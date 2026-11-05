@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -108,9 +132,9 @@ def setpoint-mode-completer [] { ["away" "hg" "manual" "max" "off" "program"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "addwebhook" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["addwebhook" "createnewschedule" "devicelist" "dropwebhook" "getcamerapicture" "geteventsuntil" "gethomecoachsdata" "gethomedata" "getlasteventof" "getmeasure" "getnextevents" "getpublicdata" "getstationsdata" "getthermostatsdata" "getthermstate" "getuser" "partnerdevices" "setpersonsaway" "setpersonshome" "setthermpoint" "switchschedule" "syncschedule" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -144,7 +168,7 @@ export def "addwebhook" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --url: string # Your webhook callback url (required)
   --app-type: string # Webhooks are only available for Welcome, enter app_camera. (required)
-]: nothing -> record<status: string, time_exec: float> {
+]: nothing -> oneof<record<status: string, time_exec: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($url == null) { error make --unspanned { msg: "required query parameter 'url' missing: pass --url" } }
@@ -184,7 +208,7 @@ export def "createnewschedule" [
   --device-id: string # The relay id (required)
   --module-id: string # The thermostat id (required)
   --body: any
-]: any -> record<body: record<schedule_id: string>, status: string, time_exec: float, time_server: int> {
+]: any -> oneof<record<body: record<schedule_id: string>, status: string, time_exec: float, time_server: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -229,7 +253,7 @@ export def "devicelist" [
   --app-type: string@app-type-completer # Defines which device type will be returned by devicelist. It could be app_thermostat or app_station (by default if not provided)
   --device-id: string # Specify a device_id if you want to retrieve only this device informations.
   --get-favorites: oneof<nothing, bool> # When set to "true", the favorite devices of the user are returned. This flag is available only if the devices requested are Weather Stations. (default: false)
-]: nothing -> record<body: record<devices: list<record>, modules: list<record>>, status: string, time_exec: float, time_server: int> {
+]: nothing -> oneof<record<body: record<devices: list<record>, modules: list<record>>, status: string, time_exec: float, time_server: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "app_type" $app_type "scalar") (serialize-qp "device_id" $device_id "scalar") (serialize-qp "get_favorites" $get_favorites "scalar")] | flatten | str join "&"
@@ -265,7 +289,7 @@ export def "dropwebhook" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --app-type: string # For Welcome, use app_camera (required)
-]: nothing -> record<status: string, time_exec: float> {
+]: nothing -> oneof<record<status: string, time_exec: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_type == null) { error make --unspanned { msg: "required query parameter 'app_type' missing: pass --app-type" } }
@@ -342,7 +366,7 @@ export def "geteventsuntil" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --home-id: string # ID of the Home you're interested in (required)
   --event-id: string # Your request will retrieve all the events until this one (required)
-]: nothing -> record<body: record<events_list: list<record>>, status: string, time_exec: float, time_server: int> {
+]: nothing -> oneof<record<body: record<events_list: list<record>>, status: string, time_exec: float, time_server: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($home_id == null) { error make --unspanned { msg: "required query parameter 'home_id' missing: pass --home-id" } }
@@ -380,7 +404,7 @@ export def "gethomecoachsdata" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --device-id: string # Id of the device you want to retrieve information of
-]: nothing -> record<body: record<devices: list<record>, user: record<_id: string, administrative: record, date_creation: record, devices: list, friend_devices: list, mail: string, timeline_not_read: int, timeline_size: int>>, status: string, time_exec: float, time_server: int> {
+]: nothing -> oneof<record<body: record<devices: list<record>, user: record<_id: string, administrative: record, date_creation: record, devices: list, friend_devices: list, mail: string, timeline_not_read: int, timeline_size: int>>, status: string, time_exec: float, time_server: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "device_id" $device_id "scalar")] | flatten | str join "&"
@@ -417,7 +441,7 @@ export def "gethomedata" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --home-id: string # Specify if you're looking for the events of a specific Home.
   --size: int # Number of events to retrieve. Default is `30`.
-]: nothing -> record<body: record<global_info: record<show_tags: bool>, homes: list<record>, user: record<lang: string, reg_locale: string>>, status: string, time_exec: float, time_server: int> {
+]: nothing -> oneof<record<body: record<global_info: record<show_tags: bool>, homes: list<record>, user: record<lang: string, reg_locale: string>>, status: string, time_exec: float, time_server: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "home_id" $home_id "scalar") (serialize-qp "size" $size "scalar")] | flatten | str join "&"
@@ -455,7 +479,7 @@ export def "getlasteventof" [
   --home-id: string # ID of the Home you're interested in (required)
   --person-id: string # Your request will retrieve all events of the given home until the most recent event of the given person (required)
   --offset: int # Number of events to retrieve. Default is 30.
-]: nothing -> record<body: record<events_list: list<record>>, status: string, time_exec: float, time_server: int> {
+]: nothing -> oneof<record<body: record<events_list: list<record>>, status: string, time_exec: float, time_server: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($home_id == null) { error make --unspanned { msg: "required query parameter 'home_id' missing: pass --home-id" } }
@@ -501,7 +525,7 @@ export def "getmeasure" [
   --limit: int # Limits the number of measurements returned (default & max is 1024) (format: int32)
   --optimize: oneof<nothing, bool> # Allows you to choose the format of the answer. If you build a mobile app and bandwith usage is an issue, use `optimize = true`. Use `optimize = false`, for an easier parse. In this case, values are indexed by sorted timestamp. Example of un-optimized response : ```json {"status": "ok", "body": { "1347575400": [18.3,39], "1347586200": [20.6,48] }, "time_exec": 0.012136936187744} ``` If optimize is set true, measurements are returned as an array of series of regularly spaced measurements. Each series is defined by a beginning time beg_time and a step between measurements, step_time: ```json {"status": "ok", "body": [ {"beg_time": 1347575400, "step_time": 10800, "value": [[18.3,39], [ 20.6,48]] }], "time_exec": 0.014238119125366} ``` Default value is `true`.
   --real-time: oneof<nothing, bool> # In scales higher than max, since the data is aggregated, the timestamps returned are by default offset by +(scale/2). For instance, if you ask for measurements at a daily scale, you will receive data timestamped at 12:00 if real_time is set to `false` (default case), and timestamped at 00:00 if real_time is set to `true`. NB : The servers always store data with real_time set to `true` and data are offset by this parameter AFTER having being time-filtered, thus you could have data after date_end if real_time is set to `false`.
-]: nothing -> record<body: table<beg_time: int, step_time: int, value: list>, status: string, time_exec: float, time_server: int> {
+]: nothing -> oneof<record<body: table<beg_time: int, step_time: int, value: list>, status: string, time_exec: float, time_server: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($device_id == null) { error make --unspanned { msg: "required query parameter 'device_id' missing: pass --device-id" } }
@@ -542,7 +566,7 @@ export def "getnextevents" [
   --home-id: string # ID of the Home you're interested in (required)
   --event-id: string # Your request will retrieve events occured before this one (required)
   --size: int # Number of events to retrieve. Default is 30.
-]: nothing -> record<body: record<events_list: list<record>>, status: string, time_exec: float, time_server: int> {
+]: nothing -> oneof<record<body: record<events_list: list<record>>, status: string, time_exec: float, time_server: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($home_id == null) { error make --unspanned { msg: "required query parameter 'home_id' missing: pass --home-id" } }
@@ -585,7 +609,7 @@ export def "getpublicdata" [
   --lon-sw: int # Longitude of the south west corner of the requested area. -180 <= lon_sw <= 180 (required, format: int32)
   --required-data: list<string> # To filter stations based on relevant measurements you want (e.g. rain will only return stations with rain gauges). Default is no filter. You can find all measurements available on the Thermostat page.
   --filter: oneof<nothing, bool> # True to exclude stations with abnormal temperature measures. Default is false.
-]: nothing -> record<body: table<_id: string, mark: int, measures: record, module_types: record, modules: list, place: record>, status: string, time_exec: float, time_server: int> {
+]: nothing -> oneof<record<body: table<_id: string, mark: int, measures: record, module_types: record, modules: list, place: record>, status: string, time_exec: float, time_server: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($lat_ne == null) { error make --unspanned { msg: "required query parameter 'lat_ne' missing: pass --lat-ne" } }
@@ -626,7 +650,7 @@ export def "getstationsdata" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --device-id: string # Id of the device you want to retrieve information of
   --get-favorites: oneof<nothing, bool> # Whether to include the user's favorite Weather Stations in addition to the user's own Weather Stations (default: false)
-]: nothing -> record<body: record<devices: list<record>, user: record<_id: string, administrative: record, date_creation: record, devices: list, friend_devices: list, mail: string, timeline_not_read: int, timeline_size: int>>, status: string, time_exec: float, time_server: int> {
+]: nothing -> oneof<record<body: record<devices: list<record>, user: record<_id: string, administrative: record, date_creation: record, devices: list, friend_devices: list, mail: string, timeline_not_read: int, timeline_size: int>>, status: string, time_exec: float, time_server: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "device_id" $device_id "scalar") (serialize-qp "get_favorites" $get_favorites "scalar")] | flatten | str join "&"
@@ -662,7 +686,7 @@ export def "getthermostatsdata" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --device-id: string # Id of the device you want to retrieve information of
-]: nothing -> record<body: record<devices: list<record>, user: record<_id: string, administrative: record, date_creation: record, devices: list, friend_devices: list, mail: string, timeline_not_read: int, timeline_size: int>>, status: string, time_exec: float, time_server: int> {
+]: nothing -> oneof<record<body: record<devices: list<record>, user: record<_id: string, administrative: record, date_creation: record, devices: list, friend_devices: list, mail: string, timeline_not_read: int, timeline_size: int>>, status: string, time_exec: float, time_server: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "device_id" $device_id "scalar")] | flatten | str join "&"
@@ -701,7 +725,7 @@ export def "getthermstate" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --device-id: string # The relay id (required)
   --module-id: string # The thermostat id (required)
-]: nothing -> record<body: record<battery_percent: int, battery_vp: int, last_plug_seen: int, last_therm_seen: int, measured: record<setpoint_temp: float, temperature: float, time: int>, plug_connected_boiler: int, rf_status: int, setpoint: record<setpoint_endtime: int, setpoint_mode: string, setpoint_temp: float>, setpoint_order: record<setpoint_endtime: int, setpoint_mode: string, setpoint_temp: float>, therm_orientation: int, therm_program: record<name: string, program_id: string, selected: bool, timetable: list, zones: list>, therm_program_backup: list<record>, therm_program_order: record<name: string, program_id: string, selected: bool, timetable: list, zones: list>, therm_relay_cmd: int, udp_conn: bool, wifi_status: int>, status: string, time_exec: float, time_server: int> {
+]: nothing -> oneof<record<body: record<battery_percent: int, battery_vp: int, last_plug_seen: int, last_therm_seen: int, measured: record<setpoint_temp: float, temperature: float, time: int>, plug_connected_boiler: int, rf_status: int, setpoint: record<setpoint_endtime: int, setpoint_mode: string, setpoint_temp: float>, setpoint_order: record<setpoint_endtime: int, setpoint_mode: string, setpoint_temp: float>, therm_orientation: int, therm_program: record<name: string, program_id: string, selected: bool, timetable: list, zones: list>, therm_program_backup: list<record>, therm_program_order: record<name: string, program_id: string, selected: bool, timetable: list, zones: list>, therm_relay_cmd: int, udp_conn: bool, wifi_status: int>, status: string, time_exec: float, time_server: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($device_id == null) { error make --unspanned { msg: "required query parameter 'device_id' missing: pass --device-id" } }
@@ -740,7 +764,7 @@ export def "getuser" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<body: record<_id: string, administrative: record<country: string, feel_like_algo: string, lang: string, pressureunit: string, reg_locale: string, unit: string, windunit: string>, date_creation: record<sec: int, usec: int>, devices: list<string>, friend_devices: list<string>, mail: string, timeline_not_read: int, timeline_size: int>, status: string, time_exec: float, time_server: int> {
+]: nothing -> oneof<record<body: record<_id: string, administrative: record<country: string, feel_like_algo: string, lang: string, pressureunit: string, reg_locale: string, unit: string, windunit: string>, date_creation: record<sec: int, usec: int>, devices: list<string>, friend_devices: list<string>, mail: string, timeline_not_read: int, timeline_size: int>, status: string, time_exec: float, time_server: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/getuser" $auth.query)
@@ -774,7 +798,7 @@ export def "partnerdevices" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<body: list<string>, status: string, time_exec: float, time_server: int> {
+]: nothing -> oneof<record<body: list<string>, status: string, time_exec: float, time_server: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/partnerdevices" $auth.query)
@@ -810,7 +834,7 @@ export def "setpersonsaway" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --home-id: string # ID of the Home you're interested in (required)
   --person-id: string # If a person_id is specified, that person will be set as 'Away'. If no person_id is specified, the Home will be set as 'Empty'.
-]: nothing -> record<status: string, time_exec: float, time_server: int> {
+]: nothing -> oneof<record<status: string, time_exec: float, time_server: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($home_id == null) { error make --unspanned { msg: "required query parameter 'home_id' missing: pass --home-id" } }
@@ -848,7 +872,7 @@ export def "setpersonshome" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --home-id: string # ID of the Home you're interested in (required)
   --person-ids: string # List of persons IDs (required)
-]: nothing -> record<status: string, time_exec: float, time_server: int> {
+]: nothing -> oneof<record<status: string, time_exec: float, time_server: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($home_id == null) { error make --unspanned { msg: "required query parameter 'home_id' missing: pass --home-id" } }
@@ -890,7 +914,7 @@ export def "setthermpoint" [
   --setpoint-mode: string@setpoint-mode-completer # Chosen setpoint_mode (required)
   --setpoint-endtime: int # When using the manual or max setpoint_mode, this parameter defines when the setpoint expires. (format: int32)
   --setpoint-temp: float # When using the manual setpoint_mode, this parameter defines the temperature setpoint (in Celcius) to use. (format: float)
-]: nothing -> record<body: string, status: string, time_exec: float, time_server: int> {
+]: nothing -> oneof<record<body: string, status: string, time_exec: float, time_server: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($device_id == null) { error make --unspanned { msg: "required query parameter 'device_id' missing: pass --device-id" } }
@@ -931,7 +955,7 @@ export def "switchschedule" [
   --device-id: string # The relay id (required)
   --module-id: string # The thermostat id (required)
   --schedule-id: string # The schedule id. It can be found in the getthermstate response, under the keys `therm_program_backup` and `therm_program`. (required)
-]: nothing -> record<body: string, status: string, time_exec: float, time_server: int> {
+]: nothing -> oneof<record<body: string, status: string, time_exec: float, time_server: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($device_id == null) { error make --unspanned { msg: "required query parameter 'device_id' missing: pass --device-id" } }
@@ -972,7 +996,7 @@ export def "syncschedule" [
   --device-id: string # The relay id (required)
   --module-id: string # The thermostat id (required)
   --body: any
-]: any -> record<body: string, status: string, time_exec: float, time_server: int> {
+]: any -> oneof<record<body: string, status: string, time_exec: float, time_server: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

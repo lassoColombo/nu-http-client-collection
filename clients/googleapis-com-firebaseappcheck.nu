@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -120,9 +144,9 @@ def enforcement-mode-completer [] { ["ENFORCED" "OFF" "UNENFORCED"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "firebaseappcheck-projects-apps-exchange-app-attest-assertion" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["firebaseappcheck-projects-apps-exchange-app-attest-assertion" "firebaseappcheck-projects-apps-exchange-app-attest-attestation" "firebaseappcheck-projects-apps-exchange-custom-token" "firebaseappcheck-projects-apps-exchange-debug-token" "firebaseappcheck-projects-apps-exchange-device-check-token" "firebaseappcheck-projects-apps-exchange-play-integrity-token" "firebaseappcheck-projects-apps-exchange-recaptcha-enterprise-token" "firebaseappcheck-projects-apps-exchange-recaptcha-v3-token" "firebaseappcheck-projects-apps-exchange-safety-net-token" "firebaseappcheck-projects-apps-generate-app-attest-challenge" "firebaseappcheck-projects-apps-generate-play-integrity-challenge" "firebaseappcheck-projects-apps-debug-tokens-delete" "firebaseappcheck-projects-services-get" "firebaseappcheck-projects-services-patch" "firebaseappcheck-projects-apps-app-attest-config-batch-get" "firebaseappcheck-projects-apps-device-check-config-batch-get" "firebaseappcheck-projects-apps-play-integrity-config-batch-get" "firebaseappcheck-projects-apps-recaptcha-enterprise-config-batch-get" "firebaseappcheck-projects-apps-recaptcha-v3-config-batch-get" "firebaseappcheck-projects-apps-safety-net-config-batch-get" "firebaseappcheck-projects-apps-debug-tokens-list" "firebaseappcheck-projects-apps-debug-tokens-create" "firebaseappcheck-projects-services-list" "firebaseappcheck-projects-services-batch-update" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -169,7 +193,7 @@ export def "firebaseappcheck-projects-apps-exchange-app-attest-assertion" [
   --artifact: string # Required. The artifact returned by a previous call to ExchangeAppAttestAttestation. (format: byte)
   --assertion: string # Required. The CBOR-encoded assertion returned by the client-side App Attest API. (format: byte)
   --challenge: string # Required. A one-time challenge returned by an immediately prior call to GenerateAppAttestChallenge. (format: byte)
-]: any -> record<token: string, ttl: string> {
+]: any -> oneof<record<token: string, ttl: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -223,7 +247,7 @@ export def "firebaseappcheck-projects-apps-exchange-app-attest-attestation" [
   --attestation-statement: string # Required. The App Attest statement returned by the client-side App Attest API. This is a base64url encoded CBOR object in the JSON response. (format: byte)
   --challenge: string # Required. A one-time challenge returned by an immediately prior call to GenerateAppAttestChallenge. (format: byte)
   --key-id: string # Required. The key ID generated by App Attest for the client app. (format: byte)
-]: any -> record<appCheckToken: record<token: string, ttl: string>, artifact: string> {
+]: any -> oneof<record<appCheckToken: record<token: string, ttl: string>, artifact: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -275,7 +299,7 @@ export def "firebaseappcheck-projects-apps-exchange-custom-token" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --custom-token: string # Required. A custom token signed using your project's Admin SDK service account credentials.
-]: any -> record<token: string, ttl: string> {
+]: any -> oneof<record<token: string, ttl: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -327,7 +351,7 @@ export def "firebaseappcheck-projects-apps-exchange-debug-token" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --debug-token: string # Required. A debug token secret. This string must match a debug token secret previously created using CreateDebugToken.
-]: any -> record<token: string, ttl: string> {
+]: any -> oneof<record<token: string, ttl: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -379,7 +403,7 @@ export def "firebaseappcheck-projects-apps-exchange-device-check-token" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --device-token: string # Required. The `device_token` as returned by Apple's client-side [DeviceCheck API](https://developer.apple.com/documentation/devicecheck/dcdevice). This is the base64 encoded `Data` (Swift) or `NSData` (ObjC) object.
-]: any -> record<token: string, ttl: string> {
+]: any -> oneof<record<token: string, ttl: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -431,7 +455,7 @@ export def "firebaseappcheck-projects-apps-exchange-play-integrity-token" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --play-integrity-token: string # Required. The [integrity verdict response token from Play Integrity](https://developer.android.com/google/play/integrity/verdict#decrypt-verify) issued to your app.
-]: any -> record<token: string, ttl: string> {
+]: any -> oneof<record<token: string, ttl: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -483,7 +507,7 @@ export def "firebaseappcheck-projects-apps-exchange-recaptcha-enterprise-token" 
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --recaptcha-enterprise-token: string # Required. The reCAPTCHA token as returned by the [reCAPTCHA Enterprise JavaScript API](https://cloud.google.com/recaptcha-enterprise/docs/instrument-web-pages).
-]: any -> record<token: string, ttl: string> {
+]: any -> oneof<record<token: string, ttl: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -535,7 +559,7 @@ export def "firebaseappcheck-projects-apps-exchange-recaptcha-v3-token" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --recaptcha-v3-token: string # Required. The reCAPTCHA token as returned by the [reCAPTCHA v3 JavaScript API](https://developers.google.com/recaptcha/docs/v3).
-]: any -> record<token: string, ttl: string> {
+]: any -> oneof<record<token: string, ttl: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -587,7 +611,7 @@ export def "firebaseappcheck-projects-apps-exchange-safety-net-token" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --safety-net-token: string # Required. The [SafetyNet attestation response](https://developer.android.com/training/safetynet/attestation#request-attestation-step) issued to your app.
-]: any -> record<token: string, ttl: string> {
+]: any -> oneof<record<token: string, ttl: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -639,7 +663,7 @@ export def "firebaseappcheck-projects-apps-generate-app-attest-challenge" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record<challenge: string, ttl: string> {
+]: any -> oneof<record<challenge: string, ttl: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -691,7 +715,7 @@ export def "firebaseappcheck-projects-apps-generate-play-integrity-challenge" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record<challenge: string, ttl: string> {
+]: any -> oneof<record<challenge: string, ttl: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -742,7 +766,7 @@ export def "firebaseappcheck-projects-apps-debug-tokens-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -790,7 +814,7 @@ export def "firebaseappcheck-projects-services-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<enforcementMode: string, name: string> {
+]: nothing -> oneof<record<enforcementMode: string, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -841,7 +865,7 @@ export def "firebaseappcheck-projects-services-patch" [
   --update-mask: string # Required. A comma-separated list of names of fields in the Service to update. Example: `enforcement_mode`.
   --enforcement-mode: string@enforcement-mode-completer # Required. The App Check enforcement mode for this service.
   --body-name: string # Required. The relative resource name of the service configuration object, in the format: ``` projects/{project_number}/services/{service_id} ``` Note that the `service_id` element must be a supported service ID. Currently, the following service IDs are supported: * `firebasestorage.googleapis.com` (Cloud Storage for Firebase) * `firebasedatabase.googleapis.com` (Firebase Realtime Database) * `firestore.googleapis.com` (Cloud Firestore)
-]: any -> record<enforcementMode: string, name: string> {
+]: any -> oneof<record<enforcementMode: string, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -893,7 +917,7 @@ export def "firebaseappcheck-projects-apps-app-attest-config-batch-get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --names: list<string> # Required. The relative resource names of the AppAttestConfigs to retrieve, in the format ``` projects/{project_number}/apps/{app_id}/appAttestConfig ``` A maximum of 100 objects can be retrieved in a batch.
-]: nothing -> record<configs: table<name: string, tokenTtl: string>> {
+]: nothing -> oneof<record<configs: table<name: string, tokenTtl: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -942,7 +966,7 @@ export def "firebaseappcheck-projects-apps-device-check-config-batch-get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --names: list<string> # Required. The relative resource names of the DeviceCheckConfigs to retrieve, in the format ``` projects/{project_number}/apps/{app_id}/deviceCheckConfig ``` A maximum of 100 objects can be retrieved in a batch.
-]: nothing -> record<configs: table<keyId: string, name: string, privateKey: string, privateKeySet: bool, tokenTtl: string>> {
+]: nothing -> oneof<record<configs: table<keyId: string, name: string, privateKey: string, privateKeySet: bool, tokenTtl: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -991,7 +1015,7 @@ export def "firebaseappcheck-projects-apps-play-integrity-config-batch-get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --names: list<string> # Required. The relative resource names of the PlayIntegrityConfigs to retrieve, in the format ``` projects/{project_number}/apps/{app_id}/playIntegrityConfig ``` A maximum of 100 objects can be retrieved in a batch.
-]: nothing -> record<configs: table<name: string, tokenTtl: string>> {
+]: nothing -> oneof<record<configs: table<name: string, tokenTtl: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1040,7 +1064,7 @@ export def "firebaseappcheck-projects-apps-recaptcha-enterprise-config-batch-get
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --names: list<string> # Required. The relative resource names of the RecaptchaEnterpriseConfigs to retrieve, in the format: ``` projects/{project_number}/apps/{app_id}/recaptchaEnterpriseConfig ``` A maximum of 100 objects can be retrieved in a batch.
-]: nothing -> record<configs: table<name: string, siteKey: string, tokenTtl: string>> {
+]: nothing -> oneof<record<configs: table<name: string, siteKey: string, tokenTtl: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1089,7 +1113,7 @@ export def "firebaseappcheck-projects-apps-recaptcha-v3-config-batch-get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --names: list<string> # Required. The relative resource names of the RecaptchaV3Configs to retrieve, in the format: ``` projects/{project_number}/apps/{app_id}/recaptchaV3Config ``` A maximum of 100 objects can be retrieved in a batch.
-]: nothing -> record<configs: table<name: string, siteSecret: string, siteSecretSet: bool, tokenTtl: string>> {
+]: nothing -> oneof<record<configs: table<name: string, siteSecret: string, siteSecretSet: bool, tokenTtl: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1138,7 +1162,7 @@ export def "firebaseappcheck-projects-apps-safety-net-config-batch-get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --names: list<string> # Required. The relative resource names of the SafetyNetConfigs to retrieve, in the format ``` projects/{project_number}/apps/{app_id}/safetyNetConfig ``` A maximum of 100 objects can be retrieved in a batch.
-]: nothing -> record<configs: table<name: string, tokenTtl: string>> {
+]: nothing -> oneof<record<configs: table<name: string, tokenTtl: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1188,7 +1212,7 @@ export def "firebaseappcheck-projects-apps-debug-tokens-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # The maximum number of DebugTokens to return in the response. Note that an app can have at most 20 debug tokens. The server may return fewer than this at its own discretion. If no value is specified (or too large a value is specified), the server will impose its own limit.
   --page-token: string # Token returned from a previous call to ListDebugTokens indicating where in the set of DebugTokens to resume listing. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to ListDebugTokens must match the call that provided the page token; if they do not match, the result is undefined.
-]: nothing -> record<debugTokens: table<displayName: string, name: string, token: string>, nextPageToken: string> {
+]: nothing -> oneof<record<debugTokens: table<displayName: string, name: string, token: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1239,7 +1263,7 @@ export def "firebaseappcheck-projects-apps-debug-tokens-create" [
   --display-name: string # Required. A human readable display name used to identify this debug token.
   --name: string # Required. The relative resource name of the debug token, in the format: ``` projects/{project_number}/apps/{app_id}/debugTokens/{debug_token_id} ```
   --body-token: string # Required. Input only. Immutable. The secret token itself. Must be provided during creation, and must be a UUID4, case insensitive. This field is immutable once set, and cannot be provided during an UpdateDebugToken request. You can, however, delete this debug token using DeleteDebugToken to revoke it. For security reasons, this field will never be populated in any response.
-]: any -> record<displayName: string, name: string, token: string> {
+]: any -> oneof<record<displayName: string, name: string, token: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1292,7 +1316,7 @@ export def "firebaseappcheck-projects-services-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # The maximum number of Services to return in the response. Only explicitly configured services are returned. The server may return fewer than this at its own discretion. If no value is specified (or too large a value is specified), the server will impose its own limit.
   --page-token: string # Token returned from a previous call to ListServices indicating where in the set of Services to resume listing. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to ListServices must match the call that provided the page token; if they do not match, the result is undefined.
-]: nothing -> record<nextPageToken: string, services: table<enforcementMode: string, name: string>> {
+]: nothing -> oneof<record<nextPageToken: string, services: table<enforcementMode: string, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1318,7 +1342,6 @@ export def "firebaseappcheck-projects-services-list" [
 #
 # POST /v1/{parent}/services:batchUpdate
 # operationId: firebaseappcheck.projects.services.batchUpdate
-# --requests item shape: {service?: record, updateMask?: string}
 export def "firebaseappcheck-projects-services-batch-update" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1343,7 +1366,7 @@ export def "firebaseappcheck-projects-services-batch-update" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --requests: list # Required. The request messages specifying the Services to update. A maximum of 100 objects can be updated in a batch. — item shape: {service?: record, updateMask?: string}
   --update-mask: string # Optional. A comma-separated list of names of fields in the Services to update. Example: `display_name`. If the `update_mask` field is set in both this request and any of the UpdateServiceRequest messages, they must match or the entire batch fails and no updates will be committed. (format: google-fieldmask)
-]: any -> record<services: table<enforcementMode: string, name: string>> {
+]: any -> oneof<record<services: table<enforcementMode: string, name: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

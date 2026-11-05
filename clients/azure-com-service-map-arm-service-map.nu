@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -119,9 +143,9 @@ def kind-completer-1 [] { ["clientGroup" "machine" "machineGroup" "port" "proces
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "client-groups-get" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["client-groups-get" "client-groups-list-members" "client-groups-get-members-count" "maps-generate" "machine-groups-list-by-workspace" "machine-groups-create" "machine-groups-delete" "machine-groups-get" "machine-groups-update" "machines-list-by-workspace" "machines-get" "machines-list-connections" "machines-get-liveness" "machines-list-machine-group-membership" "machines-list-ports" "ports-get" "ports-list-accepting-processes" "ports-list-connections" "ports-get-liveness" "machines-list-processes" "processes-get" "processes-list-accepting-ports" "processes-list-connections" "processes-get-liveness" "summaries-get-machines" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -160,7 +184,7 @@ export def "client-groups-get" [
   --api-version: string # API version. (required)
   --start-time: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
   --end-time: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
-]: nothing -> record<properties: record<clientsOf: record<id: string, kind: string, name: string, type: string>>, etag: string, kind: string, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<clientsOf: record<id: string, kind: string, name: string, type: string>>, etag: string, kind: string, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -208,7 +232,7 @@ export def "client-groups-list-members" [
   --start-time: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
   --end-time: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
   --top: int # Page size to use. When not specified, the default page size is 100 records. (format: int32)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -255,7 +279,7 @@ export def "client-groups-get-members-count" [
   --api-version: string # API version. (required)
   --start-time: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
   --end-time: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
-]: nothing -> record<accuracy: string, count: int, endTime: string, groupId: string, startTime: string> {
+]: nothing -> oneof<record<accuracy: string, count: int, endTime: string, groupId: string, startTime: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -303,7 +327,7 @@ export def "maps-generate" [
   --end-time: string # Map interval end time. (format: date-time)
   kind: string@kind-completer # The type of map to create.
   --start-time: string # Map interval start time. (format: date-time)
-]: any -> record<endTime: string, map: record<edges: record<acceptors: list, connections: list>, nodes: record<clientGroups: list, machines: list, ports: list, processes: list>>, startTime: string> {
+]: any -> oneof<record<endTime: string, map: record<edges: record<acceptors: list, connections: list>, nodes: record<clientGroups: list, machines: list, ports: list, processes: list>>, startTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -351,7 +375,7 @@ export def "machine-groups-list-by-workspace" [
   --api-version: string # API version. (required)
   --start-time: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
   --end-time: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
-]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, kind: string, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<etag: string, properties: record, kind: string, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -380,7 +404,6 @@ export def "machine-groups-list-by-workspace" [
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/features/serviceMap/machineGroups
 # operationId: MachineGroups_Create
-# --properties shape: {count?: int, displayName: string, groupType?: "unknown"|"azure-cs"|"azure-sf"|"azure-vmss"|"user-static", machines?: list}
 export def "machine-groups-create" [
   subscription_id: string
   resource_group_name: string
@@ -398,7 +421,7 @@ export def "machine-groups-create" [
   --etag: string # Resource ETAG.
   --properties: record # Resource properties. — shape: {count?: int, displayName: string, groupType?: "unknown"|"azure-cs"|"azure-sf"|"azure-vmss"|"user-static", machines?: list}
   kind: string@kind-completer-1 # Additional resource type qualifier.
-]: any -> record<etag: string, properties: record<count: int, displayName: string, groupType: string, machines: list<record>>, kind: string, id: string, name: string, type: string> {
+]: any -> oneof<record<etag: string, properties: record<count: int, displayName: string, groupType: string, machines: list<record>>, kind: string, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -492,7 +515,7 @@ export def "machine-groups-get" [
   --api-version: string # API version. (required)
   --start-time: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
   --end-time: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
-]: nothing -> record<etag: string, properties: record<count: int, displayName: string, groupType: string, machines: list<record>>, kind: string, id: string, name: string, type: string> {
+]: nothing -> oneof<record<etag: string, properties: record<count: int, displayName: string, groupType: string, machines: list<record>>, kind: string, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -522,7 +545,6 @@ export def "machine-groups-get" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/features/serviceMap/machineGroups/{machineGroupName}
 # operationId: MachineGroups_Update
-# --properties shape: {count?: int, displayName: string, groupType?: "unknown"|"azure-cs"|"azure-sf"|"azure-vmss"|"user-static", machines?: list}
 export def "machine-groups-update" [
   subscription_id: string
   resource_group_name: string
@@ -541,7 +563,7 @@ export def "machine-groups-update" [
   --etag: string # Resource ETAG.
   --properties: record # Resource properties. — shape: {count?: int, displayName: string, groupType?: "unknown"|"azure-cs"|"azure-sf"|"azure-vmss"|"user-static", machines?: list}
   kind: string@kind-completer-1 # Additional resource type qualifier.
-]: any -> record<etag: string, properties: record<count: int, displayName: string, groupType: string, machines: list<record>>, kind: string, id: string, name: string, type: string> {
+]: any -> oneof<record<etag: string, properties: record<count: int, displayName: string, groupType: string, machines: list<record>>, kind: string, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -593,7 +615,7 @@ export def "machines-list-by-workspace" [
   --end-time: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
   --timestamp: string # UTC date and time specifying a time instance relative to which to evaluate each machine resource. Only applies when `live=false`. When not specified, the service uses DateTime.UtcNow. (format: date-time)
   --top: int # Page size to use. When not specified, the default page size is 100 records. (format: int32)
-]: nothing -> record<nextLink: string, value: table<properties: record, etag: string, kind: string, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, etag: string, kind: string, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -638,7 +660,7 @@ export def "machines-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API version. (required)
   --timestamp: string # UTC date and time specifying a time instance relative to which to evaluate the machine resource. When not specified, the service uses DateTime.UtcNow. (format: date-time)
-]: nothing -> record<properties: record<agent: record<agentId: string, clockGranularity: int, dependencyAgentId: string, dependencyAgentRevision: string, dependencyAgentVersion: string, rebootStatus: string>, bootTime: string, computerName: string, displayName: string, fullyQualifiedDomainName: string, hosting: record<kind: string, provider: string>, hypervisor: record<hypervisorType: string, nativeHostMachineId: string>, monitoringState: string, networking: record<defaultIpv4Gateways: list, dnsNames: list, ipv4Interfaces: list, ipv6Interfaces: list, macAddresses: list>, operatingSystem: record<bitness: string, family: string, fullName: string>, resources: record<cpuSpeed: int, cpuSpeedAccuracy: string, cpus: int, physicalMemory: int>, timestamp: string, timezone: record<fullName: string>, virtualMachine: record<nativeHostMachineId: string, nativeMachineId: string, virtualMachineName: string, virtualMachineType: string>, virtualizationState: string>, etag: string, kind: string, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<agent: record<agentId: string, clockGranularity: int, dependencyAgentId: string, dependencyAgentRevision: string, dependencyAgentVersion: string, rebootStatus: string>, bootTime: string, computerName: string, displayName: string, fullyQualifiedDomainName: string, hosting: record<kind: string, provider: string>, hypervisor: record<hypervisorType: string, nativeHostMachineId: string>, monitoringState: string, networking: record<defaultIpv4Gateways: list, dnsNames: list, ipv4Interfaces: list, ipv6Interfaces: list, macAddresses: list>, operatingSystem: record<bitness: string, family: string, fullName: string>, resources: record<cpuSpeed: int, cpuSpeedAccuracy: string, cpus: int, physicalMemory: int>, timestamp: string, timezone: record<fullName: string>, virtualMachine: record<nativeHostMachineId: string, nativeMachineId: string, virtualMachineName: string, virtualMachineType: string>, virtualizationState: string>, etag: string, kind: string, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -685,7 +707,7 @@ export def "machines-list-connections" [
   --api-version: string # API version. (required)
   --start-time: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
   --end-time: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
-]: nothing -> record<nextLink: string, value: table<properties: record, kind: string, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, kind: string, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -732,7 +754,7 @@ export def "machines-get-liveness" [
   --api-version: string # API version. (required)
   --start-time: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
   --end-time: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
-]: nothing -> record<endTime: string, live: bool, startTime: string> {
+]: nothing -> oneof<record<endTime: string, live: bool, startTime: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -779,7 +801,7 @@ export def "machines-list-machine-group-membership" [
   --api-version: string # API version. (required)
   --start-time: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
   --end-time: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
-]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, kind: string, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<etag: string, properties: record, kind: string, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -826,7 +848,7 @@ export def "machines-list-ports" [
   --api-version: string # API version. (required)
   --start-time: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
   --end-time: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
-]: nothing -> record<nextLink: string, value: table<properties: record, etag: string, kind: string, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, etag: string, kind: string, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -874,7 +896,7 @@ export def "ports-get" [
   --api-version: string # API version. (required)
   --start-time: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
   --end-time: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
-]: nothing -> record<properties: record<displayName: string, ipAddress: string, machine: record<id: string, kind: string, name: string, type: string>, monitoringState: string, portNumber: int>, etag: string, kind: string, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<displayName: string, ipAddress: string, machine: record<id: string, kind: string, name: string, type: string>, monitoringState: string, portNumber: int>, etag: string, kind: string, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -923,7 +945,7 @@ export def "ports-list-accepting-processes" [
   --api-version: string # API version. (required)
   --start-time: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
   --end-time: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
-]: nothing -> record<nextLink: string, value: table<properties: record, etag: string, kind: string, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, etag: string, kind: string, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -972,7 +994,7 @@ export def "ports-list-connections" [
   --api-version: string # API version. (required)
   --start-time: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
   --end-time: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
-]: nothing -> record<nextLink: string, value: table<properties: record, kind: string, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, kind: string, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1021,7 +1043,7 @@ export def "ports-get-liveness" [
   --api-version: string # API version. (required)
   --start-time: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
   --end-time: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
-]: nothing -> record<endTime: string, live: bool, startTime: string> {
+]: nothing -> oneof<record<endTime: string, live: bool, startTime: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1071,7 +1093,7 @@ export def "machines-list-processes" [
   --start-time: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
   --end-time: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
   --timestamp: string # UTC date and time specifying a time instance relative to which to evaluate all process resource. Only applies when `live=false`. When not specified, the service uses DateTime.UtcNow. (format: date-time)
-]: nothing -> record<nextLink: string, value: table<properties: record, etag: string, kind: string, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, etag: string, kind: string, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1118,7 +1140,7 @@ export def "processes-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API version. (required)
   --timestamp: string # UTC date and time specifying a time instance relative to which to evaluate a resource. When not specified, the service uses DateTime.UtcNow. (format: date-time)
-]: nothing -> record<properties: record<acceptorOf: record<id: string, kind: string, name: string, type: string>, clientOf: record<id: string, kind: string, name: string, type: string>, details: record<commandLine: string, companyName: string, description: string, executablePath: string, fileVersion: string, firstPid: int, internalName: string, persistentKey: string, poolId: int, productName: string, productVersion: string, services: list, workingDirectory: string, zoneName: string>, displayName: string, executableName: string, group: string, hosting: record<kind: string, provider: string>, machine: record<id: string, kind: string, name: string, type: string>, monitoringState: string, role: string, startTime: string, timestamp: string, user: record<userDomain: string, userName: string>>, etag: string, kind: string, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<acceptorOf: record<id: string, kind: string, name: string, type: string>, clientOf: record<id: string, kind: string, name: string, type: string>, details: record<commandLine: string, companyName: string, description: string, executablePath: string, fileVersion: string, firstPid: int, internalName: string, persistentKey: string, poolId: int, productName: string, productVersion: string, services: list, workingDirectory: string, zoneName: string>, displayName: string, executableName: string, group: string, hosting: record<kind: string, provider: string>, machine: record<id: string, kind: string, name: string, type: string>, monitoringState: string, role: string, startTime: string, timestamp: string, user: record<userDomain: string, userName: string>>, etag: string, kind: string, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1167,7 +1189,7 @@ export def "processes-list-accepting-ports" [
   --api-version: string # API version. (required)
   --start-time: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
   --end-time: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
-]: nothing -> record<nextLink: string, value: table<properties: record, etag: string, kind: string, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, etag: string, kind: string, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1216,7 +1238,7 @@ export def "processes-list-connections" [
   --api-version: string # API version. (required)
   --start-time: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
   --end-time: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
-]: nothing -> record<nextLink: string, value: table<properties: record, kind: string, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, kind: string, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1265,7 +1287,7 @@ export def "processes-get-liveness" [
   --api-version: string # API version. (required)
   --start-time: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
   --end-time: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
-]: nothing -> record<endTime: string, live: bool, startTime: string> {
+]: nothing -> oneof<record<endTime: string, live: bool, startTime: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1312,7 +1334,7 @@ export def "summaries-get-machines" [
   --api-version: string # API version. (required)
   --start-time: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
   --end-time: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
-]: nothing -> record<properties: record<live: int, os: record<linux: int, windows: int>, total: int, endTime: string, startTime: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<live: int, os: record<linux: int, windows: int>, total: int, endTime: string, startTime: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }

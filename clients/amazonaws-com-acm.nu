@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -119,9 +142,9 @@ def x-amz-target-completer-14 [] { ["CertificateManager.UpdateCertificateOptions
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "add-tags-to-certificate" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["add-tags-to-certificate" "delete-certificate" "describe-certificate" "export-certificate" "get-account-configuration" "get-certificate" "import-certificate" "list-certificates" "list-tags-for-certificate" "put-account-configuration" "remove-tags-from-certificate" "renew-certificate" "request-certificate" "resend-validation-email" "update-certificate-options" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -143,7 +166,6 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AddTagsToCertificate
-# --Tags item shape: {Key: string, Value?: string}
 export def "add-tags-to-certificate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -262,7 +284,7 @@ export def "describe-certificate" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-2 # required
   certificate_arn: string # The Amazon Resource Name (ARN) of the ACM certificate. The ARN must have the following form: arn:aws:acm:region:123456789012:certificate/12345678-1234-1234-1234-123456789012 For more information about ARNs, see Amazon Resource Names (ARNs) (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html).
-]: any -> record<Certificate: record<CertificateArn: string, DomainName: string, SubjectAlternativeNames: list<string>, DomainValidationOptions: list<record>, Serial: string, Subject: string, Issuer: string, CreatedAt: string, IssuedAt: string, ImportedAt: string, Status: string, RevokedAt: string, RevocationReason: string, NotBefore: string, NotAfter: string, KeyAlgorithm: string, SignatureAlgorithm: string, InUseBy: list<string>, FailureReason: string, Type: string, RenewalSummary: record<RenewalStatus: string, DomainValidationOptions: list, RenewalStatusReason: string, UpdatedAt: string>, KeyUsages: list<record>, ExtendedKeyUsages: list<record>, CertificateAuthorityArn: string, RenewalEligibility: string, Options: record<CertificateTransparencyLoggingPreference: string>>> {
+]: any -> oneof<record<Certificate: record<CertificateArn: string, DomainName: string, SubjectAlternativeNames: list<string>, DomainValidationOptions: list<record>, Serial: string, Subject: string, Issuer: string, CreatedAt: string, IssuedAt: string, ImportedAt: string, Status: string, RevokedAt: string, RevocationReason: string, NotBefore: string, NotAfter: string, KeyAlgorithm: string, SignatureAlgorithm: string, InUseBy: list<string>, FailureReason: string, Type: string, RenewalSummary: record<RenewalStatus: string, DomainValidationOptions: list, RenewalStatusReason: string, UpdatedAt: string>, KeyUsages: list<record>, ExtendedKeyUsages: list<record>, CertificateAuthorityArn: string, RenewalEligibility: string, Options: record<CertificateTransparencyLoggingPreference: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -312,7 +334,7 @@ export def "export-certificate" [
   --x-amz-target: string@x-amz-target-completer-3 # required
   certificate_arn: string # An Amazon Resource Name (ARN) of the issued certificate. This must be of the form: arn:aws:acm:region:account:certificate/12345678-1234-1234-1234-123456789012
   passphrase: string # Passphrase to associate with the encrypted exported private key. When creating your passphrase, you can use any ASCII character except #, $, or %. If you want to later decrypt the private key, you must have the passphrase. You can use the following OpenSSL command to decrypt a private key. After entering the command, you are prompted for the passphrase. openssl rsa -in encrypted_key.pem -out decrypted_key.pem (format: password)
-]: any -> record<Certificate: string, CertificateChain: string, PrivateKey: string> {
+]: any -> oneof<record<Certificate: string, CertificateChain: string, PrivateKey: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -360,7 +382,7 @@ export def "get-account-configuration" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-4 # required
-]: nothing -> record<ExpiryEvents: record<DaysBeforeExpiry: int>> {
+]: nothing -> oneof<record<ExpiryEvents: record<DaysBeforeExpiry: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let x_amz_target = ($x_amz_target | default "CertificateManager.GetAccountConfiguration")
@@ -406,7 +428,7 @@ export def "get-certificate" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-5 # required
   certificate_arn: string # String that contains a certificate ARN in the following format: arn:aws:acm:region:123456789012:certificate/12345678-1234-1234-1234-123456789012 For more information about ARNs, see Amazon Resource Names (ARNs) (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html).
-]: any -> record<Certificate: string, CertificateChain: string> {
+]: any -> oneof<record<Certificate: string, CertificateChain: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -436,7 +458,6 @@ export def "get-certificate" [
 #
 # POST /
 # operationId: ImportCertificate
-# --Tags item shape: {Key: string, Value?: string}
 export def "import-certificate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -460,7 +481,7 @@ export def "import-certificate" [
   private_key: string # The private key that matches the public key in the certificate. (format: password)
   --certificate-chain: string # The PEM encoded certificate chain.
   --tags: list # One or more resource tags to associate with the imported certificate. Note: You cannot apply tags when reimporting a certificate. — item shape: {Key: string, Value?: string}
-]: any -> record<CertificateArn: string> {
+]: any -> oneof<record<CertificateArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -490,7 +511,6 @@ export def "import-certificate" [
 #
 # POST /
 # operationId: ListCertificates
-# --Includes shape: {extendedKeyUsage?: list<string>, keyUsage?: list<string>, keyTypes?: list<string>}
 export def "list-certificates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -517,7 +537,7 @@ export def "list-certificates" [
   --max-items-body: int # Use this parameter when paginating results to specify the maximum number of items to return in the response. If additional items exist beyond the number you specify, the NextToken element is sent in the response. Use this NextToken value in a subsequent request to retrieve additional items. (body field)
   --sort-by: string@sort-by-completer # Specifies the field to sort results by. If you specify SortBy, you must also specify SortOrder.
   --sort-order: string@sort-order-completer # Specifies the order of sorted results. If you specify SortOrder, you must also specify SortBy.
-]: any -> record<NextToken: string, CertificateSummaryList: table<CertificateArn: string, DomainName: string, SubjectAlternativeNameSummaries: list, HasAdditionalSubjectAlternativeNames: bool, Status: string, Type: string, KeyAlgorithm: string, KeyUsages: list, ExtendedKeyUsages: list, InUse: bool, Exported: bool, RenewalEligibility: string, NotBefore: string, NotAfter: string, CreatedAt: string, IssuedAt: string, ImportedAt: string, RevokedAt: string>> {
+]: any -> oneof<record<NextToken: string, CertificateSummaryList: table<CertificateArn: string, DomainName: string, SubjectAlternativeNameSummaries: list, HasAdditionalSubjectAlternativeNames: bool, Status: string, Type: string, KeyAlgorithm: string, KeyUsages: list, ExtendedKeyUsages: list, InUse: bool, Exported: bool, RenewalEligibility: string, NotBefore: string, NotAfter: string, CreatedAt: string, IssuedAt: string, ImportedAt: string, RevokedAt: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -567,7 +587,7 @@ export def "list-tags-for-certificate" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-8 # required
   certificate_arn: string # String that contains the ARN of the ACM certificate for which you want to list the tags. This must have the following form: arn:aws:acm:region:123456789012:certificate/12345678-1234-1234-1234-123456789012 For more information about ARNs, see Amazon Resource Names (ARNs) (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html).
-]: any -> record<Tags: table<Key: string, Value: string>> {
+]: any -> oneof<record<Tags: table<Key: string, Value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -597,7 +617,6 @@ export def "list-tags-for-certificate" [
 #
 # POST /
 # operationId: PutAccountConfiguration
-# --ExpiryEvents shape: {DaysBeforeExpiry?: int}
 export def "put-account-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -648,7 +667,6 @@ export def "put-account-configuration" [
 #
 # POST /
 # operationId: RemoveTagsFromCertificate
-# --Tags item shape: {Key: string, Value?: string}
 export def "remove-tags-from-certificate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -748,9 +766,6 @@ export def "renew-certificate" [
 #
 # POST /
 # operationId: RequestCertificate
-# --DomainValidationOptions item shape: {DomainName: string, ValidationDomain: string}
-# --Options shape: {CertificateTransparencyLoggingPreference?: "ENABLED"|"DISABLED"}
-# --Tags item shape: {Key: string, Value?: string}
 export def "request-certificate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -778,7 +793,7 @@ export def "request-certificate" [
   --certificate-authority-arn: string # The Amazon Resource Name (ARN) of the private certificate authority (CA) that will be used to issue the certificate. If you do not provide an ARN and you are trying to request a private certificate, ACM will attempt to issue a public certificate. For more information about private CAs, see the Amazon Web Services Private Certificate Authority (https://docs.aws.amazon.com/privateca/latest/userguide/PcaWelcome.html) user guide. The ARN must have the following form: arn:aws:acm-pca:region:account:certificate-authority/12345678-1234-1234-1234-123456789012
   --tags: list # One or more resource tags to associate with the certificate. — item shape: {Key: string, Value?: string}
   --key-algorithm: string@key-algorithm-completer # Specifies the algorithm of the public and private key pair that your certificate uses to encrypt data. RSA is the default key algorithm for ACM certificates. Elliptic Curve Digital Signature Algorithm (ECDSA) keys are smaller, offering security comparable to RSA keys but with greater computing efficiency. However, ECDSA is not supported by all network clients. Some AWS services may require RSA keys, or only support ECDSA keys of a particular size, while others allow the use of either RSA and ECDSA keys to ensure that compatibility is not broken. Check the requirements for the AWS service where you plan to deploy your certificate. Default: RSA_2048
-]: any -> record<CertificateArn: string> {
+]: any -> oneof<record<CertificateArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -859,7 +874,6 @@ export def "resend-validation-email" [
 #
 # POST /
 # operationId: UpdateCertificateOptions
-# --Options shape: {CertificateTransparencyLoggingPreference?: "ENABLED"|"DISABLED"}
 export def "update-certificate-options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

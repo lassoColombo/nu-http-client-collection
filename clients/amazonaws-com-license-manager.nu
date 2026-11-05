@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -156,9 +179,9 @@ def x-amz-target-completer-49 [] { ["AWSLicenseManager.UpdateServiceSettings"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accept-grant" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["accept-grant" "check-in-license" "checkout-borrow-license" "checkout-license" "create-grant" "create-grant-version" "create-license" "create-license-configuration" "create-license-conversion-task-for-resource" "create-license-manager-report-generator" "create-license-version" "create-token" "delete-grant" "delete-license" "delete-license-configuration" "delete-license-manager-report-generator" "delete-token" "extend-license-consumption" "get-access-token" "get-grant" "get-license" "get-license-configuration" "get-license-conversion-task" "get-license-manager-report-generator" "get-license-usage" "get-service-settings" "list-associations-for-license-configuration" "list-distributed-grants" "list-failures-for-license-configuration-operations" "list-license-configurations" "list-license-conversion-tasks" "list-license-manager-report-generators" "list-license-specifications-for-resource" "list-license-versions" "list-licenses" "list-received-grants" "list-received-grants-for-organization" "list-received-licenses" "list-received-licenses-for-organization" "list-resource-inventory" "list-tags-for-resource" "list-tokens" "list-usage-for-license-configuration" "reject-grant" "tag-resource" "untag-resource" "update-license-configuration" "update-license-manager-report-generator" "update-license-specifications-for-resource" "update-service-settings" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -199,7 +222,7 @@ export def "accept-grant" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer # required
   grant_arn: string # Amazon Resource Name (ARN) of the grant.
-]: any -> record<GrantArn: string, Status: string, Version: string> {
+]: any -> oneof<record<GrantArn: string, Status: string, Version: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -249,7 +272,7 @@ export def "check-in-license" [
   --x-amz-target: string@x-amz-target-completer-1 # required
   license_consumption_token: string # License consumption token.
   --beneficiary: string # License beneficiary.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -279,8 +302,6 @@ export def "check-in-license" [
 #
 # POST /
 # operationId: CheckoutBorrowLicense
-# --Entitlements item shape: {Name: string, Value?: string, Unit: "Count"|"None"|"Seconds"|"Microseconds"|"Milliseconds"|"Bytes"|"Kilobytes"|"Megabytes"|"Gigabytes"|"Terabytes"|"Bits"|"Kilobits"|"Megabits"|"Gigabits"|"Terabits"|"Percent"|"Bytes/Second"|"Kilobytes/Second"|"Megabytes/Second"|"Gigabytes/Second"|"Terabytes/Second"|"Bits/Second"|"Kilobits/Second"|"Megabits/Second"|"Gigabits/Second"|"Terabits/Second"|"Count/Second"}
-# --CheckoutMetadata item shape: {Name?: string, Value?: string}
 export def "checkout-borrow-license" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -305,7 +326,7 @@ export def "checkout-borrow-license" [
   --node-id: string # Node ID.
   --checkout-metadata: list # Information about constraints. — item shape: {Name?: string, Value?: string}
   client_token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request.
-]: any -> record<LicenseArn: string, LicenseConsumptionToken: string, EntitlementsAllowed: table<Name: string, Value: string, Unit: string>, NodeId: string, SignedToken: string, IssuedAt: string, Expiration: string, CheckoutMetadata: table<Name: string, Value: string>> {
+]: any -> oneof<record<LicenseArn: string, LicenseConsumptionToken: string, EntitlementsAllowed: table<Name: string, Value: string, Unit: string>, NodeId: string, SignedToken: string, IssuedAt: string, Expiration: string, CheckoutMetadata: table<Name: string, Value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -335,7 +356,6 @@ export def "checkout-borrow-license" [
 #
 # POST /
 # operationId: CheckoutLicense
-# --Entitlements item shape: {Name: string, Value?: string, Unit: "Count"|"None"|"Seconds"|"Microseconds"|"Milliseconds"|"Bytes"|"Kilobytes"|"Megabytes"|"Gigabytes"|"Terabytes"|"Bits"|"Kilobits"|"Megabits"|"Gigabits"|"Terabits"|"Percent"|"Bytes/Second"|"Kilobytes/Second"|"Megabytes/Second"|"Gigabytes/Second"|"Terabytes/Second"|"Bits/Second"|"Kilobits/Second"|"Megabits/Second"|"Gigabits/Second"|"Terabits/Second"|"Count/Second"}
 export def "checkout-license" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -361,7 +381,7 @@ export def "checkout-license" [
   client_token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request.
   --beneficiary: string # License beneficiary.
   --node-id: string # Node ID.
-]: any -> record<CheckoutType: string, LicenseConsumptionToken: string, EntitlementsAllowed: table<Name: string, Value: string, Unit: string>, SignedToken: string, NodeId: string, IssuedAt: string, Expiration: string, LicenseArn: string> {
+]: any -> oneof<record<CheckoutType: string, LicenseConsumptionToken: string, EntitlementsAllowed: table<Name: string, Value: string, Unit: string>, SignedToken: string, NodeId: string, IssuedAt: string, Expiration: string, LicenseArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -415,7 +435,7 @@ export def "create-grant" [
   principals: list<string> # The grant principals. You can specify one of the following as an Amazon Resource Name (ARN): An Amazon Web Services account, which includes only the account specified. An organizational unit (OU), which includes all accounts in the OU. An organization, which will include all accounts across your organization.
   home_region: string # Home Region of the grant.
   allowed_operations: list<string> # Allowed operations for the grant.
-]: any -> record<GrantArn: string, Status: string, Version: string> {
+]: any -> oneof<record<GrantArn: string, Status: string, Version: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -445,7 +465,6 @@ export def "create-grant" [
 #
 # POST /
 # operationId: CreateGrantVersion
-# --Options shape: {ActivationOverrideBehavior?: "DISTRIBUTED_GRANTS_ONLY"|"ALL_GRANTS_PERMITTED_BY_ISSUER"}
 export def "create-grant-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -472,7 +491,7 @@ export def "create-grant-version" [
   --status-reason: string # Grant status reason.
   --source-version: string # Current version of the grant.
   --options: record # The options you can specify when you create a new version of a grant, such as activation override behavior. For more information, see Granted licenses in License Manager (https://docs.aws.amazon.com/license-manager/latest/userguide/granted-licenses.html) in the License Manager User Guide. — shape: {ActivationOverrideBehavior?: "DISTRIBUTED_GRANTS_ONLY"|"ALL_GRANTS_PERMITTED_BY_ISSUER"}
-]: any -> record<GrantArn: string, Status: string, Version: string> {
+]: any -> oneof<record<GrantArn: string, Status: string, Version: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -502,11 +521,6 @@ export def "create-grant-version" [
 #
 # POST /
 # operationId: CreateLicense
-# --Issuer shape: {Name: string, SignKey?: string}
-# --Validity shape: {Begin: string, End?: string}
-# --Entitlements item shape: {Name: string, Value?: string, MaxCount?: int, Overage?: bool, Unit: "Count"|"None"|"Seconds"|"Microseconds"|"Milliseconds"|"Bytes"|"Kilobytes"|"Megabytes"|"Gigabytes"|"Terabytes"|"Bits"|"Kilobits"|"Megabits"|"Gigabits"|"Terabits"|"Percent"|"Bytes/Second"|"Kilobytes/Second"|"Megabytes/Second"|"Gigabytes/Second"|"Terabytes/Second"|"Bits/Second"|"Kilobits/Second"|"Megabits/Second"|"Gigabits/Second"|"Terabits/Second"|"Count/Second", AllowCheckIn?: bool}
-# --ConsumptionConfiguration shape: {RenewType?: "None"|"Weekly"|"Monthly", ProvisionalConfiguration?: record, BorrowConfiguration?: record}
-# --LicenseMetadata item shape: {Name?: string, Value?: string}
 export def "create-license" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -536,7 +550,7 @@ export def "create-license" [
   consumption_configuration: record # Details about a consumption configuration. — shape: {RenewType?: "None"|"Weekly"|"Monthly", ProvisionalConfiguration?: record, BorrowConfiguration?: record}
   --license-metadata: list # Information about the license. — item shape: {Name?: string, Value?: string}
   client_token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request.
-]: any -> record<LicenseArn: string, Status: string, Version: string> {
+]: any -> oneof<record<LicenseArn: string, Status: string, Version: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -566,8 +580,6 @@ export def "create-license" [
 #
 # POST /
 # operationId: CreateLicenseConfiguration
-# --Tags item shape: {Key?: string, Value?: string}
-# --ProductInformationList item shape: {ResourceType: string, ProductInformationFilterList: list}
 export def "create-license-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -595,7 +607,7 @@ export def "create-license-configuration" [
   --tags: list # Tags to add to the license configuration. — item shape: {Key?: string, Value?: string}
   --disassociate-when-not-found: oneof<nothing, bool> # When true, disassociates a resource when software is uninstalled.
   --product-information-list: list # Product information. — item shape: {ResourceType: string, ProductInformationFilterList: list}
-]: any -> record<LicenseConfigurationArn: string> {
+]: any -> oneof<record<LicenseConfigurationArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -625,8 +637,6 @@ export def "create-license-configuration" [
 #
 # POST /
 # operationId: CreateLicenseConversionTaskForResource
-# --SourceLicenseContext shape: {UsageOperation?: string}
-# --DestinationLicenseContext shape: {UsageOperation?: string}
 export def "create-license-conversion-task-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -648,7 +658,7 @@ export def "create-license-conversion-task-for-resource" [
   resource_arn: string # Amazon Resource Name (ARN) of the resource you are converting the license type for.
   source_license_context: record # Information about a license type conversion task. — shape: {UsageOperation?: string}
   destination_license_context: record # Information about a license type conversion task. — shape: {UsageOperation?: string}
-]: any -> record<LicenseConversionTaskId: string> {
+]: any -> oneof<record<LicenseConversionTaskId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -678,9 +688,6 @@ export def "create-license-conversion-task-for-resource" [
 #
 # POST /
 # operationId: CreateLicenseManagerReportGenerator
-# --ReportContext shape: {licenseConfigurationArns: list<string>}
-# --ReportFrequency shape: {value?: int, period?: "DAY"|"WEEK"|"MONTH"}
-# --Tags item shape: {Key?: string, Value?: string}
 export def "create-license-manager-report-generator" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -706,7 +713,7 @@ export def "create-license-manager-report-generator" [
   client_token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request.
   --description: string # Description of the report generator.
   --tags: list # Tags to add to the report generator. — item shape: {Key?: string, Value?: string}
-]: any -> record<LicenseManagerReportGeneratorArn: string> {
+]: any -> oneof<record<LicenseManagerReportGeneratorArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -736,11 +743,6 @@ export def "create-license-manager-report-generator" [
 #
 # POST /
 # operationId: CreateLicenseVersion
-# --Issuer shape: {Name: string, SignKey?: string}
-# --Validity shape: {Begin: string, End?: string}
-# --LicenseMetadata item shape: {Name?: string, Value?: string}
-# --Entitlements item shape: {Name: string, Value?: string, MaxCount?: int, Overage?: bool, Unit: "Count"|"None"|"Seconds"|"Microseconds"|"Milliseconds"|"Bytes"|"Kilobytes"|"Megabytes"|"Gigabytes"|"Terabytes"|"Bits"|"Kilobits"|"Megabits"|"Gigabits"|"Terabits"|"Percent"|"Bytes/Second"|"Kilobytes/Second"|"Megabytes/Second"|"Gigabytes/Second"|"Terabytes/Second"|"Bits/Second"|"Kilobits/Second"|"Megabits/Second"|"Gigabits/Second"|"Terabits/Second"|"Count/Second", AllowCheckIn?: bool}
-# --ConsumptionConfiguration shape: {RenewType?: "None"|"Weekly"|"Monthly", ProvisionalConfiguration?: record, BorrowConfiguration?: record}
 export def "create-license-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -771,7 +773,7 @@ export def "create-license-version" [
   status: string@status-completer-1 # License status.
   client_token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request.
   --source-version: string # Current version of the license.
-]: any -> record<LicenseArn: string, Version: string, Status: string> {
+]: any -> oneof<record<LicenseArn: string, Version: string, Status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -824,7 +826,7 @@ export def "create-token" [
   --expiration-in-days: int # Token expiration, in days, counted from token creation. The default is 365 days.
   --token-properties: list<string> # Data specified by the caller to be included in the JWT token. The data is mapped to the amr claim of the JWT token.
   client_token: string # Idempotency token, valid for 10 minutes.
-]: any -> record<TokenId: string, TokenType: string, Token: string> {
+]: any -> oneof<record<TokenId: string, TokenType: string, Token: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -875,7 +877,7 @@ export def "delete-grant" [
   grant_arn: string # Amazon Resource Name (ARN) of the grant.
   --status-reason: string # The Status reason for the delete request.
   version: string # Current version of the grant.
-]: any -> record<GrantArn: string, Status: string, Version: string> {
+]: any -> oneof<record<GrantArn: string, Status: string, Version: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -925,7 +927,7 @@ export def "delete-license" [
   --x-amz-target: string@x-amz-target-completer-13 # required
   license_arn: string # Amazon Resource Name (ARN) of the license.
   source_version: string # Current version of the license.
-]: any -> record<Status: string, DeletionDate: string> {
+]: any -> oneof<record<Status: string, DeletionDate: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -974,7 +976,7 @@ export def "delete-license-configuration" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-14 # required
   license_configuration_arn: string # ID of the license configuration.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1023,7 +1025,7 @@ export def "delete-license-manager-report-generator" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-15 # required
   license_manager_report_generator_arn: string # Amazon Resource Name (ARN) of the report generator to be deleted.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1072,7 +1074,7 @@ export def "delete-token" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-16 # required
   token_id: string # Token ID.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1122,7 +1124,7 @@ export def "extend-license-consumption" [
   --x-amz-target: string@x-amz-target-completer-17 # required
   license_consumption_token: string # License consumption token.
   --body-dry-run: oneof<nothing, bool> # Checks whether you have the required permissions for the action, without actually making the request. Provides an error response if you do not have the required permissions.
-]: any -> record<LicenseConsumptionToken: string, Expiration: string> {
+]: any -> oneof<record<LicenseConsumptionToken: string, Expiration: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1172,7 +1174,7 @@ export def "get-access-token" [
   --x-amz-target: string@x-amz-target-completer-18 # required
   --body-token: string # Refresh token, encoded as a JWT token.
   --token-properties: list<string> # Token properties to validate against those present in the JWT token.
-]: any -> record<AccessToken: string> {
+]: any -> oneof<record<AccessToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1223,7 +1225,7 @@ export def "get-grant" [
   --x-amz-target: string@x-amz-target-completer-19 # required
   grant_arn: string # Amazon Resource Name (ARN) of the grant.
   --version: string # Grant version.
-]: any -> record<Grant: record<GrantArn: string, GrantName: string, ParentArn: string, LicenseArn: string, GranteePrincipalArn: string, HomeRegion: string, GrantStatus: string, StatusReason: string, Version: string, GrantedOperations: list<string>, Options: record<ActivationOverrideBehavior: string>>> {
+]: any -> oneof<record<Grant: record<GrantArn: string, GrantName: string, ParentArn: string, LicenseArn: string, GranteePrincipalArn: string, HomeRegion: string, GrantStatus: string, StatusReason: string, Version: string, GrantedOperations: list<string>, Options: record<ActivationOverrideBehavior: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1273,7 +1275,7 @@ export def "get-license" [
   --x-amz-target: string@x-amz-target-completer-20 # required
   license_arn: string # Amazon Resource Name (ARN) of the license.
   --version: string # License version.
-]: any -> record<License: record<LicenseArn: string, LicenseName: string, ProductName: string, ProductSKU: string, Issuer: record<Name: string, SignKey: string, KeyFingerprint: string>, HomeRegion: string, Status: string, Validity: record<Begin: string, End: string>, Beneficiary: string, Entitlements: list<record>, ConsumptionConfiguration: record<RenewType: string, ProvisionalConfiguration: record, BorrowConfiguration: record>, LicenseMetadata: list<record>, CreateTime: string, Version: string>> {
+]: any -> oneof<record<License: record<LicenseArn: string, LicenseName: string, ProductName: string, ProductSKU: string, Issuer: record<Name: string, SignKey: string, KeyFingerprint: string>, HomeRegion: string, Status: string, Validity: record<Begin: string, End: string>, Beneficiary: string, Entitlements: list<record>, ConsumptionConfiguration: record<RenewType: string, ProvisionalConfiguration: record, BorrowConfiguration: record>, LicenseMetadata: list<record>, CreateTime: string, Version: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1322,7 +1324,7 @@ export def "get-license-configuration" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-21 # required
   license_configuration_arn: string # Amazon Resource Name (ARN) of the license configuration.
-]: any -> record<LicenseConfigurationId: string, LicenseConfigurationArn: string, Name: string, Description: string, LicenseCountingType: string, LicenseRules: list<string>, LicenseCount: int, LicenseCountHardLimit: bool, ConsumedLicenses: int, Status: string, OwnerAccountId: string, ConsumedLicenseSummaryList: table<ResourceType: string, ConsumedLicenses: int>, ManagedResourceSummaryList: table<ResourceType: string, AssociationCount: int>, Tags: table<Key: string, Value: string>, ProductInformationList: table<ResourceType: string, ProductInformationFilterList: list>, AutomatedDiscoveryInformation: record<LastRunTime: string>, DisassociateWhenNotFound: bool> {
+]: any -> oneof<record<LicenseConfigurationId: string, LicenseConfigurationArn: string, Name: string, Description: string, LicenseCountingType: string, LicenseRules: list<string>, LicenseCount: int, LicenseCountHardLimit: bool, ConsumedLicenses: int, Status: string, OwnerAccountId: string, ConsumedLicenseSummaryList: table<ResourceType: string, ConsumedLicenses: int>, ManagedResourceSummaryList: table<ResourceType: string, AssociationCount: int>, Tags: table<Key: string, Value: string>, ProductInformationList: table<ResourceType: string, ProductInformationFilterList: list>, AutomatedDiscoveryInformation: record<LastRunTime: string>, DisassociateWhenNotFound: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1371,7 +1373,7 @@ export def "get-license-conversion-task" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-22 # required
   license_conversion_task_id: string # ID of the license type conversion task to retrieve information on.
-]: any -> record<LicenseConversionTaskId: string, ResourceArn: string, SourceLicenseContext: record<UsageOperation: string>, DestinationLicenseContext: record<UsageOperation: string>, StatusMessage: string, Status: string, StartTime: string, LicenseConversionTime: string, EndTime: string> {
+]: any -> oneof<record<LicenseConversionTaskId: string, ResourceArn: string, SourceLicenseContext: record<UsageOperation: string>, DestinationLicenseContext: record<UsageOperation: string>, StatusMessage: string, Status: string, StartTime: string, LicenseConversionTime: string, EndTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1420,7 +1422,7 @@ export def "get-license-manager-report-generator" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-23 # required
   license_manager_report_generator_arn: string # Amazon Resource Name (ARN) of the report generator.
-]: any -> record<ReportGenerator: record<ReportGeneratorName: string, ReportType: list<string>, ReportContext: record<licenseConfigurationArns: list>, ReportFrequency: record<value: int, period: string>, LicenseManagerReportGeneratorArn: string, LastRunStatus: string, LastRunFailureReason: string, LastReportGenerationTime: string, ReportCreatorAccount: string, Description: string, S3Location: record<bucket: string, keyPrefix: string>, CreateTime: string, Tags: list<record>>> {
+]: any -> oneof<record<ReportGenerator: record<ReportGeneratorName: string, ReportType: list<string>, ReportContext: record<licenseConfigurationArns: list>, ReportFrequency: record<value: int, period: string>, LicenseManagerReportGeneratorArn: string, LastRunStatus: string, LastRunFailureReason: string, LastReportGenerationTime: string, ReportCreatorAccount: string, Description: string, S3Location: record<bucket: string, keyPrefix: string>, CreateTime: string, Tags: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1469,7 +1471,7 @@ export def "get-license-usage" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-24 # required
   license_arn: string # Amazon Resource Name (ARN) of the license.
-]: any -> record<LicenseUsage: record<EntitlementUsages: list<record>>> {
+]: any -> oneof<record<LicenseUsage: record<EntitlementUsages: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1518,7 +1520,7 @@ export def "get-service-settings" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-25 # required
   --body: record
-]: any -> record<S3BucketArn: string, SnsTopicArn: string, OrganizationConfiguration: record<EnableIntegration: bool>, EnableCrossAccountsDiscovery: bool, LicenseManagerResourceShareArn: string> {
+]: any -> oneof<record<S3BucketArn: string, SnsTopicArn: string, OrganizationConfiguration: record<EnableIntegration: bool>, EnableCrossAccountsDiscovery: bool, LicenseManagerResourceShareArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1569,7 +1571,7 @@ export def "list-associations-for-license-configuration" [
   license_configuration_arn: string # Amazon Resource Name (ARN) of a license configuration.
   --max-results: int # Maximum number of results to return in a single call.
   --next-token: string # Token for the next set of results.
-]: any -> record<LicenseConfigurationAssociations: table<ResourceArn: string, ResourceType: string, ResourceOwnerId: string, AssociationTime: string, AmiAssociationScope: string>, NextToken: string> {
+]: any -> oneof<record<LicenseConfigurationAssociations: table<ResourceArn: string, ResourceType: string, ResourceOwnerId: string, AssociationTime: string, AmiAssociationScope: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1599,7 +1601,6 @@ export def "list-associations-for-license-configuration" [
 #
 # POST /
 # operationId: ListDistributedGrants
-# --Filters item shape: {Name?: string, Values?: list<string>}
 export def "list-distributed-grants" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1622,7 +1623,7 @@ export def "list-distributed-grants" [
   --filters: list # Filters to scope the results. The following filters are supported: LicenseArn GrantStatus GranteePrincipalARN ProductSKU LicenseIssuerName — item shape: {Name?: string, Values?: list<string>}
   --next-token: string # Token for the next set of results.
   --max-results: int # Maximum number of results to return in a single call.
-]: any -> record<Grants: table<GrantArn: string, GrantName: string, ParentArn: string, LicenseArn: string, GranteePrincipalArn: string, HomeRegion: string, GrantStatus: string, StatusReason: string, Version: string, GrantedOperations: list, Options: record>, NextToken: string> {
+]: any -> oneof<record<Grants: table<GrantArn: string, GrantName: string, ParentArn: string, LicenseArn: string, GranteePrincipalArn: string, HomeRegion: string, GrantStatus: string, StatusReason: string, Version: string, GrantedOperations: list, Options: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1673,7 +1674,7 @@ export def "list-failures-for-license-configuration-operations" [
   license_configuration_arn: string # Amazon Resource Name of the license configuration.
   --max-results: int # Maximum number of results to return in a single call.
   --next-token: string # Token for the next set of results.
-]: any -> record<LicenseOperationFailureList: table<ResourceArn: string, ResourceType: string, ErrorMessage: string, FailureTime: string, OperationName: string, ResourceOwnerId: string, OperationRequestedBy: string, MetadataList: list>, NextToken: string> {
+]: any -> oneof<record<LicenseOperationFailureList: table<ResourceArn: string, ResourceType: string, ErrorMessage: string, FailureTime: string, OperationName: string, ResourceOwnerId: string, OperationRequestedBy: string, MetadataList: list>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1703,7 +1704,6 @@ export def "list-failures-for-license-configuration-operations" [
 #
 # POST /
 # operationId: ListLicenseConfigurations
-# --Filters item shape: {Name?: string, Values?: list<string>}
 export def "list-license-configurations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1726,7 +1726,7 @@ export def "list-license-configurations" [
   --max-results: int # Maximum number of results to return in a single call.
   --next-token: string # Token for the next set of results.
   --filters: list # Filters to scope the results. The following filters and logical operators are supported: licenseCountingType - The dimension for which licenses are counted. Possible values are vCPU | Instance | Core | Socket. Logical operators are EQUALS | NOT_EQUALS. enforceLicenseCount - A Boolean value that indicates whether hard license enforcement is used. Logical operators are EQUALS | NOT_EQUALS. usagelimitExceeded - A Boolean value that indicates whether the available licenses have been exceeded. Logical operators are EQUALS | NOT_EQUALS. — item shape: {Name?: string, Values?: list<string>}
-]: any -> record<LicenseConfigurations: table<LicenseConfigurationId: string, LicenseConfigurationArn: string, Name: string, Description: string, LicenseCountingType: string, LicenseRules: list, LicenseCount: int, LicenseCountHardLimit: bool, DisassociateWhenNotFound: bool, ConsumedLicenses: int, Status: string, OwnerAccountId: string, ConsumedLicenseSummaryList: list, ManagedResourceSummaryList: list, ProductInformationList: list, AutomatedDiscoveryInformation: record>, NextToken: string> {
+]: any -> oneof<record<LicenseConfigurations: table<LicenseConfigurationId: string, LicenseConfigurationArn: string, Name: string, Description: string, LicenseCountingType: string, LicenseRules: list, LicenseCount: int, LicenseCountHardLimit: bool, DisassociateWhenNotFound: bool, ConsumedLicenses: int, Status: string, OwnerAccountId: string, ConsumedLicenseSummaryList: list, ManagedResourceSummaryList: list, ProductInformationList: list, AutomatedDiscoveryInformation: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1756,7 +1756,6 @@ export def "list-license-configurations" [
 #
 # POST /
 # operationId: ListLicenseConversionTasks
-# --Filters item shape: {Name?: string, Values?: list<string>}
 export def "list-license-conversion-tasks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1778,7 +1777,7 @@ export def "list-license-conversion-tasks" [
   --next-token: string # Token for the next set of results.
   --max-results: int # Maximum number of results to return in a single call.
   --filters: list # Filters to scope the results. Valid filters are ResourceArns and Status. — item shape: {Name?: string, Values?: list<string>}
-]: any -> record<LicenseConversionTasks: table<LicenseConversionTaskId: string, ResourceArn: string, SourceLicenseContext: record, DestinationLicenseContext: record, Status: string, StatusMessage: string, StartTime: string, LicenseConversionTime: string, EndTime: string>, NextToken: string> {
+]: any -> oneof<record<LicenseConversionTasks: table<LicenseConversionTaskId: string, ResourceArn: string, SourceLicenseContext: record, DestinationLicenseContext: record, Status: string, StatusMessage: string, StartTime: string, LicenseConversionTime: string, EndTime: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1808,7 +1807,6 @@ export def "list-license-conversion-tasks" [
 #
 # POST /
 # operationId: ListLicenseManagerReportGenerators
-# --Filters item shape: {Name?: string, Values?: list<string>}
 export def "list-license-manager-report-generators" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1830,7 +1828,7 @@ export def "list-license-manager-report-generators" [
   --filters: list # Filters to scope the results. The following filters are supported: LicenseConfigurationArn — item shape: {Name?: string, Values?: list<string>}
   --next-token: string # Token for the next set of results.
   --max-results: int # Maximum number of results to return in a single call.
-]: any -> record<ReportGenerators: table<ReportGeneratorName: string, ReportType: list, ReportContext: record, ReportFrequency: record, LicenseManagerReportGeneratorArn: string, LastRunStatus: string, LastRunFailureReason: string, LastReportGenerationTime: string, ReportCreatorAccount: string, Description: string, S3Location: record, CreateTime: string, Tags: list>, NextToken: string> {
+]: any -> oneof<record<ReportGenerators: table<ReportGeneratorName: string, ReportType: list, ReportContext: record, ReportFrequency: record, LicenseManagerReportGeneratorArn: string, LastRunStatus: string, LastRunFailureReason: string, LastReportGenerationTime: string, ReportCreatorAccount: string, Description: string, S3Location: record, CreateTime: string, Tags: list>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1881,7 +1879,7 @@ export def "list-license-specifications-for-resource" [
   resource_arn: string # Amazon Resource Name (ARN) of a resource that has an associated license configuration.
   --max-results: int # Maximum number of results to return in a single call.
   --next-token: string # Token for the next set of results.
-]: any -> record<LicenseSpecifications: table<LicenseConfigurationArn: string, AmiAssociationScope: string>, NextToken: string> {
+]: any -> oneof<record<LicenseSpecifications: table<LicenseConfigurationArn: string, AmiAssociationScope: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1932,7 +1930,7 @@ export def "list-license-versions" [
   license_arn: string # Amazon Resource Name (ARN) of the license.
   --next-token: string # Token for the next set of results.
   --max-results: int # Maximum number of results to return in a single call.
-]: any -> record<Licenses: table<LicenseArn: string, LicenseName: string, ProductName: string, ProductSKU: string, Issuer: record, HomeRegion: string, Status: string, Validity: record, Beneficiary: string, Entitlements: list, ConsumptionConfiguration: record, LicenseMetadata: list, CreateTime: string, Version: string>, NextToken: string> {
+]: any -> oneof<record<Licenses: table<LicenseArn: string, LicenseName: string, ProductName: string, ProductSKU: string, Issuer: record, HomeRegion: string, Status: string, Validity: record, Beneficiary: string, Entitlements: list, ConsumptionConfiguration: record, LicenseMetadata: list, CreateTime: string, Version: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1962,7 +1960,6 @@ export def "list-license-versions" [
 #
 # POST /
 # operationId: ListLicenses
-# --Filters item shape: {Name?: string, Values?: list<string>}
 export def "list-licenses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1985,7 +1982,7 @@ export def "list-licenses" [
   --filters: list # Filters to scope the results. The following filters are supported: Beneficiary ProductSKU Fingerprint Status — item shape: {Name?: string, Values?: list<string>}
   --next-token: string # Token for the next set of results.
   --max-results: int # Maximum number of results to return in a single call.
-]: any -> record<Licenses: table<LicenseArn: string, LicenseName: string, ProductName: string, ProductSKU: string, Issuer: record, HomeRegion: string, Status: string, Validity: record, Beneficiary: string, Entitlements: list, ConsumptionConfiguration: record, LicenseMetadata: list, CreateTime: string, Version: string>, NextToken: string> {
+]: any -> oneof<record<Licenses: table<LicenseArn: string, LicenseName: string, ProductName: string, ProductSKU: string, Issuer: record, HomeRegion: string, Status: string, Validity: record, Beneficiary: string, Entitlements: list, ConsumptionConfiguration: record, LicenseMetadata: list, CreateTime: string, Version: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2015,7 +2012,6 @@ export def "list-licenses" [
 #
 # POST /
 # operationId: ListReceivedGrants
-# --Filters item shape: {Name?: string, Values?: list<string>}
 export def "list-received-grants" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2038,7 +2034,7 @@ export def "list-received-grants" [
   --filters: list # Filters to scope the results. The following filters are supported: ProductSKU LicenseIssuerName LicenseArn GrantStatus GranterAccountId — item shape: {Name?: string, Values?: list<string>}
   --next-token: string # Token for the next set of results.
   --max-results: int # Maximum number of results to return in a single call.
-]: any -> record<Grants: table<GrantArn: string, GrantName: string, ParentArn: string, LicenseArn: string, GranteePrincipalArn: string, HomeRegion: string, GrantStatus: string, StatusReason: string, Version: string, GrantedOperations: list, Options: record>, NextToken: string> {
+]: any -> oneof<record<Grants: table<GrantArn: string, GrantName: string, ParentArn: string, LicenseArn: string, GranteePrincipalArn: string, HomeRegion: string, GrantStatus: string, StatusReason: string, Version: string, GrantedOperations: list, Options: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2068,7 +2064,6 @@ export def "list-received-grants" [
 #
 # POST /
 # operationId: ListReceivedGrantsForOrganization
-# --Filters item shape: {Name?: string, Values?: list<string>}
 export def "list-received-grants-for-organization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2091,7 +2086,7 @@ export def "list-received-grants-for-organization" [
   --filters: list # Filters to scope the results. The following filters are supported: ParentArn GranteePrincipalArn — item shape: {Name?: string, Values?: list<string>}
   --next-token: string # Token for the next set of results.
   --max-results: int # Maximum number of results to return in a single call.
-]: any -> record<Grants: table<GrantArn: string, GrantName: string, ParentArn: string, LicenseArn: string, GranteePrincipalArn: string, HomeRegion: string, GrantStatus: string, StatusReason: string, Version: string, GrantedOperations: list, Options: record>, NextToken: string> {
+]: any -> oneof<record<Grants: table<GrantArn: string, GrantName: string, ParentArn: string, LicenseArn: string, GranteePrincipalArn: string, HomeRegion: string, GrantStatus: string, StatusReason: string, Version: string, GrantedOperations: list, Options: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2121,7 +2116,6 @@ export def "list-received-grants-for-organization" [
 #
 # POST /
 # operationId: ListReceivedLicenses
-# --Filters item shape: {Name?: string, Values?: list<string>}
 export def "list-received-licenses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2144,7 +2138,7 @@ export def "list-received-licenses" [
   --filters: list # Filters to scope the results. The following filters are supported: ProductSKU Status Fingerprint IssuerName Beneficiary — item shape: {Name?: string, Values?: list<string>}
   --next-token: string # Token for the next set of results.
   --max-results: int # Maximum number of results to return in a single call.
-]: any -> record<Licenses: table<LicenseArn: string, LicenseName: string, ProductName: string, ProductSKU: string, Issuer: record, HomeRegion: string, Status: string, Validity: record, Beneficiary: string, Entitlements: list, ConsumptionConfiguration: record, LicenseMetadata: list, CreateTime: string, Version: string, ReceivedMetadata: record>, NextToken: string> {
+]: any -> oneof<record<Licenses: table<LicenseArn: string, LicenseName: string, ProductName: string, ProductSKU: string, Issuer: record, HomeRegion: string, Status: string, Validity: record, Beneficiary: string, Entitlements: list, ConsumptionConfiguration: record, LicenseMetadata: list, CreateTime: string, Version: string, ReceivedMetadata: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2174,7 +2168,6 @@ export def "list-received-licenses" [
 #
 # POST /
 # operationId: ListReceivedLicensesForOrganization
-# --Filters item shape: {Name?: string, Values?: list<string>}
 export def "list-received-licenses-for-organization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2196,7 +2189,7 @@ export def "list-received-licenses-for-organization" [
   --filters: list # Filters to scope the results. The following filters are supported: Beneficiary ProductSKU — item shape: {Name?: string, Values?: list<string>}
   --next-token: string # Token for the next set of results.
   --max-results: int # Maximum number of results to return in a single call.
-]: any -> record<Licenses: table<LicenseArn: string, LicenseName: string, ProductName: string, ProductSKU: string, Issuer: record, HomeRegion: string, Status: string, Validity: record, Beneficiary: string, Entitlements: list, ConsumptionConfiguration: record, LicenseMetadata: list, CreateTime: string, Version: string, ReceivedMetadata: record>, NextToken: string> {
+]: any -> oneof<record<Licenses: table<LicenseArn: string, LicenseName: string, ProductName: string, ProductSKU: string, Issuer: record, HomeRegion: string, Status: string, Validity: record, Beneficiary: string, Entitlements: list, ConsumptionConfiguration: record, LicenseMetadata: list, CreateTime: string, Version: string, ReceivedMetadata: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2226,7 +2219,6 @@ export def "list-received-licenses-for-organization" [
 #
 # POST /
 # operationId: ListResourceInventory
-# --Filters item shape: {Name: string, Condition: "EQUALS"|"NOT_EQUALS"|"BEGINS_WITH"|"CONTAINS", Value?: string}
 export def "list-resource-inventory" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2248,7 +2240,7 @@ export def "list-resource-inventory" [
   --max-results: int # Maximum number of results to return in a single call.
   --next-token: string # Token for the next set of results.
   --filters: list # Filters to scope the results. The following filters and logical operators are supported: account_id - The ID of the Amazon Web Services account that owns the resource. Logical operators are EQUALS | NOT_EQUALS. application_name - The name of the application. Logical operators are EQUALS | BEGINS_WITH. license_included - The type of license included. Logical operators are EQUALS | NOT_EQUALS. Possible values are sql-server-enterprise | sql-server-standard | sql-server-web | windows-server-datacenter. platform - The platform of the resource. Logical operators are EQUALS | BEGINS_WITH. resource_id - The ID of the resource. Logical operators are EQUALS | NOT_EQUALS. tag:<key> - The key/value combination of a tag assigned to the resource. Logical operators are EQUALS (single account) or EQUALS | NOT_EQUALS (cross account). — item shape: {Name: string, Condition: "EQUALS"|"NOT_EQUALS"|"BEGINS_WITH"|"CONTAINS", Value?: string}
-]: any -> record<ResourceInventoryList: table<ResourceId: string, ResourceType: string, ResourceArn: string, Platform: string, PlatformVersion: string, ResourceOwningAccountId: string>, NextToken: string> {
+]: any -> oneof<record<ResourceInventoryList: table<ResourceId: string, ResourceType: string, ResourceArn: string, Platform: string, PlatformVersion: string, ResourceOwningAccountId: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2297,7 +2289,7 @@ export def "list-tags-for-resource" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-40 # required
   resource_arn: string # Amazon Resource Name (ARN) of the license configuration.
-]: any -> record<Tags: table<Key: string, Value: string>> {
+]: any -> oneof<record<Tags: table<Key: string, Value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2327,7 +2319,6 @@ export def "list-tags-for-resource" [
 #
 # POST /
 # operationId: ListTokens
-# --Filters item shape: {Name?: string, Values?: list<string>}
 export def "list-tokens" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2350,7 +2341,7 @@ export def "list-tokens" [
   --filters: list # Filters to scope the results. The following filter is supported: LicenseArns — item shape: {Name?: string, Values?: list<string>}
   --next-token: string # Token for the next set of results.
   --max-results: int # Maximum number of results to return in a single call.
-]: any -> record<Tokens: table<TokenId: string, TokenType: string, LicenseArn: string, ExpirationTime: string, TokenProperties: list, RoleArns: list, Status: string>, NextToken: string> {
+]: any -> oneof<record<Tokens: table<TokenId: string, TokenType: string, LicenseArn: string, ExpirationTime: string, TokenProperties: list, RoleArns: list, Status: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2380,7 +2371,6 @@ export def "list-tokens" [
 #
 # POST /
 # operationId: ListUsageForLicenseConfiguration
-# --Filters item shape: {Name?: string, Values?: list<string>}
 export def "list-usage-for-license-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2403,7 +2393,7 @@ export def "list-usage-for-license-configuration" [
   --max-results: int # Maximum number of results to return in a single call.
   --next-token: string # Token for the next set of results.
   --filters: list # Filters to scope the results. The following filters and logical operators are supported: resourceArn - The ARN of the license configuration resource. Logical operators are EQUALS | NOT_EQUALS. resourceType - The resource type (EC2_INSTANCE | EC2_HOST | EC2_AMI | SYSTEMS_MANAGER_MANAGED_INSTANCE). Logical operators are EQUALS | NOT_EQUALS. resourceAccount - The ID of the account that owns the resource. Logical operators are EQUALS | NOT_EQUALS. — item shape: {Name?: string, Values?: list<string>}
-]: any -> record<LicenseConfigurationUsageList: table<ResourceArn: string, ResourceType: string, ResourceStatus: string, ResourceOwnerId: string, AssociationTime: string, ConsumedLicenses: int>, NextToken: string> {
+]: any -> oneof<record<LicenseConfigurationUsageList: table<ResourceArn: string, ResourceType: string, ResourceStatus: string, ResourceOwnerId: string, AssociationTime: string, ConsumedLicenses: int>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2452,7 +2442,7 @@ export def "reject-grant" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-43 # required
   grant_arn: string # Amazon Resource Name (ARN) of the grant.
-]: any -> record<GrantArn: string, Status: string, Version: string> {
+]: any -> oneof<record<GrantArn: string, Status: string, Version: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2482,7 +2472,6 @@ export def "reject-grant" [
 #
 # POST /
 # operationId: TagResource
-# --Tags item shape: {Key?: string, Value?: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2503,7 +2492,7 @@ export def "tag-resource" [
   --x-amz-target: string@x-amz-target-completer-44 # required
   resource_arn: string # Amazon Resource Name (ARN) of the license configuration.
   tags: list # One or more tags. — item shape: {Key?: string, Value?: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2553,7 +2542,7 @@ export def "untag-resource" [
   --x-amz-target: string@x-amz-target-completer-45 # required
   resource_arn: string # Amazon Resource Name (ARN) of the license configuration.
   tag_keys: list<string> # Keys identifying the tags to remove.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2583,7 +2572,6 @@ export def "untag-resource" [
 #
 # POST /
 # operationId: UpdateLicenseConfiguration
-# --ProductInformationList item shape: {ResourceType: string, ProductInformationFilterList: list}
 export def "update-license-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2611,7 +2599,7 @@ export def "update-license-configuration" [
   --description: string # New description of the license configuration.
   --product-information-list: list # New product information. — item shape: {ResourceType: string, ProductInformationFilterList: list}
   --disassociate-when-not-found: oneof<nothing, bool> # When true, disassociates a resource when software is uninstalled.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2641,8 +2629,6 @@ export def "update-license-configuration" [
 #
 # POST /
 # operationId: UpdateLicenseManagerReportGenerator
-# --ReportContext shape: {licenseConfigurationArns: list<string>}
-# --ReportFrequency shape: {value?: int, period?: "DAY"|"WEEK"|"MONTH"}
 export def "update-license-manager-report-generator" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2668,7 +2654,7 @@ export def "update-license-manager-report-generator" [
   report_frequency: record # Details about how frequently reports are generated. — shape: {value?: int, period?: "DAY"|"WEEK"|"MONTH"}
   client_token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request.
   --description: string # Description of the report generator.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2698,8 +2684,6 @@ export def "update-license-manager-report-generator" [
 #
 # POST /
 # operationId: UpdateLicenseSpecificationsForResource
-# --AddLicenseSpecifications item shape: {LicenseConfigurationArn: string, AmiAssociationScope?: string}
-# --RemoveLicenseSpecifications item shape: {LicenseConfigurationArn: string, AmiAssociationScope?: string}
 export def "update-license-specifications-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2721,7 +2705,7 @@ export def "update-license-specifications-for-resource" [
   resource_arn: string # Amazon Resource Name (ARN) of the Amazon Web Services resource.
   --add-license-specifications: list # ARNs of the license configurations to add. — item shape: {LicenseConfigurationArn: string, AmiAssociationScope?: string}
   --remove-license-specifications: list # ARNs of the license configurations to remove. — item shape: {LicenseConfigurationArn: string, AmiAssociationScope?: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2751,7 +2735,6 @@ export def "update-license-specifications-for-resource" [
 #
 # POST /
 # operationId: UpdateServiceSettings
-# --OrganizationConfiguration shape: {EnableIntegration: bool}
 export def "update-service-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2774,7 +2757,7 @@ export def "update-service-settings" [
   --sns-topic-arn: string # Amazon Resource Name (ARN) of the Amazon SNS topic used for License Manager alerts.
   --organization-configuration: record # Configuration information for Organizations. — shape: {EnableIntegration: bool}
   --enable-cross-accounts-discovery: oneof<nothing, bool> # Activates cross-account discovery.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

@@ -15,27 +15,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
     "x-api-key" => { {scheme: $scheme, headers: {"X-API-Key": $token_val}, query: "", location: "header"} }
     "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -43,8 +52,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -55,7 +69,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -106,9 +129,9 @@ def shopper-interaction-completer [] { ["ContAuth" "Ecommerce" "Moto" "POS"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-adjust-authorisation" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["post-adjust-authorisation" "post-authorise" "post-authorise3d" "post-authorise3ds2" "post-cancel" "post-cancel-or-refund" "post-capture" "post-donate" "post-get-authentication-result" "post-refund" "post-retrieve3ds2-result" "post-technical-cancel" "post-void-pending-refund" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -130,11 +153,6 @@ export def commands []: nothing -> table {
 #
 # POST /adjustAuthorisation
 # operationId: post-adjustAuthorisation
-# --additionalData shape: {allow3DS2?: string, challengeWindowSize?: "01"|"02"|"03"|"04"|"05", executeThreeD?: string, mpiImplementationType?: string, scaExemption?: string, threeDSVersion?: string, airline.agency_invoice_number?: string, airline.agency_plan_name?: string, airline.airline_code?: string, airline.airline_designator_code?: string, airline.boarding_fee?: string, airline.computerized_reservation_system?: string, airline.customer_reference_number?: string, airline.document_type?: string, ... (181 more fields)}
-# --modificationAmount shape: {currency: string, value: int}
-# --mpiData shape: {authenticationResponse?: "Y"|"N"|"U"|"A", cavv?: string, cavvAlgorithm?: string, challengeCancel?: "01"|"02"|"03"|"04"|"05"|"06"|"07", directoryResponse?: "A"|"C"|"D"|"I"|"N"|"R"|"U"|"Y", dsTransID?: string, eci?: string, riskScore?: string, threeDSVersion?: string, tokenAuthenticationVerificationValue?: string, transStatusReason?: string, xid?: string}
-# --platformChargebackLogic shape: {behavior?: "deductAccordingToSplitRatio"|"deductFromLiableAccount"|"deductFromOneBalanceAccount", costAllocationAccount?: string, targetAccount?: string}
-# --splits item shape: {account?: string, amount: record, description?: string, reference?: string, type: "BalanceAccount"|"Commission"|"Default"|"MarketPlace"|"PaymentFee"|"Remainder"|"Surcharge"|"Tip"|"VAT"|"Verification"}
 export def "post-adjust-authorisation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -156,7 +174,7 @@ export def "post-adjust-authorisation" [
   --splits: list # An array of objects specifying how the amount should be split between accounts when using Adyen for Platforms. For details, refer to [Providing split information](https://docs.adyen.com/marketplaces-and-platforms/processing-payments#providing-split-information). — item shape: {account?: string, amount: record, description?: string, reference?: string, type: "BalanceAccount"|"Commission"|"Default"|"MarketPlace"|"PaymentFee"|"Remainder"|"Surcharge"|"Tip"|"VAT"|"Verification"}
   --tender-reference: string # The transaction reference provided by the PED. For point-of-sale integrations only.
   --unique-terminal-id: string # Unique terminal ID for the PED that originally processed the request. For point-of-sale integrations only.
-]: any -> record<additionalData: record, pspReference: string, response: string> {
+]: any -> oneof<record<additionalData: record, pspReference: string, response: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -183,28 +201,6 @@ export def "post-adjust-authorisation" [
 #
 # POST /authorise
 # operationId: post-authorise
-# --accountInfo shape: {accountAgeIndicator?: "notApplicable"|"thisTransaction"|"lessThan30Days"|"from30To60Days"|"moreThan60Days", accountChangeDate?: string, accountChangeIndicator?: "thisTransaction"|"lessThan30Days"|"from30To60Days"|"moreThan60Days", accountCreationDate?: string, accountType?: "notApplicable"|"credit"|"debit", addCardAttemptsDay?: int, deliveryAddressUsageDate?: string, deliveryAddressUsageIndicator?: "thisTransaction"|"lessThan30Days"|"from30To60Days"|"moreThan60Days", homePhone?: string, ... (10 more fields)}
-# --additionalAmount shape: {currency: string, value: int}
-# --additionalData shape: {allow3DS2?: string, challengeWindowSize?: "01"|"02"|"03"|"04"|"05", executeThreeD?: string, mpiImplementationType?: string, scaExemption?: string, threeDSVersion?: string, airline.agency_invoice_number?: string, airline.agency_plan_name?: string, airline.airline_code?: string, airline.airline_designator_code?: string, airline.boarding_fee?: string, airline.computerized_reservation_system?: string, airline.customer_reference_number?: string, airline.document_type?: string, ... (180 more fields)}
-# --amount shape: {currency: string, value: int}
-# --applicationInfo shape: {adyenLibrary?: record, adyenPaymentSource?: record, externalPlatform?: record, merchantApplication?: record, merchantDevice?: record, shopperInteractionDevice?: record}
-# --bankAccount shape: {bankAccountNumber?: string, bankCity?: string, bankLocationId?: string, bankName?: string, bic?: string, countryCode?: string, iban?: string, ownerName?: string, taxId?: string}
-# --billingAddress shape: {city: string, country: string, houseNumberOrName: string, postalCode: string, stateOrProvince?: string, street: string}
-# --browserInfo shape: {acceptHeader: string, colorDepth: int, javaEnabled: bool, javaScriptEnabled?: bool, language: string, screenHeight: int, screenWidth: int, timeZoneOffset: int, userAgent: string}
-# --card shape: {cvc?: string, expiryMonth?: string, expiryYear?: string, holderName?: string, issueNumber?: string, number?: string, startMonth?: string, startYear?: string}
-# --dccQuote shape: {account?: string, accountType?: string, baseAmount?: record, basePoints: int, buy?: record, interbank?: record, reference?: string, sell?: record, signature?: string, source?: string, type?: string, validTill: string}
-# --deliveryAddress shape: {city: string, country: string, houseNumberOrName: string, postalCode: string, stateOrProvince?: string, street: string}
-# --fundDestination shape: {additionalData?: record, billingAddress?: record, card?: record, selectedRecurringDetailReference?: string, shopperEmail?: string, shopperName?: record, shopperReference?: string, subMerchant?: record, telephoneNumber?: string}
-# --fundSource shape: {additionalData?: record, billingAddress?: record, card?: record, shopperEmail?: string, shopperName?: record, telephoneNumber?: string}
-# --installments shape: {plan?: "regular"|"revolving", value: int}
-# --mandate shape: {amount: string, amountRule?: "max"|"exact", billingAttemptsRule?: "on"|"before"|"after", billingDay?: string, endsAt: string, frequency: "adhoc"|"daily"|"weekly"|"biWeekly"|"monthly"|"quarterly"|"halfYearly"|"yearly", remarks?: string, startsAt?: string}
-# --merchantRiskIndicator shape: {addressMatch?: bool, deliveryAddressIndicator?: "shipToBillingAddress"|"shipToVerifiedAddress"|"shipToNewAddress"|"shipToStore"|"digitalGoods"|"goodsNotShipped"|"other", deliveryEmail?: string, deliveryEmailAddress?: string, deliveryTimeframe?: "electronicDelivery"|"sameDayShipping"|"overnightShipping"|"twoOrMoreDaysShipping", giftCardAmount?: record, giftCardCount?: int, giftCardCurr?: string, preOrderDate?: string, preOrderPurchase?: bool, preOrderPurchaseInd?: string, reorderItems?: bool, ... (2 more fields)}
-# --mpiData shape: {authenticationResponse?: "Y"|"N"|"U"|"A", cavv?: string, cavvAlgorithm?: string, challengeCancel?: "01"|"02"|"03"|"04"|"05"|"06"|"07", directoryResponse?: "A"|"C"|"D"|"I"|"N"|"R"|"U"|"Y", dsTransID?: string, eci?: string, riskScore?: string, threeDSVersion?: string, tokenAuthenticationVerificationValue?: string, transStatusReason?: string, xid?: string}
-# --platformChargebackLogic shape: {behavior?: "deductAccordingToSplitRatio"|"deductFromLiableAccount"|"deductFromOneBalanceAccount", costAllocationAccount?: string, targetAccount?: string}
-# --recurring shape: {contract?: "ONECLICK"|"RECURRING"|"PAYOUT", recurringDetailName?: string, recurringExpiry?: string, recurringFrequency?: string, tokenService?: "VISATOKENSERVICE"|"MCTOKENSERVICE"}
-# --shopperName shape: {firstName: string, lastName: string}
-# --splits item shape: {account?: string, amount: record, description?: string, reference?: string, type: "BalanceAccount"|"Commission"|"Default"|"MarketPlace"|"PaymentFee"|"Remainder"|"Surcharge"|"Tip"|"VAT"|"Verification"}
-# --threeDS2RequestData shape: {acctInfo?: record, acctType?: "01"|"02"|"03", acquirerBIN?: string, acquirerMerchantID?: string, addrMatch?: "Y"|"N", authenticationOnly?: bool, challengeIndicator?: "noPreference"|"requestNoChallenge"|"requestChallenge"|"requestChallengeAsMandate", deviceChannel: string, deviceRenderOptions?: record, homePhone?: record, mcc?: string, merchantName?: string, messageVersion?: string, mobilePhone?: record, notificationURL?: string, payTokenInd?: bool, paymentAuthenticationUseCase?: string, ... (22 more fields)}
 export def "post-authorise" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -268,7 +264,7 @@ export def "post-authorise" [
   --three-ds-authentication-only: oneof<nothing, bool> # If set to true, you will only perform the [3D Secure 2 authentication](https://docs.adyen.com/online-payments/3d-secure/other-3ds-flows/authentication-only), and not the payment authorisation. (default: false)
   --totals-group: string # The reference value to aggregate sales totals in reporting. When not specified, the store field is used (if available).
   --trusted-shopper: oneof<nothing, bool> # Set to true if the payment should be routed to a trusted MID.
-]: any -> record<additionalData: record, authCode: string, dccAmount: record<currency: string, value: int>, dccSignature: string, fraudResult: record<accountScore: int, results: list<record>>, issuerUrl: string, md: string, paRequest: string, pspReference: string, refusalReason: string, resultCode: string> {
+]: any -> oneof<record<additionalData: record, authCode: string, dccAmount: record<currency: string, value: int>, dccSignature: string, fraudResult: record<accountScore: int, results: list<record>>, issuerUrl: string, md: string, paRequest: string, pspReference: string, refusalReason: string, resultCode: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -295,21 +291,6 @@ export def "post-authorise" [
 #
 # POST /authorise3d
 # operationId: post-authorise3d
-# --accountInfo shape: {accountAgeIndicator?: "notApplicable"|"thisTransaction"|"lessThan30Days"|"from30To60Days"|"moreThan60Days", accountChangeDate?: string, accountChangeIndicator?: "thisTransaction"|"lessThan30Days"|"from30To60Days"|"moreThan60Days", accountCreationDate?: string, accountType?: "notApplicable"|"credit"|"debit", addCardAttemptsDay?: int, deliveryAddressUsageDate?: string, deliveryAddressUsageIndicator?: "thisTransaction"|"lessThan30Days"|"from30To60Days"|"moreThan60Days", homePhone?: string, ... (10 more fields)}
-# --additionalAmount shape: {currency: string, value: int}
-# --additionalData shape: {allow3DS2?: string, challengeWindowSize?: "01"|"02"|"03"|"04"|"05", executeThreeD?: string, mpiImplementationType?: string, scaExemption?: string, threeDSVersion?: string, airline.agency_invoice_number?: string, airline.agency_plan_name?: string, airline.airline_code?: string, airline.airline_designator_code?: string, airline.boarding_fee?: string, airline.computerized_reservation_system?: string, airline.customer_reference_number?: string, airline.document_type?: string, ... (180 more fields)}
-# --amount shape: {currency: string, value: int}
-# --applicationInfo shape: {adyenLibrary?: record, adyenPaymentSource?: record, externalPlatform?: record, merchantApplication?: record, merchantDevice?: record, shopperInteractionDevice?: record}
-# --billingAddress shape: {city: string, country: string, houseNumberOrName: string, postalCode: string, stateOrProvince?: string, street: string}
-# --browserInfo shape: {acceptHeader: string, colorDepth: int, javaEnabled: bool, javaScriptEnabled?: bool, language: string, screenHeight: int, screenWidth: int, timeZoneOffset: int, userAgent: string}
-# --dccQuote shape: {account?: string, accountType?: string, baseAmount?: record, basePoints: int, buy?: record, interbank?: record, reference?: string, sell?: record, signature?: string, source?: string, type?: string, validTill: string}
-# --deliveryAddress shape: {city: string, country: string, houseNumberOrName: string, postalCode: string, stateOrProvince?: string, street: string}
-# --installments shape: {plan?: "regular"|"revolving", value: int}
-# --merchantRiskIndicator shape: {addressMatch?: bool, deliveryAddressIndicator?: "shipToBillingAddress"|"shipToVerifiedAddress"|"shipToNewAddress"|"shipToStore"|"digitalGoods"|"goodsNotShipped"|"other", deliveryEmail?: string, deliveryEmailAddress?: string, deliveryTimeframe?: "electronicDelivery"|"sameDayShipping"|"overnightShipping"|"twoOrMoreDaysShipping", giftCardAmount?: record, giftCardCount?: int, giftCardCurr?: string, preOrderDate?: string, preOrderPurchase?: bool, preOrderPurchaseInd?: string, reorderItems?: bool, ... (2 more fields)}
-# --recurring shape: {contract?: "ONECLICK"|"RECURRING"|"PAYOUT", recurringDetailName?: string, recurringExpiry?: string, recurringFrequency?: string, tokenService?: "VISATOKENSERVICE"|"MCTOKENSERVICE"}
-# --shopperName shape: {firstName: string, lastName: string}
-# --splits item shape: {account?: string, amount: record, description?: string, reference?: string, type: "BalanceAccount"|"Commission"|"Default"|"MarketPlace"|"PaymentFee"|"Remainder"|"Surcharge"|"Tip"|"VAT"|"Verification"}
-# --threeDS2RequestData shape: {acctInfo?: record, acctType?: "01"|"02"|"03", acquirerBIN?: string, acquirerMerchantID?: string, addrMatch?: "Y"|"N", authenticationOnly?: bool, challengeIndicator?: "noPreference"|"requestNoChallenge"|"requestChallenge"|"requestChallengeAsMandate", deviceChannel: string, deviceRenderOptions?: record, homePhone?: record, mcc?: string, merchantName?: string, messageVersion?: string, mobilePhone?: record, notificationURL?: string, payTokenInd?: bool, paymentAuthenticationUseCase?: string, ... (22 more fields)}
 export def "post-authorise3d" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -365,7 +346,7 @@ export def "post-authorise3d" [
   --three-ds-authentication-only: oneof<nothing, bool> # If set to true, you will only perform the [3D Secure 2 authentication](https://docs.adyen.com/online-payments/3d-secure/other-3ds-flows/authentication-only), and not the payment authorisation. (default: false)
   --totals-group: string # The reference value to aggregate sales totals in reporting. When not specified, the store field is used (if available).
   --trusted-shopper: oneof<nothing, bool> # Set to true if the payment should be routed to a trusted MID.
-]: any -> record<additionalData: record, authCode: string, dccAmount: record<currency: string, value: int>, dccSignature: string, fraudResult: record<accountScore: int, results: list<record>>, issuerUrl: string, md: string, paRequest: string, pspReference: string, refusalReason: string, resultCode: string> {
+]: any -> oneof<record<additionalData: record, authCode: string, dccAmount: record<currency: string, value: int>, dccSignature: string, fraudResult: record<accountScore: int, results: list<record>>, issuerUrl: string, md: string, paRequest: string, pspReference: string, refusalReason: string, resultCode: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -392,22 +373,6 @@ export def "post-authorise3d" [
 #
 # POST /authorise3ds2
 # operationId: post-authorise3ds2
-# --accountInfo shape: {accountAgeIndicator?: "notApplicable"|"thisTransaction"|"lessThan30Days"|"from30To60Days"|"moreThan60Days", accountChangeDate?: string, accountChangeIndicator?: "thisTransaction"|"lessThan30Days"|"from30To60Days"|"moreThan60Days", accountCreationDate?: string, accountType?: "notApplicable"|"credit"|"debit", addCardAttemptsDay?: int, deliveryAddressUsageDate?: string, deliveryAddressUsageIndicator?: "thisTransaction"|"lessThan30Days"|"from30To60Days"|"moreThan60Days", homePhone?: string, ... (10 more fields)}
-# --additionalAmount shape: {currency: string, value: int}
-# --additionalData shape: {allow3DS2?: string, challengeWindowSize?: "01"|"02"|"03"|"04"|"05", executeThreeD?: string, mpiImplementationType?: string, scaExemption?: string, threeDSVersion?: string, airline.agency_invoice_number?: string, airline.agency_plan_name?: string, airline.airline_code?: string, airline.airline_designator_code?: string, airline.boarding_fee?: string, airline.computerized_reservation_system?: string, airline.customer_reference_number?: string, airline.document_type?: string, ... (180 more fields)}
-# --amount shape: {currency: string, value: int}
-# --applicationInfo shape: {adyenLibrary?: record, adyenPaymentSource?: record, externalPlatform?: record, merchantApplication?: record, merchantDevice?: record, shopperInteractionDevice?: record}
-# --billingAddress shape: {city: string, country: string, houseNumberOrName: string, postalCode: string, stateOrProvince?: string, street: string}
-# --browserInfo shape: {acceptHeader: string, colorDepth: int, javaEnabled: bool, javaScriptEnabled?: bool, language: string, screenHeight: int, screenWidth: int, timeZoneOffset: int, userAgent: string}
-# --dccQuote shape: {account?: string, accountType?: string, baseAmount?: record, basePoints: int, buy?: record, interbank?: record, reference?: string, sell?: record, signature?: string, source?: string, type?: string, validTill: string}
-# --deliveryAddress shape: {city: string, country: string, houseNumberOrName: string, postalCode: string, stateOrProvince?: string, street: string}
-# --installments shape: {plan?: "regular"|"revolving", value: int}
-# --merchantRiskIndicator shape: {addressMatch?: bool, deliveryAddressIndicator?: "shipToBillingAddress"|"shipToVerifiedAddress"|"shipToNewAddress"|"shipToStore"|"digitalGoods"|"goodsNotShipped"|"other", deliveryEmail?: string, deliveryEmailAddress?: string, deliveryTimeframe?: "electronicDelivery"|"sameDayShipping"|"overnightShipping"|"twoOrMoreDaysShipping", giftCardAmount?: record, giftCardCount?: int, giftCardCurr?: string, preOrderDate?: string, preOrderPurchase?: bool, preOrderPurchaseInd?: string, reorderItems?: bool, ... (2 more fields)}
-# --recurring shape: {contract?: "ONECLICK"|"RECURRING"|"PAYOUT", recurringDetailName?: string, recurringExpiry?: string, recurringFrequency?: string, tokenService?: "VISATOKENSERVICE"|"MCTOKENSERVICE"}
-# --shopperName shape: {firstName: string, lastName: string}
-# --splits item shape: {account?: string, amount: record, description?: string, reference?: string, type: "BalanceAccount"|"Commission"|"Default"|"MarketPlace"|"PaymentFee"|"Remainder"|"Surcharge"|"Tip"|"VAT"|"Verification"}
-# --threeDS2RequestData shape: {acctInfo?: record, acctType?: "01"|"02"|"03", acquirerBIN?: string, acquirerMerchantID?: string, addrMatch?: "Y"|"N", authenticationOnly?: bool, challengeIndicator?: "noPreference"|"requestNoChallenge"|"requestChallenge"|"requestChallengeAsMandate", deviceChannel: string, deviceRenderOptions?: record, homePhone?: record, mcc?: string, merchantName?: string, messageVersion?: string, mobilePhone?: record, notificationURL?: string, payTokenInd?: bool, paymentAuthenticationUseCase?: string, ... (22 more fields)}
-# --threeDS2Result shape: {authenticationValue?: string, cavvAlgorithm?: string, challengeCancel?: "01"|"02"|"03"|"04"|"05"|"06"|"07", challengeIndicator?: "noPreference"|"requestNoChallenge"|"requestChallenge"|"requestChallengeAsMandate", dsTransID?: string, eci?: string, exemptionIndicator?: "lowValue"|"secureCorporate"|"trustedBeneficiary"|"transactionRiskAnalysis", messageVersion?: string, riskScore?: string, threeDSServerTransID?: string, timestamp?: string, transStatus?: string, transStatusReason?: string, ... (1 more fields)}
 export def "post-authorise3ds2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -463,7 +428,7 @@ export def "post-authorise3ds2" [
   --three-ds-authentication-only: oneof<nothing, bool> # If set to true, you will only perform the [3D Secure 2 authentication](https://docs.adyen.com/online-payments/3d-secure/other-3ds-flows/authentication-only), and not the payment authorisation. (default: false)
   --totals-group: string # The reference value to aggregate sales totals in reporting. When not specified, the store field is used (if available).
   --trusted-shopper: oneof<nothing, bool> # Set to true if the payment should be routed to a trusted MID.
-]: any -> record<additionalData: record, authCode: string, dccAmount: record<currency: string, value: int>, dccSignature: string, fraudResult: record<accountScore: int, results: list<record>>, issuerUrl: string, md: string, paRequest: string, pspReference: string, refusalReason: string, resultCode: string> {
+]: any -> oneof<record<additionalData: record, authCode: string, dccAmount: record<currency: string, value: int>, dccSignature: string, fraudResult: record<accountScore: int, results: list<record>>, issuerUrl: string, md: string, paRequest: string, pspReference: string, refusalReason: string, resultCode: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -490,10 +455,6 @@ export def "post-authorise3ds2" [
 #
 # POST /cancel
 # operationId: post-cancel
-# --additionalData shape: {allow3DS2?: string, challengeWindowSize?: "01"|"02"|"03"|"04"|"05", executeThreeD?: string, mpiImplementationType?: string, scaExemption?: string, threeDSVersion?: string, airline.agency_invoice_number?: string, airline.agency_plan_name?: string, airline.airline_code?: string, airline.airline_designator_code?: string, airline.boarding_fee?: string, airline.computerized_reservation_system?: string, airline.customer_reference_number?: string, airline.document_type?: string, ... (181 more fields)}
-# --mpiData shape: {authenticationResponse?: "Y"|"N"|"U"|"A", cavv?: string, cavvAlgorithm?: string, challengeCancel?: "01"|"02"|"03"|"04"|"05"|"06"|"07", directoryResponse?: "A"|"C"|"D"|"I"|"N"|"R"|"U"|"Y", dsTransID?: string, eci?: string, riskScore?: string, threeDSVersion?: string, tokenAuthenticationVerificationValue?: string, transStatusReason?: string, xid?: string}
-# --platformChargebackLogic shape: {behavior?: "deductAccordingToSplitRatio"|"deductFromLiableAccount"|"deductFromOneBalanceAccount", costAllocationAccount?: string, targetAccount?: string}
-# --splits item shape: {account?: string, amount: record, description?: string, reference?: string, type: "BalanceAccount"|"Commission"|"Default"|"MarketPlace"|"PaymentFee"|"Remainder"|"Surcharge"|"Tip"|"VAT"|"Verification"}
 export def "post-cancel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -514,7 +475,7 @@ export def "post-cancel" [
   --splits: list # An array of objects specifying how the amount should be split between accounts when using Adyen for Platforms. For details, refer to [Providing split information](https://docs.adyen.com/marketplaces-and-platforms/processing-payments#providing-split-information). — item shape: {account?: string, amount: record, description?: string, reference?: string, type: "BalanceAccount"|"Commission"|"Default"|"MarketPlace"|"PaymentFee"|"Remainder"|"Surcharge"|"Tip"|"VAT"|"Verification"}
   --tender-reference: string # The transaction reference provided by the PED. For point-of-sale integrations only.
   --unique-terminal-id: string # Unique terminal ID for the PED that originally processed the request. For point-of-sale integrations only.
-]: any -> record<additionalData: record, pspReference: string, response: string> {
+]: any -> oneof<record<additionalData: record, pspReference: string, response: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -541,9 +502,6 @@ export def "post-cancel" [
 #
 # POST /cancelOrRefund
 # operationId: post-cancelOrRefund
-# --additionalData shape: {allow3DS2?: string, challengeWindowSize?: "01"|"02"|"03"|"04"|"05", executeThreeD?: string, mpiImplementationType?: string, scaExemption?: string, threeDSVersion?: string, airline.agency_invoice_number?: string, airline.agency_plan_name?: string, airline.airline_code?: string, airline.airline_designator_code?: string, airline.boarding_fee?: string, airline.computerized_reservation_system?: string, airline.customer_reference_number?: string, airline.document_type?: string, ... (181 more fields)}
-# --mpiData shape: {authenticationResponse?: "Y"|"N"|"U"|"A", cavv?: string, cavvAlgorithm?: string, challengeCancel?: "01"|"02"|"03"|"04"|"05"|"06"|"07", directoryResponse?: "A"|"C"|"D"|"I"|"N"|"R"|"U"|"Y", dsTransID?: string, eci?: string, riskScore?: string, threeDSVersion?: string, tokenAuthenticationVerificationValue?: string, transStatusReason?: string, xid?: string}
-# --platformChargebackLogic shape: {behavior?: "deductAccordingToSplitRatio"|"deductFromLiableAccount"|"deductFromOneBalanceAccount", costAllocationAccount?: string, targetAccount?: string}
 export def "post-cancel-or-refund" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -563,7 +521,7 @@ export def "post-cancel-or-refund" [
   --reference: string # Your reference for the payment modification. This reference is visible in Customer Area and in reports. Maximum length: 80 characters.
   --tender-reference: string # The transaction reference provided by the PED. For point-of-sale integrations only.
   --unique-terminal-id: string # Unique terminal ID for the PED that originally processed the request. For point-of-sale integrations only.
-]: any -> record<additionalData: record, pspReference: string, response: string> {
+]: any -> oneof<record<additionalData: record, pspReference: string, response: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -590,11 +548,6 @@ export def "post-cancel-or-refund" [
 #
 # POST /capture
 # operationId: post-capture
-# --additionalData shape: {allow3DS2?: string, challengeWindowSize?: "01"|"02"|"03"|"04"|"05", executeThreeD?: string, mpiImplementationType?: string, scaExemption?: string, threeDSVersion?: string, airline.agency_invoice_number?: string, airline.agency_plan_name?: string, airline.airline_code?: string, airline.airline_designator_code?: string, airline.boarding_fee?: string, airline.computerized_reservation_system?: string, airline.customer_reference_number?: string, airline.document_type?: string, ... (181 more fields)}
-# --modificationAmount shape: {currency: string, value: int}
-# --mpiData shape: {authenticationResponse?: "Y"|"N"|"U"|"A", cavv?: string, cavvAlgorithm?: string, challengeCancel?: "01"|"02"|"03"|"04"|"05"|"06"|"07", directoryResponse?: "A"|"C"|"D"|"I"|"N"|"R"|"U"|"Y", dsTransID?: string, eci?: string, riskScore?: string, threeDSVersion?: string, tokenAuthenticationVerificationValue?: string, transStatusReason?: string, xid?: string}
-# --platformChargebackLogic shape: {behavior?: "deductAccordingToSplitRatio"|"deductFromLiableAccount"|"deductFromOneBalanceAccount", costAllocationAccount?: string, targetAccount?: string}
-# --splits item shape: {account?: string, amount: record, description?: string, reference?: string, type: "BalanceAccount"|"Commission"|"Default"|"MarketPlace"|"PaymentFee"|"Remainder"|"Surcharge"|"Tip"|"VAT"|"Verification"}
 export def "post-capture" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -616,7 +569,7 @@ export def "post-capture" [
   --splits: list # An array of objects specifying how the amount should be split between accounts when using Adyen for Platforms. For details, refer to [Providing split information](https://docs.adyen.com/marketplaces-and-platforms/processing-payments#providing-split-information). — item shape: {account?: string, amount: record, description?: string, reference?: string, type: "BalanceAccount"|"Commission"|"Default"|"MarketPlace"|"PaymentFee"|"Remainder"|"Surcharge"|"Tip"|"VAT"|"Verification"}
   --tender-reference: string # The transaction reference provided by the PED. For point-of-sale integrations only.
   --unique-terminal-id: string # Unique terminal ID for the PED that originally processed the request. For point-of-sale integrations only.
-]: any -> record<additionalData: record, pspReference: string, response: string> {
+]: any -> oneof<record<additionalData: record, pspReference: string, response: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -643,8 +596,6 @@ export def "post-capture" [
 #
 # POST /donate
 # operationId: post-donate
-# --modificationAmount shape: {currency: string, value: int}
-# --platformChargebackLogic shape: {behavior?: "deductAccordingToSplitRatio"|"deductFromLiableAccount"|"deductFromOneBalanceAccount", costAllocationAccount?: string, targetAccount?: string}
 export def "post-donate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -661,7 +612,7 @@ export def "post-donate" [
   --original-reference: string # The original pspReference of the payment to modify. This reference is returned in: * authorisation response * authorisation notification
   --platform-chargeback-logic: record # shape: {behavior?: "deductAccordingToSplitRatio"|"deductFromLiableAccount"|"deductFromOneBalanceAccount", costAllocationAccount?: string, targetAccount?: string}
   --reference: string # Your reference for the payment modification. This reference is visible in Customer Area and in reports. Maximum length: 80 characters.
-]: any -> record<additionalData: record, pspReference: string, response: string> {
+]: any -> oneof<record<additionalData: record, pspReference: string, response: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -700,7 +651,7 @@ export def "post-get-authentication-result" [
   --dry-run(-n) # Return the request that would be sent without executing it
   merchant_account: string # The merchant account identifier, with which the authentication was processed.
   psp_reference: string # The pspReference identifier for the transaction.
-]: any -> record<threeDS1Result: record<cavv: string, cavvAlgorithm: string, eci: string, threeDAuthenticatedResponse: string, threeDOfferedResponse: string, xid: string>, threeDS2Result: record<authenticationValue: string, cavvAlgorithm: string, challengeCancel: string, challengeIndicator: string, dsTransID: string, eci: string, exemptionIndicator: string, messageVersion: string, riskScore: string, threeDSServerTransID: string, timestamp: string, transStatus: string, transStatusReason: string, whiteListStatus: string>> {
+]: any -> oneof<record<threeDS1Result: record<cavv: string, cavvAlgorithm: string, eci: string, threeDAuthenticatedResponse: string, threeDOfferedResponse: string, xid: string>, threeDS2Result: record<authenticationValue: string, cavvAlgorithm: string, challengeCancel: string, challengeIndicator: string, dsTransID: string, eci: string, exemptionIndicator: string, messageVersion: string, riskScore: string, threeDSServerTransID: string, timestamp: string, transStatus: string, transStatusReason: string, whiteListStatus: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -727,11 +678,6 @@ export def "post-get-authentication-result" [
 #
 # POST /refund
 # operationId: post-refund
-# --additionalData shape: {allow3DS2?: string, challengeWindowSize?: "01"|"02"|"03"|"04"|"05", executeThreeD?: string, mpiImplementationType?: string, scaExemption?: string, threeDSVersion?: string, airline.agency_invoice_number?: string, airline.agency_plan_name?: string, airline.airline_code?: string, airline.airline_designator_code?: string, airline.boarding_fee?: string, airline.computerized_reservation_system?: string, airline.customer_reference_number?: string, airline.document_type?: string, ... (181 more fields)}
-# --modificationAmount shape: {currency: string, value: int}
-# --mpiData shape: {authenticationResponse?: "Y"|"N"|"U"|"A", cavv?: string, cavvAlgorithm?: string, challengeCancel?: "01"|"02"|"03"|"04"|"05"|"06"|"07", directoryResponse?: "A"|"C"|"D"|"I"|"N"|"R"|"U"|"Y", dsTransID?: string, eci?: string, riskScore?: string, threeDSVersion?: string, tokenAuthenticationVerificationValue?: string, transStatusReason?: string, xid?: string}
-# --platformChargebackLogic shape: {behavior?: "deductAccordingToSplitRatio"|"deductFromLiableAccount"|"deductFromOneBalanceAccount", costAllocationAccount?: string, targetAccount?: string}
-# --splits item shape: {account?: string, amount: record, description?: string, reference?: string, type: "BalanceAccount"|"Commission"|"Default"|"MarketPlace"|"PaymentFee"|"Remainder"|"Surcharge"|"Tip"|"VAT"|"Verification"}
 export def "post-refund" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -753,7 +699,7 @@ export def "post-refund" [
   --splits: list # An array of objects specifying how the amount should be split between accounts when using Adyen for Platforms. For details, refer to [Providing split information](https://docs.adyen.com/marketplaces-and-platforms/processing-payments#providing-split-information). — item shape: {account?: string, amount: record, description?: string, reference?: string, type: "BalanceAccount"|"Commission"|"Default"|"MarketPlace"|"PaymentFee"|"Remainder"|"Surcharge"|"Tip"|"VAT"|"Verification"}
   --tender-reference: string # The transaction reference provided by the PED. For point-of-sale integrations only.
   --unique-terminal-id: string # Unique terminal ID for the PED that originally processed the request. For point-of-sale integrations only.
-]: any -> record<additionalData: record, pspReference: string, response: string> {
+]: any -> oneof<record<additionalData: record, pspReference: string, response: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -792,7 +738,7 @@ export def "post-retrieve3ds2-result" [
   --dry-run(-n) # Return the request that would be sent without executing it
   merchant_account: string # The merchant account identifier, with which you want to process the transaction.
   psp_reference: string # The pspReference returned in the /authorise call.
-]: any -> record<threeDS2Result: record<authenticationValue: string, cavvAlgorithm: string, challengeCancel: string, challengeIndicator: string, dsTransID: string, eci: string, exemptionIndicator: string, messageVersion: string, riskScore: string, threeDSServerTransID: string, timestamp: string, transStatus: string, transStatusReason: string, whiteListStatus: string>> {
+]: any -> oneof<record<threeDS2Result: record<authenticationValue: string, cavvAlgorithm: string, challengeCancel: string, challengeIndicator: string, dsTransID: string, eci: string, exemptionIndicator: string, messageVersion: string, riskScore: string, threeDSServerTransID: string, timestamp: string, transStatus: string, transStatusReason: string, whiteListStatus: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -819,11 +765,6 @@ export def "post-retrieve3ds2-result" [
 #
 # POST /technicalCancel
 # operationId: post-technicalCancel
-# --additionalData shape: {allow3DS2?: string, challengeWindowSize?: "01"|"02"|"03"|"04"|"05", executeThreeD?: string, mpiImplementationType?: string, scaExemption?: string, threeDSVersion?: string, airline.agency_invoice_number?: string, airline.agency_plan_name?: string, airline.airline_code?: string, airline.airline_designator_code?: string, airline.boarding_fee?: string, airline.computerized_reservation_system?: string, airline.customer_reference_number?: string, airline.document_type?: string, ... (181 more fields)}
-# --modificationAmount shape: {currency: string, value: int}
-# --mpiData shape: {authenticationResponse?: "Y"|"N"|"U"|"A", cavv?: string, cavvAlgorithm?: string, challengeCancel?: "01"|"02"|"03"|"04"|"05"|"06"|"07", directoryResponse?: "A"|"C"|"D"|"I"|"N"|"R"|"U"|"Y", dsTransID?: string, eci?: string, riskScore?: string, threeDSVersion?: string, tokenAuthenticationVerificationValue?: string, transStatusReason?: string, xid?: string}
-# --platformChargebackLogic shape: {behavior?: "deductAccordingToSplitRatio"|"deductFromLiableAccount"|"deductFromOneBalanceAccount", costAllocationAccount?: string, targetAccount?: string}
-# --splits item shape: {account?: string, amount: record, description?: string, reference?: string, type: "BalanceAccount"|"Commission"|"Default"|"MarketPlace"|"PaymentFee"|"Remainder"|"Surcharge"|"Tip"|"VAT"|"Verification"}
 export def "post-technical-cancel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -844,7 +785,7 @@ export def "post-technical-cancel" [
   --splits: list # An array of objects specifying how the amount should be split between accounts when using Adyen for Platforms. For details, refer to [Providing split information](https://docs.adyen.com/marketplaces-and-platforms/processing-payments#providing-split-information). — item shape: {account?: string, amount: record, description?: string, reference?: string, type: "BalanceAccount"|"Commission"|"Default"|"MarketPlace"|"PaymentFee"|"Remainder"|"Surcharge"|"Tip"|"VAT"|"Verification"}
   --tender-reference: string # The transaction reference provided by the PED. For point-of-sale integrations only.
   --unique-terminal-id: string # Unique terminal ID for the PED that originally processed the request. For point-of-sale integrations only.
-]: any -> record<additionalData: record, pspReference: string, response: string> {
+]: any -> oneof<record<additionalData: record, pspReference: string, response: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -871,11 +812,6 @@ export def "post-technical-cancel" [
 #
 # POST /voidPendingRefund
 # operationId: post-voidPendingRefund
-# --additionalData shape: {allow3DS2?: string, challengeWindowSize?: "01"|"02"|"03"|"04"|"05", executeThreeD?: string, mpiImplementationType?: string, scaExemption?: string, threeDSVersion?: string, airline.agency_invoice_number?: string, airline.agency_plan_name?: string, airline.airline_code?: string, airline.airline_designator_code?: string, airline.boarding_fee?: string, airline.computerized_reservation_system?: string, airline.customer_reference_number?: string, airline.document_type?: string, ... (181 more fields)}
-# --modificationAmount shape: {currency: string, value: int}
-# --mpiData shape: {authenticationResponse?: "Y"|"N"|"U"|"A", cavv?: string, cavvAlgorithm?: string, challengeCancel?: "01"|"02"|"03"|"04"|"05"|"06"|"07", directoryResponse?: "A"|"C"|"D"|"I"|"N"|"R"|"U"|"Y", dsTransID?: string, eci?: string, riskScore?: string, threeDSVersion?: string, tokenAuthenticationVerificationValue?: string, transStatusReason?: string, xid?: string}
-# --platformChargebackLogic shape: {behavior?: "deductAccordingToSplitRatio"|"deductFromLiableAccount"|"deductFromOneBalanceAccount", costAllocationAccount?: string, targetAccount?: string}
-# --splits item shape: {account?: string, amount: record, description?: string, reference?: string, type: "BalanceAccount"|"Commission"|"Default"|"MarketPlace"|"PaymentFee"|"Remainder"|"Surcharge"|"Tip"|"VAT"|"Verification"}
 export def "post-void-pending-refund" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -897,7 +833,7 @@ export def "post-void-pending-refund" [
   --splits: list # An array of objects specifying how the amount should be split between accounts when using Adyen for Platforms. For details, refer to [Providing split information](https://docs.adyen.com/marketplaces-and-platforms/processing-payments#providing-split-information). — item shape: {account?: string, amount: record, description?: string, reference?: string, type: "BalanceAccount"|"Commission"|"Default"|"MarketPlace"|"PaymentFee"|"Remainder"|"Surcharge"|"Tip"|"VAT"|"Verification"}
   --tender-reference: string # The transaction reference provided by the PED. For point-of-sale integrations only.
   --unique-terminal-id: string # Unique terminal ID for the PED that originally processed the request. For point-of-sale integrations only.
-]: any -> record<additionalData: record, pspReference: string, response: string> {
+]: any -> oneof<record<additionalData: record, pspReference: string, response: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)

@@ -12,27 +12,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -40,8 +49,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -52,7 +66,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -87,7 +110,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -140,9 +164,9 @@ def size-completer [] { ["1024x1024" "256x256" "512x512"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-answer" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["create-answer" "create-transcription" "create-translation" "create-chat-completion" "create-classification" "create-completion" "create-edit" "create-embedding" "list-engines" "retrieve-engine" "create-search" "list-files" "create-file" "delete-file" "retrieve-file" "download-file" "list-fine-tunes" "create-fine-tune" "retrieve-fine-tune" "cancel-fine-tune" "list-fine-tune-events" "create-image-edit" "create-image" "create-image-variation" "list-models" "delete-model" "retrieve-model" "create-moderation" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -194,7 +218,7 @@ export def "create-answer" [
   --stop: any # Up to 4 sequences where the API will stop generating further tokens. The returned text will not contain the stop sequence. (nullable)
   --temperature: float # What sampling temperature to use, between 0 and 2. Higher values like 0.8 will make the output more random, while lower values like 0.2 will make it more focused and deterministic. (nullable, default: 0)
   --user: string # A unique identifier representing your end-user, which can help OpenAI to monitor and detect abuse. [Learn more](/docs/guides/safety-best-practices/end-user-ids). (e.g. user-1234)
-]: any -> record<answers: list<string>, completion: string, model: string, object: string, search_model: string, selected_documents: table<document: int, text: string>> {
+]: any -> oneof<record<answers: list<string>, completion: string, model: string, object: string, search_model: string, selected_documents: table<document: int, text: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -237,7 +261,7 @@ export def "create-transcription" [
   --prompt: string # An optional text to guide the model's style or continue a previous audio segment. The [prompt](/docs/guides/speech-to-text/prompting) should match the audio language.
   --response-format: string # The format of the transcript output, in one of these options: json, text, srt, verbose_json, or vtt. (default: json)
   --temperature: float # The sampling temperature, between 0 and 1. Higher values like 0.8 will make the output more random, while lower values like 0.2 will make it more focused and deterministic. If set to 0, the model will use [log probability](https://en.wikipedia.org/wiki/Log_probability) to automatically increase the temperature until certain thresholds are hit. (default: 0)
-]: any -> record<text: string> {
+]: any -> oneof<record<text: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -281,7 +305,7 @@ export def "create-translation" [
   --prompt: string # An optional text to guide the model's style or continue a previous audio segment. The [prompt](/docs/guides/speech-to-text/prompting) should be in English.
   --response-format: string # The format of the transcript output, in one of these options: json, text, srt, verbose_json, or vtt. (default: json)
   --temperature: float # The sampling temperature, between 0 and 1. Higher values like 0.8 will make the output more random, while lower values like 0.2 will make it more focused and deterministic. If set to 0, the model will use [log probability](https://en.wikipedia.org/wiki/Log_probability) to automatically increase the temperature until certain thresholds are hit. (default: 0)
-]: any -> record<text: string> {
+]: any -> oneof<record<text: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -310,7 +334,6 @@ export def "create-translation" [
 #
 # POST /chat/completions
 # operationId: createChatCompletion
-# --messages item shape: {content: string, name?: string, role: "system"|"user"|"assistant"}
 export def "create-chat-completion" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -333,7 +356,7 @@ export def "create-chat-completion" [
   --temperature: float # What sampling temperature to use, between 0 and 2. Higher values like 0.8 will make the output more random, while lower values like 0.2 will make it more focused and deterministic. We generally recommend altering this or `top_p` but not both. (nullable, default: 1, e.g. 1)
   --top-p: float # An alternative to sampling with temperature, called nucleus sampling, where the model considers the results of the tokens with top_p probability mass. So 0.1 means only the tokens comprising the top 10% probability mass are considered. We generally recommend altering this or `temperature` but not both. (nullable, default: 1, e.g. 1)
   --user: string # A unique identifier representing your end-user, which can help OpenAI to monitor and detect abuse. [Learn more](/docs/guides/safety-best-practices/end-user-ids). (e.g. user-1234)
-]: any -> record<choices: table<finish_reason: string, index: int, message: record>, created: int, id: string, model: string, object: string, usage: record<completion_tokens: int, prompt_tokens: int, total_tokens: int>> {
+]: any -> oneof<record<choices: table<finish_reason: string, index: int, message: record>, created: int, id: string, model: string, object: string, usage: record<completion_tokens: int, prompt_tokens: int, total_tokens: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -386,7 +409,7 @@ export def "create-classification" [
   --search-model: string # ID of the model to use for [Search](/docs/api-reference/searches/create). You can select one of `ada`, `babbage`, `curie`, or `davinci`. (nullable, default: ada)
   --temperature: float # What sampling temperature to use, between 0 and 2. Higher values like 0.8 will make the output more random, while lower values like 0.2 will make it more focused and deterministic. (nullable, default: 0, e.g. 0)
   --user: string # A unique identifier representing your end-user, which can help OpenAI to monitor and detect abuse. [Learn more](/docs/guides/safety-best-practices/end-user-ids). (e.g. user-1234)
-]: any -> record<completion: string, label: string, model: string, object: string, search_model: string, selected_examples: table<document: int, label: string, text: string>> {
+]: any -> oneof<record<completion: string, label: string, model: string, object: string, search_model: string, selected_examples: table<document: int, label: string, text: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -439,7 +462,7 @@ export def "create-completion" [
   --temperature: float # What sampling temperature to use, between 0 and 2. Higher values like 0.8 will make the output more random, while lower values like 0.2 will make it more focused and deterministic. We generally recommend altering this or `top_p` but not both. (nullable, default: 1, e.g. 1)
   --top-p: float # An alternative to sampling with temperature, called nucleus sampling, where the model considers the results of the tokens with top_p probability mass. So 0.1 means only the tokens comprising the top 10% probability mass are considered. We generally recommend altering this or `temperature` but not both. (nullable, default: 1, e.g. 1)
   --user: string # A unique identifier representing your end-user, which can help OpenAI to monitor and detect abuse. [Learn more](/docs/guides/safety-best-practices/end-user-ids). (e.g. user-1234)
-]: any -> record<choices: table<finish_reason: string, index: int, logprobs: record, text: string>, created: int, id: string, model: string, object: string, usage: record<completion_tokens: int, prompt_tokens: int, total_tokens: int>> {
+]: any -> oneof<record<choices: table<finish_reason: string, index: int, logprobs: record, text: string>, created: int, id: string, model: string, object: string, usage: record<completion_tokens: int, prompt_tokens: int, total_tokens: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -482,7 +505,7 @@ export def "create-edit" [
   --n: int # How many edits to generate for the input and instruction. (nullable, default: 1, e.g. 1)
   --temperature: float # What sampling temperature to use, between 0 and 2. Higher values like 0.8 will make the output more random, while lower values like 0.2 will make it more focused and deterministic. We generally recommend altering this or `top_p` but not both. (nullable, default: 1, e.g. 1)
   --top-p: float # An alternative to sampling with temperature, called nucleus sampling, where the model considers the results of the tokens with top_p probability mass. So 0.1 means only the tokens comprising the top 10% probability mass are considered. We generally recommend altering this or `temperature` but not both. (nullable, default: 1, e.g. 1)
-]: any -> record<choices: table<finish_reason: string, index: int, logprobs: record, text: string>, created: int, object: string, usage: record<completion_tokens: int, prompt_tokens: int, total_tokens: int>> {
+]: any -> oneof<record<choices: table<finish_reason: string, index: int, logprobs: record, text: string>, created: int, object: string, usage: record<completion_tokens: int, prompt_tokens: int, total_tokens: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -522,7 +545,7 @@ export def "create-embedding" [
   --body-input: any # Input text to get embeddings for, encoded as a string or array of tokens. To get embeddings for multiple inputs in a single request, pass an array of strings or array of token arrays. Each input must not exceed 8192 tokens in length. (e.g. The quick brown fox jumped over the lazy dog)
   model: string # ID of the model to use. You can use the [List models](/docs/api-reference/models/list) API to see all of your available models, or see our [Model overview](/docs/models/overview) for descriptions of them.
   --user: string # A unique identifier representing your end-user, which can help OpenAI to monitor and detect abuse. [Learn more](/docs/guides/safety-best-practices/end-user-ids). (e.g. user-1234)
-]: any -> record<data: table<embedding: list, index: int, object: string>, model: string, object: string, usage: record<prompt_tokens: int, total_tokens: int>> {
+]: any -> oneof<record<data: table<embedding: list, index: int, object: string>, model: string, object: string, usage: record<prompt_tokens: int, total_tokens: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -562,7 +585,7 @@ export def "list-engines" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<created: int, id: string, object: string, ready: bool>, object: string> {
+]: nothing -> oneof<record<data: table<created: int, id: string, object: string, ready: bool>, object: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/engines" $auth.query)
@@ -599,7 +622,7 @@ export def "retrieve-engine" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created: int, id: string, object: string, ready: bool> {
+]: nothing -> oneof<record<created: int, id: string, object: string, ready: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($engine_id | is-empty) { error make --unspanned { msg: "path parameter 'engine_id' must be non-empty" } }
@@ -643,7 +666,7 @@ export def "create-search" [
   query: string # Query to search against the documents. (e.g. the president)
   --return-metadata: oneof<nothing, bool> # A special boolean flag for showing metadata. If set to `true`, each document entry in the returned JSON will contain a "metadata" field. This flag only takes effect when `file` is set. (nullable, default: false)
   --user: string # A unique identifier representing your end-user, which can help OpenAI to monitor and detect abuse. [Learn more](/docs/guides/safety-best-practices/end-user-ids). (e.g. user-1234)
-]: any -> record<data: table<document: int, object: string, score: float>, model: string, object: string> {
+]: any -> oneof<record<data: table<document: int, object: string, score: float>, model: string, object: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -681,7 +704,7 @@ export def "list-files" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<bytes: int, created_at: int, filename: string, id: string, object: string, purpose: string, status: string, status_details: record>, object: string> {
+]: nothing -> oneof<record<data: table<bytes: int, created_at: int, filename: string, id: string, object: string, purpose: string, status: string, status_details: record>, object: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/files" $auth.query)
@@ -717,7 +740,7 @@ export def "create-file" [
   --dry-run(-n) # Return the request that would be sent without executing it
   file: string # Name of the [JSON Lines](https://jsonlines.readthedocs.io/en/latest/) file to be uploaded. If the `purpose` is set to "fine-tune", each line is a JSON record with "prompt" and "completion" fields representing your [training examples](/docs/guides/fine-tuning/prepare-training-data). (format: binary)
   purpose: string # The intended purpose of the uploaded documents. Use "fine-tune" for [Fine-tuning](/docs/api-reference/fine-tunes). This allows us to validate the format of the uploaded file.
-]: any -> record<bytes: int, created_at: int, filename: string, id: string, object: string, purpose: string, status: string, status_details: record> {
+]: any -> oneof<record<bytes: int, created_at: int, filename: string, id: string, object: string, purpose: string, status: string, status_details: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -757,7 +780,7 @@ export def "delete-file" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<deleted: bool, id: string, object: string> {
+]: nothing -> oneof<record<deleted: bool, id: string, object: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'file_id' must be non-empty" } }
@@ -793,7 +816,7 @@ export def "retrieve-file" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<bytes: int, created_at: int, filename: string, id: string, object: string, purpose: string, status: string, status_details: record> {
+]: nothing -> oneof<record<bytes: int, created_at: int, filename: string, id: string, object: string, purpose: string, status: string, status_details: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'file_id' must be non-empty" } }
@@ -864,7 +887,7 @@ export def "list-fine-tunes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<created_at: int, events: list, fine_tuned_model: string, hyperparams: record, id: string, model: string, object: string, organization_id: string, result_files: list, status: string, training_files: list, updated_at: int, validation_files: list>, object: string> {
+]: nothing -> oneof<record<data: table<created_at: int, events: list, fine_tuned_model: string, hyperparams: record, id: string, model: string, object: string, organization_id: string, result_files: list, status: string, training_files: list, updated_at: int, validation_files: list>, object: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/fine-tunes" $auth.query)
@@ -910,7 +933,7 @@ export def "create-fine-tune" [
   --suffix: string # A string of up to 40 characters that will be added to your fine-tuned model name. For example, a `suffix` of "custom-model-name" would produce a model name like `ada:ft-your-org:custom-model-name-2022-02-15-04-21-04`. (nullable)
   training_file: string # The ID of an uploaded file that contains training data. See [upload file](/docs/api-reference/files/upload) for how to upload a file. Your dataset must be formatted as a JSONL file, where each training example is a JSON object with the keys "prompt" and "completion". Additionally, you must upload your file with the purpose `fine-tune`. See the [fine-tuning guide](/docs/guides/fine-tuning/creating-training-data) for more details. (e.g. file-ajSREls59WBbvgSzJSVWxMCB)
   --validation-file: string # The ID of an uploaded file that contains validation data. If you provide this file, the data is used to generate validation metrics periodically during fine-tuning. These metrics can be viewed in the [fine-tuning results file](/docs/guides/fine-tuning/analyzing-your-fine-tuned-model). Your train and validation data should be mutually exclusive. Your dataset must be formatted as a JSONL file, where each validation example is a JSON object with the keys "prompt" and "completion". Additionally, you must upload your file with the purpose `fine-tune`. See the [fine-tuning guide](/docs/guides/fine-tuning/creating-training-data) for more details. (nullable, e.g. file-XjSREls59WBbvgSzJSVWxMCa)
-]: any -> record<created_at: int, events: table<created_at: int, level: string, message: string, object: string>, fine_tuned_model: string, hyperparams: record, id: string, model: string, object: string, organization_id: string, result_files: table<bytes: int, created_at: int, filename: string, id: string, object: string, purpose: string, status: string, status_details: record>, status: string, training_files: table<bytes: int, created_at: int, filename: string, id: string, object: string, purpose: string, status: string, status_details: record>, updated_at: int, validation_files: table<bytes: int, created_at: int, filename: string, id: string, object: string, purpose: string, status: string, status_details: record>> {
+]: any -> oneof<record<created_at: int, events: table<created_at: int, level: string, message: string, object: string>, fine_tuned_model: string, hyperparams: record, id: string, model: string, object: string, organization_id: string, result_files: table<bytes: int, created_at: int, filename: string, id: string, object: string, purpose: string, status: string, status_details: record>, status: string, training_files: table<bytes: int, created_at: int, filename: string, id: string, object: string, purpose: string, status: string, status_details: record>, updated_at: int, validation_files: table<bytes: int, created_at: int, filename: string, id: string, object: string, purpose: string, status: string, status_details: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -948,7 +971,7 @@ export def "retrieve-fine-tune" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created_at: int, events: table<created_at: int, level: string, message: string, object: string>, fine_tuned_model: string, hyperparams: record, id: string, model: string, object: string, organization_id: string, result_files: table<bytes: int, created_at: int, filename: string, id: string, object: string, purpose: string, status: string, status_details: record>, status: string, training_files: table<bytes: int, created_at: int, filename: string, id: string, object: string, purpose: string, status: string, status_details: record>, updated_at: int, validation_files: table<bytes: int, created_at: int, filename: string, id: string, object: string, purpose: string, status: string, status_details: record>> {
+]: nothing -> oneof<record<created_at: int, events: table<created_at: int, level: string, message: string, object: string>, fine_tuned_model: string, hyperparams: record, id: string, model: string, object: string, organization_id: string, result_files: table<bytes: int, created_at: int, filename: string, id: string, object: string, purpose: string, status: string, status_details: record>, status: string, training_files: table<bytes: int, created_at: int, filename: string, id: string, object: string, purpose: string, status: string, status_details: record>, updated_at: int, validation_files: table<bytes: int, created_at: int, filename: string, id: string, object: string, purpose: string, status: string, status_details: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($fine_tune_id | is-empty) { error make --unspanned { msg: "path parameter 'fine_tune_id' must be non-empty" } }
@@ -984,7 +1007,7 @@ export def "cancel-fine-tune" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created_at: int, events: table<created_at: int, level: string, message: string, object: string>, fine_tuned_model: string, hyperparams: record, id: string, model: string, object: string, organization_id: string, result_files: table<bytes: int, created_at: int, filename: string, id: string, object: string, purpose: string, status: string, status_details: record>, status: string, training_files: table<bytes: int, created_at: int, filename: string, id: string, object: string, purpose: string, status: string, status_details: record>, updated_at: int, validation_files: table<bytes: int, created_at: int, filename: string, id: string, object: string, purpose: string, status: string, status_details: record>> {
+]: nothing -> oneof<record<created_at: int, events: table<created_at: int, level: string, message: string, object: string>, fine_tuned_model: string, hyperparams: record, id: string, model: string, object: string, organization_id: string, result_files: table<bytes: int, created_at: int, filename: string, id: string, object: string, purpose: string, status: string, status_details: record>, status: string, training_files: table<bytes: int, created_at: int, filename: string, id: string, object: string, purpose: string, status: string, status_details: record>, updated_at: int, validation_files: table<bytes: int, created_at: int, filename: string, id: string, object: string, purpose: string, status: string, status_details: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($fine_tune_id | is-empty) { error make --unspanned { msg: "path parameter 'fine_tune_id' must be non-empty" } }
@@ -1021,7 +1044,7 @@ export def "list-fine-tune-events" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --stream: oneof<nothing, bool> # Whether to stream events for the fine-tune job. If set to true, events will be sent as data-only [server-sent events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events#Event_stream_format) as they become available. The stream will terminate with a `data: [DONE]` message when the job is finished (succeeded, cancelled, or failed). If set to false, only events generated so far will be returned. (default: false)
-]: nothing -> record<data: table<created_at: int, level: string, message: string, object: string>, object: string> {
+]: nothing -> oneof<record<data: table<created_at: int, level: string, message: string, object: string>, object: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($fine_tune_id | is-empty) { error make --unspanned { msg: "path parameter 'fine_tune_id' must be non-empty" } }
@@ -1064,7 +1087,7 @@ export def "create-image-edit" [
   --response-format: string@response-format-completer # The format in which the generated images are returned. Must be one of `url` or `b64_json`. (nullable, default: url, e.g. url)
   --size: string@size-completer # The size of the generated images. Must be one of `256x256`, `512x512`, or `1024x1024`. (nullable, default: 1024x1024, e.g. 1024x1024)
   --user: string # A unique identifier representing your end-user, which can help OpenAI to monitor and detect abuse. [Learn more](/docs/guides/safety-best-practices/end-user-ids). (e.g. user-1234)
-]: any -> record<created: int, data: table<b64_json: string, url: string>> {
+]: any -> oneof<record<created: int, data: table<b64_json: string, url: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1108,7 +1131,7 @@ export def "create-image" [
   --response-format: string@response-format-completer # The format in which the generated images are returned. Must be one of `url` or `b64_json`. (nullable, default: url, e.g. url)
   --size: string@size-completer # The size of the generated images. Must be one of `256x256`, `512x512`, or `1024x1024`. (nullable, default: 1024x1024, e.g. 1024x1024)
   --user: string # A unique identifier representing your end-user, which can help OpenAI to monitor and detect abuse. [Learn more](/docs/guides/safety-best-practices/end-user-ids). (e.g. user-1234)
-]: any -> record<created: int, data: table<b64_json: string, url: string>> {
+]: any -> oneof<record<created: int, data: table<b64_json: string, url: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1150,7 +1173,7 @@ export def "create-image-variation" [
   --response-format: string@response-format-completer # The format in which the generated images are returned. Must be one of `url` or `b64_json`. (nullable, default: url, e.g. url)
   --size: string@size-completer # The size of the generated images. Must be one of `256x256`, `512x512`, or `1024x1024`. (nullable, default: 1024x1024, e.g. 1024x1024)
   --user: string # A unique identifier representing your end-user, which can help OpenAI to monitor and detect abuse. [Learn more](/docs/guides/safety-best-practices/end-user-ids). (e.g. user-1234)
-]: any -> record<created: int, data: table<b64_json: string, url: string>> {
+]: any -> oneof<record<created: int, data: table<b64_json: string, url: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1189,7 +1212,7 @@ export def "list-models" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<created: int, id: string, object: string, owned_by: string>, object: string> {
+]: nothing -> oneof<record<data: table<created: int, id: string, object: string, owned_by: string>, object: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/models" $auth.query)
@@ -1224,7 +1247,7 @@ export def "delete-model" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<deleted: bool, id: string, object: string> {
+]: nothing -> oneof<record<deleted: bool, id: string, object: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($model | is-empty) { error make --unspanned { msg: "path parameter 'model' must be non-empty" } }
@@ -1260,7 +1283,7 @@ export def "retrieve-model" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created: int, id: string, object: string, owned_by: string> {
+]: nothing -> oneof<record<created: int, id: string, object: string, owned_by: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($model | is-empty) { error make --unspanned { msg: "path parameter 'model' must be non-empty" } }
@@ -1297,7 +1320,7 @@ export def "create-moderation" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --body-input: any # The input text to classify
   --model: string # Two content moderations models are available: `text-moderation-stable` and `text-moderation-latest`. The default is `text-moderation-latest` which will be automatically upgraded over time. This ensures you are always using our most accurate model. If you use `text-moderation-stable`, we will provide advanced notice before updating the model. Accuracy of `text-moderation-stable` may be slightly lower than for `text-moderation-latest`. (default: text-moderation-latest, e.g. text-moderation-stable)
-]: any -> record<id: string, model: string, results: table<categories: record, category_scores: record, flagged: bool>> {
+]: any -> oneof<record<id: string, model: string, results: table<categories: record, category_scores: record, flagged: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

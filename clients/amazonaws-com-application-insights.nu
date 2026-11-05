@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -130,9 +153,9 @@ def x-amz-target-completer-26 [] { ["EC2WindowsBarleyService.UpdateLogPattern"] 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-application" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["create-application" "create-component" "create-log-pattern" "delete-application" "delete-component" "delete-log-pattern" "describe-application" "describe-component" "describe-component-configuration" "describe-component-configuration-recommendation" "describe-log-pattern" "describe-observation" "describe-problem" "describe-problem-observations" "list-applications" "list-components" "list-configuration-history" "list-log-pattern-sets" "list-log-patterns" "list-problems" "list-tags-for-resource" "tag-resource" "untag-resource" "update-application" "update-component" "update-component-configuration" "update-log-pattern" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -154,7 +177,6 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: CreateApplication
-# --Tags item shape: {Key: string, Value: string}
 export def "create-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -181,7 +203,7 @@ export def "create-application" [
   --auto-config-enabled: oneof<nothing, bool> # Indicates whether Application Insights automatically configures unmonitored resources in the resource group.
   --auto-create: oneof<nothing, bool> # Configures all of the resources in the resource group by applying the recommended configurations.
   --grouping-type: string@grouping-type-completer # Application Insights can create applications based on a resource group or on an account. To create an account-based application using all of the resources in the account, set this parameter to ACCOUNT_BASED.
-]: any -> record<ApplicationInfo: record<ResourceGroupName: string, LifeCycle: string, OpsItemSNSTopicArn: string, OpsCenterEnabled: bool, CWEMonitorEnabled: bool, Remarks: string, AutoConfigEnabled: bool, DiscoveryType: string>> {
+]: any -> oneof<record<ApplicationInfo: record<ResourceGroupName: string, LifeCycle: string, OpsItemSNSTopicArn: string, OpsCenterEnabled: bool, CWEMonitorEnabled: bool, Remarks: string, AutoConfigEnabled: bool, DiscoveryType: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -232,7 +254,7 @@ export def "create-component" [
   resource_group_name: string # The name of the resource group.
   component_name: string # The name of the component.
   resource_list: list<string> # The list of resource ARNs that belong to the component.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -285,7 +307,7 @@ export def "create-log-pattern" [
   pattern_name: string # The name of the log pattern.
   pattern: string # The log pattern. The pattern must be DFA compatible. Patterns that utilize forward lookahead or backreference constructions are not supported.
   rank: int # Rank of the log pattern. Must be a value between 1 and 1,000,000. The patterns are sorted by rank, so we recommend that you set your highest priority patterns with the lowest rank. A pattern of rank 1 will be the first to get matched to a log line. A pattern of rank 1,000,000 will be last to get matched. When you configure custom log patterns from the console, a Low severity pattern translates to a 750,000 rank. A Medium severity pattern translates to a 500,000 rank. And a High severity pattern translates to a 250,000 rank. Rank values less than 1 or greater than 1,000,000 are reserved for AWS-provided patterns.
-]: any -> record<LogPattern: record<PatternSetName: string, PatternName: string, Pattern: string, Rank: int>, ResourceGroupName: string> {
+]: any -> oneof<record<LogPattern: record<PatternSetName: string, PatternName: string, Pattern: string, Rank: int>, ResourceGroupName: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -334,7 +356,7 @@ export def "delete-application" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-3 # required
   resource_group_name: string # The name of the resource group.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -384,7 +406,7 @@ export def "delete-component" [
   --x-amz-target: string@x-amz-target-completer-4 # required
   resource_group_name: string # The name of the resource group.
   component_name: string # The name of the component.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -435,7 +457,7 @@ export def "delete-log-pattern" [
   resource_group_name: string # The name of the resource group.
   pattern_set_name: string # The name of the log pattern set.
   pattern_name: string # The name of the log pattern.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -484,7 +506,7 @@ export def "describe-application" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-6 # required
   resource_group_name: string # The name of the resource group.
-]: any -> record<ApplicationInfo: record<ResourceGroupName: string, LifeCycle: string, OpsItemSNSTopicArn: string, OpsCenterEnabled: bool, CWEMonitorEnabled: bool, Remarks: string, AutoConfigEnabled: bool, DiscoveryType: string>> {
+]: any -> oneof<record<ApplicationInfo: record<ResourceGroupName: string, LifeCycle: string, OpsItemSNSTopicArn: string, OpsCenterEnabled: bool, CWEMonitorEnabled: bool, Remarks: string, AutoConfigEnabled: bool, DiscoveryType: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -534,7 +556,7 @@ export def "describe-component" [
   --x-amz-target: string@x-amz-target-completer-7 # required
   resource_group_name: string # The name of the resource group.
   component_name: string # The name of the component.
-]: any -> record<ApplicationComponent: record<ComponentName: string, ComponentRemarks: string, ResourceType: string, OsType: string, Tier: string, Monitor: bool, DetectedWorkload: record>, ResourceList: list<string>> {
+]: any -> oneof<record<ApplicationComponent: record<ComponentName: string, ComponentRemarks: string, ResourceType: string, OsType: string, Tier: string, Monitor: bool, DetectedWorkload: record>, ResourceList: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -584,7 +606,7 @@ export def "describe-component-configuration" [
   --x-amz-target: string@x-amz-target-completer-8 # required
   resource_group_name: string # The name of the resource group.
   component_name: string # The name of the component.
-]: any -> record<Monitor: bool, Tier: string, ComponentConfiguration: string> {
+]: any -> oneof<record<Monitor: bool, Tier: string, ComponentConfiguration: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -635,7 +657,7 @@ export def "describe-component-configuration-recommendation" [
   resource_group_name: string # The name of the resource group.
   component_name: string # The name of the component.
   tier: string@tier-completer # The tier of the application component.
-]: any -> record<ComponentConfiguration: string> {
+]: any -> oneof<record<ComponentConfiguration: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -686,7 +708,7 @@ export def "describe-log-pattern" [
   resource_group_name: string # The name of the resource group.
   pattern_set_name: string # The name of the log pattern set.
   pattern_name: string # The name of the log pattern.
-]: any -> record<ResourceGroupName: string, LogPattern: record<PatternSetName: string, PatternName: string, Pattern: string, Rank: int>> {
+]: any -> oneof<record<ResourceGroupName: string, LogPattern: record<PatternSetName: string, PatternName: string, Pattern: string, Rank: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -735,7 +757,7 @@ export def "describe-observation" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-11 # required
   observation_id: string # The ID of the observation.
-]: any -> record<Observation: record<Id: string, StartTime: string, EndTime: string, SourceType: string, SourceARN: string, LogGroup: string, LineTime: string, LogText: string, LogFilter: string, MetricNamespace: string, MetricName: string, Unit: string, Value: float, CloudWatchEventId: string, CloudWatchEventSource: string, CloudWatchEventDetailType: string, HealthEventArn: string, HealthService: string, HealthEventTypeCode: string, HealthEventTypeCategory: string, HealthEventDescription: string, CodeDeployDeploymentId: string, CodeDeployDeploymentGroup: string, CodeDeployState: string, CodeDeployApplication: string, CodeDeployInstanceGroupId: string, Ec2State: string, RdsEventCategories: string, RdsEventMessage: string, S3EventName: string, StatesExecutionArn: string, StatesArn: string, StatesStatus: string, StatesInput: string, EbsEvent: string, EbsResult: string, EbsCause: string, EbsRequestId: string, XRayFaultPercent: int, XRayThrottlePercent: int, XRayErrorPercent: int, XRayRequestCount: int, XRayRequestAverageLatency: int, XRayNodeName: string, XRayNodeType: string>> {
+]: any -> oneof<record<Observation: record<Id: string, StartTime: string, EndTime: string, SourceType: string, SourceARN: string, LogGroup: string, LineTime: string, LogText: string, LogFilter: string, MetricNamespace: string, MetricName: string, Unit: string, Value: float, CloudWatchEventId: string, CloudWatchEventSource: string, CloudWatchEventDetailType: string, HealthEventArn: string, HealthService: string, HealthEventTypeCode: string, HealthEventTypeCategory: string, HealthEventDescription: string, CodeDeployDeploymentId: string, CodeDeployDeploymentGroup: string, CodeDeployState: string, CodeDeployApplication: string, CodeDeployInstanceGroupId: string, Ec2State: string, RdsEventCategories: string, RdsEventMessage: string, S3EventName: string, StatesExecutionArn: string, StatesArn: string, StatesStatus: string, StatesInput: string, EbsEvent: string, EbsResult: string, EbsCause: string, EbsRequestId: string, XRayFaultPercent: int, XRayThrottlePercent: int, XRayErrorPercent: int, XRayRequestCount: int, XRayRequestAverageLatency: int, XRayNodeName: string, XRayNodeType: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -784,7 +806,7 @@ export def "describe-problem" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-12 # required
   problem_id: string # The ID of the problem.
-]: any -> record<Problem: record<Id: string, Title: string, Insights: string, Status: string, AffectedResource: string, StartTime: string, EndTime: string, SeverityLevel: string, ResourceGroupName: string, Feedback: record, RecurringCount: int, LastRecurrenceTime: string>> {
+]: any -> oneof<record<Problem: record<Id: string, Title: string, Insights: string, Status: string, AffectedResource: string, StartTime: string, EndTime: string, SeverityLevel: string, ResourceGroupName: string, Feedback: record, RecurringCount: int, LastRecurrenceTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -833,7 +855,7 @@ export def "describe-problem-observations" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-13 # required
   problem_id: string # The ID of the problem.
-]: any -> record<RelatedObservations: record<ObservationList: list<record>>> {
+]: any -> oneof<record<RelatedObservations: record<ObservationList: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -885,7 +907,7 @@ export def "list-applications" [
   --x-amz-target: string@x-amz-target-completer-14 # required
   --max-results-body: int # The maximum number of results to return in a single call. To retrieve the remaining results, make another call with the returned NextToken value. (body field)
   --next-token-body: string # The token to request the next page of results. (body field)
-]: any -> record<ApplicationInfoList: table<ResourceGroupName: string, LifeCycle: string, OpsItemSNSTopicArn: string, OpsCenterEnabled: bool, CWEMonitorEnabled: bool, Remarks: string, AutoConfigEnabled: bool, DiscoveryType: string>, NextToken: string> {
+]: any -> oneof<record<ApplicationInfoList: table<ResourceGroupName: string, LifeCycle: string, OpsItemSNSTopicArn: string, OpsCenterEnabled: bool, CWEMonitorEnabled: bool, Remarks: string, AutoConfigEnabled: bool, DiscoveryType: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -939,7 +961,7 @@ export def "list-components" [
   resource_group_name: string # The name of the resource group.
   --max-results-body: int # The maximum number of results to return in a single call. To retrieve the remaining results, make another call with the returned NextToken value. (body field)
   --next-token-body: string # The token to request the next page of results. (body field)
-]: any -> record<ApplicationComponentList: table<ComponentName: string, ComponentRemarks: string, ResourceType: string, OsType: string, Tier: string, Monitor: bool, DetectedWorkload: record>, NextToken: string> {
+]: any -> oneof<record<ApplicationComponentList: table<ComponentName: string, ComponentRemarks: string, ResourceType: string, OsType: string, Tier: string, Monitor: bool, DetectedWorkload: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -996,7 +1018,7 @@ export def "list-configuration-history" [
   --event-status: string@event-status-completer # The status of the configuration update event. Possible values include INFO, WARN, and ERROR.
   --max-results-body: int # The maximum number of results returned by ListConfigurationHistory in paginated output. When this parameter is used, ListConfigurationHistory returns only MaxResults in a single page along with a NextToken response element. The remaining results of the initial request can be seen by sending another ListConfigurationHistory request with the returned NextToken value. If this parameter is not used, then ListConfigurationHistory returns all results. (body field)
   --next-token-body: string # The NextToken value returned from a previous paginated ListConfigurationHistory request where MaxResults was used and the results exceeded the value of that parameter. Pagination continues from the end of the previous results that returned the NextToken value. This value is null when there are no more results to return. (body field)
-]: any -> record<EventList: table<MonitoredResourceARN: string, EventStatus: string, EventResourceType: string, EventTime: string, EventDetail: string, EventResourceName: string>, NextToken: string> {
+]: any -> oneof<record<EventList: table<MonitoredResourceARN: string, EventStatus: string, EventResourceType: string, EventTime: string, EventDetail: string, EventResourceName: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1050,7 +1072,7 @@ export def "list-log-pattern-sets" [
   resource_group_name: string # The name of the resource group.
   --max-results-body: int # The maximum number of results to return in a single call. To retrieve the remaining results, make another call with the returned NextToken value. (body field)
   --next-token-body: string # The token to request the next page of results. (body field)
-]: any -> record<ResourceGroupName: string, LogPatternSets: list<string>, NextToken: string> {
+]: any -> oneof<record<ResourceGroupName: string, LogPatternSets: list<string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1105,7 +1127,7 @@ export def "list-log-patterns" [
   --pattern-set-name: string # The name of the log pattern set.
   --max-results-body: int # The maximum number of results to return in a single call. To retrieve the remaining results, make another call with the returned NextToken value. (body field)
   --next-token-body: string # The token to request the next page of results. (body field)
-]: any -> record<ResourceGroupName: string, LogPatterns: table<PatternSetName: string, PatternName: string, Pattern: string, Rank: int>, NextToken: string> {
+]: any -> oneof<record<ResourceGroupName: string, LogPatterns: table<PatternSetName: string, PatternName: string, Pattern: string, Rank: int>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1162,7 +1184,7 @@ export def "list-problems" [
   --max-results-body: int # The maximum number of results to return in a single call. To retrieve the remaining results, make another call with the returned NextToken value. (body field)
   --next-token-body: string # The token to request the next page of results. (body field)
   --component-name: string # The name of the component.
-]: any -> record<ProblemList: table<Id: string, Title: string, Insights: string, Status: string, AffectedResource: string, StartTime: string, EndTime: string, SeverityLevel: string, ResourceGroupName: string, Feedback: record, RecurringCount: int, LastRecurrenceTime: string>, NextToken: string, ResourceGroupName: string> {
+]: any -> oneof<record<ProblemList: table<Id: string, Title: string, Insights: string, Status: string, AffectedResource: string, StartTime: string, EndTime: string, SeverityLevel: string, ResourceGroupName: string, Feedback: record, RecurringCount: int, LastRecurrenceTime: string>, NextToken: string, ResourceGroupName: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1212,7 +1234,7 @@ export def "list-tags-for-resource" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-20 # required
   resource_arn: string # The Amazon Resource Name (ARN) of the application that you want to retrieve tag information for.
-]: any -> record<Tags: table<Key: string, Value: string>> {
+]: any -> oneof<record<Tags: table<Key: string, Value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1242,7 +1264,6 @@ export def "list-tags-for-resource" [
 #
 # POST /
 # operationId: TagResource
-# --Tags item shape: {Key: string, Value: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1263,7 +1284,7 @@ export def "tag-resource" [
   --x-amz-target: string@x-amz-target-completer-21 # required
   resource_arn: string # The Amazon Resource Name (ARN) of the application that you want to add one or more tags to.
   tags: list # A list of tags that to add to the application. A tag consists of a required tag key (Key) and an associated tag value (Value). The maximum length of a tag key is 128 characters. The maximum length of a tag value is 256 characters. — item shape: {Key: string, Value: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1313,7 +1334,7 @@ export def "untag-resource" [
   --x-amz-target: string@x-amz-target-completer-22 # required
   resource_arn: string # The Amazon Resource Name (ARN) of the application that you want to remove one or more tags from.
   tag_keys: list<string> # The tags (tag keys) that you want to remove from the resource. When you specify a tag key, the action removes both that key and its associated tag value. To remove more than one tag from the application, append the TagKeys parameter and argument for each additional tag to remove, separated by an ampersand.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1367,7 +1388,7 @@ export def "update-application" [
   --ops-item-sns-topic-arn: string # The SNS topic provided to Application Insights that is associated to the created opsItem. Allows you to receive notifications for updates to the opsItem.
   --remove-sns-topic: oneof<nothing, bool> # Disassociates the SNS topic from the opsItem created for detected problems.
   --auto-config-enabled: oneof<nothing, bool> # Turns auto-configuration on or off.
-]: any -> record<ApplicationInfo: record<ResourceGroupName: string, LifeCycle: string, OpsItemSNSTopicArn: string, OpsCenterEnabled: bool, CWEMonitorEnabled: bool, Remarks: string, AutoConfigEnabled: bool, DiscoveryType: string>> {
+]: any -> oneof<record<ApplicationInfo: record<ResourceGroupName: string, LifeCycle: string, OpsItemSNSTopicArn: string, OpsCenterEnabled: bool, CWEMonitorEnabled: bool, Remarks: string, AutoConfigEnabled: bool, DiscoveryType: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1419,7 +1440,7 @@ export def "update-component" [
   component_name: string # The name of the component.
   --new-component-name: string # The new name of the component.
   --resource-list: list<string> # The list of resource ARNs that belong to the component.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1473,7 +1494,7 @@ export def "update-component-configuration" [
   --tier: string@tier-completer # The tier of the application component.
   --component-configuration: string # The configuration settings of the component. The value is the escaped JSON of the configuration. For more information about the JSON format, see Working with JSON (https://docs.aws.amazon.com/sdk-for-javascript/v2/developer-guide/working-with-json.html). You can send a request to DescribeComponentConfigurationRecommendation to see the recommended configuration for a component. For the complete format of the component configuration file, see Component Configuration (https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/component-config.html).
   --auto-config-enabled: oneof<nothing, bool> # Automatically configures the component by applying the recommended configurations.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1526,7 +1547,7 @@ export def "update-log-pattern" [
   pattern_name: string # The name of the log pattern.
   --pattern: string # The log pattern. The pattern must be DFA compatible. Patterns that utilize forward lookahead or backreference constructions are not supported.
   --rank: int # Rank of the log pattern. Must be a value between 1 and 1,000,000. The patterns are sorted by rank, so we recommend that you set your highest priority patterns with the lowest rank. A pattern of rank 1 will be the first to get matched to a log line. A pattern of rank 1,000,000 will be last to get matched. When you configure custom log patterns from the console, a Low severity pattern translates to a 750,000 rank. A Medium severity pattern translates to a 500,000 rank. And a High severity pattern translates to a 250,000 rank. Rank values less than 1 or greater than 1,000,000 are reserved for AWS-provided patterns.
-]: any -> record<ResourceGroupName: string, LogPattern: record<PatternSetName: string, PatternName: string, Pattern: string, Rank: int>> {
+]: any -> oneof<record<ResourceGroupName: string, LogPattern: record<PatternSetName: string, PatternName: string, Pattern: string, Rank: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

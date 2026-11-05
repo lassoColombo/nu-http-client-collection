@@ -15,27 +15,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
     "query-apikey" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "apikey")=(encode-path-segment $token_val)", location: "query"} }
     "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -43,8 +52,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -55,7 +69,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -90,7 +113,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # PUT — body + content-type
@@ -110,9 +134,9 @@ def metadata-template-type-completer [] { ["basic" "extra" "interop"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-root" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-root" "get-pages" "get-page" "get-source" "aggregate-datasets" "get-datasets" "get-dataset" "aggregate-records" "get-dataset-attachements" "download-dataset-attachement" "export-records-csv" "export-records-geojson" "export-records-ical" "export-records-json" "export-records-ov2" "export-records-shp" "export-records-xls" "get-records-facets" "send-dataset-feedback" "get-dataset-file" "get-records" "get-record" "get-dataset-reuses" "get-dataset-reuse" "get-dataset-snapshots" "download-dataset-snapshot" "export-datasets-csv" "export-datasets-json" "export-datasets-rdf" "export-datasets-rss" "export-datasets-ttl" "export-datasets-xls" "get-datasets-facets" "get-metadata-templates-types" "get-metadata-templates-type" "get-metadata-template" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -144,7 +168,7 @@ export def "get-root" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<links: table<href: string, rel: string>> {
+]: nothing -> oneof<record<links: table<href: string, rel: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/" $auth.query)
@@ -178,7 +202,7 @@ export def "get-pages" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<links: table<href: string, rel: string>, pages: table<links: list, page: record>> {
+]: nothing -> oneof<record<links: table<href: string, rel: string>, pages: table<links: list, page: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/pages" $auth.query)
@@ -213,7 +237,7 @@ export def "get-page" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<links: table<href: string, rel: string>, page: record<description: string, slug: string, title: record<en: string, fr: string>>> {
+]: nothing -> oneof<record<links: table<href: string, rel: string>, page: record<description: string, slug: string, title: record<en: string, fr: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($slug | is-empty) { error make --unspanned { msg: "path parameter 'slug' must be non-empty" } }
@@ -249,7 +273,7 @@ export def "get-source" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<links: table<href: string, rel: string>> {
+]: nothing -> oneof<record<links: table<href: string, rel: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
@@ -294,7 +318,7 @@ export def "aggregate-datasets" [
   --facet: list<string> # A facet is a field used for simple filtering (through the parameters refine and exclude) or exploration (with the endpoint `/facets`). Facets can be configured in the back-office or with this parameter. Read [the facets documentation](https://help.opendatasoft.com/apis/ods-search-v2/#facets) for more details.
   --refine: list<string> # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will only include the selected facet value. Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details. *Not to be confused with a where filter. Refining with a facet is equivalent to selecting an entry in the left navigation panel.* *refine is not available for monitoring sources*
   --exclude: list<string> # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will exclude the defined facet value. Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details. *Not to be confused with a where filter. Excluding a facet value is equivalent to removing an entry in the left navigation panel.* *exclude is not available for monitoring sources*
-]: nothing -> record<aggregations: list<record>, links: table<href: string, rel: string>> {
+]: nothing -> oneof<record<aggregations: list<record>, links: table<href: string, rel: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
@@ -345,7 +369,7 @@ export def "get-datasets" [
   --pretty: oneof<nothing, bool> # Activate pretty print (default: false)
   --timezone: string # Set timezone for datetime fields (default: UTC)
   --include-app-metas: oneof<nothing, bool> # Explicitely request application metas for each datasets. (default: false)
-]: nothing -> record<datasets: table<dataset: record, links: list>, links: table<href: string, rel: string>, total_count: int> {
+]: nothing -> oneof<record<datasets: table<dataset: record, links: list>, links: table<href: string, rel: string>, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
@@ -387,7 +411,7 @@ export def "get-dataset" [
   --pretty: oneof<nothing, bool> # Activate pretty print (default: false)
   --timezone: string # Set timezone for datetime fields (default: UTC)
   --include-app-metas: oneof<nothing, bool> # Explicitely request application metas for each datasets. (default: false)
-]: nothing -> record<dataset: record<attachments: list<record>, data_visible: bool, dataset_id: string, features: list<string>, fields: list<record>, has_records: bool, metas: record>, links: table<href: string, rel: string>> {
+]: nothing -> oneof<record<dataset: record<attachments: list<record>, data_visible: bool, dataset_id: string, features: list<string>, fields: list<record>, has_records: bool, metas: record>, links: table<href: string, rel: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
@@ -435,7 +459,7 @@ export def "aggregate-records" [
   --facet: list<string> # A facet is a field used for simple filtering (through the parameters refine and exclude) or exploration (with the endpoint `/facets`). Facets can be configured in the back-office or with this parameter. Read [the facets documentation](https://help.opendatasoft.com/apis/ods-search-v2/#facets) for more details.
   --refine: list<string> # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will only include the selected facet value. Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details. *Not to be confused with a where filter. Refining with a facet is equivalent to selecting an entry in the left navigation panel.* *refine is not available for monitoring sources*
   --exclude: list<string> # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will exclude the defined facet value. Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details. *Not to be confused with a where filter. Excluding a facet value is equivalent to removing an entry in the left navigation panel.* *exclude is not available for monitoring sources*
-]: nothing -> record<aggregations: list<record>, links: table<href: string, rel: string>> {
+]: nothing -> oneof<record<aggregations: list<record>, links: table<href: string, rel: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
@@ -474,7 +498,7 @@ export def "get-dataset-attachements" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<attachments: table<href: string, metas: record>, links: table<href: string, rel: string>> {
+]: nothing -> oneof<record<attachments: table<href: string, metas: record>, links: table<href: string, rel: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
@@ -910,7 +934,7 @@ export def "get-records-facets" [
   --exclude: list<string> # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will exclude the defined facet value. Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details. *Not to be confused with a where filter. Excluding a facet value is equivalent to removing an entry in the left navigation panel.* *exclude is not available for monitoring sources*
   --search: list<string> # An array of full text search. A full text search performs a prefixed text search for each provided terms in all visible fields of a catalog/dataset.
   --timezone: string # Set timezone for datetime fields (default: UTC)
-]: nothing -> record<facets: table<facets: list, name: string>> {
+]: nothing -> oneof<record<facets: table<facets: list, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
@@ -1049,7 +1073,7 @@ export def "get-records" [
   --exclude: list<string> # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will exclude the defined facet value. Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details. *Not to be confused with a where filter. Excluding a facet value is equivalent to removing an entry in the left navigation panel.* *exclude is not available for monitoring sources*
   --pretty: oneof<nothing, bool> # Activate pretty print (default: false)
   --timezone: string # Set timezone for datetime fields (default: UTC)
-]: nothing -> record<links: table<href: string, rel: string>, records: table<links: list, record: record>, total_count: int> {
+]: nothing -> oneof<record<links: table<href: string, rel: string>, records: table<links: list, record: record>, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
@@ -1092,7 +1116,7 @@ export def "get-record" [
   --select: string # A select expression can be used to add, remove or change fields to return. An expression can be: - a wildcard ('*'): return all fields - a field name: return only this field - an include/exclude function. Include (resp exclude) all field matching include/exclude expression. This expression can contain wildcard. For example: include(spa*) will return all fields begining with 'spa' - a complex expression: return the result of this expression. A label can be set for this expression, in that case, field will be named with this label. For instance: 'size * 2 as bigger_size' will return a new field named bigger_size and containing the double of size field value.
   --pretty: oneof<nothing, bool> # Activate pretty print (default: false)
   --timezone: string # Set timezone for datetime fields (default: UTC)
-]: nothing -> record<links: table<href: string, rel: string>, record: record<fields: record, id: string, size: int, timestamp: string>> {
+]: nothing -> oneof<record<links: table<href: string, rel: string>, record: record<fields: record, id: string, size: int, timestamp: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
@@ -1135,7 +1159,7 @@ export def "get-dataset-reuses" [
   --limit: int # Number of items to return. To use in conjonction with offset to implement pagination. Limit maximum value is 100. To retrive more data use export entry points. The default value is 10. (default: 10)
   --offset: int # Index of the first item to return (starting at 0). To use in conjonction with limit to implement pagination. (default: 0)
   --timezone: string # Set timezone for datetime fields (default: UTC)
-]: nothing -> record<links: table<href: string, rel: string>, reuses: table<created_at: string, description: any, id: string, thumbnail: string, title: string, url: string, user: record>> {
+]: nothing -> oneof<record<links: table<href: string, rel: string>, reuses: table<created_at: string, description: any, id: string, thumbnail: string, title: string, url: string, user: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
@@ -1176,7 +1200,7 @@ export def "get-dataset-reuse" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --timezone: string # Set timezone for datetime fields (default: UTC)
-]: nothing -> record<links: table<href: string, rel: string>, reuse: record<created_at: string, description: any, id: string, thumbnail: string, title: string, url: string, user: record<first_name: string, last_name: string, username: string>>> {
+]: nothing -> oneof<record<links: table<href: string, rel: string>, reuse: record<created_at: string, description: any, id: string, thumbnail: string, title: string, url: string, user: record<first_name: string, last_name: string, username: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
@@ -1217,7 +1241,7 @@ export def "get-dataset-snapshots" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --timezone: string # Set timezone for datetime fields (default: UTC)
-]: nothing -> record<links: table<href: string, rel: string>, snapshots: table<created_at: string, description: string, href: string, snapshot_id: string>> {
+]: nothing -> oneof<record<links: table<href: string, rel: string>, snapshots: table<created_at: string, description: string, href: string, snapshot_id: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
@@ -1581,7 +1605,7 @@ export def "get-datasets-facets" [
   --where: list<string> # An array of filters. A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches. Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
   --search: list<string> # An array of full text search. A full text search performs a prefixed text search for each provided terms in all visible fields of a catalog/dataset.
   --timezone: string # Set timezone for datetime fields (default: UTC)
-]: nothing -> record<facets: table<facets: list, name: string>> {
+]: nothing -> oneof<record<facets: table<facets: list, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
@@ -1618,7 +1642,7 @@ export def "get-metadata-templates-types" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<links: table<href: string, rel: string>> {
+]: nothing -> oneof<record<links: table<href: string, rel: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
@@ -1655,7 +1679,7 @@ export def "get-metadata-templates-type" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<links: table<href: string, rel: string>, metadata_templates: table<links: list, metadata_template: record>> {
+]: nothing -> oneof<record<links: table<href: string, rel: string>, metadata_templates: table<links: list, metadata_template: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
@@ -1694,7 +1718,7 @@ export def "get-metadata-template" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<links: table<href: string, rel: string>, metadata_template: record<name: string, schema: list<record>, type: string>> {
+]: nothing -> oneof<record<links: table<href: string, rel: string>, metadata_template: record<name: string, schema: list<record>, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }

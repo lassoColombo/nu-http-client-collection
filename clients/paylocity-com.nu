@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -122,9 +146,9 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-all-company-codes-and-descriptions-by-resource" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-all-company-codes-and-descriptions-by-resource" "get-all-custom-fields-by-category" "add-employee" "get-all-employees" "get-employee" "update-employee" "add-or-update-additional-rates" "update-or-add-employee-benefit-setup" "get-all-direct-deposit" "get-all-earnings" "add-or-update-an-employee-earning" "get-earnings-by-earning-code" "delete-earning-by-earning-code-and-start-date" "get-earning-by-earning-code-and-start-date" "add-or-update-emergency-contacts" "get-all-local-taxes" "add-local-tax" "delete-local-tax-by-tax-code" "get-local-tax-by-tax-code" "add-or-update-non-primary-state-tax" "gets-employee-pay-statement-detail-data-based-on-the-specified-year" "gets-employee-pay-statement-detail-data-based-on-the-specified-year-and-check-date" "gets-employee-pay-statement-summary-data-based-on-the-specified-year" "gets-employee-pay-statement-summary-data-based-on-the-specified-year-and-check-date" "add-or-update-primary-state-tax" "get-sensitive-data" "add-or-update-sensitive-data" "get-company-specific-open-api-documentation" "add-client-secret" "add-new-employee-to-web-link" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -158,7 +182,7 @@ export def "get-all-company-codes-and-descriptions-by-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<code: string, description: string> {
+]: nothing -> oneof<table<code: string, description: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
@@ -196,7 +220,7 @@ export def "get-all-custom-fields-by-category" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<category: string, defaultValue: string, isRequired: bool, label: string, type: string, values: list<record>> {
+]: nothing -> oneof<table<category: string, defaultValue: string, isRequired: bool, label: string, type: string, values: list<record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
@@ -222,28 +246,6 @@ export def "get-all-custom-fields-by-category" [
 #
 # POST /v2/companies/{companyId}/employees
 # operationId: Add employee
-# --additionalDirectDeposit item shape: {accountNumber?: string, accountType?: string, amount?: float, amountType?: string, blockSpecial?: bool, isSkipPreNote?: bool, nameOnAccount?: string, preNoteDate?: string, routingNumber?: string}
-# --additionalRate item shape: {changeReason?: string, costCenter1?: string, costCenter2?: string, costCenter3?: string, effectiveDate?: string, endCheckDate?: string, job?: string, rate?: float, rateCode?: string, rateNotes?: string, ratePer?: string, shift?: string}
-# --benefitSetup shape: {benefitClass?: string, benefitClassEffectiveDate?: string, benefitSalary?: float, benefitSalaryEffectiveDate?: string, doNotApplyAdministrativePeriod?: bool, isMeasureAcaEligibility?: bool}
-# --customBooleanFields item shape: {category: "PayrollAndHR", label: string, value: bool}
-# --customDateFields item shape: {category: "PayrollAndHR", label: string, value: string}
-# --customDropDownFields item shape: {category: "PayrollAndHR", label: string, value: string}
-# --customNumberFields item shape: {category: "PayrollAndHR", label: string, value: float}
-# --customTextFields item shape: {category: "PayrollAndHR", label: string, value: string}
-# --departmentPosition shape: {changeReason?: string, clockBadgeNumber?: string, costCenter1?: string, costCenter2?: string, costCenter3?: string, effectiveDate?: string, employeeType?: string, equalEmploymentOpportunityClass?: string, isMinimumWageExempt?: bool, isOvertimeExempt?: bool, isSupervisorReviewer?: bool, isUnionDuesCollected?: bool, isUnionInitiationCollected?: bool, jobTitle?: string, payGroup?: string, positionCode?: string, reviewerCompanyNumber?: string, reviewerEmployeeId?: string, shift?: string, ... (7 more fields)}
-# --emergencyContacts item shape: {address1?: string, address2?: string, city?: string, country?: string, county?: string, email?: string, firstName: string, homePhone?: string, lastName: string, mobilePhone?: string, notes?: string, pager?: string, primaryPhone?: string, priority?: string, relationship?: string, state?: string, syncEmployeeInfo?: bool, workExtension?: string, workPhone?: string, zip?: string}
-# --federalTax shape: {amount?: float, deductionsAmount?: float, dependentsAmount?: float, exemptions?: float, filingStatus?: string, higherRate?: bool, otherIncomeAmount?: float, percentage?: float, taxCalculationCode?: string, w4FormYear?: int}
-# --homeAddress shape: {address1?: string, address2?: string, city?: string, country?: string, county?: string, emailAddress?: string, mobilePhone?: string, phone?: string, postalCode?: string, state?: string}
-# --localTax item shape: {exemptions?: float, exemptions2?: float, filingStatus?: string, residentPSD?: string, taxCode?: string, workPSD?: string}
-# --mainDirectDeposit shape: {accountNumber?: string, accountType?: string, blockSpecial?: bool, isSkipPreNote?: bool, nameOnAccount?: string, preNoteDate?: string, routingNumber?: string}
-# --nonPrimaryStateTax shape: {amount?: float, deductionsAmount?: float, dependentsAmount?: float, exemptions?: float, exemptions2?: float, filingStatus?: string, higherRate?: bool, otherIncomeAmount?: float, percentage?: float, reciprocityCode?: string, specialCheckCalc?: string, taxCalculationCode?: string, taxCode?: string, w4FormYear?: int}
-# --primaryPayRate shape: {annualSalary?: float, baseRate?: float, beginCheckDate?: string, changeReason?: string, defaultHours?: float, effectiveDate?: string, isAutoPay?: bool, payFrequency?: string, payGrade?: string, payRateNote?: string, payType?: string, ratePer?: string, salary?: float}
-# --primaryStateTax shape: {amount?: float, deductionsAmount?: float, dependentsAmount?: float, exemptions?: float, exemptions2?: float, filingStatus?: string, higherRate?: bool, otherIncomeAmount?: float, percentage?: float, specialCheckCalc?: string, taxCalculationCode?: string, taxCode?: string, w4FormYear?: int}
-# --status shape: {adjustedSeniorityDate?: string, changeReason?: string, effectiveDate?: string, employeeStatus?: string, hireDate?: string, isEligibleForRehire?: bool, reHireDate?: string, statusType?: string, terminationDate?: string}
-# --taxSetup shape: {fitwExemptNotes?: string, fitwExemptReason?: string, futaExemptNotes?: string, futaExemptReason?: string, isEmployee943?: bool, isPension?: bool, isStatutory?: bool, medExemptNotes?: string, medExemptReason?: string, sitwExemptNotes?: string, sitwExemptReason?: string, ssExemptNotes?: string, ssExemptReason?: string, suiExemptNotes?: string, suiExemptReason?: string, suiState?: string, taxDistributionCode1099R?: string, taxForm?: string}
-# --webTime shape: {badgeNumber?: string, chargeRate?: float, isTimeLaborEnabled?: bool}
-# --workAddress shape: {address1?: string, address2?: string, city?: string, country?: string, county?: string, emailAddress?: string, location?: string, mailStop?: string, mobilePhone?: string, pager?: string, phone?: string, phoneExtension?: string, postalCode?: string, state?: string}
-# --workEligibility shape: {alienOrAdmissionDocumentNumber?: string, attestedDate?: string, countryOfIssuance?: string, foreignPassportNumber?: string, i94AdmissionNumber?: string, i9DateVerified?: string, i9Notes?: string, isI9Verified?: bool, isSsnVerified?: bool, ssnDateVerified?: string, ssnNotes?: string, visaType?: string, workAuthorization?: string, workUntil?: string}
 export def "add-employee" [
   company_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -299,7 +301,7 @@ export def "add-employee" [
   --web-time: record # Add or update Web Time badge number and charge rate and synchronize Web Pay and Web Time employee data. — shape: {badgeNumber?: string, chargeRate?: float, isTimeLaborEnabled?: bool}
   --work-address: record # Add or update employee's work address, phone numbers, and email. Work Location drop down field is not included. — shape: {address1?: string, address2?: string, city?: string, country?: string, county?: string, emailAddress?: string, location?: string, mailStop?: string, mobilePhone?: string, pager?: string, phone?: string, phoneExtension?: string, postalCode?: string, state?: string}
   --work-eligibility: record # Add or update I-9 work authorization information. — shape: {alienOrAdmissionDocumentNumber?: string, attestedDate?: string, countryOfIssuance?: string, foreignPassportNumber?: string, i94AdmissionNumber?: string, i9DateVerified?: string, i9Notes?: string, isI9Verified?: bool, isSsnVerified?: bool, ssnDateVerified?: string, ssnNotes?: string, visaType?: string, workAuthorization?: string, workUntil?: string}
-]: any -> record<employeeId: string> {
+]: any -> oneof<record<employeeId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -341,7 +343,7 @@ export def "get-all-employees" [
   --pagesize: int # Number of records per page. Default value is 25.
   --pagenumber: int # Page number to retrieve; page numbers are 0-based (so to get the first page of results, pass pagenumber=0). Default value is 0.
   --includetotalcount: oneof<nothing, bool> # Whether to include the total record count in the header's X-Pcty-Total-Count property. Default value is true.
-]: nothing -> table<employeeId: string, statusCode: string, statusTypeCode: string> {
+]: nothing -> oneof<table<employeeId: string, statusCode: string, statusTypeCode: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
@@ -379,7 +381,7 @@ export def "get-employee" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<additionalDirectDeposit: table<accountNumber: string, accountType: string, amount: float, amountType: string, blockSpecial: bool, isSkipPreNote: bool, nameOnAccount: string, preNoteDate: string, routingNumber: string>, additionalRate: table<changeReason: string, costCenter1: string, costCenter2: string, costCenter3: string, effectiveDate: string, endCheckDate: string, job: string, rate: float, rateCode: string, rateNotes: string, ratePer: string, shift: string>, benefitSetup: record<benefitClass: string, benefitClassEffectiveDate: string, benefitSalary: float, benefitSalaryEffectiveDate: string, doNotApplyAdministrativePeriod: bool, isMeasureAcaEligibility: bool>, birthDate: string, coEmpCode: string, companyFEIN: string, companyName: string, currency: string, customBooleanFields: table<category: string, label: string, value: bool>, customDateFields: table<category: string, label: string, value: string>, customDropDownFields: table<category: string, label: string, value: string>, customNumberFields: table<category: string, label: string, value: float>, customTextFields: table<category: string, label: string, value: string>, departmentPosition: record<changeReason: string, clockBadgeNumber: string, costCenter1: string, costCenter2: string, costCenter3: string, effectiveDate: string, employeeType: string, equalEmploymentOpportunityClass: string, isMinimumWageExempt: bool, isOvertimeExempt: bool, isSupervisorReviewer: bool, isUnionDuesCollected: bool, isUnionInitiationCollected: bool, jobTitle: string, payGroup: string, positionCode: string, reviewerCompanyNumber: string, reviewerEmployeeId: string, shift: string, supervisorCompanyNumber: string, supervisorEmployeeId: string, tipped: string, unionAffiliationDate: string, unionCode: string, unionPosition: string, workersCompensation: string>, disabilityDescription: string, emergencyContacts: table<address1: string, address2: string, city: string, country: string, county: string, email: string, firstName: string, homePhone: string, lastName: string, mobilePhone: string, notes: string, pager: string, primaryPhone: string, priority: string, relationship: string, state: string, syncEmployeeInfo: bool, workExtension: string, workPhone: string, zip: string>, employeeId: string, ethnicity: string, federalTax: record<amount: float, deductionsAmount: float, dependentsAmount: float, exemptions: float, filingStatus: string, higherRate: bool, otherIncomeAmount: float, percentage: float, taxCalculationCode: string, w4FormYear: int>, firstName: string, gender: string, homeAddress: record<address1: string, address2: string, city: string, country: string, county: string, emailAddress: string, mobilePhone: string, phone: string, postalCode: string, state: string>, isHighlyCompensated: bool, isSmoker: bool, lastName: string, localTax: table<exemptions: float, exemptions2: float, filingStatus: string, residentPSD: string, taxCode: string, workPSD: string>, mainDirectDeposit: record<accountNumber: string, accountType: string, blockSpecial: bool, isSkipPreNote: bool, nameOnAccount: string, preNoteDate: string, routingNumber: string>, maritalStatus: string, middleName: string, nonPrimaryStateTax: record<amount: float, deductionsAmount: float, dependentsAmount: float, exemptions: float, exemptions2: float, filingStatus: string, higherRate: bool, otherIncomeAmount: float, percentage: float, reciprocityCode: string, specialCheckCalc: string, taxCalculationCode: string, taxCode: string, w4FormYear: int>, ownerPercent: float, preferredName: string, primaryPayRate: record<annualSalary: float, baseRate: float, beginCheckDate: string, changeReason: string, defaultHours: float, effectiveDate: string, isAutoPay: bool, payFrequency: string, payGrade: string, payRateNote: string, payType: string, ratePer: string, salary: float>, primaryStateTax: record<amount: float, deductionsAmount: float, dependentsAmount: float, exemptions: float, exemptions2: float, filingStatus: string, higherRate: bool, otherIncomeAmount: float, percentage: float, specialCheckCalc: string, taxCalculationCode: string, taxCode: string, w4FormYear: int>, priorLastName: string, salutation: string, ssn: string, status: record<adjustedSeniorityDate: string, changeReason: string, effectiveDate: string, employeeStatus: string, hireDate: string, isEligibleForRehire: bool, reHireDate: string, statusType: string, terminationDate: string>, suffix: string, taxSetup: record<fitwExemptNotes: string, fitwExemptReason: string, futaExemptNotes: string, futaExemptReason: string, isEmployee943: bool, isPension: bool, isStatutory: bool, medExemptNotes: string, medExemptReason: string, sitwExemptNotes: string, sitwExemptReason: string, ssExemptNotes: string, ssExemptReason: string, suiExemptNotes: string, suiExemptReason: string, suiState: string, taxDistributionCode1099R: string, taxForm: string>, veteranDescription: string, webTime: record<badgeNumber: string, chargeRate: float, isTimeLaborEnabled: bool>, workAddress: record<address1: string, address2: string, city: string, country: string, county: string, emailAddress: string, location: string, mailStop: string, mobilePhone: string, pager: string, phone: string, phoneExtension: string, postalCode: string, state: string>, workEligibility: record<alienOrAdmissionDocumentNumber: string, attestedDate: string, countryOfIssuance: string, foreignPassportNumber: string, i94AdmissionNumber: string, i9DateVerified: string, i9Notes: string, isI9Verified: bool, isSsnVerified: bool, ssnDateVerified: string, ssnNotes: string, visaType: string, workAuthorization: string, workUntil: string>> {
+]: nothing -> oneof<record<additionalDirectDeposit: table<accountNumber: string, accountType: string, amount: float, amountType: string, blockSpecial: bool, isSkipPreNote: bool, nameOnAccount: string, preNoteDate: string, routingNumber: string>, additionalRate: table<changeReason: string, costCenter1: string, costCenter2: string, costCenter3: string, effectiveDate: string, endCheckDate: string, job: string, rate: float, rateCode: string, rateNotes: string, ratePer: string, shift: string>, benefitSetup: record<benefitClass: string, benefitClassEffectiveDate: string, benefitSalary: float, benefitSalaryEffectiveDate: string, doNotApplyAdministrativePeriod: bool, isMeasureAcaEligibility: bool>, birthDate: string, coEmpCode: string, companyFEIN: string, companyName: string, currency: string, customBooleanFields: table<category: string, label: string, value: bool>, customDateFields: table<category: string, label: string, value: string>, customDropDownFields: table<category: string, label: string, value: string>, customNumberFields: table<category: string, label: string, value: float>, customTextFields: table<category: string, label: string, value: string>, departmentPosition: record<changeReason: string, clockBadgeNumber: string, costCenter1: string, costCenter2: string, costCenter3: string, effectiveDate: string, employeeType: string, equalEmploymentOpportunityClass: string, isMinimumWageExempt: bool, isOvertimeExempt: bool, isSupervisorReviewer: bool, isUnionDuesCollected: bool, isUnionInitiationCollected: bool, jobTitle: string, payGroup: string, positionCode: string, reviewerCompanyNumber: string, reviewerEmployeeId: string, shift: string, supervisorCompanyNumber: string, supervisorEmployeeId: string, tipped: string, unionAffiliationDate: string, unionCode: string, unionPosition: string, workersCompensation: string>, disabilityDescription: string, emergencyContacts: table<address1: string, address2: string, city: string, country: string, county: string, email: string, firstName: string, homePhone: string, lastName: string, mobilePhone: string, notes: string, pager: string, primaryPhone: string, priority: string, relationship: string, state: string, syncEmployeeInfo: bool, workExtension: string, workPhone: string, zip: string>, employeeId: string, ethnicity: string, federalTax: record<amount: float, deductionsAmount: float, dependentsAmount: float, exemptions: float, filingStatus: string, higherRate: bool, otherIncomeAmount: float, percentage: float, taxCalculationCode: string, w4FormYear: int>, firstName: string, gender: string, homeAddress: record<address1: string, address2: string, city: string, country: string, county: string, emailAddress: string, mobilePhone: string, phone: string, postalCode: string, state: string>, isHighlyCompensated: bool, isSmoker: bool, lastName: string, localTax: table<exemptions: float, exemptions2: float, filingStatus: string, residentPSD: string, taxCode: string, workPSD: string>, mainDirectDeposit: record<accountNumber: string, accountType: string, blockSpecial: bool, isSkipPreNote: bool, nameOnAccount: string, preNoteDate: string, routingNumber: string>, maritalStatus: string, middleName: string, nonPrimaryStateTax: record<amount: float, deductionsAmount: float, dependentsAmount: float, exemptions: float, exemptions2: float, filingStatus: string, higherRate: bool, otherIncomeAmount: float, percentage: float, reciprocityCode: string, specialCheckCalc: string, taxCalculationCode: string, taxCode: string, w4FormYear: int>, ownerPercent: float, preferredName: string, primaryPayRate: record<annualSalary: float, baseRate: float, beginCheckDate: string, changeReason: string, defaultHours: float, effectiveDate: string, isAutoPay: bool, payFrequency: string, payGrade: string, payRateNote: string, payType: string, ratePer: string, salary: float>, primaryStateTax: record<amount: float, deductionsAmount: float, dependentsAmount: float, exemptions: float, exemptions2: float, filingStatus: string, higherRate: bool, otherIncomeAmount: float, percentage: float, specialCheckCalc: string, taxCalculationCode: string, taxCode: string, w4FormYear: int>, priorLastName: string, salutation: string, ssn: string, status: record<adjustedSeniorityDate: string, changeReason: string, effectiveDate: string, employeeStatus: string, hireDate: string, isEligibleForRehire: bool, reHireDate: string, statusType: string, terminationDate: string>, suffix: string, taxSetup: record<fitwExemptNotes: string, fitwExemptReason: string, futaExemptNotes: string, futaExemptReason: string, isEmployee943: bool, isPension: bool, isStatutory: bool, medExemptNotes: string, medExemptReason: string, sitwExemptNotes: string, sitwExemptReason: string, ssExemptNotes: string, ssExemptReason: string, suiExemptNotes: string, suiExemptReason: string, suiState: string, taxDistributionCode1099R: string, taxForm: string>, veteranDescription: string, webTime: record<badgeNumber: string, chargeRate: float, isTimeLaborEnabled: bool>, workAddress: record<address1: string, address2: string, city: string, country: string, county: string, emailAddress: string, location: string, mailStop: string, mobilePhone: string, pager: string, phone: string, phoneExtension: string, postalCode: string, state: string>, workEligibility: record<alienOrAdmissionDocumentNumber: string, attestedDate: string, countryOfIssuance: string, foreignPassportNumber: string, i94AdmissionNumber: string, i9DateVerified: string, i9Notes: string, isI9Verified: bool, isSsnVerified: bool, ssnDateVerified: string, ssnNotes: string, visaType: string, workAuthorization: string, workUntil: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
@@ -405,28 +407,6 @@ export def "get-employee" [
 #
 # PATCH /v2/companies/{companyId}/employees/{employeeId}
 # operationId: Update employee
-# --additionalDirectDeposit item shape: {accountNumber?: string, accountType?: string, amount?: float, amountType?: string, blockSpecial?: bool, isSkipPreNote?: bool, nameOnAccount?: string, preNoteDate?: string, routingNumber?: string}
-# --additionalRate item shape: {changeReason?: string, costCenter1?: string, costCenter2?: string, costCenter3?: string, effectiveDate?: string, endCheckDate?: string, job?: string, rate?: float, rateCode?: string, rateNotes?: string, ratePer?: string, shift?: string}
-# --benefitSetup shape: {benefitClass?: string, benefitClassEffectiveDate?: string, benefitSalary?: float, benefitSalaryEffectiveDate?: string, doNotApplyAdministrativePeriod?: bool, isMeasureAcaEligibility?: bool}
-# --customBooleanFields item shape: {category: "PayrollAndHR", label: string, value: bool}
-# --customDateFields item shape: {category: "PayrollAndHR", label: string, value: string}
-# --customDropDownFields item shape: {category: "PayrollAndHR", label: string, value: string}
-# --customNumberFields item shape: {category: "PayrollAndHR", label: string, value: float}
-# --customTextFields item shape: {category: "PayrollAndHR", label: string, value: string}
-# --departmentPosition shape: {changeReason?: string, clockBadgeNumber?: string, costCenter1?: string, costCenter2?: string, costCenter3?: string, effectiveDate?: string, employeeType?: string, equalEmploymentOpportunityClass?: string, isMinimumWageExempt?: bool, isOvertimeExempt?: bool, isSupervisorReviewer?: bool, isUnionDuesCollected?: bool, isUnionInitiationCollected?: bool, jobTitle?: string, payGroup?: string, positionCode?: string, reviewerCompanyNumber?: string, reviewerEmployeeId?: string, shift?: string, ... (7 more fields)}
-# --emergencyContacts item shape: {address1?: string, address2?: string, city?: string, country?: string, county?: string, email?: string, firstName: string, homePhone?: string, lastName: string, mobilePhone?: string, notes?: string, pager?: string, primaryPhone?: string, priority?: string, relationship?: string, state?: string, syncEmployeeInfo?: bool, workExtension?: string, workPhone?: string, zip?: string}
-# --federalTax shape: {amount?: float, deductionsAmount?: float, dependentsAmount?: float, exemptions?: float, filingStatus?: string, higherRate?: bool, otherIncomeAmount?: float, percentage?: float, taxCalculationCode?: string, w4FormYear?: int}
-# --homeAddress shape: {address1?: string, address2?: string, city?: string, country?: string, county?: string, emailAddress?: string, mobilePhone?: string, phone?: string, postalCode?: string, state?: string}
-# --localTax item shape: {exemptions?: float, exemptions2?: float, filingStatus?: string, residentPSD?: string, taxCode?: string, workPSD?: string}
-# --mainDirectDeposit shape: {accountNumber?: string, accountType?: string, blockSpecial?: bool, isSkipPreNote?: bool, nameOnAccount?: string, preNoteDate?: string, routingNumber?: string}
-# --nonPrimaryStateTax shape: {amount?: float, deductionsAmount?: float, dependentsAmount?: float, exemptions?: float, exemptions2?: float, filingStatus?: string, higherRate?: bool, otherIncomeAmount?: float, percentage?: float, reciprocityCode?: string, specialCheckCalc?: string, taxCalculationCode?: string, taxCode?: string, w4FormYear?: int}
-# --primaryPayRate shape: {annualSalary?: float, baseRate?: float, beginCheckDate?: string, changeReason?: string, defaultHours?: float, effectiveDate?: string, isAutoPay?: bool, payFrequency?: string, payGrade?: string, payRateNote?: string, payType?: string, ratePer?: string, salary?: float}
-# --primaryStateTax shape: {amount?: float, deductionsAmount?: float, dependentsAmount?: float, exemptions?: float, exemptions2?: float, filingStatus?: string, higherRate?: bool, otherIncomeAmount?: float, percentage?: float, specialCheckCalc?: string, taxCalculationCode?: string, taxCode?: string, w4FormYear?: int}
-# --status shape: {adjustedSeniorityDate?: string, changeReason?: string, effectiveDate?: string, employeeStatus?: string, hireDate?: string, isEligibleForRehire?: bool, reHireDate?: string, statusType?: string, terminationDate?: string}
-# --taxSetup shape: {fitwExemptNotes?: string, fitwExemptReason?: string, futaExemptNotes?: string, futaExemptReason?: string, isEmployee943?: bool, isPension?: bool, isStatutory?: bool, medExemptNotes?: string, medExemptReason?: string, sitwExemptNotes?: string, sitwExemptReason?: string, ssExemptNotes?: string, ssExemptReason?: string, suiExemptNotes?: string, suiExemptReason?: string, suiState?: string, taxDistributionCode1099R?: string, taxForm?: string}
-# --webTime shape: {badgeNumber?: string, chargeRate?: float, isTimeLaborEnabled?: bool}
-# --workAddress shape: {address1?: string, address2?: string, city?: string, country?: string, county?: string, emailAddress?: string, location?: string, mailStop?: string, mobilePhone?: string, pager?: string, phone?: string, phoneExtension?: string, postalCode?: string, state?: string}
-# --workEligibility shape: {alienOrAdmissionDocumentNumber?: string, attestedDate?: string, countryOfIssuance?: string, foreignPassportNumber?: string, i94AdmissionNumber?: string, i9DateVerified?: string, i9Notes?: string, isI9Verified?: bool, isSsnVerified?: bool, ssnDateVerified?: string, ssnNotes?: string, visaType?: string, workAuthorization?: string, workUntil?: string}
 export def "update-employee" [
   company_id: string
   employee_id: string
@@ -624,7 +604,7 @@ export def "get-all-direct-deposit" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<additionalDirectDeposit: list<record>, mainDirectDeposit: record<accountNumber: string, accountType: string, blockSpecial: bool, isSkipPreNote: bool, nameOnAccount: string, preNoteDate: string, routingNumber: string>> {
+]: nothing -> oneof<table<additionalDirectDeposit: list<record>, mainDirectDeposit: record<accountNumber: string, accountType: string, blockSpecial: bool, isSkipPreNote: bool, nameOnAccount: string, preNoteDate: string, routingNumber: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
@@ -662,7 +642,7 @@ export def "get-all-earnings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<agency: string, amount: float, annualMaximum: float, calculationCode: string, costCenter1: string, costCenter2: string, costCenter3: string, earningCode: string, effectiveDate: string, endDate: string, frequency: string, goal: float, hoursOrUnits: float, isSelfInsured: bool, jobCode: string, miscellaneousInfo: string, paidTowardsGoal: float, payPeriodMaximum: float, payPeriodMinimum: float, rate: float, rateCode: string, startDate: string> {
+]: nothing -> oneof<table<agency: string, amount: float, annualMaximum: float, calculationCode: string, costCenter1: string, costCenter2: string, costCenter3: string, earningCode: string, effectiveDate: string, endDate: string, frequency: string, goal: float, hoursOrUnits: float, isSelfInsured: bool, jobCode: string, miscellaneousInfo: string, paidTowardsGoal: float, payPeriodMaximum: float, payPeriodMinimum: float, rate: float, rateCode: string, startDate: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
@@ -764,7 +744,7 @@ export def "get-earnings-by-earning-code" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<agency: string, amount: float, annualMaximum: float, calculationCode: string, costCenter1: string, costCenter2: string, costCenter3: string, earningCode: string, effectiveDate: string, endDate: string, frequency: string, goal: float, hoursOrUnits: float, isSelfInsured: bool, jobCode: string, miscellaneousInfo: string, paidTowardsGoal: float, payPeriodMaximum: float, payPeriodMinimum: float, rate: float, rateCode: string, startDate: string> {
+]: nothing -> oneof<table<agency: string, amount: float, annualMaximum: float, calculationCode: string, costCenter1: string, costCenter2: string, costCenter3: string, earningCode: string, effectiveDate: string, endDate: string, frequency: string, goal: float, hoursOrUnits: float, isSelfInsured: bool, jobCode: string, miscellaneousInfo: string, paidTowardsGoal: float, payPeriodMaximum: float, payPeriodMinimum: float, rate: float, rateCode: string, startDate: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
@@ -847,7 +827,7 @@ export def "get-earning-by-earning-code-and-start-date" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<agency: string, amount: float, annualMaximum: float, calculationCode: string, costCenter1: string, costCenter2: string, costCenter3: string, earningCode: string, effectiveDate: string, endDate: string, frequency: string, goal: float, hoursOrUnits: float, isSelfInsured: bool, jobCode: string, miscellaneousInfo: string, paidTowardsGoal: float, payPeriodMaximum: float, payPeriodMinimum: float, rate: float, rateCode: string, startDate: string> {
+]: nothing -> oneof<record<agency: string, amount: float, annualMaximum: float, calculationCode: string, costCenter1: string, costCenter2: string, costCenter3: string, earningCode: string, effectiveDate: string, endDate: string, frequency: string, goal: float, hoursOrUnits: float, isSelfInsured: bool, jobCode: string, miscellaneousInfo: string, paidTowardsGoal: float, payPeriodMaximum: float, payPeriodMinimum: float, rate: float, rateCode: string, startDate: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
@@ -948,7 +928,7 @@ export def "get-all-local-taxes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<exemptions: float, exemptions2: float, filingStatus: string, residentPSD: string, taxCode: string, workPSD: string> {
+]: nothing -> oneof<table<exemptions: float, exemptions2: float, filingStatus: string, residentPSD: string, taxCode: string, workPSD: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
@@ -1074,7 +1054,7 @@ export def "get-local-tax-by-tax-code" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<exemptions: float, exemptions2: float, filingStatus: string, residentPSD: string, taxCode: string, workPSD: string> {
+]: nothing -> oneof<table<exemptions: float, exemptions2: float, filingStatus: string, residentPSD: string, taxCode: string, workPSD: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
@@ -1173,7 +1153,7 @@ export def "gets-employee-pay-statement-detail-data-based-on-the-specified-year"
   --pagenumber: int # Page number to retrieve; page numbers are 0-based (so to get the first page of results, pass pagenumber=0). Default value is 0.
   --includetotalcount: oneof<nothing, bool> # Whether to include the total record count in the header's X-Pcty-Total-Count property. Default value is true.
   --codegroup: string # Retrieve pay statement details related to specific deduction, earning or tax types. Common values include 401k, Memo, Reg, OT, Cash Tips, FED and SITW.
-]: nothing -> table<amount: float, checkDate: string, det: string, detCode: string, detType: string, eligibleCompensation: float, hours: float, rate: float, transactionNumber: int, transactionType: string, year: int> {
+]: nothing -> oneof<table<amount: float, checkDate: string, det: string, detCode: string, detType: string, eligibleCompensation: float, hours: float, rate: float, transactionNumber: int, transactionType: string, year: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
@@ -1219,7 +1199,7 @@ export def "gets-employee-pay-statement-detail-data-based-on-the-specified-year-
   --pagenumber: int # Page number to retrieve; page numbers are 0-based (so to get the first page of results, pass pagenumber=0). Default value is 0.
   --includetotalcount: oneof<nothing, bool> # Whether to include the total record count in the header's X-Pcty-Total-Count property. Default value is true.
   --codegroup: string # Retrieve pay statement details related to specific deduction, earning or tax types. Common values include 401k, Memo, Reg, OT, Cash Tips, FED and SITW.
-]: nothing -> table<amount: float, checkDate: string, det: string, detCode: string, detType: string, eligibleCompensation: float, hours: float, rate: float, transactionNumber: int, transactionType: string, year: int> {
+]: nothing -> oneof<table<amount: float, checkDate: string, det: string, detCode: string, detType: string, eligibleCompensation: float, hours: float, rate: float, transactionNumber: int, transactionType: string, year: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
@@ -1265,7 +1245,7 @@ export def "gets-employee-pay-statement-summary-data-based-on-the-specified-year
   --pagenumber: int # Page number to retrieve; page numbers are 0-based (so to get the first page of results, pass pagenumber=0). Default value is 0.
   --includetotalcount: oneof<nothing, bool> # Whether to include the total record count in the header's X-Pcty-Total-Count property. Default value is true.
   --codegroup: string # Retrieve pay statement details related to specific deduction, earning or tax types. Common values include 401k, Memo, Reg, OT, Cash Tips, FED and SITW.
-]: nothing -> table<autoPay: bool, beginDate: string, checkDate: string, checkNumber: int, directDepositAmount: float, endDate: string, grossPay: float, hours: float, netCheck: float, netPay: float, overtimeDollars: float, overtimeHours: float, process: int, regularDollars: float, regularHours: float, transactionNumber: int, voucherNumber: int, workersCompCode: string, year: int> {
+]: nothing -> oneof<table<autoPay: bool, beginDate: string, checkDate: string, checkNumber: int, directDepositAmount: float, endDate: string, grossPay: float, hours: float, netCheck: float, netPay: float, overtimeDollars: float, overtimeHours: float, process: int, regularDollars: float, regularHours: float, transactionNumber: int, voucherNumber: int, workersCompCode: string, year: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
@@ -1311,7 +1291,7 @@ export def "gets-employee-pay-statement-summary-data-based-on-the-specified-year
   --pagenumber: int # Page number to retrieve; page numbers are 0-based (so to get the first page of results, pass pagenumber=0). Default value is 0.
   --includetotalcount: oneof<nothing, bool> # Whether to include the total record count in the header's X-Pcty-Total-Count property. Default value is true.
   --codegroup: string # Retrieve pay statement details related to specific deduction, earning or tax types. Common values include 401k, Memo, Reg, OT, Cash Tips, FED and SITW.
-]: nothing -> table<autoPay: bool, beginDate: string, checkDate: string, checkNumber: int, directDepositAmount: float, endDate: string, grossPay: float, hours: float, netCheck: float, netPay: float, overtimeDollars: float, overtimeHours: float, process: int, regularDollars: float, regularHours: float, transactionNumber: int, voucherNumber: int, workersCompCode: string, year: int> {
+]: nothing -> oneof<table<autoPay: bool, beginDate: string, checkDate: string, checkNumber: int, directDepositAmount: float, endDate: string, grossPay: float, hours: float, netCheck: float, netPay: float, overtimeDollars: float, overtimeHours: float, process: int, regularDollars: float, regularHours: float, transactionNumber: int, voucherNumber: int, workersCompCode: string, year: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
@@ -1406,7 +1386,7 @@ export def "get-sensitive-data" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<disability: record<disability: string, disabilityClassifications: list, hasDisability: string>, ethnicity: record<ethnicRacialIdentities: list, ethnicity: string>, gender: record<displayPronouns: bool, genderIdentityDescription: string, identifyAsLegalGender: string, legalGender: string, pronouns: string, sexualOrientation: string>, veteran: record<isVeteran: string, veteran: string>> {
+]: nothing -> oneof<table<disability: record<disability: string, disabilityClassifications: list, hasDisability: string>, ethnicity: record<ethnicRacialIdentities: list, ethnicity: string>, gender: record<displayPronouns: bool, genderIdentityDescription: string, identifyAsLegalGender: string, legalGender: string, pronouns: string, sexualOrientation: string>, veteran: record<isVeteran: string, veteran: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
@@ -1432,10 +1412,6 @@ export def "get-sensitive-data" [
 #
 # PUT /v2/companies/{companyId}/employees/{employeeId}/sensitivedata
 # operationId: Add or update Sensitive Data
-# --disability shape: {disability?: string, disabilityClassifications?: list, hasDisability?: string}
-# --ethnicity shape: {ethnicRacialIdentities?: list, ethnicity?: string}
-# --gender shape: {displayPronouns?: bool, genderIdentityDescription?: string, identifyAsLegalGender?: string, legalGender?: string, pronouns?: string, sexualOrientation?: string}
-# --veteran shape: {isVeteran?: string, veteran?: string}
 export def "add-or-update-sensitive-data" [
   company_id: string
   employee_id: string
@@ -1532,7 +1508,7 @@ export def "add-client-secret" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   code: string # A value sent with the 'ACTION NEEDED: Web Link API Credentials Expiring Soon.' email notification.
-]: any -> table<clientSecret: string, clientSecretExpirationDate: string> {
+]: any -> oneof<table<clientSecret: string, clientSecretExpirationDate: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1559,25 +1535,6 @@ export def "add-client-secret" [
 #
 # POST /v2/weblinkstaging/companies/{companyId}/employees/newemployees
 # operationId: Add new employee to Web Link
-# --additionalDirectDeposit item shape: {accountNumber?: string, accountType?: string, amount?: float, amountType?: string, isSkipPreNote?: bool, preNoteDate?: string, routingNumber?: string}
-# --benefitSetup item shape: {benefitClass?: string, benefitClassEffectiveDate?: string, benefitSalary?: float, benefitSalaryEffectiveDate?: string, doNotApplyAdministrativePeriod?: bool, isMeasureAcaEligibility?: bool}
-# --customBooleanFields item shape: {category: "PayrollAndHR", label: string, value: bool}
-# --customDateFields item shape: {category: "PayrollAndHR", label: string, value: string}
-# --customDropDownFields item shape: {category: "PayrollAndHR", label: string, value: string}
-# --customNumberFields item shape: {category: "PayrollAndHR", label: string, value: float}
-# --customTextFields item shape: {category: "PayrollAndHR", label: string, value: string}
-# --departmentPosition item shape: {changeReason?: string, clockBadgeNumber?: string, costCenter1?: string, costCenter2?: string, costCenter3?: string, effectiveDate?: string, employeeType?: string, equalEmploymentOpportunityClass?: string, isMinimumWageExempt?: bool, isOvertimeExempt?: bool, isSupervisorReviewer?: bool, isUnionDuesCollected?: bool, isUnionInitiationCollected?: bool, jobTitle?: string, payGroup?: string, positionCode?: string, shift?: string, supervisorCompanyNumber?: string, supervisorEmployeeId?: string, ... (5 more fields)}
-# --federalTax item shape: {amount?: float, deductionsAmount?: float, dependentsAmount?: float, exemptions?: float, filingStatus?: string, higherRate?: bool, otherIncomeAmount?: float, percentage?: float, taxCalculationCode?: string, w4FormYear?: int}
-# --homeAddress item shape: {address1?: string, address2?: string, city?: string, country?: string, county?: string, emailAddress?: string, mobilePhone?: string, phone?: string, postalCode?: string, state?: string}
-# --localTax item shape: {exemptions?: float, exemptions2?: float, filingStatus?: string, residentPSD?: string, taxCode?: string, workPSD?: string}
-# --mainDirectDeposit item shape: {accountNumber?: string, accountType?: string, isSkipPreNote?: bool, preNoteDate?: string, routingNumber?: string}
-# --nonPrimaryStateTax item shape: {amount?: float, deductionsAmount?: float, dependentsAmount?: float, exemptions?: float, exemptions2?: float, filingStatus?: string, higherRate?: bool, otherIncomeAmount?: float, percentage?: float, reciprocityCode?: string, specialCheckCalc?: string, taxCalculationCode?: string, taxCode?: string, w4FormYear?: int}
-# --primaryPayRate item shape: {baseRate?: float, changeReason?: string, defaultHours?: float, effectiveDate?: string, isAutoPay?: bool, payFrequency?: string, payGrade?: string, payType?: string, ratePer?: string, salary?: float}
-# --primaryStateTax item shape: {amount?: float, deductionsAmount?: float, dependentsAmount?: float, exemptions?: float, exemptions2?: float, filingStatus?: string, higherRate?: bool, otherIncomeAmount?: float, percentage?: float, specialCheckCalc?: string, taxCalculationCode?: string, taxCode?: string, w4FormYear?: int}
-# --status item shape: {adjustedSeniorityDate?: string, changeReason?: string, effectiveDate?: string, employeeStatus?: string, hireDate?: string, isEligibleForRehire?: bool}
-# --webTime shape: {badgeNumber?: string, chargeRate?: float, isTimeLaborEnabled?: bool}
-# --workAddress item shape: {address1?: string, address2?: string, city?: string, country?: string, county?: string, emailAddress?: string, mobilePhone?: string, pager?: string, phone?: string, phoneExtension?: string, postalCode?: string, state?: string}
-# --workEligibility item shape: {alienOrAdmissionDocumentNumber?: string, attestedDate?: string, countryOfIssuance?: string, foreignPassportNumber?: string, i94AdmissionNumber?: string, i9DateVerified?: string, i9Notes?: string, isI9Verified?: bool, isSsnVerified?: bool, ssnDateVerified?: string, ssnNotes?: string, visaType?: string, workAuthorization?: string, workUntil?: string}
 export def "add-new-employee-to-web-link" [
   company_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1634,7 +1591,7 @@ export def "add-new-employee-to-web-link" [
   --web-time: record # Add Web Time badge number and charge rate and synchronize Web Pay and Web Time employee data. — shape: {badgeNumber?: string, chargeRate?: float, isTimeLaborEnabled?: bool}
   --work-address: list # Add employee's work address, phone numbers, and email. Work Location drop down field is not included. — item shape: {address1?: string, address2?: string, city?: string, country?: string, county?: string, emailAddress?: string, mobilePhone?: string, pager?: string, phone?: string, phoneExtension?: string, postalCode?: string, state?: string}
   --work-eligibility: list # Add I-9 work authorization information. — item shape: {alienOrAdmissionDocumentNumber?: string, attestedDate?: string, countryOfIssuance?: string, foreignPassportNumber?: string, i94AdmissionNumber?: string, i9DateVerified?: string, i9Notes?: string, isI9Verified?: bool, isSsnVerified?: bool, ssnDateVerified?: string, ssnNotes?: string, visaType?: string, workAuthorization?: string, workUntil?: string}
-]: any -> table<trackingNumber: string> {
+]: any -> oneof<table<trackingNumber: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -125,9 +149,9 @@ def expand-completer [] { ["instanceView"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["operations-list" "availability-sets-list-by-subscription" "dedicated-host-groups-list-by-subscription" "images-list" "log-analytics-export-request-rate-by-interval" "log-analytics-export-throttled-requests" "virtual-machine-images-list-publishers" "virtual-machine-extension-images-list-types" "virtual-machine-extension-images-list-versions" "virtual-machine-extension-images-get" "virtual-machine-images-list-offers" "virtual-machine-images-list-skus" "virtual-machine-images-list" "virtual-machine-images-get" "usage-list" "virtual-machines-list-by-location" "virtual-machine-sizes-list" "proximity-placement-groups-list-by-subscription" "virtual-machine-scale-sets-list-all" "virtual-machines-list-all" "availability-sets-list" "availability-sets-delete" "availability-sets-get" "availability-sets-update" "availability-sets-create-or-update" "availability-sets-list-available-sizes" "dedicated-host-groups-list-by-resource-group" "dedicated-host-groups-delete" "dedicated-host-groups-get" "dedicated-host-groups-update" "dedicated-host-groups-create-or-update" "dedicated-hosts-list-by-host-group" "dedicated-hosts-delete" "dedicated-hosts-get" "dedicated-hosts-update" "dedicated-hosts-create-or-update" "images-list-by-resource-group" "images-delete" "images-get" "images-update" "images-create-or-update" "proximity-placement-groups-list-by-resource-group" "proximity-placement-groups-delete" "proximity-placement-groups-get" "proximity-placement-groups-update" "proximity-placement-groups-create-or-update" "virtual-machine-scale-sets-list" "virtual-machine-scale-set-v-ms-list" "virtual-machine-scale-sets-delete" "virtual-machine-scale-sets-get" "virtual-machine-scale-sets-update" "virtual-machine-scale-sets-create-or-update" "virtual-machine-scale-sets-convert-to-single-placement-group" "virtual-machine-scale-sets-deallocate" "virtual-machine-scale-sets-delete-instances" "virtual-machine-scale-set-rolling-upgrades-start-extension-upgrade" "virtual-machine-scale-set-extensions-list" "virtual-machine-scale-set-extensions-delete" "virtual-machine-scale-set-extensions-get" "virtual-machine-scale-set-extensions-create-or-update" "virtual-machine-scale-sets-force-recovery-service-fabric-platform-update-domain-walk" "virtual-machine-scale-sets-get-instance-view" "virtual-machine-scale-sets-update-instances" "virtual-machine-scale-set-rolling-upgrades-start-os-upgrade" "virtual-machine-scale-sets-get-os-upgrade-history" "virtual-machine-scale-sets-perform-maintenance" "virtual-machine-scale-sets-power-off" "virtual-machine-scale-sets-redeploy" "virtual-machine-scale-sets-reimage" "virtual-machine-scale-sets-reimage-all" "virtual-machine-scale-sets-restart" "virtual-machine-scale-set-rolling-upgrades-cancel" "virtual-machine-scale-set-rolling-upgrades-get-latest" "virtual-machine-scale-sets-list-skus" "virtual-machine-scale-sets-start" "virtual-machine-scale-set-v-ms-delete" "virtual-machine-scale-set-v-ms-get" "virtual-machine-scale-set-v-ms-update" "virtual-machine-scale-set-v-ms-deallocate" "virtual-machine-scale-set-v-ms-get-instance-view" "virtual-machine-scale-set-v-ms-perform-maintenance" "virtual-machine-scale-set-v-ms-power-off" "virtual-machine-scale-set-v-ms-redeploy" "virtual-machine-scale-set-v-ms-reimage" "virtual-machine-scale-set-v-ms-reimage-all" "virtual-machine-scale-set-v-ms-restart" "virtual-machine-scale-set-v-ms-start" "virtual-machines-list" "virtual-machines-delete" "virtual-machines-get" "virtual-machines-update" "virtual-machines-create-or-update" "virtual-machines-capture" "virtual-machines-convert-to-managed-disks" "virtual-machines-deallocate" "virtual-machine-extensions-list" "virtual-machine-extensions-delete" "virtual-machine-extensions-get" "virtual-machine-extensions-update" "virtual-machine-extensions-create-or-update" "virtual-machines-generalize" "virtual-machines-instance-view" "virtual-machines-perform-maintenance" "virtual-machines-power-off" "virtual-machines-redeploy" "virtual-machines-reimage" "virtual-machines-restart" "virtual-machines-start" "virtual-machines-list-available-sizes" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -160,7 +184,7 @@ export def "operations-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<value: table<display: record, name: string, origin: string>> {
+]: nothing -> oneof<record<value: table<display: record, name: string, origin: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
@@ -199,7 +223,7 @@ export def "availability-sets-list-by-subscription" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
   --expand: string # The expand expression to apply to the operation.
-]: nothing -> record<nextLink: string, value: table<properties: record, sku: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, sku: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -238,7 +262,7 @@ export def "dedicated-host-groups-list-by-subscription" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, zones: list, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, zones: list, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -277,7 +301,7 @@ export def "images-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -324,7 +348,7 @@ export def "log-analytics-export-request-rate-by-interval" [
   --group-by-resource-name: oneof<nothing, bool> # Group query result by Resource Name.
   --group-by-throttle-policy: oneof<nothing, bool> # Group query result by Throttle Policy applied.
   to_time: string # To time of the query (format: date-time)
-]: any -> record<properties: record<output: string>> {
+]: any -> oneof<record<properties: record<output: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -374,7 +398,7 @@ export def "log-analytics-export-throttled-requests" [
   --group-by-resource-name: oneof<nothing, bool> # Group query result by Resource Name.
   --group-by-throttle-policy: oneof<nothing, bool> # Group query result by Throttle Policy applied.
   to_time: string # To time of the query (format: date-time)
-]: any -> record<properties: record<output: string>> {
+]: any -> oneof<record<properties: record<output: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -418,7 +442,7 @@ export def "virtual-machine-images-list-publishers" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> table<location: string, name: string, tags: record, id: string> {
+]: nothing -> oneof<table<location: string, name: string, tags: record, id: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -460,7 +484,7 @@ export def "virtual-machine-extension-images-list-types" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> table<properties: record<computeRole: string, handlerSchema: string, operatingSystem: string, supportsMultipleExtensions: bool, vmScaleSetEnabled: bool>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<table<properties: record<computeRole: string, handlerSchema: string, operatingSystem: string, supportsMultipleExtensions: bool, vmScaleSetEnabled: bool>, id: string, location: string, name: string, tags: record, type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -507,7 +531,7 @@ export def "virtual-machine-extension-images-list-versions" [
   --top: int # format: int32
   --orderby: string
   --api-version: string # Client Api Version. (required)
-]: nothing -> table<properties: record<computeRole: string, handlerSchema: string, operatingSystem: string, supportsMultipleExtensions: bool, vmScaleSetEnabled: bool>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<table<properties: record<computeRole: string, handlerSchema: string, operatingSystem: string, supportsMultipleExtensions: bool, vmScaleSetEnabled: bool>, id: string, location: string, name: string, tags: record, type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -553,7 +577,7 @@ export def "virtual-machine-extension-images-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<properties: record<computeRole: string, handlerSchema: string, operatingSystem: string, supportsMultipleExtensions: bool, vmScaleSetEnabled: bool>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<properties: record<computeRole: string, handlerSchema: string, operatingSystem: string, supportsMultipleExtensions: bool, vmScaleSetEnabled: bool>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -598,7 +622,7 @@ export def "virtual-machine-images-list-offers" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> table<location: string, name: string, tags: record, id: string> {
+]: nothing -> oneof<table<location: string, name: string, tags: record, id: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -642,7 +666,7 @@ export def "virtual-machine-images-list-skus" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> table<location: string, name: string, tags: record, id: string> {
+]: nothing -> oneof<table<location: string, name: string, tags: record, id: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -691,7 +715,7 @@ export def "virtual-machine-images-list" [
   --top: int # format: int32
   --orderby: string
   --api-version: string # Client Api Version. (required)
-]: nothing -> table<location: string, name: string, tags: record, id: string> {
+]: nothing -> oneof<table<location: string, name: string, tags: record, id: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -739,7 +763,7 @@ export def "virtual-machine-images-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<properties: record<automaticOSUpgradeProperties: record<automaticOSUpgradeSupported: bool>, dataDiskImages: list<record>, hyperVGeneration: string, osDiskImage: record<operatingSystem: string>, plan: record<name: string, product: string, publisher: string>>, location: string, name: string, tags: record, id: string> {
+]: nothing -> oneof<record<properties: record<automaticOSUpgradeProperties: record<automaticOSUpgradeSupported: bool>, dataDiskImages: list<record>, hyperVGeneration: string, osDiskImage: record<operatingSystem: string>, plan: record<name: string, product: string, publisher: string>>, location: string, name: string, tags: record, id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -784,7 +808,7 @@ export def "usage-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<nextLink: string, value: table<currentValue: int, limit: int, name: record, unit: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<currentValue: int, limit: int, name: record, unit: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -825,7 +849,7 @@ export def "virtual-machines-list-by-location" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<nextLink: string, value: table<identity: record, plan: record, properties: record, resources: list, zones: list, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<identity: record, plan: record, properties: record, resources: list, zones: list, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -866,7 +890,7 @@ export def "virtual-machine-sizes-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<value: table<maxDataDiskCount: int, memoryInMB: int, name: string, numberOfCores: int, osDiskSizeInMB: int, resourceDiskSizeInMB: int>> {
+]: nothing -> oneof<record<value: table<maxDataDiskCount: int, memoryInMB: int, name: string, numberOfCores: int, osDiskSizeInMB: int, resourceDiskSizeInMB: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -906,7 +930,7 @@ export def "proximity-placement-groups-list-by-subscription" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -945,7 +969,7 @@ export def "virtual-machine-scale-sets-list-all" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<nextLink: string, value: table<identity: record, plan: record, properties: record, sku: record, zones: list, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<identity: record, plan: record, properties: record, sku: record, zones: list, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -984,7 +1008,7 @@ export def "virtual-machines-list-all" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<nextLink: string, value: table<identity: record, plan: record, properties: record, resources: list, zones: list, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<identity: record, plan: record, properties: record, resources: list, zones: list, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1024,7 +1048,7 @@ export def "availability-sets-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, sku: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, sku: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1109,7 +1133,7 @@ export def "availability-sets-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<properties: record<platformFaultDomainCount: int, platformUpdateDomainCount: int, proximityPlacementGroup: record<id: string>, statuses: list<record>, virtualMachines: list<record>>, sku: record<capacity: int, name: string, tier: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<properties: record<platformFaultDomainCount: int, platformUpdateDomainCount: int, proximityPlacementGroup: record<id: string>, statuses: list<record>, virtualMachines: list<record>>, sku: record<capacity: int, name: string, tier: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1138,8 +1162,6 @@ export def "availability-sets-get" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/availabilitySets/{availabilitySetName}
 # operationId: AvailabilitySets_Update
-# --properties shape: {platformFaultDomainCount?: int, platformUpdateDomainCount?: int, proximityPlacementGroup?: any, virtualMachines?: list}
-# --sku shape: {capacity?: int, name?: string, tier?: string}
 export def "availability-sets-update" [
   subscription_id: string
   resource_group_name: string
@@ -1157,7 +1179,7 @@ export def "availability-sets-update" [
   --properties: any # The instance view of a resource. — shape: {platformFaultDomainCount?: int, platformUpdateDomainCount?: int, proximityPlacementGroup?: any, virtualMachines?: list}
   --sku: any # Describes a virtual machine scale set sku. — shape: {capacity?: int, name?: string, tier?: string}
   --tags: record # Resource tags
-]: any -> record<properties: record<platformFaultDomainCount: int, platformUpdateDomainCount: int, proximityPlacementGroup: record<id: string>, statuses: list<record>, virtualMachines: list<record>>, sku: record<capacity: int, name: string, tier: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<platformFaultDomainCount: int, platformUpdateDomainCount: int, proximityPlacementGroup: record<id: string>, statuses: list<record>, virtualMachines: list<record>>, sku: record<capacity: int, name: string, tier: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1189,8 +1211,6 @@ export def "availability-sets-update" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/availabilitySets/{availabilitySetName}
 # operationId: AvailabilitySets_CreateOrUpdate
-# --properties shape: {platformFaultDomainCount?: int, platformUpdateDomainCount?: int, proximityPlacementGroup?: any, virtualMachines?: list}
-# --sku shape: {capacity?: int, name?: string, tier?: string}
 export def "availability-sets-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -1209,7 +1229,7 @@ export def "availability-sets-create-or-update" [
   --sku: any # Describes a virtual machine scale set sku. — shape: {capacity?: int, name?: string, tier?: string}
   location: string # Resource location
   --tags: record # Resource tags
-]: any -> record<properties: record<platformFaultDomainCount: int, platformUpdateDomainCount: int, proximityPlacementGroup: record<id: string>, statuses: list<record>, virtualMachines: list<record>>, sku: record<capacity: int, name: string, tier: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<platformFaultDomainCount: int, platformUpdateDomainCount: int, proximityPlacementGroup: record<id: string>, statuses: list<record>, virtualMachines: list<record>>, sku: record<capacity: int, name: string, tier: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1255,7 +1275,7 @@ export def "availability-sets-list-available-sizes" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<value: table<maxDataDiskCount: int, memoryInMB: int, name: string, numberOfCores: int, osDiskSizeInMB: int, resourceDiskSizeInMB: int>> {
+]: nothing -> oneof<record<value: table<maxDataDiskCount: int, memoryInMB: int, name: string, numberOfCores: int, osDiskSizeInMB: int, resourceDiskSizeInMB: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1297,7 +1317,7 @@ export def "dedicated-host-groups-list-by-resource-group" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, zones: list, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, zones: list, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1382,7 +1402,7 @@ export def "dedicated-host-groups-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<properties: record<hosts: list<record>, platformFaultDomainCount: int>, zones: list<string>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<properties: record<hosts: list<record>, platformFaultDomainCount: int>, zones: list<string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1411,7 +1431,6 @@ export def "dedicated-host-groups-get" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/hostGroups/{hostGroupName}
 # operationId: DedicatedHostGroups_Update
-# --properties shape: {platformFaultDomainCount: int}
 export def "dedicated-host-groups-update" [
   subscription_id: string
   resource_group_name: string
@@ -1429,7 +1448,7 @@ export def "dedicated-host-groups-update" [
   --properties: any # Dedicated Host Group Properties. — shape: {platformFaultDomainCount: int}
   --zones: list<string> # Availability Zone to use for this host group. Only single zone is supported. The zone can be assigned only during creation. If not provided, the group supports all zones in the region. If provided, enforces each host in the group to be in the same zone.
   --tags: record # Resource tags
-]: any -> record<properties: record<hosts: list<record>, platformFaultDomainCount: int>, zones: list<string>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<hosts: list<record>, platformFaultDomainCount: int>, zones: list<string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1461,7 +1480,6 @@ export def "dedicated-host-groups-update" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/hostGroups/{hostGroupName}
 # operationId: DedicatedHostGroups_CreateOrUpdate
-# --properties shape: {platformFaultDomainCount: int}
 export def "dedicated-host-groups-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -1480,7 +1498,7 @@ export def "dedicated-host-groups-create-or-update" [
   --zones: list<string> # Availability Zone to use for this host group. Only single zone is supported. The zone can be assigned only during creation. If not provided, the group supports all zones in the region. If provided, enforces each host in the group to be in the same zone.
   location: string # Resource location
   --tags: record # Resource tags
-]: any -> record<properties: record<hosts: list<record>, platformFaultDomainCount: int>, zones: list<string>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<hosts: list<record>, platformFaultDomainCount: int>, zones: list<string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1526,7 +1544,7 @@ export def "dedicated-hosts-list-by-host-group" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, sku: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, sku: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1616,7 +1634,7 @@ export def "dedicated-hosts-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string@expand-completer # The expand expression to apply on the operation.
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<properties: record<autoReplaceOnFailure: bool, hostId: string, instanceView: record<assetId: string, availableCapacity: record, statuses: list>, licenseType: string, platformFaultDomain: int, provisioningState: string, provisioningTime: string, virtualMachines: list<record>>, sku: record<capacity: int, name: string, tier: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<properties: record<autoReplaceOnFailure: bool, hostId: string, instanceView: record<assetId: string, availableCapacity: record, statuses: list>, licenseType: string, platformFaultDomain: int, provisioningState: string, provisioningTime: string, virtualMachines: list<record>>, sku: record<capacity: int, name: string, tier: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1646,7 +1664,6 @@ export def "dedicated-hosts-get" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/hostGroups/{hostGroupName}/hosts/{hostName}
 # operationId: DedicatedHosts_Update
-# --properties shape: {autoReplaceOnFailure?: bool, instanceView?: any, licenseType?: "None"|"Windows_Server_Hybrid"|"Windows_Server_Perpetual", platformFaultDomain?: int}
 export def "dedicated-hosts-update" [
   subscription_id: string
   resource_group_name: string
@@ -1664,7 +1681,7 @@ export def "dedicated-hosts-update" [
   --api-version: string # Client Api Version. (required)
   --properties: any # Properties of the dedicated host. — shape: {autoReplaceOnFailure?: bool, instanceView?: any, licenseType?: "None"|"Windows_Server_Hybrid"|"Windows_Server_Perpetual", platformFaultDomain?: int}
   --tags: record # Resource tags
-]: any -> record<properties: record<autoReplaceOnFailure: bool, hostId: string, instanceView: record<assetId: string, availableCapacity: record, statuses: list>, licenseType: string, platformFaultDomain: int, provisioningState: string, provisioningTime: string, virtualMachines: list<record>>, sku: record<capacity: int, name: string, tier: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<autoReplaceOnFailure: bool, hostId: string, instanceView: record<assetId: string, availableCapacity: record, statuses: list>, licenseType: string, platformFaultDomain: int, provisioningState: string, provisioningTime: string, virtualMachines: list<record>>, sku: record<capacity: int, name: string, tier: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1697,8 +1714,6 @@ export def "dedicated-hosts-update" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/hostGroups/{hostGroupName}/hosts/{hostName}
 # operationId: DedicatedHosts_CreateOrUpdate
-# --properties shape: {autoReplaceOnFailure?: bool, instanceView?: any, licenseType?: "None"|"Windows_Server_Hybrid"|"Windows_Server_Perpetual", platformFaultDomain?: int}
-# --sku shape: {capacity?: int, name?: string, tier?: string}
 export def "dedicated-hosts-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -1718,7 +1733,7 @@ export def "dedicated-hosts-create-or-update" [
   sku: any # Describes a virtual machine scale set sku. — shape: {capacity?: int, name?: string, tier?: string}
   location: string # Resource location
   --tags: record # Resource tags
-]: any -> record<properties: record<autoReplaceOnFailure: bool, hostId: string, instanceView: record<assetId: string, availableCapacity: record, statuses: list>, licenseType: string, platformFaultDomain: int, provisioningState: string, provisioningTime: string, virtualMachines: list<record>>, sku: record<capacity: int, name: string, tier: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<autoReplaceOnFailure: bool, hostId: string, instanceView: record<assetId: string, availableCapacity: record, statuses: list>, licenseType: string, platformFaultDomain: int, provisioningState: string, provisioningTime: string, virtualMachines: list<record>>, sku: record<capacity: int, name: string, tier: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1764,7 +1779,7 @@ export def "images-list-by-resource-group" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1850,7 +1865,7 @@ export def "images-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # The expand expression to apply on the operation.
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<properties: record<hyperVGeneration: string, provisioningState: string, sourceVirtualMachine: record<id: string>, storageProfile: record<dataDisks: list, osDisk: record, zoneResilient: bool>>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<properties: record<hyperVGeneration: string, provisioningState: string, sourceVirtualMachine: record<id: string>, storageProfile: record<dataDisks: list, osDisk: record, zoneResilient: bool>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1879,7 +1894,6 @@ export def "images-get" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/images/{imageName}
 # operationId: Images_Update
-# --properties shape: {hyperVGeneration?: "V1"|"V2", sourceVirtualMachine?: any, storageProfile?: any}
 export def "images-update" [
   subscription_id: string
   resource_group_name: string
@@ -1896,7 +1910,7 @@ export def "images-update" [
   --api-version: string # Client Api Version. (required)
   --properties: any # Describes the properties of an Image. — shape: {hyperVGeneration?: "V1"|"V2", sourceVirtualMachine?: any, storageProfile?: any}
   --tags: record # Resource tags
-]: any -> record<properties: record<hyperVGeneration: string, provisioningState: string, sourceVirtualMachine: record<id: string>, storageProfile: record<dataDisks: list, osDisk: record, zoneResilient: bool>>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<hyperVGeneration: string, provisioningState: string, sourceVirtualMachine: record<id: string>, storageProfile: record<dataDisks: list, osDisk: record, zoneResilient: bool>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1928,7 +1942,6 @@ export def "images-update" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/images/{imageName}
 # operationId: Images_CreateOrUpdate
-# --properties shape: {hyperVGeneration?: "V1"|"V2", sourceVirtualMachine?: any, storageProfile?: any}
 export def "images-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -1946,7 +1959,7 @@ export def "images-create-or-update" [
   --properties: any # Describes the properties of an Image. — shape: {hyperVGeneration?: "V1"|"V2", sourceVirtualMachine?: any, storageProfile?: any}
   location: string # Resource location
   --tags: record # Resource tags
-]: any -> record<properties: record<hyperVGeneration: string, provisioningState: string, sourceVirtualMachine: record<id: string>, storageProfile: record<dataDisks: list, osDisk: record, zoneResilient: bool>>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<hyperVGeneration: string, provisioningState: string, sourceVirtualMachine: record<id: string>, storageProfile: record<dataDisks: list, osDisk: record, zoneResilient: bool>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1991,7 +2004,7 @@ export def "proximity-placement-groups-list-by-resource-group" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2076,7 +2089,7 @@ export def "proximity-placement-groups-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<properties: record<availabilitySets: list<record>, proximityPlacementGroupType: string, virtualMachineScaleSets: list<record>, virtualMachines: list<record>>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<properties: record<availabilitySets: list<record>, proximityPlacementGroupType: string, virtualMachineScaleSets: list<record>, virtualMachines: list<record>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2120,7 +2133,7 @@ export def "proximity-placement-groups-update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
   --tags: record # Resource tags
-]: any -> record<properties: record<availabilitySets: list<record>, proximityPlacementGroupType: string, virtualMachineScaleSets: list<record>, virtualMachines: list<record>>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<availabilitySets: list<record>, proximityPlacementGroupType: string, virtualMachineScaleSets: list<record>, virtualMachines: list<record>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2152,7 +2165,6 @@ export def "proximity-placement-groups-update" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/proximityPlacementGroups/{proximityPlacementGroupName}
 # operationId: ProximityPlacementGroups_CreateOrUpdate
-# --properties shape: {proximityPlacementGroupType?: "Standard"|"Ultra"}
 export def "proximity-placement-groups-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -2170,7 +2182,7 @@ export def "proximity-placement-groups-create-or-update" [
   --properties: any # Describes the properties of a Proximity Placement Group. — shape: {proximityPlacementGroupType?: "Standard"|"Ultra"}
   location: string # Resource location
   --tags: record # Resource tags
-]: any -> record<properties: record<availabilitySets: list<record>, proximityPlacementGroupType: string, virtualMachineScaleSets: list<record>, virtualMachines: list<record>>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<availabilitySets: list<record>, proximityPlacementGroupType: string, virtualMachineScaleSets: list<record>, virtualMachines: list<record>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2215,7 +2227,7 @@ export def "virtual-machine-scale-sets-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<nextLink: string, value: table<identity: record, plan: record, properties: record, sku: record, zones: list, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<identity: record, plan: record, properties: record, sku: record, zones: list, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2260,7 +2272,7 @@ export def "virtual-machine-scale-set-v-ms-list" [
   --select: string # The list parameters.
   --expand: string # The expand expression to apply to the operation.
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<nextLink: string, value: table<instanceId: string, plan: record, properties: record, resources: list, sku: record, zones: list, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<instanceId: string, plan: record, properties: record, resources: list, sku: record, zones: list, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2346,7 +2358,7 @@ export def "virtual-machine-scale-sets-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, plan: record<name: string, product: string, promotionCode: string, publisher: string>, properties: record<additionalCapabilities: record<ultraSSDEnabled: bool>, doNotRunExtensionsOnOverprovisionedVMs: bool, overprovision: bool, platformFaultDomainCount: int, provisioningState: string, proximityPlacementGroup: record<id: string>, scaleInPolicy: record<rules: list>, singlePlacementGroup: bool, uniqueId: string, upgradePolicy: record<automaticOSUpgradePolicy: record, mode: string, rollingUpgradePolicy: record>, virtualMachineProfile: record<billingProfile: record, diagnosticsProfile: record, evictionPolicy: string, extensionProfile: record, licenseType: string, networkProfile: record, osProfile: record, priority: string, scheduledEventsProfile: record, storageProfile: record>, zoneBalance: bool>, sku: record<capacity: int, name: string, tier: string>, zones: list<string>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, plan: record<name: string, product: string, promotionCode: string, publisher: string>, properties: record<additionalCapabilities: record<ultraSSDEnabled: bool>, doNotRunExtensionsOnOverprovisionedVMs: bool, overprovision: bool, platformFaultDomainCount: int, provisioningState: string, proximityPlacementGroup: record<id: string>, scaleInPolicy: record<rules: list>, singlePlacementGroup: bool, uniqueId: string, upgradePolicy: record<automaticOSUpgradePolicy: record, mode: string, rollingUpgradePolicy: record>, virtualMachineProfile: record<billingProfile: record, diagnosticsProfile: record, evictionPolicy: string, extensionProfile: record, licenseType: string, networkProfile: record, osProfile: record, priority: string, scheduledEventsProfile: record, storageProfile: record>, zoneBalance: bool>, sku: record<capacity: int, name: string, tier: string>, zones: list<string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2375,10 +2387,6 @@ export def "virtual-machine-scale-sets-get" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachineScaleSets/{vmScaleSetName}
 # operationId: VirtualMachineScaleSets_Update
-# --identity shape: {type?: "SystemAssigned"|"UserAssigned"|"SystemAssigned, UserAssigned"|"None", userAssignedIdentities?: record}
-# --plan shape: {name?: string, product?: string, promotionCode?: string, publisher?: string}
-# --properties shape: {additionalCapabilities?: any, overprovision?: bool, scaleInPolicy?: any, singlePlacementGroup?: bool, upgradePolicy?: any, virtualMachineProfile?: any}
-# --sku shape: {capacity?: int, name?: string, tier?: string}
 export def "virtual-machine-scale-sets-update" [
   subscription_id: string
   resource_group_name: string
@@ -2398,7 +2406,7 @@ export def "virtual-machine-scale-sets-update" [
   --properties: any # Describes the properties of a Virtual Machine Scale Set. — shape: {additionalCapabilities?: any, overprovision?: bool, scaleInPolicy?: any, singlePlacementGroup?: bool, upgradePolicy?: any, virtualMachineProfile?: any}
   --sku: any # Describes a virtual machine scale set sku. — shape: {capacity?: int, name?: string, tier?: string}
   --tags: record # Resource tags
-]: any -> record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, plan: record<name: string, product: string, promotionCode: string, publisher: string>, properties: record<additionalCapabilities: record<ultraSSDEnabled: bool>, doNotRunExtensionsOnOverprovisionedVMs: bool, overprovision: bool, platformFaultDomainCount: int, provisioningState: string, proximityPlacementGroup: record<id: string>, scaleInPolicy: record<rules: list>, singlePlacementGroup: bool, uniqueId: string, upgradePolicy: record<automaticOSUpgradePolicy: record, mode: string, rollingUpgradePolicy: record>, virtualMachineProfile: record<billingProfile: record, diagnosticsProfile: record, evictionPolicy: string, extensionProfile: record, licenseType: string, networkProfile: record, osProfile: record, priority: string, scheduledEventsProfile: record, storageProfile: record>, zoneBalance: bool>, sku: record<capacity: int, name: string, tier: string>, zones: list<string>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, plan: record<name: string, product: string, promotionCode: string, publisher: string>, properties: record<additionalCapabilities: record<ultraSSDEnabled: bool>, doNotRunExtensionsOnOverprovisionedVMs: bool, overprovision: bool, platformFaultDomainCount: int, provisioningState: string, proximityPlacementGroup: record<id: string>, scaleInPolicy: record<rules: list>, singlePlacementGroup: bool, uniqueId: string, upgradePolicy: record<automaticOSUpgradePolicy: record, mode: string, rollingUpgradePolicy: record>, virtualMachineProfile: record<billingProfile: record, diagnosticsProfile: record, evictionPolicy: string, extensionProfile: record, licenseType: string, networkProfile: record, osProfile: record, priority: string, scheduledEventsProfile: record, storageProfile: record>, zoneBalance: bool>, sku: record<capacity: int, name: string, tier: string>, zones: list<string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2430,10 +2438,6 @@ export def "virtual-machine-scale-sets-update" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachineScaleSets/{vmScaleSetName}
 # operationId: VirtualMachineScaleSets_CreateOrUpdate
-# --identity shape: {type?: "SystemAssigned"|"UserAssigned"|"SystemAssigned, UserAssigned"|"None", userAssignedIdentities?: record}
-# --plan shape: {name?: string, product?: string, promotionCode?: string, publisher?: string}
-# --properties shape: {additionalCapabilities?: any, doNotRunExtensionsOnOverprovisionedVMs?: bool, overprovision?: bool, platformFaultDomainCount?: int, proximityPlacementGroup?: any, scaleInPolicy?: any, singlePlacementGroup?: bool, upgradePolicy?: any, virtualMachineProfile?: any, zoneBalance?: bool}
-# --sku shape: {capacity?: int, name?: string, tier?: string}
 export def "virtual-machine-scale-sets-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -2455,7 +2459,7 @@ export def "virtual-machine-scale-sets-create-or-update" [
   --zones: list<string> # The virtual machine scale set zones.
   location: string # Resource location
   --tags: record # Resource tags
-]: any -> record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, plan: record<name: string, product: string, promotionCode: string, publisher: string>, properties: record<additionalCapabilities: record<ultraSSDEnabled: bool>, doNotRunExtensionsOnOverprovisionedVMs: bool, overprovision: bool, platformFaultDomainCount: int, provisioningState: string, proximityPlacementGroup: record<id: string>, scaleInPolicy: record<rules: list>, singlePlacementGroup: bool, uniqueId: string, upgradePolicy: record<automaticOSUpgradePolicy: record, mode: string, rollingUpgradePolicy: record>, virtualMachineProfile: record<billingProfile: record, diagnosticsProfile: record, evictionPolicy: string, extensionProfile: record, licenseType: string, networkProfile: record, osProfile: record, priority: string, scheduledEventsProfile: record, storageProfile: record>, zoneBalance: bool>, sku: record<capacity: int, name: string, tier: string>, zones: list<string>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, plan: record<name: string, product: string, promotionCode: string, publisher: string>, properties: record<additionalCapabilities: record<ultraSSDEnabled: bool>, doNotRunExtensionsOnOverprovisionedVMs: bool, overprovision: bool, platformFaultDomainCount: int, provisioningState: string, proximityPlacementGroup: record<id: string>, scaleInPolicy: record<rules: list>, singlePlacementGroup: bool, uniqueId: string, upgradePolicy: record<automaticOSUpgradePolicy: record, mode: string, rollingUpgradePolicy: record>, virtualMachineProfile: record<billingProfile: record, diagnosticsProfile: record, evictionPolicy: string, extensionProfile: record, licenseType: string, networkProfile: record, osProfile: record, priority: string, scheduledEventsProfile: record, storageProfile: record>, zoneBalance: bool>, sku: record<capacity: int, name: string, tier: string>, zones: list<string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2682,7 +2686,7 @@ export def "virtual-machine-scale-set-extensions-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<nextLink: string, value: table<name: string, properties: record, id: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<name: string, properties: record, id: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2772,7 +2776,7 @@ export def "virtual-machine-scale-set-extensions-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # The expand expression to apply on the operation.
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<name: string, properties: record<autoUpgradeMinorVersion: bool, forceUpdateTag: string, protectedSettings: record, provisionAfterExtensions: list<string>, provisioningState: string, publisher: string, settings: record, type: string, typeHandlerVersion: string>, id: string> {
+]: nothing -> oneof<record<name: string, properties: record<autoUpgradeMinorVersion: bool, forceUpdateTag: string, protectedSettings: record, provisionAfterExtensions: list<string>, provisioningState: string, publisher: string, settings: record, type: string, typeHandlerVersion: string>, id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2802,7 +2806,6 @@ export def "virtual-machine-scale-set-extensions-get" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachineScaleSets/{vmScaleSetName}/extensions/{vmssExtensionName}
 # operationId: VirtualMachineScaleSetExtensions_CreateOrUpdate
-# --properties shape: {autoUpgradeMinorVersion?: bool, forceUpdateTag?: string, protectedSettings?: record, provisionAfterExtensions?: list<string>, publisher?: string, settings?: record, type?: string, typeHandlerVersion?: string}
 export def "virtual-machine-scale-set-extensions-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -2820,7 +2823,7 @@ export def "virtual-machine-scale-set-extensions-create-or-update" [
   --api-version: string # Client Api Version. (required)
   --name: string # The name of the extension.
   --properties: any # Describes the properties of a Virtual Machine Scale Set Extension. — shape: {autoUpgradeMinorVersion?: bool, forceUpdateTag?: string, protectedSettings?: record, provisionAfterExtensions?: list<string>, publisher?: string, settings?: record, type?: string, typeHandlerVersion?: string}
-]: any -> record<name: string, properties: record<autoUpgradeMinorVersion: bool, forceUpdateTag: string, protectedSettings: record, provisionAfterExtensions: list<string>, provisioningState: string, publisher: string, settings: record, type: string, typeHandlerVersion: string>, id: string> {
+]: any -> oneof<record<name: string, properties: record<autoUpgradeMinorVersion: bool, forceUpdateTag: string, protectedSettings: record, provisionAfterExtensions: list<string>, provisioningState: string, publisher: string, settings: record, type: string, typeHandlerVersion: string>, id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2868,7 +2871,7 @@ export def "virtual-machine-scale-sets-force-recovery-service-fabric-platform-up
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
   --platform-update-domain: int # The platform update domain for which a manual recovery walk is requested (required)
-]: nothing -> record<nextPlatformUpdateDomain: int, walkPerformed: bool> {
+]: nothing -> oneof<record<nextPlatformUpdateDomain: int, walkPerformed: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2912,7 +2915,7 @@ export def "virtual-machine-scale-sets-get-instance-view" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<extensions: table<name: string, statusesSummary: list>, statuses: table<code: string, displayStatus: string, level: string, message: string, time: string>, virtualMachine: record<statusesSummary: list<record>>> {
+]: nothing -> oneof<record<extensions: table<name: string, statusesSummary: list>, statuses: table<code: string, displayStatus: string, level: string, message: string, time: string>, virtualMachine: record<statusesSummary: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3045,7 +3048,7 @@ export def "virtual-machine-scale-sets-get-os-upgrade-history" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<nextLink: string, value: table<location: string, properties: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<location: string, properties: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3231,6 +3234,7 @@ export def "virtual-machine-scale-sets-reimage" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
   --instance-ids: list<string> # The virtual machine scale set instance ids. Omitting the virtual machine scale set instance ids will result in the operation being performed on all virtual machines in the virtual machine scale set.
+  --temp-disk: oneof<nothing, bool> # Specifies whether to reimage temp disk. Default value: false. Note: This temp disk reimage parameter is only supported for VM/VMSS with Ephemeral OS disk.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3241,7 +3245,7 @@ export def "virtual-machine-scale-sets-reimage" [
   if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), vm_scale_set_name: (encode-path-segment $vm_scale_set_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/virtualMachineScaleSets/{vm_scale_set_name}/reimage") $qp $auth.query)
-  let req_body = {"instanceIds": $instance_ids} | compact
+  let req_body = {"instanceIds": $instance_ids, "tempDisk": $temp_disk} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3414,7 +3418,7 @@ export def "virtual-machine-scale-set-rolling-upgrades-get-latest" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<properties: record<error: record<code: string, details: list, innererror: record, message: string, target: string>, policy: record<maxBatchInstancePercent: int, maxUnhealthyInstancePercent: int, maxUnhealthyUpgradedInstancePercent: int, pauseTimeBetweenBatches: string>, progress: record<failedInstanceCount: int, inProgressInstanceCount: int, pendingInstanceCount: int, successfulInstanceCount: int>, runningStatus: record<code: string, lastAction: string, lastActionTime: string, startTime: string>>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<properties: record<error: record<code: string, details: list, innererror: record, message: string, target: string>, policy: record<maxBatchInstancePercent: int, maxUnhealthyInstancePercent: int, maxUnhealthyUpgradedInstancePercent: int, pauseTimeBetweenBatches: string>, progress: record<failedInstanceCount: int, inProgressInstanceCount: int, pendingInstanceCount: int, successfulInstanceCount: int>, runningStatus: record<code: string, lastAction: string, lastActionTime: string, startTime: string>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3457,7 +3461,7 @@ export def "virtual-machine-scale-sets-list-skus" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<nextLink: string, value: table<capacity: record, resourceType: string, sku: record>> {
+]: nothing -> oneof<record<nextLink: string, value: table<capacity: record, resourceType: string, sku: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3594,7 +3598,7 @@ export def "virtual-machine-scale-set-v-ms-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string@expand-completer # The expand expression to apply on the operation.
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<instanceId: string, plan: record<name: string, product: string, promotionCode: string, publisher: string>, properties: record<additionalCapabilities: record<ultraSSDEnabled: bool>, availabilitySet: record<id: string>, diagnosticsProfile: record<bootDiagnostics: record>, hardwareProfile: record<vmSize: string>, instanceView: record<bootDiagnostics: record, disks: list, extensions: list, maintenanceRedeployStatus: record, placementGroupId: string, platformFaultDomain: int, platformUpdateDomain: int, rdpThumbPrint: string, statuses: list, vmAgent: record, vmHealth: record>, latestModelApplied: bool, licenseType: string, modelDefinitionApplied: string, networkProfile: record<networkInterfaces: list>, networkProfileConfiguration: record<networkInterfaceConfigurations: list>, osProfile: record<adminPassword: string, adminUsername: string, allowExtensionOperations: bool, computerName: string, customData: string, linuxConfiguration: record, secrets: list, windowsConfiguration: record>, protectionPolicy: record<protectFromScaleIn: bool, protectFromScaleSetActions: bool>, provisioningState: string, storageProfile: record<dataDisks: list, imageReference: record, osDisk: record>, vmId: string>, resources: table<properties: record, id: string, location: string, name: string, tags: record, type: string>, sku: record<capacity: int, name: string, tier: string>, zones: list<string>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<instanceId: string, plan: record<name: string, product: string, promotionCode: string, publisher: string>, properties: record<additionalCapabilities: record<ultraSSDEnabled: bool>, availabilitySet: record<id: string>, diagnosticsProfile: record<bootDiagnostics: record>, hardwareProfile: record<vmSize: string>, instanceView: record<bootDiagnostics: record, disks: list, extensions: list, maintenanceRedeployStatus: record, placementGroupId: string, platformFaultDomain: int, platformUpdateDomain: int, rdpThumbPrint: string, statuses: list, vmAgent: record, vmHealth: record>, latestModelApplied: bool, licenseType: string, modelDefinitionApplied: string, networkProfile: record<networkInterfaces: list>, networkProfileConfiguration: record<networkInterfaceConfigurations: list>, osProfile: record<adminPassword: string, adminUsername: string, allowExtensionOperations: bool, computerName: string, customData: string, linuxConfiguration: record, secrets: list, windowsConfiguration: record>, protectionPolicy: record<protectFromScaleIn: bool, protectFromScaleSetActions: bool>, provisioningState: string, storageProfile: record<dataDisks: list, imageReference: record, osDisk: record>, vmId: string>, resources: table<properties: record, id: string, location: string, name: string, tags: record, type: string>, sku: record<capacity: int, name: string, tier: string>, zones: list<string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3624,10 +3628,6 @@ export def "virtual-machine-scale-set-v-ms-get" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachineScaleSets/{vmScaleSetName}/virtualmachines/{instanceId}
 # operationId: VirtualMachineScaleSetVMs_Update
-# --plan shape: {name?: string, product?: string, promotionCode?: string, publisher?: string}
-# --properties shape: {additionalCapabilities?: any, availabilitySet?: any, diagnosticsProfile?: any, hardwareProfile?: any, instanceView?: any, licenseType?: string, networkProfile?: any, networkProfileConfiguration?: any, osProfile?: any, protectionPolicy?: any, storageProfile?: any}
-# --resources item shape: {properties?: any, location: string, tags?: record}
-# --sku shape: {capacity?: int, name?: string, tier?: string}
 export def "virtual-machine-scale-set-v-ms-update" [
   subscription_id: string
   resource_group_name: string
@@ -3648,7 +3648,7 @@ export def "virtual-machine-scale-set-v-ms-update" [
   --sku: any # Describes a virtual machine scale set sku. — shape: {capacity?: int, name?: string, tier?: string}
   location: string # Resource location
   --tags: record # Resource tags
-]: any -> record<instanceId: string, plan: record<name: string, product: string, promotionCode: string, publisher: string>, properties: record<additionalCapabilities: record<ultraSSDEnabled: bool>, availabilitySet: record<id: string>, diagnosticsProfile: record<bootDiagnostics: record>, hardwareProfile: record<vmSize: string>, instanceView: record<bootDiagnostics: record, disks: list, extensions: list, maintenanceRedeployStatus: record, placementGroupId: string, platformFaultDomain: int, platformUpdateDomain: int, rdpThumbPrint: string, statuses: list, vmAgent: record, vmHealth: record>, latestModelApplied: bool, licenseType: string, modelDefinitionApplied: string, networkProfile: record<networkInterfaces: list>, networkProfileConfiguration: record<networkInterfaceConfigurations: list>, osProfile: record<adminPassword: string, adminUsername: string, allowExtensionOperations: bool, computerName: string, customData: string, linuxConfiguration: record, secrets: list, windowsConfiguration: record>, protectionPolicy: record<protectFromScaleIn: bool, protectFromScaleSetActions: bool>, provisioningState: string, storageProfile: record<dataDisks: list, imageReference: record, osDisk: record>, vmId: string>, resources: table<properties: record, id: string, location: string, name: string, tags: record, type: string>, sku: record<capacity: int, name: string, tier: string>, zones: list<string>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<instanceId: string, plan: record<name: string, product: string, promotionCode: string, publisher: string>, properties: record<additionalCapabilities: record<ultraSSDEnabled: bool>, availabilitySet: record<id: string>, diagnosticsProfile: record<bootDiagnostics: record>, hardwareProfile: record<vmSize: string>, instanceView: record<bootDiagnostics: record, disks: list, extensions: list, maintenanceRedeployStatus: record, placementGroupId: string, platformFaultDomain: int, platformUpdateDomain: int, rdpThumbPrint: string, statuses: list, vmAgent: record, vmHealth: record>, latestModelApplied: bool, licenseType: string, modelDefinitionApplied: string, networkProfile: record<networkInterfaces: list>, networkProfileConfiguration: record<networkInterfaceConfigurations: list>, osProfile: record<adminPassword: string, adminUsername: string, allowExtensionOperations: bool, computerName: string, customData: string, linuxConfiguration: record, secrets: list, windowsConfiguration: record>, protectionPolicy: record<protectFromScaleIn: bool, protectFromScaleSetActions: bool>, provisioningState: string, storageProfile: record<dataDisks: list, imageReference: record, osDisk: record>, vmId: string>, resources: table<properties: record, id: string, location: string, name: string, tags: record, type: string>, sku: record<capacity: int, name: string, tier: string>, zones: list<string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3741,7 +3741,7 @@ export def "virtual-machine-scale-set-v-ms-get-instance-view" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<bootDiagnostics: record<consoleScreenshotBlobUri: string, serialConsoleLogBlobUri: string, status: record<code: string, displayStatus: string, level: string, message: string, time: string>>, disks: table<encryptionSettings: list, name: string, statuses: list>, extensions: table<name: string, statuses: list, substatuses: list, type: string, typeHandlerVersion: string>, maintenanceRedeployStatus: record<isCustomerInitiatedMaintenanceAllowed: bool, lastOperationMessage: string, lastOperationResultCode: string, maintenanceWindowEndTime: string, maintenanceWindowStartTime: string, preMaintenanceWindowEndTime: string, preMaintenanceWindowStartTime: string>, placementGroupId: string, platformFaultDomain: int, platformUpdateDomain: int, rdpThumbPrint: string, statuses: table<code: string, displayStatus: string, level: string, message: string, time: string>, vmAgent: record<extensionHandlers: list<record>, statuses: list<record>, vmAgentVersion: string>, vmHealth: record<status: record<code: string, displayStatus: string, level: string, message: string, time: string>>> {
+]: nothing -> oneof<record<bootDiagnostics: record<consoleScreenshotBlobUri: string, serialConsoleLogBlobUri: string, status: record<code: string, displayStatus: string, level: string, message: string, time: string>>, disks: table<encryptionSettings: list, name: string, statuses: list>, extensions: table<name: string, statuses: list, substatuses: list, type: string, typeHandlerVersion: string>, maintenanceRedeployStatus: record<isCustomerInitiatedMaintenanceAllowed: bool, lastOperationMessage: string, lastOperationResultCode: string, maintenanceWindowEndTime: string, maintenanceWindowStartTime: string, preMaintenanceWindowEndTime: string, preMaintenanceWindowStartTime: string>, placementGroupId: string, platformFaultDomain: int, platformUpdateDomain: int, rdpThumbPrint: string, statuses: table<code: string, displayStatus: string, level: string, message: string, time: string>, vmAgent: record<extensionHandlers: list<record>, statuses: list<record>, vmAgentVersion: string>, vmHealth: record<status: record<code: string, displayStatus: string, level: string, message: string, time: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -4104,7 +4104,7 @@ export def "virtual-machines-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<nextLink: string, value: table<identity: record, plan: record, properties: record, resources: list, zones: list, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<identity: record, plan: record, properties: record, resources: list, zones: list, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -4190,7 +4190,7 @@ export def "virtual-machines-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string@expand-completer # The expand expression to apply on the operation.
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, plan: record<name: string, product: string, promotionCode: string, publisher: string>, properties: record<additionalCapabilities: record<ultraSSDEnabled: bool>, availabilitySet: record<id: string>, billingProfile: record<maxPrice: float>, diagnosticsProfile: record<bootDiagnostics: record>, evictionPolicy: string, hardwareProfile: record<vmSize: string>, host: record<id: string>, instanceView: record<bootDiagnostics: record, computerName: string, disks: list, extensions: list, hyperVGeneration: string, maintenanceRedeployStatus: record, osName: string, osVersion: string, platformFaultDomain: int, platformUpdateDomain: int, rdpThumbPrint: string, statuses: list, vmAgent: record>, licenseType: string, networkProfile: record<networkInterfaces: list>, osProfile: record<adminPassword: string, adminUsername: string, allowExtensionOperations: bool, computerName: string, customData: string, linuxConfiguration: record, secrets: list, windowsConfiguration: record>, priority: string, provisioningState: string, proximityPlacementGroup: record<id: string>, storageProfile: record<dataDisks: list, imageReference: record, osDisk: record>, virtualMachineScaleSet: record<id: string>, vmId: string>, resources: table<properties: record, id: string, location: string, name: string, tags: record, type: string>, zones: list<string>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, plan: record<name: string, product: string, promotionCode: string, publisher: string>, properties: record<additionalCapabilities: record<ultraSSDEnabled: bool>, availabilitySet: record<id: string>, billingProfile: record<maxPrice: float>, diagnosticsProfile: record<bootDiagnostics: record>, evictionPolicy: string, hardwareProfile: record<vmSize: string>, host: record<id: string>, instanceView: record<bootDiagnostics: record, computerName: string, disks: list, extensions: list, hyperVGeneration: string, maintenanceRedeployStatus: record, osName: string, osVersion: string, platformFaultDomain: int, platformUpdateDomain: int, rdpThumbPrint: string, statuses: list, vmAgent: record>, licenseType: string, networkProfile: record<networkInterfaces: list>, osProfile: record<adminPassword: string, adminUsername: string, allowExtensionOperations: bool, computerName: string, customData: string, linuxConfiguration: record, secrets: list, windowsConfiguration: record>, priority: string, provisioningState: string, proximityPlacementGroup: record<id: string>, storageProfile: record<dataDisks: list, imageReference: record, osDisk: record>, virtualMachineScaleSet: record<id: string>, vmId: string>, resources: table<properties: record, id: string, location: string, name: string, tags: record, type: string>, zones: list<string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -4219,9 +4219,6 @@ export def "virtual-machines-get" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{vmName}
 # operationId: VirtualMachines_Update
-# --identity shape: {type?: "SystemAssigned"|"UserAssigned"|"SystemAssigned, UserAssigned"|"None", userAssignedIdentities?: record}
-# --plan shape: {name?: string, product?: string, promotionCode?: string, publisher?: string}
-# --properties shape: {additionalCapabilities?: any, availabilitySet?: any, billingProfile?: any, diagnosticsProfile?: any, evictionPolicy?: "Deallocate"|"Delete", hardwareProfile?: any, host?: any, instanceView?: any, licenseType?: string, networkProfile?: any, osProfile?: any, priority?: "Regular"|"Low", proximityPlacementGroup?: any, storageProfile?: any, virtualMachineScaleSet?: any}
 export def "virtual-machines-update" [
   subscription_id: string
   resource_group_name: string
@@ -4241,7 +4238,7 @@ export def "virtual-machines-update" [
   --properties: any # Describes the properties of a Virtual Machine. — shape: {additionalCapabilities?: any, availabilitySet?: any, billingProfile?: any, diagnosticsProfile?: any, evictionPolicy?: "Deallocate"|"Delete", hardwareProfile?: any, host?: any, instanceView?: any, licenseType?: string, networkProfile?: any, osProfile?: any, priority?: "Regular"|"Low", proximityPlacementGroup?: any, storageProfile?: any, virtualMachineScaleSet?: any}
   --zones: list<string> # The virtual machine zones.
   --tags: record # Resource tags
-]: any -> record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, plan: record<name: string, product: string, promotionCode: string, publisher: string>, properties: record<additionalCapabilities: record<ultraSSDEnabled: bool>, availabilitySet: record<id: string>, billingProfile: record<maxPrice: float>, diagnosticsProfile: record<bootDiagnostics: record>, evictionPolicy: string, hardwareProfile: record<vmSize: string>, host: record<id: string>, instanceView: record<bootDiagnostics: record, computerName: string, disks: list, extensions: list, hyperVGeneration: string, maintenanceRedeployStatus: record, osName: string, osVersion: string, platformFaultDomain: int, platformUpdateDomain: int, rdpThumbPrint: string, statuses: list, vmAgent: record>, licenseType: string, networkProfile: record<networkInterfaces: list>, osProfile: record<adminPassword: string, adminUsername: string, allowExtensionOperations: bool, computerName: string, customData: string, linuxConfiguration: record, secrets: list, windowsConfiguration: record>, priority: string, provisioningState: string, proximityPlacementGroup: record<id: string>, storageProfile: record<dataDisks: list, imageReference: record, osDisk: record>, virtualMachineScaleSet: record<id: string>, vmId: string>, resources: table<properties: record, id: string, location: string, name: string, tags: record, type: string>, zones: list<string>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, plan: record<name: string, product: string, promotionCode: string, publisher: string>, properties: record<additionalCapabilities: record<ultraSSDEnabled: bool>, availabilitySet: record<id: string>, billingProfile: record<maxPrice: float>, diagnosticsProfile: record<bootDiagnostics: record>, evictionPolicy: string, hardwareProfile: record<vmSize: string>, host: record<id: string>, instanceView: record<bootDiagnostics: record, computerName: string, disks: list, extensions: list, hyperVGeneration: string, maintenanceRedeployStatus: record, osName: string, osVersion: string, platformFaultDomain: int, platformUpdateDomain: int, rdpThumbPrint: string, statuses: list, vmAgent: record>, licenseType: string, networkProfile: record<networkInterfaces: list>, osProfile: record<adminPassword: string, adminUsername: string, allowExtensionOperations: bool, computerName: string, customData: string, linuxConfiguration: record, secrets: list, windowsConfiguration: record>, priority: string, provisioningState: string, proximityPlacementGroup: record<id: string>, storageProfile: record<dataDisks: list, imageReference: record, osDisk: record>, virtualMachineScaleSet: record<id: string>, vmId: string>, resources: table<properties: record, id: string, location: string, name: string, tags: record, type: string>, zones: list<string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4273,10 +4270,6 @@ export def "virtual-machines-update" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{vmName}
 # operationId: VirtualMachines_CreateOrUpdate
-# --identity shape: {type?: "SystemAssigned"|"UserAssigned"|"SystemAssigned, UserAssigned"|"None", userAssignedIdentities?: record}
-# --plan shape: {name?: string, product?: string, promotionCode?: string, publisher?: string}
-# --properties shape: {additionalCapabilities?: any, availabilitySet?: any, billingProfile?: any, diagnosticsProfile?: any, evictionPolicy?: "Deallocate"|"Delete", hardwareProfile?: any, host?: any, instanceView?: any, licenseType?: string, networkProfile?: any, osProfile?: any, priority?: "Regular"|"Low", proximityPlacementGroup?: any, storageProfile?: any, virtualMachineScaleSet?: any}
-# --resources item shape: {properties?: any, location: string, tags?: record}
 export def "virtual-machines-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -4297,7 +4290,7 @@ export def "virtual-machines-create-or-update" [
   --zones: list<string> # The virtual machine zones.
   location: string # Resource location
   --tags: record # Resource tags
-]: any -> record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, plan: record<name: string, product: string, promotionCode: string, publisher: string>, properties: record<additionalCapabilities: record<ultraSSDEnabled: bool>, availabilitySet: record<id: string>, billingProfile: record<maxPrice: float>, diagnosticsProfile: record<bootDiagnostics: record>, evictionPolicy: string, hardwareProfile: record<vmSize: string>, host: record<id: string>, instanceView: record<bootDiagnostics: record, computerName: string, disks: list, extensions: list, hyperVGeneration: string, maintenanceRedeployStatus: record, osName: string, osVersion: string, platformFaultDomain: int, platformUpdateDomain: int, rdpThumbPrint: string, statuses: list, vmAgent: record>, licenseType: string, networkProfile: record<networkInterfaces: list>, osProfile: record<adminPassword: string, adminUsername: string, allowExtensionOperations: bool, computerName: string, customData: string, linuxConfiguration: record, secrets: list, windowsConfiguration: record>, priority: string, provisioningState: string, proximityPlacementGroup: record<id: string>, storageProfile: record<dataDisks: list, imageReference: record, osDisk: record>, virtualMachineScaleSet: record<id: string>, vmId: string>, resources: table<properties: record, id: string, location: string, name: string, tags: record, type: string>, zones: list<string>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, plan: record<name: string, product: string, promotionCode: string, publisher: string>, properties: record<additionalCapabilities: record<ultraSSDEnabled: bool>, availabilitySet: record<id: string>, billingProfile: record<maxPrice: float>, diagnosticsProfile: record<bootDiagnostics: record>, evictionPolicy: string, hardwareProfile: record<vmSize: string>, host: record<id: string>, instanceView: record<bootDiagnostics: record, computerName: string, disks: list, extensions: list, hyperVGeneration: string, maintenanceRedeployStatus: record, osName: string, osVersion: string, platformFaultDomain: int, platformUpdateDomain: int, rdpThumbPrint: string, statuses: list, vmAgent: record>, licenseType: string, networkProfile: record<networkInterfaces: list>, osProfile: record<adminPassword: string, adminUsername: string, allowExtensionOperations: bool, computerName: string, customData: string, linuxConfiguration: record, secrets: list, windowsConfiguration: record>, priority: string, provisioningState: string, proximityPlacementGroup: record<id: string>, storageProfile: record<dataDisks: list, imageReference: record, osDisk: record>, virtualMachineScaleSet: record<id: string>, vmId: string>, resources: table<properties: record, id: string, location: string, name: string, tags: record, type: string>, zones: list<string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4346,7 +4339,7 @@ export def "virtual-machines-capture" [
   destination_container_name: string # The destination container name.
   --overwrite-vhds: oneof<nothing, bool> # Specifies whether to overwrite the destination virtual hard disk, in case of conflict.
   vhd_prefix: string # The captured virtual hard disk's name prefix.
-]: any -> record<_schema: string, contentVersion: string, parameters: record, resources: list<record>, id: string> {
+]: any -> oneof<record<_schema: string, contentVersion: string, parameters: record, resources: list<record>, id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4480,7 +4473,7 @@ export def "virtual-machine-extensions-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # The expand expression to apply on the operation.
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -4570,7 +4563,7 @@ export def "virtual-machine-extensions-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # The expand expression to apply on the operation.
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<properties: record<autoUpgradeMinorVersion: bool, forceUpdateTag: string, instanceView: record<name: string, statuses: list, substatuses: list, type: string, typeHandlerVersion: string>, protectedSettings: record, provisioningState: string, publisher: string, settings: record, type: string, typeHandlerVersion: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<properties: record<autoUpgradeMinorVersion: bool, forceUpdateTag: string, instanceView: record<name: string, statuses: list, substatuses: list, type: string, typeHandlerVersion: string>, protectedSettings: record, provisioningState: string, publisher: string, settings: record, type: string, typeHandlerVersion: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -4600,7 +4593,6 @@ export def "virtual-machine-extensions-get" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{vmName}/extensions/{vmExtensionName}
 # operationId: VirtualMachineExtensions_Update
-# --properties shape: {autoUpgradeMinorVersion?: bool, forceUpdateTag?: string, protectedSettings?: record, publisher?: string, settings?: record, type?: string, typeHandlerVersion?: string}
 export def "virtual-machine-extensions-update" [
   subscription_id: string
   resource_group_name: string
@@ -4618,7 +4610,7 @@ export def "virtual-machine-extensions-update" [
   --api-version: string # Client Api Version. (required)
   --properties: any # Describes the properties of a Virtual Machine Extension. — shape: {autoUpgradeMinorVersion?: bool, forceUpdateTag?: string, protectedSettings?: record, publisher?: string, settings?: record, type?: string, typeHandlerVersion?: string}
   --tags: record # Resource tags
-]: any -> record<properties: record<autoUpgradeMinorVersion: bool, forceUpdateTag: string, instanceView: record<name: string, statuses: list, substatuses: list, type: string, typeHandlerVersion: string>, protectedSettings: record, provisioningState: string, publisher: string, settings: record, type: string, typeHandlerVersion: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<autoUpgradeMinorVersion: bool, forceUpdateTag: string, instanceView: record<name: string, statuses: list, substatuses: list, type: string, typeHandlerVersion: string>, protectedSettings: record, provisioningState: string, publisher: string, settings: record, type: string, typeHandlerVersion: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4651,7 +4643,6 @@ export def "virtual-machine-extensions-update" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{vmName}/extensions/{vmExtensionName}
 # operationId: VirtualMachineExtensions_CreateOrUpdate
-# --properties shape: {autoUpgradeMinorVersion?: bool, forceUpdateTag?: string, instanceView?: any, protectedSettings?: record, publisher?: string, settings?: record, type?: string, typeHandlerVersion?: string}
 export def "virtual-machine-extensions-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -4670,7 +4661,7 @@ export def "virtual-machine-extensions-create-or-update" [
   --properties: any # Describes the properties of a Virtual Machine Extension. — shape: {autoUpgradeMinorVersion?: bool, forceUpdateTag?: string, instanceView?: any, protectedSettings?: record, publisher?: string, settings?: record, type?: string, typeHandlerVersion?: string}
   location: string # Resource location
   --tags: record # Resource tags
-]: any -> record<properties: record<autoUpgradeMinorVersion: bool, forceUpdateTag: string, instanceView: record<name: string, statuses: list, substatuses: list, type: string, typeHandlerVersion: string>, protectedSettings: record, provisioningState: string, publisher: string, settings: record, type: string, typeHandlerVersion: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<autoUpgradeMinorVersion: bool, forceUpdateTag: string, instanceView: record<name: string, statuses: list, substatuses: list, type: string, typeHandlerVersion: string>, protectedSettings: record, provisioningState: string, publisher: string, settings: record, type: string, typeHandlerVersion: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4760,7 +4751,7 @@ export def "virtual-machines-instance-view" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<bootDiagnostics: record<consoleScreenshotBlobUri: string, serialConsoleLogBlobUri: string, status: record<code: string, displayStatus: string, level: string, message: string, time: string>>, computerName: string, disks: table<encryptionSettings: list, name: string, statuses: list>, extensions: table<name: string, statuses: list, substatuses: list, type: string, typeHandlerVersion: string>, hyperVGeneration: string, maintenanceRedeployStatus: record<isCustomerInitiatedMaintenanceAllowed: bool, lastOperationMessage: string, lastOperationResultCode: string, maintenanceWindowEndTime: string, maintenanceWindowStartTime: string, preMaintenanceWindowEndTime: string, preMaintenanceWindowStartTime: string>, osName: string, osVersion: string, platformFaultDomain: int, platformUpdateDomain: int, rdpThumbPrint: string, statuses: table<code: string, displayStatus: string, level: string, message: string, time: string>, vmAgent: record<extensionHandlers: list<record>, statuses: list<record>, vmAgentVersion: string>> {
+]: nothing -> oneof<record<bootDiagnostics: record<consoleScreenshotBlobUri: string, serialConsoleLogBlobUri: string, status: record<code: string, displayStatus: string, level: string, message: string, time: string>>, computerName: string, disks: table<encryptionSettings: list, name: string, statuses: list>, extensions: table<name: string, statuses: list, substatuses: list, type: string, typeHandlerVersion: string>, hyperVGeneration: string, maintenanceRedeployStatus: record<isCustomerInitiatedMaintenanceAllowed: bool, lastOperationMessage: string, lastOperationResultCode: string, maintenanceWindowEndTime: string, maintenanceWindowStartTime: string, preMaintenanceWindowEndTime: string, preMaintenanceWindowStartTime: string>, osName: string, osVersion: string, platformFaultDomain: int, platformUpdateDomain: int, rdpThumbPrint: string, statuses: table<code: string, displayStatus: string, level: string, message: string, time: string>, vmAgent: record<extensionHandlers: list<record>, statuses: list<record>, vmAgentVersion: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -5066,7 +5057,7 @@ export def "virtual-machines-list-available-sizes" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<value: table<maxDataDiskCount: int, memoryInMB: int, name: string, numberOfCores: int, osDiskSizeInMB: int, resourceDiskSizeInMB: int>> {
+]: nothing -> oneof<record<value: table<maxDataDiskCount: int, memoryInMB: int, name: string, numberOfCores: int, osDiskSizeInMB: int, resourceDiskSizeInMB: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }

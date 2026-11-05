@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -127,9 +151,9 @@ def topic-completer [] { ["app/uninstalled" "listings/bumps-ran-out" "listings/p
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-articles" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-articles" "get-articles-categories" "get-categories" "get-categories-flat" "get-categories-taxonomy" "get-categories-product-type-category" "get-categories-uuid" "get-comparison-shopping-pages" "get-comparison-shopping-pages-find" "get-comparison-shopping-pages-id" "get-comparison-shopping-pages-id-listings" "get-comparison-shopping-pages-id-reviews" "post-conversations-conversation-id-offer" "post-conversations-id-offer" "get-countries" "get-csps" "get-csps-categories" "get-csps-find" "get-csps-id" "get-curated-sets-slug" "get-currencies-display" "get-currencies-listing" "get-feedback-feedback-id" "get-handpicked-slug" "get-listing-conditions" "get-listings" "post-listings" "get-listings-all" "get-listings-facets-seller-location" "get-listings-id-negotiation" "post-listings-id-offer" "get-listings-listing-id-bump" "post-listings-listing-id-bump-budget-type" "post-listings-listing-id-conversations" "get-listings-listing-id-images" "delete-listings-listing-id-images-image-id" "get-listings-listing-id-sales" "delete-listings-slug" "get-listings-slug" "put-listings-slug" "get-listings-slug-edit" "post-listings-slug-flag" "get-listings-slug-reviews" "post-listings-slug-reviews" "get-listings-slug-similar-listings" "get-my-account" "put-my-account" "get-my-addresses" "post-my-addresses" "delete-my-addresses-address-id" "put-my-addresses-address-id" "get-my-conversations" "post-my-conversations" "post-my-conversations-conversation-id-messages" "get-my-conversations-id" "put-my-conversations-id" "get-my-counts" "delete-my-curated-set-product-product-id" "post-my-curated-set-product-product-id" "get-my-feed" "get-my-feed-customize" "get-my-feed-grid" "get-my-feedback-received" "get-my-feedback-sent" "get-my-follows" "get-my-follows-articles" "post-my-follows-articles" "delete-my-follows-brands-slug" "get-my-follows-brands-slug" "post-my-follows-brands-slug" "delete-my-follows-categories-category-subcategory" "get-my-follows-categories-category-subcategory" "post-my-follows-categories-category-subcategory" "delete-my-follows-categories-identifier" "get-my-follows-categories-identifier" "post-my-follows-categories-identifier" "post-my-follows-categories-uuid" "delete-my-follows-collections-slug" "get-my-follows-collections-slug" "post-my-follows-collections-slug" "delete-my-follows-handpicked-slug" "get-my-follows-handpicked-slug" "post-my-follows-handpicked-slug" "get-my-follows-search" "post-my-follows-search" "delete-my-follows-shops-slug" "get-my-follows-shops-slug" "post-my-follows-shops-slug" "delete-my-follows-follow-id" "delete-my-follows-follow-id-alert" "post-my-follows-follow-id-alert" "get-my-listings" "get-my-listings-drafts" "get-my-listings-negotiations" "put-my-listings-slug-state-end" "get-my-lists" "get-my-negotiations-buying" "get-my-negotiations-id" "post-my-negotiations-id-accept" "post-my-negotiations-id-counter" "post-my-negotiations-id-decline" "get-my-orders-awaiting-feedback" "get-my-orders-buying-all" "get-my-orders-buying-by-uuid-uuid" "get-my-orders-buying-unpaid" "get-my-orders-buying-id" "post-my-orders-buying-id-mark-received" "get-my-orders-selling-all" "get-my-orders-selling-awaiting-shipment" "get-my-orders-selling-buyer-history-buyer-id" "get-my-orders-selling-by-uuid-uuid" "get-my-orders-selling-unpaid" "get-my-orders-selling-id" "post-my-orders-selling-id-mark-picked-up" "post-my-orders-selling-id-ship" "post-my-orders-selling-order-id-refund-requests" "get-my-payments-selling" "get-my-payments-selling-id" "get-my-payouts" "get-my-payouts-id-line-items" "get-my-refund-requests-selling" "put-my-refund-requests-selling-id" "get-my-viewed-listings" "get-my-wishlist" "delete-my-wishlist-id" "put-my-wishlist-id" "get-orders-order-id-feedback-buyer" "post-orders-order-id-feedback-buyer" "get-orders-order-id-feedback-seller" "post-orders-order-id-feedback-seller" "get-payment-methods" "get-priceguide-id-transactions-summary" "get-products-reviews-id" "put-products-reviews-id" "get-products-slug-reviews" "post-products-slug-reviews" "get-sales-reverb" "get-sales-seller" "delete-sales-sale-id-listings" "post-sales-sale-id-listings" "get-sales-slug" "get-shipping-providers" "get-shipping-regions" "get-shop" "put-shop" "get-shop-listing-conditions" "get-shop-payment-methods" "delete-shop-vacation" "get-shop-vacation" "post-shop-vacation" "get-shops-id-storefronts" "get-shops-shop-id-shipping-profiles" "get-shops-slug" "get-shops-slug-feedback" "get-shops-slug-feedback-buyer" "get-shops-slug-feedback-seller" "get-wants" "delete-wants-id" "put-wants-id" "get-webhooks-registrations" "post-webhooks-registrations" "delete-webhooks-registrations-id" "get-webhooks-registrations-id" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -567,9 +591,6 @@ export def "get-comparison-shopping-pages-id-reviews" [
 # Make an offer to the other participant in the conversation
 #
 # POST /conversations/{conversation_id}/offer
-# --offer_items item shape: {listing_id: string, price: string, shipping_price: string}
-# --price shape: {amount: string, currency: "USD"|"CAD"|"EUR"|"GBP"|"AUD"|"JPY"|"NZD"|"MXN"}
-# --shipping_price shape: {amount: string, currency: "USD"|"CAD"|"EUR"|"GBP"|"AUD"|"JPY"|"NZD"|"MXN"}
 export def "post-conversations-conversation-id-offer" [
   conversation_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1129,14 +1150,6 @@ export def "get-listings" [
 # Create a listing
 #
 # POST /listings
-# --categories item shape: {uuid?: string}
-# --condition shape: {uuid: "fbf35668-96a0-4baa-bcde-ab18d6b1b329"|"6a9dfcad-600b-46c8-9e08-ce6e5057921e"|"98777886-76d0-44c8-865e-bb40e669e934"|"f7a3f48c-972a-44c6-b01a-0cd27488d3f6"|"ae4d9114-1bd7-4ec5-a4ba-6653af5ac84d"|"df268ad1-c462-4ba6-b6db-e007e23922ea"|"ac5b9c1e-dc78-466d-b0b3-7cf712967a48"|"6db7df88-293b-4017-a1c1-cdb5e599fa1a"|"9225283f-60c2-4413-ad18-1f5eba7a856f"|"7c3f45de-2ae0-4c81-8400-fdb6b1d74890"}
-# --location shape: {country_code?: string, locality?: string, region?: string}
-# --preorder_info shape: {lead_time?: int, lead_time_unit: "days"|"weeks", ship_date?: string}
-# --price shape: {amount: string, currency: "USD"|"CAD"|"EUR"|"GBP"|"AUD"|"JPY"|"NZD"|"MXN"}
-# --seller shape: {paypal_email?: string}
-# --shipping shape: {local?: bool, rates?: list}
-# --videos item shape: {link: string}
 export def "post-listings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1670,14 +1683,6 @@ export def "get-listings-slug" [
 # Update a listing
 #
 # PUT /listings/{slug}
-# --categories item shape: {uuid?: string}
-# --condition shape: {uuid: "fbf35668-96a0-4baa-bcde-ab18d6b1b329"|"6a9dfcad-600b-46c8-9e08-ce6e5057921e"|"98777886-76d0-44c8-865e-bb40e669e934"|"f7a3f48c-972a-44c6-b01a-0cd27488d3f6"|"ae4d9114-1bd7-4ec5-a4ba-6653af5ac84d"|"df268ad1-c462-4ba6-b6db-e007e23922ea"|"ac5b9c1e-dc78-466d-b0b3-7cf712967a48"|"6db7df88-293b-4017-a1c1-cdb5e599fa1a"|"9225283f-60c2-4413-ad18-1f5eba7a856f"|"7c3f45de-2ae0-4c81-8400-fdb6b1d74890"}
-# --location shape: {country_code?: string, locality?: string, region?: string}
-# --preorder_info shape: {lead_time?: int, lead_time_unit: "days"|"weeks", ship_date?: string}
-# --price shape: {amount: string, currency: "USD"|"CAD"|"EUR"|"GBP"|"AUD"|"JPY"|"NZD"|"MXN"}
-# --seller shape: {paypal_email?: string}
-# --shipping shape: {local?: bool, rates?: list}
-# --videos item shape: {link: string}
 export def "put-listings-slug" [
   slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3924,9 +3929,6 @@ export def "post-my-negotiations-id-accept" [
 # Counter an offer
 #
 # POST /my/negotiations/{id}/counter
-# --offer_items item shape: {listing_id: string, price: string, shipping_price: string}
-# --price shape: {amount: string, currency: "USD"|"CAD"|"EUR"|"GBP"|"AUD"|"JPY"|"NZD"|"MXN"}
-# --shipping_price shape: {amount: string, currency: "USD"|"CAD"|"EUR"|"GBP"|"AUD"|"JPY"|"NZD"|"MXN"}
 export def "post-my-negotiations-id-counter" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5501,7 +5503,6 @@ export def "get-shop" [
 # Update your shop profile
 #
 # PUT /shop
-# --address shape: {country_code?: string, extended_address?: string, locality?: string, name?: string, phone?: string, postal_code?: string, region?: string, street_address?: string}
 export def "put-shop" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

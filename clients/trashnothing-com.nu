@@ -14,27 +14,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "query-api_key" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "api_key")=(encode-path-segment $token_val)", location: "query"} }
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -42,8 +51,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -54,7 +68,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -89,7 +112,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -145,9 +169,9 @@ def auth-scheme-completer [] { ["query-api_key" "bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-conversations" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-conversations" "archive-all-conversations" "mark-all-conversations-read" "search-conversations" "delete-conversation" "archive-conversation" "block-conversation" "mark-conversation-read" "get-conversation-messages" "reply-to-conversation" "report-conversation" "unarchive-conversation" "unblock-conversation" "send-feedback" "search-groups" "get-groups-by-ids" "join-groups" "get-group" "submit-answers" "contact-moderators" "leave-group" "upload-photo" "get-photos-by-ids" "delete-photo" "rotate-photo" "get-posts" "submit-post" "get-all-posts" "get-all-posts-changes" "get-posts-by-ids" "search-posts" "delete-post" "get-post" "update-post" "delete-bookmark" "bookmark-post" "get-post-and-related-data" "promise-post" "reply-to-post" "report-post" "satisfy-post" "share-post" "unpromise-post" "withdraw-post" "get-stories" "submit-story" "get-story" "like-story" "unlike-story" "viewed-story" "get-current-user" "update-current-user" "get-alerts" "create-alert" "delete-alert" "change-email" "set-email-not-bouncing" "get-current-user-groups" "update-location" "get-user-group-notices" "get-post-locations" "save-post-location" "get-current-user-posts" "search-current-user-posts" "set-profile-image" "get-profile-images" "resend-account-verification-email" "send-password-reset-email" "report-user" "get-user" "get-user-and-related-data" "remove-user-feedback" "submit-user-feedback" "get-user-posts" "search-user-posts" "get-profile-image-file" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -185,7 +209,7 @@ export def "get-conversations" [
   --num-messages: int # The number of recent messages to return with each conversation. Additional messages can be retrieved using get conversation messages endpoint. (default: 10)
   --include-num-unread: int # If set to 1, the num_unread field in the response will be set to the count of the total number of conversations that have unread messages. This is useful for showing users the total number of unread messages that they have in their inbox. Calculating the count will slow the request down a bit so setting this should be avoided for requests where it's not needed (eg. requesting archived or blocked conversations or requests that are just paging through older conversations). (default: 0)
   --device-pixel-ratio: float # Client device pixel ratio used to determine thumbnail size (default 1.0). (default: 1)
-]: nothing -> record<conversations: table<archived: bool, blocked: bool, conversation_id: string, last_message_date: string, messages: list, num_unread_messages: int, user: record>, num_unread: int, page: int, per_page: int> {
+]: nothing -> oneof<record<conversations: table<archived: bool, blocked: bool, conversation_id: string, last_message_date: string, messages: list, num_unread_messages: int, user: record>, num_unread: int, page: int, per_page: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "category" $category "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "num_messages" $num_messages "scalar") (serialize-qp "include_num_unread" $include_num_unread "scalar") (serialize-qp "device_pixel_ratio" $device_pixel_ratio "scalar")] | flatten | str join "&"
@@ -304,7 +328,7 @@ export def "search-conversations" [
   --page: int # The page of conversations to return. (default: 1)
   --per-page: int # The number of conversations to return per page (must be >= 1 and <= 30). (default: 10)
   --device-pixel-ratio: float # Client device pixel ratio used to determine thumbnail size (default 1.0). (default: 1)
-]: nothing -> record<conversations: table<archived: bool, blocked: bool, conversation_id: string, last_message_date: string, messages: list, num_unread_messages: int, user: record>, page: int, per_page: int, search: string> {
+]: nothing -> oneof<record<conversations: table<archived: bool, blocked: bool, conversation_id: string, last_message_date: string, messages: list, num_unread_messages: int, user: record>, page: int, per_page: int, search: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($search == null) { error make --unspanned { msg: "required query parameter 'search' missing: pass --search" } }
@@ -498,7 +522,7 @@ export def "get-conversation-messages" [
   --per-page: int # The number of messages to return per page (must be >= 1 and <= 30). (default: 10)
   --device-pixel-ratio: float # Client device pixel ratio used to determine thumbnail size (default 1.0). (default: 1)
   --include-conversation: int # If set to 1, the conversation will be returned along with the messages. (default: 0)
-]: nothing -> record<conversation: record<archived: bool, blocked: bool, conversation_id: string, last_message_date: string, messages: list<record>, num_unread_messages: int, user: record<about_me: string, country: string, feedback: record, firstname: string, lastname: string, member_since: string, profile_image: string, reply_time: int, user_id: string, username: string>>, messages: table<content: string, date: string, email_attachments: list, from_user_id: string, message_id: string, photos: list, post: record, subject: string, to_user_id: string>, page: int, per_page: int> {
+]: nothing -> oneof<record<conversation: record<archived: bool, blocked: bool, conversation_id: string, last_message_date: string, messages: list<record>, num_unread_messages: int, user: record<about_me: string, country: string, feedback: record, firstname: string, lastname: string, member_since: string, profile_image: string, reply_time: int, user_id: string, username: string>>, messages: table<content: string, date: string, email_attachments: list, from_user_id: string, message_id: string, photos: list, post: record, subject: string, to_user_id: string>, page: int, per_page: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($conversation_id | is-empty) { error make --unspanned { msg: "path parameter 'conversation_id' must be non-empty" } }
@@ -538,7 +562,7 @@ export def "reply-to-conversation" [
   content: string # The content of the reply.
   --device-pixel-ratio: float # Client device pixel ratio used to determine thumbnail size (default 1.0). (default: 1)
   --photo-ids: string # A comma separated list of the IDs of the photos that should be attached to this message.
-]: any -> record<content: string, date: string, email_attachments: list<string>, from_user_id: string, message_id: string, photos: table<blurhash: string, images: list, photo_id: string, thumbnail: string, url: string>, post: record<content: string, date: string, expiration: string, footer: string, group_id: string, latitude: float, longitude: float, outcome: string, photos: list<record>, post_id: string, repost_count: int, reselling: bool, source: string, title: string, type: string, url: string, user_id: string>, subject: string, to_user_id: string> {
+]: any -> oneof<record<content: string, date: string, email_attachments: list<string>, from_user_id: string, message_id: string, photos: table<blurhash: string, images: list, photo_id: string, thumbnail: string, url: string>, post: record<content: string, date: string, expiration: string, footer: string, group_id: string, latitude: float, longitude: float, outcome: string, photos: list<record>, post_id: string, repost_count: int, reselling: bool, source: string, title: string, type: string, url: string, user_id: string>, subject: string, to_user_id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -743,7 +767,7 @@ export def "search-groups" [
   --postal-code: string # Find groups in the given postal code. Only a few countries support postal code searches (US, CA, AU, GB). The country parameter must be passed when the postal_code parameter is set. NOTE: The region and postal_code parameters cannot be used at the same time and if both are passed then the postal_code will take priority.
   --page: int # The page of groups to return. (default: 1)
   --per-page: int # The number of groups to return per page (must be >= 1 and <= 100). (default: 20)
-]: nothing -> record<end_index: int, groups: table<country: record, group_id: string, has_questions: bool, homepage: string, identifier: string, latitude: float, longitude: float, member_count: int, membership: record, name: string, open_archives: bool, open_membership: bool, region: record, timezone: string>, num_groups: int, num_pages: int, page: int, per_page: int, start_index: int> {
+]: nothing -> oneof<record<end_index: int, groups: table<country: record, group_id: string, has_questions: bool, homepage: string, identifier: string, latitude: float, longitude: float, member_count: int, membership: record, name: string, open_archives: bool, open_membership: bool, region: record, timezone: string>, num_groups: int, num_pages: int, page: int, per_page: int, start_index: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "distance" $distance "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "postal_code" $postal_code "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
@@ -779,7 +803,7 @@ export def "get-groups-by-ids" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --group-ids: string # The IDs of the groups to retrieve. If more than 20 group IDs are passed, only the first 20 groups will be returned. (required)
-]: nothing -> table<country: record<abbreviation: string, name: string>, group_id: string, has_questions: bool, homepage: string, identifier: string, latitude: float, longitude: float, member_count: int, membership: record<date: string, questionnaire: record, status: string>, name: string, open_archives: bool, open_membership: bool, region: record<abbreviation: string, name: string>, timezone: string> {
+]: nothing -> oneof<table<country: record<abbreviation: string, name: string>, group_id: string, has_questions: bool, homepage: string, identifier: string, latitude: float, longitude: float, member_count: int, membership: record<date: string, questionnaire: record, status: string>, name: string, open_archives: bool, open_membership: bool, region: record<abbreviation: string, name: string>, timezone: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_ids == null) { error make --unspanned { msg: "required query parameter 'group_ids' missing: pass --group-ids" } }
@@ -816,7 +840,7 @@ export def "join-groups" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   group_ids: string # A comma separated list of the IDs of the groups to join.
-]: any -> record<groups: table<country: record, group_id: string, has_questions: bool, homepage: string, identifier: string, latitude: float, longitude: float, member_count: int, membership: record, name: string, open_archives: bool, open_membership: bool, region: record, timezone: string>, over_group_limit: bool> {
+]: any -> oneof<record<groups: table<country: record, group_id: string, has_questions: bool, homepage: string, identifier: string, latitude: float, longitude: float, member_count: int, membership: record, name: string, open_archives: bool, open_membership: bool, region: record, timezone: string>, over_group_limit: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -856,7 +880,7 @@ export def "get-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<country: record<abbreviation: string, name: string>, group_id: string, has_questions: bool, homepage: string, identifier: string, latitude: float, longitude: float, member_count: int, membership: record<date: string, questionnaire: record<message: string, questions: list>, status: string>, name: string, open_archives: bool, open_membership: bool, region: record<abbreviation: string, name: string>, timezone: string> {
+]: nothing -> oneof<record<country: record<abbreviation: string, name: string>, group_id: string, has_questions: bool, homepage: string, identifier: string, latitude: float, longitude: float, member_count: int, membership: record<date: string, questionnaire: record<message: string, questions: list>, status: string>, name: string, open_archives: bool, open_membership: bool, region: record<abbreviation: string, name: string>, timezone: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'group_id' must be non-empty" } }
@@ -893,7 +917,7 @@ export def "submit-answers" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
-]: any -> record<country: record<abbreviation: string, name: string>, group_id: string, has_questions: bool, homepage: string, identifier: string, latitude: float, longitude: float, member_count: int, membership: record<date: string, questionnaire: record<message: string, questions: list>, status: string>, name: string, open_archives: bool, open_membership: bool, region: record<abbreviation: string, name: string>, timezone: string> {
+]: any -> oneof<record<country: record<abbreviation: string, name: string>, group_id: string, has_questions: bool, homepage: string, identifier: string, latitude: float, longitude: float, member_count: int, membership: record<date: string, questionnaire: record<message: string, questions: list>, status: string>, name: string, open_archives: bool, open_membership: bool, region: record<abbreviation: string, name: string>, timezone: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -975,7 +999,7 @@ export def "leave-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<country: record<abbreviation: string, name: string>, group_id: string, has_questions: bool, homepage: string, identifier: string, latitude: float, longitude: float, member_count: int, membership: record<date: string, questionnaire: record<message: string, questions: list>, status: string>, name: string, open_archives: bool, open_membership: bool, region: record<abbreviation: string, name: string>, timezone: string> {
+]: nothing -> oneof<record<country: record<abbreviation: string, name: string>, group_id: string, has_questions: bool, homepage: string, identifier: string, latitude: float, longitude: float, member_count: int, membership: record<date: string, questionnaire: record<message: string, questions: list>, status: string>, name: string, open_archives: bool, open_membership: bool, region: record<abbreviation: string, name: string>, timezone: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'group_id' must be non-empty" } }
@@ -1012,7 +1036,7 @@ export def "upload-photo" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --device-pixel-ratio: float # Client device pixel ratio used to determine thumbnail size (default 1.0). (default: 1)
   photo: string # Photo to upload. (format: binary)
-]: any -> record<photo_id: string, thumbnail: record<height: int, url: string, width: int>> {
+]: any -> oneof<record<photo_id: string, thumbnail: record<height: int, url: string, width: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1053,7 +1077,7 @@ export def "get-photos-by-ids" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --photo-ids: string # The IDs of the photos to retrieve. If more than 50 photo IDs are passed, only the first 50 photos will be returned. (required)
   --device-pixel-ratio: float # Client device pixel ratio used to determine thumbnail size (default 1.0). (default: 1)
-]: nothing -> table<photo_id: string, thumbnail: record<height: int, url: string, width: int>> {
+]: nothing -> oneof<table<photo_id: string, thumbnail: record<height: int, url: string, width: int>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($photo_ids == null) { error make --unspanned { msg: "required query parameter 'photo_ids' missing: pass --photo-ids" } }
@@ -1128,7 +1152,7 @@ export def "rotate-photo" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --degrees: int # Rotation in degrees - currently only 90, 180 and 270 are supported which correspond to rotate left, rotate upside down and rotate right. (required)
   --device-pixel-ratio: float # Client device pixel ratio used to determine thumbnail size (default 1.0). (default: 1)
-]: nothing -> record<photo_id: string, thumbnail: record<height: int, url: string, width: int>> {
+]: nothing -> oneof<record<photo_id: string, thumbnail: record<height: int, url: string, width: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($photo_id | is-empty) { error make --unspanned { msg: "path parameter 'photo_id' must be non-empty" } }
@@ -1180,7 +1204,7 @@ export def "get-posts" [
   --outcomes: string # A comma separated list of the post outcomes to return. The available post outcomes are: satisfied, withdrawn There are also a couple special values that can be passed. If set to an empty string (the default), only posts that are not satisfied and not withdrawn and not expired are returned. If set to 'all', all posts will be returned no matter what outcome the posts have. If set to 'not-promised', only posts that are not satisfied ant not withdrawn and not expired and not promised are returned. (default: "")
   --user-state: string # If user_state is set, only posts matching the state specified will be returned. Only one state may be passed and it must be one of the following: viewed, replied, bookmarked NOTE: This option will only work with oauth requests. (default: "")
   --include-reposts: int # If set to 1 (the default), posts that are reposts will be included. If set to 0, reposts will be excluded. See the repost_count field of post objects for details about how reposts are identified. (default: 1)
-]: nothing -> record<end_index: int, group_ids: list<string>, last_listings_view: string, num_pages: int, num_posts: int, page: int, per_page: int, posts: table<content: string, date: string, expiration: string, footer: string, group_id: string, latitude: float, longitude: float, outcome: string, photos: list, post_id: string, repost_count: int, reselling: bool, source: string, title: string, type: string, url: string, user_id: string>, start_index: int> {
+]: nothing -> oneof<record<end_index: int, group_ids: list<string>, last_listings_view: string, num_pages: int, num_posts: int, page: int, per_page: int, posts: table<content: string, date: string, expiration: string, footer: string, group_id: string, latitude: float, longitude: float, outcome: string, photos: list, post_id: string, repost_count: int, reselling: bool, source: string, title: string, type: string, url: string, user_id: string>, start_index: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($types == null) { error make --unspanned { msg: "required query parameter 'types' missing: pass --types" } }
@@ -1231,7 +1255,7 @@ export def "submit-post" [
   session: string # A JSON string representing a temporary object that is used to store data about the submission process for a single post. The first time a post is submitted, session should be a new empty object (eg. '{}'). The session object should be persisted by the client until that post is successfully submitted and then it can be discarded so that the next post will start over with a new empty session object. Every time a post is submitted and the response indicates that the submission was not successful, the session object returned in the response should override the clients copy of the session.
   title: string # A short description of the item(s).
   type: string # The type of post. One of: offer, wanted
-]: any -> record<identifier: string, message: string, preference_key: string, result: string, session: record> {
+]: any -> oneof<record<identifier: string, message: string, preference_key: string, result: string, session: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1276,7 +1300,7 @@ export def "get-all-posts" [
   --per-page: int # The number of posts to return per page (must be >= 1 and <= 50). (default: 20)
   --page: int # The page of posts to return. (default: 1)
   --device-pixel-ratio: float # Client device pixel ratio used to determine thumbnail size (default 1.0). (default: 1)
-]: nothing -> record<posts: table<content: string, date: string, expiration: string, footer: string, group_id: string, latitude: float, longitude: float, outcome: string, photos: list, post_id: string, repost_count: int, reselling: bool, source: string, title: string, type: string, url: string, user_id: string>> {
+]: nothing -> oneof<record<posts: table<content: string, date: string, expiration: string, footer: string, group_id: string, latitude: float, longitude: float, outcome: string, photos: list, post_id: string, repost_count: int, reselling: bool, source: string, title: string, type: string, url: string, user_id: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($types == null) { error make --unspanned { msg: "required query parameter 'types' missing: pass --types" } }
@@ -1318,7 +1342,7 @@ export def "get-all-posts-changes" [
   --date-max: string # Only changes older than this UTC date and time will be returned. The UTC date and time used must be within a day or less of date_min. And the date and time must be rounded to the nearest second. (required, format: date-time)
   --per-page: int # The number of changes to return per page (must be >= 1 and <= 50). (default: 20)
   --page: int # The page of changes to return. (default: 1)
-]: nothing -> record<changes: table<date: string, post_id: string, type: string>> {
+]: nothing -> oneof<record<changes: table<date: string, post_id: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($date_min == null) { error make --unspanned { msg: "required query parameter 'date_min' missing: pass --date-min" } }
@@ -1356,7 +1380,7 @@ export def "get-posts-by-ids" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --post-ids: string # A comma separated list of the post IDs. If more than 10 post IDs are passed, only the first 10 posts will be returned. (required)
-]: nothing -> record<forbidden: list<string>, not_found: list<string>, posts: table<content: string, date: string, expiration: string, footer: string, group_id: string, latitude: float, longitude: float, outcome: string, photos: list, post_id: string, repost_count: int, reselling: bool, source: string, title: string, type: string, url: string, user_id: string>> {
+]: nothing -> oneof<record<forbidden: list<string>, not_found: list<string>, posts: table<content: string, date: string, expiration: string, footer: string, group_id: string, latitude: float, longitude: float, outcome: string, photos: list, post_id: string, repost_count: int, reselling: bool, source: string, title: string, type: string, url: string, user_id: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($post_ids == null) { error make --unspanned { msg: "required query parameter 'post_ids' missing: pass --post-ids" } }
@@ -1408,7 +1432,7 @@ export def "search-posts" [
   --outcomes: string # A comma separated list of the post outcomes to return. The available post outcomes are: satisfied, withdrawn There are also a couple special values that can be passed. If set to an empty string (the default), only posts that are not satisfied and not withdrawn and not expired are returned. If set to 'all', all posts will be returned no matter what outcome the posts have. If set to 'not-promised', only posts that are not satisfied ant not withdrawn and not expired and not promised are returned. (default: "")
   --user-state: string # If user_state is set, only posts matching the state specified will be returned. Only one state may be passed and it must be one of the following: viewed, replied, bookmarked NOTE: This option will only work with oauth requests. (default: "")
   --include-reposts: int # If set to 1 (the default), posts that are reposts will be included. If set to 0, reposts will be excluded. See the repost_count field of post objects for details about how reposts are identified. (default: 1)
-]: nothing -> record<end_index: int, group_ids: list<string>, num_pages: int, num_posts: int, page: int, per_page: int, posts: table<content: string, date: string, expiration: string, footer: string, group_id: string, latitude: float, longitude: float, outcome: string, photos: list, post_id: string, repost_count: int, reselling: bool, source: string, title: string, type: string, url: string, user_id: string, search_content: string, search_title: string>, start_index: int> {
+]: nothing -> oneof<record<end_index: int, group_ids: list<string>, num_pages: int, num_posts: int, page: int, per_page: int, posts: table<content: string, date: string, expiration: string, footer: string, group_id: string, latitude: float, longitude: float, outcome: string, photos: list, post_id: string, repost_count: int, reselling: bool, source: string, title: string, type: string, url: string, user_id: string, search_content: string, search_title: string>, start_index: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($search == null) { error make --unspanned { msg: "required query parameter 'search' missing: pass --search" } }
@@ -1483,7 +1507,7 @@ export def "get-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<content: string, date: string, expiration: string, footer: string, group_id: string, latitude: float, longitude: float, outcome: string, photos: table<blurhash: string, images: list, photo_id: string, thumbnail: string, url: string>, post_id: string, repost_count: int, reselling: bool, source: string, title: string, type: string, url: string, user_id: string> {
+]: nothing -> oneof<record<content: string, date: string, expiration: string, footer: string, group_id: string, latitude: float, longitude: float, outcome: string, photos: table<blurhash: string, images: list, photo_id: string, thumbnail: string, url: string>, post_id: string, repost_count: int, reselling: bool, source: string, title: string, type: string, url: string, user_id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($post_id | is-empty) { error make --unspanned { msg: "path parameter 'post_id' must be non-empty" } }
@@ -1531,7 +1555,7 @@ export def "update-post" [
   session: string # A JSON string representing a temporary object that is used to store data about the update process for a single post. The first time a post update is submitted, session should be a new empty object (eg. '{}'). The session object should be persisted by the client until that update is successfully submitted and then it can be discarded so that the next update will start over with a new empty session object. Every time an update is submitted and the response indicates that the submission was not successful, the session object returned in the response should override the clients copy of the session.
   title: string # A short description of the item(s).
   type: string # The type of post. One of: offer, wanted
-]: any -> record<identifier: string, message: string, preference_key: string, result: string, session: record> {
+]: any -> oneof<record<identifier: string, message: string, preference_key: string, result: string, session: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1644,7 +1668,7 @@ export def "get-post-and-related-data" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<author: record<about_me: string, country: string, feedback: record<percent_positive: float, restriction: string, score: int>, firstname: string, lastname: string, member_since: string, profile_image: string, reply_time: int, user_id: string, username: string>, author_offer_count: int, author_posts: table<content: string, date: string, expiration: string, footer: string, group_id: string, latitude: float, longitude: float, outcome: string, photos: list, post_id: string, repost_count: int, reselling: bool, source: string, title: string, type: string, url: string, user_id: string>, author_wanted_count: int, bookmarked: bool, feedback: table<content: string, date: string, feedback_id: string, positive: bool, reviewer_user_id: string, user_id: string>, groups: table<country: record, group_id: string, has_questions: bool, homepage: string, identifier: string, latitude: float, longitude: float, member_count: int, membership: record, name: string, open_archives: bool, open_membership: bool, region: record, timezone: string>, post: record<content: string, date: string, expiration: string, footer: string, group_id: string, latitude: float, longitude: float, outcome: string, photos: list<record>, post_id: string, repost_count: int, reselling: bool, source: string, title: string, type: string, url: string, user_id: string>, replied: bool, user_can_reply: bool, viewed: bool> {
+]: nothing -> oneof<record<author: record<about_me: string, country: string, feedback: record<percent_positive: float, restriction: string, score: int>, firstname: string, lastname: string, member_since: string, profile_image: string, reply_time: int, user_id: string, username: string>, author_offer_count: int, author_posts: table<content: string, date: string, expiration: string, footer: string, group_id: string, latitude: float, longitude: float, outcome: string, photos: list, post_id: string, repost_count: int, reselling: bool, source: string, title: string, type: string, url: string, user_id: string>, author_wanted_count: int, bookmarked: bool, feedback: table<content: string, date: string, feedback_id: string, positive: bool, reviewer_user_id: string, user_id: string>, groups: table<country: record, group_id: string, has_questions: bool, homepage: string, identifier: string, latitude: float, longitude: float, member_count: int, membership: record, name: string, open_archives: bool, open_membership: bool, region: record, timezone: string>, post: record<content: string, date: string, expiration: string, footer: string, group_id: string, latitude: float, longitude: float, outcome: string, photos: list<record>, post_id: string, repost_count: int, reselling: bool, source: string, title: string, type: string, url: string, user_id: string>, replied: bool, user_can_reply: bool, viewed: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($post_id | is-empty) { error make --unspanned { msg: "path parameter 'post_id' must be non-empty" } }
@@ -1680,7 +1704,7 @@ export def "promise-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<content: string, date: string, expiration: string, footer: string, group_id: string, latitude: float, longitude: float, outcome: string, photos: table<blurhash: string, images: list, photo_id: string, thumbnail: string, url: string>, post_id: string, repost_count: int, reselling: bool, source: string, title: string, type: string, url: string, user_id: string> {
+]: nothing -> oneof<record<content: string, date: string, expiration: string, footer: string, group_id: string, latitude: float, longitude: float, outcome: string, photos: table<blurhash: string, images: list, photo_id: string, thumbnail: string, url: string>, post_id: string, repost_count: int, reselling: bool, source: string, title: string, type: string, url: string, user_id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($post_id | is-empty) { error make --unspanned { msg: "path parameter 'post_id' must be non-empty" } }
@@ -1802,7 +1826,7 @@ export def "satisfy-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<content: string, date: string, expiration: string, footer: string, group_id: string, latitude: float, longitude: float, outcome: string, photos: table<blurhash: string, images: list, photo_id: string, thumbnail: string, url: string>, post_id: string, repost_count: int, reselling: bool, source: string, title: string, type: string, url: string, user_id: string> {
+]: nothing -> oneof<record<content: string, date: string, expiration: string, footer: string, group_id: string, latitude: float, longitude: float, outcome: string, photos: table<blurhash: string, images: list, photo_id: string, thumbnail: string, url: string>, post_id: string, repost_count: int, reselling: bool, source: string, title: string, type: string, url: string, user_id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($post_id | is-empty) { error make --unspanned { msg: "path parameter 'post_id' must be non-empty" } }
@@ -1874,7 +1898,7 @@ export def "unpromise-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<content: string, date: string, expiration: string, footer: string, group_id: string, latitude: float, longitude: float, outcome: string, photos: table<blurhash: string, images: list, photo_id: string, thumbnail: string, url: string>, post_id: string, repost_count: int, reselling: bool, source: string, title: string, type: string, url: string, user_id: string> {
+]: nothing -> oneof<record<content: string, date: string, expiration: string, footer: string, group_id: string, latitude: float, longitude: float, outcome: string, photos: table<blurhash: string, images: list, photo_id: string, thumbnail: string, url: string>, post_id: string, repost_count: int, reselling: bool, source: string, title: string, type: string, url: string, user_id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($post_id | is-empty) { error make --unspanned { msg: "path parameter 'post_id' must be non-empty" } }
@@ -1910,7 +1934,7 @@ export def "withdraw-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<content: string, date: string, expiration: string, footer: string, group_id: string, latitude: float, longitude: float, outcome: string, photos: table<blurhash: string, images: list, photo_id: string, thumbnail: string, url: string>, post_id: string, repost_count: int, reselling: bool, source: string, title: string, type: string, url: string, user_id: string> {
+]: nothing -> oneof<record<content: string, date: string, expiration: string, footer: string, group_id: string, latitude: float, longitude: float, outcome: string, photos: table<blurhash: string, images: list, photo_id: string, thumbnail: string, url: string>, post_id: string, repost_count: int, reselling: bool, source: string, title: string, type: string, url: string, user_id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($post_id | is-empty) { error make --unspanned { msg: "path parameter 'post_id' must be non-empty" } }
@@ -1951,7 +1975,7 @@ export def "get-stories" [
   --latitude: float # Find groups near the given latitude and longitude.
   --longitude: float # Find groups near the given latitude and longitude.
   --device-pixel-ratio: float # Client device pixel ratio used to determine thumbnail size (default 1.0). (default: 1)
-]: nothing -> record<stories: table<content: string, date: string, like_count: int, photos: list, share_url: string, story_id: string, title: string, user: record, user_liked: bool>> {
+]: nothing -> oneof<record<stories: table<content: string, date: string, like_count: int, photos: list, share_url: string, story_id: string, title: string, user: record, user_liked: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "device_pixel_ratio" $device_pixel_ratio "scalar")] | flatten | str join "&"
@@ -1991,7 +2015,7 @@ export def "submit-story" [
   --photo-ids: string # A comma separated list of the IDs of the photos that should be attached to this story.
   sharing: string # Must be set to one of the following two options: public, members When sharing is set to public, anyone will be able to view the story. When sharing is set to members, only other members will be able to view the story.
   title: string # The title of the story.
-]: any -> record<content: string, date: string, like_count: int, photos: table<blurhash: string, images: list, photo_id: string, thumbnail: string, url: string>, share_url: string, story_id: string, title: string, user: record<about_me: string, country: string, feedback: record<percent_positive: float, restriction: string, score: int>, firstname: string, lastname: string, member_since: string, profile_image: string, reply_time: int, user_id: string, username: string>, user_liked: bool> {
+]: any -> oneof<record<content: string, date: string, like_count: int, photos: table<blurhash: string, images: list, photo_id: string, thumbnail: string, url: string>, share_url: string, story_id: string, title: string, user: record<about_me: string, country: string, feedback: record<percent_positive: float, restriction: string, score: int>, firstname: string, lastname: string, member_since: string, profile_image: string, reply_time: int, user_id: string, username: string>, user_liked: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2032,7 +2056,7 @@ export def "get-story" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --device-pixel-ratio: float # Client device pixel ratio used to determine thumbnail size (default 1.0). (default: 1)
-]: nothing -> record<content: string, date: string, like_count: int, photos: table<blurhash: string, images: list, photo_id: string, thumbnail: string, url: string>, share_url: string, story_id: string, title: string, user: record<about_me: string, country: string, feedback: record<percent_positive: float, restriction: string, score: int>, firstname: string, lastname: string, member_since: string, profile_image: string, reply_time: int, user_id: string, username: string>, user_liked: bool> {
+]: nothing -> oneof<record<content: string, date: string, like_count: int, photos: table<blurhash: string, images: list, photo_id: string, thumbnail: string, url: string>, share_url: string, story_id: string, title: string, user: record<about_me: string, country: string, feedback: record<percent_positive: float, restriction: string, score: int>, firstname: string, lastname: string, member_since: string, profile_image: string, reply_time: int, user_id: string, username: string>, user_liked: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($story_id | is-empty) { error make --unspanned { msg: "path parameter 'story_id' must be non-empty" } }
@@ -2070,7 +2094,7 @@ export def "like-story" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --device-pixel-ratio: float # Client device pixel ratio used to determine thumbnail size (default 1.0). (default: 1)
-]: nothing -> record<content: string, date: string, like_count: int, photos: table<blurhash: string, images: list, photo_id: string, thumbnail: string, url: string>, share_url: string, story_id: string, title: string, user: record<about_me: string, country: string, feedback: record<percent_positive: float, restriction: string, score: int>, firstname: string, lastname: string, member_since: string, profile_image: string, reply_time: int, user_id: string, username: string>, user_liked: bool> {
+]: nothing -> oneof<record<content: string, date: string, like_count: int, photos: table<blurhash: string, images: list, photo_id: string, thumbnail: string, url: string>, share_url: string, story_id: string, title: string, user: record<about_me: string, country: string, feedback: record<percent_positive: float, restriction: string, score: int>, firstname: string, lastname: string, member_since: string, profile_image: string, reply_time: int, user_id: string, username: string>, user_liked: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($story_id | is-empty) { error make --unspanned { msg: "path parameter 'story_id' must be non-empty" } }
@@ -2108,7 +2132,7 @@ export def "unlike-story" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --device-pixel-ratio: float # Client device pixel ratio used to determine thumbnail size (default 1.0). (default: 1)
-]: nothing -> record<content: string, date: string, like_count: int, photos: table<blurhash: string, images: list, photo_id: string, thumbnail: string, url: string>, share_url: string, story_id: string, title: string, user: record<about_me: string, country: string, feedback: record<percent_positive: float, restriction: string, score: int>, firstname: string, lastname: string, member_since: string, profile_image: string, reply_time: int, user_id: string, username: string>, user_liked: bool> {
+]: nothing -> oneof<record<content: string, date: string, like_count: int, photos: table<blurhash: string, images: list, photo_id: string, thumbnail: string, url: string>, share_url: string, story_id: string, title: string, user: record<about_me: string, country: string, feedback: record<percent_positive: float, restriction: string, score: int>, firstname: string, lastname: string, member_since: string, profile_image: string, reply_time: int, user_id: string, username: string>, user_liked: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($story_id | is-empty) { error make --unspanned { msg: "path parameter 'story_id' must be non-empty" } }
@@ -2180,7 +2204,7 @@ export def "get-current-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<about_me: string, country: string, feedback: record<percent_positive: float, restriction: string, score: int>, firstname: string, lastname: string, member_since: string, profile_image: string, reply_time: int, user_id: string, username: string, digest_photos: bool, email: record<address: string, bouncing: bool, spam_stop: bool>, email_message_delay: string, email_post_reminders: bool, email_posts_frequency: string, email_search_alerts: bool, has_password: bool, last_listings_view: string, location: record<latitude: float, longitude: float, name: string, radius: float>, profile_image_source: string, public_name: bool, public_post_sources: list<string>, show_all_group_posts: bool, signup: string, special_notices: bool, uses_fair_offer_policy: bool, verified: bool> {
+]: nothing -> oneof<record<about_me: string, country: string, feedback: record<percent_positive: float, restriction: string, score: int>, firstname: string, lastname: string, member_since: string, profile_image: string, reply_time: int, user_id: string, username: string, digest_photos: bool, email: record<address: string, bouncing: bool, spam_stop: bool>, email_message_delay: string, email_post_reminders: bool, email_posts_frequency: string, email_search_alerts: bool, has_password: bool, last_listings_view: string, location: record<latitude: float, longitude: float, name: string, radius: float>, profile_image_source: string, public_name: bool, public_post_sources: list<string>, show_all_group_posts: bool, signup: string, special_notices: bool, uses_fair_offer_policy: bool, verified: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users/me" $auth.query)
@@ -2232,7 +2256,7 @@ export def "update-current-user" [
   --public-post-sources: string # A comma separated list of the sources to show public posts from. Currently only 'trashnothing' is supported. If not passed, all sources will be enabled. If set to an empty string, no sources will be enabled which effectively disables public posts for the user so that the user will only see posts from the groups they are a member of. Setting to an empty string is only allowed if the user is a member of one or more groups.
   --show-all-group-posts: int # Set to 1 to show all group posts on the main posts page and in the digests. Set to 0 to only show group posts in the area defined by the users' location. Can only be set to 0 if the users' location is already set.
   --special-notices: int # Whether or not the user wants to receive special notice emails from the groups they are a member of. Special notices are admin posts that the group moderators choose to send out by email. Set to 1 to enable and 0 to disable.
-]: any -> record<about_me: string, country: string, feedback: record<percent_positive: float, restriction: string, score: int>, firstname: string, lastname: string, member_since: string, profile_image: string, reply_time: int, user_id: string, username: string, digest_photos: bool, email: record<address: string, bouncing: bool, spam_stop: bool>, email_message_delay: string, email_post_reminders: bool, email_posts_frequency: string, email_search_alerts: bool, has_password: bool, last_listings_view: string, location: record<latitude: float, longitude: float, name: string, radius: float>, profile_image_source: string, public_name: bool, public_post_sources: list<string>, show_all_group_posts: bool, signup: string, special_notices: bool, uses_fair_offer_policy: bool, verified: bool> {
+]: any -> oneof<record<about_me: string, country: string, feedback: record<percent_positive: float, restriction: string, score: int>, firstname: string, lastname: string, member_since: string, profile_image: string, reply_time: int, user_id: string, username: string, digest_photos: bool, email: record<address: string, bouncing: bool, spam_stop: bool>, email_message_delay: string, email_post_reminders: bool, email_posts_frequency: string, email_search_alerts: bool, has_password: bool, last_listings_view: string, location: record<latitude: float, longitude: float, name: string, radius: float>, profile_image_source: string, public_name: bool, public_post_sources: list<string>, show_all_group_posts: bool, signup: string, special_notices: bool, uses_fair_offer_policy: bool, verified: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2271,7 +2295,7 @@ export def "get-alerts" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<alert_id: string, last_sent: string, search: string, send_count: int, types: list<string>, user_id: string> {
+]: nothing -> oneof<table<alert_id: string, last_sent: string, search: string, send_count: int, types: list<string>, user_id: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users/me/alerts" $auth.query)
@@ -2307,7 +2331,7 @@ export def "create-alert" [
   --dry-run(-n) # Return the request that would be sent without executing it
   search: string # When a post matches this search query, an email alert will be sent. Must have a length >= 2 and < 255 characters.
   types: string # A comma separated list of the post types that the alert should match against. The available post types are: offer, wanted
-]: any -> record<alert_id: string, last_sent: string, search: string, send_count: int, types: list<string>, user_id: string> {
+]: any -> oneof<record<alert_id: string, last_sent: string, search: string, send_count: int, types: list<string>, user_id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2422,7 +2446,7 @@ export def "set-email-not-bouncing" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<about_me: string, country: string, feedback: record<percent_positive: float, restriction: string, score: int>, firstname: string, lastname: string, member_since: string, profile_image: string, reply_time: int, user_id: string, username: string, digest_photos: bool, email: record<address: string, bouncing: bool, spam_stop: bool>, email_message_delay: string, email_post_reminders: bool, email_posts_frequency: string, email_search_alerts: bool, has_password: bool, last_listings_view: string, location: record<latitude: float, longitude: float, name: string, radius: float>, profile_image_source: string, public_name: bool, public_post_sources: list<string>, show_all_group_posts: bool, signup: string, special_notices: bool, uses_fair_offer_policy: bool, verified: bool> {
+]: nothing -> oneof<record<about_me: string, country: string, feedback: record<percent_positive: float, restriction: string, score: int>, firstname: string, lastname: string, member_since: string, profile_image: string, reply_time: int, user_id: string, username: string, digest_photos: bool, email: record<address: string, bouncing: bool, spam_stop: bool>, email_message_delay: string, email_post_reminders: bool, email_posts_frequency: string, email_search_alerts: bool, has_password: bool, last_listings_view: string, location: record<latitude: float, longitude: float, name: string, radius: float>, profile_image_source: string, public_name: bool, public_post_sources: list<string>, show_all_group_posts: bool, signup: string, special_notices: bool, uses_fair_offer_policy: bool, verified: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users/me/email/not-bouncing" $auth.query)
@@ -2457,7 +2481,7 @@ export def "get-current-user-groups" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --membership: string # Set the membership parameter to only return certain groups. The options are: - **subscribed**: Only return groups the user is a member of. - **pending-questions**: Only return groups where the user needs to respond to a new member questionnaire. - **pending**: Only return groups where the user is waiting for their membership request to be approved (excludes groups which are pending-questions). If unset, all groups the user is a member of and pending membership on will be returned.
-]: nothing -> table<country: record<abbreviation: string, name: string>, group_id: string, has_questions: bool, homepage: string, identifier: string, latitude: float, longitude: float, member_count: int, membership: record<date: string, questionnaire: record, status: string>, name: string, open_archives: bool, open_membership: bool, region: record<abbreviation: string, name: string>, timezone: string> {
+]: nothing -> oneof<table<country: record<abbreviation: string, name: string>, group_id: string, has_questions: bool, homepage: string, identifier: string, latitude: float, longitude: float, member_count: int, membership: record<date: string, questionnaire: record, status: string>, name: string, open_archives: bool, open_membership: bool, region: record<abbreviation: string, name: string>, timezone: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "membership" $membership "scalar")] | flatten | str join "&"
@@ -2496,7 +2520,7 @@ export def "update-location" [
   longitude: float
   name: string # A name that describes the location specified by the given latitude and longitude (must be <= 128 characters).
   radius: float # A radius in meters that defines a circle around the point specified by latitude and longitude. Only posts within the area specified by this circle will be shown. If set to 0, effectively disables public posts for the user.
-]: any -> record<about_me: string, country: string, feedback: record<percent_positive: float, restriction: string, score: int>, firstname: string, lastname: string, member_since: string, profile_image: string, reply_time: int, user_id: string, username: string, digest_photos: bool, email: record<address: string, bouncing: bool, spam_stop: bool>, email_message_delay: string, email_post_reminders: bool, email_posts_frequency: string, email_search_alerts: bool, has_password: bool, last_listings_view: string, location: record<latitude: float, longitude: float, name: string, radius: float>, profile_image_source: string, public_name: bool, public_post_sources: list<string>, show_all_group_posts: bool, signup: string, special_notices: bool, uses_fair_offer_policy: bool, verified: bool> {
+]: any -> oneof<record<about_me: string, country: string, feedback: record<percent_positive: float, restriction: string, score: int>, firstname: string, lastname: string, member_since: string, profile_image: string, reply_time: int, user_id: string, username: string, digest_photos: bool, email: record<address: string, bouncing: bool, spam_stop: bool>, email_message_delay: string, email_post_reminders: bool, email_posts_frequency: string, email_search_alerts: bool, has_password: bool, last_listings_view: string, location: record<latitude: float, longitude: float, name: string, radius: float>, profile_image_source: string, public_name: bool, public_post_sources: list<string>, show_all_group_posts: bool, signup: string, special_notices: bool, uses_fair_offer_policy: bool, verified: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2536,7 +2560,7 @@ export def "get-user-group-notices" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --group-ids: string # A comma separated list of group IDs to return notices for. If unset, notices for all the users groups will be returned.
-]: nothing -> table<content: string, date: string, group_id: string, notice_id: string, title: string> {
+]: nothing -> oneof<table<content: string, date: string, group_id: string, notice_id: string, title: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "group_ids" $group_ids "scalar")] | flatten | str join "&"
@@ -2571,7 +2595,7 @@ export def "get-post-locations" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<latitude: float, longitude: float, name: string> {
+]: nothing -> oneof<table<latitude: float, longitude: float, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users/me/post-locations" $auth.query)
@@ -2608,7 +2632,7 @@ export def "save-post-location" [
   latitude: float
   longitude: float
   name: string # A name that describes the location specified by the given latitude and longitude (must be >= 2 characters and <= 30 characters).
-]: any -> table<latitude: float, longitude: float, name: string> {
+]: any -> oneof<table<latitude: float, longitude: float, name: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2662,7 +2686,7 @@ export def "get-current-user-posts" [
   --outcomes: string # A comma separated list of the post outcomes to return. The available post outcomes are: satisfied, withdrawn There are also a couple special values that can be passed. If set to an empty string (the default), only posts that are not satisfied and not withdrawn and not expired are returned. If set to 'all', all posts will be returned no matter what outcome the posts have. If set to 'not-promised', only posts that are not satisfied ant not withdrawn and not expired and not promised are returned. (default: "")
   --user-state: string # If user_state is set, only posts matching the state specified will be returned. Only one state may be passed and it must be one of the following: viewed, replied, bookmarked NOTE: This option will only work with oauth requests. (default: "")
   --include-reposts: int # If set to 1 (the default), posts that are reposts will be included. If set to 0, reposts will be excluded. See the repost_count field of post objects for details about how reposts are identified. (default: 1)
-]: nothing -> record<end_index: int, group_ids: list<string>, last_listings_view: string, num_pages: int, num_posts: int, page: int, per_page: int, posts: table<content: string, date: string, expiration: string, footer: string, group_id: string, latitude: float, longitude: float, outcome: string, photos: list, post_id: string, repost_count: int, reselling: bool, source: string, title: string, type: string, url: string, user_id: string>, start_index: int> {
+]: nothing -> oneof<record<end_index: int, group_ids: list<string>, last_listings_view: string, num_pages: int, num_posts: int, page: int, per_page: int, posts: table<content: string, date: string, expiration: string, footer: string, group_id: string, latitude: float, longitude: float, outcome: string, photos: list, post_id: string, repost_count: int, reselling: bool, source: string, title: string, type: string, url: string, user_id: string>, start_index: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($types == null) { error make --unspanned { msg: "required query parameter 'types' missing: pass --types" } }
@@ -2715,7 +2739,7 @@ export def "search-current-user-posts" [
   --outcomes: string # A comma separated list of the post outcomes to return. The available post outcomes are: satisfied, withdrawn There are also a couple special values that can be passed. If set to an empty string (the default), only posts that are not satisfied and not withdrawn and not expired are returned. If set to 'all', all posts will be returned no matter what outcome the posts have. If set to 'not-promised', only posts that are not satisfied ant not withdrawn and not expired and not promised are returned. (default: "")
   --user-state: string # If user_state is set, only posts matching the state specified will be returned. Only one state may be passed and it must be one of the following: viewed, replied, bookmarked NOTE: This option will only work with oauth requests. (default: "")
   --include-reposts: int # If set to 1 (the default), posts that are reposts will be included. If set to 0, reposts will be excluded. See the repost_count field of post objects for details about how reposts are identified. (default: 1)
-]: nothing -> record<end_index: int, group_ids: list<string>, num_pages: int, num_posts: int, page: int, per_page: int, posts: table<content: string, date: string, expiration: string, footer: string, group_id: string, latitude: float, longitude: float, outcome: string, photos: list, post_id: string, repost_count: int, reselling: bool, source: string, title: string, type: string, url: string, user_id: string, search_content: string, search_title: string>, start_index: int> {
+]: nothing -> oneof<record<end_index: int, group_ids: list<string>, num_pages: int, num_posts: int, page: int, per_page: int, posts: table<content: string, date: string, expiration: string, footer: string, group_id: string, latitude: float, longitude: float, outcome: string, photos: list, post_id: string, repost_count: int, reselling: bool, source: string, title: string, type: string, url: string, user_id: string, search_content: string, search_title: string>, start_index: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($search == null) { error make --unspanned { msg: "required query parameter 'search' missing: pass --search" } }
@@ -2758,7 +2782,7 @@ export def "set-profile-image" [
   --photo: string # Photo to upload. (format: binary)
   --photo-id: string # Photo to use (if already uploaded).
   --set-default: int # Whether or not to set the photo as the users' default profile image. Set to 1 to enable and 0 to disable. (default: 1)
-]: any -> record<photo: record<photo_id: string, thumbnail: record<height: int, url: string, width: int>>, user: record<about_me: string, country: string, feedback: record<percent_positive: float, restriction: string, score: int>, firstname: string, lastname: string, member_since: string, profile_image: string, reply_time: int, user_id: string, username: string, digest_photos: bool, email: record<address: string, bouncing: bool, spam_stop: bool>, email_message_delay: string, email_post_reminders: bool, email_posts_frequency: string, email_search_alerts: bool, has_password: bool, last_listings_view: string, location: record<latitude: float, longitude: float, name: string, radius: float>, profile_image_source: string, public_name: bool, public_post_sources: list<string>, show_all_group_posts: bool, signup: string, special_notices: bool, uses_fair_offer_policy: bool, verified: bool>> {
+]: any -> oneof<record<photo: record<photo_id: string, thumbnail: record<height: int, url: string, width: int>>, user: record<about_me: string, country: string, feedback: record<percent_positive: float, restriction: string, score: int>, firstname: string, lastname: string, member_since: string, profile_image: string, reply_time: int, user_id: string, username: string, digest_photos: bool, email: record<address: string, bouncing: bool, spam_stop: bool>, email_message_delay: string, email_post_reminders: bool, email_posts_frequency: string, email_search_alerts: bool, has_password: bool, last_listings_view: string, location: record<latitude: float, longitude: float, name: string, radius: float>, profile_image_source: string, public_name: bool, public_post_sources: list<string>, show_all_group_posts: bool, signup: string, special_notices: bool, uses_fair_offer_policy: bool, verified: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2797,7 +2821,7 @@ export def "get-profile-images" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<image: string, source: string> {
+]: nothing -> oneof<table<image: string, source: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users/me/profile-images" $auth.query)
@@ -2944,7 +2968,7 @@ export def "get-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<about_me: string, country: string, feedback: record<percent_positive: float, restriction: string, score: int>, firstname: string, lastname: string, member_since: string, profile_image: string, reply_time: int, user_id: string, username: string> {
+]: nothing -> oneof<record<about_me: string, country: string, feedback: record<percent_positive: float, restriction: string, score: int>, firstname: string, lastname: string, member_since: string, profile_image: string, reply_time: int, user_id: string, username: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -2980,7 +3004,7 @@ export def "get-user-and-related-data" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<feedback: table<content: string, date: string, feedback_id: string, positive: bool, reviewer_user_id: string, user_id: string>, offer_count: int, posts: table<content: string, date: string, expiration: string, footer: string, group_id: string, latitude: float, longitude: float, outcome: string, photos: list, post_id: string, repost_count: int, reselling: bool, source: string, title: string, type: string, url: string, user_id: string>, user: record<about_me: string, country: string, feedback: record<percent_positive: float, restriction: string, score: int>, firstname: string, lastname: string, member_since: string, profile_image: string, reply_time: int, user_id: string, username: string>, wanted_count: int> {
+]: nothing -> oneof<record<feedback: table<content: string, date: string, feedback_id: string, positive: bool, reviewer_user_id: string, user_id: string>, offer_count: int, posts: table<content: string, date: string, expiration: string, footer: string, group_id: string, latitude: float, longitude: float, outcome: string, photos: list, post_id: string, repost_count: int, reselling: bool, source: string, title: string, type: string, url: string, user_id: string>, user: record<about_me: string, country: string, feedback: record<percent_positive: float, restriction: string, score: int>, firstname: string, lastname: string, member_since: string, profile_image: string, reply_time: int, user_id: string, username: string>, wanted_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -3016,7 +3040,7 @@ export def "remove-user-feedback" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<user: record<about_me: string, country: string, feedback: record<percent_positive: float, restriction: string, score: int>, firstname: string, lastname: string, member_since: string, profile_image: string, reply_time: int, user_id: string, username: string>> {
+]: nothing -> oneof<record<user: record<about_me: string, country: string, feedback: record<percent_positive: float, restriction: string, score: int>, firstname: string, lastname: string, member_since: string, profile_image: string, reply_time: int, user_id: string, username: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -3055,7 +3079,7 @@ export def "submit-user-feedback" [
   --category: string # For positive feedback, category should not be set. For negative feedback, category should be set to one of: NO_SHOW, UNRESPONSIVE, LATE_OR_TOO_EARLY, ITEM_NOT_AS_DESCRIBED, BROKEN_PROMISE, RUDE, RESELLER, SELLING, UNWANTED_MESSAGES, COMMUNICATION, OTHER Below are descriptions for each of these categories: **NO_SHOW** - The user did not show up when they said they would. **UNRESPONSIVE** - The user failed to respond when a response was expected. **LATE_OR_TOO_EARLY** - The user showed up later than they said they would (or too early). **ITEM_NOT_AS_DESCRIBED** - The user gave away an item that had a misleading on incomplete description. **BROKEN_PROMISE** - The user broke a promise. **RUDE** - The user was rude or impolite. **RESELLER** - The user is obtaining free items to sell on other sites without disclosing their intent to resell. **SELLING** - The user is selling items on trash nothing. **UNWANTED_MESSAGES** - The user is sending off-topic or unrelated messages. **COMMUNICATION** - The users' communication is unclear, confusing or bad. **OTHER** - This category is for anything that does not fit in any of the above categories.
   --content: string # A comment written by the current user about the user they are leaving feedback on. This is optional for positive feedback but is required for negative feedback.
   positive: int # If set to 1, the feedback is positive. If set to 0, the feedback is negative.
-]: any -> record<feedback: record<content: string, date: string, feedback_id: string, positive: bool, reviewer_user_id: string, user_id: string>, user: record<about_me: string, country: string, feedback: record<percent_positive: float, restriction: string, score: int>, firstname: string, lastname: string, member_since: string, profile_image: string, reply_time: int, user_id: string, username: string>> {
+]: any -> oneof<record<feedback: record<content: string, date: string, feedback_id: string, positive: bool, reviewer_user_id: string, user_id: string>, user: record<about_me: string, country: string, feedback: record<percent_positive: float, restriction: string, score: int>, firstname: string, lastname: string, member_since: string, profile_image: string, reply_time: int, user_id: string, username: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3110,7 +3134,7 @@ export def "get-user-posts" [
   --date-max: string # Only posts older than this UTC date and time will be returned. (format: date-time)
   --outcomes: string # A comma separated list of the post outcomes to return. The available post outcomes are: satisfied, withdrawn There are also a couple special values that can be passed. If set to an empty string (the default), only posts that are not satisfied and not withdrawn and not expired are returned. If set to 'all', all posts will be returned no matter what outcome the posts have. If set to 'not-promised', only posts that are not satisfied ant not withdrawn and not expired and not promised are returned. (default: "")
   --include-reposts: int # If set to 1 (the default), posts that are reposts will be included. If set to 0, reposts will be excluded. See the repost_count field of post objects for details about how reposts are identified. (default: 1)
-]: nothing -> record<end_index: int, group_ids: list<string>, last_listings_view: string, num_pages: int, num_posts: int, page: int, per_page: int, posts: table<content: string, date: string, expiration: string, footer: string, group_id: string, latitude: float, longitude: float, outcome: string, photos: list, post_id: string, repost_count: int, reselling: bool, source: string, title: string, type: string, url: string, user_id: string>, start_index: int> {
+]: nothing -> oneof<record<end_index: int, group_ids: list<string>, last_listings_view: string, num_pages: int, num_posts: int, page: int, per_page: int, posts: table<content: string, date: string, expiration: string, footer: string, group_id: string, latitude: float, longitude: float, outcome: string, photos: list, post_id: string, repost_count: int, reselling: bool, source: string, title: string, type: string, url: string, user_id: string>, start_index: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -3164,7 +3188,7 @@ export def "search-user-posts" [
   --date-max: string # Only posts older than this UTC date and time will be returned. (format: date-time)
   --outcomes: string # A comma separated list of the post outcomes to return. The available post outcomes are: satisfied, withdrawn There are also a couple special values that can be passed. If set to an empty string (the default), only posts that are not satisfied and not withdrawn and not expired are returned. If set to 'all', all posts will be returned no matter what outcome the posts have. If set to 'not-promised', only posts that are not satisfied ant not withdrawn and not expired and not promised are returned. (default: "")
   --include-reposts: int # If set to 1 (the default), posts that are reposts will be included. If set to 0, reposts will be excluded. See the repost_count field of post objects for details about how reposts are identified. (default: 1)
-]: nothing -> record<end_index: int, group_ids: list<string>, num_pages: int, num_posts: int, page: int, per_page: int, posts: table<content: string, date: string, expiration: string, footer: string, group_id: string, latitude: float, longitude: float, outcome: string, photos: list, post_id: string, repost_count: int, reselling: bool, source: string, title: string, type: string, url: string, user_id: string, search_content: string, search_title: string>, start_index: int> {
+]: nothing -> oneof<record<end_index: int, group_ids: list<string>, num_pages: int, num_posts: int, page: int, per_page: int, posts: table<content: string, date: string, expiration: string, footer: string, group_id: string, latitude: float, longitude: float, outcome: string, photos: list, post_id: string, repost_count: int, reselling: bool, source: string, title: string, type: string, url: string, user_id: string, search_content: string, search_title: string>, start_index: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }

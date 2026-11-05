@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -122,9 +146,9 @@ def update-targets-operating-system-completer [] { ["amazon_linux" "openwrt" "ra
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "associate-role-to-group" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["associate-role-to-group" "disassociate-role-from-group" "get-associated-role" "associate-service-role-to-account" "disassociate-service-role-from-account" "get-service-role-for-account" "create-connector-definition" "list-connector-definitions" "create-connector-definition-version" "list-connector-definition-versions" "create-core-definition" "list-core-definitions" "create-core-definition-version" "list-core-definition-versions" "create-deployment" "list-deployments" "create-device-definition" "list-device-definitions" "create-device-definition-version" "list-device-definition-versions" "create-function-definition" "list-function-definitions" "create-function-definition-version" "list-function-definition-versions" "create-group" "list-groups" "create-group-certificate-authority" "list-group-certificate-authorities" "create-group-version" "list-group-versions" "create-logger-definition" "list-logger-definitions" "create-logger-definition-version" "list-logger-definition-versions" "create-resource-definition" "list-resource-definitions" "create-resource-definition-version" "list-resource-definition-versions" "create-software-update-job" "create-subscription-definition" "list-subscription-definitions" "create-subscription-definition-version" "list-subscription-definition-versions" "delete-connector-definition" "get-connector-definition" "update-connector-definition" "delete-core-definition" "get-core-definition" "update-core-definition" "delete-device-definition" "get-device-definition" "update-device-definition" "delete-function-definition" "get-function-definition" "update-function-definition" "delete-group" "get-group" "update-group" "delete-logger-definition" "get-logger-definition" "update-logger-definition" "delete-resource-definition" "get-resource-definition" "update-resource-definition" "delete-subscription-definition" "get-subscription-definition" "update-subscription-definition" "get-bulk-deployment-status" "get-connectivity-info" "update-connectivity-info" "get-connector-definition-version" "get-core-definition-version" "get-deployment-status" "get-device-definition-version" "get-function-definition-version" "get-group-certificate-authority" "get-group-certificate-configuration" "update-group-certificate-configuration" "get-group-version" "get-logger-definition-version" "get-resource-definition-version" "get-subscription-definition-version" "get-thing-runtime-configuration" "update-thing-runtime-configuration" "list-bulk-deployment-detailed-reports" "list-bulk-deployments" "start-bulk-deployment" "list-tags-for-resource" "tag-resource" "reset-deployments" "stop-bulk-deployment" "untag-resource" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -165,7 +189,7 @@ export def "associate-role-to-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   role_arn: string # The ARN of the role you wish to associate with this group. The existence of the role is not validated.
-]: any -> record<AssociatedAt: string> {
+]: any -> oneof<record<AssociatedAt: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -213,7 +237,7 @@ export def "disassociate-role-from-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DisassociatedAt: string> {
+]: nothing -> oneof<record<DisassociatedAt: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'GroupId' must be non-empty" } }
@@ -258,7 +282,7 @@ export def "get-associated-role" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<AssociatedAt: string, RoleArn: string> {
+]: nothing -> oneof<record<AssociatedAt: string, RoleArn: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'GroupId' must be non-empty" } }
@@ -303,7 +327,7 @@ export def "associate-service-role-to-account" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   role_arn: string # The ARN of the service role you wish to associate with your account.
-]: any -> record<AssociatedAt: string> {
+]: any -> oneof<record<AssociatedAt: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -349,7 +373,7 @@ export def "disassociate-service-role-from-account" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DisassociatedAt: string> {
+]: nothing -> oneof<record<DisassociatedAt: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/greengrass/servicerole" $auth.query)
@@ -392,7 +416,7 @@ export def "get-service-role-for-account" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<AssociatedAt: string, RoleArn: string> {
+]: nothing -> oneof<record<AssociatedAt: string, RoleArn: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/greengrass/servicerole" $auth.query)
@@ -418,7 +442,6 @@ export def "get-service-role-for-account" [
 #
 # POST /greengrass/definition/connectors
 # operationId: CreateConnectorDefinition
-# --InitialVersion shape: {Connectors?: list}
 export def "create-connector-definition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -440,7 +463,7 @@ export def "create-connector-definition" [
   --initial-version: record # Information about the connector definition version, which is a container for connectors. — shape: {Connectors?: list}
   --name: string # The name of the connector definition.
   --tags: record # The key-value pair for the resource tag.
-]: any -> record<Arn: string, CreationTimestamp: string, Id: string, LastUpdatedTimestamp: string, LatestVersion: string, LatestVersionArn: string, Name: string> {
+]: any -> oneof<record<Arn: string, CreationTimestamp: string, Id: string, LastUpdatedTimestamp: string, LatestVersion: string, LatestVersionArn: string, Name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -488,7 +511,7 @@ export def "list-connector-definitions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Definitions: table<Arn: string, CreationTimestamp: string, Id: string, LastUpdatedTimestamp: string, LatestVersion: string, LatestVersionArn: string, Name: string, Tags: record>, NextToken: string> {
+]: nothing -> oneof<record<Definitions: table<Arn: string, CreationTimestamp: string, Id: string, LastUpdatedTimestamp: string, LatestVersion: string, LatestVersionArn: string, Name: string, Tags: record>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
@@ -515,7 +538,6 @@ export def "list-connector-definitions" [
 #
 # POST /greengrass/definition/connectors/{ConnectorDefinitionId}/versions
 # operationId: CreateConnectorDefinitionVersion
-# --Connectors item shape: {ConnectorArn: string, Id: string, Parameters?: record}
 export def "create-connector-definition-version" [
   connector_definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -536,7 +558,7 @@ export def "create-connector-definition-version" [
   --x-amz-signed-headers: string
   --x-amzn-client-token: string # A client token used to correlate requests and responses.
   --connectors: list # A list of references to connectors in this version, with their corresponding configuration settings. — item shape: {ConnectorArn: string, Id: string, Parameters?: record}
-]: any -> record<Arn: string, CreationTimestamp: string, Id: string, Version: string> {
+]: any -> oneof<record<Arn: string, CreationTimestamp: string, Id: string, Version: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -586,7 +608,7 @@ export def "list-connector-definition-versions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextToken: string, Versions: table<Arn: string, CreationTimestamp: string, Id: string, Version: string>> {
+]: nothing -> oneof<record<NextToken: string, Versions: table<Arn: string, CreationTimestamp: string, Id: string, Version: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($connector_definition_id | is-empty) { error make --unspanned { msg: "path parameter 'ConnectorDefinitionId' must be non-empty" } }
@@ -614,7 +636,6 @@ export def "list-connector-definition-versions" [
 #
 # POST /greengrass/definition/cores
 # operationId: CreateCoreDefinition
-# --InitialVersion shape: {Cores?: list}
 export def "create-core-definition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -636,7 +657,7 @@ export def "create-core-definition" [
   --initial-version: record # Information about a core definition version. — shape: {Cores?: list}
   --name: string # The name of the core definition.
   --tags: record # The key-value pair for the resource tag.
-]: any -> record<Arn: string, CreationTimestamp: string, Id: string, LastUpdatedTimestamp: string, LatestVersion: string, LatestVersionArn: string, Name: string> {
+]: any -> oneof<record<Arn: string, CreationTimestamp: string, Id: string, LastUpdatedTimestamp: string, LatestVersion: string, LatestVersionArn: string, Name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -684,7 +705,7 @@ export def "list-core-definitions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Definitions: table<Arn: string, CreationTimestamp: string, Id: string, LastUpdatedTimestamp: string, LatestVersion: string, LatestVersionArn: string, Name: string, Tags: record>, NextToken: string> {
+]: nothing -> oneof<record<Definitions: table<Arn: string, CreationTimestamp: string, Id: string, LastUpdatedTimestamp: string, LatestVersion: string, LatestVersionArn: string, Name: string, Tags: record>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
@@ -711,7 +732,6 @@ export def "list-core-definitions" [
 #
 # POST /greengrass/definition/cores/{CoreDefinitionId}/versions
 # operationId: CreateCoreDefinitionVersion
-# --Cores item shape: {CertificateArn: string, Id: string, SyncShadow?: bool, ThingArn: string}
 export def "create-core-definition-version" [
   core_definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -732,7 +752,7 @@ export def "create-core-definition-version" [
   --x-amz-signed-headers: string
   --x-amzn-client-token: string # A client token used to correlate requests and responses.
   --cores: list # A list of cores in the core definition version. — item shape: {CertificateArn: string, Id: string, SyncShadow?: bool, ThingArn: string}
-]: any -> record<Arn: string, CreationTimestamp: string, Id: string, Version: string> {
+]: any -> oneof<record<Arn: string, CreationTimestamp: string, Id: string, Version: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -782,7 +802,7 @@ export def "list-core-definition-versions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextToken: string, Versions: table<Arn: string, CreationTimestamp: string, Id: string, Version: string>> {
+]: nothing -> oneof<record<NextToken: string, Versions: table<Arn: string, CreationTimestamp: string, Id: string, Version: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($core_definition_id | is-empty) { error make --unspanned { msg: "path parameter 'CoreDefinitionId' must be non-empty" } }
@@ -832,7 +852,7 @@ export def "create-deployment" [
   --deployment-id: string # The ID of the deployment if you wish to redeploy a previous deployment.
   deployment_type: string@deployment-type-completer # The type of deployment. When used for ''CreateDeployment'', only ''NewDeployment'' and ''Redeployment'' are valid.
   --group-version-id: string # The ID of the group version to be deployed.
-]: any -> record<DeploymentArn: string, DeploymentId: string> {
+]: any -> oneof<record<DeploymentArn: string, DeploymentId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -882,7 +902,7 @@ export def "list-deployments" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Deployments: table<CreatedAt: string, DeploymentArn: string, DeploymentId: string, DeploymentType: string, GroupArn: string>, NextToken: string> {
+]: nothing -> oneof<record<Deployments: table<CreatedAt: string, DeploymentArn: string, DeploymentId: string, DeploymentType: string, GroupArn: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'GroupId' must be non-empty" } }
@@ -910,7 +930,6 @@ export def "list-deployments" [
 #
 # POST /greengrass/definition/devices
 # operationId: CreateDeviceDefinition
-# --InitialVersion shape: {Devices?: list}
 export def "create-device-definition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -932,7 +951,7 @@ export def "create-device-definition" [
   --initial-version: record # Information about a device definition version. — shape: {Devices?: list}
   --name: string # The name of the device definition.
   --tags: record # The key-value pair for the resource tag.
-]: any -> record<Arn: string, CreationTimestamp: string, Id: string, LastUpdatedTimestamp: string, LatestVersion: string, LatestVersionArn: string, Name: string> {
+]: any -> oneof<record<Arn: string, CreationTimestamp: string, Id: string, LastUpdatedTimestamp: string, LatestVersion: string, LatestVersionArn: string, Name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -980,7 +999,7 @@ export def "list-device-definitions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Definitions: table<Arn: string, CreationTimestamp: string, Id: string, LastUpdatedTimestamp: string, LatestVersion: string, LatestVersionArn: string, Name: string, Tags: record>, NextToken: string> {
+]: nothing -> oneof<record<Definitions: table<Arn: string, CreationTimestamp: string, Id: string, LastUpdatedTimestamp: string, LatestVersion: string, LatestVersionArn: string, Name: string, Tags: record>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
@@ -1007,7 +1026,6 @@ export def "list-device-definitions" [
 #
 # POST /greengrass/definition/devices/{DeviceDefinitionId}/versions
 # operationId: CreateDeviceDefinitionVersion
-# --Devices item shape: {CertificateArn: string, Id: string, SyncShadow?: bool, ThingArn: string}
 export def "create-device-definition-version" [
   device_definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1028,7 +1046,7 @@ export def "create-device-definition-version" [
   --x-amz-signed-headers: string
   --x-amzn-client-token: string # A client token used to correlate requests and responses.
   --devices: list # A list of devices in the definition version. — item shape: {CertificateArn: string, Id: string, SyncShadow?: bool, ThingArn: string}
-]: any -> record<Arn: string, CreationTimestamp: string, Id: string, Version: string> {
+]: any -> oneof<record<Arn: string, CreationTimestamp: string, Id: string, Version: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1078,7 +1096,7 @@ export def "list-device-definition-versions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextToken: string, Versions: table<Arn: string, CreationTimestamp: string, Id: string, Version: string>> {
+]: nothing -> oneof<record<NextToken: string, Versions: table<Arn: string, CreationTimestamp: string, Id: string, Version: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($device_definition_id | is-empty) { error make --unspanned { msg: "path parameter 'DeviceDefinitionId' must be non-empty" } }
@@ -1106,7 +1124,6 @@ export def "list-device-definition-versions" [
 #
 # POST /greengrass/definition/functions
 # operationId: CreateFunctionDefinition
-# --InitialVersion shape: {DefaultConfig?: record, Functions?: list}
 export def "create-function-definition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1128,7 +1145,7 @@ export def "create-function-definition" [
   --initial-version: record # Information about a function definition version. — shape: {DefaultConfig?: record, Functions?: list}
   --name: string # The name of the function definition.
   --tags: record # The key-value pair for the resource tag.
-]: any -> record<Arn: string, CreationTimestamp: string, Id: string, LastUpdatedTimestamp: string, LatestVersion: string, LatestVersionArn: string, Name: string> {
+]: any -> oneof<record<Arn: string, CreationTimestamp: string, Id: string, LastUpdatedTimestamp: string, LatestVersion: string, LatestVersionArn: string, Name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1176,7 +1193,7 @@ export def "list-function-definitions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Definitions: table<Arn: string, CreationTimestamp: string, Id: string, LastUpdatedTimestamp: string, LatestVersion: string, LatestVersionArn: string, Name: string, Tags: record>, NextToken: string> {
+]: nothing -> oneof<record<Definitions: table<Arn: string, CreationTimestamp: string, Id: string, LastUpdatedTimestamp: string, LatestVersion: string, LatestVersionArn: string, Name: string, Tags: record>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
@@ -1203,8 +1220,6 @@ export def "list-function-definitions" [
 #
 # POST /greengrass/definition/functions/{FunctionDefinitionId}/versions
 # operationId: CreateFunctionDefinitionVersion
-# --DefaultConfig shape: {Execution?: record}
-# --Functions item shape: {FunctionArn?: string, FunctionConfiguration?: record, Id: string}
 export def "create-function-definition-version" [
   function_definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1226,7 +1241,7 @@ export def "create-function-definition-version" [
   --x-amzn-client-token: string # A client token used to correlate requests and responses.
   --default-config: record # The default configuration that applies to all Lambda functions in the group. Individual Lambda functions can override these settings. — shape: {Execution?: record}
   --functions: list # A list of Lambda functions in this function definition version. — item shape: {FunctionArn?: string, FunctionConfiguration?: record, Id: string}
-]: any -> record<Arn: string, CreationTimestamp: string, Id: string, Version: string> {
+]: any -> oneof<record<Arn: string, CreationTimestamp: string, Id: string, Version: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1276,7 +1291,7 @@ export def "list-function-definition-versions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextToken: string, Versions: table<Arn: string, CreationTimestamp: string, Id: string, Version: string>> {
+]: nothing -> oneof<record<NextToken: string, Versions: table<Arn: string, CreationTimestamp: string, Id: string, Version: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($function_definition_id | is-empty) { error make --unspanned { msg: "path parameter 'FunctionDefinitionId' must be non-empty" } }
@@ -1304,7 +1319,6 @@ export def "list-function-definition-versions" [
 #
 # POST /greengrass/groups
 # operationId: CreateGroup
-# --InitialVersion shape: {ConnectorDefinitionVersionArn?: string, CoreDefinitionVersionArn?: string, DeviceDefinitionVersionArn?: string, FunctionDefinitionVersionArn?: string, LoggerDefinitionVersionArn?: string, ResourceDefinitionVersionArn?: string, SubscriptionDefinitionVersionArn?: string}
 export def "create-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1326,7 +1340,7 @@ export def "create-group" [
   --initial-version: record # Information about a group version. — shape: {ConnectorDefinitionVersionArn?: string, CoreDefinitionVersionArn?: string, DeviceDefinitionVersionArn?: string, FunctionDefinitionVersionArn?: string, LoggerDefinitionVersionArn?: string, ResourceDefinitionVersionArn?: string, SubscriptionDefinitionVersionArn?: string}
   name: string # The name of the group.
   --tags: record # The key-value pair for the resource tag.
-]: any -> record<Arn: string, CreationTimestamp: string, Id: string, LastUpdatedTimestamp: string, LatestVersion: string, LatestVersionArn: string, Name: string> {
+]: any -> oneof<record<Arn: string, CreationTimestamp: string, Id: string, LastUpdatedTimestamp: string, LatestVersion: string, LatestVersionArn: string, Name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1374,7 +1388,7 @@ export def "list-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Groups: table<Arn: string, CreationTimestamp: string, Id: string, LastUpdatedTimestamp: string, LatestVersion: string, LatestVersionArn: string, Name: string>, NextToken: string> {
+]: nothing -> oneof<record<Groups: table<Arn: string, CreationTimestamp: string, Id: string, LastUpdatedTimestamp: string, LatestVersion: string, LatestVersionArn: string, Name: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
@@ -1420,7 +1434,7 @@ export def "create-group-certificate-authority" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amzn-client-token: string # A client token used to correlate requests and responses.
-]: nothing -> record<GroupCertificateAuthorityArn: string> {
+]: nothing -> oneof<record<GroupCertificateAuthorityArn: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'GroupId' must be non-empty" } }
@@ -1465,7 +1479,7 @@ export def "list-group-certificate-authorities" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<GroupCertificateAuthorities: table<GroupCertificateAuthorityArn: string, GroupCertificateAuthorityId: string>> {
+]: nothing -> oneof<record<GroupCertificateAuthorities: table<GroupCertificateAuthorityArn: string, GroupCertificateAuthorityId: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'GroupId' must be non-empty" } }
@@ -1518,7 +1532,7 @@ export def "create-group-version" [
   --logger-definition-version-arn: string # The ARN of the logger definition version for this group.
   --resource-definition-version-arn: string # The ARN of the resource definition version for this group.
   --subscription-definition-version-arn: string # The ARN of the subscription definition version for this group.
-]: any -> record<Arn: string, CreationTimestamp: string, Id: string, Version: string> {
+]: any -> oneof<record<Arn: string, CreationTimestamp: string, Id: string, Version: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1568,7 +1582,7 @@ export def "list-group-versions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextToken: string, Versions: table<Arn: string, CreationTimestamp: string, Id: string, Version: string>> {
+]: nothing -> oneof<record<NextToken: string, Versions: table<Arn: string, CreationTimestamp: string, Id: string, Version: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'GroupId' must be non-empty" } }
@@ -1596,7 +1610,6 @@ export def "list-group-versions" [
 #
 # POST /greengrass/definition/loggers
 # operationId: CreateLoggerDefinition
-# --InitialVersion shape: {Loggers?: list}
 export def "create-logger-definition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1618,7 +1631,7 @@ export def "create-logger-definition" [
   --initial-version: record # Information about a logger definition version. — shape: {Loggers?: list}
   --name: string # The name of the logger definition.
   --tags: record # The key-value pair for the resource tag.
-]: any -> record<Arn: string, CreationTimestamp: string, Id: string, LastUpdatedTimestamp: string, LatestVersion: string, LatestVersionArn: string, Name: string> {
+]: any -> oneof<record<Arn: string, CreationTimestamp: string, Id: string, LastUpdatedTimestamp: string, LatestVersion: string, LatestVersionArn: string, Name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1666,7 +1679,7 @@ export def "list-logger-definitions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Definitions: table<Arn: string, CreationTimestamp: string, Id: string, LastUpdatedTimestamp: string, LatestVersion: string, LatestVersionArn: string, Name: string, Tags: record>, NextToken: string> {
+]: nothing -> oneof<record<Definitions: table<Arn: string, CreationTimestamp: string, Id: string, LastUpdatedTimestamp: string, LatestVersion: string, LatestVersionArn: string, Name: string, Tags: record>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
@@ -1693,7 +1706,6 @@ export def "list-logger-definitions" [
 #
 # POST /greengrass/definition/loggers/{LoggerDefinitionId}/versions
 # operationId: CreateLoggerDefinitionVersion
-# --Loggers item shape: {Component: "GreengrassSystem"|"Lambda", Id: string, Level: "DEBUG"|"INFO"|"WARN"|"ERROR"|"FATAL", Space?: int, Type: "FileSystem"|"AWSCloudWatch"}
 export def "create-logger-definition-version" [
   logger_definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1714,7 +1726,7 @@ export def "create-logger-definition-version" [
   --x-amz-signed-headers: string
   --x-amzn-client-token: string # A client token used to correlate requests and responses.
   --loggers: list # A list of loggers. — item shape: {Component: "GreengrassSystem"|"Lambda", Id: string, Level: "DEBUG"|"INFO"|"WARN"|"ERROR"|"FATAL", Space?: int, Type: "FileSystem"|"AWSCloudWatch"}
-]: any -> record<Arn: string, CreationTimestamp: string, Id: string, Version: string> {
+]: any -> oneof<record<Arn: string, CreationTimestamp: string, Id: string, Version: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1764,7 +1776,7 @@ export def "list-logger-definition-versions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextToken: string, Versions: table<Arn: string, CreationTimestamp: string, Id: string, Version: string>> {
+]: nothing -> oneof<record<NextToken: string, Versions: table<Arn: string, CreationTimestamp: string, Id: string, Version: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($logger_definition_id | is-empty) { error make --unspanned { msg: "path parameter 'LoggerDefinitionId' must be non-empty" } }
@@ -1792,7 +1804,6 @@ export def "list-logger-definition-versions" [
 #
 # POST /greengrass/definition/resources
 # operationId: CreateResourceDefinition
-# --InitialVersion shape: {Resources?: list}
 export def "create-resource-definition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1814,7 +1825,7 @@ export def "create-resource-definition" [
   --initial-version: record # Information about a resource definition version. — shape: {Resources?: list}
   --name: string # The name of the resource definition.
   --tags: record # The key-value pair for the resource tag.
-]: any -> record<Arn: string, CreationTimestamp: string, Id: string, LastUpdatedTimestamp: string, LatestVersion: string, LatestVersionArn: string, Name: string> {
+]: any -> oneof<record<Arn: string, CreationTimestamp: string, Id: string, LastUpdatedTimestamp: string, LatestVersion: string, LatestVersionArn: string, Name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1862,7 +1873,7 @@ export def "list-resource-definitions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Definitions: table<Arn: string, CreationTimestamp: string, Id: string, LastUpdatedTimestamp: string, LatestVersion: string, LatestVersionArn: string, Name: string, Tags: record>, NextToken: string> {
+]: nothing -> oneof<record<Definitions: table<Arn: string, CreationTimestamp: string, Id: string, LastUpdatedTimestamp: string, LatestVersion: string, LatestVersionArn: string, Name: string, Tags: record>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
@@ -1889,7 +1900,6 @@ export def "list-resource-definitions" [
 #
 # POST /greengrass/definition/resources/{ResourceDefinitionId}/versions
 # operationId: CreateResourceDefinitionVersion
-# --Resources item shape: {Id: string, Name: string, ResourceDataContainer: record}
 export def "create-resource-definition-version" [
   resource_definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1910,7 +1920,7 @@ export def "create-resource-definition-version" [
   --x-amz-signed-headers: string
   --x-amzn-client-token: string # A client token used to correlate requests and responses.
   --resources: list # A list of resources. — item shape: {Id: string, Name: string, ResourceDataContainer: record}
-]: any -> record<Arn: string, CreationTimestamp: string, Id: string, Version: string> {
+]: any -> oneof<record<Arn: string, CreationTimestamp: string, Id: string, Version: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1960,7 +1970,7 @@ export def "list-resource-definition-versions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextToken: string, Versions: table<Arn: string, CreationTimestamp: string, Id: string, Version: string>> {
+]: nothing -> oneof<record<NextToken: string, Versions: table<Arn: string, CreationTimestamp: string, Id: string, Version: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_definition_id | is-empty) { error make --unspanned { msg: "path parameter 'ResourceDefinitionId' must be non-empty" } }
@@ -2012,7 +2022,7 @@ export def "create-software-update-job" [
   update_targets: list<string> # The ARNs of the targets (IoT things or IoT thing groups) that this update will be applied to.
   update_targets_architecture: string@update-targets-architecture-completer # The architecture of the cores which are the targets of an update.
   update_targets_operating_system: string@update-targets-operating-system-completer # The operating system of the cores which are the targets of an update.
-]: any -> record<IotJobArn: string, IotJobId: string, PlatformSoftwareVersion: string> {
+]: any -> oneof<record<IotJobArn: string, IotJobId: string, PlatformSoftwareVersion: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2041,7 +2051,6 @@ export def "create-software-update-job" [
 #
 # POST /greengrass/definition/subscriptions
 # operationId: CreateSubscriptionDefinition
-# --InitialVersion shape: {Subscriptions?: list}
 export def "create-subscription-definition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2063,7 +2072,7 @@ export def "create-subscription-definition" [
   --initial-version: record # Information about a subscription definition version. — shape: {Subscriptions?: list}
   --name: string # The name of the subscription definition.
   --tags: record # The key-value pair for the resource tag.
-]: any -> record<Arn: string, CreationTimestamp: string, Id: string, LastUpdatedTimestamp: string, LatestVersion: string, LatestVersionArn: string, Name: string> {
+]: any -> oneof<record<Arn: string, CreationTimestamp: string, Id: string, LastUpdatedTimestamp: string, LatestVersion: string, LatestVersionArn: string, Name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2111,7 +2120,7 @@ export def "list-subscription-definitions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Definitions: table<Arn: string, CreationTimestamp: string, Id: string, LastUpdatedTimestamp: string, LatestVersion: string, LatestVersionArn: string, Name: string, Tags: record>, NextToken: string> {
+]: nothing -> oneof<record<Definitions: table<Arn: string, CreationTimestamp: string, Id: string, LastUpdatedTimestamp: string, LatestVersion: string, LatestVersionArn: string, Name: string, Tags: record>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
@@ -2138,7 +2147,6 @@ export def "list-subscription-definitions" [
 #
 # POST /greengrass/definition/subscriptions/{SubscriptionDefinitionId}/versions
 # operationId: CreateSubscriptionDefinitionVersion
-# --Subscriptions item shape: {Id: string, Source: string, Subject: string, Target: string}
 export def "create-subscription-definition-version" [
   subscription_definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2159,7 +2167,7 @@ export def "create-subscription-definition-version" [
   --x-amz-signed-headers: string
   --x-amzn-client-token: string # A client token used to correlate requests and responses.
   --subscriptions: list # A list of subscriptions. — item shape: {Id: string, Source: string, Subject: string, Target: string}
-]: any -> record<Arn: string, CreationTimestamp: string, Id: string, Version: string> {
+]: any -> oneof<record<Arn: string, CreationTimestamp: string, Id: string, Version: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2209,7 +2217,7 @@ export def "list-subscription-definition-versions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextToken: string, Versions: table<Arn: string, CreationTimestamp: string, Id: string, Version: string>> {
+]: nothing -> oneof<record<NextToken: string, Versions: table<Arn: string, CreationTimestamp: string, Id: string, Version: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_definition_id | is-empty) { error make --unspanned { msg: "path parameter 'SubscriptionDefinitionId' must be non-empty" } }
@@ -2255,7 +2263,7 @@ export def "delete-connector-definition" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($connector_definition_id | is-empty) { error make --unspanned { msg: "path parameter 'ConnectorDefinitionId' must be non-empty" } }
@@ -2300,7 +2308,7 @@ export def "get-connector-definition" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Arn: string, CreationTimestamp: string, Id: string, LastUpdatedTimestamp: string, LatestVersion: string, LatestVersionArn: string, Name: string, tags: record> {
+]: nothing -> oneof<record<Arn: string, CreationTimestamp: string, Id: string, LastUpdatedTimestamp: string, LatestVersion: string, LatestVersionArn: string, Name: string, tags: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($connector_definition_id | is-empty) { error make --unspanned { msg: "path parameter 'ConnectorDefinitionId' must be non-empty" } }
@@ -2346,7 +2354,7 @@ export def "update-connector-definition" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --name: string # The name of the definition.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2394,7 +2402,7 @@ export def "delete-core-definition" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($core_definition_id | is-empty) { error make --unspanned { msg: "path parameter 'CoreDefinitionId' must be non-empty" } }
@@ -2439,7 +2447,7 @@ export def "get-core-definition" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Arn: string, CreationTimestamp: string, Id: string, LastUpdatedTimestamp: string, LatestVersion: string, LatestVersionArn: string, Name: string, tags: record> {
+]: nothing -> oneof<record<Arn: string, CreationTimestamp: string, Id: string, LastUpdatedTimestamp: string, LatestVersion: string, LatestVersionArn: string, Name: string, tags: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($core_definition_id | is-empty) { error make --unspanned { msg: "path parameter 'CoreDefinitionId' must be non-empty" } }
@@ -2485,7 +2493,7 @@ export def "update-core-definition" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --name: string # The name of the definition.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2533,7 +2541,7 @@ export def "delete-device-definition" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($device_definition_id | is-empty) { error make --unspanned { msg: "path parameter 'DeviceDefinitionId' must be non-empty" } }
@@ -2578,7 +2586,7 @@ export def "get-device-definition" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Arn: string, CreationTimestamp: string, Id: string, LastUpdatedTimestamp: string, LatestVersion: string, LatestVersionArn: string, Name: string, tags: record> {
+]: nothing -> oneof<record<Arn: string, CreationTimestamp: string, Id: string, LastUpdatedTimestamp: string, LatestVersion: string, LatestVersionArn: string, Name: string, tags: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($device_definition_id | is-empty) { error make --unspanned { msg: "path parameter 'DeviceDefinitionId' must be non-empty" } }
@@ -2624,7 +2632,7 @@ export def "update-device-definition" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --name: string # The name of the definition.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2672,7 +2680,7 @@ export def "delete-function-definition" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($function_definition_id | is-empty) { error make --unspanned { msg: "path parameter 'FunctionDefinitionId' must be non-empty" } }
@@ -2717,7 +2725,7 @@ export def "get-function-definition" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Arn: string, CreationTimestamp: string, Id: string, LastUpdatedTimestamp: string, LatestVersion: string, LatestVersionArn: string, Name: string, tags: record> {
+]: nothing -> oneof<record<Arn: string, CreationTimestamp: string, Id: string, LastUpdatedTimestamp: string, LatestVersion: string, LatestVersionArn: string, Name: string, tags: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($function_definition_id | is-empty) { error make --unspanned { msg: "path parameter 'FunctionDefinitionId' must be non-empty" } }
@@ -2763,7 +2771,7 @@ export def "update-function-definition" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --name: string # The name of the definition.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2811,7 +2819,7 @@ export def "delete-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'GroupId' must be non-empty" } }
@@ -2856,7 +2864,7 @@ export def "get-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Arn: string, CreationTimestamp: string, Id: string, LastUpdatedTimestamp: string, LatestVersion: string, LatestVersionArn: string, Name: string, tags: record> {
+]: nothing -> oneof<record<Arn: string, CreationTimestamp: string, Id: string, LastUpdatedTimestamp: string, LatestVersion: string, LatestVersionArn: string, Name: string, tags: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'GroupId' must be non-empty" } }
@@ -2902,7 +2910,7 @@ export def "update-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --name: string # The name of the definition.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2950,7 +2958,7 @@ export def "delete-logger-definition" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($logger_definition_id | is-empty) { error make --unspanned { msg: "path parameter 'LoggerDefinitionId' must be non-empty" } }
@@ -2995,7 +3003,7 @@ export def "get-logger-definition" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Arn: string, CreationTimestamp: string, Id: string, LastUpdatedTimestamp: string, LatestVersion: string, LatestVersionArn: string, Name: string, tags: record> {
+]: nothing -> oneof<record<Arn: string, CreationTimestamp: string, Id: string, LastUpdatedTimestamp: string, LatestVersion: string, LatestVersionArn: string, Name: string, tags: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($logger_definition_id | is-empty) { error make --unspanned { msg: "path parameter 'LoggerDefinitionId' must be non-empty" } }
@@ -3041,7 +3049,7 @@ export def "update-logger-definition" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --name: string # The name of the definition.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3089,7 +3097,7 @@ export def "delete-resource-definition" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_definition_id | is-empty) { error make --unspanned { msg: "path parameter 'ResourceDefinitionId' must be non-empty" } }
@@ -3134,7 +3142,7 @@ export def "get-resource-definition" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Arn: string, CreationTimestamp: string, Id: string, LastUpdatedTimestamp: string, LatestVersion: string, LatestVersionArn: string, Name: string, tags: record> {
+]: nothing -> oneof<record<Arn: string, CreationTimestamp: string, Id: string, LastUpdatedTimestamp: string, LatestVersion: string, LatestVersionArn: string, Name: string, tags: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_definition_id | is-empty) { error make --unspanned { msg: "path parameter 'ResourceDefinitionId' must be non-empty" } }
@@ -3180,7 +3188,7 @@ export def "update-resource-definition" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --name: string # The name of the definition.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3228,7 +3236,7 @@ export def "delete-subscription-definition" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_definition_id | is-empty) { error make --unspanned { msg: "path parameter 'SubscriptionDefinitionId' must be non-empty" } }
@@ -3273,7 +3281,7 @@ export def "get-subscription-definition" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Arn: string, CreationTimestamp: string, Id: string, LastUpdatedTimestamp: string, LatestVersion: string, LatestVersionArn: string, Name: string, tags: record> {
+]: nothing -> oneof<record<Arn: string, CreationTimestamp: string, Id: string, LastUpdatedTimestamp: string, LatestVersion: string, LatestVersionArn: string, Name: string, tags: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_definition_id | is-empty) { error make --unspanned { msg: "path parameter 'SubscriptionDefinitionId' must be non-empty" } }
@@ -3319,7 +3327,7 @@ export def "update-subscription-definition" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --name: string # The name of the definition.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3367,7 +3375,7 @@ export def "get-bulk-deployment-status" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<BulkDeploymentMetrics: record<InvalidInputRecords: int, RecordsProcessed: int, RetryAttempts: int>, BulkDeploymentStatus: string, CreatedAt: string, ErrorDetails: table<DetailedErrorCode: string, DetailedErrorMessage: string>, ErrorMessage: string, tags: record> {
+]: nothing -> oneof<record<BulkDeploymentMetrics: record<InvalidInputRecords: int, RecordsProcessed: int, RetryAttempts: int>, BulkDeploymentStatus: string, CreatedAt: string, ErrorDetails: table<DetailedErrorCode: string, DetailedErrorMessage: string>, ErrorMessage: string, tags: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bulk_deployment_id | is-empty) { error make --unspanned { msg: "path parameter 'BulkDeploymentId' must be non-empty" } }
@@ -3412,7 +3420,7 @@ export def "get-connectivity-info" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ConnectivityInfo: table<HostAddress: string, Id: string, Metadata: string, PortNumber: int>, Message: string> {
+]: nothing -> oneof<record<ConnectivityInfo: table<HostAddress: string, Id: string, Metadata: string, PortNumber: int>, Message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($thing_name | is-empty) { error make --unspanned { msg: "path parameter 'ThingName' must be non-empty" } }
@@ -3439,7 +3447,6 @@ export def "get-connectivity-info" [
 #
 # PUT /greengrass/things/{ThingName}/connectivityInfo
 # operationId: UpdateConnectivityInfo
-# --ConnectivityInfo item shape: {HostAddress?: string, Id?: string, Metadata?: string, PortNumber?: int}
 export def "update-connectivity-info" [
   thing_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3459,7 +3466,7 @@ export def "update-connectivity-info" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --connectivity-info: list # A list of connectivity info. — item shape: {HostAddress?: string, Id?: string, Metadata?: string, PortNumber?: int}
-]: any -> record<Message: string, Version: string> {
+]: any -> oneof<record<Message: string, Version: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3509,7 +3516,7 @@ export def "get-connector-definition-version" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Arn: string, CreationTimestamp: string, Definition: record<Connectors: list<record>>, Id: string, NextToken: string, Version: string> {
+]: nothing -> oneof<record<Arn: string, CreationTimestamp: string, Definition: record<Connectors: list<record>>, Id: string, NextToken: string, Version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($connector_definition_id | is-empty) { error make --unspanned { msg: "path parameter 'ConnectorDefinitionId' must be non-empty" } }
@@ -3557,7 +3564,7 @@ export def "get-core-definition-version" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Arn: string, CreationTimestamp: string, Definition: record<Cores: list<record>>, Id: string, NextToken: string, Version: string> {
+]: nothing -> oneof<record<Arn: string, CreationTimestamp: string, Definition: record<Cores: list<record>>, Id: string, NextToken: string, Version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($core_definition_id | is-empty) { error make --unspanned { msg: "path parameter 'CoreDefinitionId' must be non-empty" } }
@@ -3604,7 +3611,7 @@ export def "get-deployment-status" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DeploymentStatus: string, DeploymentType: string, ErrorDetails: table<DetailedErrorCode: string, DetailedErrorMessage: string>, ErrorMessage: string, UpdatedAt: string> {
+]: nothing -> oneof<record<DeploymentStatus: string, DeploymentType: string, ErrorDetails: table<DetailedErrorCode: string, DetailedErrorMessage: string>, ErrorMessage: string, UpdatedAt: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'GroupId' must be non-empty" } }
@@ -3652,7 +3659,7 @@ export def "get-device-definition-version" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Arn: string, CreationTimestamp: string, Definition: record<Devices: list<record>>, Id: string, NextToken: string, Version: string> {
+]: nothing -> oneof<record<Arn: string, CreationTimestamp: string, Definition: record<Devices: list<record>>, Id: string, NextToken: string, Version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($device_definition_id | is-empty) { error make --unspanned { msg: "path parameter 'DeviceDefinitionId' must be non-empty" } }
@@ -3701,7 +3708,7 @@ export def "get-function-definition-version" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Arn: string, CreationTimestamp: string, Definition: record<DefaultConfig: record<Execution: record>, Functions: list<record>>, Id: string, NextToken: string, Version: string> {
+]: nothing -> oneof<record<Arn: string, CreationTimestamp: string, Definition: record<DefaultConfig: record<Execution: record>, Functions: list<record>>, Id: string, NextToken: string, Version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($function_definition_id | is-empty) { error make --unspanned { msg: "path parameter 'FunctionDefinitionId' must be non-empty" } }
@@ -3749,7 +3756,7 @@ export def "get-group-certificate-authority" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<GroupCertificateAuthorityArn: string, GroupCertificateAuthorityId: string, PemEncodedCertificate: string> {
+]: nothing -> oneof<record<GroupCertificateAuthorityArn: string, GroupCertificateAuthorityId: string, PemEncodedCertificate: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'GroupId' must be non-empty" } }
@@ -3795,7 +3802,7 @@ export def "get-group-certificate-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CertificateAuthorityExpiryInMilliseconds: string, CertificateExpiryInMilliseconds: string, GroupId: string> {
+]: nothing -> oneof<record<CertificateAuthorityExpiryInMilliseconds: string, CertificateExpiryInMilliseconds: string, GroupId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'GroupId' must be non-empty" } }
@@ -3841,7 +3848,7 @@ export def "update-group-certificate-configuration" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --certificate-expiry-in-milliseconds: string # The amount of time remaining before the certificate expires, in milliseconds.
-]: any -> record<CertificateAuthorityExpiryInMilliseconds: string, CertificateExpiryInMilliseconds: string, GroupId: string> {
+]: any -> oneof<record<CertificateAuthorityExpiryInMilliseconds: string, CertificateExpiryInMilliseconds: string, GroupId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3890,7 +3897,7 @@ export def "get-group-version" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Arn: string, CreationTimestamp: string, Definition: record<ConnectorDefinitionVersionArn: string, CoreDefinitionVersionArn: string, DeviceDefinitionVersionArn: string, FunctionDefinitionVersionArn: string, LoggerDefinitionVersionArn: string, ResourceDefinitionVersionArn: string, SubscriptionDefinitionVersionArn: string>, Id: string, Version: string> {
+]: nothing -> oneof<record<Arn: string, CreationTimestamp: string, Definition: record<ConnectorDefinitionVersionArn: string, CoreDefinitionVersionArn: string, DeviceDefinitionVersionArn: string, FunctionDefinitionVersionArn: string, LoggerDefinitionVersionArn: string, ResourceDefinitionVersionArn: string, SubscriptionDefinitionVersionArn: string>, Id: string, Version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'GroupId' must be non-empty" } }
@@ -3938,7 +3945,7 @@ export def "get-logger-definition-version" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Arn: string, CreationTimestamp: string, Definition: record<Loggers: list<record>>, Id: string, Version: string> {
+]: nothing -> oneof<record<Arn: string, CreationTimestamp: string, Definition: record<Loggers: list<record>>, Id: string, Version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($logger_definition_id | is-empty) { error make --unspanned { msg: "path parameter 'LoggerDefinitionId' must be non-empty" } }
@@ -3986,7 +3993,7 @@ export def "get-resource-definition-version" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Arn: string, CreationTimestamp: string, Definition: record<Resources: list<record>>, Id: string, Version: string> {
+]: nothing -> oneof<record<Arn: string, CreationTimestamp: string, Definition: record<Resources: list<record>>, Id: string, Version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_definition_id | is-empty) { error make --unspanned { msg: "path parameter 'ResourceDefinitionId' must be non-empty" } }
@@ -4034,7 +4041,7 @@ export def "get-subscription-definition-version" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Arn: string, CreationTimestamp: string, Definition: record<Subscriptions: list<record>>, Id: string, NextToken: string, Version: string> {
+]: nothing -> oneof<record<Arn: string, CreationTimestamp: string, Definition: record<Subscriptions: list<record>>, Id: string, NextToken: string, Version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_definition_id | is-empty) { error make --unspanned { msg: "path parameter 'SubscriptionDefinitionId' must be non-empty" } }
@@ -4081,7 +4088,7 @@ export def "get-thing-runtime-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<RuntimeConfiguration: record<TelemetryConfiguration: record<ConfigurationSyncStatus: string, Telemetry: string>>> {
+]: nothing -> oneof<record<RuntimeConfiguration: record<TelemetryConfiguration: record<ConfigurationSyncStatus: string, Telemetry: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($thing_name | is-empty) { error make --unspanned { msg: "path parameter 'ThingName' must be non-empty" } }
@@ -4108,7 +4115,6 @@ export def "get-thing-runtime-configuration" [
 #
 # PUT /greengrass/things/{ThingName}/runtimeconfig
 # operationId: UpdateThingRuntimeConfiguration
-# --TelemetryConfiguration shape: {Telemetry?: "On"|"Off"}
 export def "update-thing-runtime-configuration" [
   thing_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4128,7 +4134,7 @@ export def "update-thing-runtime-configuration" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --telemetry-configuration: record # Configuration settings for running telemetry. — shape: {Telemetry?: "On"|"Off"}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4178,7 +4184,7 @@ export def "list-bulk-deployment-detailed-reports" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Deployments: table<CreatedAt: string, DeploymentArn: string, DeploymentId: string, DeploymentStatus: string, DeploymentType: string, ErrorDetails: list, ErrorMessage: string, GroupArn: string>, NextToken: string> {
+]: nothing -> oneof<record<Deployments: table<CreatedAt: string, DeploymentArn: string, DeploymentId: string, DeploymentStatus: string, DeploymentType: string, ErrorDetails: list, ErrorMessage: string, GroupArn: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bulk_deployment_id | is-empty) { error make --unspanned { msg: "path parameter 'BulkDeploymentId' must be non-empty" } }
@@ -4225,7 +4231,7 @@ export def "list-bulk-deployments" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<BulkDeployments: table<BulkDeploymentArn: string, BulkDeploymentId: string, CreatedAt: string>, NextToken: string> {
+]: nothing -> oneof<record<BulkDeployments: table<BulkDeploymentArn: string, BulkDeploymentId: string, CreatedAt: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
@@ -4273,7 +4279,7 @@ export def "start-bulk-deployment" [
   execution_role_arn: string # The ARN of the execution role to associate with the bulk deployment operation. This IAM role must allow the ''greengrass:CreateDeployment'' action for all group versions that are listed in the input file. This IAM role must have access to the S3 bucket containing the input file.
   input_file_uri: string # The URI of the input file contained in the S3 bucket. The execution role must have ''getObject'' permissions on this bucket to access the input file. The input file is a JSON-serialized, line delimited file with UTF-8 encoding that provides a list of group and version IDs and the deployment type. This file must be less than 100 MB. Currently, AWS IoT Greengrass supports only ''NewDeployment'' deployment types.
   --tags: record # The key-value pair for the resource tag.
-]: any -> record<BulkDeploymentArn: string, BulkDeploymentId: string> {
+]: any -> oneof<record<BulkDeploymentArn: string, BulkDeploymentId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4320,7 +4326,7 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<tags: record> {
+]: nothing -> oneof<record<tags: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resource-arn' must be non-empty" } }
@@ -4416,7 +4422,7 @@ export def "reset-deployments" [
   --x-amz-signed-headers: string
   --x-amzn-client-token: string # A client token used to correlate requests and responses.
   --force: oneof<nothing, bool> # If true, performs a best-effort only core reset.
-]: any -> record<DeploymentArn: string, DeploymentId: string> {
+]: any -> oneof<record<DeploymentArn: string, DeploymentId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4464,7 +4470,7 @@ export def "stop-bulk-deployment" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bulk_deployment_id | is-empty) { error make --unspanned { msg: "path parameter 'BulkDeploymentId' must be non-empty" } }

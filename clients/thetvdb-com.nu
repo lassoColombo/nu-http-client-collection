@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "jwt" => { {scheme: $scheme, headers: {"Authorization": $"JWT ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,12 +111,13 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # HEAD — bodyless; default surfaces just the headers on success
 def send-head [req: record, insecure: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = (http head --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure $req.url)
+  let resp = http head --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure $req.url
   if (not $full) and (not $allow_errors) and (status-ok $resp.status $ok_codes) { return $resp.headers }
   $resp | handle-response $allow_errors $full $ok_codes
 }
@@ -123,9 +147,9 @@ def auth-scheme-completer [] { ["jwt"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-episodes-id" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-episodes-id" "get-languages" "get-languages-id" "post-login" "get-movies-id" "get-movieupdates" "get-refresh-token" "get-search-series" "get-search-series-params" "get-series-id" "head-series-id" "get-series-id-actors" "get-series-id-episodes" "get-series-id-episodes-query" "get-series-id-episodes-query-params" "get-series-id-episodes-summary" "get-series-id-filter" "get-series-id-filter-params" "get-series-id-images" "get-series-id-images-query" "get-series-id-images-query-params" "get-updated-query" "get-updated-query-params" "get-user" "get-user-favorites" "delete-user-favorites-id" "put-user-favorites-id" "get-user-ratings" "get-user-ratings-query" "get-user-ratings-query-params" "delete-user-ratings-item-type-item-id" "put-user-ratings-item-type-item-id-item-rating" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -158,7 +182,7 @@ export def "get-episodes-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string # Records are returned with the some fields in the desired language, if it exists. If there is no translation for the given language, then the record is still returned but with empty values for the translated fields.
-]: nothing -> record<data: record<absoluteNumber: int, airedEpisodeNumber: int, airedSeason: int, airsAfterSeason: int, airsBeforeEpisode: int, airsBeforeSeason: int, director: string, directors: list<string>, dvdChapter: float, dvdDiscid: string, dvdEpisodeNumber: float, dvdSeason: int, episodeName: string, filename: string, firstAired: string, guestStars: list<string>, id: int, imdbId: string, lastUpdated: int, lastUpdatedBy: string, overview: string, productionCode: string, seriesId: string, showUrl: string, siteRating: float, siteRatingCount: int, thumbAdded: string, thumbAuthor: int, thumbHeight: string, thumbWidth: string, writers: list<string>>, errors: record<invalidFilters: list<string>, invalidLanguage: string, invalidQueryParams: list<string>>> {
+]: nothing -> oneof<record<data: record<absoluteNumber: int, airedEpisodeNumber: int, airedSeason: int, airsAfterSeason: int, airsBeforeEpisode: int, airsBeforeSeason: int, director: string, directors: list<string>, dvdChapter: float, dvdDiscid: string, dvdEpisodeNumber: float, dvdSeason: int, episodeName: string, filename: string, firstAired: string, guestStars: list<string>, id: int, imdbId: string, lastUpdated: int, lastUpdatedBy: string, overview: string, productionCode: string, seriesId: string, showUrl: string, siteRating: float, siteRatingCount: int, thumbAdded: string, thumbAuthor: int, thumbHeight: string, thumbWidth: string, writers: list<string>>, errors: record<invalidFilters: list<string>, invalidLanguage: string, invalidQueryParams: list<string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -194,7 +218,7 @@ export def "get-languages" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<abbreviation: string, englishName: string, id: int, name: string>> {
+]: nothing -> oneof<record<data: table<abbreviation: string, englishName: string, id: int, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/languages" $auth.query)
@@ -228,7 +252,7 @@ export def "get-languages-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<abbreviation: string, englishName: string, id: int, name: string> {
+]: nothing -> oneof<record<abbreviation: string, englishName: string, id: int, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -265,7 +289,7 @@ export def "post-login" [
   --apikey: string
   --userkey: string
   --username: string
-]: any -> record<token: string> {
+]: any -> oneof<record<token: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
@@ -303,7 +327,7 @@ export def "get-movies-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string # Records are returned with the some fields in the desired language, if it exists. If there is no translation for the given language, then the record is still returned but with empty values for the translated fields.
-]: nothing -> record<artworks: table<artwork_type: string, height: int, id: string, is_primary: bool, tags: string, thumb_url: string, url: string, width: int>, genres: table<id: int, name: string, url: string>, id: int, people: record<actors: list<record>, directors: list<record>, producers: list<record>, writers: list<record>>, release_dates: table<country: string, date: string, type: string>, remoteids: table<id: string, source_id: int, source_name: string, source_url: string, url: string>, runtime: int, trailers: table<name: string, url: string>, translations: table<is_primary: bool, language_code: string, name: string, overview: string, tagline: string>, url: string> {
+]: nothing -> oneof<record<artworks: table<artwork_type: string, height: int, id: string, is_primary: bool, tags: string, thumb_url: string, url: string, width: int>, genres: table<id: int, name: string, url: string>, id: int, people: record<actors: list<record>, directors: list<record>, producers: list<record>, writers: list<record>>, release_dates: table<country: string, date: string, type: string>, remoteids: table<id: string, source_id: int, source_name: string, source_url: string, url: string>, runtime: int, trailers: table<name: string, url: string>, translations: table<is_primary: bool, language_code: string, name: string, overview: string, tagline: string>, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -340,7 +364,7 @@ export def "get-movieupdates" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --since: string # Epoch time to start your date range. (required)
-]: nothing -> record<movies: list<int>> {
+]: nothing -> oneof<record<movies: list<int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($since == null) { error make --unspanned { msg: "required query parameter 'since' missing: pass --since" } }
@@ -375,7 +399,7 @@ export def "get-refresh-token" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<token: string> {
+]: nothing -> oneof<record<token: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/refresh_token" $auth.query)
@@ -413,7 +437,7 @@ export def "get-search-series" [
   --zap2it-id: string # Zap2it ID of the series to search for.
   --slug: string # Slug from site URL of series (https://www.thetvdb.com/series/$SLUG)
   --accept-language: string # Records are returned with the some fields in the desired language, if it exists. If there is no translation for the given language, then the record is still returned but with empty values for the translated fields.
-]: nothing -> record<data: table<aliases: list, banner: string, firstAired: string, id: int, image: string, network: string, overview: string, poster: string, seriesName: string, slug: string, status: string>> {
+]: nothing -> oneof<record<data: table<aliases: list, banner: string, firstAired: string, id: int, image: string, network: string, overview: string, poster: string, seriesName: string, slug: string, status: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "imdbId" $imdb_id "scalar") (serialize-qp "zap2itId" $zap2it_id "scalar") (serialize-qp "slug" $slug "scalar")] | flatten | str join "&"
@@ -449,7 +473,7 @@ export def "get-search-series-params" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: list<string>> {
+]: nothing -> oneof<record<data: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/search/series/params" $auth.query)
@@ -484,7 +508,7 @@ export def "get-series-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string # Records are returned with the some fields in the desired language, if it exists. If there is no translation for the given language, then the record is still returned but with empty values for the translated fields.
-]: nothing -> record<data: record<added: string, airsDayOfWeek: string, airsTime: string, aliases: list<string>, banner: string, firstAired: string, genre: list<string>, id: int, imdbId: string, lastUpdated: int, network: string, networkId: string, overview: string, rating: string, runtime: string, seriesId: string, seriesName: string, siteRating: float, siteRatingCount: int, slug: string, status: string, zap2itId: string>, errors: record<invalidFilters: list<string>, invalidLanguage: string, invalidQueryParams: list<string>>> {
+]: nothing -> oneof<record<data: record<added: string, airsDayOfWeek: string, airsTime: string, aliases: list<string>, banner: string, firstAired: string, genre: list<string>, id: int, imdbId: string, lastUpdated: int, network: string, networkId: string, overview: string, rating: string, runtime: string, seriesId: string, seriesName: string, siteRating: float, siteRatingCount: int, slug: string, status: string, zap2itId: string>, errors: record<invalidFilters: list<string>, invalidLanguage: string, invalidQueryParams: list<string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -522,7 +546,7 @@ export def "head-series-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string # Records are returned with the some fields in the desired language, if it exists. If there is no translation for the given language, then the record is still returned but with empty values for the translated fields.
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -559,7 +583,7 @@ export def "get-series-id-actors" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<id: int, image: string, imageAdded: string, imageAuthor: int, lastUpdated: string, name: string, role: string, seriesId: int, sortOrder: int>, errors: record<invalidFilters: list<string>, invalidLanguage: string, invalidQueryParams: list<string>>> {
+]: nothing -> oneof<record<data: table<id: int, image: string, imageAdded: string, imageAuthor: int, lastUpdated: string, name: string, role: string, seriesId: int, sortOrder: int>, errors: record<invalidFilters: list<string>, invalidLanguage: string, invalidQueryParams: list<string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -595,7 +619,7 @@ export def "get-series-id-episodes" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: string # Page of results to fetch. Defaults to page 1 if not provided.
-]: nothing -> record<data: table<absoluteNumber: int, airedEpisodeNumber: int, airedSeason: int, airsAfterSeason: int, airsBeforeEpisode: int, airsBeforeSeason: int, director: string, directors: list, dvdChapter: float, dvdDiscid: string, dvdEpisodeNumber: float, dvdSeason: int, episodeName: string, filename: string, firstAired: string, guestStars: list, id: int, imdbId: string, lastUpdated: int, lastUpdatedBy: string, overview: string, productionCode: string, seriesId: string, showUrl: string, siteRating: float, siteRatingCount: int, thumbAdded: string, thumbAuthor: int, thumbHeight: string, thumbWidth: string, writers: list>, errors: record<invalidFilters: list<string>, invalidLanguage: string, invalidQueryParams: list<string>>, links: record<first: int, last: int, next: int, previous: int>> {
+]: nothing -> oneof<record<data: table<absoluteNumber: int, airedEpisodeNumber: int, airedSeason: int, airsAfterSeason: int, airsBeforeEpisode: int, airsBeforeSeason: int, director: string, directors: list, dvdChapter: float, dvdDiscid: string, dvdEpisodeNumber: float, dvdSeason: int, episodeName: string, filename: string, firstAired: string, guestStars: list, id: int, imdbId: string, lastUpdated: int, lastUpdatedBy: string, overview: string, productionCode: string, seriesId: string, showUrl: string, siteRating: float, siteRatingCount: int, thumbAdded: string, thumbAuthor: int, thumbHeight: string, thumbWidth: string, writers: list>, errors: record<invalidFilters: list<string>, invalidLanguage: string, invalidQueryParams: list<string>>, links: record<first: int, last: int, next: int, previous: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -639,7 +663,7 @@ export def "get-series-id-episodes-query" [
   --imdb-id: string # IMDB id of the series
   --page: string # Page of results to fetch. Defaults to page 1 if not provided.
   --accept-language: string # Records are returned with the some fields in the desired language, if it exists. If there is no translation for the given language, then the record is still returned but with empty values for the translated fields.
-]: nothing -> record<data: table<absoluteNumber: int, airedEpisodeNumber: int, airedSeason: int, airsAfterSeason: int, airsBeforeEpisode: int, airsBeforeSeason: int, director: string, directors: list, dvdChapter: float, dvdDiscid: string, dvdEpisodeNumber: float, dvdSeason: int, episodeName: string, filename: string, firstAired: string, guestStars: list, id: int, imdbId: string, lastUpdated: int, lastUpdatedBy: string, overview: string, productionCode: string, seriesId: string, showUrl: string, siteRating: float, siteRatingCount: int, thumbAdded: string, thumbAuthor: int, thumbHeight: string, thumbWidth: string, writers: list>, errors: record<invalidFilters: list<string>, invalidLanguage: string, invalidQueryParams: list<string>>, links: record<first: int, last: int, next: int, previous: int>> {
+]: nothing -> oneof<record<data: table<absoluteNumber: int, airedEpisodeNumber: int, airedSeason: int, airsAfterSeason: int, airsBeforeEpisode: int, airsBeforeSeason: int, director: string, directors: list, dvdChapter: float, dvdDiscid: string, dvdEpisodeNumber: float, dvdSeason: int, episodeName: string, filename: string, firstAired: string, guestStars: list, id: int, imdbId: string, lastUpdated: int, lastUpdatedBy: string, overview: string, productionCode: string, seriesId: string, showUrl: string, siteRating: float, siteRatingCount: int, thumbAdded: string, thumbAuthor: int, thumbHeight: string, thumbWidth: string, writers: list>, errors: record<invalidFilters: list<string>, invalidLanguage: string, invalidQueryParams: list<string>>, links: record<first: int, last: int, next: int, previous: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -677,7 +701,7 @@ export def "get-series-id-episodes-query-params" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: list<string>> {
+]: nothing -> oneof<record<data: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -712,7 +736,7 @@ export def "get-series-id-episodes-summary" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<airedEpisodes: string, airedSeasons: list<string>, dvdEpisodes: string, dvdSeasons: list<string>> {
+]: nothing -> oneof<record<airedEpisodes: string, airedSeasons: list<string>, dvdEpisodes: string, dvdSeasons: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -749,7 +773,7 @@ export def "get-series-id-filter" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --keys: string # Comma-separated list of keys to filter by (required)
   --accept-language: string # Records are returned with the some fields in the desired language, if it exists. If there is no translation for the given language, then the record is still returned but with empty values for the translated fields.
-]: nothing -> record<data: record<added: string, airsDayOfWeek: string, airsTime: string, aliases: list<string>, banner: string, firstAired: string, genre: list<string>, id: int, imdbId: string, lastUpdated: int, network: string, networkId: string, overview: string, rating: string, runtime: string, seriesId: string, seriesName: string, siteRating: float, siteRatingCount: int, slug: string, status: string, zap2itId: string>, errors: record<invalidFilters: list<string>, invalidLanguage: string, invalidQueryParams: list<string>>> {
+]: nothing -> oneof<record<data: record<added: string, airsDayOfWeek: string, airsTime: string, aliases: list<string>, banner: string, firstAired: string, genre: list<string>, id: int, imdbId: string, lastUpdated: int, network: string, networkId: string, overview: string, rating: string, runtime: string, seriesId: string, seriesName: string, siteRating: float, siteRatingCount: int, slug: string, status: string, zap2itId: string>, errors: record<invalidFilters: list<string>, invalidLanguage: string, invalidQueryParams: list<string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -789,7 +813,7 @@ export def "get-series-id-filter-params" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string # Records are returned with the some fields in the desired language, if it exists. If there is no translation for the given language, then the record is still returned but with empty values for the translated fields.
-]: nothing -> record<data: list<string>> {
+]: nothing -> oneof<record<data: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -827,7 +851,7 @@ export def "get-series-id-images" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string # Records are returned with the some fields in the desired language, if it exists. If there is no translation for the given language, then the record is still returned but with empty values for the translated fields.
-]: nothing -> record<data: record<fanart: int, poster: int, season: int, seasonwide: int, series: int>> {
+]: nothing -> oneof<record<data: record<fanart: int, poster: int, season: int, seasonwide: int, series: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -868,7 +892,7 @@ export def "get-series-id-images-query" [
   --resolution: string # Resolution to filter by (1280x1024, for example)
   --sub-key: string # Subkey for the above query keys. See /series/{id}/images/query/params for more information
   --accept-language: string # Records are returned with the some fields in the desired language, if it exists. If there is no translation for the given language, then the record is still returned but with empty values for the translated fields.
-]: nothing -> record<data: table<fileName: string, id: int, keyType: string, languageId: int, ratingsInfo: record, resolution: string, subKey: string, thumbnail: string>, errors: record<invalidFilters: list<string>, invalidLanguage: string, invalidQueryParams: list<string>>> {
+]: nothing -> oneof<record<data: table<fileName: string, id: int, keyType: string, languageId: int, ratingsInfo: record, resolution: string, subKey: string, thumbnail: string>, errors: record<invalidFilters: list<string>, invalidLanguage: string, invalidQueryParams: list<string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -907,7 +931,7 @@ export def "get-series-id-images-query-params" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string # Records are returned with the some fields in the desired language, if it exists. If there is no translation for the given language, then the record is still returned but with empty values for the translated fields.
-]: nothing -> record<data: table<keyType: string, languageId: string, resolution: list, subKey: list>> {
+]: nothing -> oneof<record<data: table<keyType: string, languageId: string, resolution: list, subKey: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -946,7 +970,7 @@ export def "get-updated-query" [
   --from-time: string # Epoch time to start your date range. (required)
   --to-time: string # Epoch time to end your date range. Must be one week from `fromTime`.
   --accept-language: string # Records are returned with the some fields in the desired language, if it exists. If there is no translation for the given language, then the record is still returned but with empty values for the translated fields.
-]: nothing -> record<data: table<id: int, lastUpdated: int>, errors: record<invalidFilters: list<string>, invalidLanguage: string, invalidQueryParams: list<string>>> {
+]: nothing -> oneof<record<data: table<id: int, lastUpdated: int>, errors: record<invalidFilters: list<string>, invalidLanguage: string, invalidQueryParams: list<string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($from_time == null) { error make --unspanned { msg: "required query parameter 'fromTime' missing: pass --from-time" } }
@@ -983,7 +1007,7 @@ export def "get-updated-query-params" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: list<string>> {
+]: nothing -> oneof<record<data: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/updated/query/params" $auth.query)
@@ -1016,7 +1040,7 @@ export def "get-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<favoritesDisplaymode: string, language: string, userName: string>> {
+]: nothing -> oneof<record<data: record<favoritesDisplaymode: string, language: string, userName: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user" $auth.query)
@@ -1049,7 +1073,7 @@ export def "get-user-favorites" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<favorites: list<string>>, errors: record<invalidFilters: list<string>, invalidLanguage: string, invalidQueryParams: list<string>>> {
+]: nothing -> oneof<record<data: record<favorites: list<string>>, errors: record<invalidFilters: list<string>, invalidLanguage: string, invalidQueryParams: list<string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/favorites" $auth.query)
@@ -1083,7 +1107,7 @@ export def "delete-user-favorites-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<favorites: list<string>>, errors: record<invalidFilters: list<string>, invalidLanguage: string, invalidQueryParams: list<string>>> {
+]: nothing -> oneof<record<data: record<favorites: list<string>>, errors: record<invalidFilters: list<string>, invalidLanguage: string, invalidQueryParams: list<string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1118,7 +1142,7 @@ export def "put-user-favorites-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<favorites: list<string>>, errors: record<invalidFilters: list<string>, invalidLanguage: string, invalidQueryParams: list<string>>> {
+]: nothing -> oneof<record<data: record<favorites: list<string>>, errors: record<invalidFilters: list<string>, invalidLanguage: string, invalidQueryParams: list<string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1152,7 +1176,7 @@ export def "get-user-ratings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<rating: int, ratingItemId: int, ratingType: string>, errors: record<invalidFilters: list<string>, invalidLanguage: string, invalidQueryParams: list<string>>, links: record<first: int, last: int, next: int, previous: int>> {
+]: nothing -> oneof<record<data: table<rating: int, ratingItemId: int, ratingType: string>, errors: record<invalidFilters: list<string>, invalidLanguage: string, invalidQueryParams: list<string>>, links: record<first: int, last: int, next: int, previous: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/ratings" $auth.query)
@@ -1186,7 +1210,7 @@ export def "get-user-ratings-query" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --item-type: string # Item to query. Can be either 'series', 'episode', or 'banner' (format: string)
-]: nothing -> record<data: table<rating: int, ratingItemId: int, ratingType: string>, errors: record<invalidFilters: list<string>, invalidLanguage: string, invalidQueryParams: list<string>>, links: record<first: int, last: int, next: int, previous: int>> {
+]: nothing -> oneof<record<data: table<rating: int, ratingItemId: int, ratingType: string>, errors: record<invalidFilters: list<string>, invalidLanguage: string, invalidQueryParams: list<string>>, links: record<first: int, last: int, next: int, previous: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "itemType" $item_type "scalar")] | flatten | str join "&"
@@ -1220,7 +1244,7 @@ export def "get-user-ratings-query-params" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: list<string>> {
+]: nothing -> oneof<record<data: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/ratings/query/params" $auth.query)
@@ -1255,7 +1279,7 @@ export def "delete-user-ratings-item-type-item-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: list<any>> {
+]: nothing -> oneof<record<data: list<any>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($item_type | is-empty) { error make --unspanned { msg: "path parameter 'itemType' must be non-empty" } }
@@ -1293,7 +1317,7 @@ export def "put-user-ratings-item-type-item-id-item-rating" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<rating: int, ratingItemId: int, ratingType: string>> {
+]: nothing -> oneof<record<data: table<rating: int, ratingItemId: int, ratingType: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($item_type | is-empty) { error make --unspanned { msg: "path parameter 'itemType' must be non-empty" } }

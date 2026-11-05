@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -139,9 +163,9 @@ def resource-type-completer-1 [] { ["SidewalkAccount" "WirelessDevice" "Wireless
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "associate-aws-account-with-partner-account" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["associate-aws-account-with-partner-account" "list-partner-accounts" "associate-multicast-group-with-fuota-task" "associate-wireless-device-with-fuota-task" "associate-wireless-device-with-multicast-group" "associate-wireless-device-with-thing" "disassociate-wireless-device-from-thing" "associate-wireless-gateway-with-certificate" "disassociate-wireless-gateway-from-certificate" "get-wireless-gateway-certificate" "associate-wireless-gateway-with-thing" "disassociate-wireless-gateway-from-thing" "cancel-multicast-group-session" "get-multicast-group-session" "start-multicast-group-session" "create-destination" "list-destinations" "create-device-profile" "list-device-profiles" "create-fuota-task" "list-fuota-tasks" "create-multicast-group" "list-multicast-groups" "create-network-analyzer-configuration" "list-network-analyzer-configurations" "create-service-profile" "list-service-profiles" "create-wireless-device" "list-wireless-devices" "create-wireless-gateway" "list-wireless-gateways" "create-wireless-gateway-task" "delete-wireless-gateway-task" "get-wireless-gateway-task" "create-wireless-gateway-task-definition" "list-wireless-gateway-task-definitions" "delete-destination" "get-destination" "update-destination" "delete-device-profile" "get-device-profile" "delete-fuota-task" "get-fuota-task" "start-fuota-task" "update-fuota-task" "delete-multicast-group" "get-multicast-group" "update-multicast-group" "delete-network-analyzer-configuration" "get-network-analyzer-configuration" "update-network-analyzer-configuration" "delete-queued-messages" "delete-service-profile" "get-service-profile" "delete-wireless-device" "update-wireless-device" "delete-wireless-device-import-task" "get-wireless-device-import-task" "update-wireless-device-import-task" "delete-wireless-gateway" "update-wireless-gateway" "delete-wireless-gateway-task-definition" "get-wireless-gateway-task-definition" "deregister-wireless-device" "disassociate-aws-account-from-partner-account" "get-partner-account" "update-partner-account" "disassociate-multicast-group-from-fuota-task" "disassociate-wireless-device-from-fuota-task" "disassociate-wireless-device-from-multicast-group" "get-event-configuration-by-resource-types" "update-event-configuration-by-resource-types" "get-log-levels-by-resource-types" "reset-all-resource-log-levels" "update-log-levels-by-resource-types" "get-position" "update-position" "get-position-configuration" "put-position-configuration" "get-position-estimate" "get-resource-event-configuration" "update-resource-event-configuration" "get-resource-log-level" "put-resource-log-level" "reset-resource-log-level" "get-resource-position" "update-resource-position" "get-service-endpoint" "get-wireless-device" "get-wireless-device-statistics" "get-wireless-gateway" "get-wireless-gateway-firmware-information" "get-wireless-gateway-statistics" "list-devices-for-wireless-device-import-task" "list-event-configurations" "list-multicast-groups-by-fuota-task" "list-position-configurations" "list-queued-messages" "send-data-to-wireless-device" "list-tags-for-resource" "tag-resource" "list-wireless-device-import-tasks" "send-data-to-multicast-group" "start-bulk-associate-wireless-device-with-multicast-group" "start-bulk-disassociate-wireless-device-from-multicast-group" "start-single-wireless-device-import-task" "start-wireless-device-import-task" "test-wireless-device" "untag-resource" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -163,8 +187,6 @@ export def commands []: nothing -> table {
 #
 # POST /partner-accounts
 # operationId: AssociateAwsAccountWithPartnerAccount
-# --Sidewalk shape: {AmazonId?: string, AppServerPrivateKey?: string}
-# --Tags item shape: {Key: string, Value: string}
 export def "associate-aws-account-with-partner-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -185,7 +207,7 @@ export def "associate-aws-account-with-partner-account" [
   sidewalk: record # Information about a Sidewalk account. — shape: {AmazonId?: string, AppServerPrivateKey?: string}
   --client-request-token: string # Each resource must have a unique client request token. If you try to create a new resource with the same token as a resource that already exists, an exception occurs. If you omit this value, AWS SDKs will automatically generate a unique client request.
   --tags: list # The tag to attach to the specified resource. Tags are metadata that you can use to manage a resource. — item shape: {Key: string, Value: string}
-]: any -> record<Sidewalk: record<AmazonId: string, AppServerPrivateKey: string>, Arn: string> {
+]: any -> oneof<record<Sidewalk: record<AmazonId: string, AppServerPrivateKey: string>, Arn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -233,7 +255,7 @@ export def "list-partner-accounts" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextToken: string, Sidewalk: table<AmazonId: string, Fingerprint: string, Arn: string>> {
+]: nothing -> oneof<record<NextToken: string, Sidewalk: table<AmazonId: string, Fingerprint: string, Arn: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
@@ -279,7 +301,7 @@ export def "associate-multicast-group-with-fuota-task" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   multicast_group_id: string # The ID of the multicast group.
-]: any -> any {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -328,7 +350,7 @@ export def "associate-wireless-device-with-fuota-task" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   wireless_device_id: string # The ID of the wireless device.
-]: any -> any {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -377,7 +399,7 @@ export def "associate-wireless-device-with-multicast-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   wireless_device_id: string # The ID of the wireless device.
-]: any -> any {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -426,7 +448,7 @@ export def "associate-wireless-device-with-thing" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   thing_arn: string # The ARN of the thing to associate with the wireless device.
-]: any -> any {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -474,7 +496,7 @@ export def "disassociate-wireless-device-from-thing" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -520,7 +542,7 @@ export def "associate-wireless-gateway-with-certificate" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   iot_certificate_id: string # The ID of the certificate to associate with the wireless gateway.
-]: any -> record<IotCertificateId: string> {
+]: any -> oneof<record<IotCertificateId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -568,7 +590,7 @@ export def "disassociate-wireless-gateway-from-certificate" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -613,7 +635,7 @@ export def "get-wireless-gateway-certificate" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<IotCertificateId: string, LoRaWANNetworkServerCertificateId: string> {
+]: nothing -> oneof<record<IotCertificateId: string, LoRaWANNetworkServerCertificateId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -659,7 +681,7 @@ export def "associate-wireless-gateway-with-thing" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   thing_arn: string # The ARN of the thing to associate with the wireless gateway.
-]: any -> any {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -707,7 +729,7 @@ export def "disassociate-wireless-gateway-from-thing" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -752,7 +774,7 @@ export def "cancel-multicast-group-session" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -797,7 +819,7 @@ export def "get-multicast-group-session" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<LoRaWAN: record<DlDr: int, DlFreq: int, SessionStartTime: string, SessionTimeout: int, PingSlotPeriod: int>> {
+]: nothing -> oneof<record<LoRaWAN: record<DlDr: int, DlFreq: int, SessionStartTime: string, SessionTimeout: int, PingSlotPeriod: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -824,7 +846,6 @@ export def "get-multicast-group-session" [
 #
 # PUT /multicast-groups/{Id}/session
 # operationId: StartMulticastGroupSession
-# --LoRaWAN shape: {DlDr?: int, DlFreq?: int, SessionStartTime?: string, SessionTimeout?: int, PingSlotPeriod?: int}
 export def "start-multicast-group-session" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -844,7 +865,7 @@ export def "start-multicast-group-session" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   lo_ra_wan: record # The LoRaWAN information used with the multicast session. — shape: {DlDr?: int, DlFreq?: int, SessionStartTime?: string, SessionTimeout?: int, PingSlotPeriod?: int}
-]: any -> any {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -874,7 +895,6 @@ export def "start-multicast-group-session" [
 #
 # POST /destinations
 # operationId: CreateDestination
-# --Tags item shape: {Key: string, Value: string}
 export def "create-destination" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -899,7 +919,7 @@ export def "create-destination" [
   role_arn: string # The ARN of the IAM Role that authorizes the destination.
   --tags: list # The tag to attach to the specified resource. Tags are metadata that you can use to manage a resource. — item shape: {Key: string, Value: string}
   --client-request-token: string # Each resource must have a unique client request token. If you try to create a new resource with the same token as a resource that already exists, an exception occurs. If you omit this value, AWS SDKs will automatically generate a unique client request.
-]: any -> record<Arn: string, Name: string> {
+]: any -> oneof<record<Arn: string, Name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -949,7 +969,7 @@ export def "list-destinations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextToken: string, DestinationList: table<Arn: string, Name: string, ExpressionType: string, Expression: string, Description: string, RoleArn: string>> {
+]: nothing -> oneof<record<NextToken: string, DestinationList: table<Arn: string, Name: string, ExpressionType: string, Expression: string, Description: string, RoleArn: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -976,8 +996,6 @@ export def "list-destinations" [
 #
 # POST /device-profiles
 # operationId: CreateDeviceProfile
-# --LoRaWAN shape: {SupportsClassB?: bool, ClassBTimeout?: int, PingSlotPeriod?: int, PingSlotDr?: int, PingSlotFreq?: int, SupportsClassC?: bool, ClassCTimeout?: int, MacVersion?: string, RegParamsRevision?: string, RxDelay1?: int, RxDrOffset1?: int, RxDataRate2?: int, RxFreq2?: int, FactoryPresetFreqsList?: list<int>, MaxEirp?: int, MaxDutyCycle?: int, RfRegion?: string, SupportsJoin?: bool, Supports32BitFCnt?: bool}
-# --Tags item shape: {Key: string, Value: string}
 export def "create-device-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1000,7 +1018,7 @@ export def "create-device-profile" [
   --tags: list # The tag to attach to the specified resource. Tags are metadata that you can use to manage a resource. — item shape: {Key: string, Value: string}
   --client-request-token: string # Each resource must have a unique client request token. If you try to create a new resource with the same token as a resource that already exists, an exception occurs. If you omit this value, AWS SDKs will automatically generate a unique client request.
   --sidewalk: record # Sidewalk object for creating a device profile.
-]: any -> record<Arn: string, Id: string> {
+]: any -> oneof<record<Arn: string, Id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1051,7 +1069,7 @@ export def "list-device-profiles" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextToken: string, DeviceProfileList: table<Arn: string, Name: string, Id: string>> {
+]: nothing -> oneof<record<NextToken: string, DeviceProfileList: table<Arn: string, Name: string, Id: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "deviceProfileType" $device_profile_type "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -1078,8 +1096,6 @@ export def "list-device-profiles" [
 #
 # POST /fuota-tasks
 # operationId: CreateFuotaTask
-# --LoRaWAN shape: {RfRegion?: "EU868"|"US915"|"AU915"|"AS923-1"|"AS923-2"|"AS923-3"|"AS923-4"|"EU433"|"CN470"|"CN779"|"RU864"|"KR920"|"IN865"}
-# --Tags item shape: {Key: string, Value: string}
 export def "create-fuota-task" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1107,7 +1123,7 @@ export def "create-fuota-task" [
   --redundancy-percent: int # The percentage of added redundant fragments. For example, if firmware file is 100 bytes and fragment size is 10 bytes, with RedundancyPercent set to 50(%), the final number of encoded fragments is (100 / 10) + (100 / 10 * 50%) = 15.
   --fragment-size-bytes: int # The size of each fragment in bytes. Currently only supported in fuota tasks with multicast groups.
   --fragment-interval-ms: int # The interval of sending fragments in milliseconds. Currently the interval will be rounded to the nearest second. Note that this interval only controls the timing when the cloud sends the fragments down. The actual delay of receiving fragments at device side depends on the device's class and the communication delay with the cloud.
-]: any -> record<Arn: string, Id: string> {
+]: any -> oneof<record<Arn: string, Id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1157,7 +1173,7 @@ export def "list-fuota-tasks" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextToken: string, FuotaTaskList: table<Id: string, Arn: string, Name: string>> {
+]: nothing -> oneof<record<NextToken: string, FuotaTaskList: table<Id: string, Arn: string, Name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -1184,8 +1200,6 @@ export def "list-fuota-tasks" [
 #
 # POST /multicast-groups
 # operationId: CreateMulticastGroup
-# --LoRaWAN shape: {RfRegion?: "EU868"|"US915"|"AU915"|"AS923-1"|"AS923-2"|"AS923-3"|"AS923-4"|"EU433"|"CN470"|"CN779"|"RU864"|"KR920"|"IN865", DlClass?: "ClassB"|"ClassC"}
-# --Tags item shape: {Key: string, Value: string}
 export def "create-multicast-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1208,7 +1222,7 @@ export def "create-multicast-group" [
   --client-request-token: string # Each resource must have a unique client request token. If you try to create a new resource with the same token as a resource that already exists, an exception occurs. If you omit this value, AWS SDKs will automatically generate a unique client request.
   lo_ra_wan: record # The LoRaWAN information that is to be used with the multicast group. — shape: {RfRegion?: "EU868"|"US915"|"AU915"|"AS923-1"|"AS923-2"|"AS923-3"|"AS923-4"|"EU433"|"CN470"|"CN779"|"RU864"|"KR920"|"IN865", DlClass?: "ClassB"|"ClassC"}
   --tags: list # The tag to attach to the specified resource. Tags are metadata that you can use to manage a resource. — item shape: {Key: string, Value: string}
-]: any -> record<Arn: string, Id: string> {
+]: any -> oneof<record<Arn: string, Id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1258,7 +1272,7 @@ export def "list-multicast-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextToken: string, MulticastGroupList: table<Id: string, Arn: string, Name: string>> {
+]: nothing -> oneof<record<NextToken: string, MulticastGroupList: table<Id: string, Arn: string, Name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -1285,8 +1299,6 @@ export def "list-multicast-groups" [
 #
 # POST /network-analyzer-configurations
 # operationId: CreateNetworkAnalyzerConfiguration
-# --TraceContent shape: {WirelessDeviceFrameInfo?: "ENABLED"|"DISABLED", LogLevel?: "INFO"|"ERROR"|"DISABLED"}
-# --Tags item shape: {Key: string, Value: string}
 export def "create-network-analyzer-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1311,7 +1323,7 @@ export def "create-network-analyzer-configuration" [
   --description: string # The description of the new resource.
   --tags: list # The tag to attach to the specified resource. Tags are metadata that you can use to manage a resource. — item shape: {Key: string, Value: string}
   --client-request-token: string # Each resource must have a unique client request token. If you try to create a new resource with the same token as a resource that already exists, an exception occurs. If you omit this value, AWS SDKs will automatically generate a unique client request.
-]: any -> record<Arn: string, Name: string> {
+]: any -> oneof<record<Arn: string, Name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1361,7 +1373,7 @@ export def "list-network-analyzer-configurations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextToken: string, NetworkAnalyzerConfigurationList: table<Arn: string, Name: string>> {
+]: nothing -> oneof<record<NextToken: string, NetworkAnalyzerConfigurationList: table<Arn: string, Name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -1388,8 +1400,6 @@ export def "list-network-analyzer-configurations" [
 #
 # POST /service-profiles
 # operationId: CreateServiceProfile
-# --LoRaWAN shape: {AddGwMetadata?: bool, DrMin?: int, DrMax?: int, PrAllowed?: bool, RaAllowed?: bool}
-# --Tags item shape: {Key: string, Value: string}
 export def "create-service-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1411,7 +1421,7 @@ export def "create-service-profile" [
   --lo-ra-wan: record # LoRaWANServiceProfile object. — shape: {AddGwMetadata?: bool, DrMin?: int, DrMax?: int, PrAllowed?: bool, RaAllowed?: bool}
   --tags: list # The tag to attach to the specified resource. Tags are metadata that you can use to manage a resource. — item shape: {Key: string, Value: string}
   --client-request-token: string # Each resource must have a unique client request token. If you try to create a new resource with the same token as a resource that already exists, an exception occurs. If you omit this value, AWS SDKs will automatically generate a unique client request.
-]: any -> record<Arn: string, Id: string> {
+]: any -> oneof<record<Arn: string, Id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1461,7 +1471,7 @@ export def "list-service-profiles" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextToken: string, ServiceProfileList: table<Arn: string, Name: string, Id: string>> {
+]: nothing -> oneof<record<NextToken: string, ServiceProfileList: table<Arn: string, Name: string, Id: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -1488,9 +1498,6 @@ export def "list-service-profiles" [
 #
 # POST /wireless-devices
 # operationId: CreateWirelessDevice
-# --LoRaWAN shape: {DevEui?: string, DeviceProfileId?: string, ServiceProfileId?: string, OtaaV1_1?: record, OtaaV1_0_x?: record, AbpV1_1?: record, AbpV1_0_x?: record, FPorts?: record}
-# --Tags item shape: {Key: string, Value: string}
-# --Sidewalk shape: {DeviceProfileId?: string}
 export def "create-wireless-device" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1517,7 +1524,7 @@ export def "create-wireless-device" [
   --tags: list # The tag to attach to the specified resource. Tags are metadata that you can use to manage a resource. — item shape: {Key: string, Value: string}
   --positioning: string@positioning-completer # FPort values for the GNSS, stream, and ClockSync functions of the positioning information.
   --sidewalk: record # Sidewalk object for creating a wireless device. — shape: {DeviceProfileId?: string}
-]: any -> record<Arn: string, Id: string> {
+]: any -> oneof<record<Arn: string, Id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1573,7 +1580,7 @@ export def "list-wireless-devices" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextToken: string, WirelessDeviceList: table<Arn: string, Id: string, Type: string, Name: string, DestinationName: string, LastUplinkReceivedAt: string, LoRaWAN: record, Sidewalk: record, FuotaDeviceStatus: string, MulticastDeviceStatus: string, McGroupId: int>> {
+]: nothing -> oneof<record<NextToken: string, WirelessDeviceList: table<Arn: string, Id: string, Type: string, Name: string, DestinationName: string, LastUplinkReceivedAt: string, LoRaWAN: record, Sidewalk: record, FuotaDeviceStatus: string, MulticastDeviceStatus: string, McGroupId: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "destinationName" $destination_name "scalar") (serialize-qp "deviceProfileId" $device_profile_id "scalar") (serialize-qp "serviceProfileId" $service_profile_id "scalar") (serialize-qp "wirelessDeviceType" $wireless_device_type "scalar") (serialize-qp "fuotaTaskId" $fuota_task_id "scalar") (serialize-qp "multicastGroupId" $multicast_group_id "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -1600,8 +1607,6 @@ export def "list-wireless-devices" [
 #
 # POST /wireless-gateways
 # operationId: CreateWirelessGateway
-# --LoRaWAN shape: {GatewayEui?: string, RfRegion?: string, JoinEuiFilters?: list, NetIdFilters?: list<string>, SubBands?: list<int>, Beaconing?: record, MaxEirp?: float}
-# --Tags item shape: {Key: string, Value: string}
 export def "create-wireless-gateway" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1624,7 +1629,7 @@ export def "create-wireless-gateway" [
   lo_ra_wan: record # LoRaWANGateway object. — shape: {GatewayEui?: string, RfRegion?: string, JoinEuiFilters?: list, NetIdFilters?: list<string>, SubBands?: list<int>, Beaconing?: record, MaxEirp?: float}
   --tags: list # The tag to attach to the specified resource. Tags are metadata that you can use to manage a resource. — item shape: {Key: string, Value: string}
   --client-request-token: string # Each resource must have a unique client request token. If you try to create a new resource with the same token as a resource that already exists, an exception occurs. If you omit this value, AWS SDKs will automatically generate a unique client request.
-]: any -> record<Arn: string, Id: string> {
+]: any -> oneof<record<Arn: string, Id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1674,7 +1679,7 @@ export def "list-wireless-gateways" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextToken: string, WirelessGatewayList: table<Arn: string, Id: string, Name: string, Description: string, LoRaWAN: record, LastUplinkReceivedAt: string>> {
+]: nothing -> oneof<record<NextToken: string, WirelessGatewayList: table<Arn: string, Id: string, Name: string, Description: string, LoRaWAN: record, LastUplinkReceivedAt: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -1720,7 +1725,7 @@ export def "create-wireless-gateway-task" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   wireless_gateway_task_definition_id: string # The ID of the WirelessGatewayTaskDefinition.
-]: any -> record<WirelessGatewayTaskDefinitionId: string, Status: string> {
+]: any -> oneof<record<WirelessGatewayTaskDefinitionId: string, Status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1768,7 +1773,7 @@ export def "delete-wireless-gateway-task" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -1813,7 +1818,7 @@ export def "get-wireless-gateway-task" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<WirelessGatewayId: string, WirelessGatewayTaskDefinitionId: string, LastUplinkReceivedAt: string, TaskCreatedAt: string, Status: string> {
+]: nothing -> oneof<record<WirelessGatewayId: string, WirelessGatewayTaskDefinitionId: string, LastUplinkReceivedAt: string, TaskCreatedAt: string, Status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -1840,8 +1845,6 @@ export def "get-wireless-gateway-task" [
 #
 # POST /wireless-gateway-task-definitions
 # operationId: CreateWirelessGatewayTaskDefinition
-# --Update shape: {UpdateDataSource?: string, UpdateDataRole?: string, LoRaWAN?: record}
-# --Tags item shape: {Key: string, Value: string}
 export def "create-wireless-gateway-task-definition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1864,7 +1867,7 @@ export def "create-wireless-gateway-task-definition" [
   --update: record # UpdateWirelessGatewayTaskCreate object. — shape: {UpdateDataSource?: string, UpdateDataRole?: string, LoRaWAN?: record}
   --client-request-token: string # Each resource must have a unique client request token. If you try to create a new resource with the same token as a resource that already exists, an exception occurs. If you omit this value, AWS SDKs will automatically generate a unique client request.
   --tags: list # The tag to attach to the specified resource. Tags are metadata that you can use to manage a resource. — item shape: {Key: string, Value: string}
-]: any -> record<Id: string, Arn: string> {
+]: any -> oneof<record<Id: string, Arn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1914,7 +1917,7 @@ export def "list-wireless-gateway-task-definitions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextToken: string, TaskDefinitions: table<Id: string, LoRaWAN: record, Arn: string>> {
+]: nothing -> oneof<record<NextToken: string, TaskDefinitions: table<Id: string, LoRaWAN: record, Arn: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "taskDefinitionType" $task_definition_type "scalar")] | flatten | str join "&"
@@ -1959,7 +1962,7 @@ export def "delete-destination" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'Name' must be non-empty" } }
@@ -2004,7 +2007,7 @@ export def "get-destination" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Arn: string, Name: string, Expression: string, ExpressionType: string, Description: string, RoleArn: string> {
+]: nothing -> oneof<record<Arn: string, Name: string, Expression: string, ExpressionType: string, Description: string, RoleArn: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'Name' must be non-empty" } }
@@ -2053,7 +2056,7 @@ export def "update-destination" [
   --expression: string # The new rule name or topic rule to send messages to.
   --description: string # The description of the new resource.
   --role-arn: string # The ARN of the IAM Role that authorizes the destination.
-]: any -> any {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2101,7 +2104,7 @@ export def "delete-device-profile" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -2146,7 +2149,7 @@ export def "get-device-profile" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Arn: string, Name: string, Id: string, LoRaWAN: record<SupportsClassB: bool, ClassBTimeout: int, PingSlotPeriod: int, PingSlotDr: int, PingSlotFreq: int, SupportsClassC: bool, ClassCTimeout: int, MacVersion: string, RegParamsRevision: string, RxDelay1: int, RxDrOffset1: int, RxDataRate2: int, RxFreq2: int, FactoryPresetFreqsList: list<int>, MaxEirp: int, MaxDutyCycle: int, RfRegion: string, SupportsJoin: bool, Supports32BitFCnt: bool>, Sidewalk: record<ApplicationServerPublicKey: string, QualificationStatus: bool, DakCertificateMetadata: list<record>>> {
+]: nothing -> oneof<record<Arn: string, Name: string, Id: string, LoRaWAN: record<SupportsClassB: bool, ClassBTimeout: int, PingSlotPeriod: int, PingSlotDr: int, PingSlotFreq: int, SupportsClassC: bool, ClassCTimeout: int, MacVersion: string, RegParamsRevision: string, RxDelay1: int, RxDrOffset1: int, RxDataRate2: int, RxFreq2: int, FactoryPresetFreqsList: list<int>, MaxEirp: int, MaxDutyCycle: int, RfRegion: string, SupportsJoin: bool, Supports32BitFCnt: bool>, Sidewalk: record<ApplicationServerPublicKey: string, QualificationStatus: bool, DakCertificateMetadata: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -2191,7 +2194,7 @@ export def "delete-fuota-task" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -2236,7 +2239,7 @@ export def "get-fuota-task" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Arn: string, Id: string, Status: string, Name: string, Description: string, LoRaWAN: record<RfRegion: string, StartTime: string>, FirmwareUpdateImage: string, FirmwareUpdateRole: string, CreatedAt: string, RedundancyPercent: int, FragmentSizeBytes: int, FragmentIntervalMS: int> {
+]: nothing -> oneof<record<Arn: string, Id: string, Status: string, Name: string, Description: string, LoRaWAN: record<RfRegion: string, StartTime: string>, FirmwareUpdateImage: string, FirmwareUpdateRole: string, CreatedAt: string, RedundancyPercent: int, FragmentSizeBytes: int, FragmentIntervalMS: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -2263,7 +2266,6 @@ export def "get-fuota-task" [
 #
 # PUT /fuota-tasks/{Id}
 # operationId: StartFuotaTask
-# --LoRaWAN shape: {StartTime?: string}
 export def "start-fuota-task" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2283,7 +2285,7 @@ export def "start-fuota-task" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --lo-ra-wan: record # The LoRaWAN information used to start a FUOTA task. — shape: {StartTime?: string}
-]: any -> any {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2313,7 +2315,6 @@ export def "start-fuota-task" [
 #
 # PATCH /fuota-tasks/{Id}
 # operationId: UpdateFuotaTask
-# --LoRaWAN shape: {RfRegion?: "EU868"|"US915"|"AU915"|"AS923-1"|"AS923-2"|"AS923-3"|"AS923-4"|"EU433"|"CN470"|"CN779"|"RU864"|"KR920"|"IN865"}
 export def "update-fuota-task" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2340,7 +2341,7 @@ export def "update-fuota-task" [
   --redundancy-percent: int # The percentage of added redundant fragments. For example, if firmware file is 100 bytes and fragment size is 10 bytes, with RedundancyPercent set to 50(%), the final number of encoded fragments is (100 / 10) + (100 / 10 * 50%) = 15.
   --fragment-size-bytes: int # The size of each fragment in bytes. Currently only supported in fuota tasks with multicast groups.
   --fragment-interval-ms: int # The interval of sending fragments in milliseconds. Currently the interval will be rounded to the nearest second. Note that this interval only controls the timing when the cloud sends the fragments down. The actual delay of receiving fragments at device side depends on the device's class and the communication delay with the cloud.
-]: any -> any {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2388,7 +2389,7 @@ export def "delete-multicast-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -2433,7 +2434,7 @@ export def "get-multicast-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Arn: string, Id: string, Name: string, Description: string, Status: string, LoRaWAN: record<RfRegion: string, DlClass: string, NumberOfDevicesRequested: int, NumberOfDevicesInGroup: int>, CreatedAt: string> {
+]: nothing -> oneof<record<Arn: string, Id: string, Name: string, Description: string, Status: string, LoRaWAN: record<RfRegion: string, DlClass: string, NumberOfDevicesRequested: int, NumberOfDevicesInGroup: int>, CreatedAt: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -2460,7 +2461,6 @@ export def "get-multicast-group" [
 #
 # PATCH /multicast-groups/{Id}
 # operationId: UpdateMulticastGroup
-# --LoRaWAN shape: {RfRegion?: "EU868"|"US915"|"AU915"|"AS923-1"|"AS923-2"|"AS923-3"|"AS923-4"|"EU433"|"CN470"|"CN779"|"RU864"|"KR920"|"IN865", DlClass?: "ClassB"|"ClassC"}
 export def "update-multicast-group" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2482,7 +2482,7 @@ export def "update-multicast-group" [
   --name: string # The name of the multicast group.
   --description: string # The description of the new resource.
   --lo-ra-wan: record # The LoRaWAN information that is to be used with the multicast group. — shape: {RfRegion?: "EU868"|"US915"|"AU915"|"AS923-1"|"AS923-2"|"AS923-3"|"AS923-4"|"EU433"|"CN470"|"CN779"|"RU864"|"KR920"|"IN865", DlClass?: "ClassB"|"ClassC"}
-]: any -> any {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2530,7 +2530,7 @@ export def "delete-network-analyzer-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($configuration_name | is-empty) { error make --unspanned { msg: "path parameter 'ConfigurationName' must be non-empty" } }
@@ -2575,7 +2575,7 @@ export def "get-network-analyzer-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<TraceContent: record<WirelessDeviceFrameInfo: string, LogLevel: string>, WirelessDevices: list<string>, WirelessGateways: list<string>, Description: string, Arn: string, Name: string> {
+]: nothing -> oneof<record<TraceContent: record<WirelessDeviceFrameInfo: string, LogLevel: string>, WirelessDevices: list<string>, WirelessGateways: list<string>, Description: string, Arn: string, Name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($configuration_name | is-empty) { error make --unspanned { msg: "path parameter 'ConfigurationName' must be non-empty" } }
@@ -2602,7 +2602,6 @@ export def "get-network-analyzer-configuration" [
 #
 # PATCH /network-analyzer-configurations/{ConfigurationName}
 # operationId: UpdateNetworkAnalyzerConfiguration
-# --TraceContent shape: {WirelessDeviceFrameInfo?: "ENABLED"|"DISABLED", LogLevel?: "INFO"|"ERROR"|"DISABLED"}
 export def "update-network-analyzer-configuration" [
   configuration_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2627,7 +2626,7 @@ export def "update-network-analyzer-configuration" [
   --wireless-gateways-to-add: list<string> # Wireless gateway resources to add to the network analyzer configuration. Provide the WirelessGatewayId of the resource to add in the input array.
   --wireless-gateways-to-remove: list<string> # Wireless gateway resources to remove from the network analyzer configuration. Provide the WirelessGatewayId of the resources to remove in the input array.
   --description: string # The description of the new resource.
-]: any -> any {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2677,7 +2676,7 @@ export def "delete-queued-messages" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -2724,7 +2723,7 @@ export def "delete-service-profile" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -2769,7 +2768,7 @@ export def "get-service-profile" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Arn: string, Name: string, Id: string, LoRaWAN: record<UlRate: int, UlBucketSize: int, UlRatePolicy: string, DlRate: int, DlBucketSize: int, DlRatePolicy: string, AddGwMetadata: bool, DevStatusReqFreq: int, ReportDevStatusBattery: bool, ReportDevStatusMargin: bool, DrMin: int, DrMax: int, ChannelMask: string, PrAllowed: bool, HrAllowed: bool, RaAllowed: bool, NwkGeoLoc: bool, TargetPer: int, MinGwDiversity: int>> {
+]: nothing -> oneof<record<Arn: string, Name: string, Id: string, LoRaWAN: record<UlRate: int, UlBucketSize: int, UlRatePolicy: string, DlRate: int, DlBucketSize: int, DlRatePolicy: string, AddGwMetadata: bool, DevStatusReqFreq: int, ReportDevStatusBattery: bool, ReportDevStatusMargin: bool, DrMin: int, DrMax: int, ChannelMask: string, PrAllowed: bool, HrAllowed: bool, RaAllowed: bool, NwkGeoLoc: bool, TargetPer: int, MinGwDiversity: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -2814,7 +2813,7 @@ export def "delete-wireless-device" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -2841,7 +2840,6 @@ export def "delete-wireless-device" [
 #
 # PATCH /wireless-devices/{Id}
 # operationId: UpdateWirelessDevice
-# --LoRaWAN shape: {DeviceProfileId?: string, ServiceProfileId?: string, AbpV1_1?: record, AbpV1_0_x?: record, FPorts?: record}
 export def "update-wireless-device" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2865,7 +2863,7 @@ export def "update-wireless-device" [
   --description: string # The description of the new resource.
   --lo-ra-wan: record # LoRaWAN object for update functions. — shape: {DeviceProfileId?: string, ServiceProfileId?: string, AbpV1_1?: record, AbpV1_0_x?: record, FPorts?: record}
   --positioning: string@positioning-completer # FPort values for the GNSS, stream, and ClockSync functions of the positioning information.
-]: any -> any {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2913,7 +2911,7 @@ export def "delete-wireless-device-import-task" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -2958,7 +2956,7 @@ export def "get-wireless-device-import-task" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Id: string, Arn: string, DestinationName: string, Sidewalk: record<DeviceCreationFileList: list<string>, Role: string>, CreationTime: string, Status: string, StatusReason: string, InitializedImportedDeviceCount: int, PendingImportedDeviceCount: int, OnboardedImportedDeviceCount: int, FailedImportedDeviceCount: int> {
+]: nothing -> oneof<record<Id: string, Arn: string, DestinationName: string, Sidewalk: record<DeviceCreationFileList: list<string>, Role: string>, CreationTime: string, Status: string, StatusReason: string, InitializedImportedDeviceCount: int, PendingImportedDeviceCount: int, OnboardedImportedDeviceCount: int, FailedImportedDeviceCount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -2985,7 +2983,6 @@ export def "get-wireless-device-import-task" [
 #
 # PATCH /wireless_device_import_task/{Id}
 # operationId: UpdateWirelessDeviceImportTask
-# --Sidewalk shape: {DeviceCreationFile?: string}
 export def "update-wireless-device-import-task" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3005,7 +3002,7 @@ export def "update-wireless-device-import-task" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   sidewalk: record # Sidewalk object information for updating an import task. — shape: {DeviceCreationFile?: string}
-]: any -> any {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3053,7 +3050,7 @@ export def "delete-wireless-gateway" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -3103,7 +3100,7 @@ export def "update-wireless-gateway" [
   --join-eui-filters: list # A list of JoinEuiRange used by LoRa gateways to filter LoRa frames.
   --net-id-filters: list<string> # A list of NetId values that are used by LoRa gateways to filter the uplink frames.
   --max-eirp: float # The MaxEIRP value. (format: float)
-]: any -> any {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3151,7 +3148,7 @@ export def "delete-wireless-gateway-task-definition" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -3196,7 +3193,7 @@ export def "get-wireless-gateway-task-definition" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<AutoCreateTasks: bool, Name: string, Update: record<UpdateDataSource: string, UpdateDataRole: string, LoRaWAN: record<UpdateSignature: string, SigKeyCrc: int, CurrentVersion: record, UpdateVersion: record>>, Arn: string> {
+]: nothing -> oneof<record<AutoCreateTasks: bool, Name: string, Update: record<UpdateDataSource: string, UpdateDataRole: string, LoRaWAN: record<UpdateSignature: string, SigKeyCrc: int, CurrentVersion: record, UpdateVersion: record>>, Arn: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -3242,7 +3239,7 @@ export def "deregister-wireless-device" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($identifier | is-empty) { error make --unspanned { msg: "path parameter 'Identifier' must be non-empty" } }
@@ -3289,7 +3286,7 @@ export def "disassociate-aws-account-from-partner-account" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($partner_account_id | is-empty) { error make --unspanned { msg: "path parameter 'PartnerAccountId' must be non-empty" } }
@@ -3337,7 +3334,7 @@ export def "get-partner-account" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Sidewalk: record<AmazonId: string, Fingerprint: string, Arn: string>, AccountLinked: bool> {
+]: nothing -> oneof<record<Sidewalk: record<AmazonId: string, Fingerprint: string, Arn: string>, AccountLinked: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($partner_account_id | is-empty) { error make --unspanned { msg: "path parameter 'PartnerAccountId' must be non-empty" } }
@@ -3366,7 +3363,6 @@ export def "get-partner-account" [
 #
 # PATCH /partner-accounts/{PartnerAccountId}
 # operationId: UpdatePartnerAccount
-# --Sidewalk shape: {AppServerPrivateKey?: string}
 export def "update-partner-account" [
   partner_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3387,7 +3383,7 @@ export def "update-partner-account" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   sidewalk: record # Sidewalk update. — shape: {AppServerPrivateKey?: string}
-]: any -> any {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3438,7 +3434,7 @@ export def "disassociate-multicast-group-from-fuota-task" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -3485,7 +3481,7 @@ export def "disassociate-wireless-device-from-fuota-task" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -3532,7 +3528,7 @@ export def "disassociate-wireless-device-from-multicast-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -3577,7 +3573,7 @@ export def "get-event-configuration-by-resource-types" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DeviceRegistrationState: record<Sidewalk: record<WirelessDeviceEventTopic: string>>, Proximity: record<Sidewalk: record<WirelessDeviceEventTopic: string>>, Join: record<LoRaWAN: record<WirelessDeviceEventTopic: string>>, ConnectionStatus: record<LoRaWAN: record<WirelessGatewayEventTopic: string>>, MessageDeliveryStatus: record<Sidewalk: record<WirelessDeviceEventTopic: string>>> {
+]: nothing -> oneof<record<DeviceRegistrationState: record<Sidewalk: record<WirelessDeviceEventTopic: string>>, Proximity: record<Sidewalk: record<WirelessDeviceEventTopic: string>>, Join: record<LoRaWAN: record<WirelessDeviceEventTopic: string>>, ConnectionStatus: record<LoRaWAN: record<WirelessGatewayEventTopic: string>>, MessageDeliveryStatus: record<Sidewalk: record<WirelessDeviceEventTopic: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/event-configurations-resource-types" $auth.query)
@@ -3603,11 +3599,6 @@ export def "get-event-configuration-by-resource-types" [
 #
 # PATCH /event-configurations-resource-types
 # operationId: UpdateEventConfigurationByResourceTypes
-# --DeviceRegistrationState shape: {Sidewalk?: record}
-# --Proximity shape: {Sidewalk?: record}
-# --Join shape: {LoRaWAN?: record}
-# --ConnectionStatus shape: {LoRaWAN?: record}
-# --MessageDeliveryStatus shape: {Sidewalk?: record}
 export def "update-event-configuration-by-resource-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3630,7 +3621,7 @@ export def "update-event-configuration-by-resource-types" [
   --join: record # Join resource type event configuration object for enabling or disabling topic. — shape: {LoRaWAN?: record}
   --connection-status: record # Connection status resource type event configuration object for enabling or disabling topic. — shape: {LoRaWAN?: record}
   --message-delivery-status: record # Message delivery status resource type event configuration object for enabling or disabling relevant topic. — shape: {Sidewalk?: record}
-]: any -> any {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3676,7 +3667,7 @@ export def "get-log-levels-by-resource-types" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DefaultLogLevel: string, WirelessGatewayLogOptions: table<Type: string, LogLevel: string, Events: list>, WirelessDeviceLogOptions: table<Type: string, LogLevel: string, Events: list>> {
+]: nothing -> oneof<record<DefaultLogLevel: string, WirelessGatewayLogOptions: table<Type: string, LogLevel: string, Events: list>, WirelessDeviceLogOptions: table<Type: string, LogLevel: string, Events: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/log-levels" $auth.query)
@@ -3719,7 +3710,7 @@ export def "reset-all-resource-log-levels" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/log-levels" $auth.query)
@@ -3745,8 +3736,6 @@ export def "reset-all-resource-log-levels" [
 #
 # POST /log-levels
 # operationId: UpdateLogLevelsByResourceTypes
-# --WirelessDeviceLogOptions item shape: {Type: "Sidewalk"|"LoRaWAN", LogLevel: "INFO"|"ERROR"|"DISABLED", Events?: list}
-# --WirelessGatewayLogOptions item shape: {Type: "LoRaWAN", LogLevel: "INFO"|"ERROR"|"DISABLED", Events?: list}
 export def "update-log-levels-by-resource-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3767,7 +3756,7 @@ export def "update-log-levels-by-resource-types" [
   --default-log-level: string@default-log-level-completer # The log level for a log message. The log levels can be disabled, or set to ERROR to display less verbose logs containing only error information, or to INFO for more detailed logs.
   --wireless-device-log-options: list # The list of wireless device log options. — item shape: {Type: "Sidewalk"|"LoRaWAN", LogLevel: "INFO"|"ERROR"|"DISABLED", Events?: list}
   --wireless-gateway-log-options: list # The list of wireless gateway log options. — item shape: {Type: "LoRaWAN", LogLevel: "INFO"|"ERROR"|"DISABLED", Events?: list}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3817,7 +3806,7 @@ export def "get-position" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Position: list<float>, Accuracy: record<HorizontalAccuracy: float, VerticalAccuracy: float>, SolverType: string, SolverProvider: string, SolverVersion: string, Timestamp: string> {
+]: nothing -> oneof<record<Position: list<float>, Accuracy: record<HorizontalAccuracy: float, VerticalAccuracy: float>, SolverType: string, SolverProvider: string, SolverVersion: string, Timestamp: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_identifier | is-empty) { error make --unspanned { msg: "path parameter 'ResourceIdentifier' must be non-empty" } }
@@ -3868,7 +3857,7 @@ export def "update-position" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   position: list<float> # The position information of the resource.
-]: any -> any {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3921,7 +3910,7 @@ export def "get-position-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Solvers: record<SemtechGnss: record<Provider: string, Type: string, Status: string, Fec: string>>, Destination: string> {
+]: nothing -> oneof<record<Solvers: record<SemtechGnss: record<Provider: string, Type: string, Status: string, Fec: string>>, Destination: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_identifier | is-empty) { error make --unspanned { msg: "path parameter 'ResourceIdentifier' must be non-empty" } }
@@ -3951,7 +3940,6 @@ export def "get-position-configuration" [
 # PUT /position-configurations/{ResourceIdentifier}
 # DEPRECATED
 # operationId: PutPositionConfiguration
-# --Solvers shape: {SemtechGnss?: record}
 @deprecated
 export def "put-position-configuration" [
   resource_identifier: string
@@ -3974,7 +3962,7 @@ export def "put-position-configuration" [
   --x-amz-signed-headers: string
   --solvers: record # The wrapper for position solver configurations. — shape: {SemtechGnss?: record}
   --destination: string # The position data destination that describes the AWS IoT rule that processes the device's position data for use by AWS IoT Core for LoRaWAN.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4006,10 +3994,6 @@ export def "put-position-configuration" [
 #
 # POST /position-estimate
 # operationId: GetPositionEstimate
-# --WiFiAccessPoints item shape: {MacAddress: string, Rss: int}
-# --CellTowers shape: {Gsm?: list, Wcdma?: list, Tdscdma?: list, Lte?: list, Cdma?: list}
-# --Ip shape: {IpAddress?: string}
-# --Gnss shape: {Payload?: string, CaptureTime?: float, CaptureTimeAccuracy?: float, AssistPosition?: list<float>, AssistAltitude?: float, Use2DSolver?: bool}
 export def "get-position-estimate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4032,7 +4016,7 @@ export def "get-position-estimate" [
   --ip: record # IP address used for resolving device location. — shape: {IpAddress?: string}
   --gnss: record # Global navigation satellite system (GNSS) object used for positioning. — shape: {Payload?: string, CaptureTime?: float, CaptureTimeAccuracy?: float, AssistPosition?: list<float>, AssistAltitude?: float, Use2DSolver?: bool}
   --timestamp: string # Optional information that specifies the time when the position information will be resolved. It uses the Unix timestamp format. If not specified, the time at which the request was received will be used. (format: date-time)
-]: any -> record<GeoJsonPayload: string> {
+]: any -> oneof<record<GeoJsonPayload: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4081,7 +4065,7 @@ export def "get-resource-event-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DeviceRegistrationState: record<Sidewalk: record<AmazonIdEventTopic: string>, WirelessDeviceIdEventTopic: string>, Proximity: record<Sidewalk: record<AmazonIdEventTopic: string>, WirelessDeviceIdEventTopic: string>, Join: record<LoRaWAN: record<DevEuiEventTopic: string>, WirelessDeviceIdEventTopic: string>, ConnectionStatus: record<LoRaWAN: record<GatewayEuiEventTopic: string>, WirelessGatewayIdEventTopic: string>, MessageDeliveryStatus: record<Sidewalk: record<AmazonIdEventTopic: string>, WirelessDeviceIdEventTopic: string>> {
+]: nothing -> oneof<record<DeviceRegistrationState: record<Sidewalk: record<AmazonIdEventTopic: string>, WirelessDeviceIdEventTopic: string>, Proximity: record<Sidewalk: record<AmazonIdEventTopic: string>, WirelessDeviceIdEventTopic: string>, Join: record<LoRaWAN: record<DevEuiEventTopic: string>, WirelessDeviceIdEventTopic: string>, ConnectionStatus: record<LoRaWAN: record<GatewayEuiEventTopic: string>, WirelessGatewayIdEventTopic: string>, MessageDeliveryStatus: record<Sidewalk: record<AmazonIdEventTopic: string>, WirelessDeviceIdEventTopic: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($identifier | is-empty) { error make --unspanned { msg: "path parameter 'Identifier' must be non-empty" } }
@@ -4110,11 +4094,6 @@ export def "get-resource-event-configuration" [
 #
 # PATCH /event-configurations/{Identifier}
 # operationId: UpdateResourceEventConfiguration
-# --DeviceRegistrationState shape: {Sidewalk?: record, WirelessDeviceIdEventTopic?: "Enabled"|"Disabled"}
-# --Proximity shape: {Sidewalk?: record, WirelessDeviceIdEventTopic?: "Enabled"|"Disabled"}
-# --Join shape: {LoRaWAN?: record, WirelessDeviceIdEventTopic?: "Enabled"|"Disabled"}
-# --ConnectionStatus shape: {LoRaWAN?: record, WirelessGatewayIdEventTopic?: "Enabled"|"Disabled"}
-# --MessageDeliveryStatus shape: {Sidewalk?: record, WirelessDeviceIdEventTopic?: "Enabled"|"Disabled"}
 export def "update-resource-event-configuration" [
   identifier: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4140,7 +4119,7 @@ export def "update-resource-event-configuration" [
   --join: record # Join event configuration object for enabling or disabling topic. — shape: {LoRaWAN?: record, WirelessDeviceIdEventTopic?: "Enabled"|"Disabled"}
   --connection-status: record # Connection status event configuration object for enabling or disabling topic. — shape: {LoRaWAN?: record, WirelessGatewayIdEventTopic?: "Enabled"|"Disabled"}
   --message-delivery-status: record # Message delivery status event configuration object for enabling and disabling relevant topics. — shape: {Sidewalk?: record, WirelessDeviceIdEventTopic?: "Enabled"|"Disabled"}
-]: any -> any {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4191,7 +4170,7 @@ export def "get-resource-log-level" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<LogLevel: string> {
+]: nothing -> oneof<record<LogLevel: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_identifier | is-empty) { error make --unspanned { msg: "path parameter 'ResourceIdentifier' must be non-empty" } }
@@ -4240,7 +4219,7 @@ export def "put-resource-log-level" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   log_level: string@log-level-completer # The log level for a log message. The log levels can be disabled, or set to ERROR to display less verbose logs containing only error information, or to INFO for more detailed logs.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4291,7 +4270,7 @@ export def "reset-resource-log-level" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_identifier | is-empty) { error make --unspanned { msg: "path parameter 'ResourceIdentifier' must be non-empty" } }
@@ -4339,7 +4318,7 @@ export def "get-resource-position" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<GeoJsonPayload: string> {
+]: nothing -> oneof<record<GeoJsonPayload: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_identifier | is-empty) { error make --unspanned { msg: "path parameter 'ResourceIdentifier' must be non-empty" } }
@@ -4388,7 +4367,7 @@ export def "update-resource-position" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --geo-json-payload: string # The position information of the resource, displayed as a JSON payload. The payload uses the GeoJSON format, which a format that's used to encode geographic data structures. For more information, see GeoJSON (https://geojson.org/).
-]: any -> any {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4438,7 +4417,7 @@ export def "get-service-endpoint" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ServiceType: string, ServiceEndpoint: string, ServerTrust: string> {
+]: nothing -> oneof<record<ServiceType: string, ServiceEndpoint: string, ServerTrust: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "serviceType" $service_type "scalar")] | flatten | str join "&"
@@ -4484,7 +4463,7 @@ export def "get-wireless-device" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Type: string, Name: string, Description: string, DestinationName: string, Id: string, Arn: string, ThingName: string, ThingArn: string, LoRaWAN: record<DevEui: string, DeviceProfileId: string, ServiceProfileId: string, OtaaV1_1: record<AppKey: string, NwkKey: string, JoinEui: string>, OtaaV1_0_x: record<AppKey: string, AppEui: string, GenAppKey: string>, AbpV1_1: record<DevAddr: string, SessionKeys: record, FCntStart: int>, AbpV1_0_x: record<DevAddr: string, SessionKeys: record, FCntStart: int>, FPorts: record<Fuota: int, Multicast: int, ClockSync: int, Positioning: record, Applications: list>>, Sidewalk: record<AmazonId: string, SidewalkId: string, SidewalkManufacturingSn: string, DeviceCertificates: list<record>, PrivateKeys: list<record>, DeviceProfileId: string, CertificateId: string, Status: string>, Positioning: string> {
+]: nothing -> oneof<record<Type: string, Name: string, Description: string, DestinationName: string, Id: string, Arn: string, ThingName: string, ThingArn: string, LoRaWAN: record<DevEui: string, DeviceProfileId: string, ServiceProfileId: string, OtaaV1_1: record<AppKey: string, NwkKey: string, JoinEui: string>, OtaaV1_0_x: record<AppKey: string, AppEui: string, GenAppKey: string>, AbpV1_1: record<DevAddr: string, SessionKeys: record, FCntStart: int>, AbpV1_0_x: record<DevAddr: string, SessionKeys: record, FCntStart: int>, FPorts: record<Fuota: int, Multicast: int, ClockSync: int, Positioning: record, Applications: list>>, Sidewalk: record<AmazonId: string, SidewalkId: string, SidewalkManufacturingSn: string, DeviceCertificates: list<record>, PrivateKeys: list<record>, DeviceProfileId: string, CertificateId: string, Status: string>, Positioning: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($identifier | is-empty) { error make --unspanned { msg: "path parameter 'Identifier' must be non-empty" } }
@@ -4531,7 +4510,7 @@ export def "get-wireless-device-statistics" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<WirelessDeviceId: string, LastUplinkReceivedAt: string, LoRaWAN: record<DevEui: string, FPort: int, DataRate: int, Frequency: int, Timestamp: string, Gateways: list<record>>, Sidewalk: record<Rssi: int, BatteryLevel: string, Event: string, DeviceState: string>> {
+]: nothing -> oneof<record<WirelessDeviceId: string, LastUplinkReceivedAt: string, LoRaWAN: record<DevEui: string, FPort: int, DataRate: int, Frequency: int, Timestamp: string, Gateways: list<record>>, Sidewalk: record<Rssi: int, BatteryLevel: string, Event: string, DeviceState: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -4577,7 +4556,7 @@ export def "get-wireless-gateway" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Name: string, Id: string, Description: string, LoRaWAN: record<GatewayEui: string, RfRegion: string, JoinEuiFilters: list<list>, NetIdFilters: list<string>, SubBands: list<int>, Beaconing: record<DataRate: int, Frequencies: list>, MaxEirp: float>, Arn: string, ThingName: string, ThingArn: string> {
+]: nothing -> oneof<record<Name: string, Id: string, Description: string, LoRaWAN: record<GatewayEui: string, RfRegion: string, JoinEuiFilters: list<list>, NetIdFilters: list<string>, SubBands: list<int>, Beaconing: record<DataRate: int, Frequencies: list>, MaxEirp: float>, Arn: string, ThingName: string, ThingArn: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($identifier | is-empty) { error make --unspanned { msg: "path parameter 'Identifier' must be non-empty" } }
@@ -4624,7 +4603,7 @@ export def "get-wireless-gateway-firmware-information" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<LoRaWAN: record<CurrentVersion: record<PackageVersion: string, Model: string, Station: string>>> {
+]: nothing -> oneof<record<LoRaWAN: record<CurrentVersion: record<PackageVersion: string, Model: string, Station: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -4669,7 +4648,7 @@ export def "get-wireless-gateway-statistics" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<WirelessGatewayId: string, LastUplinkReceivedAt: string, ConnectionStatus: string> {
+]: nothing -> oneof<record<WirelessGatewayId: string, LastUplinkReceivedAt: string, ConnectionStatus: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -4717,7 +4696,7 @@ export def "list-devices-for-wireless-device-import-task" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextToken: string, DestinationName: string, ImportedWirelessDeviceList: table<Sidewalk: record>> {
+]: nothing -> oneof<record<NextToken: string, DestinationName: string, ImportedWirelessDeviceList: table<Sidewalk: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
@@ -4765,7 +4744,7 @@ export def "list-event-configurations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextToken: string, EventConfigurationsList: table<Identifier: string, IdentifierType: string, PartnerType: string, Events: record>> {
+]: nothing -> oneof<record<NextToken: string, EventConfigurationsList: table<Identifier: string, IdentifierType: string, PartnerType: string, Events: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_type == null) { error make --unspanned { msg: "required query parameter 'resourceType' missing: pass --resource-type" } }
@@ -4815,7 +4794,7 @@ export def "list-multicast-groups-by-fuota-task" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextToken: string, MulticastGroupList: table<Id: string>> {
+]: nothing -> oneof<record<NextToken: string, MulticastGroupList: table<Id: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -4867,7 +4846,7 @@ export def "list-position-configurations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<PositionConfigurationList: table<ResourceIdentifier: string, ResourceType: string, Solvers: record, Destination: string>, NextToken: string> {
+]: nothing -> oneof<record<PositionConfigurationList: table<ResourceIdentifier: string, ResourceType: string, Solvers: record, Destination: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "resourceType" $resource_type "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -4917,7 +4896,7 @@ export def "list-queued-messages" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextToken: string, DownlinkQueueMessagesList: table<MessageId: string, TransmitMode: int, ReceivedAt: string, LoRaWAN: record>> {
+]: nothing -> oneof<record<NextToken: string, DownlinkQueueMessagesList: table<MessageId: string, TransmitMode: int, ReceivedAt: string, LoRaWAN: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -4945,7 +4924,6 @@ export def "list-queued-messages" [
 #
 # POST /wireless-devices/{Id}/data
 # operationId: SendDataToWirelessDevice
-# --WirelessMetadata shape: {LoRaWAN?: record, Sidewalk?: record}
 export def "send-data-to-wireless-device" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4967,7 +4945,7 @@ export def "send-data-to-wireless-device" [
   transmit_mode: int # The transmit mode to use to send data to the wireless device. Can be: 0 for UM (unacknowledge mode) or 1 for AM (acknowledge mode).
   payload_data: string # The binary to be sent to the end device, encoded in base64.
   --wireless-metadata: record # WirelessMetadata object. — shape: {LoRaWAN?: record, Sidewalk?: record}
-]: any -> record<MessageId: string> {
+]: any -> oneof<record<MessageId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5015,7 +4993,7 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Tags: table<Key: string, Value: string>> {
+]: nothing -> oneof<record<Tags: table<Key: string, Value: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn == null) { error make --unspanned { msg: "required query parameter 'resourceArn' missing: pass --resource-arn" } }
@@ -5043,7 +5021,6 @@ export def "list-tags-for-resource" [
 #
 # POST /tags
 # operationId: TagResource
-# --Tags item shape: {Key: string, Value: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5063,7 +5040,7 @@ export def "tag-resource" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   tags: list # The tag to attach to the specified resource. Tags are metadata that you can use to manage a resource. — item shape: {Key: string, Value: string}
-]: any -> any {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5113,7 +5090,7 @@ export def "list-wireless-device-import-tasks" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextToken: string, WirelessDeviceImportTaskList: table<Id: string, Arn: string, DestinationName: string, Sidewalk: record, CreationTime: string, Status: string, StatusReason: string, InitializedImportedDeviceCount: int, PendingImportedDeviceCount: int, OnboardedImportedDeviceCount: int, FailedImportedDeviceCount: int>> {
+]: nothing -> oneof<record<NextToken: string, WirelessDeviceImportTaskList: table<Id: string, Arn: string, DestinationName: string, Sidewalk: record, CreationTime: string, Status: string, StatusReason: string, InitializedImportedDeviceCount: int, PendingImportedDeviceCount: int, OnboardedImportedDeviceCount: int, FailedImportedDeviceCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
@@ -5140,7 +5117,6 @@ export def "list-wireless-device-import-tasks" [
 #
 # POST /multicast-groups/{Id}/data
 # operationId: SendDataToMulticastGroup
-# --WirelessMetadata shape: {LoRaWAN?: record}
 export def "send-data-to-multicast-group" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5161,7 +5137,7 @@ export def "send-data-to-multicast-group" [
   --x-amz-signed-headers: string
   payload_data: string # The binary to be sent to the end device, encoded in base64.
   wireless_metadata: record # Wireless metadata that is to be sent to multicast group. — shape: {LoRaWAN?: record}
-]: any -> record<MessageId: string> {
+]: any -> oneof<record<MessageId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5191,7 +5167,6 @@ export def "send-data-to-multicast-group" [
 #
 # PATCH /multicast-groups/{Id}/bulk
 # operationId: StartBulkAssociateWirelessDeviceWithMulticastGroup
-# --Tags item shape: {Key: string, Value: string}
 export def "start-bulk-associate-wireless-device-with-multicast-group" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5212,7 +5187,7 @@ export def "start-bulk-associate-wireless-device-with-multicast-group" [
   --x-amz-signed-headers: string
   --query-string: string # Query string used to search for wireless devices as part of the bulk associate and disassociate process.
   --tags: list # The tag to attach to the specified resource. Tags are metadata that you can use to manage a resource. — item shape: {Key: string, Value: string}
-]: any -> any {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5242,7 +5217,6 @@ export def "start-bulk-associate-wireless-device-with-multicast-group" [
 #
 # POST /multicast-groups/{Id}/bulk
 # operationId: StartBulkDisassociateWirelessDeviceFromMulticastGroup
-# --Tags item shape: {Key: string, Value: string}
 export def "start-bulk-disassociate-wireless-device-from-multicast-group" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5263,7 +5237,7 @@ export def "start-bulk-disassociate-wireless-device-from-multicast-group" [
   --x-amz-signed-headers: string
   --query-string: string # Query string used to search for wireless devices as part of the bulk associate and disassociate process.
   --tags: list # The tag to attach to the specified resource. Tags are metadata that you can use to manage a resource. — item shape: {Key: string, Value: string}
-]: any -> any {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5293,8 +5267,6 @@ export def "start-bulk-disassociate-wireless-device-from-multicast-group" [
 #
 # POST /wireless_single_device_import_task
 # operationId: StartSingleWirelessDeviceImportTask
-# --Tags item shape: {Key: string, Value: string}
-# --Sidewalk shape: {SidewalkManufacturingSn?: string}
 export def "start-single-wireless-device-import-task" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5317,7 +5289,7 @@ export def "start-single-wireless-device-import-task" [
   --device-name: string # The name of the wireless device for which an import task is being started.
   --tags: list # The tag to attach to the specified resource. Tags are metadata that you can use to manage a resource. — item shape: {Key: string, Value: string}
   sidewalk: record # Information about an import task created for an individual Sidewalk device. — shape: {SidewalkManufacturingSn?: string}
-]: any -> record<Id: string, Arn: string> {
+]: any -> oneof<record<Id: string, Arn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5346,8 +5318,6 @@ export def "start-single-wireless-device-import-task" [
 #
 # POST /wireless_device_import_task
 # operationId: StartWirelessDeviceImportTask
-# --Tags item shape: {Key: string, Value: string}
-# --Sidewalk shape: {DeviceCreationFile?: string, Role?: string}
 export def "start-wireless-device-import-task" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5369,7 +5339,7 @@ export def "start-wireless-device-import-task" [
   --client-request-token: string # Each resource must have a unique client request token. If you try to create a new resource with the same token as a resource that already exists, an exception occurs. If you omit this value, AWS SDKs will automatically generate a unique client request.
   --tags: list # The tag to attach to the specified resource. Tags are metadata that you can use to manage a resource. — item shape: {Key: string, Value: string}
   sidewalk: record # Information about an import task created for bulk provisioning. — shape: {DeviceCreationFile?: string, Role?: string}
-]: any -> record<Id: string, Arn: string> {
+]: any -> oneof<record<Id: string, Arn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5416,7 +5386,7 @@ export def "test-wireless-device" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Result: string> {
+]: nothing -> oneof<record<Result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -5462,7 +5432,7 @@ export def "untag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn == null) { error make --unspanned { msg: "required query parameter 'resourceArn' missing: pass --resource-arn" } }

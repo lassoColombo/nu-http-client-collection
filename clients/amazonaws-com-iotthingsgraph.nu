@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -137,9 +160,9 @@ def x-amz-target-completer-34 [] { ["IotThingsGraphFrontEndService.UploadEntityD
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "associate-entity-to-thing" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["associate-entity-to-thing" "create-flow-template" "create-system-instance" "create-system-template" "delete-flow-template" "delete-namespace" "delete-system-instance" "delete-system-template" "deploy-system-instance" "deprecate-flow-template" "deprecate-system-template" "describe-namespace" "dissociate-entity-from-thing" "get-entities" "get-flow-template" "get-flow-template-revisions" "get-namespace-deletion-status" "get-system-instance" "get-system-template" "get-system-template-revisions" "get-upload-status" "list-flow-execution-messages" "list-tags-for-resource" "search-entities" "search-flow-executions" "search-flow-templates" "search-system-instances" "search-system-templates" "search-things" "tag-resource" "undeploy-system-instance" "untag-resource" "update-flow-template" "update-system-template" "upload-entity-definitions" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -184,7 +207,7 @@ export def "associate-entity-to-thing" [
   thing_name: string # The name of the thing to which the entity is to be associated.
   entity_id: string # The ID of the device to be associated with the thing. The ID should be in the following format. urn:tdm:REGION/ACCOUNT ID/default:device:DEVICENAME
   --namespace-version: int # The version of the user's namespace. Defaults to the latest version of the user's namespace.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -215,7 +238,6 @@ export def "associate-entity-to-thing" [
 # POST /
 # DEPRECATED
 # operationId: CreateFlowTemplate
-# --definition shape: {language: "GRAPHQL", text: string}
 @deprecated
 export def "create-flow-template" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -237,7 +259,7 @@ export def "create-flow-template" [
   --x-amz-target: string@x-amz-target-completer-1 # required
   definition: record # A document that defines an entity. — shape: {language: "GRAPHQL", text: string}
   --compatible-namespace-version: int # The namespace version in which the workflow is to be created. If no value is specified, the latest version is used by default.
-]: any -> record<summary: record<id: string, arn: string, revisionNumber: int, createdAt: string>> {
+]: any -> oneof<record<summary: record<id: string, arn: string, revisionNumber: int, createdAt: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -268,9 +290,6 @@ export def "create-flow-template" [
 # POST /
 # DEPRECATED
 # operationId: CreateSystemInstance
-# --tags item shape: {key: string, value: string}
-# --definition shape: {language: "GRAPHQL", text: string}
-# --metricsConfiguration shape: {cloudMetricEnabled?: bool, metricRuleRoleArn?: string}
 @deprecated
 export def "create-system-instance" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -297,7 +316,7 @@ export def "create-system-instance" [
   --s3-bucket-name: string # The name of the Amazon Simple Storage Service bucket that will be used to store and deploy the system instance's resource file. This value is required if the value of the target parameter is GREENGRASS.
   --metrics-configuration: record # An object that specifies whether cloud metrics are collected in a deployment and, if so, what role is used to collect metrics. — shape: {cloudMetricEnabled?: bool, metricRuleRoleArn?: string}
   --flow-actions-role-arn: string # The ARN of the IAM role that AWS IoT Things Graph will assume when it executes the flow. This role must have read and write access to AWS Lambda and AWS IoT and any other AWS services that the flow uses when it executes. This value is required if the value of the target parameter is CLOUD.
-]: any -> record<summary: record<id: string, arn: string, status: string, target: string, greengrassGroupName: string, createdAt: string, updatedAt: string, greengrassGroupId: string, greengrassGroupVersionId: string>> {
+]: any -> oneof<record<summary: record<id: string, arn: string, status: string, target: string, greengrassGroupName: string, createdAt: string, updatedAt: string, greengrassGroupId: string, greengrassGroupVersionId: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -328,7 +347,6 @@ export def "create-system-instance" [
 # POST /
 # DEPRECATED
 # operationId: CreateSystemTemplate
-# --definition shape: {language: "GRAPHQL", text: string}
 @deprecated
 export def "create-system-template" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -350,7 +368,7 @@ export def "create-system-template" [
   --x-amz-target: string@x-amz-target-completer-3 # required
   definition: record # A document that defines an entity. — shape: {language: "GRAPHQL", text: string}
   --compatible-namespace-version: int # The namespace version in which the system is to be created. If no value is specified, the latest version is used by default.
-]: any -> record<summary: record<id: string, arn: string, revisionNumber: int, createdAt: string>> {
+]: any -> oneof<record<summary: record<id: string, arn: string, revisionNumber: int, createdAt: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -401,7 +419,7 @@ export def "delete-flow-template" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-4 # required
   id: string # The ID of the workflow to be deleted. The ID should be in the following format. urn:tdm:REGION/ACCOUNT ID/default:workflow:WORKFLOWNAME
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -452,7 +470,7 @@ export def "delete-namespace" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-5 # required
   --body: record
-]: any -> record<namespaceArn: string, namespaceName: string> {
+]: any -> oneof<record<namespaceArn: string, namespaceName: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -503,7 +521,7 @@ export def "delete-system-instance" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-6 # required
   --id: string # The ID of the system instance to be deleted.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -554,7 +572,7 @@ export def "delete-system-template" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-7 # required
   id: string # The ID of the system to be deleted. The ID should be in the following format. urn:tdm:REGION/ACCOUNT ID/default:system:SYSTEMNAME
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -605,7 +623,7 @@ export def "deploy-system-instance" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-8 # required
   --id: string # The ID of the system instance. This value is returned by the CreateSystemInstance action. The ID should be in the following format. urn:tdm:REGION/ACCOUNT ID/default:deployment:DEPLOYMENTNAME
-]: any -> record<summary: record<id: string, arn: string, status: string, target: string, greengrassGroupName: string, createdAt: string, updatedAt: string, greengrassGroupId: string, greengrassGroupVersionId: string>, greengrassDeploymentId: string> {
+]: any -> oneof<record<summary: record<id: string, arn: string, status: string, target: string, greengrassGroupName: string, createdAt: string, updatedAt: string, greengrassGroupId: string, greengrassGroupVersionId: string>, greengrassDeploymentId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -656,7 +674,7 @@ export def "deprecate-flow-template" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-9 # required
   id: string # The ID of the workflow to be deleted. The ID should be in the following format. urn:tdm:REGION/ACCOUNT ID/default:workflow:WORKFLOWNAME
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -707,7 +725,7 @@ export def "deprecate-system-template" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-10 # required
   id: string # The ID of the system to delete. The ID should be in the following format. urn:tdm:REGION/ACCOUNT ID/default:system:SYSTEMNAME
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -758,7 +776,7 @@ export def "describe-namespace" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-11 # required
   --namespace-name: string # The name of the user's namespace. Set this to aws to get the public namespace.
-]: any -> record<namespaceArn: string, namespaceName: string, trackingNamespaceName: string, trackingNamespaceVersion: int, namespaceVersion: int> {
+]: any -> oneof<record<namespaceArn: string, namespaceName: string, trackingNamespaceName: string, trackingNamespaceVersion: int, namespaceVersion: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -810,7 +828,7 @@ export def "dissociate-entity-from-thing" [
   --x-amz-target: string@x-amz-target-completer-12 # required
   thing_name: string # The name of the thing to disassociate.
   entity_type: string@entity-type-completer # The entity type from which to disassociate the thing.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -862,7 +880,7 @@ export def "get-entities" [
   --x-amz-target: string@x-amz-target-completer-13 # required
   ids: list<string> # An array of entity IDs. The IDs should be in the following format. urn:tdm:REGION/ACCOUNT ID/default:device:DEVICENAME
   --namespace-version: int # The version of the user's namespace. Defaults to the latest version of the user's namespace.
-]: any -> record<descriptions: table<id: string, arn: string, type: string, createdAt: string, definition: record>> {
+]: any -> oneof<record<descriptions: table<id: string, arn: string, type: string, createdAt: string, definition: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -914,7 +932,7 @@ export def "get-flow-template" [
   --x-amz-target: string@x-amz-target-completer-14 # required
   id: string # The ID of the workflow. The ID should be in the following format. urn:tdm:REGION/ACCOUNT ID/default:workflow:WORKFLOWNAME
   --revision-number: int # The number of the workflow revision to retrieve.
-]: any -> record<description: record<summary: record<id: string, arn: string, revisionNumber: int, createdAt: string>, definition: record<language: string, text: string>, validatedNamespaceVersion: int>> {
+]: any -> oneof<record<description: record<summary: record<id: string, arn: string, revisionNumber: int, createdAt: string>, definition: record<language: string, text: string>, validatedNamespaceVersion: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -969,7 +987,7 @@ export def "get-flow-template-revisions" [
   id: string # The ID of the workflow. The ID should be in the following format. urn:tdm:REGION/ACCOUNT ID/default:workflow:WORKFLOWNAME
   --next-token-body: string # The string that specifies the next page of results. Use this when you're paginating results. (body field)
   --max-results-body: int # The maximum number of results to return in the response. (body field)
-]: any -> record<summaries: table<id: string, arn: string, revisionNumber: int, createdAt: string>, nextToken: string> {
+]: any -> oneof<record<summaries: table<id: string, arn: string, revisionNumber: int, createdAt: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1021,7 +1039,7 @@ export def "get-namespace-deletion-status" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-16 # required
   --body: record
-]: any -> record<namespaceArn: string, namespaceName: string, status: string, errorCode: string, errorMessage: string> {
+]: any -> oneof<record<namespaceArn: string, namespaceName: string, status: string, errorCode: string, errorMessage: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1072,7 +1090,7 @@ export def "get-system-instance" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-17 # required
   id: string # The ID of the system deployment instance. This value is returned by CreateSystemInstance. The ID should be in the following format. urn:tdm:REGION/ACCOUNT ID/default:deployment:DEPLOYMENTNAME
-]: any -> record<description: record<summary: record<id: string, arn: string, status: string, target: string, greengrassGroupName: string, createdAt: string, updatedAt: string, greengrassGroupId: string, greengrassGroupVersionId: string>, definition: record<language: string, text: string>, s3BucketName: string, metricsConfiguration: record<cloudMetricEnabled: bool, metricRuleRoleArn: string>, validatedNamespaceVersion: int, validatedDependencyRevisions: list<record>, flowActionsRoleArn: string>> {
+]: any -> oneof<record<description: record<summary: record<id: string, arn: string, status: string, target: string, greengrassGroupName: string, createdAt: string, updatedAt: string, greengrassGroupId: string, greengrassGroupVersionId: string>, definition: record<language: string, text: string>, s3BucketName: string, metricsConfiguration: record<cloudMetricEnabled: bool, metricRuleRoleArn: string>, validatedNamespaceVersion: int, validatedDependencyRevisions: list<record>, flowActionsRoleArn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1124,7 +1142,7 @@ export def "get-system-template" [
   --x-amz-target: string@x-amz-target-completer-18 # required
   id: string # The ID of the system to get. This ID must be in the user's namespace. The ID should be in the following format. urn:tdm:REGION/ACCOUNT ID/default:system:SYSTEMNAME
   --revision-number: int # The number that specifies the revision of the system to get.
-]: any -> record<description: record<summary: record<id: string, arn: string, revisionNumber: int, createdAt: string>, definition: record<language: string, text: string>, validatedNamespaceVersion: int>> {
+]: any -> oneof<record<description: record<summary: record<id: string, arn: string, revisionNumber: int, createdAt: string>, definition: record<language: string, text: string>, validatedNamespaceVersion: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1179,7 +1197,7 @@ export def "get-system-template-revisions" [
   id: string # The ID of the system template. The ID should be in the following format. urn:tdm:REGION/ACCOUNT ID/default:system:SYSTEMNAME
   --next-token-body: string # The string that specifies the next page of results. Use this when you're paginating results. (body field)
   --max-results-body: int # The maximum number of results to return in the response. (body field)
-]: any -> record<summaries: table<id: string, arn: string, revisionNumber: int, createdAt: string>, nextToken: string> {
+]: any -> oneof<record<summaries: table<id: string, arn: string, revisionNumber: int, createdAt: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1231,7 +1249,7 @@ export def "get-upload-status" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-20 # required
   upload_id: string # The ID of the upload. This value is returned by the UploadEntityDefinitions action.
-]: any -> record<uploadId: string, uploadStatus: string, namespaceArn: string, namespaceName: string, namespaceVersion: int, failureReason: list<string>, createdDate: string> {
+]: any -> oneof<record<uploadId: string, uploadStatus: string, namespaceArn: string, namespaceName: string, namespaceVersion: int, failureReason: list<string>, createdDate: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1286,7 +1304,7 @@ export def "list-flow-execution-messages" [
   flow_execution_id: string # The ID of the flow execution.
   --next-token-body: string # The string that specifies the next page of results. Use this when you're paginating results. (body field)
   --max-results-body: int # The maximum number of results to return in the response. (body field)
-]: any -> record<messages: table<messageId: string, eventType: string, timestamp: string, payload: string>, nextToken: string> {
+]: any -> oneof<record<messages: table<messageId: string, eventType: string, timestamp: string, payload: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1342,7 +1360,7 @@ export def "list-tags-for-resource" [
   --max-results-body: int # The maximum number of tags to return. (body field)
   resource_arn: string # The Amazon Resource Name (ARN) of the resource whose tags are to be returned.
   --next-token-body: string # The token that specifies the next page of results to return. (body field)
-]: any -> record<tags: table<key: string, value: string>, nextToken: string> {
+]: any -> oneof<record<tags: table<key: string, value: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1374,7 +1392,6 @@ export def "list-tags-for-resource" [
 # POST /
 # DEPRECATED
 # operationId: SearchEntities
-# --filters item shape: {name?: "NAME"|"NAMESPACE"|"SEMANTIC_TYPE_PATH"|"REFERENCED_ENTITY_ID", value?: list<string>}
 @deprecated
 export def "search-entities" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1401,7 +1418,7 @@ export def "search-entities" [
   --next-token-body: string # The string that specifies the next page of results. Use this when you're paginating results. (body field)
   --max-results-body: int # The maximum number of results to return in the response. (body field)
   --namespace-version: int # The version of the user's namespace. Defaults to the latest version of the user's namespace.
-]: any -> record<descriptions: table<id: string, arn: string, type: string, createdAt: string, definition: record>, nextToken: string> {
+]: any -> oneof<record<descriptions: table<id: string, arn: string, type: string, createdAt: string, definition: record>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1460,7 +1477,7 @@ export def "search-flow-executions" [
   --end-time: string # The date and time of the latest flow execution to return. (format: date-time)
   --next-token-body: string # The string that specifies the next page of results. Use this when you're paginating results. (body field)
   --max-results-body: int # The maximum number of results to return in the response. (body field)
-]: any -> record<summaries: table<flowExecutionId: string, status: string, systemInstanceId: string, flowTemplateId: string, createdAt: string, updatedAt: string>, nextToken: string> {
+]: any -> oneof<record<summaries: table<flowExecutionId: string, status: string, systemInstanceId: string, flowTemplateId: string, createdAt: string, updatedAt: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1492,7 +1509,6 @@ export def "search-flow-executions" [
 # POST /
 # DEPRECATED
 # operationId: SearchFlowTemplates
-# --filters item shape: {name: "DEVICE_MODEL_ID", value: list<string>}
 @deprecated
 export def "search-flow-templates" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1517,7 +1533,7 @@ export def "search-flow-templates" [
   --filters: list # An array of objects that limit the result set. The only valid filter is DEVICE_MODEL_ID. — item shape: {name: "DEVICE_MODEL_ID", value: list<string>}
   --next-token-body: string # The string that specifies the next page of results. Use this when you're paginating results. (body field)
   --max-results-body: int # The maximum number of results to return in the response. (body field)
-]: any -> record<summaries: table<id: string, arn: string, revisionNumber: int, createdAt: string>, nextToken: string> {
+]: any -> oneof<record<summaries: table<id: string, arn: string, revisionNumber: int, createdAt: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1549,7 +1565,6 @@ export def "search-flow-templates" [
 # POST /
 # DEPRECATED
 # operationId: SearchSystemInstances
-# --filters item shape: {name?: "SYSTEM_TEMPLATE_ID"|"STATUS"|"GREENGRASS_GROUP_NAME", value?: list<string>}
 @deprecated
 export def "search-system-instances" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1574,7 +1589,7 @@ export def "search-system-instances" [
   --filters: list # Optional filter to apply to the search. Valid filters are SYSTEM_TEMPLATE_ID, STATUS, and GREENGRASS_GROUP_NAME. Multiple filters function as OR criteria in the query. Multiple values passed inside the filter function as AND criteria. — item shape: {name?: "SYSTEM_TEMPLATE_ID"|"STATUS"|"GREENGRASS_GROUP_NAME", value?: list<string>}
   --next-token-body: string # The string that specifies the next page of results. Use this when you're paginating results. (body field)
   --max-results-body: int # The maximum number of results to return in the response. (body field)
-]: any -> record<summaries: table<id: string, arn: string, status: string, target: string, greengrassGroupName: string, createdAt: string, updatedAt: string, greengrassGroupId: string, greengrassGroupVersionId: string>, nextToken: string> {
+]: any -> oneof<record<summaries: table<id: string, arn: string, status: string, target: string, greengrassGroupName: string, createdAt: string, updatedAt: string, greengrassGroupId: string, greengrassGroupVersionId: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1606,7 +1621,6 @@ export def "search-system-instances" [
 # POST /
 # DEPRECATED
 # operationId: SearchSystemTemplates
-# --filters item shape: {name: "FLOW_TEMPLATE_ID", value: list<string>}
 @deprecated
 export def "search-system-templates" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1631,7 +1645,7 @@ export def "search-system-templates" [
   --filters: list # An array of filters that limit the result set. The only valid filter is FLOW_TEMPLATE_ID. — item shape: {name: "FLOW_TEMPLATE_ID", value: list<string>}
   --next-token-body: string # The string that specifies the next page of results. Use this when you're paginating results. (body field)
   --max-results-body: int # The maximum number of results to return in the response. (body field)
-]: any -> record<summaries: table<id: string, arn: string, revisionNumber: int, createdAt: string>, nextToken: string> {
+]: any -> oneof<record<summaries: table<id: string, arn: string, revisionNumber: int, createdAt: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1688,7 +1702,7 @@ export def "search-things" [
   --next-token-body: string # The string that specifies the next page of results. Use this when you're paginating results. (body field)
   --max-results-body: int # The maximum number of results to return in the response. (body field)
   --namespace-version: int # The version of the user's namespace. Defaults to the latest version of the user's namespace.
-]: any -> record<things: table<thingArn: string, thingName: string>, nextToken: string> {
+]: any -> oneof<record<things: table<thingArn: string, thingName: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1720,7 +1734,6 @@ export def "search-things" [
 # POST /
 # DEPRECATED
 # operationId: TagResource
-# --tags item shape: {key: string, value: string}
 @deprecated
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1742,7 +1755,7 @@ export def "tag-resource" [
   --x-amz-target: string@x-amz-target-completer-29 # required
   resource_arn: string # The Amazon Resource Name (ARN) of the resource whose tags are returned.
   tags: list # A list of tags to add to the resource.> — item shape: {key: string, value: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1793,7 +1806,7 @@ export def "undeploy-system-instance" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-30 # required
   --id: string # The ID of the system instance to remove from its target.
-]: any -> record<summary: record<id: string, arn: string, status: string, target: string, greengrassGroupName: string, createdAt: string, updatedAt: string, greengrassGroupId: string, greengrassGroupVersionId: string>> {
+]: any -> oneof<record<summary: record<id: string, arn: string, status: string, target: string, greengrassGroupName: string, createdAt: string, updatedAt: string, greengrassGroupId: string, greengrassGroupVersionId: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1845,7 +1858,7 @@ export def "untag-resource" [
   --x-amz-target: string@x-amz-target-completer-31 # required
   resource_arn: string # The Amazon Resource Name (ARN) of the resource whose tags are to be removed.
   tag_keys: list<string> # A list of tag key names to remove from the resource. You don't specify the value. Both the key and its associated value are removed. This parameter to the API requires a JSON text string argument. For information on how to format a JSON parameter for the various command line tool environments, see Using JSON for Parameters (https://docs.aws.amazon.com/cli/latest/userguide/cli-usage-parameters.html#cli-using-param-json) in the AWS CLI User Guide.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1876,7 +1889,6 @@ export def "untag-resource" [
 # POST /
 # DEPRECATED
 # operationId: UpdateFlowTemplate
-# --definition shape: {language: "GRAPHQL", text: string}
 @deprecated
 export def "update-flow-template" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1899,7 +1911,7 @@ export def "update-flow-template" [
   id: string # The ID of the workflow to be updated. The ID should be in the following format. urn:tdm:REGION/ACCOUNT ID/default:workflow:WORKFLOWNAME
   definition: record # A document that defines an entity. — shape: {language: "GRAPHQL", text: string}
   --compatible-namespace-version: int # The version of the user's namespace. If no value is specified, the latest version is used by default. Use the GetFlowTemplateRevisions if you want to find earlier revisions of the flow to update.
-]: any -> record<summary: record<id: string, arn: string, revisionNumber: int, createdAt: string>> {
+]: any -> oneof<record<summary: record<id: string, arn: string, revisionNumber: int, createdAt: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1930,7 +1942,6 @@ export def "update-flow-template" [
 # POST /
 # DEPRECATED
 # operationId: UpdateSystemTemplate
-# --definition shape: {language: "GRAPHQL", text: string}
 @deprecated
 export def "update-system-template" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1953,7 +1964,7 @@ export def "update-system-template" [
   id: string # The ID of the system to be updated. The ID should be in the following format. urn:tdm:REGION/ACCOUNT ID/default:system:SYSTEMNAME
   definition: record # A document that defines an entity. — shape: {language: "GRAPHQL", text: string}
   --compatible-namespace-version: int # The version of the user's namespace. Defaults to the latest version of the user's namespace. If no value is specified, the latest version is used by default.
-]: any -> record<summary: record<id: string, arn: string, revisionNumber: int, createdAt: string>> {
+]: any -> oneof<record<summary: record<id: string, arn: string, revisionNumber: int, createdAt: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1984,7 +1995,6 @@ export def "update-system-template" [
 # POST /
 # DEPRECATED
 # operationId: UploadEntityDefinitions
-# --document shape: {language: "GRAPHQL", text: string}
 @deprecated
 export def "upload-entity-definitions" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2007,7 +2017,7 @@ export def "upload-entity-definitions" [
   --document: record # A document that defines an entity. — shape: {language: "GRAPHQL", text: string}
   --sync-with-public-namespace: oneof<nothing, bool> # A Boolean that specifies whether to synchronize with the latest version of the public namespace. If set to true, the upload will create a new namespace version.
   --deprecate-existing-entities: oneof<nothing, bool> # A Boolean that specifies whether to deprecate all entities in the latest version before uploading the new DefinitionDocument. If set to true, the upload will create a new namespace version.
-]: any -> record<uploadId: string> {
+]: any -> oneof<record<uploadId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

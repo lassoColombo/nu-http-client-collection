@@ -14,27 +14,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "ocp-apim-subscription-key" => { {scheme: $scheme, headers: {"Ocp-Apim-Subscription-Key": $token_val}, query: "", location: "header"} }
     "query-key" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "key")=(encode-path-segment $token_val)", location: "query"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -42,8 +51,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -54,7 +68,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -89,7 +112,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["http://azure-api.sportsdata.io/v3/cfb/scores" "https://azure-api.sportsdata.io/v3/cfb/scores"] }
@@ -101,9 +125,9 @@ def format-completer [] { ["JSON" "XML"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "are-games-in-progress" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["are-games-in-progress" "current-season" "current-season-details" "current-seasontype" "current-week" "schedules" "games-by-date" "games-by-week" "injured-players" "conference-hierarchy-with-teams" "player-details-by-player" "player-details-by-active" "player-details-by-team" "stadiums" "team-game-logs-by-season" "team-game-stats-by-week" "team-season-stats-standings" "teams" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -208,7 +232,7 @@ export def "current-season-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<ApiSeason: string, ApiWeek: int, Description: string, EndYear: int, Season: int, StartYear: int> {
+]: nothing -> oneof<record<ApiSeason: string, ApiWeek: int, Description: string, EndYear: int, Season: int, StartYear: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
@@ -317,7 +341,7 @@ export def "schedules" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<Attendance: int, AwayPointSpreadPayout: int, AwayRotationNumber: int, AwayTeam: string, AwayTeamID: int, AwayTeamMoneyLine: int, AwayTeamName: string, AwayTeamScore: int, Channel: string, Created: string, DateTime: string, DateTimeUTC: string, Day: string, Distance: int, Down: int, GameEndDateTime: string, GameID: int, GlobalAwayTeamID: int, GlobalGameID: int, GlobalHomeTeamID: int, HomePointSpreadPayout: int, HomeRotationNumber: int, HomeTeam: string, HomeTeamID: int, HomeTeamMoneyLine: int, HomeTeamName: string, HomeTeamScore: int, IsClosed: bool, NeutralVenue: bool, OverPayout: int, OverUnder: float, Period: string, Periods: list<record>, PointSpread: float, Possession: string, Season: int, SeasonType: int, Stadium: record<Active: bool, City: string, Dome: bool, GeoLat: float, GeoLong: float, Name: string, StadiumID: int, State: string>, StadiumID: int, Status: string, TimeRemainingMinutes: int, TimeRemainingSeconds: int, Title: string, UnderPayout: int, Updated: string, Week: int, YardLine: int, YardLineTerritory: string> {
+]: nothing -> oneof<table<Attendance: int, AwayPointSpreadPayout: int, AwayRotationNumber: int, AwayTeam: string, AwayTeamID: int, AwayTeamMoneyLine: int, AwayTeamName: string, AwayTeamScore: int, Channel: string, Created: string, DateTime: string, DateTimeUTC: string, Day: string, Distance: int, Down: int, GameEndDateTime: string, GameID: int, GlobalAwayTeamID: int, GlobalGameID: int, GlobalHomeTeamID: int, HomePointSpreadPayout: int, HomeRotationNumber: int, HomeTeam: string, HomeTeamID: int, HomeTeamMoneyLine: int, HomeTeamName: string, HomeTeamScore: int, IsClosed: bool, NeutralVenue: bool, OverPayout: int, OverUnder: float, Period: string, Periods: list<record>, PointSpread: float, Possession: string, Season: int, SeasonType: int, Stadium: record<Active: bool, City: string, Dome: bool, GeoLat: float, GeoLong: float, Name: string, StadiumID: int, State: string>, StadiumID: int, Status: string, TimeRemainingMinutes: int, TimeRemainingSeconds: int, Title: string, UnderPayout: int, Updated: string, Week: int, YardLine: int, YardLineTerritory: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
@@ -355,7 +379,7 @@ export def "games-by-date" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<Attendance: int, AwayPointSpreadPayout: int, AwayRotationNumber: int, AwayTeam: string, AwayTeamID: int, AwayTeamMoneyLine: int, AwayTeamName: string, AwayTeamScore: int, Channel: string, Created: string, DateTime: string, DateTimeUTC: string, Day: string, Distance: int, Down: int, GameEndDateTime: string, GameID: int, GlobalAwayTeamID: int, GlobalGameID: int, GlobalHomeTeamID: int, HomePointSpreadPayout: int, HomeRotationNumber: int, HomeTeam: string, HomeTeamID: int, HomeTeamMoneyLine: int, HomeTeamName: string, HomeTeamScore: int, IsClosed: bool, NeutralVenue: bool, OverPayout: int, OverUnder: float, Period: string, Periods: list<record>, PointSpread: float, Possession: string, Season: int, SeasonType: int, Stadium: record<Active: bool, City: string, Dome: bool, GeoLat: float, GeoLong: float, Name: string, StadiumID: int, State: string>, StadiumID: int, Status: string, TimeRemainingMinutes: int, TimeRemainingSeconds: int, Title: string, UnderPayout: int, Updated: string, Week: int, YardLine: int, YardLineTerritory: string> {
+]: nothing -> oneof<table<Attendance: int, AwayPointSpreadPayout: int, AwayRotationNumber: int, AwayTeam: string, AwayTeamID: int, AwayTeamMoneyLine: int, AwayTeamName: string, AwayTeamScore: int, Channel: string, Created: string, DateTime: string, DateTimeUTC: string, Day: string, Distance: int, Down: int, GameEndDateTime: string, GameID: int, GlobalAwayTeamID: int, GlobalGameID: int, GlobalHomeTeamID: int, HomePointSpreadPayout: int, HomeRotationNumber: int, HomeTeam: string, HomeTeamID: int, HomeTeamMoneyLine: int, HomeTeamName: string, HomeTeamScore: int, IsClosed: bool, NeutralVenue: bool, OverPayout: int, OverUnder: float, Period: string, Periods: list<record>, PointSpread: float, Possession: string, Season: int, SeasonType: int, Stadium: record<Active: bool, City: string, Dome: bool, GeoLat: float, GeoLong: float, Name: string, StadiumID: int, State: string>, StadiumID: int, Status: string, TimeRemainingMinutes: int, TimeRemainingSeconds: int, Title: string, UnderPayout: int, Updated: string, Week: int, YardLine: int, YardLineTerritory: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
@@ -394,7 +418,7 @@ export def "games-by-week" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<Attendance: int, AwayPointSpreadPayout: int, AwayRotationNumber: int, AwayTeam: string, AwayTeamID: int, AwayTeamMoneyLine: int, AwayTeamName: string, AwayTeamScore: int, Channel: string, Created: string, DateTime: string, DateTimeUTC: string, Day: string, Distance: int, Down: int, GameEndDateTime: string, GameID: int, GlobalAwayTeamID: int, GlobalGameID: int, GlobalHomeTeamID: int, HomePointSpreadPayout: int, HomeRotationNumber: int, HomeTeam: string, HomeTeamID: int, HomeTeamMoneyLine: int, HomeTeamName: string, HomeTeamScore: int, IsClosed: bool, NeutralVenue: bool, OverPayout: int, OverUnder: float, Period: string, Periods: list<record>, PointSpread: float, Possession: string, Season: int, SeasonType: int, Stadium: record<Active: bool, City: string, Dome: bool, GeoLat: float, GeoLong: float, Name: string, StadiumID: int, State: string>, StadiumID: int, Status: string, TimeRemainingMinutes: int, TimeRemainingSeconds: int, Title: string, UnderPayout: int, Updated: string, Week: int, YardLine: int, YardLineTerritory: string> {
+]: nothing -> oneof<table<Attendance: int, AwayPointSpreadPayout: int, AwayRotationNumber: int, AwayTeam: string, AwayTeamID: int, AwayTeamMoneyLine: int, AwayTeamName: string, AwayTeamScore: int, Channel: string, Created: string, DateTime: string, DateTimeUTC: string, Day: string, Distance: int, Down: int, GameEndDateTime: string, GameID: int, GlobalAwayTeamID: int, GlobalGameID: int, GlobalHomeTeamID: int, HomePointSpreadPayout: int, HomeRotationNumber: int, HomeTeam: string, HomeTeamID: int, HomeTeamMoneyLine: int, HomeTeamName: string, HomeTeamScore: int, IsClosed: bool, NeutralVenue: bool, OverPayout: int, OverUnder: float, Period: string, Periods: list<record>, PointSpread: float, Possession: string, Season: int, SeasonType: int, Stadium: record<Active: bool, City: string, Dome: bool, GeoLat: float, GeoLong: float, Name: string, StadiumID: int, State: string>, StadiumID: int, Status: string, TimeRemainingMinutes: int, TimeRemainingSeconds: int, Title: string, UnderPayout: int, Updated: string, Week: int, YardLine: int, YardLineTerritory: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
@@ -432,7 +456,7 @@ export def "injured-players" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<BirthCity: string, BirthState: string, Class: string, Created: string, FirstName: string, GlobalTeamID: int, Height: int, InjuryBodyPart: string, InjuryNotes: string, InjuryStartDate: string, InjuryStatus: string, Jersey: int, LastName: string, PlayerID: int, Position: string, PositionCategory: string, Team: string, TeamID: int, Updated: string, Weight: int> {
+]: nothing -> oneof<table<BirthCity: string, BirthState: string, Class: string, Created: string, FirstName: string, GlobalTeamID: int, Height: int, InjuryBodyPart: string, InjuryNotes: string, InjuryStartDate: string, InjuryStatus: string, Jersey: int, LastName: string, PlayerID: int, Position: string, PositionCategory: string, Team: string, TeamID: int, Updated: string, Weight: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
@@ -468,7 +492,7 @@ export def "conference-hierarchy-with-teams" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<ConferenceID: int, ConferenceName: string, DivisionName: string, Name: string, Teams: list<record>> {
+]: nothing -> oneof<table<ConferenceID: int, ConferenceName: string, DivisionName: string, Name: string, Teams: list<record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
@@ -505,7 +529,7 @@ export def "player-details-by-player" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<BirthCity: string, BirthState: string, Class: string, Created: string, FirstName: string, GlobalTeamID: int, Height: int, InjuryBodyPart: string, InjuryNotes: string, InjuryStartDate: string, InjuryStatus: string, Jersey: int, LastName: string, PlayerID: int, Position: string, PositionCategory: string, Team: string, TeamID: int, Updated: string, Weight: int> {
+]: nothing -> oneof<table<BirthCity: string, BirthState: string, Class: string, Created: string, FirstName: string, GlobalTeamID: int, Height: int, InjuryBodyPart: string, InjuryNotes: string, InjuryStartDate: string, InjuryStatus: string, Jersey: int, LastName: string, PlayerID: int, Position: string, PositionCategory: string, Team: string, TeamID: int, Updated: string, Weight: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
@@ -542,7 +566,7 @@ export def "player-details-by-active" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<BirthCity: string, BirthState: string, Class: string, Created: string, FirstName: string, GlobalTeamID: int, Height: int, InjuryBodyPart: string, InjuryNotes: string, InjuryStartDate: string, InjuryStatus: string, Jersey: int, LastName: string, PlayerID: int, Position: string, PositionCategory: string, Team: string, TeamID: int, Updated: string, Weight: int> {
+]: nothing -> oneof<table<BirthCity: string, BirthState: string, Class: string, Created: string, FirstName: string, GlobalTeamID: int, Height: int, InjuryBodyPart: string, InjuryNotes: string, InjuryStartDate: string, InjuryStatus: string, Jersey: int, LastName: string, PlayerID: int, Position: string, PositionCategory: string, Team: string, TeamID: int, Updated: string, Weight: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
@@ -579,7 +603,7 @@ export def "player-details-by-team" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<BirthCity: string, BirthState: string, Class: string, Created: string, FirstName: string, GlobalTeamID: int, Height: int, InjuryBodyPart: string, InjuryNotes: string, InjuryStartDate: string, InjuryStatus: string, Jersey: int, LastName: string, PlayerID: int, Position: string, PositionCategory: string, Team: string, TeamID: int, Updated: string, Weight: int> {
+]: nothing -> oneof<table<BirthCity: string, BirthState: string, Class: string, Created: string, FirstName: string, GlobalTeamID: int, Height: int, InjuryBodyPart: string, InjuryNotes: string, InjuryStartDate: string, InjuryStatus: string, Jersey: int, LastName: string, PlayerID: int, Position: string, PositionCategory: string, Team: string, TeamID: int, Updated: string, Weight: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
@@ -616,7 +640,7 @@ export def "stadiums" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<Active: bool, City: string, Dome: bool, GeoLat: float, GeoLong: float, Name: string, StadiumID: int, State: string> {
+]: nothing -> oneof<table<Active: bool, City: string, Dome: bool, GeoLat: float, GeoLong: float, Name: string, StadiumID: int, State: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
@@ -655,7 +679,7 @@ export def "team-game-logs-by-season" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<AssistedTackles: float, Created: string, DateTime: string, Day: string, ExtraPointsAttempted: float, ExtraPointsMade: float, FantasyPoints: float, FieldGoalPercentage: float, FieldGoalsAttempted: float, FieldGoalsLongestMade: float, FieldGoalsMade: float, FirstDowns: int, FourthDownAttempts: int, FourthDownConversions: int, FumbleReturnTouchdowns: float, Fumbles: float, FumblesLost: float, FumblesRecovered: float, GameID: int, Games: int, GlobalGameID: int, GlobalOpponentID: int, GlobalTeamID: int, HomeOrAway: string, InterceptionReturnTouchdowns: float, InterceptionReturnYards: float, Interceptions: float, IsGameOver: bool, KickReturnLong: float, KickReturnTouchdowns: float, KickReturnYards: float, KickReturnYardsPerAttempt: float, KickReturns: float, Name: string, Opponent: string, OpponentID: int, OpponentScore: int, PassesDefended: float, PassingAttempts: float, PassingCompletionPercentage: float, PassingCompletions: float, PassingInterceptions: float, PassingRating: float, PassingTouchdowns: float, PassingYards: float, PassingYardsPerAttempt: float, PassingYardsPerCompletion: float, Penalties: int, PenaltyYards: int, PuntAverage: float, PuntLong: float, PuntReturnLong: float, PuntReturnTouchdowns: float, PuntReturnYards: float, PuntReturnYardsPerAttempt: float, PuntReturns: float, PuntYards: float, Punts: float, QuarterbackHurries: float, ReceivingLong: float, ReceivingTouchdowns: float, ReceivingYards: float, ReceivingYardsPerReception: float, Receptions: float, RushingAttempts: float, RushingLong: float, RushingTouchdowns: float, RushingYards: float, RushingYardsPerAttempt: float, Sacks: float, Score: int, Season: int, SeasonType: int, SoloTackles: float, StatID: int, TacklesForLoss: float, Team: string, TeamID: int, ThirdDownAttempts: int, ThirdDownConversions: int, TimeOfPossessionMinutes: int, TimeOfPossessionSeconds: int, Updated: string, Week: int> {
+]: nothing -> oneof<table<AssistedTackles: float, Created: string, DateTime: string, Day: string, ExtraPointsAttempted: float, ExtraPointsMade: float, FantasyPoints: float, FieldGoalPercentage: float, FieldGoalsAttempted: float, FieldGoalsLongestMade: float, FieldGoalsMade: float, FirstDowns: int, FourthDownAttempts: int, FourthDownConversions: int, FumbleReturnTouchdowns: float, Fumbles: float, FumblesLost: float, FumblesRecovered: float, GameID: int, Games: int, GlobalGameID: int, GlobalOpponentID: int, GlobalTeamID: int, HomeOrAway: string, InterceptionReturnTouchdowns: float, InterceptionReturnYards: float, Interceptions: float, IsGameOver: bool, KickReturnLong: float, KickReturnTouchdowns: float, KickReturnYards: float, KickReturnYardsPerAttempt: float, KickReturns: float, Name: string, Opponent: string, OpponentID: int, OpponentScore: int, PassesDefended: float, PassingAttempts: float, PassingCompletionPercentage: float, PassingCompletions: float, PassingInterceptions: float, PassingRating: float, PassingTouchdowns: float, PassingYards: float, PassingYardsPerAttempt: float, PassingYardsPerCompletion: float, Penalties: int, PenaltyYards: int, PuntAverage: float, PuntLong: float, PuntReturnLong: float, PuntReturnTouchdowns: float, PuntReturnYards: float, PuntReturnYardsPerAttempt: float, PuntReturns: float, PuntYards: float, Punts: float, QuarterbackHurries: float, ReceivingLong: float, ReceivingTouchdowns: float, ReceivingYards: float, ReceivingYardsPerReception: float, Receptions: float, RushingAttempts: float, RushingLong: float, RushingTouchdowns: float, RushingYards: float, RushingYardsPerAttempt: float, Sacks: float, Score: int, Season: int, SeasonType: int, SoloTackles: float, StatID: int, TacklesForLoss: float, Team: string, TeamID: int, ThirdDownAttempts: int, ThirdDownConversions: int, TimeOfPossessionMinutes: int, TimeOfPossessionSeconds: int, Updated: string, Week: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
@@ -696,7 +720,7 @@ export def "team-game-stats-by-week" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<AssistedTackles: float, Created: string, DateTime: string, Day: string, ExtraPointsAttempted: float, ExtraPointsMade: float, FantasyPoints: float, FieldGoalPercentage: float, FieldGoalsAttempted: float, FieldGoalsLongestMade: float, FieldGoalsMade: float, FirstDowns: int, FourthDownAttempts: int, FourthDownConversions: int, FumbleReturnTouchdowns: float, Fumbles: float, FumblesLost: float, FumblesRecovered: float, GameID: int, Games: int, GlobalGameID: int, GlobalOpponentID: int, GlobalTeamID: int, HomeOrAway: string, InterceptionReturnTouchdowns: float, InterceptionReturnYards: float, Interceptions: float, IsGameOver: bool, KickReturnLong: float, KickReturnTouchdowns: float, KickReturnYards: float, KickReturnYardsPerAttempt: float, KickReturns: float, Name: string, Opponent: string, OpponentID: int, OpponentScore: int, PassesDefended: float, PassingAttempts: float, PassingCompletionPercentage: float, PassingCompletions: float, PassingInterceptions: float, PassingRating: float, PassingTouchdowns: float, PassingYards: float, PassingYardsPerAttempt: float, PassingYardsPerCompletion: float, Penalties: int, PenaltyYards: int, PuntAverage: float, PuntLong: float, PuntReturnLong: float, PuntReturnTouchdowns: float, PuntReturnYards: float, PuntReturnYardsPerAttempt: float, PuntReturns: float, PuntYards: float, Punts: float, QuarterbackHurries: float, ReceivingLong: float, ReceivingTouchdowns: float, ReceivingYards: float, ReceivingYardsPerReception: float, Receptions: float, RushingAttempts: float, RushingLong: float, RushingTouchdowns: float, RushingYards: float, RushingYardsPerAttempt: float, Sacks: float, Score: int, Season: int, SeasonType: int, SoloTackles: float, StatID: int, TacklesForLoss: float, Team: string, TeamID: int, ThirdDownAttempts: int, ThirdDownConversions: int, TimeOfPossessionMinutes: int, TimeOfPossessionSeconds: int, Updated: string, Week: int> {
+]: nothing -> oneof<table<AssistedTackles: float, Created: string, DateTime: string, Day: string, ExtraPointsAttempted: float, ExtraPointsMade: float, FantasyPoints: float, FieldGoalPercentage: float, FieldGoalsAttempted: float, FieldGoalsLongestMade: float, FieldGoalsMade: float, FirstDowns: int, FourthDownAttempts: int, FourthDownConversions: int, FumbleReturnTouchdowns: float, Fumbles: float, FumblesLost: float, FumblesRecovered: float, GameID: int, Games: int, GlobalGameID: int, GlobalOpponentID: int, GlobalTeamID: int, HomeOrAway: string, InterceptionReturnTouchdowns: float, InterceptionReturnYards: float, Interceptions: float, IsGameOver: bool, KickReturnLong: float, KickReturnTouchdowns: float, KickReturnYards: float, KickReturnYardsPerAttempt: float, KickReturns: float, Name: string, Opponent: string, OpponentID: int, OpponentScore: int, PassesDefended: float, PassingAttempts: float, PassingCompletionPercentage: float, PassingCompletions: float, PassingInterceptions: float, PassingRating: float, PassingTouchdowns: float, PassingYards: float, PassingYardsPerAttempt: float, PassingYardsPerCompletion: float, Penalties: int, PenaltyYards: int, PuntAverage: float, PuntLong: float, PuntReturnLong: float, PuntReturnTouchdowns: float, PuntReturnYards: float, PuntReturnYardsPerAttempt: float, PuntReturns: float, PuntYards: float, Punts: float, QuarterbackHurries: float, ReceivingLong: float, ReceivingTouchdowns: float, ReceivingYards: float, ReceivingYardsPerReception: float, Receptions: float, RushingAttempts: float, RushingLong: float, RushingTouchdowns: float, RushingYards: float, RushingYardsPerAttempt: float, Sacks: float, Score: int, Season: int, SeasonType: int, SoloTackles: float, StatID: int, TacklesForLoss: float, Team: string, TeamID: int, ThirdDownAttempts: int, ThirdDownConversions: int, TimeOfPossessionMinutes: int, TimeOfPossessionSeconds: int, Updated: string, Week: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
@@ -735,7 +759,7 @@ export def "team-season-stats-standings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<AssistedTackles: float, ConferenceLosses: int, ConferencePointsAgainst: int, ConferencePointsFor: int, ConferenceRank: int, ConferenceWins: int, Created: string, DivisionRank: int, ExtraPointsAttempted: float, ExtraPointsMade: float, FantasyPoints: float, FieldGoalPercentage: float, FieldGoalsAttempted: float, FieldGoalsLongestMade: float, FieldGoalsMade: float, FirstDowns: int, FourthDownAttempts: int, FourthDownConversions: int, FumbleReturnTouchdowns: float, Fumbles: float, FumblesLost: float, FumblesRecovered: float, Games: int, GlobalTeamID: int, HomeLosses: int, HomeWins: int, InterceptionReturnTouchdowns: float, InterceptionReturnYards: float, Interceptions: float, KickReturnLong: float, KickReturnTouchdowns: float, KickReturnYards: float, KickReturnYardsPerAttempt: float, KickReturns: float, Losses: int, Name: string, OpponentScore: int, PassesDefended: float, PassingAttempts: float, PassingCompletionPercentage: float, PassingCompletions: float, PassingInterceptions: float, PassingRating: float, PassingTouchdowns: float, PassingYards: float, PassingYardsPerAttempt: float, PassingYardsPerCompletion: float, Penalties: int, PenaltyYards: int, PointsAgainst: int, PointsFor: int, PuntAverage: float, PuntLong: float, PuntReturnLong: float, PuntReturnTouchdowns: float, PuntReturnYards: float, PuntReturnYardsPerAttempt: float, PuntReturns: float, PuntYards: float, Punts: float, QuarterbackHurries: float, ReceivingLong: float, ReceivingTouchdowns: float, ReceivingYards: float, ReceivingYardsPerReception: float, Receptions: float, RoadLosses: int, RoadWins: int, RushingAttempts: float, RushingLong: float, RushingTouchdowns: float, RushingYards: float, RushingYardsPerAttempt: float, Sacks: float, Score: int, Season: int, SeasonType: int, SoloTackles: float, StatID: int, Streak: int, TacklesForLoss: float, Team: string, TeamID: int, ThirdDownAttempts: int, ThirdDownConversions: int, TimeOfPossessionMinutes: int, TimeOfPossessionSeconds: int, Updated: string, Wins: int> {
+]: nothing -> oneof<table<AssistedTackles: float, ConferenceLosses: int, ConferencePointsAgainst: int, ConferencePointsFor: int, ConferenceRank: int, ConferenceWins: int, Created: string, DivisionRank: int, ExtraPointsAttempted: float, ExtraPointsMade: float, FantasyPoints: float, FieldGoalPercentage: float, FieldGoalsAttempted: float, FieldGoalsLongestMade: float, FieldGoalsMade: float, FirstDowns: int, FourthDownAttempts: int, FourthDownConversions: int, FumbleReturnTouchdowns: float, Fumbles: float, FumblesLost: float, FumblesRecovered: float, Games: int, GlobalTeamID: int, HomeLosses: int, HomeWins: int, InterceptionReturnTouchdowns: float, InterceptionReturnYards: float, Interceptions: float, KickReturnLong: float, KickReturnTouchdowns: float, KickReturnYards: float, KickReturnYardsPerAttempt: float, KickReturns: float, Losses: int, Name: string, OpponentScore: int, PassesDefended: float, PassingAttempts: float, PassingCompletionPercentage: float, PassingCompletions: float, PassingInterceptions: float, PassingRating: float, PassingTouchdowns: float, PassingYards: float, PassingYardsPerAttempt: float, PassingYardsPerCompletion: float, Penalties: int, PenaltyYards: int, PointsAgainst: int, PointsFor: int, PuntAverage: float, PuntLong: float, PuntReturnLong: float, PuntReturnTouchdowns: float, PuntReturnYards: float, PuntReturnYardsPerAttempt: float, PuntReturns: float, PuntYards: float, Punts: float, QuarterbackHurries: float, ReceivingLong: float, ReceivingTouchdowns: float, ReceivingYards: float, ReceivingYardsPerReception: float, Receptions: float, RoadLosses: int, RoadWins: int, RushingAttempts: float, RushingLong: float, RushingTouchdowns: float, RushingYards: float, RushingYardsPerAttempt: float, Sacks: float, Score: int, Season: int, SeasonType: int, SoloTackles: float, StatID: int, Streak: int, TacklesForLoss: float, Team: string, TeamID: int, ThirdDownAttempts: int, ThirdDownConversions: int, TimeOfPossessionMinutes: int, TimeOfPossessionSeconds: int, Updated: string, Wins: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
@@ -772,7 +796,7 @@ export def "teams" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<Active: bool, ApRank: int, CoachesRank: int, Conference: string, ConferenceID: int, ConferenceLosses: int, ConferenceWins: int, GlobalTeamID: int, Key: string, Losses: int, Name: string, PlayoffRank: int, RankSeason: int, RankSeasonType: int, RankWeek: int, School: string, ShortDisplayName: string, StadiumID: int, TeamID: int, TeamLogoUrl: string, Wins: int> {
+]: nothing -> oneof<table<Active: bool, ApRank: int, CoachesRank: int, Conference: string, ConferenceID: int, ConferenceLosses: int, ConferenceWins: int, GlobalTeamID: int, Key: string, Losses: int, Name: string, PlayoffRank: int, RankSeason: int, RankSeasonType: int, RankWeek: int, School: string, ShortDisplayName: string, StadiumID: int, TeamID: int, TeamLogoUrl: string, Wins: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }

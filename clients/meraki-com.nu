@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "x-cisco-meraki-api-key" => { {scheme: $scheme, headers: {"X-Cisco-Meraki-API-Key": $token_val}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -151,9 +175,9 @@ def state-completer [] { ["active" "expired" "expiring" "recentlyQueued" "unused
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-device-camera-analytics-live" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-device-camera-analytics-live" "get-device-camera-analytics-overview" "get-device-camera-analytics-recent" "get-device-camera-analytics-zones" "get-device-camera-analytics-zone-history" "get-device-camera-quality-and-retention-settings" "update-device-camera-quality-and-retention-settings" "get-device-camera-video-settings" "update-device-camera-video-settings" "get-device-cellular-gateway-settings" "update-device-cellular-gateway-settings" "get-device-cellular-gateway-settings-port-forwarding-rules" "update-device-cellular-gateway-settings-port-forwarding-rules" "get-device-clients" "cycle-device-switch-ports" "get-device-switch-port-statuses" "get-device-switch-port-statuses-packets" "update-device-wireless-bluetooth-settings" "delete-network" "get-network" "update-network" "get-network-access-policies" "get-network-air-marshal" "get-network-alert-settings" "update-network-alert-settings" "get-network-appliance-firewall-inbound-firewall-rules" "update-network-appliance-firewall-inbound-firewall-rules" "get-network-appliance-ports" "get-network-appliance-port" "update-network-appliance-port" "bind-network" "get-network-bluetooth-clients" "get-network-bluetooth-client" "get-network-bluetooth-settings" "update-network-bluetooth-settings" "get-network-camera-quality-retention-profiles" "create-network-camera-quality-retention-profile" "delete-network-camera-quality-retention-profile" "get-network-camera-quality-retention-profile" "update-network-camera-quality-retention-profile" "get-network-camera-schedules" "generate-network-camera-snapshot" "get-network-camera-video-link" "get-network-cellular-firewall-rules" "update-network-cellular-firewall-rules" "get-network-clients" "get-network-clients-connection-stats" "get-network-clients-latency-stats" "provision-network-clients" "get-network-client" "get-network-client-connection-stats" "get-network-client-events" "get-network-client-latency-history" "get-network-client-latency-stats" "get-network-client-policy" "update-network-client-policy" "get-network-client-splash-authorization-status" "update-network-client-splash-authorization-status" "get-network-client-usage-history" "get-network-connection-stats" "get-network-content-filtering" "update-network-content-filtering" "get-network-content-filtering-categories" "get-network-devices" "claim-network-devices" "get-network-devices-connection-stats" "get-network-devices-latency-stats" "get-network-device" "update-network-device" "get-network-device-connection-stats" "get-network-device-latency-stats" "get-network-device-loss-and-latency-history" "get-network-device-performance" "reboot-network-device" "remove-network-device" "get-network-device-uplink" "get-network-device-wireless-status" "get-network-events" "get-network-events-event-types" "get-network-failed-connections" "get-network-firewalled-services" "get-network-firewalled-service" "update-network-firewalled-service" "get-network-floor-plans" "create-network-floor-plan" "delete-network-floor-plan" "get-network-floor-plan" "update-network-floor-plan" "get-network-l3-firewall-rules" "update-network-l3-firewall-rules" "get-network-l7-firewall-rules" "update-network-l7-firewall-rules" "get-network-l7-firewall-rules-application-categories" "get-network-latency-stats" "get-network-meraki-auth-users" "get-network-meraki-auth-user" "get-network-one-to-many-nat-rules" "update-network-one-to-many-nat-rules" "get-network-one-to-one-nat-rules" "update-network-one-to-one-nat-rules" "get-network-pii-pii-keys" "get-network-pii-requests" "create-network-pii-request" "delete-network-pii-request" "get-network-pii-request" "get-network-pii-sm-devices-for-key" "get-network-pii-sm-owners-for-key" "get-network-port-forwarding-rules" "update-network-port-forwarding-rules" "get-network-security-intrusion-settings" "update-network-security-intrusion-settings" "get-network-security-malware-settings" "update-network-security-malware-settings" "get-network-security-events" "get-network-site-to-site-vpn" "update-network-site-to-site-vpn" "create-network-sm-bypass-activation-lock-attempt" "get-network-sm-bypass-activation-lock-attempt" "update-network-sm-device-fields" "wipe-network-sm-device" "refresh-network-sm-device-details" "get-network-sm-devices" "checkin-network-sm-devices" "update-network-sm-devices-tags" "unenroll-network-sm-device" "get-network-sm-profiles" "get-network-sm-target-groups" "create-network-sm-target-group" "delete-network-sm-target-group" "get-network-sm-target-group" "update-network-sm-target-group" "get-network-sm-user-device-profiles" "get-network-sm-user-softwares" "get-network-sm-users" "get-network-sm-cellular-usage-history" "get-network-sm-certs" "get-network-sm-device-profiles" "get-network-sm-network-adapters" "get-network-sm-restrictions" "get-network-sm-security-centers" "get-network-sm-softwares" "get-network-sm-wlan-lists" "get-network-snmp-settings" "get-network-splash-login-attempts" "split-network" "get-network-ssids" "get-network-ssid" "update-network-ssid" "get-network-ssid-l3-firewall-rules" "update-network-ssid-l3-firewall-rules" "get-network-ssid-splash-settings" "update-network-ssid-splash-settings" "get-network-static-routes" "create-network-static-route" "delete-network-static-route" "get-network-static-route" "update-network-static-route" "swap-network-warm-spare" "get-network-switch-link-aggregations" "create-network-switch-link-aggregation" "delete-network-switch-link-aggregation" "update-network-switch-link-aggregation" "get-network-switch-port-schedules" "create-network-switch-port-schedule" "delete-network-switch-port-schedule" "update-network-switch-port-schedule" "get-network-switch-settings" "update-network-switch-settings" "get-network-switch-settings-mtu" "update-network-switch-settings-mtu" "get-network-switch-settings-multicast" "update-network-switch-settings-multicast" "get-network-switch-settings-qos-rules" "create-network-switch-settings-qos-rule" "get-network-switch-settings-qos-rules-order" "update-network-switch-settings-qos-rules-order" "delete-network-switch-settings-qos-rule" "get-network-switch-settings-qos-rule" "update-network-switch-settings-qos-rule" "get-network-switch-settings-storm-control" "update-network-switch-settings-storm-control" "get-network-switch-stacks" "create-network-switch-stack" "delete-network-switch-stack" "get-network-switch-stack" "add-network-switch-stack" "remove-network-switch-stack" "get-network-syslog-servers" "update-network-syslog-servers" "get-network-traffic" "unbind-network" "get-network-uplink-settings" "update-network-uplink-settings" "get-network-vlans" "create-network-vlan" "delete-network-vlan" "get-network-vlan" "update-network-vlan" "get-network-vlans-enabled-state" "update-network-vlans-enabled-state" "get-network-warm-spare-settings" "update-network-warm-spare-settings" "get-network-wireless-rf-profiles" "create-network-wireless-rf-profile" "delete-network-wireless-rf-profile" "get-network-wireless-rf-profile" "update-network-wireless-rf-profile" "get-network-wireless-settings" "update-network-wireless-settings" "lock-network-sm-devices" "get-network-sm-connectivity" "get-network-sm-desktop-logs" "get-network-sm-device-command-logs" "get-network-sm-performance-history" "get-organizations" "get-organization" "get-organization-action-batches" "create-organization-action-batch" "delete-organization-action-batch" "update-organization-action-batch" "get-organization-admins" "create-organization-admin" "delete-organization-admin" "update-organization-admin" "get-organization-api-requests" "get-organization-api-requests-overview" "claim-into-organization" "clone-organization" "get-organization-config-templates" "delete-organization-config-template" "get-organization-config-template-switch-profiles" "get-organization-configuration-changes" "get-organization-device-statuses" "get-organization-devices" "get-organization-insight-monitored-media-servers" "create-organization-insight-monitored-media-server" "delete-organization-insight-monitored-media-server" "get-organization-insight-monitored-media-server" "update-organization-insight-monitored-media-server" "get-organization-inventory" "get-organization-license-state" "get-organization-licenses" "assign-organization-licenses-seats" "move-organization-licenses-seats" "renew-organization-licenses-seats" "get-organization-license" "get-organization-networks" "create-organization-network" "combine-organization-networks" "get-organization-openapi-spec" "get-organization-saml-roles" "create-organization-saml-role" "get-organization-saml-role" "update-organization-saml-role" "get-organization-security-intrusion-settings" "update-organization-security-intrusion-settings" "get-organization-security-events" "get-organization-snmp" "get-organization-third-party-vpn-peers" "update-organization-third-party-vpn-peers" "get-organization-uplinks-loss-and-latency" "get-organization-vpn-firewall-rules" "update-organization-vpn-firewall-rules" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -186,7 +210,7 @@ export def "get-device-camera-analytics-live" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($serial | is-empty) { error make --unspanned { msg: "path parameter 'serial' must be non-empty" } }
@@ -226,7 +250,7 @@ export def "get-device-camera-analytics-overview" [
   --t1: string # The end of the timespan for the data. t1 can be a maximum of 7 days after t0.
   --timespan: float # The timespan for which the information will be fetched. If specifying timespan, do not specify parameters t0 and t1. The value must be in seconds and be less than or equal to 7 days. The default is 1 hour. (format: float)
   --object-type: string@object-type-completer # [optional] The object type for which analytics will be retrieved. The default object type is person. The available types are [person, vehicle].
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($serial | is-empty) { error make --unspanned { msg: "path parameter 'serial' must be non-empty" } }
@@ -264,7 +288,7 @@ export def "get-device-camera-analytics-recent" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --object-type: string@object-type-completer # [optional] The object type for which analytics will be retrieved. The default object type is person. The available types are [person, vehicle].
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($serial | is-empty) { error make --unspanned { msg: "path parameter 'serial' must be non-empty" } }
@@ -301,7 +325,7 @@ export def "get-device-camera-analytics-zones" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($serial | is-empty) { error make --unspanned { msg: "path parameter 'serial' must be non-empty" } }
@@ -343,7 +367,7 @@ export def "get-device-camera-analytics-zone-history" [
   --timespan: float # The timespan for which the information will be fetched. If specifying timespan, do not specify parameters t0 and t1. The value must be in seconds and be less than or equal to 14 hours. The default is 1 hour. (format: float)
   --resolution: int # The time resolution in seconds for returned data. The valid resolutions are: 60. The default is 60.
   --object-type: string@object-type-completer # [optional] The object type for which analytics will be retrieved. The default object type is person. The available types are [person, vehicle].
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($serial | is-empty) { error make --unspanned { msg: "path parameter 'serial' must be non-empty" } }
@@ -381,7 +405,7 @@ export def "get-device-camera-quality-and-retention-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($serial | is-empty) { error make --unspanned { msg: "path parameter 'serial' must be non-empty" } }
@@ -424,7 +448,7 @@ export def "update-device-camera-quality-and-retention-settings" [
   --quality: string@quality-completer # Quality of the camera. Can be one of 'Standard', 'High' or 'Enhanced'. Not all qualities are supported by every camera model.
   --resolution: string@resolution-completer # Resolution of the camera. Can be one of '1280x720', '1920x1080', '1080x1080' or '2058x2058'. Not all resolutions are supported by every camera model.
   --restricted-bandwidth-mode-enabled: oneof<nothing, bool> # Boolean indicating if restricted bandwidth is enabled(true) or disabled(false) on the camera. This setting does not apply to MV2 cameras.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -463,7 +487,7 @@ export def "get-device-camera-video-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($serial | is-empty) { error make --unspanned { msg: "path parameter 'serial' must be non-empty" } }
@@ -500,7 +524,7 @@ export def "update-device-camera-video-settings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --external-rtsp-enabled: oneof<nothing, bool> # Boolean indicating if external rtsp stream is exposed
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -539,7 +563,7 @@ export def "get-device-cellular-gateway-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($serial | is-empty) { error make --unspanned { msg: "path parameter 'serial' must be non-empty" } }
@@ -564,8 +588,6 @@ export def "get-device-cellular-gateway-settings" [
 #
 # PUT /devices/{serial}/cellularGateway/settings
 # operationId: updateDeviceCellularGatewaySettings
-# --fixedIpAssignments item shape: {ip: string, mac: string, name?: string}
-# --reservedIpRanges item shape: {comment: string, end: string, start: string}
 export def "update-device-cellular-gateway-settings" [
   serial: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -579,7 +601,7 @@ export def "update-device-cellular-gateway-settings" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fixed-ip-assignments: list # list of all fixed IP assignments for a single MG — item shape: {ip: string, mac: string, name?: string}
   --reserved-ip-ranges: list # list of all reserved IP ranges for a single MG — item shape: {comment: string, end: string, start: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -618,7 +640,7 @@ export def "get-device-cellular-gateway-settings-port-forwarding-rules" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($serial | is-empty) { error make --unspanned { msg: "path parameter 'serial' must be non-empty" } }
@@ -643,7 +665,6 @@ export def "get-device-cellular-gateway-settings-port-forwarding-rules" [
 #
 # PUT /devices/{serial}/cellularGateway/settings/portForwardingRules
 # operationId: updateDeviceCellularGatewaySettingsPortForwardingRules
-# --rules item shape: {access: string, allowedIps?: list<string>, lanIp: string, localPort: string, name?: string, protocol: string, publicPort: string}
 export def "update-device-cellular-gateway-settings-port-forwarding-rules" [
   serial: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -656,7 +677,7 @@ export def "update-device-cellular-gateway-settings-port-forwarding-rules" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --rules: list # An array of port forwarding params — item shape: {access: string, allowedIps?: list<string>, lanIp: string, localPort: string, name?: string, protocol: string, publicPort: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -697,7 +718,7 @@ export def "get-device-clients" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --t0: string # The beginning of the timespan for the data. The maximum lookback period is 31 days from today.
   --timespan: float # The timespan for which the information will be fetched. If specifying timespan, do not specify parameter t0. The value must be in seconds and be less than or equal to 31 days. The default is 1 day. (format: float)
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($serial | is-empty) { error make --unspanned { msg: "path parameter 'serial' must be non-empty" } }
@@ -735,7 +756,7 @@ export def "cycle-device-switch-ports" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   ports: list<string> # List of switch ports. Example: [1, 2-5, 1_MA-MOD-8X10G_1, 1_MA-MOD-8X10G_2-1_MA-MOD-8X10G_8]
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -776,7 +797,7 @@ export def "get-device-switch-port-statuses" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --t0: string # The beginning of the timespan for the data. The maximum lookback period is 31 days from today.
   --timespan: float # The timespan for which the information will be fetched. If specifying timespan, do not specify parameter t0. The value must be in seconds and be less than or equal to 31 days. The default is 1 day. (format: float)
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($serial | is-empty) { error make --unspanned { msg: "path parameter 'serial' must be non-empty" } }
@@ -815,7 +836,7 @@ export def "get-device-switch-port-statuses-packets" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --t0: string # The beginning of the timespan for the data. The maximum lookback period is 1 day from today.
   --timespan: float # The timespan for which the information will be fetched. If specifying timespan, do not specify parameter t0. The value must be in seconds and be less than or equal to 1 day. The default is 1 day. (format: float)
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($serial | is-empty) { error make --unspanned { msg: "path parameter 'serial' must be non-empty" } }
@@ -855,7 +876,7 @@ export def "update-device-wireless-bluetooth-settings" [
   --major: int # Desired major value of the beacon. If the value is set to null it will reset to Dashboard's automatically generated value.
   --minor: int # Desired minor value of the beacon. If the value is set to null it will reset to Dashboard's automatically generated value.
   --uuid: string # Desired UUID of the beacon. If the value is set to null it will reset to Dashboard's automatically generated value.
-]: any -> record<major: int, minor: int, uuid: string> {
+]: any -> oneof<record<major: int, minor: int, uuid: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -930,7 +951,7 @@ export def "get-network" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -972,7 +993,7 @@ export def "update-network" [
   --name: string # The name of the network
   --tags: string # A space-separated list of tags to be applied to the network
   --time-zone: string # The timezone of the network. For a list of allowed timezones, please see the 'TZ' column in the table in this article.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1011,7 +1032,7 @@ export def "get-network-access-policies" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -1049,7 +1070,7 @@ export def "get-network-air-marshal" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --t0: string # The beginning of the timespan for the data. The maximum lookback period is 31 days from today.
   --timespan: float # The timespan for which the information will be fetched. If specifying timespan, do not specify parameter t0. The value must be in seconds and be less than or equal to 31 days. The default is 7 days. (format: float)
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -1086,7 +1107,7 @@ export def "get-network-alert-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -1111,8 +1132,6 @@ export def "get-network-alert-settings" [
 #
 # PUT /networks/{networkId}/alertSettings
 # operationId: updateNetworkAlertSettings
-# --alerts item shape: {alertDestinations?: record, enabled?: bool, filters?: record, type: string}
-# --defaultDestinations shape: {allAdmins?: bool, emails?: list<string>, httpServerIds?: list<string>, snmp?: bool}
 export def "update-network-alert-settings" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1126,7 +1145,7 @@ export def "update-network-alert-settings" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --alerts: list # Alert-specific configuration for each type. Only alerts that pertain to the network can be updated. — item shape: {alertDestinations?: record, enabled?: bool, filters?: record, type: string}
   --default-destinations: record # The network-wide destinations for all alerts on the network. — shape: {allAdmins?: bool, emails?: list<string>, httpServerIds?: list<string>, snmp?: bool}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1165,7 +1184,7 @@ export def "get-network-appliance-firewall-inbound-firewall-rules" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -1190,7 +1209,6 @@ export def "get-network-appliance-firewall-inbound-firewall-rules" [
 #
 # PUT /networks/{networkId}/appliance/firewall/inboundFirewallRules
 # operationId: updateNetworkApplianceFirewallInboundFirewallRules
-# --rules item shape: {comment?: string, destCidr: string, destPort?: string, policy: "allow"|"deny", protocol: "any"|"icmp"|"icmp6"|"tcp"|"udp", srcCidr: string, srcPort?: string, syslogEnabled?: bool}
 export def "update-network-appliance-firewall-inbound-firewall-rules" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1204,7 +1222,7 @@ export def "update-network-appliance-firewall-inbound-firewall-rules" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --rules: list # An ordered array of the firewall rules (not including the default rule) — item shape: {comment?: string, destCidr: string, destPort?: string, policy: "allow"|"deny", protocol: "any"|"icmp"|"icmp6"|"tcp"|"udp", srcCidr: string, srcPort?: string, syslogEnabled?: bool}
   --syslog-default-rule: oneof<nothing, bool> # Log the special default rule (boolean value - enable only if you've configured a syslog server) (optional)
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1243,7 +1261,7 @@ export def "get-network-appliance-ports" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -1280,7 +1298,7 @@ export def "get-network-appliance-port" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -1324,7 +1342,7 @@ export def "update-network-appliance-port" [
   --enabled: oneof<nothing, bool> # The status of the port
   --type: string # The type of the port: 'access' or 'trunk'.
   --vlan: int # Native VLAN when the port is in Trunk mode. Access VLAN when the port is in Access mode.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1411,7 +1429,7 @@ export def "get-network-bluetooth-clients" [
   --starting-after: string # A token used by the server to indicate the start of the page. Often this is a timestamp or an ID but it is not limited to those. This parameter should not be defined by client applications. The link for the first, last, prev, or next page in the HTTP Link header should define it.
   --ending-before: string # A token used by the server to indicate the end of the page. Often this is a timestamp or an ID but it is not limited to those. This parameter should not be defined by client applications. The link for the first, last, prev, or next page in the HTTP Link header should define it.
   --include-connectivity-history: oneof<nothing, bool> # Include the connectivity history for this client
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -1451,7 +1469,7 @@ export def "get-network-bluetooth-client" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --include-connectivity-history: oneof<nothing, bool> # Include the connectivity history for this client
   --connectivity-history-timespan: int # The timespan, in seconds, for the connectivityHistory data. By default 1 day, 86400, will be used.
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -1489,7 +1507,7 @@ export def "get-network-bluetooth-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<advertisingEnabled: bool, major: int, majorMinorAssignmentMode: string, minor: int, scanningEnabled: bool, uuid: string> {
+]: nothing -> oneof<record<advertisingEnabled: bool, major: int, majorMinorAssignmentMode: string, minor: int, scanningEnabled: bool, uuid: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -1531,7 +1549,7 @@ export def "update-network-bluetooth-settings" [
   --minor: int # The minor number to be used in the beacon identifier. Only valid in 'Non-unique' mode.
   --scanning-enabled: oneof<nothing, bool> # Whether APs will scan for Bluetooth enabled clients.
   --uuid: string # The UUID to be used in the beacon identifier.
-]: any -> record<advertisingEnabled: bool, major: int, majorMinorAssignmentMode: string, minor: int, scanningEnabled: bool, uuid: string> {
+]: any -> oneof<record<advertisingEnabled: bool, major: int, majorMinorAssignmentMode: string, minor: int, scanningEnabled: bool, uuid: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1570,7 +1588,7 @@ export def "get-network-camera-quality-retention-profiles" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -1595,7 +1613,6 @@ export def "get-network-camera-quality-retention-profiles" [
 #
 # POST /networks/{networkId}/camera/qualityRetentionProfiles
 # operationId: createNetworkCameraQualityRetentionProfile
-# --videoSettings shape: {MV12/MV22/MV72?: record, MV12WE?: record, MV13?: record, MV21/MV71?: record, MV22X/MV72X?: record, MV32?: record, MV33?: record, MV52?: record, MV63?: record, MV63X?: record, MV93?: record, MV93X?: record}
 export def "create-network-camera-quality-retention-profile" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1616,7 +1633,7 @@ export def "create-network-camera-quality-retention-profile" [
   --restricted-bandwidth-mode-enabled: oneof<nothing, bool> # Disable features that require additional bandwidth such as Motion Recap. Can be either true or false. Defaults to false. This setting does not apply to MV2 cameras.
   --schedule-id: string # Schedule for which this camera will record video, or 'null' to always record.
   --video-settings: record # Video quality and resolution settings for all the camera models. — shape: {MV12/MV22/MV72?: record, MV12WE?: record, MV13?: record, MV21/MV71?: record, MV22X/MV72X?: record, MV32?: record, MV33?: record, MV52?: record, MV63?: record, MV63X?: record, MV93?: record, MV93X?: record}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1694,7 +1711,7 @@ export def "get-network-camera-quality-retention-profile" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -1720,7 +1737,6 @@ export def "get-network-camera-quality-retention-profile" [
 #
 # PUT /networks/{networkId}/camera/qualityRetentionProfiles/{qualityRetentionProfileId}
 # operationId: updateNetworkCameraQualityRetentionProfile
-# --videoSettings shape: {MV12/MV22/MV72?: record, MV12WE?: record, MV13?: record, MV21/MV71?: record, MV22X/MV72X?: record, MV32?: record, MV33?: record, MV52?: record, MV63?: record, MV63X?: record, MV93?: record, MV93X?: record}
 export def "update-network-camera-quality-retention-profile" [
   network_id: string
   quality_retention_profile_id: string
@@ -1742,7 +1758,7 @@ export def "update-network-camera-quality-retention-profile" [
   --restricted-bandwidth-mode-enabled: oneof<nothing, bool> # Disable features that require additional bandwidth such as Motion Recap. Can be either true or false. Defaults to false. This setting does not apply to MV2 cameras.
   --schedule-id: string # Schedule for which this camera will record video, or 'null' to always record.
   --video-settings: record # Video quality and resolution settings for all the camera models. — shape: {MV12/MV22/MV72?: record, MV12WE?: record, MV13?: record, MV21/MV71?: record, MV22X/MV72X?: record, MV32?: record, MV33?: record, MV52?: record, MV63?: record, MV63X?: record, MV93?: record, MV93X?: record}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1782,7 +1798,7 @@ export def "get-network-camera-schedules" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -1821,7 +1837,7 @@ export def "generate-network-camera-snapshot" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fullframe: oneof<nothing, bool> # [optional] If set to "true" the snapshot will be taken at full sensor resolution. This will error if used with timestamp.
   --timestamp: string # [optional] The snapshot will be taken from this time on the camera. The timestamp is expected to be in ISO 8601 format. If no timestamp is specified, we will assume current time. (format: date-time)
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1863,7 +1879,7 @@ export def "get-network-camera-video-link" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --timestamp: string # [optional] The video link will start at this timestamp. The timestamp is in UNIX Epoch time (milliseconds). If no timestamp is specified, we will assume current time.
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -1901,7 +1917,7 @@ export def "get-network-cellular-firewall-rules" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -1926,7 +1942,6 @@ export def "get-network-cellular-firewall-rules" [
 #
 # PUT /networks/{networkId}/cellularFirewallRules
 # operationId: updateNetworkCellularFirewallRules
-# --rules item shape: {comment?: string, destCidr: string, destPort?: string, policy: "allow"|"deny", protocol: "any"|"icmp"|"icmp6"|"tcp"|"udp", srcCidr: string, srcPort?: string, syslogEnabled?: bool}
 export def "update-network-cellular-firewall-rules" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1939,7 +1954,7 @@ export def "update-network-cellular-firewall-rules" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --rules: list # An ordered array of the firewall rules (not including the default rule) — item shape: {comment?: string, destCidr: string, destPort?: string, policy: "allow"|"deny", protocol: "any"|"icmp"|"icmp6"|"tcp"|"udp", srcCidr: string, srcPort?: string, syslogEnabled?: bool}
-]: any -> list<record> {
+]: any -> oneof<list<record>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1983,7 +1998,7 @@ export def "get-network-clients" [
   --per-page: int # The number of entries per page returned. Acceptable range is 3 - 1000. Default is 10.
   --starting-after: string # A token used by the server to indicate the start of the page. Often this is a timestamp or an ID but it is not limited to those. This parameter should not be defined by client applications. The link for the first, last, prev, or next page in the HTTP Link header should define it.
   --ending-before: string # A token used by the server to indicate the end of the page. Often this is a timestamp or an ID but it is not limited to those. This parameter should not be defined by client applications. The link for the first, last, prev, or next page in the HTTP Link header should define it.
-]: nothing -> record<description: string, firstSeen: int, groupPolicy8021x: string, id: string, ip: string, ip6: string, ip6Local: string, lastSeen: int, mac: string, manufacturer: string, notes: string, os: string, recentDeviceMac: string, recentDeviceName: string, recentDeviceSerial: string, smInstalled: bool, ssid: string, status: string, switchport: string, usage: record<recv: float, sent: float>, user: string, vlan: string> {
+]: nothing -> oneof<record<description: string, firstSeen: int, groupPolicy8021x: string, id: string, ip: string, ip6: string, ip6Local: string, lastSeen: int, mac: string, manufacturer: string, notes: string, os: string, recentDeviceMac: string, recentDeviceName: string, recentDeviceSerial: string, smInstalled: bool, ssid: string, status: string, switchport: string, usage: record<recv: float, sent: float>, user: string, vlan: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -2027,7 +2042,7 @@ export def "get-network-clients-connection-stats" [
   --ssid: int # Filter results by SSID
   --vlan: int # Filter results by VLAN
   --ap-tag: string # Filter results by AP Tag
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -2072,7 +2087,7 @@ export def "get-network-clients-latency-stats" [
   --vlan: int # Filter results by VLAN
   --ap-tag: string # Filter results by AP Tag
   --fields: string # Partial selection: If present, this call will return only the selected fields of ["rawDistribution", "avg"]. All fields will be returned by default. Selected fields must be entered as a comma separated string.
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -2098,8 +2113,6 @@ export def "get-network-clients-latency-stats" [
 #
 # POST /networks/{networkId}/clients/provision
 # operationId: provisionNetworkClients
-# --policiesBySecurityAppliance shape: {devicePolicy?: "Blocked"|"Normal"|"Whitelisted"}
-# --policiesBySsid shape: {0?: record, 1?: record, 2?: record, 3?: record, 4?: record, 5?: record, 6?: record, 7?: record, 8?: record, 9?: record, 10?: record, 11?: record, 12?: record, 13?: record, 14?: record}
 export def "provision-network-clients" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2117,7 +2130,7 @@ export def "provision-network-clients" [
   --name: string # The display name for the client. Optional. Limited to 255 bytes.
   --policies-by-security-appliance: record # An object, describing what the policy-connection association is for the security appliance. (Only relevant if the security appliance is actually within the network) — shape: {devicePolicy?: "Blocked"|"Normal"|"Whitelisted"}
   --policies-by-ssid: record # An object, describing the policy-connection associations for each active SSID within the network. Keys should be the number of enabled SSIDs, mapping to an object describing the client's policy — shape: {0?: record, 1?: record, 2?: record, 3?: record, 4?: record, 5?: record, 6?: record, 7?: record, 8?: record, 9?: record, 10?: record, 11?: record, 12?: record, 13?: record, 14?: record}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2157,7 +2170,7 @@ export def "get-network-client" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -2202,7 +2215,7 @@ export def "get-network-client-connection-stats" [
   --ssid: int # Filter results by SSID
   --vlan: int # Filter results by VLAN
   --ap-tag: string # Filter results by AP Tag
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -2244,7 +2257,7 @@ export def "get-network-client-events" [
   --per-page: int # The number of entries per page returned. Acceptable range is 3 - 100. Default is 100.
   --starting-after: string # A token used by the server to indicate the start of the page. Often this is a timestamp or an ID but it is not limited to those. This parameter should not be defined by client applications. The link for the first, last, prev, or next page in the HTTP Link header should define it.
   --ending-before: string # A token used by the server to indicate the end of the page. Often this is a timestamp or an ID but it is not limited to those. This parameter should not be defined by client applications. The link for the first, last, prev, or next page in the HTTP Link header should define it.
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -2287,7 +2300,7 @@ export def "get-network-client-latency-history" [
   --t1: string # The end of the timespan for the data. t1 can be a maximum of 791 days after t0.
   --timespan: float # The timespan for which the information will be fetched. If specifying timespan, do not specify parameters t0 and t1. The value must be in seconds and be less than or equal to 791 days. The default is 1 day. (format: float)
   --resolution: int # The time resolution in seconds for returned data. The valid resolutions are: 86400. The default is 86400.
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -2334,7 +2347,7 @@ export def "get-network-client-latency-stats" [
   --vlan: int # Filter results by VLAN
   --ap-tag: string # Filter results by AP Tag
   --fields: string # Partial selection: If present, this call will return only the selected fields of ["rawDistribution", "avg"]. All fields will be returned by default. Selected fields must be entered as a comma separated string.
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -2373,7 +2386,7 @@ export def "get-network-client-policy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -2413,7 +2426,7 @@ export def "update-network-client-policy" [
   --dry-run(-n) # Return the request that would be sent without executing it
   device_policy: string # The policy to assign. Can be 'Whitelisted', 'Blocked', 'Normal' or 'Group policy'. Required.
   --group-policy-id: string # [optional] If 'devicePolicy' is set to 'Group policy' this param is used to specify the group policy ID.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2454,7 +2467,7 @@ export def "get-network-client-splash-authorization-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -2480,7 +2493,6 @@ export def "get-network-client-splash-authorization-status" [
 #
 # PUT /networks/{networkId}/clients/{clientId}/splashAuthorizationStatus
 # operationId: updateNetworkClientSplashAuthorizationStatus
-# --ssids shape: {0?: record, 1?: record, 2?: record, 3?: record, 4?: record, 5?: record, 6?: record, 7?: record, 8?: record, 9?: record, 10?: record, 11?: record, 12?: record, 13?: record, 14?: record}
 export def "update-network-client-splash-authorization-status" [
   network_id: string
   client_id: string
@@ -2494,7 +2506,7 @@ export def "update-network-client-splash-authorization-status" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   ssids: record # The target SSIDs. Each SSID must be enabled and must have Click-through splash enabled. For each SSID where isAuthorized is true, the expiration time will automatically be set according to the SSID's splash frequency. Not all networks support configuring all SSIDs — shape: {0?: record, 1?: record, 2?: record, 3?: record, 4?: record, 5?: record, 6?: record, 7?: record, 8?: record, 9?: record, 10?: record, 11?: record, 12?: record, 13?: record, 14?: record}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2535,7 +2547,7 @@ export def "get-network-client-usage-history" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -2579,7 +2591,7 @@ export def "get-network-connection-stats" [
   --ssid: int # Filter results by SSID
   --vlan: int # Filter results by VLAN
   --ap-tag: string # Filter results by AP Tag
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -2616,7 +2628,7 @@ export def "get-network-content-filtering" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -2656,7 +2668,7 @@ export def "update-network-content-filtering" [
   --blocked-url-categories: list<string> # A list of URL categories to block
   --blocked-url-patterns: list<string> # A list of URL patterns that are blocked
   --url-category-list-size: string@url-category-list-size-completer # URL category list size which is either 'topSites' or 'fullList'
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2695,7 +2707,7 @@ export def "get-network-content-filtering-categories" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -2731,7 +2743,7 @@ export def "get-network-devices" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -2815,7 +2827,7 @@ export def "get-network-devices-connection-stats" [
   --ssid: int # Filter results by SSID
   --vlan: int # Filter results by VLAN
   --ap-tag: string # Filter results by AP Tag
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -2860,7 +2872,7 @@ export def "get-network-devices-latency-stats" [
   --vlan: int # Filter results by VLAN
   --ap-tag: string # Filter results by AP Tag
   --fields: string # Partial selection: If present, this call will return only the selected fields of ["rawDistribution", "avg"]. All fields will be returned by default. Selected fields must be entered as a comma separated string.
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -2898,7 +2910,7 @@ export def "get-network-device" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -2945,7 +2957,7 @@ export def "update-network-device" [
   --notes: string # The notes for the device. String. Limited to 255 characters.
   --switch-profile-id: string # The ID of a switch profile to bind to the device (for available switch profiles, see the 'Switch Profiles' endpoint). Use null to unbind the switch device from the current profile. For a device to be bindable to a switch profile, it must (1) be a switch, and (2) belong to a network that is bound to a configuration template.
   --tags: string # The tags of a device
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2993,7 +3005,7 @@ export def "get-network-device-connection-stats" [
   --ssid: int # Filter results by SSID
   --vlan: int # Filter results by VLAN
   --ap-tag: string # Filter results by AP Tag
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -3040,7 +3052,7 @@ export def "get-network-device-latency-stats" [
   --vlan: int # Filter results by VLAN
   --ap-tag: string # Filter results by AP Tag
   --fields: string # Partial selection: If present, this call will return only the selected fields of ["rawDistribution", "avg"]. All fields will be returned by default. Selected fields must be entered as a comma separated string.
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -3085,7 +3097,7 @@ export def "get-network-device-loss-and-latency-history" [
   --resolution: int # The time resolution in seconds for returned data. The valid resolutions are: 60, 600, 3600, 86400. The default is 60.
   --uplink: string@uplink-completer # The WAN uplink used to obtain the requested stats. Valid uplinks are wan1, wan2, cellular. The default is wan1.
   --ip: string # The destination IP used to obtain the requested stats. This is required. (required)
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -3125,7 +3137,7 @@ export def "get-network-device-performance" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -3163,7 +3175,7 @@ export def "reboot-network-device" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -3239,7 +3251,7 @@ export def "get-network-device-uplink" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -3277,7 +3289,7 @@ export def "get-network-device-wireless-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -3328,7 +3340,7 @@ export def "get-network-events" [
   --per-page: int # The number of entries per page returned. Acceptable range is 3 - 1000. Default is 10.
   --starting-after: string # A token used by the server to indicate the start of the page. Often this is a timestamp or an ID but it is not limited to those. This parameter should not be defined by client applications. The link for the first, last, prev, or next page in the HTTP Link header should define it.
   --ending-before: string # A token used by the server to indicate the end of the page. Often this is a timestamp or an ID but it is not limited to those. This parameter should not be defined by client applications. The link for the first, last, prev, or next page in the HTTP Link header should define it.
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -3365,7 +3377,7 @@ export def "get-network-events-event-types" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -3410,7 +3422,7 @@ export def "get-network-failed-connections" [
   --ap-tag: string # Filter results by AP Tag
   --serial: string # Filter by AP
   --client-id: string # Filter by client MAC
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -3447,7 +3459,7 @@ export def "get-network-firewalled-services" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -3484,7 +3496,7 @@ export def "get-network-firewalled-service" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -3524,7 +3536,7 @@ export def "update-network-firewalled-service" [
   --dry-run(-n) # Return the request that would be sent without executing it
   access: string@access-completer # A string indicating the rule for which IPs are allowed to use the specified service. Acceptable values are "blocked" (no remote IPs can access the service), "restricted" (only whitelisted IPs can access the service), and "unrestriced" (any remote IP can access the service). This field is required
   --allowed-ips: list<string> # An array of whitelisted IPs that can access the service. This field is required if "access" is set to "restricted". Otherwise this field is ignored
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -3564,7 +3576,7 @@ export def "get-network-floor-plans" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -3589,11 +3601,6 @@ export def "get-network-floor-plans" [
 #
 # POST /networks/{networkId}/floorPlans
 # operationId: createNetworkFloorPlan
-# --bottomLeftCorner shape: {lat?: float, lng?: float}
-# --bottomRightCorner shape: {lat?: float, lng?: float}
-# --center shape: {lat?: float, lng?: float}
-# --topLeftCorner shape: {lat?: float, lng?: float}
-# --topRightCorner shape: {lat?: float, lng?: float}
 export def "create-network-floor-plan" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3612,7 +3619,7 @@ export def "create-network-floor-plan" [
   name: string # The name of your floor plan.
   --top-left-corner: record # The longitude and latitude of the top left corner of your floor plan. — shape: {lat?: float, lng?: float}
   --top-right-corner: record # The longitude and latitude of the top right corner of your floor plan. — shape: {lat?: float, lng?: float}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -3690,7 +3697,7 @@ export def "get-network-floor-plan" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -3716,11 +3723,6 @@ export def "get-network-floor-plan" [
 #
 # PUT /networks/{networkId}/floorPlans/{floorPlanId}
 # operationId: updateNetworkFloorPlan
-# --bottomLeftCorner shape: {lat?: float, lng?: float}
-# --bottomRightCorner shape: {lat?: float, lng?: float}
-# --center shape: {lat?: float, lng?: float}
-# --topLeftCorner shape: {lat?: float, lng?: float}
-# --topRightCorner shape: {lat?: float, lng?: float}
 export def "update-network-floor-plan" [
   network_id: string
   floor_plan_id: string
@@ -3740,7 +3742,7 @@ export def "update-network-floor-plan" [
   --name: string # The name of your floor plan.
   --top-left-corner: record # The longitude and latitude of the top left corner of your floor plan. — shape: {lat?: float, lng?: float}
   --top-right-corner: record # The longitude and latitude of the top right corner of your floor plan. — shape: {lat?: float, lng?: float}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -3780,7 +3782,7 @@ export def "get-network-l3-firewall-rules" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -3805,7 +3807,6 @@ export def "get-network-l3-firewall-rules" [
 #
 # PUT /networks/{networkId}/l3FirewallRules
 # operationId: updateNetworkL3FirewallRules
-# --rules item shape: {comment?: string, destCidr: string, destPort?: string, policy: "allow"|"deny", protocol: "any"|"icmp"|"icmp6"|"tcp"|"udp", srcCidr: string, srcPort?: string, syslogEnabled?: bool}
 export def "update-network-l3-firewall-rules" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3819,7 +3820,7 @@ export def "update-network-l3-firewall-rules" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --rules: list # An ordered array of the firewall rules (not including the default rule) — item shape: {comment?: string, destCidr: string, destPort?: string, policy: "allow"|"deny", protocol: "any"|"icmp"|"icmp6"|"tcp"|"udp", srcCidr: string, srcPort?: string, syslogEnabled?: bool}
   --syslog-default-rule: oneof<nothing, bool> # Log the special default rule (boolean value - enable only if you've configured a syslog server) (optional)
-]: any -> list<record> {
+]: any -> oneof<list<record>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -3858,7 +3859,7 @@ export def "get-network-l7-firewall-rules" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -3883,7 +3884,6 @@ export def "get-network-l7-firewall-rules" [
 #
 # PUT /networks/{networkId}/l7FirewallRules
 # operationId: updateNetworkL7FirewallRules
-# --rules item shape: {policy?: "deny", type?: "application"|"applicationCategory"|"host"|"ipRange"|"port", value?: string}
 export def "update-network-l7-firewall-rules" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3896,7 +3896,7 @@ export def "update-network-l7-firewall-rules" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --rules: list # An ordered array of the MX L7 firewall rules — item shape: {policy?: "deny", type?: "application"|"applicationCategory"|"host"|"ipRange"|"port", value?: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -3935,7 +3935,7 @@ export def "get-network-l7-firewall-rules-application-categories" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -3979,7 +3979,7 @@ export def "get-network-latency-stats" [
   --vlan: int # Filter results by VLAN
   --ap-tag: string # Filter results by AP Tag
   --fields: string # Partial selection: If present, this call will return only the selected fields of ["rawDistribution", "avg"]. All fields will be returned by default. Selected fields must be entered as a comma separated string.
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -4016,7 +4016,7 @@ export def "get-network-meraki-auth-users" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -4053,7 +4053,7 @@ export def "get-network-meraki-auth-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -4090,7 +4090,7 @@ export def "get-network-one-to-many-nat-rules" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -4115,7 +4115,6 @@ export def "get-network-one-to-many-nat-rules" [
 #
 # PUT /networks/{networkId}/oneToManyNatRules
 # operationId: updateNetworkOneToManyNatRules
-# --rules item shape: {portRules: list, publicIp: string, uplink: "internet1"|"internet2"}
 export def "update-network-one-to-many-nat-rules" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4128,7 +4127,7 @@ export def "update-network-one-to-many-nat-rules" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   rules: list # An array of 1:Many nat rules — item shape: {portRules: list, publicIp: string, uplink: "internet1"|"internet2"}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -4167,7 +4166,7 @@ export def "get-network-one-to-one-nat-rules" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -4192,7 +4191,6 @@ export def "get-network-one-to-one-nat-rules" [
 #
 # PUT /networks/{networkId}/oneToOneNatRules
 # operationId: updateNetworkOneToOneNatRules
-# --rules item shape: {allowedInbound?: list, lanIp: string, name?: string, publicIp?: string, uplink?: "internet1"|"internet2"}
 export def "update-network-one-to-one-nat-rules" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4205,7 +4203,7 @@ export def "update-network-one-to-one-nat-rules" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   rules: list # An array of 1:1 nat rules — item shape: {allowedInbound?: list, lanIp: string, name?: string, publicIp?: string, uplink?: "internet1"|"internet2"}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -4250,7 +4248,7 @@ export def "get-network-pii-pii-keys" [
   --serial: string # The serial of a Systems Manager device
   --imei: string # The IMEI of a Systems Manager device
   --bluetooth-mac: string # The MAC of a Bluetooth client
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -4287,7 +4285,7 @@ export def "get-network-pii-requests" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -4330,7 +4328,7 @@ export def "create-network-pii-request" [
   --sm-user-id: string # The sm_user_id of a Systems Manager user. The only way to "restrict processing" or "delete" a Systems Manager user. Must include "user" in the dataset for a "delete" request to destroy the user.
   --type: string@type-completer # One of "delete" or "restrict processing"
   --username: string # The username of a network log in. Only applies to "delete" requests.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -4408,7 +4406,7 @@ export def "get-network-pii-request" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -4451,7 +4449,7 @@ export def "get-network-pii-sm-devices-for-key" [
   --serial: string # The serial of a Systems Manager device
   --imei: string # The IMEI of a Systems Manager device
   --bluetooth-mac: string # The MAC of a Bluetooth client
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -4494,7 +4492,7 @@ export def "get-network-pii-sm-owners-for-key" [
   --serial: string # The serial of a Systems Manager device
   --imei: string # The IMEI of a Systems Manager device
   --bluetooth-mac: string # The MAC of a Bluetooth client
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -4531,7 +4529,7 @@ export def "get-network-port-forwarding-rules" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -4556,7 +4554,6 @@ export def "get-network-port-forwarding-rules" [
 #
 # PUT /networks/{networkId}/portForwardingRules
 # operationId: updateNetworkPortForwardingRules
-# --rules item shape: {allowedIps: list<string>, lanIp: string, localPort: string, name?: string, protocol: "tcp"|"udp", publicPort: string, uplink?: "both"|"internet1"|"internet2"}
 export def "update-network-port-forwarding-rules" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4569,7 +4566,7 @@ export def "update-network-port-forwarding-rules" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   rules: list # An array of port forwarding params — item shape: {allowedIps: list<string>, lanIp: string, localPort: string, name?: string, protocol: "tcp"|"udp", publicPort: string, uplink?: "both"|"internet1"|"internet2"}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -4608,7 +4605,7 @@ export def "get-network-security-intrusion-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -4633,7 +4630,6 @@ export def "get-network-security-intrusion-settings" [
 #
 # PUT /networks/{networkId}/security/intrusionSettings
 # operationId: updateNetworkSecurityIntrusionSettings
-# --protectedNetworks shape: {excludedCidr?: list<string>, includedCidr?: list<string>, useDefault?: bool}
 export def "update-network-security-intrusion-settings" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4648,7 +4644,7 @@ export def "update-network-security-intrusion-settings" [
   --ids-rulesets: string@ids-rulesets-completer # Set the detection ruleset 'connectivity'/'balanced'/'security' (optional - omitting will leave current config unchanged). Default value is 'balanced' if none currently saved
   --mode: string@mode-completer # Set mode to 'disabled'/'detection'/'prevention' (optional - omitting will leave current config unchanged)
   --protected-networks: record # Set the included/excluded networks from the intrusion engine (optional - omitting will leave current config unchanged). This is available only in 'passthrough' mode — shape: {excludedCidr?: list<string>, includedCidr?: list<string>, useDefault?: bool}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -4687,7 +4683,7 @@ export def "get-network-security-malware-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -4712,8 +4708,6 @@ export def "get-network-security-malware-settings" [
 #
 # PUT /networks/{networkId}/security/malwareSettings
 # operationId: updateNetworkSecurityMalwareSettings
-# --allowedFiles item shape: {comment: string, sha256: string}
-# --allowedUrls item shape: {comment: string, url: string}
 export def "update-network-security-malware-settings" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4728,7 +4722,7 @@ export def "update-network-security-malware-settings" [
   --allowed-files: list # The sha256 digests of files that should be permitted by the malware detection engine. If omitted, the current config will remain unchanged. This is available only if your network supports AMP allow listing — item shape: {comment: string, sha256: string}
   --allowed-urls: list # The urls that should be permitted by the malware detection engine. If omitted, the current config will remain unchanged. This is available only if your network supports AMP allow listing — item shape: {comment: string, url: string}
   mode: string@mode-completer-1 # Set mode to 'enabled' to enable malware prevention, otherwise 'disabled'
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -4773,7 +4767,7 @@ export def "get-network-security-events" [
   --per-page: int # The number of entries per page returned. Acceptable range is 3 - 1000. Default is 100.
   --starting-after: string # A token used by the server to indicate the start of the page. Often this is a timestamp or an ID but it is not limited to those. This parameter should not be defined by client applications. The link for the first, last, prev, or next page in the HTTP Link header should define it.
   --ending-before: string # A token used by the server to indicate the end of the page. Often this is a timestamp or an ID but it is not limited to those. This parameter should not be defined by client applications. The link for the first, last, prev, or next page in the HTTP Link header should define it.
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -4810,7 +4804,7 @@ export def "get-network-site-to-site-vpn" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -4835,8 +4829,6 @@ export def "get-network-site-to-site-vpn" [
 #
 # PUT /networks/{networkId}/siteToSiteVpn
 # operationId: updateNetworkSiteToSiteVpn
-# --hubs item shape: {hubId: string, useDefaultRoute?: bool}
-# --subnets item shape: {localSubnet: string, useVpn?: bool}
 export def "update-network-site-to-site-vpn" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4851,7 +4843,7 @@ export def "update-network-site-to-site-vpn" [
   --hubs: list # The list of VPN hubs, in order of preference. In spoke mode, at least 1 hub is required. — item shape: {hubId: string, useDefaultRoute?: bool}
   mode: string@mode-completer-2 # The site-to-site VPN mode. Can be one of 'none', 'spoke' or 'hub'
   --subnets: list # The list of subnets and their VPN presence. — item shape: {localSubnet: string, useVpn?: bool}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -4891,7 +4883,7 @@ export def "create-network-sm-bypass-activation-lock-attempt" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   ids: list<string> # The ids of the devices to attempt activation lock bypass.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -4931,7 +4923,7 @@ export def "get-network-sm-bypass-activation-lock-attempt" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -4957,7 +4949,6 @@ export def "get-network-sm-bypass-activation-lock-attempt" [
 #
 # PUT /networks/{networkId}/sm/device/fields
 # operationId: updateNetworkSmDeviceFields
-# --deviceFields shape: {name?: string, notes?: string}
 export def "update-network-sm-device-fields" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4973,7 +4964,7 @@ export def "update-network-sm-device-fields" [
   --id: string # The id of the device to be modified.
   --serial: string # The serial of the device to be modified.
   --wifi-mac: string # The wifiMac of the device to be modified.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -5016,7 +5007,7 @@ export def "wipe-network-sm-device" [
   --pin: int # The pin number (a six digit value) for wiping a macOS device. Required only for macOS devices.
   --serial: string # The serial of the device to be wiped.
   --wifi-mac: string # The wifiMac of the device to be wiped.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -5100,7 +5091,7 @@ export def "get-network-sm-devices" [
   --scope: string # Specify a scope (one of all, none, withAny, withAll, withoutAny, or withoutAll) and a set of tags as comma separated values.
   --batch-size: int # Number of devices to return, 1000 is the default as well as the max.
   --batch-token: string # If the network has more devices than the batch size, a batch token will be returned as a part of the device list. To see the remainder of the devices, pass in the batchToken as a parameter in the next request. Requests made with the batchToken do not require additional parameters as the batchToken includes the parameters passed in with the original request. Additional parameters passed in with the batchToken will be ignored.
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -5141,7 +5132,7 @@ export def "checkin-network-sm-devices" [
   --scope: string # The scope (one of all, none, withAny, withAll, withoutAny, or withoutAll) and a set of tags of the devices to be checked-in.
   --serials: string # The serials of the devices to be checked-in.
   --wifi-macs: string # The wifiMacs of the devices to be checked-in.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -5186,7 +5177,7 @@ export def "update-network-sm-devices-tags" [
   tags: string # The tags to be added, deleted, or updated.
   update_action: string # One of add, delete, or update. Only devices that have been modified will be returned.
   --wifi-macs: string # The wifiMacs of the devices to be modified.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -5226,7 +5217,7 @@ export def "unenroll-network-sm-device" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -5263,7 +5254,7 @@ export def "get-network-sm-profiles" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -5300,7 +5291,7 @@ export def "get-network-sm-target-groups" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --with-details: oneof<nothing, bool> # Boolean indicating if the the ids of the devices or users scoped by the target group should be included in the response
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -5339,7 +5330,7 @@ export def "create-network-sm-target-group" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The name of this target group
   --scope: string # The scope and tag options of the target group. Comma separated values beginning with one of withAny, withAll, withoutAny, withoutAll, all, none, followed by tags. Default to none if empty.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -5418,7 +5409,7 @@ export def "get-network-sm-target-group" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --with-details: oneof<nothing, bool> # Boolean indicating if the the ids of the devices or users scoped by the target group should be included in the response
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -5459,7 +5450,7 @@ export def "update-network-sm-target-group" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The name of this target group
   --scope: string # The scope and tag options of the target group. Comma separated values beginning with one of withAny, withAll, withoutAny, withoutAll, all, none, followed by tags. Default to none if empty.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -5500,7 +5491,7 @@ export def "get-network-sm-user-device-profiles" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -5538,7 +5529,7 @@ export def "get-network-sm-user-softwares" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -5579,7 +5570,7 @@ export def "get-network-sm-users" [
   --usernames: string # Filter users by username(s). Multiple usernames can be passed in as comma separated values.
   --emails: string # Filter users by email(s). Multiple emails can be passed in as comma separated values.
   --scope: string # Specifiy a scope (one of all, none, withAny, withAll, withoutAny, withoutAll) and a set of tags as comma separated values.
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -5617,7 +5608,7 @@ export def "get-network-sm-cellular-usage-history" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -5655,7 +5646,7 @@ export def "get-network-sm-certs" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -5693,7 +5684,7 @@ export def "get-network-sm-device-profiles" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -5731,7 +5722,7 @@ export def "get-network-sm-network-adapters" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -5769,7 +5760,7 @@ export def "get-network-sm-restrictions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -5807,7 +5798,7 @@ export def "get-network-sm-security-centers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -5845,7 +5836,7 @@ export def "get-network-sm-softwares" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -5883,7 +5874,7 @@ export def "get-network-sm-wlan-lists" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -5920,7 +5911,7 @@ export def "get-network-snmp-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -5959,7 +5950,7 @@ export def "get-network-splash-login-attempts" [
   --ssid-number: int@ssid-number-completer # Only return the login attempts for the specified SSID
   --login-identifier: string # The username, email, or phone number used during login
   --timespan: int # The timespan, in seconds, for the login attempts. The period will be from [timespan] seconds ago until now. The maximum timespan is 3 months
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -5996,7 +5987,7 @@ export def "split-network" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -6032,7 +6023,7 @@ export def "get-network-ssids" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -6069,7 +6060,7 @@ export def "get-network-ssid" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -6095,9 +6086,6 @@ export def "get-network-ssid" [
 #
 # PUT /networks/{networkId}/ssids/{number}
 # operationId: updateNetworkSsid
-# --apTagsAndVlanIds item shape: {tags?: string, vlanId?: int}
-# --radiusAccountingServers item shape: {host: string, port?: int, secret?: string}
-# --radiusServers item shape: {host: string, port?: int, secret?: string}
 export def "update-network-ssid" [
   network_id: string
   number: string
@@ -6144,7 +6132,7 @@ export def "update-network-ssid" [
   --walled-garden-enabled: oneof<nothing, bool> # Allow access to a configurable list of IP ranges, which users may access prior to sign-on.
   --walled-garden-ranges: string # Specify your walled garden by entering space-separated addresses, ranges using CIDR notation, domain names, and domain wildcards (e.g. 192.168.1.1/24 192.168.37.10/32 www.yahoo.com *.google.com). Meraki's splash page is automatically included in your walled garden.
   --wpa-encryption-mode: string@wpa-encryption-mode-completer # The types of WPA encryption. ('WPA1 only', 'WPA1 and WPA2', 'WPA2 only', 'WPA3 Transition Mode' or 'WPA3 only')
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -6185,7 +6173,7 @@ export def "get-network-ssid-l3-firewall-rules" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -6211,7 +6199,6 @@ export def "get-network-ssid-l3-firewall-rules" [
 #
 # PUT /networks/{networkId}/ssids/{number}/l3FirewallRules
 # operationId: updateNetworkSsidL3FirewallRules
-# --rules item shape: {comment?: string, destCidr: string, destPort?: string, policy: "allow"|"deny", protocol: "any"|"icmp"|"icmp6"|"tcp"|"udp"}
 export def "update-network-ssid-l3-firewall-rules" [
   network_id: string
   number: string
@@ -6226,7 +6213,7 @@ export def "update-network-ssid-l3-firewall-rules" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --allow-lan-access: oneof<nothing, bool> # Allow wireless client access to local LAN (boolean value - true allows access and false denies access) (optional)
   --rules: list # An ordered array of the firewall rules for this SSID (not including the local LAN access rule or the default rule) — item shape: {comment?: string, destCidr: string, destPort?: string, policy: "allow"|"deny", protocol: "any"|"icmp"|"icmp6"|"tcp"|"udp"}
-]: any -> list<record> {
+]: any -> oneof<list<record>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -6267,7 +6254,7 @@ export def "get-network-ssid-splash-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -6307,7 +6294,7 @@ export def "update-network-ssid-splash-settings" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --splash-url: string # [optional] The custom splash URL of the click-through splash page. Note that the URL can be configured without necessarily being used. In order to enable the custom URL, see 'useSplashUrl'
   --use-splash-url: oneof<nothing, bool> # [optional] Boolean indicating whether the user will be redirected to the custom splash url. A custom splash URL must be set if this is true. Note that depending on your SSID's access control settings, it may not be possible to use the custom splash URL.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -6347,7 +6334,7 @@ export def "get-network-static-routes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -6386,7 +6373,7 @@ export def "create-network-static-route" [
   gateway_ip: string # The gateway IP (next hop) of the static route
   name: string # The name of the new static route
   subnet: string # The subnet of the static route
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -6464,7 +6451,7 @@ export def "get-network-static-route" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -6490,7 +6477,6 @@ export def "get-network-static-route" [
 #
 # PUT /networks/{networkId}/staticRoutes/{staticRouteId}
 # operationId: updateNetworkStaticRoute
-# --reservedIpRanges item shape: {comment: string, end: string, start: string}
 export def "update-network-static-route" [
   network_id: string
   static_route_id: string
@@ -6509,7 +6495,7 @@ export def "update-network-static-route" [
   --name: string # The name of the static route
   --reserved-ip-ranges: list # The DHCP reserved IP ranges on the static route — item shape: {comment: string, end: string, start: string}
   --subnet: string # The subnet of the static route
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -6549,7 +6535,7 @@ export def "swap-network-warm-spare" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -6585,7 +6571,7 @@ export def "get-network-switch-link-aggregations" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -6610,8 +6596,6 @@ export def "get-network-switch-link-aggregations" [
 #
 # POST /networks/{networkId}/switch/linkAggregations
 # operationId: createNetworkSwitchLinkAggregation
-# --switchPorts item shape: {portId: string, serial: string}
-# --switchProfilePorts item shape: {portId: string, profile: string}
 export def "create-network-switch-link-aggregation" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6625,7 +6609,7 @@ export def "create-network-switch-link-aggregation" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --switch-ports: list # Array of switch or stack ports for creating aggregation group. Minimum 2 and maximum 8 ports are supported. — item shape: {portId: string, serial: string}
   --switch-profile-ports: list # Array of switch profile ports for creating aggregation group. Minimum 2 and maximum 8 ports are supported. — item shape: {portId: string, profile: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -6691,8 +6675,6 @@ export def "delete-network-switch-link-aggregation" [
 #
 # PUT /networks/{networkId}/switch/linkAggregations/{linkAggregationId}
 # operationId: updateNetworkSwitchLinkAggregation
-# --switchPorts item shape: {portId: string, serial: string}
-# --switchProfilePorts item shape: {portId: string, profile: string}
 export def "update-network-switch-link-aggregation" [
   network_id: string
   link_aggregation_id: string
@@ -6707,7 +6689,7 @@ export def "update-network-switch-link-aggregation" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --switch-ports: list # Array of switch or stack ports for updating aggregation group. Minimum 2 and maximum 8 ports are supported. — item shape: {portId: string, serial: string}
   --switch-profile-ports: list # Array of switch profile ports for updating aggregation group. Minimum 2 and maximum 8 ports are supported. — item shape: {portId: string, profile: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -6747,7 +6729,7 @@ export def "get-network-switch-port-schedules" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -6772,7 +6754,6 @@ export def "get-network-switch-port-schedules" [
 #
 # POST /networks/{networkId}/switch/portSchedules
 # operationId: createNetworkSwitchPortSchedule
-# --portSchedule shape: {friday?: record, monday?: record, saturday?: record, sunday?: record, thursday?: record, tuesday?: record, wednesday?: record}
 export def "create-network-switch-port-schedule" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6786,7 +6767,7 @@ export def "create-network-switch-port-schedule" [
   --dry-run(-n) # Return the request that would be sent without executing it
   name: string # The name for your port schedule. Required
   --port-schedule: record # The schedule for switch port scheduling. Schedules are applied to days of the week. When it's empty, default schedule with all days of a week are configured. Any unspecified day in the schedule is added as a default schedule configuration of the day. — shape: {friday?: record, monday?: record, saturday?: record, sunday?: record, thursday?: record, tuesday?: record, wednesday?: record}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -6852,7 +6833,6 @@ export def "delete-network-switch-port-schedule" [
 #
 # PUT /networks/{networkId}/switch/portSchedules/{portScheduleId}
 # operationId: updateNetworkSwitchPortSchedule
-# --portSchedule shape: {friday?: record, monday?: record, saturday?: record, sunday?: record, thursday?: record, tuesday?: record, wednesday?: record}
 export def "update-network-switch-port-schedule" [
   network_id: string
   port_schedule_id: string
@@ -6867,7 +6847,7 @@ export def "update-network-switch-port-schedule" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The name for your port schedule.
   --port-schedule: record # The schedule for switch port scheduling. Schedules are applied to days of the week. When it's empty, default schedule with all days of a week are configured. Any unspecified day in the schedule is added as a default schedule configuration of the day. — shape: {friday?: record, monday?: record, saturday?: record, sunday?: record, thursday?: record, tuesday?: record, wednesday?: record}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -6907,7 +6887,7 @@ export def "get-network-switch-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -6932,7 +6912,6 @@ export def "get-network-switch-settings" [
 #
 # PUT /networks/{networkId}/switch/settings
 # operationId: updateNetworkSwitchSettings
-# --powerExceptions item shape: {powerType: "combined"|"redundant"|"useNetworkSetting", serial: string}
 export def "update-network-switch-settings" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6947,7 +6926,7 @@ export def "update-network-switch-settings" [
   --power-exceptions: list # Exceptions on a per switch basis to "useCombinedPower" — item shape: {powerType: "combined"|"redundant"|"useNetworkSetting", serial: string}
   --use-combined-power: oneof<nothing, bool> # The use Combined Power as the default behavior of secondary power supplies on supported devices.
   --vlan: int # Management VLAN
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -6986,7 +6965,7 @@ export def "get-network-switch-settings-mtu" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -7011,7 +6990,6 @@ export def "get-network-switch-settings-mtu" [
 #
 # PUT /networks/{networkId}/switch/settings/mtu
 # operationId: updateNetworkSwitchSettingsMtu
-# --overrides item shape: {mtuSize: int, switchProfiles?: list<string>, switches?: list<string>}
 export def "update-network-switch-settings-mtu" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7025,7 +7003,7 @@ export def "update-network-switch-settings-mtu" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --default-mtu-size: int # MTU size for the entire network. Default value is 9578.
   --overrides: list # Override MTU size for individual switches or switch profiles. An empty array will clear overrides. — item shape: {mtuSize: int, switchProfiles?: list<string>, switches?: list<string>}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -7064,7 +7042,7 @@ export def "get-network-switch-settings-multicast" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -7089,8 +7067,6 @@ export def "get-network-switch-settings-multicast" [
 #
 # PUT /networks/{networkId}/switch/settings/multicast
 # operationId: updateNetworkSwitchSettingsMulticast
-# --defaultSettings shape: {floodUnknownMulticastTrafficEnabled?: bool, igmpSnoopingEnabled?: bool}
-# --overrides item shape: {floodUnknownMulticastTrafficEnabled: bool, igmpSnoopingEnabled: bool, stacks?: list<string>, switchProfiles?: list<string>, switches?: list<string>}
 export def "update-network-switch-settings-multicast" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7104,7 +7080,7 @@ export def "update-network-switch-settings-multicast" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --default-settings: record # Default multicast setting for entire network. IGMP snooping and Flood unknown multicast traffic settings are enabled by default. — shape: {floodUnknownMulticastTrafficEnabled?: bool, igmpSnoopingEnabled?: bool}
   --overrides: list # Array of paired switches/stacks/profiles and corresponding multicast settings. An empty array will clear the multicast settings. — item shape: {floodUnknownMulticastTrafficEnabled: bool, igmpSnoopingEnabled: bool, stacks?: list<string>, switchProfiles?: list<string>, switches?: list<string>}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -7143,7 +7119,7 @@ export def "get-network-switch-settings-qos-rules" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -7186,7 +7162,7 @@ export def "create-network-switch-settings-qos-rule" [
   --src-port: int # The source port of the incoming packet. Applicable only if protocol is TCP or UDP.
   --src-port-range: string # The source port range of the incoming packet. Applicable only if protocol is set to TCP or UDP. Example: 70-80
   vlan: int # The VLAN of the incoming packet. A null value will match any VLAN.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -7225,7 +7201,7 @@ export def "get-network-switch-settings-qos-rules-order" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -7262,7 +7238,7 @@ export def "update-network-switch-settings-qos-rules-order" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   rule_ids: list<string> # A list of quality of service rule IDs arranged in order in which they should be processed by the switch.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -7340,7 +7316,7 @@ export def "get-network-switch-settings-qos-rule" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -7385,7 +7361,7 @@ export def "update-network-switch-settings-qos-rule" [
   --src-port: int # The source port of the incoming packet. Applicable only if protocol is TCP or UDP.
   --src-port-range: string # The source port range of the incoming packet. Applicable only if protocol is set to TCP or UDP. Example: 70-80
   --vlan: int # The VLAN of the incoming packet. A null value will match any VLAN.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -7425,7 +7401,7 @@ export def "get-network-switch-settings-storm-control" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -7464,7 +7440,7 @@ export def "update-network-switch-settings-storm-control" [
   --broadcast-threshold: int # Percentage (1 to 99) of total available port bandwidth for broadcast traffic type. Default value 100 percent rate is to clear the configuration.
   --multicast-threshold: int # Percentage (1 to 99) of total available port bandwidth for multicast traffic type. Default value 100 percent rate is to clear the configuration.
   --unknown-unicast-threshold: int # Percentage (1 to 99) of total available port bandwidth for unknown unicast (dlf-destination lookup failure) traffic type. Default value 100 percent rate is to clear the configuration.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -7503,7 +7479,7 @@ export def "get-network-switch-stacks" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -7541,7 +7517,7 @@ export def "create-network-switch-stack" [
   --dry-run(-n) # Return the request that would be sent without executing it
   name: string # The name of the new stack
   serials: list<string> # An array of switch serials to be added into the new stack
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -7619,7 +7595,7 @@ export def "get-network-switch-stack" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -7658,7 +7634,7 @@ export def "add-network-switch-stack" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   serial: string # The serial of the switch to be added
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -7700,7 +7676,7 @@ export def "remove-network-switch-stack" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   serial: string # The serial of the switch to be removed
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -7740,7 +7716,7 @@ export def "get-network-syslog-servers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -7765,7 +7741,6 @@ export def "get-network-syslog-servers" [
 #
 # PUT /networks/{networkId}/syslogServers
 # operationId: updateNetworkSyslogServers
-# --servers item shape: {host: string, port: int, roles: list<string>}
 export def "update-network-syslog-servers" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7778,7 +7753,7 @@ export def "update-network-syslog-servers" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   servers: list # A list of the syslog servers for this network — item shape: {host: string, port: int, roles: list<string>}
-]: any -> list<record> {
+]: any -> oneof<list<record>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -7820,7 +7795,7 @@ export def "get-network-traffic" [
   --t0: string # The beginning of the timespan for the data. The maximum lookback period is 30 days from today.
   --timespan: float # The timespan for which the information will be fetched. If specifying timespan, do not specify parameter t0. The value must be in seconds and be less than or equal to 30 days. (format: float)
   --device-type: string@device-type-completer # Filter the data by device type: 'combined', 'wireless', 'switch' or 'appliance'. Defaults to 'combined'. When using 'combined', for each rule the data will come from the device type with the most usage.
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -7893,7 +7868,7 @@ export def "get-network-uplink-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -7918,7 +7893,6 @@ export def "get-network-uplink-settings" [
 #
 # PUT /networks/{networkId}/uplinkSettings
 # operationId: updateNetworkUplinkSettings
-# --bandwidthLimits shape: {cellular?: record, wan1?: record, wan2?: record}
 export def "update-network-uplink-settings" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7931,7 +7905,7 @@ export def "update-network-uplink-settings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --bandwidth-limits: record # A mapping of uplinks to their bandwidth settings (be sure to check which uplinks are supported for your network) — shape: {cellular?: record, wan1?: record, wan2?: record}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -7970,7 +7944,7 @@ export def "get-network-vlans" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -8011,7 +7985,7 @@ export def "create-network-vlan" [
   id: string # The VLAN ID of the new VLAN (must be between 1 and 4094)
   name: string # The name of the new VLAN
   subnet: string # The subnet of the VLAN
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -8089,7 +8063,7 @@ export def "get-network-vlan" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -8115,8 +8089,6 @@ export def "get-network-vlan" [
 #
 # PUT /networks/{networkId}/vlans/{vlanId}
 # operationId: updateNetworkVlan
-# --dhcpOptions item shape: {code: string, type: "hex"|"integer"|"ip"|"text", value: string}
-# --reservedIpRanges item shape: {comment: string, end: string, start: string}
 export def "update-network-vlan" [
   network_id: string
   vlan_id: string
@@ -8144,7 +8116,7 @@ export def "update-network-vlan" [
   --reserved-ip-ranges: list # The DHCP reserved IP ranges on the VLAN — item shape: {comment: string, end: string, start: string}
   --subnet: string # The subnet of the VLAN
   --vpn-nat-subnet: string # The translated VPN subnet if VPN and VPN subnet translation are enabled on the VLAN
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -8184,7 +8156,7 @@ export def "get-network-vlans-enabled-state" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -8221,7 +8193,7 @@ export def "update-network-vlans-enabled-state" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --enabled: oneof<nothing, bool> # Boolean indicating whether to enable (true) or disable (false) VLANs for the network
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -8261,7 +8233,7 @@ export def "get-network-warm-spare-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -8302,7 +8274,7 @@ export def "update-network-warm-spare-settings" [
   --uplink-mode: string # Uplink mode, either virtual or public
   --virtual-ip1: string # The WAN 1 shared IP
   --virtual-ip2: string # The WAN 2 shared IP
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -8343,7 +8315,7 @@ export def "get-network-wireless-rf-profiles" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --include-template-profiles: oneof<nothing, bool> # If the network is bound to a template, this parameter controls whether or not the non-basic RF profiles defined on the template should be included in the response alongside the non-basic profiles defined on the bound network. Defaults to false.
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -8369,9 +8341,6 @@ export def "get-network-wireless-rf-profiles" [
 #
 # POST /networks/{networkId}/wireless/rfProfiles
 # operationId: createNetworkWirelessRfProfile
-# --apBandSettings shape: {bandOperationMode?: "2.4ghz"|"5ghz"|"dual", bandSteeringEnabled?: bool}
-# --fiveGhzSettings shape: {channelWidth?: string, maxPower?: int, minBitrate?: int, minPower?: int, rxsop?: int, validAutoChannels?: list<int>}
-# --twoFourGhzSettings shape: {axEnabled?: bool, maxPower?: int, minBitrate?: float, minPower?: int, rxsop?: int, validAutoChannels?: list<int>}
 export def "create-network-wireless-rf-profile" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8390,7 +8359,7 @@ export def "create-network-wireless-rf-profile" [
   --min-bitrate-type: string@min-bitrate-type-completer # Minimum bitrate can be set to either 'band' or 'ssid'. Defaults to band.
   name: string # The name of the new profile. Must be unique. This param is required on creation.
   --two-four-ghz-settings: record # Settings related to 2.4Ghz band — shape: {axEnabled?: bool, maxPower?: int, minBitrate?: float, minPower?: int, rxsop?: int, validAutoChannels?: list<int>}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -8468,7 +8437,7 @@ export def "get-network-wireless-rf-profile" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -8494,9 +8463,6 @@ export def "get-network-wireless-rf-profile" [
 #
 # PUT /networks/{networkId}/wireless/rfProfiles/{rfProfileId}
 # operationId: updateNetworkWirelessRfProfile
-# --apBandSettings shape: {bandOperationMode?: "2.4ghz"|"5ghz"|"dual", bandSteeringEnabled?: bool}
-# --fiveGhzSettings shape: {channelWidth?: string, maxPower?: int, minBitrate?: int, minPower?: int, rxsop?: int, validAutoChannels?: list<int>}
-# --twoFourGhzSettings shape: {axEnabled?: bool, maxPower?: int, minBitrate?: float, minPower?: int, rxsop?: int, validAutoChannels?: list<int>}
 export def "update-network-wireless-rf-profile" [
   network_id: string
   rf_profile_id: string
@@ -8516,7 +8482,7 @@ export def "update-network-wireless-rf-profile" [
   --min-bitrate-type: string@min-bitrate-type-completer # Minimum bitrate can be set to either 'band' or 'ssid'.
   --name: string # The name of the new profile. Must be unique.
   --two-four-ghz-settings: record # Settings related to 2.4Ghz band — shape: {axEnabled?: bool, maxPower?: int, minBitrate?: float, minPower?: int, rxsop?: int, validAutoChannels?: list<int>}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -8556,7 +8522,7 @@ export def "get-network-wireless-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -8597,7 +8563,7 @@ export def "update-network-wireless-settings" [
   --location-analytics-enabled: oneof<nothing, bool> # Toggle for enabling or disabling location analytics for your network
   --meshing-enabled: oneof<nothing, bool> # Toggle for enabling or disabling meshing in a network
   --upgrade-strategy: string@upgrade-strategy-completer # The upgrade strategy to apply to the network. Must be one of 'minimizeUpgradeTime' or 'minimizeClientDowntime'. Requires firmware version MR 26.8 or higher'
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -8641,7 +8607,7 @@ export def "lock-network-sm-devices" [
   --scope: string # The scope (one of all, none, withAny, withAll, withoutAny, or withoutAll) and a set of tags of the devices to be wiped.
   --serials: string # The serials of the devices to be locked.
   --wifi-macs: string # The wifiMacs of the devices to be locked.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -8684,7 +8650,7 @@ export def "get-network-sm-connectivity" [
   --per-page: int # The number of entries per page returned. Acceptable range is 3 - 1000. Default is 1000.
   --starting-after: string # A token used by the server to indicate the start of the page. Often this is a timestamp or an ID but it is not limited to those. This parameter should not be defined by client applications. The link for the first, last, prev, or next page in the HTTP Link header should define it.
   --ending-before: string # A token used by the server to indicate the end of the page. Often this is a timestamp or an ID but it is not limited to those. This parameter should not be defined by client applications. The link for the first, last, prev, or next page in the HTTP Link header should define it.
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'network_id' must be non-empty" } }
@@ -8726,7 +8692,7 @@ export def "get-network-sm-desktop-logs" [
   --per-page: int # The number of entries per page returned. Acceptable range is 3 - 1000. Default is 1000.
   --starting-after: string # A token used by the server to indicate the start of the page. Often this is a timestamp or an ID but it is not limited to those. This parameter should not be defined by client applications. The link for the first, last, prev, or next page in the HTTP Link header should define it.
   --ending-before: string # A token used by the server to indicate the end of the page. Often this is a timestamp or an ID but it is not limited to those. This parameter should not be defined by client applications. The link for the first, last, prev, or next page in the HTTP Link header should define it.
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'network_id' must be non-empty" } }
@@ -8768,7 +8734,7 @@ export def "get-network-sm-device-command-logs" [
   --per-page: int # The number of entries per page returned. Acceptable range is 3 - 1000. Default is 1000.
   --starting-after: string # A token used by the server to indicate the start of the page. Often this is a timestamp or an ID but it is not limited to those. This parameter should not be defined by client applications. The link for the first, last, prev, or next page in the HTTP Link header should define it.
   --ending-before: string # A token used by the server to indicate the end of the page. Often this is a timestamp or an ID but it is not limited to those. This parameter should not be defined by client applications. The link for the first, last, prev, or next page in the HTTP Link header should define it.
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'network_id' must be non-empty" } }
@@ -8810,7 +8776,7 @@ export def "get-network-sm-performance-history" [
   --per-page: int # The number of entries per page returned. Acceptable range is 3 - 1000. Default is 1000.
   --starting-after: string # A token used by the server to indicate the start of the page. Often this is a timestamp or an ID but it is not limited to those. This parameter should not be defined by client applications. The link for the first, last, prev, or next page in the HTTP Link header should define it.
   --ending-before: string # A token used by the server to indicate the end of the page. Often this is a timestamp or an ID but it is not limited to those. This parameter should not be defined by client applications. The link for the first, last, prev, or next page in the HTTP Link header should define it.
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'network_id' must be non-empty" } }
@@ -8847,7 +8813,7 @@ export def "get-organizations" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/organizations" $auth.query)
@@ -8882,7 +8848,7 @@ export def "get-organization" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
@@ -8919,7 +8885,7 @@ export def "get-organization-action-batches" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --status: string@status-completer # Filter batches by status. Valid types are pending, completed, and failed.
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
@@ -8945,7 +8911,6 @@ export def "get-organization-action-batches" [
 #
 # POST /organizations/{organizationId}/actionBatches
 # operationId: createOrganizationActionBatch
-# --actions item shape: {body?: record, operation: string, resource: string}
 export def "create-organization-action-batch" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8960,7 +8925,7 @@ export def "create-organization-action-batch" [
   actions: list # A set of changes to make as part of this action (more details) — item shape: {body?: record, operation: string, resource: string}
   --confirmed: oneof<nothing, bool> # Set to true for immediate execution. Set to false if the action should be previewed before executing. This property cannot be unset once it is true. Defaults to false.
   --synchronous: oneof<nothing, bool> # Set to true to force the batch to run synchronous. There can be at most 20 actions in synchronous batch. Defaults to false.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -9040,7 +9005,7 @@ export def "update-organization-action-batch" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --confirmed: oneof<nothing, bool> # A boolean representing whether or not the batch has been confirmed. This property cannot be unset once it is true.
   --synchronous: oneof<nothing, bool> # Set to true to force the batch to run synchronous. There can be at most 20 actions in synchronous batch.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -9080,7 +9045,7 @@ export def "get-organization-admins" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
@@ -9105,8 +9070,6 @@ export def "get-organization-admins" [
 #
 # POST /organizations/{organizationId}/admins
 # operationId: createOrganizationAdmin
-# --networks item shape: {access: string, id: string}
-# --tags item shape: {access: string, tag: string}
 export def "create-organization-admin" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9124,7 +9087,7 @@ export def "create-organization-admin" [
   --networks: list # The list of networks that the dashboard administrator has privileges on — item shape: {access: string, id: string}
   org_access: string@org-access-completer # The privilege of the dashboard administrator on the organization. Can be one of 'full', 'read-only', 'enterprise' or 'none'
   --tags: list # The list of tags that the dashboard administrator has privileges on — item shape: {access: string, tag: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -9190,8 +9153,6 @@ export def "delete-organization-admin" [
 #
 # PUT /organizations/{organizationId}/admins/{adminId}
 # operationId: updateOrganizationAdmin
-# --networks item shape: {access: string, id: string}
-# --tags item shape: {access: string, tag: string}
 export def "update-organization-admin" [
   organization_id: string
   admin_id: string
@@ -9208,7 +9169,7 @@ export def "update-organization-admin" [
   --networks: list # The list of networks that the dashboard administrator has privileges on — item shape: {access: string, id: string}
   --org-access: string@org-access-completer # The privilege of the dashboard administrator on the organization. Can be one of 'full', 'read-only', 'enterprise' or 'none'
   --tags: list # The list of tags that the dashboard administrator has privileges on — item shape: {access: string, tag: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -9259,7 +9220,7 @@ export def "get-organization-api-requests" [
   --method: string # Filter the results by the method of the API requests (must be 'GET', 'PUT', 'POST' or 'DELETE')
   --response-code: int # Filter the results by the response code of the API requests
   --source-ip: string # Filter the results by the IP address of the originating API request
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
@@ -9299,7 +9260,7 @@ export def "get-organization-api-requests-overview" [
   --t0: string # The beginning of the timespan for the data. The maximum lookback period is 31 days from today.
   --t1: string # The end of the timespan for the data. t1 can be a maximum of 31 days after t0.
   --timespan: float # The timespan for which the information will be fetched. If specifying timespan, do not specify parameters t0 and t1. The value must be in seconds and be less than or equal to 31 days. The default is 31 days. (format: float)
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
@@ -9325,7 +9286,6 @@ export def "get-organization-api-requests-overview" [
 #
 # POST /organizations/{organizationId}/claim
 # operationId: claimIntoOrganization
-# --licenses item shape: {key: string, mode?: "addDevices"|"renew"}
 export def "claim-into-organization" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9340,7 +9300,7 @@ export def "claim-into-organization" [
   --licenses: list # The licenses that should be claimed — item shape: {key: string, mode?: "addDevices"|"renew"}
   --orders: list<string> # The numbers of the orders that should be claimed
   --serials: list<string> # The serials of the devices that should be claimed
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -9380,7 +9340,7 @@ export def "clone-organization" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   name: string # The name of the new organization
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -9419,7 +9379,7 @@ export def "get-organization-config-templates" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
@@ -9494,7 +9454,7 @@ export def "get-organization-config-template-switch-profiles" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
@@ -9539,7 +9499,7 @@ export def "get-organization-configuration-changes" [
   --ending-before: string # A token used by the server to indicate the end of the page. Often this is a timestamp or an ID but it is not limited to those. This parameter should not be defined by client applications. The link for the first, last, prev, or next page in the HTTP Link header should define it.
   --network-id: string # Filters on the given network
   --admin-id: string # Filters on the given Admin
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
@@ -9576,7 +9536,7 @@ export def "get-organization-device-statuses" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
@@ -9616,7 +9576,7 @@ export def "get-organization-devices" [
   --starting-after: string # A token used by the server to indicate the start of the page. Often this is a timestamp or an ID but it is not limited to those. This parameter should not be defined by client applications. The link for the first, last, prev, or next page in the HTTP Link header should define it.
   --ending-before: string # A token used by the server to indicate the end of the page. Often this is a timestamp or an ID but it is not limited to those. This parameter should not be defined by client applications. The link for the first, last, prev, or next page in the HTTP Link header should define it.
   --configuration-updated-after: string # Filter results by whether or not the device's configuration has been updated after the given timestamp
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
@@ -9653,7 +9613,7 @@ export def "get-organization-insight-monitored-media-servers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
@@ -9691,7 +9651,7 @@ export def "create-organization-insight-monitored-media-server" [
   --dry-run(-n) # Return the request that would be sent without executing it
   address: string # The IP address (IPv4 only) or hostname of the media server to monitor
   name: string # The name of the VoIP provider
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -9769,7 +9729,7 @@ export def "get-organization-insight-monitored-media-server" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
@@ -9809,7 +9769,7 @@ export def "update-organization-insight-monitored-media-server" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --address: string # The IP address (IPv4 only) or hostname of the media server to monitor
   --name: string # The name of the VoIP provider
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -9850,7 +9810,7 @@ export def "get-organization-inventory" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --include-license-info: oneof<nothing, bool> # When this parameter is true, each entity in the response will include the license expiration date of the device (if any). Only applies to organizations that are on the per-device licensing model. Defaults to false.
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
@@ -9887,7 +9847,7 @@ export def "get-organization-license-state" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
@@ -9929,7 +9889,7 @@ export def "get-organization-licenses" [
   --device-serial: string # Filter the licenses to those assigned to a particular device
   --network-id: string # Filter the licenses to those assigned in a particular network
   --state: string@state-completer # Filter the licenses to those in a particular state. Can be one of 'active', 'expired', 'expiring', 'recentlyQueued', 'unused' or 'unusedActive'
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
@@ -9969,7 +9929,7 @@ export def "assign-organization-licenses-seats" [
   license_id: string # The ID of the SM license to assign seats from
   network_id: string # The ID of the SM network to assign the seats to
   seat_count: int # The number of seats to assign to the SM network. Must be less than or equal to the total number of seats of the license
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -10011,7 +9971,7 @@ export def "move-organization-licenses-seats" [
   dest_organization_id: string # The ID of the organization to move the SM seats to
   license_id: string # The ID of the SM license to move the seats from
   seat_count: int # The number of seats to move to the new organization. Must be less than or equal to the total number of seats of the license
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -10052,7 +10012,7 @@ export def "renew-organization-licenses-seats" [
   --dry-run(-n) # Return the request that would be sent without executing it
   license_id_to_renew: string # The ID of the SM license to renew. This license must already be assigned to an SM network
   unused_license_id: string # The SM license to use to renew the seats on 'licenseIdToRenew'. This license must have at least as many seats available as there are seats on 'licenseIdToRenew'
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -10092,7 +10052,7 @@ export def "get-organization-license" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
@@ -10130,7 +10090,7 @@ export def "get-organization-networks" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --config-template-id: string # An optional parameter that is the ID of a config template. Will return all networks bound to that template.
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
@@ -10174,7 +10134,7 @@ export def "create-organization-network" [
   --tags: string # A space-separated list of tags to be applied to the network
   --time-zone: string # The timezone of the network. For a list of allowed timezones, please see the 'TZ' column in the table in this article.
   type: string # The type of the new network. Valid types are wireless, appliance, switch, systemsManager, camera, cellularGateway, environmental, or a space-separated list of those for a combined network.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -10216,7 +10176,7 @@ export def "combine-organization-networks" [
   --enrollment-string: string # A unique identifier which can be used for device enrollment or easy access through the Meraki SM Registration page or the Self Service Portal. Please note that changing this field may cause existing bookmarks to break. All networks that are part of this combined network will have their enrollment string appended by '-network_type'. If left empty, all exisitng enrollment strings will be deleted.
   name: string # The name of the combined network
   network_ids: list<string> # A list of the network IDs that will be combined. If an ID of a combined network is included in this list, the other networks in the list will be grouped into that network
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -10255,7 +10215,7 @@ export def "get-organization-openapi-spec" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
@@ -10291,7 +10251,7 @@ export def "get-organization-saml-roles" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
@@ -10316,8 +10276,6 @@ export def "get-organization-saml-roles" [
 #
 # POST /organizations/{organizationId}/samlRoles
 # operationId: createOrganizationSamlRole
-# --networks item shape: {access: string, id: string}
-# --tags item shape: {access: string, tag: string}
 export def "create-organization-saml-role" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10333,7 +10291,7 @@ export def "create-organization-saml-role" [
   org_access: string # The privilege of the SAML administrator on the organization
   role: string # The role of the SAML administrator
   --tags: list # The list of tags that the SAML administrator has privleges on — item shape: {access: string, tag: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -10373,7 +10331,7 @@ export def "get-organization-saml-role" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
@@ -10399,8 +10357,6 @@ export def "get-organization-saml-role" [
 #
 # PUT /organizations/{organizationId}/samlRoles/{samlRoleId}
 # operationId: updateOrganizationSamlRole
-# --networks item shape: {access: string, id: string}
-# --tags item shape: {access: string, tag: string}
 export def "update-organization-saml-role" [
   organization_id: string
   saml_role_id: string
@@ -10417,7 +10373,7 @@ export def "update-organization-saml-role" [
   --org-access: string # The privilege of the SAML administrator on the organization
   --role: string # The role of the SAML administrator
   --tags: list # The list of tags that the SAML administrator has privleges on — item shape: {access: string, tag: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -10457,7 +10413,7 @@ export def "get-organization-security-intrusion-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
@@ -10482,7 +10438,6 @@ export def "get-organization-security-intrusion-settings" [
 #
 # PUT /organizations/{organizationId}/security/intrusionSettings
 # operationId: updateOrganizationSecurityIntrusionSettings
-# --whitelistedRules item shape: {message?: string, ruleId: string}
 export def "update-organization-security-intrusion-settings" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10495,7 +10450,7 @@ export def "update-organization-security-intrusion-settings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   whitelisted_rules: list # Sets a list of specific SNORT signatures to allow — item shape: {message?: string, ruleId: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -10540,7 +10495,7 @@ export def "get-organization-security-events" [
   --per-page: int # The number of entries per page returned. Acceptable range is 3 - 1000. Default is 100.
   --starting-after: string # A token used by the server to indicate the start of the page. Often this is a timestamp or an ID but it is not limited to those. This parameter should not be defined by client applications. The link for the first, last, prev, or next page in the HTTP Link header should define it.
   --ending-before: string # A token used by the server to indicate the end of the page. Often this is a timestamp or an ID but it is not limited to those. This parameter should not be defined by client applications. The link for the first, last, prev, or next page in the HTTP Link header should define it.
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
@@ -10577,7 +10532,7 @@ export def "get-organization-snmp" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
@@ -10613,7 +10568,7 @@ export def "get-organization-third-party-vpn-peers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
@@ -10638,7 +10593,6 @@ export def "get-organization-third-party-vpn-peers" [
 #
 # PUT /organizations/{organizationId}/thirdPartyVPNPeers
 # operationId: updateOrganizationThirdPartyVPNPeers
-# --peers item shape: {ikeVersion?: "1"|"2", ipsecPolicies?: record, ipsecPoliciesPreset?: string, name: string, networkTags?: list<string>, privateSubnets: list<string>, publicIp: string, remoteId?: string, secret: string}
 export def "update-organization-third-party-vpn-peers" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10651,7 +10605,7 @@ export def "update-organization-third-party-vpn-peers" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   peers: list # The list of VPN peers — item shape: {ikeVersion?: "1"|"2", ipsecPolicies?: record, ipsecPoliciesPreset?: string, name: string, networkTags?: list<string>, privateSubnets: list<string>, publicIp: string, remoteId?: string, secret: string}
-]: any -> list<record> {
+]: any -> oneof<list<record>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -10695,7 +10649,7 @@ export def "get-organization-uplinks-loss-and-latency" [
   --timespan: float # The timespan for which the information will be fetched. If specifying timespan, do not specify parameters t0 and t1. The value must be in seconds and be less than or equal to 5 minutes. The default is 5 minutes. (format: float)
   --uplink: string@uplink-completer # Optional filter for a specific WAN uplink. Valid uplinks are wan1, wan2, cellular. Default will return all uplinks.
   --ip: string # Optional filter for a specific destination IP. Default will return all destination IPs.
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
@@ -10732,7 +10686,7 @@ export def "get-organization-vpn-firewall-rules" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
@@ -10757,7 +10711,6 @@ export def "get-organization-vpn-firewall-rules" [
 #
 # PUT /organizations/{organizationId}/vpnFirewallRules
 # operationId: updateOrganizationVpnFirewallRules
-# --rules item shape: {comment?: string, destCidr: string, destPort?: string, policy: "allow"|"deny", protocol: "any"|"icmp"|"icmp6"|"tcp"|"udp", srcCidr: string, srcPort?: string, syslogEnabled?: bool}
 export def "update-organization-vpn-firewall-rules" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10771,7 +10724,7 @@ export def "update-organization-vpn-firewall-rules" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --rules: list # An ordered array of the firewall rules (not including the default rule) — item shape: {comment?: string, destCidr: string, destPort?: string, policy: "allow"|"deny", protocol: "any"|"icmp"|"icmp6"|"tcp"|"udp", srcCidr: string, srcPort?: string, syslogEnabled?: bool}
   --syslog-default-rule: oneof<nothing, bool> # Log the special default rule (boolean value - enable only if you've configured a syslog server) (optional)
-]: any -> list<record> {
+]: any -> oneof<list<record>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)

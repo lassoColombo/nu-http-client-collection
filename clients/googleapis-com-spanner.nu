@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -123,9 +147,9 @@ def query-mode-completer [] { ["NORMAL" "PLAN" "PROFILE"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "spanner-projects-instances-databases-drop-database" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["spanner-projects-instances-databases-drop-database" "spanner-projects-instances-databases-get-ddl" "spanner-projects-instances-databases-update-ddl" "spanner-projects-instances-databases-sessions-list" "spanner-projects-instances-databases-sessions-create" "spanner-projects-instances-databases-sessions-batch-create" "spanner-projects-instances-operations-delete" "spanner-projects-instances-operations-list" "spanner-projects-instances-databases-patch" "spanner-projects-instances-databases-get-scans" "spanner-projects-instances-operations-cancel" "spanner-scans-list" "spanner-projects-instances-backup-operations-list" "spanner-projects-instances-backups-list" "spanner-projects-instances-backups-create" "spanner-projects-instances-backups-copy" "spanner-projects-instances-database-operations-list" "spanner-projects-instances-databases-database-roles-list" "spanner-projects-instances-databases-list" "spanner-projects-instances-databases-create" "spanner-projects-instances-databases-restore" "spanner-projects-instance-config-operations-list" "spanner-projects-instance-configs-list" "spanner-projects-instance-configs-create" "spanner-projects-instances-list" "spanner-projects-instances-create" "spanner-projects-instances-databases-get-iam-policy" "spanner-projects-instances-databases-set-iam-policy" "spanner-projects-instances-databases-database-roles-test-iam-permissions" "spanner-projects-instances-databases-sessions-begin-transaction" "spanner-projects-instances-databases-sessions-commit" "spanner-projects-instances-databases-sessions-execute-batch-dml" "spanner-projects-instances-databases-sessions-execute-sql" "spanner-projects-instances-databases-sessions-execute-streaming-sql" "spanner-projects-instances-databases-sessions-partition-query" "spanner-projects-instances-databases-sessions-partition-read" "spanner-projects-instances-databases-sessions-read" "spanner-projects-instances-databases-sessions-rollback" "spanner-projects-instances-databases-sessions-streaming-read" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -169,7 +193,7 @@ export def "spanner-projects-instances-databases-drop-database" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database | is-empty) { error make --unspanned { msg: "path parameter 'database' must be non-empty" } }
@@ -217,7 +241,7 @@ export def "spanner-projects-instances-databases-get-ddl" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<protoDescriptors: string, statements: list<string>> {
+]: nothing -> oneof<record<protoDescriptors: string, statements: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database | is-empty) { error make --unspanned { msg: "path parameter 'database' must be non-empty" } }
@@ -268,7 +292,7 @@ export def "spanner-projects-instances-databases-update-ddl" [
   --operation-id: string # If empty, the new update request is assigned an automatically-generated operation ID. Otherwise, `operation_id` is used to construct the name of the resulting Operation. Specifying an explicit operation ID simplifies determining whether the statements were executed in the event that the UpdateDatabaseDdl call is replayed, or the return value is otherwise lost: the database and `operation_id` fields can be combined to form the name of the resulting longrunning.Operation: `/operations/`. `operation_id` should be unique within the database, and must be a valid identifier: `a-z*`. Note that automatically-generated operation IDs always begin with an underscore. If the named operation already exists, UpdateDatabaseDdl returns `ALREADY_EXISTS`.
   --proto-descriptors: string # Optional. Proto descriptors used by CREATE/ALTER PROTO BUNDLE statements. Contains a protobuf-serialized [google.protobuf.FileDescriptorSet](https://github.com/protocolbuffers/protobuf/blob/main/src/google/protobuf/descriptor.proto). To generate it, [install](https://grpc.io/docs/protoc-installation/) and run `protoc` with --include_imports and --descriptor_set_out. For example, to generate for moon/shot/app.proto, run """ $protoc --proto_path=/app_path --proto_path=/lib_path \ --include_imports \ --descriptor_set_out=descriptors.data \ moon/shot/app.proto """ For more details, see protobuffer [self description](https://developers.google.com/protocol-buffers/docs/techniques#self-description). (format: byte)
   --statements: list<string> # Required. DDL statements to be applied to the database.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -322,7 +346,7 @@ export def "spanner-projects-instances-databases-sessions-list" [
   --filter: string # An expression for filtering the results of the request. Filter rules are case insensitive. The fields eligible for filtering are: * `labels.key` where key is the name of a label Some examples of using filters are: * `labels.env:*` --> The session has the label "env". * `labels.env:dev` --> The session has the label "env" and the value of the label contains the string "dev".
   --page-size: int # Number of sessions to be returned in the response. If 0 or less, defaults to the server's maximum allowed page size.
   --page-token: string # If non-empty, `page_token` should contain a next_page_token from a previous ListSessionsResponse.
-]: nothing -> record<nextPageToken: string, sessions: table<approximateLastUseTime: string, createTime: string, creatorRole: string, labels: record, name: string>> {
+]: nothing -> oneof<record<nextPageToken: string, sessions: table<approximateLastUseTime: string, createTime: string, creatorRole: string, labels: record, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database | is-empty) { error make --unspanned { msg: "path parameter 'database' must be non-empty" } }
@@ -348,7 +372,6 @@ export def "spanner-projects-instances-databases-sessions-list" [
 #
 # POST /v1/{database}/sessions
 # operationId: spanner.projects.instances.databases.sessions.create
-# --session shape: {creatorRole?: string, labels?: record}
 export def "spanner-projects-instances-databases-sessions-create" [
   database: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -372,7 +395,7 @@ export def "spanner-projects-instances-databases-sessions-create" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --session: record # A session in the Cloud Spanner API. — shape: {creatorRole?: string, labels?: record}
-]: any -> record<approximateLastUseTime: string, createTime: string, creatorRole: string, labels: record, name: string> {
+]: any -> oneof<record<approximateLastUseTime: string, createTime: string, creatorRole: string, labels: record, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -401,7 +424,6 @@ export def "spanner-projects-instances-databases-sessions-create" [
 #
 # POST /v1/{database}/sessions:batchCreate
 # operationId: spanner.projects.instances.databases.sessions.batchCreate
-# --sessionTemplate shape: {creatorRole?: string, labels?: record}
 export def "spanner-projects-instances-databases-sessions-batch-create" [
   database: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -426,7 +448,7 @@ export def "spanner-projects-instances-databases-sessions-batch-create" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --session-count: int # Required. The number of sessions to be created in this batch call. The API may return fewer than the requested number of sessions. If a specific number of sessions are desired, the client can make additional calls to BatchCreateSessions (adjusting session_count as necessary). (format: int32)
   --session-template: record # A session in the Cloud Spanner API. — shape: {creatorRole?: string, labels?: record}
-]: any -> record<session: table<approximateLastUseTime: string, createTime: string, creatorRole: string, labels: record, name: string>> {
+]: any -> oneof<record<session: table<approximateLastUseTime: string, createTime: string, creatorRole: string, labels: record, name: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -479,7 +501,7 @@ export def "spanner-projects-instances-operations-delete" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --etag: string # Used for optimistic concurrency control as a way to help prevent simultaneous deletes of an instance config from overwriting each other. If not empty, the API only deletes the instance config when the etag provided matches the current status of the requested instance config. Otherwise, deletes the instance config without checking the current status of the requested instance config.
   --validate-only: oneof<nothing, bool> # An option to validate, but not actually execute, a request, and provide the same response.
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -530,7 +552,7 @@ export def "spanner-projects-instances-operations-list" [
   --filter: string # The standard list filter.
   --page-size: int # The standard list page size.
   --page-token: string # The standard list page token.
-]: nothing -> record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>> {
+]: nothing -> oneof<record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -556,9 +578,6 @@ export def "spanner-projects-instances-operations-list" [
 #
 # PATCH /v1/{name}
 # operationId: spanner.projects.instances.databases.patch
-# --encryptionConfig shape: {kmsKeyName?: string}
-# --encryptionInfo item shape: {encryptionStatus?: record}
-# --restoreInfo shape: {backupInfo?: record, sourceType?: "TYPE_UNSPECIFIED"|"BACKUP"}
 export def "spanner-projects-instances-databases-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -586,7 +605,7 @@ export def "spanner-projects-instances-databases-patch" [
   --encryption-config: record # Encryption configuration for a Cloud Spanner database. — shape: {kmsKeyName?: string}
   --body-name: string # Required. The name of the database. Values are of the form `projects//instances//databases/`, where `` is as specified in the `CREATE DATABASE` statement. This name can be passed to other API methods to identify the database.
   --restore-info: record # Information about the database restore. — shape: {backupInfo?: record, sourceType?: "TYPE_UNSPECIFIED"|"BACKUP"}
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -640,7 +659,7 @@ export def "spanner-projects-instances-databases-get-scans" [
   --end-time: string # The upper bound for the time range to retrieve Scan data for.
   --start-time: string # These fields restrict the Database-specific information returned in the `Scan.data` field. If a `View` is provided that does not include the `Scan.data` field, these are ignored. This range of time must be entirely contained within the defined time range of the targeted scan. The lower bound for the time range to retrieve Scan data for.
   --view: string@view-completer # Specifies which parts of the Scan should be returned in the response. Note, if left unspecified, the FULL view is assumed.
-]: nothing -> record<details: record, endTime: string, name: string, scanData: record<data: record<dataSourceEndToken: string, dataSourceSeparatorToken: string, diagnosticMessages: list, endKeyStrings: list, hasPii: bool, indexedKeys: list, keySeparator: string, keyUnit: string, metrics: list, prefixNodes: list>, endTime: string, startTime: string>, startTime: string> {
+]: nothing -> oneof<record<details: record, endTime: string, name: string, scanData: record<data: record<dataSourceEndToken: string, dataSourceSeparatorToken: string, diagnosticMessages: list, endKeyStrings: list, hasPii: bool, indexedKeys: list, keySeparator: string, keyUnit: string, metrics: list, prefixNodes: list>, endTime: string, startTime: string>, startTime: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -688,7 +707,7 @@ export def "spanner-projects-instances-operations-cancel" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -740,7 +759,7 @@ export def "spanner-scans-list" [
   --page-size: int # The maximum number of items to return.
   --page-token: string # The next_page_token value returned from a previous List request, if any.
   --view: string@view-completer # Specifies which parts of the Scan should be returned in the response. Note, only the SUMMARY view (the default) is currently supported for ListScans.
-]: nothing -> record<nextPageToken: string, scans: table<details: record, endTime: string, name: string, scanData: record, startTime: string>> {
+]: nothing -> oneof<record<nextPageToken: string, scans: table<details: record, endTime: string, name: string, scanData: record, startTime: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -791,7 +810,7 @@ export def "spanner-projects-instances-backup-operations-list" [
   --filter: string # An expression that filters the list of returned backup operations. A filter expression consists of a field name, a comparison operator, and a value for filtering. The value must be a string, a number, or a boolean. The comparison operator must be one of: `<`, `>`, `<=`, `>=`, `!=`, `=`, or `:`. Colon `:` is the contains operator. Filter rules are not case sensitive. The following fields in the operation are eligible for filtering: * `name` - The name of the long-running operation * `done` - False if the operation is in progress, else true. * `metadata.@type` - the type of metadata. For example, the type string for CreateBackupMetadata is `type.googleapis.com/google.spanner.admin.database.v1.CreateBackupMetadata`. * `metadata.` - any field in metadata.value. `metadata.@type` must be specified first if filtering on metadata fields. * `error` - Error associated with the long-running operation. * `response.@type` - the type of response. * `response.` - any field in response.value. You can combine multiple expressions by enclosing each expression in parentheses. By default, expressions are combined with AND logic, but you can specify AND, OR, and NOT logic explicitly. Here are a few examples: * `done:true` - The operation is complete. * `(metadata.@type=type.googleapis.com/google.spanner.admin.database.v1.CreateBackupMetadata) AND` \ `metadata.database:prod` - Returns operations where: * The operation's metadata type is CreateBackupMetadata. * The source database name of backup contains the string "prod". * `(metadata.@type=type.googleapis.com/google.spanner.admin.database.v1.CreateBackupMetadata) AND` \ `(metadata.name:howl) AND` \ `(metadata.progress.start_time < \"2018-03-28T14:50:00Z\") AND` \ `(error:*)` - Returns operations where: * The operation's metadata type is CreateBackupMetadata. * The backup name contains the string "howl". * The operation started before 2018-03-28T14:50:00Z. * The operation resulted in an error. * `(metadata.@type=type.googleapis.com/google.spanner.admin.database.v1.CopyBackupMetadata) AND` \ `(metadata.source_backup:test) AND` \ `(metadata.progress.start_time < \"2022-01-18T14:50:00Z\") AND` \ `(error:*)` - Returns operations where: * The operation's metadata type is CopyBackupMetadata. * The source backup name contains the string "test". * The operation started before 2022-01-18T14:50:00Z. * The operation resulted in an error. * `((metadata.@type=type.googleapis.com/google.spanner.admin.database.v1.CreateBackupMetadata) AND` \ `(metadata.database:test_db)) OR` \ `((metadata.@type=type.googleapis.com/google.spanner.admin.database.v1.CopyBackupMetadata) AND` \ `(metadata.source_backup:test_bkp)) AND` \ `(error:*)` - Returns operations where: * The operation's metadata matches either of criteria: * The operation's metadata type is CreateBackupMetadata AND the source database name of the backup contains the string "test_db" * The operation's metadata type is CopyBackupMetadata AND the source backup name contains the string "test_bkp" * The operation resulted in an error.
   --page-size: int # Number of operations to be returned in the response. If 0 or less, defaults to the server's maximum allowed page size.
   --page-token: string # If non-empty, `page_token` should contain a next_page_token from a previous ListBackupOperationsResponse to the same `parent` and with the same `filter`.
-]: nothing -> record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>> {
+]: nothing -> oneof<record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -842,7 +861,7 @@ export def "spanner-projects-instances-backups-list" [
   --filter: string # An expression that filters the list of returned backups. A filter expression consists of a field name, a comparison operator, and a value for filtering. The value must be a string, a number, or a boolean. The comparison operator must be one of: `<`, `>`, `<=`, `>=`, `!=`, `=`, or `:`. Colon `:` is the contains operator. Filter rules are not case sensitive. The following fields in the Backup are eligible for filtering: * `name` * `database` * `state` * `create_time` (and values are of the format YYYY-MM-DDTHH:MM:SSZ) * `expire_time` (and values are of the format YYYY-MM-DDTHH:MM:SSZ) * `version_time` (and values are of the format YYYY-MM-DDTHH:MM:SSZ) * `size_bytes` You can combine multiple expressions by enclosing each expression in parentheses. By default, expressions are combined with AND logic, but you can specify AND, OR, and NOT logic explicitly. Here are a few examples: * `name:Howl` - The backup's name contains the string "howl". * `database:prod` - The database's name contains the string "prod". * `state:CREATING` - The backup is pending creation. * `state:READY` - The backup is fully created and ready for use. * `(name:howl) AND (create_time < \"2018-03-28T14:50:00Z\")` - The backup name contains the string "howl" and `create_time` of the backup is before 2018-03-28T14:50:00Z. * `expire_time < \"2018-03-28T14:50:00Z\"` - The backup `expire_time` is before 2018-03-28T14:50:00Z. * `size_bytes > 10000000000` - The backup's size is greater than 10GB
   --page-size: int # Number of backups to be returned in the response. If 0 or less, defaults to the server's maximum allowed page size.
   --page-token: string # If non-empty, `page_token` should contain a next_page_token from a previous ListBackupsResponse to the same `parent` and with the same `filter`.
-]: nothing -> record<backups: table<createTime: string, database: string, databaseDialect: string, encryptionInfo: record, expireTime: string, maxExpireTime: string, name: string, referencingBackups: list, referencingDatabases: list, sizeBytes: string, state: string, versionTime: string>, nextPageToken: string> {
+]: nothing -> oneof<record<backups: table<createTime: string, database: string, databaseDialect: string, encryptionInfo: record, expireTime: string, maxExpireTime: string, name: string, referencingBackups: list, referencingDatabases: list, sizeBytes: string, state: string, versionTime: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -868,7 +887,6 @@ export def "spanner-projects-instances-backups-list" [
 #
 # POST /v1/{parent}/backups
 # operationId: spanner.projects.instances.backups.create
-# --encryptionInfo shape: {encryptionStatus?: record}
 export def "spanner-projects-instances-backups-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -899,7 +917,7 @@ export def "spanner-projects-instances-backups-create" [
   --expire-time: string # Required for the CreateBackup operation. The expiration time of the backup, with microseconds granularity that must be at least 6 hours and at most 366 days from the time the CreateBackup request is processed. Once the `expire_time` has passed, the backup is eligible to be automatically deleted by Cloud Spanner to free the resources used by the backup. (format: google-datetime)
   --name: string # Output only for the CreateBackup operation. Required for the UpdateBackup operation. A globally unique identifier for the backup which cannot be changed. Values are of the form `projects//instances//backups/a-z*[a-z0-9]` The final segment of the name must be between 2 and 60 characters in length. The backup is stored in the location(s) specified in the instance configuration of the instance containing the backup, identified by the prefix of the backup name of the form `projects//instances/`.
   --version-time: string # The backup will contain an externally consistent copy of the database at the timestamp specified by `version_time`. If `version_time` is not specified, the system will set `version_time` to the `create_time` of the backup. (format: google-datetime)
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -928,7 +946,6 @@ export def "spanner-projects-instances-backups-create" [
 #
 # POST /v1/{parent}/backups:copy
 # operationId: spanner.projects.instances.backups.copy
-# --encryptionConfig shape: {encryptionType?: "ENCRYPTION_TYPE_UNSPECIFIED"|"USE_CONFIG_DEFAULT_OR_BACKUP_ENCRYPTION"|"GOOGLE_DEFAULT_ENCRYPTION"|"CUSTOMER_MANAGED_ENCRYPTION", kmsKeyName?: string}
 export def "spanner-projects-instances-backups-copy" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -955,7 +972,7 @@ export def "spanner-projects-instances-backups-copy" [
   --encryption-config: record # Encryption configuration for the copied backup. — shape: {encryptionType?: "ENCRYPTION_TYPE_UNSPECIFIED"|"USE_CONFIG_DEFAULT_OR_BACKUP_ENCRYPTION"|"GOOGLE_DEFAULT_ENCRYPTION"|"CUSTOMER_MANAGED_ENCRYPTION", kmsKeyName?: string}
   --expire-time: string # Required. The expiration time of the backup in microsecond granularity. The expiration time must be at least 6 hours and at most 366 days from the `create_time` of the source backup. Once the `expire_time` has passed, the backup is eligible to be automatically deleted by Cloud Spanner to free the resources used by the backup. (format: google-datetime)
   --source-backup: string # Required. The source backup to be copied. The source backup needs to be in READY state for it to be copied. Once CopyBackup is in progress, the source backup cannot be deleted or cleaned up on expiration until CopyBackup is finished. Values are of the form: `projects//instances//backups/`.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1009,7 +1026,7 @@ export def "spanner-projects-instances-database-operations-list" [
   --filter: string # An expression that filters the list of returned operations. A filter expression consists of a field name, a comparison operator, and a value for filtering. The value must be a string, a number, or a boolean. The comparison operator must be one of: `<`, `>`, `<=`, `>=`, `!=`, `=`, or `:`. Colon `:` is the contains operator. Filter rules are not case sensitive. The following fields in the Operation are eligible for filtering: * `name` - The name of the long-running operation * `done` - False if the operation is in progress, else true. * `metadata.@type` - the type of metadata. For example, the type string for RestoreDatabaseMetadata is `type.googleapis.com/google.spanner.admin.database.v1.RestoreDatabaseMetadata`. * `metadata.` - any field in metadata.value. `metadata.@type` must be specified first, if filtering on metadata fields. * `error` - Error associated with the long-running operation. * `response.@type` - the type of response. * `response.` - any field in response.value. You can combine multiple expressions by enclosing each expression in parentheses. By default, expressions are combined with AND logic. However, you can specify AND, OR, and NOT logic explicitly. Here are a few examples: * `done:true` - The operation is complete. * `(metadata.@type=type.googleapis.com/google.spanner.admin.database.v1.RestoreDatabaseMetadata) AND` \ `(metadata.source_type:BACKUP) AND` \ `(metadata.backup_info.backup:backup_howl) AND` \ `(metadata.name:restored_howl) AND` \ `(metadata.progress.start_time < \"2018-03-28T14:50:00Z\") AND` \ `(error:*)` - Return operations where: * The operation's metadata type is RestoreDatabaseMetadata. * The database is restored from a backup. * The backup name contains "backup_howl". * The restored database's name contains "restored_howl". * The operation started before 2018-03-28T14:50:00Z. * The operation resulted in an error.
   --page-size: int # Number of operations to be returned in the response. If 0 or less, defaults to the server's maximum allowed page size.
   --page-token: string # If non-empty, `page_token` should contain a next_page_token from a previous ListDatabaseOperationsResponse to the same `parent` and with the same `filter`.
-]: nothing -> record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>> {
+]: nothing -> oneof<record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1059,7 +1076,7 @@ export def "spanner-projects-instances-databases-database-roles-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # Number of database roles to be returned in the response. If 0 or less, defaults to the server's maximum allowed page size.
   --page-token: string # If non-empty, `page_token` should contain a next_page_token from a previous ListDatabaseRolesResponse.
-]: nothing -> record<databaseRoles: table<name: string>, nextPageToken: string> {
+]: nothing -> oneof<record<databaseRoles: table<name: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1109,7 +1126,7 @@ export def "spanner-projects-instances-databases-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # Number of databases to be returned in the response. If 0 or less, defaults to the server's maximum allowed page size.
   --page-token: string # If non-empty, `page_token` should contain a next_page_token from a previous ListDatabasesResponse.
-]: nothing -> record<databases: table<createTime: string, databaseDialect: string, defaultLeader: string, earliestVersionTime: string, enableDropProtection: bool, encryptionConfig: record, encryptionInfo: list, name: string, reconciling: bool, restoreInfo: record, state: string, versionRetentionPeriod: string>, nextPageToken: string> {
+]: nothing -> oneof<record<databases: table<createTime: string, databaseDialect: string, defaultLeader: string, earliestVersionTime: string, enableDropProtection: bool, encryptionConfig: record, encryptionInfo: list, name: string, reconciling: bool, restoreInfo: record, state: string, versionRetentionPeriod: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1135,7 +1152,6 @@ export def "spanner-projects-instances-databases-list" [
 #
 # POST /v1/{parent}/databases
 # operationId: spanner.projects.instances.databases.create
-# --encryptionConfig shape: {kmsKeyName?: string}
 export def "spanner-projects-instances-databases-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1163,7 +1179,7 @@ export def "spanner-projects-instances-databases-create" [
   --encryption-config: record # Encryption configuration for a Cloud Spanner database. — shape: {kmsKeyName?: string}
   --extra-statements: list<string> # Optional. A list of DDL statements to run inside the newly created database. Statements can create tables, indexes, etc. These statements execute atomically with the creation of the database: if there is an error in any statement, the database is not created.
   --proto-descriptors: string # Optional. Proto descriptors used by CREATE/ALTER PROTO BUNDLE statements in 'extra_statements' above. Contains a protobuf-serialized [google.protobuf.FileDescriptorSet](https://github.com/protocolbuffers/protobuf/blob/main/src/google/protobuf/descriptor.proto). To generate it, [install](https://grpc.io/docs/protoc-installation/) and run `protoc` with --include_imports and --descriptor_set_out. For example, to generate for moon/shot/app.proto, run """ $protoc --proto_path=/app_path --proto_path=/lib_path \ --include_imports \ --descriptor_set_out=descriptors.data \ moon/shot/app.proto """ For more details, see protobuffer [self description](https://developers.google.com/protocol-buffers/docs/techniques#self-description). (format: byte)
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1192,7 +1208,6 @@ export def "spanner-projects-instances-databases-create" [
 #
 # POST /v1/{parent}/databases:restore
 # operationId: spanner.projects.instances.databases.restore
-# --encryptionConfig shape: {encryptionType?: "ENCRYPTION_TYPE_UNSPECIFIED"|"USE_CONFIG_DEFAULT_OR_BACKUP_ENCRYPTION"|"GOOGLE_DEFAULT_ENCRYPTION"|"CUSTOMER_MANAGED_ENCRYPTION", kmsKeyName?: string}
 export def "spanner-projects-instances-databases-restore" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1218,7 +1233,7 @@ export def "spanner-projects-instances-databases-restore" [
   --backup: string # Name of the backup from which to restore. Values are of the form `projects//instances//backups/`.
   --database-id: string # Required. The id of the database to create and restore to. This database must not already exist. The `database_id` appended to `parent` forms the full database name of the form `projects//instances//databases/`.
   --encryption-config: record # Encryption configuration for the restored database. — shape: {encryptionType?: "ENCRYPTION_TYPE_UNSPECIFIED"|"USE_CONFIG_DEFAULT_OR_BACKUP_ENCRYPTION"|"GOOGLE_DEFAULT_ENCRYPTION"|"CUSTOMER_MANAGED_ENCRYPTION", kmsKeyName?: string}
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1272,7 +1287,7 @@ export def "spanner-projects-instance-config-operations-list" [
   --filter: string # An expression that filters the list of returned operations. A filter expression consists of a field name, a comparison operator, and a value for filtering. The value must be a string, a number, or a boolean. The comparison operator must be one of: `<`, `>`, `<=`, `>=`, `!=`, `=`, or `:`. Colon `:` is the contains operator. Filter rules are not case sensitive. The following fields in the Operation are eligible for filtering: * `name` - The name of the long-running operation * `done` - False if the operation is in progress, else true. * `metadata.@type` - the type of metadata. For example, the type string for CreateInstanceConfigMetadata is `type.googleapis.com/google.spanner.admin.instance.v1.CreateInstanceConfigMetadata`. * `metadata.` - any field in metadata.value. `metadata.@type` must be specified first, if filtering on metadata fields. * `error` - Error associated with the long-running operation. * `response.@type` - the type of response. * `response.` - any field in response.value. You can combine multiple expressions by enclosing each expression in parentheses. By default, expressions are combined with AND logic. However, you can specify AND, OR, and NOT logic explicitly. Here are a few examples: * `done:true` - The operation is complete. * `(metadata.@type=` \ `type.googleapis.com/google.spanner.admin.instance.v1.CreateInstanceConfigMetadata) AND` \ `(metadata.instance_config.name:custom-config) AND` \ `(metadata.progress.start_time < \"2021-03-28T14:50:00Z\") AND` \ `(error:*)` - Return operations where: * The operation's metadata type is CreateInstanceConfigMetadata. * The instance config name contains "custom-config". * The operation started before 2021-03-28T14:50:00Z. * The operation resulted in an error.
   --page-size: int # Number of operations to be returned in the response. If 0 or less, defaults to the server's maximum allowed page size.
   --page-token: string # If non-empty, `page_token` should contain a next_page_token from a previous ListInstanceConfigOperationsResponse to the same `parent` and with the same `filter`.
-]: nothing -> record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>> {
+]: nothing -> oneof<record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1322,7 +1337,7 @@ export def "spanner-projects-instance-configs-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # Number of instance configurations to be returned in the response. If 0 or less, defaults to the server's maximum allowed page size.
   --page-token: string # If non-empty, `page_token` should contain a next_page_token from a previous ListInstanceConfigsResponse.
-]: nothing -> record<instanceConfigs: table<baseConfig: string, configType: string, displayName: string, etag: string, freeInstanceAvailability: string, labels: record, leaderOptions: list, name: string, optionalReplicas: list, reconciling: bool, replicas: list, state: string>, nextPageToken: string> {
+]: nothing -> oneof<record<instanceConfigs: table<baseConfig: string, configType: string, displayName: string, etag: string, freeInstanceAvailability: string, labels: record, leaderOptions: list, name: string, optionalReplicas: list, reconciling: bool, replicas: list, state: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1348,7 +1363,6 @@ export def "spanner-projects-instance-configs-list" [
 #
 # POST /v1/{parent}/instanceConfigs
 # operationId: spanner.projects.instanceConfigs.create
-# --instanceConfig shape: {baseConfig?: string, displayName?: string, etag?: string, labels?: record, leaderOptions?: list<string>, name?: string, replicas?: list}
 export def "spanner-projects-instance-configs-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1374,7 +1388,7 @@ export def "spanner-projects-instance-configs-create" [
   --instance-config: record # A possible configuration for a Cloud Spanner instance. Configurations define the geographic placement of nodes and their replication. — shape: {baseConfig?: string, displayName?: string, etag?: string, labels?: record, leaderOptions?: list<string>, name?: string, replicas?: list}
   --instance-config-id: string # Required. The ID of the instance config to create. Valid identifiers are of the form `custom-[-a-z0-9]*[a-z0-9]` and must be between 2 and 64 characters in length. The `custom-` prefix is required to avoid name conflicts with Google managed configurations.
   --validate-only: oneof<nothing, bool> # An option to validate, but not actually execute, a request, and provide the same response.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1429,7 +1443,7 @@ export def "spanner-projects-instances-list" [
   --instance-deadline: string # Deadline used while retrieving metadata for instances. Instances whose metadata cannot be retrieved within this deadline will be added to unreachable in ListInstancesResponse.
   --page-size: int # Number of instances to be returned in the response. If 0 or less, defaults to the server's maximum allowed page size.
   --page-token: string # If non-empty, `page_token` should contain a next_page_token from a previous ListInstancesResponse.
-]: nothing -> record<instances: table<config: string, createTime: string, displayName: string, endpointUris: list, freeInstanceMetadata: record, instanceType: string, labels: record, name: string, nodeCount: int, processingUnits: int, state: string, updateTime: string>, nextPageToken: string, unreachable: list<string>> {
+]: nothing -> oneof<record<instances: table<config: string, createTime: string, displayName: string, endpointUris: list, freeInstanceMetadata: record, instanceType: string, labels: record, name: string, nodeCount: int, processingUnits: int, state: string, updateTime: string>, nextPageToken: string, unreachable: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1455,7 +1469,6 @@ export def "spanner-projects-instances-list" [
 #
 # POST /v1/{parent}/instances
 # operationId: spanner.projects.instances.create
-# --instance shape: {config?: string, displayName?: string, endpointUris?: list<string>, freeInstanceMetadata?: record, instanceType?: "INSTANCE_TYPE_UNSPECIFIED"|"PROVISIONED"|"FREE_INSTANCE", labels?: record, name?: string, nodeCount?: int, processingUnits?: int}
 export def "spanner-projects-instances-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1480,7 +1493,7 @@ export def "spanner-projects-instances-create" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --instance: record # An isolated set of Cloud Spanner resources on which databases can be hosted. — shape: {config?: string, displayName?: string, endpointUris?: list<string>, freeInstanceMetadata?: record, instanceType?: "INSTANCE_TYPE_UNSPECIFIED"|"PROVISIONED"|"FREE_INSTANCE", labels?: record, name?: string, nodeCount?: int, processingUnits?: int}
   --instance-id: string # Required. The ID of the instance to create. Valid identifiers are of the form `a-z*[a-z0-9]` and must be between 2 and 64 characters in length.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1509,7 +1522,6 @@ export def "spanner-projects-instances-create" [
 #
 # POST /v1/{resource}:getIamPolicy
 # operationId: spanner.projects.instances.databases.getIamPolicy
-# --options shape: {requestedPolicyVersion?: int}
 export def "spanner-projects-instances-databases-get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1533,7 +1545,7 @@ export def "spanner-projects-instances-databases-get-iam-policy" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --options: record # Encapsulates settings provided to GetIamPolicy. — shape: {requestedPolicyVersion?: int}
-]: any -> record<bindings: table<condition: record, members: list, role: string>, etag: string, version: int> {
+]: any -> oneof<record<bindings: table<condition: record, members: list, role: string>, etag: string, version: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1562,7 +1574,6 @@ export def "spanner-projects-instances-databases-get-iam-policy" [
 #
 # POST /v1/{resource}:setIamPolicy
 # operationId: spanner.projects.instances.databases.setIamPolicy
-# --policy shape: {bindings?: list, etag?: string, version?: int}
 export def "spanner-projects-instances-databases-set-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1586,7 +1597,7 @@ export def "spanner-projects-instances-databases-set-iam-policy" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --policy: record # An Identity and Access Management (IAM) policy, which specifies access controls for Google Cloud resources. A `Policy` is a collection of `bindings`. A `binding` binds one or more `members`, or principals, to a single `role`. Principals can be user accounts, service accounts, Google groups, and domains (such as G Suite). A `role` is a named list of permissions; each `role` can be an IAM predefined role or a user-created custom role. For some types of Google Cloud resources, a `binding` can also specify a `condition`, which is a logical expression that allows access to a resource only if the expression evaluates to `true`. A condition can add constraints based on attributes of the request, the resource, or both. To learn which resources support conditions in their IAM policies, see the [IAM documentation](https://cloud.google.com/iam/help/conditions/resource-policies). **JSON example:** { "bindings": [ { "role": "roles/resourcemanager.organizationAdmin", "members": [ "user:mike@example.com", "group:admins@example.com", "domain:google.com", "serviceAccount:my-project-id@appspot.gserviceaccount.com" ] }, { "role": "roles/resourcemanager.organizationViewer", "members": [ "user:eve@example.com" ], "condition": { "title": "expirable access", "description": "Does not grant access after Sep 2020", "expression": "request.time < timestamp('2020-10-01T00:00:00.000Z')", } } ], "etag": "BwWWja0YfJA=", "version": 3 } **YAML example:** bindings: - members: - user:mike@example.com - group:admins@example.com - domain:google.com - serviceAccount:my-project-id@appspot.gserviceaccount.com role: roles/resourcemanager.organizationAdmin - members: - user:eve@example.com role: roles/resourcemanager.organizationViewer condition: title: expirable access description: Does not grant access after Sep 2020 expression: request.time < timestamp('2020-10-01T00:00:00.000Z') etag: BwWWja0YfJA= version: 3 For a description of IAM and its features, see the [IAM documentation](https://cloud.google.com/iam/docs/). — shape: {bindings?: list, etag?: string, version?: int}
-]: any -> record<bindings: table<condition: record, members: list, role: string>, etag: string, version: int> {
+]: any -> oneof<record<bindings: table<condition: record, members: list, role: string>, etag: string, version: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1638,7 +1649,7 @@ export def "spanner-projects-instances-databases-database-roles-test-iam-permiss
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --permissions: list<string> # REQUIRED: The set of permissions to check for 'resource'. Permissions with wildcards (such as '*', 'spanner.*', 'spanner.instances.*') are not allowed.
-]: any -> record<permissions: list<string>> {
+]: any -> oneof<record<permissions: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1667,8 +1678,6 @@ export def "spanner-projects-instances-databases-database-roles-test-iam-permiss
 #
 # POST /v1/{session}:beginTransaction
 # operationId: spanner.projects.instances.databases.sessions.beginTransaction
-# --options shape: {partitionedDml?: record, readOnly?: record, readWrite?: record}
-# --requestOptions shape: {priority?: "PRIORITY_UNSPECIFIED"|"PRIORITY_LOW"|"PRIORITY_MEDIUM"|"PRIORITY_HIGH", requestTag?: string, transactionTag?: string}
 export def "spanner-projects-instances-databases-sessions-begin-transaction" [
   session: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1693,7 +1702,7 @@ export def "spanner-projects-instances-databases-sessions-begin-transaction" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --options: record # Transactions: Each session can have at most one active transaction at a time (note that standalone reads and queries use a transaction internally and do count towards the one transaction limit). After the active transaction is completed, the session can immediately be re-used for the next transaction. It is not necessary to create a new session for each transaction. Transaction modes: Cloud Spanner supports three transaction modes: 1. Locking read-write. This type of transaction is the only way to write data into Cloud Spanner. These transactions rely on pessimistic locking and, if necessary, two-phase commit. Locking read-write transactions may abort, requiring the application to retry. 2. Snapshot read-only. Snapshot read-only transactions provide guaranteed consistency across several reads, but do not allow writes. Snapshot read-only transactions can be configured to read at timestamps in the past, or configured to perform a strong read (where Spanner will select a timestamp such that the read is guaranteed to see the effects of all transactions that have committed before the start of the read). Snapshot read-only transactions do not need to be committed. Queries on change streams must be performed with the snapshot read-only transaction mode, specifying a strong read. Please see TransactionOptions.ReadOnly.strong for more details. 3. Partitioned DML. This type of transaction is used to execute a single Partitioned DML statement. Partitioned DML partitions the key space and runs the DML statement over each partition in parallel using separate, internal transactions that commit independently. Partitioned DML transactions do not need to be committed. For transactions that only read, snapshot read-only transactions provide simpler semantics and are almost always faster. In particular, read-only transactions do not take locks, so they do not conflict with read-write transactions. As a consequence of not taking locks, they also do not abort, so retry loops are not needed. Transactions may only read-write data in a single database. They may, however, read-write data in different tables within that database. Locking read-write transactions: Locking transactions may be used to atomically read-modify-write data anywhere in a database. This type of transaction is externally consistent. Clients should attempt to minimize the amount of time a transaction is active. Faster transactions commit with higher probability and cause less contention. Cloud Spanner attempts to keep read locks active as long as the transaction continues to do reads, and the transaction has not been terminated by Commit or Rollback. Long periods of inactivity at the client may cause Cloud Spanner to release a transaction's locks and abort it. Conceptually, a read-write transaction consists of zero or more reads or SQL statements followed by Commit. At any time before Commit, the client can send a Rollback request to abort the transaction. Semantics: Cloud Spanner can commit the transaction if all read locks it acquired are still valid at commit time, and it is able to acquire write locks for all writes. Cloud Spanner can abort the transaction for any reason. If a commit attempt returns `ABORTED`, Cloud Spanner guarantees that the transaction has not modified any user data in Cloud Spanner. Unless the transaction commits, Cloud Spanner makes no guarantees about how long the transaction's locks were held for. It is an error to use Cloud Spanner locks for any sort of mutual exclusion other than between Cloud Spanner transactions themselves. Retrying aborted transactions: When a transaction aborts, the application can choose to retry the whole transaction again. To maximize the chances of successfully committing the retry, the client should execute the retry in the same session as the original attempt. The original session's lock priority increases with each consecutive abort, meaning that each attempt has a slightly better chance of success than the previous. Under some circumstances (for example, many transactions attempting to modify the same row(s)), a transaction can abort many times in a short period before successfully committing. Thus, it is not a good idea to cap the number of retries a transaction can attempt; instead, it is better to limit the total amount of time spent retrying. Idle transactions: A transaction is considered idle if it has no outstanding reads or SQL queries and has not started a read or SQL query within the last 10 seconds. Idle transactions can be aborted by Cloud Spanner so that they don't hold on to locks indefinitely. If an idle transaction is aborted, the commit will fail with error `ABORTED`. If this behavior is undesirable, periodically executing a simple SQL query in the transaction (for example, `SELECT 1`) prevents the transaction from becoming idle. Snapshot read-only transactions: Snapshot read-only transactions provides a simpler method than locking read-write transactions for doing several consistent reads. However, this type of transaction does not support writes. Snapshot transactions do not take locks. Instead, they work by choosing a Cloud Spanner timestamp, then executing all reads at that timestamp. Since they do not acquire locks, they do not block concurrent read-write transactions. Unlike locking read-write transactions, snapshot read-only transactions never abort. They can fail if the chosen read timestamp is garbage collected; however, the default garbage collection policy is generous enough that most applications do not need to worry about this in practice. Snapshot read-only transactions do not need to call Commit or Rollback (and in fact are not permitted to do so). To execute a snapshot transaction, the client specifies a timestamp bound, which tells Cloud Spanner how to choose a read timestamp. The types of timestamp bound are: - Strong (the default). - Bounded staleness. - Exact staleness. If the Cloud Spanner database to be read is geographically distributed, stale read-only transactions can execute more quickly than strong or read-write transactions, because they are able to execute far from the leader replica. Each type of timestamp bound is discussed in detail below. Strong: Strong reads are guaranteed to see the effects of all transactions that have committed before the start of the read. Furthermore, all rows yielded by a single read are consistent with each other -- if any part of the read observes a transaction, all parts of the read see the transaction. Strong reads are not repeatable: two consecutive strong read-only transactions might return inconsistent results if there are concurrent writes. If consistency across reads is required, the reads should be executed within a transaction or at an exact read timestamp. Queries on change streams (see below for more details) must also specify the strong read timestamp bound. See TransactionOptions.ReadOnly.strong. Exact staleness: These timestamp bounds execute reads at a user-specified timestamp. Reads at a timestamp are guaranteed to see a consistent prefix of the global transaction history: they observe modifications done by all transactions with a commit timestamp less than or equal to the read timestamp, and observe none of the modifications done by transactions with a larger commit timestamp. They will block until all conflicting transactions that may be assigned commit timestamps <= the read timestamp have finished. The timestamp can either be expressed as an absolute Cloud Spanner commit timestamp or a staleness relative to the current time. These modes do not require a "negotiation phase" to pick a timestamp. As a result, they execute slightly faster than the equivalent boundedly stale concurrency modes. On the other hand, boundedly stale reads usually return fresher results. See TransactionOptions.ReadOnly.read_timestamp and TransactionOptions.ReadOnly.exact_staleness. Bounded staleness: Bounded staleness modes allow Cloud Spanner to pick the read timestamp, subject to a user-provided staleness bound. Cloud Spanner chooses the newest timestamp within the staleness bound that allows execution of the reads at the closest available replica without blocking. All rows yielded are consistent with each other -- if any part of the read observes a transaction, all parts of the read see the transaction. Boundedly stale reads are not repeatable: two stale reads, even if they use the same staleness bound, can execute at different timestamps and thus return inconsistent results. Boundedly stale reads execute in two phases: the first phase negotiates a timestamp among all replicas needed to serve the read. In the second phase, reads are executed at the negotiated timestamp. As a result of the two phase execution, bounded staleness reads are usually a little slower than comparable exact staleness reads. However, they are typically able to return fresher results, and are more likely to execute at the closest replica. Because the timestamp negotiation requires up-front knowledge of which rows will be read, it can only be used with single-use read-only transactions. See TransactionOptions.ReadOnly.max_staleness and TransactionOptions.ReadOnly.min_read_timestamp. Old read timestamps and garbage collection: Cloud Spanner continuously garbage collects deleted and overwritten data in the background to reclaim storage space. This process is known as "version GC". By default, version GC reclaims versions after they are one hour old. Because of this, Cloud Spanner cannot perform reads at read timestamps more than one hour in the past. This restriction also applies to in-progress reads and/or SQL queries whose timestamp become too old while executing. Reads and SQL queries with too-old read timestamps fail with the error `FAILED_PRECONDITION`. You can configure and extend the `VERSION_RETENTION_PERIOD` of a database up to a period as long as one week, which allows Cloud Spanner to perform reads up to one week in the past. Querying change Streams: A Change Stream is a schema object that can be configured to watch data changes on the entire database, a set of tables, or a set of columns in a database. When a change stream is created, Spanner automatically defines a corresponding SQL Table-Valued Function (TVF) that can be used to query the change records in the associated change stream using the ExecuteStreamingSql API. The name of the TVF for a change stream is generated from the name of the change stream: READ_. All queries on change stream TVFs must be executed using the ExecuteStreamingSql API with a single-use read-only transaction with a strong read-only timestamp_bound. The change stream TVF allows users to specify the start_timestamp and end_timestamp for the time range of interest. All change records within the retention period is accessible using the strong read-only timestamp_bound. All other TransactionOptions are invalid for change stream queries. In addition, if TransactionOptions.read_only.return_read_timestamp is set to true, a special value of 2^63 - 2 will be returned in the Transaction message that describes the transaction, instead of a valid read timestamp. This special value should be discarded and not used for any subsequent queries. Please see https://cloud.google.com/spanner/docs/change-streams for more details on how to query the change stream TVFs. Partitioned DML transactions: Partitioned DML transactions are used to execute DML statements with a different execution strategy that provides different, and often better, scalability properties for large, table-wide operations than DML in a ReadWrite transaction. Smaller scoped statements, such as an OLTP workload, should prefer using ReadWrite transactions. Partitioned DML partitions the keyspace and runs the DML statement on each partition in separate, internal transactions. These transactions commit automatically when complete, and run independently from one another. To reduce lock contention, this execution strategy only acquires read locks on rows that match the WHERE clause of the statement. Additionally, the smaller per-partition transactions hold locks for less time. That said, Partitioned DML is not a drop-in replacement for standard DML used in ReadWrite transactions. - The DML statement must be fully-partitionable. Specifically, the statement must be expressible as the union of many statements which each access only a single row of the table. - The statement is not applied atomically to all rows of the table. Rather, the statement is applied atomically to partitions of the table, in independent transactions. Secondary index rows are updated atomically with the base table rows. - Partitioned DML does not guarantee exactly-once execution semantics against a partition. The statement will be applied at least once to each partition. It is strongly recommended that the DML statement should be idempotent to avoid unexpected results. For instance, it is potentially dangerous to run a statement such as `UPDATE table SET column = column + 1` as it could be run multiple times against some rows. - The partitions are committed automatically - there is no support for Commit or Rollback. If the call returns an error, or if the client issuing the ExecuteSql call dies, it is possible that some rows had the statement executed on them successfully. It is also possible that statement was never executed against other rows. - Partitioned DML transactions may only contain the execution of a single DML statement via ExecuteSql or ExecuteStreamingSql. - If any error is encountered during the execution of the partitioned DML operation (for instance, a UNIQUE INDEX violation, division by zero, or a value that cannot be stored due to schema constraints), then the operation is stopped at that point and an error is returned. It is possible that at this point, some partitions have been committed (or even committed multiple times), and other partitions have not been run at all. Given the above, Partitioned DML is good fit for large, database-wide, operations that are idempotent, such as deleting old rows from a very large table. — shape: {partitionedDml?: record, readOnly?: record, readWrite?: record}
   --request-options: record # Common request options for various APIs. — shape: {priority?: "PRIORITY_UNSPECIFIED"|"PRIORITY_LOW"|"PRIORITY_MEDIUM"|"PRIORITY_HIGH", requestTag?: string, transactionTag?: string}
-]: any -> record<id: string, readTimestamp: string> {
+]: any -> oneof<record<id: string, readTimestamp: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1722,9 +1731,6 @@ export def "spanner-projects-instances-databases-sessions-begin-transaction" [
 #
 # POST /v1/{session}:commit
 # operationId: spanner.projects.instances.databases.sessions.commit
-# --mutations item shape: {delete?: record, insert?: record, insertOrUpdate?: record, replace?: record, update?: record}
-# --requestOptions shape: {priority?: "PRIORITY_UNSPECIFIED"|"PRIORITY_LOW"|"PRIORITY_MEDIUM"|"PRIORITY_HIGH", requestTag?: string, transactionTag?: string}
-# --singleUseTransaction shape: {partitionedDml?: record, readOnly?: record, readWrite?: record}
 export def "spanner-projects-instances-databases-sessions-commit" [
   session: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1752,7 +1758,7 @@ export def "spanner-projects-instances-databases-sessions-commit" [
   --return-commit-stats: oneof<nothing, bool> # If `true`, then statistics related to the transaction will be included in the CommitResponse. Default value is `false`.
   --single-use-transaction: record # Transactions: Each session can have at most one active transaction at a time (note that standalone reads and queries use a transaction internally and do count towards the one transaction limit). After the active transaction is completed, the session can immediately be re-used for the next transaction. It is not necessary to create a new session for each transaction. Transaction modes: Cloud Spanner supports three transaction modes: 1. Locking read-write. This type of transaction is the only way to write data into Cloud Spanner. These transactions rely on pessimistic locking and, if necessary, two-phase commit. Locking read-write transactions may abort, requiring the application to retry. 2. Snapshot read-only. Snapshot read-only transactions provide guaranteed consistency across several reads, but do not allow writes. Snapshot read-only transactions can be configured to read at timestamps in the past, or configured to perform a strong read (where Spanner will select a timestamp such that the read is guaranteed to see the effects of all transactions that have committed before the start of the read). Snapshot read-only transactions do not need to be committed. Queries on change streams must be performed with the snapshot read-only transaction mode, specifying a strong read. Please see TransactionOptions.ReadOnly.strong for more details. 3. Partitioned DML. This type of transaction is used to execute a single Partitioned DML statement. Partitioned DML partitions the key space and runs the DML statement over each partition in parallel using separate, internal transactions that commit independently. Partitioned DML transactions do not need to be committed. For transactions that only read, snapshot read-only transactions provide simpler semantics and are almost always faster. In particular, read-only transactions do not take locks, so they do not conflict with read-write transactions. As a consequence of not taking locks, they also do not abort, so retry loops are not needed. Transactions may only read-write data in a single database. They may, however, read-write data in different tables within that database. Locking read-write transactions: Locking transactions may be used to atomically read-modify-write data anywhere in a database. This type of transaction is externally consistent. Clients should attempt to minimize the amount of time a transaction is active. Faster transactions commit with higher probability and cause less contention. Cloud Spanner attempts to keep read locks active as long as the transaction continues to do reads, and the transaction has not been terminated by Commit or Rollback. Long periods of inactivity at the client may cause Cloud Spanner to release a transaction's locks and abort it. Conceptually, a read-write transaction consists of zero or more reads or SQL statements followed by Commit. At any time before Commit, the client can send a Rollback request to abort the transaction. Semantics: Cloud Spanner can commit the transaction if all read locks it acquired are still valid at commit time, and it is able to acquire write locks for all writes. Cloud Spanner can abort the transaction for any reason. If a commit attempt returns `ABORTED`, Cloud Spanner guarantees that the transaction has not modified any user data in Cloud Spanner. Unless the transaction commits, Cloud Spanner makes no guarantees about how long the transaction's locks were held for. It is an error to use Cloud Spanner locks for any sort of mutual exclusion other than between Cloud Spanner transactions themselves. Retrying aborted transactions: When a transaction aborts, the application can choose to retry the whole transaction again. To maximize the chances of successfully committing the retry, the client should execute the retry in the same session as the original attempt. The original session's lock priority increases with each consecutive abort, meaning that each attempt has a slightly better chance of success than the previous. Under some circumstances (for example, many transactions attempting to modify the same row(s)), a transaction can abort many times in a short period before successfully committing. Thus, it is not a good idea to cap the number of retries a transaction can attempt; instead, it is better to limit the total amount of time spent retrying. Idle transactions: A transaction is considered idle if it has no outstanding reads or SQL queries and has not started a read or SQL query within the last 10 seconds. Idle transactions can be aborted by Cloud Spanner so that they don't hold on to locks indefinitely. If an idle transaction is aborted, the commit will fail with error `ABORTED`. If this behavior is undesirable, periodically executing a simple SQL query in the transaction (for example, `SELECT 1`) prevents the transaction from becoming idle. Snapshot read-only transactions: Snapshot read-only transactions provides a simpler method than locking read-write transactions for doing several consistent reads. However, this type of transaction does not support writes. Snapshot transactions do not take locks. Instead, they work by choosing a Cloud Spanner timestamp, then executing all reads at that timestamp. Since they do not acquire locks, they do not block concurrent read-write transactions. Unlike locking read-write transactions, snapshot read-only transactions never abort. They can fail if the chosen read timestamp is garbage collected; however, the default garbage collection policy is generous enough that most applications do not need to worry about this in practice. Snapshot read-only transactions do not need to call Commit or Rollback (and in fact are not permitted to do so). To execute a snapshot transaction, the client specifies a timestamp bound, which tells Cloud Spanner how to choose a read timestamp. The types of timestamp bound are: - Strong (the default). - Bounded staleness. - Exact staleness. If the Cloud Spanner database to be read is geographically distributed, stale read-only transactions can execute more quickly than strong or read-write transactions, because they are able to execute far from the leader replica. Each type of timestamp bound is discussed in detail below. Strong: Strong reads are guaranteed to see the effects of all transactions that have committed before the start of the read. Furthermore, all rows yielded by a single read are consistent with each other -- if any part of the read observes a transaction, all parts of the read see the transaction. Strong reads are not repeatable: two consecutive strong read-only transactions might return inconsistent results if there are concurrent writes. If consistency across reads is required, the reads should be executed within a transaction or at an exact read timestamp. Queries on change streams (see below for more details) must also specify the strong read timestamp bound. See TransactionOptions.ReadOnly.strong. Exact staleness: These timestamp bounds execute reads at a user-specified timestamp. Reads at a timestamp are guaranteed to see a consistent prefix of the global transaction history: they observe modifications done by all transactions with a commit timestamp less than or equal to the read timestamp, and observe none of the modifications done by transactions with a larger commit timestamp. They will block until all conflicting transactions that may be assigned commit timestamps <= the read timestamp have finished. The timestamp can either be expressed as an absolute Cloud Spanner commit timestamp or a staleness relative to the current time. These modes do not require a "negotiation phase" to pick a timestamp. As a result, they execute slightly faster than the equivalent boundedly stale concurrency modes. On the other hand, boundedly stale reads usually return fresher results. See TransactionOptions.ReadOnly.read_timestamp and TransactionOptions.ReadOnly.exact_staleness. Bounded staleness: Bounded staleness modes allow Cloud Spanner to pick the read timestamp, subject to a user-provided staleness bound. Cloud Spanner chooses the newest timestamp within the staleness bound that allows execution of the reads at the closest available replica without blocking. All rows yielded are consistent with each other -- if any part of the read observes a transaction, all parts of the read see the transaction. Boundedly stale reads are not repeatable: two stale reads, even if they use the same staleness bound, can execute at different timestamps and thus return inconsistent results. Boundedly stale reads execute in two phases: the first phase negotiates a timestamp among all replicas needed to serve the read. In the second phase, reads are executed at the negotiated timestamp. As a result of the two phase execution, bounded staleness reads are usually a little slower than comparable exact staleness reads. However, they are typically able to return fresher results, and are more likely to execute at the closest replica. Because the timestamp negotiation requires up-front knowledge of which rows will be read, it can only be used with single-use read-only transactions. See TransactionOptions.ReadOnly.max_staleness and TransactionOptions.ReadOnly.min_read_timestamp. Old read timestamps and garbage collection: Cloud Spanner continuously garbage collects deleted and overwritten data in the background to reclaim storage space. This process is known as "version GC". By default, version GC reclaims versions after they are one hour old. Because of this, Cloud Spanner cannot perform reads at read timestamps more than one hour in the past. This restriction also applies to in-progress reads and/or SQL queries whose timestamp become too old while executing. Reads and SQL queries with too-old read timestamps fail with the error `FAILED_PRECONDITION`. You can configure and extend the `VERSION_RETENTION_PERIOD` of a database up to a period as long as one week, which allows Cloud Spanner to perform reads up to one week in the past. Querying change Streams: A Change Stream is a schema object that can be configured to watch data changes on the entire database, a set of tables, or a set of columns in a database. When a change stream is created, Spanner automatically defines a corresponding SQL Table-Valued Function (TVF) that can be used to query the change records in the associated change stream using the ExecuteStreamingSql API. The name of the TVF for a change stream is generated from the name of the change stream: READ_. All queries on change stream TVFs must be executed using the ExecuteStreamingSql API with a single-use read-only transaction with a strong read-only timestamp_bound. The change stream TVF allows users to specify the start_timestamp and end_timestamp for the time range of interest. All change records within the retention period is accessible using the strong read-only timestamp_bound. All other TransactionOptions are invalid for change stream queries. In addition, if TransactionOptions.read_only.return_read_timestamp is set to true, a special value of 2^63 - 2 will be returned in the Transaction message that describes the transaction, instead of a valid read timestamp. This special value should be discarded and not used for any subsequent queries. Please see https://cloud.google.com/spanner/docs/change-streams for more details on how to query the change stream TVFs. Partitioned DML transactions: Partitioned DML transactions are used to execute DML statements with a different execution strategy that provides different, and often better, scalability properties for large, table-wide operations than DML in a ReadWrite transaction. Smaller scoped statements, such as an OLTP workload, should prefer using ReadWrite transactions. Partitioned DML partitions the keyspace and runs the DML statement on each partition in separate, internal transactions. These transactions commit automatically when complete, and run independently from one another. To reduce lock contention, this execution strategy only acquires read locks on rows that match the WHERE clause of the statement. Additionally, the smaller per-partition transactions hold locks for less time. That said, Partitioned DML is not a drop-in replacement for standard DML used in ReadWrite transactions. - The DML statement must be fully-partitionable. Specifically, the statement must be expressible as the union of many statements which each access only a single row of the table. - The statement is not applied atomically to all rows of the table. Rather, the statement is applied atomically to partitions of the table, in independent transactions. Secondary index rows are updated atomically with the base table rows. - Partitioned DML does not guarantee exactly-once execution semantics against a partition. The statement will be applied at least once to each partition. It is strongly recommended that the DML statement should be idempotent to avoid unexpected results. For instance, it is potentially dangerous to run a statement such as `UPDATE table SET column = column + 1` as it could be run multiple times against some rows. - The partitions are committed automatically - there is no support for Commit or Rollback. If the call returns an error, or if the client issuing the ExecuteSql call dies, it is possible that some rows had the statement executed on them successfully. It is also possible that statement was never executed against other rows. - Partitioned DML transactions may only contain the execution of a single DML statement via ExecuteSql or ExecuteStreamingSql. - If any error is encountered during the execution of the partitioned DML operation (for instance, a UNIQUE INDEX violation, division by zero, or a value that cannot be stored due to schema constraints), then the operation is stopped at that point and an error is returned. It is possible that at this point, some partitions have been committed (or even committed multiple times), and other partitions have not been run at all. Given the above, Partitioned DML is good fit for large, database-wide, operations that are idempotent, such as deleting old rows from a very large table. — shape: {partitionedDml?: record, readOnly?: record, readWrite?: record}
   --transaction-id: string # Commit a previously-started transaction. (format: byte)
-]: any -> record<commitStats: record<mutationCount: string>, commitTimestamp: string> {
+]: any -> oneof<record<commitStats: record<mutationCount: string>, commitTimestamp: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1781,9 +1787,6 @@ export def "spanner-projects-instances-databases-sessions-commit" [
 #
 # POST /v1/{session}:executeBatchDml
 # operationId: spanner.projects.instances.databases.sessions.executeBatchDml
-# --requestOptions shape: {priority?: "PRIORITY_UNSPECIFIED"|"PRIORITY_LOW"|"PRIORITY_MEDIUM"|"PRIORITY_HIGH", requestTag?: string, transactionTag?: string}
-# --statements item shape: {paramTypes?: record, params?: record, sql?: string}
-# --transaction shape: {begin?: record, id?: string, singleUse?: record}
 export def "spanner-projects-instances-databases-sessions-execute-batch-dml" [
   session: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1810,7 +1813,7 @@ export def "spanner-projects-instances-databases-sessions-execute-batch-dml" [
   --seqno: string # Required. A per-transaction sequence number used to identify this request. This field makes each request idempotent such that if the request is received multiple times, at most one will succeed. The sequence number must be monotonically increasing within the transaction. If a request arrives for the first time with an out-of-order sequence number, the transaction may be aborted. Replays of previously handled requests will yield the same response as the first execution. (format: int64)
   --statements: list # Required. The list of statements to execute in this batch. Statements are executed serially, such that the effects of statement `i` are visible to statement `i+1`. Each statement must be a DML statement. Execution stops at the first failed statement; the remaining statements are not executed. Callers must provide at least one statement. — item shape: {paramTypes?: record, params?: record, sql?: string}
   --transaction: record # This message is used to select the transaction in which a Read or ExecuteSql call runs. See TransactionOptions for more information about transactions. — shape: {begin?: record, id?: string, singleUse?: record}
-]: any -> record<resultSets: table<metadata: record, rows: list, stats: record>, status: record<code: int, details: list<record>, message: string>> {
+]: any -> oneof<record<resultSets: table<metadata: record, rows: list, stats: record>, status: record<code: int, details: list<record>, message: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1839,9 +1842,6 @@ export def "spanner-projects-instances-databases-sessions-execute-batch-dml" [
 #
 # POST /v1/{session}:executeSql
 # operationId: spanner.projects.instances.databases.sessions.executeSql
-# --queryOptions shape: {optimizerStatisticsPackage?: string, optimizerVersion?: string}
-# --requestOptions shape: {priority?: "PRIORITY_UNSPECIFIED"|"PRIORITY_LOW"|"PRIORITY_MEDIUM"|"PRIORITY_HIGH", requestTag?: string, transactionTag?: string}
-# --transaction shape: {begin?: record, id?: string, singleUse?: record}
 export def "spanner-projects-instances-databases-sessions-execute-sql" [
   session: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1875,7 +1875,7 @@ export def "spanner-projects-instances-databases-sessions-execute-sql" [
   --seqno: string # A per-transaction sequence number used to identify this request. This field makes each request idempotent such that if the request is received multiple times, at most one will succeed. The sequence number must be monotonically increasing within the transaction. If a request arrives for the first time with an out-of-order sequence number, the transaction may be aborted. Replays of previously handled requests will yield the same response as the first execution. Required for DML statements. Ignored for queries. (format: int64)
   --sql: string # Required. The SQL string.
   --transaction: record # This message is used to select the transaction in which a Read or ExecuteSql call runs. See TransactionOptions for more information about transactions. — shape: {begin?: record, id?: string, singleUse?: record}
-]: any -> record<metadata: record<rowType: record<fields: list>, transaction: record<id: string, readTimestamp: string>, undeclaredParameters: record<fields: list>>, rows: list<list<any>>, stats: record<queryPlan: record<planNodes: list>, queryStats: record, rowCountExact: string, rowCountLowerBound: string>> {
+]: any -> oneof<record<metadata: record<rowType: record<fields: list>, transaction: record<id: string, readTimestamp: string>, undeclaredParameters: record<fields: list>>, rows: list<list<any>>, stats: record<queryPlan: record<planNodes: list>, queryStats: record, rowCountExact: string, rowCountLowerBound: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1904,9 +1904,6 @@ export def "spanner-projects-instances-databases-sessions-execute-sql" [
 #
 # POST /v1/{session}:executeStreamingSql
 # operationId: spanner.projects.instances.databases.sessions.executeStreamingSql
-# --queryOptions shape: {optimizerStatisticsPackage?: string, optimizerVersion?: string}
-# --requestOptions shape: {priority?: "PRIORITY_UNSPECIFIED"|"PRIORITY_LOW"|"PRIORITY_MEDIUM"|"PRIORITY_HIGH", requestTag?: string, transactionTag?: string}
-# --transaction shape: {begin?: record, id?: string, singleUse?: record}
 export def "spanner-projects-instances-databases-sessions-execute-streaming-sql" [
   session: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1940,7 +1937,7 @@ export def "spanner-projects-instances-databases-sessions-execute-streaming-sql"
   --seqno: string # A per-transaction sequence number used to identify this request. This field makes each request idempotent such that if the request is received multiple times, at most one will succeed. The sequence number must be monotonically increasing within the transaction. If a request arrives for the first time with an out-of-order sequence number, the transaction may be aborted. Replays of previously handled requests will yield the same response as the first execution. Required for DML statements. Ignored for queries. (format: int64)
   --sql: string # Required. The SQL string.
   --transaction: record # This message is used to select the transaction in which a Read or ExecuteSql call runs. See TransactionOptions for more information about transactions. — shape: {begin?: record, id?: string, singleUse?: record}
-]: any -> record<chunkedValue: bool, metadata: record<rowType: record<fields: list>, transaction: record<id: string, readTimestamp: string>, undeclaredParameters: record<fields: list>>, resumeToken: string, stats: record<queryPlan: record<planNodes: list>, queryStats: record, rowCountExact: string, rowCountLowerBound: string>, values: list<any>> {
+]: any -> oneof<record<chunkedValue: bool, metadata: record<rowType: record<fields: list>, transaction: record<id: string, readTimestamp: string>, undeclaredParameters: record<fields: list>>, resumeToken: string, stats: record<queryPlan: record<planNodes: list>, queryStats: record, rowCountExact: string, rowCountLowerBound: string>, values: list<any>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1969,8 +1966,6 @@ export def "spanner-projects-instances-databases-sessions-execute-streaming-sql"
 #
 # POST /v1/{session}:partitionQuery
 # operationId: spanner.projects.instances.databases.sessions.partitionQuery
-# --partitionOptions shape: {maxPartitions?: string, partitionSizeBytes?: string}
-# --transaction shape: {begin?: record, id?: string, singleUse?: record}
 export def "spanner-projects-instances-databases-sessions-partition-query" [
   session: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1998,7 +1993,7 @@ export def "spanner-projects-instances-databases-sessions-partition-query" [
   --partition-options: record # Options for a PartitionQueryRequest and PartitionReadRequest. — shape: {maxPartitions?: string, partitionSizeBytes?: string}
   --sql: string # Required. The query request to generate partitions for. The request will fail if the query is not root partitionable. The query plan of a root partitionable query has a single distributed union operator. A distributed union operator conceptually divides one or more tables into multiple splits, remotely evaluates a subquery independently on each split, and then unions all results. This must not contain DML commands, such as INSERT, UPDATE, or DELETE. Use ExecuteStreamingSql with a PartitionedDml transaction for large, partition-friendly DML operations.
   --transaction: record # This message is used to select the transaction in which a Read or ExecuteSql call runs. See TransactionOptions for more information about transactions. — shape: {begin?: record, id?: string, singleUse?: record}
-]: any -> record<partitions: table<partitionToken: string>, transaction: record<id: string, readTimestamp: string>> {
+]: any -> oneof<record<partitions: table<partitionToken: string>, transaction: record<id: string, readTimestamp: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2027,9 +2022,6 @@ export def "spanner-projects-instances-databases-sessions-partition-query" [
 #
 # POST /v1/{session}:partitionRead
 # operationId: spanner.projects.instances.databases.sessions.partitionRead
-# --keySet shape: {all?: bool, keys?: list, ranges?: list}
-# --partitionOptions shape: {maxPartitions?: string, partitionSizeBytes?: string}
-# --transaction shape: {begin?: record, id?: string, singleUse?: record}
 export def "spanner-projects-instances-databases-sessions-partition-read" [
   session: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2058,7 +2050,7 @@ export def "spanner-projects-instances-databases-sessions-partition-read" [
   --partition-options: record # Options for a PartitionQueryRequest and PartitionReadRequest. — shape: {maxPartitions?: string, partitionSizeBytes?: string}
   --table: string # Required. The name of the table in the database to be read.
   --transaction: record # This message is used to select the transaction in which a Read or ExecuteSql call runs. See TransactionOptions for more information about transactions. — shape: {begin?: record, id?: string, singleUse?: record}
-]: any -> record<partitions: table<partitionToken: string>, transaction: record<id: string, readTimestamp: string>> {
+]: any -> oneof<record<partitions: table<partitionToken: string>, transaction: record<id: string, readTimestamp: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2087,9 +2079,6 @@ export def "spanner-projects-instances-databases-sessions-partition-read" [
 #
 # POST /v1/{session}:read
 # operationId: spanner.projects.instances.databases.sessions.read
-# --keySet shape: {all?: bool, keys?: list, ranges?: list}
-# --requestOptions shape: {priority?: "PRIORITY_UNSPECIFIED"|"PRIORITY_LOW"|"PRIORITY_MEDIUM"|"PRIORITY_HIGH", requestTag?: string, transactionTag?: string}
-# --transaction shape: {begin?: record, id?: string, singleUse?: record}
 export def "spanner-projects-instances-databases-sessions-read" [
   session: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2122,7 +2111,7 @@ export def "spanner-projects-instances-databases-sessions-read" [
   --resume-token: string # If this request is resuming a previously interrupted read, `resume_token` should be copied from the last PartialResultSet yielded before the interruption. Doing this enables the new read to resume where the last read left off. The rest of the request parameters must exactly match the request that yielded this token. (format: byte)
   --table: string # Required. The name of the table in the database to be read.
   --transaction: record # This message is used to select the transaction in which a Read or ExecuteSql call runs. See TransactionOptions for more information about transactions. — shape: {begin?: record, id?: string, singleUse?: record}
-]: any -> record<metadata: record<rowType: record<fields: list>, transaction: record<id: string, readTimestamp: string>, undeclaredParameters: record<fields: list>>, rows: list<list<any>>, stats: record<queryPlan: record<planNodes: list>, queryStats: record, rowCountExact: string, rowCountLowerBound: string>> {
+]: any -> oneof<record<metadata: record<rowType: record<fields: list>, transaction: record<id: string, readTimestamp: string>, undeclaredParameters: record<fields: list>>, rows: list<list<any>>, stats: record<queryPlan: record<planNodes: list>, queryStats: record, rowCountExact: string, rowCountLowerBound: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2174,7 +2163,7 @@ export def "spanner-projects-instances-databases-sessions-rollback" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --transaction-id: string # Required. The transaction to roll back. (format: byte)
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2203,9 +2192,6 @@ export def "spanner-projects-instances-databases-sessions-rollback" [
 #
 # POST /v1/{session}:streamingRead
 # operationId: spanner.projects.instances.databases.sessions.streamingRead
-# --keySet shape: {all?: bool, keys?: list, ranges?: list}
-# --requestOptions shape: {priority?: "PRIORITY_UNSPECIFIED"|"PRIORITY_LOW"|"PRIORITY_MEDIUM"|"PRIORITY_HIGH", requestTag?: string, transactionTag?: string}
-# --transaction shape: {begin?: record, id?: string, singleUse?: record}
 export def "spanner-projects-instances-databases-sessions-streaming-read" [
   session: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2238,7 +2224,7 @@ export def "spanner-projects-instances-databases-sessions-streaming-read" [
   --resume-token: string # If this request is resuming a previously interrupted read, `resume_token` should be copied from the last PartialResultSet yielded before the interruption. Doing this enables the new read to resume where the last read left off. The rest of the request parameters must exactly match the request that yielded this token. (format: byte)
   --table: string # Required. The name of the table in the database to be read.
   --transaction: record # This message is used to select the transaction in which a Read or ExecuteSql call runs. See TransactionOptions for more information about transactions. — shape: {begin?: record, id?: string, singleUse?: record}
-]: any -> record<chunkedValue: bool, metadata: record<rowType: record<fields: list>, transaction: record<id: string, readTimestamp: string>, undeclaredParameters: record<fields: list>>, resumeToken: string, stats: record<queryPlan: record<planNodes: list>, queryStats: record, rowCountExact: string, rowCountLowerBound: string>, values: list<any>> {
+]: any -> oneof<record<chunkedValue: bool, metadata: record<rowType: record<fields: list>, transaction: record<id: string, readTimestamp: string>, undeclaredParameters: record<fields: list>>, resumeToken: string, stats: record<queryPlan: record<planNodes: list>, queryStats: record, rowCountExact: string, rowCountLowerBound: string>, values: list<any>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -119,9 +142,9 @@ def x-amz-target-completer-18 [] { ["AWSIdentityStore.UpdateUser"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-group" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["create-group" "create-group-membership" "create-user" "delete-group" "delete-group-membership" "delete-user" "describe-group" "describe-group-membership" "describe-user" "get-group-id" "get-group-membership-id" "get-user-id" "is-member-in-groups" "list-group-memberships" "list-group-memberships-for-member" "list-groups" "list-users" "update-group" "update-user" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -164,7 +187,7 @@ export def "create-group" [
   identity_store_id: string # The globally unique identifier for the identity store.
   --display-name: string # A string containing the name of the group. This value is commonly displayed when the group is referenced. "Administrator" and "AWSAdministrators" are reserved names and can't be used for users or groups. (format: password)
   --description: string # A string containing the description of the group. (format: password)
-]: any -> record<GroupId: string, IdentityStoreId: string> {
+]: any -> oneof<record<GroupId: string, IdentityStoreId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -194,7 +217,6 @@ export def "create-group" [
 #
 # POST /
 # operationId: CreateGroupMembership
-# --MemberId shape: {UserId?: string}
 export def "create-group-membership" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -216,7 +238,7 @@ export def "create-group-membership" [
   identity_store_id: string # The globally unique identifier for the identity store.
   group_id: string # The identifier for a group in the identity store.
   member_id: record # An object containing the identifier of a group member. — shape: {UserId?: string}
-]: any -> record<MembershipId: string, IdentityStoreId: string> {
+]: any -> oneof<record<MembershipId: string, IdentityStoreId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -246,10 +268,6 @@ export def "create-group-membership" [
 #
 # POST /
 # operationId: CreateUser
-# --Name shape: {Formatted?: string, FamilyName?: string, GivenName?: string, MiddleName?: string, HonorificPrefix?: string, HonorificSuffix?: string}
-# --Emails item shape: {Value?: string, Type?: string, Primary?: bool}
-# --Addresses item shape: {StreetAddress?: string, Locality?: string, Region?: string, PostalCode?: string, Country?: string, Formatted?: string, Type?: string, Primary?: bool}
-# --PhoneNumbers item shape: {Value?: string, Type?: string, Primary?: bool}
 export def "create-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -282,7 +300,7 @@ export def "create-user" [
   --preferred-language: string # A string containing the preferred language of the user. For example, "American English" or "en-us." (format: password)
   --locale: string # A string containing the geographical region or location of the user. (format: password)
   --timezone: string # A string containing the time zone of the user. (format: password)
-]: any -> record<UserId: string, IdentityStoreId: string> {
+]: any -> oneof<record<UserId: string, IdentityStoreId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -332,7 +350,7 @@ export def "delete-group" [
   --x-amz-target: string@x-amz-target-completer-3 # required
   identity_store_id: string # The globally unique identifier for the identity store.
   group_id: string # The identifier for a group in the identity store.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -382,7 +400,7 @@ export def "delete-group-membership" [
   --x-amz-target: string@x-amz-target-completer-4 # required
   identity_store_id: string # The globally unique identifier for the identity store.
   membership_id: string # The identifier for a GroupMembership in an identity store.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -432,7 +450,7 @@ export def "delete-user" [
   --x-amz-target: string@x-amz-target-completer-5 # required
   identity_store_id: string # The globally unique identifier for the identity store.
   user_id: string # The identifier for a user in the identity store.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -482,7 +500,7 @@ export def "describe-group" [
   --x-amz-target: string@x-amz-target-completer-6 # required
   identity_store_id: string # The globally unique identifier for the identity store, such as d-1234567890. In this example, d- is a fixed prefix, and 1234567890 is a randomly generated string that contains numbers and lower case letters. This value is generated at the time that a new identity store is created.
   group_id: string # The identifier for a group in the identity store.
-]: any -> record<GroupId: string, DisplayName: string, ExternalIds: table<Issuer: string, Id: string>, Description: string, IdentityStoreId: string> {
+]: any -> oneof<record<GroupId: string, DisplayName: string, ExternalIds: table<Issuer: string, Id: string>, Description: string, IdentityStoreId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -532,7 +550,7 @@ export def "describe-group-membership" [
   --x-amz-target: string@x-amz-target-completer-7 # required
   identity_store_id: string # The globally unique identifier for the identity store.
   membership_id: string # The identifier for a GroupMembership in an identity store.
-]: any -> record<IdentityStoreId: string, MembershipId: string, GroupId: string, MemberId: record<UserId: string>> {
+]: any -> oneof<record<IdentityStoreId: string, MembershipId: string, GroupId: string, MemberId: record<UserId: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -582,7 +600,7 @@ export def "describe-user" [
   --x-amz-target: string@x-amz-target-completer-8 # required
   identity_store_id: string # The globally unique identifier for the identity store, such as d-1234567890. In this example, d- is a fixed prefix, and 1234567890 is a randomly generated string that contains numbers and lower case letters. This value is generated at the time that a new identity store is created.
   user_id: string # The identifier for a user in the identity store.
-]: any -> record<UserName: string, UserId: string, ExternalIds: table<Issuer: string, Id: string>, Name: record<Formatted: string, FamilyName: string, GivenName: string, MiddleName: string, HonorificPrefix: string, HonorificSuffix: string>, DisplayName: string, NickName: string, ProfileUrl: string, Emails: table<Value: string, Type: string, Primary: bool>, Addresses: table<StreetAddress: string, Locality: string, Region: string, PostalCode: string, Country: string, Formatted: string, Type: string, Primary: bool>, PhoneNumbers: table<Value: string, Type: string, Primary: bool>, UserType: string, Title: string, PreferredLanguage: string, Locale: string, Timezone: string, IdentityStoreId: string> {
+]: any -> oneof<record<UserName: string, UserId: string, ExternalIds: table<Issuer: string, Id: string>, Name: record<Formatted: string, FamilyName: string, GivenName: string, MiddleName: string, HonorificPrefix: string, HonorificSuffix: string>, DisplayName: string, NickName: string, ProfileUrl: string, Emails: table<Value: string, Type: string, Primary: bool>, Addresses: table<StreetAddress: string, Locality: string, Region: string, PostalCode: string, Country: string, Formatted: string, Type: string, Primary: bool>, PhoneNumbers: table<Value: string, Type: string, Primary: bool>, UserType: string, Title: string, PreferredLanguage: string, Locale: string, Timezone: string, IdentityStoreId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -612,7 +630,6 @@ export def "describe-user" [
 #
 # POST /
 # operationId: GetGroupId
-# --AlternateIdentifier shape: {ExternalId?: record, UniqueAttribute?: record}
 export def "get-group-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -633,7 +650,7 @@ export def "get-group-id" [
   --x-amz-target: string@x-amz-target-completer-9 # required
   identity_store_id: string # The globally unique identifier for the identity store.
   alternate_identifier: record # A unique identifier for a user or group that is not the primary identifier. This value can be an identifier from an external identity provider (IdP) that is associated with the user, the group, or a unique attribute. — shape: {ExternalId?: record, UniqueAttribute?: record}
-]: any -> record<GroupId: string, IdentityStoreId: string> {
+]: any -> oneof<record<GroupId: string, IdentityStoreId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -663,7 +680,6 @@ export def "get-group-id" [
 #
 # POST /
 # operationId: GetGroupMembershipId
-# --MemberId shape: {UserId?: string}
 export def "get-group-membership-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -685,7 +701,7 @@ export def "get-group-membership-id" [
   identity_store_id: string # The globally unique identifier for the identity store.
   group_id: string # The identifier for a group in the identity store.
   member_id: record # An object containing the identifier of a group member. — shape: {UserId?: string}
-]: any -> record<MembershipId: string, IdentityStoreId: string> {
+]: any -> oneof<record<MembershipId: string, IdentityStoreId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -715,7 +731,6 @@ export def "get-group-membership-id" [
 #
 # POST /
 # operationId: GetUserId
-# --AlternateIdentifier shape: {ExternalId?: record, UniqueAttribute?: record}
 export def "get-user-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -736,7 +751,7 @@ export def "get-user-id" [
   --x-amz-target: string@x-amz-target-completer-11 # required
   identity_store_id: string # The globally unique identifier for the identity store.
   alternate_identifier: record # A unique identifier for a user or group that is not the primary identifier. This value can be an identifier from an external identity provider (IdP) that is associated with the user, the group, or a unique attribute. — shape: {ExternalId?: record, UniqueAttribute?: record}
-]: any -> record<UserId: string, IdentityStoreId: string> {
+]: any -> oneof<record<UserId: string, IdentityStoreId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -766,7 +781,6 @@ export def "get-user-id" [
 #
 # POST /
 # operationId: IsMemberInGroups
-# --MemberId shape: {UserId?: string}
 export def "is-member-in-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -788,7 +802,7 @@ export def "is-member-in-groups" [
   identity_store_id: string # The globally unique identifier for the identity store.
   member_id: record # An object containing the identifier of a group member. — shape: {UserId?: string}
   group_ids: list<string> # A list of identifiers for groups in the identity store.
-]: any -> record<Results: table<GroupId: string, MemberId: record, MembershipExists: bool>> {
+]: any -> oneof<record<Results: table<GroupId: string, MemberId: record, MembershipExists: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -842,7 +856,7 @@ export def "list-group-memberships" [
   group_id: string # The identifier for a group in the identity store.
   --max-results-body: int # The maximum number of results to be returned per request. This parameter is used in all List requests to specify how many results to return in one page. (body field)
   --next-token-body: string # The pagination token used for the ListUsers, ListGroups and ListGroupMemberships API operations. This value is generated by the identity store service. It is returned in the API response if the total results are more than the size of one page. This token is also returned when it is used in the API request to search for the next page. (body field)
-]: any -> record<GroupMemberships: table<IdentityStoreId: string, MembershipId: string, GroupId: string, MemberId: record>, NextToken: string> {
+]: any -> oneof<record<GroupMemberships: table<IdentityStoreId: string, MembershipId: string, GroupId: string, MemberId: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -873,7 +887,6 @@ export def "list-group-memberships" [
 #
 # POST /
 # operationId: ListGroupMembershipsForMember
-# --MemberId shape: {UserId?: string}
 export def "list-group-memberships-for-member" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -898,7 +911,7 @@ export def "list-group-memberships-for-member" [
   member_id: record # An object containing the identifier of a group member. — shape: {UserId?: string}
   --max-results-body: int # The maximum number of results to be returned per request. This parameter is used in the ListUsers and ListGroups requests to specify how many results to return in one page. The length limit is 50 characters. (body field)
   --next-token-body: string # The pagination token used for the ListUsers, ListGroups, and ListGroupMemberships API operations. This value is generated by the identity store service. It is returned in the API response if the total results are more than the size of one page. This token is also returned when it is used in the API request to search for the next page. (body field)
-]: any -> record<GroupMemberships: table<IdentityStoreId: string, MembershipId: string, GroupId: string, MemberId: record>, NextToken: string> {
+]: any -> oneof<record<GroupMemberships: table<IdentityStoreId: string, MembershipId: string, GroupId: string, MemberId: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -929,7 +942,6 @@ export def "list-group-memberships-for-member" [
 #
 # POST /
 # operationId: ListGroups
-# --Filters item shape: {AttributePath: string, AttributeValue: string}
 export def "list-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -954,7 +966,7 @@ export def "list-groups" [
   --max-results-body: int # The maximum number of results to be returned per request. This parameter is used in the ListUsers and ListGroups requests to specify how many results to return in one page. The length limit is 50 characters. (body field)
   --next-token-body: string # The pagination token used for the ListUsers and ListGroups API operations. This value is generated by the identity store service. It is returned in the API response if the total results are more than the size of one page. This token is also returned when it is used in the API request to search for the next page. (body field)
   --filters: list # A list of Filter objects, which is used in the ListUsers and ListGroups requests.Using filters with ListGroups API is deprecated, please use GetGroupId API instead. — item shape: {AttributePath: string, AttributeValue: string}
-]: any -> record<Groups: table<GroupId: string, DisplayName: string, ExternalIds: list, Description: string, IdentityStoreId: string>, NextToken: string> {
+]: any -> oneof<record<Groups: table<GroupId: string, DisplayName: string, ExternalIds: list, Description: string, IdentityStoreId: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -985,7 +997,6 @@ export def "list-groups" [
 #
 # POST /
 # operationId: ListUsers
-# --Filters item shape: {AttributePath: string, AttributeValue: string}
 export def "list-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1010,7 +1021,7 @@ export def "list-users" [
   --max-results-body: int # The maximum number of results to be returned per request. This parameter is used in the ListUsers and ListGroups requests to specify how many results to return in one page. The length limit is 50 characters. (body field)
   --next-token-body: string # The pagination token used for the ListUsers and ListGroups API operations. This value is generated by the identity store service. It is returned in the API response if the total results are more than the size of one page. This token is also returned when it is used in the API request to search for the next page. (body field)
   --filters: list # A list of Filter objects, which is used in the ListUsers and ListGroups requests. Using filters with ListUsers API is deprecated, please use GetGroupId API instead. — item shape: {AttributePath: string, AttributeValue: string}
-]: any -> record<Users: table<UserName: string, UserId: string, ExternalIds: list, Name: record, DisplayName: string, NickName: string, ProfileUrl: string, Emails: list, Addresses: list, PhoneNumbers: list, UserType: string, Title: string, PreferredLanguage: string, Locale: string, Timezone: string, IdentityStoreId: string>, NextToken: string> {
+]: any -> oneof<record<Users: table<UserName: string, UserId: string, ExternalIds: list, Name: record, DisplayName: string, NickName: string, ProfileUrl: string, Emails: list, Addresses: list, PhoneNumbers: list, UserType: string, Title: string, PreferredLanguage: string, Locale: string, Timezone: string, IdentityStoreId: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1041,7 +1052,6 @@ export def "list-users" [
 #
 # POST /
 # operationId: UpdateGroup
-# --Operations item shape: {AttributePath: string, AttributeValue?: record}
 export def "update-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1063,7 +1073,7 @@ export def "update-group" [
   identity_store_id: string # The globally unique identifier for the identity store.
   group_id: string # The identifier for a group in the identity store.
   operations: list # A list of AttributeOperation objects to apply to the requested group. These operations might add, replace, or remove an attribute. — item shape: {AttributePath: string, AttributeValue?: record}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1093,7 +1103,6 @@ export def "update-group" [
 #
 # POST /
 # operationId: UpdateUser
-# --Operations item shape: {AttributePath: string, AttributeValue?: record}
 export def "update-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1115,7 +1124,7 @@ export def "update-user" [
   identity_store_id: string # The globally unique identifier for the identity store.
   user_id: string # The identifier for a user in the identity store.
   operations: list # A list of AttributeOperation objects to apply to the requested user. These operations might add, replace, or remove an attribute. — item shape: {AttributePath: string, AttributeValue?: record}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

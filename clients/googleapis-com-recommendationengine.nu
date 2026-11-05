@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -121,9 +145,9 @@ def event-source-completer [] { ["AUTOML" "BATCH_UPLOAD" "ECOMMERCE" "EVENT_SOUR
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "recommendationengine-projects-locations-catalogs-event-stores-prediction-api-key-registrations-delete" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["recommendationengine-projects-locations-catalogs-event-stores-prediction-api-key-registrations-delete" "recommendationengine-projects-locations-catalogs-operations-get" "recommendationengine-projects-locations-catalogs-catalog-items-patch" "recommendationengine-projects-locations-catalogs-operations-list" "recommendationengine-projects-locations-catalogs-event-stores-placements-predict" "recommendationengine-projects-locations-catalogs-catalog-items-list" "recommendationengine-projects-locations-catalogs-catalog-items-create" "recommendationengine-projects-locations-catalogs-catalog-items-import" "recommendationengine-projects-locations-catalogs-list" "recommendationengine-projects-locations-catalogs-event-stores-prediction-api-key-registrations-list" "recommendationengine-projects-locations-catalogs-event-stores-prediction-api-key-registrations-create" "recommendationengine-projects-locations-catalogs-event-stores-user-events-list" "recommendationengine-projects-locations-catalogs-event-stores-user-events-collect" "recommendationengine-projects-locations-catalogs-event-stores-user-events-import" "recommendationengine-projects-locations-catalogs-event-stores-user-events-purge" "recommendationengine-projects-locations-catalogs-event-stores-user-events-rejoin" "recommendationengine-projects-locations-catalogs-event-stores-user-events-write" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -167,7 +191,7 @@ export def "recommendationengine-projects-locations-catalogs-event-stores-predic
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -215,7 +239,7 @@ export def "recommendationengine-projects-locations-catalogs-operations-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: nothing -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -241,9 +265,6 @@ export def "recommendationengine-projects-locations-catalogs-operations-get" [
 #
 # PATCH /v1beta1/{name}
 # operationId: recommendationengine.projects.locations.catalogs.catalogItems.patch
-# --categoryHierarchies item shape: {categories?: list<string>}
-# --itemAttributes shape: {categoricalFeatures?: record, numericalFeatures?: record}
-# --productMetadata shape: {availableQuantity?: string, canonicalProductUri?: string, costs?: record, currencyCode?: string, exactPrice?: record, images?: list, priceRange?: record, stockState?: "STOCK_STATE_UNSPECIFIED"|"IN_STOCK"|"OUT_OF_STOCK"|"PREORDER"|"BACKORDER"}
 export def "recommendationengine-projects-locations-catalogs-catalog-items-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -276,7 +297,7 @@ export def "recommendationengine-projects-locations-catalogs-catalog-items-patch
   --product-metadata: record # ProductCatalogItem captures item metadata specific to retail products. — shape: {availableQuantity?: string, canonicalProductUri?: string, costs?: record, currencyCode?: string, exactPrice?: record, images?: list, priceRange?: record, stockState?: "STOCK_STATE_UNSPECIFIED"|"IN_STOCK"|"OUT_OF_STOCK"|"PREORDER"|"BACKORDER"}
   --tags: list<string> # Optional. Filtering tags associated with the catalog item. Each tag should be a UTF-8 encoded string with a length limit of 1 KiB. This tag can be used for filtering recommendation results by passing the tag as part of the predict request filter.
   --title: string # Required. Catalog item title. UTF-8 encoded string with a length limit of 1 KiB.
-]: any -> record<categoryHierarchies: table<categories: list>, description: string, id: string, itemAttributes: record<categoricalFeatures: record, numericalFeatures: record>, itemGroupId: string, languageCode: string, productMetadata: record<availableQuantity: string, canonicalProductUri: string, costs: record, currencyCode: string, exactPrice: record<displayPrice: float, originalPrice: float>, images: list<record>, priceRange: record<max: float, min: float>, stockState: string>, tags: list<string>, title: string> {
+]: any -> oneof<record<categoryHierarchies: table<categories: list>, description: string, id: string, itemAttributes: record<categoricalFeatures: record, numericalFeatures: record>, itemGroupId: string, languageCode: string, productMetadata: record<availableQuantity: string, canonicalProductUri: string, costs: record, currencyCode: string, exactPrice: record<displayPrice: float, originalPrice: float>, images: list<record>, priceRange: record<max: float, min: float>, stockState: string>, tags: list<string>, title: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -330,7 +351,7 @@ export def "recommendationengine-projects-locations-catalogs-operations-list" [
   --filter: string # The standard list filter.
   --page-size: int # The standard list page size.
   --page-token: string # The standard list page token.
-]: nothing -> record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>> {
+]: nothing -> oneof<record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -356,7 +377,6 @@ export def "recommendationengine-projects-locations-catalogs-operations-list" [
 #
 # POST /v1beta1/{name}:predict
 # operationId: recommendationengine.projects.locations.catalogs.eventStores.placements.predict
-# --userEvent shape: {eventDetail?: record, eventSource?: "EVENT_SOURCE_UNSPECIFIED"|"AUTOML"|"ECOMMERCE"|"BATCH_UPLOAD", eventTime?: string, eventType?: string, productEventDetail?: record, userInfo?: record}
 export def "recommendationengine-projects-locations-catalogs-event-stores-placements-predict" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -386,7 +406,7 @@ export def "recommendationengine-projects-locations-catalogs-event-stores-placem
   --page-token: string # Optional. The previous PredictResponse.next_page_token.
   --params: record # Optional. Additional domain specific parameters for the predictions. Allowed values: * `returnCatalogItem`: Boolean. If set to true, the associated catalogItem object will be returned in the `PredictResponse.PredictionResult.itemMetadata` object in the method response. * `returnItemScore`: Boolean. If set to true, the prediction 'score' corresponding to each returned item will be set in the `metadata` field in the prediction response. The given 'score' indicates the probability of an item being clicked/purchased given the user's context and history. * `strictFiltering`: Boolean. True by default. If set to false, the service will return generic (unfiltered) popular items instead of empty if your filter blocks all prediction results. * `priceRerankLevel`: String. Default empty. If set to be non-empty, then it needs to be one of {'no-price-reranking', 'low-price-reranking', 'medium-price-reranking', 'high-price-reranking'}. This gives request level control and adjust prediction results based on product price. * `diversityLevel`: String. Default empty. If set to be non-empty, then it needs to be one of {'no-diversity', 'low-diversity', 'medium-diversity', 'high-diversity', 'auto-diversity'}. This gives request level control and adjust prediction results based on product category.
   --user-event: record # UserEvent captures all metadata information recommendation engine needs to know about how end users interact with customers' website. — shape: {eventDetail?: record, eventSource?: "EVENT_SOURCE_UNSPECIFIED"|"AUTOML"|"ECOMMERCE"|"BATCH_UPLOAD", eventTime?: string, eventType?: string, productEventDetail?: record, userInfo?: record}
-]: any -> record<dryRun: bool, itemsMissingInCatalog: list<string>, metadata: record, nextPageToken: string, recommendationToken: string, results: table<id: string, itemMetadata: record>> {
+]: any -> oneof<record<dryRun: bool, itemsMissingInCatalog: list<string>, metadata: record, nextPageToken: string, recommendationToken: string, results: table<id: string, itemMetadata: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -440,7 +460,7 @@ export def "recommendationengine-projects-locations-catalogs-catalog-items-list"
   --filter: string # Optional. Use of this field is not supported by version v1beta1.
   --page-size: int # Optional. Maximum number of results to return per page. If zero, the service will choose a reasonable default.
   --page-token: string # Optional. The previous ListCatalogItemsResponse.next_page_token.
-]: nothing -> record<catalogItems: table<categoryHierarchies: list, description: string, id: string, itemAttributes: record, itemGroupId: string, languageCode: string, productMetadata: record, tags: list, title: string>, nextPageToken: string> {
+]: nothing -> oneof<record<catalogItems: table<categoryHierarchies: list, description: string, id: string, itemAttributes: record, itemGroupId: string, languageCode: string, productMetadata: record, tags: list, title: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -466,9 +486,6 @@ export def "recommendationengine-projects-locations-catalogs-catalog-items-list"
 #
 # POST /v1beta1/{parent}/catalogItems
 # operationId: recommendationengine.projects.locations.catalogs.catalogItems.create
-# --categoryHierarchies item shape: {categories?: list<string>}
-# --itemAttributes shape: {categoricalFeatures?: record, numericalFeatures?: record}
-# --productMetadata shape: {availableQuantity?: string, canonicalProductUri?: string, costs?: record, currencyCode?: string, exactPrice?: record, images?: list, priceRange?: record, stockState?: "STOCK_STATE_UNSPECIFIED"|"IN_STOCK"|"OUT_OF_STOCK"|"PREORDER"|"BACKORDER"}
 export def "recommendationengine-projects-locations-catalogs-catalog-items-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -500,7 +517,7 @@ export def "recommendationengine-projects-locations-catalogs-catalog-items-creat
   --product-metadata: record # ProductCatalogItem captures item metadata specific to retail products. — shape: {availableQuantity?: string, canonicalProductUri?: string, costs?: record, currencyCode?: string, exactPrice?: record, images?: list, priceRange?: record, stockState?: "STOCK_STATE_UNSPECIFIED"|"IN_STOCK"|"OUT_OF_STOCK"|"PREORDER"|"BACKORDER"}
   --tags: list<string> # Optional. Filtering tags associated with the catalog item. Each tag should be a UTF-8 encoded string with a length limit of 1 KiB. This tag can be used for filtering recommendation results by passing the tag as part of the predict request filter.
   --title: string # Required. Catalog item title. UTF-8 encoded string with a length limit of 1 KiB.
-]: any -> record<categoryHierarchies: table<categories: list>, description: string, id: string, itemAttributes: record<categoricalFeatures: record, numericalFeatures: record>, itemGroupId: string, languageCode: string, productMetadata: record<availableQuantity: string, canonicalProductUri: string, costs: record, currencyCode: string, exactPrice: record<displayPrice: float, originalPrice: float>, images: list<record>, priceRange: record<max: float, min: float>, stockState: string>, tags: list<string>, title: string> {
+]: any -> oneof<record<categoryHierarchies: table<categories: list>, description: string, id: string, itemAttributes: record<categoricalFeatures: record, numericalFeatures: record>, itemGroupId: string, languageCode: string, productMetadata: record<availableQuantity: string, canonicalProductUri: string, costs: record, currencyCode: string, exactPrice: record<displayPrice: float, originalPrice: float>, images: list<record>, priceRange: record<max: float, min: float>, stockState: string>, tags: list<string>, title: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -529,8 +546,6 @@ export def "recommendationengine-projects-locations-catalogs-catalog-items-creat
 #
 # POST /v1beta1/{parent}/catalogItems:import
 # operationId: recommendationengine.projects.locations.catalogs.catalogItems.import
-# --errorsConfig shape: {gcsPrefix?: string}
-# --inputConfig shape: {bigQuerySource?: record, catalogInlineSource?: record, gcsSource?: record, userEventInlineSource?: record}
 export def "recommendationengine-projects-locations-catalogs-catalog-items-import" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -557,7 +572,7 @@ export def "recommendationengine-projects-locations-catalogs-catalog-items-impor
   --input-config: record # The input config source. — shape: {bigQuerySource?: record, catalogInlineSource?: record, gcsSource?: record, userEventInlineSource?: record}
   --request-id: string # Optional. Unique identifier provided by client, within the ancestor dataset scope. Ensures idempotency and used for request deduplication. Server-generated if unspecified. Up to 128 characters long. This is returned as google.longrunning.Operation.name in the response.
   --update-mask: string # Optional. Indicates which fields in the provided imported 'items' to update. If not set, will by default update all fields. (format: google-fieldmask)
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -610,7 +625,7 @@ export def "recommendationengine-projects-locations-catalogs-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # Optional. Maximum number of results to return. If unspecified, defaults to 50. Max allowed value is 1000.
   --page-token: string # Optional. A page token, received from a previous `ListCatalogs` call. Provide this to retrieve the subsequent page.
-]: nothing -> record<catalogs: table<catalogItemLevelConfig: record, defaultEventStoreId: string, displayName: string, name: string>, nextPageToken: string> {
+]: nothing -> oneof<record<catalogs: table<catalogItemLevelConfig: record, defaultEventStoreId: string, displayName: string, name: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -660,7 +675,7 @@ export def "recommendationengine-projects-locations-catalogs-event-stores-predic
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # Optional. Maximum number of results to return per page. If unset, the service will choose a reasonable default.
   --page-token: string # Optional. The previous `ListPredictionApiKeyRegistration.nextPageToken`.
-]: nothing -> record<nextPageToken: string, predictionApiKeyRegistrations: table<apiKey: string>> {
+]: nothing -> oneof<record<nextPageToken: string, predictionApiKeyRegistrations: table<apiKey: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -686,7 +701,6 @@ export def "recommendationengine-projects-locations-catalogs-event-stores-predic
 #
 # POST /v1beta1/{parent}/predictionApiKeyRegistrations
 # operationId: recommendationengine.projects.locations.catalogs.eventStores.predictionApiKeyRegistrations.create
-# --predictionApiKeyRegistration shape: {apiKey?: string}
 export def "recommendationengine-projects-locations-catalogs-event-stores-prediction-api-key-registrations-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -710,7 +724,7 @@ export def "recommendationengine-projects-locations-catalogs-event-stores-predic
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --prediction-api-key-registration: record # Registered Api Key. — shape: {apiKey?: string}
-]: any -> record<apiKey: string> {
+]: any -> oneof<record<apiKey: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -764,7 +778,7 @@ export def "recommendationengine-projects-locations-catalogs-event-stores-user-e
   --filter: string # Optional. Filtering expression to specify restrictions over returned events. This is a sequence of terms, where each term applies some kind of a restriction to the returned user events. Use this expression to restrict results to a specific time range, or filter events by eventType. eg: eventTime > "2012-04-23T18:25:43.511Z" eventsMissingCatalogItems eventTime<"2012-04-23T18:25:43.511Z" eventType=search We expect only 3 types of fields: * eventTime: this can be specified a maximum of 2 times, once with a less than operator and once with a greater than operator. The eventTime restrict should result in one contiguous valid eventTime range. * eventType: only 1 eventType restriction can be specified. * eventsMissingCatalogItems: specififying this will restrict results to events for which catalog items were not found in the catalog. The default behavior is to return only those events for which catalog items were found. Some examples of valid filters expressions: * Example 1: eventTime > "2012-04-23T18:25:43.511Z" eventTime < "2012-04-23T18:30:43.511Z" * Example 2: eventTime > "2012-04-23T18:25:43.511Z" eventType = detail-page-view * Example 3: eventsMissingCatalogItems eventType = search eventTime < "2018-04-23T18:30:43.511Z" * Example 4: eventTime > "2012-04-23T18:25:43.511Z" * Example 5: eventType = search * Example 6: eventsMissingCatalogItems
   --page-size: int # Optional. Maximum number of results to return per page. If zero, the service will choose a reasonable default.
   --page-token: string # Optional. The previous ListUserEventsResponse.next_page_token.
-]: nothing -> record<nextPageToken: string, userEvents: table<eventDetail: record, eventSource: string, eventTime: string, eventType: string, productEventDetail: record, userInfo: record>> {
+]: nothing -> oneof<record<nextPageToken: string, userEvents: table<eventDetail: record, eventSource: string, eventTime: string, eventType: string, productEventDetail: record, userInfo: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -815,7 +829,7 @@ export def "recommendationengine-projects-locations-catalogs-event-stores-user-e
   --ets: string # Optional. The event timestamp in milliseconds. This prevents browser caching of otherwise identical get requests. The name is abbreviated to reduce the payload bytes.
   --uri: string # Optional. The url including cgi-parameters but excluding the hash fragment. The URL must be truncated to 1.5K bytes to conservatively be under the 2K bytes. This is often more useful than the referer url, because many browsers only send the domain for 3rd party requests.
   --user-event: string # Required. URL encoded UserEvent proto.
-]: nothing -> record<contentType: string, data: string, extensions: list<record>> {
+]: nothing -> oneof<record<contentType: string, data: string, extensions: list<record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -841,8 +855,6 @@ export def "recommendationengine-projects-locations-catalogs-event-stores-user-e
 #
 # POST /v1beta1/{parent}/userEvents:import
 # operationId: recommendationengine.projects.locations.catalogs.eventStores.userEvents.import
-# --errorsConfig shape: {gcsPrefix?: string}
-# --inputConfig shape: {bigQuerySource?: record, catalogInlineSource?: record, gcsSource?: record, userEventInlineSource?: record}
 export def "recommendationengine-projects-locations-catalogs-event-stores-user-events-import" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -868,7 +880,7 @@ export def "recommendationengine-projects-locations-catalogs-event-stores-user-e
   --errors-config: record # Configuration of destination for Import related errors. — shape: {gcsPrefix?: string}
   --input-config: record # The input config source. — shape: {bigQuerySource?: record, catalogInlineSource?: record, gcsSource?: record, userEventInlineSource?: record}
   --request-id: string # Optional. Unique identifier provided by client, within the ancestor dataset scope. Ensures idempotency for expensive long running operations. Server-generated if unspecified. Up to 128 characters long. This is returned as google.longrunning.Operation.name in the response. Note that this field must not be set if the desired input config is catalog_inline_source.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -921,7 +933,7 @@ export def "recommendationengine-projects-locations-catalogs-event-stores-user-e
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --filter: string # Required. The filter string to specify the events to be deleted. Empty string filter is not allowed. The eligible fields for filtering are: * `eventType`: UserEvent.eventType field of type string. * `eventTime`: in ISO 8601 "zulu" format. * `visitorId`: field of type string. Specifying this will delete all events associated with a visitor. * `userId`: field of type string. Specifying this will delete all events associated with a user. Examples: * Deleting all events in a time range: `eventTime > "2012-04-23T18:25:43.511Z" eventTime < "2012-04-23T18:30:43.511Z"` * Deleting specific eventType in time range: `eventTime > "2012-04-23T18:25:43.511Z" eventType = "detail-page-view"` * Deleting all events for a specific visitor: `visitorId = "visitor1024"` The filtering fields are assumed to have an implicit AND.
   --force: oneof<nothing, bool> # Optional. The default value is false. Override this flag to true to actually perform the purge. If the field is not set to true, a sampling of events to be deleted will be returned.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -973,7 +985,7 @@ export def "recommendationengine-projects-locations-catalogs-event-stores-user-e
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --user-event-rejoin-scope: string@user-event-rejoin-scope-completer # Required. The type of the catalog rejoin to define the scope and range of the user events to be rejoined with catalog items.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1002,9 +1014,6 @@ export def "recommendationengine-projects-locations-catalogs-event-stores-user-e
 #
 # POST /v1beta1/{parent}/userEvents:write
 # operationId: recommendationengine.projects.locations.catalogs.eventStores.userEvents.write
-# --eventDetail shape: {eventAttributes?: record, experimentIds?: list<string>, pageViewId?: string, recommendationToken?: string, referrerUri?: string, uri?: string}
-# --productEventDetail shape: {cartId?: string, listId?: string, pageCategories?: list, productDetails?: list, purchaseTransaction?: record, searchQuery?: string}
-# --userInfo shape: {directUserRequest?: bool, ipAddress?: string, userAgent?: string, userId?: string, visitorId?: string}
 export def "recommendationengine-projects-locations-catalogs-event-stores-user-events-write" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1033,7 +1042,7 @@ export def "recommendationengine-projects-locations-catalogs-event-stores-user-e
   --event-type: string # Required. User event type. Allowed values are: * `add-to-cart` Products being added to cart. * `add-to-list` Items being added to a list (shopping list, favorites etc). * `category-page-view` Special pages such as sale or promotion pages viewed. * `checkout-start` User starting a checkout process. * `detail-page-view` Products detail page viewed. * `home-page-view` Homepage viewed. * `page-visit` Generic page visits not included in the event types above. * `purchase-complete` User finishing a purchase. * `refund` Purchased items being refunded or returned. * `remove-from-cart` Products being removed from cart. * `remove-from-list` Items being removed from a list. * `search` Product search. * `shopping-cart-page-view` User viewing a shopping cart. * `impression` List of items displayed. Used by Google Tag Manager.
   --product-event-detail: record # ProductEventDetail captures user event information specific to retail products. — shape: {cartId?: string, listId?: string, pageCategories?: list, productDetails?: list, purchaseTransaction?: record, searchQuery?: string}
   --user-info: record # Information of end users. — shape: {directUserRequest?: bool, ipAddress?: string, userAgent?: string, userId?: string, visitorId?: string}
-]: any -> record<eventDetail: record<eventAttributes: record<categoricalFeatures: record, numericalFeatures: record>, experimentIds: list<string>, pageViewId: string, recommendationToken: string, referrerUri: string, uri: string>, eventSource: string, eventTime: string, eventType: string, productEventDetail: record<cartId: string, listId: string, pageCategories: list<record>, productDetails: list<record>, purchaseTransaction: record<costs: record, currencyCode: string, id: string, revenue: float, taxes: record>, searchQuery: string>, userInfo: record<directUserRequest: bool, ipAddress: string, userAgent: string, userId: string, visitorId: string>> {
+]: any -> oneof<record<eventDetail: record<eventAttributes: record<categoricalFeatures: record, numericalFeatures: record>, experimentIds: list<string>, pageViewId: string, recommendationToken: string, referrerUri: string, uri: string>, eventSource: string, eventTime: string, eventType: string, productEventDetail: record<cartId: string, listId: string, pageCategories: list<record>, productDetails: list<record>, purchaseTransaction: record<costs: record, currencyCode: string, id: string, revenue: float, taxes: record>, searchQuery: string>, userInfo: record<directUserRequest: bool, ipAddress: string, userAgent: string, userId: string, visitorId: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

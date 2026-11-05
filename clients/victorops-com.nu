@@ -12,27 +12,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -40,8 +49,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -52,7 +66,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -87,7 +110,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -125,9 +149,9 @@ def type-completer-1 [] { ["email" "phone" "push" "sms"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-api-public-v1-alerts-uuid" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-api-public-v1-alerts-uuid" "get-api-public-v1-incidents" "post-api-public-v1-incidents" "patch-api-public-v1-incidents-ack" "patch-api-public-v1-incidents-by-user-ack" "patch-api-public-v1-incidents-by-user-resolve" "post-api-public-v1-incidents-reroute" "patch-api-public-v1-incidents-resolve" "get-api-public-v1-maintenancemode" "post-api-public-v1-maintenancemode-start" "put-api-public-v1-maintenancemode-maintenancemodeid-end" "get-api-public-v1-oncall-current" "get-api-public-v1-org-routing-keys" "get-api-public-v1-overrides" "post-api-public-v1-overrides" "delete-api-public-v1-overrides-public-id" "get-api-public-v1-overrides-public-id" "get-api-public-v1-overrides-public-id-assignments" "delete-api-public-v1-overrides-public-id-assignments-policy-slug" "get-api-public-v1-overrides-public-id-assignments-policy-slug" "put-api-public-v1-overrides-public-id-assignments-policy-slug" "get-api-public-v1-policies" "get-api-public-v1-policies-types-contacts" "get-api-public-v1-policies-types-notifications" "get-api-public-v1-policies-types-timeouts" "patch-api-public-v1-policies-policy-oncall-user" "get-api-public-v1-profile-username-policies" "post-api-public-v1-profile-username-policies" "get-api-public-v1-profile-username-policies-step" "post-api-public-v1-profile-username-policies-step" "put-api-public-v1-profile-username-policies-step" "delete-api-public-v1-profile-username-policies-step-rule" "get-api-public-v1-profile-username-policies-step-rule" "put-api-public-v1-profile-username-policies-step-rule" "get-api-public-v1-team" "post-api-public-v1-team" "delete-api-public-v1-team-team" "get-api-public-v1-team-team" "put-api-public-v1-team-team" "get-api-public-v1-team-team-admins" "get-api-public-v1-team-team-members" "post-api-public-v1-team-team-members" "delete-api-public-v1-team-team-members-user" "get-api-public-v1-team-team-oncall-schedule" "patch-api-public-v1-team-team-oncall-user" "get-api-public-v1-team-team-policies" "get-api-public-v1-user" "post-api-public-v1-user" "delete-api-public-v1-user-user" "get-api-public-v1-user-user" "put-api-public-v1-user-user" "get-api-public-v1-user-user-contact-methods" "get-api-public-v1-user-user-contact-methods-devices" "delete-api-public-v1-user-user-contact-methods-devices-contact-id" "get-api-public-v1-user-user-contact-methods-devices-contact-id" "put-api-public-v1-user-user-contact-methods-devices-contact-id" "get-api-public-v1-user-user-contact-methods-emails" "post-api-public-v1-user-user-contact-methods-emails" "delete-api-public-v1-user-user-contact-methods-emails-contact-id" "get-api-public-v1-user-user-contact-methods-emails-contact-id" "get-api-public-v1-user-user-contact-methods-phones" "post-api-public-v1-user-user-contact-methods-phones" "delete-api-public-v1-user-user-contact-methods-phones-contact-id" "get-api-public-v1-user-user-contact-methods-phones-contact-id" "get-api-public-v1-user-user-oncall-schedule" "get-api-public-v1-user-user-policies" "get-api-public-v1-user-user-teams" "get-api-public-v2-team-team-oncall-schedule" "get-api-public-v2-user-user-oncall-schedule" "get-api-reporting-v1-incidents" "get-api-reporting-v1-team-team-oncall-log" "get-api-reporting-v2-incidents" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -161,7 +185,7 @@ export def "get-api-public-v1-alerts-uuid" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-vo-api-id: string # Your API ID (required)
   --x-vo-api-key: string # Your API Key (required)
-]: nothing -> record<ackAuthor: string, ackMsg: string, entityDisplayName: string, entityId: string, messageType: string, monitoringTool: string, raw: string, stateMessage: string, stateStartTime: float, timestamp: float> {
+]: nothing -> oneof<record<ackAuthor: string, ackMsg: string, entityDisplayName: string, entityId: string, messageType: string, monitoringTool: string, raw: string, stateMessage: string, stateStartTime: float, timestamp: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($uuid | is-empty) { error make --unspanned { msg: "path parameter 'uuid' must be non-empty" } }
@@ -201,7 +225,7 @@ export def "get-api-public-v1-incidents" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-vo-api-id: string # Your API ID (required)
   --x-vo-api-key: string # Your API Key (required)
-]: nothing -> record<incidents: table<alertCount: float, currentPhase: string, entityId: string, host: string, incidentNumber: string, lastAlertId: string, lastAlertTime: string, pagedPolicies: list, pagedTeams: list, pagedUsers: list, service: string, startTime: string, transitions: list>> {
+]: nothing -> oneof<record<incidents: table<alertCount: float, currentPhase: string, entityId: string, host: string, incidentNumber: string, lastAlertId: string, lastAlertTime: string, pagedPolicies: list, pagedTeams: list, pagedUsers: list, service: string, startTime: string, transitions: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
@@ -228,7 +252,6 @@ export def "get-api-public-v1-incidents" [
 # Create a new incident
 #
 # POST /api-public/v1/incidents
-# --targets item shape: {slug: string, type: "User"|"EscalationPolicy"}
 export def "post-api-public-v1-incidents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -245,7 +268,7 @@ export def "post-api-public-v1-incidents" [
   summary: string
   targets: list # item shape: {slug: string, type: "User"|"EscalationPolicy"}
   user_name: string
-]: any -> record<error: string, incidentNumber: string> {
+]: any -> oneof<record<error: string, incidentNumber: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -290,7 +313,7 @@ export def "patch-api-public-v1-incidents-ack" [
   incident_names: list<string>
   --message: string
   user_name: string
-]: any -> record<results: table<cmdAccepted: bool, entityId: string, incidentNumber: string, message: string>> {
+]: any -> oneof<record<results: table<cmdAccepted: bool, entityId: string, incidentNumber: string, message: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -334,7 +357,7 @@ export def "patch-api-public-v1-incidents-by-user-ack" [
   --x-vo-api-key: string # Your API Key (required)
   --message: string
   user_name: string
-]: any -> record<results: table<cmdAccepted: bool, entityId: string, incidentNumber: string, message: string>> {
+]: any -> oneof<record<results: table<cmdAccepted: bool, entityId: string, incidentNumber: string, message: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -378,7 +401,7 @@ export def "patch-api-public-v1-incidents-by-user-resolve" [
   --x-vo-api-key: string # Your API Key (required)
   --message: string
   user_name: string
-]: any -> record<results: table<cmdAccepted: bool, entityId: string, incidentNumber: string, message: string>> {
+]: any -> oneof<record<results: table<cmdAccepted: bool, entityId: string, incidentNumber: string, message: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -408,7 +431,6 @@ export def "patch-api-public-v1-incidents-by-user-resolve" [
 # Reroute one or more incidents to one or more new routable destinations.
 #
 # POST /api-public/v1/incidents/reroute
-# --reroutes item shape: {incidentNumber: string, targets: list}
 export def "post-api-public-v1-incidents-reroute" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -423,7 +445,7 @@ export def "post-api-public-v1-incidents-reroute" [
   --x-vo-api-key: string # Your API Key (required)
   reroutes: list # item shape: {incidentNumber: string, targets: list}
   user_name: string
-]: any -> record<statuses: table<incidentNumber: string, message: string, success: bool, targetStatus: list>> {
+]: any -> oneof<record<statuses: table<incidentNumber: string, message: string, success: bool, targetStatus: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -468,7 +490,7 @@ export def "patch-api-public-v1-incidents-resolve" [
   incident_names: list<string>
   --message: string
   user_name: string
-]: any -> record<results: table<cmdAccepted: bool, entityId: string, incidentNumber: string, message: string>> {
+]: any -> oneof<record<results: table<cmdAccepted: bool, entityId: string, incidentNumber: string, message: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -510,7 +532,7 @@ export def "get-api-public-v1-maintenancemode" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-vo-api-id: string # Your API ID (required)
   --x-vo-api-key: string # Your API Key (required)
-]: nothing -> record<activeInstances: table<instanceId: string, isGlobal: bool, startedAt: float, startedBy: string, targets: list>, companyId: string> {
+]: nothing -> oneof<record<activeInstances: table<instanceId: string, isGlobal: bool, startedAt: float, startedBy: string, targets: list>, companyId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
@@ -552,7 +574,7 @@ export def "post-api-public-v1-maintenancemode-start" [
   --names: list<string> # Routing keys that maintenance mode state covers. An empty list indicates global maintenance mode
   --purpose: string # the reason for the maintenance mode
   --type: string@type-completer
-]: any -> record<activeInstances: table<instanceId: string, isGlobal: bool, startedAt: float, startedBy: string, targets: list>, companyId: string> {
+]: any -> oneof<record<activeInstances: table<instanceId: string, isGlobal: bool, startedAt: float, startedBy: string, targets: list>, companyId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -595,7 +617,7 @@ export def "put-api-public-v1-maintenancemode-maintenancemodeid-end" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-vo-api-id: string # Your API ID (required)
   --x-vo-api-key: string # Your API Key (required)
-]: nothing -> record<activeInstances: table<instanceId: string, isGlobal: bool, startedAt: float, startedBy: string, targets: list>, companyId: string> {
+]: nothing -> oneof<record<activeInstances: table<instanceId: string, isGlobal: bool, startedAt: float, startedBy: string, targets: list>, companyId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($maintenancemodeid | is-empty) { error make --unspanned { msg: "path parameter 'maintenancemodeid' must be non-empty" } }
@@ -635,7 +657,7 @@ export def "get-api-public-v1-oncall-current" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-vo-api-id: string # Your API ID (required)
   --x-vo-api-key: string # Your API Key (required)
-]: nothing -> record<teamsOnCall: table<onCallNow: list, team: record>> {
+]: nothing -> oneof<record<teamsOnCall: table<onCallNow: list, team: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
@@ -674,7 +696,7 @@ export def "get-api-public-v1-org-routing-keys" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-vo-api-id: string # Your API ID (required)
   --x-vo-api-key: string # Your API Key (required)
-]: nothing -> record<_selfUrl: string, routingKeys: table<isDefault: bool, routingKey: string, targets: list>> {
+]: nothing -> oneof<record<_selfUrl: string, routingKeys: table<isDefault: bool, routingKey: string, targets: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
@@ -713,7 +735,7 @@ export def "get-api-public-v1-overrides" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-vo-api-id: string # Your API ID (required)
   --x-vo-api-key: string # Your API Key (required)
-]: nothing -> record<_selfUrl: string, overrides: table<assignments: list, end: string, publicId: string, start: string, timezone: string, user: record>> {
+]: nothing -> oneof<record<_selfUrl: string, overrides: table<assignments: list, end: string, publicId: string, start: string, timezone: string, user: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
@@ -756,7 +778,7 @@ export def "post-api-public-v1-overrides" [
   --start: string # The override start time (ISO 8601)
   --timezone: string
   --username: string
-]: any -> record<_selfUrl: string, schedule: record<assignments: list<record>, end: string, publicId: string, start: string, timezone: string, user: record<firstName: string, lastName: string, username: string>>> {
+]: any -> oneof<record<_selfUrl: string, schedule: record<assignments: list<record>, end: string, publicId: string, start: string, timezone: string, user: record<firstName: string, lastName: string, username: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -840,7 +862,7 @@ export def "get-api-public-v1-overrides-public-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-vo-api-id: string # Your API ID (required)
   --x-vo-api-key: string # Your API Key (required)
-]: nothing -> record<_selfUrl: string, override: record<assignments: list<record>, end: string, publicId: string, start: string, timezone: string, user: record<firstName: string, lastName: string, username: string>>> {
+]: nothing -> oneof<record<_selfUrl: string, override: record<assignments: list<record>, end: string, publicId: string, start: string, timezone: string, user: record<firstName: string, lastName: string, username: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($public_id | is-empty) { error make --unspanned { msg: "path parameter 'publicId' must be non-empty" } }
@@ -881,7 +903,7 @@ export def "get-api-public-v1-overrides-public-id-assignments" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-vo-api-id: string # Your API ID (required)
   --x-vo-api-key: string # Your API Key (required)
-]: nothing -> table<_selfUrl: string, assigned: bool, policy: string, team: string, user: string> {
+]: nothing -> oneof<table<_selfUrl: string, assigned: bool, policy: string, team: string, user: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($public_id | is-empty) { error make --unspanned { msg: "path parameter 'publicId' must be non-empty" } }
@@ -923,7 +945,7 @@ export def "delete-api-public-v1-overrides-public-id-assignments-policy-slug" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-vo-api-id: string # Your API ID (required)
   --x-vo-api-key: string # Your API Key (required)
-]: nothing -> record<_selfUrl: string, assigned: bool, policy: string, team: string, user: string> {
+]: nothing -> oneof<record<_selfUrl: string, assigned: bool, policy: string, team: string, user: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($public_id | is-empty) { error make --unspanned { msg: "path parameter 'publicId' must be non-empty" } }
@@ -966,7 +988,7 @@ export def "get-api-public-v1-overrides-public-id-assignments-policy-slug" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-vo-api-id: string # Your API ID (required)
   --x-vo-api-key: string # Your API Key (required)
-]: nothing -> record<_selfUrl: string, assigned: bool, policy: string, team: string, user: string> {
+]: nothing -> oneof<record<_selfUrl: string, assigned: bool, policy: string, team: string, user: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($public_id | is-empty) { error make --unspanned { msg: "path parameter 'publicId' must be non-empty" } }
@@ -1011,7 +1033,7 @@ export def "put-api-public-v1-overrides-public-id-assignments-policy-slug" [
   --x-vo-api-key: string # Your API Key (required)
   policy: string # The policy slug
   --username: string # The username being assinged
-]: any -> record<_selfUrl: string, assigned: bool, policy: string, team: string, user: string> {
+]: any -> oneof<record<_selfUrl: string, assigned: bool, policy: string, team: string, user: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1055,7 +1077,7 @@ export def "get-api-public-v1-policies" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-vo-api-id: string # Your API ID (required)
   --x-vo-api-key: string # Your API Key (required)
-]: nothing -> record<policies: table<policy: record, team: record>> {
+]: nothing -> oneof<record<policies: table<policy: record, team: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
@@ -1094,7 +1116,7 @@ export def "get-api-public-v1-policies-types-contacts" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-vo-api-id: string # Your API ID (required)
   --x-vo-api-key: string # Your API Key (required)
-]: nothing -> record<_selfUrl: string, contactTypes: table<description: string, type: string>> {
+]: nothing -> oneof<record<_selfUrl: string, contactTypes: table<description: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
@@ -1133,7 +1155,7 @@ export def "get-api-public-v1-policies-types-notifications" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-vo-api-id: string # Your API ID (required)
   --x-vo-api-key: string # Your API Key (required)
-]: nothing -> record<_selfUrl: string, notificationTypes: table<description: string, type: string>> {
+]: nothing -> oneof<record<_selfUrl: string, notificationTypes: table<description: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
@@ -1172,7 +1194,7 @@ export def "get-api-public-v1-policies-types-timeouts" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-vo-api-id: string # Your API ID (required)
   --x-vo-api-key: string # Your API Key (required)
-]: nothing -> record<_selfUrl: string, timeoutTypes: table<description: string, type: int>> {
+]: nothing -> oneof<record<_selfUrl: string, timeoutTypes: table<description: string, type: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
@@ -1214,7 +1236,7 @@ export def "patch-api-public-v1-policies-policy-oncall-user" [
   --x-vo-api-key: string # Your API Key (required)
   from_user: string
   to_user: string
-]: any -> record<result: string> {
+]: any -> oneof<record<result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1258,7 +1280,7 @@ export def "get-api-public-v1-profile-username-policies" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-vo-api-id: string # Your API ID (required)
   --x-vo-api-key: string # Your API Key (required)
-]: nothing -> record<_selfUrl: string, steps: table<index: float, rules: list, timeout: int>> {
+]: nothing -> oneof<record<_selfUrl: string, steps: table<index: float, rules: list, timeout: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
@@ -1286,7 +1308,6 @@ export def "get-api-public-v1-profile-username-policies" [
 # Create a paging policy step
 #
 # POST /api-public/v1/profile/{username}/policies
-# --rules item shape: {contact?: record, type?: "push"|"email"|"sms"|"phone"}
 export def "post-api-public-v1-profile-username-policies" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1302,7 +1323,7 @@ export def "post-api-public-v1-profile-username-policies" [
   --x-vo-api-key: string # Your API Key (required)
   --rules: list # item shape: {contact?: record, type?: "push"|"email"|"sms"|"phone"}
   --timeout: int@timeout-completer
-]: any -> record<_selfUrl: string, step: record<index: float, rules: list<record>, timeout: int>> {
+]: any -> oneof<record<_selfUrl: string, step: record<index: float, rules: list<record>, timeout: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1347,7 +1368,7 @@ export def "get-api-public-v1-profile-username-policies-step" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-vo-api-id: string # Your API ID (required)
   --x-vo-api-key: string # Your API Key (required)
-]: nothing -> record<_selfUrl: string, step: record<index: float, rules: list<record>, timeout: int>> {
+]: nothing -> oneof<record<_selfUrl: string, step: record<index: float, rules: list<record>, timeout: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
@@ -1376,7 +1397,6 @@ export def "get-api-public-v1-profile-username-policies-step" [
 # Create a rule for a paging policy step
 #
 # POST /api-public/v1/profile/{username}/policies/{step}
-# --contact shape: {id?: float, type?: "email"|"phone"}
 export def "post-api-public-v1-profile-username-policies-step" [
   username: string
   step: float
@@ -1393,7 +1413,7 @@ export def "post-api-public-v1-profile-username-policies-step" [
   --x-vo-api-key: string # Your API Key (required)
   --contact: record # shape: {id?: float, type?: "email"|"phone"}
   --type: string@type-completer-1 # e.g. email
-]: any -> record<_selfUrl: string, stepRule: record<contact: record<id: float, type: string>, index: float, type: string>> {
+]: any -> oneof<record<_selfUrl: string, stepRule: record<contact: record<id: float, type: string>, index: float, type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1425,7 +1445,6 @@ export def "post-api-public-v1-profile-username-policies-step" [
 # Update a paging policy step
 #
 # PUT /api-public/v1/profile/{username}/policies/{step}
-# --rules item shape: {contact?: record, type?: "push"|"email"|"sms"|"phone"}
 export def "put-api-public-v1-profile-username-policies-step" [
   username: string
   step: float
@@ -1442,7 +1461,7 @@ export def "put-api-public-v1-profile-username-policies-step" [
   --x-vo-api-key: string # Your API Key (required)
   --rules: list # item shape: {contact?: record, type?: "push"|"email"|"sms"|"phone"}
   --timeout: int@timeout-completer
-]: any -> record<_selfUrl: string, step: record<index: float, rules: list<record>, timeout: int>> {
+]: any -> oneof<record<_selfUrl: string, step: record<index: float, rules: list<record>, timeout: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1489,7 +1508,7 @@ export def "delete-api-public-v1-profile-username-policies-step-rule" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-vo-api-id: string # Your API ID (required)
   --x-vo-api-key: string # Your API Key (required)
-]: nothing -> record<_selfUrl: string, stepRule: record<contact: record<id: float, type: string>, index: float, type: string>> {
+]: nothing -> oneof<record<_selfUrl: string, stepRule: record<contact: record<id: float, type: string>, index: float, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
@@ -1534,7 +1553,7 @@ export def "get-api-public-v1-profile-username-policies-step-rule" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-vo-api-id: string # Your API ID (required)
   --x-vo-api-key: string # Your API Key (required)
-]: nothing -> record<_selfUrl: string, stepRule: record<contact: record<id: float, type: string>, index: float, type: string>> {
+]: nothing -> oneof<record<_selfUrl: string, stepRule: record<contact: record<id: float, type: string>, index: float, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
@@ -1564,7 +1583,6 @@ export def "get-api-public-v1-profile-username-policies-step-rule" [
 # Update a rule for a paging policy step
 #
 # PUT /api-public/v1/profile/{username}/policies/{step}/{rule}
-# --contact shape: {id?: float, type?: "email"|"phone"}
 export def "put-api-public-v1-profile-username-policies-step-rule" [
   username: string
   step: float
@@ -1582,7 +1600,7 @@ export def "put-api-public-v1-profile-username-policies-step-rule" [
   --x-vo-api-key: string # Your API Key (required)
   --contact: record # shape: {id?: float, type?: "email"|"phone"}
   --type: string@type-completer-1 # e.g. email
-]: any -> record<_selfUrl: string, stepRule: record<contact: record<id: float, type: string>, index: float, type: string>> {
+]: any -> oneof<record<_selfUrl: string, stepRule: record<contact: record<id: float, type: string>, index: float, type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1627,7 +1645,7 @@ export def "get-api-public-v1-team" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-vo-api-id: string # Your API ID (required)
   --x-vo-api-key: string # Your API Key (required)
-]: nothing -> table<_adminsUrl: string, _membersUrl: string, _policiesUrl: string, _selfUrl: string, isDefaultTeam: bool, memberCount: float, name: string, slug: string, version: float> {
+]: nothing -> oneof<table<_adminsUrl: string, _membersUrl: string, _policiesUrl: string, _selfUrl: string, isDefaultTeam: bool, memberCount: float, name: string, slug: string, version: float>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
@@ -1667,7 +1685,7 @@ export def "post-api-public-v1-team" [
   --x-vo-api-id: string # Your API ID (required)
   --x-vo-api-key: string # Your API Key (required)
   name: string
-]: any -> record<_adminsUrl: string, _membersUrl: string, _policiesUrl: string, _selfUrl: string, isDefaultTeam: bool, memberCount: float, name: string, slug: string, version: float> {
+]: any -> oneof<record<_adminsUrl: string, _membersUrl: string, _policiesUrl: string, _selfUrl: string, isDefaultTeam: bool, memberCount: float, name: string, slug: string, version: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1751,7 +1769,7 @@ export def "get-api-public-v1-team-team" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-vo-api-id: string # Your API ID (required)
   --x-vo-api-key: string # Your API Key (required)
-]: nothing -> record<_adminsUrl: string, _membersUrl: string, _policiesUrl: string, _selfUrl: string, isDefaultTeam: bool, memberCount: float, name: string, slug: string, version: float> {
+]: nothing -> oneof<record<_adminsUrl: string, _membersUrl: string, _policiesUrl: string, _selfUrl: string, isDefaultTeam: bool, memberCount: float, name: string, slug: string, version: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($team | is-empty) { error make --unspanned { msg: "path parameter 'team' must be non-empty" } }
@@ -1793,7 +1811,7 @@ export def "put-api-public-v1-team-team" [
   --x-vo-api-id: string # Your API ID (required)
   --x-vo-api-key: string # Your API Key (required)
   name: string
-]: any -> record<_adminsUrl: string, _membersUrl: string, _policiesUrl: string, _selfUrl: string, isDefaultTeam: bool, memberCount: float, name: string, slug: string, version: float> {
+]: any -> oneof<record<_adminsUrl: string, _membersUrl: string, _policiesUrl: string, _selfUrl: string, isDefaultTeam: bool, memberCount: float, name: string, slug: string, version: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1837,7 +1855,7 @@ export def "get-api-public-v1-team-team-admins" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-vo-api-id: string # Your API ID (required)
   --x-vo-api-key: string # Your API Key (required)
-]: nothing -> record<teamAdmins: table<_selfUrl: string, firstName: string, lastName: string, username: string>> {
+]: nothing -> oneof<record<teamAdmins: table<_selfUrl: string, firstName: string, lastName: string, username: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($team | is-empty) { error make --unspanned { msg: "path parameter 'team' must be non-empty" } }
@@ -1878,7 +1896,7 @@ export def "get-api-public-v1-team-team-members" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-vo-api-id: string # Your API ID (required)
   --x-vo-api-key: string # Your API Key (required)
-]: nothing -> record<_selfUrl: string, _teamUrl: string, members: table<firstName: string, lastName: string, username: string, verified: string, version: float>> {
+]: nothing -> oneof<record<_selfUrl: string, _teamUrl: string, members: table<firstName: string, lastName: string, username: string, verified: string, version: float>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($team | is-empty) { error make --unspanned { msg: "path parameter 'team' must be non-empty" } }
@@ -1920,7 +1938,7 @@ export def "post-api-public-v1-team-team-members" [
   --x-vo-api-id: string # Your API ID (required)
   --x-vo-api-key: string # Your API Key (required)
   username: string
-]: any -> record<_selfUrl: string, _teamUrl: string, members: table<firstName: string, lastName: string, username: string, verified: string, version: float>> {
+]: any -> oneof<record<_selfUrl: string, _teamUrl: string, members: table<firstName: string, lastName: string, username: string, verified: string, version: float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2016,7 +2034,7 @@ export def "get-api-public-v1-team-team-oncall-schedule" [
   --step: float # Step of escalation policy (3 max) (default: 0)
   --x-vo-api-id: string # Your API ID (required)
   --x-vo-api-key: string # Your API Key (required)
-]: nothing -> record<overrides: table<end: float, orig: string, over: string, start: float>, schedule: table<oncall: string, overrideoncall: string, policyType: string, rolls: list, rotationName: string, shiftName: string, shiftRoll: float>, team: string> {
+]: nothing -> oneof<record<overrides: table<end: float, orig: string, over: string, start: float>, schedule: table<oncall: string, overrideoncall: string, policyType: string, rolls: list, rotationName: string, shiftName: string, shiftRoll: float>, team: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($team | is-empty) { error make --unspanned { msg: "path parameter 'team' must be non-empty" } }
@@ -2062,7 +2080,7 @@ export def "patch-api-public-v1-team-team-oncall-user" [
   --x-vo-api-key: string # Your API Key (required)
   from_user: string
   to_user: string
-]: any -> record<result: string> {
+]: any -> oneof<record<result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2106,7 +2124,7 @@ export def "get-api-public-v1-team-team-policies" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-vo-api-id: string # Your API ID (required)
   --x-vo-api-key: string # Your API Key (required)
-]: nothing -> record<policies: table<name: string, slug: string>> {
+]: nothing -> oneof<record<policies: table<name: string, slug: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($team | is-empty) { error make --unspanned { msg: "path parameter 'team' must be non-empty" } }
@@ -2146,7 +2164,7 @@ export def "get-api-public-v1-user" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-vo-api-id: string # Your API ID (required)
   --x-vo-api-key: string # Your API Key (required)
-]: nothing -> record<_selfUrl: string, users: table<_selfUrl: string, createdAt: string, email: string, firstName: string, lastName: string, passwordLastUpdated: string, username: string, verified: bool>> {
+]: nothing -> oneof<record<_selfUrl: string, users: table<_selfUrl: string, createdAt: string, email: string, firstName: string, lastName: string, passwordLastUpdated: string, username: string, verified: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
@@ -2191,7 +2209,7 @@ export def "post-api-public-v1-user" [
   first_name: string
   last_name: string
   username: string
-]: any -> record<_selfUrl: string, createdAt: string, email: string, firstName: string, lastName: string, passwordLastUpdated: string, username: string, verified: bool> {
+]: any -> oneof<record<_selfUrl: string, createdAt: string, email: string, firstName: string, lastName: string, passwordLastUpdated: string, username: string, verified: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2279,7 +2297,7 @@ export def "get-api-public-v1-user-user" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-vo-api-id: string # Your API ID (required)
   --x-vo-api-key: string # Your API Key (required)
-]: nothing -> record<_selfUrl: string, createdAt: string, email: string, firstName: string, lastName: string, passwordLastUpdated: string, username: string, verified: bool> {
+]: nothing -> oneof<record<_selfUrl: string, createdAt: string, email: string, firstName: string, lastName: string, passwordLastUpdated: string, username: string, verified: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
@@ -2326,7 +2344,7 @@ export def "put-api-public-v1-user-user" [
   first_name: string
   last_name: string
   username: string
-]: any -> record<_selfUrl: string, createdAt: string, email: string, firstName: string, lastName: string, passwordLastUpdated: string, username: string, verified: bool> {
+]: any -> oneof<record<_selfUrl: string, createdAt: string, email: string, firstName: string, lastName: string, passwordLastUpdated: string, username: string, verified: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2370,7 +2388,7 @@ export def "get-api-public-v1-user-user-contact-methods" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-vo-api-id: string # Your API ID (required)
   --x-vo-api-key: string # Your API Key (required)
-]: nothing -> record<devices: table<_selfUrl: string, deviceType: string, extId: string, label: string>, emails: table<_selfUrl: string, deviceType: string, extId: string, label: string>, phones: table<_selfUrl: string, deviceType: string, extId: string, label: string>> {
+]: nothing -> oneof<record<devices: table<_selfUrl: string, deviceType: string, extId: string, label: string>, emails: table<_selfUrl: string, deviceType: string, extId: string, label: string>, phones: table<_selfUrl: string, deviceType: string, extId: string, label: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
@@ -2411,7 +2429,7 @@ export def "get-api-public-v1-user-user-contact-methods-devices" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-vo-api-id: string # Your API ID (required)
   --x-vo-api-key: string # Your API Key (required)
-]: nothing -> table<_selfUrl: string, deviceType: string, extId: string, label: string> {
+]: nothing -> oneof<table<_selfUrl: string, deviceType: string, extId: string, label: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
@@ -2453,7 +2471,7 @@ export def "delete-api-public-v1-user-user-contact-methods-devices-contact-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-vo-api-id: string # Your API ID (required)
   --x-vo-api-key: string # Your API Key (required)
-]: nothing -> record<_selfUrl: string, deviceType: string, extId: string, label: string> {
+]: nothing -> oneof<record<_selfUrl: string, deviceType: string, extId: string, label: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
@@ -2496,7 +2514,7 @@ export def "get-api-public-v1-user-user-contact-methods-devices-contact-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-vo-api-id: string # Your API ID (required)
   --x-vo-api-key: string # Your API Key (required)
-]: nothing -> table<_selfUrl: string, deviceType: string, extId: string, label: string> {
+]: nothing -> oneof<table<_selfUrl: string, deviceType: string, extId: string, label: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
@@ -2543,7 +2561,7 @@ export def "put-api-public-v1-user-user-contact-methods-devices-contact-id" [
   --device-label: string
   --escalation-notification-sound: string
   --resolved-notification-sound: string
-]: any -> record<_selfUrl: string, deviceType: string, extId: string, label: string> {
+]: any -> oneof<record<_selfUrl: string, deviceType: string, extId: string, label: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2588,7 +2606,7 @@ export def "get-api-public-v1-user-user-contact-methods-emails" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-vo-api-id: string # Your API ID (required)
   --x-vo-api-key: string # Your API Key (required)
-]: nothing -> table<_selfUrl: string, deviceType: string, extId: string, label: string> {
+]: nothing -> oneof<table<_selfUrl: string, deviceType: string, extId: string, label: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
@@ -2632,7 +2650,7 @@ export def "post-api-public-v1-user-user-contact-methods-emails" [
   email: string # format: email
   label: string
   --rank: int
-]: any -> record<_selfUrl: string, deviceType: string, extId: string, label: string> {
+]: any -> oneof<record<_selfUrl: string, deviceType: string, extId: string, label: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2677,7 +2695,7 @@ export def "delete-api-public-v1-user-user-contact-methods-emails-contact-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-vo-api-id: string # Your API ID (required)
   --x-vo-api-key: string # Your API Key (required)
-]: nothing -> record<_selfUrl: string, deviceType: string, extId: string, label: string> {
+]: nothing -> oneof<record<_selfUrl: string, deviceType: string, extId: string, label: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
@@ -2720,7 +2738,7 @@ export def "get-api-public-v1-user-user-contact-methods-emails-contact-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-vo-api-id: string # Your API ID (required)
   --x-vo-api-key: string # Your API Key (required)
-]: nothing -> table<_selfUrl: string, deviceType: string, extId: string, label: string> {
+]: nothing -> oneof<table<_selfUrl: string, deviceType: string, extId: string, label: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
@@ -2762,7 +2780,7 @@ export def "get-api-public-v1-user-user-contact-methods-phones" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-vo-api-id: string # Your API ID (required)
   --x-vo-api-key: string # Your API Key (required)
-]: nothing -> table<_selfUrl: string, deviceType: string, extId: string, label: string> {
+]: nothing -> oneof<table<_selfUrl: string, deviceType: string, extId: string, label: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
@@ -2806,7 +2824,7 @@ export def "post-api-public-v1-user-user-contact-methods-phones" [
   label: string
   phone: string
   --rank: int
-]: any -> record<_selfUrl: string, deviceType: string, extId: string, label: string> {
+]: any -> oneof<record<_selfUrl: string, deviceType: string, extId: string, label: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2851,7 +2869,7 @@ export def "delete-api-public-v1-user-user-contact-methods-phones-contact-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-vo-api-id: string # Your API ID (required)
   --x-vo-api-key: string # Your API Key (required)
-]: nothing -> record<_selfUrl: string, deviceType: string, extId: string, label: string> {
+]: nothing -> oneof<record<_selfUrl: string, deviceType: string, extId: string, label: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
@@ -2894,7 +2912,7 @@ export def "get-api-public-v1-user-user-contact-methods-phones-contact-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-vo-api-id: string # Your API ID (required)
   --x-vo-api-key: string # Your API Key (required)
-]: nothing -> table<_selfUrl: string, deviceType: string, extId: string, label: string> {
+]: nothing -> oneof<table<_selfUrl: string, deviceType: string, extId: string, label: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
@@ -2941,7 +2959,7 @@ export def "get-api-public-v1-user-user-oncall-schedule" [
   --step: float # Step of escalation policy (3 max) (default: 0)
   --x-vo-api-id: string # Your API ID (required)
   --x-vo-api-key: string # Your API Key (required)
-]: nothing -> table<overrides: list<record>, schedule: list<record>, team: string> {
+]: nothing -> oneof<table<overrides: list<record>, schedule: list<record>, team: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
@@ -2983,7 +3001,7 @@ export def "get-api-public-v1-user-user-policies" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-vo-api-id: string # Your API ID (required)
   --x-vo-api-key: string # Your API Key (required)
-]: nothing -> record<policies: table<contactType: string, extId: string, order: int, timeout: int>, userId: int, username: string> {
+]: nothing -> oneof<record<policies: table<contactType: string, extId: string, order: int, timeout: int>, userId: int, username: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
@@ -3024,7 +3042,7 @@ export def "get-api-public-v1-user-user-teams" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-vo-api-id: string # Your API ID (required)
   --x-vo-api-key: string # Your API Key (required)
-]: nothing -> record<teams: table<_adminsUrl: string, _membersUrl: string, _policiesUrl: string, _selfUrl: string, name: string, slug: string>> {
+]: nothing -> oneof<record<teams: table<_adminsUrl: string, _membersUrl: string, _policiesUrl: string, _selfUrl: string, name: string, slug: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
@@ -3068,7 +3086,7 @@ export def "get-api-public-v2-team-team-oncall-schedule" [
   --step: float # Step of escalation policy (3 max) (default: 0)
   --x-vo-api-id: string # Your API ID (required)
   --x-vo-api-key: string # Your API Key (required)
-]: nothing -> record<schedules: table<overrides: list, policy: record, schedule: list>, team: record<name: string, slug: string>> {
+]: nothing -> oneof<record<schedules: table<overrides: list, policy: record, schedule: list>, team: record<name: string, slug: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($team | is-empty) { error make --unspanned { msg: "path parameter 'team' must be non-empty" } }
@@ -3113,7 +3131,7 @@ export def "get-api-public-v2-user-user-oncall-schedule" [
   --step: float # Step of escalation policy (3 max) (default: 0)
   --x-vo-api-id: string # Your API ID (required)
   --x-vo-api-key: string # Your API Key (required)
-]: nothing -> record<teamSchedules: table<schedules: list, team: record>> {
+]: nothing -> oneof<record<teamSchedules: table<schedules: list, team: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
@@ -3165,7 +3183,7 @@ export def "get-api-reporting-v1-incidents" [
   --current-phase: string # The current phase of the incident "resolved", "triggered" or "acknowledged". Multiple values can be separated with commas.
   --x-vo-api-id: string # Your API ID (required)
   --x-vo-api-key: string # Your API Key (required)
-]: nothing -> table<incidents: list<record>, limit: float, offset: float, total: float> {
+]: nothing -> oneof<table<incidents: list<record>, limit: float, offset: float, total: float>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
@@ -3209,7 +3227,7 @@ export def "get-api-reporting-v1-team-team-oncall-log" [
   --user-name: string # The VictorOps user ID. Return shift changes occurring during the interval specified for this user. Without this parameter, all relevant users (with respect to the specified interval) are returned
   --x-vo-api-id: string # Your API ID (required)
   --x-vo-api-key: string # Your API Key (required)
-]: nothing -> record<end: string, start: string, teamSlug: string, userLogs: table<adjustedTotal: record, log: list, total: record, userId: string>> {
+]: nothing -> oneof<record<end: string, start: string, teamSlug: string, userLogs: table<adjustedTotal: record, log: list, total: record, userId: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($team | is-empty) { error make --unspanned { msg: "path parameter 'team' must be non-empty" } }
@@ -3260,7 +3278,7 @@ export def "get-api-reporting-v2-incidents" [
   --routing-key: string # The original routing of the incident
   --x-vo-api-id: string # Your API ID (required)
   --x-vo-api-key: string # Your API Key (required)
-]: nothing -> record<incidents: table<alertCount: float, currentPhase: string, entityId: string, host: string, incidentNumber: string, lastAlertId: string, lastAlertTime: string, pagedPolicies: list, pagedTeams: list, pagedUsers: list, service: string, startTime: string, transitions: list>> {
+]: nothing -> oneof<record<incidents: table<alertCount: float, currentPhase: string, entityId: string, host: string, incidentNumber: string, lastAlertId: string, lastAlertTime: string, pagedPolicies: list, pagedTeams: list, pagedUsers: list, service: string, startTime: string, transitions: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }

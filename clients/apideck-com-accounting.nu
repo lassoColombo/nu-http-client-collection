@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -129,9 +153,9 @@ def type-completer-4 [] { ["accounts_payable" "accounts_payable_credit" "account
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "balance-sheet-one" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["balance-sheet-one" "bills-all" "bills-add" "bills-delete" "bills-one" "bills-update" "company-info-one" "credit-notes-all" "credit-notes-add" "credit-notes-delete" "credit-notes-one" "credit-notes-update" "customers-all" "customers-add" "customers-delete" "customers-one" "customers-update" "invoice-items-all" "invoice-items-add" "invoice-items-delete" "invoice-items-one" "invoice-items-update" "invoices-all" "invoices-add" "invoices-delete" "invoices-one" "invoices-update" "journal-entries-all" "journal-entries-add" "journal-entries-delete" "journal-entries-one" "journal-entries-update" "ledger-accounts-all" "ledger-accounts-add" "ledger-accounts-delete" "ledger-accounts-one" "ledger-accounts-update" "payments-all" "payments-add" "payments-delete" "payments-one" "payments-update" "profit-and-loss-one" "suppliers-all" "suppliers-add" "suppliers-delete" "suppliers-one" "suppliers-update" "tax-rates-all" "tax-rates-add" "tax-rates-delete" "tax-rates-one" "tax-rates-update" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -169,7 +193,7 @@ export def "balance-sheet-one" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: record<assets: record<current_assets: record, fixed_assets: record, total: float>, created_at: string, created_by: string, end_date: string, equity: record<items: list, total: float>, id: string, liabilities: record<accounts: list, total: float>, report_name: string, start_date: string, updated_at: string, updated_by: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: record<assets: record<current_assets: record, fixed_assets: record, total: float>, created_at: string, created_by: string, end_date: string, equity: record<items: list, total: float>, id: string, liabilities: record<accounts: list, total: float>, report_name: string, start_date: string, updated_at: string, updated_by: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
@@ -217,7 +241,7 @@ export def "bills-all" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: table<balance: float, bill_date: string, bill_number: string, created_at: string, created_by: string, currency: string, currency_rate: float, deposit: float, downstream_id: string, due_date: string, id: string, ledger_account: record, line_items: list, notes: string, paid_date: string, po_number: string, reference: string, row_version: string, status: string, sub_total: float, supplier: record, tax_code: string, tax_inclusive: bool, terms: string, total: float, total_tax: float, updated_at: string, updated_by: string>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: table<balance: float, bill_date: string, bill_number: string, created_at: string, created_by: string, currency: string, currency_rate: float, deposit: float, downstream_id: string, due_date: string, id: string, ledger_account: record, line_items: list, notes: string, paid_date: string, po_number: string, reference: string, row_version: string, status: string, sub_total: float, supplier: record, tax_code: string, tax_inclusive: bool, terms: string, total: float, total_tax: float, updated_at: string, updated_by: string>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
@@ -246,9 +270,6 @@ export def "bills-all" [
 #
 # POST /accounting/bills
 # operationId: billsAdd
-# --ledger_account shape: {code?: string, id?: string, nominal_code?: string}
-# --line_items item shape: {code?: string, department_id?: string, description?: string, discount_percentage?: float, item?: record, ledger_account?: record, line_number?: int, location_id?: string, quantity?: float, row_id?: string, row_version?: string, tax_amount?: float, tax_rate?: record, total_amount?: float, type?: "expense_item"|"expense_account", unit_of_measure?: string, unit_price?: float}
-# --supplier shape: {address?: record, display_name?: string, id: string}
 export def "bills-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -285,7 +306,7 @@ export def "bills-add" [
   --terms: string # Terms of payment. (nullable, e.g. Net 30 days)
   --total: float # Total amount of bill, including tax. (nullable, e.g. 27500)
   --total-tax: float # Total tax amount applied to this bill. (nullable, e.g. 2500)
-]: any -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: any -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -332,7 +353,7 @@ export def "bills-delete" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -378,7 +399,7 @@ export def "bills-one" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: record<balance: float, bill_date: string, bill_number: string, created_at: string, created_by: string, currency: string, currency_rate: float, deposit: float, downstream_id: string, due_date: string, id: string, ledger_account: record<code: string, id: string, name: string, nominal_code: string>, line_items: list<record>, notes: string, paid_date: string, po_number: string, reference: string, row_version: string, status: string, sub_total: float, supplier: record<address: record, company_name: string, display_name: string, id: string>, tax_code: string, tax_inclusive: bool, terms: string, total: float, total_tax: float, updated_at: string, updated_by: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: record<balance: float, bill_date: string, bill_number: string, created_at: string, created_by: string, currency: string, currency_rate: float, deposit: float, downstream_id: string, due_date: string, id: string, ledger_account: record<code: string, id: string, name: string, nominal_code: string>, line_items: list<record>, notes: string, paid_date: string, po_number: string, reference: string, row_version: string, status: string, sub_total: float, supplier: record<address: record, company_name: string, display_name: string, id: string>, tax_code: string, tax_inclusive: bool, terms: string, total: float, total_tax: float, updated_at: string, updated_by: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -408,9 +429,6 @@ export def "bills-one" [
 #
 # PATCH /accounting/bills/{id}
 # operationId: billsUpdate
-# --ledger_account shape: {code?: string, id?: string, nominal_code?: string}
-# --line_items item shape: {code?: string, department_id?: string, description?: string, discount_percentage?: float, item?: record, ledger_account?: record, line_number?: int, location_id?: string, quantity?: float, row_id?: string, row_version?: string, tax_amount?: float, tax_rate?: record, total_amount?: float, type?: "expense_item"|"expense_account", unit_of_measure?: string, unit_price?: float}
-# --supplier shape: {address?: record, display_name?: string, id: string}
 export def "bills-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -448,7 +466,7 @@ export def "bills-update" [
   --terms: string # Terms of payment. (nullable, e.g. Net 30 days)
   --total: float # Total amount of bill, including tax. (nullable, e.g. 27500)
   --total-tax: float # Total tax amount applied to this bill. (nullable, e.g. 2500)
-]: any -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: any -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -496,7 +514,7 @@ export def "company-info-one" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: record<addresses: list<record>, automated_sales_tax: bool, company_name: string, company_start_date: string, country: string, created_at: string, created_by: string, currency: string, default_sales_tax: record<code: string, id: string, name: string, rate: float>, emails: list<record>, fiscal_year_start_month: string, id: string, language: string, legal_name: string, phone_numbers: list<record>, row_version: string, sales_tax_enabled: bool, sales_tax_number: string, status: string, updated_at: string, updated_by: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: record<addresses: list<record>, automated_sales_tax: bool, company_name: string, company_start_date: string, country: string, created_at: string, created_by: string, currency: string, default_sales_tax: record<code: string, id: string, name: string, rate: float>, emails: list<record>, fiscal_year_start_month: string, id: string, language: string, legal_name: string, phone_numbers: list<record>, row_version: string, sales_tax_enabled: bool, sales_tax_number: string, status: string, updated_at: string, updated_by: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
@@ -543,7 +561,7 @@ export def "credit-notes-all" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: table<account: record, allocations: list, balance: float, created_at: string, created_by: string, currency: string, currency_rate: float, customer: record, date_issued: string, date_paid: string, id: string, line_items: list, note: string, number: string, reference: string, remaining_credit: float, row_version: string, status: string, sub_total: float, tax_code: string, tax_inclusive: bool, terms: string, total_amount: float, total_tax: float, type: string, updated_at: string, updated_by: string>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: table<account: record, allocations: list, balance: float, created_at: string, created_by: string, currency: string, currency_rate: float, customer: record, date_issued: string, date_paid: string, id: string, line_items: list, note: string, number: string, reference: string, remaining_credit: float, row_version: string, status: string, sub_total: float, tax_code: string, tax_inclusive: bool, terms: string, total_amount: float, total_tax: float, type: string, updated_at: string, updated_by: string>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
@@ -572,10 +590,6 @@ export def "credit-notes-all" [
 #
 # POST /accounting/credit-notes
 # operationId: creditNotesAdd
-# --account shape: {code?: string, id?: string, nominal_code?: string}
-# --allocations item shape: {amount?: float, id?: string, type?: "invoice"|"order"|"expense"|"credit_memo"|"over_payment"|"pre_payment"}
-# --customer shape: {display_name?: string, id: string, name?: string}
-# --line_items item shape: {code?: string, department_id?: string, description?: string, discount_amount?: float, discount_percentage?: float, item?: record, ledger_account?: record, line_number?: int, location_id?: string, quantity?: float, row_id?: string, row_version?: string, tax_amount?: float, tax_rate?: record, total_amount?: float, type?: "sales_item"|"discount"|"info"|"sub_total", unit_of_measure?: string, unit_price?: float}
 export def "credit-notes-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -612,7 +626,7 @@ export def "credit-notes-add" [
   total_amount: float # Amount of transaction (e.g. 49.99)
   --total-tax: float # Total tax amount applied to this invoice. (nullable, e.g. 2500)
   --type: string@type-completer # Type of payment (e.g. accounts_receivable_credit)
-]: any -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: any -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -659,7 +673,7 @@ export def "credit-notes-delete" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -705,7 +719,7 @@ export def "credit-notes-one" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: record<account: record<code: string, id: string, name: string, nominal_code: string>, allocations: list<record>, balance: float, created_at: string, created_by: string, currency: string, currency_rate: float, customer: record<company_name: string, display_id: string, display_name: string, id: string, name: string>, date_issued: string, date_paid: string, id: string, line_items: list<record>, note: string, number: string, reference: string, remaining_credit: float, row_version: string, status: string, sub_total: float, tax_code: string, tax_inclusive: bool, terms: string, total_amount: float, total_tax: float, type: string, updated_at: string, updated_by: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: record<account: record<code: string, id: string, name: string, nominal_code: string>, allocations: list<record>, balance: float, created_at: string, created_by: string, currency: string, currency_rate: float, customer: record<company_name: string, display_id: string, display_name: string, id: string, name: string>, date_issued: string, date_paid: string, id: string, line_items: list<record>, note: string, number: string, reference: string, remaining_credit: float, row_version: string, status: string, sub_total: float, tax_code: string, tax_inclusive: bool, terms: string, total_amount: float, total_tax: float, type: string, updated_at: string, updated_by: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -735,10 +749,6 @@ export def "credit-notes-one" [
 #
 # PATCH /accounting/credit-notes/{id}
 # operationId: creditNotesUpdate
-# --account shape: {code?: string, id?: string, nominal_code?: string}
-# --allocations item shape: {amount?: float, id?: string, type?: "invoice"|"order"|"expense"|"credit_memo"|"over_payment"|"pre_payment"}
-# --customer shape: {display_name?: string, id: string, name?: string}
-# --line_items item shape: {code?: string, department_id?: string, description?: string, discount_amount?: float, discount_percentage?: float, item?: record, ledger_account?: record, line_number?: int, location_id?: string, quantity?: float, row_id?: string, row_version?: string, tax_amount?: float, tax_rate?: record, total_amount?: float, type?: "sales_item"|"discount"|"info"|"sub_total", unit_of_measure?: string, unit_price?: float}
 export def "credit-notes-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -776,7 +786,7 @@ export def "credit-notes-update" [
   total_amount: float # Amount of transaction (e.g. 49.99)
   --total-tax: float # Total tax amount applied to this invoice. (nullable, e.g. 2500)
   --type: string@type-completer # Type of payment (e.g. accounts_receivable_credit)
-]: any -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: any -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -828,7 +838,7 @@ export def "customers-all" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: table<account: record, addresses: list, bank_accounts: list, company_name: string, created_at: string, created_by: string, currency: string, display_id: string, display_name: string, downstream_id: string, emails: list, first_name: string, id: string, individual: bool, last_name: string, middle_name: string, notes: string, parent: record, phone_numbers: list, project: bool, row_version: string, status: string, suffix: string, tax_number: string, tax_rate: record, title: string, updated_at: string, updated_by: string, websites: list>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: table<account: record, addresses: list, bank_accounts: list, company_name: string, created_at: string, created_by: string, currency: string, display_id: string, display_name: string, downstream_id: string, emails: list, first_name: string, id: string, individual: bool, last_name: string, middle_name: string, notes: string, parent: record, phone_numbers: list, project: bool, row_version: string, status: string, suffix: string, tax_number: string, tax_rate: record, title: string, updated_at: string, updated_by: string, websites: list>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
@@ -857,14 +867,6 @@ export def "customers-all" [
 #
 # POST /accounting/customers
 # operationId: customersAdd
-# --account shape: {code?: string, id?: string, nominal_code?: string}
-# --addresses item shape: {city?: string, contact_name?: string, country?: string, county?: string, email?: string, fax?: string, id?: string, latitude?: string, line1?: string, line2?: string, line3?: string, line4?: string, longitude?: string, name?: string, phone_number?: string, postal_code?: string, row_version?: string, salutation?: string, state?: string, street_number?: string, string?: string, type?: "primary"|"secondary"|"home"|"office"|"shipping"|"billing"|"other", website?: string}
-# --bank_accounts item shape: {account_name?: string, account_number?: string, account_type?: "bank_account"|"credit_card"|"other", bank_code?: string, bic?: string, branch_identifier?: string, bsb_number?: string, ... (2 more fields)}
-# --emails item shape: {email: string, id?: string, type?: "primary"|"secondary"|"work"|"personal"|"billing"|"other"}
-# --parent shape: {id: string, name?: string}
-# --phone_numbers item shape: {area_code?: string, country_code?: string, extension?: string, id?: string, number: string, type?: "primary"|"secondary"|"home"|"work"|"office"|"mobile"|"assistant"|"fax"|"direct-dial-in"|"personal"|"other"}
-# --tax_rate shape: {id?: string}
-# --websites item shape: {id?: string, type?: "primary"|"secondary"|"work"|"personal"|"other", url: string}
 export def "customers-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -902,7 +904,7 @@ export def "customers-add" [
   --tax-rate: record # shape: {id?: string}
   --title: string # The job title of the person. (nullable, e.g. CEO)
   --websites: list # item shape: {id?: string, type?: "primary"|"secondary"|"work"|"personal"|"other", url: string}
-]: any -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: any -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -949,7 +951,7 @@ export def "customers-delete" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -995,7 +997,7 @@ export def "customers-one" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: record<account: record<code: string, id: string, name: string, nominal_code: string>, addresses: list<record>, bank_accounts: list<record>, company_name: string, created_at: string, created_by: string, currency: string, display_id: string, display_name: string, downstream_id: string, emails: list<record>, first_name: string, id: string, individual: bool, last_name: string, middle_name: string, notes: string, parent: record<id: string, name: string>, phone_numbers: list<record>, project: bool, row_version: string, status: string, suffix: string, tax_number: string, tax_rate: record<code: string, id: string, name: string, rate: float>, title: string, updated_at: string, updated_by: string, websites: list<record>>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: record<account: record<code: string, id: string, name: string, nominal_code: string>, addresses: list<record>, bank_accounts: list<record>, company_name: string, created_at: string, created_by: string, currency: string, display_id: string, display_name: string, downstream_id: string, emails: list<record>, first_name: string, id: string, individual: bool, last_name: string, middle_name: string, notes: string, parent: record<id: string, name: string>, phone_numbers: list<record>, project: bool, row_version: string, status: string, suffix: string, tax_number: string, tax_rate: record<code: string, id: string, name: string, rate: float>, title: string, updated_at: string, updated_by: string, websites: list<record>>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1025,14 +1027,6 @@ export def "customers-one" [
 #
 # PATCH /accounting/customers/{id}
 # operationId: customersUpdate
-# --account shape: {code?: string, id?: string, nominal_code?: string}
-# --addresses item shape: {city?: string, contact_name?: string, country?: string, county?: string, email?: string, fax?: string, id?: string, latitude?: string, line1?: string, line2?: string, line3?: string, line4?: string, longitude?: string, name?: string, phone_number?: string, postal_code?: string, row_version?: string, salutation?: string, state?: string, street_number?: string, string?: string, type?: "primary"|"secondary"|"home"|"office"|"shipping"|"billing"|"other", website?: string}
-# --bank_accounts item shape: {account_name?: string, account_number?: string, account_type?: "bank_account"|"credit_card"|"other", bank_code?: string, bic?: string, branch_identifier?: string, bsb_number?: string, ... (2 more fields)}
-# --emails item shape: {email: string, id?: string, type?: "primary"|"secondary"|"work"|"personal"|"billing"|"other"}
-# --parent shape: {id: string, name?: string}
-# --phone_numbers item shape: {area_code?: string, country_code?: string, extension?: string, id?: string, number: string, type?: "primary"|"secondary"|"home"|"work"|"office"|"mobile"|"assistant"|"fax"|"direct-dial-in"|"personal"|"other"}
-# --tax_rate shape: {id?: string}
-# --websites item shape: {id?: string, type?: "primary"|"secondary"|"work"|"personal"|"other", url: string}
 export def "customers-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1071,7 +1065,7 @@ export def "customers-update" [
   --tax-rate: record # shape: {id?: string}
   --title: string # The job title of the person. (nullable, e.g. CEO)
   --websites: list # item shape: {id?: string, type?: "primary"|"secondary"|"work"|"personal"|"other", url: string}
-]: any -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: any -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1123,7 +1117,7 @@ export def "invoice-items-all" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: table<active: bool, asset_account: record, code: string, created_at: string, created_by: string, description: string, expense_account: record, id: string, income_account: record, inventory_date: string, name: string, purchase_details: record, purchased: bool, quantity: float, row_version: string, sales_details: record, sold: bool, taxable: bool, tracked: bool, type: string, unit_price: float, updated_at: string, updated_by: string>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: table<active: bool, asset_account: record, code: string, created_at: string, created_by: string, description: string, expense_account: record, id: string, income_account: record, inventory_date: string, name: string, purchase_details: record, purchased: bool, quantity: float, row_version: string, sales_details: record, sold: bool, taxable: bool, tracked: bool, type: string, unit_price: float, updated_at: string, updated_by: string>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
@@ -1152,11 +1146,6 @@ export def "invoice-items-all" [
 #
 # POST /accounting/invoice-items
 # operationId: invoiceItemsAdd
-# --asset_account shape: {code?: string, id?: string, nominal_code?: string}
-# --expense_account shape: {code?: string, id?: string, nominal_code?: string}
-# --income_account shape: {code?: string, id?: string, nominal_code?: string}
-# --purchase_details shape: {tax_inclusive?: bool, tax_rate?: record, unit_of_measure?: string, unit_price?: float}
-# --sales_details shape: {tax_inclusive?: bool, tax_rate?: record, unit_of_measure?: string, unit_price?: float}
 export def "invoice-items-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1189,7 +1178,7 @@ export def "invoice-items-add" [
   --tracked: oneof<nothing, bool> # Item is inventoried (nullable, e.g. true)
   --type: string@type-completer-1 # Item type (nullable, e.g. inventory)
   --unit-price: float # nullable, e.g. 27500.5
-]: any -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: any -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1236,7 +1225,7 @@ export def "invoice-items-delete" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1282,7 +1271,7 @@ export def "invoice-items-one" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: record<active: bool, asset_account: record<code: string, id: string, name: string, nominal_code: string>, code: string, created_at: string, created_by: string, description: string, expense_account: record<code: string, id: string, name: string, nominal_code: string>, id: string, income_account: record<code: string, id: string, name: string, nominal_code: string>, inventory_date: string, name: string, purchase_details: record<tax_inclusive: bool, tax_rate: record, unit_of_measure: string, unit_price: float>, purchased: bool, quantity: float, row_version: string, sales_details: record<tax_inclusive: bool, tax_rate: record, unit_of_measure: string, unit_price: float>, sold: bool, taxable: bool, tracked: bool, type: string, unit_price: float, updated_at: string, updated_by: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: record<active: bool, asset_account: record<code: string, id: string, name: string, nominal_code: string>, code: string, created_at: string, created_by: string, description: string, expense_account: record<code: string, id: string, name: string, nominal_code: string>, id: string, income_account: record<code: string, id: string, name: string, nominal_code: string>, inventory_date: string, name: string, purchase_details: record<tax_inclusive: bool, tax_rate: record, unit_of_measure: string, unit_price: float>, purchased: bool, quantity: float, row_version: string, sales_details: record<tax_inclusive: bool, tax_rate: record, unit_of_measure: string, unit_price: float>, sold: bool, taxable: bool, tracked: bool, type: string, unit_price: float, updated_at: string, updated_by: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1312,11 +1301,6 @@ export def "invoice-items-one" [
 #
 # PATCH /accounting/invoice-items/{id}
 # operationId: invoiceItemsUpdate
-# --asset_account shape: {code?: string, id?: string, nominal_code?: string}
-# --expense_account shape: {code?: string, id?: string, nominal_code?: string}
-# --income_account shape: {code?: string, id?: string, nominal_code?: string}
-# --purchase_details shape: {tax_inclusive?: bool, tax_rate?: record, unit_of_measure?: string, unit_price?: float}
-# --sales_details shape: {tax_inclusive?: bool, tax_rate?: record, unit_of_measure?: string, unit_price?: float}
 export def "invoice-items-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1350,7 +1334,7 @@ export def "invoice-items-update" [
   --tracked: oneof<nothing, bool> # Item is inventoried (nullable, e.g. true)
   --type: string@type-completer-1 # Item type (nullable, e.g. inventory)
   --unit-price: float # nullable, e.g. 27500.5
-]: any -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: any -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1402,7 +1386,7 @@ export def "invoices-all" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: table<balance: float, billing_address: record, created_at: string, created_by: string, currency: string, currency_rate: float, customer: record, customer_memo: string, deposit: float, discount_amount: float, discount_percentage: float, downstream_id: string, due_date: string, id: string, invoice_date: string, invoice_sent: bool, line_items: list, number: string, po_number: string, reference: string, row_version: string, shipping_address: record, source_document_url: string, status: string, sub_total: float, tax_code: string, tax_inclusive: bool, template_id: string, terms: string, total: float, total_tax: float, type: string, updated_at: string, updated_by: string>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: table<balance: float, billing_address: record, created_at: string, created_by: string, currency: string, currency_rate: float, customer: record, customer_memo: string, deposit: float, discount_amount: float, discount_percentage: float, downstream_id: string, due_date: string, id: string, invoice_date: string, invoice_sent: bool, line_items: list, number: string, po_number: string, reference: string, row_version: string, shipping_address: record, source_document_url: string, status: string, sub_total: float, tax_code: string, tax_inclusive: bool, template_id: string, terms: string, total: float, total_tax: float, type: string, updated_at: string, updated_by: string>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
@@ -1431,10 +1415,6 @@ export def "invoices-all" [
 #
 # POST /accounting/invoices
 # operationId: invoicesAdd
-# --billing_address shape: {city?: string, contact_name?: string, country?: string, county?: string, email?: string, fax?: string, id?: string, latitude?: string, line1?: string, line2?: string, line3?: string, line4?: string, longitude?: string, name?: string, phone_number?: string, postal_code?: string, row_version?: string, salutation?: string, state?: string, street_number?: string, string?: string, type?: "primary"|"secondary"|"home"|"office"|"shipping"|"billing"|"other", website?: string}
-# --customer shape: {display_name?: string, id: string, name?: string}
-# --line_items item shape: {code?: string, department_id?: string, description?: string, discount_amount?: float, discount_percentage?: float, item?: record, ledger_account?: record, line_number?: int, location_id?: string, quantity?: float, row_id?: string, row_version?: string, tax_amount?: float, tax_rate?: record, total_amount?: float, type?: "sales_item"|"discount"|"info"|"sub_total", unit_of_measure?: string, unit_price?: float}
-# --shipping_address shape: {city?: string, contact_name?: string, country?: string, county?: string, email?: string, fax?: string, id?: string, latitude?: string, line1?: string, line2?: string, line3?: string, line4?: string, longitude?: string, name?: string, phone_number?: string, postal_code?: string, row_version?: string, salutation?: string, state?: string, street_number?: string, string?: string, type?: "primary"|"secondary"|"home"|"office"|"shipping"|"billing"|"other", website?: string}
 export def "invoices-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1477,7 +1457,7 @@ export def "invoices-add" [
   --total: float # Total amount of invoice, including tax. (nullable, e.g. 27500)
   --total-tax: float # Total tax amount applied to this invoice. (nullable, e.g. 2500)
   --type: string@type-completer-2 # Invoice type (nullable, e.g. service)
-]: any -> record<data: record<downstream_id: string, id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: any -> oneof<record<data: record<downstream_id: string, id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1524,7 +1504,7 @@ export def "invoices-delete" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: record<downstream_id: string, id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: record<downstream_id: string, id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1570,7 +1550,7 @@ export def "invoices-one" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: record<balance: float, billing_address: record<city: string, contact_name: string, country: string, county: string, email: string, fax: string, id: string, latitude: string, line1: string, line2: string, line3: string, line4: string, longitude: string, name: string, phone_number: string, postal_code: string, row_version: string, salutation: string, state: string, street_number: string, string: string, type: string, website: string>, created_at: string, created_by: string, currency: string, currency_rate: float, customer: record<company_name: string, display_id: string, display_name: string, id: string, name: string>, customer_memo: string, deposit: float, discount_amount: float, discount_percentage: float, downstream_id: string, due_date: string, id: string, invoice_date: string, invoice_sent: bool, line_items: list<record>, number: string, po_number: string, reference: string, row_version: string, shipping_address: record<city: string, contact_name: string, country: string, county: string, email: string, fax: string, id: string, latitude: string, line1: string, line2: string, line3: string, line4: string, longitude: string, name: string, phone_number: string, postal_code: string, row_version: string, salutation: string, state: string, street_number: string, string: string, type: string, website: string>, source_document_url: string, status: string, sub_total: float, tax_code: string, tax_inclusive: bool, template_id: string, terms: string, total: float, total_tax: float, type: string, updated_at: string, updated_by: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: record<balance: float, billing_address: record<city: string, contact_name: string, country: string, county: string, email: string, fax: string, id: string, latitude: string, line1: string, line2: string, line3: string, line4: string, longitude: string, name: string, phone_number: string, postal_code: string, row_version: string, salutation: string, state: string, street_number: string, string: string, type: string, website: string>, created_at: string, created_by: string, currency: string, currency_rate: float, customer: record<company_name: string, display_id: string, display_name: string, id: string, name: string>, customer_memo: string, deposit: float, discount_amount: float, discount_percentage: float, downstream_id: string, due_date: string, id: string, invoice_date: string, invoice_sent: bool, line_items: list<record>, number: string, po_number: string, reference: string, row_version: string, shipping_address: record<city: string, contact_name: string, country: string, county: string, email: string, fax: string, id: string, latitude: string, line1: string, line2: string, line3: string, line4: string, longitude: string, name: string, phone_number: string, postal_code: string, row_version: string, salutation: string, state: string, street_number: string, string: string, type: string, website: string>, source_document_url: string, status: string, sub_total: float, tax_code: string, tax_inclusive: bool, template_id: string, terms: string, total: float, total_tax: float, type: string, updated_at: string, updated_by: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1600,10 +1580,6 @@ export def "invoices-one" [
 #
 # PATCH /accounting/invoices/{id}
 # operationId: invoicesUpdate
-# --billing_address shape: {city?: string, contact_name?: string, country?: string, county?: string, email?: string, fax?: string, id?: string, latitude?: string, line1?: string, line2?: string, line3?: string, line4?: string, longitude?: string, name?: string, phone_number?: string, postal_code?: string, row_version?: string, salutation?: string, state?: string, street_number?: string, string?: string, type?: "primary"|"secondary"|"home"|"office"|"shipping"|"billing"|"other", website?: string}
-# --customer shape: {display_name?: string, id: string, name?: string}
-# --line_items item shape: {code?: string, department_id?: string, description?: string, discount_amount?: float, discount_percentage?: float, item?: record, ledger_account?: record, line_number?: int, location_id?: string, quantity?: float, row_id?: string, row_version?: string, tax_amount?: float, tax_rate?: record, total_amount?: float, type?: "sales_item"|"discount"|"info"|"sub_total", unit_of_measure?: string, unit_price?: float}
-# --shipping_address shape: {city?: string, contact_name?: string, country?: string, county?: string, email?: string, fax?: string, id?: string, latitude?: string, line1?: string, line2?: string, line3?: string, line4?: string, longitude?: string, name?: string, phone_number?: string, postal_code?: string, row_version?: string, salutation?: string, state?: string, street_number?: string, string?: string, type?: "primary"|"secondary"|"home"|"office"|"shipping"|"billing"|"other", website?: string}
 export def "invoices-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1647,7 +1623,7 @@ export def "invoices-update" [
   --total: float # Total amount of invoice, including tax. (nullable, e.g. 27500)
   --total-tax: float # Total tax amount applied to this invoice. (nullable, e.g. 2500)
   --type: string@type-completer-2 # Invoice type (nullable, e.g. service)
-]: any -> record<data: record<downstream_id: string, id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: any -> oneof<record<data: record<downstream_id: string, id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1698,7 +1674,7 @@ export def "journal-entries-all" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: table<created_at: string, created_by: string, currency: string, currency_rate: float, id: string, journal_symbol: string, line_items: list, memo: string, posted_at: string, row_version: string, title: string, updated_at: string, updated_by: string>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: table<created_at: string, created_by: string, currency: string, currency_rate: float, id: string, journal_symbol: string, line_items: list, memo: string, posted_at: string, row_version: string, title: string, updated_at: string, updated_by: string>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
@@ -1727,7 +1703,6 @@ export def "journal-entries-all" [
 #
 # POST /accounting/journal-entries
 # operationId: journalEntriesAdd
-# --line_items item shape: {description?: string, ledger_account: record, tax_amount?: float, tax_rate?: record, total_amount: float, tracking_category?: record, type: "debit"|"credit"}
 export def "journal-entries-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1750,7 +1725,7 @@ export def "journal-entries-add" [
   --posted-at: string # This is the date on which the journal entry was added. This can be different from the creation date and can also be backdated. (format: date-time, e.g. 2020-09-30T07:43:32.000Z)
   --row-version: string # A binary value used to detect updates to a object and prevent data conflicts. It is incremented each time an update is made to the object. (nullable, e.g. 1-12345)
   --title: string # Journal entry title (nullable, e.g. Purchase Invoice-Inventory (USD): 2019/02/01 Batch Summary Entry)
-]: any -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: any -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1797,7 +1772,7 @@ export def "journal-entries-delete" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1843,7 +1818,7 @@ export def "journal-entries-one" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: record<created_at: string, created_by: string, currency: string, currency_rate: float, id: string, journal_symbol: string, line_items: list<record>, memo: string, posted_at: string, row_version: string, title: string, updated_at: string, updated_by: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: record<created_at: string, created_by: string, currency: string, currency_rate: float, id: string, journal_symbol: string, line_items: list<record>, memo: string, posted_at: string, row_version: string, title: string, updated_at: string, updated_by: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1873,7 +1848,6 @@ export def "journal-entries-one" [
 #
 # PATCH /accounting/journal-entries/{id}
 # operationId: journalEntriesUpdate
-# --line_items item shape: {description?: string, ledger_account: record, tax_amount?: float, tax_rate?: record, total_amount: float, tracking_category?: record, type: "debit"|"credit"}
 export def "journal-entries-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1897,7 +1871,7 @@ export def "journal-entries-update" [
   --posted-at: string # This is the date on which the journal entry was added. This can be different from the creation date and can also be backdated. (format: date-time, e.g. 2020-09-30T07:43:32.000Z)
   --row-version: string # A binary value used to detect updates to a object and prevent data conflicts. It is incremented each time an update is made to the object. (nullable, e.g. 1-12345)
   --title: string # Journal entry title (nullable, e.g. Purchase Invoice-Inventory (USD): 2019/02/01 Batch Summary Entry)
-]: any -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: any -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1948,7 +1922,7 @@ export def "ledger-accounts-all" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: table<active: bool, bank_account: record, categories: list, classification: string, code: string, created_at: string, created_by: string, currency: string, current_balance: float, description: string, display_id: string, fully_qualified_name: string, header: bool, id: string, last_reconciliation_date: string, level: float, name: string, nominal_code: string, opening_balance: float, parent_account: record, row_version: string, status: string, sub_account: bool, sub_accounts: list, sub_type: string, tax_rate: record, tax_type: string, type: string, updated_at: string, updated_by: string>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: table<active: bool, bank_account: record, categories: list, classification: string, code: string, created_at: string, created_by: string, currency: string, current_balance: float, description: string, display_id: string, fully_qualified_name: string, header: bool, id: string, last_reconciliation_date: string, level: float, name: string, nominal_code: string, opening_balance: float, parent_account: record, row_version: string, status: string, sub_account: bool, sub_accounts: list, sub_type: string, tax_rate: record, tax_type: string, type: string, updated_at: string, updated_by: string>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
@@ -1977,9 +1951,6 @@ export def "ledger-accounts-all" [
 #
 # POST /accounting/ledger-accounts
 # operationId: ledgerAccountsAdd
-# --bank_account shape: {account_name?: string, account_number?: string, account_type?: "bank_account"|"credit_card"|"other", bank_code?: string, bic?: string, branch_identifier?: string, bsb_number?: string, ... (2 more fields)}
-# --parent_account shape: {display_id?: string, id?: string, name?: string}
-# --tax_rate shape: {id?: string}
 @deprecated --flag nominal-code
 export def "ledger-accounts-add" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2018,7 +1989,7 @@ export def "ledger-accounts-add" [
   --tax-rate: record # shape: {id?: string}
   --tax-type: string # The tax type of the account. (nullable, e.g. NONE)
   --type: string@type-completer-3 # The type of account. (e.g. bank)
-]: any -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: any -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2065,7 +2036,7 @@ export def "ledger-accounts-delete" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2111,7 +2082,7 @@ export def "ledger-accounts-one" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: record<active: bool, bank_account: record<account_name: string, account_number: string, account_type: string, bank_code: string, bic: string, branch_identifier: string, bsb_number: string, currency: string, iban: string>, categories: list<record>, classification: string, code: string, created_at: string, created_by: string, currency: string, current_balance: float, description: string, display_id: string, fully_qualified_name: string, header: bool, id: string, last_reconciliation_date: string, level: float, name: string, nominal_code: string, opening_balance: float, parent_account: record<display_id: string, id: string, name: string>, row_version: string, status: string, sub_account: bool, sub_accounts: list<record>, sub_type: string, tax_rate: record<code: string, id: string, name: string, rate: float>, tax_type: string, type: string, updated_at: string, updated_by: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: record<active: bool, bank_account: record<account_name: string, account_number: string, account_type: string, bank_code: string, bic: string, branch_identifier: string, bsb_number: string, currency: string, iban: string>, categories: list<record>, classification: string, code: string, created_at: string, created_by: string, currency: string, current_balance: float, description: string, display_id: string, fully_qualified_name: string, header: bool, id: string, last_reconciliation_date: string, level: float, name: string, nominal_code: string, opening_balance: float, parent_account: record<display_id: string, id: string, name: string>, row_version: string, status: string, sub_account: bool, sub_accounts: list<record>, sub_type: string, tax_rate: record<code: string, id: string, name: string, rate: float>, tax_type: string, type: string, updated_at: string, updated_by: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2141,9 +2112,6 @@ export def "ledger-accounts-one" [
 #
 # PATCH /accounting/ledger-accounts/{id}
 # operationId: ledgerAccountsUpdate
-# --bank_account shape: {account_name?: string, account_number?: string, account_type?: "bank_account"|"credit_card"|"other", bank_code?: string, bic?: string, branch_identifier?: string, bsb_number?: string, ... (2 more fields)}
-# --parent_account shape: {display_id?: string, id?: string, name?: string}
-# --tax_rate shape: {id?: string}
 @deprecated --flag nominal-code
 export def "ledger-accounts-update" [
   id: string
@@ -2183,7 +2151,7 @@ export def "ledger-accounts-update" [
   --tax-rate: record # shape: {id?: string}
   --tax-type: string # The tax type of the account. (nullable, e.g. NONE)
   --type: string@type-completer-3 # The type of account. (e.g. bank)
-]: any -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: any -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2234,7 +2202,7 @@ export def "payments-all" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: table<account: record, accounts_receivable_account_id: string, accounts_receivable_account_type: string, allocations: list, created_at: string, created_by: string, currency: string, currency_rate: float, customer: record, display_id: string, downstream_id: string, id: string, note: string, payment_method: string, payment_method_id: string, payment_method_reference: string, reconciled: bool, reference: string, row_version: string, status: string, supplier: record, total_amount: float, transaction_date: string, type: string, updated_at: string, updated_by: string>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: table<account: record, accounts_receivable_account_id: string, accounts_receivable_account_type: string, allocations: list, created_at: string, created_by: string, currency: string, currency_rate: float, customer: record, display_id: string, downstream_id: string, id: string, note: string, payment_method: string, payment_method_id: string, payment_method_reference: string, reconciled: bool, reference: string, row_version: string, status: string, supplier: record, total_amount: float, transaction_date: string, type: string, updated_at: string, updated_by: string>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
@@ -2263,10 +2231,6 @@ export def "payments-all" [
 #
 # POST /accounting/payments
 # operationId: paymentsAdd
-# --account shape: {code?: string, id?: string, nominal_code?: string}
-# --allocations item shape: {amount?: float, id?: string, type?: "invoice"|"order"|"expense"|"credit_memo"|"over_payment"|"pre_payment"}
-# --customer shape: {display_name?: string, id: string, name?: string}
-# --supplier shape: {address?: record, display_name?: string, id: string}
 @deprecated --flag accounts-receivable-account-id
 @deprecated --flag accounts-receivable-account-type
 export def "payments-add" [
@@ -2303,7 +2267,7 @@ export def "payments-add" [
   total_amount: float # Amount of payment (e.g. 49.99)
   transaction_date: string # Date transaction was entered - YYYY:MM::DDThh:mm:ss.sTZD (format: date-time, e.g. 2021-05-01T12:00:00.000Z)
   --type: string@type-completer-4 # Type of payment (e.g. accounts_receivable)
-]: any -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: any -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2350,7 +2314,7 @@ export def "payments-delete" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2396,7 +2360,7 @@ export def "payments-one" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: record<account: record<code: string, id: string, name: string, nominal_code: string>, accounts_receivable_account_id: string, accounts_receivable_account_type: string, allocations: list<record>, created_at: string, created_by: string, currency: string, currency_rate: float, customer: record<company_name: string, display_id: string, display_name: string, id: string, name: string>, display_id: string, downstream_id: string, id: string, note: string, payment_method: string, payment_method_id: string, payment_method_reference: string, reconciled: bool, reference: string, row_version: string, status: string, supplier: record<address: record, company_name: string, display_name: string, id: string>, total_amount: float, transaction_date: string, type: string, updated_at: string, updated_by: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: record<account: record<code: string, id: string, name: string, nominal_code: string>, accounts_receivable_account_id: string, accounts_receivable_account_type: string, allocations: list<record>, created_at: string, created_by: string, currency: string, currency_rate: float, customer: record<company_name: string, display_id: string, display_name: string, id: string, name: string>, display_id: string, downstream_id: string, id: string, note: string, payment_method: string, payment_method_id: string, payment_method_reference: string, reconciled: bool, reference: string, row_version: string, status: string, supplier: record<address: record, company_name: string, display_name: string, id: string>, total_amount: float, transaction_date: string, type: string, updated_at: string, updated_by: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2426,10 +2390,6 @@ export def "payments-one" [
 #
 # PATCH /accounting/payments/{id}
 # operationId: paymentsUpdate
-# --account shape: {code?: string, id?: string, nominal_code?: string}
-# --allocations item shape: {amount?: float, id?: string, type?: "invoice"|"order"|"expense"|"credit_memo"|"over_payment"|"pre_payment"}
-# --customer shape: {display_name?: string, id: string, name?: string}
-# --supplier shape: {address?: record, display_name?: string, id: string}
 @deprecated --flag accounts-receivable-account-id
 @deprecated --flag accounts-receivable-account-type
 export def "payments-update" [
@@ -2467,7 +2427,7 @@ export def "payments-update" [
   total_amount: float # Amount of payment (e.g. 49.99)
   transaction_date: string # Date transaction was entered - YYYY:MM::DDThh:mm:ss.sTZD (format: date-time, e.g. 2021-05-01T12:00:00.000Z)
   --type: string@type-completer-4 # Type of payment (e.g. accounts_receivable)
-]: any -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: any -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2517,7 +2477,7 @@ export def "profit-and-loss-one" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: record<currency: string, customer_id: string, end_date: string, expenses: record<records: list, total: float>, gross_profit: record<records: list, total: float>, id: string, income: record<records: list, total: float>, net_income: record<records: list, total: float>, net_operating_income: record<records: list, total: float>, report_name: string, start_date: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: record<currency: string, customer_id: string, end_date: string, expenses: record<records: list, total: float>, gross_profit: record<records: list, total: float>, id: string, income: record<records: list, total: float>, net_income: record<records: list, total: float>, net_operating_income: record<records: list, total: float>, report_name: string, start_date: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
@@ -2565,7 +2525,7 @@ export def "suppliers-all" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: table<account: record, addresses: list, bank_accounts: list, company_name: string, created_at: string, created_by: string, currency: string, display_id: string, display_name: string, downstream_id: string, emails: list, first_name: string, id: string, individual: bool, last_name: string, middle_name: string, notes: string, phone_numbers: list, row_version: string, status: string, suffix: string, tax_number: string, tax_rate: record, title: string, updated_at: string, updated_by: string, websites: list>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: table<account: record, addresses: list, bank_accounts: list, company_name: string, created_at: string, created_by: string, currency: string, display_id: string, display_name: string, downstream_id: string, emails: list, first_name: string, id: string, individual: bool, last_name: string, middle_name: string, notes: string, phone_numbers: list, row_version: string, status: string, suffix: string, tax_number: string, tax_rate: record, title: string, updated_at: string, updated_by: string, websites: list>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
@@ -2594,13 +2554,6 @@ export def "suppliers-all" [
 #
 # POST /accounting/suppliers
 # operationId: suppliersAdd
-# --account shape: {code?: string, id?: string, nominal_code?: string}
-# --addresses item shape: {city?: string, contact_name?: string, country?: string, county?: string, email?: string, fax?: string, id?: string, latitude?: string, line1?: string, line2?: string, line3?: string, line4?: string, longitude?: string, name?: string, phone_number?: string, postal_code?: string, row_version?: string, salutation?: string, state?: string, street_number?: string, string?: string, type?: "primary"|"secondary"|"home"|"office"|"shipping"|"billing"|"other", website?: string}
-# --bank_accounts item shape: {account_name?: string, account_number?: string, account_type?: "bank_account"|"credit_card"|"other", bank_code?: string, bic?: string, branch_identifier?: string, bsb_number?: string, ... (2 more fields)}
-# --emails item shape: {email: string, id?: string, type?: "primary"|"secondary"|"work"|"personal"|"billing"|"other"}
-# --phone_numbers item shape: {area_code?: string, country_code?: string, extension?: string, id?: string, number: string, type?: "primary"|"secondary"|"home"|"work"|"office"|"mobile"|"assistant"|"fax"|"direct-dial-in"|"personal"|"other"}
-# --tax_rate shape: {id?: string}
-# --websites item shape: {id?: string, type?: "primary"|"secondary"|"work"|"personal"|"other", url: string}
 export def "suppliers-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2636,7 +2589,7 @@ export def "suppliers-add" [
   --tax-rate: record # shape: {id?: string}
   --title: string # The job title of the person. (nullable, e.g. CEO)
   --websites: list # item shape: {id?: string, type?: "primary"|"secondary"|"work"|"personal"|"other", url: string}
-]: any -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: any -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2683,7 +2636,7 @@ export def "suppliers-delete" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2729,7 +2682,7 @@ export def "suppliers-one" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: record<account: record<code: string, id: string, name: string, nominal_code: string>, addresses: list<record>, bank_accounts: list<record>, company_name: string, created_at: string, created_by: string, currency: string, display_id: string, display_name: string, downstream_id: string, emails: list<record>, first_name: string, id: string, individual: bool, last_name: string, middle_name: string, notes: string, phone_numbers: list<record>, row_version: string, status: string, suffix: string, tax_number: string, tax_rate: record<code: string, id: string, name: string, rate: float>, title: string, updated_at: string, updated_by: string, websites: list<record>>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: record<account: record<code: string, id: string, name: string, nominal_code: string>, addresses: list<record>, bank_accounts: list<record>, company_name: string, created_at: string, created_by: string, currency: string, display_id: string, display_name: string, downstream_id: string, emails: list<record>, first_name: string, id: string, individual: bool, last_name: string, middle_name: string, notes: string, phone_numbers: list<record>, row_version: string, status: string, suffix: string, tax_number: string, tax_rate: record<code: string, id: string, name: string, rate: float>, title: string, updated_at: string, updated_by: string, websites: list<record>>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2759,13 +2712,6 @@ export def "suppliers-one" [
 #
 # PATCH /accounting/suppliers/{id}
 # operationId: suppliersUpdate
-# --account shape: {code?: string, id?: string, nominal_code?: string}
-# --addresses item shape: {city?: string, contact_name?: string, country?: string, county?: string, email?: string, fax?: string, id?: string, latitude?: string, line1?: string, line2?: string, line3?: string, line4?: string, longitude?: string, name?: string, phone_number?: string, postal_code?: string, row_version?: string, salutation?: string, state?: string, street_number?: string, string?: string, type?: "primary"|"secondary"|"home"|"office"|"shipping"|"billing"|"other", website?: string}
-# --bank_accounts item shape: {account_name?: string, account_number?: string, account_type?: "bank_account"|"credit_card"|"other", bank_code?: string, bic?: string, branch_identifier?: string, bsb_number?: string, ... (2 more fields)}
-# --emails item shape: {email: string, id?: string, type?: "primary"|"secondary"|"work"|"personal"|"billing"|"other"}
-# --phone_numbers item shape: {area_code?: string, country_code?: string, extension?: string, id?: string, number: string, type?: "primary"|"secondary"|"home"|"work"|"office"|"mobile"|"assistant"|"fax"|"direct-dial-in"|"personal"|"other"}
-# --tax_rate shape: {id?: string}
-# --websites item shape: {id?: string, type?: "primary"|"secondary"|"work"|"personal"|"other", url: string}
 export def "suppliers-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2802,7 +2748,7 @@ export def "suppliers-update" [
   --tax-rate: record # shape: {id?: string}
   --title: string # The job title of the person. (nullable, e.g. CEO)
   --websites: list # item shape: {id?: string, type?: "primary"|"secondary"|"work"|"personal"|"other", url: string}
-]: any -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: any -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2854,7 +2800,7 @@ export def "tax-rates-all" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: table<code: string, components: list, created_at: string, created_by: string, description: string, effective_tax_rate: float, id: string, name: string, original_tax_rate_id: string, report_tax_type: string, row_version: string, status: string, tax_payable_account_id: string, tax_remitted_account_id: string, total_tax_rate: float, type: string, updated_at: string, updated_by: string>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: table<code: string, components: list, created_at: string, created_by: string, description: string, effective_tax_rate: float, id: string, name: string, original_tax_rate_id: string, report_tax_type: string, row_version: string, status: string, tax_payable_account_id: string, tax_remitted_account_id: string, total_tax_rate: float, type: string, updated_at: string, updated_by: string>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
@@ -2883,7 +2829,6 @@ export def "tax-rates-all" [
 #
 # POST /accounting/tax-rates
 # operationId: taxRatesAdd
-# --components item shape: {compound?: bool, id?: string, name?: string, rate?: float}
 export def "tax-rates-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2912,7 +2857,7 @@ export def "tax-rates-add" [
   --tax-remitted-account-id: string # Unique identifier for the account for tax remitted. (nullable, e.g. 123456)
   --total-tax-rate: float # Not compounded sum of the components of a tax rate (nullable, e.g. 10)
   --type: string # Tax type used to indicate the source of tax collected or paid (nullable, e.g. NONE)
-]: any -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: any -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2959,7 +2904,7 @@ export def "tax-rates-delete" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3005,7 +2950,7 @@ export def "tax-rates-one" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: record<code: string, components: list<record>, created_at: string, created_by: string, description: string, effective_tax_rate: float, id: string, name: string, original_tax_rate_id: string, report_tax_type: string, row_version: string, status: string, tax_payable_account_id: string, tax_remitted_account_id: string, total_tax_rate: float, type: string, updated_at: string, updated_by: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: record<code: string, components: list<record>, created_at: string, created_by: string, description: string, effective_tax_rate: float, id: string, name: string, original_tax_rate_id: string, report_tax_type: string, row_version: string, status: string, tax_payable_account_id: string, tax_remitted_account_id: string, total_tax_rate: float, type: string, updated_at: string, updated_by: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3035,7 +2980,6 @@ export def "tax-rates-one" [
 #
 # PATCH /accounting/tax-rates/{id}
 # operationId: taxRatesUpdate
-# --components item shape: {compound?: bool, id?: string, name?: string, rate?: float}
 export def "tax-rates-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3065,7 +3009,7 @@ export def "tax-rates-update" [
   --tax-remitted-account-id: string # Unique identifier for the account for tax remitted. (nullable, e.g. 123456)
   --total-tax-rate: float # Not compounded sum of the components of a tax rate (nullable, e.g. 10)
   --type: string # Tax type used to indicate the source of tax collected or paid (nullable, e.g. NONE)
-]: any -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: any -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -137,9 +160,9 @@ def x-amz-target-completer-32 [] { ["AWSLookoutEquipmentFrontendService.UpdateLa
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-dataset" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["create-dataset" "create-inference-scheduler" "create-label" "create-label-group" "create-model" "delete-dataset" "delete-inference-scheduler" "delete-label" "delete-label-group" "delete-model" "describe-data-ingestion-job" "describe-dataset" "describe-inference-scheduler" "describe-label" "describe-label-group" "describe-model" "list-data-ingestion-jobs" "list-datasets" "list-inference-events" "list-inference-executions" "list-inference-schedulers" "list-label-groups" "list-labels" "list-models" "list-sensor-statistics" "list-tags-for-resource" "start-data-ingestion-job" "start-inference-scheduler" "stop-inference-scheduler" "tag-resource" "untag-resource" "update-inference-scheduler" "update-label-group" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -161,8 +184,6 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: CreateDataset
-# --DatasetSchema shape: {InlineDataSchema?: string}
-# --Tags item shape: {Key: string, Value: string}
 export def "create-dataset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -186,7 +207,7 @@ export def "create-dataset" [
   --server-side-kms-key-id: string # Provides the identifier of the KMS key used to encrypt dataset data by Amazon Lookout for Equipment.
   client_token: string # A unique identifier for the request. If you do not set the client request token, Amazon Lookout for Equipment generates one.
   --tags: list # Any tags associated with the ingested data described in the dataset. — item shape: {Key: string, Value: string}
-]: any -> record<DatasetName: string, DatasetArn: string, Status: string> {
+]: any -> oneof<record<DatasetName: string, DatasetArn: string, Status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -216,9 +237,6 @@ export def "create-dataset" [
 #
 # POST /
 # operationId: CreateInferenceScheduler
-# --DataInputConfiguration shape: {S3InputConfiguration?: record, InputTimeZoneOffset?: string, InferenceInputNameConfiguration?: record}
-# --DataOutputConfiguration shape: {S3OutputConfiguration: record, KmsKeyId?: string}
-# --Tags item shape: {Key: string, Value: string}
 export def "create-inference-scheduler" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -247,7 +265,7 @@ export def "create-inference-scheduler" [
   --server-side-kms-key-id: string # Provides the identifier of the KMS key used to encrypt inference scheduler data by Amazon Lookout for Equipment.
   client_token: string # A unique identifier for the request. If you do not set the client request token, Amazon Lookout for Equipment generates one.
   --tags: list # Any tags associated with the inference scheduler. — item shape: {Key: string, Value: string}
-]: any -> record<InferenceSchedulerArn: string, InferenceSchedulerName: string, Status: string> {
+]: any -> oneof<record<InferenceSchedulerArn: string, InferenceSchedulerName: string, Status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -303,7 +321,7 @@ export def "create-label" [
   --notes: string # Metadata providing additional information about the label. Data in this field will be retained for service usage. Follow best practices for the security of your data.
   --equipment: string # Indicates that a label pertains to a particular piece of equipment. Data in this field will be retained for service usage. Follow best practices for the security of your data.
   client_token: string # A unique identifier for the request to create a label. If you do not set the client request token, Lookout for Equipment generates one.
-]: any -> record<LabelId: string> {
+]: any -> oneof<record<LabelId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -333,7 +351,6 @@ export def "create-label" [
 #
 # POST /
 # operationId: CreateLabelGroup
-# --Tags item shape: {Key: string, Value: string}
 export def "create-label-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -356,7 +373,7 @@ export def "create-label-group" [
   --fault-codes: list<string> # The acceptable fault codes (indicating the type of anomaly associated with the label) that can be used with this label group. Data in this field will be retained for service usage. Follow best practices for the security of your data.
   client_token: string # A unique identifier for the request to create a label group. If you do not set the client request token, Lookout for Equipment generates one.
   --tags: list # Tags that provide metadata about the label group you are creating. Data in this field will be retained for service usage. Follow best practices for the security of your data. — item shape: {Key: string, Value: string}
-]: any -> record<LabelGroupName: string, LabelGroupArn: string> {
+]: any -> oneof<record<LabelGroupName: string, LabelGroupArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -386,10 +403,6 @@ export def "create-label-group" [
 #
 # POST /
 # operationId: CreateModel
-# --DatasetSchema shape: {InlineDataSchema?: string}
-# --LabelsInputConfiguration shape: {S3InputConfiguration?: record, LabelGroupName?: string}
-# --DataPreProcessingConfiguration shape: {TargetSamplingRate?: "PT1S"|"PT5S"|"PT10S"|"PT15S"|"PT30S"|"PT1M"|"PT5M"|"PT10M"|"PT15M"|"PT30M"|"PT1H"}
-# --Tags item shape: {Key: string, Value: string}
 export def "create-model" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -422,7 +435,7 @@ export def "create-model" [
   --server-side-kms-key-id: string # Provides the identifier of the KMS key used to encrypt model data by Amazon Lookout for Equipment.
   --tags: list # Any tags associated with the ML model being created. — item shape: {Key: string, Value: string}
   --off-condition: string # Indicates that the asset associated with this sensor has been shut off. As long as this condition is met, Lookout for Equipment will not use data from this asset for training, evaluation, or inference.
-]: any -> record<ModelArn: string, Status: string> {
+]: any -> oneof<record<ModelArn: string, Status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -717,7 +730,7 @@ export def "describe-data-ingestion-job" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-10 # required
   job_id: string # The job ID of the data ingestion job.
-]: any -> record<JobId: string, DatasetArn: string, IngestionInputConfiguration: record<S3InputConfiguration: record<Bucket: string, Prefix: string, KeyPattern: string>>, RoleArn: string, CreatedAt: string, Status: string, FailedReason: string, DataQualitySummary: record<InsufficientSensorData: record<MissingCompleteSensorData: record, SensorsWithShortDateRange: record>, MissingSensorData: record<AffectedSensorCount: int, TotalNumberOfMissingValues: int>, InvalidSensorData: record<AffectedSensorCount: int, TotalNumberOfInvalidValues: int>, UnsupportedTimestamps: record<TotalNumberOfUnsupportedTimestamps: int>, DuplicateTimestamps: record<TotalNumberOfDuplicateTimestamps: int>>, IngestedFilesSummary: record<TotalNumberOfFiles: int, IngestedNumberOfFiles: int, DiscardedFiles: list<record>>, StatusDetail: string, IngestedDataSize: int, DataStartTime: string, DataEndTime: string> {
+]: any -> oneof<record<JobId: string, DatasetArn: string, IngestionInputConfiguration: record<S3InputConfiguration: record<Bucket: string, Prefix: string, KeyPattern: string>>, RoleArn: string, CreatedAt: string, Status: string, FailedReason: string, DataQualitySummary: record<InsufficientSensorData: record<MissingCompleteSensorData: record, SensorsWithShortDateRange: record>, MissingSensorData: record<AffectedSensorCount: int, TotalNumberOfMissingValues: int>, InvalidSensorData: record<AffectedSensorCount: int, TotalNumberOfInvalidValues: int>, UnsupportedTimestamps: record<TotalNumberOfUnsupportedTimestamps: int>, DuplicateTimestamps: record<TotalNumberOfDuplicateTimestamps: int>>, IngestedFilesSummary: record<TotalNumberOfFiles: int, IngestedNumberOfFiles: int, DiscardedFiles: list<record>>, StatusDetail: string, IngestedDataSize: int, DataStartTime: string, DataEndTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -766,7 +779,7 @@ export def "describe-dataset" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-11 # required
   dataset_name: string # The name of the dataset to be described.
-]: any -> record<DatasetName: string, DatasetArn: string, CreatedAt: string, LastUpdatedAt: string, Status: string, Schema: string, ServerSideKmsKeyId: string, IngestionInputConfiguration: record<S3InputConfiguration: record<Bucket: string, Prefix: string, KeyPattern: string>>, DataQualitySummary: record<InsufficientSensorData: record<MissingCompleteSensorData: record, SensorsWithShortDateRange: record>, MissingSensorData: record<AffectedSensorCount: int, TotalNumberOfMissingValues: int>, InvalidSensorData: record<AffectedSensorCount: int, TotalNumberOfInvalidValues: int>, UnsupportedTimestamps: record<TotalNumberOfUnsupportedTimestamps: int>, DuplicateTimestamps: record<TotalNumberOfDuplicateTimestamps: int>>, IngestedFilesSummary: record<TotalNumberOfFiles: int, IngestedNumberOfFiles: int, DiscardedFiles: list<record>>, RoleArn: string, DataStartTime: string, DataEndTime: string> {
+]: any -> oneof<record<DatasetName: string, DatasetArn: string, CreatedAt: string, LastUpdatedAt: string, Status: string, Schema: string, ServerSideKmsKeyId: string, IngestionInputConfiguration: record<S3InputConfiguration: record<Bucket: string, Prefix: string, KeyPattern: string>>, DataQualitySummary: record<InsufficientSensorData: record<MissingCompleteSensorData: record, SensorsWithShortDateRange: record>, MissingSensorData: record<AffectedSensorCount: int, TotalNumberOfMissingValues: int>, InvalidSensorData: record<AffectedSensorCount: int, TotalNumberOfInvalidValues: int>, UnsupportedTimestamps: record<TotalNumberOfUnsupportedTimestamps: int>, DuplicateTimestamps: record<TotalNumberOfDuplicateTimestamps: int>>, IngestedFilesSummary: record<TotalNumberOfFiles: int, IngestedNumberOfFiles: int, DiscardedFiles: list<record>>, RoleArn: string, DataStartTime: string, DataEndTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -815,7 +828,7 @@ export def "describe-inference-scheduler" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-12 # required
   inference_scheduler_name: string # The name of the inference scheduler being described.
-]: any -> record<ModelArn: string, ModelName: string, InferenceSchedulerName: string, InferenceSchedulerArn: string, Status: string, DataDelayOffsetInMinutes: int, DataUploadFrequency: string, CreatedAt: string, UpdatedAt: string, DataInputConfiguration: record<S3InputConfiguration: record<Bucket: string, Prefix: string>, InputTimeZoneOffset: string, InferenceInputNameConfiguration: record<TimestampFormat: string, ComponentTimestampDelimiter: string>>, DataOutputConfiguration: record<S3OutputConfiguration: record<Bucket: string, Prefix: string>, KmsKeyId: string>, RoleArn: string, ServerSideKmsKeyId: string, LatestInferenceResult: string> {
+]: any -> oneof<record<ModelArn: string, ModelName: string, InferenceSchedulerName: string, InferenceSchedulerArn: string, Status: string, DataDelayOffsetInMinutes: int, DataUploadFrequency: string, CreatedAt: string, UpdatedAt: string, DataInputConfiguration: record<S3InputConfiguration: record<Bucket: string, Prefix: string>, InputTimeZoneOffset: string, InferenceInputNameConfiguration: record<TimestampFormat: string, ComponentTimestampDelimiter: string>>, DataOutputConfiguration: record<S3OutputConfiguration: record<Bucket: string, Prefix: string>, KmsKeyId: string>, RoleArn: string, ServerSideKmsKeyId: string, LatestInferenceResult: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -865,7 +878,7 @@ export def "describe-label" [
   --x-amz-target: string@x-amz-target-completer-13 # required
   label_group_name: string # Returns the name of the group containing the label.
   label_id: string # Returns the ID of the label.
-]: any -> record<LabelGroupName: string, LabelGroupArn: string, LabelId: string, StartTime: string, EndTime: string, Rating: string, FaultCode: string, Notes: string, Equipment: string, CreatedAt: string> {
+]: any -> oneof<record<LabelGroupName: string, LabelGroupArn: string, LabelId: string, StartTime: string, EndTime: string, Rating: string, FaultCode: string, Notes: string, Equipment: string, CreatedAt: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -914,7 +927,7 @@ export def "describe-label-group" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-14 # required
   label_group_name: string # Returns the name of the label group.
-]: any -> record<LabelGroupName: string, LabelGroupArn: string, FaultCodes: list<string>, CreatedAt: string, UpdatedAt: string> {
+]: any -> oneof<record<LabelGroupName: string, LabelGroupArn: string, FaultCodes: list<string>, CreatedAt: string, UpdatedAt: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -963,7 +976,7 @@ export def "describe-model" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-15 # required
   model_name: string # The name of the ML model to be described.
-]: any -> record<ModelName: string, ModelArn: string, DatasetName: string, DatasetArn: string, Schema: string, LabelsInputConfiguration: record<S3InputConfiguration: record<Bucket: string, Prefix: string>, LabelGroupName: string>, TrainingDataStartTime: string, TrainingDataEndTime: string, EvaluationDataStartTime: string, EvaluationDataEndTime: string, RoleArn: string, DataPreProcessingConfiguration: record<TargetSamplingRate: string>, Status: string, TrainingExecutionStartTime: string, TrainingExecutionEndTime: string, FailedReason: string, ModelMetrics: string, LastUpdatedTime: string, CreatedAt: string, ServerSideKmsKeyId: string, OffCondition: string> {
+]: any -> oneof<record<ModelName: string, ModelArn: string, DatasetName: string, DatasetArn: string, Schema: string, LabelsInputConfiguration: record<S3InputConfiguration: record<Bucket: string, Prefix: string>, LabelGroupName: string>, TrainingDataStartTime: string, TrainingDataEndTime: string, EvaluationDataStartTime: string, EvaluationDataEndTime: string, RoleArn: string, DataPreProcessingConfiguration: record<TargetSamplingRate: string>, Status: string, TrainingExecutionStartTime: string, TrainingExecutionEndTime: string, FailedReason: string, ModelMetrics: string, LastUpdatedTime: string, CreatedAt: string, ServerSideKmsKeyId: string, OffCondition: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1017,7 +1030,7 @@ export def "list-data-ingestion-jobs" [
   --next-token-body: string # An opaque pagination token indicating where to continue the listing of data ingestion jobs. (body field)
   --max-results-body: int # Specifies the maximum number of data ingestion jobs to list. (body field)
   --status: string@status-completer # Indicates the status of the data ingestion job.
-]: any -> record<NextToken: string, DataIngestionJobSummaries: table<JobId: string, DatasetName: string, DatasetArn: string, IngestionInputConfiguration: record, Status: string>> {
+]: any -> oneof<record<NextToken: string, DataIngestionJobSummaries: table<JobId: string, DatasetName: string, DatasetArn: string, IngestionInputConfiguration: record, Status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1071,7 +1084,7 @@ export def "list-datasets" [
   --next-token-body: string # An opaque pagination token indicating where to continue the listing of datasets. (body field)
   --max-results-body: int # Specifies the maximum number of datasets to list. (body field)
   --dataset-name-begins-with: string # The beginning of the name of the datasets to be listed.
-]: any -> record<NextToken: string, DatasetSummaries: table<DatasetName: string, DatasetArn: string, Status: string, CreatedAt: string>> {
+]: any -> oneof<record<NextToken: string, DatasetSummaries: table<DatasetName: string, DatasetArn: string, Status: string, CreatedAt: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1127,7 +1140,7 @@ export def "list-inference-events" [
   inference_scheduler_name: string # The name of the inference scheduler for the inference events listed.
   interval_start_time: string # Lookout for Equipment will return all the inference events with an end time equal to or greater than the start time given. (format: date-time)
   interval_end_time: string # Returns all the inference events with an end start time equal to or greater than less than the end time given (format: date-time)
-]: any -> record<NextToken: string, InferenceEventSummaries: table<InferenceSchedulerArn: string, InferenceSchedulerName: string, EventStartTime: string, EventEndTime: string, Diagnostics: string, EventDurationInSeconds: int>> {
+]: any -> oneof<record<NextToken: string, InferenceEventSummaries: table<InferenceSchedulerArn: string, InferenceSchedulerName: string, EventStartTime: string, EventEndTime: string, Diagnostics: string, EventDurationInSeconds: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1184,7 +1197,7 @@ export def "list-inference-executions" [
   --data-start-time-after: string # The time reference in the inferenced dataset after which Amazon Lookout for Equipment started the inference execution. (format: date-time)
   --data-end-time-before: string # The time reference in the inferenced dataset before which Amazon Lookout for Equipment stopped the inference execution. (format: date-time)
   --status: string@status-completer # The status of the inference execution.
-]: any -> record<NextToken: string, InferenceExecutionSummaries: table<ModelName: string, ModelArn: string, InferenceSchedulerName: string, InferenceSchedulerArn: string, ScheduledStartTime: string, DataStartTime: string, DataEndTime: string, DataInputConfiguration: record, DataOutputConfiguration: record, CustomerResultObject: record, Status: string, FailedReason: string>> {
+]: any -> oneof<record<NextToken: string, InferenceExecutionSummaries: table<ModelName: string, ModelArn: string, InferenceSchedulerName: string, InferenceSchedulerArn: string, ScheduledStartTime: string, DataStartTime: string, DataEndTime: string, DataInputConfiguration: record, DataOutputConfiguration: record, CustomerResultObject: record, Status: string, FailedReason: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1240,7 +1253,7 @@ export def "list-inference-schedulers" [
   --inference-scheduler-name-begins-with: string # The beginning of the name of the inference schedulers to be listed.
   --model-name: string # The name of the ML model used by the inference scheduler to be listed.
   --status: string@status-completer-1 # Specifies the current status of the inference schedulers to list.
-]: any -> record<NextToken: string, InferenceSchedulerSummaries: table<ModelName: string, ModelArn: string, InferenceSchedulerName: string, InferenceSchedulerArn: string, Status: string, DataDelayOffsetInMinutes: int, DataUploadFrequency: string, LatestInferenceResult: string>> {
+]: any -> oneof<record<NextToken: string, InferenceSchedulerSummaries: table<ModelName: string, ModelArn: string, InferenceSchedulerName: string, InferenceSchedulerArn: string, Status: string, DataDelayOffsetInMinutes: int, DataUploadFrequency: string, LatestInferenceResult: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1294,7 +1307,7 @@ export def "list-label-groups" [
   --label-group-name-begins-with: string # The beginning of the name of the label groups to be listed.
   --next-token-body: string # An opaque pagination token indicating where to continue the listing of label groups. (body field)
   --max-results-body: int # Specifies the maximum number of label groups to list. (body field)
-]: any -> record<NextToken: string, LabelGroupSummaries: table<LabelGroupName: string, LabelGroupArn: string, CreatedAt: string, UpdatedAt: string>> {
+]: any -> oneof<record<NextToken: string, LabelGroupSummaries: table<LabelGroupName: string, LabelGroupArn: string, CreatedAt: string, UpdatedAt: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1352,7 +1365,7 @@ export def "list-labels" [
   --equipment: string # Lists the labels that pertain to a particular piece of equipment.
   --next-token-body: string # An opaque pagination token indicating where to continue the listing of label groups. (body field)
   --max-results-body: int # Specifies the maximum number of labels to list. (body field)
-]: any -> record<NextToken: string, LabelSummaries: table<LabelGroupName: string, LabelId: string, LabelGroupArn: string, StartTime: string, EndTime: string, Rating: string, FaultCode: string, Equipment: string, CreatedAt: string>> {
+]: any -> oneof<record<NextToken: string, LabelSummaries: table<LabelGroupName: string, LabelId: string, LabelGroupArn: string, StartTime: string, EndTime: string, Rating: string, FaultCode: string, Equipment: string, CreatedAt: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1408,7 +1421,7 @@ export def "list-models" [
   --status: string@status-completer # The status of the ML model.
   --model-name-begins-with: string # The beginning of the name of the ML models being listed.
   --dataset-name-begins-with: string # The beginning of the name of the dataset of the ML models to be listed.
-]: any -> record<NextToken: string, ModelSummaries: table<ModelName: string, ModelArn: string, DatasetName: string, DatasetArn: string, Status: string, CreatedAt: string>> {
+]: any -> oneof<record<NextToken: string, ModelSummaries: table<ModelName: string, ModelArn: string, DatasetName: string, DatasetArn: string, Status: string, CreatedAt: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1463,7 +1476,7 @@ export def "list-sensor-statistics" [
   --ingestion-job-id: string # The ingestion job id associated with the list of Sensor Statistics. To get sensor statistics for a particular ingestion job id, both dataset name and ingestion job id must be submitted as inputs.
   --max-results-body: int # Specifies the maximum number of sensors for which to retrieve statistics. (body field)
   --next-token-body: string # An opaque pagination token indicating where to continue the listing of sensor statistics. (body field)
-]: any -> record<SensorStatisticsSummaries: table<ComponentName: string, SensorName: string, DataExists: bool, MissingValues: record, InvalidValues: record, InvalidDateEntries: record, DuplicateTimestamps: record, CategoricalValues: record, MultipleOperatingModes: record, LargeTimestampGaps: record, MonotonicValues: record, DataStartTime: string, DataEndTime: string>, NextToken: string> {
+]: any -> oneof<record<SensorStatisticsSummaries: table<ComponentName: string, SensorName: string, DataExists: bool, MissingValues: record, InvalidValues: record, InvalidDateEntries: record, DuplicateTimestamps: record, CategoricalValues: record, MultipleOperatingModes: record, LargeTimestampGaps: record, MonotonicValues: record, DataStartTime: string, DataEndTime: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1513,7 +1526,7 @@ export def "list-tags-for-resource" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-25 # required
   resource_arn: string # The Amazon Resource Name (ARN) of the resource (such as the dataset or model) that is the focus of the ListTagsForResource operation.
-]: any -> record<Tags: table<Key: string, Value: string>> {
+]: any -> oneof<record<Tags: table<Key: string, Value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1543,7 +1556,6 @@ export def "list-tags-for-resource" [
 #
 # POST /
 # operationId: StartDataIngestionJob
-# --IngestionInputConfiguration shape: {S3InputConfiguration: record}
 export def "start-data-ingestion-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1566,7 +1578,7 @@ export def "start-data-ingestion-job" [
   ingestion_input_configuration: record # Specifies configuration information for the input data for the data ingestion job, including input data S3 location. — shape: {S3InputConfiguration: record}
   role_arn: string # The Amazon Resource Name (ARN) of a role with permission to access the data source for the data ingestion job.
   client_token: string # A unique identifier for the request. If you do not set the client request token, Amazon Lookout for Equipment generates one.
-]: any -> record<JobId: string, Status: string> {
+]: any -> oneof<record<JobId: string, Status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1615,7 +1627,7 @@ export def "start-inference-scheduler" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-27 # required
   inference_scheduler_name: string # The name of the inference scheduler to be started.
-]: any -> record<ModelArn: string, ModelName: string, InferenceSchedulerName: string, InferenceSchedulerArn: string, Status: string> {
+]: any -> oneof<record<ModelArn: string, ModelName: string, InferenceSchedulerName: string, InferenceSchedulerArn: string, Status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1664,7 +1676,7 @@ export def "stop-inference-scheduler" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-28 # required
   inference_scheduler_name: string # The name of the inference scheduler to be stopped.
-]: any -> record<ModelArn: string, ModelName: string, InferenceSchedulerName: string, InferenceSchedulerArn: string, Status: string> {
+]: any -> oneof<record<ModelArn: string, ModelName: string, InferenceSchedulerName: string, InferenceSchedulerArn: string, Status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1694,7 +1706,6 @@ export def "stop-inference-scheduler" [
 #
 # POST /
 # operationId: TagResource
-# --Tags item shape: {Key: string, Value: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1715,7 +1726,7 @@ export def "tag-resource" [
   --x-amz-target: string@x-amz-target-completer-29 # required
   resource_arn: string # The Amazon Resource Name (ARN) of the specific resource to which the tag should be associated.
   tags: list # The tag or tags to be associated with a specific resource. Both the tag key and value are specified. — item shape: {Key: string, Value: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1765,7 +1776,7 @@ export def "untag-resource" [
   --x-amz-target: string@x-amz-target-completer-30 # required
   resource_arn: string # The Amazon Resource Name (ARN) of the resource to which the tag is currently associated.
   tag_keys: list<string> # Specifies the key of the tag to be removed from a specified resource.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1795,8 +1806,6 @@ export def "untag-resource" [
 #
 # POST /
 # operationId: UpdateInferenceScheduler
-# --DataInputConfiguration shape: {S3InputConfiguration?: record, InputTimeZoneOffset?: string, InferenceInputNameConfiguration?: record}
-# --DataOutputConfiguration shape: {S3OutputConfiguration: record, KmsKeyId?: string}
 export def "update-inference-scheduler" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

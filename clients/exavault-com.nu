@@ -12,27 +12,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -40,8 +49,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -52,7 +66,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -87,7 +110,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -157,9 +181,9 @@ def response-version-completer [] { ["v1" "v2"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-account" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-account" "update-account" "get-session-logs" "get-webhook-logs" "get-email-lists" "add-email-list" "delete-email-list-by-id" "get-email-list-by-id" "update-email-list-by-id" "send-referral-email" "send-welcome-email" "get-form-by-share-hash" "delete-form-message-by-id" "get-form-entries" "get-form-by-id" "update-form-by-id" "list-notifications" "add-notification" "delete-notification-by-id" "get-notification-by-id" "update-notification-by-id" "resend-invitations-for-share" "delete-resources" "get-resource-info" "add-folder" "compress-files" "copy-resources" "download" "extract-files" "list-resources" "list-resource-contents" "move-resources" "get-preview-image" "upload-file" "delete-resource-by-id" "get-resource-info-by-id" "update-resource-by-id" "list-shares" "add-share" "complete-direct-send" "delete-share-by-id" "get-share-by-id" "update-share-by-id" "get-ssh-keys-list" "add-ssh-key" "delete-ssh-key" "get-ssh-key" "list-users" "add-user" "delete-user" "get-user-by-id" "update-user" "get-wehooks-list" "add-webhook" "regenerate-webhook-token" "resend-webhook-activity-entry" "delete-webhook" "get-webhook-by-id" "update-webhook" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -194,7 +218,7 @@ export def "get-account" [
   --include: string # Related records to include in the response. Valid option is **masterUser** (e.g. masterUser)
   --ev-api-key: string # API Key required for the request (required, e.g. exampleaccount-zwSuWUZ8S38h33qPS8v0s)
   --ev-access-token: string # Access Token for the request (required, e.g. 19853ef63a0bc348024a9e4cfd4a92520d2dfd04e88d8679fb1ed6bc551593d1)
-]: nothing -> record<data: record<attributes: record<accountName: string, accountOnboarding: bool, allowedIp: list, branding: bool, brandingSettings: record, clientId: int, complexPasswords: bool, created: string, customDomain: bool, customSignature: string, externalDomains: list, maxUsers: int, modified: string, planDetails: record, quota: record, secureOnly: bool, showReferralLinks: bool, status: int, userCount: int, welcomeEmailContent: string, welcomeEmailSubject: string>, id: int, relationships: record<masterUser: record>, type: string>, included: table<attributes: record, id: int, relationships: record, type: string>, responseStatus: int> {
+]: nothing -> oneof<record<data: record<attributes: record<accountName: string, accountOnboarding: bool, allowedIp: list, branding: bool, brandingSettings: record, clientId: int, complexPasswords: bool, created: string, customDomain: bool, customSignature: string, externalDomains: list, maxUsers: int, modified: string, planDetails: record, quota: record, secureOnly: bool, showReferralLinks: bool, status: int, userCount: int, welcomeEmailContent: string, welcomeEmailSubject: string>, id: int, relationships: record<masterUser: record>, type: string>, included: table<attributes: record, id: int, relationships: record, type: string>, responseStatus: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ev_api_key == null) { error make --unspanned { msg: "required header parameter 'ev-api-key' missing: pass --ev-api-key" } }
@@ -223,9 +247,6 @@ export def "get-account" [
 #
 # PATCH /account
 # operationId: updateAccount
-# --allowedIpRanges item shape: {ipEnd?: string, ipStart?: string}
-# --brandingSettings shape: {companyName?: string, customEmail?: string, theme?: string}
-# --quota shape: {noticeEnabled?: bool, noticeThreshold?: int, transactionsNoticeEnabled?: bool, transactionsNoticeThreshold?: int}
 export def "update-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -249,7 +270,7 @@ export def "update-account" [
   --quota: record # shape: {noticeEnabled?: bool, noticeThreshold?: int, transactionsNoticeEnabled?: bool, transactionsNoticeThreshold?: int}
   --secure-only: oneof<nothing, bool> # Whether unencrypted FTP connections should be denied for the account. (e.g. false)
   --show-referral-links: oneof<nothing, bool> # Whether to display links for others to sign up on share views and invitation emails (e.g. false)
-]: any -> record<data: record<attributes: record<accountName: string, accountOnboarding: bool, allowedIp: list, branding: bool, brandingSettings: record, clientId: int, complexPasswords: bool, created: string, customDomain: bool, customSignature: string, externalDomains: list, maxUsers: int, modified: string, planDetails: record, quota: record, secureOnly: bool, showReferralLinks: bool, status: int, userCount: int, welcomeEmailContent: string, welcomeEmailSubject: string>, id: int, relationships: record<masterUser: record>, type: string>, included: table<attributes: record, id: int, relationships: record, type: string>, responseStatus: int> {
+]: any -> oneof<record<data: record<attributes: record<accountName: string, accountOnboarding: bool, allowedIp: list, branding: bool, brandingSettings: record, clientId: int, complexPasswords: bool, created: string, customDomain: bool, customSignature: string, externalDomains: list, maxUsers: int, modified: string, planDetails: record, quota: record, secureOnly: bool, showReferralLinks: bool, status: int, userCount: int, welcomeEmailContent: string, welcomeEmailSubject: string>, id: int, relationships: record<masterUser: record>, type: string>, included: table<attributes: record, id: int, relationships: record, type: string>, responseStatus: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -301,7 +322,7 @@ export def "get-session-logs" [
   --sort: string # Comma separated list sort params (e.g. -date)
   --ev-api-key: string # API Key (required, e.g. exampleaccount-zwSuWUZ8S38h33qPS8v0s)
   --ev-access-token: string # Access Token (required, e.g. 19853ef63a0bc348024a9e4cfd4a92520d2dfd04e88d8679fb1ed6bc551593d1)
-]: nothing -> record<data: table<attributes: record, id: int, type: string>, responseStatus: int, returnedResults: int, totalResults: int> {
+]: nothing -> oneof<record<data: table<attributes: record, id: int, type: string>, responseStatus: int, returnedResults: int, totalResults: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ev_api_key == null) { error make --unspanned { msg: "required header parameter 'ev-api-key' missing: pass --ev-api-key" } }
@@ -352,7 +373,7 @@ export def "get-webhook-logs" [
   --sort: string # Comma separated list sort params (e.g. -date,event)
   --ev-api-key: string # API Key (required, e.g. exampleaccount-zwSuWUZ8S38h33qPS8v0s)
   --ev-access-token: string # Access Token (required, e.g. 19853ef63a0bc348024a9e4cfd4a92520d2dfd04e88d8679fb1ed6bc551593d1)
-]: nothing -> record<data: table<attributes: any, id: int, type: string>, responseStatus: int, returnedResults: int, totalResults: int> {
+]: nothing -> oneof<record<data: table<attributes: any, id: int, type: string>, responseStatus: int, returnedResults: int, totalResults: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ev_api_key == null) { error make --unspanned { msg: "required header parameter 'ev-api-key' missing: pass --ev-api-key" } }
@@ -394,7 +415,7 @@ export def "get-email-lists" [
   --include: string # Related record types to include in the response. Valid option is `ownerUser`
   --ev-api-key: string # API Key required to make the API call. (required, e.g. exampleaccount-zwSuWUZ8S38h33qPS8v0s)
   --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
-]: nothing -> record<data: table<attributes: record, id: int, relationships: record, type: string>, included: table<attributes: record, id: int, relationships: record, type: string>, responseStatus: int, returnedResults: int, totalResults: int> {
+]: nothing -> oneof<record<data: table<attributes: record, id: int, relationships: record, type: string>, included: table<attributes: record, id: int, relationships: record, type: string>, responseStatus: int, returnedResults: int, totalResults: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ev_api_key == null) { error make --unspanned { msg: "required header parameter 'ev-api-key' missing: pass --ev-api-key" } }
@@ -437,7 +458,7 @@ export def "add-email-list" [
   --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
   emails: list<string> # Array of email addresses to include in the email list. (e.g. [johns@example.com, jdoe@example.com])
   name: string # Name of the email list. (e.g. My friends list)
-]: any -> record<data: record<attributes: record<created: string, emails: list, modified: string, name: string>, id: int, relationships: record<ownerUser: record>, type: string>, included: table<attributes: record, id: int, relationships: record, type: string>, responseStatus: int> {
+]: any -> oneof<record<data: record<attributes: record<created: string, emails: list, modified: string, name: string>, id: int, relationships: record<ownerUser: record>, type: string>, included: table<attributes: record, id: int, relationships: record, type: string>, responseStatus: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -481,7 +502,7 @@ export def "delete-email-list-by-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ev-api-key: string # API Key required to make the API call. (required, e.g. exampleaccount-zwSuWUZ8S38h33qPS8v0s)
   --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
-]: nothing -> record<data: list<string>, responseStatus: int> {
+]: nothing -> oneof<record<data: list<string>, responseStatus: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -524,7 +545,7 @@ export def "get-email-list-by-id" [
   --include: string # Related record types to include in the response. Valid option is `ownerUser`
   --ev-api-key: string # API Key required to make the API call. (required, e.g. exampleaccount-zwSuWUZ8S38h33qPS8v0s)
   --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
-]: nothing -> record<data: record<attributes: record<created: string, emails: list, modified: string, name: string>, id: int, relationships: record<ownerUser: record>, type: string>, included: table<attributes: record, id: int, relationships: record, type: string>, responseStatus: int> {
+]: nothing -> oneof<record<data: record<attributes: record<created: string, emails: list, modified: string, name: string>, id: int, relationships: record<ownerUser: record>, type: string>, included: table<attributes: record, id: int, relationships: record, type: string>, responseStatus: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -569,7 +590,7 @@ export def "update-email-list-by-id" [
   --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
   --emails: list<string> # Email addresses that replace existing list. (e.g. [yuk@example.com, jdoe@example.com])
   --name: string # Name of the email list. (e.g. My friends list)
-]: any -> record<data: record<attributes: record<created: string, emails: list, modified: string, name: string>, id: int, relationships: record<ownerUser: record>, type: string>, included: table<attributes: record, id: int, relationships: record, type: string>, responseStatus: int> {
+]: any -> oneof<record<data: record<attributes: record<created: string, emails: list, modified: string, name: string>, id: int, relationships: record<ownerUser: record>, type: string>, included: table<attributes: record, id: int, relationships: record, type: string>, responseStatus: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -615,7 +636,7 @@ export def "send-referral-email" [
   --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
   emails: list<string>
   message: string # e.g. I use ExaVault for secure file sending, and so should you. Follow my link to sign up for a trial.
-]: any -> record<data: list<string>, responseStatus: int> {
+]: any -> oneof<record<data: list<string>, responseStatus: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -659,7 +680,7 @@ export def "send-welcome-email" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ev-api-key: string # API Key required to make the API call. (required, e.g. exampleaccount-zwSuWUZ8S38h33qPS8v0s)
   --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
-]: nothing -> record<data: list<string>, responseStatus: int> {
+]: nothing -> oneof<record<data: list<string>, responseStatus: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
@@ -702,7 +723,7 @@ export def "get-form-by-share-hash" [
   --include: string@include-completer # Related record types to include in the response. Valid option is **share**
   --ev-api-key: string # API key required to make the API call. (required)
   --ev-access-token: string # Access Token required to make the API call. (required)
-]: nothing -> record<data: record<attributes: record<cssStyles: string, elements: list, formDescription: string, submitButtonText: string, successMessage: string>, id: int, relationships: record<share: record>, type: string>, included: table<attributes: record, id: int, relationships: record, type: string>, responseStatus: int> {
+]: nothing -> oneof<record<data: record<attributes: record<cssStyles: string, elements: list, formDescription: string, submitButtonText: string, successMessage: string>, id: int, relationships: record<share: record>, type: string>, included: table<attributes: record, id: int, relationships: record, type: string>, responseStatus: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($share_hash == null) { error make --unspanned { msg: "required query parameter 'shareHash' missing: pass --share-hash" } }
@@ -745,7 +766,7 @@ export def "delete-form-message-by-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ev-api-key: string # API Key required to make the API call. (required)
   --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
-]: nothing -> record<data: list<string>, responseStatus: int> {
+]: nothing -> oneof<record<data: list<string>, responseStatus: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -789,7 +810,7 @@ export def "get-form-entries" [
   --offset: int # Current offset of records (for pagination) (e.g. 100)
   --ev-api-key: string # API Key required to make the API call. (required)
   --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
-]: nothing -> record<data: table<attributes: record, id: int, type: string>, responseStatus: int, returnedResults: int, totalResults: int> {
+]: nothing -> oneof<record<data: table<attributes: record, id: int, type: string>, responseStatus: int, returnedResults: int, totalResults: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -833,7 +854,7 @@ export def "get-form-by-id" [
   --include: string # Enter "**share**" to get information about associated receive folder. (e.g. share)
   --ev-api-key: string # API key required to make the API call. (required)
   --ev-access-token: string # Access Token required to make the API call. (required)
-]: nothing -> record<data: record<attributes: record<cssStyles: string, elements: list, formDescription: string, submitButtonText: string, successMessage: string>, id: int, relationships: record<share: record>, type: string>, included: table<attributes: record, id: int, relationships: record, type: string>, responseStatus: int> {
+]: nothing -> oneof<record<data: record<attributes: record<cssStyles: string, elements: list, formDescription: string, submitButtonText: string, successMessage: string>, id: int, relationships: record<share: record>, type: string>, included: table<attributes: record, id: int, relationships: record, type: string>, responseStatus: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -863,7 +884,6 @@ export def "get-form-by-id" [
 #
 # PATCH /forms/{id}
 # operationId: updateFormById
-# --elements item shape: {id?: int, name?: string, order?: int, settings?: record, type?: "name"|"email"|"text"|"textarea"|"upload_area"}
 export def "update-form-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -882,7 +902,7 @@ export def "update-form-by-id" [
   --form-description: string # Set a description for the form that will be visible to recipients. (e.g. Send your files)
   --submit-button-text: string # Text to be displayed on the submission button. (e.g. Send Files)
   --success-message: string # Text to be displayed when a recipient has submitted the form. (e.g. Your files were uploaded)
-]: any -> record<data: record<attributes: record<cssStyles: string, elements: list, formDescription: string, submitButtonText: string, successMessage: string>, id: int, relationships: record<share: record>, type: string>, included: table<attributes: record, id: int, relationships: record, type: string>, responseStatus: int> {
+]: any -> oneof<record<data: record<attributes: record<cssStyles: string, elements: list, formDescription: string, submitButtonText: string, successMessage: string>, id: int, relationships: record<share: record>, type: string>, included: table<attributes: record, id: int, relationships: record, type: string>, responseStatus: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -932,7 +952,7 @@ export def "list-notifications" [
   --action: string@action-completer # The kind of action which triggers the notification. Valid choices are **connect** (only for delivery receipts), **download**, **upload**, **delete**, or **all** **Note** The **all** action matches notifications set to "all", not all notifications. For example, notifications set to trigger only on delete are not included if you filter for action=all (e.g. all)
   --ev-api-key: string # API Key required to make the API call. (required)
   --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
-]: nothing -> record<data: table<attributes: record, id: int, relationships: record, type: string>, included: list<any>, responseStatus: int, returnedResults: int, totalResults: int> {
+]: nothing -> oneof<record<data: table<attributes: record, id: int, relationships: record, type: string>, included: list<any>, responseStatus: int, returnedResults: int, totalResults: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ev_api_key == null) { error make --unspanned { msg: "required header parameter 'ev-api-key' missing: pass --ev-api-key" } }
@@ -980,7 +1000,7 @@ export def "add-notification" [
   --send-email: oneof<nothing, bool> # Set to true if the user should be notified by email when the notification is triggered. (e.g. true)
   type: string@type-completer-1 # What kind of notification you're making. Valid choices are: - **file** to monitor activity for a file resource - **folder** to monitor activity for a folder resource (e.g. file)
   usernames: list<string> # Determines which users' actions should trigger the notification. Rather than listing individual users, you can also use 3 special options: - **notice\_user\_all** for activity by any user or share recipient - **notice\_user\_all\_users** for activity only by user accounts - **notice\_user\_all\_recipient** for activity only by share recipients
-]: any -> record<data: record<attributes: record<action: string, created: string, message: string, modified: string, name: string, path: string, readableDescription: string, readableDescriptionWithoutPath: string, recipients: list, sendEmail: bool, shareId: string, type: string, userId: string, usernames: list>, id: int, relationships: record<ownerUser: record, resource: record, share: record>, type: string>, included: list<any>, responseStatus: int> {
+]: any -> oneof<record<data: record<attributes: record<action: string, created: string, message: string, modified: string, name: string, path: string, readableDescription: string, readableDescriptionWithoutPath: string, recipients: list, sendEmail: bool, shareId: string, type: string, userId: string, usernames: list>, id: int, relationships: record<ownerUser: record, resource: record, share: record>, type: string>, included: list<any>, responseStatus: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1025,7 +1045,7 @@ export def "delete-notification-by-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ev-api-key: string # API Key required to make the API call. (required)
   --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
-]: nothing -> record<data: list<string>, responseStatus: int> {
+]: nothing -> oneof<record<data: list<string>, responseStatus: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1068,7 +1088,7 @@ export def "get-notification-by-id" [
   --include: string # Related record types to include in the response. You can include multiple types by separating them with commas. Valid options are **ownerUser**, **resource**, and **share**. (e.g. resource,share)
   --ev-api-key: string # API Key required to make the API call. (required)
   --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
-]: nothing -> record<data: record<attributes: record<action: string, created: string, message: string, modified: string, name: string, path: string, readableDescription: string, readableDescriptionWithoutPath: string, recipients: list, sendEmail: bool, shareId: string, type: string, userId: string, usernames: list>, id: int, relationships: record<ownerUser: record, resource: record, share: record>, type: string>, included: list<any>, responseStatus: int> {
+]: nothing -> oneof<record<data: record<attributes: record<action: string, created: string, message: string, modified: string, name: string, path: string, readableDescription: string, readableDescriptionWithoutPath: string, recipients: list, sendEmail: bool, shareId: string, type: string, userId: string, usernames: list>, id: int, relationships: record<ownerUser: record, resource: record, share: record>, type: string>, included: list<any>, responseStatus: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1116,7 +1136,7 @@ export def "update-notification-by-id" [
   --recipients: list<string> # Email addresses to send notification emails to. If empty, sends to the current user's email address. (e.g. [myemail@example.com])
   --send-email: oneof<nothing, bool> # Whether an email should be sent to the recipients when matching activity happens. (e.g. true)
   --usernames: list<string> # Determines which users' actions should trigger the notification. Rather than listing individual users, you can also use 3 special options: - **notice\_user\_all** for activity by any user or share recipient - **notice\_user\_all\_users** for activity only by user accounts - **notice\_user\_all\_recipients** for activity only by share recipients (e.g. [notice_user_all])
-]: any -> record<data: record<attributes: record<action: string, created: string, message: string, modified: string, name: string, path: string, readableDescription: string, readableDescriptionWithoutPath: string, recipients: list, sendEmail: bool, shareId: string, type: string, userId: string, usernames: list>, id: int, relationships: record<ownerUser: record, resource: record, share: record>, type: string>, included: list<any>, responseStatus: int> {
+]: any -> oneof<record<data: record<attributes: record<action: string, created: string, message: string, modified: string, name: string, path: string, readableDescription: string, readableDescriptionWithoutPath: string, recipients: list, sendEmail: bool, shareId: string, type: string, userId: string, usernames: list>, id: int, relationships: record<ownerUser: record, resource: record, share: record>, type: string>, included: list<any>, responseStatus: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1162,7 +1182,7 @@ export def "resend-invitations-for-share" [
   --ev-api-key: string # API Key required to make the API call. (required)
   --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
   --recipient-id: int # ID number of recipient to send a new invitation to. (format: int32)
-]: any -> record<data: list<string>, responseStatus: int> {
+]: any -> oneof<record<data: list<string>, responseStatus: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1207,7 +1227,7 @@ export def "delete-resources" [
   --ev-api-key: string # API Key (required, e.g. exampleaccount-zwSuWUZ8S38h33qPS8v0s)
   --ev-access-token: string # Access Token (required, e.g. 19853ef63a0bc348024a9e4cfd4a92520d2dfd04e88d8679fb1ed6bc551593d1)
   resources: list<string> # Resource identifiers of items to delete.
-]: any -> record<data: list<string>, responseStatus: int> {
+]: any -> oneof<record<data: list<string>, responseStatus: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1252,7 +1272,7 @@ export def "get-resource-info" [
   --include: string # Comma separated list of relationships to include in response. Possible values are **share**, **notifications**, **directFile**, **parentResource**, **ownerUser**, **ownerUser**.
   --ev-api-key: string # API Key required to make the API call. (required)
   --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
-]: nothing -> record<data: record<attributes: record<accessedAt: string, accessedTime: int, createdAt: string, createdBy: string, createdTime: int, extension: string, fileCount: int, hash: string, name: string, path: string, previewable: bool, size: int, type: string, updatedAt: string, updatedTime: int, uploadDate: string>, id: int, relationships: record<directFile: record, notifications: list, parentResource: record, share: record>, type: string>, included: list<any>, responseStatus: int> {
+]: nothing -> oneof<record<data: record<attributes: record<accessedAt: string, accessedTime: int, createdAt: string, createdBy: string, createdTime: int, extension: string, fileCount: int, hash: string, name: string, path: string, previewable: bool, size: int, type: string, updatedAt: string, updatedTime: int, uploadDate: string>, id: int, relationships: record<directFile: record, notifications: list, parentResource: record, share: record>, type: string>, included: list<any>, responseStatus: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource == null) { error make --unspanned { msg: "required query parameter 'resource' missing: pass --resource" } }
@@ -1297,7 +1317,7 @@ export def "add-folder" [
   --name: string # Name of the folder to create. Required if **path** is not used
   --parent-resource: string # Resource identifier where to create a folder. Required if **path** is not used
   --path: string # Fully-qualified path to the new folder including folder's name
-]: any -> record<data: record<attributes: record<accessedAt: string, accessedTime: int, createdAt: string, createdBy: string, createdTime: int, extension: string, fileCount: int, hash: string, name: string, path: string, previewable: bool, size: int, type: string, updatedAt: string, updatedTime: int, uploadDate: string>, id: int, relationships: record<directFile: record, notifications: list, parentResource: record, share: record>, type: string>, included: list<any>, responseStatus: int> {
+]: any -> oneof<record<data: record<attributes: record<accessedAt: string, accessedTime: int, createdAt: string, createdBy: string, createdTime: int, extension: string, fileCount: int, hash: string, name: string, path: string, previewable: bool, size: int, type: string, updatedAt: string, updatedTime: int, uploadDate: string>, id: int, relationships: record<directFile: record, notifications: list, parentResource: record, share: record>, type: string>, included: list<any>, responseStatus: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1343,7 +1363,7 @@ export def "compress-files" [
   --archive-name: string # Name of the zip archive to create. If left blank, current date will be used.
   --parent-resource: string # Resource identifier of the folder where zip archive should be created.
   resources: list<string> # Resource identifiers for file(s)/folder(s) to include in new zip file
-]: any -> record<data: record<attributes: record<accessedAt: string, accessedTime: int, createdAt: string, createdBy: string, createdTime: int, extension: string, fileCount: int, hash: string, name: string, path: string, previewable: bool, size: int, type: string, updatedAt: string, updatedTime: int, uploadDate: string>, id: int, relationships: record<directFile: record, notifications: list, parentResource: record, share: record>, type: string>, included: list<any>, responseStatus: int> {
+]: any -> oneof<record<data: record<attributes: record<accessedAt: string, accessedTime: int, createdAt: string, createdBy: string, createdTime: int, extension: string, fileCount: int, hash: string, name: string, path: string, previewable: bool, size: int, type: string, updatedAt: string, updatedTime: int, uploadDate: string>, id: int, relationships: record<directFile: record, notifications: list, parentResource: record, share: record>, type: string>, included: list<any>, responseStatus: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1388,7 +1408,7 @@ export def "copy-resources" [
   --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
   parent_resource: string # Resource identifier for folder where items will be copied to.
   resources: list<string> # Resource identifier(s) of items to be copied to a new location
-]: any -> record<data: record<attributes: record<accessedAt: string, accessedTime: int, createdAt: string, createdBy: string, createdTime: int, extension: string, fileCount: int, hash: string, name: string, path: string, previewable: bool, size: int, type: string, updatedAt: string, updatedTime: int, uploadDate: string>, id: int, relationships: record<directFile: record, notifications: list, parentResource: record, share: record>, type: string>, meta: record> {
+]: any -> oneof<record<data: record<attributes: record<accessedAt: string, accessedTime: int, createdAt: string, createdBy: string, createdTime: int, extension: string, fileCount: int, hash: string, name: string, path: string, previewable: bool, size: int, type: string, updatedAt: string, updatedTime: int, uploadDate: string>, id: int, relationships: record<directFile: record, notifications: list, parentResource: record, share: record>, type: string>, meta: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1478,7 +1498,7 @@ export def "extract-files" [
   --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
   parent_resource: string # Resource identifier for folder files should be extracted to.
   resource: string # Resource identifier of zip archive to be extracted.
-]: any -> record<data: table<attributes: record, id: int, relationships: record, type: string>, included: list<any>, responseStatus: int, returnedResults: int, totalResults: int> {
+]: any -> oneof<record<data: table<attributes: record, id: int, relationships: record, type: string>, included: list<any>, responseStatus: int, returnedResults: int, totalResults: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1528,7 +1548,7 @@ export def "list-resources" [
   --include: string # Comma separated list of relationships to include in response. Possible values are **share**, **notifications**, **directFile**, **parentResource**, **ownerUser**, **ownerAccount**.
   --ev-api-key: string # API Key required to make the API call. (required)
   --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
-]: nothing -> record<data: table<attributes: record, id: int, relationships: record, type: string>, included: list<any>, responseStatus: int, returnedResults: int, totalResults: int> {
+]: nothing -> oneof<record<data: table<attributes: record, id: int, relationships: record, type: string>, included: list<any>, responseStatus: int, returnedResults: int, totalResults: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource == null) { error make --unspanned { msg: "required query parameter 'resource' missing: pass --resource" } }
@@ -1576,7 +1596,7 @@ export def "list-resource-contents" [
   --include: string # Comma separated list of relationships to include in response. Possible values are **share**, **notifications**, **directFile**, **parentResource**, **ownerUser**, **ownerUser**.
   --ev-api-key: string # API Key required to make the API call. (required)
   --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
-]: nothing -> record<data: table<attributes: record, id: int, relationships: record, type: string>, included: list<any>, responseStatus: int, returnedResults: int, totalResults: int> {
+]: nothing -> oneof<record<data: table<attributes: record, id: int, relationships: record, type: string>, included: list<any>, responseStatus: int, returnedResults: int, totalResults: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1620,7 +1640,7 @@ export def "move-resources" [
   --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
   parent_resource: string # Resource identifier of folder to move files/folders to. (e.g. /copyhere)
   resources: list<string> # Array containing file/folder paths to move. (e.g. [/testone.jpg, /folder])
-]: any -> record<data: record<attributes: record<accessedAt: string, accessedTime: int, createdAt: string, createdBy: string, createdTime: int, extension: string, fileCount: int, hash: string, name: string, path: string, previewable: bool, size: int, type: string, updatedAt: string, updatedTime: int, uploadDate: string>, id: int, relationships: record<directFile: record, notifications: list, parentResource: record, share: record>, type: string>, meta: record> {
+]: any -> oneof<record<data: record<attributes: record<accessedAt: string, accessedTime: int, createdAt: string, createdBy: string, createdTime: int, extension: string, fileCount: int, hash: string, name: string, path: string, previewable: bool, size: int, type: string, updatedAt: string, updatedTime: int, uploadDate: string>, id: int, relationships: record<directFile: record, notifications: list, parentResource: record, share: record>, type: string>, meta: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1668,7 +1688,7 @@ export def "get-preview-image" [
   --page: int # Page number to extract from a multi-page document (0 is the first page). Vaild for **.pdf** or **.doc** files. (format: int32, default: 0)
   --ev-api-key: string # API Key (required, e.g. exampleaccount-zwSuWUZ8S38h33qPS8v0s)
   --ev-access-token: string # Access Token (required, e.g. 19853ef63a0bc348024a9e4cfd4a92520d2dfd04e88d8679fb1ed6bc551593d1)
-]: nothing -> record<data: record<attributes: record<image: string, imageHash: string, pageCount: int, size: int>, id: int, type: string>, responseStatus: int> {
+]: nothing -> oneof<record<data: record<attributes: record<image: string, imageHash: string, pageCount: int, size: int>, id: int, type: string>, responseStatus: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource == null) { error make --unspanned { msg: "required query parameter 'resource' missing: pass --resource" } }
@@ -1717,7 +1737,7 @@ export def "upload-file" [
   --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
   --offset-bytes: int # Allows a file upload to resume at a certain number of bytes. (e.g. 4852)
   --file: string # format: binary
-]: any -> record<data: record<attributes: record<accessedAt: string, accessedTime: int, createdAt: string, createdBy: string, createdTime: int, extension: string, fileCount: int, hash: string, name: string, path: string, previewable: bool, size: int, type: string, updatedAt: string, updatedTime: int, uploadDate: string>, id: int, relationships: record<directFile: record, notifications: list, parentResource: record, share: record>, type: string>, included: list<any>, responseStatus: int> {
+]: any -> oneof<record<data: record<attributes: record<accessedAt: string, accessedTime: int, createdAt: string, createdBy: string, createdTime: int, extension: string, fileCount: int, hash: string, name: string, path: string, previewable: bool, size: int, type: string, updatedAt: string, updatedTime: int, uploadDate: string>, id: int, relationships: record<directFile: record, notifications: list, parentResource: record, share: record>, type: string>, included: list<any>, responseStatus: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1766,7 +1786,7 @@ export def "delete-resource-by-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ev-api-key: string # API Key required to make the API call. (required)
   --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
-]: nothing -> record<data: list<string>, responseStatus: int> {
+]: nothing -> oneof<record<data: list<string>, responseStatus: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1809,7 +1829,7 @@ export def "get-resource-info-by-id" [
   --include: string # Comma separated list of relationships to include in response. Possible values are **share**, **notifications**, **directFile**, **parentResource**, **ownerUser**, **ownerAccount**.
   --ev-api-key: string # API Key required to make the API call. (required)
   --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
-]: nothing -> record<data: record<attributes: record<accessedAt: string, accessedTime: int, createdAt: string, createdBy: string, createdTime: int, extension: string, fileCount: int, hash: string, name: string, path: string, previewable: bool, size: int, type: string, updatedAt: string, updatedTime: int, uploadDate: string>, id: int, relationships: record<directFile: record, notifications: list, parentResource: record, share: record>, type: string>, included: list<any>, responseStatus: int> {
+]: nothing -> oneof<record<data: record<attributes: record<accessedAt: string, accessedTime: int, createdAt: string, createdBy: string, createdTime: int, extension: string, fileCount: int, hash: string, name: string, path: string, previewable: bool, size: int, type: string, updatedAt: string, updatedTime: int, uploadDate: string>, id: int, relationships: record<directFile: record, notifications: list, parentResource: record, share: record>, type: string>, included: list<any>, responseStatus: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1853,7 +1873,7 @@ export def "update-resource-by-id" [
   --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
   --ev-api-key: string # API key required to make the API call. (required)
   --name: string # The new name for the resource (file or folder). (e.g. my-renamed-file.txt)
-]: any -> record<data: record<attributes: record<accessedAt: string, accessedTime: int, createdAt: string, createdBy: string, createdTime: int, extension: string, fileCount: int, hash: string, name: string, path: string, previewable: bool, size: int, type: string, updatedAt: string, updatedTime: int, uploadDate: string>, id: int, relationships: record<directFile: record, notifications: list, parentResource: record, share: record>, type: string>, included: list<any>, responseStatus: int> {
+]: any -> oneof<record<data: record<attributes: record<accessedAt: string, accessedTime: int, createdAt: string, createdBy: string, createdTime: int, extension: string, fileCount: int, hash: string, name: string, path: string, previewable: bool, size: int, type: string, updatedAt: string, updatedTime: int, uploadDate: string>, id: int, relationships: record<directFile: record, notifications: list, parentResource: record, share: record>, type: string>, included: list<any>, responseStatus: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1908,7 +1928,7 @@ export def "list-shares" [
   --search: string # Searches the share name, username, recipients, share messages fields for the provided value. Supports wildcard searches.
   --ev-api-key: string # API Key required to make the API call. (required, e.g. exampleaccount-zwSuWUZ8S38h33qPS8v0s)
   --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
-]: nothing -> record<data: table<attributes: record, id: int, relationships: record, type: string>, included: list<any>, responseStatus: int, returnedResults: int, totalResults: int> {
+]: nothing -> oneof<record<data: table<attributes: record, id: int, relationships: record, type: string>, included: list<any>, responseStatus: int, returnedResults: int, totalResults: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ev_api_key == null) { error make --unspanned { msg: "required header parameter 'ev-api-key' missing: pass --ev-api-key" } }
@@ -1937,8 +1957,6 @@ export def "list-shares" [
 #
 # POST /shares
 # operationId: addShare
-# --accessMode shape: {delete?: bool, download?: bool, modify?: bool, upload?: bool}
-# --recipients item shape: {email?: string, type?: string}
 export def "add-share" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1967,7 +1985,7 @@ export def "add-share" [
   --resources: list<string> # Array of resources for this share. See details on [how to specify resources](#section/Identifying-Resources) above. **shared_folder** and **receive** shares must have only one `resource`, which is a directory that does not have a current share attached. **send** shares may have multiple `resource` parameters. You can also leave this parameter null if you are planning to upload files to the send. If you are planning to upload files to the send that are not yet in your account, you will also need to call the [POST /shares/complete-send/{id}](#operation/completeDirectSend) endpoint to finish the send operation. (e.g. [/testfolder])
   --sending-local-files: oneof<nothing, bool> # Use this only for **send** shares. Flag to indicate that you are going to upload additional files from your computer to the share. If this is **true**, you will also need to use the [POST /shares/complete-send/{id}](#operation/completeDirectSend) call to finish setting up your share after the files are uploaded.
   type: string@type-completer-2 # The type of share to create. See above for a description of each. (e.g. shared_folder)
-]: any -> record<data: record<attributes: record<accessDescription: string, accessMode: record, created: string, embed: bool, expiration: string, expired: bool, fileDropCreateFolders: bool, formId: int, hasNotification: bool, hasPassword: bool, hash: string, inherited: bool, messages: list, modified: string, name: string, ownerHash: string, paths: list, public: bool, recipients: list, requireEmail: bool, resent: string, status: int, trackingStatus: string, type: string>, id: int, relationships: record<messages: list, notifications: list, owner: record, resources: list>, type: string>, included: list<any>, responseStatus: int> {
+]: any -> oneof<record<data: record<attributes: record<accessDescription: string, accessMode: record, created: string, embed: bool, expiration: string, expired: bool, fileDropCreateFolders: bool, formId: int, hasNotification: bool, hasPassword: bool, hash: string, inherited: bool, messages: list, modified: string, name: string, ownerHash: string, paths: list, public: bool, recipients: list, requireEmail: bool, resent: string, status: int, trackingStatus: string, type: string>, id: int, relationships: record<messages: list, notifications: list, owner: record, resources: list>, type: string>, included: list<any>, responseStatus: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2011,7 +2029,7 @@ export def "complete-direct-send" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ev-api-key: string # API Key (required, e.g. exampleaccount-zwSuWUZ8S38h33qPS8v0s)
   --ev-access-token: string # Access Token (required, e.g. 19853ef63a0bc348024a9e4cfd4a92520d2dfd04e88d8679fb1ed6bc551593d1)
-]: nothing -> record<data: record<attributes: record<accessDescription: string, accessMode: record, created: string, embed: bool, expiration: string, expired: bool, fileDropCreateFolders: bool, formId: int, hasNotification: bool, hasPassword: bool, hash: string, inherited: bool, messages: list, modified: string, name: string, ownerHash: string, paths: list, public: bool, recipients: list, requireEmail: bool, resent: string, status: int, trackingStatus: string, type: string>, id: int, relationships: record<messages: list, notifications: list, owner: record, resources: list>, type: string>, included: list<any>, responseStatus: int> {
+]: nothing -> oneof<record<data: record<attributes: record<accessDescription: string, accessMode: record, created: string, embed: bool, expiration: string, expired: bool, fileDropCreateFolders: bool, formId: int, hasNotification: bool, hasPassword: bool, hash: string, inherited: bool, messages: list, modified: string, name: string, ownerHash: string, paths: list, public: bool, recipients: list, requireEmail: bool, resent: string, status: int, trackingStatus: string, type: string>, id: int, relationships: record<messages: list, notifications: list, owner: record, resources: list>, type: string>, included: list<any>, responseStatus: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2053,7 +2071,7 @@ export def "delete-share-by-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ev-api-key: string # API Key required to make the API call. (required, e.g. exampleaccount-zwSuWUZ8S38h33qPS8v0s)
   --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
-]: nothing -> record<data: list<string>, responseStatus: int> {
+]: nothing -> oneof<record<data: list<string>, responseStatus: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2096,7 +2114,7 @@ export def "get-share-by-id" [
   --include: string # Comma separated list of relationships to include in response. Possible values are **owner**, **resources**, **notifications**, **activity**. (e.g. owner,notifications)
   --ev-api-key: string # API Key (required, e.g. exampleaccount-zwSuWUZ8S38h33qPS8v0s)
   --ev-access-token: string # Access Token (required, e.g. 19853ef63a0bc348024a9e4cfd4a92520d2dfd04e88d8679fb1ed6bc551593d1)
-]: nothing -> record<data: record<attributes: record<accessDescription: string, accessMode: record, created: string, embed: bool, expiration: string, expired: bool, fileDropCreateFolders: bool, formId: int, hasNotification: bool, hasPassword: bool, hash: string, inherited: bool, messages: list, modified: string, name: string, ownerHash: string, paths: list, public: bool, recipients: list, requireEmail: bool, resent: string, status: int, trackingStatus: string, type: string>, id: int, relationships: record<messages: list, notifications: list, owner: record, resources: list>, type: string>, included: list<any>, responseStatus: int> {
+]: nothing -> oneof<record<data: record<attributes: record<accessDescription: string, accessMode: record, created: string, embed: bool, expiration: string, expired: bool, fileDropCreateFolders: bool, formId: int, hasNotification: bool, hasPassword: bool, hash: string, inherited: bool, messages: list, modified: string, name: string, ownerHash: string, paths: list, public: bool, recipients: list, requireEmail: bool, resent: string, status: int, trackingStatus: string, type: string>, id: int, relationships: record<messages: list, notifications: list, owner: record, resources: list>, type: string>, included: list<any>, responseStatus: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2126,8 +2144,6 @@ export def "get-share-by-id" [
 #
 # PATCH /shares/{id}
 # operationId: updateShareById
-# --accessMode shape: {delete?: bool, download?: bool, modify?: bool, upload?: bool}
-# --recipients item shape: {email?: string, type?: string}
 export def "update-share-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2156,7 +2172,7 @@ export def "update-share-by-id" [
   --require-email: oneof<nothing, bool> # Whether visitors to the share will be required to enter their email in order to access the share. (e.g. false)
   --resources: list<string> # Array of resources for this share. See details on [how to specify resources](#section/Identifying-Resources) above. **shared_folder** and **receive** shares must have only one `resource`, which is a directory that does not have a current share attached. **send** shares may have multiple `resource` parameters. **NOTE**: Sending this parameter will **REPLACE** the existing resources with the resources included in this request. (e.g. [/testfolder])
   --status: int # New status for the share. You can set an active share to inactive by setting the status to **0**
-]: any -> record<data: record<attributes: record<accessDescription: string, accessMode: record, created: string, embed: bool, expiration: string, expired: bool, fileDropCreateFolders: bool, formId: int, hasNotification: bool, hasPassword: bool, hash: string, inherited: bool, messages: list, modified: string, name: string, ownerHash: string, paths: list, public: bool, recipients: list, requireEmail: bool, resent: string, status: int, trackingStatus: string, type: string>, id: int, relationships: record<messages: list, notifications: list, owner: record, resources: list>, type: string>, included: list<any>, responseStatus: int> {
+]: any -> oneof<record<data: record<attributes: record<accessDescription: string, accessMode: record, created: string, embed: bool, expiration: string, expired: bool, fileDropCreateFolders: bool, formId: int, hasNotification: bool, hasPassword: bool, hash: string, inherited: bool, messages: list, modified: string, name: string, ownerHash: string, paths: list, public: bool, recipients: list, requireEmail: bool, resent: string, status: int, trackingStatus: string, type: string>, id: int, relationships: record<messages: list, notifications: list, owner: record, resources: list>, type: string>, included: list<any>, responseStatus: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2203,7 +2219,7 @@ export def "get-ssh-keys-list" [
   --offset: int # Determines which item to start on for pagination. Use zero (0) to start at the beginning of the list.
   --ev-api-key: string # API key required to make the API call. (required)
   --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
-]: nothing -> record<data: table<attributes: record, id: int, relationships: record, type: string>, included: table<attributes: record, id: int, relationships: record, type: string>, responseStatus: int, returnedResults: int, totalResults: int> {
+]: nothing -> oneof<record<data: table<attributes: record, id: int, relationships: record, type: string>, included: table<attributes: record, id: int, relationships: record, type: string>, responseStatus: int, returnedResults: int, totalResults: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ev_api_key == null) { error make --unspanned { msg: "required header parameter 'ev-api-key' missing: pass --ev-api-key" } }
@@ -2246,7 +2262,7 @@ export def "add-ssh-key" [
   --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
   public_key: string # Public Key to provide ExaVault. You can provide the Public Key as formatted from the ssh-keygen command or a standard rfc-4716 format.
   user_id: int # ID of the user to assign the new key to.
-]: any -> record<data: record<attributes: record<created: string, fingerprint: string, lastLogin: string>, id: int, relationships: record<ownerUser: record>, type: string>, included: table<attributes: record, id: int, relationships: record, type: string>, responseStatus: int> {
+]: any -> oneof<record<data: record<attributes: record<created: string, fingerprint: string, lastLogin: string>, id: int, relationships: record<ownerUser: record>, type: string>, included: table<attributes: record, id: int, relationships: record, type: string>, responseStatus: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2332,7 +2348,7 @@ export def "get-ssh-key" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ev-api-key: string # API key required to make the API call. (required)
   --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
-]: nothing -> record<data: record<attributes: record<created: string, fingerprint: string, lastLogin: string>, id: int, relationships: record<ownerUser: record>, type: string>, included: table<attributes: record, id: int, relationships: record, type: string>, responseStatus: int> {
+]: nothing -> oneof<record<data: record<attributes: record<created: string, fingerprint: string, lastLogin: string>, id: int, relationships: record<ownerUser: record>, type: string>, included: table<attributes: record, id: int, relationships: record, type: string>, responseStatus: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2384,7 +2400,7 @@ export def "list-users" [
   --include: string # Comma separated list of relationships to include in response. Valid options are **homeResource** and **ownerAccount**. (e.g. homeResource,ownerAccount)
   --ev-api-key: string # API key required to make the API call. (required)
   --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
-]: nothing -> record<data: table<attributes: record, id: int, relationships: record, type: string>, included: list<any>, responseStatus: int, returnedResults: int, totalResults: int> {
+]: nothing -> oneof<record<data: table<attributes: record, id: int, relationships: record, type: string>, included: list<any>, responseStatus: int, returnedResults: int, totalResults: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ev_api_key == null) { error make --unspanned { msg: "required header parameter 'ev-api-key' missing: pass --ev-api-key" } }
@@ -2413,7 +2429,6 @@ export def "list-users" [
 #
 # POST /users
 # operationId: addUser
-# --permissions shape: {changePassword?: bool, delete?: bool, deleteFormData?: bool, download?: bool, list?: bool, modify?: bool, notification?: bool, share?: bool, upload?: bool, viewFormData?: bool}
 export def "add-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2438,7 +2453,7 @@ export def "add-user" [
   time_zone: string # Time zone, used for accurate time display within the application. See this page for allowed values. (e.g. America/Los_Angeles)
   username: string # Username of the user to create. This should follow standard username conventions - spaces are not allowed, etc. We do allow email addresses as usernames. **Note** Usernames must be unique across all ExaVault accounts. (e.g. testuser)
   --welcome-email: oneof<nothing, bool> # If **true**, send this new user a welcome email upon creation. The content of the welcome email can be configured with the [PATCH /accounts](#operation/updateAccount) method. (e.g. true)
-]: any -> record<data: record<attributes: record<accessTimestamp: string, accountName: string, created: string, email: string, expiration: string, firstLogin: bool, homePath: string, locked: bool, modified: string, nickname: string, onboarding: bool, permissions: record, role: string, status: int, timeZone: string, username: string>, id: int, relationships: record<homeResource: record, ownerAccount: record>, type: string>, included: list<any>, responseStatus: int> {
+]: any -> oneof<record<data: record<attributes: record<accessTimestamp: string, accountName: string, created: string, email: string, expiration: string, firstLogin: bool, homePath: string, locked: bool, modified: string, nickname: string, onboarding: bool, permissions: record, role: string, status: int, timeZone: string, username: string>, id: int, relationships: record<homeResource: record, ownerAccount: record>, type: string>, included: list<any>, responseStatus: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2482,7 +2497,7 @@ export def "delete-user" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ev-api-key: string # API Key required to make the API call. (required)
   --ev-access-token: string # Access token required to make the API call. (required, e.g. 19853ef63a0bc348024a9e4cfd4a92520d2dfd04e88d8679fb1ed6bc551593d1)
-]: nothing -> record<data: list<string>, responseStatus: int> {
+]: nothing -> oneof<record<data: list<string>, responseStatus: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2525,7 +2540,7 @@ export def "get-user-by-id" [
   --include: string # Comma-separated list of relationships to include in response. Possible values include **homeResource** and **ownerAccount**. (e.g. homeResource,ownerAccount)
   --ev-api-key: string # API Key (required, e.g. exampleaccount-zwSuWUZ8S38h33qPS8v0s)
   --ev-access-token: string # Access token required to make the API call. (required, e.g. 19853ef63a0bc348024a9e4cfd4a92520d2dfd04e88d8679fb1ed6bc551593d1)
-]: nothing -> record<data: record<attributes: record<accessTimestamp: string, accountName: string, created: string, email: string, expiration: string, firstLogin: bool, homePath: string, locked: bool, modified: string, nickname: string, onboarding: bool, permissions: record, role: string, status: int, timeZone: string, username: string>, id: int, relationships: record<homeResource: record, ownerAccount: record>, type: string>, included: list<any>, responseStatus: int> {
+]: nothing -> oneof<record<data: record<attributes: record<accessTimestamp: string, accountName: string, created: string, email: string, expiration: string, firstLogin: bool, homePath: string, locked: bool, modified: string, nickname: string, onboarding: bool, permissions: record, role: string, status: int, timeZone: string, username: string>, id: int, relationships: record<homeResource: record, ownerAccount: record>, type: string>, included: list<any>, responseStatus: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2555,7 +2570,6 @@ export def "get-user-by-id" [
 #
 # PATCH /users/{id}
 # operationId: updateUser
-# --permissions shape: {changePassword: bool, delete: bool, deleteFormData: bool, download: bool, list: bool, modify: bool, notification: bool, share: bool, upload: bool, viewFormData: bool}
 export def "update-user" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2580,7 +2594,7 @@ export def "update-user" [
   --role: string@role-completer # The type of user (**admin** or **user**). Note that admin users cannot have a `homeResource` other than '/', and will have full permissions, but you must provide at least "download,upload,list,delete" in the `permissions` parameter. (e.g. user)
   --time-zone: string # Time zone, used for accurate time display within the application. See this page for allowed values. (e.g. America/Los_Angeles)
   --username: string # New username for the user. This should follow standard username conventions - spaces are not allowed, etc. We do allow email addresses as usernames. **Note** Usernames must be unique across all ExaVault accounts. (e.g. testuser)
-]: any -> record<data: record<attributes: record<accessTimestamp: string, accountName: string, created: string, email: string, expiration: string, firstLogin: bool, homePath: string, locked: bool, modified: string, nickname: string, onboarding: bool, permissions: record, role: string, status: int, timeZone: string, username: string>, id: int, relationships: record<homeResource: record, ownerAccount: record>, type: string>, included: list<any>, responseStatus: int> {
+]: any -> oneof<record<data: record<attributes: record<accessTimestamp: string, accountName: string, created: string, email: string, expiration: string, firstLogin: bool, homePath: string, locked: bool, modified: string, nickname: string, onboarding: bool, permissions: record, role: string, status: int, timeZone: string, username: string>, id: int, relationships: record<homeResource: record, ownerAccount: record>, type: string>, included: list<any>, responseStatus: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2627,7 +2641,7 @@ export def "get-wehooks-list" [
   --limit: int # Limit of the records list (e.g. 100)
   --ev-api-key: string # API key required to make the API call. (required)
   --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
-]: nothing -> record<data: table<attributes: record, id: int, relationships: record, type: string>, included: list<any>, responseStatus: int, returnedResults: int, totalResults: int> {
+]: nothing -> oneof<record<data: table<attributes: record, id: int, relationships: record, type: string>, included: list<any>, responseStatus: int, returnedResults: int, totalResults: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ev_api_key == null) { error make --unspanned { msg: "required header parameter 'ev-api-key' missing: pass --ev-api-key" } }
@@ -2656,7 +2670,6 @@ export def "get-wehooks-list" [
 #
 # POST /webhooks
 # operationId: addWebhook
-# --triggers shape: {resources?: record, shares?: record}
 export def "add-webhook" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2673,7 +2686,7 @@ export def "add-webhook" [
   --resource: string # Resource identifier for the top folder this webhook is associated with (e.g. /uploads-folder)
   --response-version: string@response-version-completer # What version of webhook request should be sent to the endpoint URL when messages are sent (e.g. v2)
   --triggers: record # shape: {resources?: record, shares?: record}
-]: any -> record<data: table<attributes: record, id: int, relationships: record, type: string>, included: list<any>, responseStatus: int> {
+]: any -> oneof<record<data: table<attributes: record, id: int, relationships: record, type: string>, included: list<any>, responseStatus: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2717,7 +2730,7 @@ export def "regenerate-webhook-token" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ev-api-key: string # API key required to make the API call. (required)
   --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
-]: nothing -> record<data: table<attributes: record, id: int, relationships: record, type: string>, included: list<any>, responseStatus: int> {
+]: nothing -> oneof<record<data: table<attributes: record, id: int, relationships: record, type: string>, included: list<any>, responseStatus: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2759,7 +2772,7 @@ export def "resend-webhook-activity-entry" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ev-api-key: string # API key required to make the API call. (required)
   --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
-]: nothing -> record<data: list<string>, responseStatus: int> {
+]: nothing -> oneof<record<data: list<string>, responseStatus: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($activity_id | is-empty) { error make --unspanned { msg: "path parameter 'activityId' must be non-empty" } }
@@ -2801,7 +2814,7 @@ export def "delete-webhook" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ev-api-key: string # API key required to make the API call. (required)
   --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
-]: nothing -> record<data: list<string>, responseStatus: int> {
+]: nothing -> oneof<record<data: list<string>, responseStatus: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2844,7 +2857,7 @@ export def "get-webhook-by-id" [
   --include: string # Include metadata for related items; `ownerAccount` and/or `resource`
   --ev-api-key: string # API key required to make the API call. (required)
   --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
-]: nothing -> record<data: table<attributes: record, id: int, relationships: record, type: string>, included: list<any>, responseStatus: int> {
+]: nothing -> oneof<record<data: table<attributes: record, id: int, relationships: record, type: string>, included: list<any>, responseStatus: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2874,7 +2887,6 @@ export def "get-webhook-by-id" [
 #
 # PATCH /webhooks/{id}
 # operationId: updateWebhook
-# --triggers shape: {resources?: record, shares?: record}
 export def "update-webhook" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2892,7 +2904,7 @@ export def "update-webhook" [
   --resource: string # Resource identifier of the top folder watched by this webhook. (e.g. /newfolder)
   --response-version: string@response-version-completer # Version of the webhooks message to send to the endpoint (e.g. v1)
   --triggers: record # shape: {resources?: record, shares?: record}
-]: any -> record<data: table<attributes: record, id: int, relationships: record, type: string>, included: list<any>, responseStatus: int> {
+]: any -> oneof<record<data: table<attributes: record, id: int, relationships: record, type: string>, included: list<any>, responseStatus: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

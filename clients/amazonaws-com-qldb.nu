@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -119,9 +143,9 @@ def output-format-completer [] { ["ION_BINARY" "ION_TEXT" "JSON"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cancel-journal-kinesis-stream" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["cancel-journal-kinesis-stream" "describe-journal-kinesis-stream" "create-ledger" "list-ledgers" "delete-ledger" "describe-ledger" "update-ledger" "describe-journal-s3-export" "export-journal-to-s3" "list-journal-s3-exports-for-ledger" "get-block" "get-digest" "get-revision" "list-journal-kinesis-streams-for-ledger" "stream-journal-to-kinesis" "list-journal-s3-exports" "list-tags-for-resource" "tag-resource" "untag-resource" "update-ledger-permissions-mode" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -162,7 +186,7 @@ export def "cancel-journal-kinesis-stream" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<StreamId: string> {
+]: nothing -> oneof<record<StreamId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -209,7 +233,7 @@ export def "describe-journal-kinesis-stream" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Stream: record<LedgerName: string, CreationTime: string, InclusiveStartTime: string, ExclusiveEndTime: string, RoleArn: string, StreamId: string, Arn: string, Status: string, KinesisConfiguration: record<StreamArn: string, AggregationEnabled: bool>, ErrorCause: string, StreamName: string>> {
+]: nothing -> oneof<record<Stream: record<LedgerName: string, CreationTime: string, InclusiveStartTime: string, ExclusiveEndTime: string, RoleArn: string, StreamId: string, Arn: string, Status: string, KinesisConfiguration: record<StreamArn: string, AggregationEnabled: bool>, ErrorCause: string, StreamName: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -259,7 +283,7 @@ export def "create-ledger" [
   permissions_mode: string@permissions-mode-completer # The permissions mode to assign to the ledger that you want to create. This parameter can have one of the following values: ALLOW_ALL: A legacy permissions mode that enables access control with API-level granularity for ledgers. This mode allows users who have the SendCommand API permission for this ledger to run all PartiQL commands (hence, ALLOW_ALL) on any tables in the specified ledger. This mode disregards any table-level or command-level IAM permissions policies that you create for the ledger. STANDARD: (Recommended) A permissions mode that enables access control with finer granularity for ledgers, tables, and PartiQL commands. By default, this mode denies all user requests to run any PartiQL commands on any tables in this ledger. To allow PartiQL commands to run, you must create IAM permissions policies for specific table resources and PartiQL actions, in addition to the SendCommand API permission for the ledger. For information, see Getting started with the standard permissions mode (https://docs.aws.amazon.com/qldb/latest/developerguide/getting-started-standard-mode.html) in the Amazon QLDB Developer Guide. We strongly recommend using the STANDARD permissions mode to maximize the security of your ledger data.
   --deletion-protection: oneof<nothing, bool> # The flag that prevents a ledger from being deleted by any user. If not provided on ledger creation, this feature is enabled (true) by default. If deletion protection is enabled, you must first disable it before you can delete the ledger. You can disable it by calling the UpdateLedger operation to set the flag to false.
   --kms-key: string # The key in Key Management Service (KMS) to use for encryption of data at rest in the ledger. For more information, see Encryption at rest (https://docs.aws.amazon.com/qldb/latest/developerguide/encryption-at-rest.html) in the Amazon QLDB Developer Guide. Use one of the following options to specify this parameter: AWS_OWNED_KMS_KEY: Use an KMS key that is owned and managed by Amazon Web Services on your behalf. Undefined: By default, use an Amazon Web Services owned KMS key. A valid symmetric customer managed KMS key: Use the specified KMS key in your account that you create, own, and manage. Amazon QLDB does not support asymmetric keys. For more information, see Using symmetric and asymmetric keys (https://docs.aws.amazon.com/kms/latest/developerguide/symmetric-asymmetric.html) in the Key Management Service Developer Guide. To specify a customer managed KMS key, you can use its key ID, Amazon Resource Name (ARN), alias name, or alias ARN. When using an alias name, prefix it with "alias/". To specify a key in a different Amazon Web Services account, you must use the key ARN or alias ARN. For example: Key ID: 1234abcd-12ab-34cd-56ef-1234567890ab Key ARN: arn:aws:kms:us-east-2:111122223333:key/1234abcd-12ab-34cd-56ef-1234567890ab Alias name: alias/ExampleAlias Alias ARN: arn:aws:kms:us-east-2:111122223333:alias/ExampleAlias For more information, see Key identifiers (KeyId) (https://docs.aws.amazon.com/kms/latest/developerguide/concepts.html#key-id) in the Key Management Service Developer Guide.
-]: any -> record<Name: string, Arn: string, State: string, CreationDateTime: string, PermissionsMode: string, DeletionProtection: bool, KmsKeyArn: string> {
+]: any -> oneof<record<Name: string, Arn: string, State: string, CreationDateTime: string, PermissionsMode: string, DeletionProtection: bool, KmsKeyArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -309,7 +333,7 @@ export def "list-ledgers" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Ledgers: table<Name: string, State: string, CreationDateTime: string>, NextToken: string> {
+]: nothing -> oneof<record<Ledgers: table<Name: string, State: string, CreationDateTime: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "next_token" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -399,7 +423,7 @@ export def "describe-ledger" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Name: string, Arn: string, State: string, CreationDateTime: string, PermissionsMode: string, DeletionProtection: bool, EncryptionDescription: record<KmsKeyArn: string, EncryptionStatus: string, InaccessibleKmsKeyDateTime: string>> {
+]: nothing -> oneof<record<Name: string, Arn: string, State: string, CreationDateTime: string, PermissionsMode: string, DeletionProtection: bool, EncryptionDescription: record<KmsKeyArn: string, EncryptionStatus: string, InaccessibleKmsKeyDateTime: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -446,7 +470,7 @@ export def "update-ledger" [
   --x-amz-signed-headers: string
   --deletion-protection: oneof<nothing, bool> # The flag that prevents a ledger from being deleted by any user. If not provided on ledger creation, this feature is enabled (true) by default. If deletion protection is enabled, you must first disable it before you can delete the ledger. You can disable it by calling the UpdateLedger operation to set the flag to false.
   --kms-key: string # The key in Key Management Service (KMS) to use for encryption of data at rest in the ledger. For more information, see Encryption at rest (https://docs.aws.amazon.com/qldb/latest/developerguide/encryption-at-rest.html) in the Amazon QLDB Developer Guide. Use one of the following options to specify this parameter: AWS_OWNED_KMS_KEY: Use an KMS key that is owned and managed by Amazon Web Services on your behalf. Undefined: Make no changes to the KMS key of the ledger. A valid symmetric customer managed KMS key: Use the specified KMS key in your account that you create, own, and manage. Amazon QLDB does not support asymmetric keys. For more information, see Using symmetric and asymmetric keys (https://docs.aws.amazon.com/kms/latest/developerguide/symmetric-asymmetric.html) in the Key Management Service Developer Guide. To specify a customer managed KMS key, you can use its key ID, Amazon Resource Name (ARN), alias name, or alias ARN. When using an alias name, prefix it with "alias/". To specify a key in a different Amazon Web Services account, you must use the key ARN or alias ARN. For example: Key ID: 1234abcd-12ab-34cd-56ef-1234567890ab Key ARN: arn:aws:kms:us-east-2:111122223333:key/1234abcd-12ab-34cd-56ef-1234567890ab Alias name: alias/ExampleAlias Alias ARN: arn:aws:kms:us-east-2:111122223333:alias/ExampleAlias For more information, see Key identifiers (KeyId) (https://docs.aws.amazon.com/kms/latest/developerguide/concepts.html#key-id) in the Key Management Service Developer Guide.
-]: any -> record<Name: string, Arn: string, State: string, CreationDateTime: string, DeletionProtection: bool, EncryptionDescription: record<KmsKeyArn: string, EncryptionStatus: string, InaccessibleKmsKeyDateTime: string>> {
+]: any -> oneof<record<Name: string, Arn: string, State: string, CreationDateTime: string, DeletionProtection: bool, EncryptionDescription: record<KmsKeyArn: string, EncryptionStatus: string, InaccessibleKmsKeyDateTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -495,7 +519,7 @@ export def "describe-journal-s3-export" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ExportDescription: record<LedgerName: string, ExportId: string, ExportCreationTime: string, Status: string, InclusiveStartTime: string, ExclusiveEndTime: string, S3ExportConfiguration: record<Bucket: string, Prefix: string, EncryptionConfiguration: record>, RoleArn: string, OutputFormat: string>> {
+]: nothing -> oneof<record<ExportDescription: record<LedgerName: string, ExportId: string, ExportCreationTime: string, Status: string, InclusiveStartTime: string, ExclusiveEndTime: string, S3ExportConfiguration: record<Bucket: string, Prefix: string, EncryptionConfiguration: record>, RoleArn: string, OutputFormat: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -523,7 +547,6 @@ export def "describe-journal-s3-export" [
 #
 # POST /ledgers/{name}/journal-s3-exports
 # operationId: ExportJournalToS3
-# --S3ExportConfiguration shape: {Bucket?: string, Prefix?: string, EncryptionConfiguration?: record}
 export def "export-journal-to-s3" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -547,7 +570,7 @@ export def "export-journal-to-s3" [
   s3_export_configuration: record # The Amazon Simple Storage Service (Amazon S3) bucket location in which a journal export job writes the journal contents. — shape: {Bucket?: string, Prefix?: string, EncryptionConfiguration?: record}
   role_arn: string # The Amazon Resource Name (ARN) of the IAM role that grants QLDB permissions for a journal export job to do the following: Write objects into your Amazon Simple Storage Service (Amazon S3) bucket. (Optional) Use your customer managed key in Key Management Service (KMS) for server-side encryption of your exported data. To pass a role to QLDB when requesting a journal export, you must have permissions to perform the iam:PassRole action on the IAM role resource. This is required for all journal export requests.
   --output-format: string@output-format-completer # The output format of your exported journal data. If this parameter is not specified, the exported data defaults to ION_TEXT format.
-]: any -> record<ExportId: string> {
+]: any -> oneof<record<ExportId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -599,7 +622,7 @@ export def "list-journal-s3-exports-for-ledger" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<JournalS3Exports: table<LedgerName: string, ExportId: string, ExportCreationTime: string, Status: string, InclusiveStartTime: string, ExclusiveEndTime: string, S3ExportConfiguration: record, RoleArn: string, OutputFormat: string>, NextToken: string> {
+]: nothing -> oneof<record<JournalS3Exports: table<LedgerName: string, ExportId: string, ExportCreationTime: string, Status: string, InclusiveStartTime: string, ExclusiveEndTime: string, S3ExportConfiguration: record, RoleArn: string, OutputFormat: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -627,8 +650,6 @@ export def "list-journal-s3-exports-for-ledger" [
 #
 # POST /ledgers/{name}/block
 # operationId: GetBlock
-# --BlockAddress shape: {IonText?: string}
-# --DigestTipAddress shape: {IonText?: string}
 export def "get-block" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -649,7 +670,7 @@ export def "get-block" [
   --x-amz-signed-headers: string
   block_address: record # A structure that can contain a value in multiple encoding formats. — shape: {IonText?: string}
   --digest-tip-address: record # A structure that can contain a value in multiple encoding formats. — shape: {IonText?: string}
-]: any -> record<Block: record<IonText: string>, Proof: record<IonText: string>> {
+]: any -> oneof<record<Block: record<IonText: string>, Proof: record<IonText: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -697,7 +718,7 @@ export def "get-digest" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Digest: string, DigestTipAddress: record<IonText: string>> {
+]: nothing -> oneof<record<Digest: string, DigestTipAddress: record<IonText: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -724,8 +745,6 @@ export def "get-digest" [
 #
 # POST /ledgers/{name}/revision
 # operationId: GetRevision
-# --BlockAddress shape: {IonText?: string}
-# --DigestTipAddress shape: {IonText?: string}
 export def "get-revision" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -747,7 +766,7 @@ export def "get-revision" [
   block_address: record # A structure that can contain a value in multiple encoding formats. — shape: {IonText?: string}
   document_id: string # The UUID (represented in Base62-encoded text) of the document to be verified.
   --digest-tip-address: record # A structure that can contain a value in multiple encoding formats. — shape: {IonText?: string}
-]: any -> record<Proof: record<IonText: string>, Revision: record<IonText: string>> {
+]: any -> oneof<record<Proof: record<IonText: string>, Revision: record<IonText: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -799,7 +818,7 @@ export def "list-journal-kinesis-streams-for-ledger" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Streams: table<LedgerName: string, CreationTime: string, InclusiveStartTime: string, ExclusiveEndTime: string, RoleArn: string, StreamId: string, Arn: string, Status: string, KinesisConfiguration: record, ErrorCause: string, StreamName: string>, NextToken: string> {
+]: nothing -> oneof<record<Streams: table<LedgerName: string, CreationTime: string, InclusiveStartTime: string, ExclusiveEndTime: string, RoleArn: string, StreamId: string, Arn: string, Status: string, KinesisConfiguration: record, ErrorCause: string, StreamName: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -827,7 +846,6 @@ export def "list-journal-kinesis-streams-for-ledger" [
 #
 # POST /ledgers/{name}/journal-kinesis-streams
 # operationId: StreamJournalToKinesis
-# --KinesisConfiguration shape: {StreamArn?: string, AggregationEnabled?: bool}
 export def "stream-journal-to-kinesis" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -852,7 +870,7 @@ export def "stream-journal-to-kinesis" [
   --exclusive-end-time: string # The exclusive date and time that specifies when the stream ends. If you don't define this parameter, the stream runs indefinitely until you cancel it. The ExclusiveEndTime must be in ISO 8601 date and time format and in Universal Coordinated Time (UTC). For example: 2019-06-13T21:36:34Z. (format: date-time)
   kinesis_configuration: record # The configuration settings of the Amazon Kinesis Data Streams destination for an Amazon QLDB journal stream. — shape: {StreamArn?: string, AggregationEnabled?: bool}
   stream_name: string # The name that you want to assign to the QLDB journal stream. User-defined names can help identify and indicate the purpose of a stream. Your stream name must be unique among other active streams for a given ledger. Stream names have the same naming constraints as ledger names, as defined in Quotas in Amazon QLDB (https://docs.aws.amazon.com/qldb/latest/developerguide/limits.html#limits.naming) in the Amazon QLDB Developer Guide.
-]: any -> record<StreamId: string> {
+]: any -> oneof<record<StreamId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -903,7 +921,7 @@ export def "list-journal-s3-exports" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<JournalS3Exports: table<LedgerName: string, ExportId: string, ExportCreationTime: string, Status: string, InclusiveStartTime: string, ExclusiveEndTime: string, S3ExportConfiguration: record, RoleArn: string, OutputFormat: string>, NextToken: string> {
+]: nothing -> oneof<record<JournalS3Exports: table<LedgerName: string, ExportId: string, ExportCreationTime: string, Status: string, InclusiveStartTime: string, ExclusiveEndTime: string, S3ExportConfiguration: record, RoleArn: string, OutputFormat: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "next_token" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -948,7 +966,7 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Tags: record> {
+]: nothing -> oneof<record<Tags: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
@@ -994,7 +1012,7 @@ export def "tag-resource" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   tags: record # The key-value pairs to add as tags to the specified QLDB resource. Tag keys are case sensitive. If you specify a key that already exists for the resource, your request fails and returns an error. Tag values are case sensitive and can be null.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1043,7 +1061,7 @@ export def "untag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
@@ -1091,7 +1109,7 @@ export def "update-ledger-permissions-mode" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   permissions_mode: string@permissions-mode-completer # The permissions mode to assign to the ledger. This parameter can have one of the following values: ALLOW_ALL: A legacy permissions mode that enables access control with API-level granularity for ledgers. This mode allows users who have the SendCommand API permission for this ledger to run all PartiQL commands (hence, ALLOW_ALL) on any tables in the specified ledger. This mode disregards any table-level or command-level IAM permissions policies that you create for the ledger. STANDARD: (Recommended) A permissions mode that enables access control with finer granularity for ledgers, tables, and PartiQL commands. By default, this mode denies all user requests to run any PartiQL commands on any tables in this ledger. To allow PartiQL commands to run, you must create IAM permissions policies for specific table resources and PartiQL actions, in addition to the SendCommand API permission for the ledger. For information, see Getting started with the standard permissions mode (https://docs.aws.amazon.com/qldb/latest/developerguide/getting-started-standard-mode.html) in the Amazon QLDB Developer Guide. We strongly recommend using the STANDARD permissions mode to maximize the security of your ledger data.
-]: any -> record<Name: string, Arn: string, PermissionsMode: string> {
+]: any -> oneof<record<Name: string, Arn: string, PermissionsMode: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

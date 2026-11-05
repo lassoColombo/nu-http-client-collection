@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -125,9 +149,9 @@ def workload-profile-completer-1 [] { ["WORKLOAD_PROFILE_GENERIC" "WORKLOAD_PROF
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "baremetalsolution-projects-locations-instances-detach-lun" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["baremetalsolution-projects-locations-instances-detach-lun" "baremetalsolution-projects-locations-instance-provisioning-settings-fetch" "baremetalsolution-projects-locations-networks-list-network-usage" "baremetalsolution-projects-locations-volumes-snapshots-delete" "baremetalsolution-projects-locations-volumes-snapshots-get" "baremetalsolution-projects-locations-volumes-patch" "baremetalsolution-projects-locations-list" "baremetalsolution-projects-locations-instances-disable-interactive-serial-console" "baremetalsolution-projects-locations-instances-enable-interactive-serial-console" "baremetalsolution-projects-locations-volumes-luns-evict" "baremetalsolution-projects-locations-volumes-rename" "baremetalsolution-projects-locations-instances-reset" "baremetalsolution-projects-locations-instances-start" "baremetalsolution-projects-locations-instances-stop" "baremetalsolution-projects-locations-instances-list" "baremetalsolution-projects-locations-instances-create" "baremetalsolution-projects-locations-volumes-luns-list" "baremetalsolution-projects-locations-networks-list" "baremetalsolution-projects-locations-nfs-shares-list" "baremetalsolution-projects-locations-nfs-shares-create" "baremetalsolution-projects-locations-provisioning-configs-create" "baremetalsolution-projects-locations-provisioning-configs-submit" "baremetalsolution-projects-locations-provisioning-quotas-list" "baremetalsolution-projects-locations-volumes-snapshots-list" "baremetalsolution-projects-locations-volumes-snapshots-create" "baremetalsolution-projects-locations-ssh-keys-list" "baremetalsolution-projects-locations-ssh-keys-create" "baremetalsolution-projects-locations-volumes-list" "baremetalsolution-projects-locations-volumes-snapshots-restore-volume-snapshot" "baremetalsolution-projects-locations-volumes-resize" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -173,7 +197,7 @@ export def "baremetalsolution-projects-locations-instances-detach-lun" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --lun: string # Required. Name of the Lun to detach.
   --skip-reboot: oneof<nothing, bool> # If true, performs lun unmapping without instance reboot.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -224,7 +248,7 @@ export def "baremetalsolution-projects-locations-instance-provisioning-settings-
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<images: table<applicableInstanceTypes: list, code: string, description: string, name: string, supportedNetworkTemplates: list>> {
+]: nothing -> oneof<record<images: table<applicableInstanceTypes: list, code: string, description: string, name: string, supportedNetworkTemplates: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
@@ -272,7 +296,7 @@ export def "baremetalsolution-projects-locations-networks-list-network-usage" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<networks: table<network: record, usedIps: list>> {
+]: nothing -> oneof<record<networks: table<network: record, usedIps: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
@@ -320,7 +344,7 @@ export def "baremetalsolution-projects-locations-volumes-snapshots-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -368,7 +392,7 @@ export def "baremetalsolution-projects-locations-volumes-snapshots-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<createTime: string, description: string, id: string, name: string, storageVolume: string, type: string> {
+]: nothing -> oneof<record<createTime: string, description: string, id: string, name: string, storageVolume: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -394,7 +418,6 @@ export def "baremetalsolution-projects-locations-volumes-snapshots-get" [
 #
 # PATCH /v2/{name}
 # operationId: baremetalsolution.projects.locations.volumes.patch
-# --snapshotReservationDetail shape: {reservedSpaceGib?: string, reservedSpacePercent?: int, reservedSpaceRemainingGib?: string, reservedSpaceUsedPercent?: int}
 export def "baremetalsolution-projects-locations-volumes-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -438,7 +461,7 @@ export def "baremetalsolution-projects-locations-volumes-patch" [
   --storage-aggregate-pool: string # Input only. Name of the storage aggregate pool to allocate the volume in. Can be used only for VOLUME_PERFORMANCE_TIER_ASSIGNED volumes.
   --storage-type: string@storage-type-completer # The storage type for this volume.
   --workload-profile: string@workload-profile-completer # The workload profile for the volume.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -492,7 +515,7 @@ export def "baremetalsolution-projects-locations-list" [
   --filter: string # A filter to narrow down results to a preferred subset. The filtering language accepts strings like `"displayName=tokyo"`, and is documented in more detail in [AIP-160](https://google.aip.dev/160).
   --page-size: int # The maximum number of results to return. If not set, the service selects a default.
   --page-token: string # A page token received from the `next_page_token` field in the response. Send that page token to receive the subsequent page.
-]: nothing -> record<locations: table<displayName: string, labels: record, locationId: string, metadata: record, name: string>, nextPageToken: string> {
+]: nothing -> oneof<record<locations: table<displayName: string, labels: record, locationId: string, metadata: record, name: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -541,7 +564,7 @@ export def "baremetalsolution-projects-locations-instances-disable-interactive-s
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -593,7 +616,7 @@ export def "baremetalsolution-projects-locations-instances-enable-interactive-se
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -645,7 +668,7 @@ export def "baremetalsolution-projects-locations-volumes-luns-evict" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -697,7 +720,7 @@ export def "baremetalsolution-projects-locations-volumes-rename" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --new-volume-id: string # Required. The new `id` of the volume.
-]: any -> record<attached: bool, autoGrownSizeGib: string, bootVolume: bool, currentSizeGib: string, emergencySizeGib: string, expireTime: string, id: string, instances: list<string>, labels: record, maxSizeGib: string, name: string, notes: string, originallyRequestedSizeGib: string, performanceTier: string, pod: string, protocol: string, remainingSpaceGib: string, requestedSizeGib: string, snapshotAutoDeleteBehavior: string, snapshotEnabled: bool, snapshotReservationDetail: record<reservedSpaceGib: string, reservedSpacePercent: int, reservedSpaceRemainingGib: string, reservedSpaceUsedPercent: int>, snapshotSchedulePolicy: string, state: string, storageAggregatePool: string, storageType: string, workloadProfile: string> {
+]: any -> oneof<record<attached: bool, autoGrownSizeGib: string, bootVolume: bool, currentSizeGib: string, emergencySizeGib: string, expireTime: string, id: string, instances: list<string>, labels: record, maxSizeGib: string, name: string, notes: string, originallyRequestedSizeGib: string, performanceTier: string, pod: string, protocol: string, remainingSpaceGib: string, requestedSizeGib: string, snapshotAutoDeleteBehavior: string, snapshotEnabled: bool, snapshotReservationDetail: record<reservedSpaceGib: string, reservedSpacePercent: int, reservedSpaceRemainingGib: string, reservedSpaceUsedPercent: int>, snapshotSchedulePolicy: string, state: string, storageAggregatePool: string, storageType: string, workloadProfile: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -749,7 +772,7 @@ export def "baremetalsolution-projects-locations-instances-reset" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -801,7 +824,7 @@ export def "baremetalsolution-projects-locations-instances-start" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -853,7 +876,7 @@ export def "baremetalsolution-projects-locations-instances-stop" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -907,7 +930,7 @@ export def "baremetalsolution-projects-locations-instances-list" [
   --filter: string # List filter.
   --page-size: int # Requested page size. Server may return fewer items than requested. If unspecified, the server will pick an appropriate default.
   --page-token: string # A token identifying a page of results from the server.
-]: nothing -> record<instances: table<createTime: string, firmwareVersion: string, hyperthreadingEnabled: bool, id: string, interactiveSerialConsoleEnabled: bool, labels: record, logicalInterfaces: list, loginInfo: string, luns: list, machineType: string, name: string, networkTemplate: string, networks: list, osImage: string, pod: string, state: string, updateTime: string, volumes: list, workloadProfile: string>, nextPageToken: string, unreachable: list<string>> {
+]: nothing -> oneof<record<instances: table<createTime: string, firmwareVersion: string, hyperthreadingEnabled: bool, id: string, interactiveSerialConsoleEnabled: bool, labels: record, logicalInterfaces: list, loginInfo: string, luns: list, machineType: string, name: string, networkTemplate: string, networks: list, osImage: string, pod: string, state: string, updateTime: string, volumes: list, workloadProfile: string>, nextPageToken: string, unreachable: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -933,10 +956,6 @@ export def "baremetalsolution-projects-locations-instances-list" [
 #
 # POST /v2/{parent}/instances
 # operationId: baremetalsolution.projects.locations.instances.create
-# --logicalInterfaces item shape: {interfaceIndex?: int, logicalNetworkInterfaces?: list, name?: string}
-# --luns item shape: {bootLun?: bool, id?: string, multiprotocolType?: "MULTIPROTOCOL_TYPE_UNSPECIFIED"|"LINUX", shareable?: bool, sizeGb?: string, state?: "STATE_UNSPECIFIED"|"CREATING"|"UPDATING"|"READY"|"DELETING"|"COOL_OFF", storageType?: "STORAGE_TYPE_UNSPECIFIED"|"SSD"|"HDD", storageVolume?: string, wwid?: string}
-# --networks item shape: {cidr?: string, id?: string, ipAddress?: string, jumboFramesEnabled?: bool, labels?: record, macAddress?: list<string>, mountPoints?: list, reservations?: list, servicesCidr?: string, state?: "STATE_UNSPECIFIED"|"PROVISIONING"|"PROVISIONED"|"DEPROVISIONING"|"UPDATING", type?: "TYPE_UNSPECIFIED"|"CLIENT"|"PRIVATE", vlanId?: string, vrf?: record}
-# --volumes item shape: {autoGrownSizeGib?: string, currentSizeGib?: string, emergencySizeGib?: string, id?: string, labels?: record, maxSizeGib?: string, notes?: string, originallyRequestedSizeGib?: string, performanceTier?: "VOLUME_PERFORMANCE_TIER_UNSPECIFIED"|"VOLUME_PERFORMANCE_TIER_SHARED"|"VOLUME_PERFORMANCE_TIER_ASSIGNED"|"VOLUME_PERFORMANCE_TIER_HT", pod?: string, remainingSpaceGib?: string, requestedSizeGib?: string, ... (8 more fields)}
 export def "baremetalsolution-projects-locations-instances-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -970,7 +989,7 @@ export def "baremetalsolution-projects-locations-instances-create" [
   --pod: string # Immutable. Pod name. Pod is an independent part of infrastructure. Instance can be connected to the assets (networks, volumes) allocated in the same pod only.
   --volumes: list # Input only. List of Volumes to attach to this Instance on creation. This field won't be populated in Get/List responses. — item shape: {autoGrownSizeGib?: string, currentSizeGib?: string, emergencySizeGib?: string, id?: string, labels?: record, maxSizeGib?: string, notes?: string, originallyRequestedSizeGib?: string, performanceTier?: "VOLUME_PERFORMANCE_TIER_UNSPECIFIED"|"VOLUME_PERFORMANCE_TIER_SHARED"|"VOLUME_PERFORMANCE_TIER_ASSIGNED"|"VOLUME_PERFORMANCE_TIER_HT", pod?: string, remainingSpaceGib?: string, requestedSizeGib?: string, ... (8 more fields)}
   --workload-profile: string@workload-profile-completer-1 # The workload profile for the instance.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1023,7 +1042,7 @@ export def "baremetalsolution-projects-locations-volumes-luns-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # Requested page size. The server might return fewer items than requested. If unspecified, server will pick an appropriate default.
   --page-token: string # A token identifying a page of results from the server.
-]: nothing -> record<luns: table<bootLun: bool, expireTime: string, id: string, instances: list, multiprotocolType: string, name: string, shareable: bool, sizeGb: string, state: string, storageType: string, storageVolume: string, wwid: string>, nextPageToken: string, unreachable: list<string>> {
+]: nothing -> oneof<record<luns: table<bootLun: bool, expireTime: string, id: string, instances: list, multiprotocolType: string, name: string, shareable: bool, sizeGb: string, state: string, storageType: string, storageVolume: string, wwid: string>, nextPageToken: string, unreachable: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1074,7 +1093,7 @@ export def "baremetalsolution-projects-locations-networks-list" [
   --filter: string # List filter.
   --page-size: int # Requested page size. The server might return fewer items than requested. If unspecified, server will pick an appropriate default.
   --page-token: string # A token identifying a page of results from the server.
-]: nothing -> record<networks: table<cidr: string, gatewayIp: string, id: string, ipAddress: string, jumboFramesEnabled: bool, labels: record, macAddress: list, mountPoints: list, name: string, pod: string, reservations: list, servicesCidr: string, state: string, type: string, vlanId: string, vrf: record>, nextPageToken: string, unreachable: list<string>> {
+]: nothing -> oneof<record<networks: table<cidr: string, gatewayIp: string, id: string, ipAddress: string, jumboFramesEnabled: bool, labels: record, macAddress: list, mountPoints: list, name: string, pod: string, reservations: list, servicesCidr: string, state: string, type: string, vlanId: string, vrf: record>, nextPageToken: string, unreachable: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1125,7 +1144,7 @@ export def "baremetalsolution-projects-locations-nfs-shares-list" [
   --filter: string # List filter.
   --page-size: int # Requested page size. The server might return fewer items than requested. If unspecified, server will pick an appropriate default.
   --page-token: string # A token identifying a page of results from the server.
-]: nothing -> record<nextPageToken: string, nfsShares: table<allowedClients: list, id: string, labels: record, name: string, nfsShareId: string, requestedSizeGib: string, state: string, storageType: string, volume: string>, unreachable: list<string>> {
+]: nothing -> oneof<record<nextPageToken: string, nfsShares: table<allowedClients: list, id: string, labels: record, name: string, nfsShareId: string, requestedSizeGib: string, state: string, storageType: string, volume: string>, unreachable: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1151,7 +1170,6 @@ export def "baremetalsolution-projects-locations-nfs-shares-list" [
 #
 # POST /v2/{parent}/nfsShares
 # operationId: baremetalsolution.projects.locations.nfsShares.create
-# --allowedClients item shape: {allowDev?: bool, allowSuid?: bool, allowedClientsCidr?: string, mountPermissions?: "MOUNT_PERMISSIONS_UNSPECIFIED"|"READ"|"READ_WRITE", network?: string, noRootSquash?: bool}
 export def "baremetalsolution-projects-locations-nfs-shares-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1179,7 +1197,7 @@ export def "baremetalsolution-projects-locations-nfs-shares-create" [
   --name: string # Immutable. The name of the NFS share.
   --requested-size-gib: string # The requested size, in GiB. (format: int64)
   --storage-type: string@storage-type-completer # Immutable. The storage type of the underlying volume.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1208,9 +1226,6 @@ export def "baremetalsolution-projects-locations-nfs-shares-create" [
 #
 # POST /v2/{parent}/provisioningConfigs
 # operationId: baremetalsolution.projects.locations.provisioningConfigs.create
-# --instances item shape: {accountNetworksEnabled?: bool, clientNetwork?: record, hyperthreading?: bool, id?: string, instanceType?: string, logicalInterfaces?: list, networkConfig?: "NETWORKCONFIG_UNSPECIFIED"|"SINGLE_VLAN"|"MULTI_VLAN", networkTemplate?: string, osImage?: string, privateNetwork?: record, userNote?: string}
-# --networks item shape: {bandwidth?: "BANDWIDTH_UNSPECIFIED"|"BW_1_GBPS"|"BW_2_GBPS"|"BW_5_GBPS"|"BW_10_GBPS", cidr?: string, gcpService?: string, id?: string, jumboFramesEnabled?: bool, serviceCidr?: "SERVICE_CIDR_UNSPECIFIED"|"DISABLED"|"HIGH_26"|"HIGH_27"|"HIGH_28", type?: "TYPE_UNSPECIFIED"|"CLIENT"|"PRIVATE", userNote?: string, vlanAttachments?: list, vlanSameProject?: bool}
-# --volumes item shape: {gcpService?: string, id?: string, lunRanges?: list, machineIds?: list<string>, nfsExports?: list, performanceTier?: "VOLUME_PERFORMANCE_TIER_UNSPECIFIED"|"VOLUME_PERFORMANCE_TIER_SHARED"|"VOLUME_PERFORMANCE_TIER_ASSIGNED"|"VOLUME_PERFORMANCE_TIER_HT", protocol?: "PROTOCOL_UNSPECIFIED"|"PROTOCOL_FC"|"PROTOCOL_NFS", sizeGb?: int, snapshotsEnabled?: bool, storageAggregatePool?: string, type?: "TYPE_UNSPECIFIED"|"FLASH"|"DISK", userNote?: string}
 export def "baremetalsolution-projects-locations-provisioning-configs-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1244,7 +1259,7 @@ export def "baremetalsolution-projects-locations-provisioning-configs-create" [
   --ticket-id: string # A generated ticket id to track provisioning request.
   --volumes: list # Volumes to be created. — item shape: {gcpService?: string, id?: string, lunRanges?: list, machineIds?: list<string>, nfsExports?: list, performanceTier?: "VOLUME_PERFORMANCE_TIER_UNSPECIFIED"|"VOLUME_PERFORMANCE_TIER_SHARED"|"VOLUME_PERFORMANCE_TIER_ASSIGNED"|"VOLUME_PERFORMANCE_TIER_HT", protocol?: "PROTOCOL_UNSPECIFIED"|"PROTOCOL_FC"|"PROTOCOL_NFS", sizeGb?: int, snapshotsEnabled?: bool, storageAggregatePool?: string, type?: "TYPE_UNSPECIFIED"|"FLASH"|"DISK", userNote?: string}
   --vpc-sc-enabled: oneof<nothing, bool> # If true, VPC SC is enabled for the cluster.
-]: any -> record<cloudConsoleUri: string, customId: string, email: string, handoverServiceAccount: string, instances: table<accountNetworksEnabled: bool, clientNetwork: record, hyperthreading: bool, id: string, instanceType: string, logicalInterfaces: list, name: string, networkConfig: string, networkTemplate: string, osImage: string, privateNetwork: record, userNote: string>, location: string, name: string, networks: table<bandwidth: string, cidr: string, gcpService: string, id: string, jumboFramesEnabled: bool, name: string, serviceCidr: string, type: string, userNote: string, vlanAttachments: list, vlanSameProject: bool>, state: string, statusMessage: string, ticketId: string, updateTime: string, volumes: table<gcpService: string, id: string, lunRanges: list, machineIds: list, name: string, nfsExports: list, performanceTier: string, protocol: string, sizeGb: int, snapshotsEnabled: bool, storageAggregatePool: string, type: string, userNote: string>, vpcScEnabled: bool> {
+]: any -> oneof<record<cloudConsoleUri: string, customId: string, email: string, handoverServiceAccount: string, instances: table<accountNetworksEnabled: bool, clientNetwork: record, hyperthreading: bool, id: string, instanceType: string, logicalInterfaces: list, name: string, networkConfig: string, networkTemplate: string, osImage: string, privateNetwork: record, userNote: string>, location: string, name: string, networks: table<bandwidth: string, cidr: string, gcpService: string, id: string, jumboFramesEnabled: bool, name: string, serviceCidr: string, type: string, userNote: string, vlanAttachments: list, vlanSameProject: bool>, state: string, statusMessage: string, ticketId: string, updateTime: string, volumes: table<gcpService: string, id: string, lunRanges: list, machineIds: list, name: string, nfsExports: list, performanceTier: string, protocol: string, sizeGb: int, snapshotsEnabled: bool, storageAggregatePool: string, type: string, userNote: string>, vpcScEnabled: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1273,7 +1288,6 @@ export def "baremetalsolution-projects-locations-provisioning-configs-create" [
 #
 # POST /v2/{parent}/provisioningConfigs:submit
 # operationId: baremetalsolution.projects.locations.provisioningConfigs.submit
-# --provisioningConfig shape: {customId?: string, email?: string, handoverServiceAccount?: string, instances?: list, location?: string, networks?: list, statusMessage?: string, ticketId?: string, volumes?: list, vpcScEnabled?: bool}
 export def "baremetalsolution-projects-locations-provisioning-configs-submit" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1298,7 +1312,7 @@ export def "baremetalsolution-projects-locations-provisioning-configs-submit" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --email: string # Optional. Email provided to send a confirmation with provisioning config to.
   --provisioning-config: record # A provisioning configuration. — shape: {customId?: string, email?: string, handoverServiceAccount?: string, instances?: list, location?: string, networks?: list, statusMessage?: string, ticketId?: string, volumes?: list, vpcScEnabled?: bool}
-]: any -> record<provisioningConfig: record<cloudConsoleUri: string, customId: string, email: string, handoverServiceAccount: string, instances: list<record>, location: string, name: string, networks: list<record>, state: string, statusMessage: string, ticketId: string, updateTime: string, volumes: list<record>, vpcScEnabled: bool>> {
+]: any -> oneof<record<provisioningConfig: record<cloudConsoleUri: string, customId: string, email: string, handoverServiceAccount: string, instances: list<record>, location: string, name: string, networks: list<record>, state: string, statusMessage: string, ticketId: string, updateTime: string, volumes: list<record>, vpcScEnabled: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1351,7 +1365,7 @@ export def "baremetalsolution-projects-locations-provisioning-quotas-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # Requested page size. The server might return fewer items than requested. If unspecified, server will pick an appropriate default. Notice that page_size field is not supported and won't be respected in the API request for now, will be updated when pagination is supported.
   --page-token: string # A token identifying a page of results from the server.
-]: nothing -> record<nextPageToken: string, provisioningQuotas: table<assetType: string, availableCount: int, gcpService: string, instanceQuota: record, location: string, name: string, networkBandwidth: string, serverCount: string, storageGib: string>> {
+]: nothing -> oneof<record<nextPageToken: string, provisioningQuotas: table<assetType: string, availableCount: int, gcpService: string, instanceQuota: record, location: string, name: string, networkBandwidth: string, serverCount: string, storageGib: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1401,7 +1415,7 @@ export def "baremetalsolution-projects-locations-volumes-snapshots-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # Requested page size. The server might return fewer items than requested. If unspecified, server will pick an appropriate default.
   --page-token: string # A token identifying a page of results from the server.
-]: nothing -> record<nextPageToken: string, unreachable: list<string>, volumeSnapshots: table<createTime: string, description: string, id: string, name: string, storageVolume: string, type: string>> {
+]: nothing -> oneof<record<nextPageToken: string, unreachable: list<string>, volumeSnapshots: table<createTime: string, description: string, id: string, name: string, storageVolume: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1451,7 +1465,7 @@ export def "baremetalsolution-projects-locations-volumes-snapshots-create" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --description: string # The description of the snapshot.
   --name: string # The name of the snapshot.
-]: any -> record<createTime: string, description: string, id: string, name: string, storageVolume: string, type: string> {
+]: any -> oneof<record<createTime: string, description: string, id: string, name: string, storageVolume: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1504,7 +1518,7 @@ export def "baremetalsolution-projects-locations-ssh-keys-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # The maximum number of items to return.
   --page-token: string # The next_page_token value returned from a previous List request, if any.
-]: nothing -> record<nextPageToken: string, sshKeys: table<name: string, publicKey: string>> {
+]: nothing -> oneof<record<nextPageToken: string, sshKeys: table<name: string, publicKey: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1554,7 +1568,7 @@ export def "baremetalsolution-projects-locations-ssh-keys-create" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --ssh-key-id: string # Required. The ID to use for the key, which will become the final component of the key's resource name. This value must match the regex: [a-zA-Z0-9@.\-_]{1,64}
   --public-key: string # The public SSH key. This must be in OpenSSH .authorized_keys format.
-]: any -> record<name: string, publicKey: string> {
+]: any -> oneof<record<name: string, publicKey: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1608,7 +1622,7 @@ export def "baremetalsolution-projects-locations-volumes-list" [
   --filter: string # List filter.
   --page-size: int # Requested page size. The server might return fewer items than requested. If unspecified, server will pick an appropriate default.
   --page-token: string # A token identifying a page of results from the server.
-]: nothing -> record<nextPageToken: string, unreachable: list<string>, volumes: table<attached: bool, autoGrownSizeGib: string, bootVolume: bool, currentSizeGib: string, emergencySizeGib: string, expireTime: string, id: string, instances: list, labels: record, maxSizeGib: string, name: string, notes: string, originallyRequestedSizeGib: string, performanceTier: string, pod: string, protocol: string, remainingSpaceGib: string, requestedSizeGib: string, snapshotAutoDeleteBehavior: string, snapshotEnabled: bool, snapshotReservationDetail: record, snapshotSchedulePolicy: string, state: string, storageAggregatePool: string, storageType: string, workloadProfile: string>> {
+]: nothing -> oneof<record<nextPageToken: string, unreachable: list<string>, volumes: table<attached: bool, autoGrownSizeGib: string, bootVolume: bool, currentSizeGib: string, emergencySizeGib: string, expireTime: string, id: string, instances: list, labels: record, maxSizeGib: string, name: string, notes: string, originallyRequestedSizeGib: string, performanceTier: string, pod: string, protocol: string, remainingSpaceGib: string, requestedSizeGib: string, snapshotAutoDeleteBehavior: string, snapshotEnabled: bool, snapshotReservationDetail: record, snapshotSchedulePolicy: string, state: string, storageAggregatePool: string, storageType: string, workloadProfile: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1657,7 +1671,7 @@ export def "baremetalsolution-projects-locations-volumes-snapshots-restore-volum
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1709,7 +1723,7 @@ export def "baremetalsolution-projects-locations-volumes-resize" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --size-gib: string # New Volume size, in GiB. (format: int64)
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

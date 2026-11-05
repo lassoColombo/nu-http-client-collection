@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -102,9 +125,9 @@ def type-completer [] { ["KMS" "NONE"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "batch-get-traces" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["batch-get-traces" "create-group" "create-sampling-rule" "delete-group" "delete-resource-policy" "delete-sampling-rule" "get-encryption-config" "get-group" "get-groups" "get-insight" "get-insight-events" "get-insight-impact-graph" "get-insight-summaries" "get-sampling-rules" "get-sampling-statistic-summaries" "get-sampling-targets" "get-service-graph" "get-time-series-service-statistics" "get-trace-graph" "get-trace-summaries" "list-resource-policies" "list-tags-for-resource" "put-encryption-config" "put-resource-policy" "put-telemetry-records" "put-trace-segments" "tag-resource" "untag-resource" "update-group" "update-sampling-rule" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -146,7 +169,7 @@ export def "batch-get-traces" [
   --x-amz-signed-headers: string
   trace_ids: list<string> # Specify the trace IDs of requests for which to retrieve segments.
   --next-token-body: string # Pagination token. (body field)
-]: any -> record<Traces: table<Id: string, Duration: float, LimitExceeded: bool, Segments: list>, UnprocessedTraceIds: list<string>, NextToken: string> {
+]: any -> oneof<record<Traces: table<Id: string, Duration: float, LimitExceeded: bool, Segments: list>, UnprocessedTraceIds: list<string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -176,8 +199,6 @@ export def "batch-get-traces" [
 #
 # POST /CreateGroup
 # operationId: CreateGroup
-# --InsightsConfiguration shape: {InsightsEnabled?: bool, NotificationsEnabled?: bool}
-# --Tags item shape: {Key: string, Value: string}
 export def "create-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -199,7 +220,7 @@ export def "create-group" [
   --filter-expression: string # The filter expression defining criteria by which to group traces.
   --insights-configuration: record # The structure containing configurations related to insights. — shape: {InsightsEnabled?: bool, NotificationsEnabled?: bool}
   --tags: list # A map that contains one or more tag keys and tag values to attach to an X-Ray group. For more information about ways to use tags, see Tagging Amazon Web Services resources (https://docs.aws.amazon.com/general/latest/gr/aws_tagging.html) in the Amazon Web Services General Reference. The following restrictions apply to tags: Maximum number of user-applied tags per resource: 50 Maximum tag key length: 128 Unicode characters Maximum tag value length: 256 Unicode characters Valid values for key and value: a-z, A-Z, 0-9, space, and the following characters: _ . : / = + - and @ Tag keys and values are case sensitive. Don't use aws: as a prefix for keys; it's reserved for Amazon Web Services use. — item shape: {Key: string, Value: string}
-]: any -> record<Group: record<GroupName: string, GroupARN: string, FilterExpression: string, InsightsConfiguration: record<InsightsEnabled: bool, NotificationsEnabled: bool>>> {
+]: any -> oneof<record<Group: record<GroupName: string, GroupARN: string, FilterExpression: string, InsightsConfiguration: record<InsightsEnabled: bool, NotificationsEnabled: bool>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -228,8 +249,6 @@ export def "create-group" [
 #
 # POST /CreateSamplingRule
 # operationId: CreateSamplingRule
-# --SamplingRule shape: {RuleName?: string, RuleARN?: string, ResourceARN?: string, Priority?: int, FixedRate?: float, ReservoirSize?: int, ServiceName?: string, ServiceType?: string, Host?: string, HTTPMethod?: string, URLPath?: string, Version?: int, Attributes?: record}
-# --Tags item shape: {Key: string, Value: string}
 export def "create-sampling-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -249,7 +268,7 @@ export def "create-sampling-rule" [
   --x-amz-signed-headers: string
   sampling_rule: record # A sampling rule that services use to decide whether to instrument a request. Rule fields can match properties of the service, or properties of a request. The service can ignore rules that don't match its properties. — shape: {RuleName?: string, RuleARN?: string, ResourceARN?: string, Priority?: int, FixedRate?: float, ReservoirSize?: int, ServiceName?: string, ServiceType?: string, Host?: string, HTTPMethod?: string, URLPath?: string, Version?: int, Attributes?: record}
   --tags: list # A map that contains one or more tag keys and tag values to attach to an X-Ray sampling rule. For more information about ways to use tags, see Tagging Amazon Web Services resources (https://docs.aws.amazon.com/general/latest/gr/aws_tagging.html) in the Amazon Web Services General Reference. The following restrictions apply to tags: Maximum number of user-applied tags per resource: 50 Maximum tag key length: 128 Unicode characters Maximum tag value length: 256 Unicode characters Valid values for key and value: a-z, A-Z, 0-9, space, and the following characters: _ . : / = + - and @ Tag keys and values are case sensitive. Don't use aws: as a prefix for keys; it's reserved for Amazon Web Services use. — item shape: {Key: string, Value: string}
-]: any -> record<SamplingRuleRecord: record<SamplingRule: record<RuleName: string, RuleARN: string, ResourceARN: string, Priority: int, FixedRate: float, ReservoirSize: int, ServiceName: string, ServiceType: string, Host: string, HTTPMethod: string, URLPath: string, Version: int, Attributes: record>, CreatedAt: string, ModifiedAt: string>> {
+]: any -> oneof<record<SamplingRuleRecord: record<SamplingRule: record<RuleName: string, RuleARN: string, ResourceARN: string, Priority: int, FixedRate: float, ReservoirSize: int, ServiceName: string, ServiceType: string, Host: string, HTTPMethod: string, URLPath: string, Version: int, Attributes: record>, CreatedAt: string, ModifiedAt: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -297,7 +316,7 @@ export def "delete-group" [
   --x-amz-signed-headers: string
   --group-name: string # The case-sensitive name of the group.
   --group-arn: string # The ARN of the group that was generated on creation.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -345,7 +364,7 @@ export def "delete-resource-policy" [
   --x-amz-signed-headers: string
   policy_name: string # The name of the resource policy to delete.
   --policy-revision-id: string # Specifies a specific policy revision to delete. Provide a PolicyRevisionId to ensure an atomic delete operation. If the provided revision id does not match the latest policy revision id, an InvalidPolicyRevisionIdException exception is returned.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -393,7 +412,7 @@ export def "delete-sampling-rule" [
   --x-amz-signed-headers: string
   --rule-name: string # The name of the sampling rule. Specify a rule by either name or ARN, but not both.
   --rule-arn: string # The ARN of the sampling rule. Specify a rule by either name or ARN, but not both.
-]: any -> record<SamplingRuleRecord: record<SamplingRule: record<RuleName: string, RuleARN: string, ResourceARN: string, Priority: int, FixedRate: float, ReservoirSize: int, ServiceName: string, ServiceType: string, Host: string, HTTPMethod: string, URLPath: string, Version: int, Attributes: record>, CreatedAt: string, ModifiedAt: string>> {
+]: any -> oneof<record<SamplingRuleRecord: record<SamplingRule: record<RuleName: string, RuleARN: string, ResourceARN: string, Priority: int, FixedRate: float, ReservoirSize: int, ServiceName: string, ServiceType: string, Host: string, HTTPMethod: string, URLPath: string, Version: int, Attributes: record>, CreatedAt: string, ModifiedAt: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -439,7 +458,7 @@ export def "get-encryption-config" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<EncryptionConfig: record<KeyId: string, Status: string, Type: string>> {
+]: nothing -> oneof<record<EncryptionConfig: record<KeyId: string, Status: string, Type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/EncryptionConfig" $auth.query)
@@ -484,7 +503,7 @@ export def "get-group" [
   --x-amz-signed-headers: string
   --group-name: string # The case-sensitive name of the group.
   --group-arn: string # The ARN of the group that was generated on creation.
-]: any -> record<Group: record<GroupName: string, GroupARN: string, FilterExpression: string, InsightsConfiguration: record<InsightsEnabled: bool, NotificationsEnabled: bool>>> {
+]: any -> oneof<record<Group: record<GroupName: string, GroupARN: string, FilterExpression: string, InsightsConfiguration: record<InsightsEnabled: bool, NotificationsEnabled: bool>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -532,7 +551,7 @@ export def "get-groups" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --next-token-body: string # Pagination token. (body field)
-]: any -> record<Groups: table<GroupName: string, GroupARN: string, FilterExpression: string, InsightsConfiguration: record>, NextToken: string> {
+]: any -> oneof<record<Groups: table<GroupName: string, GroupARN: string, FilterExpression: string, InsightsConfiguration: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -580,7 +599,7 @@ export def "get-insight" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   insight_id: string # The insight's unique identifier. Use the GetInsightSummaries action to retrieve an InsightId.
-]: any -> record<Insight: record<InsightId: string, GroupARN: string, GroupName: string, RootCauseServiceId: record<Name: string, Names: list, AccountId: string, Type: string>, Categories: list<string>, State: string, StartTime: string, EndTime: string, Summary: string, ClientRequestImpactStatistics: record<FaultCount: int, OkCount: int, TotalCount: int>, RootCauseServiceRequestImpactStatistics: record<FaultCount: int, OkCount: int, TotalCount: int>, TopAnomalousServices: list<record>>> {
+]: any -> oneof<record<Insight: record<InsightId: string, GroupARN: string, GroupName: string, RootCauseServiceId: record<Name: string, Names: list, AccountId: string, Type: string>, Categories: list<string>, State: string, StartTime: string, EndTime: string, Summary: string, ClientRequestImpactStatistics: record<FaultCount: int, OkCount: int, TotalCount: int>, RootCauseServiceRequestImpactStatistics: record<FaultCount: int, OkCount: int, TotalCount: int>, TopAnomalousServices: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -631,7 +650,7 @@ export def "get-insight-events" [
   insight_id: string # The insight's unique identifier. Use the GetInsightSummaries action to retrieve an InsightId.
   --max-results-body: int # Used to retrieve at most the specified value of events. (body field)
   --next-token-body: string # Specify the pagination token returned by a previous request to retrieve the next page of events. (body field)
-]: any -> record<InsightEvents: table<Summary: string, EventTime: string, ClientRequestImpactStatistics: record, RootCauseServiceRequestImpactStatistics: record, TopAnomalousServices: list>, NextToken: string> {
+]: any -> oneof<record<InsightEvents: table<Summary: string, EventTime: string, ClientRequestImpactStatistics: record, RootCauseServiceRequestImpactStatistics: record, TopAnomalousServices: list>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -682,7 +701,7 @@ export def "get-insight-impact-graph" [
   start_time: string # The estimated start time of the insight, in Unix time seconds. The StartTime is inclusive of the value provided and can't be more than 30 days old. (format: date-time)
   end_time: string # The estimated end time of the insight, in Unix time seconds. The EndTime is exclusive of the value provided. The time range between the start time and end time can't be more than six hours. (format: date-time)
   --next-token: string # Specify the pagination token returned by a previous request to retrieve the next page of results.
-]: any -> record<InsightId: string, StartTime: string, EndTime: string, ServiceGraphStartTime: string, ServiceGraphEndTime: string, Services: table<ReferenceId: int, Type: string, Name: string, Names: list, AccountId: string, Edges: list>, NextToken: string> {
+]: any -> oneof<record<InsightId: string, StartTime: string, EndTime: string, ServiceGraphStartTime: string, ServiceGraphEndTime: string, Services: table<ReferenceId: int, Type: string, Name: string, Names: list, AccountId: string, Edges: list>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -737,7 +756,7 @@ export def "get-insight-summaries" [
   end_time: string # The end of the time frame in which the insights ended. The end time can't be more than 30 days old. (format: date-time)
   --max-results-body: int # The maximum number of results to display. (body field)
   --next-token-body: string # Pagination token. (body field)
-]: any -> record<InsightSummaries: table<InsightId: string, GroupARN: string, GroupName: string, RootCauseServiceId: record, Categories: list, State: string, StartTime: string, EndTime: string, Summary: string, ClientRequestImpactStatistics: record, RootCauseServiceRequestImpactStatistics: record, TopAnomalousServices: list, LastUpdateTime: string>, NextToken: string> {
+]: any -> oneof<record<InsightSummaries: table<InsightId: string, GroupARN: string, GroupName: string, RootCauseServiceId: record, Categories: list, State: string, StartTime: string, EndTime: string, Summary: string, ClientRequestImpactStatistics: record, RootCauseServiceRequestImpactStatistics: record, TopAnomalousServices: list, LastUpdateTime: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -786,7 +805,7 @@ export def "get-sampling-rules" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --next-token-body: string # Pagination token. (body field)
-]: any -> record<SamplingRuleRecords: table<SamplingRule: record, CreatedAt: string, ModifiedAt: string>, NextToken: string> {
+]: any -> oneof<record<SamplingRuleRecords: table<SamplingRule: record, CreatedAt: string, ModifiedAt: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -835,7 +854,7 @@ export def "get-sampling-statistic-summaries" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --next-token-body: string # Pagination token. (body field)
-]: any -> record<SamplingStatisticSummaries: table<RuleName: string, Timestamp: string, RequestCount: int, BorrowCount: int, SampledCount: int>, NextToken: string> {
+]: any -> oneof<record<SamplingStatisticSummaries: table<RuleName: string, Timestamp: string, RequestCount: int, BorrowCount: int, SampledCount: int>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -865,7 +884,6 @@ export def "get-sampling-statistic-summaries" [
 #
 # POST /SamplingTargets
 # operationId: GetSamplingTargets
-# --SamplingStatisticsDocuments item shape: {RuleName: string, ClientID: string, Timestamp: string, RequestCount: int, SampledCount: int, BorrowCount?: int}
 export def "get-sampling-targets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -884,7 +902,7 @@ export def "get-sampling-targets" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   sampling_statistics_documents: list # Information about rules that the service is using to sample requests. — item shape: {RuleName: string, ClientID: string, Timestamp: string, RequestCount: int, SampledCount: int, BorrowCount?: int}
-]: any -> record<SamplingTargetDocuments: table<RuleName: string, FixedRate: float, ReservoirQuota: int, ReservoirQuotaTTL: string, Interval: int>, LastRuleModification: string, UnprocessedStatistics: table<RuleName: string, ErrorCode: string, Message: string>> {
+]: any -> oneof<record<SamplingTargetDocuments: table<RuleName: string, FixedRate: float, ReservoirQuota: int, ReservoirQuotaTTL: string, Interval: int>, LastRuleModification: string, UnprocessedStatistics: table<RuleName: string, ErrorCode: string, Message: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -936,7 +954,7 @@ export def "get-service-graph" [
   --group-name: string # The name of a group based on which you want to generate a graph.
   --group-arn: string # The Amazon Resource Name (ARN) of a group based on which you want to generate a graph.
   --next-token-body: string # Pagination token. (body field)
-]: any -> record<StartTime: string, EndTime: string, Services: table<ReferenceId: int, Name: string, Names: list, Root: bool, AccountId: string, Type: string, State: string, StartTime: string, EndTime: string, Edges: list, SummaryStatistics: record, DurationHistogram: list, ResponseTimeHistogram: list>, ContainsOldGroupVersions: bool, NextToken: string> {
+]: any -> oneof<record<StartTime: string, EndTime: string, Services: table<ReferenceId: int, Name: string, Names: list, Root: bool, AccountId: string, Type: string, State: string, StartTime: string, EndTime: string, Edges: list, SummaryStatistics: record, DurationHistogram: list, ResponseTimeHistogram: list>, ContainsOldGroupVersions: bool, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -992,7 +1010,7 @@ export def "get-time-series-service-statistics" [
   --period: int # Aggregation period in seconds.
   --forecast-statistics: oneof<nothing, bool> # The forecasted high and low fault count values. Forecast enabled requests require the EntitySelectorExpression ID be provided.
   --next-token-body: string # Pagination token. (body field)
-]: any -> record<TimeSeriesServiceStatistics: table<Timestamp: string, EdgeSummaryStatistics: record, ServiceSummaryStatistics: record, ServiceForecastStatistics: record, ResponseTimeHistogram: list>, ContainsOldGroupVersions: bool, NextToken: string> {
+]: any -> oneof<record<TimeSeriesServiceStatistics: table<Timestamp: string, EdgeSummaryStatistics: record, ServiceSummaryStatistics: record, ServiceForecastStatistics: record, ResponseTimeHistogram: list>, ContainsOldGroupVersions: bool, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1042,7 +1060,7 @@ export def "get-trace-graph" [
   --x-amz-signed-headers: string
   trace_ids: list<string> # Trace IDs of requests for which to generate a service graph.
   --next-token-body: string # Pagination token. (body field)
-]: any -> record<Services: table<ReferenceId: int, Name: string, Names: list, Root: bool, AccountId: string, Type: string, State: string, StartTime: string, EndTime: string, Edges: list, SummaryStatistics: record, DurationHistogram: list, ResponseTimeHistogram: list>, NextToken: string> {
+]: any -> oneof<record<Services: table<ReferenceId: int, Name: string, Names: list, Root: bool, AccountId: string, Type: string, State: string, StartTime: string, EndTime: string, Edges: list, SummaryStatistics: record, DurationHistogram: list, ResponseTimeHistogram: list>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1072,7 +1090,6 @@ export def "get-trace-graph" [
 #
 # POST /TraceSummaries
 # operationId: GetTraceSummaries
-# --SamplingStrategy shape: {Name?: "PartialScan"|"FixedRate", Value?: float}
 export def "get-trace-summaries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1098,7 +1115,7 @@ export def "get-trace-summaries" [
   --sampling-strategy: record # The name and value of a sampling rule to apply to a trace summary. — shape: {Name?: "PartialScan"|"FixedRate", Value?: float}
   --filter-expression: string # Specify a filter expression to retrieve trace summaries for services or requests that meet certain requirements.
   --next-token-body: string # Specify the pagination token returned by a previous request to retrieve the next page of results. (body field)
-]: any -> record<TraceSummaries: table<Id: string, Duration: float, ResponseTime: float, HasFault: bool, HasError: bool, HasThrottle: bool, IsPartial: bool, Http: record, Annotations: record, Users: list, ServiceIds: list, ResourceARNs: list, InstanceIds: list, AvailabilityZones: list, EntryPoint: record, FaultRootCauses: list, ErrorRootCauses: list, ResponseTimeRootCauses: list, Revision: int, MatchedEventTime: string>, ApproximateTime: string, TracesProcessedCount: int, NextToken: string> {
+]: any -> oneof<record<TraceSummaries: table<Id: string, Duration: float, ResponseTime: float, HasFault: bool, HasError: bool, HasThrottle: bool, IsPartial: bool, Http: record, Annotations: record, Users: list, ServiceIds: list, ResourceARNs: list, InstanceIds: list, AvailabilityZones: list, EntryPoint: record, FaultRootCauses: list, ErrorRootCauses: list, ResponseTimeRootCauses: list, Revision: int, MatchedEventTime: string>, ApproximateTime: string, TracesProcessedCount: int, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1147,7 +1164,7 @@ export def "list-resource-policies" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --next-token-body: string # Not currently supported. (body field)
-]: any -> record<ResourcePolicies: table<PolicyName: string, PolicyDocument: string, PolicyRevisionId: string, LastUpdatedTime: string>, NextToken: string> {
+]: any -> oneof<record<ResourcePolicies: table<PolicyName: string, PolicyDocument: string, PolicyRevisionId: string, LastUpdatedTime: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1197,7 +1214,7 @@ export def "list-tags-for-resource" [
   --x-amz-signed-headers: string
   resource_arn: string # The Amazon Resource Number (ARN) of an X-Ray group or sampling rule.
   --next-token-body: string # A pagination token. If multiple pages of results are returned, use the NextToken value returned with the current page of results as the value of this parameter to get the next page of results. (body field)
-]: any -> record<Tags: table<Key: string, Value: string>, NextToken: string> {
+]: any -> oneof<record<Tags: table<Key: string, Value: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1246,7 +1263,7 @@ export def "put-encryption-config" [
   --x-amz-signed-headers: string
   --key-id: string # An Amazon Web Services KMS key in one of the following formats: Alias - The name of the key. For example, alias/MyKey. Key ID - The KMS key ID of the key. For example, ae4aa6d49-a4d8-9df9-a475-4ff6d7898456. Amazon Web Services X-Ray does not support asymmetric KMS keys. ARN - The full Amazon Resource Name of the key ID or alias. For example, arn:aws:kms:us-east-2:123456789012:key/ae4aa6d49-a4d8-9df9-a475-4ff6d7898456. Use this format to specify a key in a different account. Omit this key if you set Type to NONE.
   type: string@type-completer # The type of encryption. Set to KMS to use your own key for encryption. Set to NONE for default encryption.
-]: any -> record<EncryptionConfig: record<KeyId: string, Status: string, Type: string>> {
+]: any -> oneof<record<EncryptionConfig: record<KeyId: string, Status: string, Type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1296,7 +1313,7 @@ export def "put-resource-policy" [
   policy_document: string # The resource policy document, which can be up to 5kb in size.
   --policy-revision-id: string # Specifies a specific policy revision, to ensure an atomic create operation. By default the resource policy is created if it does not exist, or updated with an incremented revision id. The revision id is unique to each policy in the account. If the policy revision id does not match the latest revision id, the operation will fail with an InvalidPolicyRevisionIdException exception. You can also provide a PolicyRevisionId of 0. In this case, the operation will fail with an InvalidPolicyRevisionIdException exception if a resource policy with the same name already exists.
   --bypass-policy-lockout-check: oneof<nothing, bool> # A flag to indicate whether to bypass the resource policy lockout safety check. Setting this value to true increases the risk that the policy becomes unmanageable. Do not set this value to true indiscriminately. Use this parameter only when you include a policy in the request and you intend to prevent the principal that is making the request from making a subsequent PutResourcePolicy request. The default value is false.
-]: any -> record<ResourcePolicy: record<PolicyName: string, PolicyDocument: string, PolicyRevisionId: string, LastUpdatedTime: string>> {
+]: any -> oneof<record<ResourcePolicy: record<PolicyName: string, PolicyDocument: string, PolicyRevisionId: string, LastUpdatedTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1325,7 +1342,6 @@ export def "put-resource-policy" [
 #
 # POST /TelemetryRecords
 # operationId: PutTelemetryRecords
-# --TelemetryRecords item shape: {Timestamp: string, SegmentsReceivedCount?: int, SegmentsSentCount?: int, SegmentsSpilloverCount?: int, SegmentsRejectedCount?: int, BackendConnectionErrors?: record}
 export def "put-telemetry-records" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1347,7 +1363,7 @@ export def "put-telemetry-records" [
   --ec2-instance-id: string
   --hostname: string
   --resource-arn: string
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1394,7 +1410,7 @@ export def "put-trace-segments" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   trace_segment_documents: list<string> # A string containing a JSON document defining one or more segments or subsegments.
-]: any -> record<UnprocessedTraceSegments: table<Id: string, ErrorCode: string, Message: string>> {
+]: any -> oneof<record<UnprocessedTraceSegments: table<Id: string, ErrorCode: string, Message: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1423,7 +1439,6 @@ export def "put-trace-segments" [
 #
 # POST /TagResource
 # operationId: TagResource
-# --Tags item shape: {Key: string, Value: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1443,7 +1458,7 @@ export def "tag-resource" [
   --x-amz-signed-headers: string
   resource_arn: string # The Amazon Resource Number (ARN) of an X-Ray group or sampling rule.
   tags: list # A map that contains one or more tag keys and tag values to attach to an X-Ray group or sampling rule. For more information about ways to use tags, see Tagging Amazon Web Services resources (https://docs.aws.amazon.com/general/latest/gr/aws_tagging.html) in the Amazon Web Services General Reference. The following restrictions apply to tags: Maximum number of user-applied tags per resource: 50 Maximum tag key length: 128 Unicode characters Maximum tag value length: 256 Unicode characters Valid values for key and value: a-z, A-Z, 0-9, space, and the following characters: _ . : / = + - and @ Tag keys and values are case sensitive. Don't use aws: as a prefix for keys; it's reserved for Amazon Web Services use. You cannot edit or delete system tags. — item shape: {Key: string, Value: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1491,7 +1506,7 @@ export def "untag-resource" [
   --x-amz-signed-headers: string
   resource_arn: string # The Amazon Resource Number (ARN) of an X-Ray group or sampling rule.
   tag_keys: list<string> # Keys for one or more tags that you want to remove from an X-Ray group or sampling rule.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1520,7 +1535,6 @@ export def "untag-resource" [
 #
 # POST /UpdateGroup
 # operationId: UpdateGroup
-# --InsightsConfiguration shape: {InsightsEnabled?: bool, NotificationsEnabled?: bool}
 export def "update-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1542,7 +1556,7 @@ export def "update-group" [
   --group-arn: string # The ARN that was generated upon creation.
   --filter-expression: string # The updated filter expression defining criteria by which to group traces.
   --insights-configuration: record # The structure containing configurations related to insights. — shape: {InsightsEnabled?: bool, NotificationsEnabled?: bool}
-]: any -> record<Group: record<GroupName: string, GroupARN: string, FilterExpression: string, InsightsConfiguration: record<InsightsEnabled: bool, NotificationsEnabled: bool>>> {
+]: any -> oneof<record<Group: record<GroupName: string, GroupARN: string, FilterExpression: string, InsightsConfiguration: record<InsightsEnabled: bool, NotificationsEnabled: bool>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1571,7 +1585,6 @@ export def "update-group" [
 #
 # POST /UpdateSamplingRule
 # operationId: UpdateSamplingRule
-# --SamplingRuleUpdate shape: {RuleName?: string, RuleARN?: string, ResourceARN?: string, Priority?: int, FixedRate?: float, ReservoirSize?: int, Host?: string, ServiceName?: string, ServiceType?: string, HTTPMethod?: string, URLPath?: string, Attributes?: record}
 export def "update-sampling-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1590,7 +1603,7 @@ export def "update-sampling-rule" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   sampling_rule_update: record # A document specifying changes to a sampling rule's configuration. — shape: {RuleName?: string, RuleARN?: string, ResourceARN?: string, Priority?: int, FixedRate?: float, ReservoirSize?: int, Host?: string, ServiceName?: string, ServiceType?: string, HTTPMethod?: string, URLPath?: string, Attributes?: record}
-]: any -> record<SamplingRuleRecord: record<SamplingRule: record<RuleName: string, RuleARN: string, ResourceARN: string, Priority: int, FixedRate: float, ReservoirSize: int, ServiceName: string, ServiceType: string, Host: string, HTTPMethod: string, URLPath: string, Version: int, Attributes: record>, CreatedAt: string, ModifiedAt: string>> {
+]: any -> oneof<record<SamplingRuleRecord: record<SamplingRule: record<RuleName: string, RuleARN: string, ResourceARN: string, Priority: int, FixedRate: float, ReservoirSize: int, ServiceName: string, ServiceType: string, Host: string, HTTPMethod: string, URLPath: string, Version: int, Attributes: record>, CreatedAt: string, ModifiedAt: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

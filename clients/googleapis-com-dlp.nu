@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -120,9 +144,9 @@ def type-completer [] { ["DLP_JOB_TYPE_UNSPECIFIED" "INSPECT_JOB" "RISK_ANALYSIS
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "dlp-info-types-list" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["dlp-info-types-list" "dlp-projects-stored-info-types-delete" "dlp-projects-stored-info-types-get" "dlp-projects-stored-info-types-patch" "dlp-projects-locations-job-triggers-activate" "dlp-projects-locations-dlp-jobs-cancel" "dlp-projects-locations-dlp-jobs-finish" "dlp-projects-locations-job-triggers-hybrid-inspect" "dlp-projects-locations-content-deidentify" "dlp-projects-locations-content-inspect" "dlp-projects-locations-content-reidentify" "dlp-projects-locations-deidentify-templates-list" "dlp-projects-locations-deidentify-templates-create" "dlp-projects-locations-dlp-jobs-list" "dlp-projects-locations-dlp-jobs-create" "dlp-projects-locations-image-redact" "dlp-locations-info-types-list" "dlp-projects-locations-inspect-templates-list" "dlp-projects-locations-inspect-templates-create" "dlp-projects-locations-job-triggers-list" "dlp-projects-locations-job-triggers-create" "dlp-projects-stored-info-types-list" "dlp-projects-stored-info-types-create" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -169,7 +193,7 @@ export def "dlp-info-types-list" [
   --language-code: string # BCP-47 language code for localized infoType friendly names. If omitted, or if localized strings are not available, en-US strings will be returned.
   --location-id: string # Deprecated. This field has no effect.
   --parent: string # The parent resource name. The format of this value is as follows: locations/ LOCATION_ID
-]: nothing -> record<infoTypes: table<categories: list, description: string, displayName: string, name: string, sensitivityScore: record, supportedBy: list, versions: list>> {
+]: nothing -> oneof<record<infoTypes: table<categories: list, description: string, displayName: string, name: string, sensitivityScore: record, supportedBy: list, versions: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "locationId" $location_id "scalar") (serialize-qp "parent" $parent "scalar")] | flatten | str join "&"
@@ -216,7 +240,7 @@ export def "dlp-projects-stored-info-types-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -264,7 +288,7 @@ export def "dlp-projects-stored-info-types-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<currentVersion: record<config: record<description: string, dictionary: record, displayName: string, largeCustomDictionary: record, regex: record>, createTime: string, errors: list<record>, state: string, stats: record<largeCustomDictionary: record>>, name: string, pendingVersions: table<config: record, createTime: string, errors: list, state: string, stats: record>> {
+]: nothing -> oneof<record<currentVersion: record<config: record<description: string, dictionary: record, displayName: string, largeCustomDictionary: record, regex: record>, createTime: string, errors: list<record>, state: string, stats: record<largeCustomDictionary: record>>, name: string, pendingVersions: table<config: record, createTime: string, errors: list, state: string, stats: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -290,7 +314,6 @@ export def "dlp-projects-stored-info-types-get" [
 #
 # PATCH /v2/{name}
 # operationId: dlp.projects.storedInfoTypes.patch
-# --config shape: {description?: string, dictionary?: record, displayName?: string, largeCustomDictionary?: record, regex?: record}
 export def "dlp-projects-stored-info-types-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -315,7 +338,7 @@ export def "dlp-projects-stored-info-types-patch" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --config: record # Configuration for stored infoTypes. All fields and subfield are provided by the user. For more information, see https://cloud.google.com/dlp/docs/creating-custom-infotypes. — shape: {description?: string, dictionary?: record, displayName?: string, largeCustomDictionary?: record, regex?: record}
   --update-mask: string # Mask to control which fields get updated. (format: google-fieldmask)
-]: any -> record<currentVersion: record<config: record<description: string, dictionary: record, displayName: string, largeCustomDictionary: record, regex: record>, createTime: string, errors: list<record>, state: string, stats: record<largeCustomDictionary: record>>, name: string, pendingVersions: table<config: record, createTime: string, errors: list, state: string, stats: record>> {
+]: any -> oneof<record<currentVersion: record<config: record<description: string, dictionary: record, displayName: string, largeCustomDictionary: record, regex: record>, createTime: string, errors: list<record>, state: string, stats: record<largeCustomDictionary: record>>, name: string, pendingVersions: table<config: record, createTime: string, errors: list, state: string, stats: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -367,7 +390,7 @@ export def "dlp-projects-locations-job-triggers-activate" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record<actionDetails: table<deidentifyDetails: record>, createTime: string, endTime: string, errors: table<details: record, timestamps: list>, inspectDetails: record<requestedOptions: record<jobConfig: record, snapshotInspectTemplate: record>, result: record<hybridStats: record, infoTypeStats: list, processedBytes: string, totalEstimatedBytes: string>>, jobTriggerName: string, name: string, riskDetails: record<categoricalStatsResult: record<valueFrequencyHistogramBuckets: list>, deltaPresenceEstimationResult: record<deltaPresenceEstimationHistogram: list>, kAnonymityResult: record<equivalenceClassHistogramBuckets: list>, kMapEstimationResult: record<kMapEstimationHistogram: list>, lDiversityResult: record<sensitiveValueFrequencyHistogramBuckets: list>, numericalStatsResult: record<maxValue: record, minValue: record, quantileValues: list>, requestedOptions: record<jobConfig: record>, requestedPrivacyMetric: record<categoricalStatsConfig: record, deltaPresenceEstimationConfig: record, kAnonymityConfig: record, kMapEstimationConfig: record, lDiversityConfig: record, numericalStatsConfig: record>, requestedSourceTable: record<datasetId: string, projectId: string, tableId: string>>, startTime: string, state: string, type: string> {
+]: any -> oneof<record<actionDetails: table<deidentifyDetails: record>, createTime: string, endTime: string, errors: table<details: record, timestamps: list>, inspectDetails: record<requestedOptions: record<jobConfig: record, snapshotInspectTemplate: record>, result: record<hybridStats: record, infoTypeStats: list, processedBytes: string, totalEstimatedBytes: string>>, jobTriggerName: string, name: string, riskDetails: record<categoricalStatsResult: record<valueFrequencyHistogramBuckets: list>, deltaPresenceEstimationResult: record<deltaPresenceEstimationHistogram: list>, kAnonymityResult: record<equivalenceClassHistogramBuckets: list>, kMapEstimationResult: record<kMapEstimationHistogram: list>, lDiversityResult: record<sensitiveValueFrequencyHistogramBuckets: list>, numericalStatsResult: record<maxValue: record, minValue: record, quantileValues: list>, requestedOptions: record<jobConfig: record>, requestedPrivacyMetric: record<categoricalStatsConfig: record, deltaPresenceEstimationConfig: record, kAnonymityConfig: record, kMapEstimationConfig: record, lDiversityConfig: record, numericalStatsConfig: record>, requestedSourceTable: record<datasetId: string, projectId: string, tableId: string>>, startTime: string, state: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -419,7 +442,7 @@ export def "dlp-projects-locations-dlp-jobs-cancel" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -471,7 +494,7 @@ export def "dlp-projects-locations-dlp-jobs-finish" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -500,7 +523,6 @@ export def "dlp-projects-locations-dlp-jobs-finish" [
 #
 # POST /v2/{name}:hybridInspect
 # operationId: dlp.projects.locations.jobTriggers.hybridInspect
-# --hybridItem shape: {findingDetails?: record, item?: record}
 export def "dlp-projects-locations-job-triggers-hybrid-inspect" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -524,7 +546,7 @@ export def "dlp-projects-locations-job-triggers-hybrid-inspect" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --hybrid-item: record # An individual hybrid item to inspect. Will be stored temporarily during processing. — shape: {findingDetails?: record, item?: record}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -553,9 +575,6 @@ export def "dlp-projects-locations-job-triggers-hybrid-inspect" [
 #
 # POST /v2/{parent}/content:deidentify
 # operationId: dlp.projects.locations.content.deidentify
-# --deidentifyConfig shape: {imageTransformations?: record, infoTypeTransformations?: record, recordTransformations?: record, transformationErrorHandling?: record}
-# --inspectConfig shape: {contentOptions?: list<string>, customInfoTypes?: list, excludeInfoTypes?: bool, includeQuote?: bool, infoTypes?: list, limits?: record, minLikelihood?: "LIKELIHOOD_UNSPECIFIED"|"VERY_UNLIKELY"|"UNLIKELY"|"POSSIBLE"|"LIKELY"|"VERY_LIKELY", ruleSet?: list}
-# --item shape: {byteItem?: record, table?: record, value?: string}
 export def "dlp-projects-locations-content-deidentify" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -584,7 +603,7 @@ export def "dlp-projects-locations-content-deidentify" [
   --inspect-template-name: string # Template to use. Any configuration directly specified in inspect_config will override those set in the template. Singular fields that are set in this request will replace their corresponding fields in the template. Repeated fields are appended. Singular sub-messages and groups are recursively merged.
   --item: record # shape: {byteItem?: record, table?: record, value?: string}
   --location-id: string # Deprecated. This field has no effect.
-]: any -> record<item: record<byteItem: record<data: string, type: string>, table: record<headers: list, rows: list>, value: string>, overview: record<transformationSummaries: list<record>, transformedBytes: string>> {
+]: any -> oneof<record<item: record<byteItem: record<data: string, type: string>, table: record<headers: list, rows: list>, value: string>, overview: record<transformationSummaries: list<record>, transformedBytes: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -613,8 +632,6 @@ export def "dlp-projects-locations-content-deidentify" [
 #
 # POST /v2/{parent}/content:inspect
 # operationId: dlp.projects.locations.content.inspect
-# --inspectConfig shape: {contentOptions?: list<string>, customInfoTypes?: list, excludeInfoTypes?: bool, includeQuote?: bool, infoTypes?: list, limits?: record, minLikelihood?: "LIKELIHOOD_UNSPECIFIED"|"VERY_UNLIKELY"|"UNLIKELY"|"POSSIBLE"|"LIKELY"|"VERY_LIKELY", ruleSet?: list}
-# --item shape: {byteItem?: record, table?: record, value?: string}
 export def "dlp-projects-locations-content-inspect" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -641,7 +658,7 @@ export def "dlp-projects-locations-content-inspect" [
   --inspect-template-name: string # Template to use. Any configuration directly specified in inspect_config will override those set in the template. Singular fields that are set in this request will replace their corresponding fields in the template. Repeated fields are appended. Singular sub-messages and groups are recursively merged.
   --item: record # shape: {byteItem?: record, table?: record, value?: string}
   --location-id: string # Deprecated. This field has no effect.
-]: any -> record<result: record<findings: list<record>, findingsTruncated: bool>> {
+]: any -> oneof<record<result: record<findings: list<record>, findingsTruncated: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -670,9 +687,6 @@ export def "dlp-projects-locations-content-inspect" [
 #
 # POST /v2/{parent}/content:reidentify
 # operationId: dlp.projects.locations.content.reidentify
-# --inspectConfig shape: {contentOptions?: list<string>, customInfoTypes?: list, excludeInfoTypes?: bool, includeQuote?: bool, infoTypes?: list, limits?: record, minLikelihood?: "LIKELIHOOD_UNSPECIFIED"|"VERY_UNLIKELY"|"UNLIKELY"|"POSSIBLE"|"LIKELY"|"VERY_LIKELY", ruleSet?: list}
-# --item shape: {byteItem?: record, table?: record, value?: string}
-# --reidentifyConfig shape: {imageTransformations?: record, infoTypeTransformations?: record, recordTransformations?: record, transformationErrorHandling?: record}
 export def "dlp-projects-locations-content-reidentify" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -701,7 +715,7 @@ export def "dlp-projects-locations-content-reidentify" [
   --location-id: string # Deprecated. This field has no effect.
   --reidentify-config: record # The configuration that controls how the data will change. — shape: {imageTransformations?: record, infoTypeTransformations?: record, recordTransformations?: record, transformationErrorHandling?: record}
   --reidentify-template-name: string # Template to use. References an instance of `DeidentifyTemplate`. Any configuration directly specified in `reidentify_config` or `inspect_config` will override those set in the template. The `DeidentifyTemplate` used must include only reversible transformations. Singular fields that are set in this request will replace their corresponding fields in the template. Repeated fields are appended. Singular sub-messages and groups are recursively merged.
-]: any -> record<item: record<byteItem: record<data: string, type: string>, table: record<headers: list, rows: list>, value: string>, overview: record<transformationSummaries: list<record>, transformedBytes: string>> {
+]: any -> oneof<record<item: record<byteItem: record<data: string, type: string>, table: record<headers: list, rows: list>, value: string>, overview: record<transformationSummaries: list<record>, transformedBytes: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -756,7 +770,7 @@ export def "dlp-projects-locations-deidentify-templates-list" [
   --order-by: string # Comma separated list of fields to order by, followed by `asc` or `desc` postfix. This list is case-insensitive, default sorting order is ascending, redundant space characters are insignificant. Example: `name asc,update_time, create_time desc` Supported fields are: - `create_time`: corresponds to the time the template was created. - `update_time`: corresponds to the time the template was last updated. - `name`: corresponds to the template's name. - `display_name`: corresponds to the template's display name.
   --page-size: int # Size of the page, can be limited by the server. If zero server returns a page of max size 100.
   --page-token: string # Page token to continue retrieval. Comes from previous call to `ListDeidentifyTemplates`.
-]: nothing -> record<deidentifyTemplates: table<createTime: string, deidentifyConfig: record, description: string, displayName: string, name: string, updateTime: string>, nextPageToken: string> {
+]: nothing -> oneof<record<deidentifyTemplates: table<createTime: string, deidentifyConfig: record, description: string, displayName: string, name: string, updateTime: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -782,7 +796,6 @@ export def "dlp-projects-locations-deidentify-templates-list" [
 #
 # POST /v2/{parent}/deidentifyTemplates
 # operationId: dlp.projects.locations.deidentifyTemplates.create
-# --deidentifyTemplate shape: {deidentifyConfig?: record, description?: string, displayName?: string}
 export def "dlp-projects-locations-deidentify-templates-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -808,7 +821,7 @@ export def "dlp-projects-locations-deidentify-templates-create" [
   --deidentify-template: record # DeidentifyTemplates contains instructions on how to de-identify content. See https://cloud.google.com/dlp/docs/concepts-templates to learn more. — shape: {deidentifyConfig?: record, description?: string, displayName?: string}
   --location-id: string # Deprecated. This field has no effect.
   --template-id: string # The template id can contain uppercase and lowercase letters, numbers, and hyphens; that is, it must match the regular expression: `[a-zA-Z\d-_]+`. The maximum length is 100 characters. Can be empty to allow the system to generate one.
-]: any -> record<createTime: string, deidentifyConfig: record<imageTransformations: record<transforms: list>, infoTypeTransformations: record<transformations: list>, recordTransformations: record<fieldTransformations: list, recordSuppressions: list>, transformationErrorHandling: record<leaveUntransformed: record, throwError: record>>, description: string, displayName: string, name: string, updateTime: string> {
+]: any -> oneof<record<createTime: string, deidentifyConfig: record<imageTransformations: record<transforms: list>, infoTypeTransformations: record<transformations: list>, recordTransformations: record<fieldTransformations: list, recordSuppressions: list>, transformationErrorHandling: record<leaveUntransformed: record, throwError: record>>, description: string, displayName: string, name: string, updateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -865,7 +878,7 @@ export def "dlp-projects-locations-dlp-jobs-list" [
   --page-size: int # The standard list page size.
   --page-token: string # The standard list page token.
   --type: string@type-completer # The type of job. Defaults to `DlpJobType.INSPECT`
-]: nothing -> record<jobs: table<actionDetails: list, createTime: string, endTime: string, errors: list, inspectDetails: record, jobTriggerName: string, name: string, riskDetails: record, startTime: string, state: string, type: string>, nextPageToken: string> {
+]: nothing -> oneof<record<jobs: table<actionDetails: list, createTime: string, endTime: string, errors: list, inspectDetails: record, jobTriggerName: string, name: string, riskDetails: record, startTime: string, state: string, type: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -891,8 +904,6 @@ export def "dlp-projects-locations-dlp-jobs-list" [
 #
 # POST /v2/{parent}/dlpJobs
 # operationId: dlp.projects.locations.dlpJobs.create
-# --inspectJob shape: {actions?: list, inspectConfig?: record, inspectTemplateName?: string, storageConfig?: record}
-# --riskJob shape: {actions?: list, privacyMetric?: record, sourceTable?: record}
 export def "dlp-projects-locations-dlp-jobs-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -919,7 +930,7 @@ export def "dlp-projects-locations-dlp-jobs-create" [
   --job-id: string # The job id can contain uppercase and lowercase letters, numbers, and hyphens; that is, it must match the regular expression: `[a-zA-Z\d-_]+`. The maximum length is 100 characters. Can be empty to allow the system to generate one.
   --location-id: string # Deprecated. This field has no effect.
   --risk-job: record # Configuration for a risk analysis job. See https://cloud.google.com/dlp/docs/concepts-risk-analysis to learn more. — shape: {actions?: list, privacyMetric?: record, sourceTable?: record}
-]: any -> record<actionDetails: table<deidentifyDetails: record>, createTime: string, endTime: string, errors: table<details: record, timestamps: list>, inspectDetails: record<requestedOptions: record<jobConfig: record, snapshotInspectTemplate: record>, result: record<hybridStats: record, infoTypeStats: list, processedBytes: string, totalEstimatedBytes: string>>, jobTriggerName: string, name: string, riskDetails: record<categoricalStatsResult: record<valueFrequencyHistogramBuckets: list>, deltaPresenceEstimationResult: record<deltaPresenceEstimationHistogram: list>, kAnonymityResult: record<equivalenceClassHistogramBuckets: list>, kMapEstimationResult: record<kMapEstimationHistogram: list>, lDiversityResult: record<sensitiveValueFrequencyHistogramBuckets: list>, numericalStatsResult: record<maxValue: record, minValue: record, quantileValues: list>, requestedOptions: record<jobConfig: record>, requestedPrivacyMetric: record<categoricalStatsConfig: record, deltaPresenceEstimationConfig: record, kAnonymityConfig: record, kMapEstimationConfig: record, lDiversityConfig: record, numericalStatsConfig: record>, requestedSourceTable: record<datasetId: string, projectId: string, tableId: string>>, startTime: string, state: string, type: string> {
+]: any -> oneof<record<actionDetails: table<deidentifyDetails: record>, createTime: string, endTime: string, errors: table<details: record, timestamps: list>, inspectDetails: record<requestedOptions: record<jobConfig: record, snapshotInspectTemplate: record>, result: record<hybridStats: record, infoTypeStats: list, processedBytes: string, totalEstimatedBytes: string>>, jobTriggerName: string, name: string, riskDetails: record<categoricalStatsResult: record<valueFrequencyHistogramBuckets: list>, deltaPresenceEstimationResult: record<deltaPresenceEstimationHistogram: list>, kAnonymityResult: record<equivalenceClassHistogramBuckets: list>, kMapEstimationResult: record<kMapEstimationHistogram: list>, lDiversityResult: record<sensitiveValueFrequencyHistogramBuckets: list>, numericalStatsResult: record<maxValue: record, minValue: record, quantileValues: list>, requestedOptions: record<jobConfig: record>, requestedPrivacyMetric: record<categoricalStatsConfig: record, deltaPresenceEstimationConfig: record, kAnonymityConfig: record, kMapEstimationConfig: record, lDiversityConfig: record, numericalStatsConfig: record>, requestedSourceTable: record<datasetId: string, projectId: string, tableId: string>>, startTime: string, state: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -948,9 +959,6 @@ export def "dlp-projects-locations-dlp-jobs-create" [
 #
 # POST /v2/{parent}/image:redact
 # operationId: dlp.projects.locations.image.redact
-# --byteItem shape: {data?: string, type?: "BYTES_TYPE_UNSPECIFIED"|"IMAGE"|"IMAGE_JPEG"|"IMAGE_BMP"|"IMAGE_PNG"|"IMAGE_SVG"|"TEXT_UTF8"|"WORD_DOCUMENT"|"PDF"|"POWERPOINT_DOCUMENT"|"EXCEL_DOCUMENT"|"AVRO"|"CSV"|"TSV"}
-# --imageRedactionConfigs item shape: {infoType?: record, redactAllText?: bool, redactionColor?: record}
-# --inspectConfig shape: {contentOptions?: list<string>, customInfoTypes?: list, excludeInfoTypes?: bool, includeQuote?: bool, infoTypes?: list, limits?: record, minLikelihood?: "LIKELIHOOD_UNSPECIFIED"|"VERY_UNLIKELY"|"UNLIKELY"|"POSSIBLE"|"LIKELY"|"VERY_LIKELY", ruleSet?: list}
 export def "dlp-projects-locations-image-redact" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -978,7 +986,7 @@ export def "dlp-projects-locations-image-redact" [
   --include-findings: oneof<nothing, bool> # Whether the response should include findings along with the redacted image.
   --inspect-config: record # Configuration description of the scanning process. When used with redactContent only info_types and min_likelihood are currently used. — shape: {contentOptions?: list<string>, customInfoTypes?: list, excludeInfoTypes?: bool, includeQuote?: bool, infoTypes?: list, limits?: record, minLikelihood?: "LIKELIHOOD_UNSPECIFIED"|"VERY_UNLIKELY"|"UNLIKELY"|"POSSIBLE"|"LIKELY"|"VERY_LIKELY", ruleSet?: list}
   --location-id: string # Deprecated. This field has no effect.
-]: any -> record<extractedText: string, inspectResult: record<findings: list<record>, findingsTruncated: bool>, redactedImage: string> {
+]: any -> oneof<record<extractedText: string, inspectResult: record<findings: list<record>, findingsTruncated: bool>, redactedImage: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1032,7 +1040,7 @@ export def "dlp-locations-info-types-list" [
   --filter: string # filter to only return infoTypes supported by certain parts of the API. Defaults to supported_by=INSPECT.
   --language-code: string # BCP-47 language code for localized infoType friendly names. If omitted, or if localized strings are not available, en-US strings will be returned.
   --location-id: string # Deprecated. This field has no effect.
-]: nothing -> record<infoTypes: table<categories: list, description: string, displayName: string, name: string, sensitivityScore: record, supportedBy: list, versions: list>> {
+]: nothing -> oneof<record<infoTypes: table<categories: list, description: string, displayName: string, name: string, sensitivityScore: record, supportedBy: list, versions: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1084,7 +1092,7 @@ export def "dlp-projects-locations-inspect-templates-list" [
   --order-by: string # Comma separated list of fields to order by, followed by `asc` or `desc` postfix. This list is case-insensitive, default sorting order is ascending, redundant space characters are insignificant. Example: `name asc,update_time, create_time desc` Supported fields are: - `create_time`: corresponds to the time the template was created. - `update_time`: corresponds to the time the template was last updated. - `name`: corresponds to the template's name. - `display_name`: corresponds to the template's display name.
   --page-size: int # Size of the page, can be limited by the server. If zero server returns a page of max size 100.
   --page-token: string # Page token to continue retrieval. Comes from previous call to `ListInspectTemplates`.
-]: nothing -> record<inspectTemplates: table<createTime: string, description: string, displayName: string, inspectConfig: record, name: string, updateTime: string>, nextPageToken: string> {
+]: nothing -> oneof<record<inspectTemplates: table<createTime: string, description: string, displayName: string, inspectConfig: record, name: string, updateTime: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1110,7 +1118,6 @@ export def "dlp-projects-locations-inspect-templates-list" [
 #
 # POST /v2/{parent}/inspectTemplates
 # operationId: dlp.projects.locations.inspectTemplates.create
-# --inspectTemplate shape: {description?: string, displayName?: string, inspectConfig?: record}
 export def "dlp-projects-locations-inspect-templates-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1136,7 +1143,7 @@ export def "dlp-projects-locations-inspect-templates-create" [
   --inspect-template: record # The inspectTemplate contains a configuration (set of types of sensitive data to be detected) to be used anywhere you otherwise would normally specify InspectConfig. See https://cloud.google.com/dlp/docs/concepts-templates to learn more. — shape: {description?: string, displayName?: string, inspectConfig?: record}
   --location-id: string # Deprecated. This field has no effect.
   --template-id: string # The template id can contain uppercase and lowercase letters, numbers, and hyphens; that is, it must match the regular expression: `[a-zA-Z\d-_]+`. The maximum length is 100 characters. Can be empty to allow the system to generate one.
-]: any -> record<createTime: string, description: string, displayName: string, inspectConfig: record<contentOptions: list<string>, customInfoTypes: list<record>, excludeInfoTypes: bool, includeQuote: bool, infoTypes: list<record>, limits: record<maxFindingsPerInfoType: list, maxFindingsPerItem: int, maxFindingsPerRequest: int>, minLikelihood: string, ruleSet: list<record>>, name: string, updateTime: string> {
+]: any -> oneof<record<createTime: string, description: string, displayName: string, inspectConfig: record<contentOptions: list<string>, customInfoTypes: list<record>, excludeInfoTypes: bool, includeQuote: bool, infoTypes: list<record>, limits: record<maxFindingsPerInfoType: list, maxFindingsPerItem: int, maxFindingsPerRequest: int>, minLikelihood: string, ruleSet: list<record>>, name: string, updateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1193,7 +1200,7 @@ export def "dlp-projects-locations-job-triggers-list" [
   --page-size: int # Size of the page, can be limited by a server.
   --page-token: string # Page token to continue retrieval. Comes from previous call to ListJobTriggers. `order_by` field must not change for subsequent calls.
   --type: string@type-completer # The type of jobs. Will use `DlpJobType.INSPECT` if not set.
-]: nothing -> record<jobTriggers: table<createTime: string, description: string, displayName: string, errors: list, inspectJob: record, lastRunTime: string, name: string, status: string, triggers: list, updateTime: string>, nextPageToken: string> {
+]: nothing -> oneof<record<jobTriggers: table<createTime: string, description: string, displayName: string, errors: list, inspectJob: record, lastRunTime: string, name: string, status: string, triggers: list, updateTime: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1219,7 +1226,6 @@ export def "dlp-projects-locations-job-triggers-list" [
 #
 # POST /v2/{parent}/jobTriggers
 # operationId: dlp.projects.locations.jobTriggers.create
-# --jobTrigger shape: {description?: string, displayName?: string, inspectJob?: record, name?: string, status?: "STATUS_UNSPECIFIED"|"HEALTHY"|"PAUSED"|"CANCELLED", triggers?: list}
 export def "dlp-projects-locations-job-triggers-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1245,7 +1251,7 @@ export def "dlp-projects-locations-job-triggers-create" [
   --job-trigger: record # Contains a configuration to make dlp api calls on a repeating basis. See https://cloud.google.com/dlp/docs/concepts-job-triggers to learn more. — shape: {description?: string, displayName?: string, inspectJob?: record, name?: string, status?: "STATUS_UNSPECIFIED"|"HEALTHY"|"PAUSED"|"CANCELLED", triggers?: list}
   --location-id: string # Deprecated. This field has no effect.
   --trigger-id: string # The trigger id can contain uppercase and lowercase letters, numbers, and hyphens; that is, it must match the regular expression: `[a-zA-Z\d-_]+`. The maximum length is 100 characters. Can be empty to allow the system to generate one.
-]: any -> record<createTime: string, description: string, displayName: string, errors: table<details: record, timestamps: list>, inspectJob: record<actions: list<record>, inspectConfig: record<contentOptions: list, customInfoTypes: list, excludeInfoTypes: bool, includeQuote: bool, infoTypes: list, limits: record, minLikelihood: string, ruleSet: list>, inspectTemplateName: string, storageConfig: record<bigQueryOptions: record, cloudStorageOptions: record, datastoreOptions: record, hybridOptions: record, timespanConfig: record>>, lastRunTime: string, name: string, status: string, triggers: table<manual: record, schedule: record>, updateTime: string> {
+]: any -> oneof<record<createTime: string, description: string, displayName: string, errors: table<details: record, timestamps: list>, inspectJob: record<actions: list<record>, inspectConfig: record<contentOptions: list, customInfoTypes: list, excludeInfoTypes: bool, includeQuote: bool, infoTypes: list, limits: record, minLikelihood: string, ruleSet: list>, inspectTemplateName: string, storageConfig: record<bigQueryOptions: record, cloudStorageOptions: record, datastoreOptions: record, hybridOptions: record, timespanConfig: record>>, lastRunTime: string, name: string, status: string, triggers: table<manual: record, schedule: record>, updateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1300,7 +1306,7 @@ export def "dlp-projects-stored-info-types-list" [
   --order-by: string # Comma separated list of fields to order by, followed by `asc` or `desc` postfix. This list is case-insensitive, default sorting order is ascending, redundant space characters are insignificant. Example: `name asc, display_name, create_time desc` Supported fields are: - `create_time`: corresponds to the time the most recent version of the resource was created. - `state`: corresponds to the state of the resource. - `name`: corresponds to resource name. - `display_name`: corresponds to info type's display name.
   --page-size: int # Size of the page, can be limited by the server. If zero server returns a page of max size 100.
   --page-token: string # Page token to continue retrieval. Comes from previous call to `ListStoredInfoTypes`.
-]: nothing -> record<nextPageToken: string, storedInfoTypes: table<currentVersion: record, name: string, pendingVersions: list>> {
+]: nothing -> oneof<record<nextPageToken: string, storedInfoTypes: table<currentVersion: record, name: string, pendingVersions: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1326,7 +1332,6 @@ export def "dlp-projects-stored-info-types-list" [
 #
 # POST /v2/{parent}/storedInfoTypes
 # operationId: dlp.projects.storedInfoTypes.create
-# --config shape: {description?: string, dictionary?: record, displayName?: string, largeCustomDictionary?: record, regex?: record}
 export def "dlp-projects-stored-info-types-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1352,7 +1357,7 @@ export def "dlp-projects-stored-info-types-create" [
   --config: record # Configuration for stored infoTypes. All fields and subfield are provided by the user. For more information, see https://cloud.google.com/dlp/docs/creating-custom-infotypes. — shape: {description?: string, dictionary?: record, displayName?: string, largeCustomDictionary?: record, regex?: record}
   --location-id: string # Deprecated. This field has no effect.
   --stored-info-type-id: string # The storedInfoType ID can contain uppercase and lowercase letters, numbers, and hyphens; that is, it must match the regular expression: `[a-zA-Z\d-_]+`. The maximum length is 100 characters. Can be empty to allow the system to generate one.
-]: any -> record<currentVersion: record<config: record<description: string, dictionary: record, displayName: string, largeCustomDictionary: record, regex: record>, createTime: string, errors: list<record>, state: string, stats: record<largeCustomDictionary: record>>, name: string, pendingVersions: table<config: record, createTime: string, errors: list, state: string, stats: record>> {
+]: any -> oneof<record<currentVersion: record<config: record<description: string, dictionary: record, displayName: string, largeCustomDictionary: record, regex: record>, createTime: string, errors: list<record>, state: string, stats: record<largeCustomDictionary: record>>, name: string, pendingVersions: table<config: record, createTime: string, errors: list, state: string, stats: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

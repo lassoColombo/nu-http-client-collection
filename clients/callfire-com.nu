@@ -14,27 +14,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -42,8 +51,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -54,7 +68,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -89,7 +112,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -159,9 +183,9 @@ def big-message-strategy-completer [] { ["DO_NOT_SEND" "MMS" "SEND_MULTIPLE" "TR
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "find-calls" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["find-calls" "send-calls" "find-call-broadcasts" "create-call-broadcast" "get-call-broadcast" "update-call-broadcast" "archive-voice-broadcast" "get-call-broadcast-batches" "add-call-broadcast-batch" "get-call-broadcast-calls" "add-call-broadcast-recipients" "start-voice-broadcast" "get-call-broadcast-stats" "stop-voice-broadcast" "toggle-call-broadcast-recipients-status" "get-call-recording" "get-call-recording-mp3" "get-call" "get-call-recordings" "get-call-recording-by-name" "get-call-recording-mp3-by-name" "get-campaign-batch" "update-campaign-batch" "find-campaign-sounds" "post-call-campaign-sound" "post-file-campaign-sound" "post-tts-campaign-sound" "delete-campaign-sound" "get-campaign-sound" "get-campaign-sound-data-mp3" "get-campaign-sound-data-wav" "find-contacts" "create-contacts" "find-do-not-contacts" "add-do-not-contacts" "delete-do-not-contacts-by-source" "get-universal-do-not-contacts" "delete-do-not-contact" "get-do-not-contact" "update-do-not-contact" "find-contact-lists" "create-contact-list" "create-contact-list-from-file" "delete-contact-list" "get-contact-list" "update-contact-list" "remove-contact-list-items" "get-contact-list-items" "add-contact-list-items" "remove-contact-list-item" "delete-contact" "get-contact" "update-contact" "get-contact-history" "find-keywords" "find-keyword-leases" "find-keyword-lease-configs" "get-keyword-lease-config" "update-keyword-lease-config" "get-keyword-lease-by-id" "get-keyword-lease" "update-keyword-lease" "is-keyword-available" "get-account" "find-api-credentials" "create-api-credential" "delete-api-credential" "get-api-credential" "disable-api-credentials" "enable-api-credentials" "get-credit-usage" "get-billing-plan-usage" "get-caller-ids" "send-verification-code-to-caller-id" "verify-caller-id" "find-media" "create-media" "get-media-data-by-key" "get-media" "get-media-data" "get-media-data-binary" "find-number-leases" "find-number-lease-configs" "get-number-lease-config" "update-number-lease-config" "get-number-lease" "update-number-lease" "find-numbers-local" "find-number-regions" "find-numbers-tollfree" "find-orders" "order-keywords" "order-numbers" "get-order" "get-delivery-reports" "find-texts" "send-texts" "find-text-auto-replys" "create-text-auto-reply" "delete-text-auto-reply" "get-text-auto-reply" "find-text-broadcasts" "create-text-broadcast" "get-text-broadcast" "update-text-broadcast" "archive-text-broadcast" "get-text-broadcast-batches" "add-text-broadcast-batch" "add-text-broadcast-recipients" "start-text-broadcast" "get-text-broadcast-stats" "stop-text-broadcast" "get-text-broadcast-texts" "toggle-text-broadcast-recipients-status" "get-text" "find-webhooks" "create-webhook" "find-webhook-resources" "get-webhook-resource" "delete-webhook" "get-webhook" "update-webhook" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -207,7 +231,7 @@ export def "find-calls" [
   --inbound: oneof<nothing, bool> # Filters inbound calls for "true" value and outbound calls for "false" value
   --interval-begin: int # Start of the find time interval, formatted in unix time milliseconds. Example: 1473781817000 for Sat, 05 Jan 1985 14:03:37 GMT (format: int64)
   --interval-end: int # End of the find time interval, formatted in unix time milliseconds. Example: 1473781817000 for Sat, 05 Jan 1985 14:03:37 GMT (format: int64)
-]: nothing -> record<items: table<agentCall: bool, attributes: record, batchId: int, campaignId: int, contact: record, created: int, finalCallResult: string, fromNumber: string, id: int, inbound: bool, labels: list, modified: int, notes: list, records: list, state: string, toNumber: string>, limit: int, offset: int, totalCount: int> {
+]: nothing -> oneof<record<items: table<agentCall: bool, attributes: record, batchId: int, campaignId: int, contact: record, created: int, finalCallResult: string, fromNumber: string, id: int, inbound: bool, labels: list, modified: int, notes: list, records: list, state: string, toNumber: string>, limit: int, offset: int, totalCount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "id" $id "multi") (serialize-qp "campaignId" $campaign_id "scalar") (serialize-qp "batchId" $batch_id "scalar") (serialize-qp "fromNumber" $from_number "scalar") (serialize-qp "toNumber" $to_number "scalar") (serialize-qp "label" $label "scalar") (serialize-qp "states" $states "scalar") (serialize-qp "results" $results "scalar") (serialize-qp "inbound" $inbound "scalar") (serialize-qp "intervalBegin" $interval_begin "scalar") (serialize-qp "intervalEnd" $interval_end "scalar")] | flatten | str join "&"
@@ -251,7 +275,7 @@ export def "send-calls" [
   --default-voice: string@default-voice-completer # The voice set by default for all text-to-speech messages defined in CallRecipient objects or as default *Message properties
   --strict-validation: oneof<nothing, bool> # Turns on strict validation for recipients. System will reply with BAD_REQUEST(400) if strictValidation = true and one of numbers didn't pass validation
   --body: list
-]: any -> record<items: table<agentCall: bool, attributes: record, batchId: int, campaignId: int, contact: record, created: int, finalCallResult: string, fromNumber: string, id: int, inbound: bool, labels: list, modified: int, notes: list, records: list, state: string, toNumber: string>> {
+]: any -> oneof<record<items: table<agentCall: bool, attributes: record, batchId: int, campaignId: int, contact: record, created: int, finalCallResult: string, fromNumber: string, id: int, inbound: bool, labels: list, modified: int, notes: list, records: list, state: string, toNumber: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -298,7 +322,7 @@ export def "find-call-broadcasts" [
   --scheduled: oneof<nothing, bool> # Specify whether the campaigns should be scheduled or not
   --interval-begin: int # Start of the find time interval, formatted in unix time milliseconds. Example: 1473781817000 for Sat, 05 Jan 1985 14:03:37 GMT (format: int64)
   --interval-end: int # End of the find time interval, formatted in unix time milliseconds. Example: 1473781817000 for Sat, 05 Jan 1985 14:03:37 GMT (format: int64)
-]: nothing -> record<items: table<answeringMachineConfig: string, dialplanXml: string, fromNumber: string, id: int, labels: list, lastModified: int, localTimeRestriction: record, maxActive: int, maxActiveTransfers: int, name: string, recipients: list, resumeNextDay: bool, retryConfig: record, schedules: list, sounds: record, status: string>, limit: int, offset: int, totalCount: int> {
+]: nothing -> oneof<record<items: table<answeringMachineConfig: string, dialplanXml: string, fromNumber: string, id: int, labels: list, lastModified: int, localTimeRestriction: record, maxActive: int, maxActiveTransfers: int, name: string, recipients: list, resumeNextDay: bool, retryConfig: record, schedules: list, sounds: record, status: string>, limit: int, offset: int, totalCount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "label" $label "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "running" $running "scalar") (serialize-qp "scheduled" $scheduled "scalar") (serialize-qp "intervalBegin" $interval_begin "scalar") (serialize-qp "intervalEnd" $interval_end "scalar")] | flatten | str join "&"
@@ -323,11 +347,6 @@ export def "find-call-broadcasts" [
 #
 # POST /calls/broadcasts
 # operationId: createCallBroadcast
-# --localTimeRestriction shape: {beginHour?: int, beginMinute?: int, enabled?: bool, endHour?: int, endMinute?: int}
-# --recipients item shape: {attributes?: record, contactId?: int, fromNumber?: string, phoneNumber?: string}
-# --retryConfig shape: {maxAttempts?: int, minutesBetweenAttempts?: int, retryPhoneTypes?: list<string>, retryResults?: list<string>}
-# --schedules item shape: {campaignId?: int, daysOfWeek?: list<string>, id?: int, startDate?: record, startTimeOfDay?: record, stopDate?: record, stopTimeOfDay?: record, timeZone?: string}
-# --sounds shape: {dncDigit?: string, dncSoundId?: int, dncSoundText?: string, dncSoundTextVoice?: "MALE1"|"FEMALE1"|"FEMALE2"|"SPANISH1"|"FRENCHCANADIAN1", liveSoundId?: int, liveSoundText?: string, liveSoundTextVoice?: "MALE1"|"FEMALE1"|"FEMALE2"|"SPANISH1"|"FRENCHCANADIAN1", machineSoundId?: int, machineSoundText?: string, machineSoundTextVoice?: "MALE1"|"FEMALE1"|"FEMALE2"|"SPANISH1"|"FRENCHCANADIAN1", transferDigit?: string, transferNumber?: string, transferSoundId?: int, transferSoundText?: string, ... (1 more fields)}
 export def "create-call-broadcast" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -354,7 +373,7 @@ export def "create-call-broadcast" [
   --retry-config: record # Retry configuration will help you to resend a call or text if it was not delivered first time — shape: {maxAttempts?: int, minutesBetweenAttempts?: int, retryPhoneTypes?: list<string>, retryResults?: list<string>}
   --schedules: list # A list of schedule objects which specifies a range of time when broadcast should be started and stopped. Supports the scheduling per day of week — item shape: {campaignId?: int, daysOfWeek?: list<string>, id?: int, startDate?: record, startTimeOfDay?: record, stopDate?: record, stopTimeOfDay?: record, timeZone?: string}
   --sounds: record # A set of sounds assigned to a voice broadcast to play according to an answering machine configuration. You can add the existing sounds from the account's sound library or to provide a text which will be converted into a speech. There are four sound options available for a Voice Broadcast campaign — shape: {dncDigit?: string, dncSoundId?: int, dncSoundText?: string, dncSoundTextVoice?: "MALE1"|"FEMALE1"|"FEMALE2"|"SPANISH1"|"FRENCHCANADIAN1", liveSoundId?: int, liveSoundText?: string, liveSoundTextVoice?: "MALE1"|"FEMALE1"|"FEMALE2"|"SPANISH1"|"FRENCHCANADIAN1", machineSoundId?: int, machineSoundText?: string, machineSoundTextVoice?: "MALE1"|"FEMALE1"|"FEMALE2"|"SPANISH1"|"FRENCHCANADIAN1", transferDigit?: string, transferNumber?: string, transferSoundId?: int, transferSoundText?: string, ... (1 more fields)}
-]: any -> record<id: int> {
+]: any -> oneof<record<id: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -394,7 +413,7 @@ export def "get-call-broadcast" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
-]: nothing -> record<answeringMachineConfig: string, dialplanXml: string, fromNumber: string, id: int, labels: list<string>, lastModified: int, localTimeRestriction: record<beginHour: int, beginMinute: int, enabled: bool, endHour: int, endMinute: int>, maxActive: int, maxActiveTransfers: int, name: string, recipients: table<attributes: record, contactId: int, fromNumber: string, phoneNumber: string>, resumeNextDay: bool, retryConfig: record<maxAttempts: int, minutesBetweenAttempts: int, retryPhoneTypes: list<string>, retryResults: list<string>>, schedules: table<campaignId: int, daysOfWeek: list, id: int, startDate: record, startTimeOfDay: record, stopDate: record, stopTimeOfDay: record, timeZone: string>, sounds: record<dncDigit: string, dncSoundId: int, dncSoundText: string, dncSoundTextVoice: string, liveSoundId: int, liveSoundText: string, liveSoundTextVoice: string, machineSoundId: int, machineSoundText: string, machineSoundTextVoice: string, transferDigit: string, transferNumber: string, transferSoundId: int, transferSoundText: string, transferSoundTextVoice: string>, status: string> {
+]: nothing -> oneof<record<answeringMachineConfig: string, dialplanXml: string, fromNumber: string, id: int, labels: list<string>, lastModified: int, localTimeRestriction: record<beginHour: int, beginMinute: int, enabled: bool, endHour: int, endMinute: int>, maxActive: int, maxActiveTransfers: int, name: string, recipients: table<attributes: record, contactId: int, fromNumber: string, phoneNumber: string>, resumeNextDay: bool, retryConfig: record<maxAttempts: int, minutesBetweenAttempts: int, retryPhoneTypes: list<string>, retryResults: list<string>>, schedules: table<campaignId: int, daysOfWeek: list, id: int, startDate: record, startTimeOfDay: record, stopDate: record, stopTimeOfDay: record, timeZone: string>, sounds: record<dncDigit: string, dncSoundId: int, dncSoundText: string, dncSoundTextVoice: string, liveSoundId: int, liveSoundText: string, liveSoundTextVoice: string, machineSoundId: int, machineSoundText: string, machineSoundTextVoice: string, transferDigit: string, transferNumber: string, transferSoundId: int, transferSoundText: string, transferSoundTextVoice: string>, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -420,11 +439,6 @@ export def "get-call-broadcast" [
 #
 # PUT /calls/broadcasts/{id}
 # operationId: updateCallBroadcast
-# --localTimeRestriction shape: {beginHour?: int, beginMinute?: int, enabled?: bool, endHour?: int, endMinute?: int}
-# --recipients item shape: {attributes?: record, contactId?: int, fromNumber?: string, phoneNumber?: string}
-# --retryConfig shape: {maxAttempts?: int, minutesBetweenAttempts?: int, retryPhoneTypes?: list<string>, retryResults?: list<string>}
-# --schedules item shape: {campaignId?: int, daysOfWeek?: list<string>, id?: int, startDate?: record, startTimeOfDay?: record, stopDate?: record, stopTimeOfDay?: record, timeZone?: string}
-# --sounds shape: {dncDigit?: string, dncSoundId?: int, dncSoundText?: string, dncSoundTextVoice?: "MALE1"|"FEMALE1"|"FEMALE2"|"SPANISH1"|"FRENCHCANADIAN1", liveSoundId?: int, liveSoundText?: string, liveSoundTextVoice?: "MALE1"|"FEMALE1"|"FEMALE2"|"SPANISH1"|"FRENCHCANADIAN1", machineSoundId?: int, machineSoundText?: string, machineSoundTextVoice?: "MALE1"|"FEMALE1"|"FEMALE2"|"SPANISH1"|"FRENCHCANADIAN1", transferDigit?: string, transferNumber?: string, transferSoundId?: int, transferSoundText?: string, ... (1 more fields)}
 export def "update-call-broadcast" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -530,7 +544,7 @@ export def "get-call-broadcast-batches" [
   --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
   --limit: int # To set the maximum number of records to return in a paged list response. The default is 100 (format: int32, default: 100)
   --offset: int # Offset to the start of a given page. The default is 0. Check [pagination](https://developers.callfire.com/docs.html#pagination) page for more information about pagination in CallFire API. (format: int32, default: 0)
-]: nothing -> record<items: table<broadcastId: int, created: int, enabled: bool, id: int, name: string, remaining: int, size: int, status: string>, limit: int, offset: int, totalCount: int> {
+]: nothing -> oneof<record<items: table<broadcastId: int, created: int, enabled: bool, id: int, name: string, remaining: int, size: int, status: string>, limit: int, offset: int, totalCount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -556,7 +570,6 @@ export def "get-call-broadcast-batches" [
 #
 # POST /calls/broadcasts/{id}/batches
 # operationId: addCallBroadcastBatch
-# --recipients item shape: {attributes?: record, contactId?: int, fromNumber?: string, phoneNumber?: string}
 export def "add-call-broadcast-batch" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -573,7 +586,7 @@ export def "add-call-broadcast-batch" [
   --name: string # A name of batch
   --recipients: list # A list of Recipient objects. For each recipient you can set its phone number or existing contact id to use contact which already exists in account — item shape: {attributes?: record, contactId?: int, fromNumber?: string, phoneNumber?: string}
   --scrub-duplicates: oneof<nothing, bool> # Removes duplicate recipients from batch if true
-]: any -> record<id: int> {
+]: any -> oneof<record<id: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -617,7 +630,7 @@ export def "get-call-broadcast-calls" [
   --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
   --limit: int # To set the maximum number of records to return in a paged list response. The default is 100 (format: int32, default: 100)
   --offset: int # Offset to the start of a given page. The default is 0. Check [pagination](https://developers.callfire.com/docs.html#pagination) page for more information about pagination in CallFire API. (format: int32, default: 0)
-]: nothing -> record<items: table<agentCall: bool, attributes: record, batchId: int, campaignId: int, contact: record, created: int, finalCallResult: string, fromNumber: string, id: int, inbound: bool, labels: list, modified: int, notes: list, records: list, state: string, toNumber: string>, limit: int, offset: int, totalCount: int> {
+]: nothing -> oneof<record<items: table<agentCall: bool, attributes: record, batchId: int, campaignId: int, contact: record, created: int, finalCallResult: string, fromNumber: string, id: int, inbound: bool, labels: list, modified: int, notes: list, records: list, state: string, toNumber: string>, limit: int, offset: int, totalCount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -657,7 +670,7 @@ export def "add-call-broadcast-recipients" [
   --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
   --strict-validation: oneof<nothing, bool> # Turns on strict validation for recipients. System will reply with BAD_REQUEST(400) if strictValidation = true and one of numbers didn't pass validation
   --body: list
-]: any -> record<items: table<agentCall: bool, attributes: record, batchId: int, campaignId: int, contact: record, created: int, finalCallResult: string, fromNumber: string, id: int, inbound: bool, labels: list, modified: int, notes: list, records: list, state: string, toNumber: string>> {
+]: any -> oneof<record<items: table<agentCall: bool, attributes: record, batchId: int, campaignId: int, contact: record, created: int, finalCallResult: string, fromNumber: string, id: int, inbound: bool, labels: list, modified: int, notes: list, records: list, state: string, toNumber: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -736,7 +749,7 @@ export def "get-call-broadcast-stats" [
   --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
   --begin: int # Start of the search time interval, formatted in unix time milliseconds. Example: 1473781817000 for Sat, 05 Jan 1985 14:03:37 GMT (format: int64)
   --end: int # End of the search time interval, formatted in unix time milliseconds. Example: 1473781817000 for Sat, 05 Jan 1985 14:03:37 GMT (format: int64)
-]: nothing -> record<answeringMachineCount: int, billedAmount: float, billedDuration: int, busyCount: int, callsAttempted: int, callsAwaitingRedial: int, callsDuration: int, callsLiveAnswer: int, callsPlaced: int, callsRemaining: int, dialedCount: int, doNotCallCount: int, errorCount: int, liveCount: int, miscCount: int, noAnswerCount: int, remainingOutboundCount: int, responseRatePercent: int, totalCount: int, totalOutboundCount: int, transferCount: int> {
+]: nothing -> oneof<record<answeringMachineCount: int, billedAmount: float, billedDuration: int, busyCount: int, callsAttempted: int, callsAwaitingRedial: int, callsDuration: int, callsLiveAnswer: int, callsPlaced: int, callsRemaining: int, dialedCount: int, doNotCallCount: int, errorCount: int, liveCount: int, miscCount: int, noAnswerCount: int, remainingOutboundCount: int, responseRatePercent: int, totalCount: int, totalOutboundCount: int, transferCount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -852,7 +865,7 @@ export def "get-call-recording" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
-]: nothing -> record<callId: int, campaignId: int, created: int, hash: string, id: int, lengthInBytes: int, lengthInSeconds: int, mp3Url: string, name: string, state: string> {
+]: nothing -> oneof<record<callId: int, campaignId: int, created: int, hash: string, id: int, lengthInBytes: int, lengthInSeconds: int, mp3Url: string, name: string, state: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -889,7 +902,7 @@ export def "get-call-recording-mp3" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -926,7 +939,7 @@ export def "get-call" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
-]: nothing -> record<agentCall: bool, attributes: record, batchId: int, campaignId: int, contact: record<deleted: bool, externalId: string, externalSystem: string, extraPhone1: string, extraPhone2: string, extraPhone3: string, firstName: string, homePhone: string, id: int, lastName: string, mobilePhone: string, properties: record, workPhone: string, zipcode: string>, created: int, finalCallResult: string, fromNumber: string, id: int, inbound: bool, labels: list<string>, modified: int, notes: table<created: int, text: string>, records: table<answerTime: int, billedAmount: float, callerName: string, duration: int, finishTime: int, id: int, labels: list, notes: list, originateTime: int, questionResponses: list, recordings: list, result: string, switchId: string, toNumber: string>, state: string, toNumber: string> {
+]: nothing -> oneof<record<agentCall: bool, attributes: record, batchId: int, campaignId: int, contact: record<deleted: bool, externalId: string, externalSystem: string, extraPhone1: string, extraPhone2: string, extraPhone3: string, firstName: string, homePhone: string, id: int, lastName: string, mobilePhone: string, properties: record, workPhone: string, zipcode: string>, created: int, finalCallResult: string, fromNumber: string, id: int, inbound: bool, labels: list<string>, modified: int, notes: table<created: int, text: string>, records: table<answerTime: int, billedAmount: float, callerName: string, duration: int, finishTime: int, id: int, labels: list, notes: list, originateTime: int, questionResponses: list, recordings: list, result: string, switchId: string, toNumber: string>, state: string, toNumber: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -964,7 +977,7 @@ export def "get-call-recordings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
-]: nothing -> record<items: table<callId: int, campaignId: int, created: int, hash: string, id: int, lengthInBytes: int, lengthInSeconds: int, mp3Url: string, name: string, state: string>> {
+]: nothing -> oneof<record<items: table<callId: int, campaignId: int, created: int, hash: string, id: int, lengthInBytes: int, lengthInSeconds: int, mp3Url: string, name: string, state: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1003,7 +1016,7 @@ export def "get-call-recording-by-name" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
-]: nothing -> record<callId: int, campaignId: int, created: int, hash: string, id: int, lengthInBytes: int, lengthInSeconds: int, mp3Url: string, name: string, state: string> {
+]: nothing -> oneof<record<callId: int, campaignId: int, created: int, hash: string, id: int, lengthInBytes: int, lengthInSeconds: int, mp3Url: string, name: string, state: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1042,7 +1055,7 @@ export def "get-call-recording-mp3-by-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1080,7 +1093,7 @@ export def "get-campaign-batch" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
-]: nothing -> record<broadcastId: int, created: int, enabled: bool, id: int, name: string, remaining: int, size: int, status: string> {
+]: nothing -> oneof<record<broadcastId: int, created: int, enabled: bool, id: int, name: string, remaining: int, size: int, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1167,7 +1180,7 @@ export def "find-campaign-sounds" [
   --include-pending: oneof<nothing, bool> # Includes UPLOAD/RECORDING sounds for "true" value
   --include-scrubbed: oneof<nothing, bool> # Includes SCRUBBED sounds for "true" value
   --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
-]: nothing -> record<items: table<created: int, duplicate: bool, id: int, lengthInSeconds: int, name: string, status: string>, limit: int, offset: int, totalCount: int> {
+]: nothing -> oneof<record<items: table<created: int, duplicate: bool, id: int, lengthInSeconds: int, name: string, status: string>, limit: int, offset: int, totalCount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "includeArchived" $include_archived "scalar") (serialize-qp "includePending" $include_pending "scalar") (serialize-qp "includeScrubbed" $include_scrubbed "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
@@ -1205,7 +1218,7 @@ export def "post-call-campaign-sound" [
   --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
   --name: string # Name of a sound to create
   --to-number: string # Phone number in E.164 11-digit format to call to record a sound. Example: 12132000384
-]: any -> record<created: int, duplicate: bool, id: int, lengthInSeconds: int, name: string, status: string> {
+]: any -> oneof<record<created: int, duplicate: bool, id: int, lengthInSeconds: int, name: string, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1246,7 +1259,7 @@ export def "post-file-campaign-sound" [
   --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
   file: string # A sound file encoded in binary form (format: binary)
   --name: string # Optional name of a sound file, if the name is empty than it will be taken from a file
-]: any -> record<created: int, duplicate: bool, id: int, lengthInSeconds: int, name: string, status: string> {
+]: any -> oneof<record<created: int, duplicate: bool, id: int, lengthInSeconds: int, name: string, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1289,7 +1302,7 @@ export def "post-tts-campaign-sound" [
   --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
   --message: string # A text to be turned into sound
   --voice: string@voice-completer # A voice to be used. Available values: MALE1, FEMALE1 , FEMALE2, SPANISH1, FRENCHCANADIAN1
-]: any -> record<created: int, duplicate: bool, id: int, lengthInSeconds: int, name: string, status: string> {
+]: any -> oneof<record<created: int, duplicate: bool, id: int, lengthInSeconds: int, name: string, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1365,7 +1378,7 @@ export def "get-campaign-sound" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
-]: nothing -> record<created: int, duplicate: bool, id: int, lengthInSeconds: int, name: string, status: string> {
+]: nothing -> oneof<record<created: int, duplicate: bool, id: int, lengthInSeconds: int, name: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1402,7 +1415,7 @@ export def "get-campaign-sound-data-mp3" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1438,7 +1451,7 @@ export def "get-campaign-sound-data-wav" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1481,7 +1494,7 @@ export def "find-contacts" [
   --contact-list-id: int # Filters contacts by a particular contact list (format: int64)
   --property-name: string # Name of a contact property to search by
   --property-value: string # Value of a contact property to search by
-]: nothing -> record<items: table<deleted: bool, externalId: string, externalSystem: string, extraPhone1: string, extraPhone2: string, extraPhone3: string, firstName: string, homePhone: string, id: int, lastName: string, mobilePhone: string, properties: record, workPhone: string, zipcode: string>, limit: int, offset: int, totalCount: int> {
+]: nothing -> oneof<record<items: table<deleted: bool, externalId: string, externalSystem: string, extraPhone1: string, extraPhone2: string, extraPhone3: string, firstName: string, homePhone: string, id: int, lastName: string, mobilePhone: string, properties: record, workPhone: string, zipcode: string>, limit: int, offset: int, totalCount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "id" $id "multi") (serialize-qp "number" $number "multi") (serialize-qp "contactListId" $contact_list_id "scalar") (serialize-qp "propertyName" $property_name "scalar") (serialize-qp "propertyValue" $property_value "scalar")] | flatten | str join "&"
@@ -1517,7 +1530,7 @@ export def "create-contacts" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> record<items: table<id: int>> {
+]: any -> oneof<record<items: table<id: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1565,7 +1578,7 @@ export def "find-do-not-contacts" [
   --inbound-call: oneof<nothing, bool> # ~
   --inbound-text: oneof<nothing, bool> # ~
   --number: list<string> # ~
-]: nothing -> record<items: table<call: bool, campaignId: int, created: int, inboundCall: bool, inboundText: bool, number: string, source: string, text: bool>, limit: int, offset: int, totalCount: int> {
+]: nothing -> oneof<record<items: table<call: bool, campaignId: int, created: int, inboundCall: bool, inboundText: bool, number: string, source: string, text: bool>, limit: int, offset: int, totalCount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "campaignId" $campaign_id "scalar") (serialize-qp "source" $source "scalar") (serialize-qp "call" $call "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "inboundCall" $inbound_call "scalar") (serialize-qp "inboundText" $inbound_text "scalar") (serialize-qp "number" $number "multi")] | flatten | str join "&"
@@ -1682,7 +1695,7 @@ export def "get-universal-do-not-contacts" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --from-number: string # An optional destination/source number for DNC, specified in E.164 format (11-digit). Example: 12132000384
   --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
-]: nothing -> record<items: table<fromNumber: string, inboundCall: bool, inboundText: bool, outboundCall: bool, outboundText: bool, toNumber: string>> {
+]: nothing -> oneof<record<items: table<fromNumber: string, inboundCall: bool, inboundText: bool, outboundCall: bool, outboundText: bool, toNumber: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($to_number | is-empty) { error make --unspanned { msg: "path parameter 'toNumber' must be non-empty" } }
@@ -1755,7 +1768,7 @@ export def "get-do-not-contact" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<call: bool, campaignId: int, created: int, inboundCall: bool, inboundText: bool, number: string, source: string, text: bool> {
+]: nothing -> oneof<record<call: bool, campaignId: int, created: int, inboundCall: bool, inboundText: bool, number: string, source: string, text: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($number | is-empty) { error make --unspanned { msg: "path parameter 'number' must be non-empty" } }
@@ -1842,7 +1855,7 @@ export def "find-contact-lists" [
   --exact-match: oneof<nothing, bool> # ~
   --contact-count: int # ~ (format: int32)
   --order-by: string # ~
-]: nothing -> record<items: table<created: int, id: int, name: string, size: int, status: string>, limit: int, offset: int, totalCount: int> {
+]: nothing -> oneof<record<items: table<created: int, id: int, name: string, size: int, status: string>, limit: int, offset: int, totalCount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "exactMatch" $exact_match "scalar") (serialize-qp "contactCount" $contact_count "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
@@ -1867,7 +1880,6 @@ export def "find-contact-lists" [
 #
 # POST /contacts/lists
 # operationId: createContactList
-# --contacts item shape: {deleted?: bool, externalId?: string, externalSystem?: string, extraPhone1?: string, extraPhone2?: string, extraPhone3?: string, firstName?: string, homePhone?: string, id?: int, lastName?: string, mobilePhone?: string, properties?: record, workPhone?: string, zipcode?: string}
 export def "create-contact-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1885,7 +1897,7 @@ export def "create-contact-list" [
   --contacts: list # A list of new contact objects to be added — item shape: {deleted?: bool, externalId?: string, externalSystem?: string, extraPhone1?: string, extraPhone2?: string, extraPhone3?: string, firstName?: string, homePhone?: string, id?: int, lastName?: string, mobilePhone?: string, properties?: record, workPhone?: string, zipcode?: string}
   --name: string # A name of a contact list
   --use-custom-fields: oneof<nothing, bool> # A flag to indicate how to define property names for contacts. If true, uses the field and property names exactly as defined. If false will assign custom properties and fields to A, B, C, etc
-]: any -> record<created: int, id: int, name: string, size: int, status: string> {
+]: any -> oneof<record<created: int, id: int, name: string, size: int, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1926,7 +1938,7 @@ export def "create-contact-list-from-file" [
   file: string # CSV file to be uploaded (format: binary)
   --name: string # A name of a contact list
   --use-custom-fields: oneof<nothing, bool> # A flag to indicate how to define property names for contacts. If true, uses the field and property names exactly as defined. If false will assign custom properties and fields to A, B, C, etc
-]: any -> record<id: int> {
+]: any -> oneof<record<id: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2003,7 +2015,7 @@ export def "get-contact-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
-]: nothing -> record<created: int, id: int, name: string, size: int, status: string> {
+]: nothing -> oneof<record<created: int, id: int, name: string, size: int, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2121,7 +2133,7 @@ export def "get-contact-list-items" [
   --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
   --limit: int # To set the maximum number of records to return in a paged list response. The default is 100 (format: int32)
   --offset: int # Offset to the start of a given page. The default is 0. Check [pagination](https://developers.callfire.com/docs.html#pagination) page for more information about pagination in CallFire API. (format: int32)
-]: nothing -> record<items: table<deleted: bool, externalId: string, externalSystem: string, extraPhone1: string, extraPhone2: string, extraPhone3: string, firstName: string, homePhone: string, id: int, lastName: string, mobilePhone: string, properties: record, workPhone: string, zipcode: string>, limit: int, offset: int, totalCount: int> {
+]: nothing -> oneof<record<items: table<deleted: bool, externalId: string, externalSystem: string, extraPhone1: string, extraPhone2: string, extraPhone3: string, firstName: string, homePhone: string, id: int, lastName: string, mobilePhone: string, properties: record, workPhone: string, zipcode: string>, limit: int, offset: int, totalCount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2147,7 +2159,6 @@ export def "get-contact-list-items" [
 #
 # POST /contacts/lists/{id}/items
 # operationId: addContactListItems
-# --contacts item shape: {deleted?: bool, externalId?: string, externalSystem?: string, extraPhone1?: string, extraPhone2?: string, extraPhone3?: string, firstName?: string, homePhone?: string, id?: int, lastName?: string, mobilePhone?: string, properties?: record, workPhone?: string, zipcode?: string}
 export def "add-contact-list-items" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2278,7 +2289,7 @@ export def "get-contact" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
-]: nothing -> record<deleted: bool, externalId: string, externalSystem: string, extraPhone1: string, extraPhone2: string, extraPhone3: string, firstName: string, homePhone: string, id: int, lastName: string, mobilePhone: string, properties: record, workPhone: string, zipcode: string> {
+]: nothing -> oneof<record<deleted: bool, externalId: string, externalSystem: string, extraPhone1: string, extraPhone2: string, extraPhone3: string, firstName: string, homePhone: string, id: int, lastName: string, mobilePhone: string, properties: record, workPhone: string, zipcode: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2371,7 +2382,7 @@ export def "get-contact-history" [
   --limit: int # To set the maximum number of records to return in a paged list response. The default is 100 (format: int32)
   --offset: int # Offset to the start of a given page. The default is 0. Check [pagination](https://developers.callfire.com/docs.html#pagination) page for more information about pagination in CallFire API. (format: int32)
   --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
-]: nothing -> record<calls: table<agentCall: bool, attributes: record, batchId: int, campaignId: int, contact: record, created: int, finalCallResult: string, fromNumber: string, id: int, inbound: bool, labels: list, modified: int, notes: list, records: list, state: string, toNumber: string>, id: int, texts: table<attributes: record, batchId: int, campaignId: int, contact: record, created: int, finalTextResult: string, fromNumber: string, id: int, inbound: bool, labels: list, media: list, message: string, modified: int, records: list, state: string, toNumber: string>> {
+]: nothing -> oneof<record<calls: table<agentCall: bool, attributes: record, batchId: int, campaignId: int, contact: record, created: int, finalCallResult: string, fromNumber: string, id: int, inbound: bool, labels: list, modified: int, notes: list, records: list, state: string, toNumber: string>, id: int, texts: table<attributes: record, batchId: int, campaignId: int, contact: record, created: int, finalTextResult: string, fromNumber: string, id: int, inbound: bool, labels: list, media: list, message: string, modified: int, records: list, state: string, toNumber: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2408,7 +2419,7 @@ export def "find-keywords" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --keywords: list<string> # A keyword to search for
-]: nothing -> record<items: table<keyword: string, number: string, shortCode: string>> {
+]: nothing -> oneof<record<items: table<keyword: string, number: string, shortCode: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "keywords" $keywords "multi")] | flatten | str join "&"
@@ -2448,7 +2459,7 @@ export def "find-keyword-leases" [
   --filter: string # Filter by part of Keyword name or Label name of Keyword
   --label-name: string # An exact label name to search by
   --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
-]: nothing -> record<items: table<autoRenew: bool, contactListId: int, doubleOptInEnabled: bool, keyword: string, labels: list, leaseBegin: int, leaseEnd: int, number: string, optInConfirmationMessage: string, shortCode: string, status: string, type: string>, limit: int, offset: int, totalCount: int> {
+]: nothing -> oneof<record<items: table<autoRenew: bool, contactListId: int, doubleOptInEnabled: bool, keyword: string, labels: list, leaseBegin: int, leaseEnd: int, number: string, optInConfirmationMessage: string, shortCode: string, status: string, type: string>, limit: int, offset: int, totalCount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "labelName" $label_name "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
@@ -2488,7 +2499,7 @@ export def "find-keyword-lease-configs" [
   --filter: string # Filter by part of Keyword name or Label name of Keyword
   --label-name: string # An exact label name to search by
   --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
-]: nothing -> record<items: list<record>, limit: int, offset: int, totalCount: int> {
+]: nothing -> oneof<record<items: list<record>, limit: int, offset: int, totalCount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "labelName" $label_name "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
@@ -2525,7 +2536,7 @@ export def "get-keyword-lease-config" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
-]: nothing -> record<keyword: string, textInboundConfig: record<forwardEnabled: bool, forwardNumber: string>> {
+]: nothing -> oneof<record<keyword: string, textInboundConfig: record<forwardEnabled: bool, forwardNumber: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($keyword | is-empty) { error make --unspanned { msg: "path parameter 'keyword' must be non-empty" } }
@@ -2551,7 +2562,6 @@ export def "get-keyword-lease-config" [
 #
 # PUT /keywords/leases/configs/{keyword}
 # operationId: updateKeywordLeaseConfig
-# --textInboundConfig shape: {forwardEnabled?: bool, forwardNumber?: string}
 export def "update-keyword-lease-config" [
   keyword: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2605,7 +2615,7 @@ export def "get-keyword-lease-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
-]: nothing -> record<autoRenew: bool, contactListId: int, doubleOptInEnabled: bool, keyword: string, labels: list<string>, leaseBegin: int, leaseEnd: int, number: string, optInConfirmationMessage: string, shortCode: string, status: string, type: string> {
+]: nothing -> oneof<record<autoRenew: bool, contactListId: int, doubleOptInEnabled: bool, keyword: string, labels: list<string>, leaseBegin: int, leaseEnd: int, number: string, optInConfirmationMessage: string, shortCode: string, status: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2643,7 +2653,7 @@ export def "get-keyword-lease" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
-]: nothing -> record<autoRenew: bool, contactListId: int, doubleOptInEnabled: bool, keyword: string, labels: list<string>, leaseBegin: int, leaseEnd: int, number: string, optInConfirmationMessage: string, shortCode: string, status: string, type: string> {
+]: nothing -> oneof<record<autoRenew: bool, contactListId: int, doubleOptInEnabled: bool, keyword: string, labels: list<string>, leaseBegin: int, leaseEnd: int, number: string, optInConfirmationMessage: string, shortCode: string, status: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($keyword | is-empty) { error make --unspanned { msg: "path parameter 'keyword' must be non-empty" } }
@@ -2767,7 +2777,7 @@ export def "get-account" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
-]: nothing -> record<active: bool, address: string, age: record<millis: int, standardDays: int, standardHours: int, standardMinutes: int, standardSeconds: int>, agencyManagedAccounts: bool, allowedToCreateCampaign: bool, apiCallLimit: int, archived: bool, autoAddDoNotContact: bool, brand: string, canceled: bool, canceledOrArchived: bool, city: string, companyName: string, country: string, countryOrDefault: string, created: string, dateTimeZone: record<fixed: bool, id: string>, defaultNotificationTtlMillis: int, defaultNumberId: int, ein: string, entityType: string, ez: bool, failedVerificationAttempts: int, fromNumberPool: string, id: int, industry: string, industryName: string, key: string, localTimeZoneRestriction: record<enabled: bool, startTime: string, stopTime: string>, locale: record<country: string, displayCountry: string, displayLanguage: string, displayName: string, displayScript: string, displayVariant: string, extensionKeys: list<string>, iso3Country: string, iso3Language: string, language: string, script: string, unicodeLocaleAttributes: list<string>, unicodeLocaleKeys: list<string>, variant: string>, maxAgents: int, messageClass: string, messageFlows: list<string>, name: string, outboundThreshold: int, receiverPeriodCall: int, receiverPeriodEnabled: bool, receiverPeriodGlobal: int, receiverPeriodText: int, receiverPeriodTimeUnit: string, retainOnlyMetadata: bool, retainOnlyMetadataLastDetailRecordId: int, retainOnlyMetadataLastModified: string, scrub: bool, sharedShortCodeAllowed: bool, sharedShortCodeId: int, soaAccount: any, startCapable: bool, state: string, status: string, textOutboundThreshold: int, timeZone: record<displayName: string, dstsavings: int, id: string, rawOffset: int>, timeZoneId: record<id: string, rules: record<fixedOffset: bool, transitionRules: list, transitions: list>>, trustLevel: string, tsrAgreement: string, tsrInitials: string, uiContext: string, universal: bool, website: string, zipcode: string> {
+]: nothing -> oneof<record<active: bool, address: string, age: record<millis: int, standardDays: int, standardHours: int, standardMinutes: int, standardSeconds: int>, agencyManagedAccounts: bool, allowedToCreateCampaign: bool, apiCallLimit: int, archived: bool, autoAddDoNotContact: bool, brand: string, canceled: bool, canceledOrArchived: bool, city: string, companyName: string, country: string, countryOrDefault: string, created: string, dateTimeZone: record<fixed: bool, id: string>, defaultNotificationTtlMillis: int, defaultNumberId: int, ein: string, entityType: string, ez: bool, failedVerificationAttempts: int, fromNumberPool: string, id: int, industry: string, industryName: string, key: string, localTimeZoneRestriction: record<enabled: bool, startTime: string, stopTime: string>, locale: record<country: string, displayCountry: string, displayLanguage: string, displayName: string, displayScript: string, displayVariant: string, extensionKeys: list<string>, iso3Country: string, iso3Language: string, language: string, script: string, unicodeLocaleAttributes: list<string>, unicodeLocaleKeys: list<string>, variant: string>, maxAgents: int, messageClass: string, messageFlows: list<string>, name: string, outboundThreshold: int, receiverPeriodCall: int, receiverPeriodEnabled: bool, receiverPeriodGlobal: int, receiverPeriodText: int, receiverPeriodTimeUnit: string, retainOnlyMetadata: bool, retainOnlyMetadataLastDetailRecordId: int, retainOnlyMetadataLastModified: string, scrub: bool, sharedShortCodeAllowed: bool, sharedShortCodeId: int, soaAccount: any, startCapable: bool, state: string, status: string, textOutboundThreshold: int, timeZone: record<displayName: string, dstsavings: int, id: string, rawOffset: int>, timeZoneId: record<id: string, rules: record<fixedOffset: bool, transitionRules: list, transitions: list>>, trustLevel: string, tsrAgreement: string, tsrInitials: string, uiContext: string, universal: bool, website: string, zipcode: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
@@ -2806,7 +2816,7 @@ export def "find-api-credentials" [
   --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
   --limit: int # To set the maximum number of records to return in a paged list response. The default is 100 (format: int32, default: 100)
   --offset: int # Offset to the start of a given page. The default is 0. Check [pagination](https://developers.callfire.com/docs.html#pagination) page for more information about pagination in CallFire API. (format: int32, default: 0)
-]: nothing -> record<items: table<enabled: bool, id: int, name: string, password: string, username: string>, limit: int, offset: int, totalCount: int> {
+]: nothing -> oneof<record<items: table<enabled: bool, id: int, name: string, password: string, username: string>, limit: int, offset: int, totalCount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -2844,7 +2854,7 @@ export def "create-api-credential" [
   --enabled: oneof<nothing, bool> # Is credential enabled
   --id: int # An id of an API credential (format: int64)
   --name: string # A name of an API credential
-]: any -> record<enabled: bool, id: int, name: string, password: string, username: string> {
+]: any -> oneof<record<enabled: bool, id: int, name: string, password: string, username: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2919,7 +2929,7 @@ export def "get-api-credential" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
-]: nothing -> record<enabled: bool, id: int, name: string, password: string, username: string> {
+]: nothing -> oneof<record<enabled: bool, id: int, name: string, password: string, username: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3029,7 +3039,7 @@ export def "get-credit-usage" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --interval-begin: int # Beginning of usage period formatted in unix time milliseconds. Example: 1473781817000 (format: int64)
   --interval-end: int # End of usage period formatted in unix time milliseconds. Example: 1473781817000 (format: int64)
-]: nothing -> record<callsDurationMinutes: int, creditsUsed: float, intervalBegin: int, intervalEnd: int, textsSent: int> {
+]: nothing -> oneof<record<callsDurationMinutes: int, creditsUsed: float, intervalBegin: int, intervalEnd: int, textsSent: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "intervalBegin" $interval_begin "scalar") (serialize-qp "intervalEnd" $interval_end "scalar")] | flatten | str join "&"
@@ -3064,7 +3074,7 @@ export def "get-billing-plan-usage" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<intervalEnd: int, intervalStart: int, remainingPayAsYouGoCredits: float, remainingPlanCredits: float, totalRemainingCredits: float> {
+]: nothing -> oneof<record<intervalEnd: int, intervalStart: int, remainingPayAsYouGoCredits: float, remainingPlanCredits: float, totalRemainingCredits: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/me/billing/plan-usage" $auth.query)
@@ -3098,7 +3108,7 @@ export def "get-caller-ids" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<items: table<phoneNumber: string>> {
+]: nothing -> oneof<record<items: table<phoneNumber: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/me/callerids" $auth.query)
@@ -3212,7 +3222,7 @@ export def "find-media" [
   --offset: int # Offset to the start of a given page. The default is 0. Check [pagination](https://developers.callfire.com/docs.html#pagination) page for more information about pagination in CallFire API. (format: int32, default: 0)
   --filter: string # value to filter file names again; this value is used to check if the filename contains the filter value.
   --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
-]: nothing -> record<items: table<accountId: int, created: int, id: int, lengthInBytes: int, mediaType: string, name: string, publicUrl: string>, limit: int, offset: int, totalCount: int> {
+]: nothing -> oneof<record<items: table<accountId: int, created: int, id: int, lengthInBytes: int, mediaType: string, name: string, publicUrl: string>, limit: int, offset: int, totalCount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
@@ -3249,7 +3259,7 @@ export def "create-media" [
   --dry-run(-n) # Return the request that would be sent without executing it
   file: string # Binary media file (format: binary)
   --name: string # A name of a media file
-]: any -> record<id: int> {
+]: any -> oneof<record<id: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3291,7 +3301,7 @@ export def "get-media-data-by-key" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
@@ -3329,7 +3339,7 @@ export def "get-media" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
-]: nothing -> record<accountId: int, created: int, id: int, lengthInBytes: int, mediaType: string, name: string, publicUrl: string> {
+]: nothing -> oneof<record<accountId: int, created: int, id: int, lengthInBytes: int, mediaType: string, name: string, publicUrl: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3368,7 +3378,7 @@ export def "get-media-data" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3405,7 +3415,7 @@ export def "get-media-data-binary" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3449,7 +3459,7 @@ export def "find-number-leases" [
   --label-name: string # A label name
   --toll-free: oneof<nothing, bool> # ~
   --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
-]: nothing -> record<items: table<autoRenew: bool, callFeatureStatus: string, labels: list, leaseBegin: int, leaseEnd: int, nationalFormat: string, number: string, region: record, sendEmailOnCreate: bool, status: string, textFeatureStatus: string, tollFree: bool, type: string>, limit: int, offset: int, totalCount: int> {
+]: nothing -> oneof<record<items: table<autoRenew: bool, callFeatureStatus: string, labels: list, leaseBegin: int, leaseEnd: int, nationalFormat: string, number: string, region: record, sendEmailOnCreate: bool, status: string, textFeatureStatus: string, tollFree: bool, type: string>, limit: int, offset: int, totalCount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "zipcode" $zipcode "scalar") (serialize-qp "labelName" $label_name "scalar") (serialize-qp "tollFree" $toll_free "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
@@ -3492,7 +3502,7 @@ export def "find-number-lease-configs" [
   --zipcode: string # A five-digit Zipcode
   --label-name: string # A label name
   --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
-]: nothing -> record<items: table<callTrackingConfig: record, configType: string, ivrInboundConfig: record, number: string, textInboundConfig: record>, limit: int, offset: int, totalCount: int> {
+]: nothing -> oneof<record<items: table<callTrackingConfig: record, configType: string, ivrInboundConfig: record, number: string, textInboundConfig: record>, limit: int, offset: int, totalCount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "zipcode" $zipcode "scalar") (serialize-qp "labelName" $label_name "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
@@ -3529,7 +3539,7 @@ export def "get-number-lease-config" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
-]: nothing -> record<callTrackingConfig: record<failedTransferSoundId: int, googleAnalytics: record<category: string, domain: string, googleAccountId: string>, introSoundId: int, recorded: bool, screen: bool, transferNumbers: list<string>, voicemail: bool, voicemailSoundId: int, weeklySchedule: record<daysOfWeek: list, startTimeOfDay: record, stopTimeOfDay: record, timeZone: string>, whisperSoundId: int>, configType: string, ivrInboundConfig: record<dialplanXml: string>, number: string, textInboundConfig: record<forwardEnabled: bool, forwardNumber: string>> {
+]: nothing -> oneof<record<callTrackingConfig: record<failedTransferSoundId: int, googleAnalytics: record<category: string, domain: string, googleAccountId: string>, introSoundId: int, recorded: bool, screen: bool, transferNumbers: list<string>, voicemail: bool, voicemailSoundId: int, weeklySchedule: record<daysOfWeek: list, startTimeOfDay: record, stopTimeOfDay: record, timeZone: string>, whisperSoundId: int>, configType: string, ivrInboundConfig: record<dialplanXml: string>, number: string, textInboundConfig: record<forwardEnabled: bool, forwardNumber: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($number | is-empty) { error make --unspanned { msg: "path parameter 'number' must be non-empty" } }
@@ -3555,9 +3565,6 @@ export def "get-number-lease-config" [
 #
 # PUT /numbers/leases/configs/{number}
 # operationId: updateNumberLeaseConfig
-# --callTrackingConfig shape: {failedTransferSoundId?: int, googleAnalytics?: record, introSoundId?: int, recorded?: bool, screen?: bool, transferNumbers?: list<string>, voicemail?: bool, voicemailSoundId?: int, weeklySchedule?: record, whisperSoundId?: int}
-# --ivrInboundConfig shape: {dialplanXml?: string}
-# --textInboundConfig shape: {forwardEnabled?: bool, forwardNumber?: string}
 export def "update-number-lease-config" [
   number: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3614,7 +3621,7 @@ export def "get-number-lease" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
-]: nothing -> record<autoRenew: bool, callFeatureStatus: string, labels: list<string>, leaseBegin: int, leaseEnd: int, nationalFormat: string, number: string, region: record<city: string, country: string, latitude: float, longitude: float, prefix: string, state: string, timeZone: string, zipcode: string>, sendEmailOnCreate: bool, status: string, textFeatureStatus: string, tollFree: bool, type: string> {
+]: nothing -> oneof<record<autoRenew: bool, callFeatureStatus: string, labels: list<string>, leaseBegin: int, leaseEnd: int, nationalFormat: string, number: string, region: record<city: string, country: string, latitude: float, longitude: float, prefix: string, state: string, timeZone: string, zipcode: string>, sendEmailOnCreate: bool, status: string, textFeatureStatus: string, tollFree: bool, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($number | is-empty) { error make --unspanned { msg: "path parameter 'number' must be non-empty" } }
@@ -3640,7 +3647,6 @@ export def "get-number-lease" [
 #
 # PUT /numbers/leases/{number}
 # operationId: updateNumberLease
-# --region shape: {city?: string, country?: string, latitude?: float, longitude?: float, prefix?: string, state?: string, timeZone?: string, zipcode?: string}
 export def "update-number-lease" [
   number: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3708,7 +3714,7 @@ export def "find-numbers-local" [
   --state: string # A two-letter state code. Example: CA, IL, etc.
   --zipcode: string # A five-digit Zipcode
   --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
-]: nothing -> record<items: table<nationalFormat: string, number: string, region: record, sendEmailOnCreate: bool, tollFree: bool>> {
+]: nothing -> oneof<record<items: table<nationalFormat: string, number: string, region: record, sendEmailOnCreate: bool, tollFree: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "zipcode" $zipcode "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
@@ -3752,7 +3758,7 @@ export def "find-number-regions" [
   --zipcode: string # A five-digit Zipcode
   --country: string # ~
   --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
-]: nothing -> record<items: table<city: string, country: string, latitude: float, longitude: float, prefix: string, state: string, timeZone: string, zipcode: string>, limit: int, offset: int, totalCount: int> {
+]: nothing -> oneof<record<items: table<city: string, country: string, latitude: float, longitude: float, prefix: string, state: string, timeZone: string, zipcode: string>, limit: int, offset: int, totalCount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "cityPrefix" $city_prefix "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "zipcode" $zipcode "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
@@ -3790,7 +3796,7 @@ export def "find-numbers-tollfree" [
   --pattern: string # Filter toll free numbers by prefix, pattern must be 3 char long and should end with '*'. Examples: 8**, 85*, 87* (but 855 will fail because pattern must end with '*').
   --limit: int # To set the maximum number of records to return in a paged list response. The default is 100 (format: int32, default: 100)
   --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
-]: nothing -> record<items: table<nationalFormat: string, number: string, region: record, sendEmailOnCreate: bool, tollFree: bool>> {
+]: nothing -> oneof<record<items: table<nationalFormat: string, number: string, region: record, sendEmailOnCreate: bool, tollFree: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pattern" $pattern "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
@@ -3831,7 +3837,7 @@ export def "find-orders" [
   --status: list<string> # Filter by order status, accepts multiple values in comma separated string, available values: [PROCESSING, FINISHED, PAYMENT_ERROR, VOID, WAIT_FOR_PAYMENT, PARTIALLY_ADJUSTED, ADJUSTED]
   --interval-begin: int # Start of the find time interval, formatted in unix time milliseconds. Example: 1473781817000 (format: int64)
   --interval-end: int # End of the find time interval, formatted in unix time milliseconds. Example: 1473781817000 (format: int64)
-]: nothing -> record<items: table<created: int, id: int, keywords: record, localNumbers: record, salesTax: float, status: string, summary: float, tollFreeNumbers: record, total: float, totalCost: float>, limit: int, offset: int, totalCount: int> {
+]: nothing -> oneof<record<items: table<created: int, id: int, keywords: record, localNumbers: record, salesTax: float, status: string, summary: float, tollFreeNumbers: record, total: float, totalCost: float>, limit: int, offset: int, totalCount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "status" $status "multi") (serialize-qp "intervalBegin" $interval_begin "scalar") (serialize-qp "intervalEnd" $interval_end "scalar")] | flatten | str join "&"
@@ -3868,7 +3874,7 @@ export def "order-keywords" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
   --keywords: list<string> # A list of keywords
-]: any -> record<id: int> {
+]: any -> oneof<record<id: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3915,7 +3921,7 @@ export def "order-numbers" [
   --state: string # A two-letter state code of requested numbers
   --toll-free-count: int # Total count of toll-free numbers requested (format: int32)
   --zipcode: string # A five-digit Zip code of requested numbers
-]: any -> record<id: int> {
+]: any -> oneof<record<id: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3955,7 +3961,7 @@ export def "get-order" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
-]: nothing -> record<created: int, id: int, keywords: record<fulfilled: list<string>, ordered: int, unitCost: float>, localNumbers: record<fulfilled: list<string>, ordered: int, unitCost: float>, salesTax: float, status: string, summary: float, tollFreeNumbers: record<fulfilled: list<string>, ordered: int, unitCost: float>, total: float, totalCost: float> {
+]: nothing -> oneof<record<created: int, id: int, keywords: record<fulfilled: list<string>, ordered: int, unitCost: float>, localNumbers: record<fulfilled: list<string>, ordered: int, unitCost: float>, salesTax: float, status: string, summary: float, tollFreeNumbers: record<fulfilled: list<string>, ordered: int, unitCost: float>, total: float, totalCost: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4002,7 +4008,7 @@ export def "get-delivery-reports" [
   --delivery-state: string@delivery-state-completer # ~
   --carrier: string # ~
   --message-text: string # ~
-]: nothing -> record<items: table<campaignId: int, carrier: string, deliveryCategory: string, deliveryState: string, fromNumber: string, messageText: string, toNumber: string, updated: string>, limit: int, offset: int, totalCount: int> {
+]: nothing -> oneof<record<items: table<campaignId: int, carrier: string, deliveryCategory: string, deliveryState: string, fromNumber: string, messageText: string, toNumber: string, updated: string>, limit: int, offset: int, totalCount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "campaignId" $campaign_id "scalar") (serialize-qp "fromNumber" $from_number "scalar") (serialize-qp "toNumber" $to_number "scalar") (serialize-qp "deliveryCategory" $delivery_category "scalar") (serialize-qp "deliveryState" $delivery_state "scalar") (serialize-qp "carrier" $carrier "scalar") (serialize-qp "messageText" $message_text "scalar")] | flatten | str join "&"
@@ -4051,7 +4057,7 @@ export def "find-texts" [
   --limit: int # To set the maximum number of records to return in a paged list response. The default is 100 (format: int32, default: 10)
   --offset: int # Offset to the start of a given page. The default is 0. Check [pagination](https://developers.callfire.com/docs.html#pagination) page for more information about pagination in CallFire API. (format: int32, default: 0)
   --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
-]: nothing -> record<items: table<attributes: record, batchId: int, campaignId: int, contact: record, created: int, finalTextResult: string, fromNumber: string, id: int, inbound: bool, labels: list, media: list, message: string, modified: int, records: list, state: string, toNumber: string>, limit: int, offset: int, totalCount: int> {
+]: nothing -> oneof<record<items: table<attributes: record, batchId: int, campaignId: int, contact: record, created: int, finalTextResult: string, fromNumber: string, id: int, inbound: bool, labels: list, media: list, message: string, modified: int, records: list, state: string, toNumber: string>, limit: int, offset: int, totalCount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "multi") (serialize-qp "campaignId" $campaign_id "scalar") (serialize-qp "batchId" $batch_id "scalar") (serialize-qp "fromNumber" $from_number "scalar") (serialize-qp "toNumber" $to_number "scalar") (serialize-qp "label" $label "scalar") (serialize-qp "states" $states "scalar") (serialize-qp "results" $results "scalar") (serialize-qp "inbound" $inbound "scalar") (serialize-qp "intervalBegin" $interval_begin "scalar") (serialize-qp "intervalEnd" $interval_end "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
@@ -4091,7 +4097,7 @@ export def "send-texts" [
   --default-message: string # Text message can be overridden by TextRecipient.message field. If multiple recipients have the same text message to a different recipients it is better to specify a single default message and do not duplicate it in each recipient.
   --strict-validation: oneof<nothing, bool> # Turns on strict validation for recipients
   --body: list
-]: any -> record<items: table<attributes: record, batchId: int, campaignId: int, contact: record, created: int, finalTextResult: string, fromNumber: string, id: int, inbound: bool, labels: list, media: list, message: string, modified: int, records: list, state: string, toNumber: string>> {
+]: any -> oneof<record<items: table<attributes: record, batchId: int, campaignId: int, contact: record, created: int, finalTextResult: string, fromNumber: string, id: int, inbound: bool, labels: list, media: list, message: string, modified: int, records: list, state: string, toNumber: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -4133,7 +4139,7 @@ export def "find-text-auto-replys" [
   --limit: int # To set the maximum number of records to return in a paged list response. The default is 100 (format: int32, default: 100)
   --offset: int # Offset to the start of a given page. The default is 0. Check [pagination](https://developers.callfire.com/docs.html#pagination) page for more information about pagination in CallFire API. (format: int32, default: 0)
   --number: string # Phone number in E.164 format (11-digit) which contains a TextAutoReply. Example: 12132000384. If number is empty then operator returns all autoreplies configured for the user's account
-]: nothing -> record<items: table<id: int, keyword: string, match: string, message: string, number: string>, limit: int, offset: int, totalCount: int> {
+]: nothing -> oneof<record<items: table<id: int, keyword: string, match: string, message: string, number: string>, limit: int, offset: int, totalCount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "number" $number "scalar")] | flatten | str join "&"
@@ -4173,7 +4179,7 @@ export def "create-text-auto-reply" [
   --match: string # Text to match. If it is set then autoreply will be sent to a person who texted message with matched text. Case insensitive, if parameter is not specified then all texts will be matched
   --message: string # A text message to return as an auto reply
   --number: string # Setup autoreply for a given phone number, E.164 format (11-digit). Example: 12132000384
-]: any -> record<id: int> {
+]: any -> oneof<record<id: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -4248,7 +4254,7 @@ export def "get-text-auto-reply" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
-]: nothing -> record<id: int, keyword: string, match: string, message: string, number: string> {
+]: nothing -> oneof<record<id: int, keyword: string, match: string, message: string, number: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4293,7 +4299,7 @@ export def "find-text-broadcasts" [
   --limit: int # To set the maximum number of records to return in a paged list response. The default is 100 (format: int32, default: 10)
   --offset: int # Offset to the start of a given page. The default is 0. Check [pagination](https://developers.callfire.com/docs.html#pagination) page for more information about pagination in CallFire API. (format: int32, default: 0)
   --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
-]: nothing -> record<items: table<bigMessageStrategy: string, fromNumber: string, id: int, labels: list, lastModified: int, localTimeRestriction: record, maxActive: int, media: list, message: string, name: string, recipients: list, resumeNextDay: bool, schedules: list, status: string>, limit: int, offset: int, totalCount: int> {
+]: nothing -> oneof<record<items: table<bigMessageStrategy: string, fromNumber: string, id: int, labels: list, lastModified: int, localTimeRestriction: record, maxActive: int, media: list, message: string, name: string, recipients: list, resumeNextDay: bool, schedules: list, status: string>, limit: int, offset: int, totalCount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "label" $label "scalar") (serialize-qp "running" $running "scalar") (serialize-qp "scheduled" $scheduled "scalar") (serialize-qp "intervalBegin" $interval_begin "scalar") (serialize-qp "intervalEnd" $interval_end "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
@@ -4318,10 +4324,6 @@ export def "find-text-broadcasts" [
 #
 # POST /texts/broadcasts
 # operationId: createTextBroadcast
-# --localTimeRestriction shape: {beginHour?: int, beginMinute?: int, enabled?: bool, endHour?: int, endMinute?: int}
-# --media item shape: {accountId?: int, created?: int, id?: int, lengthInBytes?: int, mediaType?: string, name?: string, publicUrl?: string}
-# --recipients item shape: {attributes?: record, contactId?: int, fromNumber?: string, media?: list, message?: string, phoneNumber?: string}
-# --schedules item shape: {campaignId?: int, daysOfWeek?: list<string>, id?: int, startDate?: record, startTimeOfDay?: record, stopDate?: record, stopTimeOfDay?: record, timeZone?: string}
 export def "create-text-broadcast" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4346,7 +4348,7 @@ export def "create-text-broadcast" [
   --recipients: list # Recipients of a text campaign, can be an existing contacts or a new one — item shape: {attributes?: record, contactId?: int, fromNumber?: string, media?: list, message?: string, phoneNumber?: string}
   --resume-next-day: oneof<nothing, bool> # ~
   --schedules: list # ~ — item shape: {campaignId?: int, daysOfWeek?: list<string>, id?: int, startDate?: record, startTimeOfDay?: record, stopDate?: record, stopTimeOfDay?: record, timeZone?: string}
-]: any -> record<id: int> {
+]: any -> oneof<record<id: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -4386,7 +4388,7 @@ export def "get-text-broadcast" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
-]: nothing -> record<bigMessageStrategy: string, fromNumber: string, id: int, labels: list<string>, lastModified: int, localTimeRestriction: record<beginHour: int, beginMinute: int, enabled: bool, endHour: int, endMinute: int>, maxActive: int, media: table<accountId: int, created: int, id: int, lengthInBytes: int, mediaType: string, name: string, publicUrl: string>, message: string, name: string, recipients: table<attributes: record, contactId: int, fromNumber: string, media: list, message: string, phoneNumber: string>, resumeNextDay: bool, schedules: table<campaignId: int, daysOfWeek: list, id: int, startDate: record, startTimeOfDay: record, stopDate: record, stopTimeOfDay: record, timeZone: string>, status: string> {
+]: nothing -> oneof<record<bigMessageStrategy: string, fromNumber: string, id: int, labels: list<string>, lastModified: int, localTimeRestriction: record<beginHour: int, beginMinute: int, enabled: bool, endHour: int, endMinute: int>, maxActive: int, media: table<accountId: int, created: int, id: int, lengthInBytes: int, mediaType: string, name: string, publicUrl: string>, message: string, name: string, recipients: table<attributes: record, contactId: int, fromNumber: string, media: list, message: string, phoneNumber: string>, resumeNextDay: bool, schedules: table<campaignId: int, daysOfWeek: list, id: int, startDate: record, startTimeOfDay: record, stopDate: record, stopTimeOfDay: record, timeZone: string>, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4412,10 +4414,6 @@ export def "get-text-broadcast" [
 #
 # PUT /texts/broadcasts/{id}
 # operationId: updateTextBroadcast
-# --localTimeRestriction shape: {beginHour?: int, beginMinute?: int, enabled?: bool, endHour?: int, endMinute?: int}
-# --media item shape: {accountId?: int, created?: int, id?: int, lengthInBytes?: int, mediaType?: string, name?: string, publicUrl?: string}
-# --recipients item shape: {attributes?: record, contactId?: int, fromNumber?: string, media?: list, message?: string, phoneNumber?: string}
-# --schedules item shape: {campaignId?: int, daysOfWeek?: list<string>, id?: int, startDate?: record, startTimeOfDay?: record, stopDate?: record, stopTimeOfDay?: record, timeZone?: string}
 export def "update-text-broadcast" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4440,7 +4438,7 @@ export def "update-text-broadcast" [
   --recipients: list # Recipients of a text campaign, can be an existing contacts or a new one — item shape: {attributes?: record, contactId?: int, fromNumber?: string, media?: list, message?: string, phoneNumber?: string}
   --resume-next-day: oneof<nothing, bool> # ~
   --schedules: list # ~ — item shape: {campaignId?: int, daysOfWeek?: list<string>, id?: int, startDate?: record, startTimeOfDay?: record, stopDate?: record, stopTimeOfDay?: record, timeZone?: string}
-]: any -> record<id: int> {
+]: any -> oneof<record<id: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -4519,7 +4517,7 @@ export def "get-text-broadcast-batches" [
   --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
   --limit: int # To set the maximum number of records to return in a paged list response. The default is 100 (format: int32, default: 100)
   --offset: int # Offset to the start of a given page. The default is 0. Check [pagination](https://developers.callfire.com/docs.html#pagination) page for more information about pagination in CallFire API. (format: int32, default: 0)
-]: nothing -> record<items: table<broadcastId: int, created: int, enabled: bool, id: int, name: string, remaining: int, size: int, status: string>, limit: int, offset: int, totalCount: int> {
+]: nothing -> oneof<record<items: table<broadcastId: int, created: int, enabled: bool, id: int, name: string, remaining: int, size: int, status: string>, limit: int, offset: int, totalCount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4545,7 +4543,6 @@ export def "get-text-broadcast-batches" [
 #
 # POST /texts/broadcasts/{id}/batches
 # operationId: addTextBroadcastBatch
-# --recipients item shape: {attributes?: record, contactId?: int, fromNumber?: string, phoneNumber?: string}
 export def "add-text-broadcast-batch" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4562,7 +4559,7 @@ export def "add-text-broadcast-batch" [
   --name: string # A name of batch
   --recipients: list # A list of Recipient objects. For each recipient you can set its phone number or existing contact id to use contact which already exists in account — item shape: {attributes?: record, contactId?: int, fromNumber?: string, phoneNumber?: string}
   --scrub-duplicates: oneof<nothing, bool> # Removes duplicate recipients from batch if true
-]: any -> record<id: int> {
+]: any -> oneof<record<id: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -4605,7 +4602,7 @@ export def "add-text-broadcast-recipients" [
   --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
   --strict-validation: oneof<nothing, bool> # Turns on strict validation for recipients. System will reply with BAD_REQUEST(400) if strictValidation = true and one of numbers didn't pass validation
   --body: list
-]: any -> record<items: table<attributes: record, batchId: int, campaignId: int, contact: record, created: int, finalTextResult: string, fromNumber: string, id: int, inbound: bool, labels: list, media: list, message: string, modified: int, records: list, state: string, toNumber: string>> {
+]: any -> oneof<record<items: table<attributes: record, batchId: int, campaignId: int, contact: record, created: int, finalTextResult: string, fromNumber: string, id: int, inbound: bool, labels: list, media: list, message: string, modified: int, records: list, state: string, toNumber: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -4684,7 +4681,7 @@ export def "get-text-broadcast-stats" [
   --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
   --begin: int # Start of a search find time interval, formatted in unix time milliseconds. Example: 1473781817000 for Sat, 05 Jan 1985 14:03:37 GMT (format: int64)
   --end: int # End of a search time interval, formatted in unix time milliseconds. Example: 1473781817000 for Sat, 05 Jan 1985 14:03:37 GMT (format: int64)
-]: nothing -> record<billedAmount: float, doNotTextCount: int, errorCount: int, recievedCount: int, remainingOutboundCount: int, sentCount: int, tooBigCount: int, totalOutboundCount: int, unsentCount: int> {
+]: nothing -> oneof<record<billedAmount: float, doNotTextCount: int, errorCount: int, recievedCount: int, remainingOutboundCount: int, sentCount: int, tooBigCount: int, totalOutboundCount: int, unsentCount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4761,7 +4758,7 @@ export def "get-text-broadcast-texts" [
   --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
   --limit: int # To set the maximum number of records to return in a paged list response. The default is 100 (format: int32, default: 100)
   --offset: int # Offset to the start of a given page. The default is 0. Check [pagination](https://developers.callfire.com/docs.html#pagination) page for more information about pagination in CallFire API. (format: int32, default: 0)
-]: nothing -> record<items: table<attributes: record, batchId: int, campaignId: int, contact: record, created: int, finalTextResult: string, fromNumber: string, id: int, inbound: bool, labels: list, media: list, message: string, modified: int, records: list, state: string, toNumber: string>, limit: int, offset: int, totalCount: int> {
+]: nothing -> oneof<record<items: table<attributes: record, batchId: int, campaignId: int, contact: record, created: int, finalTextResult: string, fromNumber: string, id: int, inbound: bool, labels: list, media: list, message: string, modified: int, records: list, state: string, toNumber: string>, limit: int, offset: int, totalCount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4841,7 +4838,7 @@ export def "get-text" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
-]: nothing -> record<attributes: record, batchId: int, campaignId: int, contact: record<deleted: bool, externalId: string, externalSystem: string, extraPhone1: string, extraPhone2: string, extraPhone3: string, firstName: string, homePhone: string, id: int, lastName: string, mobilePhone: string, properties: record, workPhone: string, zipcode: string>, created: int, finalTextResult: string, fromNumber: string, id: int, inbound: bool, labels: list<string>, media: table<accountId: int, created: int, id: int, lengthInBytes: int, mediaType: string, name: string, publicUrl: string>, message: string, modified: int, records: table<billedAmount: float, callerName: string, finishTime: int, id: int, labels: list, message: string, switchId: string, textResult: string, toNumber: string>, state: string, toNumber: string> {
+]: nothing -> oneof<record<attributes: record, batchId: int, campaignId: int, contact: record<deleted: bool, externalId: string, externalSystem: string, extraPhone1: string, extraPhone2: string, extraPhone3: string, firstName: string, homePhone: string, id: int, lastName: string, mobilePhone: string, properties: record, workPhone: string, zipcode: string>, created: int, finalTextResult: string, fromNumber: string, id: int, inbound: bool, labels: list<string>, media: table<accountId: int, created: int, id: int, lengthInBytes: int, mediaType: string, name: string, publicUrl: string>, message: string, modified: int, records: table<billedAmount: float, callerName: string, finishTime: int, id: int, labels: list, message: string, switchId: string, textResult: string, toNumber: string>, state: string, toNumber: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4885,7 +4882,7 @@ export def "find-webhooks" [
   --event: string # A name of event, available values: 'started', 'stopped', 'finished'
   --callback: string # A callback URL
   --enabled: oneof<nothing, bool> # Specifies whether webhook is enabled
-]: nothing -> record<items: table<callback: string, createdAt: int, enabled: bool, events: list, expiresAt: int, fields: string, id: int, name: string, nonStrictSsl: bool, resource: string, secret: string, singleUse: bool, updatedAt: int>, limit: int, offset: int, totalCount: int> {
+]: nothing -> oneof<record<items: table<callback: string, createdAt: int, enabled: bool, events: list, expiresAt: int, fields: string, id: int, name: string, nonStrictSsl: bool, resource: string, secret: string, singleUse: bool, updatedAt: int>, limit: int, offset: int, totalCount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "resource" $resource "scalar") (serialize-qp "event" $event "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "enabled" $enabled "scalar")] | flatten | str join "&"
@@ -4931,7 +4928,7 @@ export def "create-webhook" [
   --resource: string # A resource name that webhook is watching events on. Use GET /webhooks/resources to determine resources and events available (ex: InboundCall, OutboundCall, InboundText, OutboundText, CallBroadcast, TextBroadcast, etc...)
   --secret: string # Webhook secret token which is used as a signing key to HmacSHA1 hash of json payload which is returned in 'X-CallFire-Signature' header. This header can be used to verify callback POST is coming from CallFire. See [security guide](https://developers.callfire.com/security-guide.html)
   --single-use: oneof<nothing, bool> # If true is set then webhook triggers only once. Afterwards the webhook will be deleted
-]: any -> record<id: int> {
+]: any -> oneof<record<id: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -4969,7 +4966,7 @@ export def "find-webhook-resources" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
-]: nothing -> record<items: table<resource: string, supportedEvents: list>> {
+]: nothing -> oneof<record<items: table<resource: string, supportedEvents: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
@@ -5006,7 +5003,7 @@ export def "get-webhook-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
-]: nothing -> record<resource: string, supportedEvents: list<string>> {
+]: nothing -> oneof<record<resource: string, supportedEvents: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($resource | is-empty) { error make --unspanned { msg: "path parameter 'resource' must be non-empty" } }
@@ -5080,7 +5077,7 @@ export def "get-webhook" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
-]: nothing -> record<callback: string, createdAt: int, enabled: bool, events: list<string>, expiresAt: int, fields: string, id: int, name: string, nonStrictSsl: bool, resource: string, secret: string, singleUse: bool, updatedAt: int> {
+]: nothing -> oneof<record<callback: string, createdAt: int, enabled: bool, events: list<string>, expiresAt: int, fields: string, id: int, name: string, nonStrictSsl: bool, resource: string, secret: string, singleUse: bool, updatedAt: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }

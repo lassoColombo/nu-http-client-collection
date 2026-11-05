@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -120,9 +144,9 @@ def source-completer [] { ["administrator" "repository"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-version" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-version" "get-analysis" "get-alerts" "request-analysis" "get-analysis-for-commit" "request-review" "get-code-review" "get-issue" "get-spec" "get-operation" "get-projects" "add-project" "delete-project" "get-project" "get-project-config" "set-project-config" "get-project-by-url-identifier" "create-query-job" "get-query-job" "get-query-job-results-overview" "get-query-job-results-for-project" "abort-upload" "complete-upload" "upload-part" "get-snapshot" "init-snapshot-upload" "get-health" "get-metrics" "get-metric" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -154,7 +178,7 @@ export def "get-version" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<apiVersion: string> {
+]: nothing -> oneof<record<apiVersion: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/" $auth.query)
@@ -189,7 +213,7 @@ export def "get-analysis" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<commit_id: string, id: string, languages: table<alerts: int, analysis_date: string, commit_date: string, commit_id: string, language: string, lines: int, status: string>, log_url: string, project: record<id: int, name: string, url: string, url_identifier: string>, results_url: string> {
+]: nothing -> oneof<record<commit_id: string, id: string, languages: table<alerts: int, analysis_date: string, commit_date: string, commit_id: string, language: string, lines: int, status: string>, log_url: string, project: record<id: int, name: string, url: string, url_identifier: string>, results_url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($analysis_id | is-empty) { error make --unspanned { msg: "path parameter 'analysis-id' must be non-empty" } }
@@ -228,7 +252,7 @@ export def "get-alerts" [
   --accept: string@accept-completer # Response content type
   --sarif-version: string # The desired version of the SARIF format. Currently supported versions are `1.0.0`, `2.0.0`, and `2.1.0`.
   --excluded-files: oneof<nothing, bool> # Set `true` to include results in files that are excluded from the output by default. This includes results in test code and generated files. For more information, see [File classification](https://lgtm.com/help/lgtm/file-classification). (default: false)
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($analysis_id | is-empty) { error make --unspanned { msg: "path parameter 'analysis-id' must be non-empty" } }
@@ -267,7 +291,7 @@ export def "request-analysis" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --commit: string # The identifier of the commit to analyze. (required)
   --language: list<string> # The language codes of the languages to analyze. For a list of available languages, see [Supported languages](https://lgtm.com/help/lgtm/analysis-faqs#which-languages-are-supported). To specify more than one language, this parameter can be repeated. If no language is specified, all the project's languages will be analyzed.
-]: nothing -> record<id: int, status: string, task_result: any, task_result_url: string, task_type: string, uploads: record> {
+]: nothing -> oneof<record<id: int, status: string, task_result: any, task_result_url: string, task_type: string, uploads: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project-id' must be non-empty" } }
@@ -306,7 +330,7 @@ export def "get-analysis-for-commit" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<commit_id: string, id: string, languages: table<alerts: int, analysis_date: string, commit_date: string, commit_id: string, language: string, lines: int, status: string>, log_url: string, project: record<id: int, name: string, url: string, url_identifier: string>, results_url: string> {
+]: nothing -> oneof<record<commit_id: string, id: string, languages: table<alerts: int, analysis_date: string, commit_date: string, commit_id: string, language: string, lines: int, status: string>, log_url: string, project: record<id: int, name: string, url: string, url_identifier: string>, results_url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project-id' must be non-empty" } }
@@ -349,7 +373,7 @@ export def "request-review" [
   --callback-url: string # The callback URL for LGTM to post to on completion of the review. When the code review is complete, the API sends an HTTP POST request to the callback URL with the result of the code review in the request body. The code review results in the request body are identical to the results accessed through the [`/codereviews/{review-id}`](https://lgtm.com/help/lgtm/api/api-v1#opIdgetCodeReview) end-point. If you specify a `callback-secret`, the request also includes an `x-lgtm-signature` header with a digital signature of the request's contents.
   --callback-secret: string # The `callback-secret` is used to compute a signature which is included in the `x-lgtm-signature` header of the callback response. The receiver of the callback can check the validity of the response by computing the signature using HMAC-SHA1 and verifying that it matches the `x-lgtm-signature` header value. The HMAC algorithm requires byte sequences as inputs for both the secret and the message. The callback secret string must be converted to bytes using UTF-8 encoding. The response body should ideally be read as a plain byte sequence. Conversion to, for example a JSON object, and back to a byte sequence might change the formatting, and would invalidate the signature.
   --body: string
-]: any -> record<id: int, status: string, task_result: any, task_result_url: string, task_type: string, uploads: record> {
+]: any -> oneof<record<id: int, status: string, task_result: any, task_result_url: string, task_type: string, uploads: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -391,7 +415,7 @@ export def "get-code-review" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<id: string, languages: list<record>, results_url: string, status: string, status_message: string> {
+]: nothing -> oneof<table<id: string, languages: list<record>, results_url: string, status: string, status_message: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($review_id | is-empty) { error make --unspanned { msg: "path parameter 'review-id' must be non-empty" } }
@@ -428,7 +452,7 @@ export def "get-issue" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project-id' must be non-empty" } }
@@ -464,7 +488,7 @@ export def "get-spec" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/openapi" $auth.query)
@@ -499,7 +523,7 @@ export def "get-operation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<id: int, status: string, task_result: any, task_result_url: string, task_type: string, uploads: record> {
+]: nothing -> oneof<record<id: int, status: string, task_result: any, task_result_url: string, task_type: string, uploads: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($operation_id | is-empty) { error make --unspanned { msg: "path parameter 'operation-id' must be non-empty" } }
@@ -536,7 +560,7 @@ export def "get-projects" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The maximum number of projects to return in each response (1-100). (format: int32, default: 100)
   --start: string # An opaque identifier generated by the API.
-]: nothing -> record<data: table<id: int, name: string, url: string, url_identifier: string>, nextPageUrl: string> {
+]: nothing -> oneof<record<data: table<id: int, name: string, url: string, url_identifier: string>, nextPageUrl: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar")] | flatten | str join "&"
@@ -578,7 +602,7 @@ export def "add-project" [
   --date: string # Optional when `mode=upload`, specify the date and time of the commit used to generate the database; defaults to the current time. (format: date-time)
   --worker-label: list<string> # Optional, any [labels](https://lgtm.com/admin/help/defining-worker-labels) required by workers to analyze this project. To specify more than one label, repeat the query parameter.
   --body: string
-]: any -> record<id: int, status: string, task_result: any, task_result_url: string, task_type: string, uploads: record> {
+]: any -> oneof<record<id: int, status: string, task_result: any, task_result_url: string, task_type: string, uploads: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -618,7 +642,7 @@ export def "delete-project" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<id: int, name: string, url: string, url_identifier: string, languages: table<alerts: int, analysis_date: string, commit_date: string, commit_id: string, language: string, lines: int, status: string, grade: string>> {
+]: nothing -> oneof<record<id: int, name: string, url: string, url_identifier: string, languages: table<alerts: int, analysis_date: string, commit_date: string, commit_id: string, language: string, lines: int, status: string, grade: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project-id' must be non-empty" } }
@@ -654,7 +678,7 @@ export def "get-project" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<id: int, name: string, url: string, url_identifier: string, languages: table<alerts: int, analysis_date: string, commit_date: string, commit_id: string, language: string, lines: int, status: string, grade: string>> {
+]: nothing -> oneof<record<id: int, name: string, url: string, url_identifier: string, languages: table<alerts: int, analysis_date: string, commit_date: string, commit_id: string, language: string, lines: int, status: string, grade: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project-id' must be non-empty" } }
@@ -691,7 +715,7 @@ export def "get-project-config" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --source: string@source-completer # The type of project configuration to retrieve. If this parameter isn't specified, the request retrieves the effective configuration. That is, the configuration that is actually applied to the project, which may be from: * the repository * the administrator-set, project configuration * the global configuration. If you do specify this value, it must be one of: * `repository` to retrieve the configuration specified by a YAML file in the repository. A 404 status is returned if there is no repository configuration. * `administrator` to retrieve the administrator-set, project configuration. A 404 status is returned if there is no administrator configuration.
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project-id' must be non-empty" } }
@@ -729,7 +753,7 @@ export def "set-project-config" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: string
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -770,7 +794,7 @@ export def "get-project-by-url-identifier" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<id: int, name: string, url: string, url_identifier: string, languages: table<alerts: int, analysis_date: string, commit_date: string, commit_id: string, language: string, lines: int, status: string, grade: string>> {
+]: nothing -> oneof<record<id: int, name: string, url: string, url_identifier: string, languages: table<alerts: int, analysis_date: string, commit_date: string, commit_id: string, language: string, lines: int, status: string, grade: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($provider | is-empty) { error make --unspanned { msg: "path parameter 'provider' must be non-empty" } }
@@ -811,7 +835,7 @@ export def "create-query-job" [
   --project-id: list<int> # The identifier of the project to analyze. Either `project-id` or `projects-list` must be specified.
   --projects-list: string # Name of the list containing the projects to analyze. Either `project-id` or `projects-list` must be specified.
   --body: string
-]: any -> record<id: int, status: string, task_result: any, task_result_url: string, task_type: string, uploads: record> {
+]: any -> oneof<record<id: int, status: string, task_result: any, task_result_url: string, task_type: string, uploads: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -851,7 +875,7 @@ export def "get-query-job" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<id: string, result_url: string, stats: record<failed: int, pending: int, success_with_result: int, success_without_result: int, successful: int>> {
+]: nothing -> oneof<record<id: string, result_url: string, stats: record<failed: int, pending: int, success_with_result: int, success_without_result: int, successful: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($queryjob_id | is-empty) { error make --unspanned { msg: "path parameter 'queryjob-id' must be non-empty" } }
@@ -890,7 +914,7 @@ export def "get-query-job-results-overview" [
   --start: string # An opaque identifier generated by the API used for pagination. This identifier will be included as part of the response for this endpoint whenever more than one page of results is available.
   --limit: int # The number of results to return. Useful for pagination. (format: int32, default: 100)
   --filter: string # Only return a subset of results. Legal values are `w-results`, `wo-results`, `error`.
-]: nothing -> record<data: table<error: string, external: int, internal: int, project: record, status: string, total: int>, next: string> {
+]: nothing -> oneof<record<data: table<error: string, external: int, internal: int, project: record, status: string, total: int>, next: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($queryjob_id | is-empty) { error make --unspanned { msg: "path parameter 'queryjob-id' must be non-empty" } }
@@ -931,7 +955,7 @@ export def "get-query-job-results-for-project" [
   --start: int # Start point for the page of results. (format: int32)
   --limit: int # The maximum number of results to display (less than 100). (format: int32, default: 100)
   --nofilter: oneof<nothing, bool> # Include results that are not part of the source tree. These results are filtered out by default. (default: false)
-]: nothing -> record<columns: list<string>, data: list<list<record>>, next: string, project: record<id: int, name: string, url: string, url_identifier: string>> {
+]: nothing -> oneof<record<columns: list<string>, data: list<list<record>>, next: string, project: record<id: int, name: string, url: string, url_identifier: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($queryjob_id | is-empty) { error make --unspanned { msg: "path parameter 'queryjob-id' must be non-empty" } }
@@ -969,7 +993,7 @@ export def "abort-upload" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<id: int, status: string, task_result: any, task_result_url: string, task_type: string, uploads: record> {
+]: nothing -> oneof<record<id: int, status: string, task_result: any, task_result_url: string, task_type: string, uploads: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($session_id | is-empty) { error make --unspanned { msg: "path parameter 'session-id' must be non-empty" } }
@@ -1005,7 +1029,7 @@ export def "complete-upload" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<id: int, status: string, task_result: any, task_result_url: string, task_type: string, uploads: record> {
+]: nothing -> oneof<record<id: int, status: string, task_result: any, task_result_url: string, task_type: string, uploads: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($session_id | is-empty) { error make --unspanned { msg: "path parameter 'session-id' must be non-empty" } }
@@ -1122,7 +1146,7 @@ export def "init-snapshot-upload" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --commit: string # The identifier of the analyzed commit. (required)
   --date: string # The date and time of the analyzed commit (default the current time). (format: date-time)
-]: nothing -> record<id: string, url: string> {
+]: nothing -> oneof<record<id: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project-id' must be non-empty" } }
@@ -1160,7 +1184,7 @@ export def "get-health" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<description: string, details: record, status: string> {
+]: nothing -> oneof<record<description: string, details: record, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/system/health" $auth.query)
@@ -1194,7 +1218,7 @@ export def "get-metrics" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<description: string, metric_id: string>> {
+]: nothing -> oneof<record<data: table<description: string, metric_id: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/system/metrics" $auth.query)
@@ -1229,7 +1253,7 @@ export def "get-metric" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<measurements: table<timestamp: string, value: float>, metric_id: string> {
+]: nothing -> oneof<record<measurements: table<timestamp: string, value: float>, metric_id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($metric_id | is-empty) { error make --unspanned { msg: "path parameter 'metric-id' must be non-empty" } }

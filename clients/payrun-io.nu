@@ -12,27 +12,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -40,8 +49,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -52,7 +66,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -87,7 +110,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -121,9 +145,9 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "delete-employer" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["delete-employer" "get-employer" "patch-employer" "put-employer" "delete-cis-line-type" "get-cis-line-type-from-employer" "put-cis-line-type-into-employer" "delete-cis-line-type-tag" "get-tag-from-cis-line-type" "put-cis-line-type-tag" "get-tags-from-cis-line-type" "get-cis-line-types-from-employer" "post-cis-line-type-into-employer" "get-cis-line-types-with-tag" "get-all-cis-line-type-tags" "delete-cis-transaction" "get-cis-transaction-from-employer" "get-cis-transactions-from-employer" "delete-dps-message" "get-dps-message-from-employer" "patch-dps-message" "put-dps-message" "get-dps-messages-from-employer" "post-dps-message" "delete-employee" "get-employee-from-employer" "patch-employee" "put-employee-into-employer" "delete-ae-assessment" "get-ae-assessment-from-employee" "put-new-ae-assessment" "get-ae-assessments-from-employee" "post-new-ae-assessment" "get-commentaries-from-employee" "get-commentary-from-employee" "get-journal-lines-from-employee" "delete-pay-instruction" "get-pay-instruction-from-employee" "patch-pay-instruction" "put-pay-instruction" "delete-pay-instruction-tag" "get-tag-from-pay-instruction" "put-pay-instruction-tag" "get-tags-from-pay-instruction" "get-pay-instructions-from-employee" "post-pay-instruction" "get-pay-instructions-with-tag" "get-all-pay-instruction-tags" "get-pay-line-from-employee" "delete-pay-line-tag" "get-tag-from-pay-line" "put-pay-line-tag" "get-tags-from-pay-line" "get-pay-lines-from-employee" "get-pay-lines-with-tag" "get-all-pay-line-tags" "get-pay-runs-from-employee" "delete-employee-revision-by-number" "get-employee-revision-by-number" "get-employee-revision-summary-by-number" "get-employee-revisions" "get-employee-revision-summaries" "delete-employee-secret" "get-employee-secret" "put-employee-secret" "get-employee-secrets" "post-employee-secret" "get-employee-summary-from-employer" "delete-employee-tag" "get-tag-from-employee" "put-employee-tag" "get-tag-from-employee-revision" "get-tags-from-employee" "get-tags-from-employee-revision" "delete-employee-revision" "get-employee-by-effective-date" "get-employee-summary-by-effective-date" "get-employees-from-employer" "post-employee-into-employer" "get-employee-summaries-from-employer" "get-employees-with-tag" "get-all-employee-tags" "get-employees-by-effective-date" "get-employee-summaries-by-effective-date" "delete-holiday-scheme" "get-holiday-scheme-from-employer" "patch-holiday-scheme" "put-holiday-scheme-into-employer" "delete-holiday-scheme-revision-by-number" "get-holiday-scheme-revision-by-number" "get-holiday-scheme-revisions" "delete-holiday-scheme-tag" "get-tag-from-holiday-scheme" "put-holiday-scheme-tag" "get-tag-from-holiday-scheme-revision" "get-tags-from-holiday-scheme" "get-tags-from-holiday-scheme-revision" "delete-holiday-scheme-revision" "get-holiday-scheme-by-effective-date" "get-holiday-schemes-from-employer" "post-holiday-scheme-into-employer" "get-holiday-schemes-with-tag" "get-all-holiday-scheme-tags" "get-holiday-schemes-by-effective-date" "delete-journal-instruction" "get-journal-instruction-from-employer" "put-journal-instruction" "get-journal-instructions-from-employer" "post-journal-instruction" "get-journal-line-from-employer" "delete-journal-line-tag" "get-tag-from-journal-line" "put-journal-line-tag" "get-tags-from-journal-line" "get-journal-lines-from-employer" "get-all-journal-lines-with-tag" "get-all-journal-line-tags" "delete-nominal-code" "get-nominal-code-from-employer" "put-nominal-code" "get-pay-codes-from-nominal-code" "get-nominal-codes-from-employer" "post-nominal-code" "delete-pay-code" "get-pay-code-from-employer" "patch-pay-code" "put-pay-code" "delete-pay-code-revision-by-number" "get-pay-code-revision-by-number" "get-pay-code-revisions" "delete-pay-code-tag" "get-tag-from-pay-code" "put-pay-code-tag" "get-tags-from-pay-code" "delete-pay-code-revision" "get-pay-code-by-effective-date" "get-pay-codes-from-employer" "post-pay-code" "get-pay-codes-with-tag" "get-all-pay-code-tags" "get-pay-codes-by-effective-date" "delete-pay-schedule" "get-pay-schedule-from-employer" "put-pay-schedule" "get-employees-from-pay-schedule" "get-employees-from-pay-schedule-on-effective-date" "delete-pay-run" "get-pay-run-from-pay-schedule" "get-ae-assessments-from-pay-run" "get-commentaries-from-pay-run" "delete-pay-run-employee" "get-commentary-from-pay-run-by-employee" "get-employees-from-pay-run" "get-journal-lines-from-pay-run" "get-pay-lines-from-pay-run" "get-report-lines-from-pay-run" "delete-pay-run-tag" "get-tag-from-pay-run" "put-pay-run-tag" "get-tags-from-pay-run" "get-pay-runs-from-pay-schedule" "get-pay-runs-with-tag" "get-all-pay-run-tags" "delete-pay-schedule-tag" "get-tag-from-pay-schedule" "put-pay-schedule-tag" "get-tags-from-pay-schedule" "get-pay-schedules-from-employer" "post-pay-schedule" "get-pay-schedules-with-tag" "get-all-pay-schedule-tags" "delete-pension" "get-pension-from-employer" "patch-pension" "put-pension-into-employer" "delete-pension-revision-by-number" "get-pension-revision-by-number" "get-pension-revisions" "delete-pension-revision" "get-pension-by-effective-date" "get-pensions-from-employer" "post-pension-into-employer" "get-pensions-by-effective-date" "get-report-line-from-employer" "get-report-lines-from-employer" "delete-reporting-instruction" "get-reporting-instruction-from-employer" "put-reporting-instruction" "get-reporting-instructions-from-employer" "post-reporting-instruction" "delete-employer-revision-by-number" "get-employer-revision-by-number" "get-employer-revision-summary-by-number" "get-employer-revisions" "get-employer-revision-summaries" "delete-rti-transaction" "get-rti-transaction-from-employer" "get-rti-transaction-summary-from-employer" "delete-rti-transaction-tag" "get-tag-from-rti-transaction" "put-rti-transaction-tag" "get-tags-from-rti-transaction" "get-rti-transactions-from-employer" "get-rti-transaction-summaries-from-employer" "get-rti-transactions-with-tag" "get-all-rti-transaction-tags" "delete-employer-secret" "get-employer-secret" "put-employer-secret" "get-employer-secrets" "post-employer-secret" "delete-sub-contractor" "get-sub-contractor-from-employer" "patch-sub-contractor" "put-sub-contractor-into-employer" "delete-cis-instruction" "get-cis-instruction-from-sub-contractor" "patch-cis-instruction" "put-cis-instruction-into-sub-contractor" "delete-cis-instruction-tag" "get-tag-from-cis-instruction" "put-cis-instruction-tag" "get-tags-from-cis-instruction" "get-cis-instructions-from-sub-contractor" "post-cis-instruction-into-sub-contractor" "get-cis-instructions-with-tag" "get-all-cis-instruction-tags" "delete-cis-line" "get-cis-line-from-sub-contractor" "delete-cis-line-tag" "get-tag-from-cis-line" "put-cis-line-tag" "get-tags-from-cis-line" "get-cis-lines-from-sub-contractor" "get-cis-lines-with-tag" "get-all-cis-line-tags" "get-journal-lines-from-sub-contractor" "delete-sub-contractor-revision-by-number" "get-sub-contractor-revision-by-number" "get-sub-contractor-revisions" "delete-sub-contractor-tag" "get-tag-from-sub-contractor" "put-sub-contractor-tag" "get-tag-from-sub-contractor-revision" "get-tags-from-sub-contractor" "get-tags-from-sub-contractor-revision" "delete-sub-contractor-revision" "get-sub-contractor-by-effective-date" "get-sub-contractors-from-employer" "post-sub-contractor-into-employer" "get-sub-contractors-with-tag" "get-all-sub-contractor-tags" "get-sub-contractors-by-effective-date" "get-employer-summary" "delete-employer-tag" "get-tag-from-employer" "put-employer-tag" "get-tag-from-employer-revision" "get-tags-from-employer" "get-tags-from-employer-revision" "delete-third-party-transaction" "get-third-party-transaction" "delete-third-party-transaction-tag" "get-tag-from-third-party-transaction" "put-third-party-transaction-tag" "get-tags-from-third-party-transaction" "get-third-party-transactions" "get-all-third-party-transactions-with-tag" "get-all-third-party-transaction-tags" "delete-employer-revision" "get-employer-by-effective-date" "get-employer-summary-by-effective-date" "get-employers" "post-employer" "get-employer-summaries" "get-employers-with-tag" "get-all-employer-tags" "get-employers-by-effective-date" "get-employer-summaries-by-effective-date" "get-health-check" "get-batch-jobs" "post-new-batch-job" "delete-batch-job" "get-batch-job-info" "get-batch-job-progress" "get-batch-job-status" "get-cis-jobs" "post-new-cis-job" "delete-cis-job" "get-cis-job-info" "get-cis-job-progress" "get-cis-job-status" "get-dps-jobs" "post-new-dps-job" "delete-dps-job" "get-dps-job-info" "get-dps-job-progress" "get-dps-job-status" "get-employer-jobs" "get-pay-run-jobs" "post-new-pay-run-job" "delete-pay-run-job" "get-pay-run-job-info" "get-pay-run-job-progress" "get-pay-run-job-status" "get-rti-jobs" "post-new-rti-job" "delete-rti-job" "get-rti-job-info" "get-rti-job-progress" "get-rti-job-status" "get-third-party-jobs" "post-new-third-party-job" "delete-third-party-job" "get-third-party-job-info" "get-third-party-job-progress" "get-third-party-job-status" "delete-journal-instruction-template" "get-journal-instruction-template" "put-journal-instruction-template" "get-journal-instruction-templates" "post-journal-instruction-template" "delete-permission" "get-permission" "patch-permission" "put-permission" "delete-permission-tag" "get-tag-from-permission" "put-permission-tag" "get-tags-from-permission" "get-permissions" "post-permission" "get-all-permissions-with-tag" "get-all-permission-tags" "get-query-response" "get-journal-expression-schema" "get-active-pay-instructions-report-output" "get-aoe-liability-report-ouput" "get-dps-message-report-output" "get-employer-summary-report-ouput" "get-gross-to-net-report-output" "get-holiday-balance-report-output" "get-journal-report-ouput" "get-last-pay-date-report-ouput" "get-net-pay-report-output" "get-next-pay-period-dates-report-output" "get-p11-summary-report-output" "get-p32-net-report-output" "get-p32-summary-net-report-output" "get-p45-report-output" "get-p60-report-output" "get-papdis-report-ouput" "get-pass-report-ouput" "get-pay-dashboard-payslip-report-ouput" "get-payslip3-report-output" "get-pension-liability-report-output" "delete-report-definition" "get-report-definition-from-application" "put-report-definition" "get-report-output" "get-report-definitions-from-application" "post-report-definition" "get-schemas" "get-schema" "delete-application-secret" "get-application-secret" "put-application-secret" "get-application-secrets" "post-application-secret" "get-template-model" "get-templates" "delete-transform-definition" "get-transform-definition-from-application" "put-transform-definition" "get-transform-definitions-from-application" "post-transform-definition" "delete-user" "get-user" "patch-user" "put-user" "get-user-permissions" "delete-user-tag" "get-tag-from-user" "put-user-tag" "get-tags-from-user" "get-users" "post-user" "get-all-users-with-tag" "get-all-user-tags" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -200,7 +224,7 @@ export def "get-employer" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<Employer: record<Address: record<Address1: string, Address2: string, Address3: string, Address4: string, Country: string, Postcode: string>, ApprenticeshipLevyAllowance: float, AutoEnrolment: record<Pension: record, PostponementDate: string, PrimaryAddress: record, PrimaryEmail: string, PrimaryFirstName: string, PrimaryJobTitle: string, PrimaryLastName: string, PrimaryTelephone: string, ReEnrolmentDayOffset: int, ReEnrolmentMonthOffset: int, RecentOptOutReEnrolmentExcluded: bool, SecondaryAddress: record, SecondaryEmail: string, SecondaryFirstName: string, SecondaryJobTitle: string, SecondaryLastName: string, SecondaryTelephone: string, StagingDate: string>, BacsServiceUserNumber: string, BankAccount: record<AccountName: string, AccountNumber: string, BranchName: string, Reference: string, SortCode: string>, CalculateApprenticeshipLevy: bool, ClaimEmploymentAllowance: bool, ClaimSmallEmployerRelief: bool, EffectiveDate: string, HmrcSettings: record<AccountingOfficeRef: string, COTAXRef: string, ContactEmail: string, ContactFax: string, ContactFirstName: string, ContactLastName: string, ContactTelephone: string, EmploymentAllowanceOverride: float, Password: string, SAUTR: string, Sender: string, SenderId: string, StateAidSector: string, TaxOfficeNumber: string, TaxOfficeReference: string>, MetaData: record, Name: string, NextRevisionDate: string, Region: string, Revision: int, RuleExclusions: string, Territory: string>> {
+]: nothing -> oneof<record<Employer: record<Address: record<Address1: string, Address2: string, Address3: string, Address4: string, Country: string, Postcode: string>, ApprenticeshipLevyAllowance: float, AutoEnrolment: record<Pension: record, PostponementDate: string, PrimaryAddress: record, PrimaryEmail: string, PrimaryFirstName: string, PrimaryJobTitle: string, PrimaryLastName: string, PrimaryTelephone: string, ReEnrolmentDayOffset: int, ReEnrolmentMonthOffset: int, RecentOptOutReEnrolmentExcluded: bool, SecondaryAddress: record, SecondaryEmail: string, SecondaryFirstName: string, SecondaryJobTitle: string, SecondaryLastName: string, SecondaryTelephone: string, StagingDate: string>, BacsServiceUserNumber: string, BankAccount: record<AccountName: string, AccountNumber: string, BranchName: string, Reference: string, SortCode: string>, CalculateApprenticeshipLevy: bool, ClaimEmploymentAllowance: bool, ClaimSmallEmployerRelief: bool, EffectiveDate: string, HmrcSettings: record<AccountingOfficeRef: string, COTAXRef: string, ContactEmail: string, ContactFax: string, ContactFirstName: string, ContactLastName: string, ContactTelephone: string, EmploymentAllowanceOverride: float, Password: string, SAUTR: string, Sender: string, SenderId: string, StateAidSector: string, TaxOfficeNumber: string, TaxOfficeReference: string>, MetaData: record, Name: string, NextRevisionDate: string, Region: string, Revision: int, RuleExclusions: string, Territory: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -229,7 +253,6 @@ export def "get-employer" [
 #
 # PATCH /Employer/{EmployerId}
 # operationId: PatchEmployer
-# --Employer shape: {Address?: record, ApprenticeshipLevyAllowance?: float, AutoEnrolment?: record, BacsServiceUserNumber?: string, BankAccount?: record, CalculateApprenticeshipLevy?: bool, ClaimEmploymentAllowance?: bool, ClaimSmallEmployerRelief?: bool, EffectiveDate?: string, HmrcSettings?: record, MetaData?: record, Name?: string, NextRevisionDate?: string, Region?: "NotSet"|"England"|"Scotland"|"Wales", Revision?: int, ... (2 more fields)}
 export def "patch-employer" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -244,7 +267,7 @@ export def "patch-employer" [
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
   --employer: record # shape: {Address?: record, ApprenticeshipLevyAllowance?: float, AutoEnrolment?: record, BacsServiceUserNumber?: string, BankAccount?: record, CalculateApprenticeshipLevy?: bool, ClaimEmploymentAllowance?: bool, ClaimSmallEmployerRelief?: bool, EffectiveDate?: string, HmrcSettings?: record, MetaData?: record, Name?: string, NextRevisionDate?: string, Region?: "NotSet"|"England"|"Scotland"|"Wales", Revision?: int, ... (2 more fields)}
-]: any -> record<Employer: record<Address: record<Address1: string, Address2: string, Address3: string, Address4: string, Country: string, Postcode: string>, ApprenticeshipLevyAllowance: float, AutoEnrolment: record<Pension: record, PostponementDate: string, PrimaryAddress: record, PrimaryEmail: string, PrimaryFirstName: string, PrimaryJobTitle: string, PrimaryLastName: string, PrimaryTelephone: string, ReEnrolmentDayOffset: int, ReEnrolmentMonthOffset: int, RecentOptOutReEnrolmentExcluded: bool, SecondaryAddress: record, SecondaryEmail: string, SecondaryFirstName: string, SecondaryJobTitle: string, SecondaryLastName: string, SecondaryTelephone: string, StagingDate: string>, BacsServiceUserNumber: string, BankAccount: record<AccountName: string, AccountNumber: string, BranchName: string, Reference: string, SortCode: string>, CalculateApprenticeshipLevy: bool, ClaimEmploymentAllowance: bool, ClaimSmallEmployerRelief: bool, EffectiveDate: string, HmrcSettings: record<AccountingOfficeRef: string, COTAXRef: string, ContactEmail: string, ContactFax: string, ContactFirstName: string, ContactLastName: string, ContactTelephone: string, EmploymentAllowanceOverride: float, Password: string, SAUTR: string, Sender: string, SenderId: string, StateAidSector: string, TaxOfficeNumber: string, TaxOfficeReference: string>, MetaData: record, Name: string, NextRevisionDate: string, Region: string, Revision: int, RuleExclusions: string, Territory: string>> {
+]: any -> oneof<record<Employer: record<Address: record<Address1: string, Address2: string, Address3: string, Address4: string, Country: string, Postcode: string>, ApprenticeshipLevyAllowance: float, AutoEnrolment: record<Pension: record, PostponementDate: string, PrimaryAddress: record, PrimaryEmail: string, PrimaryFirstName: string, PrimaryJobTitle: string, PrimaryLastName: string, PrimaryTelephone: string, ReEnrolmentDayOffset: int, ReEnrolmentMonthOffset: int, RecentOptOutReEnrolmentExcluded: bool, SecondaryAddress: record, SecondaryEmail: string, SecondaryFirstName: string, SecondaryJobTitle: string, SecondaryLastName: string, SecondaryTelephone: string, StagingDate: string>, BacsServiceUserNumber: string, BankAccount: record<AccountName: string, AccountNumber: string, BranchName: string, Reference: string, SortCode: string>, CalculateApprenticeshipLevy: bool, ClaimEmploymentAllowance: bool, ClaimSmallEmployerRelief: bool, EffectiveDate: string, HmrcSettings: record<AccountingOfficeRef: string, COTAXRef: string, ContactEmail: string, ContactFax: string, ContactFirstName: string, ContactLastName: string, ContactTelephone: string, EmploymentAllowanceOverride: float, Password: string, SAUTR: string, Sender: string, SenderId: string, StateAidSector: string, TaxOfficeNumber: string, TaxOfficeReference: string>, MetaData: record, Name: string, NextRevisionDate: string, Region: string, Revision: int, RuleExclusions: string, Territory: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -276,7 +299,6 @@ export def "patch-employer" [
 #
 # PUT /Employer/{EmployerId}
 # operationId: PutEmployer
-# --Employer shape: {Address?: record, ApprenticeshipLevyAllowance?: float, AutoEnrolment?: record, BacsServiceUserNumber?: string, BankAccount?: record, CalculateApprenticeshipLevy?: bool, ClaimEmploymentAllowance?: bool, ClaimSmallEmployerRelief?: bool, EffectiveDate?: string, HmrcSettings?: record, MetaData?: record, Name?: string, NextRevisionDate?: string, Region?: "NotSet"|"England"|"Scotland"|"Wales", Revision?: int, ... (2 more fields)}
 export def "put-employer" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -291,7 +313,7 @@ export def "put-employer" [
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
   --employer: record # shape: {Address?: record, ApprenticeshipLevyAllowance?: float, AutoEnrolment?: record, BacsServiceUserNumber?: string, BankAccount?: record, CalculateApprenticeshipLevy?: bool, ClaimEmploymentAllowance?: bool, ClaimSmallEmployerRelief?: bool, EffectiveDate?: string, HmrcSettings?: record, MetaData?: record, Name?: string, NextRevisionDate?: string, Region?: "NotSet"|"England"|"Scotland"|"Wales", Revision?: int, ... (2 more fields)}
-]: any -> record<Employer: record<Address: record<Address1: string, Address2: string, Address3: string, Address4: string, Country: string, Postcode: string>, ApprenticeshipLevyAllowance: float, AutoEnrolment: record<Pension: record, PostponementDate: string, PrimaryAddress: record, PrimaryEmail: string, PrimaryFirstName: string, PrimaryJobTitle: string, PrimaryLastName: string, PrimaryTelephone: string, ReEnrolmentDayOffset: int, ReEnrolmentMonthOffset: int, RecentOptOutReEnrolmentExcluded: bool, SecondaryAddress: record, SecondaryEmail: string, SecondaryFirstName: string, SecondaryJobTitle: string, SecondaryLastName: string, SecondaryTelephone: string, StagingDate: string>, BacsServiceUserNumber: string, BankAccount: record<AccountName: string, AccountNumber: string, BranchName: string, Reference: string, SortCode: string>, CalculateApprenticeshipLevy: bool, ClaimEmploymentAllowance: bool, ClaimSmallEmployerRelief: bool, EffectiveDate: string, HmrcSettings: record<AccountingOfficeRef: string, COTAXRef: string, ContactEmail: string, ContactFax: string, ContactFirstName: string, ContactLastName: string, ContactTelephone: string, EmploymentAllowanceOverride: float, Password: string, SAUTR: string, Sender: string, SenderId: string, StateAidSector: string, TaxOfficeNumber: string, TaxOfficeReference: string>, MetaData: record, Name: string, NextRevisionDate: string, Region: string, Revision: int, RuleExclusions: string, Territory: string>> {
+]: any -> oneof<record<Employer: record<Address: record<Address1: string, Address2: string, Address3: string, Address4: string, Country: string, Postcode: string>, ApprenticeshipLevyAllowance: float, AutoEnrolment: record<Pension: record, PostponementDate: string, PrimaryAddress: record, PrimaryEmail: string, PrimaryFirstName: string, PrimaryJobTitle: string, PrimaryLastName: string, PrimaryTelephone: string, ReEnrolmentDayOffset: int, ReEnrolmentMonthOffset: int, RecentOptOutReEnrolmentExcluded: bool, SecondaryAddress: record, SecondaryEmail: string, SecondaryFirstName: string, SecondaryJobTitle: string, SecondaryLastName: string, SecondaryTelephone: string, StagingDate: string>, BacsServiceUserNumber: string, BankAccount: record<AccountName: string, AccountNumber: string, BranchName: string, Reference: string, SortCode: string>, CalculateApprenticeshipLevy: bool, ClaimEmploymentAllowance: bool, ClaimSmallEmployerRelief: bool, EffectiveDate: string, HmrcSettings: record<AccountingOfficeRef: string, COTAXRef: string, ContactEmail: string, ContactFax: string, ContactFirstName: string, ContactLastName: string, ContactTelephone: string, EmploymentAllowanceOverride: float, Password: string, SAUTR: string, Sender: string, SenderId: string, StateAidSector: string, TaxOfficeNumber: string, TaxOfficeReference: string>, MetaData: record, Name: string, NextRevisionDate: string, Region: string, Revision: int, RuleExclusions: string, Territory: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -381,7 +403,7 @@ export def "get-cis-line-type-from-employer" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<CisLineType: record<Description: string, LineType: string, NominalCode: record<_href: string, _rel: string, _title: string>, TaxTreatment: string>> {
+]: nothing -> oneof<record<CisLineType: record<Description: string, LineType: string, NominalCode: record<_href: string, _rel: string, _title: string>, TaxTreatment: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -411,7 +433,6 @@ export def "get-cis-line-type-from-employer" [
 #
 # PUT /Employer/{EmployerId}/CisLineType/{CisLineTypeId}
 # operationId: PutCisLineTypeIntoEmployer
-# --CisLineType shape: {Description?: string, LineType?: string, NominalCode?: record, TaxTreatment?: "Taxable"|"NonTaxable"|"Notional"|"Materials"}
 export def "put-cis-line-type-into-employer" [
   employer_id: string
   cis_line_type_id: string
@@ -427,7 +448,7 @@ export def "put-cis-line-type-into-employer" [
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
   --cis-line-type: record # shape: {Description?: string, LineType?: string, NominalCode?: record, TaxTreatment?: "Taxable"|"NonTaxable"|"Notional"|"Materials"}
-]: any -> record<CisLineType: record<Description: string, LineType: string, NominalCode: record<_href: string, _rel: string, _title: string>, TaxTreatment: string>> {
+]: any -> oneof<record<CisLineType: record<Description: string, LineType: string, NominalCode: record<_href: string, _rel: string, _title: string>, TaxTreatment: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -521,7 +542,7 @@ export def "get-tag-from-cis-line-type" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
+]: nothing -> oneof<record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -567,7 +588,7 @@ export def "put-cis-line-type-tag" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
+]: nothing -> oneof<record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -612,7 +633,7 @@ export def "get-tags-from-cis-line-type" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -655,7 +676,7 @@ export def "get-cis-line-types-from-employer" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -684,7 +705,6 @@ export def "get-cis-line-types-from-employer" [
 #
 # POST /Employer/{EmployerId}/CisLineTypes
 # operationId: PostCisLineTypeIntoEmployer
-# --CisLineType shape: {Description?: string, LineType?: string, NominalCode?: record, TaxTreatment?: "Taxable"|"NonTaxable"|"Notional"|"Materials"}
 export def "post-cis-line-type-into-employer" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -699,7 +719,7 @@ export def "post-cis-line-type-into-employer" [
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
   --cis-line-type: record # shape: {Description?: string, LineType?: string, NominalCode?: record, TaxTreatment?: "Taxable"|"NonTaxable"|"Notional"|"Materials"}
-]: any -> record<Link: record<_href: string, _rel: string, _title: string>> {
+]: any -> oneof<record<Link: record<_href: string, _rel: string, _title: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -745,7 +765,7 @@ export def "get-cis-line-types-with-tag" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -788,7 +808,7 @@ export def "get-all-cis-line-type-tags" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -875,7 +895,7 @@ export def "get-cis-transaction-from-employer" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<CisTransaction: record<CisMessageType: string, EmployerCore: record<_href: string, _rel: string, _title: string>, RequestData: string, ResponseData: string, TaxYear: int, Timestamp: string, TransactionStatus: string, TransmissionDate: string>> {
+]: nothing -> oneof<record<CisTransaction: record<CisMessageType: string, EmployerCore: record<_href: string, _rel: string, _title: string>, RequestData: string, ResponseData: string, TaxYear: int, Timestamp: string, TransactionStatus: string, TransmissionDate: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -918,7 +938,7 @@ export def "get-cis-transactions-from-employer" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -1005,7 +1025,7 @@ export def "get-dps-message-from-employer" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<DpsMessage: record<FormType: string, IssueDate: string, LastUpdated: string, Message: string, MessageStatus: string, MessageType: string, ProcessingResult: string, RetrieveDate: string, SequenceNumber: int>> {
+]: nothing -> oneof<record<DpsMessage: record<FormType: string, IssueDate: string, LastUpdated: string, Message: string, MessageStatus: string, MessageType: string, ProcessingResult: string, RetrieveDate: string, SequenceNumber: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -1049,7 +1069,7 @@ export def "patch-dps-message" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<DpsMessage: record<FormType: string, IssueDate: string, LastUpdated: string, Message: string, MessageStatus: string, MessageType: string, ProcessingResult: string, RetrieveDate: string, SequenceNumber: int>> {
+]: nothing -> oneof<record<DpsMessage: record<FormType: string, IssueDate: string, LastUpdated: string, Message: string, MessageStatus: string, MessageType: string, ProcessingResult: string, RetrieveDate: string, SequenceNumber: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -1093,7 +1113,7 @@ export def "put-dps-message" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<DpsMessage: record<FormType: string, IssueDate: string, LastUpdated: string, Message: string, MessageStatus: string, MessageType: string, ProcessingResult: string, RetrieveDate: string, SequenceNumber: int>> {
+]: nothing -> oneof<record<DpsMessage: record<FormType: string, IssueDate: string, LastUpdated: string, Message: string, MessageStatus: string, MessageType: string, ProcessingResult: string, RetrieveDate: string, SequenceNumber: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -1136,7 +1156,7 @@ export def "get-dps-messages-from-employer" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -1178,7 +1198,7 @@ export def "post-dps-message" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<Link: record<_href: string, _rel: string, _title: string>> {
+]: nothing -> oneof<record<Link: record<_href: string, _rel: string, _title: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -1265,7 +1285,7 @@ export def "get-employee-from-employer" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<Employee: record<AEAssessmentOverride: string, AEAssessmentOverrideDate: string, AEExclusionReasonCode: string, AEPostponementDate: string, Address: record<Address1: string, Address2: string, Address3: string, Address4: string, Country: string, Postcode: string>, BankAccount: record<AccountName: string, AccountNumber: string, BranchName: string, Reference: string, SortCode: string>, Code: string, DateOfBirth: string, Deactivated: bool, DirectorshipAppointmentDate: string, EEACitizen: bool, EPM6: bool, EffectiveDate: string, EmployeePartner: record<FirstName: string, Initials: string, LastName: string, MiddleName: string, NiNumber: string>, FirstName: string, Gender: string, HoursPerWeek: float, Initials: string, IrregularEmployment: bool, IsAgencyWorker: bool, LastName: string, LeaverReason: string, LeavingDate: string, MaritalStatus: string, MetaData: record, MiddleName: string, NextRevisionDate: string, NiNumber: string, NicLiability: string, OffPayrollWorker: bool, OnStrike: bool, P45IssuedDate: string, PassportNumber: string, PaySchedule: record<_href: string, _rel: string, _title: string>, PaymentMethod: string, PaymentToANonIndividual: bool, Region: string, Revision: int, RuleExclusions: string, Seconded: string, StartDate: string, StarterDeclaration: string, Territory: string, Title: string, VeteranPeriodStartDate: string, WorkingWeek: string>> {
+]: nothing -> oneof<record<Employee: record<AEAssessmentOverride: string, AEAssessmentOverrideDate: string, AEExclusionReasonCode: string, AEPostponementDate: string, Address: record<Address1: string, Address2: string, Address3: string, Address4: string, Country: string, Postcode: string>, BankAccount: record<AccountName: string, AccountNumber: string, BranchName: string, Reference: string, SortCode: string>, Code: string, DateOfBirth: string, Deactivated: bool, DirectorshipAppointmentDate: string, EEACitizen: bool, EPM6: bool, EffectiveDate: string, EmployeePartner: record<FirstName: string, Initials: string, LastName: string, MiddleName: string, NiNumber: string>, FirstName: string, Gender: string, HoursPerWeek: float, Initials: string, IrregularEmployment: bool, IsAgencyWorker: bool, LastName: string, LeaverReason: string, LeavingDate: string, MaritalStatus: string, MetaData: record, MiddleName: string, NextRevisionDate: string, NiNumber: string, NicLiability: string, OffPayrollWorker: bool, OnStrike: bool, P45IssuedDate: string, PassportNumber: string, PaySchedule: record<_href: string, _rel: string, _title: string>, PaymentMethod: string, PaymentToANonIndividual: bool, Region: string, Revision: int, RuleExclusions: string, Seconded: string, StartDate: string, StarterDeclaration: string, Territory: string, Title: string, VeteranPeriodStartDate: string, WorkingWeek: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -1295,7 +1315,6 @@ export def "get-employee-from-employer" [
 #
 # PATCH /Employer/{EmployerId}/Employee/{EmployeeId}
 # operationId: PatchEmployee
-# --Employee shape: {AEAssessmentOverride?: "None"|"OptOut"|"OptIn"|"VoluntaryJoiner"|"ContractualPension"|"CeasedMembership"|"Leaver"|"Excluded", AEAssessmentOverrideDate?: string, AEExclusionReasonCode?: "OtherNotKnown"|"NotAWorker"|"NotUKWorker"|"TemporaryUKWorker"|"OutsideAgeRange"|"SingleEmployeeDirector"|"CeasedMembershipWithin12Months"|"CeasedMembershipBeyond12Months"|"WorkerWULSWithin12Month"|"WorkerWULSBeyond12Month"|"WorkerInNoticePeriod"|"WorkerTaxProtection", AEPostponementDate?: string, Address?: record, ... (41 more fields)}
 export def "patch-employee" [
   employer_id: string
   employee_id: string
@@ -1311,7 +1330,7 @@ export def "patch-employee" [
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
   --employee: record # shape: {AEAssessmentOverride?: "None"|"OptOut"|"OptIn"|"VoluntaryJoiner"|"ContractualPension"|"CeasedMembership"|"Leaver"|"Excluded", AEAssessmentOverrideDate?: string, AEExclusionReasonCode?: "OtherNotKnown"|"NotAWorker"|"NotUKWorker"|"TemporaryUKWorker"|"OutsideAgeRange"|"SingleEmployeeDirector"|"CeasedMembershipWithin12Months"|"CeasedMembershipBeyond12Months"|"WorkerWULSWithin12Month"|"WorkerWULSBeyond12Month"|"WorkerInNoticePeriod"|"WorkerTaxProtection", AEPostponementDate?: string, Address?: record, ... (41 more fields)}
-]: any -> record<Employee: record<AEAssessmentOverride: string, AEAssessmentOverrideDate: string, AEExclusionReasonCode: string, AEPostponementDate: string, Address: record<Address1: string, Address2: string, Address3: string, Address4: string, Country: string, Postcode: string>, BankAccount: record<AccountName: string, AccountNumber: string, BranchName: string, Reference: string, SortCode: string>, Code: string, DateOfBirth: string, Deactivated: bool, DirectorshipAppointmentDate: string, EEACitizen: bool, EPM6: bool, EffectiveDate: string, EmployeePartner: record<FirstName: string, Initials: string, LastName: string, MiddleName: string, NiNumber: string>, FirstName: string, Gender: string, HoursPerWeek: float, Initials: string, IrregularEmployment: bool, IsAgencyWorker: bool, LastName: string, LeaverReason: string, LeavingDate: string, MaritalStatus: string, MetaData: record, MiddleName: string, NextRevisionDate: string, NiNumber: string, NicLiability: string, OffPayrollWorker: bool, OnStrike: bool, P45IssuedDate: string, PassportNumber: string, PaySchedule: record<_href: string, _rel: string, _title: string>, PaymentMethod: string, PaymentToANonIndividual: bool, Region: string, Revision: int, RuleExclusions: string, Seconded: string, StartDate: string, StarterDeclaration: string, Territory: string, Title: string, VeteranPeriodStartDate: string, WorkingWeek: string>> {
+]: any -> oneof<record<Employee: record<AEAssessmentOverride: string, AEAssessmentOverrideDate: string, AEExclusionReasonCode: string, AEPostponementDate: string, Address: record<Address1: string, Address2: string, Address3: string, Address4: string, Country: string, Postcode: string>, BankAccount: record<AccountName: string, AccountNumber: string, BranchName: string, Reference: string, SortCode: string>, Code: string, DateOfBirth: string, Deactivated: bool, DirectorshipAppointmentDate: string, EEACitizen: bool, EPM6: bool, EffectiveDate: string, EmployeePartner: record<FirstName: string, Initials: string, LastName: string, MiddleName: string, NiNumber: string>, FirstName: string, Gender: string, HoursPerWeek: float, Initials: string, IrregularEmployment: bool, IsAgencyWorker: bool, LastName: string, LeaverReason: string, LeavingDate: string, MaritalStatus: string, MetaData: record, MiddleName: string, NextRevisionDate: string, NiNumber: string, NicLiability: string, OffPayrollWorker: bool, OnStrike: bool, P45IssuedDate: string, PassportNumber: string, PaySchedule: record<_href: string, _rel: string, _title: string>, PaymentMethod: string, PaymentToANonIndividual: bool, Region: string, Revision: int, RuleExclusions: string, Seconded: string, StartDate: string, StarterDeclaration: string, Territory: string, Title: string, VeteranPeriodStartDate: string, WorkingWeek: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1344,7 +1363,6 @@ export def "patch-employee" [
 #
 # PUT /Employer/{EmployerId}/Employee/{EmployeeId}
 # operationId: PutEmployeeIntoEmployer
-# --Employee shape: {AEAssessmentOverride?: "None"|"OptOut"|"OptIn"|"VoluntaryJoiner"|"ContractualPension"|"CeasedMembership"|"Leaver"|"Excluded", AEAssessmentOverrideDate?: string, AEExclusionReasonCode?: "OtherNotKnown"|"NotAWorker"|"NotUKWorker"|"TemporaryUKWorker"|"OutsideAgeRange"|"SingleEmployeeDirector"|"CeasedMembershipWithin12Months"|"CeasedMembershipBeyond12Months"|"WorkerWULSWithin12Month"|"WorkerWULSBeyond12Month"|"WorkerInNoticePeriod"|"WorkerTaxProtection", AEPostponementDate?: string, Address?: record, ... (41 more fields)}
 export def "put-employee-into-employer" [
   employer_id: string
   employee_id: string
@@ -1360,7 +1378,7 @@ export def "put-employee-into-employer" [
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
   --employee: record # shape: {AEAssessmentOverride?: "None"|"OptOut"|"OptIn"|"VoluntaryJoiner"|"ContractualPension"|"CeasedMembership"|"Leaver"|"Excluded", AEAssessmentOverrideDate?: string, AEExclusionReasonCode?: "OtherNotKnown"|"NotAWorker"|"NotUKWorker"|"TemporaryUKWorker"|"OutsideAgeRange"|"SingleEmployeeDirector"|"CeasedMembershipWithin12Months"|"CeasedMembershipBeyond12Months"|"WorkerWULSWithin12Month"|"WorkerWULSBeyond12Month"|"WorkerInNoticePeriod"|"WorkerTaxProtection", AEPostponementDate?: string, Address?: record, ... (41 more fields)}
-]: any -> record<Employee: record<AEAssessmentOverride: string, AEAssessmentOverrideDate: string, AEExclusionReasonCode: string, AEPostponementDate: string, Address: record<Address1: string, Address2: string, Address3: string, Address4: string, Country: string, Postcode: string>, BankAccount: record<AccountName: string, AccountNumber: string, BranchName: string, Reference: string, SortCode: string>, Code: string, DateOfBirth: string, Deactivated: bool, DirectorshipAppointmentDate: string, EEACitizen: bool, EPM6: bool, EffectiveDate: string, EmployeePartner: record<FirstName: string, Initials: string, LastName: string, MiddleName: string, NiNumber: string>, FirstName: string, Gender: string, HoursPerWeek: float, Initials: string, IrregularEmployment: bool, IsAgencyWorker: bool, LastName: string, LeaverReason: string, LeavingDate: string, MaritalStatus: string, MetaData: record, MiddleName: string, NextRevisionDate: string, NiNumber: string, NicLiability: string, OffPayrollWorker: bool, OnStrike: bool, P45IssuedDate: string, PassportNumber: string, PaySchedule: record<_href: string, _rel: string, _title: string>, PaymentMethod: string, PaymentToANonIndividual: bool, Region: string, Revision: int, RuleExclusions: string, Seconded: string, StartDate: string, StarterDeclaration: string, Territory: string, Title: string, VeteranPeriodStartDate: string, WorkingWeek: string>> {
+]: any -> oneof<record<Employee: record<AEAssessmentOverride: string, AEAssessmentOverrideDate: string, AEExclusionReasonCode: string, AEPostponementDate: string, Address: record<Address1: string, Address2: string, Address3: string, Address4: string, Country: string, Postcode: string>, BankAccount: record<AccountName: string, AccountNumber: string, BranchName: string, Reference: string, SortCode: string>, Code: string, DateOfBirth: string, Deactivated: bool, DirectorshipAppointmentDate: string, EEACitizen: bool, EPM6: bool, EffectiveDate: string, EmployeePartner: record<FirstName: string, Initials: string, LastName: string, MiddleName: string, NiNumber: string>, FirstName: string, Gender: string, HoursPerWeek: float, Initials: string, IrregularEmployment: bool, IsAgencyWorker: bool, LastName: string, LeaverReason: string, LeavingDate: string, MaritalStatus: string, MetaData: record, MiddleName: string, NextRevisionDate: string, NiNumber: string, NicLiability: string, OffPayrollWorker: bool, OnStrike: bool, P45IssuedDate: string, PassportNumber: string, PaySchedule: record<_href: string, _rel: string, _title: string>, PaymentMethod: string, PaymentToANonIndividual: bool, Region: string, Revision: int, RuleExclusions: string, Seconded: string, StartDate: string, StarterDeclaration: string, Territory: string, Title: string, VeteranPeriodStartDate: string, WorkingWeek: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1454,7 +1472,7 @@ export def "get-ae-assessment-from-employee" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<AEAssessment: record<Age: int, AssessmentCode: string, AssessmentDate: string, AssessmentEvent: string, AssessmentOverride: string, AssessmentResult: string, IsMemberOfAlternativePensionScheme: bool, OptOutWindowEndDate: string, QualifyingEarnings: float, ReenrolmentDate: string, StatePensionAge: int, StatePensionDate: string, TaxPeriod: int, TaxYear: int>> {
+]: nothing -> oneof<record<AEAssessment: record<Age: int, AssessmentCode: string, AssessmentDate: string, AssessmentEvent: string, AssessmentOverride: string, AssessmentResult: string, IsMemberOfAlternativePensionScheme: bool, OptOutWindowEndDate: string, QualifyingEarnings: float, ReenrolmentDate: string, StatePensionAge: int, StatePensionDate: string, TaxPeriod: int, TaxYear: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -1485,7 +1503,6 @@ export def "get-ae-assessment-from-employee" [
 #
 # PUT /Employer/{EmployerId}/Employee/{EmployeeId}/AEAssessment/{AEAssessmentId}
 # operationId: PutNewAEAssessment
-# --AEAssessment shape: {Age?: int, AssessmentCode?: "Excluded"|"EligibleJobHolder"|"NonEligibleJobHolder"|"EntitledWorker", AssessmentDate?: string, AssessmentEvent?: "NonEnrolmentEvent"|"AutomaticEnrolment"|"OptIn"|"VoluntaryJoiner"|"ContractualEnrolment", AssessmentOverride?: "None"|"OptOut"|"OptIn"|"VoluntaryJoiner"|"ContractualPension"|"CeasedMembership"|"Leaver"|"Excluded", AssessmentResult?: "Inconclusive"|"NoChange"|"Enrol"|"Exit", IsMemberOfAlternativePensionScheme?: bool, OptOutWindowEndDate?: string, ... (6 more fields)}
 export def "put-new-ae-assessment" [
   employer_id: string
   employee_id: string
@@ -1502,7 +1519,7 @@ export def "put-new-ae-assessment" [
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
   --ae-assessment: record # shape: {Age?: int, AssessmentCode?: "Excluded"|"EligibleJobHolder"|"NonEligibleJobHolder"|"EntitledWorker", AssessmentDate?: string, AssessmentEvent?: "NonEnrolmentEvent"|"AutomaticEnrolment"|"OptIn"|"VoluntaryJoiner"|"ContractualEnrolment", AssessmentOverride?: "None"|"OptOut"|"OptIn"|"VoluntaryJoiner"|"ContractualPension"|"CeasedMembership"|"Leaver"|"Excluded", AssessmentResult?: "Inconclusive"|"NoChange"|"Enrol"|"Exit", IsMemberOfAlternativePensionScheme?: bool, OptOutWindowEndDate?: string, ... (6 more fields)}
-]: any -> record<AEAssessment: record<Age: int, AssessmentCode: string, AssessmentDate: string, AssessmentEvent: string, AssessmentOverride: string, AssessmentResult: string, IsMemberOfAlternativePensionScheme: bool, OptOutWindowEndDate: string, QualifyingEarnings: float, ReenrolmentDate: string, StatePensionAge: int, StatePensionDate: string, TaxPeriod: int, TaxYear: int>> {
+]: any -> oneof<record<AEAssessment: record<Age: int, AssessmentCode: string, AssessmentDate: string, AssessmentEvent: string, AssessmentOverride: string, AssessmentResult: string, IsMemberOfAlternativePensionScheme: bool, OptOutWindowEndDate: string, QualifyingEarnings: float, ReenrolmentDate: string, StatePensionAge: int, StatePensionDate: string, TaxPeriod: int, TaxYear: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1550,7 +1567,7 @@ export def "get-ae-assessments-from-employee" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -1580,7 +1597,6 @@ export def "get-ae-assessments-from-employee" [
 #
 # POST /Employer/{EmployerId}/Employee/{EmployeeId}/AEAssessments
 # operationId: PostNewAEAssessment
-# --AEAssessment shape: {Age?: int, AssessmentCode?: "Excluded"|"EligibleJobHolder"|"NonEligibleJobHolder"|"EntitledWorker", AssessmentDate?: string, AssessmentEvent?: "NonEnrolmentEvent"|"AutomaticEnrolment"|"OptIn"|"VoluntaryJoiner"|"ContractualEnrolment", AssessmentOverride?: "None"|"OptOut"|"OptIn"|"VoluntaryJoiner"|"ContractualPension"|"CeasedMembership"|"Leaver"|"Excluded", AssessmentResult?: "Inconclusive"|"NoChange"|"Enrol"|"Exit", IsMemberOfAlternativePensionScheme?: bool, OptOutWindowEndDate?: string, ... (6 more fields)}
 export def "post-new-ae-assessment" [
   employer_id: string
   employee_id: string
@@ -1596,7 +1612,7 @@ export def "post-new-ae-assessment" [
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
   --ae-assessment: record # shape: {Age?: int, AssessmentCode?: "Excluded"|"EligibleJobHolder"|"NonEligibleJobHolder"|"EntitledWorker", AssessmentDate?: string, AssessmentEvent?: "NonEnrolmentEvent"|"AutomaticEnrolment"|"OptIn"|"VoluntaryJoiner"|"ContractualEnrolment", AssessmentOverride?: "None"|"OptOut"|"OptIn"|"VoluntaryJoiner"|"ContractualPension"|"CeasedMembership"|"Leaver"|"Excluded", AssessmentResult?: "Inconclusive"|"NoChange"|"Enrol"|"Exit", IsMemberOfAlternativePensionScheme?: bool, OptOutWindowEndDate?: string, ... (6 more fields)}
-]: any -> record<Link: record<_href: string, _rel: string, _title: string>> {
+]: any -> oneof<record<Link: record<_href: string, _rel: string, _title: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1643,7 +1659,7 @@ export def "get-commentaries-from-employee" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -1688,7 +1704,7 @@ export def "get-commentary-from-employee" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<Commentary: record<Created: string, Detail: string, Employee: record<_href: string, _rel: string, _title: string>, PayRun: record<_href: string, _rel: string, _title: string>>> {
+]: nothing -> oneof<record<Commentary: record<Created: string, Detail: string, Employee: record<_href: string, _rel: string, _title: string>, PayRun: record<_href: string, _rel: string, _title: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -1733,7 +1749,7 @@ export def "get-journal-lines-from-employee" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -1824,7 +1840,7 @@ export def "get-pay-instruction-from-employee" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<PayInstruction: record<Description: string, EndDate: string, PayLineTag: string, StartDate: string>> {
+]: nothing -> oneof<record<PayInstruction: record<Description: string, EndDate: string, PayLineTag: string, StartDate: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -1855,7 +1871,6 @@ export def "get-pay-instruction-from-employee" [
 #
 # PATCH /Employer/{EmployerId}/Employee/{EmployeeId}/PayInstruction/{PayInstructionId}
 # operationId: PatchPayInstruction
-# --PayInstruction shape: {Description?: string, EndDate?: string, PayLineTag?: string, StartDate?: string}
 export def "patch-pay-instruction" [
   employer_id: string
   employee_id: string
@@ -1872,7 +1887,7 @@ export def "patch-pay-instruction" [
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
   --pay-instruction: record # shape: {Description?: string, EndDate?: string, PayLineTag?: string, StartDate?: string}
-]: any -> record<PayInstruction: record<Description: string, EndDate: string, PayLineTag: string, StartDate: string>> {
+]: any -> oneof<record<PayInstruction: record<Description: string, EndDate: string, PayLineTag: string, StartDate: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1906,7 +1921,6 @@ export def "patch-pay-instruction" [
 #
 # PUT /Employer/{EmployerId}/Employee/{EmployeeId}/PayInstruction/{PayInstructionId}
 # operationId: PutPayInstruction
-# --PayInstruction shape: {Description?: string, EndDate?: string, PayLineTag?: string, StartDate?: string}
 export def "put-pay-instruction" [
   employer_id: string
   employee_id: string
@@ -1923,7 +1937,7 @@ export def "put-pay-instruction" [
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
   --pay-instruction: record # shape: {Description?: string, EndDate?: string, PayLineTag?: string, StartDate?: string}
-]: any -> record<PayInstruction: record<Description: string, EndDate: string, PayLineTag: string, StartDate: string>> {
+]: any -> oneof<record<PayInstruction: record<Description: string, EndDate: string, PayLineTag: string, StartDate: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2021,7 +2035,7 @@ export def "get-tag-from-pay-instruction" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
+]: nothing -> oneof<record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -2069,7 +2083,7 @@ export def "put-pay-instruction-tag" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
+]: nothing -> oneof<record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -2116,7 +2130,7 @@ export def "get-tags-from-pay-instruction" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -2161,7 +2175,7 @@ export def "get-pay-instructions-from-employee" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -2191,7 +2205,6 @@ export def "get-pay-instructions-from-employee" [
 #
 # POST /Employer/{EmployerId}/Employee/{EmployeeId}/PayInstructions
 # operationId: PostPayInstruction
-# --PayInstruction shape: {Description?: string, EndDate?: string, PayLineTag?: string, StartDate?: string}
 export def "post-pay-instruction" [
   employer_id: string
   employee_id: string
@@ -2207,7 +2220,7 @@ export def "post-pay-instruction" [
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
   --pay-instruction: record # shape: {Description?: string, EndDate?: string, PayLineTag?: string, StartDate?: string}
-]: any -> record<Link: record<_href: string, _rel: string, _title: string>> {
+]: any -> oneof<record<Link: record<_href: string, _rel: string, _title: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2255,7 +2268,7 @@ export def "get-pay-instructions-with-tag" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -2300,7 +2313,7 @@ export def "get-all-pay-instruction-tags" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -2345,7 +2358,7 @@ export def "get-pay-line-from-employee" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<PayLine: record<Calculator: string, Description: string, Generated: string, PayCode: string, PayCodeType: string, PayRunSequence: int, PaymentDate: string, TaxPeriod: int, TaxYear: int, Value: float>> {
+]: nothing -> oneof<record<PayLine: record<Calculator: string, Description: string, Generated: string, PayCode: string, PayCodeType: string, PayRunSequence: int, PaymentDate: string, TaxPeriod: int, TaxYear: int, Value: float>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -2440,7 +2453,7 @@ export def "get-tag-from-pay-line" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
+]: nothing -> oneof<record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -2488,7 +2501,7 @@ export def "put-pay-line-tag" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
+]: nothing -> oneof<record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -2535,7 +2548,7 @@ export def "get-tags-from-pay-line" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -2580,7 +2593,7 @@ export def "get-pay-lines-from-employee" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -2625,7 +2638,7 @@ export def "get-pay-lines-with-tag" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -2670,7 +2683,7 @@ export def "get-all-pay-line-tags" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -2714,7 +2727,7 @@ export def "get-pay-runs-from-employee" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -2805,7 +2818,7 @@ export def "get-employee-revision-by-number" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<Employee: record<AEAssessmentOverride: string, AEAssessmentOverrideDate: string, AEExclusionReasonCode: string, AEPostponementDate: string, Address: record<Address1: string, Address2: string, Address3: string, Address4: string, Country: string, Postcode: string>, BankAccount: record<AccountName: string, AccountNumber: string, BranchName: string, Reference: string, SortCode: string>, Code: string, DateOfBirth: string, Deactivated: bool, DirectorshipAppointmentDate: string, EEACitizen: bool, EPM6: bool, EffectiveDate: string, EmployeePartner: record<FirstName: string, Initials: string, LastName: string, MiddleName: string, NiNumber: string>, FirstName: string, Gender: string, HoursPerWeek: float, Initials: string, IrregularEmployment: bool, IsAgencyWorker: bool, LastName: string, LeaverReason: string, LeavingDate: string, MaritalStatus: string, MetaData: record, MiddleName: string, NextRevisionDate: string, NiNumber: string, NicLiability: string, OffPayrollWorker: bool, OnStrike: bool, P45IssuedDate: string, PassportNumber: string, PaySchedule: record<_href: string, _rel: string, _title: string>, PaymentMethod: string, PaymentToANonIndividual: bool, Region: string, Revision: int, RuleExclusions: string, Seconded: string, StartDate: string, StarterDeclaration: string, Territory: string, Title: string, VeteranPeriodStartDate: string, WorkingWeek: string>> {
+]: nothing -> oneof<record<Employee: record<AEAssessmentOverride: string, AEAssessmentOverrideDate: string, AEExclusionReasonCode: string, AEPostponementDate: string, Address: record<Address1: string, Address2: string, Address3: string, Address4: string, Country: string, Postcode: string>, BankAccount: record<AccountName: string, AccountNumber: string, BranchName: string, Reference: string, SortCode: string>, Code: string, DateOfBirth: string, Deactivated: bool, DirectorshipAppointmentDate: string, EEACitizen: bool, EPM6: bool, EffectiveDate: string, EmployeePartner: record<FirstName: string, Initials: string, LastName: string, MiddleName: string, NiNumber: string>, FirstName: string, Gender: string, HoursPerWeek: float, Initials: string, IrregularEmployment: bool, IsAgencyWorker: bool, LastName: string, LeaverReason: string, LeavingDate: string, MaritalStatus: string, MetaData: record, MiddleName: string, NextRevisionDate: string, NiNumber: string, NicLiability: string, OffPayrollWorker: bool, OnStrike: bool, P45IssuedDate: string, PassportNumber: string, PaySchedule: record<_href: string, _rel: string, _title: string>, PaymentMethod: string, PaymentToANonIndividual: bool, Region: string, Revision: int, RuleExclusions: string, Seconded: string, StartDate: string, StarterDeclaration: string, Territory: string, Title: string, VeteranPeriodStartDate: string, WorkingWeek: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -2896,7 +2909,7 @@ export def "get-employee-revisions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -2940,7 +2953,7 @@ export def "get-employee-revision-summaries" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -3031,7 +3044,7 @@ export def "get-employee-secret" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<EmployeeSecret: record<Created: string, Name: string, Value: string>> {
+]: nothing -> oneof<record<EmployeeSecret: record<Created: string, Name: string, Value: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -3077,7 +3090,7 @@ export def "put-employee-secret" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<EmployeeSecret: record<Created: string, Name: string, Value: string>> {
+]: nothing -> oneof<record<EmployeeSecret: record<Created: string, Name: string, Value: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -3122,7 +3135,7 @@ export def "get-employee-secrets" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -3166,7 +3179,7 @@ export def "post-employee-secret" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<Link: record<_href: string, _rel: string, _title: string>> {
+]: nothing -> oneof<record<Link: record<_href: string, _rel: string, _title: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -3301,7 +3314,7 @@ export def "get-tag-from-employee" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
+]: nothing -> oneof<record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -3347,7 +3360,7 @@ export def "put-employee-tag" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
+]: nothing -> oneof<record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -3394,7 +3407,7 @@ export def "get-tag-from-employee-revision" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
+]: nothing -> oneof<record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -3440,7 +3453,7 @@ export def "get-tags-from-employee" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -3485,7 +3498,7 @@ export def "get-tags-from-employee-revision" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -3577,7 +3590,7 @@ export def "get-employee-by-effective-date" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<Employee: record<AEAssessmentOverride: string, AEAssessmentOverrideDate: string, AEExclusionReasonCode: string, AEPostponementDate: string, Address: record<Address1: string, Address2: string, Address3: string, Address4: string, Country: string, Postcode: string>, BankAccount: record<AccountName: string, AccountNumber: string, BranchName: string, Reference: string, SortCode: string>, Code: string, DateOfBirth: string, Deactivated: bool, DirectorshipAppointmentDate: string, EEACitizen: bool, EPM6: bool, EffectiveDate: string, EmployeePartner: record<FirstName: string, Initials: string, LastName: string, MiddleName: string, NiNumber: string>, FirstName: string, Gender: string, HoursPerWeek: float, Initials: string, IrregularEmployment: bool, IsAgencyWorker: bool, LastName: string, LeaverReason: string, LeavingDate: string, MaritalStatus: string, MetaData: record, MiddleName: string, NextRevisionDate: string, NiNumber: string, NicLiability: string, OffPayrollWorker: bool, OnStrike: bool, P45IssuedDate: string, PassportNumber: string, PaySchedule: record<_href: string, _rel: string, _title: string>, PaymentMethod: string, PaymentToANonIndividual: bool, Region: string, Revision: int, RuleExclusions: string, Seconded: string, StartDate: string, StarterDeclaration: string, Territory: string, Title: string, VeteranPeriodStartDate: string, WorkingWeek: string>> {
+]: nothing -> oneof<record<Employee: record<AEAssessmentOverride: string, AEAssessmentOverrideDate: string, AEExclusionReasonCode: string, AEPostponementDate: string, Address: record<Address1: string, Address2: string, Address3: string, Address4: string, Country: string, Postcode: string>, BankAccount: record<AccountName: string, AccountNumber: string, BranchName: string, Reference: string, SortCode: string>, Code: string, DateOfBirth: string, Deactivated: bool, DirectorshipAppointmentDate: string, EEACitizen: bool, EPM6: bool, EffectiveDate: string, EmployeePartner: record<FirstName: string, Initials: string, LastName: string, MiddleName: string, NiNumber: string>, FirstName: string, Gender: string, HoursPerWeek: float, Initials: string, IrregularEmployment: bool, IsAgencyWorker: bool, LastName: string, LeaverReason: string, LeavingDate: string, MaritalStatus: string, MetaData: record, MiddleName: string, NextRevisionDate: string, NiNumber: string, NicLiability: string, OffPayrollWorker: bool, OnStrike: bool, P45IssuedDate: string, PassportNumber: string, PaySchedule: record<_href: string, _rel: string, _title: string>, PaymentMethod: string, PaymentToANonIndividual: bool, Region: string, Revision: int, RuleExclusions: string, Seconded: string, StartDate: string, StarterDeclaration: string, Territory: string, Title: string, VeteranPeriodStartDate: string, WorkingWeek: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -3667,7 +3680,7 @@ export def "get-employees-from-employer" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -3696,7 +3709,6 @@ export def "get-employees-from-employer" [
 #
 # POST /Employer/{EmployerId}/Employees
 # operationId: PostEmployeeIntoEmployer
-# --Employee shape: {AEAssessmentOverride?: "None"|"OptOut"|"OptIn"|"VoluntaryJoiner"|"ContractualPension"|"CeasedMembership"|"Leaver"|"Excluded", AEAssessmentOverrideDate?: string, AEExclusionReasonCode?: "OtherNotKnown"|"NotAWorker"|"NotUKWorker"|"TemporaryUKWorker"|"OutsideAgeRange"|"SingleEmployeeDirector"|"CeasedMembershipWithin12Months"|"CeasedMembershipBeyond12Months"|"WorkerWULSWithin12Month"|"WorkerWULSBeyond12Month"|"WorkerInNoticePeriod"|"WorkerTaxProtection", AEPostponementDate?: string, Address?: record, ... (41 more fields)}
 export def "post-employee-into-employer" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3711,7 +3723,7 @@ export def "post-employee-into-employer" [
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
   --employee: record # shape: {AEAssessmentOverride?: "None"|"OptOut"|"OptIn"|"VoluntaryJoiner"|"ContractualPension"|"CeasedMembership"|"Leaver"|"Excluded", AEAssessmentOverrideDate?: string, AEExclusionReasonCode?: "OtherNotKnown"|"NotAWorker"|"NotUKWorker"|"TemporaryUKWorker"|"OutsideAgeRange"|"SingleEmployeeDirector"|"CeasedMembershipWithin12Months"|"CeasedMembershipBeyond12Months"|"WorkerWULSWithin12Month"|"WorkerWULSBeyond12Month"|"WorkerInNoticePeriod"|"WorkerTaxProtection", AEPostponementDate?: string, Address?: record, ... (41 more fields)}
-]: any -> record<Link: record<_href: string, _rel: string, _title: string>> {
+]: any -> oneof<record<Link: record<_href: string, _rel: string, _title: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3756,7 +3768,7 @@ export def "get-employee-summaries-from-employer" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -3799,7 +3811,7 @@ export def "get-employees-with-tag" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -3842,7 +3854,7 @@ export def "get-all-employee-tags" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -3885,7 +3897,7 @@ export def "get-employees-by-effective-date" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -3929,7 +3941,7 @@ export def "get-employee-summaries-by-effective-date" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -4017,7 +4029,7 @@ export def "get-holiday-scheme-from-employer" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<HolidayScheme: record<AccrualPayCodes: record<PayCode: list>, AllowExceedAnnualEntitlement: bool, AllowNegativeBalance: bool, AnnualEntitlementWeeks: float, BankHolidayInclusive: bool, Code: string, EffectiveDate: string, MaxCarryOverDays: float, NextRevisionDate: string, OffsetPayment: bool, Revision: int, SchemeCeasedDate: string, SchemeKey: string, SchemeName: string, YearStartDay: int, YearStartMonth: int>> {
+]: nothing -> oneof<record<HolidayScheme: record<AccrualPayCodes: record<PayCode: list>, AllowExceedAnnualEntitlement: bool, AllowNegativeBalance: bool, AnnualEntitlementWeeks: float, BankHolidayInclusive: bool, Code: string, EffectiveDate: string, MaxCarryOverDays: float, NextRevisionDate: string, OffsetPayment: bool, Revision: int, SchemeCeasedDate: string, SchemeKey: string, SchemeName: string, YearStartDay: int, YearStartMonth: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -4047,7 +4059,6 @@ export def "get-holiday-scheme-from-employer" [
 #
 # PATCH /Employer/{EmployerId}/HolidayScheme/{HolidaySchemeId}
 # operationId: PatchHolidayScheme
-# --HolidayScheme shape: {AccrualPayCodes?: record, AllowExceedAnnualEntitlement?: bool, AllowNegativeBalance?: bool, AnnualEntitlementWeeks?: float, BankHolidayInclusive?: bool, Code?: string, EffectiveDate?: string, MaxCarryOverDays?: float, NextRevisionDate?: string, OffsetPayment?: bool, Revision?: int, SchemeCeasedDate?: string, SchemeKey?: string, SchemeName?: string, YearStartDay?: int, YearStartMonth?: int}
 export def "patch-holiday-scheme" [
   employer_id: string
   holiday_scheme_id: string
@@ -4063,7 +4074,7 @@ export def "patch-holiday-scheme" [
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
   --holiday-scheme: record # shape: {AccrualPayCodes?: record, AllowExceedAnnualEntitlement?: bool, AllowNegativeBalance?: bool, AnnualEntitlementWeeks?: float, BankHolidayInclusive?: bool, Code?: string, EffectiveDate?: string, MaxCarryOverDays?: float, NextRevisionDate?: string, OffsetPayment?: bool, Revision?: int, SchemeCeasedDate?: string, SchemeKey?: string, SchemeName?: string, YearStartDay?: int, YearStartMonth?: int}
-]: any -> record<HolidayScheme: record<AccrualPayCodes: record<PayCode: list>, AllowExceedAnnualEntitlement: bool, AllowNegativeBalance: bool, AnnualEntitlementWeeks: float, BankHolidayInclusive: bool, Code: string, EffectiveDate: string, MaxCarryOverDays: float, NextRevisionDate: string, OffsetPayment: bool, Revision: int, SchemeCeasedDate: string, SchemeKey: string, SchemeName: string, YearStartDay: int, YearStartMonth: int>> {
+]: any -> oneof<record<HolidayScheme: record<AccrualPayCodes: record<PayCode: list>, AllowExceedAnnualEntitlement: bool, AllowNegativeBalance: bool, AnnualEntitlementWeeks: float, BankHolidayInclusive: bool, Code: string, EffectiveDate: string, MaxCarryOverDays: float, NextRevisionDate: string, OffsetPayment: bool, Revision: int, SchemeCeasedDate: string, SchemeKey: string, SchemeName: string, YearStartDay: int, YearStartMonth: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4096,7 +4107,6 @@ export def "patch-holiday-scheme" [
 #
 # PUT /Employer/{EmployerId}/HolidayScheme/{HolidaySchemeId}
 # operationId: PutHolidaySchemeIntoEmployer
-# --HolidayScheme shape: {AccrualPayCodes?: record, AllowExceedAnnualEntitlement?: bool, AllowNegativeBalance?: bool, AnnualEntitlementWeeks?: float, BankHolidayInclusive?: bool, Code?: string, EffectiveDate?: string, MaxCarryOverDays?: float, NextRevisionDate?: string, OffsetPayment?: bool, Revision?: int, SchemeCeasedDate?: string, SchemeKey?: string, SchemeName?: string, YearStartDay?: int, YearStartMonth?: int}
 export def "put-holiday-scheme-into-employer" [
   employer_id: string
   holiday_scheme_id: string
@@ -4112,7 +4122,7 @@ export def "put-holiday-scheme-into-employer" [
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
   --holiday-scheme: record # shape: {AccrualPayCodes?: record, AllowExceedAnnualEntitlement?: bool, AllowNegativeBalance?: bool, AnnualEntitlementWeeks?: float, BankHolidayInclusive?: bool, Code?: string, EffectiveDate?: string, MaxCarryOverDays?: float, NextRevisionDate?: string, OffsetPayment?: bool, Revision?: int, SchemeCeasedDate?: string, SchemeKey?: string, SchemeName?: string, YearStartDay?: int, YearStartMonth?: int}
-]: any -> record<HolidayScheme: record<AccrualPayCodes: record<PayCode: list>, AllowExceedAnnualEntitlement: bool, AllowNegativeBalance: bool, AnnualEntitlementWeeks: float, BankHolidayInclusive: bool, Code: string, EffectiveDate: string, MaxCarryOverDays: float, NextRevisionDate: string, OffsetPayment: bool, Revision: int, SchemeCeasedDate: string, SchemeKey: string, SchemeName: string, YearStartDay: int, YearStartMonth: int>> {
+]: any -> oneof<record<HolidayScheme: record<AccrualPayCodes: record<PayCode: list>, AllowExceedAnnualEntitlement: bool, AllowNegativeBalance: bool, AnnualEntitlementWeeks: float, BankHolidayInclusive: bool, Code: string, EffectiveDate: string, MaxCarryOverDays: float, NextRevisionDate: string, OffsetPayment: bool, Revision: int, SchemeCeasedDate: string, SchemeKey: string, SchemeName: string, YearStartDay: int, YearStartMonth: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4206,7 +4216,7 @@ export def "get-holiday-scheme-revision-by-number" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<HolidayScheme: record<AccrualPayCodes: record<PayCode: list>, AllowExceedAnnualEntitlement: bool, AllowNegativeBalance: bool, AnnualEntitlementWeeks: float, BankHolidayInclusive: bool, Code: string, EffectiveDate: string, MaxCarryOverDays: float, NextRevisionDate: string, OffsetPayment: bool, Revision: int, SchemeCeasedDate: string, SchemeKey: string, SchemeName: string, YearStartDay: int, YearStartMonth: int>> {
+]: nothing -> oneof<record<HolidayScheme: record<AccrualPayCodes: record<PayCode: list>, AllowExceedAnnualEntitlement: bool, AllowNegativeBalance: bool, AnnualEntitlementWeeks: float, BankHolidayInclusive: bool, Code: string, EffectiveDate: string, MaxCarryOverDays: float, NextRevisionDate: string, OffsetPayment: bool, Revision: int, SchemeCeasedDate: string, SchemeKey: string, SchemeName: string, YearStartDay: int, YearStartMonth: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -4251,7 +4261,7 @@ export def "get-holiday-scheme-revisions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -4342,7 +4352,7 @@ export def "get-tag-from-holiday-scheme" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
+]: nothing -> oneof<record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -4388,7 +4398,7 @@ export def "put-holiday-scheme-tag" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
+]: nothing -> oneof<record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -4435,7 +4445,7 @@ export def "get-tag-from-holiday-scheme-revision" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
+]: nothing -> oneof<record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -4481,7 +4491,7 @@ export def "get-tags-from-holiday-scheme" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -4526,7 +4536,7 @@ export def "get-tags-from-holiday-scheme-revision" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -4618,7 +4628,7 @@ export def "get-holiday-scheme-by-effective-date" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<HolidayScheme: record<AccrualPayCodes: record<PayCode: list>, AllowExceedAnnualEntitlement: bool, AllowNegativeBalance: bool, AnnualEntitlementWeeks: float, BankHolidayInclusive: bool, Code: string, EffectiveDate: string, MaxCarryOverDays: float, NextRevisionDate: string, OffsetPayment: bool, Revision: int, SchemeCeasedDate: string, SchemeKey: string, SchemeName: string, YearStartDay: int, YearStartMonth: int>> {
+]: nothing -> oneof<record<HolidayScheme: record<AccrualPayCodes: record<PayCode: list>, AllowExceedAnnualEntitlement: bool, AllowNegativeBalance: bool, AnnualEntitlementWeeks: float, BankHolidayInclusive: bool, Code: string, EffectiveDate: string, MaxCarryOverDays: float, NextRevisionDate: string, OffsetPayment: bool, Revision: int, SchemeCeasedDate: string, SchemeKey: string, SchemeName: string, YearStartDay: int, YearStartMonth: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -4662,7 +4672,7 @@ export def "get-holiday-schemes-from-employer" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -4691,7 +4701,6 @@ export def "get-holiday-schemes-from-employer" [
 #
 # POST /Employer/{EmployerId}/HolidaySchemes
 # operationId: PostHolidaySchemeIntoEmployer
-# --HolidayScheme shape: {AccrualPayCodes?: record, AllowExceedAnnualEntitlement?: bool, AllowNegativeBalance?: bool, AnnualEntitlementWeeks?: float, BankHolidayInclusive?: bool, Code?: string, EffectiveDate?: string, MaxCarryOverDays?: float, NextRevisionDate?: string, OffsetPayment?: bool, Revision?: int, SchemeCeasedDate?: string, SchemeKey?: string, SchemeName?: string, YearStartDay?: int, YearStartMonth?: int}
 export def "post-holiday-scheme-into-employer" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4706,7 +4715,7 @@ export def "post-holiday-scheme-into-employer" [
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
   --holiday-scheme: record # shape: {AccrualPayCodes?: record, AllowExceedAnnualEntitlement?: bool, AllowNegativeBalance?: bool, AnnualEntitlementWeeks?: float, BankHolidayInclusive?: bool, Code?: string, EffectiveDate?: string, MaxCarryOverDays?: float, NextRevisionDate?: string, OffsetPayment?: bool, Revision?: int, SchemeCeasedDate?: string, SchemeKey?: string, SchemeName?: string, YearStartDay?: int, YearStartMonth?: int}
-]: any -> record<Link: record<_href: string, _rel: string, _title: string>> {
+]: any -> oneof<record<Link: record<_href: string, _rel: string, _title: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4752,7 +4761,7 @@ export def "get-holiday-schemes-with-tag" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -4795,7 +4804,7 @@ export def "get-all-holiday-scheme-tags" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -4838,7 +4847,7 @@ export def "get-holiday-schemes-by-effective-date" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -4926,7 +4935,7 @@ export def "get-journal-instruction-from-employer" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<JournalInstruction: record<AccountingType: string, Description: string, EndDate: string, Expression: string, JournalLineTag: string, LedgerTarget: string, NomCode: string, StartDate: string, SubNomCode: string>> {
+]: nothing -> oneof<record<JournalInstruction: record<AccountingType: string, Description: string, EndDate: string, Expression: string, JournalLineTag: string, LedgerTarget: string, NomCode: string, StartDate: string, SubNomCode: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -4970,7 +4979,7 @@ export def "put-journal-instruction" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<JournalInstruction: record<AccountingType: string, Description: string, EndDate: string, Expression: string, JournalLineTag: string, LedgerTarget: string, NomCode: string, StartDate: string, SubNomCode: string>> {
+]: nothing -> oneof<record<JournalInstruction: record<AccountingType: string, Description: string, EndDate: string, Expression: string, JournalLineTag: string, LedgerTarget: string, NomCode: string, StartDate: string, SubNomCode: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -5013,7 +5022,7 @@ export def "get-journal-instructions-from-employer" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -5055,7 +5064,7 @@ export def "post-journal-instruction" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<Link: record<_href: string, _rel: string, _title: string>> {
+]: nothing -> oneof<record<Link: record<_href: string, _rel: string, _title: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -5098,7 +5107,7 @@ export def "get-journal-line-from-employer" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<JournalLine: record<Credit: float, Debit: float, Description: string, Employee: record<_href: string, _rel: string, _title: string>, Generated: string, Grouping: string, LedgerTarget: string, NomCode: string, PayFrequency: string, PayRun: record<_href: string, _rel: string, _title: string>, SubContractor: record<_href: string, _rel: string, _title: string>, SubNomCode: string, TaxPeriod: int, TaxYear: int>> {
+]: nothing -> oneof<record<JournalLine: record<Credit: float, Debit: float, Description: string, Employee: record<_href: string, _rel: string, _title: string>, Generated: string, Grouping: string, LedgerTarget: string, NomCode: string, PayFrequency: string, PayRun: record<_href: string, _rel: string, _title: string>, SubContractor: record<_href: string, _rel: string, _title: string>, SubNomCode: string, TaxPeriod: int, TaxYear: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -5189,7 +5198,7 @@ export def "get-tag-from-journal-line" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
+]: nothing -> oneof<record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -5235,7 +5244,7 @@ export def "put-journal-line-tag" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
+]: nothing -> oneof<record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -5280,7 +5289,7 @@ export def "get-tags-from-journal-line" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -5323,7 +5332,7 @@ export def "get-journal-lines-from-employer" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -5366,7 +5375,7 @@ export def "get-all-journal-lines-with-tag" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -5409,7 +5418,7 @@ export def "get-all-journal-line-tags" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -5496,7 +5505,7 @@ export def "get-nominal-code-from-employer" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<NominalCode: record<Description: string, Key: string>> {
+]: nothing -> oneof<record<NominalCode: record<Description: string, Key: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -5526,7 +5535,6 @@ export def "get-nominal-code-from-employer" [
 #
 # PUT /Employer/{EmployerId}/NominalCode/{NominalCodeId}
 # operationId: PutNominalCode
-# --NominalCode shape: {Description?: string, Key?: string}
 export def "put-nominal-code" [
   employer_id: string
   nominal_code_id: string
@@ -5542,7 +5550,7 @@ export def "put-nominal-code" [
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
   --nominal-code: record # shape: {Description?: string, Key?: string}
-]: any -> record<NominalCode: record<Description: string, Key: string>> {
+]: any -> oneof<record<NominalCode: record<Description: string, Key: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5589,7 +5597,7 @@ export def "get-pay-codes-from-nominal-code" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -5632,7 +5640,7 @@ export def "get-nominal-codes-from-employer" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -5661,7 +5669,6 @@ export def "get-nominal-codes-from-employer" [
 #
 # POST /Employer/{EmployerId}/NominalCodes
 # operationId: PostNominalCode
-# --NominalCode shape: {Description?: string, Key?: string}
 export def "post-nominal-code" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5676,7 +5683,7 @@ export def "post-nominal-code" [
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
   --nominal-code: record # shape: {Description?: string, Key?: string}
-]: any -> record<Link: record<_href: string, _rel: string, _title: string>> {
+]: any -> oneof<record<Link: record<_href: string, _rel: string, _title: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5766,7 +5773,7 @@ export def "get-pay-code-from-employer" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<PayCode: record<Benefit: bool, Code: string, Description: string, EffectiveDate: string, MetaData: record, NextRevisionDate: string, Niable: bool, NominalCode: record<_href: string, _rel: string, _title: string>, NonArrestable: bool, Notional: bool, Readonly: bool, Region: string, Revision: int, Taxable: bool, Territory: string, Type: string>> {
+]: nothing -> oneof<record<PayCode: record<Benefit: bool, Code: string, Description: string, EffectiveDate: string, MetaData: record, NextRevisionDate: string, Niable: bool, NominalCode: record<_href: string, _rel: string, _title: string>, NonArrestable: bool, Notional: bool, Readonly: bool, Region: string, Revision: int, Taxable: bool, Territory: string, Type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -5796,7 +5803,6 @@ export def "get-pay-code-from-employer" [
 #
 # PATCH /Employer/{EmployerId}/PayCode/{PayCodeId}
 # operationId: PatchPayCode
-# --PayCode shape: {Benefit?: bool, Code?: string, Description?: string, EffectiveDate?: string, MetaData?: record, NextRevisionDate?: string, Niable?: bool, NominalCode?: record, NonArrestable?: bool, Notional?: bool, Readonly?: bool, Region?: "NotSet"|"England"|"Scotland"|"Wales", Revision?: int, Taxable?: bool, Territory?: "UnitedKingdom", Type?: "NotSet"|"Payment"|"Deduction"}
 export def "patch-pay-code" [
   employer_id: string
   pay_code_id: string
@@ -5812,7 +5818,7 @@ export def "patch-pay-code" [
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
   --pay-code: record # shape: {Benefit?: bool, Code?: string, Description?: string, EffectiveDate?: string, MetaData?: record, NextRevisionDate?: string, Niable?: bool, NominalCode?: record, NonArrestable?: bool, Notional?: bool, Readonly?: bool, Region?: "NotSet"|"England"|"Scotland"|"Wales", Revision?: int, Taxable?: bool, Territory?: "UnitedKingdom", Type?: "NotSet"|"Payment"|"Deduction"}
-]: any -> record<PayCode: record<Benefit: bool, Code: string, Description: string, EffectiveDate: string, MetaData: record, NextRevisionDate: string, Niable: bool, NominalCode: record<_href: string, _rel: string, _title: string>, NonArrestable: bool, Notional: bool, Readonly: bool, Region: string, Revision: int, Taxable: bool, Territory: string, Type: string>> {
+]: any -> oneof<record<PayCode: record<Benefit: bool, Code: string, Description: string, EffectiveDate: string, MetaData: record, NextRevisionDate: string, Niable: bool, NominalCode: record<_href: string, _rel: string, _title: string>, NonArrestable: bool, Notional: bool, Readonly: bool, Region: string, Revision: int, Taxable: bool, Territory: string, Type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5845,7 +5851,6 @@ export def "patch-pay-code" [
 #
 # PUT /Employer/{EmployerId}/PayCode/{PayCodeId}
 # operationId: PutPayCode
-# --PayCode shape: {Benefit?: bool, Code?: string, Description?: string, EffectiveDate?: string, MetaData?: record, NextRevisionDate?: string, Niable?: bool, NominalCode?: record, NonArrestable?: bool, Notional?: bool, Readonly?: bool, Region?: "NotSet"|"England"|"Scotland"|"Wales", Revision?: int, Taxable?: bool, Territory?: "UnitedKingdom", Type?: "NotSet"|"Payment"|"Deduction"}
 export def "put-pay-code" [
   employer_id: string
   pay_code_id: string
@@ -5861,7 +5866,7 @@ export def "put-pay-code" [
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
   --pay-code: record # shape: {Benefit?: bool, Code?: string, Description?: string, EffectiveDate?: string, MetaData?: record, NextRevisionDate?: string, Niable?: bool, NominalCode?: record, NonArrestable?: bool, Notional?: bool, Readonly?: bool, Region?: "NotSet"|"England"|"Scotland"|"Wales", Revision?: int, Taxable?: bool, Territory?: "UnitedKingdom", Type?: "NotSet"|"Payment"|"Deduction"}
-]: any -> record<PayCode: record<Benefit: bool, Code: string, Description: string, EffectiveDate: string, MetaData: record, NextRevisionDate: string, Niable: bool, NominalCode: record<_href: string, _rel: string, _title: string>, NonArrestable: bool, Notional: bool, Readonly: bool, Region: string, Revision: int, Taxable: bool, Territory: string, Type: string>> {
+]: any -> oneof<record<PayCode: record<Benefit: bool, Code: string, Description: string, EffectiveDate: string, MetaData: record, NextRevisionDate: string, Niable: bool, NominalCode: record<_href: string, _rel: string, _title: string>, NonArrestable: bool, Notional: bool, Readonly: bool, Region: string, Revision: int, Taxable: bool, Territory: string, Type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5955,7 +5960,7 @@ export def "get-pay-code-revision-by-number" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<PayCode: record<Benefit: bool, Code: string, Description: string, EffectiveDate: string, MetaData: record, NextRevisionDate: string, Niable: bool, NominalCode: record<_href: string, _rel: string, _title: string>, NonArrestable: bool, Notional: bool, Readonly: bool, Region: string, Revision: int, Taxable: bool, Territory: string, Type: string>> {
+]: nothing -> oneof<record<PayCode: record<Benefit: bool, Code: string, Description: string, EffectiveDate: string, MetaData: record, NextRevisionDate: string, Niable: bool, NominalCode: record<_href: string, _rel: string, _title: string>, NonArrestable: bool, Notional: bool, Readonly: bool, Region: string, Revision: int, Taxable: bool, Territory: string, Type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -6000,7 +6005,7 @@ export def "get-pay-code-revisions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -6091,7 +6096,7 @@ export def "get-tag-from-pay-code" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
+]: nothing -> oneof<record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -6137,7 +6142,7 @@ export def "put-pay-code-tag" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
+]: nothing -> oneof<record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -6182,7 +6187,7 @@ export def "get-tags-from-pay-code" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -6273,7 +6278,7 @@ export def "get-pay-code-by-effective-date" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<PayCode: record<Benefit: bool, Code: string, Description: string, EffectiveDate: string, MetaData: record, NextRevisionDate: string, Niable: bool, NominalCode: record<_href: string, _rel: string, _title: string>, NonArrestable: bool, Notional: bool, Readonly: bool, Region: string, Revision: int, Taxable: bool, Territory: string, Type: string>> {
+]: nothing -> oneof<record<PayCode: record<Benefit: bool, Code: string, Description: string, EffectiveDate: string, MetaData: record, NextRevisionDate: string, Niable: bool, NominalCode: record<_href: string, _rel: string, _title: string>, NonArrestable: bool, Notional: bool, Readonly: bool, Region: string, Revision: int, Taxable: bool, Territory: string, Type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -6317,7 +6322,7 @@ export def "get-pay-codes-from-employer" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -6346,7 +6351,6 @@ export def "get-pay-codes-from-employer" [
 #
 # POST /Employer/{EmployerId}/PayCodes
 # operationId: PostPayCode
-# --PayCode shape: {Benefit?: bool, Code?: string, Description?: string, EffectiveDate?: string, MetaData?: record, NextRevisionDate?: string, Niable?: bool, NominalCode?: record, NonArrestable?: bool, Notional?: bool, Readonly?: bool, Region?: "NotSet"|"England"|"Scotland"|"Wales", Revision?: int, Taxable?: bool, Territory?: "UnitedKingdom", Type?: "NotSet"|"Payment"|"Deduction"}
 export def "post-pay-code" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6361,7 +6365,7 @@ export def "post-pay-code" [
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
   --pay-code: record # shape: {Benefit?: bool, Code?: string, Description?: string, EffectiveDate?: string, MetaData?: record, NextRevisionDate?: string, Niable?: bool, NominalCode?: record, NonArrestable?: bool, Notional?: bool, Readonly?: bool, Region?: "NotSet"|"England"|"Scotland"|"Wales", Revision?: int, Taxable?: bool, Territory?: "UnitedKingdom", Type?: "NotSet"|"Payment"|"Deduction"}
-]: any -> record<Link: record<_href: string, _rel: string, _title: string>> {
+]: any -> oneof<record<Link: record<_href: string, _rel: string, _title: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6407,7 +6411,7 @@ export def "get-pay-codes-with-tag" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -6450,7 +6454,7 @@ export def "get-all-pay-code-tags" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -6493,7 +6497,7 @@ export def "get-pay-codes-by-effective-date" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -6581,7 +6585,7 @@ export def "get-pay-schedule-from-employer" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<PaySchedule: record<MetaData: record, Name: string, PayFrequency: string>> {
+]: nothing -> oneof<record<PaySchedule: record<MetaData: record, Name: string, PayFrequency: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -6611,7 +6615,6 @@ export def "get-pay-schedule-from-employer" [
 #
 # PUT /Employer/{EmployerId}/PaySchedule/{PayScheduleId}
 # operationId: PutPaySchedule
-# --PaySchedule shape: {MetaData?: record, Name?: string, PayFrequency?: "Weekly"|"Monthly"|"TwoWeekly"|"FourWeekly"|"Yearly"}
 export def "put-pay-schedule" [
   employer_id: string
   pay_schedule_id: string
@@ -6627,7 +6630,7 @@ export def "put-pay-schedule" [
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
   --pay-schedule: record # shape: {MetaData?: record, Name?: string, PayFrequency?: "Weekly"|"Monthly"|"TwoWeekly"|"FourWeekly"|"Yearly"}
-]: any -> record<PaySchedule: record<MetaData: record, Name: string, PayFrequency: string>> {
+]: any -> oneof<record<PaySchedule: record<MetaData: record, Name: string, PayFrequency: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6674,7 +6677,7 @@ export def "get-employees-from-pay-schedule" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -6719,7 +6722,7 @@ export def "get-employees-from-pay-schedule-on-effective-date" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -6811,7 +6814,7 @@ export def "get-pay-run-from-pay-schedule" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<PayRun: record<Executed: string, IsSupplementary: bool, PayFrequency: string, PaySchedule: record<_href: string, _rel: string, _title: string>, PaymentDate: string, PeriodEnd: string, PeriodStart: string, ProceedingPayRun: record<_href: string, _rel: string, _title: string>, Sequence: int, TaxPeriod: int, TaxYear: int>> {
+]: nothing -> oneof<record<PayRun: record<Executed: string, IsSupplementary: bool, PayFrequency: string, PaySchedule: record<_href: string, _rel: string, _title: string>, PaymentDate: string, PeriodEnd: string, PeriodStart: string, ProceedingPayRun: record<_href: string, _rel: string, _title: string>, Sequence: int, TaxPeriod: int, TaxYear: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -6857,7 +6860,7 @@ export def "get-ae-assessments-from-pay-run" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -6903,7 +6906,7 @@ export def "get-commentaries-from-pay-run" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -6998,7 +7001,7 @@ export def "get-commentary-from-pay-run-by-employee" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<Commentary: record<Created: string, Detail: string, Employee: record<_href: string, _rel: string, _title: string>, PayRun: record<_href: string, _rel: string, _title: string>>> {
+]: nothing -> oneof<record<Commentary: record<Created: string, Detail: string, Employee: record<_href: string, _rel: string, _title: string>, PayRun: record<_href: string, _rel: string, _title: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -7045,7 +7048,7 @@ export def "get-employees-from-pay-run" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -7091,7 +7094,7 @@ export def "get-journal-lines-from-pay-run" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -7137,7 +7140,7 @@ export def "get-pay-lines-from-pay-run" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -7183,7 +7186,7 @@ export def "get-report-lines-from-pay-run" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -7278,7 +7281,7 @@ export def "get-tag-from-pay-run" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
+]: nothing -> oneof<record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -7326,7 +7329,7 @@ export def "put-pay-run-tag" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
+]: nothing -> oneof<record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -7373,7 +7376,7 @@ export def "get-tags-from-pay-run" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -7418,7 +7421,7 @@ export def "get-pay-runs-from-pay-schedule" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -7463,7 +7466,7 @@ export def "get-pay-runs-with-tag" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -7508,7 +7511,7 @@ export def "get-all-pay-run-tags" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -7599,7 +7602,7 @@ export def "get-tag-from-pay-schedule" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
+]: nothing -> oneof<record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -7645,7 +7648,7 @@ export def "put-pay-schedule-tag" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
+]: nothing -> oneof<record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -7690,7 +7693,7 @@ export def "get-tags-from-pay-schedule" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -7733,7 +7736,7 @@ export def "get-pay-schedules-from-employer" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -7762,7 +7765,6 @@ export def "get-pay-schedules-from-employer" [
 #
 # POST /Employer/{EmployerId}/PaySchedules
 # operationId: PostPaySchedule
-# --PaySchedule shape: {MetaData?: record, Name?: string, PayFrequency?: "Weekly"|"Monthly"|"TwoWeekly"|"FourWeekly"|"Yearly"}
 export def "post-pay-schedule" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7777,7 +7779,7 @@ export def "post-pay-schedule" [
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
   --pay-schedule: record # shape: {MetaData?: record, Name?: string, PayFrequency?: "Weekly"|"Monthly"|"TwoWeekly"|"FourWeekly"|"Yearly"}
-]: any -> record<Link: record<_href: string, _rel: string, _title: string>> {
+]: any -> oneof<record<Link: record<_href: string, _rel: string, _title: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7823,7 +7825,7 @@ export def "get-pay-schedules-with-tag" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -7866,7 +7868,7 @@ export def "get-all-pay-schedule-tags" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -7953,7 +7955,7 @@ export def "get-pension-from-employer" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<Pension: record<AECompatible: bool, Certification: string, Code: string, ContributionDeductionDay: int, EffectiveDate: string, EmployeeContributionCash: float, EmployeeContributionPercent: float, EmployerContributionCash: float, EmployerContributionPercent: float, EmployerNiSaving: bool, EmployerNiSavingPercentage: float, Group: string, LowerThreshold: float, MetaData: record, NextRevisionDate: string, PensionablePayCodes: record<PayCode: list>, ProRataMethod: string, ProviderEmployerRef: string, ProviderName: string, QualifyingPayCodes: record<PayCode: list>, RasRoundingOverride: string, Revision: int, RoundingOption: string, SalarySacrifice: bool, SchemeName: string, SubGroup: string, TaxationMethod: string, UpperThreshold: float, UseAEThresholds: bool>> {
+]: nothing -> oneof<record<Pension: record<AECompatible: bool, Certification: string, Code: string, ContributionDeductionDay: int, EffectiveDate: string, EmployeeContributionCash: float, EmployeeContributionPercent: float, EmployerContributionCash: float, EmployerContributionPercent: float, EmployerNiSaving: bool, EmployerNiSavingPercentage: float, Group: string, LowerThreshold: float, MetaData: record, NextRevisionDate: string, PensionablePayCodes: record<PayCode: list>, ProRataMethod: string, ProviderEmployerRef: string, ProviderName: string, QualifyingPayCodes: record<PayCode: list>, RasRoundingOverride: string, Revision: int, RoundingOption: string, SalarySacrifice: bool, SchemeName: string, SubGroup: string, TaxationMethod: string, UpperThreshold: float, UseAEThresholds: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -7983,7 +7985,6 @@ export def "get-pension-from-employer" [
 #
 # PATCH /Employer/{EmployerId}/Pension/{PensionId}
 # operationId: PatchPension
-# --Pension shape: {AECompatible?: bool, Certification?: "NotSet"|"Set1"|"Set2"|"Set3", Code?: string, ContributionDeductionDay?: int, EffectiveDate?: string, EmployeeContributionCash?: float, EmployeeContributionPercent?: float, EmployerContributionCash?: float, EmployerContributionPercent?: float, EmployerNiSaving?: bool, EmployerNiSavingPercentage?: float, Group?: string, LowerThreshold?: float, MetaData?: record, NextRevisionDate?: string, PensionablePayCodes?: record, ... (13 more fields)}
 export def "patch-pension" [
   employer_id: string
   pension_id: string
@@ -7999,7 +8000,7 @@ export def "patch-pension" [
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
   --pension: record # shape: {AECompatible?: bool, Certification?: "NotSet"|"Set1"|"Set2"|"Set3", Code?: string, ContributionDeductionDay?: int, EffectiveDate?: string, EmployeeContributionCash?: float, EmployeeContributionPercent?: float, EmployerContributionCash?: float, EmployerContributionPercent?: float, EmployerNiSaving?: bool, EmployerNiSavingPercentage?: float, Group?: string, LowerThreshold?: float, MetaData?: record, NextRevisionDate?: string, PensionablePayCodes?: record, ... (13 more fields)}
-]: any -> record<Pension: record<AECompatible: bool, Certification: string, Code: string, ContributionDeductionDay: int, EffectiveDate: string, EmployeeContributionCash: float, EmployeeContributionPercent: float, EmployerContributionCash: float, EmployerContributionPercent: float, EmployerNiSaving: bool, EmployerNiSavingPercentage: float, Group: string, LowerThreshold: float, MetaData: record, NextRevisionDate: string, PensionablePayCodes: record<PayCode: list>, ProRataMethod: string, ProviderEmployerRef: string, ProviderName: string, QualifyingPayCodes: record<PayCode: list>, RasRoundingOverride: string, Revision: int, RoundingOption: string, SalarySacrifice: bool, SchemeName: string, SubGroup: string, TaxationMethod: string, UpperThreshold: float, UseAEThresholds: bool>> {
+]: any -> oneof<record<Pension: record<AECompatible: bool, Certification: string, Code: string, ContributionDeductionDay: int, EffectiveDate: string, EmployeeContributionCash: float, EmployeeContributionPercent: float, EmployerContributionCash: float, EmployerContributionPercent: float, EmployerNiSaving: bool, EmployerNiSavingPercentage: float, Group: string, LowerThreshold: float, MetaData: record, NextRevisionDate: string, PensionablePayCodes: record<PayCode: list>, ProRataMethod: string, ProviderEmployerRef: string, ProviderName: string, QualifyingPayCodes: record<PayCode: list>, RasRoundingOverride: string, Revision: int, RoundingOption: string, SalarySacrifice: bool, SchemeName: string, SubGroup: string, TaxationMethod: string, UpperThreshold: float, UseAEThresholds: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8032,7 +8033,6 @@ export def "patch-pension" [
 #
 # PUT /Employer/{EmployerId}/Pension/{PensionId}
 # operationId: PutPensionIntoEmployer
-# --Pension shape: {AECompatible?: bool, Certification?: "NotSet"|"Set1"|"Set2"|"Set3", Code?: string, ContributionDeductionDay?: int, EffectiveDate?: string, EmployeeContributionCash?: float, EmployeeContributionPercent?: float, EmployerContributionCash?: float, EmployerContributionPercent?: float, EmployerNiSaving?: bool, EmployerNiSavingPercentage?: float, Group?: string, LowerThreshold?: float, MetaData?: record, NextRevisionDate?: string, PensionablePayCodes?: record, ... (13 more fields)}
 export def "put-pension-into-employer" [
   employer_id: string
   pension_id: string
@@ -8048,7 +8048,7 @@ export def "put-pension-into-employer" [
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
   --pension: record # shape: {AECompatible?: bool, Certification?: "NotSet"|"Set1"|"Set2"|"Set3", Code?: string, ContributionDeductionDay?: int, EffectiveDate?: string, EmployeeContributionCash?: float, EmployeeContributionPercent?: float, EmployerContributionCash?: float, EmployerContributionPercent?: float, EmployerNiSaving?: bool, EmployerNiSavingPercentage?: float, Group?: string, LowerThreshold?: float, MetaData?: record, NextRevisionDate?: string, PensionablePayCodes?: record, ... (13 more fields)}
-]: any -> record<Pension: record<AECompatible: bool, Certification: string, Code: string, ContributionDeductionDay: int, EffectiveDate: string, EmployeeContributionCash: float, EmployeeContributionPercent: float, EmployerContributionCash: float, EmployerContributionPercent: float, EmployerNiSaving: bool, EmployerNiSavingPercentage: float, Group: string, LowerThreshold: float, MetaData: record, NextRevisionDate: string, PensionablePayCodes: record<PayCode: list>, ProRataMethod: string, ProviderEmployerRef: string, ProviderName: string, QualifyingPayCodes: record<PayCode: list>, RasRoundingOverride: string, Revision: int, RoundingOption: string, SalarySacrifice: bool, SchemeName: string, SubGroup: string, TaxationMethod: string, UpperThreshold: float, UseAEThresholds: bool>> {
+]: any -> oneof<record<Pension: record<AECompatible: bool, Certification: string, Code: string, ContributionDeductionDay: int, EffectiveDate: string, EmployeeContributionCash: float, EmployeeContributionPercent: float, EmployerContributionCash: float, EmployerContributionPercent: float, EmployerNiSaving: bool, EmployerNiSavingPercentage: float, Group: string, LowerThreshold: float, MetaData: record, NextRevisionDate: string, PensionablePayCodes: record<PayCode: list>, ProRataMethod: string, ProviderEmployerRef: string, ProviderName: string, QualifyingPayCodes: record<PayCode: list>, RasRoundingOverride: string, Revision: int, RoundingOption: string, SalarySacrifice: bool, SchemeName: string, SubGroup: string, TaxationMethod: string, UpperThreshold: float, UseAEThresholds: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8142,7 +8142,7 @@ export def "get-pension-revision-by-number" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<Pension: record<AECompatible: bool, Certification: string, Code: string, ContributionDeductionDay: int, EffectiveDate: string, EmployeeContributionCash: float, EmployeeContributionPercent: float, EmployerContributionCash: float, EmployerContributionPercent: float, EmployerNiSaving: bool, EmployerNiSavingPercentage: float, Group: string, LowerThreshold: float, MetaData: record, NextRevisionDate: string, PensionablePayCodes: record<PayCode: list>, ProRataMethod: string, ProviderEmployerRef: string, ProviderName: string, QualifyingPayCodes: record<PayCode: list>, RasRoundingOverride: string, Revision: int, RoundingOption: string, SalarySacrifice: bool, SchemeName: string, SubGroup: string, TaxationMethod: string, UpperThreshold: float, UseAEThresholds: bool>> {
+]: nothing -> oneof<record<Pension: record<AECompatible: bool, Certification: string, Code: string, ContributionDeductionDay: int, EffectiveDate: string, EmployeeContributionCash: float, EmployeeContributionPercent: float, EmployerContributionCash: float, EmployerContributionPercent: float, EmployerNiSaving: bool, EmployerNiSavingPercentage: float, Group: string, LowerThreshold: float, MetaData: record, NextRevisionDate: string, PensionablePayCodes: record<PayCode: list>, ProRataMethod: string, ProviderEmployerRef: string, ProviderName: string, QualifyingPayCodes: record<PayCode: list>, RasRoundingOverride: string, Revision: int, RoundingOption: string, SalarySacrifice: bool, SchemeName: string, SubGroup: string, TaxationMethod: string, UpperThreshold: float, UseAEThresholds: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -8187,7 +8187,7 @@ export def "get-pension-revisions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -8278,7 +8278,7 @@ export def "get-pension-by-effective-date" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<Pension: record<AECompatible: bool, Certification: string, Code: string, ContributionDeductionDay: int, EffectiveDate: string, EmployeeContributionCash: float, EmployeeContributionPercent: float, EmployerContributionCash: float, EmployerContributionPercent: float, EmployerNiSaving: bool, EmployerNiSavingPercentage: float, Group: string, LowerThreshold: float, MetaData: record, NextRevisionDate: string, PensionablePayCodes: record<PayCode: list>, ProRataMethod: string, ProviderEmployerRef: string, ProviderName: string, QualifyingPayCodes: record<PayCode: list>, RasRoundingOverride: string, Revision: int, RoundingOption: string, SalarySacrifice: bool, SchemeName: string, SubGroup: string, TaxationMethod: string, UpperThreshold: float, UseAEThresholds: bool>> {
+]: nothing -> oneof<record<Pension: record<AECompatible: bool, Certification: string, Code: string, ContributionDeductionDay: int, EffectiveDate: string, EmployeeContributionCash: float, EmployeeContributionPercent: float, EmployerContributionCash: float, EmployerContributionPercent: float, EmployerNiSaving: bool, EmployerNiSavingPercentage: float, Group: string, LowerThreshold: float, MetaData: record, NextRevisionDate: string, PensionablePayCodes: record<PayCode: list>, ProRataMethod: string, ProviderEmployerRef: string, ProviderName: string, QualifyingPayCodes: record<PayCode: list>, RasRoundingOverride: string, Revision: int, RoundingOption: string, SalarySacrifice: bool, SchemeName: string, SubGroup: string, TaxationMethod: string, UpperThreshold: float, UseAEThresholds: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -8322,7 +8322,7 @@ export def "get-pensions-from-employer" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -8351,7 +8351,6 @@ export def "get-pensions-from-employer" [
 #
 # POST /Employer/{EmployerId}/Pensions
 # operationId: PostPensionIntoEmployer
-# --Pension shape: {AECompatible?: bool, Certification?: "NotSet"|"Set1"|"Set2"|"Set3", Code?: string, ContributionDeductionDay?: int, EffectiveDate?: string, EmployeeContributionCash?: float, EmployeeContributionPercent?: float, EmployerContributionCash?: float, EmployerContributionPercent?: float, EmployerNiSaving?: bool, EmployerNiSavingPercentage?: float, Group?: string, LowerThreshold?: float, MetaData?: record, NextRevisionDate?: string, PensionablePayCodes?: record, ... (13 more fields)}
 export def "post-pension-into-employer" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8366,7 +8365,7 @@ export def "post-pension-into-employer" [
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
   --pension: record # shape: {AECompatible?: bool, Certification?: "NotSet"|"Set1"|"Set2"|"Set3", Code?: string, ContributionDeductionDay?: int, EffectiveDate?: string, EmployeeContributionCash?: float, EmployeeContributionPercent?: float, EmployerContributionCash?: float, EmployerContributionPercent?: float, EmployerNiSaving?: bool, EmployerNiSavingPercentage?: float, Group?: string, LowerThreshold?: float, MetaData?: record, NextRevisionDate?: string, PensionablePayCodes?: record, ... (13 more fields)}
-]: any -> record<Link: record<_href: string, _rel: string, _title: string>> {
+]: any -> oneof<record<Link: record<_href: string, _rel: string, _title: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8412,7 +8411,7 @@ export def "get-pensions-by-effective-date" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -8456,7 +8455,7 @@ export def "get-report-line-from-employer" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<ReportLine: record<Description: string, Generated: string, TaxMonth: int, TaxYear: int, Value: float>> {
+]: nothing -> oneof<record<ReportLine: record<Description: string, Generated: string, TaxMonth: int, TaxYear: int, Value: float>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -8499,7 +8498,7 @@ export def "get-report-lines-from-employer" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -8586,7 +8585,7 @@ export def "get-reporting-instruction-from-employer" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<ReportingInstruction: record<EndDate: string, StartDate: string, TaxMonth: int, TaxYear: int, Value: float>> {
+]: nothing -> oneof<record<ReportingInstruction: record<EndDate: string, StartDate: string, TaxMonth: int, TaxYear: int, Value: float>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -8616,7 +8615,6 @@ export def "get-reporting-instruction-from-employer" [
 #
 # PUT /Employer/{EmployerId}/ReportingInstruction/{ReportingInstructionId}
 # operationId: PutReportingInstruction
-# --ReportingInstruction shape: {EndDate?: string, StartDate?: string, TaxMonth?: int, TaxYear?: int, Value?: float}
 export def "put-reporting-instruction" [
   employer_id: string
   reporting_instruction_id: string
@@ -8632,7 +8630,7 @@ export def "put-reporting-instruction" [
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
   --reporting-instruction: record # shape: {EndDate?: string, StartDate?: string, TaxMonth?: int, TaxYear?: int, Value?: float}
-]: any -> record<ReportingInstruction: record<EndDate: string, StartDate: string, TaxMonth: int, TaxYear: int, Value: float>> {
+]: any -> oneof<record<ReportingInstruction: record<EndDate: string, StartDate: string, TaxMonth: int, TaxYear: int, Value: float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8678,7 +8676,7 @@ export def "get-reporting-instructions-from-employer" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -8707,7 +8705,6 @@ export def "get-reporting-instructions-from-employer" [
 #
 # POST /Employer/{EmployerId}/ReportingInstructions
 # operationId: PostReportingInstruction
-# --ReportingInstruction shape: {EndDate?: string, StartDate?: string, TaxMonth?: int, TaxYear?: int, Value?: float}
 export def "post-reporting-instruction" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8722,7 +8719,7 @@ export def "post-reporting-instruction" [
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
   --reporting-instruction: record # shape: {EndDate?: string, StartDate?: string, TaxMonth?: int, TaxYear?: int, Value?: float}
-]: any -> record<Link: record<_href: string, _rel: string, _title: string>> {
+]: any -> oneof<record<Link: record<_href: string, _rel: string, _title: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8812,7 +8809,7 @@ export def "get-employer-revision-by-number" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<Employer: record<Address: record<Address1: string, Address2: string, Address3: string, Address4: string, Country: string, Postcode: string>, ApprenticeshipLevyAllowance: float, AutoEnrolment: record<Pension: record, PostponementDate: string, PrimaryAddress: record, PrimaryEmail: string, PrimaryFirstName: string, PrimaryJobTitle: string, PrimaryLastName: string, PrimaryTelephone: string, ReEnrolmentDayOffset: int, ReEnrolmentMonthOffset: int, RecentOptOutReEnrolmentExcluded: bool, SecondaryAddress: record, SecondaryEmail: string, SecondaryFirstName: string, SecondaryJobTitle: string, SecondaryLastName: string, SecondaryTelephone: string, StagingDate: string>, BacsServiceUserNumber: string, BankAccount: record<AccountName: string, AccountNumber: string, BranchName: string, Reference: string, SortCode: string>, CalculateApprenticeshipLevy: bool, ClaimEmploymentAllowance: bool, ClaimSmallEmployerRelief: bool, EffectiveDate: string, HmrcSettings: record<AccountingOfficeRef: string, COTAXRef: string, ContactEmail: string, ContactFax: string, ContactFirstName: string, ContactLastName: string, ContactTelephone: string, EmploymentAllowanceOverride: float, Password: string, SAUTR: string, Sender: string, SenderId: string, StateAidSector: string, TaxOfficeNumber: string, TaxOfficeReference: string>, MetaData: record, Name: string, NextRevisionDate: string, Region: string, Revision: int, RuleExclusions: string, Territory: string>> {
+]: nothing -> oneof<record<Employer: record<Address: record<Address1: string, Address2: string, Address3: string, Address4: string, Country: string, Postcode: string>, ApprenticeshipLevyAllowance: float, AutoEnrolment: record<Pension: record, PostponementDate: string, PrimaryAddress: record, PrimaryEmail: string, PrimaryFirstName: string, PrimaryJobTitle: string, PrimaryLastName: string, PrimaryTelephone: string, ReEnrolmentDayOffset: int, ReEnrolmentMonthOffset: int, RecentOptOutReEnrolmentExcluded: bool, SecondaryAddress: record, SecondaryEmail: string, SecondaryFirstName: string, SecondaryJobTitle: string, SecondaryLastName: string, SecondaryTelephone: string, StagingDate: string>, BacsServiceUserNumber: string, BankAccount: record<AccountName: string, AccountNumber: string, BranchName: string, Reference: string, SortCode: string>, CalculateApprenticeshipLevy: bool, ClaimEmploymentAllowance: bool, ClaimSmallEmployerRelief: bool, EffectiveDate: string, HmrcSettings: record<AccountingOfficeRef: string, COTAXRef: string, ContactEmail: string, ContactFax: string, ContactFirstName: string, ContactLastName: string, ContactTelephone: string, EmploymentAllowanceOverride: float, Password: string, SAUTR: string, Sender: string, SenderId: string, StateAidSector: string, TaxOfficeNumber: string, TaxOfficeReference: string>, MetaData: record, Name: string, NextRevisionDate: string, Region: string, Revision: int, RuleExclusions: string, Territory: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -8899,7 +8896,7 @@ export def "get-employer-revisions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -8941,7 +8938,7 @@ export def "get-employer-revision-summaries" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -9028,7 +9025,7 @@ export def "get-rti-transaction-from-employer" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<RtiTransactionBase: record<EmployerCore: record<_href: string, _rel: string, _title: string>, RequestData: string, ResponseData: string, RtiType: string, TaxYear: int, Timestamp: string, TransactionStatus: string, TransmissionDate: string>> {
+]: nothing -> oneof<record<RtiTransactionBase: record<EmployerCore: record<_href: string, _rel: string, _title: string>, RequestData: string, ResponseData: string, RtiType: string, TaxYear: int, Timestamp: string, TransactionStatus: string, TransmissionDate: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -9072,7 +9069,7 @@ export def "get-rti-transaction-summary-from-employer" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<RtiTransactionBase: record<EmployerCore: record<_href: string, _rel: string, _title: string>, RequestData: string, ResponseData: string, RtiType: string, TaxYear: int, Timestamp: string, TransactionStatus: string, TransmissionDate: string>> {
+]: nothing -> oneof<record<RtiTransactionBase: record<EmployerCore: record<_href: string, _rel: string, _title: string>, RequestData: string, ResponseData: string, RtiType: string, TaxYear: int, Timestamp: string, TransactionStatus: string, TransmissionDate: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -9163,7 +9160,7 @@ export def "get-tag-from-rti-transaction" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
+]: nothing -> oneof<record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -9209,7 +9206,7 @@ export def "put-rti-transaction-tag" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
+]: nothing -> oneof<record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -9254,7 +9251,7 @@ export def "get-tags-from-rti-transaction" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -9297,7 +9294,7 @@ export def "get-rti-transactions-from-employer" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -9339,7 +9336,7 @@ export def "get-rti-transaction-summaries-from-employer" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -9382,7 +9379,7 @@ export def "get-rti-transactions-with-tag" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -9425,7 +9422,7 @@ export def "get-all-rti-transaction-tags" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -9512,7 +9509,7 @@ export def "get-employer-secret" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<EmployerSecret: record<Created: string, Name: string, Value: string>> {
+]: nothing -> oneof<record<EmployerSecret: record<Created: string, Name: string, Value: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -9556,7 +9553,7 @@ export def "put-employer-secret" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<EmployerSecret: record<Created: string, Name: string, Value: string>> {
+]: nothing -> oneof<record<EmployerSecret: record<Created: string, Name: string, Value: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -9599,7 +9596,7 @@ export def "get-employer-secrets" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -9641,7 +9638,7 @@ export def "post-employer-secret" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<Link: record<_href: string, _rel: string, _title: string>> {
+]: nothing -> oneof<record<Link: record<_href: string, _rel: string, _title: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -9728,7 +9725,7 @@ export def "get-sub-contractor-from-employer" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<SubContractor: record<Address: record<Address1: string, Address2: string, Address3: string, Address4: string, Country: string, Postcode: string>, BankAccount: record<AccountName: string, AccountNumber: string, BranchName: string, Reference: string, SortCode: string>, BusinessType: string, CompanyName: string, CompanyRegistrationNumber: string, Deactivated: bool, EffectiveDate: string, FirstName: string, Initials: string, LastName: string, MetaData: record, MiddleName: string, NextRevisionDate: string, NiNumber: string, PartnershipName: string, PartnershipUniqueTaxReference: string, PayFrequency: string, PaymentMethod: string, Region: string, Revision: int, TaxationStatus: string, Telephone: string, Territory: string, Title: string, TradingName: string, UniqueTaxReference: string, VatRegistered: bool, VatRegistrationNumber: string, VerificationDate: string, VerificationNumber: string, WorksNumber: string>> {
+]: nothing -> oneof<record<SubContractor: record<Address: record<Address1: string, Address2: string, Address3: string, Address4: string, Country: string, Postcode: string>, BankAccount: record<AccountName: string, AccountNumber: string, BranchName: string, Reference: string, SortCode: string>, BusinessType: string, CompanyName: string, CompanyRegistrationNumber: string, Deactivated: bool, EffectiveDate: string, FirstName: string, Initials: string, LastName: string, MetaData: record, MiddleName: string, NextRevisionDate: string, NiNumber: string, PartnershipName: string, PartnershipUniqueTaxReference: string, PayFrequency: string, PaymentMethod: string, Region: string, Revision: int, TaxationStatus: string, Telephone: string, Territory: string, Title: string, TradingName: string, UniqueTaxReference: string, VatRegistered: bool, VatRegistrationNumber: string, VerificationDate: string, VerificationNumber: string, WorksNumber: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -9758,7 +9755,6 @@ export def "get-sub-contractor-from-employer" [
 #
 # PATCH /Employer/{EmployerId}/SubContractor/{SubContractorId}
 # operationId: PatchSubContractor
-# --SubContractor shape: {Address?: record, BankAccount?: record, BusinessType?: "SoleTrader"|"Company"|"Partnership"|"Trust", CompanyName?: string, CompanyRegistrationNumber?: string, Deactivated?: bool, EffectiveDate?: string, FirstName?: string, Initials?: string, LastName?: string, MetaData?: record, MiddleName?: string, NextRevisionDate?: string, NiNumber?: string, PartnershipName?: string, PartnershipUniqueTaxReference?: string, PayFrequency?: "Monthly"|"Weekly", ... (14 more fields)}
 export def "patch-sub-contractor" [
   employer_id: string
   sub_contractor_id: string
@@ -9774,7 +9770,7 @@ export def "patch-sub-contractor" [
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
   --sub-contractor: record # shape: {Address?: record, BankAccount?: record, BusinessType?: "SoleTrader"|"Company"|"Partnership"|"Trust", CompanyName?: string, CompanyRegistrationNumber?: string, Deactivated?: bool, EffectiveDate?: string, FirstName?: string, Initials?: string, LastName?: string, MetaData?: record, MiddleName?: string, NextRevisionDate?: string, NiNumber?: string, PartnershipName?: string, PartnershipUniqueTaxReference?: string, PayFrequency?: "Monthly"|"Weekly", ... (14 more fields)}
-]: any -> record<SubContractor: record<Address: record<Address1: string, Address2: string, Address3: string, Address4: string, Country: string, Postcode: string>, BankAccount: record<AccountName: string, AccountNumber: string, BranchName: string, Reference: string, SortCode: string>, BusinessType: string, CompanyName: string, CompanyRegistrationNumber: string, Deactivated: bool, EffectiveDate: string, FirstName: string, Initials: string, LastName: string, MetaData: record, MiddleName: string, NextRevisionDate: string, NiNumber: string, PartnershipName: string, PartnershipUniqueTaxReference: string, PayFrequency: string, PaymentMethod: string, Region: string, Revision: int, TaxationStatus: string, Telephone: string, Territory: string, Title: string, TradingName: string, UniqueTaxReference: string, VatRegistered: bool, VatRegistrationNumber: string, VerificationDate: string, VerificationNumber: string, WorksNumber: string>> {
+]: any -> oneof<record<SubContractor: record<Address: record<Address1: string, Address2: string, Address3: string, Address4: string, Country: string, Postcode: string>, BankAccount: record<AccountName: string, AccountNumber: string, BranchName: string, Reference: string, SortCode: string>, BusinessType: string, CompanyName: string, CompanyRegistrationNumber: string, Deactivated: bool, EffectiveDate: string, FirstName: string, Initials: string, LastName: string, MetaData: record, MiddleName: string, NextRevisionDate: string, NiNumber: string, PartnershipName: string, PartnershipUniqueTaxReference: string, PayFrequency: string, PaymentMethod: string, Region: string, Revision: int, TaxationStatus: string, Telephone: string, Territory: string, Title: string, TradingName: string, UniqueTaxReference: string, VatRegistered: bool, VatRegistrationNumber: string, VerificationDate: string, VerificationNumber: string, WorksNumber: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9807,7 +9803,6 @@ export def "patch-sub-contractor" [
 #
 # PUT /Employer/{EmployerId}/SubContractor/{SubContractorId}
 # operationId: PutSubContractorIntoEmployer
-# --SubContractor shape: {Address?: record, BankAccount?: record, BusinessType?: "SoleTrader"|"Company"|"Partnership"|"Trust", CompanyName?: string, CompanyRegistrationNumber?: string, Deactivated?: bool, EffectiveDate?: string, FirstName?: string, Initials?: string, LastName?: string, MetaData?: record, MiddleName?: string, NextRevisionDate?: string, NiNumber?: string, PartnershipName?: string, PartnershipUniqueTaxReference?: string, PayFrequency?: "Monthly"|"Weekly", ... (14 more fields)}
 export def "put-sub-contractor-into-employer" [
   employer_id: string
   sub_contractor_id: string
@@ -9823,7 +9818,7 @@ export def "put-sub-contractor-into-employer" [
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
   --sub-contractor: record # shape: {Address?: record, BankAccount?: record, BusinessType?: "SoleTrader"|"Company"|"Partnership"|"Trust", CompanyName?: string, CompanyRegistrationNumber?: string, Deactivated?: bool, EffectiveDate?: string, FirstName?: string, Initials?: string, LastName?: string, MetaData?: record, MiddleName?: string, NextRevisionDate?: string, NiNumber?: string, PartnershipName?: string, PartnershipUniqueTaxReference?: string, PayFrequency?: "Monthly"|"Weekly", ... (14 more fields)}
-]: any -> record<SubContractor: record<Address: record<Address1: string, Address2: string, Address3: string, Address4: string, Country: string, Postcode: string>, BankAccount: record<AccountName: string, AccountNumber: string, BranchName: string, Reference: string, SortCode: string>, BusinessType: string, CompanyName: string, CompanyRegistrationNumber: string, Deactivated: bool, EffectiveDate: string, FirstName: string, Initials: string, LastName: string, MetaData: record, MiddleName: string, NextRevisionDate: string, NiNumber: string, PartnershipName: string, PartnershipUniqueTaxReference: string, PayFrequency: string, PaymentMethod: string, Region: string, Revision: int, TaxationStatus: string, Telephone: string, Territory: string, Title: string, TradingName: string, UniqueTaxReference: string, VatRegistered: bool, VatRegistrationNumber: string, VerificationDate: string, VerificationNumber: string, WorksNumber: string>> {
+]: any -> oneof<record<SubContractor: record<Address: record<Address1: string, Address2: string, Address3: string, Address4: string, Country: string, Postcode: string>, BankAccount: record<AccountName: string, AccountNumber: string, BranchName: string, Reference: string, SortCode: string>, BusinessType: string, CompanyName: string, CompanyRegistrationNumber: string, Deactivated: bool, EffectiveDate: string, FirstName: string, Initials: string, LastName: string, MetaData: record, MiddleName: string, NextRevisionDate: string, NiNumber: string, PartnershipName: string, PartnershipUniqueTaxReference: string, PayFrequency: string, PaymentMethod: string, Region: string, Revision: int, TaxationStatus: string, Telephone: string, Territory: string, Title: string, TradingName: string, UniqueTaxReference: string, VatRegistered: bool, VatRegistrationNumber: string, VerificationDate: string, VerificationNumber: string, WorksNumber: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9917,7 +9912,7 @@ export def "get-cis-instruction-from-sub-contractor" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<CisInstruction: record<CisLineTag: string, CisLineType: string, Description: string, PayFrequency: string, PeriodEnd: int, PeriodStart: int, TaxYearEnd: int, TaxYearStart: int, UOM: string, Units: float, VAT: float, Value: float>> {
+]: nothing -> oneof<record<CisInstruction: record<CisLineTag: string, CisLineType: string, Description: string, PayFrequency: string, PeriodEnd: int, PeriodStart: int, TaxYearEnd: int, TaxYearStart: int, UOM: string, Units: float, VAT: float, Value: float>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -9963,7 +9958,7 @@ export def "patch-cis-instruction" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<CisInstruction: record<CisLineTag: string, CisLineType: string, Description: string, PayFrequency: string, PeriodEnd: int, PeriodStart: int, TaxYearEnd: int, TaxYearStart: int, UOM: string, Units: float, VAT: float, Value: float>> {
+]: nothing -> oneof<record<CisInstruction: record<CisLineTag: string, CisLineType: string, Description: string, PayFrequency: string, PeriodEnd: int, PeriodStart: int, TaxYearEnd: int, TaxYearStart: int, UOM: string, Units: float, VAT: float, Value: float>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -9994,7 +9989,6 @@ export def "patch-cis-instruction" [
 #
 # PUT /Employer/{EmployerId}/SubContractor/{SubContractorId}/CisInstruction/{CisInstructionId}
 # operationId: PutCisInstructionIntoSubContractor
-# --CisInstruction shape: {CisLineTag?: string, CisLineType?: string, Description?: string, PayFrequency?: "Monthly"|"Weekly", PeriodEnd?: int, PeriodStart?: int, TaxYearEnd?: int, TaxYearStart?: int, UOM?: "NotSet"|"Minute"|"Hour"|"Day"|"Week"|"Month"|"Year"|"Unit", Units?: float, VAT?: float, Value?: float}
 export def "put-cis-instruction-into-sub-contractor" [
   employer_id: string
   sub_contractor_id: string
@@ -10011,7 +10005,7 @@ export def "put-cis-instruction-into-sub-contractor" [
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
   --cis-instruction: record # shape: {CisLineTag?: string, CisLineType?: string, Description?: string, PayFrequency?: "Monthly"|"Weekly", PeriodEnd?: int, PeriodStart?: int, TaxYearEnd?: int, TaxYearStart?: int, UOM?: "NotSet"|"Minute"|"Hour"|"Day"|"Week"|"Month"|"Year"|"Unit", Units?: float, VAT?: float, Value?: float}
-]: any -> record<CisInstruction: record<CisLineTag: string, CisLineType: string, Description: string, PayFrequency: string, PeriodEnd: int, PeriodStart: int, TaxYearEnd: int, TaxYearStart: int, UOM: string, Units: float, VAT: float, Value: float>> {
+]: any -> oneof<record<CisInstruction: record<CisLineTag: string, CisLineType: string, Description: string, PayFrequency: string, PeriodEnd: int, PeriodStart: int, TaxYearEnd: int, TaxYearStart: int, UOM: string, Units: float, VAT: float, Value: float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10109,7 +10103,7 @@ export def "get-tag-from-cis-instruction" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
+]: nothing -> oneof<record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -10157,7 +10151,7 @@ export def "put-cis-instruction-tag" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
+]: nothing -> oneof<record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -10204,7 +10198,7 @@ export def "get-tags-from-cis-instruction" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -10249,7 +10243,7 @@ export def "get-cis-instructions-from-sub-contractor" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -10279,7 +10273,6 @@ export def "get-cis-instructions-from-sub-contractor" [
 #
 # POST /Employer/{EmployerId}/SubContractor/{SubContractorId}/CisInstructions
 # operationId: PostCisInstructionIntoSubContractor
-# --CisInstruction shape: {CisLineTag?: string, CisLineType?: string, Description?: string, PayFrequency?: "Monthly"|"Weekly", PeriodEnd?: int, PeriodStart?: int, TaxYearEnd?: int, TaxYearStart?: int, UOM?: "NotSet"|"Minute"|"Hour"|"Day"|"Week"|"Month"|"Year"|"Unit", Units?: float, VAT?: float, Value?: float}
 export def "post-cis-instruction-into-sub-contractor" [
   employer_id: string
   sub_contractor_id: string
@@ -10295,7 +10288,7 @@ export def "post-cis-instruction-into-sub-contractor" [
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
   --cis-instruction: record # shape: {CisLineTag?: string, CisLineType?: string, Description?: string, PayFrequency?: "Monthly"|"Weekly", PeriodEnd?: int, PeriodStart?: int, TaxYearEnd?: int, TaxYearStart?: int, UOM?: "NotSet"|"Minute"|"Hour"|"Day"|"Week"|"Month"|"Year"|"Unit", Units?: float, VAT?: float, Value?: float}
-]: any -> record<Link: record<_href: string, _rel: string, _title: string>> {
+]: any -> oneof<record<Link: record<_href: string, _rel: string, _title: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10343,7 +10336,7 @@ export def "get-cis-instructions-with-tag" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -10388,7 +10381,7 @@ export def "get-all-cis-instruction-tags" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -10479,7 +10472,7 @@ export def "get-cis-line-from-sub-contractor" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<CisLine: record<CisDeduction: float, CisLineType: string, Description: string, Generated: string, GrossPay: float, NominalCodeKey: string, PayFrequency: string, TaxMonth: int, TaxPeriod: int, TaxTreatment: string, TaxYear: int, UOM: string, UnitRate: float, Units: float, VAT: float>> {
+]: nothing -> oneof<record<CisLine: record<CisDeduction: float, CisLineType: string, Description: string, Generated: string, GrossPay: float, NominalCodeKey: string, PayFrequency: string, TaxMonth: int, TaxPeriod: int, TaxTreatment: string, TaxYear: int, UOM: string, UnitRate: float, Units: float, VAT: float>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -10574,7 +10567,7 @@ export def "get-tag-from-cis-line" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
+]: nothing -> oneof<record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -10622,7 +10615,7 @@ export def "put-cis-line-tag" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
+]: nothing -> oneof<record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -10669,7 +10662,7 @@ export def "get-tags-from-cis-line" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -10714,7 +10707,7 @@ export def "get-cis-lines-from-sub-contractor" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -10759,7 +10752,7 @@ export def "get-cis-lines-with-tag" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -10804,7 +10797,7 @@ export def "get-all-cis-line-tags" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -10848,7 +10841,7 @@ export def "get-journal-lines-from-sub-contractor" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -10939,7 +10932,7 @@ export def "get-sub-contractor-revision-by-number" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<SubContractor: record<Address: record<Address1: string, Address2: string, Address3: string, Address4: string, Country: string, Postcode: string>, BankAccount: record<AccountName: string, AccountNumber: string, BranchName: string, Reference: string, SortCode: string>, BusinessType: string, CompanyName: string, CompanyRegistrationNumber: string, Deactivated: bool, EffectiveDate: string, FirstName: string, Initials: string, LastName: string, MetaData: record, MiddleName: string, NextRevisionDate: string, NiNumber: string, PartnershipName: string, PartnershipUniqueTaxReference: string, PayFrequency: string, PaymentMethod: string, Region: string, Revision: int, TaxationStatus: string, Telephone: string, Territory: string, Title: string, TradingName: string, UniqueTaxReference: string, VatRegistered: bool, VatRegistrationNumber: string, VerificationDate: string, VerificationNumber: string, WorksNumber: string>> {
+]: nothing -> oneof<record<SubContractor: record<Address: record<Address1: string, Address2: string, Address3: string, Address4: string, Country: string, Postcode: string>, BankAccount: record<AccountName: string, AccountNumber: string, BranchName: string, Reference: string, SortCode: string>, BusinessType: string, CompanyName: string, CompanyRegistrationNumber: string, Deactivated: bool, EffectiveDate: string, FirstName: string, Initials: string, LastName: string, MetaData: record, MiddleName: string, NextRevisionDate: string, NiNumber: string, PartnershipName: string, PartnershipUniqueTaxReference: string, PayFrequency: string, PaymentMethod: string, Region: string, Revision: int, TaxationStatus: string, Telephone: string, Territory: string, Title: string, TradingName: string, UniqueTaxReference: string, VatRegistered: bool, VatRegistrationNumber: string, VerificationDate: string, VerificationNumber: string, WorksNumber: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -10984,7 +10977,7 @@ export def "get-sub-contractor-revisions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -11075,7 +11068,7 @@ export def "get-tag-from-sub-contractor" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
+]: nothing -> oneof<record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -11121,7 +11114,7 @@ export def "put-sub-contractor-tag" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
+]: nothing -> oneof<record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -11168,7 +11161,7 @@ export def "get-tag-from-sub-contractor-revision" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
+]: nothing -> oneof<record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -11214,7 +11207,7 @@ export def "get-tags-from-sub-contractor" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -11259,7 +11252,7 @@ export def "get-tags-from-sub-contractor-revision" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -11351,7 +11344,7 @@ export def "get-sub-contractor-by-effective-date" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<SubContractor: record<Address: record<Address1: string, Address2: string, Address3: string, Address4: string, Country: string, Postcode: string>, BankAccount: record<AccountName: string, AccountNumber: string, BranchName: string, Reference: string, SortCode: string>, BusinessType: string, CompanyName: string, CompanyRegistrationNumber: string, Deactivated: bool, EffectiveDate: string, FirstName: string, Initials: string, LastName: string, MetaData: record, MiddleName: string, NextRevisionDate: string, NiNumber: string, PartnershipName: string, PartnershipUniqueTaxReference: string, PayFrequency: string, PaymentMethod: string, Region: string, Revision: int, TaxationStatus: string, Telephone: string, Territory: string, Title: string, TradingName: string, UniqueTaxReference: string, VatRegistered: bool, VatRegistrationNumber: string, VerificationDate: string, VerificationNumber: string, WorksNumber: string>> {
+]: nothing -> oneof<record<SubContractor: record<Address: record<Address1: string, Address2: string, Address3: string, Address4: string, Country: string, Postcode: string>, BankAccount: record<AccountName: string, AccountNumber: string, BranchName: string, Reference: string, SortCode: string>, BusinessType: string, CompanyName: string, CompanyRegistrationNumber: string, Deactivated: bool, EffectiveDate: string, FirstName: string, Initials: string, LastName: string, MetaData: record, MiddleName: string, NextRevisionDate: string, NiNumber: string, PartnershipName: string, PartnershipUniqueTaxReference: string, PayFrequency: string, PaymentMethod: string, Region: string, Revision: int, TaxationStatus: string, Telephone: string, Territory: string, Title: string, TradingName: string, UniqueTaxReference: string, VatRegistered: bool, VatRegistrationNumber: string, VerificationDate: string, VerificationNumber: string, WorksNumber: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -11395,7 +11388,7 @@ export def "get-sub-contractors-from-employer" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -11424,7 +11417,6 @@ export def "get-sub-contractors-from-employer" [
 #
 # POST /Employer/{EmployerId}/SubContractors
 # operationId: PostSubContractorIntoEmployer
-# --SubContractor shape: {Address?: record, BankAccount?: record, BusinessType?: "SoleTrader"|"Company"|"Partnership"|"Trust", CompanyName?: string, CompanyRegistrationNumber?: string, Deactivated?: bool, EffectiveDate?: string, FirstName?: string, Initials?: string, LastName?: string, MetaData?: record, MiddleName?: string, NextRevisionDate?: string, NiNumber?: string, PartnershipName?: string, PartnershipUniqueTaxReference?: string, PayFrequency?: "Monthly"|"Weekly", ... (14 more fields)}
 export def "post-sub-contractor-into-employer" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11439,7 +11431,7 @@ export def "post-sub-contractor-into-employer" [
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
   --sub-contractor: record # shape: {Address?: record, BankAccount?: record, BusinessType?: "SoleTrader"|"Company"|"Partnership"|"Trust", CompanyName?: string, CompanyRegistrationNumber?: string, Deactivated?: bool, EffectiveDate?: string, FirstName?: string, Initials?: string, LastName?: string, MetaData?: record, MiddleName?: string, NextRevisionDate?: string, NiNumber?: string, PartnershipName?: string, PartnershipUniqueTaxReference?: string, PayFrequency?: "Monthly"|"Weekly", ... (14 more fields)}
-]: any -> record<Link: record<_href: string, _rel: string, _title: string>> {
+]: any -> oneof<record<Link: record<_href: string, _rel: string, _title: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11485,7 +11477,7 @@ export def "get-sub-contractors-with-tag" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -11528,7 +11520,7 @@ export def "get-all-sub-contractor-tags" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -11571,7 +11563,7 @@ export def "get-sub-contractors-by-effective-date" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -11701,7 +11693,7 @@ export def "get-tag-from-employer" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
+]: nothing -> oneof<record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -11745,7 +11737,7 @@ export def "put-employer-tag" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
+]: nothing -> oneof<record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -11790,7 +11782,7 @@ export def "get-tag-from-employer-revision" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
+]: nothing -> oneof<record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -11834,7 +11826,7 @@ export def "get-tags-from-employer" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -11877,7 +11869,7 @@ export def "get-tags-from-employer-revision" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -12056,7 +12048,7 @@ export def "get-tag-from-third-party-transaction" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
+]: nothing -> oneof<record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -12102,7 +12094,7 @@ export def "put-third-party-transaction-tag" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
+]: nothing -> oneof<record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -12147,7 +12139,7 @@ export def "get-tags-from-third-party-transaction" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -12190,7 +12182,7 @@ export def "get-third-party-transactions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -12233,7 +12225,7 @@ export def "get-all-third-party-transactions-with-tag" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -12276,7 +12268,7 @@ export def "get-all-third-party-transaction-tags" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -12363,7 +12355,7 @@ export def "get-employer-by-effective-date" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<Employer: record<Address: record<Address1: string, Address2: string, Address3: string, Address4: string, Country: string, Postcode: string>, ApprenticeshipLevyAllowance: float, AutoEnrolment: record<Pension: record, PostponementDate: string, PrimaryAddress: record, PrimaryEmail: string, PrimaryFirstName: string, PrimaryJobTitle: string, PrimaryLastName: string, PrimaryTelephone: string, ReEnrolmentDayOffset: int, ReEnrolmentMonthOffset: int, RecentOptOutReEnrolmentExcluded: bool, SecondaryAddress: record, SecondaryEmail: string, SecondaryFirstName: string, SecondaryJobTitle: string, SecondaryLastName: string, SecondaryTelephone: string, StagingDate: string>, BacsServiceUserNumber: string, BankAccount: record<AccountName: string, AccountNumber: string, BranchName: string, Reference: string, SortCode: string>, CalculateApprenticeshipLevy: bool, ClaimEmploymentAllowance: bool, ClaimSmallEmployerRelief: bool, EffectiveDate: string, HmrcSettings: record<AccountingOfficeRef: string, COTAXRef: string, ContactEmail: string, ContactFax: string, ContactFirstName: string, ContactLastName: string, ContactTelephone: string, EmploymentAllowanceOverride: float, Password: string, SAUTR: string, Sender: string, SenderId: string, StateAidSector: string, TaxOfficeNumber: string, TaxOfficeReference: string>, MetaData: record, Name: string, NextRevisionDate: string, Region: string, Revision: int, RuleExclusions: string, Territory: string>> {
+]: nothing -> oneof<record<Employer: record<Address: record<Address1: string, Address2: string, Address3: string, Address4: string, Country: string, Postcode: string>, ApprenticeshipLevyAllowance: float, AutoEnrolment: record<Pension: record, PostponementDate: string, PrimaryAddress: record, PrimaryEmail: string, PrimaryFirstName: string, PrimaryJobTitle: string, PrimaryLastName: string, PrimaryTelephone: string, ReEnrolmentDayOffset: int, ReEnrolmentMonthOffset: int, RecentOptOutReEnrolmentExcluded: bool, SecondaryAddress: record, SecondaryEmail: string, SecondaryFirstName: string, SecondaryJobTitle: string, SecondaryLastName: string, SecondaryTelephone: string, StagingDate: string>, BacsServiceUserNumber: string, BankAccount: record<AccountName: string, AccountNumber: string, BranchName: string, Reference: string, SortCode: string>, CalculateApprenticeshipLevy: bool, ClaimEmploymentAllowance: bool, ClaimSmallEmployerRelief: bool, EffectiveDate: string, HmrcSettings: record<AccountingOfficeRef: string, COTAXRef: string, ContactEmail: string, ContactFax: string, ContactFirstName: string, ContactLastName: string, ContactTelephone: string, EmploymentAllowanceOverride: float, Password: string, SAUTR: string, Sender: string, SenderId: string, StateAidSector: string, TaxOfficeNumber: string, TaxOfficeReference: string>, MetaData: record, Name: string, NextRevisionDate: string, Region: string, Revision: int, RuleExclusions: string, Territory: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -12449,7 +12441,7 @@ export def "get-employers" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let authorization = ($authorization | default "Auto")
@@ -12477,7 +12469,6 @@ export def "get-employers" [
 #
 # POST /Employers
 # operationId: PostEmployer
-# --Employer shape: {Address?: record, ApprenticeshipLevyAllowance?: float, AutoEnrolment?: record, BacsServiceUserNumber?: string, BankAccount?: record, CalculateApprenticeshipLevy?: bool, ClaimEmploymentAllowance?: bool, ClaimSmallEmployerRelief?: bool, EffectiveDate?: string, HmrcSettings?: record, MetaData?: record, Name?: string, NextRevisionDate?: string, Region?: "NotSet"|"England"|"Scotland"|"Wales", Revision?: int, ... (2 more fields)}
 export def "post-employer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12491,7 +12482,7 @@ export def "post-employer" [
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
   --employer: record # shape: {Address?: record, ApprenticeshipLevyAllowance?: float, AutoEnrolment?: record, BacsServiceUserNumber?: string, BankAccount?: record, CalculateApprenticeshipLevy?: bool, ClaimEmploymentAllowance?: bool, ClaimSmallEmployerRelief?: bool, EffectiveDate?: string, HmrcSettings?: record, MetaData?: record, Name?: string, NextRevisionDate?: string, Region?: "NotSet"|"England"|"Scotland"|"Wales", Revision?: int, ... (2 more fields)}
-]: any -> record<Link: record<_href: string, _rel: string, _title: string>> {
+]: any -> oneof<record<Link: record<_href: string, _rel: string, _title: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12534,7 +12525,7 @@ export def "get-employer-summaries" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let authorization = ($authorization | default "Auto")
@@ -12575,7 +12566,7 @@ export def "get-employers-with-tag" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tag_id | is-empty) { error make --unspanned { msg: "path parameter 'TagId' must be non-empty" } }
@@ -12616,7 +12607,7 @@ export def "get-all-employer-tags" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let authorization = ($authorization | default "Auto")
@@ -12657,7 +12648,7 @@ export def "get-employers-by-effective-date" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($effective_date | is-empty) { error make --unspanned { msg: "path parameter 'EffectiveDate' must be non-empty" } }
@@ -12699,7 +12690,7 @@ export def "get-employer-summaries-by-effective-date" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($effective_date | is-empty) { error make --unspanned { msg: "path parameter 'EffectiveDate' must be non-empty" } }
@@ -12738,7 +12729,7 @@ export def "get-health-check" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<HealthCheck: record<Info: string, Version: string>> {
+]: nothing -> oneof<record<HealthCheck: record<Info: string, Version: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Healthcheck" $auth.query)
@@ -12774,7 +12765,7 @@ export def "get-batch-jobs" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let authorization = ($authorization | default "Auto")
@@ -12802,7 +12793,6 @@ export def "get-batch-jobs" [
 #
 # POST /Jobs/Batch
 # operationId: PostNewBatchJob
-# --BatchJobInstruction shape: {HoldingDate?: string, Instructions?: record, ValidateOnly?: bool}
 export def "post-new-batch-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12816,7 +12806,7 @@ export def "post-new-batch-job" [
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
   --batch-job-instruction: record # shape: {HoldingDate?: string, Instructions?: record, ValidateOnly?: bool}
-]: any -> record<Link: record<_href: string, _rel: string, _title: string>> {
+]: any -> oneof<record<Link: record<_href: string, _rel: string, _title: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12902,7 +12892,7 @@ export def "get-batch-job-info" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<JobInfo: record<Created: string, EmployerKey: string, Errors: record<Error: list>, HoldingDate: string, JobId: string, JobStatus: string, JobType: string, LastUpdated: string, Progress: float>> {
+]: nothing -> oneof<record<JobInfo: record<Created: string, EmployerKey: string, Errors: record<Error: list>, HoldingDate: string, JobId: string, JobStatus: string, JobType: string, LastUpdated: string, Progress: float>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'JobId' must be non-empty" } }
@@ -13027,7 +13017,7 @@ export def "get-cis-jobs" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let authorization = ($authorization | default "Auto")
@@ -13055,7 +13045,6 @@ export def "get-cis-jobs" [
 #
 # POST /Jobs/Cis
 # operationId: PostNewCisJob
-# --CisJobInstructionBase shape: {Employer?: record, HoldingDate?: string, SubContractors?: record}
 export def "post-new-cis-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13069,7 +13058,7 @@ export def "post-new-cis-job" [
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
   --cis-job-instruction-base: record # shape: {Employer?: record, HoldingDate?: string, SubContractors?: record}
-]: any -> record<Link: record<_href: string, _rel: string, _title: string>> {
+]: any -> oneof<record<Link: record<_href: string, _rel: string, _title: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13155,7 +13144,7 @@ export def "get-cis-job-info" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<JobInfo: record<Created: string, EmployerKey: string, Errors: record<Error: list>, HoldingDate: string, JobId: string, JobStatus: string, JobType: string, LastUpdated: string, Progress: float>> {
+]: nothing -> oneof<record<JobInfo: record<Created: string, EmployerKey: string, Errors: record<Error: list>, HoldingDate: string, JobId: string, JobStatus: string, JobType: string, LastUpdated: string, Progress: float>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'JobId' must be non-empty" } }
@@ -13280,7 +13269,7 @@ export def "get-dps-jobs" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let authorization = ($authorization | default "Auto")
@@ -13308,7 +13297,6 @@ export def "get-dps-jobs" [
 #
 # POST /Jobs/Dps
 # operationId: PostNewDpsJob
-# --DpsJobInstruction shape: {Apply?: bool, Employer?: record, FromDate?: string, HoldingDate?: string, MessageTypes?: record, MessagesToProcess?: record, Retrieve?: bool}
 export def "post-new-dps-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13322,7 +13310,7 @@ export def "post-new-dps-job" [
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
   --dps-job-instruction: record # shape: {Apply?: bool, Employer?: record, FromDate?: string, HoldingDate?: string, MessageTypes?: record, MessagesToProcess?: record, Retrieve?: bool}
-]: any -> record<Link: record<_href: string, _rel: string, _title: string>> {
+]: any -> oneof<record<Link: record<_href: string, _rel: string, _title: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13408,7 +13396,7 @@ export def "get-dps-job-info" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<JobInfo: record<Created: string, EmployerKey: string, Errors: record<Error: list>, HoldingDate: string, JobId: string, JobStatus: string, JobType: string, LastUpdated: string, Progress: float>> {
+]: nothing -> oneof<record<JobInfo: record<Created: string, EmployerKey: string, Errors: record<Error: list>, HoldingDate: string, JobId: string, JobStatus: string, JobType: string, LastUpdated: string, Progress: float>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'JobId' must be non-empty" } }
@@ -13575,7 +13563,7 @@ export def "get-pay-run-jobs" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let authorization = ($authorization | default "Auto")
@@ -13603,7 +13591,6 @@ export def "get-pay-run-jobs" [
 #
 # POST /Jobs/PayRuns
 # operationId: PostNewPayRunJob
-# --PayRunJobInstruction shape: {Employees?: record, EndDate?: string, HoldingDate?: string, IsSupplementary?: bool, PaySchedule?: record, PaymentDate?: string, StartDate?: string}
 export def "post-new-pay-run-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13617,7 +13604,7 @@ export def "post-new-pay-run-job" [
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
   --pay-run-job-instruction: record # shape: {Employees?: record, EndDate?: string, HoldingDate?: string, IsSupplementary?: bool, PaySchedule?: record, PaymentDate?: string, StartDate?: string}
-]: any -> record<Link: record<_href: string, _rel: string, _title: string>> {
+]: any -> oneof<record<Link: record<_href: string, _rel: string, _title: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13703,7 +13690,7 @@ export def "get-pay-run-job-info" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<JobInfo: record<Created: string, EmployerKey: string, Errors: record<Error: list>, HoldingDate: string, JobId: string, JobStatus: string, JobType: string, LastUpdated: string, Progress: float>> {
+]: nothing -> oneof<record<JobInfo: record<Created: string, EmployerKey: string, Errors: record<Error: list>, HoldingDate: string, JobId: string, JobStatus: string, JobType: string, LastUpdated: string, Progress: float>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'JobId' must be non-empty" } }
@@ -13828,7 +13815,7 @@ export def "get-rti-jobs" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let authorization = ($authorization | default "Auto")
@@ -13856,7 +13843,6 @@ export def "get-rti-jobs" [
 #
 # POST /Jobs/Rti
 # operationId: PostNewRtiJob
-# --RtiJobInstruction shape: {EarlierTaxYear?: int, Employer?: record, FinalSubmissionForYear?: bool, Generate?: bool, HoldingDate?: string, LateReason?: "A"|"B"|"C"|"D"|"F"|"G"|"H", NoPaymentForPeriodFrom?: string, NoPaymentForPeriodTo?: string, PaySchedule?: record, PaymentDate?: string, PeriodOfInactivityFrom?: string, PeriodOfInactivityTo?: string, RtiTransaction?: record, RtiType?: string, SchemeCeased?: string, TaxMonth?: int, TaxYear?: int, Timestamp?: string, Transmit?: bool}
 export def "post-new-rti-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13870,7 +13856,7 @@ export def "post-new-rti-job" [
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
   --rti-job-instruction: record # shape: {EarlierTaxYear?: int, Employer?: record, FinalSubmissionForYear?: bool, Generate?: bool, HoldingDate?: string, LateReason?: "A"|"B"|"C"|"D"|"F"|"G"|"H", NoPaymentForPeriodFrom?: string, NoPaymentForPeriodTo?: string, PaySchedule?: record, PaymentDate?: string, PeriodOfInactivityFrom?: string, PeriodOfInactivityTo?: string, RtiTransaction?: record, RtiType?: string, SchemeCeased?: string, TaxMonth?: int, TaxYear?: int, Timestamp?: string, Transmit?: bool}
-]: any -> record<Link: record<_href: string, _rel: string, _title: string>> {
+]: any -> oneof<record<Link: record<_href: string, _rel: string, _title: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13956,7 +13942,7 @@ export def "get-rti-job-info" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<JobInfo: record<Created: string, EmployerKey: string, Errors: record<Error: list>, HoldingDate: string, JobId: string, JobStatus: string, JobType: string, LastUpdated: string, Progress: float>> {
+]: nothing -> oneof<record<JobInfo: record<Created: string, EmployerKey: string, Errors: record<Error: list>, HoldingDate: string, JobId: string, JobStatus: string, JobType: string, LastUpdated: string, Progress: float>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'JobId' must be non-empty" } }
@@ -14081,7 +14067,7 @@ export def "get-third-party-jobs" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let authorization = ($authorization | default "Auto")
@@ -14109,7 +14095,6 @@ export def "get-third-party-jobs" [
 #
 # POST /Jobs/ThirdParty
 # operationId: PostNewThirdPartyJob
-# --ThirdPartyJobInstruction shape: {EmployerHref?: string, HoldingDate?: string, InstructionType?: string, MetaData?: record, PayLoad?: string}
 export def "post-new-third-party-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14123,7 +14108,7 @@ export def "post-new-third-party-job" [
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
   --third-party-job-instruction: record # shape: {EmployerHref?: string, HoldingDate?: string, InstructionType?: string, MetaData?: record, PayLoad?: string}
-]: any -> record<Link: record<_href: string, _rel: string, _title: string>> {
+]: any -> oneof<record<Link: record<_href: string, _rel: string, _title: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -14209,7 +14194,7 @@ export def "get-third-party-job-info" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<JobInfo: record<Created: string, EmployerKey: string, Errors: record<Error: list>, HoldingDate: string, JobId: string, JobStatus: string, JobType: string, LastUpdated: string, Progress: float>> {
+]: nothing -> oneof<record<JobInfo: record<Created: string, EmployerKey: string, Errors: record<Error: list>, HoldingDate: string, JobId: string, JobStatus: string, JobType: string, LastUpdated: string, Progress: float>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'JobId' must be non-empty" } }
@@ -14377,7 +14362,7 @@ export def "get-journal-instruction-template" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<JournalInstruction: record<AccountingType: string, Description: string, EndDate: string, Expression: string, JournalLineTag: string, LedgerTarget: string, NomCode: string, StartDate: string, SubNomCode: string>> {
+]: nothing -> oneof<record<JournalInstruction: record<AccountingType: string, Description: string, EndDate: string, Expression: string, JournalLineTag: string, LedgerTarget: string, NomCode: string, StartDate: string, SubNomCode: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($journal_instruction_id | is-empty) { error make --unspanned { msg: "path parameter 'JournalInstructionId' must be non-empty" } }
@@ -14419,7 +14404,7 @@ export def "put-journal-instruction-template" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<JournalInstruction: record<AccountingType: string, Description: string, EndDate: string, Expression: string, JournalLineTag: string, LedgerTarget: string, NomCode: string, StartDate: string, SubNomCode: string>> {
+]: nothing -> oneof<record<JournalInstruction: record<AccountingType: string, Description: string, EndDate: string, Expression: string, JournalLineTag: string, LedgerTarget: string, NomCode: string, StartDate: string, SubNomCode: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($journal_instruction_id | is-empty) { error make --unspanned { msg: "path parameter 'JournalInstructionId' must be non-empty" } }
@@ -14460,7 +14445,7 @@ export def "get-journal-instruction-templates" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let authorization = ($authorization | default "Auto")
@@ -14500,7 +14485,7 @@ export def "post-journal-instruction-template" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<Link: record<_href: string, _rel: string, _title: string>> {
+]: nothing -> oneof<record<Link: record<_href: string, _rel: string, _title: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let authorization = ($authorization | default "Auto")
@@ -14583,7 +14568,7 @@ export def "get-permission" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<Permission: record<Description: string, Expression: string, Name: string, Policy: string, Verbs: string>> {
+]: nothing -> oneof<record<Permission: record<Description: string, Expression: string, Name: string, Policy: string, Verbs: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($permission_id | is-empty) { error make --unspanned { msg: "path parameter 'PermissionId' must be non-empty" } }
@@ -14625,7 +14610,7 @@ export def "patch-permission" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<Permission: record<Description: string, Expression: string, Name: string, Policy: string, Verbs: string>> {
+]: nothing -> oneof<record<Permission: record<Description: string, Expression: string, Name: string, Policy: string, Verbs: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($permission_id | is-empty) { error make --unspanned { msg: "path parameter 'PermissionId' must be non-empty" } }
@@ -14667,7 +14652,7 @@ export def "put-permission" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<Permission: record<Description: string, Expression: string, Name: string, Policy: string, Verbs: string>> {
+]: nothing -> oneof<record<Permission: record<Description: string, Expression: string, Name: string, Policy: string, Verbs: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($permission_id | is-empty) { error make --unspanned { msg: "path parameter 'PermissionId' must be non-empty" } }
@@ -14754,7 +14739,7 @@ export def "get-tag-from-permission" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
+]: nothing -> oneof<record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($permission_id | is-empty) { error make --unspanned { msg: "path parameter 'PermissionId' must be non-empty" } }
@@ -14798,7 +14783,7 @@ export def "put-permission-tag" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
+]: nothing -> oneof<record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($permission_id | is-empty) { error make --unspanned { msg: "path parameter 'PermissionId' must be non-empty" } }
@@ -14841,7 +14826,7 @@ export def "get-tags-from-permission" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($permission_id | is-empty) { error make --unspanned { msg: "path parameter 'PermissionId' must be non-empty" } }
@@ -14882,7 +14867,7 @@ export def "get-permissions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let authorization = ($authorization | default "Auto")
@@ -14922,7 +14907,7 @@ export def "post-permission" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<Link: record<_href: string, _rel: string, _title: string>> {
+]: nothing -> oneof<record<Link: record<_href: string, _rel: string, _title: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let authorization = ($authorization | default "Auto")
@@ -14963,7 +14948,7 @@ export def "get-all-permissions-with-tag" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tag_id | is-empty) { error make --unspanned { msg: "path parameter 'TagId' must be non-empty" } }
@@ -15004,7 +14989,7 @@ export def "get-all-permission-tags" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let authorization = ($authorization | default "Auto")
@@ -15032,7 +15017,6 @@ export def "get-all-permission-tags" [
 #
 # POST /Query
 # operationId: GetQueryResponse
-# --Query shape: {Encoding?: string, ExcludeNullOrEmptyElements?: bool, Groups?: record, RootNodeName?: string, SuppressMetricAttributes?: bool, Variables?: record}
 export def "get-query-response" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16150,7 +16134,7 @@ export def "get-report-definition-from-application" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<ReportDefinition: record<Active: bool, Readonly: bool, ReportQuery: record<Encoding: string, ExcludeNullOrEmptyElements: bool, Groups: record, RootNodeName: string, SuppressMetricAttributes: bool, Variables: record>, SupportedTransforms: string, Title: string, Version: string>> {
+]: nothing -> oneof<record<ReportDefinition: record<Active: bool, Readonly: bool, ReportQuery: record<Encoding: string, ExcludeNullOrEmptyElements: bool, Groups: record, RootNodeName: string, SuppressMetricAttributes: bool, Variables: record>, SupportedTransforms: string, Title: string, Version: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($report_definition_id | is-empty) { error make --unspanned { msg: "path parameter 'ReportDefinitionId' must be non-empty" } }
@@ -16179,7 +16163,6 @@ export def "get-report-definition-from-application" [
 #
 # PUT /Report/{ReportDefinitionId}
 # operationId: PutReportDefinition
-# --ReportDefinition shape: {Active?: bool, Readonly?: bool, ReportQuery?: record, SupportedTransforms?: string, Title?: string, Version?: string}
 export def "put-report-definition" [
   report_definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16194,7 +16177,7 @@ export def "put-report-definition" [
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
   --report-definition: record # shape: {Active?: bool, Readonly?: bool, ReportQuery?: record, SupportedTransforms?: string, Title?: string, Version?: string}
-]: any -> record<ReportDefinition: record<Active: bool, Readonly: bool, ReportQuery: record<Encoding: string, ExcludeNullOrEmptyElements: bool, Groups: record, RootNodeName: string, SuppressMetricAttributes: bool, Variables: record>, SupportedTransforms: string, Title: string, Version: string>> {
+]: any -> oneof<record<ReportDefinition: record<Active: bool, Readonly: bool, ReportQuery: record<Encoding: string, ExcludeNullOrEmptyElements: bool, Groups: record, RootNodeName: string, SuppressMetricAttributes: bool, Variables: record>, SupportedTransforms: string, Title: string, Version: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -16280,7 +16263,7 @@ export def "get-report-definitions-from-application" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let authorization = ($authorization | default "Auto")
@@ -16308,7 +16291,6 @@ export def "get-report-definitions-from-application" [
 #
 # POST /Reports
 # operationId: PostReportDefinition
-# --ReportDefinition shape: {Active?: bool, Readonly?: bool, ReportQuery?: record, SupportedTransforms?: string, Title?: string, Version?: string}
 export def "post-report-definition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16322,7 +16304,7 @@ export def "post-report-definition" [
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
   --report-definition: record # shape: {Active?: bool, Readonly?: bool, ReportQuery?: record, SupportedTransforms?: string, Title?: string, Version?: string}
-]: any -> record<Link: record<_href: string, _rel: string, _title: string>> {
+]: any -> oneof<record<Link: record<_href: string, _rel: string, _title: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -16365,7 +16347,7 @@ export def "get-schemas" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let authorization = ($authorization | default "Auto")
@@ -16573,7 +16555,7 @@ export def "get-application-secrets" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let authorization = ($authorization | default "Auto")
@@ -16613,7 +16595,7 @@ export def "post-application-secret" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<Link: record<_href: string, _rel: string, _title: string>> {
+]: nothing -> oneof<record<Link: record<_href: string, _rel: string, _title: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let authorization = ($authorization | default "Auto")
@@ -16695,7 +16677,7 @@ export def "get-templates" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let authorization = ($authorization | default "Auto")
@@ -16778,7 +16760,7 @@ export def "get-transform-definition-from-application" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<TransformDefinition: record<Active: bool, ContentType: string, Definition: string, DefinitionType: string, Readonly: bool, SupportedReports: string, TaxYear: int, Title: string, Version: string>> {
+]: nothing -> oneof<record<TransformDefinition: record<Active: bool, ContentType: string, Definition: string, DefinitionType: string, Readonly: bool, SupportedReports: string, TaxYear: int, Title: string, Version: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($transform_definition_id | is-empty) { error make --unspanned { msg: "path parameter 'TransformDefinitionId' must be non-empty" } }
@@ -16807,7 +16789,6 @@ export def "get-transform-definition-from-application" [
 #
 # PUT /Transform/{TransformDefinitionId}
 # operationId: PutTransformDefinition
-# --TransformDefinition shape: {Active?: bool, ContentType?: string, Definition?: string, DefinitionType?: string, Readonly?: bool, SupportedReports?: string, TaxYear?: int, Title?: string, Version?: string}
 export def "put-transform-definition" [
   transform_definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16822,7 +16803,7 @@ export def "put-transform-definition" [
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
   --transform-definition: record # shape: {Active?: bool, ContentType?: string, Definition?: string, DefinitionType?: string, Readonly?: bool, SupportedReports?: string, TaxYear?: int, Title?: string, Version?: string}
-]: any -> record<TransformDefinition: record<Active: bool, ContentType: string, Definition: string, DefinitionType: string, Readonly: bool, SupportedReports: string, TaxYear: int, Title: string, Version: string>> {
+]: any -> oneof<record<TransformDefinition: record<Active: bool, ContentType: string, Definition: string, DefinitionType: string, Readonly: bool, SupportedReports: string, TaxYear: int, Title: string, Version: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -16866,7 +16847,7 @@ export def "get-transform-definitions-from-application" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let authorization = ($authorization | default "Auto")
@@ -16894,7 +16875,6 @@ export def "get-transform-definitions-from-application" [
 #
 # POST /Transforms
 # operationId: PostTransformDefinition
-# --TransformDefinition shape: {Active?: bool, ContentType?: string, Definition?: string, DefinitionType?: string, Readonly?: bool, SupportedReports?: string, TaxYear?: int, Title?: string, Version?: string}
 export def "post-transform-definition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16908,7 +16888,7 @@ export def "post-transform-definition" [
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
   --transform-definition: record # shape: {Active?: bool, ContentType?: string, Definition?: string, DefinitionType?: string, Readonly?: bool, SupportedReports?: string, TaxYear?: int, Title?: string, Version?: string}
-]: any -> record<Link: record<_href: string, _rel: string, _title: string>> {
+]: any -> oneof<record<Link: record<_href: string, _rel: string, _title: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -16994,7 +16974,7 @@ export def "get-user" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<User: record<MetaData: record, Permissions: record<Permission: list>, Roles: record<Role: list>, UserIdentifier: string>> {
+]: nothing -> oneof<record<User: record<MetaData: record, Permissions: record<Permission: list>, Roles: record<Role: list>, UserIdentifier: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'UserId' must be non-empty" } }
@@ -17036,7 +17016,7 @@ export def "patch-user" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<User: record<MetaData: record, Permissions: record<Permission: list>, Roles: record<Role: list>, UserIdentifier: string>> {
+]: nothing -> oneof<record<User: record<MetaData: record, Permissions: record<Permission: list>, Roles: record<Role: list>, UserIdentifier: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'UserId' must be non-empty" } }
@@ -17078,7 +17058,7 @@ export def "put-user" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<User: record<MetaData: record, Permissions: record<Permission: list>, Roles: record<Role: list>, UserIdentifier: string>> {
+]: nothing -> oneof<record<User: record<MetaData: record, Permissions: record<Permission: list>, Roles: record<Role: list>, UserIdentifier: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'UserId' must be non-empty" } }
@@ -17120,7 +17100,7 @@ export def "get-user-permissions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'UserId' must be non-empty" } }
@@ -17207,7 +17187,7 @@ export def "get-tag-from-user" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
+]: nothing -> oneof<record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'UserId' must be non-empty" } }
@@ -17251,7 +17231,7 @@ export def "put-user-tag" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
+]: nothing -> oneof<record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'UserId' must be non-empty" } }
@@ -17294,7 +17274,7 @@ export def "get-tags-from-user" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'UserId' must be non-empty" } }
@@ -17335,7 +17315,7 @@ export def "get-users" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let authorization = ($authorization | default "Auto")
@@ -17375,7 +17355,7 @@ export def "post-user" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<Link: record<_href: string, _rel: string, _title: string>> {
+]: nothing -> oneof<record<Link: record<_href: string, _rel: string, _title: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let authorization = ($authorization | default "Auto")
@@ -17416,7 +17396,7 @@ export def "get-all-users-with-tag" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tag_id | is-empty) { error make --unspanned { msg: "path parameter 'TagId' must be non-empty" } }
@@ -17457,7 +17437,7 @@ export def "get-all-user-tags" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete. (required, format: string, default: Auto)
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version. (required, format: string, default: default)
-]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
+]: nothing -> oneof<record<LinkCollection: record<Links: record<Link: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let authorization = ($authorization | default "Auto")

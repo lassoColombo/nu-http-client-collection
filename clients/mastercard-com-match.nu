@@ -12,27 +12,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -40,8 +49,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -52,7 +66,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -87,7 +110,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -103,9 +127,9 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-fraud-merchant-v3-add-merchant" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["post-fraud-merchant-v3-add-merchant" "post-fraud-merchant-v3-common-contact-details" "post-fraud-merchant-v3-retro-retro-inquiry-details" "post-fraud-merchant-v3-retro-retro-list" "post-fraud-merchant-v3-termination-inquiry" "get-fraud-merchant-v3-termination-inquiry-irn" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -126,7 +150,6 @@ export def commands []: nothing -> table {
 # Used by Acquirers to add a terminated a merchant in the MATCH system. Merchant information, and up to five principal owners per merchant, can be provided by an acquiring bank as part of the listing.
 #
 # POST /fraud/merchant/v3/add-merchant
-# --AddMerchantRequest shape: {AcquirerId: string, Merchant?: any}
 export def "post-fraud-merchant-v3-add-merchant" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -138,7 +161,7 @@ export def "post-fraud-merchant-v3-add-merchant" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --add-merchant-request: any # shape: {AcquirerId: string, Merchant?: any}
-]: any -> record<AddMerchantResponse: record<MerchantReferenceNumber: string, Name: string>> {
+]: any -> oneof<record<AddMerchantResponse: record<MerchantReferenceNumber: string, Name: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -164,7 +187,6 @@ export def "post-fraud-merchant-v3-add-merchant" [
 # Returns the contact information for the acquirer id requested. When MATCH returns a possible merchant match, this resource assists users by retrieving the contact information associated with the Acquirer ID/ICA that added the merchant to MATCH.
 #
 # POST /fraud/merchant/v3/common/contact-details
-# --ContactRequest shape: {AcquirerId: string}
 export def "post-fraud-merchant-v3-common-contact-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -176,7 +198,7 @@ export def "post-fraud-merchant-v3-common-contact-details" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --contact-request: any # shape: {AcquirerId: string}
-]: any -> record<ContactResponse: record<Contact: list<record>>> {
+]: any -> oneof<record<ContactResponse: record<Contact: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -202,7 +224,6 @@ export def "post-fraud-merchant-v3-common-contact-details" [
 # Returns detailed information about Merchants, URLs and up to five principal owners, that have been terminated by an acquiring bank after the inquiry was made. This MATCH resource assists acquirer's ability to consider the merchants terminated after the inquiry was made. If an initial inquiry does not result in a possible match, it is still possible that the merchant listing could appear sometime in the next 360 days. This may occur when another acquirer enters the merchant into the MATCH database. The system will automatically continue to search the MATCH system for 360 days. To view these notifications, acquirers must use the Retroactive Inquiry Summary service. This resource can be used to obtain detailed information, such as, if a Merchant or individual has been terminated by another acquirer after an inquiry was made, the reason for termination, and the history of fraudulent or risky business practices that led to that termination.
 #
 # POST /fraud/merchant/v3/retro/retro-inquiry-details
-# --RetroInquiryRequest shape: {InquiryReferenceNumber?: string}
 export def "post-fraud-merchant-v3-retro-retro-inquiry-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -215,7 +236,7 @@ export def "post-fraud-merchant-v3-retro-retro-inquiry-details" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --acquirer-id: string # The Member ICA number which is used to validate that the application has permission to hit the MATCH database. This number must be obtained from a participating MATCH acquiring bank or entity before a developer can access the MATCH resource. (required)
   --retro-inquiry-request: any # shape: {InquiryReferenceNumber?: string}
-]: any -> record<RetroInquiryResponse: record<PossibleMerchantMatches: record<TerminatedMerchant: list, TotalLength: string>>> {
+]: any -> oneof<record<RetroInquiryResponse: record<PossibleMerchantMatches: record<TerminatedMerchant: list, TotalLength: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -243,7 +264,6 @@ export def "post-fraud-merchant-v3-retro-retro-inquiry-details" [
 # Returns the summary of Retro matches for the given Acquirer Id. This resource will return the summary of Retroactive Inquiry matches for the given Acquirer ID/ICA. If an initial inquiry does not result in a possible match, it is still possible that the merchant listing could appear sometime in the next 360 days. This may occur when another acquirer enters the merchant into the MATCH database. The system will automatically continue to search the MATCH system for 360 days. To view these notifications, acquirers must use the Retroactive Inquiry service.
 #
 # POST /fraud/merchant/v3/retro/retro-list
-# --RetroRequest shape: {AcquirerId?: string}
 export def "post-fraud-merchant-v3-retro-retro-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -255,7 +275,7 @@ export def "post-fraud-merchant-v3-retro-retro-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --retro-request: any # shape: {AcquirerId?: string}
-]: any -> record<RetroResponse: record<BusinessName: string, City: string, Country: string, Date: string, RefNum: string, State: string>> {
+]: any -> oneof<record<RetroResponse: record<BusinessName: string, City: string, Country: string, Date: string, RefNum: string, State: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -281,7 +301,6 @@ export def "post-fraud-merchant-v3-retro-retro-list" [
 # Returns information on merchants that have been terminated and merchants that have inquired upon. Provides the acquiring bank with information, such as, if a Merchant or individual has been terminated by another acquirer already, the reason for termination, the history of fraudulent or risky business practices that led to that termination and the inquiry that was made already on the Merchant or individual by own or another acquiring bank (if opted).
 #
 # POST /fraud/merchant/v3/termination-inquiry
-# --TerminationInquiryRequest shape: {AcquirerId: string, Merchant?: any, TransactionReferenceNumber?: string}
 export def "post-fraud-merchant-v3-termination-inquiry" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -295,7 +314,7 @@ export def "post-fraud-merchant-v3-termination-inquiry" [
   --page-offset: float # The zero-based offset to start at. The actual start position is this value +1. An offset of 10 starts at item 11. Combined with the PageLength option this allows pagination to be supported through the service requests. (required, e.g. 0)
   --page-length: float # The maximum number of items to retrieve within the current "page" of results. (required, e.g. 10)
   --termination-inquiry-request: any # shape: {AcquirerId: string, Merchant?: any, TransactionReferenceNumber?: string}
-]: any -> record<TerminationInquiry: record<PageOffset: string, PossibleInquiryMatches: record<InquiredMerchant: list, TotalLength: string>, PossibleMerchantMatches: list<record>, TransactionReferenceNumber: string>> {
+]: any -> oneof<record<TerminationInquiry: record<PageOffset: string, PossibleInquiryMatches: record<InquiredMerchant: list, TotalLength: string>, PossibleMerchantMatches: list<record>, TransactionReferenceNumber: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -338,7 +357,7 @@ export def "get-fraud-merchant-v3-termination-inquiry-irn" [
   --page-offset: float # The zero-based offset to start at. The actual start position is this value +1. An offset of 10 starts at item 11. Combined with the PageLength option this allows pagination to be supported through the service requests. (required, e.g. 0)
   --page-length: float # The maximum number of items to retrieve within the current "page" of results. (required, e.g. 10)
   --acquirer-id: string # The Member ICA number which is used to validate that the application has permission to hit the MATCH database. This number must be obtained from a participating MATCH acquiring bank or entity before a developer can access the MATCH resource. (required, e.g. 1996)
-]: nothing -> record<TerminationInquiry: record<PageOffset: string, PossibleInquiryMatches: record<InquiredMerchant: list, TotalLength: string>, PossibleMerchantMatches: list<record>, TransactionReferenceNumber: string>> {
+]: nothing -> oneof<record<TerminationInquiry: record<PageOffset: string, PossibleInquiryMatches: record<InquiredMerchant: list, TotalLength: string>, PossibleMerchantMatches: list<record>, TransactionReferenceNumber: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($irn | is-empty) { error make --unspanned { msg: "path parameter 'IRN' must be non-empty" } }

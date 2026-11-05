@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -127,9 +151,9 @@ def origin-completer [] { ["APPLICATION_IP_PROVISIONING" "PIPER_V2" "PIPER_V3" "
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "integrations-callback-generate-token" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["integrations-callback-generate-token" "integrations-connector-platform-regions-enumerate" "integrations-projects-locations-products-integrations-versions-takeover-edit-lock" "integrations-projects-locations-sfdc-instances-sfdc-channels-delete" "integrations-projects-locations-sfdc-instances-sfdc-channels-get" "integrations-projects-locations-sfdc-instances-sfdc-channels-patch" "integrations-projects-locations-products-integrations-executions-cancel" "integrations-projects-locations-products-integrations-versions-download" "integrations-projects-locations-products-integrations-execute" "integrations-projects-locations-products-integrations-executions-suspensions-lift" "integrations-projects-locations-products-integrations-versions-publish" "integrations-projects-locations-products-integrations-executions-suspensions-resolve" "integrations-projects-locations-products-integrations-schedule" "integrations-projects-locations-products-integrations-test" "integrations-projects-locations-products-integrations-versions-unpublish" "integrations-projects-locations-apps-script-projects-create" "integrations-projects-locations-apps-script-projects-link" "integrations-projects-locations-products-auth-configs-list" "integrations-projects-locations-products-auth-configs-create" "integrations-projects-locations-products-certificates-list" "integrations-projects-locations-products-certificates-create" "integrations-projects-get-clientmetadata" "integrations-projects-locations-get-clients" "integrations-projects-locations-clients-deprovision" "integrations-projects-locations-clients-provision" "integrations-projects-locations-clients-switch" "integrations-projects-locations-products-cloud-functions-create" "integrations-projects-locations-connections-list" "integrations-projects-locations-products-integrations-executions-list" "integrations-projects-locations-products-integrations-list" "integrations-projects-locations-connections-runtime-action-schemas-list" "integrations-projects-locations-connections-runtime-entity-schemas-list" "integrations-projects-locations-sfdc-instances-sfdc-channels-list" "integrations-projects-locations-sfdc-instances-sfdc-channels-create" "integrations-projects-locations-sfdc-instances-list" "integrations-projects-locations-sfdc-instances-create" "integrations-projects-locations-products-integrations-executions-suspensions-list" "integrations-projects-locations-products-integrations-versions-list" "integrations-projects-locations-products-integrations-versions-create" "integrations-projects-locations-products-integrations-versions-upload" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -177,7 +201,7 @@ export def "integrations-callback-generate-token" [
   --product: string@product-completer # Which product sends the request
   --redirect-uri: string # Redirect uri of the auth code request
   --state: string # The auth config id for the given request
-]: nothing -> record<message: string> {
+]: nothing -> oneof<record<message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "code" $code "scalar") (serialize-qp "gcpProjectId" $gcp_project_id "scalar") (serialize-qp "product" $product "scalar") (serialize-qp "redirectUri" $redirect_uri "scalar") (serialize-qp "state" $state "scalar")] | flatten | str join "&"
@@ -223,7 +247,7 @@ export def "integrations-connector-platform-regions-enumerate" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<regions: list<string>> {
+]: nothing -> oneof<record<regions: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -271,7 +295,7 @@ export def "integrations-projects-locations-products-integrations-versions-takeo
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record<integrationVersion: record<createTime: string, databasePersistencePolicy: string, description: string, errorCatcherConfigs: list<record>, integrationParameters: list<record>, integrationParametersInternal: record<parameters: list>, lastModifierEmail: string, lockHolder: string, name: string, origin: string, parentTemplateId: string, runAsServiceAccount: string, snapshotNumber: string, state: string, status: string, taskConfigs: list<record>, taskConfigsInternal: list<record>, teardown: record<teardownTaskConfigs: list>, triggerConfigs: list<record>, triggerConfigsInternal: list<record>, updateTime: string, userLabel: string>> {
+]: any -> oneof<record<integrationVersion: record<createTime: string, databasePersistencePolicy: string, description: string, errorCatcherConfigs: list<record>, integrationParameters: list<record>, integrationParametersInternal: record<parameters: list>, lastModifierEmail: string, lockHolder: string, name: string, origin: string, parentTemplateId: string, runAsServiceAccount: string, snapshotNumber: string, state: string, status: string, taskConfigs: list<record>, taskConfigsInternal: list<record>, teardown: record<teardownTaskConfigs: list>, triggerConfigs: list<record>, triggerConfigsInternal: list<record>, updateTime: string, userLabel: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -322,7 +346,7 @@ export def "integrations-projects-locations-sfdc-instances-sfdc-channels-delete"
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -370,7 +394,7 @@ export def "integrations-projects-locations-sfdc-instances-sfdc-channels-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<channelTopic: string, createTime: string, deleteTime: string, description: string, displayName: string, isActive: bool, lastReplayId: string, name: string, updateTime: string> {
+]: nothing -> oneof<record<channelTopic: string, createTime: string, deleteTime: string, description: string, displayName: string, isActive: bool, lastReplayId: string, name: string, updateTime: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -427,7 +451,7 @@ export def "integrations-projects-locations-sfdc-instances-sfdc-channels-patch" 
   --is-active: oneof<nothing, bool> # Indicated if a channel has any active integrations referencing it. Set to false when the channel is created, and set to true if there is any integration published with the channel configured in it.
   --last-replay-id: string # Last sfdc messsage replay id for channel
   --body-name: string # Resource name of the SFDC channel projects/{project}/locations/{location}/sfdcInstances/{sfdc_instance}/sfdcChannels/{sfdc_channel}.
-]: any -> record<channelTopic: string, createTime: string, deleteTime: string, description: string, displayName: string, isActive: bool, lastReplayId: string, name: string, updateTime: string> {
+]: any -> oneof<record<channelTopic: string, createTime: string, deleteTime: string, description: string, displayName: string, isActive: bool, lastReplayId: string, name: string, updateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -479,7 +503,7 @@ export def "integrations-projects-locations-products-integrations-executions-can
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record<isCanceled: bool> {
+]: any -> oneof<record<isCanceled: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -531,7 +555,7 @@ export def "integrations-projects-locations-products-integrations-versions-downl
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --file-format: string@file-format-completer # File format for download request.
-]: nothing -> record<content: string> {
+]: nothing -> oneof<record<content: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -557,8 +581,6 @@ export def "integrations-projects-locations-products-integrations-versions-downl
 #
 # POST /v1/{name}:execute
 # operationId: integrations.projects.locations.products.integrations.execute
-# --parameterEntries item shape: {dataType?: "DATA_TYPE_UNSPECIFIED"|"STRING_VALUE"|"INT_VALUE"|"DOUBLE_VALUE"|"BOOLEAN_VALUE"|"PROTO_VALUE"|"SERIALIZED_OBJECT_VALUE"|"STRING_ARRAY"|"INT_ARRAY"|"DOUBLE_ARRAY"|"PROTO_ARRAY"|"PROTO_ENUM"|"BOOLEAN_ARRAY"|"PROTO_ENUM_ARRAY"|"BYTES"|"BYTES_ARRAY"|"NON_SERIALIZABLE_OBJECT"|"JSON_VALUE", key?: string, value?: record}
-# --parameters shape: {parameters?: list}
 export def "integrations-projects-locations-products-integrations-execute" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -588,7 +610,7 @@ export def "integrations-projects-locations-products-integrations-execute" [
   --parameters: record # LINT.IfChange This message is used for processing and persisting (when applicable) key value pair parameters for each event in the event bus. Please see — shape: {parameters?: list}
   --request-id: string # Optional. This is used to de-dup incoming request: if the duplicate request was detected, the response from the previous execution is returned.
   --trigger-id: string # Required. Matched against all {@link TriggerConfig}s across all integrations. i.e. TriggerConfig.trigger_id.equals(trigger_id). The trigger_id is in the format of `api_trigger/TRIGGER_NAME`.
-]: any -> record<eventParameters: record<parameters: list<record>>, executionFailed: bool, executionId: string, outputParameters: record, parameterEntries: table<dataType: string, key: string, value: record>> {
+]: any -> oneof<record<eventParameters: record<parameters: list<record>>, executionFailed: bool, executionId: string, outputParameters: record, parameterEntries: table<dataType: string, key: string, value: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -640,7 +662,7 @@ export def "integrations-projects-locations-products-integrations-executions-sus
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --suspension-result: string # User passed in suspension result and will be used to control workflow execution branching behavior by setting up corresponnding edge condition with suspension result. For example, if you want to lift the suspension, you can pass "Approved", or if you want to reject the suspension and terminate workfloe execution, you can pass "Rejected" and terminate the workflow execution with configuring the edge condition.
-]: any -> record<eventExecutionInfoId: string> {
+]: any -> oneof<record<eventExecutionInfoId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -692,7 +714,7 @@ export def "integrations-projects-locations-products-integrations-versions-publi
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -721,7 +743,6 @@ export def "integrations-projects-locations-products-integrations-versions-publi
 #
 # POST /v1/{name}:resolve
 # operationId: integrations.projects.locations.products.integrations.executions.suspensions.resolve
-# --suspension shape: {approvalConfig?: record, audit?: record, eventExecutionInfoId?: string, integration?: string, name?: string, state?: "RESOLUTION_STATE_UNSPECIFIED"|"PENDING"|"REJECTED"|"LIFTED", suspensionConfig?: record, taskId?: string}
 export def "integrations-projects-locations-products-integrations-executions-suspensions-resolve" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -745,7 +766,7 @@ export def "integrations-projects-locations-products-integrations-executions-sus
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --suspension: record # A record representing a suspension. — shape: {approvalConfig?: record, audit?: record, eventExecutionInfoId?: string, integration?: string, name?: string, state?: "RESOLUTION_STATE_UNSPECIFIED"|"PENDING"|"REJECTED"|"LIFTED", suspensionConfig?: record, taskId?: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -774,8 +795,6 @@ export def "integrations-projects-locations-products-integrations-executions-sus
 #
 # POST /v1/{name}:schedule
 # operationId: integrations.projects.locations.products.integrations.schedule
-# --parameterEntries item shape: {dataType?: "DATA_TYPE_UNSPECIFIED"|"STRING_VALUE"|"INT_VALUE"|"DOUBLE_VALUE"|"BOOLEAN_VALUE"|"PROTO_VALUE"|"SERIALIZED_OBJECT_VALUE"|"STRING_ARRAY"|"INT_ARRAY"|"DOUBLE_ARRAY"|"PROTO_ARRAY"|"PROTO_ENUM"|"BOOLEAN_ARRAY"|"PROTO_ENUM_ARRAY"|"BYTES"|"BYTES_ARRAY"|"NON_SERIALIZABLE_OBJECT"|"JSON_VALUE", key?: string, value?: record}
-# --parameters shape: {parameters?: list}
 export def "integrations-projects-locations-products-integrations-schedule" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -804,7 +823,7 @@ export def "integrations-projects-locations-products-integrations-schedule" [
   --request-id: string # This is used to de-dup incoming request: if the duplicate request was detected, the response from the previous execution is returned.
   --schedule-time: string # The time that the integration should be executed. If the time is less or equal to the current time, the integration is executed immediately. (format: google-datetime)
   --trigger-id: string # Matched against all {@link TriggerConfig}s across all integrations. i.e. TriggerConfig.trigger_id.equals(trigger_id)
-]: any -> record<executionInfoIds: list<string>> {
+]: any -> oneof<record<executionInfoIds: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -833,8 +852,6 @@ export def "integrations-projects-locations-products-integrations-schedule" [
 #
 # POST /v1/{name}:test
 # operationId: integrations.projects.locations.products.integrations.test
-# --integrationVersion shape: {databasePersistencePolicy?: "DATABASE_PERSISTENCE_POLICY_UNSPECIFIED"|"DATABASE_PERSISTENCE_DISABLED", description?: string, errorCatcherConfigs?: list, integrationParameters?: list, integrationParametersInternal?: record, lastModifierEmail?: string, lockHolder?: string, origin?: "UNSPECIFIED"|"UI"|"PIPER_V2"|"PIPER_V3"|"APPLICATION_IP_PROVISIONING", parentTemplateId?: string, runAsServiceAccount?: string, snapshotNumber?: string, taskConfigs?: list, taskConfigsInternal?: list, teardown?: record, ... (3 more fields)}
-# --parameters shape: {parameters?: list}
 export def "integrations-projects-locations-products-integrations-test" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -864,7 +881,7 @@ export def "integrations-projects-locations-products-integrations-test" [
   --parameters: record # LINT.IfChange This message is used for processing and persisting (when applicable) key value pair parameters for each event in the event bus. Please see — shape: {parameters?: list}
   --test-mode: oneof<nothing, bool> # Optional. Can be specified in the event request, otherwise false (default). If true, enables tasks with condition "test_mode = true". If false, disables tasks with condition "test_mode = true" if global test mode (set by platform) is also false {@link EventBusConfig}.
   --trigger-id: string # Required. The trigger id of the integration trigger config. If both trigger_id and client_id is present, the integration is executed from the start tasks provided by the matching trigger config otherwise it is executed from the default start tasks.
-]: any -> record<eventParameters: record<parameters: list<record>>, executionFailed: bool, executionId: string, parameterEntries: table<dataType: string, key: string, value: record>, parameters: record> {
+]: any -> oneof<record<eventParameters: record<parameters: list<record>>, executionFailed: bool, executionId: string, parameterEntries: table<dataType: string, key: string, value: record>, parameters: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -916,7 +933,7 @@ export def "integrations-projects-locations-products-integrations-versions-unpub
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -969,7 +986,7 @@ export def "integrations-projects-locations-apps-script-projects-create" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --apps-script-project: string # The name of the Apps Script project to be created.
   --auth-config-id: string # The auth config id necessary to fetch the necessary credentials to create the project for external clients
-]: any -> record<projectId: string> {
+]: any -> oneof<record<projectId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1021,7 +1038,7 @@ export def "integrations-projects-locations-apps-script-projects-link" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --script-id: string # The id of the Apps Script project to be linked.
-]: any -> record<scriptId: string> {
+]: any -> oneof<record<scriptId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1076,7 +1093,7 @@ export def "integrations-projects-locations-products-auth-configs-list" [
   --page-size: int # The size of entries in the response. If unspecified, defaults to 100.
   --page-token: string # The token returned in the previous response.
   --read-mask: string # The mask which specifies fields that need to be returned in the AuthConfig's response.
-]: nothing -> record<authConfigs: table<certificateId: string, createTime: string, creatorEmail: string, credentialType: string, decryptedCredential: record, description: string, displayName: string, encryptedCredential: string, expiryNotificationDuration: list, lastModifierEmail: string, name: string, overrideValidTime: string, reason: string, state: string, updateTime: string, validTime: string, visibility: string>, nextPageToken: string> {
+]: nothing -> oneof<record<authConfigs: table<certificateId: string, createTime: string, creatorEmail: string, credentialType: string, decryptedCredential: record, description: string, displayName: string, encryptedCredential: string, expiryNotificationDuration: list, lastModifierEmail: string, name: string, overrideValidTime: string, reason: string, state: string, updateTime: string, validTime: string, visibility: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1102,7 +1119,6 @@ export def "integrations-projects-locations-products-auth-configs-list" [
 #
 # POST /v1/{parent}/authConfigs
 # operationId: integrations.projects.locations.products.authConfigs.create
-# --decryptedCredential shape: {authToken?: record, credentialType?: "CREDENTIAL_TYPE_UNSPECIFIED"|"USERNAME_AND_PASSWORD"|"API_KEY"|"OAUTH2_AUTHORIZATION_CODE"|"OAUTH2_IMPLICIT"|"OAUTH2_CLIENT_CREDENTIALS"|"OAUTH2_RESOURCE_OWNER_CREDENTIALS"|"JWT"|"AUTH_TOKEN"|"SERVICE_ACCOUNT"|"CLIENT_CERTIFICATE_ONLY"|"OIDC_TOKEN", jwt?: record, oauth2AuthorizationCode?: record, oauth2ClientCredentials?: record, oauth2ResourceOwnerCredentials?: record, oidcToken?: record, serviceAccountCredentials?: record, usernameAndPassword?: record}
 export def "integrations-projects-locations-products-auth-configs-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1143,7 +1159,7 @@ export def "integrations-projects-locations-products-auth-configs-create" [
   --state: string@state-completer # The status of the auth config.
   --valid-time: string # The time until the auth config is valid. Empty or max value is considered the auth config won't expire. (format: google-datetime)
   --visibility: string@visibility-completer # The visibility of the auth config.
-]: any -> record<certificateId: string, createTime: string, creatorEmail: string, credentialType: string, decryptedCredential: record<authToken: record<token: string, type: string>, credentialType: string, jwt: record<jwt: string, jwtHeader: string, jwtPayload: string, secret: string>, oauth2AuthorizationCode: record<accessToken: record, applyReauthPolicy: bool, authCode: string, authEndpoint: string, authParams: record, clientId: string, clientSecret: string, requestType: string, scope: string, tokenEndpoint: string, tokenParams: record>, oauth2ClientCredentials: record<accessToken: record, clientId: string, clientSecret: string, requestType: string, scope: string, tokenEndpoint: string, tokenParams: record>, oauth2ResourceOwnerCredentials: record<accessToken: record, clientId: string, clientSecret: string, password: string, requestType: string, scope: string, tokenEndpoint: string, tokenParams: record, username: string>, oidcToken: record<audience: string, serviceAccountEmail: string, token: string, tokenExpireTime: string>, serviceAccountCredentials: record<scope: string, serviceAccount: string>, usernameAndPassword: record<password: string, username: string>>, description: string, displayName: string, encryptedCredential: string, expiryNotificationDuration: list<string>, lastModifierEmail: string, name: string, overrideValidTime: string, reason: string, state: string, updateTime: string, validTime: string, visibility: string> {
+]: any -> oneof<record<certificateId: string, createTime: string, creatorEmail: string, credentialType: string, decryptedCredential: record<authToken: record<token: string, type: string>, credentialType: string, jwt: record<jwt: string, jwtHeader: string, jwtPayload: string, secret: string>, oauth2AuthorizationCode: record<accessToken: record, applyReauthPolicy: bool, authCode: string, authEndpoint: string, authParams: record, clientId: string, clientSecret: string, requestType: string, scope: string, tokenEndpoint: string, tokenParams: record>, oauth2ClientCredentials: record<accessToken: record, clientId: string, clientSecret: string, requestType: string, scope: string, tokenEndpoint: string, tokenParams: record>, oauth2ResourceOwnerCredentials: record<accessToken: record, clientId: string, clientSecret: string, password: string, requestType: string, scope: string, tokenEndpoint: string, tokenParams: record, username: string>, oidcToken: record<audience: string, serviceAccountEmail: string, token: string, tokenExpireTime: string>, serviceAccountCredentials: record<scope: string, serviceAccount: string>, usernameAndPassword: record<password: string, username: string>>, description: string, displayName: string, encryptedCredential: string, expiryNotificationDuration: list<string>, lastModifierEmail: string, name: string, overrideValidTime: string, reason: string, state: string, updateTime: string, validTime: string, visibility: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1198,7 +1214,7 @@ export def "integrations-projects-locations-products-certificates-list" [
   --page-size: int # The size of entries in the response. If unspecified, defaults to 100.
   --page-token: string # The token returned in the previous response.
   --read-mask: string # The mask which specifies fields that need to be returned in the Certificate's response.
-]: nothing -> record<certificates: table<certificateStatus: string, credentialId: string, description: string, displayName: string, name: string, rawCertificate: record, requestorId: string, validEndTime: string, validStartTime: string>, nextPageToken: string> {
+]: nothing -> oneof<record<certificates: table<certificateStatus: string, credentialId: string, description: string, displayName: string, name: string, rawCertificate: record, requestorId: string, validEndTime: string, validStartTime: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1224,7 +1240,6 @@ export def "integrations-projects-locations-products-certificates-list" [
 #
 # POST /v1/{parent}/certificates
 # operationId: integrations.projects.locations.products.certificates.create
-# --rawCertificate shape: {encryptedPrivateKey?: string, passphrase?: string, sslCertificate?: string}
 export def "integrations-projects-locations-products-certificates-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1253,7 +1268,7 @@ export def "integrations-projects-locations-products-certificates-create" [
   --display-name: string # Name of the certificate
   --raw-certificate: record # Contains client certificate information — shape: {encryptedPrivateKey?: string, passphrase?: string, sslCertificate?: string}
   --requestor-id: string # Immutable. Requestor ID to be used to register certificate with trawler
-]: any -> record<certificateStatus: string, credentialId: string, description: string, displayName: string, name: string, rawCertificate: record<encryptedPrivateKey: string, passphrase: string, sslCertificate: string>, requestorId: string, validEndTime: string, validStartTime: string> {
+]: any -> oneof<record<certificateStatus: string, credentialId: string, description: string, displayName: string, name: string, rawCertificate: record<encryptedPrivateKey: string, passphrase: string, sslCertificate: string>, requestorId: string, validEndTime: string, validStartTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1304,7 +1319,7 @@ export def "integrations-projects-get-clientmetadata" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<properties: record<ipEnablementState: string, provisionedRegions: list<string>>> {
+]: nothing -> oneof<record<properties: record<ipEnablementState: string, provisionedRegions: list<string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1352,7 +1367,7 @@ export def "integrations-projects-locations-get-clients" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<client: record<billingType: string, clientState: string, cloudKmsConfig: record<key: string, keyVersion: string, kmsLocation: string, kmsProjectId: string, kmsRing: string>, cloudLoggingConfig: record<bucket: string, enableCloudLogging: bool>, createTime: string, description: string, id: string, p4ServiceAccount: string, projectId: string, region: string>> {
+]: nothing -> oneof<record<client: record<billingType: string, clientState: string, cloudKmsConfig: record<key: string, keyVersion: string, kmsLocation: string, kmsProjectId: string, kmsRing: string>, cloudLoggingConfig: record<bucket: string, enableCloudLogging: bool>, createTime: string, description: string, id: string, p4ServiceAccount: string, projectId: string, region: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1401,7 +1416,7 @@ export def "integrations-projects-locations-clients-deprovision" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1430,7 +1445,6 @@ export def "integrations-projects-locations-clients-deprovision" [
 #
 # POST /v1/{parent}/clients:provision
 # operationId: integrations.projects.locations.clients.provision
-# --cloudKmsConfig shape: {key?: string, keyVersion?: string, kmsLocation?: string, kmsProjectId?: string, kmsRing?: string}
 export def "integrations-projects-locations-clients-provision" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1456,7 +1470,7 @@ export def "integrations-projects-locations-clients-provision" [
   --cloud-kms-config: record # Configuration information for Client's Cloud KMS information — shape: {key?: string, keyVersion?: string, kmsLocation?: string, kmsProjectId?: string, kmsRing?: string}
   --create-sample-workflows: oneof<nothing, bool> # Optional. Indicates if sample workflow should be created along with provisioning
   --provision-gmek: oneof<nothing, bool> # Optional. Indicates provision with GMEK or CMEK
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1485,7 +1499,6 @@ export def "integrations-projects-locations-clients-provision" [
 #
 # POST /v1/{parent}/clients:switch
 # operationId: integrations.projects.locations.clients.switch
-# --cloudKmsConfig shape: {key?: string, keyVersion?: string, kmsLocation?: string, kmsProjectId?: string, kmsRing?: string}
 export def "integrations-projects-locations-clients-switch" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1509,7 +1522,7 @@ export def "integrations-projects-locations-clients-switch" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --cloud-kms-config: record # Configuration information for Client's Cloud KMS information — shape: {key?: string, keyVersion?: string, kmsLocation?: string, kmsProjectId?: string, kmsRing?: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1563,7 +1576,7 @@ export def "integrations-projects-locations-products-cloud-functions-create" [
   --function-name: string # The function name of CF to be created
   --function-region: string # The function region of CF to be created
   --project-id: string # Indicates the id of the GCP project that the function will be created in.
-]: any -> record<triggerUrl: string> {
+]: any -> oneof<record<triggerUrl: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1618,7 +1631,7 @@ export def "integrations-projects-locations-connections-list" [
   --order-by: string # Order by parameters.
   --page-size: int # Page size.
   --page-token: string # Page token.
-]: nothing -> record<connections: table<authConfig: record, configVariables: list, connectorVersion: string, createTime: string, description: string, destinationConfigs: list, envoyImageLocation: string, imageLocation: string, labels: record, lockConfig: record, logConfig: record, name: string, nodeConfig: record, serviceAccount: string, serviceDirectory: string, sslConfig: record, status: record, suspended: bool, updateTime: string>, nextPageToken: string> {
+]: nothing -> oneof<record<connections: table<authConfig: record, configVariables: list, connectorVersion: string, createTime: string, description: string, destinationConfigs: list, envoyImageLocation: string, imageLocation: string, labels: record, lockConfig: record, logConfig: record, name: string, nodeConfig: record, serviceAccount: string, serviceDirectory: string, sslConfig: record, status: record, suspended: bool, updateTime: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1685,7 +1698,7 @@ export def "integrations-projects-locations-products-integrations-executions-lis
   --read-mask: string # Optional. View mask for the response data. If set, only the field specified will be returned as part of the result. If not set, all fields in event execution info will be filled and returned.
   --refresh-acl: oneof<nothing, bool> # Optional. If true, the service will use the most recent acl information to list event execution infos and renew the acl cache. Note that fetching the most recent acl is synchronous, so it will increase RPC call latency.
   --truncate-params: oneof<nothing, bool> # Optional. If true, the service will truncate the params to only keep the first 1000 characters of string params and empty the executions in order to make response smaller. Only works for UI and when the params fields are not filtered out.
-]: nothing -> record<executionInfos: table<clientId: string, createTime: string, errorCode: record, errors: list, eventExecutionDetails: record, eventExecutionInfoId: string, executionTraceInfo: record, lastModifiedTime: string, postMethod: string, product: string, requestId: string, requestParams: record, responseParams: record, snapshotNumber: string, tenant: string, triggerId: string, workflowId: string, workflowName: string, workflowRetryBackoffIntervalSeconds: string>, executions: table<createTime: string, directSubExecutions: list, eventExecutionDetails: record, executionDetails: record, executionMethod: string, name: string, requestParameters: record, requestParams: list, responseParameters: record, responseParams: list, triggerId: string, updateTime: string>, nextPageToken: string> {
+]: nothing -> oneof<record<executionInfos: table<clientId: string, createTime: string, errorCode: record, errors: list, eventExecutionDetails: record, eventExecutionInfoId: string, executionTraceInfo: record, lastModifiedTime: string, postMethod: string, product: string, requestId: string, requestParams: record, responseParams: record, snapshotNumber: string, tenant: string, triggerId: string, workflowId: string, workflowName: string, workflowRetryBackoffIntervalSeconds: string>, executions: table<createTime: string, directSubExecutions: list, eventExecutionDetails: record, executionDetails: record, executionMethod: string, name: string, requestParameters: record, requestParams: list, responseParameters: record, responseParams: list, triggerId: string, updateTime: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1737,7 +1750,7 @@ export def "integrations-projects-locations-products-integrations-list" [
   --order-by: string # The results would be returned in order you specified here. Supported sort keys are: Descending sort order by "last_modified_time", "created_time", "snapshot_number". Ascending sort order by the integration name.
   --page-size: int # The page size for the resquest.
   --page-token: string # The page token for the resquest.
-]: nothing -> record<integrations: table<active: bool, description: string, name: string, updateTime: string>, nextPageToken: string> {
+]: nothing -> oneof<record<integrations: table<active: bool, description: string, name: string, updateTime: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1788,7 +1801,7 @@ export def "integrations-projects-locations-connections-runtime-action-schemas-l
   --filter: string # Filter. Only the action field with literal equality operator is supported.
   --page-size: int # Page size.
   --page-token: string # Page token.
-]: nothing -> record<nextPageToken: string, runtimeActionSchemas: table<action: string, inputSchema: string, outputSchema: string>> {
+]: nothing -> oneof<record<nextPageToken: string, runtimeActionSchemas: table<action: string, inputSchema: string, outputSchema: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1839,7 +1852,7 @@ export def "integrations-projects-locations-connections-runtime-entity-schemas-l
   --filter: string # Filter. Only the entity field with literal equality operator is supported.
   --page-size: int # Page size.
   --page-token: string # Page token.
-]: nothing -> record<nextPageToken: string, runtimeEntitySchemas: table<arrayFieldSchema: string, entity: string, fieldSchema: string>> {
+]: nothing -> oneof<record<nextPageToken: string, runtimeEntitySchemas: table<arrayFieldSchema: string, entity: string, fieldSchema: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1891,7 +1904,7 @@ export def "integrations-projects-locations-sfdc-instances-sfdc-channels-list" [
   --page-size: int # The size of entries in the response. If unspecified, defaults to 100.
   --page-token: string # The token returned in the previous response.
   --read-mask: string # The mask which specifies fields that need to be returned in the SfdcChannel's response.
-]: nothing -> record<nextPageToken: string, sfdcChannels: table<channelTopic: string, createTime: string, deleteTime: string, description: string, displayName: string, isActive: bool, lastReplayId: string, name: string, updateTime: string>> {
+]: nothing -> oneof<record<nextPageToken: string, sfdcChannels: table<channelTopic: string, createTime: string, deleteTime: string, description: string, displayName: string, isActive: bool, lastReplayId: string, name: string, updateTime: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1945,7 +1958,7 @@ export def "integrations-projects-locations-sfdc-instances-sfdc-channels-create"
   --is-active: oneof<nothing, bool> # Indicated if a channel has any active integrations referencing it. Set to false when the channel is created, and set to true if there is any integration published with the channel configured in it.
   --last-replay-id: string # Last sfdc messsage replay id for channel
   --name: string # Resource name of the SFDC channel projects/{project}/locations/{location}/sfdcInstances/{sfdc_instance}/sfdcChannels/{sfdc_channel}.
-]: any -> record<channelTopic: string, createTime: string, deleteTime: string, description: string, displayName: string, isActive: bool, lastReplayId: string, name: string, updateTime: string> {
+]: any -> oneof<record<channelTopic: string, createTime: string, deleteTime: string, description: string, displayName: string, isActive: bool, lastReplayId: string, name: string, updateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2000,7 +2013,7 @@ export def "integrations-projects-locations-sfdc-instances-list" [
   --page-size: int # The size of entries in the response. If unspecified, defaults to 100.
   --page-token: string # The token returned in the previous response.
   --read-mask: string # The mask which specifies fields that need to be returned in the SfdcInstance's response.
-]: nothing -> record<nextPageToken: string, sfdcInstances: table<authConfigId: list, createTime: string, deleteTime: string, description: string, displayName: string, name: string, serviceAuthority: string, sfdcOrgId: string, updateTime: string>> {
+]: nothing -> oneof<record<nextPageToken: string, sfdcInstances: table<authConfigId: list, createTime: string, deleteTime: string, description: string, displayName: string, name: string, serviceAuthority: string, sfdcOrgId: string, updateTime: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -2054,7 +2067,7 @@ export def "integrations-projects-locations-sfdc-instances-create" [
   --name: string # Resource name of the SFDC instance projects/{project}/locations/{location}/sfdcInstances/{sfdcInstance}.
   --service-authority: string # URL used for API calls after authentication (the login authority is configured within the referenced AuthConfig).
   --sfdc-org-id: string # The SFDC Org Id. This is defined in salesforce.
-]: any -> record<authConfigId: list<string>, createTime: string, deleteTime: string, description: string, displayName: string, name: string, serviceAuthority: string, sfdcOrgId: string, updateTime: string> {
+]: any -> oneof<record<authConfigId: list<string>, createTime: string, deleteTime: string, description: string, displayName: string, name: string, serviceAuthority: string, sfdcOrgId: string, updateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2109,7 +2122,7 @@ export def "integrations-projects-locations-products-integrations-executions-sus
   --order-by: string # Field name to order by.
   --page-size: int # Maximum number of entries in the response.
   --page-token: string # Token to retrieve a specific page.
-]: nothing -> record<nextPageToken: string, suspensions: table<approvalConfig: record, audit: record, createTime: string, eventExecutionInfoId: string, integration: string, lastModifyTime: string, name: string, state: string, suspensionConfig: record, taskId: string>> {
+]: nothing -> oneof<record<nextPageToken: string, suspensions: table<approvalConfig: record, audit: record, createTime: string, eventExecutionInfoId: string, integration: string, lastModifyTime: string, name: string, state: string, suspensionConfig: record, taskId: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -2162,7 +2175,7 @@ export def "integrations-projects-locations-products-integrations-versions-list"
   --order-by: string # The results would be returned in order you specified here. Currently supported sort keys are: Descending sort order for "last_modified_time", "created_time", "snapshot_number" Ascending sort order for "name".
   --page-size: int # The maximum number of versions to return. The service may return fewer than this value. If unspecified, at most 50 versions will be returned. The maximum value is 1000; values above 1000 will be coerced to 1000.
   --page-token: string # A page token, received from a previous `ListIntegrationVersions` call. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to `ListIntegrationVersions` must match the call that provided the page token.
-]: nothing -> record<integrationVersions: table<createTime: string, databasePersistencePolicy: string, description: string, errorCatcherConfigs: list, integrationParameters: list, integrationParametersInternal: record, lastModifierEmail: string, lockHolder: string, name: string, origin: string, parentTemplateId: string, runAsServiceAccount: string, snapshotNumber: string, state: string, status: string, taskConfigs: list, taskConfigsInternal: list, teardown: record, triggerConfigs: list, triggerConfigsInternal: list, updateTime: string, userLabel: string>, nextPageToken: string, noPermission: bool> {
+]: nothing -> oneof<record<integrationVersions: table<createTime: string, databasePersistencePolicy: string, description: string, errorCatcherConfigs: list, integrationParameters: list, integrationParametersInternal: record, lastModifierEmail: string, lockHolder: string, name: string, origin: string, parentTemplateId: string, runAsServiceAccount: string, snapshotNumber: string, state: string, status: string, taskConfigs: list, taskConfigsInternal: list, teardown: record, triggerConfigs: list, triggerConfigsInternal: list, updateTime: string, userLabel: string>, nextPageToken: string, noPermission: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -2188,14 +2201,6 @@ export def "integrations-projects-locations-products-integrations-versions-list"
 #
 # POST /v1/{parent}/versions
 # operationId: integrations.projects.locations.products.integrations.versions.create
-# --errorCatcherConfigs item shape: {description?: string, errorCatcherId?: string, errorCatcherNumber?: string, label?: string, position?: record, startErrorTasks?: list}
-# --integrationParameters item shape: {dataType?: "INTEGRATION_PARAMETER_DATA_TYPE_UNSPECIFIED"|"STRING_VALUE"|"INT_VALUE"|"DOUBLE_VALUE"|"BOOLEAN_VALUE"|"STRING_ARRAY"|"INT_ARRAY"|"DOUBLE_ARRAY"|"BOOLEAN_ARRAY"|"JSON_VALUE"|"PROTO_VALUE"|"PROTO_ARRAY", defaultValue?: record, displayName?: string, inputOutputType?: "IN_OUT_TYPE_UNSPECIFIED"|"IN"|"OUT"|"IN_OUT", isTransient?: bool, jsonSchema?: string, key?: string, producer?: string, searchable?: bool}
-# --integrationParametersInternal shape: {parameters?: list}
-# --taskConfigs item shape: {description?: string, displayName?: string, errorCatcherId?: string, externalTaskType?: "EXTERNAL_TASK_TYPE_UNSPECIFIED"|"NORMAL_TASK"|"ERROR_TASK", failurePolicy?: record, jsonValidationOption?: "JSON_VALIDATION_OPTION_UNSPECIFIED"|"SKIP"|"PRE_EXECUTION"|"POST_EXECUTION"|"PRE_POST_EXECUTION", nextTasks?: list, nextTasksExecutionPolicy?: "NEXT_TASKS_EXECUTION_POLICY_UNSPECIFIED"|"RUN_ALL_MATCH"|"RUN_FIRST_MATCH", parameters?: record, position?: record, successPolicy?: record, ... (5 more fields)}
-# --taskConfigsInternal item shape: {alertConfigs?: list, createTime?: string, creatorEmail?: string, description?: string, disableStrictTypeValidation?: bool, errorCatcherId?: string, externalTaskType?: "EXTERNAL_TASK_TYPE_UNSPECIFIED"|"NORMAL_TASK"|"ERROR_TASK", failurePolicy?: record, incomingEdgeCount?: int, jsonValidationOption?: "UNSPECIFIED_JSON_VALIDATION_OPTION"|"SKIP"|"PRE_EXECUTION"|"POST_EXECUTION"|"PRE_POST_EXECUTION", label?: string, lastModifiedTime?: string, nextTasks?: list, ... (15 more fields)}
-# --teardown shape: {teardownTaskConfigs?: list}
-# --triggerConfigs item shape: {alertConfig?: list, cloudSchedulerConfig?: record, description?: string, errorCatcherId?: string, label?: string, nextTasksExecutionPolicy?: "NEXT_TASKS_EXECUTION_POLICY_UNSPECIFIED"|"RUN_ALL_MATCH"|"RUN_FIRST_MATCH", position?: record, properties?: record, startTasks?: list, triggerId?: string, triggerNumber?: string, triggerType?: "TRIGGER_TYPE_UNSPECIFIED"|"CRON"|"API"|"SFDC_CHANNEL"|"CLOUD_PUBSUB_EXTERNAL"|"SFDC_CDC_CHANNEL"|"CLOUD_SCHEDULER"}
-# --triggerConfigsInternal item shape: {alertConfig?: list, cloudSchedulerConfig?: record, description?: string, enabledClients?: list<string>, errorCatcherId?: string, label?: string, nextTasksExecutionPolicy?: "UNSPECIFIED"|"RUN_ALL_MATCH"|"RUN_FIRST_MATCH", pauseWorkflowExecutions?: bool, position?: record, properties?: record, startTasks?: list, triggerCriteria?: record, triggerId?: string, triggerNumber?: string, ... (1 more fields)}
 export def "integrations-projects-locations-products-integrations-versions-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2236,7 +2241,7 @@ export def "integrations-projects-locations-products-integrations-versions-creat
   --trigger-configs: list # Optional. Trigger configurations. — item shape: {alertConfig?: list, cloudSchedulerConfig?: record, description?: string, errorCatcherId?: string, label?: string, nextTasksExecutionPolicy?: "NEXT_TASKS_EXECUTION_POLICY_UNSPECIFIED"|"RUN_ALL_MATCH"|"RUN_FIRST_MATCH", position?: record, properties?: record, startTasks?: list, triggerId?: string, triggerNumber?: string, triggerType?: "TRIGGER_TYPE_UNSPECIFIED"|"CRON"|"API"|"SFDC_CHANNEL"|"CLOUD_PUBSUB_EXTERNAL"|"SFDC_CDC_CHANNEL"|"CLOUD_SCHEDULER"}
   --trigger-configs-internal: list # Optional. Trigger configurations. — item shape: {alertConfig?: list, cloudSchedulerConfig?: record, description?: string, enabledClients?: list<string>, errorCatcherId?: string, label?: string, nextTasksExecutionPolicy?: "UNSPECIFIED"|"RUN_ALL_MATCH"|"RUN_FIRST_MATCH", pauseWorkflowExecutions?: bool, position?: record, properties?: record, startTasks?: list, triggerCriteria?: record, triggerId?: string, triggerNumber?: string, ... (1 more fields)}
   --user-label: string # Optional. A user-defined label that annotates an integration version. Typically, this is only set when the integration version is created.
-]: any -> record<createTime: string, databasePersistencePolicy: string, description: string, errorCatcherConfigs: table<description: string, errorCatcherId: string, errorCatcherNumber: string, label: string, position: record, startErrorTasks: list>, integrationParameters: table<dataType: string, defaultValue: record, displayName: string, inputOutputType: string, isTransient: bool, jsonSchema: string, key: string, producer: string, searchable: bool>, integrationParametersInternal: record<parameters: list<record>>, lastModifierEmail: string, lockHolder: string, name: string, origin: string, parentTemplateId: string, runAsServiceAccount: string, snapshotNumber: string, state: string, status: string, taskConfigs: table<description: string, displayName: string, errorCatcherId: string, externalTaskType: string, failurePolicy: record, jsonValidationOption: string, nextTasks: list, nextTasksExecutionPolicy: string, parameters: record, position: record, successPolicy: record, synchronousCallFailurePolicy: record, task: string, taskExecutionStrategy: string, taskId: string, taskTemplate: string>, taskConfigsInternal: table<alertConfigs: list, createTime: string, creatorEmail: string, description: string, disableStrictTypeValidation: bool, errorCatcherId: string, externalTaskType: string, failurePolicy: record, incomingEdgeCount: int, jsonValidationOption: string, label: string, lastModifiedTime: string, nextTasks: list, nextTasksExecutionPolicy: string, parameters: record, position: record, precondition: string, preconditionLabel: string, rollbackStrategy: record, successPolicy: record, synchronousCallFailurePolicy: record, taskEntity: record, taskExecutionStrategy: string, taskName: string, taskNumber: string, taskSpec: string, taskTemplateName: string, taskType: string>, teardown: record<teardownTaskConfigs: list<record>>, triggerConfigs: table<alertConfig: list, cloudSchedulerConfig: record, description: string, errorCatcherId: string, label: string, nextTasksExecutionPolicy: string, position: record, properties: record, startTasks: list, triggerId: string, triggerNumber: string, triggerType: string>, triggerConfigsInternal: table<alertConfig: list, cloudSchedulerConfig: record, description: string, enabledClients: list, errorCatcherId: string, label: string, nextTasksExecutionPolicy: string, pauseWorkflowExecutions: bool, position: record, properties: record, startTasks: list, triggerCriteria: record, triggerId: string, triggerNumber: string, triggerType: string>, updateTime: string, userLabel: string> {
+]: any -> oneof<record<createTime: string, databasePersistencePolicy: string, description: string, errorCatcherConfigs: table<description: string, errorCatcherId: string, errorCatcherNumber: string, label: string, position: record, startErrorTasks: list>, integrationParameters: table<dataType: string, defaultValue: record, displayName: string, inputOutputType: string, isTransient: bool, jsonSchema: string, key: string, producer: string, searchable: bool>, integrationParametersInternal: record<parameters: list<record>>, lastModifierEmail: string, lockHolder: string, name: string, origin: string, parentTemplateId: string, runAsServiceAccount: string, snapshotNumber: string, state: string, status: string, taskConfigs: table<description: string, displayName: string, errorCatcherId: string, externalTaskType: string, failurePolicy: record, jsonValidationOption: string, nextTasks: list, nextTasksExecutionPolicy: string, parameters: record, position: record, successPolicy: record, synchronousCallFailurePolicy: record, task: string, taskExecutionStrategy: string, taskId: string, taskTemplate: string>, taskConfigsInternal: table<alertConfigs: list, createTime: string, creatorEmail: string, description: string, disableStrictTypeValidation: bool, errorCatcherId: string, externalTaskType: string, failurePolicy: record, incomingEdgeCount: int, jsonValidationOption: string, label: string, lastModifiedTime: string, nextTasks: list, nextTasksExecutionPolicy: string, parameters: record, position: record, precondition: string, preconditionLabel: string, rollbackStrategy: record, successPolicy: record, synchronousCallFailurePolicy: record, taskEntity: record, taskExecutionStrategy: string, taskName: string, taskNumber: string, taskSpec: string, taskTemplateName: string, taskType: string>, teardown: record<teardownTaskConfigs: list<record>>, triggerConfigs: table<alertConfig: list, cloudSchedulerConfig: record, description: string, errorCatcherId: string, label: string, nextTasksExecutionPolicy: string, position: record, properties: record, startTasks: list, triggerId: string, triggerNumber: string, triggerType: string>, triggerConfigsInternal: table<alertConfig: list, cloudSchedulerConfig: record, description: string, enabledClients: list, errorCatcherId: string, label: string, nextTasksExecutionPolicy: string, pauseWorkflowExecutions: bool, position: record, properties: record, startTasks: list, triggerCriteria: record, triggerId: string, triggerNumber: string, triggerType: string>, updateTime: string, userLabel: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2289,7 +2294,7 @@ export def "integrations-projects-locations-products-integrations-versions-uploa
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --content: string # The textproto of the integration_version.
   --file-format: string@file-format-completer # File format for upload request.
-]: any -> record<integrationVersion: record<createTime: string, databasePersistencePolicy: string, description: string, errorCatcherConfigs: list<record>, integrationParameters: list<record>, integrationParametersInternal: record<parameters: list>, lastModifierEmail: string, lockHolder: string, name: string, origin: string, parentTemplateId: string, runAsServiceAccount: string, snapshotNumber: string, state: string, status: string, taskConfigs: list<record>, taskConfigsInternal: list<record>, teardown: record<teardownTaskConfigs: list>, triggerConfigs: list<record>, triggerConfigsInternal: list<record>, updateTime: string, userLabel: string>> {
+]: any -> oneof<record<integrationVersion: record<createTime: string, databasePersistencePolicy: string, description: string, errorCatcherConfigs: list<record>, integrationParameters: list<record>, integrationParametersInternal: record<parameters: list>, lastModifierEmail: string, lockHolder: string, name: string, origin: string, parentTemplateId: string, runAsServiceAccount: string, snapshotNumber: string, state: string, status: string, taskConfigs: list<record>, taskConfigsInternal: list<record>, teardown: record<teardownTaskConfigs: list>, triggerConfigs: list<record>, triggerConfigsInternal: list<record>, updateTime: string, userLabel: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -111,9 +134,9 @@ def state-completer [] { ["DELETED" "DISABLED" "ENABLED"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "add-facet-to-object" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["add-facet-to-object" "apply-schema" "attach-object" "attach-policy" "attach-to-index" "attach-typed-link" "batch-read" "batch-write" "create-directory" "create-facet" "create-index" "create-object" "create-schema" "create-typed-link-facet" "delete-directory" "delete-facet" "delete-object" "delete-schema" "delete-typed-link-facet" "detach-from-index" "detach-object" "detach-policy" "detach-typed-link" "disable-directory" "enable-directory" "get-applied-schema-version" "get-directory" "get-facet" "update-facet" "get-link-attributes" "get-object-attributes" "get-object-information" "get-schema-as-json" "put-schema-from-json" "get-typed-link-facet-information" "list-applied-schema-arns" "list-attached-indices" "list-development-schema-arns" "list-directories" "list-facet-attributes" "list-facet-names" "list-incoming-typed-links" "list-index" "list-managed-schema-arns" "list-object-attributes" "list-object-children" "list-object-parent-paths" "list-object-parents" "list-object-policies" "list-outgoing-typed-links" "list-policy-attachments" "list-published-schema-arns" "list-tags-for-resource" "list-typed-link-facet-attributes" "list-typed-link-facet-names" "lookup-policy" "publish-schema" "remove-facet-from-object" "tag-resource" "untag-resource" "update-link-attributes" "update-object-attributes" "update-schema" "update-typed-link-facet" "upgrade-applied-schema" "upgrade-published-schema" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -135,9 +158,6 @@ export def commands []: nothing -> table {
 #
 # PUT /amazonclouddirectory/2017-01-11/object/facets
 # operationId: AddFacetToObject
-# --SchemaFacet shape: {SchemaArn?: string, FacetName?: string}
-# --ObjectAttributeList item shape: {Key: record, Value: record}
-# --ObjectReference shape: {Selector?: string}
 export def "add-facet-to-object" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -159,7 +179,7 @@ export def "add-facet-to-object" [
   schema_facet: record # A facet. — shape: {SchemaArn?: string, FacetName?: string}
   --object-attribute-list: list # Attributes on the facet that you are adding to the object. — item shape: {Key: record, Value: record}
   object_reference: record # The reference that identifies an object. — shape: {Selector?: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -208,7 +228,7 @@ export def "apply-schema" [
   --x-amz-signed-headers: string
   --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the Directory into which the schema is copied. For more information, see arns. (required)
   published_schema_arn: string # Published schema Amazon Resource Name (ARN) that needs to be copied. For more information, see arns.
-]: any -> record<AppliedSchemaArn: string, DirectoryArn: string> {
+]: any -> oneof<record<AppliedSchemaArn: string, DirectoryArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -238,8 +258,6 @@ export def "apply-schema" [
 #
 # PUT /amazonclouddirectory/2017-01-11/object/attach
 # operationId: AttachObject
-# --ParentReference shape: {Selector?: string}
-# --ChildReference shape: {Selector?: string}
 export def "attach-object" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -261,7 +279,7 @@ export def "attach-object" [
   parent_reference: record # The reference that identifies an object. — shape: {Selector?: string}
   child_reference: record # The reference that identifies an object. — shape: {Selector?: string}
   link_name: string # The link name with which the child object is attached to the parent.
-]: any -> record<AttachedObjectIdentifier: string> {
+]: any -> oneof<record<AttachedObjectIdentifier: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -291,8 +309,6 @@ export def "attach-object" [
 #
 # PUT /amazonclouddirectory/2017-01-11/policy/attach
 # operationId: AttachPolicy
-# --PolicyReference shape: {Selector?: string}
-# --ObjectReference shape: {Selector?: string}
 export def "attach-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -313,7 +329,7 @@ export def "attach-policy" [
   --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the Directory where both objects reside. For more information, see arns. (required)
   policy_reference: record # The reference that identifies an object. — shape: {Selector?: string}
   object_reference: record # The reference that identifies an object. — shape: {Selector?: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -343,8 +359,6 @@ export def "attach-policy" [
 #
 # PUT /amazonclouddirectory/2017-01-11/index/attach
 # operationId: AttachToIndex
-# --IndexReference shape: {Selector?: string}
-# --TargetReference shape: {Selector?: string}
 export def "attach-to-index" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -365,7 +379,7 @@ export def "attach-to-index" [
   --x-amz-data-partition: string # The Amazon Resource Name (ARN) of the directory where the object and index exist. (required)
   index_reference: record # The reference that identifies an object. — shape: {Selector?: string}
   target_reference: record # The reference that identifies an object. — shape: {Selector?: string}
-]: any -> record<AttachedObjectIdentifier: string> {
+]: any -> oneof<record<AttachedObjectIdentifier: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -395,10 +409,6 @@ export def "attach-to-index" [
 #
 # PUT /amazonclouddirectory/2017-01-11/typedlink/attach
 # operationId: AttachTypedLink
-# --SourceObjectReference shape: {Selector?: string}
-# --TargetObjectReference shape: {Selector?: string}
-# --TypedLinkFacet shape: {SchemaArn?: string, TypedLinkName?: string}
-# --Attributes item shape: {AttributeName: string, Value: record}
 export def "attach-typed-link" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -421,7 +431,7 @@ export def "attach-typed-link" [
   target_object_reference: record # The reference that identifies an object. — shape: {Selector?: string}
   typed_link_facet: record # Identifies the schema Amazon Resource Name (ARN) and facet name for the typed link. — shape: {SchemaArn?: string, TypedLinkName?: string}
   attributes: list # A set of attributes that are associated with the typed link. — item shape: {AttributeName: string, Value: record}
-]: any -> record<TypedLinkSpecifier: record<TypedLinkFacet: record<SchemaArn: string, TypedLinkName: string>, SourceObjectReference: record<Selector: string>, TargetObjectReference: record<Selector: string>, IdentityAttributeValues: list<record>>> {
+]: any -> oneof<record<TypedLinkSpecifier: record<TypedLinkFacet: record<SchemaArn: string, TypedLinkName: string>, SourceObjectReference: record<Selector: string>, TargetObjectReference: record<Selector: string>, IdentityAttributeValues: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -451,7 +461,6 @@ export def "attach-typed-link" [
 #
 # POST /amazonclouddirectory/2017-01-11/batchread
 # operationId: BatchRead
-# --Operations item shape: {ListObjectAttributes?: record, ListObjectChildren?: record, ListAttachedIndices?: record, ListObjectParentPaths?: record, GetObjectInformation?: record, GetObjectAttributes?: record, ListObjectParents?: record, ListObjectPolicies?: record, ListPolicyAttachments?: record, LookupPolicy?: record, ListIndex?: record, ListOutgoingTypedLinks?: record, ListIncomingTypedLinks?: record, GetLinkAttributes?: record}
 export def "batch-read" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -472,7 +481,7 @@ export def "batch-read" [
   --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the Directory. For more information, see arns. (required)
   --x-amz-consistency-level: string@x-amz-consistency-level-completer # Represents the manner and timing in which the successful write or update of an object is reflected in a subsequent read operation of that same object.
   operations: list # A list of operations that are part of the batch. — item shape: {ListObjectAttributes?: record, ListObjectChildren?: record, ListAttachedIndices?: record, ListObjectParentPaths?: record, GetObjectInformation?: record, GetObjectAttributes?: record, ListObjectParents?: record, ListObjectPolicies?: record, ListPolicyAttachments?: record, LookupPolicy?: record, ListIndex?: record, ListOutgoingTypedLinks?: record, ListIncomingTypedLinks?: record, GetLinkAttributes?: record}
-]: any -> record<Responses: table<SuccessfulResponse: record, ExceptionResponse: record>> {
+]: any -> oneof<record<Responses: table<SuccessfulResponse: record, ExceptionResponse: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -502,7 +511,6 @@ export def "batch-read" [
 #
 # PUT /amazonclouddirectory/2017-01-11/batchwrite
 # operationId: BatchWrite
-# --Operations item shape: {CreateObject?: record, AttachObject?: record, DetachObject?: record, UpdateObjectAttributes?: record, DeleteObject?: record, AddFacetToObject?: record, RemoveFacetFromObject?: record, AttachPolicy?: record, DetachPolicy?: record, CreateIndex?: record, AttachToIndex?: record, DetachFromIndex?: record, AttachTypedLink?: record, DetachTypedLink?: record, UpdateLinkAttributes?: record}
 export def "batch-write" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -522,7 +530,7 @@ export def "batch-write" [
   --x-amz-signed-headers: string
   --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the Directory. For more information, see arns. (required)
   operations: list # A list of operations that are part of the batch. — item shape: {CreateObject?: record, AttachObject?: record, DetachObject?: record, UpdateObjectAttributes?: record, DeleteObject?: record, AddFacetToObject?: record, RemoveFacetFromObject?: record, AttachPolicy?: record, DetachPolicy?: record, CreateIndex?: record, AttachToIndex?: record, DetachFromIndex?: record, AttachTypedLink?: record, DetachTypedLink?: record, UpdateLinkAttributes?: record}
-]: any -> record<Responses: table<CreateObject: record, AttachObject: record, DetachObject: record, UpdateObjectAttributes: record, DeleteObject: record, AddFacetToObject: record, RemoveFacetFromObject: record, AttachPolicy: record, DetachPolicy: record, CreateIndex: record, AttachToIndex: record, DetachFromIndex: record, AttachTypedLink: record, DetachTypedLink: record, UpdateLinkAttributes: record>> {
+]: any -> oneof<record<Responses: table<CreateObject: record, AttachObject: record, DetachObject: record, UpdateObjectAttributes: record, DeleteObject: record, AddFacetToObject: record, RemoveFacetFromObject: record, AttachPolicy: record, DetachPolicy: record, CreateIndex: record, AttachToIndex: record, DetachFromIndex: record, AttachTypedLink: record, DetachTypedLink: record, UpdateLinkAttributes: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -571,7 +579,7 @@ export def "create-directory" [
   --x-amz-signed-headers: string
   --x-amz-data-partition: string # The Amazon Resource Name (ARN) of the published schema that will be copied into the data Directory. For more information, see arns. (required)
   name: string # The name of the Directory. Should be unique per account, per region.
-]: any -> record<DirectoryArn: string, Name: string, ObjectIdentifier: string, AppliedSchemaArn: string> {
+]: any -> oneof<record<DirectoryArn: string, Name: string, ObjectIdentifier: string, AppliedSchemaArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -601,7 +609,6 @@ export def "create-directory" [
 #
 # PUT /amazonclouddirectory/2017-01-11/facet/create
 # operationId: CreateFacet
-# --Attributes item shape: {Name: string, AttributeDefinition?: record, AttributeReference?: record, RequiredBehavior?: "REQUIRED_ALWAYS"|"NOT_REQUIRED"}
 export def "create-facet" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -624,7 +631,7 @@ export def "create-facet" [
   --attributes: list # The attributes that are associated with the Facet. — item shape: {Name: string, AttributeDefinition?: record, AttributeReference?: record, RequiredBehavior?: "REQUIRED_ALWAYS"|"NOT_REQUIRED"}
   --object-type: string@object-type-completer # Specifies whether a given object created from this facet is of type node, leaf node, policy or index. Node: Can have multiple children but one parent. Leaf node: Cannot have children but can have multiple parents. Policy: Allows you to store a policy document and policy type. For more information, see Policies (https://docs.aws.amazon.com/clouddirectory/latest/developerguide/key_concepts_directory.html#key_concepts_policies). Index: Can be created with the Index API.
   --facet-style: string@facet-style-completer # There are two different styles that you can define on any given facet, Static and Dynamic. For static facets, all attributes must be defined in the schema. For dynamic facets, attributes can be defined during data plane operations.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -654,8 +661,6 @@ export def "create-facet" [
 #
 # PUT /amazonclouddirectory/2017-01-11/index
 # operationId: CreateIndex
-# --OrderedIndexedAttributeList item shape: {SchemaArn: string, FacetName: string, Name: string}
-# --ParentReference shape: {Selector?: string}
 export def "create-index" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -678,7 +683,7 @@ export def "create-index" [
   --is-unique: oneof<nothing, bool> # Indicates whether the attribute that is being indexed has unique values or not.
   --parent-reference: record # The reference that identifies an object. — shape: {Selector?: string}
   --link-name: string # The name of the link between the parent object and the index object.
-]: any -> record<ObjectIdentifier: string> {
+]: any -> oneof<record<ObjectIdentifier: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -709,9 +714,6 @@ export def "create-index" [
 #
 # PUT /amazonclouddirectory/2017-01-11/object
 # operationId: CreateObject
-# --SchemaFacets item shape: {SchemaArn?: string, FacetName?: string}
-# --ObjectAttributeList item shape: {Key: record, Value: record}
-# --ParentReference shape: {Selector?: string}
 export def "create-object" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -734,7 +736,7 @@ export def "create-object" [
   --object-attribute-list: list # The attribute map whose attribute ARN contains the key and attribute value as the map value. — item shape: {Key: record, Value: record}
   --parent-reference: record # The reference that identifies an object. — shape: {Selector?: string}
   --link-name: string # The name of link that is used to attach this object to a parent.
-]: any -> record<ObjectIdentifier: string> {
+]: any -> oneof<record<ObjectIdentifier: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -782,7 +784,7 @@ export def "create-schema" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   name: string # The name that is associated with the schema. This is unique to each account and in each region.
-]: any -> record<SchemaArn: string> {
+]: any -> oneof<record<SchemaArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -811,7 +813,6 @@ export def "create-schema" [
 #
 # PUT /amazonclouddirectory/2017-01-11/typedlink/facet/create
 # operationId: CreateTypedLinkFacet
-# --Facet shape: {Name?: string, Attributes?: list, IdentityAttributeOrder?: list<string>}
 export def "create-typed-link-facet" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -831,7 +832,7 @@ export def "create-typed-link-facet" [
   --x-amz-signed-headers: string
   --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the schema. For more information, see arns. (required)
   facet: record # Defines the typed links structure and its attributes. To create a typed link facet, use the CreateTypedLinkFacet API. — shape: {Name?: string, Attributes?: list, IdentityAttributeOrder?: list<string>}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -879,7 +880,7 @@ export def "delete-directory" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-data-partition: string # The ARN of the directory to delete. (required)
-]: nothing -> record<DirectoryArn: string> {
+]: nothing -> oneof<record<DirectoryArn: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_amz_data_partition == null) { error make --unspanned { msg: "required header parameter 'x-amz-data-partition' missing: pass --x-amz-data-partition" } }
@@ -925,7 +926,7 @@ export def "delete-facet" [
   --x-amz-signed-headers: string
   --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the Facet. For more information, see arns. (required)
   name: string # The name of the facet to delete.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -955,7 +956,6 @@ export def "delete-facet" [
 #
 # PUT /amazonclouddirectory/2017-01-11/object/delete
 # operationId: DeleteObject
-# --ObjectReference shape: {Selector?: string}
 export def "delete-object" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -975,7 +975,7 @@ export def "delete-object" [
   --x-amz-signed-headers: string
   --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the Directory where the object resides. For more information, see arns. (required)
   object_reference: record # The reference that identifies an object. — shape: {Selector?: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1023,7 +1023,7 @@ export def "delete-schema" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-data-partition: string # The Amazon Resource Name (ARN) of the development schema. For more information, see arns. (required)
-]: nothing -> record<SchemaArn: string> {
+]: nothing -> oneof<record<SchemaArn: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_amz_data_partition == null) { error make --unspanned { msg: "required header parameter 'x-amz-data-partition' missing: pass --x-amz-data-partition" } }
@@ -1069,7 +1069,7 @@ export def "delete-typed-link-facet" [
   --x-amz-signed-headers: string
   --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the schema. For more information, see arns. (required)
   name: string # The unique name of the typed link facet.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1099,8 +1099,6 @@ export def "delete-typed-link-facet" [
 #
 # PUT /amazonclouddirectory/2017-01-11/index/detach
 # operationId: DetachFromIndex
-# --IndexReference shape: {Selector?: string}
-# --TargetReference shape: {Selector?: string}
 export def "detach-from-index" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1121,7 +1119,7 @@ export def "detach-from-index" [
   --x-amz-data-partition: string # The Amazon Resource Name (ARN) of the directory the index and object exist in. (required)
   index_reference: record # The reference that identifies an object. — shape: {Selector?: string}
   target_reference: record # The reference that identifies an object. — shape: {Selector?: string}
-]: any -> record<DetachedObjectIdentifier: string> {
+]: any -> oneof<record<DetachedObjectIdentifier: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1151,7 +1149,6 @@ export def "detach-from-index" [
 #
 # PUT /amazonclouddirectory/2017-01-11/object/detach
 # operationId: DetachObject
-# --ParentReference shape: {Selector?: string}
 export def "detach-object" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1172,7 +1169,7 @@ export def "detach-object" [
   --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the Directory where objects reside. For more information, see arns. (required)
   parent_reference: record # The reference that identifies an object. — shape: {Selector?: string}
   link_name: string # The link name associated with the object that needs to be detached.
-]: any -> record<DetachedObjectIdentifier: string> {
+]: any -> oneof<record<DetachedObjectIdentifier: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1202,8 +1199,6 @@ export def "detach-object" [
 #
 # PUT /amazonclouddirectory/2017-01-11/policy/detach
 # operationId: DetachPolicy
-# --PolicyReference shape: {Selector?: string}
-# --ObjectReference shape: {Selector?: string}
 export def "detach-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1224,7 +1219,7 @@ export def "detach-policy" [
   --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the Directory where both objects reside. For more information, see arns. (required)
   policy_reference: record # The reference that identifies an object. — shape: {Selector?: string}
   object_reference: record # The reference that identifies an object. — shape: {Selector?: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1254,7 +1249,6 @@ export def "detach-policy" [
 #
 # PUT /amazonclouddirectory/2017-01-11/typedlink/detach
 # operationId: DetachTypedLink
-# --TypedLinkSpecifier shape: {TypedLinkFacet?: record, SourceObjectReference?: record, TargetObjectReference?: record, IdentityAttributeValues?: list}
 export def "detach-typed-link" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1322,7 +1316,7 @@ export def "disable-directory" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-data-partition: string # The ARN of the directory to disable. (required)
-]: nothing -> record<DirectoryArn: string> {
+]: nothing -> oneof<record<DirectoryArn: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_amz_data_partition == null) { error make --unspanned { msg: "required header parameter 'x-amz-data-partition' missing: pass --x-amz-data-partition" } }
@@ -1367,7 +1361,7 @@ export def "enable-directory" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-data-partition: string # The ARN of the directory to enable. (required)
-]: nothing -> record<DirectoryArn: string> {
+]: nothing -> oneof<record<DirectoryArn: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_amz_data_partition == null) { error make --unspanned { msg: "required header parameter 'x-amz-data-partition' missing: pass --x-amz-data-partition" } }
@@ -1412,7 +1406,7 @@ export def "get-applied-schema-version" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   schema_arn: string # The ARN of the applied schema.
-]: any -> record<AppliedSchemaArn: string> {
+]: any -> oneof<record<AppliedSchemaArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1459,7 +1453,7 @@ export def "get-directory" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-data-partition: string # The ARN of the directory. (required)
-]: nothing -> record<Directory: record<Name: string, DirectoryArn: string, State: string, CreationDateTime: string>> {
+]: nothing -> oneof<record<Directory: record<Name: string, DirectoryArn: string, State: string, CreationDateTime: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_amz_data_partition == null) { error make --unspanned { msg: "required header parameter 'x-amz-data-partition' missing: pass --x-amz-data-partition" } }
@@ -1505,7 +1499,7 @@ export def "get-facet" [
   --x-amz-signed-headers: string
   --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the Facet. For more information, see arns. (required)
   name: string # The name of the facet to retrieve.
-]: any -> record<Facet: record<Name: string, ObjectType: string, FacetStyle: string>> {
+]: any -> oneof<record<Facet: record<Name: string, ObjectType: string, FacetStyle: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1535,7 +1529,6 @@ export def "get-facet" [
 #
 # PUT /amazonclouddirectory/2017-01-11/facet
 # operationId: UpdateFacet
-# --AttributeUpdates item shape: {Attribute?: record, Action?: "CREATE_OR_UPDATE"|"DELETE"}
 export def "update-facet" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1557,7 +1550,7 @@ export def "update-facet" [
   name: string # The name of the facet.
   --attribute-updates: list # List of attributes that need to be updated in a given schema Facet. Each attribute is followed by AttributeAction, which specifies the type of update operation to perform. — item shape: {Attribute?: record, Action?: "CREATE_OR_UPDATE"|"DELETE"}
   --object-type: string@object-type-completer # The object type that is associated with the facet. See CreateFacetRequest$ObjectType for more details.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1587,7 +1580,6 @@ export def "update-facet" [
 #
 # POST /amazonclouddirectory/2017-01-11/typedlink/attributes/get
 # operationId: GetLinkAttributes
-# --TypedLinkSpecifier shape: {TypedLinkFacet?: record, SourceObjectReference?: record, TargetObjectReference?: record, IdentityAttributeValues?: list}
 export def "get-link-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1609,7 +1601,7 @@ export def "get-link-attributes" [
   typed_link_specifier: record # Contains all the information that is used to uniquely identify a typed link. The parameters discussed in this topic are used to uniquely specify the typed link being operated on. The AttachTypedLink API returns a typed link specifier while the DetachTypedLink API accepts one as input. Similarly, the ListIncomingTypedLinks and ListOutgoingTypedLinks API operations provide typed link specifiers as output. You can also construct a typed link specifier from scratch. — shape: {TypedLinkFacet?: record, SourceObjectReference?: record, TargetObjectReference?: record, IdentityAttributeValues?: list}
   attribute_names: list<string> # A list of attribute names whose values will be retrieved.
   --consistency-level: string@consistency-level-completer # The consistency level at which to retrieve the attributes on a typed link.
-]: any -> record<Attributes: table<Key: record, Value: record>> {
+]: any -> oneof<record<Attributes: table<Key: record, Value: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1639,8 +1631,6 @@ export def "get-link-attributes" [
 #
 # POST /amazonclouddirectory/2017-01-11/object/attributes/get
 # operationId: GetObjectAttributes
-# --ObjectReference shape: {Selector?: string}
-# --SchemaFacet shape: {SchemaArn?: string, FacetName?: string}
 export def "get-object-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1663,7 +1653,7 @@ export def "get-object-attributes" [
   object_reference: record # The reference that identifies an object. — shape: {Selector?: string}
   schema_facet: record # A facet. — shape: {SchemaArn?: string, FacetName?: string}
   attribute_names: list<string> # List of attribute names whose values will be retrieved.
-]: any -> record<Attributes: table<Key: record, Value: record>> {
+]: any -> oneof<record<Attributes: table<Key: record, Value: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1693,7 +1683,6 @@ export def "get-object-attributes" [
 #
 # POST /amazonclouddirectory/2017-01-11/object/information
 # operationId: GetObjectInformation
-# --ObjectReference shape: {Selector?: string}
 export def "get-object-information" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1714,7 +1703,7 @@ export def "get-object-information" [
   --x-amz-data-partition: string # The ARN of the directory being retrieved. (required)
   --x-amz-consistency-level: string@x-amz-consistency-level-completer # The consistency level at which to retrieve the object information.
   object_reference: record # The reference that identifies an object. — shape: {Selector?: string}
-]: any -> record<SchemaFacets: table<SchemaArn: string, FacetName: string>, ObjectIdentifier: string> {
+]: any -> oneof<record<SchemaFacets: table<SchemaArn: string, FacetName: string>, ObjectIdentifier: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1762,7 +1751,7 @@ export def "get-schema-as-json" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-data-partition: string # The ARN of the schema to retrieve. (required)
-]: nothing -> record<Name: string, Document: string> {
+]: nothing -> oneof<record<Name: string, Document: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_amz_data_partition == null) { error make --unspanned { msg: "required header parameter 'x-amz-data-partition' missing: pass --x-amz-data-partition" } }
@@ -1808,7 +1797,7 @@ export def "put-schema-from-json" [
   --x-amz-signed-headers: string
   --x-amz-data-partition: string # The ARN of the schema to update. (required)
   document: string # The replacement JSON schema.
-]: any -> record<Arn: string> {
+]: any -> oneof<record<Arn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1857,7 +1846,7 @@ export def "get-typed-link-facet-information" [
   --x-amz-signed-headers: string
   --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the schema. For more information, see arns. (required)
   name: string # The unique name of the typed link facet.
-]: any -> record<IdentityAttributeOrder: list<string>> {
+]: any -> oneof<record<IdentityAttributeOrder: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1910,7 +1899,7 @@ export def "list-applied-schema-arns" [
   --schema-arn: string # The response for ListAppliedSchemaArns when this parameter is used will list all minor version ARNs for a major version.
   --next-token-body: string # The pagination token. (body field)
   --max-results-body: int # The maximum number of results to retrieve. (body field)
-]: any -> record<SchemaArns: list<string>, NextToken: string> {
+]: any -> oneof<record<SchemaArns: list<string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1940,7 +1929,6 @@ export def "list-applied-schema-arns" [
 #
 # POST /amazonclouddirectory/2017-01-11/object/indices
 # operationId: ListAttachedIndices
-# --TargetReference shape: {Selector?: string}
 export def "list-attached-indices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1965,7 +1953,7 @@ export def "list-attached-indices" [
   target_reference: record # The reference that identifies an object. — shape: {Selector?: string}
   --next-token-body: string # The pagination token. (body field)
   --max-results-body: int # The maximum number of results to retrieve. (body field)
-]: any -> record<IndexAttachments: table<IndexedAttributes: list, ObjectIdentifier: string>, NextToken: string> {
+]: any -> oneof<record<IndexAttachments: table<IndexedAttributes: list, ObjectIdentifier: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2017,7 +2005,7 @@ export def "list-development-schema-arns" [
   --x-amz-signed-headers: string
   --next-token-body: string # The pagination token. (body field)
   --max-results-body: int # The maximum number of results to retrieve. (body field)
-]: any -> record<SchemaArns: list<string>, NextToken: string> {
+]: any -> oneof<record<SchemaArns: list<string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2069,7 +2057,7 @@ export def "list-directories" [
   --next-token-body: string # The pagination token. (body field)
   --max-results-body: int # The maximum number of results to retrieve. (body field)
   --state: string@state-completer # The state of the directories in the list. Can be either Enabled, Disabled, or Deleted.
-]: any -> record<Directories: table<Name: string, DirectoryArn: string, State: string, CreationDateTime: string>, NextToken: string> {
+]: any -> oneof<record<Directories: table<Name: string, DirectoryArn: string, State: string, CreationDateTime: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2122,7 +2110,7 @@ export def "list-facet-attributes" [
   name: string # The name of the facet whose attributes will be retrieved.
   --next-token-body: string # The pagination token. (body field)
   --max-results-body: int # The maximum number of results to retrieve. (body field)
-]: any -> record<Attributes: table<Name: string, AttributeDefinition: record, AttributeReference: record, RequiredBehavior: string>, NextToken: string> {
+]: any -> oneof<record<Attributes: table<Name: string, AttributeDefinition: record, AttributeReference: record, RequiredBehavior: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2175,7 +2163,7 @@ export def "list-facet-names" [
   --x-amz-data-partition: string # The Amazon Resource Name (ARN) to retrieve facet names from. (required)
   --next-token-body: string # The pagination token. (body field)
   --max-results-body: int # The maximum number of results to retrieve. (body field)
-]: any -> record<FacetNames: list<string>, NextToken: string> {
+]: any -> oneof<record<FacetNames: list<string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2206,9 +2194,6 @@ export def "list-facet-names" [
 #
 # POST /amazonclouddirectory/2017-01-11/typedlink/incoming
 # operationId: ListIncomingTypedLinks
-# --ObjectReference shape: {Selector?: string}
-# --FilterAttributeRanges item shape: {AttributeName?: string, Range: record}
-# --FilterTypedLink shape: {SchemaArn?: string, TypedLinkName?: string}
 export def "list-incoming-typed-links" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2233,7 +2218,7 @@ export def "list-incoming-typed-links" [
   --next-token: string # The pagination token.
   --max-results: int # The maximum number of results to retrieve.
   --consistency-level: string@consistency-level-completer # The consistency level to execute the request at.
-]: any -> record<LinkSpecifiers: table<TypedLinkFacet: record, SourceObjectReference: record, TargetObjectReference: record, IdentityAttributeValues: list>, NextToken: string> {
+]: any -> oneof<record<LinkSpecifiers: table<TypedLinkFacet: record, SourceObjectReference: record, TargetObjectReference: record, IdentityAttributeValues: list>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2263,8 +2248,6 @@ export def "list-incoming-typed-links" [
 #
 # POST /amazonclouddirectory/2017-01-11/index/targets
 # operationId: ListIndex
-# --RangesOnIndexedValues item shape: {AttributeKey?: record, Range?: record}
-# --IndexReference shape: {Selector?: string}
 export def "list-index" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2290,7 +2273,7 @@ export def "list-index" [
   index_reference: record # The reference that identifies an object. — shape: {Selector?: string}
   --max-results-body: int # The maximum number of objects in a single page to retrieve from the index during a request. For more information, see Amazon Cloud Directory Limits (http://docs.aws.amazon.com/clouddirectory/latest/developerguide/limits.html). (body field)
   --next-token-body: string # The pagination token. (body field)
-]: any -> record<IndexAttachments: table<IndexedAttributes: list, ObjectIdentifier: string>, NextToken: string> {
+]: any -> oneof<record<IndexAttachments: table<IndexedAttributes: list, ObjectIdentifier: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2343,7 +2326,7 @@ export def "list-managed-schema-arns" [
   --schema-arn: string # The response for ListManagedSchemaArns. When this parameter is used, all minor version ARNs for a major version are listed.
   --next-token-body: string # The pagination token. (body field)
   --max-results-body: int # The maximum number of results to retrieve. (body field)
-]: any -> record<SchemaArns: list<string>, NextToken: string> {
+]: any -> oneof<record<SchemaArns: list<string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2373,8 +2356,6 @@ export def "list-managed-schema-arns" [
 #
 # POST /amazonclouddirectory/2017-01-11/object/attributes
 # operationId: ListObjectAttributes
-# --ObjectReference shape: {Selector?: string}
-# --FacetFilter shape: {SchemaArn?: string, FacetName?: string}
 export def "list-object-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2400,7 +2381,7 @@ export def "list-object-attributes" [
   --next-token-body: string # The pagination token. (body field)
   --max-results-body: int # The maximum number of items to be retrieved in a single call. This is an approximate number. (body field)
   --facet-filter: record # A facet. — shape: {SchemaArn?: string, FacetName?: string}
-]: any -> record<Attributes: table<Key: record, Value: record>, NextToken: string> {
+]: any -> oneof<record<Attributes: table<Key: record, Value: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2431,7 +2412,6 @@ export def "list-object-attributes" [
 #
 # POST /amazonclouddirectory/2017-01-11/object/children
 # operationId: ListObjectChildren
-# --ObjectReference shape: {Selector?: string}
 export def "list-object-children" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2456,7 +2436,7 @@ export def "list-object-children" [
   object_reference: record # The reference that identifies an object. — shape: {Selector?: string}
   --next-token-body: string # The pagination token. (body field)
   --max-results-body: int # The maximum number of items to be retrieved in a single call. This is an approximate number. (body field)
-]: any -> record<Children: record, NextToken: string> {
+]: any -> oneof<record<Children: record, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2487,7 +2467,6 @@ export def "list-object-children" [
 #
 # POST /amazonclouddirectory/2017-01-11/object/parentpaths
 # operationId: ListObjectParentPaths
-# --ObjectReference shape: {Selector?: string}
 export def "list-object-parent-paths" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2511,7 +2490,7 @@ export def "list-object-parent-paths" [
   object_reference: record # The reference that identifies an object. — shape: {Selector?: string}
   --next-token-body: string # The pagination token. (body field)
   --max-results-body: int # The maximum number of items to be retrieved in a single call. This is an approximate number. (body field)
-]: any -> record<PathToObjectIdentifiersList: table<Path: string, ObjectIdentifiers: list>, NextToken: string> {
+]: any -> oneof<record<PathToObjectIdentifiersList: table<Path: string, ObjectIdentifiers: list>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2542,7 +2521,6 @@ export def "list-object-parent-paths" [
 #
 # POST /amazonclouddirectory/2017-01-11/object/parent
 # operationId: ListObjectParents
-# --ObjectReference shape: {Selector?: string}
 export def "list-object-parents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2568,7 +2546,7 @@ export def "list-object-parents" [
   --next-token-body: string # The pagination token. (body field)
   --max-results-body: int # The maximum number of items to be retrieved in a single call. This is an approximate number. (body field)
   --include-all-links-to-each-parent: oneof<nothing, bool> # When set to True, returns all ListObjectParentsResponse$ParentLinks. There could be multiple links between a parent-child pair.
-]: any -> record<Parents: record, NextToken: string, ParentLinks: table<ObjectIdentifier: string, LinkName: string>> {
+]: any -> oneof<record<Parents: record, NextToken: string, ParentLinks: table<ObjectIdentifier: string, LinkName: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2599,7 +2577,6 @@ export def "list-object-parents" [
 #
 # POST /amazonclouddirectory/2017-01-11/object/policy
 # operationId: ListObjectPolicies
-# --ObjectReference shape: {Selector?: string}
 export def "list-object-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2624,7 +2601,7 @@ export def "list-object-policies" [
   object_reference: record # The reference that identifies an object. — shape: {Selector?: string}
   --next-token-body: string # The pagination token. (body field)
   --max-results-body: int # The maximum number of items to be retrieved in a single call. This is an approximate number. (body field)
-]: any -> record<AttachedPolicyIds: list<string>, NextToken: string> {
+]: any -> oneof<record<AttachedPolicyIds: list<string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2655,9 +2632,6 @@ export def "list-object-policies" [
 #
 # POST /amazonclouddirectory/2017-01-11/typedlink/outgoing
 # operationId: ListOutgoingTypedLinks
-# --ObjectReference shape: {Selector?: string}
-# --FilterAttributeRanges item shape: {AttributeName?: string, Range: record}
-# --FilterTypedLink shape: {SchemaArn?: string, TypedLinkName?: string}
 export def "list-outgoing-typed-links" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2682,7 +2656,7 @@ export def "list-outgoing-typed-links" [
   --next-token: string # The pagination token.
   --max-results: int # The maximum number of results to retrieve.
   --consistency-level: string@consistency-level-completer # The consistency level to execute the request at.
-]: any -> record<TypedLinkSpecifiers: table<TypedLinkFacet: record, SourceObjectReference: record, TargetObjectReference: record, IdentityAttributeValues: list>, NextToken: string> {
+]: any -> oneof<record<TypedLinkSpecifiers: table<TypedLinkFacet: record, SourceObjectReference: record, TargetObjectReference: record, IdentityAttributeValues: list>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2712,7 +2686,6 @@ export def "list-outgoing-typed-links" [
 #
 # POST /amazonclouddirectory/2017-01-11/policy/attachment
 # operationId: ListPolicyAttachments
-# --PolicyReference shape: {Selector?: string}
 export def "list-policy-attachments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2737,7 +2710,7 @@ export def "list-policy-attachments" [
   policy_reference: record # The reference that identifies an object. — shape: {Selector?: string}
   --next-token-body: string # The pagination token. (body field)
   --max-results-body: int # The maximum number of items to be retrieved in a single call. This is an approximate number. (body field)
-]: any -> record<ObjectIdentifiers: list<string>, NextToken: string> {
+]: any -> oneof<record<ObjectIdentifiers: list<string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2790,7 +2763,7 @@ export def "list-published-schema-arns" [
   --schema-arn: string # The response for ListPublishedSchemaArns when this parameter is used will list all minor version ARNs for a major version.
   --next-token-body: string # The pagination token. (body field)
   --max-results-body: int # The maximum number of results to retrieve. (body field)
-]: any -> record<SchemaArns: list<string>, NextToken: string> {
+]: any -> oneof<record<SchemaArns: list<string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2842,7 +2815,7 @@ export def "list-tags-for-resource" [
   resource_arn: string # The Amazon Resource Name (ARN) of the resource. Tagging is only supported for directories.
   --next-token-body: string # The pagination token. This is for future use. Currently pagination is not supported for tagging. (body field)
   --max-results-body: int # The MaxResults parameter sets the maximum number of results returned in a single page. This is for future use and is not supported currently. (body field)
-]: any -> record<Tags: table<Key: string, Value: string>, NextToken: string> {
+]: any -> oneof<record<Tags: table<Key: string, Value: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2895,7 +2868,7 @@ export def "list-typed-link-facet-attributes" [
   name: string # The unique name of the typed link facet.
   --next-token-body: string # The pagination token. (body field)
   --max-results-body: int # The maximum number of results to retrieve. (body field)
-]: any -> record<Attributes: table<Name: string, Type: string, DefaultValue: record, IsImmutable: bool, Rules: record, RequiredBehavior: string>, NextToken: string> {
+]: any -> oneof<record<Attributes: table<Name: string, Type: string, DefaultValue: record, IsImmutable: bool, Rules: record, RequiredBehavior: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2948,7 +2921,7 @@ export def "list-typed-link-facet-names" [
   --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the schema. For more information, see arns. (required)
   --next-token-body: string # The pagination token. (body field)
   --max-results-body: int # The maximum number of results to retrieve. (body field)
-]: any -> record<FacetNames: list<string>, NextToken: string> {
+]: any -> oneof<record<FacetNames: list<string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2979,7 +2952,6 @@ export def "list-typed-link-facet-names" [
 #
 # POST /amazonclouddirectory/2017-01-11/policy/lookup
 # operationId: LookupPolicy
-# --ObjectReference shape: {Selector?: string}
 export def "lookup-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3003,7 +2975,7 @@ export def "lookup-policy" [
   object_reference: record # The reference that identifies an object. — shape: {Selector?: string}
   --next-token-body: string # The token to request the next page of results. (body field)
   --max-results-body: int # The maximum number of items to be retrieved in a single call. This is an approximate number. (body field)
-]: any -> record<PolicyToPathList: table<Path: string, Policies: list>, NextToken: string> {
+]: any -> oneof<record<PolicyToPathList: table<Path: string, Policies: list>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3055,7 +3027,7 @@ export def "publish-schema" [
   version: string # The major version under which the schema will be published. Schemas have both a major and minor version associated with them.
   --minor-version: string # The minor version under which the schema will be published. This parameter is recommended. Schemas have both a major and minor version associated with them.
   --name: string # The new name under which the schema will be published. If this is not provided, the development schema is considered.
-]: any -> record<PublishedSchemaArn: string> {
+]: any -> oneof<record<PublishedSchemaArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3085,8 +3057,6 @@ export def "publish-schema" [
 #
 # PUT /amazonclouddirectory/2017-01-11/object/facets/delete
 # operationId: RemoveFacetFromObject
-# --SchemaFacet shape: {SchemaArn?: string, FacetName?: string}
-# --ObjectReference shape: {Selector?: string}
 export def "remove-facet-from-object" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3107,7 +3077,7 @@ export def "remove-facet-from-object" [
   --x-amz-data-partition: string # The ARN of the directory in which the object resides. (required)
   schema_facet: record # A facet. — shape: {SchemaArn?: string, FacetName?: string}
   object_reference: record # The reference that identifies an object. — shape: {Selector?: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3137,7 +3107,6 @@ export def "remove-facet-from-object" [
 #
 # PUT /amazonclouddirectory/2017-01-11/tags/add
 # operationId: TagResource
-# --Tags item shape: {Key?: string, Value?: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3157,7 +3126,7 @@ export def "tag-resource" [
   --x-amz-signed-headers: string
   resource_arn: string # The Amazon Resource Name (ARN) of the resource. Tagging is only supported for directories.
   tags: list # A list of tag key-value pairs. — item shape: {Key?: string, Value?: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3205,7 +3174,7 @@ export def "untag-resource" [
   --x-amz-signed-headers: string
   resource_arn: string # The Amazon Resource Name (ARN) of the resource. Tagging is only supported for directories.
   tag_keys: list<string> # Keys of the tag that need to be removed from the resource.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3234,8 +3203,6 @@ export def "untag-resource" [
 #
 # POST /amazonclouddirectory/2017-01-11/typedlink/attributes/update
 # operationId: UpdateLinkAttributes
-# --TypedLinkSpecifier shape: {TypedLinkFacet?: record, SourceObjectReference?: record, TargetObjectReference?: record, IdentityAttributeValues?: list}
-# --AttributeUpdates item shape: {AttributeKey?: record, AttributeAction?: record}
 export def "update-link-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3256,7 +3223,7 @@ export def "update-link-attributes" [
   --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the Directory where the updated typed link resides. For more information, see arns or Typed Links (https://docs.aws.amazon.com/clouddirectory/latest/developerguide/directory_objects_links.html#directory_objects_links_typedlink). (required)
   typed_link_specifier: record # Contains all the information that is used to uniquely identify a typed link. The parameters discussed in this topic are used to uniquely specify the typed link being operated on. The AttachTypedLink API returns a typed link specifier while the DetachTypedLink API accepts one as input. Similarly, the ListIncomingTypedLinks and ListOutgoingTypedLinks API operations provide typed link specifiers as output. You can also construct a typed link specifier from scratch. — shape: {TypedLinkFacet?: record, SourceObjectReference?: record, TargetObjectReference?: record, IdentityAttributeValues?: list}
   attribute_updates: list # The attributes update structure. — item shape: {AttributeKey?: record, AttributeAction?: record}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3286,8 +3253,6 @@ export def "update-link-attributes" [
 #
 # PUT /amazonclouddirectory/2017-01-11/object/update
 # operationId: UpdateObjectAttributes
-# --ObjectReference shape: {Selector?: string}
-# --AttributeUpdates item shape: {ObjectAttributeKey?: record, ObjectAttributeAction?: record}
 export def "update-object-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3308,7 +3273,7 @@ export def "update-object-attributes" [
   --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the Directory where the object resides. For more information, see arns. (required)
   object_reference: record # The reference that identifies an object. — shape: {Selector?: string}
   attribute_updates: list # The attributes update structure. — item shape: {ObjectAttributeKey?: record, ObjectAttributeAction?: record}
-]: any -> record<ObjectIdentifier: string> {
+]: any -> oneof<record<ObjectIdentifier: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3357,7 +3322,7 @@ export def "update-schema" [
   --x-amz-signed-headers: string
   --x-amz-data-partition: string # The Amazon Resource Name (ARN) of the development schema. For more information, see arns. (required)
   name: string # The name of the schema.
-]: any -> record<SchemaArn: string> {
+]: any -> oneof<record<SchemaArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3387,7 +3352,6 @@ export def "update-schema" [
 #
 # PUT /amazonclouddirectory/2017-01-11/typedlink/facet
 # operationId: UpdateTypedLinkFacet
-# --AttributeUpdates item shape: {Attribute: record, Action: "CREATE_OR_UPDATE"|"DELETE"}
 export def "update-typed-link-facet" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3409,7 +3373,7 @@ export def "update-typed-link-facet" [
   name: string # The unique name of the typed link facet.
   attribute_updates: list # Attributes update structure. — item shape: {Attribute: record, Action: "CREATE_OR_UPDATE"|"DELETE"}
   identity_attribute_order: list<string> # The order of identity attributes for the facet, from most significant to least significant. The ability to filter typed links considers the order that the attributes are defined on the typed link facet. When providing ranges to a typed link selection, any inexact ranges must be specified at the end. Any attributes that do not have a range specified are presumed to match the entire range. Filters are interpreted in the order of the attributes on the typed link facet, not the order in which they are supplied to any API calls. For more information about identity attributes, see Typed Links (https://docs.aws.amazon.com/clouddirectory/latest/developerguide/directory_objects_links.html#directory_objects_links_typedlink).
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3459,7 +3423,7 @@ export def "upgrade-applied-schema" [
   published_schema_arn: string # The revision of the published schema to upgrade the directory to.
   directory_arn: string # The ARN for the directory to which the upgraded schema will be applied.
   --body-dry-run: oneof<nothing, bool> # Used for testing whether the major version schemas are backward compatible or not. If schema compatibility fails, an exception would be thrown else the call would succeed but no changes will be saved. This parameter is optional.
-]: any -> record<UpgradedSchemaArn: string, DirectoryArn: string> {
+]: any -> oneof<record<UpgradedSchemaArn: string, DirectoryArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3509,7 +3473,7 @@ export def "upgrade-published-schema" [
   published_schema_arn: string # The ARN of the published schema to be upgraded.
   minor_version: string # Identifies the minor version of the published schema that will be created. This parameter is NOT optional.
   --body-dry-run: oneof<nothing, bool> # Used for testing whether the Development schema provided is backwards compatible, or not, with the publish schema provided by the user to be upgraded. If schema compatibility fails, an exception would be thrown else the call would succeed. This parameter is optional and defaults to false.
-]: any -> record<UpgradedSchemaArn: string> {
+]: any -> oneof<record<UpgradedSchemaArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

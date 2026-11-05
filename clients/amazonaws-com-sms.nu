@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -138,9 +161,9 @@ def x-amz-target-completer-34 [] { ["AWSServerMigrationService_V2016_10_24.Updat
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-app" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["create-app" "create-replication-job" "delete-app" "delete-app-launch-configuration" "delete-app-replication-configuration" "delete-app-validation-configuration" "delete-replication-job" "delete-server-catalog" "disassociate-connector" "generate-change-set" "generate-template" "get-app" "get-app-launch-configuration" "get-app-replication-configuration" "get-app-validation-configuration" "get-app-validation-output" "get-connectors" "get-replication-jobs" "get-replication-runs" "get-servers" "import-app-catalog" "import-server-catalog" "launch-app" "list-apps" "notify-app-validation-output" "put-app-launch-configuration" "put-app-replication-configuration" "put-app-validation-configuration" "start-app-replication" "start-on-demand-app-replication" "start-on-demand-replication-run" "stop-app-replication" "terminate-app" "update-app" "update-replication-job" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -162,8 +185,6 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: CreateApp
-# --serverGroups item shape: {serverGroupId?: string, name?: string, serverList?: list}
-# --tags item shape: {key?: string, value?: string}
 export def "create-app" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -188,7 +209,7 @@ export def "create-app" [
   --client-token: string # A unique, case-sensitive identifier that you provide to ensure the idempotency of application creation.
   --server-groups: list # The server groups to include in the application. — item shape: {serverGroupId?: string, name?: string, serverList?: list}
   --tags: list # The tags to be associated with the application. — item shape: {key?: string, value?: string}
-]: any -> record<appSummary: record<appId: string, importedAppId: string, name: string, description: string, status: string, statusMessage: string, replicationConfigurationStatus: string, replicationStatus: string, replicationStatusMessage: string, latestReplicationTime: string, launchConfigurationStatus: string, launchStatus: string, launchStatusMessage: string, launchDetails: record<latestLaunchTime: string, stackName: string, stackId: string>, creationTime: string, lastModified: string, roleName: string, totalServerGroups: int, totalServers: int>, serverGroups: table<serverGroupId: string, name: string, serverList: list>, tags: table<key: string, value: string>> {
+]: any -> oneof<record<appSummary: record<appId: string, importedAppId: string, name: string, description: string, status: string, statusMessage: string, replicationConfigurationStatus: string, replicationStatus: string, replicationStatusMessage: string, latestReplicationTime: string, launchConfigurationStatus: string, launchStatus: string, launchStatusMessage: string, launchDetails: record<latestLaunchTime: string, stackName: string, stackId: string>, creationTime: string, lastModified: string, roleName: string, totalServerGroups: int, totalServers: int>, serverGroups: table<serverGroupId: string, name: string, serverList: list>, tags: table<key: string, value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -246,7 +267,7 @@ export def "create-replication-job" [
   --number-of-recent-amis-to-keep: int # The maximum number of SMS-created AMIs to retain. The oldest is deleted after the maximum number is reached and a new AMI is created.
   --encrypted: oneof<nothing, bool> # Indicates whether the replication job produces encrypted AMIs.
   --kms-key-id: string # The ID of the KMS key for replication jobs that produce encrypted AMIs. This value can be any of the following: KMS key ID KMS key alias ARN referring to the KMS key ID ARN referring to the KMS key alias If encrypted is true but a KMS key ID is not specified, the customer's default KMS key for Amazon EBS is used.
-]: any -> record<replicationJobId: string> {
+]: any -> oneof<record<replicationJobId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -297,7 +318,7 @@ export def "delete-app" [
   --app-id: string # The ID of the application.
   --force-stop-app-replication: oneof<nothing, bool> # Indicates whether to stop all replication jobs corresponding to the servers in the application while deleting the application.
   --force-terminate-app: oneof<nothing, bool> # Indicates whether to terminate the stack corresponding to the application while deleting the application.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -346,7 +367,7 @@ export def "delete-app-launch-configuration" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-3 # required
   --app-id: string # The ID of the application.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -395,7 +416,7 @@ export def "delete-app-replication-configuration" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-4 # required
   --app-id: string # The ID of the application.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -444,7 +465,7 @@ export def "delete-app-validation-configuration" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-5 # required
   app_id: string # The ID of the application.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -493,7 +514,7 @@ export def "delete-replication-job" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-6 # required
   replication_job_id: string # The ID of the replication job.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -542,7 +563,7 @@ export def "delete-server-catalog" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-7 # required
   --body: record
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -591,7 +612,7 @@ export def "disassociate-connector" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-8 # required
   connector_id: string # The ID of the connector.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -641,7 +662,7 @@ export def "generate-change-set" [
   --x-amz-target: string@x-amz-target-completer-9 # required
   --app-id: string # The ID of the application associated with the change set.
   --changeset-format: string@changeset-format-completer # The format for the change set.
-]: any -> record<s3Location: record<bucket: string, key: string>> {
+]: any -> oneof<record<s3Location: record<bucket: string, key: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -691,7 +712,7 @@ export def "generate-template" [
   --x-amz-target: string@x-amz-target-completer-10 # required
   --app-id: string # The ID of the application associated with the CloudFormation template.
   --template-format: string@template-format-completer # The format for generating the CloudFormation template.
-]: any -> record<s3Location: record<bucket: string, key: string>> {
+]: any -> oneof<record<s3Location: record<bucket: string, key: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -740,7 +761,7 @@ export def "get-app" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-11 # required
   --app-id: string # The ID of the application.
-]: any -> record<appSummary: record<appId: string, importedAppId: string, name: string, description: string, status: string, statusMessage: string, replicationConfigurationStatus: string, replicationStatus: string, replicationStatusMessage: string, latestReplicationTime: string, launchConfigurationStatus: string, launchStatus: string, launchStatusMessage: string, launchDetails: record<latestLaunchTime: string, stackName: string, stackId: string>, creationTime: string, lastModified: string, roleName: string, totalServerGroups: int, totalServers: int>, serverGroups: table<serverGroupId: string, name: string, serverList: list>, tags: table<key: string, value: string>> {
+]: any -> oneof<record<appSummary: record<appId: string, importedAppId: string, name: string, description: string, status: string, statusMessage: string, replicationConfigurationStatus: string, replicationStatus: string, replicationStatusMessage: string, latestReplicationTime: string, launchConfigurationStatus: string, launchStatus: string, launchStatusMessage: string, launchDetails: record<latestLaunchTime: string, stackName: string, stackId: string>, creationTime: string, lastModified: string, roleName: string, totalServerGroups: int, totalServers: int>, serverGroups: table<serverGroupId: string, name: string, serverList: list>, tags: table<key: string, value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -789,7 +810,7 @@ export def "get-app-launch-configuration" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-12 # required
   --app-id: string # The ID of the application.
-]: any -> record<appId: string, roleName: string, autoLaunch: bool, serverGroupLaunchConfigurations: table<serverGroupId: string, launchOrder: int, serverLaunchConfigurations: list>> {
+]: any -> oneof<record<appId: string, roleName: string, autoLaunch: bool, serverGroupLaunchConfigurations: table<serverGroupId: string, launchOrder: int, serverLaunchConfigurations: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -838,7 +859,7 @@ export def "get-app-replication-configuration" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-13 # required
   --app-id: string # The ID of the application.
-]: any -> record<serverGroupReplicationConfigurations: table<serverGroupId: string, serverReplicationConfigurations: list>> {
+]: any -> oneof<record<serverGroupReplicationConfigurations: table<serverGroupId: string, serverReplicationConfigurations: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -887,7 +908,7 @@ export def "get-app-validation-configuration" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-14 # required
   app_id: string # The ID of the application.
-]: any -> record<appValidationConfigurations: table<validationId: string, name: string, appValidationStrategy: string, ssmValidationParameters: record>, serverGroupValidationConfigurations: table<serverGroupId: string, serverValidationConfigurations: list>> {
+]: any -> oneof<record<appValidationConfigurations: table<validationId: string, name: string, appValidationStrategy: string, ssmValidationParameters: record>, serverGroupValidationConfigurations: table<serverGroupId: string, serverValidationConfigurations: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -936,7 +957,7 @@ export def "get-app-validation-output" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-15 # required
   app_id: string # The ID of the application.
-]: any -> record<validationOutputList: table<validationId: string, name: string, status: string, statusMessage: string, latestValidationTime: string, appValidationOutput: record, serverValidationOutput: record>> {
+]: any -> oneof<record<validationOutputList: table<validationId: string, name: string, status: string, statusMessage: string, latestValidationTime: string, appValidationOutput: record, serverValidationOutput: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -988,7 +1009,7 @@ export def "get-connectors" [
   --x-amz-target: string@x-amz-target-completer-16 # required
   --next-token-body: string # The token for the next set of results. (body field)
   --max-results-body: int # The maximum number of results to return in a single call. The default value is 50. To retrieve the remaining results, make another call with the returned NextToken value. (body field)
-]: any -> record<connectorList: table<connectorId: string, version: string, status: string, capabilityList: list, vmManagerName: string, vmManagerType: string, vmManagerId: string, ipAddress: string, macAddress: string, associatedOn: string>, nextToken: string> {
+]: any -> oneof<record<connectorList: table<connectorId: string, version: string, status: string, capabilityList: list, vmManagerName: string, vmManagerType: string, vmManagerId: string, ipAddress: string, macAddress: string, associatedOn: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1042,7 +1063,7 @@ export def "get-replication-jobs" [
   --replication-job-id: string # The ID of the replication job.
   --next-token-body: string # The token for the next set of results. (body field)
   --max-results-body: int # The maximum number of results to return in a single call. The default value is 50. To retrieve the remaining results, make another call with the returned NextToken value. (body field)
-]: any -> record<replicationJobList: table<replicationJobId: string, serverId: string, serverType: string, vmServer: record, seedReplicationTime: string, frequency: int, runOnce: bool, nextReplicationRunStartTime: string, licenseType: string, roleName: string, latestAmiId: string, state: string, statusMessage: string, description: string, numberOfRecentAmisToKeep: int, encrypted: bool, kmsKeyId: string, replicationRunList: list>, nextToken: string> {
+]: any -> oneof<record<replicationJobList: table<replicationJobId: string, serverId: string, serverType: string, vmServer: record, seedReplicationTime: string, frequency: int, runOnce: bool, nextReplicationRunStartTime: string, licenseType: string, roleName: string, latestAmiId: string, state: string, statusMessage: string, description: string, numberOfRecentAmisToKeep: int, encrypted: bool, kmsKeyId: string, replicationRunList: list>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1096,7 +1117,7 @@ export def "get-replication-runs" [
   replication_job_id: string # The ID of the replication job.
   --next-token-body: string # The token for the next set of results. (body field)
   --max-results-body: int # The maximum number of results to return in a single call. The default value is 50. To retrieve the remaining results, make another call with the returned NextToken value. (body field)
-]: any -> record<replicationJob: record<replicationJobId: string, serverId: string, serverType: string, vmServer: record<vmServerAddress: record, vmName: string, vmManagerName: string, vmManagerType: string, vmPath: string>, seedReplicationTime: string, frequency: int, runOnce: bool, nextReplicationRunStartTime: string, licenseType: string, roleName: string, latestAmiId: string, state: string, statusMessage: string, description: string, numberOfRecentAmisToKeep: int, encrypted: bool, kmsKeyId: string, replicationRunList: list<record>>, replicationRunList: table<replicationRunId: string, state: string, type: string, stageDetails: record, statusMessage: string, amiId: string, scheduledStartTime: string, completedTime: string, description: string, encrypted: bool, kmsKeyId: string>, nextToken: string> {
+]: any -> oneof<record<replicationJob: record<replicationJobId: string, serverId: string, serverType: string, vmServer: record<vmServerAddress: record, vmName: string, vmManagerName: string, vmManagerType: string, vmPath: string>, seedReplicationTime: string, frequency: int, runOnce: bool, nextReplicationRunStartTime: string, licenseType: string, roleName: string, latestAmiId: string, state: string, statusMessage: string, description: string, numberOfRecentAmisToKeep: int, encrypted: bool, kmsKeyId: string, replicationRunList: list<record>>, replicationRunList: table<replicationRunId: string, state: string, type: string, stageDetails: record, statusMessage: string, amiId: string, scheduledStartTime: string, completedTime: string, description: string, encrypted: bool, kmsKeyId: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1127,7 +1148,6 @@ export def "get-replication-runs" [
 #
 # POST /
 # operationId: GetServers
-# --vmServerAddressList item shape: {vmManagerId?: string, vmId?: string}
 export def "get-servers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1151,7 +1171,7 @@ export def "get-servers" [
   --next-token-body: string # The token for the next set of results. (body field)
   --max-results-body: int # The maximum number of results to return in a single call. The default value is 50. To retrieve the remaining results, make another call with the returned NextToken value. (body field)
   --vm-server-address-list: list # The server addresses. — item shape: {vmManagerId?: string, vmId?: string}
-]: any -> record<lastModifiedOn: string, serverCatalogStatus: string, serverList: table<serverId: string, serverType: string, vmServer: record, replicationJobId: string, replicationJobTerminated: bool>, nextToken: string> {
+]: any -> oneof<record<lastModifiedOn: string, serverCatalogStatus: string, serverList: table<serverId: string, serverType: string, vmServer: record, replicationJobId: string, replicationJobTerminated: bool>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1201,7 +1221,7 @@ export def "import-app-catalog" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-20 # required
   --role-name: string # The name of the service role. If you omit this parameter, we create a service-linked role for Migration Hub in your account. Otherwise, the role that you provide must have the policy and trust policy (https://docs.aws.amazon.com/migrationhub/latest/ug/new-customer-setup.html#sms-managed) described in the Migration Hub User Guide.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1250,7 +1270,7 @@ export def "import-server-catalog" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-21 # required
   --body: record
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1299,7 +1319,7 @@ export def "launch-app" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-22 # required
   --app-id: string # The ID of the application.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1350,7 +1370,7 @@ export def "list-apps" [
   --app-ids: list<string> # The unique application IDs.
   --next-token: string # The token for the next set of results.
   --max-results: int # The maximum number of results to return in a single call. The default value is 100. To retrieve the remaining results, make another call with the returned NextToken value.
-]: any -> record<apps: table<appId: string, importedAppId: string, name: string, description: string, status: string, statusMessage: string, replicationConfigurationStatus: string, replicationStatus: string, replicationStatusMessage: string, latestReplicationTime: string, launchConfigurationStatus: string, launchStatus: string, launchStatusMessage: string, launchDetails: record, creationTime: string, lastModified: string, roleName: string, totalServerGroups: int, totalServers: int>, nextToken: string> {
+]: any -> oneof<record<apps: table<appId: string, importedAppId: string, name: string, description: string, status: string, statusMessage: string, replicationConfigurationStatus: string, replicationStatus: string, replicationStatusMessage: string, latestReplicationTime: string, launchConfigurationStatus: string, launchStatus: string, launchStatusMessage: string, launchDetails: record, creationTime: string, lastModified: string, roleName: string, totalServerGroups: int, totalServers: int>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1380,7 +1400,6 @@ export def "list-apps" [
 #
 # POST /
 # operationId: NotifyAppValidationOutput
-# --notificationContext shape: {validationId?: string, status?: "READY_FOR_VALIDATION"|"PENDING"|"IN_PROGRESS"|"SUCCEEDED"|"FAILED", statusMessage?: string}
 export def "notify-app-validation-output" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1401,7 +1420,7 @@ export def "notify-app-validation-output" [
   --x-amz-target: string@x-amz-target-completer-24 # required
   app_id: string # The ID of the application.
   --notification-context: record # Contains the status of validating an application. — shape: {validationId?: string, status?: "READY_FOR_VALIDATION"|"PENDING"|"IN_PROGRESS"|"SUCCEEDED"|"FAILED", statusMessage?: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1431,7 +1450,6 @@ export def "notify-app-validation-output" [
 #
 # POST /
 # operationId: PutAppLaunchConfiguration
-# --serverGroupLaunchConfigurations item shape: {serverGroupId?: string, launchOrder?: int, serverLaunchConfigurations?: list}
 export def "put-app-launch-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1454,7 +1472,7 @@ export def "put-app-launch-configuration" [
   --role-name: string # The name of service role in the customer's account that CloudFormation uses to launch the application.
   --auto-launch: oneof<nothing, bool> # Indicates whether the application is configured to launch automatically after replication is complete.
   --server-group-launch-configurations: list # Information about the launch configurations for server groups in the application. — item shape: {serverGroupId?: string, launchOrder?: int, serverLaunchConfigurations?: list}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1484,7 +1502,6 @@ export def "put-app-launch-configuration" [
 #
 # POST /
 # operationId: PutAppReplicationConfiguration
-# --serverGroupReplicationConfigurations item shape: {serverGroupId?: string, serverReplicationConfigurations?: list}
 export def "put-app-replication-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1505,7 +1522,7 @@ export def "put-app-replication-configuration" [
   --x-amz-target: string@x-amz-target-completer-26 # required
   --app-id: string # The ID of the application.
   --server-group-replication-configurations: list # Information about the replication configurations for server groups in the application. — item shape: {serverGroupId?: string, serverReplicationConfigurations?: list}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1535,8 +1552,6 @@ export def "put-app-replication-configuration" [
 #
 # POST /
 # operationId: PutAppValidationConfiguration
-# --appValidationConfigurations item shape: {validationId?: string, name?: string, appValidationStrategy?: "SSM", ssmValidationParameters?: record}
-# --serverGroupValidationConfigurations item shape: {serverGroupId?: string, serverValidationConfigurations?: list}
 export def "put-app-validation-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1558,7 +1573,7 @@ export def "put-app-validation-configuration" [
   app_id: string # The ID of the application.
   --app-validation-configurations: list # The configuration for application validation. — item shape: {validationId?: string, name?: string, appValidationStrategy?: "SSM", ssmValidationParameters?: record}
   --server-group-validation-configurations: list # The configuration for instance validation. — item shape: {serverGroupId?: string, serverValidationConfigurations?: list}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1607,7 +1622,7 @@ export def "start-app-replication" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-28 # required
   --app-id: string # The ID of the application.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1657,7 +1672,7 @@ export def "start-on-demand-app-replication" [
   --x-amz-target: string@x-amz-target-completer-29 # required
   app_id: string # The ID of the application.
   --description: string # The description of the replication run.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1707,7 +1722,7 @@ export def "start-on-demand-replication-run" [
   --x-amz-target: string@x-amz-target-completer-30 # required
   replication_job_id: string # The ID of the replication job.
   --description: string # The description of the replication run.
-]: any -> record<replicationRunId: string> {
+]: any -> oneof<record<replicationRunId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1756,7 +1771,7 @@ export def "stop-app-replication" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-31 # required
   --app-id: string # The ID of the application.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1805,7 +1820,7 @@ export def "terminate-app" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-32 # required
   --app-id: string # The ID of the application.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1835,8 +1850,6 @@ export def "terminate-app" [
 #
 # POST /
 # operationId: UpdateApp
-# --serverGroups item shape: {serverGroupId?: string, name?: string, serverList?: list}
-# --tags item shape: {key?: string, value?: string}
 export def "update-app" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1861,7 +1874,7 @@ export def "update-app" [
   --role-name: string # The name of the service role in the customer's account used by Server Migration Service.
   --server-groups: list # The server groups in the application to update. — item shape: {serverGroupId?: string, name?: string, serverList?: list}
   --tags: list # The tags to associate with the application. — item shape: {key?: string, value?: string}
-]: any -> record<appSummary: record<appId: string, importedAppId: string, name: string, description: string, status: string, statusMessage: string, replicationConfigurationStatus: string, replicationStatus: string, replicationStatusMessage: string, latestReplicationTime: string, launchConfigurationStatus: string, launchStatus: string, launchStatusMessage: string, launchDetails: record<latestLaunchTime: string, stackName: string, stackId: string>, creationTime: string, lastModified: string, roleName: string, totalServerGroups: int, totalServers: int>, serverGroups: table<serverGroupId: string, name: string, serverList: list>, tags: table<key: string, value: string>> {
+]: any -> oneof<record<appSummary: record<appId: string, importedAppId: string, name: string, description: string, status: string, statusMessage: string, replicationConfigurationStatus: string, replicationStatus: string, replicationStatusMessage: string, latestReplicationTime: string, launchConfigurationStatus: string, launchStatus: string, launchStatusMessage: string, launchDetails: record<latestLaunchTime: string, stackName: string, stackId: string>, creationTime: string, lastModified: string, roleName: string, totalServerGroups: int, totalServers: int>, serverGroups: table<serverGroupId: string, name: string, serverList: list>, tags: table<key: string, value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1918,7 +1931,7 @@ export def "update-replication-job" [
   --number-of-recent-amis-to-keep: int # The maximum number of SMS-created AMIs to retain. The oldest is deleted after the maximum number is reached and a new AMI is created.
   --encrypted: oneof<nothing, bool> # When true, the replication job produces encrypted AMIs. For more information, KmsKeyId.
   --kms-key-id: string # The ID of the KMS key for replication jobs that produce encrypted AMIs. This value can be any of the following: KMS key ID KMS key alias ARN referring to the KMS key ID ARN referring to the KMS key alias If encrypted is enabled but a KMS key ID is not specified, the customer's default KMS key for Amazon EBS is used.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

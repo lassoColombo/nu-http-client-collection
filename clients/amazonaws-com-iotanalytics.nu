@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -116,9 +140,9 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "batch-put-message" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["batch-put-message" "cancel-pipeline-reprocessing" "create-channel" "list-channels" "create-dataset" "list-datasets" "create-dataset-content" "delete-dataset-content" "get-dataset-content" "create-datastore" "list-datastores" "create-pipeline" "list-pipelines" "delete-channel" "describe-channel" "update-channel" "delete-dataset" "describe-dataset" "update-dataset" "delete-datastore" "describe-datastore" "update-datastore" "delete-pipeline" "describe-pipeline" "update-pipeline" "describe-logging-options" "put-logging-options" "list-dataset-contents" "list-tags-for-resource" "tag-resource" "run-pipeline-activity" "sample-channel-data" "start-pipeline-reprocessing" "untag-resource" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -140,7 +164,6 @@ export def commands []: nothing -> table {
 #
 # POST /messages/batch
 # operationId: BatchPutMessage
-# --messages item shape: {messageId: string, payload: string}
 export def "batch-put-message" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -160,7 +183,7 @@ export def "batch-put-message" [
   --x-amz-signed-headers: string
   channel_name: string # The name of the channel where the messages are sent.
   messages: list # The list of messages to be sent. Each message has the format: { "messageId": "string", "payload": "string"}. The field names of message payloads (data) that you send to IoT Analytics: Must contain only alphanumeric characters and undescores (_). No other special characters are allowed. Must begin with an alphabetic character or single underscore (_). Cannot contain hyphens (-). In regular expression terms: "^[A-Za-z_]([A-Za-z0-9]*|[A-Za-z0-9][A-Za-z0-9_]*)$". Cannot be more than 255 characters. Are case insensitive. (Fields named foo and FOO in the same payload are considered duplicates.) For example, {"temp_01": 29} or {"_temp_01": 29} are valid, but {"temp-01": 29}, {"01_temp": 29} or {"__temp_01": 29} are invalid in message payloads. — item shape: {messageId: string, payload: string}
-]: any -> record<batchPutMessageErrorEntries: table<messageId: string, errorCode: string, errorMessage: string>> {
+]: any -> oneof<record<batchPutMessageErrorEntries: table<messageId: string, errorCode: string, errorMessage: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -208,7 +231,7 @@ export def "cancel-pipeline-reprocessing" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pipeline_name | is-empty) { error make --unspanned { msg: "path parameter 'pipelineName' must be non-empty" } }
@@ -236,9 +259,6 @@ export def "cancel-pipeline-reprocessing" [
 #
 # POST /channels
 # operationId: CreateChannel
-# --channelStorage shape: {serviceManagedS3?: record, customerManagedS3?: record}
-# --retentionPeriod shape: {unlimited?: bool, numberOfDays?: int}
-# --tags item shape: {key: string, value: string}
 export def "create-channel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -260,7 +280,7 @@ export def "create-channel" [
   --channel-storage: record # Where channel data is stored. You may choose one of serviceManagedS3, customerManagedS3 storage. If not specified, the default is serviceManagedS3. This can't be changed after creation of the channel. — shape: {serviceManagedS3?: record, customerManagedS3?: record}
   --retention-period: record # How long, in days, message data is kept. — shape: {unlimited?: bool, numberOfDays?: int}
   --tags: list # Metadata which can be used to manage the channel. — item shape: {key: string, value: string}
-]: any -> record<channelName: string, channelArn: string, retentionPeriod: record<unlimited: bool, numberOfDays: int>> {
+]: any -> oneof<record<channelName: string, channelArn: string, retentionPeriod: record<unlimited: bool, numberOfDays: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -308,7 +328,7 @@ export def "list-channels" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<channelSummaries: table<channelName: string, channelStorage: record, status: string, creationTime: string, lastUpdateTime: string, lastMessageArrivalTime: string>, nextToken: string> {
+]: nothing -> oneof<record<channelSummaries: table<channelName: string, channelStorage: record, status: string, creationTime: string, lastUpdateTime: string, lastMessageArrivalTime: string>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
@@ -335,13 +355,6 @@ export def "list-channels" [
 #
 # POST /datasets
 # operationId: CreateDataset
-# --actions item shape: {actionName?: string, queryAction?: record, containerAction?: record}
-# --triggers item shape: {schedule?: record, dataset?: record}
-# --contentDeliveryRules item shape: {entryName?: string, destination: record}
-# --retentionPeriod shape: {unlimited?: bool, numberOfDays?: int}
-# --versioningConfiguration shape: {unlimited?: bool, maxVersions?: int}
-# --tags item shape: {key: string, value: string}
-# --lateDataRules item shape: {ruleName?: string, ruleConfiguration: record}
 export def "create-dataset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -367,7 +380,7 @@ export def "create-dataset" [
   --versioning-configuration: record # Information about the versioning of dataset contents. — shape: {unlimited?: bool, maxVersions?: int}
   --tags: list # Metadata which can be used to manage the dataset. — item shape: {key: string, value: string}
   --late-data-rules: list # A list of data rules that send notifications to CloudWatch, when data arrives late. To specify lateDataRules, the dataset must use a DeltaTimer (https://docs.aws.amazon.com/iotanalytics/latest/APIReference/API_DeltaTime.html) filter. — item shape: {ruleName?: string, ruleConfiguration: record}
-]: any -> record<datasetName: string, datasetArn: string, retentionPeriod: record<unlimited: bool, numberOfDays: int>> {
+]: any -> oneof<record<datasetName: string, datasetArn: string, retentionPeriod: record<unlimited: bool, numberOfDays: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -415,7 +428,7 @@ export def "list-datasets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<datasetSummaries: table<datasetName: string, status: string, creationTime: string, lastUpdateTime: string, triggers: list, actions: list>, nextToken: string> {
+]: nothing -> oneof<record<datasetSummaries: table<datasetName: string, status: string, creationTime: string, lastUpdateTime: string, triggers: list, actions: list>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
@@ -461,7 +474,7 @@ export def "create-dataset-content" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --version-id: string # The version ID of the dataset content. To specify versionId for a dataset content, the dataset must use a DeltaTimer (https://docs.aws.amazon.com/iotanalytics/latest/APIReference/API_DeltaTime.html) filter.
-]: any -> record<versionId: string> {
+]: any -> oneof<record<versionId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -557,7 +570,7 @@ export def "get-dataset-content" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<entries: table<entryName: string, dataURI: string>, timestamp: string, status: record<state: string, reason: string>> {
+]: nothing -> oneof<record<entries: table<entryName: string, dataURI: string>, timestamp: string, status: record<state: string, reason: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($dataset_name | is-empty) { error make --unspanned { msg: "path parameter 'datasetName' must be non-empty" } }
@@ -585,11 +598,6 @@ export def "get-dataset-content" [
 #
 # POST /datastores
 # operationId: CreateDatastore
-# --datastoreStorage shape: {serviceManagedS3?: record, customerManagedS3?: record, iotSiteWiseMultiLayerStorage?: record}
-# --retentionPeriod shape: {unlimited?: bool, numberOfDays?: int}
-# --tags item shape: {key: string, value: string}
-# --fileFormatConfiguration shape: {jsonConfiguration?: record, parquetConfiguration?: record}
-# --datastorePartitions shape: {partitions?: list}
 export def "create-datastore" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -613,7 +621,7 @@ export def "create-datastore" [
   --tags: list # Metadata which can be used to manage the data store. — item shape: {key: string, value: string}
   --file-format-configuration: record # Contains the configuration information of file formats. IoT Analytics data stores support JSON and Parquet (https://parquet.apache.org/). The default file format is JSON. You can specify only one format. You can't change the file format after you create the data store. — shape: {jsonConfiguration?: record, parquetConfiguration?: record}
   --datastore-partitions: record # Contains information about the partition dimensions in a data store. — shape: {partitions?: list}
-]: any -> record<datastoreName: string, datastoreArn: string, retentionPeriod: record<unlimited: bool, numberOfDays: int>> {
+]: any -> oneof<record<datastoreName: string, datastoreArn: string, retentionPeriod: record<unlimited: bool, numberOfDays: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -661,7 +669,7 @@ export def "list-datastores" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<datastoreSummaries: table<datastoreName: string, datastoreStorage: record, status: string, creationTime: string, lastUpdateTime: string, lastMessageArrivalTime: string, fileFormatType: string, datastorePartitions: record>, nextToken: string> {
+]: nothing -> oneof<record<datastoreSummaries: table<datastoreName: string, datastoreStorage: record, status: string, creationTime: string, lastUpdateTime: string, lastMessageArrivalTime: string, fileFormatType: string, datastorePartitions: record>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
@@ -688,8 +696,6 @@ export def "list-datastores" [
 #
 # POST /pipelines
 # operationId: CreatePipeline
-# --pipelineActivities item shape: {channel?: record, lambda?: record, datastore?: record, addAttributes?: record, removeAttributes?: record, selectAttributes?: record, filter?: record, math?: record, deviceRegistryEnrich?: record, deviceShadowEnrich?: record}
-# --tags item shape: {key: string, value: string}
 export def "create-pipeline" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -710,7 +716,7 @@ export def "create-pipeline" [
   pipeline_name: string # The name of the pipeline.
   pipeline_activities: list # A list of PipelineActivity objects. Activities perform transformations on your messages, such as removing, renaming or adding message attributes; filtering messages based on attribute values; invoking your Lambda unctions on messages for advanced processing; or performing mathematical transformations to normalize device data. The list can be 2-25 PipelineActivity objects and must contain both a channel and a datastore activity. Each entry in the list must contain only one activity. For example: pipelineActivities = [ { "channel": { ... } }, { "lambda": { ... } }, ... ] — item shape: {channel?: record, lambda?: record, datastore?: record, addAttributes?: record, removeAttributes?: record, selectAttributes?: record, filter?: record, math?: record, deviceRegistryEnrich?: record, deviceShadowEnrich?: record}
   --tags: list # Metadata which can be used to manage the pipeline. — item shape: {key: string, value: string}
-]: any -> record<pipelineName: string, pipelineArn: string> {
+]: any -> oneof<record<pipelineName: string, pipelineArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -758,7 +764,7 @@ export def "list-pipelines" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<pipelineSummaries: table<pipelineName: string, reprocessingSummaries: list, creationTime: string, lastUpdateTime: string>, nextToken: string> {
+]: nothing -> oneof<record<pipelineSummaries: table<pipelineName: string, reprocessingSummaries: list, creationTime: string, lastUpdateTime: string>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
@@ -849,7 +855,7 @@ export def "describe-channel" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<channel: record<name: string, storage: record<serviceManagedS3: record, customerManagedS3: record>, arn: string, status: string, retentionPeriod: record<unlimited: bool, numberOfDays: int>, creationTime: string, lastUpdateTime: string, lastMessageArrivalTime: string>, statistics: record<size: record<estimatedSizeInBytes: float, estimatedOn: string>>> {
+]: nothing -> oneof<record<channel: record<name: string, storage: record<serviceManagedS3: record, customerManagedS3: record>, arn: string, status: string, retentionPeriod: record<unlimited: bool, numberOfDays: int>, creationTime: string, lastUpdateTime: string, lastMessageArrivalTime: string>, statistics: record<size: record<estimatedSizeInBytes: float, estimatedOn: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_name | is-empty) { error make --unspanned { msg: "path parameter 'channelName' must be non-empty" } }
@@ -877,8 +883,6 @@ export def "describe-channel" [
 #
 # PUT /channels/{channelName}
 # operationId: UpdateChannel
-# --channelStorage shape: {serviceManagedS3?: record, customerManagedS3?: record}
-# --retentionPeriod shape: {unlimited?: bool, numberOfDays?: int}
 export def "update-channel" [
   channel_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -992,7 +996,7 @@ export def "describe-dataset" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<dataset: record<name: string, arn: string, actions: list<record>, triggers: list<record>, contentDeliveryRules: list<record>, status: string, creationTime: string, lastUpdateTime: string, retentionPeriod: record<unlimited: bool, numberOfDays: int>, versioningConfiguration: record<unlimited: bool, maxVersions: int>, lateDataRules: list<record>>> {
+]: nothing -> oneof<record<dataset: record<name: string, arn: string, actions: list<record>, triggers: list<record>, contentDeliveryRules: list<record>, status: string, creationTime: string, lastUpdateTime: string, retentionPeriod: record<unlimited: bool, numberOfDays: int>, versioningConfiguration: record<unlimited: bool, maxVersions: int>, lateDataRules: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($dataset_name | is-empty) { error make --unspanned { msg: "path parameter 'datasetName' must be non-empty" } }
@@ -1019,12 +1023,6 @@ export def "describe-dataset" [
 #
 # PUT /datasets/{datasetName}
 # operationId: UpdateDataset
-# --actions item shape: {actionName?: string, queryAction?: record, containerAction?: record}
-# --triggers item shape: {schedule?: record, dataset?: record}
-# --contentDeliveryRules item shape: {entryName?: string, destination: record}
-# --retentionPeriod shape: {unlimited?: bool, numberOfDays?: int}
-# --versioningConfiguration shape: {unlimited?: bool, maxVersions?: int}
-# --lateDataRules item shape: {ruleName?: string, ruleConfiguration: record}
 export def "update-dataset" [
   dataset_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1143,7 +1141,7 @@ export def "describe-datastore" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<datastore: record<name: string, storage: record<serviceManagedS3: record, customerManagedS3: record, iotSiteWiseMultiLayerStorage: record>, arn: string, status: string, retentionPeriod: record<unlimited: bool, numberOfDays: int>, creationTime: string, lastUpdateTime: string, lastMessageArrivalTime: string, fileFormatConfiguration: record<jsonConfiguration: record, parquetConfiguration: record>, datastorePartitions: record<partitions: list>>, statistics: record<size: record<estimatedSizeInBytes: float, estimatedOn: string>>> {
+]: nothing -> oneof<record<datastore: record<name: string, storage: record<serviceManagedS3: record, customerManagedS3: record, iotSiteWiseMultiLayerStorage: record>, arn: string, status: string, retentionPeriod: record<unlimited: bool, numberOfDays: int>, creationTime: string, lastUpdateTime: string, lastMessageArrivalTime: string, fileFormatConfiguration: record<jsonConfiguration: record, parquetConfiguration: record>, datastorePartitions: record<partitions: list>>, statistics: record<size: record<estimatedSizeInBytes: float, estimatedOn: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($datastore_name | is-empty) { error make --unspanned { msg: "path parameter 'datastoreName' must be non-empty" } }
@@ -1171,9 +1169,6 @@ export def "describe-datastore" [
 #
 # PUT /datastores/{datastoreName}
 # operationId: UpdateDatastore
-# --retentionPeriod shape: {unlimited?: bool, numberOfDays?: int}
-# --datastoreStorage shape: {serviceManagedS3?: record, customerManagedS3?: record, iotSiteWiseMultiLayerStorage?: record}
-# --fileFormatConfiguration shape: {jsonConfiguration?: record, parquetConfiguration?: record}
 export def "update-datastore" [
   datastore_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1288,7 +1283,7 @@ export def "describe-pipeline" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<pipeline: record<name: string, arn: string, activities: list<record>, reprocessingSummaries: list<record>, creationTime: string, lastUpdateTime: string>> {
+]: nothing -> oneof<record<pipeline: record<name: string, arn: string, activities: list<record>, reprocessingSummaries: list<record>, creationTime: string, lastUpdateTime: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pipeline_name | is-empty) { error make --unspanned { msg: "path parameter 'pipelineName' must be non-empty" } }
@@ -1315,7 +1310,6 @@ export def "describe-pipeline" [
 #
 # PUT /pipelines/{pipelineName}
 # operationId: UpdatePipeline
-# --pipelineActivities item shape: {channel?: record, lambda?: record, datastore?: record, addAttributes?: record, removeAttributes?: record, selectAttributes?: record, filter?: record, math?: record, deviceRegistryEnrich?: record, deviceShadowEnrich?: record}
 export def "update-pipeline" [
   pipeline_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1382,7 +1376,7 @@ export def "describe-logging-options" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<loggingOptions: record<roleArn: string, level: string, enabled: bool>> {
+]: nothing -> oneof<record<loggingOptions: record<roleArn: string, level: string, enabled: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/logging" $auth.query)
@@ -1408,7 +1402,6 @@ export def "describe-logging-options" [
 #
 # PUT /logging
 # operationId: PutLoggingOptions
-# --loggingOptions shape: {roleArn?: string, level?: "ERROR", enabled?: bool}
 export def "put-logging-options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1478,7 +1471,7 @@ export def "list-dataset-contents" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<datasetContentSummaries: table<version: string, status: record, creationTime: string, scheduleTime: string, completionTime: string>, nextToken: string> {
+]: nothing -> oneof<record<datasetContentSummaries: table<version: string, status: record, creationTime: string, scheduleTime: string, completionTime: string>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($dataset_name | is-empty) { error make --unspanned { msg: "path parameter 'datasetName' must be non-empty" } }
@@ -1524,7 +1517,7 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<tags: table<key: string, value: string>> {
+]: nothing -> oneof<record<tags: table<key: string, value: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn == null) { error make --unspanned { msg: "required query parameter 'resourceArn' missing: pass --resource-arn" } }
@@ -1552,7 +1545,6 @@ export def "list-tags-for-resource" [
 #
 # POST /tags
 # operationId: TagResource
-# --tags item shape: {key: string, value: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1572,7 +1564,7 @@ export def "tag-resource" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   tags: list # The new or modified tags for the resource. — item shape: {key: string, value: string}
-]: any -> any {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1603,7 +1595,6 @@ export def "tag-resource" [
 #
 # POST /pipelineactivities/run
 # operationId: RunPipelineActivity
-# --pipelineActivity shape: {channel?: record, lambda?: record, datastore?: record, addAttributes?: record, removeAttributes?: record, selectAttributes?: record, filter?: record, math?: record, deviceRegistryEnrich?: record, deviceShadowEnrich?: record}
 export def "run-pipeline-activity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1623,7 +1614,7 @@ export def "run-pipeline-activity" [
   --x-amz-signed-headers: string
   pipeline_activity: record # An activity that performs a transformation on a message. — shape: {channel?: record, lambda?: record, datastore?: record, addAttributes?: record, removeAttributes?: record, selectAttributes?: record, filter?: record, math?: record, deviceRegistryEnrich?: record, deviceShadowEnrich?: record}
   payloads: list<string> # The sample message payloads on which the pipeline activity is run.
-]: any -> record<payloads: list<string>, logResult: string> {
+]: any -> oneof<record<payloads: list<string>, logResult: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1673,7 +1664,7 @@ export def "sample-channel-data" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<payloads: list<string>> {
+]: nothing -> oneof<record<payloads: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_name | is-empty) { error make --unspanned { msg: "path parameter 'channelName' must be non-empty" } }
@@ -1701,7 +1692,6 @@ export def "sample-channel-data" [
 #
 # POST /pipelines/{pipelineName}/reprocessing
 # operationId: StartPipelineReprocessing
-# --channelMessages shape: {s3Paths?: list<string>}
 export def "start-pipeline-reprocessing" [
   pipeline_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1723,7 +1713,7 @@ export def "start-pipeline-reprocessing" [
   --start-time: string # The start time (inclusive) of raw message data that is reprocessed. If you specify a value for the startTime parameter, you must not use the channelMessages object. (format: date-time)
   --end-time: string # The end time (exclusive) of raw message data that is reprocessed. If you specify a value for the endTime parameter, you must not use the channelMessages object. (format: date-time)
   --channel-messages: record # Specifies one or more sets of channel messages. — shape: {s3Paths?: list<string>}
-]: any -> record<reprocessingId: string> {
+]: any -> oneof<record<reprocessingId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1772,7 +1762,7 @@ export def "untag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn == null) { error make --unspanned { msg: "required query parameter 'resourceArn' missing: pass --resource-arn" } }

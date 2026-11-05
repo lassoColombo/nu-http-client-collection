@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,12 +111,13 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # HEAD — bodyless; default surfaces just the headers on success
 def send-head [req: record, insecure: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = (http head --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure $req.url)
+  let resp = http head --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure $req.url
   if (not $full) and (not $allow_errors) and (status-ok $resp.status $ok_codes) { return $resp.headers }
   $resp | handle-response $allow_errors $full $ok_codes
 }
@@ -129,9 +153,9 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-list-at-tenant-scope" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["providers-list-at-tenant-scope" "deployments-list-at-management-group-scope" "deployments-delete-at-management-group-scope" "deployments-get-at-management-group-scope" "deployments-check-existence-at-management-group-scope" "deployments-create-or-update-at-management-group-scope" "deployments-cancel-at-management-group-scope" "deployments-export-template-at-management-group-scope" "deployment-operations-list-at-management-group-scope" "deployment-operations-get-at-management-group-scope" "deployments-validate-at-management-group-scope" "deployments-calculate-template-hash" "deployments-list-at-tenant-scope" "deployments-delete-at-tenant-scope" "deployments-get-at-tenant-scope" "deployments-check-existence-at-tenant-scope" "deployments-create-or-update-at-tenant-scope" "deployments-cancel-at-tenant-scope" "deployments-export-template-at-tenant-scope" "deployment-operations-list-at-tenant-scope" "deployment-operations-get-at-tenant-scope" "deployments-validate-at-tenant-scope" "operations-list" "providers-get-at-tenant-scope" "providers-list" "deployments-list-at-subscription-scope" "deployments-delete-at-subscription-scope" "deployments-get-at-subscription-scope" "deployments-check-existence-at-subscription-scope" "deployments-create-or-update-at-subscription-scope" "deployments-cancel-at-subscription-scope" "deployments-export-template-at-subscription-scope" "deployment-operations-list-at-subscription-scope" "deployment-operations-get-at-subscription-scope" "deployments-validate-at-subscription-scope" "deployments-what-if-at-subscription-scope" "providers-get" "providers-register" "providers-unregister" "resources-list-by-resource-group" "resources-move-resources" "resources-validate-move-resources" "resource-groups-list" "resource-groups-delete" "resource-groups-get" "resource-groups-check-existence" "resource-groups-update" "resource-groups-create-or-update" "deployment-operations-list" "deployment-operations-get" "resource-groups-export-template" "deployments-list-by-resource-group" "deployments-delete" "deployments-get" "deployments-check-existence" "deployments-create-or-update" "deployments-cancel" "deployments-export-template" "deployments-validate" "deployments-what-if" "resources-delete" "resources-get" "resources-check-existence" "resources-update" "resources-create-or-update" "resources-list" "tags-list" "tags-delete" "tags-create-or-update" "tags-delete-value" "tags-create-or-update-value" "resources-delete-by-id" "resources-get-by-id" "resources-check-existence-by-id" "resources-update-by-id" "resources-create-or-update-by-id" "deployments-list-at-scope" "deployments-delete-at-scope" "deployments-get-at-scope" "deployments-check-existence-at-scope" "deployments-create-or-update-at-scope" "deployments-cancel-at-scope" "deployments-export-template-at-scope" "deployment-operations-list-at-scope" "deployment-operations-get-at-scope" "deployments-validate-at-scope" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -166,7 +190,7 @@ export def "providers-list-at-tenant-scope" [
   --top: int # The number of results to return. If null is passed returns all providers. (format: int32)
   --expand: string # The properties to include in the results. For example, use &$expand=metadata in the query string to retrieve resource provider metadata. To include property aliases in response, use $expand=resourceTypes/aliases.
   --api-version: string # The API version to use for this operation. (required)
-]: nothing -> record<nextLink: string, value: table<id: string, namespace: string, registrationPolicy: string, registrationState: string, resourceTypes: list>> {
+]: nothing -> oneof<record<nextLink: string, value: table<id: string, namespace: string, registrationPolicy: string, registrationState: string, resourceTypes: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
@@ -206,7 +230,7 @@ export def "deployments-list-at-management-group-scope" [
   --filter: string # The filter to apply on the operation. For example, you can use $filter=provisioningState eq '{state}'.
   --top: int # The number of results to get. If null is passed, returns all deployments. (format: int32)
   --api-version: string # The API version to use for this operation. (required)
-]: nothing -> record<nextLink: string, value: table<id: string, location: string, name: string, properties: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<id: string, location: string, name: string, properties: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
@@ -287,7 +311,7 @@ export def "deployments-get-at-management-group-scope" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation. (required)
-]: nothing -> record<id: string, location: string, name: string, properties: record<correlationId: string, debugSetting: record<detailLevel: string>, dependencies: list<record>, duration: string, mode: string, onErrorDeployment: record<deploymentName: string, provisioningState: string, type: string>, outputs: record, parameters: record, parametersLink: record<contentVersion: string, uri: string>, providers: list<record>, provisioningState: string, template: record, templateLink: record<contentVersion: string, uri: string>, timestamp: string>, type: string> {
+]: nothing -> oneof<record<id: string, location: string, name: string, properties: record<correlationId: string, debugSetting: record<detailLevel: string>, dependencies: list<record>, duration: string, mode: string, onErrorDeployment: record<deploymentName: string, provisioningState: string, type: string>, outputs: record, parameters: record, parametersLink: record<contentVersion: string, uri: string>, providers: list<record>, provisioningState: string, template: record, templateLink: record<contentVersion: string, uri: string>, timestamp: string>, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
@@ -328,7 +352,7 @@ export def "deployments-check-existence-at-management-group-scope" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation. (required)
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
@@ -356,7 +380,6 @@ export def "deployments-check-existence-at-management-group-scope" [
 #
 # PUT /providers/Microsoft.Management/managementGroups/{groupId}/providers/Microsoft.Resources/deployments/{deploymentName}
 # operationId: Deployments_CreateOrUpdateAtManagementGroupScope
-# --properties shape: {debugSetting?: any, mode: "Incremental"|"Complete", onErrorDeployment?: any, parameters?: record, parametersLink?: any, template?: record, templateLink?: any}
 export def "deployments-create-or-update-at-management-group-scope" [
   group_id: string
   deployment_name: string
@@ -372,7 +395,7 @@ export def "deployments-create-or-update-at-management-group-scope" [
   --api-version: string # The API version to use for this operation. (required)
   location: string # The location to store the deployment data.
   properties: any # Deployment properties. — shape: {debugSetting?: any, mode: "Incremental"|"Complete", onErrorDeployment?: any, parameters?: record, parametersLink?: any, template?: record, templateLink?: any}
-]: any -> record<id: string, location: string, name: string, properties: record<correlationId: string, debugSetting: record<detailLevel: string>, dependencies: list<record>, duration: string, mode: string, onErrorDeployment: record<deploymentName: string, provisioningState: string, type: string>, outputs: record, parameters: record, parametersLink: record<contentVersion: string, uri: string>, providers: list<record>, provisioningState: string, template: record, templateLink: record<contentVersion: string, uri: string>, timestamp: string>, type: string> {
+]: any -> oneof<record<id: string, location: string, name: string, properties: record<correlationId: string, debugSetting: record<detailLevel: string>, dependencies: list<record>, duration: string, mode: string, onErrorDeployment: record<deploymentName: string, provisioningState: string, type: string>, outputs: record, parameters: record, parametersLink: record<contentVersion: string, uri: string>, providers: list<record>, provisioningState: string, template: record, templateLink: record<contentVersion: string, uri: string>, timestamp: string>, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -457,7 +480,7 @@ export def "deployments-export-template-at-management-group-scope" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation. (required)
-]: nothing -> record<template: record> {
+]: nothing -> oneof<record<template: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
@@ -499,7 +522,7 @@ export def "deployment-operations-list-at-management-group-scope" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # The number of results to return. (format: int32)
   --api-version: string # The API version to use for this operation. (required)
-]: nothing -> record<nextLink: string, value: table<id: string, operationId: string, properties: record>> {
+]: nothing -> oneof<record<nextLink: string, value: table<id: string, operationId: string, properties: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
@@ -541,7 +564,7 @@ export def "deployment-operations-get-at-management-group-scope" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation. (required)
-]: nothing -> record<id: string, operationId: string, properties: record<duration: string, provisioningState: string, request: record<content: record>, response: record<content: record>, serviceRequestId: string, statusCode: string, statusMessage: record, targetResource: record<id: string, resourceName: string, resourceType: string>, timestamp: string>> {
+]: nothing -> oneof<record<id: string, operationId: string, properties: record<duration: string, provisioningState: string, request: record<content: record>, response: record<content: record>, serviceRequestId: string, statusCode: string, statusMessage: record, targetResource: record<id: string, resourceName: string, resourceType: string>, timestamp: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
@@ -570,7 +593,6 @@ export def "deployment-operations-get-at-management-group-scope" [
 #
 # POST /providers/Microsoft.Management/managementGroups/{groupId}/providers/Microsoft.Resources/deployments/{deploymentName}/validate
 # operationId: Deployments_ValidateAtManagementGroupScope
-# --properties shape: {debugSetting?: any, mode: "Incremental"|"Complete", onErrorDeployment?: any, parameters?: record, parametersLink?: any, template?: record, templateLink?: any}
 export def "deployments-validate-at-management-group-scope" [
   group_id: string
   deployment_name: string
@@ -586,7 +608,7 @@ export def "deployments-validate-at-management-group-scope" [
   --api-version: string # The API version to use for this operation. (required)
   location: string # The location to store the deployment data.
   properties: any # Deployment properties. — shape: {debugSetting?: any, mode: "Incremental"|"Complete", onErrorDeployment?: any, parameters?: record, parametersLink?: any, template?: record, templateLink?: any}
-]: any -> record<error: record<additionalInfo: list<record>, code: string, details: list<any>, message: string, target: string>, properties: record<correlationId: string, debugSetting: record<detailLevel: string>, dependencies: list<record>, duration: string, mode: string, onErrorDeployment: record<deploymentName: string, provisioningState: string, type: string>, outputs: record, parameters: record, parametersLink: record<contentVersion: string, uri: string>, providers: list<record>, provisioningState: string, template: record, templateLink: record<contentVersion: string, uri: string>, timestamp: string>> {
+]: any -> oneof<record<error: record<additionalInfo: list<record>, code: string, details: list<any>, message: string, target: string>, properties: record<correlationId: string, debugSetting: record<detailLevel: string>, dependencies: list<record>, duration: string, mode: string, onErrorDeployment: record<deploymentName: string, provisioningState: string, type: string>, outputs: record, parameters: record, parametersLink: record<contentVersion: string, uri: string>, providers: list<record>, provisioningState: string, template: record, templateLink: record<contentVersion: string, uri: string>, timestamp: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -629,7 +651,7 @@ export def "deployments-calculate-template-hash" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation. (required)
   --body: record
-]: any -> record<minifiedTemplate: string, templateHash: string> {
+]: any -> oneof<record<minifiedTemplate: string, templateHash: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -671,7 +693,7 @@ export def "deployments-list-at-tenant-scope" [
   --filter: string # The filter to apply on the operation. For example, you can use $filter=provisioningState eq '{state}'.
   --top: int # The number of results to get. If null is passed, returns all deployments. (format: int32)
   --api-version: string # The API version to use for this operation. (required)
-]: nothing -> record<nextLink: string, value: table<id: string, location: string, name: string, properties: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<id: string, location: string, name: string, properties: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
@@ -748,7 +770,7 @@ export def "deployments-get-at-tenant-scope" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation. (required)
-]: nothing -> record<id: string, location: string, name: string, properties: record<correlationId: string, debugSetting: record<detailLevel: string>, dependencies: list<record>, duration: string, mode: string, onErrorDeployment: record<deploymentName: string, provisioningState: string, type: string>, outputs: record, parameters: record, parametersLink: record<contentVersion: string, uri: string>, providers: list<record>, provisioningState: string, template: record, templateLink: record<contentVersion: string, uri: string>, timestamp: string>, type: string> {
+]: nothing -> oneof<record<id: string, location: string, name: string, properties: record<correlationId: string, debugSetting: record<detailLevel: string>, dependencies: list<record>, duration: string, mode: string, onErrorDeployment: record<deploymentName: string, provisioningState: string, type: string>, outputs: record, parameters: record, parametersLink: record<contentVersion: string, uri: string>, providers: list<record>, provisioningState: string, template: record, templateLink: record<contentVersion: string, uri: string>, timestamp: string>, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($deployment_name | is-empty) { error make --unspanned { msg: "path parameter 'deploymentName' must be non-empty" } }
@@ -787,7 +809,7 @@ export def "deployments-check-existence-at-tenant-scope" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation. (required)
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($deployment_name | is-empty) { error make --unspanned { msg: "path parameter 'deploymentName' must be non-empty" } }
@@ -814,7 +836,6 @@ export def "deployments-check-existence-at-tenant-scope" [
 #
 # PUT /providers/Microsoft.Resources/deployments/{deploymentName}
 # operationId: Deployments_CreateOrUpdateAtTenantScope
-# --properties shape: {debugSetting?: any, mode: "Incremental"|"Complete", onErrorDeployment?: any, parameters?: record, parametersLink?: any, template?: record, templateLink?: any}
 export def "deployments-create-or-update-at-tenant-scope" [
   deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -829,7 +850,7 @@ export def "deployments-create-or-update-at-tenant-scope" [
   --api-version: string # The API version to use for this operation. (required)
   location: string # The location to store the deployment data.
   properties: any # Deployment properties. — shape: {debugSetting?: any, mode: "Incremental"|"Complete", onErrorDeployment?: any, parameters?: record, parametersLink?: any, template?: record, templateLink?: any}
-]: any -> record<id: string, location: string, name: string, properties: record<correlationId: string, debugSetting: record<detailLevel: string>, dependencies: list<record>, duration: string, mode: string, onErrorDeployment: record<deploymentName: string, provisioningState: string, type: string>, outputs: record, parameters: record, parametersLink: record<contentVersion: string, uri: string>, providers: list<record>, provisioningState: string, template: record, templateLink: record<contentVersion: string, uri: string>, timestamp: string>, type: string> {
+]: any -> oneof<record<id: string, location: string, name: string, properties: record<correlationId: string, debugSetting: record<detailLevel: string>, dependencies: list<record>, duration: string, mode: string, onErrorDeployment: record<deploymentName: string, provisioningState: string, type: string>, outputs: record, parameters: record, parametersLink: record<contentVersion: string, uri: string>, providers: list<record>, provisioningState: string, template: record, templateLink: record<contentVersion: string, uri: string>, timestamp: string>, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -910,7 +931,7 @@ export def "deployments-export-template-at-tenant-scope" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation. (required)
-]: nothing -> record<template: record> {
+]: nothing -> oneof<record<template: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($deployment_name | is-empty) { error make --unspanned { msg: "path parameter 'deploymentName' must be non-empty" } }
@@ -950,7 +971,7 @@ export def "deployment-operations-list-at-tenant-scope" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # The number of results to return. (format: int32)
   --api-version: string # The API version to use for this operation. (required)
-]: nothing -> record<nextLink: string, value: table<id: string, operationId: string, properties: record>> {
+]: nothing -> oneof<record<nextLink: string, value: table<id: string, operationId: string, properties: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($deployment_name | is-empty) { error make --unspanned { msg: "path parameter 'deploymentName' must be non-empty" } }
@@ -990,7 +1011,7 @@ export def "deployment-operations-get-at-tenant-scope" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation. (required)
-]: nothing -> record<id: string, operationId: string, properties: record<duration: string, provisioningState: string, request: record<content: record>, response: record<content: record>, serviceRequestId: string, statusCode: string, statusMessage: record, targetResource: record<id: string, resourceName: string, resourceType: string>, timestamp: string>> {
+]: nothing -> oneof<record<id: string, operationId: string, properties: record<duration: string, provisioningState: string, request: record<content: record>, response: record<content: record>, serviceRequestId: string, statusCode: string, statusMessage: record, targetResource: record<id: string, resourceName: string, resourceType: string>, timestamp: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($deployment_name | is-empty) { error make --unspanned { msg: "path parameter 'deploymentName' must be non-empty" } }
@@ -1018,7 +1039,6 @@ export def "deployment-operations-get-at-tenant-scope" [
 #
 # POST /providers/Microsoft.Resources/deployments/{deploymentName}/validate
 # operationId: Deployments_ValidateAtTenantScope
-# --properties shape: {debugSetting?: any, mode: "Incremental"|"Complete", onErrorDeployment?: any, parameters?: record, parametersLink?: any, template?: record, templateLink?: any}
 export def "deployments-validate-at-tenant-scope" [
   deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1033,7 +1053,7 @@ export def "deployments-validate-at-tenant-scope" [
   --api-version: string # The API version to use for this operation. (required)
   location: string # The location to store the deployment data.
   properties: any # Deployment properties. — shape: {debugSetting?: any, mode: "Incremental"|"Complete", onErrorDeployment?: any, parameters?: record, parametersLink?: any, template?: record, templateLink?: any}
-]: any -> record<error: record<additionalInfo: list<record>, code: string, details: list<any>, message: string, target: string>, properties: record<correlationId: string, debugSetting: record<detailLevel: string>, dependencies: list<record>, duration: string, mode: string, onErrorDeployment: record<deploymentName: string, provisioningState: string, type: string>, outputs: record, parameters: record, parametersLink: record<contentVersion: string, uri: string>, providers: list<record>, provisioningState: string, template: record, templateLink: record<contentVersion: string, uri: string>, timestamp: string>> {
+]: any -> oneof<record<error: record<additionalInfo: list<record>, code: string, details: list<any>, message: string, target: string>, properties: record<correlationId: string, debugSetting: record<detailLevel: string>, dependencies: list<record>, duration: string, mode: string, onErrorDeployment: record<deploymentName: string, provisioningState: string, type: string>, outputs: record, parameters: record, parametersLink: record<contentVersion: string, uri: string>, providers: list<record>, provisioningState: string, template: record, templateLink: record<contentVersion: string, uri: string>, timestamp: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1074,7 +1094,7 @@ export def "operations-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation. (required)
-]: nothing -> record<nextLink: string, value: table<display: record, name: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<display: record, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
@@ -1113,7 +1133,7 @@ export def "providers-get-at-tenant-scope" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # The $expand query parameter. For example, to include property aliases in response, use $expand=resourceTypes/aliases.
   --api-version: string # The API version to use for this operation. (required)
-]: nothing -> record<id: string, namespace: string, registrationPolicy: string, registrationState: string, resourceTypes: table<aliases: list, apiVersions: list, capabilities: string, locations: list, properties: record, resourceType: string>> {
+]: nothing -> oneof<record<id: string, namespace: string, registrationPolicy: string, registrationState: string, resourceTypes: table<aliases: list, apiVersions: list, capabilities: string, locations: list, properties: record, resourceType: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_provider_namespace | is-empty) { error make --unspanned { msg: "path parameter 'resourceProviderNamespace' must be non-empty" } }
@@ -1154,7 +1174,7 @@ export def "providers-list" [
   --top: int # The number of results to return. If null is passed returns all deployments. (format: int32)
   --expand: string # The properties to include in the results. For example, use &$expand=metadata in the query string to retrieve resource provider metadata. To include property aliases in response, use $expand=resourceTypes/aliases.
   --api-version: string # The API version to use for this operation. (required)
-]: nothing -> record<nextLink: string, value: table<id: string, namespace: string, registrationPolicy: string, registrationState: string, resourceTypes: list>> {
+]: nothing -> oneof<record<nextLink: string, value: table<id: string, namespace: string, registrationPolicy: string, registrationState: string, resourceTypes: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1195,7 +1215,7 @@ export def "deployments-list-at-subscription-scope" [
   --filter: string # The filter to apply on the operation. For example, you can use $filter=provisioningState eq '{state}'.
   --top: int # The number of results to get. If null is passed, returns all deployments. (format: int32)
   --api-version: string # The API version to use for this operation. (required)
-]: nothing -> record<nextLink: string, value: table<id: string, location: string, name: string, properties: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<id: string, location: string, name: string, properties: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1276,7 +1296,7 @@ export def "deployments-get-at-subscription-scope" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation. (required)
-]: nothing -> record<id: string, location: string, name: string, properties: record<correlationId: string, debugSetting: record<detailLevel: string>, dependencies: list<record>, duration: string, mode: string, onErrorDeployment: record<deploymentName: string, provisioningState: string, type: string>, outputs: record, parameters: record, parametersLink: record<contentVersion: string, uri: string>, providers: list<record>, provisioningState: string, template: record, templateLink: record<contentVersion: string, uri: string>, timestamp: string>, type: string> {
+]: nothing -> oneof<record<id: string, location: string, name: string, properties: record<correlationId: string, debugSetting: record<detailLevel: string>, dependencies: list<record>, duration: string, mode: string, onErrorDeployment: record<deploymentName: string, provisioningState: string, type: string>, outputs: record, parameters: record, parametersLink: record<contentVersion: string, uri: string>, providers: list<record>, provisioningState: string, template: record, templateLink: record<contentVersion: string, uri: string>, timestamp: string>, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1317,7 +1337,7 @@ export def "deployments-check-existence-at-subscription-scope" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation. (required)
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1345,7 +1365,6 @@ export def "deployments-check-existence-at-subscription-scope" [
 #
 # PUT /subscriptions/{subscriptionId}/providers/Microsoft.Resources/deployments/{deploymentName}
 # operationId: Deployments_CreateOrUpdateAtSubscriptionScope
-# --properties shape: {debugSetting?: any, mode: "Incremental"|"Complete", onErrorDeployment?: any, parameters?: record, parametersLink?: any, template?: record, templateLink?: any}
 export def "deployments-create-or-update-at-subscription-scope" [
   subscription_id: string
   deployment_name: string
@@ -1361,7 +1380,7 @@ export def "deployments-create-or-update-at-subscription-scope" [
   --api-version: string # The API version to use for this operation. (required)
   --location: string # The location to store the deployment data.
   properties: any # Deployment properties. — shape: {debugSetting?: any, mode: "Incremental"|"Complete", onErrorDeployment?: any, parameters?: record, parametersLink?: any, template?: record, templateLink?: any}
-]: any -> record<id: string, location: string, name: string, properties: record<correlationId: string, debugSetting: record<detailLevel: string>, dependencies: list<record>, duration: string, mode: string, onErrorDeployment: record<deploymentName: string, provisioningState: string, type: string>, outputs: record, parameters: record, parametersLink: record<contentVersion: string, uri: string>, providers: list<record>, provisioningState: string, template: record, templateLink: record<contentVersion: string, uri: string>, timestamp: string>, type: string> {
+]: any -> oneof<record<id: string, location: string, name: string, properties: record<correlationId: string, debugSetting: record<detailLevel: string>, dependencies: list<record>, duration: string, mode: string, onErrorDeployment: record<deploymentName: string, provisioningState: string, type: string>, outputs: record, parameters: record, parametersLink: record<contentVersion: string, uri: string>, providers: list<record>, provisioningState: string, template: record, templateLink: record<contentVersion: string, uri: string>, timestamp: string>, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1446,7 +1465,7 @@ export def "deployments-export-template-at-subscription-scope" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation. (required)
-]: nothing -> record<template: record> {
+]: nothing -> oneof<record<template: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1488,7 +1507,7 @@ export def "deployment-operations-list-at-subscription-scope" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # The number of results to return. (format: int32)
   --api-version: string # The API version to use for this operation. (required)
-]: nothing -> record<nextLink: string, value: table<id: string, operationId: string, properties: record>> {
+]: nothing -> oneof<record<nextLink: string, value: table<id: string, operationId: string, properties: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1530,7 +1549,7 @@ export def "deployment-operations-get-at-subscription-scope" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation. (required)
-]: nothing -> record<id: string, operationId: string, properties: record<duration: string, provisioningState: string, request: record<content: record>, response: record<content: record>, serviceRequestId: string, statusCode: string, statusMessage: record, targetResource: record<id: string, resourceName: string, resourceType: string>, timestamp: string>> {
+]: nothing -> oneof<record<id: string, operationId: string, properties: record<duration: string, provisioningState: string, request: record<content: record>, response: record<content: record>, serviceRequestId: string, statusCode: string, statusMessage: record, targetResource: record<id: string, resourceName: string, resourceType: string>, timestamp: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1559,7 +1578,6 @@ export def "deployment-operations-get-at-subscription-scope" [
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Resources/deployments/{deploymentName}/validate
 # operationId: Deployments_ValidateAtSubscriptionScope
-# --properties shape: {debugSetting?: any, mode: "Incremental"|"Complete", onErrorDeployment?: any, parameters?: record, parametersLink?: any, template?: record, templateLink?: any}
 export def "deployments-validate-at-subscription-scope" [
   subscription_id: string
   deployment_name: string
@@ -1575,7 +1593,7 @@ export def "deployments-validate-at-subscription-scope" [
   --api-version: string # The API version to use for this operation. (required)
   --location: string # The location to store the deployment data.
   properties: any # Deployment properties. — shape: {debugSetting?: any, mode: "Incremental"|"Complete", onErrorDeployment?: any, parameters?: record, parametersLink?: any, template?: record, templateLink?: any}
-]: any -> record<error: record<additionalInfo: list<record>, code: string, details: list<any>, message: string, target: string>, properties: record<correlationId: string, debugSetting: record<detailLevel: string>, dependencies: list<record>, duration: string, mode: string, onErrorDeployment: record<deploymentName: string, provisioningState: string, type: string>, outputs: record, parameters: record, parametersLink: record<contentVersion: string, uri: string>, providers: list<record>, provisioningState: string, template: record, templateLink: record<contentVersion: string, uri: string>, timestamp: string>> {
+]: any -> oneof<record<error: record<additionalInfo: list<record>, code: string, details: list<any>, message: string, target: string>, properties: record<correlationId: string, debugSetting: record<detailLevel: string>, dependencies: list<record>, duration: string, mode: string, onErrorDeployment: record<deploymentName: string, provisioningState: string, type: string>, outputs: record, parameters: record, parametersLink: record<contentVersion: string, uri: string>, providers: list<record>, provisioningState: string, template: record, templateLink: record<contentVersion: string, uri: string>, timestamp: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1606,7 +1624,6 @@ export def "deployments-validate-at-subscription-scope" [
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Resources/deployments/{deploymentName}/whatIf
 # operationId: Deployments_WhatIfAtSubscriptionScope
-# --properties shape: {whatIfSettings?: any, debugSetting?: any, mode: "Incremental"|"Complete", onErrorDeployment?: any, parameters?: record, parametersLink?: any, template?: record, templateLink?: any}
 export def "deployments-what-if-at-subscription-scope" [
   subscription_id: string
   deployment_name: string
@@ -1622,7 +1639,7 @@ export def "deployments-what-if-at-subscription-scope" [
   --api-version: string # The API version to use for this operation. (required)
   --location: string # The location to store the deployment data.
   properties: any # Deployment What-if properties. — shape: {whatIfSettings?: any, debugSetting?: any, mode: "Incremental"|"Complete", onErrorDeployment?: any, parameters?: record, parametersLink?: any, template?: record, templateLink?: any}
-]: any -> record<error: record<additionalInfo: list<record>, code: string, details: list<any>, message: string, target: string>, properties: record<changes: list<record>>, status: string> {
+]: any -> oneof<record<error: record<additionalInfo: list<record>, code: string, details: list<any>, message: string, target: string>, properties: record<changes: list<record>>, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1667,7 +1684,7 @@ export def "providers-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # The $expand query parameter. For example, to include property aliases in response, use $expand=resourceTypes/aliases.
   --api-version: string # The API version to use for this operation. (required)
-]: nothing -> record<id: string, namespace: string, registrationPolicy: string, registrationState: string, resourceTypes: table<aliases: list, apiVersions: list, capabilities: string, locations: list, properties: record, resourceType: string>> {
+]: nothing -> oneof<record<id: string, namespace: string, registrationPolicy: string, registrationState: string, resourceTypes: table<aliases: list, apiVersions: list, capabilities: string, locations: list, properties: record, resourceType: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1708,7 +1725,7 @@ export def "providers-register" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation. (required)
-]: nothing -> record<id: string, namespace: string, registrationPolicy: string, registrationState: string, resourceTypes: table<aliases: list, apiVersions: list, capabilities: string, locations: list, properties: record, resourceType: string>> {
+]: nothing -> oneof<record<id: string, namespace: string, registrationPolicy: string, registrationState: string, resourceTypes: table<aliases: list, apiVersions: list, capabilities: string, locations: list, properties: record, resourceType: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1749,7 +1766,7 @@ export def "providers-unregister" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation. (required)
-]: nothing -> record<id: string, namespace: string, registrationPolicy: string, registrationState: string, resourceTypes: table<aliases: list, apiVersions: list, capabilities: string, locations: list, properties: record, resourceType: string>> {
+]: nothing -> oneof<record<id: string, namespace: string, registrationPolicy: string, registrationState: string, resourceTypes: table<aliases: list, apiVersions: list, capabilities: string, locations: list, properties: record, resourceType: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1793,7 +1810,7 @@ export def "resources-list-by-resource-group" [
   --expand: string # The $expand query parameter. You can expand createdTime and changedTime. For example, to expand both properties, use $expand=changedTime,createdTime
   --top: int # The number of results to return. If null is passed, returns all resources. (format: int32)
   --api-version: string # The API version to use for this operation. (required)
-]: nothing -> record<nextLink: string, value: table<identity: record, kind: string, managedBy: string, plan: record, properties: record, sku: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<identity: record, kind: string, managedBy: string, plan: record, properties: record, sku: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1927,7 +1944,7 @@ export def "resource-groups-list" [
   --filter: string # The filter to apply on the operation.You can filter by tag names and values. For example, to filter for a tag name and value, use $filter=tagName eq 'tag1' and tagValue eq 'Value1'
   --top: int # The number of results to return. If null is passed, returns all resource groups. (format: int32)
   --api-version: string # The API version to use for this operation. (required)
-]: nothing -> record<nextLink: string, value: table<id: string, location: string, managedBy: string, name: string, properties: record, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<id: string, location: string, managedBy: string, name: string, properties: record, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2008,7 +2025,7 @@ export def "resource-groups-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation. (required)
-]: nothing -> record<id: string, location: string, managedBy: string, name: string, properties: record<provisioningState: string>, tags: record, type: string> {
+]: nothing -> oneof<record<id: string, location: string, managedBy: string, name: string, properties: record<provisioningState: string>, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2049,7 +2066,7 @@ export def "resource-groups-check-existence" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation. (required)
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2094,7 +2111,7 @@ export def "resource-groups-update" [
   --name: string # The name of the resource group.
   --properties: any # The resource group properties.
   --tags: record # The tags attached to the resource group.
-]: any -> record<id: string, location: string, managedBy: string, name: string, properties: record<provisioningState: string>, tags: record, type: string> {
+]: any -> oneof<record<id: string, location: string, managedBy: string, name: string, properties: record<provisioningState: string>, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2142,7 +2159,7 @@ export def "resource-groups-create-or-update" [
   --managed-by: string # The ID of the resource that manages this resource group.
   --properties: any # The resource group properties.
   --tags: record # The tags attached to the resource group.
-]: any -> record<id: string, location: string, managedBy: string, name: string, properties: record<provisioningState: string>, tags: record, type: string> {
+]: any -> oneof<record<id: string, location: string, managedBy: string, name: string, properties: record<provisioningState: string>, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2188,7 +2205,7 @@ export def "deployment-operations-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # The number of results to return. (format: int32)
   --api-version: string # The API version to use for this operation. (required)
-]: nothing -> record<nextLink: string, value: table<id: string, operationId: string, properties: record>> {
+]: nothing -> oneof<record<nextLink: string, value: table<id: string, operationId: string, properties: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2232,7 +2249,7 @@ export def "deployment-operations-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation. (required)
-]: nothing -> record<id: string, operationId: string, properties: record<duration: string, provisioningState: string, request: record<content: record>, response: record<content: record>, serviceRequestId: string, statusCode: string, statusMessage: record, targetResource: record<id: string, resourceName: string, resourceType: string>, timestamp: string>> {
+]: nothing -> oneof<record<id: string, operationId: string, properties: record<duration: string, provisioningState: string, request: record<content: record>, response: record<content: record>, serviceRequestId: string, statusCode: string, statusMessage: record, targetResource: record<id: string, resourceName: string, resourceType: string>, timestamp: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2277,7 +2294,7 @@ export def "resource-groups-export-template" [
   --api-version: string # The API version to use for this operation. (required)
   --options: string # The export template options. A CSV-formatted list containing zero or more of the following: 'IncludeParameterDefaultValue', 'IncludeComments', 'SkipResourceNameParameterization', 'SkipAllParameterization'
   --resources: list<string> # The IDs of the resources to filter the export by. To export all resources, supply an array with single entry '*'.
-]: any -> record<error: record<additionalInfo: list<record>, code: string, details: list<any>, message: string, target: string>, template: record> {
+]: any -> oneof<record<error: record<additionalInfo: list<record>, code: string, details: list<any>, message: string, target: string>, template: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2323,7 +2340,7 @@ export def "deployments-list-by-resource-group" [
   --filter: string # The filter to apply on the operation. For example, you can use $filter=provisioningState eq '{state}'.
   --top: int # The number of results to get. If null is passed, returns all deployments. (format: int32)
   --api-version: string # The API version to use for this operation. (required)
-]: nothing -> record<nextLink: string, value: table<id: string, location: string, name: string, properties: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<id: string, location: string, name: string, properties: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2408,7 +2425,7 @@ export def "deployments-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation. (required)
-]: nothing -> record<id: string, location: string, name: string, properties: record<correlationId: string, debugSetting: record<detailLevel: string>, dependencies: list<record>, duration: string, mode: string, onErrorDeployment: record<deploymentName: string, provisioningState: string, type: string>, outputs: record, parameters: record, parametersLink: record<contentVersion: string, uri: string>, providers: list<record>, provisioningState: string, template: record, templateLink: record<contentVersion: string, uri: string>, timestamp: string>, type: string> {
+]: nothing -> oneof<record<id: string, location: string, name: string, properties: record<correlationId: string, debugSetting: record<detailLevel: string>, dependencies: list<record>, duration: string, mode: string, onErrorDeployment: record<deploymentName: string, provisioningState: string, type: string>, outputs: record, parameters: record, parametersLink: record<contentVersion: string, uri: string>, providers: list<record>, provisioningState: string, template: record, templateLink: record<contentVersion: string, uri: string>, timestamp: string>, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2451,7 +2468,7 @@ export def "deployments-check-existence" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation. (required)
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2480,7 +2497,6 @@ export def "deployments-check-existence" [
 #
 # PUT /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Resources/deployments/{deploymentName}
 # operationId: Deployments_CreateOrUpdate
-# --properties shape: {debugSetting?: any, mode: "Incremental"|"Complete", onErrorDeployment?: any, parameters?: record, parametersLink?: any, template?: record, templateLink?: any}
 export def "deployments-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -2497,7 +2513,7 @@ export def "deployments-create-or-update" [
   --api-version: string # The API version to use for this operation. (required)
   --location: string # The location to store the deployment data.
   properties: any # Deployment properties. — shape: {debugSetting?: any, mode: "Incremental"|"Complete", onErrorDeployment?: any, parameters?: record, parametersLink?: any, template?: record, templateLink?: any}
-]: any -> record<id: string, location: string, name: string, properties: record<correlationId: string, debugSetting: record<detailLevel: string>, dependencies: list<record>, duration: string, mode: string, onErrorDeployment: record<deploymentName: string, provisioningState: string, type: string>, outputs: record, parameters: record, parametersLink: record<contentVersion: string, uri: string>, providers: list<record>, provisioningState: string, template: record, templateLink: record<contentVersion: string, uri: string>, timestamp: string>, type: string> {
+]: any -> oneof<record<id: string, location: string, name: string, properties: record<correlationId: string, debugSetting: record<detailLevel: string>, dependencies: list<record>, duration: string, mode: string, onErrorDeployment: record<deploymentName: string, provisioningState: string, type: string>, outputs: record, parameters: record, parametersLink: record<contentVersion: string, uri: string>, providers: list<record>, provisioningState: string, template: record, templateLink: record<contentVersion: string, uri: string>, timestamp: string>, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2586,7 +2602,7 @@ export def "deployments-export-template" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation. (required)
-]: nothing -> record<template: record> {
+]: nothing -> oneof<record<template: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2615,7 +2631,6 @@ export def "deployments-export-template" [
 #
 # POST /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Resources/deployments/{deploymentName}/validate
 # operationId: Deployments_Validate
-# --properties shape: {debugSetting?: any, mode: "Incremental"|"Complete", onErrorDeployment?: any, parameters?: record, parametersLink?: any, template?: record, templateLink?: any}
 export def "deployments-validate" [
   subscription_id: string
   resource_group_name: string
@@ -2632,7 +2647,7 @@ export def "deployments-validate" [
   --api-version: string # The API version to use for this operation. (required)
   --location: string # The location to store the deployment data.
   properties: any # Deployment properties. — shape: {debugSetting?: any, mode: "Incremental"|"Complete", onErrorDeployment?: any, parameters?: record, parametersLink?: any, template?: record, templateLink?: any}
-]: any -> record<error: record<additionalInfo: list<record>, code: string, details: list<any>, message: string, target: string>, properties: record<correlationId: string, debugSetting: record<detailLevel: string>, dependencies: list<record>, duration: string, mode: string, onErrorDeployment: record<deploymentName: string, provisioningState: string, type: string>, outputs: record, parameters: record, parametersLink: record<contentVersion: string, uri: string>, providers: list<record>, provisioningState: string, template: record, templateLink: record<contentVersion: string, uri: string>, timestamp: string>> {
+]: any -> oneof<record<error: record<additionalInfo: list<record>, code: string, details: list<any>, message: string, target: string>, properties: record<correlationId: string, debugSetting: record<detailLevel: string>, dependencies: list<record>, duration: string, mode: string, onErrorDeployment: record<deploymentName: string, provisioningState: string, type: string>, outputs: record, parameters: record, parametersLink: record<contentVersion: string, uri: string>, providers: list<record>, provisioningState: string, template: record, templateLink: record<contentVersion: string, uri: string>, timestamp: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2664,7 +2679,6 @@ export def "deployments-validate" [
 #
 # POST /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Resources/deployments/{deploymentName}/whatIf
 # operationId: Deployments_WhatIf
-# --properties shape: {whatIfSettings?: any, debugSetting?: any, mode: "Incremental"|"Complete", onErrorDeployment?: any, parameters?: record, parametersLink?: any, template?: record, templateLink?: any}
 export def "deployments-what-if" [
   subscription_id: string
   resource_group_name: string
@@ -2681,7 +2695,7 @@ export def "deployments-what-if" [
   --api-version: string # The API version to use for this operation. (required)
   --location: string # The location to store the deployment data.
   properties: any # Deployment What-if properties. — shape: {whatIfSettings?: any, debugSetting?: any, mode: "Incremental"|"Complete", onErrorDeployment?: any, parameters?: record, parametersLink?: any, template?: record, templateLink?: any}
-]: any -> record<error: record<additionalInfo: list<record>, code: string, details: list<any>, message: string, target: string>, properties: record<changes: list<record>>, status: string> {
+]: any -> oneof<record<error: record<additionalInfo: list<record>, code: string, details: list<any>, message: string, target: string>, properties: record<changes: list<record>>, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2779,7 +2793,7 @@ export def "resources-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation. (required)
-]: nothing -> record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, kind: string, managedBy: string, plan: record<name: string, product: string, promotionCode: string, publisher: string, version: string>, properties: record, sku: record<capacity: int, family: string, model: string, name: string, size: string, tier: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, kind: string, managedBy: string, plan: record<name: string, product: string, promotionCode: string, publisher: string, version: string>, properties: record, sku: record<capacity: int, family: string, model: string, name: string, size: string, tier: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2828,7 +2842,7 @@ export def "resources-check-existence" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation. (required)
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2860,9 +2874,6 @@ export def "resources-check-existence" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/{resourceProviderNamespace}/{parentResourcePath}/{resourceType}/{resourceName}
 # operationId: Resources_Update
-# --identity shape: {type?: "SystemAssigned"|"UserAssigned"|"SystemAssigned, UserAssigned"|"None", userAssignedIdentities?: record}
-# --plan shape: {name?: string, product?: string, promotionCode?: string, publisher?: string, version?: string}
-# --sku shape: {capacity?: int, family?: string, model?: string, name?: string, size?: string, tier?: string}
 export def "resources-update" [
   subscription_id: string
   resource_group_name: string
@@ -2888,7 +2899,7 @@ export def "resources-update" [
   --sku: any # SKU for the resource. — shape: {capacity?: int, family?: string, model?: string, name?: string, size?: string, tier?: string}
   --location: string # Resource location
   --tags: record # Resource tags
-]: any -> record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, kind: string, managedBy: string, plan: record<name: string, product: string, promotionCode: string, publisher: string, version: string>, properties: record, sku: record<capacity: int, family: string, model: string, name: string, size: string, tier: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, kind: string, managedBy: string, plan: record<name: string, product: string, promotionCode: string, publisher: string, version: string>, properties: record, sku: record<capacity: int, family: string, model: string, name: string, size: string, tier: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2923,9 +2934,6 @@ export def "resources-update" [
 #
 # PUT /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/{resourceProviderNamespace}/{parentResourcePath}/{resourceType}/{resourceName}
 # operationId: Resources_CreateOrUpdate
-# --identity shape: {type?: "SystemAssigned"|"UserAssigned"|"SystemAssigned, UserAssigned"|"None", userAssignedIdentities?: record}
-# --plan shape: {name?: string, product?: string, promotionCode?: string, publisher?: string, version?: string}
-# --sku shape: {capacity?: int, family?: string, model?: string, name?: string, size?: string, tier?: string}
 export def "resources-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -2951,7 +2959,7 @@ export def "resources-create-or-update" [
   --sku: any # SKU for the resource. — shape: {capacity?: int, family?: string, model?: string, name?: string, size?: string, tier?: string}
   --location: string # Resource location
   --tags: record # Resource tags
-]: any -> record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, kind: string, managedBy: string, plan: record<name: string, product: string, promotionCode: string, publisher: string, version: string>, properties: record, sku: record<capacity: int, family: string, model: string, name: string, size: string, tier: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, kind: string, managedBy: string, plan: record<name: string, product: string, promotionCode: string, publisher: string, version: string>, properties: record, sku: record<capacity: int, family: string, model: string, name: string, size: string, tier: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3001,7 +3009,7 @@ export def "resources-list" [
   --expand: string # The $expand query parameter. You can expand createdTime and changedTime. For example, to expand both properties, use $expand=changedTime,createdTime
   --top: int # The number of results to return. If null is passed, returns all resource groups. (format: int32)
   --api-version: string # The API version to use for this operation. (required)
-]: nothing -> record<nextLink: string, value: table<identity: record, kind: string, managedBy: string, plan: record, properties: record, sku: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<identity: record, kind: string, managedBy: string, plan: record, properties: record, sku: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3040,7 +3048,7 @@ export def "tags-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation. (required)
-]: nothing -> record<nextLink: string, value: table<count: record, id: string, tagName: string, values: list>> {
+]: nothing -> oneof<record<nextLink: string, value: table<count: record, id: string, tagName: string, values: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3121,7 +3129,7 @@ export def "tags-create-or-update" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation. (required)
-]: nothing -> record<count: record<type: string, value: int>, id: string, tagName: string, values: table<count: record, id: string, tagValue: string>> {
+]: nothing -> oneof<record<count: record<type: string, value: int>, id: string, tagName: string, values: table<count: record, id: string, tagValue: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3206,7 +3214,7 @@ export def "tags-create-or-update-value" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation. (required)
-]: nothing -> record<count: record<type: string, value: int>, id: string, tagValue: string> {
+]: nothing -> oneof<record<count: record<type: string, value: int>, id: string, tagValue: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3286,7 +3294,7 @@ export def "resources-get-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation. (required)
-]: nothing -> record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, kind: string, managedBy: string, plan: record<name: string, product: string, promotionCode: string, publisher: string, version: string>, properties: record, sku: record<capacity: int, family: string, model: string, name: string, size: string, tier: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, kind: string, managedBy: string, plan: record<name: string, product: string, promotionCode: string, publisher: string, version: string>, properties: record, sku: record<capacity: int, family: string, model: string, name: string, size: string, tier: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
@@ -3325,7 +3333,7 @@ export def "resources-check-existence-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation. (required)
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
@@ -3352,9 +3360,6 @@ export def "resources-check-existence-by-id" [
 #
 # PATCH /{resourceId}
 # operationId: Resources_UpdateById
-# --identity shape: {type?: "SystemAssigned"|"UserAssigned"|"SystemAssigned, UserAssigned"|"None", userAssignedIdentities?: record}
-# --plan shape: {name?: string, product?: string, promotionCode?: string, publisher?: string, version?: string}
-# --sku shape: {capacity?: int, family?: string, model?: string, name?: string, size?: string, tier?: string}
 export def "resources-update-by-id" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3375,7 +3380,7 @@ export def "resources-update-by-id" [
   --sku: any # SKU for the resource. — shape: {capacity?: int, family?: string, model?: string, name?: string, size?: string, tier?: string}
   --location: string # Resource location
   --tags: record # Resource tags
-]: any -> record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, kind: string, managedBy: string, plan: record<name: string, product: string, promotionCode: string, publisher: string, version: string>, properties: record, sku: record<capacity: int, family: string, model: string, name: string, size: string, tier: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, kind: string, managedBy: string, plan: record<name: string, product: string, promotionCode: string, publisher: string, version: string>, properties: record, sku: record<capacity: int, family: string, model: string, name: string, size: string, tier: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3405,9 +3410,6 @@ export def "resources-update-by-id" [
 #
 # PUT /{resourceId}
 # operationId: Resources_CreateOrUpdateById
-# --identity shape: {type?: "SystemAssigned"|"UserAssigned"|"SystemAssigned, UserAssigned"|"None", userAssignedIdentities?: record}
-# --plan shape: {name?: string, product?: string, promotionCode?: string, publisher?: string, version?: string}
-# --sku shape: {capacity?: int, family?: string, model?: string, name?: string, size?: string, tier?: string}
 export def "resources-create-or-update-by-id" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3428,7 +3430,7 @@ export def "resources-create-or-update-by-id" [
   --sku: any # SKU for the resource. — shape: {capacity?: int, family?: string, model?: string, name?: string, size?: string, tier?: string}
   --location: string # Resource location
   --tags: record # Resource tags
-]: any -> record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, kind: string, managedBy: string, plan: record<name: string, product: string, promotionCode: string, publisher: string, version: string>, properties: record, sku: record<capacity: int, family: string, model: string, name: string, size: string, tier: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, kind: string, managedBy: string, plan: record<name: string, product: string, promotionCode: string, publisher: string, version: string>, properties: record, sku: record<capacity: int, family: string, model: string, name: string, size: string, tier: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3472,7 +3474,7 @@ export def "deployments-list-at-scope" [
   --filter: string # The filter to apply on the operation. For example, you can use $filter=provisioningState eq '{state}'.
   --top: int # The number of results to get. If null is passed, returns all deployments. (format: int32)
   --api-version: string # The API version to use for this operation. (required)
-]: nothing -> record<nextLink: string, value: table<id: string, location: string, name: string, properties: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<id: string, location: string, name: string, properties: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
@@ -3553,7 +3555,7 @@ export def "deployments-get-at-scope" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation. (required)
-]: nothing -> record<id: string, location: string, name: string, properties: record<correlationId: string, debugSetting: record<detailLevel: string>, dependencies: list<record>, duration: string, mode: string, onErrorDeployment: record<deploymentName: string, provisioningState: string, type: string>, outputs: record, parameters: record, parametersLink: record<contentVersion: string, uri: string>, providers: list<record>, provisioningState: string, template: record, templateLink: record<contentVersion: string, uri: string>, timestamp: string>, type: string> {
+]: nothing -> oneof<record<id: string, location: string, name: string, properties: record<correlationId: string, debugSetting: record<detailLevel: string>, dependencies: list<record>, duration: string, mode: string, onErrorDeployment: record<deploymentName: string, provisioningState: string, type: string>, outputs: record, parameters: record, parametersLink: record<contentVersion: string, uri: string>, providers: list<record>, provisioningState: string, template: record, templateLink: record<contentVersion: string, uri: string>, timestamp: string>, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
@@ -3594,7 +3596,7 @@ export def "deployments-check-existence-at-scope" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation. (required)
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
@@ -3622,7 +3624,6 @@ export def "deployments-check-existence-at-scope" [
 #
 # PUT /{scope}/providers/Microsoft.Resources/deployments/{deploymentName}
 # operationId: Deployments_CreateOrUpdateAtScope
-# --properties shape: {debugSetting?: any, mode: "Incremental"|"Complete", onErrorDeployment?: any, parameters?: record, parametersLink?: any, template?: record, templateLink?: any}
 export def "deployments-create-or-update-at-scope" [
   scope: string
   deployment_name: string
@@ -3638,7 +3639,7 @@ export def "deployments-create-or-update-at-scope" [
   --api-version: string # The API version to use for this operation. (required)
   --location: string # The location to store the deployment data.
   properties: any # Deployment properties. — shape: {debugSetting?: any, mode: "Incremental"|"Complete", onErrorDeployment?: any, parameters?: record, parametersLink?: any, template?: record, templateLink?: any}
-]: any -> record<id: string, location: string, name: string, properties: record<correlationId: string, debugSetting: record<detailLevel: string>, dependencies: list<record>, duration: string, mode: string, onErrorDeployment: record<deploymentName: string, provisioningState: string, type: string>, outputs: record, parameters: record, parametersLink: record<contentVersion: string, uri: string>, providers: list<record>, provisioningState: string, template: record, templateLink: record<contentVersion: string, uri: string>, timestamp: string>, type: string> {
+]: any -> oneof<record<id: string, location: string, name: string, properties: record<correlationId: string, debugSetting: record<detailLevel: string>, dependencies: list<record>, duration: string, mode: string, onErrorDeployment: record<deploymentName: string, provisioningState: string, type: string>, outputs: record, parameters: record, parametersLink: record<contentVersion: string, uri: string>, providers: list<record>, provisioningState: string, template: record, templateLink: record<contentVersion: string, uri: string>, timestamp: string>, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3723,7 +3724,7 @@ export def "deployments-export-template-at-scope" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation. (required)
-]: nothing -> record<template: record> {
+]: nothing -> oneof<record<template: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
@@ -3765,7 +3766,7 @@ export def "deployment-operations-list-at-scope" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # The number of results to return. (format: int32)
   --api-version: string # The API version to use for this operation. (required)
-]: nothing -> record<nextLink: string, value: table<id: string, operationId: string, properties: record>> {
+]: nothing -> oneof<record<nextLink: string, value: table<id: string, operationId: string, properties: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
@@ -3807,7 +3808,7 @@ export def "deployment-operations-get-at-scope" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation. (required)
-]: nothing -> record<id: string, operationId: string, properties: record<duration: string, provisioningState: string, request: record<content: record>, response: record<content: record>, serviceRequestId: string, statusCode: string, statusMessage: record, targetResource: record<id: string, resourceName: string, resourceType: string>, timestamp: string>> {
+]: nothing -> oneof<record<id: string, operationId: string, properties: record<duration: string, provisioningState: string, request: record<content: record>, response: record<content: record>, serviceRequestId: string, statusCode: string, statusMessage: record, targetResource: record<id: string, resourceName: string, resourceType: string>, timestamp: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
@@ -3836,7 +3837,6 @@ export def "deployment-operations-get-at-scope" [
 #
 # POST /{scope}/providers/Microsoft.Resources/deployments/{deploymentName}/validate
 # operationId: Deployments_ValidateAtScope
-# --properties shape: {debugSetting?: any, mode: "Incremental"|"Complete", onErrorDeployment?: any, parameters?: record, parametersLink?: any, template?: record, templateLink?: any}
 export def "deployments-validate-at-scope" [
   scope: string
   deployment_name: string
@@ -3852,7 +3852,7 @@ export def "deployments-validate-at-scope" [
   --api-version: string # The API version to use for this operation. (required)
   --location: string # The location to store the deployment data.
   properties: any # Deployment properties. — shape: {debugSetting?: any, mode: "Incremental"|"Complete", onErrorDeployment?: any, parameters?: record, parametersLink?: any, template?: record, templateLink?: any}
-]: any -> record<error: record<additionalInfo: list<record>, code: string, details: list<any>, message: string, target: string>, properties: record<correlationId: string, debugSetting: record<detailLevel: string>, dependencies: list<record>, duration: string, mode: string, onErrorDeployment: record<deploymentName: string, provisioningState: string, type: string>, outputs: record, parameters: record, parametersLink: record<contentVersion: string, uri: string>, providers: list<record>, provisioningState: string, template: record, templateLink: record<contentVersion: string, uri: string>, timestamp: string>> {
+]: any -> oneof<record<error: record<additionalInfo: list<record>, code: string, details: list<any>, message: string, target: string>, properties: record<correlationId: string, debugSetting: record<detailLevel: string>, dependencies: list<record>, duration: string, mode: string, onErrorDeployment: record<deploymentName: string, provisioningState: string, type: string>, outputs: record, parameters: record, parametersLink: record<contentVersion: string, uri: string>, providers: list<record>, provisioningState: string, template: record, templateLink: record<contentVersion: string, uri: string>, timestamp: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

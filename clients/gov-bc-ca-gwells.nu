@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "jwt" => { {scheme: $scheme, headers: {"JWT": $token_val}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["https://apps.nrs.gov.bc.ca/gwells/api/v1"] }
@@ -98,9 +122,9 @@ def auth-scheme-completer [] { ["jwt"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "aquifer-codes-demand-list" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["aquifer-codes-demand-list" "aquifer-codes-materials-list" "aquifer-codes-productivity-list" "aquifer-codes-quality-concerns-list" "aquifer-codes-subtypes-list" "aquifer-codes-vulnerability-list" "aquifer-codes-water-use-list" "aquifers-list" "aquifers-names-list" "aquifers-read" "aquifers-files-list" "cities-drillers-list" "cities-installers-list" "config-list" "drillers-list" "drillers-names-list" "drillers-files-list" "keycloak-list" "submissions-options-list" "surveys-list" "wells-list" "wells-tags-list" "wells-files-list" "wells-read" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -134,7 +158,7 @@ export def "aquifer-codes-demand-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<code: string, description: string>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<code: string, description: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -171,7 +195,7 @@ export def "aquifer-codes-materials-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<code: string, description: string>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<code: string, description: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -208,7 +232,7 @@ export def "aquifer-codes-productivity-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<code: string, description: string>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<code: string, description: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -245,7 +269,7 @@ export def "aquifer-codes-quality-concerns-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<code: string, description: string>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<code: string, description: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -282,7 +306,7 @@ export def "aquifer-codes-subtypes-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<code: string, description: string>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<code: string, description: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -319,7 +343,7 @@ export def "aquifer-codes-vulnerability-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<code: string, description: string>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<code: string, description: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -356,7 +380,7 @@ export def "aquifer-codes-water-use-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<code: string, description: string>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<code: string, description: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -396,7 +420,7 @@ export def "aquifers-list" [
   --search: string # A search term.
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<aquifer_id: int, aquifer_name: string, area: string, demand: string, demand_description: string, known_water_use: string, known_water_use_description: string, litho_stratographic_unit: string, location_description: string, mapping_year: int, material: string, material_description: string, notes: string, productivity: string, productivity_description: string, quality_concern: string, quality_concern_description: string, subtype: string, subtype_description: string, vulnerability: string, vulnerability_description: string>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<aquifer_id: int, aquifer_name: string, area: string, demand: string, demand_description: string, known_water_use: string, known_water_use_description: string, litho_stratographic_unit: string, location_description: string, mapping_year: int, material: string, material_description: string, notes: string, productivity: string, productivity_description: string, quality_concern: string, quality_concern_description: string, subtype: string, subtype_description: string, vulnerability: string, vulnerability_description: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "aquifer_id" $aquifer_id "scalar") (serialize-qp "ordering" $ordering "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -432,7 +456,7 @@ export def "aquifers-names-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # A search term.
-]: nothing -> table<aquifer_id: int, description: string> {
+]: nothing -> oneof<table<aquifer_id: int, description: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search" $search "scalar")] | flatten | str join "&"
@@ -468,7 +492,7 @@ export def "aquifers-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<aquifer_id: int, aquifer_name: string, area: string, demand: string, demand_description: string, known_water_use: string, known_water_use_description: string, litho_stratographic_unit: string, location_description: string, mapping_year: int, material: string, material_description: string, notes: string, productivity: string, productivity_description: string, quality_concern: string, quality_concern_description: string, subtype: string, subtype_description: string, vulnerability: string, vulnerability_description: string> {
+]: nothing -> oneof<record<aquifer_id: int, aquifer_name: string, area: string, demand: string, demand_description: string, known_water_use: string, known_water_use_description: string, litho_stratographic_unit: string, location_description: string, mapping_year: int, material: string, material_description: string, notes: string, productivity: string, productivity_description: string, quality_concern: string, quality_concern_description: string, subtype: string, subtype_description: string, vulnerability: string, vulnerability_description: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($aquifer_id | is-empty) { error make --unspanned { msg: "path parameter 'aquifer_id' must be non-empty" } }
@@ -504,7 +528,7 @@ export def "aquifers-files-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<private: table<name: string, url: string>, public: table<name: string, url: string>> {
+]: nothing -> oneof<record<private: table<name: string, url: string>, public: table<name: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($aquifer_id | is-empty) { error make --unspanned { msg: "path parameter 'aquifer_id' must be non-empty" } }
@@ -539,7 +563,7 @@ export def "cities-drillers-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<organization: record<city: string, email: string, fax_tel: string, main_tel: string, name: string, org_guid: string, org_verbose_name: string, postal_code: string, province_state: string, street_address: string, website_url: string>> {
+]: nothing -> oneof<table<organization: record<city: string, email: string, fax_tel: string, main_tel: string, name: string, org_guid: string, org_verbose_name: string, postal_code: string, province_state: string, street_address: string, website_url: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cities/drillers/" $auth.query)
@@ -573,7 +597,7 @@ export def "cities-installers-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<organization: record<city: string, email: string, fax_tel: string, main_tel: string, name: string, org_guid: string, org_verbose_name: string, postal_code: string, province_state: string, street_address: string, website_url: string>> {
+]: nothing -> oneof<table<organization: record<city: string, email: string, fax_tel: string, main_tel: string, name: string, org_guid: string, org_verbose_name: string, postal_code: string, province_state: string, street_address: string, website_url: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cities/installers/" $auth.query)
@@ -645,7 +669,7 @@ export def "drillers-list" [
   --ordering: string # Which field to use when ordering the results.
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> table<contact_cell: string, contact_email: string, contact_tel: string, first_name: string, person_guid: string, registrations: list<record>, surname: string> {
+]: nothing -> oneof<table<contact_cell: string, contact_email: string, contact_tel: string, first_name: string, person_guid: string, registrations: list<record>, surname: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "ordering" $ordering "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -681,7 +705,7 @@ export def "drillers-names-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # A search term.
-]: nothing -> table<name: string, person_guid: string, registrations: list<record>> {
+]: nothing -> oneof<table<name: string, person_guid: string, registrations: list<record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search" $search "scalar")] | flatten | str join "&"
@@ -717,7 +741,7 @@ export def "drillers-files-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<private: table<name: string, url: string>, public: table<name: string, url: string>> {
+]: nothing -> oneof<record<private: table<name: string, url: string>, public: table<name: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($person_guid | is-empty) { error make --unspanned { msg: "path parameter 'person_guid' must be non-empty" } }
@@ -820,7 +844,7 @@ export def "surveys-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<survey_guid: string, survey_introduction_text: string, survey_link: string, survey_page: string> {
+]: nothing -> oneof<table<survey_guid: string, survey_introduction_text: string, survey_link: string, survey_page: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/surveys/" $auth.query)
@@ -856,7 +880,7 @@ export def "wells-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<alteration_end_date: string, alternative_specs_submitted: bool, analytic_solution_type: string, aquifer: int, aquifer_vulnerability_index: string, artesian_flow: string, artesian_pressure: string, backfill_depth: string, backfill_material: string, backfill_type: string, bcgs_id: int, bedrock_depth: string, boundary_effect: string, city: string, comments: string, construction_end_date: string, construction_start_date: string, coordinate_acquisition_code: string, decommission_details: string, decommission_end_date: string, decommission_method: string, decommission_reason: string, decommission_start_date: string, development_hours: string, development_method: string, development_notes: string, diameter: string, drawdown: string, drilling_company: string, drilling_method: string, ems: string, filter_pack_from: string, filter_pack_material: string, filter_pack_material_size: string, filter_pack_thickness: string, filter_pack_to: string, final_casing_stick_up: string, finished_well_depth: string, ground_elevation: string, ground_elevation_method: string, hydraulic_conductivity: string, hydro_fracturing_performed: bool, hydro_fracturing_yield_increase: string, id_plate_attached_by: string, identification_plate_number: int, intended_water_use: string, land_district: string, latitude: string, legal_block: string, legal_district_lot: string, legal_lot: string, legal_pid: int, legal_plan: string, legal_range: string, legal_section: string, legal_township: string, licenced_status: string, liner_diameter: string, liner_from: string, liner_material: string, liner_thickness: string, liner_to: string, longitude: string, observation_well_number: string, observation_well_status: string, other_drilling_method: string, other_screen_bottom: string, other_screen_material: string, owner_full_name: string, recommended_pump_depth: string, recommended_pump_rate: string, screen_bottom: string, screen_information: string, screen_intake_method: string, screen_material: string, screen_opening: string, screen_type: string, sealant_material: string, specific_storage: string, specific_yield: string, static_level_before_test: string, static_water_level: string, storativity: string, street_address: string, surface_seal_depth: string, surface_seal_length: string, surface_seal_material: string, surface_seal_method: string, surface_seal_thickness: string, testing_duration: int, testing_method: string, total_depth_drilled: string, transmissivity: string, utm_easting: int, utm_northing: int, utm_zone_code: string, water_quality_characteristics: list, water_quality_colour: string, water_quality_odour: string, water_supply_system_name: string, water_supply_system_well_name: string, well_cap_type: string, well_class: string, well_disinfected: bool, well_guid: string, well_identification_plate_attached: string, well_location_description: string, well_orientation: bool, well_status: string, well_subclass: string, well_tag_number: int, well_yield: string, well_yield_unit: string, yield_estimation_duration: string, yield_estimation_method: string, yield_estimation_rate: string>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<alteration_end_date: string, alternative_specs_submitted: bool, analytic_solution_type: string, aquifer: int, aquifer_vulnerability_index: string, artesian_flow: string, artesian_pressure: string, backfill_depth: string, backfill_material: string, backfill_type: string, bcgs_id: int, bedrock_depth: string, boundary_effect: string, city: string, comments: string, construction_end_date: string, construction_start_date: string, coordinate_acquisition_code: string, decommission_details: string, decommission_end_date: string, decommission_method: string, decommission_reason: string, decommission_start_date: string, development_hours: string, development_method: string, development_notes: string, diameter: string, drawdown: string, drilling_company: string, drilling_method: string, ems: string, filter_pack_from: string, filter_pack_material: string, filter_pack_material_size: string, filter_pack_thickness: string, filter_pack_to: string, final_casing_stick_up: string, finished_well_depth: string, ground_elevation: string, ground_elevation_method: string, hydraulic_conductivity: string, hydro_fracturing_performed: bool, hydro_fracturing_yield_increase: string, id_plate_attached_by: string, identification_plate_number: int, intended_water_use: string, land_district: string, latitude: string, legal_block: string, legal_district_lot: string, legal_lot: string, legal_pid: int, legal_plan: string, legal_range: string, legal_section: string, legal_township: string, licenced_status: string, liner_diameter: string, liner_from: string, liner_material: string, liner_thickness: string, liner_to: string, longitude: string, observation_well_number: string, observation_well_status: string, other_drilling_method: string, other_screen_bottom: string, other_screen_material: string, owner_full_name: string, recommended_pump_depth: string, recommended_pump_rate: string, screen_bottom: string, screen_information: string, screen_intake_method: string, screen_material: string, screen_opening: string, screen_type: string, sealant_material: string, specific_storage: string, specific_yield: string, static_level_before_test: string, static_water_level: string, storativity: string, street_address: string, surface_seal_depth: string, surface_seal_length: string, surface_seal_material: string, surface_seal_method: string, surface_seal_thickness: string, testing_duration: int, testing_method: string, total_depth_drilled: string, transmissivity: string, utm_easting: int, utm_northing: int, utm_zone_code: string, water_quality_characteristics: list, water_quality_colour: string, water_quality_odour: string, water_supply_system_name: string, water_supply_system_well_name: string, well_cap_type: string, well_class: string, well_disinfected: bool, well_guid: string, well_identification_plate_attached: string, well_location_description: string, well_orientation: bool, well_status: string, well_subclass: string, well_tag_number: int, well_yield: string, well_yield_unit: string, yield_estimation_duration: string, yield_estimation_method: string, yield_estimation_rate: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -893,7 +917,7 @@ export def "wells-tags-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # A search term.
   --ordering: string # Which field to use when ordering the results.
-]: nothing -> table<owner_full_name: string, well_tag_number: int> {
+]: nothing -> oneof<table<owner_full_name: string, well_tag_number: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "ordering" $ordering "scalar")] | flatten | str join "&"
@@ -929,7 +953,7 @@ export def "wells-files-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<private: table<name: string, url: string>, public: table<name: string, url: string>> {
+]: nothing -> oneof<record<private: table<name: string, url: string>, public: table<name: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($tag | is-empty) { error make --unspanned { msg: "path parameter 'tag' must be non-empty" } }
@@ -965,7 +989,7 @@ export def "wells-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<alteration_end_date: string, alternative_specs_submitted: bool, analytic_solution_type: string, aquifer: int, aquifer_vulnerability_index: string, artesian_flow: string, artesian_pressure: string, backfill_depth: string, backfill_material: string, backfill_type: string, bcgs_id: int, bedrock_depth: string, boundary_effect: string, casing_set: table<casing_code: string, casing_material: string, diameter: string, drive_shoe: bool, end: string, start: string, wall_thickness: string>, city: string, comments: string, company_of_person_responsible: record<name: string, org_guid: string, org_verbose_name: string>, construction_end_date: string, construction_start_date: string, coordinate_acquisition_code: string, decommission_description_set: table<end: string, material: string, observations: string, start: string>, decommission_details: string, decommission_end_date: string, decommission_method: string, decommission_reason: string, decommission_start_date: string, development_hours: string, development_method: string, development_notes: string, diameter: string, drawdown: string, drilling_company: string, drilling_method: string, ems: string, filter_pack_from: string, filter_pack_material: string, filter_pack_material_size: string, filter_pack_thickness: string, filter_pack_to: string, final_casing_stick_up: string, finished_well_depth: string, ground_elevation: string, ground_elevation_method: string, hydraulic_conductivity: string, hydro_fracturing_performed: bool, hydro_fracturing_yield_increase: string, id_plate_attached_by: string, identification_plate_number: int, intended_water_use: string, land_district: string, latitude: string, legal_block: string, legal_district_lot: string, legal_lot: string, legal_pid: int, legal_plan: string, legal_range: string, legal_section: string, legal_township: string, licenced_status: string, liner_diameter: string, liner_from: string, liner_material: string, liner_thickness: string, liner_to: string, linerperforation_set: table<end: string, start: string>, lithologydescription_set: table<lithology_colour: string, lithology_from: string, lithology_hardness: string, lithology_moisture: string, lithology_raw_data: string, lithology_to: string, water_bearing_estimated_flow: string>, longitude: string, observation_well_number: string, observation_well_status: string, other_drilling_method: string, other_screen_bottom: string, other_screen_material: string, owner_full_name: string, person_responsible: record<name: string, person_guid: string>, recommended_pump_depth: string, recommended_pump_rate: string, screen_bottom: string, screen_information: string, screen_intake_method: string, screen_material: string, screen_opening: string, screen_set: table<assembly_type: string, end: string, internal_diameter: string, slot_size: string, start: string>, screen_type: string, sealant_material: string, specific_storage: string, specific_yield: string, static_level_before_test: string, static_water_level: string, storativity: string, street_address: string, surface_seal_depth: string, surface_seal_length: string, surface_seal_material: string, surface_seal_method: string, surface_seal_thickness: string, testing_duration: int, testing_method: string, total_depth_drilled: string, transmissivity: string, utm_easting: int, utm_northing: int, utm_zone_code: string, water_quality_characteristics: list<string>, water_quality_colour: string, water_quality_odour: string, water_supply_system_name: string, water_supply_system_well_name: string, well: int, well_cap_type: string, well_class: string, well_disinfected: bool, well_guid: string, well_identification_plate_attached: string, well_location_description: string, well_orientation: bool, well_status: string, well_subclass: string, well_tag_number: int, well_yield: string, well_yield_unit: string, yield_estimation_duration: string, yield_estimation_method: string, yield_estimation_rate: string> {
+]: nothing -> oneof<record<alteration_end_date: string, alternative_specs_submitted: bool, analytic_solution_type: string, aquifer: int, aquifer_vulnerability_index: string, artesian_flow: string, artesian_pressure: string, backfill_depth: string, backfill_material: string, backfill_type: string, bcgs_id: int, bedrock_depth: string, boundary_effect: string, casing_set: table<casing_code: string, casing_material: string, diameter: string, drive_shoe: bool, end: string, start: string, wall_thickness: string>, city: string, comments: string, company_of_person_responsible: record<name: string, org_guid: string, org_verbose_name: string>, construction_end_date: string, construction_start_date: string, coordinate_acquisition_code: string, decommission_description_set: table<end: string, material: string, observations: string, start: string>, decommission_details: string, decommission_end_date: string, decommission_method: string, decommission_reason: string, decommission_start_date: string, development_hours: string, development_method: string, development_notes: string, diameter: string, drawdown: string, drilling_company: string, drilling_method: string, ems: string, filter_pack_from: string, filter_pack_material: string, filter_pack_material_size: string, filter_pack_thickness: string, filter_pack_to: string, final_casing_stick_up: string, finished_well_depth: string, ground_elevation: string, ground_elevation_method: string, hydraulic_conductivity: string, hydro_fracturing_performed: bool, hydro_fracturing_yield_increase: string, id_plate_attached_by: string, identification_plate_number: int, intended_water_use: string, land_district: string, latitude: string, legal_block: string, legal_district_lot: string, legal_lot: string, legal_pid: int, legal_plan: string, legal_range: string, legal_section: string, legal_township: string, licenced_status: string, liner_diameter: string, liner_from: string, liner_material: string, liner_thickness: string, liner_to: string, linerperforation_set: table<end: string, start: string>, lithologydescription_set: table<lithology_colour: string, lithology_from: string, lithology_hardness: string, lithology_moisture: string, lithology_raw_data: string, lithology_to: string, water_bearing_estimated_flow: string>, longitude: string, observation_well_number: string, observation_well_status: string, other_drilling_method: string, other_screen_bottom: string, other_screen_material: string, owner_full_name: string, person_responsible: record<name: string, person_guid: string>, recommended_pump_depth: string, recommended_pump_rate: string, screen_bottom: string, screen_information: string, screen_intake_method: string, screen_material: string, screen_opening: string, screen_set: table<assembly_type: string, end: string, internal_diameter: string, slot_size: string, start: string>, screen_type: string, sealant_material: string, specific_storage: string, specific_yield: string, static_level_before_test: string, static_water_level: string, storativity: string, street_address: string, surface_seal_depth: string, surface_seal_length: string, surface_seal_material: string, surface_seal_method: string, surface_seal_thickness: string, testing_duration: int, testing_method: string, total_depth_drilled: string, transmissivity: string, utm_easting: int, utm_northing: int, utm_zone_code: string, water_quality_characteristics: list<string>, water_quality_colour: string, water_quality_odour: string, water_supply_system_name: string, water_supply_system_well_name: string, well: int, well_cap_type: string, well_class: string, well_disinfected: bool, well_guid: string, well_identification_plate_attached: string, well_location_description: string, well_orientation: bool, well_status: string, well_subclass: string, well_tag_number: int, well_yield: string, well_yield_unit: string, yield_estimation_duration: string, yield_estimation_method: string, yield_estimation_rate: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($well_tag_number | is-empty) { error make --unspanned { msg: "path parameter 'well_tag_number' must be non-empty" } }

@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -106,9 +130,9 @@ def alt-completer [] { ["json"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "replicapool-pools-list" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["replicapool-pools-list" "replicapool-pools-insert" "replicapool-pools-get" "replicapool-pools-delete" "replicapool-replicas-list" "replicapool-replicas-get" "replicapool-replicas-delete" "replicapool-replicas-restart" "replicapool-pools-resize" "replicapool-pools-updatetemplate" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -151,7 +175,7 @@ export def "replicapool-pools-list" [
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --max-results: int # Maximum count of results to be returned. Acceptable values are 0 to 100, inclusive. (Default: 50) (default: 500)
   --page-token: string # Set this to the nextPageToken value returned by a previous list request to obtain the next page of results from the previous list request.
-]: nothing -> record<nextPageToken: string, resources: table<autoRestart: bool, baseInstanceName: string, currentNumReplicas: int, description: string, healthChecks: list, initialNumReplicas: int, labels: list, name: string, numReplicas: int, resourceViews: list, selfLink: string, targetPool: string, targetPools: list, template: record, type: string>> {
+]: nothing -> oneof<record<nextPageToken: string, resources: table<autoRestart: bool, baseInstanceName: string, currentNumReplicas: int, description: string, healthChecks: list, initialNumReplicas: int, labels: list, name: string, numReplicas: int, resourceViews: list, selfLink: string, targetPool: string, targetPools: list, template: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'projectName' must be non-empty" } }
@@ -178,9 +202,6 @@ export def "replicapool-pools-list" [
 #
 # POST /{projectName}/zones/{zone}/pools
 # operationId: replicapool.pools.insert
-# --healthChecks item shape: {checkIntervalSec?: int, description?: string, healthyThreshold?: int, host?: string, name?: string, path?: string, port?: int, timeoutSec?: int, unhealthyThreshold?: int}
-# --labels item shape: {key?: string, value?: string}
-# --template shape: {action?: record, healthChecks?: list, version?: string, vmParams?: record}
 export def "replicapool-pools-insert" [
   project_name: string
   zone: string
@@ -215,7 +236,7 @@ export def "replicapool-pools-insert" [
   --target-pools: list<string> # A list of target pools to update with the replicas that are managed by this pool. If specified, the replicas in this replica pool will be added to the specified target pools for load balancing purposes. The replica pool must live in the same region as the specified target pools. These values must be the target pool resource names, and not fully qualified URLs.
   --template: record # The template used for creating replicas in the pool. — shape: {action?: record, healthChecks?: list, version?: string, vmParams?: record}
   --type: string # Deprecated! Do not set.
-]: any -> record<autoRestart: bool, baseInstanceName: string, currentNumReplicas: int, description: string, healthChecks: table<checkIntervalSec: int, description: string, healthyThreshold: int, host: string, name: string, path: string, port: int, timeoutSec: int, unhealthyThreshold: int>, initialNumReplicas: int, labels: table<key: string, value: string>, name: string, numReplicas: int, resourceViews: list<string>, selfLink: string, targetPool: string, targetPools: list<string>, template: record<action: record<commands: list, envVariables: list, timeoutMilliSeconds: int>, healthChecks: list<record>, version: string, vmParams: record<baseInstanceName: string, canIpForward: bool, description: string, disksToAttach: list, disksToCreate: list, machineType: string, metadata: record, networkInterfaces: list, onHostMaintenance: string, serviceAccounts: list, tags: record>>, type: string> {
+]: any -> oneof<record<autoRestart: bool, baseInstanceName: string, currentNumReplicas: int, description: string, healthChecks: table<checkIntervalSec: int, description: string, healthyThreshold: int, host: string, name: string, path: string, port: int, timeoutSec: int, unhealthyThreshold: int>, initialNumReplicas: int, labels: table<key: string, value: string>, name: string, numReplicas: int, resourceViews: list<string>, selfLink: string, targetPool: string, targetPools: list<string>, template: record<action: record<commands: list, envVariables: list, timeoutMilliSeconds: int>, healthChecks: list<record>, version: string, vmParams: record<baseInstanceName: string, canIpForward: bool, description: string, disksToAttach: list, disksToCreate: list, machineType: string, metadata: record, networkInterfaces: list, onHostMaintenance: string, serviceAccounts: list, tags: record>>, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -265,7 +286,7 @@ export def "replicapool-pools-get" [
   --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
-]: nothing -> record<autoRestart: bool, baseInstanceName: string, currentNumReplicas: int, description: string, healthChecks: table<checkIntervalSec: int, description: string, healthyThreshold: int, host: string, name: string, path: string, port: int, timeoutSec: int, unhealthyThreshold: int>, initialNumReplicas: int, labels: table<key: string, value: string>, name: string, numReplicas: int, resourceViews: list<string>, selfLink: string, targetPool: string, targetPools: list<string>, template: record<action: record<commands: list, envVariables: list, timeoutMilliSeconds: int>, healthChecks: list<record>, version: string, vmParams: record<baseInstanceName: string, canIpForward: bool, description: string, disksToAttach: list, disksToCreate: list, machineType: string, metadata: record, networkInterfaces: list, onHostMaintenance: string, serviceAccounts: list, tags: record>>, type: string> {
+]: nothing -> oneof<record<autoRestart: bool, baseInstanceName: string, currentNumReplicas: int, description: string, healthChecks: table<checkIntervalSec: int, description: string, healthyThreshold: int, host: string, name: string, path: string, port: int, timeoutSec: int, unhealthyThreshold: int>, initialNumReplicas: int, labels: table<key: string, value: string>, name: string, numReplicas: int, resourceViews: list<string>, selfLink: string, targetPool: string, targetPools: list<string>, template: record<action: record<commands: list, envVariables: list, timeoutMilliSeconds: int>, healthChecks: list<record>, version: string, vmParams: record<baseInstanceName: string, canIpForward: bool, description: string, disksToAttach: list, disksToCreate: list, machineType: string, metadata: record, networkInterfaces: list, onHostMaintenance: string, serviceAccounts: list, tags: record>>, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'projectName' must be non-empty" } }
@@ -367,7 +388,7 @@ export def "replicapool-replicas-list" [
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --max-results: int # Maximum count of results to be returned. Acceptable values are 0 to 100, inclusive. (Default: 50) (default: 500)
   --page-token: string # Set this to the nextPageToken value returned by a previous list request to obtain the next page of results from the previous list request.
-]: nothing -> record<nextPageToken: string, resources: table<name: string, selfLink: string, status: record>> {
+]: nothing -> oneof<record<nextPageToken: string, resources: table<name: string, selfLink: string, status: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'projectName' must be non-empty" } }
@@ -416,7 +437,7 @@ export def "replicapool-replicas-get" [
   --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
-]: nothing -> record<name: string, selfLink: string, status: record<details: string, state: string, templateVersion: string, vmLink: string, vmStartTime: string>> {
+]: nothing -> oneof<record<name: string, selfLink: string, status: record<details: string, state: string, templateVersion: string, vmLink: string, vmStartTime: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'projectName' must be non-empty" } }
@@ -467,7 +488,7 @@ export def "replicapool-replicas-delete" [
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --abandon-instance: oneof<nothing, bool> # Whether the instance resource represented by this replica should be deleted or abandoned. If abandoned, the replica will be deleted but the virtual machine instance will remain. By default, this is set to false and the instance will be deleted along with the replica.
-]: any -> record<name: string, selfLink: string, status: record<details: string, state: string, templateVersion: string, vmLink: string, vmStartTime: string>> {
+]: any -> oneof<record<name: string, selfLink: string, status: record<details: string, state: string, templateVersion: string, vmLink: string, vmStartTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -520,7 +541,7 @@ export def "replicapool-replicas-restart" [
   --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
-]: nothing -> record<name: string, selfLink: string, status: record<details: string, state: string, templateVersion: string, vmLink: string, vmStartTime: string>> {
+]: nothing -> oneof<record<name: string, selfLink: string, status: record<details: string, state: string, templateVersion: string, vmLink: string, vmStartTime: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'projectName' must be non-empty" } }
@@ -570,7 +591,7 @@ export def "replicapool-pools-resize" [
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --num-replicas: int # The desired number of replicas to resize to. If this number is larger than the existing number of replicas, new replicas will be added. If the number is smaller, then existing replicas will be deleted.
-]: nothing -> record<autoRestart: bool, baseInstanceName: string, currentNumReplicas: int, description: string, healthChecks: table<checkIntervalSec: int, description: string, healthyThreshold: int, host: string, name: string, path: string, port: int, timeoutSec: int, unhealthyThreshold: int>, initialNumReplicas: int, labels: table<key: string, value: string>, name: string, numReplicas: int, resourceViews: list<string>, selfLink: string, targetPool: string, targetPools: list<string>, template: record<action: record<commands: list, envVariables: list, timeoutMilliSeconds: int>, healthChecks: list<record>, version: string, vmParams: record<baseInstanceName: string, canIpForward: bool, description: string, disksToAttach: list, disksToCreate: list, machineType: string, metadata: record, networkInterfaces: list, onHostMaintenance: string, serviceAccounts: list, tags: record>>, type: string> {
+]: nothing -> oneof<record<autoRestart: bool, baseInstanceName: string, currentNumReplicas: int, description: string, healthChecks: table<checkIntervalSec: int, description: string, healthyThreshold: int, host: string, name: string, path: string, port: int, timeoutSec: int, unhealthyThreshold: int>, initialNumReplicas: int, labels: table<key: string, value: string>, name: string, numReplicas: int, resourceViews: list<string>, selfLink: string, targetPool: string, targetPools: list<string>, template: record<action: record<commands: list, envVariables: list, timeoutMilliSeconds: int>, healthChecks: list<record>, version: string, vmParams: record<baseInstanceName: string, canIpForward: bool, description: string, disksToAttach: list, disksToCreate: list, machineType: string, metadata: record, networkInterfaces: list, onHostMaintenance: string, serviceAccounts: list, tags: record>>, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'projectName' must be non-empty" } }
@@ -598,9 +619,6 @@ export def "replicapool-pools-resize" [
 #
 # POST /{projectName}/zones/{zone}/pools/{poolName}/updateTemplate
 # operationId: replicapool.pools.updatetemplate
-# --action shape: {commands?: list<string>, envVariables?: list, timeoutMilliSeconds?: int}
-# --healthChecks item shape: {checkIntervalSec?: int, description?: string, healthyThreshold?: int, host?: string, name?: string, path?: string, port?: int, timeoutSec?: int, unhealthyThreshold?: int}
-# --vmParams shape: {baseInstanceName?: string, canIpForward?: bool, description?: string, disksToAttach?: list, disksToCreate?: list, machineType?: string, metadata?: record, networkInterfaces?: list, onHostMaintenance?: string, serviceAccounts?: list, tags?: record}
 export def "replicapool-pools-updatetemplate" [
   project_name: string
   zone: string

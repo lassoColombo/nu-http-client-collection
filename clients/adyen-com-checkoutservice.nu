@@ -15,27 +15,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
     "x-api-key" => { {scheme: $scheme, headers: {"X-API-Key": $token_val}, query: "", location: "header"} }
     "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -43,8 +52,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -55,7 +69,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -90,7 +113,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -127,9 +151,9 @@ def merchant-refund-reason-completer [] { ["CUSTOMER REQUEST" "DUPLICATE" "FRAUD
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-apple-pay-sessions" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["post-apple-pay-sessions" "post-cancels" "post-card-details" "post-donations" "post-orders" "post-orders-cancel" "post-origin-keys" "post-payment-links" "get-payment-links-link-id" "patch-payment-links-link-id" "post-payment-methods" "post-payment-methods-balance" "post-payment-session" "post-payments" "post-payments-details" "post-payments-result" "post-payments-payment-psp-reference-amount-updates" "post-payments-payment-psp-reference-cancels" "post-payments-payment-psp-reference-captures" "post-payments-payment-psp-reference-refunds" "post-payments-payment-psp-reference-reversals" "post-sessions" "get-stored-payment-methods" "delete-stored-payment-methods-recurring-id" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -165,7 +189,7 @@ export def "post-apple-pay-sessions" [
   display_name: string # This is the name that your shoppers will see in the Apple Pay interface. The value returned as `configuration.merchantName` field from the [`/paymentMethods`](https://docs.adyen.com/api-explorer/#/CheckoutService/latest/post/paymentMethods) response.
   domain_name: string # The domain name you provided when you added Apple Pay in your Customer Area. This must match the `window.location.hostname` of the web shop.
   merchant_identifier: string # Your merchant identifier registered with Apple Pay. Use the value of the `configuration.merchantId` field from the [`/paymentMethods`](https://docs.adyen.com/api-explorer/#/CheckoutService/latest/post/paymentMethods) response.
-]: any -> record<data: string> {
+]: any -> oneof<record<data: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -208,7 +232,7 @@ export def "post-cancels" [
   merchant_account: string # The merchant account that is used to process the payment.
   payment_reference: string # The [`reference`](https://docs.adyen.com/api-explorer/#/CheckoutService/latest/post/payments__reqParam_reference) of the payment that you want to cancel.
   --reference: string # Your reference for the cancel request. Maximum length: 80 characters.
-]: any -> record<merchantAccount: string, paymentReference: string, pspReference: string, reference: string, status: string> {
+]: any -> oneof<record<merchantAccount: string, paymentReference: string, pspReference: string, reference: string, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -253,7 +277,7 @@ export def "post-card-details" [
   --encrypted-card-number: string # The encrypted card number.
   merchant_account: string # The merchant account identifier, with which you want to process the transaction.
   --supported-brands: list<string> # The card brands you support. This is the [`brands`](https://docs.adyen.com/api-explorer/#/CheckoutService/latest/post/paymentMethods__resParam_paymentMethods-brands) array from your [`/paymentMethods`](https://docs.adyen.com/api-explorer/#/CheckoutService/latest/post/paymentMethods) response. If not included, our API uses the ones configured for your merchant account and, if provided, the country code.
-]: any -> record<brands: table<supported: bool, type: string>> {
+]: any -> oneof<record<brands: table<supported: bool, type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -282,28 +306,6 @@ export def "post-card-details" [
 #
 # POST /donations
 # operationId: post-donations
-# --accountInfo shape: {accountAgeIndicator?: "notApplicable"|"thisTransaction"|"lessThan30Days"|"from30To60Days"|"moreThan60Days", accountChangeDate?: string, accountChangeIndicator?: "thisTransaction"|"lessThan30Days"|"from30To60Days"|"moreThan60Days", accountCreationDate?: string, accountType?: "notApplicable"|"credit"|"debit", addCardAttemptsDay?: int, deliveryAddressUsageDate?: string, deliveryAddressUsageIndicator?: "thisTransaction"|"lessThan30Days"|"from30To60Days"|"moreThan60Days", homePhone?: string, ... (10 more fields)}
-# --additionalAmount shape: {currency: string, value: int}
-# --additionalData shape: {allow3DS2?: string, challengeWindowSize?: "01"|"02"|"03"|"04"|"05", executeThreeD?: string, mpiImplementationType?: string, scaExemption?: string, threeDSVersion?: string, airline.agency_invoice_number?: string, airline.agency_plan_name?: string, airline.airline_code?: string, airline.airline_designator_code?: string, airline.boarding_fee?: string, airline.computerized_reservation_system?: string, airline.customer_reference_number?: string, airline.document_type?: string, ... (180 more fields)}
-# --amount shape: {currency: string, value: int}
-# --applicationInfo shape: {adyenLibrary?: record, adyenPaymentSource?: record, externalPlatform?: record, merchantApplication?: record, merchantDevice?: record, shopperInteractionDevice?: record}
-# --authenticationData shape: {attemptAuthentication?: "always"|"never", authenticationOnly?: bool, threeDSRequestData?: record}
-# --billingAddress shape: {city: string, country: string, houseNumberOrName: string, postalCode: string, stateOrProvince?: string, street: string}
-# --browserInfo shape: {acceptHeader: string, colorDepth: int, javaEnabled: bool, javaScriptEnabled?: bool, language: string, screenHeight: int, screenWidth: int, timeZoneOffset: int, userAgent: string}
-# --company shape: {homepage?: string, name?: string, registrationNumber?: string, registryLocation?: string, taxId?: string, type?: string}
-# --dccQuote shape: {account?: string, accountType?: string, baseAmount?: record, basePoints: int, buy?: record, interbank?: record, reference?: string, sell?: record, signature?: string, source?: string, type?: string, validTill: string}
-# --deliveryAddress shape: {city: string, country: string, houseNumberOrName: string, postalCode: string, stateOrProvince?: string, street: string}
-# --installments shape: {plan?: "regular"|"revolving", value: int}
-# --lineItems item shape: {amountExcludingTax?: int, amountIncludingTax?: int, brand?: string, color?: string, description?: string, id?: string, imageUrl?: string, itemCategory?: string, manufacturer?: string, productUrl?: string, quantity?: int, receiverEmail?: string, size?: string, sku?: string, taxAmount?: int, taxPercentage?: int, upc?: string}
-# --mandate shape: {amount: string, amountRule?: "max"|"exact", billingAttemptsRule?: "on"|"before"|"after", billingDay?: string, endsAt: string, frequency: "adhoc"|"daily"|"weekly"|"biWeekly"|"monthly"|"quarterly"|"halfYearly"|"yearly", remarks?: string, startsAt?: string}
-# --merchantRiskIndicator shape: {addressMatch?: bool, deliveryAddressIndicator?: "shipToBillingAddress"|"shipToVerifiedAddress"|"shipToNewAddress"|"shipToStore"|"digitalGoods"|"goodsNotShipped"|"other", deliveryEmail?: string, deliveryEmailAddress?: string, deliveryTimeframe?: "electronicDelivery"|"sameDayShipping"|"overnightShipping"|"twoOrMoreDaysShipping", giftCardAmount?: record, giftCardCount?: int, giftCardCurr?: string, preOrderDate?: string, preOrderPurchase?: bool, preOrderPurchaseInd?: string, reorderItems?: bool, ... (2 more fields)}
-# --mpiData shape: {authenticationResponse?: "Y"|"N"|"U"|"A", cavv?: string, cavvAlgorithm?: string, challengeCancel?: "01"|"02"|"03"|"04"|"05"|"06"|"07", directoryResponse?: "A"|"C"|"D"|"I"|"N"|"R"|"U"|"Y", dsTransID?: string, eci?: string, riskScore?: string, threeDSVersion?: string, tokenAuthenticationVerificationValue?: string, transStatusReason?: string, xid?: string}
-# --order shape: {orderData: string, pspReference: string}
-# --platformChargebackLogic shape: {behavior?: "deductAccordingToSplitRatio"|"deductFromLiableAccount"|"deductFromOneBalanceAccount", costAllocationAccount?: string, targetAccount?: string}
-# --riskData shape: {clientData?: string, customFields?: record, fraudOffset?: int, profileReference?: string}
-# --shopperName shape: {firstName: string, lastName: string}
-# --splits item shape: {account?: string, amount: record, description?: string, reference?: string, type: "BalanceAccount"|"Commission"|"Default"|"MarketPlace"|"PaymentFee"|"Remainder"|"Surcharge"|"Tip"|"VAT"|"Verification"}
-# --threeDS2RequestData shape: {acctInfo?: record, acctType?: "01"|"02"|"03", acquirerBIN?: string, acquirerMerchantID?: string, addrMatch?: "Y"|"N", authenticationOnly?: bool, challengeIndicator?: "noPreference"|"requestNoChallenge"|"requestChallenge"|"requestChallengeAsMandate", deviceChannel: string, deviceRenderOptions?: record, homePhone?: record, mcc?: string, merchantName?: string, messageVersion?: string, mobilePhone?: record, notificationURL?: string, payTokenInd?: bool, paymentAuthenticationUseCase?: string, ... (22 more fields)}
 @deprecated --flag conversion-id
 @deprecated --flag three-ds-authentication-only
 export def "post-donations" [
@@ -384,7 +386,7 @@ export def "post-donations" [
   --three-ds2-request-data: record # shape: {acctInfo?: record, acctType?: "01"|"02"|"03", acquirerBIN?: string, acquirerMerchantID?: string, addrMatch?: "Y"|"N", authenticationOnly?: bool, challengeIndicator?: "noPreference"|"requestNoChallenge"|"requestChallenge"|"requestChallengeAsMandate", deviceChannel: string, deviceRenderOptions?: record, homePhone?: record, mcc?: string, merchantName?: string, messageVersion?: string, mobilePhone?: record, notificationURL?: string, payTokenInd?: bool, paymentAuthenticationUseCase?: string, ... (22 more fields)}
   --three-ds-authentication-only: oneof<nothing, bool> # If set to true, you will only perform the [3D Secure 2 authentication](https://docs.adyen.com/online-payments/3d-secure/other-3ds-flows/authentication-only), and not the payment authorisation. (DEPRECATED, default: false)
   --trusted-shopper: oneof<nothing, bool> # Set to true if the payment should be routed to a trusted MID.
-]: any -> record<amount: record<currency: string, value: int>, donationAccount: string, id: string, merchantAccount: string, payment: record<action: any, additionalData: record, amount: record<currency: string, value: int>, donationToken: string, fraudResult: record<accountScore: int, results: list>, merchantReference: string, order: record<amount: record, expiresAt: string, orderData: string, pspReference: string, reference: string, remainingAmount: record>, paymentMethod: record<brand: string, type: string>, pspReference: string, refusalReason: string, refusalReasonCode: string, resultCode: string, threeDS2ResponseData: record<acsChallengeMandated: string, acsOperatorID: string, acsReferenceNumber: string, acsSignedContent: string, acsTransID: string, acsURL: string, authenticationType: string, cardHolderInfo: string, cavvAlgorithm: string, challengeIndicator: string, dsReferenceNumber: string, dsTransID: string, exemptionIndicator: string, messageVersion: string, riskScore: string, sdkEphemPubKey: string, threeDSServerTransID: string, transStatus: string, transStatusReason: string>, threeDS2Result: record<authenticationValue: string, cavvAlgorithm: string, challengeCancel: string, challengeIndicator: string, dsTransID: string, eci: string, exemptionIndicator: string, messageVersion: string, riskScore: string, threeDSServerTransID: string, timestamp: string, transStatus: string, transStatusReason: string, whiteListStatus: string>, threeDSPaymentData: string>, reference: string, status: string> {
+]: any -> oneof<record<amount: record<currency: string, value: int>, donationAccount: string, id: string, merchantAccount: string, payment: record<action: any, additionalData: record, amount: record<currency: string, value: int>, donationToken: string, fraudResult: record<accountScore: int, results: list>, merchantReference: string, order: record<amount: record, expiresAt: string, orderData: string, pspReference: string, reference: string, remainingAmount: record>, paymentMethod: record<brand: string, type: string>, pspReference: string, refusalReason: string, refusalReasonCode: string, resultCode: string, threeDS2ResponseData: record<acsChallengeMandated: string, acsOperatorID: string, acsReferenceNumber: string, acsSignedContent: string, acsTransID: string, acsURL: string, authenticationType: string, cardHolderInfo: string, cavvAlgorithm: string, challengeIndicator: string, dsReferenceNumber: string, dsTransID: string, exemptionIndicator: string, messageVersion: string, riskScore: string, sdkEphemPubKey: string, threeDSServerTransID: string, transStatus: string, transStatusReason: string>, threeDS2Result: record<authenticationValue: string, cavvAlgorithm: string, challengeCancel: string, challengeIndicator: string, dsTransID: string, eci: string, exemptionIndicator: string, messageVersion: string, riskScore: string, threeDSServerTransID: string, timestamp: string, transStatus: string, transStatusReason: string, whiteListStatus: string>, threeDSPaymentData: string>, reference: string, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -413,7 +415,6 @@ export def "post-donations" [
 #
 # POST /orders
 # operationId: post-orders
-# --amount shape: {currency: string, value: int}
 export def "post-orders" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -429,7 +430,7 @@ export def "post-orders" [
   --expires-at: string # The date that order expires; e.g. 2019-03-23T12:25:28Z. If not provided, the default expiry duration is 1 day.
   merchant_account: string # The merchant account identifier, with which you want to process the order.
   reference: string # A custom reference identifying the order.
-]: any -> record<additionalData: record, amount: record<currency: string, value: int>, expiresAt: string, fraudResult: record<accountScore: int, results: list<record>>, orderData: string, pspReference: string, reference: string, refusalReason: string, remainingAmount: record<currency: string, value: int>, resultCode: string> {
+]: any -> oneof<record<additionalData: record, amount: record<currency: string, value: int>, expiresAt: string, fraudResult: record<accountScore: int, results: list<record>>, orderData: string, pspReference: string, reference: string, refusalReason: string, remainingAmount: record<currency: string, value: int>, resultCode: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -458,7 +459,6 @@ export def "post-orders" [
 #
 # POST /orders/cancel
 # operationId: post-orders-cancel
-# --order shape: {orderData: string, pspReference: string}
 export def "post-orders-cancel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -472,7 +472,7 @@ export def "post-orders-cancel" [
   --idempotency-key: string # A unique identifier for the message with a maximum of 64 characters (we recommend a UUID). (e.g. 37ca9c97-d1d1-4c62-89e8-706891a563ed)
   merchant_account: string # The merchant account identifier that orderData belongs to.
   order: record # shape: {orderData: string, pspReference: string}
-]: any -> record<pspReference: string, resultCode: string> {
+]: any -> oneof<record<pspReference: string, resultCode: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -515,7 +515,7 @@ export def "post-origin-keys" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --idempotency-key: string # A unique identifier for the message with a maximum of 64 characters (we recommend a UUID). (e.g. 37ca9c97-d1d1-4c62-89e8-706891a563ed)
   origin_domains: list<string> # The list of origin domains, for which origin keys are requested.
-]: any -> record<originKeys: record> {
+]: any -> oneof<record<originKeys: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -544,14 +544,6 @@ export def "post-origin-keys" [
 #
 # POST /paymentLinks
 # operationId: post-paymentLinks
-# --amount shape: {currency: string, value: int}
-# --applicationInfo shape: {adyenLibrary?: record, adyenPaymentSource?: record, externalPlatform?: record, merchantApplication?: record, merchantDevice?: record, shopperInteractionDevice?: record}
-# --billingAddress shape: {city: string, country: string, houseNumberOrName: string, postalCode: string, stateOrProvince?: string, street: string}
-# --deliveryAddress shape: {city: string, country: string, houseNumberOrName: string, postalCode: string, stateOrProvince?: string, street: string}
-# --lineItems item shape: {amountExcludingTax?: int, amountIncludingTax?: int, brand?: string, color?: string, description?: string, id?: string, imageUrl?: string, itemCategory?: string, manufacturer?: string, productUrl?: string, quantity?: int, receiverEmail?: string, size?: string, sku?: string, taxAmount?: int, taxPercentage?: int, upc?: string}
-# --riskData shape: {clientData?: string, customFields?: record, fraudOffset?: int, profileReference?: string}
-# --shopperName shape: {firstName: string, lastName: string}
-# --splits item shape: {account?: string, amount: record, description?: string, reference?: string, type: "BalanceAccount"|"Commission"|"Default"|"MarketPlace"|"PaymentFee"|"Remainder"|"Surcharge"|"Tip"|"VAT"|"Verification"}
 export def "post-payment-links" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -601,7 +593,7 @@ export def "post-payment-links" [
   --store-payment-method-mode: string@store-payment-method-mode-completer # Indicates if the details of the payment method will be stored for the shopper. Possible values: * **disabled** – No details will be stored (default). * **askForConsent** – If the `shopperReference` is provided, the UI lets the shopper choose if they want their payment details to be stored. * **enabled** – If the `shopperReference` is provided, the details will be stored without asking the shopper for consent.
   --telephone-number: string # The shopper's telephone number.
   --theme-id: string # A [theme](https://docs.adyen.com/unified-commerce/pay-by-link/payment-links/api#themes) to customize the appearance of the payment page. If not specified, the payment page is rendered according to the theme set as default in your Customer Area.
-]: any -> record<allowedPaymentMethods: list<string>, amount: record<currency: string, value: int>, applicationInfo: record<adyenLibrary: record<name: string, version: string>, adyenPaymentSource: record<name: string, version: string>, externalPlatform: record<integrator: string, name: string, version: string>, merchantApplication: record<name: string, version: string>, merchantDevice: record<os: string, osVersion: string, reference: string>, shopperInteractionDevice: record<locale: string, os: string, osVersion: string>>, billingAddress: record<city: string, country: string, houseNumberOrName: string, postalCode: string, stateOrProvince: string, street: string>, blockedPaymentMethods: list<string>, captureDelayHours: int, countryCode: string, dateOfBirth: string, deliverAt: string, deliveryAddress: record<city: string, country: string, houseNumberOrName: string, postalCode: string, stateOrProvince: string, street: string>, description: string, expiresAt: string, id: string, installmentOptions: record, lineItems: table<amountExcludingTax: int, amountIncludingTax: int, brand: string, color: string, description: string, id: string, imageUrl: string, itemCategory: string, manufacturer: string, productUrl: string, quantity: int, receiverEmail: string, size: string, sku: string, taxAmount: int, taxPercentage: int, upc: string>, manualCapture: bool, mcc: string, merchantAccount: string, merchantOrderReference: string, metadata: record, recurringProcessingModel: string, reference: string, requiredShopperFields: list<string>, returnUrl: string, reusable: bool, riskData: record<clientData: string, customFields: record, fraudOffset: int, profileReference: string>, shopperEmail: string, shopperLocale: string, shopperName: record<firstName: string, lastName: string>, shopperReference: string, shopperStatement: string, showRemovePaymentMethodButton: bool, socialSecurityNumber: string, splitCardFundingSources: bool, splits: table<account: string, amount: record, description: string, reference: string, type: string>, status: string, store: string, storePaymentMethodMode: string, telephoneNumber: string, themeId: string, updatedAt: string, url: string> {
+]: any -> oneof<record<allowedPaymentMethods: list<string>, amount: record<currency: string, value: int>, applicationInfo: record<adyenLibrary: record<name: string, version: string>, adyenPaymentSource: record<name: string, version: string>, externalPlatform: record<integrator: string, name: string, version: string>, merchantApplication: record<name: string, version: string>, merchantDevice: record<os: string, osVersion: string, reference: string>, shopperInteractionDevice: record<locale: string, os: string, osVersion: string>>, billingAddress: record<city: string, country: string, houseNumberOrName: string, postalCode: string, stateOrProvince: string, street: string>, blockedPaymentMethods: list<string>, captureDelayHours: int, countryCode: string, dateOfBirth: string, deliverAt: string, deliveryAddress: record<city: string, country: string, houseNumberOrName: string, postalCode: string, stateOrProvince: string, street: string>, description: string, expiresAt: string, id: string, installmentOptions: record, lineItems: table<amountExcludingTax: int, amountIncludingTax: int, brand: string, color: string, description: string, id: string, imageUrl: string, itemCategory: string, manufacturer: string, productUrl: string, quantity: int, receiverEmail: string, size: string, sku: string, taxAmount: int, taxPercentage: int, upc: string>, manualCapture: bool, mcc: string, merchantAccount: string, merchantOrderReference: string, metadata: record, recurringProcessingModel: string, reference: string, requiredShopperFields: list<string>, returnUrl: string, reusable: bool, riskData: record<clientData: string, customFields: record, fraudOffset: int, profileReference: string>, shopperEmail: string, shopperLocale: string, shopperName: record<firstName: string, lastName: string>, shopperReference: string, shopperStatement: string, showRemovePaymentMethodButton: bool, socialSecurityNumber: string, splitCardFundingSources: bool, splits: table<account: string, amount: record, description: string, reference: string, type: string>, status: string, store: string, storePaymentMethodMode: string, telephoneNumber: string, themeId: string, updatedAt: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -641,7 +633,7 @@ export def "get-payment-links-link-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<allowedPaymentMethods: list<string>, amount: record<currency: string, value: int>, applicationInfo: record<adyenLibrary: record<name: string, version: string>, adyenPaymentSource: record<name: string, version: string>, externalPlatform: record<integrator: string, name: string, version: string>, merchantApplication: record<name: string, version: string>, merchantDevice: record<os: string, osVersion: string, reference: string>, shopperInteractionDevice: record<locale: string, os: string, osVersion: string>>, billingAddress: record<city: string, country: string, houseNumberOrName: string, postalCode: string, stateOrProvince: string, street: string>, blockedPaymentMethods: list<string>, captureDelayHours: int, countryCode: string, dateOfBirth: string, deliverAt: string, deliveryAddress: record<city: string, country: string, houseNumberOrName: string, postalCode: string, stateOrProvince: string, street: string>, description: string, expiresAt: string, id: string, installmentOptions: record, lineItems: table<amountExcludingTax: int, amountIncludingTax: int, brand: string, color: string, description: string, id: string, imageUrl: string, itemCategory: string, manufacturer: string, productUrl: string, quantity: int, receiverEmail: string, size: string, sku: string, taxAmount: int, taxPercentage: int, upc: string>, manualCapture: bool, mcc: string, merchantAccount: string, merchantOrderReference: string, metadata: record, recurringProcessingModel: string, reference: string, requiredShopperFields: list<string>, returnUrl: string, reusable: bool, riskData: record<clientData: string, customFields: record, fraudOffset: int, profileReference: string>, shopperEmail: string, shopperLocale: string, shopperName: record<firstName: string, lastName: string>, shopperReference: string, shopperStatement: string, showRemovePaymentMethodButton: bool, socialSecurityNumber: string, splitCardFundingSources: bool, splits: table<account: string, amount: record, description: string, reference: string, type: string>, status: string, store: string, storePaymentMethodMode: string, telephoneNumber: string, themeId: string, updatedAt: string, url: string> {
+]: nothing -> oneof<record<allowedPaymentMethods: list<string>, amount: record<currency: string, value: int>, applicationInfo: record<adyenLibrary: record<name: string, version: string>, adyenPaymentSource: record<name: string, version: string>, externalPlatform: record<integrator: string, name: string, version: string>, merchantApplication: record<name: string, version: string>, merchantDevice: record<os: string, osVersion: string, reference: string>, shopperInteractionDevice: record<locale: string, os: string, osVersion: string>>, billingAddress: record<city: string, country: string, houseNumberOrName: string, postalCode: string, stateOrProvince: string, street: string>, blockedPaymentMethods: list<string>, captureDelayHours: int, countryCode: string, dateOfBirth: string, deliverAt: string, deliveryAddress: record<city: string, country: string, houseNumberOrName: string, postalCode: string, stateOrProvince: string, street: string>, description: string, expiresAt: string, id: string, installmentOptions: record, lineItems: table<amountExcludingTax: int, amountIncludingTax: int, brand: string, color: string, description: string, id: string, imageUrl: string, itemCategory: string, manufacturer: string, productUrl: string, quantity: int, receiverEmail: string, size: string, sku: string, taxAmount: int, taxPercentage: int, upc: string>, manualCapture: bool, mcc: string, merchantAccount: string, merchantOrderReference: string, metadata: record, recurringProcessingModel: string, reference: string, requiredShopperFields: list<string>, returnUrl: string, reusable: bool, riskData: record<clientData: string, customFields: record, fraudOffset: int, profileReference: string>, shopperEmail: string, shopperLocale: string, shopperName: record<firstName: string, lastName: string>, shopperReference: string, shopperStatement: string, showRemovePaymentMethodButton: bool, socialSecurityNumber: string, splitCardFundingSources: bool, splits: table<account: string, amount: record, description: string, reference: string, type: string>, status: string, store: string, storePaymentMethodMode: string, telephoneNumber: string, themeId: string, updatedAt: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($link_id | is-empty) { error make --unspanned { msg: "path parameter 'linkId' must be non-empty" } }
@@ -678,7 +670,7 @@ export def "patch-payment-links-link-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   status: string@status-completer # Status of the payment link. Possible values: * **expired**
-]: any -> record<allowedPaymentMethods: list<string>, amount: record<currency: string, value: int>, applicationInfo: record<adyenLibrary: record<name: string, version: string>, adyenPaymentSource: record<name: string, version: string>, externalPlatform: record<integrator: string, name: string, version: string>, merchantApplication: record<name: string, version: string>, merchantDevice: record<os: string, osVersion: string, reference: string>, shopperInteractionDevice: record<locale: string, os: string, osVersion: string>>, billingAddress: record<city: string, country: string, houseNumberOrName: string, postalCode: string, stateOrProvince: string, street: string>, blockedPaymentMethods: list<string>, captureDelayHours: int, countryCode: string, dateOfBirth: string, deliverAt: string, deliveryAddress: record<city: string, country: string, houseNumberOrName: string, postalCode: string, stateOrProvince: string, street: string>, description: string, expiresAt: string, id: string, installmentOptions: record, lineItems: table<amountExcludingTax: int, amountIncludingTax: int, brand: string, color: string, description: string, id: string, imageUrl: string, itemCategory: string, manufacturer: string, productUrl: string, quantity: int, receiverEmail: string, size: string, sku: string, taxAmount: int, taxPercentage: int, upc: string>, manualCapture: bool, mcc: string, merchantAccount: string, merchantOrderReference: string, metadata: record, recurringProcessingModel: string, reference: string, requiredShopperFields: list<string>, returnUrl: string, reusable: bool, riskData: record<clientData: string, customFields: record, fraudOffset: int, profileReference: string>, shopperEmail: string, shopperLocale: string, shopperName: record<firstName: string, lastName: string>, shopperReference: string, shopperStatement: string, showRemovePaymentMethodButton: bool, socialSecurityNumber: string, splitCardFundingSources: bool, splits: table<account: string, amount: record, description: string, reference: string, type: string>, status: string, store: string, storePaymentMethodMode: string, telephoneNumber: string, themeId: string, updatedAt: string, url: string> {
+]: any -> oneof<record<allowedPaymentMethods: list<string>, amount: record<currency: string, value: int>, applicationInfo: record<adyenLibrary: record<name: string, version: string>, adyenPaymentSource: record<name: string, version: string>, externalPlatform: record<integrator: string, name: string, version: string>, merchantApplication: record<name: string, version: string>, merchantDevice: record<os: string, osVersion: string, reference: string>, shopperInteractionDevice: record<locale: string, os: string, osVersion: string>>, billingAddress: record<city: string, country: string, houseNumberOrName: string, postalCode: string, stateOrProvince: string, street: string>, blockedPaymentMethods: list<string>, captureDelayHours: int, countryCode: string, dateOfBirth: string, deliverAt: string, deliveryAddress: record<city: string, country: string, houseNumberOrName: string, postalCode: string, stateOrProvince: string, street: string>, description: string, expiresAt: string, id: string, installmentOptions: record, lineItems: table<amountExcludingTax: int, amountIncludingTax: int, brand: string, color: string, description: string, id: string, imageUrl: string, itemCategory: string, manufacturer: string, productUrl: string, quantity: int, receiverEmail: string, size: string, sku: string, taxAmount: int, taxPercentage: int, upc: string>, manualCapture: bool, mcc: string, merchantAccount: string, merchantOrderReference: string, metadata: record, recurringProcessingModel: string, reference: string, requiredShopperFields: list<string>, returnUrl: string, reusable: bool, riskData: record<clientData: string, customFields: record, fraudOffset: int, profileReference: string>, shopperEmail: string, shopperLocale: string, shopperName: record<firstName: string, lastName: string>, shopperReference: string, shopperStatement: string, showRemovePaymentMethodButton: bool, socialSecurityNumber: string, splitCardFundingSources: bool, splits: table<account: string, amount: record, description: string, reference: string, type: string>, status: string, store: string, storePaymentMethodMode: string, telephoneNumber: string, themeId: string, updatedAt: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -706,9 +698,6 @@ export def "patch-payment-links-link-id" [
 #
 # POST /paymentMethods
 # operationId: post-paymentMethods
-# --additionalData shape: {allow3DS2?: string, challengeWindowSize?: "01"|"02"|"03"|"04"|"05", executeThreeD?: string, mpiImplementationType?: string, scaExemption?: string, threeDSVersion?: string, airline.agency_invoice_number?: string, airline.agency_plan_name?: string, airline.airline_code?: string, airline.airline_designator_code?: string, airline.boarding_fee?: string, airline.computerized_reservation_system?: string, airline.customer_reference_number?: string, airline.document_type?: string, ... (180 more fields)}
-# --amount shape: {currency: string, value: int}
-# --order shape: {orderData: string, pspReference: string}
 export def "post-payment-methods" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -732,7 +721,7 @@ export def "post-payment-methods" [
   --shopper-reference: string # Required for recurring payments. Your reference to uniquely identify this shopper, for example user ID or account ID. Minimum length: 3 characters. > Your reference must not include personally identifiable information (PII), for example name or email address.
   --split-card-funding-sources: oneof<nothing, bool> # Boolean value indicating whether the card payment method should be split into separate debit and credit options. (default: false)
   --store: string # The ecommerce or point-of-sale store that is processing the payment. Used in [partner model integrations](https://docs.adyen.com/marketplaces-and-platforms/classic/platforms-for-partners#route-payments) for Adyen for Platforms.
-]: any -> record<paymentMethods: table<brand: string, brands: list, configuration: record, fundingSource: string, group: record, inputDetails: list, issuers: list, name: string, type: string>, storedPaymentMethods: table<brand: string, expiryMonth: string, expiryYear: string, holderName: string, iban: string, id: string, lastFour: string, name: string, networkTxReference: string, ownerName: string, shopperEmail: string, supportedRecurringProcessingModels: list, supportedShopperInteractions: list, type: string>> {
+]: any -> oneof<record<paymentMethods: table<brand: string, brands: list, configuration: record, fundingSource: string, group: record, inputDetails: list, issuers: list, name: string, type: string>, storedPaymentMethods: table<brand: string, expiryMonth: string, expiryYear: string, holderName: string, iban: string, id: string, lastFour: string, name: string, networkTxReference: string, ownerName: string, shopperEmail: string, supportedRecurringProcessingModels: list, supportedShopperInteractions: list, type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -761,21 +750,6 @@ export def "post-payment-methods" [
 #
 # POST /paymentMethods/balance
 # operationId: post-paymentMethods-balance
-# --accountInfo shape: {accountAgeIndicator?: "notApplicable"|"thisTransaction"|"lessThan30Days"|"from30To60Days"|"moreThan60Days", accountChangeDate?: string, accountChangeIndicator?: "thisTransaction"|"lessThan30Days"|"from30To60Days"|"moreThan60Days", accountCreationDate?: string, accountType?: "notApplicable"|"credit"|"debit", addCardAttemptsDay?: int, deliveryAddressUsageDate?: string, deliveryAddressUsageIndicator?: "thisTransaction"|"lessThan30Days"|"from30To60Days"|"moreThan60Days", homePhone?: string, ... (10 more fields)}
-# --additionalAmount shape: {currency: string, value: int}
-# --additionalData shape: {allow3DS2?: string, challengeWindowSize?: "01"|"02"|"03"|"04"|"05", executeThreeD?: string, mpiImplementationType?: string, scaExemption?: string, threeDSVersion?: string, airline.agency_invoice_number?: string, airline.agency_plan_name?: string, airline.airline_code?: string, airline.airline_designator_code?: string, airline.boarding_fee?: string, airline.computerized_reservation_system?: string, airline.customer_reference_number?: string, airline.document_type?: string, ... (180 more fields)}
-# --amount shape: {currency: string, value: int}
-# --applicationInfo shape: {adyenLibrary?: record, adyenPaymentSource?: record, externalPlatform?: record, merchantApplication?: record, merchantDevice?: record, shopperInteractionDevice?: record}
-# --billingAddress shape: {city: string, country: string, houseNumberOrName: string, postalCode: string, stateOrProvince?: string, street: string}
-# --browserInfo shape: {acceptHeader: string, colorDepth: int, javaEnabled: bool, javaScriptEnabled?: bool, language: string, screenHeight: int, screenWidth: int, timeZoneOffset: int, userAgent: string}
-# --dccQuote shape: {account?: string, accountType?: string, baseAmount?: record, basePoints: int, buy?: record, interbank?: record, reference?: string, sell?: record, signature?: string, source?: string, type?: string, validTill: string}
-# --deliveryAddress shape: {city: string, country: string, houseNumberOrName: string, postalCode: string, stateOrProvince?: string, street: string}
-# --installments shape: {plan?: "regular"|"revolving", value: int}
-# --merchantRiskIndicator shape: {addressMatch?: bool, deliveryAddressIndicator?: "shipToBillingAddress"|"shipToVerifiedAddress"|"shipToNewAddress"|"shipToStore"|"digitalGoods"|"goodsNotShipped"|"other", deliveryEmail?: string, deliveryEmailAddress?: string, deliveryTimeframe?: "electronicDelivery"|"sameDayShipping"|"overnightShipping"|"twoOrMoreDaysShipping", giftCardAmount?: record, giftCardCount?: int, giftCardCurr?: string, preOrderDate?: string, preOrderPurchase?: bool, preOrderPurchaseInd?: string, reorderItems?: bool, ... (2 more fields)}
-# --recurring shape: {contract?: "ONECLICK"|"RECURRING"|"PAYOUT", recurringDetailName?: string, recurringExpiry?: string, recurringFrequency?: string, tokenService?: "VISATOKENSERVICE"|"MCTOKENSERVICE"}
-# --shopperName shape: {firstName: string, lastName: string}
-# --splits item shape: {account?: string, amount: record, description?: string, reference?: string, type: "BalanceAccount"|"Commission"|"Default"|"MarketPlace"|"PaymentFee"|"Remainder"|"Surcharge"|"Tip"|"VAT"|"Verification"}
-# --threeDS2RequestData shape: {acctInfo?: record, acctType?: "01"|"02"|"03", acquirerBIN?: string, acquirerMerchantID?: string, addrMatch?: "Y"|"N", authenticationOnly?: bool, challengeIndicator?: "noPreference"|"requestNoChallenge"|"requestChallenge"|"requestChallengeAsMandate", deviceChannel: string, deviceRenderOptions?: record, homePhone?: record, mcc?: string, merchantName?: string, messageVersion?: string, mobilePhone?: record, notificationURL?: string, payTokenInd?: bool, paymentAuthenticationUseCase?: string, ... (22 more fields)}
 @deprecated --flag three-ds-authentication-only
 export def "post-payment-methods-balance" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -832,7 +806,7 @@ export def "post-payment-methods-balance" [
   --three-ds-authentication-only: oneof<nothing, bool> # If set to true, you will only perform the [3D Secure 2 authentication](https://docs.adyen.com/online-payments/3d-secure/other-3ds-flows/authentication-only), and not the payment authorisation. (DEPRECATED, default: false)
   --totals-group: string # The reference value to aggregate sales totals in reporting. When not specified, the store field is used (if available).
   --trusted-shopper: oneof<nothing, bool> # Set to true if the payment should be routed to a trusted MID.
-]: any -> record<additionalData: record, balance: record<currency: string, value: int>, fraudResult: record<accountScore: int, results: list<record>>, pspReference: string, refusalReason: string, resultCode: string, transactionLimit: record<currency: string, value: int>> {
+]: any -> oneof<record<additionalData: record, balance: record<currency: string, value: int>, fraudResult: record<accountScore: int, results: list<record>>, pspReference: string, refusalReason: string, resultCode: string, transactionLimit: record<currency: string, value: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -862,22 +836,6 @@ export def "post-payment-methods-balance" [
 # POST /paymentSession
 # DEPRECATED
 # operationId: post-paymentSession
-# --additionalAmount shape: {currency: string, value: int}
-# --additionalData shape: {allow3DS2?: string, challengeWindowSize?: "01"|"02"|"03"|"04"|"05", executeThreeD?: string, mpiImplementationType?: string, scaExemption?: string, threeDSVersion?: string, airline.agency_invoice_number?: string, airline.agency_plan_name?: string, airline.airline_code?: string, airline.airline_designator_code?: string, airline.boarding_fee?: string, airline.computerized_reservation_system?: string, airline.customer_reference_number?: string, airline.document_type?: string, ... (180 more fields)}
-# --amount shape: {currency: string, value: int}
-# --applicationInfo shape: {adyenLibrary?: record, adyenPaymentSource?: record, externalPlatform?: record, merchantApplication?: record, merchantDevice?: record, shopperInteractionDevice?: record}
-# --billingAddress shape: {city: string, country: string, houseNumberOrName: string, postalCode: string, stateOrProvince?: string, street: string}
-# --company shape: {homepage?: string, name?: string, registrationNumber?: string, registryLocation?: string, taxId?: string, type?: string}
-# --configuration shape: {avs?: record, cardHolderName?: "NONE"|"OPTIONAL"|"REQUIRED", installments?: record, shopperInput?: record}
-# --dccQuote shape: {account?: string, accountType?: string, baseAmount?: record, basePoints: int, buy?: record, interbank?: record, reference?: string, sell?: record, signature?: string, source?: string, type?: string, validTill: string}
-# --deliveryAddress shape: {city: string, country: string, houseNumberOrName: string, postalCode: string, stateOrProvince?: string, street: string}
-# --installments shape: {plan?: "regular"|"revolving", value: int}
-# --lineItems item shape: {amountExcludingTax?: int, amountIncludingTax?: int, brand?: string, color?: string, description?: string, id?: string, imageUrl?: string, itemCategory?: string, manufacturer?: string, productUrl?: string, quantity?: int, receiverEmail?: string, size?: string, sku?: string, taxAmount?: int, taxPercentage?: int, upc?: string}
-# --mandate shape: {amount: string, amountRule?: "max"|"exact", billingAttemptsRule?: "on"|"before"|"after", billingDay?: string, endsAt: string, frequency: "adhoc"|"daily"|"weekly"|"biWeekly"|"monthly"|"quarterly"|"halfYearly"|"yearly", remarks?: string, startsAt?: string}
-# --platformChargebackLogic shape: {behavior?: "deductAccordingToSplitRatio"|"deductFromLiableAccount"|"deductFromOneBalanceAccount", costAllocationAccount?: string, targetAccount?: string}
-# --riskData shape: {clientData?: string, customFields?: record, fraudOffset?: int, profileReference?: string}
-# --shopperName shape: {firstName: string, lastName: string}
-# --splits item shape: {account?: string, amount: record, description?: string, reference?: string, type: "BalanceAccount"|"Commission"|"Default"|"MarketPlace"|"PaymentFee"|"Remainder"|"Surcharge"|"Tip"|"VAT"|"Verification"}
 @deprecated
 @deprecated --flag conversion-id
 @deprecated --flag three-ds-authentication-only
@@ -948,7 +906,7 @@ export def "post-payment-session" [
   --three-ds-authentication-only: oneof<nothing, bool> # If set to true, you will only perform the [3D Secure 2 authentication](https://docs.adyen.com/online-payments/3d-secure/other-3ds-flows/authentication-only), and not the payment authorisation. (DEPRECATED, default: false)
   --body-token: string # The token obtained when initializing the SDK. > This parameter is required for iOS and Android; not required for Web.
   --trusted-shopper: oneof<nothing, bool> # Set to true if the payment should be routed to a trusted MID.
-]: any -> record<paymentSession: string, recurringDetails: table<brand: string, brands: list, configuration: record, fundingSource: string, group: record, inputDetails: list, issuers: list, name: string, recurringDetailReference: string, storedDetails: record, type: string>> {
+]: any -> oneof<record<paymentSession: string, recurringDetails: table<brand: string, brands: list, configuration: record, fundingSource: string, group: record, inputDetails: list, issuers: list, name: string, recurringDetailReference: string, storedDetails: record, type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -977,28 +935,6 @@ export def "post-payment-session" [
 #
 # POST /payments
 # operationId: post-payments
-# --accountInfo shape: {accountAgeIndicator?: "notApplicable"|"thisTransaction"|"lessThan30Days"|"from30To60Days"|"moreThan60Days", accountChangeDate?: string, accountChangeIndicator?: "thisTransaction"|"lessThan30Days"|"from30To60Days"|"moreThan60Days", accountCreationDate?: string, accountType?: "notApplicable"|"credit"|"debit", addCardAttemptsDay?: int, deliveryAddressUsageDate?: string, deliveryAddressUsageIndicator?: "thisTransaction"|"lessThan30Days"|"from30To60Days"|"moreThan60Days", homePhone?: string, ... (10 more fields)}
-# --additionalAmount shape: {currency: string, value: int}
-# --additionalData shape: {allow3DS2?: string, challengeWindowSize?: "01"|"02"|"03"|"04"|"05", executeThreeD?: string, mpiImplementationType?: string, scaExemption?: string, threeDSVersion?: string, airline.agency_invoice_number?: string, airline.agency_plan_name?: string, airline.airline_code?: string, airline.airline_designator_code?: string, airline.boarding_fee?: string, airline.computerized_reservation_system?: string, airline.customer_reference_number?: string, airline.document_type?: string, ... (180 more fields)}
-# --amount shape: {currency: string, value: int}
-# --applicationInfo shape: {adyenLibrary?: record, adyenPaymentSource?: record, externalPlatform?: record, merchantApplication?: record, merchantDevice?: record, shopperInteractionDevice?: record}
-# --authenticationData shape: {attemptAuthentication?: "always"|"never", authenticationOnly?: bool, threeDSRequestData?: record}
-# --billingAddress shape: {city: string, country: string, houseNumberOrName: string, postalCode: string, stateOrProvince?: string, street: string}
-# --browserInfo shape: {acceptHeader: string, colorDepth: int, javaEnabled: bool, javaScriptEnabled?: bool, language: string, screenHeight: int, screenWidth: int, timeZoneOffset: int, userAgent: string}
-# --company shape: {homepage?: string, name?: string, registrationNumber?: string, registryLocation?: string, taxId?: string, type?: string}
-# --dccQuote shape: {account?: string, accountType?: string, baseAmount?: record, basePoints: int, buy?: record, interbank?: record, reference?: string, sell?: record, signature?: string, source?: string, type?: string, validTill: string}
-# --deliveryAddress shape: {city: string, country: string, houseNumberOrName: string, postalCode: string, stateOrProvince?: string, street: string}
-# --installments shape: {plan?: "regular"|"revolving", value: int}
-# --lineItems item shape: {amountExcludingTax?: int, amountIncludingTax?: int, brand?: string, color?: string, description?: string, id?: string, imageUrl?: string, itemCategory?: string, manufacturer?: string, productUrl?: string, quantity?: int, receiverEmail?: string, size?: string, sku?: string, taxAmount?: int, taxPercentage?: int, upc?: string}
-# --mandate shape: {amount: string, amountRule?: "max"|"exact", billingAttemptsRule?: "on"|"before"|"after", billingDay?: string, endsAt: string, frequency: "adhoc"|"daily"|"weekly"|"biWeekly"|"monthly"|"quarterly"|"halfYearly"|"yearly", remarks?: string, startsAt?: string}
-# --merchantRiskIndicator shape: {addressMatch?: bool, deliveryAddressIndicator?: "shipToBillingAddress"|"shipToVerifiedAddress"|"shipToNewAddress"|"shipToStore"|"digitalGoods"|"goodsNotShipped"|"other", deliveryEmail?: string, deliveryEmailAddress?: string, deliveryTimeframe?: "electronicDelivery"|"sameDayShipping"|"overnightShipping"|"twoOrMoreDaysShipping", giftCardAmount?: record, giftCardCount?: int, giftCardCurr?: string, preOrderDate?: string, preOrderPurchase?: bool, preOrderPurchaseInd?: string, reorderItems?: bool, ... (2 more fields)}
-# --mpiData shape: {authenticationResponse?: "Y"|"N"|"U"|"A", cavv?: string, cavvAlgorithm?: string, challengeCancel?: "01"|"02"|"03"|"04"|"05"|"06"|"07", directoryResponse?: "A"|"C"|"D"|"I"|"N"|"R"|"U"|"Y", dsTransID?: string, eci?: string, riskScore?: string, threeDSVersion?: string, tokenAuthenticationVerificationValue?: string, transStatusReason?: string, xid?: string}
-# --order shape: {orderData: string, pspReference: string}
-# --platformChargebackLogic shape: {behavior?: "deductAccordingToSplitRatio"|"deductFromLiableAccount"|"deductFromOneBalanceAccount", costAllocationAccount?: string, targetAccount?: string}
-# --riskData shape: {clientData?: string, customFields?: record, fraudOffset?: int, profileReference?: string}
-# --shopperName shape: {firstName: string, lastName: string}
-# --splits item shape: {account?: string, amount: record, description?: string, reference?: string, type: "BalanceAccount"|"Commission"|"Default"|"MarketPlace"|"PaymentFee"|"Remainder"|"Surcharge"|"Tip"|"VAT"|"Verification"}
-# --threeDS2RequestData shape: {acctInfo?: record, acctType?: "01"|"02"|"03", acquirerBIN?: string, acquirerMerchantID?: string, addrMatch?: "Y"|"N", authenticationOnly?: bool, challengeIndicator?: "noPreference"|"requestNoChallenge"|"requestChallenge"|"requestChallengeAsMandate", deviceChannel: string, deviceRenderOptions?: record, homePhone?: record, mcc?: string, merchantName?: string, messageVersion?: string, mobilePhone?: record, notificationURL?: string, payTokenInd?: bool, paymentAuthenticationUseCase?: string, ... (22 more fields)}
 @deprecated --flag conversion-id
 @deprecated --flag three-ds-authentication-only
 export def "post-payments" [
@@ -1076,7 +1012,7 @@ export def "post-payments" [
   --three-ds2-request-data: record # shape: {acctInfo?: record, acctType?: "01"|"02"|"03", acquirerBIN?: string, acquirerMerchantID?: string, addrMatch?: "Y"|"N", authenticationOnly?: bool, challengeIndicator?: "noPreference"|"requestNoChallenge"|"requestChallenge"|"requestChallengeAsMandate", deviceChannel: string, deviceRenderOptions?: record, homePhone?: record, mcc?: string, merchantName?: string, messageVersion?: string, mobilePhone?: record, notificationURL?: string, payTokenInd?: bool, paymentAuthenticationUseCase?: string, ... (22 more fields)}
   --three-ds-authentication-only: oneof<nothing, bool> # If set to true, you will only perform the [3D Secure 2 authentication](https://docs.adyen.com/online-payments/3d-secure/other-3ds-flows/authentication-only), and not the payment authorisation. (DEPRECATED, default: false)
   --trusted-shopper: oneof<nothing, bool> # Set to true if the payment should be routed to a trusted MID.
-]: any -> record<action: any, additionalData: record, amount: record<currency: string, value: int>, donationToken: string, fraudResult: record<accountScore: int, results: list<record>>, merchantReference: string, order: record<amount: record<currency: string, value: int>, expiresAt: string, orderData: string, pspReference: string, reference: string, remainingAmount: record<currency: string, value: int>>, paymentMethod: record<brand: string, type: string>, pspReference: string, refusalReason: string, refusalReasonCode: string, resultCode: string, threeDS2ResponseData: record<acsChallengeMandated: string, acsOperatorID: string, acsReferenceNumber: string, acsSignedContent: string, acsTransID: string, acsURL: string, authenticationType: string, cardHolderInfo: string, cavvAlgorithm: string, challengeIndicator: string, dsReferenceNumber: string, dsTransID: string, exemptionIndicator: string, messageVersion: string, riskScore: string, sdkEphemPubKey: string, threeDSServerTransID: string, transStatus: string, transStatusReason: string>, threeDS2Result: record<authenticationValue: string, cavvAlgorithm: string, challengeCancel: string, challengeIndicator: string, dsTransID: string, eci: string, exemptionIndicator: string, messageVersion: string, riskScore: string, threeDSServerTransID: string, timestamp: string, transStatus: string, transStatusReason: string, whiteListStatus: string>, threeDSPaymentData: string> {
+]: any -> oneof<record<action: any, additionalData: record, amount: record<currency: string, value: int>, donationToken: string, fraudResult: record<accountScore: int, results: list<record>>, merchantReference: string, order: record<amount: record<currency: string, value: int>, expiresAt: string, orderData: string, pspReference: string, reference: string, remainingAmount: record<currency: string, value: int>>, paymentMethod: record<brand: string, type: string>, pspReference: string, refusalReason: string, refusalReasonCode: string, resultCode: string, threeDS2ResponseData: record<acsChallengeMandated: string, acsOperatorID: string, acsReferenceNumber: string, acsSignedContent: string, acsTransID: string, acsURL: string, authenticationType: string, cardHolderInfo: string, cavvAlgorithm: string, challengeIndicator: string, dsReferenceNumber: string, dsTransID: string, exemptionIndicator: string, messageVersion: string, riskScore: string, sdkEphemPubKey: string, threeDSServerTransID: string, transStatus: string, transStatusReason: string>, threeDS2Result: record<authenticationValue: string, cavvAlgorithm: string, challengeCancel: string, challengeIndicator: string, dsTransID: string, eci: string, exemptionIndicator: string, messageVersion: string, riskScore: string, threeDSServerTransID: string, timestamp: string, transStatus: string, transStatusReason: string, whiteListStatus: string>, threeDSPaymentData: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1105,8 +1041,6 @@ export def "post-payments" [
 #
 # POST /payments/details
 # operationId: post-payments-details
-# --authenticationData shape: {authenticationOnly?: bool}
-# --details shape: {MD?: string, PaReq?: string, PaRes?: string, billingToken?: string, cupsecureplus.smscode?: string, facilitatorAccessToken?: string, oneTimePasscode?: string, orderID?: string, payerID?: string, payload?: string, paymentID?: string, paymentStatus?: string, redirectResult?: string, resultCode?: string, threeDSResult?: string, threeds2.challengeResult?: string, threeds2.fingerprint?: string}
 @deprecated --flag three-ds-authentication-only
 export def "post-payments-details" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1123,7 +1057,7 @@ export def "post-payments-details" [
   details: record # shape: {MD?: string, PaReq?: string, PaRes?: string, billingToken?: string, cupsecureplus.smscode?: string, facilitatorAccessToken?: string, oneTimePasscode?: string, orderID?: string, payerID?: string, payload?: string, paymentID?: string, paymentStatus?: string, redirectResult?: string, resultCode?: string, threeDSResult?: string, threeds2.challengeResult?: string, threeds2.fingerprint?: string}
   --payment-data: string # The `paymentData` value from the `/payments` response. Required if the `/payments` response returns this value.
   --three-ds-authentication-only: oneof<nothing, bool> # Change the `authenticationOnly` indicator originally set in the `/payments` request. Only needs to be set if you want to modify the value set previously. (DEPRECATED)
-]: any -> record<additionalData: record, amount: record<currency: string, value: int>, donationToken: string, fraudResult: record<accountScore: int, results: list<record>>, merchantReference: string, order: record<amount: record<currency: string, value: int>, expiresAt: string, orderData: string, pspReference: string, reference: string, remainingAmount: record<currency: string, value: int>>, paymentMethod: record<brand: string, type: string>, pspReference: string, refusalReason: string, refusalReasonCode: string, resultCode: string, shopperLocale: string, threeDS2ResponseData: record<acsChallengeMandated: string, acsOperatorID: string, acsReferenceNumber: string, acsSignedContent: string, acsTransID: string, acsURL: string, authenticationType: string, cardHolderInfo: string, cavvAlgorithm: string, challengeIndicator: string, dsReferenceNumber: string, dsTransID: string, exemptionIndicator: string, messageVersion: string, riskScore: string, sdkEphemPubKey: string, threeDSServerTransID: string, transStatus: string, transStatusReason: string>, threeDS2Result: record<authenticationValue: string, cavvAlgorithm: string, challengeCancel: string, challengeIndicator: string, dsTransID: string, eci: string, exemptionIndicator: string, messageVersion: string, riskScore: string, threeDSServerTransID: string, timestamp: string, transStatus: string, transStatusReason: string, whiteListStatus: string>, threeDSPaymentData: string> {
+]: any -> oneof<record<additionalData: record, amount: record<currency: string, value: int>, donationToken: string, fraudResult: record<accountScore: int, results: list<record>>, merchantReference: string, order: record<amount: record<currency: string, value: int>, expiresAt: string, orderData: string, pspReference: string, reference: string, remainingAmount: record<currency: string, value: int>>, paymentMethod: record<brand: string, type: string>, pspReference: string, refusalReason: string, refusalReasonCode: string, resultCode: string, shopperLocale: string, threeDS2ResponseData: record<acsChallengeMandated: string, acsOperatorID: string, acsReferenceNumber: string, acsSignedContent: string, acsTransID: string, acsURL: string, authenticationType: string, cardHolderInfo: string, cavvAlgorithm: string, challengeIndicator: string, dsReferenceNumber: string, dsTransID: string, exemptionIndicator: string, messageVersion: string, riskScore: string, sdkEphemPubKey: string, threeDSServerTransID: string, transStatus: string, transStatusReason: string>, threeDS2Result: record<authenticationValue: string, cavvAlgorithm: string, challengeCancel: string, challengeIndicator: string, dsTransID: string, eci: string, exemptionIndicator: string, messageVersion: string, riskScore: string, threeDSServerTransID: string, timestamp: string, transStatus: string, transStatusReason: string, whiteListStatus: string>, threeDSPaymentData: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1166,7 +1100,7 @@ export def "post-payments-result" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --idempotency-key: string # A unique identifier for the message with a maximum of 64 characters (we recommend a UUID). (e.g. 37ca9c97-d1d1-4c62-89e8-706891a563ed)
   payload: string # Encrypted and signed payment result data. You should receive this value from the Checkout SDK after the shopper completes the payment.
-]: any -> record<additionalData: record, fraudResult: record<accountScore: int, results: list<record>>, merchantReference: string, order: record<amount: record<currency: string, value: int>, expiresAt: string, orderData: string, pspReference: string, reference: string, remainingAmount: record<currency: string, value: int>>, pspReference: string, refusalReason: string, refusalReasonCode: string, resultCode: string, serviceError: record<errorCode: string, errorType: string, message: string, pspReference: string>, shopperLocale: string> {
+]: any -> oneof<record<additionalData: record, fraudResult: record<accountScore: int, results: list<record>>, merchantReference: string, order: record<amount: record<currency: string, value: int>, expiresAt: string, orderData: string, pspReference: string, reference: string, remainingAmount: record<currency: string, value: int>>, pspReference: string, refusalReason: string, refusalReasonCode: string, resultCode: string, serviceError: record<errorCode: string, errorType: string, message: string, pspReference: string>, shopperLocale: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1195,8 +1129,6 @@ export def "post-payments-result" [
 #
 # POST /payments/{paymentPspReference}/amountUpdates
 # operationId: post-payments-paymentPspReference-amountUpdates
-# --amount shape: {currency: string, value: int}
-# --splits item shape: {account?: string, amount: record, description?: string, reference?: string, type: "BalanceAccount"|"Commission"|"Default"|"MarketPlace"|"PaymentFee"|"Remainder"|"Surcharge"|"Tip"|"VAT"|"Verification"}
 export def "post-payments-payment-psp-reference-amount-updates" [
   payment_psp_reference: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1214,7 +1146,7 @@ export def "post-payments-payment-psp-reference-amount-updates" [
   merchant_account: string # The merchant account that is used to process the payment.
   --reference: string # Your reference for the amount update request. Maximum length: 80 characters.
   --splits: list # An array of objects specifying how the amount should be split between accounts when using Adyen for Platforms. For details, refer to [Providing split information](https://docs.adyen.com/marketplaces-and-platforms/processing-payments#providing-split-information). — item shape: {account?: string, amount: record, description?: string, reference?: string, type: "BalanceAccount"|"Commission"|"Default"|"MarketPlace"|"PaymentFee"|"Remainder"|"Surcharge"|"Tip"|"VAT"|"Verification"}
-]: any -> record<amount: record<currency: string, value: int>, industryUsage: string, merchantAccount: string, paymentPspReference: string, pspReference: string, reference: string, splits: table<account: string, amount: record, description: string, reference: string, type: string>, status: string> {
+]: any -> oneof<record<amount: record<currency: string, value: int>, industryUsage: string, merchantAccount: string, paymentPspReference: string, pspReference: string, reference: string, splits: table<account: string, amount: record, description: string, reference: string, type: string>, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1258,7 +1190,7 @@ export def "post-payments-payment-psp-reference-cancels" [
   --idempotency-key: string # A unique identifier for the message with a maximum of 64 characters (we recommend a UUID). (e.g. 37ca9c97-d1d1-4c62-89e8-706891a563ed)
   merchant_account: string # The merchant account that is used to process the payment.
   --reference: string # Your reference for the cancel request. Maximum length: 80 characters.
-]: any -> record<merchantAccount: string, paymentPspReference: string, pspReference: string, reference: string, status: string> {
+]: any -> oneof<record<merchantAccount: string, paymentPspReference: string, pspReference: string, reference: string, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1288,9 +1220,6 @@ export def "post-payments-payment-psp-reference-cancels" [
 #
 # POST /payments/{paymentPspReference}/captures
 # operationId: post-payments-paymentPspReference-captures
-# --amount shape: {currency: string, value: int}
-# --lineItems item shape: {amountExcludingTax?: int, amountIncludingTax?: int, brand?: string, color?: string, description?: string, id?: string, imageUrl?: string, itemCategory?: string, manufacturer?: string, productUrl?: string, quantity?: int, receiverEmail?: string, size?: string, sku?: string, taxAmount?: int, taxPercentage?: int, upc?: string}
-# --splits item shape: {account?: string, amount: record, description?: string, reference?: string, type: "BalanceAccount"|"Commission"|"Default"|"MarketPlace"|"PaymentFee"|"Remainder"|"Surcharge"|"Tip"|"VAT"|"Verification"}
 export def "post-payments-payment-psp-reference-captures" [
   payment_psp_reference: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1308,7 +1237,7 @@ export def "post-payments-payment-psp-reference-captures" [
   merchant_account: string # The merchant account that is used to process the payment.
   --reference: string # Your reference for the capture request. Maximum length: 80 characters.
   --splits: list # An array of objects specifying how the amount should be split between accounts when using Adyen for Platforms. For details, refer to [Providing split information](https://docs.adyen.com/marketplaces-and-platforms/processing-payments#providing-split-information). — item shape: {account?: string, amount: record, description?: string, reference?: string, type: "BalanceAccount"|"Commission"|"Default"|"MarketPlace"|"PaymentFee"|"Remainder"|"Surcharge"|"Tip"|"VAT"|"Verification"}
-]: any -> record<amount: record<currency: string, value: int>, lineItems: table<amountExcludingTax: int, amountIncludingTax: int, brand: string, color: string, description: string, id: string, imageUrl: string, itemCategory: string, manufacturer: string, productUrl: string, quantity: int, receiverEmail: string, size: string, sku: string, taxAmount: int, taxPercentage: int, upc: string>, merchantAccount: string, paymentPspReference: string, pspReference: string, reference: string, splits: table<account: string, amount: record, description: string, reference: string, type: string>, status: string> {
+]: any -> oneof<record<amount: record<currency: string, value: int>, lineItems: table<amountExcludingTax: int, amountIncludingTax: int, brand: string, color: string, description: string, id: string, imageUrl: string, itemCategory: string, manufacturer: string, productUrl: string, quantity: int, receiverEmail: string, size: string, sku: string, taxAmount: int, taxPercentage: int, upc: string>, merchantAccount: string, paymentPspReference: string, pspReference: string, reference: string, splits: table<account: string, amount: record, description: string, reference: string, type: string>, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1338,9 +1267,6 @@ export def "post-payments-payment-psp-reference-captures" [
 #
 # POST /payments/{paymentPspReference}/refunds
 # operationId: post-payments-paymentPspReference-refunds
-# --amount shape: {currency: string, value: int}
-# --lineItems item shape: {amountExcludingTax?: int, amountIncludingTax?: int, brand?: string, color?: string, description?: string, id?: string, imageUrl?: string, itemCategory?: string, manufacturer?: string, productUrl?: string, quantity?: int, receiverEmail?: string, size?: string, sku?: string, taxAmount?: int, taxPercentage?: int, upc?: string}
-# --splits item shape: {account?: string, amount: record, description?: string, reference?: string, type: "BalanceAccount"|"Commission"|"Default"|"MarketPlace"|"PaymentFee"|"Remainder"|"Surcharge"|"Tip"|"VAT"|"Verification"}
 export def "post-payments-payment-psp-reference-refunds" [
   payment_psp_reference: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1359,7 +1285,7 @@ export def "post-payments-payment-psp-reference-refunds" [
   --merchant-refund-reason: string@merchant-refund-reason-completer # Your reason for the refund request
   --reference: string # Your reference for the refund request. Maximum length: 80 characters.
   --splits: list # An array of objects specifying how the amount should be split between accounts when using Adyen for Platforms. For details, refer to [Providing split information](https://docs.adyen.com/marketplaces-and-platforms/processing-payments#providing-split-information). — item shape: {account?: string, amount: record, description?: string, reference?: string, type: "BalanceAccount"|"Commission"|"Default"|"MarketPlace"|"PaymentFee"|"Remainder"|"Surcharge"|"Tip"|"VAT"|"Verification"}
-]: any -> record<amount: record<currency: string, value: int>, lineItems: table<amountExcludingTax: int, amountIncludingTax: int, brand: string, color: string, description: string, id: string, imageUrl: string, itemCategory: string, manufacturer: string, productUrl: string, quantity: int, receiverEmail: string, size: string, sku: string, taxAmount: int, taxPercentage: int, upc: string>, merchantAccount: string, merchantRefundReason: string, paymentPspReference: string, pspReference: string, reference: string, splits: table<account: string, amount: record, description: string, reference: string, type: string>, status: string> {
+]: any -> oneof<record<amount: record<currency: string, value: int>, lineItems: table<amountExcludingTax: int, amountIncludingTax: int, brand: string, color: string, description: string, id: string, imageUrl: string, itemCategory: string, manufacturer: string, productUrl: string, quantity: int, receiverEmail: string, size: string, sku: string, taxAmount: int, taxPercentage: int, upc: string>, merchantAccount: string, merchantRefundReason: string, paymentPspReference: string, pspReference: string, reference: string, splits: table<account: string, amount: record, description: string, reference: string, type: string>, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1403,7 +1329,7 @@ export def "post-payments-payment-psp-reference-reversals" [
   --idempotency-key: string # A unique identifier for the message with a maximum of 64 characters (we recommend a UUID). (e.g. 37ca9c97-d1d1-4c62-89e8-706891a563ed)
   merchant_account: string # The merchant account that is used to process the payment.
   --reference: string # Your reference for the reversal request. Maximum length: 80 characters.
-]: any -> record<merchantAccount: string, paymentPspReference: string, pspReference: string, reference: string, status: string> {
+]: any -> oneof<record<merchantAccount: string, paymentPspReference: string, pspReference: string, reference: string, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1433,23 +1359,6 @@ export def "post-payments-payment-psp-reference-reversals" [
 #
 # POST /sessions
 # operationId: post-sessions
-# --accountInfo shape: {accountAgeIndicator?: "notApplicable"|"thisTransaction"|"lessThan30Days"|"from30To60Days"|"moreThan60Days", accountChangeDate?: string, accountChangeIndicator?: "thisTransaction"|"lessThan30Days"|"from30To60Days"|"moreThan60Days", accountCreationDate?: string, accountType?: "notApplicable"|"credit"|"debit", addCardAttemptsDay?: int, deliveryAddressUsageDate?: string, deliveryAddressUsageIndicator?: "thisTransaction"|"lessThan30Days"|"from30To60Days"|"moreThan60Days", homePhone?: string, ... (10 more fields)}
-# --additionalAmount shape: {currency: string, value: int}
-# --additionalData shape: {allow3DS2?: string, challengeWindowSize?: "01"|"02"|"03"|"04"|"05", executeThreeD?: string, mpiImplementationType?: string, scaExemption?: string, threeDSVersion?: string, airline.agency_invoice_number?: string, airline.agency_plan_name?: string, airline.airline_code?: string, airline.airline_designator_code?: string, airline.boarding_fee?: string, airline.computerized_reservation_system?: string, airline.customer_reference_number?: string, airline.document_type?: string, ... (180 more fields)}
-# --amount shape: {currency: string, value: int}
-# --applicationInfo shape: {adyenLibrary?: record, adyenPaymentSource?: record, externalPlatform?: record, merchantApplication?: record, merchantDevice?: record, shopperInteractionDevice?: record}
-# --authenticationData shape: {attemptAuthentication?: "always"|"never", authenticationOnly?: bool, threeDSRequestData?: record}
-# --billingAddress shape: {city: string, country: string, houseNumberOrName: string, postalCode: string, stateOrProvince?: string, street: string}
-# --company shape: {homepage?: string, name?: string, registrationNumber?: string, registryLocation?: string, taxId?: string, type?: string}
-# --deliveryAddress shape: {city: string, country: string, houseNumberOrName: string, postalCode: string, stateOrProvince?: string, street: string}
-# --fundOrigin shape: {billingAddress?: record, shopperName?: record}
-# --fundRecipient shape: {billingAddress?: record, paymentMethod?: record, shopperEmail?: string, shopperName?: record, shopperReference?: string, storedPaymentMethodId?: string, subMerchant?: record, telephoneNumber?: string, walletIdentifier?: string, walletOwnerTaxId?: string}
-# --lineItems item shape: {amountExcludingTax?: int, amountIncludingTax?: int, brand?: string, color?: string, description?: string, id?: string, imageUrl?: string, itemCategory?: string, manufacturer?: string, productUrl?: string, quantity?: int, receiverEmail?: string, size?: string, sku?: string, taxAmount?: int, taxPercentage?: int, upc?: string}
-# --mandate shape: {amount: string, amountRule?: "max"|"exact", billingAttemptsRule?: "on"|"before"|"after", billingDay?: string, endsAt: string, frequency: "adhoc"|"daily"|"weekly"|"biWeekly"|"monthly"|"quarterly"|"halfYearly"|"yearly", remarks?: string, startsAt?: string}
-# --mpiData shape: {authenticationResponse?: "Y"|"N"|"U"|"A", cavv?: string, cavvAlgorithm?: string, challengeCancel?: "01"|"02"|"03"|"04"|"05"|"06"|"07", directoryResponse?: "A"|"C"|"D"|"I"|"N"|"R"|"U"|"Y", dsTransID?: string, eci?: string, riskScore?: string, threeDSVersion?: string, tokenAuthenticationVerificationValue?: string, transStatusReason?: string, xid?: string}
-# --riskData shape: {clientData?: string, customFields?: record, fraudOffset?: int, profileReference?: string}
-# --shopperName shape: {firstName: string, lastName: string}
-# --splits item shape: {account?: string, amount: record, description?: string, reference?: string, type: "BalanceAccount"|"Commission"|"Default"|"MarketPlace"|"PaymentFee"|"Remainder"|"Surcharge"|"Tip"|"VAT"|"Verification"}
 @deprecated --flag three-ds-authentication-only
 export def "post-sessions" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1516,7 +1425,7 @@ export def "post-sessions" [
   --telephone-number: string # The shopper's telephone number.
   --three-ds-authentication-only: oneof<nothing, bool> # If set to true, you will only perform the [3D Secure 2 authentication](https://docs.adyen.com/online-payments/3d-secure/other-3ds-flows/authentication-only), and not the payment authorisation. (DEPRECATED, default: false)
   --trusted-shopper: oneof<nothing, bool> # Set to true if the payment should be routed to a trusted MID.
-]: any -> record<accountInfo: record<accountAgeIndicator: string, accountChangeDate: string, accountChangeIndicator: string, accountCreationDate: string, accountType: string, addCardAttemptsDay: int, deliveryAddressUsageDate: string, deliveryAddressUsageIndicator: string, homePhone: string, mobilePhone: string, passwordChangeDate: string, passwordChangeIndicator: string, pastTransactionsDay: int, pastTransactionsYear: int, paymentAccountAge: string, paymentAccountIndicator: string, purchasesLast6Months: int, suspiciousActivity: bool, workPhone: string>, additionalAmount: record<currency: string, value: int>, additionalData: record, allowedPaymentMethods: list<string>, amount: record<currency: string, value: int>, applicationInfo: record<adyenLibrary: record<name: string, version: string>, adyenPaymentSource: record<name: string, version: string>, externalPlatform: record<integrator: string, name: string, version: string>, merchantApplication: record<name: string, version: string>, merchantDevice: record<os: string, osVersion: string, reference: string>, shopperInteractionDevice: record<locale: string, os: string, osVersion: string>>, authenticationData: record<attemptAuthentication: string, authenticationOnly: bool, threeDSRequestData: record<challengeWindowSize: string, dataOnly: string, nativeThreeDS: string, threeDSVersion: string>>, billingAddress: record<city: string, country: string, houseNumberOrName: string, postalCode: string, stateOrProvince: string, street: string>, blockedPaymentMethods: list<string>, captureDelayHours: int, channel: string, company: record<homepage: string, name: string, registrationNumber: string, registryLocation: string, taxId: string, type: string>, countryCode: string, dateOfBirth: string, deliverAt: string, deliveryAddress: record<city: string, country: string, houseNumberOrName: string, postalCode: string, stateOrProvince: string, street: string>, enableOneClick: bool, enablePayOut: bool, enableRecurring: bool, expiresAt: string, fundOrigin: record<billingAddress: record<city: string, country: string, houseNumberOrName: string, postalCode: string, stateOrProvince: string, street: string>, shopperName: record<firstName: string, lastName: string>>, fundRecipient: record<billingAddress: record<city: string, country: string, houseNumberOrName: string, postalCode: string, stateOrProvince: string, street: string>, paymentMethod: record<brand: string, checkoutAttemptId: string, cupsecureplus_smscode: string, cvc: string, encryptedCardNumber: string, encryptedExpiryMonth: string, encryptedExpiryYear: string, encryptedSecurityCode: string, expiryMonth: string, expiryYear: string, fundingSource: string, holderName: string, networkPaymentReference: string, number: string, recurringDetailReference: string, shopperNotificationReference: string, storedPaymentMethodId: string, threeDS2SdkVersion: string, type: string>, shopperEmail: string, shopperName: record<firstName: string, lastName: string>, shopperReference: string, storedPaymentMethodId: string, subMerchant: record<city: string, country: string, mcc: string, name: string, taxId: string>, telephoneNumber: string, walletIdentifier: string, walletOwnerTaxId: string>, id: string, installmentOptions: record, lineItems: table<amountExcludingTax: int, amountIncludingTax: int, brand: string, color: string, description: string, id: string, imageUrl: string, itemCategory: string, manufacturer: string, productUrl: string, quantity: int, receiverEmail: string, size: string, sku: string, taxAmount: int, taxPercentage: int, upc: string>, mandate: record<amount: string, amountRule: string, billingAttemptsRule: string, billingDay: string, endsAt: string, frequency: string, remarks: string, startsAt: string>, mcc: string, merchantAccount: string, merchantOrderReference: string, metadata: record, mode: string, mpiData: record<authenticationResponse: string, cavv: string, cavvAlgorithm: string, challengeCancel: string, directoryResponse: string, dsTransID: string, eci: string, riskScore: string, threeDSVersion: string, tokenAuthenticationVerificationValue: string, transStatusReason: string, xid: string>, recurringExpiry: string, recurringFrequency: string, recurringProcessingModel: string, redirectFromIssuerMethod: string, redirectToIssuerMethod: string, reference: string, returnUrl: string, riskData: record<clientData: string, customFields: record, fraudOffset: int, profileReference: string>, sessionData: string, shopperEmail: string, shopperIP: string, shopperInteraction: string, shopperLocale: string, shopperName: record<firstName: string, lastName: string>, shopperReference: string, shopperStatement: string, socialSecurityNumber: string, splitCardFundingSources: bool, splits: table<account: string, amount: record, description: string, reference: string, type: string>, store: string, storePaymentMethod: bool, storePaymentMethodMode: string, telephoneNumber: string, threeDSAuthenticationOnly: bool, trustedShopper: bool> {
+]: any -> oneof<record<accountInfo: record<accountAgeIndicator: string, accountChangeDate: string, accountChangeIndicator: string, accountCreationDate: string, accountType: string, addCardAttemptsDay: int, deliveryAddressUsageDate: string, deliveryAddressUsageIndicator: string, homePhone: string, mobilePhone: string, passwordChangeDate: string, passwordChangeIndicator: string, pastTransactionsDay: int, pastTransactionsYear: int, paymentAccountAge: string, paymentAccountIndicator: string, purchasesLast6Months: int, suspiciousActivity: bool, workPhone: string>, additionalAmount: record<currency: string, value: int>, additionalData: record, allowedPaymentMethods: list<string>, amount: record<currency: string, value: int>, applicationInfo: record<adyenLibrary: record<name: string, version: string>, adyenPaymentSource: record<name: string, version: string>, externalPlatform: record<integrator: string, name: string, version: string>, merchantApplication: record<name: string, version: string>, merchantDevice: record<os: string, osVersion: string, reference: string>, shopperInteractionDevice: record<locale: string, os: string, osVersion: string>>, authenticationData: record<attemptAuthentication: string, authenticationOnly: bool, threeDSRequestData: record<challengeWindowSize: string, dataOnly: string, nativeThreeDS: string, threeDSVersion: string>>, billingAddress: record<city: string, country: string, houseNumberOrName: string, postalCode: string, stateOrProvince: string, street: string>, blockedPaymentMethods: list<string>, captureDelayHours: int, channel: string, company: record<homepage: string, name: string, registrationNumber: string, registryLocation: string, taxId: string, type: string>, countryCode: string, dateOfBirth: string, deliverAt: string, deliveryAddress: record<city: string, country: string, houseNumberOrName: string, postalCode: string, stateOrProvince: string, street: string>, enableOneClick: bool, enablePayOut: bool, enableRecurring: bool, expiresAt: string, fundOrigin: record<billingAddress: record<city: string, country: string, houseNumberOrName: string, postalCode: string, stateOrProvince: string, street: string>, shopperName: record<firstName: string, lastName: string>>, fundRecipient: record<billingAddress: record<city: string, country: string, houseNumberOrName: string, postalCode: string, stateOrProvince: string, street: string>, paymentMethod: record<brand: string, checkoutAttemptId: string, cupsecureplus_smscode: string, cvc: string, encryptedCardNumber: string, encryptedExpiryMonth: string, encryptedExpiryYear: string, encryptedSecurityCode: string, expiryMonth: string, expiryYear: string, fundingSource: string, holderName: string, networkPaymentReference: string, number: string, recurringDetailReference: string, shopperNotificationReference: string, storedPaymentMethodId: string, threeDS2SdkVersion: string, type: string>, shopperEmail: string, shopperName: record<firstName: string, lastName: string>, shopperReference: string, storedPaymentMethodId: string, subMerchant: record<city: string, country: string, mcc: string, name: string, taxId: string>, telephoneNumber: string, walletIdentifier: string, walletOwnerTaxId: string>, id: string, installmentOptions: record, lineItems: table<amountExcludingTax: int, amountIncludingTax: int, brand: string, color: string, description: string, id: string, imageUrl: string, itemCategory: string, manufacturer: string, productUrl: string, quantity: int, receiverEmail: string, size: string, sku: string, taxAmount: int, taxPercentage: int, upc: string>, mandate: record<amount: string, amountRule: string, billingAttemptsRule: string, billingDay: string, endsAt: string, frequency: string, remarks: string, startsAt: string>, mcc: string, merchantAccount: string, merchantOrderReference: string, metadata: record, mode: string, mpiData: record<authenticationResponse: string, cavv: string, cavvAlgorithm: string, challengeCancel: string, directoryResponse: string, dsTransID: string, eci: string, riskScore: string, threeDSVersion: string, tokenAuthenticationVerificationValue: string, transStatusReason: string, xid: string>, recurringExpiry: string, recurringFrequency: string, recurringProcessingModel: string, redirectFromIssuerMethod: string, redirectToIssuerMethod: string, reference: string, returnUrl: string, riskData: record<clientData: string, customFields: record, fraudOffset: int, profileReference: string>, sessionData: string, shopperEmail: string, shopperIP: string, shopperInteraction: string, shopperLocale: string, shopperName: record<firstName: string, lastName: string>, shopperReference: string, shopperStatement: string, socialSecurityNumber: string, splitCardFundingSources: bool, splits: table<account: string, amount: record, description: string, reference: string, type: string>, store: string, storePaymentMethod: bool, storePaymentMethodMode: string, telephoneNumber: string, threeDSAuthenticationOnly: bool, trustedShopper: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1557,7 +1466,7 @@ export def "get-stored-payment-methods" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --shopper-reference: string # Your reference to uniquely identify this shopper, for example user ID or account ID. Minimum length: 3 characters. > Your reference must not include personally identifiable information (PII), for example name or email address.
   --merchant-account: string # Your merchant account.
-]: nothing -> record<merchantAccount: string, shopperReference: string, storedPaymentMethods: table<brand: string, expiryMonth: string, expiryYear: string, externalResponseCode: string, externalTokenReference: string, holderName: string, iban: string, id: string, issuerName: string, lastFour: string, name: string, networkTxReference: string, ownerName: string, shopperEmail: string, shopperReference: string, supportedRecurringProcessingModels: list, type: string>> {
+]: nothing -> oneof<record<merchantAccount: string, shopperReference: string, storedPaymentMethods: table<brand: string, expiryMonth: string, expiryYear: string, externalResponseCode: string, externalTokenReference: string, holderName: string, iban: string, id: string, issuerName: string, lastFour: string, name: string, networkTxReference: string, ownerName: string, shopperEmail: string, shopperReference: string, supportedRecurringProcessingModels: list, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "shopperReference" $shopper_reference "scalar") (serialize-qp "merchantAccount" $merchant_account "scalar")] | flatten | str join "&"
@@ -1595,7 +1504,7 @@ export def "delete-stored-payment-methods-recurring-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --shopper-reference: string # Your reference to uniquely identify this shopper, for example user ID or account ID. Minimum length: 3 characters. > Your reference must not include personally identifiable information (PII), for example name or email address. (required)
   --merchant-account: string # Your merchant account. (required)
-]: nothing -> record<brand: string, expiryMonth: string, expiryYear: string, externalResponseCode: string, externalTokenReference: string, holderName: string, iban: string, id: string, issuerName: string, lastFour: string, name: string, networkTxReference: string, ownerName: string, shopperEmail: string, shopperReference: string, supportedRecurringProcessingModels: list<string>, type: string> {
+]: nothing -> oneof<record<brand: string, expiryMonth: string, expiryYear: string, externalResponseCode: string, externalTokenReference: string, holderName: string, iban: string, id: string, issuerName: string, lastFour: string, name: string, networkTxReference: string, ownerName: string, shopperEmail: string, shopperReference: string, supportedRecurringProcessingModels: list<string>, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($recurring_id | is-empty) { error make --unspanned { msg: "path parameter 'recurringId' must be non-empty" } }

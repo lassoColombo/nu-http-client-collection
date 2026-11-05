@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -125,9 +149,9 @@ def target-status-completer [] { ["Archived" "Deleted" "Disposed" "Published" "U
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "associate-external-connection" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["associate-external-connection" "disassociate-external-connection" "copy-package-versions" "create-domain" "delete-domain" "describe-domain" "create-repository" "delete-repository" "describe-repository" "update-repository" "delete-domain-permissions-policy" "get-domain-permissions-policy" "delete-package" "describe-package" "put-package-origin-configuration" "delete-package-versions" "delete-repository-permissions-policy" "describe-package-version" "dispose-package-versions" "get-authorization-token" "get-package-version-asset" "get-package-version-readme" "get-repository-endpoint" "get-repository-permissions-policy" "put-repository-permissions-policy" "list-domains" "list-package-version-assets" "list-package-version-dependencies" "list-package-versions" "list-packages" "list-repositories" "list-repositories-in-domain" "list-tags-for-resource" "publish-package-version" "put-domain-permissions-policy" "tag-resource" "untag-resource" "update-package-versions-status" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -170,7 +194,7 @@ export def "associate-external-connection" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<repository: record<name: string, administratorAccount: string, domainName: string, domainOwner: string, arn: string, description: string, upstreams: list<record>, externalConnections: list<record>, createdTime: string>> {
+]: nothing -> oneof<record<repository: record<name: string, administratorAccount: string, domainName: string, domainOwner: string, arn: string, description: string, upstreams: list<record>, externalConnections: list<record>, createdTime: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain == null) { error make --unspanned { msg: "required query parameter 'domain' missing: pass --domain" } }
@@ -221,7 +245,7 @@ export def "disassociate-external-connection" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<repository: record<name: string, administratorAccount: string, domainName: string, domainOwner: string, arn: string, description: string, upstreams: list<record>, externalConnections: list<record>, createdTime: string>> {
+]: nothing -> oneof<record<repository: record<name: string, administratorAccount: string, domainName: string, domainOwner: string, arn: string, description: string, upstreams: list<record>, externalConnections: list<record>, createdTime: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain == null) { error make --unspanned { msg: "required query parameter 'domain' missing: pass --domain" } }
@@ -279,7 +303,7 @@ export def "copy-package-versions" [
   --version-revisions: record # A list of key-value pairs. The keys are package versions and the values are package version revisions. A CopyPackageVersion operation succeeds if the specified versions in the source repository match the specified package version revision. You must specify versions or versionRevisions. You cannot specify both.
   --allow-overwrite: oneof<nothing, bool> # Set to true to overwrite a package version that already exists in the destination repository. If set to false and the package version already exists in the destination repository, the package version is returned in the failedVersions field of the response with an ALREADY_EXISTS error code.
   --include-from-upstream: oneof<nothing, bool> # Set to true to copy packages from repositories that are upstream from the source repository to the destination repository. The default setting is false. For more information, see Working with upstream repositories (https://docs.aws.amazon.com/codeartifact/latest/ug/repos-upstream.html).
-]: any -> record<successfulVersions: record, failedVersions: record> {
+]: any -> oneof<record<successfulVersions: record, failedVersions: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -314,7 +338,6 @@ export def "copy-package-versions" [
 #
 # POST /v1/domain
 # operationId: CreateDomain
-# --tags item shape: {key: string, value: string}
 export def "create-domain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -335,7 +358,7 @@ export def "create-domain" [
   --x-amz-signed-headers: string
   --encryption-key: string # The encryption key for the domain. This is used to encrypt content stored in a domain. An encryption key can be a key ID, a key Amazon Resource Name (ARN), a key alias, or a key alias ARN. To specify an encryptionKey, your IAM role must have kms:DescribeKey and kms:CreateGrant permissions on the encryption key that is used. For more information, see DescribeKey (https://docs.aws.amazon.com/kms/latest/APIReference/API_DescribeKey.html#API_DescribeKey_RequestSyntax) in the Key Management Service API Reference and Key Management Service API Permissions Reference (https://docs.aws.amazon.com/kms/latest/developerguide/kms-api-permissions-reference.html) in the Key Management Service Developer Guide. CodeArtifact supports only symmetric CMKs. Do not associate an asymmetric CMK with your domain. For more information, see Using symmetric and asymmetric keys (https://docs.aws.amazon.com/kms/latest/developerguide/symmetric-asymmetric.html) in the Key Management Service Developer Guide.
   --tags: list # One or more tag key-value pairs for the domain. — item shape: {key: string, value: string}
-]: any -> record<domain: record<name: string, owner: string, arn: string, status: string, createdTime: string, encryptionKey: string, repositoryCount: int, assetSizeBytes: int, s3BucketArn: string>> {
+]: any -> oneof<record<domain: record<name: string, owner: string, arn: string, status: string, createdTime: string, encryptionKey: string, repositoryCount: int, assetSizeBytes: int, s3BucketArn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -385,7 +408,7 @@ export def "delete-domain" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<domain: record<name: string, owner: string, arn: string, status: string, createdTime: string, encryptionKey: string, repositoryCount: int, assetSizeBytes: int, s3BucketArn: string>> {
+]: nothing -> oneof<record<domain: record<name: string, owner: string, arn: string, status: string, createdTime: string, encryptionKey: string, repositoryCount: int, assetSizeBytes: int, s3BucketArn: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain == null) { error make --unspanned { msg: "required query parameter 'domain' missing: pass --domain" } }
@@ -432,7 +455,7 @@ export def "describe-domain" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<domain: record<name: string, owner: string, arn: string, status: string, createdTime: string, encryptionKey: string, repositoryCount: int, assetSizeBytes: int, s3BucketArn: string>> {
+]: nothing -> oneof<record<domain: record<name: string, owner: string, arn: string, status: string, createdTime: string, encryptionKey: string, repositoryCount: int, assetSizeBytes: int, s3BucketArn: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain == null) { error make --unspanned { msg: "required query parameter 'domain' missing: pass --domain" } }
@@ -460,8 +483,6 @@ export def "describe-domain" [
 #
 # POST /v1/repository
 # operationId: CreateRepository
-# --upstreams item shape: {repositoryName: string}
-# --tags item shape: {key: string, value: string}
 export def "create-repository" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -485,7 +506,7 @@ export def "create-repository" [
   --description: string # A description of the created repository.
   --upstreams: list # A list of upstream repositories to associate with the repository. The order of the upstream repositories in the list determines their priority order when CodeArtifact looks for a requested package version. For more information, see Working with upstream repositories (https://docs.aws.amazon.com/codeartifact/latest/ug/repos-upstream.html). — item shape: {repositoryName: string}
   --tags: list # One or more tag key-value pairs for the repository. — item shape: {key: string, value: string}
-]: any -> record<repository: record<name: string, administratorAccount: string, domainName: string, domainOwner: string, arn: string, description: string, upstreams: list<record>, externalConnections: list<record>, createdTime: string>> {
+]: any -> oneof<record<repository: record<name: string, administratorAccount: string, domainName: string, domainOwner: string, arn: string, description: string, upstreams: list<record>, externalConnections: list<record>, createdTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -537,7 +558,7 @@ export def "delete-repository" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<repository: record<name: string, administratorAccount: string, domainName: string, domainOwner: string, arn: string, description: string, upstreams: list<record>, externalConnections: list<record>, createdTime: string>> {
+]: nothing -> oneof<record<repository: record<name: string, administratorAccount: string, domainName: string, domainOwner: string, arn: string, description: string, upstreams: list<record>, externalConnections: list<record>, createdTime: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain == null) { error make --unspanned { msg: "required query parameter 'domain' missing: pass --domain" } }
@@ -586,7 +607,7 @@ export def "describe-repository" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<repository: record<name: string, administratorAccount: string, domainName: string, domainOwner: string, arn: string, description: string, upstreams: list<record>, externalConnections: list<record>, createdTime: string>> {
+]: nothing -> oneof<record<repository: record<name: string, administratorAccount: string, domainName: string, domainOwner: string, arn: string, description: string, upstreams: list<record>, externalConnections: list<record>, createdTime: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain == null) { error make --unspanned { msg: "required query parameter 'domain' missing: pass --domain" } }
@@ -615,7 +636,6 @@ export def "describe-repository" [
 #
 # PUT /v1/repository
 # operationId: UpdateRepository
-# --upstreams item shape: {repositoryName: string}
 export def "update-repository" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -638,7 +658,7 @@ export def "update-repository" [
   --x-amz-signed-headers: string
   --description: string # An updated repository description.
   --upstreams: list # A list of upstream repositories to associate with the repository. The order of the upstream repositories in the list determines their priority order when CodeArtifact looks for a requested package version. For more information, see Working with upstream repositories (https://docs.aws.amazon.com/codeartifact/latest/ug/repos-upstream.html). — item shape: {repositoryName: string}
-]: any -> record<repository: record<name: string, administratorAccount: string, domainName: string, domainOwner: string, arn: string, description: string, upstreams: list<record>, externalConnections: list<record>, createdTime: string>> {
+]: any -> oneof<record<repository: record<name: string, administratorAccount: string, domainName: string, domainOwner: string, arn: string, description: string, upstreams: list<record>, externalConnections: list<record>, createdTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -690,7 +710,7 @@ export def "delete-domain-permissions-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<policy: record<resourceArn: string, revision: string, document: string>> {
+]: nothing -> oneof<record<policy: record<resourceArn: string, revision: string, document: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain == null) { error make --unspanned { msg: "required query parameter 'domain' missing: pass --domain" } }
@@ -737,7 +757,7 @@ export def "get-domain-permissions-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<policy: record<resourceArn: string, revision: string, document: string>> {
+]: nothing -> oneof<record<policy: record<resourceArn: string, revision: string, document: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain == null) { error make --unspanned { msg: "required query parameter 'domain' missing: pass --domain" } }
@@ -788,7 +808,7 @@ export def "delete-package" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<deletedPackage: record<format: string, namespace: string, package: string, originConfiguration: record<restrictions: record>>> {
+]: nothing -> oneof<record<deletedPackage: record<format: string, namespace: string, package: string, originConfiguration: record<restrictions: record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain == null) { error make --unspanned { msg: "required query parameter 'domain' missing: pass --domain" } }
@@ -842,7 +862,7 @@ export def "describe-package" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<package: record<format: string, namespace: string, name: string, originConfiguration: record<restrictions: record>>> {
+]: nothing -> oneof<record<package: record<format: string, namespace: string, name: string, originConfiguration: record<restrictions: record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain == null) { error make --unspanned { msg: "required query parameter 'domain' missing: pass --domain" } }
@@ -873,7 +893,6 @@ export def "describe-package" [
 #
 # POST /v1/package
 # operationId: PutPackageOriginConfiguration
-# --restrictions shape: {publish?: "ALLOW"|"BLOCK", upstream?: "ALLOW"|"BLOCK"}
 export def "put-package-origin-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -898,7 +917,7 @@ export def "put-package-origin-configuration" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   restrictions: record # Details about the origin restrictions set on the package. The package origin restrictions determine how new versions of a package can be added to a specific repository. — shape: {publish?: "ALLOW"|"BLOCK", upstream?: "ALLOW"|"BLOCK"}
-]: any -> record<originConfiguration: record<restrictions: record<publish: string, upstream: string>>> {
+]: any -> oneof<record<originConfiguration: record<restrictions: record<publish: string, upstream: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -957,7 +976,7 @@ export def "delete-package-versions" [
   --x-amz-signed-headers: string
   versions: list<string> # An array of strings that specify the versions of the package to delete.
   --expected-status: string@expected-status-completer # The expected status of the package version to delete.
-]: any -> record<successfulVersions: record, failedVersions: record> {
+]: any -> oneof<record<successfulVersions: record, failedVersions: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1012,7 +1031,7 @@ export def "delete-repository-permissions-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<policy: record<resourceArn: string, revision: string, document: string>> {
+]: nothing -> oneof<record<policy: record<resourceArn: string, revision: string, document: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain == null) { error make --unspanned { msg: "required query parameter 'domain' missing: pass --domain" } }
@@ -1065,7 +1084,7 @@ export def "describe-package-version" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<packageVersion: record<format: string, namespace: string, packageName: string, displayName: string, version: string, summary: string, homePage: string, sourceCodeRepository: string, publishedTime: string, licenses: list<record>, revision: string, status: string, origin: record<domainEntryPoint: record, originType: string>>> {
+]: nothing -> oneof<record<packageVersion: record<format: string, namespace: string, packageName: string, displayName: string, version: string, summary: string, homePage: string, sourceCodeRepository: string, publishedTime: string, licenses: list<record>, revision: string, status: string, origin: record<domainEntryPoint: record, originType: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain == null) { error make --unspanned { msg: "required query parameter 'domain' missing: pass --domain" } }
@@ -1123,7 +1142,7 @@ export def "dispose-package-versions" [
   versions: list<string> # The versions of the package you want to dispose.
   --version-revisions: record # The revisions of the package versions you want to dispose.
   --expected-status: string@expected-status-completer # The expected status of the package version to dispose.
-]: any -> record<successfulVersions: record, failedVersions: record> {
+]: any -> oneof<record<successfulVersions: record, failedVersions: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1177,7 +1196,7 @@ export def "get-authorization-token" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<authorizationToken: string, expiration: string> {
+]: nothing -> oneof<record<authorizationToken: string, expiration: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain == null) { error make --unspanned { msg: "required query parameter 'domain' missing: pass --domain" } }
@@ -1231,7 +1250,7 @@ export def "get-package-version-asset" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<asset: string> {
+]: nothing -> oneof<record<asset: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain == null) { error make --unspanned { msg: "required query parameter 'domain' missing: pass --domain" } }
@@ -1288,7 +1307,7 @@ export def "get-package-version-readme" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<format: string, namespace: string, package: string, version: string, versionRevision: string, readme: string> {
+]: nothing -> oneof<record<format: string, namespace: string, package: string, version: string, versionRevision: string, readme: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain == null) { error make --unspanned { msg: "required query parameter 'domain' missing: pass --domain" } }
@@ -1341,7 +1360,7 @@ export def "get-repository-endpoint" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<repositoryEndpoint: string> {
+]: nothing -> oneof<record<repositoryEndpoint: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain == null) { error make --unspanned { msg: "required query parameter 'domain' missing: pass --domain" } }
@@ -1391,7 +1410,7 @@ export def "get-repository-permissions-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<policy: record<resourceArn: string, revision: string, document: string>> {
+]: nothing -> oneof<record<policy: record<resourceArn: string, revision: string, document: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain == null) { error make --unspanned { msg: "required query parameter 'domain' missing: pass --domain" } }
@@ -1442,7 +1461,7 @@ export def "put-repository-permissions-policy" [
   --x-amz-signed-headers: string
   --policy-revision: string # Sets the revision of the resource policy that specifies permissions to access the repository. This revision is used for optimistic locking, which prevents others from overwriting your changes to the repository's resource policy.
   policy_document: string # A valid displayable JSON Aspen policy string to be set as the access control resource policy on the provided repository.
-]: any -> record<policy: record<resourceArn: string, revision: string, document: string>> {
+]: any -> oneof<record<policy: record<resourceArn: string, revision: string, document: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1495,7 +1514,7 @@ export def "list-domains" [
   --x-amz-signed-headers: string
   --max-results-body: int # The maximum number of results to return per page. (body field)
   --next-token-body: string # The token for the next set of results. Use the value returned in the previous response in the next request to retrieve the next set of results. (body field)
-]: any -> record<domains: table<name: string, owner: string, arn: string, status: string, createdTime: string, encryptionKey: string>, nextToken: string> {
+]: any -> oneof<record<domains: table<name: string, owner: string, arn: string, status: string, createdTime: string, encryptionKey: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1553,7 +1572,7 @@ export def "list-package-version-assets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<format: string, namespace: string, package: string, version: string, versionRevision: string, nextToken: string, assets: table<name: string, size: int, hashes: record>> {
+]: nothing -> oneof<record<format: string, namespace: string, package: string, version: string, versionRevision: string, nextToken: string, assets: table<name: string, size: int, hashes: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain == null) { error make --unspanned { msg: "required query parameter 'domain' missing: pass --domain" } }
@@ -1610,7 +1629,7 @@ export def "list-package-version-dependencies" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<format: string, namespace: string, package: string, version: string, versionRevision: string, nextToken: string, dependencies: table<namespace: string, package: string, dependencyType: string, versionRequirement: string>> {
+]: nothing -> oneof<record<format: string, namespace: string, package: string, version: string, versionRevision: string, nextToken: string, dependencies: table<namespace: string, package: string, dependencyType: string, versionRequirement: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain == null) { error make --unspanned { msg: "required query parameter 'domain' missing: pass --domain" } }
@@ -1672,7 +1691,7 @@ export def "list-package-versions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<defaultDisplayVersion: string, format: string, namespace: string, package: string, versions: table<version: string, revision: string, status: string, origin: record>, nextToken: string> {
+]: nothing -> oneof<record<defaultDisplayVersion: string, format: string, namespace: string, package: string, versions: table<version: string, revision: string, status: string, origin: record>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain == null) { error make --unspanned { msg: "required query parameter 'domain' missing: pass --domain" } }
@@ -1732,7 +1751,7 @@ export def "list-packages" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<packages: table<format: string, namespace: string, package: string, originConfiguration: record>, nextToken: string> {
+]: nothing -> oneof<record<packages: table<format: string, namespace: string, package: string, originConfiguration: record>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain == null) { error make --unspanned { msg: "required query parameter 'domain' missing: pass --domain" } }
@@ -1783,7 +1802,7 @@ export def "list-repositories" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<repositories: table<name: string, administratorAccount: string, domainName: string, domainOwner: string, arn: string, description: string, createdTime: string>, nextToken: string> {
+]: nothing -> oneof<record<repositories: table<name: string, administratorAccount: string, domainName: string, domainOwner: string, arn: string, description: string, createdTime: string>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "repository-prefix" $repository_prefix "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "maxResults" $max_results_2 "scalar") (serialize-qp "nextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -1835,7 +1854,7 @@ export def "list-repositories-in-domain" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<repositories: table<name: string, administratorAccount: string, domainName: string, domainOwner: string, arn: string, description: string, createdTime: string>, nextToken: string> {
+]: nothing -> oneof<record<repositories: table<name: string, administratorAccount: string, domainName: string, domainOwner: string, arn: string, description: string, createdTime: string>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain == null) { error make --unspanned { msg: "required query parameter 'domain' missing: pass --domain" } }
@@ -1881,7 +1900,7 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<tags: table<key: string, value: string>> {
+]: nothing -> oneof<record<tags: table<key: string, value: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn == null) { error make --unspanned { msg: "required query parameter 'resourceArn' missing: pass --resource-arn" } }
@@ -1937,7 +1956,7 @@ export def "publish-package-version" [
   --x-amz-signed-headers: string
   --x-amz-content-sha256-2: string # The SHA256 hash of the assetContent to publish. This value must be calculated by the caller and provided with the request (see Publishing a generic package (https://docs.aws.amazon.com/codeartifact/latest/ug/using-generic.html#publishing-generic-packages) in the CodeArtifact User Guide). This value is used as an integrity check to verify that the assetContent has not changed after it was originally sent. (required) (disambiguated-2)
   asset_content: string # The content of the asset to publish.
-]: any -> record<format: string, namespace: string, package: string, version: string, versionRevision: string, status: string, asset: record<name: string, size: int, hashes: record>> {
+]: any -> oneof<record<format: string, namespace: string, package: string, version: string, versionRevision: string, status: string, asset: record<name: string, size: int, hashes: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1995,7 +2014,7 @@ export def "put-domain-permissions-policy" [
   --domain-owner: string # The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces.
   --policy-revision: string # The current revision of the resource policy to be set. This revision is used for optimistic locking, which prevents others from overwriting your changes to the domain's resource policy.
   policy_document: string # A valid displayable JSON Aspen policy string to be set as the access control resource policy on the provided domain.
-]: any -> record<policy: record<resourceArn: string, revision: string, document: string>> {
+]: any -> oneof<record<policy: record<resourceArn: string, revision: string, document: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2024,7 +2043,6 @@ export def "put-domain-permissions-policy" [
 #
 # POST /v1/tag
 # operationId: TagResource
-# --tags item shape: {key: string, value: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2044,7 +2062,7 @@ export def "tag-resource" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   tags: list # The tags you want to modify or add to the resource. — item shape: {key: string, value: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2094,7 +2112,7 @@ export def "untag-resource" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   tag_keys: list<string> # The tag key for each tag that you want to remove from the resource.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2152,7 +2170,7 @@ export def "update-package-versions-status" [
   --version-revisions: record # A map of package versions and package version revisions. The map key is the package version (for example, 3.5.2), and the map value is the package version revision.
   --expected-status: string@expected-status-completer # The package version’s expected status before it is updated. If expectedStatus is provided, the package version's status is updated only if its status at the time UpdatePackageVersionsStatus is called matches expectedStatus.
   target_status: string@target-status-completer # The status you want to change the package version status to.
-]: any -> record<successfulVersions: record, failedVersions: record> {
+]: any -> oneof<record<successfulVersions: record, failedVersions: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

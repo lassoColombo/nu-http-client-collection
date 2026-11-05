@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -188,9 +212,9 @@ def action-completer-65 [] { ["ValidateTemplate"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-activate-type" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-activate-type" "post-activate-type" "get-batch-describe-type-configurations" "post-batch-describe-type-configurations" "get-cancel-update-stack" "post-cancel-update-stack" "get-continue-update-rollback" "post-continue-update-rollback" "get-create-change-set" "post-create-change-set" "get-create-stack" "post-create-stack" "get-create-stack-instances" "post-create-stack-instances" "get-create-stack-set" "post-create-stack-set" "get-deactivate-type" "post-deactivate-type" "get-delete-change-set" "post-delete-change-set" "get-delete-stack" "post-delete-stack" "get-delete-stack-instances" "post-delete-stack-instances" "get-delete-stack-set" "post-delete-stack-set" "get-deregister-type" "post-deregister-type" "get-describe-account-limits" "post-describe-account-limits" "get-describe-change-set" "post-describe-change-set" "get-describe-change-set-hooks" "post-describe-change-set-hooks" "get-describe-publisher" "post-describe-publisher" "get-describe-stack-drift-detection-status" "post-describe-stack-drift-detection-status" "get-describe-stack-events" "post-describe-stack-events" "get-describe-stack-instance" "post-describe-stack-instance" "get-describe-stack-resource" "post-describe-stack-resource" "get-describe-stack-resource-drifts" "post-describe-stack-resource-drifts" "get-describe-stack-resources" "post-describe-stack-resources" "get-describe-stack-set" "post-describe-stack-set" "get-describe-stack-set-operation" "post-describe-stack-set-operation" "get-describe-stacks" "post-describe-stacks" "get-describe-type" "post-describe-type" "get-describe-type-registration" "post-describe-type-registration" "get-detect-stack-drift" "post-detect-stack-drift" "get-detect-stack-resource-drift" "post-detect-stack-resource-drift" "get-detect-stack-set-drift" "post-detect-stack-set-drift" "get-estimate-template-cost" "post-estimate-template-cost" "get-execute-change-set" "post-execute-change-set" "get-get-stack-policy" "post-get-stack-policy" "get-get-template" "post-get-template" "get-get-template-summary" "post-get-template-summary" "get-import-stacks-to-stack-set" "post-import-stacks-to-stack-set" "get-list-change-sets" "post-list-change-sets" "get-list-exports" "post-list-exports" "get-list-imports" "post-list-imports" "get-list-stack-instances" "post-list-stack-instances" "get-list-stack-resources" "post-list-stack-resources" "get-list-stack-set-operation-results" "post-list-stack-set-operation-results" "get-list-stack-set-operations" "post-list-stack-set-operations" "get-list-stack-sets" "post-list-stack-sets" "get-list-stacks" "post-list-stacks" "get-list-type-registrations" "post-list-type-registrations" "get-list-type-versions" "post-list-type-versions" "get-list-types" "post-list-types" "get-publish-type" "post-publish-type" "get-record-handler-progress" "post-record-handler-progress" "get-register-publisher" "post-register-publisher" "get-register-type" "post-register-type" "get-rollback-stack" "post-rollback-stack" "get-set-stack-policy" "post-set-stack-policy" "get-set-type-configuration" "post-set-type-configuration" "get-set-type-default-version" "post-set-type-default-version" "get-signal-resource" "post-signal-resource" "get-stop-stack-set-operation" "post-stop-stack-set-operation" "get-test-type" "post-test-type" "get-update-stack" "post-update-stack" "get-update-stack-instances" "post-update-stack-instances" "get-update-stack-set" "post-update-stack-set" "get-update-termination-protection" "post-update-termination-protection" "get-validate-template" "post-validate-template" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -241,7 +265,7 @@ export def "get-activate-type" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Arn: string> {
+]: nothing -> oneof<record<Arn: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "ActivateType")
@@ -290,7 +314,7 @@ export def "post-activate-type" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Arn: string> {
+]: any -> oneof<record<Arn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -342,7 +366,7 @@ export def "get-batch-describe-type-configurations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Errors: table<ErrorCode: string, ErrorMessage: string, TypeConfigurationIdentifier: record>, UnprocessedTypeConfigurations: table<TypeArn: string, TypeConfigurationAlias: string, TypeConfigurationArn: string, Type: string, TypeName: string>, TypeConfigurations: table<Arn: string, Alias: string, Configuration: string, LastUpdated: string, TypeArn: string, TypeName: string, IsDefaultConfiguration: bool>> {
+]: nothing -> oneof<record<Errors: table<ErrorCode: string, ErrorMessage: string, TypeConfigurationIdentifier: record>, UnprocessedTypeConfigurations: table<TypeArn: string, TypeConfigurationAlias: string, TypeConfigurationArn: string, Type: string, TypeName: string>, TypeConfigurations: table<Arn: string, Alias: string, Configuration: string, LastUpdated: string, TypeArn: string, TypeName: string, IsDefaultConfiguration: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($type_configuration_identifiers == null) { error make --unspanned { msg: "required query parameter 'TypeConfigurationIdentifiers' missing: pass --type-configuration-identifiers" } }
@@ -392,7 +416,7 @@ export def "post-batch-describe-type-configurations" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Errors: table<ErrorCode: string, ErrorMessage: string, TypeConfigurationIdentifier: record>, UnprocessedTypeConfigurations: table<TypeArn: string, TypeConfigurationAlias: string, TypeConfigurationArn: string, Type: string, TypeName: string>, TypeConfigurations: table<Arn: string, Alias: string, Configuration: string, LastUpdated: string, TypeArn: string, TypeName: string, IsDefaultConfiguration: bool>> {
+]: any -> oneof<record<Errors: table<ErrorCode: string, ErrorMessage: string, TypeConfigurationIdentifier: record>, UnprocessedTypeConfigurations: table<TypeArn: string, TypeConfigurationAlias: string, TypeConfigurationArn: string, Type: string, TypeName: string>, TypeConfigurations: table<Arn: string, Alias: string, Configuration: string, LastUpdated: string, TypeArn: string, TypeName: string, IsDefaultConfiguration: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -550,7 +574,7 @@ export def "get-continue-update-rollback" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($stack_name == null) { error make --unspanned { msg: "required query parameter 'StackName' missing: pass --stack-name" } }
@@ -600,7 +624,7 @@ export def "post-continue-update-rollback" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -668,7 +692,7 @@ export def "get-create-change-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Id: string, StackId: string> {
+]: nothing -> oneof<record<Id: string, StackId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($stack_name == null) { error make --unspanned { msg: "required query parameter 'StackName' missing: pass --stack-name" } }
@@ -719,7 +743,7 @@ export def "post-create-change-set" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Id: string, StackId: string> {
+]: any -> oneof<record<Id: string, StackId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -787,7 +811,7 @@ export def "get-create-stack" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<StackId: string> {
+]: nothing -> oneof<record<StackId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($stack_name == null) { error make --unspanned { msg: "required query parameter 'StackName' missing: pass --stack-name" } }
@@ -837,7 +861,7 @@ export def "post-create-stack" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<StackId: string> {
+]: any -> oneof<record<StackId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -896,7 +920,7 @@ export def "get-create-stack-instances" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<OperationId: string> {
+]: nothing -> oneof<record<OperationId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($stack_set_name == null) { error make --unspanned { msg: "required query parameter 'StackSetName' missing: pass --stack-set-name" } }
@@ -947,7 +971,7 @@ export def "post-create-stack-instances" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<OperationId: string> {
+]: any -> oneof<record<OperationId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1013,7 +1037,7 @@ export def "get-create-stack-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<StackSetId: string> {
+]: nothing -> oneof<record<StackSetId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($stack_set_name == null) { error make --unspanned { msg: "required query parameter 'StackSetName' missing: pass --stack-set-name" } }
@@ -1063,7 +1087,7 @@ export def "post-create-stack-set" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<StackSetId: string> {
+]: any -> oneof<record<StackSetId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1117,7 +1141,7 @@ export def "get-deactivate-type" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DeactivateType")
@@ -1166,7 +1190,7 @@ export def "post-deactivate-type" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1219,7 +1243,7 @@ export def "get-delete-change-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($change_set_name == null) { error make --unspanned { msg: "required query parameter 'ChangeSetName' missing: pass --change-set-name" } }
@@ -1269,7 +1293,7 @@ export def "post-delete-change-set" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1433,7 +1457,7 @@ export def "get-delete-stack-instances" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<OperationId: string> {
+]: nothing -> oneof<record<OperationId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($stack_set_name == null) { error make --unspanned { msg: "required query parameter 'StackSetName' missing: pass --stack-set-name" } }
@@ -1485,7 +1509,7 @@ export def "post-delete-stack-instances" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<OperationId: string> {
+]: any -> oneof<record<OperationId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1538,7 +1562,7 @@ export def "get-delete-stack-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($stack_set_name == null) { error make --unspanned { msg: "required query parameter 'StackSetName' missing: pass --stack-set-name" } }
@@ -1588,7 +1612,7 @@ export def "post-delete-stack-set" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1643,7 +1667,7 @@ export def "get-deregister-type" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DeregisterType")
@@ -1692,7 +1716,7 @@ export def "post-deregister-type" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1744,7 +1768,7 @@ export def "get-describe-account-limits" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<AccountLimits: table<Name: string, Value: int>, NextToken: string> {
+]: nothing -> oneof<record<AccountLimits: table<Name: string, Value: int>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DescribeAccountLimits")
@@ -1794,7 +1818,7 @@ export def "post-describe-account-limits" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<AccountLimits: table<Name: string, Value: int>, NextToken: string> {
+]: any -> oneof<record<AccountLimits: table<Name: string, Value: int>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1848,7 +1872,7 @@ export def "get-describe-change-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ChangeSetName: string, ChangeSetId: string, StackId: string, StackName: string, Description: string, Parameters: table<ParameterKey: string, ParameterValue: string, UsePreviousValue: bool, ResolvedValue: string>, CreationTime: string, ExecutionStatus: string, Status: string, StatusReason: string, NotificationARNs: list<string>, RollbackConfiguration: record<RollbackTriggers: list<record>, MonitoringTimeInMinutes: int>, Capabilities: list<string>, Tags: table<Key: string, Value: string>, Changes: table<Type: string, HookInvocationCount: int, ResourceChange: record>, NextToken: string, IncludeNestedStacks: bool, ParentChangeSetId: string, RootChangeSetId: string> {
+]: nothing -> oneof<record<ChangeSetName: string, ChangeSetId: string, StackId: string, StackName: string, Description: string, Parameters: table<ParameterKey: string, ParameterValue: string, UsePreviousValue: bool, ResolvedValue: string>, CreationTime: string, ExecutionStatus: string, Status: string, StatusReason: string, NotificationARNs: list<string>, RollbackConfiguration: record<RollbackTriggers: list<record>, MonitoringTimeInMinutes: int>, Capabilities: list<string>, Tags: table<Key: string, Value: string>, Changes: table<Type: string, HookInvocationCount: int, ResourceChange: record>, NextToken: string, IncludeNestedStacks: bool, ParentChangeSetId: string, RootChangeSetId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($change_set_name == null) { error make --unspanned { msg: "required query parameter 'ChangeSetName' missing: pass --change-set-name" } }
@@ -1898,7 +1922,7 @@ export def "post-describe-change-set" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<ChangeSetName: string, ChangeSetId: string, StackId: string, StackName: string, Description: string, Parameters: table<ParameterKey: string, ParameterValue: string, UsePreviousValue: bool, ResolvedValue: string>, CreationTime: string, ExecutionStatus: string, Status: string, StatusReason: string, NotificationARNs: list<string>, RollbackConfiguration: record<RollbackTriggers: list<record>, MonitoringTimeInMinutes: int>, Capabilities: list<string>, Tags: table<Key: string, Value: string>, Changes: table<Type: string, HookInvocationCount: int, ResourceChange: record>, NextToken: string, IncludeNestedStacks: bool, ParentChangeSetId: string, RootChangeSetId: string> {
+]: any -> oneof<record<ChangeSetName: string, ChangeSetId: string, StackId: string, StackName: string, Description: string, Parameters: table<ParameterKey: string, ParameterValue: string, UsePreviousValue: bool, ResolvedValue: string>, CreationTime: string, ExecutionStatus: string, Status: string, StatusReason: string, NotificationARNs: list<string>, RollbackConfiguration: record<RollbackTriggers: list<record>, MonitoringTimeInMinutes: int>, Capabilities: list<string>, Tags: table<Key: string, Value: string>, Changes: table<Type: string, HookInvocationCount: int, ResourceChange: record>, NextToken: string, IncludeNestedStacks: bool, ParentChangeSetId: string, RootChangeSetId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1953,7 +1977,7 @@ export def "get-describe-change-set-hooks" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ChangeSetId: string, ChangeSetName: string, Hooks: table<InvocationPoint: string, FailureMode: string, TypeName: string, TypeVersionId: string, TypeConfigurationVersionId: string, TargetDetails: record>, Status: string, NextToken: string, StackId: string, StackName: string> {
+]: nothing -> oneof<record<ChangeSetId: string, ChangeSetName: string, Hooks: table<InvocationPoint: string, FailureMode: string, TypeName: string, TypeVersionId: string, TypeConfigurationVersionId: string, TargetDetails: record>, Status: string, NextToken: string, StackId: string, StackName: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($change_set_name == null) { error make --unspanned { msg: "required query parameter 'ChangeSetName' missing: pass --change-set-name" } }
@@ -2003,7 +2027,7 @@ export def "post-describe-change-set-hooks" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<ChangeSetId: string, ChangeSetName: string, Hooks: table<InvocationPoint: string, FailureMode: string, TypeName: string, TypeVersionId: string, TypeConfigurationVersionId: string, TargetDetails: record>, Status: string, NextToken: string, StackId: string, StackName: string> {
+]: any -> oneof<record<ChangeSetId: string, ChangeSetName: string, Hooks: table<InvocationPoint: string, FailureMode: string, TypeName: string, TypeVersionId: string, TypeConfigurationVersionId: string, TargetDetails: record>, Status: string, NextToken: string, StackId: string, StackName: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2055,7 +2079,7 @@ export def "get-describe-publisher" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<PublisherId: string, PublisherStatus: string, IdentityProvider: string, PublisherProfile: string> {
+]: nothing -> oneof<record<PublisherId: string, PublisherStatus: string, IdentityProvider: string, PublisherProfile: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DescribePublisher")
@@ -2104,7 +2128,7 @@ export def "post-describe-publisher" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<PublisherId: string, PublisherStatus: string, IdentityProvider: string, PublisherProfile: string> {
+]: any -> oneof<record<PublisherId: string, PublisherStatus: string, IdentityProvider: string, PublisherProfile: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2156,7 +2180,7 @@ export def "get-describe-stack-drift-detection-status" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<StackId: string, StackDriftDetectionId: string, StackDriftStatus: string, DetectionStatus: string, DetectionStatusReason: string, DriftedStackResourceCount: int, Timestamp: string> {
+]: nothing -> oneof<record<StackId: string, StackDriftDetectionId: string, StackDriftStatus: string, DetectionStatus: string, DetectionStatusReason: string, DriftedStackResourceCount: int, Timestamp: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($stack_drift_detection_id == null) { error make --unspanned { msg: "required query parameter 'StackDriftDetectionId' missing: pass --stack-drift-detection-id" } }
@@ -2206,7 +2230,7 @@ export def "post-describe-stack-drift-detection-status" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<StackId: string, StackDriftDetectionId: string, StackDriftStatus: string, DetectionStatus: string, DetectionStatusReason: string, DriftedStackResourceCount: int, Timestamp: string> {
+]: any -> oneof<record<StackId: string, StackDriftDetectionId: string, StackDriftStatus: string, DetectionStatus: string, DetectionStatusReason: string, DriftedStackResourceCount: int, Timestamp: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2259,7 +2283,7 @@ export def "get-describe-stack-events" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<StackEvents: table<StackId: string, EventId: string, StackName: string, LogicalResourceId: string, PhysicalResourceId: string, ResourceType: string, Timestamp: string, ResourceStatus: string, ResourceStatusReason: string, ResourceProperties: string, ClientRequestToken: string, HookType: string, HookStatus: string, HookStatusReason: string, HookInvocationPoint: string, HookFailureMode: string>, NextToken: string> {
+]: nothing -> oneof<record<StackEvents: table<StackId: string, EventId: string, StackName: string, LogicalResourceId: string, PhysicalResourceId: string, ResourceType: string, Timestamp: string, ResourceStatus: string, ResourceStatusReason: string, ResourceProperties: string, ClientRequestToken: string, HookType: string, HookStatus: string, HookStatusReason: string, HookInvocationPoint: string, HookFailureMode: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DescribeStackEvents")
@@ -2309,7 +2333,7 @@ export def "post-describe-stack-events" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<StackEvents: table<StackId: string, EventId: string, StackName: string, LogicalResourceId: string, PhysicalResourceId: string, ResourceType: string, Timestamp: string, ResourceStatus: string, ResourceStatusReason: string, ResourceProperties: string, ClientRequestToken: string, HookType: string, HookStatus: string, HookStatusReason: string, HookInvocationPoint: string, HookFailureMode: string>, NextToken: string> {
+]: any -> oneof<record<StackEvents: table<StackId: string, EventId: string, StackName: string, LogicalResourceId: string, PhysicalResourceId: string, ResourceType: string, Timestamp: string, ResourceStatus: string, ResourceStatusReason: string, ResourceProperties: string, ClientRequestToken: string, HookType: string, HookStatus: string, HookStatusReason: string, HookInvocationPoint: string, HookFailureMode: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2364,7 +2388,7 @@ export def "get-describe-stack-instance" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<StackInstance: record<StackSetId: string, Region: string, Account: string, StackId: string, ParameterOverrides: list<record>, Status: string, StackInstanceStatus: record<DetailedStatus: string>, StatusReason: string, OrganizationalUnitId: string, DriftStatus: string, LastDriftCheckTimestamp: string, LastOperationId: string>> {
+]: nothing -> oneof<record<StackInstance: record<StackSetId: string, Region: string, Account: string, StackId: string, ParameterOverrides: list<record>, Status: string, StackInstanceStatus: record<DetailedStatus: string>, StatusReason: string, OrganizationalUnitId: string, DriftStatus: string, LastDriftCheckTimestamp: string, LastOperationId: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($stack_set_name == null) { error make --unspanned { msg: "required query parameter 'StackSetName' missing: pass --stack-set-name" } }
@@ -2416,7 +2440,7 @@ export def "post-describe-stack-instance" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<StackInstance: record<StackSetId: string, Region: string, Account: string, StackId: string, ParameterOverrides: list<record>, Status: string, StackInstanceStatus: record<DetailedStatus: string>, StatusReason: string, OrganizationalUnitId: string, DriftStatus: string, LastDriftCheckTimestamp: string, LastOperationId: string>> {
+]: any -> oneof<record<StackInstance: record<StackSetId: string, Region: string, Account: string, StackId: string, ParameterOverrides: list<record>, Status: string, StackInstanceStatus: record<DetailedStatus: string>, StatusReason: string, OrganizationalUnitId: string, DriftStatus: string, LastDriftCheckTimestamp: string, LastOperationId: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2469,7 +2493,7 @@ export def "get-describe-stack-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<StackResourceDetail: record<StackName: string, StackId: string, LogicalResourceId: string, PhysicalResourceId: string, ResourceType: string, LastUpdatedTimestamp: string, ResourceStatus: string, ResourceStatusReason: string, Description: string, Metadata: string, DriftInformation: record<StackResourceDriftStatus: string, LastCheckTimestamp: string>, ModuleInfo: record<TypeHierarchy: string, LogicalIdHierarchy: string>>> {
+]: nothing -> oneof<record<StackResourceDetail: record<StackName: string, StackId: string, LogicalResourceId: string, PhysicalResourceId: string, ResourceType: string, LastUpdatedTimestamp: string, ResourceStatus: string, ResourceStatusReason: string, Description: string, Metadata: string, DriftInformation: record<StackResourceDriftStatus: string, LastCheckTimestamp: string>, ModuleInfo: record<TypeHierarchy: string, LogicalIdHierarchy: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($stack_name == null) { error make --unspanned { msg: "required query parameter 'StackName' missing: pass --stack-name" } }
@@ -2520,7 +2544,7 @@ export def "post-describe-stack-resource" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<StackResourceDetail: record<StackName: string, StackId: string, LogicalResourceId: string, PhysicalResourceId: string, ResourceType: string, LastUpdatedTimestamp: string, ResourceStatus: string, ResourceStatusReason: string, Description: string, Metadata: string, DriftInformation: record<StackResourceDriftStatus: string, LastCheckTimestamp: string>, ModuleInfo: record<TypeHierarchy: string, LogicalIdHierarchy: string>>> {
+]: any -> oneof<record<StackResourceDetail: record<StackName: string, StackId: string, LogicalResourceId: string, PhysicalResourceId: string, ResourceType: string, LastUpdatedTimestamp: string, ResourceStatus: string, ResourceStatusReason: string, Description: string, Metadata: string, DriftInformation: record<StackResourceDriftStatus: string, LastCheckTimestamp: string>, ModuleInfo: record<TypeHierarchy: string, LogicalIdHierarchy: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2575,7 +2599,7 @@ export def "get-describe-stack-resource-drifts" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<StackResourceDrifts: table<StackId: string, LogicalResourceId: string, PhysicalResourceId: string, PhysicalResourceIdContext: list, ResourceType: string, ExpectedProperties: string, ActualProperties: string, PropertyDifferences: list, StackResourceDriftStatus: string, Timestamp: string, ModuleInfo: record>, NextToken: string> {
+]: nothing -> oneof<record<StackResourceDrifts: table<StackId: string, LogicalResourceId: string, PhysicalResourceId: string, PhysicalResourceIdContext: list, ResourceType: string, ExpectedProperties: string, ActualProperties: string, PropertyDifferences: list, StackResourceDriftStatus: string, Timestamp: string, ModuleInfo: record>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($stack_name == null) { error make --unspanned { msg: "required query parameter 'StackName' missing: pass --stack-name" } }
@@ -2627,7 +2651,7 @@ export def "post-describe-stack-resource-drifts" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<StackResourceDrifts: table<StackId: string, LogicalResourceId: string, PhysicalResourceId: string, PhysicalResourceIdContext: list, ResourceType: string, ExpectedProperties: string, ActualProperties: string, PropertyDifferences: list, StackResourceDriftStatus: string, Timestamp: string, ModuleInfo: record>, NextToken: string> {
+]: any -> oneof<record<StackResourceDrifts: table<StackId: string, LogicalResourceId: string, PhysicalResourceId: string, PhysicalResourceIdContext: list, ResourceType: string, ExpectedProperties: string, ActualProperties: string, PropertyDifferences: list, StackResourceDriftStatus: string, Timestamp: string, ModuleInfo: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2681,7 +2705,7 @@ export def "get-describe-stack-resources" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<StackResources: table<StackName: string, StackId: string, LogicalResourceId: string, PhysicalResourceId: string, ResourceType: string, Timestamp: string, ResourceStatus: string, ResourceStatusReason: string, Description: string, DriftInformation: record, ModuleInfo: record>> {
+]: nothing -> oneof<record<StackResources: table<StackName: string, StackId: string, LogicalResourceId: string, PhysicalResourceId: string, ResourceType: string, Timestamp: string, ResourceStatus: string, ResourceStatusReason: string, Description: string, DriftInformation: record, ModuleInfo: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DescribeStackResources")
@@ -2730,7 +2754,7 @@ export def "post-describe-stack-resources" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<StackResources: table<StackName: string, StackId: string, LogicalResourceId: string, PhysicalResourceId: string, ResourceType: string, Timestamp: string, ResourceStatus: string, ResourceStatusReason: string, Description: string, DriftInformation: record, ModuleInfo: record>> {
+]: any -> oneof<record<StackResources: table<StackName: string, StackId: string, LogicalResourceId: string, PhysicalResourceId: string, ResourceType: string, Timestamp: string, ResourceStatus: string, ResourceStatusReason: string, Description: string, DriftInformation: record, ModuleInfo: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2783,7 +2807,7 @@ export def "get-describe-stack-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<StackSet: record<StackSetName: string, StackSetId: string, Description: string, Status: string, TemplateBody: string, Parameters: list<record>, Capabilities: list<string>, Tags: list<record>, StackSetARN: string, AdministrationRoleARN: string, ExecutionRoleName: string, StackSetDriftDetectionDetails: record<DriftStatus: string, DriftDetectionStatus: string, LastDriftCheckTimestamp: string, TotalStackInstancesCount: int, DriftedStackInstancesCount: int, InSyncStackInstancesCount: int, InProgressStackInstancesCount: int, FailedStackInstancesCount: int>, AutoDeployment: record<Enabled: bool, RetainStacksOnAccountRemoval: bool>, PermissionModel: string, OrganizationalUnitIds: list<string>, ManagedExecution: record<Active: bool>, Regions: list<string>>> {
+]: nothing -> oneof<record<StackSet: record<StackSetName: string, StackSetId: string, Description: string, Status: string, TemplateBody: string, Parameters: list<record>, Capabilities: list<string>, Tags: list<record>, StackSetARN: string, AdministrationRoleARN: string, ExecutionRoleName: string, StackSetDriftDetectionDetails: record<DriftStatus: string, DriftDetectionStatus: string, LastDriftCheckTimestamp: string, TotalStackInstancesCount: int, DriftedStackInstancesCount: int, InSyncStackInstancesCount: int, InProgressStackInstancesCount: int, FailedStackInstancesCount: int>, AutoDeployment: record<Enabled: bool, RetainStacksOnAccountRemoval: bool>, PermissionModel: string, OrganizationalUnitIds: list<string>, ManagedExecution: record<Active: bool>, Regions: list<string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($stack_set_name == null) { error make --unspanned { msg: "required query parameter 'StackSetName' missing: pass --stack-set-name" } }
@@ -2833,7 +2857,7 @@ export def "post-describe-stack-set" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<StackSet: record<StackSetName: string, StackSetId: string, Description: string, Status: string, TemplateBody: string, Parameters: list<record>, Capabilities: list<string>, Tags: list<record>, StackSetARN: string, AdministrationRoleARN: string, ExecutionRoleName: string, StackSetDriftDetectionDetails: record<DriftStatus: string, DriftDetectionStatus: string, LastDriftCheckTimestamp: string, TotalStackInstancesCount: int, DriftedStackInstancesCount: int, InSyncStackInstancesCount: int, InProgressStackInstancesCount: int, FailedStackInstancesCount: int>, AutoDeployment: record<Enabled: bool, RetainStacksOnAccountRemoval: bool>, PermissionModel: string, OrganizationalUnitIds: list<string>, ManagedExecution: record<Active: bool>, Regions: list<string>>> {
+]: any -> oneof<record<StackSet: record<StackSetName: string, StackSetId: string, Description: string, Status: string, TemplateBody: string, Parameters: list<record>, Capabilities: list<string>, Tags: list<record>, StackSetARN: string, AdministrationRoleARN: string, ExecutionRoleName: string, StackSetDriftDetectionDetails: record<DriftStatus: string, DriftDetectionStatus: string, LastDriftCheckTimestamp: string, TotalStackInstancesCount: int, DriftedStackInstancesCount: int, InSyncStackInstancesCount: int, InProgressStackInstancesCount: int, FailedStackInstancesCount: int>, AutoDeployment: record<Enabled: bool, RetainStacksOnAccountRemoval: bool>, PermissionModel: string, OrganizationalUnitIds: list<string>, ManagedExecution: record<Active: bool>, Regions: list<string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2887,7 +2911,7 @@ export def "get-describe-stack-set-operation" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<StackSetOperation: record<OperationId: string, StackSetId: string, Action: string, Status: string, OperationPreferences: record<RegionConcurrencyType: string, RegionOrder: list, FailureToleranceCount: int, FailureTolerancePercentage: int, MaxConcurrentCount: int, MaxConcurrentPercentage: int>, RetainStacks: bool, AdministrationRoleARN: string, ExecutionRoleName: string, CreationTimestamp: string, EndTimestamp: string, DeploymentTargets: record<Accounts: list, AccountsUrl: string, OrganizationalUnitIds: list, AccountFilterType: string>, StackSetDriftDetectionDetails: record<DriftStatus: string, DriftDetectionStatus: string, LastDriftCheckTimestamp: string, TotalStackInstancesCount: int, DriftedStackInstancesCount: int, InSyncStackInstancesCount: int, InProgressStackInstancesCount: int, FailedStackInstancesCount: int>, StatusReason: string, StatusDetails: record<FailedStackInstancesCount: int>>> {
+]: nothing -> oneof<record<StackSetOperation: record<OperationId: string, StackSetId: string, Action: string, Status: string, OperationPreferences: record<RegionConcurrencyType: string, RegionOrder: list, FailureToleranceCount: int, FailureTolerancePercentage: int, MaxConcurrentCount: int, MaxConcurrentPercentage: int>, RetainStacks: bool, AdministrationRoleARN: string, ExecutionRoleName: string, CreationTimestamp: string, EndTimestamp: string, DeploymentTargets: record<Accounts: list, AccountsUrl: string, OrganizationalUnitIds: list, AccountFilterType: string>, StackSetDriftDetectionDetails: record<DriftStatus: string, DriftDetectionStatus: string, LastDriftCheckTimestamp: string, TotalStackInstancesCount: int, DriftedStackInstancesCount: int, InSyncStackInstancesCount: int, InProgressStackInstancesCount: int, FailedStackInstancesCount: int>, StatusReason: string, StatusDetails: record<FailedStackInstancesCount: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($stack_set_name == null) { error make --unspanned { msg: "required query parameter 'StackSetName' missing: pass --stack-set-name" } }
@@ -2938,7 +2962,7 @@ export def "post-describe-stack-set-operation" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<StackSetOperation: record<OperationId: string, StackSetId: string, Action: string, Status: string, OperationPreferences: record<RegionConcurrencyType: string, RegionOrder: list, FailureToleranceCount: int, FailureTolerancePercentage: int, MaxConcurrentCount: int, MaxConcurrentPercentage: int>, RetainStacks: bool, AdministrationRoleARN: string, ExecutionRoleName: string, CreationTimestamp: string, EndTimestamp: string, DeploymentTargets: record<Accounts: list, AccountsUrl: string, OrganizationalUnitIds: list, AccountFilterType: string>, StackSetDriftDetectionDetails: record<DriftStatus: string, DriftDetectionStatus: string, LastDriftCheckTimestamp: string, TotalStackInstancesCount: int, DriftedStackInstancesCount: int, InSyncStackInstancesCount: int, InProgressStackInstancesCount: int, FailedStackInstancesCount: int>, StatusReason: string, StatusDetails: record<FailedStackInstancesCount: int>>> {
+]: any -> oneof<record<StackSetOperation: record<OperationId: string, StackSetId: string, Action: string, Status: string, OperationPreferences: record<RegionConcurrencyType: string, RegionOrder: list, FailureToleranceCount: int, FailureTolerancePercentage: int, MaxConcurrentCount: int, MaxConcurrentPercentage: int>, RetainStacks: bool, AdministrationRoleARN: string, ExecutionRoleName: string, CreationTimestamp: string, EndTimestamp: string, DeploymentTargets: record<Accounts: list, AccountsUrl: string, OrganizationalUnitIds: list, AccountFilterType: string>, StackSetDriftDetectionDetails: record<DriftStatus: string, DriftDetectionStatus: string, LastDriftCheckTimestamp: string, TotalStackInstancesCount: int, DriftedStackInstancesCount: int, InSyncStackInstancesCount: int, InProgressStackInstancesCount: int, FailedStackInstancesCount: int>, StatusReason: string, StatusDetails: record<FailedStackInstancesCount: int>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2991,7 +3015,7 @@ export def "get-describe-stacks" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Stacks: table<StackId: string, StackName: string, ChangeSetId: string, Description: string, Parameters: list, CreationTime: string, DeletionTime: string, LastUpdatedTime: string, RollbackConfiguration: record, StackStatus: string, StackStatusReason: string, DisableRollback: bool, NotificationARNs: list, TimeoutInMinutes: int, Capabilities: list, Outputs: list, RoleARN: string, Tags: list, EnableTerminationProtection: bool, ParentId: string, RootId: string, DriftInformation: record>, NextToken: string> {
+]: nothing -> oneof<record<Stacks: table<StackId: string, StackName: string, ChangeSetId: string, Description: string, Parameters: list, CreationTime: string, DeletionTime: string, LastUpdatedTime: string, RollbackConfiguration: record, StackStatus: string, StackStatusReason: string, DisableRollback: bool, NotificationARNs: list, TimeoutInMinutes: int, Capabilities: list, Outputs: list, RoleARN: string, Tags: list, EnableTerminationProtection: bool, ParentId: string, RootId: string, DriftInformation: record>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DescribeStacks")
@@ -3041,7 +3065,7 @@ export def "post-describe-stacks" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Stacks: table<StackId: string, StackName: string, ChangeSetId: string, Description: string, Parameters: list, CreationTime: string, DeletionTime: string, LastUpdatedTime: string, RollbackConfiguration: record, StackStatus: string, StackStatusReason: string, DisableRollback: bool, NotificationARNs: list, TimeoutInMinutes: int, Capabilities: list, Outputs: list, RoleARN: string, Tags: list, EnableTerminationProtection: bool, ParentId: string, RootId: string, DriftInformation: record>, NextToken: string> {
+]: any -> oneof<record<Stacks: table<StackId: string, StackName: string, ChangeSetId: string, Description: string, Parameters: list, CreationTime: string, DeletionTime: string, LastUpdatedTime: string, RollbackConfiguration: record, StackStatus: string, StackStatusReason: string, DisableRollback: bool, NotificationARNs: list, TimeoutInMinutes: int, Capabilities: list, Outputs: list, RoleARN: string, Tags: list, EnableTerminationProtection: bool, ParentId: string, RootId: string, DriftInformation: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3098,7 +3122,7 @@ export def "get-describe-type" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Arn: string, Type: string, TypeName: string, DefaultVersionId: string, IsDefaultVersion: bool, TypeTestsStatus: string, TypeTestsStatusDescription: string, Description: string, Schema: string, ProvisioningType: string, DeprecatedStatus: string, LoggingConfig: record<LogRoleArn: string, LogGroupName: string>, RequiredActivatedTypes: table<TypeNameAlias: string, OriginalTypeName: string, PublisherId: string, SupportedMajorVersions: list>, ExecutionRoleArn: string, Visibility: string, SourceUrl: string, DocumentationUrl: string, LastUpdated: string, TimeCreated: string, ConfigurationSchema: string, PublisherId: string, OriginalTypeName: string, OriginalTypeArn: string, PublicVersionNumber: string, LatestPublicVersion: string, IsActivated: bool, AutoUpdate: bool> {
+]: nothing -> oneof<record<Arn: string, Type: string, TypeName: string, DefaultVersionId: string, IsDefaultVersion: bool, TypeTestsStatus: string, TypeTestsStatusDescription: string, Description: string, Schema: string, ProvisioningType: string, DeprecatedStatus: string, LoggingConfig: record<LogRoleArn: string, LogGroupName: string>, RequiredActivatedTypes: table<TypeNameAlias: string, OriginalTypeName: string, PublisherId: string, SupportedMajorVersions: list>, ExecutionRoleArn: string, Visibility: string, SourceUrl: string, DocumentationUrl: string, LastUpdated: string, TimeCreated: string, ConfigurationSchema: string, PublisherId: string, OriginalTypeName: string, OriginalTypeArn: string, PublicVersionNumber: string, LatestPublicVersion: string, IsActivated: bool, AutoUpdate: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DescribeType")
@@ -3147,7 +3171,7 @@ export def "post-describe-type" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Arn: string, Type: string, TypeName: string, DefaultVersionId: string, IsDefaultVersion: bool, TypeTestsStatus: string, TypeTestsStatusDescription: string, Description: string, Schema: string, ProvisioningType: string, DeprecatedStatus: string, LoggingConfig: record<LogRoleArn: string, LogGroupName: string>, RequiredActivatedTypes: table<TypeNameAlias: string, OriginalTypeName: string, PublisherId: string, SupportedMajorVersions: list>, ExecutionRoleArn: string, Visibility: string, SourceUrl: string, DocumentationUrl: string, LastUpdated: string, TimeCreated: string, ConfigurationSchema: string, PublisherId: string, OriginalTypeName: string, OriginalTypeArn: string, PublicVersionNumber: string, LatestPublicVersion: string, IsActivated: bool, AutoUpdate: bool> {
+]: any -> oneof<record<Arn: string, Type: string, TypeName: string, DefaultVersionId: string, IsDefaultVersion: bool, TypeTestsStatus: string, TypeTestsStatusDescription: string, Description: string, Schema: string, ProvisioningType: string, DeprecatedStatus: string, LoggingConfig: record<LogRoleArn: string, LogGroupName: string>, RequiredActivatedTypes: table<TypeNameAlias: string, OriginalTypeName: string, PublisherId: string, SupportedMajorVersions: list>, ExecutionRoleArn: string, Visibility: string, SourceUrl: string, DocumentationUrl: string, LastUpdated: string, TimeCreated: string, ConfigurationSchema: string, PublisherId: string, OriginalTypeName: string, OriginalTypeArn: string, PublicVersionNumber: string, LatestPublicVersion: string, IsActivated: bool, AutoUpdate: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3199,7 +3223,7 @@ export def "get-describe-type-registration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ProgressStatus: string, Description: string, TypeArn: string, TypeVersionArn: string> {
+]: nothing -> oneof<record<ProgressStatus: string, Description: string, TypeArn: string, TypeVersionArn: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($registration_token == null) { error make --unspanned { msg: "required query parameter 'RegistrationToken' missing: pass --registration-token" } }
@@ -3249,7 +3273,7 @@ export def "post-describe-type-registration" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<ProgressStatus: string, Description: string, TypeArn: string, TypeVersionArn: string> {
+]: any -> oneof<record<ProgressStatus: string, Description: string, TypeArn: string, TypeVersionArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3302,7 +3326,7 @@ export def "get-detect-stack-drift" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<StackDriftDetectionId: string> {
+]: nothing -> oneof<record<StackDriftDetectionId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($stack_name == null) { error make --unspanned { msg: "required query parameter 'StackName' missing: pass --stack-name" } }
@@ -3352,7 +3376,7 @@ export def "post-detect-stack-drift" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<StackDriftDetectionId: string> {
+]: any -> oneof<record<StackDriftDetectionId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3405,7 +3429,7 @@ export def "get-detect-stack-resource-drift" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<StackResourceDrift: record<StackId: string, LogicalResourceId: string, PhysicalResourceId: string, PhysicalResourceIdContext: list<record>, ResourceType: string, ExpectedProperties: string, ActualProperties: string, PropertyDifferences: list<record>, StackResourceDriftStatus: string, Timestamp: string, ModuleInfo: record<TypeHierarchy: string, LogicalIdHierarchy: string>>> {
+]: nothing -> oneof<record<StackResourceDrift: record<StackId: string, LogicalResourceId: string, PhysicalResourceId: string, PhysicalResourceIdContext: list<record>, ResourceType: string, ExpectedProperties: string, ActualProperties: string, PropertyDifferences: list<record>, StackResourceDriftStatus: string, Timestamp: string, ModuleInfo: record<TypeHierarchy: string, LogicalIdHierarchy: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($stack_name == null) { error make --unspanned { msg: "required query parameter 'StackName' missing: pass --stack-name" } }
@@ -3456,7 +3480,7 @@ export def "post-detect-stack-resource-drift" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<StackResourceDrift: record<StackId: string, LogicalResourceId: string, PhysicalResourceId: string, PhysicalResourceIdContext: list<record>, ResourceType: string, ExpectedProperties: string, ActualProperties: string, PropertyDifferences: list<record>, StackResourceDriftStatus: string, Timestamp: string, ModuleInfo: record<TypeHierarchy: string, LogicalIdHierarchy: string>>> {
+]: any -> oneof<record<StackResourceDrift: record<StackId: string, LogicalResourceId: string, PhysicalResourceId: string, PhysicalResourceIdContext: list<record>, ResourceType: string, ExpectedProperties: string, ActualProperties: string, PropertyDifferences: list<record>, StackResourceDriftStatus: string, Timestamp: string, ModuleInfo: record<TypeHierarchy: string, LogicalIdHierarchy: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3511,7 +3535,7 @@ export def "get-detect-stack-set-drift" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<OperationId: string> {
+]: nothing -> oneof<record<OperationId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($stack_set_name == null) { error make --unspanned { msg: "required query parameter 'StackSetName' missing: pass --stack-set-name" } }
@@ -3561,7 +3585,7 @@ export def "post-detect-stack-set-drift" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<OperationId: string> {
+]: any -> oneof<record<OperationId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3615,7 +3639,7 @@ export def "get-estimate-template-cost" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Url: string> {
+]: nothing -> oneof<record<Url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "EstimateTemplateCost")
@@ -3664,7 +3688,7 @@ export def "post-estimate-template-cost" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Url: string> {
+]: any -> oneof<record<Url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3719,7 +3743,7 @@ export def "get-execute-change-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($change_set_name == null) { error make --unspanned { msg: "required query parameter 'ChangeSetName' missing: pass --change-set-name" } }
@@ -3769,7 +3793,7 @@ export def "post-execute-change-set" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3821,7 +3845,7 @@ export def "get-get-stack-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<StackPolicyBody: string> {
+]: nothing -> oneof<record<StackPolicyBody: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($stack_name == null) { error make --unspanned { msg: "required query parameter 'StackName' missing: pass --stack-name" } }
@@ -3871,7 +3895,7 @@ export def "post-get-stack-policy" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<StackPolicyBody: string> {
+]: any -> oneof<record<StackPolicyBody: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3925,7 +3949,7 @@ export def "get-get-template" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<TemplateBody: string, StagesAvailable: list<string>> {
+]: nothing -> oneof<record<TemplateBody: string, StagesAvailable: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "GetTemplate")
@@ -3974,7 +3998,7 @@ export def "post-get-template" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<TemplateBody: string, StagesAvailable: list<string>> {
+]: any -> oneof<record<TemplateBody: string, StagesAvailable: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4030,7 +4054,7 @@ export def "get-get-template-summary" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Parameters: table<ParameterKey: string, DefaultValue: string, ParameterType: string, NoEcho: bool, Description: string, ParameterConstraints: record>, Description: string, Capabilities: list<string>, CapabilitiesReason: string, ResourceTypes: list<string>, Version: string, Metadata: string, DeclaredTransforms: list<string>, ResourceIdentifierSummaries: table<ResourceType: string, LogicalResourceIds: list, ResourceIdentifiers: list>> {
+]: nothing -> oneof<record<Parameters: table<ParameterKey: string, DefaultValue: string, ParameterType: string, NoEcho: bool, Description: string, ParameterConstraints: record>, Description: string, Capabilities: list<string>, CapabilitiesReason: string, ResourceTypes: list<string>, Version: string, Metadata: string, DeclaredTransforms: list<string>, ResourceIdentifierSummaries: table<ResourceType: string, LogicalResourceIds: list, ResourceIdentifiers: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "GetTemplateSummary")
@@ -4079,7 +4103,7 @@ export def "post-get-template-summary" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Parameters: table<ParameterKey: string, DefaultValue: string, ParameterType: string, NoEcho: bool, Description: string, ParameterConstraints: record>, Description: string, Capabilities: list<string>, CapabilitiesReason: string, ResourceTypes: list<string>, Version: string, Metadata: string, DeclaredTransforms: list<string>, ResourceIdentifierSummaries: table<ResourceType: string, LogicalResourceIds: list, ResourceIdentifiers: list>> {
+]: any -> oneof<record<Parameters: table<ParameterKey: string, DefaultValue: string, ParameterType: string, NoEcho: bool, Description: string, ParameterConstraints: record>, Description: string, Capabilities: list<string>, CapabilitiesReason: string, ResourceTypes: list<string>, Version: string, Metadata: string, DeclaredTransforms: list<string>, ResourceIdentifierSummaries: table<ResourceType: string, LogicalResourceIds: list, ResourceIdentifiers: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4137,7 +4161,7 @@ export def "get-import-stacks-to-stack-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<OperationId: string> {
+]: nothing -> oneof<record<OperationId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($stack_set_name == null) { error make --unspanned { msg: "required query parameter 'StackSetName' missing: pass --stack-set-name" } }
@@ -4187,7 +4211,7 @@ export def "post-import-stacks-to-stack-set" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<OperationId: string> {
+]: any -> oneof<record<OperationId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4240,7 +4264,7 @@ export def "get-list-change-sets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Summaries: table<StackId: string, StackName: string, ChangeSetId: string, ChangeSetName: string, ExecutionStatus: string, Status: string, StatusReason: string, CreationTime: string, Description: string, IncludeNestedStacks: bool, ParentChangeSetId: string, RootChangeSetId: string>, NextToken: string> {
+]: nothing -> oneof<record<Summaries: table<StackId: string, StackName: string, ChangeSetId: string, ChangeSetName: string, ExecutionStatus: string, Status: string, StatusReason: string, CreationTime: string, Description: string, IncludeNestedStacks: bool, ParentChangeSetId: string, RootChangeSetId: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($stack_name == null) { error make --unspanned { msg: "required query parameter 'StackName' missing: pass --stack-name" } }
@@ -4291,7 +4315,7 @@ export def "post-list-change-sets" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Summaries: table<StackId: string, StackName: string, ChangeSetId: string, ChangeSetName: string, ExecutionStatus: string, Status: string, StatusReason: string, CreationTime: string, Description: string, IncludeNestedStacks: bool, ParentChangeSetId: string, RootChangeSetId: string>, NextToken: string> {
+]: any -> oneof<record<Summaries: table<StackId: string, StackName: string, ChangeSetId: string, ChangeSetName: string, ExecutionStatus: string, Status: string, StatusReason: string, CreationTime: string, Description: string, IncludeNestedStacks: bool, ParentChangeSetId: string, RootChangeSetId: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4343,7 +4367,7 @@ export def "get-list-exports" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Exports: table<ExportingStackId: string, Name: string, Value: string>, NextToken: string> {
+]: nothing -> oneof<record<Exports: table<ExportingStackId: string, Name: string, Value: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "ListExports")
@@ -4393,7 +4417,7 @@ export def "post-list-exports" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Exports: table<ExportingStackId: string, Name: string, Value: string>, NextToken: string> {
+]: any -> oneof<record<Exports: table<ExportingStackId: string, Name: string, Value: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4446,7 +4470,7 @@ export def "get-list-imports" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Imports: list<string>, NextToken: string> {
+]: nothing -> oneof<record<Imports: list<string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($export_name == null) { error make --unspanned { msg: "required query parameter 'ExportName' missing: pass --export-name" } }
@@ -4497,7 +4521,7 @@ export def "post-list-imports" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Imports: list<string>, NextToken: string> {
+]: any -> oneof<record<Imports: list<string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4555,7 +4579,7 @@ export def "get-list-stack-instances" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Summaries: table<StackSetId: string, Region: string, Account: string, StackId: string, Status: string, StatusReason: string, StackInstanceStatus: record, OrganizationalUnitId: string, DriftStatus: string, LastDriftCheckTimestamp: string, LastOperationId: string>, NextToken: string> {
+]: nothing -> oneof<record<Summaries: table<StackSetId: string, Region: string, Account: string, StackId: string, Status: string, StatusReason: string, StackInstanceStatus: record, OrganizationalUnitId: string, DriftStatus: string, LastDriftCheckTimestamp: string, LastOperationId: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($stack_set_name == null) { error make --unspanned { msg: "required query parameter 'StackSetName' missing: pass --stack-set-name" } }
@@ -4607,7 +4631,7 @@ export def "post-list-stack-instances" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Summaries: table<StackSetId: string, Region: string, Account: string, StackId: string, Status: string, StatusReason: string, StackInstanceStatus: record, OrganizationalUnitId: string, DriftStatus: string, LastDriftCheckTimestamp: string, LastOperationId: string>, NextToken: string> {
+]: any -> oneof<record<Summaries: table<StackSetId: string, Region: string, Account: string, StackId: string, Status: string, StatusReason: string, StackInstanceStatus: record, OrganizationalUnitId: string, DriftStatus: string, LastDriftCheckTimestamp: string, LastOperationId: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4660,7 +4684,7 @@ export def "get-list-stack-resources" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<StackResourceSummaries: table<LogicalResourceId: string, PhysicalResourceId: string, ResourceType: string, LastUpdatedTimestamp: string, ResourceStatus: string, ResourceStatusReason: string, DriftInformation: record, ModuleInfo: record>, NextToken: string> {
+]: nothing -> oneof<record<StackResourceSummaries: table<LogicalResourceId: string, PhysicalResourceId: string, ResourceType: string, LastUpdatedTimestamp: string, ResourceStatus: string, ResourceStatusReason: string, DriftInformation: record, ModuleInfo: record>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($stack_name == null) { error make --unspanned { msg: "required query parameter 'StackName' missing: pass --stack-name" } }
@@ -4711,7 +4735,7 @@ export def "post-list-stack-resources" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<StackResourceSummaries: table<LogicalResourceId: string, PhysicalResourceId: string, ResourceType: string, LastUpdatedTimestamp: string, ResourceStatus: string, ResourceStatusReason: string, DriftInformation: record, ModuleInfo: record>, NextToken: string> {
+]: any -> oneof<record<StackResourceSummaries: table<LogicalResourceId: string, PhysicalResourceId: string, ResourceType: string, LastUpdatedTimestamp: string, ResourceStatus: string, ResourceStatusReason: string, DriftInformation: record, ModuleInfo: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4768,7 +4792,7 @@ export def "get-list-stack-set-operation-results" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Summaries: table<Account: string, Region: string, Status: string, StatusReason: string, AccountGateResult: record, OrganizationalUnitId: string>, NextToken: string> {
+]: nothing -> oneof<record<Summaries: table<Account: string, Region: string, Status: string, StatusReason: string, AccountGateResult: record, OrganizationalUnitId: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($stack_set_name == null) { error make --unspanned { msg: "required query parameter 'StackSetName' missing: pass --stack-set-name" } }
@@ -4821,7 +4845,7 @@ export def "post-list-stack-set-operation-results" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Summaries: table<Account: string, Region: string, Status: string, StatusReason: string, AccountGateResult: record, OrganizationalUnitId: string>, NextToken: string> {
+]: any -> oneof<record<Summaries: table<Account: string, Region: string, Status: string, StatusReason: string, AccountGateResult: record, OrganizationalUnitId: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4876,7 +4900,7 @@ export def "get-list-stack-set-operations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Summaries: table<OperationId: string, Action: string, Status: string, CreationTimestamp: string, EndTimestamp: string, StatusReason: string, StatusDetails: record, OperationPreferences: record>, NextToken: string> {
+]: nothing -> oneof<record<Summaries: table<OperationId: string, Action: string, Status: string, CreationTimestamp: string, EndTimestamp: string, StatusReason: string, StatusDetails: record, OperationPreferences: record>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($stack_set_name == null) { error make --unspanned { msg: "required query parameter 'StackSetName' missing: pass --stack-set-name" } }
@@ -4928,7 +4952,7 @@ export def "post-list-stack-set-operations" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Summaries: table<OperationId: string, Action: string, Status: string, CreationTimestamp: string, EndTimestamp: string, StatusReason: string, StatusDetails: record, OperationPreferences: record>, NextToken: string> {
+]: any -> oneof<record<Summaries: table<OperationId: string, Action: string, Status: string, CreationTimestamp: string, EndTimestamp: string, StatusReason: string, StatusDetails: record, OperationPreferences: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4983,7 +5007,7 @@ export def "get-list-stack-sets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Summaries: table<StackSetName: string, StackSetId: string, Description: string, Status: string, AutoDeployment: record, PermissionModel: string, DriftStatus: string, LastDriftCheckTimestamp: string, ManagedExecution: record>, NextToken: string> {
+]: nothing -> oneof<record<Summaries: table<StackSetName: string, StackSetId: string, Description: string, Status: string, AutoDeployment: record, PermissionModel: string, DriftStatus: string, LastDriftCheckTimestamp: string, ManagedExecution: record>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "ListStackSets")
@@ -5034,7 +5058,7 @@ export def "post-list-stack-sets" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Summaries: table<StackSetName: string, StackSetId: string, Description: string, Status: string, AutoDeployment: record, PermissionModel: string, DriftStatus: string, LastDriftCheckTimestamp: string, ManagedExecution: record>, NextToken: string> {
+]: any -> oneof<record<Summaries: table<StackSetName: string, StackSetId: string, Description: string, Status: string, AutoDeployment: record, PermissionModel: string, DriftStatus: string, LastDriftCheckTimestamp: string, ManagedExecution: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5087,7 +5111,7 @@ export def "get-list-stacks" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<StackSummaries: table<StackId: string, StackName: string, TemplateDescription: string, CreationTime: string, LastUpdatedTime: string, DeletionTime: string, StackStatus: string, StackStatusReason: string, ParentId: string, RootId: string, DriftInformation: record>, NextToken: string> {
+]: nothing -> oneof<record<StackSummaries: table<StackId: string, StackName: string, TemplateDescription: string, CreationTime: string, LastUpdatedTime: string, DeletionTime: string, StackStatus: string, StackStatusReason: string, ParentId: string, RootId: string, DriftInformation: record>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "ListStacks")
@@ -5137,7 +5161,7 @@ export def "post-list-stacks" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<StackSummaries: table<StackId: string, StackName: string, TemplateDescription: string, CreationTime: string, LastUpdatedTime: string, DeletionTime: string, StackStatus: string, StackStatusReason: string, ParentId: string, RootId: string, DriftInformation: record>, NextToken: string> {
+]: any -> oneof<record<StackSummaries: table<StackId: string, StackName: string, TemplateDescription: string, CreationTime: string, LastUpdatedTime: string, DeletionTime: string, StackStatus: string, StackStatusReason: string, ParentId: string, RootId: string, DriftInformation: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5194,7 +5218,7 @@ export def "get-list-type-registrations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<RegistrationTokenList: list<string>, NextToken: string> {
+]: nothing -> oneof<record<RegistrationTokenList: list<string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "ListTypeRegistrations")
@@ -5245,7 +5269,7 @@ export def "post-list-type-registrations" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<RegistrationTokenList: list<string>, NextToken: string> {
+]: any -> oneof<record<RegistrationTokenList: list<string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5303,7 +5327,7 @@ export def "get-list-type-versions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<TypeVersionSummaries: table<Type: string, TypeName: string, VersionId: string, IsDefaultVersion: bool, Arn: string, TimeCreated: string, Description: string, PublicVersionNumber: string>, NextToken: string> {
+]: nothing -> oneof<record<TypeVersionSummaries: table<Type: string, TypeName: string, VersionId: string, IsDefaultVersion: bool, Arn: string, TimeCreated: string, Description: string, PublicVersionNumber: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "ListTypeVersions")
@@ -5354,7 +5378,7 @@ export def "post-list-type-versions" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<TypeVersionSummaries: table<Type: string, TypeName: string, VersionId: string, IsDefaultVersion: bool, Arn: string, TimeCreated: string, Description: string, PublicVersionNumber: string>, NextToken: string> {
+]: any -> oneof<record<TypeVersionSummaries: table<Type: string, TypeName: string, VersionId: string, IsDefaultVersion: bool, Arn: string, TimeCreated: string, Description: string, PublicVersionNumber: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5412,7 +5436,7 @@ export def "get-list-types" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<TypeSummaries: table<Type: string, TypeName: string, DefaultVersionId: string, TypeArn: string, LastUpdated: string, Description: string, PublisherId: string, OriginalTypeName: string, PublicVersionNumber: string, LatestPublicVersion: string, PublisherIdentity: string, PublisherName: string, IsActivated: bool>, NextToken: string> {
+]: nothing -> oneof<record<TypeSummaries: table<Type: string, TypeName: string, DefaultVersionId: string, TypeArn: string, LastUpdated: string, Description: string, PublisherId: string, OriginalTypeName: string, PublicVersionNumber: string, LatestPublicVersion: string, PublisherIdentity: string, PublisherName: string, IsActivated: bool>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "ListTypes")
@@ -5463,7 +5487,7 @@ export def "post-list-types" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<TypeSummaries: table<Type: string, TypeName: string, DefaultVersionId: string, TypeArn: string, LastUpdated: string, Description: string, PublisherId: string, OriginalTypeName: string, PublicVersionNumber: string, LatestPublicVersion: string, PublisherIdentity: string, PublisherName: string, IsActivated: bool>, NextToken: string> {
+]: any -> oneof<record<TypeSummaries: table<Type: string, TypeName: string, DefaultVersionId: string, TypeArn: string, LastUpdated: string, Description: string, PublisherId: string, OriginalTypeName: string, PublicVersionNumber: string, LatestPublicVersion: string, PublisherIdentity: string, PublisherName: string, IsActivated: bool>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5518,7 +5542,7 @@ export def "get-publish-type" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<PublicTypeArn: string> {
+]: nothing -> oneof<record<PublicTypeArn: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "PublishType")
@@ -5567,7 +5591,7 @@ export def "post-publish-type" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<PublicTypeArn: string> {
+]: any -> oneof<record<PublicTypeArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5625,7 +5649,7 @@ export def "get-record-handler-progress" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bearer_token == null) { error make --unspanned { msg: "required query parameter 'BearerToken' missing: pass --bearer-token" } }
@@ -5676,7 +5700,7 @@ export def "post-record-handler-progress" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5729,7 +5753,7 @@ export def "get-register-publisher" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<PublisherId: string> {
+]: nothing -> oneof<record<PublisherId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "RegisterPublisher")
@@ -5778,7 +5802,7 @@ export def "post-register-publisher" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<PublisherId: string> {
+]: any -> oneof<record<PublisherId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5835,7 +5859,7 @@ export def "get-register-type" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<RegistrationToken: string> {
+]: nothing -> oneof<record<RegistrationToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($type_name == null) { error make --unspanned { msg: "required query parameter 'TypeName' missing: pass --type-name" } }
@@ -5886,7 +5910,7 @@ export def "post-register-type" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<RegistrationToken: string> {
+]: any -> oneof<record<RegistrationToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5940,7 +5964,7 @@ export def "get-rollback-stack" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<StackId: string> {
+]: nothing -> oneof<record<StackId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($stack_name == null) { error make --unspanned { msg: "required query parameter 'StackName' missing: pass --stack-name" } }
@@ -5990,7 +6014,7 @@ export def "post-rollback-stack" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<StackId: string> {
+]: any -> oneof<record<StackId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6150,7 +6174,7 @@ export def "get-set-type-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ConfigurationArn: string> {
+]: nothing -> oneof<record<ConfigurationArn: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($configuration == null) { error make --unspanned { msg: "required query parameter 'Configuration' missing: pass --configuration" } }
@@ -6200,7 +6224,7 @@ export def "post-set-type-configuration" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<ConfigurationArn: string> {
+]: any -> oneof<record<ConfigurationArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6255,7 +6279,7 @@ export def "get-set-type-default-version" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "SetTypeDefaultVersion")
@@ -6304,7 +6328,7 @@ export def "post-set-type-default-version" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6466,7 +6490,7 @@ export def "get-stop-stack-set-operation" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($stack_set_name == null) { error make --unspanned { msg: "required query parameter 'StackSetName' missing: pass --stack-set-name" } }
@@ -6517,7 +6541,7 @@ export def "post-stop-stack-set-operation" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6573,7 +6597,7 @@ export def "get-test-type" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<TypeVersionArn: string> {
+]: nothing -> oneof<record<TypeVersionArn: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "TestType")
@@ -6622,7 +6646,7 @@ export def "post-test-type" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<TypeVersionArn: string> {
+]: any -> oneof<record<TypeVersionArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6690,7 +6714,7 @@ export def "get-update-stack" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<StackId: string> {
+]: nothing -> oneof<record<StackId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($stack_name == null) { error make --unspanned { msg: "required query parameter 'StackName' missing: pass --stack-name" } }
@@ -6740,7 +6764,7 @@ export def "post-update-stack" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<StackId: string> {
+]: any -> oneof<record<StackId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6799,7 +6823,7 @@ export def "get-update-stack-instances" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<OperationId: string> {
+]: nothing -> oneof<record<OperationId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($stack_set_name == null) { error make --unspanned { msg: "required query parameter 'StackSetName' missing: pass --stack-set-name" } }
@@ -6850,7 +6874,7 @@ export def "post-update-stack-instances" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<OperationId: string> {
+]: any -> oneof<record<OperationId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6920,7 +6944,7 @@ export def "get-update-stack-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<OperationId: string> {
+]: nothing -> oneof<record<OperationId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($stack_set_name == null) { error make --unspanned { msg: "required query parameter 'StackSetName' missing: pass --stack-set-name" } }
@@ -6970,7 +6994,7 @@ export def "post-update-stack-set" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<OperationId: string> {
+]: any -> oneof<record<OperationId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7023,7 +7047,7 @@ export def "get-update-termination-protection" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<StackId: string> {
+]: nothing -> oneof<record<StackId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($enable_termination_protection == null) { error make --unspanned { msg: "required query parameter 'EnableTerminationProtection' missing: pass --enable-termination-protection" } }
@@ -7074,7 +7098,7 @@ export def "post-update-termination-protection" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<StackId: string> {
+]: any -> oneof<record<StackId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7127,7 +7151,7 @@ export def "get-validate-template" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Parameters: table<ParameterKey: string, DefaultValue: string, NoEcho: bool, Description: string>, Description: string, Capabilities: list<string>, CapabilitiesReason: string, DeclaredTransforms: list<string>> {
+]: nothing -> oneof<record<Parameters: table<ParameterKey: string, DefaultValue: string, NoEcho: bool, Description: string>, Description: string, Capabilities: list<string>, CapabilitiesReason: string, DeclaredTransforms: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "ValidateTemplate")
@@ -7176,7 +7200,7 @@ export def "post-validate-template" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Parameters: table<ParameterKey: string, DefaultValue: string, NoEcho: bool, Description: string>, Description: string, Capabilities: list<string>, CapabilitiesReason: string, DeclaredTransforms: list<string>> {
+]: any -> oneof<record<Parameters: table<ParameterKey: string, DefaultValue: string, NoEcho: bool, Description: string>, Description: string, Capabilities: list<string>, CapabilitiesReason: string, DeclaredTransforms: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

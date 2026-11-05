@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -126,9 +150,9 @@ def type-completer [] { ["derived" "raw"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "fitness-users-data-sources-list" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["fitness-users-data-sources-list" "fitness-users-data-sources-create" "fitness-users-data-sources-delete" "fitness-users-data-sources-get" "fitness-users-data-sources-update" "fitness-users-data-sources-data-point-changes-list" "fitness-users-data-sources-datasets-delete" "fitness-users-data-sources-datasets-get" "fitness-users-data-sources-datasets-patch" "fitness-users-dataset-aggregate" "fitness-users-sessions-list" "fitness-users-sessions-delete" "fitness-users-sessions-update" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -173,7 +197,7 @@ export def "fitness-users-data-sources-list" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --data-type-name: list<string> # The names of data types to include in the list. If not specified, all data sources will be returned.
-]: nothing -> record<dataSource: table<application: record, dataQualityStandard: list, dataStreamId: string, dataStreamName: string, dataType: record, device: record, name: string, type: string>> {
+]: nothing -> oneof<record<dataSource: table<application: record, dataQualityStandard: list, dataStreamId: string, dataStreamName: string, dataType: record, device: record, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -199,9 +223,6 @@ export def "fitness-users-data-sources-list" [
 #
 # POST /{userId}/dataSources
 # operationId: fitness.users.dataSources.create
-# --application shape: {detailsUrl?: string, name?: string, packageName?: string, version?: string}
-# --dataType shape: {field?: list, name?: string}
-# --device shape: {manufacturer?: string, model?: string, type?: "unknown"|"phone"|"tablet"|"watch"|"chestStrap"|"scale"|"headMounted"|"smartDisplay", uid?: string, version?: string}
 export def "fitness-users-data-sources-create" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -232,7 +253,7 @@ export def "fitness-users-data-sources-create" [
   --device: record # Representation of an integrated device (such as a phone or a wearable) that can hold sensors. Each sensor is exposed as a data source. The main purpose of the device information contained in this class is to identify the hardware of a particular data source. This can be useful in different ways, including: - Distinguishing two similar sensors on different devices (the step counter on two nexus 5 phones, for instance) - Display the source of data to the user (by using the device make / model) - Treat data differently depending on sensor type (accelerometers on a watch may give different patterns than those on a phone) - Build different analysis models for each device/version. — shape: {manufacturer?: string, model?: string, type?: "unknown"|"phone"|"tablet"|"watch"|"chestStrap"|"scale"|"headMounted"|"smartDisplay", uid?: string, version?: string}
   --name: string # An end-user visible name for this data source.
   --type: string@type-completer # A constant describing the type of this data source. Indicates whether this data source produces raw or derived data.
-]: any -> record<application: record<detailsUrl: string, name: string, packageName: string, version: string>, dataQualityStandard: list<string>, dataStreamId: string, dataStreamName: string, dataType: record<field: list<record>, name: string>, device: record<manufacturer: string, model: string, type: string, uid: string, version: string>, name: string, type: string> {
+]: any -> oneof<record<application: record<detailsUrl: string, name: string, packageName: string, version: string>, dataQualityStandard: list<string>, dataStreamId: string, dataStreamName: string, dataType: record<field: list<record>, name: string>, device: record<manufacturer: string, model: string, type: string, uid: string, version: string>, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -284,7 +305,7 @@ export def "fitness-users-data-sources-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<application: record<detailsUrl: string, name: string, packageName: string, version: string>, dataQualityStandard: list<string>, dataStreamId: string, dataStreamName: string, dataType: record<field: list<record>, name: string>, device: record<manufacturer: string, model: string, type: string, uid: string, version: string>, name: string, type: string> {
+]: nothing -> oneof<record<application: record<detailsUrl: string, name: string, packageName: string, version: string>, dataQualityStandard: list<string>, dataStreamId: string, dataStreamName: string, dataType: record<field: list<record>, name: string>, device: record<manufacturer: string, model: string, type: string, uid: string, version: string>, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -334,7 +355,7 @@ export def "fitness-users-data-sources-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<application: record<detailsUrl: string, name: string, packageName: string, version: string>, dataQualityStandard: list<string>, dataStreamId: string, dataStreamName: string, dataType: record<field: list<record>, name: string>, device: record<manufacturer: string, model: string, type: string, uid: string, version: string>, name: string, type: string> {
+]: nothing -> oneof<record<application: record<detailsUrl: string, name: string, packageName: string, version: string>, dataQualityStandard: list<string>, dataStreamId: string, dataStreamName: string, dataType: record<field: list<record>, name: string>, device: record<manufacturer: string, model: string, type: string, uid: string, version: string>, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -361,9 +382,6 @@ export def "fitness-users-data-sources-get" [
 #
 # PUT /{userId}/dataSources/{dataSourceId}
 # operationId: fitness.users.dataSources.update
-# --application shape: {detailsUrl?: string, name?: string, packageName?: string, version?: string}
-# --dataType shape: {field?: list, name?: string}
-# --device shape: {manufacturer?: string, model?: string, type?: "unknown"|"phone"|"tablet"|"watch"|"chestStrap"|"scale"|"headMounted"|"smartDisplay", uid?: string, version?: string}
 export def "fitness-users-data-sources-update" [
   user_id: string
   data_source_id: string
@@ -395,7 +413,7 @@ export def "fitness-users-data-sources-update" [
   --device: record # Representation of an integrated device (such as a phone or a wearable) that can hold sensors. Each sensor is exposed as a data source. The main purpose of the device information contained in this class is to identify the hardware of a particular data source. This can be useful in different ways, including: - Distinguishing two similar sensors on different devices (the step counter on two nexus 5 phones, for instance) - Display the source of data to the user (by using the device make / model) - Treat data differently depending on sensor type (accelerometers on a watch may give different patterns than those on a phone) - Build different analysis models for each device/version. — shape: {manufacturer?: string, model?: string, type?: "unknown"|"phone"|"tablet"|"watch"|"chestStrap"|"scale"|"headMounted"|"smartDisplay", uid?: string, version?: string}
   --name: string # An end-user visible name for this data source.
   --type: string@type-completer # A constant describing the type of this data source. Indicates whether this data source produces raw or derived data.
-]: any -> record<application: record<detailsUrl: string, name: string, packageName: string, version: string>, dataQualityStandard: list<string>, dataStreamId: string, dataStreamName: string, dataType: record<field: list<record>, name: string>, device: record<manufacturer: string, model: string, type: string, uid: string, version: string>, name: string, type: string> {
+]: any -> oneof<record<application: record<detailsUrl: string, name: string, packageName: string, version: string>, dataQualityStandard: list<string>, dataStreamId: string, dataStreamName: string, dataType: record<field: list<record>, name: string>, device: record<manufacturer: string, model: string, type: string, uid: string, version: string>, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -450,7 +468,7 @@ export def "fitness-users-data-sources-data-point-changes-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --limit: int # If specified, no more than this many data point changes will be included in the response.
   --page-token: string # The continuation token, which is used to page through large result sets. To get the next page of results, set this parameter to the value of nextPageToken from the previous response.
-]: nothing -> record<dataSourceId: string, deletedDataPoint: table<computationTimeMillis: string, dataTypeName: string, endTimeNanos: string, modifiedTimeMillis: string, originDataSourceId: string, rawTimestampNanos: string, startTimeNanos: string, value: list>, insertedDataPoint: table<computationTimeMillis: string, dataTypeName: string, endTimeNanos: string, modifiedTimeMillis: string, originDataSourceId: string, rawTimestampNanos: string, startTimeNanos: string, value: list>, nextPageToken: string> {
+]: nothing -> oneof<record<dataSourceId: string, deletedDataPoint: table<computationTimeMillis: string, dataTypeName: string, endTimeNanos: string, modifiedTimeMillis: string, originDataSourceId: string, rawTimestampNanos: string, startTimeNanos: string, value: list>, insertedDataPoint: table<computationTimeMillis: string, dataTypeName: string, endTimeNanos: string, modifiedTimeMillis: string, originDataSourceId: string, rawTimestampNanos: string, startTimeNanos: string, value: list>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -555,7 +573,7 @@ export def "fitness-users-data-sources-datasets-get" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --limit: int # If specified, no more than this many data points will be included in the dataset. If there are more data points in the dataset, nextPageToken will be set in the dataset response. The limit is applied from the end of the time range. That is, if pageToken is absent, the limit most recent data points will be returned.
   --page-token: string # The continuation token, which is used to page through large datasets. To get the next page of a dataset, set this parameter to the value of nextPageToken from the previous response. Each subsequent call will yield a partial dataset with data point end timestamps that are strictly smaller than those in the previous partial response.
-]: nothing -> record<dataSourceId: string, maxEndTimeNs: string, minStartTimeNs: string, nextPageToken: string, point: table<computationTimeMillis: string, dataTypeName: string, endTimeNanos: string, modifiedTimeMillis: string, originDataSourceId: string, rawTimestampNanos: string, startTimeNanos: string, value: list>> {
+]: nothing -> oneof<record<dataSourceId: string, maxEndTimeNs: string, minStartTimeNs: string, nextPageToken: string, point: table<computationTimeMillis: string, dataTypeName: string, endTimeNanos: string, modifiedTimeMillis: string, originDataSourceId: string, rawTimestampNanos: string, startTimeNanos: string, value: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -583,7 +601,6 @@ export def "fitness-users-data-sources-datasets-get" [
 #
 # PATCH /{userId}/dataSources/{dataSourceId}/datasets/{datasetId}
 # operationId: fitness.users.dataSources.datasets.patch
-# --point item shape: {computationTimeMillis?: string, dataTypeName?: string, endTimeNanos?: string, modifiedTimeMillis?: string, originDataSourceId?: string, rawTimestampNanos?: string, startTimeNanos?: string, value?: list}
 export def "fitness-users-data-sources-datasets-patch" [
   user_id: string
   data_source_id: string
@@ -613,7 +630,7 @@ export def "fitness-users-data-sources-datasets-patch" [
   --min-start-time-ns: string # The smallest start time of all data points in this possibly partial representation of the dataset. Time is in nanoseconds from epoch. This should also match the first part of the dataset identifier. (format: int64)
   --next-page-token: string # This token will be set when a dataset is received in response to a GET request and the dataset is too large to be included in a single response. Provide this value in a subsequent GET request to return the next page of data points within this dataset.
   --point: list # A partial list of data points contained in the dataset, ordered by endTimeNanos. This list is considered complete when retrieving a small dataset and partial when patching a dataset or retrieving a dataset that is too large to include in a single response. — item shape: {computationTimeMillis?: string, dataTypeName?: string, endTimeNanos?: string, modifiedTimeMillis?: string, originDataSourceId?: string, rawTimestampNanos?: string, startTimeNanos?: string, value?: list}
-]: any -> record<dataSourceId: string, maxEndTimeNs: string, minStartTimeNs: string, nextPageToken: string, point: table<computationTimeMillis: string, dataTypeName: string, endTimeNanos: string, modifiedTimeMillis: string, originDataSourceId: string, rawTimestampNanos: string, startTimeNanos: string, value: list>> {
+]: any -> oneof<record<dataSourceId: string, maxEndTimeNs: string, minStartTimeNs: string, nextPageToken: string, point: table<computationTimeMillis: string, dataTypeName: string, endTimeNanos: string, modifiedTimeMillis: string, originDataSourceId: string, rawTimestampNanos: string, startTimeNanos: string, value: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -644,11 +661,6 @@ export def "fitness-users-data-sources-datasets-patch" [
 #
 # POST /{userId}/dataset:aggregate
 # operationId: fitness.users.dataset.aggregate
-# --aggregateBy item shape: {dataSourceId?: string, dataTypeName?: string}
-# --bucketByActivitySegment shape: {activityDataSourceId?: string, minDurationMillis?: string}
-# --bucketByActivityType shape: {activityDataSourceId?: string, minDurationMillis?: string}
-# --bucketBySession shape: {minDurationMillis?: string}
-# --bucketByTime shape: {durationMillis?: string, period?: record}
 export def "fitness-users-dataset-aggregate" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -679,7 +691,7 @@ export def "fitness-users-dataset-aggregate" [
   --end-time-millis: string # The end of a window of time. Data that intersects with this time window will be aggregated. The time is in milliseconds since epoch, inclusive. The maximum allowed difference between start_time_millis // and end_time_millis is 7776000000 (roughly 90 days). (format: int64)
   --filtered-data-quality-standard: list<string> # DO NOT POPULATE THIS FIELD. It is ignored.
   --start-time-millis: string # The start of a window of time. Data that intersects with this time window will be aggregated. The time is in milliseconds since epoch, inclusive. (format: int64)
-]: any -> record<bucket: table<activity: int, dataset: list, endTimeMillis: string, session: record, startTimeMillis: string, type: string>> {
+]: any -> oneof<record<bucket: table<activity: int, dataset: list, endTimeMillis: string, session: record, startTimeMillis: string, type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -735,7 +747,7 @@ export def "fitness-users-sessions-list" [
   --include-deleted: oneof<nothing, bool> # If true, and if both startTime and endTime are omitted, session deletions will be returned.
   --page-token: string # The continuation token, which is used for incremental syncing. To get the next batch of changes, set this parameter to the value of nextPageToken from the previous response. The page token is ignored if either start or end time is specified. If none of start time, end time, and the page token is specified, sessions modified in the last 30 days are returned.
   --start-time: string # An RFC3339 timestamp. Only sessions ending between the start and end times will be included in the response. If this time is omitted but endTime is specified, all sessions from the start of time up to endTime will be returned.
-]: nothing -> record<deletedSession: table<activeTimeMillis: string, activityType: int, application: record, description: string, endTimeMillis: string, id: string, modifiedTimeMillis: string, name: string, startTimeMillis: string>, hasMoreData: bool, nextPageToken: string, session: table<activeTimeMillis: string, activityType: int, application: record, description: string, endTimeMillis: string, id: string, modifiedTimeMillis: string, name: string, startTimeMillis: string>> {
+]: nothing -> oneof<record<deletedSession: table<activeTimeMillis: string, activityType: int, application: record, description: string, endTimeMillis: string, id: string, modifiedTimeMillis: string, name: string, startTimeMillis: string>, hasMoreData: bool, nextPageToken: string, session: table<activeTimeMillis: string, activityType: int, application: record, description: string, endTimeMillis: string, id: string, modifiedTimeMillis: string, name: string, startTimeMillis: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -811,7 +823,6 @@ export def "fitness-users-sessions-delete" [
 #
 # PUT /{userId}/sessions/{sessionId}
 # operationId: fitness.users.sessions.update
-# --application shape: {detailsUrl?: string, name?: string, packageName?: string, version?: string}
 export def "fitness-users-sessions-update" [
   user_id: string
   session_id: string
@@ -844,7 +855,7 @@ export def "fitness-users-sessions-update" [
   --modified-time-millis: string # A timestamp that indicates when the session was last modified. (format: int64)
   --name: string # A human readable name of the session.
   --start-time-millis: string # A start time, in milliseconds since epoch, inclusive. (format: int64)
-]: any -> record<activeTimeMillis: string, activityType: int, application: record<detailsUrl: string, name: string, packageName: string, version: string>, description: string, endTimeMillis: string, id: string, modifiedTimeMillis: string, name: string, startTimeMillis: string> {
+]: any -> oneof<record<activeTimeMillis: string, activityType: int, application: record<detailsUrl: string, name: string, packageName: string, version: string>, description: string, endTimeMillis: string, id: string, modifiedTimeMillis: string, name: string, startTimeMillis: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

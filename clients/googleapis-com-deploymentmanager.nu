@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -128,9 +152,9 @@ def delete-policy-completer [] { ["ABANDON" "DELETE"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "deploymentmanager-composite-types-list" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["deploymentmanager-composite-types-list" "deploymentmanager-composite-types-insert" "deploymentmanager-composite-types-delete" "deploymentmanager-composite-types-get" "deploymentmanager-composite-types-patch" "deploymentmanager-composite-types-update" "deploymentmanager-deployments-list" "deploymentmanager-deployments-insert" "deploymentmanager-deployments-delete" "deploymentmanager-deployments-get" "deploymentmanager-deployments-patch" "deploymentmanager-deployments-update" "deploymentmanager-deployments-cancel-preview" "deploymentmanager-manifests-list" "deploymentmanager-manifests-get" "deploymentmanager-resources-list" "deploymentmanager-resources-get" "deploymentmanager-deployments-stop" "deploymentmanager-deployments-get-iam-policy" "deploymentmanager-deployments-set-iam-policy" "deploymentmanager-deployments-test-iam-permissions" "deploymentmanager-operations-list" "deploymentmanager-operations-get" "deploymentmanager-type-providers-list" "deploymentmanager-type-providers-insert" "deploymentmanager-type-providers-delete" "deploymentmanager-type-providers-get" "deploymentmanager-type-providers-patch" "deploymentmanager-type-providers-update" "deploymentmanager-type-providers-list-types" "deploymentmanager-type-providers-get-type" "deploymentmanager-types-list" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -178,7 +202,7 @@ export def "deploymentmanager-composite-types-list" [
   --max-results: int # The maximum number of results per page that should be returned. If the number of available results is larger than `maxResults`, Compute Engine returns a `nextPageToken` that can be used to get the next page of results in subsequent list requests. Acceptable values are `0` to `500`, inclusive. (Default: `500`)
   --order-by: string # Sorts list results by a certain order. By default, results are returned in alphanumerical order based on the resource name. You can also sort results in descending order based on the creation timestamp using `orderBy="creationTimestamp desc"`. This sorts results based on the `creationTimestamp` field in reverse chronological order (newest result first). Use this to sort resources like operations so that the newest operation is returned first. Currently, only sorting by `name` or `creationTimestamp desc` is supported.
   --page-token: string # Specifies a page token to use. Set `pageToken` to the `nextPageToken` returned by a previous list request to get the next page of results.
-]: nothing -> record<compositeTypes: table<description: string, id: string, insertTime: string, labels: list, name: string, operation: record, selfLink: string, status: string, templateContents: record>, nextPageToken: string> {
+]: nothing -> oneof<record<compositeTypes: table<description: string, id: string, insertTime: string, labels: list, name: string, operation: record, selfLink: string, status: string, templateContents: record>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
@@ -204,9 +228,6 @@ export def "deploymentmanager-composite-types-list" [
 #
 # POST /deploymentmanager/v2beta/projects/{project}/global/compositeTypes
 # operationId: deploymentmanager.compositeTypes.insert
-# --labels item shape: {key?: string, value?: string}
-# --operation shape: {clientOperationId?: string, creationTimestamp?: string, description?: string, endTime?: string, error?: record, httpErrorMessage?: string, httpErrorStatusCode?: int, id?: string, insertTime?: string, kind?: string, name?: string, operationGroupId?: string, operationType?: string, progress?: int, region?: string, selfLink?: string, startTime?: string, status?: "PENDING"|"RUNNING"|"DONE", statusMessage?: string, targetId?: string, targetLink?: string, user?: string, warnings?: list, zone?: string}
-# --templateContents shape: {imports?: list, interpreter?: "UNKNOWN_INTERPRETER"|"PYTHON"|"JINJA", mainTemplate?: string, schema?: string, template?: string}
 export def "deploymentmanager-composite-types-insert" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -238,7 +259,7 @@ export def "deploymentmanager-composite-types-insert" [
   --self-link: string # Output only. Server defined URL for the resource.
   --status: string@status-completer
   --template-contents: record # Files that make up the template contents of a template type. — shape: {imports?: list, interpreter?: "UNKNOWN_INTERPRETER"|"PYTHON"|"JINJA", mainTemplate?: string, schema?: string, template?: string}
-]: any -> record<clientOperationId: string, creationTimestamp: string, description: string, endTime: string, error: record<errors: list<record>>, httpErrorMessage: string, httpErrorStatusCode: int, id: string, insertTime: string, kind: string, name: string, operationGroupId: string, operationType: string, progress: int, region: string, selfLink: string, startTime: string, status: string, statusMessage: string, targetId: string, targetLink: string, user: string, warnings: table<code: string, data: list, message: string>, zone: string> {
+]: any -> oneof<record<clientOperationId: string, creationTimestamp: string, description: string, endTime: string, error: record<errors: list<record>>, httpErrorMessage: string, httpErrorStatusCode: int, id: string, insertTime: string, kind: string, name: string, operationGroupId: string, operationType: string, progress: int, region: string, selfLink: string, startTime: string, status: string, statusMessage: string, targetId: string, targetLink: string, user: string, warnings: table<code: string, data: list, message: string>, zone: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -290,7 +311,7 @@ export def "deploymentmanager-composite-types-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<clientOperationId: string, creationTimestamp: string, description: string, endTime: string, error: record<errors: list<record>>, httpErrorMessage: string, httpErrorStatusCode: int, id: string, insertTime: string, kind: string, name: string, operationGroupId: string, operationType: string, progress: int, region: string, selfLink: string, startTime: string, status: string, statusMessage: string, targetId: string, targetLink: string, user: string, warnings: table<code: string, data: list, message: string>, zone: string> {
+]: nothing -> oneof<record<clientOperationId: string, creationTimestamp: string, description: string, endTime: string, error: record<errors: list<record>>, httpErrorMessage: string, httpErrorStatusCode: int, id: string, insertTime: string, kind: string, name: string, operationGroupId: string, operationType: string, progress: int, region: string, selfLink: string, startTime: string, status: string, statusMessage: string, targetId: string, targetLink: string, user: string, warnings: table<code: string, data: list, message: string>, zone: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
@@ -340,7 +361,7 @@ export def "deploymentmanager-composite-types-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<description: string, id: string, insertTime: string, labels: table<key: string, value: string>, name: string, operation: record<clientOperationId: string, creationTimestamp: string, description: string, endTime: string, error: record<errors: list>, httpErrorMessage: string, httpErrorStatusCode: int, id: string, insertTime: string, kind: string, name: string, operationGroupId: string, operationType: string, progress: int, region: string, selfLink: string, startTime: string, status: string, statusMessage: string, targetId: string, targetLink: string, user: string, warnings: list<record>, zone: string>, selfLink: string, status: string, templateContents: record<imports: list<record>, interpreter: string, mainTemplate: string, schema: string, template: string>> {
+]: nothing -> oneof<record<description: string, id: string, insertTime: string, labels: table<key: string, value: string>, name: string, operation: record<clientOperationId: string, creationTimestamp: string, description: string, endTime: string, error: record<errors: list>, httpErrorMessage: string, httpErrorStatusCode: int, id: string, insertTime: string, kind: string, name: string, operationGroupId: string, operationType: string, progress: int, region: string, selfLink: string, startTime: string, status: string, statusMessage: string, targetId: string, targetLink: string, user: string, warnings: list<record>, zone: string>, selfLink: string, status: string, templateContents: record<imports: list<record>, interpreter: string, mainTemplate: string, schema: string, template: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
@@ -367,9 +388,6 @@ export def "deploymentmanager-composite-types-get" [
 #
 # PATCH /deploymentmanager/v2beta/projects/{project}/global/compositeTypes/{compositeType}
 # operationId: deploymentmanager.compositeTypes.patch
-# --labels item shape: {key?: string, value?: string}
-# --operation shape: {clientOperationId?: string, creationTimestamp?: string, description?: string, endTime?: string, error?: record, httpErrorMessage?: string, httpErrorStatusCode?: int, id?: string, insertTime?: string, kind?: string, name?: string, operationGroupId?: string, operationType?: string, progress?: int, region?: string, selfLink?: string, startTime?: string, status?: "PENDING"|"RUNNING"|"DONE", statusMessage?: string, targetId?: string, targetLink?: string, user?: string, warnings?: list, zone?: string}
-# --templateContents shape: {imports?: list, interpreter?: "UNKNOWN_INTERPRETER"|"PYTHON"|"JINJA", mainTemplate?: string, schema?: string, template?: string}
 export def "deploymentmanager-composite-types-patch" [
   project: string
   composite_type: string
@@ -402,7 +420,7 @@ export def "deploymentmanager-composite-types-patch" [
   --self-link: string # Output only. Server defined URL for the resource.
   --status: string@status-completer
   --template-contents: record # Files that make up the template contents of a template type. — shape: {imports?: list, interpreter?: "UNKNOWN_INTERPRETER"|"PYTHON"|"JINJA", mainTemplate?: string, schema?: string, template?: string}
-]: any -> record<clientOperationId: string, creationTimestamp: string, description: string, endTime: string, error: record<errors: list<record>>, httpErrorMessage: string, httpErrorStatusCode: int, id: string, insertTime: string, kind: string, name: string, operationGroupId: string, operationType: string, progress: int, region: string, selfLink: string, startTime: string, status: string, statusMessage: string, targetId: string, targetLink: string, user: string, warnings: table<code: string, data: list, message: string>, zone: string> {
+]: any -> oneof<record<clientOperationId: string, creationTimestamp: string, description: string, endTime: string, error: record<errors: list<record>>, httpErrorMessage: string, httpErrorStatusCode: int, id: string, insertTime: string, kind: string, name: string, operationGroupId: string, operationType: string, progress: int, region: string, selfLink: string, startTime: string, status: string, statusMessage: string, targetId: string, targetLink: string, user: string, warnings: table<code: string, data: list, message: string>, zone: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -432,9 +450,6 @@ export def "deploymentmanager-composite-types-patch" [
 #
 # PUT /deploymentmanager/v2beta/projects/{project}/global/compositeTypes/{compositeType}
 # operationId: deploymentmanager.compositeTypes.update
-# --labels item shape: {key?: string, value?: string}
-# --operation shape: {clientOperationId?: string, creationTimestamp?: string, description?: string, endTime?: string, error?: record, httpErrorMessage?: string, httpErrorStatusCode?: int, id?: string, insertTime?: string, kind?: string, name?: string, operationGroupId?: string, operationType?: string, progress?: int, region?: string, selfLink?: string, startTime?: string, status?: "PENDING"|"RUNNING"|"DONE", statusMessage?: string, targetId?: string, targetLink?: string, user?: string, warnings?: list, zone?: string}
-# --templateContents shape: {imports?: list, interpreter?: "UNKNOWN_INTERPRETER"|"PYTHON"|"JINJA", mainTemplate?: string, schema?: string, template?: string}
 export def "deploymentmanager-composite-types-update" [
   project: string
   composite_type: string
@@ -467,7 +482,7 @@ export def "deploymentmanager-composite-types-update" [
   --self-link: string # Output only. Server defined URL for the resource.
   --status: string@status-completer
   --template-contents: record # Files that make up the template contents of a template type. — shape: {imports?: list, interpreter?: "UNKNOWN_INTERPRETER"|"PYTHON"|"JINJA", mainTemplate?: string, schema?: string, template?: string}
-]: any -> record<clientOperationId: string, creationTimestamp: string, description: string, endTime: string, error: record<errors: list<record>>, httpErrorMessage: string, httpErrorStatusCode: int, id: string, insertTime: string, kind: string, name: string, operationGroupId: string, operationType: string, progress: int, region: string, selfLink: string, startTime: string, status: string, statusMessage: string, targetId: string, targetLink: string, user: string, warnings: table<code: string, data: list, message: string>, zone: string> {
+]: any -> oneof<record<clientOperationId: string, creationTimestamp: string, description: string, endTime: string, error: record<errors: list<record>>, httpErrorMessage: string, httpErrorStatusCode: int, id: string, insertTime: string, kind: string, name: string, operationGroupId: string, operationType: string, progress: int, region: string, selfLink: string, startTime: string, status: string, statusMessage: string, targetId: string, targetLink: string, user: string, warnings: table<code: string, data: list, message: string>, zone: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -523,7 +538,7 @@ export def "deploymentmanager-deployments-list" [
   --max-results: int # The maximum number of results per page that should be returned. If the number of available results is larger than `maxResults`, Compute Engine returns a `nextPageToken` that can be used to get the next page of results in subsequent list requests. Acceptable values are `0` to `500`, inclusive. (Default: `500`)
   --order-by: string # Sorts list results by a certain order. By default, results are returned in alphanumerical order based on the resource name. You can also sort results in descending order based on the creation timestamp using `orderBy="creationTimestamp desc"`. This sorts results based on the `creationTimestamp` field in reverse chronological order (newest result first). Use this to sort resources like operations so that the newest operation is returned first. Currently, only sorting by `name` or `creationTimestamp desc` is supported.
   --page-token: string # Specifies a page token to use. Set `pageToken` to the `nextPageToken` returned by a previous list request to get the next page of results.
-]: nothing -> record<deployments: table<description: string, fingerprint: string, id: string, insertTime: string, labels: list, manifest: string, name: string, operation: record, selfLink: string, target: record, update: record, updateTime: string>, nextPageToken: string> {
+]: nothing -> oneof<record<deployments: table<description: string, fingerprint: string, id: string, insertTime: string, labels: list, manifest: string, name: string, operation: record, selfLink: string, target: record, update: record, updateTime: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
@@ -549,10 +564,6 @@ export def "deploymentmanager-deployments-list" [
 #
 # POST /deploymentmanager/v2beta/projects/{project}/global/deployments
 # operationId: deploymentmanager.deployments.insert
-# --labels item shape: {key?: string, value?: string}
-# --operation shape: {clientOperationId?: string, creationTimestamp?: string, description?: string, endTime?: string, error?: record, httpErrorMessage?: string, httpErrorStatusCode?: int, id?: string, insertTime?: string, kind?: string, name?: string, operationGroupId?: string, operationType?: string, progress?: int, region?: string, selfLink?: string, startTime?: string, status?: "PENDING"|"RUNNING"|"DONE", statusMessage?: string, targetId?: string, targetLink?: string, user?: string, warnings?: list, zone?: string}
-# --target shape: {config?: record, imports?: list}
-# --update shape: {description?: string, labels?: list, manifest?: string}
 export def "deploymentmanager-deployments-insert" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -589,7 +600,7 @@ export def "deploymentmanager-deployments-insert" [
   --target: record # shape: {config?: record, imports?: list}
   --update: record # shape: {description?: string, labels?: list, manifest?: string}
   --update-time: string # Output only. Update timestamp in RFC3339 text format.
-]: any -> record<clientOperationId: string, creationTimestamp: string, description: string, endTime: string, error: record<errors: list<record>>, httpErrorMessage: string, httpErrorStatusCode: int, id: string, insertTime: string, kind: string, name: string, operationGroupId: string, operationType: string, progress: int, region: string, selfLink: string, startTime: string, status: string, statusMessage: string, targetId: string, targetLink: string, user: string, warnings: table<code: string, data: list, message: string>, zone: string> {
+]: any -> oneof<record<clientOperationId: string, creationTimestamp: string, description: string, endTime: string, error: record<errors: list<record>>, httpErrorMessage: string, httpErrorStatusCode: int, id: string, insertTime: string, kind: string, name: string, operationGroupId: string, operationType: string, progress: int, region: string, selfLink: string, startTime: string, status: string, statusMessage: string, targetId: string, targetLink: string, user: string, warnings: table<code: string, data: list, message: string>, zone: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -642,7 +653,7 @@ export def "deploymentmanager-deployments-delete" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --delete-policy: string@delete-policy-completer # Sets the policy to use for deleting resources.
-]: nothing -> record<clientOperationId: string, creationTimestamp: string, description: string, endTime: string, error: record<errors: list<record>>, httpErrorMessage: string, httpErrorStatusCode: int, id: string, insertTime: string, kind: string, name: string, operationGroupId: string, operationType: string, progress: int, region: string, selfLink: string, startTime: string, status: string, statusMessage: string, targetId: string, targetLink: string, user: string, warnings: table<code: string, data: list, message: string>, zone: string> {
+]: nothing -> oneof<record<clientOperationId: string, creationTimestamp: string, description: string, endTime: string, error: record<errors: list<record>>, httpErrorMessage: string, httpErrorStatusCode: int, id: string, insertTime: string, kind: string, name: string, operationGroupId: string, operationType: string, progress: int, region: string, selfLink: string, startTime: string, status: string, statusMessage: string, targetId: string, targetLink: string, user: string, warnings: table<code: string, data: list, message: string>, zone: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
@@ -692,7 +703,7 @@ export def "deploymentmanager-deployments-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<description: string, fingerprint: string, id: string, insertTime: string, labels: table<key: string, value: string>, manifest: string, name: string, operation: record<clientOperationId: string, creationTimestamp: string, description: string, endTime: string, error: record<errors: list>, httpErrorMessage: string, httpErrorStatusCode: int, id: string, insertTime: string, kind: string, name: string, operationGroupId: string, operationType: string, progress: int, region: string, selfLink: string, startTime: string, status: string, statusMessage: string, targetId: string, targetLink: string, user: string, warnings: list<record>, zone: string>, selfLink: string, target: record<config: record<content: string>, imports: list<record>>, update: record<description: string, labels: list<record>, manifest: string>, updateTime: string> {
+]: nothing -> oneof<record<description: string, fingerprint: string, id: string, insertTime: string, labels: table<key: string, value: string>, manifest: string, name: string, operation: record<clientOperationId: string, creationTimestamp: string, description: string, endTime: string, error: record<errors: list>, httpErrorMessage: string, httpErrorStatusCode: int, id: string, insertTime: string, kind: string, name: string, operationGroupId: string, operationType: string, progress: int, region: string, selfLink: string, startTime: string, status: string, statusMessage: string, targetId: string, targetLink: string, user: string, warnings: list<record>, zone: string>, selfLink: string, target: record<config: record<content: string>, imports: list<record>>, update: record<description: string, labels: list<record>, manifest: string>, updateTime: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
@@ -719,10 +730,6 @@ export def "deploymentmanager-deployments-get" [
 #
 # PATCH /deploymentmanager/v2beta/projects/{project}/global/deployments/{deployment}
 # operationId: deploymentmanager.deployments.patch
-# --labels item shape: {key?: string, value?: string}
-# --operation shape: {clientOperationId?: string, creationTimestamp?: string, description?: string, endTime?: string, error?: record, httpErrorMessage?: string, httpErrorStatusCode?: int, id?: string, insertTime?: string, kind?: string, name?: string, operationGroupId?: string, operationType?: string, progress?: int, region?: string, selfLink?: string, startTime?: string, status?: "PENDING"|"RUNNING"|"DONE", statusMessage?: string, targetId?: string, targetLink?: string, user?: string, warnings?: list, zone?: string}
-# --target shape: {config?: record, imports?: list}
-# --update shape: {description?: string, labels?: list, manifest?: string}
 export def "deploymentmanager-deployments-patch" [
   project: string
   deployment: string
@@ -761,7 +768,7 @@ export def "deploymentmanager-deployments-patch" [
   --target: record # shape: {config?: record, imports?: list}
   --update: record # shape: {description?: string, labels?: list, manifest?: string}
   --update-time: string # Output only. Update timestamp in RFC3339 text format.
-]: any -> record<clientOperationId: string, creationTimestamp: string, description: string, endTime: string, error: record<errors: list<record>>, httpErrorMessage: string, httpErrorStatusCode: int, id: string, insertTime: string, kind: string, name: string, operationGroupId: string, operationType: string, progress: int, region: string, selfLink: string, startTime: string, status: string, statusMessage: string, targetId: string, targetLink: string, user: string, warnings: table<code: string, data: list, message: string>, zone: string> {
+]: any -> oneof<record<clientOperationId: string, creationTimestamp: string, description: string, endTime: string, error: record<errors: list<record>>, httpErrorMessage: string, httpErrorStatusCode: int, id: string, insertTime: string, kind: string, name: string, operationGroupId: string, operationType: string, progress: int, region: string, selfLink: string, startTime: string, status: string, statusMessage: string, targetId: string, targetLink: string, user: string, warnings: table<code: string, data: list, message: string>, zone: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -791,10 +798,6 @@ export def "deploymentmanager-deployments-patch" [
 #
 # PUT /deploymentmanager/v2beta/projects/{project}/global/deployments/{deployment}
 # operationId: deploymentmanager.deployments.update
-# --labels item shape: {key?: string, value?: string}
-# --operation shape: {clientOperationId?: string, creationTimestamp?: string, description?: string, endTime?: string, error?: record, httpErrorMessage?: string, httpErrorStatusCode?: int, id?: string, insertTime?: string, kind?: string, name?: string, operationGroupId?: string, operationType?: string, progress?: int, region?: string, selfLink?: string, startTime?: string, status?: "PENDING"|"RUNNING"|"DONE", statusMessage?: string, targetId?: string, targetLink?: string, user?: string, warnings?: list, zone?: string}
-# --target shape: {config?: record, imports?: list}
-# --update shape: {description?: string, labels?: list, manifest?: string}
 export def "deploymentmanager-deployments-update" [
   project: string
   deployment: string
@@ -833,7 +836,7 @@ export def "deploymentmanager-deployments-update" [
   --target: record # shape: {config?: record, imports?: list}
   --update: record # shape: {description?: string, labels?: list, manifest?: string}
   --update-time: string # Output only. Update timestamp in RFC3339 text format.
-]: any -> record<clientOperationId: string, creationTimestamp: string, description: string, endTime: string, error: record<errors: list<record>>, httpErrorMessage: string, httpErrorStatusCode: int, id: string, insertTime: string, kind: string, name: string, operationGroupId: string, operationType: string, progress: int, region: string, selfLink: string, startTime: string, status: string, statusMessage: string, targetId: string, targetLink: string, user: string, warnings: table<code: string, data: list, message: string>, zone: string> {
+]: any -> oneof<record<clientOperationId: string, creationTimestamp: string, description: string, endTime: string, error: record<errors: list<record>>, httpErrorMessage: string, httpErrorStatusCode: int, id: string, insertTime: string, kind: string, name: string, operationGroupId: string, operationType: string, progress: int, region: string, selfLink: string, startTime: string, status: string, statusMessage: string, targetId: string, targetLink: string, user: string, warnings: table<code: string, data: list, message: string>, zone: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -887,7 +890,7 @@ export def "deploymentmanager-deployments-cancel-preview" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --fingerprint: string # Specifies a fingerprint for `cancelPreview()` requests. A fingerprint is a randomly generated value that must be provided in `cancelPreview()` requests to perform optimistic locking. This ensures optimistic concurrency so that the deployment does not have conflicting requests (e.g. if someone attempts to make a new update request while another user attempts to cancel a preview, this would prevent one of the requests). The fingerprint is initially generated by Deployment Manager and changes after every request to modify a deployment. To get the latest fingerprint value, perform a `get()` request on the deployment. (format: byte)
-]: any -> record<clientOperationId: string, creationTimestamp: string, description: string, endTime: string, error: record<errors: list<record>>, httpErrorMessage: string, httpErrorStatusCode: int, id: string, insertTime: string, kind: string, name: string, operationGroupId: string, operationType: string, progress: int, region: string, selfLink: string, startTime: string, status: string, statusMessage: string, targetId: string, targetLink: string, user: string, warnings: table<code: string, data: list, message: string>, zone: string> {
+]: any -> oneof<record<clientOperationId: string, creationTimestamp: string, description: string, endTime: string, error: record<errors: list<record>>, httpErrorMessage: string, httpErrorStatusCode: int, id: string, insertTime: string, kind: string, name: string, operationGroupId: string, operationType: string, progress: int, region: string, selfLink: string, startTime: string, status: string, statusMessage: string, targetId: string, targetLink: string, user: string, warnings: table<code: string, data: list, message: string>, zone: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -944,7 +947,7 @@ export def "deploymentmanager-manifests-list" [
   --max-results: int # The maximum number of results per page that should be returned. If the number of available results is larger than `maxResults`, Compute Engine returns a `nextPageToken` that can be used to get the next page of results in subsequent list requests. Acceptable values are `0` to `500`, inclusive. (Default: `500`)
   --order-by: string # Sorts list results by a certain order. By default, results are returned in alphanumerical order based on the resource name. You can also sort results in descending order based on the creation timestamp using `orderBy="creationTimestamp desc"`. This sorts results based on the `creationTimestamp` field in reverse chronological order (newest result first). Use this to sort resources like operations so that the newest operation is returned first. Currently, only sorting by `name` or `creationTimestamp desc` is supported.
   --page-token: string # Specifies a page token to use. Set `pageToken` to the `nextPageToken` returned by a previous list request to get the next page of results.
-]: nothing -> record<manifests: table<config: record, expandedConfig: string, id: string, imports: list, insertTime: string, layout: string, manifestSizeBytes: string, manifestSizeLimitBytes: string, name: string, selfLink: string>, nextPageToken: string> {
+]: nothing -> oneof<record<manifests: table<config: record, expandedConfig: string, id: string, imports: list, insertTime: string, layout: string, manifestSizeBytes: string, manifestSizeLimitBytes: string, name: string, selfLink: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
@@ -995,7 +998,7 @@ export def "deploymentmanager-manifests-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<config: record<content: string>, expandedConfig: string, id: string, imports: table<content: string, name: string>, insertTime: string, layout: string, manifestSizeBytes: string, manifestSizeLimitBytes: string, name: string, selfLink: string> {
+]: nothing -> oneof<record<config: record<content: string>, expandedConfig: string, id: string, imports: table<content: string, name: string>, insertTime: string, layout: string, manifestSizeBytes: string, manifestSizeLimitBytes: string, name: string, selfLink: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
@@ -1050,7 +1053,7 @@ export def "deploymentmanager-resources-list" [
   --max-results: int # The maximum number of results per page that should be returned. If the number of available results is larger than `maxResults`, Compute Engine returns a `nextPageToken` that can be used to get the next page of results in subsequent list requests. Acceptable values are `0` to `500`, inclusive. (Default: `500`)
   --order-by: string # Sorts list results by a certain order. By default, results are returned in alphanumerical order based on the resource name. You can also sort results in descending order based on the creation timestamp using `orderBy="creationTimestamp desc"`. This sorts results based on the `creationTimestamp` field in reverse chronological order (newest result first). Use this to sort resources like operations so that the newest operation is returned first. Currently, only sorting by `name` or `creationTimestamp desc` is supported.
   --page-token: string # Specifies a page token to use. Set `pageToken` to the `nextPageToken` returned by a previous list request to get the next page of results.
-]: nothing -> record<nextPageToken: string, resources: table<accessControl: record, finalProperties: string, id: string, insertTime: string, manifest: string, name: string, properties: string, type: string, update: record, updateTime: string, url: string, warnings: list>> {
+]: nothing -> oneof<record<nextPageToken: string, resources: table<accessControl: record, finalProperties: string, id: string, insertTime: string, manifest: string, name: string, properties: string, type: string, update: record, updateTime: string, url: string, warnings: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
@@ -1101,7 +1104,7 @@ export def "deploymentmanager-resources-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<accessControl: record<gcpIamPolicy: string>, finalProperties: string, id: string, insertTime: string, manifest: string, name: string, properties: string, type: string, update: record<accessControl: record<gcpIamPolicy: string>, error: record<errors: list>, finalProperties: string, intent: string, manifest: string, properties: string, state: string, warnings: list<record>>, updateTime: string, url: string, warnings: table<code: string, data: list, message: string>> {
+]: nothing -> oneof<record<accessControl: record<gcpIamPolicy: string>, finalProperties: string, id: string, insertTime: string, manifest: string, name: string, properties: string, type: string, update: record<accessControl: record<gcpIamPolicy: string>, error: record<errors: list>, finalProperties: string, intent: string, manifest: string, properties: string, state: string, warnings: list<record>>, updateTime: string, url: string, warnings: table<code: string, data: list, message: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
@@ -1153,7 +1156,7 @@ export def "deploymentmanager-deployments-stop" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --fingerprint: string # Specifies a fingerprint for `stop()` requests. A fingerprint is a randomly generated value that must be provided in `stop()` requests to perform optimistic locking. This ensures optimistic concurrency so that the deployment does not have conflicting requests (e.g. if someone attempts to make a new update request while another user attempts to stop an ongoing update request, this would prevent a collision). The fingerprint is initially generated by Deployment Manager and changes after every request to modify a deployment. To get the latest fingerprint value, perform a `get()` request on the deployment. (format: byte)
-]: any -> record<clientOperationId: string, creationTimestamp: string, description: string, endTime: string, error: record<errors: list<record>>, httpErrorMessage: string, httpErrorStatusCode: int, id: string, insertTime: string, kind: string, name: string, operationGroupId: string, operationType: string, progress: int, region: string, selfLink: string, startTime: string, status: string, statusMessage: string, targetId: string, targetLink: string, user: string, warnings: table<code: string, data: list, message: string>, zone: string> {
+]: any -> oneof<record<clientOperationId: string, creationTimestamp: string, description: string, endTime: string, error: record<errors: list<record>>, httpErrorMessage: string, httpErrorStatusCode: int, id: string, insertTime: string, kind: string, name: string, operationGroupId: string, operationType: string, progress: int, region: string, selfLink: string, startTime: string, status: string, statusMessage: string, targetId: string, targetLink: string, user: string, warnings: table<code: string, data: list, message: string>, zone: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1207,7 +1210,7 @@ export def "deploymentmanager-deployments-get-iam-policy" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --options-requested-policy-version: int # Requested IAM Policy version.
-]: nothing -> record<auditConfigs: table<auditLogConfigs: list, service: string>, bindings: table<condition: record, members: list, role: string>, etag: string, version: int> {
+]: nothing -> oneof<record<auditConfigs: table<auditLogConfigs: list, service: string>, bindings: table<condition: record, members: list, role: string>, etag: string, version: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
@@ -1234,8 +1237,6 @@ export def "deploymentmanager-deployments-get-iam-policy" [
 #
 # POST /deploymentmanager/v2beta/projects/{project}/global/deployments/{resource}/setIamPolicy
 # operationId: deploymentmanager.deployments.setIamPolicy
-# --bindings item shape: {condition?: record, members?: list<string>, role?: string}
-# --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
 export def "deploymentmanager-deployments-set-iam-policy" [
   project: string
   resource: string
@@ -1262,7 +1263,7 @@ export def "deploymentmanager-deployments-set-iam-policy" [
   --bindings: list # Flatten Policy to create a backward compatible wire-format. Deprecated. Use 'policy' to specify bindings. — item shape: {condition?: record, members?: list<string>, role?: string}
   --etag: string # Flatten Policy to create a backward compatible wire-format. Deprecated. Use 'policy' to specify the etag. (format: byte)
   --policy: record # An Identity and Access Management (IAM) policy, which specifies access controls for Google Cloud resources. A `Policy` is a collection of `bindings`. A `binding` binds one or more `members`, or principals, to a single `role`. Principals can be user accounts, service accounts, Google groups, and domains (such as G Suite). A `role` is a named list of permissions; each `role` can be an IAM predefined role or a user-created custom role. For some types of Google Cloud resources, a `binding` can also specify a `condition`, which is a logical expression that allows access to a resource only if the expression evaluates to `true`. A condition can add constraints based on attributes of the request, the resource, or both. To learn which resources support conditions in their IAM policies, see the [IAM documentation](https://cloud.google.com/iam/help/conditions/resource-policies). **JSON example:** { "bindings": [ { "role": "roles/resourcemanager.organizationAdmin", "members": [ "user:mike@example.com", "group:admins@example.com", "domain:google.com", "serviceAccount:my-project-id@appspot.gserviceaccount.com" ] }, { "role": "roles/resourcemanager.organizationViewer", "members": [ "user:eve@example.com" ], "condition": { "title": "expirable access", "description": "Does not grant access after Sep 2020", "expression": "request.time < timestamp('2020-10-01T00:00:00.000Z')", } } ], "etag": "BwWWja0YfJA=", "version": 3 } **YAML example:** bindings: - members: - user:mike@example.com - group:admins@example.com - domain:google.com - serviceAccount:my-project-id@appspot.gserviceaccount.com role: roles/resourcemanager.organizationAdmin - members: - user:eve@example.com role: roles/resourcemanager.organizationViewer condition: title: expirable access description: Does not grant access after Sep 2020 expression: request.time < timestamp('2020-10-01T00:00:00.000Z') etag: BwWWja0YfJA= version: 3 For a description of IAM and its features, see the [IAM documentation](https://cloud.google.com/iam/docs/). — shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
-]: any -> record<auditConfigs: table<auditLogConfigs: list, service: string>, bindings: table<condition: record, members: list, role: string>, etag: string, version: int> {
+]: any -> oneof<record<auditConfigs: table<auditLogConfigs: list, service: string>, bindings: table<condition: record, members: list, role: string>, etag: string, version: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1316,7 +1317,7 @@ export def "deploymentmanager-deployments-test-iam-permissions" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --permissions: list<string> # The set of permissions to check for the 'resource'. Permissions with wildcards (such as '*' or 'storage.*') are not allowed.
-]: any -> record<permissions: list<string>> {
+]: any -> oneof<record<permissions: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1372,7 +1373,7 @@ export def "deploymentmanager-operations-list" [
   --max-results: int # The maximum number of results per page that should be returned. If the number of available results is larger than `maxResults`, Compute Engine returns a `nextPageToken` that can be used to get the next page of results in subsequent list requests. Acceptable values are `0` to `500`, inclusive. (Default: `500`)
   --order-by: string # Sorts list results by a certain order. By default, results are returned in alphanumerical order based on the resource name. You can also sort results in descending order based on the creation timestamp using `orderBy="creationTimestamp desc"`. This sorts results based on the `creationTimestamp` field in reverse chronological order (newest result first). Use this to sort resources like operations so that the newest operation is returned first. Currently, only sorting by `name` or `creationTimestamp desc` is supported.
   --page-token: string # Specifies a page token to use. Set `pageToken` to the `nextPageToken` returned by a previous list request to get the next page of results.
-]: nothing -> record<nextPageToken: string, operations: table<clientOperationId: string, creationTimestamp: string, description: string, endTime: string, error: record, httpErrorMessage: string, httpErrorStatusCode: int, id: string, insertTime: string, kind: string, name: string, operationGroupId: string, operationType: string, progress: int, region: string, selfLink: string, startTime: string, status: string, statusMessage: string, targetId: string, targetLink: string, user: string, warnings: list, zone: string>> {
+]: nothing -> oneof<record<nextPageToken: string, operations: table<clientOperationId: string, creationTimestamp: string, description: string, endTime: string, error: record, httpErrorMessage: string, httpErrorStatusCode: int, id: string, insertTime: string, kind: string, name: string, operationGroupId: string, operationType: string, progress: int, region: string, selfLink: string, startTime: string, status: string, statusMessage: string, targetId: string, targetLink: string, user: string, warnings: list, zone: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
@@ -1421,7 +1422,7 @@ export def "deploymentmanager-operations-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<clientOperationId: string, creationTimestamp: string, description: string, endTime: string, error: record<errors: list<record>>, httpErrorMessage: string, httpErrorStatusCode: int, id: string, insertTime: string, kind: string, name: string, operationGroupId: string, operationType: string, progress: int, region: string, selfLink: string, startTime: string, status: string, statusMessage: string, targetId: string, targetLink: string, user: string, warnings: table<code: string, data: list, message: string>, zone: string> {
+]: nothing -> oneof<record<clientOperationId: string, creationTimestamp: string, description: string, endTime: string, error: record<errors: list<record>>, httpErrorMessage: string, httpErrorStatusCode: int, id: string, insertTime: string, kind: string, name: string, operationGroupId: string, operationType: string, progress: int, region: string, selfLink: string, startTime: string, status: string, statusMessage: string, targetId: string, targetLink: string, user: string, warnings: table<code: string, data: list, message: string>, zone: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
@@ -1474,7 +1475,7 @@ export def "deploymentmanager-type-providers-list" [
   --max-results: int # The maximum number of results per page that should be returned. If the number of available results is larger than `maxResults`, Compute Engine returns a `nextPageToken` that can be used to get the next page of results in subsequent list requests. Acceptable values are `0` to `500`, inclusive. (Default: `500`)
   --order-by: string # Sorts list results by a certain order. By default, results are returned in alphanumerical order based on the resource name. You can also sort results in descending order based on the creation timestamp using `orderBy="creationTimestamp desc"`. This sorts results based on the `creationTimestamp` field in reverse chronological order (newest result first). Use this to sort resources like operations so that the newest operation is returned first. Currently, only sorting by `name` or `creationTimestamp desc` is supported.
   --page-token: string # Specifies a page token to use. Set `pageToken` to the `nextPageToken` returned by a previous list request to get the next page of results.
-]: nothing -> record<nextPageToken: string, typeProviders: table<collectionOverrides: list, credential: record, customCertificateAuthorityRoots: list, description: string, descriptorUrl: string, id: string, insertTime: string, labels: list, name: string, operation: record, options: record, selfLink: string>> {
+]: nothing -> oneof<record<nextPageToken: string, typeProviders: table<collectionOverrides: list, credential: record, customCertificateAuthorityRoots: list, description: string, descriptorUrl: string, id: string, insertTime: string, labels: list, name: string, operation: record, options: record, selfLink: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
@@ -1500,11 +1501,6 @@ export def "deploymentmanager-type-providers-list" [
 #
 # POST /deploymentmanager/v2beta/projects/{project}/global/typeProviders
 # operationId: deploymentmanager.typeProviders.insert
-# --collectionOverrides item shape: {collection?: string, options?: record}
-# --credential shape: {basicAuth?: record, serviceAccount?: record, useProjectDefault?: bool}
-# --labels item shape: {key?: string, value?: string}
-# --operation shape: {clientOperationId?: string, creationTimestamp?: string, description?: string, endTime?: string, error?: record, httpErrorMessage?: string, httpErrorStatusCode?: int, id?: string, insertTime?: string, kind?: string, name?: string, operationGroupId?: string, operationType?: string, progress?: int, region?: string, selfLink?: string, startTime?: string, status?: "PENDING"|"RUNNING"|"DONE", statusMessage?: string, targetId?: string, targetLink?: string, user?: string, warnings?: list, zone?: string}
-# --options shape: {asyncOptions?: list, inputMappings?: list, validationOptions?: record, virtualProperties?: string}
 export def "deploymentmanager-type-providers-insert" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1539,7 +1535,7 @@ export def "deploymentmanager-type-providers-insert" [
   --operation: record # Represents an Operation resource. Google Compute Engine has three Operation resources: * [Global](/compute/docs/reference/rest/{$api_version}/globalOperations) * [Regional](/compute/docs/reference/rest/{$api_version}/regionOperations) * [Zonal](/compute/docs/reference/rest/{$api_version}/zoneOperations) You can use an operation resource to manage asynchronous API requests. For more information, read Handling API responses. Operations can be global, regional or zonal. - For global operations, use the `globalOperations` resource. - For regional operations, use the `regionOperations` resource. - For zonal operations, use the `zonalOperations` resource. For more information, read Global, Regional, and Zonal Resources. — shape: {clientOperationId?: string, creationTimestamp?: string, description?: string, endTime?: string, error?: record, httpErrorMessage?: string, httpErrorStatusCode?: int, id?: string, insertTime?: string, kind?: string, name?: string, operationGroupId?: string, operationType?: string, progress?: int, region?: string, selfLink?: string, startTime?: string, status?: "PENDING"|"RUNNING"|"DONE", statusMessage?: string, targetId?: string, targetLink?: string, user?: string, warnings?: list, zone?: string}
   --options: record # Options allows customized resource handling by Deployment Manager. — shape: {asyncOptions?: list, inputMappings?: list, validationOptions?: record, virtualProperties?: string}
   --self-link: string # Output only. Self link for the type provider.
-]: any -> record<clientOperationId: string, creationTimestamp: string, description: string, endTime: string, error: record<errors: list<record>>, httpErrorMessage: string, httpErrorStatusCode: int, id: string, insertTime: string, kind: string, name: string, operationGroupId: string, operationType: string, progress: int, region: string, selfLink: string, startTime: string, status: string, statusMessage: string, targetId: string, targetLink: string, user: string, warnings: table<code: string, data: list, message: string>, zone: string> {
+]: any -> oneof<record<clientOperationId: string, creationTimestamp: string, description: string, endTime: string, error: record<errors: list<record>>, httpErrorMessage: string, httpErrorStatusCode: int, id: string, insertTime: string, kind: string, name: string, operationGroupId: string, operationType: string, progress: int, region: string, selfLink: string, startTime: string, status: string, statusMessage: string, targetId: string, targetLink: string, user: string, warnings: table<code: string, data: list, message: string>, zone: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1591,7 +1587,7 @@ export def "deploymentmanager-type-providers-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<clientOperationId: string, creationTimestamp: string, description: string, endTime: string, error: record<errors: list<record>>, httpErrorMessage: string, httpErrorStatusCode: int, id: string, insertTime: string, kind: string, name: string, operationGroupId: string, operationType: string, progress: int, region: string, selfLink: string, startTime: string, status: string, statusMessage: string, targetId: string, targetLink: string, user: string, warnings: table<code: string, data: list, message: string>, zone: string> {
+]: nothing -> oneof<record<clientOperationId: string, creationTimestamp: string, description: string, endTime: string, error: record<errors: list<record>>, httpErrorMessage: string, httpErrorStatusCode: int, id: string, insertTime: string, kind: string, name: string, operationGroupId: string, operationType: string, progress: int, region: string, selfLink: string, startTime: string, status: string, statusMessage: string, targetId: string, targetLink: string, user: string, warnings: table<code: string, data: list, message: string>, zone: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
@@ -1641,7 +1637,7 @@ export def "deploymentmanager-type-providers-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<collectionOverrides: table<collection: string, options: record>, credential: record<basicAuth: record<password: string, user: string>, serviceAccount: record<email: string>, useProjectDefault: bool>, customCertificateAuthorityRoots: list<string>, description: string, descriptorUrl: string, id: string, insertTime: string, labels: table<key: string, value: string>, name: string, operation: record<clientOperationId: string, creationTimestamp: string, description: string, endTime: string, error: record<errors: list>, httpErrorMessage: string, httpErrorStatusCode: int, id: string, insertTime: string, kind: string, name: string, operationGroupId: string, operationType: string, progress: int, region: string, selfLink: string, startTime: string, status: string, statusMessage: string, targetId: string, targetLink: string, user: string, warnings: list<record>, zone: string>, options: record<asyncOptions: list<record>, inputMappings: list<record>, validationOptions: record<schemaValidation: string, undeclaredProperties: string>, virtualProperties: string>, selfLink: string> {
+]: nothing -> oneof<record<collectionOverrides: table<collection: string, options: record>, credential: record<basicAuth: record<password: string, user: string>, serviceAccount: record<email: string>, useProjectDefault: bool>, customCertificateAuthorityRoots: list<string>, description: string, descriptorUrl: string, id: string, insertTime: string, labels: table<key: string, value: string>, name: string, operation: record<clientOperationId: string, creationTimestamp: string, description: string, endTime: string, error: record<errors: list>, httpErrorMessage: string, httpErrorStatusCode: int, id: string, insertTime: string, kind: string, name: string, operationGroupId: string, operationType: string, progress: int, region: string, selfLink: string, startTime: string, status: string, statusMessage: string, targetId: string, targetLink: string, user: string, warnings: list<record>, zone: string>, options: record<asyncOptions: list<record>, inputMappings: list<record>, validationOptions: record<schemaValidation: string, undeclaredProperties: string>, virtualProperties: string>, selfLink: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
@@ -1668,11 +1664,6 @@ export def "deploymentmanager-type-providers-get" [
 #
 # PATCH /deploymentmanager/v2beta/projects/{project}/global/typeProviders/{typeProvider}
 # operationId: deploymentmanager.typeProviders.patch
-# --collectionOverrides item shape: {collection?: string, options?: record}
-# --credential shape: {basicAuth?: record, serviceAccount?: record, useProjectDefault?: bool}
-# --labels item shape: {key?: string, value?: string}
-# --operation shape: {clientOperationId?: string, creationTimestamp?: string, description?: string, endTime?: string, error?: record, httpErrorMessage?: string, httpErrorStatusCode?: int, id?: string, insertTime?: string, kind?: string, name?: string, operationGroupId?: string, operationType?: string, progress?: int, region?: string, selfLink?: string, startTime?: string, status?: "PENDING"|"RUNNING"|"DONE", statusMessage?: string, targetId?: string, targetLink?: string, user?: string, warnings?: list, zone?: string}
-# --options shape: {asyncOptions?: list, inputMappings?: list, validationOptions?: record, virtualProperties?: string}
 export def "deploymentmanager-type-providers-patch" [
   project: string
   type_provider: string
@@ -1708,7 +1699,7 @@ export def "deploymentmanager-type-providers-patch" [
   --operation: record # Represents an Operation resource. Google Compute Engine has three Operation resources: * [Global](/compute/docs/reference/rest/{$api_version}/globalOperations) * [Regional](/compute/docs/reference/rest/{$api_version}/regionOperations) * [Zonal](/compute/docs/reference/rest/{$api_version}/zoneOperations) You can use an operation resource to manage asynchronous API requests. For more information, read Handling API responses. Operations can be global, regional or zonal. - For global operations, use the `globalOperations` resource. - For regional operations, use the `regionOperations` resource. - For zonal operations, use the `zonalOperations` resource. For more information, read Global, Regional, and Zonal Resources. — shape: {clientOperationId?: string, creationTimestamp?: string, description?: string, endTime?: string, error?: record, httpErrorMessage?: string, httpErrorStatusCode?: int, id?: string, insertTime?: string, kind?: string, name?: string, operationGroupId?: string, operationType?: string, progress?: int, region?: string, selfLink?: string, startTime?: string, status?: "PENDING"|"RUNNING"|"DONE", statusMessage?: string, targetId?: string, targetLink?: string, user?: string, warnings?: list, zone?: string}
   --options: record # Options allows customized resource handling by Deployment Manager. — shape: {asyncOptions?: list, inputMappings?: list, validationOptions?: record, virtualProperties?: string}
   --self-link: string # Output only. Self link for the type provider.
-]: any -> record<clientOperationId: string, creationTimestamp: string, description: string, endTime: string, error: record<errors: list<record>>, httpErrorMessage: string, httpErrorStatusCode: int, id: string, insertTime: string, kind: string, name: string, operationGroupId: string, operationType: string, progress: int, region: string, selfLink: string, startTime: string, status: string, statusMessage: string, targetId: string, targetLink: string, user: string, warnings: table<code: string, data: list, message: string>, zone: string> {
+]: any -> oneof<record<clientOperationId: string, creationTimestamp: string, description: string, endTime: string, error: record<errors: list<record>>, httpErrorMessage: string, httpErrorStatusCode: int, id: string, insertTime: string, kind: string, name: string, operationGroupId: string, operationType: string, progress: int, region: string, selfLink: string, startTime: string, status: string, statusMessage: string, targetId: string, targetLink: string, user: string, warnings: table<code: string, data: list, message: string>, zone: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1738,11 +1729,6 @@ export def "deploymentmanager-type-providers-patch" [
 #
 # PUT /deploymentmanager/v2beta/projects/{project}/global/typeProviders/{typeProvider}
 # operationId: deploymentmanager.typeProviders.update
-# --collectionOverrides item shape: {collection?: string, options?: record}
-# --credential shape: {basicAuth?: record, serviceAccount?: record, useProjectDefault?: bool}
-# --labels item shape: {key?: string, value?: string}
-# --operation shape: {clientOperationId?: string, creationTimestamp?: string, description?: string, endTime?: string, error?: record, httpErrorMessage?: string, httpErrorStatusCode?: int, id?: string, insertTime?: string, kind?: string, name?: string, operationGroupId?: string, operationType?: string, progress?: int, region?: string, selfLink?: string, startTime?: string, status?: "PENDING"|"RUNNING"|"DONE", statusMessage?: string, targetId?: string, targetLink?: string, user?: string, warnings?: list, zone?: string}
-# --options shape: {asyncOptions?: list, inputMappings?: list, validationOptions?: record, virtualProperties?: string}
 export def "deploymentmanager-type-providers-update" [
   project: string
   type_provider: string
@@ -1778,7 +1764,7 @@ export def "deploymentmanager-type-providers-update" [
   --operation: record # Represents an Operation resource. Google Compute Engine has three Operation resources: * [Global](/compute/docs/reference/rest/{$api_version}/globalOperations) * [Regional](/compute/docs/reference/rest/{$api_version}/regionOperations) * [Zonal](/compute/docs/reference/rest/{$api_version}/zoneOperations) You can use an operation resource to manage asynchronous API requests. For more information, read Handling API responses. Operations can be global, regional or zonal. - For global operations, use the `globalOperations` resource. - For regional operations, use the `regionOperations` resource. - For zonal operations, use the `zonalOperations` resource. For more information, read Global, Regional, and Zonal Resources. — shape: {clientOperationId?: string, creationTimestamp?: string, description?: string, endTime?: string, error?: record, httpErrorMessage?: string, httpErrorStatusCode?: int, id?: string, insertTime?: string, kind?: string, name?: string, operationGroupId?: string, operationType?: string, progress?: int, region?: string, selfLink?: string, startTime?: string, status?: "PENDING"|"RUNNING"|"DONE", statusMessage?: string, targetId?: string, targetLink?: string, user?: string, warnings?: list, zone?: string}
   --options: record # Options allows customized resource handling by Deployment Manager. — shape: {asyncOptions?: list, inputMappings?: list, validationOptions?: record, virtualProperties?: string}
   --self-link: string # Output only. Self link for the type provider.
-]: any -> record<clientOperationId: string, creationTimestamp: string, description: string, endTime: string, error: record<errors: list<record>>, httpErrorMessage: string, httpErrorStatusCode: int, id: string, insertTime: string, kind: string, name: string, operationGroupId: string, operationType: string, progress: int, region: string, selfLink: string, startTime: string, status: string, statusMessage: string, targetId: string, targetLink: string, user: string, warnings: table<code: string, data: list, message: string>, zone: string> {
+]: any -> oneof<record<clientOperationId: string, creationTimestamp: string, description: string, endTime: string, error: record<errors: list<record>>, httpErrorMessage: string, httpErrorStatusCode: int, id: string, insertTime: string, kind: string, name: string, operationGroupId: string, operationType: string, progress: int, region: string, selfLink: string, startTime: string, status: string, statusMessage: string, targetId: string, targetLink: string, user: string, warnings: table<code: string, data: list, message: string>, zone: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1835,7 +1821,7 @@ export def "deploymentmanager-type-providers-list-types" [
   --max-results: int # The maximum number of results per page that should be returned. If the number of available results is larger than `maxResults`, Compute Engine returns a `nextPageToken` that can be used to get the next page of results in subsequent list requests. Acceptable values are `0` to `500`, inclusive. (Default: `500`)
   --order-by: string # Sorts list results by a certain order. By default, results are returned in alphanumerical order based on the resource name. You can also sort results in descending order based on the creation timestamp using `orderBy="creationTimestamp desc"`. This sorts results based on the `creationTimestamp` field in reverse chronological order (newest result first). Use this to sort resources like operations so that the newest operation is returned first. Currently, only sorting by `name` or `creationTimestamp desc` is supported.
   --page-token: string # Specifies a page token to use. Set `pageToken` to the `nextPageToken` returned by a previous list request to get the next page of results.
-]: nothing -> record<nextPageToken: string, types: table<description: string, documentationLink: string, kind: string, name: string, schema: record, selfLink: string, title: string>> {
+]: nothing -> oneof<record<nextPageToken: string, types: table<description: string, documentationLink: string, kind: string, name: string, schema: record, selfLink: string, title: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
@@ -1886,7 +1872,7 @@ export def "deploymentmanager-type-providers-get-type" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<description: string, documentationLink: string, kind: string, name: string, schema: record<input: string, output: string>, selfLink: string, title: string> {
+]: nothing -> oneof<record<description: string, documentationLink: string, kind: string, name: string, schema: record<input: string, output: string>, selfLink: string, title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
@@ -1940,7 +1926,7 @@ export def "deploymentmanager-types-list" [
   --max-results: int # The maximum number of results per page that should be returned. If the number of available results is larger than `maxResults`, Compute Engine returns a `nextPageToken` that can be used to get the next page of results in subsequent list requests. Acceptable values are `0` to `500`, inclusive. (Default: `500`)
   --order-by: string # Sorts list results by a certain order. By default, results are returned in alphanumerical order based on the resource name. You can also sort results in descending order based on the creation timestamp using `orderBy="creationTimestamp desc"`. This sorts results based on the `creationTimestamp` field in reverse chronological order (newest result first). Use this to sort resources like operations so that the newest operation is returned first. Currently, only sorting by `name` or `creationTimestamp desc` is supported.
   --page-token: string # Specifies a page token to use. Set `pageToken` to the `nextPageToken` returned by a previous list request to get the next page of results.
-]: nothing -> record<nextPageToken: string, types: table<base: record, description: string, id: string, insertTime: string, labels: list, name: string, operation: record, selfLink: string>> {
+]: nothing -> oneof<record<nextPageToken: string, types: table<base: record, description: string, id: string, insertTime: string, labels: list, name: string, operation: record, selfLink: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }

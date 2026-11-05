@@ -14,27 +14,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "query-access_token" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "access_token")=(encode-path-segment $token_val)", location: "query"} }
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -42,8 +51,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -54,7 +68,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -89,7 +112,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -113,9 +137,9 @@ def action-completer [] { ["approve" "block" "follow" "ignore" "unblock" "unfoll
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-geographies-geo-id-media-recent" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-geographies-geo-id-media-recent" "get-locations-search" "get-locations-location-id" "get-locations-location-id-media-recent" "get-media-popular" "get-media-search" "get-media-shortcode-shortcode" "get-media-media-id" "get-media-media-id-comments" "post-media-media-id-comments" "delete-media-media-id-comments-comment-id" "delete-media-media-id-likes" "get-media-media-id-likes" "post-media-media-id-likes" "get-tags-search" "get-tags-tag-name" "get-tags-tag-name-media-recent" "get-users-search" "get-users-self-feed" "get-users-self-media-liked" "get-users-self-requested-by" "get-users-user-id" "get-users-user-id-followed-by" "get-users-user-id-follows" "get-users-user-id-media-recent" "get-users-user-id-relationship" "post-users-user-id-relationship" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -151,7 +175,7 @@ export def "get-geographies-geo-id-media-recent" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --count: int # Max number of media to return. (format: int32)
   --min-id: string # Return media before this `min_id`.
-]: nothing -> record<data: table<attribution: string, caption: record, comments: record, created_time: string, filter: string, id: string, images: record, likes: record, link: string, location: record, tags: list, type: string, user: record, user_has_liked: bool, users_in_photo: list, videos: record>, meta: record<code: int>, pagination: record<next_max_id: string, next_url: string>> {
+]: nothing -> oneof<record<data: table<attribution: string, caption: record, comments: record, created_time: string, filter: string, id: string, images: record, likes: record, link: string, location: record, tags: list, type: string, user: record, user_has_liked: bool, users_in_photo: list, videos: record>, meta: record<code: int>, pagination: record<next_max_id: string, next_url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-access_token"))
   let base = ($base_url | default $BASE_URL)
   if ($geo_id | is-empty) { error make --unspanned { msg: "path parameter 'geo-id' must be non-empty" } }
@@ -192,7 +216,7 @@ export def "get-locations-search" [
   --lat: float # Latitude of the center search coordinate. If used, `lng` is required. (format: double)
   --lng: float # Longitude of the center search coordinate. If used, `lat` is required. (format: double)
   --foursquare-v2-id: string # Returns a location mapped off of a foursquare v2 api location id. If used, you are not required to use `lat` and `lng`.
-]: nothing -> record<data: table<id: string, latitude: float, longitude: float, name: string>, meta: record<code: int>> {
+]: nothing -> oneof<record<data: table<id: string, latitude: float, longitude: float, name: string>, meta: record<code: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-access_token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "distance" $distance "scalar") (serialize-qp "facebook_places_id" $facebook_places_id "scalar") (serialize-qp "foursquare_id" $foursquare_id "scalar") (serialize-qp "lat" $lat "scalar") (serialize-qp "lng" $lng "scalar") (serialize-qp "foursquare_v2_id" $foursquare_v2_id "scalar")] | flatten | str join "&"
@@ -227,7 +251,7 @@ export def "get-locations-location-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<id: string, latitude: float, longitude: float, name: string>, meta: record<code: int>> {
+]: nothing -> oneof<record<data: record<id: string, latitude: float, longitude: float, name: string>, meta: record<code: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-access_token"))
   let base = ($base_url | default $BASE_URL)
   if ($location_id | is-empty) { error make --unspanned { msg: "path parameter 'location-id' must be non-empty" } }
@@ -266,7 +290,7 @@ export def "get-locations-location-id-media-recent" [
   --max-timestamp: int # Return media before this UNIX timestamp. (format: int64)
   --min-id: string # Return media before this `min_id`.
   --max-id: string # Return media after this `max_id`.
-]: nothing -> record<data: table<attribution: string, caption: record, comments: record, created_time: string, filter: string, id: string, images: record, likes: record, link: string, location: record, tags: list, type: string, user: record, user_has_liked: bool, users_in_photo: list, videos: record>, meta: record<code: int>, pagination: record<next_max_id: string, next_url: string>> {
+]: nothing -> oneof<record<data: table<attribution: string, caption: record, comments: record, created_time: string, filter: string, id: string, images: record, likes: record, link: string, location: record, tags: list, type: string, user: record, user_has_liked: bool, users_in_photo: list, videos: record>, meta: record<code: int>, pagination: record<next_max_id: string, next_url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-access_token"))
   let base = ($base_url | default $BASE_URL)
   if ($location_id | is-empty) { error make --unspanned { msg: "path parameter 'location-id' must be non-empty" } }
@@ -303,7 +327,7 @@ export def "get-media-popular" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<attribution: string, caption: record, comments: record, created_time: string, filter: string, id: string, images: record, likes: record, link: string, location: record, tags: list, type: string, user: record, user_has_liked: bool, users_in_photo: list, videos: record>, meta: record<code: int>> {
+]: nothing -> oneof<record<data: table<attribution: string, caption: record, comments: record, created_time: string, filter: string, id: string, images: record, likes: record, link: string, location: record, tags: list, type: string, user: record, user_has_liked: bool, users_in_photo: list, videos: record>, meta: record<code: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-access_token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/media/popular" $auth.query)
@@ -341,7 +365,7 @@ export def "get-media-search" [
   --min-timestamp: int # A unix timestamp. All media returned will be taken later than this timestamp. (format: int64)
   --max-timestamp: int # A unix timestamp. All media returned will be taken earlier than this timestamp. (format: int64)
   --distance: int # Default is 1km (distance=1000), max distance is 5km. (format: int32)
-]: nothing -> record<data: table<attribution: string, caption: record, comments: record, created_time: string, filter: string, id: string, images: record, likes: record, link: string, location: record, tags: list, type: string, user: record, user_has_liked: bool, users_in_photo: list, videos: record>, meta: record<code: int>> {
+]: nothing -> oneof<record<data: table<attribution: string, caption: record, comments: record, created_time: string, filter: string, id: string, images: record, likes: record, link: string, location: record, tags: list, type: string, user: record, user_has_liked: bool, users_in_photo: list, videos: record>, meta: record<code: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-access_token"))
   let base = ($base_url | default $BASE_URL)
   if ($lat == null) { error make --unspanned { msg: "required query parameter 'lat' missing: pass --lat" } }
@@ -378,7 +402,7 @@ export def "get-media-shortcode-shortcode" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<attribution: string, caption: record<created_time: string, from: record, id: string, text: string>, comments: record<count: int, data: list>, created_time: string, filter: string, id: string, images: record<low_resolution: record, standard_resolution: record, thumbnail: record>, likes: record<count: int, data: list>, link: string, location: record<id: string, latitude: float, longitude: float, name: string>, tags: list<string>, type: string, user: record<full_name: string, id: string, profile_picture: string, username: string>, user_has_liked: bool, users_in_photo: list<record>, videos: record<low_resolution: record, standard_resolution: record>>, meta: record<code: int>> {
+]: nothing -> oneof<record<data: record<attribution: string, caption: record<created_time: string, from: record, id: string, text: string>, comments: record<count: int, data: list>, created_time: string, filter: string, id: string, images: record<low_resolution: record, standard_resolution: record, thumbnail: record>, likes: record<count: int, data: list>, link: string, location: record<id: string, latitude: float, longitude: float, name: string>, tags: list<string>, type: string, user: record<full_name: string, id: string, profile_picture: string, username: string>, user_has_liked: bool, users_in_photo: list<record>, videos: record<low_resolution: record, standard_resolution: record>>, meta: record<code: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-access_token"))
   let base = ($base_url | default $BASE_URL)
   if ($shortcode | is-empty) { error make --unspanned { msg: "path parameter 'shortcode' must be non-empty" } }
@@ -413,7 +437,7 @@ export def "get-media-media-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<attribution: string, caption: record<created_time: string, from: record, id: string, text: string>, comments: record<count: int, data: list>, created_time: string, filter: string, id: string, images: record<low_resolution: record, standard_resolution: record, thumbnail: record>, likes: record<count: int, data: list>, link: string, location: record<id: string, latitude: float, longitude: float, name: string>, tags: list<string>, type: string, user: record<full_name: string, id: string, profile_picture: string, username: string>, user_has_liked: bool, users_in_photo: list<record>, videos: record<low_resolution: record, standard_resolution: record>>, meta: record<code: int>> {
+]: nothing -> oneof<record<data: record<attribution: string, caption: record<created_time: string, from: record, id: string, text: string>, comments: record<count: int, data: list>, created_time: string, filter: string, id: string, images: record<low_resolution: record, standard_resolution: record, thumbnail: record>, likes: record<count: int, data: list>, link: string, location: record<id: string, latitude: float, longitude: float, name: string>, tags: list<string>, type: string, user: record<full_name: string, id: string, profile_picture: string, username: string>, user_has_liked: bool, users_in_photo: list<record>, videos: record<low_resolution: record, standard_resolution: record>>, meta: record<code: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-access_token"))
   let base = ($base_url | default $BASE_URL)
   if ($media_id | is-empty) { error make --unspanned { msg: "path parameter 'media-id' must be non-empty" } }
@@ -448,7 +472,7 @@ export def "get-media-media-id-comments" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<created_time: string, from: record, id: string, text: string>, meta: record<code: int>> {
+]: nothing -> oneof<record<data: table<created_time: string, from: record, id: string, text: string>, meta: record<code: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-access_token"))
   let base = ($base_url | default $BASE_URL)
   if ($media_id | is-empty) { error make --unspanned { msg: "path parameter 'media-id' must be non-empty" } }
@@ -484,7 +508,7 @@ export def "post-media-media-id-comments" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --text: string # Text to post as a comment on the media object as specified in `media-id`. (required)
-]: nothing -> record<data: string, meta: record<code: int>> {
+]: nothing -> oneof<record<data: string, meta: record<code: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-access_token"))
   let base = ($base_url | default $BASE_URL)
   if ($media_id | is-empty) { error make --unspanned { msg: "path parameter 'media-id' must be non-empty" } }
@@ -522,7 +546,7 @@ export def "delete-media-media-id-comments-comment-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: string, meta: record<code: int>> {
+]: nothing -> oneof<record<data: string, meta: record<code: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-access_token"))
   let base = ($base_url | default $BASE_URL)
   if ($media_id | is-empty) { error make --unspanned { msg: "path parameter 'media-id' must be non-empty" } }
@@ -558,7 +582,7 @@ export def "delete-media-media-id-likes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: string, meta: record<code: int>> {
+]: nothing -> oneof<record<data: string, meta: record<code: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-access_token"))
   let base = ($base_url | default $BASE_URL)
   if ($media_id | is-empty) { error make --unspanned { msg: "path parameter 'media-id' must be non-empty" } }
@@ -593,7 +617,7 @@ export def "get-media-media-id-likes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<full_name: string, id: string, profile_picture: string, username: string>, meta: record<code: int>> {
+]: nothing -> oneof<record<data: table<full_name: string, id: string, profile_picture: string, username: string>, meta: record<code: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-access_token"))
   let base = ($base_url | default $BASE_URL)
   if ($media_id | is-empty) { error make --unspanned { msg: "path parameter 'media-id' must be non-empty" } }
@@ -628,7 +652,7 @@ export def "post-media-media-id-likes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: string, meta: record<code: int>> {
+]: nothing -> oneof<record<data: string, meta: record<code: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-access_token"))
   let base = ($base_url | default $BASE_URL)
   if ($media_id | is-empty) { error make --unspanned { msg: "path parameter 'media-id' must be non-empty" } }
@@ -663,7 +687,7 @@ export def "get-tags-search" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # A valid tag name without a leading \#. (eg. snowy, nofilter) (required)
-]: nothing -> record<data: table<media_count: int, name: string>, meta: record<code: int>> {
+]: nothing -> oneof<record<data: table<media_count: int, name: string>, meta: record<code: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-access_token"))
   let base = ($base_url | default $BASE_URL)
   if ($q == null) { error make --unspanned { msg: "required query parameter 'q' missing: pass --q" } }
@@ -699,7 +723,7 @@ export def "get-tags-tag-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<media_count: int, name: string>, meta: record<code: int>> {
+]: nothing -> oneof<record<data: record<media_count: int, name: string>, meta: record<code: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-access_token"))
   let base = ($base_url | default $BASE_URL)
   if ($tag_name | is-empty) { error make --unspanned { msg: "path parameter 'tag-name' must be non-empty" } }
@@ -737,7 +761,7 @@ export def "get-tags-tag-name-media-recent" [
   --count: int # Count of tagged media to return.
   --min-tag-id: string # Return media before this `min_tag_id`.
   --max-tag-id: string # Return media after this `max_tag_id`.
-]: nothing -> record<data: table<attribution: string, caption: record, comments: record, created_time: string, filter: string, id: string, images: record, likes: record, link: string, location: record, tags: list, type: string, user: record, user_has_liked: bool, users_in_photo: list, videos: record>, meta: record<code: int>, pagination: record<deprecation_warning: string, min_tag_id: string, next_max_id: string, next_max_tag_id: string, next_min_id: string, next_url: string>> {
+]: nothing -> oneof<record<data: table<attribution: string, caption: record, comments: record, created_time: string, filter: string, id: string, images: record, likes: record, link: string, location: record, tags: list, type: string, user: record, user_has_liked: bool, users_in_photo: list, videos: record>, meta: record<code: int>, pagination: record<deprecation_warning: string, min_tag_id: string, next_max_id: string, next_max_tag_id: string, next_min_id: string, next_url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-access_token"))
   let base = ($base_url | default $BASE_URL)
   if ($tag_name | is-empty) { error make --unspanned { msg: "path parameter 'tag-name' must be non-empty" } }
@@ -774,7 +798,7 @@ export def "get-users-search" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # A query string. (required)
   --count: int # Number of users to return.
-]: nothing -> record<data: table<full_name: string, id: string, profile_picture: string, username: string>, meta: record<code: int>> {
+]: nothing -> oneof<record<data: table<full_name: string, id: string, profile_picture: string, username: string>, meta: record<code: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-access_token"))
   let base = ($base_url | default $BASE_URL)
   if ($q == null) { error make --unspanned { msg: "required query parameter 'q' missing: pass --q" } }
@@ -814,7 +838,7 @@ export def "get-users-self-feed" [
   --count: int # Count of media to return.
   --min-id: string # Return media later than this `min_id`.
   --max-id: string # Return media earlier than this `max_id`.
-]: nothing -> record<data: table<attribution: string, caption: record, comments: record, created_time: string, filter: string, id: string, images: record, likes: record, link: string, location: record, tags: list, type: string, user: record, user_has_liked: bool, users_in_photo: list, videos: record>, meta: record<code: int>, pagination: record<next_max_id: string, next_url: string>> {
+]: nothing -> oneof<record<data: table<attribution: string, caption: record, comments: record, created_time: string, filter: string, id: string, images: record, likes: record, link: string, location: record, tags: list, type: string, user: record, user_has_liked: bool, users_in_photo: list, videos: record>, meta: record<code: int>, pagination: record<next_max_id: string, next_url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-access_token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "count" $count "scalar") (serialize-qp "min_id" $min_id "scalar") (serialize-qp "max_id" $max_id "scalar")] | flatten | str join "&"
@@ -850,7 +874,7 @@ export def "get-users-self-media-liked" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --count: int # Count of media to return.
   --max-like-id: string # Return media liked before this id.
-]: nothing -> record<data: table<attribution: string, caption: record, comments: record, created_time: string, filter: string, id: string, images: record, likes: record, link: string, location: record, tags: list, type: string, user: record, user_has_liked: bool, users_in_photo: list, videos: record>, meta: record<code: int>, pagination: record<next_max_id: string, next_url: string>> {
+]: nothing -> oneof<record<data: table<attribution: string, caption: record, comments: record, created_time: string, filter: string, id: string, images: record, likes: record, link: string, location: record, tags: list, type: string, user: record, user_has_liked: bool, users_in_photo: list, videos: record>, meta: record<code: int>, pagination: record<next_max_id: string, next_url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-access_token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "count" $count "scalar") (serialize-qp "max_like_id" $max_like_id "scalar")] | flatten | str join "&"
@@ -884,7 +908,7 @@ export def "get-users-self-requested-by" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<full_name: string, id: string, profile_picture: string, username: string>, meta: record<code: int>> {
+]: nothing -> oneof<record<data: table<full_name: string, id: string, profile_picture: string, username: string>, meta: record<code: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-access_token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users/self/requested-by" $auth.query)
@@ -918,7 +942,7 @@ export def "get-users-user-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<bio: string, counts: record<followed_by: int, follows: int, media: int>, full_name: string, id: string, profile_picture: string, username: string, website: string>, meta: record<code: int>> {
+]: nothing -> oneof<record<data: record<bio: string, counts: record<followed_by: int, follows: int, media: int>, full_name: string, id: string, profile_picture: string, username: string, website: string>, meta: record<code: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-access_token"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user-id' must be non-empty" } }
@@ -953,7 +977,7 @@ export def "get-users-user-id-followed-by" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<full_name: string, id: string, profile_picture: string, username: string>, meta: record<code: int>, pagination: record<next_cursor: string, next_url: string>> {
+]: nothing -> oneof<record<data: table<full_name: string, id: string, profile_picture: string, username: string>, meta: record<code: int>, pagination: record<next_cursor: string, next_url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-access_token"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user-id' must be non-empty" } }
@@ -988,7 +1012,7 @@ export def "get-users-user-id-follows" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<full_name: string, id: string, profile_picture: string, username: string>, meta: record<code: int>, pagination: record<next_cursor: string, next_url: string>> {
+]: nothing -> oneof<record<data: table<full_name: string, id: string, profile_picture: string, username: string>, meta: record<code: int>, pagination: record<next_cursor: string, next_url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-access_token"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user-id' must be non-empty" } }
@@ -1028,7 +1052,7 @@ export def "get-users-user-id-media-recent" [
   --min-timestamp: int # Return media after this UNIX timestamp. (format: int64)
   --min-id: string # Return media later than this `min_id`.
   --max-id: string # Return media earlier than this `max_id`.
-]: nothing -> record<data: table<attribution: string, caption: record, comments: record, created_time: string, filter: string, id: string, images: record, likes: record, link: string, location: record, tags: list, type: string, user: record, user_has_liked: bool, users_in_photo: list, videos: record>, meta: record<code: int>, pagination: record<next_max_id: string, next_url: string>> {
+]: nothing -> oneof<record<data: table<attribution: string, caption: record, comments: record, created_time: string, filter: string, id: string, images: record, likes: record, link: string, location: record, tags: list, type: string, user: record, user_has_liked: bool, users_in_photo: list, videos: record>, meta: record<code: int>, pagination: record<next_max_id: string, next_url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-access_token"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user-id' must be non-empty" } }
@@ -1064,7 +1088,7 @@ export def "get-users-user-id-relationship" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<incoming_status: string, outgoing_status: string, target_user_is_private: bool>, meta: record<code: int>> {
+]: nothing -> oneof<record<data: record<incoming_status: string, outgoing_status: string, target_user_is_private: bool>, meta: record<code: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-access_token"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user-id' must be non-empty" } }
@@ -1100,7 +1124,7 @@ export def "post-users-user-id-relationship" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --action: string@action-completer # Type of action to apply for relationship with the user. (required)
-]: nothing -> record<data: record<outgoing_status: string>, meta: record<code: int>> {
+]: nothing -> oneof<record<data: record<outgoing_status: string>, meta: record<code: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-access_token"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user-id' must be non-empty" } }

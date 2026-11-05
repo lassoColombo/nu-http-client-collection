@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -110,9 +134,9 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "delete-session" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["delete-session" "put-session" "get-session" "post-content" "post-text" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -154,7 +178,7 @@ export def "delete-session" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<botName: string, botAlias: string, userId: string, sessionId: string> {
+]: nothing -> oneof<record<botName: string, botAlias: string, userId: string, sessionId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bot_name | is-empty) { error make --unspanned { msg: "path parameter 'botName' must be non-empty" } }
@@ -183,9 +207,6 @@ export def "delete-session" [
 #
 # POST /bot/{botName}/alias/{botAlias}/user/{userId}/session
 # operationId: PutSession
-# --dialogAction shape: {type?: "ElicitIntent"|"ConfirmIntent"|"ElicitSlot"|"Close"|"Delegate", intentName?: string, slots?: record, slotToElicit?: string, fulfillmentState?: "Fulfilled"|"Failed"|"ReadyForFulfillment", message?: string, messageFormat?: "PlainText"|"CustomPayload"|"SSML"|"Composite"}
-# --recentIntentSummaryView item shape: {intentName?: string, checkpointLabel?: string, slots?: record, confirmationStatus?: "None"|"Confirmed"|"Denied", dialogActionType: "ElicitIntent"|"ConfirmIntent"|"ElicitSlot"|"Close"|"Delegate", fulfillmentState?: "Fulfilled"|"Failed"|"ReadyForFulfillment", slotToElicit?: string}
-# --activeContexts item shape: {name: string, timeToLive: record, parameters: record}
 export def "put-session" [
   bot_name: string
   bot_alias: string
@@ -211,7 +232,7 @@ export def "put-session" [
   --dialog-action: record # Describes the next action that the bot should take in its interaction with the user and provides information about the context in which the action takes place. Use the DialogAction data type to set the interaction to a specific state, or to return the interaction to a previous state. — shape: {type?: "ElicitIntent"|"ConfirmIntent"|"ElicitSlot"|"Close"|"Delegate", intentName?: string, slots?: record, slotToElicit?: string, fulfillmentState?: "Fulfilled"|"Failed"|"ReadyForFulfillment", message?: string, messageFormat?: "PlainText"|"CustomPayload"|"SSML"|"Composite"}
   --recent-intent-summary-view: list # A summary of the recent intents for the bot. You can use the intent summary view to set a checkpoint label on an intent and modify attributes of intents. You can also use it to remove or add intent summary objects to the list. An intent that you modify or add to the list must make sense for the bot. For example, the intent name must be valid for the bot. You must provide valid values for: intentName slot names slotToElict If you send the recentIntentSummaryView parameter in a PutSession request, the contents of the new summary view replaces the old summary view. For example, if a GetSession request returns three intents in the summary view and you call PutSession with one intent in the summary view, the next call to GetSession will only return one intent. — item shape: {intentName?: string, checkpointLabel?: string, slots?: record, confirmationStatus?: "None"|"Confirmed"|"Denied", dialogActionType: "ElicitIntent"|"ConfirmIntent"|"ElicitSlot"|"Close"|"Delegate", fulfillmentState?: "Fulfilled"|"Failed"|"ReadyForFulfillment", slotToElicit?: string}
   --active-contexts: list # A list of contexts active for the request. A context can be activated when a previous intent is fulfilled, or by including the context in the request, If you don't specify a list of contexts, Amazon Lex will use the current list of contexts for the session. If you specify an empty list, all contexts for the session are cleared. — item shape: {name: string, timeToLive: record, parameters: record}
-]: any -> record<audioStream: string> {
+]: any -> oneof<record<audioStream: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -264,7 +285,7 @@ export def "get-session" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<recentIntentSummaryView: table<intentName: string, checkpointLabel: string, slots: record, confirmationStatus: string, dialogActionType: string, fulfillmentState: string, slotToElicit: string>, sessionAttributes: record, sessionId: string, dialogAction: record<type: string, intentName: string, slots: record, slotToElicit: string, fulfillmentState: string, message: string, messageFormat: string>, activeContexts: table<name: string, timeToLive: record, parameters: record>> {
+]: nothing -> oneof<record<recentIntentSummaryView: table<intentName: string, checkpointLabel: string, slots: record, confirmationStatus: string, dialogActionType: string, fulfillmentState: string, slotToElicit: string>, sessionAttributes: record, sessionId: string, dialogAction: record<type: string, intentName: string, slots: record, slotToElicit: string, fulfillmentState: string, message: string, messageFormat: string>, activeContexts: table<name: string, timeToLive: record, parameters: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bot_name | is-empty) { error make --unspanned { msg: "path parameter 'botName' must be non-empty" } }
@@ -320,7 +341,7 @@ export def "post-content" [
   --hdr-accept: string # You pass this value as the Accept HTTP header. The message Amazon Lex returns in the response can be either text or speech based on the Accept HTTP header value in the request. If the value is text/plain; charset=utf-8, Amazon Lex returns text in the response. If the value begins with audio/, Amazon Lex returns speech in the response. Amazon Lex uses Amazon Polly to generate the speech (using the configuration you specified in the Accept header). For example, if you specify audio/mpeg as the value, Amazon Lex returns speech in the MPEG format. If the value is audio/pcm, the speech returned is audio/pcm in 16-bit, little endian format. The following are the accepted values: audio/mpeg audio/ogg audio/pcm text/plain; charset=utf-8 audio/* (defaults to mpeg)
   --x-amz-lex-active-contexts: string # A list of contexts active for the request. A context can be activated when a previous intent is fulfilled, or by including the context in the request, If you don't specify a list of contexts, Amazon Lex will use the current list of contexts for the session. If you specify an empty list, all contexts for the session are cleared. (format: password)
   input_stream: string # User input in PCM or Opus audio format or text format as described in the Content-Type HTTP header. You can stream audio data to Amazon Lex or you can create a local buffer that captures all of the audio data before sending. In general, you get better performance if you stream audio data rather than buffering the data locally.
-]: any -> record<audioStream: string> {
+]: any -> oneof<record<audioStream: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -335,7 +356,7 @@ export def "post-content" [
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-lex-session-attributes": $x_amz_lex_session_attributes, "x-amz-lex-request-attributes": $x_amz_lex_request_attributes, "Content-Type": $content_type, "Accept": $hdr_accept, "x-amz-lex-active-contexts": $x_amz_lex_active_contexts} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -354,7 +375,6 @@ export def "post-content" [
 #
 # POST /bot/{botName}/alias/{botAlias}/user/{userId}/text
 # operationId: PostText
-# --activeContexts item shape: {name: string, timeToLive: record, parameters: record}
 export def "post-text" [
   bot_name: string
   bot_alias: string
@@ -379,7 +399,7 @@ export def "post-text" [
   --request-attributes: record # Request-specific information passed between Amazon Lex and a client application. The namespace x-amz-lex: is reserved for special attributes. Don't create any request attributes with the prefix x-amz-lex:. For more information, see Setting Request Attributes (https://docs.aws.amazon.com/lex/latest/dg/context-mgmt.html#context-mgmt-request-attribs).
   input_text: string # The text that the user entered (Amazon Lex interprets this text). (format: password)
   --active-contexts: list # A list of contexts active for the request. A context can be activated when a previous intent is fulfilled, or by including the context in the request, If you don't specify a list of contexts, Amazon Lex will use the current list of contexts for the session. If you specify an empty list, all contexts for the session are cleared. — item shape: {name: string, timeToLive: record, parameters: record}
-]: any -> record<intentName: string, nluIntentConfidence: record<score: float>, alternativeIntents: table<intentName: string, nluIntentConfidence: record, slots: record>, slots: record, sessionAttributes: record, message: string, sentimentResponse: record<sentimentLabel: string, sentimentScore: string>, messageFormat: string, dialogState: string, slotToElicit: string, responseCard: record<version: string, contentType: string, genericAttachments: list<record>>, sessionId: string, botVersion: string, activeContexts: table<name: string, timeToLive: record, parameters: record>> {
+]: any -> oneof<record<intentName: string, nluIntentConfidence: record<score: float>, alternativeIntents: table<intentName: string, nluIntentConfidence: record, slots: record>, slots: record, sessionAttributes: record, message: string, sentimentResponse: record<sentimentLabel: string, sentimentScore: string>, messageFormat: string, dialogState: string, slotToElicit: string, responseCard: record<version: string, contentType: string, genericAttachments: list<record>>, sessionId: string, botVersion: string, activeContexts: table<name: string, timeToLive: record, parameters: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

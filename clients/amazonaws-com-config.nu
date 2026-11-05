@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -200,9 +223,9 @@ def x-amz-target-completer-91 [] { ["StarlingDoveService.UntagResource"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "batch-get-aggregate-resource-config" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["batch-get-aggregate-resource-config" "batch-get-resource-config" "delete-aggregation-authorization" "delete-config-rule" "delete-configuration-aggregator" "delete-configuration-recorder" "delete-conformance-pack" "delete-delivery-channel" "delete-evaluation-results" "delete-organization-config-rule" "delete-organization-conformance-pack" "delete-pending-aggregation-request" "delete-remediation-configuration" "delete-remediation-exceptions" "delete-resource-config" "delete-retention-configuration" "delete-stored-query" "deliver-config-snapshot" "describe-aggregate-compliance-by-config-rules" "describe-aggregate-compliance-by-conformance-packs" "describe-aggregation-authorizations" "describe-compliance-by-config-rule" "describe-compliance-by-resource" "describe-config-rule-evaluation-status" "describe-config-rules" "describe-configuration-aggregator-sources-status" "describe-configuration-aggregators" "describe-configuration-recorder-status" "describe-configuration-recorders" "describe-conformance-pack-compliance" "describe-conformance-pack-status" "describe-conformance-packs" "describe-delivery-channel-status" "describe-delivery-channels" "describe-organization-config-rule-statuses" "describe-organization-config-rules" "describe-organization-conformance-pack-statuses" "describe-organization-conformance-packs" "describe-pending-aggregation-requests" "describe-remediation-configurations" "describe-remediation-exceptions" "describe-remediation-execution-status" "describe-retention-configurations" "get-aggregate-compliance-details-by-config-rule" "get-aggregate-config-rule-compliance-summary" "get-aggregate-conformance-pack-compliance-summary" "get-aggregate-discovered-resource-counts" "get-aggregate-resource-config" "get-compliance-details-by-config-rule" "get-compliance-details-by-resource" "get-compliance-summary-by-config-rule" "get-compliance-summary-by-resource-type" "get-conformance-pack-compliance-details" "get-conformance-pack-compliance-summary" "get-custom-rule-policy" "get-discovered-resource-counts" "get-organization-config-rule-detailed-status" "get-organization-conformance-pack-detailed-status" "get-organization-custom-rule-policy" "get-resource-config-history" "get-resource-evaluation-summary" "get-stored-query" "list-aggregate-discovered-resources" "list-conformance-pack-compliance-scores" "list-discovered-resources" "list-resource-evaluations" "list-stored-queries" "list-tags-for-resource" "put-aggregation-authorization" "put-config-rule" "put-configuration-aggregator" "put-configuration-recorder" "put-conformance-pack" "put-delivery-channel" "put-evaluations" "put-external-evaluation" "put-organization-config-rule" "put-organization-conformance-pack" "put-remediation-configurations" "put-remediation-exceptions" "put-resource-config" "put-retention-configuration" "put-stored-query" "select-aggregate-resource-config" "select-resource-config" "start-config-rules-evaluation" "start-configuration-recorder" "start-remediation-execution" "start-resource-evaluation" "stop-configuration-recorder" "tag-resource" "untag-resource" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -224,7 +247,6 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: BatchGetAggregateResourceConfig
-# --ResourceIdentifiers item shape: {SourceAccountId: string, SourceRegion: string, ResourceId: string, ... (2 more fields)}
 export def "batch-get-aggregate-resource-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -245,7 +267,7 @@ export def "batch-get-aggregate-resource-config" [
   --x-amz-target: string@x-amz-target-completer # required
   configuration_aggregator_name: string # The name of the configuration aggregator.
   resource_identifiers: list # A list of aggregate ResourceIdentifiers objects. — item shape: {SourceAccountId: string, SourceRegion: string, ResourceId: string, ... (2 more fields)}
-]: any -> record<BaseConfigurationItems: table<version: string, accountId: string, configurationItemCaptureTime: string, configurationItemStatus: string, configurationStateId: string, arn: string, resourceType: string, resourceId: string, resourceName: string, awsRegion: string, availabilityZone: string, resourceCreationTime: string, configuration: string, supplementaryConfiguration: record>, UnprocessedResourceIdentifiers: table<SourceAccountId: string, SourceRegion: string, ResourceId: string, ResourceType: string, ResourceName: string>> {
+]: any -> oneof<record<BaseConfigurationItems: table<version: string, accountId: string, configurationItemCaptureTime: string, configurationItemStatus: string, configurationStateId: string, arn: string, resourceType: string, resourceId: string, resourceName: string, awsRegion: string, availabilityZone: string, resourceCreationTime: string, configuration: string, supplementaryConfiguration: record>, UnprocessedResourceIdentifiers: table<SourceAccountId: string, SourceRegion: string, ResourceId: string, ResourceType: string, ResourceName: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -275,7 +297,6 @@ export def "batch-get-aggregate-resource-config" [
 #
 # POST /
 # operationId: BatchGetResourceConfig
-# --resourceKeys item shape: {resourceType: "AWS::EC2::CustomerGateway"|"AWS::EC2::EIP"|"AWS::EC2::Host"|"AWS::EC2::Instance"|"AWS::EC2::InternetGateway"|"AWS::EC2::NetworkAcl"|"AWS::EC2::NetworkInterface"|"AWS::EC2::RouteTable"|"AWS::EC2::SecurityGroup"|"AWS::EC2::Subnet"|"AWS::CloudTrail::Trail"|"AWS::EC2::Volume"|"AWS::EC2::VPC"|"AWS::EC2::VPNConnection"|"AWS::EC2::VPNGateway"|"AWS::EC2::RegisteredHAInstance"|"AWS::EC2::NatGateway"|"AWS::EC2::EgressOnlyInternetGateway"|"AWS::EC2::VPCEndpoint"|"AWS::EC2::VPCEndpointService"|"AWS::EC2::FlowLog"|"AWS::EC2::VPCPeeringConnection"|"AWS::Elasticsearch::Domain"|"AWS::IAM::Group"|"AWS::IAM::Policy"|"AWS::IAM::Role"|"AWS::IAM::User"|"AWS::ElasticLoadBalancingV2::LoadBalancer"|"AWS::ACM::Certificate"|"AWS::RDS::DBInstance"|"AWS::RDS::DBSubnetGroup"|"AWS::RDS::DBSecurityGroup"|"AWS::RDS::DBSnapshot"|"AWS::RDS::DBCluster"|"AWS::RDS::DBClusterSnapshot"|"AWS::RDS::EventSubscription"|"AWS::S3::Bucket"|"AWS::S3::AccountPublicAccessBlock"|"AWS::Redshift::Cluster"|"AWS::Redshift::ClusterSnapshot"|"AWS::Redshift::ClusterParameterGroup"|"AWS::Redshift::ClusterSecurityGroup"|"AWS::Redshift::ClusterSubnetGroup"|"AWS::Redshift::EventSubscription"|"AWS::SSM::ManagedInstanceInventory"|"AWS::CloudWatch::Alarm"|"AWS::CloudFormation::Stack"|"AWS::ElasticLoadBalancing::LoadBalancer"|"AWS::AutoScaling::AutoScalingGroup"|"AWS::AutoScaling::LaunchConfiguration"|"AWS::AutoScaling::ScalingPolicy"|"AWS::AutoScaling::ScheduledAction"|"AWS::DynamoDB::Table"|"AWS::CodeBuild::Project"|"AWS::WAF::RateBasedRule"|"AWS::WAF::Rule"|"AWS::WAF::RuleGroup"|"AWS::WAF::WebACL"|"AWS::WAFRegional::RateBasedRule"|"AWS::WAFRegional::Rule"|"AWS::WAFRegional::RuleGroup"|"AWS::WAFRegional::WebACL"|"AWS::CloudFront::Distribution"|"AWS::CloudFront::StreamingDistribution"|"AWS::Lambda::Function"|"AWS::NetworkFirewall::Firewall"|"AWS::NetworkFirewall::FirewallPolicy"|"AWS::NetworkFirewall::RuleGroup"|"AWS::ElasticBeanstalk::Application"|"AWS::ElasticBeanstalk::ApplicationVersion"|"AWS::ElasticBeanstalk::Environment"|"AWS::WAFv2::WebACL"|"AWS::WAFv2::RuleGroup"|"AWS::WAFv2::IPSet"|"AWS::WAFv2::RegexPatternSet"|"AWS::WAFv2::ManagedRuleSet"|"AWS::XRay::EncryptionConfig"|"AWS::SSM::AssociationCompliance"|"AWS::SSM::PatchCompliance"|"AWS::Shield::Protection"|"AWS::ShieldRegional::Protection"|"AWS::Config::ConformancePackCompliance"|"AWS::Config::ResourceCompliance"|"AWS::ApiGateway::Stage"|"AWS::ApiGateway::RestApi"|"AWS::ApiGatewayV2::Stage"|"AWS::ApiGatewayV2::Api"|"AWS::CodePipeline::Pipeline"|"AWS::ServiceCatalog::CloudFormationProvisionedProduct"|"AWS::ServiceCatalog::CloudFormationProduct"|"AWS::ServiceCatalog::Portfolio"|"AWS::SQS::Queue"|"AWS::KMS::Key"|"AWS::QLDB::Ledger"|"AWS::SecretsManager::Secret"|"AWS::SNS::Topic"|"AWS::SSM::FileData"|"AWS::Backup::BackupPlan"|"AWS::Backup::BackupSelection"|"AWS::Backup::BackupVault"|"AWS::Backup::RecoveryPoint"|"AWS::ECR::Repository"|"AWS::ECS::Cluster"|"AWS::ECS::Service"|"AWS::ECS::TaskDefinition"|"AWS::EFS::AccessPoint"|"AWS::EFS::FileSystem"|"AWS::EKS::Cluster"|"AWS::OpenSearch::Domain"|"AWS::EC2::TransitGateway"|"AWS::Kinesis::Stream"|"AWS::Kinesis::StreamConsumer"|"AWS::CodeDeploy::Application"|"AWS::CodeDeploy::DeploymentConfig"|"AWS::CodeDeploy::DeploymentGroup"|"AWS::EC2::LaunchTemplate"|"AWS::ECR::PublicRepository"|"AWS::GuardDuty::Detector"|"AWS::EMR::SecurityConfiguration"|"AWS::SageMaker::CodeRepository"|"AWS::Route53Resolver::ResolverEndpoint"|"AWS::Route53Resolver::ResolverRule"|"AWS::Route53Resolver::ResolverRuleAssociation"|"AWS::DMS::ReplicationSubnetGroup"|"AWS::DMS::EventSubscription"|"AWS::MSK::Cluster"|"AWS::StepFunctions::Activity"|"AWS::WorkSpaces::Workspace"|"AWS::WorkSpaces::ConnectionAlias"|"AWS::SageMaker::Model"|"AWS::ElasticLoadBalancingV2::Listener"|"AWS::StepFunctions::StateMachine"|"AWS::Batch::JobQueue"|"AWS::Batch::ComputeEnvironment"|"AWS::AccessAnalyzer::Analyzer"|"AWS::Athena::WorkGroup"|"AWS::Athena::DataCatalog"|"AWS::Detective::Graph"|"AWS::GlobalAccelerator::Accelerator"|"AWS::GlobalAccelerator::EndpointGroup"|"AWS::GlobalAccelerator::Listener"|"AWS::EC2::TransitGatewayAttachment"|"AWS::EC2::TransitGatewayRouteTable"|"AWS::DMS::Certificate"|"AWS::AppConfig::Application"|"AWS::AppSync::GraphQLApi"|"AWS::DataSync::LocationSMB"|"AWS::DataSync::LocationFSxLustre"|"AWS::DataSync::LocationS3"|"AWS::DataSync::LocationEFS"|"AWS::DataSync::Task"|"AWS::DataSync::LocationNFS"|"AWS::EC2::NetworkInsightsAccessScopeAnalysis"|"AWS::EKS::FargateProfile"|"AWS::Glue::Job"|"AWS::GuardDuty::ThreatIntelSet"|"AWS::GuardDuty::IPSet"|"AWS::SageMaker::Workteam"|"AWS::SageMaker::NotebookInstanceLifecycleConfig"|"AWS::ServiceDiscovery::Service"|"AWS::ServiceDiscovery::PublicDnsNamespace"|"AWS::SES::ContactList"|"AWS::SES::ConfigurationSet"|"AWS::Route53::HostedZone"|"AWS::IoTEvents::Input"|"AWS::IoTEvents::DetectorModel"|"AWS::IoTEvents::AlarmModel"|"AWS::ServiceDiscovery::HttpNamespace"|"AWS::Events::EventBus"|"AWS::ImageBuilder::ContainerRecipe"|"AWS::ImageBuilder::DistributionConfiguration"|"AWS::ImageBuilder::InfrastructureConfiguration"|"AWS::DataSync::LocationObjectStorage"|"AWS::DataSync::LocationHDFS"|"AWS::Glue::Classifier"|"AWS::Route53RecoveryReadiness::Cell"|"AWS::Route53RecoveryReadiness::ReadinessCheck"|"AWS::ECR::RegistryPolicy"|"AWS::Backup::ReportPlan"|"AWS::Lightsail::Certificate"|"AWS::RUM::AppMonitor"|"AWS::Events::Endpoint"|"AWS::SES::ReceiptRuleSet"|"AWS::Events::Archive"|"AWS::Events::ApiDestination"|"AWS::Lightsail::Disk"|"AWS::FIS::ExperimentTemplate"|"AWS::DataSync::LocationFSxWindows"|"AWS::SES::ReceiptFilter"|"AWS::GuardDuty::Filter"|"AWS::SES::Template"|"AWS::AmazonMQ::Broker"|"AWS::AppConfig::Environment"|"AWS::AppConfig::ConfigurationProfile"|"AWS::Cloud9::EnvironmentEC2"|"AWS::EventSchemas::Registry"|"AWS::EventSchemas::RegistryPolicy"|"AWS::EventSchemas::Discoverer"|"AWS::FraudDetector::Label"|"AWS::FraudDetector::EntityType"|"AWS::FraudDetector::Variable"|"AWS::FraudDetector::Outcome"|"AWS::IoT::Authorizer"|"AWS::IoT::SecurityProfile"|"AWS::IoT::RoleAlias"|"AWS::IoT::Dimension"|"AWS::IoTAnalytics::Datastore"|"AWS::Lightsail::Bucket"|"AWS::Lightsail::StaticIp"|"AWS::MediaPackage::PackagingGroup"|"AWS::Route53RecoveryReadiness::RecoveryGroup"|"AWS::ResilienceHub::ResiliencyPolicy"|"AWS::Transfer::Workflow"|"AWS::EKS::IdentityProviderConfig"|"AWS::EKS::Addon"|"AWS::Glue::MLTransform"|"AWS::IoT::Policy"|"AWS::IoT::MitigationAction"|"AWS::IoTTwinMaker::Workspace"|"AWS::IoTTwinMaker::Entity"|"AWS::IoTAnalytics::Dataset"|"AWS::IoTAnalytics::Pipeline"|"AWS::IoTAnalytics::Channel"|"AWS::IoTSiteWise::Dashboard"|"AWS::IoTSiteWise::Project"|"AWS::IoTSiteWise::Portal"|"AWS::IoTSiteWise::AssetModel"|"AWS::IVS::Channel"|"AWS::IVS::RecordingConfiguration"|"AWS::IVS::PlaybackKeyPair"|"AWS::KinesisAnalyticsV2::Application"|"AWS::RDS::GlobalCluster"|"AWS::S3::MultiRegionAccessPoint"|"AWS::DeviceFarm::TestGridProject"|"AWS::Budgets::BudgetsAction"|"AWS::Lex::Bot"|"AWS::CodeGuruReviewer::RepositoryAssociation"|"AWS::IoT::CustomMetric"|"AWS::Route53Resolver::FirewallDomainList"|"AWS::RoboMaker::RobotApplicationVersion"|"AWS::EC2::TrafficMirrorSession"|"AWS::IoTSiteWise::Gateway"|"AWS::Lex::BotAlias"|"AWS::LookoutMetrics::Alert"|"AWS::IoT::AccountAuditConfiguration"|"AWS::EC2::TrafficMirrorTarget"|"AWS::S3::StorageLens"|"AWS::IoT::ScheduledAudit"|"AWS::Events::Connection"|"AWS::EventSchemas::Schema"|"AWS::MediaPackage::PackagingConfiguration"|"AWS::KinesisVideo::SignalingChannel"|"AWS::AppStream::DirectoryConfig"|"AWS::LookoutVision::Project"|"AWS::Route53RecoveryControl::Cluster"|"AWS::Route53RecoveryControl::SafetyRule"|"AWS::Route53RecoveryControl::ControlPanel"|"AWS::Route53RecoveryControl::RoutingControl"|"AWS::Route53RecoveryReadiness::ResourceSet"|"AWS::RoboMaker::SimulationApplication"|"AWS::RoboMaker::RobotApplication"|"AWS::HealthLake::FHIRDatastore"|"AWS::Pinpoint::Segment"|"AWS::Pinpoint::ApplicationSettings"|"AWS::Events::Rule"|"AWS::EC2::DHCPOptions"|"AWS::EC2::NetworkInsightsPath"|"AWS::EC2::TrafficMirrorFilter"|"AWS::EC2::IPAM"|"AWS::IoTTwinMaker::Scene"|"AWS::NetworkManager::TransitGatewayRegistration"|"AWS::CustomerProfiles::Domain"|"AWS::AutoScaling::WarmPool"|"AWS::Connect::PhoneNumber", ... (1 more fields)}
 export def "batch-get-resource-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -295,7 +316,7 @@ export def "batch-get-resource-config" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-1 # required
   resource_keys: list # A list of resource keys to be processed with the current request. Each element in the list consists of the resource type and resource ID. — item shape: {resourceType: "AWS::EC2::CustomerGateway"|"AWS::EC2::EIP"|"AWS::EC2::Host"|"AWS::EC2::Instance"|"AWS::EC2::InternetGateway"|"AWS::EC2::NetworkAcl"|"AWS::EC2::NetworkInterface"|"AWS::EC2::RouteTable"|"AWS::EC2::SecurityGroup"|"AWS::EC2::Subnet"|"AWS::CloudTrail::Trail"|"AWS::EC2::Volume"|"AWS::EC2::VPC"|"AWS::EC2::VPNConnection"|"AWS::EC2::VPNGateway"|"AWS::EC2::RegisteredHAInstance"|"AWS::EC2::NatGateway"|"AWS::EC2::EgressOnlyInternetGateway"|"AWS::EC2::VPCEndpoint"|"AWS::EC2::VPCEndpointService"|"AWS::EC2::FlowLog"|"AWS::EC2::VPCPeeringConnection"|"AWS::Elasticsearch::Domain"|"AWS::IAM::Group"|"AWS::IAM::Policy"|"AWS::IAM::Role"|"AWS::IAM::User"|"AWS::ElasticLoadBalancingV2::LoadBalancer"|"AWS::ACM::Certificate"|"AWS::RDS::DBInstance"|"AWS::RDS::DBSubnetGroup"|"AWS::RDS::DBSecurityGroup"|"AWS::RDS::DBSnapshot"|"AWS::RDS::DBCluster"|"AWS::RDS::DBClusterSnapshot"|"AWS::RDS::EventSubscription"|"AWS::S3::Bucket"|"AWS::S3::AccountPublicAccessBlock"|"AWS::Redshift::Cluster"|"AWS::Redshift::ClusterSnapshot"|"AWS::Redshift::ClusterParameterGroup"|"AWS::Redshift::ClusterSecurityGroup"|"AWS::Redshift::ClusterSubnetGroup"|"AWS::Redshift::EventSubscription"|"AWS::SSM::ManagedInstanceInventory"|"AWS::CloudWatch::Alarm"|"AWS::CloudFormation::Stack"|"AWS::ElasticLoadBalancing::LoadBalancer"|"AWS::AutoScaling::AutoScalingGroup"|"AWS::AutoScaling::LaunchConfiguration"|"AWS::AutoScaling::ScalingPolicy"|"AWS::AutoScaling::ScheduledAction"|"AWS::DynamoDB::Table"|"AWS::CodeBuild::Project"|"AWS::WAF::RateBasedRule"|"AWS::WAF::Rule"|"AWS::WAF::RuleGroup"|"AWS::WAF::WebACL"|"AWS::WAFRegional::RateBasedRule"|"AWS::WAFRegional::Rule"|"AWS::WAFRegional::RuleGroup"|"AWS::WAFRegional::WebACL"|"AWS::CloudFront::Distribution"|"AWS::CloudFront::StreamingDistribution"|"AWS::Lambda::Function"|"AWS::NetworkFirewall::Firewall"|"AWS::NetworkFirewall::FirewallPolicy"|"AWS::NetworkFirewall::RuleGroup"|"AWS::ElasticBeanstalk::Application"|"AWS::ElasticBeanstalk::ApplicationVersion"|"AWS::ElasticBeanstalk::Environment"|"AWS::WAFv2::WebACL"|"AWS::WAFv2::RuleGroup"|"AWS::WAFv2::IPSet"|"AWS::WAFv2::RegexPatternSet"|"AWS::WAFv2::ManagedRuleSet"|"AWS::XRay::EncryptionConfig"|"AWS::SSM::AssociationCompliance"|"AWS::SSM::PatchCompliance"|"AWS::Shield::Protection"|"AWS::ShieldRegional::Protection"|"AWS::Config::ConformancePackCompliance"|"AWS::Config::ResourceCompliance"|"AWS::ApiGateway::Stage"|"AWS::ApiGateway::RestApi"|"AWS::ApiGatewayV2::Stage"|"AWS::ApiGatewayV2::Api"|"AWS::CodePipeline::Pipeline"|"AWS::ServiceCatalog::CloudFormationProvisionedProduct"|"AWS::ServiceCatalog::CloudFormationProduct"|"AWS::ServiceCatalog::Portfolio"|"AWS::SQS::Queue"|"AWS::KMS::Key"|"AWS::QLDB::Ledger"|"AWS::SecretsManager::Secret"|"AWS::SNS::Topic"|"AWS::SSM::FileData"|"AWS::Backup::BackupPlan"|"AWS::Backup::BackupSelection"|"AWS::Backup::BackupVault"|"AWS::Backup::RecoveryPoint"|"AWS::ECR::Repository"|"AWS::ECS::Cluster"|"AWS::ECS::Service"|"AWS::ECS::TaskDefinition"|"AWS::EFS::AccessPoint"|"AWS::EFS::FileSystem"|"AWS::EKS::Cluster"|"AWS::OpenSearch::Domain"|"AWS::EC2::TransitGateway"|"AWS::Kinesis::Stream"|"AWS::Kinesis::StreamConsumer"|"AWS::CodeDeploy::Application"|"AWS::CodeDeploy::DeploymentConfig"|"AWS::CodeDeploy::DeploymentGroup"|"AWS::EC2::LaunchTemplate"|"AWS::ECR::PublicRepository"|"AWS::GuardDuty::Detector"|"AWS::EMR::SecurityConfiguration"|"AWS::SageMaker::CodeRepository"|"AWS::Route53Resolver::ResolverEndpoint"|"AWS::Route53Resolver::ResolverRule"|"AWS::Route53Resolver::ResolverRuleAssociation"|"AWS::DMS::ReplicationSubnetGroup"|"AWS::DMS::EventSubscription"|"AWS::MSK::Cluster"|"AWS::StepFunctions::Activity"|"AWS::WorkSpaces::Workspace"|"AWS::WorkSpaces::ConnectionAlias"|"AWS::SageMaker::Model"|"AWS::ElasticLoadBalancingV2::Listener"|"AWS::StepFunctions::StateMachine"|"AWS::Batch::JobQueue"|"AWS::Batch::ComputeEnvironment"|"AWS::AccessAnalyzer::Analyzer"|"AWS::Athena::WorkGroup"|"AWS::Athena::DataCatalog"|"AWS::Detective::Graph"|"AWS::GlobalAccelerator::Accelerator"|"AWS::GlobalAccelerator::EndpointGroup"|"AWS::GlobalAccelerator::Listener"|"AWS::EC2::TransitGatewayAttachment"|"AWS::EC2::TransitGatewayRouteTable"|"AWS::DMS::Certificate"|"AWS::AppConfig::Application"|"AWS::AppSync::GraphQLApi"|"AWS::DataSync::LocationSMB"|"AWS::DataSync::LocationFSxLustre"|"AWS::DataSync::LocationS3"|"AWS::DataSync::LocationEFS"|"AWS::DataSync::Task"|"AWS::DataSync::LocationNFS"|"AWS::EC2::NetworkInsightsAccessScopeAnalysis"|"AWS::EKS::FargateProfile"|"AWS::Glue::Job"|"AWS::GuardDuty::ThreatIntelSet"|"AWS::GuardDuty::IPSet"|"AWS::SageMaker::Workteam"|"AWS::SageMaker::NotebookInstanceLifecycleConfig"|"AWS::ServiceDiscovery::Service"|"AWS::ServiceDiscovery::PublicDnsNamespace"|"AWS::SES::ContactList"|"AWS::SES::ConfigurationSet"|"AWS::Route53::HostedZone"|"AWS::IoTEvents::Input"|"AWS::IoTEvents::DetectorModel"|"AWS::IoTEvents::AlarmModel"|"AWS::ServiceDiscovery::HttpNamespace"|"AWS::Events::EventBus"|"AWS::ImageBuilder::ContainerRecipe"|"AWS::ImageBuilder::DistributionConfiguration"|"AWS::ImageBuilder::InfrastructureConfiguration"|"AWS::DataSync::LocationObjectStorage"|"AWS::DataSync::LocationHDFS"|"AWS::Glue::Classifier"|"AWS::Route53RecoveryReadiness::Cell"|"AWS::Route53RecoveryReadiness::ReadinessCheck"|"AWS::ECR::RegistryPolicy"|"AWS::Backup::ReportPlan"|"AWS::Lightsail::Certificate"|"AWS::RUM::AppMonitor"|"AWS::Events::Endpoint"|"AWS::SES::ReceiptRuleSet"|"AWS::Events::Archive"|"AWS::Events::ApiDestination"|"AWS::Lightsail::Disk"|"AWS::FIS::ExperimentTemplate"|"AWS::DataSync::LocationFSxWindows"|"AWS::SES::ReceiptFilter"|"AWS::GuardDuty::Filter"|"AWS::SES::Template"|"AWS::AmazonMQ::Broker"|"AWS::AppConfig::Environment"|"AWS::AppConfig::ConfigurationProfile"|"AWS::Cloud9::EnvironmentEC2"|"AWS::EventSchemas::Registry"|"AWS::EventSchemas::RegistryPolicy"|"AWS::EventSchemas::Discoverer"|"AWS::FraudDetector::Label"|"AWS::FraudDetector::EntityType"|"AWS::FraudDetector::Variable"|"AWS::FraudDetector::Outcome"|"AWS::IoT::Authorizer"|"AWS::IoT::SecurityProfile"|"AWS::IoT::RoleAlias"|"AWS::IoT::Dimension"|"AWS::IoTAnalytics::Datastore"|"AWS::Lightsail::Bucket"|"AWS::Lightsail::StaticIp"|"AWS::MediaPackage::PackagingGroup"|"AWS::Route53RecoveryReadiness::RecoveryGroup"|"AWS::ResilienceHub::ResiliencyPolicy"|"AWS::Transfer::Workflow"|"AWS::EKS::IdentityProviderConfig"|"AWS::EKS::Addon"|"AWS::Glue::MLTransform"|"AWS::IoT::Policy"|"AWS::IoT::MitigationAction"|"AWS::IoTTwinMaker::Workspace"|"AWS::IoTTwinMaker::Entity"|"AWS::IoTAnalytics::Dataset"|"AWS::IoTAnalytics::Pipeline"|"AWS::IoTAnalytics::Channel"|"AWS::IoTSiteWise::Dashboard"|"AWS::IoTSiteWise::Project"|"AWS::IoTSiteWise::Portal"|"AWS::IoTSiteWise::AssetModel"|"AWS::IVS::Channel"|"AWS::IVS::RecordingConfiguration"|"AWS::IVS::PlaybackKeyPair"|"AWS::KinesisAnalyticsV2::Application"|"AWS::RDS::GlobalCluster"|"AWS::S3::MultiRegionAccessPoint"|"AWS::DeviceFarm::TestGridProject"|"AWS::Budgets::BudgetsAction"|"AWS::Lex::Bot"|"AWS::CodeGuruReviewer::RepositoryAssociation"|"AWS::IoT::CustomMetric"|"AWS::Route53Resolver::FirewallDomainList"|"AWS::RoboMaker::RobotApplicationVersion"|"AWS::EC2::TrafficMirrorSession"|"AWS::IoTSiteWise::Gateway"|"AWS::Lex::BotAlias"|"AWS::LookoutMetrics::Alert"|"AWS::IoT::AccountAuditConfiguration"|"AWS::EC2::TrafficMirrorTarget"|"AWS::S3::StorageLens"|"AWS::IoT::ScheduledAudit"|"AWS::Events::Connection"|"AWS::EventSchemas::Schema"|"AWS::MediaPackage::PackagingConfiguration"|"AWS::KinesisVideo::SignalingChannel"|"AWS::AppStream::DirectoryConfig"|"AWS::LookoutVision::Project"|"AWS::Route53RecoveryControl::Cluster"|"AWS::Route53RecoveryControl::SafetyRule"|"AWS::Route53RecoveryControl::ControlPanel"|"AWS::Route53RecoveryControl::RoutingControl"|"AWS::Route53RecoveryReadiness::ResourceSet"|"AWS::RoboMaker::SimulationApplication"|"AWS::RoboMaker::RobotApplication"|"AWS::HealthLake::FHIRDatastore"|"AWS::Pinpoint::Segment"|"AWS::Pinpoint::ApplicationSettings"|"AWS::Events::Rule"|"AWS::EC2::DHCPOptions"|"AWS::EC2::NetworkInsightsPath"|"AWS::EC2::TrafficMirrorFilter"|"AWS::EC2::IPAM"|"AWS::IoTTwinMaker::Scene"|"AWS::NetworkManager::TransitGatewayRegistration"|"AWS::CustomerProfiles::Domain"|"AWS::AutoScaling::WarmPool"|"AWS::Connect::PhoneNumber", ... (1 more fields)}
-]: any -> record<baseConfigurationItems: table<version: string, accountId: string, configurationItemCaptureTime: string, configurationItemStatus: string, configurationStateId: string, arn: string, resourceType: string, resourceId: string, resourceName: string, awsRegion: string, availabilityZone: string, resourceCreationTime: string, configuration: string, supplementaryConfiguration: record>, unprocessedResourceKeys: table<resourceType: string, resourceId: string>> {
+]: any -> oneof<record<baseConfigurationItems: table<version: string, accountId: string, configurationItemCaptureTime: string, configurationItemStatus: string, configurationStateId: string, arn: string, resourceType: string, resourceId: string, resourceName: string, awsRegion: string, availabilityZone: string, resourceCreationTime: string, configuration: string, supplementaryConfiguration: record>, unprocessedResourceKeys: table<resourceType: string, resourceId: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -639,7 +660,7 @@ export def "delete-evaluation-results" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-8 # required
   config_rule_name: string # The name of the Config rule for which you want to delete the evaluation results.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -837,7 +858,7 @@ export def "delete-remediation-configuration" [
   --x-amz-target: string@x-amz-target-completer-12 # required
   config_rule_name: string # The name of the Config rule for which you want to delete remediation configuration.
   --resource-type: string # The type of a resource.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -867,7 +888,6 @@ export def "delete-remediation-configuration" [
 #
 # POST /
 # operationId: DeleteRemediationExceptions
-# --ResourceKeys item shape: {ResourceType?: string, ResourceId?: string}
 export def "delete-remediation-exceptions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -888,7 +908,7 @@ export def "delete-remediation-exceptions" [
   --x-amz-target: string@x-amz-target-completer-13 # required
   config_rule_name: string # The name of the Config rule for which you want to delete remediation exception configuration.
   resource_keys: list # An exception list of resource exception keys to be processed with the current request. Config adds exception for each resource key. For example, Config adds 3 exceptions for 3 resource keys. — item shape: {ResourceType?: string, ResourceId?: string}
-]: any -> record<FailedBatches: table<FailureMessage: string, FailedItems: list>> {
+]: any -> oneof<record<FailedBatches: table<FailureMessage: string, FailedItems: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1036,7 +1056,7 @@ export def "delete-stored-query" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-16 # required
   query_name: string # The name of the query that you want to delete.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1085,7 +1105,7 @@ export def "deliver-config-snapshot" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-17 # required
   delivery_channel_name: string # The name of the delivery channel through which the snapshot is delivered.
-]: any -> record<configSnapshotId: string> {
+]: any -> oneof<record<configSnapshotId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1115,7 +1135,6 @@ export def "deliver-config-snapshot" [
 #
 # POST /
 # operationId: DescribeAggregateComplianceByConfigRules
-# --Filters shape: {ConfigRuleName?: string, ComplianceType?: "COMPLIANT"|"NON_COMPLIANT"|"NOT_APPLICABLE"|"INSUFFICIENT_DATA", AccountId?: string, AwsRegion?: string}
 export def "describe-aggregate-compliance-by-config-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1140,7 +1159,7 @@ export def "describe-aggregate-compliance-by-config-rules" [
   --filters: record # Filters the compliance results based on account ID, region, compliance type, and rule name. — shape: {ConfigRuleName?: string, ComplianceType?: "COMPLIANT"|"NON_COMPLIANT"|"NOT_APPLICABLE"|"INSUFFICIENT_DATA", AccountId?: string, AwsRegion?: string}
   --limit-body: int # The maximum number of evaluation results returned on each page. The default is maximum. If you specify 0, Config uses the default. (body field)
   --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
-]: any -> record<AggregateComplianceByConfigRules: table<ConfigRuleName: string, Compliance: record, AccountId: string, AwsRegion: string>, NextToken: string> {
+]: any -> oneof<record<AggregateComplianceByConfigRules: table<ConfigRuleName: string, Compliance: record, AccountId: string, AwsRegion: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1171,7 +1190,6 @@ export def "describe-aggregate-compliance-by-config-rules" [
 #
 # POST /
 # operationId: DescribeAggregateComplianceByConformancePacks
-# --Filters shape: {ConformancePackName?: string, ComplianceType?: "COMPLIANT"|"NON_COMPLIANT"|"INSUFFICIENT_DATA", AccountId?: string, AwsRegion?: string}
 export def "describe-aggregate-compliance-by-conformance-packs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1196,7 +1214,7 @@ export def "describe-aggregate-compliance-by-conformance-packs" [
   --filters: record # Filters the conformance packs based on an account ID, region, compliance type, and the name of the conformance pack. — shape: {ConformancePackName?: string, ComplianceType?: "COMPLIANT"|"NON_COMPLIANT"|"INSUFFICIENT_DATA", AccountId?: string, AwsRegion?: string}
   --limit-body: int # The maximum number of conformance packs compliance details returned on each page. The default is maximum. If you specify 0, Config uses the default. (body field)
   --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
-]: any -> record<AggregateComplianceByConformancePacks: table<ConformancePackName: string, Compliance: record, AccountId: string, AwsRegion: string>, NextToken: string> {
+]: any -> oneof<record<AggregateComplianceByConformancePacks: table<ConformancePackName: string, Compliance: record, AccountId: string, AwsRegion: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1249,7 +1267,7 @@ export def "describe-aggregation-authorizations" [
   --x-amz-target: string@x-amz-target-completer-20 # required
   --limit-body: int # The maximum number of AggregationAuthorizations returned on each page. The default is maximum. If you specify 0, Config uses the default. (body field)
   --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
-]: any -> record<AggregationAuthorizations: table<AggregationAuthorizationArn: string, AuthorizedAccountId: string, AuthorizedAwsRegion: string, CreationTime: string>, NextToken: string> {
+]: any -> oneof<record<AggregationAuthorizations: table<AggregationAuthorizationArn: string, AuthorizedAccountId: string, AuthorizedAwsRegion: string, CreationTime: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1302,7 +1320,7 @@ export def "describe-compliance-by-config-rule" [
   --config-rule-names: list<string> # Specify one or more Config rule names to filter the results by rule.
   --compliance-types: list<string> # Filters the results by compliance.
   --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
-]: any -> record<ComplianceByConfigRules: table<ConfigRuleName: string, Compliance: record>, NextToken: string> {
+]: any -> oneof<record<ComplianceByConfigRules: table<ConfigRuleName: string, Compliance: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1358,7 +1376,7 @@ export def "describe-compliance-by-resource" [
   --compliance-types: list<string> # Filters the results by compliance.
   --limit-body: int # The maximum number of evaluation results returned on each page. The default is 10. You cannot specify a number greater than 100. If you specify 0, Config uses the default. (body field)
   --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
-]: any -> record<ComplianceByResources: table<ResourceType: string, ResourceId: string, Compliance: record>, NextToken: string> {
+]: any -> oneof<record<ComplianceByResources: table<ResourceType: string, ResourceId: string, Compliance: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1412,7 +1430,7 @@ export def "describe-config-rule-evaluation-status" [
   --config-rule-names: list<string> # The name of the Config managed rules for which you want status information. If you do not specify any names, Config returns status information for all Config managed rules that you use.
   --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
   --limit-body: int # The number of rule evaluation results that you want returned. This parameter is required if the rule limit for your account is more than the default of 150 rules. For information about requesting a rule limit increase, see Config Limits (http://docs.aws.amazon.com/general/latest/gr/aws_service_limits.html#limits_config) in the Amazon Web Services General Reference Guide. (body field)
-]: any -> record<ConfigRulesEvaluationStatus: table<ConfigRuleName: string, ConfigRuleArn: string, ConfigRuleId: string, LastSuccessfulInvocationTime: string, LastFailedInvocationTime: string, LastSuccessfulEvaluationTime: string, LastFailedEvaluationTime: string, FirstActivatedTime: string, LastDeactivatedTime: string, LastErrorCode: string, LastErrorMessage: string, FirstEvaluationStarted: bool, LastDebugLogDeliveryStatus: string, LastDebugLogDeliveryStatusReason: string, LastDebugLogDeliveryTime: string>, NextToken: string> {
+]: any -> oneof<record<ConfigRulesEvaluationStatus: table<ConfigRuleName: string, ConfigRuleArn: string, ConfigRuleId: string, LastSuccessfulInvocationTime: string, LastFailedInvocationTime: string, LastSuccessfulEvaluationTime: string, LastFailedEvaluationTime: string, FirstActivatedTime: string, LastDeactivatedTime: string, LastErrorCode: string, LastErrorMessage: string, FirstEvaluationStarted: bool, LastDebugLogDeliveryStatus: string, LastDebugLogDeliveryStatusReason: string, LastDebugLogDeliveryTime: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1443,7 +1461,6 @@ export def "describe-config-rule-evaluation-status" [
 #
 # POST /
 # operationId: DescribeConfigRules
-# --Filters shape: {EvaluationMode?: "DETECTIVE"|"PROACTIVE"}
 export def "describe-config-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1466,7 +1483,7 @@ export def "describe-config-rules" [
   --config-rule-names: list<string> # The names of the Config rules for which you want details. If you do not specify any names, Config returns details for all your rules.
   --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
   --filters: record # Returns a filtered list of Detective or Proactive Config rules. By default, if the filter is not defined, this API returns an unfiltered list. For more information on Detective or Proactive Config rules, see Evaluation Mode (https://docs.aws.amazon.com/config/latest/developerguide/evaluate-config-rules.html) in the Config Developer Guide. — shape: {EvaluationMode?: "DETECTIVE"|"PROACTIVE"}
-]: any -> record<ConfigRules: table<ConfigRuleName: string, ConfigRuleArn: string, ConfigRuleId: string, Description: string, Scope: record, Source: record, InputParameters: string, MaximumExecutionFrequency: string, ConfigRuleState: string, CreatedBy: string, EvaluationModes: list>, NextToken: string> {
+]: any -> oneof<record<ConfigRules: table<ConfigRuleName: string, ConfigRuleArn: string, ConfigRuleId: string, Description: string, Scope: record, Source: record, InputParameters: string, MaximumExecutionFrequency: string, ConfigRuleState: string, CreatedBy: string, EvaluationModes: list>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1521,7 +1538,7 @@ export def "describe-configuration-aggregator-sources-status" [
   --update-status: list<string> # Filters the status type. Valid value FAILED indicates errors while moving data. Valid value SUCCEEDED indicates the data was successfully moved. Valid value OUTDATED indicates the data is not the most recent.
   --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
   --limit-body: int # The maximum number of AggregatorSourceStatus returned on each page. The default is maximum. If you specify 0, Config uses the default. (body field)
-]: any -> record<AggregatedSourceStatusList: table<SourceId: string, SourceType: string, AwsRegion: string, LastUpdateStatus: string, LastUpdateTime: string, LastErrorCode: string, LastErrorMessage: string>, NextToken: string> {
+]: any -> oneof<record<AggregatedSourceStatusList: table<SourceId: string, SourceType: string, AwsRegion: string, LastUpdateStatus: string, LastUpdateTime: string, LastErrorCode: string, LastErrorMessage: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1575,7 +1592,7 @@ export def "describe-configuration-aggregators" [
   --configuration-aggregator-names: list<string> # The name of the configuration aggregators.
   --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
   --limit-body: int # The maximum number of configuration aggregators returned on each page. The default is maximum. If you specify 0, Config uses the default. (body field)
-]: any -> record<ConfigurationAggregators: table<ConfigurationAggregatorName: string, ConfigurationAggregatorArn: string, AccountAggregationSources: list, OrganizationAggregationSource: record, CreationTime: string, LastUpdatedTime: string, CreatedBy: string>, NextToken: string> {
+]: any -> oneof<record<ConfigurationAggregators: table<ConfigurationAggregatorName: string, ConfigurationAggregatorArn: string, AccountAggregationSources: list, OrganizationAggregationSource: record, CreationTime: string, LastUpdatedTime: string, CreatedBy: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1625,7 +1642,7 @@ export def "describe-configuration-recorder-status" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-27 # required
   --configuration-recorder-names: list<string> # The name(s) of the configuration recorder. If the name is not specified, the action returns the current status of all the configuration recorders associated with the account.
-]: any -> record<ConfigurationRecordersStatus: table<name: string, lastStartTime: string, lastStopTime: string, recording: bool, lastStatus: string, lastErrorCode: string, lastErrorMessage: string, lastStatusChangeTime: string>> {
+]: any -> oneof<record<ConfigurationRecordersStatus: table<name: string, lastStartTime: string, lastStopTime: string, recording: bool, lastStatus: string, lastErrorCode: string, lastErrorMessage: string, lastStatusChangeTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1674,7 +1691,7 @@ export def "describe-configuration-recorders" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-28 # required
   --configuration-recorder-names: list<string> # A list of configuration recorder names.
-]: any -> record<ConfigurationRecorders: table<name: string, roleARN: string, recordingGroup: record>> {
+]: any -> oneof<record<ConfigurationRecorders: table<name: string, roleARN: string, recordingGroup: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1704,7 +1721,6 @@ export def "describe-configuration-recorders" [
 #
 # POST /
 # operationId: DescribeConformancePackCompliance
-# --Filters shape: {ConfigRuleNames?: list<string>, ComplianceType?: "COMPLIANT"|"NON_COMPLIANT"|"INSUFFICIENT_DATA"}
 export def "describe-conformance-pack-compliance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1729,7 +1745,7 @@ export def "describe-conformance-pack-compliance" [
   --filters: record # Filters the conformance pack by compliance types and Config rule names. — shape: {ConfigRuleNames?: list<string>, ComplianceType?: "COMPLIANT"|"NON_COMPLIANT"|"INSUFFICIENT_DATA"}
   --limit-body: int # The maximum number of Config rules within a conformance pack are returned on each page. (body field)
   --next-token-body: string # The nextToken string returned in a previous request that you use to request the next page of results in a paginated response. (body field)
-]: any -> record<ConformancePackName: string, ConformancePackRuleComplianceList: table<ConfigRuleName: string, ComplianceType: string, Controls: list>, NextToken: string> {
+]: any -> oneof<record<ConformancePackName: string, ConformancePackRuleComplianceList: table<ConfigRuleName: string, ComplianceType: string, Controls: list>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1783,7 +1799,7 @@ export def "describe-conformance-pack-status" [
   --conformance-pack-names: list<string> # Comma-separated list of conformance pack names.
   --limit-body: int # The maximum number of conformance packs status returned on each page. (body field)
   --next-token-body: string # The nextToken string returned in a previous request that you use to request the next page of results in a paginated response. (body field)
-]: any -> record<ConformancePackStatusDetails: table<ConformancePackName: string, ConformancePackId: string, ConformancePackArn: string, ConformancePackState: string, StackArn: string, ConformancePackStatusReason: string, LastUpdateRequestedTime: string, LastUpdateCompletedTime: string>, NextToken: string> {
+]: any -> oneof<record<ConformancePackStatusDetails: table<ConformancePackName: string, ConformancePackId: string, ConformancePackArn: string, ConformancePackState: string, StackArn: string, ConformancePackStatusReason: string, LastUpdateRequestedTime: string, LastUpdateCompletedTime: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1837,7 +1853,7 @@ export def "describe-conformance-packs" [
   --conformance-pack-names: list<string> # Comma-separated list of conformance pack names for which you want details. If you do not specify any names, Config returns details for all your conformance packs.
   --limit-body: int # The maximum number of conformance packs returned on each page. (body field)
   --next-token-body: string # The nextToken string returned in a previous request that you use to request the next page of results in a paginated response. (body field)
-]: any -> record<ConformancePackDetails: table<ConformancePackName: string, ConformancePackArn: string, ConformancePackId: string, DeliveryS3Bucket: string, DeliveryS3KeyPrefix: string, ConformancePackInputParameters: list, LastUpdateRequestedTime: string, CreatedBy: string, TemplateSSMDocumentDetails: record>, NextToken: string> {
+]: any -> oneof<record<ConformancePackDetails: table<ConformancePackName: string, ConformancePackArn: string, ConformancePackId: string, DeliveryS3Bucket: string, DeliveryS3KeyPrefix: string, ConformancePackInputParameters: list, LastUpdateRequestedTime: string, CreatedBy: string, TemplateSSMDocumentDetails: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1887,7 +1903,7 @@ export def "describe-delivery-channel-status" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-32 # required
   --delivery-channel-names: list<string> # A list of delivery channel names.
-]: any -> record<DeliveryChannelsStatus: table<name: string, configSnapshotDeliveryInfo: record, configHistoryDeliveryInfo: record, configStreamDeliveryInfo: record>> {
+]: any -> oneof<record<DeliveryChannelsStatus: table<name: string, configSnapshotDeliveryInfo: record, configHistoryDeliveryInfo: record, configStreamDeliveryInfo: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1936,7 +1952,7 @@ export def "describe-delivery-channels" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-33 # required
   --delivery-channel-names: list<string> # A list of delivery channel names.
-]: any -> record<DeliveryChannels: table<name: string, s3BucketName: string, s3KeyPrefix: string, s3KmsKeyArn: string, snsTopicARN: string, configSnapshotDeliveryProperties: record>> {
+]: any -> oneof<record<DeliveryChannels: table<name: string, s3BucketName: string, s3KeyPrefix: string, s3KmsKeyArn: string, snsTopicARN: string, configSnapshotDeliveryProperties: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1989,7 +2005,7 @@ export def "describe-organization-config-rule-statuses" [
   --organization-config-rule-names: list<string> # The names of organization Config rules for which you want status details. If you do not specify any names, Config returns details for all your organization Config rules.
   --limit-body: int # The maximum number of OrganizationConfigRuleStatuses returned on each page. If you do no specify a number, Config uses the default. The default is 100. (body field)
   --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
-]: any -> record<OrganizationConfigRuleStatuses: table<OrganizationConfigRuleName: string, OrganizationRuleStatus: string, ErrorCode: string, ErrorMessage: string, LastUpdateTime: string>, NextToken: string> {
+]: any -> oneof<record<OrganizationConfigRuleStatuses: table<OrganizationConfigRuleName: string, OrganizationRuleStatus: string, ErrorCode: string, ErrorMessage: string, LastUpdateTime: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2043,7 +2059,7 @@ export def "describe-organization-config-rules" [
   --organization-config-rule-names: list<string> # The names of organization Config rules for which you want details. If you do not specify any names, Config returns details for all your organization Config rules.
   --limit-body: int # The maximum number of organization Config rules returned on each page. If you do no specify a number, Config uses the default. The default is 100. (body field)
   --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
-]: any -> record<OrganizationConfigRules: table<OrganizationConfigRuleName: string, OrganizationConfigRuleArn: string, OrganizationManagedRuleMetadata: record, OrganizationCustomRuleMetadata: record, ExcludedAccounts: list, LastUpdateTime: string, OrganizationCustomPolicyRuleMetadata: record>, NextToken: string> {
+]: any -> oneof<record<OrganizationConfigRules: table<OrganizationConfigRuleName: string, OrganizationConfigRuleArn: string, OrganizationManagedRuleMetadata: record, OrganizationCustomRuleMetadata: record, ExcludedAccounts: list, LastUpdateTime: string, OrganizationCustomPolicyRuleMetadata: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2097,7 +2113,7 @@ export def "describe-organization-conformance-pack-statuses" [
   --organization-conformance-pack-names: list<string> # The names of organization conformance packs for which you want status details. If you do not specify any names, Config returns details for all your organization conformance packs.
   --limit-body: int # The maximum number of OrganizationConformancePackStatuses returned on each page. If you do no specify a number, Config uses the default. The default is 100. (body field)
   --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
-]: any -> record<OrganizationConformancePackStatuses: table<OrganizationConformancePackName: string, Status: string, ErrorCode: string, ErrorMessage: string, LastUpdateTime: string>, NextToken: string> {
+]: any -> oneof<record<OrganizationConformancePackStatuses: table<OrganizationConformancePackName: string, Status: string, ErrorCode: string, ErrorMessage: string, LastUpdateTime: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2151,7 +2167,7 @@ export def "describe-organization-conformance-packs" [
   --organization-conformance-pack-names: list<string> # The name that you assign to an organization conformance pack.
   --limit-body: int # The maximum number of organization config packs returned on each page. If you do no specify a number, Config uses the default. The default is 100. (body field)
   --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
-]: any -> record<OrganizationConformancePacks: table<OrganizationConformancePackName: string, OrganizationConformancePackArn: string, DeliveryS3Bucket: string, DeliveryS3KeyPrefix: string, ConformancePackInputParameters: list, ExcludedAccounts: list, LastUpdateTime: string>, NextToken: string> {
+]: any -> oneof<record<OrganizationConformancePacks: table<OrganizationConformancePackName: string, OrganizationConformancePackArn: string, DeliveryS3Bucket: string, DeliveryS3KeyPrefix: string, ConformancePackInputParameters: list, ExcludedAccounts: list, LastUpdateTime: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2204,7 +2220,7 @@ export def "describe-pending-aggregation-requests" [
   --x-amz-target: string@x-amz-target-completer-38 # required
   --limit-body: int # The maximum number of evaluation results returned on each page. The default is maximum. If you specify 0, Config uses the default. (body field)
   --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
-]: any -> record<PendingAggregationRequests: table<RequesterAccountId: string, RequesterAwsRegion: string>, NextToken: string> {
+]: any -> oneof<record<PendingAggregationRequests: table<RequesterAccountId: string, RequesterAwsRegion: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2254,7 +2270,7 @@ export def "describe-remediation-configurations" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-39 # required
   config_rule_names: list<string> # A list of Config rule names of remediation configurations for which you want details.
-]: any -> record<RemediationConfigurations: table<ConfigRuleName: string, TargetType: string, TargetId: string, TargetVersion: string, Parameters: record, ResourceType: string, Automatic: bool, ExecutionControls: record, MaximumAutomaticAttempts: int, RetryAttemptSeconds: int, Arn: string, CreatedByService: string>> {
+]: any -> oneof<record<RemediationConfigurations: table<ConfigRuleName: string, TargetType: string, TargetId: string, TargetVersion: string, Parameters: record, ResourceType: string, Automatic: bool, ExecutionControls: record, MaximumAutomaticAttempts: int, RetryAttemptSeconds: int, Arn: string, CreatedByService: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2284,7 +2300,6 @@ export def "describe-remediation-configurations" [
 #
 # POST /
 # operationId: DescribeRemediationExceptions
-# --ResourceKeys item shape: {ResourceType?: string, ResourceId?: string}
 export def "describe-remediation-exceptions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2309,7 +2324,7 @@ export def "describe-remediation-exceptions" [
   --resource-keys: list # An exception list of resource exception keys to be processed with the current request. Config adds exception for each resource key. For example, Config adds 3 exceptions for 3 resource keys. — item shape: {ResourceType?: string, ResourceId?: string}
   --limit-body: int # The maximum number of RemediationExceptionResourceKey returned on each page. The default is 25. If you specify 0, Config uses the default. (body field)
   --next-token-body: string # The nextToken string returned in a previous request that you use to request the next page of results in a paginated response. (body field)
-]: any -> record<RemediationExceptions: table<ConfigRuleName: string, ResourceType: string, ResourceId: string, Message: string, ExpirationTime: string>, NextToken: string> {
+]: any -> oneof<record<RemediationExceptions: table<ConfigRuleName: string, ResourceType: string, ResourceId: string, Message: string, ExpirationTime: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2340,7 +2355,6 @@ export def "describe-remediation-exceptions" [
 #
 # POST /
 # operationId: DescribeRemediationExecutionStatus
-# --ResourceKeys item shape: {resourceType: "AWS::EC2::CustomerGateway"|"AWS::EC2::EIP"|"AWS::EC2::Host"|"AWS::EC2::Instance"|"AWS::EC2::InternetGateway"|"AWS::EC2::NetworkAcl"|"AWS::EC2::NetworkInterface"|"AWS::EC2::RouteTable"|"AWS::EC2::SecurityGroup"|"AWS::EC2::Subnet"|"AWS::CloudTrail::Trail"|"AWS::EC2::Volume"|"AWS::EC2::VPC"|"AWS::EC2::VPNConnection"|"AWS::EC2::VPNGateway"|"AWS::EC2::RegisteredHAInstance"|"AWS::EC2::NatGateway"|"AWS::EC2::EgressOnlyInternetGateway"|"AWS::EC2::VPCEndpoint"|"AWS::EC2::VPCEndpointService"|"AWS::EC2::FlowLog"|"AWS::EC2::VPCPeeringConnection"|"AWS::Elasticsearch::Domain"|"AWS::IAM::Group"|"AWS::IAM::Policy"|"AWS::IAM::Role"|"AWS::IAM::User"|"AWS::ElasticLoadBalancingV2::LoadBalancer"|"AWS::ACM::Certificate"|"AWS::RDS::DBInstance"|"AWS::RDS::DBSubnetGroup"|"AWS::RDS::DBSecurityGroup"|"AWS::RDS::DBSnapshot"|"AWS::RDS::DBCluster"|"AWS::RDS::DBClusterSnapshot"|"AWS::RDS::EventSubscription"|"AWS::S3::Bucket"|"AWS::S3::AccountPublicAccessBlock"|"AWS::Redshift::Cluster"|"AWS::Redshift::ClusterSnapshot"|"AWS::Redshift::ClusterParameterGroup"|"AWS::Redshift::ClusterSecurityGroup"|"AWS::Redshift::ClusterSubnetGroup"|"AWS::Redshift::EventSubscription"|"AWS::SSM::ManagedInstanceInventory"|"AWS::CloudWatch::Alarm"|"AWS::CloudFormation::Stack"|"AWS::ElasticLoadBalancing::LoadBalancer"|"AWS::AutoScaling::AutoScalingGroup"|"AWS::AutoScaling::LaunchConfiguration"|"AWS::AutoScaling::ScalingPolicy"|"AWS::AutoScaling::ScheduledAction"|"AWS::DynamoDB::Table"|"AWS::CodeBuild::Project"|"AWS::WAF::RateBasedRule"|"AWS::WAF::Rule"|"AWS::WAF::RuleGroup"|"AWS::WAF::WebACL"|"AWS::WAFRegional::RateBasedRule"|"AWS::WAFRegional::Rule"|"AWS::WAFRegional::RuleGroup"|"AWS::WAFRegional::WebACL"|"AWS::CloudFront::Distribution"|"AWS::CloudFront::StreamingDistribution"|"AWS::Lambda::Function"|"AWS::NetworkFirewall::Firewall"|"AWS::NetworkFirewall::FirewallPolicy"|"AWS::NetworkFirewall::RuleGroup"|"AWS::ElasticBeanstalk::Application"|"AWS::ElasticBeanstalk::ApplicationVersion"|"AWS::ElasticBeanstalk::Environment"|"AWS::WAFv2::WebACL"|"AWS::WAFv2::RuleGroup"|"AWS::WAFv2::IPSet"|"AWS::WAFv2::RegexPatternSet"|"AWS::WAFv2::ManagedRuleSet"|"AWS::XRay::EncryptionConfig"|"AWS::SSM::AssociationCompliance"|"AWS::SSM::PatchCompliance"|"AWS::Shield::Protection"|"AWS::ShieldRegional::Protection"|"AWS::Config::ConformancePackCompliance"|"AWS::Config::ResourceCompliance"|"AWS::ApiGateway::Stage"|"AWS::ApiGateway::RestApi"|"AWS::ApiGatewayV2::Stage"|"AWS::ApiGatewayV2::Api"|"AWS::CodePipeline::Pipeline"|"AWS::ServiceCatalog::CloudFormationProvisionedProduct"|"AWS::ServiceCatalog::CloudFormationProduct"|"AWS::ServiceCatalog::Portfolio"|"AWS::SQS::Queue"|"AWS::KMS::Key"|"AWS::QLDB::Ledger"|"AWS::SecretsManager::Secret"|"AWS::SNS::Topic"|"AWS::SSM::FileData"|"AWS::Backup::BackupPlan"|"AWS::Backup::BackupSelection"|"AWS::Backup::BackupVault"|"AWS::Backup::RecoveryPoint"|"AWS::ECR::Repository"|"AWS::ECS::Cluster"|"AWS::ECS::Service"|"AWS::ECS::TaskDefinition"|"AWS::EFS::AccessPoint"|"AWS::EFS::FileSystem"|"AWS::EKS::Cluster"|"AWS::OpenSearch::Domain"|"AWS::EC2::TransitGateway"|"AWS::Kinesis::Stream"|"AWS::Kinesis::StreamConsumer"|"AWS::CodeDeploy::Application"|"AWS::CodeDeploy::DeploymentConfig"|"AWS::CodeDeploy::DeploymentGroup"|"AWS::EC2::LaunchTemplate"|"AWS::ECR::PublicRepository"|"AWS::GuardDuty::Detector"|"AWS::EMR::SecurityConfiguration"|"AWS::SageMaker::CodeRepository"|"AWS::Route53Resolver::ResolverEndpoint"|"AWS::Route53Resolver::ResolverRule"|"AWS::Route53Resolver::ResolverRuleAssociation"|"AWS::DMS::ReplicationSubnetGroup"|"AWS::DMS::EventSubscription"|"AWS::MSK::Cluster"|"AWS::StepFunctions::Activity"|"AWS::WorkSpaces::Workspace"|"AWS::WorkSpaces::ConnectionAlias"|"AWS::SageMaker::Model"|"AWS::ElasticLoadBalancingV2::Listener"|"AWS::StepFunctions::StateMachine"|"AWS::Batch::JobQueue"|"AWS::Batch::ComputeEnvironment"|"AWS::AccessAnalyzer::Analyzer"|"AWS::Athena::WorkGroup"|"AWS::Athena::DataCatalog"|"AWS::Detective::Graph"|"AWS::GlobalAccelerator::Accelerator"|"AWS::GlobalAccelerator::EndpointGroup"|"AWS::GlobalAccelerator::Listener"|"AWS::EC2::TransitGatewayAttachment"|"AWS::EC2::TransitGatewayRouteTable"|"AWS::DMS::Certificate"|"AWS::AppConfig::Application"|"AWS::AppSync::GraphQLApi"|"AWS::DataSync::LocationSMB"|"AWS::DataSync::LocationFSxLustre"|"AWS::DataSync::LocationS3"|"AWS::DataSync::LocationEFS"|"AWS::DataSync::Task"|"AWS::DataSync::LocationNFS"|"AWS::EC2::NetworkInsightsAccessScopeAnalysis"|"AWS::EKS::FargateProfile"|"AWS::Glue::Job"|"AWS::GuardDuty::ThreatIntelSet"|"AWS::GuardDuty::IPSet"|"AWS::SageMaker::Workteam"|"AWS::SageMaker::NotebookInstanceLifecycleConfig"|"AWS::ServiceDiscovery::Service"|"AWS::ServiceDiscovery::PublicDnsNamespace"|"AWS::SES::ContactList"|"AWS::SES::ConfigurationSet"|"AWS::Route53::HostedZone"|"AWS::IoTEvents::Input"|"AWS::IoTEvents::DetectorModel"|"AWS::IoTEvents::AlarmModel"|"AWS::ServiceDiscovery::HttpNamespace"|"AWS::Events::EventBus"|"AWS::ImageBuilder::ContainerRecipe"|"AWS::ImageBuilder::DistributionConfiguration"|"AWS::ImageBuilder::InfrastructureConfiguration"|"AWS::DataSync::LocationObjectStorage"|"AWS::DataSync::LocationHDFS"|"AWS::Glue::Classifier"|"AWS::Route53RecoveryReadiness::Cell"|"AWS::Route53RecoveryReadiness::ReadinessCheck"|"AWS::ECR::RegistryPolicy"|"AWS::Backup::ReportPlan"|"AWS::Lightsail::Certificate"|"AWS::RUM::AppMonitor"|"AWS::Events::Endpoint"|"AWS::SES::ReceiptRuleSet"|"AWS::Events::Archive"|"AWS::Events::ApiDestination"|"AWS::Lightsail::Disk"|"AWS::FIS::ExperimentTemplate"|"AWS::DataSync::LocationFSxWindows"|"AWS::SES::ReceiptFilter"|"AWS::GuardDuty::Filter"|"AWS::SES::Template"|"AWS::AmazonMQ::Broker"|"AWS::AppConfig::Environment"|"AWS::AppConfig::ConfigurationProfile"|"AWS::Cloud9::EnvironmentEC2"|"AWS::EventSchemas::Registry"|"AWS::EventSchemas::RegistryPolicy"|"AWS::EventSchemas::Discoverer"|"AWS::FraudDetector::Label"|"AWS::FraudDetector::EntityType"|"AWS::FraudDetector::Variable"|"AWS::FraudDetector::Outcome"|"AWS::IoT::Authorizer"|"AWS::IoT::SecurityProfile"|"AWS::IoT::RoleAlias"|"AWS::IoT::Dimension"|"AWS::IoTAnalytics::Datastore"|"AWS::Lightsail::Bucket"|"AWS::Lightsail::StaticIp"|"AWS::MediaPackage::PackagingGroup"|"AWS::Route53RecoveryReadiness::RecoveryGroup"|"AWS::ResilienceHub::ResiliencyPolicy"|"AWS::Transfer::Workflow"|"AWS::EKS::IdentityProviderConfig"|"AWS::EKS::Addon"|"AWS::Glue::MLTransform"|"AWS::IoT::Policy"|"AWS::IoT::MitigationAction"|"AWS::IoTTwinMaker::Workspace"|"AWS::IoTTwinMaker::Entity"|"AWS::IoTAnalytics::Dataset"|"AWS::IoTAnalytics::Pipeline"|"AWS::IoTAnalytics::Channel"|"AWS::IoTSiteWise::Dashboard"|"AWS::IoTSiteWise::Project"|"AWS::IoTSiteWise::Portal"|"AWS::IoTSiteWise::AssetModel"|"AWS::IVS::Channel"|"AWS::IVS::RecordingConfiguration"|"AWS::IVS::PlaybackKeyPair"|"AWS::KinesisAnalyticsV2::Application"|"AWS::RDS::GlobalCluster"|"AWS::S3::MultiRegionAccessPoint"|"AWS::DeviceFarm::TestGridProject"|"AWS::Budgets::BudgetsAction"|"AWS::Lex::Bot"|"AWS::CodeGuruReviewer::RepositoryAssociation"|"AWS::IoT::CustomMetric"|"AWS::Route53Resolver::FirewallDomainList"|"AWS::RoboMaker::RobotApplicationVersion"|"AWS::EC2::TrafficMirrorSession"|"AWS::IoTSiteWise::Gateway"|"AWS::Lex::BotAlias"|"AWS::LookoutMetrics::Alert"|"AWS::IoT::AccountAuditConfiguration"|"AWS::EC2::TrafficMirrorTarget"|"AWS::S3::StorageLens"|"AWS::IoT::ScheduledAudit"|"AWS::Events::Connection"|"AWS::EventSchemas::Schema"|"AWS::MediaPackage::PackagingConfiguration"|"AWS::KinesisVideo::SignalingChannel"|"AWS::AppStream::DirectoryConfig"|"AWS::LookoutVision::Project"|"AWS::Route53RecoveryControl::Cluster"|"AWS::Route53RecoveryControl::SafetyRule"|"AWS::Route53RecoveryControl::ControlPanel"|"AWS::Route53RecoveryControl::RoutingControl"|"AWS::Route53RecoveryReadiness::ResourceSet"|"AWS::RoboMaker::SimulationApplication"|"AWS::RoboMaker::RobotApplication"|"AWS::HealthLake::FHIRDatastore"|"AWS::Pinpoint::Segment"|"AWS::Pinpoint::ApplicationSettings"|"AWS::Events::Rule"|"AWS::EC2::DHCPOptions"|"AWS::EC2::NetworkInsightsPath"|"AWS::EC2::TrafficMirrorFilter"|"AWS::EC2::IPAM"|"AWS::IoTTwinMaker::Scene"|"AWS::NetworkManager::TransitGatewayRegistration"|"AWS::CustomerProfiles::Domain"|"AWS::AutoScaling::WarmPool"|"AWS::Connect::PhoneNumber", ... (1 more fields)}
 export def "describe-remediation-execution-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2365,7 +2379,7 @@ export def "describe-remediation-execution-status" [
   --resource-keys: list # A list of resource keys to be processed with the current request. Each element in the list consists of the resource type and resource ID. — item shape: {resourceType: "AWS::EC2::CustomerGateway"|"AWS::EC2::EIP"|"AWS::EC2::Host"|"AWS::EC2::Instance"|"AWS::EC2::InternetGateway"|"AWS::EC2::NetworkAcl"|"AWS::EC2::NetworkInterface"|"AWS::EC2::RouteTable"|"AWS::EC2::SecurityGroup"|"AWS::EC2::Subnet"|"AWS::CloudTrail::Trail"|"AWS::EC2::Volume"|"AWS::EC2::VPC"|"AWS::EC2::VPNConnection"|"AWS::EC2::VPNGateway"|"AWS::EC2::RegisteredHAInstance"|"AWS::EC2::NatGateway"|"AWS::EC2::EgressOnlyInternetGateway"|"AWS::EC2::VPCEndpoint"|"AWS::EC2::VPCEndpointService"|"AWS::EC2::FlowLog"|"AWS::EC2::VPCPeeringConnection"|"AWS::Elasticsearch::Domain"|"AWS::IAM::Group"|"AWS::IAM::Policy"|"AWS::IAM::Role"|"AWS::IAM::User"|"AWS::ElasticLoadBalancingV2::LoadBalancer"|"AWS::ACM::Certificate"|"AWS::RDS::DBInstance"|"AWS::RDS::DBSubnetGroup"|"AWS::RDS::DBSecurityGroup"|"AWS::RDS::DBSnapshot"|"AWS::RDS::DBCluster"|"AWS::RDS::DBClusterSnapshot"|"AWS::RDS::EventSubscription"|"AWS::S3::Bucket"|"AWS::S3::AccountPublicAccessBlock"|"AWS::Redshift::Cluster"|"AWS::Redshift::ClusterSnapshot"|"AWS::Redshift::ClusterParameterGroup"|"AWS::Redshift::ClusterSecurityGroup"|"AWS::Redshift::ClusterSubnetGroup"|"AWS::Redshift::EventSubscription"|"AWS::SSM::ManagedInstanceInventory"|"AWS::CloudWatch::Alarm"|"AWS::CloudFormation::Stack"|"AWS::ElasticLoadBalancing::LoadBalancer"|"AWS::AutoScaling::AutoScalingGroup"|"AWS::AutoScaling::LaunchConfiguration"|"AWS::AutoScaling::ScalingPolicy"|"AWS::AutoScaling::ScheduledAction"|"AWS::DynamoDB::Table"|"AWS::CodeBuild::Project"|"AWS::WAF::RateBasedRule"|"AWS::WAF::Rule"|"AWS::WAF::RuleGroup"|"AWS::WAF::WebACL"|"AWS::WAFRegional::RateBasedRule"|"AWS::WAFRegional::Rule"|"AWS::WAFRegional::RuleGroup"|"AWS::WAFRegional::WebACL"|"AWS::CloudFront::Distribution"|"AWS::CloudFront::StreamingDistribution"|"AWS::Lambda::Function"|"AWS::NetworkFirewall::Firewall"|"AWS::NetworkFirewall::FirewallPolicy"|"AWS::NetworkFirewall::RuleGroup"|"AWS::ElasticBeanstalk::Application"|"AWS::ElasticBeanstalk::ApplicationVersion"|"AWS::ElasticBeanstalk::Environment"|"AWS::WAFv2::WebACL"|"AWS::WAFv2::RuleGroup"|"AWS::WAFv2::IPSet"|"AWS::WAFv2::RegexPatternSet"|"AWS::WAFv2::ManagedRuleSet"|"AWS::XRay::EncryptionConfig"|"AWS::SSM::AssociationCompliance"|"AWS::SSM::PatchCompliance"|"AWS::Shield::Protection"|"AWS::ShieldRegional::Protection"|"AWS::Config::ConformancePackCompliance"|"AWS::Config::ResourceCompliance"|"AWS::ApiGateway::Stage"|"AWS::ApiGateway::RestApi"|"AWS::ApiGatewayV2::Stage"|"AWS::ApiGatewayV2::Api"|"AWS::CodePipeline::Pipeline"|"AWS::ServiceCatalog::CloudFormationProvisionedProduct"|"AWS::ServiceCatalog::CloudFormationProduct"|"AWS::ServiceCatalog::Portfolio"|"AWS::SQS::Queue"|"AWS::KMS::Key"|"AWS::QLDB::Ledger"|"AWS::SecretsManager::Secret"|"AWS::SNS::Topic"|"AWS::SSM::FileData"|"AWS::Backup::BackupPlan"|"AWS::Backup::BackupSelection"|"AWS::Backup::BackupVault"|"AWS::Backup::RecoveryPoint"|"AWS::ECR::Repository"|"AWS::ECS::Cluster"|"AWS::ECS::Service"|"AWS::ECS::TaskDefinition"|"AWS::EFS::AccessPoint"|"AWS::EFS::FileSystem"|"AWS::EKS::Cluster"|"AWS::OpenSearch::Domain"|"AWS::EC2::TransitGateway"|"AWS::Kinesis::Stream"|"AWS::Kinesis::StreamConsumer"|"AWS::CodeDeploy::Application"|"AWS::CodeDeploy::DeploymentConfig"|"AWS::CodeDeploy::DeploymentGroup"|"AWS::EC2::LaunchTemplate"|"AWS::ECR::PublicRepository"|"AWS::GuardDuty::Detector"|"AWS::EMR::SecurityConfiguration"|"AWS::SageMaker::CodeRepository"|"AWS::Route53Resolver::ResolverEndpoint"|"AWS::Route53Resolver::ResolverRule"|"AWS::Route53Resolver::ResolverRuleAssociation"|"AWS::DMS::ReplicationSubnetGroup"|"AWS::DMS::EventSubscription"|"AWS::MSK::Cluster"|"AWS::StepFunctions::Activity"|"AWS::WorkSpaces::Workspace"|"AWS::WorkSpaces::ConnectionAlias"|"AWS::SageMaker::Model"|"AWS::ElasticLoadBalancingV2::Listener"|"AWS::StepFunctions::StateMachine"|"AWS::Batch::JobQueue"|"AWS::Batch::ComputeEnvironment"|"AWS::AccessAnalyzer::Analyzer"|"AWS::Athena::WorkGroup"|"AWS::Athena::DataCatalog"|"AWS::Detective::Graph"|"AWS::GlobalAccelerator::Accelerator"|"AWS::GlobalAccelerator::EndpointGroup"|"AWS::GlobalAccelerator::Listener"|"AWS::EC2::TransitGatewayAttachment"|"AWS::EC2::TransitGatewayRouteTable"|"AWS::DMS::Certificate"|"AWS::AppConfig::Application"|"AWS::AppSync::GraphQLApi"|"AWS::DataSync::LocationSMB"|"AWS::DataSync::LocationFSxLustre"|"AWS::DataSync::LocationS3"|"AWS::DataSync::LocationEFS"|"AWS::DataSync::Task"|"AWS::DataSync::LocationNFS"|"AWS::EC2::NetworkInsightsAccessScopeAnalysis"|"AWS::EKS::FargateProfile"|"AWS::Glue::Job"|"AWS::GuardDuty::ThreatIntelSet"|"AWS::GuardDuty::IPSet"|"AWS::SageMaker::Workteam"|"AWS::SageMaker::NotebookInstanceLifecycleConfig"|"AWS::ServiceDiscovery::Service"|"AWS::ServiceDiscovery::PublicDnsNamespace"|"AWS::SES::ContactList"|"AWS::SES::ConfigurationSet"|"AWS::Route53::HostedZone"|"AWS::IoTEvents::Input"|"AWS::IoTEvents::DetectorModel"|"AWS::IoTEvents::AlarmModel"|"AWS::ServiceDiscovery::HttpNamespace"|"AWS::Events::EventBus"|"AWS::ImageBuilder::ContainerRecipe"|"AWS::ImageBuilder::DistributionConfiguration"|"AWS::ImageBuilder::InfrastructureConfiguration"|"AWS::DataSync::LocationObjectStorage"|"AWS::DataSync::LocationHDFS"|"AWS::Glue::Classifier"|"AWS::Route53RecoveryReadiness::Cell"|"AWS::Route53RecoveryReadiness::ReadinessCheck"|"AWS::ECR::RegistryPolicy"|"AWS::Backup::ReportPlan"|"AWS::Lightsail::Certificate"|"AWS::RUM::AppMonitor"|"AWS::Events::Endpoint"|"AWS::SES::ReceiptRuleSet"|"AWS::Events::Archive"|"AWS::Events::ApiDestination"|"AWS::Lightsail::Disk"|"AWS::FIS::ExperimentTemplate"|"AWS::DataSync::LocationFSxWindows"|"AWS::SES::ReceiptFilter"|"AWS::GuardDuty::Filter"|"AWS::SES::Template"|"AWS::AmazonMQ::Broker"|"AWS::AppConfig::Environment"|"AWS::AppConfig::ConfigurationProfile"|"AWS::Cloud9::EnvironmentEC2"|"AWS::EventSchemas::Registry"|"AWS::EventSchemas::RegistryPolicy"|"AWS::EventSchemas::Discoverer"|"AWS::FraudDetector::Label"|"AWS::FraudDetector::EntityType"|"AWS::FraudDetector::Variable"|"AWS::FraudDetector::Outcome"|"AWS::IoT::Authorizer"|"AWS::IoT::SecurityProfile"|"AWS::IoT::RoleAlias"|"AWS::IoT::Dimension"|"AWS::IoTAnalytics::Datastore"|"AWS::Lightsail::Bucket"|"AWS::Lightsail::StaticIp"|"AWS::MediaPackage::PackagingGroup"|"AWS::Route53RecoveryReadiness::RecoveryGroup"|"AWS::ResilienceHub::ResiliencyPolicy"|"AWS::Transfer::Workflow"|"AWS::EKS::IdentityProviderConfig"|"AWS::EKS::Addon"|"AWS::Glue::MLTransform"|"AWS::IoT::Policy"|"AWS::IoT::MitigationAction"|"AWS::IoTTwinMaker::Workspace"|"AWS::IoTTwinMaker::Entity"|"AWS::IoTAnalytics::Dataset"|"AWS::IoTAnalytics::Pipeline"|"AWS::IoTAnalytics::Channel"|"AWS::IoTSiteWise::Dashboard"|"AWS::IoTSiteWise::Project"|"AWS::IoTSiteWise::Portal"|"AWS::IoTSiteWise::AssetModel"|"AWS::IVS::Channel"|"AWS::IVS::RecordingConfiguration"|"AWS::IVS::PlaybackKeyPair"|"AWS::KinesisAnalyticsV2::Application"|"AWS::RDS::GlobalCluster"|"AWS::S3::MultiRegionAccessPoint"|"AWS::DeviceFarm::TestGridProject"|"AWS::Budgets::BudgetsAction"|"AWS::Lex::Bot"|"AWS::CodeGuruReviewer::RepositoryAssociation"|"AWS::IoT::CustomMetric"|"AWS::Route53Resolver::FirewallDomainList"|"AWS::RoboMaker::RobotApplicationVersion"|"AWS::EC2::TrafficMirrorSession"|"AWS::IoTSiteWise::Gateway"|"AWS::Lex::BotAlias"|"AWS::LookoutMetrics::Alert"|"AWS::IoT::AccountAuditConfiguration"|"AWS::EC2::TrafficMirrorTarget"|"AWS::S3::StorageLens"|"AWS::IoT::ScheduledAudit"|"AWS::Events::Connection"|"AWS::EventSchemas::Schema"|"AWS::MediaPackage::PackagingConfiguration"|"AWS::KinesisVideo::SignalingChannel"|"AWS::AppStream::DirectoryConfig"|"AWS::LookoutVision::Project"|"AWS::Route53RecoveryControl::Cluster"|"AWS::Route53RecoveryControl::SafetyRule"|"AWS::Route53RecoveryControl::ControlPanel"|"AWS::Route53RecoveryControl::RoutingControl"|"AWS::Route53RecoveryReadiness::ResourceSet"|"AWS::RoboMaker::SimulationApplication"|"AWS::RoboMaker::RobotApplication"|"AWS::HealthLake::FHIRDatastore"|"AWS::Pinpoint::Segment"|"AWS::Pinpoint::ApplicationSettings"|"AWS::Events::Rule"|"AWS::EC2::DHCPOptions"|"AWS::EC2::NetworkInsightsPath"|"AWS::EC2::TrafficMirrorFilter"|"AWS::EC2::IPAM"|"AWS::IoTTwinMaker::Scene"|"AWS::NetworkManager::TransitGatewayRegistration"|"AWS::CustomerProfiles::Domain"|"AWS::AutoScaling::WarmPool"|"AWS::Connect::PhoneNumber", ... (1 more fields)}
   --limit-body: int # The maximum number of RemediationExecutionStatuses returned on each page. The default is maximum. If you specify 0, Config uses the default. (body field)
   --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
-]: any -> record<RemediationExecutionStatuses: table<ResourceKey: record, State: string, StepDetails: list, InvocationTime: string, LastUpdatedTime: string>, NextToken: string> {
+]: any -> oneof<record<RemediationExecutionStatuses: table<ResourceKey: record, State: string, StepDetails: list, InvocationTime: string, LastUpdatedTime: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2417,7 +2431,7 @@ export def "describe-retention-configurations" [
   --x-amz-target: string@x-amz-target-completer-42 # required
   --retention-configuration-names: list<string> # A list of names of retention configurations for which you want details. If you do not specify a name, Config returns details for all the retention configurations for that account. Currently, Config supports only one retention configuration per region in your account.
   --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
-]: any -> record<RetentionConfigurations: table<Name: string, RetentionPeriodInDays: int>, NextToken: string> {
+]: any -> oneof<record<RetentionConfigurations: table<Name: string, RetentionPeriodInDays: int>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2475,7 +2489,7 @@ export def "get-aggregate-compliance-details-by-config-rule" [
   --compliance-type: string@compliance-type-completer # The resource compliance status. For the GetAggregateComplianceDetailsByConfigRuleRequest data type, Config supports only the COMPLIANT and NON_COMPLIANT. Config does not support the NOT_APPLICABLE and INSUFFICIENT_DATA values.
   --limit-body: int # The maximum number of evaluation results returned on each page. The default is 50. You cannot specify a number greater than 100. If you specify 0, Config uses the default. (body field)
   --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
-]: any -> record<AggregateEvaluationResults: table<EvaluationResultIdentifier: record, ComplianceType: string, ResultRecordedTime: string, ConfigRuleInvokedTime: string, Annotation: string, AccountId: string, AwsRegion: string>, NextToken: string> {
+]: any -> oneof<record<AggregateEvaluationResults: table<EvaluationResultIdentifier: record, ComplianceType: string, ResultRecordedTime: string, ConfigRuleInvokedTime: string, Annotation: string, AccountId: string, AwsRegion: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2506,7 +2520,6 @@ export def "get-aggregate-compliance-details-by-config-rule" [
 #
 # POST /
 # operationId: GetAggregateConfigRuleComplianceSummary
-# --Filters shape: {AccountId?: string, AwsRegion?: string}
 export def "get-aggregate-config-rule-compliance-summary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2532,7 +2545,7 @@ export def "get-aggregate-config-rule-compliance-summary" [
   --group-by-key: string@group-by-key-completer # Groups the result based on ACCOUNT_ID or AWS_REGION.
   --limit-body: int # The maximum number of evaluation results returned on each page. The default is 1000. You cannot specify a number greater than 1000. If you specify 0, Config uses the default. (body field)
   --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
-]: any -> record<GroupByKey: string, AggregateComplianceCounts: table<GroupName: string, ComplianceSummary: record>, NextToken: string> {
+]: any -> oneof<record<GroupByKey: string, AggregateComplianceCounts: table<GroupName: string, ComplianceSummary: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2563,7 +2576,6 @@ export def "get-aggregate-config-rule-compliance-summary" [
 #
 # POST /
 # operationId: GetAggregateConformancePackComplianceSummary
-# --Filters shape: {AccountId?: string, AwsRegion?: string}
 export def "get-aggregate-conformance-pack-compliance-summary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2589,7 +2601,7 @@ export def "get-aggregate-conformance-pack-compliance-summary" [
   --group-by-key: string@group-by-key-completer # Groups the result based on Amazon Web Services account ID or Amazon Web Services Region.
   --limit-body: int # The maximum number of results returned on each page. The default is maximum. If you specify 0, Config uses the default. (body field)
   --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
-]: any -> record<AggregateConformancePackComplianceSummaries: table<ComplianceSummary: record, GroupName: string>, GroupByKey: string, NextToken: string> {
+]: any -> oneof<record<AggregateConformancePackComplianceSummaries: table<ComplianceSummary: record, GroupName: string>, GroupByKey: string, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2620,7 +2632,6 @@ export def "get-aggregate-conformance-pack-compliance-summary" [
 #
 # POST /
 # operationId: GetAggregateDiscoveredResourceCounts
-# --Filters shape: {ResourceType?: "AWS::EC2::CustomerGateway"|"AWS::EC2::EIP"|"AWS::EC2::Host"|"AWS::EC2::Instance"|"AWS::EC2::InternetGateway"|"AWS::EC2::NetworkAcl"|"AWS::EC2::NetworkInterface"|"AWS::EC2::RouteTable"|"AWS::EC2::SecurityGroup"|"AWS::EC2::Subnet"|"AWS::CloudTrail::Trail"|"AWS::EC2::Volume"|"AWS::EC2::VPC"|"AWS::EC2::VPNConnection"|"AWS::EC2::VPNGateway"|"AWS::EC2::RegisteredHAInstance"|"AWS::EC2::NatGateway"|"AWS::EC2::EgressOnlyInternetGateway"|"AWS::EC2::VPCEndpoint"|"AWS::EC2::VPCEndpointService"|"AWS::EC2::FlowLog"|"AWS::EC2::VPCPeeringConnection"|"AWS::Elasticsearch::Domain"|"AWS::IAM::Group"|"AWS::IAM::Policy"|"AWS::IAM::Role"|"AWS::IAM::User"|"AWS::ElasticLoadBalancingV2::LoadBalancer"|"AWS::ACM::Certificate"|"AWS::RDS::DBInstance"|"AWS::RDS::DBSubnetGroup"|"AWS::RDS::DBSecurityGroup"|"AWS::RDS::DBSnapshot"|"AWS::RDS::DBCluster"|"AWS::RDS::DBClusterSnapshot"|"AWS::RDS::EventSubscription"|"AWS::S3::Bucket"|"AWS::S3::AccountPublicAccessBlock"|"AWS::Redshift::Cluster"|"AWS::Redshift::ClusterSnapshot"|"AWS::Redshift::ClusterParameterGroup"|"AWS::Redshift::ClusterSecurityGroup"|"AWS::Redshift::ClusterSubnetGroup"|"AWS::Redshift::EventSubscription"|"AWS::SSM::ManagedInstanceInventory"|"AWS::CloudWatch::Alarm"|"AWS::CloudFormation::Stack"|"AWS::ElasticLoadBalancing::LoadBalancer"|"AWS::AutoScaling::AutoScalingGroup"|"AWS::AutoScaling::LaunchConfiguration"|"AWS::AutoScaling::ScalingPolicy"|"AWS::AutoScaling::ScheduledAction"|"AWS::DynamoDB::Table"|"AWS::CodeBuild::Project"|"AWS::WAF::RateBasedRule"|"AWS::WAF::Rule"|"AWS::WAF::RuleGroup"|"AWS::WAF::WebACL"|"AWS::WAFRegional::RateBasedRule"|"AWS::WAFRegional::Rule"|"AWS::WAFRegional::RuleGroup"|"AWS::WAFRegional::WebACL"|"AWS::CloudFront::Distribution"|"AWS::CloudFront::StreamingDistribution"|"AWS::Lambda::Function"|"AWS::NetworkFirewall::Firewall"|"AWS::NetworkFirewall::FirewallPolicy"|"AWS::NetworkFirewall::RuleGroup"|"AWS::ElasticBeanstalk::Application"|"AWS::ElasticBeanstalk::ApplicationVersion"|"AWS::ElasticBeanstalk::Environment"|"AWS::WAFv2::WebACL"|"AWS::WAFv2::RuleGroup"|"AWS::WAFv2::IPSet"|"AWS::WAFv2::RegexPatternSet"|"AWS::WAFv2::ManagedRuleSet"|"AWS::XRay::EncryptionConfig"|"AWS::SSM::AssociationCompliance"|"AWS::SSM::PatchCompliance"|"AWS::Shield::Protection"|"AWS::ShieldRegional::Protection"|"AWS::Config::ConformancePackCompliance"|"AWS::Config::ResourceCompliance"|"AWS::ApiGateway::Stage"|"AWS::ApiGateway::RestApi"|"AWS::ApiGatewayV2::Stage"|"AWS::ApiGatewayV2::Api"|"AWS::CodePipeline::Pipeline"|"AWS::ServiceCatalog::CloudFormationProvisionedProduct"|"AWS::ServiceCatalog::CloudFormationProduct"|"AWS::ServiceCatalog::Portfolio"|"AWS::SQS::Queue"|"AWS::KMS::Key"|"AWS::QLDB::Ledger"|"AWS::SecretsManager::Secret"|"AWS::SNS::Topic"|"AWS::SSM::FileData"|"AWS::Backup::BackupPlan"|"AWS::Backup::BackupSelection"|"AWS::Backup::BackupVault"|"AWS::Backup::RecoveryPoint"|"AWS::ECR::Repository"|"AWS::ECS::Cluster"|"AWS::ECS::Service"|"AWS::ECS::TaskDefinition"|"AWS::EFS::AccessPoint"|"AWS::EFS::FileSystem"|"AWS::EKS::Cluster"|"AWS::OpenSearch::Domain"|"AWS::EC2::TransitGateway"|"AWS::Kinesis::Stream"|"AWS::Kinesis::StreamConsumer"|"AWS::CodeDeploy::Application"|"AWS::CodeDeploy::DeploymentConfig"|"AWS::CodeDeploy::DeploymentGroup"|"AWS::EC2::LaunchTemplate"|"AWS::ECR::PublicRepository"|"AWS::GuardDuty::Detector"|"AWS::EMR::SecurityConfiguration"|"AWS::SageMaker::CodeRepository"|"AWS::Route53Resolver::ResolverEndpoint"|"AWS::Route53Resolver::ResolverRule"|"AWS::Route53Resolver::ResolverRuleAssociation"|"AWS::DMS::ReplicationSubnetGroup"|"AWS::DMS::EventSubscription"|"AWS::MSK::Cluster"|"AWS::StepFunctions::Activity"|"AWS::WorkSpaces::Workspace"|"AWS::WorkSpaces::ConnectionAlias"|"AWS::SageMaker::Model"|"AWS::ElasticLoadBalancingV2::Listener"|"AWS::StepFunctions::StateMachine"|"AWS::Batch::JobQueue"|"AWS::Batch::ComputeEnvironment"|"AWS::AccessAnalyzer::Analyzer"|"AWS::Athena::WorkGroup"|"AWS::Athena::DataCatalog"|"AWS::Detective::Graph"|"AWS::GlobalAccelerator::Accelerator"|"AWS::GlobalAccelerator::EndpointGroup"|"AWS::GlobalAccelerator::Listener"|"AWS::EC2::TransitGatewayAttachment"|"AWS::EC2::TransitGatewayRouteTable"|"AWS::DMS::Certificate"|"AWS::AppConfig::Application"|"AWS::AppSync::GraphQLApi"|"AWS::DataSync::LocationSMB"|"AWS::DataSync::LocationFSxLustre"|"AWS::DataSync::LocationS3"|"AWS::DataSync::LocationEFS"|"AWS::DataSync::Task"|"AWS::DataSync::LocationNFS"|"AWS::EC2::NetworkInsightsAccessScopeAnalysis"|"AWS::EKS::FargateProfile"|"AWS::Glue::Job"|"AWS::GuardDuty::ThreatIntelSet"|"AWS::GuardDuty::IPSet"|"AWS::SageMaker::Workteam"|"AWS::SageMaker::NotebookInstanceLifecycleConfig"|"AWS::ServiceDiscovery::Service"|"AWS::ServiceDiscovery::PublicDnsNamespace"|"AWS::SES::ContactList"|"AWS::SES::ConfigurationSet"|"AWS::Route53::HostedZone"|"AWS::IoTEvents::Input"|"AWS::IoTEvents::DetectorModel"|"AWS::IoTEvents::AlarmModel"|"AWS::ServiceDiscovery::HttpNamespace"|"AWS::Events::EventBus"|"AWS::ImageBuilder::ContainerRecipe"|"AWS::ImageBuilder::DistributionConfiguration"|"AWS::ImageBuilder::InfrastructureConfiguration"|"AWS::DataSync::LocationObjectStorage"|"AWS::DataSync::LocationHDFS"|"AWS::Glue::Classifier"|"AWS::Route53RecoveryReadiness::Cell"|"AWS::Route53RecoveryReadiness::ReadinessCheck"|"AWS::ECR::RegistryPolicy"|"AWS::Backup::ReportPlan"|"AWS::Lightsail::Certificate"|"AWS::RUM::AppMonitor"|"AWS::Events::Endpoint"|"AWS::SES::ReceiptRuleSet"|"AWS::Events::Archive"|"AWS::Events::ApiDestination"|"AWS::Lightsail::Disk"|"AWS::FIS::ExperimentTemplate"|"AWS::DataSync::LocationFSxWindows"|"AWS::SES::ReceiptFilter"|"AWS::GuardDuty::Filter"|"AWS::SES::Template"|"AWS::AmazonMQ::Broker"|"AWS::AppConfig::Environment"|"AWS::AppConfig::ConfigurationProfile"|"AWS::Cloud9::EnvironmentEC2"|"AWS::EventSchemas::Registry"|"AWS::EventSchemas::RegistryPolicy"|"AWS::EventSchemas::Discoverer"|"AWS::FraudDetector::Label"|"AWS::FraudDetector::EntityType"|"AWS::FraudDetector::Variable"|"AWS::FraudDetector::Outcome"|"AWS::IoT::Authorizer"|"AWS::IoT::SecurityProfile"|"AWS::IoT::RoleAlias"|"AWS::IoT::Dimension"|"AWS::IoTAnalytics::Datastore"|"AWS::Lightsail::Bucket"|"AWS::Lightsail::StaticIp"|"AWS::MediaPackage::PackagingGroup"|"AWS::Route53RecoveryReadiness::RecoveryGroup"|"AWS::ResilienceHub::ResiliencyPolicy"|"AWS::Transfer::Workflow"|"AWS::EKS::IdentityProviderConfig"|"AWS::EKS::Addon"|"AWS::Glue::MLTransform"|"AWS::IoT::Policy"|"AWS::IoT::MitigationAction"|"AWS::IoTTwinMaker::Workspace"|"AWS::IoTTwinMaker::Entity"|"AWS::IoTAnalytics::Dataset"|"AWS::IoTAnalytics::Pipeline"|"AWS::IoTAnalytics::Channel"|"AWS::IoTSiteWise::Dashboard"|"AWS::IoTSiteWise::Project"|"AWS::IoTSiteWise::Portal"|"AWS::IoTSiteWise::AssetModel"|"AWS::IVS::Channel"|"AWS::IVS::RecordingConfiguration"|"AWS::IVS::PlaybackKeyPair"|"AWS::KinesisAnalyticsV2::Application"|"AWS::RDS::GlobalCluster"|"AWS::S3::MultiRegionAccessPoint"|"AWS::DeviceFarm::TestGridProject"|"AWS::Budgets::BudgetsAction"|"AWS::Lex::Bot"|"AWS::CodeGuruReviewer::RepositoryAssociation"|"AWS::IoT::CustomMetric"|"AWS::Route53Resolver::FirewallDomainList"|"AWS::RoboMaker::RobotApplicationVersion"|"AWS::EC2::TrafficMirrorSession"|"AWS::IoTSiteWise::Gateway"|"AWS::Lex::BotAlias"|"AWS::LookoutMetrics::Alert"|"AWS::IoT::AccountAuditConfiguration"|"AWS::EC2::TrafficMirrorTarget"|"AWS::S3::StorageLens"|"AWS::IoT::ScheduledAudit"|"AWS::Events::Connection"|"AWS::EventSchemas::Schema"|"AWS::MediaPackage::PackagingConfiguration"|"AWS::KinesisVideo::SignalingChannel"|"AWS::AppStream::DirectoryConfig"|"AWS::LookoutVision::Project"|"AWS::Route53RecoveryControl::Cluster"|"AWS::Route53RecoveryControl::SafetyRule"|"AWS::Route53RecoveryControl::ControlPanel"|"AWS::Route53RecoveryControl::RoutingControl"|"AWS::Route53RecoveryReadiness::ResourceSet"|"AWS::RoboMaker::SimulationApplication"|"AWS::RoboMaker::RobotApplication"|"AWS::HealthLake::FHIRDatastore"|"AWS::Pinpoint::Segment"|"AWS::Pinpoint::ApplicationSettings"|"AWS::Events::Rule"|"AWS::EC2::DHCPOptions"|"AWS::EC2::NetworkInsightsPath"|"AWS::EC2::TrafficMirrorFilter"|"AWS::EC2::IPAM"|"AWS::IoTTwinMaker::Scene"|"AWS::NetworkManager::TransitGatewayRegistration"|"AWS::CustomerProfiles::Domain"|"AWS::AutoScaling::WarmPool"|"AWS::Connect::PhoneNumber", ... (2 more fields)}
 export def "get-aggregate-discovered-resource-counts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2646,7 +2657,7 @@ export def "get-aggregate-discovered-resource-counts" [
   --group-by-key: string@group-by-key-completer-1 # The key to group the resource counts.
   --limit-body: int # The maximum number of GroupedResourceCount objects returned on each page. The default is 1000. You cannot specify a number greater than 1000. If you specify 0, Config uses the default. (body field)
   --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
-]: any -> record<TotalDiscoveredResources: int, GroupByKey: string, GroupedResourceCounts: table<GroupName: string, ResourceCount: int>, NextToken: string> {
+]: any -> oneof<record<TotalDiscoveredResources: int, GroupByKey: string, GroupedResourceCounts: table<GroupName: string, ResourceCount: int>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2677,7 +2688,6 @@ export def "get-aggregate-discovered-resource-counts" [
 #
 # POST /
 # operationId: GetAggregateResourceConfig
-# --ResourceIdentifier shape: {SourceAccountId: string, SourceRegion: string, ResourceId: string, ... (2 more fields)}
 export def "get-aggregate-resource-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2698,7 +2708,7 @@ export def "get-aggregate-resource-config" [
   --x-amz-target: string@x-amz-target-completer-47 # required
   configuration_aggregator_name: string # The name of the configuration aggregator.
   resource_identifier: record # The details that identify a resource that is collected by Config aggregator, including the resource type, ID, (if available) the custom resource name, the source account, and source region. — shape: {SourceAccountId: string, SourceRegion: string, ResourceId: string, ... (2 more fields)}
-]: any -> record<ConfigurationItem: record<version: string, accountId: string, configurationItemCaptureTime: string, configurationItemStatus: string, configurationStateId: string, configurationItemMD5Hash: string, arn: string, resourceType: string, resourceId: string, resourceName: string, awsRegion: string, availabilityZone: string, resourceCreationTime: string, tags: record, relatedEvents: list<string>, relationships: list<record>, configuration: string, supplementaryConfiguration: record>> {
+]: any -> oneof<record<ConfigurationItem: record<version: string, accountId: string, configurationItemCaptureTime: string, configurationItemStatus: string, configurationStateId: string, configurationItemMD5Hash: string, arn: string, resourceType: string, resourceId: string, resourceName: string, awsRegion: string, availabilityZone: string, resourceCreationTime: string, tags: record, relatedEvents: list<string>, relationships: list<record>, configuration: string, supplementaryConfiguration: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2752,7 +2762,7 @@ export def "get-compliance-details-by-config-rule" [
   --compliance-types: list<string> # Filters the results by compliance. INSUFFICIENT_DATA is a valid ComplianceType that is returned when an Config rule cannot be evaluated. However, INSUFFICIENT_DATA cannot be used as a ComplianceType for filtering results.
   --limit-body: int # The maximum number of evaluation results returned on each page. The default is 10. You cannot specify a number greater than 100. If you specify 0, Config uses the default. (body field)
   --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
-]: any -> record<EvaluationResults: table<EvaluationResultIdentifier: record, ComplianceType: string, ResultRecordedTime: string, ConfigRuleInvokedTime: string, Annotation: string, ResultToken: string>, NextToken: string> {
+]: any -> oneof<record<EvaluationResults: table<EvaluationResultIdentifier: record, ComplianceType: string, ResultRecordedTime: string, ConfigRuleInvokedTime: string, Annotation: string, ResultToken: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2807,7 +2817,7 @@ export def "get-compliance-details-by-resource" [
   --compliance-types: list<string> # Filters the results by compliance. INSUFFICIENT_DATA is a valid ComplianceType that is returned when an Config rule cannot be evaluated. However, INSUFFICIENT_DATA cannot be used as a ComplianceType for filtering results.
   --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
   --resource-evaluation-id: string # The unique ID of Amazon Web Services resource execution for which you want to retrieve evaluation results. You need to only provide either a ResourceEvaluationID or a ResourceID and ResourceType.
-]: any -> record<EvaluationResults: table<EvaluationResultIdentifier: record, ComplianceType: string, ResultRecordedTime: string, ConfigRuleInvokedTime: string, Annotation: string, ResultToken: string>, NextToken: string> {
+]: any -> oneof<record<EvaluationResults: table<EvaluationResultIdentifier: record, ComplianceType: string, ResultRecordedTime: string, ConfigRuleInvokedTime: string, Annotation: string, ResultToken: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2856,7 +2866,7 @@ export def "get-compliance-summary-by-config-rule" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-50 # required
-]: nothing -> record<ComplianceSummary: record<CompliantResourceCount: record<CappedCount: int, CapExceeded: bool>, NonCompliantResourceCount: record<CappedCount: int, CapExceeded: bool>, ComplianceSummaryTimestamp: string>> {
+]: nothing -> oneof<record<ComplianceSummary: record<CompliantResourceCount: record<CappedCount: int, CapExceeded: bool>, NonCompliantResourceCount: record<CappedCount: int, CapExceeded: bool>, ComplianceSummaryTimestamp: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.GetComplianceSummaryByConfigRule")
@@ -2902,7 +2912,7 @@ export def "get-compliance-summary-by-resource-type" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-51 # required
   --resource-types: list<string> # Specify one or more resource types to get the number of resources that are compliant and the number that are noncompliant for each resource type. For this request, you can specify an Amazon Web Services resource type such as AWS::EC2::Instance. You can specify that the resource type is an Amazon Web Services account by specifying AWS::::Account.
-]: any -> record<ComplianceSummariesByResourceType: table<ResourceType: string, ComplianceSummary: record>> {
+]: any -> oneof<record<ComplianceSummariesByResourceType: table<ResourceType: string, ComplianceSummary: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2932,7 +2942,6 @@ export def "get-compliance-summary-by-resource-type" [
 #
 # POST /
 # operationId: GetConformancePackComplianceDetails
-# --Filters shape: {ConfigRuleNames?: list<string>, ComplianceType?: "COMPLIANT"|"NON_COMPLIANT"|"INSUFFICIENT_DATA", ResourceType?: string, ResourceIds?: list<string>}
 export def "get-conformance-pack-compliance-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2957,7 +2966,7 @@ export def "get-conformance-pack-compliance-details" [
   --filters: record # Filters a conformance pack by Config rule names, compliance types, Amazon Web Services resource types, and resource IDs. — shape: {ConfigRuleNames?: list<string>, ComplianceType?: "COMPLIANT"|"NON_COMPLIANT"|"INSUFFICIENT_DATA", ResourceType?: string, ResourceIds?: list<string>}
   --limit-body: int # The maximum number of evaluation results returned on each page. If you do no specify a number, Config uses the default. The default is 100. (body field)
   --next-token-body: string # The nextToken string returned in a previous request that you use to request the next page of results in a paginated response. (body field)
-]: any -> record<ConformancePackName: string, ConformancePackRuleEvaluationResults: table<ComplianceType: string, EvaluationResultIdentifier: record, ConfigRuleInvokedTime: string, ResultRecordedTime: string, Annotation: string>, NextToken: string> {
+]: any -> oneof<record<ConformancePackName: string, ConformancePackRuleEvaluationResults: table<ComplianceType: string, EvaluationResultIdentifier: record, ConfigRuleInvokedTime: string, ResultRecordedTime: string, Annotation: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3011,7 +3020,7 @@ export def "get-conformance-pack-compliance-summary" [
   conformance_pack_names: list<string> # Names of conformance packs.
   --limit-body: int # The maximum number of conformance packs returned on each page. (body field)
   --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
-]: any -> record<ConformancePackComplianceSummaryList: table<ConformancePackName: string, ConformancePackComplianceStatus: string>, NextToken: string> {
+]: any -> oneof<record<ConformancePackComplianceSummaryList: table<ConformancePackName: string, ConformancePackComplianceStatus: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3061,7 +3070,7 @@ export def "get-custom-rule-policy" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-54 # required
   --config-rule-name: string # The name of your Config Custom Policy rule.
-]: any -> record<PolicyText: string> {
+]: any -> oneof<record<PolicyText: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3114,7 +3123,7 @@ export def "get-discovered-resource-counts" [
   --resource-types: list<string> # The comma-separated list that specifies the resource types that you want Config to return (for example, "AWS::EC2::Instance", "AWS::IAM::User"). If a value for resourceTypes is not specified, Config returns all resource types that Config is recording in the region for your account. If the configuration recorder is turned off, Config returns an empty list of ResourceCount objects. If the configuration recorder is not recording a specific resource type (for example, S3 buckets), that resource type is not returned in the list of ResourceCount objects.
   --limit-body: int # The maximum number of ResourceCount objects returned on each page. The default is 100. You cannot specify a number greater than 100. If you specify 0, Config uses the default. (body field)
   --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
-]: any -> record<totalDiscoveredResources: int, resourceCounts: table<resourceType: string, count: int>, nextToken: string> {
+]: any -> oneof<record<totalDiscoveredResources: int, resourceCounts: table<resourceType: string, count: int>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3145,7 +3154,6 @@ export def "get-discovered-resource-counts" [
 #
 # POST /
 # operationId: GetOrganizationConfigRuleDetailedStatus
-# --Filters shape: {AccountId?: string, MemberAccountRuleStatus?: "CREATE_SUCCESSFUL"|"CREATE_IN_PROGRESS"|"CREATE_FAILED"|"DELETE_SUCCESSFUL"|"DELETE_FAILED"|"DELETE_IN_PROGRESS"|"UPDATE_SUCCESSFUL"|"UPDATE_IN_PROGRESS"|"UPDATE_FAILED"}
 export def "get-organization-config-rule-detailed-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3170,7 +3178,7 @@ export def "get-organization-config-rule-detailed-status" [
   --filters: record # Status filter object to filter results based on specific member account ID or status type for an organization Config rule. — shape: {AccountId?: string, MemberAccountRuleStatus?: "CREATE_SUCCESSFUL"|"CREATE_IN_PROGRESS"|"CREATE_FAILED"|"DELETE_SUCCESSFUL"|"DELETE_FAILED"|"DELETE_IN_PROGRESS"|"UPDATE_SUCCESSFUL"|"UPDATE_IN_PROGRESS"|"UPDATE_FAILED"}
   --limit-body: int # The maximum number of OrganizationConfigRuleDetailedStatus returned on each page. If you do not specify a number, Config uses the default. The default is 100. (body field)
   --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
-]: any -> record<OrganizationConfigRuleDetailedStatus: table<AccountId: string, ConfigRuleName: string, MemberAccountRuleStatus: string, ErrorCode: string, ErrorMessage: string, LastUpdateTime: string>, NextToken: string> {
+]: any -> oneof<record<OrganizationConfigRuleDetailedStatus: table<AccountId: string, ConfigRuleName: string, MemberAccountRuleStatus: string, ErrorCode: string, ErrorMessage: string, LastUpdateTime: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3201,7 +3209,6 @@ export def "get-organization-config-rule-detailed-status" [
 #
 # POST /
 # operationId: GetOrganizationConformancePackDetailedStatus
-# --Filters shape: {AccountId?: string, Status?: "CREATE_SUCCESSFUL"|"CREATE_IN_PROGRESS"|"CREATE_FAILED"|"DELETE_SUCCESSFUL"|"DELETE_FAILED"|"DELETE_IN_PROGRESS"|"UPDATE_SUCCESSFUL"|"UPDATE_IN_PROGRESS"|"UPDATE_FAILED"}
 export def "get-organization-conformance-pack-detailed-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3226,7 +3233,7 @@ export def "get-organization-conformance-pack-detailed-status" [
   --filters: record # Status filter object to filter results based on specific member account ID or status type for an organization conformance pack. — shape: {AccountId?: string, Status?: "CREATE_SUCCESSFUL"|"CREATE_IN_PROGRESS"|"CREATE_FAILED"|"DELETE_SUCCESSFUL"|"DELETE_FAILED"|"DELETE_IN_PROGRESS"|"UPDATE_SUCCESSFUL"|"UPDATE_IN_PROGRESS"|"UPDATE_FAILED"}
   --limit-body: int # The maximum number of OrganizationConformancePackDetailedStatuses returned on each page. If you do not specify a number, Config uses the default. The default is 100. (body field)
   --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
-]: any -> record<OrganizationConformancePackDetailedStatuses: table<AccountId: string, ConformancePackName: string, Status: string, ErrorCode: string, ErrorMessage: string, LastUpdateTime: string>, NextToken: string> {
+]: any -> oneof<record<OrganizationConformancePackDetailedStatuses: table<AccountId: string, ConformancePackName: string, Status: string, ErrorCode: string, ErrorMessage: string, LastUpdateTime: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3276,7 +3283,7 @@ export def "get-organization-custom-rule-policy" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-58 # required
   organization_config_rule_name: string # The name of your organization Config Custom Policy rule.
-]: any -> record<PolicyText: string> {
+]: any -> oneof<record<PolicyText: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3333,7 +3340,7 @@ export def "get-resource-config-history" [
   --chronological-order: string@chronological-order-completer # The chronological order for configuration items listed. By default, the results are listed in reverse chronological order.
   --limit-body: int # The maximum number of configuration items returned on each page. The default is 10. You cannot specify a number greater than 100. If you specify 0, Config uses the default. (body field)
   --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
-]: any -> record<configurationItems: table<version: string, accountId: string, configurationItemCaptureTime: string, configurationItemStatus: string, configurationStateId: string, configurationItemMD5Hash: string, arn: string, resourceType: string, resourceId: string, resourceName: string, awsRegion: string, availabilityZone: string, resourceCreationTime: string, tags: record, relatedEvents: list, relationships: list, configuration: string, supplementaryConfiguration: record>, nextToken: string> {
+]: any -> oneof<record<configurationItems: table<version: string, accountId: string, configurationItemCaptureTime: string, configurationItemStatus: string, configurationStateId: string, configurationItemMD5Hash: string, arn: string, resourceType: string, resourceId: string, resourceName: string, awsRegion: string, availabilityZone: string, resourceCreationTime: string, tags: record, relatedEvents: list, relationships: list, configuration: string, supplementaryConfiguration: record>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3383,7 +3390,7 @@ export def "get-resource-evaluation-summary" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-60 # required
   resource_evaluation_id: string # The unique ResourceEvaluationId of Amazon Web Services resource execution for which you want to retrieve the evaluation summary.
-]: any -> record<ResourceEvaluationId: string, EvaluationMode: string, EvaluationStatus: record<Status: string, FailureReason: string>, EvaluationStartTimestamp: string, Compliance: string, EvaluationContext: record<EvaluationContextIdentifier: string>, ResourceDetails: record<ResourceId: string, ResourceType: string, ResourceConfiguration: string, ResourceConfigurationSchemaType: string>> {
+]: any -> oneof<record<ResourceEvaluationId: string, EvaluationMode: string, EvaluationStatus: record<Status: string, FailureReason: string>, EvaluationStartTimestamp: string, Compliance: string, EvaluationContext: record<EvaluationContextIdentifier: string>, ResourceDetails: record<ResourceId: string, ResourceType: string, ResourceConfiguration: string, ResourceConfigurationSchemaType: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3432,7 +3439,7 @@ export def "get-stored-query" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-61 # required
   query_name: string # The name of the query.
-]: any -> record<StoredQuery: record<QueryId: string, QueryArn: string, QueryName: string, Description: string, Expression: string>> {
+]: any -> oneof<record<StoredQuery: record<QueryId: string, QueryArn: string, QueryName: string, Description: string, Expression: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3462,7 +3469,6 @@ export def "get-stored-query" [
 #
 # POST /
 # operationId: ListAggregateDiscoveredResources
-# --Filters shape: {AccountId?: string, ResourceId?: string, ResourceName?: string, Region?: string}
 export def "list-aggregate-discovered-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3488,7 +3494,7 @@ export def "list-aggregate-discovered-resources" [
   --filters: record # Filters the results by resource account ID, region, resource ID, and resource name. — shape: {AccountId?: string, ResourceId?: string, ResourceName?: string, Region?: string}
   --limit-body: int # The maximum number of resource identifiers returned on each page. You cannot specify a number greater than 100. If you specify 0, Config uses the default. (body field)
   --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
-]: any -> record<ResourceIdentifiers: table<SourceAccountId: string, SourceRegion: string, ResourceId: string, ResourceType: string, ResourceName: string>, NextToken: string> {
+]: any -> oneof<record<ResourceIdentifiers: table<SourceAccountId: string, SourceRegion: string, ResourceId: string, ResourceType: string, ResourceName: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3519,7 +3525,6 @@ export def "list-aggregate-discovered-resources" [
 #
 # POST /
 # operationId: ListConformancePackComplianceScores
-# --Filters shape: {ConformancePackNames: list<string>}
 export def "list-conformance-pack-compliance-scores" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3545,7 +3550,7 @@ export def "list-conformance-pack-compliance-scores" [
   --sort-by: string@sort-by-completer # Sorts your conformance pack compliance scores in either ascending or descending order, depending on SortOrder. By default, conformance pack compliance scores are sorted in alphabetical order by name of the conformance pack. Enter SCORE, to sort conformance pack compliance scores by the numerical value of the compliance score.
   --limit-body: int # The maximum number of conformance pack compliance scores returned on each page. (body field)
   --next-token-body: string # The nextToken string in a prior request that you can use to get the paginated response for the next set of conformance pack compliance scores. (body field)
-]: any -> record<NextToken: string, ConformancePackComplianceScores: table<Score: string, ConformancePackName: string, LastUpdatedTime: string>> {
+]: any -> oneof<record<NextToken: string, ConformancePackComplianceScores: table<Score: string, ConformancePackName: string, LastUpdatedTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3602,7 +3607,7 @@ export def "list-discovered-resources" [
   --limit-body: int # The maximum number of resource identifiers returned on each page. The default is 100. You cannot specify a number greater than 100. If you specify 0, Config uses the default. (body field)
   --include-deleted-resources: oneof<nothing, bool> # Specifies whether Config includes deleted resources in the results. By default, deleted resources are not included.
   --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
-]: any -> record<resourceIdentifiers: table<resourceType: string, resourceId: string, resourceName: string, resourceDeletionTime: string>, nextToken: string> {
+]: any -> oneof<record<resourceIdentifiers: table<resourceType: string, resourceId: string, resourceName: string, resourceDeletionTime: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3633,7 +3638,6 @@ export def "list-discovered-resources" [
 #
 # POST /
 # operationId: ListResourceEvaluations
-# --Filters shape: {EvaluationMode?: "DETECTIVE"|"PROACTIVE", TimeWindow?: record, EvaluationContextIdentifier?: string}
 export def "list-resource-evaluations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3657,7 +3661,7 @@ export def "list-resource-evaluations" [
   --filters: record # Returns details of a resource evaluation based on the selected filter. — shape: {EvaluationMode?: "DETECTIVE"|"PROACTIVE", TimeWindow?: record, EvaluationContextIdentifier?: string}
   --limit-body: int # The maximum number of evaluations returned on each page. The default is 10. You cannot specify a number greater than 100. If you specify 0, Config uses the default. (body field)
   --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
-]: any -> record<ResourceEvaluations: table<ResourceEvaluationId: string, EvaluationMode: string, EvaluationStartTimestamp: string>, NextToken: string> {
+]: any -> oneof<record<ResourceEvaluations: table<ResourceEvaluationId: string, EvaluationMode: string, EvaluationStartTimestamp: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3710,7 +3714,7 @@ export def "list-stored-queries" [
   --x-amz-target: string@x-amz-target-completer-66 # required
   --next-token-body: string # The nextToken string returned in a previous request that you use to request the next page of results in a paginated response. (body field)
   --max-results-body: int # The maximum number of results to be returned with a single call. (body field)
-]: any -> record<StoredQueryMetadata: table<QueryId: string, QueryArn: string, QueryName: string, Description: string>, NextToken: string> {
+]: any -> oneof<record<StoredQueryMetadata: table<QueryId: string, QueryArn: string, QueryName: string, Description: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3764,7 +3768,7 @@ export def "list-tags-for-resource" [
   resource_arn: string # The Amazon Resource Name (ARN) that identifies the resource for which to list the tags. Currently, the supported resources are ConfigRule, ConfigurationAggregator and AggregatorAuthorization.
   --limit-body: int # The maximum number of tags returned on each page. The limit maximum is 50. You cannot specify a number greater than 50. If you specify 0, Config uses the default. (body field)
   --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
-]: any -> record<Tags: table<Key: string, Value: string>, NextToken: string> {
+]: any -> oneof<record<Tags: table<Key: string, Value: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3795,7 +3799,6 @@ export def "list-tags-for-resource" [
 #
 # POST /
 # operationId: PutAggregationAuthorization
-# --Tags item shape: {Key?: string, Value?: string}
 export def "put-aggregation-authorization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3817,7 +3820,7 @@ export def "put-aggregation-authorization" [
   authorized_account_id: string # The 12-digit account ID of the account authorized to aggregate data.
   authorized_aws_region: string # The region authorized to collect aggregated data.
   --tags: list # An array of tag object. — item shape: {Key?: string, Value?: string}
-]: any -> record<AggregationAuthorization: record<AggregationAuthorizationArn: string, AuthorizedAccountId: string, AuthorizedAwsRegion: string, CreationTime: string>> {
+]: any -> oneof<record<AggregationAuthorization: record<AggregationAuthorizationArn: string, AuthorizedAccountId: string, AuthorizedAwsRegion: string, CreationTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3847,8 +3850,6 @@ export def "put-aggregation-authorization" [
 #
 # POST /
 # operationId: PutConfigRule
-# --ConfigRule shape: {ConfigRuleName?: string, ConfigRuleArn?: string, ConfigRuleId?: string, Description?: string, Scope?: record, Source: record, InputParameters?: string, MaximumExecutionFrequency?: "One_Hour"|"Three_Hours"|"Six_Hours"|"Twelve_Hours"|"TwentyFour_Hours", ConfigRuleState?: "ACTIVE"|"DELETING"|"DELETING_RESULTS"|"EVALUATING", CreatedBy?: string, EvaluationModes?: list}
-# --Tags item shape: {Key?: string, Value?: string}
 export def "put-config-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3899,9 +3900,6 @@ export def "put-config-rule" [
 #
 # POST /
 # operationId: PutConfigurationAggregator
-# --AccountAggregationSources item shape: {AccountIds: list<string>, AllAwsRegions?: bool, AwsRegions?: list<string>}
-# --OrganizationAggregationSource shape: {RoleArn: string, AwsRegions?: list<string>, AllAwsRegions?: bool}
-# --Tags item shape: {Key?: string, Value?: string}
 export def "put-configuration-aggregator" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3924,7 +3922,7 @@ export def "put-configuration-aggregator" [
   --account-aggregation-sources: list # A list of AccountAggregationSource object. — item shape: {AccountIds: list<string>, AllAwsRegions?: bool, AwsRegions?: list<string>}
   --organization-aggregation-source: record # This object contains regions to set up the aggregator and an IAM role to retrieve organization details. — shape: {RoleArn: string, AwsRegions?: list<string>, AllAwsRegions?: bool}
   --tags: list # An array of tag object. — item shape: {Key?: string, Value?: string}
-]: any -> record<ConfigurationAggregator: record<ConfigurationAggregatorName: string, ConfigurationAggregatorArn: string, AccountAggregationSources: list<record>, OrganizationAggregationSource: record<RoleArn: string, AwsRegions: list, AllAwsRegions: bool>, CreationTime: string, LastUpdatedTime: string, CreatedBy: string>> {
+]: any -> oneof<record<ConfigurationAggregator: record<ConfigurationAggregatorName: string, ConfigurationAggregatorArn: string, AccountAggregationSources: list<record>, OrganizationAggregationSource: record<RoleArn: string, AwsRegions: list, AllAwsRegions: bool>, CreationTime: string, LastUpdatedTime: string, CreatedBy: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3954,7 +3952,6 @@ export def "put-configuration-aggregator" [
 #
 # POST /
 # operationId: PutConfigurationRecorder
-# --ConfigurationRecorder shape: {name?: string, roleARN?: string, recordingGroup?: record}
 export def "put-configuration-recorder" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4004,8 +4001,6 @@ export def "put-configuration-recorder" [
 #
 # POST /
 # operationId: PutConformancePack
-# --ConformancePackInputParameters item shape: {ParameterName: string, ParameterValue: string}
-# --TemplateSSMDocumentDetails shape: {DocumentName: string, DocumentVersion?: string}
 export def "put-conformance-pack" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4031,7 +4026,7 @@ export def "put-conformance-pack" [
   --delivery-s3-key-prefix: string # The prefix for the Amazon S3 bucket. This field is optional.
   --conformance-pack-input-parameters: list # A list of ConformancePackInputParameter objects. — item shape: {ParameterName: string, ParameterValue: string}
   --template-ssm-document-details: record # This API allows you to create a conformance pack template with an Amazon Web Services Systems Manager document (SSM document). To deploy a conformance pack using an SSM document, first create an SSM document with conformance pack content, and then provide the DocumentName in the PutConformancePack API (https://docs.aws.amazon.com/config/latest/APIReference/API_PutConformancePack.html). You can also provide the DocumentVersion. The TemplateSSMDocumentDetails object contains the name of the SSM document and the version of the SSM document. — shape: {DocumentName: string, DocumentVersion?: string}
-]: any -> record<ConformancePackArn: string> {
+]: any -> oneof<record<ConformancePackArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4061,7 +4056,6 @@ export def "put-conformance-pack" [
 #
 # POST /
 # operationId: PutDeliveryChannel
-# --DeliveryChannel shape: {name?: string, s3BucketName?: string, s3KeyPrefix?: string, s3KmsKeyArn?: string, snsTopicARN?: string, configSnapshotDeliveryProperties?: record}
 export def "put-delivery-channel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4111,7 +4105,6 @@ export def "put-delivery-channel" [
 #
 # POST /
 # operationId: PutEvaluations
-# --Evaluations item shape: {ComplianceResourceType: string, ComplianceResourceId: string, ComplianceType: "COMPLIANT"|"NON_COMPLIANT"|"NOT_APPLICABLE"|"INSUFFICIENT_DATA", Annotation?: string, OrderingTimestamp: string}
 export def "put-evaluations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4133,7 +4126,7 @@ export def "put-evaluations" [
   --evaluations: list # The assessments that the Lambda function performs. Each evaluation identifies an Amazon Web Services resource and indicates whether it complies with the Config rule that invokes the Lambda function. — item shape: {ComplianceResourceType: string, ComplianceResourceId: string, ComplianceType: "COMPLIANT"|"NON_COMPLIANT"|"NOT_APPLICABLE"|"INSUFFICIENT_DATA", Annotation?: string, OrderingTimestamp: string}
   result_token: string # An encrypted token that associates an evaluation with an Config rule. Identifies the rule and the event that triggered the evaluation.
   --test-mode: oneof<nothing, bool> # Use this parameter to specify a test run for PutEvaluations. You can verify whether your Lambda function will deliver evaluation results to Config. No updates occur to your existing evaluations, and evaluation results are not sent to Config. When TestMode is true, PutEvaluations doesn't require a valid value for the ResultToken parameter, but the value cannot be null.
-]: any -> record<FailedEvaluations: table<ComplianceResourceType: string, ComplianceResourceId: string, ComplianceType: string, Annotation: string, OrderingTimestamp: string>> {
+]: any -> oneof<record<FailedEvaluations: table<ComplianceResourceType: string, ComplianceResourceId: string, ComplianceType: string, Annotation: string, OrderingTimestamp: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4163,7 +4156,6 @@ export def "put-evaluations" [
 #
 # POST /
 # operationId: PutExternalEvaluation
-# --ExternalEvaluation shape: {ComplianceResourceType: string, ComplianceResourceId: string, ComplianceType: "COMPLIANT"|"NON_COMPLIANT"|"NOT_APPLICABLE"|"INSUFFICIENT_DATA", Annotation?: string, OrderingTimestamp: string}
 export def "put-external-evaluation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4184,7 +4176,7 @@ export def "put-external-evaluation" [
   --x-amz-target: string@x-amz-target-completer-75 # required
   config_rule_name: string # The name of the Config rule.
   external_evaluation: record # Identifies an Amazon Web Services resource and indicates whether it complies with the Config rule that it was evaluated against. — shape: {ComplianceResourceType: string, ComplianceResourceId: string, ComplianceType: "COMPLIANT"|"NON_COMPLIANT"|"NOT_APPLICABLE"|"INSUFFICIENT_DATA", Annotation?: string, OrderingTimestamp: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4214,9 +4206,6 @@ export def "put-external-evaluation" [
 #
 # POST /
 # operationId: PutOrganizationConfigRule
-# --OrganizationManagedRuleMetadata shape: {Description?: string, RuleIdentifier: string, InputParameters?: string, MaximumExecutionFrequency?: "One_Hour"|"Three_Hours"|"Six_Hours"|"Twelve_Hours"|"TwentyFour_Hours", ResourceTypesScope?: list<string>, ResourceIdScope?: string, TagKeyScope?: string, TagValueScope?: string}
-# --OrganizationCustomRuleMetadata shape: {Description?: string, LambdaFunctionArn: string, OrganizationConfigRuleTriggerTypes: list<string>, InputParameters?: string, MaximumExecutionFrequency?: "One_Hour"|"Three_Hours"|"Six_Hours"|"Twelve_Hours"|"TwentyFour_Hours", ResourceTypesScope?: list<string>, ResourceIdScope?: string, TagKeyScope?: string, TagValueScope?: string}
-# --OrganizationCustomPolicyRuleMetadata shape: {Description?: string, OrganizationConfigRuleTriggerTypes?: list<string>, InputParameters?: string, MaximumExecutionFrequency?: "One_Hour"|"Three_Hours"|"Six_Hours"|"Twelve_Hours"|"TwentyFour_Hours", ResourceTypesScope?: list<string>, ResourceIdScope?: string, TagKeyScope?: string, TagValueScope?: string, PolicyRuntime: string, PolicyText: string, DebugLogDeliveryAccounts?: list<string>}
 export def "put-organization-config-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4240,7 +4229,7 @@ export def "put-organization-config-rule" [
   --organization-custom-rule-metadata: record # An object that specifies organization custom rule metadata such as resource type, resource ID of Amazon Web Services resource, Lambda function ARN, and organization trigger types that trigger Config to evaluate your Amazon Web Services resources against a rule. It also provides the frequency with which you want Config to run evaluations for the rule if the trigger type is periodic. — shape: {Description?: string, LambdaFunctionArn: string, OrganizationConfigRuleTriggerTypes: list<string>, InputParameters?: string, MaximumExecutionFrequency?: "One_Hour"|"Three_Hours"|"Six_Hours"|"Twelve_Hours"|"TwentyFour_Hours", ResourceTypesScope?: list<string>, ResourceIdScope?: string, TagKeyScope?: string, TagValueScope?: string}
   --excluded-accounts: list<string> # A comma-separated list of accounts that you want to exclude from an organization Config rule.
   --organization-custom-policy-rule-metadata: record # An object that specifies metadata for your organization's Config Custom Policy rule. The metadata includes the runtime system in use, which accounts have debug logging enabled, and other custom rule metadata, such as resource type, resource ID of Amazon Web Services resource, and organization trigger types that initiate Config to evaluate Amazon Web Services resources against a rule. — shape: {Description?: string, OrganizationConfigRuleTriggerTypes?: list<string>, InputParameters?: string, MaximumExecutionFrequency?: "One_Hour"|"Three_Hours"|"Six_Hours"|"Twelve_Hours"|"TwentyFour_Hours", ResourceTypesScope?: list<string>, ResourceIdScope?: string, TagKeyScope?: string, TagValueScope?: string, PolicyRuntime: string, PolicyText: string, DebugLogDeliveryAccounts?: list<string>}
-]: any -> record<OrganizationConfigRuleArn: string> {
+]: any -> oneof<record<OrganizationConfigRuleArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4270,7 +4259,6 @@ export def "put-organization-config-rule" [
 #
 # POST /
 # operationId: PutOrganizationConformancePack
-# --ConformancePackInputParameters item shape: {ParameterName: string, ParameterValue: string}
 export def "put-organization-conformance-pack" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4296,7 +4284,7 @@ export def "put-organization-conformance-pack" [
   --delivery-s3-key-prefix: string # The prefix for the Amazon S3 bucket. This field is optional.
   --conformance-pack-input-parameters: list # A list of ConformancePackInputParameter objects. — item shape: {ParameterName: string, ParameterValue: string}
   --excluded-accounts: list<string> # A list of Amazon Web Services accounts to be excluded from an organization conformance pack while deploying a conformance pack.
-]: any -> record<OrganizationConformancePackArn: string> {
+]: any -> oneof<record<OrganizationConformancePackArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4326,7 +4314,6 @@ export def "put-organization-conformance-pack" [
 #
 # POST /
 # operationId: PutRemediationConfigurations
-# --RemediationConfigurations item shape: {ConfigRuleName: string, TargetType: "SSM_DOCUMENT", TargetId: string, TargetVersion?: string, Parameters?: record, ResourceType?: string, Automatic?: bool, ExecutionControls?: record, MaximumAutomaticAttempts?: int, RetryAttemptSeconds?: int, Arn?: string, CreatedByService?: string}
 export def "put-remediation-configurations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4346,7 +4333,7 @@ export def "put-remediation-configurations" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-78 # required
   remediation_configurations: list # A list of remediation configuration objects. — item shape: {ConfigRuleName: string, TargetType: "SSM_DOCUMENT", TargetId: string, TargetVersion?: string, Parameters?: record, ResourceType?: string, Automatic?: bool, ExecutionControls?: record, MaximumAutomaticAttempts?: int, RetryAttemptSeconds?: int, Arn?: string, CreatedByService?: string}
-]: any -> record<FailedBatches: table<FailureMessage: string, FailedItems: list>> {
+]: any -> oneof<record<FailedBatches: table<FailureMessage: string, FailedItems: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4376,7 +4363,6 @@ export def "put-remediation-configurations" [
 #
 # POST /
 # operationId: PutRemediationExceptions
-# --ResourceKeys item shape: {ResourceType?: string, ResourceId?: string}
 export def "put-remediation-exceptions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4399,7 +4385,7 @@ export def "put-remediation-exceptions" [
   resource_keys: list # An exception list of resource exception keys to be processed with the current request. Config adds exception for each resource key. For example, Config adds 3 exceptions for 3 resource keys. — item shape: {ResourceType?: string, ResourceId?: string}
   --message: string # The message contains an explanation of the exception.
   --expiration-time: string # The exception is automatically deleted after the expiration date. (format: date-time)
-]: any -> record<FailedBatches: table<FailureMessage: string, FailedItems: list>> {
+]: any -> oneof<record<FailedBatches: table<FailureMessage: string, FailedItems: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4502,7 +4488,7 @@ export def "put-retention-configuration" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-81 # required
   retention_period_in_days: int # Number of days Config stores your historical information. Currently, only applicable to the configuration item history.
-]: any -> record<RetentionConfiguration: record<Name: string, RetentionPeriodInDays: int>> {
+]: any -> oneof<record<RetentionConfiguration: record<Name: string, RetentionPeriodInDays: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4532,8 +4518,6 @@ export def "put-retention-configuration" [
 #
 # POST /
 # operationId: PutStoredQuery
-# --StoredQuery shape: {QueryId?: string, QueryArn?: string, QueryName: string, Description?: string, Expression?: string}
-# --Tags item shape: {Key?: string, Value?: string}
 export def "put-stored-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4554,7 +4538,7 @@ export def "put-stored-query" [
   --x-amz-target: string@x-amz-target-completer-82 # required
   stored_query: record # Provides the details of a stored query. — shape: {QueryId?: string, QueryArn?: string, QueryName: string, Description?: string, Expression?: string}
   --tags: list # A list of Tags object. — item shape: {Key?: string, Value?: string}
-]: any -> record<QueryArn: string> {
+]: any -> oneof<record<QueryArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4609,7 +4593,7 @@ export def "select-aggregate-resource-config" [
   --limit-body: int # The maximum number of query results returned on each page. (body field)
   --max-results: int # The maximum number of query results returned on each page. Config also allows the Limit request parameter.
   --next-token-body: string # The nextToken string returned in a previous request that you use to request the next page of results in a paginated response. (body field)
-]: any -> record<Results: list<string>, QueryInfo: record<SelectFields: list<record>>, NextToken: string> {
+]: any -> oneof<record<Results: list<string>, QueryInfo: record<SelectFields: list<record>>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4663,7 +4647,7 @@ export def "select-resource-config" [
   expression: string # The SQL query SELECT command.
   --limit-body: int # The maximum number of query results returned on each page. (body field)
   --next-token-body: string # The nextToken string returned in a previous request that you use to request the next page of results in a paginated response. (body field)
-]: any -> record<Results: list<string>, QueryInfo: record<SelectFields: list<record>>, NextToken: string> {
+]: any -> oneof<record<Results: list<string>, QueryInfo: record<SelectFields: list<record>>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4713,7 +4697,7 @@ export def "start-config-rules-evaluation" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-85 # required
   --config-rule-names: list<string> # The list of names of Config rules that you want to run evaluations for.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4792,7 +4776,6 @@ export def "start-configuration-recorder" [
 #
 # POST /
 # operationId: StartRemediationExecution
-# --ResourceKeys item shape: {resourceType: "AWS::EC2::CustomerGateway"|"AWS::EC2::EIP"|"AWS::EC2::Host"|"AWS::EC2::Instance"|"AWS::EC2::InternetGateway"|"AWS::EC2::NetworkAcl"|"AWS::EC2::NetworkInterface"|"AWS::EC2::RouteTable"|"AWS::EC2::SecurityGroup"|"AWS::EC2::Subnet"|"AWS::CloudTrail::Trail"|"AWS::EC2::Volume"|"AWS::EC2::VPC"|"AWS::EC2::VPNConnection"|"AWS::EC2::VPNGateway"|"AWS::EC2::RegisteredHAInstance"|"AWS::EC2::NatGateway"|"AWS::EC2::EgressOnlyInternetGateway"|"AWS::EC2::VPCEndpoint"|"AWS::EC2::VPCEndpointService"|"AWS::EC2::FlowLog"|"AWS::EC2::VPCPeeringConnection"|"AWS::Elasticsearch::Domain"|"AWS::IAM::Group"|"AWS::IAM::Policy"|"AWS::IAM::Role"|"AWS::IAM::User"|"AWS::ElasticLoadBalancingV2::LoadBalancer"|"AWS::ACM::Certificate"|"AWS::RDS::DBInstance"|"AWS::RDS::DBSubnetGroup"|"AWS::RDS::DBSecurityGroup"|"AWS::RDS::DBSnapshot"|"AWS::RDS::DBCluster"|"AWS::RDS::DBClusterSnapshot"|"AWS::RDS::EventSubscription"|"AWS::S3::Bucket"|"AWS::S3::AccountPublicAccessBlock"|"AWS::Redshift::Cluster"|"AWS::Redshift::ClusterSnapshot"|"AWS::Redshift::ClusterParameterGroup"|"AWS::Redshift::ClusterSecurityGroup"|"AWS::Redshift::ClusterSubnetGroup"|"AWS::Redshift::EventSubscription"|"AWS::SSM::ManagedInstanceInventory"|"AWS::CloudWatch::Alarm"|"AWS::CloudFormation::Stack"|"AWS::ElasticLoadBalancing::LoadBalancer"|"AWS::AutoScaling::AutoScalingGroup"|"AWS::AutoScaling::LaunchConfiguration"|"AWS::AutoScaling::ScalingPolicy"|"AWS::AutoScaling::ScheduledAction"|"AWS::DynamoDB::Table"|"AWS::CodeBuild::Project"|"AWS::WAF::RateBasedRule"|"AWS::WAF::Rule"|"AWS::WAF::RuleGroup"|"AWS::WAF::WebACL"|"AWS::WAFRegional::RateBasedRule"|"AWS::WAFRegional::Rule"|"AWS::WAFRegional::RuleGroup"|"AWS::WAFRegional::WebACL"|"AWS::CloudFront::Distribution"|"AWS::CloudFront::StreamingDistribution"|"AWS::Lambda::Function"|"AWS::NetworkFirewall::Firewall"|"AWS::NetworkFirewall::FirewallPolicy"|"AWS::NetworkFirewall::RuleGroup"|"AWS::ElasticBeanstalk::Application"|"AWS::ElasticBeanstalk::ApplicationVersion"|"AWS::ElasticBeanstalk::Environment"|"AWS::WAFv2::WebACL"|"AWS::WAFv2::RuleGroup"|"AWS::WAFv2::IPSet"|"AWS::WAFv2::RegexPatternSet"|"AWS::WAFv2::ManagedRuleSet"|"AWS::XRay::EncryptionConfig"|"AWS::SSM::AssociationCompliance"|"AWS::SSM::PatchCompliance"|"AWS::Shield::Protection"|"AWS::ShieldRegional::Protection"|"AWS::Config::ConformancePackCompliance"|"AWS::Config::ResourceCompliance"|"AWS::ApiGateway::Stage"|"AWS::ApiGateway::RestApi"|"AWS::ApiGatewayV2::Stage"|"AWS::ApiGatewayV2::Api"|"AWS::CodePipeline::Pipeline"|"AWS::ServiceCatalog::CloudFormationProvisionedProduct"|"AWS::ServiceCatalog::CloudFormationProduct"|"AWS::ServiceCatalog::Portfolio"|"AWS::SQS::Queue"|"AWS::KMS::Key"|"AWS::QLDB::Ledger"|"AWS::SecretsManager::Secret"|"AWS::SNS::Topic"|"AWS::SSM::FileData"|"AWS::Backup::BackupPlan"|"AWS::Backup::BackupSelection"|"AWS::Backup::BackupVault"|"AWS::Backup::RecoveryPoint"|"AWS::ECR::Repository"|"AWS::ECS::Cluster"|"AWS::ECS::Service"|"AWS::ECS::TaskDefinition"|"AWS::EFS::AccessPoint"|"AWS::EFS::FileSystem"|"AWS::EKS::Cluster"|"AWS::OpenSearch::Domain"|"AWS::EC2::TransitGateway"|"AWS::Kinesis::Stream"|"AWS::Kinesis::StreamConsumer"|"AWS::CodeDeploy::Application"|"AWS::CodeDeploy::DeploymentConfig"|"AWS::CodeDeploy::DeploymentGroup"|"AWS::EC2::LaunchTemplate"|"AWS::ECR::PublicRepository"|"AWS::GuardDuty::Detector"|"AWS::EMR::SecurityConfiguration"|"AWS::SageMaker::CodeRepository"|"AWS::Route53Resolver::ResolverEndpoint"|"AWS::Route53Resolver::ResolverRule"|"AWS::Route53Resolver::ResolverRuleAssociation"|"AWS::DMS::ReplicationSubnetGroup"|"AWS::DMS::EventSubscription"|"AWS::MSK::Cluster"|"AWS::StepFunctions::Activity"|"AWS::WorkSpaces::Workspace"|"AWS::WorkSpaces::ConnectionAlias"|"AWS::SageMaker::Model"|"AWS::ElasticLoadBalancingV2::Listener"|"AWS::StepFunctions::StateMachine"|"AWS::Batch::JobQueue"|"AWS::Batch::ComputeEnvironment"|"AWS::AccessAnalyzer::Analyzer"|"AWS::Athena::WorkGroup"|"AWS::Athena::DataCatalog"|"AWS::Detective::Graph"|"AWS::GlobalAccelerator::Accelerator"|"AWS::GlobalAccelerator::EndpointGroup"|"AWS::GlobalAccelerator::Listener"|"AWS::EC2::TransitGatewayAttachment"|"AWS::EC2::TransitGatewayRouteTable"|"AWS::DMS::Certificate"|"AWS::AppConfig::Application"|"AWS::AppSync::GraphQLApi"|"AWS::DataSync::LocationSMB"|"AWS::DataSync::LocationFSxLustre"|"AWS::DataSync::LocationS3"|"AWS::DataSync::LocationEFS"|"AWS::DataSync::Task"|"AWS::DataSync::LocationNFS"|"AWS::EC2::NetworkInsightsAccessScopeAnalysis"|"AWS::EKS::FargateProfile"|"AWS::Glue::Job"|"AWS::GuardDuty::ThreatIntelSet"|"AWS::GuardDuty::IPSet"|"AWS::SageMaker::Workteam"|"AWS::SageMaker::NotebookInstanceLifecycleConfig"|"AWS::ServiceDiscovery::Service"|"AWS::ServiceDiscovery::PublicDnsNamespace"|"AWS::SES::ContactList"|"AWS::SES::ConfigurationSet"|"AWS::Route53::HostedZone"|"AWS::IoTEvents::Input"|"AWS::IoTEvents::DetectorModel"|"AWS::IoTEvents::AlarmModel"|"AWS::ServiceDiscovery::HttpNamespace"|"AWS::Events::EventBus"|"AWS::ImageBuilder::ContainerRecipe"|"AWS::ImageBuilder::DistributionConfiguration"|"AWS::ImageBuilder::InfrastructureConfiguration"|"AWS::DataSync::LocationObjectStorage"|"AWS::DataSync::LocationHDFS"|"AWS::Glue::Classifier"|"AWS::Route53RecoveryReadiness::Cell"|"AWS::Route53RecoveryReadiness::ReadinessCheck"|"AWS::ECR::RegistryPolicy"|"AWS::Backup::ReportPlan"|"AWS::Lightsail::Certificate"|"AWS::RUM::AppMonitor"|"AWS::Events::Endpoint"|"AWS::SES::ReceiptRuleSet"|"AWS::Events::Archive"|"AWS::Events::ApiDestination"|"AWS::Lightsail::Disk"|"AWS::FIS::ExperimentTemplate"|"AWS::DataSync::LocationFSxWindows"|"AWS::SES::ReceiptFilter"|"AWS::GuardDuty::Filter"|"AWS::SES::Template"|"AWS::AmazonMQ::Broker"|"AWS::AppConfig::Environment"|"AWS::AppConfig::ConfigurationProfile"|"AWS::Cloud9::EnvironmentEC2"|"AWS::EventSchemas::Registry"|"AWS::EventSchemas::RegistryPolicy"|"AWS::EventSchemas::Discoverer"|"AWS::FraudDetector::Label"|"AWS::FraudDetector::EntityType"|"AWS::FraudDetector::Variable"|"AWS::FraudDetector::Outcome"|"AWS::IoT::Authorizer"|"AWS::IoT::SecurityProfile"|"AWS::IoT::RoleAlias"|"AWS::IoT::Dimension"|"AWS::IoTAnalytics::Datastore"|"AWS::Lightsail::Bucket"|"AWS::Lightsail::StaticIp"|"AWS::MediaPackage::PackagingGroup"|"AWS::Route53RecoveryReadiness::RecoveryGroup"|"AWS::ResilienceHub::ResiliencyPolicy"|"AWS::Transfer::Workflow"|"AWS::EKS::IdentityProviderConfig"|"AWS::EKS::Addon"|"AWS::Glue::MLTransform"|"AWS::IoT::Policy"|"AWS::IoT::MitigationAction"|"AWS::IoTTwinMaker::Workspace"|"AWS::IoTTwinMaker::Entity"|"AWS::IoTAnalytics::Dataset"|"AWS::IoTAnalytics::Pipeline"|"AWS::IoTAnalytics::Channel"|"AWS::IoTSiteWise::Dashboard"|"AWS::IoTSiteWise::Project"|"AWS::IoTSiteWise::Portal"|"AWS::IoTSiteWise::AssetModel"|"AWS::IVS::Channel"|"AWS::IVS::RecordingConfiguration"|"AWS::IVS::PlaybackKeyPair"|"AWS::KinesisAnalyticsV2::Application"|"AWS::RDS::GlobalCluster"|"AWS::S3::MultiRegionAccessPoint"|"AWS::DeviceFarm::TestGridProject"|"AWS::Budgets::BudgetsAction"|"AWS::Lex::Bot"|"AWS::CodeGuruReviewer::RepositoryAssociation"|"AWS::IoT::CustomMetric"|"AWS::Route53Resolver::FirewallDomainList"|"AWS::RoboMaker::RobotApplicationVersion"|"AWS::EC2::TrafficMirrorSession"|"AWS::IoTSiteWise::Gateway"|"AWS::Lex::BotAlias"|"AWS::LookoutMetrics::Alert"|"AWS::IoT::AccountAuditConfiguration"|"AWS::EC2::TrafficMirrorTarget"|"AWS::S3::StorageLens"|"AWS::IoT::ScheduledAudit"|"AWS::Events::Connection"|"AWS::EventSchemas::Schema"|"AWS::MediaPackage::PackagingConfiguration"|"AWS::KinesisVideo::SignalingChannel"|"AWS::AppStream::DirectoryConfig"|"AWS::LookoutVision::Project"|"AWS::Route53RecoveryControl::Cluster"|"AWS::Route53RecoveryControl::SafetyRule"|"AWS::Route53RecoveryControl::ControlPanel"|"AWS::Route53RecoveryControl::RoutingControl"|"AWS::Route53RecoveryReadiness::ResourceSet"|"AWS::RoboMaker::SimulationApplication"|"AWS::RoboMaker::RobotApplication"|"AWS::HealthLake::FHIRDatastore"|"AWS::Pinpoint::Segment"|"AWS::Pinpoint::ApplicationSettings"|"AWS::Events::Rule"|"AWS::EC2::DHCPOptions"|"AWS::EC2::NetworkInsightsPath"|"AWS::EC2::TrafficMirrorFilter"|"AWS::EC2::IPAM"|"AWS::IoTTwinMaker::Scene"|"AWS::NetworkManager::TransitGatewayRegistration"|"AWS::CustomerProfiles::Domain"|"AWS::AutoScaling::WarmPool"|"AWS::Connect::PhoneNumber", ... (1 more fields)}
 export def "start-remediation-execution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4813,7 +4796,7 @@ export def "start-remediation-execution" [
   --x-amz-target: string@x-amz-target-completer-87 # required
   config_rule_name: string # The list of names of Config rules that you want to run remediation execution for.
   resource_keys: list # A list of resource keys to be processed with the current request. Each element in the list consists of the resource type and resource ID. — item shape: {resourceType: "AWS::EC2::CustomerGateway"|"AWS::EC2::EIP"|"AWS::EC2::Host"|"AWS::EC2::Instance"|"AWS::EC2::InternetGateway"|"AWS::EC2::NetworkAcl"|"AWS::EC2::NetworkInterface"|"AWS::EC2::RouteTable"|"AWS::EC2::SecurityGroup"|"AWS::EC2::Subnet"|"AWS::CloudTrail::Trail"|"AWS::EC2::Volume"|"AWS::EC2::VPC"|"AWS::EC2::VPNConnection"|"AWS::EC2::VPNGateway"|"AWS::EC2::RegisteredHAInstance"|"AWS::EC2::NatGateway"|"AWS::EC2::EgressOnlyInternetGateway"|"AWS::EC2::VPCEndpoint"|"AWS::EC2::VPCEndpointService"|"AWS::EC2::FlowLog"|"AWS::EC2::VPCPeeringConnection"|"AWS::Elasticsearch::Domain"|"AWS::IAM::Group"|"AWS::IAM::Policy"|"AWS::IAM::Role"|"AWS::IAM::User"|"AWS::ElasticLoadBalancingV2::LoadBalancer"|"AWS::ACM::Certificate"|"AWS::RDS::DBInstance"|"AWS::RDS::DBSubnetGroup"|"AWS::RDS::DBSecurityGroup"|"AWS::RDS::DBSnapshot"|"AWS::RDS::DBCluster"|"AWS::RDS::DBClusterSnapshot"|"AWS::RDS::EventSubscription"|"AWS::S3::Bucket"|"AWS::S3::AccountPublicAccessBlock"|"AWS::Redshift::Cluster"|"AWS::Redshift::ClusterSnapshot"|"AWS::Redshift::ClusterParameterGroup"|"AWS::Redshift::ClusterSecurityGroup"|"AWS::Redshift::ClusterSubnetGroup"|"AWS::Redshift::EventSubscription"|"AWS::SSM::ManagedInstanceInventory"|"AWS::CloudWatch::Alarm"|"AWS::CloudFormation::Stack"|"AWS::ElasticLoadBalancing::LoadBalancer"|"AWS::AutoScaling::AutoScalingGroup"|"AWS::AutoScaling::LaunchConfiguration"|"AWS::AutoScaling::ScalingPolicy"|"AWS::AutoScaling::ScheduledAction"|"AWS::DynamoDB::Table"|"AWS::CodeBuild::Project"|"AWS::WAF::RateBasedRule"|"AWS::WAF::Rule"|"AWS::WAF::RuleGroup"|"AWS::WAF::WebACL"|"AWS::WAFRegional::RateBasedRule"|"AWS::WAFRegional::Rule"|"AWS::WAFRegional::RuleGroup"|"AWS::WAFRegional::WebACL"|"AWS::CloudFront::Distribution"|"AWS::CloudFront::StreamingDistribution"|"AWS::Lambda::Function"|"AWS::NetworkFirewall::Firewall"|"AWS::NetworkFirewall::FirewallPolicy"|"AWS::NetworkFirewall::RuleGroup"|"AWS::ElasticBeanstalk::Application"|"AWS::ElasticBeanstalk::ApplicationVersion"|"AWS::ElasticBeanstalk::Environment"|"AWS::WAFv2::WebACL"|"AWS::WAFv2::RuleGroup"|"AWS::WAFv2::IPSet"|"AWS::WAFv2::RegexPatternSet"|"AWS::WAFv2::ManagedRuleSet"|"AWS::XRay::EncryptionConfig"|"AWS::SSM::AssociationCompliance"|"AWS::SSM::PatchCompliance"|"AWS::Shield::Protection"|"AWS::ShieldRegional::Protection"|"AWS::Config::ConformancePackCompliance"|"AWS::Config::ResourceCompliance"|"AWS::ApiGateway::Stage"|"AWS::ApiGateway::RestApi"|"AWS::ApiGatewayV2::Stage"|"AWS::ApiGatewayV2::Api"|"AWS::CodePipeline::Pipeline"|"AWS::ServiceCatalog::CloudFormationProvisionedProduct"|"AWS::ServiceCatalog::CloudFormationProduct"|"AWS::ServiceCatalog::Portfolio"|"AWS::SQS::Queue"|"AWS::KMS::Key"|"AWS::QLDB::Ledger"|"AWS::SecretsManager::Secret"|"AWS::SNS::Topic"|"AWS::SSM::FileData"|"AWS::Backup::BackupPlan"|"AWS::Backup::BackupSelection"|"AWS::Backup::BackupVault"|"AWS::Backup::RecoveryPoint"|"AWS::ECR::Repository"|"AWS::ECS::Cluster"|"AWS::ECS::Service"|"AWS::ECS::TaskDefinition"|"AWS::EFS::AccessPoint"|"AWS::EFS::FileSystem"|"AWS::EKS::Cluster"|"AWS::OpenSearch::Domain"|"AWS::EC2::TransitGateway"|"AWS::Kinesis::Stream"|"AWS::Kinesis::StreamConsumer"|"AWS::CodeDeploy::Application"|"AWS::CodeDeploy::DeploymentConfig"|"AWS::CodeDeploy::DeploymentGroup"|"AWS::EC2::LaunchTemplate"|"AWS::ECR::PublicRepository"|"AWS::GuardDuty::Detector"|"AWS::EMR::SecurityConfiguration"|"AWS::SageMaker::CodeRepository"|"AWS::Route53Resolver::ResolverEndpoint"|"AWS::Route53Resolver::ResolverRule"|"AWS::Route53Resolver::ResolverRuleAssociation"|"AWS::DMS::ReplicationSubnetGroup"|"AWS::DMS::EventSubscription"|"AWS::MSK::Cluster"|"AWS::StepFunctions::Activity"|"AWS::WorkSpaces::Workspace"|"AWS::WorkSpaces::ConnectionAlias"|"AWS::SageMaker::Model"|"AWS::ElasticLoadBalancingV2::Listener"|"AWS::StepFunctions::StateMachine"|"AWS::Batch::JobQueue"|"AWS::Batch::ComputeEnvironment"|"AWS::AccessAnalyzer::Analyzer"|"AWS::Athena::WorkGroup"|"AWS::Athena::DataCatalog"|"AWS::Detective::Graph"|"AWS::GlobalAccelerator::Accelerator"|"AWS::GlobalAccelerator::EndpointGroup"|"AWS::GlobalAccelerator::Listener"|"AWS::EC2::TransitGatewayAttachment"|"AWS::EC2::TransitGatewayRouteTable"|"AWS::DMS::Certificate"|"AWS::AppConfig::Application"|"AWS::AppSync::GraphQLApi"|"AWS::DataSync::LocationSMB"|"AWS::DataSync::LocationFSxLustre"|"AWS::DataSync::LocationS3"|"AWS::DataSync::LocationEFS"|"AWS::DataSync::Task"|"AWS::DataSync::LocationNFS"|"AWS::EC2::NetworkInsightsAccessScopeAnalysis"|"AWS::EKS::FargateProfile"|"AWS::Glue::Job"|"AWS::GuardDuty::ThreatIntelSet"|"AWS::GuardDuty::IPSet"|"AWS::SageMaker::Workteam"|"AWS::SageMaker::NotebookInstanceLifecycleConfig"|"AWS::ServiceDiscovery::Service"|"AWS::ServiceDiscovery::PublicDnsNamespace"|"AWS::SES::ContactList"|"AWS::SES::ConfigurationSet"|"AWS::Route53::HostedZone"|"AWS::IoTEvents::Input"|"AWS::IoTEvents::DetectorModel"|"AWS::IoTEvents::AlarmModel"|"AWS::ServiceDiscovery::HttpNamespace"|"AWS::Events::EventBus"|"AWS::ImageBuilder::ContainerRecipe"|"AWS::ImageBuilder::DistributionConfiguration"|"AWS::ImageBuilder::InfrastructureConfiguration"|"AWS::DataSync::LocationObjectStorage"|"AWS::DataSync::LocationHDFS"|"AWS::Glue::Classifier"|"AWS::Route53RecoveryReadiness::Cell"|"AWS::Route53RecoveryReadiness::ReadinessCheck"|"AWS::ECR::RegistryPolicy"|"AWS::Backup::ReportPlan"|"AWS::Lightsail::Certificate"|"AWS::RUM::AppMonitor"|"AWS::Events::Endpoint"|"AWS::SES::ReceiptRuleSet"|"AWS::Events::Archive"|"AWS::Events::ApiDestination"|"AWS::Lightsail::Disk"|"AWS::FIS::ExperimentTemplate"|"AWS::DataSync::LocationFSxWindows"|"AWS::SES::ReceiptFilter"|"AWS::GuardDuty::Filter"|"AWS::SES::Template"|"AWS::AmazonMQ::Broker"|"AWS::AppConfig::Environment"|"AWS::AppConfig::ConfigurationProfile"|"AWS::Cloud9::EnvironmentEC2"|"AWS::EventSchemas::Registry"|"AWS::EventSchemas::RegistryPolicy"|"AWS::EventSchemas::Discoverer"|"AWS::FraudDetector::Label"|"AWS::FraudDetector::EntityType"|"AWS::FraudDetector::Variable"|"AWS::FraudDetector::Outcome"|"AWS::IoT::Authorizer"|"AWS::IoT::SecurityProfile"|"AWS::IoT::RoleAlias"|"AWS::IoT::Dimension"|"AWS::IoTAnalytics::Datastore"|"AWS::Lightsail::Bucket"|"AWS::Lightsail::StaticIp"|"AWS::MediaPackage::PackagingGroup"|"AWS::Route53RecoveryReadiness::RecoveryGroup"|"AWS::ResilienceHub::ResiliencyPolicy"|"AWS::Transfer::Workflow"|"AWS::EKS::IdentityProviderConfig"|"AWS::EKS::Addon"|"AWS::Glue::MLTransform"|"AWS::IoT::Policy"|"AWS::IoT::MitigationAction"|"AWS::IoTTwinMaker::Workspace"|"AWS::IoTTwinMaker::Entity"|"AWS::IoTAnalytics::Dataset"|"AWS::IoTAnalytics::Pipeline"|"AWS::IoTAnalytics::Channel"|"AWS::IoTSiteWise::Dashboard"|"AWS::IoTSiteWise::Project"|"AWS::IoTSiteWise::Portal"|"AWS::IoTSiteWise::AssetModel"|"AWS::IVS::Channel"|"AWS::IVS::RecordingConfiguration"|"AWS::IVS::PlaybackKeyPair"|"AWS::KinesisAnalyticsV2::Application"|"AWS::RDS::GlobalCluster"|"AWS::S3::MultiRegionAccessPoint"|"AWS::DeviceFarm::TestGridProject"|"AWS::Budgets::BudgetsAction"|"AWS::Lex::Bot"|"AWS::CodeGuruReviewer::RepositoryAssociation"|"AWS::IoT::CustomMetric"|"AWS::Route53Resolver::FirewallDomainList"|"AWS::RoboMaker::RobotApplicationVersion"|"AWS::EC2::TrafficMirrorSession"|"AWS::IoTSiteWise::Gateway"|"AWS::Lex::BotAlias"|"AWS::LookoutMetrics::Alert"|"AWS::IoT::AccountAuditConfiguration"|"AWS::EC2::TrafficMirrorTarget"|"AWS::S3::StorageLens"|"AWS::IoT::ScheduledAudit"|"AWS::Events::Connection"|"AWS::EventSchemas::Schema"|"AWS::MediaPackage::PackagingConfiguration"|"AWS::KinesisVideo::SignalingChannel"|"AWS::AppStream::DirectoryConfig"|"AWS::LookoutVision::Project"|"AWS::Route53RecoveryControl::Cluster"|"AWS::Route53RecoveryControl::SafetyRule"|"AWS::Route53RecoveryControl::ControlPanel"|"AWS::Route53RecoveryControl::RoutingControl"|"AWS::Route53RecoveryReadiness::ResourceSet"|"AWS::RoboMaker::SimulationApplication"|"AWS::RoboMaker::RobotApplication"|"AWS::HealthLake::FHIRDatastore"|"AWS::Pinpoint::Segment"|"AWS::Pinpoint::ApplicationSettings"|"AWS::Events::Rule"|"AWS::EC2::DHCPOptions"|"AWS::EC2::NetworkInsightsPath"|"AWS::EC2::TrafficMirrorFilter"|"AWS::EC2::IPAM"|"AWS::IoTTwinMaker::Scene"|"AWS::NetworkManager::TransitGatewayRegistration"|"AWS::CustomerProfiles::Domain"|"AWS::AutoScaling::WarmPool"|"AWS::Connect::PhoneNumber", ... (1 more fields)}
-]: any -> record<FailureMessage: string, FailedItems: table<resourceType: string, resourceId: string>> {
+]: any -> oneof<record<FailureMessage: string, FailedItems: table<resourceType: string, resourceId: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4843,8 +4826,6 @@ export def "start-remediation-execution" [
 #
 # POST /
 # operationId: StartResourceEvaluation
-# --ResourceDetails shape: {ResourceId: string, ResourceType: string, ResourceConfiguration: string, ResourceConfigurationSchemaType?: "CFN_RESOURCE_SCHEMA"}
-# --EvaluationContext shape: {EvaluationContextIdentifier?: string}
 export def "start-resource-evaluation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4868,7 +4849,7 @@ export def "start-resource-evaluation" [
   evaluation_mode: string@evaluation-mode-completer # The mode of an evaluation. The valid values for this API are DETECTIVE and PROACTIVE.
   --evaluation-timeout: int # The timeout for an evaluation. The default is 900 seconds. You cannot specify a number greater than 3600. If you specify 0, Config uses the default.
   --client-token: string # A client token is a unique, case-sensitive string of up to 64 ASCII characters. To make an idempotent API request using one of these actions, specify a client token in the request. Avoid reusing the same client token for other API requests. If you retry a request that completed successfully using the same client token and the same parameters, the retry succeeds without performing any further actions. If you retry a successful request using the same client token, but one or more of the parameters are different, other than the Region or Availability Zone, the retry fails with an IdempotentParameterMismatch error.
-]: any -> record<ResourceEvaluationId: string> {
+]: any -> oneof<record<ResourceEvaluationId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4947,7 +4928,6 @@ export def "stop-configuration-recorder" [
 #
 # POST /
 # operationId: TagResource
-# --Tags item shape: {Key?: string, Value?: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

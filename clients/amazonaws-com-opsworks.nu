@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -180,9 +203,9 @@ def x-amz-target-completer-73 [] { ["OpsWorks_20130218.UpdateVolume"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "assign-instance" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["assign-instance" "assign-volume" "associate-elastic-ip" "attach-elastic-load-balancer" "clone-stack" "create-app" "create-deployment" "create-instance" "create-layer" "create-stack" "create-user-profile" "delete-app" "delete-instance" "delete-layer" "delete-stack" "delete-user-profile" "deregister-ecs-cluster" "deregister-elastic-ip" "deregister-instance" "deregister-rds-db-instance" "deregister-volume" "describe-agent-versions" "describe-apps" "describe-commands" "describe-deployments" "describe-ecs-clusters" "describe-elastic-ips" "describe-elastic-load-balancers" "describe-instances" "describe-layers" "describe-load-based-auto-scaling" "describe-my-user-profile" "describe-operating-systems" "describe-permissions" "describe-raid-arrays" "describe-rds-db-instances" "describe-service-errors" "describe-stack-provisioning-parameters" "describe-stack-summary" "describe-stacks" "describe-time-based-auto-scaling" "describe-user-profiles" "describe-volumes" "detach-elastic-load-balancer" "disassociate-elastic-ip" "get-hostname-suggestion" "grant-access" "list-tags" "reboot-instance" "register-ecs-cluster" "register-elastic-ip" "register-instance" "register-rds-db-instance" "register-volume" "set-load-based-auto-scaling" "set-permission" "set-time-based-auto-scaling" "start-instance" "start-stack" "stop-instance" "stop-stack" "tag-resource" "unassign-instance" "unassign-volume" "untag-resource" "update-app" "update-elastic-ip" "update-instance" "update-layer" "update-my-user-profile" "update-rds-db-instance" "update-stack" "update-user-profile" "update-volume" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -404,9 +427,6 @@ export def "attach-elastic-load-balancer" [
 #
 # POST /
 # operationId: CloneStack
-# --ConfigurationManager shape: {Name?: string, Version?: string}
-# --ChefConfiguration shape: {ManageBerkshelf?: bool, BerkshelfVersion?: string}
-# --CustomCookbooksSource shape: {Type?: "git"|"svn"|"archive"|"s3", Url?: string, Username?: string, Password?: string, SshKey?: string, Revision?: string}
 export def "clone-stack" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -447,7 +467,7 @@ export def "clone-stack" [
   --clone-app-ids: list<string> # A list of source stack app IDs to be included in the cloned stack.
   --default-root-device-type: string@default-root-device-type-completer # The default root device type. This value is used by default for all instances in the cloned stack, but you can override it when you create an instance. For more information, see Storage for the Root Device (https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ComponentsAMIs.html#storage-for-the-root-device).
   --agent-version: string # The default AWS OpsWorks Stacks agent version. You have the following options: Auto-update - Set this parameter to LATEST. AWS OpsWorks Stacks automatically installs new agent versions on the stack's instances as soon as they are available. Fixed version - Set this parameter to your preferred agent version. To update the agent version, you must edit the stack configuration and specify a new version. AWS OpsWorks Stacks then automatically installs that version on the stack's instances. The default setting is LATEST. To specify an agent version, you must use the complete version number, not the abbreviated number shown on the console. For a list of available agent version numbers, call DescribeAgentVersions. AgentVersion cannot be set to Chef 12.2. You can also specify an agent version when you create or update an instance, which overrides the stack's default setting.
-]: any -> record<StackId: string> {
+]: any -> oneof<record<StackId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -477,10 +497,6 @@ export def "clone-stack" [
 #
 # POST /
 # operationId: CreateApp
-# --DataSources item shape: {Type?: string, Arn?: string, DatabaseName?: string}
-# --AppSource shape: {Type?: "git"|"svn"|"archive"|"s3", Url?: string, Username?: string, Password?: string, SshKey?: string, Revision?: string}
-# --SslConfiguration shape: {Certificate: string, PrivateKey: string, Chain?: string}
-# --Environment item shape: {Key: string, Value: string, Secure?: bool}
 export def "create-app" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -511,7 +527,7 @@ export def "create-app" [
   --ssl-configuration: record # Describes an app's SSL configuration. — shape: {Certificate: string, PrivateKey: string, Chain?: string}
   --attributes: record # One or more user-defined key/value pairs to be added to the stack attributes.
   --environment: list # An array of EnvironmentVariable objects that specify environment variables to be associated with the app. After you deploy the app, these variables are defined on the associated app server instance. For more information, see Environment Variables (https://docs.aws.amazon.com/opsworks/latest/userguide/workingapps-creating.html#workingapps-creating-environment). There is no specific limit on the number of environment variables. However, the size of the associated data structure - which includes the variables' names, values, and protected flag values - cannot exceed 20 KB. This limit should accommodate most if not all use cases. Exceeding it will cause an exception with the message, "Environment: is too large (maximum is 20KB)." If you have specified one or more environment variables, you cannot modify the stack's Chef version. — item shape: {Key: string, Value: string, Secure?: bool}
-]: any -> record<AppId: string> {
+]: any -> oneof<record<AppId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -541,7 +557,6 @@ export def "create-app" [
 #
 # POST /
 # operationId: CreateDeployment
-# --Command shape: {Name: "install_dependencies"|"update_dependencies"|"update_custom_cookbooks"|"execute_recipes"|"configure"|"setup"|"deploy"|"rollback"|"start"|"stop"|"restart"|"undeploy", Args?: record}
 export def "create-deployment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -567,7 +582,7 @@ export def "create-deployment" [
   command: record # Used to specify a stack or deployment command. — shape: {Name: "install_dependencies"|"update_dependencies"|"update_custom_cookbooks"|"execute_recipes"|"configure"|"setup"|"deploy"|"rollback"|"start"|"stop"|"restart"|"undeploy", Args?: record}
   --comment: string # A user-defined comment.
   --custom-json: string # A string that contains user-defined, custom JSON. You can use this parameter to override some corresponding default stack configuration JSON values. The string should be in the following format: "{\"key1\": \"value1\", \"key2\": \"value2\",...}" For more information about custom JSON, see Use Custom JSON to Modify the Stack Configuration Attributes (https://docs.aws.amazon.com/opsworks/latest/userguide/workingstacks-json.html) and Overriding Attributes With Custom JSON (https://docs.aws.amazon.com/opsworks/latest/userguide/workingcookbook-json-override.html).
-]: any -> record<DeploymentId: string> {
+]: any -> oneof<record<DeploymentId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -597,7 +612,6 @@ export def "create-deployment" [
 #
 # POST /
 # operationId: CreateInstance
-# --BlockDeviceMappings item shape: {DeviceName?: string, NoDevice?: string, VirtualName?: string, Ebs?: record}
 export def "create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -634,7 +648,7 @@ export def "create-instance" [
   --ebs-optimized: oneof<nothing, bool> # Whether to create an Amazon EBS-optimized instance.
   --agent-version: string # The default AWS OpsWorks Stacks agent version. You have the following options: INHERIT - Use the stack's default agent version setting. version_number - Use the specified agent version. This value overrides the stack's default setting. To update the agent version, edit the instance configuration and specify a new version. AWS OpsWorks Stacks then automatically installs that version on the instance. The default setting is INHERIT. To specify an agent version, you must use the complete version number, not the abbreviated number shown on the console. For a list of available agent version numbers, call DescribeAgentVersions. AgentVersion cannot be set to Chef 12.2.
   --tenancy: string # The instance's tenancy option. The default option is no tenancy, or if the instance is running in a VPC, inherit tenancy settings from the VPC. The following are valid values for this parameter: dedicated, default, or host. Because there are costs associated with changes in tenancy options, we recommend that you research tenancy options before choosing them for your instances. For more information about dedicated hosts, see Dedicated Hosts Overview (http://aws.amazon.com/ec2/dedicated-hosts/) and Amazon EC2 Dedicated Hosts (http://aws.amazon.com/ec2/dedicated-hosts/). For more information about dedicated instances, see Dedicated Instances (https://docs.aws.amazon.com/AmazonVPC/latest/UserGuide/dedicated-instance.html) and Amazon EC2 Dedicated Instances (http://aws.amazon.com/ec2/purchasing-options/dedicated-instances/).
-]: any -> record<InstanceId: string> {
+]: any -> oneof<record<InstanceId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -664,10 +678,6 @@ export def "create-instance" [
 #
 # POST /
 # operationId: CreateLayer
-# --CloudWatchLogsConfiguration shape: {Enabled?: bool, LogStreams?: list}
-# --VolumeConfigurations item shape: {MountPoint: string, RaidLevel?: int, NumberOfDisks: int, Size: int, VolumeType?: string, Iops?: int, Encrypted?: bool}
-# --CustomRecipes shape: {Setup?: list<string>, Configure?: list<string>, Deploy?: list<string>, Undeploy?: list<string>, Shutdown?: list<string>}
-# --LifecycleEventConfiguration shape: {Shutdown?: record}
 export def "create-layer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -704,7 +714,7 @@ export def "create-layer" [
   --install-updates-on-boot: oneof<nothing, bool> # Whether to install operating system and package updates when the instance boots. The default value is true. To control when updates are installed, set this value to false. You must then update your instances manually by using CreateDeployment to run the update_dependencies stack command or by manually running yum (Amazon Linux) or apt-get (Ubuntu) on the instances. To ensure that your instances have the latest security updates, we strongly recommend using the default value of true.
   --use-ebs-optimized-instances: oneof<nothing, bool> # Whether to use Amazon EBS-optimized instances.
   --lifecycle-event-configuration: record # Specifies the lifecycle event configuration — shape: {Shutdown?: record}
-]: any -> record<LayerId: string> {
+]: any -> oneof<record<LayerId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -734,9 +744,6 @@ export def "create-layer" [
 #
 # POST /
 # operationId: CreateStack
-# --ConfigurationManager shape: {Name?: string, Version?: string}
-# --ChefConfiguration shape: {ManageBerkshelf?: bool, BerkshelfVersion?: string}
-# --CustomCookbooksSource shape: {Type?: "git"|"svn"|"archive"|"s3", Url?: string, Username?: string, Password?: string, SshKey?: string, Revision?: string}
 export def "create-stack" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -774,7 +781,7 @@ export def "create-stack" [
   --default-ssh-key-name: string # A default Amazon EC2 key pair name. The default value is none. If you specify a key pair name, AWS OpsWorks installs the public key on the instance and you can use the private key with an SSH client to log in to the instance. For more information, see Using SSH to Communicate with an Instance (https://docs.aws.amazon.com/opsworks/latest/userguide/workinginstances-ssh.html) and Managing SSH Access (https://docs.aws.amazon.com/opsworks/latest/userguide/security-ssh-access.html). You can override this setting by specifying a different key pair, or no key pair, when you create an instance (https://docs.aws.amazon.com/opsworks/latest/userguide/workinginstances-add.html).
   --default-root-device-type: string@default-root-device-type-completer # The default root device type. This value is the default for all instances in the stack, but you can override it when you create an instance. The default option is instance-store. For more information, see Storage for the Root Device (https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ComponentsAMIs.html#storage-for-the-root-device).
   --agent-version: string # The default AWS OpsWorks Stacks agent version. You have the following options: Auto-update - Set this parameter to LATEST. AWS OpsWorks Stacks automatically installs new agent versions on the stack's instances as soon as they are available. Fixed version - Set this parameter to your preferred agent version. To update the agent version, you must edit the stack configuration and specify a new version. AWS OpsWorks Stacks then automatically installs that version on the stack's instances. The default setting is the most recent release of the agent. To specify an agent version, you must use the complete version number, not the abbreviated number shown on the console. For a list of available agent version numbers, call DescribeAgentVersions. AgentVersion cannot be set to Chef 12.2. You can also specify an agent version when you create or update an instance, which overrides the stack's default setting.
-]: any -> record<StackId: string> {
+]: any -> oneof<record<StackId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -826,7 +833,7 @@ export def "create-user-profile" [
   --ssh-username: string # The user's SSH user name. The allowable characters are [a-z], [A-Z], [0-9], '-', and '_'. If the specified name includes other punctuation marks, AWS OpsWorks Stacks removes them. For example, my.name will be changed to myname. If you do not specify an SSH user name, AWS OpsWorks Stacks generates one from the IAM user name.
   --ssh-public-key: string # The user's public SSH key.
   --allow-self-management: oneof<nothing, bool> # Whether users can specify their own SSH public key through the My Settings page. For more information, see Setting an IAM User's Public SSH Key (https://docs.aws.amazon.com/opsworks/latest/userguide/security-settingsshkey.html).
-]: any -> record<IamUserArn: string> {
+]: any -> oneof<record<IamUserArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1348,7 +1355,6 @@ export def "deregister-volume" [
 #
 # POST /
 # operationId: DescribeAgentVersions
-# --ConfigurationManager shape: {Name?: string, Version?: string}
 export def "describe-agent-versions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1369,7 +1375,7 @@ export def "describe-agent-versions" [
   --x-amz-target: string@x-amz-target-completer-21 # required
   --stack-id: string # The stack ID.
   --configuration-manager: record # Describes the configuration manager. — shape: {Name?: string, Version?: string}
-]: any -> record<AgentVersions: table<Version: string, ConfigurationManager: record>> {
+]: any -> oneof<record<AgentVersions: table<Version: string, ConfigurationManager: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1419,7 +1425,7 @@ export def "describe-apps" [
   --x-amz-target: string@x-amz-target-completer-22 # required
   --stack-id: string # The app stack ID. If you use this parameter, DescribeApps returns a description of the apps in the specified stack.
   --app-ids: list<string> # An array of app IDs for the apps to be described. If you use this parameter, DescribeApps returns a description of the specified apps. Otherwise, it returns a description of every app.
-]: any -> record<Apps: table<AppId: string, StackId: string, Shortname: string, Name: string, Description: string, DataSources: list, Type: string, AppSource: record, Domains: list, EnableSsl: bool, SslConfiguration: record, Attributes: record, CreatedAt: string, Environment: list>> {
+]: any -> oneof<record<Apps: table<AppId: string, StackId: string, Shortname: string, Name: string, Description: string, DataSources: list, Type: string, AppSource: record, Domains: list, EnableSsl: bool, SslConfiguration: record, Attributes: record, CreatedAt: string, Environment: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1470,7 +1476,7 @@ export def "describe-commands" [
   --deployment-id: string # The deployment ID. If you include this parameter, DescribeCommands returns a description of the commands associated with the specified deployment.
   --instance-id: string # The instance ID. If you include this parameter, DescribeCommands returns a description of the commands associated with the specified instance.
   --command-ids: list<string> # An array of command IDs. If you include this parameter, DescribeCommands returns a description of the specified commands. Otherwise, it returns a description of every command.
-]: any -> record<Commands: table<CommandId: string, InstanceId: string, DeploymentId: string, CreatedAt: string, AcknowledgedAt: string, CompletedAt: string, Status: string, ExitCode: int, LogUrl: string, Type: string>> {
+]: any -> oneof<record<Commands: table<CommandId: string, InstanceId: string, DeploymentId: string, CreatedAt: string, AcknowledgedAt: string, CompletedAt: string, Status: string, ExitCode: int, LogUrl: string, Type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1521,7 +1527,7 @@ export def "describe-deployments" [
   --stack-id: string # The stack ID. If you include this parameter, the command returns a description of the commands associated with the specified stack.
   --app-id: string # The app ID. If you include this parameter, the command returns a description of the commands associated with the specified app.
   --deployment-ids: list<string> # An array of deployment IDs to be described. If you include this parameter, the command returns a description of the specified deployments. Otherwise, it returns a description of every deployment.
-]: any -> record<Deployments: table<DeploymentId: string, StackId: string, AppId: string, CreatedAt: string, CompletedAt: string, Duration: int, IamUserArn: string, Comment: string, Command: record, Status: string, CustomJson: string, InstanceIds: list>> {
+]: any -> oneof<record<Deployments: table<DeploymentId: string, StackId: string, AppId: string, CreatedAt: string, CompletedAt: string, Duration: int, IamUserArn: string, Comment: string, Command: record, Status: string, CustomJson: string, InstanceIds: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1575,7 +1581,7 @@ export def "describe-ecs-clusters" [
   --stack-id: string # A stack ID. DescribeEcsClusters returns a description of the cluster that is registered with the stack.
   --next-token-body: string # If the previous paginated request did not return all of the remaining results, the response object'sNextToken parameter value is set to a token. To retrieve the next set of results, call DescribeEcsClusters again and assign that token to the request object's NextToken parameter. If there are no remaining results, the previous response object's NextToken parameter is set to null. (body field)
   --max-results-body: int # To receive a paginated response, use this parameter to specify the maximum number of results to be returned with a single call. If the number of available results exceeds this maximum, the response includes a NextToken value that you can assign to the NextToken request parameter to get the next set of results. (body field)
-]: any -> record<EcsClusters: table<EcsClusterArn: string, EcsClusterName: string, StackId: string, RegisteredAt: string>, NextToken: string> {
+]: any -> oneof<record<EcsClusters: table<EcsClusterArn: string, EcsClusterName: string, StackId: string, RegisteredAt: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1627,7 +1633,7 @@ export def "describe-elastic-ips" [
   --instance-id: string # The instance ID. If you include this parameter, DescribeElasticIps returns a description of the Elastic IP addresses associated with the specified instance.
   --stack-id: string # A stack ID. If you include this parameter, DescribeElasticIps returns a description of the Elastic IP addresses that are registered with the specified stack.
   --ips: list<string> # An array of Elastic IP addresses to be described. If you include this parameter, DescribeElasticIps returns a description of the specified Elastic IP addresses. Otherwise, it returns a description of every Elastic IP address.
-]: any -> record<ElasticIps: table<Ip: string, Name: string, Domain: string, Region: string, InstanceId: string>> {
+]: any -> oneof<record<ElasticIps: table<Ip: string, Name: string, Domain: string, Region: string, InstanceId: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1677,7 +1683,7 @@ export def "describe-elastic-load-balancers" [
   --x-amz-target: string@x-amz-target-completer-27 # required
   --stack-id: string # A stack ID. The action describes the stack's Elastic Load Balancing instances.
   --layer-ids: list<string> # A list of layer IDs. The action describes the Elastic Load Balancing instances for the specified layers.
-]: any -> record<ElasticLoadBalancers: table<ElasticLoadBalancerName: string, Region: string, DnsName: string, StackId: string, LayerId: string, VpcId: string, AvailabilityZones: list, SubnetIds: list, Ec2InstanceIds: list>> {
+]: any -> oneof<record<ElasticLoadBalancers: table<ElasticLoadBalancerName: string, Region: string, DnsName: string, StackId: string, LayerId: string, VpcId: string, AvailabilityZones: list, SubnetIds: list, Ec2InstanceIds: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1728,7 +1734,7 @@ export def "describe-instances" [
   --stack-id: string # A stack ID. If you use this parameter, DescribeInstances returns descriptions of the instances associated with the specified stack.
   --layer-id: string # A layer ID. If you use this parameter, DescribeInstances returns descriptions of the instances associated with the specified layer.
   --instance-ids: list<string> # An array of instance IDs to be described. If you use this parameter, DescribeInstances returns a description of the specified instances. Otherwise, it returns a description of every instance.
-]: any -> record<Instances: table<AgentVersion: string, AmiId: string, Architecture: string, Arn: string, AutoScalingType: string, AvailabilityZone: string, BlockDeviceMappings: list, CreatedAt: string, EbsOptimized: bool, Ec2InstanceId: string, EcsClusterArn: string, EcsContainerInstanceArn: string, ElasticIp: string, Hostname: string, InfrastructureClass: string, InstallUpdatesOnBoot: bool, InstanceId: string, InstanceProfileArn: string, InstanceType: string, LastServiceErrorId: string, LayerIds: list, Os: string, Platform: string, PrivateDns: string, PrivateIp: string, PublicDns: string, PublicIp: string, RegisteredBy: string, ReportedAgentVersion: string, ReportedOs: record, RootDeviceType: string, RootDeviceVolumeId: string, SecurityGroupIds: list, SshHostDsaKeyFingerprint: string, SshHostRsaKeyFingerprint: string, SshKeyName: string, StackId: string, Status: string, SubnetId: string, Tenancy: string, VirtualizationType: string>> {
+]: any -> oneof<record<Instances: table<AgentVersion: string, AmiId: string, Architecture: string, Arn: string, AutoScalingType: string, AvailabilityZone: string, BlockDeviceMappings: list, CreatedAt: string, EbsOptimized: bool, Ec2InstanceId: string, EcsClusterArn: string, EcsContainerInstanceArn: string, ElasticIp: string, Hostname: string, InfrastructureClass: string, InstallUpdatesOnBoot: bool, InstanceId: string, InstanceProfileArn: string, InstanceType: string, LastServiceErrorId: string, LayerIds: list, Os: string, Platform: string, PrivateDns: string, PrivateIp: string, PublicDns: string, PublicIp: string, RegisteredBy: string, ReportedAgentVersion: string, ReportedOs: record, RootDeviceType: string, RootDeviceVolumeId: string, SecurityGroupIds: list, SshHostDsaKeyFingerprint: string, SshHostRsaKeyFingerprint: string, SshKeyName: string, StackId: string, Status: string, SubnetId: string, Tenancy: string, VirtualizationType: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1778,7 +1784,7 @@ export def "describe-layers" [
   --x-amz-target: string@x-amz-target-completer-29 # required
   --stack-id: string # The stack ID.
   --layer-ids: list<string> # An array of layer IDs that specify the layers to be described. If you omit this parameter, DescribeLayers returns a description of every layer in the specified stack.
-]: any -> record<Layers: table<Arn: string, StackId: string, LayerId: string, Type: string, Name: string, Shortname: string, Attributes: record, CloudWatchLogsConfiguration: record, CustomInstanceProfileArn: string, CustomJson: string, CustomSecurityGroupIds: list, DefaultSecurityGroupNames: list, Packages: list, VolumeConfigurations: list, EnableAutoHealing: bool, AutoAssignElasticIps: bool, AutoAssignPublicIps: bool, DefaultRecipes: record, CustomRecipes: record, CreatedAt: string, InstallUpdatesOnBoot: bool, UseEbsOptimizedInstances: bool, LifecycleEventConfiguration: record>> {
+]: any -> oneof<record<Layers: table<Arn: string, StackId: string, LayerId: string, Type: string, Name: string, Shortname: string, Attributes: record, CloudWatchLogsConfiguration: record, CustomInstanceProfileArn: string, CustomJson: string, CustomSecurityGroupIds: list, DefaultSecurityGroupNames: list, Packages: list, VolumeConfigurations: list, EnableAutoHealing: bool, AutoAssignElasticIps: bool, AutoAssignPublicIps: bool, DefaultRecipes: record, CustomRecipes: record, CreatedAt: string, InstallUpdatesOnBoot: bool, UseEbsOptimizedInstances: bool, LifecycleEventConfiguration: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1827,7 +1833,7 @@ export def "describe-load-based-auto-scaling" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-30 # required
   layer_ids: list<string> # An array of layer IDs.
-]: any -> record<LoadBasedAutoScalingConfigurations: table<LayerId: string, Enable: bool, UpScaling: record, DownScaling: record>> {
+]: any -> oneof<record<LoadBasedAutoScalingConfigurations: table<LayerId: string, Enable: bool, UpScaling: record, DownScaling: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1875,7 +1881,7 @@ export def "describe-my-user-profile" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-31 # required
-]: nothing -> record<UserProfile: record<IamUserArn: string, Name: string, SshUsername: string, SshPublicKey: string>> {
+]: nothing -> oneof<record<UserProfile: record<IamUserArn: string, Name: string, SshUsername: string, SshPublicKey: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let x_amz_target = ($x_amz_target | default "OpsWorks_20130218.DescribeMyUserProfile")
@@ -1920,7 +1926,7 @@ export def "describe-operating-systems" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-32 # required
-]: nothing -> record<OperatingSystems: table<Name: string, Id: string, Type: string, ConfigurationManagers: list, ReportedName: string, ReportedVersion: string, Supported: bool>> {
+]: nothing -> oneof<record<OperatingSystems: table<Name: string, Id: string, Type: string, ConfigurationManagers: list, ReportedName: string, ReportedVersion: string, Supported: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let x_amz_target = ($x_amz_target | default "OpsWorks_20130218.DescribeOperatingSystems")
@@ -1967,7 +1973,7 @@ export def "describe-permissions" [
   --x-amz-target: string@x-amz-target-completer-33 # required
   --iam-user-arn: string # The user's IAM ARN. This can also be a federated user's ARN. For more information about IAM ARNs, see Using Identifiers (https://docs.aws.amazon.com/IAM/latest/UserGuide/Using_Identifiers.html).
   --stack-id: string # The stack ID.
-]: any -> record<Permissions: table<StackId: string, IamUserArn: string, AllowSsh: bool, AllowSudo: bool, Level: string>> {
+]: any -> oneof<record<Permissions: table<StackId: string, IamUserArn: string, AllowSsh: bool, AllowSudo: bool, Level: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2018,7 +2024,7 @@ export def "describe-raid-arrays" [
   --instance-id: string # The instance ID. If you use this parameter, DescribeRaidArrays returns descriptions of the RAID arrays associated with the specified instance.
   --stack-id: string # The stack ID.
   --raid-array-ids: list<string> # An array of RAID array IDs. If you use this parameter, DescribeRaidArrays returns descriptions of the specified arrays. Otherwise, it returns a description of every array.
-]: any -> record<RaidArrays: table<RaidArrayId: string, InstanceId: string, Name: string, RaidLevel: int, NumberOfDisks: int, Size: int, Device: string, MountPoint: string, AvailabilityZone: string, CreatedAt: string, StackId: string, VolumeType: string, Iops: int>> {
+]: any -> oneof<record<RaidArrays: table<RaidArrayId: string, InstanceId: string, Name: string, RaidLevel: int, NumberOfDisks: int, Size: int, Device: string, MountPoint: string, AvailabilityZone: string, CreatedAt: string, StackId: string, VolumeType: string, Iops: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2068,7 +2074,7 @@ export def "describe-rds-db-instances" [
   --x-amz-target: string@x-amz-target-completer-35 # required
   stack_id: string # The ID of the stack with which the instances are registered. The operation returns descriptions of all registered Amazon RDS instances.
   --rds-db-instance-arns: list<string> # An array containing the ARNs of the instances to be described.
-]: any -> record<RdsDbInstances: table<RdsDbInstanceArn: string, DbInstanceIdentifier: string, DbUser: string, DbPassword: string, Region: string, Address: string, Engine: string, StackId: string, MissingOnRds: bool>> {
+]: any -> oneof<record<RdsDbInstances: table<RdsDbInstanceArn: string, DbInstanceIdentifier: string, DbUser: string, DbPassword: string, Region: string, Address: string, Engine: string, StackId: string, MissingOnRds: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2119,7 +2125,7 @@ export def "describe-service-errors" [
   --stack-id: string # The stack ID. If you use this parameter, DescribeServiceErrors returns descriptions of the errors associated with the specified stack.
   --instance-id: string # The instance ID. If you use this parameter, DescribeServiceErrors returns descriptions of the errors associated with the specified instance.
   --service-error-ids: list<string> # An array of service error IDs. If you use this parameter, DescribeServiceErrors returns descriptions of the specified errors. Otherwise, it returns a description of every error.
-]: any -> record<ServiceErrors: table<ServiceErrorId: string, StackId: string, InstanceId: string, Type: string, Message: string, CreatedAt: string>> {
+]: any -> oneof<record<ServiceErrors: table<ServiceErrorId: string, StackId: string, InstanceId: string, Type: string, Message: string, CreatedAt: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2168,7 +2174,7 @@ export def "describe-stack-provisioning-parameters" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-37 # required
   stack_id: string # The stack ID.
-]: any -> record<AgentInstallerUrl: string, Parameters: record> {
+]: any -> oneof<record<AgentInstallerUrl: string, Parameters: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2217,7 +2223,7 @@ export def "describe-stack-summary" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-38 # required
   stack_id: string # The stack ID.
-]: any -> record<StackSummary: record<StackId: string, Name: string, Arn: string, LayersCount: int, AppsCount: int, InstancesCount: record<Assigning: int, Booting: int, ConnectionLost: int, Deregistering: int, Online: int, Pending: int, Rebooting: int, Registered: int, Registering: int, Requested: int, RunningSetup: int, SetupFailed: int, ShuttingDown: int, StartFailed: int, StopFailed: int, Stopped: int, Stopping: int, Terminated: int, Terminating: int, Unassigning: int>>> {
+]: any -> oneof<record<StackSummary: record<StackId: string, Name: string, Arn: string, LayersCount: int, AppsCount: int, InstancesCount: record<Assigning: int, Booting: int, ConnectionLost: int, Deregistering: int, Online: int, Pending: int, Rebooting: int, Registered: int, Registering: int, Requested: int, RunningSetup: int, SetupFailed: int, ShuttingDown: int, StartFailed: int, StopFailed: int, Stopped: int, Stopping: int, Terminated: int, Terminating: int, Unassigning: int>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2266,7 +2272,7 @@ export def "describe-stacks" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-39 # required
   --stack-ids: list<string> # An array of stack IDs that specify the stacks to be described. If you omit this parameter, DescribeStacks returns a description of every stack.
-]: any -> record<Stacks: table<StackId: string, Name: string, Arn: string, Region: string, VpcId: string, Attributes: record, ServiceRoleArn: string, DefaultInstanceProfileArn: string, DefaultOs: string, HostnameTheme: string, DefaultAvailabilityZone: string, DefaultSubnetId: string, CustomJson: string, ConfigurationManager: record, ChefConfiguration: record, UseCustomCookbooks: bool, UseOpsworksSecurityGroups: bool, CustomCookbooksSource: record, DefaultSshKeyName: string, CreatedAt: string, DefaultRootDeviceType: string, AgentVersion: string>> {
+]: any -> oneof<record<Stacks: table<StackId: string, Name: string, Arn: string, Region: string, VpcId: string, Attributes: record, ServiceRoleArn: string, DefaultInstanceProfileArn: string, DefaultOs: string, HostnameTheme: string, DefaultAvailabilityZone: string, DefaultSubnetId: string, CustomJson: string, ConfigurationManager: record, ChefConfiguration: record, UseCustomCookbooks: bool, UseOpsworksSecurityGroups: bool, CustomCookbooksSource: record, DefaultSshKeyName: string, CreatedAt: string, DefaultRootDeviceType: string, AgentVersion: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2315,7 +2321,7 @@ export def "describe-time-based-auto-scaling" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-40 # required
   instance_ids: list<string> # An array of instance IDs.
-]: any -> record<TimeBasedAutoScalingConfigurations: table<InstanceId: string, AutoScalingSchedule: record>> {
+]: any -> oneof<record<TimeBasedAutoScalingConfigurations: table<InstanceId: string, AutoScalingSchedule: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2364,7 +2370,7 @@ export def "describe-user-profiles" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-41 # required
   --iam-user-arns: list<string> # An array of IAM or federated user ARNs that identify the users to be described.
-]: any -> record<UserProfiles: table<IamUserArn: string, Name: string, SshUsername: string, SshPublicKey: string, AllowSelfManagement: bool>> {
+]: any -> oneof<record<UserProfiles: table<IamUserArn: string, Name: string, SshUsername: string, SshPublicKey: string, AllowSelfManagement: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2416,7 +2422,7 @@ export def "describe-volumes" [
   --stack-id: string # A stack ID. The action describes the stack's registered Amazon EBS volumes.
   --raid-array-id: string # The RAID array ID. If you use this parameter, DescribeVolumes returns descriptions of the volumes associated with the specified RAID array.
   --volume-ids: list<string> # Am array of volume IDs. If you use this parameter, DescribeVolumes returns descriptions of the specified volumes. Otherwise, it returns a description of every volume.
-]: any -> record<Volumes: table<VolumeId: string, Ec2VolumeId: string, Name: string, RaidArrayId: string, InstanceId: string, Status: string, Size: int, Device: string, MountPoint: string, Region: string, AvailabilityZone: string, VolumeType: string, Iops: int, Encrypted: bool>> {
+]: any -> oneof<record<Volumes: table<VolumeId: string, Ec2VolumeId: string, Name: string, RaidArrayId: string, InstanceId: string, Status: string, Size: int, Device: string, MountPoint: string, Region: string, AvailabilityZone: string, VolumeType: string, Iops: int, Encrypted: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2564,7 +2570,7 @@ export def "get-hostname-suggestion" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-45 # required
   layer_id: string # The layer ID.
-]: any -> record<LayerId: string, Hostname: string> {
+]: any -> oneof<record<LayerId: string, Hostname: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2614,7 +2620,7 @@ export def "grant-access" [
   --x-amz-target: string@x-amz-target-completer-46 # required
   instance_id: string # The instance's AWS OpsWorks Stacks ID.
   --valid-for-in-minutes: int # The length of time (in minutes) that the grant is valid. When the grant expires at the end of this period, the user will no longer be able to use the credentials to log in. If the user is logged in at the time, he or she automatically will be logged out.
-]: any -> record<TemporaryCredential: record<Username: string, Password: string, ValidForInMinutes: int, InstanceId: string>> {
+]: any -> oneof<record<TemporaryCredential: record<Username: string, Password: string, ValidForInMinutes: int, InstanceId: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2665,7 +2671,7 @@ export def "list-tags" [
   resource_arn: string # The stack or layer's Amazon Resource Number (ARN).
   --max-results: int # Do not use. A validation exception occurs if you add a MaxResults parameter to a ListTagsRequest call.
   --next-token: string # Do not use. A validation exception occurs if you add a NextToken parameter to a ListTagsRequest call.
-]: any -> record<Tags: record, NextToken: string> {
+]: any -> oneof<record<Tags: record, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2764,7 +2770,7 @@ export def "register-ecs-cluster" [
   --x-amz-target: string@x-amz-target-completer-49 # required
   ecs_cluster_arn: string # The cluster's ARN.
   stack_id: string # The stack ID.
-]: any -> record<EcsClusterArn: string> {
+]: any -> oneof<record<EcsClusterArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2814,7 +2820,7 @@ export def "register-elastic-ip" [
   --x-amz-target: string@x-amz-target-completer-50 # required
   elastic_ip: string # The Elastic IP address.
   stack_id: string # The stack ID.
-]: any -> record<ElasticIp: string> {
+]: any -> oneof<record<ElasticIp: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2844,7 +2850,6 @@ export def "register-elastic-ip" [
 #
 # POST /
 # operationId: RegisterInstance
-# --InstanceIdentity shape: {Document?: string, Signature?: string}
 export def "register-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2870,7 +2875,7 @@ export def "register-instance" [
   --rsa-public-key: string # The instances public RSA key. This key is used to encrypt communication between the instance and the service.
   --rsa-public-key-fingerprint: string # The instances public RSA key fingerprint.
   --instance-identity: record # Contains a description of an Amazon EC2 instance from the Amazon EC2 metadata service. For more information, see Instance Metadata and User Data (https://docs.aws.amazon.com/sdkfornet/latest/apidocs/Index.html). — shape: {Document?: string, Signature?: string}
-]: any -> record<InstanceId: string> {
+]: any -> oneof<record<InstanceId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2972,7 +2977,7 @@ export def "register-volume" [
   --x-amz-target: string@x-amz-target-completer-53 # required
   --ec2-volume-id: string # The Amazon EBS volume ID.
   stack_id: string # The stack ID.
-]: any -> record<VolumeId: string> {
+]: any -> oneof<record<VolumeId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3002,8 +3007,6 @@ export def "register-volume" [
 #
 # POST /
 # operationId: SetLoadBasedAutoScaling
-# --UpScaling shape: {InstanceCount?: int, ThresholdsWaitTime?: int, IgnoreMetricsTime?: int, CpuThreshold?: float, MemoryThreshold?: float, LoadThreshold?: float, Alarms?: list<string>}
-# --DownScaling shape: {InstanceCount?: int, ThresholdsWaitTime?: int, IgnoreMetricsTime?: int, CpuThreshold?: float, MemoryThreshold?: float, LoadThreshold?: float, Alarms?: list<string>}
 export def "set-load-based-auto-scaling" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3109,7 +3112,6 @@ export def "set-permission" [
 #
 # POST /
 # operationId: SetTimeBasedAutoScaling
-# --AutoScalingSchedule shape: {Monday?: record, Tuesday?: record, Wednesday?: record, Thursday?: record, Friday?: record, Saturday?: record, Sunday?: record}
 export def "set-time-based-auto-scaling" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3555,10 +3557,6 @@ export def "untag-resource" [
 #
 # POST /
 # operationId: UpdateApp
-# --DataSources item shape: {Type?: string, Arn?: string, DatabaseName?: string}
-# --AppSource shape: {Type?: "git"|"svn"|"archive"|"s3", Url?: string, Username?: string, Password?: string, SshKey?: string, Revision?: string}
-# --SslConfiguration shape: {Certificate: string, PrivateKey: string, Chain?: string}
-# --Environment item shape: {Key: string, Value: string, Secure?: bool}
 export def "update-app" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3728,10 +3726,6 @@ export def "update-instance" [
 #
 # POST /
 # operationId: UpdateLayer
-# --CloudWatchLogsConfiguration shape: {Enabled?: bool, LogStreams?: list}
-# --VolumeConfigurations item shape: {MountPoint: string, RaidLevel?: int, NumberOfDisks: int, Size: int, VolumeType?: string, Iops?: int, Encrypted?: bool}
-# --CustomRecipes shape: {Setup?: list<string>, Configure?: list<string>, Deploy?: list<string>, Undeploy?: list<string>, Shutdown?: list<string>}
-# --LifecycleEventConfiguration shape: {Shutdown?: record}
 export def "update-layer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3897,9 +3891,6 @@ export def "update-rds-db-instance" [
 #
 # POST /
 # operationId: UpdateStack
-# --ConfigurationManager shape: {Name?: string, Version?: string}
-# --ChefConfiguration shape: {ManageBerkshelf?: bool, BerkshelfVersion?: string}
-# --CustomCookbooksSource shape: {Type?: "git"|"svn"|"archive"|"s3", Url?: string, Username?: string, Password?: string, SshKey?: string, Revision?: string}
 export def "update-stack" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

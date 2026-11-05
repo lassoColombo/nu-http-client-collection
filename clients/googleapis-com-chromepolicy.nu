@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -107,9 +131,9 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "chromepolicy-media-upload" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["chromepolicy-media-upload" "chromepolicy-customers-policies-groups-batch-delete" "chromepolicy-customers-policies-groups-batch-modify" "chromepolicy-customers-policies-groups-list-group-priority-ordering" "chromepolicy-customers-policies-groups-update-group-priority-ordering" "chromepolicy-customers-policies-networks-define-certificate" "chromepolicy-customers-policies-networks-define-network" "chromepolicy-customers-policies-networks-remove-certificate" "chromepolicy-customers-policies-networks-remove-network" "chromepolicy-customers-policies-orgunits-batch-inherit" "chromepolicy-customers-policies-orgunits-batch-modify" "chromepolicy-customers-policies-resolve" "chromepolicy-customers-policy-schemas-get" "chromepolicy-customers-policy-schemas-list" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -154,7 +178,7 @@ export def "chromepolicy-media-upload" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: any
-]: any -> record<downloadUri: string> {
+]: any -> oneof<record<downloadUri: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -183,7 +207,6 @@ export def "chromepolicy-media-upload" [
 #
 # POST /v1/{customer}/policies/groups:batchDelete
 # operationId: chromepolicy.customers.policies.groups.batchDelete
-# --requests item shape: {policySchema?: string, policyTargetKey?: record}
 export def "chromepolicy-customers-policies-groups-batch-delete" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -207,7 +230,7 @@ export def "chromepolicy-customers-policies-groups-batch-delete" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --requests: list # List of policies that will be deleted as defined by the `requests`. All requests in the list must follow these restrictions: 1. All schemas in the list must have the same root namespace. 2. All `policyTargetKey.targetResource` values must point to a group resource. 3. All `policyTargetKey` values must have the same `app_id` key name in the `additionalTargetKeys`. 4. No two modification requests can reference the same `policySchema` + ` policyTargetKey` pair. — item shape: {policySchema?: string, policyTargetKey?: record}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -236,7 +259,6 @@ export def "chromepolicy-customers-policies-groups-batch-delete" [
 #
 # POST /v1/{customer}/policies/groups:batchModify
 # operationId: chromepolicy.customers.policies.groups.batchModify
-# --requests item shape: {policyTargetKey?: record, policyValue?: record, updateMask?: string}
 export def "chromepolicy-customers-policies-groups-batch-modify" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -260,7 +282,7 @@ export def "chromepolicy-customers-policies-groups-batch-modify" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --requests: list # List of policies to modify as defined by the `requests`. All requests in the list must follow these restrictions: 1. All schemas in the list must have the same root namespace. 2. All `policyTargetKey.targetResource` values must point to a group resource. 3. All `policyTargetKey` values must have the same `app_id` key name in the `additionalTargetKeys`. 4. No two modification requests can reference the same `policySchema` + ` policyTargetKey` pair. — item shape: {policyTargetKey?: record, policyValue?: record, updateMask?: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -289,7 +311,6 @@ export def "chromepolicy-customers-policies-groups-batch-modify" [
 #
 # POST /v1/{customer}/policies/groups:listGroupPriorityOrdering
 # operationId: chromepolicy.customers.policies.groups.listGroupPriorityOrdering
-# --policyTargetKey shape: {additionalTargetKeys?: record, targetResource?: string}
 export def "chromepolicy-customers-policies-groups-list-group-priority-ordering" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -315,7 +336,7 @@ export def "chromepolicy-customers-policies-groups-list-group-priority-ordering"
   --policy-namespace: string # The namespace of the policy type for the request.
   --policy-schema: string # The schema name of the policy for the request.
   --policy-target-key: record # The key used to identify the target on which the policy will be applied. — shape: {additionalTargetKeys?: record, targetResource?: string}
-]: any -> record<groupIds: list<string>, policyNamespace: string, policySchema: string, policyTargetKey: record<additionalTargetKeys: record, targetResource: string>> {
+]: any -> oneof<record<groupIds: list<string>, policyNamespace: string, policySchema: string, policyTargetKey: record<additionalTargetKeys: record, targetResource: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -344,7 +365,6 @@ export def "chromepolicy-customers-policies-groups-list-group-priority-ordering"
 #
 # POST /v1/{customer}/policies/groups:updateGroupPriorityOrdering
 # operationId: chromepolicy.customers.policies.groups.updateGroupPriorityOrdering
-# --policyTargetKey shape: {additionalTargetKeys?: record, targetResource?: string}
 export def "chromepolicy-customers-policies-groups-update-group-priority-ordering" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -371,7 +391,7 @@ export def "chromepolicy-customers-policies-groups-update-group-priority-orderin
   --policy-namespace: string # The namespace of the policy type for the request.
   --policy-schema: string # The schema name of the policy for the request.
   --policy-target-key: record # The key used to identify the target on which the policy will be applied. — shape: {additionalTargetKeys?: record, targetResource?: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -400,7 +420,6 @@ export def "chromepolicy-customers-policies-groups-update-group-priority-orderin
 #
 # POST /v1/{customer}/policies/networks:defineCertificate
 # operationId: chromepolicy.customers.policies.networks.defineCertificate
-# --settings item shape: {policySchema?: string, value?: record}
 export def "chromepolicy-customers-policies-networks-define-certificate" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -427,7 +446,7 @@ export def "chromepolicy-customers-policies-networks-define-certificate" [
   --certificate: string # Required. The raw contents of the .PEM, .CRT, or .CER file.
   --settings: list # Optional. Certificate settings within the chrome.networks.certificates namespace. — item shape: {policySchema?: string, value?: record}
   --target-resource: string # Required. The target resource on which this certificate is applied. The following resources are supported: * Organizational Unit ("orgunits/{orgunit_id}")
-]: any -> record<networkId: string, settings: table<policySchema: string, value: record>, targetResource: string> {
+]: any -> oneof<record<networkId: string, settings: table<policySchema: string, value: record>, targetResource: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -456,7 +475,6 @@ export def "chromepolicy-customers-policies-networks-define-certificate" [
 #
 # POST /v1/{customer}/policies/networks:defineNetwork
 # operationId: chromepolicy.customers.policies.networks.defineNetwork
-# --settings item shape: {policySchema?: string, value?: record}
 export def "chromepolicy-customers-policies-networks-define-network" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -482,7 +500,7 @@ export def "chromepolicy-customers-policies-networks-define-network" [
   --name: string # Required. Name of the new created network.
   --settings: list # Required. Detailed network settings. — item shape: {policySchema?: string, value?: record}
   --target-resource: string # Required. The target resource on which this new network will be defined. The following resources are supported: * Organizational Unit ("orgunits/{orgunit_id}")
-]: any -> record<networkId: string, settings: table<policySchema: string, value: record>, targetResource: string> {
+]: any -> oneof<record<networkId: string, settings: table<policySchema: string, value: record>, targetResource: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -535,7 +553,7 @@ export def "chromepolicy-customers-policies-networks-remove-certificate" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --network-id: string # Required. The GUID of the certificate to remove.
   --target-resource: string # Required. The target resource on which this certificate will be removed. The following resources are supported: * Organizational Unit ("orgunits/{orgunit_id}")
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -588,7 +606,7 @@ export def "chromepolicy-customers-policies-networks-remove-network" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --network-id: string # Required. The GUID of the network to remove.
   --target-resource: string # Required. The target resource on which this network will be removed. The following resources are supported: * Organizational Unit ("orgunits/{orgunit_id}")
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -617,7 +635,6 @@ export def "chromepolicy-customers-policies-networks-remove-network" [
 #
 # POST /v1/{customer}/policies/orgunits:batchInherit
 # operationId: chromepolicy.customers.policies.orgunits.batchInherit
-# --requests item shape: {policySchema?: string, policyTargetKey?: record}
 export def "chromepolicy-customers-policies-orgunits-batch-inherit" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -641,7 +658,7 @@ export def "chromepolicy-customers-policies-orgunits-batch-inherit" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --requests: list # List of policies that have to inherit their values as defined by the `requests`. All requests in the list must follow these restrictions: 1. All schemas in the list must have the same root namespace. 2. All `policyTargetKey.targetResource` values must point to an org unit resource. 3. All `policyTargetKey` values must have the same key names in the ` additionalTargetKeys`. This also means if one of the targets has an empty `additionalTargetKeys` map, all of the targets must have an empty `additionalTargetKeys` map. 4. No two modification requests can reference the same `policySchema` + ` policyTargetKey` pair. — item shape: {policySchema?: string, policyTargetKey?: record}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -670,7 +687,6 @@ export def "chromepolicy-customers-policies-orgunits-batch-inherit" [
 #
 # POST /v1/{customer}/policies/orgunits:batchModify
 # operationId: chromepolicy.customers.policies.orgunits.batchModify
-# --requests item shape: {policyTargetKey?: record, policyValue?: record, updateMask?: string}
 export def "chromepolicy-customers-policies-orgunits-batch-modify" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -694,7 +710,7 @@ export def "chromepolicy-customers-policies-orgunits-batch-modify" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --requests: list # List of policies to modify as defined by the `requests`. All requests in the list must follow these restrictions: 1. All schemas in the list must have the same root namespace. 2. All `policyTargetKey.targetResource` values must point to an org unit resource. 3. All `policyTargetKey` values must have the same key names in the ` additionalTargetKeys`. This also means if one of the targets has an empty `additionalTargetKeys` map, all of the targets must have an empty `additionalTargetKeys` map. 4. No two modification requests can reference the same `policySchema` + ` policyTargetKey` pair. — item shape: {policyTargetKey?: record, policyValue?: record, updateMask?: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -723,7 +739,6 @@ export def "chromepolicy-customers-policies-orgunits-batch-modify" [
 #
 # POST /v1/{customer}/policies:resolve
 # operationId: chromepolicy.customers.policies.resolve
-# --policyTargetKey shape: {additionalTargetKeys?: record, targetResource?: string}
 export def "chromepolicy-customers-policies-resolve" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -750,7 +765,7 @@ export def "chromepolicy-customers-policies-resolve" [
   --page-token: string # The page token used to retrieve a specific page of the request.
   --policy-schema-filter: string # Required. The schema filter to apply to the resolve request. Specify a schema name to view a particular schema, for example: chrome.users.ShowLogoutButton Wildcards are supported, but only in the leaf portion of the schema name. Wildcards cannot be used in namespace directly. Please read https://developers.google.com/chrome/policy/guides/policy-schemas for details on schema namespaces. For example: Valid: "chrome.users.*", "chrome.users.apps.*", "chrome.printers.*" Invalid: "*", "*.users", "chrome.*", "chrome.*.apps.*"
   --policy-target-key: record # The key used to identify the target on which the policy will be applied. — shape: {additionalTargetKeys?: record, targetResource?: string}
-]: any -> record<nextPageToken: string, resolvedPolicies: table<addedSourceKey: record, sourceKey: record, targetKey: record, value: record>> {
+]: any -> oneof<record<nextPageToken: string, resolvedPolicies: table<addedSourceKey: record, sourceKey: record, targetKey: record, value: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -801,7 +816,7 @@ export def "chromepolicy-customers-policy-schemas-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<accessRestrictions: list<string>, additionalTargetKeyNames: table<key: string, keyDescription: string>, categoryTitle: string, definition: record<enumType: list<record>, messageType: list<record>, name: string, package: string, syntax: string>, fieldDescriptions: table<defaultValue: any, description: string, field: string, fieldConstraints: record, fieldDependencies: list, fieldDescription: string, inputConstraint: string, knownValueDescriptions: list, name: string, nestedFieldDescriptions: list, requiredItems: list>, name: string, notices: table<acknowledgementRequired: bool, field: string, noticeMessage: string, noticeValue: string>, policyApiLifecycle: record<deprecatedInFavorOf: list<string>, description: string, endSupport: record<day: int, month: int, year: int>, policyApiLifecycleStage: string>, policyDescription: string, schemaName: string, supportUri: string, validTargetResources: list<string>> {
+]: nothing -> oneof<record<accessRestrictions: list<string>, additionalTargetKeyNames: table<key: string, keyDescription: string>, categoryTitle: string, definition: record<enumType: list<record>, messageType: list<record>, name: string, package: string, syntax: string>, fieldDescriptions: table<defaultValue: any, description: string, field: string, fieldConstraints: record, fieldDependencies: list, fieldDescription: string, inputConstraint: string, knownValueDescriptions: list, name: string, nestedFieldDescriptions: list, requiredItems: list>, name: string, notices: table<acknowledgementRequired: bool, field: string, noticeMessage: string, noticeValue: string>, policyApiLifecycle: record<deprecatedInFavorOf: list<string>, description: string, endSupport: record<day: int, month: int, year: int>, policyApiLifecycleStage: string>, policyDescription: string, schemaName: string, supportUri: string, validTargetResources: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -852,7 +867,7 @@ export def "chromepolicy-customers-policy-schemas-list" [
   --filter: string # The schema filter used to find a particular schema based on fields like its resource name, description and `additionalTargetKeyNames`.
   --page-size: int # The maximum number of policy schemas to return, defaults to 100 and has a maximum of 1000.
   --page-token: string # The page token used to retrieve a specific page of the listing request.
-]: nothing -> record<nextPageToken: string, policySchemas: table<accessRestrictions: list, additionalTargetKeyNames: list, categoryTitle: string, definition: record, fieldDescriptions: list, name: string, notices: list, policyApiLifecycle: record, policyDescription: string, schemaName: string, supportUri: string, validTargetResources: list>> {
+]: nothing -> oneof<record<nextPageToken: string, policySchemas: table<accessRestrictions: list, additionalTargetKeyNames: list, categoryTitle: string, definition: record, fieldDescriptions: list, name: string, notices: list, policyApiLifecycle: record, policyDescription: string, schemaName: string, supportUri: string, validTargetResources: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }

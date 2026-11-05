@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -106,9 +130,9 @@ def service-name-completer [] { ["S3"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "clone-backend" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["clone-backend" "create-backend" "create-backend-api" "create-backend-auth" "create-backend-config" "create-backend-storage" "create-token" "delete-backend" "delete-backend-api" "delete-backend-auth" "delete-backend-storage" "delete-token" "generate-backend-api-models" "get-backend" "get-backend-api" "get-backend-api-models" "get-backend-auth" "get-backend-job" "update-backend-job" "get-backend-storage" "get-token" "import-backend-auth" "import-backend-storage" "list-backend-jobs" "list-s3-buckets" "remove-all-backends" "remove-backend-config" "update-backend-api" "update-backend-auth" "update-backend-config" "update-backend-storage" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -150,7 +174,7 @@ export def "clone-backend" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   target_environment_name: string # The name of the destination backend environment to be created.
-]: any -> record<AppId: string, BackendEnvironmentName: string, Error: string, JobId: string, Operation: string, Status: string> {
+]: any -> oneof<record<AppId: string, BackendEnvironmentName: string, Error: string, JobId: string, Operation: string, Status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -203,7 +227,7 @@ export def "create-backend" [
   backend_environment_name: string # The name of the backend environment.
   --resource-config: record # Defines the resource configuration for the data model in your Amplify project.
   --resource-name: string # The name of the resource.
-]: any -> record<AppId: string, BackendEnvironmentName: string, Error: string, JobId: string, Operation: string, Status: string> {
+]: any -> oneof<record<AppId: string, BackendEnvironmentName: string, Error: string, JobId: string, Operation: string, Status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -232,7 +256,6 @@ export def "create-backend" [
 #
 # POST /backend/{appId}/api
 # operationId: CreateBackendAPI
-# --resourceConfig shape: {AdditionalAuthTypes?: list, ApiName?: string, ConflictResolution?: record, DefaultAuthType?: record, Service?: string, TransformSchema?: string}
 export def "create-backend-api" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -254,7 +277,7 @@ export def "create-backend-api" [
   backend_environment_name: string # The name of the backend environment.
   resource_config: record # The resource config for the data model, configured as a part of the Amplify project. — shape: {AdditionalAuthTypes?: list, ApiName?: string, ConflictResolution?: record, DefaultAuthType?: record, Service?: string, TransformSchema?: string}
   resource_name: string # The name of this resource.
-]: any -> record<AppId: string, BackendEnvironmentName: string, Error: string, JobId: string, Operation: string, Status: string> {
+]: any -> oneof<record<AppId: string, BackendEnvironmentName: string, Error: string, JobId: string, Operation: string, Status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -284,7 +307,6 @@ export def "create-backend-api" [
 #
 # POST /backend/{appId}/auth
 # operationId: CreateBackendAuth
-# --resourceConfig shape: {AuthResources?: "USER_POOL_ONLY"|"IDENTITY_POOL_AND_USER_POOL", IdentityPoolConfigs?: record, Service?: "COGNITO", UserPoolConfigs?: record}
 export def "create-backend-auth" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -306,7 +328,7 @@ export def "create-backend-auth" [
   backend_environment_name: string # The name of the backend environment.
   resource_config: record # Defines the resource configuration when creating an auth resource in your Amplify project. — shape: {AuthResources?: "USER_POOL_ONLY"|"IDENTITY_POOL_AND_USER_POOL", IdentityPoolConfigs?: record, Service?: "COGNITO", UserPoolConfigs?: record}
   resource_name: string # The name of this resource.
-]: any -> record<AppId: string, BackendEnvironmentName: string, Error: string, JobId: string, Operation: string, Status: string> {
+]: any -> oneof<record<AppId: string, BackendEnvironmentName: string, Error: string, JobId: string, Operation: string, Status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -355,7 +377,7 @@ export def "create-backend-config" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --backend-manager-app-id: string # The app ID for the backend manager.
-]: any -> record<AppId: string, BackendEnvironmentName: string, JobId: string, Status: string> {
+]: any -> oneof<record<AppId: string, BackendEnvironmentName: string, JobId: string, Status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -385,7 +407,6 @@ export def "create-backend-config" [
 #
 # POST /backend/{appId}/storage
 # operationId: CreateBackendStorage
-# --resourceConfig shape: {BucketName?: string, Permissions?: record, ServiceName?: "S3"}
 export def "create-backend-storage" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -407,7 +428,7 @@ export def "create-backend-storage" [
   backend_environment_name: string # The name of the backend environment.
   resource_config: record # The resource configuration for creating backend storage. — shape: {BucketName?: string, Permissions?: record, ServiceName?: "S3"}
   resource_name: string # The name of the storage resource.
-]: any -> record<AppId: string, BackendEnvironmentName: string, JobId: string, Status: string> {
+]: any -> oneof<record<AppId: string, BackendEnvironmentName: string, JobId: string, Status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -455,7 +476,7 @@ export def "create-token" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<AppId: string, ChallengeCode: string, SessionId: string, Ttl: string> {
+]: nothing -> oneof<record<AppId: string, ChallengeCode: string, SessionId: string, Ttl: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
@@ -501,7 +522,7 @@ export def "delete-backend" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<AppId: string, BackendEnvironmentName: string, Error: string, JobId: string, Operation: string, Status: string> {
+]: nothing -> oneof<record<AppId: string, BackendEnvironmentName: string, Error: string, JobId: string, Operation: string, Status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
@@ -529,7 +550,6 @@ export def "delete-backend" [
 #
 # POST /backend/{appId}/api/{backendEnvironmentName}/remove
 # operationId: DeleteBackendAPI
-# --resourceConfig shape: {AdditionalAuthTypes?: list, ApiName?: string, ConflictResolution?: record, DefaultAuthType?: record, Service?: string, TransformSchema?: string}
 export def "delete-backend-api" [
   app_id: string
   backend_environment_name: string
@@ -551,7 +571,7 @@ export def "delete-backend-api" [
   --x-amz-signed-headers: string
   --resource-config: record # The resource config for the data model, configured as a part of the Amplify project. — shape: {AdditionalAuthTypes?: list, ApiName?: string, ConflictResolution?: record, DefaultAuthType?: record, Service?: string, TransformSchema?: string}
   resource_name: string # The name of this resource.
-]: any -> record<AppId: string, BackendEnvironmentName: string, Error: string, JobId: string, Operation: string, Status: string> {
+]: any -> oneof<record<AppId: string, BackendEnvironmentName: string, Error: string, JobId: string, Operation: string, Status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -602,7 +622,7 @@ export def "delete-backend-auth" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   resource_name: string # The name of this resource.
-]: any -> record<AppId: string, BackendEnvironmentName: string, Error: string, JobId: string, Operation: string, Status: string> {
+]: any -> oneof<record<AppId: string, BackendEnvironmentName: string, Error: string, JobId: string, Operation: string, Status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -654,7 +674,7 @@ export def "delete-backend-storage" [
   --x-amz-signed-headers: string
   resource_name: string # The name of the storage resource.
   service_name: string@service-name-completer # The name of the storage service.
-]: any -> record<AppId: string, BackendEnvironmentName: string, JobId: string, Status: string> {
+]: any -> oneof<record<AppId: string, BackendEnvironmentName: string, JobId: string, Status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -704,7 +724,7 @@ export def "delete-token" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<IsSuccess: bool> {
+]: nothing -> oneof<record<IsSuccess: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
@@ -752,7 +772,7 @@ export def "generate-backend-api-models" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   resource_name: string # The name of this resource.
-]: any -> record<AppId: string, BackendEnvironmentName: string, Error: string, JobId: string, Operation: string, Status: string> {
+]: any -> oneof<record<AppId: string, BackendEnvironmentName: string, Error: string, JobId: string, Operation: string, Status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -802,7 +822,7 @@ export def "get-backend" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --backend-environment-name: string # The name of the backend environment.
-]: any -> record<AmplifyFeatureFlags: string, AmplifyMetaConfig: string, AppId: string, AppName: string, BackendEnvironmentList: list<string>, BackendEnvironmentName: string, Error: string> {
+]: any -> oneof<record<AmplifyFeatureFlags: string, AmplifyMetaConfig: string, AppId: string, AppName: string, BackendEnvironmentList: list<string>, BackendEnvironmentName: string, Error: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -832,7 +852,6 @@ export def "get-backend" [
 #
 # POST /backend/{appId}/api/{backendEnvironmentName}/details
 # operationId: GetBackendAPI
-# --resourceConfig shape: {AdditionalAuthTypes?: list, ApiName?: string, ConflictResolution?: record, DefaultAuthType?: record, Service?: string, TransformSchema?: string}
 export def "get-backend-api" [
   app_id: string
   backend_environment_name: string
@@ -854,7 +873,7 @@ export def "get-backend-api" [
   --x-amz-signed-headers: string
   --resource-config: record # The resource config for the data model, configured as a part of the Amplify project. — shape: {AdditionalAuthTypes?: list, ApiName?: string, ConflictResolution?: record, DefaultAuthType?: record, Service?: string, TransformSchema?: string}
   resource_name: string # The name of this resource.
-]: any -> record<AppId: string, BackendEnvironmentName: string, Error: string, ResourceConfig: record<AdditionalAuthTypes: list<record>, ApiName: string, ConflictResolution: record<ResolutionStrategy: string>, DefaultAuthType: record<Mode: string, Settings: record>, Service: string, TransformSchema: string>, ResourceName: string> {
+]: any -> oneof<record<AppId: string, BackendEnvironmentName: string, Error: string, ResourceConfig: record<AdditionalAuthTypes: list<record>, ApiName: string, ConflictResolution: record<ResolutionStrategy: string>, DefaultAuthType: record<Mode: string, Settings: record>, Service: string, TransformSchema: string>, ResourceName: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -905,7 +924,7 @@ export def "get-backend-api-models" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   resource_name: string # The name of this resource.
-]: any -> record<Models: string, Status: string, ModelIntrospectionSchema: string> {
+]: any -> oneof<record<Models: string, Status: string, ModelIntrospectionSchema: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -956,7 +975,7 @@ export def "get-backend-auth" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   resource_name: string # The name of this resource.
-]: any -> record<AppId: string, BackendEnvironmentName: string, Error: string, ResourceConfig: record<AuthResources: string, IdentityPoolConfigs: record<IdentityPoolName: string, UnauthenticatedLogin: bool>, Service: string, UserPoolConfigs: record<ForgotPassword: record, Mfa: record, OAuth: record, PasswordPolicy: record, RequiredSignUpAttributes: list, SignInMethod: string, UserPoolName: string, VerificationMessage: record>>, ResourceName: string> {
+]: any -> oneof<record<AppId: string, BackendEnvironmentName: string, Error: string, ResourceConfig: record<AuthResources: string, IdentityPoolConfigs: record<IdentityPoolName: string, UnauthenticatedLogin: bool>, Service: string, UserPoolConfigs: record<ForgotPassword: record, Mfa: record, OAuth: record, PasswordPolicy: record, RequiredSignUpAttributes: list, SignInMethod: string, UserPoolName: string, VerificationMessage: record>>, ResourceName: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1007,7 +1026,7 @@ export def "get-backend-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<AppId: string, BackendEnvironmentName: string, CreateTime: string, Error: string, JobId: string, Operation: string, Status: string, UpdateTime: string> {
+]: nothing -> oneof<record<AppId: string, BackendEnvironmentName: string, CreateTime: string, Error: string, JobId: string, Operation: string, Status: string, UpdateTime: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
@@ -1058,7 +1077,7 @@ export def "update-backend-job" [
   --x-amz-signed-headers: string
   --operation: string # Filters the list of response objects to include only those with the specified operation name.
   --status: string # Filters the list of response objects to include only those with the specified status.
-]: any -> record<AppId: string, BackendEnvironmentName: string, CreateTime: string, Error: string, JobId: string, Operation: string, Status: string, UpdateTime: string> {
+]: any -> oneof<record<AppId: string, BackendEnvironmentName: string, CreateTime: string, Error: string, JobId: string, Operation: string, Status: string, UpdateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1110,7 +1129,7 @@ export def "get-backend-storage" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   resource_name: string # The name of the storage resource.
-]: any -> record<AppId: string, BackendEnvironmentName: string, ResourceConfig: record<BucketName: string, Imported: bool, Permissions: record<Authenticated: list, UnAuthenticated: list>, ServiceName: string>, ResourceName: string> {
+]: any -> oneof<record<AppId: string, BackendEnvironmentName: string, ResourceConfig: record<BucketName: string, Imported: bool, Permissions: record<Authenticated: list, UnAuthenticated: list>, ServiceName: string>, ResourceName: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1160,7 +1179,7 @@ export def "get-token" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<AppId: string, ChallengeCode: string, SessionId: string, Ttl: string> {
+]: nothing -> oneof<record<AppId: string, ChallengeCode: string, SessionId: string, Ttl: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
@@ -1211,7 +1230,7 @@ export def "import-backend-auth" [
   native_client_id: string # The ID of the Amazon Cognito native client.
   user_pool_id: string # The ID of the Amazon Cognito user pool.
   web_client_id: string # The ID of the Amazon Cognito web client.
-]: any -> record<AppId: string, BackendEnvironmentName: string, Error: string, JobId: string, Operation: string, Status: string> {
+]: any -> oneof<record<AppId: string, BackendEnvironmentName: string, Error: string, JobId: string, Operation: string, Status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1263,7 +1282,7 @@ export def "import-backend-storage" [
   --x-amz-signed-headers: string
   --bucket-name: string # The name of the S3 bucket.
   service_name: string@service-name-completer # The name of the storage service.
-]: any -> record<AppId: string, BackendEnvironmentName: string, JobId: string, Status: string> {
+]: any -> oneof<record<AppId: string, BackendEnvironmentName: string, JobId: string, Status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1320,7 +1339,7 @@ export def "list-backend-jobs" [
   --next-token-body: string # The token for the next set of results. (body field)
   --operation: string # Filters the list of response objects to include only those with the specified operation name.
   --status: string # Filters the list of response objects to include only those with the specified status.
-]: any -> record<Jobs: table<AppId: string, BackendEnvironmentName: string, CreateTime: string, Error: string, JobId: string, Operation: string, Status: string, UpdateTime: string>, NextToken: string> {
+]: any -> oneof<record<Jobs: table<AppId: string, BackendEnvironmentName: string, CreateTime: string, Error: string, JobId: string, Operation: string, Status: string, UpdateTime: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1370,7 +1389,7 @@ export def "list-s3-buckets" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --next-token: string # Reserved for future use.
-]: any -> record<Buckets: table<CreationDate: string, Name: string>, NextToken: string> {
+]: any -> oneof<record<Buckets: table<CreationDate: string, Name: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1418,7 +1437,7 @@ export def "remove-all-backends" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --clean-amplify-app: oneof<nothing, bool> # Cleans up the Amplify Console app if this value is set to true.
-]: any -> record<AppId: string, Error: string, JobId: string, Operation: string, Status: string> {
+]: any -> oneof<record<AppId: string, Error: string, JobId: string, Operation: string, Status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1466,7 +1485,7 @@ export def "remove-backend-config" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Error: string> {
+]: nothing -> oneof<record<Error: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
@@ -1493,7 +1512,6 @@ export def "remove-backend-config" [
 #
 # POST /backend/{appId}/api/{backendEnvironmentName}
 # operationId: UpdateBackendAPI
-# --resourceConfig shape: {AdditionalAuthTypes?: list, ApiName?: string, ConflictResolution?: record, DefaultAuthType?: record, Service?: string, TransformSchema?: string}
 export def "update-backend-api" [
   app_id: string
   backend_environment_name: string
@@ -1515,7 +1533,7 @@ export def "update-backend-api" [
   --x-amz-signed-headers: string
   --resource-config: record # The resource config for the data model, configured as a part of the Amplify project. — shape: {AdditionalAuthTypes?: list, ApiName?: string, ConflictResolution?: record, DefaultAuthType?: record, Service?: string, TransformSchema?: string}
   resource_name: string # The name of this resource.
-]: any -> record<AppId: string, BackendEnvironmentName: string, Error: string, JobId: string, Operation: string, Status: string> {
+]: any -> oneof<record<AppId: string, BackendEnvironmentName: string, Error: string, JobId: string, Operation: string, Status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1546,7 +1564,6 @@ export def "update-backend-api" [
 #
 # POST /backend/{appId}/auth/{backendEnvironmentName}
 # operationId: UpdateBackendAuth
-# --resourceConfig shape: {AuthResources?: "USER_POOL_ONLY"|"IDENTITY_POOL_AND_USER_POOL", IdentityPoolConfigs?: record, Service?: "COGNITO", UserPoolConfigs?: record}
 export def "update-backend-auth" [
   app_id: string
   backend_environment_name: string
@@ -1568,7 +1585,7 @@ export def "update-backend-auth" [
   --x-amz-signed-headers: string
   resource_config: record # Defines the resource configuration when updating an authentication resource in your Amplify project. — shape: {AuthResources?: "USER_POOL_ONLY"|"IDENTITY_POOL_AND_USER_POOL", IdentityPoolConfigs?: record, Service?: "COGNITO", UserPoolConfigs?: record}
   resource_name: string # The name of this resource.
-]: any -> record<AppId: string, BackendEnvironmentName: string, Error: string, JobId: string, Operation: string, Status: string> {
+]: any -> oneof<record<AppId: string, BackendEnvironmentName: string, Error: string, JobId: string, Operation: string, Status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1599,7 +1616,6 @@ export def "update-backend-auth" [
 #
 # POST /backend/{appId}/config/update
 # operationId: UpdateBackendConfig
-# --loginAuthConfig shape: {AwsCognitoIdentityPoolId?: string, AwsCognitoRegion?: string, AwsUserPoolsId?: string, AwsUserPoolsWebClientId?: string}
 export def "update-backend-config" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1619,7 +1635,7 @@ export def "update-backend-config" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --login-auth-config: record # The request object for this operation. — shape: {AwsCognitoIdentityPoolId?: string, AwsCognitoRegion?: string, AwsUserPoolsId?: string, AwsUserPoolsWebClientId?: string}
-]: any -> record<AppId: string, BackendManagerAppId: string, Error: string, LoginAuthConfig: record<AwsCognitoIdentityPoolId: string, AwsCognitoRegion: string, AwsUserPoolsId: string, AwsUserPoolsWebClientId: string>> {
+]: any -> oneof<record<AppId: string, BackendManagerAppId: string, Error: string, LoginAuthConfig: record<AwsCognitoIdentityPoolId: string, AwsCognitoRegion: string, AwsUserPoolsId: string, AwsUserPoolsWebClientId: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1649,7 +1665,6 @@ export def "update-backend-config" [
 #
 # POST /backend/{appId}/storage/{backendEnvironmentName}
 # operationId: UpdateBackendStorage
-# --resourceConfig shape: {Permissions?: record, ServiceName?: "S3"}
 export def "update-backend-storage" [
   app_id: string
   backend_environment_name: string
@@ -1671,7 +1686,7 @@ export def "update-backend-storage" [
   --x-amz-signed-headers: string
   resource_config: record # The resource configuration for updating backend storage. — shape: {Permissions?: record, ServiceName?: "S3"}
   resource_name: string # The name of the storage resource.
-]: any -> record<AppId: string, BackendEnvironmentName: string, JobId: string, Status: string> {
+]: any -> oneof<record<AppId: string, BackendEnvironmentName: string, JobId: string, Status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

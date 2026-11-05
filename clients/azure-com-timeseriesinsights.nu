@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -110,9 +134,9 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "query-get-availability" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["query-get-availability" "query-get-event-schema" "time-series-hierarchies-get" "time-series-hierarchies-execute-batch" "time-series-instances-get" "time-series-instances-execute-batch" "time-series-instances-search" "time-series-instances-suggest" "model-settings-get" "model-settings-update" "query-execute" "time-series-types-get" "time-series-types-execute-batch" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -148,7 +172,7 @@ export def "query-get-availability" [
   --store-type: string # For the environments with warm store enabled, the query can be executed either on the 'WarmStore' or 'ColdStore'. This parameter in the query defines which store the query should be executed on. If not defined, the query will be executed on the cold store.
   --x-ms-client-request-id: string # Optional client request ID. Service records this value. Allows the service to trace operation across services, and allows the customer to contact support regarding a particular request.
   --x-ms-client-session-id: string # Optional client session ID. Service records this value. Allows the service to trace a group of related operations across services, and allows the customer to contact support regarding a particular group of requests.
-]: nothing -> record<availability: record<distribution: any, intervalSize: string, range: record<from: string, to: string>>> {
+]: nothing -> oneof<record<availability: record<distribution: any, intervalSize: string, range: record<from: string, to: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let api_version = ($api_version | default "2018-11-01-preview")
@@ -176,7 +200,6 @@ export def "query-get-availability" [
 #
 # POST /eventSchema
 # operationId: Query_GetEventSchema
-# --searchSpan shape: {from: string, to: string}
 export def "query-get-event-schema" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -192,7 +215,7 @@ export def "query-get-event-schema" [
   --x-ms-client-request-id: string # Optional client request ID. Service records this value. Allows the service to trace operation across services, and allows the customer to contact support regarding a particular request.
   --x-ms-client-session-id: string # Optional client session ID. Service records this value. Allows the service to trace a group of related operations across services, and allows the customer to contact support regarding a particular group of requests.
   search_span: record # The range of time. Cannot be null or negative. — shape: {from: string, to: string}
-]: any -> record<properties: table<name: string, type: string>> {
+]: any -> oneof<record<properties: table<name: string, type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -237,7 +260,7 @@ export def "time-series-hierarchies-get" [
   --x-ms-continuation: string # Continuation token from previous page of results to retrieve the next page of the results in calls that support pagination. To get the first page results, specify null continuation token as parameter value. Returned continuation token is null if all results have been returned, and there is no next page of results.
   --x-ms-client-request-id: string # Optional client request ID. Service records this value. Allows the service to trace operation across services, and allows the customer to contact support regarding a particular request.
   --x-ms-client-session-id: string # Optional client session ID. Service records this value. Allows the service to trace a group of related operations across services, and allows the customer to contact support regarding a particular group of requests.
-]: nothing -> record<continuationToken: string, hierarchies: table<id: string, name: string, source: record>> {
+]: nothing -> oneof<record<continuationToken: string, hierarchies: table<id: string, name: string, source: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let api_version = ($api_version | default "2018-11-01-preview")
@@ -265,9 +288,6 @@ export def "time-series-hierarchies-get" [
 #
 # POST /timeseries/hierarchies/$batch
 # operationId: TimeSeriesHierarchies_ExecuteBatch
-# --delete shape: {hierarchyIds?: list<string>, names?: list<string>}
-# --get shape: {hierarchyIds?: list<string>, names?: list<string>}
-# --put item shape: {id?: string, name: string, source: record}
 export def "time-series-hierarchies-execute-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -284,7 +304,7 @@ export def "time-series-hierarchies-execute-batch" [
   --delete: record # Request to get or delete multiple time series hierarchies. Exactly one of "hierarchyIds" or "names" must be set. — shape: {hierarchyIds?: list<string>, names?: list<string>}
   --get: record # Request to get or delete multiple time series hierarchies. Exactly one of "hierarchyIds" or "names" must be set. — shape: {hierarchyIds?: list<string>, names?: list<string>}
   --put: list # "put" should be set while creating or updating hierarchies. — item shape: {id?: string, name: string, source: record}
-]: any -> record<delete: table<code: string, details: list, innerError: any, message: string, target: string>, get: table<error: record, hierarchy: record>, put: table<error: record, hierarchy: record>> {
+]: any -> oneof<record<delete: table<code: string, details: list, innerError: any, message: string, target: string>, get: table<error: record, hierarchy: record>, put: table<error: record, hierarchy: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -329,7 +349,7 @@ export def "time-series-instances-get" [
   --x-ms-continuation: string # Continuation token from previous page of results to retrieve the next page of the results in calls that support pagination. To get the first page results, specify null continuation token as parameter value. Returned continuation token is null if all results have been returned, and there is no next page of results.
   --x-ms-client-request-id: string # Optional client request ID. Service records this value. Allows the service to trace operation across services, and allows the customer to contact support regarding a particular request.
   --x-ms-client-session-id: string # Optional client session ID. Service records this value. Allows the service to trace a group of related operations across services, and allows the customer to contact support regarding a particular group of requests.
-]: nothing -> record<continuationToken: string, instances: table<description: string, hierarchyIds: list, instanceFields: record, name: string, timeSeriesId: list, typeId: string>> {
+]: nothing -> oneof<record<continuationToken: string, instances: table<description: string, hierarchyIds: list, instanceFields: record, name: string, timeSeriesId: list, typeId: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let api_version = ($api_version | default "2018-11-01-preview")
@@ -357,10 +377,6 @@ export def "time-series-instances-get" [
 #
 # POST /timeseries/instances/$batch
 # operationId: TimeSeriesInstances_ExecuteBatch
-# --delete shape: {names?: list<string>, timeSeriesIds?: list}
-# --get shape: {names?: list<string>, timeSeriesIds?: list}
-# --put item shape: {description?: string, hierarchyIds?: list<string>, instanceFields?: record, name?: string, timeSeriesId: list, typeId: string}
-# --update item shape: {description?: string, hierarchyIds?: list<string>, instanceFields?: record, name?: string, timeSeriesId: list, typeId: string}
 export def "time-series-instances-execute-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -378,7 +394,7 @@ export def "time-series-instances-execute-batch" [
   --get: record # Request to get or delete instances by time series IDs or time series names. Exactly one of "timeSeriesIds" or "names" must be set. — shape: {names?: list<string>, timeSeriesIds?: list}
   --put: list # Time series instances to be created or updated. — item shape: {description?: string, hierarchyIds?: list<string>, instanceFields?: record, name?: string, timeSeriesId: list, typeId: string}
   --update: list # Time series instances to be updated onlRequest to perform a single operation on a batch of instances. y. If instance does not exist, an error is returned. — item shape: {description?: string, hierarchyIds?: list<string>, instanceFields?: record, name?: string, timeSeriesId: list, typeId: string}
-]: any -> record<delete: table<code: string, details: list, innerError: any, message: string, target: string>, get: table<error: record, instance: record>, put: table<error: record, instance: record>, update: table<error: record, instance: record>> {
+]: any -> oneof<record<delete: table<code: string, details: list, innerError: any, message: string, target: string>, get: table<error: record, instance: record>, put: table<error: record, instance: record>, update: table<error: record, instance: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -409,8 +425,6 @@ export def "time-series-instances-execute-batch" [
 #
 # POST /timeseries/instances/search
 # operationId: TimeSeriesInstances_Search
-# --hierarchies shape: {expand?: record, pageSize?: int, sort?: record}
-# --instances shape: {highlights?: bool, pageSize?: int, recursive?: bool, sort?: record}
 export def "time-series-instances-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -429,7 +443,7 @@ export def "time-series-instances-search" [
   --instances: record # Parameters of how to return time series instances by search instances call. — shape: {highlights?: bool, pageSize?: int, recursive?: bool, sort?: record}
   --path: list<string> # Filter on hierarchy path of time series instances. Path is represented as array of string path segments. First element should be hierarchy name. Example: ["Location", "California"]. Optional, case sensitive, never empty and can be null.
   search_string: string # Query search string that will be matched to the attributes of time series instances. Example: "floor 100". Case-insensitive, must be present, but can be empty string.
-]: any -> record<hierarchyNodes: record<continuationToken: string, hitCount: int, hits: list<record>>, instances: record<continuationToken: string, hitCount: int, hits: list<record>>> {
+]: any -> oneof<record<hierarchyNodes: record<continuationToken: string, hitCount: int, hits: list<record>>, instances: record<continuationToken: string, hitCount: int, hits: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -475,7 +489,7 @@ export def "time-series-instances-suggest" [
   --x-ms-client-session-id: string # Optional client session ID. Service records this value. Allows the service to trace a group of related operations across services, and allows the customer to contact support regarding a particular group of requests.
   search_string: string # Search string for which suggestions are required. Empty is allowed, but not null.
   --take: int # Maximum number of suggestions expected in the result. Defaults to 10 when not set. (format: int32)
-]: any -> record<suggestions: table<highlightedSearchString: string, searchString: string>> {
+]: any -> oneof<record<suggestions: table<highlightedSearchString: string, searchString: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -519,7 +533,7 @@ export def "model-settings-get" [
   --api-version: string # Version of the API to be used with the client request. Currently supported version is "2018-11-01-preview". (required, default: 2018-11-01-preview)
   --x-ms-client-request-id: string # Optional client request ID. Service records this value. Allows the service to trace operation across services, and allows the customer to contact support regarding a particular request.
   --x-ms-client-session-id: string # Optional client session ID. Service records this value. Allows the service to trace a group of related operations across services, and allows the customer to contact support regarding a particular group of requests.
-]: nothing -> record<modelSettings: record<defaultTypeId: string, name: string, timeSeriesIdProperties: list<record>>> {
+]: nothing -> oneof<record<modelSettings: record<defaultTypeId: string, name: string, timeSeriesIdProperties: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let api_version = ($api_version | default "2018-11-01-preview")
@@ -562,7 +576,7 @@ export def "model-settings-update" [
   --x-ms-client-session-id: string # Optional client session ID. Service records this value. Allows the service to trace a group of related operations across services, and allows the customer to contact support regarding a particular group of requests.
   --default-type-id: string # Default type id of the model that new instances will automatically belong to. (format: uuid)
   --name: string # Model display name which is shown in the UX and mutable by the user. Initial value is "DefaultModel".
-]: any -> record<modelSettings: record<defaultTypeId: string, name: string, timeSeriesIdProperties: list<record>>> {
+]: any -> oneof<record<modelSettings: record<defaultTypeId: string, name: string, timeSeriesIdProperties: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -593,9 +607,6 @@ export def "model-settings-update" [
 #
 # POST /timeseries/query
 # operationId: Query_Execute
-# --aggregateSeries shape: {filter?: record, inlineVariables?: record, interval: string, projectedVariables?: list<string>, searchSpan: record, timeSeriesId: list}
-# --getEvents shape: {filter?: record, projectedProperties?: list, searchSpan: record, take?: int, timeSeriesId: list}
-# --getSeries shape: {filter?: record, inlineVariables?: record, projectedVariables?: list<string>, searchSpan: record, take?: int, timeSeriesId: list}
 export def "query-execute" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -614,7 +625,7 @@ export def "query-execute" [
   --aggregate-series: record # Aggregate Series query. Allows to calculate an aggregated time series from events for a given Time Series ID and search span. — shape: {filter?: record, inlineVariables?: record, interval: string, projectedVariables?: list<string>, searchSpan: record, timeSeriesId: list}
   --get-events: record # Get Events query. Allows to retrieve raw events for a given Time Series ID and search span. — shape: {filter?: record, projectedProperties?: list, searchSpan: record, take?: int, timeSeriesId: list}
   --get-series: record # Get Series query. Allows to retrieve time series of calculated variable values from events for a given Time Series ID and search span. — shape: {filter?: record, inlineVariables?: record, projectedVariables?: list<string>, searchSpan: record, take?: int, timeSeriesId: list}
-]: any -> record<continuationToken: string, progress: float, properties: table<name: string, type: string, values: list>, timestamps: list<string>> {
+]: any -> oneof<record<continuationToken: string, progress: float, properties: table<name: string, type: string, values: list>, timestamps: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -659,7 +670,7 @@ export def "time-series-types-get" [
   --x-ms-continuation: string # Continuation token from previous page of results to retrieve the next page of the results in calls that support pagination. To get the first page results, specify null continuation token as parameter value. Returned continuation token is null if all results have been returned, and there is no next page of results.
   --x-ms-client-request-id: string # Optional client request ID. Service records this value. Allows the service to trace operation across services, and allows the customer to contact support regarding a particular request.
   --x-ms-client-session-id: string # Optional client session ID. Service records this value. Allows the service to trace a group of related operations across services, and allows the customer to contact support regarding a particular group of requests.
-]: nothing -> record<continuationToken: string, types: table<description: string, id: string, name: string, variables: any>> {
+]: nothing -> oneof<record<continuationToken: string, types: table<description: string, id: string, name: string, variables: any>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let api_version = ($api_version | default "2018-11-01-preview")
@@ -687,9 +698,6 @@ export def "time-series-types-get" [
 #
 # POST /timeseries/types/$batch
 # operationId: TimeSeriesTypes_ExecuteBatch
-# --delete shape: {names?: list<string>, typeIds?: list<string>}
-# --get shape: {names?: list<string>, typeIds?: list<string>}
-# --put item shape: {description?: string, id?: string, name: string, variables: any}
 export def "time-series-types-execute-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -706,7 +714,7 @@ export def "time-series-types-execute-batch" [
   --delete: record # Request to get or delete time series types by IDs or type names. Exactly one of "typeIds" or "names" must be set. — shape: {names?: list<string>, typeIds?: list<string>}
   --get: record # Request to get or delete time series types by IDs or type names. Exactly one of "typeIds" or "names" must be set. — shape: {names?: list<string>, typeIds?: list<string>}
   --put: list # Definition of what time series types to update or create. — item shape: {description?: string, id?: string, name: string, variables: any}
-]: any -> record<delete: table<code: string, details: list, innerError: any, message: string, target: string>, get: table<error: record, timeSeriesType: record>, put: table<error: record, timeSeriesType: record>> {
+]: any -> oneof<record<delete: table<code: string, details: list, innerError: any, message: string, target: string>, get: table<error: record, timeSeriesType: record>, put: table<error: record, timeSeriesType: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

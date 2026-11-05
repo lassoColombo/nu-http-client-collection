@@ -15,7 +15,6 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "query-api_key" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "api_key")=(encode-path-segment $token_val)", location: "query"} }
     "query-api_secret" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "api_secret")=(encode-path-segment $token_val)", location: "query"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
@@ -30,22 +29,32 @@ def merge-auth [parts: list]: nothing -> record {
   {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -53,8 +62,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -65,7 +79,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -100,7 +123,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -123,9 +147,9 @@ def voice-callback-type-completer [] { ["app" "sip" "tel"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "token-apikey" "token-apisecret"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-owned-numbers" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-owned-numbers" "buy-a-number" "cancel-a-number" "get-available-numbers" "update-a-number" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -165,7 +189,7 @@ export def "get-owned-numbers" [
   --search-pattern: int@search-pattern-completer # The strategy you want to use for matching: * `0` - Search for numbers that start with `pattern` (Note: all numbers are in E.164 format, so the starting pattern includes the country code, such as 1 for USA) * `1` - Search for numbers that contain `pattern` * `2` - Search for numbers that end with `pattern` (default: 0, e.g. 1)
   --size: int # Page size (default: 10, e.g. 10)
   --index: int # Page index (default: 1, e.g. 1)
-]: nothing -> record<count: int, numbers: table<country: string, features: list, messagesCallbackType: string, messagesCallbackValue: string, moHttpUrl: string, msisdn: string, type: string, voiceCallbackType: string, voiceCallbackValue: string>> {
+]: nothing -> oneof<record<count: int, numbers: table<country: string, features: list, messagesCallbackType: string, messagesCallbackValue: string, moHttpUrl: string, msisdn: string, type: string, voiceCallbackType: string, voiceCallbackValue: string>>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NUMBERS_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_apisecret | default ($env | get -o NUMBERS_API_APISECRET_TOKEN | default "")) "query-api_secret")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "application_id" $application_id "scalar") (serialize-qp "has_application" $has_application "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "pattern" $pattern "scalar") (serialize-qp "search_pattern" $search_pattern "scalar") (serialize-qp "size" $size "scalar") (serialize-qp "index" $index "scalar")] | flatten | str join "&"
@@ -204,7 +228,7 @@ export def "buy-a-number" [
   country: string # The two character country code in ISO 3166-1 alpha-2 format (e.g. GB)
   msisdn: string # An available inbound virtual number. (e.g. 447700900000)
   --target-api-key: string # If you’d like to perform an action on a subaccount, provide the `api_key` of that account here. If you’d like to perform an action on your own account, you do not need to provide this field. (e.g. 1a2345b7)
-]: any -> record<error_code: string, error_code_label: string> {
+]: any -> oneof<record<error_code: string, error_code_label: string>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NUMBERS_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_apisecret | default ($env | get -o NUMBERS_API_APISECRET_TOKEN | default "")) "query-api_secret")])
   let base = ($base_url | default $BASE_URL)
@@ -213,7 +237,7 @@ export def "buy-a-number" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -246,7 +270,7 @@ export def "cancel-a-number" [
   country: string # The two character country code in ISO 3166-1 alpha-2 format (e.g. GB)
   msisdn: string # An available inbound virtual number. (e.g. 447700900000)
   --target-api-key: string # If you’d like to perform an action on a subaccount, provide the `api_key` of that account here. If you’d like to perform an action on your own account, you do not need to provide this field. (e.g. 1a2345b7)
-]: any -> record<error_code: string, error_code_label: string> {
+]: any -> oneof<record<error_code: string, error_code_label: string>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NUMBERS_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_apisecret | default ($env | get -o NUMBERS_API_APISECRET_TOKEN | default "")) "query-api_secret")])
   let base = ($base_url | default $BASE_URL)
@@ -255,7 +279,7 @@ export def "cancel-a-number" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -292,7 +316,7 @@ export def "get-available-numbers" [
   --features: string@features-completer # Available features are `SMS`, `VOICE` and `MMS`. To look for numbers that support multiple features, use a comma-separated value: `SMS,MMS,VOICE`. (e.g. SMS)
   --size: int # Page size (default: 10, e.g. 10)
   --index: int # Page index (default: 1, e.g. 1)
-]: nothing -> record<count: int, numbers: table<cost: string, country: string, features: list, msisdn: string, type: string>> {
+]: nothing -> oneof<record<count: int, numbers: table<cost: string, country: string, features: list, msisdn: string, type: string>>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NUMBERS_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_apisecret | default ($env | get -o NUMBERS_API_APISECRET_TOKEN | default "")) "query-api_secret")])
   let base = ($base_url | default $BASE_URL)
   if ($country == null) { error make --unspanned { msg: "required query parameter 'country' missing: pass --country" } }
@@ -341,7 +365,7 @@ export def "update-a-number" [
   --voice-callback-type: string@voice-callback-type-completer # Specify whether inbound voice calls on your number are forwarded to a SIP or a telephone number. This must be used with the `voiceCallbackValue` parameter. If set, `sip` or `tel` are prioritized over the Voice capability in your Application. *Note: The `app` value is deprecated and will be removed in future.* (e.g. tel)
   --voice-callback-value: string # A SIP URI or telephone number. Must be used with the `voiceCallbackType` parameter. (e.g. 447700900000)
   --voice-status-callback: string # A webhook URI for Vonage to send a request to when a call ends (e.g. https://example.com/webhooks/status)
-]: any -> record<error_code: string, error_code_label: string> {
+]: any -> oneof<record<error_code: string, error_code_label: string>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NUMBERS_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_apisecret | default ($env | get -o NUMBERS_API_APISECRET_TOKEN | default "")) "query-api_secret")])
   let base = ($base_url | default $BASE_URL)
@@ -350,7 +374,7 @@ export def "update-a-number" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url

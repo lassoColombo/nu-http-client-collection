@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -123,9 +147,9 @@ def type-completer [] { ["Negative" "Positive"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "add-notification-channels" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["add-notification-channels" "get-notification-configuration" "batch-get-frame-metric-data" "configure-agent" "create-profiling-group" "delete-profiling-group" "describe-profiling-group" "update-profiling-group" "get-findings-report-account-summary" "get-policy" "get-profile" "get-recommendations" "list-findings-reports" "list-profile-times" "list-profiling-groups" "list-tags-for-resource" "tag-resource" "post-agent-profile" "put-permission" "remove-notification-channel" "remove-permission" "submit-feedback" "untag-resource" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -147,7 +171,6 @@ export def commands []: nothing -> table {
 #
 # POST /profilingGroups/{profilingGroupName}/notificationConfiguration
 # operationId: AddNotificationChannels
-# --channels item shape: {eventPublishers: list<string>, id?: string, uri: string}
 export def "add-notification-channels" [
   profiling_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -167,7 +190,7 @@ export def "add-notification-channels" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   channels: list # One or 2 channels to report to when anomalies are detected. — item shape: {eventPublishers: list<string>, id?: string, uri: string}
-]: any -> record<notificationConfiguration: record<channels: list<record>>> {
+]: any -> oneof<record<notificationConfiguration: record<channels: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -215,7 +238,7 @@ export def "get-notification-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<notificationConfiguration: record<channels: list<record>>> {
+]: nothing -> oneof<record<notificationConfiguration: record<channels: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($profiling_group_name | is-empty) { error make --unspanned { msg: "path parameter 'profilingGroupName' must be non-empty" } }
@@ -242,7 +265,6 @@ export def "get-notification-configuration" [
 #
 # POST /profilingGroups/{profilingGroupName}/frames/-/metrics
 # operationId: BatchGetFrameMetricData
-# --frameMetrics item shape: {frameName: string, threadStates: list<string>, type: "AggregatedRelativeTotalTime"}
 export def "batch-get-frame-metric-data" [
   profiling_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -266,7 +288,7 @@ export def "batch-get-frame-metric-data" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --frame-metrics: list # The details of the metrics that are used to request a time series of values. The metric includes the name of the frame, the aggregation type to calculate the metric value for the frame, and the thread states to use to get the count for the metric value of the frame. — item shape: {frameName: string, threadStates: list<string>, type: "AggregatedRelativeTotalTime"}
-]: any -> record<endTime: string, endTimes: table<value: string>, frameMetricData: table<frameMetric: record, values: list>, resolution: string, startTime: string, unprocessedEndTimes: record> {
+]: any -> oneof<record<endTime: string, endTimes: table<value: string>, frameMetricData: table<frameMetric: record, values: list>, resolution: string, startTime: string, unprocessedEndTimes: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -317,7 +339,7 @@ export def "configure-agent" [
   --x-amz-signed-headers: string
   --fleet-instance-id: string # A universally unique identifier (UUID) for a profiling instance. For example, if the profiling instance is an Amazon EC2 instance, it is the instance ID. If it is an AWS Fargate container, it is the container's task ID.
   --metadata: record # Metadata captured about the compute platform the agent is running on. It includes information about sampling and reporting. The valid fields are: COMPUTE_PLATFORM - The compute platform on which the agent is running AGENT_ID - The ID for an agent instance. AWS_REQUEST_ID - The AWS request ID of a Lambda invocation. EXECUTION_ENVIRONMENT - The execution environment a Lambda function is running on. LAMBDA_FUNCTION_ARN - The Amazon Resource Name (ARN) that is used to invoke a Lambda function. LAMBDA_MEMORY_LIMIT_IN_MB - The memory allocated to a Lambda function. LAMBDA_REMAINING_TIME_IN_MILLISECONDS - The time in milliseconds before execution of a Lambda function times out. LAMBDA_TIME_GAP_BETWEEN_INVOKES_IN_MILLISECONDS - The time in milliseconds between two invocations of a Lambda function. LAMBDA_PREVIOUS_EXECUTION_TIME_IN_MILLISECONDS - The time in milliseconds for the previous Lambda invocation.
-]: any -> record<configuration: record<agentParameters: record, periodInSeconds: int, shouldProfile: bool>> {
+]: any -> oneof<record<configuration: record<agentParameters: record, periodInSeconds: int, shouldProfile: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -347,7 +369,6 @@ export def "configure-agent" [
 #
 # POST /profilingGroups
 # operationId: CreateProfilingGroup
-# --agentOrchestrationConfig shape: {profilingEnabled?: bool}
 export def "create-profiling-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -370,7 +391,7 @@ export def "create-profiling-group" [
   --compute-platform: string@compute-platform-completer # The compute platform of the profiling group. Use AWSLambda if your application runs on AWS Lambda. Use Default if your application runs on a compute platform that is not AWS Lambda, such an Amazon EC2 instance, an on-premises server, or a different platform. If not specified, Default is used.
   profiling_group_name: string # The name of the profiling group to create.
   --tags: record # A list of tags to add to the created profiling group.
-]: any -> record<profilingGroup: record<agentOrchestrationConfig: record<profilingEnabled: bool>, arn: string, computePlatform: string, createdAt: string, name: string, profilingStatus: record<latestAgentOrchestratedAt: string, latestAgentProfileReportedAt: string, latestAggregatedProfile: record>, tags: record, updatedAt: string>> {
+]: any -> oneof<record<profilingGroup: record<agentOrchestrationConfig: record<profilingEnabled: bool>, arn: string, computePlatform: string, createdAt: string, name: string, profilingStatus: record<latestAgentOrchestratedAt: string, latestAgentProfileReportedAt: string, latestAggregatedProfile: record>, tags: record, updatedAt: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -419,7 +440,7 @@ export def "delete-profiling-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($profiling_group_name | is-empty) { error make --unspanned { msg: "path parameter 'profilingGroupName' must be non-empty" } }
@@ -464,7 +485,7 @@ export def "describe-profiling-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<profilingGroup: record<agentOrchestrationConfig: record<profilingEnabled: bool>, arn: string, computePlatform: string, createdAt: string, name: string, profilingStatus: record<latestAgentOrchestratedAt: string, latestAgentProfileReportedAt: string, latestAggregatedProfile: record>, tags: record, updatedAt: string>> {
+]: nothing -> oneof<record<profilingGroup: record<agentOrchestrationConfig: record<profilingEnabled: bool>, arn: string, computePlatform: string, createdAt: string, name: string, profilingStatus: record<latestAgentOrchestratedAt: string, latestAgentProfileReportedAt: string, latestAggregatedProfile: record>, tags: record, updatedAt: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($profiling_group_name | is-empty) { error make --unspanned { msg: "path parameter 'profilingGroupName' must be non-empty" } }
@@ -491,7 +512,6 @@ export def "describe-profiling-group" [
 #
 # PUT /profilingGroups/{profilingGroupName}
 # operationId: UpdateProfilingGroup
-# --agentOrchestrationConfig shape: {profilingEnabled?: bool}
 export def "update-profiling-group" [
   profiling_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -511,7 +531,7 @@ export def "update-profiling-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   agent_orchestration_config: record # Specifies whether profiling is enabled or disabled for a profiling group. It is used by ConfigureAgent (https://docs.aws.amazon.com/codeguru/latest/profiler-api/API_ConfigureAgent.html) to enable or disable profiling for a profiling group. — shape: {profilingEnabled?: bool}
-]: any -> record<profilingGroup: record<agentOrchestrationConfig: record<profilingEnabled: bool>, arn: string, computePlatform: string, createdAt: string, name: string, profilingStatus: record<latestAgentOrchestratedAt: string, latestAgentProfileReportedAt: string, latestAggregatedProfile: record>, tags: record, updatedAt: string>> {
+]: any -> oneof<record<profilingGroup: record<agentOrchestrationConfig: record<profilingEnabled: bool>, arn: string, computePlatform: string, createdAt: string, name: string, profilingStatus: record<latestAgentOrchestratedAt: string, latestAgentProfileReportedAt: string, latestAggregatedProfile: record>, tags: record, updatedAt: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -561,7 +581,7 @@ export def "get-findings-report-account-summary" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<nextToken: string, reportSummaries: table<id: string, profileEndTime: string, profileStartTime: string, profilingGroupName: string, totalNumberOfFindings: int>> {
+]: nothing -> oneof<record<nextToken: string, reportSummaries: table<id: string, profileEndTime: string, profileStartTime: string, profilingGroupName: string, totalNumberOfFindings: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "dailyReportsOnly" $daily_reports_only "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
@@ -606,7 +626,7 @@ export def "get-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<policy: string, revisionId: string> {
+]: nothing -> oneof<record<policy: string, revisionId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($profiling_group_name | is-empty) { error make --unspanned { msg: "path parameter 'profilingGroupName' must be non-empty" } }
@@ -656,7 +676,7 @@ export def "get-profile" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --hdr-accept: string # The format of the returned profiling data. The format maps to the Accept and Content-Type headers of the HTTP request. You can specify one of the following: or the default . <ul> <li> <p> <code>application/json</code> — standard JSON format </p> </li> <li> <p> <code>application/x-amzn-ion</code> — the Amazon Ion data format. For more information, see <a href="http://amzn.github.io/ion-docs/">Amazon Ion</a>. </p> </li> </ul>
-]: nothing -> record<profile: string> {
+]: nothing -> oneof<record<profile: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($profiling_group_name | is-empty) { error make --unspanned { msg: "path parameter 'profilingGroupName' must be non-empty" } }
@@ -705,7 +725,7 @@ export def "get-recommendations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<anomalies: table<instances: list, metric: record, reason: string>, profileEndTime: string, profileStartTime: string, profilingGroupName: string, recommendations: table<allMatchesCount: int, allMatchesSum: float, endTime: string, pattern: record, startTime: string, topMatches: list>> {
+]: nothing -> oneof<record<anomalies: table<instances: list, metric: record, reason: string>, profileEndTime: string, profileStartTime: string, profilingGroupName: string, recommendations: table<allMatchesCount: int, allMatchesSum: float, endTime: string, pattern: record, startTime: string, topMatches: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($profiling_group_name | is-empty) { error make --unspanned { msg: "path parameter 'profilingGroupName' must be non-empty" } }
@@ -758,7 +778,7 @@ export def "list-findings-reports" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<findingsReportSummaries: table<id: string, profileEndTime: string, profileStartTime: string, profilingGroupName: string, totalNumberOfFindings: int>, nextToken: string> {
+]: nothing -> oneof<record<findingsReportSummaries: table<id: string, profileEndTime: string, profileStartTime: string, profilingGroupName: string, totalNumberOfFindings: int>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($profiling_group_name | is-empty) { error make --unspanned { msg: "path parameter 'profilingGroupName' must be non-empty" } }
@@ -812,7 +832,7 @@ export def "list-profile-times" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<nextToken: string, profileTimes: table<start: string>> {
+]: nothing -> oneof<record<nextToken: string, profileTimes: table<start: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($profiling_group_name | is-empty) { error make --unspanned { msg: "path parameter 'profilingGroupName' must be non-empty" } }
@@ -863,7 +883,7 @@ export def "list-profiling-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<nextToken: string, profilingGroupNames: list<string>, profilingGroups: table<agentOrchestrationConfig: record, arn: string, computePlatform: string, createdAt: string, name: string, profilingStatus: record, tags: record, updatedAt: string>> {
+]: nothing -> oneof<record<nextToken: string, profilingGroupNames: list<string>, profilingGroups: table<agentOrchestrationConfig: record, arn: string, computePlatform: string, createdAt: string, name: string, profilingStatus: record, tags: record, updatedAt: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "includeDescription" $include_description "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
@@ -908,7 +928,7 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<tags: record> {
+]: nothing -> oneof<record<tags: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
@@ -954,7 +974,7 @@ export def "tag-resource" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   tags: record # The list of tags that are added to the specified resource.
-]: any -> any {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1005,7 +1025,7 @@ export def "post-agent-profile" [
   --x-amz-signed-headers: string
   --content-type: string # The format of the submitted profiling data. The format maps to the Accept and Content-Type headers of the HTTP request. You can specify one of the following: or the default . <ul> <li> <p> <code>application/json</code> — standard JSON format </p> </li> <li> <p> <code>application/x-amzn-ion</code> — the Amazon Ion data format. For more information, see <a href="http://amzn.github.io/ion-docs/">Amazon Ion</a>. </p> </li> </ul> (required)
   agent_profile: string # The submitted profiling data.
-]: any -> any {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1019,7 +1039,7 @@ export def "post-agent-profile" [
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -1059,7 +1079,7 @@ export def "put-permission" [
   --x-amz-signed-headers: string
   principals: list<string> # A list ARNs for the roles and users you want to grant access to the profiling group. Wildcards are not are supported in the ARNs.
   --revision-id: string # A universally unique identifier (UUID) for the revision of the policy you are adding to the profiling group. Do not specify this when you add permissions to a profiling group for the first time. If a policy already exists on the profiling group, you must specify the revisionId.
-]: any -> record<policy: string, revisionId: string> {
+]: any -> oneof<record<policy: string, revisionId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1109,7 +1129,7 @@ export def "remove-notification-channel" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<notificationConfiguration: record<channels: list<record>>> {
+]: nothing -> oneof<record<notificationConfiguration: record<channels: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($profiling_group_name | is-empty) { error make --unspanned { msg: "path parameter 'profilingGroupName' must be non-empty" } }
@@ -1157,7 +1177,7 @@ export def "remove-permission" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<policy: string, revisionId: string> {
+]: nothing -> oneof<record<policy: string, revisionId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($profiling_group_name | is-empty) { error make --unspanned { msg: "path parameter 'profilingGroupName' must be non-empty" } }
@@ -1208,7 +1228,7 @@ export def "submit-feedback" [
   --x-amz-signed-headers: string
   --comment: string # Optional feedback about this anomaly.
   type: string@type-completer # The feedback tpye. Thee are two valid values, Positive and Negative.
-]: any -> any {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1258,7 +1278,7 @@ export def "untag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }

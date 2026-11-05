@@ -12,27 +12,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -40,8 +49,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -52,7 +66,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -87,7 +110,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -121,9 +145,9 @@ def format-completer [] { ["solr"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "data-sources-list" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["data-sources-list" "data-sources-create" "data-sources-delete" "data-sources-get" "data-sources-create-or-update" "indexers-list" "indexers-create" "indexers-delete" "indexers-get" "indexers-create-or-update" "indexers-reset" "indexers-run" "indexers-get-status" "indexes-list" "indexes-create" "indexes-delete" "indexes-get" "indexes-create-or-update" "indexes-analyze" "indexes-get-statistics" "get-service-statistics" "skillsets-list" "skillsets-create" "skillsets-delete" "skillsets-get" "skillsets-create-or-update" "synonym-maps-list" "synonym-maps-create" "synonym-maps-delete" "synonym-maps-get" "synonym-maps-create-or-update" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -159,7 +183,7 @@ export def "data-sources-list" [
   --select: string # Selects which top-level properties of the data sources to retrieve. Specified as a comma-separated list of JSON property names, or '*' for all properties. The default is all properties.
   --api-version: string # Client Api Version. (required)
   --client-request-id: string # The tracking ID sent with the request to help with debugging. (format: uuid)
-]: nothing -> record<value: table<_odata_etag: string, container: record, credentials: record, dataChangeDetectionPolicy: record, dataDeletionDetectionPolicy: record, description: string, name: string, type: string>> {
+]: nothing -> oneof<record<value: table<_odata_etag: string, container: record, credentials: record, dataChangeDetectionPolicy: record, dataDeletionDetectionPolicy: record, description: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
@@ -188,10 +212,6 @@ export def "data-sources-list" [
 # POST /datasources
 # Docs: https://docs.microsoft.com/rest/api/searchservice/Create-Data-Source
 # operationId: DataSources_Create
-# --container shape: {name: string, query?: string}
-# --credentials shape: {connectionString?: string}
-# --dataChangeDetectionPolicy shape: {@odata.type: string}
-# --dataDeletionDetectionPolicy shape: {@odata.type: string}
 export def "data-sources-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -212,7 +232,7 @@ export def "data-sources-create" [
   --description: string # The description of the datasource.
   name: string # The name of the datasource.
   type: string@type-completer # Defines the type of a datasource.
-]: any -> record<_odata_etag: string, container: record<name: string, query: string>, credentials: record<connectionString: string>, dataChangeDetectionPolicy: record<_odata_type: string>, dataDeletionDetectionPolicy: record<_odata_type: string>, description: string, name: string, type: string> {
+]: any -> oneof<record<_odata_etag: string, container: record<name: string, query: string>, credentials: record<connectionString: string>, dataChangeDetectionPolicy: record<_odata_type: string>, dataDeletionDetectionPolicy: record<_odata_type: string>, description: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -302,7 +322,7 @@ export def "data-sources-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
   --client-request-id: string # The tracking ID sent with the request to help with debugging. (format: uuid)
-]: nothing -> record<_odata_etag: string, container: record<name: string, query: string>, credentials: record<connectionString: string>, dataChangeDetectionPolicy: record<_odata_type: string>, dataDeletionDetectionPolicy: record<_odata_type: string>, description: string, name: string, type: string> {
+]: nothing -> oneof<record<_odata_etag: string, container: record<name: string, query: string>, credentials: record<connectionString: string>, dataChangeDetectionPolicy: record<_odata_type: string>, dataDeletionDetectionPolicy: record<_odata_type: string>, description: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($data_source_name | is-empty) { error make --unspanned { msg: "path parameter 'dataSourceName' must be non-empty" } }
@@ -332,10 +352,6 @@ export def "data-sources-get" [
 # PUT /datasources('{dataSourceName}')
 # Docs: https://docs.microsoft.com/rest/api/searchservice/Update-Data-Source
 # operationId: DataSources_CreateOrUpdate
-# --container shape: {name: string, query?: string}
-# --credentials shape: {connectionString?: string}
-# --dataChangeDetectionPolicy shape: {@odata.type: string}
-# --dataDeletionDetectionPolicy shape: {@odata.type: string}
 export def "data-sources-create-or-update" [
   data_source_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -360,7 +376,7 @@ export def "data-sources-create-or-update" [
   --description: string # The description of the datasource.
   name: string # The name of the datasource.
   type: string@type-completer # Defines the type of a datasource.
-]: any -> record<_odata_etag: string, container: record<name: string, query: string>, credentials: record<connectionString: string>, dataChangeDetectionPolicy: record<_odata_type: string>, dataDeletionDetectionPolicy: record<_odata_type: string>, description: string, name: string, type: string> {
+]: any -> oneof<record<_odata_etag: string, container: record<name: string, query: string>, credentials: record<connectionString: string>, dataChangeDetectionPolicy: record<_odata_type: string>, dataDeletionDetectionPolicy: record<_odata_type: string>, description: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -407,7 +423,7 @@ export def "indexers-list" [
   --select: string # Selects which top-level properties of the indexers to retrieve. Specified as a comma-separated list of JSON property names, or '*' for all properties. The default is all properties.
   --api-version: string # Client Api Version. (required)
   --client-request-id: string # The tracking ID sent with the request to help with debugging. (format: uuid)
-]: nothing -> record<value: table<_odata_etag: string, dataSourceName: string, description: string, disabled: bool, fieldMappings: list, name: string, outputFieldMappings: list, parameters: record, schedule: record, skillsetName: string, targetIndexName: string>> {
+]: nothing -> oneof<record<value: table<_odata_etag: string, dataSourceName: string, description: string, disabled: bool, fieldMappings: list, name: string, outputFieldMappings: list, parameters: record, schedule: record, skillsetName: string, targetIndexName: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
@@ -436,10 +452,6 @@ export def "indexers-list" [
 # POST /indexers
 # Docs: https://docs.microsoft.com/rest/api/searchservice/Create-Indexer
 # operationId: Indexers_Create
-# --fieldMappings item shape: {mappingFunction?: any, sourceFieldName: string, targetFieldName?: string}
-# --outputFieldMappings item shape: {mappingFunction?: any, sourceFieldName: string, targetFieldName?: string}
-# --parameters shape: {base64EncodeKeys?: bool, batchSize?: int, configuration?: record, maxFailedItems?: int, maxFailedItemsPerBatch?: int}
-# --schedule shape: {interval: string, startTime?: string}
 export def "indexers-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -463,7 +475,7 @@ export def "indexers-create" [
   --schedule: any # Represents a schedule for indexer execution. — shape: {interval: string, startTime?: string}
   --skillset-name: string # The name of the skillset executing with this indexer.
   target_index_name: string # The name of the index to which this indexer writes data.
-]: any -> record<_odata_etag: string, dataSourceName: string, description: string, disabled: bool, fieldMappings: table<mappingFunction: record, sourceFieldName: string, targetFieldName: string>, name: string, outputFieldMappings: table<mappingFunction: record, sourceFieldName: string, targetFieldName: string>, parameters: record<base64EncodeKeys: bool, batchSize: int, configuration: record, maxFailedItems: int, maxFailedItemsPerBatch: int>, schedule: record<interval: string, startTime: string>, skillsetName: string, targetIndexName: string> {
+]: any -> oneof<record<_odata_etag: string, dataSourceName: string, description: string, disabled: bool, fieldMappings: table<mappingFunction: record, sourceFieldName: string, targetFieldName: string>, name: string, outputFieldMappings: table<mappingFunction: record, sourceFieldName: string, targetFieldName: string>, parameters: record<base64EncodeKeys: bool, batchSize: int, configuration: record, maxFailedItems: int, maxFailedItemsPerBatch: int>, schedule: record<interval: string, startTime: string>, skillsetName: string, targetIndexName: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -553,7 +565,7 @@ export def "indexers-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
   --client-request-id: string # The tracking ID sent with the request to help with debugging. (format: uuid)
-]: nothing -> record<_odata_etag: string, dataSourceName: string, description: string, disabled: bool, fieldMappings: table<mappingFunction: record, sourceFieldName: string, targetFieldName: string>, name: string, outputFieldMappings: table<mappingFunction: record, sourceFieldName: string, targetFieldName: string>, parameters: record<base64EncodeKeys: bool, batchSize: int, configuration: record, maxFailedItems: int, maxFailedItemsPerBatch: int>, schedule: record<interval: string, startTime: string>, skillsetName: string, targetIndexName: string> {
+]: nothing -> oneof<record<_odata_etag: string, dataSourceName: string, description: string, disabled: bool, fieldMappings: table<mappingFunction: record, sourceFieldName: string, targetFieldName: string>, name: string, outputFieldMappings: table<mappingFunction: record, sourceFieldName: string, targetFieldName: string>, parameters: record<base64EncodeKeys: bool, batchSize: int, configuration: record, maxFailedItems: int, maxFailedItemsPerBatch: int>, schedule: record<interval: string, startTime: string>, skillsetName: string, targetIndexName: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($indexer_name | is-empty) { error make --unspanned { msg: "path parameter 'indexerName' must be non-empty" } }
@@ -583,10 +595,6 @@ export def "indexers-get" [
 # PUT /indexers('{indexerName}')
 # Docs: https://docs.microsoft.com/rest/api/searchservice/Create-Indexer
 # operationId: Indexers_CreateOrUpdate
-# --fieldMappings item shape: {mappingFunction?: any, sourceFieldName: string, targetFieldName?: string}
-# --outputFieldMappings item shape: {mappingFunction?: any, sourceFieldName: string, targetFieldName?: string}
-# --parameters shape: {base64EncodeKeys?: bool, batchSize?: int, configuration?: record, maxFailedItems?: int, maxFailedItemsPerBatch?: int}
-# --schedule shape: {interval: string, startTime?: string}
 export def "indexers-create-or-update" [
   indexer_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -614,7 +622,7 @@ export def "indexers-create-or-update" [
   --schedule: any # Represents a schedule for indexer execution. — shape: {interval: string, startTime?: string}
   --skillset-name: string # The name of the skillset executing with this indexer.
   target_index_name: string # The name of the index to which this indexer writes data.
-]: any -> record<_odata_etag: string, dataSourceName: string, description: string, disabled: bool, fieldMappings: table<mappingFunction: record, sourceFieldName: string, targetFieldName: string>, name: string, outputFieldMappings: table<mappingFunction: record, sourceFieldName: string, targetFieldName: string>, parameters: record<base64EncodeKeys: bool, batchSize: int, configuration: record, maxFailedItems: int, maxFailedItemsPerBatch: int>, schedule: record<interval: string, startTime: string>, skillsetName: string, targetIndexName: string> {
+]: any -> oneof<record<_odata_etag: string, dataSourceName: string, description: string, disabled: bool, fieldMappings: table<mappingFunction: record, sourceFieldName: string, targetFieldName: string>, name: string, outputFieldMappings: table<mappingFunction: record, sourceFieldName: string, targetFieldName: string>, parameters: record<base64EncodeKeys: bool, batchSize: int, configuration: record, maxFailedItems: int, maxFailedItemsPerBatch: int>, schedule: record<interval: string, startTime: string>, skillsetName: string, targetIndexName: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -747,7 +755,7 @@ export def "indexers-get-status" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
   --client-request-id: string # The tracking ID sent with the request to help with debugging. (format: uuid)
-]: nothing -> record<executionHistory: table<endTime: string, errorMessage: string, errors: list, finalTrackingState: string, initialTrackingState: string, itemsFailed: int, itemsProcessed: int, startTime: string, status: string, warnings: list>, lastResult: record<endTime: string, errorMessage: string, errors: list<record>, finalTrackingState: string, initialTrackingState: string, itemsFailed: int, itemsProcessed: int, startTime: string, status: string, warnings: list<record>>, limits: record<maxDocumentContentCharactersToExtract: float, maxDocumentExtractionSize: float, maxRunTime: string>, status: string> {
+]: nothing -> oneof<record<executionHistory: table<endTime: string, errorMessage: string, errors: list, finalTrackingState: string, initialTrackingState: string, itemsFailed: int, itemsProcessed: int, startTime: string, status: string, warnings: list>, lastResult: record<endTime: string, errorMessage: string, errors: list<record>, finalTrackingState: string, initialTrackingState: string, itemsFailed: int, itemsProcessed: int, startTime: string, status: string, warnings: list<record>>, limits: record<maxDocumentContentCharactersToExtract: float, maxDocumentExtractionSize: float, maxRunTime: string>, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($indexer_name | is-empty) { error make --unspanned { msg: "path parameter 'indexerName' must be non-empty" } }
@@ -790,7 +798,7 @@ export def "indexes-list" [
   --select: string # Selects which top-level properties of the index definitions to retrieve. Specified as a comma-separated list of JSON property names, or '*' for all properties. The default is all properties.
   --api-version: string # Client Api Version. (required)
   --client-request-id: string # The tracking ID sent with the request to help with debugging. (format: uuid)
-]: nothing -> record<value: table<_odata_etag: string, analyzers: list, charFilters: list, corsOptions: record, defaultScoringProfile: string, encryptionKey: record, fields: list, name: string, scoringProfiles: list, suggesters: list, tokenFilters: list, tokenizers: list>> {
+]: nothing -> oneof<record<value: table<_odata_etag: string, analyzers: list, charFilters: list, corsOptions: record, defaultScoringProfile: string, encryptionKey: record, fields: list, name: string, scoringProfiles: list, suggesters: list, tokenFilters: list, tokenizers: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
@@ -819,15 +827,6 @@ export def "indexes-list" [
 # POST /indexes
 # Docs: https://docs.microsoft.com/rest/api/searchservice/Create-Index
 # operationId: Indexes_Create
-# --analyzers item shape: {@odata.type: string, name: string}
-# --charFilters item shape: {@odata.type: string, name: string}
-# --corsOptions shape: {allowedOrigins: list<string>, maxAgeInSeconds?: int}
-# --encryptionKey shape: {accessCredentials?: any, keyVaultKeyName: string, keyVaultKeyVersion: string, keyVaultUri: string}
-# --fields item shape: {analyzer?: "ar.microsoft"|"ar.lucene"|"hy.lucene"|"bn.microsoft"|"eu.lucene"|"bg.microsoft"|"bg.lucene"|"ca.microsoft"|"ca.lucene"|"zh-Hans.microsoft"|"zh-Hans.lucene"|"zh-Hant.microsoft"|"zh-Hant.lucene"|"hr.microsoft"|"cs.microsoft"|"cs.lucene"|"da.microsoft"|"da.lucene"|"nl.microsoft"|"nl.lucene"|"en.microsoft"|"en.lucene"|"et.microsoft"|"fi.microsoft"|"fi.lucene"|"fr.microsoft"|"fr.lucene"|"gl.lucene"|"de.microsoft"|"de.lucene"|"el.microsoft"|"el.lucene"|"gu.microsoft"|"he.microsoft"|"hi.microsoft"|"hi.lucene"|"hu.microsoft"|"hu.lucene"|"is.microsoft"|"id.microsoft"|"id.lucene"|"ga.lucene"|"it.microsoft"|"it.lucene"|"ja.microsoft"|"ja.lucene"|"kn.microsoft"|"ko.microsoft"|"ko.lucene"|"lv.microsoft"|"lv.lucene"|"lt.microsoft"|"ml.microsoft"|"ms.microsoft"|"mr.microsoft"|"nb.microsoft"|"no.lucene"|"fa.lucene"|"pl.microsoft"|"pl.lucene"|"pt-BR.microsoft"|"pt-BR.lucene"|"pt-PT.microsoft"|"pt-PT.lucene"|"pa.microsoft"|"ro.microsoft"|"ro.lucene"|"ru.microsoft"|"ru.lucene"|"sr-cyrillic.microsoft"|"sr-latin.microsoft"|"sk.microsoft"|"sl.microsoft"|"es.microsoft"|"es.lucene"|"sv.microsoft"|"sv.lucene"|"ta.microsoft"|"te.microsoft"|"th.microsoft"|"th.lucene"|"tr.microsoft"|"tr.lucene"|"uk.microsoft"|"ur.microsoft"|"vi.microsoft"|"standard.lucene"|"standardasciifolding.lucene"|"keyword"|"pattern"|"simple"|"stop"|"whitespace", ... (12 more fields)}
-# --scoringProfiles item shape: {functionAggregation?: "sum"|"average"|"minimum"|"maximum"|"firstMatching", functions?: list, name: string, text?: any}
-# --suggesters item shape: {name: string, searchMode: "analyzingInfixMatching", sourceFields: list<string>}
-# --tokenFilters item shape: {@odata.type: string, name: string}
-# --tokenizers item shape: {@odata.type: string, name: string}
 export def "indexes-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -852,7 +851,7 @@ export def "indexes-create" [
   --suggesters: list # The suggesters for the index. — item shape: {name: string, searchMode: "analyzingInfixMatching", sourceFields: list<string>}
   --token-filters: list # The token filters for the index. — item shape: {@odata.type: string, name: string}
   --tokenizers: list # The tokenizers for the index. — item shape: {@odata.type: string, name: string}
-]: any -> record<_odata_etag: string, analyzers: table<_odata_type: string, name: string>, charFilters: table<_odata_type: string, name: string>, corsOptions: record<allowedOrigins: list<string>, maxAgeInSeconds: int>, defaultScoringProfile: string, encryptionKey: record<accessCredentials: record<applicationId: string, applicationSecret: string>, keyVaultKeyName: string, keyVaultKeyVersion: string, keyVaultUri: string>, fields: table<analyzer: string, facetable: bool, fields: list, filterable: bool, indexAnalyzer: string, key: bool, name: string, retrievable: bool, searchAnalyzer: string, searchable: bool, sortable: bool, synonymMaps: list, type: string>, name: string, scoringProfiles: table<functionAggregation: string, functions: list, name: string, text: record>, suggesters: table<name: string, searchMode: string, sourceFields: list>, tokenFilters: table<_odata_type: string, name: string>, tokenizers: table<_odata_type: string, name: string>> {
+]: any -> oneof<record<_odata_etag: string, analyzers: table<_odata_type: string, name: string>, charFilters: table<_odata_type: string, name: string>, corsOptions: record<allowedOrigins: list<string>, maxAgeInSeconds: int>, defaultScoringProfile: string, encryptionKey: record<accessCredentials: record<applicationId: string, applicationSecret: string>, keyVaultKeyName: string, keyVaultKeyVersion: string, keyVaultUri: string>, fields: table<analyzer: string, facetable: bool, fields: list, filterable: bool, indexAnalyzer: string, key: bool, name: string, retrievable: bool, searchAnalyzer: string, searchable: bool, sortable: bool, synonymMaps: list, type: string>, name: string, scoringProfiles: table<functionAggregation: string, functions: list, name: string, text: record>, suggesters: table<name: string, searchMode: string, sourceFields: list>, tokenFilters: table<_odata_type: string, name: string>, tokenizers: table<_odata_type: string, name: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -942,7 +941,7 @@ export def "indexes-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
   --client-request-id: string # The tracking ID sent with the request to help with debugging. (format: uuid)
-]: nothing -> record<_odata_etag: string, analyzers: table<_odata_type: string, name: string>, charFilters: table<_odata_type: string, name: string>, corsOptions: record<allowedOrigins: list<string>, maxAgeInSeconds: int>, defaultScoringProfile: string, encryptionKey: record<accessCredentials: record<applicationId: string, applicationSecret: string>, keyVaultKeyName: string, keyVaultKeyVersion: string, keyVaultUri: string>, fields: table<analyzer: string, facetable: bool, fields: list, filterable: bool, indexAnalyzer: string, key: bool, name: string, retrievable: bool, searchAnalyzer: string, searchable: bool, sortable: bool, synonymMaps: list, type: string>, name: string, scoringProfiles: table<functionAggregation: string, functions: list, name: string, text: record>, suggesters: table<name: string, searchMode: string, sourceFields: list>, tokenFilters: table<_odata_type: string, name: string>, tokenizers: table<_odata_type: string, name: string>> {
+]: nothing -> oneof<record<_odata_etag: string, analyzers: table<_odata_type: string, name: string>, charFilters: table<_odata_type: string, name: string>, corsOptions: record<allowedOrigins: list<string>, maxAgeInSeconds: int>, defaultScoringProfile: string, encryptionKey: record<accessCredentials: record<applicationId: string, applicationSecret: string>, keyVaultKeyName: string, keyVaultKeyVersion: string, keyVaultUri: string>, fields: table<analyzer: string, facetable: bool, fields: list, filterable: bool, indexAnalyzer: string, key: bool, name: string, retrievable: bool, searchAnalyzer: string, searchable: bool, sortable: bool, synonymMaps: list, type: string>, name: string, scoringProfiles: table<functionAggregation: string, functions: list, name: string, text: record>, suggesters: table<name: string, searchMode: string, sourceFields: list>, tokenFilters: table<_odata_type: string, name: string>, tokenizers: table<_odata_type: string, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($index_name | is-empty) { error make --unspanned { msg: "path parameter 'indexName' must be non-empty" } }
@@ -972,15 +971,6 @@ export def "indexes-get" [
 # PUT /indexes('{indexName}')
 # Docs: https://docs.microsoft.com/rest/api/searchservice/Update-Index
 # operationId: Indexes_CreateOrUpdate
-# --analyzers item shape: {@odata.type: string, name: string}
-# --charFilters item shape: {@odata.type: string, name: string}
-# --corsOptions shape: {allowedOrigins: list<string>, maxAgeInSeconds?: int}
-# --encryptionKey shape: {accessCredentials?: any, keyVaultKeyName: string, keyVaultKeyVersion: string, keyVaultUri: string}
-# --fields item shape: {analyzer?: "ar.microsoft"|"ar.lucene"|"hy.lucene"|"bn.microsoft"|"eu.lucene"|"bg.microsoft"|"bg.lucene"|"ca.microsoft"|"ca.lucene"|"zh-Hans.microsoft"|"zh-Hans.lucene"|"zh-Hant.microsoft"|"zh-Hant.lucene"|"hr.microsoft"|"cs.microsoft"|"cs.lucene"|"da.microsoft"|"da.lucene"|"nl.microsoft"|"nl.lucene"|"en.microsoft"|"en.lucene"|"et.microsoft"|"fi.microsoft"|"fi.lucene"|"fr.microsoft"|"fr.lucene"|"gl.lucene"|"de.microsoft"|"de.lucene"|"el.microsoft"|"el.lucene"|"gu.microsoft"|"he.microsoft"|"hi.microsoft"|"hi.lucene"|"hu.microsoft"|"hu.lucene"|"is.microsoft"|"id.microsoft"|"id.lucene"|"ga.lucene"|"it.microsoft"|"it.lucene"|"ja.microsoft"|"ja.lucene"|"kn.microsoft"|"ko.microsoft"|"ko.lucene"|"lv.microsoft"|"lv.lucene"|"lt.microsoft"|"ml.microsoft"|"ms.microsoft"|"mr.microsoft"|"nb.microsoft"|"no.lucene"|"fa.lucene"|"pl.microsoft"|"pl.lucene"|"pt-BR.microsoft"|"pt-BR.lucene"|"pt-PT.microsoft"|"pt-PT.lucene"|"pa.microsoft"|"ro.microsoft"|"ro.lucene"|"ru.microsoft"|"ru.lucene"|"sr-cyrillic.microsoft"|"sr-latin.microsoft"|"sk.microsoft"|"sl.microsoft"|"es.microsoft"|"es.lucene"|"sv.microsoft"|"sv.lucene"|"ta.microsoft"|"te.microsoft"|"th.microsoft"|"th.lucene"|"tr.microsoft"|"tr.lucene"|"uk.microsoft"|"ur.microsoft"|"vi.microsoft"|"standard.lucene"|"standardasciifolding.lucene"|"keyword"|"pattern"|"simple"|"stop"|"whitespace", ... (12 more fields)}
-# --scoringProfiles item shape: {functionAggregation?: "sum"|"average"|"minimum"|"maximum"|"firstMatching", functions?: list, name: string, text?: any}
-# --suggesters item shape: {name: string, searchMode: "analyzingInfixMatching", sourceFields: list<string>}
-# --tokenFilters item shape: {@odata.type: string, name: string}
-# --tokenizers item shape: {@odata.type: string, name: string}
 export def "indexes-create-or-update" [
   index_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1010,7 +1000,7 @@ export def "indexes-create-or-update" [
   --suggesters: list # The suggesters for the index. — item shape: {name: string, searchMode: "analyzingInfixMatching", sourceFields: list<string>}
   --token-filters: list # The token filters for the index. — item shape: {@odata.type: string, name: string}
   --tokenizers: list # The tokenizers for the index. — item shape: {@odata.type: string, name: string}
-]: any -> record<_odata_etag: string, analyzers: table<_odata_type: string, name: string>, charFilters: table<_odata_type: string, name: string>, corsOptions: record<allowedOrigins: list<string>, maxAgeInSeconds: int>, defaultScoringProfile: string, encryptionKey: record<accessCredentials: record<applicationId: string, applicationSecret: string>, keyVaultKeyName: string, keyVaultKeyVersion: string, keyVaultUri: string>, fields: table<analyzer: string, facetable: bool, fields: list, filterable: bool, indexAnalyzer: string, key: bool, name: string, retrievable: bool, searchAnalyzer: string, searchable: bool, sortable: bool, synonymMaps: list, type: string>, name: string, scoringProfiles: table<functionAggregation: string, functions: list, name: string, text: record>, suggesters: table<name: string, searchMode: string, sourceFields: list>, tokenFilters: table<_odata_type: string, name: string>, tokenizers: table<_odata_type: string, name: string>> {
+]: any -> oneof<record<_odata_etag: string, analyzers: table<_odata_type: string, name: string>, charFilters: table<_odata_type: string, name: string>, corsOptions: record<allowedOrigins: list<string>, maxAgeInSeconds: int>, defaultScoringProfile: string, encryptionKey: record<accessCredentials: record<applicationId: string, applicationSecret: string>, keyVaultKeyName: string, keyVaultKeyVersion: string, keyVaultUri: string>, fields: table<analyzer: string, facetable: bool, fields: list, filterable: bool, indexAnalyzer: string, key: bool, name: string, retrievable: bool, searchAnalyzer: string, searchable: bool, sortable: bool, synonymMaps: list, type: string>, name: string, scoringProfiles: table<functionAggregation: string, functions: list, name: string, text: record>, suggesters: table<name: string, searchMode: string, sourceFields: list>, tokenFilters: table<_odata_type: string, name: string>, tokenizers: table<_odata_type: string, name: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1062,7 +1052,7 @@ export def "indexes-analyze" [
   text: string # The text to break into tokens.
   --token-filters: list<string> # An optional list of token filters to use when breaking the given text. This parameter can only be set when using the tokenizer parameter.
   --tokenizer: string@tokenizer-completer # Defines the names of all tokenizers supported by Azure Cognitive Search.
-]: any -> record<tokens: table<endOffset: int, position: int, startOffset: int, token: string>> {
+]: any -> oneof<record<tokens: table<endOffset: int, position: int, startOffset: int, token: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1108,7 +1098,7 @@ export def "indexes-get-statistics" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
   --client-request-id: string # The tracking ID sent with the request to help with debugging. (format: uuid)
-]: nothing -> record<documentCount: int, storageSize: int> {
+]: nothing -> oneof<record<documentCount: int, storageSize: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($index_name | is-empty) { error make --unspanned { msg: "path parameter 'indexName' must be non-empty" } }
@@ -1149,7 +1139,7 @@ export def "get-service-statistics" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
   --client-request-id: string # The tracking ID sent with the request to help with debugging. (format: uuid)
-]: nothing -> record<counters: record<dataSourcesCount: record<quota: int, usage: int>, documentCount: record<quota: int, usage: int>, indexersCount: record<quota: int, usage: int>, indexesCount: record<quota: int, usage: int>, storageSize: record<quota: int, usage: int>, synonymMaps: record<quota: int, usage: int>>, limits: record<maxComplexCollectionFieldsPerIndex: int, maxComplexObjectsInCollectionsPerDocument: int, maxFieldNestingDepthPerIndex: int, maxFieldsPerIndex: int>> {
+]: nothing -> oneof<record<counters: record<dataSourcesCount: record<quota: int, usage: int>, documentCount: record<quota: int, usage: int>, indexersCount: record<quota: int, usage: int>, indexesCount: record<quota: int, usage: int>, storageSize: record<quota: int, usage: int>, synonymMaps: record<quota: int, usage: int>>, limits: record<maxComplexCollectionFieldsPerIndex: int, maxComplexObjectsInCollectionsPerDocument: int, maxFieldNestingDepthPerIndex: int, maxFieldsPerIndex: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
@@ -1191,7 +1181,7 @@ export def "skillsets-list" [
   --select: string # Selects which top-level properties of the skillsets to retrieve. Specified as a comma-separated list of JSON property names, or '*' for all properties. The default is all properties.
   --api-version: string # Client Api Version. (required)
   --client-request-id: string # The tracking ID sent with the request to help with debugging. (format: uuid)
-]: nothing -> record<value: table<_odata_etag: string, cognitiveServices: record, description: string, name: string, skills: list>> {
+]: nothing -> oneof<record<value: table<_odata_etag: string, cognitiveServices: record, description: string, name: string, skills: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
@@ -1220,8 +1210,6 @@ export def "skillsets-list" [
 # POST /skillsets
 # Docs: https://docs.microsoft.com/rest/api/searchservice/create-skillset
 # operationId: Skillsets_Create
-# --cognitiveServices shape: {@odata.type: string, description?: string}
-# --skills item shape: {@odata.type: string, context?: string, description?: string, inputs: list, name?: string, outputs: list}
 export def "skillsets-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1239,7 +1227,7 @@ export def "skillsets-create" [
   description: string # The description of the skillset.
   name: string # The name of the skillset.
   skills: list # A list of skills in the skillset. — item shape: {@odata.type: string, context?: string, description?: string, inputs: list, name?: string, outputs: list}
-]: any -> record<_odata_etag: string, cognitiveServices: record<_odata_type: string, description: string>, description: string, name: string, skills: table<_odata_type: string, context: string, description: string, inputs: list, name: string, outputs: list>> {
+]: any -> oneof<record<_odata_etag: string, cognitiveServices: record<_odata_type: string, description: string>, description: string, name: string, skills: table<_odata_type: string, context: string, description: string, inputs: list, name: string, outputs: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1329,7 +1317,7 @@ export def "skillsets-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
   --client-request-id: string # The tracking ID sent with the request to help with debugging. (format: uuid)
-]: nothing -> record<_odata_etag: string, cognitiveServices: record<_odata_type: string, description: string>, description: string, name: string, skills: table<_odata_type: string, context: string, description: string, inputs: list, name: string, outputs: list>> {
+]: nothing -> oneof<record<_odata_etag: string, cognitiveServices: record<_odata_type: string, description: string>, description: string, name: string, skills: table<_odata_type: string, context: string, description: string, inputs: list, name: string, outputs: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($skillset_name | is-empty) { error make --unspanned { msg: "path parameter 'skillsetName' must be non-empty" } }
@@ -1359,8 +1347,6 @@ export def "skillsets-get" [
 # PUT /skillsets('{skillsetName}')
 # Docs: https://docs.microsoft.com/rest/api/searchservice/update-skillset
 # operationId: Skillsets_CreateOrUpdate
-# --cognitiveServices shape: {@odata.type: string, description?: string}
-# --skills item shape: {@odata.type: string, context?: string, description?: string, inputs: list, name?: string, outputs: list}
 export def "skillsets-create-or-update" [
   skillset_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1382,7 +1368,7 @@ export def "skillsets-create-or-update" [
   description: string # The description of the skillset.
   name: string # The name of the skillset.
   skills: list # A list of skills in the skillset. — item shape: {@odata.type: string, context?: string, description?: string, inputs: list, name?: string, outputs: list}
-]: any -> record<_odata_etag: string, cognitiveServices: record<_odata_type: string, description: string>, description: string, name: string, skills: table<_odata_type: string, context: string, description: string, inputs: list, name: string, outputs: list>> {
+]: any -> oneof<record<_odata_etag: string, cognitiveServices: record<_odata_type: string, description: string>, description: string, name: string, skills: table<_odata_type: string, context: string, description: string, inputs: list, name: string, outputs: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1429,7 +1415,7 @@ export def "synonym-maps-list" [
   --select: string # Selects which top-level properties of the synonym maps to retrieve. Specified as a comma-separated list of JSON property names, or '*' for all properties. The default is all properties.
   --api-version: string # Client Api Version. (required)
   --client-request-id: string # The tracking ID sent with the request to help with debugging. (format: uuid)
-]: nothing -> record<value: table<_odata_etag: string, encryptionKey: record, format: string, name: string, synonyms: string>> {
+]: nothing -> oneof<record<value: table<_odata_etag: string, encryptionKey: record, format: string, name: string, synonyms: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
@@ -1458,7 +1444,6 @@ export def "synonym-maps-list" [
 # POST /synonymmaps
 # Docs: https://docs.microsoft.com/rest/api/searchservice/Create-Synonym-Map
 # operationId: SynonymMaps_Create
-# --encryptionKey shape: {accessCredentials?: any, keyVaultKeyName: string, keyVaultKeyVersion: string, keyVaultUri: string}
 export def "synonym-maps-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1476,7 +1461,7 @@ export def "synonym-maps-create" [
   format: string@format-completer # The format of the synonym map. Only the 'solr' format is currently supported.
   name: string # The name of the synonym map.
   synonyms: string # A series of synonym rules in the specified synonym map format. The rules must be separated by newlines.
-]: any -> record<_odata_etag: string, encryptionKey: record<accessCredentials: record<applicationId: string, applicationSecret: string>, keyVaultKeyName: string, keyVaultKeyVersion: string, keyVaultUri: string>, format: string, name: string, synonyms: string> {
+]: any -> oneof<record<_odata_etag: string, encryptionKey: record<accessCredentials: record<applicationId: string, applicationSecret: string>, keyVaultKeyName: string, keyVaultKeyVersion: string, keyVaultUri: string>, format: string, name: string, synonyms: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1566,7 +1551,7 @@ export def "synonym-maps-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
   --client-request-id: string # The tracking ID sent with the request to help with debugging. (format: uuid)
-]: nothing -> record<_odata_etag: string, encryptionKey: record<accessCredentials: record<applicationId: string, applicationSecret: string>, keyVaultKeyName: string, keyVaultKeyVersion: string, keyVaultUri: string>, format: string, name: string, synonyms: string> {
+]: nothing -> oneof<record<_odata_etag: string, encryptionKey: record<accessCredentials: record<applicationId: string, applicationSecret: string>, keyVaultKeyName: string, keyVaultKeyVersion: string, keyVaultUri: string>, format: string, name: string, synonyms: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($synonym_map_name | is-empty) { error make --unspanned { msg: "path parameter 'synonymMapName' must be non-empty" } }
@@ -1596,7 +1581,6 @@ export def "synonym-maps-get" [
 # PUT /synonymmaps('{synonymMapName}')
 # Docs: https://docs.microsoft.com/rest/api/searchservice/Update-Synonym-Map
 # operationId: SynonymMaps_CreateOrUpdate
-# --encryptionKey shape: {accessCredentials?: any, keyVaultKeyName: string, keyVaultKeyVersion: string, keyVaultUri: string}
 export def "synonym-maps-create-or-update" [
   synonym_map_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1618,7 +1602,7 @@ export def "synonym-maps-create-or-update" [
   format: string@format-completer # The format of the synonym map. Only the 'solr' format is currently supported.
   name: string # The name of the synonym map.
   synonyms: string # A series of synonym rules in the specified synonym map format. The rules must be separated by newlines.
-]: any -> record<_odata_etag: string, encryptionKey: record<accessCredentials: record<applicationId: string, applicationSecret: string>, keyVaultKeyName: string, keyVaultKeyVersion: string, keyVaultUri: string>, format: string, name: string, synonyms: string> {
+]: any -> oneof<record<_odata_etag: string, encryptionKey: record<accessCredentials: record<applicationId: string, applicationSecret: string>, keyVaultKeyName: string, keyVaultKeyVersion: string, keyVaultUri: string>, format: string, name: string, synonyms: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

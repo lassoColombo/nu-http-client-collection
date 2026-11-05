@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -116,9 +140,9 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-account" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-account" "get-buckets" "post-buckets" "delete-buckets-bucket-key" "get-buckets-bucket-key" "get-buckets-bucket-key-environments" "post-buckets-bucket-key-environments" "put-buckets-bucket-key-environments-environment-id" "get-buckets-bucket-key-errors" "delete-buckets-bucket-key-messages" "get-buckets-bucket-key-messages" "post-buckets-bucket-key-messages" "get-buckets-bucket-key-messages-message-id" "get-buckets-bucket-key-tests" "post-buckets-bucket-key-tests" "delete-buckets-bucket-key-tests-test-id" "get-buckets-bucket-key-tests-test-id" "put-buckets-bucket-key-tests-test-id" "get-buckets-bucket-key-tests-test-id-environments" "post-buckets-bucket-key-tests-test-id-environments" "put-buckets-bucket-key-tests-test-id-environments-environment-id" "get-buckets-bucket-key-tests-test-id-metrics" "get-buckets-bucket-key-tests-test-id-steps" "post-buckets-bucket-key-tests-test-id-steps" "delete-buckets-bucket-key-tests-test-id-steps-step-id" "put-buckets-bucket-key-tests-test-id-steps-step-id" "get-teams-team-id-agents" "get-teams-team-id-integrations" "get-teams-team-id-people" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -149,7 +173,7 @@ export def "get-account" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<email: string, id: string, name: string, teams: list<record>>, meta: record<status: string>> {
+]: nothing -> oneof<record<data: record<email: string, id: string, name: string, teams: list<record>>, meta: record<status: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account" $auth.query)
@@ -182,7 +206,7 @@ export def "get-buckets" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<auth_token: string, collections_url: string, default: bool, key: string, messages_url: string, name: string, team: record, tests_url: string, trigger_url: string, verify_ssl: bool>, meta: record<status: string>> {
+]: nothing -> oneof<record<data: table<auth_token: string, collections_url: string, default: bool, key: string, messages_url: string, name: string, team: record, tests_url: string, trigger_url: string, verify_ssl: bool>, meta: record<status: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/buckets" $auth.query)
@@ -217,7 +241,7 @@ export def "post-buckets" [
   --dry-run(-n) # Return the request that would be sent without executing it
   name: string # Name of this bucket
   team_id: string # Unique identifier for the team to create this bucket for.
-]: any -> record<auth_token: string, collections_url: string, default: bool, key: string, messages_url: string, name: string, team: record<id: string, name: string>, tests_url: string, trigger_url: string, verify_ssl: bool> {
+]: any -> oneof<record<auth_token: string, collections_url: string, default: bool, key: string, messages_url: string, name: string, team: record<id: string, name: string>, tests_url: string, trigger_url: string, verify_ssl: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -289,7 +313,7 @@ export def "get-buckets-bucket-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<auth_token: string, collections_url: string, default: bool, key: string, messages_url: string, name: string, team: record<id: string, name: string>, tests_url: string, trigger_url: string, verify_ssl: bool> {
+]: nothing -> oneof<record<auth_token: string, collections_url: string, default: bool, key: string, messages_url: string, name: string, team: record<id: string, name: string>, tests_url: string, trigger_url: string, verify_ssl: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket_key | is-empty) { error make --unspanned { msg: "path parameter 'bucketKey' must be non-empty" } }
@@ -348,8 +372,6 @@ export def "get-buckets-bucket-key-environments" [
 # Create new shared environment.
 #
 # POST /buckets/{bucketKey}/environments
-# --integrations item shape: {description?: string, id?: string, type?: string, uuid?: string}
-# --remote_agents item shape: {agent_id?: string, name?: string, version?: string}
 export def "post-buckets-bucket-key-environments" [
   bucket_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -410,8 +432,6 @@ export def "post-buckets-bucket-key-environments" [
 # Update the details of a shared environment.
 #
 # PUT /buckets/{bucketKey}/environments/{environmentId}
-# --integrations item shape: {description?: string, id?: string, type?: string, uuid?: string}
-# --remote_agents item shape: {agent_id?: string, name?: string, version?: string}
 export def "put-buckets-bucket-key-environments-environment-id" [
   bucket_key: string
   environment_id: string
@@ -587,8 +607,6 @@ export def "get-buckets-bucket-key-messages" [
 # Create a message
 #
 # POST /buckets/{bucketKey}/messages
-# --request shape: {body?: string, body_encoding?: string, form?: string, headers?: string, method?: string, timestamp?: float, url?: string}
-# --response shape: {body?: string, body_encoding?: string, headers?: string, reason?: string, response_time?: float, status?: int, timestamp?: float}
 export def "post-buckets-bucket-key-messages" [
   bucket_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -602,7 +620,7 @@ export def "post-buckets-bucket-key-messages" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --request: record # shape: {body?: string, body_encoding?: string, form?: string, headers?: string, method?: string, timestamp?: float, url?: string}
   --response: record # shape: {body?: string, body_encoding?: string, headers?: string, reason?: string, response_time?: float, status?: int, timestamp?: float}
-]: any -> record<data: table<error: record, status: string, unique_identifier: string, uuid: string, warning: record>, meta: record<error_count: int, succcess_count: int, warning_count: int>> {
+]: any -> oneof<record<data: table<error: record, status: string, unique_identifier: string, uuid: string, warning: record>, meta: record<error_count: int, succcess_count: int, warning_count: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -677,7 +695,7 @@ export def "get-buckets-bucket-key-tests" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<created_at: int, created_by: record, default_environment_id: string, description: string, id: string, last_run: record, name: string, trigger_url: string>, meta: record<status: string>> {
+]: nothing -> oneof<record<data: table<created_at: int, created_by: record, default_environment_id: string, description: string, id: string, last_run: record, name: string, trigger_url: string>, meta: record<status: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket_key | is-empty) { error make --unspanned { msg: "path parameter 'bucketKey' must be non-empty" } }
@@ -701,7 +719,6 @@ export def "get-buckets-bucket-key-tests" [
 # Create a test.
 #
 # POST /buckets/{bucketKey}/tests
-# --created_by shape: {email?: string, id?: string, name?: string}
 export def "post-buckets-bucket-key-tests" [
   bucket_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -721,7 +738,7 @@ export def "post-buckets-bucket-key-tests" [
   --last-run: record
   name: string # The name for the test.
   --trigger-url: string
-]: any -> record<data: table<created_at: int, created_by: record, default_environment_id: string, description: string, id: string, last_run: record, name: string, trigger_url: string>, meta: record<status: string>> {
+]: any -> oneof<record<data: table<created_at: int, created_by: record, default_environment_id: string, description: string, id: string, last_run: record, name: string, trigger_url: string>, meta: record<status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -797,7 +814,7 @@ export def "get-buckets-bucket-key-tests-test-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<environments: record<auth: string, client_certificate: string, emails: record, exported_at: int, headers: record, id: string, initial_script_hash: string, initial_variables: record, integrations: list<record>, name: string, parent_environment_id: string, preserve_cookies: bool, regions: list<string>, remote_agents: list<record>, retry_on_failure: bool, script: string, script_library: list<string>, stop_on_failure: bool, test_id: string, verify_ssl: bool, version: string, webhooks: string>, exported_at: int, last_run: record, schedules: table<environment_id: string, exported_at: int, id: string, interval: string, note: string, version: string>, steps: list<record>, version: string, created_at: int, created_by: record<email: string, id: string, name: string>, default_environment_id: string, description: string, id: string, name: string, trigger_url: string> {
+]: nothing -> oneof<record<environments: record<auth: string, client_certificate: string, emails: record, exported_at: int, headers: record, id: string, initial_script_hash: string, initial_variables: record, integrations: list<record>, name: string, parent_environment_id: string, preserve_cookies: bool, regions: list<string>, remote_agents: list<record>, retry_on_failure: bool, script: string, script_library: list<string>, stop_on_failure: bool, test_id: string, verify_ssl: bool, version: string, webhooks: string>, exported_at: int, last_run: record, schedules: table<environment_id: string, exported_at: int, id: string, interval: string, note: string, version: string>, steps: list<record>, version: string, created_at: int, created_by: record<email: string, id: string, name: string>, default_environment_id: string, description: string, id: string, name: string, trigger_url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket_key | is-empty) { error make --unspanned { msg: "path parameter 'bucketKey' must be non-empty" } }
@@ -834,7 +851,7 @@ export def "put-buckets-bucket-key-tests-test-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<environments: record<auth: string, client_certificate: string, emails: record, exported_at: int, headers: record, id: string, initial_script_hash: string, initial_variables: record, integrations: list<record>, name: string, parent_environment_id: string, preserve_cookies: bool, regions: list<string>, remote_agents: list<record>, retry_on_failure: bool, script: string, script_library: list<string>, stop_on_failure: bool, test_id: string, verify_ssl: bool, version: string, webhooks: string>, exported_at: int, last_run: record, schedules: table<environment_id: string, exported_at: int, id: string, interval: string, note: string, version: string>, steps: list<record>, version: string, created_at: int, created_by: record<email: string, id: string, name: string>, default_environment_id: string, description: string, id: string, name: string, trigger_url: string> {
+]: nothing -> oneof<record<environments: record<auth: string, client_certificate: string, emails: record, exported_at: int, headers: record, id: string, initial_script_hash: string, initial_variables: record, integrations: list<record>, name: string, parent_environment_id: string, preserve_cookies: bool, regions: list<string>, remote_agents: list<record>, retry_on_failure: bool, script: string, script_library: list<string>, stop_on_failure: bool, test_id: string, verify_ssl: bool, version: string, webhooks: string>, exported_at: int, last_run: record, schedules: table<environment_id: string, exported_at: int, id: string, interval: string, note: string, version: string>, steps: list<record>, version: string, created_at: int, created_by: record<email: string, id: string, name: string>, default_environment_id: string, description: string, id: string, name: string, trigger_url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket_key | is-empty) { error make --unspanned { msg: "path parameter 'bucketKey' must be non-empty" } }
@@ -871,7 +888,7 @@ export def "get-buckets-bucket-key-tests-test-id-environments" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<auth: string, client_certificate: string, emails: record, exported_at: int, headers: record, id: string, initial_script_hash: string, initial_variables: record, integrations: list, name: string, parent_environment_id: string, preserve_cookies: bool, regions: list, remote_agents: list, retry_on_failure: bool, script: string, script_library: list, stop_on_failure: bool, test_id: string, verify_ssl: bool, version: string, webhooks: string>, meta: record<status: string>> {
+]: nothing -> oneof<record<data: table<auth: string, client_certificate: string, emails: record, exported_at: int, headers: record, id: string, initial_script_hash: string, initial_variables: record, integrations: list, name: string, parent_environment_id: string, preserve_cookies: bool, regions: list, remote_agents: list, retry_on_failure: bool, script: string, script_library: list, stop_on_failure: bool, test_id: string, verify_ssl: bool, version: string, webhooks: string>, meta: record<status: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket_key | is-empty) { error make --unspanned { msg: "path parameter 'bucketKey' must be non-empty" } }
@@ -896,8 +913,6 @@ export def "get-buckets-bucket-key-tests-test-id-environments" [
 # Create new test environment.
 #
 # POST /buckets/{bucketKey}/tests/{testId}/environments
-# --integrations item shape: {description?: string, id?: string, type?: string, uuid?: string}
-# --remote_agents item shape: {agent_id?: string, name?: string, version?: string}
 export def "post-buckets-bucket-key-tests-test-id-environments" [
   bucket_key: string
   test_id: string
@@ -960,8 +975,6 @@ export def "post-buckets-bucket-key-tests-test-id-environments" [
 # Update the details of a test environment.
 #
 # PUT /buckets/{bucketKey}/tests/{testId}/environments/{environmentId}
-# --integrations item shape: {description?: string, id?: string, type?: string, uuid?: string}
-# --remote_agents item shape: {agent_id?: string, name?: string, version?: string}
 export def "put-buckets-bucket-key-tests-test-id-environments-environment-id" [
   bucket_key: string
   test_id: string
@@ -1038,7 +1051,7 @@ export def "get-buckets-bucket-key-tests-test-id-metrics" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<changes_from_last_period: record, environment_uuid: string, region: string, response_times: table<avg_response_time_ms: int, success_ratio: int, timestamp: int>, this_time_period: record, timeframe: string> {
+]: nothing -> oneof<record<changes_from_last_period: record, environment_uuid: string, region: string, response_times: table<avg_response_time_ms: int, success_ratio: int, timestamp: int>, this_time_period: record, timeframe: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket_key | is-empty) { error make --unspanned { msg: "path parameter 'bucketKey' must be non-empty" } }
@@ -1234,7 +1247,7 @@ export def "get-teams-team-id-agents" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<agent_id: string, name: string, version: string> {
+]: nothing -> oneof<table<agent_id: string, name: string, version: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($team_id | is-empty) { error make --unspanned { msg: "path parameter 'teamId' must be non-empty" } }
@@ -1269,7 +1282,7 @@ export def "get-teams-team-id-integrations" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<description: string, id: string, type: string, uuid: string>, meta: record<status: string>> {
+]: nothing -> oneof<record<data: table<description: string, id: string, type: string, uuid: string>, meta: record<status: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($team_id | is-empty) { error make --unspanned { msg: "path parameter 'teamId' must be non-empty" } }
@@ -1304,7 +1317,7 @@ export def "get-teams-team-id-people" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<email: string, id: string, name: string, teams: list<record>> {
+]: nothing -> oneof<table<email: string, id: string, name: string, teams: list<record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($team_id | is-empty) { error make --unspanned { msg: "path parameter 'teamId' must be non-empty" } }

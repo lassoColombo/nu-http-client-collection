@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -126,9 +150,9 @@ def serving-status-completer-1 [] { ["SERVING" "SERVING_STATUS_UNSPECIFIED" "STO
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "appengine-apps-create" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["appengine-apps-create" "appengine-apps-get" "appengine-apps-patch" "appengine-apps-authorized-certificates-list" "appengine-apps-authorized-certificates-create" "appengine-apps-authorized-certificates-delete" "appengine-apps-authorized-certificates-get" "appengine-apps-authorized-certificates-patch" "appengine-apps-authorized-domains-list" "appengine-apps-domain-mappings-list" "appengine-apps-domain-mappings-create" "appengine-apps-domain-mappings-delete" "appengine-apps-domain-mappings-get" "appengine-apps-domain-mappings-patch" "appengine-apps-firewall-ingress-rules-list" "appengine-apps-firewall-ingress-rules-create" "appengine-apps-firewall-ingress-rules-delete" "appengine-apps-firewall-ingress-rules-get" "appengine-apps-firewall-ingress-rules-patch" "appengine-apps-firewall-ingress-rules-batch-update" "appengine-apps-locations-list" "appengine-apps-locations-get" "appengine-apps-operations-list" "appengine-apps-operations-get" "appengine-apps-services-list" "appengine-apps-services-delete" "appengine-apps-services-get" "appengine-apps-services-patch" "appengine-apps-services-versions-list" "appengine-apps-services-versions-create" "appengine-apps-services-versions-delete" "appengine-apps-services-versions-get" "appengine-apps-services-versions-patch" "appengine-apps-services-versions-instances-list" "appengine-apps-services-versions-instances-delete" "appengine-apps-services-versions-instances-get" "appengine-apps-services-versions-instances-debug" "appengine-apps-repair" "appengine-projects-locations-list" "appengine-projects-locations-get" "appengine-projects-locations-applications-create" "appengine-projects-locations-applications-get" "appengine-projects-locations-applications-repair" "appengine-projects-locations-operations-list" "appengine-projects-locations-operations-get" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -150,9 +174,6 @@ export def commands []: nothing -> table {
 #
 # POST /v1beta/apps
 # operationId: appengine.apps.create
-# --dispatchRules item shape: {domain?: string, path?: string, service?: string}
-# --featureSettings shape: {splitHealthChecks?: bool, useContainerOptimizedOs?: bool}
-# --iap shape: {enabled?: bool, oauth2ClientId?: string, oauth2ClientSecret?: string}
 export def "appengine-apps-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -185,7 +206,7 @@ export def "appengine-apps-create" [
   --location-id: string # Location from which this application runs. Application instances run out of the data centers in the specified location, which is also where all of the application's end user content is stored.Defaults to us-central.View the list of supported locations (https://cloud.google.com/appengine/docs/locations).
   --service-account: string # The service account associated with the application. This is the app-level default identity. If no identity provided during create version, Admin API will fallback to this one.
   --serving-status: string@serving-status-completer # Serving status of this application.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -235,7 +256,7 @@ export def "appengine-apps-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<authDomain: string, codeBucket: string, databaseType: string, defaultBucket: string, defaultCookieExpiration: string, defaultHostname: string, dispatchRules: table<domain: string, path: string, service: string>, featureSettings: record<splitHealthChecks: bool, useContainerOptimizedOs: bool>, gcrDomain: string, iap: record<enabled: bool, oauth2ClientId: string, oauth2ClientSecret: string, oauth2ClientSecretSha256: string>, id: string, locationId: string, name: string, serviceAccount: string, servingStatus: string> {
+]: nothing -> oneof<record<authDomain: string, codeBucket: string, databaseType: string, defaultBucket: string, defaultCookieExpiration: string, defaultHostname: string, dispatchRules: table<domain: string, path: string, service: string>, featureSettings: record<splitHealthChecks: bool, useContainerOptimizedOs: bool>, gcrDomain: string, iap: record<enabled: bool, oauth2ClientId: string, oauth2ClientSecret: string, oauth2ClientSecretSha256: string>, id: string, locationId: string, name: string, serviceAccount: string, servingStatus: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
@@ -261,9 +282,6 @@ export def "appengine-apps-get" [
 #
 # PATCH /v1beta/apps/{appsId}
 # operationId: appengine.apps.patch
-# --dispatchRules item shape: {domain?: string, path?: string, service?: string}
-# --featureSettings shape: {splitHealthChecks?: bool, useContainerOptimizedOs?: bool}
-# --iap shape: {enabled?: bool, oauth2ClientId?: string, oauth2ClientSecret?: string}
 export def "appengine-apps-patch" [
   apps_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -297,7 +315,7 @@ export def "appengine-apps-patch" [
   --location-id: string # Location from which this application runs. Application instances run out of the data centers in the specified location, which is also where all of the application's end user content is stored.Defaults to us-central.View the list of supported locations (https://cloud.google.com/appengine/docs/locations).
   --service-account: string # The service account associated with the application. This is the app-level default identity. If no identity provided during create version, Admin API will fallback to this one.
   --serving-status: string@serving-status-completer # Serving status of this application.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -351,7 +369,7 @@ export def "appengine-apps-authorized-certificates-list" [
   --page-size: int # Maximum results to return per page.
   --page-token: string # Continuation token for fetching the next page of results.
   --view: string@view-completer # Controls the set of fields returned in the LIST response.
-]: nothing -> record<certificates: table<certificateRawData: record, displayName: string, domainMappingsCount: int, domainNames: list, expireTime: string, id: string, managedCertificate: record, name: string, visibleDomainMappings: list>, nextPageToken: string> {
+]: nothing -> oneof<record<certificates: table<certificateRawData: record, displayName: string, domainMappingsCount: int, domainNames: list, expireTime: string, id: string, managedCertificate: record, name: string, visibleDomainMappings: list>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
@@ -377,8 +395,6 @@ export def "appengine-apps-authorized-certificates-list" [
 #
 # POST /v1beta/apps/{appsId}/authorizedCertificates
 # operationId: appengine.apps.authorizedCertificates.create
-# --certificateRawData shape: {privateKey?: string, publicCertificate?: string}
-# --managedCertificate shape: {lastRenewalTime?: string, status?: "MANAGEMENT_STATUS_UNSPECIFIED"|"OK"|"PENDING"|"FAILED_RETRYING_NOT_VISIBLE"|"FAILED_PERMANENT"|"FAILED_RETRYING_CAA_FORBIDDEN"|"FAILED_RETRYING_CAA_CHECKING"}
 export def "appengine-apps-authorized-certificates-create" [
   apps_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -410,7 +426,7 @@ export def "appengine-apps-authorized-certificates-create" [
   --managed-certificate: record # A certificate managed by App Engine. — shape: {lastRenewalTime?: string, status?: "MANAGEMENT_STATUS_UNSPECIFIED"|"OK"|"PENDING"|"FAILED_RETRYING_NOT_VISIBLE"|"FAILED_PERMANENT"|"FAILED_RETRYING_CAA_FORBIDDEN"|"FAILED_RETRYING_CAA_CHECKING"}
   --name: string # Full path to the AuthorizedCertificate resource in the API. Example: apps/myapp/authorizedCertificates/12345.@OutputOnly
   --visible-domain-mappings: list<string> # The full paths to user visible Domain Mapping resources that have this certificate mapped. Example: apps/myapp/domainMappings/example.com.This may not represent the full list of mapped domain mappings if the user does not have VIEWER permissions on all of the applications that have this certificate mapped. See domain_mappings_count for a complete count.Only returned by GET or LIST requests when specifically requested by the view=FULL_CERTIFICATE option.@OutputOnly
-]: any -> record<certificateRawData: record<privateKey: string, publicCertificate: string>, displayName: string, domainMappingsCount: int, domainNames: list<string>, expireTime: string, id: string, managedCertificate: record<lastRenewalTime: string, status: string>, name: string, visibleDomainMappings: list<string>> {
+]: any -> oneof<record<certificateRawData: record<privateKey: string, publicCertificate: string>, displayName: string, domainMappingsCount: int, domainNames: list<string>, expireTime: string, id: string, managedCertificate: record<lastRenewalTime: string, status: string>, name: string, visibleDomainMappings: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -462,7 +478,7 @@ export def "appengine-apps-authorized-certificates-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
@@ -513,7 +529,7 @@ export def "appengine-apps-authorized-certificates-get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --view: string@view-completer # Controls the set of fields returned in the GET response.
-]: nothing -> record<certificateRawData: record<privateKey: string, publicCertificate: string>, displayName: string, domainMappingsCount: int, domainNames: list<string>, expireTime: string, id: string, managedCertificate: record<lastRenewalTime: string, status: string>, name: string, visibleDomainMappings: list<string>> {
+]: nothing -> oneof<record<certificateRawData: record<privateKey: string, publicCertificate: string>, displayName: string, domainMappingsCount: int, domainNames: list<string>, expireTime: string, id: string, managedCertificate: record<lastRenewalTime: string, status: string>, name: string, visibleDomainMappings: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
@@ -540,8 +556,6 @@ export def "appengine-apps-authorized-certificates-get" [
 #
 # PATCH /v1beta/apps/{appsId}/authorizedCertificates/{authorizedCertificatesId}
 # operationId: appengine.apps.authorizedCertificates.patch
-# --certificateRawData shape: {privateKey?: string, publicCertificate?: string}
-# --managedCertificate shape: {lastRenewalTime?: string, status?: "MANAGEMENT_STATUS_UNSPECIFIED"|"OK"|"PENDING"|"FAILED_RETRYING_NOT_VISIBLE"|"FAILED_PERMANENT"|"FAILED_RETRYING_CAA_FORBIDDEN"|"FAILED_RETRYING_CAA_CHECKING"}
 export def "appengine-apps-authorized-certificates-patch" [
   apps_id: string
   authorized_certificates_id: string
@@ -575,7 +589,7 @@ export def "appengine-apps-authorized-certificates-patch" [
   --managed-certificate: record # A certificate managed by App Engine. — shape: {lastRenewalTime?: string, status?: "MANAGEMENT_STATUS_UNSPECIFIED"|"OK"|"PENDING"|"FAILED_RETRYING_NOT_VISIBLE"|"FAILED_PERMANENT"|"FAILED_RETRYING_CAA_FORBIDDEN"|"FAILED_RETRYING_CAA_CHECKING"}
   --name: string # Full path to the AuthorizedCertificate resource in the API. Example: apps/myapp/authorizedCertificates/12345.@OutputOnly
   --visible-domain-mappings: list<string> # The full paths to user visible Domain Mapping resources that have this certificate mapped. Example: apps/myapp/domainMappings/example.com.This may not represent the full list of mapped domain mappings if the user does not have VIEWER permissions on all of the applications that have this certificate mapped. See domain_mappings_count for a complete count.Only returned by GET or LIST requests when specifically requested by the view=FULL_CERTIFICATE option.@OutputOnly
-]: any -> record<certificateRawData: record<privateKey: string, publicCertificate: string>, displayName: string, domainMappingsCount: int, domainNames: list<string>, expireTime: string, id: string, managedCertificate: record<lastRenewalTime: string, status: string>, name: string, visibleDomainMappings: list<string>> {
+]: any -> oneof<record<certificateRawData: record<privateKey: string, publicCertificate: string>, displayName: string, domainMappingsCount: int, domainNames: list<string>, expireTime: string, id: string, managedCertificate: record<lastRenewalTime: string, status: string>, name: string, visibleDomainMappings: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -629,7 +643,7 @@ export def "appengine-apps-authorized-domains-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # Maximum results to return per page.
   --page-token: string # Continuation token for fetching the next page of results.
-]: nothing -> record<domains: table<id: string, name: string>, nextPageToken: string> {
+]: nothing -> oneof<record<domains: table<id: string, name: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
@@ -679,7 +693,7 @@ export def "appengine-apps-domain-mappings-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # Maximum results to return per page.
   --page-token: string # Continuation token for fetching the next page of results.
-]: nothing -> record<domainMappings: table<id: string, name: string, resourceRecords: list, sslSettings: record>, nextPageToken: string> {
+]: nothing -> oneof<record<domainMappings: table<id: string, name: string, resourceRecords: list, sslSettings: record>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
@@ -705,8 +719,6 @@ export def "appengine-apps-domain-mappings-list" [
 #
 # POST /v1beta/apps/{appsId}/domainMappings
 # operationId: appengine.apps.domainMappings.create
-# --resourceRecords item shape: {name?: string, rrdata?: string, type?: "A"|"AAAA"|"CNAME"}
-# --sslSettings shape: {certificateId?: string, pendingManagedCertificateId?: string, sslManagementType?: "AUTOMATIC"|"MANUAL"}
 export def "appengine-apps-domain-mappings-create" [
   apps_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -734,7 +746,7 @@ export def "appengine-apps-domain-mappings-create" [
   --name: string # Full path to the DomainMapping resource in the API. Example: apps/myapp/domainMapping/example.com.@OutputOnly
   --resource-records: list # The resource records required to configure this domain mapping. These records must be added to the domain's DNS configuration in order to serve the application via this domain mapping.@OutputOnly — item shape: {name?: string, rrdata?: string, type?: "A"|"AAAA"|"CNAME"}
   --ssl-settings: record # SSL configuration for a DomainMapping resource. — shape: {certificateId?: string, pendingManagedCertificateId?: string, sslManagementType?: "AUTOMATIC"|"MANUAL"}
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -786,7 +798,7 @@ export def "appengine-apps-domain-mappings-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: nothing -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
@@ -836,7 +848,7 @@ export def "appengine-apps-domain-mappings-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<id: string, name: string, resourceRecords: table<name: string, rrdata: string, type: string>, sslSettings: record<certificateId: string, pendingManagedCertificateId: string, sslManagementType: string>> {
+]: nothing -> oneof<record<id: string, name: string, resourceRecords: table<name: string, rrdata: string, type: string>, sslSettings: record<certificateId: string, pendingManagedCertificateId: string, sslManagementType: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
@@ -863,8 +875,6 @@ export def "appengine-apps-domain-mappings-get" [
 #
 # PATCH /v1beta/apps/{appsId}/domainMappings/{domainMappingsId}
 # operationId: appengine.apps.domainMappings.patch
-# --resourceRecords item shape: {name?: string, rrdata?: string, type?: "A"|"AAAA"|"CNAME"}
-# --sslSettings shape: {certificateId?: string, pendingManagedCertificateId?: string, sslManagementType?: "AUTOMATIC"|"MANUAL"}
 export def "appengine-apps-domain-mappings-patch" [
   apps_id: string
   domain_mappings_id: string
@@ -893,7 +903,7 @@ export def "appengine-apps-domain-mappings-patch" [
   --name: string # Full path to the DomainMapping resource in the API. Example: apps/myapp/domainMapping/example.com.@OutputOnly
   --resource-records: list # The resource records required to configure this domain mapping. These records must be added to the domain's DNS configuration in order to serve the application via this domain mapping.@OutputOnly — item shape: {name?: string, rrdata?: string, type?: "A"|"AAAA"|"CNAME"}
   --ssl-settings: record # SSL configuration for a DomainMapping resource. — shape: {certificateId?: string, pendingManagedCertificateId?: string, sslManagementType?: "AUTOMATIC"|"MANUAL"}
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -948,7 +958,7 @@ export def "appengine-apps-firewall-ingress-rules-list" [
   --matching-address: string # A valid IP Address. If set, only rules matching this address will be returned. The first returned rule will be the rule that fires on requests from this IP.
   --page-size: int # Maximum results to return per page.
   --page-token: string # Continuation token for fetching the next page of results.
-]: nothing -> record<ingressRules: table<action: string, description: string, priority: int, sourceRange: string>, nextPageToken: string> {
+]: nothing -> oneof<record<ingressRules: table<action: string, description: string, priority: int, sourceRange: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
@@ -1000,7 +1010,7 @@ export def "appengine-apps-firewall-ingress-rules-create" [
   --description: string # An optional string description of this rule. This field has a maximum length of 400 characters.
   --priority: int # A positive integer between 1, Int32.MaxValue-1 that defines the order of rule evaluation. Rules with the lowest priority are evaluated first.A default rule at priority Int32.MaxValue matches all IPv4 and IPv6 traffic when no previous rule matches. Only the action of this rule can be modified by the user. (format: int32)
   --source-range: string # IP address or range, defined using CIDR notation, of requests that this rule applies to. You can use the wildcard character "*" to match all IPs equivalent to "0/0" and "::/0" together. Examples: 192.168.1.1 or 192.168.0.0/16 or 2001:db8::/32 or 2001:0db8:0000:0042:0000:8a2e:0370:7334. Truncation will be silently performed on addresses which are not properly truncated. For example, 1.2.3.4/24 is accepted as the same address as 1.2.3.0/24. Similarly, for IPv6, 2001:db8::1/32 is accepted as the same address as 2001:db8::/32.
-]: any -> record<action: string, description: string, priority: int, sourceRange: string> {
+]: any -> oneof<record<action: string, description: string, priority: int, sourceRange: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1052,7 +1062,7 @@ export def "appengine-apps-firewall-ingress-rules-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
@@ -1102,7 +1112,7 @@ export def "appengine-apps-firewall-ingress-rules-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<action: string, description: string, priority: int, sourceRange: string> {
+]: nothing -> oneof<record<action: string, description: string, priority: int, sourceRange: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
@@ -1157,7 +1167,7 @@ export def "appengine-apps-firewall-ingress-rules-patch" [
   --description: string # An optional string description of this rule. This field has a maximum length of 400 characters.
   --priority: int # A positive integer between 1, Int32.MaxValue-1 that defines the order of rule evaluation. Rules with the lowest priority are evaluated first.A default rule at priority Int32.MaxValue matches all IPv4 and IPv6 traffic when no previous rule matches. Only the action of this rule can be modified by the user. (format: int32)
   --source-range: string # IP address or range, defined using CIDR notation, of requests that this rule applies to. You can use the wildcard character "*" to match all IPs equivalent to "0/0" and "::/0" together. Examples: 192.168.1.1 or 192.168.0.0/16 or 2001:db8::/32 or 2001:0db8:0000:0042:0000:8a2e:0370:7334. Truncation will be silently performed on addresses which are not properly truncated. For example, 1.2.3.4/24 is accepted as the same address as 1.2.3.0/24. Similarly, for IPv6, 2001:db8::1/32 is accepted as the same address as 2001:db8::/32.
-]: any -> record<action: string, description: string, priority: int, sourceRange: string> {
+]: any -> oneof<record<action: string, description: string, priority: int, sourceRange: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1187,7 +1197,6 @@ export def "appengine-apps-firewall-ingress-rules-patch" [
 #
 # POST /v1beta/apps/{appsId}/firewall/ingressRules:batchUpdate
 # operationId: appengine.apps.firewall.ingressRules.batchUpdate
-# --ingressRules item shape: {action?: "UNSPECIFIED_ACTION"|"ALLOW"|"DENY", description?: string, priority?: int, sourceRange?: string}
 export def "appengine-apps-firewall-ingress-rules-batch-update" [
   apps_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1211,7 +1220,7 @@ export def "appengine-apps-firewall-ingress-rules-batch-update" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --ingress-rules: list # A list of FirewallRules to replace the existing set. — item shape: {action?: "UNSPECIFIED_ACTION"|"ALLOW"|"DENY", description?: string, priority?: int, sourceRange?: string}
-]: any -> record<ingressRules: table<action: string, description: string, priority: int, sourceRange: string>> {
+]: any -> oneof<record<ingressRules: table<action: string, description: string, priority: int, sourceRange: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1265,7 +1274,7 @@ export def "appengine-apps-locations-list" [
   --filter: string # A filter to narrow down results to a preferred subset. The filtering language accepts strings like "displayName=tokyo", and is documented in more detail in AIP-160 (https://google.aip.dev/160).
   --page-size: int # The maximum number of results to return. If not set, the service selects a default.
   --page-token: string # A page token received from the next_page_token field in the response. Send that page token to receive the subsequent page.
-]: nothing -> record<locations: table<displayName: string, labels: record, locationId: string, metadata: record, name: string>, nextPageToken: string> {
+]: nothing -> oneof<record<locations: table<displayName: string, labels: record, locationId: string, metadata: record, name: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
@@ -1314,7 +1323,7 @@ export def "appengine-apps-locations-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<displayName: string, labels: record, locationId: string, metadata: record, name: string> {
+]: nothing -> oneof<record<displayName: string, labels: record, locationId: string, metadata: record, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
@@ -1366,7 +1375,7 @@ export def "appengine-apps-operations-list" [
   --filter: string # The standard list filter.
   --page-size: int # The standard list page size.
   --page-token: string # The standard list page token.
-]: nothing -> record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>> {
+]: nothing -> oneof<record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
@@ -1415,7 +1424,7 @@ export def "appengine-apps-operations-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: nothing -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
@@ -1466,7 +1475,7 @@ export def "appengine-apps-services-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # Maximum results to return per page.
   --page-token: string # Continuation token for fetching the next page of results.
-]: nothing -> record<nextPageToken: string, services: table<id: string, labels: record, name: string, networkSettings: record, split: record>> {
+]: nothing -> oneof<record<nextPageToken: string, services: table<id: string, labels: record, name: string, networkSettings: record, split: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
@@ -1515,7 +1524,7 @@ export def "appengine-apps-services-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: nothing -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
@@ -1565,7 +1574,7 @@ export def "appengine-apps-services-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<id: string, labels: record, name: string, networkSettings: record<ingressTrafficAllowed: string>, split: record<allocations: record, shardBy: string>> {
+]: nothing -> oneof<record<id: string, labels: record, name: string, networkSettings: record<ingressTrafficAllowed: string>, split: record<allocations: record, shardBy: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
@@ -1592,8 +1601,6 @@ export def "appengine-apps-services-get" [
 #
 # PATCH /v1beta/apps/{appsId}/services/{servicesId}
 # operationId: appengine.apps.services.patch
-# --networkSettings shape: {ingressTrafficAllowed?: "INGRESS_TRAFFIC_ALLOWED_UNSPECIFIED"|"INGRESS_TRAFFIC_ALLOWED_ALL"|"INGRESS_TRAFFIC_ALLOWED_INTERNAL_ONLY"|"INGRESS_TRAFFIC_ALLOWED_INTERNAL_AND_LB"}
-# --split shape: {allocations?: record, shardBy?: "UNSPECIFIED"|"COOKIE"|"IP"|"RANDOM"}
 export def "appengine-apps-services-patch" [
   apps_id: string
   services_id: string
@@ -1624,7 +1631,7 @@ export def "appengine-apps-services-patch" [
   --name: string # Full path to the Service resource in the API. Example: apps/myapp/services/default.@OutputOnly
   --network-settings: record # A NetworkSettings resource is a container for ingress settings for a version or service. — shape: {ingressTrafficAllowed?: "INGRESS_TRAFFIC_ALLOWED_UNSPECIFIED"|"INGRESS_TRAFFIC_ALLOWED_ALL"|"INGRESS_TRAFFIC_ALLOWED_INTERNAL_ONLY"|"INGRESS_TRAFFIC_ALLOWED_INTERNAL_AND_LB"}
   --split: record # Traffic routing configuration for versions within a single service. Traffic splits define how traffic directed to the service is assigned to versions. — shape: {allocations?: record, shardBy?: "UNSPECIFIED"|"COOKIE"|"IP"|"RANDOM"}
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1680,7 +1687,7 @@ export def "appengine-apps-services-versions-list" [
   --page-size: int # Maximum results to return per page.
   --page-token: string # Continuation token for fetching the next page of results.
   --view: string@view-completer-1 # Controls the set of fields returned in the List response.
-]: nothing -> record<nextPageToken: string, versions: table<apiConfig: record, appEngineApis: bool, automaticScaling: record, basicScaling: record, betaSettings: record, buildEnvVariables: record, createTime: string, createdBy: string, defaultExpiration: string, deployment: record, diskUsageBytes: string, endpointsApiService: record, entrypoint: record, env: string, envVariables: record, errorHandlers: list, flexibleRuntimeSettings: record, handlers: list, healthCheck: record, id: string, inboundServices: list, instanceClass: string, libraries: list, livenessCheck: record, manualScaling: record, name: string, network: record, nobuildFilesRegex: string, readinessCheck: record, resources: record, runtime: string, runtimeApiVersion: string, runtimeChannel: string, runtimeMainExecutablePath: string, serviceAccount: string, servingStatus: string, threadsafe: bool, versionUrl: string, vm: bool, vpcAccessConnector: record, zones: list>> {
+]: nothing -> oneof<record<nextPageToken: string, versions: table<apiConfig: record, appEngineApis: bool, automaticScaling: record, basicScaling: record, betaSettings: record, buildEnvVariables: record, createTime: string, createdBy: string, defaultExpiration: string, deployment: record, diskUsageBytes: string, endpointsApiService: record, entrypoint: record, env: string, envVariables: record, errorHandlers: list, flexibleRuntimeSettings: record, handlers: list, healthCheck: record, id: string, inboundServices: list, instanceClass: string, libraries: list, livenessCheck: record, manualScaling: record, name: string, network: record, nobuildFilesRegex: string, readinessCheck: record, resources: record, runtime: string, runtimeApiVersion: string, runtimeChannel: string, runtimeMainExecutablePath: string, serviceAccount: string, servingStatus: string, threadsafe: bool, versionUrl: string, vm: bool, vpcAccessConnector: record, zones: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
@@ -1707,23 +1714,6 @@ export def "appengine-apps-services-versions-list" [
 #
 # POST /v1beta/apps/{appsId}/services/{servicesId}/versions
 # operationId: appengine.apps.services.versions.create
-# --apiConfig shape: {authFailAction?: "AUTH_FAIL_ACTION_UNSPECIFIED"|"AUTH_FAIL_ACTION_REDIRECT"|"AUTH_FAIL_ACTION_UNAUTHORIZED", login?: "LOGIN_UNSPECIFIED"|"LOGIN_OPTIONAL"|"LOGIN_ADMIN"|"LOGIN_REQUIRED", script?: string, securityLevel?: "SECURE_UNSPECIFIED"|"SECURE_DEFAULT"|"SECURE_NEVER"|"SECURE_OPTIONAL"|"SECURE_ALWAYS", url?: string}
-# --automaticScaling shape: {coolDownPeriod?: string, cpuUtilization?: record, customMetrics?: list, diskUtilization?: record, maxConcurrentRequests?: int, maxIdleInstances?: int, maxPendingLatency?: string, maxTotalInstances?: int, minIdleInstances?: int, minPendingLatency?: string, minTotalInstances?: int, networkUtilization?: record, requestUtilization?: record, standardSchedulerSettings?: record}
-# --basicScaling shape: {idleTimeout?: string, maxInstances?: int}
-# --deployment shape: {build?: record, cloudBuildOptions?: record, container?: record, files?: record, zip?: record}
-# --endpointsApiService shape: {configId?: string, disableTraceSampling?: bool, name?: string, rolloutStrategy?: "UNSPECIFIED_ROLLOUT_STRATEGY"|"FIXED"|"MANAGED"}
-# --entrypoint shape: {shell?: string}
-# --errorHandlers item shape: {errorCode?: "ERROR_CODE_UNSPECIFIED"|"ERROR_CODE_DEFAULT"|"ERROR_CODE_OVER_QUOTA"|"ERROR_CODE_DOS_API_DENIAL"|"ERROR_CODE_TIMEOUT", mimeType?: string, staticFile?: string}
-# --flexibleRuntimeSettings shape: {operatingSystem?: string, runtimeVersion?: string}
-# --handlers item shape: {apiEndpoint?: record, authFailAction?: "AUTH_FAIL_ACTION_UNSPECIFIED"|"AUTH_FAIL_ACTION_REDIRECT"|"AUTH_FAIL_ACTION_UNAUTHORIZED", login?: "LOGIN_UNSPECIFIED"|"LOGIN_OPTIONAL"|"LOGIN_ADMIN"|"LOGIN_REQUIRED", redirectHttpResponseCode?: "REDIRECT_HTTP_RESPONSE_CODE_UNSPECIFIED"|"REDIRECT_HTTP_RESPONSE_CODE_301"|"REDIRECT_HTTP_RESPONSE_CODE_302"|"REDIRECT_HTTP_RESPONSE_CODE_303"|"REDIRECT_HTTP_RESPONSE_CODE_307", script?: record, ... (3 more fields)}
-# --healthCheck shape: {checkInterval?: string, disableHealthCheck?: bool, healthyThreshold?: int, host?: string, restartThreshold?: int, timeout?: string, unhealthyThreshold?: int}
-# --libraries item shape: {name?: string, version?: string}
-# --livenessCheck shape: {checkInterval?: string, failureThreshold?: int, host?: string, initialDelay?: string, path?: string, successThreshold?: int, timeout?: string}
-# --manualScaling shape: {instances?: int}
-# --network shape: {forwardedPorts?: list<string>, instanceIpMode?: "INSTANCE_IP_MODE_UNSPECIFIED"|"EXTERNAL"|"INTERNAL", instanceTag?: string, name?: string, sessionAffinity?: bool, subnetworkName?: string}
-# --readinessCheck shape: {appStartTimeout?: string, checkInterval?: string, failureThreshold?: int, host?: string, path?: string, successThreshold?: int, timeout?: string}
-# --resources shape: {cpu?: float, diskGb?: float, kmsKeyReference?: string, memoryGb?: float, volumes?: list}
-# --vpcAccessConnector shape: {egressSetting?: "EGRESS_SETTING_UNSPECIFIED"|"ALL_TRAFFIC"|"PRIVATE_IP_RANGES", name?: string}
 export def "appengine-apps-services-versions-create" [
   apps_id: string
   services_id: string
@@ -1788,7 +1778,7 @@ export def "appengine-apps-services-versions-create" [
   --vm: oneof<nothing, bool> # Whether to deploy this version in a container on a virtual machine.
   --vpc-access-connector: record # VPC access connector specification. — shape: {egressSetting?: "EGRESS_SETTING_UNSPECIFIED"|"ALL_TRAFFIC"|"PRIVATE_IP_RANGES", name?: string}
   --zones: list<string> # The Google Compute Engine zones that are supported by this version in the App Engine flexible environment. Deprecated.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1842,7 +1832,7 @@ export def "appengine-apps-services-versions-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: nothing -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
@@ -1895,7 +1885,7 @@ export def "appengine-apps-services-versions-get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --view: string@view-completer-1 # Controls the set of fields returned in the Get response.
-]: nothing -> record<apiConfig: record<authFailAction: string, login: string, script: string, securityLevel: string, url: string>, appEngineApis: bool, automaticScaling: record<coolDownPeriod: string, cpuUtilization: record<aggregationWindowLength: string, targetUtilization: float>, customMetrics: list<record>, diskUtilization: record<targetReadBytesPerSecond: int, targetReadOpsPerSecond: int, targetWriteBytesPerSecond: int, targetWriteOpsPerSecond: int>, maxConcurrentRequests: int, maxIdleInstances: int, maxPendingLatency: string, maxTotalInstances: int, minIdleInstances: int, minPendingLatency: string, minTotalInstances: int, networkUtilization: record<targetReceivedBytesPerSecond: int, targetReceivedPacketsPerSecond: int, targetSentBytesPerSecond: int, targetSentPacketsPerSecond: int>, requestUtilization: record<targetConcurrentRequests: int, targetRequestCountPerSecond: int>, standardSchedulerSettings: record<maxInstances: int, minInstances: int, targetCpuUtilization: float, targetThroughputUtilization: float>>, basicScaling: record<idleTimeout: string, maxInstances: int>, betaSettings: record, buildEnvVariables: record, createTime: string, createdBy: string, defaultExpiration: string, deployment: record<build: record<cloudBuildId: string>, cloudBuildOptions: record<appYamlPath: string, cloudBuildTimeout: string>, container: record<image: string>, files: record, zip: record<filesCount: int, sourceUrl: string>>, diskUsageBytes: string, endpointsApiService: record<configId: string, disableTraceSampling: bool, name: string, rolloutStrategy: string>, entrypoint: record<shell: string>, env: string, envVariables: record, errorHandlers: table<errorCode: string, mimeType: string, staticFile: string>, flexibleRuntimeSettings: record<operatingSystem: string, runtimeVersion: string>, handlers: table<apiEndpoint: record, authFailAction: string, login: string, redirectHttpResponseCode: string, script: record, securityLevel: string, staticFiles: record, urlRegex: string>, healthCheck: record<checkInterval: string, disableHealthCheck: bool, healthyThreshold: int, host: string, restartThreshold: int, timeout: string, unhealthyThreshold: int>, id: string, inboundServices: list<string>, instanceClass: string, libraries: table<name: string, version: string>, livenessCheck: record<checkInterval: string, failureThreshold: int, host: string, initialDelay: string, path: string, successThreshold: int, timeout: string>, manualScaling: record<instances: int>, name: string, network: record<forwardedPorts: list<string>, instanceIpMode: string, instanceTag: string, name: string, sessionAffinity: bool, subnetworkName: string>, nobuildFilesRegex: string, readinessCheck: record<appStartTimeout: string, checkInterval: string, failureThreshold: int, host: string, path: string, successThreshold: int, timeout: string>, resources: record<cpu: float, diskGb: float, kmsKeyReference: string, memoryGb: float, volumes: list<record>>, runtime: string, runtimeApiVersion: string, runtimeChannel: string, runtimeMainExecutablePath: string, serviceAccount: string, servingStatus: string, threadsafe: bool, versionUrl: string, vm: bool, vpcAccessConnector: record<egressSetting: string, name: string>, zones: list<string>> {
+]: nothing -> oneof<record<apiConfig: record<authFailAction: string, login: string, script: string, securityLevel: string, url: string>, appEngineApis: bool, automaticScaling: record<coolDownPeriod: string, cpuUtilization: record<aggregationWindowLength: string, targetUtilization: float>, customMetrics: list<record>, diskUtilization: record<targetReadBytesPerSecond: int, targetReadOpsPerSecond: int, targetWriteBytesPerSecond: int, targetWriteOpsPerSecond: int>, maxConcurrentRequests: int, maxIdleInstances: int, maxPendingLatency: string, maxTotalInstances: int, minIdleInstances: int, minPendingLatency: string, minTotalInstances: int, networkUtilization: record<targetReceivedBytesPerSecond: int, targetReceivedPacketsPerSecond: int, targetSentBytesPerSecond: int, targetSentPacketsPerSecond: int>, requestUtilization: record<targetConcurrentRequests: int, targetRequestCountPerSecond: int>, standardSchedulerSettings: record<maxInstances: int, minInstances: int, targetCpuUtilization: float, targetThroughputUtilization: float>>, basicScaling: record<idleTimeout: string, maxInstances: int>, betaSettings: record, buildEnvVariables: record, createTime: string, createdBy: string, defaultExpiration: string, deployment: record<build: record<cloudBuildId: string>, cloudBuildOptions: record<appYamlPath: string, cloudBuildTimeout: string>, container: record<image: string>, files: record, zip: record<filesCount: int, sourceUrl: string>>, diskUsageBytes: string, endpointsApiService: record<configId: string, disableTraceSampling: bool, name: string, rolloutStrategy: string>, entrypoint: record<shell: string>, env: string, envVariables: record, errorHandlers: table<errorCode: string, mimeType: string, staticFile: string>, flexibleRuntimeSettings: record<operatingSystem: string, runtimeVersion: string>, handlers: table<apiEndpoint: record, authFailAction: string, login: string, redirectHttpResponseCode: string, script: record, securityLevel: string, staticFiles: record, urlRegex: string>, healthCheck: record<checkInterval: string, disableHealthCheck: bool, healthyThreshold: int, host: string, restartThreshold: int, timeout: string, unhealthyThreshold: int>, id: string, inboundServices: list<string>, instanceClass: string, libraries: table<name: string, version: string>, livenessCheck: record<checkInterval: string, failureThreshold: int, host: string, initialDelay: string, path: string, successThreshold: int, timeout: string>, manualScaling: record<instances: int>, name: string, network: record<forwardedPorts: list<string>, instanceIpMode: string, instanceTag: string, name: string, sessionAffinity: bool, subnetworkName: string>, nobuildFilesRegex: string, readinessCheck: record<appStartTimeout: string, checkInterval: string, failureThreshold: int, host: string, path: string, successThreshold: int, timeout: string>, resources: record<cpu: float, diskGb: float, kmsKeyReference: string, memoryGb: float, volumes: list<record>>, runtime: string, runtimeApiVersion: string, runtimeChannel: string, runtimeMainExecutablePath: string, serviceAccount: string, servingStatus: string, threadsafe: bool, versionUrl: string, vm: bool, vpcAccessConnector: record<egressSetting: string, name: string>, zones: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
@@ -1923,23 +1913,6 @@ export def "appengine-apps-services-versions-get" [
 #
 # PATCH /v1beta/apps/{appsId}/services/{servicesId}/versions/{versionsId}
 # operationId: appengine.apps.services.versions.patch
-# --apiConfig shape: {authFailAction?: "AUTH_FAIL_ACTION_UNSPECIFIED"|"AUTH_FAIL_ACTION_REDIRECT"|"AUTH_FAIL_ACTION_UNAUTHORIZED", login?: "LOGIN_UNSPECIFIED"|"LOGIN_OPTIONAL"|"LOGIN_ADMIN"|"LOGIN_REQUIRED", script?: string, securityLevel?: "SECURE_UNSPECIFIED"|"SECURE_DEFAULT"|"SECURE_NEVER"|"SECURE_OPTIONAL"|"SECURE_ALWAYS", url?: string}
-# --automaticScaling shape: {coolDownPeriod?: string, cpuUtilization?: record, customMetrics?: list, diskUtilization?: record, maxConcurrentRequests?: int, maxIdleInstances?: int, maxPendingLatency?: string, maxTotalInstances?: int, minIdleInstances?: int, minPendingLatency?: string, minTotalInstances?: int, networkUtilization?: record, requestUtilization?: record, standardSchedulerSettings?: record}
-# --basicScaling shape: {idleTimeout?: string, maxInstances?: int}
-# --deployment shape: {build?: record, cloudBuildOptions?: record, container?: record, files?: record, zip?: record}
-# --endpointsApiService shape: {configId?: string, disableTraceSampling?: bool, name?: string, rolloutStrategy?: "UNSPECIFIED_ROLLOUT_STRATEGY"|"FIXED"|"MANAGED"}
-# --entrypoint shape: {shell?: string}
-# --errorHandlers item shape: {errorCode?: "ERROR_CODE_UNSPECIFIED"|"ERROR_CODE_DEFAULT"|"ERROR_CODE_OVER_QUOTA"|"ERROR_CODE_DOS_API_DENIAL"|"ERROR_CODE_TIMEOUT", mimeType?: string, staticFile?: string}
-# --flexibleRuntimeSettings shape: {operatingSystem?: string, runtimeVersion?: string}
-# --handlers item shape: {apiEndpoint?: record, authFailAction?: "AUTH_FAIL_ACTION_UNSPECIFIED"|"AUTH_FAIL_ACTION_REDIRECT"|"AUTH_FAIL_ACTION_UNAUTHORIZED", login?: "LOGIN_UNSPECIFIED"|"LOGIN_OPTIONAL"|"LOGIN_ADMIN"|"LOGIN_REQUIRED", redirectHttpResponseCode?: "REDIRECT_HTTP_RESPONSE_CODE_UNSPECIFIED"|"REDIRECT_HTTP_RESPONSE_CODE_301"|"REDIRECT_HTTP_RESPONSE_CODE_302"|"REDIRECT_HTTP_RESPONSE_CODE_303"|"REDIRECT_HTTP_RESPONSE_CODE_307", script?: record, ... (3 more fields)}
-# --healthCheck shape: {checkInterval?: string, disableHealthCheck?: bool, healthyThreshold?: int, host?: string, restartThreshold?: int, timeout?: string, unhealthyThreshold?: int}
-# --libraries item shape: {name?: string, version?: string}
-# --livenessCheck shape: {checkInterval?: string, failureThreshold?: int, host?: string, initialDelay?: string, path?: string, successThreshold?: int, timeout?: string}
-# --manualScaling shape: {instances?: int}
-# --network shape: {forwardedPorts?: list<string>, instanceIpMode?: "INSTANCE_IP_MODE_UNSPECIFIED"|"EXTERNAL"|"INTERNAL", instanceTag?: string, name?: string, sessionAffinity?: bool, subnetworkName?: string}
-# --readinessCheck shape: {appStartTimeout?: string, checkInterval?: string, failureThreshold?: int, host?: string, path?: string, successThreshold?: int, timeout?: string}
-# --resources shape: {cpu?: float, diskGb?: float, kmsKeyReference?: string, memoryGb?: float, volumes?: list}
-# --vpcAccessConnector shape: {egressSetting?: "EGRESS_SETTING_UNSPECIFIED"|"ALL_TRAFFIC"|"PRIVATE_IP_RANGES", name?: string}
 export def "appengine-apps-services-versions-patch" [
   apps_id: string
   services_id: string
@@ -2006,7 +1979,7 @@ export def "appengine-apps-services-versions-patch" [
   --vm: oneof<nothing, bool> # Whether to deploy this version in a container on a virtual machine.
   --vpc-access-connector: record # VPC access connector specification. — shape: {egressSetting?: "EGRESS_SETTING_UNSPECIFIED"|"ALL_TRAFFIC"|"PRIVATE_IP_RANGES", name?: string}
   --zones: list<string> # The Google Compute Engine zones that are supported by this version in the App Engine flexible environment. Deprecated.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2063,7 +2036,7 @@ export def "appengine-apps-services-versions-instances-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # Maximum results to return per page.
   --page-token: string # Continuation token for fetching the next page of results.
-]: nothing -> record<instances: table<appEngineRelease: string, availability: string, averageLatency: int, errors: int, id: string, memoryUsage: string, name: string, qps: float, requests: int, startTime: string, vmDebugEnabled: bool, vmId: string, vmIp: string, vmLiveness: string, vmName: string, vmStatus: string, vmZoneName: string>, nextPageToken: string> {
+]: nothing -> oneof<record<instances: table<appEngineRelease: string, availability: string, averageLatency: int, errors: int, id: string, memoryUsage: string, name: string, qps: float, requests: int, startTime: string, vmDebugEnabled: bool, vmId: string, vmIp: string, vmLiveness: string, vmName: string, vmStatus: string, vmZoneName: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
@@ -2116,7 +2089,7 @@ export def "appengine-apps-services-versions-instances-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: nothing -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
@@ -2170,7 +2143,7 @@ export def "appengine-apps-services-versions-instances-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<appEngineRelease: string, availability: string, averageLatency: int, errors: int, id: string, memoryUsage: string, name: string, qps: float, requests: int, startTime: string, vmDebugEnabled: bool, vmId: string, vmIp: string, vmLiveness: string, vmName: string, vmStatus: string, vmZoneName: string> {
+]: nothing -> oneof<record<appEngineRelease: string, availability: string, averageLatency: int, errors: int, id: string, memoryUsage: string, name: string, qps: float, requests: int, startTime: string, vmDebugEnabled: bool, vmId: string, vmIp: string, vmLiveness: string, vmName: string, vmStatus: string, vmZoneName: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
@@ -2225,7 +2198,7 @@ export def "appengine-apps-services-versions-instances-debug" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --ssh-key: string # Public SSH key to add to the instance. Examples: [USERNAME]:ssh-rsa [KEY_VALUE] [USERNAME] [USERNAME]:ssh-rsa [KEY_VALUE] google-ssh {"userName":"[USERNAME]","expireOn":"[EXPIRE_TIME]"}For more information, see Adding and Removing SSH Keys (https://cloud.google.com/compute/docs/instances/adding-removing-ssh-keys).
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2280,7 +2253,7 @@ export def "appengine-apps-repair" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2334,7 +2307,7 @@ export def "appengine-projects-locations-list" [
   --filter: string # A filter to narrow down results to a preferred subset. The filtering language accepts strings like "displayName=tokyo", and is documented in more detail in AIP-160 (https://google.aip.dev/160).
   --page-size: int # The maximum number of results to return. If not set, the service selects a default.
   --page-token: string # A page token received from the next_page_token field in the response. Send that page token to receive the subsequent page.
-]: nothing -> record<locations: table<displayName: string, labels: record, locationId: string, metadata: record, name: string>, nextPageToken: string> {
+]: nothing -> oneof<record<locations: table<displayName: string, labels: record, locationId: string, metadata: record, name: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($projects_id | is-empty) { error make --unspanned { msg: "path parameter 'projectsId' must be non-empty" } }
@@ -2383,7 +2356,7 @@ export def "appengine-projects-locations-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<displayName: string, labels: record, locationId: string, metadata: record, name: string> {
+]: nothing -> oneof<record<displayName: string, labels: record, locationId: string, metadata: record, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($projects_id | is-empty) { error make --unspanned { msg: "path parameter 'projectsId' must be non-empty" } }
@@ -2410,9 +2383,6 @@ export def "appengine-projects-locations-get" [
 #
 # POST /v1beta/projects/{projectsId}/locations/{locationsId}/applications
 # operationId: appengine.projects.locations.applications.create
-# --dispatchRules item shape: {domain?: string, path?: string, service?: string}
-# --featureSettings shape: {splitHealthChecks?: bool, useContainerOptimizedOs?: bool}
-# --iap shape: {enabled?: bool, oauth2ClientId?: string, oauth2ClientSecret?: string}
 export def "appengine-projects-locations-applications-create" [
   projects_id: string
   locations_id: string
@@ -2446,7 +2416,7 @@ export def "appengine-projects-locations-applications-create" [
   --location-id: string # Location from which this application runs. Application instances run out of the data centers in the specified location, which is also where all of the application's end user content is stored.Defaults to us-central.View the list of supported locations (https://cloud.google.com/appengine/docs/locations).
   --service-account: string # The service account associated with the application. This is the app-level default identity. If no identity provided during create version, Admin API will fallback to this one.
   --serving-status: string@serving-status-completer # Serving status of this application.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2500,7 +2470,7 @@ export def "appengine-projects-locations-applications-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<authDomain: string, codeBucket: string, databaseType: string, defaultBucket: string, defaultCookieExpiration: string, defaultHostname: string, dispatchRules: table<domain: string, path: string, service: string>, featureSettings: record<splitHealthChecks: bool, useContainerOptimizedOs: bool>, gcrDomain: string, iap: record<enabled: bool, oauth2ClientId: string, oauth2ClientSecret: string, oauth2ClientSecretSha256: string>, id: string, locationId: string, name: string, serviceAccount: string, servingStatus: string> {
+]: nothing -> oneof<record<authDomain: string, codeBucket: string, databaseType: string, defaultBucket: string, defaultCookieExpiration: string, defaultHostname: string, dispatchRules: table<domain: string, path: string, service: string>, featureSettings: record<splitHealthChecks: bool, useContainerOptimizedOs: bool>, gcrDomain: string, iap: record<enabled: bool, oauth2ClientId: string, oauth2ClientSecret: string, oauth2ClientSecretSha256: string>, id: string, locationId: string, name: string, serviceAccount: string, servingStatus: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($projects_id | is-empty) { error make --unspanned { msg: "path parameter 'projectsId' must be non-empty" } }
@@ -2553,7 +2523,7 @@ export def "appengine-projects-locations-applications-repair" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2610,7 +2580,7 @@ export def "appengine-projects-locations-operations-list" [
   --filter: string # The standard list filter.
   --page-size: int # The standard list page size.
   --page-token: string # The standard list page token.
-]: nothing -> record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>> {
+]: nothing -> oneof<record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($projects_id | is-empty) { error make --unspanned { msg: "path parameter 'projectsId' must be non-empty" } }
@@ -2661,7 +2631,7 @@ export def "appengine-projects-locations-operations-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: nothing -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($projects_id | is-empty) { error make --unspanned { msg: "path parameter 'projectsId' must be non-empty" } }

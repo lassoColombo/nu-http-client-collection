@@ -12,27 +12,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -40,8 +49,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -52,7 +66,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -87,7 +110,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["https://www.dnd5eapi.co" "http://localhost:3000"] }
@@ -116,9 +140,9 @@ def endpoint-completer [] { ["ability-scores" "alignments" "backgrounds" "classe
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-api" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-api" "get-api-ability-scores-index" "get-api-alignments-index" "get-api-backgrounds-index" "get-api-classes-index" "get-api-classes-index-features" "get-api-classes-index-levels" "get-api-classes-index-levels-class-level" "get-api-classes-index-levels-class-level-features" "get-api-classes-index-levels-spell-level-spells" "get-api-classes-index-multi-classing" "get-api-classes-index-proficiencies" "get-api-classes-index-spellcasting" "get-api-classes-index-spells" "get-api-classes-index-subclasses" "get-api-conditions-index" "get-api-damage-types-index" "get-api-equipment-categories-index" "get-api-equipment-index" "get-api-feats-index" "get-api-features-index" "get-api-languages-index" "get-api-magic-items-index" "get-api-magic-schools-index" "get-api-monsters" "get-api-monsters-index" "get-api-proficiencies-index" "get-api-races-index" "get-api-races-index-proficiencies" "get-api-races-index-subraces" "get-api-races-index-traits" "get-api-rule-sections-index" "get-api-rules-index" "get-api-skills-index" "get-api-spells" "get-api-spells-index" "get-api-subclasses-index" "get-api-subclasses-index-features" "get-api-subclasses-index-levels" "get-api-subclasses-index-levels-subclass-level" "get-api-subclasses-index-levels-subclass-level-features" "get-api-subraces-index" "get-api-subraces-index-proficiencies" "get-api-subraces-index-traits" "get-api-traits-index" "get-api-weapon-properties-index" "get-api-endpoint" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -149,7 +173,7 @@ export def "get-api" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api" $auth.query)
@@ -183,7 +207,7 @@ export def "get-api-ability-scores-index" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<index: string, name: string, url: string, desc: list<string>, full_name: string, skills: table<index: string, name: string, url: string>> {
+]: nothing -> oneof<record<index: string, name: string, url: string, desc: list<string>, full_name: string, skills: table<index: string, name: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
@@ -218,7 +242,7 @@ export def "get-api-alignments-index" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<index: string, name: string, url: string, abbreviation: string, desc: string> {
+]: nothing -> oneof<record<index: string, name: string, url: string, abbreviation: string, desc: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
@@ -253,7 +277,7 @@ export def "get-api-backgrounds-index" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<index: string, name: string, url: string, bonds: record<choose: float, desc: string, from: any, type: string>, feature: record<desc: list<string>, name: string>, flaws: record<choose: float, desc: string, from: any, type: string>, ideals: record<choose: float, desc: string, from: any, type: string>, language_options: record<choose: float, desc: string, from: any, type: string>, personality_traits: record, starting_equipment: table<index: string, name: string, url: string>, starting_equipment_options: record<choose: float, desc: string, from: any, type: string>, starting_proficiencies: table<index: string, name: string, url: string>> {
+]: nothing -> oneof<record<index: string, name: string, url: string, bonds: record<choose: float, desc: string, from: any, type: string>, feature: record<desc: list<string>, name: string>, flaws: record<choose: float, desc: string, from: any, type: string>, ideals: record<choose: float, desc: string, from: any, type: string>, language_options: record<choose: float, desc: string, from: any, type: string>, personality_traits: record, starting_equipment: table<index: string, name: string, url: string>, starting_equipment_options: record<choose: float, desc: string, from: any, type: string>, starting_proficiencies: table<index: string, name: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
@@ -288,7 +312,7 @@ export def "get-api-classes-index" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<index: string, name: string, url: string, class_levels: string, hit_die: float, multi_classing: record<prerequisite_options: list<record>, prerequisites: list<record>, proficiencies: list<record>, proficiency_choices: list<record>>, proficiencies: table<index: string, name: string, url: string>, proficiency_choices: table<choose: float, desc: string, from: any, type: string>, saving_throws: table<index: string, name: string, url: string>, spellcasting: record<info: list<record>, level: float, spellcasting_ability: record<index: string, name: string, url: string>>, spells: string, starting_equipment: table<equipment: record, quantity: float>, starting_equipment_options: table<choose: float, desc: string, from: any, type: string>, subclasses: table<index: string, name: string, url: string>> {
+]: nothing -> oneof<record<index: string, name: string, url: string, class_levels: string, hit_die: float, multi_classing: record<prerequisite_options: list<record>, prerequisites: list<record>, proficiencies: list<record>, proficiency_choices: list<record>>, proficiencies: table<index: string, name: string, url: string>, proficiency_choices: table<choose: float, desc: string, from: any, type: string>, saving_throws: table<index: string, name: string, url: string>, spellcasting: record<info: list<record>, level: float, spellcasting_ability: record<index: string, name: string, url: string>>, spells: string, starting_equipment: table<equipment: record, quantity: float>, starting_equipment_options: table<choose: float, desc: string, from: any, type: string>, subclasses: table<index: string, name: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
@@ -323,7 +347,7 @@ export def "get-api-classes-index-features" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<count: float, results: table<index: string, name: string, url: string>> {
+]: nothing -> oneof<record<count: float, results: table<index: string, name: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
@@ -359,7 +383,7 @@ export def "get-api-classes-index-levels" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --subclass: string # Adds subclasses for class to the response
-]: nothing -> table<ability_score_bonuses: float, class_specific: any, features: list<record>, index: string, level: float, prof_bonus: float, spellcasting: record<cantrips_known: float, spell_slots_level_1: float, spell_slots_level_2: float, spell_slots_level_3: float, spell_slots_level_4: float, spell_slots_level_5: float, spell_slots_level_6: float, spell_slots_level_7: float, spell_slots_level_8: float, spell_slots_level_9: float, spells_known: float>, url: string> {
+]: nothing -> oneof<table<ability_score_bonuses: float, class_specific: any, features: list<record>, index: string, level: float, prof_bonus: float, spellcasting: record<cantrips_known: float, spell_slots_level_1: float, spell_slots_level_2: float, spell_slots_level_3: float, spell_slots_level_4: float, spell_slots_level_5: float, spell_slots_level_6: float, spell_slots_level_7: float, spell_slots_level_8: float, spell_slots_level_9: float, spells_known: float>, url: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
@@ -396,7 +420,7 @@ export def "get-api-classes-index-levels-class-level" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<ability_score_bonuses: float, class_specific: any, features: table<index: string, name: string, url: string>, index: string, level: float, prof_bonus: float, spellcasting: record<cantrips_known: float, spell_slots_level_1: float, spell_slots_level_2: float, spell_slots_level_3: float, spell_slots_level_4: float, spell_slots_level_5: float, spell_slots_level_6: float, spell_slots_level_7: float, spell_slots_level_8: float, spell_slots_level_9: float, spells_known: float>, url: string> {
+]: nothing -> oneof<record<ability_score_bonuses: float, class_specific: any, features: table<index: string, name: string, url: string>, index: string, level: float, prof_bonus: float, spellcasting: record<cantrips_known: float, spell_slots_level_1: float, spell_slots_level_2: float, spell_slots_level_3: float, spell_slots_level_4: float, spell_slots_level_5: float, spell_slots_level_6: float, spell_slots_level_7: float, spell_slots_level_8: float, spell_slots_level_9: float, spells_known: float>, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
@@ -433,7 +457,7 @@ export def "get-api-classes-index-levels-class-level-features" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<count: float, results: table<index: string, name: string, url: string>> {
+]: nothing -> oneof<record<count: float, results: table<index: string, name: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
@@ -470,7 +494,7 @@ export def "get-api-classes-index-levels-spell-level-spells" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<count: float, results: table<index: string, name: string, url: string>> {
+]: nothing -> oneof<record<count: float, results: table<index: string, name: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
@@ -506,7 +530,7 @@ export def "get-api-classes-index-multi-classing" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<prerequisite_options: table<choose: float, desc: string, from: any, type: string>, prerequisites: table<ability_score: record, minimum_score: float>, proficiencies: table<index: string, name: string, url: string>, proficiency_choices: table<choose: float, desc: string, from: any, type: string>> {
+]: nothing -> oneof<record<prerequisite_options: table<choose: float, desc: string, from: any, type: string>, prerequisites: table<ability_score: record, minimum_score: float>, proficiencies: table<index: string, name: string, url: string>, proficiency_choices: table<choose: float, desc: string, from: any, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
@@ -541,7 +565,7 @@ export def "get-api-classes-index-proficiencies" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<count: float, results: table<index: string, name: string, url: string>> {
+]: nothing -> oneof<record<count: float, results: table<index: string, name: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
@@ -576,7 +600,7 @@ export def "get-api-classes-index-spellcasting" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<info: table<desc: list, name: string>, level: float, spellcasting_ability: record<index: string, name: string, url: string>> {
+]: nothing -> oneof<record<info: table<desc: list, name: string>, level: float, spellcasting_ability: record<index: string, name: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
@@ -611,7 +635,7 @@ export def "get-api-classes-index-spells" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<count: float, results: table<index: string, name: string, url: string>> {
+]: nothing -> oneof<record<count: float, results: table<index: string, name: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
@@ -646,7 +670,7 @@ export def "get-api-classes-index-subclasses" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<count: float, results: table<index: string, name: string, url: string>> {
+]: nothing -> oneof<record<count: float, results: table<index: string, name: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
@@ -681,7 +705,7 @@ export def "get-api-conditions-index" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<index: string, name: string, url: string, desc: list<string>> {
+]: nothing -> oneof<record<index: string, name: string, url: string, desc: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
@@ -716,7 +740,7 @@ export def "get-api-damage-types-index" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<index: string, name: string, url: string, desc: list<string>> {
+]: nothing -> oneof<record<index: string, name: string, url: string, desc: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
@@ -751,7 +775,7 @@ export def "get-api-equipment-categories-index" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<index: string, name: string, url: string, equipment: table<index: string, name: string, url: string>> {
+]: nothing -> oneof<record<index: string, name: string, url: string, equipment: table<index: string, name: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
@@ -821,7 +845,7 @@ export def "get-api-feats-index" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<index: string, name: string, url: string, desc: list<string>, prerequisites: table<ability_score: record, minimum_score: float>> {
+]: nothing -> oneof<record<index: string, name: string, url: string, desc: list<string>, prerequisites: table<ability_score: record, minimum_score: float>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
@@ -856,7 +880,7 @@ export def "get-api-features-index" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<index: string, name: string, url: string, desc: list<string>, class: record<index: string, name: string, url: string>, feature_specific: any, level: float, parent: record<index: string, name: string, url: string>, prerequisites: list<any>, subclass: record<index: string, name: string, url: string>> {
+]: nothing -> oneof<record<index: string, name: string, url: string, desc: list<string>, class: record<index: string, name: string, url: string>, feature_specific: any, level: float, parent: record<index: string, name: string, url: string>, prerequisites: list<any>, subclass: record<index: string, name: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
@@ -891,7 +915,7 @@ export def "get-api-languages-index" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<index: string, name: string, url: string, desc: string, script: string, type: string, typical_speakers: list<string>> {
+]: nothing -> oneof<record<index: string, name: string, url: string, desc: string, script: string, type: string, typical_speakers: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
@@ -926,7 +950,7 @@ export def "get-api-magic-items-index" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<index: string, name: string, url: string, desc: list<string>, equipment_category: record<index: string, name: string, url: string>, rarity: record<name: string>, variant: bool, variants: table<index: string, name: string, url: string>> {
+]: nothing -> oneof<record<index: string, name: string, url: string, desc: list<string>, equipment_category: record<index: string, name: string, url: string>, rarity: record<name: string>, variant: bool, variants: table<index: string, name: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
@@ -961,7 +985,7 @@ export def "get-api-magic-schools-index" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<index: string, name: string, url: string, desc: string> {
+]: nothing -> oneof<record<index: string, name: string, url: string, desc: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
@@ -996,7 +1020,7 @@ export def "get-api-monsters" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --challenge-rating: list<float> # The challenge rating or ratings to filter on.
-]: nothing -> record<count: float, results: table<index: string, name: string, url: string>> {
+]: nothing -> oneof<record<count: float, results: table<index: string, name: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "challenge_rating" $challenge_rating "multi")] | flatten | str join "&"
@@ -1031,7 +1055,7 @@ export def "get-api-monsters-index" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<index: string, name: string, url: string, desc: list<string>, charisma: float, constitution: float, dexterity: float, intelligence: float, strength: float, wisdom: float, actions: table<action_options: record, actions: list, attack_bonus: float, attacks: list, damage: list, dc: record, desc: string, multiattack_type: string, name: string, options: record>, alignments: string, armor_class: list<record>, challenge_rating: float, condition_immunities: table<index: string, name: string, url: string>, damage_immunities: list<string>, damage_resistances: list<string>, damage_vulnerabilities: list<string>, forms: table<index: string, name: string, url: string>, hit_dice: string, hit_points: float, hit_points_roll: string, image: string, languages: string, legendary_actions: table<action_options: record, actions: list, attack_bonus: float, attacks: list, damage: list, dc: record, desc: string, multiattack_type: string, name: string, options: record>, proficiencies: table<proficiency: record, value: float>, reactions: table<action_options: record, actions: list, attack_bonus: float, attacks: list, damage: list, dc: record, desc: string, multiattack_type: string, name: string, options: record>, senses: record<blindsight: string, darkvision: string, passive_perception: float, tremorsense: string, truesight: string>, size: string, special_abilities: table<attack_bonus: float, damage: list, dc: record, desc: string, name: string, spellcasting: record, usage: record>, speed: record<burrow: string, climb: string, fly: string, swim: string, walk: string>, subtype: string, type: string, xp: float> {
+]: nothing -> oneof<record<index: string, name: string, url: string, desc: list<string>, charisma: float, constitution: float, dexterity: float, intelligence: float, strength: float, wisdom: float, actions: table<action_options: record, actions: list, attack_bonus: float, attacks: list, damage: list, dc: record, desc: string, multiattack_type: string, name: string, options: record>, alignments: string, armor_class: list<record>, challenge_rating: float, condition_immunities: table<index: string, name: string, url: string>, damage_immunities: list<string>, damage_resistances: list<string>, damage_vulnerabilities: list<string>, forms: table<index: string, name: string, url: string>, hit_dice: string, hit_points: float, hit_points_roll: string, image: string, languages: string, legendary_actions: table<action_options: record, actions: list, attack_bonus: float, attacks: list, damage: list, dc: record, desc: string, multiattack_type: string, name: string, options: record>, proficiencies: table<proficiency: record, value: float>, reactions: table<action_options: record, actions: list, attack_bonus: float, attacks: list, damage: list, dc: record, desc: string, multiattack_type: string, name: string, options: record>, senses: record<blindsight: string, darkvision: string, passive_perception: float, tremorsense: string, truesight: string>, size: string, special_abilities: table<attack_bonus: float, damage: list, dc: record, desc: string, name: string, spellcasting: record, usage: record>, speed: record<burrow: string, climb: string, fly: string, swim: string, walk: string>, subtype: string, type: string, xp: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
@@ -1066,7 +1090,7 @@ export def "get-api-proficiencies-index" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<index: string, name: string, url: string, classes: table<index: string, name: string, url: string>, races: table<index: string, name: string, url: string>, reference: record<index: string, name: string, url: string>, type: string> {
+]: nothing -> oneof<record<index: string, name: string, url: string, classes: table<index: string, name: string, url: string>, races: table<index: string, name: string, url: string>, reference: record<index: string, name: string, url: string>, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
@@ -1101,7 +1125,7 @@ export def "get-api-races-index" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<index: string, name: string, url: string, ability_bonuses: table<ability_score: record, bonus: float>, age: string, alignment: string, language_desc: string, languages: table<index: string, name: string, url: string>, size: string, size_description: string, speed: float, starting_proficiencies: table<index: string, name: string, url: string>, starting_proficiency_options: record<choose: float, desc: string, from: any, type: string>, subraces: table<index: string, name: string, url: string>, traits: table<index: string, name: string, url: string>> {
+]: nothing -> oneof<record<index: string, name: string, url: string, ability_bonuses: table<ability_score: record, bonus: float>, age: string, alignment: string, language_desc: string, languages: table<index: string, name: string, url: string>, size: string, size_description: string, speed: float, starting_proficiencies: table<index: string, name: string, url: string>, starting_proficiency_options: record<choose: float, desc: string, from: any, type: string>, subraces: table<index: string, name: string, url: string>, traits: table<index: string, name: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
@@ -1136,7 +1160,7 @@ export def "get-api-races-index-proficiencies" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<count: float, results: table<index: string, name: string, url: string>> {
+]: nothing -> oneof<record<count: float, results: table<index: string, name: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
@@ -1171,7 +1195,7 @@ export def "get-api-races-index-subraces" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<count: float, results: table<index: string, name: string, url: string>> {
+]: nothing -> oneof<record<count: float, results: table<index: string, name: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
@@ -1206,7 +1230,7 @@ export def "get-api-races-index-traits" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<count: float, results: table<index: string, name: string, url: string>> {
+]: nothing -> oneof<record<count: float, results: table<index: string, name: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
@@ -1241,7 +1265,7 @@ export def "get-api-rule-sections-index" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<index: string, name: string, url: string, desc: string> {
+]: nothing -> oneof<record<index: string, name: string, url: string, desc: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
@@ -1276,7 +1300,7 @@ export def "get-api-rules-index" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<index: string, name: string, url: string, desc: string, subsections: table<index: string, name: string, url: string>> {
+]: nothing -> oneof<record<index: string, name: string, url: string, desc: string, subsections: table<index: string, name: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
@@ -1311,7 +1335,7 @@ export def "get-api-skills-index" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<index: string, name: string, url: string, desc: list<string>, ability_score: record<index: string, name: string, url: string>> {
+]: nothing -> oneof<record<index: string, name: string, url: string, desc: list<string>, ability_score: record<index: string, name: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
@@ -1347,7 +1371,7 @@ export def "get-api-spells" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --level: list<int> # The level or levels to filter on.
   --school: list<string> # The magic school or schools to filter on.
-]: nothing -> record<count: float, results: table<index: string, name: string, url: string>> {
+]: nothing -> oneof<record<count: float, results: table<index: string, name: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "level" $level "multi") (serialize-qp "school" $school "multi")] | flatten | str join "&"
@@ -1382,7 +1406,7 @@ export def "get-api-spells-index" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<index: string, name: string, url: string, desc: list<string>, area_of_effect: record<size: float, type: string>, attack_type: string, casting_time: string, classes: table<index: string, name: string, url: string>, components: list<string>, concentration: bool, damage: any, duration: string, higher_level: list<string>, level: float, material: string, range: string, ritual: bool, school: record<index: string, name: string, url: string>, subclasses: table<index: string, name: string, url: string>> {
+]: nothing -> oneof<record<index: string, name: string, url: string, desc: list<string>, area_of_effect: record<size: float, type: string>, attack_type: string, casting_time: string, classes: table<index: string, name: string, url: string>, components: list<string>, concentration: bool, damage: any, duration: string, higher_level: list<string>, level: float, material: string, range: string, ritual: bool, school: record<index: string, name: string, url: string>, subclasses: table<index: string, name: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
@@ -1417,7 +1441,7 @@ export def "get-api-subclasses-index" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<index: string, name: string, url: string, desc: list<string>, class: record<index: string, name: string, url: string>, spells: table<prerequisites: list, spell: record>, subclass_flavor: string, subclass_levels: string> {
+]: nothing -> oneof<record<index: string, name: string, url: string, desc: list<string>, class: record<index: string, name: string, url: string>, spells: table<prerequisites: list, spell: record>, subclass_flavor: string, subclass_levels: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
@@ -1452,7 +1476,7 @@ export def "get-api-subclasses-index-features" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<count: float, results: table<index: string, name: string, url: string>> {
+]: nothing -> oneof<record<count: float, results: table<index: string, name: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
@@ -1487,7 +1511,7 @@ export def "get-api-subclasses-index-levels" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<class: record<index: string, name: string, url: string>, features: list<record>, index: string, level: float, subclass: record<index: string, name: string, url: string>, url: string> {
+]: nothing -> oneof<table<class: record<index: string, name: string, url: string>, features: list<record>, index: string, level: float, subclass: record<index: string, name: string, url: string>, url: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
@@ -1523,7 +1547,7 @@ export def "get-api-subclasses-index-levels-subclass-level" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<ability_score_bonuses: float, classspecific: any, features: table<index: string, name: string, url: string>, index: string, level: float, prof_bonus: float, spellcasting: record<cantrips_known: float, spell_slots_level_1: float, spell_slots_level_2: float, spell_slots_level_3: float, spell_slots_level_4: float, spell_slots_level_5: float, spell_slots_level_6: float, spell_slots_level_7: float, spell_slots_level_8: float, spell_slots_level_9: float, spells_known: float>, url: string> {
+]: nothing -> oneof<record<ability_score_bonuses: float, classspecific: any, features: table<index: string, name: string, url: string>, index: string, level: float, prof_bonus: float, spellcasting: record<cantrips_known: float, spell_slots_level_1: float, spell_slots_level_2: float, spell_slots_level_3: float, spell_slots_level_4: float, spell_slots_level_5: float, spell_slots_level_6: float, spell_slots_level_7: float, spell_slots_level_8: float, spell_slots_level_9: float, spells_known: float>, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
@@ -1560,7 +1584,7 @@ export def "get-api-subclasses-index-levels-subclass-level-features" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<count: float, results: table<index: string, name: string, url: string>> {
+]: nothing -> oneof<record<count: float, results: table<index: string, name: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
@@ -1596,7 +1620,7 @@ export def "get-api-subraces-index" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<index: string, name: string, url: string, ability_bonuses: table<ability_score: record, bonus: float>, desc: string, language_options: record<choose: float, desc: string, from: any, type: string>, languages: table<index: string, name: string, url: string>, race: record<index: string, name: string, url: string>, racial_traits: table<index: string, name: string, url: string>, starting_proficiencies: table<index: string, name: string, url: string>> {
+]: nothing -> oneof<record<index: string, name: string, url: string, ability_bonuses: table<ability_score: record, bonus: float>, desc: string, language_options: record<choose: float, desc: string, from: any, type: string>, languages: table<index: string, name: string, url: string>, race: record<index: string, name: string, url: string>, racial_traits: table<index: string, name: string, url: string>, starting_proficiencies: table<index: string, name: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
@@ -1631,7 +1655,7 @@ export def "get-api-subraces-index-proficiencies" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<count: float, results: table<index: string, name: string, url: string>> {
+]: nothing -> oneof<record<count: float, results: table<index: string, name: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
@@ -1666,7 +1690,7 @@ export def "get-api-subraces-index-traits" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<count: float, results: table<index: string, name: string, url: string>> {
+]: nothing -> oneof<record<count: float, results: table<index: string, name: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
@@ -1701,7 +1725,7 @@ export def "get-api-traits-index" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<index: string, name: string, url: string, desc: list<string>, language_options: record<choose: float, desc: string, from: any, type: string>, proficiencies: table<index: string, name: string, url: string>, proficiency_choices: record<choose: float, desc: string, from: any, type: string>, races: table<index: string, name: string, url: string>, subraces: table<index: string, name: string, url: string>, trait_specific: any> {
+]: nothing -> oneof<record<index: string, name: string, url: string, desc: list<string>, language_options: record<choose: float, desc: string, from: any, type: string>, proficiencies: table<index: string, name: string, url: string>, proficiency_choices: record<choose: float, desc: string, from: any, type: string>, races: table<index: string, name: string, url: string>, subraces: table<index: string, name: string, url: string>, trait_specific: any>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
@@ -1736,7 +1760,7 @@ export def "get-api-weapon-properties-index" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<index: string, name: string, url: string, desc: list<string>> {
+]: nothing -> oneof<record<index: string, name: string, url: string, desc: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
@@ -1771,7 +1795,7 @@ export def "get-api-endpoint" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<count: float, results: table<index: string, name: string, url: string>> {
+]: nothing -> oneof<record<count: float, results: table<index: string, name: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($endpoint | is-empty) { error make --unspanned { msg: "path parameter 'endpoint' must be non-empty" } }

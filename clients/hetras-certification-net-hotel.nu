@@ -12,27 +12,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -40,8 +49,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -52,7 +66,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -87,7 +110,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # PUT — body + content-type
@@ -116,9 +140,9 @@ def occupancy-completer [] { ["Occupied" "Vacant"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "hotels-get-hotels" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["hotels-get-hotels" "hotels-get-hotel" "codes-get-codes" "codes-get-code" "rate-plans-get-rateplans" "rate-plans-get-rateplans-count" "rate-plans-batch-update-rates" "rate-plans-get-rateplan" "rate-plans-get-rates" "rate-plans-patch-rates" "rate-plans-get-rates-count" "rate-plans-get-rate" "rate-plans-patch-rate" "room-types-get-room-types" "room-types-get-room-type" "rooms-get-rooms" "rooms-get-rooms-count" "rooms-get-available-rooms" "rooms-get-room" "rooms-patch-room" "yieldable-rates-save-prices" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -153,7 +177,7 @@ export def "hotels-get-hotels" [
   --accept: string@accept-completer # Response content type
   --app-id: string # Application identifier (required)
   --app-key: string # Application key. (required)
-]: nothing -> table<city: string, code: string, country: string, created: string, current_business_day: string, desc: string, email: string, fax: string, hotel_id: int, latitude: float, longitude: float, name: string, phone: string, postal_code: string, state: string, street: string, updated: string, url: string, utc_offset: string> {
+]: nothing -> oneof<table<city: string, code: string, country: string, created: string, current_business_day: string, desc: string, email: string, fax: string, hotel_id: int, latitude: float, longitude: float, name: string, phone: string, postal_code: string, state: string, street: string, updated: string, url: string, utc_offset: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id == null) { error make --unspanned { msg: "required header parameter 'App-Id' missing: pass --app-id" } }
@@ -195,7 +219,7 @@ export def "hotels-get-hotel" [
   --accept: string@accept-completer # Response content type
   --app-id: string # Application identifier (required)
   --app-key: string # Application key. (required)
-]: nothing -> record<city: string, code: string, country: string, created: string, current_business_day: string, desc: string, email: string, fax: string, hotel_id: int, latitude: float, longitude: float, name: string, phone: string, postal_code: string, state: string, street: string, updated: string, url: string, utc_offset: string> {
+]: nothing -> oneof<record<city: string, code: string, country: string, created: string, current_business_day: string, desc: string, email: string, fax: string, hotel_id: int, latitude: float, longitude: float, name: string, phone: string, postal_code: string, state: string, street: string, updated: string, url: string, utc_offset: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($hotel_id | is-empty) { error make --unspanned { msg: "path parameter 'hotelId' must be non-empty" } }
@@ -240,7 +264,7 @@ export def "codes-get-codes" [
   --type: string@type-completer # Return all codes for the specified type
   --app-id: string # Application identifier (required)
   --app-key: string # Application key. (required)
-]: nothing -> record<codes: table<_links: record, code: string, default: bool, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<codes: table<_links: record, code: string, default: bool, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($hotel_id | is-empty) { error make --unspanned { msg: "path parameter 'hotelId' must be non-empty" } }
@@ -285,7 +309,7 @@ export def "codes-get-code" [
   --accept: string@accept-completer # Response content type
   --app-id: string # Application identifier (required)
   --app-key: string # Application key. (required)
-]: nothing -> record<_links: record, code: string, comment: string, default: bool, id: string, name: string, parent: record<_links: record, code: string, default: bool, id: string, name: string, type: string>, type: string> {
+]: nothing -> oneof<record<_links: record, code: string, comment: string, default: bool, id: string, name: string, parent: record<_links: record, code: string, default: bool, id: string, name: string, type: string>, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($hotel_id | is-empty) { error make --unspanned { msg: "path parameter 'hotelId' must be non-empty" } }
@@ -341,7 +365,7 @@ export def "rate-plans-get-rateplans" [
   --inlinecount: string@inlinecount-completer # Return total number of items for a given filter criteria.
   --app-id: string # Application identifier (required)
   --app-key: string # Application key. (required)
-]: nothing -> record<_count: int, _links: record, rateplans: table<_links: record, access_control: list, active: bool, active_periods: list, base_rateplan: string, booking_periods: list, code: string, commissionable: bool, created: string, day_use: bool, derived_rateplans: list, description: string, group: string, included_services: list, is_yieldable: bool, market_code: string, name: string, room_types: list, suspended: bool, updated: string, visibility: string>> {
+]: nothing -> oneof<record<_count: int, _links: record, rateplans: table<_links: record, access_control: list, active: bool, active_periods: list, base_rateplan: string, booking_periods: list, code: string, commissionable: bool, created: string, day_use: bool, derived_rateplans: list, description: string, group: string, included_services: list, is_yieldable: bool, market_code: string, name: string, room_types: list, suspended: bool, updated: string, visibility: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($hotel_id | is-empty) { error make --unspanned { msg: "path parameter 'hotelId' must be non-empty" } }
@@ -394,7 +418,7 @@ export def "rate-plans-get-rateplans-count" [
   --included-services: list<string> # Return all rateplans having at least one of the specified services included
   --app-id: string # Application identifier (required)
   --app-key: string # Application key. (required)
-]: nothing -> record<_count: int> {
+]: nothing -> oneof<record<_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($hotel_id | is-empty) { error make --unspanned { msg: "path parameter 'hotelId' must be non-empty" } }
@@ -439,7 +463,7 @@ export def "rate-plans-batch-update-rates" [
   --app-id: string # Application identifier (required)
   --app-key: string # Application key. (required)
   --body: list
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -486,7 +510,7 @@ export def "rate-plans-get-rateplan" [
   --accept: string@accept-completer # Response content type
   --app-id: string # Application identifier (required)
   --app-key: string # Application key. (required)
-]: nothing -> record<_links: record, access_control: table<channel_codes: list, channel_group: string>, active: bool, active_periods: table<from: string, to: string>, booking_periods: table<from: string, to: string>, code: string, commissionable: bool, created: string, day_use: bool, derivation: record<adjustment: string, base_rateplan: record<_links: record, code: string, name: string>>, derived_rateplans: table<_links: record, code: string, name: string>, description: string, folio_name: string, group: record<code: string, name: string>, included_services: list<string>, is_yieldable: bool, market_code: string, name: string, noshow_policy: string, restrictions: record<leadtime_to_book: int, max_advance_booking: int>, room_types: table<_links: record, code: string, description: string, name: string>, suspended: bool, taxes_included: bool, updated: string, visibility: string> {
+]: nothing -> oneof<record<_links: record, access_control: table<channel_codes: list, channel_group: string>, active: bool, active_periods: table<from: string, to: string>, booking_periods: table<from: string, to: string>, code: string, commissionable: bool, created: string, day_use: bool, derivation: record<adjustment: string, base_rateplan: record<_links: record, code: string, name: string>>, derived_rateplans: table<_links: record, code: string, name: string>, description: string, folio_name: string, group: record<code: string, name: string>, included_services: list<string>, is_yieldable: bool, market_code: string, name: string, noshow_policy: string, restrictions: record<leadtime_to_book: int, max_advance_booking: int>, room_types: table<_links: record, code: string, description: string, name: string>, suspended: bool, taxes_included: bool, updated: string, visibility: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($hotel_id | is-empty) { error make --unspanned { msg: "path parameter 'hotelId' must be non-empty" } }
@@ -537,7 +561,7 @@ export def "rate-plans-get-rates" [
   --inlinecount: string@inlinecount-completer # Return total number of items for a given filter criteria.
   --app-id: string # Application identifier (required)
   --app-key: string # Application key. (required)
-]: nothing -> record<_count: int, _links: record, rates: table<_links: record, base_price: float, business_day: string, cancellation_policy: record, derivation: record, minimum_guarantee_type: string, per_person_surcharge: float, room_type_supplements: list>> {
+]: nothing -> oneof<record<_count: int, _links: record, rates: table<_links: record, base_price: float, business_day: string, cancellation_policy: record, derivation: record, minimum_guarantee_type: string, per_person_surcharge: float, room_type_supplements: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($hotel_id | is-empty) { error make --unspanned { msg: "path parameter 'hotelId' must be non-empty" } }
@@ -588,7 +612,7 @@ export def "rate-plans-patch-rates" [
   --app-id: string # Application identifier (required)
   --app-key: string # Application key. (required)
   --body: list
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -641,7 +665,7 @@ export def "rate-plans-get-rates-count" [
   --to: string # Defines the first business day you would like to get rates for. (required, format: date-time)
   --app-id: string # Application identifier (required)
   --app-key: string # Application key. (required)
-]: nothing -> record<_count: int> {
+]: nothing -> oneof<record<_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($hotel_id | is-empty) { error make --unspanned { msg: "path parameter 'hotelId' must be non-empty" } }
@@ -690,7 +714,7 @@ export def "rate-plans-get-rate" [
   --accept: string@accept-completer # Response content type
   --app-id: string # Application identifier (required)
   --app-key: string # Application key. (required)
-]: nothing -> record<_links: record, base_price: float, business_day: string, cancellation_policy: record<description: string, name: string>, derivation: record<adjustment: string, value: float>, minimum_guarantee_type: string, per_person_surcharge: float, room_type_supplements: table<_links: record, code: string, default: bool, supplements: list>> {
+]: nothing -> oneof<record<_links: record, base_price: float, business_day: string, cancellation_policy: record<description: string, name: string>, derivation: record<adjustment: string, value: float>, minimum_guarantee_type: string, per_person_surcharge: float, room_type_supplements: table<_links: record, code: string, default: bool, supplements: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($hotel_id | is-empty) { error make --unspanned { msg: "path parameter 'hotelId' must be non-empty" } }
@@ -738,7 +762,7 @@ export def "rate-plans-patch-rate" [
   --app-id: string # Application identifier (required)
   --app-key: string # Application key. (required)
   --body: list
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -786,7 +810,7 @@ export def "room-types-get-room-types" [
   --accept: string@accept-completer # Response content type
   --app-id: string # Application identifier (required)
   --app-key: string # Application key. (required)
-]: nothing -> table<amenities: list<record>, bedding_type: string, code: string, created: string, default: bool, description: string, expected_occupancy: int, facilities: list<record>, max_persons: int, min_persons: int, name: string, updated: string, views: list<record>> {
+]: nothing -> oneof<table<amenities: list<record>, bedding_type: string, code: string, created: string, default: bool, description: string, expected_occupancy: int, facilities: list<record>, max_persons: int, min_persons: int, name: string, updated: string, views: list<record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($hotel_id | is-empty) { error make --unspanned { msg: "path parameter 'hotelId' must be non-empty" } }
@@ -830,7 +854,7 @@ export def "room-types-get-room-type" [
   --accept: string@accept-completer # Response content type
   --app-id: string # Application identifier (required)
   --app-key: string # Application key. (required)
-]: nothing -> record<amenities: table<code: string, name: string>, bedding_type: string, code: string, created: string, default: bool, description: string, expected_occupancy: int, facilities: table<code: string, name: string>, max_persons: int, min_persons: int, name: string, updated: string, views: table<code: string, name: string>> {
+]: nothing -> oneof<record<amenities: table<code: string, name: string>, bedding_type: string, code: string, created: string, default: bool, description: string, expected_occupancy: int, facilities: table<code: string, name: string>, max_persons: int, min_persons: int, name: string, updated: string, views: table<code: string, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($hotel_id | is-empty) { error make --unspanned { msg: "path parameter 'hotelId' must be non-empty" } }
@@ -884,7 +908,7 @@ export def "rooms-get-rooms" [
   --inlinecount: string@inlinecount-completer # Return total number of items for a given filter criteria.
   --app-id: string # Application identifier (required)
   --app-key: string # Application key. (required)
-]: nothing -> record<_count: int, _links: record, rooms: table<_links: record, created: string, description: string, name: string, number: string, room_type: record, status: record, updated: string>> {
+]: nothing -> oneof<record<_count: int, _links: record, rooms: table<_links: record, created: string, description: string, name: string, number: string, room_type: record, status: record, updated: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($hotel_id | is-empty) { error make --unspanned { msg: "path parameter 'hotelId' must be non-empty" } }
@@ -935,7 +959,7 @@ export def "rooms-get-rooms-count" [
   --locations: list<string> # Return result only for rooms having at least one of the specified locations. You can provide a comma seperated list of location codes.
   --app-id: string # Application identifier (required)
   --app-key: string # Application key. (required)
-]: nothing -> record<_count: int> {
+]: nothing -> oneof<record<_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($hotel_id | is-empty) { error make --unspanned { msg: "path parameter 'hotelId' must be non-empty" } }
@@ -990,7 +1014,7 @@ export def "rooms-get-available-rooms" [
   --inlinecount: string@inlinecount-completer # Return total number of items for a given filter criteria.
   --app-id: string # Application identifier (required)
   --app-key: string # Application key. (required)
-]: nothing -> record<_count: int, _links: record, rooms: table<_links: record, created: string, description: string, name: string, number: string, room_type: record, status: record, updated: string>> {
+]: nothing -> oneof<record<_count: int, _links: record, rooms: table<_links: record, created: string, description: string, name: string, number: string, room_type: record, status: record, updated: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($hotel_id | is-empty) { error make --unspanned { msg: "path parameter 'hotelId' must be non-empty" } }
@@ -1037,7 +1061,7 @@ export def "rooms-get-room" [
   --accept: string@accept-completer # Response content type
   --app-id: string # Application identifier (required)
   --app-key: string # Application key. (required)
-]: nothing -> record<amenities: table<code: string, name: string>, beddings: table<count: int, type: string>, created: string, description: string, expected_occupancy: int, extra_bed_allowed: bool, floor: int, locations: table<code: string, name: string>, max_persons: int, min_persons: int, name: string, number: string, reservations: table<_links: record, arrival_date: string, confirmation_id: string, departure_date: string, reservation_number: int, reservation_status: string>, room_type: record<_links: record, code: string, description: string, name: string>, status: record<condition: string, frontdesk_occupancy: string, housekeeping_occupancy: string, maintenance: record<from: string, reason: string, to: string, value: string>>, updated: string, views: table<code: string, name: string>> {
+]: nothing -> oneof<record<amenities: table<code: string, name: string>, beddings: table<count: int, type: string>, created: string, description: string, expected_occupancy: int, extra_bed_allowed: bool, floor: int, locations: table<code: string, name: string>, max_persons: int, min_persons: int, name: string, number: string, reservations: table<_links: record, arrival_date: string, confirmation_id: string, departure_date: string, reservation_number: int, reservation_status: string>, room_type: record<_links: record, code: string, description: string, name: string>, status: record<condition: string, frontdesk_occupancy: string, housekeeping_occupancy: string, maintenance: record<from: string, reason: string, to: string, value: string>>, updated: string, views: table<code: string, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($hotel_id | is-empty) { error make --unspanned { msg: "path parameter 'hotelId' must be non-empty" } }
@@ -1083,7 +1107,7 @@ export def "rooms-patch-room" [
   --app-id: string # Application identifier (required)
   --app-key: string # Application key. (required)
   --body: list
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1132,7 +1156,7 @@ export def "yieldable-rates-save-prices" [
   --app-id: string # Application identifier (required)
   --app-key: string # Application key. (required)
   --body: list
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

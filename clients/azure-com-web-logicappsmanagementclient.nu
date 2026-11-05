@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -124,9 +148,9 @@ def import-method-completer [] { ["NotSpecified" "SoapPassThrough" "SoapToRest"]
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "connection-gateways-list" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["connection-gateways-list" "custom-apis-list" "connection-gateway-installations-list" "connection-gateway-installations-get" "custom-apis-extract-api-definition-from-wsdl" "custom-apis-list-wsdl-interfaces" "managed-apis-list" "managed-apis-get" "connection-gateways-list-by-resource-group" "connection-gateways-delete" "connection-gateways-get" "connection-gateways-update" "connection-gateways-create-or-update" "connections-list" "connections-delete" "connections-get" "connections-update" "connections-create-or-update" "connections-confirm-consent-code" "connections-list-consent-links" "custom-apis-list-by-resource-group" "custom-apis-delete" "custom-apis-get" "custom-apis-update" "custom-apis-create-or-update" "custom-apis-move" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -160,7 +184,7 @@ export def "connection-gateways-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API Version (required)
-]: nothing -> record<value: table<properties: record, etag: string, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<value: table<properties: record, etag: string, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -201,7 +225,7 @@ export def "custom-apis-list" [
   --api-version: string # API Version (required)
   --top: int # The number of items to be included in the result (format: int32)
   --skiptoken: string # Skip Token
-]: nothing -> record<value: table<properties: record, etag: string, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<value: table<properties: record, etag: string, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -241,7 +265,7 @@ export def "connection-gateway-installations-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API Version (required)
-]: nothing -> record<value: table<properties: record, etag: string, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<value: table<properties: record, etag: string, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -283,7 +307,7 @@ export def "connection-gateway-installations-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API Version (required)
-]: nothing -> record<properties: record<backendUri: string, connectionGateway: record<location: string, name: string, id: string, type: string>, contactInformation: list<string>, description: string, displayName: string, machineName: string, status: record>, etag: string, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<properties: record<backendUri: string, connectionGateway: record<location: string, name: string, id: string, type: string>, contactInformation: list<string>, description: string, displayName: string, machineName: string, status: record>, etag: string, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -312,7 +336,6 @@ export def "connection-gateway-installations-get" [
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Web/locations/{location}/extractApiDefinitionFromWsdl
 # operationId: CustomApis_ExtractApiDefinitionFromWsdl
-# --service shape: {endpointQualifiedNames?: list<string>, qualifiedName: string}
 export def "custom-apis-extract-api-definition-from-wsdl" [
   subscription_id: string
   location: string
@@ -361,7 +384,6 @@ export def "custom-apis-extract-api-definition-from-wsdl" [
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Web/locations/{location}/listWsdlInterfaces
 # operationId: CustomApis_ListWsdlInterfaces
-# --service shape: {endpointQualifiedNames?: list<string>, qualifiedName: string}
 export def "custom-apis-list-wsdl-interfaces" [
   subscription_id: string
   location: string
@@ -379,7 +401,7 @@ export def "custom-apis-list-wsdl-interfaces" [
   --import-method: string@import-method-completer # The WSDL import method
   --service: record # The service with name and endpoint names — shape: {endpointQualifiedNames?: list<string>, qualifiedName: string}
   --url: string # The WSDL URL
-]: any -> record<value: table<endpointQualifiedNames: list, qualifiedName: string>> {
+]: any -> oneof<record<value: table<endpointQualifiedNames: list, qualifiedName: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -423,7 +445,7 @@ export def "managed-apis-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API Version (required)
-]: nothing -> record<value: table<properties: record, etag: string, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<value: table<properties: record, etag: string, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -465,7 +487,7 @@ export def "managed-apis-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API Version (required)
-]: nothing -> record<properties: record<apiDefinitionUrl: string, apiDefinitions: record<modifiedSwaggerUrl: string, originalSwaggerUrl: string>, backendService: record<serviceUrl: string>, capabilities: list<string>, connectionParameters: record, generalInformation: record<description: string, displayName: string, iconUrl: string, releaseTag: string, termsOfUseUrl: string>, metadata: record<apiType: string, brandColor: string, connectionType: string, hideKey: string, source: string, tags: record, wsdlImportMethod: string, wsdlService: record>, name: string, policies: record<content: string, contentLink: string>, runtimeUrls: list<string>, swagger: record>, etag: string, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<properties: record<apiDefinitionUrl: string, apiDefinitions: record<modifiedSwaggerUrl: string, originalSwaggerUrl: string>, backendService: record<serviceUrl: string>, capabilities: list<string>, connectionParameters: record, generalInformation: record<description: string, displayName: string, iconUrl: string, releaseTag: string, termsOfUseUrl: string>, metadata: record<apiType: string, brandColor: string, connectionType: string, hideKey: string, source: string, tags: record, wsdlImportMethod: string, wsdlService: record>, name: string, policies: record<content: string, contentLink: string>, runtimeUrls: list<string>, swagger: record>, etag: string, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -507,7 +529,7 @@ export def "connection-gateways-list-by-resource-group" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API Version (required)
-]: nothing -> record<value: table<properties: record, etag: string, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<value: table<properties: record, etag: string, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -592,7 +614,7 @@ export def "connection-gateways-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API Version (required)
-]: nothing -> record<properties: record<backendUri: string, connectionGatewayInstallation: record<location: string, name: string, id: string, type: string>, contactInformation: list<string>, description: string, displayName: string, machineName: string, status: record>, etag: string, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<properties: record<backendUri: string, connectionGatewayInstallation: record<location: string, name: string, id: string, type: string>, contactInformation: list<string>, description: string, displayName: string, machineName: string, status: record>, etag: string, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -621,7 +643,6 @@ export def "connection-gateways-get" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/connectionGateways/{connectionGatewayName}
 # operationId: ConnectionGateways_Update
-# --properties shape: {backendUri?: string, connectionGatewayInstallation?: record, contactInformation?: list<string>, description?: string, displayName?: string, machineName?: string, status?: record}
 export def "connection-gateways-update" [
   subscription_id: string
   resource_group_name: string
@@ -640,7 +661,7 @@ export def "connection-gateways-update" [
   --etag: string # Resource ETag
   --location: string # Resource location
   --tags: record # Resource tags (e.g. {SampleTagName: SampleTagValue})
-]: any -> record<properties: record<backendUri: string, connectionGatewayInstallation: record<location: string, name: string, id: string, type: string>, contactInformation: list<string>, description: string, displayName: string, machineName: string, status: record>, etag: string, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<backendUri: string, connectionGatewayInstallation: record<location: string, name: string, id: string, type: string>, contactInformation: list<string>, description: string, displayName: string, machineName: string, status: record>, etag: string, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -672,7 +693,6 @@ export def "connection-gateways-update" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/connectionGateways/{connectionGatewayName}
 # operationId: ConnectionGateways_CreateOrUpdate
-# --properties shape: {backendUri?: string, connectionGatewayInstallation?: record, contactInformation?: list<string>, description?: string, displayName?: string, machineName?: string, status?: record}
 export def "connection-gateways-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -691,7 +711,7 @@ export def "connection-gateways-create-or-update" [
   --etag: string # Resource ETag
   --location: string # Resource location
   --tags: record # Resource tags (e.g. {SampleTagName: SampleTagValue})
-]: any -> record<properties: record<backendUri: string, connectionGatewayInstallation: record<location: string, name: string, id: string, type: string>, contactInformation: list<string>, description: string, displayName: string, machineName: string, status: record>, etag: string, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<backendUri: string, connectionGatewayInstallation: record<location: string, name: string, id: string, type: string>, contactInformation: list<string>, description: string, displayName: string, machineName: string, status: record>, etag: string, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -738,7 +758,7 @@ export def "connections-list" [
   --top: int # The number of items to be included in the result (format: int32)
   --filter: string # The filter to apply on the operation
   --api-version: string # API Version (required)
-]: nothing -> record<value: table<properties: record, etag: string, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<value: table<properties: record, etag: string, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -823,7 +843,7 @@ export def "connections-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API Version (required)
-]: nothing -> record<properties: record<api: record<brandColor: string, description: string, displayName: string, iconUri: string, name: string, swagger: record, id: string, type: string>, changedTime: string, createdTime: string, customParameterValues: record, displayName: string, nonSecretParameterValues: record, parameterValues: record, statuses: list<record>, testLinks: list<record>>, etag: string, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<properties: record<api: record<brandColor: string, description: string, displayName: string, iconUri: string, name: string, swagger: record, id: string, type: string>, changedTime: string, createdTime: string, customParameterValues: record, displayName: string, nonSecretParameterValues: record, parameterValues: record, statuses: list<record>, testLinks: list<record>>, etag: string, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -852,7 +872,6 @@ export def "connections-get" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/connections/{connectionName}
 # operationId: Connections_Update
-# --properties shape: {api?: record, changedTime?: string, createdTime?: string, customParameterValues?: record, displayName?: string, nonSecretParameterValues?: record, parameterValues?: record, statuses?: list, testLinks?: list}
 export def "connections-update" [
   subscription_id: string
   resource_group_name: string
@@ -871,7 +890,7 @@ export def "connections-update" [
   --etag: string # Resource ETag
   --location: string # Resource location
   --tags: record # Resource tags (e.g. {SampleTagName: SampleTagValue})
-]: any -> record<properties: record<api: record<brandColor: string, description: string, displayName: string, iconUri: string, name: string, swagger: record, id: string, type: string>, changedTime: string, createdTime: string, customParameterValues: record, displayName: string, nonSecretParameterValues: record, parameterValues: record, statuses: list<record>, testLinks: list<record>>, etag: string, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<api: record<brandColor: string, description: string, displayName: string, iconUri: string, name: string, swagger: record, id: string, type: string>, changedTime: string, createdTime: string, customParameterValues: record, displayName: string, nonSecretParameterValues: record, parameterValues: record, statuses: list<record>, testLinks: list<record>>, etag: string, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -903,7 +922,6 @@ export def "connections-update" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/connections/{connectionName}
 # operationId: Connections_CreateOrUpdate
-# --properties shape: {api?: record, changedTime?: string, createdTime?: string, customParameterValues?: record, displayName?: string, nonSecretParameterValues?: record, parameterValues?: record, statuses?: list, testLinks?: list}
 export def "connections-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -922,7 +940,7 @@ export def "connections-create-or-update" [
   --etag: string # Resource ETag
   --location: string # Resource location
   --tags: record # Resource tags (e.g. {SampleTagName: SampleTagValue})
-]: any -> record<properties: record<api: record<brandColor: string, description: string, displayName: string, iconUri: string, name: string, swagger: record, id: string, type: string>, changedTime: string, createdTime: string, customParameterValues: record, displayName: string, nonSecretParameterValues: record, parameterValues: record, statuses: list<record>, testLinks: list<record>>, etag: string, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<api: record<brandColor: string, description: string, displayName: string, iconUri: string, name: string, swagger: record, id: string, type: string>, changedTime: string, createdTime: string, customParameterValues: record, displayName: string, nonSecretParameterValues: record, parameterValues: record, statuses: list<record>, testLinks: list<record>>, etag: string, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -971,7 +989,7 @@ export def "connections-confirm-consent-code" [
   --code: string # Code that was returned during consent flow
   --object-id: string # AAD object ID. This is userId
   --tenant-id: string # Tenant Id
-]: any -> record<code: string, objectId: string, tenantId: string> {
+]: any -> oneof<record<code: string, objectId: string, tenantId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1003,7 +1021,6 @@ export def "connections-confirm-consent-code" [
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/connections/{connectionName}/listConsentLinks
 # operationId: Connections_ListConsentLinks
-# --parameters item shape: {objectId?: string, parameterName?: string, redirectUrl?: string, tenantId?: string}
 export def "connections-list-consent-links" [
   subscription_id: string
   resource_group_name: string
@@ -1019,7 +1036,7 @@ export def "connections-list-consent-links" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API Version (required)
   --parameters: list # Collection of resources — item shape: {objectId?: string, parameterName?: string, redirectUrl?: string, tenantId?: string}
-]: any -> record<value: table<displayName: string, firstPartyLoginUri: string, link: string, status: string>> {
+]: any -> oneof<record<value: table<displayName: string, firstPartyLoginUri: string, link: string, status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1066,7 +1083,7 @@ export def "custom-apis-list-by-resource-group" [
   --api-version: string # API Version (required)
   --top: int # The number of items to be included in the result (format: int32)
   --skiptoken: string # Skip Token
-]: nothing -> record<value: table<properties: record, etag: string, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<value: table<properties: record, etag: string, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1151,7 +1168,7 @@ export def "custom-apis-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API Version (required)
-]: nothing -> record<properties: record<apiDefinitions: record<modifiedSwaggerUrl: string, originalSwaggerUrl: string>, apiType: string, backendService: record<serviceUrl: string>, brandColor: string, capabilities: list<string>, connectionParameters: record, description: string, displayName: string, iconUri: string, runtimeUrls: list<string>, swagger: record, wsdlDefinition: record<content: string, importMethod: string, service: record, url: string>>, etag: string, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<properties: record<apiDefinitions: record<modifiedSwaggerUrl: string, originalSwaggerUrl: string>, apiType: string, backendService: record<serviceUrl: string>, brandColor: string, capabilities: list<string>, connectionParameters: record, description: string, displayName: string, iconUri: string, runtimeUrls: list<string>, swagger: record, wsdlDefinition: record<content: string, importMethod: string, service: record, url: string>>, etag: string, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1180,7 +1197,6 @@ export def "custom-apis-get" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/customApis/{apiName}
 # operationId: CustomApis_Update
-# --properties shape: {apiDefinitions?: record, apiType?: "NotSpecified"|"Rest"|"Soap", backendService?: record, brandColor?: string, capabilities?: list<string>, connectionParameters?: record, description?: string, displayName?: string, iconUri?: string, runtimeUrls?: list<string>, swagger?: record, wsdlDefinition?: record}
 export def "custom-apis-update" [
   subscription_id: string
   resource_group_name: string
@@ -1199,7 +1215,7 @@ export def "custom-apis-update" [
   --etag: string # Resource ETag
   --location: string # Resource location
   --tags: record # Resource tags (e.g. {SampleTagName: SampleTagValue})
-]: any -> record<properties: record<apiDefinitions: record<modifiedSwaggerUrl: string, originalSwaggerUrl: string>, apiType: string, backendService: record<serviceUrl: string>, brandColor: string, capabilities: list<string>, connectionParameters: record, description: string, displayName: string, iconUri: string, runtimeUrls: list<string>, swagger: record, wsdlDefinition: record<content: string, importMethod: string, service: record, url: string>>, etag: string, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<apiDefinitions: record<modifiedSwaggerUrl: string, originalSwaggerUrl: string>, apiType: string, backendService: record<serviceUrl: string>, brandColor: string, capabilities: list<string>, connectionParameters: record, description: string, displayName: string, iconUri: string, runtimeUrls: list<string>, swagger: record, wsdlDefinition: record<content: string, importMethod: string, service: record, url: string>>, etag: string, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1231,7 +1247,6 @@ export def "custom-apis-update" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/customApis/{apiName}
 # operationId: CustomApis_CreateOrUpdate
-# --properties shape: {apiDefinitions?: record, apiType?: "NotSpecified"|"Rest"|"Soap", backendService?: record, brandColor?: string, capabilities?: list<string>, connectionParameters?: record, description?: string, displayName?: string, iconUri?: string, runtimeUrls?: list<string>, swagger?: record, wsdlDefinition?: record}
 export def "custom-apis-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -1250,7 +1265,7 @@ export def "custom-apis-create-or-update" [
   --etag: string # Resource ETag
   --location: string # Resource location
   --tags: record # Resource tags (e.g. {SampleTagName: SampleTagValue})
-]: any -> record<properties: record<apiDefinitions: record<modifiedSwaggerUrl: string, originalSwaggerUrl: string>, apiType: string, backendService: record<serviceUrl: string>, brandColor: string, capabilities: list<string>, connectionParameters: record, description: string, displayName: string, iconUri: string, runtimeUrls: list<string>, swagger: record, wsdlDefinition: record<content: string, importMethod: string, service: record, url: string>>, etag: string, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<apiDefinitions: record<modifiedSwaggerUrl: string, originalSwaggerUrl: string>, apiType: string, backendService: record<serviceUrl: string>, brandColor: string, capabilities: list<string>, connectionParameters: record, description: string, displayName: string, iconUri: string, runtimeUrls: list<string>, swagger: record, wsdlDefinition: record<content: string, importMethod: string, service: record, url: string>>, etag: string, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1302,6 +1317,8 @@ export def "custom-apis-move" [
   --display-name: string # The display name
   --icon-uri: string # The icon URI
   --swagger: record # The JSON representation of the swagger
+  --id: string # Resource reference id
+  --type: string # Resource reference type
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1312,7 +1329,7 @@ export def "custom-apis-move" [
   if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), api_name: (encode-path-segment $api_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/customApis/{api_name}/move") $qp $auth.query)
-  let req_body = {"name": $name, "brandColor": $brand_color, "description": $description, "displayName": $display_name, "iconUri": $icon_uri, "swagger": $swagger} | compact
+  let req_body = {"name": $name, "brandColor": $brand_color, "description": $description, "displayName": $display_name, "iconUri": $icon_uri, "swagger": $swagger, "id": $id, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

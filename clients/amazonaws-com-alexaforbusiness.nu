@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -204,9 +227,9 @@ def x-amz-target-completer-92 [] { ["AlexaForBusiness.UpdateSkillGroup"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "approve-skill" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["approve-skill" "associate-contact-with-address-book" "associate-device-with-network-profile" "associate-device-with-room" "associate-skill-group-with-room" "associate-skill-with-skill-group" "associate-skill-with-users" "create-address-book" "create-business-report-schedule" "create-conference-provider" "create-contact" "create-gateway-group" "create-network-profile" "create-profile" "create-room" "create-skill-group" "create-user" "delete-address-book" "delete-business-report-schedule" "delete-conference-provider" "delete-contact" "delete-device" "delete-device-usage-data" "delete-gateway-group" "delete-network-profile" "delete-profile" "delete-room" "delete-room-skill-parameter" "delete-skill-authorization" "delete-skill-group" "delete-user" "disassociate-contact-from-address-book" "disassociate-device-from-room" "disassociate-skill-from-skill-group" "disassociate-skill-from-users" "disassociate-skill-group-from-room" "forget-smart-home-appliances" "get-address-book" "get-conference-preference" "get-conference-provider" "get-contact" "get-device" "get-gateway" "get-gateway-group" "get-invitation-configuration" "get-network-profile" "get-profile" "get-room" "get-room-skill-parameter" "get-skill-group" "list-business-report-schedules" "list-conference-providers" "list-device-events" "list-gateway-groups" "list-gateways" "list-skills" "list-skills-store-categories" "list-skills-store-skills-by-category" "list-smart-home-appliances" "list-tags" "put-conference-preference" "put-invitation-configuration" "put-room-skill-parameter" "put-skill-authorization" "register-avs-device" "reject-skill" "resolve-room" "revoke-invitation" "search-address-books" "search-contacts" "search-devices" "search-network-profiles" "search-profiles" "search-rooms" "search-skill-groups" "search-users" "send-announcement" "send-invitation" "start-device-sync" "start-smart-home-appliance-discovery" "tag-resource" "untag-resource" "update-address-book" "update-business-report-schedule" "update-conference-provider" "update-contact" "update-device" "update-gateway" "update-gateway-group" "update-network-profile" "update-profile" "update-room" "update-skill-group" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -247,7 +270,7 @@ export def "approve-skill" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer # required
   skill_id: string # The unique identifier of the skill.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -297,7 +320,7 @@ export def "associate-contact-with-address-book" [
   --x-amz-target: string@x-amz-target-completer-1 # required
   contact_arn: string # The ARN of the contact to associate with an address book.
   address_book_arn: string # The ARN of the address book with which to associate the contact.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -347,7 +370,7 @@ export def "associate-device-with-network-profile" [
   --x-amz-target: string@x-amz-target-completer-2 # required
   device_arn: string # The device ARN.
   network_profile_arn: string # The ARN of the network profile to associate with a device.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -397,7 +420,7 @@ export def "associate-device-with-room" [
   --x-amz-target: string@x-amz-target-completer-3 # required
   --device-arn: string # The ARN of the device to associate to a room. Required.
   --room-arn: string # The ARN of the room with which to associate the device. Required.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -447,7 +470,7 @@ export def "associate-skill-group-with-room" [
   --x-amz-target: string@x-amz-target-completer-4 # required
   --skill-group-arn: string # The ARN of the skill group to associate with a room. Required.
   --room-arn: string # The ARN of the room with which to associate the skill group. Required.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -497,7 +520,7 @@ export def "associate-skill-with-skill-group" [
   --x-amz-target: string@x-amz-target-completer-5 # required
   --skill-group-arn: string # The ARN of the skill group to associate the skill to. Required.
   skill_id: string # The unique identifier of the skill.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -546,7 +569,7 @@ export def "associate-skill-with-users" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-6 # required
   skill_id: string # The private skill ID you want to make available to enrolled users.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -576,7 +599,6 @@ export def "associate-skill-with-users" [
 #
 # POST /
 # operationId: CreateAddressBook
-# --Tags item shape: {Key: string, Value: string}
 export def "create-address-book" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -599,7 +621,7 @@ export def "create-address-book" [
   --description: string # The description of the address book.
   --client-request-token: string # A unique, user-specified identifier for the request that ensures idempotency.
   --tags: list # The tags to be added to the specified resource. Do not provide system tags. — item shape: {Key: string, Value: string}
-]: any -> record<AddressBookArn: string> {
+]: any -> oneof<record<AddressBookArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -629,9 +651,6 @@ export def "create-address-book" [
 #
 # POST /
 # operationId: CreateBusinessReportSchedule
-# --ContentRange shape: {Interval: "ONE_DAY"|"ONE_WEEK"|"THIRTY_DAYS"}
-# --Recurrence shape: {StartDate?: string}
-# --Tags item shape: {Key: string, Value: string}
 export def "create-business-report-schedule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -658,7 +677,7 @@ export def "create-business-report-schedule" [
   --recurrence: record # The recurrence of the reports. — shape: {StartDate?: string}
   --client-request-token: string # A unique, user-specified identifier for the request that ensures idempotency.
   --tags: list # The tags for the business report schedule. — item shape: {Key: string, Value: string}
-]: any -> record<ScheduleArn: string> {
+]: any -> oneof<record<ScheduleArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -688,10 +707,6 @@ export def "create-business-report-schedule" [
 #
 # POST /
 # operationId: CreateConferenceProvider
-# --IPDialIn shape: {Endpoint: string, CommsProtocol: "SIP"|"SIPS"|"H323"}
-# --PSTNDialIn shape: {CountryCode: string, PhoneNumber: string, OneClickIdDelay: string, OneClickPinDelay: string}
-# --MeetingSetting shape: {RequirePin: "YES"|"NO"|"OPTIONAL"}
-# --Tags item shape: {Key: string, Value: string}
 export def "create-conference-provider" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -717,7 +732,7 @@ export def "create-conference-provider" [
   meeting_setting: record # The values that indicate whether a pin is always required (YES), never required (NO), or OPTIONAL. If YES, Alexa will always ask for a meeting pin. If NO, Alexa will never ask for a meeting pin. If OPTIONAL, Alexa will ask if you have a meeting pin and if the customer responds with yes, it will ask for the meeting pin. — shape: {RequirePin: "YES"|"NO"|"OPTIONAL"}
   --client-request-token: string # A unique, user-specified identifier for the request that ensures idempotency.
   --tags: list # The tags to be added to the specified resource. Do not provide system tags. — item shape: {Key: string, Value: string}
-]: any -> record<ConferenceProviderArn: string> {
+]: any -> oneof<record<ConferenceProviderArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -747,9 +762,6 @@ export def "create-conference-provider" [
 #
 # POST /
 # operationId: CreateContact
-# --PhoneNumbers item shape: {Number: string, Type: "MOBILE"|"WORK"|"HOME"}
-# --SipAddresses item shape: {Uri: string, Type: "WORK"}
-# --Tags item shape: {Key: string, Value: string}
 export def "create-contact" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -776,7 +788,7 @@ export def "create-contact" [
   --sip-addresses: list # The list of SIP addresses for the contact. — item shape: {Uri: string, Type: "WORK"}
   --client-request-token: string # A unique, user-specified identifier for the request that ensures idempotency.
   --tags: list # The tags to be added to the specified resource. Do not provide system tags. — item shape: {Key: string, Value: string}
-]: any -> record<ContactArn: string> {
+]: any -> oneof<record<ContactArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -806,7 +818,6 @@ export def "create-contact" [
 #
 # POST /
 # operationId: CreateGatewayGroup
-# --Tags item shape: {Key: string, Value: string}
 export def "create-gateway-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -829,7 +840,7 @@ export def "create-gateway-group" [
   --description: string # The description of the gateway group.
   client_request_token: string # A unique, user-specified identifier for the request that ensures idempotency.
   --tags: list # The tags to be added to the specified resource. Do not provide system tags. — item shape: {Key: string, Value: string}
-]: any -> record<GatewayGroupArn: string> {
+]: any -> oneof<record<GatewayGroupArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -859,7 +870,6 @@ export def "create-gateway-group" [
 #
 # POST /
 # operationId: CreateNetworkProfile
-# --Tags item shape: {Key: string, Value: string}
 export def "create-network-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -889,7 +899,7 @@ export def "create-network-profile" [
   --trust-anchors: list<string> # The root certificates of your authentication server that is installed on your devices and used to trust your authentication server during EAP negotiation.
   client_request_token: string # A unique, user-specified identifier for the request that ensures idempotency.
   --tags: list # The tags to be added to the specified resource. Do not provide system tags. — item shape: {Key: string, Value: string}
-]: any -> record<NetworkProfileArn: string> {
+]: any -> oneof<record<NetworkProfileArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -919,8 +929,6 @@ export def "create-network-profile" [
 #
 # POST /
 # operationId: CreateProfile
-# --MeetingRoomConfiguration shape: {RoomUtilizationMetricsEnabled?: bool, EndOfMeetingReminder?: record, InstantBooking?: record, RequireCheckIn?: record}
-# --Tags item shape: {Key: string, Value: string}
 export def "create-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -953,7 +961,7 @@ export def "create-profile" [
   --data-retention-opt-in: oneof<nothing, bool> # Whether data retention of the profile is enabled.
   --meeting-room-configuration: record # Creates meeting room settings of a room profile. — shape: {RoomUtilizationMetricsEnabled?: bool, EndOfMeetingReminder?: record, InstantBooking?: record, RequireCheckIn?: record}
   --tags: list # The tags for the profile. — item shape: {Key: string, Value: string}
-]: any -> record<ProfileArn: string> {
+]: any -> oneof<record<ProfileArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -983,7 +991,6 @@ export def "create-profile" [
 #
 # POST /
 # operationId: CreateRoom
-# --Tags item shape: {Key: string, Value: string}
 export def "create-room" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1008,7 +1015,7 @@ export def "create-room" [
   --provider-calendar-id: string # The calendar ARN for the room.
   --client-request-token: string # A unique, user-specified identifier for the request that ensures idempotency.
   --tags: list # The tags for the room. — item shape: {Key: string, Value: string}
-]: any -> record<RoomArn: string> {
+]: any -> oneof<record<RoomArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1038,7 +1045,6 @@ export def "create-room" [
 #
 # POST /
 # operationId: CreateSkillGroup
-# --Tags item shape: {Key: string, Value: string}
 export def "create-skill-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1061,7 +1067,7 @@ export def "create-skill-group" [
   --description: string # The description for the skill group.
   --client-request-token: string # A unique, user-specified identifier for the request that ensures idempotency.
   --tags: list # The tags for the skill group. — item shape: {Key: string, Value: string}
-]: any -> record<SkillGroupArn: string> {
+]: any -> oneof<record<SkillGroupArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1091,7 +1097,6 @@ export def "create-skill-group" [
 #
 # POST /
 # operationId: CreateUser
-# --Tags item shape: {Key: string, Value: string}
 export def "create-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1116,7 +1121,7 @@ export def "create-user" [
   --email: string # The email address for the user.
   --client-request-token: string # A unique, user-specified identifier for the request that ensures idempotency.
   --tags: list # The tags for the user. — item shape: {Key: string, Value: string}
-]: any -> record<UserArn: string> {
+]: any -> oneof<record<UserArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1165,7 +1170,7 @@ export def "delete-address-book" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-17 # required
   address_book_arn: string # The ARN of the address book to delete.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1214,7 +1219,7 @@ export def "delete-business-report-schedule" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-18 # required
   schedule_arn: string # The ARN of the business report schedule.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1263,7 +1268,7 @@ export def "delete-conference-provider" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-19 # required
   conference_provider_arn: string # The ARN of the conference provider.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1312,7 +1317,7 @@ export def "delete-contact" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-20 # required
   contact_arn: string # The ARN of the contact to delete.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1361,7 +1366,7 @@ export def "delete-device" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-21 # required
   device_arn: string # The ARN of the device for which to request details.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1411,7 +1416,7 @@ export def "delete-device-usage-data" [
   --x-amz-target: string@x-amz-target-completer-22 # required
   device_arn: string # The ARN of the device.
   device_usage_type: string@device-usage-type-completer # The type of usage data to delete.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1460,7 +1465,7 @@ export def "delete-gateway-group" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-23 # required
   gateway_group_arn: string # The ARN of the gateway group to delete.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1509,7 +1514,7 @@ export def "delete-network-profile" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-24 # required
   network_profile_arn: string # The ARN of the network profile associated with a device.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1558,7 +1563,7 @@ export def "delete-profile" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-25 # required
   --profile-arn: string # The ARN of the room profile to delete. Required.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1607,7 +1612,7 @@ export def "delete-room" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-26 # required
   --room-arn: string # The ARN of the room to delete. Required.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1658,7 +1663,7 @@ export def "delete-room-skill-parameter" [
   --room-arn: string # The ARN of the room from which to remove the room skill parameter details.
   skill_id: string # The ID of the skill from which to remove the room skill parameter details.
   parameter_key: string # The room skill parameter key for which to remove details.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1708,7 +1713,7 @@ export def "delete-skill-authorization" [
   --x-amz-target: string@x-amz-target-completer-28 # required
   skill_id: string # The unique identifier of a skill.
   --room-arn: string # The room that the skill is authorized for.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1757,7 +1762,7 @@ export def "delete-skill-group" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-29 # required
   --skill-group-arn: string # The ARN of the skill group to delete. Required.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1807,7 +1812,7 @@ export def "delete-user" [
   --x-amz-target: string@x-amz-target-completer-30 # required
   --user-arn: string # The ARN of the user to delete in the organization. Required.
   enrollment_id: string # The ARN of the user's enrollment in the organization. Required.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1857,7 +1862,7 @@ export def "disassociate-contact-from-address-book" [
   --x-amz-target: string@x-amz-target-completer-31 # required
   contact_arn: string # The ARN of the contact to disassociate from an address book.
   address_book_arn: string # The ARN of the address from which to disassociate the contact.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1906,7 +1911,7 @@ export def "disassociate-device-from-room" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-32 # required
   --device-arn: string # The ARN of the device to disassociate from a room. Required.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1956,7 +1961,7 @@ export def "disassociate-skill-from-skill-group" [
   --x-amz-target: string@x-amz-target-completer-33 # required
   --skill-group-arn: string # The unique identifier of a skill. Required.
   skill_id: string # The ARN of a skill group to associate to a skill.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2005,7 +2010,7 @@ export def "disassociate-skill-from-users" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-34 # required
   skill_id: string # The private skill ID you want to make unavailable for enrolled users.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2055,7 +2060,7 @@ export def "disassociate-skill-group-from-room" [
   --x-amz-target: string@x-amz-target-completer-35 # required
   --skill-group-arn: string # The ARN of the skill group to disassociate from a room. Required.
   --room-arn: string # The ARN of the room from which the skill group is to be disassociated. Required.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2104,7 +2109,7 @@ export def "forget-smart-home-appliances" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-36 # required
   room_arn: string # The room that the appliances are associated with.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2153,7 +2158,7 @@ export def "get-address-book" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-37 # required
   address_book_arn: string # The ARN of the address book for which to request details.
-]: any -> record<AddressBook: record<AddressBookArn: string, Name: string, Description: string>> {
+]: any -> oneof<record<AddressBook: record<AddressBookArn: string, Name: string, Description: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2202,7 +2207,7 @@ export def "get-conference-preference" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-38 # required
   --body: record
-]: any -> record<Preference: record<DefaultConferenceProviderArn: string>> {
+]: any -> oneof<record<Preference: record<DefaultConferenceProviderArn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2251,7 +2256,7 @@ export def "get-conference-provider" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-39 # required
   conference_provider_arn: string # The ARN of the newly created conference provider.
-]: any -> record<ConferenceProvider: record<Arn: string, Name: string, Type: string, IPDialIn: record<Endpoint: string, CommsProtocol: string>, PSTNDialIn: record<CountryCode: string, PhoneNumber: string, OneClickIdDelay: string, OneClickPinDelay: string>, MeetingSetting: record<RequirePin: string>>> {
+]: any -> oneof<record<ConferenceProvider: record<Arn: string, Name: string, Type: string, IPDialIn: record<Endpoint: string, CommsProtocol: string>, PSTNDialIn: record<CountryCode: string, PhoneNumber: string, OneClickIdDelay: string, OneClickPinDelay: string>, MeetingSetting: record<RequirePin: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2300,7 +2305,7 @@ export def "get-contact" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-40 # required
   contact_arn: string # The ARN of the contact for which to request details.
-]: any -> record<Contact: record<ContactArn: string, DisplayName: string, FirstName: string, LastName: string, PhoneNumber: string, PhoneNumbers: list<record>, SipAddresses: list<record>>> {
+]: any -> oneof<record<Contact: record<ContactArn: string, DisplayName: string, FirstName: string, LastName: string, PhoneNumber: string, PhoneNumbers: list<record>, SipAddresses: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2349,7 +2354,7 @@ export def "get-device" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-41 # required
   --device-arn: string # The ARN of the device for which to request details. Required.
-]: any -> record<Device: record<DeviceArn: string, DeviceSerialNumber: string, DeviceType: string, DeviceName: string, SoftwareVersion: string, MacAddress: string, RoomArn: string, DeviceStatus: string, DeviceStatusInfo: record<DeviceStatusDetails: list, ConnectionStatus: string, ConnectionStatusUpdatedTime: string>, NetworkProfileInfo: record<NetworkProfileArn: string, CertificateArn: string, CertificateExpirationTime: string>>> {
+]: any -> oneof<record<Device: record<DeviceArn: string, DeviceSerialNumber: string, DeviceType: string, DeviceName: string, SoftwareVersion: string, MacAddress: string, RoomArn: string, DeviceStatus: string, DeviceStatusInfo: record<DeviceStatusDetails: list, ConnectionStatus: string, ConnectionStatusUpdatedTime: string>, NetworkProfileInfo: record<NetworkProfileArn: string, CertificateArn: string, CertificateExpirationTime: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2398,7 +2403,7 @@ export def "get-gateway" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-42 # required
   gateway_arn: string # The ARN of the gateway to get.
-]: any -> record<Gateway: record<Arn: string, Name: string, Description: string, GatewayGroupArn: string, SoftwareVersion: string>> {
+]: any -> oneof<record<Gateway: record<Arn: string, Name: string, Description: string, GatewayGroupArn: string, SoftwareVersion: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2447,7 +2452,7 @@ export def "get-gateway-group" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-43 # required
   gateway_group_arn: string # The ARN of the gateway group to get.
-]: any -> record<GatewayGroup: record<Arn: string, Name: string, Description: string>> {
+]: any -> oneof<record<GatewayGroup: record<Arn: string, Name: string, Description: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2496,7 +2501,7 @@ export def "get-invitation-configuration" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-44 # required
   --body: record
-]: any -> record<OrganizationName: string, ContactEmail: string, PrivateSkillIds: list<string>> {
+]: any -> oneof<record<OrganizationName: string, ContactEmail: string, PrivateSkillIds: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2545,7 +2550,7 @@ export def "get-network-profile" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-45 # required
   network_profile_arn: string # The ARN of the network profile associated with a device.
-]: any -> record<NetworkProfile: record<NetworkProfileArn: string, NetworkProfileName: string, Description: string, Ssid: string, SecurityType: string, EapMethod: string, CurrentPassword: string, NextPassword: string, CertificateAuthorityArn: string, TrustAnchors: list<string>>> {
+]: any -> oneof<record<NetworkProfile: record<NetworkProfileArn: string, NetworkProfileName: string, Description: string, Ssid: string, SecurityType: string, EapMethod: string, CurrentPassword: string, NextPassword: string, CertificateAuthorityArn: string, TrustAnchors: list<string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2594,7 +2599,7 @@ export def "get-profile" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-46 # required
   --profile-arn: string # The ARN of the room profile for which to request details. Required.
-]: any -> record<Profile: record<ProfileArn: string, ProfileName: string, IsDefault: bool, Address: string, Timezone: string, DistanceUnit: string, TemperatureUnit: string, WakeWord: string, Locale: string, SetupModeDisabled: bool, MaxVolumeLimit: int, PSTNEnabled: bool, DataRetentionOptIn: bool, AddressBookArn: string, MeetingRoomConfiguration: record<RoomUtilizationMetricsEnabled: bool, EndOfMeetingReminder: record, InstantBooking: record, RequireCheckIn: record>>> {
+]: any -> oneof<record<Profile: record<ProfileArn: string, ProfileName: string, IsDefault: bool, Address: string, Timezone: string, DistanceUnit: string, TemperatureUnit: string, WakeWord: string, Locale: string, SetupModeDisabled: bool, MaxVolumeLimit: int, PSTNEnabled: bool, DataRetentionOptIn: bool, AddressBookArn: string, MeetingRoomConfiguration: record<RoomUtilizationMetricsEnabled: bool, EndOfMeetingReminder: record, InstantBooking: record, RequireCheckIn: record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2643,7 +2648,7 @@ export def "get-room" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-47 # required
   --room-arn: string # The ARN of the room for which to request details. Required.
-]: any -> record<Room: record<RoomArn: string, RoomName: string, Description: string, ProviderCalendarId: string, ProfileArn: string>> {
+]: any -> oneof<record<Room: record<RoomArn: string, RoomName: string, Description: string, ProviderCalendarId: string, ProfileArn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2694,7 +2699,7 @@ export def "get-room-skill-parameter" [
   --room-arn: string # The ARN of the room from which to get the room skill parameter details.
   skill_id: string # The ARN of the skill from which to get the room skill parameter details. Required.
   parameter_key: string # The room skill parameter key for which to get details. Required.
-]: any -> record<RoomSkillParameter: record<ParameterKey: string, ParameterValue: string>> {
+]: any -> oneof<record<RoomSkillParameter: record<ParameterKey: string, ParameterValue: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2743,7 +2748,7 @@ export def "get-skill-group" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-49 # required
   --skill-group-arn: string # The ARN of the skill group for which to get details. Required.
-]: any -> record<SkillGroup: record<SkillGroupArn: string, SkillGroupName: string, Description: string>> {
+]: any -> oneof<record<SkillGroup: record<SkillGroupArn: string, SkillGroupName: string, Description: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2795,7 +2800,7 @@ export def "list-business-report-schedules" [
   --x-amz-target: string@x-amz-target-completer-50 # required
   --next-token-body: string # The token used to list the remaining schedules from the previous API call. (body field)
   --max-results-body: int # The maximum number of schedules listed in the call. (body field)
-]: any -> record<BusinessReportSchedules: table<ScheduleArn: string, ScheduleName: string, S3BucketName: string, S3KeyPrefix: string, Format: string, ContentRange: record, Recurrence: record, LastBusinessReport: record>, NextToken: string> {
+]: any -> oneof<record<BusinessReportSchedules: table<ScheduleArn: string, ScheduleName: string, S3BucketName: string, S3KeyPrefix: string, Format: string, ContentRange: record, Recurrence: record, LastBusinessReport: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2848,7 +2853,7 @@ export def "list-conference-providers" [
   --x-amz-target: string@x-amz-target-completer-51 # required
   --next-token-body: string # The tokens used for pagination. (body field)
   --max-results-body: int # The maximum number of conference providers to be returned, per paginated calls. (body field)
-]: any -> record<ConferenceProviders: table<Arn: string, Name: string, Type: string, IPDialIn: record, PSTNDialIn: record, MeetingSetting: record>, NextToken: string> {
+]: any -> oneof<record<ConferenceProviders: table<Arn: string, Name: string, Type: string, IPDialIn: record, PSTNDialIn: record, MeetingSetting: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2903,7 +2908,7 @@ export def "list-device-events" [
   --event-type: string@event-type-completer # The event type to filter device events. If EventType isn't specified, this returns a list of all device events in reverse chronological order. If EventType is specified, this returns a list of device events for that EventType in reverse chronological order.
   --next-token-body: string # An optional token returned from a prior request. Use this token for pagination of results from this action. If this parameter is specified, the response only includes results beyond the token, up to the value specified by MaxResults. When the end of results is reached, the response has a value of null. (body field)
   --max-results-body: int # The maximum number of results to include in the response. The default value is 50. If more results exist than the specified MaxResults value, a token is included in the response so that the remaining results can be retrieved. (body field)
-]: any -> record<DeviceEvents: table<Type: string, Value: string, Timestamp: string>, NextToken: string> {
+]: any -> oneof<record<DeviceEvents: table<Type: string, Value: string, Timestamp: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2956,7 +2961,7 @@ export def "list-gateway-groups" [
   --x-amz-target: string@x-amz-target-completer-53 # required
   --next-token-body: string # The token used to paginate though multiple pages of gateway group summaries. (body field)
   --max-results-body: int # The maximum number of gateway group summaries to return. The default is 50. (body field)
-]: any -> record<GatewayGroups: table<Arn: string, Name: string, Description: string>, NextToken: string> {
+]: any -> oneof<record<GatewayGroups: table<Arn: string, Name: string, Description: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3010,7 +3015,7 @@ export def "list-gateways" [
   --gateway-group-arn: string # The gateway group ARN for which to list gateways.
   --next-token-body: string # The token used to paginate though multiple pages of gateway summaries. (body field)
   --max-results-body: int # The maximum number of gateway summaries to return. The default is 50. (body field)
-]: any -> record<Gateways: table<Arn: string, Name: string, Description: string, GatewayGroupArn: string, SoftwareVersion: string>, NextToken: string> {
+]: any -> oneof<record<Gateways: table<Arn: string, Name: string, Description: string, GatewayGroupArn: string, SoftwareVersion: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3066,7 +3071,7 @@ export def "list-skills" [
   --skill-type: string@skill-type-completer # Whether the skill is publicly available or is a private skill.
   --next-token-body: string # An optional token returned from a prior request. Use this token for pagination of results from this action. If this parameter is specified, the response includes only results beyond the token, up to the value specified by MaxResults. (body field)
   --max-results-body: int # The maximum number of results to include in the response. If more results exist than the specified MaxResults value, a token is included in the response so that the remaining results can be retrieved. (body field)
-]: any -> record<SkillSummaries: table<SkillId: string, SkillName: string, SupportsLinking: bool, EnablementType: string, SkillType: string>, NextToken: string> {
+]: any -> oneof<record<SkillSummaries: table<SkillId: string, SkillName: string, SupportsLinking: bool, EnablementType: string, SkillType: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3119,7 +3124,7 @@ export def "list-skills-store-categories" [
   --x-amz-target: string@x-amz-target-completer-56 # required
   --next-token-body: string # The tokens used for pagination. (body field)
   --max-results-body: int # The maximum number of categories returned, per paginated calls. (body field)
-]: any -> record<CategoryList: table<CategoryId: int, CategoryName: string>, NextToken: string> {
+]: any -> oneof<record<CategoryList: table<CategoryId: int, CategoryName: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3173,7 +3178,7 @@ export def "list-skills-store-skills-by-category" [
   category_id: int # The category ID for which the skills are being retrieved from the skill store.
   --next-token-body: string # The tokens used for pagination. (body field)
   --max-results-body: int # The maximum number of skills returned per paginated calls. (body field)
-]: any -> record<SkillsStoreSkills: table<SkillId: string, SkillName: string, ShortDescription: string, IconUrl: string, SampleUtterances: list, SkillDetails: record, SupportsLinking: bool>, NextToken: string> {
+]: any -> oneof<record<SkillsStoreSkills: table<SkillId: string, SkillName: string, ShortDescription: string, IconUrl: string, SampleUtterances: list, SkillDetails: record, SupportsLinking: bool>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3227,7 +3232,7 @@ export def "list-smart-home-appliances" [
   room_arn: string # The room that the appliances are associated with.
   --max-results-body: int # The maximum number of appliances to be returned, per paginated calls. (body field)
   --next-token-body: string # The tokens used for pagination. (body field)
-]: any -> record<SmartHomeAppliances: table<FriendlyName: string, Description: string, ManufacturerName: string>, NextToken: string> {
+]: any -> oneof<record<SmartHomeAppliances: table<FriendlyName: string, Description: string, ManufacturerName: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3281,7 +3286,7 @@ export def "list-tags" [
   arn: string # The ARN of the specified resource for which to list tags.
   --next-token-body: string # An optional token returned from a prior request. Use this token for pagination of results from this action. If this parameter is specified, the response includes only results beyond the token, up to the value specified by MaxResults. (body field)
   --max-results-body: int # The maximum number of results to include in the response. If more results exist than the specified MaxResults value, a token is included in the response so that the remaining results can be retrieved. (body field)
-]: any -> record<Tags: table<Key: string, Value: string>, NextToken: string> {
+]: any -> oneof<record<Tags: table<Key: string, Value: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3312,7 +3317,6 @@ export def "list-tags" [
 #
 # POST /
 # operationId: PutConferencePreference
-# --ConferencePreference shape: {DefaultConferenceProviderArn?: string}
 export def "put-conference-preference" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3332,7 +3336,7 @@ export def "put-conference-preference" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-60 # required
   conference_preference: record # The default conference provider that is used if no other scheduled meetings are detected. — shape: {DefaultConferenceProviderArn?: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3383,7 +3387,7 @@ export def "put-invitation-configuration" [
   organization_name: string # The name of the organization sending the enrollment invite to a user.
   --contact-email: string # The email ID of the organization or individual contact that the enrolled user can use.
   --private-skill-ids: list<string> # The list of private skill IDs that you want to recommend to the user to enable in the invitation.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3413,7 +3417,6 @@ export def "put-invitation-configuration" [
 #
 # POST /
 # operationId: PutRoomSkillParameter
-# --RoomSkillParameter shape: {ParameterKey: string, ParameterValue: string}
 export def "put-room-skill-parameter" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3435,7 +3438,7 @@ export def "put-room-skill-parameter" [
   --room-arn: string # The ARN of the room associated with the room skill parameter. Required.
   skill_id: string # The ARN of the skill associated with the room skill parameter. Required.
   room_skill_parameter: record # A skill parameter associated with a room. — shape: {ParameterKey: string, ParameterValue: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3486,7 +3489,7 @@ export def "put-skill-authorization" [
   authorization_result: record # The authorization result specific to OAUTH code grant output. "Code” must be populated in the AuthorizationResult map to establish the authorization.
   skill_id: string # The unique identifier of a skill.
   --room-arn: string # The room that the skill is authorized for.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3516,7 +3519,6 @@ export def "put-skill-authorization" [
 #
 # POST /
 # operationId: RegisterAVSDevice
-# --Tags item shape: {Key: string, Value: string}
 export def "register-avs-device" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3542,7 +3544,7 @@ export def "register-avs-device" [
   amazon_id: string # The device type ID for your AVS device generated by Amazon when the OEM creates a new product on Amazon's Developer Console.
   --room-arn: string # The Amazon Resource Name (ARN) of the room with which to associate your AVS device.
   --tags: list # The tags to be added to the specified resource. Do not provide system tags. — item shape: {Key: string, Value: string}
-]: any -> record<DeviceArn: string> {
+]: any -> oneof<record<DeviceArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3591,7 +3593,7 @@ export def "reject-skill" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-65 # required
   skill_id: string # The unique identifier of the skill.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3641,7 +3643,7 @@ export def "resolve-room" [
   --x-amz-target: string@x-amz-target-completer-66 # required
   user_id: string # The ARN of the user. Required.
   skill_id: string # The ARN of the skill that was requested. Required.
-]: any -> record<RoomArn: string, RoomName: string, RoomSkillParameters: table<ParameterKey: string, ParameterValue: string>> {
+]: any -> oneof<record<RoomArn: string, RoomName: string, RoomSkillParameters: table<ParameterKey: string, ParameterValue: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3691,7 +3693,7 @@ export def "revoke-invitation" [
   --x-amz-target: string@x-amz-target-completer-67 # required
   --user-arn: string # The ARN of the user for whom to revoke an enrollment invitation. Required.
   --enrollment-id: string # The ARN of the enrollment invitation to revoke. Required.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3721,8 +3723,6 @@ export def "revoke-invitation" [
 #
 # POST /
 # operationId: SearchAddressBooks
-# --Filters item shape: {Key: string, Values: list<string>}
-# --SortCriteria item shape: {Key: string, Value: "ASC"|"DESC"}
 export def "search-address-books" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3747,7 +3747,7 @@ export def "search-address-books" [
   --sort-criteria: list # The sort order to use in listing the specified set of address books. The supported sort key is AddressBookName. — item shape: {Key: string, Value: "ASC"|"DESC"}
   --next-token-body: string # An optional token returned from a prior request. Use this token for pagination of results from this action. If this parameter is specified, the response only includes results beyond the token, up to the value specified by MaxResults. (body field)
   --max-results-body: int # The maximum number of results to include in the response. If more results exist than the specified MaxResults value, a token is included in the response so that the remaining results can be retrieved. (body field)
-]: any -> record<AddressBooks: table<AddressBookArn: string, Name: string, Description: string>, NextToken: string, TotalCount: int> {
+]: any -> oneof<record<AddressBooks: table<AddressBookArn: string, Name: string, Description: string>, NextToken: string, TotalCount: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3778,8 +3778,6 @@ export def "search-address-books" [
 #
 # POST /
 # operationId: SearchContacts
-# --Filters item shape: {Key: string, Values: list<string>}
-# --SortCriteria item shape: {Key: string, Value: "ASC"|"DESC"}
 export def "search-contacts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3804,7 +3802,7 @@ export def "search-contacts" [
   --sort-criteria: list # The sort order to use in listing the specified set of contacts. The supported sort keys are DisplayName, FirstName, and LastName. — item shape: {Key: string, Value: "ASC"|"DESC"}
   --next-token-body: string # An optional token returned from a prior request. Use this token for pagination of results from this action. If this parameter is specified, the response only includes results beyond the token, up to the value specified by MaxResults. (body field)
   --max-results-body: int # The maximum number of results to include in the response. If more results exist than the specified MaxResults value, a token is included in the response so that the remaining results can be retrieved. (body field)
-]: any -> record<Contacts: table<ContactArn: string, DisplayName: string, FirstName: string, LastName: string, PhoneNumber: string, PhoneNumbers: list, SipAddresses: list>, NextToken: string, TotalCount: int> {
+]: any -> oneof<record<Contacts: table<ContactArn: string, DisplayName: string, FirstName: string, LastName: string, PhoneNumber: string, PhoneNumbers: list, SipAddresses: list>, NextToken: string, TotalCount: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3835,8 +3833,6 @@ export def "search-contacts" [
 #
 # POST /
 # operationId: SearchDevices
-# --Filters item shape: {Key: string, Values: list<string>}
-# --SortCriteria item shape: {Key: string, Value: "ASC"|"DESC"}
 export def "search-devices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3861,7 +3857,7 @@ export def "search-devices" [
   --max-results-body: int # The maximum number of results to include in the response. If more results exist than the specified MaxResults value, a token is included in the response so that the remaining results can be retrieved. (body field)
   --filters: list # The filters to use to list a specified set of devices. Supported filter keys are DeviceName, DeviceStatus, DeviceStatusDetailCode, RoomName, DeviceType, DeviceSerialNumber, UnassociatedOnly, ConnectionStatus (ONLINE and OFFLINE), NetworkProfileName, NetworkProfileArn, Feature, and FailureCode. — item shape: {Key: string, Values: list<string>}
   --sort-criteria: list # The sort order to use in listing the specified set of devices. Supported sort keys are DeviceName, DeviceStatus, RoomName, DeviceType, DeviceSerialNumber, ConnectionStatus, NetworkProfileName, NetworkProfileArn, Feature, and FailureCode. — item shape: {Key: string, Value: "ASC"|"DESC"}
-]: any -> record<Devices: table<DeviceArn: string, DeviceSerialNumber: string, DeviceType: string, DeviceName: string, SoftwareVersion: string, MacAddress: string, DeviceStatus: string, NetworkProfileArn: string, NetworkProfileName: string, RoomArn: string, RoomName: string, DeviceStatusInfo: record, CreatedTime: string>, NextToken: string, TotalCount: int> {
+]: any -> oneof<record<Devices: table<DeviceArn: string, DeviceSerialNumber: string, DeviceType: string, DeviceName: string, SoftwareVersion: string, MacAddress: string, DeviceStatus: string, NetworkProfileArn: string, NetworkProfileName: string, RoomArn: string, RoomName: string, DeviceStatusInfo: record, CreatedTime: string>, NextToken: string, TotalCount: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3892,8 +3888,6 @@ export def "search-devices" [
 #
 # POST /
 # operationId: SearchNetworkProfiles
-# --Filters item shape: {Key: string, Values: list<string>}
-# --SortCriteria item shape: {Key: string, Value: "ASC"|"DESC"}
 export def "search-network-profiles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3918,7 +3912,7 @@ export def "search-network-profiles" [
   --max-results-body: int # The maximum number of results to include in the response. If more results exist than the specified MaxResults value, a token is included in the response so that the remaining results can be retrieved. (body field)
   --filters: list # The filters to use to list a specified set of network profiles. Valid filters are NetworkProfileName, Ssid, and SecurityType. — item shape: {Key: string, Values: list<string>}
   --sort-criteria: list # The sort order to use to list the specified set of network profiles. Valid sort criteria includes NetworkProfileName, Ssid, and SecurityType. — item shape: {Key: string, Value: "ASC"|"DESC"}
-]: any -> record<NetworkProfiles: table<NetworkProfileArn: string, NetworkProfileName: string, Description: string, Ssid: string, SecurityType: string, EapMethod: string, CertificateAuthorityArn: string>, NextToken: string, TotalCount: int> {
+]: any -> oneof<record<NetworkProfiles: table<NetworkProfileArn: string, NetworkProfileName: string, Description: string, Ssid: string, SecurityType: string, EapMethod: string, CertificateAuthorityArn: string>, NextToken: string, TotalCount: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3949,8 +3943,6 @@ export def "search-network-profiles" [
 #
 # POST /
 # operationId: SearchProfiles
-# --Filters item shape: {Key: string, Values: list<string>}
-# --SortCriteria item shape: {Key: string, Value: "ASC"|"DESC"}
 export def "search-profiles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3975,7 +3967,7 @@ export def "search-profiles" [
   --max-results-body: int # The maximum number of results to include in the response. If more results exist than the specified MaxResults value, a token is included in the response so that the remaining results can be retrieved. (body field)
   --filters: list # The filters to use to list a specified set of room profiles. Supported filter keys are ProfileName and Address. Required. — item shape: {Key: string, Values: list<string>}
   --sort-criteria: list # The sort order to use in listing the specified set of room profiles. Supported sort keys are ProfileName and Address. — item shape: {Key: string, Value: "ASC"|"DESC"}
-]: any -> record<Profiles: table<ProfileArn: string, ProfileName: string, IsDefault: bool, Address: string, Timezone: string, DistanceUnit: string, TemperatureUnit: string, WakeWord: string, Locale: string>, NextToken: string, TotalCount: int> {
+]: any -> oneof<record<Profiles: table<ProfileArn: string, ProfileName: string, IsDefault: bool, Address: string, Timezone: string, DistanceUnit: string, TemperatureUnit: string, WakeWord: string, Locale: string>, NextToken: string, TotalCount: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4006,8 +3998,6 @@ export def "search-profiles" [
 #
 # POST /
 # operationId: SearchRooms
-# --Filters item shape: {Key: string, Values: list<string>}
-# --SortCriteria item shape: {Key: string, Value: "ASC"|"DESC"}
 export def "search-rooms" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4032,7 +4022,7 @@ export def "search-rooms" [
   --max-results-body: int # The maximum number of results to include in the response. If more results exist than the specified MaxResults value, a token is included in the response so that the remaining results can be retrieved. (body field)
   --filters: list # The filters to use to list a specified set of rooms. The supported filter keys are RoomName and ProfileName. — item shape: {Key: string, Values: list<string>}
   --sort-criteria: list # The sort order to use in listing the specified set of rooms. The supported sort keys are RoomName and ProfileName. — item shape: {Key: string, Value: "ASC"|"DESC"}
-]: any -> record<Rooms: table<RoomArn: string, RoomName: string, Description: string, ProviderCalendarId: string, ProfileArn: string, ProfileName: string>, NextToken: string, TotalCount: int> {
+]: any -> oneof<record<Rooms: table<RoomArn: string, RoomName: string, Description: string, ProviderCalendarId: string, ProfileArn: string, ProfileName: string>, NextToken: string, TotalCount: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4063,8 +4053,6 @@ export def "search-rooms" [
 #
 # POST /
 # operationId: SearchSkillGroups
-# --Filters item shape: {Key: string, Values: list<string>}
-# --SortCriteria item shape: {Key: string, Value: "ASC"|"DESC"}
 export def "search-skill-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4089,7 +4077,7 @@ export def "search-skill-groups" [
   --max-results-body: int # The maximum number of results to include in the response. If more results exist than the specified MaxResults value, a token is included in the response so that the remaining results can be retrieved. (body field)
   --filters: list # The filters to use to list a specified set of skill groups. The supported filter key is SkillGroupName. — item shape: {Key: string, Values: list<string>}
   --sort-criteria: list # The sort order to use in listing the specified set of skill groups. The supported sort key is SkillGroupName. — item shape: {Key: string, Value: "ASC"|"DESC"}
-]: any -> record<SkillGroups: table<SkillGroupArn: string, SkillGroupName: string, Description: string>, NextToken: string, TotalCount: int> {
+]: any -> oneof<record<SkillGroups: table<SkillGroupArn: string, SkillGroupName: string, Description: string>, NextToken: string, TotalCount: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4120,8 +4108,6 @@ export def "search-skill-groups" [
 #
 # POST /
 # operationId: SearchUsers
-# --Filters item shape: {Key: string, Values: list<string>}
-# --SortCriteria item shape: {Key: string, Value: "ASC"|"DESC"}
 export def "search-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4146,7 +4132,7 @@ export def "search-users" [
   --max-results-body: int # The maximum number of results to include in the response. If more results exist than the specified MaxResults value, a token is included in the response so that the remaining results can be retrieved. Required. (body field)
   --filters: list # The filters to use for listing a specific set of users. Required. Supported filter keys are UserId, FirstName, LastName, Email, and EnrollmentStatus. — item shape: {Key: string, Values: list<string>}
   --sort-criteria: list # The sort order to use in listing the filtered set of users. Required. Supported sort keys are UserId, FirstName, LastName, Email, and EnrollmentStatus. — item shape: {Key: string, Value: "ASC"|"DESC"}
-]: any -> record<Users: table<UserArn: string, FirstName: string, LastName: string, Email: string, EnrollmentStatus: string, EnrollmentId: string>, NextToken: string, TotalCount: int> {
+]: any -> oneof<record<Users: table<UserArn: string, FirstName: string, LastName: string, Email: string, EnrollmentStatus: string, EnrollmentId: string>, NextToken: string, TotalCount: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4177,8 +4163,6 @@ export def "search-users" [
 #
 # POST /
 # operationId: SendAnnouncement
-# --RoomFilters item shape: {Key: string, Values: list<string>}
-# --Content shape: {TextList?: list, SsmlList?: list, AudioList?: list}
 export def "send-announcement" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4201,7 +4185,7 @@ export def "send-announcement" [
   content: record # The content definition. This can contain only one text, SSML, or audio list object. — shape: {TextList?: list, SsmlList?: list, AudioList?: list}
   --time-to-live-in-seconds: int # The time to live for an announcement. Default is 300. If delivery doesn't occur within this time, the announcement is not delivered.
   client_request_token: string # A unique, user-specified identifier for the request that ensures idempotency.
-]: any -> record<AnnouncementArn: string> {
+]: any -> oneof<record<AnnouncementArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4250,7 +4234,7 @@ export def "send-invitation" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-77 # required
   --user-arn: string # The ARN of the user to whom to send an invitation. Required.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4301,7 +4285,7 @@ export def "start-device-sync" [
   --room-arn: string # The ARN of the room with which the device to sync is associated. Required.
   --device-arn: string # The ARN of the device to sync. Required.
   features: list<string> # Request structure to start the device sync. Required.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4350,7 +4334,7 @@ export def "start-smart-home-appliance-discovery" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-79 # required
   room_arn: string # The room where smart home appliance discovery was initiated.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4380,7 +4364,6 @@ export def "start-smart-home-appliance-discovery" [
 #
 # POST /
 # operationId: TagResource
-# --Tags item shape: {Key: string, Value: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4401,7 +4384,7 @@ export def "tag-resource" [
   --x-amz-target: string@x-amz-target-completer-80 # required
   arn: string # The ARN of the resource to which to add metadata tags. Required.
   tags: list # The tags to be added to the specified resource. Do not provide system tags. Required. — item shape: {Key: string, Value: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4451,7 +4434,7 @@ export def "untag-resource" [
   --x-amz-target: string@x-amz-target-completer-81 # required
   arn: string # The ARN of the resource from which to remove metadata tags. Required.
   tag_keys: list<string> # The tags to be removed from the specified resource. Do not provide system tags. Required.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4502,7 +4485,7 @@ export def "update-address-book" [
   address_book_arn: string # The ARN of the room to update.
   --name: string # The updated name of the room.
   --description: string # The updated description of the room.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4532,7 +4515,6 @@ export def "update-address-book" [
 #
 # POST /
 # operationId: UpdateBusinessReportSchedule
-# --Recurrence shape: {StartDate?: string}
 export def "update-business-report-schedule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4557,7 +4539,7 @@ export def "update-business-report-schedule" [
   --format: string@format-completer # The format of the generated report (individual CSV files or zipped files of individual files).
   --schedule-name: string # The name identifier of the schedule.
   --recurrence: record # The recurrence of the reports. — shape: {StartDate?: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4587,9 +4569,6 @@ export def "update-business-report-schedule" [
 #
 # POST /
 # operationId: UpdateConferenceProvider
-# --IPDialIn shape: {Endpoint: string, CommsProtocol: "SIP"|"SIPS"|"H323"}
-# --PSTNDialIn shape: {CountryCode: string, PhoneNumber: string, OneClickIdDelay: string, OneClickPinDelay: string}
-# --MeetingSetting shape: {RequirePin: "YES"|"NO"|"OPTIONAL"}
 export def "update-conference-provider" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4613,7 +4592,7 @@ export def "update-conference-provider" [
   --ip-dial-in: record # The IP endpoint and protocol for calling. — shape: {Endpoint: string, CommsProtocol: "SIP"|"SIPS"|"H323"}
   --pstn-dial-in: record # The information for public switched telephone network (PSTN) conferencing. — shape: {CountryCode: string, PhoneNumber: string, OneClickIdDelay: string, OneClickPinDelay: string}
   meeting_setting: record # The values that indicate whether a pin is always required (YES), never required (NO), or OPTIONAL. If YES, Alexa will always ask for a meeting pin. If NO, Alexa will never ask for a meeting pin. If OPTIONAL, Alexa will ask if you have a meeting pin and if the customer responds with yes, it will ask for the meeting pin. — shape: {RequirePin: "YES"|"NO"|"OPTIONAL"}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4643,8 +4622,6 @@ export def "update-conference-provider" [
 #
 # POST /
 # operationId: UpdateContact
-# --PhoneNumbers item shape: {Number: string, Type: "MOBILE"|"WORK"|"HOME"}
-# --SipAddresses item shape: {Uri: string, Type: "WORK"}
 export def "update-contact" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4670,7 +4647,7 @@ export def "update-contact" [
   --phone-number: string # The updated phone number of the contact. The phone number type defaults to WORK. You can either specify PhoneNumber or PhoneNumbers. We recommend that you use PhoneNumbers, which lets you specify the phone number type and multiple numbers. (format: password)
   --phone-numbers: list # The list of phone numbers for the contact. — item shape: {Number: string, Type: "MOBILE"|"WORK"|"HOME"}
   --sip-addresses: list # The list of SIP addresses for the contact. — item shape: {Uri: string, Type: "WORK"}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4720,7 +4697,7 @@ export def "update-device" [
   --x-amz-target: string@x-amz-target-completer-86 # required
   --device-arn: string # The ARN of the device to update. Required.
   --device-name: string # The updated device name. Required.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4772,7 +4749,7 @@ export def "update-gateway" [
   --name: string # The updated name of the gateway.
   --description: string # The updated description of the gateway.
   --software-version: string # The updated software version of the gateway. The gateway automatically updates its software version during normal operation.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4823,7 +4800,7 @@ export def "update-gateway-group" [
   gateway_group_arn: string # The ARN of the gateway group to update.
   --name: string # The updated name of the gateway group.
   --description: string # The updated description of the gateway group.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4878,7 +4855,7 @@ export def "update-network-profile" [
   --next-password: string # The next, or subsequent, password of the Wi-Fi network. This password is asynchronously transmitted to the device and is used when the password of the network changes to NextPassword. (format: password)
   --certificate-authority-arn: string # The ARN of the Private Certificate Authority (PCA) created in AWS Certificate Manager (ACM). This is used to issue certificates to the devices.
   --trust-anchors: list<string> # The root certificate(s) of your authentication server that will be installed on your devices and used to trust your authentication server during EAP negotiation.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4908,7 +4885,6 @@ export def "update-network-profile" [
 #
 # POST /
 # operationId: UpdateProfile
-# --MeetingRoomConfiguration shape: {RoomUtilizationMetricsEnabled?: bool, EndOfMeetingReminder?: record, InstantBooking?: record, RequireCheckIn?: record}
 export def "update-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4941,7 +4917,7 @@ export def "update-profile" [
   --pstn-enabled: oneof<nothing, bool> # Whether the PSTN setting of the room profile is enabled.
   --data-retention-opt-in: oneof<nothing, bool> # Whether data retention of the profile is enabled.
   --meeting-room-configuration: record # Updates meeting room settings of a room profile. — shape: {RoomUtilizationMetricsEnabled?: bool, EndOfMeetingReminder?: record, InstantBooking?: record, RequireCheckIn?: record}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4994,7 +4970,7 @@ export def "update-room" [
   --description: string # The updated description for the room.
   --provider-calendar-id: string # The updated provider calendar ARN for the room.
   --profile-arn: string # The updated profile ARN for the room.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5045,7 +5021,7 @@ export def "update-skill-group" [
   --skill-group-arn: string # The ARN of the skill group to update.
   --skill-group-name: string # The updated name for the skill group.
   --description: string # The updated description for the skill group.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

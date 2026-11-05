@@ -14,27 +14,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "wsc-access-key" => { {scheme: $scheme, headers: {"wsc-access-key": $token_val}, query: "", location: "header"} }
     "wsc-api-key" => { {scheme: $scheme, headers: {"wsc-api-key": $token_val}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -42,8 +51,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -54,7 +68,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -89,7 +112,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -127,9 +151,9 @@ def billing-mode-completer [] { ["pay_as_you_go" "twentyfour_seven"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "specs" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["specs" "list-live-streams" "create-live-stream" "delete-live-stream" "show-live-stream" "update-live-stream" "regenerate-connection-code-live-stream" "reset-live-stream" "start-live-stream" "show-live-stream-state" "show-live-stream-stats" "stop-live-stream" "show-live-stream-thumbnail-url" "list-players" "show-player" "update-player" "request-player-rebuild" "show-player-state" "list-player-urls" "create-player-url" "delete-player-url" "show-player-url" "update-player-url" "list-recordings" "delete-recording" "show-recording" "show-recording-state" "list-schedules" "create-schedule" "delete-schedule" "show-schedule" "update-schedule" "disable-schedule" "enable-schedule" "show-schedule-state" "list-stream-sources" "create-stream-source" "add-stream-source" "delete-stream-source" "show-stream-source" "update-stream-source" "list-stream-targets" "create-stream-target" "add-stream-target" "delete-stream-target" "show-stream-target" "update-stream-target" "show-stream-target-metrics-current" "show-stream-target-metrics-historic" "regenerate-connection-code-stream-target" "show-stream-target-geoblock" "update-stream-target-geoblock" "create-stream-target-geoblock" "list-stream-target-properties" "create-stream-target-property" "delete-stream-target-property" "show-stream-target-property" "show-stream-target-token-auth" "update-stream-target-token-auth" "create-stream-target-token-auth" "list-transcoders" "create-transcoder" "delete-transcoder" "show-transcoder" "update-transcoder" "disable-all-stream-targets-transcoder" "enable-all-stream-targets-transcoder" "list-transcoder-recordings" "reset-transcoder" "list-transcoder-schedules" "start-transcoder" "show-transcoder-state" "show-transcoder-stats" "stop-transcoder" "show-transcoder-thumbnail-url" "list-transcoder-outputs" "create-transcoder-output" "delete-transcoder-output" "show-transcoder-output" "update-transcoder-output" "add-stream-target-to-transcoder-output" "remove-stream-target-to-transcoder-output" "list-transcoder-output-output-stream-targets" "create-transcoder-output-output-stream-target" "delete-transcoder-output-output-stream-target" "show-transcoder-output-output-stream-target" "update-transcoder-output-output-stream-target" "disable-transcoder-output-output-stream-target" "enable-transcoder-output-output-stream-target" "restart-transcoder-output-output-stream-target" "list-transcoder-properties" "create-transcoder-property" "delete-transcoder-property" "show-transcoder-property" "index-uptimes" "show-uptime" "show-uptime-metrics-current" "show-uptime-metrics-historic" "usage-network-stream-sources-index" "usage-network-stream-targets-index" "usage-network-transcoders-index" "usage-storage-peak-recording-index" "usage-time-transcoders-index" "show-viewer-data-stream-target" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -161,7 +185,7 @@ export def "specs" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<basePath: string, consumes: list<string>, definitions: record, externalDocs: record, host: string, info: record, paths: record, produces: list<string>, schemes: list<string>, security: list<record>, securityDefinitions: record, swagger: string, tags: list<record>, x_tagGroups: list<record>> {
+]: nothing -> oneof<record<basePath: string, consumes: list<string>, definitions: record, externalDocs: record, host: string, info: record, paths: record, produces: list<string>, schemes: list<string>, security: list<record>, securityDefinitions: record, swagger: string, tags: list<record>, x_tagGroups: list<record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/specs" $auth.query)
@@ -197,7 +221,7 @@ export def "list-live-streams" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Returns a paginated view of results from the HTTP request. Specify a positive integer to indicate which page of the results should be displayed first. Next and Previous links allow you to navigate multiple pages of results. Omit the page parameter or specify an integer that's less than or equal to 0 to view all (unpaginated) results.
   --per-page: int # For use with the page parameter. Indicates how many records should be included on each page of results. A valid value is any positive integer. The default is 10.
-]: nothing -> record<live_streams: table<aspect_ratio_height: int, aspect_ratio_width: int, billing_mode: string, broadcast_location: string, closed_caption_type: string, connection_code: string, connection_code_expires_at: string, created_at: string, delivery_method: string, delivery_protocol: string, delivery_protocols: list, delivery_type: string, direct_playback_urls: list, encoder: string, hosted_page: bool, hosted_page_description: string, hosted_page_logo_image_url: string, hosted_page_sharing_icons: bool, hosted_page_title: string, hosted_page_url: string, id: string, low_latency: bool, name: string, player_countdown: bool, player_countdown_at: string, player_embed_code: string, player_hds_playback_url: string, player_hls_playback_url: string, player_id: string, player_logo_image_url: string, player_logo_position: string, player_responsive: bool, player_type: string, player_video_poster_image_url: string, player_width: int, recording: bool, source_connection_information: record, stream_source_id: string, stream_targets: list, target_delivery_protocol: string, transcoder_type: string, updated_at: string, use_stream_source: bool, video_fallback: bool>> {
+]: nothing -> oneof<record<live_streams: table<aspect_ratio_height: int, aspect_ratio_width: int, billing_mode: string, broadcast_location: string, closed_caption_type: string, connection_code: string, connection_code_expires_at: string, created_at: string, delivery_method: string, delivery_protocol: string, delivery_protocols: list, delivery_type: string, direct_playback_urls: list, encoder: string, hosted_page: bool, hosted_page_description: string, hosted_page_logo_image_url: string, hosted_page_sharing_icons: bool, hosted_page_title: string, hosted_page_url: string, id: string, low_latency: bool, name: string, player_countdown: bool, player_countdown_at: string, player_embed_code: string, player_hds_playback_url: string, player_hls_playback_url: string, player_id: string, player_logo_image_url: string, player_logo_position: string, player_responsive: bool, player_type: string, player_video_poster_image_url: string, player_width: int, recording: bool, source_connection_information: record, stream_source_id: string, stream_targets: list, target_delivery_protocol: string, transcoder_type: string, updated_at: string, use_stream_source: bool, video_fallback: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
@@ -222,7 +246,6 @@ export def "list-live-streams" [
 #
 # POST /live_streams
 # operationId: createLiveStream
-# --live_stream shape: {aspect_ratio_height: int, aspect_ratio_width: int, billing_mode: "pay_as_you_go"|"twentyfour_seven", broadcast_location: "asia_pacific_australia"|"asia_pacific_japan"|"asia_pacific_singapore"|"asia_pacific_taiwan"|"eu_belgium"|"eu_germany"|"eu_ireland"|"south_america_brazil"|"us_central_iowa"|"us_east_s_carolina"|"us_east_virginia"|"us_west_california"|"us_west_oregon", closed_caption_type?: "none"|"cea"|"on_text"|"both", delivery_method?: "pull"|"cdn"|"push", delivery_protocols?: list<string>, ... (29 more fields)}
 export def "create-live-stream" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -234,7 +257,7 @@ export def "create-live-stream" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   live_stream: record # shape: {aspect_ratio_height: int, aspect_ratio_width: int, billing_mode: "pay_as_you_go"|"twentyfour_seven", broadcast_location: "asia_pacific_australia"|"asia_pacific_japan"|"asia_pacific_singapore"|"asia_pacific_taiwan"|"eu_belgium"|"eu_germany"|"eu_ireland"|"south_america_brazil"|"us_central_iowa"|"us_east_s_carolina"|"us_east_virginia"|"us_west_california"|"us_west_oregon", closed_caption_type?: "none"|"cea"|"on_text"|"both", delivery_method?: "pull"|"cdn"|"push", delivery_protocols?: list<string>, ... (29 more fields)}
-]: any -> record<live_stream: record<aspect_ratio_height: int, aspect_ratio_width: int, billing_mode: string, broadcast_location: string, closed_caption_type: string, connection_code: string, connection_code_expires_at: string, created_at: string, delivery_method: string, delivery_protocol: string, delivery_protocols: list<string>, delivery_type: string, direct_playback_urls: list<record>, encoder: string, hosted_page: bool, hosted_page_description: string, hosted_page_logo_image_url: string, hosted_page_sharing_icons: bool, hosted_page_title: string, hosted_page_url: string, id: string, low_latency: bool, name: string, player_countdown: bool, player_countdown_at: string, player_embed_code: string, player_hds_playback_url: string, player_hls_playback_url: string, player_id: string, player_logo_image_url: string, player_logo_position: string, player_responsive: bool, player_type: string, player_video_poster_image_url: string, player_width: int, recording: bool, source_connection_information: record, stream_source_id: string, stream_targets: list<record>, target_delivery_protocol: string, transcoder_type: string, updated_at: string, use_stream_source: bool, video_fallback: bool>> {
+]: any -> oneof<record<live_stream: record<aspect_ratio_height: int, aspect_ratio_width: int, billing_mode: string, broadcast_location: string, closed_caption_type: string, connection_code: string, connection_code_expires_at: string, created_at: string, delivery_method: string, delivery_protocol: string, delivery_protocols: list<string>, delivery_type: string, direct_playback_urls: list<record>, encoder: string, hosted_page: bool, hosted_page_description: string, hosted_page_logo_image_url: string, hosted_page_sharing_icons: bool, hosted_page_title: string, hosted_page_url: string, id: string, low_latency: bool, name: string, player_countdown: bool, player_countdown_at: string, player_embed_code: string, player_hds_playback_url: string, player_hls_playback_url: string, player_id: string, player_logo_image_url: string, player_logo_position: string, player_responsive: bool, player_type: string, player_video_poster_image_url: string, player_width: int, recording: bool, source_connection_information: record, stream_source_id: string, stream_targets: list<record>, target_delivery_protocol: string, transcoder_type: string, updated_at: string, use_stream_source: bool, video_fallback: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -308,7 +331,7 @@ export def "show-live-stream" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<live_stream: record<aspect_ratio_height: int, aspect_ratio_width: int, billing_mode: string, broadcast_location: string, closed_caption_type: string, connection_code: string, connection_code_expires_at: string, created_at: string, delivery_method: string, delivery_protocol: string, delivery_protocols: list<string>, delivery_type: string, direct_playback_urls: list<record>, encoder: string, hosted_page: bool, hosted_page_description: string, hosted_page_logo_image_url: string, hosted_page_sharing_icons: bool, hosted_page_title: string, hosted_page_url: string, id: string, low_latency: bool, name: string, player_countdown: bool, player_countdown_at: string, player_embed_code: string, player_hds_playback_url: string, player_hls_playback_url: string, player_id: string, player_logo_image_url: string, player_logo_position: string, player_responsive: bool, player_type: string, player_video_poster_image_url: string, player_width: int, recording: bool, source_connection_information: record, stream_source_id: string, stream_targets: list<record>, target_delivery_protocol: string, transcoder_type: string, updated_at: string, use_stream_source: bool, video_fallback: bool>> {
+]: nothing -> oneof<record<live_stream: record<aspect_ratio_height: int, aspect_ratio_width: int, billing_mode: string, broadcast_location: string, closed_caption_type: string, connection_code: string, connection_code_expires_at: string, created_at: string, delivery_method: string, delivery_protocol: string, delivery_protocols: list<string>, delivery_type: string, direct_playback_urls: list<record>, encoder: string, hosted_page: bool, hosted_page_description: string, hosted_page_logo_image_url: string, hosted_page_sharing_icons: bool, hosted_page_title: string, hosted_page_url: string, id: string, low_latency: bool, name: string, player_countdown: bool, player_countdown_at: string, player_embed_code: string, player_hds_playback_url: string, player_hls_playback_url: string, player_id: string, player_logo_image_url: string, player_logo_position: string, player_responsive: bool, player_type: string, player_video_poster_image_url: string, player_width: int, recording: bool, source_connection_information: record, stream_source_id: string, stream_targets: list<record>, target_delivery_protocol: string, transcoder_type: string, updated_at: string, use_stream_source: bool, video_fallback: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -333,7 +356,6 @@ export def "show-live-stream" [
 #
 # PATCH /live_streams/{id}
 # operationId: updateLiveStream
-# --live_stream shape: {aspect_ratio_height: int, aspect_ratio_width: int, closed_caption_type?: "none"|"cea"|"on_text"|"both", delivery_method?: "pull"|"cdn"|"push", delivery_protocols?: list<string>, disable_authentication?: bool, encoder: "wowza_streaming_engine"|"wowza_gocoder"|"media_ds"|"axis"|"epiphan"|"hauppauge"|"jvc"|"live_u"|"matrox"|"newtek_tricaster"|"osprey"|"sony"|"telestream_wirecast"|"teradek_cube"|"vmix"|"x_split"|"ipcamera"|"other_rtmp"|"other_rtsp", hosted_page_description?: string, ... (22 more fields)}
 export def "update-live-stream" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -346,7 +368,7 @@ export def "update-live-stream" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   live_stream: record # shape: {aspect_ratio_height: int, aspect_ratio_width: int, closed_caption_type?: "none"|"cea"|"on_text"|"both", delivery_method?: "pull"|"cdn"|"push", delivery_protocols?: list<string>, disable_authentication?: bool, encoder: "wowza_streaming_engine"|"wowza_gocoder"|"media_ds"|"axis"|"epiphan"|"hauppauge"|"jvc"|"live_u"|"matrox"|"newtek_tricaster"|"osprey"|"sony"|"telestream_wirecast"|"teradek_cube"|"vmix"|"x_split"|"ipcamera"|"other_rtmp"|"other_rtsp", hosted_page_description?: string, ... (22 more fields)}
-]: any -> record<live_stream: record<aspect_ratio_height: int, aspect_ratio_width: int, billing_mode: string, broadcast_location: string, closed_caption_type: string, connection_code: string, connection_code_expires_at: string, created_at: string, delivery_method: string, delivery_protocol: string, delivery_protocols: list<string>, delivery_type: string, direct_playback_urls: list<record>, encoder: string, hosted_page: bool, hosted_page_description: string, hosted_page_logo_image_url: string, hosted_page_sharing_icons: bool, hosted_page_title: string, hosted_page_url: string, id: string, low_latency: bool, name: string, player_countdown: bool, player_countdown_at: string, player_embed_code: string, player_hds_playback_url: string, player_hls_playback_url: string, player_id: string, player_logo_image_url: string, player_logo_position: string, player_responsive: bool, player_type: string, player_video_poster_image_url: string, player_width: int, recording: bool, source_connection_information: record, stream_source_id: string, stream_targets: list<record>, target_delivery_protocol: string, transcoder_type: string, updated_at: string, use_stream_source: bool, video_fallback: bool>> {
+]: any -> oneof<record<live_stream: record<aspect_ratio_height: int, aspect_ratio_width: int, billing_mode: string, broadcast_location: string, closed_caption_type: string, connection_code: string, connection_code_expires_at: string, created_at: string, delivery_method: string, delivery_protocol: string, delivery_protocols: list<string>, delivery_type: string, direct_playback_urls: list<record>, encoder: string, hosted_page: bool, hosted_page_description: string, hosted_page_logo_image_url: string, hosted_page_sharing_icons: bool, hosted_page_title: string, hosted_page_url: string, id: string, low_latency: bool, name: string, player_countdown: bool, player_countdown_at: string, player_embed_code: string, player_hds_playback_url: string, player_hls_playback_url: string, player_id: string, player_logo_image_url: string, player_logo_position: string, player_responsive: bool, player_type: string, player_video_poster_image_url: string, player_width: int, recording: bool, source_connection_information: record, stream_source_id: string, stream_targets: list<record>, target_delivery_protocol: string, transcoder_type: string, updated_at: string, use_stream_source: bool, video_fallback: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -385,7 +407,7 @@ export def "regenerate-connection-code-live-stream" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<live_stream: record<connection_code: string>> {
+]: nothing -> oneof<record<live_stream: record<connection_code: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -421,7 +443,7 @@ export def "reset-live-stream" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<live_stream: record<state: string>> {
+]: nothing -> oneof<record<live_stream: record<state: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -457,7 +479,7 @@ export def "start-live-stream" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<live_stream: record<state: string>> {
+]: nothing -> oneof<record<live_stream: record<state: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -493,7 +515,7 @@ export def "show-live-stream-state" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<live_stream: record<state: string>> {
+]: nothing -> oneof<record<live_stream: record<state: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -529,7 +551,7 @@ export def "show-live-stream-stats" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<live_stream: record<audio_codec: record<status: string, text: string, units: string, value: string>, bits_in_rate: record<status: string, text: string, units: string, value: float>, bits_out_rate: record<status: string, text: string, units: string, value: float>, bytes_in_rate: record<status: string, text: string, units: string, value: float>, bytes_out_rate: record<status: string, text: string, units: string, value: float>, configured_bytes_out_rate: record<status: string, text: string, units: string, value: int>, connected: record<status: string, text: string, units: string, value: string>, cpu: record<status: string, text: string, units: string, value: int>, frame_rate: record<status: string, text: string, units: string, value: int>, frame_size: record<status: string, text: string, units: string, value: string>, gpu_decoder_usage: record<status: string, text: string, units: string, value: int>, gpu_driver_version: record<status: string, text: string, units: string, value: string>, gpu_encoder_usage: record<status: string, text: string, units: string, value: int>, gpu_memory_usage: record<status: string, text: string, units: string, value: int>, gpu_usage: record<status: string, text: string, units: string, value: int>, height: record<status: string, text: string, units: string, value: int>, keyframe_interval: record<status: string, text: string, units: string, value: int>, stream_target_status_OUTPUTIDX_STREAMTARGETIDX: record<status: string, text: string, units: string, value: string>, unique_views: record<status: string, text: string, units: string, value: int>, video_codec: record<status: string, text: string, units: string, value: string>, width: record<status: string, text: string, units: string, value: int>>> {
+]: nothing -> oneof<record<live_stream: record<audio_codec: record<status: string, text: string, units: string, value: string>, bits_in_rate: record<status: string, text: string, units: string, value: float>, bits_out_rate: record<status: string, text: string, units: string, value: float>, bytes_in_rate: record<status: string, text: string, units: string, value: float>, bytes_out_rate: record<status: string, text: string, units: string, value: float>, configured_bytes_out_rate: record<status: string, text: string, units: string, value: int>, connected: record<status: string, text: string, units: string, value: string>, cpu: record<status: string, text: string, units: string, value: int>, frame_rate: record<status: string, text: string, units: string, value: int>, frame_size: record<status: string, text: string, units: string, value: string>, gpu_decoder_usage: record<status: string, text: string, units: string, value: int>, gpu_driver_version: record<status: string, text: string, units: string, value: string>, gpu_encoder_usage: record<status: string, text: string, units: string, value: int>, gpu_memory_usage: record<status: string, text: string, units: string, value: int>, gpu_usage: record<status: string, text: string, units: string, value: int>, height: record<status: string, text: string, units: string, value: int>, keyframe_interval: record<status: string, text: string, units: string, value: int>, stream_target_status_OUTPUTIDX_STREAMTARGETIDX: record<status: string, text: string, units: string, value: string>, unique_views: record<status: string, text: string, units: string, value: int>, video_codec: record<status: string, text: string, units: string, value: string>, width: record<status: string, text: string, units: string, value: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -565,7 +587,7 @@ export def "stop-live-stream" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<live_stream: record<state: string>> {
+]: nothing -> oneof<record<live_stream: record<state: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -601,7 +623,7 @@ export def "show-live-stream-thumbnail-url" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<live_stream: record<thumbnail_url: string>> {
+]: nothing -> oneof<record<live_stream: record<thumbnail_url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -638,7 +660,7 @@ export def "list-players" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Returns a paginated view of results from the HTTP request. Specify a positive integer to indicate which page of the results should be displayed first. Next and Previous links allow you to navigate multiple pages of results. Omit the page parameter or specify an integer that's less than or equal to 0 to view all (unpaginated) results.
   --per-page: int # For use with the page parameter. Indicates how many records should be included on each page of results. A valid value is any positive integer. The default is 10.
-]: nothing -> record<players: table<countdown: bool, countdown_at: string, created_at: string, embed_code: string, hds_playback_url: string, hls_playback_url: string, hosted_page: bool, hosted_page_description: string, hosted_page_logo_image_url: string, hosted_page_sharing_icons: string, hosted_page_title: string, hosted_page_url: string, id: string, logo_image_url: string, logo_position: string, responsive: bool, transcoder_id: string, type: string, updated_at: string, video_poster_image_url: string, width: int>> {
+]: nothing -> oneof<record<players: table<countdown: bool, countdown_at: string, created_at: string, embed_code: string, hds_playback_url: string, hls_playback_url: string, hosted_page: bool, hosted_page_description: string, hosted_page_logo_image_url: string, hosted_page_sharing_icons: string, hosted_page_title: string, hosted_page_url: string, id: string, logo_image_url: string, logo_position: string, responsive: bool, transcoder_id: string, type: string, updated_at: string, video_poster_image_url: string, width: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
@@ -674,7 +696,7 @@ export def "show-player" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<player: record<countdown: bool, countdown_at: string, created_at: string, embed_code: string, hds_playback_url: string, hls_playback_url: string, hosted_page: bool, hosted_page_description: string, hosted_page_logo_image_url: string, hosted_page_sharing_icons: string, hosted_page_title: string, hosted_page_url: string, id: string, logo_image_url: string, logo_position: string, responsive: bool, transcoder_id: string, type: string, updated_at: string, video_poster_image_url: string, width: int>> {
+]: nothing -> oneof<record<player: record<countdown: bool, countdown_at: string, created_at: string, embed_code: string, hds_playback_url: string, hls_playback_url: string, hosted_page: bool, hosted_page_description: string, hosted_page_logo_image_url: string, hosted_page_sharing_icons: string, hosted_page_title: string, hosted_page_url: string, id: string, logo_image_url: string, logo_position: string, responsive: bool, transcoder_id: string, type: string, updated_at: string, video_poster_image_url: string, width: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -699,7 +721,6 @@ export def "show-player" [
 #
 # PATCH /players/{id}
 # operationId: updatePlayer
-# --player shape: {countdown?: bool, countdown_at?: string, hosted_page?: bool, hosted_page_description?: string, hosted_page_logo_image?: string, hosted_page_sharing_icons?: bool, hosted_page_title?: string, logo_image?: string, logo_position?: string, remove_hosted_page_logo_image?: bool, remove_logo_image?: bool, remove_video_poster_image?: bool, responsive?: bool, type?: string, video_poster_image?: string, width?: int}
 export def "update-player" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -712,7 +733,7 @@ export def "update-player" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   player: record # shape: {countdown?: bool, countdown_at?: string, hosted_page?: bool, hosted_page_description?: string, hosted_page_logo_image?: string, hosted_page_sharing_icons?: bool, hosted_page_title?: string, logo_image?: string, logo_position?: string, remove_hosted_page_logo_image?: bool, remove_logo_image?: bool, remove_video_poster_image?: bool, responsive?: bool, type?: string, video_poster_image?: string, width?: int}
-]: any -> record<player: record<countdown: bool, countdown_at: string, created_at: string, embed_code: string, hds_playback_url: string, hls_playback_url: string, hosted_page: bool, hosted_page_description: string, hosted_page_logo_image_url: string, hosted_page_sharing_icons: string, hosted_page_title: string, hosted_page_url: string, id: string, logo_image_url: string, logo_position: string, responsive: bool, transcoder_id: string, type: string, updated_at: string, video_poster_image_url: string, width: int>> {
+]: any -> oneof<record<player: record<countdown: bool, countdown_at: string, created_at: string, embed_code: string, hds_playback_url: string, hls_playback_url: string, hosted_page: bool, hosted_page_description: string, hosted_page_logo_image_url: string, hosted_page_sharing_icons: string, hosted_page_title: string, hosted_page_url: string, id: string, logo_image_url: string, logo_position: string, responsive: bool, transcoder_id: string, type: string, updated_at: string, video_poster_image_url: string, width: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -751,7 +772,7 @@ export def "request-player-rebuild" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<player: record<state: string>> {
+]: nothing -> oneof<record<player: record<state: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -787,7 +808,7 @@ export def "show-player-state" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<player: record<state: string>> {
+]: nothing -> oneof<record<player: record<state: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -823,7 +844,7 @@ export def "list-player-urls" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<urls: table<bitrate: int, created_at: string, height: int, id: string, label: string, player_id: string, updated_at: string, url: string, width: int>> {
+]: nothing -> oneof<record<urls: table<bitrate: int, created_at: string, height: int, id: string, label: string, player_id: string, updated_at: string, url: string, width: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($player_id | is-empty) { error make --unspanned { msg: "path parameter 'player_id' must be non-empty" } }
@@ -848,7 +869,6 @@ export def "list-player-urls" [
 #
 # POST /players/{player_id}/urls
 # operationId: createPlayerUrl
-# --url shape: {bitrate?: int, height?: int, label?: string, url?: string, width?: int}
 export def "create-player-url" [
   player_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -861,7 +881,7 @@ export def "create-player-url" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   url: record # shape: {bitrate?: int, height?: int, label?: string, url?: string, width?: int}
-]: any -> record<url: record<bitrate: int, created_at: string, height: int, id: string, label: string, player_id: string, updated_at: string, url: string, width: int>> {
+]: any -> oneof<record<url: record<bitrate: int, created_at: string, height: int, id: string, label: string, player_id: string, updated_at: string, url: string, width: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -939,7 +959,7 @@ export def "show-player-url" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<url: record<bitrate: int, created_at: string, height: int, id: string, label: string, player_id: string, updated_at: string, url: string, width: int>> {
+]: nothing -> oneof<record<url: record<bitrate: int, created_at: string, height: int, id: string, label: string, player_id: string, updated_at: string, url: string, width: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($player_id | is-empty) { error make --unspanned { msg: "path parameter 'player_id' must be non-empty" } }
@@ -965,7 +985,6 @@ export def "show-player-url" [
 #
 # PATCH /players/{player_id}/urls/{id}
 # operationId: updatePlayerUrl
-# --url shape: {bitrate?: int, height?: int, label?: string, url?: string, width?: int}
 export def "update-player-url" [
   player_id: string
   id: string
@@ -979,7 +998,7 @@ export def "update-player-url" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   url: record # shape: {bitrate?: int, height?: int, label?: string, url?: string, width?: int}
-]: any -> record<url: record<bitrate: int, created_at: string, height: int, id: string, label: string, player_id: string, updated_at: string, url: string, width: int>> {
+]: any -> oneof<record<url: record<bitrate: int, created_at: string, height: int, id: string, label: string, player_id: string, updated_at: string, url: string, width: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1020,7 +1039,7 @@ export def "list-recordings" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Returns a paginated view of results from the HTTP request. Specify a positive integer to indicate which page of the results should be displayed first. Next and Previous links allow you to navigate multiple pages of results. Omit the page parameter or specify an integer that's less than or equal to 0 to view all (unpaginated) results.
   --per-page: int # For use with the page parameter. Indicates how many records should be included on each page of results. A valid value is any positive integer. The default is 10.
-]: nothing -> record<recordings: table<created_at: string, download_url: string, duration: int, file_name: string, file_size: int, id: string, reason: string, starts_at: string, state: string, transcoder_id: string, transcoder_name: string, transcoding_uptime_id: string, updated_at: string>> {
+]: nothing -> oneof<record<recordings: table<created_at: string, download_url: string, duration: int, file_name: string, file_size: int, id: string, reason: string, starts_at: string, state: string, transcoder_id: string, transcoder_name: string, transcoding_uptime_id: string, updated_at: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
@@ -1092,7 +1111,7 @@ export def "show-recording" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<recording: record<created_at: string, download_url: string, duration: int, file_name: string, file_size: int, id: string, reason: string, starts_at: string, state: string, transcoder_id: string, transcoder_name: string, transcoding_uptime_id: string, updated_at: string>> {
+]: nothing -> oneof<record<recording: record<created_at: string, download_url: string, duration: int, file_name: string, file_size: int, id: string, reason: string, starts_at: string, state: string, transcoder_id: string, transcoder_name: string, transcoding_uptime_id: string, updated_at: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1128,7 +1147,7 @@ export def "show-recording-state" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<recording: record<state: string>> {
+]: nothing -> oneof<record<recording: record<state: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1165,7 +1184,7 @@ export def "list-schedules" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Returns a paginated view of results from the HTTP request. Specify a positive integer to indicate which page of the results should be displayed first. Next and Previous links allow you to navigate multiple pages of results. Omit the page parameter or specify an integer that's less than or equal to 0 to view all (unpaginated) results.
   --per-page: int # For use with the page parameter. Indicates how many records should be included on each page of results. A valid value is any positive integer. The default is 10.
-]: nothing -> record<schedules: table<action_type: string, created_at: string, end_repeat: string, id: string, name: string, recurrence_data: string, recurrence_type: string, start_repeat: string, start_transcoder: string, state: string, stop_transcoder: string, transcoder_id: string, transcoder_name: string, updated_at: string>> {
+]: nothing -> oneof<record<schedules: table<action_type: string, created_at: string, end_repeat: string, id: string, name: string, recurrence_data: string, recurrence_type: string, start_repeat: string, start_transcoder: string, state: string, stop_transcoder: string, transcoder_id: string, transcoder_name: string, updated_at: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
@@ -1190,7 +1209,6 @@ export def "list-schedules" [
 #
 # POST /schedules
 # operationId: createSchedule
-# --schedule shape: {action_type: "start"|"stop"|"start_stop", end_repeat?: string, name: string, recurrence_data?: "sunday"|"monday"|"tuesday"|"wednesday"|"thursday"|"friday"|"saturday", recurrence_type: "once"|"recur", start_repeat?: string, start_transcoder?: string, stop_transcoder?: string, transcoder_id: string}
 export def "create-schedule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1202,7 +1220,7 @@ export def "create-schedule" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   schedule: record # shape: {action_type: "start"|"stop"|"start_stop", end_repeat?: string, name: string, recurrence_data?: "sunday"|"monday"|"tuesday"|"wednesday"|"thursday"|"friday"|"saturday", recurrence_type: "once"|"recur", start_repeat?: string, start_transcoder?: string, stop_transcoder?: string, transcoder_id: string}
-]: any -> record<schedule: record<action_type: string, created_at: string, end_repeat: string, id: string, name: string, recurrence_data: string, recurrence_type: string, start_repeat: string, start_transcoder: string, state: string, stop_transcoder: string, transcoder_id: string, transcoder_name: string, updated_at: string>> {
+]: any -> oneof<record<schedule: record<action_type: string, created_at: string, end_repeat: string, id: string, name: string, recurrence_data: string, recurrence_type: string, start_repeat: string, start_transcoder: string, state: string, stop_transcoder: string, transcoder_id: string, transcoder_name: string, updated_at: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1276,7 +1294,7 @@ export def "show-schedule" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<schedule: record<action_type: string, created_at: string, end_repeat: string, id: string, name: string, recurrence_data: string, recurrence_type: string, start_repeat: string, start_transcoder: string, state: string, stop_transcoder: string, transcoder_id: string, transcoder_name: string, updated_at: string>> {
+]: nothing -> oneof<record<schedule: record<action_type: string, created_at: string, end_repeat: string, id: string, name: string, recurrence_data: string, recurrence_type: string, start_repeat: string, start_transcoder: string, state: string, stop_transcoder: string, transcoder_id: string, transcoder_name: string, updated_at: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1301,7 +1319,6 @@ export def "show-schedule" [
 #
 # PATCH /schedules/{id}
 # operationId: updateSchedule
-# --schedule shape: {action_type: "start"|"stop"|"start_stop", end_repeat?: string, name: string, recurrence_data?: "sunday"|"monday"|"tuesday"|"wednesday"|"thursday"|"friday"|"saturday", start_repeat?: string, start_transcoder?: string, stop_transcoder?: string}
 export def "update-schedule" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1314,7 +1331,7 @@ export def "update-schedule" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   schedule: record # shape: {action_type: "start"|"stop"|"start_stop", end_repeat?: string, name: string, recurrence_data?: "sunday"|"monday"|"tuesday"|"wednesday"|"thursday"|"friday"|"saturday", start_repeat?: string, start_transcoder?: string, stop_transcoder?: string}
-]: any -> record<schedule: record<action_type: string, created_at: string, end_repeat: string, id: string, name: string, recurrence_data: string, recurrence_type: string, start_repeat: string, start_transcoder: string, state: string, stop_transcoder: string, transcoder_id: string, transcoder_name: string, updated_at: string>> {
+]: any -> oneof<record<schedule: record<action_type: string, created_at: string, end_repeat: string, id: string, name: string, recurrence_data: string, recurrence_type: string, start_repeat: string, start_transcoder: string, state: string, stop_transcoder: string, transcoder_id: string, transcoder_name: string, updated_at: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1353,7 +1370,7 @@ export def "disable-schedule" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<schedule: record<state: string>> {
+]: nothing -> oneof<record<schedule: record<state: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1389,7 +1406,7 @@ export def "enable-schedule" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<schedule: record<state: string>> {
+]: nothing -> oneof<record<schedule: record<state: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1425,7 +1442,7 @@ export def "show-schedule-state" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<schedule: record<state: string>> {
+]: nothing -> oneof<record<schedule: record<state: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1462,7 +1479,7 @@ export def "list-stream-sources" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Returns a paginated view of results from the HTTP request. Specify a positive integer to indicate which page of the results should be displayed first. Next and Previous links allow you to navigate multiple pages of results. Omit the page parameter or specify an integer that's less than or equal to 0 to view all (unpaginated) results.
   --per-page: int # For use with the page parameter. Indicates how many records should be included on each page of results. A valid value is any positive integer. The default is 10.
-]: nothing -> record<stream_sources: table<backup_ip_address: string, backup_url: string, created_at: string, id: string, ip_address: string, location: string, location_method: string, name: string, password: string, playback_url: string, primary_url: string, provider: string, stream_name: string, updated_at: string, username: string>> {
+]: nothing -> oneof<record<stream_sources: table<backup_ip_address: string, backup_url: string, created_at: string, id: string, ip_address: string, location: string, location_method: string, name: string, password: string, playback_url: string, primary_url: string, provider: string, stream_name: string, updated_at: string, username: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
@@ -1487,7 +1504,6 @@ export def "list-stream-sources" [
 #
 # POST /stream_sources
 # operationId: createStreamSource
-# --stream_source shape: {backup_ip_address?: string, ip_address?: string, location?: "asia_pacific_australia"|"asia_pacific_japan"|"asia_pacific_singapore"|"asia_pacific_taiwan"|"eu_belgium"|"eu_germany"|"eu_ireland"|"south_america_brazil"|"us_central_iowa"|"us_east_s_carolina"|"us_east_virginia"|"us_west_california"|"us_west_oregon", location_method: "region"|"ip_address", name: string}
 export def "create-stream-source" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1499,7 +1515,7 @@ export def "create-stream-source" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   stream_source: record # shape: {backup_ip_address?: string, ip_address?: string, location?: "asia_pacific_australia"|"asia_pacific_japan"|"asia_pacific_singapore"|"asia_pacific_taiwan"|"eu_belgium"|"eu_germany"|"eu_ireland"|"south_america_brazil"|"us_central_iowa"|"us_east_s_carolina"|"us_east_virginia"|"us_west_california"|"us_west_oregon", location_method: "region"|"ip_address", name: string}
-]: any -> record<stream_source: record<backup_ip_address: string, backup_url: string, created_at: string, id: string, ip_address: string, location: string, location_method: string, name: string, password: string, playback_url: string, primary_url: string, provider: string, stream_name: string, updated_at: string, username: string>> {
+]: any -> oneof<record<stream_source: record<backup_ip_address: string, backup_url: string, created_at: string, id: string, ip_address: string, location: string, location_method: string, name: string, password: string, playback_url: string, primary_url: string, provider: string, stream_name: string, updated_at: string, username: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1527,7 +1543,6 @@ export def "create-stream-source" [
 # POST /stream_sources/add
 # DEPRECATED
 # operationId: addStreamSource
-# --stream_source shape: {backup_ip_address?: string, ip_address?: string, location?: "asia_pacific_australia"|"asia_pacific_japan"|"asia_pacific_singapore"|"asia_pacific_taiwan"|"eu_belgium"|"eu_germany"|"eu_ireland"|"south_america_brazil"|"us_central_iowa"|"us_east_s_carolina"|"us_east_virginia"|"us_west_california"|"us_west_oregon", location_method: "region"|"ip_address", name: string}
 @deprecated
 export def "add-stream-source" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1540,7 +1555,7 @@ export def "add-stream-source" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   stream_source: record # shape: {backup_ip_address?: string, ip_address?: string, location?: "asia_pacific_australia"|"asia_pacific_japan"|"asia_pacific_singapore"|"asia_pacific_taiwan"|"eu_belgium"|"eu_germany"|"eu_ireland"|"south_america_brazil"|"us_central_iowa"|"us_east_s_carolina"|"us_east_virginia"|"us_west_california"|"us_west_oregon", location_method: "region"|"ip_address", name: string}
-]: any -> record<stream_source: record<backup_ip_address: string, backup_url: string, created_at: string, id: string, ip_address: string, location: string, location_method: string, name: string, password: string, playback_url: string, primary_url: string, provider: string, stream_name: string, updated_at: string, username: string>> {
+]: any -> oneof<record<stream_source: record<backup_ip_address: string, backup_url: string, created_at: string, id: string, ip_address: string, location: string, location_method: string, name: string, password: string, playback_url: string, primary_url: string, provider: string, stream_name: string, updated_at: string, username: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1614,7 +1629,7 @@ export def "show-stream-source" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<stream_source: record<backup_ip_address: string, backup_url: string, created_at: string, id: string, ip_address: string, location: string, location_method: string, name: string, password: string, playback_url: string, primary_url: string, provider: string, stream_name: string, updated_at: string, username: string>> {
+]: nothing -> oneof<record<stream_source: record<backup_ip_address: string, backup_url: string, created_at: string, id: string, ip_address: string, location: string, location_method: string, name: string, password: string, playback_url: string, primary_url: string, provider: string, stream_name: string, updated_at: string, username: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1639,7 +1654,6 @@ export def "show-stream-source" [
 #
 # PATCH /stream_sources/{id}
 # operationId: updateStreamSource
-# --stream_source shape: {name: string}
 export def "update-stream-source" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1652,7 +1666,7 @@ export def "update-stream-source" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   stream_source: record # shape: {name: string}
-]: any -> record<stream_source: record<backup_ip_address: string, backup_url: string, created_at: string, id: string, ip_address: string, location: string, location_method: string, name: string, password: string, playback_url: string, primary_url: string, provider: string, stream_name: string, updated_at: string, username: string>> {
+]: any -> oneof<record<stream_source: record<backup_ip_address: string, backup_url: string, created_at: string, id: string, ip_address: string, location: string, location_method: string, name: string, password: string, playback_url: string, primary_url: string, provider: string, stream_name: string, updated_at: string, username: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1692,7 +1706,7 @@ export def "list-stream-targets" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Returns a paginated view of results from the HTTP request. Specify a positive integer to indicate which page of the results should be displayed first. Next and Previous links allow you to navigate multiple pages of results. Omit the page parameter or specify an integer that's less than or equal to 0 to view all (unpaginated) results.
   --per-page: int # For use with the page parameter. Indicates how many records should be included on each page of results. A valid value is any positive integer. The default is 10.
-]: nothing -> record<stream_targets: table<chunk_size: string, connection_code: string, connection_code_expires_at: string, created_at: string, hds_playback_url: string, hls_playback_url: string, id: string, location: string, name: string, primary_url: string, provider: string, rtmp_playback_url: string, stream_name: string, type: string, updated_at: string, username: string>> {
+]: nothing -> oneof<record<stream_targets: table<chunk_size: string, connection_code: string, connection_code_expires_at: string, created_at: string, hds_playback_url: string, hls_playback_url: string, id: string, location: string, name: string, primary_url: string, provider: string, rtmp_playback_url: string, stream_name: string, type: string, updated_at: string, username: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
@@ -1717,7 +1731,6 @@ export def "list-stream-targets" [
 #
 # POST /stream_targets
 # operationId: createStreamTarget
-# --stream_target shape: {backup_url?: string, chunk_size?: "2"|"4"|"6"|"8"|"10", enable_hls?: bool, enabled?: bool, hds_playback_url?: string, hls_playback_url?: string, ingest_ip_whitelist?: list<string>, location: "asia_pacific_australia"|"asia_pacific_japan"|"asia_pacific_singapore"|"asia_pacific_taiwan"|"eu_belgium"|"eu_germany"|"eu_ireland"|"south_america_brazil"|"us_central_iowa"|"us_east_s_carolina"|"us_east_virginia"|"us_west_california"|"us_west_oregon", name: string, password?: string, primary_url: string, ... (11 more fields)}
 export def "create-stream-target" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1729,7 +1742,7 @@ export def "create-stream-target" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   stream_target: record # shape: {backup_url?: string, chunk_size?: "2"|"4"|"6"|"8"|"10", enable_hls?: bool, enabled?: bool, hds_playback_url?: string, hls_playback_url?: string, ingest_ip_whitelist?: list<string>, location: "asia_pacific_australia"|"asia_pacific_japan"|"asia_pacific_singapore"|"asia_pacific_taiwan"|"eu_belgium"|"eu_germany"|"eu_ireland"|"south_america_brazil"|"us_central_iowa"|"us_east_s_carolina"|"us_east_virginia"|"us_west_california"|"us_west_oregon", name: string, password?: string, primary_url: string, ... (11 more fields)}
-]: any -> record<stream_target: record<backup_url: string, chunk_size: string, connection_code: string, connection_code_expires_at: string, created_at: string, enable_hls: bool, enabled: bool, hds_playback_url: string, hls_playback_url: string, id: string, ingest_ip_whitelist: list<string>, location: string, name: string, password: string, playback_urls: record<hls: string, wowz: string, ws: string>, primary_url: string, provider: string, region_override: string, rtmp_playback_url: string, secure_ingest_query_param: string, source_delivery_method: string, source_url: string, stream_name: string, type: string, updated_at: string, use_cors: bool, use_https: bool, use_secure_ingest: bool, username: string>> {
+]: any -> oneof<record<stream_target: record<backup_url: string, chunk_size: string, connection_code: string, connection_code_expires_at: string, created_at: string, enable_hls: bool, enabled: bool, hds_playback_url: string, hls_playback_url: string, id: string, ingest_ip_whitelist: list<string>, location: string, name: string, password: string, playback_urls: record<hls: string, wowz: string, ws: string>, primary_url: string, provider: string, region_override: string, rtmp_playback_url: string, secure_ingest_query_param: string, source_delivery_method: string, source_url: string, stream_name: string, type: string, updated_at: string, use_cors: bool, use_https: bool, use_secure_ingest: bool, username: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1757,7 +1770,6 @@ export def "create-stream-target" [
 # POST /stream_targets/add
 # DEPRECATED
 # operationId: addStreamTarget
-# --stream_target shape: {chunk_size?: "2"|"4"|"6"|"8"|"10", location: "asia_pacific_australia"|"asia_pacific_japan"|"asia_pacific_singapore"|"asia_pacific_taiwan"|"eu_belgium"|"eu_germany"|"eu_ireland"|"south_america_brazil"|"us_central_iowa"|"us_east_s_carolina"|"us_east_virginia"|"us_west_california"|"us_west_oregon", name: string, provider?: string, type?: string, use_cors?: bool, use_https?: bool, use_secure_ingest?: bool}
 @deprecated
 export def "add-stream-target" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1770,7 +1782,7 @@ export def "add-stream-target" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   stream_target: record # shape: {chunk_size?: "2"|"4"|"6"|"8"|"10", location: "asia_pacific_australia"|"asia_pacific_japan"|"asia_pacific_singapore"|"asia_pacific_taiwan"|"eu_belgium"|"eu_germany"|"eu_ireland"|"south_america_brazil"|"us_central_iowa"|"us_east_s_carolina"|"us_east_virginia"|"us_west_california"|"us_west_oregon", name: string, provider?: string, type?: string, use_cors?: bool, use_https?: bool, use_secure_ingest?: bool}
-]: any -> record<stream_target: record<backup_url: string, chunk_size: string, connection_code: string, connection_code_expires_at: string, created_at: string, enable_hls: bool, enabled: bool, hds_playback_url: string, hls_playback_url: string, id: string, ingest_ip_whitelist: list<string>, location: string, name: string, password: string, playback_urls: record<hls: string, wowz: string, ws: string>, primary_url: string, provider: string, region_override: string, rtmp_playback_url: string, secure_ingest_query_param: string, source_delivery_method: string, source_url: string, stream_name: string, type: string, updated_at: string, use_cors: bool, use_https: bool, use_secure_ingest: bool, username: string>> {
+]: any -> oneof<record<stream_target: record<backup_url: string, chunk_size: string, connection_code: string, connection_code_expires_at: string, created_at: string, enable_hls: bool, enabled: bool, hds_playback_url: string, hls_playback_url: string, id: string, ingest_ip_whitelist: list<string>, location: string, name: string, password: string, playback_urls: record<hls: string, wowz: string, ws: string>, primary_url: string, provider: string, region_override: string, rtmp_playback_url: string, secure_ingest_query_param: string, source_delivery_method: string, source_url: string, stream_name: string, type: string, updated_at: string, use_cors: bool, use_https: bool, use_secure_ingest: bool, username: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1844,7 +1856,7 @@ export def "show-stream-target" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<stream_target: record<backup_url: string, chunk_size: string, connection_code: string, connection_code_expires_at: string, created_at: string, enable_hls: bool, enabled: bool, hds_playback_url: string, hls_playback_url: string, id: string, ingest_ip_whitelist: list<string>, location: string, name: string, password: string, playback_urls: record<hls: string, wowz: string, ws: string>, primary_url: string, provider: string, region_override: string, rtmp_playback_url: string, secure_ingest_query_param: string, source_delivery_method: string, source_url: string, stream_name: string, type: string, updated_at: string, use_cors: bool, use_https: bool, use_secure_ingest: bool, username: string>> {
+]: nothing -> oneof<record<stream_target: record<backup_url: string, chunk_size: string, connection_code: string, connection_code_expires_at: string, created_at: string, enable_hls: bool, enabled: bool, hds_playback_url: string, hls_playback_url: string, id: string, ingest_ip_whitelist: list<string>, location: string, name: string, password: string, playback_urls: record<hls: string, wowz: string, ws: string>, primary_url: string, provider: string, region_override: string, rtmp_playback_url: string, secure_ingest_query_param: string, source_delivery_method: string, source_url: string, stream_name: string, type: string, updated_at: string, use_cors: bool, use_https: bool, use_secure_ingest: bool, username: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1869,7 +1881,6 @@ export def "show-stream-target" [
 #
 # PATCH /stream_targets/{id}
 # operationId: updateStreamTarget
-# --stream_target shape: {backup_url?: string, chunk_size?: "2"|"4"|"6"|"8"|"10", enabled?: bool, hds_playback_url?: string, hls_playback_url?: string, ingest_ip_whitelist?: list<string>, name?: string, password?: string, primary_url?: string, provider?: string, rtmp_playback_url?: string, source_url?: string, stream_name?: string, username?: string}
 export def "update-stream-target" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1882,7 +1893,7 @@ export def "update-stream-target" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   stream_target: record # shape: {backup_url?: string, chunk_size?: "2"|"4"|"6"|"8"|"10", enabled?: bool, hds_playback_url?: string, hls_playback_url?: string, ingest_ip_whitelist?: list<string>, name?: string, password?: string, primary_url?: string, provider?: string, rtmp_playback_url?: string, source_url?: string, stream_name?: string, username?: string}
-]: any -> record<stream_target: record<backup_url: string, chunk_size: string, connection_code: string, connection_code_expires_at: string, created_at: string, enable_hls: bool, enabled: bool, hds_playback_url: string, hls_playback_url: string, id: string, ingest_ip_whitelist: list<string>, location: string, name: string, password: string, playback_urls: record<hls: string, wowz: string, ws: string>, primary_url: string, provider: string, region_override: string, rtmp_playback_url: string, secure_ingest_query_param: string, source_delivery_method: string, source_url: string, stream_name: string, type: string, updated_at: string, use_cors: bool, use_https: bool, use_secure_ingest: bool, username: string>> {
+]: any -> oneof<record<stream_target: record<backup_url: string, chunk_size: string, connection_code: string, connection_code_expires_at: string, created_at: string, enable_hls: bool, enabled: bool, hds_playback_url: string, hls_playback_url: string, id: string, ingest_ip_whitelist: list<string>, location: string, name: string, password: string, playback_urls: record<hls: string, wowz: string, ws: string>, primary_url: string, provider: string, region_override: string, rtmp_playback_url: string, secure_ingest_query_param: string, source_delivery_method: string, source_url: string, stream_name: string, type: string, updated_at: string, use_cors: bool, use_https: bool, use_secure_ingest: bool, username: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1921,7 +1932,7 @@ export def "show-stream-target-metrics-current" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<id: string, metrics: record<average_bytes_in: float, average_total_connections: float, created_at: string, dropped_connections: int, maximum_total_connections: int, minimum_total_connections: int, new_connections: int>> {
+]: nothing -> oneof<record<id: string, metrics: record<average_bytes_in: float, average_total_connections: float, created_at: string, dropped_connections: int, maximum_total_connections: int, minimum_total_connections: int, new_connections: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1960,7 +1971,7 @@ export def "show-stream-target-metrics-historic" [
   --from: string # The start of the range of time used to aggregate the metrics. Express the value by using the ISO 8601 standard of YYYY-MM-DDTHH:MM:SSZ where HH is a 24-hour clock in UTC.
   --to: string # The end of the range of time used to aggregate the metrics. Express the value by using the ISO 8601 standard of YYYY-MM-DDTHH:MM:SSZ where HH is a 24-hour clock in UTC.
   --interval: string@interval-completer # The length of time for a block of metrics. The default is **10m** (10 minutes).
-]: nothing -> record<id: string, interval: string, metrics: table<average_bytes_in: float, average_total_connections: float, created_at: string, dropped_connections: int, maximum_total_connections: int, minimum_total_connections: int, new_connections: int>> {
+]: nothing -> oneof<record<id: string, interval: string, metrics: table<average_bytes_in: float, average_total_connections: float, created_at: string, dropped_connections: int, maximum_total_connections: int, minimum_total_connections: int, new_connections: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1997,7 +2008,7 @@ export def "regenerate-connection-code-stream-target" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<stream_target: record<connection_code: string>> {
+]: nothing -> oneof<record<stream_target: record<connection_code: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2033,7 +2044,7 @@ export def "show-stream-target-geoblock" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<geoblock: record<countries: list<string>, created_at: string, state: string, stream_target_id: string, type: string, updated_at: string, whitelist: list<string>>> {
+]: nothing -> oneof<record<geoblock: record<countries: list<string>, created_at: string, state: string, stream_target_id: string, type: string, updated_at: string, whitelist: list<string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($stream_target_id | is-empty) { error make --unspanned { msg: "path parameter 'stream_target_id' must be non-empty" } }
@@ -2058,7 +2069,6 @@ export def "show-stream-target-geoblock" [
 #
 # PATCH /stream_targets/{stream_target_id}/geoblock
 # operationId: updateStreamTargetGeoblock
-# --geoblock shape: {countries?: list<string>, type: "disabled"|"allow"|"deny", whitelist?: list<string>}
 export def "update-stream-target-geoblock" [
   stream_target_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2071,7 +2081,7 @@ export def "update-stream-target-geoblock" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   geoblock: record # shape: {countries?: list<string>, type: "disabled"|"allow"|"deny", whitelist?: list<string>}
-]: any -> record<geoblock: record<countries: list<string>, created_at: string, state: string, stream_target_id: string, type: string, updated_at: string, whitelist: list<string>>> {
+]: any -> oneof<record<geoblock: record<countries: list<string>, created_at: string, state: string, stream_target_id: string, type: string, updated_at: string, whitelist: list<string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2099,7 +2109,6 @@ export def "update-stream-target-geoblock" [
 #
 # POST /stream_targets/{stream_target_id}/geoblock
 # operationId: createStreamTargetGeoblock
-# --geoblock shape: {countries?: list<string>, type: "disabled"|"allow"|"deny", whitelist?: list<string>}
 export def "create-stream-target-geoblock" [
   stream_target_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2112,7 +2121,7 @@ export def "create-stream-target-geoblock" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   geoblock: record # shape: {countries?: list<string>, type: "disabled"|"allow"|"deny", whitelist?: list<string>}
-]: any -> record<geoblock: record<countries: list<string>, created_at: string, state: string, stream_target_id: string, type: string, updated_at: string, whitelist: list<string>>> {
+]: any -> oneof<record<geoblock: record<countries: list<string>, created_at: string, state: string, stream_target_id: string, type: string, updated_at: string, whitelist: list<string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2151,7 +2160,7 @@ export def "list-stream-target-properties" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<properties: table<key: string, section: string, stream_target_id: string, value: string>> {
+]: nothing -> oneof<record<properties: table<key: string, section: string, stream_target_id: string, value: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($stream_target_id | is-empty) { error make --unspanned { msg: "path parameter 'stream_target_id' must be non-empty" } }
@@ -2176,7 +2185,6 @@ export def "list-stream-target-properties" [
 #
 # POST /stream_targets/{stream_target_id}/properties
 # operationId: createStreamTargetProperty
-# --property shape: {key: "chunkSize"|"playSSL"|"relativePlaylists"|"sendSSL", section: "hls"|"playlist", value: "2"|"4"|"6"|"8"|"10"|"true"|"false"}
 export def "create-stream-target-property" [
   stream_target_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2189,7 +2197,7 @@ export def "create-stream-target-property" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   property: record # shape: {key: "chunkSize"|"playSSL"|"relativePlaylists"|"sendSSL", section: "hls"|"playlist", value: "2"|"4"|"6"|"8"|"10"|"true"|"false"}
-]: any -> record<property: record<key: string, section: string, stream_target_id: string, value: string>> {
+]: any -> oneof<record<property: record<key: string, section: string, stream_target_id: string, value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2267,7 +2275,7 @@ export def "show-stream-target-property" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<property: record<key: string, section: string, stream_target_id: string, value: string>> {
+]: nothing -> oneof<record<property: record<key: string, section: string, stream_target_id: string, value: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($stream_target_id | is-empty) { error make --unspanned { msg: "path parameter 'stream_target_id' must be non-empty" } }
@@ -2304,7 +2312,7 @@ export def "show-stream-target-token-auth" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<token_auth: record<created_at: string, enabled: bool, stream_target_id: string, trusted_shared_secret: string, updated_at: string>> {
+]: nothing -> oneof<record<token_auth: record<created_at: string, enabled: bool, stream_target_id: string, trusted_shared_secret: string, updated_at: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($stream_target_id | is-empty) { error make --unspanned { msg: "path parameter 'stream_target_id' must be non-empty" } }
@@ -2329,7 +2337,6 @@ export def "show-stream-target-token-auth" [
 #
 # PATCH /stream_targets/{stream_target_id}/token_auth
 # operationId: updateStreamTargetTokenAuth
-# --token_auth shape: {enabled?: bool, trusted_shared_secret?: string}
 export def "update-stream-target-token-auth" [
   stream_target_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2342,7 +2349,7 @@ export def "update-stream-target-token-auth" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   token_auth: record # shape: {enabled?: bool, trusted_shared_secret?: string}
-]: any -> record<token_auth: record<created_at: string, enabled: bool, stream_target_id: string, trusted_shared_secret: string, updated_at: string>> {
+]: any -> oneof<record<token_auth: record<created_at: string, enabled: bool, stream_target_id: string, trusted_shared_secret: string, updated_at: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2370,7 +2377,6 @@ export def "update-stream-target-token-auth" [
 #
 # POST /stream_targets/{stream_target_id}/token_auth
 # operationId: createStreamTargetTokenAuth
-# --token_auth shape: {enabled: bool, trusted_shared_secret: string}
 export def "create-stream-target-token-auth" [
   stream_target_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2383,7 +2389,7 @@ export def "create-stream-target-token-auth" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   token_auth: record # shape: {enabled: bool, trusted_shared_secret: string}
-]: any -> record<token_auth: record<created_at: string, enabled: bool, stream_target_id: string, trusted_shared_secret: string, updated_at: string>> {
+]: any -> oneof<record<token_auth: record<created_at: string, enabled: bool, stream_target_id: string, trusted_shared_secret: string, updated_at: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2423,7 +2429,7 @@ export def "list-transcoders" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Returns a paginated view of results from the HTTP request. Specify a positive integer to indicate which page of the results should be displayed first. Next and Previous links allow you to navigate multiple pages of results. Omit the page parameter or specify an integer that's less than or equal to 0 to view all (unpaginated) results.
   --per-page: int # For use with the page parameter. Indicates how many records should be included on each page of results. A valid value is any positive integer. The default is 10.
-]: nothing -> record<transcoders: table<application_name: string, billing_mode: string, broadcast_location: string, buffer_size: int, closed_caption_type: string, created_at: string, delivery_method: string, delivery_protocols: list, description: string, direct_playback_urls: list, disable_authentication: bool, domain_name: string, id: string, idle_timeout: int, low_latency: bool, name: string, outputs: list, password: string, play_maximum_connections: int, protocol: string, recording: bool, source_port: int, source_url: string, stream_extension: string, stream_name: string, stream_smoother: bool, stream_source_id: string, suppress_stream_target_start: bool, transcoder_type: string, updated_at: string, username: string, video_fallback: bool, watermark: bool, watermark_height: int, watermark_image_url: string, watermark_opacity: int, watermark_position: string, watermark_width: int>> {
+]: nothing -> oneof<record<transcoders: table<application_name: string, billing_mode: string, broadcast_location: string, buffer_size: int, closed_caption_type: string, created_at: string, delivery_method: string, delivery_protocols: list, description: string, direct_playback_urls: list, disable_authentication: bool, domain_name: string, id: string, idle_timeout: int, low_latency: bool, name: string, outputs: list, password: string, play_maximum_connections: int, protocol: string, recording: bool, source_port: int, source_url: string, stream_extension: string, stream_name: string, stream_smoother: bool, stream_source_id: string, suppress_stream_target_start: bool, transcoder_type: string, updated_at: string, username: string, video_fallback: bool, watermark: bool, watermark_height: int, watermark_image_url: string, watermark_opacity: int, watermark_position: string, watermark_width: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
@@ -2448,7 +2454,6 @@ export def "list-transcoders" [
 #
 # POST /transcoders
 # operationId: createTranscoder
-# --transcoder shape: {billing_mode: "pay_as_you_go"|"twentyfour_seven", broadcast_location: "asia_pacific_australia"|"asia_pacific_japan"|"asia_pacific_singapore"|"asia_pacific_taiwan"|"eu_belgium"|"eu_germany"|"eu_ireland"|"south_america_brazil"|"us_central_iowa"|"us_east_s_carolina"|"us_east_virginia"|"us_west_california"|"us_west_oregon", buffer_size?: "0"|"1000"|"2000"|"3000"|"4000"|"5000"|"6000"|"7000"|"8000", closed_caption_type?: "none"|"cea"|"on_text"|"both", delivery_method: "pull"|"cdn"|"push", ... (24 more fields)}
 export def "create-transcoder" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2460,7 +2465,7 @@ export def "create-transcoder" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   transcoder: record # shape: {billing_mode: "pay_as_you_go"|"twentyfour_seven", broadcast_location: "asia_pacific_australia"|"asia_pacific_japan"|"asia_pacific_singapore"|"asia_pacific_taiwan"|"eu_belgium"|"eu_germany"|"eu_ireland"|"south_america_brazil"|"us_central_iowa"|"us_east_s_carolina"|"us_east_virginia"|"us_west_california"|"us_west_oregon", buffer_size?: "0"|"1000"|"2000"|"3000"|"4000"|"5000"|"6000"|"7000"|"8000", closed_caption_type?: "none"|"cea"|"on_text"|"both", delivery_method: "pull"|"cdn"|"push", ... (24 more fields)}
-]: any -> record<transcoder: record<application_name: string, billing_mode: string, broadcast_location: string, buffer_size: int, closed_caption_type: string, created_at: string, delivery_method: string, delivery_protocols: list<string>, description: string, direct_playback_urls: list<record>, disable_authentication: bool, domain_name: string, id: string, idle_timeout: int, low_latency: bool, name: string, outputs: list<record>, password: string, play_maximum_connections: int, protocol: string, recording: bool, source_port: int, source_url: string, stream_extension: string, stream_name: string, stream_smoother: bool, stream_source_id: string, suppress_stream_target_start: bool, transcoder_type: string, updated_at: string, username: string, video_fallback: bool, watermark: bool, watermark_height: int, watermark_image_url: string, watermark_opacity: int, watermark_position: string, watermark_width: int>> {
+]: any -> oneof<record<transcoder: record<application_name: string, billing_mode: string, broadcast_location: string, buffer_size: int, closed_caption_type: string, created_at: string, delivery_method: string, delivery_protocols: list<string>, description: string, direct_playback_urls: list<record>, disable_authentication: bool, domain_name: string, id: string, idle_timeout: int, low_latency: bool, name: string, outputs: list<record>, password: string, play_maximum_connections: int, protocol: string, recording: bool, source_port: int, source_url: string, stream_extension: string, stream_name: string, stream_smoother: bool, stream_source_id: string, suppress_stream_target_start: bool, transcoder_type: string, updated_at: string, username: string, video_fallback: bool, watermark: bool, watermark_height: int, watermark_image_url: string, watermark_opacity: int, watermark_position: string, watermark_width: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2534,7 +2539,7 @@ export def "show-transcoder" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<transcoder: record<application_name: string, billing_mode: string, broadcast_location: string, buffer_size: int, closed_caption_type: string, created_at: string, delivery_method: string, delivery_protocols: list<string>, description: string, direct_playback_urls: list<record>, disable_authentication: bool, domain_name: string, id: string, idle_timeout: int, low_latency: bool, name: string, outputs: list<record>, password: string, play_maximum_connections: int, protocol: string, recording: bool, source_port: int, source_url: string, stream_extension: string, stream_name: string, stream_smoother: bool, stream_source_id: string, suppress_stream_target_start: bool, transcoder_type: string, updated_at: string, username: string, video_fallback: bool, watermark: bool, watermark_height: int, watermark_image_url: string, watermark_opacity: int, watermark_position: string, watermark_width: int>> {
+]: nothing -> oneof<record<transcoder: record<application_name: string, billing_mode: string, broadcast_location: string, buffer_size: int, closed_caption_type: string, created_at: string, delivery_method: string, delivery_protocols: list<string>, description: string, direct_playback_urls: list<record>, disable_authentication: bool, domain_name: string, id: string, idle_timeout: int, low_latency: bool, name: string, outputs: list<record>, password: string, play_maximum_connections: int, protocol: string, recording: bool, source_port: int, source_url: string, stream_extension: string, stream_name: string, stream_smoother: bool, stream_source_id: string, suppress_stream_target_start: bool, transcoder_type: string, updated_at: string, username: string, video_fallback: bool, watermark: bool, watermark_height: int, watermark_image_url: string, watermark_opacity: int, watermark_position: string, watermark_width: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2559,7 +2564,6 @@ export def "show-transcoder" [
 #
 # PATCH /transcoders/{id}
 # operationId: updateTranscoder
-# --transcoder shape: {broadcast_location?: "asia_pacific_australia"|"asia_pacific_japan"|"asia_pacific_singapore"|"asia_pacific_taiwan"|"eu_belgium"|"eu_germany"|"eu_ireland"|"south_america_brazil"|"us_central_iowa"|"us_east_s_carolina"|"us_east_virginia"|"us_west_california"|"us_west_oregon", buffer_size?: "0"|"1000"|"2000"|"3000"|"4000"|"5000"|"6000"|"7000"|"8000", closed_caption_type?: "none"|"cea"|"on_text"|"both", delivery_method: "pull"|"cdn"|"push", delivery_protocols?: list<string>, description?: string, ... (22 more fields)}
 export def "update-transcoder" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2572,7 +2576,7 @@ export def "update-transcoder" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   transcoder: record # shape: {broadcast_location?: "asia_pacific_australia"|"asia_pacific_japan"|"asia_pacific_singapore"|"asia_pacific_taiwan"|"eu_belgium"|"eu_germany"|"eu_ireland"|"south_america_brazil"|"us_central_iowa"|"us_east_s_carolina"|"us_east_virginia"|"us_west_california"|"us_west_oregon", buffer_size?: "0"|"1000"|"2000"|"3000"|"4000"|"5000"|"6000"|"7000"|"8000", closed_caption_type?: "none"|"cea"|"on_text"|"both", delivery_method: "pull"|"cdn"|"push", delivery_protocols?: list<string>, description?: string, ... (22 more fields)}
-]: any -> record<transcoder: record<application_name: string, billing_mode: string, broadcast_location: string, buffer_size: int, closed_caption_type: string, created_at: string, delivery_method: string, delivery_protocols: list<string>, description: string, direct_playback_urls: list<record>, disable_authentication: bool, domain_name: string, id: string, idle_timeout: int, low_latency: bool, name: string, outputs: list<record>, password: string, play_maximum_connections: int, protocol: string, recording: bool, source_port: int, source_url: string, stream_extension: string, stream_name: string, stream_smoother: bool, stream_source_id: string, suppress_stream_target_start: bool, transcoder_type: string, updated_at: string, username: string, video_fallback: bool, watermark: bool, watermark_height: int, watermark_image_url: string, watermark_opacity: int, watermark_position: string, watermark_width: int>> {
+]: any -> oneof<record<transcoder: record<application_name: string, billing_mode: string, broadcast_location: string, buffer_size: int, closed_caption_type: string, created_at: string, delivery_method: string, delivery_protocols: list<string>, description: string, direct_playback_urls: list<record>, disable_authentication: bool, domain_name: string, id: string, idle_timeout: int, low_latency: bool, name: string, outputs: list<record>, password: string, play_maximum_connections: int, protocol: string, recording: bool, source_port: int, source_url: string, stream_extension: string, stream_name: string, stream_smoother: bool, stream_source_id: string, suppress_stream_target_start: bool, transcoder_type: string, updated_at: string, username: string, video_fallback: bool, watermark: bool, watermark_height: int, watermark_image_url: string, watermark_opacity: int, watermark_position: string, watermark_width: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2611,7 +2615,7 @@ export def "disable-all-stream-targets-transcoder" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<transcoder: record<stream_targets: record<state: string>>> {
+]: nothing -> oneof<record<transcoder: record<stream_targets: record<state: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2647,7 +2651,7 @@ export def "enable-all-stream-targets-transcoder" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<transcoder: record<stream_targets: record<state: string>>> {
+]: nothing -> oneof<record<transcoder: record<stream_targets: record<state: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2683,7 +2687,7 @@ export def "list-transcoder-recordings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<transcoder: record<recordings: list<record>>> {
+]: nothing -> oneof<record<transcoder: record<recordings: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2719,7 +2723,7 @@ export def "reset-transcoder" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<transcoder: record<state: string>> {
+]: nothing -> oneof<record<transcoder: record<state: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2755,7 +2759,7 @@ export def "list-transcoder-schedules" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<transcoder: record<schedules: list<record>>> {
+]: nothing -> oneof<record<transcoder: record<schedules: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2791,7 +2795,7 @@ export def "start-transcoder" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<transcoder: record<state: string, transcoding_uptime_id: string>> {
+]: nothing -> oneof<record<transcoder: record<state: string, transcoding_uptime_id: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2827,7 +2831,7 @@ export def "show-transcoder-state" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<transcoder: record<state: string, transcoding_uptime_id: string, uptime_id: string>> {
+]: nothing -> oneof<record<transcoder: record<state: string, transcoding_uptime_id: string, uptime_id: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2863,7 +2867,7 @@ export def "show-transcoder-stats" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<transcoder: record<audio_codec: record<status: string, text: string, units: string, value: string>, bits_in_rate: record<status: string, text: string, units: string, value: float>, bits_out_rate: record<status: string, text: string, units: string, value: float>, bytes_in_rate: record<status: string, text: string, units: string, value: float>, bytes_out_rate: record<status: string, text: string, units: string, value: float>, configured_bytes_out_rate: record<status: string, text: string, units: string, value: int>, connected: record<status: string, text: string, units: string, value: string>, cpu: record<status: string, text: string, units: string, value: int>, frame_rate: record<status: string, text: string, units: string, value: int>, frame_size: record<status: string, text: string, units: string, value: string>, gpu_decoder_usage: record<status: string, text: string, units: string, value: int>, gpu_driver_version: record<status: string, text: string, units: string, value: string>, gpu_encoder_usage: record<status: string, text: string, units: string, value: int>, gpu_memory_usage: record<status: string, text: string, units: string, value: int>, gpu_usage: record<status: string, text: string, units: string, value: int>, height: record<status: string, text: string, units: string, value: int>, keyframe_interval: record<status: string, text: string, units: string, value: int>, stream_target_status_OUTPUTIDX_STREAMTARGETIDX: record<status: string, text: string, units: string, value: string>, unique_views: record<status: string, text: string, units: string, value: int>, video_codec: record<status: string, text: string, units: string, value: string>, width: record<status: string, text: string, units: string, value: int>>> {
+]: nothing -> oneof<record<transcoder: record<audio_codec: record<status: string, text: string, units: string, value: string>, bits_in_rate: record<status: string, text: string, units: string, value: float>, bits_out_rate: record<status: string, text: string, units: string, value: float>, bytes_in_rate: record<status: string, text: string, units: string, value: float>, bytes_out_rate: record<status: string, text: string, units: string, value: float>, configured_bytes_out_rate: record<status: string, text: string, units: string, value: int>, connected: record<status: string, text: string, units: string, value: string>, cpu: record<status: string, text: string, units: string, value: int>, frame_rate: record<status: string, text: string, units: string, value: int>, frame_size: record<status: string, text: string, units: string, value: string>, gpu_decoder_usage: record<status: string, text: string, units: string, value: int>, gpu_driver_version: record<status: string, text: string, units: string, value: string>, gpu_encoder_usage: record<status: string, text: string, units: string, value: int>, gpu_memory_usage: record<status: string, text: string, units: string, value: int>, gpu_usage: record<status: string, text: string, units: string, value: int>, height: record<status: string, text: string, units: string, value: int>, keyframe_interval: record<status: string, text: string, units: string, value: int>, stream_target_status_OUTPUTIDX_STREAMTARGETIDX: record<status: string, text: string, units: string, value: string>, unique_views: record<status: string, text: string, units: string, value: int>, video_codec: record<status: string, text: string, units: string, value: string>, width: record<status: string, text: string, units: string, value: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2899,7 +2903,7 @@ export def "stop-transcoder" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<transcoder: record<state: string, transcoding_uptime_id: string>> {
+]: nothing -> oneof<record<transcoder: record<state: string, transcoding_uptime_id: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2935,7 +2939,7 @@ export def "show-transcoder-thumbnail-url" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<transcoder: record<thumbnail_url: string>> {
+]: nothing -> oneof<record<transcoder: record<thumbnail_url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2971,7 +2975,7 @@ export def "list-transcoder-outputs" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<outputs: table<aspect_ratio_height: int, aspect_ratio_width: int, bitrate_audio: int, bitrate_video: int, created_at: string, framerate_reduction: string, h264_profile: string, id: string, keyframes: string, name: string, output_stream_targets: list, passthrough_audio: bool, passthrough_video: bool, stream_format: string, transcoder_id: string, updated_at: string>> {
+]: nothing -> oneof<record<outputs: table<aspect_ratio_height: int, aspect_ratio_width: int, bitrate_audio: int, bitrate_video: int, created_at: string, framerate_reduction: string, h264_profile: string, id: string, keyframes: string, name: string, output_stream_targets: list, passthrough_audio: bool, passthrough_video: bool, stream_format: string, transcoder_id: string, updated_at: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($transcoder_id | is-empty) { error make --unspanned { msg: "path parameter 'transcoder_id' must be non-empty" } }
@@ -2996,7 +3000,6 @@ export def "list-transcoder-outputs" [
 #
 # POST /transcoders/{transcoder_id}/outputs
 # operationId: createTranscoderOutput
-# --output shape: {aspect_ratio_height?: int, aspect_ratio_width?: int, bitrate_audio?: int, bitrate_video?: int, framerate_reduction?: "0"|"1/2"|"1/4"|"1/25"|"1/30"|"1/50"|"1/60", h264_profile?: "main"|"baseline"|"high", keyframes?: "follow_source"|"25"|"30"|"50"|"60"|"100"|"120", passthrough_audio?: bool, passthrough_video?: bool, stream_format: "audiovideo"|"videoonly"|"audioonly"}
 export def "create-transcoder-output" [
   transcoder_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3009,7 +3012,7 @@ export def "create-transcoder-output" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   output: record # shape: {aspect_ratio_height?: int, aspect_ratio_width?: int, bitrate_audio?: int, bitrate_video?: int, framerate_reduction?: "0"|"1/2"|"1/4"|"1/25"|"1/30"|"1/50"|"1/60", h264_profile?: "main"|"baseline"|"high", keyframes?: "follow_source"|"25"|"30"|"50"|"60"|"100"|"120", passthrough_audio?: bool, passthrough_video?: bool, stream_format: "audiovideo"|"videoonly"|"audioonly"}
-]: any -> record<output: record<aspect_ratio_height: int, aspect_ratio_width: int, bitrate_audio: int, bitrate_video: int, created_at: string, framerate_reduction: string, h264_profile: string, id: string, keyframes: string, name: string, output_stream_targets: list<record>, passthrough_audio: bool, passthrough_video: bool, stream_format: string, transcoder_id: string, updated_at: string>> {
+]: any -> oneof<record<output: record<aspect_ratio_height: int, aspect_ratio_width: int, bitrate_audio: int, bitrate_video: int, created_at: string, framerate_reduction: string, h264_profile: string, id: string, keyframes: string, name: string, output_stream_targets: list<record>, passthrough_audio: bool, passthrough_video: bool, stream_format: string, transcoder_id: string, updated_at: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -3087,7 +3090,7 @@ export def "show-transcoder-output" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<output: record<aspect_ratio_height: int, aspect_ratio_width: int, bitrate_audio: int, bitrate_video: int, created_at: string, framerate_reduction: string, h264_profile: string, id: string, keyframes: string, name: string, output_stream_targets: list<record>, passthrough_audio: bool, passthrough_video: bool, stream_format: string, transcoder_id: string, updated_at: string>> {
+]: nothing -> oneof<record<output: record<aspect_ratio_height: int, aspect_ratio_width: int, bitrate_audio: int, bitrate_video: int, created_at: string, framerate_reduction: string, h264_profile: string, id: string, keyframes: string, name: string, output_stream_targets: list<record>, passthrough_audio: bool, passthrough_video: bool, stream_format: string, transcoder_id: string, updated_at: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($transcoder_id | is-empty) { error make --unspanned { msg: "path parameter 'transcoder_id' must be non-empty" } }
@@ -3113,7 +3116,6 @@ export def "show-transcoder-output" [
 #
 # PATCH /transcoders/{transcoder_id}/outputs/{id}
 # operationId: updateTranscoderOutput
-# --output shape: {aspect_ratio_height?: int, aspect_ratio_width?: int, bitrate_audio?: int, bitrate_video?: int, framerate_reduction?: "0"|"1/2"|"1/4"|"1/25"|"1/30"|"1/50"|"1/60", h264_profile?: "main"|"baseline"|"high", keyframes?: "follow_source"|"25"|"30"|"50"|"60"|"100"|"120", passthrough_audio?: bool, passthrough_video?: bool, stream_format: "audiovideo"|"videoonly"|"audioonly"}
 export def "update-transcoder-output" [
   transcoder_id: string
   id: string
@@ -3127,7 +3129,7 @@ export def "update-transcoder-output" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   output: record # shape: {aspect_ratio_height?: int, aspect_ratio_width?: int, bitrate_audio?: int, bitrate_video?: int, framerate_reduction?: "0"|"1/2"|"1/4"|"1/25"|"1/30"|"1/50"|"1/60", h264_profile?: "main"|"baseline"|"high", keyframes?: "follow_source"|"25"|"30"|"50"|"60"|"100"|"120", passthrough_audio?: bool, passthrough_video?: bool, stream_format: "audiovideo"|"videoonly"|"audioonly"}
-]: any -> record<output: record<aspect_ratio_height: int, aspect_ratio_width: int, bitrate_audio: int, bitrate_video: int, created_at: string, framerate_reduction: string, h264_profile: string, id: string, keyframes: string, name: string, output_stream_targets: list<record>, passthrough_audio: bool, passthrough_video: bool, stream_format: string, transcoder_id: string, updated_at: string>> {
+]: any -> oneof<record<output: record<aspect_ratio_height: int, aspect_ratio_width: int, bitrate_audio: int, bitrate_video: int, created_at: string, framerate_reduction: string, h264_profile: string, id: string, keyframes: string, name: string, output_stream_targets: list<record>, passthrough_audio: bool, passthrough_video: bool, stream_format: string, transcoder_id: string, updated_at: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -3157,7 +3159,6 @@ export def "update-transcoder-output" [
 # POST /transcoders/{transcoder_id}/outputs/{id}/add_stream_target
 # DEPRECATED
 # operationId: addStreamTargetToTranscoderOutput
-# --output_stream_target shape: {stream_target_id: string, use_stream_target_backup_url?: bool}
 @deprecated
 export def "add-stream-target-to-transcoder-output" [
   transcoder_id: string
@@ -3172,7 +3173,7 @@ export def "add-stream-target-to-transcoder-output" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   output_stream_target: record # shape: {stream_target_id: string, use_stream_target_backup_url?: bool}
-]: any -> record<output_stream_target: record<created_at: string, id: string, output_id: string, stream_target: record<backup_url: string, chunk_size: string, connection_code: string, connection_code_expires_at: string, created_at: string, enable_hls: bool, enabled: bool, hds_playback_url: string, hls_playback_url: string, id: string, ingest_ip_whitelist: list, location: string, name: string, password: string, playback_urls: record, primary_url: string, provider: string, region_override: string, rtmp_playback_url: string, secure_ingest_query_param: string, source_delivery_method: string, source_url: string, stream_name: string, type: string, updated_at: string, use_cors: bool, use_https: bool, use_secure_ingest: bool, username: string>, stream_target_id: string, updated_at: string, use_stream_target_backup_url: bool>> {
+]: any -> oneof<record<output_stream_target: record<created_at: string, id: string, output_id: string, stream_target: record<backup_url: string, chunk_size: string, connection_code: string, connection_code_expires_at: string, created_at: string, enable_hls: bool, enabled: bool, hds_playback_url: string, hls_playback_url: string, id: string, ingest_ip_whitelist: list, location: string, name: string, password: string, playback_urls: record, primary_url: string, provider: string, region_override: string, rtmp_playback_url: string, secure_ingest_query_param: string, source_delivery_method: string, source_url: string, stream_name: string, type: string, updated_at: string, use_cors: bool, use_https: bool, use_secure_ingest: bool, username: string>, stream_target_id: string, updated_at: string, use_stream_target_backup_url: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -3202,7 +3203,6 @@ export def "add-stream-target-to-transcoder-output" [
 # DELETE /transcoders/{transcoder_id}/outputs/{id}/remove_stream_target
 # DEPRECATED
 # operationId: removeStreamTargetToTranscoderOutput
-# --output_stream_target shape: {stream_target_id: string}
 @deprecated
 export def "remove-stream-target-to-transcoder-output" [
   transcoder_id: string
@@ -3258,7 +3258,7 @@ export def "list-transcoder-output-output-stream-targets" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created_at: string, id: string, output_id: string, stream_target: record<backup_url: string, chunk_size: string, connection_code: string, connection_code_expires_at: string, created_at: string, enable_hls: bool, enabled: bool, hds_playback_url: string, hls_playback_url: string, id: string, ingest_ip_whitelist: list<string>, location: string, name: string, password: string, playback_urls: record<hls: string, wowz: string, ws: string>, primary_url: string, provider: string, region_override: string, rtmp_playback_url: string, secure_ingest_query_param: string, source_delivery_method: string, source_url: string, stream_name: string, type: string, updated_at: string, use_cors: bool, use_https: bool, use_secure_ingest: bool, username: string>, stream_target_id: string, updated_at: string, use_stream_target_backup_url: bool> {
+]: nothing -> oneof<record<created_at: string, id: string, output_id: string, stream_target: record<backup_url: string, chunk_size: string, connection_code: string, connection_code_expires_at: string, created_at: string, enable_hls: bool, enabled: bool, hds_playback_url: string, hls_playback_url: string, id: string, ingest_ip_whitelist: list<string>, location: string, name: string, password: string, playback_urls: record<hls: string, wowz: string, ws: string>, primary_url: string, provider: string, region_override: string, rtmp_playback_url: string, secure_ingest_query_param: string, source_delivery_method: string, source_url: string, stream_name: string, type: string, updated_at: string, use_cors: bool, use_https: bool, use_secure_ingest: bool, username: string>, stream_target_id: string, updated_at: string, use_stream_target_backup_url: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($transcoder_id | is-empty) { error make --unspanned { msg: "path parameter 'transcoder_id' must be non-empty" } }
@@ -3284,7 +3284,6 @@ export def "list-transcoder-output-output-stream-targets" [
 #
 # POST /transcoders/{transcoder_id}/outputs/{output_id}/output_stream_targets
 # operationId: createTranscoderOutputOutputStreamTarget
-# --output_stream_target shape: {stream_target_id: string, use_stream_target_backup_url?: bool}
 export def "create-transcoder-output-output-stream-target" [
   transcoder_id: string
   output_id: string
@@ -3298,7 +3297,7 @@ export def "create-transcoder-output-output-stream-target" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   output_stream_target: record # shape: {stream_target_id: string, use_stream_target_backup_url?: bool}
-]: any -> record<output_stream_target: record<created_at: string, id: string, output_id: string, stream_target: record<backup_url: string, chunk_size: string, connection_code: string, connection_code_expires_at: string, created_at: string, enable_hls: bool, enabled: bool, hds_playback_url: string, hls_playback_url: string, id: string, ingest_ip_whitelist: list, location: string, name: string, password: string, playback_urls: record, primary_url: string, provider: string, region_override: string, rtmp_playback_url: string, secure_ingest_query_param: string, source_delivery_method: string, source_url: string, stream_name: string, type: string, updated_at: string, use_cors: bool, use_https: bool, use_secure_ingest: bool, username: string>, stream_target_id: string, updated_at: string, use_stream_target_backup_url: bool>> {
+]: any -> oneof<record<output_stream_target: record<created_at: string, id: string, output_id: string, stream_target: record<backup_url: string, chunk_size: string, connection_code: string, connection_code_expires_at: string, created_at: string, enable_hls: bool, enabled: bool, hds_playback_url: string, hls_playback_url: string, id: string, ingest_ip_whitelist: list, location: string, name: string, password: string, playback_urls: record, primary_url: string, provider: string, region_override: string, rtmp_playback_url: string, secure_ingest_query_param: string, source_delivery_method: string, source_url: string, stream_name: string, type: string, updated_at: string, use_cors: bool, use_https: bool, use_secure_ingest: bool, username: string>, stream_target_id: string, updated_at: string, use_stream_target_backup_url: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -3380,7 +3379,7 @@ export def "show-transcoder-output-output-stream-target" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<output_stream_target: record<created_at: string, id: string, output_id: string, stream_target: record<backup_url: string, chunk_size: string, connection_code: string, connection_code_expires_at: string, created_at: string, enable_hls: bool, enabled: bool, hds_playback_url: string, hls_playback_url: string, id: string, ingest_ip_whitelist: list, location: string, name: string, password: string, playback_urls: record, primary_url: string, provider: string, region_override: string, rtmp_playback_url: string, secure_ingest_query_param: string, source_delivery_method: string, source_url: string, stream_name: string, type: string, updated_at: string, use_cors: bool, use_https: bool, use_secure_ingest: bool, username: string>, stream_target_id: string, updated_at: string, use_stream_target_backup_url: bool>> {
+]: nothing -> oneof<record<output_stream_target: record<created_at: string, id: string, output_id: string, stream_target: record<backup_url: string, chunk_size: string, connection_code: string, connection_code_expires_at: string, created_at: string, enable_hls: bool, enabled: bool, hds_playback_url: string, hls_playback_url: string, id: string, ingest_ip_whitelist: list, location: string, name: string, password: string, playback_urls: record, primary_url: string, provider: string, region_override: string, rtmp_playback_url: string, secure_ingest_query_param: string, source_delivery_method: string, source_url: string, stream_name: string, type: string, updated_at: string, use_cors: bool, use_https: bool, use_secure_ingest: bool, username: string>, stream_target_id: string, updated_at: string, use_stream_target_backup_url: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($transcoder_id | is-empty) { error make --unspanned { msg: "path parameter 'transcoder_id' must be non-empty" } }
@@ -3407,7 +3406,6 @@ export def "show-transcoder-output-output-stream-target" [
 #
 # PATCH /transcoders/{transcoder_id}/outputs/{output_id}/output_stream_targets/{stream_target_id}
 # operationId: updateTranscoderOutputOutputStreamTarget
-# --output_stream_target shape: {stream_target_id: string, use_stream_target_backup_url?: bool}
 export def "update-transcoder-output-output-stream-target" [
   transcoder_id: string
   output_id: string
@@ -3422,7 +3420,7 @@ export def "update-transcoder-output-output-stream-target" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   output_stream_target: record # shape: {stream_target_id: string, use_stream_target_backup_url?: bool}
-]: any -> record<output_stream_target: record<created_at: string, id: string, output_id: string, stream_target: record<backup_url: string, chunk_size: string, connection_code: string, connection_code_expires_at: string, created_at: string, enable_hls: bool, enabled: bool, hds_playback_url: string, hls_playback_url: string, id: string, ingest_ip_whitelist: list, location: string, name: string, password: string, playback_urls: record, primary_url: string, provider: string, region_override: string, rtmp_playback_url: string, secure_ingest_query_param: string, source_delivery_method: string, source_url: string, stream_name: string, type: string, updated_at: string, use_cors: bool, use_https: bool, use_secure_ingest: bool, username: string>, stream_target_id: string, updated_at: string, use_stream_target_backup_url: bool>> {
+]: any -> oneof<record<output_stream_target: record<created_at: string, id: string, output_id: string, stream_target: record<backup_url: string, chunk_size: string, connection_code: string, connection_code_expires_at: string, created_at: string, enable_hls: bool, enabled: bool, hds_playback_url: string, hls_playback_url: string, id: string, ingest_ip_whitelist: list, location: string, name: string, password: string, playback_urls: record, primary_url: string, provider: string, region_override: string, rtmp_playback_url: string, secure_ingest_query_param: string, source_delivery_method: string, source_url: string, stream_name: string, type: string, updated_at: string, use_cors: bool, use_https: bool, use_secure_ingest: bool, username: string>, stream_target_id: string, updated_at: string, use_stream_target_backup_url: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -3465,7 +3463,7 @@ export def "disable-transcoder-output-output-stream-target" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<stream_target: record<state: string>> {
+]: nothing -> oneof<record<stream_target: record<state: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($transcoder_id | is-empty) { error make --unspanned { msg: "path parameter 'transcoder_id' must be non-empty" } }
@@ -3505,7 +3503,7 @@ export def "enable-transcoder-output-output-stream-target" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<stream_target: record<state: string>> {
+]: nothing -> oneof<record<stream_target: record<state: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($transcoder_id | is-empty) { error make --unspanned { msg: "path parameter 'transcoder_id' must be non-empty" } }
@@ -3545,7 +3543,7 @@ export def "restart-transcoder-output-output-stream-target" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<stream_target: record<state: string>> {
+]: nothing -> oneof<record<stream_target: record<state: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($transcoder_id | is-empty) { error make --unspanned { msg: "path parameter 'transcoder_id' must be non-empty" } }
@@ -3583,7 +3581,7 @@ export def "list-transcoder-properties" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<properties: table<key: string, section: string, transcoder_id: string, value: string>> {
+]: nothing -> oneof<record<properties: table<key: string, section: string, transcoder_id: string, value: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($transcoder_id | is-empty) { error make --unspanned { msg: "path parameter 'transcoder_id' must be non-empty" } }
@@ -3608,7 +3606,6 @@ export def "list-transcoder-properties" [
 #
 # POST /transcoders/{transcoder_id}/properties
 # operationId: createTranscoderProperty
-# --property shape: {key: string, section: string, value: string}
 export def "create-transcoder-property" [
   transcoder_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3621,7 +3618,7 @@ export def "create-transcoder-property" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   property: record # shape: {key: string, section: string, value: string}
-]: any -> record<property: record<key: string, section: string, transcoder_id: string, value: string>> {
+]: any -> oneof<record<property: record<key: string, section: string, transcoder_id: string, value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -3699,7 +3696,7 @@ export def "show-transcoder-property" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<property: record<key: string, section: string, transcoder_id: string, value: string>> {
+]: nothing -> oneof<record<property: record<key: string, section: string, transcoder_id: string, value: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($transcoder_id | is-empty) { error make --unspanned { msg: "path parameter 'transcoder_id' must be non-empty" } }
@@ -3738,7 +3735,7 @@ export def "index-uptimes" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Returns a paginated view of results from the HTTP request. Specify a positive integer to indicate which page of the results should be displayed first. Next and Previous links allow you to navigate multiple pages of results. Omit the page parameter or specify an integer that's less than or equal to 0 to view all (unpaginated) results.
   --per-page: int # For use with the page parameter. Indicates how many records should be included on each page of results. A valid value is any positive integer. The default is 10.
-]: nothing -> record<uptimes: table<billed: bool, created_at: string, ended_at: string, id: string, running: bool, started_at: string, transcoder_id: string, updated_at: string>> {
+]: nothing -> oneof<record<uptimes: table<billed: bool, created_at: string, ended_at: string, id: string, running: bool, started_at: string, transcoder_id: string, updated_at: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($transcoder_id | is-empty) { error make --unspanned { msg: "path parameter 'transcoder_id' must be non-empty" } }
@@ -3776,7 +3773,7 @@ export def "show-uptime" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<billed: bool, created_at: string, ended_at: string, id: string, running: bool, started_at: string, transcoder_id: string, updated_at: string> {
+]: nothing -> oneof<record<billed: bool, created_at: string, ended_at: string, id: string, running: bool, started_at: string, transcoder_id: string, updated_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($transcoder_id | is-empty) { error make --unspanned { msg: "path parameter 'transcoder_id' must be non-empty" } }
@@ -3815,7 +3812,7 @@ export def "show-uptime-metrics-current" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: string # A comma-separated list of fields to return.
-]: nothing -> record<current: record<audio_codec: record<status: string, text: string, units: string, value: string>, bits_in_rate: record<status: string, text: string, units: string, value: float>, bits_out_rate: record<status: string, text: string, units: string, value: float>, bytes_in_rate: record<status: string, text: string, units: string, value: float>, bytes_out_rate: record<status: string, text: string, units: string, value: float>, configured_bytes_out_rate: record<status: string, text: string, units: string, value: int>, connected: record<status: string, text: string, units: string, value: string>, cpu: record<status: string, text: string, units: string, value: int>, frame_rate: record<status: string, text: string, units: string, value: int>, frame_size: record<status: string, text: string, units: string, value: string>, gpu_decoder_usage: record<status: string, text: string, units: string, value: int>, gpu_driver_version: record<status: string, text: string, units: string, value: string>, gpu_encoder_usage: record<status: string, text: string, units: string, value: int>, gpu_memory_usage: record<status: string, text: string, units: string, value: int>, gpu_usage: record<status: string, text: string, units: string, value: int>, height: record<status: string, text: string, units: string, value: int>, keyframe_interval: record<status: string, text: string, units: string, value: int>, stream_target_status_OUTPUTIDX_STREAMTARGETIDX: record<status: string, text: string, units: string, value: string>, unique_views: record<status: string, text: string, units: string, value: int>, video_codec: record<status: string, text: string, units: string, value: string>, width: record<status: string, text: string, units: string, value: int>>, limits: record<fields: string>> {
+]: nothing -> oneof<record<current: record<audio_codec: record<status: string, text: string, units: string, value: string>, bits_in_rate: record<status: string, text: string, units: string, value: float>, bits_out_rate: record<status: string, text: string, units: string, value: float>, bytes_in_rate: record<status: string, text: string, units: string, value: float>, bytes_out_rate: record<status: string, text: string, units: string, value: float>, configured_bytes_out_rate: record<status: string, text: string, units: string, value: int>, connected: record<status: string, text: string, units: string, value: string>, cpu: record<status: string, text: string, units: string, value: int>, frame_rate: record<status: string, text: string, units: string, value: int>, frame_size: record<status: string, text: string, units: string, value: string>, gpu_decoder_usage: record<status: string, text: string, units: string, value: int>, gpu_driver_version: record<status: string, text: string, units: string, value: string>, gpu_encoder_usage: record<status: string, text: string, units: string, value: int>, gpu_memory_usage: record<status: string, text: string, units: string, value: int>, gpu_usage: record<status: string, text: string, units: string, value: int>, height: record<status: string, text: string, units: string, value: int>, keyframe_interval: record<status: string, text: string, units: string, value: int>, stream_target_status_OUTPUTIDX_STREAMTARGETIDX: record<status: string, text: string, units: string, value: string>, unique_views: record<status: string, text: string, units: string, value: int>, video_codec: record<status: string, text: string, units: string, value: string>, width: record<status: string, text: string, units: string, value: int>>, limits: record<fields: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($transcoder_id | is-empty) { error make --unspanned { msg: "path parameter 'transcoder_id' must be non-empty" } }
@@ -3857,7 +3854,7 @@ export def "show-uptime-metrics-historic" [
   --fields: string # A comma-separated list of fields to return.
   --from: string # The start of the range of time used to aggregate the metrics. Express the value by using the ISO 8601 standard of YYYY-MM-DDTHH:MM:SSZ where HH is a 24-hour clock in UTC.
   --to: string # The end of the range of time used to aggregate the metrics. Express the value by using the ISO 8601 standard of YYYY-MM-DDTHH:MM:SSZ where HH is a 24-hour clock in UTC.
-]: nothing -> record<historic: table<audio_codec: record, bits_in_rate: record, bits_out_rate: record, cpu_idle: record, created_at: string, frame_rate: record, height: record, keyframe_interval: record, video_codec: record, width: record>, limits: record<fields: string, from: string, to: string>> {
+]: nothing -> oneof<record<historic: table<audio_codec: record, bits_in_rate: record, bits_out_rate: record, cpu_idle: record, created_at: string, frame_rate: record, height: record, keyframe_interval: record, video_codec: record, width: record>, limits: record<fields: string, from: string, to: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($transcoder_id | is-empty) { error make --unspanned { msg: "path parameter 'transcoder_id' must be non-empty" } }
@@ -3896,7 +3893,7 @@ export def "usage-network-stream-sources-index" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --from: string # The start of the range of time you want to view. Specify YYYY-MM-DD HH:MM:SS where HH is a 24-hour clock in UTC. The from default is the last billing date. (format: date-time)
   --to: string # The end of the range of time you want to view. Specify YYYY-MM-DD HH:MM:SS where HH is a 24-hour clock in UTC. The to default is the end of the current day. (format: date-time)
-]: nothing -> record<stream_sources: table<bytes_billed: int, bytes_used: int, deleted: bool, id: string, name: string>> {
+]: nothing -> oneof<record<stream_sources: table<bytes_billed: int, bytes_used: int, deleted: bool, id: string, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar")] | flatten | str join "&"
@@ -3933,7 +3930,7 @@ export def "usage-network-stream-targets-index" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --from: string # The start of the range of time you want to view. Specify YYYY-MM-DD HH:MM:SS where HH is a 24-hour clock in UTC. The from default is the last billing date. (format: date-time)
   --to: string # The end of the range of time you want to view. Specify YYYY-MM-DD HH:MM:SS where HH is a 24-hour clock in UTC. The to default is the end of the current day. (format: date-time)
-]: nothing -> record<stream_targets: record<bytes_billed: int, bytes_used: int, deleted: bool, id: string, name: string, protocols: record<zones: record>>, total: record<bytes_billed: int, bytes_used: int, protocols: record<zones: record>>> {
+]: nothing -> oneof<record<stream_targets: record<bytes_billed: int, bytes_used: int, deleted: bool, id: string, name: string, protocols: record<zones: record>>, total: record<bytes_billed: int, bytes_used: int, protocols: record<zones: record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar")] | flatten | str join "&"
@@ -3972,7 +3969,7 @@ export def "usage-network-transcoders-index" [
   --to: string # The end of the range of time you want to view. Specify YYYY-MM-DD HH:MM:SS where HH is a 24-hour clock in UTC. The to default is the end of the current day. (format: date-time)
   --transcoder-type: string@transcoder-type-completer # The type of transcoder. The default is transcoded.
   --billing-mode: string@billing-mode-completer # The billing mode for the transcoder. The default is pay_as_you_go.
-]: nothing -> record<transcoders: table<bytes_billed: int, bytes_used: int, deleted: bool, id: int, name: string>> {
+]: nothing -> oneof<record<transcoders: table<bytes_billed: int, bytes_used: int, deleted: bool, id: int, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "transcoder_type" $transcoder_type "scalar") (serialize-qp "billing_mode" $billing_mode "scalar")] | flatten | str join "&"
@@ -4009,7 +4006,7 @@ export def "usage-storage-peak-recording-index" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --from: string # The start of the range of time you want to view. Specify YYYY-MM-DD HH:MM:SS where HH is a 24-hour clock in UTC. The from default is the last billing date. (format: date-time)
   --to: string # The end of the range of time you want to view. Specify YYYY-MM-DD HH:MM:SS where HH is a 24-hour clock in UTC. The to default is the end of the current day. (format: date-time)
-]: nothing -> record<peak_recording: record<bytes_total: int>> {
+]: nothing -> oneof<record<peak_recording: record<bytes_total: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar")] | flatten | str join "&"
@@ -4048,7 +4045,7 @@ export def "usage-time-transcoders-index" [
   --to: string # The end of the range of time you want to view. Specify YYYY-MM-DD HH:MM:SS where HH is a 24-hour clock in UTC. The to default is the end of the current day. (format: date-time)
   --transcoder-type: string@transcoder-type-completer # The type of transcoder. The default is transcoded.
   --billing-mode: string@billing-mode-completer # The billing mode for the transcoder. The default is pay_as_you_go.
-]: nothing -> record<transcoders: table<deleted: bool, id: int, name: string, seconds_billed: int, seconds_used: int>> {
+]: nothing -> oneof<record<transcoders: table<deleted: bool, id: int, name: string, seconds_billed: int, seconds_used: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "transcoder_type" $transcoder_type "scalar") (serialize-qp "billing_mode" $billing_mode "scalar")] | flatten | str join "&"
@@ -4086,7 +4083,7 @@ export def "show-viewer-data-stream-target" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --from: string # The start of the range of time you want to view. Specify YYYY-MM-DD HH:MM:SS where HH is a 24-hour clock in UTC. The from default is the last billing date. (format: date-time)
   --to: string # The end of the range of time you want to view. Specify YYYY-MM-DD HH:MM:SS where HH is a 24-hour clock in UTC. The to default is the end of the current day. (format: date-time)
-]: nothing -> record<stream_target: record<countries: list<record>, country_list: list<string>, percentage_viewers: int, percentage_viewing_time: int, protocols: list<record>, rendition_list: list<string>, renditions: list<record>, seconds_avg_viewing_time: int, seconds_total_viewing_time: int, total_unique_viewers: int>> {
+]: nothing -> oneof<record<stream_target: record<countries: list<record>, country_list: list<string>, percentage_viewers: int, percentage_viewing_time: int, protocols: list<record>, rendition_list: list<string>, renditions: list<record>, seconds_avg_viewing_time: int, seconds_total_viewing_time: int, total_unique_viewers: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }

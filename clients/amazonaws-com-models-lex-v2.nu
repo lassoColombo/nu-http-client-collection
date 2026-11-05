@@ -12,28 +12,37 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -122,9 +146,9 @@ def search-order-completer [] { ["Ascending" "Descending"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "batch-create-custom-vocabulary-item" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["batch-create-custom-vocabulary-item" "batch-delete-custom-vocabulary-item" "batch-update-custom-vocabulary-item" "build-bot-locale" "delete-bot-locale" "describe-bot-locale" "update-bot-locale" "create-bot" "list-bots" "create-bot-alias" "list-bot-aliases" "create-bot-locale" "list-bot-locales" "create-bot-version" "list-bot-versions" "create-export" "list-exports" "create-intent" "list-intents" "create-resource-policy" "delete-resource-policy" "describe-resource-policy" "update-resource-policy" "create-resource-policy-statement" "create-slot" "list-slots" "create-slot-type" "list-slot-types" "create-upload-url" "delete-bot" "describe-bot" "update-bot" "delete-bot-alias" "describe-bot-alias" "update-bot-alias" "delete-bot-version" "describe-bot-version" "delete-custom-vocabulary" "delete-export" "describe-export" "update-export" "delete-import" "describe-import" "delete-intent" "describe-intent" "update-intent" "delete-resource-policy-statement" "delete-slot" "describe-slot" "update-slot" "delete-slot-type" "describe-slot-type" "update-slot-type" "delete-utterances" "describe-bot-recommendation" "update-bot-recommendation" "describe-custom-vocabulary-metadata" "list-aggregated-utterances" "list-bot-recommendations" "start-bot-recommendation" "list-built-in-intents" "list-built-in-slot-types" "list-custom-vocabulary-items" "list-imports" "start-import" "list-recommended-intents" "list-tags-for-resource" "tag-resource" "search-associated-transcripts" "stop-bot-recommendation" "untag-resource" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -146,7 +170,6 @@ export def commands []: nothing -> table {
 #
 # PUT /bots/{botId}/botversions/{botVersion}/botlocales/{localeId}/customvocabulary/DEFAULT/batchcreate
 # operationId: BatchCreateCustomVocabularyItem
-# --customVocabularyItemList item shape: {phrase: any, weight?: any, displayAs?: any}
 export def "batch-create-custom-vocabulary-item" [
   bot_id: string
   bot_version: string
@@ -167,8 +190,8 @@ export def "batch-create-custom-vocabulary-item" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  custom_vocabulary_item_list: list # A list of new custom vocabulary items. Each entry must contain a phrase and can optionally contain a displayAs and/or a weight. — item shape: {phrase: any, weight?: any, displayAs?: any}
-]: any -> record<botId: record, botVersion: record, localeId: record, errors: record, resources: record> {
+  custom_vocabulary_item_list: list # A list of new custom vocabulary items. Each entry must contain a phrase and can optionally contain a displayAs and/or a weight. — item shape: {phrase: string, weight?: int, displayAs?: string}
+]: any -> oneof<record<botId: string, botVersion: string, localeId: string, errors: table<itemId: string, errorMessage: string, errorCode: string>, resources: table<itemId: string, phrase: string, weight: int, displayAs: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -200,7 +223,6 @@ export def "batch-create-custom-vocabulary-item" [
 #
 # POST /bots/{botId}/botversions/{botVersion}/botlocales/{localeId}/customvocabulary/DEFAULT/batchdelete
 # operationId: BatchDeleteCustomVocabularyItem
-# --customVocabularyItemList item shape: {itemId: any}
 export def "batch-delete-custom-vocabulary-item" [
   bot_id: string
   bot_version: string
@@ -221,8 +243,8 @@ export def "batch-delete-custom-vocabulary-item" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  custom_vocabulary_item_list: list # A list of custom vocabulary items requested to be deleted. Each entry must contain the unique custom vocabulary entry identifier. — item shape: {itemId: any}
-]: any -> record<botId: record, botVersion: record, localeId: record, errors: record, resources: record> {
+  custom_vocabulary_item_list: list # A list of custom vocabulary items requested to be deleted. Each entry must contain the unique custom vocabulary entry identifier. — item shape: {itemId: string}
+]: any -> oneof<record<botId: string, botVersion: string, localeId: string, errors: table<itemId: string, errorMessage: string, errorCode: string>, resources: table<itemId: string, phrase: string, weight: int, displayAs: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -254,7 +276,6 @@ export def "batch-delete-custom-vocabulary-item" [
 #
 # PUT /bots/{botId}/botversions/{botVersion}/botlocales/{localeId}/customvocabulary/DEFAULT/batchupdate
 # operationId: BatchUpdateCustomVocabularyItem
-# --customVocabularyItemList item shape: {itemId: any, phrase: any, weight?: any, displayAs?: any}
 export def "batch-update-custom-vocabulary-item" [
   bot_id: string
   bot_version: string
@@ -275,8 +296,8 @@ export def "batch-update-custom-vocabulary-item" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  custom_vocabulary_item_list: list # A list of custom vocabulary items with updated fields. Each entry must contain a phrase and can optionally contain a displayAs and/or a weight. — item shape: {itemId: any, phrase: any, weight?: any, displayAs?: any}
-]: any -> record<botId: record, botVersion: record, localeId: record, errors: record, resources: record> {
+  custom_vocabulary_item_list: list # A list of custom vocabulary items with updated fields. Each entry must contain a phrase and can optionally contain a displayAs and/or a weight. — item shape: {itemId: string, phrase: string, weight?: int, displayAs?: string}
+]: any -> oneof<record<botId: string, botVersion: string, localeId: string, errors: table<itemId: string, errorMessage: string, errorCode: string>, resources: table<itemId: string, phrase: string, weight: int, displayAs: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -328,7 +349,7 @@ export def "build-bot-locale" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<botId: record, botVersion: record, localeId: record, botLocaleStatus: record, lastBuildSubmittedDateTime: record> {
+]: nothing -> oneof<record<botId: string, botVersion: string, localeId: string, botLocaleStatus: string, lastBuildSubmittedDateTime: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bot_id | is-empty) { error make --unspanned { msg: "path parameter 'botId' must be non-empty" } }
@@ -377,7 +398,7 @@ export def "delete-bot-locale" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<botId: record, botVersion: record, localeId: record, botLocaleStatus: record> {
+]: nothing -> oneof<record<botId: string, botVersion: string, localeId: string, botLocaleStatus: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bot_id | is-empty) { error make --unspanned { msg: "path parameter 'botId' must be non-empty" } }
@@ -426,7 +447,7 @@ export def "describe-bot-locale" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<botId: record, botVersion: record, localeId: record, localeName: record, description: record, nluIntentConfidenceThreshold: record, voiceSettings: record<voiceId: record, engine: record>, intentsCount: record, slotTypesCount: record, botLocaleStatus: record, failureReasons: record, creationDateTime: record, lastUpdatedDateTime: record, lastBuildSubmittedDateTime: record, botLocaleHistoryEvents: record, recommendedActions: record> {
+]: nothing -> oneof<record<botId: string, botVersion: string, localeId: string, localeName: string, description: string, nluIntentConfidenceThreshold: float, voiceSettings: record<voiceId: string, engine: string>, intentsCount: int, slotTypesCount: int, botLocaleStatus: string, failureReasons: list<string>, creationDateTime: string, lastUpdatedDateTime: string, lastBuildSubmittedDateTime: string, botLocaleHistoryEvents: table<event: string, eventDate: string>, recommendedActions: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bot_id | is-empty) { error make --unspanned { msg: "path parameter 'botId' must be non-empty" } }
@@ -455,7 +476,6 @@ export def "describe-bot-locale" [
 #
 # PUT /bots/{botId}/botversions/{botVersion}/botlocales/{localeId}/
 # operationId: UpdateBotLocale
-# --voiceSettings shape: {voiceId?: any, engine?: any}
 export def "update-bot-locale" [
   bot_id: string
   bot_version: string
@@ -478,8 +498,8 @@ export def "update-bot-locale" [
   --x-amz-signed-headers: string
   --description: string # The new description of the locale.
   nlu_intent_confidence_threshold: float # The new confidence threshold where Amazon Lex inserts the AMAZON.FallbackIntent and AMAZON.KendraSearchIntent intents in the list of possible intents for an utterance. (format: double)
-  --voice-settings: record # Defines settings for using an Amazon Polly voice to communicate with a user. — shape: {voiceId?: any, engine?: any}
-]: any -> record<botId: record, botVersion: record, localeId: record, localeName: record, description: record, nluIntentConfidenceThreshold: record, voiceSettings: record<voiceId: record, engine: record>, botLocaleStatus: record, failureReasons: record, creationDateTime: record, lastUpdatedDateTime: record, recommendedActions: record> {
+  --voice-settings: record # Defines settings for using an Amazon Polly voice to communicate with a user. — shape: {voiceId?: string, engine?: "standard"|"neural"}
+]: any -> oneof<record<botId: string, botVersion: string, localeId: string, localeName: string, description: string, nluIntentConfidenceThreshold: float, voiceSettings: record<voiceId: string, engine: string>, botLocaleStatus: string, failureReasons: list<string>, creationDateTime: string, lastUpdatedDateTime: string, recommendedActions: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -511,8 +531,6 @@ export def "update-bot-locale" [
 #
 # PUT /bots/
 # operationId: CreateBot
-# --dataPrivacy shape: {childDirected?: any}
-# --botMembers item shape: {botMemberId: any, botMemberName: any, botMemberAliasId: any, botMemberAliasName: any, botMemberVersion: any}
 export def "create-bot" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -533,13 +551,13 @@ export def "create-bot" [
   bot_name: string # The name of the bot. The bot name must be unique in the account that creates the bot.
   --description: string # A description of the bot. It appears in lists to help you identify a particular bot.
   role_arn: string # The Amazon Resource Name (ARN) of an IAM role that has permission to access the bot.
-  data_privacy: record # By default, data stored by Amazon Lex is encrypted. The DataPrivacy structure provides settings that determine how Amazon Lex handles special cases of securing the data for your bot. — shape: {childDirected?: any}
+  data_privacy: record # By default, data stored by Amazon Lex is encrypted. The DataPrivacy structure provides settings that determine how Amazon Lex handles special cases of securing the data for your bot. — shape: {childDirected?: bool}
   idle_session_ttl_in_seconds: int # The time, in seconds, that Amazon Lex should keep information about a user's conversation with the bot. A user interaction remains active for the amount of time specified. If no conversation occurs during this time, the session expires and Amazon Lex deletes any data provided before the timeout. You can specify between 60 (1 minute) and 86,400 (24 hours) seconds.
   --bot-tags: record # A list of tags to add to the bot. You can only add tags when you create a bot. You can't use the UpdateBot operation to update tags. To update tags, use the TagResource operation.
   --test-bot-alias-tags: record # A list of tags to add to the test alias for a bot. You can only add tags when you create a bot. You can't use the UpdateAlias operation to update tags. To update tags on the test alias, use the TagResource operation.
   --bot-type: string@bot-type-completer # The type of a bot to create.
-  --bot-members: list # The list of bot members in a network to be created. — item shape: {botMemberId: any, botMemberName: any, botMemberAliasId: any, botMemberAliasName: any, botMemberVersion: any}
-]: any -> record<botId: record, botName: record, description: record, roleArn: record, dataPrivacy: record<childDirected: record>, idleSessionTTLInSeconds: record, botStatus: record, creationDateTime: record, botTags: record, testBotAliasTags: record, botType: record, botMembers: record> {
+  --bot-members: list # The list of bot members in a network to be created. — item shape: {botMemberId: string, botMemberName: string, botMemberAliasId: string, botMemberAliasName: string, botMemberVersion: string}
+]: any -> oneof<record<botId: string, botName: string, description: string, roleArn: string, dataPrivacy: record<childDirected: bool>, idleSessionTTLInSeconds: int, botStatus: string, creationDateTime: string, botTags: record, testBotAliasTags: record, botType: string, botMembers: table<botMemberId: string, botMemberName: string, botMemberAliasId: string, botMemberAliasName: string, botMemberVersion: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -568,8 +586,6 @@ export def "create-bot" [
 #
 # POST /bots/
 # operationId: ListBots
-# --sortBy shape: {attribute?: any, order?: any}
-# --filters item shape: {name: any, values: any, operator: any}
 export def "list-bots" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -589,11 +605,11 @@ export def "list-bots" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --sort-by: record # Specifies attributes for sorting a list of bots. — shape: {attribute?: any, order?: any}
-  --filters: list # Provides the specification of a filter used to limit the bots in the response to only those that match the filter specification. You can only specify one filter and one string to filter on. — item shape: {name: any, values: any, operator: any}
+  --sort-by: record # Specifies attributes for sorting a list of bots. — shape: {attribute?: "BotName", order?: "Ascending"|"Descending"}
+  --filters: list # Provides the specification of a filter used to limit the bots in the response to only those that match the filter specification. You can only specify one filter and one string to filter on. — item shape: {name: "BotName"|"BotType", values: list<string>, operator: "CO"|"EQ"|"NE"}
   --max-results-body: int # The maximum number of bots to return in each page of results. If there are fewer results than the maximum page size, only the actual number of results are returned. (body field)
   --next-token-body: string # If the response from the ListBots operation contains more results than specified in the maxResults parameter, a token is returned in the response. Use the returned token in the nextToken parameter of a ListBots request to return the next page of results. For a complete set of results, call the ListBots operation until the nextToken returned in the response is null. (body field)
-]: any -> record<botSummaries: record, nextToken: record> {
+]: any -> oneof<record<botSummaries: table<botId: string, botName: string, description: string, botStatus: string, latestBotVersion: string, lastUpdatedDateTime: string, botType: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -623,8 +639,6 @@ export def "list-bots" [
 #
 # PUT /bots/{botId}/botaliases/
 # operationId: CreateBotAlias
-# --conversationLogSettings shape: {textLogSettings?: any, audioLogSettings?: any}
-# --sentimentAnalysisSettings shape: {detectSentiment?: any}
 export def "create-bot-alias" [
   bot_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -647,10 +661,10 @@ export def "create-bot-alias" [
   --description: string # A description of the alias. Use this description to help identify the alias.
   --bot-version: string # The version of the bot that this alias points to. You can use the UpdateBotAlias (https://docs.aws.amazon.com/lexv2/latest/APIReference/API_UpdateBotAlias.html) operation to change the bot version associated with the alias.
   --bot-alias-locale-settings: record # Maps configuration information to a specific locale. You can use this parameter to specify a specific Lambda function to run different functions in different locales.
-  --conversation-log-settings: record # Configures conversation logging that saves audio, text, and metadata for the conversations with your users. — shape: {textLogSettings?: any, audioLogSettings?: any}
-  --sentiment-analysis-settings: record # Determines whether Amazon Lex will use Amazon Comprehend to detect the sentiment of user utterances. — shape: {detectSentiment?: any}
+  --conversation-log-settings: record # Configures conversation logging that saves audio, text, and metadata for the conversations with your users. — shape: {textLogSettings?: list, audioLogSettings?: list}
+  --sentiment-analysis-settings: record # Determines whether Amazon Lex will use Amazon Comprehend to detect the sentiment of user utterances. — shape: {detectSentiment?: bool}
   --tags: record # A list of tags to add to the bot alias. You can only add tags when you create an alias, you can't use the UpdateBotAlias operation to update the tags on a bot alias. To update tags, use the TagResource operation.
-]: any -> record<botAliasId: record, botAliasName: record, description: record, botVersion: record, botAliasLocaleSettings: record, conversationLogSettings: record<textLogSettings: record, audioLogSettings: record>, sentimentAnalysisSettings: record<detectSentiment: record>, botAliasStatus: record, botId: record, creationDateTime: record, tags: record> {
+]: any -> oneof<record<botAliasId: string, botAliasName: string, description: string, botVersion: string, botAliasLocaleSettings: record, conversationLogSettings: record<textLogSettings: list<record>, audioLogSettings: list<record>>, sentimentAnalysisSettings: record<detectSentiment: bool>, botAliasStatus: string, botId: string, creationDateTime: string, tags: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -702,7 +716,7 @@ export def "list-bot-aliases" [
   --x-amz-signed-headers: string
   --max-results-body: int # The maximum number of aliases to return in each page of results. If there are fewer results than the max page size, only the actual number of results are returned. (body field)
   --next-token-body: string # If the response from the ListBotAliases operation contains more results than specified in the maxResults parameter, a token is returned in the response. Use that token in the nextToken parameter to return the next page of results. (body field)
-]: any -> record<botAliasSummaries: record, nextToken: record, botId: record> {
+]: any -> oneof<record<botAliasSummaries: table<botAliasId: string, botAliasName: string, description: string, botVersion: string, botAliasStatus: string, creationDateTime: string, lastUpdatedDateTime: string>, nextToken: string, botId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -733,7 +747,6 @@ export def "list-bot-aliases" [
 #
 # PUT /bots/{botId}/botversions/{botVersion}/botlocales/
 # operationId: CreateBotLocale
-# --voiceSettings shape: {voiceId?: any, engine?: any}
 export def "create-bot-locale" [
   bot_id: string
   bot_version: string
@@ -756,8 +769,8 @@ export def "create-bot-locale" [
   locale_id: string # The identifier of the language and locale that the bot will be used in. The string must match one of the supported locales. All of the intents, slot types, and slots used in the bot must have the same locale. For more information, see Supported languages (https://docs.aws.amazon.com/lexv2/latest/dg/how-languages.html).
   --description: string # A description of the bot locale. Use this to help identify the bot locale in lists.
   nlu_intent_confidence_threshold: float # Determines the threshold where Amazon Lex will insert the AMAZON.FallbackIntent, AMAZON.KendraSearchIntent, or both when returning alternative intents. AMAZON.FallbackIntent and AMAZON.KendraSearchIntent are only inserted if they are configured for the bot. For example, suppose a bot is configured with the confidence threshold of 0.80 and the AMAZON.FallbackIntent. Amazon Lex returns three alternative intents with the following confidence scores: IntentA (0.70), IntentB (0.60), IntentC (0.50). The response from the RecognizeText operation would be: AMAZON.FallbackIntent IntentA IntentB IntentC (format: double)
-  --voice-settings: record # Defines settings for using an Amazon Polly voice to communicate with a user. — shape: {voiceId?: any, engine?: any}
-]: any -> record<botId: record, botVersion: record, localeName: record, localeId: record, description: record, nluIntentConfidenceThreshold: record, voiceSettings: record<voiceId: record, engine: record>, botLocaleStatus: record, creationDateTime: record> {
+  --voice-settings: record # Defines settings for using an Amazon Polly voice to communicate with a user. — shape: {voiceId?: string, engine?: "standard"|"neural"}
+]: any -> oneof<record<botId: string, botVersion: string, localeName: string, localeId: string, description: string, nluIntentConfidenceThreshold: float, voiceSettings: record<voiceId: string, engine: string>, botLocaleStatus: string, creationDateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -788,8 +801,6 @@ export def "create-bot-locale" [
 #
 # POST /bots/{botId}/botversions/{botVersion}/botlocales/
 # operationId: ListBotLocales
-# --sortBy shape: {attribute?: any, order?: any}
-# --filters item shape: {name: any, values: any, operator: any}
 export def "list-bot-locales" [
   bot_id: string
   bot_version: string
@@ -811,11 +822,11 @@ export def "list-bot-locales" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --sort-by: record # Specifies attributes for sorting a list of bot locales. — shape: {attribute?: any, order?: any}
-  --filters: list # Provides the specification for a filter used to limit the response to only those locales that match the filter specification. You can only specify one filter and one value to filter on. — item shape: {name: any, values: any, operator: any}
+  --sort-by: record # Specifies attributes for sorting a list of bot locales. — shape: {attribute?: "BotLocaleName", order?: "Ascending"|"Descending"}
+  --filters: list # Provides the specification for a filter used to limit the response to only those locales that match the filter specification. You can only specify one filter and one value to filter on. — item shape: {name: "BotLocaleName", values: list<string>, operator: "CO"|"EQ"}
   --max-results-body: int # The maximum number of aliases to return in each page of results. If there are fewer results than the max page size, only the actual number of results are returned. (body field)
   --next-token-body: string # If the response from the ListBotLocales operation contains more results than specified in the maxResults parameter, a token is returned in the response. Use that token as the nextToken parameter to return the next page of results. (body field)
-]: any -> record<botId: record, botVersion: record, nextToken: record, botLocaleSummaries: record> {
+]: any -> oneof<record<botId: string, botVersion: string, nextToken: string, botLocaleSummaries: table<localeId: string, localeName: string, description: string, botLocaleStatus: string, lastUpdatedDateTime: string, lastBuildSubmittedDateTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -867,7 +878,7 @@ export def "create-bot-version" [
   --x-amz-signed-headers: string
   --description: string # A description of the version. Use the description to help identify the version in lists.
   bot_version_locale_specification: record # Specifies the locales that Amazon Lex adds to this version. You can choose the Draft version or any other previously published version for each locale. When you specify a source version, the locale data is copied from the source version to the new version.
-]: any -> record<botId: record, description: record, botVersion: record, botVersionLocaleSpecification: record, botStatus: record, creationDateTime: record> {
+]: any -> oneof<record<botId: string, description: string, botVersion: string, botVersionLocaleSpecification: record, botStatus: string, creationDateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -897,7 +908,6 @@ export def "create-bot-version" [
 #
 # POST /bots/{botId}/botversions/
 # operationId: ListBotVersions
-# --sortBy shape: {attribute?: any, order?: any}
 export def "list-bot-versions" [
   bot_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -918,10 +928,10 @@ export def "list-bot-versions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --sort-by: record # Specifies attributes for sorting a list of bot versions. — shape: {attribute?: any, order?: any}
+  --sort-by: record # Specifies attributes for sorting a list of bot versions. — shape: {attribute?: "BotVersion", order?: "Ascending"|"Descending"}
   --max-results-body: int # The maximum number of versions to return in each page of results. If there are fewer results than the max page size, only the actual number of results are returned. (body field)
   --next-token-body: string # If the response to the ListBotVersion operation contains more results than specified in the maxResults parameter, a token is returned in the response. Use that token in the nextToken parameter to return the next page of results. (body field)
-]: any -> record<botId: record, botVersionSummaries: record, nextToken: record> {
+]: any -> oneof<record<botId: string, botVersionSummaries: table<botName: string, botVersion: string, description: string, botStatus: string, creationDateTime: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -952,7 +962,6 @@ export def "list-bot-versions" [
 #
 # PUT /exports/
 # operationId: CreateExport
-# --resourceSpecification shape: {botExportSpecification?: any, botLocaleExportSpecification?: any, customVocabularyExportSpecification?: any}
 export def "create-export" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -970,10 +979,10 @@ export def "create-export" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  resource_specification: record # Provides information about the bot or bot locale that you want to export. You can specify the botExportSpecification or the botLocaleExportSpecification, but not both. — shape: {botExportSpecification?: any, botLocaleExportSpecification?: any, customVocabularyExportSpecification?: any}
+  resource_specification: record # Provides information about the bot or bot locale that you want to export. You can specify the botExportSpecification or the botLocaleExportSpecification, but not both. — shape: {botExportSpecification?: record, botLocaleExportSpecification?: record, customVocabularyExportSpecification?: record}
   file_format: string@file-format-completer # The file format of the bot or bot locale definition files.
   --file-password: string # An password to use to encrypt the exported archive. Using a password is optional, but you should encrypt the archive to protect the data in transit between Amazon Lex and your local computer. (format: password)
-]: any -> record<exportId: record, resourceSpecification: record<botExportSpecification: record<botId: record, botVersion: record>, botLocaleExportSpecification: record<botId: record, botVersion: record, localeId: record>, customVocabularyExportSpecification: record<botId: record, botVersion: record, localeId: record>>, fileFormat: record, exportStatus: record, creationDateTime: record> {
+]: any -> oneof<record<exportId: string, resourceSpecification: record<botExportSpecification: record<botId: string, botVersion: string>, botLocaleExportSpecification: record<botId: string, botVersion: string, localeId: string>, customVocabularyExportSpecification: record<botId: string, botVersion: string, localeId: string>>, fileFormat: string, exportStatus: string, creationDateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1002,8 +1011,6 @@ export def "create-export" [
 #
 # POST /exports/
 # operationId: ListExports
-# --sortBy shape: {attribute?: any, order?: any}
-# --filters item shape: {name: any, values: any, operator: any}
 export def "list-exports" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1025,12 +1032,12 @@ export def "list-exports" [
   --x-amz-signed-headers: string
   --bot-id: string # The unique identifier that Amazon Lex assigned to the bot.
   --bot-version: string # The version of the bot to list exports for.
-  --sort-by: record # Provides information about sorting a list of exports. — shape: {attribute?: any, order?: any}
-  --filters: list # Provides the specification of a filter used to limit the exports in the response to only those that match the filter specification. You can only specify one filter and one string to filter on. — item shape: {name: any, values: any, operator: any}
+  --sort-by: record # Provides information about sorting a list of exports. — shape: {attribute?: "LastUpdatedDateTime", order?: "Ascending"|"Descending"}
+  --filters: list # Provides the specification of a filter used to limit the exports in the response to only those that match the filter specification. You can only specify one filter and one string to filter on. — item shape: {name: "ExportResourceType", values: list<string>, operator: "CO"|"EQ"}
   --max-results-body: int # The maximum number of exports to return in each page of results. If there are fewer results than the max page size, only the actual number of results are returned. (body field)
   --next-token-body: string # If the response from the ListExports operation contains more results that specified in the maxResults parameter, a token is returned in the response. Use the returned token in the nextToken parameter of a ListExports request to return the next page of results. For a complete set of results, call the ListExports operation until the nextToken returned in the response is null. (body field)
   --locale-id: string # Specifies the resources that should be exported. If you don't specify a resource type in the filters parameter, both bot locales and custom vocabularies are exported.
-]: any -> record<botId: record, botVersion: record, exportSummaries: record, nextToken: record, localeId: record> {
+]: any -> oneof<record<botId: string, botVersion: string, exportSummaries: table<exportId: string, resourceSpecification: record, fileFormat: string, exportStatus: string, creationDateTime: string, lastUpdatedDateTime: string>, nextToken: string, localeId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1060,15 +1067,6 @@ export def "list-exports" [
 #
 # PUT /bots/{botId}/botversions/{botVersion}/botlocales/{localeId}/intents/
 # operationId: CreateIntent
-# --sampleUtterances item shape: {utterance: any}
-# --dialogCodeHook shape: {enabled?: any}
-# --fulfillmentCodeHook shape: {enabled?: any, postFulfillmentStatusSpecification?: any, fulfillmentUpdatesSpecification?: any, active?: any}
-# --intentConfirmationSetting shape: {promptSpecification?: any, declinationResponse?: any, active?: any, confirmationResponse?: record, confirmationNextStep?: any, confirmationConditional?: any, declinationNextStep?: any, declinationConditional?: any, failureResponse?: record, failureNextStep?: any, failureConditional?: record, codeHook?: any, elicitationCodeHook?: any}
-# --intentClosingSetting shape: {closingResponse?: any, active?: any, nextStep?: any, conditional?: any}
-# --inputContexts item shape: {name: any}
-# --outputContexts item shape: {name: any, timeToLiveInSeconds: any, turnsToLive: any}
-# --kendraConfiguration shape: {kendraIndex?: any, queryFilterStringEnabled?: any, queryFilterString?: any}
-# --initialResponseSetting shape: {initialResponse?: record, nextStep?: any, conditional?: record, codeHook?: record}
 export def "create-intent" [
   bot_id: string
   bot_version: string
@@ -1092,16 +1090,16 @@ export def "create-intent" [
   intent_name: string # The name of the intent. Intent names must be unique in the locale that contains the intent and cannot match the name of any built-in intent.
   --description: string # A description of the intent. Use the description to help identify the intent in lists.
   --parent-intent-signature: string # A unique identifier for the built-in intent to base this intent on.
-  --sample-utterances: list # An array of strings that a user might say to signal the intent. For example, "I want a pizza", or "I want a {PizzaSize} pizza". In an utterance, slot names are enclosed in curly braces ("{", "}") to indicate where they should be displayed in the utterance shown to the user.. — item shape: {utterance: any}
-  --dialog-code-hook: record # Settings that determine the Lambda function that Amazon Lex uses for processing user responses. — shape: {enabled?: any}
-  --fulfillment-code-hook: record # Determines if a Lambda function should be invoked for a specific intent. — shape: {enabled?: any, postFulfillmentStatusSpecification?: any, fulfillmentUpdatesSpecification?: any, active?: any}
-  --intent-confirmation-setting: record # Provides a prompt for making sure that the user is ready for the intent to be fulfilled. — shape: {promptSpecification?: any, declinationResponse?: any, active?: any, confirmationResponse?: record, confirmationNextStep?: any, confirmationConditional?: any, declinationNextStep?: any, declinationConditional?: any, failureResponse?: record, failureNextStep?: any, failureConditional?: record, codeHook?: any, elicitationCodeHook?: any}
-  --intent-closing-setting: record # Provides a statement the Amazon Lex conveys to the user when the intent is successfully fulfilled. — shape: {closingResponse?: any, active?: any, nextStep?: any, conditional?: any}
-  --input-contexts: list # A list of contexts that must be active for this intent to be considered by Amazon Lex. When an intent has an input context list, Amazon Lex only considers using the intent in an interaction with the user when the specified contexts are included in the active context list for the session. If the contexts are not active, then Amazon Lex will not use the intent. A context can be automatically activated using the outputContexts property or it can be set at runtime. For example, if there are two intents with different input contexts that respond to the same utterances, only the intent with the active context will respond. An intent may have up to 5 input contexts. If an intent has multiple input contexts, all of the contexts must be active to consider the intent. — item shape: {name: any}
-  --output-contexts: list # A lists of contexts that the intent activates when it is fulfilled. You can use an output context to indicate the intents that Amazon Lex should consider for the next turn of the conversation with a customer. When you use the outputContextsList property, all of the contexts specified in the list are activated when the intent is fulfilled. You can set up to 10 output contexts. You can also set the number of conversation turns that the context should be active, or the length of time that the context should be active. — item shape: {name: any, timeToLiveInSeconds: any, turnsToLive: any}
-  --kendra-configuration: record # Provides configuration information for the AMAZON.KendraSearchIntent intent. When you use this intent, Amazon Lex searches the specified Amazon Kendra index and returns documents from the index that match the user's utterance. — shape: {kendraIndex?: any, queryFilterStringEnabled?: any, queryFilterString?: any}
-  --initial-response-setting: record # Configuration setting for a response sent to the user before Amazon Lex starts eliciting slots. — shape: {initialResponse?: record, nextStep?: any, conditional?: record, codeHook?: record}
-]: any -> record<intentId: record, intentName: record, description: record, parentIntentSignature: record, sampleUtterances: record, dialogCodeHook: record<enabled: record>, fulfillmentCodeHook: record<enabled: record, postFulfillmentStatusSpecification: record<successResponse: record, failureResponse: record, timeoutResponse: record, successNextStep: record, successConditional: record, failureNextStep: record, failureConditional: record, timeoutNextStep: record, timeoutConditional: record>, fulfillmentUpdatesSpecification: record<active: record, startResponse: record, updateResponse: record, timeoutInSeconds: record>, active: record>, intentConfirmationSetting: record<promptSpecification: record<messageGroups: record, maxRetries: record, allowInterrupt: record, messageSelectionStrategy: record, promptAttemptsSpecification: record>, declinationResponse: record<messageGroups: record, allowInterrupt: record>, active: record, confirmationResponse: record<messageGroups: record, allowInterrupt: record>, confirmationNextStep: record<dialogAction: record, intent: record, sessionAttributes: record>, confirmationConditional: record<active: record, conditionalBranches: record, defaultBranch: record>, declinationNextStep: record<dialogAction: record, intent: record, sessionAttributes: record>, declinationConditional: record<active: record, conditionalBranches: record, defaultBranch: record>, failureResponse: record<messageGroups: record, allowInterrupt: record>, failureNextStep: record<dialogAction: record, intent: record, sessionAttributes: record>, failureConditional: record<active: record, conditionalBranches: record, defaultBranch: record>, codeHook: record<enableCodeHookInvocation: record, active: record, invocationLabel: record, postCodeHookSpecification: record>, elicitationCodeHook: record<enableCodeHookInvocation: record, invocationLabel: record>>, intentClosingSetting: record<closingResponse: record<messageGroups: record, allowInterrupt: record>, active: record, nextStep: record<dialogAction: record, intent: record, sessionAttributes: record>, conditional: record<active: record, conditionalBranches: record, defaultBranch: record>>, inputContexts: record, outputContexts: record, kendraConfiguration: record<kendraIndex: record, queryFilterStringEnabled: record, queryFilterString: record>, botId: record, botVersion: record, localeId: record, creationDateTime: record, initialResponseSetting: record<initialResponse: record<messageGroups: record, allowInterrupt: record>, nextStep: record<dialogAction: record, intent: record, sessionAttributes: record>, conditional: record<active: record, conditionalBranches: record, defaultBranch: record>, codeHook: record<enableCodeHookInvocation: record, active: record, invocationLabel: record, postCodeHookSpecification: record>>> {
+  --sample-utterances: list # An array of strings that a user might say to signal the intent. For example, "I want a pizza", or "I want a {PizzaSize} pizza". In an utterance, slot names are enclosed in curly braces ("{", "}") to indicate where they should be displayed in the utterance shown to the user.. — item shape: {utterance: string}
+  --dialog-code-hook: record # Settings that determine the Lambda function that Amazon Lex uses for processing user responses. — shape: {enabled?: bool}
+  --fulfillment-code-hook: record # Determines if a Lambda function should be invoked for a specific intent. — shape: {enabled?: bool, postFulfillmentStatusSpecification?: record, fulfillmentUpdatesSpecification?: record, active?: bool}
+  --intent-confirmation-setting: record # Provides a prompt for making sure that the user is ready for the intent to be fulfilled. — shape: {promptSpecification?: record, declinationResponse?: record, active?: bool, confirmationResponse?: record, confirmationNextStep?: record, confirmationConditional?: record, declinationNextStep?: record, declinationConditional?: record, failureResponse?: record, failureNextStep?: record, failureConditional?: record, codeHook?: record, elicitationCodeHook?: record}
+  --intent-closing-setting: record # Provides a statement the Amazon Lex conveys to the user when the intent is successfully fulfilled. — shape: {closingResponse?: record, active?: bool, nextStep?: record, conditional?: record}
+  --input-contexts: list # A list of contexts that must be active for this intent to be considered by Amazon Lex. When an intent has an input context list, Amazon Lex only considers using the intent in an interaction with the user when the specified contexts are included in the active context list for the session. If the contexts are not active, then Amazon Lex will not use the intent. A context can be automatically activated using the outputContexts property or it can be set at runtime. For example, if there are two intents with different input contexts that respond to the same utterances, only the intent with the active context will respond. An intent may have up to 5 input contexts. If an intent has multiple input contexts, all of the contexts must be active to consider the intent. — item shape: {name: string}
+  --output-contexts: list # A lists of contexts that the intent activates when it is fulfilled. You can use an output context to indicate the intents that Amazon Lex should consider for the next turn of the conversation with a customer. When you use the outputContextsList property, all of the contexts specified in the list are activated when the intent is fulfilled. You can set up to 10 output contexts. You can also set the number of conversation turns that the context should be active, or the length of time that the context should be active. — item shape: {name: string, timeToLiveInSeconds: int, turnsToLive: int}
+  --kendra-configuration: record # Provides configuration information for the AMAZON.KendraSearchIntent intent. When you use this intent, Amazon Lex searches the specified Amazon Kendra index and returns documents from the index that match the user's utterance. — shape: {kendraIndex?: string, queryFilterStringEnabled?: bool, queryFilterString?: string}
+  --initial-response-setting: record # Configuration setting for a response sent to the user before Amazon Lex starts eliciting slots. — shape: {initialResponse?: record, nextStep?: record, conditional?: record, codeHook?: record}
+]: any -> oneof<record<intentId: string, intentName: string, description: string, parentIntentSignature: string, sampleUtterances: table<utterance: string>, dialogCodeHook: record<enabled: bool>, fulfillmentCodeHook: record<enabled: bool, postFulfillmentStatusSpecification: record<successResponse: record, failureResponse: record, timeoutResponse: record, successNextStep: record, successConditional: record, failureNextStep: record, failureConditional: record, timeoutNextStep: record, timeoutConditional: record>, fulfillmentUpdatesSpecification: record<active: bool, startResponse: record, updateResponse: record, timeoutInSeconds: int>, active: bool>, intentConfirmationSetting: record<promptSpecification: record<messageGroups: list, maxRetries: int, allowInterrupt: bool, messageSelectionStrategy: string, promptAttemptsSpecification: record>, declinationResponse: record<messageGroups: list, allowInterrupt: bool>, active: bool, confirmationResponse: record<messageGroups: list, allowInterrupt: bool>, confirmationNextStep: record<dialogAction: record, intent: record, sessionAttributes: record>, confirmationConditional: record<active: bool, conditionalBranches: list, defaultBranch: record>, declinationNextStep: record<dialogAction: record, intent: record, sessionAttributes: record>, declinationConditional: record<active: bool, conditionalBranches: list, defaultBranch: record>, failureResponse: record<messageGroups: list, allowInterrupt: bool>, failureNextStep: record<dialogAction: record, intent: record, sessionAttributes: record>, failureConditional: record<active: bool, conditionalBranches: list, defaultBranch: record>, codeHook: record<enableCodeHookInvocation: bool, active: bool, invocationLabel: string, postCodeHookSpecification: record>, elicitationCodeHook: record<enableCodeHookInvocation: bool, invocationLabel: string>>, intentClosingSetting: record<closingResponse: record<messageGroups: list, allowInterrupt: bool>, active: bool, nextStep: record<dialogAction: record, intent: record, sessionAttributes: record>, conditional: record<active: bool, conditionalBranches: list, defaultBranch: record>>, inputContexts: table<name: string>, outputContexts: table<name: string, timeToLiveInSeconds: int, turnsToLive: int>, kendraConfiguration: record<kendraIndex: string, queryFilterStringEnabled: bool, queryFilterString: string>, botId: string, botVersion: string, localeId: string, creationDateTime: string, initialResponseSetting: record<initialResponse: record<messageGroups: list, allowInterrupt: bool>, nextStep: record<dialogAction: record, intent: record, sessionAttributes: record>, conditional: record<active: bool, conditionalBranches: list, defaultBranch: record>, codeHook: record<enableCodeHookInvocation: bool, active: bool, invocationLabel: string, postCodeHookSpecification: record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1133,8 +1131,6 @@ export def "create-intent" [
 #
 # POST /bots/{botId}/botversions/{botVersion}/botlocales/{localeId}/intents/
 # operationId: ListIntents
-# --sortBy shape: {attribute?: any, order?: any}
-# --filters item shape: {name: any, values: any, operator: any}
 export def "list-intents" [
   bot_id: string
   bot_version: string
@@ -1157,11 +1153,11 @@ export def "list-intents" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --sort-by: record # Specifies attributes for sorting a list of intents. — shape: {attribute?: any, order?: any}
-  --filters: list # Provides the specification of a filter used to limit the intents in the response to only those that match the filter specification. You can only specify one filter and only one string to filter on. — item shape: {name: any, values: any, operator: any}
+  --sort-by: record # Specifies attributes for sorting a list of intents. — shape: {attribute?: "IntentName"|"LastUpdatedDateTime", order?: "Ascending"|"Descending"}
+  --filters: list # Provides the specification of a filter used to limit the intents in the response to only those that match the filter specification. You can only specify one filter and only one string to filter on. — item shape: {name: "IntentName", values: list<string>, operator: "CO"|"EQ"}
   --max-results-body: int # The maximum number of intents to return in each page of results. If there are fewer results than the max page size, only the actual number of results are returned. (body field)
   --next-token-body: string # If the response from the ListIntents operation contains more results than specified in the maxResults parameter, a token is returned in the response. Use the returned token in the nextToken parameter of a ListIntents request to return the next page of results. For a complete set of results, call the ListIntents operation until the nextToken returned in the response is null. (body field)
-]: any -> record<botId: record, botVersion: record, localeId: record, intentSummaries: record, nextToken: record> {
+]: any -> oneof<record<botId: string, botVersion: string, localeId: string, intentSummaries: table<intentId: string, intentName: string, description: string, parentIntentSignature: string, inputContexts: list, outputContexts: list, lastUpdatedDateTime: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1213,7 +1209,7 @@ export def "create-resource-policy" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   policy: string # A resource policy to add to the resource. The policy is a JSON structure that contains one or more statements that define the policy. The policy must follow the IAM syntax. For more information about the contents of a JSON policy document, see IAM JSON policy reference (https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies.html). If the policy isn't valid, Amazon Lex returns a validation exception.
-]: any -> record<resourceArn: record, revisionId: record> {
+]: any -> oneof<record<resourceArn: string, revisionId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1262,7 +1258,7 @@ export def "delete-resource-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> oneof<record<resourceArn: string, revisionId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
@@ -1308,7 +1304,7 @@ export def "describe-resource-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<resourceArn: record, policy: record, revisionId: record> {
+]: nothing -> oneof<record<resourceArn: string, policy: string, revisionId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
@@ -1355,7 +1351,7 @@ export def "update-resource-policy" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   policy: string # A resource policy to add to the resource. The policy is a JSON structure that contains one or more statements that define the policy. The policy must follow the IAM syntax. For more information about the contents of a JSON policy document, see IAM JSON policy reference (https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies.html). If the policy isn't valid, Amazon Lex returns a validation exception.
-]: any -> record<resourceArn: record, revisionId: record> {
+]: any -> oneof<record<resourceArn: string, revisionId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1386,7 +1382,6 @@ export def "update-resource-policy" [
 #
 # POST /policy/{resourceArn}/statements/
 # operationId: CreateResourcePolicyStatement
-# --principal item shape: {service?: any, arn?: any}
 export def "create-resource-policy-statement" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1408,10 +1403,10 @@ export def "create-resource-policy-statement" [
   --x-amz-signed-headers: string
   statement_id: string # The name of the statement. The ID is the same as the Sid IAM property. The statement name must be unique within the policy. For more information, see IAM JSON policy elements: Sid (https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_sid.html).
   effect: string@effect-completer # Determines whether the statement allows or denies access to the resource.
-  principal: list # An IAM principal, such as an IAM users, IAM roles, or AWS services that is allowed or denied access to a resource. For more information, see AWS JSON policy elements: Principal (https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_principal.html). — item shape: {service?: any, arn?: any}
+  principal: list # An IAM principal, such as an IAM users, IAM roles, or AWS services that is allowed or denied access to a resource. For more information, see AWS JSON policy elements: Principal (https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_principal.html). — item shape: {service?: string, arn?: string}
   action: list<string> # The Amazon Lex action that this policy either allows or denies. The action must apply to the resource type of the specified ARN. For more information, see Actions, resources, and condition keys for Amazon Lex V2 (https://docs.aws.amazon.com/service-authorization/latest/reference/list_amazonlexv2.html).
   --condition: record # Specifies a condition when the policy is in effect. If the principal of the policy is a service principal, you must provide two condition blocks, one with a SourceAccount global condition key and one with a SourceArn global condition key. For more information, see IAM JSON policy elements: Condition (https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_condition.html).
-]: any -> record<resourceArn: record, revisionId: record> {
+]: any -> oneof<record<resourceArn: string, revisionId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1442,10 +1437,6 @@ export def "create-resource-policy-statement" [
 #
 # PUT /bots/{botId}/botversions/{botVersion}/botlocales/{localeId}/intents/{intentId}/slots/
 # operationId: CreateSlot
-# --valueElicitationSetting shape: {defaultValueSpecification?: any, slotConstraint?: any, promptSpecification?: any, sampleUtterances?: any, waitAndContinueSpecification?: record, slotCaptureSetting?: any}
-# --obfuscationSetting shape: {obfuscationSettingType?: any}
-# --multipleValuesSetting shape: {allowMultipleValues?: any}
-# --subSlotSetting shape: {expression?: any, slotSpecifications?: any}
 export def "create-slot" [
   bot_id: string
   bot_version: string
@@ -1470,11 +1461,11 @@ export def "create-slot" [
   slot_name: string # The name of the slot. Slot names must be unique within the bot that contains the slot.
   --description: string # A description of the slot. Use this to help identify the slot in lists.
   --slot-type-id: string # The unique identifier for the slot type associated with this slot. The slot type determines the values that can be entered into the slot.
-  value_elicitation_setting: record # Specifies the elicitation setting details for constituent sub slots of a composite slot. — shape: {defaultValueSpecification?: any, slotConstraint?: any, promptSpecification?: any, sampleUtterances?: any, waitAndContinueSpecification?: record, slotCaptureSetting?: any}
-  --obfuscation-setting: record # Determines whether Amazon Lex obscures slot values in conversation logs. — shape: {obfuscationSettingType?: any}
-  --multiple-values-setting: record # Indicates whether a slot can return multiple values. — shape: {allowMultipleValues?: any}
-  --sub-slot-setting: record # Specifications for the constituent sub slots and the expression for the composite slot. — shape: {expression?: any, slotSpecifications?: any}
-]: any -> record<slotId: record, slotName: record, description: record, slotTypeId: record, valueElicitationSetting: record<defaultValueSpecification: record<defaultValueList: record>, slotConstraint: record, promptSpecification: record<messageGroups: record, maxRetries: record, allowInterrupt: record, messageSelectionStrategy: record, promptAttemptsSpecification: record>, sampleUtterances: record, waitAndContinueSpecification: record<waitingResponse: record, continueResponse: record, stillWaitingResponse: record, active: record>, slotCaptureSetting: record<captureResponse: record, captureNextStep: record, captureConditional: record, failureResponse: record, failureNextStep: record, failureConditional: record, codeHook: record, elicitationCodeHook: record>>, obfuscationSetting: record<obfuscationSettingType: record>, botId: record, botVersion: record, localeId: record, intentId: record, creationDateTime: record, multipleValuesSetting: record<allowMultipleValues: record>, subSlotSetting: record<expression: record, slotSpecifications: record>> {
+  value_elicitation_setting: record # Specifies the elicitation setting details for constituent sub slots of a composite slot. — shape: {defaultValueSpecification?: record, slotConstraint?: "Required"|"Optional", promptSpecification?: record, sampleUtterances?: list, waitAndContinueSpecification?: record, slotCaptureSetting?: record}
+  --obfuscation-setting: record # Determines whether Amazon Lex obscures slot values in conversation logs. — shape: {obfuscationSettingType?: "None"|"DefaultObfuscation"}
+  --multiple-values-setting: record # Indicates whether a slot can return multiple values. — shape: {allowMultipleValues?: bool}
+  --sub-slot-setting: record # Specifications for the constituent sub slots and the expression for the composite slot. — shape: {expression?: string, slotSpecifications?: record}
+]: any -> oneof<record<slotId: string, slotName: string, description: string, slotTypeId: string, valueElicitationSetting: record<defaultValueSpecification: record<defaultValueList: list>, slotConstraint: string, promptSpecification: record<messageGroups: list, maxRetries: int, allowInterrupt: bool, messageSelectionStrategy: string, promptAttemptsSpecification: record>, sampleUtterances: list<record>, waitAndContinueSpecification: record<waitingResponse: record, continueResponse: record, stillWaitingResponse: record, active: bool>, slotCaptureSetting: record<captureResponse: record, captureNextStep: record, captureConditional: record, failureResponse: record, failureNextStep: record, failureConditional: record, codeHook: record, elicitationCodeHook: record>>, obfuscationSetting: record<obfuscationSettingType: string>, botId: string, botVersion: string, localeId: string, intentId: string, creationDateTime: string, multipleValuesSetting: record<allowMultipleValues: bool>, subSlotSetting: record<expression: string, slotSpecifications: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1507,8 +1498,6 @@ export def "create-slot" [
 #
 # POST /bots/{botId}/botversions/{botVersion}/botlocales/{localeId}/intents/{intentId}/slots/
 # operationId: ListSlots
-# --sortBy shape: {attribute?: any, order?: any}
-# --filters item shape: {name: any, values: any, operator: any}
 export def "list-slots" [
   bot_id: string
   bot_version: string
@@ -1532,11 +1521,11 @@ export def "list-slots" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --sort-by: record # Specifies attributes for sorting a list of bots. — shape: {attribute?: any, order?: any}
-  --filters: list # Provides the specification of a filter used to limit the slots in the response to only those that match the filter specification. You can only specify one filter and only one string to filter on. — item shape: {name: any, values: any, operator: any}
+  --sort-by: record # Specifies attributes for sorting a list of bots. — shape: {attribute?: "SlotName"|"LastUpdatedDateTime", order?: "Ascending"|"Descending"}
+  --filters: list # Provides the specification of a filter used to limit the slots in the response to only those that match the filter specification. You can only specify one filter and only one string to filter on. — item shape: {name: "SlotName", values: list<string>, operator: "CO"|"EQ"}
   --max-results-body: int # The maximum number of slots to return in each page of results. If there are fewer results than the max page size, only the actual number of results are returned. (body field)
   --next-token-body: string # If the response from the ListSlots operation contains more results than specified in the maxResults parameter, a token is returned in the response. Use that token in the nextToken parameter to return the next page of results. (body field)
-]: any -> record<botId: record, botVersion: record, localeId: record, intentId: record, slotSummaries: record, nextToken: record> {
+]: any -> oneof<record<botId: string, botVersion: string, localeId: string, intentId: string, slotSummaries: table<slotId: string, slotName: string, description: string, slotConstraint: string, slotTypeId: string, valueElicitationPromptSpecification: record, lastUpdatedDateTime: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1570,10 +1559,6 @@ export def "list-slots" [
 #
 # PUT /bots/{botId}/botversions/{botVersion}/botlocales/{localeId}/slottypes/
 # operationId: CreateSlotType
-# --slotTypeValues item shape: {sampleValue?: any, synonyms?: any}
-# --valueSelectionSetting shape: {resolutionStrategy?: any, regexFilter?: any, advancedRecognitionSetting?: any}
-# --externalSourceSetting shape: {grammarSlotTypeSetting?: any}
-# --compositeSlotTypeSetting shape: {subSlots?: any}
 export def "create-slot-type" [
   bot_id: string
   bot_version: string
@@ -1596,12 +1581,12 @@ export def "create-slot-type" [
   --x-amz-signed-headers: string
   slot_type_name: string # The name for the slot. A slot type name must be unique within the account.
   --description: string # A description of the slot type. Use the description to help identify the slot type in lists.
-  --slot-type-values: list # A list of SlotTypeValue objects that defines the values that the slot type can take. Each value can have a list of synonyms, additional values that help train the machine learning model about the values that it resolves for a slot. — item shape: {sampleValue?: any, synonyms?: any}
-  --value-selection-setting: record # Contains settings used by Amazon Lex to select a slot value. — shape: {resolutionStrategy?: any, regexFilter?: any, advancedRecognitionSetting?: any}
+  --slot-type-values: list # A list of SlotTypeValue objects that defines the values that the slot type can take. Each value can have a list of synonyms, additional values that help train the machine learning model about the values that it resolves for a slot. — item shape: {sampleValue?: record, synonyms?: list}
+  --value-selection-setting: record # Contains settings used by Amazon Lex to select a slot value. — shape: {resolutionStrategy?: "OriginalValue"|"TopResolution"|"Concatenation", regexFilter?: record, advancedRecognitionSetting?: record}
   --parent-slot-type-signature: string # The built-in slot type used as a parent of this slot type. When you define a parent slot type, the new slot type has the configuration of the parent slot type. Only AMAZON.AlphaNumeric is supported.
-  --external-source-setting: record # Provides information about the external source of the slot type's definition. — shape: {grammarSlotTypeSetting?: any}
-  --composite-slot-type-setting: record # A composite slot is a combination of two or more slots that capture multiple pieces of information in a single user input. — shape: {subSlots?: any}
-]: any -> record<slotTypeId: record, slotTypeName: record, description: record, slotTypeValues: record, valueSelectionSetting: record<resolutionStrategy: record, regexFilter: record<pattern: record>, advancedRecognitionSetting: record<audioRecognitionStrategy: record>>, parentSlotTypeSignature: record, botId: record, botVersion: record, localeId: record, creationDateTime: record, externalSourceSetting: record<grammarSlotTypeSetting: record<source: record>>, compositeSlotTypeSetting: record<subSlots: record>> {
+  --external-source-setting: record # Provides information about the external source of the slot type's definition. — shape: {grammarSlotTypeSetting?: record}
+  --composite-slot-type-setting: record # A composite slot is a combination of two or more slots that capture multiple pieces of information in a single user input. — shape: {subSlots?: list}
+]: any -> oneof<record<slotTypeId: string, slotTypeName: string, description: string, slotTypeValues: table<sampleValue: record, synonyms: list>, valueSelectionSetting: record<resolutionStrategy: string, regexFilter: record<pattern: string>, advancedRecognitionSetting: record<audioRecognitionStrategy: string>>, parentSlotTypeSignature: string, botId: string, botVersion: string, localeId: string, creationDateTime: string, externalSourceSetting: record<grammarSlotTypeSetting: record<source: record>>, compositeSlotTypeSetting: record<subSlots: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1633,8 +1618,6 @@ export def "create-slot-type" [
 #
 # POST /bots/{botId}/botversions/{botVersion}/botlocales/{localeId}/slottypes/
 # operationId: ListSlotTypes
-# --sortBy shape: {attribute?: any, order?: any}
-# --filters item shape: {name: any, values: any, operator: any}
 export def "list-slot-types" [
   bot_id: string
   bot_version: string
@@ -1657,11 +1640,11 @@ export def "list-slot-types" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --sort-by: record # Specifies attributes for sorting a list of slot types. — shape: {attribute?: any, order?: any}
-  --filters: list # Provides the specification of a filter used to limit the slot types in the response to only those that match the filter specification. You can only specify one filter and only one string to filter on. — item shape: {name: any, values: any, operator: any}
+  --sort-by: record # Specifies attributes for sorting a list of slot types. — shape: {attribute?: "SlotTypeName"|"LastUpdatedDateTime", order?: "Ascending"|"Descending"}
+  --filters: list # Provides the specification of a filter used to limit the slot types in the response to only those that match the filter specification. You can only specify one filter and only one string to filter on. — item shape: {name: "SlotTypeName"|"ExternalSourceType", values: list<string>, operator: "CO"|"EQ"}
   --max-results-body: int # The maximum number of slot types to return in each page of results. If there are fewer results than the max page size, only the actual number of results are returned. (body field)
   --next-token-body: string # If the response from the ListSlotTypes operation contains more results than specified in the maxResults parameter, a token is returned in the response. Use that token in the nextToken parameter to return the next page of results. (body field)
-]: any -> record<botId: record, botVersion: record, localeId: record, slotTypeSummaries: record, nextToken: record> {
+]: any -> oneof<record<botId: string, botVersion: string, localeId: string, slotTypeSummaries: table<slotTypeId: string, slotTypeName: string, description: string, parentSlotTypeSignature: string, lastUpdatedDateTime: string, slotTypeCategory: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1711,7 +1694,7 @@ export def "create-upload-url" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<importId: record, uploadUrl: record> {
+]: nothing -> oneof<record<importId: string, uploadUrl: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/createuploadurl/" $auth.query)
@@ -1756,7 +1739,7 @@ export def "delete-bot" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<botId: record, botStatus: record> {
+]: nothing -> oneof<record<botId: string, botStatus: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bot_id | is-empty) { error make --unspanned { msg: "path parameter 'botId' must be non-empty" } }
@@ -1802,7 +1785,7 @@ export def "describe-bot" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<botId: record, botName: record, description: record, roleArn: record, dataPrivacy: record<childDirected: record>, idleSessionTTLInSeconds: record, botStatus: record, creationDateTime: record, lastUpdatedDateTime: record, botType: record, botMembers: record, failureReasons: record> {
+]: nothing -> oneof<record<botId: string, botName: string, description: string, roleArn: string, dataPrivacy: record<childDirected: bool>, idleSessionTTLInSeconds: int, botStatus: string, creationDateTime: string, lastUpdatedDateTime: string, botType: string, botMembers: table<botMemberId: string, botMemberName: string, botMemberAliasId: string, botMemberAliasName: string, botMemberVersion: string>, failureReasons: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bot_id | is-empty) { error make --unspanned { msg: "path parameter 'botId' must be non-empty" } }
@@ -1829,8 +1812,6 @@ export def "describe-bot" [
 #
 # PUT /bots/{botId}/
 # operationId: UpdateBot
-# --dataPrivacy shape: {childDirected?: any}
-# --botMembers item shape: {botMemberId: any, botMemberName: any, botMemberAliasId: any, botMemberAliasName: any, botMemberVersion: any}
 export def "update-bot" [
   bot_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1852,11 +1833,11 @@ export def "update-bot" [
   bot_name: string # The new name of the bot. The name must be unique in the account that creates the bot.
   --description: string # A description of the bot.
   role_arn: string # The Amazon Resource Name (ARN) of an IAM role that has permissions to access the bot.
-  data_privacy: record # By default, data stored by Amazon Lex is encrypted. The DataPrivacy structure provides settings that determine how Amazon Lex handles special cases of securing the data for your bot. — shape: {childDirected?: any}
+  data_privacy: record # By default, data stored by Amazon Lex is encrypted. The DataPrivacy structure provides settings that determine how Amazon Lex handles special cases of securing the data for your bot. — shape: {childDirected?: bool}
   idle_session_ttl_in_seconds: int # The time, in seconds, that Amazon Lex should keep information about a user's conversation with the bot. A user interaction remains active for the amount of time specified. If no conversation occurs during this time, the session expires and Amazon Lex deletes any data provided before the timeout. You can specify between 60 (1 minute) and 86,400 (24 hours) seconds.
   --bot-type: string@bot-type-completer # The type of the bot to be updated.
-  --bot-members: list # The list of bot members in the network associated with the update action. — item shape: {botMemberId: any, botMemberName: any, botMemberAliasId: any, botMemberAliasName: any, botMemberVersion: any}
-]: any -> record<botId: record, botName: record, description: record, roleArn: record, dataPrivacy: record<childDirected: record>, idleSessionTTLInSeconds: record, botStatus: record, creationDateTime: record, lastUpdatedDateTime: record, botType: record, botMembers: record> {
+  --bot-members: list # The list of bot members in the network associated with the update action. — item shape: {botMemberId: string, botMemberName: string, botMemberAliasId: string, botMemberAliasName: string, botMemberVersion: string}
+]: any -> oneof<record<botId: string, botName: string, description: string, roleArn: string, dataPrivacy: record<childDirected: bool>, idleSessionTTLInSeconds: int, botStatus: string, creationDateTime: string, lastUpdatedDateTime: string, botType: string, botMembers: table<botMemberId: string, botMemberName: string, botMemberAliasId: string, botMemberAliasName: string, botMemberVersion: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1906,7 +1887,7 @@ export def "delete-bot-alias" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<botAliasId: record, botId: record, botAliasStatus: record> {
+]: nothing -> oneof<record<botAliasId: string, botId: string, botAliasStatus: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bot_id | is-empty) { error make --unspanned { msg: "path parameter 'botId' must be non-empty" } }
@@ -1954,7 +1935,7 @@ export def "describe-bot-alias" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<botAliasId: record, botAliasName: record, description: record, botVersion: record, botAliasLocaleSettings: record, conversationLogSettings: record<textLogSettings: record, audioLogSettings: record>, sentimentAnalysisSettings: record<detectSentiment: record>, botAliasHistoryEvents: record, botAliasStatus: record, botId: record, creationDateTime: record, lastUpdatedDateTime: record, parentBotNetworks: record> {
+]: nothing -> oneof<record<botAliasId: string, botAliasName: string, description: string, botVersion: string, botAliasLocaleSettings: record, conversationLogSettings: record<textLogSettings: list<record>, audioLogSettings: list<record>>, sentimentAnalysisSettings: record<detectSentiment: bool>, botAliasHistoryEvents: table<botVersion: string, startDate: string, endDate: string>, botAliasStatus: string, botId: string, creationDateTime: string, lastUpdatedDateTime: string, parentBotNetworks: table<botId: string, botVersion: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bot_id | is-empty) { error make --unspanned { msg: "path parameter 'botId' must be non-empty" } }
@@ -1982,8 +1963,6 @@ export def "describe-bot-alias" [
 #
 # PUT /bots/{botId}/botaliases/{botAliasId}/
 # operationId: UpdateBotAlias
-# --conversationLogSettings shape: {textLogSettings?: any, audioLogSettings?: any}
-# --sentimentAnalysisSettings shape: {detectSentiment?: any}
 export def "update-bot-alias" [
   bot_id: string
   bot_alias_id: string
@@ -2007,9 +1986,9 @@ export def "update-bot-alias" [
   --description: string # The new description to assign to the bot alias.
   --bot-version: string # The new bot version to assign to the bot alias.
   --bot-alias-locale-settings: record # The new Lambda functions to use in each locale for the bot alias.
-  --conversation-log-settings: record # Configures conversation logging that saves audio, text, and metadata for the conversations with your users. — shape: {textLogSettings?: any, audioLogSettings?: any}
-  --sentiment-analysis-settings: record # Determines whether Amazon Lex will use Amazon Comprehend to detect the sentiment of user utterances. — shape: {detectSentiment?: any}
-]: any -> record<botAliasId: record, botAliasName: record, description: record, botVersion: record, botAliasLocaleSettings: record, conversationLogSettings: record<textLogSettings: record, audioLogSettings: record>, sentimentAnalysisSettings: record<detectSentiment: record>, botAliasStatus: record, botId: record, creationDateTime: record, lastUpdatedDateTime: record> {
+  --conversation-log-settings: record # Configures conversation logging that saves audio, text, and metadata for the conversations with your users. — shape: {textLogSettings?: list, audioLogSettings?: list}
+  --sentiment-analysis-settings: record # Determines whether Amazon Lex will use Amazon Comprehend to detect the sentiment of user utterances. — shape: {detectSentiment?: bool}
+]: any -> oneof<record<botAliasId: string, botAliasName: string, description: string, botVersion: string, botAliasLocaleSettings: record, conversationLogSettings: record<textLogSettings: list<record>, audioLogSettings: list<record>>, sentimentAnalysisSettings: record<detectSentiment: bool>, botAliasStatus: string, botId: string, creationDateTime: string, lastUpdatedDateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2060,7 +2039,7 @@ export def "delete-bot-version" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<botId: record, botVersion: record, botStatus: record> {
+]: nothing -> oneof<record<botId: string, botVersion: string, botStatus: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bot_id | is-empty) { error make --unspanned { msg: "path parameter 'botId' must be non-empty" } }
@@ -2108,7 +2087,7 @@ export def "describe-bot-version" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<botId: record, botName: record, botVersion: record, description: record, roleArn: record, dataPrivacy: record<childDirected: record>, idleSessionTTLInSeconds: record, botStatus: record, failureReasons: record, creationDateTime: record, parentBotNetworks: record, botType: record, botMembers: record> {
+]: nothing -> oneof<record<botId: string, botName: string, botVersion: string, description: string, roleArn: string, dataPrivacy: record<childDirected: bool>, idleSessionTTLInSeconds: int, botStatus: string, failureReasons: list<string>, creationDateTime: string, parentBotNetworks: table<botId: string, botVersion: string>, botType: string, botMembers: table<botMemberId: string, botMemberName: string, botMemberAliasId: string, botMemberAliasName: string, botMemberVersion: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bot_id | is-empty) { error make --unspanned { msg: "path parameter 'botId' must be non-empty" } }
@@ -2156,7 +2135,7 @@ export def "delete-custom-vocabulary" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<botId: record, botVersion: record, localeId: record, customVocabularyStatus: record> {
+]: nothing -> oneof<record<botId: string, botVersion: string, localeId: string, customVocabularyStatus: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bot_id | is-empty) { error make --unspanned { msg: "path parameter 'botId' must be non-empty" } }
@@ -2203,7 +2182,7 @@ export def "delete-export" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<exportId: record, exportStatus: record> {
+]: nothing -> oneof<record<exportId: string, exportStatus: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($export_id | is-empty) { error make --unspanned { msg: "path parameter 'exportId' must be non-empty" } }
@@ -2248,7 +2227,7 @@ export def "describe-export" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<exportId: record, resourceSpecification: record<botExportSpecification: record<botId: record, botVersion: record>, botLocaleExportSpecification: record<botId: record, botVersion: record, localeId: record>, customVocabularyExportSpecification: record<botId: record, botVersion: record, localeId: record>>, fileFormat: record, exportStatus: record, failureReasons: record, downloadUrl: record, creationDateTime: record, lastUpdatedDateTime: record> {
+]: nothing -> oneof<record<exportId: string, resourceSpecification: record<botExportSpecification: record<botId: string, botVersion: string>, botLocaleExportSpecification: record<botId: string, botVersion: string, localeId: string>, customVocabularyExportSpecification: record<botId: string, botVersion: string, localeId: string>>, fileFormat: string, exportStatus: string, failureReasons: list<string>, downloadUrl: string, creationDateTime: string, lastUpdatedDateTime: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($export_id | is-empty) { error make --unspanned { msg: "path parameter 'exportId' must be non-empty" } }
@@ -2294,7 +2273,7 @@ export def "update-export" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --file-password: string # The new password to use to encrypt the export zip archive. (format: password)
-]: any -> record<exportId: record, resourceSpecification: record<botExportSpecification: record<botId: record, botVersion: record>, botLocaleExportSpecification: record<botId: record, botVersion: record, localeId: record>, customVocabularyExportSpecification: record<botId: record, botVersion: record, localeId: record>>, fileFormat: record, exportStatus: record, creationDateTime: record, lastUpdatedDateTime: record> {
+]: any -> oneof<record<exportId: string, resourceSpecification: record<botExportSpecification: record<botId: string, botVersion: string>, botLocaleExportSpecification: record<botId: string, botVersion: string, localeId: string>, customVocabularyExportSpecification: record<botId: string, botVersion: string, localeId: string>>, fileFormat: string, exportStatus: string, creationDateTime: string, lastUpdatedDateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2342,7 +2321,7 @@ export def "delete-import" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<importId: record, importStatus: record> {
+]: nothing -> oneof<record<importId: string, importStatus: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($import_id | is-empty) { error make --unspanned { msg: "path parameter 'importId' must be non-empty" } }
@@ -2387,7 +2366,7 @@ export def "describe-import" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<importId: record, resourceSpecification: record<botImportSpecification: record<botName: record, roleArn: record, dataPrivacy: record, idleSessionTTLInSeconds: record, botTags: record, testBotAliasTags: record>, botLocaleImportSpecification: record<botId: record, botVersion: record, localeId: record, nluIntentConfidenceThreshold: record, voiceSettings: record>, customVocabularyImportSpecification: record<botId: record, botVersion: record, localeId: record>>, importedResourceId: record, importedResourceName: record, mergeStrategy: record, importStatus: record, failureReasons: record, creationDateTime: record, lastUpdatedDateTime: record> {
+]: nothing -> oneof<record<importId: string, resourceSpecification: record<botImportSpecification: record<botName: string, roleArn: string, dataPrivacy: record, idleSessionTTLInSeconds: int, botTags: record, testBotAliasTags: record>, botLocaleImportSpecification: record<botId: string, botVersion: string, localeId: string, nluIntentConfidenceThreshold: float, voiceSettings: record>, customVocabularyImportSpecification: record<botId: string, botVersion: string, localeId: string>>, importedResourceId: string, importedResourceName: string, mergeStrategy: string, importStatus: string, failureReasons: list<string>, creationDateTime: string, lastUpdatedDateTime: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($import_id | is-empty) { error make --unspanned { msg: "path parameter 'importId' must be non-empty" } }
@@ -2486,7 +2465,7 @@ export def "describe-intent" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<intentId: record, intentName: record, description: record, parentIntentSignature: record, sampleUtterances: record, dialogCodeHook: record<enabled: record>, fulfillmentCodeHook: record<enabled: record, postFulfillmentStatusSpecification: record<successResponse: record, failureResponse: record, timeoutResponse: record, successNextStep: record, successConditional: record, failureNextStep: record, failureConditional: record, timeoutNextStep: record, timeoutConditional: record>, fulfillmentUpdatesSpecification: record<active: record, startResponse: record, updateResponse: record, timeoutInSeconds: record>, active: record>, slotPriorities: record, intentConfirmationSetting: record<promptSpecification: record<messageGroups: record, maxRetries: record, allowInterrupt: record, messageSelectionStrategy: record, promptAttemptsSpecification: record>, declinationResponse: record<messageGroups: record, allowInterrupt: record>, active: record, confirmationResponse: record<messageGroups: record, allowInterrupt: record>, confirmationNextStep: record<dialogAction: record, intent: record, sessionAttributes: record>, confirmationConditional: record<active: record, conditionalBranches: record, defaultBranch: record>, declinationNextStep: record<dialogAction: record, intent: record, sessionAttributes: record>, declinationConditional: record<active: record, conditionalBranches: record, defaultBranch: record>, failureResponse: record<messageGroups: record, allowInterrupt: record>, failureNextStep: record<dialogAction: record, intent: record, sessionAttributes: record>, failureConditional: record<active: record, conditionalBranches: record, defaultBranch: record>, codeHook: record<enableCodeHookInvocation: record, active: record, invocationLabel: record, postCodeHookSpecification: record>, elicitationCodeHook: record<enableCodeHookInvocation: record, invocationLabel: record>>, intentClosingSetting: record<closingResponse: record<messageGroups: record, allowInterrupt: record>, active: record, nextStep: record<dialogAction: record, intent: record, sessionAttributes: record>, conditional: record<active: record, conditionalBranches: record, defaultBranch: record>>, inputContexts: record, outputContexts: record, kendraConfiguration: record<kendraIndex: record, queryFilterStringEnabled: record, queryFilterString: record>, botId: record, botVersion: record, localeId: record, creationDateTime: record, lastUpdatedDateTime: record, initialResponseSetting: record<initialResponse: record<messageGroups: record, allowInterrupt: record>, nextStep: record<dialogAction: record, intent: record, sessionAttributes: record>, conditional: record<active: record, conditionalBranches: record, defaultBranch: record>, codeHook: record<enableCodeHookInvocation: record, active: record, invocationLabel: record, postCodeHookSpecification: record>>> {
+]: nothing -> oneof<record<intentId: string, intentName: string, description: string, parentIntentSignature: string, sampleUtterances: table<utterance: string>, dialogCodeHook: record<enabled: bool>, fulfillmentCodeHook: record<enabled: bool, postFulfillmentStatusSpecification: record<successResponse: record, failureResponse: record, timeoutResponse: record, successNextStep: record, successConditional: record, failureNextStep: record, failureConditional: record, timeoutNextStep: record, timeoutConditional: record>, fulfillmentUpdatesSpecification: record<active: bool, startResponse: record, updateResponse: record, timeoutInSeconds: int>, active: bool>, slotPriorities: table<priority: int, slotId: string>, intentConfirmationSetting: record<promptSpecification: record<messageGroups: list, maxRetries: int, allowInterrupt: bool, messageSelectionStrategy: string, promptAttemptsSpecification: record>, declinationResponse: record<messageGroups: list, allowInterrupt: bool>, active: bool, confirmationResponse: record<messageGroups: list, allowInterrupt: bool>, confirmationNextStep: record<dialogAction: record, intent: record, sessionAttributes: record>, confirmationConditional: record<active: bool, conditionalBranches: list, defaultBranch: record>, declinationNextStep: record<dialogAction: record, intent: record, sessionAttributes: record>, declinationConditional: record<active: bool, conditionalBranches: list, defaultBranch: record>, failureResponse: record<messageGroups: list, allowInterrupt: bool>, failureNextStep: record<dialogAction: record, intent: record, sessionAttributes: record>, failureConditional: record<active: bool, conditionalBranches: list, defaultBranch: record>, codeHook: record<enableCodeHookInvocation: bool, active: bool, invocationLabel: string, postCodeHookSpecification: record>, elicitationCodeHook: record<enableCodeHookInvocation: bool, invocationLabel: string>>, intentClosingSetting: record<closingResponse: record<messageGroups: list, allowInterrupt: bool>, active: bool, nextStep: record<dialogAction: record, intent: record, sessionAttributes: record>, conditional: record<active: bool, conditionalBranches: list, defaultBranch: record>>, inputContexts: table<name: string>, outputContexts: table<name: string, timeToLiveInSeconds: int, turnsToLive: int>, kendraConfiguration: record<kendraIndex: string, queryFilterStringEnabled: bool, queryFilterString: string>, botId: string, botVersion: string, localeId: string, creationDateTime: string, lastUpdatedDateTime: string, initialResponseSetting: record<initialResponse: record<messageGroups: list, allowInterrupt: bool>, nextStep: record<dialogAction: record, intent: record, sessionAttributes: record>, conditional: record<active: bool, conditionalBranches: list, defaultBranch: record>, codeHook: record<enableCodeHookInvocation: bool, active: bool, invocationLabel: string, postCodeHookSpecification: record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bot_id | is-empty) { error make --unspanned { msg: "path parameter 'botId' must be non-empty" } }
@@ -2516,16 +2495,6 @@ export def "describe-intent" [
 #
 # PUT /bots/{botId}/botversions/{botVersion}/botlocales/{localeId}/intents/{intentId}/
 # operationId: UpdateIntent
-# --sampleUtterances item shape: {utterance: any}
-# --dialogCodeHook shape: {enabled?: any}
-# --fulfillmentCodeHook shape: {enabled?: any, postFulfillmentStatusSpecification?: any, fulfillmentUpdatesSpecification?: any, active?: any}
-# --slotPriorities item shape: {priority: any, slotId: any}
-# --intentConfirmationSetting shape: {promptSpecification?: any, declinationResponse?: any, active?: any, confirmationResponse?: record, confirmationNextStep?: any, confirmationConditional?: any, declinationNextStep?: any, declinationConditional?: any, failureResponse?: record, failureNextStep?: any, failureConditional?: record, codeHook?: any, elicitationCodeHook?: any}
-# --intentClosingSetting shape: {closingResponse?: any, active?: any, nextStep?: any, conditional?: any}
-# --inputContexts item shape: {name: any}
-# --outputContexts item shape: {name: any, timeToLiveInSeconds: any, turnsToLive: any}
-# --kendraConfiguration shape: {kendraIndex?: any, queryFilterStringEnabled?: any, queryFilterString?: any}
-# --initialResponseSetting shape: {initialResponse?: record, nextStep?: any, conditional?: record, codeHook?: record}
 export def "update-intent" [
   bot_id: string
   bot_version: string
@@ -2550,17 +2519,17 @@ export def "update-intent" [
   intent_name: string # The new name for the intent.
   --description: string # The new description of the intent.
   --parent-intent-signature: string # The signature of the new built-in intent to use as the parent of this intent.
-  --sample-utterances: list # New utterances used to invoke the intent. — item shape: {utterance: any}
-  --dialog-code-hook: record # Settings that determine the Lambda function that Amazon Lex uses for processing user responses. — shape: {enabled?: any}
-  --fulfillment-code-hook: record # Determines if a Lambda function should be invoked for a specific intent. — shape: {enabled?: any, postFulfillmentStatusSpecification?: any, fulfillmentUpdatesSpecification?: any, active?: any}
-  --slot-priorities: list # A new list of slots and their priorities that are contained by the intent. — item shape: {priority: any, slotId: any}
-  --intent-confirmation-setting: record # Provides a prompt for making sure that the user is ready for the intent to be fulfilled. — shape: {promptSpecification?: any, declinationResponse?: any, active?: any, confirmationResponse?: record, confirmationNextStep?: any, confirmationConditional?: any, declinationNextStep?: any, declinationConditional?: any, failureResponse?: record, failureNextStep?: any, failureConditional?: record, codeHook?: any, elicitationCodeHook?: any}
-  --intent-closing-setting: record # Provides a statement the Amazon Lex conveys to the user when the intent is successfully fulfilled. — shape: {closingResponse?: any, active?: any, nextStep?: any, conditional?: any}
-  --input-contexts: list # A new list of contexts that must be active in order for Amazon Lex to consider the intent. — item shape: {name: any}
-  --output-contexts: list # A new list of contexts that Amazon Lex activates when the intent is fulfilled. — item shape: {name: any, timeToLiveInSeconds: any, turnsToLive: any}
-  --kendra-configuration: record # Provides configuration information for the AMAZON.KendraSearchIntent intent. When you use this intent, Amazon Lex searches the specified Amazon Kendra index and returns documents from the index that match the user's utterance. — shape: {kendraIndex?: any, queryFilterStringEnabled?: any, queryFilterString?: any}
-  --initial-response-setting: record # Configuration setting for a response sent to the user before Amazon Lex starts eliciting slots. — shape: {initialResponse?: record, nextStep?: any, conditional?: record, codeHook?: record}
-]: any -> record<intentId: record, intentName: record, description: record, parentIntentSignature: record, sampleUtterances: record, dialogCodeHook: record<enabled: record>, fulfillmentCodeHook: record<enabled: record, postFulfillmentStatusSpecification: record<successResponse: record, failureResponse: record, timeoutResponse: record, successNextStep: record, successConditional: record, failureNextStep: record, failureConditional: record, timeoutNextStep: record, timeoutConditional: record>, fulfillmentUpdatesSpecification: record<active: record, startResponse: record, updateResponse: record, timeoutInSeconds: record>, active: record>, slotPriorities: record, intentConfirmationSetting: record<promptSpecification: record<messageGroups: record, maxRetries: record, allowInterrupt: record, messageSelectionStrategy: record, promptAttemptsSpecification: record>, declinationResponse: record<messageGroups: record, allowInterrupt: record>, active: record, confirmationResponse: record<messageGroups: record, allowInterrupt: record>, confirmationNextStep: record<dialogAction: record, intent: record, sessionAttributes: record>, confirmationConditional: record<active: record, conditionalBranches: record, defaultBranch: record>, declinationNextStep: record<dialogAction: record, intent: record, sessionAttributes: record>, declinationConditional: record<active: record, conditionalBranches: record, defaultBranch: record>, failureResponse: record<messageGroups: record, allowInterrupt: record>, failureNextStep: record<dialogAction: record, intent: record, sessionAttributes: record>, failureConditional: record<active: record, conditionalBranches: record, defaultBranch: record>, codeHook: record<enableCodeHookInvocation: record, active: record, invocationLabel: record, postCodeHookSpecification: record>, elicitationCodeHook: record<enableCodeHookInvocation: record, invocationLabel: record>>, intentClosingSetting: record<closingResponse: record<messageGroups: record, allowInterrupt: record>, active: record, nextStep: record<dialogAction: record, intent: record, sessionAttributes: record>, conditional: record<active: record, conditionalBranches: record, defaultBranch: record>>, inputContexts: record, outputContexts: record, kendraConfiguration: record<kendraIndex: record, queryFilterStringEnabled: record, queryFilterString: record>, botId: record, botVersion: record, localeId: record, creationDateTime: record, lastUpdatedDateTime: record, initialResponseSetting: record<initialResponse: record<messageGroups: record, allowInterrupt: record>, nextStep: record<dialogAction: record, intent: record, sessionAttributes: record>, conditional: record<active: record, conditionalBranches: record, defaultBranch: record>, codeHook: record<enableCodeHookInvocation: record, active: record, invocationLabel: record, postCodeHookSpecification: record>>> {
+  --sample-utterances: list # New utterances used to invoke the intent. — item shape: {utterance: string}
+  --dialog-code-hook: record # Settings that determine the Lambda function that Amazon Lex uses for processing user responses. — shape: {enabled?: bool}
+  --fulfillment-code-hook: record # Determines if a Lambda function should be invoked for a specific intent. — shape: {enabled?: bool, postFulfillmentStatusSpecification?: record, fulfillmentUpdatesSpecification?: record, active?: bool}
+  --slot-priorities: list # A new list of slots and their priorities that are contained by the intent. — item shape: {priority: int, slotId: string}
+  --intent-confirmation-setting: record # Provides a prompt for making sure that the user is ready for the intent to be fulfilled. — shape: {promptSpecification?: record, declinationResponse?: record, active?: bool, confirmationResponse?: record, confirmationNextStep?: record, confirmationConditional?: record, declinationNextStep?: record, declinationConditional?: record, failureResponse?: record, failureNextStep?: record, failureConditional?: record, codeHook?: record, elicitationCodeHook?: record}
+  --intent-closing-setting: record # Provides a statement the Amazon Lex conveys to the user when the intent is successfully fulfilled. — shape: {closingResponse?: record, active?: bool, nextStep?: record, conditional?: record}
+  --input-contexts: list # A new list of contexts that must be active in order for Amazon Lex to consider the intent. — item shape: {name: string}
+  --output-contexts: list # A new list of contexts that Amazon Lex activates when the intent is fulfilled. — item shape: {name: string, timeToLiveInSeconds: int, turnsToLive: int}
+  --kendra-configuration: record # Provides configuration information for the AMAZON.KendraSearchIntent intent. When you use this intent, Amazon Lex searches the specified Amazon Kendra index and returns documents from the index that match the user's utterance. — shape: {kendraIndex?: string, queryFilterStringEnabled?: bool, queryFilterString?: string}
+  --initial-response-setting: record # Configuration setting for a response sent to the user before Amazon Lex starts eliciting slots. — shape: {initialResponse?: record, nextStep?: record, conditional?: record, codeHook?: record}
+]: any -> oneof<record<intentId: string, intentName: string, description: string, parentIntentSignature: string, sampleUtterances: table<utterance: string>, dialogCodeHook: record<enabled: bool>, fulfillmentCodeHook: record<enabled: bool, postFulfillmentStatusSpecification: record<successResponse: record, failureResponse: record, timeoutResponse: record, successNextStep: record, successConditional: record, failureNextStep: record, failureConditional: record, timeoutNextStep: record, timeoutConditional: record>, fulfillmentUpdatesSpecification: record<active: bool, startResponse: record, updateResponse: record, timeoutInSeconds: int>, active: bool>, slotPriorities: table<priority: int, slotId: string>, intentConfirmationSetting: record<promptSpecification: record<messageGroups: list, maxRetries: int, allowInterrupt: bool, messageSelectionStrategy: string, promptAttemptsSpecification: record>, declinationResponse: record<messageGroups: list, allowInterrupt: bool>, active: bool, confirmationResponse: record<messageGroups: list, allowInterrupt: bool>, confirmationNextStep: record<dialogAction: record, intent: record, sessionAttributes: record>, confirmationConditional: record<active: bool, conditionalBranches: list, defaultBranch: record>, declinationNextStep: record<dialogAction: record, intent: record, sessionAttributes: record>, declinationConditional: record<active: bool, conditionalBranches: list, defaultBranch: record>, failureResponse: record<messageGroups: list, allowInterrupt: bool>, failureNextStep: record<dialogAction: record, intent: record, sessionAttributes: record>, failureConditional: record<active: bool, conditionalBranches: list, defaultBranch: record>, codeHook: record<enableCodeHookInvocation: bool, active: bool, invocationLabel: string, postCodeHookSpecification: record>, elicitationCodeHook: record<enableCodeHookInvocation: bool, invocationLabel: string>>, intentClosingSetting: record<closingResponse: record<messageGroups: list, allowInterrupt: bool>, active: bool, nextStep: record<dialogAction: record, intent: record, sessionAttributes: record>, conditional: record<active: bool, conditionalBranches: list, defaultBranch: record>>, inputContexts: table<name: string>, outputContexts: table<name: string, timeToLiveInSeconds: int, turnsToLive: int>, kendraConfiguration: record<kendraIndex: string, queryFilterStringEnabled: bool, queryFilterString: string>, botId: string, botVersion: string, localeId: string, creationDateTime: string, lastUpdatedDateTime: string, initialResponseSetting: record<initialResponse: record<messageGroups: list, allowInterrupt: bool>, nextStep: record<dialogAction: record, intent: record, sessionAttributes: record>, conditional: record<active: bool, conditionalBranches: list, defaultBranch: record>, codeHook: record<enableCodeHookInvocation: bool, active: bool, invocationLabel: string, postCodeHookSpecification: record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2613,7 +2582,7 @@ export def "delete-resource-policy-statement" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> oneof<record<resourceArn: string, revisionId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
@@ -2717,7 +2686,7 @@ export def "describe-slot" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<slotId: record, slotName: record, description: record, slotTypeId: record, valueElicitationSetting: record<defaultValueSpecification: record<defaultValueList: record>, slotConstraint: record, promptSpecification: record<messageGroups: record, maxRetries: record, allowInterrupt: record, messageSelectionStrategy: record, promptAttemptsSpecification: record>, sampleUtterances: record, waitAndContinueSpecification: record<waitingResponse: record, continueResponse: record, stillWaitingResponse: record, active: record>, slotCaptureSetting: record<captureResponse: record, captureNextStep: record, captureConditional: record, failureResponse: record, failureNextStep: record, failureConditional: record, codeHook: record, elicitationCodeHook: record>>, obfuscationSetting: record<obfuscationSettingType: record>, botId: record, botVersion: record, localeId: record, intentId: record, creationDateTime: record, lastUpdatedDateTime: record, multipleValuesSetting: record<allowMultipleValues: record>, subSlotSetting: record<expression: record, slotSpecifications: record>> {
+]: nothing -> oneof<record<slotId: string, slotName: string, description: string, slotTypeId: string, valueElicitationSetting: record<defaultValueSpecification: record<defaultValueList: list>, slotConstraint: string, promptSpecification: record<messageGroups: list, maxRetries: int, allowInterrupt: bool, messageSelectionStrategy: string, promptAttemptsSpecification: record>, sampleUtterances: list<record>, waitAndContinueSpecification: record<waitingResponse: record, continueResponse: record, stillWaitingResponse: record, active: bool>, slotCaptureSetting: record<captureResponse: record, captureNextStep: record, captureConditional: record, failureResponse: record, failureNextStep: record, failureConditional: record, codeHook: record, elicitationCodeHook: record>>, obfuscationSetting: record<obfuscationSettingType: string>, botId: string, botVersion: string, localeId: string, intentId: string, creationDateTime: string, lastUpdatedDateTime: string, multipleValuesSetting: record<allowMultipleValues: bool>, subSlotSetting: record<expression: string, slotSpecifications: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bot_id | is-empty) { error make --unspanned { msg: "path parameter 'botId' must be non-empty" } }
@@ -2748,10 +2717,6 @@ export def "describe-slot" [
 #
 # PUT /bots/{botId}/botversions/{botVersion}/botlocales/{localeId}/intents/{intentId}/slots/{slotId}/
 # operationId: UpdateSlot
-# --valueElicitationSetting shape: {defaultValueSpecification?: any, slotConstraint?: any, promptSpecification?: any, sampleUtterances?: any, waitAndContinueSpecification?: record, slotCaptureSetting?: any}
-# --obfuscationSetting shape: {obfuscationSettingType?: any}
-# --multipleValuesSetting shape: {allowMultipleValues?: any}
-# --subSlotSetting shape: {expression?: any, slotSpecifications?: any}
 export def "update-slot" [
   bot_id: string
   bot_version: string
@@ -2777,11 +2742,11 @@ export def "update-slot" [
   slot_name: string # The new name for the slot.
   --description: string # The new description for the slot.
   --slot-type-id: string # The unique identifier of the new slot type to associate with this slot.
-  value_elicitation_setting: record # Specifies the elicitation setting details for constituent sub slots of a composite slot. — shape: {defaultValueSpecification?: any, slotConstraint?: any, promptSpecification?: any, sampleUtterances?: any, waitAndContinueSpecification?: record, slotCaptureSetting?: any}
-  --obfuscation-setting: record # Determines whether Amazon Lex obscures slot values in conversation logs. — shape: {obfuscationSettingType?: any}
-  --multiple-values-setting: record # Indicates whether a slot can return multiple values. — shape: {allowMultipleValues?: any}
-  --sub-slot-setting: record # Specifications for the constituent sub slots and the expression for the composite slot. — shape: {expression?: any, slotSpecifications?: any}
-]: any -> record<slotId: record, slotName: record, description: record, slotTypeId: record, valueElicitationSetting: record<defaultValueSpecification: record<defaultValueList: record>, slotConstraint: record, promptSpecification: record<messageGroups: record, maxRetries: record, allowInterrupt: record, messageSelectionStrategy: record, promptAttemptsSpecification: record>, sampleUtterances: record, waitAndContinueSpecification: record<waitingResponse: record, continueResponse: record, stillWaitingResponse: record, active: record>, slotCaptureSetting: record<captureResponse: record, captureNextStep: record, captureConditional: record, failureResponse: record, failureNextStep: record, failureConditional: record, codeHook: record, elicitationCodeHook: record>>, obfuscationSetting: record<obfuscationSettingType: record>, botId: record, botVersion: record, localeId: record, intentId: record, creationDateTime: record, lastUpdatedDateTime: record, multipleValuesSetting: record<allowMultipleValues: record>, subSlotSetting: record<expression: record, slotSpecifications: record>> {
+  value_elicitation_setting: record # Specifies the elicitation setting details for constituent sub slots of a composite slot. — shape: {defaultValueSpecification?: record, slotConstraint?: "Required"|"Optional", promptSpecification?: record, sampleUtterances?: list, waitAndContinueSpecification?: record, slotCaptureSetting?: record}
+  --obfuscation-setting: record # Determines whether Amazon Lex obscures slot values in conversation logs. — shape: {obfuscationSettingType?: "None"|"DefaultObfuscation"}
+  --multiple-values-setting: record # Indicates whether a slot can return multiple values. — shape: {allowMultipleValues?: bool}
+  --sub-slot-setting: record # Specifications for the constituent sub slots and the expression for the composite slot. — shape: {expression?: string, slotSpecifications?: record}
+]: any -> oneof<record<slotId: string, slotName: string, description: string, slotTypeId: string, valueElicitationSetting: record<defaultValueSpecification: record<defaultValueList: list>, slotConstraint: string, promptSpecification: record<messageGroups: list, maxRetries: int, allowInterrupt: bool, messageSelectionStrategy: string, promptAttemptsSpecification: record>, sampleUtterances: list<record>, waitAndContinueSpecification: record<waitingResponse: record, continueResponse: record, stillWaitingResponse: record, active: bool>, slotCaptureSetting: record<captureResponse: record, captureNextStep: record, captureConditional: record, failureResponse: record, failureNextStep: record, failureConditional: record, codeHook: record, elicitationCodeHook: record>>, obfuscationSetting: record<obfuscationSettingType: string>, botId: string, botVersion: string, localeId: string, intentId: string, creationDateTime: string, lastUpdatedDateTime: string, multipleValuesSetting: record<allowMultipleValues: bool>, subSlotSetting: record<expression: string, slotSpecifications: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2889,7 +2854,7 @@ export def "describe-slot-type" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<slotTypeId: record, slotTypeName: record, description: record, slotTypeValues: record, valueSelectionSetting: record<resolutionStrategy: record, regexFilter: record<pattern: record>, advancedRecognitionSetting: record<audioRecognitionStrategy: record>>, parentSlotTypeSignature: record, botId: record, botVersion: record, localeId: record, creationDateTime: record, lastUpdatedDateTime: record, externalSourceSetting: record<grammarSlotTypeSetting: record<source: record>>, compositeSlotTypeSetting: record<subSlots: record>> {
+]: nothing -> oneof<record<slotTypeId: string, slotTypeName: string, description: string, slotTypeValues: table<sampleValue: record, synonyms: list>, valueSelectionSetting: record<resolutionStrategy: string, regexFilter: record<pattern: string>, advancedRecognitionSetting: record<audioRecognitionStrategy: string>>, parentSlotTypeSignature: string, botId: string, botVersion: string, localeId: string, creationDateTime: string, lastUpdatedDateTime: string, externalSourceSetting: record<grammarSlotTypeSetting: record<source: record>>, compositeSlotTypeSetting: record<subSlots: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bot_id | is-empty) { error make --unspanned { msg: "path parameter 'botId' must be non-empty" } }
@@ -2919,10 +2884,6 @@ export def "describe-slot-type" [
 #
 # PUT /bots/{botId}/botversions/{botVersion}/botlocales/{localeId}/slottypes/{slotTypeId}/
 # operationId: UpdateSlotType
-# --slotTypeValues item shape: {sampleValue?: any, synonyms?: any}
-# --valueSelectionSetting shape: {resolutionStrategy?: any, regexFilter?: any, advancedRecognitionSetting?: any}
-# --externalSourceSetting shape: {grammarSlotTypeSetting?: any}
-# --compositeSlotTypeSetting shape: {subSlots?: any}
 export def "update-slot-type" [
   bot_id: string
   bot_version: string
@@ -2946,12 +2907,12 @@ export def "update-slot-type" [
   --x-amz-signed-headers: string
   slot_type_name: string # The new name of the slot type.
   --description: string # The new description of the slot type.
-  --slot-type-values: list # A new list of values and their optional synonyms that define the values that the slot type can take. — item shape: {sampleValue?: any, synonyms?: any}
-  --value-selection-setting: record # Contains settings used by Amazon Lex to select a slot value. — shape: {resolutionStrategy?: any, regexFilter?: any, advancedRecognitionSetting?: any}
+  --slot-type-values: list # A new list of values and their optional synonyms that define the values that the slot type can take. — item shape: {sampleValue?: record, synonyms?: list}
+  --value-selection-setting: record # Contains settings used by Amazon Lex to select a slot value. — shape: {resolutionStrategy?: "OriginalValue"|"TopResolution"|"Concatenation", regexFilter?: record, advancedRecognitionSetting?: record}
   --parent-slot-type-signature: string # The new built-in slot type that should be used as the parent of this slot type.
-  --external-source-setting: record # Provides information about the external source of the slot type's definition. — shape: {grammarSlotTypeSetting?: any}
-  --composite-slot-type-setting: record # A composite slot is a combination of two or more slots that capture multiple pieces of information in a single user input. — shape: {subSlots?: any}
-]: any -> record<slotTypeId: record, slotTypeName: record, description: record, slotTypeValues: record, valueSelectionSetting: record<resolutionStrategy: record, regexFilter: record<pattern: record>, advancedRecognitionSetting: record<audioRecognitionStrategy: record>>, parentSlotTypeSignature: record, botId: record, botVersion: record, localeId: record, creationDateTime: record, lastUpdatedDateTime: record, externalSourceSetting: record<grammarSlotTypeSetting: record<source: record>>, compositeSlotTypeSetting: record<subSlots: record>> {
+  --external-source-setting: record # Provides information about the external source of the slot type's definition. — shape: {grammarSlotTypeSetting?: record}
+  --composite-slot-type-setting: record # A composite slot is a combination of two or more slots that capture multiple pieces of information in a single user input. — shape: {subSlots?: list}
+]: any -> oneof<record<slotTypeId: string, slotTypeName: string, description: string, slotTypeValues: table<sampleValue: record, synonyms: list>, valueSelectionSetting: record<resolutionStrategy: string, regexFilter: record<pattern: string>, advancedRecognitionSetting: record<audioRecognitionStrategy: string>>, parentSlotTypeSignature: string, botId: string, botVersion: string, localeId: string, creationDateTime: string, lastUpdatedDateTime: string, externalSourceSetting: record<grammarSlotTypeSetting: record<source: record>>, compositeSlotTypeSetting: record<subSlots: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3004,7 +2965,7 @@ export def "delete-utterances" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bot_id | is-empty) { error make --unspanned { msg: "path parameter 'botId' must be non-empty" } }
@@ -3053,7 +3014,7 @@ export def "describe-bot-recommendation" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<botId: record, botVersion: record, localeId: record, botRecommendationStatus: record, botRecommendationId: record, failureReasons: record, creationDateTime: record, lastUpdatedDateTime: record, transcriptSourceSetting: record<s3BucketTranscriptSource: record<s3BucketName: record, pathFormat: record, transcriptFormat: record, transcriptFilter: record, kmsKeyArn: record>>, encryptionSetting: record<kmsKeyArn: record, botLocaleExportPassword: record, associatedTranscriptsPassword: record>, botRecommendationResults: record<botLocaleExportUrl: record, associatedTranscriptsUrl: record, statistics: record<intents: record, slotTypes: record>>> {
+]: nothing -> oneof<record<botId: string, botVersion: string, localeId: string, botRecommendationStatus: string, botRecommendationId: string, failureReasons: list<string>, creationDateTime: string, lastUpdatedDateTime: string, transcriptSourceSetting: record<s3BucketTranscriptSource: record<s3BucketName: string, pathFormat: record, transcriptFormat: string, transcriptFilter: record, kmsKeyArn: string>>, encryptionSetting: record<kmsKeyArn: string, botLocaleExportPassword: string, associatedTranscriptsPassword: string>, botRecommendationResults: record<botLocaleExportUrl: string, associatedTranscriptsUrl: string, statistics: record<intents: record, slotTypes: record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bot_id | is-empty) { error make --unspanned { msg: "path parameter 'botId' must be non-empty" } }
@@ -3083,7 +3044,6 @@ export def "describe-bot-recommendation" [
 #
 # PUT /bots/{botId}/botversions/{botVersion}/botlocales/{localeId}/botrecommendations/{botRecommendationId}/
 # operationId: UpdateBotRecommendation
-# --encryptionSetting shape: {kmsKeyArn?: any, botLocaleExportPassword?: any, associatedTranscriptsPassword?: any}
 export def "update-bot-recommendation" [
   bot_id: string
   bot_version: string
@@ -3105,8 +3065,8 @@ export def "update-bot-recommendation" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  encryption_setting: record # The object representing the passwords that were used to encrypt the data related to the bot recommendation, as well as the KMS key ARN used to encrypt the associated metadata. — shape: {kmsKeyArn?: any, botLocaleExportPassword?: any, associatedTranscriptsPassword?: any}
-]: any -> record<botId: record, botVersion: record, localeId: record, botRecommendationStatus: record, botRecommendationId: record, creationDateTime: record, lastUpdatedDateTime: record, transcriptSourceSetting: record<s3BucketTranscriptSource: record<s3BucketName: record, pathFormat: record, transcriptFormat: record, transcriptFilter: record, kmsKeyArn: record>>, encryptionSetting: record<kmsKeyArn: record, botLocaleExportPassword: record, associatedTranscriptsPassword: record>> {
+  encryption_setting: record # The object representing the passwords that were used to encrypt the data related to the bot recommendation, as well as the KMS key ARN used to encrypt the associated metadata. — shape: {kmsKeyArn?: string, botLocaleExportPassword?: string, associatedTranscriptsPassword?: string}
+]: any -> oneof<record<botId: string, botVersion: string, localeId: string, botRecommendationStatus: string, botRecommendationId: string, creationDateTime: string, lastUpdatedDateTime: string, transcriptSourceSetting: record<s3BucketTranscriptSource: record<s3BucketName: string, pathFormat: record, transcriptFormat: string, transcriptFilter: record, kmsKeyArn: string>>, encryptionSetting: record<kmsKeyArn: string, botLocaleExportPassword: string, associatedTranscriptsPassword: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3159,7 +3119,7 @@ export def "describe-custom-vocabulary-metadata" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<botId: record, botVersion: record, localeId: record, customVocabularyStatus: record, creationDateTime: record, lastUpdatedDateTime: record> {
+]: nothing -> oneof<record<botId: string, botVersion: string, localeId: string, customVocabularyStatus: string, creationDateTime: string, lastUpdatedDateTime: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bot_id | is-empty) { error make --unspanned { msg: "path parameter 'botId' must be non-empty" } }
@@ -3188,9 +3148,6 @@ export def "describe-custom-vocabulary-metadata" [
 #
 # POST /bots/{botId}/aggregatedutterances/
 # operationId: ListAggregatedUtterances
-# --aggregationDuration shape: {relativeAggregationDuration?: any}
-# --sortBy shape: {attribute?: any, order?: any}
-# --filters item shape: {name: any, values: any, operator: any}
 export def "list-aggregated-utterances" [
   bot_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3214,12 +3171,12 @@ export def "list-aggregated-utterances" [
   --bot-alias-id: string # The identifier of the bot alias associated with this request. If you specify the bot alias, you can't specify the bot version.
   --bot-version: string # The identifier of the bot version associated with this request. If you specify the bot version, you can't specify the bot alias.
   locale_id: string # The identifier of the language and locale where the utterances were collected. For more information, see Supported languages (https://docs.aws.amazon.com/lexv2/latest/dg/how-languages.html).
-  aggregation_duration: record # Provides parameters for setting the time window and duration for aggregating utterance data. — shape: {relativeAggregationDuration?: any}
-  --sort-by: record # Specifies attributes for sorting a list of utterances. — shape: {attribute?: any, order?: any}
-  --filters: list # Provides the specification of a filter used to limit the utterances in the response to only those that match the filter specification. You can only specify one filter and one string to filter on. — item shape: {name: any, values: any, operator: any}
+  aggregation_duration: record # Provides parameters for setting the time window and duration for aggregating utterance data. — shape: {relativeAggregationDuration?: record}
+  --sort-by: record # Specifies attributes for sorting a list of utterances. — shape: {attribute?: "HitCount"|"MissedCount", order?: "Ascending"|"Descending"}
+  --filters: list # Provides the specification of a filter used to limit the utterances in the response to only those that match the filter specification. You can only specify one filter and one string to filter on. — item shape: {name: "Utterance", values: list<string>, operator: "CO"|"EQ"}
   --max-results-body: int # The maximum number of utterances to return in each page of results. If there are fewer results than the maximum page size, only the actual number of results are returned. If you don't specify the maxResults parameter, 1,000 results are returned. (body field)
   --next-token-body: string # If the response from the ListAggregatedUtterances operation contains more results that specified in the maxResults parameter, a token is returned in the response. Use that token in the nextToken parameter to return the next page of results. (body field)
-]: any -> record<botId: record, botAliasId: record, botVersion: record, localeId: record, aggregationDuration: record<relativeAggregationDuration: record<timeDimension: record, timeValue: record>>, aggregationWindowStartTime: record, aggregationWindowEndTime: record, aggregationLastRefreshedDateTime: record, aggregatedUtterancesSummaries: record, nextToken: record> {
+]: any -> oneof<record<botId: string, botAliasId: string, botVersion: string, localeId: string, aggregationDuration: record<relativeAggregationDuration: record<timeDimension: string, timeValue: int>>, aggregationWindowStartTime: string, aggregationWindowEndTime: string, aggregationLastRefreshedDateTime: string, aggregatedUtterancesSummaries: table<utterance: string, hitCount: int, missedCount: int, utteranceFirstRecordedInAggregationDuration: string, utteranceLastRecordedInAggregationDuration: string, containsDataFromDeletedResources: bool>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3274,7 +3231,7 @@ export def "list-bot-recommendations" [
   --x-amz-signed-headers: string
   --max-results-body: int # The maximum number of bot recommendations to return in each page of results. If there are fewer results than the max page size, only the actual number of results are returned. (body field)
   --next-token-body: string # If the response from the ListBotRecommendation operation contains more results than specified in the maxResults parameter, a token is returned in the response. Use that token in the nextToken parameter to return the next page of results. (body field)
-]: any -> record<botId: record, botVersion: record, localeId: record, botRecommendationSummaries: record, nextToken: record> {
+]: any -> oneof<record<botId: string, botVersion: string, localeId: string, botRecommendationSummaries: table<botRecommendationStatus: string, botRecommendationId: string, creationDateTime: string, lastUpdatedDateTime: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3307,8 +3264,6 @@ export def "list-bot-recommendations" [
 #
 # PUT /bots/{botId}/botversions/{botVersion}/botlocales/{localeId}/botrecommendations/
 # operationId: StartBotRecommendation
-# --transcriptSourceSetting shape: {s3BucketTranscriptSource?: any}
-# --encryptionSetting shape: {kmsKeyArn?: any, botLocaleExportPassword?: any, associatedTranscriptsPassword?: any}
 export def "start-bot-recommendation" [
   bot_id: string
   bot_version: string
@@ -3329,9 +3284,9 @@ export def "start-bot-recommendation" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  transcript_source_setting: record # Indicates the setting of the location where the transcript is stored. — shape: {s3BucketTranscriptSource?: any}
-  --encryption-setting: record # The object representing the passwords that were used to encrypt the data related to the bot recommendation, as well as the KMS key ARN used to encrypt the associated metadata. — shape: {kmsKeyArn?: any, botLocaleExportPassword?: any, associatedTranscriptsPassword?: any}
-]: any -> record<botId: record, botVersion: record, localeId: record, botRecommendationStatus: record, botRecommendationId: record, creationDateTime: record, transcriptSourceSetting: record<s3BucketTranscriptSource: record<s3BucketName: record, pathFormat: record, transcriptFormat: record, transcriptFilter: record, kmsKeyArn: record>>, encryptionSetting: record<kmsKeyArn: record, botLocaleExportPassword: record, associatedTranscriptsPassword: record>> {
+  transcript_source_setting: record # Indicates the setting of the location where the transcript is stored. — shape: {s3BucketTranscriptSource?: record}
+  --encryption-setting: record # The object representing the passwords that were used to encrypt the data related to the bot recommendation, as well as the KMS key ARN used to encrypt the associated metadata. — shape: {kmsKeyArn?: string, botLocaleExportPassword?: string, associatedTranscriptsPassword?: string}
+]: any -> oneof<record<botId: string, botVersion: string, localeId: string, botRecommendationStatus: string, botRecommendationId: string, creationDateTime: string, transcriptSourceSetting: record<s3BucketTranscriptSource: record<s3BucketName: string, pathFormat: record, transcriptFormat: string, transcriptFilter: record, kmsKeyArn: string>>, encryptionSetting: record<kmsKeyArn: string, botLocaleExportPassword: string, associatedTranscriptsPassword: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3363,7 +3318,6 @@ export def "start-bot-recommendation" [
 #
 # POST /builtins/locales/{localeId}/intents/
 # operationId: ListBuiltInIntents
-# --sortBy shape: {attribute?: any, order?: any}
 export def "list-built-in-intents" [
   locale_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3384,10 +3338,10 @@ export def "list-built-in-intents" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --sort-by: record # Specifies attributes for sorting a list of built-in intents. — shape: {attribute?: any, order?: any}
+  --sort-by: record # Specifies attributes for sorting a list of built-in intents. — shape: {attribute?: "IntentSignature", order?: "Ascending"|"Descending"}
   --max-results-body: int # The maximum number of built-in intents to return in each page of results. If there are fewer results than the max page size, only the actual number of results are returned. (body field)
   --next-token-body: string # If the response from the ListBuiltInIntents operation contains more results than specified in the maxResults parameter, a token is returned in the response. Use that token in the nextToken parameter to return the next page of results. (body field)
-]: any -> record<builtInIntentSummaries: record, nextToken: record, localeId: record> {
+]: any -> oneof<record<builtInIntentSummaries: table<intentSignature: string, description: string>, nextToken: string, localeId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3418,7 +3372,6 @@ export def "list-built-in-intents" [
 #
 # POST /builtins/locales/{localeId}/slottypes/
 # operationId: ListBuiltInSlotTypes
-# --sortBy shape: {attribute?: any, order?: any}
 export def "list-built-in-slot-types" [
   locale_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3439,10 +3392,10 @@ export def "list-built-in-slot-types" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --sort-by: record # Specifies attributes for sorting a list of built-in slot types. — shape: {attribute?: any, order?: any}
+  --sort-by: record # Specifies attributes for sorting a list of built-in slot types. — shape: {attribute?: "SlotTypeSignature", order?: "Ascending"|"Descending"}
   --max-results-body: int # The maximum number of built-in slot types to return in each page of results. If there are fewer results than the max page size, only the actual number of results are returned. (body field)
   --next-token-body: string # If the response from the ListBuiltInSlotTypes operation contains more results than specified in the maxResults parameter, a token is returned in the response. Use that token in the nextToken parameter to return the next page of results. (body field)
-]: any -> record<builtInSlotTypeSummaries: record, nextToken: record, localeId: record> {
+]: any -> oneof<record<builtInSlotTypeSummaries: table<slotTypeSignature: string, description: string>, nextToken: string, localeId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3497,7 +3450,7 @@ export def "list-custom-vocabulary-items" [
   --x-amz-signed-headers: string
   --max-results-body: int # The maximum number of items returned by the list operation. (body field)
   --next-token-body: string # The nextToken identifier to the list custom vocabulary request. (body field)
-]: any -> record<botId: record, botVersion: record, localeId: record, customVocabularyItems: record, nextToken: record> {
+]: any -> oneof<record<botId: string, botVersion: string, localeId: string, customVocabularyItems: table<itemId: string, phrase: string, weight: int, displayAs: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3530,8 +3483,6 @@ export def "list-custom-vocabulary-items" [
 #
 # POST /imports/
 # operationId: ListImports
-# --sortBy shape: {attribute?: any, order?: any}
-# --filters item shape: {name: any, values: any, operator: any}
 export def "list-imports" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3553,12 +3504,12 @@ export def "list-imports" [
   --x-amz-signed-headers: string
   --bot-id: string # The unique identifier that Amazon Lex assigned to the bot.
   --bot-version: string # The version of the bot to list imports for.
-  --sort-by: record # Provides information for sorting a list of imports. — shape: {attribute?: any, order?: any}
-  --filters: list # Provides the specification of a filter used to limit the bots in the response to only those that match the filter specification. You can only specify one filter and one string to filter on. — item shape: {name: any, values: any, operator: any}
+  --sort-by: record # Provides information for sorting a list of imports. — shape: {attribute?: "LastUpdatedDateTime", order?: "Ascending"|"Descending"}
+  --filters: list # Provides the specification of a filter used to limit the bots in the response to only those that match the filter specification. You can only specify one filter and one string to filter on. — item shape: {name: "ImportResourceType", values: list<string>, operator: "CO"|"EQ"}
   --max-results-body: int # The maximum number of imports to return in each page of results. If there are fewer results than the max page size, only the actual number of results are returned. (body field)
   --next-token-body: string # If the response from the ListImports operation contains more results than specified in the maxResults parameter, a token is returned in the response. Use the returned token in the nextToken parameter of a ListImports request to return the next page of results. For a complete set of results, call the ListImports operation until the nextToken returned in the response is null. (body field)
   --locale-id: string # Specifies the locale that should be present in the list. If you don't specify a resource type in the filters parameter, the list contains both bot locales and custom vocabularies.
-]: any -> record<botId: record, botVersion: record, importSummaries: record, nextToken: record, localeId: record> {
+]: any -> oneof<record<botId: string, botVersion: string, importSummaries: table<importId: string, importedResourceId: string, importedResourceName: string, importStatus: string, mergeStrategy: string, creationDateTime: string, lastUpdatedDateTime: string, importedResourceType: string>, nextToken: string, localeId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3588,7 +3539,6 @@ export def "list-imports" [
 #
 # PUT /imports/
 # operationId: StartImport
-# --resourceSpecification shape: {botImportSpecification?: any, botLocaleImportSpecification?: any, customVocabularyImportSpecification?: record}
 export def "start-import" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3607,10 +3557,10 @@ export def "start-import" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   import_id: string # The unique identifier for the import. It is included in the response from the CreateUploadUrl (https://docs.aws.amazon.com/lexv2/latest/APIReference/API_CreateUploadUrl.html) operation.
-  resource_specification: record # Provides information about the bot or bot locale that you want to import. You can specify the botImportSpecification or the botLocaleImportSpecification, but not both. — shape: {botImportSpecification?: any, botLocaleImportSpecification?: any, customVocabularyImportSpecification?: record}
+  resource_specification: record # Provides information about the bot or bot locale that you want to import. You can specify the botImportSpecification or the botLocaleImportSpecification, but not both. — shape: {botImportSpecification?: record, botLocaleImportSpecification?: record, customVocabularyImportSpecification?: record}
   merge_strategy: string@merge-strategy-completer # The strategy to use when there is a name conflict between the imported resource and an existing resource. When the merge strategy is FailOnConflict existing resources are not overwritten and the import fails.
   --file-password: string # The password used to encrypt the zip archive that contains the resource definition. You should always encrypt the zip archive to protect it during transit between your site and Amazon Lex. (format: password)
-]: any -> record<importId: record, resourceSpecification: record<botImportSpecification: record<botName: record, roleArn: record, dataPrivacy: record, idleSessionTTLInSeconds: record, botTags: record, testBotAliasTags: record>, botLocaleImportSpecification: record<botId: record, botVersion: record, localeId: record, nluIntentConfidenceThreshold: record, voiceSettings: record>, customVocabularyImportSpecification: record<botId: record, botVersion: record, localeId: record>>, mergeStrategy: record, importStatus: record, creationDateTime: record> {
+]: any -> oneof<record<importId: string, resourceSpecification: record<botImportSpecification: record<botName: string, roleArn: string, dataPrivacy: record, idleSessionTTLInSeconds: int, botTags: record, testBotAliasTags: record>, botLocaleImportSpecification: record<botId: string, botVersion: string, localeId: string, nluIntentConfidenceThreshold: float, voiceSettings: record>, customVocabularyImportSpecification: record<botId: string, botVersion: string, localeId: string>>, mergeStrategy: string, importStatus: string, creationDateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3664,7 +3614,7 @@ export def "list-recommended-intents" [
   --x-amz-signed-headers: string
   --next-token-body: string # If the response from the ListRecommendedIntents operation contains more results than specified in the maxResults parameter, a token is returned in the response. Use that token in the nextToken parameter to return the next page of results. (body field)
   --max-results-body: int # The maximum number of bot recommendations to return in each page of results. If there are fewer results than the max page size, only the actual number of results are returned. (body field)
-]: any -> record<botId: record, botVersion: record, localeId: record, botRecommendationId: record, summaryList: record, nextToken: record> {
+]: any -> oneof<record<botId: string, botVersion: string, localeId: string, botRecommendationId: string, summaryList: table<intentId: string, intentName: string, sampleUtterancesCount: int>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3716,7 +3666,7 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<tags: record> {
+]: nothing -> oneof<record<tags: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceARN' must be non-empty" } }
@@ -3762,7 +3712,7 @@ export def "tag-resource" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   tags: record # A list of tag keys to add to the resource. If a tag key already exists, the existing value is replaced with the new value.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3792,7 +3742,6 @@ export def "tag-resource" [
 #
 # POST /bots/{botId}/botversions/{botVersion}/botlocales/{localeId}/botrecommendations/{botRecommendationId}/associatedtranscripts
 # operationId: SearchAssociatedTranscripts
-# --filters item shape: {name: any, values: any}
 export def "search-associated-transcripts" [
   bot_id: string
   bot_version: string
@@ -3815,10 +3764,10 @@ export def "search-associated-transcripts" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --search-order: string@search-order-completer # How SearchResults are ordered. Valid values are Ascending or Descending. The default is Descending.
-  filters: list # A list of filter objects. — item shape: {name: any, values: any}
+  filters: list # A list of filter objects. — item shape: {name: "IntentId"|"SlotTypeId", values: list<string>}
   --max-results: int # The maximum number of bot recommendations to return in each page of results. If there are fewer results than the max page size, only the actual number of results are returned.
   --next-index: int # If the response from the SearchAssociatedTranscriptsRequest operation contains more results than specified in the maxResults parameter, an index is returned in the response. Use that index in the nextIndex parameter to return the next page of results.
-]: any -> record<botId: record, botVersion: record, localeId: record, botRecommendationId: record, nextIndex: record, associatedTranscripts: record, totalResults: record> {
+]: any -> oneof<record<botId: string, botVersion: string, localeId: string, botRecommendationId: string, nextIndex: int, associatedTranscripts: table<transcript: string>, totalResults: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3872,7 +3821,7 @@ export def "stop-bot-recommendation" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<botId: record, botVersion: record, localeId: record, botRecommendationStatus: record, botRecommendationId: record> {
+]: nothing -> oneof<record<botId: string, botVersion: string, localeId: string, botRecommendationStatus: string, botRecommendationId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bot_id | is-empty) { error make --unspanned { msg: "path parameter 'botId' must be non-empty" } }
@@ -3913,7 +3862,7 @@ export def "untag-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tag-keys: list # A list of tag keys to remove from the resource. If a tag key does not exist on the resource, it is ignored.
+  --tag-keys: list # A list of tag keys to remove from the resource. If a tag key does not exist on the resource, it is ignored. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3921,10 +3870,11 @@ export def "untag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceARN' must be non-empty" } }
+  if ($tag_keys == null) { error make --unspanned { msg: "required query parameter 'tagKeys' missing: pass --tag-keys" } }
   let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}") $qp $auth.query)
   let accept_val = "application/json"

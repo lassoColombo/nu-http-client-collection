@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -127,9 +151,9 @@ def output-version-format-completer [] { ["V1" "V2" "VERSION_FORMAT_UNSPECIFIED"
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "logging-entries-copy" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["logging-entries-copy" "logging-entries-list" "logging-entries-tail" "logging-entries-write" "logging-monitored-resource-descriptors-list" "logging-projects-logs-delete" "logging-projects-metrics-delete" "logging-projects-metrics-get" "logging-projects-metrics-update" "logging-projects-locations-buckets-views-delete" "logging-projects-locations-operations-get" "logging-projects-locations-buckets-views-patch" "logging-get-cmek-settings" "logging-update-cmek-settings" "logging-projects-locations-list" "logging-projects-locations-operations-list" "logging-get-settings" "logging-update-settings" "logging-projects-locations-operations-cancel" "logging-projects-locations-buckets-undelete" "logging-projects-locations-buckets-update-async" "logging-projects-locations-buckets-list" "logging-projects-locations-buckets-create" "logging-projects-locations-buckets-create-async" "logging-projects-exclusions-list" "logging-projects-exclusions-create" "logging-projects-locations-buckets-links-list" "logging-projects-locations-buckets-links-create" "logging-projects-logs-list" "logging-projects-metrics-list" "logging-projects-metrics-create" "logging-sinks-list" "logging-sinks-create" "logging-projects-locations-buckets-views-list" "logging-projects-locations-buckets-views-create" "logging-sinks-delete" "logging-sinks-get" "logging-projects-sinks-patch" "logging-sinks-update" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -175,7 +199,7 @@ export def "logging-entries-copy" [
   --destination: string # Required. Destination to which to copy log entries.
   --filter: string # Optional. A filter specifying which log entries to copy. The filter must be no more than 20k characters. An empty filter matches all log entries.
   --name: string # Required. Log bucket from which to copy log entries.For example:"projects/my-project/locations/global/buckets/my-source-bucket"
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -230,7 +254,7 @@ export def "logging-entries-list" [
   --page-token: string # Optional. If present, then retrieve the next batch of results from the preceding call to this method. page_token must be the value of next_page_token from the previous response. The values of other method parameters should be identical to those in the previous call.
   --project-ids: list<string> # Optional. Deprecated. Use resource_names instead. One or more project identifiers or project numbers from which to retrieve log entries. Example: "my-project-1A".
   --resource-names: list<string> # Required. Names of one or more parent resources from which to retrieve log entries: projects/[PROJECT_ID] organizations/[ORGANIZATION_ID] billingAccounts/[BILLING_ACCOUNT_ID] folders/[FOLDER_ID]May alternatively be one or more views: projects/[PROJECT_ID]/locations/[LOCATION_ID]/buckets/[BUCKET_ID]/views/[VIEW_ID] organizations/[ORGANIZATION_ID]/locations/[LOCATION_ID]/buckets/[BUCKET_ID]/views/[VIEW_ID] billingAccounts/[BILLING_ACCOUNT_ID]/locations/[LOCATION_ID]/buckets/[BUCKET_ID]/views/[VIEW_ID] folders/[FOLDER_ID]/locations/[LOCATION_ID]/buckets/[BUCKET_ID]/views/[VIEW_ID]Projects listed in the project_ids field are added to this list. A maximum of 100 resources may be specified in a single request.
-]: any -> record<entries: table<httpRequest: record, insertId: string, jsonPayload: record, labels: record, logName: string, metadata: record, operation: record, protoPayload: record, receiveTimestamp: string, resource: record, severity: string, sourceLocation: record, spanId: string, split: record, textPayload: string, timestamp: string, trace: string, traceSampled: bool>, nextPageToken: string> {
+]: any -> oneof<record<entries: table<httpRequest: record, insertId: string, jsonPayload: record, labels: record, logName: string, metadata: record, operation: record, protoPayload: record, receiveTimestamp: string, resource: record, severity: string, sourceLocation: record, spanId: string, split: record, textPayload: string, timestamp: string, trace: string, traceSampled: bool>, nextPageToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -282,7 +306,7 @@ export def "logging-entries-tail" [
   --buffer-window: string # Optional. The amount of time to buffer log entries at the server before being returned to prevent out of order results due to late arriving log entries. Valid values are between 0-60000 milliseconds. Defaults to 2000 milliseconds. (format: google-duration)
   --filter: string # Optional. Only log entries that match the filter are returned. An empty filter matches all log entries in the resources listed in resource_names. Referencing a parent resource that is not listed in resource_names will cause the filter to return no results. The maximum length of a filter is 20,000 characters.
   --resource-names: list<string> # Required. Name of a parent resource from which to retrieve log entries: projects/[PROJECT_ID] organizations/[ORGANIZATION_ID] billingAccounts/[BILLING_ACCOUNT_ID] folders/[FOLDER_ID]May alternatively be one or more views: projects/[PROJECT_ID]/locations/[LOCATION_ID]/buckets/[BUCKET_ID]/views/[VIEW_ID] organizations/[ORGANIZATION_ID]/locations/[LOCATION_ID]/buckets/[BUCKET_ID]/views/[VIEW_ID] billingAccounts/[BILLING_ACCOUNT_ID]/locations/[LOCATION_ID]/buckets/[BUCKET_ID]/views/[VIEW_ID] folders/[FOLDER_ID]/locations/[LOCATION_ID]/buckets/[BUCKET_ID]/views/[VIEW_ID]
-]: any -> record<entries: table<httpRequest: record, insertId: string, jsonPayload: record, labels: record, logName: string, metadata: record, operation: record, protoPayload: record, receiveTimestamp: string, resource: record, severity: string, sourceLocation: record, spanId: string, split: record, textPayload: string, timestamp: string, trace: string, traceSampled: bool>, suppressionInfo: table<reason: string, suppressedCount: int>> {
+]: any -> oneof<record<entries: table<httpRequest: record, insertId: string, jsonPayload: record, labels: record, logName: string, metadata: record, operation: record, protoPayload: record, receiveTimestamp: string, resource: record, severity: string, sourceLocation: record, spanId: string, split: record, textPayload: string, timestamp: string, trace: string, traceSampled: bool>, suppressionInfo: table<reason: string, suppressedCount: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -310,8 +334,6 @@ export def "logging-entries-tail" [
 #
 # POST /v2/entries:write
 # operationId: logging.entries.write
-# --entries item shape: {httpRequest?: record, insertId?: string, jsonPayload?: record, labels?: record, logName?: string, metadata?: record, operation?: record, protoPayload?: record, resource?: record, severity?: "DEFAULT"|"DEBUG"|"INFO"|"NOTICE"|"WARNING"|"ERROR"|"CRITICAL"|"ALERT"|"EMERGENCY", sourceLocation?: record, spanId?: string, split?: record, textPayload?: string, timestamp?: string, trace?: string, traceSampled?: bool}
-# --resource shape: {labels?: record, type?: string}
 export def "logging-entries-write" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -339,7 +361,7 @@ export def "logging-entries-write" [
   --log-name: string # Optional. A default log resource name that is assigned to all log entries in entries that do not specify a value for log_name: projects/[PROJECT_ID]/logs/[LOG_ID] organizations/[ORGANIZATION_ID]/logs/[LOG_ID] billingAccounts/[BILLING_ACCOUNT_ID]/logs/[LOG_ID] folders/[FOLDER_ID]/logs/[LOG_ID][LOG_ID] must be URL-encoded. For example: "projects/my-project-id/logs/syslog" "organizations/123/logs/cloudaudit.googleapis.com%2Factivity" The permission logging.logEntries.create is needed on each project, organization, billing account, or folder that is receiving new log entries, whether the resource is specified in logName or in an individual log entry.
   --partial-success: oneof<nothing, bool> # Optional. Whether a batch's valid entries should be written even if some other entry failed due to a permanent error such as INVALID_ARGUMENT or PERMISSION_DENIED. If any entry failed, then the response status is the response status of one of the failed entries. The response will include error details in WriteLogEntriesPartialErrors.log_entry_errors keyed by the entries' zero-based index in the entries. Failed requests for which no entries are written will not include per-entry errors.
   --resource: record # An object representing a resource that can be used for monitoring, logging, billing, or other purposes. Examples include virtual machine instances, databases, and storage devices such as disks. The type field identifies a MonitoredResourceDescriptor object that describes the resource's schema. Information in the labels field identifies the actual resource and its attributes according to the schema. For example, a particular Compute Engine VM instance could be represented by the following object, because the MonitoredResourceDescriptor for "gce_instance" has labels "project_id", "instance_id" and "zone": { "type": "gce_instance", "labels": { "project_id": "my-project", "instance_id": "12345678901234", "zone": "us-central1-a" }} — shape: {labels?: record, type?: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -390,7 +412,7 @@ export def "logging-monitored-resource-descriptors-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # Optional. The maximum number of results to return from this request. Non-positive values are ignored. The presence of nextPageToken in the response indicates that more results might be available.
   --page-token: string # Optional. If present, then retrieve the next batch of results from the preceding call to this method. pageToken must be the value of nextPageToken from the previous response. The values of other method parameters should be identical to those in the previous call.
-]: nothing -> record<nextPageToken: string, resourceDescriptors: table<description: string, displayName: string, labels: list, launchStage: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextPageToken: string, resourceDescriptors: table<description: string, displayName: string, labels: list, launchStage: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -437,7 +459,7 @@ export def "logging-projects-logs-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($log_name | is-empty) { error make --unspanned { msg: "path parameter 'logName' must be non-empty" } }
@@ -485,7 +507,7 @@ export def "logging-projects-metrics-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($metric_name | is-empty) { error make --unspanned { msg: "path parameter 'metricName' must be non-empty" } }
@@ -533,7 +555,7 @@ export def "logging-projects-metrics-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<bucketName: string, bucketOptions: record<explicitBuckets: record<bounds: list>, exponentialBuckets: record<growthFactor: float, numFiniteBuckets: int, scale: float>, linearBuckets: record<numFiniteBuckets: int, offset: float, width: float>>, createTime: string, description: string, disabled: bool, filter: string, labelExtractors: record, metricDescriptor: record<description: string, displayName: string, labels: list<record>, launchStage: string, metadata: record<ingestDelay: string, launchStage: string, samplePeriod: string>, metricKind: string, monitoredResourceTypes: list<string>, name: string, type: string, unit: string, valueType: string>, name: string, updateTime: string, valueExtractor: string, version: string> {
+]: nothing -> oneof<record<bucketName: string, bucketOptions: record<explicitBuckets: record<bounds: list>, exponentialBuckets: record<growthFactor: float, numFiniteBuckets: int, scale: float>, linearBuckets: record<numFiniteBuckets: int, offset: float, width: float>>, createTime: string, description: string, disabled: bool, filter: string, labelExtractors: record, metricDescriptor: record<description: string, displayName: string, labels: list<record>, launchStage: string, metadata: record<ingestDelay: string, launchStage: string, samplePeriod: string>, metricKind: string, monitoredResourceTypes: list<string>, name: string, type: string, unit: string, valueType: string>, name: string, updateTime: string, valueExtractor: string, version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($metric_name | is-empty) { error make --unspanned { msg: "path parameter 'metricName' must be non-empty" } }
@@ -559,8 +581,6 @@ export def "logging-projects-metrics-get" [
 #
 # PUT /v2/{metricName}
 # operationId: logging.projects.metrics.update
-# --bucketOptions shape: {explicitBuckets?: record, exponentialBuckets?: record, linearBuckets?: record}
-# --metricDescriptor shape: {description?: string, displayName?: string, labels?: list, launchStage?: "LAUNCH_STAGE_UNSPECIFIED"|"UNIMPLEMENTED"|"PRELAUNCH"|"EARLY_ACCESS"|"ALPHA"|"BETA"|"GA"|"DEPRECATED", metadata?: record, metricKind?: "METRIC_KIND_UNSPECIFIED"|"GAUGE"|"DELTA"|"CUMULATIVE", monitoredResourceTypes?: list<string>, name?: string, type?: string, unit?: string, valueType?: "VALUE_TYPE_UNSPECIFIED"|"BOOL"|"INT64"|"DOUBLE"|"STRING"|"DISTRIBUTION"|"MONEY"}
 export def "logging-projects-metrics-update" [
   metric_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -593,7 +613,7 @@ export def "logging-projects-metrics-update" [
   --name: string # Required. The client-assigned metric identifier. Examples: "error_count", "nginx/requests".Metric identifiers are limited to 100 characters and can include only the following characters: A-Z, a-z, 0-9, and the special characters _-.,+!*',()%/. The forward-slash character (/) denotes a hierarchy of name pieces, and it cannot be the first character of the name.This field is the [METRIC_ID] part of a metric resource name in the format "projects/PROJECT_ID/metrics/METRIC_ID". Example: If the resource name of a metric is "projects/my-project/metrics/nginx%2Frequests", this field's value is "nginx/requests".
   --value-extractor: string # Optional. A value_extractor is required when using a distribution logs-based metric to extract the values to record from a log entry. Two functions are supported for value extraction: EXTRACT(field) or REGEXP_EXTRACT(field, regex). The arguments are: field: The name of the log entry field from which the value is to be extracted. regex: A regular expression using the Google RE2 syntax (https://github.com/google/re2/wiki/Syntax) with a single capture group to extract data from the specified log entry field. The value of the field is converted to a string before applying the regex. It is an error to specify a regex that does not include exactly one capture group.The result of the extraction must be convertible to a double type, as the distribution always records double values. If either the extraction or the conversion to double fails, then those values are not recorded in the distribution.Example: REGEXP_EXTRACT(jsonPayload.request, ".*quantity=(\d+).*")
   --version: string@version-completer # Deprecated. The API version that created or updated this metric. The v2 format is used by default and cannot be changed.
-]: any -> record<bucketName: string, bucketOptions: record<explicitBuckets: record<bounds: list>, exponentialBuckets: record<growthFactor: float, numFiniteBuckets: int, scale: float>, linearBuckets: record<numFiniteBuckets: int, offset: float, width: float>>, createTime: string, description: string, disabled: bool, filter: string, labelExtractors: record, metricDescriptor: record<description: string, displayName: string, labels: list<record>, launchStage: string, metadata: record<ingestDelay: string, launchStage: string, samplePeriod: string>, metricKind: string, monitoredResourceTypes: list<string>, name: string, type: string, unit: string, valueType: string>, name: string, updateTime: string, valueExtractor: string, version: string> {
+]: any -> oneof<record<bucketName: string, bucketOptions: record<explicitBuckets: record<bounds: list>, exponentialBuckets: record<growthFactor: float, numFiniteBuckets: int, scale: float>, linearBuckets: record<numFiniteBuckets: int, offset: float, width: float>>, createTime: string, description: string, disabled: bool, filter: string, labelExtractors: record, metricDescriptor: record<description: string, displayName: string, labels: list<record>, launchStage: string, metadata: record<ingestDelay: string, launchStage: string, samplePeriod: string>, metricKind: string, monitoredResourceTypes: list<string>, name: string, type: string, unit: string, valueType: string>, name: string, updateTime: string, valueExtractor: string, version: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -644,7 +664,7 @@ export def "logging-projects-locations-buckets-views-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -692,7 +712,7 @@ export def "logging-projects-locations-operations-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: nothing -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -744,7 +764,7 @@ export def "logging-projects-locations-buckets-views-patch" [
   --description: string # Describes this view.
   --filter: string # Filter that restricts which log entries in a bucket are visible in this view.Filters are restricted to be a logical AND of ==/!= of any of the following: originating project/folder/organization/billing account. resource type log idFor example:SOURCE("projects/myproject") AND resource.type = "gce_instance" AND LOG_ID("stdout")
   --body-name: string # The resource name of the view.For example:projects/my-project/locations/global/buckets/my-bucket/views/my-view
-]: any -> record<createTime: string, description: string, filter: string, name: string, updateTime: string> {
+]: any -> oneof<record<createTime: string, description: string, filter: string, name: string, updateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -795,7 +815,7 @@ export def "logging-get-cmek-settings" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<kmsKeyName: string, kmsKeyVersionName: string, name: string, serviceAccountId: string> {
+]: nothing -> oneof<record<kmsKeyName: string, kmsKeyVersionName: string, name: string, serviceAccountId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -846,7 +866,7 @@ export def "logging-update-cmek-settings" [
   --update-mask: string # Optional. Field mask identifying which fields from cmek_settings should be updated. A field will be overwritten if and only if it is in the update mask. Output only fields cannot be updated.See FieldMask for more information.For example: "updateMask=kmsKeyName"
   --kms-key-name: string # The resource name for the configured Cloud KMS key.KMS key name format: "projects/[PROJECT_ID]/locations/[LOCATION]/keyRings/[KEYRING]/cryptoKeys/[KEY]" For example:"projects/my-project/locations/us-central1/keyRings/my-ring/cryptoKeys/my-key"To enable CMEK for the Log Router, set this field to a valid kms_key_name for which the associated service account has the required cloudkms.cryptoKeyEncrypterDecrypter roles assigned for the key.The Cloud KMS key used by the Log Router can be updated by changing the kms_key_name to a new valid key name or disabled by setting the key name to an empty string. Encryption operations that are in progress will be completed with the key that was in use when they started. Decryption operations will be completed using the key that was used at the time of encryption unless access to that key has been revoked.To disable CMEK for the Log Router, set this field to an empty string.See Enabling CMEK for Log Router (https://cloud.google.com/logging/docs/routing/managed-encryption) for more information.
   --kms-key-version-name: string # The CryptoKeyVersion resource name for the configured Cloud KMS key.KMS key name format: "projects/[PROJECT_ID]/locations/[LOCATION]/keyRings/[KEYRING]/cryptoKeys/[KEY]/cryptoKeyVersions/[VERSION]" For example:"projects/my-project/locations/us-central1/keyRings/my-ring/cryptoKeys/my-key/cryptoKeyVersions/1"This is a read-only field used to convey the specific configured CryptoKeyVersion of kms_key that has been configured. It will be populated in cases where the CMEK settings are bound to a single key version.If this field is populated, the kms_key is tied to a specific CryptoKeyVersion.
-]: any -> record<kmsKeyName: string, kmsKeyVersionName: string, name: string, serviceAccountId: string> {
+]: any -> oneof<record<kmsKeyName: string, kmsKeyVersionName: string, name: string, serviceAccountId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -900,7 +920,7 @@ export def "logging-projects-locations-list" [
   --filter: string # A filter to narrow down results to a preferred subset. The filtering language accepts strings like "displayName=tokyo", and is documented in more detail in AIP-160 (https://google.aip.dev/160).
   --page-size: int # The maximum number of results to return. If not set, the service selects a default.
   --page-token: string # A page token received from the next_page_token field in the response. Send that page token to receive the subsequent page.
-]: nothing -> record<locations: table<displayName: string, labels: record, locationId: string, metadata: record, name: string>, nextPageToken: string> {
+]: nothing -> oneof<record<locations: table<displayName: string, labels: record, locationId: string, metadata: record, name: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -951,7 +971,7 @@ export def "logging-projects-locations-operations-list" [
   --filter: string # The standard list filter.
   --page-size: int # The standard list page size.
   --page-token: string # The standard list page token.
-]: nothing -> record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>> {
+]: nothing -> oneof<record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -999,7 +1019,7 @@ export def "logging-get-settings" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<disableDefaultSink: bool, kmsKeyName: string, kmsServiceAccountId: string, name: string, storageLocation: string> {
+]: nothing -> oneof<record<disableDefaultSink: bool, kmsKeyName: string, kmsServiceAccountId: string, name: string, storageLocation: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -1051,7 +1071,7 @@ export def "logging-update-settings" [
   --disable-default-sink: oneof<nothing, bool> # Optional. If set to true, the _Default sink in newly created projects and folders will created in a disabled state. This can be used to automatically disable log ingestion if there is already an aggregated sink configured in the hierarchy. The _Default sink can be re-enabled manually if needed.
   --kms-key-name: string # Optional. The resource name for the configured Cloud KMS key.KMS key name format: "projects/[PROJECT_ID]/locations/[LOCATION]/keyRings/[KEYRING]/cryptoKeys/[KEY]" For example:"projects/my-project/locations/us-central1/keyRings/my-ring/cryptoKeys/my-key"To enable CMEK for the Log Router, set this field to a valid kms_key_name for which the associated service account has the required roles/cloudkms.cryptoKeyEncrypterDecrypter role assigned for the key.The Cloud KMS key used by the Log Router can be updated by changing the kms_key_name to a new valid key name. Encryption operations that are in progress will be completed with the key that was in use when they started. Decryption operations will be completed using the key that was used at the time of encryption unless access to that key has been revoked.To disable CMEK for the Log Router, set this field to an empty string.See Enabling CMEK for Log Router (https://cloud.google.com/logging/docs/routing/managed-encryption) for more information.
   --storage-location: string # Optional. The Cloud region that will be used for _Default and _Required log buckets for newly created projects and folders. For example europe-west1. This setting does not affect the location of custom log buckets.
-]: any -> record<disableDefaultSink: bool, kmsKeyName: string, kmsServiceAccountId: string, name: string, storageLocation: string> {
+]: any -> oneof<record<disableDefaultSink: bool, kmsKeyName: string, kmsServiceAccountId: string, name: string, storageLocation: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1103,7 +1123,7 @@ export def "logging-projects-locations-operations-cancel" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1155,7 +1175,7 @@ export def "logging-projects-locations-buckets-undelete" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1184,8 +1204,6 @@ export def "logging-projects-locations-buckets-undelete" [
 #
 # POST /v2/{name}:updateAsync
 # operationId: logging.projects.locations.buckets.updateAsync
-# --cmekSettings shape: {kmsKeyName?: string, kmsKeyVersionName?: string}
-# --indexConfigs item shape: {fieldPath?: string, type?: "INDEX_TYPE_UNSPECIFIED"|"INDEX_TYPE_STRING"|"INDEX_TYPE_INTEGER"}
 export def "logging-projects-locations-buckets-update-async" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1216,7 +1234,7 @@ export def "logging-projects-locations-buckets-update-async" [
   --locked: oneof<nothing, bool> # Whether the bucket is locked.The retention period on a locked bucket cannot be changed. Locked buckets may only be deleted if they are empty.
   --restricted-fields: list<string> # Log entry field paths that are denied access in this bucket.The following fields and their children are eligible: textPayload, jsonPayload, protoPayload, httpRequest, labels, sourceLocation.Restricting a repeated field will restrict all values. Adding a parent will block all child fields. (e.g. foo.bar will block foo.bar.baz)
   --retention-days: int # Logs will be retained by default for this amount of time, after which they will automatically be deleted. The minimum retention period is 1 day. If this value is set to zero at bucket creation time, the default time of 30 days will be used. (format: int32)
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1269,7 +1287,7 @@ export def "logging-projects-locations-buckets-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # Optional. The maximum number of results to return from this request. Non-positive values are ignored. The presence of nextPageToken in the response indicates that more results might be available.
   --page-token: string # Optional. If present, then retrieve the next batch of results from the preceding call to this method. pageToken must be the value of nextPageToken from the previous response. The values of other method parameters should be identical to those in the previous call.
-]: nothing -> record<buckets: table<analyticsEnabled: bool, cmekSettings: record, createTime: string, description: string, indexConfigs: list, lifecycleState: string, locked: bool, name: string, restrictedFields: list, retentionDays: int, updateTime: string>, nextPageToken: string> {
+]: nothing -> oneof<record<buckets: table<analyticsEnabled: bool, cmekSettings: record, createTime: string, description: string, indexConfigs: list, lifecycleState: string, locked: bool, name: string, restrictedFields: list, retentionDays: int, updateTime: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1295,8 +1313,6 @@ export def "logging-projects-locations-buckets-list" [
 #
 # POST /v2/{parent}/buckets
 # operationId: logging.projects.locations.buckets.create
-# --cmekSettings shape: {kmsKeyName?: string, kmsKeyVersionName?: string}
-# --indexConfigs item shape: {fieldPath?: string, type?: "INDEX_TYPE_UNSPECIFIED"|"INDEX_TYPE_STRING"|"INDEX_TYPE_INTEGER"}
 export def "logging-projects-locations-buckets-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1327,7 +1343,7 @@ export def "logging-projects-locations-buckets-create" [
   --locked: oneof<nothing, bool> # Whether the bucket is locked.The retention period on a locked bucket cannot be changed. Locked buckets may only be deleted if they are empty.
   --restricted-fields: list<string> # Log entry field paths that are denied access in this bucket.The following fields and their children are eligible: textPayload, jsonPayload, protoPayload, httpRequest, labels, sourceLocation.Restricting a repeated field will restrict all values. Adding a parent will block all child fields. (e.g. foo.bar will block foo.bar.baz)
   --retention-days: int # Logs will be retained by default for this amount of time, after which they will automatically be deleted. The minimum retention period is 1 day. If this value is set to zero at bucket creation time, the default time of 30 days will be used. (format: int32)
-]: any -> record<analyticsEnabled: bool, cmekSettings: record<kmsKeyName: string, kmsKeyVersionName: string, name: string, serviceAccountId: string>, createTime: string, description: string, indexConfigs: table<createTime: string, fieldPath: string, type: string>, lifecycleState: string, locked: bool, name: string, restrictedFields: list<string>, retentionDays: int, updateTime: string> {
+]: any -> oneof<record<analyticsEnabled: bool, cmekSettings: record<kmsKeyName: string, kmsKeyVersionName: string, name: string, serviceAccountId: string>, createTime: string, description: string, indexConfigs: table<createTime: string, fieldPath: string, type: string>, lifecycleState: string, locked: bool, name: string, restrictedFields: list<string>, retentionDays: int, updateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1356,8 +1372,6 @@ export def "logging-projects-locations-buckets-create" [
 #
 # POST /v2/{parent}/buckets:createAsync
 # operationId: logging.projects.locations.buckets.createAsync
-# --cmekSettings shape: {kmsKeyName?: string, kmsKeyVersionName?: string}
-# --indexConfigs item shape: {fieldPath?: string, type?: "INDEX_TYPE_UNSPECIFIED"|"INDEX_TYPE_STRING"|"INDEX_TYPE_INTEGER"}
 export def "logging-projects-locations-buckets-create-async" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1388,7 +1402,7 @@ export def "logging-projects-locations-buckets-create-async" [
   --locked: oneof<nothing, bool> # Whether the bucket is locked.The retention period on a locked bucket cannot be changed. Locked buckets may only be deleted if they are empty.
   --restricted-fields: list<string> # Log entry field paths that are denied access in this bucket.The following fields and their children are eligible: textPayload, jsonPayload, protoPayload, httpRequest, labels, sourceLocation.Restricting a repeated field will restrict all values. Adding a parent will block all child fields. (e.g. foo.bar will block foo.bar.baz)
   --retention-days: int # Logs will be retained by default for this amount of time, after which they will automatically be deleted. The minimum retention period is 1 day. If this value is set to zero at bucket creation time, the default time of 30 days will be used. (format: int32)
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1441,7 +1455,7 @@ export def "logging-projects-exclusions-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # Optional. The maximum number of results to return from this request. Non-positive values are ignored. The presence of nextPageToken in the response indicates that more results might be available.
   --page-token: string # Optional. If present, then retrieve the next batch of results from the preceding call to this method. pageToken must be the value of nextPageToken from the previous response. The values of other method parameters should be identical to those in the previous call.
-]: nothing -> record<exclusions: table<createTime: string, description: string, disabled: bool, filter: string, name: string, updateTime: string>, nextPageToken: string> {
+]: nothing -> oneof<record<exclusions: table<createTime: string, description: string, disabled: bool, filter: string, name: string, updateTime: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1493,7 +1507,7 @@ export def "logging-projects-exclusions-create" [
   --disabled: oneof<nothing, bool> # Optional. If set to True, then this exclusion is disabled and it does not exclude any log entries. You can update an exclusion to change the value of this field.
   --filter: string # Required. An advanced logs filter (https://cloud.google.com/logging/docs/view/advanced-queries) that matches the log entries to be excluded. By using the sample function (https://cloud.google.com/logging/docs/view/advanced-queries#sample), you can exclude less than 100% of the matching log entries.For example, the following query matches 99% of low-severity log entries from Google Cloud Storage buckets:resource.type=gcs_bucket severity<ERROR sample(insertId, 0.99)
   --name: string # Required. A client-assigned identifier, such as "load-balancer-exclusion". Identifiers are limited to 100 characters and can include only letters, digits, underscores, hyphens, and periods. First character has to be alphanumeric.
-]: any -> record<createTime: string, description: string, disabled: bool, filter: string, name: string, updateTime: string> {
+]: any -> oneof<record<createTime: string, description: string, disabled: bool, filter: string, name: string, updateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1546,7 +1560,7 @@ export def "logging-projects-locations-buckets-links-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # Optional. The maximum number of results to return from this request.
   --page-token: string # Optional. If present, then retrieve the next batch of results from the preceding call to this method. pageToken must be the value of nextPageToken from the previous response.
-]: nothing -> record<links: table<bigqueryDataset: record, createTime: string, description: string, lifecycleState: string, name: string>, nextPageToken: string> {
+]: nothing -> oneof<record<links: table<bigqueryDataset: record, createTime: string, description: string, lifecycleState: string, name: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1598,7 +1612,7 @@ export def "logging-projects-locations-buckets-links-create" [
   --bigquery-dataset: record # Describes a BigQuery dataset that was created by a link.
   --description: string # Describes this link.The maximum length of the description is 8000 characters.
   --name: string # The resource name of the link. The name can have up to 100 characters. A valid link id (at the end of the link name) must only have alphanumeric characters and underscores within it. "projects/[PROJECT_ID]/locations/[LOCATION_ID]/buckets/[BUCKET_ID]/links/[LINK_ID]" "organizations/[ORGANIZATION_ID]/locations/[LOCATION_ID]/buckets/[BUCKET_ID]/links/[LINK_ID]" "billingAccounts/[BILLING_ACCOUNT_ID]/locations/[LOCATION_ID]/buckets/[BUCKET_ID]/links/[LINK_ID]" "folders/[FOLDER_ID]/locations/[LOCATION_ID]/buckets/[BUCKET_ID]/links/[LINK_ID]" For example:`projects/my-project/locations/global/buckets/my-bucket/links/my_link
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1652,7 +1666,7 @@ export def "logging-projects-logs-list" [
   --page-size: int # Optional. The maximum number of results to return from this request. Non-positive values are ignored. The presence of nextPageToken in the response indicates that more results might be available.
   --page-token: string # Optional. If present, then retrieve the next batch of results from the preceding call to this method. pageToken must be the value of nextPageToken from the previous response. The values of other method parameters should be identical to those in the previous call.
   --resource-names: list<string> # Optional. List of resource names to list logs for: projects/[PROJECT_ID]/locations/[LOCATION_ID]/buckets/[BUCKET_ID]/views/[VIEW_ID] organizations/[ORGANIZATION_ID]/locations/[LOCATION_ID]/buckets/[BUCKET_ID]/views/[VIEW_ID] billingAccounts/[BILLING_ACCOUNT_ID]/locations/[LOCATION_ID]/buckets/[BUCKET_ID]/views/[VIEW_ID] folders/[FOLDER_ID]/locations/[LOCATION_ID]/buckets/[BUCKET_ID]/views/[VIEW_ID]To support legacy queries, it could also be: projects/[PROJECT_ID] organizations/[ORGANIZATION_ID] billingAccounts/[BILLING_ACCOUNT_ID] folders/[FOLDER_ID]The resource name in the parent field is added to this list.
-]: nothing -> record<logNames: list<string>, nextPageToken: string> {
+]: nothing -> oneof<record<logNames: list<string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1702,7 +1716,7 @@ export def "logging-projects-metrics-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # Optional. The maximum number of results to return from this request. Non-positive values are ignored. The presence of nextPageToken in the response indicates that more results might be available.
   --page-token: string # Optional. If present, then retrieve the next batch of results from the preceding call to this method. pageToken must be the value of nextPageToken from the previous response. The values of other method parameters should be identical to those in the previous call.
-]: nothing -> record<metrics: table<bucketName: string, bucketOptions: record, createTime: string, description: string, disabled: bool, filter: string, labelExtractors: record, metricDescriptor: record, name: string, updateTime: string, valueExtractor: string, version: string>, nextPageToken: string> {
+]: nothing -> oneof<record<metrics: table<bucketName: string, bucketOptions: record, createTime: string, description: string, disabled: bool, filter: string, labelExtractors: record, metricDescriptor: record, name: string, updateTime: string, valueExtractor: string, version: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1728,8 +1742,6 @@ export def "logging-projects-metrics-list" [
 #
 # POST /v2/{parent}/metrics
 # operationId: logging.projects.metrics.create
-# --bucketOptions shape: {explicitBuckets?: record, exponentialBuckets?: record, linearBuckets?: record}
-# --metricDescriptor shape: {description?: string, displayName?: string, labels?: list, launchStage?: "LAUNCH_STAGE_UNSPECIFIED"|"UNIMPLEMENTED"|"PRELAUNCH"|"EARLY_ACCESS"|"ALPHA"|"BETA"|"GA"|"DEPRECATED", metadata?: record, metricKind?: "METRIC_KIND_UNSPECIFIED"|"GAUGE"|"DELTA"|"CUMULATIVE", monitoredResourceTypes?: list<string>, name?: string, type?: string, unit?: string, valueType?: "VALUE_TYPE_UNSPECIFIED"|"BOOL"|"INT64"|"DOUBLE"|"STRING"|"DISTRIBUTION"|"MONEY"}
 export def "logging-projects-metrics-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1762,7 +1774,7 @@ export def "logging-projects-metrics-create" [
   --name: string # Required. The client-assigned metric identifier. Examples: "error_count", "nginx/requests".Metric identifiers are limited to 100 characters and can include only the following characters: A-Z, a-z, 0-9, and the special characters _-.,+!*',()%/. The forward-slash character (/) denotes a hierarchy of name pieces, and it cannot be the first character of the name.This field is the [METRIC_ID] part of a metric resource name in the format "projects/PROJECT_ID/metrics/METRIC_ID". Example: If the resource name of a metric is "projects/my-project/metrics/nginx%2Frequests", this field's value is "nginx/requests".
   --value-extractor: string # Optional. A value_extractor is required when using a distribution logs-based metric to extract the values to record from a log entry. Two functions are supported for value extraction: EXTRACT(field) or REGEXP_EXTRACT(field, regex). The arguments are: field: The name of the log entry field from which the value is to be extracted. regex: A regular expression using the Google RE2 syntax (https://github.com/google/re2/wiki/Syntax) with a single capture group to extract data from the specified log entry field. The value of the field is converted to a string before applying the regex. It is an error to specify a regex that does not include exactly one capture group.The result of the extraction must be convertible to a double type, as the distribution always records double values. If either the extraction or the conversion to double fails, then those values are not recorded in the distribution.Example: REGEXP_EXTRACT(jsonPayload.request, ".*quantity=(\d+).*")
   --version: string@version-completer # Deprecated. The API version that created or updated this metric. The v2 format is used by default and cannot be changed.
-]: any -> record<bucketName: string, bucketOptions: record<explicitBuckets: record<bounds: list>, exponentialBuckets: record<growthFactor: float, numFiniteBuckets: int, scale: float>, linearBuckets: record<numFiniteBuckets: int, offset: float, width: float>>, createTime: string, description: string, disabled: bool, filter: string, labelExtractors: record, metricDescriptor: record<description: string, displayName: string, labels: list<record>, launchStage: string, metadata: record<ingestDelay: string, launchStage: string, samplePeriod: string>, metricKind: string, monitoredResourceTypes: list<string>, name: string, type: string, unit: string, valueType: string>, name: string, updateTime: string, valueExtractor: string, version: string> {
+]: any -> oneof<record<bucketName: string, bucketOptions: record<explicitBuckets: record<bounds: list>, exponentialBuckets: record<growthFactor: float, numFiniteBuckets: int, scale: float>, linearBuckets: record<numFiniteBuckets: int, offset: float, width: float>>, createTime: string, description: string, disabled: bool, filter: string, labelExtractors: record, metricDescriptor: record<description: string, displayName: string, labels: list<record>, launchStage: string, metadata: record<ingestDelay: string, launchStage: string, samplePeriod: string>, metricKind: string, monitoredResourceTypes: list<string>, name: string, type: string, unit: string, valueType: string>, name: string, updateTime: string, valueExtractor: string, version: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1815,7 +1827,7 @@ export def "logging-sinks-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # Optional. The maximum number of results to return from this request. Non-positive values are ignored. The presence of nextPageToken in the response indicates that more results might be available.
   --page-token: string # Optional. If present, then retrieve the next batch of results from the preceding call to this method. pageToken must be the value of nextPageToken from the previous response. The values of other method parameters should be identical to those in the previous call.
-]: nothing -> record<nextPageToken: string, sinks: table<bigqueryOptions: record, createTime: string, description: string, destination: string, disabled: bool, exclusions: list, filter: string, includeChildren: bool, name: string, outputVersionFormat: string, updateTime: string, writerIdentity: string>> {
+]: nothing -> oneof<record<nextPageToken: string, sinks: table<bigqueryOptions: record, createTime: string, description: string, destination: string, disabled: bool, exclusions: list, filter: string, includeChildren: bool, name: string, outputVersionFormat: string, updateTime: string, writerIdentity: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1841,8 +1853,6 @@ export def "logging-sinks-list" [
 #
 # POST /v2/{parent}/sinks
 # operationId: logging.sinks.create
-# --bigqueryOptions shape: {usePartitionedTables?: bool}
-# --exclusions item shape: {description?: string, disabled?: bool, filter?: string, name?: string}
 export def "logging-sinks-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1875,7 +1885,7 @@ export def "logging-sinks-create" [
   --include-children: oneof<nothing, bool> # Optional. This field applies only to sinks owned by organizations and folders. If the field is false, the default, only the logs owned by the sink's parent resource are available for export. If the field is true, then log entries from all the projects, folders, and billing accounts contained in the sink's parent resource are also available for export. Whether a particular log entry from the children is exported depends on the sink's filter expression.For example, if this field is true, then the filter resource.type=gce_instance would export all Compute Engine VM instance log entries from all projects in the sink's parent.To only export entries from certain child projects, filter on the project part of the log name:logName:("projects/test-project1/" OR "projects/test-project2/") AND resource.type=gce_instance
   --name: string # Required. The client-assigned sink identifier, unique within the project.For example: "my-syslog-errors-to-pubsub". Sink identifiers are limited to 100 characters and can include only the following characters: upper and lower-case alphanumeric characters, underscores, hyphens, and periods. First character has to be alphanumeric.
   --output-version-format: string@output-version-format-completer # Deprecated. This field is unused.
-]: any -> record<bigqueryOptions: record<usePartitionedTables: bool, usesTimestampColumnPartitioning: bool>, createTime: string, description: string, destination: string, disabled: bool, exclusions: table<createTime: string, description: string, disabled: bool, filter: string, name: string, updateTime: string>, filter: string, includeChildren: bool, name: string, outputVersionFormat: string, updateTime: string, writerIdentity: string> {
+]: any -> oneof<record<bigqueryOptions: record<usePartitionedTables: bool, usesTimestampColumnPartitioning: bool>, createTime: string, description: string, destination: string, disabled: bool, exclusions: table<createTime: string, description: string, disabled: bool, filter: string, name: string, updateTime: string>, filter: string, includeChildren: bool, name: string, outputVersionFormat: string, updateTime: string, writerIdentity: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1928,7 +1938,7 @@ export def "logging-projects-locations-buckets-views-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # Optional. The maximum number of results to return from this request.Non-positive values are ignored. The presence of nextPageToken in the response indicates that more results might be available.
   --page-token: string # Optional. If present, then retrieve the next batch of results from the preceding call to this method. pageToken must be the value of nextPageToken from the previous response. The values of other method parameters should be identical to those in the previous call.
-]: nothing -> record<nextPageToken: string, views: table<createTime: string, description: string, filter: string, name: string, updateTime: string>> {
+]: nothing -> oneof<record<nextPageToken: string, views: table<createTime: string, description: string, filter: string, name: string, updateTime: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1980,7 +1990,7 @@ export def "logging-projects-locations-buckets-views-create" [
   --description: string # Describes this view.
   --filter: string # Filter that restricts which log entries in a bucket are visible in this view.Filters are restricted to be a logical AND of ==/!= of any of the following: originating project/folder/organization/billing account. resource type log idFor example:SOURCE("projects/myproject") AND resource.type = "gce_instance" AND LOG_ID("stdout")
   --name: string # The resource name of the view.For example:projects/my-project/locations/global/buckets/my-bucket/views/my-view
-]: any -> record<createTime: string, description: string, filter: string, name: string, updateTime: string> {
+]: any -> oneof<record<createTime: string, description: string, filter: string, name: string, updateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2031,7 +2041,7 @@ export def "logging-sinks-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($sink_name | is-empty) { error make --unspanned { msg: "path parameter 'sinkName' must be non-empty" } }
@@ -2079,7 +2089,7 @@ export def "logging-sinks-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<bigqueryOptions: record<usePartitionedTables: bool, usesTimestampColumnPartitioning: bool>, createTime: string, description: string, destination: string, disabled: bool, exclusions: table<createTime: string, description: string, disabled: bool, filter: string, name: string, updateTime: string>, filter: string, includeChildren: bool, name: string, outputVersionFormat: string, updateTime: string, writerIdentity: string> {
+]: nothing -> oneof<record<bigqueryOptions: record<usePartitionedTables: bool, usesTimestampColumnPartitioning: bool>, createTime: string, description: string, destination: string, disabled: bool, exclusions: table<createTime: string, description: string, disabled: bool, filter: string, name: string, updateTime: string>, filter: string, includeChildren: bool, name: string, outputVersionFormat: string, updateTime: string, writerIdentity: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($sink_name | is-empty) { error make --unspanned { msg: "path parameter 'sinkName' must be non-empty" } }
@@ -2105,8 +2115,6 @@ export def "logging-sinks-get" [
 #
 # PATCH /v2/{sinkName}
 # operationId: logging.projects.sinks.patch
-# --bigqueryOptions shape: {usePartitionedTables?: bool}
-# --exclusions item shape: {description?: string, disabled?: bool, filter?: string, name?: string}
 export def "logging-projects-sinks-patch" [
   sink_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2140,7 +2148,7 @@ export def "logging-projects-sinks-patch" [
   --include-children: oneof<nothing, bool> # Optional. This field applies only to sinks owned by organizations and folders. If the field is false, the default, only the logs owned by the sink's parent resource are available for export. If the field is true, then log entries from all the projects, folders, and billing accounts contained in the sink's parent resource are also available for export. Whether a particular log entry from the children is exported depends on the sink's filter expression.For example, if this field is true, then the filter resource.type=gce_instance would export all Compute Engine VM instance log entries from all projects in the sink's parent.To only export entries from certain child projects, filter on the project part of the log name:logName:("projects/test-project1/" OR "projects/test-project2/") AND resource.type=gce_instance
   --name: string # Required. The client-assigned sink identifier, unique within the project.For example: "my-syslog-errors-to-pubsub". Sink identifiers are limited to 100 characters and can include only the following characters: upper and lower-case alphanumeric characters, underscores, hyphens, and periods. First character has to be alphanumeric.
   --output-version-format: string@output-version-format-completer # Deprecated. This field is unused.
-]: any -> record<bigqueryOptions: record<usePartitionedTables: bool, usesTimestampColumnPartitioning: bool>, createTime: string, description: string, destination: string, disabled: bool, exclusions: table<createTime: string, description: string, disabled: bool, filter: string, name: string, updateTime: string>, filter: string, includeChildren: bool, name: string, outputVersionFormat: string, updateTime: string, writerIdentity: string> {
+]: any -> oneof<record<bigqueryOptions: record<usePartitionedTables: bool, usesTimestampColumnPartitioning: bool>, createTime: string, description: string, destination: string, disabled: bool, exclusions: table<createTime: string, description: string, disabled: bool, filter: string, name: string, updateTime: string>, filter: string, includeChildren: bool, name: string, outputVersionFormat: string, updateTime: string, writerIdentity: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2169,8 +2177,6 @@ export def "logging-projects-sinks-patch" [
 #
 # PUT /v2/{sinkName}
 # operationId: logging.sinks.update
-# --bigqueryOptions shape: {usePartitionedTables?: bool}
-# --exclusions item shape: {description?: string, disabled?: bool, filter?: string, name?: string}
 export def "logging-sinks-update" [
   sink_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2204,7 +2210,7 @@ export def "logging-sinks-update" [
   --include-children: oneof<nothing, bool> # Optional. This field applies only to sinks owned by organizations and folders. If the field is false, the default, only the logs owned by the sink's parent resource are available for export. If the field is true, then log entries from all the projects, folders, and billing accounts contained in the sink's parent resource are also available for export. Whether a particular log entry from the children is exported depends on the sink's filter expression.For example, if this field is true, then the filter resource.type=gce_instance would export all Compute Engine VM instance log entries from all projects in the sink's parent.To only export entries from certain child projects, filter on the project part of the log name:logName:("projects/test-project1/" OR "projects/test-project2/") AND resource.type=gce_instance
   --name: string # Required. The client-assigned sink identifier, unique within the project.For example: "my-syslog-errors-to-pubsub". Sink identifiers are limited to 100 characters and can include only the following characters: upper and lower-case alphanumeric characters, underscores, hyphens, and periods. First character has to be alphanumeric.
   --output-version-format: string@output-version-format-completer # Deprecated. This field is unused.
-]: any -> record<bigqueryOptions: record<usePartitionedTables: bool, usesTimestampColumnPartitioning: bool>, createTime: string, description: string, destination: string, disabled: bool, exclusions: table<createTime: string, description: string, disabled: bool, filter: string, name: string, updateTime: string>, filter: string, includeChildren: bool, name: string, outputVersionFormat: string, updateTime: string, writerIdentity: string> {
+]: any -> oneof<record<bigqueryOptions: record<usePartitionedTables: bool, usesTimestampColumnPartitioning: bool>, createTime: string, description: string, destination: string, disabled: bool, exclusions: table<createTime: string, description: string, disabled: bool, filter: string, name: string, updateTime: string>, filter: string, includeChildren: bool, name: string, outputVersionFormat: string, updateTime: string, writerIdentity: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

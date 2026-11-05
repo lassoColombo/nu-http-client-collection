@@ -12,27 +12,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -40,8 +49,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -52,7 +66,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -87,12 +110,13 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # HEAD — bodyless; default surfaces just the headers on success
 def send-head [req: record, insecure: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = (http head --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure $req.url)
+  let resp = http head --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure $req.url
   if (not $full) and (not $allow_errors) and (status-ok $resp.status $ok_codes) { return $resp.headers }
   $resp | handle-response $allow_errors $full $ok_codes
 }
@@ -128,9 +152,9 @@ def accept-completer-1 [] { ["application/json" "application/vnd.docker.raw-stre
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "system-ping" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["system-ping" "system-auth" "image-build" "build-prune" "image-commit" "config-list" "config-create" "config-delete" "config-inspect" "config-update" "container-create" "container-list" "container-prune" "container-delete" "container-archive" "container-archive-info" "put-container-archive" "container-attach" "container-attach-websocket" "container-changes" "container-exec" "container-export" "container-inspect" "container-kill" "container-logs" "container-pause" "container-rename" "container-resize" "container-restart" "container-start" "container-stats" "container-stop" "container-top" "container-unpause" "container-update" "container-wait" "distribution-inspect" "system-events" "exec-inspect" "exec-resize" "exec-start" "image-create" "image-get-all" "image-list" "image-load" "image-prune" "image-search" "image-delete" "image-get" "image-history" "image-inspect" "image-push" "image-tag" "system-info" "network-list" "network-create" "network-prune" "network-delete" "network-inspect" "network-connect" "network-disconnect" "node-list" "node-delete" "node-inspect" "node-update" "plugin-list" "plugin-create" "get-plugin-privileges" "plugin-pull" "plugin-delete" "plugin-disable" "plugin-enable" "plugin-inspect" "plugin-push" "plugin-set" "plugin-upgrade" "secret-list" "secret-create" "secret-delete" "secret-inspect" "secret-update" "service-list" "service-create" "service-delete" "service-inspect" "service-logs" "service-update" "session" "swarm-inspect" "swarm-init" "swarm-join" "swarm-leave" "swarm-unlock" "swarm-unlockkey" "swarm-update" "system-data-usage" "task-list" "task-inspect" "task-logs" "system-version" "volume-list" "volume-create" "volume-prune" "volume-delete" "volume-inspect" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -200,7 +224,7 @@ export def "system-auth" [
   --password: string
   --serveraddress: string
   --username: string
-]: any -> record<IdentityToken: string, Status: string> {
+]: any -> oneof<record<IdentityToken: string, Status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -274,7 +298,7 @@ export def "image-build" [
   let extra_headers = {"Content-type": $content_type, "X-Registry-Config": $x_registry_config} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/octet-stream")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -303,7 +327,7 @@ export def "build-prune" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<SpaceReclaimed: int> {
+]: nothing -> oneof<record<SpaceReclaimed: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/build/prune" $auth.query)
@@ -327,8 +351,6 @@ export def "build-prune" [
 #
 # POST /commit
 # operationId: ImageCommit
-# --Healthcheck shape: {Interval?: int, Retries?: int, StartPeriod?: int, Test?: list<string>, Timeout?: int}
-# --Volumes shape: {additionalProperties?: "{}"}
 export def "image-commit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -371,7 +393,7 @@ export def "image-commit" [
   --user: string # The user that commands are run as inside the container.
   --volumes: record # An object mapping mount point paths inside the container to empty objects. — shape: {additionalProperties?: "{}"}
   --working-dir: string # The working directory for commands to run in.
-]: any -> record<Id: string> {
+]: any -> oneof<record<Id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -410,7 +432,7 @@ export def "config-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --filters: string # A JSON encoded value of the filters (a `map[string][]string`) to process on the configs list. Available filters: - `id=` - `label= or label==value` - `name=` - `names=`
-]: nothing -> table<CreatedAt: string, ID: string, Spec: record<Data: string, Labels: record, Name: string>, UpdatedAt: string, Version: record<Index: int>> {
+]: nothing -> oneof<table<CreatedAt: string, ID: string, Spec: record<Data: string, Labels: record, Name: string>, UpdatedAt: string, Version: record<Index: int>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filters" $filters "scalar")] | flatten | str join "&"
@@ -448,7 +470,7 @@ export def "config-create" [
   --data: string # Base64-url-safe-encoded ([RFC 4648](https://tools.ietf.org/html/rfc4648#section-3.2)) config data.
   --labels: record # User-defined key/value metadata.
   --name: string # User-defined name of the config.
-]: any -> record<ID: string> {
+]: any -> oneof<record<ID: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -522,7 +544,7 @@ export def "config-inspect" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<CreatedAt: string, ID: string, Spec: record<Data: string, Labels: record, Name: string>, UpdatedAt: string, Version: record<Index: int>> {
+]: nothing -> oneof<record<CreatedAt: string, ID: string, Spec: record<Data: string, Labels: record, Name: string>, UpdatedAt: string, Version: record<Index: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -592,10 +614,6 @@ export def "config-update" [
 #
 # POST /containers/create
 # operationId: ContainerCreate
-# --Healthcheck shape: {Interval?: int, Retries?: int, StartPeriod?: int, Test?: list<string>, Timeout?: int}
-# --Volumes shape: {additionalProperties?: "{}"}
-# --HostConfig shape: {BlkioDeviceReadBps?: list, BlkioDeviceReadIOps?: list, BlkioDeviceWriteBps?: list, BlkioDeviceWriteIOps?: list, BlkioWeight?: int, BlkioWeightDevice?: list, CgroupParent?: string, CpuCount?: int, CpuPercent?: int, CpuPeriod?: int, CpuQuota?: int, CpuRealtimePeriod?: int, CpuRealtimeRuntime?: int, CpuShares?: int, CpusetCpus?: string, CpusetMems?: string, DeviceCgroupRules?: list<string>, Devices?: list, DiskQuota?: int, IOMaximumBandwidth?: int, IOMaximumIOps?: int, KernelMemory?: int, ... (43 more fields)}
-# --NetworkingConfig shape: {EndpointsConfig?: record}
 export def "container-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -634,7 +652,7 @@ export def "container-create" [
   --working-dir: string # The working directory for commands to run in.
   --host-config: record # Container configuration that depends on the host we are running on — shape: {BlkioDeviceReadBps?: list, BlkioDeviceReadIOps?: list, BlkioDeviceWriteBps?: list, BlkioDeviceWriteIOps?: list, BlkioWeight?: int, BlkioWeightDevice?: list, CgroupParent?: string, CpuCount?: int, CpuPercent?: int, CpuPeriod?: int, CpuQuota?: int, CpuRealtimePeriod?: int, CpuRealtimeRuntime?: int, CpuShares?: int, CpusetCpus?: string, CpusetMems?: string, DeviceCgroupRules?: list<string>, Devices?: list, DiskQuota?: int, IOMaximumBandwidth?: int, IOMaximumIOps?: int, KernelMemory?: int, ... (43 more fields)}
   --networking-config: record # This container's networking configuration. — shape: {EndpointsConfig?: record}
-]: any -> record<Id: string, Warnings: list<string>> {
+]: any -> oneof<record<Id: string, Warnings: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -676,7 +694,7 @@ export def "container-list" [
   --limit: int # Return this number of most recently created containers, including non-running ones.
   --size: oneof<nothing, bool> # Return the size of container as fields `SizeRw` and `SizeRootFs`. (default: false)
   --filters: string # Filters to process on the container list, encoded as JSON (a `map[string][]string`). For example, `{"status": ["paused"]}` will only return paused containers. Available filters: - `ancestor`=(`<image-name>[:]`, ``, or `<image@digest>`) - `before`=(`` or ``) - `expose`=(`[/]`|`<startport-endport>/[]`) - `exited=` containers with exit code of `` - `health`=(`starting`|`healthy`|`unhealthy`|`none`) - `id=` a container's ID - `isolation=`(`default`|`process`|`hyperv`) (Windows daemon only) - `is-task=`(`true`|`false`) - `label=key` or `label="key=value"` of a container label - `name=` a container's name - `network`=(`` or ``) - `publish`=(`[/]`|`<startport-endport>/[]`) - `since`=(`` or ``) - `status=`(`created`|`restarting`|`running`|`removing`|`paused`|`exited`|`dead`) - `volume`=(`` or ``)
-]: nothing -> table<Command: string, Created: int, HostConfig: record<NetworkMode: string>, Id: string, Image: string, ImageID: string, Labels: record, Mounts: list<record>, Names: list<string>, NetworkSettings: record<Networks: record>, Ports: list<record>, SizeRootFs: int, SizeRw: int, State: string, Status: string> {
+]: nothing -> oneof<table<Command: string, Created: int, HostConfig: record<NetworkMode: string>, Id: string, Image: string, ImageID: string, Labels: record, Mounts: list<record>, Names: list<string>, NetworkSettings: record<Networks: record>, Ports: list<record>, SizeRootFs: int, SizeRw: int, State: string, Status: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "all" $all "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "size" $size "scalar") (serialize-qp "filters" $filters "scalar")] | flatten | str join "&"
@@ -712,7 +730,7 @@ export def "container-prune" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --filters: string # Filters to process on the prune list, encoded as JSON (a `map[string][]string`). Available filters: - `until=` Prune containers created before this timestamp. The `` can be Unix timestamps, date formatted timestamps, or Go duration strings (e.g. `10m`, `1h30m`) computed relative to the daemon machine’s time. - `label` (`label=`, `label==`, `label!=`, or `label!==`) Prune containers with (or without, in case `label!=...` is used) the specified labels.
-]: nothing -> record<ContainersDeleted: list<string>, SpaceReclaimed: int> {
+]: nothing -> oneof<record<ContainersDeleted: list<string>, SpaceReclaimed: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filters" $filters "scalar")] | flatten | str join "&"
@@ -828,7 +846,7 @@ export def "container-archive-info" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --path: string # Resource in the container’s filesystem to archive. (required)
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -996,7 +1014,7 @@ export def "container-changes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<Kind: int, Path: string> {
+]: nothing -> oneof<table<Kind: int, Path: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1041,7 +1059,7 @@ export def "container-exec" [
   --privileged: oneof<nothing, bool> # Runs the exec process with extended privileges. (default: false)
   --tty: oneof<nothing, bool> # Allocate a pseudo-TTY.
   --user: string # The user, and optionally, group to run the exec process inside the container. Format is one of: `user`, `user:group`, `uid`, or `uid:gid`.
-]: any -> record<Id: string> {
+]: any -> oneof<record<Id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1117,7 +1135,7 @@ export def "container-inspect" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --size: oneof<nothing, bool> # Return the size of container as fields `SizeRw` and `SizeRootFs` (default: false)
-]: nothing -> record<AppArmorProfile: string, Args: list<string>, Config: record<ArgsEscaped: bool, AttachStderr: bool, AttachStdin: bool, AttachStdout: bool, Cmd: list<string>, Domainname: string, Entrypoint: list<string>, Env: list<string>, ExposedPorts: record, Healthcheck: record<Interval: int, Retries: int, StartPeriod: int, Test: list, Timeout: int>, Hostname: string, Image: string, Labels: record, MacAddress: string, NetworkDisabled: bool, OnBuild: list<string>, OpenStdin: bool, Shell: list<string>, StdinOnce: bool, StopSignal: string, StopTimeout: int, Tty: bool, User: string, Volumes: record<additionalProperties: record>, WorkingDir: string>, Created: string, Driver: string, ExecIDs: string, GraphDriver: record<Data: record, Name: string>, HostConfig: record<BlkioDeviceReadBps: list<record>, BlkioDeviceReadIOps: list<record>, BlkioDeviceWriteBps: list<record>, BlkioDeviceWriteIOps: list<record>, BlkioWeight: int, BlkioWeightDevice: list<record>, CgroupParent: string, CpuCount: int, CpuPercent: int, CpuPeriod: int, CpuQuota: int, CpuRealtimePeriod: int, CpuRealtimeRuntime: int, CpuShares: int, CpusetCpus: string, CpusetMems: string, DeviceCgroupRules: list<string>, Devices: list<record>, DiskQuota: int, IOMaximumBandwidth: int, IOMaximumIOps: int, KernelMemory: int, Memory: int, MemoryReservation: int, MemorySwap: int, MemorySwappiness: int, NanoCPUs: int, OomKillDisable: bool, PidsLimit: int, Ulimits: list<record>, AutoRemove: bool, Binds: list<string>, CapAdd: list<string>, CapDrop: list<string>, Cgroup: string, ConsoleSize: list<int>, ContainerIDFile: string, Dns: list<string>, DnsOptions: list<string>, DnsSearch: list<string>, ExtraHosts: list<string>, GroupAdd: list<string>, IpcMode: string, Isolation: string, Links: list<string>, LogConfig: record<Config: record, Type: string>, Mounts: list<record>, NetworkMode: string, OomScoreAdj: int, PidMode: string, PortBindings: record, Privileged: bool, PublishAllPorts: bool, ReadonlyRootfs: bool, RestartPolicy: record<MaximumRetryCount: int, Name: string>, Runtime: string, SecurityOpt: list<string>, ShmSize: int, StorageOpt: record, Sysctls: record, Tmpfs: record, UTSMode: string, UsernsMode: string, VolumeDriver: string, VolumesFrom: list<string>>, HostnamePath: string, HostsPath: string, Id: string, Image: string, LogPath: string, MountLabel: string, Mounts: table<Destination: string, Driver: string, Mode: string, Name: string, Propagation: string, RW: bool, Source: string, Type: string>, Name: string, NetworkSettings: record<Bridge: string, EndpointID: string, Gateway: string, GlobalIPv6Address: string, GlobalIPv6PrefixLen: int, HairpinMode: bool, IPAddress: string, IPPrefixLen: int, IPv6Gateway: string, LinkLocalIPv6Address: string, LinkLocalIPv6PrefixLen: int, MacAddress: string, Networks: record, Ports: record, SandboxID: string, SandboxKey: string, SecondaryIPAddresses: list<record>, SecondaryIPv6Addresses: list<record>>, Node: record, Path: string, ProcessLabel: string, ResolvConfPath: string, RestartCount: int, SizeRootFs: int, SizeRw: int, State: record<Dead: bool, Error: string, ExitCode: int, FinishedAt: string, OOMKilled: bool, Paused: bool, Pid: int, Restarting: bool, Running: bool, StartedAt: string, Status: string>> {
+]: nothing -> oneof<record<AppArmorProfile: string, Args: list<string>, Config: record<ArgsEscaped: bool, AttachStderr: bool, AttachStdin: bool, AttachStdout: bool, Cmd: list<string>, Domainname: string, Entrypoint: list<string>, Env: list<string>, ExposedPorts: record, Healthcheck: record<Interval: int, Retries: int, StartPeriod: int, Test: list, Timeout: int>, Hostname: string, Image: string, Labels: record, MacAddress: string, NetworkDisabled: bool, OnBuild: list<string>, OpenStdin: bool, Shell: list<string>, StdinOnce: bool, StopSignal: string, StopTimeout: int, Tty: bool, User: string, Volumes: record<additionalProperties: record>, WorkingDir: string>, Created: string, Driver: string, ExecIDs: string, GraphDriver: record<Data: record, Name: string>, HostConfig: record<BlkioDeviceReadBps: list<record>, BlkioDeviceReadIOps: list<record>, BlkioDeviceWriteBps: list<record>, BlkioDeviceWriteIOps: list<record>, BlkioWeight: int, BlkioWeightDevice: list<record>, CgroupParent: string, CpuCount: int, CpuPercent: int, CpuPeriod: int, CpuQuota: int, CpuRealtimePeriod: int, CpuRealtimeRuntime: int, CpuShares: int, CpusetCpus: string, CpusetMems: string, DeviceCgroupRules: list<string>, Devices: list<record>, DiskQuota: int, IOMaximumBandwidth: int, IOMaximumIOps: int, KernelMemory: int, Memory: int, MemoryReservation: int, MemorySwap: int, MemorySwappiness: int, NanoCPUs: int, OomKillDisable: bool, PidsLimit: int, Ulimits: list<record>, AutoRemove: bool, Binds: list<string>, CapAdd: list<string>, CapDrop: list<string>, Cgroup: string, ConsoleSize: list<int>, ContainerIDFile: string, Dns: list<string>, DnsOptions: list<string>, DnsSearch: list<string>, ExtraHosts: list<string>, GroupAdd: list<string>, IpcMode: string, Isolation: string, Links: list<string>, LogConfig: record<Config: record, Type: string>, Mounts: list<record>, NetworkMode: string, OomScoreAdj: int, PidMode: string, PortBindings: record, Privileged: bool, PublishAllPorts: bool, ReadonlyRootfs: bool, RestartPolicy: record<MaximumRetryCount: int, Name: string>, Runtime: string, SecurityOpt: list<string>, ShmSize: int, StorageOpt: record, Sysctls: record, Tmpfs: record, UTSMode: string, UsernsMode: string, VolumeDriver: string, VolumesFrom: list<string>>, HostnamePath: string, HostsPath: string, Id: string, Image: string, LogPath: string, MountLabel: string, Mounts: table<Destination: string, Driver: string, Mode: string, Name: string, Propagation: string, RW: bool, Source: string, Type: string>, Name: string, NetworkSettings: record<Bridge: string, EndpointID: string, Gateway: string, GlobalIPv6Address: string, GlobalIPv6PrefixLen: int, HairpinMode: bool, IPAddress: string, IPPrefixLen: int, IPv6Gateway: string, LinkLocalIPv6Address: string, LinkLocalIPv6PrefixLen: int, MacAddress: string, Networks: record, Ports: record, SandboxID: string, SandboxKey: string, SecondaryIPAddresses: list<record>, SecondaryIPv6Addresses: list<record>>, Node: record, Path: string, ProcessLabel: string, ResolvConfPath: string, RestartCount: int, SizeRootFs: int, SizeRw: int, State: record<Dead: bool, Error: string, ExitCode: int, FinishedAt: string, OOMKilled: bool, Paused: bool, Pid: int, Restarting: bool, Running: bool, StartedAt: string, Status: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1427,7 +1445,7 @@ export def "container-stats" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --stream: oneof<nothing, bool> # Stream the output. If false, the stats will be output once and then it will disconnect. (default: true)
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1504,7 +1522,7 @@ export def "container-top" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --ps-args: string # The arguments to pass to `ps`. For example, `aux` (default: -ef)
-]: nothing -> record<Processes: list<list<string>>, Titles: list<string>> {
+]: nothing -> oneof<record<Processes: list<list<string>>, Titles: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1566,14 +1584,6 @@ export def "container-unpause" [
 #
 # POST /containers/{id}/update
 # operationId: ContainerUpdate
-# --BlkioDeviceReadBps item shape: {Path?: string, Rate?: int}
-# --BlkioDeviceReadIOps item shape: {Path?: string, Rate?: int}
-# --BlkioDeviceWriteBps item shape: {Path?: string, Rate?: int}
-# --BlkioDeviceWriteIOps item shape: {Path?: string, Rate?: int}
-# --BlkioWeightDevice item shape: {Path?: string, Weight?: int}
-# --Devices item shape: {CgroupPermissions?: string, PathInContainer?: string, PathOnHost?: string}
-# --Ulimits item shape: {Hard?: int, Name?: string, Soft?: int}
-# --RestartPolicy shape: {MaximumRetryCount?: int, Name?: ""|"always"|"unless-stopped"|"on-failure"}
 export def "container-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1616,7 +1626,7 @@ export def "container-update" [
   --pids-limit: int # Tune a container's pids limit. Set -1 for unlimited. (format: int64)
   --ulimits: list # A list of resource limits to set in the container. For example: `{"Name": "nofile", "Soft": 1024, "Hard": 2048}`" — item shape: {Hard?: int, Name?: string, Soft?: int}
   --restart-policy: record # The behavior to apply when the container exits. The default is not to restart. An ever increasing delay (double the previous delay, starting at 100ms) is added before each restart to prevent flooding the server. — shape: {MaximumRetryCount?: int, Name?: ""|"always"|"unless-stopped"|"on-failure"}
-]: any -> record<Warnings: list<string>> {
+]: any -> oneof<record<Warnings: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1656,7 +1666,7 @@ export def "container-wait" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --condition: string # Wait until a container state reaches the given condition, either 'not-running' (default), 'next-exit', or 'removed'. (default: not-running)
-]: nothing -> record<StatusCode: int> {
+]: nothing -> oneof<record<StatusCode: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1693,7 +1703,7 @@ export def "distribution-inspect" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<Descriptor: record<Digest: string, MediaType: string, Size: int, URLs: list<string>>, Platforms: table<Architecture: string, Features: list, OS: string, OSFeatures: list, OSVersion: string, Variant: string>> {
+]: nothing -> oneof<record<Descriptor: record<Digest: string, MediaType: string, Size: int, URLs: list<string>>, Platforms: table<Architecture: string, Features: list, OS: string, OSFeatures: list, OSVersion: string, Variant: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -1731,7 +1741,7 @@ export def "system-events" [
   --since: string # Show events created since this timestamp then stream new events.
   --until: string # Show events created until this timestamp then stop streaming.
   --filters: string # A JSON encoded value of filters (a `map[string][]string`) to process on the event list. Available filters: - `config=` config name or ID - `container=` container name or ID - `daemon=` daemon name or ID - `event=` event type - `image=` image name or ID - `label=` image or container label - `network=` network name or ID - `node=` node ID - `plugin`= plugin name or ID - `scope`＝ local or swarm - `secret=` secret name or ID - `service=` service name or ID - `type=` object to filter by, one of `container`, `image`, `volume`, `network`, `daemon`, `plugin`, `node`, `service`, `secret` or `config` - `volume=` volume name
-]: nothing -> record<Action: string, Actor: record<Attributes: record, ID: string>, Type: string, time: int, timeNano: int> {
+]: nothing -> oneof<record<Action: string, Actor: record<Attributes: record, ID: string>, Type: string, time: int, timeNano: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "filters" $filters "scalar")] | flatten | str join "&"
@@ -1767,7 +1777,7 @@ export def "exec-inspect" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<ContainerID: string, ExitCode: int, ID: string, OpenStderr: bool, OpenStdin: bool, OpenStdout: bool, Pid: int, ProcessConfig: record<arguments: list<string>, entrypoint: string, privileged: bool, tty: bool, user: string>, Running: bool> {
+]: nothing -> oneof<record<ContainerID: string, ExitCode: int, ID: string, OpenStderr: bool, OpenStdin: bool, OpenStdout: bool, Pid: int, ProcessConfig: record<arguments: list<string>, entrypoint: string, privileged: bool, tty: bool, user: string>, Running: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1967,7 +1977,7 @@ export def "image-list" [
   --all: oneof<nothing, bool> # Show all images. Only images from a final layer (no children) are shown by default. (default: false)
   --filters: string # A JSON encoded value of the filters (a `map[string][]string`) to process on the images list. Available filters: - `before`=(`<image-name>[:]`, `` or `<image@digest>`) - `dangling=true` - `label=key` or `label="key=value"` of an image label - `reference`=(`<image-name>[:]`) - `since`=(`<image-name>[:]`, `` or `<image@digest>`)
   --digests: oneof<nothing, bool> # Show digest information as a `RepoDigests` field on each image. (default: false)
-]: nothing -> table<Containers: int, Created: int, Id: string, Labels: record, ParentId: string, RepoDigests: list<string>, RepoTags: list<string>, SharedSize: int, Size: int, VirtualSize: int> {
+]: nothing -> oneof<table<Containers: int, Created: int, Id: string, Labels: record, ParentId: string, RepoDigests: list<string>, RepoTags: list<string>, SharedSize: int, Size: int, VirtualSize: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "all" $all "scalar") (serialize-qp "filters" $filters "scalar") (serialize-qp "digests" $digests "scalar")] | flatten | str join "&"
@@ -2043,7 +2053,7 @@ export def "image-prune" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --filters: string # Filters to process on the prune list, encoded as JSON (a `map[string][]string`). Available filters: - `dangling=` When set to `true` (or `1`), prune only unused *and* untagged images. When set to `false` (or `0`), all unused images are pruned. - `until=` Prune images created before this timestamp. The `` can be Unix timestamps, date formatted timestamps, or Go duration strings (e.g. `10m`, `1h30m`) computed relative to the daemon machine’s time. - `label` (`label=`, `label==`, `label!=`, or `label!==`) Prune images with (or without, in case `label!=...` is used) the specified labels.
-]: nothing -> record<ImagesDeleted: table<Deleted: string, Untagged: string>, SpaceReclaimed: int> {
+]: nothing -> oneof<record<ImagesDeleted: table<Deleted: string, Untagged: string>, SpaceReclaimed: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filters" $filters "scalar")] | flatten | str join "&"
@@ -2081,7 +2091,7 @@ export def "image-search" [
   --term: string # Term to search (required)
   --limit: int # Maximum number of results to return
   --filters: string # A JSON encoded value of the filters (a `map[string][]string`) to process on the images list. Available filters: - `is-automated=(true|false)` - `is-official=(true|false)` - `stars=` Matches images that has at least 'number' stars.
-]: nothing -> table<description: string, is_automated: bool, is_official: bool, name: string, star_count: int> {
+]: nothing -> oneof<table<description: string, is_automated: bool, is_official: bool, name: string, star_count: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($term == null) { error make --unspanned { msg: "required query parameter 'term' missing: pass --term" } }
@@ -2120,7 +2130,7 @@ export def "image-delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --force: oneof<nothing, bool> # Remove the image even if it is being used by stopped containers or has other tags (default: false)
   --noprune: oneof<nothing, bool> # Do not delete untagged parent images (default: false)
-]: nothing -> table<Deleted: string, Untagged: string> {
+]: nothing -> oneof<table<Deleted: string, Untagged: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -2193,7 +2203,7 @@ export def "image-history" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<Comment: string, Created: int, CreatedBy: string, Id: string, Size: int, Tags: list<string>> {
+]: nothing -> oneof<table<Comment: string, Created: int, CreatedBy: string, Id: string, Size: int, Tags: list<string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -2229,7 +2239,7 @@ export def "image-inspect" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<Architecture: string, Author: string, Comment: string, Config: record<ArgsEscaped: bool, AttachStderr: bool, AttachStdin: bool, AttachStdout: bool, Cmd: list<string>, Domainname: string, Entrypoint: list<string>, Env: list<string>, ExposedPorts: record, Healthcheck: record<Interval: int, Retries: int, StartPeriod: int, Test: list, Timeout: int>, Hostname: string, Image: string, Labels: record, MacAddress: string, NetworkDisabled: bool, OnBuild: list<string>, OpenStdin: bool, Shell: list<string>, StdinOnce: bool, StopSignal: string, StopTimeout: int, Tty: bool, User: string, Volumes: record<additionalProperties: record>, WorkingDir: string>, Container: string, ContainerConfig: record<ArgsEscaped: bool, AttachStderr: bool, AttachStdin: bool, AttachStdout: bool, Cmd: list<string>, Domainname: string, Entrypoint: list<string>, Env: list<string>, ExposedPorts: record, Healthcheck: record<Interval: int, Retries: int, StartPeriod: int, Test: list, Timeout: int>, Hostname: string, Image: string, Labels: record, MacAddress: string, NetworkDisabled: bool, OnBuild: list<string>, OpenStdin: bool, Shell: list<string>, StdinOnce: bool, StopSignal: string, StopTimeout: int, Tty: bool, User: string, Volumes: record<additionalProperties: record>, WorkingDir: string>, Created: string, DockerVersion: string, GraphDriver: record<Data: record, Name: string>, Id: string, Metadata: record<LastTagTime: string>, Os: string, OsVersion: string, Parent: string, RepoDigests: list<string>, RepoTags: list<string>, RootFS: record<BaseLayer: string, Layers: list<string>, Type: string>, Size: int, VirtualSize: int> {
+]: nothing -> oneof<record<Architecture: string, Author: string, Comment: string, Config: record<ArgsEscaped: bool, AttachStderr: bool, AttachStdin: bool, AttachStdout: bool, Cmd: list<string>, Domainname: string, Entrypoint: list<string>, Env: list<string>, ExposedPorts: record, Healthcheck: record<Interval: int, Retries: int, StartPeriod: int, Test: list, Timeout: int>, Hostname: string, Image: string, Labels: record, MacAddress: string, NetworkDisabled: bool, OnBuild: list<string>, OpenStdin: bool, Shell: list<string>, StdinOnce: bool, StopSignal: string, StopTimeout: int, Tty: bool, User: string, Volumes: record<additionalProperties: record>, WorkingDir: string>, Container: string, ContainerConfig: record<ArgsEscaped: bool, AttachStderr: bool, AttachStdin: bool, AttachStdout: bool, Cmd: list<string>, Domainname: string, Entrypoint: list<string>, Env: list<string>, ExposedPorts: record, Healthcheck: record<Interval: int, Retries: int, StartPeriod: int, Test: list, Timeout: int>, Hostname: string, Image: string, Labels: record, MacAddress: string, NetworkDisabled: bool, OnBuild: list<string>, OpenStdin: bool, Shell: list<string>, StdinOnce: bool, StopSignal: string, StopTimeout: int, Tty: bool, User: string, Volumes: record<additionalProperties: record>, WorkingDir: string>, Created: string, DockerVersion: string, GraphDriver: record<Data: record, Name: string>, Id: string, Metadata: record<LastTagTime: string>, Os: string, OsVersion: string, Parent: string, RepoDigests: list<string>, RepoTags: list<string>, RootFS: record<BaseLayer: string, Layers: list<string>, Type: string>, Size: int, VirtualSize: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -2345,7 +2355,7 @@ export def "system-info" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<Architecture: string, BridgeNfIp6tables: bool, BridgeNfIptables: bool, CPUSet: bool, CPUShares: bool, CgroupDriver: string, ClusterAdvertise: string, ClusterStore: string, ContainerdCommit: record<Expected: string, ID: string>, Containers: int, ContainersPaused: int, ContainersRunning: int, ContainersStopped: int, CpuCfsPeriod: bool, CpuCfsQuota: bool, Debug: bool, DefaultRuntime: string, DockerRootDir: string, Driver: string, DriverStatus: list<list<string>>, ExperimentalBuild: bool, GenericResources: table<DiscreteResourceSpec: record, NamedResourceSpec: record>, HttpProxy: string, HttpsProxy: string, ID: string, IPv4Forwarding: bool, Images: int, IndexServerAddress: string, InitBinary: string, InitCommit: record<Expected: string, ID: string>, Isolation: string, KernelMemory: bool, KernelVersion: string, Labels: list<string>, LiveRestoreEnabled: bool, LoggingDriver: string, MemTotal: int, MemoryLimit: bool, NCPU: int, NEventsListener: int, NFd: int, NGoroutines: int, Name: string, NoProxy: string, OSType: string, OomKillDisable: bool, OperatingSystem: string, Plugins: record<Authorization: list<string>, Log: list<string>, Network: list<string>, Volume: list<string>>, RegistryConfig: record<AllowNondistributableArtifactsCIDRs: list<string>, AllowNondistributableArtifactsHostnames: list<string>, IndexConfigs: record, InsecureRegistryCIDRs: list<string>, Mirrors: list<string>>, RuncCommit: record<Expected: string, ID: string>, Runtimes: record, SecurityOptions: list<string>, ServerVersion: string, SwapLimit: bool, Swarm: record<Cluster: record<CreatedAt: string, ID: string, RootRotationInProgress: bool, Spec: record, TLSInfo: record, UpdatedAt: string, Version: record>, ControlAvailable: bool, Error: string, LocalNodeState: string, Managers: int, NodeAddr: string, NodeID: string, Nodes: int, RemoteManagers: list<record>>, SystemStatus: list<list<string>>, SystemTime: string> {
+]: nothing -> oneof<record<Architecture: string, BridgeNfIp6tables: bool, BridgeNfIptables: bool, CPUSet: bool, CPUShares: bool, CgroupDriver: string, ClusterAdvertise: string, ClusterStore: string, ContainerdCommit: record<Expected: string, ID: string>, Containers: int, ContainersPaused: int, ContainersRunning: int, ContainersStopped: int, CpuCfsPeriod: bool, CpuCfsQuota: bool, Debug: bool, DefaultRuntime: string, DockerRootDir: string, Driver: string, DriverStatus: list<list<string>>, ExperimentalBuild: bool, GenericResources: table<DiscreteResourceSpec: record, NamedResourceSpec: record>, HttpProxy: string, HttpsProxy: string, ID: string, IPv4Forwarding: bool, Images: int, IndexServerAddress: string, InitBinary: string, InitCommit: record<Expected: string, ID: string>, Isolation: string, KernelMemory: bool, KernelVersion: string, Labels: list<string>, LiveRestoreEnabled: bool, LoggingDriver: string, MemTotal: int, MemoryLimit: bool, NCPU: int, NEventsListener: int, NFd: int, NGoroutines: int, Name: string, NoProxy: string, OSType: string, OomKillDisable: bool, OperatingSystem: string, Plugins: record<Authorization: list<string>, Log: list<string>, Network: list<string>, Volume: list<string>>, RegistryConfig: record<AllowNondistributableArtifactsCIDRs: list<string>, AllowNondistributableArtifactsHostnames: list<string>, IndexConfigs: record, InsecureRegistryCIDRs: list<string>, Mirrors: list<string>>, RuncCommit: record<Expected: string, ID: string>, Runtimes: record, SecurityOptions: list<string>, ServerVersion: string, SwapLimit: bool, Swarm: record<Cluster: record<CreatedAt: string, ID: string, RootRotationInProgress: bool, Spec: record, TLSInfo: record, UpdatedAt: string, Version: record>, ControlAvailable: bool, Error: string, LocalNodeState: string, Managers: int, NodeAddr: string, NodeID: string, Nodes: int, RemoteManagers: list<record>>, SystemStatus: list<list<string>>, SystemTime: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/info" $auth.query)
@@ -2380,7 +2390,7 @@ export def "network-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --filters: string # JSON encoded value of the filters (a `map[string][]string`) to process on the networks list. Available filters: - `driver=<driver-name>` Matches a network's driver. - `id=<network-id>` Matches all or part of a network ID. - `label=` or `label==` of a network label. - `name=<network-name>` Matches all or part of a network name. - `scope=["swarm"|"global"|"local"]` Filters networks by scope (`swarm`, `global`, or `local`). - `type=["custom"|"builtin"]` Filters networks by type. The `custom` keyword returns all user-defined networks.
-]: nothing -> table<Attachable: bool, Containers: record, Created: string, Driver: string, EnableIPv6: bool, IPAM: record<Config: list, Driver: string, Options: list>, Id: string, Ingress: bool, Internal: bool, Labels: record, Name: string, Options: record, Scope: string> {
+]: nothing -> oneof<table<Attachable: bool, Containers: record, Created: string, Driver: string, EnableIPv6: bool, IPAM: record<Config: list, Driver: string, Options: list>, Id: string, Ingress: bool, Internal: bool, Labels: record, Name: string, Options: record, Scope: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filters" $filters "scalar")] | flatten | str join "&"
@@ -2405,7 +2415,6 @@ export def "network-list" [
 #
 # POST /networks/create
 # operationId: NetworkCreate
-# --IPAM shape: {Config?: list, Driver?: string, Options?: list}
 export def "network-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2426,7 +2435,7 @@ export def "network-create" [
   --labels: record # User-defined key/value metadata.
   name: string # The network's name.
   --options: record # Network specific options to be used by the drivers.
-]: any -> record<Id: string, Warning: string> {
+]: any -> oneof<record<Id: string, Warning: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2464,7 +2473,7 @@ export def "network-prune" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --filters: string # Filters to process on the prune list, encoded as JSON (a `map[string][]string`). Available filters: - `until=` Prune networks created before this timestamp. The `` can be Unix timestamps, date formatted timestamps, or Go duration strings (e.g. `10m`, `1h30m`) computed relative to the daemon machine’s time. - `label` (`label=`, `label==`, `label!=`, or `label!==`) Prune networks with (or without, in case `label!=...` is used) the specified labels.
-]: nothing -> record<NetworksDeleted: list<string>> {
+]: nothing -> oneof<record<NetworksDeleted: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filters" $filters "scalar")] | flatten | str join "&"
@@ -2538,7 +2547,7 @@ export def "network-inspect" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --verbose: oneof<nothing, bool> # Detailed inspect output for troubleshooting (default: false)
   --scope: string # Filter the network by scope (swarm, global, or local)
-]: nothing -> record<Attachable: bool, Containers: record, Created: string, Driver: string, EnableIPv6: bool, IPAM: record<Config: list<record>, Driver: string, Options: list<record>>, Id: string, Ingress: bool, Internal: bool, Labels: record, Name: string, Options: record, Scope: string> {
+]: nothing -> oneof<record<Attachable: bool, Containers: record, Created: string, Driver: string, EnableIPv6: bool, IPAM: record<Config: list<record>, Driver: string, Options: list<record>>, Id: string, Ingress: bool, Internal: bool, Labels: record, Name: string, Options: record, Scope: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2657,7 +2666,7 @@ export def "node-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --filters: string # Filters to process on the nodes list, encoded as JSON (a `map[string][]string`). Available filters: - `id=` - `label=` - `membership=`(`accepted`|`pending`)` - `name=` - `role=`(`manager`|`worker`)`
-]: nothing -> table<CreatedAt: string, Description: record<Engine: record, Hostname: string, Platform: record, Resources: record, TLSInfo: record>, ID: string, ManagerStatus: record<Addr: string, Leader: bool, Reachability: string>, Spec: record<Availability: string, Labels: record, Name: string, Role: string>, Status: record<Addr: string, Message: string, State: string>, UpdatedAt: string, Version: record<Index: int>> {
+]: nothing -> oneof<table<CreatedAt: string, Description: record<Engine: record, Hostname: string, Platform: record, Resources: record, TLSInfo: record>, ID: string, ManagerStatus: record<Addr: string, Leader: bool, Reachability: string>, Spec: record<Availability: string, Labels: record, Name: string, Role: string>, Status: record<Addr: string, Message: string, State: string>, UpdatedAt: string, Version: record<Index: int>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filters" $filters "scalar")] | flatten | str join "&"
@@ -2732,7 +2741,7 @@ export def "node-inspect" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<CreatedAt: string, Description: record<Engine: record<EngineVersion: string, Labels: record, Plugins: list>, Hostname: string, Platform: record<Architecture: string, OS: string>, Resources: record<GenericResources: list, MemoryBytes: int, NanoCPUs: int>, TLSInfo: record<CertIssuerPublicKey: string, CertIssuerSubject: string, TrustRoot: string>>, ID: string, ManagerStatus: record<Addr: string, Leader: bool, Reachability: string>, Spec: record<Availability: string, Labels: record, Name: string, Role: string>, Status: record<Addr: string, Message: string, State: string>, UpdatedAt: string, Version: record<Index: int>> {
+]: nothing -> oneof<record<CreatedAt: string, Description: record<Engine: record<EngineVersion: string, Labels: record, Plugins: list>, Hostname: string, Platform: record<Architecture: string, OS: string>, Resources: record<GenericResources: list, MemoryBytes: int, NanoCPUs: int>, TLSInfo: record<CertIssuerPublicKey: string, CertIssuerSubject: string, TrustRoot: string>>, ID: string, ManagerStatus: record<Addr: string, Leader: bool, Reachability: string>, Spec: record<Availability: string, Labels: record, Name: string, Role: string>, Status: record<Addr: string, Message: string, State: string>, UpdatedAt: string, Version: record<Index: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2814,7 +2823,7 @@ export def "plugin-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --filters: string # A JSON encoded value of the filters (a `map[string][]string`) to process on the plugin list. Available filters: - `capability=` - `enable=|`
-]: nothing -> table<Config: record<Args: record, Description: string, DockerVersion: string, Documentation: string, Entrypoint: list, Env: list, Interface: record, IpcHost: bool, Linux: record, Mounts: list, Network: record, PidHost: bool, PropagatedMount: string, User: record, WorkDir: string, rootfs: record>, Enabled: bool, Id: string, Name: string, PluginReference: string, Settings: record<Args: list, Devices: list, Env: list, Mounts: list>> {
+]: nothing -> oneof<table<Config: record<Args: record, Description: string, DockerVersion: string, Documentation: string, Entrypoint: list, Env: list, Interface: record, IpcHost: bool, Linux: record, Mounts: list, Network: record, PidHost: bool, PropagatedMount: string, User: record, WorkDir: string, rootfs: record>, Enabled: bool, Id: string, Name: string, PluginReference: string, Settings: record<Args: list, Devices: list, Env: list, Mounts: list>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filters" $filters "scalar")] | flatten | str join "&"
@@ -2892,7 +2901,7 @@ export def "get-plugin-privileges" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --remote: string # The name of the plugin. The `:latest` tag is optional, and is the default if omitted. (required)
-]: nothing -> table<Description: string, Name: string, Value: list<string>> {
+]: nothing -> oneof<table<Description: string, Name: string, Value: list<string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($remote == null) { error make --unspanned { msg: "required query parameter 'remote' missing: pass --remote" } }
@@ -2976,7 +2985,7 @@ export def "plugin-delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --force: oneof<nothing, bool> # Disable the plugin before removing. This may result in issues if the plugin is in use by a container. (default: false)
-]: nothing -> record<Config: record<Args: record<Description: string, Name: string, Settable: list, Value: list>, Description: string, DockerVersion: string, Documentation: string, Entrypoint: list<string>, Env: list<record>, Interface: record<Socket: string, Types: list>, IpcHost: bool, Linux: record<AllowAllDevices: bool, Capabilities: list, Devices: list>, Mounts: list<record>, Network: record<Type: string>, PidHost: bool, PropagatedMount: string, User: record<GID: int, UID: int>, WorkDir: string, rootfs: record<diff_ids: list, type: string>>, Enabled: bool, Id: string, Name: string, PluginReference: string, Settings: record<Args: list<string>, Devices: list<record>, Env: list<string>, Mounts: list<record>>> {
+]: nothing -> oneof<record<Config: record<Args: record<Description: string, Name: string, Settable: list, Value: list>, Description: string, DockerVersion: string, Documentation: string, Entrypoint: list<string>, Env: list<record>, Interface: record<Socket: string, Types: list>, IpcHost: bool, Linux: record<AllowAllDevices: bool, Capabilities: list, Devices: list>, Mounts: list<record>, Network: record<Type: string>, PidHost: bool, PropagatedMount: string, User: record<GID: int, UID: int>, WorkDir: string, rootfs: record<diff_ids: list, type: string>>, Enabled: bool, Id: string, Name: string, PluginReference: string, Settings: record<Args: list<string>, Devices: list<record>, Env: list<string>, Mounts: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -3088,7 +3097,7 @@ export def "plugin-inspect" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<Config: record<Args: record<Description: string, Name: string, Settable: list, Value: list>, Description: string, DockerVersion: string, Documentation: string, Entrypoint: list<string>, Env: list<record>, Interface: record<Socket: string, Types: list>, IpcHost: bool, Linux: record<AllowAllDevices: bool, Capabilities: list, Devices: list>, Mounts: list<record>, Network: record<Type: string>, PidHost: bool, PropagatedMount: string, User: record<GID: int, UID: int>, WorkDir: string, rootfs: record<diff_ids: list, type: string>>, Enabled: bool, Id: string, Name: string, PluginReference: string, Settings: record<Args: list<string>, Devices: list<record>, Env: list<string>, Mounts: list<record>>> {
+]: nothing -> oneof<record<Config: record<Args: record<Description: string, Name: string, Settable: list, Value: list>, Description: string, DockerVersion: string, Documentation: string, Entrypoint: list<string>, Env: list<record>, Interface: record<Socket: string, Types: list>, IpcHost: bool, Linux: record<AllowAllDevices: bool, Capabilities: list, Devices: list>, Mounts: list<record>, Network: record<Type: string>, PidHost: bool, PropagatedMount: string, User: record<GID: int, UID: int>, WorkDir: string, rootfs: record<diff_ids: list, type: string>>, Enabled: bool, Id: string, Name: string, PluginReference: string, Settings: record<Args: list<string>, Devices: list<record>, Env: list<string>, Mounts: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -3246,7 +3255,7 @@ export def "secret-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --filters: string # A JSON encoded value of the filters (a `map[string][]string`) to process on the secrets list. Available filters: - `id=` - `label= or label==value` - `name=` - `names=`
-]: nothing -> table<CreatedAt: string, ID: string, Spec: record<Data: string, Driver: record, Labels: record, Name: string>, UpdatedAt: string, Version: record<Index: int>> {
+]: nothing -> oneof<table<CreatedAt: string, ID: string, Spec: record<Data: string, Driver: record, Labels: record, Name: string>, UpdatedAt: string, Version: record<Index: int>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filters" $filters "scalar")] | flatten | str join "&"
@@ -3271,7 +3280,6 @@ export def "secret-list" [
 #
 # POST /secrets/create
 # operationId: SecretCreate
-# --Driver shape: {Name: string, Options?: record}
 export def "secret-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3286,7 +3294,7 @@ export def "secret-create" [
   --driver: record # Driver represents a driver (network, logging, secrets). — shape: {Name: string, Options?: record}
   --labels: record # User-defined key/value metadata. (e.g. {com.example.some-label: some-value, com.example.some-other-label: some-other-value})
   --name: string # User-defined name of the secret.
-]: any -> record<ID: string> {
+]: any -> oneof<record<ID: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3360,7 +3368,7 @@ export def "secret-inspect" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<CreatedAt: string, ID: string, Spec: record<Data: string, Driver: record<Name: string, Options: record>, Labels: record, Name: string>, UpdatedAt: string, Version: record<Index: int>> {
+]: nothing -> oneof<record<CreatedAt: string, ID: string, Spec: record<Data: string, Driver: record<Name: string, Options: record>, Labels: record, Name: string>, UpdatedAt: string, Version: record<Index: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3385,7 +3393,6 @@ export def "secret-inspect" [
 #
 # POST /secrets/{id}/update
 # operationId: SecretUpdate
-# --Driver shape: {Name: string, Options?: record}
 export def "secret-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3444,7 +3451,7 @@ export def "service-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --filters: string # A JSON encoded value of the filters (a `map[string][]string`) to process on the services list. Available filters: - `id=` - `label=` - `mode=["replicated"|"global"]` - `name=`
-]: nothing -> table<CreatedAt: string, Endpoint: record<Ports: list, Spec: record, VirtualIPs: list>, ID: string, Spec: record<EndpointSpec: record, Labels: record, Mode: record, Name: string, Networks: list, RollbackConfig: record, TaskTemplate: record, UpdateConfig: record>, UpdateStatus: record<CompletedAt: string, Message: string, StartedAt: string, State: string>, UpdatedAt: string, Version: record<Index: int>> {
+]: nothing -> oneof<table<CreatedAt: string, Endpoint: record<Ports: list, Spec: record, VirtualIPs: list>, ID: string, Spec: record<EndpointSpec: record, Labels: record, Mode: record, Name: string, Networks: list, RollbackConfig: record, TaskTemplate: record, UpdateConfig: record>, UpdateStatus: record<CompletedAt: string, Message: string, StartedAt: string, State: string>, UpdatedAt: string, Version: record<Index: int>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filters" $filters "scalar")] | flatten | str join "&"
@@ -3469,12 +3476,6 @@ export def "service-list" [
 #
 # POST /services/create
 # operationId: ServiceCreate
-# --EndpointSpec shape: {Mode?: "vip"|"dnsrr", Ports?: list}
-# --Mode shape: {Global?: record, Replicated?: record}
-# --Networks item shape: {Aliases?: list<string>, Target?: string}
-# --RollbackConfig shape: {Delay?: int, FailureAction?: "continue"|"pause", MaxFailureRatio?: float, Monitor?: int, Order?: "stop-first"|"start-first", Parallelism?: int}
-# --TaskTemplate shape: {ContainerSpec?: record, ForceUpdate?: int, LogDriver?: record, Networks?: list, Placement?: record, PluginSpec?: record, Resources?: record, RestartPolicy?: record, Runtime?: string}
-# --UpdateConfig shape: {Delay?: int, FailureAction?: "continue"|"pause"|"rollback", MaxFailureRatio?: float, Monitor?: int, Order?: "stop-first"|"start-first", Parallelism?: int}
 export def "service-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3494,7 +3495,7 @@ export def "service-create" [
   --rollback-config: record # Specification for the rollback strategy of the service. — shape: {Delay?: int, FailureAction?: "continue"|"pause", MaxFailureRatio?: float, Monitor?: int, Order?: "stop-first"|"start-first", Parallelism?: int}
   --task-template: record # User modifiable task configuration. — shape: {ContainerSpec?: record, ForceUpdate?: int, LogDriver?: record, Networks?: list, Placement?: record, PluginSpec?: record, Resources?: record, RestartPolicy?: record, Runtime?: string}
   --update-config: record # Specification for the update strategy of the service. — shape: {Delay?: int, FailureAction?: "continue"|"pause"|"rollback", MaxFailureRatio?: float, Monitor?: int, Order?: "stop-first"|"start-first", Parallelism?: int}
-]: any -> record<ID: string, Warning: string> {
+]: any -> oneof<record<ID: string, Warning: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3572,7 +3573,7 @@ export def "service-inspect" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --insert-defaults: oneof<nothing, bool> # Fill empty fields with default values. (default: false)
-]: nothing -> record<CreatedAt: string, Endpoint: record<Ports: list<record>, Spec: record<Mode: string, Ports: list>, VirtualIPs: list<record>>, ID: string, Spec: record<EndpointSpec: record<Mode: string, Ports: list>, Labels: record, Mode: record<Global: record, Replicated: record>, Name: string, Networks: list<record>, RollbackConfig: record<Delay: int, FailureAction: string, MaxFailureRatio: float, Monitor: int, Order: string, Parallelism: int>, TaskTemplate: record<ContainerSpec: record, ForceUpdate: int, LogDriver: record, Networks: list, Placement: record, PluginSpec: record, Resources: record, RestartPolicy: record, Runtime: string>, UpdateConfig: record<Delay: int, FailureAction: string, MaxFailureRatio: float, Monitor: int, Order: string, Parallelism: int>>, UpdateStatus: record<CompletedAt: string, Message: string, StartedAt: string, State: string>, UpdatedAt: string, Version: record<Index: int>> {
+]: nothing -> oneof<record<CreatedAt: string, Endpoint: record<Ports: list<record>, Spec: record<Mode: string, Ports: list>, VirtualIPs: list<record>>, ID: string, Spec: record<EndpointSpec: record<Mode: string, Ports: list>, Labels: record, Mode: record<Global: record, Replicated: record>, Name: string, Networks: list<record>, RollbackConfig: record<Delay: int, FailureAction: string, MaxFailureRatio: float, Monitor: int, Order: string, Parallelism: int>, TaskTemplate: record<ContainerSpec: record, ForceUpdate: int, LogDriver: record, Networks: list, Placement: record, PluginSpec: record, Resources: record, RestartPolicy: record, Runtime: string>, UpdateConfig: record<Delay: int, FailureAction: string, MaxFailureRatio: float, Monitor: int, Order: string, Parallelism: int>>, UpdateStatus: record<CompletedAt: string, Message: string, StartedAt: string, State: string>, UpdatedAt: string, Version: record<Index: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3643,12 +3644,6 @@ export def "service-logs" [
 #
 # POST /services/{id}/update
 # operationId: ServiceUpdate
-# --EndpointSpec shape: {Mode?: "vip"|"dnsrr", Ports?: list}
-# --Mode shape: {Global?: record, Replicated?: record}
-# --Networks item shape: {Aliases?: list<string>, Target?: string}
-# --RollbackConfig shape: {Delay?: int, FailureAction?: "continue"|"pause", MaxFailureRatio?: float, Monitor?: int, Order?: "stop-first"|"start-first", Parallelism?: int}
-# --TaskTemplate shape: {ContainerSpec?: record, ForceUpdate?: int, LogDriver?: record, Networks?: list, Placement?: record, PluginSpec?: record, Resources?: record, RestartPolicy?: record, Runtime?: string}
-# --UpdateConfig shape: {Delay?: int, FailureAction?: "continue"|"pause"|"rollback", MaxFailureRatio?: float, Monitor?: int, Order?: "stop-first"|"start-first", Parallelism?: int}
 export def "service-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3672,7 +3667,7 @@ export def "service-update" [
   --rollback-config: record # Specification for the rollback strategy of the service. — shape: {Delay?: int, FailureAction?: "continue"|"pause", MaxFailureRatio?: float, Monitor?: int, Order?: "stop-first"|"start-first", Parallelism?: int}
   --task-template: record # User modifiable task configuration. — shape: {ContainerSpec?: record, ForceUpdate?: int, LogDriver?: record, Networks?: list, Placement?: record, PluginSpec?: record, Resources?: record, RestartPolicy?: record, Runtime?: string}
   --update-config: record # Specification for the update strategy of the service. — shape: {Delay?: int, FailureAction?: "continue"|"pause"|"rollback", MaxFailureRatio?: float, Monitor?: int, Order?: "stop-first"|"start-first", Parallelism?: int}
-]: any -> record<Warnings: list<string>> {
+]: any -> oneof<record<Warnings: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3749,7 +3744,7 @@ export def "swarm-inspect" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<CreatedAt: string, ID: string, RootRotationInProgress: bool, Spec: record<CAConfig: record<ExternalCAs: list, ForceRotate: int, NodeCertExpiry: int, SigningCACert: string, SigningCAKey: string>, Dispatcher: record<HeartbeatPeriod: int>, EncryptionConfig: record<AutoLockManagers: bool>, Labels: record, Name: string, Orchestration: record<TaskHistoryRetentionLimit: int>, Raft: record<ElectionTick: int, HeartbeatTick: int, KeepOldSnapshots: int, LogEntriesForSlowFollowers: int, SnapshotInterval: int>, TaskDefaults: record<LogDriver: record>>, TLSInfo: record<CertIssuerPublicKey: string, CertIssuerSubject: string, TrustRoot: string>, UpdatedAt: string, Version: record<Index: int>, JoinTokens: record<Manager: string, Worker: string>> {
+]: nothing -> oneof<record<CreatedAt: string, ID: string, RootRotationInProgress: bool, Spec: record<CAConfig: record<ExternalCAs: list, ForceRotate: int, NodeCertExpiry: int, SigningCACert: string, SigningCAKey: string>, Dispatcher: record<HeartbeatPeriod: int>, EncryptionConfig: record<AutoLockManagers: bool>, Labels: record, Name: string, Orchestration: record<TaskHistoryRetentionLimit: int>, Raft: record<ElectionTick: int, HeartbeatTick: int, KeepOldSnapshots: int, LogEntriesForSlowFollowers: int, SnapshotInterval: int>, TaskDefaults: record<LogDriver: record>>, TLSInfo: record<CertIssuerPublicKey: string, CertIssuerSubject: string, TrustRoot: string>, UpdatedAt: string, Version: record<Index: int>, JoinTokens: record<Manager: string, Worker: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/swarm" $auth.query)
@@ -3773,7 +3768,6 @@ export def "swarm-inspect" [
 #
 # POST /swarm/init
 # operationId: SwarmInit
-# --Spec shape: {CAConfig?: record, Dispatcher?: record, EncryptionConfig?: record, Labels?: record, Name?: string, Orchestration?: record, Raft?: record, TaskDefaults?: record}
 export def "swarm-init" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3944,7 +3938,7 @@ export def "swarm-unlockkey" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<UnlockKey: string> {
+]: nothing -> oneof<record<UnlockKey: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/swarm/unlockkey" $auth.query)
@@ -3968,12 +3962,6 @@ export def "swarm-unlockkey" [
 #
 # POST /swarm/update
 # operationId: SwarmUpdate
-# --CAConfig shape: {ExternalCAs?: list, ForceRotate?: int, NodeCertExpiry?: int, SigningCACert?: string, SigningCAKey?: string}
-# --Dispatcher shape: {HeartbeatPeriod?: int}
-# --EncryptionConfig shape: {AutoLockManagers?: bool}
-# --Orchestration shape: {TaskHistoryRetentionLimit?: int}
-# --Raft shape: {ElectionTick?: int, HeartbeatTick?: int, KeepOldSnapshots?: int, LogEntriesForSlowFollowers?: int, SnapshotInterval?: int}
-# --TaskDefaults shape: {LogDriver?: record}
 export def "swarm-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4036,7 +4024,7 @@ export def "system-data-usage" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<Containers: list<list<record>>, Images: table<Containers: int, Created: int, Id: string, Labels: record, ParentId: string, RepoDigests: list, RepoTags: list, SharedSize: int, Size: int, VirtualSize: int>, LayersSize: int, Volumes: table<CreatedAt: string, Driver: string, Labels: record, Mountpoint: string, Name: string, Options: record, Scope: string, Status: record, UsageData: record>> {
+]: nothing -> oneof<record<Containers: list<list<record>>, Images: table<Containers: int, Created: int, Id: string, Labels: record, ParentId: string, RepoDigests: list, RepoTags: list, SharedSize: int, Size: int, VirtualSize: int>, LayersSize: int, Volumes: table<CreatedAt: string, Driver: string, Labels: record, Mountpoint: string, Name: string, Options: record, Scope: string, Status: record, UsageData: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/system/df" $auth.query)
@@ -4071,7 +4059,7 @@ export def "task-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --filters: string # A JSON encoded value of the filters (a `map[string][]string`) to process on the tasks list. Available filters: - `desired-state=(running | shutdown | accepted)` - `id=` - `label=key` or `label="key=value"` - `name=` - `node=` - `service=`
-]: nothing -> table<AssignedGenericResources: list<record>, CreatedAt: string, DesiredState: string, ID: string, Labels: record, Name: string, NodeID: string, ServiceID: string, Slot: int, Spec: record<ContainerSpec: record, ForceUpdate: int, LogDriver: record, Networks: list, Placement: record, PluginSpec: record, Resources: record, RestartPolicy: record, Runtime: string>, Status: record<ContainerStatus: record, Err: string, Message: string, State: string, Timestamp: string>, UpdatedAt: string, Version: record<Index: int>> {
+]: nothing -> oneof<table<AssignedGenericResources: list<record>, CreatedAt: string, DesiredState: string, ID: string, Labels: record, Name: string, NodeID: string, ServiceID: string, Slot: int, Spec: record<ContainerSpec: record, ForceUpdate: int, LogDriver: record, Networks: list, Placement: record, PluginSpec: record, Resources: record, RestartPolicy: record, Runtime: string>, Status: record<ContainerStatus: record, Err: string, Message: string, State: string, Timestamp: string>, UpdatedAt: string, Version: record<Index: int>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filters" $filters "scalar")] | flatten | str join "&"
@@ -4107,7 +4095,7 @@ export def "task-inspect" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<AssignedGenericResources: table<DiscreteResourceSpec: record, NamedResourceSpec: record>, CreatedAt: string, DesiredState: string, ID: string, Labels: record, Name: string, NodeID: string, ServiceID: string, Slot: int, Spec: record<ContainerSpec: record<Args: list, Command: list, Configs: list, DNSConfig: record, Dir: string, Env: list, Groups: list, HealthCheck: record, Hostname: string, Hosts: list, Image: string, Labels: record, Mounts: list, OpenStdin: bool, Privileges: record, ReadOnly: bool, Secrets: list, StopGracePeriod: int, StopSignal: string, TTY: bool, User: string>, ForceUpdate: int, LogDriver: record<Name: string, Options: record>, Networks: list<record>, Placement: record<Constraints: list, Platforms: list, Preferences: list>, PluginSpec: record<Disabled: bool, Name: string, PluginPrivilege: list, Remote: string>, Resources: record<Limits: record, Reservation: record>, RestartPolicy: record<Condition: string, Delay: int, MaxAttempts: int, Window: int>, Runtime: string>, Status: record<ContainerStatus: record<ContainerID: string, ExitCode: int, PID: int>, Err: string, Message: string, State: string, Timestamp: string>, UpdatedAt: string, Version: record<Index: int>> {
+]: nothing -> oneof<record<AssignedGenericResources: table<DiscreteResourceSpec: record, NamedResourceSpec: record>, CreatedAt: string, DesiredState: string, ID: string, Labels: record, Name: string, NodeID: string, ServiceID: string, Slot: int, Spec: record<ContainerSpec: record<Args: list, Command: list, Configs: list, DNSConfig: record, Dir: string, Env: list, Groups: list, HealthCheck: record, Hostname: string, Hosts: list, Image: string, Labels: record, Mounts: list, OpenStdin: bool, Privileges: record, ReadOnly: bool, Secrets: list, StopGracePeriod: int, StopSignal: string, TTY: bool, User: string>, ForceUpdate: int, LogDriver: record<Name: string, Options: record>, Networks: list<record>, Placement: record<Constraints: list, Platforms: list, Preferences: list>, PluginSpec: record<Disabled: bool, Name: string, PluginPrivilege: list, Remote: string>, Resources: record<Limits: record, Reservation: record>, RestartPolicy: record<Condition: string, Delay: int, MaxAttempts: int, Window: int>, Runtime: string>, Status: record<ContainerStatus: record<ContainerID: string, ExitCode: int, PID: int>, Err: string, Message: string, State: string, Timestamp: string>, UpdatedAt: string, Version: record<Index: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4187,7 +4175,7 @@ export def "system-version" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<ApiVersion: string, Arch: string, BuildTime: string, Experimental: bool, GitCommit: string, GoVersion: string, KernelVersion: string, MinAPIVersion: string, Os: string, Version: string> {
+]: nothing -> oneof<record<ApiVersion: string, Arch: string, BuildTime: string, Experimental: bool, GitCommit: string, GoVersion: string, KernelVersion: string, MinAPIVersion: string, Os: string, Version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/version" $auth.query)
@@ -4222,7 +4210,7 @@ export def "volume-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --filters: string # JSON encoded value of the filters (a `map[string][]string`) to process on the volumes list. Available filters: - `dangling=` When set to `true` (or `1`), returns all volumes that are not in use by a container. When set to `false` (or `0`), only volumes that are in use by one or more containers are returned. - `driver=<volume-driver-name>` Matches volumes based on their driver. - `label=` or `label=:` Matches volumes based on the presence of a `label` alone or a `label` and a value. - `name=<volume-name>` Matches all or part of a volume name. (format: json)
-]: nothing -> record<Volumes: table<CreatedAt: string, Driver: string, Labels: record, Mountpoint: string, Name: string, Options: record, Scope: string, Status: record, UsageData: record>, Warnings: list<string>> {
+]: nothing -> oneof<record<Volumes: table<CreatedAt: string, Driver: string, Labels: record, Mountpoint: string, Name: string, Options: record, Scope: string, Status: record, UsageData: record>, Warnings: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filters" $filters "scalar")] | flatten | str join "&"
@@ -4261,7 +4249,7 @@ export def "volume-create" [
   --driver-opts: record # A mapping of driver options and values. These options are passed directly to the driver and are driver specific.
   --labels: record # User-defined key/value metadata.
   --name: string # The new volume's name. If not specified, Docker generates a name.
-]: any -> record<CreatedAt: string, Driver: string, Labels: record, Mountpoint: string, Name: string, Options: record, Scope: string, Status: record, UsageData: record<RefCount: int, Size: int>> {
+]: any -> oneof<record<CreatedAt: string, Driver: string, Labels: record, Mountpoint: string, Name: string, Options: record, Scope: string, Status: record, UsageData: record<RefCount: int, Size: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4299,7 +4287,7 @@ export def "volume-prune" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --filters: string # Filters to process on the prune list, encoded as JSON (a `map[string][]string`). Available filters: - `label` (`label=`, `label==`, `label!=`, or `label!==`) Prune volumes with (or without, in case `label!=...` is used) the specified labels.
-]: nothing -> record<SpaceReclaimed: int, VolumesDeleted: list<string>> {
+]: nothing -> oneof<record<SpaceReclaimed: int, VolumesDeleted: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filters" $filters "scalar")] | flatten | str join "&"
@@ -4373,7 +4361,7 @@ export def "volume-inspect" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<CreatedAt: string, Driver: string, Labels: record, Mountpoint: string, Name: string, Options: record, Scope: string, Status: record, UsageData: record<RefCount: int, Size: int>> {
+]: nothing -> oneof<record<CreatedAt: string, Driver: string, Labels: record, Mountpoint: string, Name: string, Options: record, Scope: string, Status: record, UsageData: record<RefCount: int, Size: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }

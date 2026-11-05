@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,12 +111,14 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # OPTIONS — bodyless
 def send-options [req: record, insecure: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http options --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http options --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -128,9 +153,9 @@ def transition-type-completer [] { ["docker" "manual"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-app-clients" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-app-clients" "options-app-clients" "post-app-clients" "delete-app-clients-app-client-id" "options-app-clients-app-client-id" "patch-app-clients-app-client-id" "get-assets" "options-assets" "post-assets" "delete-assets-asset-id" "get-assets-asset-id" "options-assets-asset-id" "patch-assets-asset-id" "get-datasets" "options-datasets" "post-datasets" "delete-datasets-dataset-id" "get-datasets-dataset-id" "options-datasets-dataset-id" "patch-datasets-dataset-id" "get-deployment-environments" "options-deployment-environments" "get-deployment-environments-deployment-environment-id" "options-deployment-environments-deployment-environment-id" "delete-documents" "get-documents" "options-documents" "post-documents" "delete-documents-document-id" "get-documents-document-id" "options-documents-document-id" "patch-documents-document-id" "get-logs" "options-logs" "get-logs-log-id" "options-logs-log-id" "get-models" "options-models" "post-models" "delete-models-model-id" "get-models-model-id" "options-models-model-id" "patch-models-model-id" "get-models-model-id-data-bundles" "options-models-model-id-data-bundles" "post-models-model-id-data-bundles" "delete-models-model-id-data-bundles-data-bundle-id" "options-models-model-id-data-bundles-data-bundle-id" "patch-models-model-id-data-bundles-data-bundle-id" "get-models-model-id-trainings" "options-models-model-id-trainings" "post-models-model-id-trainings" "options-models-model-id-trainings-training-id" "patch-models-model-id-trainings-training-id" "get-organizations" "options-organizations" "post-organizations" "get-organizations-organization-id" "options-organizations-organization-id" "patch-organizations-organization-id" "get-payment-methods" "options-payment-methods" "post-payment-methods" "delete-payment-methods-payment-method-id" "get-payment-methods-payment-method-id" "options-payment-methods-payment-method-id" "patch-payment-methods-payment-method-id" "get-plans" "options-plans" "get-plans-plan-id" "options-plans-plan-id" "get-predictions" "options-predictions" "post-predictions" "get-profiles-profile-id" "options-profiles-profile-id" "patch-profiles-profile-id" "get-secrets" "options-secrets" "post-secrets" "delete-secrets-secret-id" "options-secrets-secret-id" "patch-secrets-secret-id" "options-signup" "post-signup" "get-transitions" "options-transitions" "post-transitions" "delete-transitions-transition-id" "get-transitions-transition-id" "options-transitions-transition-id" "patch-transitions-transition-id" "get-transitions-transition-id-executions" "options-transitions-transition-id-executions" "post-transitions-transition-id-executions" "get-transitions-transition-id-executions-execution-id" "options-transitions-transition-id-executions-execution-id" "patch-transitions-transition-id-executions-execution-id" "options-transitions-transition-id-executions-execution-id-heartbeats" "post-transitions-transition-id-executions-execution-id-heartbeats" "get-users" "options-users" "post-users" "delete-users-user-id" "get-users-user-id" "options-users-user-id" "patch-users-user-id" "get-workflows" "options-workflows" "post-workflows" "delete-workflows-workflow-id" "get-workflows-workflow-id" "options-workflows-workflow-id" "patch-workflows-workflow-id" "get-workflows-workflow-id-executions" "options-workflows-workflow-id-executions" "post-workflows-workflow-id-executions" "delete-workflows-workflow-id-executions-execution-id" "get-workflows-workflow-id-executions-execution-id" "options-workflows-workflow-id-executions-execution-id" "patch-workflows-workflow-id-executions-execution-id" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -161,7 +186,7 @@ export def "get-app-clients" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string
   --max-results: string
-]: nothing -> record<appClients: table<appClientId: string, callbackUrls: list, clientId: string, clientSecret: string, createdBy: string, createdTime: string, defaultLoginUrl: string, description: string, hasSecret: bool, loginUrls: list, logoutUrls: list, name: string, updatedBy: string, updatedTime: string>, nextToken: string> {
+]: nothing -> oneof<record<appClients: table<appClientId: string, callbackUrls: list, clientId: string, clientSecret: string, createdBy: string, createdTime: string, defaultLoginUrl: string, description: string, hasSecret: bool, loginUrls: list, logoutUrls: list, name: string, updatedBy: string, updatedTime: string>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
@@ -193,7 +218,7 @@ export def "options-app-clients" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/appClients" $auth.query)
@@ -232,7 +257,7 @@ export def "post-app-clients" [
   --login-urls: list<string>
   --logout-urls: list<string>
   --name: string # nullable
-]: any -> record<appClientId: string, callbackUrls: list<string>, clientId: string, clientSecret: string, createdBy: string, createdTime: string, defaultLoginUrl: string, description: string, hasSecret: bool, loginUrls: list<string>, logoutUrls: list<string>, name: string, updatedBy: string, updatedTime: string> {
+]: any -> oneof<record<appClientId: string, callbackUrls: list<string>, clientId: string, clientSecret: string, createdBy: string, createdTime: string, defaultLoginUrl: string, description: string, hasSecret: bool, loginUrls: list<string>, logoutUrls: list<string>, name: string, updatedBy: string, updatedTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -244,7 +269,7 @@ export def "post-app-clients" [
   let extra_headers = {"Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -271,7 +296,7 @@ export def "delete-app-clients-app-client-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<appClientId: string, callbackUrls: list<string>, clientId: string, clientSecret: string, createdBy: string, createdTime: string, defaultLoginUrl: string, description: string, hasSecret: bool, loginUrls: list<string>, logoutUrls: list<string>, name: string, updatedBy: string, updatedTime: string> {
+]: nothing -> oneof<record<appClientId: string, callbackUrls: list<string>, clientId: string, clientSecret: string, createdBy: string, createdTime: string, defaultLoginUrl: string, description: string, hasSecret: bool, loginUrls: list<string>, logoutUrls: list<string>, name: string, updatedBy: string, updatedTime: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_client_id | is-empty) { error make --unspanned { msg: "path parameter 'appClientId' must be non-empty" } }
@@ -304,7 +329,7 @@ export def "options-app-clients-app-client-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_client_id | is-empty) { error make --unspanned { msg: "path parameter 'appClientId' must be non-empty" } }
@@ -342,7 +367,7 @@ export def "patch-app-clients-app-client-id" [
   --description: string # nullable
   --login-urls: list<string>
   --name: string # nullable
-]: any -> record<appClientId: string, callbackUrls: list<string>, clientId: string, clientSecret: string, createdBy: string, createdTime: string, defaultLoginUrl: string, description: string, hasSecret: bool, loginUrls: list<string>, logoutUrls: list<string>, name: string, updatedBy: string, updatedTime: string> {
+]: any -> oneof<record<appClientId: string, callbackUrls: list<string>, clientId: string, clientSecret: string, createdBy: string, createdTime: string, defaultLoginUrl: string, description: string, hasSecret: bool, loginUrls: list<string>, logoutUrls: list<string>, name: string, updatedBy: string, updatedTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -355,7 +380,7 @@ export def "patch-app-clients-app-client-id" [
   let extra_headers = {"Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
   let req = {
     method: "patch"
     url: $full_url
@@ -383,7 +408,7 @@ export def "get-assets" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string
   --max-results: string
-]: nothing -> record<assets: table<assetId: string, content: string, contentMD5: string, createdBy: string, createdTime: string, description: string, name: string, updatedBy: string, updatedTime: string>, nextToken: string> {
+]: nothing -> oneof<record<assets: table<assetId: string, content: string, contentMD5: string, createdBy: string, createdTime: string, description: string, name: string, updatedBy: string, updatedTime: string>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
@@ -415,7 +440,7 @@ export def "options-assets" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assets" $auth.query)
@@ -450,7 +475,7 @@ export def "post-assets" [
   content: string
   --description: string # nullable
   --name: string # nullable
-]: any -> record<assetId: string, content: string, contentMD5: string, createdBy: string, createdTime: string, description: string, name: string, updatedBy: string, updatedTime: string> {
+]: any -> oneof<record<assetId: string, content: string, contentMD5: string, createdBy: string, createdTime: string, description: string, name: string, updatedBy: string, updatedTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -462,7 +487,7 @@ export def "post-assets" [
   let extra_headers = {"Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -489,7 +514,7 @@ export def "delete-assets-asset-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<assetId: string, content: string, contentMD5: string, createdBy: string, createdTime: string, description: string, name: string, updatedBy: string, updatedTime: string> {
+]: nothing -> oneof<record<assetId: string, content: string, contentMD5: string, createdBy: string, createdTime: string, description: string, name: string, updatedBy: string, updatedTime: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($asset_id | is-empty) { error make --unspanned { msg: "path parameter 'assetId' must be non-empty" } }
@@ -522,7 +547,7 @@ export def "get-assets-asset-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<assetId: string, content: string, contentMD5: string, createdBy: string, createdTime: string, description: string, name: string, updatedBy: string, updatedTime: string> {
+]: nothing -> oneof<record<assetId: string, content: string, contentMD5: string, createdBy: string, createdTime: string, description: string, name: string, updatedBy: string, updatedTime: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($asset_id | is-empty) { error make --unspanned { msg: "path parameter 'assetId' must be non-empty" } }
@@ -555,7 +580,7 @@ export def "options-assets-asset-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($asset_id | is-empty) { error make --unspanned { msg: "path parameter 'assetId' must be non-empty" } }
@@ -592,7 +617,7 @@ export def "patch-assets-asset-id" [
   --content: string
   --description: string # nullable
   --name: string # nullable
-]: any -> record<assetId: string, content: string, contentMD5: string, createdBy: string, createdTime: string, description: string, name: string, updatedBy: string, updatedTime: string> {
+]: any -> oneof<record<assetId: string, content: string, contentMD5: string, createdBy: string, createdTime: string, description: string, name: string, updatedBy: string, updatedTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -605,7 +630,7 @@ export def "patch-assets-asset-id" [
   let extra_headers = {"Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
   let req = {
     method: "patch"
     url: $full_url
@@ -633,7 +658,7 @@ export def "get-datasets" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string
   --max-results: string
-]: nothing -> record<datasets: table<containsPersonallyIdentifiableInformation: bool, createdBy: string, createdTime: string, datasetId: string, description: string, groundTruthSummary: record, metadata: record, name: string, numberOfDocuments: int, retentionInDays: int, storageLocation: string, updatedBy: string, updatedTime: string, version: int>, nextToken: string> {
+]: nothing -> oneof<record<datasets: table<containsPersonallyIdentifiableInformation: bool, createdBy: string, createdTime: string, datasetId: string, description: string, groundTruthSummary: record, metadata: record, name: string, numberOfDocuments: int, retentionInDays: int, storageLocation: string, updatedBy: string, updatedTime: string, version: int>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
@@ -665,7 +690,7 @@ export def "options-datasets" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/datasets" $auth.query)
@@ -702,7 +727,7 @@ export def "post-datasets" [
   --metadata: record
   --name: string # nullable
   --retention-in-days: int
-]: any -> record<containsPersonallyIdentifiableInformation: bool, createdBy: string, createdTime: string, datasetId: string, description: string, groundTruthSummary: record, metadata: record, name: string, numberOfDocuments: int, retentionInDays: int, storageLocation: string, updatedBy: string, updatedTime: string, version: int> {
+]: any -> oneof<record<containsPersonallyIdentifiableInformation: bool, createdBy: string, createdTime: string, datasetId: string, description: string, groundTruthSummary: record, metadata: record, name: string, numberOfDocuments: int, retentionInDays: int, storageLocation: string, updatedBy: string, updatedTime: string, version: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -714,7 +739,7 @@ export def "post-datasets" [
   let extra_headers = {"Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -741,7 +766,7 @@ export def "delete-datasets-dataset-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<containsPersonallyIdentifiableInformation: bool, createdBy: string, createdTime: string, datasetId: string, description: string, groundTruthSummary: record, metadata: record, name: string, numberOfDocuments: int, retentionInDays: int, storageLocation: string, updatedBy: string, updatedTime: string, version: int> {
+]: nothing -> oneof<record<containsPersonallyIdentifiableInformation: bool, createdBy: string, createdTime: string, datasetId: string, description: string, groundTruthSummary: record, metadata: record, name: string, numberOfDocuments: int, retentionInDays: int, storageLocation: string, updatedBy: string, updatedTime: string, version: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
@@ -774,7 +799,7 @@ export def "get-datasets-dataset-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<containsPersonallyIdentifiableInformation: bool, createdBy: string, createdTime: string, datasetId: string, description: string, groundTruthSummary: record, metadata: record, name: string, numberOfDocuments: int, retentionInDays: int, storageLocation: string, updatedBy: string, updatedTime: string, version: int> {
+]: nothing -> oneof<record<containsPersonallyIdentifiableInformation: bool, createdBy: string, createdTime: string, datasetId: string, description: string, groundTruthSummary: record, metadata: record, name: string, numberOfDocuments: int, retentionInDays: int, storageLocation: string, updatedBy: string, updatedTime: string, version: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
@@ -807,7 +832,7 @@ export def "options-datasets-dataset-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
@@ -846,7 +871,7 @@ export def "patch-datasets-dataset-id" [
   --metadata: record
   --name: string # nullable
   --retention-in-days: int
-]: any -> record<containsPersonallyIdentifiableInformation: bool, createdBy: string, createdTime: string, datasetId: string, description: string, groundTruthSummary: record, metadata: record, name: string, numberOfDocuments: int, retentionInDays: int, storageLocation: string, updatedBy: string, updatedTime: string, version: int> {
+]: any -> oneof<record<containsPersonallyIdentifiableInformation: bool, createdBy: string, createdTime: string, datasetId: string, description: string, groundTruthSummary: record, metadata: record, name: string, numberOfDocuments: int, retentionInDays: int, storageLocation: string, updatedBy: string, updatedTime: string, version: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -859,7 +884,7 @@ export def "patch-datasets-dataset-id" [
   let extra_headers = {"Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
   let req = {
     method: "patch"
     url: $full_url
@@ -888,7 +913,7 @@ export def "get-deployment-environments" [
   --owner: string
   --next-token: string
   --max-results: string
-]: nothing -> record<deploymentEnvironments: table<deploymentEnvironmentId: string, description: string, modelDeploymentUnits: int, name: string, organizationId: string, status: string>, nextToken: string> {
+]: nothing -> oneof<record<deploymentEnvironments: table<deploymentEnvironmentId: string, description: string, modelDeploymentUnits: int, name: string, organizationId: string, status: string>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "owner" $owner "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
@@ -920,7 +945,7 @@ export def "options-deployment-environments" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/deploymentEnvironments" $auth.query)
@@ -952,7 +977,7 @@ export def "get-deployment-environments-deployment-environment-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<deploymentEnvironmentId: string, description: string, modelDeploymentUnits: int, name: string, organizationId: string, status: string> {
+]: nothing -> oneof<record<deploymentEnvironmentId: string, description: string, modelDeploymentUnits: int, name: string, organizationId: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($deployment_environment_id | is-empty) { error make --unspanned { msg: "path parameter 'deploymentEnvironmentId' must be non-empty" } }
@@ -985,7 +1010,7 @@ export def "options-deployment-environments-deployment-environment-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($deployment_environment_id | is-empty) { error make --unspanned { msg: "path parameter 'deploymentEnvironmentId' must be non-empty" } }
@@ -1021,7 +1046,7 @@ export def "delete-documents" [
   --dataset-id: string
   --next-token: string
   --max-results: string
-]: nothing -> record<consentId: list<string>, datasetId: list<string>, documents: table<consentId: string, content: string, contentMD5: string, contentType: string, createdBy: string, createdTime: string, datasetId: string, description: string, documentId: string, groundTruth: list, metadata: record, name: string, retentionInDays: int, updatedBy: string, updatedTime: string>, nextToken: string, order: string, sortBy: string> {
+]: nothing -> oneof<record<consentId: list<string>, datasetId: list<string>, documents: table<consentId: string, content: string, contentMD5: string, contentType: string, createdBy: string, createdTime: string, datasetId: string, description: string, documentId: string, groundTruth: list, metadata: record, name: string, retentionInDays: int, updatedBy: string, updatedTime: string>, nextToken: string, order: string, sortBy: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "consentId" $consent_id "scalar") (serialize-qp "datasetId" $dataset_id "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
@@ -1060,7 +1085,7 @@ export def "get-documents" [
   --consent-id: string
   --max-results: string
   --sort-by: string
-]: nothing -> record<consentId: list<string>, datasetId: list<string>, documents: table<consentId: string, content: string, contentMD5: string, contentType: string, createdBy: string, createdTime: string, datasetId: string, description: string, documentId: string, groundTruth: list, metadata: record, name: string, retentionInDays: int, updatedBy: string, updatedTime: string>, nextToken: string, order: string, sortBy: string> {
+]: nothing -> oneof<record<consentId: list<string>, datasetId: list<string>, documents: table<consentId: string, content: string, contentMD5: string, contentType: string, createdBy: string, createdTime: string, datasetId: string, description: string, documentId: string, groundTruth: list, metadata: record, name: string, retentionInDays: int, updatedBy: string, updatedTime: string>, nextToken: string, order: string, sortBy: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasetId" $dataset_id "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "documentId" $document_id "scalar") (serialize-qp "consentId" $consent_id "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "sortBy" $sort_by "scalar")] | flatten | str join "&"
@@ -1092,7 +1117,7 @@ export def "options-documents" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/documents" $auth.query)
@@ -1113,8 +1138,6 @@ export def "options-documents" [
 }
 
 # POST /documents
-#
-# --groundTruth item shape: {label: string, value: any}
 export def "post-documents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1135,7 +1158,7 @@ export def "post-documents" [
   --metadata: record
   --name: string # nullable
   --retention-in-days: int
-]: any -> record<consentId: string, content: string, contentMD5: string, contentType: string, createdBy: string, createdTime: string, datasetId: string, description: string, documentId: string, groundTruth: table<label: string, value: any>, metadata: record, name: string, retentionInDays: int, updatedBy: string, updatedTime: string> {
+]: any -> oneof<record<consentId: string, content: string, contentMD5: string, contentType: string, createdBy: string, createdTime: string, datasetId: string, description: string, documentId: string, groundTruth: table<label: string, value: any>, metadata: record, name: string, retentionInDays: int, updatedBy: string, updatedTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1147,7 +1170,7 @@ export def "post-documents" [
   let extra_headers = {"Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -1174,7 +1197,7 @@ export def "delete-documents-document-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<consentId: string, content: string, contentMD5: string, contentType: string, createdBy: string, createdTime: string, datasetId: string, description: string, documentId: string, groundTruth: table<label: string, value: any>, metadata: record, name: string, retentionInDays: int, updatedBy: string, updatedTime: string> {
+]: nothing -> oneof<record<consentId: string, content: string, contentMD5: string, contentType: string, createdBy: string, createdTime: string, datasetId: string, description: string, documentId: string, groundTruth: table<label: string, value: any>, metadata: record, name: string, retentionInDays: int, updatedBy: string, updatedTime: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
@@ -1207,7 +1230,7 @@ export def "get-documents-document-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<consentId: string, content: string, contentMD5: string, contentType: string, createdBy: string, createdTime: string, datasetId: string, description: string, documentId: string, groundTruth: table<label: string, value: any>, metadata: record, name: string, retentionInDays: int, updatedBy: string, updatedTime: string> {
+]: nothing -> oneof<record<consentId: string, content: string, contentMD5: string, contentType: string, createdBy: string, createdTime: string, datasetId: string, description: string, documentId: string, groundTruth: table<label: string, value: any>, metadata: record, name: string, retentionInDays: int, updatedBy: string, updatedTime: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
@@ -1240,7 +1263,7 @@ export def "options-documents-document-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
@@ -1262,8 +1285,6 @@ export def "options-documents-document-id" [
 }
 
 # PATCH /documents/{documentId}
-#
-# --groundTruth item shape: {label: string, value: any}
 export def "patch-documents-document-id" [
   document_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1282,7 +1303,7 @@ export def "patch-documents-document-id" [
   --metadata: record
   --name: string # nullable
   --retention-in-days: int
-]: any -> record<consentId: string, content: string, contentMD5: string, contentType: string, createdBy: string, createdTime: string, datasetId: string, description: string, documentId: string, groundTruth: table<label: string, value: any>, metadata: record, name: string, retentionInDays: int, updatedBy: string, updatedTime: string> {
+]: any -> oneof<record<consentId: string, content: string, contentMD5: string, contentType: string, createdBy: string, createdTime: string, datasetId: string, description: string, documentId: string, groundTruth: table<label: string, value: any>, metadata: record, name: string, retentionInDays: int, updatedBy: string, updatedTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1295,7 +1316,7 @@ export def "patch-documents-document-id" [
   let extra_headers = {"Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
   let req = {
     method: "patch"
     url: $full_url
@@ -1328,7 +1349,7 @@ export def "get-logs" [
   --transition-id: string
   --max-results: string
   --workflow-execution-id: string
-]: nothing -> record<logs: table<events: list, logId: string, startTime: string, transitionExecutionId: string, transitionId: any, workflowExecutionId: string, workflowId: string>, nextToken: string, order: string, transitionExecutionId: string, transitionId: any, workflowExecutionId: string, workflowId: string> {
+]: nothing -> oneof<record<logs: table<events: list, logId: string, startTime: string, transitionExecutionId: string, transitionId: any, workflowExecutionId: string, workflowId: string>, nextToken: string, order: string, transitionExecutionId: string, transitionId: any, workflowExecutionId: string, workflowId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "workflowId" $workflow_id "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "transitionExecutionId" $transition_execution_id "scalar") (serialize-qp "transitionId" $transition_id "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "workflowExecutionId" $workflow_execution_id "scalar")] | flatten | str join "&"
@@ -1360,7 +1381,7 @@ export def "options-logs" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/logs" $auth.query)
@@ -1392,7 +1413,7 @@ export def "get-logs-log-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<events: list<record>, logId: string, startTime: string, transitionExecutionId: string, transitionId: any, workflowExecutionId: string, workflowId: string> {
+]: nothing -> oneof<record<events: list<record>, logId: string, startTime: string, transitionExecutionId: string, transitionId: any, workflowExecutionId: string, workflowId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($log_id | is-empty) { error make --unspanned { msg: "path parameter 'logId' must be non-empty" } }
@@ -1425,7 +1446,7 @@ export def "options-logs-log-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($log_id | is-empty) { error make --unspanned { msg: "path parameter 'logId' must be non-empty" } }
@@ -1460,7 +1481,7 @@ export def "get-models" [
   --owner: string
   --next-token: string
   --max-results: string
-]: nothing -> record<models: table<createdBy: string, createdTime: string, description: string, fieldConfig: record, height: int, metadata: record, modelId: string, name: string, numberOfDataBundles: int, numberOfRunningTrainings: int, organizationId: string, postprocessConfig: any, preprocessConfig: record, status: string, trainingId: string, updatedBy: string, updatedTime: string, width: int>, nextToken: string> {
+]: nothing -> oneof<record<models: table<createdBy: string, createdTime: string, description: string, fieldConfig: record, height: int, metadata: record, modelId: string, name: string, numberOfDataBundles: int, numberOfRunningTrainings: int, organizationId: string, postprocessConfig: any, preprocessConfig: record, status: string, trainingId: string, updatedBy: string, updatedTime: string, width: int>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "owner" $owner "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
@@ -1492,7 +1513,7 @@ export def "options-models" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/models" $auth.query)
@@ -1513,8 +1534,6 @@ export def "options-models" [
 }
 
 # POST /models
-#
-# --preprocessConfig shape: {autoRotate: bool, imageQuality: "LOW"|"HIGH", maxPages: int}
 export def "post-models" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1534,7 +1553,7 @@ export def "post-models" [
   --postprocess-config: any
   --preprocess-config: record # shape: {autoRotate: bool, imageQuality: "LOW"|"HIGH", maxPages: int}
   --width: int
-]: any -> record<createdBy: string, createdTime: string, description: string, fieldConfig: record, height: int, metadata: record, modelId: string, name: string, numberOfDataBundles: int, numberOfRunningTrainings: int, organizationId: string, postprocessConfig: any, preprocessConfig: record<autoRotate: bool, imageQuality: string, maxPages: int>, status: string, trainingId: string, updatedBy: string, updatedTime: string, width: int> {
+]: any -> oneof<record<createdBy: string, createdTime: string, description: string, fieldConfig: record, height: int, metadata: record, modelId: string, name: string, numberOfDataBundles: int, numberOfRunningTrainings: int, organizationId: string, postprocessConfig: any, preprocessConfig: record<autoRotate: bool, imageQuality: string, maxPages: int>, status: string, trainingId: string, updatedBy: string, updatedTime: string, width: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1546,7 +1565,7 @@ export def "post-models" [
   let extra_headers = {"Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -1573,7 +1592,7 @@ export def "delete-models-model-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<createdBy: string, createdTime: string, description: string, fieldConfig: record, height: int, metadata: record, modelId: string, name: string, numberOfDataBundles: int, numberOfRunningTrainings: int, organizationId: string, postprocessConfig: any, preprocessConfig: record<autoRotate: bool, imageQuality: string, maxPages: int>, status: string, trainingId: string, updatedBy: string, updatedTime: string, width: int> {
+]: nothing -> oneof<record<createdBy: string, createdTime: string, description: string, fieldConfig: record, height: int, metadata: record, modelId: string, name: string, numberOfDataBundles: int, numberOfRunningTrainings: int, organizationId: string, postprocessConfig: any, preprocessConfig: record<autoRotate: bool, imageQuality: string, maxPages: int>, status: string, trainingId: string, updatedBy: string, updatedTime: string, width: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($model_id | is-empty) { error make --unspanned { msg: "path parameter 'modelId' must be non-empty" } }
@@ -1606,7 +1625,7 @@ export def "get-models-model-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<createdBy: string, createdTime: string, description: string, fieldConfig: record, height: int, metadata: record, modelId: string, name: string, numberOfDataBundles: int, numberOfRunningTrainings: int, organizationId: string, postprocessConfig: any, preprocessConfig: record<autoRotate: bool, imageQuality: string, maxPages: int>, status: string, trainingId: string, updatedBy: string, updatedTime: string, width: int> {
+]: nothing -> oneof<record<createdBy: string, createdTime: string, description: string, fieldConfig: record, height: int, metadata: record, modelId: string, name: string, numberOfDataBundles: int, numberOfRunningTrainings: int, organizationId: string, postprocessConfig: any, preprocessConfig: record<autoRotate: bool, imageQuality: string, maxPages: int>, status: string, trainingId: string, updatedBy: string, updatedTime: string, width: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($model_id | is-empty) { error make --unspanned { msg: "path parameter 'modelId' must be non-empty" } }
@@ -1639,7 +1658,7 @@ export def "options-models-model-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($model_id | is-empty) { error make --unspanned { msg: "path parameter 'modelId' must be non-empty" } }
@@ -1661,8 +1680,6 @@ export def "options-models-model-id" [
 }
 
 # PATCH /models/{modelId}
-#
-# --preprocessConfig shape: {autoRotate: bool, imageQuality: "LOW"|"HIGH", maxPages: int}
 export def "patch-models-model-id" [
   model_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1684,7 +1701,7 @@ export def "patch-models-model-id" [
   --preprocess-config: record # shape: {autoRotate: bool, imageQuality: "LOW"|"HIGH", maxPages: int}
   --training-id: string # nullable
   --width: int
-]: any -> record<createdBy: string, createdTime: string, description: string, fieldConfig: record, height: int, metadata: record, modelId: string, name: string, numberOfDataBundles: int, numberOfRunningTrainings: int, organizationId: string, postprocessConfig: any, preprocessConfig: record<autoRotate: bool, imageQuality: string, maxPages: int>, status: string, trainingId: string, updatedBy: string, updatedTime: string, width: int> {
+]: any -> oneof<record<createdBy: string, createdTime: string, description: string, fieldConfig: record, height: int, metadata: record, modelId: string, name: string, numberOfDataBundles: int, numberOfRunningTrainings: int, organizationId: string, postprocessConfig: any, preprocessConfig: record<autoRotate: bool, imageQuality: string, maxPages: int>, status: string, trainingId: string, updatedBy: string, updatedTime: string, width: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1697,7 +1714,7 @@ export def "patch-models-model-id" [
   let extra_headers = {"Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
   let req = {
     method: "patch"
     url: $full_url
@@ -1727,7 +1744,7 @@ export def "get-models-model-id-data-bundles" [
   --status: string
   --next-token: string
   --max-results: string
-]: nothing -> record<dataBundles: table<createdBy: string, createdTime: string, dataBundleId: string, datasets: list, description: string, modelId: string, name: string, retentionInDays: int, status: string, summary: record, updatedBy: string, updatedTime: string>, nextToken: string, status: list<string>> {
+]: nothing -> oneof<record<dataBundles: table<createdBy: string, createdTime: string, dataBundleId: string, datasets: list, description: string, modelId: string, name: string, retentionInDays: int, status: string, summary: record, updatedBy: string, updatedTime: string>, nextToken: string, status: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($model_id | is-empty) { error make --unspanned { msg: "path parameter 'modelId' must be non-empty" } }
@@ -1761,7 +1778,7 @@ export def "options-models-model-id-data-bundles" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($model_id | is-empty) { error make --unspanned { msg: "path parameter 'modelId' must be non-empty" } }
@@ -1798,7 +1815,7 @@ export def "post-models-model-id-data-bundles" [
   --dataset-ids: list<string>
   --description: string # nullable
   --name: string # nullable
-]: any -> record<createdBy: string, createdTime: string, dataBundleId: string, datasets: table<containsPersonallyIdentifiableInformation: bool, createdBy: string, createdTime: string, datasetId: string, description: string, groundTruthSummary: record, metadata: record, name: string, numberOfDocuments: int, retentionInDays: int, storageLocation: string, updatedBy: string, updatedTime: string, version: int>, description: string, modelId: string, name: string, retentionInDays: int, status: string, summary: record, updatedBy: string, updatedTime: string> {
+]: any -> oneof<record<createdBy: string, createdTime: string, dataBundleId: string, datasets: table<containsPersonallyIdentifiableInformation: bool, createdBy: string, createdTime: string, datasetId: string, description: string, groundTruthSummary: record, metadata: record, name: string, numberOfDocuments: int, retentionInDays: int, storageLocation: string, updatedBy: string, updatedTime: string, version: int>, description: string, modelId: string, name: string, retentionInDays: int, status: string, summary: record, updatedBy: string, updatedTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1811,7 +1828,7 @@ export def "post-models-model-id-data-bundles" [
   let extra_headers = {"Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -1839,7 +1856,7 @@ export def "delete-models-model-id-data-bundles-data-bundle-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<createdBy: string, createdTime: string, dataBundleId: string, datasets: table<containsPersonallyIdentifiableInformation: bool, createdBy: string, createdTime: string, datasetId: string, description: string, groundTruthSummary: record, metadata: record, name: string, numberOfDocuments: int, retentionInDays: int, storageLocation: string, updatedBy: string, updatedTime: string, version: int>, description: string, modelId: string, name: string, retentionInDays: int, status: string, summary: record, updatedBy: string, updatedTime: string> {
+]: nothing -> oneof<record<createdBy: string, createdTime: string, dataBundleId: string, datasets: table<containsPersonallyIdentifiableInformation: bool, createdBy: string, createdTime: string, datasetId: string, description: string, groundTruthSummary: record, metadata: record, name: string, numberOfDocuments: int, retentionInDays: int, storageLocation: string, updatedBy: string, updatedTime: string, version: int>, description: string, modelId: string, name: string, retentionInDays: int, status: string, summary: record, updatedBy: string, updatedTime: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($model_id | is-empty) { error make --unspanned { msg: "path parameter 'modelId' must be non-empty" } }
@@ -1874,7 +1891,7 @@ export def "options-models-model-id-data-bundles-data-bundle-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($model_id | is-empty) { error make --unspanned { msg: "path parameter 'modelId' must be non-empty" } }
@@ -1912,7 +1929,7 @@ export def "patch-models-model-id-data-bundles-data-bundle-id" [
   --content-type: string # required
   --description: string # nullable
   --name: string # nullable
-]: any -> record<createdBy: string, createdTime: string, dataBundleId: string, datasets: table<containsPersonallyIdentifiableInformation: bool, createdBy: string, createdTime: string, datasetId: string, description: string, groundTruthSummary: record, metadata: record, name: string, numberOfDocuments: int, retentionInDays: int, storageLocation: string, updatedBy: string, updatedTime: string, version: int>, description: string, modelId: string, name: string, retentionInDays: int, status: string, summary: record, updatedBy: string, updatedTime: string> {
+]: any -> oneof<record<createdBy: string, createdTime: string, dataBundleId: string, datasets: table<containsPersonallyIdentifiableInformation: bool, createdBy: string, createdTime: string, datasetId: string, description: string, groundTruthSummary: record, metadata: record, name: string, numberOfDocuments: int, retentionInDays: int, storageLocation: string, updatedBy: string, updatedTime: string, version: int>, description: string, modelId: string, name: string, retentionInDays: int, status: string, summary: record, updatedBy: string, updatedTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1926,7 +1943,7 @@ export def "patch-models-model-id-data-bundles-data-bundle-id" [
   let extra_headers = {"Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
   let req = {
     method: "patch"
     url: $full_url
@@ -1956,7 +1973,7 @@ export def "get-models-model-id-trainings" [
   --status: string
   --next-token: string
   --max-results: string
-]: nothing -> record<nextToken: string, status: list<string>, trainings: table<createdBy: string, createdTime: string, dataBundleIds: list, dataScientistAssistance: bool, deploymentEnvironmentId: string, description: string, evaluation: record, gpuHours: float, instanceType: string, metadata: record, modelId: string, name: string, status: string, trainingId: string, updatedBy: string, updatedTime: string, warmStartConfig: any>> {
+]: nothing -> oneof<record<nextToken: string, status: list<string>, trainings: table<createdBy: string, createdTime: string, dataBundleIds: list, dataScientistAssistance: bool, deploymentEnvironmentId: string, description: string, evaluation: record, gpuHours: float, instanceType: string, metadata: record, modelId: string, name: string, status: string, trainingId: string, updatedBy: string, updatedTime: string, warmStartConfig: any>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($model_id | is-empty) { error make --unspanned { msg: "path parameter 'modelId' must be non-empty" } }
@@ -1990,7 +2007,7 @@ export def "options-models-model-id-trainings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($model_id | is-empty) { error make --unspanned { msg: "path parameter 'modelId' must be non-empty" } }
@@ -2012,8 +2029,6 @@ export def "options-models-model-id-trainings" [
 }
 
 # POST /models/{modelId}/trainings
-#
-# --warmStartConfig shape: {trainingId: string}
 export def "post-models-model-id-trainings" [
   model_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2033,7 +2048,7 @@ export def "post-models-model-id-trainings" [
   --metadata: record
   --name: string # nullable
   --warm-start-config: record # shape: {trainingId: string}
-]: any -> record<createdBy: string, createdTime: string, dataBundleIds: list<string>, dataScientistAssistance: bool, deploymentEnvironmentId: string, description: string, evaluation: record, gpuHours: float, instanceType: string, metadata: record, modelId: string, name: string, status: string, trainingId: string, updatedBy: string, updatedTime: string, warmStartConfig: any> {
+]: any -> oneof<record<createdBy: string, createdTime: string, dataBundleIds: list<string>, dataScientistAssistance: bool, deploymentEnvironmentId: string, description: string, evaluation: record, gpuHours: float, instanceType: string, metadata: record, modelId: string, name: string, status: string, trainingId: string, updatedBy: string, updatedTime: string, warmStartConfig: any>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2046,7 +2061,7 @@ export def "post-models-model-id-trainings" [
   let extra_headers = {"Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -2074,7 +2089,7 @@ export def "options-models-model-id-trainings-training-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($model_id | is-empty) { error make --unspanned { msg: "path parameter 'modelId' must be non-empty" } }
@@ -2115,7 +2130,7 @@ export def "patch-models-model-id-trainings-training-id" [
   --metadata: record
   --name: string # nullable
   --status: string@status-completer
-]: any -> record<createdBy: string, createdTime: string, dataBundleIds: list<string>, dataScientistAssistance: bool, deploymentEnvironmentId: string, description: string, evaluation: record, gpuHours: float, instanceType: string, metadata: record, modelId: string, name: string, status: string, trainingId: string, updatedBy: string, updatedTime: string, warmStartConfig: any> {
+]: any -> oneof<record<createdBy: string, createdTime: string, dataBundleIds: list<string>, dataScientistAssistance: bool, deploymentEnvironmentId: string, description: string, evaluation: record, gpuHours: float, instanceType: string, metadata: record, modelId: string, name: string, status: string, trainingId: string, updatedBy: string, updatedTime: string, warmStartConfig: any>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2129,7 +2144,7 @@ export def "patch-models-model-id-trainings-training-id" [
   let extra_headers = {"Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
   let req = {
     method: "patch"
     url: $full_url
@@ -2157,7 +2172,7 @@ export def "get-organizations" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string
   --max-results: string
-]: nothing -> record<nextToken: string, organizations: table<clientId: string, deploymentsAllowed: record, deploymentsCreated: record, description: string, documentRetentionInDays: int, monthlyNumberOfActiveModelsUsed: int, monthlyNumberOfDataBundlesAllowed: int, monthlyNumberOfDataBundlesCreated: int, monthlyNumberOfDocumentsAllowed: int, monthlyNumberOfDocumentsCreated: int, monthlyNumberOfFieldPredictionsUsed: int, monthlyNumberOfGpuHoursUsed: float, monthlyNumberOfModelDeploymentUnitsUsed: int, monthlyNumberOfPredictionsAllowed: int, monthlyNumberOfPredictionsCreated: int, monthlyNumberOfTrainingsAllowed: int, monthlyNumberOfTrainingsCreated: int, monthlyNumberOfTransitionExecutionsAllowed: int, monthlyNumberOfTransitionExecutionsCreated: int, monthlyNumberOfWorkflowExecutionsAllowed: int, monthlyNumberOfWorkflowExecutionsCreated: int, monthlyUsageSummary: record, name: string, numberOfAppClientsAllowed: int, numberOfAppClientsCreated: int, numberOfAssetsAllowed: int, numberOfAssetsCreated: int, numberOfDatasetsAllowed: int, numberOfDatasetsCreated: int, numberOfModelsAllowed: int, numberOfModelsCreated: int, numberOfSecretsAllowed: int, numberOfSecretsCreated: int, numberOfTransitionsAllowed: int, numberOfTransitionsCreated: int, numberOfUsersAllowed: int, numberOfUsersCreated: int, numberOfWorkflowsAllowed: int, numberOfWorkflowsCreated: int, organizationId: string, paymentMethodId: string, planId: string, updatedBy: string, updatedTime: string>> {
+]: nothing -> oneof<record<nextToken: string, organizations: table<clientId: string, deploymentsAllowed: record, deploymentsCreated: record, description: string, documentRetentionInDays: int, monthlyNumberOfActiveModelsUsed: int, monthlyNumberOfDataBundlesAllowed: int, monthlyNumberOfDataBundlesCreated: int, monthlyNumberOfDocumentsAllowed: int, monthlyNumberOfDocumentsCreated: int, monthlyNumberOfFieldPredictionsUsed: int, monthlyNumberOfGpuHoursUsed: float, monthlyNumberOfModelDeploymentUnitsUsed: int, monthlyNumberOfPredictionsAllowed: int, monthlyNumberOfPredictionsCreated: int, monthlyNumberOfTrainingsAllowed: int, monthlyNumberOfTrainingsCreated: int, monthlyNumberOfTransitionExecutionsAllowed: int, monthlyNumberOfTransitionExecutionsCreated: int, monthlyNumberOfWorkflowExecutionsAllowed: int, monthlyNumberOfWorkflowExecutionsCreated: int, monthlyUsageSummary: record, name: string, numberOfAppClientsAllowed: int, numberOfAppClientsCreated: int, numberOfAssetsAllowed: int, numberOfAssetsCreated: int, numberOfDatasetsAllowed: int, numberOfDatasetsCreated: int, numberOfModelsAllowed: int, numberOfModelsCreated: int, numberOfSecretsAllowed: int, numberOfSecretsCreated: int, numberOfTransitionsAllowed: int, numberOfTransitionsCreated: int, numberOfUsersAllowed: int, numberOfUsersCreated: int, numberOfWorkflowsAllowed: int, numberOfWorkflowsCreated: int, organizationId: string, paymentMethodId: string, planId: string, updatedBy: string, updatedTime: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
@@ -2189,7 +2204,7 @@ export def "options-organizations" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/organizations" $auth.query)
@@ -2222,7 +2237,7 @@ export def "post-organizations" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # required
   --name: string # nullable
-]: any -> record<clientId: string, deploymentsAllowed: record, deploymentsCreated: record, description: string, documentRetentionInDays: int, monthlyNumberOfActiveModelsUsed: int, monthlyNumberOfDataBundlesAllowed: int, monthlyNumberOfDataBundlesCreated: int, monthlyNumberOfDocumentsAllowed: int, monthlyNumberOfDocumentsCreated: int, monthlyNumberOfFieldPredictionsUsed: int, monthlyNumberOfGpuHoursUsed: float, monthlyNumberOfModelDeploymentUnitsUsed: int, monthlyNumberOfPredictionsAllowed: int, monthlyNumberOfPredictionsCreated: int, monthlyNumberOfTrainingsAllowed: int, monthlyNumberOfTrainingsCreated: int, monthlyNumberOfTransitionExecutionsAllowed: int, monthlyNumberOfTransitionExecutionsCreated: int, monthlyNumberOfWorkflowExecutionsAllowed: int, monthlyNumberOfWorkflowExecutionsCreated: int, monthlyUsageSummary: record, name: string, numberOfAppClientsAllowed: int, numberOfAppClientsCreated: int, numberOfAssetsAllowed: int, numberOfAssetsCreated: int, numberOfDatasetsAllowed: int, numberOfDatasetsCreated: int, numberOfModelsAllowed: int, numberOfModelsCreated: int, numberOfSecretsAllowed: int, numberOfSecretsCreated: int, numberOfTransitionsAllowed: int, numberOfTransitionsCreated: int, numberOfUsersAllowed: int, numberOfUsersCreated: int, numberOfWorkflowsAllowed: int, numberOfWorkflowsCreated: int, organizationId: string, paymentMethodId: string, planId: string, updatedBy: string, updatedTime: string> {
+]: any -> oneof<record<clientId: string, deploymentsAllowed: record, deploymentsCreated: record, description: string, documentRetentionInDays: int, monthlyNumberOfActiveModelsUsed: int, monthlyNumberOfDataBundlesAllowed: int, monthlyNumberOfDataBundlesCreated: int, monthlyNumberOfDocumentsAllowed: int, monthlyNumberOfDocumentsCreated: int, monthlyNumberOfFieldPredictionsUsed: int, monthlyNumberOfGpuHoursUsed: float, monthlyNumberOfModelDeploymentUnitsUsed: int, monthlyNumberOfPredictionsAllowed: int, monthlyNumberOfPredictionsCreated: int, monthlyNumberOfTrainingsAllowed: int, monthlyNumberOfTrainingsCreated: int, monthlyNumberOfTransitionExecutionsAllowed: int, monthlyNumberOfTransitionExecutionsCreated: int, monthlyNumberOfWorkflowExecutionsAllowed: int, monthlyNumberOfWorkflowExecutionsCreated: int, monthlyUsageSummary: record, name: string, numberOfAppClientsAllowed: int, numberOfAppClientsCreated: int, numberOfAssetsAllowed: int, numberOfAssetsCreated: int, numberOfDatasetsAllowed: int, numberOfDatasetsCreated: int, numberOfModelsAllowed: int, numberOfModelsCreated: int, numberOfSecretsAllowed: int, numberOfSecretsCreated: int, numberOfTransitionsAllowed: int, numberOfTransitionsCreated: int, numberOfUsersAllowed: int, numberOfUsersCreated: int, numberOfWorkflowsAllowed: int, numberOfWorkflowsCreated: int, organizationId: string, paymentMethodId: string, planId: string, updatedBy: string, updatedTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2234,7 +2249,7 @@ export def "post-organizations" [
   let extra_headers = {"Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -2261,7 +2276,7 @@ export def "get-organizations-organization-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<clientId: string, deploymentsAllowed: record, deploymentsCreated: record, description: string, documentRetentionInDays: int, monthlyNumberOfActiveModelsUsed: int, monthlyNumberOfDataBundlesAllowed: int, monthlyNumberOfDataBundlesCreated: int, monthlyNumberOfDocumentsAllowed: int, monthlyNumberOfDocumentsCreated: int, monthlyNumberOfFieldPredictionsUsed: int, monthlyNumberOfGpuHoursUsed: float, monthlyNumberOfModelDeploymentUnitsUsed: int, monthlyNumberOfPredictionsAllowed: int, monthlyNumberOfPredictionsCreated: int, monthlyNumberOfTrainingsAllowed: int, monthlyNumberOfTrainingsCreated: int, monthlyNumberOfTransitionExecutionsAllowed: int, monthlyNumberOfTransitionExecutionsCreated: int, monthlyNumberOfWorkflowExecutionsAllowed: int, monthlyNumberOfWorkflowExecutionsCreated: int, monthlyUsageSummary: record, name: string, numberOfAppClientsAllowed: int, numberOfAppClientsCreated: int, numberOfAssetsAllowed: int, numberOfAssetsCreated: int, numberOfDatasetsAllowed: int, numberOfDatasetsCreated: int, numberOfModelsAllowed: int, numberOfModelsCreated: int, numberOfSecretsAllowed: int, numberOfSecretsCreated: int, numberOfTransitionsAllowed: int, numberOfTransitionsCreated: int, numberOfUsersAllowed: int, numberOfUsersCreated: int, numberOfWorkflowsAllowed: int, numberOfWorkflowsCreated: int, organizationId: string, paymentMethodId: string, planId: string, updatedBy: string, updatedTime: string> {
+]: nothing -> oneof<record<clientId: string, deploymentsAllowed: record, deploymentsCreated: record, description: string, documentRetentionInDays: int, monthlyNumberOfActiveModelsUsed: int, monthlyNumberOfDataBundlesAllowed: int, monthlyNumberOfDataBundlesCreated: int, monthlyNumberOfDocumentsAllowed: int, monthlyNumberOfDocumentsCreated: int, monthlyNumberOfFieldPredictionsUsed: int, monthlyNumberOfGpuHoursUsed: float, monthlyNumberOfModelDeploymentUnitsUsed: int, monthlyNumberOfPredictionsAllowed: int, monthlyNumberOfPredictionsCreated: int, monthlyNumberOfTrainingsAllowed: int, monthlyNumberOfTrainingsCreated: int, monthlyNumberOfTransitionExecutionsAllowed: int, monthlyNumberOfTransitionExecutionsCreated: int, monthlyNumberOfWorkflowExecutionsAllowed: int, monthlyNumberOfWorkflowExecutionsCreated: int, monthlyUsageSummary: record, name: string, numberOfAppClientsAllowed: int, numberOfAppClientsCreated: int, numberOfAssetsAllowed: int, numberOfAssetsCreated: int, numberOfDatasetsAllowed: int, numberOfDatasetsCreated: int, numberOfModelsAllowed: int, numberOfModelsCreated: int, numberOfSecretsAllowed: int, numberOfSecretsCreated: int, numberOfTransitionsAllowed: int, numberOfTransitionsCreated: int, numberOfUsersAllowed: int, numberOfUsersCreated: int, numberOfWorkflowsAllowed: int, numberOfWorkflowsCreated: int, organizationId: string, paymentMethodId: string, planId: string, updatedBy: string, updatedTime: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
@@ -2294,7 +2309,7 @@ export def "options-organizations-organization-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
@@ -2332,7 +2347,7 @@ export def "patch-organizations-organization-id" [
   --name: string # nullable
   --payment-method-id: string
   --plan-id: string
-]: any -> record<clientId: string, deploymentsAllowed: record, deploymentsCreated: record, description: string, documentRetentionInDays: int, monthlyNumberOfActiveModelsUsed: int, monthlyNumberOfDataBundlesAllowed: int, monthlyNumberOfDataBundlesCreated: int, monthlyNumberOfDocumentsAllowed: int, monthlyNumberOfDocumentsCreated: int, monthlyNumberOfFieldPredictionsUsed: int, monthlyNumberOfGpuHoursUsed: float, monthlyNumberOfModelDeploymentUnitsUsed: int, monthlyNumberOfPredictionsAllowed: int, monthlyNumberOfPredictionsCreated: int, monthlyNumberOfTrainingsAllowed: int, monthlyNumberOfTrainingsCreated: int, monthlyNumberOfTransitionExecutionsAllowed: int, monthlyNumberOfTransitionExecutionsCreated: int, monthlyNumberOfWorkflowExecutionsAllowed: int, monthlyNumberOfWorkflowExecutionsCreated: int, monthlyUsageSummary: record, name: string, numberOfAppClientsAllowed: int, numberOfAppClientsCreated: int, numberOfAssetsAllowed: int, numberOfAssetsCreated: int, numberOfDatasetsAllowed: int, numberOfDatasetsCreated: int, numberOfModelsAllowed: int, numberOfModelsCreated: int, numberOfSecretsAllowed: int, numberOfSecretsCreated: int, numberOfTransitionsAllowed: int, numberOfTransitionsCreated: int, numberOfUsersAllowed: int, numberOfUsersCreated: int, numberOfWorkflowsAllowed: int, numberOfWorkflowsCreated: int, organizationId: string, paymentMethodId: string, planId: string, updatedBy: string, updatedTime: string> {
+]: any -> oneof<record<clientId: string, deploymentsAllowed: record, deploymentsCreated: record, description: string, documentRetentionInDays: int, monthlyNumberOfActiveModelsUsed: int, monthlyNumberOfDataBundlesAllowed: int, monthlyNumberOfDataBundlesCreated: int, monthlyNumberOfDocumentsAllowed: int, monthlyNumberOfDocumentsCreated: int, monthlyNumberOfFieldPredictionsUsed: int, monthlyNumberOfGpuHoursUsed: float, monthlyNumberOfModelDeploymentUnitsUsed: int, monthlyNumberOfPredictionsAllowed: int, monthlyNumberOfPredictionsCreated: int, monthlyNumberOfTrainingsAllowed: int, monthlyNumberOfTrainingsCreated: int, monthlyNumberOfTransitionExecutionsAllowed: int, monthlyNumberOfTransitionExecutionsCreated: int, monthlyNumberOfWorkflowExecutionsAllowed: int, monthlyNumberOfWorkflowExecutionsCreated: int, monthlyUsageSummary: record, name: string, numberOfAppClientsAllowed: int, numberOfAppClientsCreated: int, numberOfAssetsAllowed: int, numberOfAssetsCreated: int, numberOfDatasetsAllowed: int, numberOfDatasetsCreated: int, numberOfModelsAllowed: int, numberOfModelsCreated: int, numberOfSecretsAllowed: int, numberOfSecretsCreated: int, numberOfTransitionsAllowed: int, numberOfTransitionsCreated: int, numberOfUsersAllowed: int, numberOfUsersCreated: int, numberOfWorkflowsAllowed: int, numberOfWorkflowsCreated: int, organizationId: string, paymentMethodId: string, planId: string, updatedBy: string, updatedTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2345,7 +2360,7 @@ export def "patch-organizations-organization-id" [
   let extra_headers = {"Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
   let req = {
     method: "patch"
     url: $full_url
@@ -2373,7 +2388,7 @@ export def "get-payment-methods" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string
   --max-results: string
-]: nothing -> record<nextToken: string, paymentMethods: table<createdBy: string, createdTime: string, description: string, details: record, name: string, paymentMethodId: string, stripePublishableKey: string, stripeSetupIntentSecret: string, updatedBy: string, updatedTime: string>> {
+]: nothing -> oneof<record<nextToken: string, paymentMethods: table<createdBy: string, createdTime: string, description: string, details: record, name: string, paymentMethodId: string, stripePublishableKey: string, stripeSetupIntentSecret: string, updatedBy: string, updatedTime: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
@@ -2405,7 +2420,7 @@ export def "options-payment-methods" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/paymentMethods" $auth.query)
@@ -2439,7 +2454,7 @@ export def "post-payment-methods" [
   --content-type: string # required
   --description: string # nullable
   --name: string # nullable
-]: any -> record<createdBy: string, createdTime: string, description: string, details: record, name: string, paymentMethodId: string, stripePublishableKey: string, stripeSetupIntentSecret: string, updatedBy: string, updatedTime: string> {
+]: any -> oneof<record<createdBy: string, createdTime: string, description: string, details: record, name: string, paymentMethodId: string, stripePublishableKey: string, stripeSetupIntentSecret: string, updatedBy: string, updatedTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2451,7 +2466,7 @@ export def "post-payment-methods" [
   let extra_headers = {"Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -2478,7 +2493,7 @@ export def "delete-payment-methods-payment-method-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<createdBy: string, createdTime: string, description: string, details: record, name: string, paymentMethodId: string, stripePublishableKey: string, stripeSetupIntentSecret: string, updatedBy: string, updatedTime: string> {
+]: nothing -> oneof<record<createdBy: string, createdTime: string, description: string, details: record, name: string, paymentMethodId: string, stripePublishableKey: string, stripeSetupIntentSecret: string, updatedBy: string, updatedTime: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_method_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentMethodId' must be non-empty" } }
@@ -2511,7 +2526,7 @@ export def "get-payment-methods-payment-method-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<createdBy: string, createdTime: string, description: string, details: record, name: string, paymentMethodId: string, stripePublishableKey: string, stripeSetupIntentSecret: string, updatedBy: string, updatedTime: string> {
+]: nothing -> oneof<record<createdBy: string, createdTime: string, description: string, details: record, name: string, paymentMethodId: string, stripePublishableKey: string, stripeSetupIntentSecret: string, updatedBy: string, updatedTime: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_method_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentMethodId' must be non-empty" } }
@@ -2544,7 +2559,7 @@ export def "options-payment-methods-payment-method-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_method_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentMethodId' must be non-empty" } }
@@ -2581,7 +2596,7 @@ export def "patch-payment-methods-payment-method-id" [
   --description: string # nullable
   --name: string # nullable
   --stripe-setup-intent-secret: string
-]: any -> record<createdBy: string, createdTime: string, description: string, details: record, name: string, paymentMethodId: string, stripePublishableKey: string, stripeSetupIntentSecret: string, updatedBy: string, updatedTime: string> {
+]: any -> oneof<record<createdBy: string, createdTime: string, description: string, details: record, name: string, paymentMethodId: string, stripePublishableKey: string, stripeSetupIntentSecret: string, updatedBy: string, updatedTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2594,7 +2609,7 @@ export def "patch-payment-methods-payment-method-id" [
   let extra_headers = {"Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
   let req = {
     method: "patch"
     url: $full_url
@@ -2623,7 +2638,7 @@ export def "get-plans" [
   --owner: string
   --next-token: string
   --max-results: string
-]: nothing -> record<nextToken: string, plans: table<activeModels: record, available: bool, currency: string, description: string, fieldPredictions: record, gpuHours: record, latest: int, license: record, modelDeploymentUnits: record, name: string, organizationId: string, planId: string>> {
+]: nothing -> oneof<record<nextToken: string, plans: table<activeModels: record, available: bool, currency: string, description: string, fieldPredictions: record, gpuHours: record, latest: int, license: record, modelDeploymentUnits: record, name: string, organizationId: string, planId: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "owner" $owner "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
@@ -2655,7 +2670,7 @@ export def "options-plans" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/plans" $auth.query)
@@ -2687,7 +2702,7 @@ export def "get-plans-plan-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<activeModels: record, available: bool, currency: string, description: string, fieldPredictions: record, gpuHours: record, latest: int, license: record, modelDeploymentUnits: record, name: string, organizationId: string, planId: string> {
+]: nothing -> oneof<record<activeModels: record, available: bool, currency: string, description: string, fieldPredictions: record, gpuHours: record, latest: int, license: record, modelDeploymentUnits: record, name: string, organizationId: string, planId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($plan_id | is-empty) { error make --unspanned { msg: "path parameter 'planId' must be non-empty" } }
@@ -2720,7 +2735,7 @@ export def "options-plans-plan-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($plan_id | is-empty) { error make --unspanned { msg: "path parameter 'planId' must be non-empty" } }
@@ -2756,7 +2771,7 @@ export def "get-predictions" [
   --max-results: string
   --sort-by: string
   --order: string
-]: nothing -> record<nextToken: string, order: string, predictions: table<createdBy: string, createdTime: string, documentId: string, inferenceTime: float, modelId: string, predictionId: string, predictions: list, trainingId: string>, sortBy: string> {
+]: nothing -> oneof<record<nextToken: string, order: string, predictions: table<createdBy: string, createdTime: string, documentId: string, inferenceTime: float, modelId: string, predictionId: string, predictions: list, trainingId: string>, sortBy: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
@@ -2788,7 +2803,7 @@ export def "options-predictions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/predictions" $auth.query)
@@ -2828,7 +2843,7 @@ export def "post-predictions" [
   --postprocess-config: any
   --rotation: int@rotation-completer
   --training-id: string
-]: any -> record<createdBy: string, createdTime: string, documentId: string, inferenceTime: float, modelId: string, predictionId: string, predictions: list<any>, trainingId: string> {
+]: any -> oneof<record<createdBy: string, createdTime: string, documentId: string, inferenceTime: float, modelId: string, predictionId: string, predictions: list<any>, trainingId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2840,7 +2855,7 @@ export def "post-predictions" [
   let extra_headers = {"Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -2867,7 +2882,7 @@ export def "get-profiles-profile-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<createdTime: string, email: string, familyName: string, givenName: string, locale: string, metadata: record, name: string, picture: string, profileId: string, updatedTime: string> {
+]: nothing -> oneof<record<createdTime: string, email: string, familyName: string, givenName: string, locale: string, metadata: record, name: string, picture: string, profileId: string, updatedTime: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
@@ -2900,7 +2915,7 @@ export def "options-profiles-profile-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
@@ -2933,7 +2948,7 @@ export def "patch-profiles-profile-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<createdTime: string, email: string, familyName: string, givenName: string, locale: string, metadata: record, name: string, picture: string, profileId: string, updatedTime: string> {
+]: nothing -> oneof<record<createdTime: string, email: string, familyName: string, givenName: string, locale: string, metadata: record, name: string, picture: string, profileId: string, updatedTime: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
@@ -2967,7 +2982,7 @@ export def "get-secrets" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string
   --max-results: string
-]: nothing -> record<nextToken: string, secrets: table<createdBy: string, createdTime: string, description: string, name: string, secretId: string, updatedBy: string, updatedTime: string>> {
+]: nothing -> oneof<record<nextToken: string, secrets: table<createdBy: string, createdTime: string, description: string, name: string, secretId: string, updatedBy: string, updatedTime: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
@@ -2999,7 +3014,7 @@ export def "options-secrets" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/secrets" $auth.query)
@@ -3034,7 +3049,7 @@ export def "post-secrets" [
   data: record
   --description: string # nullable
   --name: string # nullable
-]: any -> record<createdBy: string, createdTime: string, description: string, name: string, secretId: string, updatedBy: string, updatedTime: string> {
+]: any -> oneof<record<createdBy: string, createdTime: string, description: string, name: string, secretId: string, updatedBy: string, updatedTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3046,7 +3061,7 @@ export def "post-secrets" [
   let extra_headers = {"Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -3073,7 +3088,7 @@ export def "delete-secrets-secret-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<createdBy: string, createdTime: string, description: string, name: string, secretId: string, updatedBy: string, updatedTime: string> {
+]: nothing -> oneof<record<createdBy: string, createdTime: string, description: string, name: string, secretId: string, updatedBy: string, updatedTime: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($secret_id | is-empty) { error make --unspanned { msg: "path parameter 'secretId' must be non-empty" } }
@@ -3106,7 +3121,7 @@ export def "options-secrets-secret-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($secret_id | is-empty) { error make --unspanned { msg: "path parameter 'secretId' must be non-empty" } }
@@ -3143,7 +3158,7 @@ export def "patch-secrets-secret-id" [
   --data: record
   --description: string # nullable
   --name: string # nullable
-]: any -> record<createdBy: string, createdTime: string, description: string, name: string, secretId: string, updatedBy: string, updatedTime: string> {
+]: any -> oneof<record<createdBy: string, createdTime: string, description: string, name: string, secretId: string, updatedBy: string, updatedTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3156,7 +3171,7 @@ export def "patch-secrets-secret-id" [
   let extra_headers = {"Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
   let req = {
     method: "patch"
     url: $full_url
@@ -3182,7 +3197,7 @@ export def "options-signup" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/signup" $auth.query)
@@ -3218,7 +3233,7 @@ export def "post-signup" [
   --name: string # nullable
   password: string
   re_captcha_response: string
-]: any -> record<clientId: string, username: string> {
+]: any -> oneof<record<clientId: string, username: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3230,7 +3245,7 @@ export def "post-signup" [
   let extra_headers = {"Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -3259,7 +3274,7 @@ export def "get-transitions" [
   --transition-type: string
   --next-token: string
   --max-results: string
-]: nothing -> record<nextToken: string, transitionType: list<string>, transitions: table<assets: record, createdBy: string, createdTime: string, description: string, inputJsonSchema: record, name: string, outputJsonSchema: record, parameters: record, timeoutInSeconds: int, transitionId: any, transitionType: string, updatedBy: string, updatedTime: string>> {
+]: nothing -> oneof<record<nextToken: string, transitionType: list<string>, transitions: table<assets: record, createdBy: string, createdTime: string, description: string, inputJsonSchema: record, name: string, outputJsonSchema: record, parameters: record, timeoutInSeconds: int, transitionId: any, transitionType: string, updatedBy: string, updatedTime: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "transitionType" $transition_type "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
@@ -3291,7 +3306,7 @@ export def "options-transitions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transitions" $auth.query)
@@ -3330,7 +3345,7 @@ export def "post-transitions" [
   --parameters: any
   --timeout-in-seconds: int
   transition_type: string@transition-type-completer
-]: any -> record<assets: record<jsRemoteComponent: string>, createdBy: string, createdTime: string, description: string, inputJsonSchema: record, name: string, outputJsonSchema: record, parameters: record, timeoutInSeconds: int, transitionId: any, transitionType: string, updatedBy: string, updatedTime: string> {
+]: any -> oneof<record<assets: record<jsRemoteComponent: string>, createdBy: string, createdTime: string, description: string, inputJsonSchema: record, name: string, outputJsonSchema: record, parameters: record, timeoutInSeconds: int, transitionId: any, transitionType: string, updatedBy: string, updatedTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3342,7 +3357,7 @@ export def "post-transitions" [
   let extra_headers = {"Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -3369,7 +3384,7 @@ export def "delete-transitions-transition-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<assets: record<jsRemoteComponent: string>, createdBy: string, createdTime: string, description: string, inputJsonSchema: record, name: string, outputJsonSchema: record, parameters: record, timeoutInSeconds: int, transitionId: any, transitionType: string, updatedBy: string, updatedTime: string> {
+]: nothing -> oneof<record<assets: record<jsRemoteComponent: string>, createdBy: string, createdTime: string, description: string, inputJsonSchema: record, name: string, outputJsonSchema: record, parameters: record, timeoutInSeconds: int, transitionId: any, transitionType: string, updatedBy: string, updatedTime: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($transition_id | is-empty) { error make --unspanned { msg: "path parameter 'transitionId' must be non-empty" } }
@@ -3402,7 +3417,7 @@ export def "get-transitions-transition-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<assets: record<jsRemoteComponent: string>, createdBy: string, createdTime: string, description: string, inputJsonSchema: record, name: string, outputJsonSchema: record, parameters: record, timeoutInSeconds: int, transitionId: any, transitionType: string, updatedBy: string, updatedTime: string> {
+]: nothing -> oneof<record<assets: record<jsRemoteComponent: string>, createdBy: string, createdTime: string, description: string, inputJsonSchema: record, name: string, outputJsonSchema: record, parameters: record, timeoutInSeconds: int, transitionId: any, transitionType: string, updatedBy: string, updatedTime: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($transition_id | is-empty) { error make --unspanned { msg: "path parameter 'transitionId' must be non-empty" } }
@@ -3435,7 +3450,7 @@ export def "options-transitions-transition-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($transition_id | is-empty) { error make --unspanned { msg: "path parameter 'transitionId' must be non-empty" } }
@@ -3457,8 +3472,6 @@ export def "options-transitions-transition-id" [
 }
 
 # PATCH /transitions/{transitionId}
-#
-# --assets shape: {jsRemoteComponent?: string}
 export def "patch-transitions-transition-id" [
   transition_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3479,7 +3492,7 @@ export def "patch-transitions-transition-id" [
   --name: string # nullable
   --output-json-schema: record
   --parameters: any
-]: any -> record<assets: record<jsRemoteComponent: string>, createdBy: string, createdTime: string, description: string, inputJsonSchema: record, name: string, outputJsonSchema: record, parameters: record, timeoutInSeconds: int, transitionId: any, transitionType: string, updatedBy: string, updatedTime: string> {
+]: any -> oneof<record<assets: record<jsRemoteComponent: string>, createdBy: string, createdTime: string, description: string, inputJsonSchema: record, name: string, outputJsonSchema: record, parameters: record, timeoutInSeconds: int, transitionId: any, transitionType: string, updatedBy: string, updatedTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3492,7 +3505,7 @@ export def "patch-transitions-transition-id" [
   let extra_headers = {"Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
   let req = {
     method: "patch"
     url: $full_url
@@ -3525,7 +3538,7 @@ export def "get-transitions-transition-id-executions" [
   --status: string
   --max-results: string
   --sort-by: string
-]: nothing -> record<executions: table<completedBy: string, endTime: string, executionId: string, input: record, logId: string, startTime: string, status: string, transitionId: any>, nextToken: string, status: list<string>, transitionId: any> {
+]: nothing -> oneof<record<executions: table<completedBy: string, endTime: string, executionId: string, input: record, logId: string, startTime: string, status: string, transitionId: any>, nextToken: string, status: list<string>, transitionId: any>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($transition_id | is-empty) { error make --unspanned { msg: "path parameter 'transitionId' must be non-empty" } }
@@ -3559,7 +3572,7 @@ export def "options-transitions-transition-id-executions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($transition_id | is-empty) { error make --unspanned { msg: "path parameter 'transitionId' must be non-empty" } }
@@ -3594,7 +3607,7 @@ export def "post-transitions-transition-id-executions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # required
   --body: record
-]: any -> record<completedBy: string, endTime: string, executionId: string, input: record, logId: string, startTime: string, status: string, transitionId: any> {
+]: any -> oneof<record<completedBy: string, endTime: string, executionId: string, input: record, logId: string, startTime: string, status: string, transitionId: any>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3607,7 +3620,7 @@ export def "post-transitions-transition-id-executions" [
   let extra_headers = {"Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -3635,7 +3648,7 @@ export def "get-transitions-transition-id-executions-execution-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<completedBy: string, endTime: string, executionId: string, input: record, logId: string, startTime: string, status: string, transitionId: any> {
+]: nothing -> oneof<record<completedBy: string, endTime: string, executionId: string, input: record, logId: string, startTime: string, status: string, transitionId: any>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($transition_id | is-empty) { error make --unspanned { msg: "path parameter 'transitionId' must be non-empty" } }
@@ -3670,7 +3683,7 @@ export def "options-transitions-transition-id-executions-execution-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($transition_id | is-empty) { error make --unspanned { msg: "path parameter 'transitionId' must be non-empty" } }
@@ -3693,8 +3706,6 @@ export def "options-transitions-transition-id-executions-execution-id" [
 }
 
 # PATCH /transitions/{transitionId}/executions/{executionId}
-#
-# --error shape: {message: string}
 export def "patch-transitions-transition-id-executions-execution-id" [
   transition_id: string
   execution_id: string
@@ -3712,7 +3723,7 @@ export def "patch-transitions-transition-id-executions-execution-id" [
   --output: record
   --start-time: string # nullable
   --status: string
-]: any -> record<completedBy: string, endTime: string, executionId: string, input: record, logId: string, startTime: string, status: string, transitionId: any> {
+]: any -> oneof<record<completedBy: string, endTime: string, executionId: string, input: record, logId: string, startTime: string, status: string, transitionId: any>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3726,7 +3737,7 @@ export def "patch-transitions-transition-id-executions-execution-id" [
   let extra_headers = {"Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
   let req = {
     method: "patch"
     url: $full_url
@@ -3754,7 +3765,7 @@ export def "options-transitions-transition-id-executions-execution-id-heartbeats
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($transition_id | is-empty) { error make --unspanned { msg: "path parameter 'transitionId' must be non-empty" } }
@@ -3791,7 +3802,7 @@ export def "post-transitions-transition-id-executions-execution-id-heartbeats" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # required
   --body: record
-]: any -> any {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3805,7 +3816,7 @@ export def "post-transitions-transition-id-executions-execution-id-heartbeats" [
   let extra_headers = {"Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -3833,7 +3844,7 @@ export def "get-users" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string
   --max-results: string
-]: nothing -> record<nextToken: string, users: table<avatar: string, createdBy: string, createdTime: string, email: string, metadata: record, name: string, profileId: string, updatedBy: string, updatedTime: string, userId: string>> {
+]: nothing -> oneof<record<nextToken: string, users: table<avatar: string, createdBy: string, createdTime: string, email: string, metadata: record, name: string, profileId: string, updatedBy: string, updatedTime: string, userId: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
@@ -3865,7 +3876,7 @@ export def "options-users" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users" $auth.query)
@@ -3902,7 +3913,7 @@ export def "post-users" [
   email: string
   --metadata: record
   --name: string # nullable
-]: any -> record<avatar: string, createdBy: string, createdTime: string, email: string, metadata: record, name: string, profileId: string, updatedBy: string, updatedTime: string, userId: string> {
+]: any -> oneof<record<avatar: string, createdBy: string, createdTime: string, email: string, metadata: record, name: string, profileId: string, updatedBy: string, updatedTime: string, userId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3914,7 +3925,7 @@ export def "post-users" [
   let extra_headers = {"Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -3941,7 +3952,7 @@ export def "delete-users-user-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<avatar: string, createdBy: string, createdTime: string, email: string, metadata: record, name: string, profileId: string, updatedBy: string, updatedTime: string, userId: string> {
+]: nothing -> oneof<record<avatar: string, createdBy: string, createdTime: string, email: string, metadata: record, name: string, profileId: string, updatedBy: string, updatedTime: string, userId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -3974,7 +3985,7 @@ export def "get-users-user-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<avatar: string, createdBy: string, createdTime: string, email: string, metadata: record, name: string, profileId: string, updatedBy: string, updatedTime: string, userId: string> {
+]: nothing -> oneof<record<avatar: string, createdBy: string, createdTime: string, email: string, metadata: record, name: string, profileId: string, updatedBy: string, updatedTime: string, userId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -4007,7 +4018,7 @@ export def "options-users-user-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -4044,7 +4055,7 @@ export def "patch-users-user-id" [
   --avatar: string # nullable
   --metadata: record
   --name: string # nullable
-]: any -> record<avatar: string, createdBy: string, createdTime: string, email: string, metadata: record, name: string, profileId: string, updatedBy: string, updatedTime: string, userId: string> {
+]: any -> oneof<record<avatar: string, createdBy: string, createdTime: string, email: string, metadata: record, name: string, profileId: string, updatedBy: string, updatedTime: string, userId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4057,7 +4068,7 @@ export def "patch-users-user-id" [
   let extra_headers = {"Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
   let req = {
     method: "patch"
     url: $full_url
@@ -4085,7 +4096,7 @@ export def "get-workflows" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string
   --max-results: string
-]: nothing -> record<nextToken: string, workflows: table<completedConfig: record, createdBy: string, createdTime: string, description: string, errorConfig: record, name: string, numberOfRunningExecutions: int, updatedBy: string, updatedTime: string, workflowId: string>> {
+]: nothing -> oneof<record<nextToken: string, workflows: table<completedConfig: record, createdBy: string, createdTime: string, description: string, errorConfig: record, name: string, numberOfRunningExecutions: int, updatedBy: string, updatedTime: string, workflowId: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
@@ -4117,7 +4128,7 @@ export def "options-workflows" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/workflows" $auth.query)
@@ -4138,10 +4149,6 @@ export def "options-workflows" [
 }
 
 # POST /workflows
-#
-# --completedConfig shape: {environment?: record, environmentSecrets?: list<string>, imageUrl: string, secretId?: string}
-# --errorConfig shape: {email?: string, manualRetry?: bool}
-# --specification shape: {definition: record, language?: "ASL", version?: "1.0.0"}
 export def "post-workflows" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4158,7 +4165,7 @@ export def "post-workflows" [
   --error-config: record # shape: {email?: string, manualRetry?: bool}
   --name: string # nullable
   specification: record # shape: {definition: record, language?: "ASL", version?: "1.0.0"}
-]: any -> record<completedConfig: record<environment: record, environmentSecrets: list<string>, imageUrl: string, secretId: string>, createdBy: string, createdTime: string, description: string, errorConfig: record<email: string, manualRetry: bool>, name: string, numberOfRunningExecutions: int, updatedBy: string, updatedTime: string, workflowId: string> {
+]: any -> oneof<record<completedConfig: record<environment: record, environmentSecrets: list<string>, imageUrl: string, secretId: string>, createdBy: string, createdTime: string, description: string, errorConfig: record<email: string, manualRetry: bool>, name: string, numberOfRunningExecutions: int, updatedBy: string, updatedTime: string, workflowId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4170,7 +4177,7 @@ export def "post-workflows" [
   let extra_headers = {"Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -4197,7 +4204,7 @@ export def "delete-workflows-workflow-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<completedConfig: record<environment: record, environmentSecrets: list<string>, imageUrl: string, secretId: string>, createdBy: string, createdTime: string, description: string, errorConfig: record<email: string, manualRetry: bool>, name: string, numberOfRunningExecutions: int, updatedBy: string, updatedTime: string, workflowId: string> {
+]: nothing -> oneof<record<completedConfig: record<environment: record, environmentSecrets: list<string>, imageUrl: string, secretId: string>, createdBy: string, createdTime: string, description: string, errorConfig: record<email: string, manualRetry: bool>, name: string, numberOfRunningExecutions: int, updatedBy: string, updatedTime: string, workflowId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($workflow_id | is-empty) { error make --unspanned { msg: "path parameter 'workflowId' must be non-empty" } }
@@ -4230,7 +4237,7 @@ export def "get-workflows-workflow-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<completedConfig: record<environment: record, environmentSecrets: list<string>, imageUrl: string, secretId: string>, createdBy: string, createdTime: string, description: string, errorConfig: record<email: string, manualRetry: bool>, name: string, numberOfRunningExecutions: int, updatedBy: string, updatedTime: string, workflowId: string> {
+]: nothing -> oneof<record<completedConfig: record<environment: record, environmentSecrets: list<string>, imageUrl: string, secretId: string>, createdBy: string, createdTime: string, description: string, errorConfig: record<email: string, manualRetry: bool>, name: string, numberOfRunningExecutions: int, updatedBy: string, updatedTime: string, workflowId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($workflow_id | is-empty) { error make --unspanned { msg: "path parameter 'workflowId' must be non-empty" } }
@@ -4263,7 +4270,7 @@ export def "options-workflows-workflow-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($workflow_id | is-empty) { error make --unspanned { msg: "path parameter 'workflowId' must be non-empty" } }
@@ -4285,9 +4292,6 @@ export def "options-workflows-workflow-id" [
 }
 
 # PATCH /workflows/{workflowId}
-#
-# --completedConfig shape: {environment?: record, environmentSecrets?: list<string>, imageUrl: string, secretId?: string}
-# --errorConfig shape: {email?: string, manualRetry?: bool}
 export def "patch-workflows-workflow-id" [
   workflow_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4304,7 +4308,7 @@ export def "patch-workflows-workflow-id" [
   --description: string # nullable
   --error-config: record # shape: {email?: string, manualRetry?: bool}
   --name: string # nullable
-]: any -> record<completedConfig: record<environment: record, environmentSecrets: list<string>, imageUrl: string, secretId: string>, createdBy: string, createdTime: string, description: string, errorConfig: record<email: string, manualRetry: bool>, name: string, numberOfRunningExecutions: int, updatedBy: string, updatedTime: string, workflowId: string> {
+]: any -> oneof<record<completedConfig: record<environment: record, environmentSecrets: list<string>, imageUrl: string, secretId: string>, createdBy: string, createdTime: string, description: string, errorConfig: record<email: string, manualRetry: bool>, name: string, numberOfRunningExecutions: int, updatedBy: string, updatedTime: string, workflowId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4317,7 +4321,7 @@ export def "patch-workflows-workflow-id" [
   let extra_headers = {"Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
   let req = {
     method: "patch"
     url: $full_url
@@ -4351,7 +4355,7 @@ export def "get-workflows-workflow-id-executions" [
   --status: string
   --max-results: string
   --sort-by: string
-]: nothing -> record<executions: table<completedBy: list, completedTaskLogId: string, endTime: string, events: list, executionId: string, input: record, logId: string, output: record, startTime: string, status: string, transitionExecutions: record, workflowId: string>, nextToken: string, order: string, sortBy: string, status: list<string>, workflowId: string> {
+]: nothing -> oneof<record<executions: table<completedBy: list, completedTaskLogId: string, endTime: string, events: list, executionId: string, input: record, logId: string, output: record, startTime: string, status: string, transitionExecutions: record, workflowId: string>, nextToken: string, order: string, sortBy: string, status: list<string>, workflowId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($workflow_id | is-empty) { error make --unspanned { msg: "path parameter 'workflowId' must be non-empty" } }
@@ -4385,7 +4389,7 @@ export def "options-workflows-workflow-id-executions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($workflow_id | is-empty) { error make --unspanned { msg: "path parameter 'workflowId' must be non-empty" } }
@@ -4420,7 +4424,7 @@ export def "post-workflows-workflow-id-executions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # required
   --body-input: record
-]: any -> record<completedBy: list<any>, completedTaskLogId: string, endTime: string, events: list<record>, executionId: string, input: record, logId: string, output: record, startTime: string, status: string, transitionExecutions: record, workflowId: string> {
+]: any -> oneof<record<completedBy: list<any>, completedTaskLogId: string, endTime: string, events: list<record>, executionId: string, input: record, logId: string, output: record, startTime: string, status: string, transitionExecutions: record, workflowId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4434,7 +4438,7 @@ export def "post-workflows-workflow-id-executions" [
   let extra_headers = {"Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -4462,7 +4466,7 @@ export def "delete-workflows-workflow-id-executions-execution-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<completedBy: list<any>, completedTaskLogId: string, endTime: string, events: list<record>, executionId: string, input: record, logId: string, output: record, startTime: string, status: string, transitionExecutions: record, workflowId: string> {
+]: nothing -> oneof<record<completedBy: list<any>, completedTaskLogId: string, endTime: string, events: list<record>, executionId: string, input: record, logId: string, output: record, startTime: string, status: string, transitionExecutions: record, workflowId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($workflow_id | is-empty) { error make --unspanned { msg: "path parameter 'workflowId' must be non-empty" } }
@@ -4497,7 +4501,7 @@ export def "get-workflows-workflow-id-executions-execution-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<completedBy: list<any>, completedTaskLogId: string, endTime: string, events: list<record>, executionId: string, input: record, logId: string, output: record, startTime: string, status: string, transitionExecutions: record, workflowId: string> {
+]: nothing -> oneof<record<completedBy: list<any>, completedTaskLogId: string, endTime: string, events: list<record>, executionId: string, input: record, logId: string, output: record, startTime: string, status: string, transitionExecutions: record, workflowId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($workflow_id | is-empty) { error make --unspanned { msg: "path parameter 'workflowId' must be non-empty" } }
@@ -4532,7 +4536,7 @@ export def "options-workflows-workflow-id-executions-execution-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($workflow_id | is-empty) { error make --unspanned { msg: "path parameter 'workflowId' must be non-empty" } }
@@ -4569,7 +4573,7 @@ export def "patch-workflows-workflow-id-executions-execution-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # required
   next_transition_id: any
-]: any -> record<completedBy: list<any>, completedTaskLogId: string, endTime: string, events: list<record>, executionId: string, input: record, logId: string, output: record, startTime: string, status: string, transitionExecutions: record, workflowId: string> {
+]: any -> oneof<record<completedBy: list<any>, completedTaskLogId: string, endTime: string, events: list<record>, executionId: string, input: record, logId: string, output: record, startTime: string, status: string, transitionExecutions: record, workflowId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4583,7 +4587,7 @@ export def "patch-workflows-workflow-id-executions-execution-id" [
   let extra_headers = {"Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
   let req = {
     method: "patch"
     url: $full_url

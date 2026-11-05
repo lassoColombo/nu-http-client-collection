@@ -12,27 +12,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -40,8 +49,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -52,7 +66,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -87,7 +110,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -148,9 +172,9 @@ def method-completer-1 [] { ["AutoBestPick" "BoxJenkins" "Croston" "DoubleExpone
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-administration-entity" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-administration-entity" "post-administration-entity" "put-administration-entity" "delete-administration-entity-id" "post-administration-file-to-json" "get-administration-model" "post-administration-model" "get-administration-model-entity-id" "post-administration-model-entity-id" "post-administration-planning-level-lock" "delete-administration-planning-level-entity-id-id" "post-administration-token" "post-administration-user" "put-administration-user" "put-administration-user-lock" "get-administration-user-entity-id" "delete-administration-user-entity-id-id" "post-forecast" "post-forecast-ai" "post-forecast-ai-history-and-forecast" "post-forecast-file-to-forecast" "post-forecast-forecast-bottom-up" "post-forecast-forecast-top-down" "post-forecast-full-detail" "post-forecast-history-and-forecast" "post-forecast-optimal-parameter" "post-forecast-rerun" "get-forecast-result-job-id" "get-forecast-status-job-id" "get-hyperparameter" "post-hyperparameter" "post-inventory-amazon-ipi" "post-inventory-caryying-cost" "post-inventory-eoq" "post-inventory-fill-rate" "post-inventory-financial-imapct-forecast-accuracy" "post-inventory-inventory-turnover" "post-inventory-ltd" "post-inventory-moq" "post-inventory-optimal-service-level" "post-inventory-reorder-point" "post-inventory-safety-stock" "post-inventory-service-level" "post-inventory-turns" "post-lifecycle-many-to-one" "post-lifecycle-one-to-one" "post-outlier" "post-portfolio" "post-portfolio-abc" "post-portfolio-file-to-portfolio" "post-portfolio-forecast-performance-rewind" "post-portfolio-xyz" "post-pricing-bundle-pricing" "post-pricing-competitive-pricing" "post-pricing-cost-plus-pricing" "post-pricing-decoy-pricing" "post-pricing-odd-pricing" "post-pricing-penetration-pricing" "post-pricing-price-elasticity-of-demand" "get-report-performance-sku-rationalization-planning-level-id" "get-report-performance-planning-level-id" "get-report-planning-level-organization" "get-report-planning-level-user" "get-report-user" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -183,7 +207,7 @@ export def "get-administration-entity" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --hdr-token: string # User Authentication Token
-]: nothing -> table<address: string, dbConnection: string, email: string, id: int, isActive: bool, name: string, token: string> {
+]: nothing -> oneof<table<address: string, dbConnection: string, email: string, id: int, isActive: bool, name: string, token: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/administration/entity" $auth.query)
@@ -344,7 +368,7 @@ export def "post-administration-file-to-json" [
   --hdr-token: string # User Authentication Token
   file: string # format: binary
   periodicity: int # format: int32
-]: any -> record<data: table<historyValues: list, timeSeriesId: string>, planningLevelId: string, startDate: string> {
+]: any -> oneof<record<data: table<historyValues: list, timeSeriesId: string>, planningLevelId: string, startDate: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -386,7 +410,7 @@ export def "get-administration-model" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --hdr-token: string # User Authentication Token
-]: nothing -> table<key: string, name: string, queue: string, replyQueue: string> {
+]: nothing -> oneof<table<key: string, name: string, queue: string, replyQueue: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/administration/model" $auth.query)
@@ -425,7 +449,7 @@ export def "post-administration-model" [
   --hdr-token: string # User Authentication Token
   --key: string # nullable
   --name: string # nullable
-]: any -> record<key: string, name: string, queue: string, replyQueue: string> {
+]: any -> oneof<record<key: string, name: string, queue: string, replyQueue: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -466,7 +490,7 @@ export def "get-administration-model-entity-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --hdr-token: string # User Authentication Token
-]: nothing -> table<key: string, name: string, queue: string, replyQueue: string> {
+]: nothing -> oneof<table<key: string, name: string, queue: string, replyQueue: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
@@ -507,7 +531,7 @@ export def "post-administration-model-entity-id" [
   --hdr-token: string # User Authentication Token
   --key: string # nullable
   --name: string # nullable
-]: any -> record<key: string, name: string, queue: string, replyQueue: string> {
+]: any -> oneof<record<key: string, name: string, queue: string, replyQueue: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -856,8 +880,6 @@ export def "delete-administration-user-entity-id-id" [
 # Forecasts only, for faster results
 #
 # POST /forecast
-# --data item shape: {historyValues?: list<float>, timeSeriesId?: string}
-# --params shape: {discardData: bool, errorType: "MeanAbsolutePercentageError"|"MeanSquaredError"|"MeanAbsoluteError"|"MedianAbsoluteDeviation"|"None", holdOutPeriod: int, noFcst: int, outlierDetection: bool, periodicity: int}
 export def "post-forecast" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -876,7 +898,7 @@ export def "post-forecast" [
   --params: record # shape: {discardData: bool, errorType: "MeanAbsolutePercentageError"|"MeanSquaredError"|"MeanAbsoluteError"|"MedianAbsoluteDeviation"|"None", holdOutPeriod: int, noFcst: int, outlierDetection: bool, periodicity: int}
   planning_level_id: string
   start_date: string # e.g. 1/16/2016
-]: any -> record<hyperparameters: record<discardData: bool, errorType: string, holdOutPeriod: int, noFcst: int, periodicity: int>, timeSeries: table<error: float, forecastData: list, method: string, timeSeriesId: string>> {
+]: any -> oneof<record<hyperparameters: record<discardData: bool, errorType: string, holdOutPeriod: int, noFcst: int, periodicity: int>, timeSeries: table<error: float, forecastData: list, method: string, timeSeriesId: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -904,8 +926,6 @@ export def "post-forecast" [
 # Forecast utilizing advanced machine learning models
 #
 # POST /forecast/AI
-# --data item shape: {historyValues?: list<float>, timeSeriesId?: string}
-# --params shape: {discardData: bool, errorType: "MeanAbsolutePercentageError"|"MeanSquaredError"|"MeanAbsoluteError"|"MedianAbsoluteDeviation"|"None", holdOutPeriod: int, noFcst: int, outlierDetection: bool, periodicity: int}
 export def "post-forecast-ai" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -923,7 +943,7 @@ export def "post-forecast-ai" [
   --params: record # shape: {discardData: bool, errorType: "MeanAbsolutePercentageError"|"MeanSquaredError"|"MeanAbsoluteError"|"MedianAbsoluteDeviation"|"None", holdOutPeriod: int, noFcst: int, outlierDetection: bool, periodicity: int}
   planning_level_id: string
   start_date: string # e.g. 1/16/2016
-]: any -> record<jobId: int> {
+]: any -> oneof<record<jobId: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -951,8 +971,6 @@ export def "post-forecast-ai" [
 # History and forecast utilizing advanced machine learning models
 #
 # POST /forecast/AI/history-and-forecast
-# --data item shape: {historyValues?: list<float>, timeSeriesId?: string}
-# --params shape: {discardData: bool, errorType: "MeanAbsolutePercentageError"|"MeanSquaredError"|"MeanAbsoluteError"|"MedianAbsoluteDeviation"|"None", holdOutPeriod: int, noFcst: int, outlierDetection: bool, periodicity: int}
 export def "post-forecast-ai-history-and-forecast" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -970,7 +988,7 @@ export def "post-forecast-ai-history-and-forecast" [
   --params: record # shape: {discardData: bool, errorType: "MeanAbsolutePercentageError"|"MeanSquaredError"|"MeanAbsoluteError"|"MedianAbsoluteDeviation"|"None", holdOutPeriod: int, noFcst: int, outlierDetection: bool, periodicity: int}
   planning_level_id: string
   start_date: string # e.g. 1/16/2016
-]: any -> record<jobId: int> {
+]: any -> oneof<record<jobId: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1018,7 +1036,7 @@ export def "post-forecast-file-to-forecast" [
   --no-fcst: int # format: int32
   --outlier-detection: oneof<nothing, bool>
   --periodicity: int # format: int32
-]: any -> record<jobId: int> {
+]: any -> oneof<record<jobId: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1048,8 +1066,6 @@ export def "post-forecast-file-to-forecast" [
 # Bottom up forecasting
 #
 # POST /forecast/forecast-bottom-up
-# --data item shape: {historyValues?: list<float>, timeSeriesId?: string}
-# --params shape: {discardData: bool, errorType: "MeanAbsolutePercentageError"|"MeanSquaredError"|"MeanAbsoluteError"|"MedianAbsoluteDeviation"|"None", holdOutPeriod: int, noFcst: int, outlierDetection: bool, periodicity: int}
 export def "post-forecast-forecast-bottom-up" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1068,7 +1084,7 @@ export def "post-forecast-forecast-bottom-up" [
   --params: record # shape: {discardData: bool, errorType: "MeanAbsolutePercentageError"|"MeanSquaredError"|"MeanAbsoluteError"|"MedianAbsoluteDeviation"|"None", holdOutPeriod: int, noFcst: int, outlierDetection: bool, periodicity: int}
   planning_level_id: string
   start_date: string # e.g. 1/16/2016
-]: any -> record<forecastData: table<date: string, value: float>, hyperparameters: record<discardData: bool, errorType: string, holdOutPeriod: int, noFcst: int, periodicity: int>> {
+]: any -> oneof<record<forecastData: table<date: string, value: float>, hyperparameters: record<discardData: bool, errorType: string, holdOutPeriod: int, noFcst: int, periodicity: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1096,8 +1112,6 @@ export def "post-forecast-forecast-bottom-up" [
 # Top down forecasting
 #
 # POST /forecast/forecast-top-down
-# --data item shape: {historyValues?: list<float>, timeSeriesId?: string}
-# --params shape: {discardData: bool, errorType: "MeanAbsolutePercentageError"|"MeanSquaredError"|"MeanAbsoluteError"|"MedianAbsoluteDeviation"|"None", holdOutPeriod: int, noFcst: int, outlierDetection: bool, periodicity: int}
 export def "post-forecast-forecast-top-down" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1143,8 +1157,6 @@ export def "post-forecast-forecast-top-down" [
 # Full forecast result details, including error, trend seasonality and outlier
 #
 # POST /forecast/full-detail
-# --data item shape: {historyValues?: list<float>, timeSeriesId?: string}
-# --params shape: {discardData: bool, errorType: "MeanAbsolutePercentageError"|"MeanSquaredError"|"MeanAbsoluteError"|"MedianAbsoluteDeviation"|"None", holdOutPeriod: int, noFcst: int, outlierDetection: bool, periodicity: int}
 export def "post-forecast-full-detail" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1163,7 +1175,7 @@ export def "post-forecast-full-detail" [
   --params: record # shape: {discardData: bool, errorType: "MeanAbsolutePercentageError"|"MeanSquaredError"|"MeanAbsoluteError"|"MedianAbsoluteDeviation"|"None", holdOutPeriod: int, noFcst: int, outlierDetection: bool, periodicity: int}
   planning_level_id: string
   start_date: string # e.g. 1/16/2016
-]: any -> record<hyperparameters: record<discardData: bool, errorType: string, holdOutPeriod: int, noFcst: int, periodicity: int>, timeSeries: table<error: float, forecastData: list, historyData: list, method: string, optimalParameters: record, outliers: list, timeSeriesId: string>> {
+]: any -> oneof<record<hyperparameters: record<discardData: bool, errorType: string, holdOutPeriod: int, noFcst: int, periodicity: int>, timeSeries: table<error: float, forecastData: list, historyData: list, method: string, optimalParameters: record, outliers: list, timeSeriesId: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1191,8 +1203,6 @@ export def "post-forecast-full-detail" [
 # History and forecast for fast timeseries view
 #
 # POST /forecast/history-and-forecast
-# --data item shape: {historyValues?: list<float>, timeSeriesId?: string}
-# --params shape: {discardData: bool, errorType: "MeanAbsolutePercentageError"|"MeanSquaredError"|"MeanAbsoluteError"|"MedianAbsoluteDeviation"|"None", holdOutPeriod: int, noFcst: int, outlierDetection: bool, periodicity: int}
 export def "post-forecast-history-and-forecast" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1211,7 +1221,7 @@ export def "post-forecast-history-and-forecast" [
   --params: record # shape: {discardData: bool, errorType: "MeanAbsolutePercentageError"|"MeanSquaredError"|"MeanAbsoluteError"|"MedianAbsoluteDeviation"|"None", holdOutPeriod: int, noFcst: int, outlierDetection: bool, periodicity: int}
   planning_level_id: string
   start_date: string # e.g. 1/16/2016
-]: any -> record<hyperparameters: record<discardData: bool, errorType: string, holdOutPeriod: int, noFcst: int, periodicity: int>, timeSeries: table<error: float, forecastData: list, historyData: list, method: string, timeSeriesId: string>> {
+]: any -> oneof<record<hyperparameters: record<discardData: bool, errorType: string, holdOutPeriod: int, noFcst: int, periodicity: int>, timeSeries: table<error: float, forecastData: list, historyData: list, method: string, timeSeriesId: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1239,8 +1249,6 @@ export def "post-forecast-history-and-forecast" [
 # Get optimal parameter per method
 #
 # POST /forecast/optimal-parameter
-# --data item shape: {historyValues?: list<float>, timeSeriesId?: string}
-# --params shape: {discardData: bool, errorType: "MeanAbsolutePercentageError"|"MeanSquaredError"|"MeanAbsoluteError"|"MedianAbsoluteDeviation"|"None", holdOutPeriod: int, noFcst: int, outlierDetection: bool, periodicity: int}
 export def "post-forecast-optimal-parameter" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1259,7 +1267,7 @@ export def "post-forecast-optimal-parameter" [
   --params: record # shape: {discardData: bool, errorType: "MeanAbsolutePercentageError"|"MeanSquaredError"|"MeanAbsoluteError"|"MedianAbsoluteDeviation"|"None", holdOutPeriod: int, noFcst: int, outlierDetection: bool, periodicity: int}
   planning_level_id: string
   start_date: string # e.g. 1/16/2016
-]: any -> record<hyperparameters: record<discardData: bool, errorType: string, holdOutPeriod: int, noFcst: int, periodicity: int>, timeSeries: table<method: string, optimalParameters: record, timeSeriesId: string>> {
+]: any -> oneof<record<hyperparameters: record<discardData: bool, errorType: string, holdOutPeriod: int, noFcst: int, periodicity: int>, timeSeries: table<method: string, optimalParameters: record, timeSeriesId: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1287,7 +1295,6 @@ export def "post-forecast-optimal-parameter" [
 # Rerun previously uploaded planning level
 #
 # POST /forecast/rerun
-# --params shape: {discardData: bool, errorType: "MeanAbsolutePercentageError"|"MeanSquaredError"|"MeanAbsoluteError"|"MedianAbsoluteDeviation"|"None", holdOutPeriod: int, noFcst: int, outlierDetection: bool, periodicity: int}
 export def "post-forecast-rerun" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1303,7 +1310,7 @@ export def "post-forecast-rerun" [
   method: string # e.g. iCUE1
   --params: record # shape: {discardData: bool, errorType: "MeanAbsolutePercentageError"|"MeanSquaredError"|"MeanAbsoluteError"|"MedianAbsoluteDeviation"|"None", holdOutPeriod: int, noFcst: int, outlierDetection: bool, periodicity: int}
   planning_level_id: int # format: int32
-]: any -> record<hyperparameters: record<discardData: bool, errorType: string, holdOutPeriod: int, noFcst: int, periodicity: int>, timeSeries: table<error: float, forecastData: list, method: string, timeSeriesId: string>> {
+]: any -> oneof<record<hyperparameters: record<discardData: bool, errorType: string, holdOutPeriod: int, noFcst: int, periodicity: int>, timeSeries: table<error: float, forecastData: list, method: string, timeSeriesId: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1419,7 +1426,7 @@ export def "get-hyperparameter" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --hdr-token: string # User Authentication Token
-]: nothing -> record<abcClassificationThresholdA: float, abcClassificationThresholdB: float, abcClassificationThresholdC: float, discardData: bool, errorType: string, holdOutPeriod: int, noFcst: int, outlierDetection: bool, periodicity: int, xyzClassificationThresholdX: float, xyzClassificationThresholdY: float, xyzClassificationThresholdZ: float> {
+]: nothing -> oneof<record<abcClassificationThresholdA: float, abcClassificationThresholdB: float, abcClassificationThresholdC: float, discardData: bool, errorType: string, holdOutPeriod: int, noFcst: int, outlierDetection: bool, periodicity: int, xyzClassificationThresholdX: float, xyzClassificationThresholdY: float, xyzClassificationThresholdZ: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/hyperparameter" $auth.query)
@@ -1963,7 +1970,6 @@ export def "post-inventory-turns" [
 # Map from old product to new product to create artifical history
 #
 # POST /lifecycle/many-to-one
-# --data item shape: {historyValues?: list<float>, timeSeriesId?: string}
 export def "post-lifecycle-many-to-one" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1979,7 +1985,7 @@ export def "post-lifecycle-many-to-one" [
   --data: list # nullable — item shape: {historyValues?: list<float>, timeSeriesId?: string}
   planning_level_id: string
   --ratios: list<float> # nullable
-]: any -> record<historyValues: list<float>, timeSeriesId: string> {
+]: any -> oneof<record<historyValues: list<float>, timeSeriesId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2007,7 +2013,6 @@ export def "post-lifecycle-many-to-one" [
 # Map from old product to new product to create artifical history
 #
 # POST /lifecycle/one-to-one
-# --data shape: {historyValues?: list<float>, timeSeriesId?: string}
 export def "post-lifecycle-one-to-one" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2023,7 +2028,7 @@ export def "post-lifecycle-one-to-one" [
   --data: record # shape: {historyValues?: list<float>, timeSeriesId?: string}
   planning_level_id: string
   --ratio: float # format: double, e.g. 15
-]: any -> record<historyValues: list<float>, timeSeriesId: string> {
+]: any -> oneof<record<historyValues: list<float>, timeSeriesId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2051,7 +2056,6 @@ export def "post-lifecycle-one-to-one" [
 # Get outlier
 #
 # POST /outlier
-# --data item shape: {historyValues?: list<float>, timeSeriesId?: string}
 export def "post-outlier" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2067,7 +2071,7 @@ export def "post-outlier" [
   --data: list # nullable — item shape: {historyValues?: list<float>, timeSeriesId?: string}
   planning_level_id: string
   start_date: string # e.g. 1/16/2016
-]: any -> table<outliers: list<record>, timeSeriesId: string> {
+]: any -> oneof<table<outliers: list<record>, timeSeriesId: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2095,7 +2099,6 @@ export def "post-outlier" [
 # ABCxyz Analysis
 #
 # POST /portfolio
-# --data item shape: {historyValues?: list<float>, timeSeriesId?: string}
 export def "post-portfolio" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2111,7 +2114,7 @@ export def "post-portfolio" [
   --data: list # nullable — item shape: {historyValues?: list<float>, timeSeriesId?: string}
   planning_level_id: string
   start_date: string # e.g. 1/16/2016
-]: any -> table<abc12: string, abc12Value: float, abc6: string, abc6Value: float, abc9: string, abc9Value: float, id: string, thresholdA: float, thresholdB: float, thresholdC: float, thresholdX: float, thresholdY: float, thresholdZ: float, xyz12: string, xyz12Value: float, xyz6: string, xyz6Value: float, xyz9: string, xyz9Value: float> {
+]: any -> oneof<table<abc12: string, abc12Value: float, abc6: string, abc6Value: float, abc9: string, abc9Value: float, id: string, thresholdA: float, thresholdB: float, thresholdC: float, thresholdX: float, thresholdY: float, thresholdZ: float, xyz12: string, xyz12Value: float, xyz6: string, xyz6Value: float, xyz9: string, xyz9Value: float>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2139,7 +2142,6 @@ export def "post-portfolio" [
 # ABC Analysis
 #
 # POST /portfolio/abc
-# --data item shape: {historyValues?: list<float>, timeSeriesId?: string}
 export def "post-portfolio-abc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2155,7 +2157,7 @@ export def "post-portfolio-abc" [
   --data: list # nullable — item shape: {historyValues?: list<float>, timeSeriesId?: string}
   planning_level_id: string
   start_date: string # e.g. 1/16/2016
-]: any -> table<abc12: string, abc12Value: float, abc6: string, abc6Value: float, abc9: string, abc9Value: float, id: string, thresholdA: float, thresholdB: float, thresholdC: float> {
+]: any -> oneof<table<abc12: string, abc12Value: float, abc6: string, abc6Value: float, abc9: string, abc9Value: float, id: string, thresholdA: float, thresholdB: float, thresholdC: float>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2225,8 +2227,6 @@ export def "post-portfolio-file-to-portfolio" [
 # Planning level rewind to calculate and measure performance potential (internal versus iCUE).
 #
 # POST /portfolio/forecast-performance-rewind
-# --data item shape: {forecastValues?: list<float>, historyValues?: list<float>, timeSeriesId?: string}
-# --params shape: {discardData: bool, errorType: "MeanAbsolutePercentageError"|"MeanSquaredError"|"MeanAbsoluteError"|"MedianAbsoluteDeviation"|"None", holdOutPeriod: int, noFcst: int, outlierDetection: bool, periodicity: int}
 export def "post-portfolio-forecast-performance-rewind" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2246,7 +2246,7 @@ export def "post-portfolio-forecast-performance-rewind" [
   planning_level_id: string
   rewind_time_frame: int # format: int32, e.g. 12
   start_date: string # e.g. 1/16/2016
-]: any -> record<hyperparameters: record<costOfError: float, discardData: bool, errorType: string, holdOutPeriod: int, noFcst: int, periodicity: int, rewindTimeFrame: int>, timeSeries: table<customerError: float, errorDiff: float, icueError: float, timeSeries: string, totalCost: float, useIcue: bool>, totalCost: float> {
+]: any -> oneof<record<hyperparameters: record<costOfError: float, discardData: bool, errorType: string, holdOutPeriod: int, noFcst: int, periodicity: int, rewindTimeFrame: int>, timeSeries: table<customerError: float, errorDiff: float, icueError: float, timeSeries: string, totalCost: float, useIcue: bool>, totalCost: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2274,7 +2274,6 @@ export def "post-portfolio-forecast-performance-rewind" [
 # xyz Analysis
 #
 # POST /portfolio/xyz
-# --data item shape: {historyValues?: list<float>, timeSeriesId?: string}
 export def "post-portfolio-xyz" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2290,7 +2289,7 @@ export def "post-portfolio-xyz" [
   --data: list # nullable — item shape: {historyValues?: list<float>, timeSeriesId?: string}
   planning_level_id: string
   start_date: string # e.g. 1/16/2016
-]: any -> table<id: string, thresholdX: float, thresholdY: float, thresholdZ: float, xyz12: string, xyz12Value: float, xyz6: string, xyz6Value: float, xyz9: string, xyz9Value: float> {
+]: any -> oneof<table<id: string, thresholdX: float, thresholdY: float, thresholdZ: float, xyz12: string, xyz12Value: float, xyz6: string, xyz6Value: float, xyz9: string, xyz9Value: float>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2571,7 +2570,7 @@ export def "get-report-performance-sku-rationalization-planning-level-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --hdr-token: string # User Authentication Token
-]: nothing -> table<abc12: string, abc12Value: float, abc6: string, abc6Value: float, abc9: string, abc9Value: float, id: string, thresholdA: float, thresholdB: float, thresholdC: float, thresholdX: float, thresholdY: float, thresholdZ: float, xyz12: string, xyz12Value: float, xyz6: string, xyz6Value: float, xyz9: string, xyz9Value: float> {
+]: nothing -> oneof<table<abc12: string, abc12Value: float, abc6: string, abc6Value: float, abc9: string, abc9Value: float, id: string, thresholdA: float, thresholdB: float, thresholdC: float, thresholdX: float, thresholdY: float, thresholdZ: float, xyz12: string, xyz12Value: float, xyz6: string, xyz6Value: float, xyz9: string, xyz9Value: float>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($planning_level_id | is-empty) { error make --unspanned { msg: "path parameter 'planningLevelId' must be non-empty" } }

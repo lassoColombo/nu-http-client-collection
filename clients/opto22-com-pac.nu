@@ -14,27 +14,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -42,8 +51,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -54,7 +68,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -89,7 +112,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -105,9 +129,9 @@ def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "read-device-details" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["read-device-details" "read-strategy-details" "read-analog-inputs" "read-analog-input-eu" "read-analog-outputs" "read-analog-output-eu" "write-analog-output-eu" "read-digital-inputs" "read-digital-input-state" "read-digital-outputs" "read-digital-output-state" "write-digital-output-state" "read-float-tables" "read-float-table" "write-float-table" "read-float-table-element" "write-float-table-element" "read-int32-tables" "read-int32-table" "write-int32-table" "read-int32-table-element" "write-int32-table-element" "read-int64-tables" "read-int64-table" "write-int64-table" "read-int64-table-as-string" "write-int64-table-as-string" "read-int64-table-element" "write-int64-table-element" "read-int64-table-element-as-string" "write-int64-table-element-as-string" "read-string-tables" "read-string-table" "write-string-table" "read-string-table-element" "write-string-table-element" "read-down-timer-vars" "read-down-timer-value" "read-float-vars" "read-float-var" "write-float-var" "read-int32-vars" "read-int32-var" "write-int32-var" "read-int64-vars" "read-int64-vars-as-strings" "read-int64-var" "write-int64-var" "read-int64-var-as-string" "write-int64-var-as-string" "read-string-vars" "read-string-var" "write-string-var" "read-up-timer-vars" "read-up-timer-value" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -139,7 +163,7 @@ export def "read-device-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<controllerType: string, firmwareDate: string, firmwareTime: string, firmwareVersion: string, mac1: string, mac2: string, upTimeSeconds: int> {
+]: nothing -> oneof<record<controllerType: string, firmwareDate: string, firmwareTime: string, firmwareVersion: string, mac1: string, mac2: string, upTimeSeconds: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/device" $auth.query)
@@ -173,7 +197,7 @@ export def "read-strategy-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<crc: string, date: string, runningCharts: int, strategyName: string, time: string> {
+]: nothing -> oneof<record<crc: string, date: string, runningCharts: int, strategyName: string, time: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/device/strategy" $auth.query)
@@ -207,7 +231,7 @@ export def "read-analog-inputs" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<name: string, value: float> {
+]: nothing -> oneof<table<name: string, value: float>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/device/strategy/ios/analogInputs" $auth.query)
@@ -242,7 +266,7 @@ export def "read-analog-input-eu" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<value: float> {
+]: nothing -> oneof<record<value: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($io_name | is-empty) { error make --unspanned { msg: "path parameter 'ioName' must be non-empty" } }
@@ -277,7 +301,7 @@ export def "read-analog-outputs" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<name: string, value: float> {
+]: nothing -> oneof<table<name: string, value: float>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/device/strategy/ios/analogOutputs" $auth.query)
@@ -312,7 +336,7 @@ export def "read-analog-output-eu" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<value: float> {
+]: nothing -> oneof<record<value: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($io_name | is-empty) { error make --unspanned { msg: "path parameter 'ioName' must be non-empty" } }
@@ -387,7 +411,7 @@ export def "read-digital-inputs" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<name: string, value: bool> {
+]: nothing -> oneof<table<name: string, value: bool>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/device/strategy/ios/digitalInputs" $auth.query)
@@ -422,7 +446,7 @@ export def "read-digital-input-state" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<value: bool> {
+]: nothing -> oneof<record<value: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($io_name | is-empty) { error make --unspanned { msg: "path parameter 'ioName' must be non-empty" } }
@@ -457,7 +481,7 @@ export def "read-digital-outputs" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<name: string, value: bool> {
+]: nothing -> oneof<table<name: string, value: bool>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/device/strategy/ios/digitalOutputs" $auth.query)
@@ -492,7 +516,7 @@ export def "read-digital-output-state" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<value: bool> {
+]: nothing -> oneof<record<value: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($io_name | is-empty) { error make --unspanned { msg: "path parameter 'ioName' must be non-empty" } }
@@ -567,7 +591,7 @@ export def "read-float-tables" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<length: int, name: string> {
+]: nothing -> oneof<table<length: int, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/device/strategy/tables/floats" $auth.query)
@@ -604,7 +628,7 @@ export def "read-float-table" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --start-index: int # Index of first element to read (default is 0) (format: int32)
   --num-elements: int # Number of elements to read (default is number of elements in the table minus startIndex) (format: int32)
-]: nothing -> list<float> {
+]: nothing -> oneof<list<float>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($table_name | is-empty) { error make --unspanned { msg: "path parameter 'tableName' must be non-empty" } }
@@ -684,7 +708,7 @@ export def "read-float-table-element" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<value: float> {
+]: nothing -> oneof<record<value: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($table_name | is-empty) { error make --unspanned { msg: "path parameter 'tableName' must be non-empty" } }
@@ -762,7 +786,7 @@ export def "read-int32-tables" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<length: int, name: string> {
+]: nothing -> oneof<table<length: int, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/device/strategy/tables/int32s" $auth.query)
@@ -799,7 +823,7 @@ export def "read-int32-table" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --start-index: int # Index of first element to read (default is 0) (format: int32)
   --num-elements: int # Number of elements to read (default is number of elements in the table minus startIndex) (format: int32)
-]: nothing -> list<int> {
+]: nothing -> oneof<list<int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($table_name | is-empty) { error make --unspanned { msg: "path parameter 'tableName' must be non-empty" } }
@@ -879,7 +903,7 @@ export def "read-int32-table-element" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<value: int> {
+]: nothing -> oneof<record<value: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($table_name | is-empty) { error make --unspanned { msg: "path parameter 'tableName' must be non-empty" } }
@@ -957,7 +981,7 @@ export def "read-int64-tables" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<length: int, name: string> {
+]: nothing -> oneof<table<length: int, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/device/strategy/tables/int64s" $auth.query)
@@ -994,7 +1018,7 @@ export def "read-int64-table" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --start-index: int # Index of first element to read (default is 0) (format: int32)
   --num-elements: int # Number of elements to read (default is number of elements in the table minus startIndex) (format: int32)
-]: nothing -> list<int> {
+]: nothing -> oneof<list<int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($table_name | is-empty) { error make --unspanned { msg: "path parameter 'tableName' must be non-empty" } }
@@ -1075,7 +1099,7 @@ export def "read-int64-table-as-string" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --start-index: int # Index of first element to read (default is 0) (format: int32)
   --num-elements: int # Number of elements to read (default is number of elements in the table minus startIndex) (format: int32)
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($table_name | is-empty) { error make --unspanned { msg: "path parameter 'tableName' must be non-empty" } }
@@ -1155,7 +1179,7 @@ export def "read-int64-table-element" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<value: int> {
+]: nothing -> oneof<record<value: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($table_name | is-empty) { error make --unspanned { msg: "path parameter 'tableName' must be non-empty" } }
@@ -1235,7 +1259,7 @@ export def "read-int64-table-element-as-string" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<value: string> {
+]: nothing -> oneof<record<value: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($table_name | is-empty) { error make --unspanned { msg: "path parameter 'tableName' must be non-empty" } }
@@ -1313,7 +1337,7 @@ export def "read-string-tables" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<length: int, name: string> {
+]: nothing -> oneof<table<length: int, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/device/strategy/tables/strings" $auth.query)
@@ -1350,7 +1374,7 @@ export def "read-string-table" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --start-index: int # Index of first element to read (default is 0) (format: int32)
   --num-elements: int # Number of elements to read (default is number of elements in the table minus startIndex) (format: int32)
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($table_name | is-empty) { error make --unspanned { msg: "path parameter 'tableName' must be non-empty" } }
@@ -1389,7 +1413,7 @@ export def "write-string-table" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --start-index: int # Index of first element to write (default is 0) (format: int32)
   --body: list
-]: any -> record<errorCode: int, message: string> {
+]: any -> oneof<record<errorCode: int, message: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1430,7 +1454,7 @@ export def "read-string-table-element" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<value: string> {
+]: nothing -> oneof<record<value: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($table_name | is-empty) { error make --unspanned { msg: "path parameter 'tableName' must be non-empty" } }
@@ -1508,7 +1532,7 @@ export def "read-down-timer-vars" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<name: string, value: float> {
+]: nothing -> oneof<table<name: string, value: float>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/device/strategy/vars/downTimers" $auth.query)
@@ -1543,7 +1567,7 @@ export def "read-down-timer-value" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<value: float> {
+]: nothing -> oneof<record<value: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($down_timer_name | is-empty) { error make --unspanned { msg: "path parameter 'downTimerName' must be non-empty" } }
@@ -1578,7 +1602,7 @@ export def "read-float-vars" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<name: string, value: float> {
+]: nothing -> oneof<table<name: string, value: float>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/device/strategy/vars/floats" $auth.query)
@@ -1613,7 +1637,7 @@ export def "read-float-var" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<value: float> {
+]: nothing -> oneof<record<value: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($float_name | is-empty) { error make --unspanned { msg: "path parameter 'floatName' must be non-empty" } }
@@ -1688,7 +1712,7 @@ export def "read-int32-vars" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<name: string, value: int> {
+]: nothing -> oneof<table<name: string, value: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/device/strategy/vars/int32s" $auth.query)
@@ -1723,7 +1747,7 @@ export def "read-int32-var" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<value: int> {
+]: nothing -> oneof<record<value: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($int32_name | is-empty) { error make --unspanned { msg: "path parameter 'int32Name' must be non-empty" } }
@@ -1798,7 +1822,7 @@ export def "read-int64-vars" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<name: string, value: int> {
+]: nothing -> oneof<table<name: string, value: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/device/strategy/vars/int64s" $auth.query)
@@ -1832,7 +1856,7 @@ export def "read-int64-vars-as-strings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<name: string, value: string> {
+]: nothing -> oneof<table<name: string, value: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/device/strategy/vars/int64s/_string" $auth.query)
@@ -1867,7 +1891,7 @@ export def "read-int64-var" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<value: int> {
+]: nothing -> oneof<record<value: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($int64_name | is-empty) { error make --unspanned { msg: "path parameter 'int64Name' must be non-empty" } }
@@ -1943,7 +1967,7 @@ export def "read-int64-var-as-string" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<value: string> {
+]: nothing -> oneof<record<value: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($int64_name | is-empty) { error make --unspanned { msg: "path parameter 'int64Name' must be non-empty" } }
@@ -2018,7 +2042,7 @@ export def "read-string-vars" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<name: string, value: string> {
+]: nothing -> oneof<table<name: string, value: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/device/strategy/vars/strings" $auth.query)
@@ -2053,7 +2077,7 @@ export def "read-string-var" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<value: string> {
+]: nothing -> oneof<record<value: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($string_name | is-empty) { error make --unspanned { msg: "path parameter 'stringName' must be non-empty" } }
@@ -2090,7 +2114,7 @@ export def "write-string-var" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --value: string # The value of a string; string width (max length) for each string variable is defined in the strategy
-]: any -> record<errorCode: int, message: string> {
+]: any -> oneof<record<errorCode: int, message: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2128,7 +2152,7 @@ export def "read-up-timer-vars" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<name: string, value: float> {
+]: nothing -> oneof<table<name: string, value: float>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/device/strategy/vars/upTimers" $auth.query)
@@ -2163,7 +2187,7 @@ export def "read-up-timer-value" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<value: float> {
+]: nothing -> oneof<record<value: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($up_timer_name | is-empty) { error make --unspanned { msg: "path parameter 'upTimerName' must be non-empty" } }

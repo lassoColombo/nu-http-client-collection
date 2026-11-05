@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -135,9 +159,9 @@ def action-completer-28 [] { ["SetLoadBalancerPoliciesOfListener"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-add-tags" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-add-tags" "post-add-tags" "get-apply-security-groups-to-load-balancer" "post-apply-security-groups-to-load-balancer" "get-attach-load-balancer-to-subnets" "post-attach-load-balancer-to-subnets" "get-configure-health-check" "post-configure-health-check" "get-create-app-cookie-stickiness-policy" "post-create-app-cookie-stickiness-policy" "get-create-lb-cookie-stickiness-policy" "post-create-lb-cookie-stickiness-policy" "get-create-load-balancer" "post-create-load-balancer" "get-create-load-balancer-listeners" "post-create-load-balancer-listeners" "get-create-load-balancer-policy" "post-create-load-balancer-policy" "get-delete-load-balancer" "post-delete-load-balancer" "get-delete-load-balancer-listeners" "post-delete-load-balancer-listeners" "get-delete-load-balancer-policy" "post-delete-load-balancer-policy" "get-deregister-instances-from-load-balancer" "post-deregister-instances-from-load-balancer" "get-describe-account-limits" "post-describe-account-limits" "get-describe-instance-health" "post-describe-instance-health" "get-describe-load-balancer-attributes" "post-describe-load-balancer-attributes" "get-describe-load-balancer-policies" "post-describe-load-balancer-policies" "get-describe-load-balancer-policy-types" "post-describe-load-balancer-policy-types" "get-describe-load-balancers" "post-describe-load-balancers" "get-describe-tags" "post-describe-tags" "get-detach-load-balancer-from-subnets" "post-detach-load-balancer-from-subnets" "get-disable-availability-zones-for-load-balancer" "post-disable-availability-zones-for-load-balancer" "get-enable-availability-zones-for-load-balancer" "post-enable-availability-zones-for-load-balancer" "get-modify-load-balancer-attributes" "post-modify-load-balancer-attributes" "get-register-instances-with-load-balancer" "post-register-instances-with-load-balancer" "get-remove-tags" "post-remove-tags" "get-set-load-balancer-listener-ssl-certificate" "post-set-load-balancer-listener-ssl-certificate" "get-set-load-balancer-policies-for-backend-server" "post-set-load-balancer-policies-for-backend-server" "get-set-load-balancer-policies-of-listener" "post-set-load-balancer-policies-of-listener" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -180,7 +204,7 @@ export def "get-add-tags" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($load_balancer_names == null) { error make --unspanned { msg: "required query parameter 'LoadBalancerNames' missing: pass --load-balancer-names" } }
@@ -231,7 +255,7 @@ export def "post-add-tags" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -284,7 +308,7 @@ export def "get-apply-security-groups-to-load-balancer" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<SecurityGroups: list<string>> {
+]: nothing -> oneof<record<SecurityGroups: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($load_balancer_name == null) { error make --unspanned { msg: "required query parameter 'LoadBalancerName' missing: pass --load-balancer-name" } }
@@ -335,7 +359,7 @@ export def "post-apply-security-groups-to-load-balancer" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<SecurityGroups: list<string>> {
+]: any -> oneof<record<SecurityGroups: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -388,7 +412,7 @@ export def "get-attach-load-balancer-to-subnets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Subnets: list<string>> {
+]: nothing -> oneof<record<Subnets: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($load_balancer_name == null) { error make --unspanned { msg: "required query parameter 'LoadBalancerName' missing: pass --load-balancer-name" } }
@@ -439,7 +463,7 @@ export def "post-attach-load-balancer-to-subnets" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Subnets: list<string>> {
+]: any -> oneof<record<Subnets: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -492,7 +516,7 @@ export def "get-configure-health-check" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<HealthCheck: record<Target: string, Interval: int, Timeout: int, UnhealthyThreshold: int, HealthyThreshold: int>> {
+]: nothing -> oneof<record<HealthCheck: record<Target: string, Interval: int, Timeout: int, UnhealthyThreshold: int, HealthyThreshold: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($load_balancer_name == null) { error make --unspanned { msg: "required query parameter 'LoadBalancerName' missing: pass --load-balancer-name" } }
@@ -543,7 +567,7 @@ export def "post-configure-health-check" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<HealthCheck: record<Target: string, Interval: int, Timeout: int, UnhealthyThreshold: int, HealthyThreshold: int>> {
+]: any -> oneof<record<HealthCheck: record<Target: string, Interval: int, Timeout: int, UnhealthyThreshold: int, HealthyThreshold: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -597,7 +621,7 @@ export def "get-create-app-cookie-stickiness-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($load_balancer_name == null) { error make --unspanned { msg: "required query parameter 'LoadBalancerName' missing: pass --load-balancer-name" } }
@@ -649,7 +673,7 @@ export def "post-create-app-cookie-stickiness-policy" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -703,7 +727,7 @@ export def "get-create-lb-cookie-stickiness-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($load_balancer_name == null) { error make --unspanned { msg: "required query parameter 'LoadBalancerName' missing: pass --load-balancer-name" } }
@@ -754,7 +778,7 @@ export def "post-create-lb-cookie-stickiness-policy" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -812,7 +836,7 @@ export def "get-create-load-balancer" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DNSName: string> {
+]: nothing -> oneof<record<DNSName: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($load_balancer_name == null) { error make --unspanned { msg: "required query parameter 'LoadBalancerName' missing: pass --load-balancer-name" } }
@@ -863,7 +887,7 @@ export def "post-create-load-balancer" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<DNSName: string> {
+]: any -> oneof<record<DNSName: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -916,7 +940,7 @@ export def "get-create-load-balancer-listeners" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($load_balancer_name == null) { error make --unspanned { msg: "required query parameter 'LoadBalancerName' missing: pass --load-balancer-name" } }
@@ -967,7 +991,7 @@ export def "post-create-load-balancer-listeners" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1022,7 +1046,7 @@ export def "get-create-load-balancer-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($load_balancer_name == null) { error make --unspanned { msg: "required query parameter 'LoadBalancerName' missing: pass --load-balancer-name" } }
@@ -1074,7 +1098,7 @@ export def "post-create-load-balancer-policy" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1126,7 +1150,7 @@ export def "get-delete-load-balancer" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($load_balancer_name == null) { error make --unspanned { msg: "required query parameter 'LoadBalancerName' missing: pass --load-balancer-name" } }
@@ -1176,7 +1200,7 @@ export def "post-delete-load-balancer" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1229,7 +1253,7 @@ export def "get-delete-load-balancer-listeners" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($load_balancer_name == null) { error make --unspanned { msg: "required query parameter 'LoadBalancerName' missing: pass --load-balancer-name" } }
@@ -1280,7 +1304,7 @@ export def "post-delete-load-balancer-listeners" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1333,7 +1357,7 @@ export def "get-delete-load-balancer-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($load_balancer_name == null) { error make --unspanned { msg: "required query parameter 'LoadBalancerName' missing: pass --load-balancer-name" } }
@@ -1384,7 +1408,7 @@ export def "post-delete-load-balancer-policy" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1437,7 +1461,7 @@ export def "get-deregister-instances-from-load-balancer" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Instances: table<InstanceId: string>> {
+]: nothing -> oneof<record<Instances: table<InstanceId: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($load_balancer_name == null) { error make --unspanned { msg: "required query parameter 'LoadBalancerName' missing: pass --load-balancer-name" } }
@@ -1488,7 +1512,7 @@ export def "post-deregister-instances-from-load-balancer" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Instances: table<InstanceId: string>> {
+]: any -> oneof<record<Instances: table<InstanceId: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1541,7 +1565,7 @@ export def "get-describe-account-limits" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Limits: table<Name: string, Max: string>, NextMarker: string> {
+]: nothing -> oneof<record<Limits: table<Name: string, Max: string>, NextMarker: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DescribeAccountLimits")
@@ -1590,7 +1614,7 @@ export def "post-describe-account-limits" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Limits: table<Name: string, Max: string>, NextMarker: string> {
+]: any -> oneof<record<Limits: table<Name: string, Max: string>, NextMarker: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1643,7 +1667,7 @@ export def "get-describe-instance-health" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<InstanceStates: table<InstanceId: string, State: string, ReasonCode: string, Description: string>> {
+]: nothing -> oneof<record<InstanceStates: table<InstanceId: string, State: string, ReasonCode: string, Description: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($load_balancer_name == null) { error make --unspanned { msg: "required query parameter 'LoadBalancerName' missing: pass --load-balancer-name" } }
@@ -1693,7 +1717,7 @@ export def "post-describe-instance-health" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<InstanceStates: table<InstanceId: string, State: string, ReasonCode: string, Description: string>> {
+]: any -> oneof<record<InstanceStates: table<InstanceId: string, State: string, ReasonCode: string, Description: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1745,7 +1769,7 @@ export def "get-describe-load-balancer-attributes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<LoadBalancerAttributes: record<CrossZoneLoadBalancing: record<Enabled: bool>, AccessLog: record<Enabled: bool, S3BucketName: string, EmitInterval: int, S3BucketPrefix: string>, ConnectionDraining: record<Enabled: bool, Timeout: int>, ConnectionSettings: record<IdleTimeout: int>, AdditionalAttributes: list<record>>> {
+]: nothing -> oneof<record<LoadBalancerAttributes: record<CrossZoneLoadBalancing: record<Enabled: bool>, AccessLog: record<Enabled: bool, S3BucketName: string, EmitInterval: int, S3BucketPrefix: string>, ConnectionDraining: record<Enabled: bool, Timeout: int>, ConnectionSettings: record<IdleTimeout: int>, AdditionalAttributes: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($load_balancer_name == null) { error make --unspanned { msg: "required query parameter 'LoadBalancerName' missing: pass --load-balancer-name" } }
@@ -1795,7 +1819,7 @@ export def "post-describe-load-balancer-attributes" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<LoadBalancerAttributes: record<CrossZoneLoadBalancing: record<Enabled: bool>, AccessLog: record<Enabled: bool, S3BucketName: string, EmitInterval: int, S3BucketPrefix: string>, ConnectionDraining: record<Enabled: bool, Timeout: int>, ConnectionSettings: record<IdleTimeout: int>, AdditionalAttributes: list<record>>> {
+]: any -> oneof<record<LoadBalancerAttributes: record<CrossZoneLoadBalancing: record<Enabled: bool>, AccessLog: record<Enabled: bool, S3BucketName: string, EmitInterval: int, S3BucketPrefix: string>, ConnectionDraining: record<Enabled: bool, Timeout: int>, ConnectionSettings: record<IdleTimeout: int>, AdditionalAttributes: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1848,7 +1872,7 @@ export def "get-describe-load-balancer-policies" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<PolicyDescriptions: table<PolicyName: string, PolicyTypeName: string, PolicyAttributeDescriptions: list>> {
+]: nothing -> oneof<record<PolicyDescriptions: table<PolicyName: string, PolicyTypeName: string, PolicyAttributeDescriptions: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DescribeLoadBalancerPolicies")
@@ -1897,7 +1921,7 @@ export def "post-describe-load-balancer-policies" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<PolicyDescriptions: table<PolicyName: string, PolicyTypeName: string, PolicyAttributeDescriptions: list>> {
+]: any -> oneof<record<PolicyDescriptions: table<PolicyName: string, PolicyTypeName: string, PolicyAttributeDescriptions: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1949,7 +1973,7 @@ export def "get-describe-load-balancer-policy-types" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<PolicyTypeDescriptions: table<PolicyTypeName: string, Description: string, PolicyAttributeTypeDescriptions: list>> {
+]: nothing -> oneof<record<PolicyTypeDescriptions: table<PolicyTypeName: string, Description: string, PolicyAttributeTypeDescriptions: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DescribeLoadBalancerPolicyTypes")
@@ -1998,7 +2022,7 @@ export def "post-describe-load-balancer-policy-types" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<PolicyTypeDescriptions: table<PolicyTypeName: string, Description: string, PolicyAttributeTypeDescriptions: list>> {
+]: any -> oneof<record<PolicyTypeDescriptions: table<PolicyTypeName: string, Description: string, PolicyAttributeTypeDescriptions: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2052,7 +2076,7 @@ export def "get-describe-load-balancers" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<LoadBalancerDescriptions: table<LoadBalancerName: string, DNSName: string, CanonicalHostedZoneName: string, CanonicalHostedZoneNameID: string, ListenerDescriptions: list, Policies: record, BackendServerDescriptions: list, AvailabilityZones: list, Subnets: list, VPCId: string, Instances: list, HealthCheck: record, SourceSecurityGroup: record, SecurityGroups: list, CreatedTime: string, Scheme: string>, NextMarker: string> {
+]: nothing -> oneof<record<LoadBalancerDescriptions: table<LoadBalancerName: string, DNSName: string, CanonicalHostedZoneName: string, CanonicalHostedZoneNameID: string, ListenerDescriptions: list, Policies: record, BackendServerDescriptions: list, AvailabilityZones: list, Subnets: list, VPCId: string, Instances: list, HealthCheck: record, SourceSecurityGroup: record, SecurityGroups: list, CreatedTime: string, Scheme: string>, NextMarker: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DescribeLoadBalancers")
@@ -2102,7 +2126,7 @@ export def "post-describe-load-balancers" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<LoadBalancerDescriptions: table<LoadBalancerName: string, DNSName: string, CanonicalHostedZoneName: string, CanonicalHostedZoneNameID: string, ListenerDescriptions: list, Policies: record, BackendServerDescriptions: list, AvailabilityZones: list, Subnets: list, VPCId: string, Instances: list, HealthCheck: record, SourceSecurityGroup: record, SecurityGroups: list, CreatedTime: string, Scheme: string>, NextMarker: string> {
+]: any -> oneof<record<LoadBalancerDescriptions: table<LoadBalancerName: string, DNSName: string, CanonicalHostedZoneName: string, CanonicalHostedZoneNameID: string, ListenerDescriptions: list, Policies: record, BackendServerDescriptions: list, AvailabilityZones: list, Subnets: list, VPCId: string, Instances: list, HealthCheck: record, SourceSecurityGroup: record, SecurityGroups: list, CreatedTime: string, Scheme: string>, NextMarker: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2154,7 +2178,7 @@ export def "get-describe-tags" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<TagDescriptions: table<LoadBalancerName: string, Tags: list>> {
+]: nothing -> oneof<record<TagDescriptions: table<LoadBalancerName: string, Tags: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($load_balancer_names == null) { error make --unspanned { msg: "required query parameter 'LoadBalancerNames' missing: pass --load-balancer-names" } }
@@ -2204,7 +2228,7 @@ export def "post-describe-tags" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<TagDescriptions: table<LoadBalancerName: string, Tags: list>> {
+]: any -> oneof<record<TagDescriptions: table<LoadBalancerName: string, Tags: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2257,7 +2281,7 @@ export def "get-detach-load-balancer-from-subnets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Subnets: list<string>> {
+]: nothing -> oneof<record<Subnets: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($load_balancer_name == null) { error make --unspanned { msg: "required query parameter 'LoadBalancerName' missing: pass --load-balancer-name" } }
@@ -2308,7 +2332,7 @@ export def "post-detach-load-balancer-from-subnets" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Subnets: list<string>> {
+]: any -> oneof<record<Subnets: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2361,7 +2385,7 @@ export def "get-disable-availability-zones-for-load-balancer" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<AvailabilityZones: list<string>> {
+]: nothing -> oneof<record<AvailabilityZones: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($load_balancer_name == null) { error make --unspanned { msg: "required query parameter 'LoadBalancerName' missing: pass --load-balancer-name" } }
@@ -2412,7 +2436,7 @@ export def "post-disable-availability-zones-for-load-balancer" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<AvailabilityZones: list<string>> {
+]: any -> oneof<record<AvailabilityZones: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2465,7 +2489,7 @@ export def "get-enable-availability-zones-for-load-balancer" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<AvailabilityZones: list<string>> {
+]: nothing -> oneof<record<AvailabilityZones: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($load_balancer_name == null) { error make --unspanned { msg: "required query parameter 'LoadBalancerName' missing: pass --load-balancer-name" } }
@@ -2516,7 +2540,7 @@ export def "post-enable-availability-zones-for-load-balancer" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<AvailabilityZones: list<string>> {
+]: any -> oneof<record<AvailabilityZones: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2569,7 +2593,7 @@ export def "get-modify-load-balancer-attributes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<LoadBalancerName: string, LoadBalancerAttributes: record<CrossZoneLoadBalancing: record<Enabled: bool>, AccessLog: record<Enabled: bool, S3BucketName: string, EmitInterval: int, S3BucketPrefix: string>, ConnectionDraining: record<Enabled: bool, Timeout: int>, ConnectionSettings: record<IdleTimeout: int>, AdditionalAttributes: list<record>>> {
+]: nothing -> oneof<record<LoadBalancerName: string, LoadBalancerAttributes: record<CrossZoneLoadBalancing: record<Enabled: bool>, AccessLog: record<Enabled: bool, S3BucketName: string, EmitInterval: int, S3BucketPrefix: string>, ConnectionDraining: record<Enabled: bool, Timeout: int>, ConnectionSettings: record<IdleTimeout: int>, AdditionalAttributes: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($load_balancer_name == null) { error make --unspanned { msg: "required query parameter 'LoadBalancerName' missing: pass --load-balancer-name" } }
@@ -2620,7 +2644,7 @@ export def "post-modify-load-balancer-attributes" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<LoadBalancerName: string, LoadBalancerAttributes: record<CrossZoneLoadBalancing: record<Enabled: bool>, AccessLog: record<Enabled: bool, S3BucketName: string, EmitInterval: int, S3BucketPrefix: string>, ConnectionDraining: record<Enabled: bool, Timeout: int>, ConnectionSettings: record<IdleTimeout: int>, AdditionalAttributes: list<record>>> {
+]: any -> oneof<record<LoadBalancerName: string, LoadBalancerAttributes: record<CrossZoneLoadBalancing: record<Enabled: bool>, AccessLog: record<Enabled: bool, S3BucketName: string, EmitInterval: int, S3BucketPrefix: string>, ConnectionDraining: record<Enabled: bool, Timeout: int>, ConnectionSettings: record<IdleTimeout: int>, AdditionalAttributes: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2673,7 +2697,7 @@ export def "get-register-instances-with-load-balancer" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Instances: table<InstanceId: string>> {
+]: nothing -> oneof<record<Instances: table<InstanceId: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($load_balancer_name == null) { error make --unspanned { msg: "required query parameter 'LoadBalancerName' missing: pass --load-balancer-name" } }
@@ -2724,7 +2748,7 @@ export def "post-register-instances-with-load-balancer" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Instances: table<InstanceId: string>> {
+]: any -> oneof<record<Instances: table<InstanceId: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2777,7 +2801,7 @@ export def "get-remove-tags" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($load_balancer_names == null) { error make --unspanned { msg: "required query parameter 'LoadBalancerNames' missing: pass --load-balancer-names" } }
@@ -2828,7 +2852,7 @@ export def "post-remove-tags" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2882,7 +2906,7 @@ export def "get-set-load-balancer-listener-ssl-certificate" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($load_balancer_name == null) { error make --unspanned { msg: "required query parameter 'LoadBalancerName' missing: pass --load-balancer-name" } }
@@ -2934,7 +2958,7 @@ export def "post-set-load-balancer-listener-ssl-certificate" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2988,7 +3012,7 @@ export def "get-set-load-balancer-policies-for-backend-server" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($load_balancer_name == null) { error make --unspanned { msg: "required query parameter 'LoadBalancerName' missing: pass --load-balancer-name" } }
@@ -3040,7 +3064,7 @@ export def "post-set-load-balancer-policies-for-backend-server" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3094,7 +3118,7 @@ export def "get-set-load-balancer-policies-of-listener" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($load_balancer_name == null) { error make --unspanned { msg: "required query parameter 'LoadBalancerName' missing: pass --load-balancer-name" } }
@@ -3146,7 +3170,7 @@ export def "post-set-load-balancer-policies-of-listener" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

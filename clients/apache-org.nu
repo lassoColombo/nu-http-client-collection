@@ -16,27 +16,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "negotiate" => { {scheme: $scheme, headers: {"Authorization": $"Negotiate ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -44,8 +53,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -56,7 +70,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -91,7 +114,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -125,9 +149,9 @@ def new-state-completer [] { ["failed" "success"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-config" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-config" "get-connections" "post-connection" "test-connection" "delete-connection" "get-connection" "patch-connection" "get-dag-source" "get-dag-warnings" "get-dags" "patch-dags" "delete-dag" "get-dag" "patch-dag" "post-clear-task-instances" "get-dag-runs" "post-dag-run" "delete-dag-run" "get-dag-run" "update-dag-run-state" "clear-dag-run" "set-dag-run-note" "get-task-instances" "get-task-instance" "patch-task-instance" "get-extra-links" "get-mapped-task-instances" "get-log" "set-task-instance-note" "get-xcom-entries" "get-xcom-entry" "get-mapped-task-instance" "patch-mapped-task-instance" "set-mapped-task-instance-note" "get-upstream-dataset-events" "get-dag-details" "get-tasks" "get-task" "post-set-task-instances-state" "get-dag-runs-batch" "get-task-instances-batch" "get-datasets" "get-dataset-events" "get-dataset" "get-event-logs" "get-event-log" "get-health" "get-import-errors" "get-import-error" "get-permissions" "get-plugins" "get-pools" "post-pool" "delete-pool" "get-pool" "patch-pool" "get-providers" "get-roles" "post-role" "delete-role" "get-role" "patch-role" "get-users" "post-user" "delete-user" "get-user" "patch-user" "get-variables" "post-variables" "delete-variable" "get-variable" "patch-variable" "get-version" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -160,7 +184,7 @@ export def "get-config" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<sections: table<name: string, options: list>> {
+]: nothing -> oneof<record<sections: table<name: string, options: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/config" $auth.query)
@@ -197,7 +221,7 @@ export def "get-connections" [
   --limit: int # The numbers of items to return. (default: 100)
   --offset: int # The number of items to skip before starting to collect the result set.
   --order-by: string # The name of the field to order the results by. Prefix a field name with `-` to reverse the sort order. *New in version 2.1.0*
-]: nothing -> record<connections: table<conn_type: string, connection_id: string, description: string, host: string, login: string, port: int, schema: string>, total_entries: int> {
+]: nothing -> oneof<record<connections: table<conn_type: string, connection_id: string, description: string, host: string, login: string, port: int, schema: string>, total_entries: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "order_by" $order_by "scalar")] | flatten | str join "&"
@@ -241,7 +265,7 @@ export def "post-connection" [
   --schema: string # Schema of the connection. (nullable)
   --extra: string # Other values that cannot be put into another field, e.g. RSA keys. (nullable)
   --password: string # Password of the connection. (format: password)
-]: any -> record<conn_type: string, connection_id: string, description: string, host: string, login: string, port: int, schema: string, extra: string, password: string> {
+]: any -> oneof<record<conn_type: string, connection_id: string, description: string, host: string, login: string, port: int, schema: string, extra: string, password: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -287,7 +311,7 @@ export def "test-connection" [
   --schema: string # Schema of the connection. (nullable)
   --extra: string # Other values that cannot be put into another field, e.g. RSA keys. (nullable)
   --password: string # Password of the connection. (format: password)
-]: any -> record<message: string, status: bool> {
+]: any -> oneof<record<message: string, status: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -361,7 +385,7 @@ export def "get-connection" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<conn_type: string, connection_id: string, description: string, host: string, login: string, port: int, schema: string, extra: string, password: string> {
+]: nothing -> oneof<record<conn_type: string, connection_id: string, description: string, host: string, login: string, port: int, schema: string, extra: string, password: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connection_id' must be non-empty" } }
@@ -407,7 +431,7 @@ export def "patch-connection" [
   --schema: string # Schema of the connection. (nullable)
   --extra: string # Other values that cannot be put into another field, e.g. RSA keys. (nullable)
   --password: string # Password of the connection. (format: password)
-]: any -> record<conn_type: string, connection_id: string, description: string, host: string, login: string, port: int, schema: string, extra: string, password: string> {
+]: any -> oneof<record<conn_type: string, connection_id: string, description: string, host: string, login: string, port: int, schema: string, extra: string, password: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -448,7 +472,7 @@ export def "get-dag-source" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-]: nothing -> record<content: string> {
+]: nothing -> oneof<record<content: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($file_token | is-empty) { error make --unspanned { msg: "path parameter 'file_token' must be non-empty" } }
@@ -488,7 +512,7 @@ export def "get-dag-warnings" [
   --limit: int # The numbers of items to return. (default: 100)
   --offset: int # The number of items to skip before starting to collect the result set.
   --order-by: string # The name of the field to order the results by. Prefix a field name with `-` to reverse the sort order. *New in version 2.1.0*
-]: nothing -> record<import_errors: table<dag_id: string, message: string, timestamp: string, warning_type: string>, total_entries: int> {
+]: nothing -> oneof<record<import_errors: table<dag_id: string, message: string, timestamp: string, warning_type: string>, total_entries: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "dag_id" $dag_id "scalar") (serialize-qp "warning_type" $warning_type "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "order_by" $order_by "scalar")] | flatten | str join "&"
@@ -529,7 +553,7 @@ export def "get-dags" [
   --tags: list<string> # List of tags to filter results. *New in version 2.2.0*
   --only-active: oneof<nothing, bool> # Only filter active DAGs. *New in version 2.1.1* (default: true)
   --dag-id-pattern: string # If set, only return DAGs with dag_ids matching this pattern.
-]: nothing -> record<dags: table<dag_id: string, default_view: string, description: string, file_token: string, fileloc: string, has_import_errors: bool, has_task_concurrency_limits: bool, is_active: bool, is_paused: bool, is_subdag: bool, last_expired: string, last_parsed_time: string, last_pickled: string, max_active_runs: int, max_active_tasks: int, next_dagrun: string, next_dagrun_create_after: string, next_dagrun_data_interval_end: string, next_dagrun_data_interval_start: string, owners: list, pickle_id: string, root_dag_id: string, schedule_interval: any, scheduler_lock: bool, tags: list, timetable_description: string>, total_entries: int> {
+]: nothing -> oneof<record<dags: table<dag_id: string, default_view: string, description: string, file_token: string, fileloc: string, has_import_errors: bool, has_task_concurrency_limits: bool, is_active: bool, is_paused: bool, is_subdag: bool, last_expired: string, last_parsed_time: string, last_pickled: string, max_active_runs: int, max_active_tasks: int, next_dagrun: string, next_dagrun_create_after: string, next_dagrun_data_interval_end: string, next_dagrun_data_interval_start: string, owners: list, pickle_id: string, root_dag_id: string, schedule_interval: any, scheduler_lock: bool, tags: list, timetable_description: string>, total_entries: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "tags" $tags "multi") (serialize-qp "only_active" $only_active "scalar") (serialize-qp "dag_id_pattern" $dag_id_pattern "scalar")] | flatten | str join "&"
@@ -554,7 +578,6 @@ export def "get-dags" [
 #
 # PATCH /dags
 # operationId: patch_dags
-# --tags item shape: {name?: string}
 export def "patch-dags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -572,7 +595,7 @@ export def "patch-dags" [
   --only-active: oneof<nothing, bool> # Only filter active DAGs. *New in version 2.1.1* (default: true)
   --dag-id-pattern: string # If set, only update DAGs with dag_ids matching this pattern. (required)
   --is-paused: oneof<nothing, bool> # Whether the DAG is paused. (nullable)
-]: any -> record<dags: table<dag_id: string, default_view: string, description: string, file_token: string, fileloc: string, has_import_errors: bool, has_task_concurrency_limits: bool, is_active: bool, is_paused: bool, is_subdag: bool, last_expired: string, last_parsed_time: string, last_pickled: string, max_active_runs: int, max_active_tasks: int, next_dagrun: string, next_dagrun_create_after: string, next_dagrun_data_interval_end: string, next_dagrun_data_interval_start: string, owners: list, pickle_id: string, root_dag_id: string, schedule_interval: any, scheduler_lock: bool, tags: list, timetable_description: string>, total_entries: int> {
+]: any -> oneof<record<dags: table<dag_id: string, default_view: string, description: string, file_token: string, fileloc: string, has_import_errors: bool, has_task_concurrency_limits: bool, is_active: bool, is_paused: bool, is_subdag: bool, last_expired: string, last_parsed_time: string, last_pickled: string, max_active_runs: int, max_active_tasks: int, next_dagrun: string, next_dagrun_create_after: string, next_dagrun_data_interval_end: string, next_dagrun_data_interval_start: string, owners: list, pickle_id: string, root_dag_id: string, schedule_interval: any, scheduler_lock: bool, tags: list, timetable_description: string>, total_entries: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -648,7 +671,7 @@ export def "get-dag" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<dag_id: string, default_view: string, description: string, file_token: string, fileloc: string, has_import_errors: bool, has_task_concurrency_limits: bool, is_active: bool, is_paused: bool, is_subdag: bool, last_expired: string, last_parsed_time: string, last_pickled: string, max_active_runs: int, max_active_tasks: int, next_dagrun: string, next_dagrun_create_after: string, next_dagrun_data_interval_end: string, next_dagrun_data_interval_start: string, owners: list<string>, pickle_id: string, root_dag_id: string, schedule_interval: any, scheduler_lock: bool, tags: table<name: string>, timetable_description: string> {
+]: nothing -> oneof<record<dag_id: string, default_view: string, description: string, file_token: string, fileloc: string, has_import_errors: bool, has_task_concurrency_limits: bool, is_active: bool, is_paused: bool, is_subdag: bool, last_expired: string, last_parsed_time: string, last_pickled: string, max_active_runs: int, max_active_tasks: int, next_dagrun: string, next_dagrun_create_after: string, next_dagrun_data_interval_end: string, next_dagrun_data_interval_start: string, owners: list<string>, pickle_id: string, root_dag_id: string, schedule_interval: any, scheduler_lock: bool, tags: table<name: string>, timetable_description: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($dag_id | is-empty) { error make --unspanned { msg: "path parameter 'dag_id' must be non-empty" } }
@@ -673,7 +696,6 @@ export def "get-dag" [
 #
 # PATCH /dags/{dag_id}
 # operationId: patch_dag
-# --tags item shape: {name?: string}
 export def "patch-dag" [
   dag_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -687,7 +709,7 @@ export def "patch-dag" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --update-mask: list<string> # The fields to update on the resource. If absent or empty, all modifiable fields are updated. A comma-separated list of fully qualified names of fields.
   --is-paused: oneof<nothing, bool> # Whether the DAG is paused. (nullable)
-]: any -> record<dag_id: string, default_view: string, description: string, file_token: string, fileloc: string, has_import_errors: bool, has_task_concurrency_limits: bool, is_active: bool, is_paused: bool, is_subdag: bool, last_expired: string, last_parsed_time: string, last_pickled: string, max_active_runs: int, max_active_tasks: int, next_dagrun: string, next_dagrun_create_after: string, next_dagrun_data_interval_end: string, next_dagrun_data_interval_start: string, owners: list<string>, pickle_id: string, root_dag_id: string, schedule_interval: any, scheduler_lock: bool, tags: table<name: string>, timetable_description: string> {
+]: any -> oneof<record<dag_id: string, default_view: string, description: string, file_token: string, fileloc: string, has_import_errors: bool, has_task_concurrency_limits: bool, is_active: bool, is_paused: bool, is_subdag: bool, last_expired: string, last_parsed_time: string, last_pickled: string, max_active_runs: int, max_active_tasks: int, next_dagrun: string, next_dagrun_create_after: string, next_dagrun_data_interval_end: string, next_dagrun_data_interval_start: string, owners: list<string>, pickle_id: string, root_dag_id: string, schedule_interval: any, scheduler_lock: bool, tags: table<name: string>, timetable_description: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -741,7 +763,7 @@ export def "post-clear-task-instances" [
   --reset-dag-runs: oneof<nothing, bool> # Set state of DAG runs to RUNNING.
   --start-date: string # The minimum execution date to clear. (format: datetime)
   --task-ids: list<string> # A list of task ids to clear. *New in version 2.1.0*
-]: any -> record<task_instances: table<dag_id: string, dag_run_id: string, execution_date: string, task_id: string>> {
+]: any -> oneof<record<task_instances: table<dag_id: string, dag_run_id: string, execution_date: string, task_id: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -790,7 +812,7 @@ export def "get-dag-runs" [
   --end-date-lte: string # Returns objects less than or equal to the specified date. This can be combined with start_date_gte parameter to receive only the selected period. (format: date-time)
   --state: list<string> # The value can be repeated to retrieve multiple matching values (OR condition).
   --order-by: string # The name of the field to order the results by. Prefix a field name with `-` to reverse the sort order. *New in version 2.1.0*
-]: nothing -> record<dag_runs: table<conf: record, dag_id: string, dag_run_id: string, data_interval_end: string, data_interval_start: string, end_date: string, execution_date: string, external_trigger: bool, last_scheduling_decision: string, logical_date: string, note: string, run_type: string, start_date: string, state: string>, total_entries: int> {
+]: nothing -> oneof<record<dag_runs: table<conf: record, dag_id: string, dag_run_id: string, data_interval_end: string, data_interval_start: string, end_date: string, execution_date: string, external_trigger: bool, last_scheduling_decision: string, logical_date: string, note: string, run_type: string, start_date: string, state: string>, total_entries: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($dag_id | is-empty) { error make --unspanned { msg: "path parameter 'dag_id' must be non-empty" } }
@@ -834,7 +856,7 @@ export def "post-dag-run" [
   --logical-date: string # The logical date (previously called execution date). This is the time or interval covered by this DAG run, according to the DAG definition. The value of this field can be set only when creating the object. If you try to modify the field of an existing object, the request fails with an BAD_REQUEST error. This together with DAG_ID are a unique key. *New in version 2.2.0* (nullable, format: date-time)
   --note: string # Contains manually entered notes by the user about the DagRun. *New in version 2.5.0* (nullable)
   --state: string@state-completer # DAG State. *Changed in version 2.1.3*&#58; 'queued' is added as a possible value.
-]: any -> record<conf: record, dag_id: string, dag_run_id: string, data_interval_end: string, data_interval_start: string, end_date: string, execution_date: string, external_trigger: bool, last_scheduling_decision: string, logical_date: string, note: string, run_type: string, start_date: string, state: string> {
+]: any -> oneof<record<conf: record, dag_id: string, dag_run_id: string, data_interval_end: string, data_interval_start: string, end_date: string, execution_date: string, external_trigger: bool, last_scheduling_decision: string, logical_date: string, note: string, run_type: string, start_date: string, state: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -912,7 +934,7 @@ export def "get-dag-run" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<conf: record, dag_id: string, dag_run_id: string, data_interval_end: string, data_interval_start: string, end_date: string, execution_date: string, external_trigger: bool, last_scheduling_decision: string, logical_date: string, note: string, run_type: string, start_date: string, state: string> {
+]: nothing -> oneof<record<conf: record, dag_id: string, dag_run_id: string, data_interval_end: string, data_interval_start: string, end_date: string, execution_date: string, external_trigger: bool, last_scheduling_decision: string, logical_date: string, note: string, run_type: string, start_date: string, state: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($dag_id | is-empty) { error make --unspanned { msg: "path parameter 'dag_id' must be non-empty" } }
@@ -951,7 +973,7 @@ export def "update-dag-run-state" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --state: string@state-completer-1 # The state to set this DagRun
-]: any -> record<conf: record, dag_id: string, dag_run_id: string, data_interval_end: string, data_interval_start: string, end_date: string, execution_date: string, external_trigger: bool, last_scheduling_decision: string, logical_date: string, note: string, run_type: string, start_date: string, state: string> {
+]: any -> oneof<record<conf: record, dag_id: string, dag_run_id: string, data_interval_end: string, data_interval_start: string, end_date: string, execution_date: string, external_trigger: bool, last_scheduling_decision: string, logical_date: string, note: string, run_type: string, start_date: string, state: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -993,7 +1015,7 @@ export def "clear-dag-run" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body-dry-run: oneof<nothing, bool> # If set, don't actually run this operation. The response will contain a list of task instances planned to be cleaned, but not modified in any way. (default: true)
-]: any -> record<conf: record, dag_id: string, dag_run_id: string, data_interval_end: string, data_interval_start: string, end_date: string, execution_date: string, external_trigger: bool, last_scheduling_decision: string, logical_date: string, note: string, run_type: string, start_date: string, state: string> {
+]: any -> oneof<record<conf: record, dag_id: string, dag_run_id: string, data_interval_end: string, data_interval_start: string, end_date: string, execution_date: string, external_trigger: bool, last_scheduling_decision: string, logical_date: string, note: string, run_type: string, start_date: string, state: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1035,7 +1057,7 @@ export def "set-dag-run-note" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --note: string # Custom notes left by users for this Dag Run.
-]: any -> record<conf: record, dag_id: string, dag_run_id: string, data_interval_end: string, data_interval_start: string, end_date: string, execution_date: string, external_trigger: bool, last_scheduling_decision: string, logical_date: string, note: string, run_type: string, start_date: string, state: string> {
+]: any -> oneof<record<conf: record, dag_id: string, dag_run_id: string, data_interval_end: string, data_interval_start: string, end_date: string, execution_date: string, external_trigger: bool, last_scheduling_decision: string, logical_date: string, note: string, run_type: string, start_date: string, state: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1089,7 +1111,7 @@ export def "get-task-instances" [
   --queue: list<string> # The value can be repeated to retrieve multiple matching values (OR condition).
   --limit: int # The numbers of items to return. (default: 100)
   --offset: int # The number of items to skip before starting to collect the result set.
-]: nothing -> record<task_instances: table<dag_id: string, dag_run_id: string, duration: float, end_date: string, execution_date: string, executor_config: string, hostname: string, map_index: int, max_tries: int, note: string, operator: string, pid: int, pool: string, pool_slots: int, priority_weight: int, queue: string, queued_when: string, rendered_fields: record, sla_miss: record, start_date: string, state: string, task_id: string, trigger: record, triggerer_job: record, try_number: int, unixname: string>, total_entries: int> {
+]: nothing -> oneof<record<task_instances: table<dag_id: string, dag_run_id: string, duration: float, end_date: string, execution_date: string, executor_config: string, hostname: string, map_index: int, max_tries: int, note: string, operator: string, pid: int, pool: string, pool_slots: int, priority_weight: int, queue: string, queued_when: string, rendered_fields: record, sla_miss: record, start_date: string, state: string, task_id: string, trigger: record, triggerer_job: record, try_number: int, unixname: string>, total_entries: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($dag_id | is-empty) { error make --unspanned { msg: "path parameter 'dag_id' must be non-empty" } }
@@ -1129,7 +1151,7 @@ export def "get-task-instance" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<dag_id: string, dag_run_id: string, duration: float, end_date: string, execution_date: string, executor_config: string, hostname: string, map_index: int, max_tries: int, note: string, operator: string, pid: int, pool: string, pool_slots: int, priority_weight: int, queue: string, queued_when: string, rendered_fields: record, sla_miss: record<dag_id: string, description: string, email_sent: bool, execution_date: string, notification_sent: bool, task_id: string, timestamp: string>, start_date: string, state: string, task_id: string, trigger: record<classpath: string, created_date: string, id: int, kwargs: string, triggerer_id: int>, triggerer_job: record<dag_id: string, end_date: string, executor_class: string, hostname: string, id: int, job_type: string, latest_heartbeat: string, start_date: string, state: string, unixname: string>, try_number: int, unixname: string> {
+]: nothing -> oneof<record<dag_id: string, dag_run_id: string, duration: float, end_date: string, execution_date: string, executor_config: string, hostname: string, map_index: int, max_tries: int, note: string, operator: string, pid: int, pool: string, pool_slots: int, priority_weight: int, queue: string, queued_when: string, rendered_fields: record, sla_miss: record<dag_id: string, description: string, email_sent: bool, execution_date: string, notification_sent: bool, task_id: string, timestamp: string>, start_date: string, state: string, task_id: string, trigger: record<classpath: string, created_date: string, id: int, kwargs: string, triggerer_id: int>, triggerer_job: record<dag_id: string, end_date: string, executor_class: string, hostname: string, id: int, job_type: string, latest_heartbeat: string, start_date: string, state: string, unixname: string>, try_number: int, unixname: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($dag_id | is-empty) { error make --unspanned { msg: "path parameter 'dag_id' must be non-empty" } }
@@ -1171,7 +1193,7 @@ export def "patch-task-instance" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --body-dry-run: oneof<nothing, bool> # If set, don't actually run this operation. The response will contain the task instance planned to be affected, but won't be modified in any way. (default: false)
   --new-state: string@new-state-completer # Expected new state.
-]: any -> record<dag_id: string, dag_run_id: string, execution_date: string, task_id: string> {
+]: any -> oneof<record<dag_id: string, dag_run_id: string, execution_date: string, task_id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1214,7 +1236,7 @@ export def "get-extra-links" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<extra_links: table<class_ref: record, href: string, name: string>> {
+]: nothing -> oneof<record<extra_links: table<class_ref: record, href: string, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($dag_id | is-empty) { error make --unspanned { msg: "path parameter 'dag_id' must be non-empty" } }
@@ -1268,7 +1290,7 @@ export def "get-mapped-task-instances" [
   --pool: list<string> # The value can be repeated to retrieve multiple matching values (OR condition).
   --queue: list<string> # The value can be repeated to retrieve multiple matching values (OR condition).
   --order-by: string # The name of the field to order the results by. Prefix a field name with `-` to reverse the sort order. *New in version 2.1.0*
-]: nothing -> record<task_instances: table<dag_id: string, dag_run_id: string, duration: float, end_date: string, execution_date: string, executor_config: string, hostname: string, map_index: int, max_tries: int, note: string, operator: string, pid: int, pool: string, pool_slots: int, priority_weight: int, queue: string, queued_when: string, rendered_fields: record, sla_miss: record, start_date: string, state: string, task_id: string, trigger: record, triggerer_job: record, try_number: int, unixname: string>, total_entries: int> {
+]: nothing -> oneof<record<task_instances: table<dag_id: string, dag_run_id: string, duration: float, end_date: string, execution_date: string, executor_config: string, hostname: string, map_index: int, max_tries: int, note: string, operator: string, pid: int, pool: string, pool_slots: int, priority_weight: int, queue: string, queued_when: string, rendered_fields: record, sla_miss: record, start_date: string, state: string, task_id: string, trigger: record, triggerer_job: record, try_number: int, unixname: string>, total_entries: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($dag_id | is-empty) { error make --unspanned { msg: "path parameter 'dag_id' must be non-empty" } }
@@ -1314,7 +1336,7 @@ export def "get-log" [
   --full-content: oneof<nothing, bool> # A full content will be returned. By default, only the first fragment will be returned.
   --map-index: int # Filter on map index for mapped task.
   --qp-token: string # A token that allows you to continue fetching logs. If passed, it will specify the location from which the download should be continued.
-]: nothing -> record<content: string, continuation_token: string> {
+]: nothing -> oneof<record<content: string, continuation_token: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($dag_id | is-empty) { error make --unspanned { msg: "path parameter 'dag_id' must be non-empty" } }
@@ -1357,7 +1379,7 @@ export def "set-task-instance-note" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   note: string # The custom note to set for this Task Instance.
-]: any -> record<dag_id: string, dag_run_id: string, duration: float, end_date: string, execution_date: string, executor_config: string, hostname: string, map_index: int, max_tries: int, note: string, operator: string, pid: int, pool: string, pool_slots: int, priority_weight: int, queue: string, queued_when: string, rendered_fields: record, sla_miss: record<dag_id: string, description: string, email_sent: bool, execution_date: string, notification_sent: bool, task_id: string, timestamp: string>, start_date: string, state: string, task_id: string, trigger: record<classpath: string, created_date: string, id: int, kwargs: string, triggerer_id: int>, triggerer_job: record<dag_id: string, end_date: string, executor_class: string, hostname: string, id: int, job_type: string, latest_heartbeat: string, start_date: string, state: string, unixname: string>, try_number: int, unixname: string> {
+]: any -> oneof<record<dag_id: string, dag_run_id: string, duration: float, end_date: string, execution_date: string, executor_config: string, hostname: string, map_index: int, max_tries: int, note: string, operator: string, pid: int, pool: string, pool_slots: int, priority_weight: int, queue: string, queued_when: string, rendered_fields: record, sla_miss: record<dag_id: string, description: string, email_sent: bool, execution_date: string, notification_sent: bool, task_id: string, timestamp: string>, start_date: string, state: string, task_id: string, trigger: record<classpath: string, created_date: string, id: int, kwargs: string, triggerer_id: int>, triggerer_job: record<dag_id: string, end_date: string, executor_class: string, hostname: string, id: int, job_type: string, latest_heartbeat: string, start_date: string, state: string, unixname: string>, try_number: int, unixname: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1402,7 +1424,7 @@ export def "get-xcom-entries" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The numbers of items to return. (default: 100)
   --offset: int # The number of items to skip before starting to collect the result set.
-]: nothing -> record<xcom_entries: table<dag_id: string, execution_date: string, key: string, task_id: string, timestamp: string>, total_entries: int> {
+]: nothing -> oneof<record<xcom_entries: table<dag_id: string, execution_date: string, key: string, task_id: string, timestamp: string>, total_entries: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($dag_id | is-empty) { error make --unspanned { msg: "path parameter 'dag_id' must be non-empty" } }
@@ -1445,7 +1467,7 @@ export def "get-xcom-entry" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --deserialize: oneof<nothing, bool> # Whether to deserialize an XCom value when using a custom XCom backend. The XCom API endpoint calls `orm_deserialize_value` by default since an XCom may contain value that is potentially expensive to deserialize in the web server. Setting this to true overrides the consideration, and calls `deserialize_value` instead. This parameter is not meaningful when using the default XCom backend. *New in version 2.4.0* (default: false)
-]: nothing -> record<dag_id: string, execution_date: string, key: string, task_id: string, timestamp: string, value: string> {
+]: nothing -> oneof<record<dag_id: string, execution_date: string, key: string, task_id: string, timestamp: string, value: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($dag_id | is-empty) { error make --unspanned { msg: "path parameter 'dag_id' must be non-empty" } }
@@ -1488,7 +1510,7 @@ export def "get-mapped-task-instance" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<dag_id: string, dag_run_id: string, duration: float, end_date: string, execution_date: string, executor_config: string, hostname: string, map_index: int, max_tries: int, note: string, operator: string, pid: int, pool: string, pool_slots: int, priority_weight: int, queue: string, queued_when: string, rendered_fields: record, sla_miss: record<dag_id: string, description: string, email_sent: bool, execution_date: string, notification_sent: bool, task_id: string, timestamp: string>, start_date: string, state: string, task_id: string, trigger: record<classpath: string, created_date: string, id: int, kwargs: string, triggerer_id: int>, triggerer_job: record<dag_id: string, end_date: string, executor_class: string, hostname: string, id: int, job_type: string, latest_heartbeat: string, start_date: string, state: string, unixname: string>, try_number: int, unixname: string> {
+]: nothing -> oneof<record<dag_id: string, dag_run_id: string, duration: float, end_date: string, execution_date: string, executor_config: string, hostname: string, map_index: int, max_tries: int, note: string, operator: string, pid: int, pool: string, pool_slots: int, priority_weight: int, queue: string, queued_when: string, rendered_fields: record, sla_miss: record<dag_id: string, description: string, email_sent: bool, execution_date: string, notification_sent: bool, task_id: string, timestamp: string>, start_date: string, state: string, task_id: string, trigger: record<classpath: string, created_date: string, id: int, kwargs: string, triggerer_id: int>, triggerer_job: record<dag_id: string, end_date: string, executor_class: string, hostname: string, id: int, job_type: string, latest_heartbeat: string, start_date: string, state: string, unixname: string>, try_number: int, unixname: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($dag_id | is-empty) { error make --unspanned { msg: "path parameter 'dag_id' must be non-empty" } }
@@ -1532,7 +1554,7 @@ export def "patch-mapped-task-instance" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --body-dry-run: oneof<nothing, bool> # If set, don't actually run this operation. The response will contain the task instance planned to be affected, but won't be modified in any way. (default: false)
   --new-state: string@new-state-completer # Expected new state.
-]: any -> record<dag_id: string, dag_run_id: string, execution_date: string, task_id: string> {
+]: any -> oneof<record<dag_id: string, dag_run_id: string, execution_date: string, task_id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1578,7 +1600,7 @@ export def "set-mapped-task-instance-note" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   note: string # The custom note to set for this Task Instance.
-]: any -> record<dag_id: string, dag_run_id: string, duration: float, end_date: string, execution_date: string, executor_config: string, hostname: string, map_index: int, max_tries: int, note: string, operator: string, pid: int, pool: string, pool_slots: int, priority_weight: int, queue: string, queued_when: string, rendered_fields: record, sla_miss: record<dag_id: string, description: string, email_sent: bool, execution_date: string, notification_sent: bool, task_id: string, timestamp: string>, start_date: string, state: string, task_id: string, trigger: record<classpath: string, created_date: string, id: int, kwargs: string, triggerer_id: int>, triggerer_job: record<dag_id: string, end_date: string, executor_class: string, hostname: string, id: int, job_type: string, latest_heartbeat: string, start_date: string, state: string, unixname: string>, try_number: int, unixname: string> {
+]: any -> oneof<record<dag_id: string, dag_run_id: string, duration: float, end_date: string, execution_date: string, executor_config: string, hostname: string, map_index: int, max_tries: int, note: string, operator: string, pid: int, pool: string, pool_slots: int, priority_weight: int, queue: string, queued_when: string, rendered_fields: record, sla_miss: record<dag_id: string, description: string, email_sent: bool, execution_date: string, notification_sent: bool, task_id: string, timestamp: string>, start_date: string, state: string, task_id: string, trigger: record<classpath: string, created_date: string, id: int, kwargs: string, triggerer_id: int>, triggerer_job: record<dag_id: string, end_date: string, executor_class: string, hostname: string, id: int, job_type: string, latest_heartbeat: string, start_date: string, state: string, unixname: string>, try_number: int, unixname: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1621,7 +1643,7 @@ export def "get-upstream-dataset-events" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<dataset_events: table<created_dagruns: list, dataset_id: int, dataset_uri: string, extra: record, source_dag_id: string, source_map_index: int, source_run_id: string, source_task_id: string, timestamp: string>, total_entries: int> {
+]: nothing -> oneof<record<dataset_events: table<created_dagruns: list, dataset_id: int, dataset_uri: string, extra: record, source_dag_id: string, source_map_index: int, source_run_id: string, source_task_id: string, timestamp: string>, total_entries: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($dag_id | is-empty) { error make --unspanned { msg: "path parameter 'dag_id' must be non-empty" } }
@@ -1658,7 +1680,7 @@ export def "get-dag-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<dag_id: string, default_view: string, description: string, file_token: string, fileloc: string, has_import_errors: bool, has_task_concurrency_limits: bool, is_active: bool, is_paused: bool, is_subdag: bool, last_expired: string, last_parsed_time: string, last_pickled: string, max_active_runs: int, max_active_tasks: int, next_dagrun: string, next_dagrun_create_after: string, next_dagrun_data_interval_end: string, next_dagrun_data_interval_start: string, owners: list<string>, pickle_id: string, root_dag_id: string, schedule_interval: any, scheduler_lock: bool, tags: table<name: string>, timetable_description: string, catchup: bool, concurrency: float, dag_run_timeout: record<__type: string, days: int, microseconds: int, seconds: int>, doc_md: string, end_date: string, is_paused_upon_creation: bool, last_parsed: string, orientation: string, params: record, render_template_as_native_obj: bool, start_date: string, template_search_path: list<string>, timezone: string> {
+]: nothing -> oneof<record<dag_id: string, default_view: string, description: string, file_token: string, fileloc: string, has_import_errors: bool, has_task_concurrency_limits: bool, is_active: bool, is_paused: bool, is_subdag: bool, last_expired: string, last_parsed_time: string, last_pickled: string, max_active_runs: int, max_active_tasks: int, next_dagrun: string, next_dagrun_create_after: string, next_dagrun_data_interval_end: string, next_dagrun_data_interval_start: string, owners: list<string>, pickle_id: string, root_dag_id: string, schedule_interval: any, scheduler_lock: bool, tags: table<name: string>, timetable_description: string, catchup: bool, concurrency: float, dag_run_timeout: record<__type: string, days: int, microseconds: int, seconds: int>, doc_md: string, end_date: string, is_paused_upon_creation: bool, last_parsed: string, orientation: string, params: record, render_template_as_native_obj: bool, start_date: string, template_search_path: list<string>, timezone: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($dag_id | is-empty) { error make --unspanned { msg: "path parameter 'dag_id' must be non-empty" } }
@@ -1695,7 +1717,7 @@ export def "get-tasks" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --order-by: string # The name of the field to order the results by. Prefix a field name with `-` to reverse the sort order. *New in version 2.1.0*
-]: nothing -> record<tasks: table<class_ref: record, depends_on_past: bool, downstream_task_ids: list, end_date: string, execution_timeout: record, extra_links: list, is_mapped: bool, owner: string, pool: string, pool_slots: float, priority_weight: float, queue: string, retries: float, retry_delay: record, retry_exponential_backoff: bool, start_date: string, sub_dag: record, task_id: string, template_fields: list, trigger_rule: string, ui_color: string, ui_fgcolor: string, wait_for_downstream: bool, weight_rule: string>> {
+]: nothing -> oneof<record<tasks: table<class_ref: record, depends_on_past: bool, downstream_task_ids: list, end_date: string, execution_timeout: record, extra_links: list, is_mapped: bool, owner: string, pool: string, pool_slots: float, priority_weight: float, queue: string, retries: float, retry_delay: record, retry_exponential_backoff: bool, start_date: string, sub_dag: record, task_id: string, template_fields: list, trigger_rule: string, ui_color: string, ui_fgcolor: string, wait_for_downstream: bool, weight_rule: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($dag_id | is-empty) { error make --unspanned { msg: "path parameter 'dag_id' must be non-empty" } }
@@ -1733,7 +1755,7 @@ export def "get-task" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<class_ref: record<class_name: string, module_path: string>, depends_on_past: bool, downstream_task_ids: list<string>, end_date: string, execution_timeout: record<__type: string, days: int, microseconds: int, seconds: int>, extra_links: table<class_ref: record>, is_mapped: bool, owner: string, pool: string, pool_slots: float, priority_weight: float, queue: string, retries: float, retry_delay: record<__type: string, days: int, microseconds: int, seconds: int>, retry_exponential_backoff: bool, start_date: string, sub_dag: record<dag_id: string, default_view: string, description: string, file_token: string, fileloc: string, has_import_errors: bool, has_task_concurrency_limits: bool, is_active: bool, is_paused: bool, is_subdag: bool, last_expired: string, last_parsed_time: string, last_pickled: string, max_active_runs: int, max_active_tasks: int, next_dagrun: string, next_dagrun_create_after: string, next_dagrun_data_interval_end: string, next_dagrun_data_interval_start: string, owners: list<string>, pickle_id: string, root_dag_id: string, schedule_interval: any, scheduler_lock: bool, tags: list<record>, timetable_description: string>, task_id: string, template_fields: list<string>, trigger_rule: string, ui_color: string, ui_fgcolor: string, wait_for_downstream: bool, weight_rule: string> {
+]: nothing -> oneof<record<class_ref: record<class_name: string, module_path: string>, depends_on_past: bool, downstream_task_ids: list<string>, end_date: string, execution_timeout: record<__type: string, days: int, microseconds: int, seconds: int>, extra_links: table<class_ref: record>, is_mapped: bool, owner: string, pool: string, pool_slots: float, priority_weight: float, queue: string, retries: float, retry_delay: record<__type: string, days: int, microseconds: int, seconds: int>, retry_exponential_backoff: bool, start_date: string, sub_dag: record<dag_id: string, default_view: string, description: string, file_token: string, fileloc: string, has_import_errors: bool, has_task_concurrency_limits: bool, is_active: bool, is_paused: bool, is_subdag: bool, last_expired: string, last_parsed_time: string, last_pickled: string, max_active_runs: int, max_active_tasks: int, next_dagrun: string, next_dagrun_create_after: string, next_dagrun_data_interval_end: string, next_dagrun_data_interval_start: string, owners: list<string>, pickle_id: string, root_dag_id: string, schedule_interval: any, scheduler_lock: bool, tags: list<record>, timetable_description: string>, task_id: string, template_fields: list<string>, trigger_rule: string, ui_color: string, ui_fgcolor: string, wait_for_downstream: bool, weight_rule: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($dag_id | is-empty) { error make --unspanned { msg: "path parameter 'dag_id' must be non-empty" } }
@@ -1779,7 +1801,7 @@ export def "post-set-task-instances-state" [
   --include-upstream: oneof<nothing, bool> # If set to true, upstream tasks are also affected.
   --new-state: string@new-state-completer # Expected new state.
   --task-id: string # The task ID.
-]: any -> record<task_instances: table<dag_id: string, dag_run_id: string, execution_date: string, task_id: string>> {
+]: any -> oneof<record<task_instances: table<dag_id: string, dag_run_id: string, execution_date: string, task_id: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1828,7 +1850,7 @@ export def "get-dag-runs-batch" [
   --start-date-gte: string # Returns objects greater or equal the specified date. This can be combined with start_date_lte key to receive only the selected period. (format: date-time)
   --start-date-lte: string # Returns objects less or equal the specified date. This can be combined with start_date_gte parameter to receive only the selected period (format: date-time)
   --states: list<string> # Return objects with specific states. The value can be repeated to retrieve multiple matching values (OR condition).
-]: any -> record<dag_runs: table<conf: record, dag_id: string, dag_run_id: string, data_interval_end: string, data_interval_start: string, end_date: string, execution_date: string, external_trigger: bool, last_scheduling_decision: string, logical_date: string, note: string, run_type: string, start_date: string, state: string>, total_entries: int> {
+]: any -> oneof<record<dag_runs: table<conf: record, dag_id: string, dag_run_id: string, data_interval_end: string, data_interval_start: string, end_date: string, execution_date: string, external_trigger: bool, last_scheduling_decision: string, logical_date: string, note: string, run_type: string, start_date: string, state: string>, total_entries: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1877,7 +1899,7 @@ export def "get-task-instances-batch" [
   --start-date-gte: string # Returns objects greater or equal the specified date. This can be combined with start_date_lte parameter to receive only the selected period. (format: date-time)
   --start-date-lte: string # Returns objects less or equal the specified date. This can be combined with start_date_gte parameter to receive only the selected period. (format: date-time)
   --state: list<string> # The value can be repeated to retrieve multiple matching values (OR condition).
-]: any -> record<task_instances: table<dag_id: string, dag_run_id: string, duration: float, end_date: string, execution_date: string, executor_config: string, hostname: string, map_index: int, max_tries: int, note: string, operator: string, pid: int, pool: string, pool_slots: int, priority_weight: int, queue: string, queued_when: string, rendered_fields: record, sla_miss: record, start_date: string, state: string, task_id: string, trigger: record, triggerer_job: record, try_number: int, unixname: string>, total_entries: int> {
+]: any -> oneof<record<task_instances: table<dag_id: string, dag_run_id: string, duration: float, end_date: string, execution_date: string, executor_config: string, hostname: string, map_index: int, max_tries: int, note: string, operator: string, pid: int, pool: string, pool_slots: int, priority_weight: int, queue: string, queued_when: string, rendered_fields: record, sla_miss: record, start_date: string, state: string, task_id: string, trigger: record, triggerer_job: record, try_number: int, unixname: string>, total_entries: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1918,7 +1940,7 @@ export def "get-datasets" [
   --offset: int # The number of items to skip before starting to collect the result set.
   --order-by: string # The name of the field to order the results by. Prefix a field name with `-` to reverse the sort order. *New in version 2.1.0*
   --uri-pattern: string # If set, only return datasets with uris matching this pattern.
-]: nothing -> record<datasets: table<consuming_dags: list, created_at: string, extra: record, id: int, producing_tasks: list, updated_at: string, uri: string>, total_entries: int> {
+]: nothing -> oneof<record<datasets: table<consuming_dags: list, created_at: string, extra: record, id: int, producing_tasks: list, updated_at: string, uri: string>, total_entries: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "uri_pattern" $uri_pattern "scalar")] | flatten | str join "&"
@@ -1961,7 +1983,7 @@ export def "get-dataset-events" [
   --source-task-id: string # The task ID that updated the dataset.
   --source-run-id: string # The DAG run ID that updated the dataset.
   --source-map-index: int # The map index that updated the dataset.
-]: nothing -> record<dataset_events: table<created_dagruns: list, dataset_id: int, dataset_uri: string, extra: record, source_dag_id: string, source_map_index: int, source_run_id: string, source_task_id: string, timestamp: string>, total_entries: int> {
+]: nothing -> oneof<record<dataset_events: table<created_dagruns: list, dataset_id: int, dataset_uri: string, extra: record, source_dag_id: string, source_map_index: int, source_run_id: string, source_task_id: string, timestamp: string>, total_entries: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "dataset_id" $dataset_id "scalar") (serialize-qp "source_dag_id" $source_dag_id "scalar") (serialize-qp "source_task_id" $source_task_id "scalar") (serialize-qp "source_run_id" $source_run_id "scalar") (serialize-qp "source_map_index" $source_map_index "scalar")] | flatten | str join "&"
@@ -1997,7 +2019,7 @@ export def "get-dataset" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<consuming_dags: table<created_at: string, dag_id: string, updated_at: string>, created_at: string, extra: record, id: int, producing_tasks: table<created_at: string, dag_id: string, task_id: string, updated_at: string>, updated_at: string, uri: string> {
+]: nothing -> oneof<record<consuming_dags: table<created_at: string, dag_id: string, updated_at: string>, created_at: string, extra: record, id: int, producing_tasks: table<created_at: string, dag_id: string, task_id: string, updated_at: string>, updated_at: string, uri: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($uri | is-empty) { error make --unspanned { msg: "path parameter 'uri' must be non-empty" } }
@@ -2035,7 +2057,7 @@ export def "get-event-logs" [
   --limit: int # The numbers of items to return. (default: 100)
   --offset: int # The number of items to skip before starting to collect the result set.
   --order-by: string # The name of the field to order the results by. Prefix a field name with `-` to reverse the sort order. *New in version 2.1.0*
-]: nothing -> record<event_logs: table<dag_id: string, event: string, event_log_id: int, execution_date: string, extra: string, owner: string, task_id: string, when: string>, total_entries: int> {
+]: nothing -> oneof<record<event_logs: table<dag_id: string, event: string, event_log_id: int, execution_date: string, extra: string, owner: string, task_id: string, when: string>, total_entries: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "order_by" $order_by "scalar")] | flatten | str join "&"
@@ -2071,7 +2093,7 @@ export def "get-event-log" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<dag_id: string, event: string, event_log_id: int, execution_date: string, extra: string, owner: string, task_id: string, when: string> {
+]: nothing -> oneof<record<dag_id: string, event: string, event_log_id: int, execution_date: string, extra: string, owner: string, task_id: string, when: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($event_log_id | is-empty) { error make --unspanned { msg: "path parameter 'event_log_id' must be non-empty" } }
@@ -2106,7 +2128,7 @@ export def "get-health" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<metadatabase: record<status: string>, scheduler: record<latest_scheduler_heartbeat: string, status: string>> {
+]: nothing -> oneof<record<metadatabase: record<status: string>, scheduler: record<latest_scheduler_heartbeat: string, status: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/health" $auth.query)
@@ -2143,7 +2165,7 @@ export def "get-import-errors" [
   --limit: int # The numbers of items to return. (default: 100)
   --offset: int # The number of items to skip before starting to collect the result set.
   --order-by: string # The name of the field to order the results by. Prefix a field name with `-` to reverse the sort order. *New in version 2.1.0*
-]: nothing -> record<import_errors: table<filename: string, import_error_id: int, stack_trace: string, timestamp: string>, total_entries: int> {
+]: nothing -> oneof<record<import_errors: table<filename: string, import_error_id: int, stack_trace: string, timestamp: string>, total_entries: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "order_by" $order_by "scalar")] | flatten | str join "&"
@@ -2179,7 +2201,7 @@ export def "get-import-error" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<filename: string, import_error_id: int, stack_trace: string, timestamp: string> {
+]: nothing -> oneof<record<filename: string, import_error_id: int, stack_trace: string, timestamp: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($import_error_id | is-empty) { error make --unspanned { msg: "path parameter 'import_error_id' must be non-empty" } }
@@ -2216,7 +2238,7 @@ export def "get-permissions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The numbers of items to return. (default: 100)
   --offset: int # The number of items to skip before starting to collect the result set.
-]: nothing -> record<actions: table<name: string>, total_entries: int> {
+]: nothing -> oneof<record<actions: table<name: string>, total_entries: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -2253,7 +2275,7 @@ export def "get-plugins" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The numbers of items to return. (default: 100)
   --offset: int # The number of items to skip before starting to collect the result set.
-]: nothing -> record<plugins: table<appbuilder_menu_items: list, appbuilder_views: list, executors: list, flask_blueprints: list, global_operator_extra_links: list, hooks: list, macros: list, name: string, operator_extra_links: list, source: string>, total_entries: int> {
+]: nothing -> oneof<record<plugins: table<appbuilder_menu_items: list, appbuilder_views: list, executors: list, flask_blueprints: list, global_operator_extra_links: list, hooks: list, macros: list, name: string, operator_extra_links: list, source: string>, total_entries: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -2291,7 +2313,7 @@ export def "get-pools" [
   --limit: int # The numbers of items to return. (default: 100)
   --offset: int # The number of items to skip before starting to collect the result set.
   --order-by: string # The name of the field to order the results by. Prefix a field name with `-` to reverse the sort order. *New in version 2.1.0*
-]: nothing -> record<pools: table<description: string, name: string, occupied_slots: int, open_slots: int, queued_slots: int, slots: int, used_slots: int>, total_entries: int> {
+]: nothing -> oneof<record<pools: table<description: string, name: string, occupied_slots: int, open_slots: int, queued_slots: int, slots: int, used_slots: int>, total_entries: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "order_by" $order_by "scalar")] | flatten | str join "&"
@@ -2329,7 +2351,7 @@ export def "post-pool" [
   --description: string # The description of the pool. *New in version 2.3.0* (nullable)
   --name: string # The name of pool.
   --slots: int # The maximum number of slots that can be assigned to tasks. One job may occupy one or more slots.
-]: any -> record<description: string, name: string, occupied_slots: int, open_slots: int, queued_slots: int, slots: int, used_slots: int> {
+]: any -> oneof<record<description: string, name: string, occupied_slots: int, open_slots: int, queued_slots: int, slots: int, used_slots: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2403,7 +2425,7 @@ export def "get-pool" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<description: string, name: string, occupied_slots: int, open_slots: int, queued_slots: int, slots: int, used_slots: int> {
+]: nothing -> oneof<record<description: string, name: string, occupied_slots: int, open_slots: int, queued_slots: int, slots: int, used_slots: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($pool_name | is-empty) { error make --unspanned { msg: "path parameter 'pool_name' must be non-empty" } }
@@ -2443,7 +2465,7 @@ export def "patch-pool" [
   --description: string # The description of the pool. *New in version 2.3.0* (nullable)
   --name: string # The name of pool.
   --slots: int # The maximum number of slots that can be assigned to tasks. One job may occupy one or more slots.
-]: any -> record<description: string, name: string, occupied_slots: int, open_slots: int, queued_slots: int, slots: int, used_slots: int> {
+]: any -> oneof<record<description: string, name: string, occupied_slots: int, open_slots: int, queued_slots: int, slots: int, used_slots: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2482,7 +2504,7 @@ export def "get-providers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<providers: table<description: string, package_name: string, version: string>, total_entries: int> {
+]: nothing -> oneof<record<providers: table<description: string, package_name: string, version: string>, total_entries: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/providers" $auth.query)
@@ -2519,7 +2541,7 @@ export def "get-roles" [
   --limit: int # The numbers of items to return. (default: 100)
   --offset: int # The number of items to skip before starting to collect the result set.
   --order-by: string # The name of the field to order the results by. Prefix a field name with `-` to reverse the sort order. *New in version 2.1.0*
-]: nothing -> record<roles: table<actions: list, name: string>, total_entries: int> {
+]: nothing -> oneof<record<roles: table<actions: list, name: string>, total_entries: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "order_by" $order_by "scalar")] | flatten | str join "&"
@@ -2544,7 +2566,6 @@ export def "get-roles" [
 #
 # POST /roles
 # operationId: post_role
-# --actions item shape: {action?: record, resource?: record}
 export def "post-role" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2557,7 +2578,7 @@ export def "post-role" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --actions: list # item shape: {action?: record, resource?: record}
   --name: string # The name of the role *Changed in version 2.3.0*&#58; A minimum character length requirement ('minLength') is added.
-]: any -> record<actions: table<action: record, resource: record>, name: string> {
+]: any -> oneof<record<actions: table<action: record, resource: record>, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2631,7 +2652,7 @@ export def "get-role" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<actions: table<action: record, resource: record>, name: string> {
+]: nothing -> oneof<record<actions: table<action: record, resource: record>, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($role_name | is-empty) { error make --unspanned { msg: "path parameter 'role_name' must be non-empty" } }
@@ -2656,7 +2677,6 @@ export def "get-role" [
 #
 # PATCH /roles/{role_name}
 # operationId: patch_role
-# --actions item shape: {action?: record, resource?: record}
 export def "patch-role" [
   role_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2671,7 +2691,7 @@ export def "patch-role" [
   --update-mask: list<string> # The fields to update on the resource. If absent or empty, all modifiable fields are updated. A comma-separated list of fully qualified names of fields.
   --actions: list # item shape: {action?: record, resource?: record}
   --name: string # The name of the role *Changed in version 2.3.0*&#58; A minimum character length requirement ('minLength') is added.
-]: any -> record<actions: table<action: record, resource: record>, name: string> {
+]: any -> oneof<record<actions: table<action: record, resource: record>, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2713,7 +2733,7 @@ export def "get-users" [
   --limit: int # The numbers of items to return. (default: 100)
   --offset: int # The number of items to skip before starting to collect the result set.
   --order-by: string # The name of the field to order the results by. Prefix a field name with `-` to reverse the sort order. *New in version 2.1.0*
-]: nothing -> record<users: table<active: bool, changed_on: string, created_on: string, email: string, failed_login_count: int, first_name: string, last_login: string, last_name: string, login_count: int, roles: list, username: string>, total_entries: int> {
+]: nothing -> oneof<record<users: table<active: bool, changed_on: string, created_on: string, email: string, failed_login_count: int, first_name: string, last_login: string, last_name: string, login_count: int, roles: list, username: string>, total_entries: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "order_by" $order_by "scalar")] | flatten | str join "&"
@@ -2738,7 +2758,6 @@ export def "get-users" [
 #
 # POST /users
 # operationId: post_user
-# --roles item shape: {name?: string}
 export def "post-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2755,7 +2774,7 @@ export def "post-user" [
   --roles: list # User roles. *Changed in version 2.2.0*&#58; Field is no longer read-only. — item shape: {name?: string}
   --username: string # The username. *Changed in version 2.2.0*&#58; A minimum character length requirement ('minLength') is added.
   --password: string
-]: any -> record<active: bool, changed_on: string, created_on: string, email: string, failed_login_count: int, first_name: string, last_login: string, last_name: string, login_count: int, roles: table<name: string>, username: string, password: string> {
+]: any -> oneof<record<active: bool, changed_on: string, created_on: string, email: string, failed_login_count: int, first_name: string, last_login: string, last_name: string, login_count: int, roles: table<name: string>, username: string, password: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2829,7 +2848,7 @@ export def "get-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<active: bool, changed_on: string, created_on: string, email: string, failed_login_count: int, first_name: string, last_login: string, last_name: string, login_count: int, roles: table<name: string>, username: string> {
+]: nothing -> oneof<record<active: bool, changed_on: string, created_on: string, email: string, failed_login_count: int, first_name: string, last_login: string, last_name: string, login_count: int, roles: table<name: string>, username: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
@@ -2854,7 +2873,6 @@ export def "get-user" [
 #
 # PATCH /users/{username}
 # operationId: patch_user
-# --roles item shape: {name?: string}
 export def "patch-user" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2873,7 +2891,7 @@ export def "patch-user" [
   --roles: list # User roles. *Changed in version 2.2.0*&#58; Field is no longer read-only. — item shape: {name?: string}
   --body-username: string # The username. *Changed in version 2.2.0*&#58; A minimum character length requirement ('minLength') is added.
   --password: string
-]: any -> record<actions: table<action: record, resource: record>, name: string> {
+]: any -> oneof<record<actions: table<action: record, resource: record>, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2915,7 +2933,7 @@ export def "get-variables" [
   --limit: int # The numbers of items to return. (default: 100)
   --offset: int # The number of items to skip before starting to collect the result set.
   --order-by: string # The name of the field to order the results by. Prefix a field name with `-` to reverse the sort order. *New in version 2.1.0*
-]: nothing -> record<variables: table<description: string, key: string>, total_entries: int> {
+]: nothing -> oneof<record<variables: table<description: string, key: string>, total_entries: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "order_by" $order_by "scalar")] | flatten | str join "&"
@@ -2953,7 +2971,7 @@ export def "post-variables" [
   --description: string # The description of the variable. *New in version 2.4.0* (nullable)
   --key: string
   --value: string
-]: any -> record<description: string, key: string, value: string> {
+]: any -> oneof<record<description: string, key: string, value: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3027,7 +3045,7 @@ export def "get-variable" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<description: string, key: string, value: string> {
+]: nothing -> oneof<record<description: string, key: string, value: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($variable_key | is-empty) { error make --unspanned { msg: "path parameter 'variable_key' must be non-empty" } }
@@ -3067,7 +3085,7 @@ export def "patch-variable" [
   --description: string # The description of the variable. *New in version 2.4.0* (nullable)
   --key: string
   --value: string
-]: any -> record<description: string, key: string, value: string> {
+]: any -> oneof<record<description: string, key: string, value: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3106,7 +3124,7 @@ export def "get-version" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<git_version: string, version: string> {
+]: nothing -> oneof<record<git_version: string, version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/version" $auth.query)

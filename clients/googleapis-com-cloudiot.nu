@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -121,9 +145,9 @@ def gateway-list-options-gateway-type-completer [] { ["GATEWAY" "GATEWAY_TYPE_UN
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cloudiot-projects-locations-registries-devices-delete" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["cloudiot-projects-locations-registries-devices-delete" "cloudiot-projects-locations-registries-devices-get" "cloudiot-projects-locations-registries-devices-patch" "cloudiot-projects-locations-registries-devices-config-versions-list" "cloudiot-projects-locations-registries-devices-states-list" "cloudiot-projects-locations-registries-devices-modify-cloud-to-device-config" "cloudiot-projects-locations-registries-devices-send-command-to-device" "cloudiot-projects-locations-registries-groups-devices-list" "cloudiot-projects-locations-registries-devices-create" "cloudiot-projects-locations-registries-list" "cloudiot-projects-locations-registries-create" "cloudiot-projects-locations-registries-bind-device-to-gateway" "cloudiot-projects-locations-registries-unbind-device-from-gateway" "cloudiot-projects-locations-registries-groups-get-iam-policy" "cloudiot-projects-locations-registries-groups-set-iam-policy" "cloudiot-projects-locations-registries-groups-test-iam-permissions" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -167,7 +191,7 @@ export def "cloudiot-projects-locations-registries-devices-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -216,7 +240,7 @@ export def "cloudiot-projects-locations-registries-devices-get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --field-mask: string # The fields of the `Device` resource to be returned in the response. If the field mask is unset or empty, all fields are returned. Fields have to be provided in snake_case format, for example: `last_heartbeat_time`.
-]: nothing -> record<blocked: bool, config: record<binaryData: string, cloudUpdateTime: string, deviceAckTime: string, version: string>, credentials: table<expirationTime: string, publicKey: record>, gatewayConfig: record<gatewayAuthMethod: string, gatewayType: string, lastAccessedGatewayId: string, lastAccessedGatewayTime: string>, id: string, lastConfigAckTime: string, lastConfigSendTime: string, lastErrorStatus: record<code: int, details: list<record>, message: string>, lastErrorTime: string, lastEventTime: string, lastHeartbeatTime: string, lastStateTime: string, logLevel: string, metadata: record, name: string, numId: string, state: record<binaryData: string, updateTime: string>> {
+]: nothing -> oneof<record<blocked: bool, config: record<binaryData: string, cloudUpdateTime: string, deviceAckTime: string, version: string>, credentials: table<expirationTime: string, publicKey: record>, gatewayConfig: record<gatewayAuthMethod: string, gatewayType: string, lastAccessedGatewayId: string, lastAccessedGatewayTime: string>, id: string, lastConfigAckTime: string, lastConfigSendTime: string, lastErrorStatus: record<code: int, details: list<record>, message: string>, lastErrorTime: string, lastEventTime: string, lastHeartbeatTime: string, lastStateTime: string, logLevel: string, metadata: record, name: string, numId: string, state: record<binaryData: string, updateTime: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -242,11 +266,6 @@ export def "cloudiot-projects-locations-registries-devices-get" [
 #
 # PATCH /v1/{name}
 # operationId: cloudiot.projects.locations.registries.devices.patch
-# --config shape: {binaryData?: string, cloudUpdateTime?: string, deviceAckTime?: string, version?: string}
-# --credentials item shape: {expirationTime?: string, publicKey?: record}
-# --gatewayConfig shape: {gatewayAuthMethod?: "GATEWAY_AUTH_METHOD_UNSPECIFIED"|"ASSOCIATION_ONLY"|"DEVICE_AUTH_TOKEN_ONLY"|"ASSOCIATION_AND_DEVICE_AUTH_TOKEN", gatewayType?: "GATEWAY_TYPE_UNSPECIFIED"|"GATEWAY"|"NON_GATEWAY", lastAccessedGatewayId?: string, lastAccessedGatewayTime?: string}
-# --lastErrorStatus shape: {code?: int, details?: list, message?: string}
-# --state shape: {binaryData?: string, updateTime?: string}
 export def "cloudiot-projects-locations-registries-devices-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -287,7 +306,7 @@ export def "cloudiot-projects-locations-registries-devices-patch" [
   --body-name: string # The resource path name. For example, `projects/p1/locations/us-central1/registries/registry0/devices/dev0` or `projects/p1/locations/us-central1/registries/registry0/devices/{num_id}`. When `name` is populated as a response from the service, it always ends in the device numeric ID.
   --num-id: string # [Output only] A server-defined unique numeric ID for the device. This is a more compact way to identify devices, and it is globally unique. (format: uint64)
   --state: record # The device state, as reported by the device. — shape: {binaryData?: string, updateTime?: string}
-]: any -> record<blocked: bool, config: record<binaryData: string, cloudUpdateTime: string, deviceAckTime: string, version: string>, credentials: table<expirationTime: string, publicKey: record>, gatewayConfig: record<gatewayAuthMethod: string, gatewayType: string, lastAccessedGatewayId: string, lastAccessedGatewayTime: string>, id: string, lastConfigAckTime: string, lastConfigSendTime: string, lastErrorStatus: record<code: int, details: list<record>, message: string>, lastErrorTime: string, lastEventTime: string, lastHeartbeatTime: string, lastStateTime: string, logLevel: string, metadata: record, name: string, numId: string, state: record<binaryData: string, updateTime: string>> {
+]: any -> oneof<record<blocked: bool, config: record<binaryData: string, cloudUpdateTime: string, deviceAckTime: string, version: string>, credentials: table<expirationTime: string, publicKey: record>, gatewayConfig: record<gatewayAuthMethod: string, gatewayType: string, lastAccessedGatewayId: string, lastAccessedGatewayTime: string>, id: string, lastConfigAckTime: string, lastConfigSendTime: string, lastErrorStatus: record<code: int, details: list<record>, message: string>, lastErrorTime: string, lastEventTime: string, lastHeartbeatTime: string, lastStateTime: string, logLevel: string, metadata: record, name: string, numId: string, state: record<binaryData: string, updateTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -339,7 +358,7 @@ export def "cloudiot-projects-locations-registries-devices-config-versions-list"
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --num-versions: int # The number of versions to list. Versions are listed in decreasing order of the version number. The maximum number of versions retained is 10. If this value is zero, it will return all the versions available.
-]: nothing -> record<deviceConfigs: table<binaryData: string, cloudUpdateTime: string, deviceAckTime: string, version: string>> {
+]: nothing -> oneof<record<deviceConfigs: table<binaryData: string, cloudUpdateTime: string, deviceAckTime: string, version: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -388,7 +407,7 @@ export def "cloudiot-projects-locations-registries-devices-states-list" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --num-states: int # The number of states to list. States are listed in descending order of update time. The maximum number of states retained is 10. If this value is zero, it will return all the states available.
-]: nothing -> record<deviceStates: table<binaryData: string, updateTime: string>> {
+]: nothing -> oneof<record<deviceStates: table<binaryData: string, updateTime: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -438,7 +457,7 @@ export def "cloudiot-projects-locations-registries-devices-modify-cloud-to-devic
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --binary-data: string # Required. The configuration data for the device. (format: byte)
   --version-to-update: string # The version number to update. If this value is zero, it will not check the version number of the server and will always update the current version; otherwise, this update will fail if the version number found on the server does not match this version number. This is used to support multiple simultaneous updates without losing data. (format: int64)
-]: any -> record<binaryData: string, cloudUpdateTime: string, deviceAckTime: string, version: string> {
+]: any -> oneof<record<binaryData: string, cloudUpdateTime: string, deviceAckTime: string, version: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -491,7 +510,7 @@ export def "cloudiot-projects-locations-registries-devices-send-command-to-devic
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --binary-data: string # Required. The command data to send to the device. (format: byte)
   --subfolder: string # Optional subfolder for the command. If empty, the command will be delivered to the /devices/{device-id}/commands topic, otherwise it will be delivered to the /devices/{device-id}/commands/{subfolder} topic. Multi-level subfolders are allowed. This field must not have more than 256 characters, and must not contain any MQTT wildcards ("+" or "#") or null characters.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -550,7 +569,7 @@ export def "cloudiot-projects-locations-registries-groups-devices-list" [
   --gateway-list-options-gateway-type: string@gateway-list-options-gateway-type-completer # If `GATEWAY` is specified, only gateways are returned. If `NON_GATEWAY` is specified, only non-gateway devices are returned. If `GATEWAY_TYPE_UNSPECIFIED` is specified, all devices are returned.
   --page-size: int # The maximum number of devices to return in the response. If this value is zero, the service will select a default size. A call may return fewer objects than requested. A non-empty `next_page_token` in the response indicates that more data is available.
   --page-token: string # The value returned by the last `ListDevicesResponse`; indicates that this is a continuation of a prior `ListDevices` call and the system should return the next page of data.
-]: nothing -> record<devices: table<blocked: bool, config: record, credentials: list, gatewayConfig: record, id: string, lastConfigAckTime: string, lastConfigSendTime: string, lastErrorStatus: record, lastErrorTime: string, lastEventTime: string, lastHeartbeatTime: string, lastStateTime: string, logLevel: string, metadata: record, name: string, numId: string, state: record>, nextPageToken: string> {
+]: nothing -> oneof<record<devices: table<blocked: bool, config: record, credentials: list, gatewayConfig: record, id: string, lastConfigAckTime: string, lastConfigSendTime: string, lastErrorStatus: record, lastErrorTime: string, lastEventTime: string, lastHeartbeatTime: string, lastStateTime: string, logLevel: string, metadata: record, name: string, numId: string, state: record>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -576,11 +595,6 @@ export def "cloudiot-projects-locations-registries-groups-devices-list" [
 #
 # POST /v1/{parent}/devices
 # operationId: cloudiot.projects.locations.registries.devices.create
-# --config shape: {binaryData?: string, cloudUpdateTime?: string, deviceAckTime?: string, version?: string}
-# --credentials item shape: {expirationTime?: string, publicKey?: record}
-# --gatewayConfig shape: {gatewayAuthMethod?: "GATEWAY_AUTH_METHOD_UNSPECIFIED"|"ASSOCIATION_ONLY"|"DEVICE_AUTH_TOKEN_ONLY"|"ASSOCIATION_AND_DEVICE_AUTH_TOKEN", gatewayType?: "GATEWAY_TYPE_UNSPECIFIED"|"GATEWAY"|"NON_GATEWAY", lastAccessedGatewayId?: string, lastAccessedGatewayTime?: string}
-# --lastErrorStatus shape: {code?: int, details?: list, message?: string}
-# --state shape: {binaryData?: string, updateTime?: string}
 export def "cloudiot-projects-locations-registries-devices-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -620,7 +634,7 @@ export def "cloudiot-projects-locations-registries-devices-create" [
   --name: string # The resource path name. For example, `projects/p1/locations/us-central1/registries/registry0/devices/dev0` or `projects/p1/locations/us-central1/registries/registry0/devices/{num_id}`. When `name` is populated as a response from the service, it always ends in the device numeric ID.
   --num-id: string # [Output only] A server-defined unique numeric ID for the device. This is a more compact way to identify devices, and it is globally unique. (format: uint64)
   --state: record # The device state, as reported by the device. — shape: {binaryData?: string, updateTime?: string}
-]: any -> record<blocked: bool, config: record<binaryData: string, cloudUpdateTime: string, deviceAckTime: string, version: string>, credentials: table<expirationTime: string, publicKey: record>, gatewayConfig: record<gatewayAuthMethod: string, gatewayType: string, lastAccessedGatewayId: string, lastAccessedGatewayTime: string>, id: string, lastConfigAckTime: string, lastConfigSendTime: string, lastErrorStatus: record<code: int, details: list<record>, message: string>, lastErrorTime: string, lastEventTime: string, lastHeartbeatTime: string, lastStateTime: string, logLevel: string, metadata: record, name: string, numId: string, state: record<binaryData: string, updateTime: string>> {
+]: any -> oneof<record<blocked: bool, config: record<binaryData: string, cloudUpdateTime: string, deviceAckTime: string, version: string>, credentials: table<expirationTime: string, publicKey: record>, gatewayConfig: record<gatewayAuthMethod: string, gatewayType: string, lastAccessedGatewayId: string, lastAccessedGatewayTime: string>, id: string, lastConfigAckTime: string, lastConfigSendTime: string, lastErrorStatus: record<code: int, details: list<record>, message: string>, lastErrorTime: string, lastEventTime: string, lastHeartbeatTime: string, lastStateTime: string, logLevel: string, metadata: record, name: string, numId: string, state: record<binaryData: string, updateTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -673,7 +687,7 @@ export def "cloudiot-projects-locations-registries-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # The maximum number of registries to return in the response. If this value is zero, the service will select a default size. A call may return fewer objects than requested. A non-empty `next_page_token` in the response indicates that more data is available.
   --page-token: string # The value returned by the last `ListDeviceRegistriesResponse`; indicates that this is a continuation of a prior `ListDeviceRegistries` call and the system should return the next page of data.
-]: nothing -> record<deviceRegistries: table<credentials: list, eventNotificationConfigs: list, httpConfig: record, id: string, logLevel: string, mqttConfig: record, name: string, stateNotificationConfig: record>, nextPageToken: string> {
+]: nothing -> oneof<record<deviceRegistries: table<credentials: list, eventNotificationConfigs: list, httpConfig: record, id: string, logLevel: string, mqttConfig: record, name: string, stateNotificationConfig: record>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -699,11 +713,6 @@ export def "cloudiot-projects-locations-registries-list" [
 #
 # POST /v1/{parent}/registries
 # operationId: cloudiot.projects.locations.registries.create
-# --credentials item shape: {publicKeyCertificate?: record}
-# --eventNotificationConfigs item shape: {pubsubTopicName?: string, subfolderMatches?: string}
-# --httpConfig shape: {httpEnabledState?: "HTTP_STATE_UNSPECIFIED"|"HTTP_ENABLED"|"HTTP_DISABLED"}
-# --mqttConfig shape: {mqttEnabledState?: "MQTT_STATE_UNSPECIFIED"|"MQTT_ENABLED"|"MQTT_DISABLED"}
-# --stateNotificationConfig shape: {pubsubTopicName?: string}
 export def "cloudiot-projects-locations-registries-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -734,7 +743,7 @@ export def "cloudiot-projects-locations-registries-create" [
   --mqtt-config: record # The configuration of MQTT for a device registry. — shape: {mqttEnabledState?: "MQTT_STATE_UNSPECIFIED"|"MQTT_ENABLED"|"MQTT_DISABLED"}
   --name: string # The resource path name. For example, `projects/example-project/locations/us-central1/registries/my-registry`.
   --state-notification-config: record # The configuration for notification of new states received from the device. — shape: {pubsubTopicName?: string}
-]: any -> record<credentials: table<publicKeyCertificate: record>, eventNotificationConfigs: table<pubsubTopicName: string, subfolderMatches: string>, httpConfig: record<httpEnabledState: string>, id: string, logLevel: string, mqttConfig: record<mqttEnabledState: string>, name: string, stateNotificationConfig: record<pubsubTopicName: string>> {
+]: any -> oneof<record<credentials: table<publicKeyCertificate: record>, eventNotificationConfigs: table<pubsubTopicName: string, subfolderMatches: string>, httpConfig: record<httpEnabledState: string>, id: string, logLevel: string, mqttConfig: record<mqttEnabledState: string>, name: string, stateNotificationConfig: record<pubsubTopicName: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -787,7 +796,7 @@ export def "cloudiot-projects-locations-registries-bind-device-to-gateway" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --device-id: string # Required. The device to associate with the specified gateway. The value of `device_id` can be either the device numeric ID or the user-defined device identifier.
   --gateway-id: string # Required. The value of `gateway_id` can be either the device numeric ID or the user-defined device identifier.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -840,7 +849,7 @@ export def "cloudiot-projects-locations-registries-unbind-device-from-gateway" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --device-id: string # Required. The device to disassociate from the specified gateway. The value of `device_id` can be either the device numeric ID or the user-defined device identifier.
   --gateway-id: string # Required. The value of `gateway_id` can be either the device numeric ID or the user-defined device identifier.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -869,7 +878,6 @@ export def "cloudiot-projects-locations-registries-unbind-device-from-gateway" [
 #
 # POST /v1/{resource}:getIamPolicy
 # operationId: cloudiot.projects.locations.registries.groups.getIamPolicy
-# --options shape: {requestedPolicyVersion?: int}
 export def "cloudiot-projects-locations-registries-groups-get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -893,7 +901,7 @@ export def "cloudiot-projects-locations-registries-groups-get-iam-policy" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --options: record # Encapsulates settings provided to GetIamPolicy. — shape: {requestedPolicyVersion?: int}
-]: any -> record<bindings: table<condition: record, members: list, role: string>, etag: string, version: int> {
+]: any -> oneof<record<bindings: table<condition: record, members: list, role: string>, etag: string, version: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -922,7 +930,6 @@ export def "cloudiot-projects-locations-registries-groups-get-iam-policy" [
 #
 # POST /v1/{resource}:setIamPolicy
 # operationId: cloudiot.projects.locations.registries.groups.setIamPolicy
-# --policy shape: {bindings?: list, etag?: string, version?: int}
 export def "cloudiot-projects-locations-registries-groups-set-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -946,7 +953,7 @@ export def "cloudiot-projects-locations-registries-groups-set-iam-policy" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --policy: record # An Identity and Access Management (IAM) policy, which specifies access controls for Google Cloud resources. A `Policy` is a collection of `bindings`. A `binding` binds one or more `members`, or principals, to a single `role`. Principals can be user accounts, service accounts, Google groups, and domains (such as G Suite). A `role` is a named list of permissions; each `role` can be an IAM predefined role or a user-created custom role. For some types of Google Cloud resources, a `binding` can also specify a `condition`, which is a logical expression that allows access to a resource only if the expression evaluates to `true`. A condition can add constraints based on attributes of the request, the resource, or both. To learn which resources support conditions in their IAM policies, see the [IAM documentation](https://cloud.google.com/iam/help/conditions/resource-policies). **JSON example:** { "bindings": [ { "role": "roles/resourcemanager.organizationAdmin", "members": [ "user:mike@example.com", "group:admins@example.com", "domain:google.com", "serviceAccount:my-project-id@appspot.gserviceaccount.com" ] }, { "role": "roles/resourcemanager.organizationViewer", "members": [ "user:eve@example.com" ], "condition": { "title": "expirable access", "description": "Does not grant access after Sep 2020", "expression": "request.time < timestamp('2020-10-01T00:00:00.000Z')", } } ], "etag": "BwWWja0YfJA=", "version": 3 } **YAML example:** bindings: - members: - user:mike@example.com - group:admins@example.com - domain:google.com - serviceAccount:my-project-id@appspot.gserviceaccount.com role: roles/resourcemanager.organizationAdmin - members: - user:eve@example.com role: roles/resourcemanager.organizationViewer condition: title: expirable access description: Does not grant access after Sep 2020 expression: request.time < timestamp('2020-10-01T00:00:00.000Z') etag: BwWWja0YfJA= version: 3 For a description of IAM and its features, see the [IAM documentation](https://cloud.google.com/iam/docs/). — shape: {bindings?: list, etag?: string, version?: int}
-]: any -> record<bindings: table<condition: record, members: list, role: string>, etag: string, version: int> {
+]: any -> oneof<record<bindings: table<condition: record, members: list, role: string>, etag: string, version: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -998,7 +1005,7 @@ export def "cloudiot-projects-locations-registries-groups-test-iam-permissions" 
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --permissions: list<string> # The set of permissions to check for the `resource`. Permissions with wildcards (such as `*` or `storage.*`) are not allowed. For more information see [IAM Overview](https://cloud.google.com/iam/docs/overview#permissions).
-]: any -> record<permissions: list<string>> {
+]: any -> oneof<record<permissions: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

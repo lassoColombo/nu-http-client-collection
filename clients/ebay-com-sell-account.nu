@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -116,9 +140,9 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-advertising-eligibility" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-advertising-eligibility" "get-custom-policies" "create-custom-policy" "get-custom-policy" "update-custom-policy" "get-fulfillment-policies" "create-fulfillment-policy" "get-fulfillment-policy-by-name" "delete-fulfillment-policy" "get-fulfillment-policy" "update-fulfillment-policy" "get-kyc" "get-payment-policies" "create-payment-policy" "get-payment-policy-by-name" "delete-payment-policy" "get-payment-policy" "update-payment-policy" "get-payments-program" "get-payments-program-onboarding" "get-privileges" "get-opted-in-programs" "opt-in-to-program" "opt-out-of-program" "get-rate-tables" "get-return-policies" "create-return-policy" "get-return-policy-by-name" "delete-return-policy" "get-return-policy" "update-return-policy" "get-sales-taxes" "delete-sales-tax" "get-sales-tax" "create-or-replace-sales-tax" "get-subscription" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -152,7 +176,7 @@ export def "get-advertising-eligibility" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --program-types: string # A comma-separated list of eBay advertising programs.Tip: See the AdvertisingProgramEnum (/api-docs/sell/account/types/plser:AdvertisingProgramEnum) type for possible values.If no programs are specified, the results will be returned for all programs.
   --x-ebay-c-marketplace-id: string # The unique identifier of the eBay marketplace for which the seller eligibility status shall be checked.Note: This value is case-sensitive. (required)
-]: nothing -> record<advertisingEligibility: table<programType: string, reason: string, status: string>> {
+]: nothing -> oneof<record<advertisingEligibility: table<programType: string, reason: string, status: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_ebay_c_marketplace_id == null) { error make --unspanned { msg: "required header parameter 'X-EBAY-C-MARKETPLACE-ID' missing: pass --x-ebay-c-marketplace-id" } }
@@ -192,7 +216,7 @@ export def "get-custom-policies" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --policy-types: string # This query parameter specifies the type of custom policies to be returned.Multiple policy types may be requested in a single call by providing a comma-delimited set of all policy types to be returned.Note: Omitting this query parameter from a request will also return policies of all policy types.Two Custom Policy types are supported: Product Compliance (PRODUCT_COMPLIANCE) Takeback (TAKE_BACK)
   --x-ebay-c-marketplace-id: string # This header parameter specifies the eBay marketplace for the custom policy that is being created. Supported values for this header can be found in the MarketplaceIdEnum (/api-docs/sell/account/types/ba:MarketplaceIdEnum) type definition. Note: The following eBay marketplaces support Custom Policies: Germany (EBAY_DE) Canada (EBAY_CA) Australia (EBAY_AU) United States (EBAY_US) France (EBAY_FR) (required)
-]: nothing -> record<customPolicies: table<customPolicyId: string, label: string, name: string, policyType: string>, href: string, limit: int, next: string, offset: int, prev: string, total: int> {
+]: nothing -> oneof<record<customPolicies: table<customPolicyId: string, label: string, name: string, policyType: string>, href: string, limit: int, next: string, offset: int, prev: string, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_ebay_c_marketplace_id == null) { error make --unspanned { msg: "required header parameter 'X-EBAY-C-MARKETPLACE-ID' missing: pass --x-ebay-c-marketplace-id" } }
@@ -235,7 +259,7 @@ export def "create-custom-policy" [
   --label: string # Customer-facing label shown on View Item pages for items to which the policy applies. This seller-defined string is displayed as a system-generated hyperlink pointing to detailed policy information.Max length: 65
   --name: string # The seller-defined name for the custom policy. Names must be unique for policies assigned to the same seller, policy type, and eBay marketplace.Note: This field is visible only to the seller. Max length: 65
   --policy-type: string # Specifies the type of custom policy being created. Two Custom Policy types are supported: Product Compliance (PRODUCT_COMPLIANCE) Takeback (TAKE_BACK) For implementation help, refer to eBay API documentation
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -277,7 +301,7 @@ export def "get-custom-policy" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-ebay-c-marketplace-id: string # This header parameter specifies the eBay marketplace for the custom policy that is being created. Supported values for this header can be found in the MarketplaceIdEnum (/api-docs/sell/account/types/ba:MarketplaceIdEnum) type definition. Note: The following eBay marketplaces support Custom Policies: Germany (EBAY_DE) Canada (EBAY_CA) Australia (EBAY_AU) United States (EBAY_US) France (EBAY_FR) (required)
-]: nothing -> record<customPolicyId: string, description: string, label: string, name: string, policyType: string> {
+]: nothing -> oneof<record<customPolicyId: string, description: string, label: string, name: string, policyType: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($custom_policy_id | is-empty) { error make --unspanned { msg: "path parameter 'custom_policy_id' must be non-empty" } }
@@ -362,7 +386,7 @@ export def "get-fulfillment-policies" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --marketplace-id: string # This query parameter specifies the eBay marketplace of the policies you want to retrieve. For implementation help, refer to eBay API documentation at https://developer.ebay.com/api-docs/sell/account/types/ba:MarketplaceIdEnum (required)
-]: nothing -> record<fulfillmentPolicies: table<categoryTypes: list, description: string, freightShipping: bool, fulfillmentPolicyId: string, globalShipping: bool, handlingTime: record, localPickup: bool, marketplaceId: string, name: string, pickupDropOff: bool, shipToLocations: record, shippingOptions: list>, href: string, limit: int, next: string, offset: int, prev: string, total: int> {
+]: nothing -> oneof<record<fulfillmentPolicies: table<categoryTypes: list, description: string, freightShipping: bool, fulfillmentPolicyId: string, globalShipping: bool, handlingTime: record, localPickup: bool, marketplaceId: string, name: string, pickupDropOff: bool, shipToLocations: record, shippingOptions: list>, href: string, limit: int, next: string, offset: int, prev: string, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($marketplace_id == null) { error make --unspanned { msg: "required query parameter 'marketplace_id' missing: pass --marketplace-id" } }
@@ -388,10 +412,6 @@ export def "get-fulfillment-policies" [
 #
 # POST /fulfillment_policy/
 # operationId: createFulfillmentPolicy
-# --categoryTypes item shape: {default?: bool, name?: string}
-# --handlingTime shape: {unit?: string, value?: int}
-# --shipToLocations shape: {regionExcluded?: list, regionIncluded?: list}
-# --shippingOptions item shape: {costType?: string, insuranceFee?: record, insuranceOffered?: bool, optionType?: string, packageHandlingCost?: record, rateTableId?: string, shippingDiscountProfileId?: string, shippingPromotionOffered?: bool, shippingServices?: list}
 export def "create-fulfillment-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -413,7 +433,7 @@ export def "create-fulfillment-policy" [
   --pickup-drop-off: oneof<nothing, bool> # This field should be included and set to true if the seller offers the "Click and Collect" feature for an item. To enable "Click and Collect" on a listing, a seller must be eligible for Click and Collect. Currently, Click and Collect is available to only large retail merchants selling in the eBay AU and UK marketplaces. In addition to setting this field to true, the merchant must also do the following to enable the "Click and Collect" option on a listing: Have inventory for the product at one or more physical stores tied to the merchant's account. Sellers can use the createInventoryLocaion method in the Inventory API to associate physical stores to their account and they can then can add inventory to specific store locations.Set an immediate payment requirement on the item. The immediate payment feature requires the seller to: Set the immediatePay flag in the payment policy to 'true'.Have a valid store location with a complete street address.When a merchant successfully lists an item with Click and Collect, prospective buyers within a reasonable distance from one of the merchant's stores (that has stock available) will see the "Available for Click and Collect" option on the listing, along with information on the closest store that has the item.Default: false
   --ship-to-locations: record # This type consists of the regionIncluded and regionExcluded arrays, which indicate the areas to where the seller does and doesn't ship. — shape: {regionExcluded?: list, regionIncluded?: list}
   --shipping-options: list # This array is used to provide detailed information on the domestic and international shipping options available for the policy. A separate ShippingOption object is required for domestic shipping service options and for international shipping service options (if the seller ships to international locations). The optionType field is used to indicate whether the ShippingOption object applies to domestic or international shipping, and the costType field is used to indicate whether flat-rate shipping or calculated shipping will be used. The rateTableId field can be used to associate a defined shipping rate table to the policy, and the packageHandlingCost container can be used to set a handling charge for the policy. A separate ShippingServices object will be used to specify cost and other details for every available domestic and international shipping service option. — item shape: {costType?: string, insuranceFee?: record, insuranceOffered?: bool, optionType?: string, packageHandlingCost?: record, rateTableId?: string, shippingDiscountProfileId?: string, shippingPromotionOffered?: bool, shippingServices?: list}
-]: any -> record<categoryTypes: table<default: bool, name: string>, description: string, freightShipping: bool, fulfillmentPolicyId: string, globalShipping: bool, handlingTime: record<unit: string, value: int>, localPickup: bool, marketplaceId: string, name: string, pickupDropOff: bool, shipToLocations: record<regionExcluded: list<record>, regionIncluded: list<record>>, shippingOptions: table<costType: string, insuranceFee: record, insuranceOffered: bool, optionType: string, packageHandlingCost: record, rateTableId: string, shippingDiscountProfileId: string, shippingPromotionOffered: bool, shippingServices: list>, warnings: table<category: string, domain: string, errorId: int, inputRefIds: list, longMessage: string, message: string, outputRefIds: list, parameters: list, subdomain: string>> {
+]: any -> oneof<record<categoryTypes: table<default: bool, name: string>, description: string, freightShipping: bool, fulfillmentPolicyId: string, globalShipping: bool, handlingTime: record<unit: string, value: int>, localPickup: bool, marketplaceId: string, name: string, pickupDropOff: bool, shipToLocations: record<regionExcluded: list<record>, regionIncluded: list<record>>, shippingOptions: table<costType: string, insuranceFee: record, insuranceOffered: bool, optionType: string, packageHandlingCost: record, rateTableId: string, shippingDiscountProfileId: string, shippingPromotionOffered: bool, shippingServices: list>, warnings: table<category: string, domain: string, errorId: int, inputRefIds: list, longMessage: string, message: string, outputRefIds: list, parameters: list, subdomain: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -452,7 +472,7 @@ export def "get-fulfillment-policy-by-name" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --marketplace-id: string # This query parameter specifies the eBay marketplace of the policy you want to retrieve. For implementation help, refer to eBay API documentation at https://developer.ebay.com/api-docs/sell/account/types/ba:MarketplaceIdEnum (required)
   --name: string # This query parameter specifies the seller-defined name of the fulfillment policy you want to retrieve. (required)
-]: nothing -> record<categoryTypes: table<default: bool, name: string>, description: string, freightShipping: bool, fulfillmentPolicyId: string, globalShipping: bool, handlingTime: record<unit: string, value: int>, localPickup: bool, marketplaceId: string, name: string, pickupDropOff: bool, shipToLocations: record<regionExcluded: list<record>, regionIncluded: list<record>>, shippingOptions: table<costType: string, insuranceFee: record, insuranceOffered: bool, optionType: string, packageHandlingCost: record, rateTableId: string, shippingDiscountProfileId: string, shippingPromotionOffered: bool, shippingServices: list>> {
+]: nothing -> oneof<record<categoryTypes: table<default: bool, name: string>, description: string, freightShipping: bool, fulfillmentPolicyId: string, globalShipping: bool, handlingTime: record<unit: string, value: int>, localPickup: bool, marketplaceId: string, name: string, pickupDropOff: bool, shipToLocations: record<regionExcluded: list<record>, regionIncluded: list<record>>, shippingOptions: table<costType: string, insuranceFee: record, insuranceOffered: bool, optionType: string, packageHandlingCost: record, rateTableId: string, shippingDiscountProfileId: string, shippingPromotionOffered: bool, shippingServices: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($marketplace_id == null) { error make --unspanned { msg: "required query parameter 'marketplace_id' missing: pass --marketplace-id" } }
@@ -526,7 +546,7 @@ export def "get-fulfillment-policy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<categoryTypes: table<default: bool, name: string>, description: string, freightShipping: bool, fulfillmentPolicyId: string, globalShipping: bool, handlingTime: record<unit: string, value: int>, localPickup: bool, marketplaceId: string, name: string, pickupDropOff: bool, shipToLocations: record<regionExcluded: list<record>, regionIncluded: list<record>>, shippingOptions: table<costType: string, insuranceFee: record, insuranceOffered: bool, optionType: string, packageHandlingCost: record, rateTableId: string, shippingDiscountProfileId: string, shippingPromotionOffered: bool, shippingServices: list>> {
+]: nothing -> oneof<record<categoryTypes: table<default: bool, name: string>, description: string, freightShipping: bool, fulfillmentPolicyId: string, globalShipping: bool, handlingTime: record<unit: string, value: int>, localPickup: bool, marketplaceId: string, name: string, pickupDropOff: bool, shipToLocations: record<regionExcluded: list<record>, regionIncluded: list<record>>, shippingOptions: table<costType: string, insuranceFee: record, insuranceOffered: bool, optionType: string, packageHandlingCost: record, rateTableId: string, shippingDiscountProfileId: string, shippingPromotionOffered: bool, shippingServices: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($fulfillment_policy_id | is-empty) { error make --unspanned { msg: "path parameter 'fulfillmentPolicyId' must be non-empty" } }
@@ -551,10 +571,6 @@ export def "get-fulfillment-policy" [
 #
 # PUT /fulfillment_policy/{fulfillmentPolicyId}
 # operationId: updateFulfillmentPolicy
-# --categoryTypes item shape: {default?: bool, name?: string}
-# --handlingTime shape: {unit?: string, value?: int}
-# --shipToLocations shape: {regionExcluded?: list, regionIncluded?: list}
-# --shippingOptions item shape: {costType?: string, insuranceFee?: record, insuranceOffered?: bool, optionType?: string, packageHandlingCost?: record, rateTableId?: string, shippingDiscountProfileId?: string, shippingPromotionOffered?: bool, shippingServices?: list}
 export def "update-fulfillment-policy" [
   fulfillment_policy_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -577,7 +593,7 @@ export def "update-fulfillment-policy" [
   --pickup-drop-off: oneof<nothing, bool> # This field should be included and set to true if the seller offers the "Click and Collect" feature for an item. To enable "Click and Collect" on a listing, a seller must be eligible for Click and Collect. Currently, Click and Collect is available to only large retail merchants selling in the eBay AU and UK marketplaces. In addition to setting this field to true, the merchant must also do the following to enable the "Click and Collect" option on a listing: Have inventory for the product at one or more physical stores tied to the merchant's account. Sellers can use the createInventoryLocaion method in the Inventory API to associate physical stores to their account and they can then can add inventory to specific store locations.Set an immediate payment requirement on the item. The immediate payment feature requires the seller to: Set the immediatePay flag in the payment policy to 'true'.Have a valid store location with a complete street address.When a merchant successfully lists an item with Click and Collect, prospective buyers within a reasonable distance from one of the merchant's stores (that has stock available) will see the "Available for Click and Collect" option on the listing, along with information on the closest store that has the item.Default: false
   --ship-to-locations: record # This type consists of the regionIncluded and regionExcluded arrays, which indicate the areas to where the seller does and doesn't ship. — shape: {regionExcluded?: list, regionIncluded?: list}
   --shipping-options: list # This array is used to provide detailed information on the domestic and international shipping options available for the policy. A separate ShippingOption object is required for domestic shipping service options and for international shipping service options (if the seller ships to international locations). The optionType field is used to indicate whether the ShippingOption object applies to domestic or international shipping, and the costType field is used to indicate whether flat-rate shipping or calculated shipping will be used. The rateTableId field can be used to associate a defined shipping rate table to the policy, and the packageHandlingCost container can be used to set a handling charge for the policy. A separate ShippingServices object will be used to specify cost and other details for every available domestic and international shipping service option. — item shape: {costType?: string, insuranceFee?: record, insuranceOffered?: bool, optionType?: string, packageHandlingCost?: record, rateTableId?: string, shippingDiscountProfileId?: string, shippingPromotionOffered?: bool, shippingServices?: list}
-]: any -> record<categoryTypes: table<default: bool, name: string>, description: string, freightShipping: bool, fulfillmentPolicyId: string, globalShipping: bool, handlingTime: record<unit: string, value: int>, localPickup: bool, marketplaceId: string, name: string, pickupDropOff: bool, shipToLocations: record<regionExcluded: list<record>, regionIncluded: list<record>>, shippingOptions: table<costType: string, insuranceFee: record, insuranceOffered: bool, optionType: string, packageHandlingCost: record, rateTableId: string, shippingDiscountProfileId: string, shippingPromotionOffered: bool, shippingServices: list>, warnings: table<category: string, domain: string, errorId: int, inputRefIds: list, longMessage: string, message: string, outputRefIds: list, parameters: list, subdomain: string>> {
+]: any -> oneof<record<categoryTypes: table<default: bool, name: string>, description: string, freightShipping: bool, fulfillmentPolicyId: string, globalShipping: bool, handlingTime: record<unit: string, value: int>, localPickup: bool, marketplaceId: string, name: string, pickupDropOff: bool, shipToLocations: record<regionExcluded: list<record>, regionIncluded: list<record>>, shippingOptions: table<costType: string, insuranceFee: record, insuranceOffered: bool, optionType: string, packageHandlingCost: record, rateTableId: string, shippingDiscountProfileId: string, shippingPromotionOffered: bool, shippingServices: list>, warnings: table<category: string, domain: string, errorId: int, inputRefIds: list, longMessage: string, message: string, outputRefIds: list, parameters: list, subdomain: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -615,7 +631,7 @@ export def "get-kyc" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<kycChecks: table<alert: string, dataRequired: string, detailMessage: string, dueDate: string, remedyUrl: string>> {
+]: nothing -> oneof<record<kycChecks: table<alert: string, dataRequired: string, detailMessage: string, dueDate: string, remedyUrl: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/kyc" $auth.query)
@@ -650,7 +666,7 @@ export def "get-payment-policies" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --marketplace-id: string # This query parameter specifies the eBay marketplace of the policies you want to retrieve. For implementation help, refer to eBay API documentation at https://developer.ebay.com/api-docs/sell/account/types/ba:MarketplaceIdEnum (required)
-]: nothing -> record<href: string, limit: int, next: string, offset: int, paymentPolicies: table<categoryTypes: list, deposit: record, description: string, fullPaymentDueIn: record, immediatePay: bool, marketplaceId: string, name: string, paymentInstructions: string, paymentMethods: list, paymentPolicyId: string>, prev: string, total: int> {
+]: nothing -> oneof<record<href: string, limit: int, next: string, offset: int, paymentPolicies: table<categoryTypes: list, deposit: record, description: string, fullPaymentDueIn: record, immediatePay: bool, marketplaceId: string, name: string, paymentInstructions: string, paymentMethods: list, paymentPolicyId: string>, prev: string, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($marketplace_id == null) { error make --unspanned { msg: "required query parameter 'marketplace_id' missing: pass --marketplace-id" } }
@@ -676,10 +692,6 @@ export def "get-payment-policies" [
 #
 # POST /payment_policy
 # operationId: createPaymentPolicy
-# --categoryTypes item shape: {default?: bool, name?: string}
-# --deposit shape: {amount?: record, dueIn?: record, paymentMethods?: list}
-# --fullPaymentDueIn shape: {unit?: string, value?: int}
-# --paymentMethods item shape: {brands?: list<string>, paymentMethodType?: string, recipientAccountReference?: record}
 export def "create-payment-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -699,7 +711,7 @@ export def "create-payment-policy" [
   --name: string # A seller-defined name for this payment business policy. Names must be unique for policies assigned to the same marketplace.Max length: 64
   --payment-instructions: string # Note: DO NOT USE THIS FIELD. Payment instructions are no longer supported by payment business policies.A free-form string field that allows sellers to add detailed payment instructions to their listings.
   --payment-methods: list # Note: This field applies only when the seller needs to specify one or more offline payment methods. eBay now manages the electronic payment options available to buyers to pay for the item.This array is used to specify one or more offline payment methods that will be accepted for payment that occurs off of eBay's platform. — item shape: {brands?: list<string>, paymentMethodType?: string, recipientAccountReference?: record}
-]: any -> record<categoryTypes: table<default: bool, name: string>, deposit: record<amount: record<currency: string, value: string>, dueIn: record<unit: string, value: int>, paymentMethods: list<record>>, description: string, fullPaymentDueIn: record<unit: string, value: int>, immediatePay: bool, marketplaceId: string, name: string, paymentInstructions: string, paymentMethods: table<brands: list, paymentMethodType: string, recipientAccountReference: record>, paymentPolicyId: string, warnings: table<category: string, domain: string, errorId: int, inputRefIds: list, longMessage: string, message: string, outputRefIds: list, parameters: list, subdomain: string>> {
+]: any -> oneof<record<categoryTypes: table<default: bool, name: string>, deposit: record<amount: record<currency: string, value: string>, dueIn: record<unit: string, value: int>, paymentMethods: list<record>>, description: string, fullPaymentDueIn: record<unit: string, value: int>, immediatePay: bool, marketplaceId: string, name: string, paymentInstructions: string, paymentMethods: table<brands: list, paymentMethodType: string, recipientAccountReference: record>, paymentPolicyId: string, warnings: table<category: string, domain: string, errorId: int, inputRefIds: list, longMessage: string, message: string, outputRefIds: list, parameters: list, subdomain: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -738,7 +750,7 @@ export def "get-payment-policy-by-name" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --marketplace-id: string # This query parameter specifies the eBay marketplace of the policy you want to retrieve. For implementation help, refer to eBay API documentation at https://developer.ebay.com/api-docs/sell/account/types/ba:MarketplaceIdEnum (required)
   --name: string # This query parameter specifies the seller-defined name of the payment policy you want to retrieve. (required)
-]: nothing -> record<categoryTypes: table<default: bool, name: string>, deposit: record<amount: record<currency: string, value: string>, dueIn: record<unit: string, value: int>, paymentMethods: list<record>>, description: string, fullPaymentDueIn: record<unit: string, value: int>, immediatePay: bool, marketplaceId: string, name: string, paymentInstructions: string, paymentMethods: table<brands: list, paymentMethodType: string, recipientAccountReference: record>, paymentPolicyId: string> {
+]: nothing -> oneof<record<categoryTypes: table<default: bool, name: string>, deposit: record<amount: record<currency: string, value: string>, dueIn: record<unit: string, value: int>, paymentMethods: list<record>>, description: string, fullPaymentDueIn: record<unit: string, value: int>, immediatePay: bool, marketplaceId: string, name: string, paymentInstructions: string, paymentMethods: table<brands: list, paymentMethodType: string, recipientAccountReference: record>, paymentPolicyId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($marketplace_id == null) { error make --unspanned { msg: "required query parameter 'marketplace_id' missing: pass --marketplace-id" } }
@@ -812,7 +824,7 @@ export def "get-payment-policy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<categoryTypes: table<default: bool, name: string>, deposit: record<amount: record<currency: string, value: string>, dueIn: record<unit: string, value: int>, paymentMethods: list<record>>, description: string, fullPaymentDueIn: record<unit: string, value: int>, immediatePay: bool, marketplaceId: string, name: string, paymentInstructions: string, paymentMethods: table<brands: list, paymentMethodType: string, recipientAccountReference: record>, paymentPolicyId: string> {
+]: nothing -> oneof<record<categoryTypes: table<default: bool, name: string>, deposit: record<amount: record<currency: string, value: string>, dueIn: record<unit: string, value: int>, paymentMethods: list<record>>, description: string, fullPaymentDueIn: record<unit: string, value: int>, immediatePay: bool, marketplaceId: string, name: string, paymentInstructions: string, paymentMethods: table<brands: list, paymentMethodType: string, recipientAccountReference: record>, paymentPolicyId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_policy_id | is-empty) { error make --unspanned { msg: "path parameter 'payment_policy_id' must be non-empty" } }
@@ -837,10 +849,6 @@ export def "get-payment-policy" [
 #
 # PUT /payment_policy/{payment_policy_id}
 # operationId: updatePaymentPolicy
-# --categoryTypes item shape: {default?: bool, name?: string}
-# --deposit shape: {amount?: record, dueIn?: record, paymentMethods?: list}
-# --fullPaymentDueIn shape: {unit?: string, value?: int}
-# --paymentMethods item shape: {brands?: list<string>, paymentMethodType?: string, recipientAccountReference?: record}
 export def "update-payment-policy" [
   payment_policy_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -861,7 +869,7 @@ export def "update-payment-policy" [
   --name: string # A seller-defined name for this payment business policy. Names must be unique for policies assigned to the same marketplace.Max length: 64
   --payment-instructions: string # Note: DO NOT USE THIS FIELD. Payment instructions are no longer supported by payment business policies.A free-form string field that allows sellers to add detailed payment instructions to their listings.
   --payment-methods: list # Note: This field applies only when the seller needs to specify one or more offline payment methods. eBay now manages the electronic payment options available to buyers to pay for the item.This array is used to specify one or more offline payment methods that will be accepted for payment that occurs off of eBay's platform. — item shape: {brands?: list<string>, paymentMethodType?: string, recipientAccountReference?: record}
-]: any -> record<categoryTypes: table<default: bool, name: string>, deposit: record<amount: record<currency: string, value: string>, dueIn: record<unit: string, value: int>, paymentMethods: list<record>>, description: string, fullPaymentDueIn: record<unit: string, value: int>, immediatePay: bool, marketplaceId: string, name: string, paymentInstructions: string, paymentMethods: table<brands: list, paymentMethodType: string, recipientAccountReference: record>, paymentPolicyId: string, warnings: table<category: string, domain: string, errorId: int, inputRefIds: list, longMessage: string, message: string, outputRefIds: list, parameters: list, subdomain: string>> {
+]: any -> oneof<record<categoryTypes: table<default: bool, name: string>, deposit: record<amount: record<currency: string, value: string>, dueIn: record<unit: string, value: int>, paymentMethods: list<record>>, description: string, fullPaymentDueIn: record<unit: string, value: int>, immediatePay: bool, marketplaceId: string, name: string, paymentInstructions: string, paymentMethods: table<brands: list, paymentMethodType: string, recipientAccountReference: record>, paymentPolicyId: string, warnings: table<category: string, domain: string, errorId: int, inputRefIds: list, longMessage: string, message: string, outputRefIds: list, parameters: list, subdomain: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -901,7 +909,7 @@ export def "get-payments-program" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<marketplaceId: string, paymentsProgramType: string, status: string, wasPreviouslyOptedIn: bool> {
+]: nothing -> oneof<record<marketplaceId: string, paymentsProgramType: string, status: string, wasPreviouslyOptedIn: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($marketplace_id | is-empty) { error make --unspanned { msg: "path parameter 'marketplace_id' must be non-empty" } }
@@ -939,7 +947,7 @@ export def "get-payments-program-onboarding" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<onboardingStatus: string, steps: table<name: string, status: string, webUrl: string>> {
+]: nothing -> oneof<record<onboardingStatus: string, steps: table<name: string, status: string, webUrl: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($marketplace_id | is-empty) { error make --unspanned { msg: "path parameter 'marketplace_id' must be non-empty" } }
@@ -975,7 +983,7 @@ export def "get-privileges" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<sellerRegistrationCompleted: bool, sellingLimit: record<amount: record<currency: string, value: string>, quantity: int>> {
+]: nothing -> oneof<record<sellerRegistrationCompleted: bool, sellingLimit: record<amount: record<currency: string, value: string>, quantity: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/privilege" $auth.query)
@@ -1009,7 +1017,7 @@ export def "get-opted-in-programs" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<programs: table<programType: string>> {
+]: nothing -> oneof<record<programs: table<programType: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/program/get_opted_in_programs" $auth.query)
@@ -1044,7 +1052,7 @@ export def "opt-in-to-program" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --program-type: string # A seller program in to which a seller can opt-in. For implementation help, refer to eBay API documentation
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1082,7 +1090,7 @@ export def "opt-out-of-program" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --program-type: string # A seller program in to which a seller can opt-in. For implementation help, refer to eBay API documentation
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1120,7 +1128,7 @@ export def "get-rate-tables" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --country-code: string # This query parameter specifies the two-letter ISO 3166 (https://www.iso.org/iso-3166-country-codes.html ) code of country for which you want shipping rate table information. If you do not specify a country code, the request returns all of the seller's defined shipping rate tables for all eBay marketplaces. For implementation help, refer to eBay API documentation at https://developer.ebay.com/api-docs/sell/account/types/ba:CountryCodeEnum
-]: nothing -> record<rateTables: table<countryCode: string, locality: string, name: string, rateTableId: string>> {
+]: nothing -> oneof<record<rateTables: table<countryCode: string, locality: string, name: string, rateTableId: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "country_code" $country_code "scalar")] | flatten | str join "&"
@@ -1156,7 +1164,7 @@ export def "get-return-policies" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --marketplace-id: string # This query parameter specifies the ID of the eBay marketplace of the policy you want to retrieve. For implementation help, refer to eBay API documentation at https://developer.ebay.com/api-docs/sell/account/types/ba:MarketplaceIdEnum (required)
-]: nothing -> record<href: string, limit: int, next: string, offset: int, prev: string, returnPolicies: table<categoryTypes: list, description: string, extendedHolidayReturnsOffered: bool, internationalOverride: record, marketplaceId: string, name: string, refundMethod: string, restockingFeePercentage: string, returnInstructions: string, returnMethod: string, returnPeriod: record, returnPolicyId: string, returnShippingCostPayer: string, returnsAccepted: bool>, total: int> {
+]: nothing -> oneof<record<href: string, limit: int, next: string, offset: int, prev: string, returnPolicies: table<categoryTypes: list, description: string, extendedHolidayReturnsOffered: bool, internationalOverride: record, marketplaceId: string, name: string, refundMethod: string, restockingFeePercentage: string, returnInstructions: string, returnMethod: string, returnPeriod: record, returnPolicyId: string, returnShippingCostPayer: string, returnsAccepted: bool>, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($marketplace_id == null) { error make --unspanned { msg: "required query parameter 'marketplace_id' missing: pass --marketplace-id" } }
@@ -1182,9 +1190,6 @@ export def "get-return-policies" [
 #
 # POST /return_policy
 # operationId: createReturnPolicy
-# --categoryTypes item shape: {default?: bool, name?: string}
-# --internationalOverride shape: {returnMethod?: string, returnPeriod?: record, returnShippingCostPayer?: string, returnsAccepted?: bool}
-# --returnPeriod shape: {unit?: string, value?: int}
 export def "create-return-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1208,7 +1213,7 @@ export def "create-return-policy" [
   --return-period: record # A type used to specify a period of time using a specified time-measurement unit. Payment, return, and fulfillment business policies all use this type to specify time windows.Whenever a container that uses this type is used in a request, both of these fields are required. Similarly, whenever a container that uses this type is returned in a response, both of these fields are always returned. — shape: {unit?: string, value?: int}
   --return-shipping-cost-payer: string # This field indicates who is responsible for paying for the shipping charges for returned items. The field can be set to either BUYER or SELLER. Depending on the return policy and specifics of the return, either the buyer or the seller can be responsible for the return shipping costs. Note that the seller is always responsible for return shipping costs for SNAD-related issues. This field is conditionally required if returnsAccepted is set to true. For implementation help, refer to eBay API documentation
   --returns-accepted: oneof<nothing, bool> # If set to true, the seller accepts returns. Note:Top-Rated sellers must accept item returns and the handlingTime should be set to zero days or one day for a listing to receive a Top-Rated Plus badge on the View Item or search result pages. For more information on eBay's Top-Rated seller program, see Becoming a Top Rated Seller and qualifying for Top Rated Plus benefits (http://pages.ebay.com/help/sell/top-rated.html ).
-]: any -> record<categoryTypes: table<default: bool, name: string>, description: string, extendedHolidayReturnsOffered: bool, internationalOverride: record<returnMethod: string, returnPeriod: record<unit: string, value: int>, returnShippingCostPayer: string, returnsAccepted: bool>, marketplaceId: string, name: string, refundMethod: string, restockingFeePercentage: string, returnInstructions: string, returnMethod: string, returnPeriod: record<unit: string, value: int>, returnPolicyId: string, returnShippingCostPayer: string, returnsAccepted: bool, warnings: table<category: string, domain: string, errorId: int, inputRefIds: list, longMessage: string, message: string, outputRefIds: list, parameters: list, subdomain: string>> {
+]: any -> oneof<record<categoryTypes: table<default: bool, name: string>, description: string, extendedHolidayReturnsOffered: bool, internationalOverride: record<returnMethod: string, returnPeriod: record<unit: string, value: int>, returnShippingCostPayer: string, returnsAccepted: bool>, marketplaceId: string, name: string, refundMethod: string, restockingFeePercentage: string, returnInstructions: string, returnMethod: string, returnPeriod: record<unit: string, value: int>, returnPolicyId: string, returnShippingCostPayer: string, returnsAccepted: bool, warnings: table<category: string, domain: string, errorId: int, inputRefIds: list, longMessage: string, message: string, outputRefIds: list, parameters: list, subdomain: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1247,7 +1252,7 @@ export def "get-return-policy-by-name" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --marketplace-id: string # This query parameter specifies the ID of the eBay marketplace of the policy you want to retrieve. For implementation help, refer to eBay API documentation at https://developer.ebay.com/api-docs/sell/account/types/ba:MarketplaceIdEnum (required)
   --name: string # This query parameter specifies the seller-defined name of the return policy you want to retrieve. (required)
-]: nothing -> record<categoryTypes: table<default: bool, name: string>, description: string, extendedHolidayReturnsOffered: bool, internationalOverride: record<returnMethod: string, returnPeriod: record<unit: string, value: int>, returnShippingCostPayer: string, returnsAccepted: bool>, marketplaceId: string, name: string, refundMethod: string, restockingFeePercentage: string, returnInstructions: string, returnMethod: string, returnPeriod: record<unit: string, value: int>, returnPolicyId: string, returnShippingCostPayer: string, returnsAccepted: bool> {
+]: nothing -> oneof<record<categoryTypes: table<default: bool, name: string>, description: string, extendedHolidayReturnsOffered: bool, internationalOverride: record<returnMethod: string, returnPeriod: record<unit: string, value: int>, returnShippingCostPayer: string, returnsAccepted: bool>, marketplaceId: string, name: string, refundMethod: string, restockingFeePercentage: string, returnInstructions: string, returnMethod: string, returnPeriod: record<unit: string, value: int>, returnPolicyId: string, returnShippingCostPayer: string, returnsAccepted: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($marketplace_id == null) { error make --unspanned { msg: "required query parameter 'marketplace_id' missing: pass --marketplace-id" } }
@@ -1321,7 +1326,7 @@ export def "get-return-policy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<categoryTypes: table<default: bool, name: string>, description: string, extendedHolidayReturnsOffered: bool, internationalOverride: record<returnMethod: string, returnPeriod: record<unit: string, value: int>, returnShippingCostPayer: string, returnsAccepted: bool>, marketplaceId: string, name: string, refundMethod: string, restockingFeePercentage: string, returnInstructions: string, returnMethod: string, returnPeriod: record<unit: string, value: int>, returnPolicyId: string, returnShippingCostPayer: string, returnsAccepted: bool> {
+]: nothing -> oneof<record<categoryTypes: table<default: bool, name: string>, description: string, extendedHolidayReturnsOffered: bool, internationalOverride: record<returnMethod: string, returnPeriod: record<unit: string, value: int>, returnShippingCostPayer: string, returnsAccepted: bool>, marketplaceId: string, name: string, refundMethod: string, restockingFeePercentage: string, returnInstructions: string, returnMethod: string, returnPeriod: record<unit: string, value: int>, returnPolicyId: string, returnShippingCostPayer: string, returnsAccepted: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($return_policy_id | is-empty) { error make --unspanned { msg: "path parameter 'return_policy_id' must be non-empty" } }
@@ -1346,9 +1351,6 @@ export def "get-return-policy" [
 #
 # PUT /return_policy/{return_policy_id}
 # operationId: updateReturnPolicy
-# --categoryTypes item shape: {default?: bool, name?: string}
-# --internationalOverride shape: {returnMethod?: string, returnPeriod?: record, returnShippingCostPayer?: string, returnsAccepted?: bool}
-# --returnPeriod shape: {unit?: string, value?: int}
 export def "update-return-policy" [
   return_policy_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1373,7 +1375,7 @@ export def "update-return-policy" [
   --return-period: record # A type used to specify a period of time using a specified time-measurement unit. Payment, return, and fulfillment business policies all use this type to specify time windows.Whenever a container that uses this type is used in a request, both of these fields are required. Similarly, whenever a container that uses this type is returned in a response, both of these fields are always returned. — shape: {unit?: string, value?: int}
   --return-shipping-cost-payer: string # This field indicates who is responsible for paying for the shipping charges for returned items. The field can be set to either BUYER or SELLER. Depending on the return policy and specifics of the return, either the buyer or the seller can be responsible for the return shipping costs. Note that the seller is always responsible for return shipping costs for SNAD-related issues. This field is conditionally required if returnsAccepted is set to true. For implementation help, refer to eBay API documentation
   --returns-accepted: oneof<nothing, bool> # If set to true, the seller accepts returns. Note:Top-Rated sellers must accept item returns and the handlingTime should be set to zero days or one day for a listing to receive a Top-Rated Plus badge on the View Item or search result pages. For more information on eBay's Top-Rated seller program, see Becoming a Top Rated Seller and qualifying for Top Rated Plus benefits (http://pages.ebay.com/help/sell/top-rated.html ).
-]: any -> record<categoryTypes: table<default: bool, name: string>, description: string, extendedHolidayReturnsOffered: bool, internationalOverride: record<returnMethod: string, returnPeriod: record<unit: string, value: int>, returnShippingCostPayer: string, returnsAccepted: bool>, marketplaceId: string, name: string, refundMethod: string, restockingFeePercentage: string, returnInstructions: string, returnMethod: string, returnPeriod: record<unit: string, value: int>, returnPolicyId: string, returnShippingCostPayer: string, returnsAccepted: bool, warnings: table<category: string, domain: string, errorId: int, inputRefIds: list, longMessage: string, message: string, outputRefIds: list, parameters: list, subdomain: string>> {
+]: any -> oneof<record<categoryTypes: table<default: bool, name: string>, description: string, extendedHolidayReturnsOffered: bool, internationalOverride: record<returnMethod: string, returnPeriod: record<unit: string, value: int>, returnShippingCostPayer: string, returnsAccepted: bool>, marketplaceId: string, name: string, refundMethod: string, restockingFeePercentage: string, returnInstructions: string, returnMethod: string, returnPeriod: record<unit: string, value: int>, returnPolicyId: string, returnShippingCostPayer: string, returnsAccepted: bool, warnings: table<category: string, domain: string, errorId: int, inputRefIds: list, longMessage: string, message: string, outputRefIds: list, parameters: list, subdomain: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1412,7 +1414,7 @@ export def "get-sales-taxes" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --country-code: string # This path parameter specifies the two-letter ISO 3166 (https://www.iso.org/iso-3166-country-codes.html ) code for the country whose tax table you want to retrieve. For implementation help, refer to eBay API documentation at https://developer.ebay.com/api-docs/sell/account/types/ba:CountryCodeEnum (required)
-]: nothing -> record<salesTaxes: table<countryCode: string, salesTaxJurisdictionId: string, salesTaxPercentage: string, shippingAndHandlingTaxed: bool>> {
+]: nothing -> oneof<record<salesTaxes: table<countryCode: string, salesTaxJurisdictionId: string, salesTaxPercentage: string, shippingAndHandlingTaxed: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($country_code == null) { error make --unspanned { msg: "required query parameter 'country_code' missing: pass --country-code" } }
@@ -1488,7 +1490,7 @@ export def "get-sales-tax" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<countryCode: string, salesTaxJurisdictionId: string, salesTaxPercentage: string, shippingAndHandlingTaxed: bool> {
+]: nothing -> oneof<record<countryCode: string, salesTaxJurisdictionId: string, salesTaxPercentage: string, shippingAndHandlingTaxed: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($country_code | is-empty) { error make --unspanned { msg: "path parameter 'countryCode' must be non-empty" } }
@@ -1569,7 +1571,7 @@ export def "get-subscription" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: string # This field is for future use.
   --continuation-token: string # This field is for future use.
-]: nothing -> record<href: string, limit: int, next: string, subscriptions: table<marketplaceId: string, subscriptionId: string, subscriptionLevel: string, subscriptionType: string, term: record>, total: int> {
+]: nothing -> oneof<record<href: string, limit: int, next: string, subscriptions: table<marketplaceId: string, subscriptionId: string, subscriptionLevel: string, subscriptionType: string, term: record>, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "continuation_token" $continuation_token "scalar")] | flatten | str join "&"

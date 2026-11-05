@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -152,9 +176,9 @@ def action-completer-37 [] { ["UntagResource"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-delete-alarms" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-delete-alarms" "post-delete-alarms" "get-delete-anomaly-detector" "post-delete-anomaly-detector" "get-delete-dashboards" "post-delete-dashboards" "get-delete-insight-rules" "post-delete-insight-rules" "get-delete-metric-stream" "post-delete-metric-stream" "get-describe-alarm-history" "post-describe-alarm-history" "get-describe-alarms" "post-describe-alarms" "get-describe-alarms-for-metric" "post-describe-alarms-for-metric" "get-describe-anomaly-detectors" "post-describe-anomaly-detectors" "get-describe-insight-rules" "post-describe-insight-rules" "get-disable-alarm-actions" "post-disable-alarm-actions" "get-disable-insight-rules" "post-disable-insight-rules" "get-enable-alarm-actions" "post-enable-alarm-actions" "get-enable-insight-rules" "post-enable-insight-rules" "get-get-dashboard" "post-get-dashboard" "get-get-insight-rule-report" "post-get-insight-rule-report" "get-get-metric-data" "post-get-metric-data" "get-get-metric-statistics" "post-get-metric-statistics" "get-get-metric-stream" "post-get-metric-stream" "get-get-metric-widget-image" "post-get-metric-widget-image" "get-list-dashboards" "post-list-dashboards" "get-list-managed-insight-rules" "post-list-managed-insight-rules" "get-list-metric-streams" "post-list-metric-streams" "get-list-metrics" "post-list-metrics" "get-list-tags-for-resource" "post-list-tags-for-resource" "get-put-anomaly-detector" "post-put-anomaly-detector" "get-put-composite-alarm" "post-put-composite-alarm" "get-put-dashboard" "post-put-dashboard" "get-put-insight-rule" "post-put-insight-rule" "get-put-managed-insight-rules" "post-put-managed-insight-rules" "get-put-metric-alarm" "post-put-metric-alarm" "get-put-metric-data" "post-put-metric-data" "get-put-metric-stream" "post-put-metric-stream" "get-set-alarm-state" "post-set-alarm-state" "get-start-metric-streams" "post-start-metric-streams" "get-stop-metric-streams" "post-stop-metric-streams" "get-tag-resource" "post-tag-resource" "get-untag-resource" "post-untag-resource" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -303,7 +327,7 @@ export def "get-delete-anomaly-detector" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DeleteAnomalyDetector")
@@ -352,7 +376,7 @@ export def "post-delete-anomaly-detector" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -404,7 +428,7 @@ export def "get-delete-dashboards" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($dashboard_names == null) { error make --unspanned { msg: "required query parameter 'DashboardNames' missing: pass --dashboard-names" } }
@@ -454,7 +478,7 @@ export def "post-delete-dashboards" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -506,7 +530,7 @@ export def "get-delete-insight-rules" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Failures: table<FailureResource: string, ExceptionType: string, FailureCode: string, FailureDescription: string>> {
+]: nothing -> oneof<record<Failures: table<FailureResource: string, ExceptionType: string, FailureCode: string, FailureDescription: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rule_names == null) { error make --unspanned { msg: "required query parameter 'RuleNames' missing: pass --rule-names" } }
@@ -556,7 +580,7 @@ export def "post-delete-insight-rules" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Failures: table<FailureResource: string, ExceptionType: string, FailureCode: string, FailureDescription: string>> {
+]: any -> oneof<record<Failures: table<FailureResource: string, ExceptionType: string, FailureCode: string, FailureDescription: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -608,7 +632,7 @@ export def "get-delete-metric-stream" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name == null) { error make --unspanned { msg: "required query parameter 'Name' missing: pass --name" } }
@@ -658,7 +682,7 @@ export def "post-delete-metric-stream" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -717,7 +741,7 @@ export def "get-describe-alarm-history" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<AlarmHistoryItems: table<AlarmName: string, AlarmType: string, Timestamp: string, HistoryItemType: string, HistorySummary: string, HistoryData: string>, NextToken: string> {
+]: nothing -> oneof<record<AlarmHistoryItems: table<AlarmName: string, AlarmType: string, Timestamp: string, HistoryItemType: string, HistorySummary: string, HistoryData: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DescribeAlarmHistory")
@@ -768,7 +792,7 @@ export def "post-describe-alarm-history" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<AlarmHistoryItems: table<AlarmName: string, AlarmType: string, Timestamp: string, HistoryItemType: string, HistorySummary: string, HistoryData: string>, NextToken: string> {
+]: any -> oneof<record<AlarmHistoryItems: table<AlarmName: string, AlarmType: string, Timestamp: string, HistoryItemType: string, HistorySummary: string, HistoryData: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -828,7 +852,7 @@ export def "get-describe-alarms" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CompositeAlarms: table<ActionsEnabled: bool, AlarmActions: list, AlarmArn: string, AlarmConfigurationUpdatedTimestamp: string, AlarmDescription: string, AlarmName: string, AlarmRule: string, InsufficientDataActions: list, OKActions: list, StateReason: string, StateReasonData: string, StateUpdatedTimestamp: string, StateValue: string, StateTransitionedTimestamp: string, ActionsSuppressedBy: string, ActionsSuppressedReason: string, ActionsSuppressor: string, ActionsSuppressorWaitPeriod: int, ActionsSuppressorExtensionPeriod: int>, MetricAlarms: table<AlarmName: string, AlarmArn: string, AlarmDescription: string, AlarmConfigurationUpdatedTimestamp: string, ActionsEnabled: bool, OKActions: list, AlarmActions: list, InsufficientDataActions: list, StateValue: string, StateReason: string, StateReasonData: string, StateUpdatedTimestamp: string, MetricName: string, Namespace: string, Statistic: string, ExtendedStatistic: string, Dimensions: list, Period: int, Unit: string, EvaluationPeriods: int, DatapointsToAlarm: int, Threshold: float, ComparisonOperator: string, TreatMissingData: string, EvaluateLowSampleCountPercentile: string, Metrics: list, ThresholdMetricId: string, EvaluationState: string, StateTransitionedTimestamp: string>, NextToken: string> {
+]: nothing -> oneof<record<CompositeAlarms: table<ActionsEnabled: bool, AlarmActions: list, AlarmArn: string, AlarmConfigurationUpdatedTimestamp: string, AlarmDescription: string, AlarmName: string, AlarmRule: string, InsufficientDataActions: list, OKActions: list, StateReason: string, StateReasonData: string, StateUpdatedTimestamp: string, StateValue: string, StateTransitionedTimestamp: string, ActionsSuppressedBy: string, ActionsSuppressedReason: string, ActionsSuppressor: string, ActionsSuppressorWaitPeriod: int, ActionsSuppressorExtensionPeriod: int>, MetricAlarms: table<AlarmName: string, AlarmArn: string, AlarmDescription: string, AlarmConfigurationUpdatedTimestamp: string, ActionsEnabled: bool, OKActions: list, AlarmActions: list, InsufficientDataActions: list, StateValue: string, StateReason: string, StateReasonData: string, StateUpdatedTimestamp: string, MetricName: string, Namespace: string, Statistic: string, ExtendedStatistic: string, Dimensions: list, Period: int, Unit: string, EvaluationPeriods: int, DatapointsToAlarm: int, Threshold: float, ComparisonOperator: string, TreatMissingData: string, EvaluateLowSampleCountPercentile: string, Metrics: list, ThresholdMetricId: string, EvaluationState: string, StateTransitionedTimestamp: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DescribeAlarms")
@@ -879,7 +903,7 @@ export def "post-describe-alarms" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<CompositeAlarms: table<ActionsEnabled: bool, AlarmActions: list, AlarmArn: string, AlarmConfigurationUpdatedTimestamp: string, AlarmDescription: string, AlarmName: string, AlarmRule: string, InsufficientDataActions: list, OKActions: list, StateReason: string, StateReasonData: string, StateUpdatedTimestamp: string, StateValue: string, StateTransitionedTimestamp: string, ActionsSuppressedBy: string, ActionsSuppressedReason: string, ActionsSuppressor: string, ActionsSuppressorWaitPeriod: int, ActionsSuppressorExtensionPeriod: int>, MetricAlarms: table<AlarmName: string, AlarmArn: string, AlarmDescription: string, AlarmConfigurationUpdatedTimestamp: string, ActionsEnabled: bool, OKActions: list, AlarmActions: list, InsufficientDataActions: list, StateValue: string, StateReason: string, StateReasonData: string, StateUpdatedTimestamp: string, MetricName: string, Namespace: string, Statistic: string, ExtendedStatistic: string, Dimensions: list, Period: int, Unit: string, EvaluationPeriods: int, DatapointsToAlarm: int, Threshold: float, ComparisonOperator: string, TreatMissingData: string, EvaluateLowSampleCountPercentile: string, Metrics: list, ThresholdMetricId: string, EvaluationState: string, StateTransitionedTimestamp: string>, NextToken: string> {
+]: any -> oneof<record<CompositeAlarms: table<ActionsEnabled: bool, AlarmActions: list, AlarmArn: string, AlarmConfigurationUpdatedTimestamp: string, AlarmDescription: string, AlarmName: string, AlarmRule: string, InsufficientDataActions: list, OKActions: list, StateReason: string, StateReasonData: string, StateUpdatedTimestamp: string, StateValue: string, StateTransitionedTimestamp: string, ActionsSuppressedBy: string, ActionsSuppressedReason: string, ActionsSuppressor: string, ActionsSuppressorWaitPeriod: int, ActionsSuppressorExtensionPeriod: int>, MetricAlarms: table<AlarmName: string, AlarmArn: string, AlarmDescription: string, AlarmConfigurationUpdatedTimestamp: string, ActionsEnabled: bool, OKActions: list, AlarmActions: list, InsufficientDataActions: list, StateValue: string, StateReason: string, StateReasonData: string, StateUpdatedTimestamp: string, MetricName: string, Namespace: string, Statistic: string, ExtendedStatistic: string, Dimensions: list, Period: int, Unit: string, EvaluationPeriods: int, DatapointsToAlarm: int, Threshold: float, ComparisonOperator: string, TreatMissingData: string, EvaluateLowSampleCountPercentile: string, Metrics: list, ThresholdMetricId: string, EvaluationState: string, StateTransitionedTimestamp: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -937,7 +961,7 @@ export def "get-describe-alarms-for-metric" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<MetricAlarms: table<AlarmName: string, AlarmArn: string, AlarmDescription: string, AlarmConfigurationUpdatedTimestamp: string, ActionsEnabled: bool, OKActions: list, AlarmActions: list, InsufficientDataActions: list, StateValue: string, StateReason: string, StateReasonData: string, StateUpdatedTimestamp: string, MetricName: string, Namespace: string, Statistic: string, ExtendedStatistic: string, Dimensions: list, Period: int, Unit: string, EvaluationPeriods: int, DatapointsToAlarm: int, Threshold: float, ComparisonOperator: string, TreatMissingData: string, EvaluateLowSampleCountPercentile: string, Metrics: list, ThresholdMetricId: string, EvaluationState: string, StateTransitionedTimestamp: string>> {
+]: nothing -> oneof<record<MetricAlarms: table<AlarmName: string, AlarmArn: string, AlarmDescription: string, AlarmConfigurationUpdatedTimestamp: string, ActionsEnabled: bool, OKActions: list, AlarmActions: list, InsufficientDataActions: list, StateValue: string, StateReason: string, StateReasonData: string, StateUpdatedTimestamp: string, MetricName: string, Namespace: string, Statistic: string, ExtendedStatistic: string, Dimensions: list, Period: int, Unit: string, EvaluationPeriods: int, DatapointsToAlarm: int, Threshold: float, ComparisonOperator: string, TreatMissingData: string, EvaluateLowSampleCountPercentile: string, Metrics: list, ThresholdMetricId: string, EvaluationState: string, StateTransitionedTimestamp: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($metric_name == null) { error make --unspanned { msg: "required query parameter 'MetricName' missing: pass --metric-name" } }
@@ -988,7 +1012,7 @@ export def "post-describe-alarms-for-metric" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<MetricAlarms: table<AlarmName: string, AlarmArn: string, AlarmDescription: string, AlarmConfigurationUpdatedTimestamp: string, ActionsEnabled: bool, OKActions: list, AlarmActions: list, InsufficientDataActions: list, StateValue: string, StateReason: string, StateReasonData: string, StateUpdatedTimestamp: string, MetricName: string, Namespace: string, Statistic: string, ExtendedStatistic: string, Dimensions: list, Period: int, Unit: string, EvaluationPeriods: int, DatapointsToAlarm: int, Threshold: float, ComparisonOperator: string, TreatMissingData: string, EvaluateLowSampleCountPercentile: string, Metrics: list, ThresholdMetricId: string, EvaluationState: string, StateTransitionedTimestamp: string>> {
+]: any -> oneof<record<MetricAlarms: table<AlarmName: string, AlarmArn: string, AlarmDescription: string, AlarmConfigurationUpdatedTimestamp: string, ActionsEnabled: bool, OKActions: list, AlarmActions: list, InsufficientDataActions: list, StateValue: string, StateReason: string, StateReasonData: string, StateUpdatedTimestamp: string, MetricName: string, Namespace: string, Statistic: string, ExtendedStatistic: string, Dimensions: list, Period: int, Unit: string, EvaluationPeriods: int, DatapointsToAlarm: int, Threshold: float, ComparisonOperator: string, TreatMissingData: string, EvaluateLowSampleCountPercentile: string, Metrics: list, ThresholdMetricId: string, EvaluationState: string, StateTransitionedTimestamp: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1045,7 +1069,7 @@ export def "get-describe-anomaly-detectors" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<AnomalyDetectors: table<Namespace: string, MetricName: string, Dimensions: list, Stat: string, Configuration: record, StateValue: string, SingleMetricAnomalyDetector: record, MetricMathAnomalyDetector: record>, NextToken: string> {
+]: nothing -> oneof<record<AnomalyDetectors: table<Namespace: string, MetricName: string, Dimensions: list, Stat: string, Configuration: record, StateValue: string, SingleMetricAnomalyDetector: record, MetricMathAnomalyDetector: record>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DescribeAnomalyDetectors")
@@ -1096,7 +1120,7 @@ export def "post-describe-anomaly-detectors" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<AnomalyDetectors: table<Namespace: string, MetricName: string, Dimensions: list, Stat: string, Configuration: record, StateValue: string, SingleMetricAnomalyDetector: record, MetricMathAnomalyDetector: record>, NextToken: string> {
+]: any -> oneof<record<AnomalyDetectors: table<Namespace: string, MetricName: string, Dimensions: list, Stat: string, Configuration: record, StateValue: string, SingleMetricAnomalyDetector: record, MetricMathAnomalyDetector: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1149,7 +1173,7 @@ export def "get-describe-insight-rules" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextToken: string, InsightRules: table<Name: string, State: string, Schema: string, Definition: string, ManagedRule: bool>> {
+]: nothing -> oneof<record<NextToken: string, InsightRules: table<Name: string, State: string, Schema: string, Definition: string, ManagedRule: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DescribeInsightRules")
@@ -1200,7 +1224,7 @@ export def "post-describe-insight-rules" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<NextToken: string, InsightRules: table<Name: string, State: string, Schema: string, Definition: string, ManagedRule: bool>> {
+]: any -> oneof<record<NextToken: string, InsightRules: table<Name: string, State: string, Schema: string, Definition: string, ManagedRule: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1354,7 +1378,7 @@ export def "get-disable-insight-rules" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Failures: table<FailureResource: string, ExceptionType: string, FailureCode: string, FailureDescription: string>> {
+]: nothing -> oneof<record<Failures: table<FailureResource: string, ExceptionType: string, FailureCode: string, FailureDescription: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rule_names == null) { error make --unspanned { msg: "required query parameter 'RuleNames' missing: pass --rule-names" } }
@@ -1404,7 +1428,7 @@ export def "post-disable-insight-rules" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Failures: table<FailureResource: string, ExceptionType: string, FailureCode: string, FailureDescription: string>> {
+]: any -> oneof<record<Failures: table<FailureResource: string, ExceptionType: string, FailureCode: string, FailureDescription: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1558,7 +1582,7 @@ export def "get-enable-insight-rules" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Failures: table<FailureResource: string, ExceptionType: string, FailureCode: string, FailureDescription: string>> {
+]: nothing -> oneof<record<Failures: table<FailureResource: string, ExceptionType: string, FailureCode: string, FailureDescription: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rule_names == null) { error make --unspanned { msg: "required query parameter 'RuleNames' missing: pass --rule-names" } }
@@ -1608,7 +1632,7 @@ export def "post-enable-insight-rules" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Failures: table<FailureResource: string, ExceptionType: string, FailureCode: string, FailureDescription: string>> {
+]: any -> oneof<record<Failures: table<FailureResource: string, ExceptionType: string, FailureCode: string, FailureDescription: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1660,7 +1684,7 @@ export def "get-get-dashboard" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DashboardArn: string, DashboardBody: string, DashboardName: string> {
+]: nothing -> oneof<record<DashboardArn: string, DashboardBody: string, DashboardName: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($dashboard_name == null) { error make --unspanned { msg: "required query parameter 'DashboardName' missing: pass --dashboard-name" } }
@@ -1710,7 +1734,7 @@ export def "post-get-dashboard" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<DashboardArn: string, DashboardBody: string, DashboardName: string> {
+]: any -> oneof<record<DashboardArn: string, DashboardBody: string, DashboardName: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1768,7 +1792,7 @@ export def "get-get-insight-rule-report" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<KeyLabels: list<string>, AggregationStatistic: string, AggregateValue: float, ApproximateUniqueCount: int, Contributors: table<Keys: list, ApproximateAggregateValue: float, Datapoints: list>, MetricDatapoints: table<Timestamp: string, UniqueContributors: float, MaxContributorValue: float, SampleCount: float, Average: float, Sum: float, Minimum: float, Maximum: float>> {
+]: nothing -> oneof<record<KeyLabels: list<string>, AggregationStatistic: string, AggregateValue: float, ApproximateUniqueCount: int, Contributors: table<Keys: list, ApproximateAggregateValue: float, Datapoints: list>, MetricDatapoints: table<Timestamp: string, UniqueContributors: float, MaxContributorValue: float, SampleCount: float, Average: float, Sum: float, Minimum: float, Maximum: float>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rule_name == null) { error make --unspanned { msg: "required query parameter 'RuleName' missing: pass --rule-name" } }
@@ -1821,7 +1845,7 @@ export def "post-get-insight-rule-report" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<KeyLabels: list<string>, AggregationStatistic: string, AggregateValue: float, ApproximateUniqueCount: int, Contributors: table<Keys: list, ApproximateAggregateValue: float, Datapoints: list>, MetricDatapoints: table<Timestamp: string, UniqueContributors: float, MaxContributorValue: float, SampleCount: float, Average: float, Sum: float, Minimum: float, Maximum: float>> {
+]: any -> oneof<record<KeyLabels: list<string>, AggregationStatistic: string, AggregateValue: float, ApproximateUniqueCount: int, Contributors: table<Keys: list, ApproximateAggregateValue: float, Datapoints: list>, MetricDatapoints: table<Timestamp: string, UniqueContributors: float, MaxContributorValue: float, SampleCount: float, Average: float, Sum: float, Minimum: float, Maximum: float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1879,7 +1903,7 @@ export def "get-get-metric-data" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<MetricDataResults: table<Id: string, Label: string, Timestamps: list, Values: list, StatusCode: string, Messages: list>, NextToken: string, Messages: table<Code: string, Value: string>> {
+]: nothing -> oneof<record<MetricDataResults: table<Id: string, Label: string, Timestamps: list, Values: list, StatusCode: string, Messages: list>, NextToken: string, Messages: table<Code: string, Value: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($metric_data_queries == null) { error make --unspanned { msg: "required query parameter 'MetricDataQueries' missing: pass --metric-data-queries" } }
@@ -1933,7 +1957,7 @@ export def "post-get-metric-data" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<MetricDataResults: table<Id: string, Label: string, Timestamps: list, Values: list, StatusCode: string, Messages: list>, NextToken: string, Messages: table<Code: string, Value: string>> {
+]: any -> oneof<record<MetricDataResults: table<Id: string, Label: string, Timestamps: list, Values: list, StatusCode: string, Messages: list>, NextToken: string, Messages: table<Code: string, Value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1993,7 +2017,7 @@ export def "get-get-metric-statistics" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Label: string, Datapoints: table<Timestamp: string, SampleCount: float, Average: float, Sum: float, Minimum: float, Maximum: float, Unit: string, ExtendedStatistics: record>> {
+]: nothing -> oneof<record<Label: string, Datapoints: table<Timestamp: string, SampleCount: float, Average: float, Sum: float, Minimum: float, Maximum: float, Unit: string, ExtendedStatistics: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($namespace == null) { error make --unspanned { msg: "required query parameter 'Namespace' missing: pass --namespace" } }
@@ -2047,7 +2071,7 @@ export def "post-get-metric-statistics" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Label: string, Datapoints: table<Timestamp: string, SampleCount: float, Average: float, Sum: float, Minimum: float, Maximum: float, Unit: string, ExtendedStatistics: record>> {
+]: any -> oneof<record<Label: string, Datapoints: table<Timestamp: string, SampleCount: float, Average: float, Sum: float, Minimum: float, Maximum: float, Unit: string, ExtendedStatistics: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2099,7 +2123,7 @@ export def "get-get-metric-stream" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Arn: string, Name: string, IncludeFilters: table<Namespace: string>, ExcludeFilters: table<Namespace: string>, FirehoseArn: string, RoleArn: string, State: string, CreationDate: string, LastUpdateDate: string, OutputFormat: string, StatisticsConfigurations: table<IncludeMetrics: list, AdditionalStatistics: list>, IncludeLinkedAccountsMetrics: bool> {
+]: nothing -> oneof<record<Arn: string, Name: string, IncludeFilters: table<Namespace: string>, ExcludeFilters: table<Namespace: string>, FirehoseArn: string, RoleArn: string, State: string, CreationDate: string, LastUpdateDate: string, OutputFormat: string, StatisticsConfigurations: table<IncludeMetrics: list, AdditionalStatistics: list>, IncludeLinkedAccountsMetrics: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name == null) { error make --unspanned { msg: "required query parameter 'Name' missing: pass --name" } }
@@ -2149,7 +2173,7 @@ export def "post-get-metric-stream" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Arn: string, Name: string, IncludeFilters: table<Namespace: string>, ExcludeFilters: table<Namespace: string>, FirehoseArn: string, RoleArn: string, State: string, CreationDate: string, LastUpdateDate: string, OutputFormat: string, StatisticsConfigurations: table<IncludeMetrics: list, AdditionalStatistics: list>, IncludeLinkedAccountsMetrics: bool> {
+]: any -> oneof<record<Arn: string, Name: string, IncludeFilters: table<Namespace: string>, ExcludeFilters: table<Namespace: string>, FirehoseArn: string, RoleArn: string, State: string, CreationDate: string, LastUpdateDate: string, OutputFormat: string, StatisticsConfigurations: table<IncludeMetrics: list, AdditionalStatistics: list>, IncludeLinkedAccountsMetrics: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2202,7 +2226,7 @@ export def "get-get-metric-widget-image" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<MetricWidgetImage: string> {
+]: nothing -> oneof<record<MetricWidgetImage: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($metric_widget == null) { error make --unspanned { msg: "required query parameter 'MetricWidget' missing: pass --metric-widget" } }
@@ -2252,7 +2276,7 @@ export def "post-get-metric-widget-image" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<MetricWidgetImage: string> {
+]: any -> oneof<record<MetricWidgetImage: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2305,7 +2329,7 @@ export def "get-list-dashboards" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DashboardEntries: table<DashboardName: string, DashboardArn: string, LastModified: string, Size: int>, NextToken: string> {
+]: nothing -> oneof<record<DashboardEntries: table<DashboardName: string, DashboardArn: string, LastModified: string, Size: int>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "ListDashboards")
@@ -2355,7 +2379,7 @@ export def "post-list-dashboards" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<DashboardEntries: table<DashboardName: string, DashboardArn: string, LastModified: string, Size: int>, NextToken: string> {
+]: any -> oneof<record<DashboardEntries: table<DashboardName: string, DashboardArn: string, LastModified: string, Size: int>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2409,7 +2433,7 @@ export def "get-list-managed-insight-rules" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ManagedRules: table<TemplateName: string, ResourceARN: string, RuleState: record>, NextToken: string> {
+]: nothing -> oneof<record<ManagedRules: table<TemplateName: string, ResourceARN: string, RuleState: record>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn == null) { error make --unspanned { msg: "required query parameter 'ResourceARN' missing: pass --resource-arn" } }
@@ -2461,7 +2485,7 @@ export def "post-list-managed-insight-rules" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<ManagedRules: table<TemplateName: string, ResourceARN: string, RuleState: record>, NextToken: string> {
+]: any -> oneof<record<ManagedRules: table<TemplateName: string, ResourceARN: string, RuleState: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2514,7 +2538,7 @@ export def "get-list-metric-streams" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextToken: string, Entries: table<Arn: string, CreationDate: string, LastUpdateDate: string, Name: string, FirehoseArn: string, State: string, OutputFormat: string>> {
+]: nothing -> oneof<record<NextToken: string, Entries: table<Arn: string, CreationDate: string, LastUpdateDate: string, Name: string, FirehoseArn: string, State: string, OutputFormat: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "ListMetricStreams")
@@ -2565,7 +2589,7 @@ export def "post-list-metric-streams" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<NextToken: string, Entries: table<Arn: string, CreationDate: string, LastUpdateDate: string, Name: string, FirehoseArn: string, State: string, OutputFormat: string>> {
+]: any -> oneof<record<NextToken: string, Entries: table<Arn: string, CreationDate: string, LastUpdateDate: string, Name: string, FirehoseArn: string, State: string, OutputFormat: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2623,7 +2647,7 @@ export def "get-list-metrics" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Metrics: table<Namespace: string, MetricName: string, Dimensions: list>, NextToken: string, OwningAccounts: list<string>> {
+]: nothing -> oneof<record<Metrics: table<Namespace: string, MetricName: string, Dimensions: list>, NextToken: string, OwningAccounts: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "ListMetrics")
@@ -2673,7 +2697,7 @@ export def "post-list-metrics" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Metrics: table<Namespace: string, MetricName: string, Dimensions: list>, NextToken: string, OwningAccounts: list<string>> {
+]: any -> oneof<record<Metrics: table<Namespace: string, MetricName: string, Dimensions: list>, NextToken: string, OwningAccounts: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2725,7 +2749,7 @@ export def "get-list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Tags: table<Key: string, Value: string>> {
+]: nothing -> oneof<record<Tags: table<Key: string, Value: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn == null) { error make --unspanned { msg: "required query parameter 'ResourceARN' missing: pass --resource-arn" } }
@@ -2775,7 +2799,7 @@ export def "post-list-tags-for-resource" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Tags: table<Key: string, Value: string>> {
+]: any -> oneof<record<Tags: table<Key: string, Value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2833,7 +2857,7 @@ export def "get-put-anomaly-detector" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "PutAnomalyDetector")
@@ -2882,7 +2906,7 @@ export def "post-put-anomaly-detector" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3048,7 +3072,7 @@ export def "get-put-dashboard" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DashboardValidationMessages: table<DataPath: string, Message: string>> {
+]: nothing -> oneof<record<DashboardValidationMessages: table<DataPath: string, Message: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($dashboard_name == null) { error make --unspanned { msg: "required query parameter 'DashboardName' missing: pass --dashboard-name" } }
@@ -3099,7 +3123,7 @@ export def "post-put-dashboard" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<DashboardValidationMessages: table<DataPath: string, Message: string>> {
+]: any -> oneof<record<DashboardValidationMessages: table<DataPath: string, Message: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3154,7 +3178,7 @@ export def "get-put-insight-rule" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rule_name == null) { error make --unspanned { msg: "required query parameter 'RuleName' missing: pass --rule-name" } }
@@ -3205,7 +3229,7 @@ export def "post-put-insight-rule" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3257,7 +3281,7 @@ export def "get-put-managed-insight-rules" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Failures: table<FailureResource: string, ExceptionType: string, FailureCode: string, FailureDescription: string>> {
+]: nothing -> oneof<record<Failures: table<FailureResource: string, ExceptionType: string, FailureCode: string, FailureDescription: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($managed_rules == null) { error make --unspanned { msg: "required query parameter 'ManagedRules' missing: pass --managed-rules" } }
@@ -3307,7 +3331,7 @@ export def "post-put-managed-insight-rules" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Failures: table<FailureResource: string, ExceptionType: string, FailureCode: string, FailureDescription: string>> {
+]: any -> oneof<record<Failures: table<FailureResource: string, ExceptionType: string, FailureCode: string, FailureDescription: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3596,7 +3620,7 @@ export def "get-put-metric-stream" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Arn: string> {
+]: nothing -> oneof<record<Arn: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name == null) { error make --unspanned { msg: "required query parameter 'Name' missing: pass --name" } }
@@ -3649,7 +3673,7 @@ export def "post-put-metric-stream" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Arn: string> {
+]: any -> oneof<record<Arn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3808,7 +3832,7 @@ export def "get-start-metric-streams" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($names == null) { error make --unspanned { msg: "required query parameter 'Names' missing: pass --names" } }
@@ -3858,7 +3882,7 @@ export def "post-start-metric-streams" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3910,7 +3934,7 @@ export def "get-stop-metric-streams" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($names == null) { error make --unspanned { msg: "required query parameter 'Names' missing: pass --names" } }
@@ -3960,7 +3984,7 @@ export def "post-stop-metric-streams" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4013,7 +4037,7 @@ export def "get-tag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn == null) { error make --unspanned { msg: "required query parameter 'ResourceARN' missing: pass --resource-arn" } }
@@ -4064,7 +4088,7 @@ export def "post-tag-resource" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4117,7 +4141,7 @@ export def "get-untag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn == null) { error make --unspanned { msg: "required query parameter 'ResourceARN' missing: pass --resource-arn" } }
@@ -4168,7 +4192,7 @@ export def "post-untag-resource" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

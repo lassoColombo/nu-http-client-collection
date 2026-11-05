@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -123,9 +147,9 @@ def link-state-completer [] { ["ACTIVE" "CHANNEL_PARTNER_LINK_STATE_UNSPECIFIED"
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cloudchannel-products-list" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["cloudchannel-products-list" "cloudchannel-accounts-list-subscribers" "cloudchannel-accounts-register" "cloudchannel-accounts-unregister" "cloudchannel-accounts-customers-list-purchasable-offers" "cloudchannel-accounts-customers-list-purchasable-skus" "cloudchannel-accounts-customers-provision-cloud-identity" "cloudchannel-accounts-customers-entitlements-lookup-offer" "cloudchannel-operations-delete" "cloudchannel-operations-list" "cloudchannel-accounts-customers-customer-repricing-configs-patch" "cloudchannel-accounts-customers-entitlements-activate" "cloudchannel-operations-cancel" "cloudchannel-accounts-customers-entitlements-change-offer" "cloudchannel-accounts-customers-entitlements-change-parameters" "cloudchannel-accounts-customers-entitlements-change-renewal-settings" "cloudchannel-accounts-reports-run" "cloudchannel-accounts-customers-entitlements-start-paid-service" "cloudchannel-accounts-customers-entitlements-suspend" "cloudchannel-accounts-channel-partner-links-list" "cloudchannel-accounts-channel-partner-links-create" "cloudchannel-accounts-channel-partner-links-channel-partner-repricing-configs-list" "cloudchannel-accounts-channel-partner-links-channel-partner-repricing-configs-create" "cloudchannel-accounts-customers-customer-repricing-configs-list" "cloudchannel-accounts-customers-customer-repricing-configs-create" "cloudchannel-accounts-customers-list" "cloudchannel-accounts-customers-create" "cloudchannel-accounts-customers-import" "cloudchannel-accounts-customers-entitlements-list" "cloudchannel-accounts-customers-entitlements-create" "cloudchannel-accounts-offers-list" "cloudchannel-accounts-reports-list" "cloudchannel-products-skus-list" "cloudchannel-accounts-check-cloud-identity-accounts-exist" "cloudchannel-accounts-customers-entitlements-list-entitlement-changes" "cloudchannel-accounts-list-transferable-offers" "cloudchannel-accounts-list-transferable-skus" "cloudchannel-accounts-customers-transfer-entitlements" "cloudchannel-accounts-customers-transfer-entitlements-to-google" "cloudchannel-accounts-report-jobs-fetch-report-results" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -172,7 +196,7 @@ export def "cloudchannel-products-list" [
   --language-code: string # Optional. The BCP-47 language code. For example, "en-US". The response will localize in the corresponding language code, if specified. The default value is "en-US".
   --page-size: int # Optional. Requested page size. Server might return fewer results than requested. If unspecified, returns at most 100 Products. The maximum value is 1000; the server will coerce values above 1000.
   --page-token: string # Optional. A token for a page of results other than the first page.
-]: nothing -> record<nextPageToken: string, products: table<marketingInfo: record, name: string>> {
+]: nothing -> oneof<record<nextPageToken: string, products: table<marketingInfo: record, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "account" $account "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -221,7 +245,7 @@ export def "cloudchannel-accounts-list-subscribers" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # Optional. The maximum number of service accounts to return. The service may return fewer than this value. If unspecified, returns at most 100 service accounts. The maximum value is 1000; the server will coerce values above 1000.
   --page-token: string # Optional. A page token, received from a previous `ListSubscribers` call. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to `ListSubscribers` must match the call that provided the page token.
-]: nothing -> record<nextPageToken: string, serviceAccounts: list<string>, topic: string> {
+]: nothing -> oneof<record<nextPageToken: string, serviceAccounts: list<string>, topic: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account | is-empty) { error make --unspanned { msg: "path parameter 'account' must be non-empty" } }
@@ -270,7 +294,7 @@ export def "cloudchannel-accounts-register" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --service-account: string # Required. Service account that provides subscriber access to the registered topic.
-]: any -> record<topic: string> {
+]: any -> oneof<record<topic: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -322,7 +346,7 @@ export def "cloudchannel-accounts-unregister" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --service-account: string # Required. Service account to unregister from subscriber access to the topic.
-]: any -> record<topic: string> {
+]: any -> oneof<record<topic: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -379,7 +403,7 @@ export def "cloudchannel-accounts-customers-list-purchasable-offers" [
   --language-code: string # Optional. The BCP-47 language code. For example, "en-US". The response will localize in the corresponding language code, if specified. The default value is "en-US".
   --page-size: int # Optional. Requested page size. Server might return fewer results than requested. If unspecified, returns at most 100 Offers. The maximum value is 1000; the server will coerce values above 1000.
   --page-token: string # Optional. A token for a page of results other than the first page.
-]: nothing -> record<nextPageToken: string, purchasableOffers: table<offer: record>> {
+]: nothing -> oneof<record<nextPageToken: string, purchasableOffers: table<offer: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($customer | is-empty) { error make --unspanned { msg: "path parameter 'customer' must be non-empty" } }
@@ -433,7 +457,7 @@ export def "cloudchannel-accounts-customers-list-purchasable-skus" [
   --language-code: string # Optional. The BCP-47 language code. For example, "en-US". The response will localize in the corresponding language code, if specified. The default value is "en-US".
   --page-size: int # Optional. Requested page size. Server might return fewer results than requested. If unspecified, returns at most 100 SKUs. The maximum value is 1000; the server will coerce values above 1000.
   --page-token: string # Optional. A token for a page of results other than the first page.
-]: nothing -> record<nextPageToken: string, purchasableSkus: table<sku: record>> {
+]: nothing -> oneof<record<nextPageToken: string, purchasableSkus: table<sku: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($customer | is-empty) { error make --unspanned { msg: "path parameter 'customer' must be non-empty" } }
@@ -459,8 +483,6 @@ export def "cloudchannel-accounts-customers-list-purchasable-skus" [
 #
 # POST /v1/{customer}:provisionCloudIdentity
 # operationId: cloudchannel.accounts.customers.provisionCloudIdentity
-# --cloudIdentityInfo shape: {alternateEmail?: string, customerType?: "CUSTOMER_TYPE_UNSPECIFIED"|"DOMAIN"|"TEAM", eduData?: record, languageCode?: string, phoneNumber?: string}
-# --user shape: {email?: string, familyName?: string, givenName?: string}
 export def "cloudchannel-accounts-customers-provision-cloud-identity" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -486,7 +508,7 @@ export def "cloudchannel-accounts-customers-provision-cloud-identity" [
   --cloud-identity-info: record # Cloud Identity information for the Cloud Channel Customer. — shape: {alternateEmail?: string, customerType?: "CUSTOMER_TYPE_UNSPECIFIED"|"DOMAIN"|"TEAM", eduData?: record, languageCode?: string, phoneNumber?: string}
   --user: record # Information needed to create an Admin User for Google Workspace. — shape: {email?: string, familyName?: string, givenName?: string}
   --validate-only: oneof<nothing, bool> # Validate the request and preview the review, but do not post it.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -537,7 +559,7 @@ export def "cloudchannel-accounts-customers-entitlements-lookup-offer" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<constraints: record<customerConstraints: record<allowedCustomerTypes: list, allowedRegions: list, promotionalOrderTypes: list>>, dealCode: string, endTime: string, marketingInfo: record<defaultLogo: record<content: string, title: string, type: string>, description: string, displayName: string>, name: string, parameterDefinitions: table<allowedValues: list, maxValue: record, minValue: record, name: string, optional: bool, parameterType: string>, plan: record<billingAccount: string, paymentCycle: record<duration: int, periodType: string>, paymentPlan: string, paymentType: string, trialPeriod: record<duration: int, periodType: string>>, priceByResources: table<price: record, pricePhases: list, resourceType: string>, sku: record<marketingInfo: record<defaultLogo: record, description: string, displayName: string>, name: string, product: record<marketingInfo: record, name: string>>, startTime: string> {
+]: nothing -> oneof<record<constraints: record<customerConstraints: record<allowedCustomerTypes: list, allowedRegions: list, promotionalOrderTypes: list>>, dealCode: string, endTime: string, marketingInfo: record<defaultLogo: record<content: string, title: string, type: string>, description: string, displayName: string>, name: string, parameterDefinitions: table<allowedValues: list, maxValue: record, minValue: record, name: string, optional: bool, parameterType: string>, plan: record<billingAccount: string, paymentCycle: record<duration: int, periodType: string>, paymentPlan: string, paymentType: string, trialPeriod: record<duration: int, periodType: string>>, priceByResources: table<price: record, pricePhases: list, resourceType: string>, sku: record<marketingInfo: record<defaultLogo: record, description: string, displayName: string>, name: string, product: record<marketingInfo: record, name: string>>, startTime: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($entitlement | is-empty) { error make --unspanned { msg: "path parameter 'entitlement' must be non-empty" } }
@@ -585,7 +607,7 @@ export def "cloudchannel-operations-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -636,7 +658,7 @@ export def "cloudchannel-operations-list" [
   --filter: string@filter-completer # The standard list filter.
   --page-size: int # The standard list page size.
   --page-token: string # The standard list page token.
-]: nothing -> record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>> {
+]: nothing -> oneof<record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -662,7 +684,6 @@ export def "cloudchannel-operations-list" [
 #
 # PATCH /v1/{name}
 # operationId: cloudchannel.accounts.customers.customerRepricingConfigs.patch
-# --repricingConfig shape: {adjustment?: record, channelPartnerGranularity?: record, conditionalOverrides?: list, effectiveInvoiceMonth?: record, entitlementGranularity?: record, rebillingBasis?: "REBILLING_BASIS_UNSPECIFIED"|"COST_AT_LIST"|"DIRECT_CUSTOMER_COST"}
 export def "cloudchannel-accounts-customers-customer-repricing-configs-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -687,7 +708,7 @@ export def "cloudchannel-accounts-customers-customer-repricing-configs-patch" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --update-mask: string # The update mask that applies to the resource. Optional.
   --repricing-config: record # Configuration for repricing a Google bill over a period of time. — shape: {adjustment?: record, channelPartnerGranularity?: record, conditionalOverrides?: list, effectiveInvoiceMonth?: record, entitlementGranularity?: record, rebillingBasis?: "REBILLING_BASIS_UNSPECIFIED"|"COST_AT_LIST"|"DIRECT_CUSTOMER_COST"}
-]: any -> record<name: string, repricingConfig: record<adjustment: record<percentageAdjustment: record>, channelPartnerGranularity: record, conditionalOverrides: list<record>, effectiveInvoiceMonth: record<day: int, month: int, year: int>, entitlementGranularity: record<entitlement: string>, rebillingBasis: string>, updateTime: string> {
+]: any -> oneof<record<name: string, repricingConfig: record<adjustment: record<percentageAdjustment: record>, channelPartnerGranularity: record, conditionalOverrides: list<record>, effectiveInvoiceMonth: record<day: int, month: int, year: int>, entitlementGranularity: record<entitlement: string>, rebillingBasis: string>, updateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -739,7 +760,7 @@ export def "cloudchannel-accounts-customers-entitlements-activate" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --request-id: string # Optional. You can specify an optional unique request ID, and if you need to retry your request, the server will know to ignore the request if it's complete. For example, you make an initial request and the request times out. If you make the request again with the same request ID, the server can check if it received the original operation with the same request ID. If it did, it will ignore the second request. The request ID must be a valid [UUID](https://tools.ietf.org/html/rfc4122) with the exception that zero UUID is not supported (`00000000-0000-0000-0000-000000000000`).
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -791,7 +812,7 @@ export def "cloudchannel-operations-cancel" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -820,7 +841,6 @@ export def "cloudchannel-operations-cancel" [
 #
 # POST /v1/{name}:changeOffer
 # operationId: cloudchannel.accounts.customers.entitlements.changeOffer
-# --parameters item shape: {name?: string, value?: record}
 export def "cloudchannel-accounts-customers-entitlements-change-offer" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -847,7 +867,7 @@ export def "cloudchannel-accounts-customers-entitlements-change-offer" [
   --parameters: list # Optional. Parameters needed to purchase the Offer. To view the available Parameters refer to the Offer.parameter_definitions from the desired offer. — item shape: {name?: string, value?: record}
   --purchase-order-id: string # Optional. Purchase order id provided by the reseller.
   --request-id: string # Optional. You can specify an optional unique request ID, and if you need to retry your request, the server will know to ignore the request if it's complete. For example, you make an initial request and the request times out. If you make the request again with the same request ID, the server can check if it received the original operation with the same request ID. If it did, it will ignore the second request. The request ID must be a valid [UUID](https://tools.ietf.org/html/rfc4122) with the exception that zero UUID is not supported (`00000000-0000-0000-0000-000000000000`).
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -876,7 +896,6 @@ export def "cloudchannel-accounts-customers-entitlements-change-offer" [
 #
 # POST /v1/{name}:changeParameters
 # operationId: cloudchannel.accounts.customers.entitlements.changeParameters
-# --parameters item shape: {name?: string, value?: record}
 export def "cloudchannel-accounts-customers-entitlements-change-parameters" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -902,7 +921,7 @@ export def "cloudchannel-accounts-customers-entitlements-change-parameters" [
   --parameters: list # Required. Entitlement parameters to update. You can only change editable parameters. To view the available Parameters for a request, refer to the Offer.parameter_definitions from the desired offer. — item shape: {name?: string, value?: record}
   --purchase-order-id: string # Optional. Purchase order ID provided by the reseller.
   --request-id: string # Optional. You can specify an optional unique request ID, and if you need to retry your request, the server will know to ignore the request if it's complete. For example, you make an initial request and the request times out. If you make the request again with the same request ID, the server can check if it received the original operation with the same request ID. If it did, it will ignore the second request. The request ID must be a valid [UUID](https://tools.ietf.org/html/rfc4122) with the exception that zero UUID is not supported (`00000000-0000-0000-0000-000000000000`).
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -931,7 +950,6 @@ export def "cloudchannel-accounts-customers-entitlements-change-parameters" [
 #
 # POST /v1/{name}:changeRenewalSettings
 # operationId: cloudchannel.accounts.customers.entitlements.changeRenewalSettings
-# --renewalSettings shape: {enableRenewal?: bool, paymentCycle?: record, paymentPlan?: "PAYMENT_PLAN_UNSPECIFIED"|"COMMITMENT"|"FLEXIBLE"|"FREE"|"TRIAL"|"OFFLINE", resizeUnitCount?: bool}
 export def "cloudchannel-accounts-customers-entitlements-change-renewal-settings" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -956,7 +974,7 @@ export def "cloudchannel-accounts-customers-entitlements-change-renewal-settings
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --renewal-settings: record # Renewal settings for renewable Offers. — shape: {enableRenewal?: bool, paymentCycle?: record, paymentPlan?: "PAYMENT_PLAN_UNSPECIFIED"|"COMMITMENT"|"FLEXIBLE"|"FREE"|"TRIAL"|"OFFLINE", resizeUnitCount?: bool}
   --request-id: string # Optional. You can specify an optional unique request ID, and if you need to retry your request, the server will know to ignore the request if it's complete. For example, you make an initial request and the request times out. If you make the request again with the same request ID, the server can check if it received the original operation with the same request ID. If it did, it will ignore the second request. The request ID must be a valid [UUID](https://tools.ietf.org/html/rfc4122) with the exception that zero UUID is not supported (`00000000-0000-0000-0000-000000000000`).
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -985,7 +1003,6 @@ export def "cloudchannel-accounts-customers-entitlements-change-renewal-settings
 #
 # POST /v1/{name}:run
 # operationId: cloudchannel.accounts.reports.run
-# --dateRange shape: {invoiceEndDate?: record, invoiceStartDate?: record, usageEndDateTime?: record, usageStartDateTime?: record}
 export def "cloudchannel-accounts-reports-run" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1011,7 +1028,7 @@ export def "cloudchannel-accounts-reports-run" [
   --date-range: record # A representation of usage or invoice date ranges. — shape: {invoiceEndDate?: record, invoiceStartDate?: record, usageEndDateTime?: record, usageStartDateTime?: record}
   --filter: string # Optional. A structured string that defines conditions on dimension columns to restrict the report output. Filters support logical operators (AND, OR, NOT) and conditional operators (=, !=, <, >, <=, and >=) using `column_id` as keys. For example: `(customer:"accounts/C123abc/customers/S456def" OR customer:"accounts/C123abc/customers/S789ghi") AND invoice_start_date.year >= 2022`
   --language-code: string # Optional. The BCP-47 language code, such as "en-US". If specified, the response is localized to the corresponding language code if the original data sources support it. Default is "en-US".
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1063,7 +1080,7 @@ export def "cloudchannel-accounts-customers-entitlements-start-paid-service" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --request-id: string # Optional. You can specify an optional unique request ID, and if you need to retry your request, the server will know to ignore the request if it's complete. For example, you make an initial request and the request times out. If you make the request again with the same request ID, the server can check if it received the original operation with the same request ID. If it did, it will ignore the second request. The request ID must be a valid [UUID](https://tools.ietf.org/html/rfc4122) with the exception that zero UUID is not supported (`00000000-0000-0000-0000-000000000000`).
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1115,7 +1132,7 @@ export def "cloudchannel-accounts-customers-entitlements-suspend" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --request-id: string # Optional. You can specify an optional unique request ID, and if you need to retry your request, the server will know to ignore the request if it's complete. For example, you make an initial request and the request times out. If you make the request again with the same request ID, the server can check if it received the original operation with the same request ID. If it did, it will ignore the second request. The request ID must be a valid [UUID](https://tools.ietf.org/html/rfc4122) with the exception that zero UUID is not supported (`00000000-0000-0000-0000-000000000000`).
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1169,7 +1186,7 @@ export def "cloudchannel-accounts-channel-partner-links-list" [
   --page-size: int # Optional. Requested page size. Server might return fewer results than requested. If unspecified, server will pick a default size (25). The maximum value is 200; the server will coerce values above 200.
   --page-token: string # Optional. A token for a page of results other than the first page. Obtained using ListChannelPartnerLinksResponse.next_page_token of the previous CloudChannelService.ListChannelPartnerLinks call.
   --view: string@view-completer # Optional. The level of granularity the ChannelPartnerLink will display.
-]: nothing -> record<channelPartnerLinks: table<channelPartnerCloudIdentityInfo: record, createTime: string, inviteLinkUri: string, linkState: string, name: string, publicId: string, resellerCloudIdentityId: string, updateTime: string>, nextPageToken: string> {
+]: nothing -> oneof<record<channelPartnerLinks: table<channelPartnerCloudIdentityInfo: record, createTime: string, inviteLinkUri: string, linkState: string, name: string, publicId: string, resellerCloudIdentityId: string, updateTime: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1195,7 +1212,6 @@ export def "cloudchannel-accounts-channel-partner-links-list" [
 #
 # POST /v1/{parent}/channelPartnerLinks
 # operationId: cloudchannel.accounts.channelPartnerLinks.create
-# --channelPartnerCloudIdentityInfo shape: {alternateEmail?: string, customerType?: "CUSTOMER_TYPE_UNSPECIFIED"|"DOMAIN"|"TEAM", eduData?: record, languageCode?: string, phoneNumber?: string}
 export def "cloudchannel-accounts-channel-partner-links-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1221,7 +1237,7 @@ export def "cloudchannel-accounts-channel-partner-links-create" [
   --channel-partner-cloud-identity-info: record # Cloud Identity information for the Cloud Channel Customer. — shape: {alternateEmail?: string, customerType?: "CUSTOMER_TYPE_UNSPECIFIED"|"DOMAIN"|"TEAM", eduData?: record, languageCode?: string, phoneNumber?: string}
   --link-state: string@link-state-completer # Required. State of the channel partner link.
   --reseller-cloud-identity-id: string # Required. Cloud Identity ID of the linked reseller.
-]: any -> record<channelPartnerCloudIdentityInfo: record<adminConsoleUri: string, alternateEmail: string, customerType: string, eduData: record<instituteSize: string, instituteType: string, website: string>, isDomainVerified: bool, languageCode: string, phoneNumber: string, primaryDomain: string>, createTime: string, inviteLinkUri: string, linkState: string, name: string, publicId: string, resellerCloudIdentityId: string, updateTime: string> {
+]: any -> oneof<record<channelPartnerCloudIdentityInfo: record<adminConsoleUri: string, alternateEmail: string, customerType: string, eduData: record<instituteSize: string, instituteType: string, website: string>, isDomainVerified: bool, languageCode: string, phoneNumber: string, primaryDomain: string>, createTime: string, inviteLinkUri: string, linkState: string, name: string, publicId: string, resellerCloudIdentityId: string, updateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1275,7 +1291,7 @@ export def "cloudchannel-accounts-channel-partner-links-channel-partner-repricin
   --filter: string # Optional. A filter for [CloudChannelService.ListChannelPartnerRepricingConfigs] results (channel_partner_link only). You can use this filter when you support a BatchGet-like query. To use the filter, you must set `parent=accounts/{account_id}/channelPartnerLinks/-`. Example: `channel_partner_link = accounts/account_id/channelPartnerLinks/c1` OR `channel_partner_link = accounts/account_id/channelPartnerLinks/c2`.
   --page-size: int # Optional. The maximum number of repricing configs to return. The service may return fewer than this value. If unspecified, returns a maximum of 50 rules. The maximum value is 100; values above 100 will be coerced to 100.
   --page-token: string # Optional. A token identifying a page of results beyond the first page. Obtained through ListChannelPartnerRepricingConfigsResponse.next_page_token of the previous CloudChannelService.ListChannelPartnerRepricingConfigs call.
-]: nothing -> record<channelPartnerRepricingConfigs: table<name: string, repricingConfig: record, updateTime: string>, nextPageToken: string> {
+]: nothing -> oneof<record<channelPartnerRepricingConfigs: table<name: string, repricingConfig: record, updateTime: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1301,7 +1317,6 @@ export def "cloudchannel-accounts-channel-partner-links-channel-partner-repricin
 #
 # POST /v1/{parent}/channelPartnerRepricingConfigs
 # operationId: cloudchannel.accounts.channelPartnerLinks.channelPartnerRepricingConfigs.create
-# --repricingConfig shape: {adjustment?: record, channelPartnerGranularity?: record, conditionalOverrides?: list, effectiveInvoiceMonth?: record, entitlementGranularity?: record, rebillingBasis?: "REBILLING_BASIS_UNSPECIFIED"|"COST_AT_LIST"|"DIRECT_CUSTOMER_COST"}
 export def "cloudchannel-accounts-channel-partner-links-channel-partner-repricing-configs-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1325,7 +1340,7 @@ export def "cloudchannel-accounts-channel-partner-links-channel-partner-repricin
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --repricing-config: record # Configuration for repricing a Google bill over a period of time. — shape: {adjustment?: record, channelPartnerGranularity?: record, conditionalOverrides?: list, effectiveInvoiceMonth?: record, entitlementGranularity?: record, rebillingBasis?: "REBILLING_BASIS_UNSPECIFIED"|"COST_AT_LIST"|"DIRECT_CUSTOMER_COST"}
-]: any -> record<name: string, repricingConfig: record<adjustment: record<percentageAdjustment: record>, channelPartnerGranularity: record, conditionalOverrides: list<record>, effectiveInvoiceMonth: record<day: int, month: int, year: int>, entitlementGranularity: record<entitlement: string>, rebillingBasis: string>, updateTime: string> {
+]: any -> oneof<record<name: string, repricingConfig: record<adjustment: record<percentageAdjustment: record>, channelPartnerGranularity: record, conditionalOverrides: list<record>, effectiveInvoiceMonth: record<day: int, month: int, year: int>, entitlementGranularity: record<entitlement: string>, rebillingBasis: string>, updateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1379,7 +1394,7 @@ export def "cloudchannel-accounts-customers-customer-repricing-configs-list" [
   --filter: string # Optional. A filter for [CloudChannelService.ListCustomerRepricingConfigs] results (customer only). You can use this filter when you support a BatchGet-like query. To use the filter, you must set `parent=accounts/{account_id}/customers/-`. Example: customer = accounts/account_id/customers/c1 OR customer = accounts/account_id/customers/c2.
   --page-size: int # Optional. The maximum number of repricing configs to return. The service may return fewer than this value. If unspecified, returns a maximum of 50 rules. The maximum value is 100; values above 100 will be coerced to 100.
   --page-token: string # Optional. A token identifying a page of results beyond the first page. Obtained through ListCustomerRepricingConfigsResponse.next_page_token of the previous CloudChannelService.ListCustomerRepricingConfigs call.
-]: nothing -> record<customerRepricingConfigs: table<name: string, repricingConfig: record, updateTime: string>, nextPageToken: string> {
+]: nothing -> oneof<record<customerRepricingConfigs: table<name: string, repricingConfig: record, updateTime: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1405,7 +1420,6 @@ export def "cloudchannel-accounts-customers-customer-repricing-configs-list" [
 #
 # POST /v1/{parent}/customerRepricingConfigs
 # operationId: cloudchannel.accounts.customers.customerRepricingConfigs.create
-# --repricingConfig shape: {adjustment?: record, channelPartnerGranularity?: record, conditionalOverrides?: list, effectiveInvoiceMonth?: record, entitlementGranularity?: record, rebillingBasis?: "REBILLING_BASIS_UNSPECIFIED"|"COST_AT_LIST"|"DIRECT_CUSTOMER_COST"}
 export def "cloudchannel-accounts-customers-customer-repricing-configs-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1429,7 +1443,7 @@ export def "cloudchannel-accounts-customers-customer-repricing-configs-create" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --repricing-config: record # Configuration for repricing a Google bill over a period of time. — shape: {adjustment?: record, channelPartnerGranularity?: record, conditionalOverrides?: list, effectiveInvoiceMonth?: record, entitlementGranularity?: record, rebillingBasis?: "REBILLING_BASIS_UNSPECIFIED"|"COST_AT_LIST"|"DIRECT_CUSTOMER_COST"}
-]: any -> record<name: string, repricingConfig: record<adjustment: record<percentageAdjustment: record>, channelPartnerGranularity: record, conditionalOverrides: list<record>, effectiveInvoiceMonth: record<day: int, month: int, year: int>, entitlementGranularity: record<entitlement: string>, rebillingBasis: string>, updateTime: string> {
+]: any -> oneof<record<name: string, repricingConfig: record<adjustment: record<percentageAdjustment: record>, channelPartnerGranularity: record, conditionalOverrides: list<record>, effectiveInvoiceMonth: record<day: int, month: int, year: int>, entitlementGranularity: record<entitlement: string>, rebillingBasis: string>, updateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1483,7 +1497,7 @@ export def "cloudchannel-accounts-customers-list" [
   --filter: string # Optional. Filters applied to the [CloudChannelService.ListCustomers] results. See https://cloud.google.com/channel/docs/concepts/google-cloud/filter-customers for more information.
   --page-size: int # Optional. The maximum number of customers to return. The service may return fewer than this value. If unspecified, returns at most 10 customers. The maximum value is 50.
   --page-token: string # Optional. A token identifying a page of results other than the first page. Obtained through ListCustomersResponse.next_page_token of the previous CloudChannelService.ListCustomers call.
-]: nothing -> record<customers: table<alternateEmail: string, channelPartnerId: string, cloudIdentityId: string, cloudIdentityInfo: record, correlationId: string, createTime: string, domain: string, languageCode: string, name: string, orgDisplayName: string, orgPostalAddress: record, primaryContactInfo: record, updateTime: string>, nextPageToken: string> {
+]: nothing -> oneof<record<customers: table<alternateEmail: string, channelPartnerId: string, cloudIdentityId: string, cloudIdentityInfo: record, correlationId: string, createTime: string, domain: string, languageCode: string, name: string, orgDisplayName: string, orgPostalAddress: record, primaryContactInfo: record, updateTime: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1509,9 +1523,6 @@ export def "cloudchannel-accounts-customers-list" [
 #
 # POST /v1/{parent}/customers
 # operationId: cloudchannel.accounts.customers.create
-# --cloudIdentityInfo shape: {alternateEmail?: string, customerType?: "CUSTOMER_TYPE_UNSPECIFIED"|"DOMAIN"|"TEAM", eduData?: record, languageCode?: string, phoneNumber?: string}
-# --orgPostalAddress shape: {addressLines?: list<string>, administrativeArea?: string, languageCode?: string, locality?: string, organization?: string, postalCode?: string, recipients?: list<string>, regionCode?: string, revision?: int, sortingCode?: string, sublocality?: string}
-# --primaryContactInfo shape: {email?: string, firstName?: string, lastName?: string, phone?: string, title?: string}
 export def "cloudchannel-accounts-customers-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1543,7 +1554,7 @@ export def "cloudchannel-accounts-customers-create" [
   --org-display-name: string # Required. Name of the organization that the customer entity represents.
   --org-postal-address: record # Represents a postal address, e.g. for postal delivery or payments addresses. Given a postal address, a postal service can deliver items to a premise, P.O. Box or similar. It is not intended to model geographical locations (roads, towns, mountains). In typical usage an address would be created via user input or from importing existing data, depending on the type of process. Advice on address input / editing: - Use an internationalization-ready address widget such as https://github.com/google/libaddressinput) - Users should not be presented with UI elements for input or editing of fields outside countries where that field is used. For more guidance on how to use this schema, please see: https://support.google.com/business/answer/6397478 — shape: {addressLines?: list<string>, administrativeArea?: string, languageCode?: string, locality?: string, organization?: string, postalCode?: string, recipients?: list<string>, regionCode?: string, revision?: int, sortingCode?: string, sublocality?: string}
   --primary-contact-info: record # Contact information for a customer account. — shape: {email?: string, firstName?: string, lastName?: string, phone?: string, title?: string}
-]: any -> record<alternateEmail: string, channelPartnerId: string, cloudIdentityId: string, cloudIdentityInfo: record<adminConsoleUri: string, alternateEmail: string, customerType: string, eduData: record<instituteSize: string, instituteType: string, website: string>, isDomainVerified: bool, languageCode: string, phoneNumber: string, primaryDomain: string>, correlationId: string, createTime: string, domain: string, languageCode: string, name: string, orgDisplayName: string, orgPostalAddress: record<addressLines: list<string>, administrativeArea: string, languageCode: string, locality: string, organization: string, postalCode: string, recipients: list<string>, regionCode: string, revision: int, sortingCode: string, sublocality: string>, primaryContactInfo: record<displayName: string, email: string, firstName: string, lastName: string, phone: string, title: string>, updateTime: string> {
+]: any -> oneof<record<alternateEmail: string, channelPartnerId: string, cloudIdentityId: string, cloudIdentityInfo: record<adminConsoleUri: string, alternateEmail: string, customerType: string, eduData: record<instituteSize: string, instituteType: string, website: string>, isDomainVerified: bool, languageCode: string, phoneNumber: string, primaryDomain: string>, correlationId: string, createTime: string, domain: string, languageCode: string, name: string, orgDisplayName: string, orgPostalAddress: record<addressLines: list<string>, administrativeArea: string, languageCode: string, locality: string, organization: string, postalCode: string, recipients: list<string>, regionCode: string, revision: int, sortingCode: string, sublocality: string>, primaryContactInfo: record<displayName: string, email: string, firstName: string, lastName: string, phone: string, title: string>, updateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1600,7 +1611,7 @@ export def "cloudchannel-accounts-customers-import" [
   --customer: string # Optional. Specifies the customer that will receive imported Cloud Identity information. Format: accounts/{account_id}/customers/{customer_id}
   --domain: string # Required. Customer domain.
   --overwrite-if-exists: oneof<nothing, bool> # Required. Choose to overwrite an existing customer if found. This must be set to true if there is an existing customer with a conflicting region code or domain.
-]: any -> record<alternateEmail: string, channelPartnerId: string, cloudIdentityId: string, cloudIdentityInfo: record<adminConsoleUri: string, alternateEmail: string, customerType: string, eduData: record<instituteSize: string, instituteType: string, website: string>, isDomainVerified: bool, languageCode: string, phoneNumber: string, primaryDomain: string>, correlationId: string, createTime: string, domain: string, languageCode: string, name: string, orgDisplayName: string, orgPostalAddress: record<addressLines: list<string>, administrativeArea: string, languageCode: string, locality: string, organization: string, postalCode: string, recipients: list<string>, regionCode: string, revision: int, sortingCode: string, sublocality: string>, primaryContactInfo: record<displayName: string, email: string, firstName: string, lastName: string, phone: string, title: string>, updateTime: string> {
+]: any -> oneof<record<alternateEmail: string, channelPartnerId: string, cloudIdentityId: string, cloudIdentityInfo: record<adminConsoleUri: string, alternateEmail: string, customerType: string, eduData: record<instituteSize: string, instituteType: string, website: string>, isDomainVerified: bool, languageCode: string, phoneNumber: string, primaryDomain: string>, correlationId: string, createTime: string, domain: string, languageCode: string, name: string, orgDisplayName: string, orgPostalAddress: record<addressLines: list<string>, administrativeArea: string, languageCode: string, locality: string, organization: string, postalCode: string, recipients: list<string>, regionCode: string, revision: int, sortingCode: string, sublocality: string>, primaryContactInfo: record<displayName: string, email: string, firstName: string, lastName: string, phone: string, title: string>, updateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1653,7 +1664,7 @@ export def "cloudchannel-accounts-customers-entitlements-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # Optional. Requested page size. Server might return fewer results than requested. If unspecified, return at most 50 entitlements. The maximum value is 100; the server will coerce values above 100.
   --page-token: string # Optional. A token for a page of results other than the first page. Obtained using ListEntitlementsResponse.next_page_token of the previous CloudChannelService.ListEntitlements call.
-]: nothing -> record<entitlements: table<associationInfo: record, commitmentSettings: record, createTime: string, name: string, offer: string, parameters: list, provisionedService: record, provisioningState: string, purchaseOrderId: string, suspensionReasons: list, trialSettings: record, updateTime: string>, nextPageToken: string> {
+]: nothing -> oneof<record<entitlements: table<associationInfo: record, commitmentSettings: record, createTime: string, name: string, offer: string, parameters: list, provisionedService: record, provisioningState: string, purchaseOrderId: string, suspensionReasons: list, trialSettings: record, updateTime: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1679,7 +1690,6 @@ export def "cloudchannel-accounts-customers-entitlements-list" [
 #
 # POST /v1/{parent}/entitlements
 # operationId: cloudchannel.accounts.customers.entitlements.create
-# --entitlement shape: {associationInfo?: record, commitmentSettings?: record, offer?: string, parameters?: list, provisionedService?: record, purchaseOrderId?: string, trialSettings?: record}
 export def "cloudchannel-accounts-customers-entitlements-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1704,7 +1714,7 @@ export def "cloudchannel-accounts-customers-entitlements-create" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --entitlement: record # An entitlement is a representation of a customer's ability to use a service. — shape: {associationInfo?: record, commitmentSettings?: record, offer?: string, parameters?: list, provisionedService?: record, purchaseOrderId?: string, trialSettings?: record}
   --request-id: string # Optional. You can specify an optional unique request ID, and if you need to retry your request, the server will know to ignore the request if it's complete. For example, you make an initial request and the request times out. If you make the request again with the same request ID, the server can check if it received the original operation with the same request ID. If it did, it will ignore the second request. The request ID must be a valid [UUID](https://tools.ietf.org/html/rfc4122) with the exception that zero UUID is not supported (`00000000-0000-0000-0000-000000000000`).
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1760,7 +1770,7 @@ export def "cloudchannel-accounts-offers-list" [
   --page-size: int # Optional. Requested page size. Server might return fewer results than requested. If unspecified, returns at most 500 Offers. The maximum value is 1000; the server will coerce values above 1000.
   --page-token: string # Optional. A token for a page of results other than the first page.
   --show-future-offers: oneof<nothing, bool> # Optional. A boolean flag that determines if a response returns future offers 30 days from now. If the show_future_offers is true, the response will only contain offers that are scheduled to be available 30 days from now.
-]: nothing -> record<nextPageToken: string, offers: table<constraints: record, dealCode: string, endTime: string, marketingInfo: record, name: string, parameterDefinitions: list, plan: record, priceByResources: list, sku: record, startTime: string>> {
+]: nothing -> oneof<record<nextPageToken: string, offers: table<constraints: record, dealCode: string, endTime: string, marketingInfo: record, name: string, parameterDefinitions: list, plan: record, priceByResources: list, sku: record, startTime: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1811,7 +1821,7 @@ export def "cloudchannel-accounts-reports-list" [
   --language-code: string # Optional. The BCP-47 language code, such as "en-US". If specified, the response is localized to the corresponding language code if the original data sources support it. Default is "en-US".
   --page-size: int # Optional. Requested page size of the report. The server might return fewer results than requested. If unspecified, returns 20 reports. The maximum value is 100.
   --page-token: string # Optional. A token that specifies a page of results beyond the first page. Obtained through ListReportsResponse.next_page_token of the previous CloudChannelReportsService.ListReports call.
-]: nothing -> record<nextPageToken: string, reports: table<columns: list, description: string, displayName: string, name: string>> {
+]: nothing -> oneof<record<nextPageToken: string, reports: table<columns: list, description: string, displayName: string, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1863,7 +1873,7 @@ export def "cloudchannel-products-skus-list" [
   --language-code: string # Optional. The BCP-47 language code. For example, "en-US". The response will localize in the corresponding language code, if specified. The default value is "en-US".
   --page-size: int # Optional. Requested page size. Server might return fewer results than requested. If unspecified, returns at most 100 SKUs. The maximum value is 1000; the server will coerce values above 1000.
   --page-token: string # Optional. A token for a page of results other than the first page. Optional.
-]: nothing -> record<nextPageToken: string, skus: table<marketingInfo: record, name: string, product: record>> {
+]: nothing -> oneof<record<nextPageToken: string, skus: table<marketingInfo: record, name: string, product: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1912,7 +1922,7 @@ export def "cloudchannel-accounts-check-cloud-identity-accounts-exist" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --domain: string # Required. Domain to fetch for Cloud Identity account customer.
-]: any -> record<cloudIdentityAccounts: table<customerCloudIdentityId: string, customerName: string, existing: bool, owned: bool>> {
+]: any -> oneof<record<cloudIdentityAccounts: table<customerCloudIdentityId: string, customerName: string, existing: bool, owned: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1966,7 +1976,7 @@ export def "cloudchannel-accounts-customers-entitlements-list-entitlement-change
   --filter: string # Optional. Filters applied to the list results.
   --page-size: int # Optional. The maximum number of entitlement changes to return. The service may return fewer than this value. If unspecified, returns at most 10 entitlement changes. The maximum value is 50; the server will coerce values above 50.
   --page-token: string # Optional. A page token, received from a previous CloudChannelService.ListEntitlementChanges call. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to CloudChannelService.ListEntitlementChanges must match the call that provided the page token.
-]: nothing -> record<entitlementChanges: table<activationReason: string, cancellationReason: string, changeType: string, createTime: string, entitlement: string, offer: string, operator: string, operatorType: string, otherChangeReason: string, parameters: list, provisionedService: record, suspensionReason: string>, nextPageToken: string> {
+]: nothing -> oneof<record<entitlementChanges: table<activationReason: string, cancellationReason: string, changeType: string, createTime: string, entitlement: string, offer: string, operator: string, operatorType: string, otherChangeReason: string, parameters: list, provisionedService: record, suspensionReason: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -2020,7 +2030,7 @@ export def "cloudchannel-accounts-list-transferable-offers" [
   --page-size: int # Requested page size. Server might return fewer results than requested. If unspecified, returns at most 100 offers. The maximum value is 1000; the server will coerce values above 1000. (format: int32)
   --page-token: string # A token for a page of results other than the first page. Obtained using ListTransferableOffersResponse.next_page_token of the previous CloudChannelService.ListTransferableOffers call.
   --sku: string # Required. The SKU to look up Offers for.
-]: any -> record<nextPageToken: string, transferableOffers: table<offer: record>> {
+]: any -> oneof<record<nextPageToken: string, transferableOffers: table<offer: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2077,7 +2087,7 @@ export def "cloudchannel-accounts-list-transferable-skus" [
   --language-code: string # The BCP-47 language code. For example, "en-US". The response will localize in the corresponding language code, if specified. The default value is "en-US". Optional.
   --page-size: int # The requested page size. Server might return fewer results than requested. If unspecified, returns at most 100 SKUs. The maximum value is 1000; the server will coerce values above 1000. Optional. (format: int32)
   --page-token: string # A token for a page of results other than the first page. Obtained using ListTransferableSkusResponse.next_page_token of the previous CloudChannelService.ListTransferableSkus call. Optional.
-]: any -> record<nextPageToken: string, transferableSkus: table<legacySku: record, sku: record, transferEligibility: record>> {
+]: any -> oneof<record<nextPageToken: string, transferableSkus: table<legacySku: record, sku: record, transferEligibility: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2106,7 +2116,6 @@ export def "cloudchannel-accounts-list-transferable-skus" [
 #
 # POST /v1/{parent}:transferEntitlements
 # operationId: cloudchannel.accounts.customers.transferEntitlements
-# --entitlements item shape: {associationInfo?: record, commitmentSettings?: record, offer?: string, parameters?: list, provisionedService?: record, purchaseOrderId?: string, trialSettings?: record}
 export def "cloudchannel-accounts-customers-transfer-entitlements" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2132,7 +2141,7 @@ export def "cloudchannel-accounts-customers-transfer-entitlements" [
   --auth-token: string # The super admin of the resold customer generates this token to authorize a reseller to access their Cloud Identity and purchase entitlements on their behalf. You can omit this token after authorization. See https://support.google.com/a/answer/7643790 for more details.
   --entitlements: list # Required. The new entitlements to create or transfer. — item shape: {associationInfo?: record, commitmentSettings?: record, offer?: string, parameters?: list, provisionedService?: record, purchaseOrderId?: string, trialSettings?: record}
   --request-id: string # Optional. You can specify an optional unique request ID, and if you need to retry your request, the server will know to ignore the request if it's complete. For example, you make an initial request and the request times out. If you make the request again with the same request ID, the server can check if it received the original operation with the same request ID. If it did, it will ignore the second request. The request ID must be a valid [UUID](https://tools.ietf.org/html/rfc4122) with the exception that zero UUID is not supported (`00000000-0000-0000-0000-000000000000`).
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2161,7 +2170,6 @@ export def "cloudchannel-accounts-customers-transfer-entitlements" [
 #
 # POST /v1/{parent}:transferEntitlementsToGoogle
 # operationId: cloudchannel.accounts.customers.transferEntitlementsToGoogle
-# --entitlements item shape: {associationInfo?: record, commitmentSettings?: record, offer?: string, parameters?: list, provisionedService?: record, purchaseOrderId?: string, trialSettings?: record}
 export def "cloudchannel-accounts-customers-transfer-entitlements-to-google" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2186,7 +2194,7 @@ export def "cloudchannel-accounts-customers-transfer-entitlements-to-google" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --entitlements: list # Required. The entitlements to transfer to Google. — item shape: {associationInfo?: record, commitmentSettings?: record, offer?: string, parameters?: list, provisionedService?: record, purchaseOrderId?: string, trialSettings?: record}
   --request-id: string # Optional. You can specify an optional unique request ID, and if you need to retry your request, the server will know to ignore the request if it's complete. For example, you make an initial request and the request times out. If you make the request again with the same request ID, the server can check if it received the original operation with the same request ID. If it did, it will ignore the second request. The request ID must be a valid [UUID](https://tools.ietf.org/html/rfc4122) with the exception that zero UUID is not supported (`00000000-0000-0000-0000-000000000000`).
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2239,7 +2247,7 @@ export def "cloudchannel-accounts-report-jobs-fetch-report-results" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # Optional. Requested page size of the report. The server may return fewer results than requested. If you don't specify a page size, the server uses a sensible default (may change over time). The maximum value is 30,000; the server will change larger values to 30,000. (format: int32)
   --page-token: string # Optional. A token that specifies a page of results beyond the first page. Obtained through FetchReportResultsResponse.next_page_token of the previous CloudChannelReportsService.FetchReportResults call.
-]: any -> record<nextPageToken: string, reportMetadata: record<dateRange: record<invoiceEndDate: record, invoiceStartDate: record, usageEndDateTime: record, usageStartDateTime: record>, precedingDateRange: record<invoiceEndDate: record, invoiceStartDate: record, usageEndDateTime: record, usageStartDateTime: record>, report: record<columns: list, description: string, displayName: string, name: string>, rowCount: string>, rows: table<values: list>> {
+]: any -> oneof<record<nextPageToken: string, reportMetadata: record<dateRange: record<invoiceEndDate: record, invoiceStartDate: record, usageEndDateTime: record, usageStartDateTime: record>, precedingDateRange: record<invoiceEndDate: record, invoiceStartDate: record, usageEndDateTime: record, usageStartDateTime: record>, report: record<columns: list, description: string, displayName: string, name: string>, rowCount: string>, rows: table<values: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

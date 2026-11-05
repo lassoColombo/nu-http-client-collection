@@ -15,27 +15,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
     "x-2" => { {scheme: $scheme, headers: {"X-2": $token_val}, query: "", location: "header"} }
     "x1123" => { {scheme: $scheme, headers: {"X1123": $token_val}, query: "", location: "header"} }
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -43,8 +52,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -55,7 +69,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -90,7 +113,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -138,9 +162,9 @@ def gender-completer [] { ["F" "M" "T"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "push-uri-to-account-id" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["push-uri-to-account-id" "verify-account-id" "get-authorization-code-id" "get-device-code-id" "upload-file-to-locker-id" "get-file-from-uri-id" "get-list-of-self-uploaded-documents" "get-list-of-issued-documents-version1-id" "get-list-of-self-uploaded-documents-id" "get-list-of-documents-provided-by-an-issuer-id" "get-list-of-issuers-id" "get-search-parameters-for-a-document-id" "pull-document-id" "get-token-revocation-id" "getaccesstoken-id" "account-detail-api-id" "get-certificate-data-in-xml-format-from-uri-id" "get-list-of-issued-documents-id" "get-e-aadhaar-data-in-xml-format-id" "verify-otp-id" "sign-up-id" "get-statistics-id" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -226,7 +250,7 @@ export def "verify-account-id" [
   --mobile: int # This is the mobile number of the user. DigiLocker will check whether an account exists for this mobile number. Either uid or mobile is required to verify whether an account exists.
   --ts: string # Provide a timestamp value in UNIX (or POSIX) format in IST time zone in seconds. This timestamp value must not be older than 30 minutes.
   --uid: int # This is the Aadhaar number of the user. DigiLocker will check whether an account exists for this Aadhaar number. Either uid or mobile is required to verify whether an account exists.
-]: any -> record<digilockerid: string, registered: string> {
+]: any -> oneof<record<digilockerid: string, registered: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -273,7 +297,7 @@ export def "get-authorization-code-id" [
   --code-challenge-method: string # Specifies what method was used to encode a code_verifier to generate code_challenge parameter above. This parameter must be used with the code_challenge parameter. The only supported values for this parameter is S256.
   --dl-flow: string # If this parameter is provided its value will always be signup. This parameter indicates that the user does not have a DigiLocker account and will be directed to the signup flow directly. After the account is created, the user will be directed to the authorization flow. If this parameter is not sent, the user will be redirected to the sign in flow.
   --verified-mobile: int # Verified mobile number of the user. If this parameter is passed, DigiLocker will skip the mobile OTP verification step during sign up. DigiLocker will treat the mobile number passed in this parameter as a verified mobile number by the trusted client application. This parameter will be used only if dl_flow parameter mentioned above is set to signup and will be ignored otherwise.
-]: nothing -> record<details: record<access_token: string, expires_in: int, scope: string, token_type: string>> {
+]: nothing -> oneof<record<details: record<access_token: string, expires_in: int, scope: string, token_type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($response_type == null) { error make --unspanned { msg: "required query parameter 'response_type' missing: pass --response-type" } }
@@ -315,7 +339,7 @@ export def "get-device-code-id" [
   --dl-mobile: int # Mobile number associated with DigiLocker account of the user. The client device accepts the mobile number on the device from user and sends it in this parameter. Either the username or the mobile number must be provided.
   --dl-username: string # DigiLocker username of the user. The client device accepts the username on the device from user and sends the username in this parameter. Either the username or the mobile number must be provided.
   --response-type: string # The parameter must be set to device_code. (e.g. device_code)
-]: any -> record<device_code: string, dl_masked_email: string, dl_masked_mobile: int, expires_in: int> {
+]: any -> oneof<record<device_code: string, dl_masked_email: string, dl_masked_mobile: int, expires_in: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -355,7 +379,7 @@ export def "upload-file-to-locker-id" [
   --path: string # The destination path of the file in DigiLocker including filename.
   --hmac: string # This is used to verify the integrity of the file data. The client app calculates the hash message authentication code (HMAC) of the file content using SHA256 hashing algorithm and the client secret as the hashing key. The resulting HMAC is converted to Base64 format and sent in this parameter. Upon upload of file, DigiLocker calculates the HMAC of the file data and compares it with this HMAC..
   --body: any
-]: any -> record<details: record<Path: string, size: string>> {
+]: any -> oneof<record<details: record<Path: string, size: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -431,7 +455,7 @@ export def "get-list-of-self-uploaded-documents" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<directory: string, items: table<date: string, description: string, id: string, issuer: string, mime: string, name: string, parent: string, size: string, type: string, uri: string>> {
+]: nothing -> oneof<record<directory: string, items: table<date: string, description: string, id: string, issuer: string, mime: string, name: string, parent: string, size: string, type: string, uri: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/oauth2/1/files/" $auth.query)
@@ -465,7 +489,7 @@ export def "get-list-of-issued-documents-version1-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<details: record<date: string, description: string, doctype: string, issuer: string, issuerid: string, mime: string, name: string, parent: string, size: string, type: string, uri: string>> {
+]: nothing -> oneof<record<details: record<date: string, description: string, doctype: string, issuer: string, issuerid: string, mime: string, name: string, parent: string, size: string, type: string, uri: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/oauth2/1/files/issued" $auth.query)
@@ -500,7 +524,7 @@ export def "get-list-of-self-uploaded-documents-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<details: record<date: string, description: string, id: int, issuer: string, mime: string, name: string, parent: string, size: string, type: string, uri: string>> {
+]: nothing -> oneof<record<details: record<date: string, description: string, id: int, issuer: string, mime: string, name: string, parent: string, size: string, type: string, uri: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -539,7 +563,7 @@ export def "get-list-of-documents-provided-by-an-issuer-id" [
   --hmac: string # Provide SHA-256 encrypted value of the client secret, clientid and ts parameters above concatenated in this sequence (client secret, clientid, ts). The hmac parameter is used by DigiLocker to ensure the data integrity and authentication of the request. Use the Client Secret Key generated during the application registration process on Partners Portal as the client secret. (format: binary)
   --orgid: string # The organization id for the issuer in DigiLocker. This organization id is returned in Get List of Issuers API mentioned earlier.
   --ts: string # Provide a timestamp value in UNIX (or POSIX) format in IST time zone in seconds. This timestamp value must not be older than 30 minutes.
-]: any -> record<documents: table<description: string, doctype: string>> {
+]: any -> oneof<record<documents: table<description: string, doctype: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -548,7 +572,7 @@ export def "get-list-of-documents-provided-by-an-issuer-id" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -580,7 +604,7 @@ export def "get-list-of-issuers-id" [
   --clientid: string # Provide the client id that was created during the application registration process on Partners Portal.
   --hmac: string # Provide SHA-256 encrypted value of the client secret, clientid and ts parameters above concatenated in this sequence (client secret, clientid, ts). The hmac parameter is used by DigiLocker to ensure the data integrity and authentication of the request. Use the Client Secret Key generated during the application registration process on Partners Portal as the client secret. (format: binary)
   --ts: string # Provide a timestamp value in UNIX (or POSIX) format in IST time zone in seconds. This timestamp value must not be older than 30 minutes.
-]: any -> record<issuers: table<categories: string, description: string, issuerid: string, name: string, orgid: string>> {
+]: any -> oneof<record<issuers: table<categories: string, description: string, issuerid: string, name: string, orgid: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -589,7 +613,7 @@ export def "get-list-of-issuers-id" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -623,7 +647,7 @@ export def "get-search-parameters-for-a-document-id" [
   --hmac: string # Provide SHA-256 encrypted value of the client secret, clientid and ts parameters above concatenated in this sequence (client secret, clientid, ts). The hmac parameter is used by DigiLocker to ensure the data integrity and authentication of the request. Use the Client Secret Key generated during the application registration process on Partners Portal as the client secret. (format: binary)
   --orgid: string # The organization id for the issuer in DigiLocker. This organization id is returned in Get List of Issuers API mentioned earlier.
   --ts: string # Provide a timestamp value in UNIX (or POSIX) format in IST time zone in seconds. This timestamp value must not be older than 30 minutes.
-]: any -> table<example: string, label: string, paramname: string, valuelist: any> {
+]: any -> oneof<table<example: string, label: string, paramname: string, valuelist: any>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -632,7 +656,7 @@ export def "get-search-parameters-for-a-document-id" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -666,7 +690,7 @@ export def "pull-document-id" [
   --doctype: string # A 5 character unique document type provided by DigiLocker.
   --orgid: string # The organization id for the issuer in DigiLocker. This organization id is returned in Get List of Issuers API mentioned above.
   --reg-no: string # Other parameters required for fetching a document as listed in paramname field of Get Search Parameters API.
-]: any -> record<details: record<uri: string>> {
+]: any -> oneof<record<details: record<uri: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -675,7 +699,7 @@ export def "pull-document-id" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -734,9 +758,6 @@ export def "get-token-revocation-id" [
 #
 # POST /oauth2/1/token
 # operationId: getaccesstoken id
-# --Get access token using authorization code shape: {client_id: string, client_secret: string, code?: string, code_verifier?: string, grant_type: "authorization_code", redirect_uri?: string}
-# --Get access token using device code and OTP shape: {client_id?: string, device_code?: string, dl_otp?: string, grant_type?: string}
-# --Get access token using refresh token shape: {client_id: string, client_secret: string, grant_type: "refresh_token", refresh_token: string}
 export def "getaccesstoken-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -750,7 +771,7 @@ export def "getaccesstoken-id" [
   --get-access-token-using-authorization-code: record # shape: {client_id: string, client_secret: string, code?: string, code_verifier?: string, grant_type: "authorization_code", redirect_uri?: string}
   --get-access-token-using-device-code-and-otp: any # shape: {client_id?: string, device_code?: string, dl_otp?: string, grant_type?: string}
   --get-access-token-using-refresh-token: record # shape: {client_id: string, client_secret: string, grant_type: "refresh_token", refresh_token: string}
-]: any -> record<access_token: string, digilocker_id: string, dob: int, eaadhar: string, expires_in: int, gender: string, name: string, reference_key: string, refresh_token: string, scope: string, token_type: string> {
+]: any -> oneof<record<access_token: string, digilocker_id: string, dob: int, eaadhar: string, expires_in: int, gender: string, name: string, reference_key: string, refresh_token: string, scope: string, token_type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-2"))
   let base = ($base_url | default $BASE_URL)
@@ -787,7 +808,7 @@ export def "account-detail-api-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<details: record<digilockerid: string, dob: string, eaadhar: string, gender: string, name: string>> {
+]: nothing -> oneof<record<details: record<digilockerid: string, dob: string, eaadhar: string, gender: string, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/oauth2/1/user" $auth.query)
@@ -822,7 +843,7 @@ export def "get-certificate-data-in-xml-format-from-uri-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<CertificateData: list<any>, Signature: record<KeyInfo: record<X509Data: any>, SignatureValue: any, SignedInfo: any>> {
+]: nothing -> oneof<record<CertificateData: list<any>, Signature: record<KeyInfo: record<X509Data: any>, SignatureValue: any, SignedInfo: any>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($uri | is-empty) { error make --unspanned { msg: "path parameter 'uri' must be non-empty" } }
@@ -857,7 +878,7 @@ export def "get-list-of-issued-documents-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<items: table<date: string, description: string, doctype: string, issuer: string, issuerid: string, mime: list, name: string, parent: string, size: string, type: string, uri: string>, resource: string> {
+]: nothing -> oneof<record<items: table<date: string, description: string, doctype: string, issuer: string, issuerid: string, mime: list, name: string, parent: string, size: string, type: string, uri: string>, resource: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-2"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/oauth2/2/files/issued" $auth.query)
@@ -891,7 +912,7 @@ export def "get-e-aadhaar-data-in-xml-format-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<KycRes: record<Rar: string, Signature: record<KeyInfo: record, SignatureValue: string, SignedInfo: record, xmlns: string>, UidData: record<LData: record, Pht: string, Poa: record, Poi: record, Prn: record, tkn: string, uid: string>, code: string, ret: string, ts: string, ttl: string, txn: string>> {
+]: nothing -> oneof<record<KycRes: record<Rar: string, Signature: record<KeyInfo: record, SignatureValue: string, SignedInfo: record, xmlns: string>, UidData: record<LData: record, Pht: string, Poa: record, Poi: record, Prn: record, tkn: string, uid: string>, code: string, ret: string, ts: string, ttl: string, txn: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/oauth2/2/xml/eaadhaar" $auth.query)
@@ -930,7 +951,7 @@ export def "verify-otp-id" [
   --mobile: int # This is the mobile number of the user. DigiLocker will check whether an account exists for this mobile number. Either uid or mobile is required to verify whether an account exists.
   --otp: int # The OTP provided by the user.
   --ts: string # Provide a timestamp value in UNIX (or POSIX) format in IST time zone in seconds. This timestamp value must not be older than 30 minutes.
-]: any -> record<details: record<access_token: string, expires_in: string, refresh_token: string, scope: string, token_type: string>> {
+]: any -> oneof<record<details: record<access_token: string, expires_in: string, refresh_token: string, scope: string, token_type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -980,7 +1001,7 @@ export def "sign-up-id" [
   --ts: string # Provide a timestamp value in UNIX (or POSIX) format in IST time zone in seconds. This timestamp value must not be older than 30 minutes.
   --uid: int # This is the Aadhaar number of the user. DigiLocker will check whether an account exists for this Aadhaar number. Either uid or mobile is required to verify whether an account exists.
   --verification: string # The parameter indicates whether the mobile number provided above should be validated by DigiLocker. If this parameter is ‘Y’, the DigiLocker sends an OTP to verify the mobile number. In this case the client application will call the second API to validate the OTP. The user will be signed on only after successful OTP validation. This flow should be used when the user account is created by user himself/herself or the user is present to provide the OTP. If this parameter is ‘N’, the user account will be created without OTP validation. The OTP validation will be performed when the user signs in for the first time in DigiLocker. This flow should be used when the user account needs to be created in the absence of the user.
-]: any -> record<details: record<access_token: string, expires_in: string, mobile: int, refresh_token: string, scope: string, token_type: string>> {
+]: any -> oneof<record<details: record<access_token: string, expires_in: string, mobile: int, refresh_token: string, scope: string, token_type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1022,7 +1043,7 @@ export def "get-statistics-id" [
   --clientid: string # Provide the client id that was created during the application registration process on Partners Portal.
   --hmac: string # Provide SHA-256 encrypted value of the client secret, clientid and ts parameters above concatenated in this sequence (client secret, clientid, ts). The hmac parameter is used by DigiLocker to ensure the data integrity and authentication of the request. Use the Client Secret Key generated during the application registration process on Partners Portal as the client secret. (format: binary)
   --ts: string # Provide a timestamp value in UNIX (or POSIX) format in IST time zone in seconds. This timestamp value must not be older than 30 minutes.
-]: any -> record<authentic_documents: string, count_as_on: string, issuers: string, monthwise_registations: record<count: int, details2: record<count: int, id: int, month: int, year: int>, id: int, month: int, year: int>, requestors: string, users: string, yearwise_authentic_documents: record<count: int, details: record<count: int, id: int, year: int>, details1: record<count: int, id: int, year: int>, details2: record<count: int, id: int, year: int>, id: int, year: int>> {
+]: any -> oneof<record<authentic_documents: string, count_as_on: string, issuers: string, monthwise_registations: record<count: int, details2: record<count: int, id: int, month: int, year: int>, id: int, month: int, year: int>, requestors: string, users: string, yearwise_authentic_documents: record<count: int, details: record<count: int, id: int, year: int>, details1: record<count: int, id: int, year: int>, details2: record<count: int, id: int, year: int>, id: int, year: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

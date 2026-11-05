@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,12 +111,13 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # HEAD — bodyless; default surfaces just the headers on success
 def send-head [req: record, insecure: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = (http head --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure $req.url)
+  let resp = http head --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure $req.url
   if (not $full) and (not $allow_errors) and (status-ok $resp.status $ok_codes) { return $resp.headers }
   $resp | handle-response $allow_errors $full $ok_codes
 }
@@ -132,9 +156,9 @@ def key-kind-completer [] { ["primary" "primaryReadonly" "secondary" "secondaryR
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "database-accounts-check-name-exists" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["database-accounts-check-name-exists" "operations-list" "database-accounts-list" "database-accounts-list-by-resource-group" "database-accounts-delete" "database-accounts-get" "database-accounts-update" "database-accounts-create-or-update" "cassandra-resources-list-cassandra-keyspaces" "cassandra-resources-delete-cassandra-keyspace" "cassandra-resources-get-cassandra-keyspace" "cassandra-resources-create-update-cassandra-keyspace" "cassandra-resources-list-cassandra-tables" "cassandra-resources-delete-cassandra-table" "cassandra-resources-get-cassandra-table" "cassandra-resources-create-update-cassandra-table" "cassandra-resources-get-cassandra-table-throughput" "cassandra-resources-update-cassandra-table-throughput" "cassandra-resources-get-cassandra-keyspace-throughput" "cassandra-resources-update-cassandra-keyspace-throughput" "collection-list-metric-definitions" "collection-list-metrics" "partition-key-range-id-list-metrics" "collection-partition-list-metrics" "collection-partition-list-usages" "collection-list-usages" "database-list-metric-definitions" "database-list-metrics" "database-list-usages" "database-accounts-failover-priority-change" "gremlin-resources-list-gremlin-databases" "gremlin-resources-delete-gremlin-database" "gremlin-resources-get-gremlin-database" "gremlin-resources-create-update-gremlin-database" "gremlin-resources-list-gremlin-graphs" "gremlin-resources-delete-gremlin-graph" "gremlin-resources-get-gremlin-graph" "gremlin-resources-create-update-gremlin-graph" "gremlin-resources-get-gremlin-graph-throughput" "gremlin-resources-update-gremlin-graph-throughput" "gremlin-resources-get-gremlin-database-throughput" "gremlin-resources-update-gremlin-database-throughput" "database-accounts-list-connection-strings" "database-accounts-list-keys" "database-accounts-list-metric-definitions" "database-accounts-list-metrics" "mongo-db-resources-list-mongo-db-databases" "mongo-db-resources-delete-mongo-db-database" "mongo-db-resources-get-mongo-db-database" "mongo-db-resources-create-update-mongo-db-database" "mongo-db-resources-list-mongo-db-collections" "mongo-db-resources-delete-mongo-db-collection" "mongo-db-resources-get-mongo-db-collection" "mongo-db-resources-create-update-mongo-db-collection" "mongo-db-resources-get-mongo-db-collection-throughput" "mongo-db-resources-update-mongo-db-collection-throughput" "mongo-db-resources-get-mongo-db-database-throughput" "mongo-db-resources-update-mongo-db-database-throughput" "database-accounts-offline-region" "database-accounts-online-region" "percentile-list-metrics" "database-accounts-get-read-only-keys" "database-accounts-list-read-only-keys" "database-accounts-regenerate-key" "collection-region-list-metrics" "partition-key-range-id-region-list-metrics" "collection-partition-region-list-metrics" "database-account-region-list-metrics" "percentile-source-target-list-metrics" "sql-resources-list-sql-databases" "sql-resources-delete-sql-database" "sql-resources-get-sql-database" "sql-resources-create-update-sql-database" "sql-resources-list-sql-containers" "sql-resources-delete-sql-container" "sql-resources-get-sql-container" "sql-resources-create-update-sql-container" "sql-resources-list-sql-stored-procedures" "sql-resources-delete-sql-stored-procedure" "sql-resources-get-sql-stored-procedure" "sql-resources-create-update-sql-stored-procedure" "sql-resources-get-sql-container-throughput" "sql-resources-update-sql-container-throughput" "sql-resources-list-sql-triggers" "sql-resources-delete-sql-trigger" "sql-resources-get-sql-trigger" "sql-resources-create-update-sql-trigger" "sql-resources-list-sql-user-defined-functions" "sql-resources-delete-sql-user-defined-function" "sql-resources-get-sql-user-defined-function" "sql-resources-create-update-sql-user-defined-function" "sql-resources-get-sql-database-throughput" "sql-resources-update-sql-database-throughput" "table-resources-list-tables" "table-resources-delete-table" "table-resources-get-table" "table-resources-create-update-table" "table-resources-get-table-throughput" "table-resources-update-table-throughput" "percentile-target-list-metrics" "database-accounts-list-usages" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -168,7 +192,7 @@ export def "database-accounts-check-name-exists" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-08-01. (required)
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
@@ -206,7 +230,7 @@ export def "operations-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-08-01. (required)
-]: nothing -> record<nextLink: string, value: table<display: record, name: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<display: record, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
@@ -244,7 +268,7 @@ export def "database-accounts-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-08-01. (required)
-]: nothing -> record<value: table<kind: string, properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<value: table<kind: string, properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -284,7 +308,7 @@ export def "database-accounts-list-by-resource-group" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-08-01. (required)
-]: nothing -> record<value: table<kind: string, properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<value: table<kind: string, properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -369,7 +393,7 @@ export def "database-accounts-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-08-01. (required)
-]: nothing -> record<kind: string, properties: record<capabilities: list<record>, connectorOffer: string, consistencyPolicy: record<defaultConsistencyLevel: string, maxIntervalInSeconds: int, maxStalenessPrefix: int>, databaseAccountOfferType: string, disableKeyBasedMetadataWriteAccess: bool, documentEndpoint: string, enableAutomaticFailover: bool, enableCassandraConnector: bool, enableMultipleWriteLocations: bool, failoverPolicies: list<record>, ipRangeFilter: string, isVirtualNetworkFilterEnabled: bool, locations: list<record>, provisioningState: string, readLocations: list<record>, virtualNetworkRules: list<record>, writeLocations: list<record>>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<kind: string, properties: record<capabilities: list<record>, connectorOffer: string, consistencyPolicy: record<defaultConsistencyLevel: string, maxIntervalInSeconds: int, maxStalenessPrefix: int>, databaseAccountOfferType: string, disableKeyBasedMetadataWriteAccess: bool, documentEndpoint: string, enableAutomaticFailover: bool, enableCassandraConnector: bool, enableMultipleWriteLocations: bool, failoverPolicies: list<record>, ipRangeFilter: string, isVirtualNetworkFilterEnabled: bool, locations: list<record>, provisioningState: string, readLocations: list<record>, virtualNetworkRules: list<record>, writeLocations: list<record>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -398,7 +422,6 @@ export def "database-accounts-get" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}
 # operationId: DatabaseAccounts_Update
-# --properties shape: {capabilities?: list, connectorOffer?: "Small", consistencyPolicy?: record, disableKeyBasedMetadataWriteAccess?: bool, enableAutomaticFailover?: bool, enableCassandraConnector?: bool, enableMultipleWriteLocations?: bool, ipRangeFilter?: string, isVirtualNetworkFilterEnabled?: bool, locations?: list, virtualNetworkRules?: list}
 export def "database-accounts-update" [
   subscription_id: string
   resource_group_name: string
@@ -416,7 +439,7 @@ export def "database-accounts-update" [
   --location: string # The location of the resource group to which the resource belongs.
   --properties: record # Properties to update Azure Cosmos DB database accounts. — shape: {capabilities?: list, connectorOffer?: "Small", consistencyPolicy?: record, disableKeyBasedMetadataWriteAccess?: bool, enableAutomaticFailover?: bool, enableCassandraConnector?: bool, enableMultipleWriteLocations?: bool, ipRangeFilter?: string, isVirtualNetworkFilterEnabled?: bool, locations?: list, virtualNetworkRules?: list}
   --tags: record # Tags are a list of key-value pairs that describe the resource. These tags can be used in viewing and grouping this resource (across resource groups). A maximum of 15 tags can be provided for a resource. Each tag must have a key no greater than 128 characters and value no greater than 256 characters. For example, the default experience for a template type is set with "defaultExperience": "Cassandra". Current "defaultExperience" values also include "Table", "Graph", "DocumentDB", and "MongoDB".
-]: any -> record<kind: string, properties: record<capabilities: list<record>, connectorOffer: string, consistencyPolicy: record<defaultConsistencyLevel: string, maxIntervalInSeconds: int, maxStalenessPrefix: int>, databaseAccountOfferType: string, disableKeyBasedMetadataWriteAccess: bool, documentEndpoint: string, enableAutomaticFailover: bool, enableCassandraConnector: bool, enableMultipleWriteLocations: bool, failoverPolicies: list<record>, ipRangeFilter: string, isVirtualNetworkFilterEnabled: bool, locations: list<record>, provisioningState: string, readLocations: list<record>, virtualNetworkRules: list<record>, writeLocations: list<record>>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<kind: string, properties: record<capabilities: list<record>, connectorOffer: string, consistencyPolicy: record<defaultConsistencyLevel: string, maxIntervalInSeconds: int, maxStalenessPrefix: int>, databaseAccountOfferType: string, disableKeyBasedMetadataWriteAccess: bool, documentEndpoint: string, enableAutomaticFailover: bool, enableCassandraConnector: bool, enableMultipleWriteLocations: bool, failoverPolicies: list<record>, ipRangeFilter: string, isVirtualNetworkFilterEnabled: bool, locations: list<record>, provisioningState: string, readLocations: list<record>, virtualNetworkRules: list<record>, writeLocations: list<record>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -448,7 +471,6 @@ export def "database-accounts-update" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}
 # operationId: DatabaseAccounts_CreateOrUpdate
-# --properties shape: {capabilities?: list, connectorOffer?: "Small", consistencyPolicy?: record, databaseAccountOfferType: "Standard", disableKeyBasedMetadataWriteAccess?: bool, enableAutomaticFailover?: bool, enableCassandraConnector?: bool, enableMultipleWriteLocations?: bool, ipRangeFilter?: string, isVirtualNetworkFilterEnabled?: bool, locations: list, virtualNetworkRules?: list}
 export def "database-accounts-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -467,7 +489,7 @@ export def "database-accounts-create-or-update" [
   properties: record # Properties to create and update Azure Cosmos DB database accounts. — shape: {capabilities?: list, connectorOffer?: "Small", consistencyPolicy?: record, databaseAccountOfferType: "Standard", disableKeyBasedMetadataWriteAccess?: bool, enableAutomaticFailover?: bool, enableCassandraConnector?: bool, enableMultipleWriteLocations?: bool, ipRangeFilter?: string, isVirtualNetworkFilterEnabled?: bool, locations: list, virtualNetworkRules?: list}
   --location: string # The location of the resource group to which the resource belongs.
   --tags: record # Tags are a list of key-value pairs that describe the resource. These tags can be used in viewing and grouping this resource (across resource groups). A maximum of 15 tags can be provided for a resource. Each tag must have a key no greater than 128 characters and value no greater than 256 characters. For example, the default experience for a template type is set with "defaultExperience": "Cassandra". Current "defaultExperience" values also include "Table", "Graph", "DocumentDB", and "MongoDB".
-]: any -> record<kind: string, properties: record<capabilities: list<record>, connectorOffer: string, consistencyPolicy: record<defaultConsistencyLevel: string, maxIntervalInSeconds: int, maxStalenessPrefix: int>, databaseAccountOfferType: string, disableKeyBasedMetadataWriteAccess: bool, documentEndpoint: string, enableAutomaticFailover: bool, enableCassandraConnector: bool, enableMultipleWriteLocations: bool, failoverPolicies: list<record>, ipRangeFilter: string, isVirtualNetworkFilterEnabled: bool, locations: list<record>, provisioningState: string, readLocations: list<record>, virtualNetworkRules: list<record>, writeLocations: list<record>>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<kind: string, properties: record<capabilities: list<record>, connectorOffer: string, consistencyPolicy: record<defaultConsistencyLevel: string, maxIntervalInSeconds: int, maxStalenessPrefix: int>, databaseAccountOfferType: string, disableKeyBasedMetadataWriteAccess: bool, documentEndpoint: string, enableAutomaticFailover: bool, enableCassandraConnector: bool, enableMultipleWriteLocations: bool, failoverPolicies: list<record>, ipRangeFilter: string, isVirtualNetworkFilterEnabled: bool, locations: list<record>, provisioningState: string, readLocations: list<record>, virtualNetworkRules: list<record>, writeLocations: list<record>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -513,7 +535,7 @@ export def "cassandra-resources-list-cassandra-keyspaces" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-08-01. (required)
-]: nothing -> record<value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -602,7 +624,7 @@ export def "cassandra-resources-get-cassandra-keyspace" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-08-01. (required)
-]: nothing -> record<properties: record<resource: record<id: string, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<properties: record<resource: record<id: string, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -632,7 +654,6 @@ export def "cassandra-resources-get-cassandra-keyspace" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/cassandraKeyspaces/{keyspaceName}
 # operationId: CassandraResources_CreateUpdateCassandraKeyspace
-# --properties shape: {options: record, resource: record}
 export def "cassandra-resources-create-update-cassandra-keyspace" [
   subscription_id: string
   resource_group_name: string
@@ -651,7 +672,7 @@ export def "cassandra-resources-create-update-cassandra-keyspace" [
   properties: record # Properties to create and update Azure Cosmos DB Cassandra keyspace. — shape: {options: record, resource: record}
   --location: string # The location of the resource group to which the resource belongs.
   --tags: record # Tags are a list of key-value pairs that describe the resource. These tags can be used in viewing and grouping this resource (across resource groups). A maximum of 15 tags can be provided for a resource. Each tag must have a key no greater than 128 characters and value no greater than 256 characters. For example, the default experience for a template type is set with "defaultExperience": "Cassandra". Current "defaultExperience" values also include "Table", "Graph", "DocumentDB", and "MongoDB".
-]: any -> record<properties: record<resource: record<id: string, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<resource: record<id: string, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -699,7 +720,7 @@ export def "cassandra-resources-list-cassandra-tables" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-08-01. (required)
-]: nothing -> record<value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -792,7 +813,7 @@ export def "cassandra-resources-get-cassandra-table" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-08-01. (required)
-]: nothing -> record<properties: record<resource: record<defaultTtl: int, id: string, schema: record, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<properties: record<resource: record<defaultTtl: int, id: string, schema: record, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -823,7 +844,6 @@ export def "cassandra-resources-get-cassandra-table" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/cassandraKeyspaces/{keyspaceName}/tables/{tableName}
 # operationId: CassandraResources_CreateUpdateCassandraTable
-# --properties shape: {options: record, resource: record}
 export def "cassandra-resources-create-update-cassandra-table" [
   subscription_id: string
   resource_group_name: string
@@ -843,7 +863,7 @@ export def "cassandra-resources-create-update-cassandra-table" [
   properties: record # Properties to create and update Azure Cosmos DB Cassandra table. — shape: {options: record, resource: record}
   --location: string # The location of the resource group to which the resource belongs.
   --tags: record # Tags are a list of key-value pairs that describe the resource. These tags can be used in viewing and grouping this resource (across resource groups). A maximum of 15 tags can be provided for a resource. Each tag must have a key no greater than 128 characters and value no greater than 256 characters. For example, the default experience for a template type is set with "defaultExperience": "Cassandra". Current "defaultExperience" values also include "Table", "Graph", "DocumentDB", and "MongoDB".
-]: any -> record<properties: record<resource: record<defaultTtl: int, id: string, schema: record, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<resource: record<defaultTtl: int, id: string, schema: record, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -893,7 +913,7 @@ export def "cassandra-resources-get-cassandra-table-throughput" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-08-01. (required)
-]: nothing -> record<properties: record<resource: record<minimumThroughput: string, offerReplacePending: string, throughput: int, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<properties: record<resource: record<minimumThroughput: string, offerReplacePending: string, throughput: int, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -924,7 +944,6 @@ export def "cassandra-resources-get-cassandra-table-throughput" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/cassandraKeyspaces/{keyspaceName}/tables/{tableName}/throughputSettings/default
 # operationId: CassandraResources_UpdateCassandraTableThroughput
-# --properties shape: {resource: record}
 export def "cassandra-resources-update-cassandra-table-throughput" [
   subscription_id: string
   resource_group_name: string
@@ -944,7 +963,7 @@ export def "cassandra-resources-update-cassandra-table-throughput" [
   properties: record # Properties to update Azure Cosmos DB resource throughput. — shape: {resource: record}
   --location: string # The location of the resource group to which the resource belongs.
   --tags: record # Tags are a list of key-value pairs that describe the resource. These tags can be used in viewing and grouping this resource (across resource groups). A maximum of 15 tags can be provided for a resource. Each tag must have a key no greater than 128 characters and value no greater than 256 characters. For example, the default experience for a template type is set with "defaultExperience": "Cassandra". Current "defaultExperience" values also include "Table", "Graph", "DocumentDB", and "MongoDB".
-]: any -> record<properties: record<resource: record<minimumThroughput: string, offerReplacePending: string, throughput: int, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<resource: record<minimumThroughput: string, offerReplacePending: string, throughput: int, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -993,7 +1012,7 @@ export def "cassandra-resources-get-cassandra-keyspace-throughput" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-08-01. (required)
-]: nothing -> record<properties: record<resource: record<minimumThroughput: string, offerReplacePending: string, throughput: int, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<properties: record<resource: record<minimumThroughput: string, offerReplacePending: string, throughput: int, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1023,7 +1042,6 @@ export def "cassandra-resources-get-cassandra-keyspace-throughput" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/cassandraKeyspaces/{keyspaceName}/throughputSettings/default
 # operationId: CassandraResources_UpdateCassandraKeyspaceThroughput
-# --properties shape: {resource: record}
 export def "cassandra-resources-update-cassandra-keyspace-throughput" [
   subscription_id: string
   resource_group_name: string
@@ -1042,7 +1060,7 @@ export def "cassandra-resources-update-cassandra-keyspace-throughput" [
   properties: record # Properties to update Azure Cosmos DB resource throughput. — shape: {resource: record}
   --location: string # The location of the resource group to which the resource belongs.
   --tags: record # Tags are a list of key-value pairs that describe the resource. These tags can be used in viewing and grouping this resource (across resource groups). A maximum of 15 tags can be provided for a resource. Each tag must have a key no greater than 128 characters and value no greater than 256 characters. For example, the default experience for a template type is set with "defaultExperience": "Cassandra". Current "defaultExperience" values also include "Table", "Graph", "DocumentDB", and "MongoDB".
-]: any -> record<properties: record<resource: record<minimumThroughput: string, offerReplacePending: string, throughput: int, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<resource: record<minimumThroughput: string, offerReplacePending: string, throughput: int, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1091,7 +1109,7 @@ export def "collection-list-metric-definitions" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-08-01. (required)
-]: nothing -> record<value: table<metricAvailabilities: list, name: record, primaryAggregationType: string, resourceUri: string, unit: string>> {
+]: nothing -> oneof<record<value: table<metricAvailabilities: list, name: record, primaryAggregationType: string, resourceUri: string, unit: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1139,7 +1157,7 @@ export def "collection-list-metrics" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-08-01. (required)
   --filter: string # An OData filter expression that describes a subset of metrics to return. The parameters that can be filtered are name.value (name of the metric, can have an or of multiple names), startTime, endTime, and timeGrain. The supported operator is eq. (required)
-]: nothing -> record<value: table<endTime: string, metricValues: list, name: record, startTime: string, timeGrain: string, unit: string>> {
+]: nothing -> oneof<record<value: table<endTime: string, metricValues: list, name: record, startTime: string, timeGrain: string, unit: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1189,7 +1207,7 @@ export def "partition-key-range-id-list-metrics" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-08-01. (required)
   --filter: string # An OData filter expression that describes a subset of metrics to return. The parameters that can be filtered are name.value (name of the metric, can have an or of multiple names), startTime, endTime, and timeGrain. The supported operator is eq. (required)
-]: nothing -> record<value: table<partitionId: string, partitionKeyRangeId: string, endTime: string, metricValues: list, name: record, startTime: string, timeGrain: string, unit: string>> {
+]: nothing -> oneof<record<value: table<partitionId: string, partitionKeyRangeId: string, endTime: string, metricValues: list, name: record, startTime: string, timeGrain: string, unit: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1239,7 +1257,7 @@ export def "collection-partition-list-metrics" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-08-01. (required)
   --filter: string # An OData filter expression that describes a subset of metrics to return. The parameters that can be filtered are name.value (name of the metric, can have an or of multiple names), startTime, endTime, and timeGrain. The supported operator is eq. (required)
-]: nothing -> record<value: table<partitionId: string, partitionKeyRangeId: string, endTime: string, metricValues: list, name: record, startTime: string, timeGrain: string, unit: string>> {
+]: nothing -> oneof<record<value: table<partitionId: string, partitionKeyRangeId: string, endTime: string, metricValues: list, name: record, startTime: string, timeGrain: string, unit: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1288,7 +1306,7 @@ export def "collection-partition-list-usages" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-08-01. (required)
   --filter: string # An OData filter expression that describes a subset of usages to return. The supported parameter is name.value (name of the metric, can have an or of multiple names).
-]: nothing -> record<value: table<partitionId: string, partitionKeyRangeId: string, currentValue: int, limit: int, name: record, quotaPeriod: string, unit: string>> {
+]: nothing -> oneof<record<value: table<partitionId: string, partitionKeyRangeId: string, currentValue: int, limit: int, name: record, quotaPeriod: string, unit: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1336,7 +1354,7 @@ export def "collection-list-usages" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-08-01. (required)
   --filter: string # An OData filter expression that describes a subset of usages to return. The supported parameter is name.value (name of the metric, can have an or of multiple names).
-]: nothing -> record<value: table<currentValue: int, limit: int, name: record, quotaPeriod: string, unit: string>> {
+]: nothing -> oneof<record<value: table<currentValue: int, limit: int, name: record, quotaPeriod: string, unit: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1382,7 +1400,7 @@ export def "database-list-metric-definitions" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-08-01. (required)
-]: nothing -> record<value: table<metricAvailabilities: list, name: record, primaryAggregationType: string, resourceUri: string, unit: string>> {
+]: nothing -> oneof<record<value: table<metricAvailabilities: list, name: record, primaryAggregationType: string, resourceUri: string, unit: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1428,7 +1446,7 @@ export def "database-list-metrics" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-08-01. (required)
   --filter: string # An OData filter expression that describes a subset of metrics to return. The parameters that can be filtered are name.value (name of the metric, can have an or of multiple names), startTime, endTime, and timeGrain. The supported operator is eq. (required)
-]: nothing -> record<value: table<endTime: string, metricValues: list, name: record, startTime: string, timeGrain: string, unit: string>> {
+]: nothing -> oneof<record<value: table<endTime: string, metricValues: list, name: record, startTime: string, timeGrain: string, unit: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1475,7 +1493,7 @@ export def "database-list-usages" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-08-01. (required)
   --filter: string # An OData filter expression that describes a subset of usages to return. The supported parameter is name.value (name of the metric, can have an or of multiple names).
-]: nothing -> record<value: table<currentValue: int, limit: int, name: record, quotaPeriod: string, unit: string>> {
+]: nothing -> oneof<record<value: table<currentValue: int, limit: int, name: record, quotaPeriod: string, unit: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1505,7 +1523,6 @@ export def "database-list-usages" [
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/failoverPriorityChange
 # operationId: DatabaseAccounts_FailoverPriorityChange
-# --failoverPolicies item shape: {failoverPriority?: int, locationName?: string}
 export def "database-accounts-failover-priority-change" [
   subscription_id: string
   resource_group_name: string
@@ -1567,7 +1584,7 @@ export def "gremlin-resources-list-gremlin-databases" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-08-01. (required)
-]: nothing -> record<value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1656,7 +1673,7 @@ export def "gremlin-resources-get-gremlin-database" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-08-01. (required)
-]: nothing -> record<properties: record<resource: record<id: string, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<properties: record<resource: record<id: string, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1686,7 +1703,6 @@ export def "gremlin-resources-get-gremlin-database" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/gremlinDatabases/{databaseName}
 # operationId: GremlinResources_CreateUpdateGremlinDatabase
-# --properties shape: {options: record, resource: record}
 export def "gremlin-resources-create-update-gremlin-database" [
   subscription_id: string
   resource_group_name: string
@@ -1705,7 +1721,7 @@ export def "gremlin-resources-create-update-gremlin-database" [
   properties: record # Properties to create and update Azure Cosmos DB Gremlin database. — shape: {options: record, resource: record}
   --location: string # The location of the resource group to which the resource belongs.
   --tags: record # Tags are a list of key-value pairs that describe the resource. These tags can be used in viewing and grouping this resource (across resource groups). A maximum of 15 tags can be provided for a resource. Each tag must have a key no greater than 128 characters and value no greater than 256 characters. For example, the default experience for a template type is set with "defaultExperience": "Cassandra". Current "defaultExperience" values also include "Table", "Graph", "DocumentDB", and "MongoDB".
-]: any -> record<properties: record<resource: record<id: string, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<resource: record<id: string, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1753,7 +1769,7 @@ export def "gremlin-resources-list-gremlin-graphs" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-08-01. (required)
-]: nothing -> record<value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1846,7 +1862,7 @@ export def "gremlin-resources-get-gremlin-graph" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-08-01. (required)
-]: nothing -> record<properties: record<resource: record<conflictResolutionPolicy: record, defaultTtl: int, id: string, indexingPolicy: record, partitionKey: record, uniqueKeyPolicy: record, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<properties: record<resource: record<conflictResolutionPolicy: record, defaultTtl: int, id: string, indexingPolicy: record, partitionKey: record, uniqueKeyPolicy: record, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1877,7 +1893,6 @@ export def "gremlin-resources-get-gremlin-graph" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/gremlinDatabases/{databaseName}/graphs/{graphName}
 # operationId: GremlinResources_CreateUpdateGremlinGraph
-# --properties shape: {options: record, resource: record}
 export def "gremlin-resources-create-update-gremlin-graph" [
   subscription_id: string
   resource_group_name: string
@@ -1897,7 +1912,7 @@ export def "gremlin-resources-create-update-gremlin-graph" [
   properties: record # Properties to create and update Azure Cosmos DB Gremlin graph. — shape: {options: record, resource: record}
   --location: string # The location of the resource group to which the resource belongs.
   --tags: record # Tags are a list of key-value pairs that describe the resource. These tags can be used in viewing and grouping this resource (across resource groups). A maximum of 15 tags can be provided for a resource. Each tag must have a key no greater than 128 characters and value no greater than 256 characters. For example, the default experience for a template type is set with "defaultExperience": "Cassandra". Current "defaultExperience" values also include "Table", "Graph", "DocumentDB", and "MongoDB".
-]: any -> record<properties: record<resource: record<conflictResolutionPolicy: record, defaultTtl: int, id: string, indexingPolicy: record, partitionKey: record, uniqueKeyPolicy: record, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<resource: record<conflictResolutionPolicy: record, defaultTtl: int, id: string, indexingPolicy: record, partitionKey: record, uniqueKeyPolicy: record, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1947,7 +1962,7 @@ export def "gremlin-resources-get-gremlin-graph-throughput" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-08-01. (required)
-]: nothing -> record<properties: record<resource: record<minimumThroughput: string, offerReplacePending: string, throughput: int, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<properties: record<resource: record<minimumThroughput: string, offerReplacePending: string, throughput: int, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1978,7 +1993,6 @@ export def "gremlin-resources-get-gremlin-graph-throughput" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/gremlinDatabases/{databaseName}/graphs/{graphName}/throughputSettings/default
 # operationId: GremlinResources_UpdateGremlinGraphThroughput
-# --properties shape: {resource: record}
 export def "gremlin-resources-update-gremlin-graph-throughput" [
   subscription_id: string
   resource_group_name: string
@@ -1998,7 +2012,7 @@ export def "gremlin-resources-update-gremlin-graph-throughput" [
   properties: record # Properties to update Azure Cosmos DB resource throughput. — shape: {resource: record}
   --location: string # The location of the resource group to which the resource belongs.
   --tags: record # Tags are a list of key-value pairs that describe the resource. These tags can be used in viewing and grouping this resource (across resource groups). A maximum of 15 tags can be provided for a resource. Each tag must have a key no greater than 128 characters and value no greater than 256 characters. For example, the default experience for a template type is set with "defaultExperience": "Cassandra". Current "defaultExperience" values also include "Table", "Graph", "DocumentDB", and "MongoDB".
-]: any -> record<properties: record<resource: record<minimumThroughput: string, offerReplacePending: string, throughput: int, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<resource: record<minimumThroughput: string, offerReplacePending: string, throughput: int, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2047,7 +2061,7 @@ export def "gremlin-resources-get-gremlin-database-throughput" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-08-01. (required)
-]: nothing -> record<properties: record<resource: record<minimumThroughput: string, offerReplacePending: string, throughput: int, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<properties: record<resource: record<minimumThroughput: string, offerReplacePending: string, throughput: int, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2077,7 +2091,6 @@ export def "gremlin-resources-get-gremlin-database-throughput" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/gremlinDatabases/{databaseName}/throughputSettings/default
 # operationId: GremlinResources_UpdateGremlinDatabaseThroughput
-# --properties shape: {resource: record}
 export def "gremlin-resources-update-gremlin-database-throughput" [
   subscription_id: string
   resource_group_name: string
@@ -2096,7 +2109,7 @@ export def "gremlin-resources-update-gremlin-database-throughput" [
   properties: record # Properties to update Azure Cosmos DB resource throughput. — shape: {resource: record}
   --location: string # The location of the resource group to which the resource belongs.
   --tags: record # Tags are a list of key-value pairs that describe the resource. These tags can be used in viewing and grouping this resource (across resource groups). A maximum of 15 tags can be provided for a resource. Each tag must have a key no greater than 128 characters and value no greater than 256 characters. For example, the default experience for a template type is set with "defaultExperience": "Cassandra". Current "defaultExperience" values also include "Table", "Graph", "DocumentDB", and "MongoDB".
-]: any -> record<properties: record<resource: record<minimumThroughput: string, offerReplacePending: string, throughput: int, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<resource: record<minimumThroughput: string, offerReplacePending: string, throughput: int, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2143,7 +2156,7 @@ export def "database-accounts-list-connection-strings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-08-01. (required)
-]: nothing -> record<connectionStrings: table<connectionString: string, description: string>> {
+]: nothing -> oneof<record<connectionStrings: table<connectionString: string, description: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2186,7 +2199,7 @@ export def "database-accounts-list-keys" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-08-01. (required)
-]: nothing -> record<primaryMasterKey: string, secondaryMasterKey: string, primaryReadonlyMasterKey: string, secondaryReadonlyMasterKey: string> {
+]: nothing -> oneof<record<primaryMasterKey: string, secondaryMasterKey: string, primaryReadonlyMasterKey: string, secondaryReadonlyMasterKey: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2229,7 +2242,7 @@ export def "database-accounts-list-metric-definitions" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-08-01. (required)
-]: nothing -> record<value: table<metricAvailabilities: list, name: record, primaryAggregationType: string, resourceUri: string, unit: string>> {
+]: nothing -> oneof<record<value: table<metricAvailabilities: list, name: record, primaryAggregationType: string, resourceUri: string, unit: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2273,7 +2286,7 @@ export def "database-accounts-list-metrics" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-08-01. (required)
   --filter: string # An OData filter expression that describes a subset of metrics to return. The parameters that can be filtered are name.value (name of the metric, can have an or of multiple names), startTime, endTime, and timeGrain. The supported operator is eq. (required)
-]: nothing -> record<value: table<endTime: string, metricValues: list, name: record, startTime: string, timeGrain: string, unit: string>> {
+]: nothing -> oneof<record<value: table<endTime: string, metricValues: list, name: record, startTime: string, timeGrain: string, unit: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2317,7 +2330,7 @@ export def "mongo-db-resources-list-mongo-db-databases" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-08-01. (required)
-]: nothing -> record<value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2406,7 +2419,7 @@ export def "mongo-db-resources-get-mongo-db-database" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-08-01. (required)
-]: nothing -> record<properties: record<resource: record<id: string, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<properties: record<resource: record<id: string, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2436,7 +2449,6 @@ export def "mongo-db-resources-get-mongo-db-database" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/mongodbDatabases/{databaseName}
 # operationId: MongoDBResources_CreateUpdateMongoDBDatabase
-# --properties shape: {options: record, resource: record}
 export def "mongo-db-resources-create-update-mongo-db-database" [
   subscription_id: string
   resource_group_name: string
@@ -2455,7 +2467,7 @@ export def "mongo-db-resources-create-update-mongo-db-database" [
   properties: record # Properties to create and update Azure Cosmos DB MongoDB database. — shape: {options: record, resource: record}
   --location: string # The location of the resource group to which the resource belongs.
   --tags: record # Tags are a list of key-value pairs that describe the resource. These tags can be used in viewing and grouping this resource (across resource groups). A maximum of 15 tags can be provided for a resource. Each tag must have a key no greater than 128 characters and value no greater than 256 characters. For example, the default experience for a template type is set with "defaultExperience": "Cassandra". Current "defaultExperience" values also include "Table", "Graph", "DocumentDB", and "MongoDB".
-]: any -> record<properties: record<resource: record<id: string, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<resource: record<id: string, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2503,7 +2515,7 @@ export def "mongo-db-resources-list-mongo-db-collections" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-08-01. (required)
-]: nothing -> record<value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2596,7 +2608,7 @@ export def "mongo-db-resources-get-mongo-db-collection" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-08-01. (required)
-]: nothing -> record<properties: record<resource: record<id: string, indexes: list, shardKey: record, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<properties: record<resource: record<id: string, indexes: list, shardKey: record, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2627,7 +2639,6 @@ export def "mongo-db-resources-get-mongo-db-collection" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/mongodbDatabases/{databaseName}/collections/{collectionName}
 # operationId: MongoDBResources_CreateUpdateMongoDBCollection
-# --properties shape: {options: record, resource: record}
 export def "mongo-db-resources-create-update-mongo-db-collection" [
   subscription_id: string
   resource_group_name: string
@@ -2647,7 +2658,7 @@ export def "mongo-db-resources-create-update-mongo-db-collection" [
   properties: record # Properties to create and update Azure Cosmos DB MongoDB collection. — shape: {options: record, resource: record}
   --location: string # The location of the resource group to which the resource belongs.
   --tags: record # Tags are a list of key-value pairs that describe the resource. These tags can be used in viewing and grouping this resource (across resource groups). A maximum of 15 tags can be provided for a resource. Each tag must have a key no greater than 128 characters and value no greater than 256 characters. For example, the default experience for a template type is set with "defaultExperience": "Cassandra". Current "defaultExperience" values also include "Table", "Graph", "DocumentDB", and "MongoDB".
-]: any -> record<properties: record<resource: record<id: string, indexes: list, shardKey: record, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<resource: record<id: string, indexes: list, shardKey: record, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2697,7 +2708,7 @@ export def "mongo-db-resources-get-mongo-db-collection-throughput" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-08-01. (required)
-]: nothing -> record<properties: record<resource: record<minimumThroughput: string, offerReplacePending: string, throughput: int, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<properties: record<resource: record<minimumThroughput: string, offerReplacePending: string, throughput: int, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2728,7 +2739,6 @@ export def "mongo-db-resources-get-mongo-db-collection-throughput" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/mongodbDatabases/{databaseName}/collections/{collectionName}/throughputSettings/default
 # operationId: MongoDBResources_UpdateMongoDBCollectionThroughput
-# --properties shape: {resource: record}
 export def "mongo-db-resources-update-mongo-db-collection-throughput" [
   subscription_id: string
   resource_group_name: string
@@ -2748,7 +2758,7 @@ export def "mongo-db-resources-update-mongo-db-collection-throughput" [
   properties: record # Properties to update Azure Cosmos DB resource throughput. — shape: {resource: record}
   --location: string # The location of the resource group to which the resource belongs.
   --tags: record # Tags are a list of key-value pairs that describe the resource. These tags can be used in viewing and grouping this resource (across resource groups). A maximum of 15 tags can be provided for a resource. Each tag must have a key no greater than 128 characters and value no greater than 256 characters. For example, the default experience for a template type is set with "defaultExperience": "Cassandra". Current "defaultExperience" values also include "Table", "Graph", "DocumentDB", and "MongoDB".
-]: any -> record<properties: record<resource: record<minimumThroughput: string, offerReplacePending: string, throughput: int, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<resource: record<minimumThroughput: string, offerReplacePending: string, throughput: int, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2797,7 +2807,7 @@ export def "mongo-db-resources-get-mongo-db-database-throughput" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-08-01. (required)
-]: nothing -> record<properties: record<resource: record<minimumThroughput: string, offerReplacePending: string, throughput: int, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<properties: record<resource: record<minimumThroughput: string, offerReplacePending: string, throughput: int, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2827,7 +2837,6 @@ export def "mongo-db-resources-get-mongo-db-database-throughput" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/mongodbDatabases/{databaseName}/throughputSettings/default
 # operationId: MongoDBResources_UpdateMongoDBDatabaseThroughput
-# --properties shape: {resource: record}
 export def "mongo-db-resources-update-mongo-db-database-throughput" [
   subscription_id: string
   resource_group_name: string
@@ -2846,7 +2855,7 @@ export def "mongo-db-resources-update-mongo-db-database-throughput" [
   properties: record # Properties to update Azure Cosmos DB resource throughput. — shape: {resource: record}
   --location: string # The location of the resource group to which the resource belongs.
   --tags: record # Tags are a list of key-value pairs that describe the resource. These tags can be used in viewing and grouping this resource (across resource groups). A maximum of 15 tags can be provided for a resource. Each tag must have a key no greater than 128 characters and value no greater than 256 characters. For example, the default experience for a template type is set with "defaultExperience": "Cassandra". Current "defaultExperience" values also include "Table", "Graph", "DocumentDB", and "MongoDB".
-]: any -> record<properties: record<resource: record<minimumThroughput: string, offerReplacePending: string, throughput: int, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<resource: record<minimumThroughput: string, offerReplacePending: string, throughput: int, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2988,7 +2997,7 @@ export def "percentile-list-metrics" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-08-01. (required)
   --filter: string # An OData filter expression that describes a subset of metrics to return. The parameters that can be filtered are name.value (name of the metric, can have an or of multiple names), startTime, endTime, and timeGrain. The supported operator is eq. (required)
-]: nothing -> record<value: table<endTime: string, metricValues: list, name: record, startTime: string, timeGrain: string, unit: string>> {
+]: nothing -> oneof<record<value: table<endTime: string, metricValues: list, name: record, startTime: string, timeGrain: string, unit: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3032,7 +3041,7 @@ export def "database-accounts-get-read-only-keys" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-08-01. (required)
-]: nothing -> record<primaryReadonlyMasterKey: string, secondaryReadonlyMasterKey: string> {
+]: nothing -> oneof<record<primaryReadonlyMasterKey: string, secondaryReadonlyMasterKey: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3075,7 +3084,7 @@ export def "database-accounts-list-read-only-keys" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-08-01. (required)
-]: nothing -> record<primaryReadonlyMasterKey: string, secondaryReadonlyMasterKey: string> {
+]: nothing -> oneof<record<primaryReadonlyMasterKey: string, secondaryReadonlyMasterKey: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3169,7 +3178,7 @@ export def "collection-region-list-metrics" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-08-01. (required)
   --filter: string # An OData filter expression that describes a subset of metrics to return. The parameters that can be filtered are name.value (name of the metric, can have an or of multiple names), startTime, endTime, and timeGrain. The supported operator is eq. (required)
-]: nothing -> record<value: table<endTime: string, metricValues: list, name: record, startTime: string, timeGrain: string, unit: string>> {
+]: nothing -> oneof<record<value: table<endTime: string, metricValues: list, name: record, startTime: string, timeGrain: string, unit: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3221,7 +3230,7 @@ export def "partition-key-range-id-region-list-metrics" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-08-01. (required)
   --filter: string # An OData filter expression that describes a subset of metrics to return. The parameters that can be filtered are name.value (name of the metric, can have an or of multiple names), startTime, endTime, and timeGrain. The supported operator is eq. (required)
-]: nothing -> record<value: table<partitionId: string, partitionKeyRangeId: string, endTime: string, metricValues: list, name: record, startTime: string, timeGrain: string, unit: string>> {
+]: nothing -> oneof<record<value: table<partitionId: string, partitionKeyRangeId: string, endTime: string, metricValues: list, name: record, startTime: string, timeGrain: string, unit: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3273,7 +3282,7 @@ export def "collection-partition-region-list-metrics" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-08-01. (required)
   --filter: string # An OData filter expression that describes a subset of metrics to return. The parameters that can be filtered are name.value (name of the metric, can have an or of multiple names), startTime, endTime, and timeGrain. The supported operator is eq. (required)
-]: nothing -> record<value: table<partitionId: string, partitionKeyRangeId: string, endTime: string, metricValues: list, name: record, startTime: string, timeGrain: string, unit: string>> {
+]: nothing -> oneof<record<value: table<partitionId: string, partitionKeyRangeId: string, endTime: string, metricValues: list, name: record, startTime: string, timeGrain: string, unit: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3322,7 +3331,7 @@ export def "database-account-region-list-metrics" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-08-01. (required)
   --filter: string # An OData filter expression that describes a subset of metrics to return. The parameters that can be filtered are name.value (name of the metric, can have an or of multiple names), startTime, endTime, and timeGrain. The supported operator is eq. (required)
-]: nothing -> record<value: table<endTime: string, metricValues: list, name: record, startTime: string, timeGrain: string, unit: string>> {
+]: nothing -> oneof<record<value: table<endTime: string, metricValues: list, name: record, startTime: string, timeGrain: string, unit: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3370,7 +3379,7 @@ export def "percentile-source-target-list-metrics" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-08-01. (required)
   --filter: string # An OData filter expression that describes a subset of metrics to return. The parameters that can be filtered are name.value (name of the metric, can have an or of multiple names), startTime, endTime, and timeGrain. The supported operator is eq. (required)
-]: nothing -> record<value: table<endTime: string, metricValues: list, name: record, startTime: string, timeGrain: string, unit: string>> {
+]: nothing -> oneof<record<value: table<endTime: string, metricValues: list, name: record, startTime: string, timeGrain: string, unit: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3416,7 +3425,7 @@ export def "sql-resources-list-sql-databases" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-08-01. (required)
-]: nothing -> record<value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3505,7 +3514,7 @@ export def "sql-resources-get-sql-database" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-08-01. (required)
-]: nothing -> record<properties: record<resource: record<_colls: string, _users: string, id: string, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<properties: record<resource: record<_colls: string, _users: string, id: string, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3535,7 +3544,6 @@ export def "sql-resources-get-sql-database" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/sqlDatabases/{databaseName}
 # operationId: SqlResources_CreateUpdateSqlDatabase
-# --properties shape: {options: record, resource: record}
 export def "sql-resources-create-update-sql-database" [
   subscription_id: string
   resource_group_name: string
@@ -3554,7 +3562,7 @@ export def "sql-resources-create-update-sql-database" [
   properties: record # Properties to create and update Azure Cosmos DB SQL database. — shape: {options: record, resource: record}
   --location: string # The location of the resource group to which the resource belongs.
   --tags: record # Tags are a list of key-value pairs that describe the resource. These tags can be used in viewing and grouping this resource (across resource groups). A maximum of 15 tags can be provided for a resource. Each tag must have a key no greater than 128 characters and value no greater than 256 characters. For example, the default experience for a template type is set with "defaultExperience": "Cassandra". Current "defaultExperience" values also include "Table", "Graph", "DocumentDB", and "MongoDB".
-]: any -> record<properties: record<resource: record<_colls: string, _users: string, id: string, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<resource: record<_colls: string, _users: string, id: string, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3602,7 +3610,7 @@ export def "sql-resources-list-sql-containers" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-08-01. (required)
-]: nothing -> record<value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3695,7 +3703,7 @@ export def "sql-resources-get-sql-container" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-08-01. (required)
-]: nothing -> record<properties: record<resource: record<conflictResolutionPolicy: record, defaultTtl: int, id: string, indexingPolicy: record, partitionKey: record, uniqueKeyPolicy: record, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<properties: record<resource: record<conflictResolutionPolicy: record, defaultTtl: int, id: string, indexingPolicy: record, partitionKey: record, uniqueKeyPolicy: record, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3726,7 +3734,6 @@ export def "sql-resources-get-sql-container" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/sqlDatabases/{databaseName}/containers/{containerName}
 # operationId: SqlResources_CreateUpdateSqlContainer
-# --properties shape: {options: record, resource: record}
 export def "sql-resources-create-update-sql-container" [
   subscription_id: string
   resource_group_name: string
@@ -3746,7 +3753,7 @@ export def "sql-resources-create-update-sql-container" [
   properties: record # Properties to create and update Azure Cosmos DB container. — shape: {options: record, resource: record}
   --location: string # The location of the resource group to which the resource belongs.
   --tags: record # Tags are a list of key-value pairs that describe the resource. These tags can be used in viewing and grouping this resource (across resource groups). A maximum of 15 tags can be provided for a resource. Each tag must have a key no greater than 128 characters and value no greater than 256 characters. For example, the default experience for a template type is set with "defaultExperience": "Cassandra". Current "defaultExperience" values also include "Table", "Graph", "DocumentDB", and "MongoDB".
-]: any -> record<properties: record<resource: record<conflictResolutionPolicy: record, defaultTtl: int, id: string, indexingPolicy: record, partitionKey: record, uniqueKeyPolicy: record, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<resource: record<conflictResolutionPolicy: record, defaultTtl: int, id: string, indexingPolicy: record, partitionKey: record, uniqueKeyPolicy: record, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3796,7 +3803,7 @@ export def "sql-resources-list-sql-stored-procedures" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-08-01. (required)
-]: nothing -> record<value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3893,7 +3900,7 @@ export def "sql-resources-get-sql-stored-procedure" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-08-01. (required)
-]: nothing -> record<properties: record<resource: record<body: string, id: string, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<properties: record<resource: record<body: string, id: string, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3925,7 +3932,6 @@ export def "sql-resources-get-sql-stored-procedure" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/sqlDatabases/{databaseName}/containers/{containerName}/storedProcedures/{storedProcedureName}
 # operationId: SqlResources_CreateUpdateSqlStoredProcedure
-# --properties shape: {options: record, resource: record}
 export def "sql-resources-create-update-sql-stored-procedure" [
   subscription_id: string
   resource_group_name: string
@@ -3946,7 +3952,7 @@ export def "sql-resources-create-update-sql-stored-procedure" [
   properties: record # Properties to create and update Azure Cosmos DB storedProcedure. — shape: {options: record, resource: record}
   --location: string # The location of the resource group to which the resource belongs.
   --tags: record # Tags are a list of key-value pairs that describe the resource. These tags can be used in viewing and grouping this resource (across resource groups). A maximum of 15 tags can be provided for a resource. Each tag must have a key no greater than 128 characters and value no greater than 256 characters. For example, the default experience for a template type is set with "defaultExperience": "Cassandra". Current "defaultExperience" values also include "Table", "Graph", "DocumentDB", and "MongoDB".
-]: any -> record<properties: record<resource: record<body: string, id: string, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<resource: record<body: string, id: string, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3997,7 +4003,7 @@ export def "sql-resources-get-sql-container-throughput" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-08-01. (required)
-]: nothing -> record<properties: record<resource: record<minimumThroughput: string, offerReplacePending: string, throughput: int, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<properties: record<resource: record<minimumThroughput: string, offerReplacePending: string, throughput: int, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -4028,7 +4034,6 @@ export def "sql-resources-get-sql-container-throughput" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/sqlDatabases/{databaseName}/containers/{containerName}/throughputSettings/default
 # operationId: SqlResources_UpdateSqlContainerThroughput
-# --properties shape: {resource: record}
 export def "sql-resources-update-sql-container-throughput" [
   subscription_id: string
   resource_group_name: string
@@ -4048,7 +4053,7 @@ export def "sql-resources-update-sql-container-throughput" [
   properties: record # Properties to update Azure Cosmos DB resource throughput. — shape: {resource: record}
   --location: string # The location of the resource group to which the resource belongs.
   --tags: record # Tags are a list of key-value pairs that describe the resource. These tags can be used in viewing and grouping this resource (across resource groups). A maximum of 15 tags can be provided for a resource. Each tag must have a key no greater than 128 characters and value no greater than 256 characters. For example, the default experience for a template type is set with "defaultExperience": "Cassandra". Current "defaultExperience" values also include "Table", "Graph", "DocumentDB", and "MongoDB".
-]: any -> record<properties: record<resource: record<minimumThroughput: string, offerReplacePending: string, throughput: int, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<resource: record<minimumThroughput: string, offerReplacePending: string, throughput: int, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4098,7 +4103,7 @@ export def "sql-resources-list-sql-triggers" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-08-01. (required)
-]: nothing -> record<value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -4195,7 +4200,7 @@ export def "sql-resources-get-sql-trigger" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-08-01. (required)
-]: nothing -> record<properties: record<resource: record<body: string, id: string, triggerOperation: string, triggerType: string, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<properties: record<resource: record<body: string, id: string, triggerOperation: string, triggerType: string, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -4227,7 +4232,6 @@ export def "sql-resources-get-sql-trigger" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/sqlDatabases/{databaseName}/containers/{containerName}/triggers/{triggerName}
 # operationId: SqlResources_CreateUpdateSqlTrigger
-# --properties shape: {options: record, resource: record}
 export def "sql-resources-create-update-sql-trigger" [
   subscription_id: string
   resource_group_name: string
@@ -4248,7 +4252,7 @@ export def "sql-resources-create-update-sql-trigger" [
   properties: record # Properties to create and update Azure Cosmos DB trigger. — shape: {options: record, resource: record}
   --location: string # The location of the resource group to which the resource belongs.
   --tags: record # Tags are a list of key-value pairs that describe the resource. These tags can be used in viewing and grouping this resource (across resource groups). A maximum of 15 tags can be provided for a resource. Each tag must have a key no greater than 128 characters and value no greater than 256 characters. For example, the default experience for a template type is set with "defaultExperience": "Cassandra". Current "defaultExperience" values also include "Table", "Graph", "DocumentDB", and "MongoDB".
-]: any -> record<properties: record<resource: record<body: string, id: string, triggerOperation: string, triggerType: string, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<resource: record<body: string, id: string, triggerOperation: string, triggerType: string, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4299,7 +4303,7 @@ export def "sql-resources-list-sql-user-defined-functions" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-08-01. (required)
-]: nothing -> record<value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -4396,7 +4400,7 @@ export def "sql-resources-get-sql-user-defined-function" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-08-01. (required)
-]: nothing -> record<properties: record<resource: record<body: string, id: string, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<properties: record<resource: record<body: string, id: string, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -4428,7 +4432,6 @@ export def "sql-resources-get-sql-user-defined-function" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/sqlDatabases/{databaseName}/containers/{containerName}/userDefinedFunctions/{userDefinedFunctionName}
 # operationId: SqlResources_CreateUpdateSqlUserDefinedFunction
-# --properties shape: {options: record, resource: record}
 export def "sql-resources-create-update-sql-user-defined-function" [
   subscription_id: string
   resource_group_name: string
@@ -4449,7 +4452,7 @@ export def "sql-resources-create-update-sql-user-defined-function" [
   properties: record # Properties to create and update Azure Cosmos DB userDefinedFunction. — shape: {options: record, resource: record}
   --location: string # The location of the resource group to which the resource belongs.
   --tags: record # Tags are a list of key-value pairs that describe the resource. These tags can be used in viewing and grouping this resource (across resource groups). A maximum of 15 tags can be provided for a resource. Each tag must have a key no greater than 128 characters and value no greater than 256 characters. For example, the default experience for a template type is set with "defaultExperience": "Cassandra". Current "defaultExperience" values also include "Table", "Graph", "DocumentDB", and "MongoDB".
-]: any -> record<properties: record<resource: record<body: string, id: string, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<resource: record<body: string, id: string, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4499,7 +4502,7 @@ export def "sql-resources-get-sql-database-throughput" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-08-01. (required)
-]: nothing -> record<properties: record<resource: record<minimumThroughput: string, offerReplacePending: string, throughput: int, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<properties: record<resource: record<minimumThroughput: string, offerReplacePending: string, throughput: int, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -4529,7 +4532,6 @@ export def "sql-resources-get-sql-database-throughput" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/sqlDatabases/{databaseName}/throughputSettings/default
 # operationId: SqlResources_UpdateSqlDatabaseThroughput
-# --properties shape: {resource: record}
 export def "sql-resources-update-sql-database-throughput" [
   subscription_id: string
   resource_group_name: string
@@ -4548,7 +4550,7 @@ export def "sql-resources-update-sql-database-throughput" [
   properties: record # Properties to update Azure Cosmos DB resource throughput. — shape: {resource: record}
   --location: string # The location of the resource group to which the resource belongs.
   --tags: record # Tags are a list of key-value pairs that describe the resource. These tags can be used in viewing and grouping this resource (across resource groups). A maximum of 15 tags can be provided for a resource. Each tag must have a key no greater than 128 characters and value no greater than 256 characters. For example, the default experience for a template type is set with "defaultExperience": "Cassandra". Current "defaultExperience" values also include "Table", "Graph", "DocumentDB", and "MongoDB".
-]: any -> record<properties: record<resource: record<minimumThroughput: string, offerReplacePending: string, throughput: int, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<resource: record<minimumThroughput: string, offerReplacePending: string, throughput: int, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4595,7 +4597,7 @@ export def "table-resources-list-tables" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-08-01. (required)
-]: nothing -> record<value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -4684,7 +4686,7 @@ export def "table-resources-get-table" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-08-01. (required)
-]: nothing -> record<properties: record<resource: record<id: string, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<properties: record<resource: record<id: string, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -4714,7 +4716,6 @@ export def "table-resources-get-table" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/tables/{tableName}
 # operationId: TableResources_CreateUpdateTable
-# --properties shape: {options: record, resource: record}
 export def "table-resources-create-update-table" [
   subscription_id: string
   resource_group_name: string
@@ -4733,7 +4734,7 @@ export def "table-resources-create-update-table" [
   properties: record # Properties to create and update Azure Cosmos DB Table. — shape: {options: record, resource: record}
   --location: string # The location of the resource group to which the resource belongs.
   --tags: record # Tags are a list of key-value pairs that describe the resource. These tags can be used in viewing and grouping this resource (across resource groups). A maximum of 15 tags can be provided for a resource. Each tag must have a key no greater than 128 characters and value no greater than 256 characters. For example, the default experience for a template type is set with "defaultExperience": "Cassandra". Current "defaultExperience" values also include "Table", "Graph", "DocumentDB", and "MongoDB".
-]: any -> record<properties: record<resource: record<id: string, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<resource: record<id: string, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4781,7 +4782,7 @@ export def "table-resources-get-table-throughput" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-08-01. (required)
-]: nothing -> record<properties: record<resource: record<minimumThroughput: string, offerReplacePending: string, throughput: int, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<properties: record<resource: record<minimumThroughput: string, offerReplacePending: string, throughput: int, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -4811,7 +4812,6 @@ export def "table-resources-get-table-throughput" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/tables/{tableName}/throughputSettings/default
 # operationId: TableResources_UpdateTableThroughput
-# --properties shape: {resource: record}
 export def "table-resources-update-table-throughput" [
   subscription_id: string
   resource_group_name: string
@@ -4830,7 +4830,7 @@ export def "table-resources-update-table-throughput" [
   properties: record # Properties to update Azure Cosmos DB resource throughput. — shape: {resource: record}
   --location: string # The location of the resource group to which the resource belongs.
   --tags: record # Tags are a list of key-value pairs that describe the resource. These tags can be used in viewing and grouping this resource (across resource groups). A maximum of 15 tags can be provided for a resource. Each tag must have a key no greater than 128 characters and value no greater than 256 characters. For example, the default experience for a template type is set with "defaultExperience": "Cassandra". Current "defaultExperience" values also include "Table", "Graph", "DocumentDB", and "MongoDB".
-]: any -> record<properties: record<resource: record<minimumThroughput: string, offerReplacePending: string, throughput: int, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<resource: record<minimumThroughput: string, offerReplacePending: string, throughput: int, _etag: string, _rid: string, _ts: any>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4879,7 +4879,7 @@ export def "percentile-target-list-metrics" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-08-01. (required)
   --filter: string # An OData filter expression that describes a subset of metrics to return. The parameters that can be filtered are name.value (name of the metric, can have an or of multiple names), startTime, endTime, and timeGrain. The supported operator is eq. (required)
-]: nothing -> record<value: table<endTime: string, metricValues: list, name: record, startTime: string, timeGrain: string, unit: string>> {
+]: nothing -> oneof<record<value: table<endTime: string, metricValues: list, name: record, startTime: string, timeGrain: string, unit: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -4925,7 +4925,7 @@ export def "database-accounts-list-usages" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-08-01. (required)
   --filter: string # An OData filter expression that describes a subset of usages to return. The supported parameter is name.value (name of the metric, can have an or of multiple names).
-]: nothing -> record<value: table<currentValue: int, limit: int, name: record, quotaPeriod: string, unit: string>> {
+]: nothing -> oneof<record<value: table<currentValue: int, limit: int, name: record, quotaPeriod: string, unit: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }

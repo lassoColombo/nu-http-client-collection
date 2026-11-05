@@ -14,27 +14,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "x-apideck-app-id" => { {scheme: $scheme, headers: {"x-apideck-app-id": $token_val}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -42,8 +51,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -54,7 +68,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -89,7 +112,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -117,9 +141,9 @@ def auth-scheme-completer [] { ["bearer" "x-apideck-app-id" "none"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "connections-authorize" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["connections-authorize" "connections-callback" "connections-all" "connections-delete" "connections-one" "connections-update" "connections-add" "connections-import" "connections-token" "connection-settings-all" "connection-settings-update" "consumers-all" "consumers-add" "consumers-delete" "consumers-one" "consumers-update" "consumer-request-counts-all" "logs-all" "connections-revoke" "sessions-create" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -156,7 +180,7 @@ export def "connections-authorize" [
   --state: string # An opaque value the applications adds to the initial request that the authorization server includes when redirecting the back to the application. This value must be used by the application to prevent CSRF attacks. (required, e.g. eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJjb25zdW1lcl9pZCI6InRlc3RfdXNlcl9pZCIsInVuaWZpZWRfYXBpIjoiZGVmYXVsdCIsInNlcnZpY2VfaWQiOiJ0ZWFtbGVhZGVyIiwiYXBwbGljYXRpb25faWQiOiIxMTExIiwiaWF0IjoxNjIyMTI2Nzg3fQ.97_pn1UAXc7mctXBdr15czUNO1jjdQ9sJUOIE_Myzbk)
   --redirect-uri: string # URL to redirect back to after authorization. When left empty the default configured redirect uri will be used. (required, e.g. http://example.com/integrations)
   --scope: list<string> # One or more OAuth scopes to request from the connector. OAuth scopes control the set of resources and operations that are allowed after authorization. Refer to the connector's documentation for the available scopes. (e.g. [openid, leads:write, profile:read])
-]: nothing -> record<detail: any, error: string, message: string, ref: string, status_code: float, type_name: string> {
+]: nothing -> oneof<record<detail: any, error: string, message: string, ref: string, status_code: float, type_name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($service_id | is-empty) { error make --unspanned { msg: "path parameter 'service_id' must be non-empty" } }
@@ -197,7 +221,7 @@ export def "connections-callback" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --state: string # An opaque value the applications adds to the initial request that the authorization server includes when redirecting the back to the application. This value must be used by the application to prevent CSRF attacks. (required, e.g. eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJjb25zdW1lcl9pZCI6InRlc3RfdXNlcl9pZCIsInVuaWZpZWRfYXBpIjoiZGVmYXVsdCIsInNlcnZpY2VfaWQiOiJ0ZWFtbGVhZGVyIiwiYXBwbGljYXRpb25faWQiOiIxMTExIiwiaWF0IjoxNjIyMTI2Nzg3fQ.97_pn1UAXc7mctXBdr15czUNO1jjdQ9sJUOIE_Myzbk)
   --code: string # An authorization code from the connector which Apideck Vault will later exchange for an access token. (required, e.g. g0ZGZmNjVmOWI)
-]: nothing -> record<detail: any, error: string, message: string, ref: string, status_code: float, type_name: string> {
+]: nothing -> oneof<record<detail: any, error: string, message: string, ref: string, status_code: float, type_name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($state == null) { error make --unspanned { msg: "required query parameter 'state' missing: pass --state" } }
@@ -238,7 +262,7 @@ export def "connections-all" [
   --configured: oneof<nothing, bool> # Scopes results to connections that have been configured or not (e.g. true)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
-]: nothing -> record<data: table<auth_type: string, authorize_url: string, configurable_resources: list, configuration: list, created_at: float, enabled: bool, form_fields: list, has_guide: bool, icon: string, id: string, integration_state: string, logo: string, metadata: record, name: string, oauth_grant_type: string, resource_schema_support: list, resource_settings_support: list, revoke_url: string, service_id: string, settings: record, settings_required_for_authorization: list, state: string, status: string, subscriptions: list, tag_line: string, unified_api: string, updated_at: float, validation_support: bool, website: string>, status: string, status_code: int> {
+]: nothing -> oneof<record<data: table<auth_type: string, authorize_url: string, configurable_resources: list, configuration: list, created_at: float, enabled: bool, form_fields: list, has_guide: bool, icon: string, id: string, integration_state: string, logo: string, metadata: record, name: string, oauth_grant_type: string, resource_schema_support: list, resource_settings_support: list, revoke_url: string, service_id: string, settings: record, settings_required_for_authorization: list, state: string, status: string, subscriptions: list, tag_line: string, unified_api: string, updated_at: float, validation_support: bool, website: string>, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
@@ -325,7 +349,7 @@ export def "connections-one" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
-]: nothing -> record<data: record<auth_type: string, authorize_url: string, configurable_resources: list<string>, configuration: list<record>, created_at: float, enabled: bool, form_fields: list<record>, has_guide: bool, icon: string, id: string, integration_state: string, logo: string, metadata: record, name: string, oauth_grant_type: string, resource_schema_support: list<string>, resource_settings_support: list<string>, revoke_url: string, service_id: string, settings: record, settings_required_for_authorization: list<string>, state: string, status: string, subscriptions: list<record>, tag_line: string, unified_api: string, updated_at: float, validation_support: bool, website: string>, status: string, status_code: int> {
+]: nothing -> oneof<record<data: record<auth_type: string, authorize_url: string, configurable_resources: list<string>, configuration: list<record>, created_at: float, enabled: bool, form_fields: list<record>, has_guide: bool, icon: string, id: string, integration_state: string, logo: string, metadata: record, name: string, oauth_grant_type: string, resource_schema_support: list<string>, resource_settings_support: list<string>, revoke_url: string, service_id: string, settings: record, settings_required_for_authorization: list<string>, state: string, status: string, subscriptions: list<record>, tag_line: string, unified_api: string, updated_at: float, validation_support: bool, website: string>, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($unified_api | is-empty) { error make --unspanned { msg: "path parameter 'unified_api' must be non-empty" } }
@@ -355,9 +379,6 @@ export def "connections-one" [
 #
 # PATCH /vault/connections/{unified_api}/{service_id}
 # operationId: connectionsUpdate
-# --configuration item shape: {defaults?: list, resource?: string}
-# --form_fields item shape: {allow_custom_values?: bool, custom_field?: bool, description?: string, disabled?: bool, hidden?: bool, id?: string, label?: string, options?: list, placeholder?: string, prefix?: string, required?: bool, sensitive?: bool, suffix?: string, type?: "text"|"checkbox"|"tel"|"email"|"url"|"textarea"|"select"|"filtered-select"|"multi-select"|"datetime"|"date"|"time"|"number"}
-# --subscriptions item shape: {created_at?: string, downstream_event_types?: list<string>, downstream_id?: string, execute_url?: string, unify_event_types?: list<string>}
 export def "connections-update" [
   unified_api: string
   service_id: string
@@ -376,7 +397,7 @@ export def "connections-update" [
   --enabled: oneof<nothing, bool> # Whether the connection is enabled or not. You can enable or disable a connection using the Update Connection API. (e.g. true)
   --metadata: record # Attach your own consumer specific metadata (nullable, e.g. {account: {id: c01458a5-7276-41ce-bc19-639906b0450a, name: My Company}, plan: enterprise})
   --settings: record # Connection settings. Values will persist to `form_fields` with corresponding id (nullable, e.g. {api_key: 12345xxxxxx, instance_url: https://eu28.salesforce.com})
-]: any -> record<data: record<auth_type: string, authorize_url: string, configurable_resources: list<string>, configuration: list<record>, created_at: float, enabled: bool, form_fields: list<record>, has_guide: bool, icon: string, id: string, integration_state: string, logo: string, metadata: record, name: string, oauth_grant_type: string, resource_schema_support: list<string>, resource_settings_support: list<string>, revoke_url: string, service_id: string, settings: record, settings_required_for_authorization: list<string>, state: string, status: string, subscriptions: list<record>, tag_line: string, unified_api: string, updated_at: float, validation_support: bool, website: string>, status: string, status_code: int> {
+]: any -> oneof<record<data: record<auth_type: string, authorize_url: string, configurable_resources: list<string>, configuration: list<record>, created_at: float, enabled: bool, form_fields: list<record>, has_guide: bool, icon: string, id: string, integration_state: string, logo: string, metadata: record, name: string, oauth_grant_type: string, resource_schema_support: list<string>, resource_settings_support: list<string>, revoke_url: string, service_id: string, settings: record, settings_required_for_authorization: list<string>, state: string, status: string, subscriptions: list<record>, tag_line: string, unified_api: string, updated_at: float, validation_support: bool, website: string>, status: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -409,9 +430,6 @@ export def "connections-update" [
 #
 # POST /vault/connections/{unified_api}/{service_id}
 # operationId: connectionsAdd
-# --configuration item shape: {defaults?: list, resource?: string}
-# --form_fields item shape: {allow_custom_values?: bool, custom_field?: bool, description?: string, disabled?: bool, hidden?: bool, id?: string, label?: string, options?: list, placeholder?: string, prefix?: string, required?: bool, sensitive?: bool, suffix?: string, type?: "text"|"checkbox"|"tel"|"email"|"url"|"textarea"|"select"|"filtered-select"|"multi-select"|"datetime"|"date"|"time"|"number"}
-# --subscriptions item shape: {created_at?: string, downstream_event_types?: list<string>, downstream_id?: string, execute_url?: string, unify_event_types?: list<string>}
 export def "connections-add" [
   unified_api: string
   service_id: string
@@ -430,7 +448,7 @@ export def "connections-add" [
   --enabled: oneof<nothing, bool> # Whether the connection is enabled or not. You can enable or disable a connection using the Update Connection API. (e.g. true)
   --metadata: record # Attach your own consumer specific metadata (nullable, e.g. {account: {id: c01458a5-7276-41ce-bc19-639906b0450a, name: My Company}, plan: enterprise})
   --settings: record # Connection settings. Values will persist to `form_fields` with corresponding id (nullable, e.g. {api_key: 12345xxxxxx, instance_url: https://eu28.salesforce.com})
-]: any -> record<data: record<auth_type: string, authorize_url: string, configurable_resources: list<string>, configuration: list<record>, created_at: float, enabled: bool, form_fields: list<record>, has_guide: bool, icon: string, id: string, integration_state: string, logo: string, metadata: record, name: string, oauth_grant_type: string, resource_schema_support: list<string>, resource_settings_support: list<string>, revoke_url: string, service_id: string, settings: record, settings_required_for_authorization: list<string>, state: string, status: string, subscriptions: list<record>, tag_line: string, unified_api: string, updated_at: float, validation_support: bool, website: string>, status: string, status_code: int> {
+]: any -> oneof<record<data: record<auth_type: string, authorize_url: string, configurable_resources: list<string>, configuration: list<record>, created_at: float, enabled: bool, form_fields: list<record>, has_guide: bool, icon: string, id: string, integration_state: string, logo: string, metadata: record, name: string, oauth_grant_type: string, resource_schema_support: list<string>, resource_settings_support: list<string>, revoke_url: string, service_id: string, settings: record, settings_required_for_authorization: list<string>, state: string, status: string, subscriptions: list<record>, tag_line: string, unified_api: string, updated_at: float, validation_support: bool, website: string>, status: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -463,7 +481,6 @@ export def "connections-add" [
 #
 # POST /vault/connections/{unified_api}/{service_id}/import
 # operationId: connectionsImport
-# --credentials shape: {access_token?: string, expires_in?: int, issued_at?: string, refresh_token: string}
 export def "connections-import" [
   unified_api: string
   service_id: string
@@ -481,7 +498,7 @@ export def "connections-import" [
   --credentials: record # e.g. {access_token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c, refresh_token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.cThIIoDvwdueQB468K5xDc5633seEFoqwxjF_xSJyQQ} — shape: {access_token?: string, expires_in?: int, issued_at?: string, refresh_token: string}
   --metadata: record # Attach your own consumer specific metadata (nullable, e.g. {account: {id: c01458a5-7276-41ce-bc19-639906b0450a, name: My Company}, plan: enterprise})
   --settings: record # Connection settings. Values will persist to `form_fields` with corresponding id (nullable, e.g. {instance_url: https://eu28.salesforce.com})
-]: any -> record<data: record<auth_type: string, authorize_url: string, configurable_resources: list<string>, configuration: list<record>, created_at: float, enabled: bool, form_fields: list<record>, has_guide: bool, icon: string, id: string, integration_state: string, logo: string, metadata: record, name: string, oauth_grant_type: string, resource_schema_support: list<string>, resource_settings_support: list<string>, revoke_url: string, service_id: string, settings: record, settings_required_for_authorization: list<string>, state: string, status: string, subscriptions: list<record>, tag_line: string, unified_api: string, updated_at: float, validation_support: bool, website: string>, status: string, status_code: int> {
+]: any -> oneof<record<data: record<auth_type: string, authorize_url: string, configurable_resources: list<string>, configuration: list<record>, created_at: float, enabled: bool, form_fields: list<record>, has_guide: bool, icon: string, id: string, integration_state: string, logo: string, metadata: record, name: string, oauth_grant_type: string, resource_schema_support: list<string>, resource_settings_support: list<string>, revoke_url: string, service_id: string, settings: record, settings_required_for_authorization: list<string>, state: string, status: string, subscriptions: list<record>, tag_line: string, unified_api: string, updated_at: float, validation_support: bool, website: string>, status: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -529,7 +546,7 @@ export def "connections-token" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --body: record
-]: any -> record<data: record<auth_type: string, authorize_url: string, configurable_resources: list<string>, configuration: list<record>, created_at: float, enabled: bool, form_fields: list<record>, has_guide: bool, icon: string, id: string, integration_state: string, logo: string, metadata: record, name: string, oauth_grant_type: string, resource_schema_support: list<string>, resource_settings_support: list<string>, revoke_url: string, service_id: string, settings: record, settings_required_for_authorization: list<string>, state: string, status: string, subscriptions: list<record>, tag_line: string, unified_api: string, updated_at: float, validation_support: bool, website: string>, status: string, status_code: int> {
+]: any -> oneof<record<data: record<auth_type: string, authorize_url: string, configurable_resources: list<string>, configuration: list<record>, created_at: float, enabled: bool, form_fields: list<record>, has_guide: bool, icon: string, id: string, integration_state: string, logo: string, metadata: record, name: string, oauth_grant_type: string, resource_schema_support: list<string>, resource_settings_support: list<string>, revoke_url: string, service_id: string, settings: record, settings_required_for_authorization: list<string>, state: string, status: string, subscriptions: list<record>, tag_line: string, unified_api: string, updated_at: float, validation_support: bool, website: string>, status: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -577,7 +594,7 @@ export def "connection-settings-all" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
-]: nothing -> record<data: record<auth_type: string, authorize_url: string, configurable_resources: list<string>, configuration: list<record>, created_at: float, enabled: bool, form_fields: list<record>, has_guide: bool, icon: string, id: string, integration_state: string, logo: string, metadata: record, name: string, oauth_grant_type: string, resource_schema_support: list<string>, resource_settings_support: list<string>, revoke_url: string, service_id: string, settings: record, settings_required_for_authorization: list<string>, state: string, status: string, subscriptions: list<record>, tag_line: string, unified_api: string, updated_at: float, validation_support: bool, website: string>, status: string, status_code: int> {
+]: nothing -> oneof<record<data: record<auth_type: string, authorize_url: string, configurable_resources: list<string>, configuration: list<record>, created_at: float, enabled: bool, form_fields: list<record>, has_guide: bool, icon: string, id: string, integration_state: string, logo: string, metadata: record, name: string, oauth_grant_type: string, resource_schema_support: list<string>, resource_settings_support: list<string>, revoke_url: string, service_id: string, settings: record, settings_required_for_authorization: list<string>, state: string, status: string, subscriptions: list<record>, tag_line: string, unified_api: string, updated_at: float, validation_support: bool, website: string>, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($unified_api | is-empty) { error make --unspanned { msg: "path parameter 'unified_api' must be non-empty" } }
@@ -608,9 +625,6 @@ export def "connection-settings-all" [
 #
 # PATCH /vault/connections/{unified_api}/{service_id}/{resource}/config
 # operationId: connectionSettingsUpdate
-# --configuration item shape: {defaults?: list, resource?: string}
-# --form_fields item shape: {allow_custom_values?: bool, custom_field?: bool, description?: string, disabled?: bool, hidden?: bool, id?: string, label?: string, options?: list, placeholder?: string, prefix?: string, required?: bool, sensitive?: bool, suffix?: string, type?: "text"|"checkbox"|"tel"|"email"|"url"|"textarea"|"select"|"filtered-select"|"multi-select"|"datetime"|"date"|"time"|"number"}
-# --subscriptions item shape: {created_at?: string, downstream_event_types?: list<string>, downstream_id?: string, execute_url?: string, unify_event_types?: list<string>}
 export def "connection-settings-update" [
   unified_api: string
   service_id: string
@@ -630,7 +644,7 @@ export def "connection-settings-update" [
   --enabled: oneof<nothing, bool> # Whether the connection is enabled or not. You can enable or disable a connection using the Update Connection API. (e.g. true)
   --metadata: record # Attach your own consumer specific metadata (nullable, e.g. {account: {id: c01458a5-7276-41ce-bc19-639906b0450a, name: My Company}, plan: enterprise})
   --settings: record # Connection settings. Values will persist to `form_fields` with corresponding id (nullable, e.g. {api_key: 12345xxxxxx, instance_url: https://eu28.salesforce.com})
-]: any -> record<data: record<auth_type: string, authorize_url: string, configurable_resources: list<string>, configuration: list<record>, created_at: float, enabled: bool, form_fields: list<record>, has_guide: bool, icon: string, id: string, integration_state: string, logo: string, metadata: record, name: string, oauth_grant_type: string, resource_schema_support: list<string>, resource_settings_support: list<string>, revoke_url: string, service_id: string, settings: record, settings_required_for_authorization: list<string>, state: string, status: string, subscriptions: list<record>, tag_line: string, unified_api: string, updated_at: float, validation_support: bool, website: string>, status: string, status_code: int> {
+]: any -> oneof<record<data: record<auth_type: string, authorize_url: string, configurable_resources: list<string>, configuration: list<record>, created_at: float, enabled: bool, form_fields: list<record>, has_guide: bool, icon: string, id: string, integration_state: string, logo: string, metadata: record, name: string, oauth_grant_type: string, resource_schema_support: list<string>, resource_settings_support: list<string>, revoke_url: string, service_id: string, settings: record, settings_required_for_authorization: list<string>, state: string, status: string, subscriptions: list<record>, tag_line: string, unified_api: string, updated_at: float, validation_support: bool, website: string>, status: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -677,7 +691,7 @@ export def "consumers-all" [
   --cursor: string # Cursor to start from. You can find cursors for next/previous pages in the meta.cursors property of the response. (nullable)
   --limit: int # Number of results to return. Minimum 1, Maximum 200, Default 20 (default: 20)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
-]: nothing -> record<data: table<aggregated_request_count: float, application_id: string, consumer_id: string, created: string, metadata: record, modified: string, request_count_updated: string, request_counts: record, services: list>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, status: string, status_code: int> {
+]: nothing -> oneof<record<data: table<aggregated_request_count: float, application_id: string, consumer_id: string, created: string, metadata: record, modified: string, request_count_updated: string, request_counts: record, services: list>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
@@ -705,9 +719,6 @@ export def "consumers-all" [
 #
 # POST /vault/consumers
 # operationId: consumersAdd
-# --connections item shape: {consumer_id?: string, created_at?: string, enabled?: bool, icon?: string, logo?: string, metadata?: record, name?: string, service_id?: string, settings?: record, state?: "available"|"callable"|"added"|"configured"|"authorized", unified_api?: string, updated_at?: string}
-# --metadata shape: {account_name?: string, email?: string, image?: string, user_name?: string}
-# --request_counts shape: {proxy?: float, unify?: float, vault?: float}
 export def "consumers-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -721,7 +732,7 @@ export def "consumers-add" [
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   consumer_id: string # Unique consumer identifier. You can freely choose a consumer ID yourself. Most of the time, this is an ID of your internal data model that represents a user or account in your system (for example account:12345). If the consumer doesn't exist yet, Vault will upsert a consumer based on your ID. (e.g. test_consumer_id)
   --metadata: record # The metadata of the consumer. This is used to display the consumer in the sidebar. This is optional, but recommended. — shape: {account_name?: string, email?: string, image?: string, user_name?: string}
-]: any -> record<data: record<aggregated_request_count: float, application_id: string, connections: list<record>, consumer_id: string, created: string, metadata: record<account_name: string, email: string, image: string, user_name: string>, modified: string, request_count_updated: string, request_counts: record<proxy: float, unify: float, vault: float>, services: list<string>>, status: string, status_code: int> {
+]: any -> oneof<record<data: record<aggregated_request_count: float, application_id: string, connections: list<record>, consumer_id: string, created: string, metadata: record<account_name: string, email: string, image: string, user_name: string>, modified: string, request_count_updated: string, request_counts: record<proxy: float, unify: float, vault: float>, services: list<string>>, status: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -763,7 +774,7 @@ export def "consumers-delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
-]: nothing -> record<data: record<consumer_id: string>, status: string, status_code: int> {
+]: nothing -> oneof<record<data: record<consumer_id: string>, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($consumer_id | is-empty) { error make --unspanned { msg: "path parameter 'consumer_id' must be non-empty" } }
@@ -803,7 +814,7 @@ export def "consumers-one" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
-]: nothing -> record<data: record<aggregated_request_count: float, application_id: string, connections: list<record>, consumer_id: string, created: string, metadata: record<account_name: string, email: string, image: string, user_name: string>, modified: string, request_count_updated: string, request_counts: record<proxy: float, unify: float, vault: float>, services: list<string>>, status: string, status_code: int> {
+]: nothing -> oneof<record<data: record<aggregated_request_count: float, application_id: string, connections: list<record>, consumer_id: string, created: string, metadata: record<account_name: string, email: string, image: string, user_name: string>, modified: string, request_count_updated: string, request_counts: record<proxy: float, unify: float, vault: float>, services: list<string>>, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($consumer_id | is-empty) { error make --unspanned { msg: "path parameter 'consumer_id' must be non-empty" } }
@@ -831,7 +842,6 @@ export def "consumers-one" [
 #
 # PATCH /vault/consumers/{consumer_id}
 # operationId: consumersUpdate
-# --metadata shape: {account_name?: string, email?: string, image?: string, user_name?: string}
 export def "consumers-update" [
   consumer_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -845,7 +855,7 @@ export def "consumers-update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --metadata: record # The metadata of the consumer. This is used to display the consumer in the sidebar. This is optional, but recommended. — shape: {account_name?: string, email?: string, image?: string, user_name?: string}
-]: any -> record<data: record<aggregated_request_count: float, application_id: string, connections: list<record>, consumer_id: string, created: string, metadata: record<account_name: string, email: string, image: string, user_name: string>, modified: string, request_count_updated: string, request_counts: record<proxy: float, unify: float, vault: float>, services: list<string>>, status: string, status_code: int> {
+]: any -> oneof<record<data: record<aggregated_request_count: float, application_id: string, connections: list<record>, consumer_id: string, created: string, metadata: record<account_name: string, email: string, image: string, user_name: string>, modified: string, request_count_updated: string, request_counts: record<proxy: float, unify: float, vault: float>, services: list<string>>, status: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -890,7 +900,7 @@ export def "consumer-request-counts-all" [
   --start-datetime: string # Scopes results to requests that happened after datetime (required, e.g. 2021-05-01T12:00:00.000Z)
   --end-datetime: string # Scopes results to requests that happened before datetime (required, e.g. 2021-05-30T12:00:00.000Z)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
-]: nothing -> record<data: record<aggregated_request_count: float, application_id: string, consumer_id: string, end_datetime: string, request_counts: record<proxy: float, unify: float, vault: float>, start_datetime: string>, status: string, status_code: int> {
+]: nothing -> oneof<record<data: record<aggregated_request_count: float, application_id: string, consumer_id: string, end_datetime: string, request_counts: record<proxy: float, unify: float, vault: float>, start_datetime: string>, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($consumer_id | is-empty) { error make --unspanned { msg: "path parameter 'consumer_id' must be non-empty" } }
@@ -936,7 +946,7 @@ export def "logs-all" [
   --limit: int # Number of results to return. Minimum 1, Maximum 200, Default 20 (default: 20)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
-]: nothing -> record<data: table<api_style: string, base_url: string, child_request: bool, consumer_id: string, duration: float, error_message: string, execution: int, has_children: bool, http_method: string, id: string, latency: float, operation: record, parent_id: string, path: string, sandbox: bool, service: record, source_ip: string, status_code: int, success: bool, timestamp: string, unified_api: string>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, status: string, status_code: int> {
+]: nothing -> oneof<record<data: table<api_style: string, base_url: string, child_request: bool, consumer_id: string, duration: float, error_message: string, execution: int, has_children: bool, http_method: string, id: string, latency: float, operation: record, parent_id: string, path: string, sandbox: bool, service: record, source_ip: string, status_code: int, success: bool, timestamp: string, unified_api: string>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
@@ -979,7 +989,7 @@ export def "connections-revoke" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --state: string # An opaque value the applications adds to the initial request that the authorization server includes when redirecting the back to the application. This value must be used by the application to prevent CSRF attacks. (required, e.g. eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJjb25zdW1lcl9pZCI6InRlc3RfdXNlcl9pZCIsInVuaWZpZWRfYXBpIjoiZGVmYXVsdCIsInNlcnZpY2VfaWQiOiJ0ZWFtbGVhZGVyIiwiYXBwbGljYXRpb25faWQiOiIxMTExIiwiaWF0IjoxNjIyMTI2Nzg3fQ.97_pn1UAXc7mctXBdr15czUNO1jjdQ9sJUOIE_Myzbk)
   --redirect-uri: string # URL to redirect back to after authorization. When left empty the default configured redirect uri will be used. (required, e.g. http://example.com/integrations)
-]: nothing -> record<detail: any, error: string, message: string, ref: string, status_code: float, type_name: string> {
+]: nothing -> oneof<record<detail: any, error: string, message: string, ref: string, status_code: float, type_name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($service_id | is-empty) { error make --unspanned { msg: "path parameter 'service_id' must be non-empty" } }
@@ -1008,9 +1018,6 @@ export def "connections-revoke" [
 #
 # POST /vault/sessions
 # operationId: sessionsCreate
-# --consumer_metadata shape: {account_name?: string, email?: string, image?: string, user_name?: string}
-# --settings shape: {allow_actions?: list<string>, auto_redirect?: bool, hide_guides?: bool, hide_resource_settings?: bool, isolation_mode?: bool, sandbox_mode?: bool, session_length?: string, show_logs?: bool, show_sidebar?: bool, show_suggestions?: bool, unified_apis?: list<string>}
-# --theme shape: {favicon?: string, logo?: string, primary_color?: string, privacy_url?: string, sidepanel_background_color?: string, sidepanel_text_color?: string, terms_url?: string, vault_name?: string}
 export def "sessions-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1028,7 +1035,7 @@ export def "sessions-create" [
   --redirect-uri: string # The URL to redirect the user to after the session has been configured. (e.g. https://mysaas.com/dashboard)
   --settings: record # Settings to change the way the Vault is displayed. — shape: {allow_actions?: list<string>, auto_redirect?: bool, hide_guides?: bool, hide_resource_settings?: bool, isolation_mode?: bool, sandbox_mode?: bool, session_length?: string, show_logs?: bool, show_sidebar?: bool, show_suggestions?: bool, unified_apis?: list<string>}
   --theme: record # Theming options to change the look and feel of Vault. — shape: {favicon?: string, logo?: string, primary_color?: string, privacy_url?: string, sidepanel_background_color?: string, sidepanel_text_color?: string, terms_url?: string, vault_name?: string}
-]: any -> record<data: record<session_token: string, session_uri: string>, status: string, status_code: int> {
+]: any -> oneof<record<data: record<session_token: string, session_uri: string>, status: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

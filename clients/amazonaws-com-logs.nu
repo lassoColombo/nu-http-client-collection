@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -152,9 +175,9 @@ def x-amz-target-completer-47 [] { ["Logs_20140328.UntagResource"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "associate-kms-key" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["associate-kms-key" "cancel-export-task" "create-export-task" "create-log-group" "create-log-stream" "delete-data-protection-policy" "delete-destination" "delete-log-group" "delete-log-stream" "delete-metric-filter" "delete-query-definition" "delete-resource-policy" "delete-retention-policy" "delete-subscription-filter" "describe-destinations" "describe-export-tasks" "describe-log-groups" "describe-log-streams" "describe-metric-filters" "describe-queries" "describe-query-definitions" "describe-resource-policies" "describe-subscription-filters" "disassociate-kms-key" "filter-log-events" "get-data-protection-policy" "get-log-events" "get-log-group-fields" "get-log-record" "get-query-results" "list-tags-for-resource" "list-tags-log-group" "put-data-protection-policy" "put-destination" "put-destination-policy" "put-log-events" "put-metric-filter" "put-query-definition" "put-resource-policy" "put-retention-policy" "put-subscription-filter" "start-query" "stop-query" "tag-log-group" "tag-resource" "test-metric-filter" "untag-log-group" "untag-resource" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -300,7 +323,7 @@ export def "create-export-task" [
   to: int # The end time of the range for the request, expressed as the number of milliseconds after Jan 1, 1970 00:00:00 UTC. Events with a timestamp later than this time are not exported. You must specify a time that is not earlier than when this log group was created.
   destination: string # The name of S3 bucket for the exported log data. The bucket must be in the same Amazon Web Services Region.
   --destination-prefix: string # The prefix used as the start of the key for every object exported. If you don't specify a value, the default is exportedlogs.
-]: any -> record<taskId: string> {
+]: any -> oneof<record<taskId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -697,7 +720,7 @@ export def "delete-query-definition" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-10 # required
   query_definition_id: string # The ID of the query definition that you want to delete. You can use DescribeQueryDefinitions (https://docs.aws.amazon.com/AmazonCloudWatchLogs/latest/APIReference/API_DescribeQueryDefinitions.html) to retrieve the IDs of your saved query definitions.
-]: any -> record<success: bool> {
+]: any -> oneof<record<success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -898,7 +921,7 @@ export def "describe-destinations" [
   --destination-name-prefix: string # The prefix to match. If you don't specify a value, no prefix filter is applied.
   --next-token-body: string # The token for the next set of items to return. The token expires after 24 hours. (body field)
   --limit-body: int # The maximum number of items returned. If you don't specify a value, the default maximum value of 50 items is used. (body field)
-]: any -> record<destinations: table<destinationName: string, targetArn: string, roleArn: string, accessPolicy: string, arn: string, creationTime: int>, nextToken: string> {
+]: any -> oneof<record<destinations: table<destinationName: string, targetArn: string, roleArn: string, accessPolicy: string, arn: string, creationTime: int>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -951,7 +974,7 @@ export def "describe-export-tasks" [
   --status-code: string@status-code-completer # The status code of the export task. Specifying a status code filters the results to zero or more export tasks.
   --next-token: string # The token for the next set of items to return. The token expires after 24 hours.
   --limit: int # The maximum number of items returned. If you don't specify a value, the default is up to 50 items.
-]: any -> record<exportTasks: table<taskId: string, taskName: string, logGroupName: string, from: int, to: int, destination: string, destinationPrefix: string, status: record, executionInfo: record>, nextToken: string> {
+]: any -> oneof<record<exportTasks: table<taskId: string, taskName: string, logGroupName: string, from: int, to: int, destination: string, destinationPrefix: string, status: record, executionInfo: record>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1007,7 +1030,7 @@ export def "describe-log-groups" [
   --next-token-body: string # The token for the next set of items to return. The token expires after 24 hours. (body field)
   --limit-body: int # The maximum number of items returned. If you don't specify a value, the default is up to 50 items. (body field)
   --include-linked-accounts: oneof<nothing, bool> # If you are using a monitoring account, set this to True to have the operation return log groups in the accounts listed in accountIdentifiers. If this parameter is set to true and accountIdentifiers contains a null value, the operation returns all log groups in the monitoring account and all log groups in all source accounts that are linked to the monitoring account. If you specify includeLinkedAccounts in your request, then metricFilterCount, retentionInDays, and storedBytes are not included in the response.
-]: any -> record<logGroups: table<logGroupName: string, creationTime: int, retentionInDays: int, metricFilterCount: int, arn: string, storedBytes: int, kmsKeyId: string, dataProtectionStatus: string>, nextToken: string> {
+]: any -> oneof<record<logGroups: table<logGroupName: string, creationTime: int, retentionInDays: int, metricFilterCount: int, arn: string, storedBytes: int, kmsKeyId: string, dataProtectionStatus: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1065,7 +1088,7 @@ export def "describe-log-streams" [
   --descending: oneof<nothing, bool> # If the value is true, results are returned in descending order. If the value is to false, results are returned in ascending order. The default value is false.
   --next-token-body: string # The token for the next set of items to return. The token expires after 24 hours. (body field)
   --limit-body: int # The maximum number of items returned. If you don't specify a value, the default is up to 50 items. (body field)
-]: any -> record<logStreams: table<logStreamName: string, creationTime: int, firstEventTimestamp: int, lastEventTimestamp: int, lastIngestionTime: int, uploadSequenceToken: string, arn: string, storedBytes: int>, nextToken: string> {
+]: any -> oneof<record<logStreams: table<logStreamName: string, creationTime: int, firstEventTimestamp: int, lastEventTimestamp: int, lastIngestionTime: int, uploadSequenceToken: string, arn: string, storedBytes: int>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1122,7 +1145,7 @@ export def "describe-metric-filters" [
   --limit-body: int # The maximum number of items returned. If you don't specify a value, the default is up to 50 items. (body field)
   --metric-name: string # The name of the CloudWatch metric to which the monitored log information should be published. For example, you might publish to a metric named ErrorCount.
   --metric-namespace: string # Filters results to include only those in the specified namespace. If you include this parameter in your request, you must also include the metricName parameter.
-]: any -> record<metricFilters: table<filterName: string, filterPattern: string, metricTransformations: list, creationTime: int, logGroupName: string>, nextToken: string> {
+]: any -> oneof<record<metricFilters: table<filterName: string, filterPattern: string, metricTransformations: list, creationTime: int, logGroupName: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1175,7 +1198,7 @@ export def "describe-queries" [
   --status: string@status-completer # Limits the returned queries to only those that have the specified status. Valid values are Cancelled, Complete, Failed, Running, and Scheduled.
   --max-results: int # Limits the number of returned queries to the specified number.
   --next-token: string # The token for the next set of items to return. The token expires after 24 hours.
-]: any -> record<queries: table<queryId: string, queryString: string, status: string, createTime: int, logGroupName: string>, nextToken: string> {
+]: any -> oneof<record<queries: table<queryId: string, queryString: string, status: string, createTime: int, logGroupName: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1226,7 +1249,7 @@ export def "describe-query-definitions" [
   --query-definition-name-prefix: string # Use this parameter to filter your results to only the query definitions that have names that start with the prefix you specify.
   --max-results: int # Limits the number of returned query definitions to the specified number.
   --next-token: string # The token for the next set of items to return. The token expires after 24 hours.
-]: any -> record<queryDefinitions: table<queryDefinitionId: string, name: string, queryString: string, lastModified: int, logGroupNames: list>, nextToken: string> {
+]: any -> oneof<record<queryDefinitions: table<queryDefinitionId: string, name: string, queryString: string, lastModified: int, logGroupNames: list>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1276,7 +1299,7 @@ export def "describe-resource-policies" [
   --x-amz-target: string@x-amz-target-completer-21 # required
   --next-token: string # The token for the next set of items to return. The token expires after 24 hours.
   --limit: int # The maximum number of resource policies to be displayed with one call of this API.
-]: any -> record<resourcePolicies: table<policyName: string, policyDocument: string, lastUpdatedTime: int>, nextToken: string> {
+]: any -> oneof<record<resourcePolicies: table<policyName: string, policyDocument: string, lastUpdatedTime: int>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1330,7 +1353,7 @@ export def "describe-subscription-filters" [
   --filter-name-prefix: string # The prefix to match. If you don't specify a value, no prefix filter is applied.
   --next-token-body: string # The token for the next set of items to return. The token expires after 24 hours. (body field)
   --limit-body: int # The maximum number of items returned. If you don't specify a value, the default is up to 50 items. (body field)
-]: any -> record<subscriptionFilters: table<filterName: string, logGroupName: string, filterPattern: string, destinationArn: string, roleArn: string, distribution: string, creationTime: int>, nextToken: string> {
+]: any -> oneof<record<subscriptionFilters: table<filterName: string, logGroupName: string, filterPattern: string, destinationArn: string, roleArn: string, distribution: string, creationTime: int>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1441,7 +1464,7 @@ export def "filter-log-events" [
   --limit-body: int # The maximum number of events to return. The default is 10,000 events. (body field)
   --interleaved: oneof<nothing, bool> # If the value is true, the operation attempts to provide responses that contain events from multiple log streams within the log group, interleaved in a single response. If the value is false, all the matched log events in the first log stream are searched first, then those in the next log stream, and so on. Important As of June 17, 2019, this parameter is ignored and the value is assumed to be true. The response from this operation always interleaves events from multiple log streams within a log group.Starting on June 17, 2019, this parameter will be ignored and the value will be assumed to be true. The response from this operation will always interleave events from multiple log streams within a log group.
   --unmask: oneof<nothing, bool> # Specify true to display the log event fields with all sensitive data unmasked and visible. The default is false. To use this operation with this parameter, you must be signed into an account with the logs:Unmask permission.
-]: any -> record<events: table<logStreamName: string, timestamp: int, message: string, ingestionTime: int, eventId: string>, searchedLogStreams: table<logStreamName: string, searchedCompletely: bool>, nextToken: string> {
+]: any -> oneof<record<events: table<logStreamName: string, timestamp: int, message: string, ingestionTime: int, eventId: string>, searchedLogStreams: table<logStreamName: string, searchedCompletely: bool>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1491,7 +1514,7 @@ export def "get-data-protection-policy" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-25 # required
   log_group_identifier: string # The name or ARN of the log group that contains the data protection policy that you want to see.
-]: any -> record<logGroupIdentifier: string, policyDocument: string, lastUpdatedTime: int> {
+]: any -> oneof<record<logGroupIdentifier: string, policyDocument: string, lastUpdatedTime: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1550,7 +1573,7 @@ export def "get-log-events" [
   --limit-body: int # The maximum number of log events returned. If you don't specify a limit, the default is as many log events as can fit in a response size of 1 MB (up to 10,000 log events). (body field)
   --start-from-head: oneof<nothing, bool> # If the value is true, the earliest log events are returned first. If the value is false, the latest log events are returned first. The default value is false. If you are using a previous nextForwardToken value as the nextToken in this operation, you must specify true for startFromHead.
   --unmask: oneof<nothing, bool> # Specify true to display the log event fields with all sensitive data unmasked and visible. The default is false. To use this operation with this parameter, you must be signed into an account with the logs:Unmask permission.
-]: any -> record<events: table<timestamp: int, message: string, ingestionTime: int>, nextForwardToken: string, nextBackwardToken: string> {
+]: any -> oneof<record<events: table<timestamp: int, message: string, ingestionTime: int>, nextForwardToken: string, nextBackwardToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1602,7 +1625,7 @@ export def "get-log-group-fields" [
   --log-group-name: string # The name of the log group to search. You must include either logGroupIdentifier or logGroupName, but not both.
   --time: int # The time to set as the center of the query. If you specify time, the 15 minutes before this time are queries. If you omit time, the 8 minutes before and 8 minutes after this time are searched. The time value is specified as epoch time, which is the number of seconds since January 1, 1970, 00:00:00 UTC.
   --log-group-identifier: string # Specify either the name or ARN of the log group to view. If the log group is in a source account and you are using a monitoring account, you must specify the ARN. You must include either logGroupIdentifier or logGroupName, but not both.
-]: any -> record<logGroupFields: table<name: string, percent: int>> {
+]: any -> oneof<record<logGroupFields: table<name: string, percent: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1652,7 +1675,7 @@ export def "get-log-record" [
   --x-amz-target: string@x-amz-target-completer-28 # required
   log_record_pointer: string # The pointer corresponding to the log event record you want to retrieve. You get this from the response of a GetQueryResults operation. In that response, the value of the @ptr field for a log event is the value to use as logRecordPointer to retrieve that complete log event record.
   --unmask: oneof<nothing, bool> # Specify true to display the log event fields with all sensitive data unmasked and visible. The default is false. To use this operation with this parameter, you must be signed into an account with the logs:Unmask permission.
-]: any -> record<logRecord: record> {
+]: any -> oneof<record<logRecord: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1701,7 +1724,7 @@ export def "get-query-results" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-29 # required
   query_id: string # The ID number of the query.
-]: any -> record<results: list<list<record>>, statistics: record<recordsMatched: float, recordsScanned: float, bytesScanned: float>, status: string> {
+]: any -> oneof<record<results: list<list<record>>, statistics: record<recordsMatched: float, recordsScanned: float, bytesScanned: float>, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1750,7 +1773,7 @@ export def "list-tags-for-resource" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-30 # required
   resource_arn: string # The ARN of the resource that you want to view tags for. The ARN format of a log group is arn:aws:logs:Region:account-id:log-group:log-group-name The ARN format of a destination is arn:aws:logs:Region:account-id:destination:destination-name For more information about ARN format, see CloudWatch Logs resources and operations (https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/iam-access-control-overview-cwl.html).
-]: any -> record<tags: record> {
+]: any -> oneof<record<tags: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1801,7 +1824,7 @@ export def "list-tags-log-group" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-31 # required
   log_group_name: string # The name of the log group.
-]: any -> record<tags: record> {
+]: any -> oneof<record<tags: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1851,7 +1874,7 @@ export def "put-data-protection-policy" [
   --x-amz-target: string@x-amz-target-completer-32 # required
   log_group_identifier: string # Specify either the log group name or log group ARN.
   policy_document: string # Specify the data protection policy, in JSON. This policy must include two JSON blocks: The first block must include both a DataIdentifer array and an Operation property with an Audit action. The DataIdentifer array lists the types of sensitive data that you want to mask. For more information about the available options, see Types of data that you can mask (https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/mask-sensitive-log-data-types.html). The Operation property with an Audit action is required to find the sensitive data terms. This Audit action must contain a FindingsDestination object. You can optionally use that FindingsDestination object to list one or more destinations to send audit findings to. If you specify destinations such as log groups, Kinesis Data Firehose streams, and S3 buckets, they must already exist. The second block must include both a DataIdentifer array and an Operation property with an Deidentify action. The DataIdentifer array must exactly match the DataIdentifer array in the first block of the policy. The Operation property with the Deidentify action is what actually masks the data, and it must contain the "MaskConfig": {} object. The "MaskConfig": {} object must be empty. For an example data protection policy, see the Examples section on this page. The contents of two DataIdentifer arrays must match exactly.
-]: any -> record<logGroupIdentifier: string, policyDocument: string, lastUpdatedTime: int> {
+]: any -> oneof<record<logGroupIdentifier: string, policyDocument: string, lastUpdatedTime: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1903,7 +1926,7 @@ export def "put-destination" [
   target_arn: string # The ARN of an Amazon Kinesis stream to which to deliver matching log events.
   role_arn: string # The ARN of an IAM role that grants CloudWatch Logs permissions to call the Amazon Kinesis PutRecord operation on the destination stream.
   --tags: record # An optional list of key-value pairs to associate with the resource. For more information about tagging, see Tagging Amazon Web Services resources (https://docs.aws.amazon.com/general/latest/gr/aws_tagging.html)
-]: any -> record<destination: record<destinationName: string, targetArn: string, roleArn: string, accessPolicy: string, arn: string, creationTime: int>> {
+]: any -> oneof<record<destination: record<destinationName: string, targetArn: string, roleArn: string, accessPolicy: string, arn: string, creationTime: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1984,7 +2007,6 @@ export def "put-destination-policy" [
 #
 # POST /
 # operationId: PutLogEvents
-# --logEvents item shape: {timestamp: int, message: string}
 export def "put-log-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2007,7 +2029,7 @@ export def "put-log-events" [
   log_stream_name: string # The name of the log stream.
   log_events: list # The log events. — item shape: {timestamp: int, message: string}
   --sequence-token: string # The sequence token obtained from the response of the previous PutLogEvents call. The sequenceToken parameter is now ignored in PutLogEvents actions. PutLogEvents actions are now accepted and never return InvalidSequenceTokenException or DataAlreadyAcceptedException even if the sequence token is not valid.
-]: any -> record<nextSequenceToken: string, rejectedLogEventsInfo: record<tooNewLogEventStartIndex: int, tooOldLogEventEndIndex: int, expiredLogEventEndIndex: int>> {
+]: any -> oneof<record<nextSequenceToken: string, rejectedLogEventsInfo: record<tooNewLogEventStartIndex: int, tooOldLogEventEndIndex: int, expiredLogEventEndIndex: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2037,7 +2059,6 @@ export def "put-log-events" [
 #
 # POST /
 # operationId: PutMetricFilter
-# --metricTransformations item shape: {metricName: string, metricNamespace: string, metricValue: string, defaultValue?: float, dimensions?: record, unit?: "Seconds"|"Microseconds"|"Milliseconds"|"Bytes"|"Kilobytes"|"Megabytes"|"Gigabytes"|"Terabytes"|"Bits"|"Kilobits"|"Megabits"|"Gigabits"|"Terabits"|"Percent"|"Count"|"Bytes/Second"|"Kilobytes/Second"|"Megabytes/Second"|"Gigabytes/Second"|"Terabytes/Second"|"Bits/Second"|"Kilobits/Second"|"Megabits/Second"|"Gigabits/Second"|"Terabits/Second"|"Count/Second"|"None"}
 export def "put-metric-filter" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2112,7 +2133,7 @@ export def "put-query-definition" [
   --query-definition-id: string # If you are updating a query definition, use this parameter to specify the ID of the query definition that you want to update. You can use DescribeQueryDefinitions (https://docs.aws.amazon.com/AmazonCloudWatchLogs/latest/APIReference/API_DescribeQueryDefinitions.html) to retrieve the IDs of your saved query definitions. If you are creating a query definition, do not specify this parameter. CloudWatch generates a unique ID for the new query definition and include it in the response to this operation.
   --log-group-names: list<string> # Use this parameter to include specific log groups as part of your query definition. If you are updating a query definition and you omit this parameter, then the updated definition will contain no log groups.
   query_string: string # The query string to use for this definition. For more information, see CloudWatch Logs Insights Query Syntax (https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/CWL_QuerySyntax.html).
-]: any -> record<queryDefinitionId: string> {
+]: any -> oneof<record<queryDefinitionId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2162,7 +2183,7 @@ export def "put-resource-policy" [
   --x-amz-target: string@x-amz-target-completer-38 # required
   --policy-name: string # Name of the new policy. This parameter is required.
   --policy-document: string # Details of the new policy, including the identity of the principal that is enabled to put logs to this account. This is formatted as a JSON string. This parameter is required. The following example creates a resource policy enabling the Route 53 service to put DNS query logs in to the specified log group. Replace "logArn" with the ARN of your CloudWatch Logs resource, such as a log group or log stream. CloudWatch Logs also supports aws:SourceArn (https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_condition-keys.html#condition-keys-sourcearn) and aws:SourceAccount (https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_condition-keys.html#condition-keys-sourceaccount) condition context keys. In the example resource policy, you would replace the value of SourceArn with the resource making the call from Route 53 to CloudWatch Logs. You would also replace the value of SourceAccount with the Amazon Web Services account ID making that call. { "Version": "2012-10-17", "Statement": [ { "Sid": "Route53LogsToCloudWatchLogs", "Effect": "Allow", "Principal": { "Service": [ "route53.amazonaws.com" ] }, "Action": "logs:PutLogEvents", "Resource": "logArn", "Condition": { "ArnLike": { "aws:SourceArn": "myRoute53ResourceArn" }, "StringEquals": { "aws:SourceAccount": "myAwsAccountId" } } } ] }
-]: any -> record<resourcePolicy: record<policyName: string, policyDocument: string, lastUpdatedTime: int>> {
+]: any -> oneof<record<resourcePolicy: record<policyName: string, policyDocument: string, lastUpdatedTime: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2321,7 +2342,7 @@ export def "start-query" [
   end_time: int # The end of the time range to query. The range is inclusive, so the specified end time is included in the query. Specified as epoch time, the number of seconds since January 1, 1970, 00:00:00 UTC.
   query_string: string # The query string to use. For more information, see CloudWatch Logs Insights Query Syntax (https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/CWL_QuerySyntax.html).
   --limit: int # The maximum number of log events to return in the query. If the query string uses the fields command, only the specified fields and their values are returned. The default is 1000.
-]: any -> record<queryId: string> {
+]: any -> oneof<record<queryId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2370,7 +2391,7 @@ export def "stop-query" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-42 # required
   query_id: string # The ID number of the query to stop. To find this ID number, use DescribeQueries.
-]: any -> record<success: bool> {
+]: any -> oneof<record<success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2522,7 +2543,7 @@ export def "test-metric-filter" [
   --x-amz-target: string@x-amz-target-completer-45 # required
   filter_pattern: string # A symbolic description of how CloudWatch Logs should interpret the data in each log event. For example, a log event can contain timestamps, IP addresses, strings, and so on. You use the filter pattern to specify what to look for in the log event message.
   log_event_messages: list<string> # The log event messages to test.
-]: any -> record<matches: table<eventNumber: int, eventMessage: string, extractedValues: record>> {
+]: any -> oneof<record<matches: table<eventNumber: int, eventMessage: string, extractedValues: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

@@ -12,27 +12,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -40,8 +49,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -52,7 +66,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -87,7 +110,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["http://localhost/api/v2"] }
@@ -97,9 +121,9 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-resources-json" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-resources-json" "get-resources-campaigns-json" "get-resources-campaigns-id-json" "get-resources-campaigns-id-media-json" "get-resources-campaigns-id-syndicate-format" "get-resources-languages-json" "get-resources-languages-id-json" "get-resources-media-json" "get-resources-media-featured-json" "get-resources-media-most-popular-media-format" "get-resources-media-search-results-json" "get-resources-media-id-json" "get-resources-media-id-content" "get-resources-media-id-embed-json" "get-resources-media-id-preview-jpg" "get-resources-media-id-related-media-format" "get-resources-media-id-syndicate-format" "get-resources-media-id-thumbnail-jpg" "get-resources-media-id-youtube-meta-data-json" "get-resources-media-types-format" "get-resources-sources-json" "get-resources-sources-id-json" "get-resources-sources-id-syndicate-format" "get-resources-tags-format" "get-resources-tags-tag-languages-format" "get-resources-tags-tag-types-format" "get-resources-tags-id-format" "get-resources-tags-id-media-format" "get-resources-tags-id-related-format" "get-resources-tags-id-syndicate-format" "get-resources-user-media-lists-id-json" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -131,7 +155,7 @@ export def "get-resources-json" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # The search query supplied by the user (required, format: )
-]: nothing -> list<any> {
+]: nothing -> oneof<list<any>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($q == null) { error make --unspanned { msg: "required query parameter 'q' missing: pass --q" } }
@@ -169,7 +193,7 @@ export def "get-resources-campaigns-json" [
   --max: int # The maximum number of records to return (format: int32)
   --offset: int # The offset of the records set to return for pagination (format: int32)
   --sort: string # * Set of fields to sort the records by. (format: )
-]: nothing -> record<callback: string, meta: record<messages: list<record>, pagination: record<count: int, currentUrl: string, max: int, nextUrl: string, offset: int, pageNum: int, previousUrl: string, sort: string, total: int, totalPages: int>, status: int>, results: table<contactEmail: string, description: string, endDate: string, id: int, name: string, source: record, startDate: string>> {
+]: nothing -> oneof<record<callback: string, meta: record<messages: list<record>, pagination: record<count: int, currentUrl: string, max: int, nextUrl: string, offset: int, pageNum: int, previousUrl: string, sort: string, total: int, totalPages: int>, status: int>, results: table<contactEmail: string, description: string, endDate: string, id: int, name: string, source: record, startDate: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "max" $max "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
@@ -204,7 +228,7 @@ export def "get-resources-campaigns-id-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<callback: string, meta: record<messages: list<record>, pagination: record<count: int, currentUrl: string, max: int, nextUrl: string, offset: int, pageNum: int, previousUrl: string, sort: string, total: int, totalPages: int>, status: int>, results: table<contactEmail: string, description: string, endDate: string, id: int, name: string, source: record, startDate: string>> {
+]: nothing -> oneof<record<callback: string, meta: record<messages: list<record>, pagination: record<count: int, currentUrl: string, max: int, nextUrl: string, offset: int, pageNum: int, previousUrl: string, sort: string, total: int, totalPages: int>, status: int>, results: table<contactEmail: string, description: string, endDate: string, id: int, name: string, source: record, startDate: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -242,7 +266,7 @@ export def "get-resources-campaigns-id-media-json" [
   --sort: string # The name of the property to which sorting will be applied (format: )
   --max: int # The maximum number of records to return (format: int32)
   --offset: int # The offset of the records set to return for pagination (format: int32)
-]: nothing -> record<callback: string, meta: record<messages: list<record>, pagination: record<count: int, currentUrl: string, max: int, nextUrl: string, offset: int, pageNum: int, previousUrl: string, sort: string, total: int, totalPages: int>, status: int>, results: table<campaigns: list, createdBy: string, customAttributionUrl: string, customPreviewUrl: string, customThumbnailUrl: string, dateContentAuthored: string, dateContentPublished: string, dateContentReviewed: string, dateContentUpdated: string, dateSyndicationCaptured: string, dateSyndicationUpdated: string, dateSyndicationVisible: string, description: string, extendedAttributes: list, externalGuid: string, foreignSyndicationAPIUrl: string, hash: string, id: int, language: record, mediaType: string, name: string, source: record, sourceUrl: string, targetUrl: string>> {
+]: nothing -> oneof<record<callback: string, meta: record<messages: list<record>, pagination: record<count: int, currentUrl: string, max: int, nextUrl: string, offset: int, pageNum: int, previousUrl: string, sort: string, total: int, totalPages: int>, status: int>, results: table<campaigns: list, createdBy: string, customAttributionUrl: string, customPreviewUrl: string, customThumbnailUrl: string, dateContentAuthored: string, dateContentPublished: string, dateContentReviewed: string, dateContentUpdated: string, dateSyndicationCaptured: string, dateSyndicationUpdated: string, dateSyndicationVisible: string, description: string, extendedAttributes: list, externalGuid: string, foreignSyndicationAPIUrl: string, hash: string, id: int, language: record, mediaType: string, name: string, source: record, sourceUrl: string, targetUrl: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -280,7 +304,7 @@ export def "get-resources-campaigns-id-syndicate-format" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --display-method: string # Method used to render an html request. Accepts one: [mv, list, feed] (format: )
-]: nothing -> record<callback: string, meta: record<messages: list<record>, pagination: record<count: int, currentUrl: string, max: int, nextUrl: string, offset: int, pageNum: int, previousUrl: string, sort: string, total: int, totalPages: int>, status: int>, results: table<content: string, description: string, id: int, mediaType: string, name: string, sourceUrl: string>> {
+]: nothing -> oneof<record<callback: string, meta: record<messages: list<record>, pagination: record<count: int, currentUrl: string, max: int, nextUrl: string, offset: int, pageNum: int, previousUrl: string, sort: string, total: int, totalPages: int>, status: int>, results: table<content: string, description: string, id: int, mediaType: string, name: string, sourceUrl: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -319,7 +343,7 @@ export def "get-resources-languages-json" [
   --max: int # The maximum number of records to return (format: int32)
   --offset: int # Return records starting at the offset index. (format: int32)
   --sort: string # The name of the property to which sorting will be applied (format: )
-]: nothing -> table<callback: string, meta: record<messages: list, pagination: record, status: int>, results: list<record>> {
+]: nothing -> oneof<table<callback: string, meta: record<messages: list, pagination: record, status: int>, results: list<record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "max" $max "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
@@ -354,7 +378,7 @@ export def "get-resources-languages-id-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<callback: string, meta: record<messages: list, pagination: record, status: int>, results: list<record>> {
+]: nothing -> oneof<table<callback: string, meta: record<messages: list, pagination: record, status: int>, results: list<record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -441,7 +465,7 @@ export def "get-resources-media-json" [
   --tag-ids: string # Find only media items tagged with the specified tag Ids. (format: )
   --restrict-to-set: string # Find only media from within the supplied list of Ids. (format: )
   --created-by: string # Find all media items containing the createdBy value. (format: )
-]: nothing -> table<callback: string, meta: record<messages: list, pagination: record, status: int>, results: list<record>> {
+]: nothing -> oneof<table<callback: string, meta: record<messages: list, pagination: record, status: int>, results: list<record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "max" $max "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "mediaTypes" $media_types "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "collectionId" $collection_id "scalar") (serialize-qp "nameContains" $name_contains "scalar") (serialize-qp "descriptionContains" $description_contains "scalar") (serialize-qp "sourceUrl" $source_url "scalar") (serialize-qp "sourceUrlContains" $source_url_contains "scalar") (serialize-qp "customThumbnailUrl" $custom_thumbnail_url "scalar") (serialize-qp "customThumbnailUrlContains" $custom_thumbnail_url_contains "scalar") (serialize-qp "dateContentAuthored" $date_content_authored "scalar") (serialize-qp "dateContentUpdated" $date_content_updated "scalar") (serialize-qp "dateContentPublished" $date_content_published "scalar") (serialize-qp "dateContentReviewed" $date_content_reviewed "scalar") (serialize-qp "dateSyndicationCaptured" $date_syndication_captured "scalar") (serialize-qp "dateSyndicationUpdated" $date_syndication_updated "scalar") (serialize-qp "contentAuthoredSinceDate" $content_authored_since_date "scalar") (serialize-qp "contentAuthoredBeforeDate" $content_authored_before_date "scalar") (serialize-qp "contentAuthoredInRange" $content_authored_in_range "scalar") (serialize-qp "contentUpdatedSinceDate" $content_updated_since_date "scalar") (serialize-qp "contentUpdatedBeforeDate" $content_updated_before_date "scalar") (serialize-qp "contentUpdatedInRange" $content_updated_in_range "scalar") (serialize-qp "contentPublishedSinceDate" $content_published_since_date "scalar") (serialize-qp "contentPublishedBeforeDate" $content_published_before_date "scalar") (serialize-qp "contentPublishedInRange" $content_published_in_range "scalar") (serialize-qp "contentReviewedSinceDate" $content_reviewed_since_date "scalar") (serialize-qp "contentReviewedBeforeDate" $content_reviewed_before_date "scalar") (serialize-qp "contentReviewedInRange" $content_reviewed_in_range "scalar") (serialize-qp "syndicationCapturedSinceDate" $syndication_captured_since_date "scalar") (serialize-qp "syndicationCapturedBeforeDate" $syndication_captured_before_date "scalar") (serialize-qp "syndicationCapturedInRange" $syndication_captured_in_range "scalar") (serialize-qp "syndicationUpdatedSinceDate" $syndication_updated_since_date "scalar") (serialize-qp "syndicationUpdatedBeforeDate" $syndication_updated_before_date "scalar") (serialize-qp "syndicationUpdatedInRange" $syndication_updated_in_range "scalar") (serialize-qp "syndicationVisibleSinceDate" $syndication_visible_since_date "scalar") (serialize-qp "syndicationVisibleBeforeDate" $syndication_visible_before_date "scalar") (serialize-qp "syndicationVisibleInRange" $syndication_visible_in_range "scalar") (serialize-qp "languageId" $language_id "scalar") (serialize-qp "languageName" $language_name "scalar") (serialize-qp "languageIsoCode" $language_iso_code "scalar") (serialize-qp "hash" $hash "scalar") (serialize-qp "hashContains" $hash_contains "scalar") (serialize-qp "sourceId" $source_id "scalar") (serialize-qp "sourceName" $source_name "scalar") (serialize-qp "sourceNameContains" $source_name_contains "scalar") (serialize-qp "sourceAcronym" $source_acronym "scalar") (serialize-qp "sourceAcronymContains" $source_acronym_contains "scalar") (serialize-qp "tagIds" $tag_ids "scalar") (serialize-qp "restrictToSet" $restrict_to_set "scalar") (serialize-qp "createdBy" $created_by "scalar")] | flatten | str join "&"
@@ -478,7 +502,7 @@ export def "get-resources-media-featured-json" [
   --sort: string # The name of the property to which sorting will be applied (format: )
   --max: int # The maximum number of records to return (format: int32)
   --offset: int # Return records starting at the offset index. (format: int32)
-]: nothing -> table<campaigns: list<record>, createdBy: string, customAttributionUrl: string, customPreviewUrl: string, customThumbnailUrl: string, dateContentAuthored: string, dateContentPublished: string, dateContentReviewed: string, dateContentUpdated: string, dateSyndicationCaptured: string, dateSyndicationUpdated: string, dateSyndicationVisible: string, description: string, extendedAttributes: list<record>, externalGuid: string, foreignSyndicationAPIUrl: string, hash: string, id: int, language: record<id: int, isActive: bool, isoCode: string, name: string>, mediaType: string, name: string, source: record<acronym: string, contactEmail: string, id: int, largeLogoUrl: string, name: string, smallLogoUrl: string, websiteUrl: string>, sourceUrl: string, targetUrl: string> {
+]: nothing -> oneof<table<campaigns: list<record>, createdBy: string, customAttributionUrl: string, customPreviewUrl: string, customThumbnailUrl: string, dateContentAuthored: string, dateContentPublished: string, dateContentReviewed: string, dateContentUpdated: string, dateSyndicationCaptured: string, dateSyndicationUpdated: string, dateSyndicationVisible: string, description: string, extendedAttributes: list<record>, externalGuid: string, foreignSyndicationAPIUrl: string, hash: string, id: int, language: record<id: int, isActive: bool, isoCode: string, name: string>, mediaType: string, name: string, source: record<acronym: string, contactEmail: string, id: int, largeLogoUrl: string, name: string, smallLogoUrl: string, websiteUrl: string>, sourceUrl: string, targetUrl: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sort" $sort "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -515,7 +539,7 @@ export def "get-resources-media-most-popular-media-format" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max: int # The maximum number of records to return (format: int32)
   --offset: int # The offset of the records set to return for pagination. (format: int32)
-]: nothing -> table<callback: string, meta: record<messages: list, pagination: record, status: int>, results: list<record>> {
+]: nothing -> oneof<table<callback: string, meta: record<messages: list, pagination: record, status: int>, results: list<record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
@@ -553,7 +577,7 @@ export def "get-resources-media-search-results-json" [
   --q: string # The search query supplied by the user (required, format: )
   --max: int # The maximum number of records to return (format: int32)
   --offset: int # The offset of the records set to return for pagination. (format: int32)
-]: nothing -> table<callback: string, meta: record<messages: list, pagination: record, status: int>, results: list<record>> {
+]: nothing -> oneof<table<callback: string, meta: record<messages: list, pagination: record, status: int>, results: list<record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($q == null) { error make --unspanned { msg: "required query parameter 'q' missing: pass --q" } }
@@ -589,7 +613,7 @@ export def "get-resources-media-id-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<callback: string, meta: record<messages: list, pagination: record, status: int>, results: list<record>> {
+]: nothing -> oneof<table<callback: string, meta: record<messages: list, pagination: record, status: int>, results: list<record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -705,7 +729,7 @@ export def "get-resources-media-id-preview-jpg" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -744,7 +768,7 @@ export def "get-resources-media-id-related-media-format" [
   --max: int # The maximum number of records to return (format: int32)
   --offset: int # Return records starting at the offset index. (format: int32)
   --sort: string # The name of the property to which sorting will be applied (format: )
-]: nothing -> table<callback: string, meta: record<messages: list, pagination: record, status: int>, results: list<record>> {
+]: nothing -> oneof<table<callback: string, meta: record<messages: list, pagination: record, status: int>, results: list<record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -793,7 +817,7 @@ export def "get-resources-media-id-syndicate-format" [
   --image-margin: string # Accepts 4 CSV values representing pixel sizes of margin similar to CSS. Default format is 'north,east,south,west' - for example '0,10,10,0' would put a 10 pixel margin on the right and bottom sides of an image. Will inject a style into the content before rendering. (format: )
   --autoplay: oneof<nothing, bool> # If content is a video, the embeded video will auto play when loaded. (format: , default: true)
   --rel: oneof<nothing, bool> # If content is a video, related items will be shown at the end of playback. (format: , default: false)
-]: nothing -> record<callback: string, meta: record<messages: list<record>, pagination: record<count: int, currentUrl: string, max: int, nextUrl: string, offset: int, pageNum: int, previousUrl: string, sort: string, total: int, totalPages: int>, status: int>, results: table<content: string, description: string, id: int, mediaType: string, name: string, sourceUrl: string>> {
+]: nothing -> oneof<record<callback: string, meta: record<messages: list<record>, pagination: record<count: int, currentUrl: string, max: int, nextUrl: string, offset: int, pageNum: int, previousUrl: string, sort: string, total: int, totalPages: int>, status: int>, results: table<content: string, description: string, id: int, mediaType: string, name: string, sourceUrl: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -830,7 +854,7 @@ export def "get-resources-media-id-thumbnail-jpg" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -865,7 +889,7 @@ export def "get-resources-media-id-youtube-meta-data-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<callback: string, meta: record<messages: list<record>, pagination: record<count: int, currentUrl: string, max: int, nextUrl: string, offset: int, pageNum: int, previousUrl: string, sort: string, total: int, totalPages: int>, status: int>, results: list<record>> {
+]: nothing -> oneof<record<callback: string, meta: record<messages: list<record>, pagination: record<count: int, currentUrl: string, max: int, nextUrl: string, offset: int, pageNum: int, previousUrl: string, sort: string, total: int, totalPages: int>, status: int>, results: list<record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -900,7 +924,7 @@ export def "get-resources-media-types-format" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<callback: string, meta: record<messages: list, pagination: record, status: int>, results: list<record>> {
+]: nothing -> oneof<table<callback: string, meta: record<messages: list, pagination: record, status: int>, results: list<record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
@@ -937,7 +961,7 @@ export def "get-resources-sources-json" [
   --max: int # The maximum number of records to return (format: int32)
   --offset: int # Return records starting at the offset index. (format: int32)
   --sort: string # The name of the property to which sorting will be applied (format: )
-]: nothing -> table<callback: string, meta: record<messages: list, pagination: record, status: int>, results: list<record>> {
+]: nothing -> oneof<table<callback: string, meta: record<messages: list, pagination: record, status: int>, results: list<record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "max" $max "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
@@ -972,7 +996,7 @@ export def "get-resources-sources-id-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<callback: string, meta: record<messages: list, pagination: record, status: int>, results: list<record>> {
+]: nothing -> oneof<table<callback: string, meta: record<messages: list, pagination: record, status: int>, results: list<record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1009,7 +1033,7 @@ export def "get-resources-sources-id-syndicate-format" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --display-method: string # Method used to render an html request. Accepts one: [mv, list, feed] (format: )
-]: nothing -> table<callback: string, meta: record<messages: list, pagination: record, status: int>, results: list<record>> {
+]: nothing -> oneof<table<callback: string, meta: record<messages: list, pagination: record, status: int>, results: list<record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1054,7 +1078,7 @@ export def "get-resources-tags-format" [
   --media-id: int # Return tags associated with the supplied media id. (format: int64)
   --type-id: int # Return tags belonging to the supplied tag type id. (format: int64)
   --type-name: string # Return tags belonging to the supplied tag type name. (format: )
-]: nothing -> table<callback: string, meta: record<messages: list, pagination: record, status: int>, results: list<record>> {
+]: nothing -> oneof<table<callback: string, meta: record<messages: list, pagination: record, status: int>, results: list<record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
@@ -1090,7 +1114,7 @@ export def "get-resources-tags-tag-languages-format" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<callback: string, meta: record<messages: list, pagination: record, status: int>, results: list<record>> {
+]: nothing -> oneof<table<callback: string, meta: record<messages: list, pagination: record, status: int>, results: list<record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
@@ -1125,7 +1149,7 @@ export def "get-resources-tags-tag-types-format" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<callback: string, meta: record<messages: list, pagination: record, status: int>, results: list<record>> {
+]: nothing -> oneof<table<callback: string, meta: record<messages: list, pagination: record, status: int>, results: list<record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
@@ -1161,7 +1185,7 @@ export def "get-resources-tags-id-format" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<callback: string, meta: record<messages: list, pagination: record, status: int>, results: list<record>> {
+]: nothing -> oneof<table<callback: string, meta: record<messages: list, pagination: record, status: int>, results: list<record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1201,7 +1225,7 @@ export def "get-resources-tags-id-media-format" [
   --sort: string # The name of the property to which sorting will be applied (format: )
   --max: int # The maximum number of records to return (format: int32)
   --offset: int # Return records starting at the offset index. (format: int32)
-]: nothing -> table<callback: string, meta: record<messages: list, pagination: record, status: int>, results: list<record>> {
+]: nothing -> oneof<table<callback: string, meta: record<messages: list, pagination: record, status: int>, results: list<record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1242,7 +1266,7 @@ export def "get-resources-tags-id-related-format" [
   --sort: string # The name of the property to which sorting will be applied (format: )
   --max: int # The maximum number of records to return (format: int32)
   --offset: int # Return records starting at the offset index. (format: int32)
-]: nothing -> table<callback: string, meta: record<messages: list, pagination: record, status: int>, results: list<record>> {
+]: nothing -> oneof<table<callback: string, meta: record<messages: list, pagination: record, status: int>, results: list<record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1319,7 +1343,7 @@ export def "get-resources-user-media-lists-id-json" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --display-method: string # Method used to render an html request. Accepts one: [mv, list, feed] (format: int64)
-]: nothing -> table<callback: string, meta: record<messages: list, pagination: record, status: int>, results: list<record>> {
+]: nothing -> oneof<table<callback: string, meta: record<messages: list, pagination: record, status: int>, results: list<record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }

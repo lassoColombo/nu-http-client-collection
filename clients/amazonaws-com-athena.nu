@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -166,9 +189,9 @@ def x-amz-target-completer-59 [] { ["AmazonAthena.UpdateWorkGroup"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "batch-get-named-query" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["batch-get-named-query" "batch-get-prepared-statement" "batch-get-query-execution" "create-data-catalog" "create-named-query" "create-notebook" "create-prepared-statement" "create-presigned-notebook-url" "create-work-group" "delete-data-catalog" "delete-named-query" "delete-notebook" "delete-prepared-statement" "delete-work-group" "export-notebook" "get-calculation-execution" "get-calculation-execution-code" "get-calculation-execution-status" "get-data-catalog" "get-database" "get-named-query" "get-notebook-metadata" "get-prepared-statement" "get-query-execution" "get-query-results" "get-query-runtime-statistics" "get-session" "get-session-status" "get-table-metadata" "get-work-group" "import-notebook" "list-application-dpu-sizes" "list-calculation-executions" "list-data-catalogs" "list-databases" "list-engine-versions" "list-executors" "list-named-queries" "list-notebook-metadata" "list-notebook-sessions" "list-prepared-statements" "list-query-executions" "list-sessions" "list-table-metadata" "list-tags-for-resource" "list-work-groups" "start-calculation-execution" "start-query-execution" "start-session" "stop-calculation-execution" "stop-query-execution" "tag-resource" "terminate-session" "untag-resource" "update-data-catalog" "update-named-query" "update-notebook" "update-notebook-metadata" "update-prepared-statement" "update-work-group" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -209,7 +232,7 @@ export def "batch-get-named-query" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer # required
   named_query_ids: list<string> # An array of query IDs.
-]: any -> record<NamedQueries: table<Name: string, Description: string, Database: string, QueryString: string, NamedQueryId: string, WorkGroup: string>, UnprocessedNamedQueryIds: table<NamedQueryId: string, ErrorCode: string, ErrorMessage: string>> {
+]: any -> oneof<record<NamedQueries: table<Name: string, Description: string, Database: string, QueryString: string, NamedQueryId: string, WorkGroup: string>, UnprocessedNamedQueryIds: table<NamedQueryId: string, ErrorCode: string, ErrorMessage: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -259,7 +282,7 @@ export def "batch-get-prepared-statement" [
   --x-amz-target: string@x-amz-target-completer-1 # required
   prepared_statement_names: list<string> # A list of prepared statement names to return.
   work_group: string # The name of the workgroup to which the prepared statements belong.
-]: any -> record<PreparedStatements: table<StatementName: string, QueryStatement: string, WorkGroupName: string, Description: string, LastModifiedTime: string>, UnprocessedPreparedStatementNames: table<StatementName: string, ErrorCode: string, ErrorMessage: string>> {
+]: any -> oneof<record<PreparedStatements: table<StatementName: string, QueryStatement: string, WorkGroupName: string, Description: string, LastModifiedTime: string>, UnprocessedPreparedStatementNames: table<StatementName: string, ErrorCode: string, ErrorMessage: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -308,7 +331,7 @@ export def "batch-get-query-execution" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-2 # required
   query_execution_ids: list<string> # An array of query execution IDs.
-]: any -> record<QueryExecutions: table<QueryExecutionId: string, Query: string, StatementType: string, ResultConfiguration: record, ResultReuseConfiguration: record, QueryExecutionContext: record, Status: record, Statistics: record, WorkGroup: string, EngineVersion: record, ExecutionParameters: list, SubstatementType: string>, UnprocessedQueryExecutionIds: table<QueryExecutionId: string, ErrorCode: string, ErrorMessage: string>> {
+]: any -> oneof<record<QueryExecutions: table<QueryExecutionId: string, Query: string, StatementType: string, ResultConfiguration: record, ResultReuseConfiguration: record, QueryExecutionContext: record, Status: record, Statistics: record, WorkGroup: string, EngineVersion: record, ExecutionParameters: list, SubstatementType: string>, UnprocessedQueryExecutionIds: table<QueryExecutionId: string, ErrorCode: string, ErrorMessage: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -338,7 +361,6 @@ export def "batch-get-query-execution" [
 #
 # POST /
 # operationId: CreateDataCatalog
-# --Tags item shape: {Key?: string, Value?: string}
 export def "create-data-catalog" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -362,7 +384,7 @@ export def "create-data-catalog" [
   --description: string # A description of the data catalog to be created.
   --parameters: record # Specifies the Lambda function or functions to use for creating the data catalog. This is a mapping whose values depend on the catalog type. For the HIVE data catalog type, use the following syntax. The metadata-function parameter is required. The sdk-version parameter is optional and defaults to the currently supported version. metadata-function=lambda_arn, sdk-version=version_number For the LAMBDA data catalog type, use one of the following sets of required parameters, but not both. If you have one Lambda function that processes metadata and another for reading the actual data, use the following syntax. Both parameters are required. metadata-function=lambda_arn, record-function=lambda_arn If you have a composite Lambda function that processes both metadata and data, use the following syntax to specify your Lambda function. function=lambda_arn The GLUE type takes a catalog ID parameter and is required. The catalog_id is the account ID of the Amazon Web Services account to which the Glue Data Catalog belongs. catalog-id=catalog_id The GLUE data catalog type also applies to the default AwsDataCatalog that already exists in your account, of which you can have only one and cannot modify. Queries that specify a Glue Data Catalog other than the default AwsDataCatalog must be run on Athena engine version 2. In Regions where Athena engine version 2 is not available, creating new Glue data catalogs results in an INVALID_INPUT error.
   --tags: list # A list of comma separated tags to add to the data catalog that is created. — item shape: {Key?: string, Value?: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -416,7 +438,7 @@ export def "create-named-query" [
   query_string: string # The contents of the query with all query statements.
   --client-request-token: string # A unique case-sensitive string used to ensure the request to create the query is idempotent (executes only once). If another CreateNamedQuery request is received, the same response is returned and another query is not created. If a parameter has changed, for example, the QueryString, an error is returned. This token is listed as not required because Amazon Web Services SDKs (for example the Amazon Web Services SDK for Java) auto-generate the token for users. If you are not using the Amazon Web Services SDK or the Amazon Web Services CLI, you must provide this token or the action will fail.
   --work-group: string # The name of the workgroup in which the named query is being created.
-]: any -> record<NamedQueryId: string> {
+]: any -> oneof<record<NamedQueryId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -467,7 +489,7 @@ export def "create-notebook" [
   work_group: string # The name of the Spark enabled workgroup in which the notebook will be created.
   name: string # The name of the ipynb file to be created in the Spark workgroup, without the .ipynb extension.
   --client-request-token: string # A unique case-sensitive string used to ensure the request to create the notebook is idempotent (executes only once). This token is listed as not required because Amazon Web Services SDKs (for example the Amazon Web Services SDK for Java) auto-generate the token for you. If you are not using the Amazon Web Services SDK or the Amazon Web Services CLI, you must provide this token or the action will fail.
-]: any -> record<NotebookId: string> {
+]: any -> oneof<record<NotebookId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -519,7 +541,7 @@ export def "create-prepared-statement" [
   work_group: string # The name of the workgroup to which the prepared statement belongs.
   query_statement: string # The query string for the prepared statement.
   --description: string # The description of the prepared statement.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -568,7 +590,7 @@ export def "create-presigned-notebook-url" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-7 # required
   session_id: string # The session ID.
-]: any -> record<NotebookUrl: string, AuthToken: string, AuthTokenExpirationTime: int> {
+]: any -> oneof<record<NotebookUrl: string, AuthToken: string, AuthTokenExpirationTime: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -598,8 +620,6 @@ export def "create-presigned-notebook-url" [
 #
 # POST /
 # operationId: CreateWorkGroup
-# --Configuration shape: {ResultConfiguration?: record, EnforceWorkGroupConfiguration?: bool, PublishCloudWatchMetricsEnabled?: bool, BytesScannedCutoffPerQuery?: int, RequesterPaysEnabled?: bool, EngineVersion?: record, AdditionalConfiguration?: string, ExecutionRole?: string, CustomerContentEncryptionConfiguration?: record, EnableMinimumEncryptionConfiguration?: bool}
-# --Tags item shape: {Key?: string, Value?: string}
 export def "create-work-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -622,7 +642,7 @@ export def "create-work-group" [
   --configuration: record # The configuration of the workgroup, which includes the location in Amazon S3 where query and calculation results are stored, the encryption option, if any, used for query and calculation results, whether the Amazon CloudWatch Metrics are enabled for the workgroup and whether workgroup settings override query settings, and the data usage limits for the amount of data scanned per query or per workgroup. The workgroup settings override is specified in EnforceWorkGroupConfiguration (true/false) in the WorkGroupConfiguration. See WorkGroupConfiguration$EnforceWorkGroupConfiguration. — shape: {ResultConfiguration?: record, EnforceWorkGroupConfiguration?: bool, PublishCloudWatchMetricsEnabled?: bool, BytesScannedCutoffPerQuery?: int, RequesterPaysEnabled?: bool, EngineVersion?: record, AdditionalConfiguration?: string, ExecutionRole?: string, CustomerContentEncryptionConfiguration?: record, EnableMinimumEncryptionConfiguration?: bool}
   --description: string # The workgroup description.
   --tags: list # A list of comma separated tags to add to the workgroup that is created. — item shape: {Key?: string, Value?: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -671,7 +691,7 @@ export def "delete-data-catalog" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-9 # required
   name: string # The name of the data catalog to delete.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -720,7 +740,7 @@ export def "delete-named-query" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-10 # required
   named_query_id: string # The unique ID of the query to delete.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -769,7 +789,7 @@ export def "delete-notebook" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-11 # required
   notebook_id: string # The ID of the notebook to delete.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -819,7 +839,7 @@ export def "delete-prepared-statement" [
   --x-amz-target: string@x-amz-target-completer-12 # required
   statement_name: string # The name of the prepared statement to delete.
   work_group: string # The workgroup to which the statement to be deleted belongs.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -869,7 +889,7 @@ export def "delete-work-group" [
   --x-amz-target: string@x-amz-target-completer-13 # required
   work_group: string # The unique name of the workgroup to delete.
   --recursive-delete-option: oneof<nothing, bool> # The option to delete the workgroup and its contents even if the workgroup contains any named queries, query executions, or notebooks.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -918,7 +938,7 @@ export def "export-notebook" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-14 # required
   notebook_id: string # The ID of the notebook to export.
-]: any -> record<NotebookMetadata: record<NotebookId: string, Name: string, WorkGroup: string, CreationTime: string, Type: string, LastModifiedTime: string>, Payload: string> {
+]: any -> oneof<record<NotebookMetadata: record<NotebookId: string, Name: string, WorkGroup: string, CreationTime: string, Type: string, LastModifiedTime: string>, Payload: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -967,7 +987,7 @@ export def "get-calculation-execution" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-15 # required
   calculation_execution_id: string # The calculation execution UUID.
-]: any -> record<CalculationExecutionId: string, SessionId: string, Description: string, WorkingDirectory: string, Status: record<SubmissionDateTime: string, CompletionDateTime: string, State: string, StateChangeReason: string>, Statistics: record<DpuExecutionInMillis: int, Progress: string>, Result: record<StdOutS3Uri: string, StdErrorS3Uri: string, ResultS3Uri: string, ResultType: string>> {
+]: any -> oneof<record<CalculationExecutionId: string, SessionId: string, Description: string, WorkingDirectory: string, Status: record<SubmissionDateTime: string, CompletionDateTime: string, State: string, StateChangeReason: string>, Statistics: record<DpuExecutionInMillis: int, Progress: string>, Result: record<StdOutS3Uri: string, StdErrorS3Uri: string, ResultS3Uri: string, ResultType: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1016,7 +1036,7 @@ export def "get-calculation-execution-code" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-16 # required
   calculation_execution_id: string # The calculation execution UUID.
-]: any -> record<CodeBlock: string> {
+]: any -> oneof<record<CodeBlock: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1065,7 +1085,7 @@ export def "get-calculation-execution-status" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-17 # required
   calculation_execution_id: string # The calculation execution UUID.
-]: any -> record<Status: record<SubmissionDateTime: string, CompletionDateTime: string, State: string, StateChangeReason: string>, Statistics: record<DpuExecutionInMillis: int, Progress: string>> {
+]: any -> oneof<record<Status: record<SubmissionDateTime: string, CompletionDateTime: string, State: string, StateChangeReason: string>, Statistics: record<DpuExecutionInMillis: int, Progress: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1114,7 +1134,7 @@ export def "get-data-catalog" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-18 # required
   name: string # The name of the data catalog to return.
-]: any -> record<DataCatalog: record<Name: string, Description: string, Type: string, Parameters: record>> {
+]: any -> oneof<record<DataCatalog: record<Name: string, Description: string, Type: string, Parameters: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1164,7 +1184,7 @@ export def "get-database" [
   --x-amz-target: string@x-amz-target-completer-19 # required
   catalog_name: string # The name of the data catalog that contains the database to return.
   database_name: string # The name of the database to return.
-]: any -> record<Database: record<Name: string, Description: string, Parameters: record>> {
+]: any -> oneof<record<Database: record<Name: string, Description: string, Parameters: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1213,7 +1233,7 @@ export def "get-named-query" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-20 # required
   named_query_id: string # The unique ID of the query. Use ListNamedQueries to get query IDs.
-]: any -> record<NamedQuery: record<Name: string, Description: string, Database: string, QueryString: string, NamedQueryId: string, WorkGroup: string>> {
+]: any -> oneof<record<NamedQuery: record<Name: string, Description: string, Database: string, QueryString: string, NamedQueryId: string, WorkGroup: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1262,7 +1282,7 @@ export def "get-notebook-metadata" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-21 # required
   notebook_id: string # The ID of the notebook whose metadata is to be retrieved.
-]: any -> record<NotebookMetadata: record<NotebookId: string, Name: string, WorkGroup: string, CreationTime: string, Type: string, LastModifiedTime: string>> {
+]: any -> oneof<record<NotebookMetadata: record<NotebookId: string, Name: string, WorkGroup: string, CreationTime: string, Type: string, LastModifiedTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1312,7 +1332,7 @@ export def "get-prepared-statement" [
   --x-amz-target: string@x-amz-target-completer-22 # required
   statement_name: string # The name of the prepared statement to retrieve.
   work_group: string # The workgroup to which the statement to be retrieved belongs.
-]: any -> record<PreparedStatement: record<StatementName: string, QueryStatement: string, WorkGroupName: string, Description: string, LastModifiedTime: string>> {
+]: any -> oneof<record<PreparedStatement: record<StatementName: string, QueryStatement: string, WorkGroupName: string, Description: string, LastModifiedTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1361,7 +1381,7 @@ export def "get-query-execution" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-23 # required
   query_execution_id: string # The unique ID of the query execution.
-]: any -> record<QueryExecution: record<QueryExecutionId: string, Query: string, StatementType: string, ResultConfiguration: record<OutputLocation: string, EncryptionConfiguration: record, ExpectedBucketOwner: string, AclConfiguration: record>, ResultReuseConfiguration: record<ResultReuseByAgeConfiguration: record>, QueryExecutionContext: record<Database: string, Catalog: string>, Status: record<State: string, StateChangeReason: string, SubmissionDateTime: string, CompletionDateTime: string, AthenaError: record>, Statistics: record<EngineExecutionTimeInMillis: int, DataScannedInBytes: int, DataManifestLocation: string, TotalExecutionTimeInMillis: int, QueryQueueTimeInMillis: int, QueryPlanningTimeInMillis: int, ServiceProcessingTimeInMillis: int, ResultReuseInformation: record>, WorkGroup: string, EngineVersion: record<SelectedEngineVersion: string, EffectiveEngineVersion: string>, ExecutionParameters: list<string>, SubstatementType: string>> {
+]: any -> oneof<record<QueryExecution: record<QueryExecutionId: string, Query: string, StatementType: string, ResultConfiguration: record<OutputLocation: string, EncryptionConfiguration: record, ExpectedBucketOwner: string, AclConfiguration: record>, ResultReuseConfiguration: record<ResultReuseByAgeConfiguration: record>, QueryExecutionContext: record<Database: string, Catalog: string>, Status: record<State: string, StateChangeReason: string, SubmissionDateTime: string, CompletionDateTime: string, AthenaError: record>, Statistics: record<EngineExecutionTimeInMillis: int, DataScannedInBytes: int, DataManifestLocation: string, TotalExecutionTimeInMillis: int, QueryQueueTimeInMillis: int, QueryPlanningTimeInMillis: int, ServiceProcessingTimeInMillis: int, ResultReuseInformation: record>, WorkGroup: string, EngineVersion: record<SelectedEngineVersion: string, EffectiveEngineVersion: string>, ExecutionParameters: list<string>, SubstatementType: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1414,7 +1434,7 @@ export def "get-query-results" [
   query_execution_id: string # The unique ID of the query execution.
   --next-token-body: string # A token generated by the Athena service that specifies where to continue pagination if a previous request was truncated. To obtain the next set of pages, pass in the NextToken from the response object of the previous page call. (body field)
   --max-results-body: int # The maximum number of results (rows) to return in this request. (body field)
-]: any -> record<UpdateCount: int, ResultSet: record<Rows: list<record>, ResultSetMetadata: record<ColumnInfo: list>>, NextToken: string> {
+]: any -> oneof<record<UpdateCount: int, ResultSet: record<Rows: list<record>, ResultSetMetadata: record<ColumnInfo: list>>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1464,7 +1484,7 @@ export def "get-query-runtime-statistics" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-25 # required
   query_execution_id: string # The unique ID of the query execution.
-]: any -> record<QueryRuntimeStatistics: record<Timeline: record<QueryQueueTimeInMillis: int, QueryPlanningTimeInMillis: int, EngineExecutionTimeInMillis: int, ServiceProcessingTimeInMillis: int, TotalExecutionTimeInMillis: int>, Rows: record<InputRows: int, InputBytes: int, OutputBytes: int, OutputRows: int>, OutputStage: record<StageId: int, State: string, OutputBytes: int, OutputRows: int, InputBytes: int, InputRows: int, ExecutionTime: int, QueryStagePlan: record, SubStages: list>>> {
+]: any -> oneof<record<QueryRuntimeStatistics: record<Timeline: record<QueryQueueTimeInMillis: int, QueryPlanningTimeInMillis: int, EngineExecutionTimeInMillis: int, ServiceProcessingTimeInMillis: int, TotalExecutionTimeInMillis: int>, Rows: record<InputRows: int, InputBytes: int, OutputBytes: int, OutputRows: int>, OutputStage: record<StageId: int, State: string, OutputBytes: int, OutputRows: int, InputBytes: int, InputRows: int, ExecutionTime: int, QueryStagePlan: record, SubStages: list>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1513,7 +1533,7 @@ export def "get-session" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-26 # required
   session_id: string # The session ID.
-]: any -> record<SessionId: string, Description: string, WorkGroup: string, EngineVersion: string, EngineConfiguration: record<CoordinatorDpuSize: int, MaxConcurrentDpus: int, DefaultExecutorDpuSize: int, AdditionalConfigs: record>, NotebookVersion: string, SessionConfiguration: record<ExecutionRole: string, WorkingDirectory: string, IdleTimeoutSeconds: int, EncryptionConfiguration: record<EncryptionOption: string, KmsKey: string>>, Status: record<StartDateTime: string, LastModifiedDateTime: string, EndDateTime: string, IdleSinceDateTime: string, State: string, StateChangeReason: string>, Statistics: record<DpuExecutionInMillis: int>> {
+]: any -> oneof<record<SessionId: string, Description: string, WorkGroup: string, EngineVersion: string, EngineConfiguration: record<CoordinatorDpuSize: int, MaxConcurrentDpus: int, DefaultExecutorDpuSize: int, AdditionalConfigs: record>, NotebookVersion: string, SessionConfiguration: record<ExecutionRole: string, WorkingDirectory: string, IdleTimeoutSeconds: int, EncryptionConfiguration: record<EncryptionOption: string, KmsKey: string>>, Status: record<StartDateTime: string, LastModifiedDateTime: string, EndDateTime: string, IdleSinceDateTime: string, State: string, StateChangeReason: string>, Statistics: record<DpuExecutionInMillis: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1562,7 +1582,7 @@ export def "get-session-status" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-27 # required
   session_id: string # The session ID.
-]: any -> record<SessionId: string, Status: record<StartDateTime: string, LastModifiedDateTime: string, EndDateTime: string, IdleSinceDateTime: string, State: string, StateChangeReason: string>> {
+]: any -> oneof<record<SessionId: string, Status: record<StartDateTime: string, LastModifiedDateTime: string, EndDateTime: string, IdleSinceDateTime: string, State: string, StateChangeReason: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1613,7 +1633,7 @@ export def "get-table-metadata" [
   catalog_name: string # The name of the data catalog that contains the database and table metadata to return.
   database_name: string # The name of the database that contains the table metadata to return.
   table_name: string # The name of the table for which metadata is returned.
-]: any -> record<TableMetadata: record<Name: string, CreateTime: string, LastAccessTime: string, TableType: string, Columns: list<record>, PartitionKeys: list<record>, Parameters: record>> {
+]: any -> oneof<record<TableMetadata: record<Name: string, CreateTime: string, LastAccessTime: string, TableType: string, Columns: list<record>, PartitionKeys: list<record>, Parameters: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1662,7 +1682,7 @@ export def "get-work-group" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-29 # required
   work_group: string # The name of the workgroup.
-]: any -> record<WorkGroup: record<Name: string, State: string, Configuration: record<ResultConfiguration: record, EnforceWorkGroupConfiguration: bool, PublishCloudWatchMetricsEnabled: bool, BytesScannedCutoffPerQuery: int, RequesterPaysEnabled: bool, EngineVersion: record, AdditionalConfiguration: string, ExecutionRole: string, CustomerContentEncryptionConfiguration: record, EnableMinimumEncryptionConfiguration: bool>, Description: string, CreationTime: string>> {
+]: any -> oneof<record<WorkGroup: record<Name: string, State: string, Configuration: record<ResultConfiguration: record, EnforceWorkGroupConfiguration: bool, PublishCloudWatchMetricsEnabled: bool, BytesScannedCutoffPerQuery: int, RequesterPaysEnabled: bool, EngineVersion: record, AdditionalConfiguration: string, ExecutionRole: string, CustomerContentEncryptionConfiguration: record, EnableMinimumEncryptionConfiguration: bool>, Description: string, CreationTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1715,7 +1735,7 @@ export def "import-notebook" [
   payload: string # The notebook content to be imported.
   type: string@type-completer-1 # The notebook content type. Currently, the only valid type is IPYNB.
   --client-request-token: string # A unique case-sensitive string used to ensure the request to import the notebook is idempotent (executes only once). This token is listed as not required because Amazon Web Services SDKs (for example the Amazon Web Services SDK for Java) auto-generate the token for you. If you are not using the Amazon Web Services SDK or the Amazon Web Services CLI, you must provide this token or the action will fail.
-]: any -> record<NotebookId: string> {
+]: any -> oneof<record<NotebookId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1767,7 +1787,7 @@ export def "list-application-dpu-sizes" [
   --x-amz-target: string@x-amz-target-completer-31 # required
   --max-results-body: int # Specifies the maximum number of results to return. (body field)
   --next-token-body: string # A token generated by the Athena service that specifies where to continue pagination if a previous request was truncated. (body field)
-]: any -> record<ApplicationDPUSizes: table<ApplicationRuntimeId: string, SupportedDPUSizes: list>, NextToken: string> {
+]: any -> oneof<record<ApplicationDPUSizes: table<ApplicationRuntimeId: string, SupportedDPUSizes: list>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1822,7 +1842,7 @@ export def "list-calculation-executions" [
   --state-filter: string@state-filter-completer # A filter for a specific calculation execution state. A description of each state follows. CREATING - The calculation is in the process of being created. CREATED - The calculation has been created and is ready to run. QUEUED - The calculation has been queued for processing. RUNNING - The calculation is running. CANCELING - A request to cancel the calculation has been received and the system is working to stop it. CANCELED - The calculation is no longer running as the result of a cancel request. COMPLETED - The calculation has completed without error. FAILED - The calculation failed and is no longer running.
   --max-results-body: int # The maximum number of calculation executions to return. (body field)
   --next-token-body: string # A token generated by the Athena service that specifies where to continue pagination if a previous request was truncated. To obtain the next set of pages, pass in the NextToken from the response object of the previous page call. (body field)
-]: any -> record<NextToken: string, Calculations: table<CalculationExecutionId: string, Description: string, Status: record>> {
+]: any -> oneof<record<NextToken: string, Calculations: table<CalculationExecutionId: string, Description: string, Status: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1875,7 +1895,7 @@ export def "list-data-catalogs" [
   --x-amz-target: string@x-amz-target-completer-33 # required
   --next-token-body: string # A token generated by the Athena service that specifies where to continue pagination if a previous request was truncated. To obtain the next set of pages, pass in the NextToken from the response object of the previous page call. (body field)
   --max-results-body: int # Specifies the maximum number of data catalogs to return. (body field)
-]: any -> record<DataCatalogsSummary: table<CatalogName: string, Type: string>, NextToken: string> {
+]: any -> oneof<record<DataCatalogsSummary: table<CatalogName: string, Type: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1929,7 +1949,7 @@ export def "list-databases" [
   catalog_name: string # The name of the data catalog that contains the databases to return.
   --next-token-body: string # A token generated by the Athena service that specifies where to continue pagination if a previous request was truncated. To obtain the next set of pages, pass in the NextToken from the response object of the previous page call. (body field)
   --max-results-body: int # Specifies the maximum number of results to return. (body field)
-]: any -> record<DatabaseList: table<Name: string, Description: string, Parameters: record>, NextToken: string> {
+]: any -> oneof<record<DatabaseList: table<Name: string, Description: string, Parameters: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1982,7 +2002,7 @@ export def "list-engine-versions" [
   --x-amz-target: string@x-amz-target-completer-35 # required
   --next-token-body: string # A token generated by the Athena service that specifies where to continue pagination if a previous request was truncated. To obtain the next set of pages, pass in the NextToken from the response object of the previous page call. (body field)
   --max-results-body: int # The maximum number of engine versions to return in this request. (body field)
-]: any -> record<EngineVersions: table<SelectedEngineVersion: string, EffectiveEngineVersion: string>, NextToken: string> {
+]: any -> oneof<record<EngineVersions: table<SelectedEngineVersion: string, EffectiveEngineVersion: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2037,7 +2057,7 @@ export def "list-executors" [
   --executor-state-filter: string@executor-state-filter-completer # A filter for a specific executor state. A description of each state follows. CREATING - The executor is being started, including acquiring resources. CREATED - The executor has been started. REGISTERED - The executor has been registered. TERMINATING - The executor is in the process of shutting down. TERMINATED - The executor is no longer running. FAILED - Due to a failure, the executor is no longer running.
   --max-results-body: int # The maximum number of executors to return. (body field)
   --next-token-body: string # A token generated by the Athena service that specifies where to continue pagination if a previous request was truncated. To obtain the next set of pages, pass in the NextToken from the response object of the previous page call. (body field)
-]: any -> record<SessionId: string, NextToken: string, ExecutorsSummary: table<ExecutorId: string, ExecutorType: string, StartDateTime: int, TerminationDateTime: int, ExecutorState: string, ExecutorSize: int>> {
+]: any -> oneof<record<SessionId: string, NextToken: string, ExecutorsSummary: table<ExecutorId: string, ExecutorType: string, StartDateTime: int, TerminationDateTime: int, ExecutorState: string, ExecutorSize: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2091,7 +2111,7 @@ export def "list-named-queries" [
   --next-token-body: string # A token generated by the Athena service that specifies where to continue pagination if a previous request was truncated. To obtain the next set of pages, pass in the NextToken from the response object of the previous page call. (body field)
   --max-results-body: int # The maximum number of queries to return in this request. (body field)
   --work-group: string # The name of the workgroup from which the named queries are being returned. If a workgroup is not specified, the saved queries for the primary workgroup are returned.
-]: any -> record<NamedQueryIds: list<string>, NextToken: string> {
+]: any -> oneof<record<NamedQueryIds: list<string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2122,7 +2142,6 @@ export def "list-named-queries" [
 #
 # POST /
 # operationId: ListNotebookMetadata
-# --Filters shape: {Name?: string}
 export def "list-notebook-metadata" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2145,7 +2164,7 @@ export def "list-notebook-metadata" [
   --next-token: string # A token generated by the Athena service that specifies where to continue pagination if a previous request was truncated.
   --max-results: int # Specifies the maximum number of results to return.
   work_group: string # The name of the Spark enabled workgroup to retrieve notebook metadata for.
-]: any -> record<NextToken: string, NotebookMetadataList: table<NotebookId: string, Name: string, WorkGroup: string, CreationTime: string, Type: string, LastModifiedTime: string>> {
+]: any -> oneof<record<NextToken: string, NotebookMetadataList: table<NotebookId: string, Name: string, WorkGroup: string, CreationTime: string, Type: string, LastModifiedTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2196,7 +2215,7 @@ export def "list-notebook-sessions" [
   notebook_id: string # The ID of the notebook to list sessions for.
   --max-results: int # The maximum number of notebook sessions to return.
   --next-token: string # A token generated by the Athena service that specifies where to continue pagination if a previous request was truncated. To obtain the next set of pages, pass in the NextToken from the response object of the previous page call.
-]: any -> record<NotebookSessionsList: table<SessionId: string, CreationTime: string>, NextToken: string> {
+]: any -> oneof<record<NotebookSessionsList: table<SessionId: string, CreationTime: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2249,7 +2268,7 @@ export def "list-prepared-statements" [
   work_group: string # The workgroup to list the prepared statements for.
   --next-token-body: string # A token generated by the Athena service that specifies where to continue pagination if a previous request was truncated. To obtain the next set of pages, pass in the NextToken from the response object of the previous page call. (body field)
   --max-results-body: int # The maximum number of results to return in this request. (body field)
-]: any -> record<PreparedStatements: table<StatementName: string, LastModifiedTime: string>, NextToken: string> {
+]: any -> oneof<record<PreparedStatements: table<StatementName: string, LastModifiedTime: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2303,7 +2322,7 @@ export def "list-query-executions" [
   --next-token-body: string # A token generated by the Athena service that specifies where to continue pagination if a previous request was truncated. To obtain the next set of pages, pass in the NextToken from the response object of the previous page call. (body field)
   --max-results-body: int # The maximum number of query executions to return in this request. (body field)
   --work-group: string # The name of the workgroup from which queries are being returned. If a workgroup is not specified, a list of available query execution IDs for the queries in the primary workgroup is returned.
-]: any -> record<QueryExecutionIds: list<string>, NextToken: string> {
+]: any -> oneof<record<QueryExecutionIds: list<string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2358,7 +2377,7 @@ export def "list-sessions" [
   --state-filter: string@state-filter-completer-1 # A filter for a specific session state. A description of each state follows. CREATING - The session is being started, including acquiring resources. CREATED - The session has been started. IDLE - The session is able to accept a calculation. BUSY - The session is processing another task and is unable to accept a calculation. TERMINATING - The session is in the process of shutting down. TERMINATED - The session and its resources are no longer running. DEGRADED - The session has no healthy coordinators. FAILED - Due to a failure, the session and its resources are no longer running.
   --max-results-body: int # The maximum number of sessions to return. (body field)
   --next-token-body: string # A token generated by the Athena service that specifies where to continue pagination if a previous request was truncated. To obtain the next set of pages, pass in the NextToken from the response object of the previous page call. (body field)
-]: any -> record<NextToken: string, Sessions: table<SessionId: string, Description: string, EngineVersion: record, NotebookVersion: string, Status: record>> {
+]: any -> oneof<record<NextToken: string, Sessions: table<SessionId: string, Description: string, EngineVersion: record, NotebookVersion: string, Status: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2414,7 +2433,7 @@ export def "list-table-metadata" [
   --expression: string # A regex filter that pattern-matches table names. If no expression is supplied, metadata for all tables are listed.
   --next-token-body: string # A token generated by the Athena service that specifies where to continue pagination if a previous request was truncated. To obtain the next set of pages, pass in the NextToken from the response object of the previous page call. (body field)
   --max-results-body: int # Specifies the maximum number of results to return. (body field)
-]: any -> record<TableMetadataList: table<Name: string, CreateTime: string, LastAccessTime: string, TableType: string, Columns: list, PartitionKeys: list, Parameters: record>, NextToken: string> {
+]: any -> oneof<record<TableMetadataList: table<Name: string, CreateTime: string, LastAccessTime: string, TableType: string, Columns: list, PartitionKeys: list, Parameters: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2468,7 +2487,7 @@ export def "list-tags-for-resource" [
   resource_arn: string # Lists the tags for the resource with the specified ARN.
   --next-token-body: string # The token for the next set of results, or null if there are no additional results for this request, where the request lists the tags for the resource with the specified ARN. (body field)
   --max-results-body: int # The maximum number of results to be returned per request that lists the tags for the resource. (body field)
-]: any -> record<Tags: table<Key: string, Value: string>, NextToken: string> {
+]: any -> oneof<record<Tags: table<Key: string, Value: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2521,7 +2540,7 @@ export def "list-work-groups" [
   --x-amz-target: string@x-amz-target-completer-45 # required
   --next-token-body: string # A token generated by the Athena service that specifies where to continue pagination if a previous request was truncated. To obtain the next set of pages, pass in the NextToken from the response object of the previous page call. (body field)
   --max-results-body: int # The maximum number of workgroups to return in this request. (body field)
-]: any -> record<WorkGroups: table<Name: string, State: string, Description: string, CreationTime: string, EngineVersion: record>, NextToken: string> {
+]: any -> oneof<record<WorkGroups: table<Name: string, State: string, Description: string, CreationTime: string, EngineVersion: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2552,7 +2571,6 @@ export def "list-work-groups" [
 #
 # POST /
 # operationId: StartCalculationExecution
-# --CalculationConfiguration shape: {CodeBlock?: string}
 export def "start-calculation-execution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2576,7 +2594,7 @@ export def "start-calculation-execution" [
   --calculation-configuration: record # Contains configuration information for the calculation. — shape: {CodeBlock?: string}
   --code-block: string # A string that contains the code of the calculation.
   --client-request-token: string # A unique case-sensitive string used to ensure the request to create the calculation is idempotent (executes only once). If another StartCalculationExecutionRequest is received, the same response is returned and another calculation is not created. If a parameter has changed, an error is returned. This token is listed as not required because Amazon Web Services SDKs (for example the Amazon Web Services SDK for Java) auto-generate the token for users. If you are not using the Amazon Web Services SDK or the Amazon Web Services CLI, you must provide this token or the action will fail.
-]: any -> record<CalculationExecutionId: string, State: string> {
+]: any -> oneof<record<CalculationExecutionId: string, State: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2606,9 +2624,6 @@ export def "start-calculation-execution" [
 #
 # POST /
 # operationId: StartQueryExecution
-# --QueryExecutionContext shape: {Database?: string, Catalog?: string}
-# --ResultConfiguration shape: {OutputLocation?: string, EncryptionConfiguration?: record, ExpectedBucketOwner?: string, AclConfiguration?: record}
-# --ResultReuseConfiguration shape: {ResultReuseByAgeConfiguration?: record}
 export def "start-query-execution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2634,7 +2649,7 @@ export def "start-query-execution" [
   --work-group: string # The name of the workgroup in which the query is being started.
   --execution-parameters: list<string> # A list of values for the parameters in a query. The values are applied sequentially to the parameters in the query in the order in which the parameters occur.
   --result-reuse-configuration: record # Specifies the query result reuse behavior for the query. — shape: {ResultReuseByAgeConfiguration?: record}
-]: any -> record<QueryExecutionId: string> {
+]: any -> oneof<record<QueryExecutionId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2664,7 +2679,6 @@ export def "start-query-execution" [
 #
 # POST /
 # operationId: StartSession
-# --EngineConfiguration shape: {CoordinatorDpuSize?: int, MaxConcurrentDpus: int, DefaultExecutorDpuSize?: int, AdditionalConfigs?: record}
 export def "start-session" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2689,7 +2703,7 @@ export def "start-session" [
   --notebook-version: string # The notebook version. This value is supplied automatically for notebook sessions in the Athena console and is not required for programmatic session access. The only valid notebook version is Athena notebook version 1. If you specify a value for NotebookVersion, you must also specify a value for NotebookId. See EngineConfiguration$AdditionalConfigs.
   --session-idle-timeout-in-minutes: int # The idle timeout in minutes for the session.
   --client-request-token: string # A unique case-sensitive string used to ensure the request to create the session is idempotent (executes only once). If another StartSessionRequest is received, the same response is returned and another session is not created. If a parameter has changed, an error is returned. This token is listed as not required because Amazon Web Services SDKs (for example the Amazon Web Services SDK for Java) auto-generate the token for users. If you are not using the Amazon Web Services SDK or the Amazon Web Services CLI, you must provide this token or the action will fail.
-]: any -> record<SessionId: string, State: string> {
+]: any -> oneof<record<SessionId: string, State: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2738,7 +2752,7 @@ export def "stop-calculation-execution" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-49 # required
   calculation_execution_id: string # The calculation execution UUID.
-]: any -> record<State: string> {
+]: any -> oneof<record<State: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2787,7 +2801,7 @@ export def "stop-query-execution" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-50 # required
   query_execution_id: string # The unique ID of the query execution to stop.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2817,7 +2831,6 @@ export def "stop-query-execution" [
 #
 # POST /
 # operationId: TagResource
-# --Tags item shape: {Key?: string, Value?: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2838,7 +2851,7 @@ export def "tag-resource" [
   --x-amz-target: string@x-amz-target-completer-51 # required
   resource_arn: string # Specifies the ARN of the Athena resource (workgroup or data catalog) to which tags are to be added.
   tags: list # A collection of one or more tags, separated by commas, to be added to an Athena workgroup or data catalog resource. — item shape: {Key?: string, Value?: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2887,7 +2900,7 @@ export def "terminate-session" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-52 # required
   session_id: string # The session ID.
-]: any -> record<State: string> {
+]: any -> oneof<record<State: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2937,7 +2950,7 @@ export def "untag-resource" [
   --x-amz-target: string@x-amz-target-completer-53 # required
   resource_arn: string # Specifies the ARN of the resource from which tags are to be removed.
   tag_keys: list<string> # A comma-separated list of one or more tag keys whose tags are to be removed from the specified resource.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2989,7 +3002,7 @@ export def "update-data-catalog" [
   type: string@type-completer # Specifies the type of data catalog to update. Specify LAMBDA for a federated catalog, HIVE for an external hive metastore, or GLUE for an Glue Data Catalog.
   --description: string # New or modified text that describes the data catalog.
   --parameters: record # Specifies the Lambda function or functions to use for updating the data catalog. This is a mapping whose values depend on the catalog type. For the HIVE data catalog type, use the following syntax. The metadata-function parameter is required. The sdk-version parameter is optional and defaults to the currently supported version. metadata-function=lambda_arn, sdk-version=version_number For the LAMBDA data catalog type, use one of the following sets of required parameters, but not both. If you have one Lambda function that processes metadata and another for reading the actual data, use the following syntax. Both parameters are required. metadata-function=lambda_arn, record-function=lambda_arn If you have a composite Lambda function that processes both metadata and data, use the following syntax to specify your Lambda function. function=lambda_arn
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3041,7 +3054,7 @@ export def "update-named-query" [
   name: string # The name of the query.
   --description: string # The query description.
   query_string: string # The contents of the query with all query statements.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3094,7 +3107,7 @@ export def "update-notebook" [
   type: string@type-completer-1 # The notebook content type. Currently, the only valid type is IPYNB.
   --session-id: string # The active notebook session ID. Required if the notebook has an active session.
   --client-request-token: string # A unique case-sensitive string used to ensure the request to create the notebook is idempotent (executes only once). This token is listed as not required because Amazon Web Services SDKs (for example the Amazon Web Services SDK for Java) auto-generate the token for you. If you are not using the Amazon Web Services SDK or the Amazon Web Services CLI, you must provide this token or the action will fail.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3145,7 +3158,7 @@ export def "update-notebook-metadata" [
   notebook_id: string # The ID of the notebook to update the metadata for.
   --client-request-token: string # A unique case-sensitive string used to ensure the request to create the notebook is idempotent (executes only once). This token is listed as not required because Amazon Web Services SDKs (for example the Amazon Web Services SDK for Java) auto-generate the token for you. If you are not using the Amazon Web Services SDK or the Amazon Web Services CLI, you must provide this token or the action will fail.
   name: string # The name to update the notebook to.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3197,7 +3210,7 @@ export def "update-prepared-statement" [
   work_group: string # The workgroup for the prepared statement.
   query_statement: string # The query string for the prepared statement.
   --description: string # The description of the prepared statement.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3227,7 +3240,6 @@ export def "update-prepared-statement" [
 #
 # POST /
 # operationId: UpdateWorkGroup
-# --ConfigurationUpdates shape: {EnforceWorkGroupConfiguration?: bool, ResultConfigurationUpdates?: record, PublishCloudWatchMetricsEnabled?: bool, BytesScannedCutoffPerQuery?: int, RemoveBytesScannedCutoffPerQuery?: bool, RequesterPaysEnabled?: bool, EngineVersion?: record, RemoveCustomerContentEncryptionConfiguration?: bool, AdditionalConfiguration?: string, ExecutionRole?: string, CustomerContentEncryptionConfiguration?: record, EnableMinimumEncryptionConfiguration?: bool}
 export def "update-work-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3250,7 +3262,7 @@ export def "update-work-group" [
   --description: string # The workgroup description.
   --configuration-updates: record # The configuration information that will be updated for this workgroup, which includes the location in Amazon S3 where query and calculation results are stored, the encryption option, if any, used for query results, whether the Amazon CloudWatch Metrics are enabled for the workgroup, whether the workgroup settings override the client-side settings, and the data usage limit for the amount of bytes scanned per query, if it is specified. — shape: {EnforceWorkGroupConfiguration?: bool, ResultConfigurationUpdates?: record, PublishCloudWatchMetricsEnabled?: bool, BytesScannedCutoffPerQuery?: int, RemoveBytesScannedCutoffPerQuery?: bool, RequesterPaysEnabled?: bool, EngineVersion?: record, RemoveCustomerContentEncryptionConfiguration?: bool, AdditionalConfiguration?: string, ExecutionRole?: string, CustomerContentEncryptionConfiguration?: record, EnableMinimumEncryptionConfiguration?: bool}
   --state: string@state-completer # The workgroup state that will be updated for the given workgroup.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

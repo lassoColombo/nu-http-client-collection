@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -124,9 +148,9 @@ def search-mode-completer [] { ["FEATURED_JOB_SEARCH" "JOB_SEARCH" "SEARCH_MODE_
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "jobs-projects-jobs-delete" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["jobs-projects-jobs-delete" "jobs-projects-operations-get" "jobs-projects-jobs-patch" "jobs-projects-complete" "jobs-projects-client-events-create" "jobs-projects-companies-list" "jobs-projects-companies-create" "jobs-projects-jobs-list" "jobs-projects-jobs-create" "jobs-projects-jobs-batch-delete" "jobs-projects-jobs-search" "jobs-projects-jobs-search-for-alert" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -170,7 +194,7 @@ export def "jobs-projects-jobs-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -218,7 +242,7 @@ export def "jobs-projects-operations-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: nothing -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -244,7 +268,6 @@ export def "jobs-projects-operations-get" [
 #
 # PATCH /v3p1beta1/{name}
 # operationId: jobs.projects.jobs.patch
-# --job shape: {addresses?: list<string>, applicationInfo?: record, companyDisplayName?: string, companyName?: string, compensationInfo?: record, customAttributes?: record, degreeTypes?: list<string>, department?: string, derivedInfo?: record, description?: string, employmentTypes?: list<string>, incentives?: string, jobBenefits?: list<string>, jobEndTime?: string, jobLevel?: "JOB_LEVEL_UNSPECIFIED"|"ENTRY_LEVEL"|"EXPERIENCED"|"MANAGER"|"DIRECTOR"|"EXECUTIVE", jobStartTime?: string, languageCode?: string, ... (13 more fields)}
 export def "jobs-projects-jobs-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -269,7 +292,7 @@ export def "jobs-projects-jobs-patch" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --job: record # A Job resource represents a job posting (also referred to as a "job listing" or "job requisition"). A job belongs to a Company, which is the hiring entity responsible for the job. — shape: {addresses?: list<string>, applicationInfo?: record, companyDisplayName?: string, companyName?: string, compensationInfo?: record, customAttributes?: record, degreeTypes?: list<string>, department?: string, derivedInfo?: record, description?: string, employmentTypes?: list<string>, incentives?: string, jobBenefits?: list<string>, jobEndTime?: string, jobLevel?: "JOB_LEVEL_UNSPECIFIED"|"ENTRY_LEVEL"|"EXPERIENCED"|"MANAGER"|"DIRECTOR"|"EXECUTIVE", jobStartTime?: string, languageCode?: string, ... (13 more fields)}
   --update-mask: string # Optional but strongly recommended to be provided for the best service experience. If update_mask is provided, only the specified fields in job are updated. Otherwise all the fields are updated. A field mask to restrict the fields that are updated. Only top level fields of Job are supported. (format: google-fieldmask)
-]: any -> record<addresses: list<string>, applicationInfo: record<emails: list<string>, instruction: string, uris: list<string>>, companyDisplayName: string, companyName: string, compensationInfo: record<annualizedBaseCompensationRange: record<maxCompensation: record, minCompensation: record>, annualizedTotalCompensationRange: record<maxCompensation: record, minCompensation: record>, entries: list<record>>, customAttributes: record, degreeTypes: list<string>, department: string, derivedInfo: record<jobCategories: list<string>, locations: list<record>>, description: string, employmentTypes: list<string>, incentives: string, jobBenefits: list<string>, jobEndTime: string, jobLevel: string, jobStartTime: string, languageCode: string, name: string, postingCreateTime: string, postingExpireTime: string, postingPublishTime: string, postingRegion: string, postingUpdateTime: string, processingOptions: record<disableStreetAddressResolution: bool, htmlSanitization: string>, promotionValue: int, qualifications: string, requisitionId: string, responsibilities: string, title: string, visibility: string> {
+]: any -> oneof<record<addresses: list<string>, applicationInfo: record<emails: list<string>, instruction: string, uris: list<string>>, companyDisplayName: string, companyName: string, compensationInfo: record<annualizedBaseCompensationRange: record<maxCompensation: record, minCompensation: record>, annualizedTotalCompensationRange: record<maxCompensation: record, minCompensation: record>, entries: list<record>>, customAttributes: record, degreeTypes: list<string>, department: string, derivedInfo: record<jobCategories: list<string>, locations: list<record>>, description: string, employmentTypes: list<string>, incentives: string, jobBenefits: list<string>, jobEndTime: string, jobLevel: string, jobStartTime: string, languageCode: string, name: string, postingCreateTime: string, postingExpireTime: string, postingPublishTime: string, postingRegion: string, postingUpdateTime: string, processingOptions: record<disableStreetAddressResolution: bool, htmlSanitization: string>, promotionValue: int, qualifications: string, requisitionId: string, responsibilities: string, title: string, visibility: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -327,7 +350,7 @@ export def "jobs-projects-complete" [
   --query: string # Required. The query used to generate suggestions. The maximum number of allowed characters is 255.
   --scope: string@scope-completer # Optional. The scope of the completion. The defaults is CompletionScope.PUBLIC.
   --type: string@type-completer # Optional. The completion topic. The default is CompletionType.COMBINED.
-]: nothing -> record<completionResults: table<imageUri: string, suggestion: string, type: string>, metadata: record<requestId: string>> {
+]: nothing -> oneof<record<completionResults: table<imageUri: string, suggestion: string, type: string>, metadata: record<requestId: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -353,7 +376,6 @@ export def "jobs-projects-complete" [
 #
 # POST /v3p1beta1/{parent}/clientEvents
 # operationId: jobs.projects.clientEvents.create
-# --clientEvent shape: {createTime?: string, eventId?: string, extraInfo?: record, jobEvent?: record, parentEventId?: string, requestId?: string}
 export def "jobs-projects-client-events-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -377,7 +399,7 @@ export def "jobs-projects-client-events-create" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --client-event: record # An event issued when an end user interacts with the application that implements Cloud Talent Solution. Providing this information improves the quality of search and recommendation for the API clients, enabling the service to perform optimally. The number of events sent must be consistent with other calls, such as job searches, issued to the service by the client. — shape: {createTime?: string, eventId?: string, extraInfo?: record, jobEvent?: record, parentEventId?: string, requestId?: string}
-]: any -> record<createTime: string, eventId: string, extraInfo: record, jobEvent: record<jobs: list<string>, type: string>, parentEventId: string, requestId: string> {
+]: any -> oneof<record<createTime: string, eventId: string, extraInfo: record, jobEvent: record<jobs: list<string>, type: string>, parentEventId: string, requestId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -431,7 +453,7 @@ export def "jobs-projects-companies-list" [
   --page-size: int # Optional. The maximum number of companies to be returned, at most 100. Default is 100 if a non-positive number is provided.
   --page-token: string # Optional. The starting indicator from which to return results.
   --require-open-jobs: oneof<nothing, bool> # Optional. Set to true if the companies requested must have open jobs. Defaults to false. If true, at most page_size of companies are fetched, among which only those with open jobs are returned.
-]: nothing -> record<companies: table<careerSiteUri: string, derivedInfo: record, displayName: string, eeoText: string, externalId: string, headquartersAddress: string, hiringAgency: bool, imageUri: string, keywordSearchableJobCustomAttributes: list, name: string, size: string, suspended: bool, websiteUri: string>, metadata: record<requestId: string>, nextPageToken: string> {
+]: nothing -> oneof<record<companies: table<careerSiteUri: string, derivedInfo: record, displayName: string, eeoText: string, externalId: string, headquartersAddress: string, hiringAgency: bool, imageUri: string, keywordSearchableJobCustomAttributes: list, name: string, size: string, suspended: bool, websiteUri: string>, metadata: record<requestId: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -457,7 +479,6 @@ export def "jobs-projects-companies-list" [
 #
 # POST /v3p1beta1/{parent}/companies
 # operationId: jobs.projects.companies.create
-# --company shape: {careerSiteUri?: string, derivedInfo?: record, displayName?: string, eeoText?: string, externalId?: string, headquartersAddress?: string, hiringAgency?: bool, imageUri?: string, keywordSearchableJobCustomAttributes?: list<string>, name?: string, size?: "COMPANY_SIZE_UNSPECIFIED"|"MINI"|"SMALL"|"SMEDIUM"|"MEDIUM"|"BIG"|"BIGGER"|"GIANT", suspended?: bool, websiteUri?: string}
 export def "jobs-projects-companies-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -481,7 +502,7 @@ export def "jobs-projects-companies-create" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --company: record # A Company resource represents a company in the service. A company is the entity that owns job postings, that is, the hiring entity responsible for employing applicants for the job position. — shape: {careerSiteUri?: string, derivedInfo?: record, displayName?: string, eeoText?: string, externalId?: string, headquartersAddress?: string, hiringAgency?: bool, imageUri?: string, keywordSearchableJobCustomAttributes?: list<string>, name?: string, size?: "COMPANY_SIZE_UNSPECIFIED"|"MINI"|"SMALL"|"SMEDIUM"|"MEDIUM"|"BIG"|"BIGGER"|"GIANT", suspended?: bool, websiteUri?: string}
-]: any -> record<careerSiteUri: string, derivedInfo: record<headquartersLocation: record<latLng: record, locationType: string, postalAddress: record, radiusInMiles: float>>, displayName: string, eeoText: string, externalId: string, headquartersAddress: string, hiringAgency: bool, imageUri: string, keywordSearchableJobCustomAttributes: list<string>, name: string, size: string, suspended: bool, websiteUri: string> {
+]: any -> oneof<record<careerSiteUri: string, derivedInfo: record<headquartersLocation: record<latLng: record, locationType: string, postalAddress: record, radiusInMiles: float>>, displayName: string, eeoText: string, externalId: string, headquartersAddress: string, hiringAgency: bool, imageUri: string, keywordSearchableJobCustomAttributes: list<string>, name: string, size: string, suspended: bool, websiteUri: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -536,7 +557,7 @@ export def "jobs-projects-jobs-list" [
   --job-view: string@job-view-completer # Optional. The desired job attributes returned for jobs in the search response. Defaults to JobView.JOB_VIEW_FULL if no value is specified.
   --page-size: int # Optional. The maximum number of jobs to be returned per page of results. If job_view is set to JobView.JOB_VIEW_ID_ONLY, the maximum allowed page size is 1000. Otherwise, the maximum allowed page size is 100. Default is 100 if empty or a number < 1 is specified.
   --page-token: string # Optional. The starting point of a query result.
-]: nothing -> record<jobs: table<addresses: list, applicationInfo: record, companyDisplayName: string, companyName: string, compensationInfo: record, customAttributes: record, degreeTypes: list, department: string, derivedInfo: record, description: string, employmentTypes: list, incentives: string, jobBenefits: list, jobEndTime: string, jobLevel: string, jobStartTime: string, languageCode: string, name: string, postingCreateTime: string, postingExpireTime: string, postingPublishTime: string, postingRegion: string, postingUpdateTime: string, processingOptions: record, promotionValue: int, qualifications: string, requisitionId: string, responsibilities: string, title: string, visibility: string>, metadata: record<requestId: string>, nextPageToken: string> {
+]: nothing -> oneof<record<jobs: table<addresses: list, applicationInfo: record, companyDisplayName: string, companyName: string, compensationInfo: record, customAttributes: record, degreeTypes: list, department: string, derivedInfo: record, description: string, employmentTypes: list, incentives: string, jobBenefits: list, jobEndTime: string, jobLevel: string, jobStartTime: string, languageCode: string, name: string, postingCreateTime: string, postingExpireTime: string, postingPublishTime: string, postingRegion: string, postingUpdateTime: string, processingOptions: record, promotionValue: int, qualifications: string, requisitionId: string, responsibilities: string, title: string, visibility: string>, metadata: record<requestId: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -562,7 +583,6 @@ export def "jobs-projects-jobs-list" [
 #
 # POST /v3p1beta1/{parent}/jobs
 # operationId: jobs.projects.jobs.create
-# --job shape: {addresses?: list<string>, applicationInfo?: record, companyDisplayName?: string, companyName?: string, compensationInfo?: record, customAttributes?: record, degreeTypes?: list<string>, department?: string, derivedInfo?: record, description?: string, employmentTypes?: list<string>, incentives?: string, jobBenefits?: list<string>, jobEndTime?: string, jobLevel?: "JOB_LEVEL_UNSPECIFIED"|"ENTRY_LEVEL"|"EXPERIENCED"|"MANAGER"|"DIRECTOR"|"EXECUTIVE", jobStartTime?: string, languageCode?: string, ... (13 more fields)}
 export def "jobs-projects-jobs-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -586,7 +606,7 @@ export def "jobs-projects-jobs-create" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --job: record # A Job resource represents a job posting (also referred to as a "job listing" or "job requisition"). A job belongs to a Company, which is the hiring entity responsible for the job. — shape: {addresses?: list<string>, applicationInfo?: record, companyDisplayName?: string, companyName?: string, compensationInfo?: record, customAttributes?: record, degreeTypes?: list<string>, department?: string, derivedInfo?: record, description?: string, employmentTypes?: list<string>, incentives?: string, jobBenefits?: list<string>, jobEndTime?: string, jobLevel?: "JOB_LEVEL_UNSPECIFIED"|"ENTRY_LEVEL"|"EXPERIENCED"|"MANAGER"|"DIRECTOR"|"EXECUTIVE", jobStartTime?: string, languageCode?: string, ... (13 more fields)}
-]: any -> record<addresses: list<string>, applicationInfo: record<emails: list<string>, instruction: string, uris: list<string>>, companyDisplayName: string, companyName: string, compensationInfo: record<annualizedBaseCompensationRange: record<maxCompensation: record, minCompensation: record>, annualizedTotalCompensationRange: record<maxCompensation: record, minCompensation: record>, entries: list<record>>, customAttributes: record, degreeTypes: list<string>, department: string, derivedInfo: record<jobCategories: list<string>, locations: list<record>>, description: string, employmentTypes: list<string>, incentives: string, jobBenefits: list<string>, jobEndTime: string, jobLevel: string, jobStartTime: string, languageCode: string, name: string, postingCreateTime: string, postingExpireTime: string, postingPublishTime: string, postingRegion: string, postingUpdateTime: string, processingOptions: record<disableStreetAddressResolution: bool, htmlSanitization: string>, promotionValue: int, qualifications: string, requisitionId: string, responsibilities: string, title: string, visibility: string> {
+]: any -> oneof<record<addresses: list<string>, applicationInfo: record<emails: list<string>, instruction: string, uris: list<string>>, companyDisplayName: string, companyName: string, compensationInfo: record<annualizedBaseCompensationRange: record<maxCompensation: record, minCompensation: record>, annualizedTotalCompensationRange: record<maxCompensation: record, minCompensation: record>, entries: list<record>>, customAttributes: record, degreeTypes: list<string>, department: string, derivedInfo: record<jobCategories: list<string>, locations: list<record>>, description: string, employmentTypes: list<string>, incentives: string, jobBenefits: list<string>, jobEndTime: string, jobLevel: string, jobStartTime: string, languageCode: string, name: string, postingCreateTime: string, postingExpireTime: string, postingPublishTime: string, postingRegion: string, postingUpdateTime: string, processingOptions: record<disableStreetAddressResolution: bool, htmlSanitization: string>, promotionValue: int, qualifications: string, requisitionId: string, responsibilities: string, title: string, visibility: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -638,7 +658,7 @@ export def "jobs-projects-jobs-batch-delete" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --filter: string # Required. The filter string specifies the jobs to be deleted. Supported operator: =, AND The fields eligible for filtering are: * `companyName` (Required) * `requisitionId` (Required) Sample Query: companyName = "projects/api-test-project/companies/123" AND requisitionId = "req-1"
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -667,11 +687,6 @@ export def "jobs-projects-jobs-batch-delete" [
 #
 # POST /v3p1beta1/{parent}/jobs:search
 # operationId: jobs.projects.jobs.search
-# --customRankingInfo shape: {importanceLevel?: "IMPORTANCE_LEVEL_UNSPECIFIED"|"NONE"|"LOW"|"MILD"|"MEDIUM"|"HIGH"|"EXTREME", rankingExpression?: string}
-# --histogramFacets shape: {compensationHistogramFacets?: list, customAttributeHistogramFacets?: list, simpleHistogramFacets?: list<string>}
-# --histogramQueries item shape: {histogramQuery?: string}
-# --jobQuery shape: {commuteFilter?: record, companyDisplayNames?: list<string>, companyNames?: list<string>, compensationFilter?: record, customAttributeFilter?: string, disableSpellCheck?: bool, employmentTypes?: list<string>, excludedJobs?: list<string>, jobCategories?: list<string>, languageCodes?: list<string>, locationFilters?: list, publishTimeRange?: record, query?: string, queryLanguageCode?: string}
-# --requestMetadata shape: {deviceInfo?: record, domain?: string, sessionId?: string, userId?: string}
 export def "jobs-projects-jobs-search" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -709,7 +724,7 @@ export def "jobs-projects-jobs-search" [
   --request-metadata: record # Input only. Meta information related to the job searcher or entity conducting the job search. This information is used to improve the performance of the service. — shape: {deviceInfo?: record, domain?: string, sessionId?: string, userId?: string}
   --require-precise-result-size: oneof<nothing, bool> # This field is deprecated.
   --search-mode: string@search-mode-completer # Optional. Mode of a search. Defaults to SearchMode.JOB_SEARCH.
-]: any -> record<broadenedQueryJobsCount: int, estimatedTotalSize: int, histogramQueryResults: table<histogram: record, histogramQuery: string>, histogramResults: record<compensationHistogramResults: list<record>, customAttributeHistogramResults: list<record>, simpleHistogramResults: list<record>>, locationFilters: table<latLng: record, locationType: string, postalAddress: record, radiusInMiles: float>, matchingJobs: table<commuteInfo: record, job: record, jobSummary: string, jobTitleSnippet: string, searchTextSnippet: string>, metadata: record<requestId: string>, nextPageToken: string, spellCorrection: record<corrected: bool, correctedText: string>, totalSize: int> {
+]: any -> oneof<record<broadenedQueryJobsCount: int, estimatedTotalSize: int, histogramQueryResults: table<histogram: record, histogramQuery: string>, histogramResults: record<compensationHistogramResults: list<record>, customAttributeHistogramResults: list<record>, simpleHistogramResults: list<record>>, locationFilters: table<latLng: record, locationType: string, postalAddress: record, radiusInMiles: float>, matchingJobs: table<commuteInfo: record, job: record, jobSummary: string, jobTitleSnippet: string, searchTextSnippet: string>, metadata: record<requestId: string>, nextPageToken: string, spellCorrection: record<corrected: bool, correctedText: string>, totalSize: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -738,11 +753,6 @@ export def "jobs-projects-jobs-search" [
 #
 # POST /v3p1beta1/{parent}/jobs:searchForAlert
 # operationId: jobs.projects.jobs.searchForAlert
-# --customRankingInfo shape: {importanceLevel?: "IMPORTANCE_LEVEL_UNSPECIFIED"|"NONE"|"LOW"|"MILD"|"MEDIUM"|"HIGH"|"EXTREME", rankingExpression?: string}
-# --histogramFacets shape: {compensationHistogramFacets?: list, customAttributeHistogramFacets?: list, simpleHistogramFacets?: list<string>}
-# --histogramQueries item shape: {histogramQuery?: string}
-# --jobQuery shape: {commuteFilter?: record, companyDisplayNames?: list<string>, companyNames?: list<string>, compensationFilter?: record, customAttributeFilter?: string, disableSpellCheck?: bool, employmentTypes?: list<string>, excludedJobs?: list<string>, jobCategories?: list<string>, languageCodes?: list<string>, locationFilters?: list, publishTimeRange?: record, query?: string, queryLanguageCode?: string}
-# --requestMetadata shape: {deviceInfo?: record, domain?: string, sessionId?: string, userId?: string}
 export def "jobs-projects-jobs-search-for-alert" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -780,7 +790,7 @@ export def "jobs-projects-jobs-search-for-alert" [
   --request-metadata: record # Input only. Meta information related to the job searcher or entity conducting the job search. This information is used to improve the performance of the service. — shape: {deviceInfo?: record, domain?: string, sessionId?: string, userId?: string}
   --require-precise-result-size: oneof<nothing, bool> # This field is deprecated.
   --search-mode: string@search-mode-completer # Optional. Mode of a search. Defaults to SearchMode.JOB_SEARCH.
-]: any -> record<broadenedQueryJobsCount: int, estimatedTotalSize: int, histogramQueryResults: table<histogram: record, histogramQuery: string>, histogramResults: record<compensationHistogramResults: list<record>, customAttributeHistogramResults: list<record>, simpleHistogramResults: list<record>>, locationFilters: table<latLng: record, locationType: string, postalAddress: record, radiusInMiles: float>, matchingJobs: table<commuteInfo: record, job: record, jobSummary: string, jobTitleSnippet: string, searchTextSnippet: string>, metadata: record<requestId: string>, nextPageToken: string, spellCorrection: record<corrected: bool, correctedText: string>, totalSize: int> {
+]: any -> oneof<record<broadenedQueryJobsCount: int, estimatedTotalSize: int, histogramQueryResults: table<histogram: record, histogramQuery: string>, histogramResults: record<compensationHistogramResults: list<record>, customAttributeHistogramResults: list<record>, simpleHistogramResults: list<record>>, locationFilters: table<latLng: record, locationType: string, postalAddress: record, radiusInMiles: float>, matchingJobs: table<commuteInfo: record, job: record, jobSummary: string, jobTitleSnippet: string, searchTextSnippet: string>, metadata: record<requestId: string>, nextPageToken: string, spellCorrection: record<corrected: bool, correctedText: string>, totalSize: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -127,9 +151,9 @@ def mode-completer [] { ["ASYNCHRONOUS" "SYNCHRONOUS" "UNSPECIFIED"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cloudsearch-debug-datasources-items-search-by-view-url" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["cloudsearch-debug-datasources-items-search-by-view-url" "cloudsearch-debug-datasources-items-check-access" "cloudsearch-debug-identitysources-items-list-forunmappedidentity" "cloudsearch-debug-identitysources-unmappedids-list" "cloudsearch-indexing-datasources-items-delete" "cloudsearch-indexing-datasources-items-get" "cloudsearch-indexing-datasources-items-list" "cloudsearch-indexing-datasources-items-delete-queue-items" "cloudsearch-indexing-datasources-items-poll" "cloudsearch-indexing-datasources-items-unreserve" "cloudsearch-indexing-datasources-delete-schema" "cloudsearch-indexing-datasources-get-schema" "cloudsearch-indexing-datasources-update-schema" "cloudsearch-indexing-datasources-items-index" "cloudsearch-indexing-datasources-items-push" "cloudsearch-indexing-datasources-items-upload" "cloudsearch-media-upload" "cloudsearch-query-search" "cloudsearch-query-sources-list" "cloudsearch-query-suggest" "cloudsearch-settings-get-customer" "cloudsearch-settings-update-customer" "cloudsearch-settings-datasources-list" "cloudsearch-settings-datasources-create" "cloudsearch-settings-searchapplications-list" "cloudsearch-settings-searchapplications-create" "cloudsearch-settings-searchapplications-delete" "cloudsearch-settings-searchapplications-get" "cloudsearch-settings-searchapplications-patch" "cloudsearch-settings-searchapplications-update" "cloudsearch-settings-searchapplications-reset" "cloudsearch-stats-get-index" "cloudsearch-stats-index-datasources-get" "cloudsearch-stats-get-query" "cloudsearch-stats-query-searchapplications-get" "cloudsearch-stats-get-searchapplication" "cloudsearch-stats-get-session" "cloudsearch-stats-session-searchapplications-get" "cloudsearch-stats-get-user" "cloudsearch-stats-user-searchapplications-get" "cloudsearch-operations-get" "cloudsearch-operations-lro-list" "cloudsearch-initialize-customer" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -151,7 +175,6 @@ export def commands []: nothing -> table {
 #
 # POST /v1/debug/{name}/items:searchByViewUrl
 # operationId: cloudsearch.debug.datasources.items.searchByViewUrl
-# --debugOptions shape: {enableDebugging?: bool}
 export def "cloudsearch-debug-datasources-items-search-by-view-url" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -177,7 +200,7 @@ export def "cloudsearch-debug-datasources-items-search-by-view-url" [
   --debug-options: record # Shared request debug options for all cloudsearch RPC methods. — shape: {enableDebugging?: bool}
   --page-token: string # The next_page_token value returned from a previous request, if any.
   --view-url: string # Specify the full view URL to find the corresponding item. The maximum length is 2048 characters.
-]: any -> record<items: table<acl: record, content: record, itemType: string, metadata: record, name: string, payload: string, queue: string, status: record, structuredData: record, version: string>, nextPageToken: string> {
+]: any -> oneof<record<items: table<acl: record, content: record, itemType: string, metadata: record, name: string, payload: string, queue: string, status: record, structuredData: record, version: string>, nextPageToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -206,7 +229,6 @@ export def "cloudsearch-debug-datasources-items-search-by-view-url" [
 #
 # POST /v1/debug/{name}:checkAccess
 # operationId: cloudsearch.debug.datasources.items.checkAccess
-# --gsuitePrincipal shape: {gsuiteDomain?: bool, gsuiteGroupEmail?: string, gsuiteUserEmail?: string}
 export def "cloudsearch-debug-datasources-items-check-access" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -233,7 +255,7 @@ export def "cloudsearch-debug-datasources-items-check-access" [
   --group-resource-name: string # This principal is a group identified using an external identity. The name field must specify the group resource name with this format: identitysources/{source_id}/groups/{ID}
   --gsuite-principal: record # shape: {gsuiteDomain?: bool, gsuiteGroupEmail?: string, gsuiteUserEmail?: string}
   --user-resource-name: string # This principal is a user identified using an external identity. The name field must specify the user resource name with this format: identitysources/{source_id}/users/{ID}
-]: any -> record<hasAccess: bool> {
+]: any -> oneof<record<hasAccess: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -289,7 +311,7 @@ export def "cloudsearch-debug-identitysources-items-list-forunmappedidentity" [
   --page-size: int # Maximum number of items to fetch in a request. Defaults to 100.
   --page-token: string # The next_page_token value returned from a previous List request, if any.
   --user-resource-name: string
-]: nothing -> record<itemNames: list<string>, nextPageToken: string> {
+]: nothing -> oneof<record<itemNames: list<string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -341,7 +363,7 @@ export def "cloudsearch-debug-identitysources-unmappedids-list" [
   --page-size: int # Maximum number of items to fetch in a request. Defaults to 100.
   --page-token: string # The next_page_token value returned from a previous List request, if any.
   --resolution-status-code: string@resolution-status-code-completer # Limit users selection to this status.
-]: nothing -> record<nextPageToken: string, unmappedIdentities: table<externalIdentity: record, resolutionStatusCode: string>> {
+]: nothing -> oneof<record<nextPageToken: string, unmappedIdentities: table<externalIdentity: record, resolutionStatusCode: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -393,7 +415,7 @@ export def "cloudsearch-indexing-datasources-items-delete" [
   --debug-options-enable-debugging: oneof<nothing, bool> # If you are asked by Google to help with debugging, set this field. Otherwise, ignore this field.
   --mode: string@mode-completer # Required. The RequestMode for this request.
   --version: string # Required. The incremented version of the item to delete from the index. The indexing system stores the version from the datasource as a byte string and compares the Item version in the index to the version of the queued Item using lexical ordering. Cloud Search Indexing won't delete any queued item with a version value that is less than or equal to the version of the currently indexed item. The maximum length for this field is 1024 bytes. For information on how item version affects the deletion process, refer to [Handle revisions after manual deletes](https://developers.google.com/cloud-search/docs/guides/operations).
-]: nothing -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: nothing -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -443,7 +465,7 @@ export def "cloudsearch-indexing-datasources-items-get" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --connector-name: string # The name of connector making this call. Format: datasources/{source_id}/connectors/{ID}
   --debug-options-enable-debugging: oneof<nothing, bool> # If you are asked by Google to help with debugging, set this field. Otherwise, ignore this field.
-]: nothing -> record<acl: record<aclInheritanceType: string, deniedReaders: list<record>, inheritAclFrom: string, owners: list<record>, readers: list<record>>, content: record<contentDataRef: record<name: string>, contentFormat: string, hash: string, inlineContent: string>, itemType: string, metadata: record<containerName: string, contentLanguage: string, contextAttributes: list<record>, createTime: string, hash: string, interactions: list<record>, keywords: list<string>, mimeType: string, objectType: string, searchQualityMetadata: record<quality: float>, sourceRepositoryUrl: string, title: string, updateTime: string>, name: string, payload: string, queue: string, status: record<code: string, processingErrors: list<record>, repositoryErrors: list<record>>, structuredData: record<hash: string, object: record<properties: list>>, version: string> {
+]: nothing -> oneof<record<acl: record<aclInheritanceType: string, deniedReaders: list<record>, inheritAclFrom: string, owners: list<record>, readers: list<record>>, content: record<contentDataRef: record<name: string>, contentFormat: string, hash: string, inlineContent: string>, itemType: string, metadata: record<containerName: string, contentLanguage: string, contextAttributes: list<record>, createTime: string, hash: string, interactions: list<record>, keywords: list<string>, mimeType: string, objectType: string, searchQualityMetadata: record<quality: float>, sourceRepositoryUrl: string, title: string, updateTime: string>, name: string, payload: string, queue: string, status: record<code: string, processingErrors: list<record>, repositoryErrors: list<record>>, structuredData: record<hash: string, object: record<properties: list>>, version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -496,7 +518,7 @@ export def "cloudsearch-indexing-datasources-items-list" [
   --debug-options-enable-debugging: oneof<nothing, bool> # If you are asked by Google to help with debugging, set this field. Otherwise, ignore this field.
   --page-size: int # Maximum number of items to fetch in a request. The max value is 1000 when brief is true. The max value is 10 if brief is false. The default value is 10
   --page-token: string # The next_page_token value returned from a previous List request, if any.
-]: nothing -> record<items: table<acl: record, content: record, itemType: string, metadata: record, name: string, payload: string, queue: string, status: record, structuredData: record, version: string>, nextPageToken: string> {
+]: nothing -> oneof<record<items: table<acl: record, content: record, itemType: string, metadata: record, name: string, payload: string, queue: string, status: record, structuredData: record, version: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -522,7 +544,6 @@ export def "cloudsearch-indexing-datasources-items-list" [
 #
 # POST /v1/indexing/{name}/items:deleteQueueItems
 # operationId: cloudsearch.indexing.datasources.items.deleteQueueItems
-# --debugOptions shape: {enableDebugging?: bool}
 export def "cloudsearch-indexing-datasources-items-delete-queue-items" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -548,7 +569,7 @@ export def "cloudsearch-indexing-datasources-items-delete-queue-items" [
   --connector-name: string # The name of connector making this call. Format: datasources/{source_id}/connectors/{ID}
   --debug-options: record # Shared request debug options for all cloudsearch RPC methods. — shape: {enableDebugging?: bool}
   --queue: string # The name of a queue to delete items from.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -577,7 +598,6 @@ export def "cloudsearch-indexing-datasources-items-delete-queue-items" [
 #
 # POST /v1/indexing/{name}/items:poll
 # operationId: cloudsearch.indexing.datasources.items.poll
-# --debugOptions shape: {enableDebugging?: bool}
 export def "cloudsearch-indexing-datasources-items-poll" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -605,7 +625,7 @@ export def "cloudsearch-indexing-datasources-items-poll" [
   --limit: int # Maximum number of items to return. The maximum value is 100 and the default value is 20. (format: int32)
   --queue: string # Queue name to fetch items from. If unspecified, PollItems will fetch from 'default' queue. The maximum length is 100 characters.
   --status-codes: list<string> # Limit the items polled to the ones with these statuses.
-]: any -> record<items: table<acl: record, content: record, itemType: string, metadata: record, name: string, payload: string, queue: string, status: record, structuredData: record, version: string>> {
+]: any -> oneof<record<items: table<acl: record, content: record, itemType: string, metadata: record, name: string, payload: string, queue: string, status: record, structuredData: record, version: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -634,7 +654,6 @@ export def "cloudsearch-indexing-datasources-items-poll" [
 #
 # POST /v1/indexing/{name}/items:unreserve
 # operationId: cloudsearch.indexing.datasources.items.unreserve
-# --debugOptions shape: {enableDebugging?: bool}
 export def "cloudsearch-indexing-datasources-items-unreserve" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -660,7 +679,7 @@ export def "cloudsearch-indexing-datasources-items-unreserve" [
   --connector-name: string # The name of connector making this call. Format: datasources/{source_id}/connectors/{ID}
   --debug-options: record # Shared request debug options for all cloudsearch RPC methods. — shape: {enableDebugging?: bool}
   --queue: string # The name of a queue to unreserve items from.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -712,7 +731,7 @@ export def "cloudsearch-indexing-datasources-delete-schema" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --debug-options-enable-debugging: oneof<nothing, bool> # If you are asked by Google to help with debugging, set this field. Otherwise, ignore this field.
-]: nothing -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: nothing -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -761,7 +780,7 @@ export def "cloudsearch-indexing-datasources-get-schema" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --debug-options-enable-debugging: oneof<nothing, bool> # If you are asked by Google to help with debugging, set this field. Otherwise, ignore this field.
-]: nothing -> record<objectDefinitions: table<name: string, options: record, propertyDefinitions: list>, operationIds: list<string>> {
+]: nothing -> oneof<record<objectDefinitions: table<name: string, options: record, propertyDefinitions: list>, operationIds: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -787,8 +806,6 @@ export def "cloudsearch-indexing-datasources-get-schema" [
 #
 # PUT /v1/indexing/{name}/schema
 # operationId: cloudsearch.indexing.datasources.updateSchema
-# --debugOptions shape: {enableDebugging?: bool}
-# --schema shape: {objectDefinitions?: list, operationIds?: list<string>}
 export def "cloudsearch-indexing-datasources-update-schema" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -814,7 +831,7 @@ export def "cloudsearch-indexing-datasources-update-schema" [
   --debug-options: record # Shared request debug options for all cloudsearch RPC methods. — shape: {enableDebugging?: bool}
   --schema: record # The schema definition for a data source. — shape: {objectDefinitions?: list, operationIds?: list<string>}
   --validate-only: oneof<nothing, bool> # If true, the schema will be checked for validity, but will not be registered with the data source, even if valid.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -843,9 +860,6 @@ export def "cloudsearch-indexing-datasources-update-schema" [
 #
 # POST /v1/indexing/{name}:index
 # operationId: cloudsearch.indexing.datasources.items.index
-# --debugOptions shape: {enableDebugging?: bool}
-# --indexItemOptions shape: {allowUnknownGsuitePrincipals?: bool}
-# --item shape: {acl?: record, content?: record, itemType?: "UNSPECIFIED"|"CONTENT_ITEM"|"CONTAINER_ITEM"|"VIRTUAL_CONTAINER_ITEM", metadata?: record, name?: string, payload?: string, queue?: string, status?: record, structuredData?: record, version?: string}
 export def "cloudsearch-indexing-datasources-items-index" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -873,7 +887,7 @@ export def "cloudsearch-indexing-datasources-items-index" [
   --index-item-options: record # shape: {allowUnknownGsuitePrincipals?: bool}
   --item: record # Represents a single object that is an item in the search index, such as a file, folder, or a database record. — shape: {acl?: record, content?: record, itemType?: "UNSPECIFIED"|"CONTENT_ITEM"|"CONTAINER_ITEM"|"VIRTUAL_CONTAINER_ITEM", metadata?: record, name?: string, payload?: string, queue?: string, status?: record, structuredData?: record, version?: string}
   --mode: string@mode-completer # Required. The RequestMode for this request.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -902,8 +916,6 @@ export def "cloudsearch-indexing-datasources-items-index" [
 #
 # POST /v1/indexing/{name}:push
 # operationId: cloudsearch.indexing.datasources.items.push
-# --debugOptions shape: {enableDebugging?: bool}
-# --item shape: {contentHash?: string, metadataHash?: string, payload?: string, queue?: string, repositoryError?: record, structuredDataHash?: string, type?: "UNSPECIFIED"|"MODIFIED"|"NOT_MODIFIED"|"REPOSITORY_ERROR"|"REQUEUE"}
 export def "cloudsearch-indexing-datasources-items-push" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -929,7 +941,7 @@ export def "cloudsearch-indexing-datasources-items-push" [
   --connector-name: string # The name of connector making this call. Format: datasources/{source_id}/connectors/{ID}
   --debug-options: record # Shared request debug options for all cloudsearch RPC methods. — shape: {enableDebugging?: bool}
   --item: record # Represents an item to be pushed to the indexing queue. — shape: {contentHash?: string, metadataHash?: string, payload?: string, queue?: string, repositoryError?: record, structuredDataHash?: string, type?: "UNSPECIFIED"|"MODIFIED"|"NOT_MODIFIED"|"REPOSITORY_ERROR"|"REQUEUE"}
-]: any -> record<acl: record<aclInheritanceType: string, deniedReaders: list<record>, inheritAclFrom: string, owners: list<record>, readers: list<record>>, content: record<contentDataRef: record<name: string>, contentFormat: string, hash: string, inlineContent: string>, itemType: string, metadata: record<containerName: string, contentLanguage: string, contextAttributes: list<record>, createTime: string, hash: string, interactions: list<record>, keywords: list<string>, mimeType: string, objectType: string, searchQualityMetadata: record<quality: float>, sourceRepositoryUrl: string, title: string, updateTime: string>, name: string, payload: string, queue: string, status: record<code: string, processingErrors: list<record>, repositoryErrors: list<record>>, structuredData: record<hash: string, object: record<properties: list>>, version: string> {
+]: any -> oneof<record<acl: record<aclInheritanceType: string, deniedReaders: list<record>, inheritAclFrom: string, owners: list<record>, readers: list<record>>, content: record<contentDataRef: record<name: string>, contentFormat: string, hash: string, inlineContent: string>, itemType: string, metadata: record<containerName: string, contentLanguage: string, contextAttributes: list<record>, createTime: string, hash: string, interactions: list<record>, keywords: list<string>, mimeType: string, objectType: string, searchQualityMetadata: record<quality: float>, sourceRepositoryUrl: string, title: string, updateTime: string>, name: string, payload: string, queue: string, status: record<code: string, processingErrors: list<record>, repositoryErrors: list<record>>, structuredData: record<hash: string, object: record<properties: list>>, version: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -958,7 +970,6 @@ export def "cloudsearch-indexing-datasources-items-push" [
 #
 # POST /v1/indexing/{name}:upload
 # operationId: cloudsearch.indexing.datasources.items.upload
-# --debugOptions shape: {enableDebugging?: bool}
 export def "cloudsearch-indexing-datasources-items-upload" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -983,7 +994,7 @@ export def "cloudsearch-indexing-datasources-items-upload" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --connector-name: string # The name of connector making this call. Format: datasources/{source_id}/connectors/{ID}
   --debug-options: record # Shared request debug options for all cloudsearch RPC methods. — shape: {enableDebugging?: bool}
-]: any -> record<name: string> {
+]: any -> oneof<record<name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1035,7 +1046,7 @@ export def "cloudsearch-media-upload" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: any
-]: any -> record<resourceName: string> {
+]: any -> oneof<record<resourceName: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1064,12 +1075,6 @@ export def "cloudsearch-media-upload" [
 #
 # POST /v1/query/search
 # operationId: cloudsearch.query.search
-# --contextAttributes item shape: {name?: string, values?: list<string>}
-# --dataSourceRestrictions item shape: {filterOptions?: list, source?: record}
-# --facetOptions item shape: {integerFacetingOptions?: record, numFacetBuckets?: int, objectType?: string, operatorName?: string, sourceName?: string}
-# --queryInterpretationOptions shape: {disableNlInterpretation?: bool, disableSupplementalResults?: bool, enableVerbatimMode?: bool}
-# --requestOptions shape: {debugOptions?: record, languageCode?: string, searchApplicationId?: string, timeZone?: string}
-# --sortOptions shape: {operatorName?: string, sortOrder?: "ASCENDING"|"DESCENDING"}
 export def "cloudsearch-query-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1100,7 +1105,7 @@ export def "cloudsearch-query-search" [
   --request-options: record # Shared request options for all RPC methods. — shape: {debugOptions?: record, languageCode?: string, searchApplicationId?: string, timeZone?: string}
   --sort-options: record # shape: {operatorName?: string, sortOrder?: "ASCENDING"|"DESCENDING"}
   --start: int # Starting index of the results. (format: int32)
-]: any -> record<debugInfo: record<formattedDebugInfo: string>, errorInfo: record<errorMessages: list<record>>, facetResults: table<buckets: list, objectType: string, operatorName: string, sourceName: string>, hasMoreResults: bool, queryInterpretation: record<interpretationType: string, interpretedQuery: string, reason: string>, resultCountEstimate: string, resultCountExact: string, resultCounts: record<sourceResultCounts: list<record>>, results: table<clusteredResults: list, debugInfo: record, metadata: record, snippet: record, title: string, url: string>, spellResults: table<suggestedQuery: string>, structuredResults: table<person: record>> {
+]: any -> oneof<record<debugInfo: record<formattedDebugInfo: string>, errorInfo: record<errorMessages: list<record>>, facetResults: table<buckets: list, objectType: string, operatorName: string, sourceName: string>, hasMoreResults: bool, queryInterpretation: record<interpretationType: string, interpretedQuery: string, reason: string>, resultCountEstimate: string, resultCountExact: string, resultCounts: record<sourceResultCounts: list<record>>, results: table<clusteredResults: list, debugInfo: record, metadata: record, snippet: record, title: string, url: string>, spellResults: table<suggestedQuery: string>, structuredResults: table<person: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1154,7 +1159,7 @@ export def "cloudsearch-query-sources-list" [
   --request-options-language-code: string # The BCP-47 language code, such as "en-US" or "sr-Latn". For more information, see http://www.unicode.org/reports/tr35/#Unicode_locale_identifier. For translations. Set this field using the language set in browser or for the page. In the event that the user's language preference is known, set this field to the known user language. When specified, the documents in search results are biased towards the specified language. From Suggest API perspective, for 3p suggest this is used as a hint while making predictions to add language boosting.
   --request-options-search-application-id: string # The ID generated when you create a search application using the [admin console](https://support.google.com/a/answer/9043922).
   --request-options-time-zone: string # Current user's time zone id, such as "America/Los_Angeles" or "Australia/Sydney". These IDs are defined by [Unicode Common Locale Data Repository (CLDR)](http://cldr.unicode.org/) project, and currently available in the file [timezone.xml](http://unicode.org/repos/cldr/trunk/common/bcp47/timezone.xml). This field is used to correctly interpret date and time queries. If this field is not specified, the default time zone (UTC) is used.
-]: nothing -> record<nextPageToken: string, sources: table<displayName: string, operators: list, shortName: string, source: record>> {
+]: nothing -> oneof<record<nextPageToken: string, sources: table<displayName: string, operators: list, shortName: string, source: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "requestOptions.debugOptions.enableDebugging" $request_options_debug_options_enable_debugging "scalar") (serialize-qp "requestOptions.languageCode" $request_options_language_code "scalar") (serialize-qp "requestOptions.searchApplicationId" $request_options_search_application_id "scalar") (serialize-qp "requestOptions.timeZone" $request_options_time_zone "scalar")] | flatten | str join "&"
@@ -1179,8 +1184,6 @@ export def "cloudsearch-query-sources-list" [
 #
 # POST /v1/query/suggest
 # operationId: cloudsearch.query.suggest
-# --dataSourceRestrictions item shape: {filterOptions?: list, source?: record}
-# --requestOptions shape: {debugOptions?: record, languageCode?: string, searchApplicationId?: string, timeZone?: string}
 export def "cloudsearch-query-suggest" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1205,7 +1208,7 @@ export def "cloudsearch-query-suggest" [
   --data-source-restrictions: list # The sources to use for suggestions. If not specified, the data sources are taken from the current search application. NOTE: Suggestions are only supported for the following sources: * Third-party data sources * PredefinedSource.PERSON * PredefinedSource.GOOGLE_DRIVE — item shape: {filterOptions?: list, source?: record}
   --query: string # Partial query for which autocomplete suggestions will be shown. For example, if the query is "sea", then the server might return "season", "search", "seagull" and so on.
   --request-options: record # Shared request options for all RPC methods. — shape: {debugOptions?: record, languageCode?: string, searchApplicationId?: string, timeZone?: string}
-]: any -> record<suggestResults: table<peopleSuggestion: record, querySuggestion: record, source: record, suggestedQuery: string>> {
+]: any -> oneof<record<suggestResults: table<peopleSuggestion: record, querySuggestion: record, source: record, suggestedQuery: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1254,7 +1257,7 @@ export def "cloudsearch-settings-get-customer" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<auditLoggingSettings: record<logAdminReadActions: bool, logDataReadActions: bool, logDataWriteActions: bool, project: string>, vpcSettings: record<project: string>> {
+]: nothing -> oneof<record<auditLoggingSettings: record<logAdminReadActions: bool, logDataReadActions: bool, logDataWriteActions: bool, project: string>, vpcSettings: record<project: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -1279,8 +1282,6 @@ export def "cloudsearch-settings-get-customer" [
 #
 # PATCH /v1/settings/customer
 # operationId: cloudsearch.settings.updateCustomer
-# --auditLoggingSettings shape: {logAdminReadActions?: bool, logDataReadActions?: bool, logDataWriteActions?: bool, project?: string}
-# --vpcSettings shape: {project?: string}
 export def "cloudsearch-settings-update-customer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1305,7 +1306,7 @@ export def "cloudsearch-settings-update-customer" [
   --update-mask: string # Update mask to control which fields get updated. If you specify a field in the update_mask but don't specify its value here, that field will be cleared. If the mask is not present or empty, all fields will be updated. Currently supported field paths: vpc_settings and audit_logging_settings
   --audit-logging-settings: record # Represents the settings for Cloud audit logging — shape: {logAdminReadActions?: bool, logDataReadActions?: bool, logDataWriteActions?: bool, project?: string}
   --vpc-settings: record # shape: {project?: string}
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1357,7 +1358,7 @@ export def "cloudsearch-settings-datasources-list" [
   --debug-options-enable-debugging: oneof<nothing, bool> # If you are asked by Google to help with debugging, set this field. Otherwise, ignore this field.
   --page-size: int # Maximum number of datasources to fetch in a request. The max value is 1000. The default value is 1000.
   --page-token: string # Starting index of the results.
-]: nothing -> record<nextPageToken: string, sources: table<disableModifications: bool, disableServing: bool, displayName: string, indexingServiceAccounts: list, itemsVisibility: list, name: string, operationIds: list, returnThumbnailUrls: bool, shortName: string>> {
+]: nothing -> oneof<record<nextPageToken: string, sources: table<disableModifications: bool, disableServing: bool, displayName: string, indexingServiceAccounts: list, itemsVisibility: list, name: string, operationIds: list, returnThumbnailUrls: bool, shortName: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "debugOptions.enableDebugging" $debug_options_enable_debugging "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -1382,7 +1383,6 @@ export def "cloudsearch-settings-datasources-list" [
 #
 # POST /v1/settings/datasources
 # operationId: cloudsearch.settings.datasources.create
-# --itemsVisibility item shape: {gsuiteDomain?: bool, gsuiteGroupEmail?: string, gsuiteUserEmail?: string}
 export def "cloudsearch-settings-datasources-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1413,7 +1413,7 @@ export def "cloudsearch-settings-datasources-create" [
   --operation-ids: list<string> # IDs of the Long Running Operations (LROs) currently running for this schema.
   --return-thumbnail-urls: oneof<nothing, bool> # Can a user request to get thumbnail URI for Items indexed in this data source.
   --short-name: string # A short name or alias for the source. This value will be used to match the 'source' operator. For example, if the short name is ** then queries like *source:* will only return results for this source. The value must be unique across all datasources. The value must only contain alphanumeric characters (a-zA-Z0-9). The value cannot start with 'google' and cannot be one of the following: mail, gmail, docs, drive, groups, sites, calendar, hangouts, gplus, keep, people, teams. Its maximum length is 32 characters.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1465,7 +1465,7 @@ export def "cloudsearch-settings-searchapplications-list" [
   --debug-options-enable-debugging: oneof<nothing, bool> # If you are asked by Google to help with debugging, set this field. Otherwise, ignore this field.
   --page-size: int # The maximum number of items to return.
   --page-token: string # The next_page_token value returned from a previous List request, if any. The default value is 10
-]: nothing -> record<nextPageToken: string, searchApplications: table<dataSourceRestrictions: list, defaultFacetOptions: list, defaultSortOptions: record, displayName: string, enableAuditLog: bool, name: string, operationIds: list, queryInterpretationConfig: record, returnResultThumbnailUrls: bool, scoringConfig: record, sourceConfig: list>> {
+]: nothing -> oneof<record<nextPageToken: string, searchApplications: table<dataSourceRestrictions: list, defaultFacetOptions: list, defaultSortOptions: record, displayName: string, enableAuditLog: bool, name: string, operationIds: list, queryInterpretationConfig: record, returnResultThumbnailUrls: bool, scoringConfig: record, sourceConfig: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "debugOptions.enableDebugging" $debug_options_enable_debugging "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -1490,12 +1490,6 @@ export def "cloudsearch-settings-searchapplications-list" [
 #
 # POST /v1/settings/searchapplications
 # operationId: cloudsearch.settings.searchapplications.create
-# --dataSourceRestrictions item shape: {filterOptions?: list, source?: record}
-# --defaultFacetOptions item shape: {integerFacetingOptions?: record, numFacetBuckets?: int, objectType?: string, operatorName?: string, sourceName?: string}
-# --defaultSortOptions shape: {operatorName?: string, sortOrder?: "ASCENDING"|"DESCENDING"}
-# --queryInterpretationConfig shape: {forceDisableSupplementalResults?: bool, forceVerbatimMode?: bool}
-# --scoringConfig shape: {disableFreshness?: bool, disablePersonalization?: bool}
-# --sourceConfig item shape: {crowdingConfig?: record, scoringConfig?: record, source?: record}
 export def "cloudsearch-settings-searchapplications-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1527,7 +1521,7 @@ export def "cloudsearch-settings-searchapplications-create" [
   --return-result-thumbnail-urls: oneof<nothing, bool> # With each result we should return the URI for its thumbnail (when applicable)
   --scoring-config: record # Scoring configurations for a source while processing a Search or Suggest request. — shape: {disableFreshness?: bool, disablePersonalization?: bool}
   --source-config: list # Configuration for a sources specified in data_source_restrictions. — item shape: {crowdingConfig?: record, scoringConfig?: record, source?: record}
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1578,7 +1572,7 @@ export def "cloudsearch-settings-searchapplications-delete" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --debug-options-enable-debugging: oneof<nothing, bool> # If you are asked by Google to help with debugging, set this field. Otherwise, ignore this field.
-]: nothing -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: nothing -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -1627,7 +1621,7 @@ export def "cloudsearch-settings-searchapplications-get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --debug-options-enable-debugging: oneof<nothing, bool> # If you are asked by Google to help with debugging, set this field. Otherwise, ignore this field.
-]: nothing -> record<dataSourceRestrictions: table<filterOptions: list, source: record>, defaultFacetOptions: table<integerFacetingOptions: record, numFacetBuckets: int, objectType: string, operatorName: string, sourceName: string>, defaultSortOptions: record<operatorName: string, sortOrder: string>, displayName: string, enableAuditLog: bool, name: string, operationIds: list<string>, queryInterpretationConfig: record<forceDisableSupplementalResults: bool, forceVerbatimMode: bool>, returnResultThumbnailUrls: bool, scoringConfig: record<disableFreshness: bool, disablePersonalization: bool>, sourceConfig: table<crowdingConfig: record, scoringConfig: record, source: record>> {
+]: nothing -> oneof<record<dataSourceRestrictions: table<filterOptions: list, source: record>, defaultFacetOptions: table<integerFacetingOptions: record, numFacetBuckets: int, objectType: string, operatorName: string, sourceName: string>, defaultSortOptions: record<operatorName: string, sortOrder: string>, displayName: string, enableAuditLog: bool, name: string, operationIds: list<string>, queryInterpretationConfig: record<forceDisableSupplementalResults: bool, forceVerbatimMode: bool>, returnResultThumbnailUrls: bool, scoringConfig: record<disableFreshness: bool, disablePersonalization: bool>, sourceConfig: table<crowdingConfig: record, scoringConfig: record, source: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -1653,12 +1647,6 @@ export def "cloudsearch-settings-searchapplications-get" [
 #
 # PATCH /v1/settings/{name}
 # operationId: cloudsearch.settings.searchapplications.patch
-# --dataSourceRestrictions item shape: {filterOptions?: list, source?: record}
-# --defaultFacetOptions item shape: {integerFacetingOptions?: record, numFacetBuckets?: int, objectType?: string, operatorName?: string, sourceName?: string}
-# --defaultSortOptions shape: {operatorName?: string, sortOrder?: "ASCENDING"|"DESCENDING"}
-# --queryInterpretationConfig shape: {forceDisableSupplementalResults?: bool, forceVerbatimMode?: bool}
-# --scoringConfig shape: {disableFreshness?: bool, disablePersonalization?: bool}
-# --sourceConfig item shape: {crowdingConfig?: record, scoringConfig?: record, source?: record}
 export def "cloudsearch-settings-searchapplications-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1692,7 +1680,7 @@ export def "cloudsearch-settings-searchapplications-patch" [
   --return-result-thumbnail-urls: oneof<nothing, bool> # With each result we should return the URI for its thumbnail (when applicable)
   --scoring-config: record # Scoring configurations for a source while processing a Search or Suggest request. — shape: {disableFreshness?: bool, disablePersonalization?: bool}
   --source-config: list # Configuration for a sources specified in data_source_restrictions. — item shape: {crowdingConfig?: record, scoringConfig?: record, source?: record}
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1721,12 +1709,6 @@ export def "cloudsearch-settings-searchapplications-patch" [
 #
 # PUT /v1/settings/{name}
 # operationId: cloudsearch.settings.searchapplications.update
-# --dataSourceRestrictions item shape: {filterOptions?: list, source?: record}
-# --defaultFacetOptions item shape: {integerFacetingOptions?: record, numFacetBuckets?: int, objectType?: string, operatorName?: string, sourceName?: string}
-# --defaultSortOptions shape: {operatorName?: string, sortOrder?: "ASCENDING"|"DESCENDING"}
-# --queryInterpretationConfig shape: {forceDisableSupplementalResults?: bool, forceVerbatimMode?: bool}
-# --scoringConfig shape: {disableFreshness?: bool, disablePersonalization?: bool}
-# --sourceConfig item shape: {crowdingConfig?: record, scoringConfig?: record, source?: record}
 export def "cloudsearch-settings-searchapplications-update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1760,7 +1742,7 @@ export def "cloudsearch-settings-searchapplications-update" [
   --return-result-thumbnail-urls: oneof<nothing, bool> # With each result we should return the URI for its thumbnail (when applicable)
   --scoring-config: record # Scoring configurations for a source while processing a Search or Suggest request. — shape: {disableFreshness?: bool, disablePersonalization?: bool}
   --source-config: list # Configuration for a sources specified in data_source_restrictions. — item shape: {crowdingConfig?: record, scoringConfig?: record, source?: record}
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1789,7 +1771,6 @@ export def "cloudsearch-settings-searchapplications-update" [
 #
 # POST /v1/settings/{name}:reset
 # operationId: cloudsearch.settings.searchapplications.reset
-# --debugOptions shape: {enableDebugging?: bool}
 export def "cloudsearch-settings-searchapplications-reset" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1813,7 +1794,7 @@ export def "cloudsearch-settings-searchapplications-reset" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --debug-options: record # Shared request debug options for all cloudsearch RPC methods. — shape: {enableDebugging?: bool}
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1869,7 +1850,7 @@ export def "cloudsearch-stats-get-index" [
   --to-date-day: int # Day of month. Must be from 1 to 31 and valid for the year and month.
   --to-date-month: int # Month of date. Must be from 1 to 12.
   --to-date-year: int # Year of date. Must be from 1 to 9999.
-]: nothing -> record<averageIndexedItemCount: string, stats: table<date: record, itemCountByStatus: list>> {
+]: nothing -> oneof<record<averageIndexedItemCount: string, stats: table<date: record, itemCountByStatus: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "fromDate.day" $from_date_day "scalar") (serialize-qp "fromDate.month" $from_date_month "scalar") (serialize-qp "fromDate.year" $from_date_year "scalar") (serialize-qp "toDate.day" $to_date_day "scalar") (serialize-qp "toDate.month" $to_date_month "scalar") (serialize-qp "toDate.year" $to_date_year "scalar")] | flatten | str join "&"
@@ -1922,7 +1903,7 @@ export def "cloudsearch-stats-index-datasources-get" [
   --to-date-day: int # Day of month. Must be from 1 to 31 and valid for the year and month.
   --to-date-month: int # Month of date. Must be from 1 to 12.
   --to-date-year: int # Year of date. Must be from 1 to 9999.
-]: nothing -> record<averageIndexedItemCount: string, stats: table<date: record, itemCountByStatus: list>> {
+]: nothing -> oneof<record<averageIndexedItemCount: string, stats: table<date: record, itemCountByStatus: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -1975,7 +1956,7 @@ export def "cloudsearch-stats-get-query" [
   --to-date-day: int # Day of month. Must be from 1 to 31 and valid for the year and month.
   --to-date-month: int # Month of date. Must be from 1 to 12.
   --to-date-year: int # Year of date. Must be from 1 to 9999.
-]: nothing -> record<stats: table<date: record, queryCountByStatus: list>, totalQueryCount: string> {
+]: nothing -> oneof<record<stats: table<date: record, queryCountByStatus: list>, totalQueryCount: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "fromDate.day" $from_date_day "scalar") (serialize-qp "fromDate.month" $from_date_month "scalar") (serialize-qp "fromDate.year" $from_date_year "scalar") (serialize-qp "toDate.day" $to_date_day "scalar") (serialize-qp "toDate.month" $to_date_month "scalar") (serialize-qp "toDate.year" $to_date_year "scalar")] | flatten | str join "&"
@@ -2028,7 +2009,7 @@ export def "cloudsearch-stats-query-searchapplications-get" [
   --to-date-day: int # Day of month. Must be from 1 to 31 and valid for the year and month.
   --to-date-month: int # Month of date. Must be from 1 to 12.
   --to-date-year: int # Year of date. Must be from 1 to 9999.
-]: nothing -> record<stats: table<date: record, queryCountByStatus: list>, totalQueryCount: string> {
+]: nothing -> oneof<record<stats: table<date: record, queryCountByStatus: list>, totalQueryCount: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -2081,7 +2062,7 @@ export def "cloudsearch-stats-get-searchapplication" [
   --start-date-day: int # Day of month. Must be from 1 to 31 and valid for the year and month.
   --start-date-month: int # Month of date. Must be from 1 to 12.
   --start-date-year: int # Year of date. Must be from 1 to 9999.
-]: nothing -> record<averageSearchApplicationCount: string, stats: table<count: string, date: record>> {
+]: nothing -> oneof<record<averageSearchApplicationCount: string, stats: table<count: string, date: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "endDate.day" $end_date_day "scalar") (serialize-qp "endDate.month" $end_date_month "scalar") (serialize-qp "endDate.year" $end_date_year "scalar") (serialize-qp "startDate.day" $start_date_day "scalar") (serialize-qp "startDate.month" $start_date_month "scalar") (serialize-qp "startDate.year" $start_date_year "scalar")] | flatten | str join "&"
@@ -2133,7 +2114,7 @@ export def "cloudsearch-stats-get-session" [
   --to-date-day: int # Day of month. Must be from 1 to 31 and valid for the year and month.
   --to-date-month: int # Month of date. Must be from 1 to 12.
   --to-date-year: int # Year of date. Must be from 1 to 9999.
-]: nothing -> record<stats: table<date: record, searchSessionsCount: string>> {
+]: nothing -> oneof<record<stats: table<date: record, searchSessionsCount: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "fromDate.day" $from_date_day "scalar") (serialize-qp "fromDate.month" $from_date_month "scalar") (serialize-qp "fromDate.year" $from_date_year "scalar") (serialize-qp "toDate.day" $to_date_day "scalar") (serialize-qp "toDate.month" $to_date_month "scalar") (serialize-qp "toDate.year" $to_date_year "scalar")] | flatten | str join "&"
@@ -2186,7 +2167,7 @@ export def "cloudsearch-stats-session-searchapplications-get" [
   --to-date-day: int # Day of month. Must be from 1 to 31 and valid for the year and month.
   --to-date-month: int # Month of date. Must be from 1 to 12.
   --to-date-year: int # Year of date. Must be from 1 to 9999.
-]: nothing -> record<stats: table<date: record, searchSessionsCount: string>> {
+]: nothing -> oneof<record<stats: table<date: record, searchSessionsCount: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -2239,7 +2220,7 @@ export def "cloudsearch-stats-get-user" [
   --to-date-day: int # Day of month. Must be from 1 to 31 and valid for the year and month.
   --to-date-month: int # Month of date. Must be from 1 to 12.
   --to-date-year: int # Year of date. Must be from 1 to 9999.
-]: nothing -> record<stats: table<date: record, oneDayActiveUsersCount: string, sevenDaysActiveUsersCount: string, thirtyDaysActiveUsersCount: string>> {
+]: nothing -> oneof<record<stats: table<date: record, oneDayActiveUsersCount: string, sevenDaysActiveUsersCount: string, thirtyDaysActiveUsersCount: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "fromDate.day" $from_date_day "scalar") (serialize-qp "fromDate.month" $from_date_month "scalar") (serialize-qp "fromDate.year" $from_date_year "scalar") (serialize-qp "toDate.day" $to_date_day "scalar") (serialize-qp "toDate.month" $to_date_month "scalar") (serialize-qp "toDate.year" $to_date_year "scalar")] | flatten | str join "&"
@@ -2292,7 +2273,7 @@ export def "cloudsearch-stats-user-searchapplications-get" [
   --to-date-day: int # Day of month. Must be from 1 to 31 and valid for the year and month.
   --to-date-month: int # Month of date. Must be from 1 to 12.
   --to-date-year: int # Year of date. Must be from 1 to 9999.
-]: nothing -> record<stats: table<date: record, oneDayActiveUsersCount: string, sevenDaysActiveUsersCount: string, thirtyDaysActiveUsersCount: string>> {
+]: nothing -> oneof<record<stats: table<date: record, oneDayActiveUsersCount: string, sevenDaysActiveUsersCount: string, thirtyDaysActiveUsersCount: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -2340,7 +2321,7 @@ export def "cloudsearch-operations-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: nothing -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -2391,7 +2372,7 @@ export def "cloudsearch-operations-lro-list" [
   --filter: string # The standard list filter.
   --page-size: int # The standard list page size.
   --page-token: string # The standard list page token.
-]: nothing -> record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>> {
+]: nothing -> oneof<record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -2439,7 +2420,7 @@ export def "cloudsearch-initialize-customer" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

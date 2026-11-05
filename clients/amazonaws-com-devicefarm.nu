@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -184,9 +207,9 @@ def x-amz-target-completer-76 [] { ["DeviceFarm_20150623.UpdateVPCEConfiguration
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-device-pool" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["create-device-pool" "create-instance-profile" "create-network-profile" "create-project" "create-remote-access-session" "create-test-grid-project" "create-test-grid-url" "create-upload" "create-vpce-configuration" "delete-device-pool" "delete-instance-profile" "delete-network-profile" "delete-project" "delete-remote-access-session" "delete-run" "delete-test-grid-project" "delete-upload" "delete-vpce-configuration" "get-account-settings" "get-device" "get-device-instance" "get-device-pool" "get-device-pool-compatibility" "get-instance-profile" "get-job" "get-network-profile" "get-offering-status" "get-project" "get-remote-access-session" "get-run" "get-suite" "get-test" "get-test-grid-project" "get-test-grid-session" "get-upload" "get-vpce-configuration" "install-to-remote-access-session" "list-artifacts" "list-device-instances" "list-device-pools" "list-devices" "list-instance-profiles" "list-jobs" "list-network-profiles" "list-offering-promotions" "list-offering-transactions" "list-offerings" "list-projects" "list-remote-access-sessions" "list-runs" "list-samples" "list-suites" "list-tags-for-resource" "list-test-grid-projects" "list-test-grid-session-actions" "list-test-grid-session-artifacts" "list-test-grid-sessions" "list-tests" "list-unique-problems" "list-uploads" "list-vpce-configurations" "purchase-offering" "renew-offering" "schedule-run" "stop-job" "stop-remote-access-session" "stop-run" "tag-resource" "untag-resource" "update-device-instance" "update-device-pool" "update-instance-profile" "update-network-profile" "update-project" "update-test-grid-project" "update-upload" "update-vpce-configuration" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -208,7 +231,6 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: CreateDevicePool
-# --rules item shape: {attribute?: "ARN"|"PLATFORM"|"FORM_FACTOR"|"MANUFACTURER"|"REMOTE_ACCESS_ENABLED"|"REMOTE_DEBUG_ENABLED"|"APPIUM_VERSION"|"INSTANCE_ARN"|"INSTANCE_LABELS"|"FLEET_TYPE"|"OS_VERSION"|"MODEL"|"AVAILABILITY", operator?: "EQUALS"|"LESS_THAN"|"LESS_THAN_OR_EQUALS"|"GREATER_THAN"|"GREATER_THAN_OR_EQUALS"|"IN"|"NOT_IN"|"CONTAINS", value?: string}
 export def "create-device-pool" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -232,7 +254,7 @@ export def "create-device-pool" [
   --description: string # The device pool's description.
   rules: list # The device pool's rules. — item shape: {attribute?: "ARN"|"PLATFORM"|"FORM_FACTOR"|"MANUFACTURER"|"REMOTE_ACCESS_ENABLED"|"REMOTE_DEBUG_ENABLED"|"APPIUM_VERSION"|"INSTANCE_ARN"|"INSTANCE_LABELS"|"FLEET_TYPE"|"OS_VERSION"|"MODEL"|"AVAILABILITY", operator?: "EQUALS"|"LESS_THAN"|"LESS_THAN_OR_EQUALS"|"GREATER_THAN"|"GREATER_THAN_OR_EQUALS"|"IN"|"NOT_IN"|"CONTAINS", value?: string}
   --max-devices: int # The number of devices that Device Farm can add to your device pool. Device Farm adds devices that are available and meet the criteria that you assign for the rules parameter. Depending on how many devices meet these constraints, your device pool might contain fewer devices than the value for this parameter. By specifying the maximum number of devices, you can control the costs that you incur by running tests.
-]: any -> record<devicePool: record<arn: string, name: string, description: string, type: string, rules: list<record>, maxDevices: int>> {
+]: any -> oneof<record<devicePool: record<arn: string, name: string, description: string, type: string, rules: list<record>, maxDevices: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -285,7 +307,7 @@ export def "create-instance-profile" [
   --package-cleanup: oneof<nothing, bool> # When set to true, Device Farm removes app packages after a test run. The default value is false for private devices.
   --exclude-app-packages-from-cleanup: list<string> # An array of strings that specifies the list of app packages that should not be cleaned up from the device after a test run. The list of packages is considered only if you set packageCleanup to true.
   --reboot-after-use: oneof<nothing, bool> # When set to true, Device Farm reboots the instance after a test run. The default value is true.
-]: any -> record<instanceProfile: record<arn: string, packageCleanup: bool, excludeAppPackagesFromCleanup: list<string>, rebootAfterUse: bool, name: string, description: string>> {
+]: any -> oneof<record<instanceProfile: record<arn: string, packageCleanup: bool, excludeAppPackagesFromCleanup: list<string>, rebootAfterUse: bool, name: string, description: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -345,7 +367,7 @@ export def "create-network-profile" [
   --downlink-jitter-ms: int # Time variation in the delay of received packets in milliseconds as an integer from 0 to 2000.
   --uplink-loss-percent: int # Proportion of transmitted packets that fail to arrive from 0 to 100 percent.
   --downlink-loss-percent: int # Proportion of received packets that fail to arrive from 0 to 100 percent.
-]: any -> record<networkProfile: record<arn: string, name: string, description: string, type: string, uplinkBandwidthBits: int, downlinkBandwidthBits: int, uplinkDelayMs: int, downlinkDelayMs: int, uplinkJitterMs: int, downlinkJitterMs: int, uplinkLossPercent: int, downlinkLossPercent: int>> {
+]: any -> oneof<record<networkProfile: record<arn: string, name: string, description: string, type: string, uplinkBandwidthBits: int, downlinkBandwidthBits: int, uplinkDelayMs: int, downlinkDelayMs: int, uplinkJitterMs: int, downlinkJitterMs: int, uplinkLossPercent: int, downlinkLossPercent: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -375,7 +397,6 @@ export def "create-network-profile" [
 #
 # POST /
 # operationId: CreateProject
-# --vpcConfig shape: {securityGroupIds: list<string>, subnetIds: list<string>, vpcId: string}
 export def "create-project" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -397,7 +418,7 @@ export def "create-project" [
   name: string # The project's name.
   --default-job-timeout-minutes: int # Sets the execution timeout value (in minutes) for a project. All test runs in this project use the specified execution timeout value unless overridden when scheduling a run.
   --vpc-config: record # Contains the VPC configuration data necessary to interface with AWS Device Farm's services. — shape: {securityGroupIds: list<string>, subnetIds: list<string>, vpcId: string}
-]: any -> record<project: record<arn: string, name: string, defaultJobTimeoutMinutes: int, created: string, vpcConfig: record<securityGroupIds: list, subnetIds: list, vpcId: string>>> {
+]: any -> oneof<record<project: record<arn: string, name: string, defaultJobTimeoutMinutes: int, created: string, vpcConfig: record<securityGroupIds: list, subnetIds: list, vpcId: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -427,7 +448,6 @@ export def "create-project" [
 #
 # POST /
 # operationId: CreateRemoteAccessSession
-# --configuration shape: {billingMethod?: "METERED"|"UNMETERED", vpceConfigurationArns?: list<string>}
 export def "create-remote-access-session" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -458,7 +478,7 @@ export def "create-remote-access-session" [
   --configuration: record # Configuration settings for a remote access session, including billing method. — shape: {billingMethod?: "METERED"|"UNMETERED", vpceConfigurationArns?: list<string>}
   --interaction-mode: string@interaction-mode-completer # The interaction mode of the remote access session. Valid values are: INTERACTIVE: You can interact with the iOS device by viewing, touching, and rotating the screen. You cannot run XCUITest framework-based tests in this mode. NO_VIDEO: You are connected to the device, but cannot interact with it or view the screen. This mode has the fastest test execution speed. You can run XCUITest framework-based tests in this mode. VIDEO_ONLY: You can view the screen, but cannot touch or rotate it. You can run XCUITest framework-based tests and watch the screen in this mode.
   --skip-app-resign: oneof<nothing, bool> # When set to true, for private devices, Device Farm does not sign your app again. For public devices, Device Farm always signs your apps again. For more information on how Device Farm modifies your uploads during tests, see Do you modify my app? (http://aws.amazon.com/device-farm/faqs/)
-]: any -> record<remoteAccessSession: record<arn: string, name: string, created: string, status: string, result: string, message: string, started: string, stopped: string, device: record<arn: string, name: string, manufacturer: string, model: string, modelId: string, formFactor: string, platform: string, os: string, cpu: record, resolution: record, heapSize: int, memory: int, image: string, carrier: string, radio: string, remoteAccessEnabled: bool, remoteDebugEnabled: bool, fleetType: string, fleetName: string, instances: list, availability: string>, instanceArn: string, remoteDebugEnabled: bool, remoteRecordEnabled: bool, remoteRecordAppArn: string, hostAddress: string, clientId: string, billingMethod: string, deviceMinutes: record<total: float, metered: float, unmetered: float>, endpoint: string, deviceUdid: string, interactionMode: string, skipAppResign: bool, vpcConfig: record<securityGroupIds: list, subnetIds: list, vpcId: string>>> {
+]: any -> oneof<record<remoteAccessSession: record<arn: string, name: string, created: string, status: string, result: string, message: string, started: string, stopped: string, device: record<arn: string, name: string, manufacturer: string, model: string, modelId: string, formFactor: string, platform: string, os: string, cpu: record, resolution: record, heapSize: int, memory: int, image: string, carrier: string, radio: string, remoteAccessEnabled: bool, remoteDebugEnabled: bool, fleetType: string, fleetName: string, instances: list, availability: string>, instanceArn: string, remoteDebugEnabled: bool, remoteRecordEnabled: bool, remoteRecordAppArn: string, hostAddress: string, clientId: string, billingMethod: string, deviceMinutes: record<total: float, metered: float, unmetered: float>, endpoint: string, deviceUdid: string, interactionMode: string, skipAppResign: bool, vpcConfig: record<securityGroupIds: list, subnetIds: list, vpcId: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -488,7 +508,6 @@ export def "create-remote-access-session" [
 #
 # POST /
 # operationId: CreateTestGridProject
-# --vpcConfig shape: {securityGroupIds: list<string>, subnetIds: list<string>, vpcId: string}
 export def "create-test-grid-project" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -510,7 +529,7 @@ export def "create-test-grid-project" [
   name: string # Human-readable name of the Selenium testing project.
   --description: string # Human-readable description of the project.
   --vpc-config: record # The VPC security groups and subnets that are attached to a project. — shape: {securityGroupIds: list<string>, subnetIds: list<string>, vpcId: string}
-]: any -> record<testGridProject: record<arn: string, name: string, description: string, vpcConfig: record<securityGroupIds: list, subnetIds: list, vpcId: string>, created: string>> {
+]: any -> oneof<record<testGridProject: record<arn: string, name: string, description: string, vpcConfig: record<securityGroupIds: list, subnetIds: list, vpcId: string>, created: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -560,7 +579,7 @@ export def "create-test-grid-url" [
   --x-amz-target: string@x-amz-target-completer-6 # required
   project_arn: string # ARN (from CreateTestGridProject or ListTestGridProjects) to associate with the short-term URL.
   expires_in_seconds: int # Lifetime, in seconds, of the URL.
-]: any -> record<url: string, expires: string> {
+]: any -> oneof<record<url: string, expires: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -612,7 +631,7 @@ export def "create-upload" [
   name: string # The upload's file name. The name should not contain any forward slashes (/). If you are uploading an iOS app, the file name must end with the .ipa extension. If you are uploading an Android app, the file name must end with the .apk extension. For all others, the file name must end with the .zip file extension.
   type: string@type-completer-1 # The upload's upload type. Must be one of the following values: ANDROID_APP IOS_APP WEB_APP EXTERNAL_DATA APPIUM_JAVA_JUNIT_TEST_PACKAGE APPIUM_JAVA_TESTNG_TEST_PACKAGE APPIUM_PYTHON_TEST_PACKAGE APPIUM_NODE_TEST_PACKAGE APPIUM_RUBY_TEST_PACKAGE APPIUM_WEB_JAVA_JUNIT_TEST_PACKAGE APPIUM_WEB_JAVA_TESTNG_TEST_PACKAGE APPIUM_WEB_PYTHON_TEST_PACKAGE APPIUM_WEB_NODE_TEST_PACKAGE APPIUM_WEB_RUBY_TEST_PACKAGE CALABASH_TEST_PACKAGE INSTRUMENTATION_TEST_PACKAGE UIAUTOMATION_TEST_PACKAGE UIAUTOMATOR_TEST_PACKAGE XCTEST_TEST_PACKAGE XCTEST_UI_TEST_PACKAGE APPIUM_JAVA_JUNIT_TEST_SPEC APPIUM_JAVA_TESTNG_TEST_SPEC APPIUM_PYTHON_TEST_SPEC APPIUM_NODE_TEST_SPEC APPIUM_RUBY_TEST_SPEC APPIUM_WEB_JAVA_JUNIT_TEST_SPEC APPIUM_WEB_JAVA_TESTNG_TEST_SPEC APPIUM_WEB_PYTHON_TEST_SPEC APPIUM_WEB_NODE_TEST_SPEC APPIUM_WEB_RUBY_TEST_SPEC INSTRUMENTATION_TEST_SPEC XCTEST_UI_TEST_SPEC If you call CreateUpload with WEB_APP specified, AWS Device Farm throws an ArgumentException error.
   --content-type: string # The upload's content type (for example, application/octet-stream).
-]: any -> record<upload: record<arn: string, name: string, created: string, type: string, status: string, url: string, metadata: string, contentType: string, message: string, category: string>> {
+]: any -> oneof<record<upload: record<arn: string, name: string, created: string, type: string, status: string, url: string, metadata: string, contentType: string, message: string, category: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -664,7 +683,7 @@ export def "create-vpce-configuration" [
   vpce_service_name: string # The name of the VPC endpoint service running in your AWS account that you want Device Farm to test.
   service_dns_name: string # The DNS name of the service running in your VPC that you want Device Farm to test.
   --vpce-configuration-description: string # An optional description that provides details about your VPC endpoint configuration.
-]: any -> record<vpceConfiguration: record<arn: string, vpceConfigurationName: string, vpceServiceName: string, serviceDnsName: string, vpceConfigurationDescription: string>> {
+]: any -> oneof<record<vpceConfiguration: record<arn: string, vpceConfigurationName: string, vpceServiceName: string, serviceDnsName: string, vpceConfigurationDescription: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -713,7 +732,7 @@ export def "delete-device-pool" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-9 # required
   arn: string # Represents the Amazon Resource Name (ARN) of the Device Farm device pool to delete.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -762,7 +781,7 @@ export def "delete-instance-profile" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-10 # required
   arn: string # The Amazon Resource Name (ARN) of the instance profile you are requesting to delete.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -811,7 +830,7 @@ export def "delete-network-profile" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-11 # required
   arn: string # The ARN of the network profile to delete.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -860,7 +879,7 @@ export def "delete-project" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-12 # required
   arn: string # Represents the Amazon Resource Name (ARN) of the Device Farm project to delete.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -909,7 +928,7 @@ export def "delete-remote-access-session" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-13 # required
   arn: string # The Amazon Resource Name (ARN) of the session for which you want to delete remote access.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -958,7 +977,7 @@ export def "delete-run" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-14 # required
   arn: string # The Amazon Resource Name (ARN) for the run to delete.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1007,7 +1026,7 @@ export def "delete-test-grid-project" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-15 # required
   project_arn: string # The ARN of the project to delete, from CreateTestGridProject or ListTestGridProjects.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1056,7 +1075,7 @@ export def "delete-upload" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-16 # required
   arn: string # Represents the Amazon Resource Name (ARN) of the Device Farm upload to delete.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1105,7 +1124,7 @@ export def "delete-vpce-configuration" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-17 # required
   arn: string # The Amazon Resource Name (ARN) of the VPC endpoint configuration you want to delete.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1154,7 +1173,7 @@ export def "get-account-settings" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-18 # required
   --body: record
-]: any -> record<accountSettings: record<awsAccountNumber: string, unmeteredDevices: record, unmeteredRemoteAccessDevices: record, maxJobTimeoutMinutes: int, trialMinutes: record<total: float, remaining: float>, maxSlots: record, defaultJobTimeoutMinutes: int, skipAppResign: bool>> {
+]: any -> oneof<record<accountSettings: record<awsAccountNumber: string, unmeteredDevices: record, unmeteredRemoteAccessDevices: record, maxJobTimeoutMinutes: int, trialMinutes: record<total: float, remaining: float>, maxSlots: record, defaultJobTimeoutMinutes: int, skipAppResign: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1203,7 +1222,7 @@ export def "get-device" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-19 # required
   arn: string # The device type's ARN.
-]: any -> record<device: record<arn: string, name: string, manufacturer: string, model: string, modelId: string, formFactor: string, platform: string, os: string, cpu: record<frequency: string, architecture: string, clock: float>, resolution: record<width: int, height: int>, heapSize: int, memory: int, image: string, carrier: string, radio: string, remoteAccessEnabled: bool, remoteDebugEnabled: bool, fleetType: string, fleetName: string, instances: list<record>, availability: string>> {
+]: any -> oneof<record<device: record<arn: string, name: string, manufacturer: string, model: string, modelId: string, formFactor: string, platform: string, os: string, cpu: record<frequency: string, architecture: string, clock: float>, resolution: record<width: int, height: int>, heapSize: int, memory: int, image: string, carrier: string, radio: string, remoteAccessEnabled: bool, remoteDebugEnabled: bool, fleetType: string, fleetName: string, instances: list<record>, availability: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1252,7 +1271,7 @@ export def "get-device-instance" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-20 # required
   arn: string # The Amazon Resource Name (ARN) of the instance you're requesting information about.
-]: any -> record<deviceInstance: record<arn: string, deviceArn: string, labels: list<string>, status: string, udid: string, instanceProfile: record<arn: string, packageCleanup: bool, excludeAppPackagesFromCleanup: list, rebootAfterUse: bool, name: string, description: string>>> {
+]: any -> oneof<record<deviceInstance: record<arn: string, deviceArn: string, labels: list<string>, status: string, udid: string, instanceProfile: record<arn: string, packageCleanup: bool, excludeAppPackagesFromCleanup: list, rebootAfterUse: bool, name: string, description: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1301,7 +1320,7 @@ export def "get-device-pool" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-21 # required
   arn: string # The device pool's ARN.
-]: any -> record<devicePool: record<arn: string, name: string, description: string, type: string, rules: list<record>, maxDevices: int>> {
+]: any -> oneof<record<devicePool: record<arn: string, name: string, description: string, type: string, rules: list<record>, maxDevices: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1331,8 +1350,6 @@ export def "get-device-pool" [
 #
 # POST /
 # operationId: GetDevicePoolCompatibility
-# --test shape: {type: "BUILTIN_FUZZ"|"BUILTIN_EXPLORER"|"WEB_PERFORMANCE_PROFILE"|"APPIUM_JAVA_JUNIT"|"APPIUM_JAVA_TESTNG"|"APPIUM_PYTHON"|"APPIUM_NODE"|"APPIUM_RUBY"|"APPIUM_WEB_JAVA_JUNIT"|"APPIUM_WEB_JAVA_TESTNG"|"APPIUM_WEB_PYTHON"|"APPIUM_WEB_NODE"|"APPIUM_WEB_RUBY"|"CALABASH"|"INSTRUMENTATION"|"UIAUTOMATION"|"UIAUTOMATOR"|"XCTEST"|"XCTEST_UI"|"REMOTE_ACCESS_RECORD"|"REMOTE_ACCESS_REPLAY", testPackageArn?: string, testSpecArn?: string, filter?: string, parameters?: record}
-# --configuration shape: {extraDataPackageArn?: string, networkProfileArn?: string, locale?: string, location?: record, vpceConfigurationArns?: list<string>, customerArtifactPaths?: record, radios?: record, auxiliaryApps?: list<string>, billingMethod?: "METERED"|"UNMETERED"}
 export def "get-device-pool-compatibility" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1356,7 +1373,7 @@ export def "get-device-pool-compatibility" [
   --test-type: string@test-type-completer # The test type for the specified device pool. Allowed values include the following: BUILTIN_FUZZ. BUILTIN_EXPLORER. For Android, an app explorer that traverses an Android app, interacting with it and capturing screenshots at the same time. APPIUM_JAVA_JUNIT. APPIUM_JAVA_TESTNG. APPIUM_PYTHON. APPIUM_NODE. APPIUM_RUBY. APPIUM_WEB_JAVA_JUNIT. APPIUM_WEB_JAVA_TESTNG. APPIUM_WEB_PYTHON. APPIUM_WEB_NODE. APPIUM_WEB_RUBY. CALABASH. INSTRUMENTATION. UIAUTOMATION. UIAUTOMATOR. XCTEST. XCTEST_UI.
   --test: record # Represents test settings. This data structure is passed in as the test parameter to ScheduleRun. For an example of the JSON request syntax, see ScheduleRun. — shape: {type: "BUILTIN_FUZZ"|"BUILTIN_EXPLORER"|"WEB_PERFORMANCE_PROFILE"|"APPIUM_JAVA_JUNIT"|"APPIUM_JAVA_TESTNG"|"APPIUM_PYTHON"|"APPIUM_NODE"|"APPIUM_RUBY"|"APPIUM_WEB_JAVA_JUNIT"|"APPIUM_WEB_JAVA_TESTNG"|"APPIUM_WEB_PYTHON"|"APPIUM_WEB_NODE"|"APPIUM_WEB_RUBY"|"CALABASH"|"INSTRUMENTATION"|"UIAUTOMATION"|"UIAUTOMATOR"|"XCTEST"|"XCTEST_UI"|"REMOTE_ACCESS_RECORD"|"REMOTE_ACCESS_REPLAY", testPackageArn?: string, testSpecArn?: string, filter?: string, parameters?: record}
   --configuration: record # Represents the settings for a run. Includes things like location, radio states, auxiliary apps, and network profiles. — shape: {extraDataPackageArn?: string, networkProfileArn?: string, locale?: string, location?: record, vpceConfigurationArns?: list<string>, customerArtifactPaths?: record, radios?: record, auxiliaryApps?: list<string>, billingMethod?: "METERED"|"UNMETERED"}
-]: any -> record<compatibleDevices: table<device: record, compatible: bool, incompatibilityMessages: list>, incompatibleDevices: table<device: record, compatible: bool, incompatibilityMessages: list>> {
+]: any -> oneof<record<compatibleDevices: table<device: record, compatible: bool, incompatibilityMessages: list>, incompatibleDevices: table<device: record, compatible: bool, incompatibilityMessages: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1405,7 +1422,7 @@ export def "get-instance-profile" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-23 # required
   arn: string # The Amazon Resource Name (ARN) of an instance profile.
-]: any -> record<instanceProfile: record<arn: string, packageCleanup: bool, excludeAppPackagesFromCleanup: list<string>, rebootAfterUse: bool, name: string, description: string>> {
+]: any -> oneof<record<instanceProfile: record<arn: string, packageCleanup: bool, excludeAppPackagesFromCleanup: list<string>, rebootAfterUse: bool, name: string, description: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1454,7 +1471,7 @@ export def "get-job" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-24 # required
   arn: string # The job's ARN.
-]: any -> record<job: record<arn: string, name: string, type: string, created: string, status: string, result: string, started: string, stopped: string, counters: record<total: int, passed: int, failed: int, warned: int, errored: int, stopped: int, skipped: int>, message: string, device: record<arn: string, name: string, manufacturer: string, model: string, modelId: string, formFactor: string, platform: string, os: string, cpu: record, resolution: record, heapSize: int, memory: int, image: string, carrier: string, radio: string, remoteAccessEnabled: bool, remoteDebugEnabled: bool, fleetType: string, fleetName: string, instances: list, availability: string>, instanceArn: string, deviceMinutes: record<total: float, metered: float, unmetered: float>, videoEndpoint: string, videoCapture: bool>> {
+]: any -> oneof<record<job: record<arn: string, name: string, type: string, created: string, status: string, result: string, started: string, stopped: string, counters: record<total: int, passed: int, failed: int, warned: int, errored: int, stopped: int, skipped: int>, message: string, device: record<arn: string, name: string, manufacturer: string, model: string, modelId: string, formFactor: string, platform: string, os: string, cpu: record, resolution: record, heapSize: int, memory: int, image: string, carrier: string, radio: string, remoteAccessEnabled: bool, remoteDebugEnabled: bool, fleetType: string, fleetName: string, instances: list, availability: string>, instanceArn: string, deviceMinutes: record<total: float, metered: float, unmetered: float>, videoEndpoint: string, videoCapture: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1503,7 +1520,7 @@ export def "get-network-profile" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-25 # required
   arn: string # The ARN of the network profile to return information about.
-]: any -> record<networkProfile: record<arn: string, name: string, description: string, type: string, uplinkBandwidthBits: int, downlinkBandwidthBits: int, uplinkDelayMs: int, downlinkDelayMs: int, uplinkJitterMs: int, downlinkJitterMs: int, uplinkLossPercent: int, downlinkLossPercent: int>> {
+]: any -> oneof<record<networkProfile: record<arn: string, name: string, description: string, type: string, uplinkBandwidthBits: int, downlinkBandwidthBits: int, uplinkDelayMs: int, downlinkDelayMs: int, uplinkJitterMs: int, downlinkJitterMs: int, uplinkLossPercent: int, downlinkLossPercent: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1553,7 +1570,7 @@ export def "get-offering-status" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-26 # required
   --next-token-body: string # An identifier that was returned from the previous call to this operation, which can be used to return the next set of items in the list. (body field)
-]: any -> record<current: record, nextPeriod: record, nextToken: string> {
+]: any -> oneof<record<current: record, nextPeriod: record, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1603,7 +1620,7 @@ export def "get-project" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-27 # required
   arn: string # The project's ARN.
-]: any -> record<project: record<arn: string, name: string, defaultJobTimeoutMinutes: int, created: string, vpcConfig: record<securityGroupIds: list, subnetIds: list, vpcId: string>>> {
+]: any -> oneof<record<project: record<arn: string, name: string, defaultJobTimeoutMinutes: int, created: string, vpcConfig: record<securityGroupIds: list, subnetIds: list, vpcId: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1652,7 +1669,7 @@ export def "get-remote-access-session" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-28 # required
   arn: string # The Amazon Resource Name (ARN) of the remote access session about which you want to get session information.
-]: any -> record<remoteAccessSession: record<arn: string, name: string, created: string, status: string, result: string, message: string, started: string, stopped: string, device: record<arn: string, name: string, manufacturer: string, model: string, modelId: string, formFactor: string, platform: string, os: string, cpu: record, resolution: record, heapSize: int, memory: int, image: string, carrier: string, radio: string, remoteAccessEnabled: bool, remoteDebugEnabled: bool, fleetType: string, fleetName: string, instances: list, availability: string>, instanceArn: string, remoteDebugEnabled: bool, remoteRecordEnabled: bool, remoteRecordAppArn: string, hostAddress: string, clientId: string, billingMethod: string, deviceMinutes: record<total: float, metered: float, unmetered: float>, endpoint: string, deviceUdid: string, interactionMode: string, skipAppResign: bool, vpcConfig: record<securityGroupIds: list, subnetIds: list, vpcId: string>>> {
+]: any -> oneof<record<remoteAccessSession: record<arn: string, name: string, created: string, status: string, result: string, message: string, started: string, stopped: string, device: record<arn: string, name: string, manufacturer: string, model: string, modelId: string, formFactor: string, platform: string, os: string, cpu: record, resolution: record, heapSize: int, memory: int, image: string, carrier: string, radio: string, remoteAccessEnabled: bool, remoteDebugEnabled: bool, fleetType: string, fleetName: string, instances: list, availability: string>, instanceArn: string, remoteDebugEnabled: bool, remoteRecordEnabled: bool, remoteRecordAppArn: string, hostAddress: string, clientId: string, billingMethod: string, deviceMinutes: record<total: float, metered: float, unmetered: float>, endpoint: string, deviceUdid: string, interactionMode: string, skipAppResign: bool, vpcConfig: record<securityGroupIds: list, subnetIds: list, vpcId: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1701,7 +1718,7 @@ export def "get-run" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-29 # required
   arn: string # The run's ARN.
-]: any -> record<run: record<arn: string, name: string, type: string, platform: string, created: string, status: string, result: string, started: string, stopped: string, counters: record<total: int, passed: int, failed: int, warned: int, errored: int, stopped: int, skipped: int>, message: string, totalJobs: int, completedJobs: int, billingMethod: string, deviceMinutes: record<total: float, metered: float, unmetered: float>, networkProfile: record<arn: string, name: string, description: string, type: string, uplinkBandwidthBits: int, downlinkBandwidthBits: int, uplinkDelayMs: int, downlinkDelayMs: int, uplinkJitterMs: int, downlinkJitterMs: int, uplinkLossPercent: int, downlinkLossPercent: int>, parsingResultUrl: string, resultCode: string, seed: int, appUpload: string, eventCount: int, jobTimeoutMinutes: int, devicePoolArn: string, locale: string, radios: record<wifi: bool, bluetooth: bool, nfc: bool, gps: bool>, location: record<latitude: float, longitude: float>, customerArtifactPaths: record<iosPaths: list, androidPaths: list, deviceHostPaths: list>, webUrl: string, skipAppResign: bool, testSpecArn: string, deviceSelectionResult: record<filters: list, matchedDevicesCount: int, maxDevices: int>, vpcConfig: record<securityGroupIds: list, subnetIds: list, vpcId: string>>> {
+]: any -> oneof<record<run: record<arn: string, name: string, type: string, platform: string, created: string, status: string, result: string, started: string, stopped: string, counters: record<total: int, passed: int, failed: int, warned: int, errored: int, stopped: int, skipped: int>, message: string, totalJobs: int, completedJobs: int, billingMethod: string, deviceMinutes: record<total: float, metered: float, unmetered: float>, networkProfile: record<arn: string, name: string, description: string, type: string, uplinkBandwidthBits: int, downlinkBandwidthBits: int, uplinkDelayMs: int, downlinkDelayMs: int, uplinkJitterMs: int, downlinkJitterMs: int, uplinkLossPercent: int, downlinkLossPercent: int>, parsingResultUrl: string, resultCode: string, seed: int, appUpload: string, eventCount: int, jobTimeoutMinutes: int, devicePoolArn: string, locale: string, radios: record<wifi: bool, bluetooth: bool, nfc: bool, gps: bool>, location: record<latitude: float, longitude: float>, customerArtifactPaths: record<iosPaths: list, androidPaths: list, deviceHostPaths: list>, webUrl: string, skipAppResign: bool, testSpecArn: string, deviceSelectionResult: record<filters: list, matchedDevicesCount: int, maxDevices: int>, vpcConfig: record<securityGroupIds: list, subnetIds: list, vpcId: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1750,7 +1767,7 @@ export def "get-suite" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-30 # required
   arn: string # The suite's ARN.
-]: any -> record<suite: record<arn: string, name: string, type: string, created: string, status: string, result: string, started: string, stopped: string, counters: record<total: int, passed: int, failed: int, warned: int, errored: int, stopped: int, skipped: int>, message: string, deviceMinutes: record<total: float, metered: float, unmetered: float>>> {
+]: any -> oneof<record<suite: record<arn: string, name: string, type: string, created: string, status: string, result: string, started: string, stopped: string, counters: record<total: int, passed: int, failed: int, warned: int, errored: int, stopped: int, skipped: int>, message: string, deviceMinutes: record<total: float, metered: float, unmetered: float>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1799,7 +1816,7 @@ export def "get-test" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-31 # required
   arn: string # The test's ARN.
-]: any -> record<test: record<arn: string, name: string, type: string, created: string, status: string, result: string, started: string, stopped: string, counters: record<total: int, passed: int, failed: int, warned: int, errored: int, stopped: int, skipped: int>, message: string, deviceMinutes: record<total: float, metered: float, unmetered: float>>> {
+]: any -> oneof<record<test: record<arn: string, name: string, type: string, created: string, status: string, result: string, started: string, stopped: string, counters: record<total: int, passed: int, failed: int, warned: int, errored: int, stopped: int, skipped: int>, message: string, deviceMinutes: record<total: float, metered: float, unmetered: float>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1848,7 +1865,7 @@ export def "get-test-grid-project" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-32 # required
   project_arn: string # The ARN of the Selenium testing project, from either CreateTestGridProject or ListTestGridProjects.
-]: any -> record<testGridProject: record<arn: string, name: string, description: string, vpcConfig: record<securityGroupIds: list, subnetIds: list, vpcId: string>, created: string>> {
+]: any -> oneof<record<testGridProject: record<arn: string, name: string, description: string, vpcConfig: record<securityGroupIds: list, subnetIds: list, vpcId: string>, created: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1899,7 +1916,7 @@ export def "get-test-grid-session" [
   --project-arn: string # The ARN for the project that this session belongs to. See CreateTestGridProject and ListTestGridProjects.
   --session-id: string # An ID associated with this session.
   --session-arn: string # An ARN that uniquely identifies a TestGridSession.
-]: any -> record<testGridSession: record<arn: string, status: string, created: string, ended: string, billingMinutes: float, seleniumProperties: string>> {
+]: any -> oneof<record<testGridSession: record<arn: string, status: string, created: string, ended: string, billingMinutes: float, seleniumProperties: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1948,7 +1965,7 @@ export def "get-upload" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-34 # required
   arn: string # The upload's ARN.
-]: any -> record<upload: record<arn: string, name: string, created: string, type: string, status: string, url: string, metadata: string, contentType: string, message: string, category: string>> {
+]: any -> oneof<record<upload: record<arn: string, name: string, created: string, type: string, status: string, url: string, metadata: string, contentType: string, message: string, category: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1997,7 +2014,7 @@ export def "get-vpce-configuration" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-35 # required
   arn: string # The Amazon Resource Name (ARN) of the VPC endpoint configuration you want to describe.
-]: any -> record<vpceConfiguration: record<arn: string, vpceConfigurationName: string, vpceServiceName: string, serviceDnsName: string, vpceConfigurationDescription: string>> {
+]: any -> oneof<record<vpceConfiguration: record<arn: string, vpceConfigurationName: string, vpceServiceName: string, serviceDnsName: string, vpceConfigurationDescription: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2047,7 +2064,7 @@ export def "install-to-remote-access-session" [
   --x-amz-target: string@x-amz-target-completer-36 # required
   remote_access_session_arn: string # The Amazon Resource Name (ARN) of the remote access session about which you are requesting information.
   app_arn: string # The ARN of the app about which you are requesting information.
-]: any -> record<appUpload: record<arn: string, name: string, created: string, type: string, status: string, url: string, metadata: string, contentType: string, message: string, category: string>> {
+]: any -> oneof<record<appUpload: record<arn: string, name: string, created: string, type: string, status: string, url: string, metadata: string, contentType: string, message: string, category: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2099,7 +2116,7 @@ export def "list-artifacts" [
   arn: string # The run, job, suite, or test ARN.
   type: string@type-completer-2 # The artifacts' type. Allowed values include: FILE LOG SCREENSHOT
   --next-token-body: string # An identifier that was returned from the previous call to this operation, which can be used to return the next set of items in the list. (body field)
-]: any -> record<artifacts: table<arn: string, name: string, type: string, extension: string, url: string>, nextToken: string> {
+]: any -> oneof<record<artifacts: table<arn: string, name: string, type: string, extension: string, url: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2150,7 +2167,7 @@ export def "list-device-instances" [
   --x-amz-target: string@x-amz-target-completer-38 # required
   --max-results: int # An integer that specifies the maximum number of items you want to return in the API response.
   --next-token: string # An identifier that was returned from the previous call to this operation, which can be used to return the next set of items in the list.
-]: any -> record<deviceInstances: table<arn: string, deviceArn: string, labels: list, status: string, udid: string, instanceProfile: record>, nextToken: string> {
+]: any -> oneof<record<deviceInstances: table<arn: string, deviceArn: string, labels: list, status: string, udid: string, instanceProfile: record>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2202,7 +2219,7 @@ export def "list-device-pools" [
   arn: string # The project ARN.
   --type: string@type-completer # The device pools' type. Allowed values include: CURATED: A device pool that is created and managed by AWS Device Farm. PRIVATE: A device pool that is created and managed by the device pool developer.
   --next-token-body: string # An identifier that was returned from the previous call to this operation, which can be used to return the next set of items in the list. (body field)
-]: any -> record<devicePools: table<arn: string, name: string, description: string, type: string, rules: list, maxDevices: int>, nextToken: string> {
+]: any -> oneof<record<devicePools: table<arn: string, name: string, description: string, type: string, rules: list, maxDevices: int>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2233,7 +2250,6 @@ export def "list-device-pools" [
 #
 # POST /
 # operationId: ListDevices
-# --filters item shape: {attribute: "ARN"|"PLATFORM"|"OS_VERSION"|"MODEL"|"AVAILABILITY"|"FORM_FACTOR"|"MANUFACTURER"|"REMOTE_ACCESS_ENABLED"|"REMOTE_DEBUG_ENABLED"|"INSTANCE_ARN"|"INSTANCE_LABELS"|"FLEET_TYPE", operator: "EQUALS"|"LESS_THAN"|"LESS_THAN_OR_EQUALS"|"GREATER_THAN"|"GREATER_THAN_OR_EQUALS"|"IN"|"NOT_IN"|"CONTAINS", values: list<string>}
 export def "list-devices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2256,7 +2272,7 @@ export def "list-devices" [
   --arn: string # The Amazon Resource Name (ARN) of the project.
   --next-token-body: string # An identifier that was returned from the previous call to this operation, which can be used to return the next set of items in the list. (body field)
   --filters: list # Used to select a set of devices. A filter is made up of an attribute, an operator, and one or more values. Attribute: The aspect of a device such as platform or model used as the selection criteria in a device filter. Allowed values include: ARN: The Amazon Resource Name (ARN) of the device (for example, arn:aws:devicefarm:us-west-2::device:12345Example). PLATFORM: The device platform. Valid values are ANDROID or IOS. OS_VERSION: The operating system version (for example, 10.3.2). MODEL: The device model (for example, iPad 5th Gen). AVAILABILITY: The current availability of the device. Valid values are AVAILABLE, HIGHLY_AVAILABLE, BUSY, or TEMPORARY_NOT_AVAILABLE. FORM_FACTOR: The device form factor. Valid values are PHONE or TABLET. MANUFACTURER: The device manufacturer (for example, Apple). REMOTE_ACCESS_ENABLED: Whether the device is enabled for remote access. Valid values are TRUE or FALSE. REMOTE_DEBUG_ENABLED: Whether the device is enabled for remote debugging. Valid values are TRUE or FALSE. Because remote debugging is no longer supported (https://docs.aws.amazon.com/devicefarm/latest/developerguide/history.html), this attribute is ignored. INSTANCE_ARN: The Amazon Resource Name (ARN) of the device instance. INSTANCE_LABELS: The label of the device instance. FLEET_TYPE: The fleet type. Valid values are PUBLIC or PRIVATE. Operator: The filter operator. The EQUALS operator is available for every attribute except INSTANCE_LABELS. The CONTAINS operator is available for the INSTANCE_LABELS and MODEL attributes. The IN and NOT_IN operators are available for the ARN, OS_VERSION, MODEL, MANUFACTURER, and INSTANCE_ARN attributes. The LESS_THAN, GREATER_THAN, LESS_THAN_OR_EQUALS, and GREATER_THAN_OR_EQUALS operators are also available for the OS_VERSION attribute. Values: An array of one or more filter values. The IN and NOT_IN operators take a values array that has one or more elements. The other operators require an array with a single element. In a request, the AVAILABILITY attribute takes the following values: AVAILABLE, HIGHLY_AVAILABLE, BUSY, or TEMPORARY_NOT_AVAILABLE. — item shape: {attribute: "ARN"|"PLATFORM"|"OS_VERSION"|"MODEL"|"AVAILABILITY"|"FORM_FACTOR"|"MANUFACTURER"|"REMOTE_ACCESS_ENABLED"|"REMOTE_DEBUG_ENABLED"|"INSTANCE_ARN"|"INSTANCE_LABELS"|"FLEET_TYPE", operator: "EQUALS"|"LESS_THAN"|"LESS_THAN_OR_EQUALS"|"GREATER_THAN"|"GREATER_THAN_OR_EQUALS"|"IN"|"NOT_IN"|"CONTAINS", values: list<string>}
-]: any -> record<devices: table<arn: string, name: string, manufacturer: string, model: string, modelId: string, formFactor: string, platform: string, os: string, cpu: record, resolution: record, heapSize: int, memory: int, image: string, carrier: string, radio: string, remoteAccessEnabled: bool, remoteDebugEnabled: bool, fleetType: string, fleetName: string, instances: list, availability: string>, nextToken: string> {
+]: any -> oneof<record<devices: table<arn: string, name: string, manufacturer: string, model: string, modelId: string, formFactor: string, platform: string, os: string, cpu: record, resolution: record, heapSize: int, memory: int, image: string, carrier: string, radio: string, remoteAccessEnabled: bool, remoteDebugEnabled: bool, fleetType: string, fleetName: string, instances: list, availability: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2307,7 +2323,7 @@ export def "list-instance-profiles" [
   --x-amz-target: string@x-amz-target-completer-41 # required
   --max-results: int # An integer that specifies the maximum number of items you want to return in the API response.
   --next-token: string # An identifier that was returned from the previous call to this operation, which can be used to return the next set of items in the list.
-]: any -> record<instanceProfiles: table<arn: string, packageCleanup: bool, excludeAppPackagesFromCleanup: list, rebootAfterUse: bool, name: string, description: string>, nextToken: string> {
+]: any -> oneof<record<instanceProfiles: table<arn: string, packageCleanup: bool, excludeAppPackagesFromCleanup: list, rebootAfterUse: bool, name: string, description: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2358,7 +2374,7 @@ export def "list-jobs" [
   --x-amz-target: string@x-amz-target-completer-42 # required
   arn: string # The run's Amazon Resource Name (ARN).
   --next-token-body: string # An identifier that was returned from the previous call to this operation, which can be used to return the next set of items in the list. (body field)
-]: any -> record<jobs: table<arn: string, name: string, type: string, created: string, status: string, result: string, started: string, stopped: string, counters: record, message: string, device: record, instanceArn: string, deviceMinutes: record, videoEndpoint: string, videoCapture: bool>, nextToken: string> {
+]: any -> oneof<record<jobs: table<arn: string, name: string, type: string, created: string, status: string, result: string, started: string, stopped: string, counters: record, message: string, device: record, instanceArn: string, deviceMinutes: record, videoEndpoint: string, videoCapture: bool>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2410,7 +2426,7 @@ export def "list-network-profiles" [
   arn: string # The Amazon Resource Name (ARN) of the project for which you want to list network profiles.
   --type: string@type-completer # The type of network profile to return information about. Valid values are listed here.
   --next-token: string # An identifier that was returned from the previous call to this operation, which can be used to return the next set of items in the list.
-]: any -> record<networkProfiles: table<arn: string, name: string, description: string, type: string, uplinkBandwidthBits: int, downlinkBandwidthBits: int, uplinkDelayMs: int, downlinkDelayMs: int, uplinkJitterMs: int, downlinkJitterMs: int, uplinkLossPercent: int, downlinkLossPercent: int>, nextToken: string> {
+]: any -> oneof<record<networkProfiles: table<arn: string, name: string, description: string, type: string, uplinkBandwidthBits: int, downlinkBandwidthBits: int, uplinkDelayMs: int, downlinkDelayMs: int, uplinkJitterMs: int, downlinkJitterMs: int, uplinkLossPercent: int, downlinkLossPercent: int>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2459,7 +2475,7 @@ export def "list-offering-promotions" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-44 # required
   --next-token: string # An identifier that was returned from the previous call to this operation, which can be used to return the next set of items in the list.
-]: any -> record<offeringPromotions: table<id: string, description: string>, nextToken: string> {
+]: any -> oneof<record<offeringPromotions: table<id: string, description: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2509,7 +2525,7 @@ export def "list-offering-transactions" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-45 # required
   --next-token-body: string # An identifier that was returned from the previous call to this operation, which can be used to return the next set of items in the list. (body field)
-]: any -> record<offeringTransactions: table<offeringStatus: record, transactionId: string, offeringPromotionId: string, createdOn: string, cost: record>, nextToken: string> {
+]: any -> oneof<record<offeringTransactions: table<offeringStatus: record, transactionId: string, offeringPromotionId: string, createdOn: string, cost: record>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2560,7 +2576,7 @@ export def "list-offerings" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-46 # required
   --next-token-body: string # An identifier that was returned from the previous call to this operation, which can be used to return the next set of items in the list. (body field)
-]: any -> record<offerings: table<id: string, description: string, type: string, platform: string, recurringCharges: list>, nextToken: string> {
+]: any -> oneof<record<offerings: table<id: string, description: string, type: string, platform: string, recurringCharges: list>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2612,7 +2628,7 @@ export def "list-projects" [
   --x-amz-target: string@x-amz-target-completer-47 # required
   --arn: string # Optional. If no Amazon Resource Name (ARN) is specified, then AWS Device Farm returns a list of all projects for the AWS account. You can also specify a project ARN.
   --next-token-body: string # An identifier that was returned from the previous call to this operation, which can be used to return the next set of items in the list. (body field)
-]: any -> record<projects: table<arn: string, name: string, defaultJobTimeoutMinutes: int, created: string, vpcConfig: record>, nextToken: string> {
+]: any -> oneof<record<projects: table<arn: string, name: string, defaultJobTimeoutMinutes: int, created: string, vpcConfig: record>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2663,7 +2679,7 @@ export def "list-remote-access-sessions" [
   --x-amz-target: string@x-amz-target-completer-48 # required
   arn: string # The Amazon Resource Name (ARN) of the project about which you are requesting information.
   --next-token: string # An identifier that was returned from the previous call to this operation, which can be used to return the next set of items in the list.
-]: any -> record<remoteAccessSessions: table<arn: string, name: string, created: string, status: string, result: string, message: string, started: string, stopped: string, device: record, instanceArn: string, remoteDebugEnabled: bool, remoteRecordEnabled: bool, remoteRecordAppArn: string, hostAddress: string, clientId: string, billingMethod: string, deviceMinutes: record, endpoint: string, deviceUdid: string, interactionMode: string, skipAppResign: bool, vpcConfig: record>, nextToken: string> {
+]: any -> oneof<record<remoteAccessSessions: table<arn: string, name: string, created: string, status: string, result: string, message: string, started: string, stopped: string, device: record, instanceArn: string, remoteDebugEnabled: bool, remoteRecordEnabled: bool, remoteRecordAppArn: string, hostAddress: string, clientId: string, billingMethod: string, deviceMinutes: record, endpoint: string, deviceUdid: string, interactionMode: string, skipAppResign: bool, vpcConfig: record>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2714,7 +2730,7 @@ export def "list-runs" [
   --x-amz-target: string@x-amz-target-completer-49 # required
   arn: string # The Amazon Resource Name (ARN) of the project for which you want to list runs.
   --next-token-body: string # An identifier that was returned from the previous call to this operation, which can be used to return the next set of items in the list. (body field)
-]: any -> record<runs: table<arn: string, name: string, type: string, platform: string, created: string, status: string, result: string, started: string, stopped: string, counters: record, message: string, totalJobs: int, completedJobs: int, billingMethod: string, deviceMinutes: record, networkProfile: record, parsingResultUrl: string, resultCode: string, seed: int, appUpload: string, eventCount: int, jobTimeoutMinutes: int, devicePoolArn: string, locale: string, radios: record, location: record, customerArtifactPaths: record, webUrl: string, skipAppResign: bool, testSpecArn: string, deviceSelectionResult: record, vpcConfig: record>, nextToken: string> {
+]: any -> oneof<record<runs: table<arn: string, name: string, type: string, platform: string, created: string, status: string, result: string, started: string, stopped: string, counters: record, message: string, totalJobs: int, completedJobs: int, billingMethod: string, deviceMinutes: record, networkProfile: record, parsingResultUrl: string, resultCode: string, seed: int, appUpload: string, eventCount: int, jobTimeoutMinutes: int, devicePoolArn: string, locale: string, radios: record, location: record, customerArtifactPaths: record, webUrl: string, skipAppResign: bool, testSpecArn: string, deviceSelectionResult: record, vpcConfig: record>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2766,7 +2782,7 @@ export def "list-samples" [
   --x-amz-target: string@x-amz-target-completer-50 # required
   arn: string # The Amazon Resource Name (ARN) of the job used to list samples.
   --next-token-body: string # An identifier that was returned from the previous call to this operation, which can be used to return the next set of items in the list. (body field)
-]: any -> record<samples: table<arn: string, type: string, url: string>, nextToken: string> {
+]: any -> oneof<record<samples: table<arn: string, type: string, url: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2818,7 +2834,7 @@ export def "list-suites" [
   --x-amz-target: string@x-amz-target-completer-51 # required
   arn: string # The job's Amazon Resource Name (ARN).
   --next-token-body: string # An identifier that was returned from the previous call to this operation, which can be used to return the next set of items in the list. (body field)
-]: any -> record<suites: table<arn: string, name: string, type: string, created: string, status: string, result: string, started: string, stopped: string, counters: record, message: string, deviceMinutes: record>, nextToken: string> {
+]: any -> oneof<record<suites: table<arn: string, name: string, type: string, created: string, status: string, result: string, started: string, stopped: string, counters: record, message: string, deviceMinutes: record>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2868,7 +2884,7 @@ export def "list-tags-for-resource" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-52 # required
   resource_arn: string # The Amazon Resource Name (ARN) of the resource or resources for which to list tags. You can associate tags with the following Device Farm resources: PROJECT, RUN, NETWORK_PROFILE, INSTANCE_PROFILE, DEVICE_INSTANCE, SESSION, DEVICE_POOL, DEVICE, and VPCE_CONFIGURATION.
-]: any -> record<Tags: table<Key: string, Value: string>> {
+]: any -> oneof<record<Tags: table<Key: string, Value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2920,7 +2936,7 @@ export def "list-test-grid-projects" [
   --x-amz-target: string@x-amz-target-completer-53 # required
   --max-result-body: int # Return no more than this number of results. (body field)
   --next-token-body: string # From a response, used to continue a paginated listing. (body field)
-]: any -> record<testGridProjects: table<arn: string, name: string, description: string, vpcConfig: record, created: string>, nextToken: string> {
+]: any -> oneof<record<testGridProjects: table<arn: string, name: string, description: string, vpcConfig: record, created: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2974,7 +2990,7 @@ export def "list-test-grid-session-actions" [
   session_arn: string # The ARN of the session to retrieve.
   --max-result-body: int # The maximum number of sessions to return per response. (body field)
   --next-token-body: string # Pagination token. (body field)
-]: any -> record<actions: table<action: string, started: string, duration: int, statusCode: string, requestMethod: string>, nextToken: string> {
+]: any -> oneof<record<actions: table<action: string, started: string, duration: int, statusCode: string, requestMethod: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3029,7 +3045,7 @@ export def "list-test-grid-session-artifacts" [
   --type: string@type-completer-3 # Limit results to a specified type of artifact.
   --max-result-body: int # The maximum number of results to be returned by a request. (body field)
   --next-token-body: string # Pagination token. (body field)
-]: any -> record<artifacts: table<filename: string, type: string, url: string>, nextToken: string> {
+]: any -> oneof<record<artifacts: table<filename: string, type: string, url: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3088,7 +3104,7 @@ export def "list-test-grid-sessions" [
   --end-time-before: string # Return only sessions that ended before this time. (format: date-time)
   --max-result-body: int # Return only this many results at a time. (body field)
   --next-token-body: string # Pagination token. (body field)
-]: any -> record<testGridSessions: table<arn: string, status: string, created: string, ended: string, billingMinutes: float, seleniumProperties: string>, nextToken: string> {
+]: any -> oneof<record<testGridSessions: table<arn: string, status: string, created: string, ended: string, billingMinutes: float, seleniumProperties: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3140,7 +3156,7 @@ export def "list-tests" [
   --x-amz-target: string@x-amz-target-completer-57 # required
   arn: string # The test suite's Amazon Resource Name (ARN).
   --next-token-body: string # An identifier that was returned from the previous call to this operation, which can be used to return the next set of items in the list. (body field)
-]: any -> record<tests: table<arn: string, name: string, type: string, created: string, status: string, result: string, started: string, stopped: string, counters: record, message: string, deviceMinutes: record>, nextToken: string> {
+]: any -> oneof<record<tests: table<arn: string, name: string, type: string, created: string, status: string, result: string, started: string, stopped: string, counters: record, message: string, deviceMinutes: record>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3192,7 +3208,7 @@ export def "list-unique-problems" [
   --x-amz-target: string@x-amz-target-completer-58 # required
   arn: string # The unique problems' ARNs.
   --next-token-body: string # An identifier that was returned from the previous call to this operation, which can be used to return the next set of items in the list. (body field)
-]: any -> record<uniqueProblems: record, nextToken: string> {
+]: any -> oneof<record<uniqueProblems: record, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3245,7 +3261,7 @@ export def "list-uploads" [
   arn: string # The Amazon Resource Name (ARN) of the project for which you want to list uploads.
   --type: string@type-completer-1 # The type of upload. Must be one of the following values: ANDROID_APP IOS_APP WEB_APP EXTERNAL_DATA APPIUM_JAVA_JUNIT_TEST_PACKAGE APPIUM_JAVA_TESTNG_TEST_PACKAGE APPIUM_PYTHON_TEST_PACKAGE APPIUM_NODE_TEST_PACKAGE APPIUM_RUBY_TEST_PACKAGE APPIUM_WEB_JAVA_JUNIT_TEST_PACKAGE APPIUM_WEB_JAVA_TESTNG_TEST_PACKAGE APPIUM_WEB_PYTHON_TEST_PACKAGE APPIUM_WEB_NODE_TEST_PACKAGE APPIUM_WEB_RUBY_TEST_PACKAGE CALABASH_TEST_PACKAGE INSTRUMENTATION_TEST_PACKAGE UIAUTOMATION_TEST_PACKAGE UIAUTOMATOR_TEST_PACKAGE XCTEST_TEST_PACKAGE XCTEST_UI_TEST_PACKAGE APPIUM_JAVA_JUNIT_TEST_SPEC APPIUM_JAVA_TESTNG_TEST_SPEC APPIUM_PYTHON_TEST_SPEC APPIUM_NODE_TEST_SPEC APPIUM_RUBY_TEST_SPEC APPIUM_WEB_JAVA_JUNIT_TEST_SPEC APPIUM_WEB_JAVA_TESTNG_TEST_SPEC APPIUM_WEB_PYTHON_TEST_SPEC APPIUM_WEB_NODE_TEST_SPEC APPIUM_WEB_RUBY_TEST_SPEC INSTRUMENTATION_TEST_SPEC XCTEST_UI_TEST_SPEC
   --next-token-body: string # An identifier that was returned from the previous call to this operation, which can be used to return the next set of items in the list. (body field)
-]: any -> record<uploads: table<arn: string, name: string, created: string, type: string, status: string, url: string, metadata: string, contentType: string, message: string, category: string>, nextToken: string> {
+]: any -> oneof<record<uploads: table<arn: string, name: string, created: string, type: string, status: string, url: string, metadata: string, contentType: string, message: string, category: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3296,7 +3312,7 @@ export def "list-vpce-configurations" [
   --x-amz-target: string@x-amz-target-completer-60 # required
   --max-results: int # An integer that specifies the maximum number of items you want to return in the API response.
   --next-token: string # An identifier that was returned from the previous call to this operation, which can be used to return the next set of items in the list.
-]: any -> record<vpceConfigurations: table<arn: string, vpceConfigurationName: string, vpceServiceName: string, serviceDnsName: string, vpceConfigurationDescription: string>, nextToken: string> {
+]: any -> oneof<record<vpceConfigurations: table<arn: string, vpceConfigurationName: string, vpceServiceName: string, serviceDnsName: string, vpceConfigurationDescription: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3347,7 +3363,7 @@ export def "purchase-offering" [
   offering_id: string # The ID of the offering.
   quantity: int # The number of device slots to purchase in an offering request.
   --offering-promotion-id: string # The ID of the offering promotion to be applied to the purchase.
-]: any -> record<offeringTransaction: record<offeringStatus: record<type: string, offering: record, quantity: int, effectiveOn: string>, transactionId: string, offeringPromotionId: string, createdOn: string, cost: record<amount: float, currencyCode: string>>> {
+]: any -> oneof<record<offeringTransaction: record<offeringStatus: record<type: string, offering: record, quantity: int, effectiveOn: string>, transactionId: string, offeringPromotionId: string, createdOn: string, cost: record<amount: float, currencyCode: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3397,7 +3413,7 @@ export def "renew-offering" [
   --x-amz-target: string@x-amz-target-completer-62 # required
   offering_id: string # The ID of a request to renew an offering.
   quantity: int # The quantity requested in an offering renewal.
-]: any -> record<offeringTransaction: record<offeringStatus: record<type: string, offering: record, quantity: int, effectiveOn: string>, transactionId: string, offeringPromotionId: string, createdOn: string, cost: record<amount: float, currencyCode: string>>> {
+]: any -> oneof<record<offeringTransaction: record<offeringStatus: record<type: string, offering: record, quantity: int, effectiveOn: string>, transactionId: string, offeringPromotionId: string, createdOn: string, cost: record<amount: float, currencyCode: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3427,10 +3443,6 @@ export def "renew-offering" [
 #
 # POST /
 # operationId: ScheduleRun
-# --deviceSelectionConfiguration shape: {filters: list, maxDevices: int}
-# --test shape: {type: "BUILTIN_FUZZ"|"BUILTIN_EXPLORER"|"WEB_PERFORMANCE_PROFILE"|"APPIUM_JAVA_JUNIT"|"APPIUM_JAVA_TESTNG"|"APPIUM_PYTHON"|"APPIUM_NODE"|"APPIUM_RUBY"|"APPIUM_WEB_JAVA_JUNIT"|"APPIUM_WEB_JAVA_TESTNG"|"APPIUM_WEB_PYTHON"|"APPIUM_WEB_NODE"|"APPIUM_WEB_RUBY"|"CALABASH"|"INSTRUMENTATION"|"UIAUTOMATION"|"UIAUTOMATOR"|"XCTEST"|"XCTEST_UI"|"REMOTE_ACCESS_RECORD"|"REMOTE_ACCESS_REPLAY", testPackageArn?: string, testSpecArn?: string, filter?: string, parameters?: record}
-# --configuration shape: {extraDataPackageArn?: string, networkProfileArn?: string, locale?: string, location?: record, vpceConfigurationArns?: list<string>, customerArtifactPaths?: record, radios?: record, auxiliaryApps?: list<string>, billingMethod?: "METERED"|"UNMETERED"}
-# --executionConfiguration shape: {jobTimeoutMinutes?: int, accountsCleanup?: bool, appPackagesCleanup?: bool, videoCapture?: bool, skipAppResign?: bool}
 export def "schedule-run" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3457,7 +3469,7 @@ export def "schedule-run" [
   test: record # Represents test settings. This data structure is passed in as the test parameter to ScheduleRun. For an example of the JSON request syntax, see ScheduleRun. — shape: {type: "BUILTIN_FUZZ"|"BUILTIN_EXPLORER"|"WEB_PERFORMANCE_PROFILE"|"APPIUM_JAVA_JUNIT"|"APPIUM_JAVA_TESTNG"|"APPIUM_PYTHON"|"APPIUM_NODE"|"APPIUM_RUBY"|"APPIUM_WEB_JAVA_JUNIT"|"APPIUM_WEB_JAVA_TESTNG"|"APPIUM_WEB_PYTHON"|"APPIUM_WEB_NODE"|"APPIUM_WEB_RUBY"|"CALABASH"|"INSTRUMENTATION"|"UIAUTOMATION"|"UIAUTOMATOR"|"XCTEST"|"XCTEST_UI"|"REMOTE_ACCESS_RECORD"|"REMOTE_ACCESS_REPLAY", testPackageArn?: string, testSpecArn?: string, filter?: string, parameters?: record}
   --configuration: record # Represents the settings for a run. Includes things like location, radio states, auxiliary apps, and network profiles. — shape: {extraDataPackageArn?: string, networkProfileArn?: string, locale?: string, location?: record, vpceConfigurationArns?: list<string>, customerArtifactPaths?: record, radios?: record, auxiliaryApps?: list<string>, billingMethod?: "METERED"|"UNMETERED"}
   --execution-configuration: record # Represents configuration information about a test run, such as the execution timeout (in minutes). — shape: {jobTimeoutMinutes?: int, accountsCleanup?: bool, appPackagesCleanup?: bool, videoCapture?: bool, skipAppResign?: bool}
-]: any -> record<run: record<arn: string, name: string, type: string, platform: string, created: string, status: string, result: string, started: string, stopped: string, counters: record<total: int, passed: int, failed: int, warned: int, errored: int, stopped: int, skipped: int>, message: string, totalJobs: int, completedJobs: int, billingMethod: string, deviceMinutes: record<total: float, metered: float, unmetered: float>, networkProfile: record<arn: string, name: string, description: string, type: string, uplinkBandwidthBits: int, downlinkBandwidthBits: int, uplinkDelayMs: int, downlinkDelayMs: int, uplinkJitterMs: int, downlinkJitterMs: int, uplinkLossPercent: int, downlinkLossPercent: int>, parsingResultUrl: string, resultCode: string, seed: int, appUpload: string, eventCount: int, jobTimeoutMinutes: int, devicePoolArn: string, locale: string, radios: record<wifi: bool, bluetooth: bool, nfc: bool, gps: bool>, location: record<latitude: float, longitude: float>, customerArtifactPaths: record<iosPaths: list, androidPaths: list, deviceHostPaths: list>, webUrl: string, skipAppResign: bool, testSpecArn: string, deviceSelectionResult: record<filters: list, matchedDevicesCount: int, maxDevices: int>, vpcConfig: record<securityGroupIds: list, subnetIds: list, vpcId: string>>> {
+]: any -> oneof<record<run: record<arn: string, name: string, type: string, platform: string, created: string, status: string, result: string, started: string, stopped: string, counters: record<total: int, passed: int, failed: int, warned: int, errored: int, stopped: int, skipped: int>, message: string, totalJobs: int, completedJobs: int, billingMethod: string, deviceMinutes: record<total: float, metered: float, unmetered: float>, networkProfile: record<arn: string, name: string, description: string, type: string, uplinkBandwidthBits: int, downlinkBandwidthBits: int, uplinkDelayMs: int, downlinkDelayMs: int, uplinkJitterMs: int, downlinkJitterMs: int, uplinkLossPercent: int, downlinkLossPercent: int>, parsingResultUrl: string, resultCode: string, seed: int, appUpload: string, eventCount: int, jobTimeoutMinutes: int, devicePoolArn: string, locale: string, radios: record<wifi: bool, bluetooth: bool, nfc: bool, gps: bool>, location: record<latitude: float, longitude: float>, customerArtifactPaths: record<iosPaths: list, androidPaths: list, deviceHostPaths: list>, webUrl: string, skipAppResign: bool, testSpecArn: string, deviceSelectionResult: record<filters: list, matchedDevicesCount: int, maxDevices: int>, vpcConfig: record<securityGroupIds: list, subnetIds: list, vpcId: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3506,7 +3518,7 @@ export def "stop-job" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-64 # required
   arn: string # Represents the Amazon Resource Name (ARN) of the Device Farm job to stop.
-]: any -> record<job: record<arn: string, name: string, type: string, created: string, status: string, result: string, started: string, stopped: string, counters: record<total: int, passed: int, failed: int, warned: int, errored: int, stopped: int, skipped: int>, message: string, device: record<arn: string, name: string, manufacturer: string, model: string, modelId: string, formFactor: string, platform: string, os: string, cpu: record, resolution: record, heapSize: int, memory: int, image: string, carrier: string, radio: string, remoteAccessEnabled: bool, remoteDebugEnabled: bool, fleetType: string, fleetName: string, instances: list, availability: string>, instanceArn: string, deviceMinutes: record<total: float, metered: float, unmetered: float>, videoEndpoint: string, videoCapture: bool>> {
+]: any -> oneof<record<job: record<arn: string, name: string, type: string, created: string, status: string, result: string, started: string, stopped: string, counters: record<total: int, passed: int, failed: int, warned: int, errored: int, stopped: int, skipped: int>, message: string, device: record<arn: string, name: string, manufacturer: string, model: string, modelId: string, formFactor: string, platform: string, os: string, cpu: record, resolution: record, heapSize: int, memory: int, image: string, carrier: string, radio: string, remoteAccessEnabled: bool, remoteDebugEnabled: bool, fleetType: string, fleetName: string, instances: list, availability: string>, instanceArn: string, deviceMinutes: record<total: float, metered: float, unmetered: float>, videoEndpoint: string, videoCapture: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3555,7 +3567,7 @@ export def "stop-remote-access-session" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-65 # required
   arn: string # The Amazon Resource Name (ARN) of the remote access session to stop.
-]: any -> record<remoteAccessSession: record<arn: string, name: string, created: string, status: string, result: string, message: string, started: string, stopped: string, device: record<arn: string, name: string, manufacturer: string, model: string, modelId: string, formFactor: string, platform: string, os: string, cpu: record, resolution: record, heapSize: int, memory: int, image: string, carrier: string, radio: string, remoteAccessEnabled: bool, remoteDebugEnabled: bool, fleetType: string, fleetName: string, instances: list, availability: string>, instanceArn: string, remoteDebugEnabled: bool, remoteRecordEnabled: bool, remoteRecordAppArn: string, hostAddress: string, clientId: string, billingMethod: string, deviceMinutes: record<total: float, metered: float, unmetered: float>, endpoint: string, deviceUdid: string, interactionMode: string, skipAppResign: bool, vpcConfig: record<securityGroupIds: list, subnetIds: list, vpcId: string>>> {
+]: any -> oneof<record<remoteAccessSession: record<arn: string, name: string, created: string, status: string, result: string, message: string, started: string, stopped: string, device: record<arn: string, name: string, manufacturer: string, model: string, modelId: string, formFactor: string, platform: string, os: string, cpu: record, resolution: record, heapSize: int, memory: int, image: string, carrier: string, radio: string, remoteAccessEnabled: bool, remoteDebugEnabled: bool, fleetType: string, fleetName: string, instances: list, availability: string>, instanceArn: string, remoteDebugEnabled: bool, remoteRecordEnabled: bool, remoteRecordAppArn: string, hostAddress: string, clientId: string, billingMethod: string, deviceMinutes: record<total: float, metered: float, unmetered: float>, endpoint: string, deviceUdid: string, interactionMode: string, skipAppResign: bool, vpcConfig: record<securityGroupIds: list, subnetIds: list, vpcId: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3604,7 +3616,7 @@ export def "stop-run" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-66 # required
   arn: string # Represents the Amazon Resource Name (ARN) of the Device Farm run to stop.
-]: any -> record<run: record<arn: string, name: string, type: string, platform: string, created: string, status: string, result: string, started: string, stopped: string, counters: record<total: int, passed: int, failed: int, warned: int, errored: int, stopped: int, skipped: int>, message: string, totalJobs: int, completedJobs: int, billingMethod: string, deviceMinutes: record<total: float, metered: float, unmetered: float>, networkProfile: record<arn: string, name: string, description: string, type: string, uplinkBandwidthBits: int, downlinkBandwidthBits: int, uplinkDelayMs: int, downlinkDelayMs: int, uplinkJitterMs: int, downlinkJitterMs: int, uplinkLossPercent: int, downlinkLossPercent: int>, parsingResultUrl: string, resultCode: string, seed: int, appUpload: string, eventCount: int, jobTimeoutMinutes: int, devicePoolArn: string, locale: string, radios: record<wifi: bool, bluetooth: bool, nfc: bool, gps: bool>, location: record<latitude: float, longitude: float>, customerArtifactPaths: record<iosPaths: list, androidPaths: list, deviceHostPaths: list>, webUrl: string, skipAppResign: bool, testSpecArn: string, deviceSelectionResult: record<filters: list, matchedDevicesCount: int, maxDevices: int>, vpcConfig: record<securityGroupIds: list, subnetIds: list, vpcId: string>>> {
+]: any -> oneof<record<run: record<arn: string, name: string, type: string, platform: string, created: string, status: string, result: string, started: string, stopped: string, counters: record<total: int, passed: int, failed: int, warned: int, errored: int, stopped: int, skipped: int>, message: string, totalJobs: int, completedJobs: int, billingMethod: string, deviceMinutes: record<total: float, metered: float, unmetered: float>, networkProfile: record<arn: string, name: string, description: string, type: string, uplinkBandwidthBits: int, downlinkBandwidthBits: int, uplinkDelayMs: int, downlinkDelayMs: int, uplinkJitterMs: int, downlinkJitterMs: int, uplinkLossPercent: int, downlinkLossPercent: int>, parsingResultUrl: string, resultCode: string, seed: int, appUpload: string, eventCount: int, jobTimeoutMinutes: int, devicePoolArn: string, locale: string, radios: record<wifi: bool, bluetooth: bool, nfc: bool, gps: bool>, location: record<latitude: float, longitude: float>, customerArtifactPaths: record<iosPaths: list, androidPaths: list, deviceHostPaths: list>, webUrl: string, skipAppResign: bool, testSpecArn: string, deviceSelectionResult: record<filters: list, matchedDevicesCount: int, maxDevices: int>, vpcConfig: record<securityGroupIds: list, subnetIds: list, vpcId: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3634,7 +3646,6 @@ export def "stop-run" [
 #
 # POST /
 # operationId: TagResource
-# --Tags item shape: {Key: string, Value: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3655,7 +3666,7 @@ export def "tag-resource" [
   --x-amz-target: string@x-amz-target-completer-67 # required
   resource_arn: string # The Amazon Resource Name (ARN) of the resource or resources to which to add tags. You can associate tags with the following Device Farm resources: PROJECT, RUN, NETWORK_PROFILE, INSTANCE_PROFILE, DEVICE_INSTANCE, SESSION, DEVICE_POOL, DEVICE, and VPCE_CONFIGURATION.
   tags: list # The tags to add to the resource. A tag is an array of key-value pairs. Tag keys can have a maximum character length of 128 characters. Tag values can have a maximum length of 256 characters. — item shape: {Key: string, Value: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3705,7 +3716,7 @@ export def "untag-resource" [
   --x-amz-target: string@x-amz-target-completer-68 # required
   resource_arn: string # The Amazon Resource Name (ARN) of the resource or resources from which to delete tags. You can associate tags with the following Device Farm resources: PROJECT, RUN, NETWORK_PROFILE, INSTANCE_PROFILE, DEVICE_INSTANCE, SESSION, DEVICE_POOL, DEVICE, and VPCE_CONFIGURATION.
   tag_keys: list<string> # The keys of the tags to be removed.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3756,7 +3767,7 @@ export def "update-device-instance" [
   arn: string # The Amazon Resource Name (ARN) of the device instance.
   --profile-arn: string # The ARN of the profile that you want to associate with the device instance.
   --labels: list<string> # An array of strings that you want to associate with the device instance.
-]: any -> record<deviceInstance: record<arn: string, deviceArn: string, labels: list<string>, status: string, udid: string, instanceProfile: record<arn: string, packageCleanup: bool, excludeAppPackagesFromCleanup: list, rebootAfterUse: bool, name: string, description: string>>> {
+]: any -> oneof<record<deviceInstance: record<arn: string, deviceArn: string, labels: list<string>, status: string, udid: string, instanceProfile: record<arn: string, packageCleanup: bool, excludeAppPackagesFromCleanup: list, rebootAfterUse: bool, name: string, description: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3786,7 +3797,6 @@ export def "update-device-instance" [
 #
 # POST /
 # operationId: UpdateDevicePool
-# --rules item shape: {attribute?: "ARN"|"PLATFORM"|"FORM_FACTOR"|"MANUFACTURER"|"REMOTE_ACCESS_ENABLED"|"REMOTE_DEBUG_ENABLED"|"APPIUM_VERSION"|"INSTANCE_ARN"|"INSTANCE_LABELS"|"FLEET_TYPE"|"OS_VERSION"|"MODEL"|"AVAILABILITY", operator?: "EQUALS"|"LESS_THAN"|"LESS_THAN_OR_EQUALS"|"GREATER_THAN"|"GREATER_THAN_OR_EQUALS"|"IN"|"NOT_IN"|"CONTAINS", value?: string}
 export def "update-device-pool" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3811,7 +3821,7 @@ export def "update-device-pool" [
   --rules: list # Represents the rules to modify for the device pool. Updating rules is optional. If you update rules for your request, the update replaces the existing rules. — item shape: {attribute?: "ARN"|"PLATFORM"|"FORM_FACTOR"|"MANUFACTURER"|"REMOTE_ACCESS_ENABLED"|"REMOTE_DEBUG_ENABLED"|"APPIUM_VERSION"|"INSTANCE_ARN"|"INSTANCE_LABELS"|"FLEET_TYPE"|"OS_VERSION"|"MODEL"|"AVAILABILITY", operator?: "EQUALS"|"LESS_THAN"|"LESS_THAN_OR_EQUALS"|"GREATER_THAN"|"GREATER_THAN_OR_EQUALS"|"IN"|"NOT_IN"|"CONTAINS", value?: string}
   --max-devices: int # The number of devices that Device Farm can add to your device pool. Device Farm adds devices that are available and that meet the criteria that you assign for the rules parameter. Depending on how many devices meet these constraints, your device pool might contain fewer devices than the value for this parameter. By specifying the maximum number of devices, you can control the costs that you incur by running tests. If you use this parameter in your request, you cannot use the clearMaxDevices parameter in the same request.
   --clear-max-devices: oneof<nothing, bool> # Sets whether the maxDevices parameter applies to your device pool. If you set this parameter to true, the maxDevices parameter does not apply, and Device Farm does not limit the number of devices that it adds to your device pool. In this case, Device Farm adds all available devices that meet the criteria specified in the rules parameter. If you use this parameter in your request, you cannot use the maxDevices parameter in the same request.
-]: any -> record<devicePool: record<arn: string, name: string, description: string, type: string, rules: list<record>, maxDevices: int>> {
+]: any -> oneof<record<devicePool: record<arn: string, name: string, description: string, type: string, rules: list<record>, maxDevices: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3865,7 +3875,7 @@ export def "update-instance-profile" [
   --package-cleanup: oneof<nothing, bool> # The updated choice for whether you want to specify package cleanup. The default value is false for private devices.
   --exclude-app-packages-from-cleanup: list<string> # An array of strings that specifies the list of app packages that should not be cleaned up from the device after a test run is over. The list of packages is only considered if you set packageCleanup to true.
   --reboot-after-use: oneof<nothing, bool> # The updated choice for whether you want to reboot the device after use. The default value is true.
-]: any -> record<instanceProfile: record<arn: string, packageCleanup: bool, excludeAppPackagesFromCleanup: list<string>, rebootAfterUse: bool, name: string, description: string>> {
+]: any -> oneof<record<instanceProfile: record<arn: string, packageCleanup: bool, excludeAppPackagesFromCleanup: list<string>, rebootAfterUse: bool, name: string, description: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3925,7 +3935,7 @@ export def "update-network-profile" [
   --downlink-jitter-ms: int # Time variation in the delay of received packets in milliseconds as an integer from 0 to 2000.
   --uplink-loss-percent: int # Proportion of transmitted packets that fail to arrive from 0 to 100 percent.
   --downlink-loss-percent: int # Proportion of received packets that fail to arrive from 0 to 100 percent.
-]: any -> record<networkProfile: record<arn: string, name: string, description: string, type: string, uplinkBandwidthBits: int, downlinkBandwidthBits: int, uplinkDelayMs: int, downlinkDelayMs: int, uplinkJitterMs: int, downlinkJitterMs: int, uplinkLossPercent: int, downlinkLossPercent: int>> {
+]: any -> oneof<record<networkProfile: record<arn: string, name: string, description: string, type: string, uplinkBandwidthBits: int, downlinkBandwidthBits: int, uplinkDelayMs: int, downlinkDelayMs: int, uplinkJitterMs: int, downlinkJitterMs: int, uplinkLossPercent: int, downlinkLossPercent: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3955,7 +3965,6 @@ export def "update-network-profile" [
 #
 # POST /
 # operationId: UpdateProject
-# --vpcConfig shape: {securityGroupIds: list<string>, subnetIds: list<string>, vpcId: string}
 export def "update-project" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3978,7 +3987,7 @@ export def "update-project" [
   --name: string # A string that represents the new name of the project that you are updating.
   --default-job-timeout-minutes: int # The number of minutes a test run in the project executes before it times out.
   --vpc-config: record # Contains the VPC configuration data necessary to interface with AWS Device Farm's services. — shape: {securityGroupIds: list<string>, subnetIds: list<string>, vpcId: string}
-]: any -> record<project: record<arn: string, name: string, defaultJobTimeoutMinutes: int, created: string, vpcConfig: record<securityGroupIds: list, subnetIds: list, vpcId: string>>> {
+]: any -> oneof<record<project: record<arn: string, name: string, defaultJobTimeoutMinutes: int, created: string, vpcConfig: record<securityGroupIds: list, subnetIds: list, vpcId: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4008,7 +4017,6 @@ export def "update-project" [
 #
 # POST /
 # operationId: UpdateTestGridProject
-# --vpcConfig shape: {securityGroupIds: list<string>, subnetIds: list<string>, vpcId: string}
 export def "update-test-grid-project" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4031,7 +4039,7 @@ export def "update-test-grid-project" [
   --name: string # Human-readable name for the project.
   --description: string # Human-readable description for the project.
   --vpc-config: record # The VPC security groups and subnets that are attached to a project. — shape: {securityGroupIds: list<string>, subnetIds: list<string>, vpcId: string}
-]: any -> record<testGridProject: record<arn: string, name: string, description: string, vpcConfig: record<securityGroupIds: list, subnetIds: list, vpcId: string>, created: string>> {
+]: any -> oneof<record<testGridProject: record<arn: string, name: string, description: string, vpcConfig: record<securityGroupIds: list, subnetIds: list, vpcId: string>, created: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4083,7 +4091,7 @@ export def "update-upload" [
   --name: string # The upload's test spec file name. The name must not contain any forward slashes (/). The test spec file name must end with the .yaml or .yml file extension.
   --content-type: string # The upload's content type (for example, application/x-yaml).
   --edit-content: oneof<nothing, bool> # Set to true if the YAML file has changed and must be updated. Otherwise, set to false.
-]: any -> record<upload: record<arn: string, name: string, created: string, type: string, status: string, url: string, metadata: string, contentType: string, message: string, category: string>> {
+]: any -> oneof<record<upload: record<arn: string, name: string, created: string, type: string, status: string, url: string, metadata: string, contentType: string, message: string, category: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4136,7 +4144,7 @@ export def "update-vpce-configuration" [
   --vpce-service-name: string # The name of the VPC endpoint service running in your AWS account that you want Device Farm to test.
   --service-dns-name: string # The DNS (domain) name used to connect to your private service in your VPC. The DNS name must not already be in use on the internet.
   --vpce-configuration-description: string # An optional description that provides details about your VPC endpoint configuration.
-]: any -> record<vpceConfiguration: record<arn: string, vpceConfigurationName: string, vpceServiceName: string, serviceDnsName: string, vpceConfigurationDescription: string>> {
+]: any -> oneof<record<vpceConfiguration: record<arn: string, vpceConfigurationName: string, vpceServiceName: string, serviceDnsName: string, vpceConfigurationDescription: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

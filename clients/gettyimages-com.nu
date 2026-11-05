@@ -14,27 +14,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "api-key" => { {scheme: $scheme, headers: {"Api-Key": $token_val}, query: "", location: "header"} }
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -42,8 +51,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -54,7 +68,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -89,7 +112,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -133,9 +157,9 @@ def release-status-completer [] { ["fully_released" "release_not_important"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-v3-affiliates-search-images" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-v3-affiliates-search-images" "get-v3-affiliates-search-videos" "get-v3-artists-images" "get-v3-artists-videos" "put-v3-asset-changes-change-sets" "delete-v3-asset-changes-change-sets-change-set-id" "get-v3-asset-changes-channels" "post-v3-asset-licensing-asset-id" "get-v3-asset-management-assets-send-events" "get-v3-boards" "post-v3-boards" "delete-v3-boards-board-id" "get-v3-boards-board-id" "put-v3-boards-board-id" "delete-v3-boards-board-id-assets" "put-v3-boards-board-id-assets" "delete-v3-boards-board-id-assets-asset-id" "put-v3-boards-board-id-assets-asset-id" "get-v3-boards-board-id-comments" "post-v3-boards-board-id-comments" "delete-v3-boards-board-id-comments-comment-id" "get-v3-collections" "get-v3-countries" "get-v3-customers-current" "get-v3-downloads" "post-v3-downloads-images-id" "post-v3-downloads-videos-id" "get-v3-events" "get-v3-events-id" "get-v3-images" "get-v3-images-id" "get-v3-images-id-downloadhistory" "get-v3-images-id-same-series" "get-v3-images-id-similar" "get-v3-orders-id" "get-v3-products" "get-v3-purchased-assets" "put-v3-search-by-image-uploads-file-name" "get-v3-search-events" "get-v3-search-images" "get-v3-search-images-creative" "get-v3-search-images-creative-by-image" "get-v3-search-images-editorial" "get-v3-search-videos-creative" "get-v3-search-videos-creative-by-image" "get-v3-search-videos-editorial" "put-v3-usage-batches-id" "get-v3-videos" "get-v3-videos-id" "get-v3-videos-id-downloadhistory" "get-v3-videos-id-same-series" "get-v3-videos-id-similar" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -167,7 +191,7 @@ export def "get-v3-affiliates-search-images" [
   --phrase: string # Search images using a search phrase. (nullable)
   --style: string@style-completer # Filter based on graphical style of the image.
   --accept-language: string # Provide a header to specify the language of result values. Supported values: cs (iStock only), de, en-GB, en-US, es, fi (iStock only), fr, hu (iStock only), id (iStock only), it, ja, ko (creative assets only), nl, pl (creative assets only), pt-BR, pt-PT, ro (iStock only), ru (creative assets only), sv, th (iStock only), tr, uk (iStock only), vi (iStock only), zh-HK (creative assets only).
-]: nothing -> record<auto_corrections: record<phrase: string>, images: table<caption: string, destination_url: string, id: string, preview_urls: record, title: string>> {
+]: nothing -> oneof<record<auto_corrections: record<phrase: string>, images: table<caption: string, destination_url: string, id: string, preview_urls: record, title: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "phrase" $phrase "scalar") (serialize-qp "style" $style "scalar")] | flatten | str join "&"
@@ -203,7 +227,7 @@ export def "get-v3-affiliates-search-videos" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --phrase: string # nullable
   --accept-language: string # Provide a header to specify the language of result values. Supported values: cs (iStock only), de, en-GB, en-US, es, fi (iStock only), fr, hu (iStock only), id (iStock only), it, ja, ko (creative assets only), nl, pl (creative assets only), pt-BR, pt-PT, ro (iStock only), ru (creative assets only), sv, th (iStock only), tr, uk (iStock only), vi (iStock only), zh-HK (creative assets only).
-]: nothing -> record<auto_corrections: record<phrase: string>, videos: table<caption: string, clip_length: string, destination_url: string, id: string, preview_urls: record, title: string>> {
+]: nothing -> oneof<record<auto_corrections: record<phrase: string>, videos: table<caption: string, clip_length: string, destination_url: string, id: string, preview_urls: record, title: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "phrase" $phrase "scalar")] | flatten | str join "&"
@@ -323,7 +347,7 @@ export def "put-v3-asset-changes-change-sets" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --channel-id: int # Specifies the id of the channel for the asset data. Valid channel ids can be found in the results of the Get Partner Channel query. (format: int32)
   --batch-size: int # Specifies the number of assets to return. The default is 2200; maximum is 2200. (nullable, format: int32)
-]: nothing -> record<change_set_id: string, changed_assets: table<asset_changed_utc_datetime: string, asset_lifecycle: string, asset_type: string, id: string, uri: string>> {
+]: nothing -> oneof<record<change_set_id: string, changed_assets: table<asset_changed_utc_datetime: string, asset_lifecycle: string, asset_type: string, id: string, uri: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "channel_id" $channel_id "scalar") (serialize-qp "batch_size" $batch_size "scalar")] | flatten | str join "&"
@@ -392,7 +416,7 @@ export def "get-v3-asset-changes-channels" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<AssetChangeType: string, AssetFamily: string, AssetType: string, ChannelId: int, CreateDateUtc: string, Metadata: string, NotificationCount: int, OldestChangeNotificationDateUtc: string> {
+]: nothing -> oneof<table<AssetChangeType: string, AssetFamily: string, AssetType: string, ChannelId: int, CreateDateUtc: string, Metadata: string, NotificationCount: int, OldestChangeNotificationDateUtc: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/asset-changes/channels" $auth.query)
@@ -429,7 +453,7 @@ export def "post-v3-asset-licensing-asset-id" [
   --accept-language: string # Provide a header to specify the language of result values. Supported values: cs (iStock only), de, en-GB, en-US, es, fi (iStock only), fr, hu (iStock only), id (iStock only), it, ja, ko (creative assets only), nl, pl (creative assets only), pt-BR, pt-PT, ro (iStock only), ru (creative assets only), sv, th (iStock only), tr, uk (iStock only), vi (iStock only), zh-HK (creative assets only).
   extended_licenses: list<string>
   --use-team-credits: oneof<nothing, bool> # Defaults to false.
-]: any -> record<acquired_licenses: list<string>, credits_used: int> {
+]: any -> oneof<record<acquired_licenses: list<string>, credits_used: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -470,7 +494,7 @@ export def "get-v3-asset-management-assets-send-events" [
   --last-offset: string # Specifies a date/time (with timezone information) for continuing retrieval of events. Events occuring _after_ the `last_offset` value provided will be returned. (nullable, format: date-time)
   --event-count: int # Specifies the number of events to return. Default is 50, maximum value is 100. (nullable, format: int32)
   --accept-language: string # Provide a header to specify the language of result values. Supported values: cs (iStock only), de, en-GB, en-US, es, fi (iStock only), fr, hu (iStock only), id (iStock only), it, ja, ko (creative assets only), nl, pl (creative assets only), pt-BR, pt-PT, ro (iStock only), ru (creative assets only), sv, th (iStock only), tr, uk (iStock only), vi (iStock only), zh-HK (creative assets only).
-]: nothing -> record<asset_send_events: table<asset_id: string, email_address: string, timestamp: string>, last_offset: string> {
+]: nothing -> oneof<record<asset_send_events: table<asset_id: string, email_address: string, timestamp: string>, last_offset: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "last_offset" $last_offset "scalar") (serialize-qp "event_count" $event_count "scalar")] | flatten | str join "&"
@@ -511,7 +535,7 @@ export def "get-v3-boards" [
   --sort-order: string@sort-order-completer # Sort the list of boards by last update date or name. Defaults to date_last_updated_descending.
   --page-size: int # Request number of boards to return in each page. (default is 30). (format: int32, default: 30)
   --accept-language: string # Provide a header to specify the language of result values. Supported values: cs (iStock only), de, en-GB, en-US, es, fi (iStock only), fr, hu (iStock only), id (iStock only), it, ja, ko (creative assets only), nl, pl (creative assets only), pt-BR, pt-PT, ro (iStock only), ru (creative assets only), sv, th (iStock only), tr, uk (iStock only), vi (iStock only), zh-HK (creative assets only).
-]: nothing -> record<board_count: int, boards: table<asset_count: int, board_relationship: string, date_created: string, date_last_updated: string, description: string, hero_asset: record, id: string, name: string>> {
+]: nothing -> oneof<record<board_count: int, boards: table<asset_count: int, board_relationship: string, date_created: string, date_last_updated: string, description: string, hero_asset: record, id: string, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "board_relationship" $board_relationship "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
@@ -550,7 +574,7 @@ export def "post-v3-boards" [
   --accept-language: string # Provide a header to specify the language of result values. Supported values: cs (iStock only), de, en-GB, en-US, es, fi (iStock only), fr, hu (iStock only), id (iStock only), it, ja, ko (creative assets only), nl, pl (creative assets only), pt-BR, pt-PT, ro (iStock only), ru (creative assets only), sv, th (iStock only), tr, uk (iStock only), vi (iStock only), zh-HK (creative assets only).
   --description: string # nullable
   name: string
-]: any -> record<id: string> {
+]: any -> oneof<record<id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -628,7 +652,7 @@ export def "get-v3-boards-board-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string # Provide a header to specify the language of result values. Supported values: cs (iStock only), de, en-GB, en-US, es, fi (iStock only), fr, hu (iStock only), id (iStock only), it, ja, ko (creative assets only), nl, pl (creative assets only), pt-BR, pt-PT, ro (iStock only), ru (creative assets only), sv, th (iStock only), tr, uk (iStock only), vi (iStock only), zh-HK (creative assets only).
-]: nothing -> record<asset_count: int, assets: table<asset_type: string, date_added: string, display_sizes: list, id: string>, comment_count: int, date_created: string, date_last_updated: string, description: string, id: string, links: record<invitation: string, share: string>, name: string, permissions: record<can_add_assets: bool, can_delete_board: bool, can_invite_to_board: bool, can_remove_assets: bool, can_update_description: bool, can_update_name: bool>> {
+]: nothing -> oneof<record<asset_count: int, assets: table<asset_type: string, date_added: string, display_sizes: list, id: string>, comment_count: int, date_created: string, date_last_updated: string, description: string, id: string, links: record<invitation: string, share: string>, name: string, permissions: record<can_add_assets: bool, can_delete_board: bool, can_invite_to_board: bool, can_remove_assets: bool, can_update_description: bool, can_update_name: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($board_id | is-empty) { error make --unspanned { msg: "path parameter 'board_id' must be non-empty" } }
@@ -750,7 +774,7 @@ export def "put-v3-boards-board-id-assets" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string # Provide a header to specify the language of result values. Supported values: cs (iStock only), de, en-GB, en-US, es, fi (iStock only), fr, hu (iStock only), id (iStock only), it, ja, ko (creative assets only), nl, pl (creative assets only), pt-BR, pt-PT, ro (iStock only), ru (creative assets only), sv, th (iStock only), tr, uk (iStock only), vi (iStock only), zh-HK (creative assets only).
   --body: list
-]: any -> record<assets_added: table<asset_id: string>, assets_not_added: list<string>> {
+]: any -> oneof<record<assets_added: table<asset_id: string>, assets_not_added: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -871,7 +895,7 @@ export def "get-v3-boards-board-id-comments" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string # Provide a header to specify the language of result values. Supported values: cs (iStock only), de, en-GB, en-US, es, fi (iStock only), fr, hu (iStock only), id (iStock only), it, ja, ko (creative assets only), nl, pl (creative assets only), pt-BR, pt-PT, ro (iStock only), ru (creative assets only), sv, th (iStock only), tr, uk (iStock only), vi (iStock only), zh-HK (creative assets only).
-]: nothing -> record<comments: table<created_by: record, date_created: string, id: string, permissions: record, text: string>, permissions: record<can_add_comment: bool>> {
+]: nothing -> oneof<record<comments: table<created_by: record, date_created: string, id: string, permissions: record, text: string>, permissions: record<can_add_comment: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($board_id | is-empty) { error make --unspanned { msg: "path parameter 'board_id' must be non-empty" } }
@@ -910,7 +934,7 @@ export def "post-v3-boards-board-id-comments" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string # Provide a header to specify the language of result values. Supported values: cs (iStock only), de, en-GB, en-US, es, fi (iStock only), fr, hu (iStock only), id (iStock only), it, ja, ko (creative assets only), nl, pl (creative assets only), pt-BR, pt-PT, ro (iStock only), ru (creative assets only), sv, th (iStock only), tr, uk (iStock only), vi (iStock only), zh-HK (creative assets only).
   --text: string # nullable
-]: any -> record<id: string> {
+]: any -> oneof<record<id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -990,7 +1014,7 @@ export def "get-v3-collections" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string # Provide a header to specify the language of result values. Supported values: cs (iStock only), de, en-GB, en-US, es, fi (iStock only), fr, hu (iStock only), id (iStock only), it, ja, ko (creative assets only), nl, pl (creative assets only), pt-BR, pt-PT, ro (iStock only), ru (creative assets only), sv, th (iStock only), tr, uk (iStock only), vi (iStock only), zh-HK (creative assets only).
-]: nothing -> record<collections: table<asset_family: string, code: string, id: int, license_model: string, name: string, product_types: list>> {
+]: nothing -> oneof<record<collections: table<asset_family: string, code: string, id: int, license_model: string, name: string, product_types: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/collections" $auth.query)
@@ -1026,7 +1050,7 @@ export def "get-v3-countries" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string # Provide a header to specify the language of result values. Supported values: cs (iStock only), de, en-GB, en-US, es, fi (iStock only), fr, hu (iStock only), id (iStock only), it, ja, ko (creative assets only), nl, pl (creative assets only), pt-BR, pt-PT, ro (iStock only), ru (creative assets only), sv, th (iStock only), tr, uk (iStock only), vi (iStock only), zh-HK (creative assets only).
-]: nothing -> record<countries: table<iso_alpha_2: string, iso_alpha_3: string, name: string>> {
+]: nothing -> oneof<record<countries: table<iso_alpha_2: string, iso_alpha_3: string, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/countries" $auth.query)
@@ -1062,7 +1086,7 @@ export def "get-v3-customers-current" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string # Provide a header to specify the language of result values. Supported values: cs (iStock only), de, en-GB, en-US, es, fi (iStock only), fr, hu (iStock only), id (iStock only), it, ja, ko (creative assets only), nl, pl (creative assets only), pt-BR, pt-PT, ro (iStock only), ru (creative assets only), sv, th (iStock only), tr, uk (iStock only), vi (iStock only), zh-HK (creative assets only).
-]: nothing -> record<first_name: string, last_name: string, middle_name: string> {
+]: nothing -> oneof<record<first_name: string, last_name: string, middle_name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/customers/current" $auth.query)
@@ -1105,7 +1129,7 @@ export def "get-v3-downloads" [
   --product-type: string@product-type-completer # Specifies product type to be included in the previous download results. Product types easyaccess, editorialsubscription, imagepack, and premiumaccess are for GettyImages API keys. Product types royaltyfreesubscription and creditpack are for iStock API keys. To get previous iStockPhoto credit downloads, creditpack must be selected.
   --company-downloads: oneof<nothing, bool> # If specified, returns the list of previously downloaded images for all users in your company. Your account must be enabled for this functionality. Contact your Getty Images account rep for more information. Default is false. (default: false)
   --accept-language: string # Provide a header to specify the language of result values. Supported values: cs (iStock only), de, en-GB, en-US, es, fi (iStock only), fr, hu (iStock only), id (iStock only), it, ja, ko (creative assets only), nl, pl (creative assets only), pt-BR, pt-PT, ro (iStock only), ru (creative assets only), sv, th (iStock only), tr, uk (iStock only), vi (iStock only), zh-HK (creative assets only).
-]: nothing -> record<downloads: table<agreement_name: string, asset_type: string, date_downloaded: string, dimensions: record, download_details: record, download_source: string, id: string, product_id: int, product_type: string, size_name: string, thumb_uri: string, user: record>, result_count: int> {
+]: nothing -> oneof<record<downloads: table<agreement_name: string, asset_type: string, date_downloaded: string, dimensions: record, download_details: record, download_source: string, id: string, product_id: int, product_type: string, size_name: string, thumb_uri: string, user: record>, result_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "date_from" $date_from "scalar") (serialize-qp "date_to" $date_to "scalar") (serialize-qp "use_time" $use_time "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "product_type" $product_type "scalar") (serialize-qp "company_downloads" $company_downloads "scalar")] | flatten | str join "&"
@@ -1322,7 +1346,7 @@ export def "get-v3-images" [
   --ids: list<string> # Specifies one or more image ids to return. Use comma delimiter when requesting multiple ids. Maximum of 100 ids. (nullable)
   --fields: list # Specifies fields to return. Defaults to 'summary_set'. NOTE: Bytes, height, and width returned by 'download_sizes' field are estimates. (nullable)
   --accept-language: string # Provide a header to specify the language of result values. Supported values: cs (iStock only), de, en-GB, en-US, es, fi (iStock only), fr, hu (iStock only), id (iStock only), it, ja, ko (creative assets only), nl, pl (creative assets only), pt-BR, pt-PT, ro (iStock only), ru (creative assets only), sv, th (iStock only), tr, uk (iStock only), vi (iStock only), zh-HK (creative assets only).
-]: nothing -> record<images: any, images_not_found: list<string>> {
+]: nothing -> oneof<record<images: any, images_not_found: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "fields" $fields "csv")] | flatten | str join "&"
@@ -1361,7 +1385,7 @@ export def "get-v3-images-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list # Specifies fields to return. Defaults to 'summary_set'. NOTE: Bytes, height, and width returned by 'download_sizes' field are estimates. (nullable)
   --accept-language: string # Provide a header to specify the language of result values. Supported values: cs (iStock only), de, en-GB, en-US, es, fi (iStock only), fr, hu (iStock only), id (iStock only), it, ja, ko (creative assets only), nl, pl (creative assets only), pt-BR, pt-PT, ro (iStock only), ru (creative assets only), sv, th (iStock only), tr, uk (iStock only), vi (iStock only), zh-HK (creative assets only).
-]: nothing -> record<images: any, images_not_found: list<string>> {
+]: nothing -> oneof<record<images: any, images_not_found: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1401,7 +1425,7 @@ export def "get-v3-images-id-downloadhistory" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --company-downloads: oneof<nothing, bool> # If specified, returns the list of previously downloaded images for all users in your company. Your account must be enabled for this functionality. Contact your Getty Images account rep for more information. Default is false.
   --accept-language: string # Provide a header to specify the language of result values. Supported values: cs (iStock only), de, en-GB, en-US, es, fi (iStock only), fr, hu (iStock only), id (iStock only), it, ja, ko (creative assets only), nl, pl (creative assets only), pt-BR, pt-PT, ro (iStock only), ru (creative assets only), sv, th (iStock only), tr, uk (iStock only), vi (iStock only), zh-HK (creative assets only).
-]: nothing -> record<downloads: any, id: string> {
+]: nothing -> oneof<record<downloads: any, id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1443,7 +1467,7 @@ export def "get-v3-images-id-same-series" [
   --page: int # Identifies page to return. Default is 1. (format: int32, default: 1)
   --page-size: int # Specifies page size. Default is 30, maximum page_size is 100. (format: int32, default: 30)
   --accept-language: string # Provide a header to specify the language of result values. Supported values: cs (iStock only), de, en-GB, en-US, es, fi (iStock only), fr, hu (iStock only), id (iStock only), it, ja, ko (creative assets only), nl, pl (creative assets only), pt-BR, pt-PT, ro (iStock only), ru (creative assets only), sv, th (iStock only), tr, uk (iStock only), vi (iStock only), zh-HK (creative assets only).
-]: nothing -> record<images: table<allowed_use: record, alternative_ids: record, artist: string, asset_family: string, call_for_image: bool, caption: string, collection_code: string, collection_id: int, collection_name: string, color_type: string, copyright: string, date_camera_shot: string, date_created: string, display_sizes: list, download_product: string, editorial_segments: list, event_ids: list, graphical_style: string, id: string, istock_licenses: list, keywords: list, largest_downloads: list, license_model: string, max_dimensions: record, orientation: string, people: list, product_types: list, quality_rank: int, referral_destinations: list, title: string, uri_oembed: string>, related_searches: table<phrase: string, url: string>, result_count: int> {
+]: nothing -> oneof<record<images: table<allowed_use: record, alternative_ids: record, artist: string, asset_family: string, call_for_image: bool, caption: string, collection_code: string, collection_id: int, collection_name: string, color_type: string, copyright: string, date_camera_shot: string, date_created: string, display_sizes: list, download_product: string, editorial_segments: list, event_ids: list, graphical_style: string, id: string, istock_licenses: list, keywords: list, largest_downloads: list, license_model: string, max_dimensions: record, orientation: string, people: list, product_types: list, quality_rank: int, referral_destinations: list, title: string, uri_oembed: string>, related_searches: table<phrase: string, url: string>, result_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1485,7 +1509,7 @@ export def "get-v3-images-id-similar" [
   --page: int # Identifies page to return. Default is 1. (format: int32, default: 1)
   --page-size: int # Specifies page size. Default is 30, maximum page_size is 100. (format: int32, default: 30)
   --accept-language: string # Provide a header to specify the language of result values. Supported values: cs (iStock only), de, en-GB, en-US, es, fi (iStock only), fr, hu (iStock only), id (iStock only), it, ja, ko (creative assets only), nl, pl (creative assets only), pt-BR, pt-PT, ro (iStock only), ru (creative assets only), sv, th (iStock only), tr, uk (iStock only), vi (iStock only), zh-HK (creative assets only).
-]: nothing -> record<images: table<allowed_use: record, alternative_ids: record, artist: string, asset_family: string, call_for_image: bool, caption: string, collection_code: string, collection_id: int, collection_name: string, color_type: string, copyright: string, date_camera_shot: string, date_created: string, display_sizes: list, download_product: string, editorial_segments: list, event_ids: list, graphical_style: string, id: string, istock_licenses: list, keywords: list, largest_downloads: list, license_model: string, max_dimensions: record, orientation: string, people: list, product_types: list, quality_rank: int, referral_destinations: list, title: string, uri_oembed: string>, related_searches: table<phrase: string, url: string>, result_count: int> {
+]: nothing -> oneof<record<images: table<allowed_use: record, alternative_ids: record, artist: string, asset_family: string, call_for_image: bool, caption: string, collection_code: string, collection_id: int, collection_name: string, color_type: string, copyright: string, date_camera_shot: string, date_created: string, display_sizes: list, download_product: string, editorial_segments: list, event_ids: list, graphical_style: string, id: string, istock_licenses: list, keywords: list, largest_downloads: list, license_model: string, max_dimensions: record, orientation: string, people: list, product_types: list, quality_rank: int, referral_destinations: list, title: string, uri_oembed: string>, related_searches: table<phrase: string, url: string>, result_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1524,7 +1548,7 @@ export def "get-v3-orders-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string # Provide a header to specify the language of result values. Supported values: cs (iStock only), de, en-GB, en-US, es, fi (iStock only), fr, hu (iStock only), id (iStock only), it, ja, ko (creative assets only), nl, pl (creative assets only), pt-BR, pt-PT, ro (iStock only), ru (creative assets only), sv, th (iStock only), tr, uk (iStock only), vi (iStock only), zh-HK (creative assets only).
-]: nothing -> record<assets: table<id: string>, end_client: string, id: string, invoice_number: string, notes: record<licensee_name: string, ordered_by: string, project_title: string, purchase_order_number: string>, order_date: string> {
+]: nothing -> oneof<record<assets: table<id: string>, end_client: string, id: string, invoice_number: string, notes: record<licensee_name: string, ordered_by: string, project_title: string, purchase_order_number: string>, order_date: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1562,7 +1586,7 @@ export def "get-v3-products" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list # Comma separated list of fields. Allows product download requirements to be returned. (nullable)
   --accept-language: string # Provide a header to specify the language of result values. Supported values: cs (iStock only), de, en-GB, en-US, es, fi (iStock only), fr, hu (iStock only), id (iStock only), it, ja, ko (creative assets only), nl, pl (creative assets only), pt-BR, pt-PT, ro (iStock only), ru (creative assets only), sv, th (iStock only), tr, uk (iStock only), vi (iStock only), zh-HK (creative assets only).
-]: nothing -> record<products: table<agreement_name: string, application_website: string, credits_remaining: int, download_limit: int, download_limit_duration: string, download_limit_reset_utc_date: string, download_requirements: record, downloads_remaining: int, expiration_utc_date: string, id: int, imagepack_resolution: string, name: string, overage: record, status: string, team_credits: int, type: string>> {
+]: nothing -> oneof<record<products: table<agreement_name: string, application_website: string, credits_remaining: int, download_limit: int, download_limit_duration: string, download_limit_reset_utc_date: string, download_requirements: record, downloads_remaining: int, expiration_utc_date: string, id: int, imagepack_resolution: string, name: string, overage: record, status: string, team_credits: int, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "csv")] | flatten | str join "&"
@@ -1604,7 +1628,7 @@ export def "get-v3-purchased-assets" [
   --date-from: string # If specified, retrieves previous purchases on or after this date. Dates should be submitted in ISO 8601 format (i.e., YYYY-MM-DD). (nullable, format: date-time)
   --company-purchases: oneof<nothing, bool> # If specified, returns the list of previously purchased assets for all users in your company. Your account must be enabled for this functionality. Contact your Getty Images account rep for more information. Default is false. (default: false)
   --accept-language: string # Provide a header to specify the language of result values. Supported values: cs (iStock only), de, en-GB, en-US, es, fi (iStock only), fr, hu (iStock only), id (iStock only), it, ja, ko (creative assets only), nl, pl (creative assets only), pt-BR, pt-PT, ro (iStock only), ru (creative assets only), sv, th (iStock only), tr, uk (iStock only), vi (iStock only), zh-HK (creative assets only).
-]: nothing -> record<previous_purchases: table<asset_id: string, asset_type: string, date_purchased: string, download_uri: string, file_size_in_bytes: string, license_model: string, order_id: string, purchased_by: string, size_name: string, thumb_uri: string>, result_count: int> {
+]: nothing -> oneof<record<previous_purchases: table<asset_id: string, asset_type: string, date_purchased: string, download_uri: string, file_size_in_bytes: string, license_model: string, order_id: string, purchased_by: string, size_name: string, thumb_uri: string>, result_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "date_to" $date_to "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "date_from" $date_from "scalar") (serialize-qp "company_purchases" $company_purchases "scalar")] | flatten | str join "&"
@@ -1689,7 +1713,7 @@ export def "get-v3-search-events" [
   --sort-order: string@sort-order-completer-1 # Specifies the order in which to sort the results. Default is `newest`.
   --accept-language: string # Provide a header to specify the language of result values. Supported values: cs (iStock only), de, en-GB, en-US, es, fi (iStock only), fr, hu (iStock only), id (iStock only), it, ja, ko (creative assets only), nl, pl (creative assets only), pt-BR, pt-PT, ro (iStock only), ru (creative assets only), sv, th (iStock only), tr, uk (iStock only), vi (iStock only), zh-HK (creative assets only).
   --gi-country-code: string # Receive regionally relevant search results based on the value specified. Accepts only ISO Alpha-3 country codes. The Countries operation can be used to retrieve the codes.
-]: nothing -> record<events: table<child_event_count: int, editorial_segments: list, hero_image: record, id: int, image_count: int, location: record, name: string, start_date: string>, result_count: int> {
+]: nothing -> oneof<record<events: table<child_event_count: int, editorial_segments: list, hero_image: record, id: int, image_count: int, location: record, name: string, start_date: string>, result_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "editorial_segment" $editorial_segment "scalar") (serialize-qp "date_from" $date_from "scalar") (serialize-qp "date_to" $date_to "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "phrase" $phrase "scalar") (serialize-qp "sort_order" $sort_order "scalar")] | flatten | str join "&"
@@ -1752,7 +1776,7 @@ export def "get-v3-search-images" [
   --specific-people: list<string> # Return only images associated with specific people (using a comma-delimited list). (nullable)
   --accept-language: string # Provide a header to specify the language of result values. Supported values: cs (iStock only), de, en-GB, en-US, es, fi (iStock only), fr, hu (iStock only), id (iStock only), it, ja, ko (creative assets only), nl, pl (creative assets only), pt-BR, pt-PT, ro (iStock only), ru (creative assets only), sv, th (iStock only), tr, uk (iStock only), vi (iStock only), zh-HK (creative assets only).
   --gi-country-code: string # Receive regionally relevant search results based on the value specified. Accepts only ISO Alpha-3 country codes. The Countries operation can be used to retrieve the codes.
-]: nothing -> record<images: table<allowed_use: record, alternative_ids: record, artist: string, asset_family: string, call_for_image: bool, caption: string, collection_code: string, collection_id: int, collection_name: string, color_type: string, copyright: string, date_camera_shot: string, date_created: string, display_sizes: list, download_product: string, editorial_segments: list, event_ids: list, graphical_style: string, id: string, istock_licenses: list, keywords: list, largest_downloads: list, license_model: string, max_dimensions: record, orientation: string, people: list, product_types: list, quality_rank: int, referral_destinations: list, title: string, uri_oembed: string>, related_searches: table<phrase: string, url: string>, result_count: int> {
+]: nothing -> oneof<record<images: table<allowed_use: record, alternative_ids: record, artist: string, asset_family: string, call_for_image: bool, caption: string, collection_code: string, collection_id: int, collection_name: string, color_type: string, copyright: string, date_camera_shot: string, date_created: string, display_sizes: list, download_product: string, editorial_segments: list, event_ids: list, graphical_style: string, id: string, istock_licenses: list, keywords: list, largest_downloads: list, license_model: string, max_dimensions: record, orientation: string, people: list, product_types: list, quality_rank: int, referral_destinations: list, title: string, uri_oembed: string>, related_searches: table<phrase: string, url: string>, result_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "age_of_people" $age_of_people "csv") (serialize-qp "artists" $artists "scalar") (serialize-qp "collection_codes" $collection_codes "csv") (serialize-qp "collections_filter_type" $collections_filter_type "scalar") (serialize-qp "color" $color "scalar") (serialize-qp "compositions" $compositions "csv") (serialize-qp "download_product" $download_product "scalar") (serialize-qp "embed_content_only" $embed_content_only "scalar") (serialize-qp "event_ids" $event_ids "csv") (serialize-qp "ethnicity" $ethnicity "csv") (serialize-qp "exclude_nudity" $exclude_nudity "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "file_types" $file_types "csv") (serialize-qp "graphical_styles" $graphical_styles "csv") (serialize-qp "graphical_styles_filter_type" $graphical_styles_filter_type "scalar") (serialize-qp "include_related_searches" $include_related_searches "scalar") (serialize-qp "keyword_ids" $keyword_ids "csv") (serialize-qp "minimum_size" $minimum_size "scalar") (serialize-qp "number_of_people" $number_of_people "csv") (serialize-qp "orientations" $orientations "csv") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "phrase" $phrase "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "specific_people" $specific_people "csv")] | flatten | str join "&"
@@ -1819,7 +1843,7 @@ export def "get-v3-search-images-creative" [
   --facet-max-count: int # Specifies the maximum number of facets to return per type. Default is 300. (format: int32, default: 300)
   --accept-language: string # Provide a header to specify the language of result values. Supported values: cs (iStock only), de, en-GB, en-US, es, fi (iStock only), fr, hu (iStock only), id (iStock only), it, ja, ko (creative assets only), nl, pl (creative assets only), pt-BR, pt-PT, ro (iStock only), ru (creative assets only), sv, th (iStock only), tr, uk (iStock only), vi (iStock only), zh-HK (creative assets only).
   --gi-country-code: string # Receive regionally relevant search results based on the value specified. Accepts only ISO Alpha-3 country codes. The Countries operation can be used to retrieve the codes.
-]: nothing -> record<auto_corrections: record<phrase: string>, images: table<allowed_use: record, alternative_ids: record, artist: string, asset_family: string, call_for_image: bool, caption: string, collection_code: string, collection_id: int, collection_name: string, color_type: string, copyright: string, date_camera_shot: string, date_created: string, display_sizes: list, download_product: string, graphical_style: string, id: string, keywords: list, largest_downloads: list, license_model: string, max_dimensions: record, orientation: string, quality_rank: int, referral_destinations: list, title: string, uri_oembed: string>, related_searches: table<phrase: string, url: string>, result_count: int> {
+]: nothing -> oneof<record<auto_corrections: record<phrase: string>, images: table<allowed_use: record, alternative_ids: record, artist: string, asset_family: string, call_for_image: bool, caption: string, collection_code: string, collection_id: int, collection_name: string, color_type: string, copyright: string, date_camera_shot: string, date_created: string, display_sizes: list, download_product: string, graphical_style: string, id: string, keywords: list, largest_downloads: list, license_model: string, max_dimensions: record, orientation: string, quality_rank: int, referral_destinations: list, title: string, uri_oembed: string>, related_searches: table<phrase: string, url: string>, result_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "age_of_people" $age_of_people "csv") (serialize-qp "artists" $artists "scalar") (serialize-qp "collection_codes" $collection_codes "csv") (serialize-qp "collections_filter_type" $collections_filter_type "scalar") (serialize-qp "color" $color "scalar") (serialize-qp "compositions" $compositions "csv") (serialize-qp "download_product" $download_product "scalar") (serialize-qp "embed_content_only" $embed_content_only "scalar") (serialize-qp "ethnicity" $ethnicity "csv") (serialize-qp "exclude_keyword_ids" $exclude_keyword_ids "csv") (serialize-qp "exclude_nudity" $exclude_nudity "scalar") (serialize-qp "exclude_editorial_use_only" $exclude_editorial_use_only "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "file_types" $file_types "csv") (serialize-qp "graphical_styles" $graphical_styles "csv") (serialize-qp "graphical_styles_filter_type" $graphical_styles_filter_type "scalar") (serialize-qp "include_related_searches" $include_related_searches "scalar") (serialize-qp "keyword_ids" $keyword_ids "csv") (serialize-qp "minimum_size" $minimum_size "scalar") (serialize-qp "number_of_people" $number_of_people "csv") (serialize-qp "orientations" $orientations "csv") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "phrase" $phrase "scalar") (serialize-qp "safe_search" $safe_search "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "facet_fields" $facet_fields "csv") (serialize-qp "include_facets" $include_facets "scalar") (serialize-qp "facet_max_count" $facet_max_count "scalar")] | flatten | str join "&"
@@ -1867,7 +1891,7 @@ export def "get-v3-search-images-creative-by-image" [
   --product-types: list<string> # Filter images to those from one of your product types. Allowed values are easyaccess, imagepack, premiumaccess and royaltyfreesubscription. If you have more than one instance of a product, you may also include the ID of the product instance you wish to filter on. For example, some users may have more than one premiumaccess product, so the product_types value would be premiumaccess:1234. Product ID can be obtained from the GET /products response. (nullable)
   --accept-language: string # Provide a header to specify the language of result values. Supported values: cs (iStock only), de, en-GB, en-US, es, fi (iStock only), fr, hu (iStock only), id (iStock only), it, ja, ko (creative assets only), nl, pl (creative assets only), pt-BR, pt-PT, ro (iStock only), ru (creative assets only), sv, th (iStock only), tr, uk (iStock only), vi (iStock only), zh-HK (creative assets only).
   --gi-country-code: string # Receive regionally relevant search results based on the value specified. Accepts only ISO Alpha-3 country codes. The Countries operation can be used to retrieve the codes.
-]: nothing -> record<auto_corrections: record<phrase: string>, facets: record<artists: list<record>, entertainment: list<record>, events: list<record>, locations: list<record>, specific_people: list<record>>, image_fingerprint: string, images: any, related_searches: table<phrase: string, url: string>, result_count: int> {
+]: nothing -> oneof<record<auto_corrections: record<phrase: string>, facets: record<artists: list<record>, entertainment: list<record>, events: list<record>, locations: list<record>, specific_people: list<record>>, image_fingerprint: string, images: any, related_searches: table<phrase: string, url: string>, result_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "asset_id" $asset_id "scalar") (serialize-qp "exclude_editorial_use_only" $exclude_editorial_use_only "scalar") (serialize-qp "facet_fields" $facet_fields "csv") (serialize-qp "facet_max_count" $facet_max_count "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "image_url" $image_url "scalar") (serialize-qp "include_facets" $include_facets "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "product_types" $product_types "csv")] | flatten | str join "&"
@@ -1936,7 +1960,7 @@ export def "get-v3-search-images-editorial" [
   --facet-max-count: int # Specifies the maximum number of facets to return per type. Default is 300. (format: int32, default: 300)
   --accept-language: string # Provide a header to specify the language of result values. Supported values: cs (iStock only), de, en-GB, en-US, es, fi (iStock only), fr, hu (iStock only), id (iStock only), it, ja, ko (creative assets only), nl, pl (creative assets only), pt-BR, pt-PT, ro (iStock only), ru (creative assets only), sv, th (iStock only), tr, uk (iStock only), vi (iStock only), zh-HK (creative assets only).
   --gi-country-code: string # Receive regionally relevant search results based on the value specified. Accepts only ISO Alpha-3 country codes. The Countries operation can be used to retrieve the codes.
-]: nothing -> record<images: table<allowed_use: record, alternative_ids: record, artist: string, asset_family: string, call_for_image: bool, caption: string, collection_code: string, collection_id: int, collection_name: string, color_type: string, copyright: string, date_camera_shot: string, date_created: string, display_sizes: list, download_product: string, editorial_segments: list, editorial_source: record, event_ids: list, graphical_style: string, id: string, keywords: list, largest_downloads: list, license_model: string, max_dimensions: record, orientation: string, people: list, product_types: list, quality_rank: int, referral_destinations: list, title: string, uri_oembed: string>, related_searches: table<phrase: string, url: string>, result_count: int> {
+]: nothing -> oneof<record<images: table<allowed_use: record, alternative_ids: record, artist: string, asset_family: string, call_for_image: bool, caption: string, collection_code: string, collection_id: int, collection_name: string, color_type: string, copyright: string, date_camera_shot: string, date_created: string, display_sizes: list, download_product: string, editorial_segments: list, editorial_source: record, event_ids: list, graphical_style: string, id: string, keywords: list, largest_downloads: list, license_model: string, max_dimensions: record, orientation: string, people: list, product_types: list, quality_rank: int, referral_destinations: list, title: string, uri_oembed: string>, related_searches: table<phrase: string, url: string>, result_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "age_of_people" $age_of_people "csv") (serialize-qp "artists" $artists "scalar") (serialize-qp "collection_codes" $collection_codes "csv") (serialize-qp "collections_filter_type" $collections_filter_type "scalar") (serialize-qp "compositions" $compositions "csv") (serialize-qp "date_from" $date_from "scalar") (serialize-qp "date_to" $date_to "scalar") (serialize-qp "download_product" $download_product "scalar") (serialize-qp "editorial_segments" $editorial_segments "csv") (serialize-qp "embed_content_only" $embed_content_only "scalar") (serialize-qp "ethnicity" $ethnicity "csv") (serialize-qp "event_ids" $event_ids "csv") (serialize-qp "exclude_keyword_ids" $exclude_keyword_ids "csv") (serialize-qp "fields" $fields "csv") (serialize-qp "file_types" $file_types "csv") (serialize-qp "graphical_styles" $graphical_styles "csv") (serialize-qp "graphical_styles_filter_type" $graphical_styles_filter_type "scalar") (serialize-qp "include_related_searches" $include_related_searches "scalar") (serialize-qp "keyword_ids" $keyword_ids "csv") (serialize-qp "minimum_size" $minimum_size "scalar") (serialize-qp "number_of_people" $number_of_people "csv") (serialize-qp "orientations" $orientations "csv") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "phrase" $phrase "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "specific_people" $specific_people "csv") (serialize-qp "minimum_quality_rank" $minimum_quality_rank "scalar") (serialize-qp "facet_fields" $facet_fields "csv") (serialize-qp "include_facets" $include_facets "scalar") (serialize-qp "facet_max_count" $facet_max_count "scalar")] | flatten | str join "&"
@@ -2004,7 +2028,7 @@ export def "get-v3-search-videos-creative" [
   --viewpoints: list # Filter based on viewpoint. (nullable)
   --accept-language: string # Provide a header to specify the language of result values. Supported values: cs (iStock only), de, en-GB, en-US, es, fi (iStock only), fr, hu (iStock only), id (iStock only), it, ja, ko (creative assets only), nl, pl (creative assets only), pt-BR, pt-PT, ro (iStock only), ru (creative assets only), sv, th (iStock only), tr, uk (iStock only), vi (iStock only), zh-HK (creative assets only).
   --gi-country-code: string # Receive regionally relevant search results based on the value specified. Accepts only ISO Alpha-3 country codes. The Countries operation can be used to retrieve the codes.
-]: nothing -> record<auto_corrections: record<phrase: string>, facets: record<artists: list<record>, entertainment: list<record>, events: list<record>, locations: list<record>, specific_people: list<record>>, related_searches: table<phrase: string, url: string>, result_count: int, videos: table<allowed_use: record, artist: string, asset_family: string, caption: string, clip_length: string, collection_code: string, collection_id: int, collection_name: string, color_type: string, copyright: string, date_created: string, display_sizes: list, download_product: string, era: string, event_ids: list, id: string, istock_licenses: list, keywords: list, largest_downloads: list, license_model: string, mastered_to: string, originally_shot_on: string, product_types: list, referral_destinations: list, shot_speed: string, title: string>> {
+]: nothing -> oneof<record<auto_corrections: record<phrase: string>, facets: record<artists: list<record>, entertainment: list<record>, events: list<record>, locations: list<record>, specific_people: list<record>>, related_searches: table<phrase: string, url: string>, result_count: int, videos: table<allowed_use: record, artist: string, asset_family: string, caption: string, clip_length: string, collection_code: string, collection_id: int, collection_name: string, color_type: string, copyright: string, date_created: string, display_sizes: list, download_product: string, era: string, event_ids: list, id: string, istock_licenses: list, keywords: list, largest_downloads: list, license_model: string, mastered_to: string, originally_shot_on: string, product_types: list, referral_destinations: list, shot_speed: string, title: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "age_of_people" $age_of_people "csv") (serialize-qp "artists" $artists "scalar") (serialize-qp "aspect_ratios" $aspect_ratios "csv") (serialize-qp "collection_codes" $collection_codes "csv") (serialize-qp "collections_filter_type" $collections_filter_type "scalar") (serialize-qp "compositions" $compositions "csv") (serialize-qp "download_product" $download_product "scalar") (serialize-qp "exclude_nudity" $exclude_nudity "scalar") (serialize-qp "exclude_editorial_use_only" $exclude_editorial_use_only "scalar") (serialize-qp "exclude_keyword_ids" $exclude_keyword_ids "csv") (serialize-qp "fields" $fields "csv") (serialize-qp "format_available" $format_available "scalar") (serialize-qp "frame_rates" $frame_rates "csv") (serialize-qp "image_techniques" $image_techniques "csv") (serialize-qp "include_related_searches" $include_related_searches "scalar") (serialize-qp "keyword_ids" $keyword_ids "csv") (serialize-qp "license_models" $license_models "csv") (serialize-qp "orientations" $orientations "csv") (serialize-qp "min_clip_length" $min_clip_length "scalar") (serialize-qp "max_clip_length" $max_clip_length "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "phrase" $phrase "scalar") (serialize-qp "safe_search" $safe_search "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "release_status" $release_status "scalar") (serialize-qp "facet_fields" $facet_fields "csv") (serialize-qp "facet_max_count" $facet_max_count "scalar") (serialize-qp "include_facets" $include_facets "scalar") (serialize-qp "viewpoints" $viewpoints "csv")] | flatten | str join "&"
@@ -2052,7 +2076,7 @@ export def "get-v3-search-videos-creative-by-image" [
   --product-types: list<string> # Filter images to those from one of your product types. Allowed values are easyaccess, imagepack, premiumaccess and royaltyfreesubscription. If you have more than one instance of a product, you may also include the ID of the product instance you wish to filter on. For example, some users may have more than one premiumaccess product, so the product_types value would be premiumaccess:1234. Product ID can be obtained from the GET /products response. (nullable)
   --accept-language: string # Provide a header to specify the language of result values. Supported values: cs (iStock only), de, en-GB, en-US, es, fi (iStock only), fr, hu (iStock only), id (iStock only), it, ja, ko (creative assets only), nl, pl (creative assets only), pt-BR, pt-PT, ro (iStock only), ru (creative assets only), sv, th (iStock only), tr, uk (iStock only), vi (iStock only), zh-HK (creative assets only).
   --gi-country-code: string # Receive regionally relevant search results based on the value specified. Accepts only ISO Alpha-3 country codes. The Countries operation can be used to retrieve the codes.
-]: nothing -> record<auto_corrections: record<phrase: string>, facets: record<artists: list<record>, entertainment: list<record>, events: list<record>, locations: list<record>, specific_people: list<record>>, related_searches: table<phrase: string, url: string>, result_count: int, videos: table<allowed_use: record, artist: string, asset_family: string, caption: string, clip_length: string, collection_code: string, collection_id: int, collection_name: string, color_type: string, copyright: string, date_created: string, display_sizes: list, download_product: string, era: string, event_ids: list, id: string, istock_licenses: list, keywords: list, largest_downloads: list, license_model: string, mastered_to: string, originally_shot_on: string, product_types: list, referral_destinations: list, shot_speed: string, title: string>> {
+]: nothing -> oneof<record<auto_corrections: record<phrase: string>, facets: record<artists: list<record>, entertainment: list<record>, events: list<record>, locations: list<record>, specific_people: list<record>>, related_searches: table<phrase: string, url: string>, result_count: int, videos: table<allowed_use: record, artist: string, asset_family: string, caption: string, clip_length: string, collection_code: string, collection_id: int, collection_name: string, color_type: string, copyright: string, date_created: string, display_sizes: list, download_product: string, era: string, event_ids: list, id: string, istock_licenses: list, keywords: list, largest_downloads: list, license_model: string, mastered_to: string, originally_shot_on: string, product_types: list, referral_destinations: list, shot_speed: string, title: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "asset_id" $asset_id "scalar") (serialize-qp "exclude_editorial_use_only" $exclude_editorial_use_only "scalar") (serialize-qp "facet_fields" $facet_fields "csv") (serialize-qp "facet_max_count" $facet_max_count "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "image_url" $image_url "scalar") (serialize-qp "include_facets" $include_facets "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "product_types" $product_types "csv")] | flatten | str join "&"
@@ -2117,7 +2141,7 @@ export def "get-v3-search-videos-editorial" [
   --viewpoints: list # Filter based on viewpoint. (nullable)
   --accept-language: string # Provide a header to specify the language of result values. Supported values: cs (iStock only), de, en-GB, en-US, es, fi (iStock only), fr, hu (iStock only), id (iStock only), it, ja, ko (creative assets only), nl, pl (creative assets only), pt-BR, pt-PT, ro (iStock only), ru (creative assets only), sv, th (iStock only), tr, uk (iStock only), vi (iStock only), zh-HK (creative assets only).
   --gi-country-code: string # Receive regionally relevant search results based on the value specified. Accepts only ISO Alpha-3 country codes. The Countries operation can be used to retrieve the codes.
-]: nothing -> record<facets: record<artists: list<record>, entertainment: list<record>, events: list<record>, locations: list<record>, specific_people: list<record>>, related_searches: table<phrase: string, url: string>, result_count: int, videos: table<allowed_use: record, artist: string, asset_family: string, caption: string, clip_length: string, collection_code: string, collection_id: int, collection_name: string, color_type: string, copyright: string, date_created: string, display_sizes: list, download_product: string, era: string, event_ids: list, id: string, istock_licenses: list, keywords: list, largest_downloads: list, license_model: string, mastered_to: string, originally_shot_on: string, product_types: list, referral_destinations: list, shot_speed: string, source: string, title: string>> {
+]: nothing -> oneof<record<facets: record<artists: list<record>, entertainment: list<record>, events: list<record>, locations: list<record>, specific_people: list<record>>, related_searches: table<phrase: string, url: string>, result_count: int, videos: table<allowed_use: record, artist: string, asset_family: string, caption: string, clip_length: string, collection_code: string, collection_id: int, collection_name: string, color_type: string, copyright: string, date_created: string, display_sizes: list, download_product: string, era: string, event_ids: list, id: string, istock_licenses: list, keywords: list, largest_downloads: list, license_model: string, mastered_to: string, originally_shot_on: string, product_types: list, referral_destinations: list, shot_speed: string, source: string, title: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "age_of_people" $age_of_people "csv") (serialize-qp "artists" $artists "scalar") (serialize-qp "aspect_ratios" $aspect_ratios "csv") (serialize-qp "collection_codes" $collection_codes "csv") (serialize-qp "collections_filter_type" $collections_filter_type "scalar") (serialize-qp "compositions" $compositions "csv") (serialize-qp "download_product" $download_product "scalar") (serialize-qp "editorial_video_types" $editorial_video_types "csv") (serialize-qp "fields" $fields "csv") (serialize-qp "format_available" $format_available "scalar") (serialize-qp "frame_rates" $frame_rates "csv") (serialize-qp "image_techniques" $image_techniques "csv") (serialize-qp "include_related_searches" $include_related_searches "scalar") (serialize-qp "keyword_ids" $keyword_ids "csv") (serialize-qp "min_clip_length" $min_clip_length "scalar") (serialize-qp "max_clip_length" $max_clip_length "scalar") (serialize-qp "orientations" $orientations "csv") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "phrase" $phrase "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "specific_people" $specific_people "csv") (serialize-qp "release_status" $release_status "scalar") (serialize-qp "facet_fields" $facet_fields "csv") (serialize-qp "include_facets" $include_facets "scalar") (serialize-qp "facet_max_count" $facet_max_count "scalar") (serialize-qp "viewpoints" $viewpoints "csv")] | flatten | str join "&"
@@ -2143,7 +2167,6 @@ export def "get-v3-search-videos-editorial" [
 # Report usage of assets via a batch format.
 #
 # PUT /v3/usage-batches/{id}
-# --asset_usages item shape: {asset_id?: string, quantity?: int, usage_date?: string}
 export def "put-v3-usage-batches-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2156,7 +2179,7 @@ export def "put-v3-usage-batches-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --asset-usages: list # Identifies the list of asset id, usage count and date of usage combinations to record. (nullable) — item shape: {asset_id?: string, quantity?: int, usage_date?: string}
-]: any -> record<invalid_assets: list<string>, total_asset_usages_processed: int> {
+]: any -> oneof<record<invalid_assets: list<string>, total_asset_usages_processed: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2275,7 +2298,7 @@ export def "get-v3-videos-id-downloadhistory" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --company-downloads: oneof<nothing, bool> # If specified, returns the list of previously downloaded videos for all users in your company. Your account must be enabled for this functionality. Contact your Getty Images account rep for more information. Default is false.
   --accept-language: string # Provide a header to specify the language of result values. Supported values: cs (iStock only), de, en-GB, en-US, es, fi (iStock only), fr, hu (iStock only), id (iStock only), it, ja, ko (creative assets only), nl, pl (creative assets only), pt-BR, pt-PT, ro (iStock only), ru (creative assets only), sv, th (iStock only), tr, uk (iStock only), vi (iStock only), zh-HK (creative assets only).
-]: nothing -> record<downloads: any, id: string> {
+]: nothing -> oneof<record<downloads: any, id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }

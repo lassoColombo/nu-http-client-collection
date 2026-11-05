@@ -14,27 +14,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -42,8 +51,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -54,7 +68,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -89,7 +112,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -115,9 +139,9 @@ def trigger-scope-completer [] { ["RECEIVED" "SENT"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-blocked-numbers" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-blocked-numbers" "post-blocked-numbers" "post-credit-transfer" "get-messages" "post-messages" "get-messages-send" "get-messages-id" "get-messages-id-related-received-messages" "get-profile" "post-rmm-pre-sign-attachment" "get-webhooks" "post-webhooks" "delete-webhooks-id" "get-webhooks-id" "post-webhooks-id" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -150,7 +174,7 @@ export def "get-blocked-numbers" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --min-id: int # Records with an `id` that is greater or equal to min-id will be returned. The default value is `0`. You can add 1 to an id that you previously retrieved, to return subsequent records. (format: int32)
   --limit: int # The maximum number of records to return. The default value is `10000`. The value cannot be greater than 10000. (format: int32)
-]: nothing -> record<id: float, phoneNumber: string> {
+]: nothing -> oneof<record<id: float, phoneNumber: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "min-id" $min_id "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
@@ -265,7 +289,7 @@ export def "get-messages" [
   --limit: float # The maximum number of messages that are returned. The default is 1000. The value of `limit` is not a guarantee that a specific number of messages will be in the response, even if there are more messages available. Consider the case where you have 150 messages and you specify `limit=50`. It is possible that only 49 messages will be returned. The way to make sure that there are no more messages is to submit a new call using the `id` filter field with the `<` operator (described below). (format: int)
   --filter: string # See the message filtering for more information.
   --sort-order: string@sort-order-completer # The default value is DESCENDING If the `sortOrder` is DESCENDING, the newest messages be first in the result. ASCENDING places the oldest messages on top of the response.
-]: nothing -> table<body: any, creditCost: float, encoding: string, from: string, id: string, messageClass: int, numberOfParts: int, protocolId: int, relatedSentMessageId: string, status: record<id: string, subtype: string, type: string>, submission: record<date: string, id: string>, to: string, type: string, userSuppliedId: string> {
+]: nothing -> oneof<table<body: any, creditCost: float, encoding: string, from: string, id: string, messageClass: int, numberOfParts: int, protocolId: int, relatedSentMessageId: string, status: record<id: string, subtype: string, type: string>, submission: record<date: string, id: string>, to: string, type: string, userSuppliedId: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
@@ -304,7 +328,7 @@ export def "post-messages" [
   --schedule-date: string # Allows you to send a message in the future. An example value is `2019-02-18T13:00:00+02:00`. It encodes to `2019-02-18T13%3A00%3A00%2B02%3A00`. Credits are deducted from your account immediately. Once submitted, scheduled messages cannot be changed or cancelled. The date can be a maximum of two years in the future. If the value is in the past, the message will be sent immediately. The date format requires you to supply an offset from UTC. You can decide to use the offset of your timezone, or maybe the zone of the recipient's location is more appropriate. If the destination is a group, the group members are determined at the time that you submit the message; not the time the message is scheduled to be sent. (format: date-time)
   --schedule-description: string # A note that is stored together with a scheduled submission, which could be used to more easily identify the scheduled submission at a later date. The value of this field is ignored if the `schedule-date` is not provided. A value that is longer than 256 characters is truncated.
   --body: list
-]: any -> table<body: any, creditCost: float, encoding: string, from: string, id: string, messageClass: int, numberOfParts: int, protocolId: int, relatedSentMessageId: string, status: record<id: string, subtype: string, type: string>, submission: record<date: string, id: string>, to: string, type: string, userSuppliedId: string> {
+]: any -> oneof<table<body: any, creditCost: float, encoding: string, from: string, id: string, messageClass: int, numberOfParts: int, protocolId: int, relatedSentMessageId: string, status: record<id: string, subtype: string, type: string>, submission: record<date: string, id: string>, to: string, type: string, userSuppliedId: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -342,21 +366,21 @@ export def "get-messages-send" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --to: string # The phone number of the recipient. (required)
-  --body: string # The text you want to send. (required)
+  --qp-body: string # The text you want to send. (required)
   --deduplication-id: int # Refer to the `deduplication-id` parameter. (format: int-32)
-]: nothing -> table<body: any, creditCost: float, encoding: string, from: string, id: string, messageClass: int, numberOfParts: int, protocolId: int, relatedSentMessageId: string, status: record<id: string, subtype: string, type: string>, submission: record<date: string, id: string>, to: string, type: string, userSuppliedId: string> {
+]: nothing -> oneof<table<body: any, creditCost: float, encoding: string, from: string, id: string, messageClass: int, numberOfParts: int, protocolId: int, relatedSentMessageId: string, status: record<id: string, subtype: string, type: string>, submission: record<date: string, id: string>, to: string, type: string, userSuppliedId: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($to == null) { error make --unspanned { msg: "required query parameter 'to' missing: pass --to" } }
-  if ($body == null) { error make --unspanned { msg: "required query parameter 'body' missing: pass --body" } }
-  let qp = [(serialize-qp "to" $to "scalar") (serialize-qp "body" $body "scalar") (serialize-qp "deduplication-id" $deduplication_id "scalar")] | flatten | str join "&"
+  if ($qp_body == null) { error make --unspanned { msg: "required query parameter 'body' missing: pass --qp-body" } }
+  let qp = [(serialize-qp "to" $to "scalar") (serialize-qp "body" $qp_body "scalar") (serialize-qp "deduplication-id" $deduplication_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/messages/send" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"to": $to, "body": $body, "deduplication-id": $deduplication_id} | compact)
+    query: ({"to": $to, "body": $qp_body, "deduplication-id": $deduplication_id} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -381,7 +405,7 @@ export def "get-messages-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<body: any, creditCost: float, encoding: string, from: string, id: string, messageClass: int, numberOfParts: int, protocolId: int, relatedSentMessageId: string, status: record<id: string, subtype: string, type: string>, submission: record<date: string, id: string>, to: string, type: string, userSuppliedId: string> {
+]: nothing -> oneof<record<body: any, creditCost: float, encoding: string, from: string, id: string, messageClass: int, numberOfParts: int, protocolId: int, relatedSentMessageId: string, status: record<id: string, subtype: string, type: string>, submission: record<date: string, id: string>, to: string, type: string, userSuppliedId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -416,7 +440,7 @@ export def "get-messages-id-related-received-messages" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<body: any, creditCost: float, encoding: string, from: string, id: string, messageClass: int, numberOfParts: int, protocolId: int, relatedSentMessageId: string, status: record<id: string, subtype: string, type: string>, submission: record<date: string, id: string>, to: string, type: string, userSuppliedId: string> {
+]: nothing -> oneof<table<body: any, creditCost: float, encoding: string, from: string, id: string, messageClass: int, numberOfParts: int, protocolId: int, relatedSentMessageId: string, status: record<id: string, subtype: string, type: string>, submission: record<date: string, id: string>, to: string, type: string, userSuppliedId: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -450,7 +474,7 @@ export def "get-profile" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<commerce: record<address: record<city: string, country: string, postalCode: string, region: string, street: list>, bankPaymentReference: string>, company: record<name: string, taxReference: string>, created: string, credits: record<balance: float, isTransferAllowed: bool, limit: int>, id: string, originAddresses: record<allowed: list<string>, isFullControlAllowed: bool>, quota: record<remaining: int, size: int>, username: string> {
+]: nothing -> oneof<record<commerce: record<address: record<city: string, country: string, postalCode: string, region: string, street: list>, bankPaymentReference: string>, company: record<name: string, taxReference: string>, created: string, credits: record<balance: float, isTransferAllowed: bool, limit: int>, id: string, originAddresses: record<allowed: list<string>, isFullControlAllowed: bool>, quota: record<remaining: int, size: int>, username: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/profile" $auth.query)
@@ -485,7 +509,7 @@ export def "post-rmm-pre-sign-attachment" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --file-extension: string # The extension of the file. Usually related to the media type. (e.g. pdf)
   --media-type: string # The media type of the file you would like to upload. If you are not sure what value to use here, check out the standard [list of media types](https://www.iana.org/assignments/media-types/media-types.xhtml). (e.g. application/pdf)
-]: any -> record<fetchUrl: string, fields: table<name: string, value: string>, putUrl: string> {
+]: any -> oneof<record<fetchUrl: string, fields: table<name: string, value: string>, putUrl: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -521,7 +545,7 @@ export def "get-webhooks" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<active: bool, contactEmailAddress: string, id: float, name: string, onWebApp: bool, triggerScope: string, url: string> {
+]: nothing -> oneof<table<active: bool, contactEmailAddress: string, id: float, name: string, onWebApp: bool, triggerScope: string, url: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/webhooks" $auth.query)
@@ -561,7 +585,7 @@ export def "post-webhooks" [
   --on-web-app: oneof<nothing, bool> # Indicates whether you want to show this webhook on the Web App. Webhooks shown there can be updated by the user that use the public Web site. The default value is `true`. (e.g. true)
   trigger_scope: string@trigger-scope-completer # Specifies when the webhook will be triggered. Please note the values are case sensitive. If the value is `SENT`, the webhook will be called when a status update becomes available for a message you sent (i.e. a mobile terminating (MT) message). If the value is `RECEIVED`, the webhook will be called when a message is received (i.e. a mobile originating (MO) message). Note that this field forces you to create two separate webhook entries if you want to collect all messages. However, you can use the same `url` for both webhooks if you want. (e.g. SENT)
   url: string # The location of the webhook. In addition to being a [valid URI](https://en.wikipedia.org/wiki/Uniform_Resource_Identifier#Syntax), the url must also start with `http` or `https`. (e.g. https://www.example.com)
-]: any -> record<active: bool, contactEmailAddress: string, id: float, name: string, onWebApp: bool, triggerScope: string, url: string> {
+]: any -> oneof<record<active: bool, contactEmailAddress: string, id: float, name: string, onWebApp: bool, triggerScope: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -633,7 +657,7 @@ export def "get-webhooks-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<active: bool, contactEmailAddress: string, id: float, name: string, onWebApp: bool, triggerScope: string, url: string> {
+]: nothing -> oneof<record<active: bool, contactEmailAddress: string, id: float, name: string, onWebApp: bool, triggerScope: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -675,7 +699,7 @@ export def "post-webhooks-id" [
   --on-web-app: oneof<nothing, bool> # Indicates whether you want to show this webhook on the Web App. Webhooks shown there can be updated by the user that use the public Web site. The default value is `true`. (e.g. true)
   trigger_scope: string@trigger-scope-completer # Specifies when the webhook will be triggered. Please note the values are case sensitive. If the value is `SENT`, the webhook will be called when a status update becomes available for a message you sent (i.e. a mobile terminating (MT) message). If the value is `RECEIVED`, the webhook will be called when a message is received (i.e. a mobile originating (MO) message). Note that this field forces you to create two separate webhook entries if you want to collect all messages. However, you can use the same `url` for both webhooks if you want. (e.g. SENT)
   url: string # The location of the webhook. In addition to being a [valid URI](https://en.wikipedia.org/wiki/Uniform_Resource_Identifier#Syntax), the url must also start with `http` or `https`. (e.g. https://www.example.com)
-]: any -> record<active: bool, contactEmailAddress: string, id: float, name: string, onWebApp: bool, triggerScope: string, url: string> {
+]: any -> oneof<record<active: bool, contactEmailAddress: string, id: float, name: string, onWebApp: bool, triggerScope: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)

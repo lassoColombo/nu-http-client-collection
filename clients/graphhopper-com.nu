@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "query-key" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "key")=(encode-path-segment $token_val)", location: "query"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -108,9 +132,9 @@ def algorithm-completer [] { ["alternative_route" "round_trip"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "solve-clustering-problem" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["solve-clustering-problem" "async-clustering-problem" "get-cluster-solution" "get-geocode" "get-isochrone" "post-gpx" "get-matrix" "post-matrix" "calculate-matrix" "get-matrix-solution" "get-route" "post-route" "get-route-info" "solve-vrp" "async-vrp" "get-solution" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -132,8 +156,6 @@ export def commands []: nothing -> table {
 #
 # POST /cluster
 # operationId: solveClusteringProblem
-# --configuration shape: {clustering?: record, response_type?: string, routing?: record}
-# --customers item shape: {address?: record, id?: string, quantity?: float}
 export def "solve-clustering-problem" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -146,7 +168,7 @@ export def "solve-clustering-problem" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --configuration: record # shape: {clustering?: record, response_type?: string, routing?: record}
   --customers: list # item shape: {address?: record, id?: string, quantity?: float}
-]: any -> record<clusters: table<ids: list, quantity: float>, copyrights: list<string>, processing_time: float, status: string, waiting_time_in_queue: float> {
+]: any -> oneof<record<clusters: table<ids: list, quantity: float>, copyrights: list<string>, processing_time: float, status: string, waiting_time_in_queue: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -173,8 +195,6 @@ export def "solve-clustering-problem" [
 #
 # POST /cluster/calculate
 # operationId: asyncClusteringProblem
-# --configuration shape: {clustering?: record, response_type?: string, routing?: record}
-# --customers item shape: {address?: record, id?: string, quantity?: float}
 export def "async-clustering-problem" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -187,7 +207,7 @@ export def "async-clustering-problem" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --configuration: record # shape: {clustering?: record, response_type?: string, routing?: record}
   --customers: list # item shape: {address?: record, id?: string, quantity?: float}
-]: any -> record<job_id: string> {
+]: any -> oneof<record<job_id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -225,7 +245,7 @@ export def "get-cluster-solution" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<clusters: table<ids: list, quantity: float>, copyrights: list<string>, processing_time: float, status: string, waiting_time_in_queue: float> {
+]: nothing -> oneof<record<clusters: table<ids: list, quantity: float>, copyrights: list<string>, processing_time: float, status: string, waiting_time_in_queue: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
@@ -267,7 +287,7 @@ export def "get-geocode" [
   --debug: oneof<nothing, bool> # If `true`, the output will be formatted. (default: false)
   --point: string # _Forward geocoding_: The location bias in the format 'latitude,longitude' e.g. point=45.93272,11.58803. _Reverse geocoding_: The location to find amenities, cities.
   --provider: string # The provider parameter is currently under development and can fall back to `default` at any time. The intend is to provide alternatives to our default geocoder. Each provider has its own strenghts and might fit better for certain scenarios, so it's worth to compare the different providers. To try it append the `provider`parameter to the URL like `&provider=nominatim`, the result structure should be identical in all cases - if not, please report this back to us. Keep in mind that some providers do not support certain parameters or don't return some fields, for example `osm_id` and `osm_type` are not supported by every geocoding provider. If you would like to use additional parameters of one of the providers, but it's not available for the GraphHopper Geocoding API, yet? Please contact us. The credit costs can be different for all providers - see [here](https://support.graphhopper.com/support/solutions/articles/44000718211-what-is-one-credit-) for more information about it. Currently, only the default provider and gisgraphy supports autocompletion of partial search strings. All providers support normal "forward" geocoding and reverse geocoding via `reverse=true`. #### Default (`provider=default`) This provider returns results of our internal geocoding engine, as described above. In addition to the above documented parameters the following parameters are possible: * `bbox` - the expected format is `minLon,minLat,maxLon,maxLat` * `osm_tag` - you can filter `key:value` or exclude places with certain OpenStreetMap tags `!key:value`. E.g. `osm_tag=tourism:museum` or just the key `osm_tag=tourism`. To exclude multiple tags you add multiple `osm_tag` parameters. #### Nominatim (`provider=nominatim`) The GraphHopper Directions API uses a commercially hosted Nominatim geocoder. You can try this provider [here](https://nominatim.openstreetmap.org/). The provider does **not** fall under the [restrictions](https://operations.osmfoundation.org/policies/nominatim/) of the Nominatim instance hosted by OpenStreetMap. In addition to the above documented parameters Nominatim allows to use the following parameters, which can be used as documented [here](https://github.com/openstreetmap/Nominatim/blob/master/docs/api/Search.md#parameters): * `viewbox` - the expected format is `minLon,minLat,maxLon,maxLat` * `bounded` - If 1 and a viewbox is given, restrict the result to items contained within that viewbox. Default is 0. #### Gisgraphy (`provider=gisgraphy`) This provider returns results from the Gisgraphy geocoder which you can try [here](https://services.gisgraphy.com/static/leaflet/index.html). **Limitations:** The `locale` parameter is not supported. Gisgraphy does not return OSM tags or an extent. Gisgraphy has a special autocomplete API, which you can use by adding `autocomplete=true` (does not work with `reverse=true`). The autocomplete API is optimized on predicting text input, but returns less information. In addition to the above documented parameters Gisgraphy allows to use the following parameters, which can be used as documented [here](https://www.gisgraphy.com/documentation/user-guide.php#geocodingservice): * `radius` - radius in meters * `country` - restrict search for the specified country. The value must be the ISO 3166 Alpha 2 code of the country. #### NetToolKit (`provider=nettoolkit`) This provider returns results from the NetToolKit provider which is specialized for US addresses and provides a wrapper around Nominatim for other addresses. You can try it [here](https://www.nettoolkit.com/geo/demo). The following additional NetToolKit parameters are supported (read [here](https://www.nettoolkit.com/docs/geo/geocoding) for more details): - `source`: User can choose which source provider to geocode the address, this value is "NetToolKit" by default - `country_code`: an iso-3166-2 country code (e.g : US) filter the results to the specify country code **Limitations:** NetToolKit does not support the `locale` parameter. NetToolKit does not return OSM tags (e.g. osm_id, osm_type, osm_value). #### OpenCage Data (`provider=opencagedata`) This provider returns results from the OpenCageData geocoder which you can try [here](https://geocoder.opencagedata.com/demo). In addition to the above documented parameters OpenCage Data allows to use the following parameters, which can be used as documented [here](https://geocoder.opencagedata.com/api#forward-opt): * countrycode - The country code is a two letter code as defined by the ISO 3166-1 Alpha 2 standard. E.g. gb for the United Kingdom, fr for France, us for United States. * bounds - the expected format is `minLon,minLat,maxLon,maxLat` (default: default)
-]: nothing -> record<hits: table<city: string, country: string, housenumber: string, name: string, osm_id: string, osm_key: string, osm_type: string, point: record, postcode: string, state: string, street: string>, took: float> {
+]: nothing -> oneof<record<hits: table<city: string, country: string, housenumber: string, name: string, osm_id: string, osm_key: string, osm_type: string, point: record, postcode: string, state: string, street: string>, took: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "locale" $locale "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "reverse" $reverse "scalar") (serialize-qp "debug" $debug "scalar") (serialize-qp "point" $point "scalar") (serialize-qp "provider" $provider "scalar")] | flatten | str join "&"
@@ -309,7 +329,7 @@ export def "get-isochrone" [
   --buckets: int # Number by which to divide the given `time_limit` to create `buckets` nested isochrones of time intervals `time_limit-n*time_limit/buckets`. Applies analogously to `distance_limit`. (format: int32, default: 1)
   --reverse-flow: oneof<nothing, bool> # If `false` the flow goes from point to the polygon, if `true` the flow goes from the polygon "inside" to the point. Example use case for `false`&#58; *How many potential customer can be reached within 30min travel time from your store* vs. `true`&#58; *How many customers can reach your store within 30min travel time.* (default: false)
   --weighting: string@weighting-completer # Use `"shortest"` to get an isodistance line instead of an isochrone. (default: fastest)
-]: nothing -> record<copyrights: list<string>, polygons: table<geometry: record, properties: record, type: string>> {
+]: nothing -> oneof<record<copyrights: list<string>, polygons: table<geometry: record, properties: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   if ($point == null) { error make --unspanned { msg: "required query parameter 'point' missing: pass --point" } }
@@ -347,7 +367,7 @@ export def "post-gpx" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --gps-accuracy: int # Specify the precision of a point, in meter
   --vehicle: string # Specify the vehicle profile like car
-]: nothing -> record<info: record<copyrights: list<string>, took: float>, paths: table<ascend: float, bbox: list, descend: float, details: record, distance: float, instructions: list, points: record, points_encoded: bool, points_order: list, snapped_waypoints: record, time: int>> {
+]: nothing -> oneof<record<info: record<copyrights: list<string>, took: float>, paths: table<ascend: float, bbox: list, descend: float, details: record, distance: float, instructions: list, points: record, points_encoded: bool, points_order: list, snapped_waypoints: record, time: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "gps_accuracy" $gps_accuracy "scalar") (serialize-qp "vehicle" $vehicle "scalar")] | flatten | str join "&"
@@ -396,7 +416,7 @@ export def "get-matrix" [
   --vehicle: string@vehicle-completer # The vehicle profile for which the matrix should be calculated. (default: car)
   --fail-fast: oneof<nothing, bool> # Specifies whether or not the matrix calculation should return with an error as soon as possible in case some points cannot be found or some points are not connected. If set to `false` the time/weight/distance matrix will be calculated for all valid points and contain the `null` value for all entries that could not be calculated. The `hint` field of the response will also contain additional information about what went wrong (see its documentation). (default: true)
   --turn-costs: oneof<nothing, bool> # Specifies if turn restrictions should be considered. Enabling this option increases the matrix computation time. Only supported for motor vehicles and OpenStreetMap. (default: false)
-]: nothing -> record<distances: list<list<float>>, hints: table<details: string, invalid_from_points: list, invalid_to_points: list, message: string, point_pairs: list>, info: record<copyrights: list<string>, took: float>, times: list<list<float>>, weights: list<list<float>>> {
+]: nothing -> oneof<record<distances: list<list<float>>, hints: table<details: string, invalid_from_points: list, invalid_to_points: list, message: string, point_pairs: list>, info: record<copyrights: list<string>, took: float>, times: list<list<float>>, weights: list<list<float>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "point" $point "multi") (serialize-qp "from_point" $from_point "multi") (serialize-qp "to_point" $to_point "multi") (serialize-qp "point_hint" $point_hint "multi") (serialize-qp "from_point_hint" $from_point_hint "multi") (serialize-qp "to_point_hint" $to_point_hint "multi") (serialize-qp "snap_prevention" $snap_prevention "multi") (serialize-qp "curbside" $curbside "multi") (serialize-qp "from_curbside" $from_curbside "multi") (serialize-qp "to_curbside" $to_curbside "multi") (serialize-qp "out_array" $out_array "multi") (serialize-qp "vehicle" $vehicle "scalar") (serialize-qp "fail_fast" $fail_fast "scalar") (serialize-qp "turn_costs" $turn_costs "scalar")] | flatten | str join "&"
@@ -445,7 +465,7 @@ export def "post-matrix" [
   --curbsides: list<string> # Optional parameter. It specifies on which side a point should be relative to the driver when she leaves/arrives at a start/target/via point. You need to specify this parameter for either none or all points. Only supported for motor vehicles and OpenStreetMap.
   --point-hints: list<string> # Optional parameter. Specifies a hint for each point in the `points` array to prefer a certain street for the closest location lookup. E.g. if there is an address or house with two or more neighboring streets you can control for which street the closest location is looked up.
   --points: list # Specify multiple points for which the weight-, route-, time- or distance-matrix should be calculated as follows: `[longitude,latitude]`. In this case the origins are identical to the destinations. Thus, if there are N points, NxN entries are calculated. The order of the point parameter is important. Specify at least three points. Cannot be used together with `from_point` or `to_point.`.
-]: any -> record<distances: list<list<float>>, hints: table<details: string, invalid_from_points: list, invalid_to_points: list, message: string, point_pairs: list>, info: record<copyrights: list<string>, took: float>, times: list<list<float>>, weights: list<list<float>>> {
+]: any -> oneof<record<distances: list<list<float>>, hints: table<details: string, invalid_from_points: list, invalid_to_points: list, message: string, point_pairs: list>, info: record<copyrights: list<string>, took: float>, times: list<list<float>>, weights: list<list<float>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -496,7 +516,7 @@ export def "calculate-matrix" [
   --curbsides: list<string> # Optional parameter. It specifies on which side a point should be relative to the driver when she leaves/arrives at a start/target/via point. You need to specify this parameter for either none or all points. Only supported for motor vehicles and OpenStreetMap.
   --point-hints: list<string> # Optional parameter. Specifies a hint for each point in the `points` array to prefer a certain street for the closest location lookup. E.g. if there is an address or house with two or more neighboring streets you can control for which street the closest location is looked up.
   --points: list # Specify multiple points for which the weight-, route-, time- or distance-matrix should be calculated as follows: `[longitude,latitude]`. In this case the origins are identical to the destinations. Thus, if there are N points, NxN entries are calculated. The order of the point parameter is important. Specify at least three points. Cannot be used together with `from_point` or `to_point.`.
-]: any -> record<job_id: string> {
+]: any -> oneof<record<job_id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -534,7 +554,7 @@ export def "get-matrix-solution" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<distances: list<list<float>>, hints: table<details: string, invalid_from_points: list, invalid_to_points: list, message: string, point_pairs: list>, info: record<copyrights: list<string>, took: float>, times: list<list<float>>, weights: list<list<float>>> {
+]: nothing -> oneof<record<distances: list<list<float>>, hints: table<details: string, invalid_from_points: list, invalid_to_points: list, message: string, point_pairs: list>, info: record<copyrights: list<string>, took: float>, times: list<list<float>>, weights: list<list<float>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
@@ -596,7 +616,7 @@ export def "get-route" [
   --alternative-route-max-paths: int # If `algorithm=alternative_route`, this parameter sets the number of maximum paths which should be calculated. Increasing can lead to worse alternatives. (format: int32, default: 2)
   --alternative-route-max-weight-factor: float # If `algorithm=alternative_route`, this parameter sets the factor by which the alternatives routes can be longer than the optimal route. Increasing can lead to worse alternatives. (default: 1.4)
   --alternative-route-max-share-factor: float # If `algorithm=alternative_route`, this parameter specifies how similar an alternative route can be to the optimal route. Increasing can lead to worse alternatives. (default: 0.6)
-]: nothing -> record<info: record<copyrights: list<string>, took: float>, paths: table<ascend: float, bbox: list, descend: float, details: record, distance: float, instructions: list, points: record, points_encoded: bool, points_order: list, snapped_waypoints: record, time: int>> {
+]: nothing -> oneof<record<info: record<copyrights: list<string>, took: float>, paths: table<ascend: float, bbox: list, descend: float, details: record, distance: float, instructions: list, points: record, points_encoded: bool, points_order: list, snapped_waypoints: record, time: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   if ($point == null) { error make --unspanned { msg: "required query parameter 'point' missing: pass --point" } }
@@ -658,7 +678,7 @@ export def "post-route" [
   --snap-preventions: list<string> # Optional parameter to avoid snapping to a certain road class or road environment. Current supported values `motorway`, `trunk`, `ferry`, `tunnel`, `bridge` and `ford` (e.g. [motorway, ferry, tunnel])
   --vehicle: string@vehicle-completer # The vehicle profile for which the route should be calculated. Other vehicles are listed [here](#section/Map-Data-and-Routing-Profiles/OpenStreetMap) for the details. (default: car, e.g. bike)
   --weighting: string # Determines the way the ''best'' route is calculated. Default is `fastest`. Other options are `shortest` (e.g. for `vehicle=foot` or `bike`) and `short_fastest` which finds a reasonable balance between `shortest` and `fastest`. Requires `ch.disable=true`. (default: fastest)
-]: any -> record<info: record<copyrights: list<string>, took: float>, paths: table<ascend: float, bbox: list, descend: float, details: record, distance: float, instructions: list, points: record, points_encoded: bool, points_order: list, snapped_waypoints: record, time: int>> {
+]: any -> oneof<record<info: record<copyrights: list<string>, took: float>, paths: table<ascend: float, bbox: list, descend: float, details: record, distance: float, instructions: list, points: record, points_encoded: bool, points_order: list, snapped_waypoints: record, time: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -694,7 +714,7 @@ export def "get-route-info" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<bbox: string, features: record, version: string> {
+]: nothing -> oneof<record<bbox: string, features: record, version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/route/info" $auth.query)
@@ -718,14 +738,6 @@ export def "get-route-info" [
 #
 # POST /vrp
 # operationId: solveVRP
-# --algorithm shape: {objective?: "transport_time"|"completion_time", problem_type?: "min"|"min-max"}
-# --configuration shape: {routing?: record}
-# --cost_matrices item shape: {data?: record, location_ids?: list<string>, profile?: string, type?: "default"|"google"}
-# --objectives item shape: {type: "min"|"min-max", value: "completion_time"|"transport_time"|"vehicles"|"activities"}
-# --services item shape: {address?: record, allowed_vehicles?: list<string>, disallowed_vehicles?: list<string>, duration?: int, group?: string, id: string, max_time_in_vehicle?: int, name?: string, preparation_time?: int, priority?: int, required_skills?: list<string>, size?: list<int>, time_windows?: list, type?: "service"|"pickup"|"delivery"}
-# --shipments item shape: {allowed_vehicles?: list<string>, delivery: record, disallowed_vehicles?: list<string>, id: string, max_time_in_vehicle?: int, name?: string, pickup: record, priority?: int, required_skills?: list<string>, size?: list<int>}
-# --vehicle_types item shape: {capacity?: list<int>, consider_traffic?: bool, cost_per_activation?: float, cost_per_meter?: float, cost_per_second?: float, network_data_provider?: "openstreetmap"|"tomtom", profile?: "car"|"bike"|"foot"|"hike"|"mtb"|"racingbike"|"scooter"|"truck"|"small_truck", service_time_factor?: float, speed_factor?: float, type_id: string}
-# --vehicles item shape: {break?: any, earliest_start?: int, end_address?: record, latest_end?: int, max_activities?: int, max_distance?: int, max_driving_time?: int, max_jobs?: int, min_jobs?: int, move_to_end_address?: bool, return_to_depot?: bool, skills?: list<string>, start_address: record, type_id?: string, vehicle_id: string}
 @deprecated --flag algorithm
 export def "solve-vrp" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -746,7 +758,7 @@ export def "solve-vrp" [
   --shipments: list # Specifies the available shipments. Each shipment contains a pickup and a delivery stop, which must be processed one after the other. — item shape: {allowed_vehicles?: list<string>, delivery: record, disallowed_vehicles?: list<string>, id: string, max_time_in_vehicle?: int, name?: string, pickup: record, priority?: int, required_skills?: list<string>, size?: list<int>}
   --vehicle-types: list # Specifies the available vehicle types. These types can be assigned to vehicles. — item shape: {capacity?: list<int>, consider_traffic?: bool, cost_per_activation?: float, cost_per_meter?: float, cost_per_second?: float, network_data_provider?: "openstreetmap"|"tomtom", profile?: "car"|"bike"|"foot"|"hike"|"mtb"|"racingbike"|"scooter"|"truck"|"small_truck", service_time_factor?: float, speed_factor?: float, type_id: string}
   --vehicles: list # Specifies the available vehicles. — item shape: {break?: any, earliest_start?: int, end_address?: record, latest_end?: int, max_activities?: int, max_distance?: int, max_driving_time?: int, max_jobs?: int, min_jobs?: int, move_to_end_address?: bool, return_to_depot?: bool, skills?: list<string>, start_address: record, type_id?: string, vehicle_id: string}
-]: any -> record<copyrights: list<string>, processing_time: int, solution: record<completion_time: int, costs: int, distance: int, max_operation_time: int, no_unassigned: int, no_vehicles: int, preparation_time: int, routes: list<record>, service_duration: int, time: int, transport_time: int, unassigned: record<breaks: list, details: list, services: list, shipments: list>, waiting_time: int>, status: string, waiting_time_in_queue: int> {
+]: any -> oneof<record<copyrights: list<string>, processing_time: int, solution: record<completion_time: int, costs: int, distance: int, max_operation_time: int, no_unassigned: int, no_vehicles: int, preparation_time: int, routes: list<record>, service_duration: int, time: int, transport_time: int, unassigned: record<breaks: list, details: list, services: list, shipments: list>, waiting_time: int>, status: string, waiting_time_in_queue: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -773,14 +785,6 @@ export def "solve-vrp" [
 #
 # POST /vrp/optimize
 # operationId: asyncVRP
-# --algorithm shape: {objective?: "transport_time"|"completion_time", problem_type?: "min"|"min-max"}
-# --configuration shape: {routing?: record}
-# --cost_matrices item shape: {data?: record, location_ids?: list<string>, profile?: string, type?: "default"|"google"}
-# --objectives item shape: {type: "min"|"min-max", value: "completion_time"|"transport_time"|"vehicles"|"activities"}
-# --services item shape: {address?: record, allowed_vehicles?: list<string>, disallowed_vehicles?: list<string>, duration?: int, group?: string, id: string, max_time_in_vehicle?: int, name?: string, preparation_time?: int, priority?: int, required_skills?: list<string>, size?: list<int>, time_windows?: list, type?: "service"|"pickup"|"delivery"}
-# --shipments item shape: {allowed_vehicles?: list<string>, delivery: record, disallowed_vehicles?: list<string>, id: string, max_time_in_vehicle?: int, name?: string, pickup: record, priority?: int, required_skills?: list<string>, size?: list<int>}
-# --vehicle_types item shape: {capacity?: list<int>, consider_traffic?: bool, cost_per_activation?: float, cost_per_meter?: float, cost_per_second?: float, network_data_provider?: "openstreetmap"|"tomtom", profile?: "car"|"bike"|"foot"|"hike"|"mtb"|"racingbike"|"scooter"|"truck"|"small_truck", service_time_factor?: float, speed_factor?: float, type_id: string}
-# --vehicles item shape: {break?: any, earliest_start?: int, end_address?: record, latest_end?: int, max_activities?: int, max_distance?: int, max_driving_time?: int, max_jobs?: int, min_jobs?: int, move_to_end_address?: bool, return_to_depot?: bool, skills?: list<string>, start_address: record, type_id?: string, vehicle_id: string}
 @deprecated --flag algorithm
 export def "async-vrp" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -801,7 +805,7 @@ export def "async-vrp" [
   --shipments: list # Specifies the available shipments. Each shipment contains a pickup and a delivery stop, which must be processed one after the other. — item shape: {allowed_vehicles?: list<string>, delivery: record, disallowed_vehicles?: list<string>, id: string, max_time_in_vehicle?: int, name?: string, pickup: record, priority?: int, required_skills?: list<string>, size?: list<int>}
   --vehicle-types: list # Specifies the available vehicle types. These types can be assigned to vehicles. — item shape: {capacity?: list<int>, consider_traffic?: bool, cost_per_activation?: float, cost_per_meter?: float, cost_per_second?: float, network_data_provider?: "openstreetmap"|"tomtom", profile?: "car"|"bike"|"foot"|"hike"|"mtb"|"racingbike"|"scooter"|"truck"|"small_truck", service_time_factor?: float, speed_factor?: float, type_id: string}
   --vehicles: list # Specifies the available vehicles. — item shape: {break?: any, earliest_start?: int, end_address?: record, latest_end?: int, max_activities?: int, max_distance?: int, max_driving_time?: int, max_jobs?: int, min_jobs?: int, move_to_end_address?: bool, return_to_depot?: bool, skills?: list<string>, start_address: record, type_id?: string, vehicle_id: string}
-]: any -> record<job_id: string> {
+]: any -> oneof<record<job_id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -839,7 +843,7 @@ export def "get-solution" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<copyrights: list<string>, processing_time: int, solution: record<completion_time: int, costs: int, distance: int, max_operation_time: int, no_unassigned: int, no_vehicles: int, preparation_time: int, routes: list<record>, service_duration: int, time: int, transport_time: int, unassigned: record<breaks: list, details: list, services: list, shipments: list>, waiting_time: int>, status: string, waiting_time_in_queue: int> {
+]: nothing -> oneof<record<copyrights: list<string>, processing_time: int, solution: record<completion_time: int, costs: int, distance: int, max_operation_time: int, no_unassigned: int, no_vehicles: int, preparation_time: int, routes: list<record>, service_duration: int, time: int, transport_time: int, unassigned: record<breaks: list, details: list, services: list, shipments: list>, waiting_time: int>, status: string, waiting_time_in_queue: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }

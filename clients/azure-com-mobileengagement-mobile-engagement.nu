@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -124,9 +148,9 @@ def campaign-type-completer [] { ["Announcement" "DataPush" "NativePush" "Poll"]
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "app-collections-list" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["app-collections-list" "app-collections-check-name-availability" "supported-platforms-list" "apps-list" "campaigns-list" "campaigns-create" "campaigns-test-new" "campaigns-delete" "campaigns-get" "campaigns-update" "campaigns-activate" "campaigns-finish" "campaigns-push" "campaigns-get-statistics" "campaigns-suspend" "campaigns-test-saved" "campaigns-get-by-name" "devices-list" "export-tasks-list" "export-tasks-create-activities-task" "export-tasks-create-crashes-task" "export-tasks-create-errors-task" "export-tasks-create-events-task" "export-tasks-create-feedback-task-by-campaign" "export-tasks-create-feedback-task-by-date-range" "export-tasks-create-jobs-task" "export-tasks-create-sessions-task" "export-tasks-create-tags-task" "export-tasks-create-tokens-task" "export-tasks-get" "import-tasks-list" "import-tasks-create" "import-tasks-get" "devices-tag-by-device-id" "devices-get-by-device-id" "devices-tag-by-user-id" "devices-get-by-user-id" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -160,7 +184,7 @@ export def "app-collections-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -202,7 +226,7 @@ export def "app-collections-check-name-availability" [
   --available: oneof<nothing, bool> # Available.
   --name: string # Name.
   --unavailability-reason: string # UnavailabilityReason.
-]: any -> record<available: bool, name: string, unavailabilityReason: string> {
+]: any -> oneof<record<available: bool, name: string, unavailabilityReason: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -244,7 +268,7 @@ export def "supported-platforms-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<platforms: list<string>> {
+]: nothing -> oneof<record<platforms: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -285,7 +309,7 @@ export def "apps-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -335,7 +359,7 @@ export def "campaigns-list" [
   --filter: string # Filter can be used to restrict the results to campaigns matching a specific state. The syntax is `$filter=state eq 'draft'`. Valid state values are: draft, scheduled, in-progress, and finished. Only the eq operator and the state property are supported.
   --orderby: string # Sort results by an expression which looks like `$orderby=id asc` (this example is actually the default behavior). The syntax is orderby={property} {direction} or just orderby={property}. The available sorting properties are id, name, state, activatedDate, and finishedDate. The available directions are asc (for ascending order) and desc (for descending order). When not specified the asc direction is used. Only one property at a time can be used for sorting.
   --search: string # Restrict results to campaigns matching the optional `search` expression. This currently performs the search based on the name on the campaign only, case insensitive. If the campaign contains the value of the `search` parameter anywhere in the name, it matches.
-]: nothing -> record<nextLink: string, value: table<activatedDate: string, endTime: string, finishedDate: string, name: string, startTime: string, timezone: string, id: int, state: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<activatedDate: string, endTime: string, finishedDate: string, name: string, startTime: string, timezone: string, id: int, state: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -366,9 +390,6 @@ export def "campaigns-list" [
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MobileEngagement/appcollections/{appCollection}/apps/{appName}/campaigns/{kind}
 # operationId: Campaigns_Create
-# --audience shape: {criteria?: record, expression?: string, filters?: list}
-# --questions item shape: {choices?: list, id?: int, localization?: record, title?: string}
-# --notificationOptions shape: {actionText?: string, bigPicture?: string, bigText?: string, sound?: string}
 export def "campaigns-create" [
   subscription_id: string
   resource_group_name: string
@@ -413,7 +434,7 @@ export def "campaigns-create" [
   --notification-title: string # Title of the notification. This field supports appInfo markers.
   --payload: record # Native push payload.
   --title: string # Title of the announcement or poll. This field supports appInfo markers.
-]: any -> record<id: int, state: string> {
+]: any -> oneof<record<id: int, state: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -447,7 +468,6 @@ export def "campaigns-create" [
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MobileEngagement/appcollections/{appCollection}/apps/{appName}/campaigns/{kind}/test
 # operationId: Campaigns_TestNew
-# --data shape: {audience?: record, category?: string, deliveryActivities?: list<string>, deliveryTime?: "any"|"background"|"session", endTime?: string, localization?: record, name?: string, notificationBadge?: bool, notificationCloseable?: bool, notificationIcon?: bool, notificationSound?: bool, notificationType?: "system"|"popup", notificationVibrate?: bool, pushMode?: "real-time"|"one-shot"|"manual", questions?: list, startTime?: string, timezone?: string, ... (11 more fields)}
 export def "campaigns-test-new" [
   subscription_id: string
   resource_group_name: string
@@ -467,7 +487,7 @@ export def "campaigns-test-new" [
   data: any # shape: {audience?: record, category?: string, deliveryActivities?: list<string>, deliveryTime?: "any"|"background"|"session", endTime?: string, localization?: record, name?: string, notificationBadge?: bool, notificationCloseable?: bool, notificationIcon?: bool, notificationSound?: bool, notificationType?: "system"|"popup", notificationVibrate?: bool, pushMode?: "real-time"|"one-shot"|"manual", questions?: list, startTime?: string, timezone?: string, ... (11 more fields)}
   device_id: string # Device identifier (as returned by the SDK).
   --lang: string # The language to test expressed using ISO 639-1 code. The default language of the campaign will be used if the parameter is not provided.
-]: any -> record<state: string> {
+]: any -> oneof<record<state: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -567,7 +587,7 @@ export def "campaigns-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<activatedDate: string, finishedDate: string, id: int, state: string, audience: record<criteria: record, expression: string, filters: list<record>>, category: string, deliveryActivities: list<string>, deliveryTime: string, endTime: string, localization: record, name: string, notificationBadge: bool, notificationCloseable: bool, notificationIcon: bool, notificationSound: bool, notificationType: string, notificationVibrate: bool, pushMode: string, questions: table<choices: list, id: int, localization: record, title: string>, startTime: string, timezone: string, type: string, actionButtonText: string, actionUrl: string, body: string, exitButtonText: string, notificationImage: string, notificationMessage: string, notificationOptions: record<actionText: string, bigPicture: string, bigText: string, sound: string>, notificationTitle: string, payload: record, title: string> {
+]: nothing -> oneof<record<activatedDate: string, finishedDate: string, id: int, state: string, audience: record<criteria: record, expression: string, filters: list<record>>, category: string, deliveryActivities: list<string>, deliveryTime: string, endTime: string, localization: record, name: string, notificationBadge: bool, notificationCloseable: bool, notificationIcon: bool, notificationSound: bool, notificationType: string, notificationVibrate: bool, pushMode: string, questions: table<choices: list, id: int, localization: record, title: string>, startTime: string, timezone: string, type: string, actionButtonText: string, actionUrl: string, body: string, exitButtonText: string, notificationImage: string, notificationMessage: string, notificationOptions: record<actionText: string, bigPicture: string, bigText: string, sound: string>, notificationTitle: string, payload: record, title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -599,9 +619,6 @@ export def "campaigns-get" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MobileEngagement/appcollections/{appCollection}/apps/{appName}/campaigns/{kind}/{id}
 # operationId: Campaigns_Update
-# --audience shape: {criteria?: record, expression?: string, filters?: list}
-# --questions item shape: {choices?: list, id?: int, localization?: record, title?: string}
-# --notificationOptions shape: {actionText?: string, bigPicture?: string, bigText?: string, sound?: string}
 export def "campaigns-update" [
   subscription_id: string
   resource_group_name: string
@@ -647,7 +664,7 @@ export def "campaigns-update" [
   --notification-title: string # Title of the notification. This field supports appInfo markers.
   --payload: record # Native push payload.
   --title: string # Title of the announcement or poll. This field supports appInfo markers.
-]: any -> record<id: int, state: string> {
+]: any -> oneof<record<id: int, state: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -699,7 +716,7 @@ export def "campaigns-activate" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<id: int, state: string> {
+]: nothing -> oneof<record<id: int, state: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -748,7 +765,7 @@ export def "campaigns-finish" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<id: int, state: string> {
+]: nothing -> oneof<record<id: int, state: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -780,7 +797,6 @@ export def "campaigns-finish" [
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MobileEngagement/appcollections/{appCollection}/apps/{appName}/campaigns/{kind}/{id}/push
 # operationId: Campaigns_Push
-# --data shape: {audience?: record, category?: string, deliveryActivities?: list<string>, deliveryTime?: "any"|"background"|"session", endTime?: string, localization?: record, name?: string, notificationBadge?: bool, notificationCloseable?: bool, notificationIcon?: bool, notificationSound?: bool, notificationType?: "system"|"popup", notificationVibrate?: bool, pushMode?: "real-time"|"one-shot"|"manual", questions?: list, startTime?: string, timezone?: string, ... (11 more fields)}
 export def "campaigns-push" [
   subscription_id: string
   resource_group_name: string
@@ -800,7 +816,7 @@ export def "campaigns-push" [
   --api-version: string # Client Api Version. (required)
   --data: any # shape: {audience?: record, category?: string, deliveryActivities?: list<string>, deliveryTime?: "any"|"background"|"session", endTime?: string, localization?: record, name?: string, notificationBadge?: bool, notificationCloseable?: bool, notificationIcon?: bool, notificationSound?: bool, notificationType?: "system"|"popup", notificationVibrate?: bool, pushMode?: "real-time"|"one-shot"|"manual", questions?: list, startTime?: string, timezone?: string, ... (11 more fields)}
   device_ids: list<string> # Device identifiers to push as a JSON array of strings. Note that if you want to push the same campaign several times to the same device, you need to make several API calls.
-]: any -> record<invalidDeviceIds: list<string>> {
+]: any -> oneof<record<invalidDeviceIds: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -852,7 +868,7 @@ export def "campaigns-get-statistics" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<answers: record, content_actioned: int, content_displayed: int, content_exited: int, delivered: int, dropped: int, in_app_notification_actioned: int, in_app_notification_displayed: int, in_app_notification_exited: int, pushed: int, pushed_native: int, pushed_native_adm: int, pushed_native_google: int, queued: int, system_notification_actioned: int, system_notification_displayed: int, system_notification_exited: int> {
+]: nothing -> oneof<record<answers: record, content_actioned: int, content_displayed: int, content_exited: int, delivered: int, dropped: int, in_app_notification_actioned: int, in_app_notification_displayed: int, in_app_notification_exited: int, pushed: int, pushed_native: int, pushed_native_adm: int, pushed_native_google: int, queued: int, system_notification_actioned: int, system_notification_displayed: int, system_notification_exited: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -901,7 +917,7 @@ export def "campaigns-suspend" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<id: int, state: string> {
+]: nothing -> oneof<record<id: int, state: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -952,7 +968,7 @@ export def "campaigns-test-saved" [
   --api-version: string # Client Api Version. (required)
   device_id: string # Device identifier (as returned by the SDK).
   --lang: string # The language to test expressed using ISO 639-1 code. The default language of the campaign will be used if the parameter is not provided.
-]: any -> record<id: int, state: string> {
+]: any -> oneof<record<id: int, state: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1004,7 +1020,7 @@ export def "campaigns-get-by-name" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<activatedDate: string, finishedDate: string, id: int, state: string, audience: record<criteria: record, expression: string, filters: list<record>>, category: string, deliveryActivities: list<string>, deliveryTime: string, endTime: string, localization: record, name: string, notificationBadge: bool, notificationCloseable: bool, notificationIcon: bool, notificationSound: bool, notificationType: string, notificationVibrate: bool, pushMode: string, questions: table<choices: list, id: int, localization: record, title: string>, startTime: string, timezone: string, type: string, actionButtonText: string, actionUrl: string, body: string, exitButtonText: string, notificationImage: string, notificationMessage: string, notificationOptions: record<actionText: string, bigPicture: string, bigText: string, sound: string>, notificationTitle: string, payload: record, title: string> {
+]: nothing -> oneof<record<activatedDate: string, finishedDate: string, id: int, state: string, audience: record<criteria: record, expression: string, filters: list<record>>, category: string, deliveryActivities: list<string>, deliveryTime: string, endTime: string, localization: record, name: string, notificationBadge: bool, notificationCloseable: bool, notificationIcon: bool, notificationSound: bool, notificationType: string, notificationVibrate: bool, pushMode: string, questions: table<choices: list, id: int, localization: record, title: string>, startTime: string, timezone: string, type: string, actionButtonText: string, actionUrl: string, body: string, exitButtonText: string, notificationImage: string, notificationMessage: string, notificationOptions: record<actionText: string, bigPicture: string, bigText: string, sound: string>, notificationTitle: string, payload: record, title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1054,7 +1070,7 @@ export def "devices-list" [
   --top: int # Number of devices to return with each call. Defaults to 100 and cannot return more. Passing a greater value is ignored. The response contains a `nextLink` property describing the URI path to get the next page of results if not all results could be returned at once.
   --select: string # By default all `meta` and `appInfo` properties are returned, this property is used to restrict the output to the desired properties. It also excludes all devices from the output that have none of the selected properties. In other terms, only devices having at least one of the selected property being set is part of the results. Examples: - `$select=appInfo` : select all devices having at least 1 appInfo, return them all and don’t return any meta property. - `$select=meta` : return only meta properties in the output. - `$select=appInfo,meta/firstSeen,meta/lastSeen` : return all `appInfo`, plus meta object containing only firstSeen and lastSeen properties. The format is thus a comma separated list of properties to select. Use `appInfo` to select all appInfo properties, `meta` to select all meta properties. Use `appInfo/{key}` and `meta/{key}` to select specific appInfo and meta properties.
   --filter: string # Filter can be used to reduce the number of results. Filter is a boolean expression that can look like the following examples: * `$filter=deviceId gt 'abcdef0123456789abcdef0123456789'` * `$filter=lastModified le 1447284263690L` * `$filter=(deviceId ge 'abcdef0123456789abcdef0123456789') and (deviceId lt 'bacdef0123456789abcdef0123456789') and (lastModified gt 1447284263690L)` The first example is used automatically for paging when returning the `nextLink` property. The filter expression is a combination of checks on some properties that can be compared to their value. The available operators are: * `gt` : greater than * `ge` : greater than or equals * `lt` : less than * `le` : less than or equals * `and` : to add multiple checks (all checks must pass), optional parentheses can be used. The properties that can be used in the expression are the following: * `deviceId {operator} '{deviceIdValue}'` : a lexicographical comparison is made on the deviceId value, use single quotes for the value. * `lastModified {operator} {number}L` : returns only meta properties or appInfo properties whose last value modification timestamp compared to the specified value is matching (value is milliseconds since January 1st, 1970 UTC). Please note the `L` character after the number of milliseconds, its required when the number of milliseconds exceeds `2^31 - 1` (which is always the case for recent timestamps). Using `lastModified` excludes all devices from the output that have no property matching the timestamp criteria, like `$select`. Please note that the internal value of `lastModified` timestamp for a given property is never part of the results.
-]: nothing -> record<nextLink: string, value: table<appInfo: record, deviceId: string, meta: record>> {
+]: nothing -> oneof<record<nextLink: string, value: table<appInfo: record, deviceId: string, meta: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1102,7 +1118,7 @@ export def "export-tasks-list" [
   --skip: int # Control paging of export tasks, start results at the given offset, defaults to 0 (1st page of data). (default: 0)
   --top: int # Control paging of export tasks, number of export tasks to return with each call. By default, it returns all export tasks with a default paging of 20. The response contains a `nextLink` property describing the path to get the next page if there are more results. The maximum paging limit for $top is 40. (default: 20)
   --orderby: string # Sort results by an expression which looks like `$orderby=taskId asc` (default when not specified). The syntax is orderby={property} {direction} or just orderby={property}. Properties that can be specified for sorting: taskId, errorDetails, dateCreated, taskStatus, and dateCreated. The available directions are asc (for ascending order) and desc (for descending order). When not specified the asc direction is used. Only one orderby property can be specified.
-]: nothing -> record<nextLink: string, value: table<dateCompleted: string, dateCreated: string, description: string, errorDetails: string, exportType: string, id: string, state: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<dateCompleted: string, dateCreated: string, description: string, errorDetails: string, exportType: string, id: string, state: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1152,7 +1168,7 @@ export def "export-tasks-create-activities-task" [
   end_date: string # A date as defined by full-date in RFC3339. (format: date)
   export_format: string@export-format-completer # The format of exported data.
   start_date: string # A date as defined by full-date in RFC3339. (format: date)
-]: any -> record<dateCompleted: string, dateCreated: string, description: string, errorDetails: string, exportType: string, id: string, state: string> {
+]: any -> oneof<record<dateCompleted: string, dateCreated: string, description: string, errorDetails: string, exportType: string, id: string, state: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1205,7 +1221,7 @@ export def "export-tasks-create-crashes-task" [
   end_date: string # A date as defined by full-date in RFC3339. (format: date)
   export_format: string@export-format-completer # The format of exported data.
   start_date: string # A date as defined by full-date in RFC3339. (format: date)
-]: any -> record<dateCompleted: string, dateCreated: string, description: string, errorDetails: string, exportType: string, id: string, state: string> {
+]: any -> oneof<record<dateCompleted: string, dateCreated: string, description: string, errorDetails: string, exportType: string, id: string, state: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1258,7 +1274,7 @@ export def "export-tasks-create-errors-task" [
   end_date: string # A date as defined by full-date in RFC3339. (format: date)
   export_format: string@export-format-completer # The format of exported data.
   start_date: string # A date as defined by full-date in RFC3339. (format: date)
-]: any -> record<dateCompleted: string, dateCreated: string, description: string, errorDetails: string, exportType: string, id: string, state: string> {
+]: any -> oneof<record<dateCompleted: string, dateCreated: string, description: string, errorDetails: string, exportType: string, id: string, state: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1311,7 +1327,7 @@ export def "export-tasks-create-events-task" [
   end_date: string # A date as defined by full-date in RFC3339. (format: date)
   export_format: string@export-format-completer # The format of exported data.
   start_date: string # A date as defined by full-date in RFC3339. (format: date)
-]: any -> record<dateCompleted: string, dateCreated: string, description: string, errorDetails: string, exportType: string, id: string, state: string> {
+]: any -> oneof<record<dateCompleted: string, dateCreated: string, description: string, errorDetails: string, exportType: string, id: string, state: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1364,7 +1380,7 @@ export def "export-tasks-create-feedback-task-by-campaign" [
   container_url: string # format: uri
   --description: string # A description of the export task.
   export_format: string@export-format-completer # The format of exported data.
-]: any -> record<dateCompleted: string, dateCreated: string, description: string, errorDetails: string, exportType: string, id: string, state: string> {
+]: any -> oneof<record<dateCompleted: string, dateCreated: string, description: string, errorDetails: string, exportType: string, id: string, state: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1418,7 +1434,7 @@ export def "export-tasks-create-feedback-task-by-date-range" [
   container_url: string # format: uri
   --description: string # A description of the export task.
   export_format: string@export-format-completer # The format of exported data.
-]: any -> record<dateCompleted: string, dateCreated: string, description: string, errorDetails: string, exportType: string, id: string, state: string> {
+]: any -> oneof<record<dateCompleted: string, dateCreated: string, description: string, errorDetails: string, exportType: string, id: string, state: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1471,7 +1487,7 @@ export def "export-tasks-create-jobs-task" [
   end_date: string # A date as defined by full-date in RFC3339. (format: date)
   export_format: string@export-format-completer # The format of exported data.
   start_date: string # A date as defined by full-date in RFC3339. (format: date)
-]: any -> record<dateCompleted: string, dateCreated: string, description: string, errorDetails: string, exportType: string, id: string, state: string> {
+]: any -> oneof<record<dateCompleted: string, dateCreated: string, description: string, errorDetails: string, exportType: string, id: string, state: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1524,7 +1540,7 @@ export def "export-tasks-create-sessions-task" [
   end_date: string # A date as defined by full-date in RFC3339. (format: date)
   export_format: string@export-format-completer # The format of exported data.
   start_date: string # A date as defined by full-date in RFC3339. (format: date)
-]: any -> record<dateCompleted: string, dateCreated: string, description: string, errorDetails: string, exportType: string, id: string, state: string> {
+]: any -> oneof<record<dateCompleted: string, dateCreated: string, description: string, errorDetails: string, exportType: string, id: string, state: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1575,7 +1591,7 @@ export def "export-tasks-create-tags-task" [
   container_url: string # format: uri
   --description: string # A description of the export task.
   export_format: string@export-format-completer # The format of exported data.
-]: any -> record<dateCompleted: string, dateCreated: string, description: string, errorDetails: string, exportType: string, id: string, state: string> {
+]: any -> oneof<record<dateCompleted: string, dateCreated: string, description: string, errorDetails: string, exportType: string, id: string, state: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1626,7 +1642,7 @@ export def "export-tasks-create-tokens-task" [
   container_url: string # format: uri
   --description: string # A description of the export task.
   export_format: string@export-format-completer # The format of exported data.
-]: any -> record<dateCompleted: string, dateCreated: string, description: string, errorDetails: string, exportType: string, id: string, state: string> {
+]: any -> oneof<record<dateCompleted: string, dateCreated: string, description: string, errorDetails: string, exportType: string, id: string, state: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1675,7 +1691,7 @@ export def "export-tasks-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<dateCompleted: string, dateCreated: string, description: string, errorDetails: string, exportType: string, id: string, state: string> {
+]: nothing -> oneof<record<dateCompleted: string, dateCreated: string, description: string, errorDetails: string, exportType: string, id: string, state: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1724,7 +1740,7 @@ export def "import-tasks-list" [
   --skip: int # Control paging of import jobs, start results at the given offset, defaults to 0 (1st page of data). (default: 0)
   --top: int # Control paging of import jobs, number of import jobs to return with each call. By default, it returns all import jobs with a default paging of 20. The response contains a `nextLink` property describing the path to get the next page if there are more results. The maximum paging limit for $top is 40. (default: 20)
   --orderby: string # Sort results by an expression which looks like `$orderby=jobId asc` (default when not specified). The syntax is orderby={property} {direction} or just orderby={property}. Properties that can be specified for sorting: jobId, errorDetails, dateCreated, jobStatus, and dateCreated. The available directions are asc (for ascending order) and desc (for descending order). When not specified the asc direction is used. Only one orderby property can be specified.
-]: nothing -> record<nextLink: string, value: table<dateCompleted: string, dateCreated: string, errorDetails: string, id: string, state: string, storageUrl: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<dateCompleted: string, dateCreated: string, errorDetails: string, id: string, state: string, storageUrl: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1770,7 +1786,7 @@ export def "import-tasks-create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
   --storage-url: string # A shared Access Signature (SAS) Storage URI where the job results will be retrieved from.
-]: any -> record<dateCompleted: string, dateCreated: string, errorDetails: string, id: string, state: string, storageUrl: string> {
+]: any -> oneof<record<dateCompleted: string, dateCreated: string, errorDetails: string, id: string, state: string, storageUrl: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1819,7 +1835,7 @@ export def "import-tasks-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<dateCompleted: string, dateCreated: string, errorDetails: string, id: string, state: string, storageUrl: string> {
+]: nothing -> oneof<record<dateCompleted: string, dateCreated: string, errorDetails: string, id: string, state: string, storageUrl: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1867,7 +1883,7 @@ export def "devices-tag-by-device-id" [
   --api-version: string # Client Api Version. (required)
   --delete-on-null: oneof<nothing, bool> # If this parameter is `true`, tags with a null value will be deleted. (default: false)
   tags: any # A JSON object describing the set of tags to record for a set of users. Each key is a device/user identifier, each value is itself a key/value set: the tags to set for the specified device/user identifier.
-]: any -> record<invalidIds: list<string>> {
+]: any -> oneof<record<invalidIds: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1916,7 +1932,7 @@ export def "devices-get-by-device-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<appInfo: record, deviceId: string, info: record<androidAPILevel: int, applicationVersionCode: int, applicationVersionName: string, carrierCountry: string, carrierName: string, firmwareName: string, firmwareVersion: string, locale: string, networkSubtype: string, networkType: string, phoneManufacturer: string, phoneModel: string, serviceVersion: string, timeZoneOffset: int>, location: record<countrycode: string, locality: string, region: string>, meta: record<firstSeen: int, lastInfo: int, lastLocation: int, lastSeen: int, nativePushEnabled: bool>> {
+]: nothing -> oneof<record<appInfo: record, deviceId: string, info: record<androidAPILevel: int, applicationVersionCode: int, applicationVersionName: string, carrierCountry: string, carrierName: string, firmwareName: string, firmwareVersion: string, locale: string, networkSubtype: string, networkType: string, phoneManufacturer: string, phoneModel: string, serviceVersion: string, timeZoneOffset: int>, location: record<countrycode: string, locality: string, region: string>, meta: record<firstSeen: int, lastInfo: int, lastLocation: int, lastSeen: int, nativePushEnabled: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1964,7 +1980,7 @@ export def "devices-tag-by-user-id" [
   --api-version: string # Client Api Version. (required)
   --delete-on-null: oneof<nothing, bool> # If this parameter is `true`, tags with a null value will be deleted. (default: false)
   tags: any # A JSON object describing the set of tags to record for a set of users. Each key is a device/user identifier, each value is itself a key/value set: the tags to set for the specified device/user identifier.
-]: any -> record<invalidIds: list<string>> {
+]: any -> oneof<record<invalidIds: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2013,7 +2029,7 @@ export def "devices-get-by-user-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<appInfo: record, deviceId: string, info: record<androidAPILevel: int, applicationVersionCode: int, applicationVersionName: string, carrierCountry: string, carrierName: string, firmwareName: string, firmwareVersion: string, locale: string, networkSubtype: string, networkType: string, phoneManufacturer: string, phoneModel: string, serviceVersion: string, timeZoneOffset: int>, location: record<countrycode: string, locality: string, region: string>, meta: record<firstSeen: int, lastInfo: int, lastLocation: int, lastSeen: int, nativePushEnabled: bool>> {
+]: nothing -> oneof<record<appInfo: record, deviceId: string, info: record<androidAPILevel: int, applicationVersionCode: int, applicationVersionName: string, carrierCountry: string, carrierName: string, firmwareName: string, firmwareVersion: string, locale: string, networkSubtype: string, networkType: string, phoneManufacturer: string, phoneModel: string, serviceVersion: string, timeZoneOffset: int>, location: record<countrycode: string, locality: string, region: string>, meta: record<firstSeen: int, lastInfo: int, lastLocation: int, lastSeen: int, nativePushEnabled: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }

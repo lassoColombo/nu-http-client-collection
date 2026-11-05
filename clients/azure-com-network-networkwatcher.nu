@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -127,9 +151,9 @@ def verbosity-level-completer [] { ["Full" "Minimum" "Normal"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "network-watchers-list-all" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["network-watchers-list-all" "network-watchers-list" "network-watchers-delete" "network-watchers-get" "network-watchers-update-tags" "network-watchers-create-or-update" "network-watchers-list-available-providers" "network-watchers-get-azure-reachability-report" "network-watchers-set-flow-log-configuration" "network-watchers-check-connectivity" "network-watchers-verify-ip-flow" "network-watchers-get-network-configuration-diagnostic" "network-watchers-get-next-hop" "packet-captures-list" "packet-captures-delete" "packet-captures-get" "packet-captures-create" "packet-captures-get-status" "packet-captures-stop" "network-watchers-get-flow-log-status" "network-watchers-get-troubleshooting-result" "network-watchers-get-vm-security-rules" "network-watchers-get-topology" "network-watchers-get-troubleshooting" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -163,7 +187,7 @@ export def "network-watchers-list-all" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -203,7 +227,7 @@ export def "network-watchers-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -288,7 +312,7 @@ export def "network-watchers-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<etag: string, properties: record<provisioningState: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<etag: string, properties: record<provisioningState: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -332,7 +356,7 @@ export def "network-watchers-update-tags" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
   --tags: record # Resource tags.
-]: any -> record<etag: string, properties: record<provisioningState: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<etag: string, properties: record<provisioningState: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -383,7 +407,7 @@ export def "network-watchers-create-or-update" [
   --id: string # Resource ID.
   --location: string # Resource location.
   --tags: record # Resource tags.
-]: any -> record<etag: string, properties: record<provisioningState: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<etag: string, properties: record<provisioningState: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -433,7 +457,7 @@ export def "network-watchers-list-available-providers" [
   --city: string # The city or town for available providers list.
   --country: string # The country for available providers list.
   --state: string # The state for available providers list.
-]: any -> record<countries: table<countryName: string, providers: list, states: list>> {
+]: any -> oneof<record<countries: table<countryName: string, providers: list, states: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -465,7 +489,6 @@ export def "network-watchers-list-available-providers" [
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkWatchers/{networkWatcherName}/azureReachabilityReport
 # operationId: NetworkWatchers_GetAzureReachabilityReport
-# --providerLocation shape: {city?: string, country: string, state?: string}
 export def "network-watchers-get-azure-reachability-report" [
   subscription_id: string
   resource_group_name: string
@@ -485,7 +508,7 @@ export def "network-watchers-get-azure-reachability-report" [
   provider_location: any # Parameters that define a geographic location. — shape: {city?: string, country: string, state?: string}
   --providers: list<string> # List of Internet service providers.
   start_time: string # The start time for the Azure reachability report. (format: date-time)
-]: any -> record<aggregationLevel: string, providerLocation: record<city: string, country: string, state: string>, reachabilityReport: table<azureLocation: string, latencies: list, provider: string>> {
+]: any -> oneof<record<aggregationLevel: string, providerLocation: record<city: string, country: string, state: string>, reachabilityReport: table<azureLocation: string, latencies: list, provider: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -517,8 +540,6 @@ export def "network-watchers-get-azure-reachability-report" [
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkWatchers/{networkWatcherName}/configureFlowLog
 # operationId: NetworkWatchers_SetFlowLogConfiguration
-# --flowAnalyticsConfiguration shape: {networkWatcherFlowAnalyticsConfiguration: any}
-# --properties shape: {enabled: bool, format?: any, retentionPolicy?: any, storageId: string}
 export def "network-watchers-set-flow-log-configuration" [
   subscription_id: string
   resource_group_name: string
@@ -536,7 +557,7 @@ export def "network-watchers-set-flow-log-configuration" [
   --flow-analytics-configuration: any # Parameters that define the configuration of traffic analytics. — shape: {networkWatcherFlowAnalyticsConfiguration: any}
   properties: any # Parameters that define the configuration of flow log. — shape: {enabled: bool, format?: any, retentionPolicy?: any, storageId: string}
   target_resource_id: string # The ID of the resource to configure for flow log and traffic analytics (optional) .
-]: any -> record<flowAnalyticsConfiguration: record<networkWatcherFlowAnalyticsConfiguration: record<enabled: bool, trafficAnalyticsInterval: int, workspaceId: string, workspaceRegion: string, workspaceResourceId: string>>, properties: record<enabled: bool, format: record<type: string, version: int>, retentionPolicy: record<days: int, enabled: bool>, storageId: string>, targetResourceId: string> {
+]: any -> oneof<record<flowAnalyticsConfiguration: record<networkWatcherFlowAnalyticsConfiguration: record<enabled: bool, trafficAnalyticsInterval: int, workspaceId: string, workspaceRegion: string, workspaceResourceId: string>>, properties: record<enabled: bool, format: record<type: string, version: int>, retentionPolicy: record<days: int, enabled: bool>, storageId: string>, targetResourceId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -568,9 +589,6 @@ export def "network-watchers-set-flow-log-configuration" [
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkWatchers/{networkWatcherName}/connectivityCheck
 # operationId: NetworkWatchers_CheckConnectivity
-# --destination shape: {address?: string, port?: int, resourceId?: string}
-# --protocolConfiguration shape: {HTTPConfiguration?: any}
-# --source shape: {port?: int, resourceId: string}
 export def "network-watchers-check-connectivity" [
   subscription_id: string
   resource_group_name: string
@@ -589,7 +607,7 @@ export def "network-watchers-check-connectivity" [
   --protocol: string@protocol-completer # Network protocol.
   --protocol-configuration: any # Configuration of the protocol. — shape: {HTTPConfiguration?: any}
   source: any # Parameters that define the source of the connection. — shape: {port?: int, resourceId: string}
-]: any -> record<avgLatencyInMs: int, connectionStatus: string, hops: table<address: string, id: string, issues: list, nextHopIds: list, resourceId: string, type: string>, maxLatencyInMs: int, minLatencyInMs: int, probesFailed: int, probesSent: int> {
+]: any -> oneof<record<avgLatencyInMs: int, connectionStatus: string, hops: table<address: string, id: string, issues: list, nextHopIds: list, resourceId: string, type: string>, maxLatencyInMs: int, minLatencyInMs: int, probesFailed: int, probesSent: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -643,7 +661,7 @@ export def "network-watchers-verify-ip-flow" [
   remote_port: string # The remote port. Acceptable values are a single integer in the range (0-65535). Support for * for the source port, which depends on the direction.
   --target-nic-resource-id: string # The NIC ID. (If VM has multiple NICs and IP forwarding is enabled on any of them, then this parameter must be specified. Otherwise optional).
   target_resource_id: string # The ID of the target resource to perform next-hop on.
-]: any -> record<access: string, ruleName: string> {
+]: any -> oneof<record<access: string, ruleName: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -675,7 +693,6 @@ export def "network-watchers-verify-ip-flow" [
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkWatchers/{networkWatcherName}/networkConfigurationDiagnostic
 # operationId: NetworkWatchers_GetNetworkConfigurationDiagnostic
-# --profiles item shape: {destination: string, destinationPort: string, direction: "Inbound"|"Outbound", protocol: string, source: string}
 export def "network-watchers-get-network-configuration-diagnostic" [
   subscription_id: string
   resource_group_name: string
@@ -693,7 +710,7 @@ export def "network-watchers-get-network-configuration-diagnostic" [
   profiles: list # List of network configuration diagnostic profiles. — item shape: {destination: string, destinationPort: string, direction: "Inbound"|"Outbound", protocol: string, source: string}
   target_resource_id: string # The ID of the target resource to perform network configuration diagnostic. Valid options are VM, NetworkInterface, VMSS/NetworkInterface and Application Gateway.
   --verbosity-level: string@verbosity-level-completer # Verbosity level.
-]: any -> record<results: table<networkSecurityGroupResult: record, profile: record>> {
+]: any -> oneof<record<results: table<networkSecurityGroupResult: record, profile: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -743,7 +760,7 @@ export def "network-watchers-get-next-hop" [
   source_ip_address: string # The source IP address.
   --target-nic-resource-id: string # The NIC ID. (If VM has multiple NICs and IP forwarding is enabled on any of the nics, then this parameter must be specified. Otherwise optional).
   target_resource_id: string # The resource identifier of the target resource against which the action is to be performed.
-]: any -> record<nextHopIpAddress: string, nextHopType: string, routeTableId: string> {
+]: any -> oneof<record<nextHopIpAddress: string, nextHopType: string, routeTableId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -789,7 +806,7 @@ export def "packet-captures-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<value: table<etag: string, id: string, name: string, properties: record>> {
+]: nothing -> oneof<record<value: table<etag: string, id: string, name: string, properties: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -878,7 +895,7 @@ export def "packet-captures-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<etag: string, id: string, name: string, properties: record<provisioningState: string, bytesToCapturePerPacket: int, filters: list<record>, storageLocation: record<filePath: string, storageId: string, storagePath: string>, target: string, timeLimitInSeconds: int, totalBytesPerSession: int>> {
+]: nothing -> oneof<record<etag: string, id: string, name: string, properties: record<provisioningState: string, bytesToCapturePerPacket: int, filters: list<record>, storageLocation: record<filePath: string, storageId: string, storagePath: string>, target: string, timeLimitInSeconds: int, totalBytesPerSession: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -908,7 +925,6 @@ export def "packet-captures-get" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkWatchers/{networkWatcherName}/packetCaptures/{packetCaptureName}
 # operationId: PacketCaptures_Create
-# --properties shape: {bytesToCapturePerPacket?: int, filters?: list, storageLocation: any, target: string, timeLimitInSeconds?: int, totalBytesPerSession?: int}
 export def "packet-captures-create" [
   subscription_id: string
   resource_group_name: string
@@ -925,7 +941,7 @@ export def "packet-captures-create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
   properties: any # Parameters that define the create packet capture operation. — shape: {bytesToCapturePerPacket?: int, filters?: list, storageLocation: any, target: string, timeLimitInSeconds?: int, totalBytesPerSession?: int}
-]: any -> record<etag: string, id: string, name: string, properties: record<provisioningState: string, bytesToCapturePerPacket: int, filters: list<record>, storageLocation: record<filePath: string, storageId: string, storagePath: string>, target: string, timeLimitInSeconds: int, totalBytesPerSession: int>> {
+]: any -> oneof<record<etag: string, id: string, name: string, properties: record<provisioningState: string, bytesToCapturePerPacket: int, filters: list<record>, storageLocation: record<filePath: string, storageId: string, storagePath: string>, target: string, timeLimitInSeconds: int, totalBytesPerSession: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -973,7 +989,7 @@ export def "packet-captures-get-status" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<captureStartTime: string, id: string, name: string, packetCaptureError: list<string>, packetCaptureStatus: string, stopReason: string> {
+]: nothing -> oneof<record<captureStartTime: string, id: string, name: string, packetCaptureError: list<string>, packetCaptureStatus: string, stopReason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1063,7 +1079,7 @@ export def "network-watchers-get-flow-log-status" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
   target_resource_id: string # The target resource where getting the flow log and traffic analytics (optional) status.
-]: any -> record<flowAnalyticsConfiguration: record<networkWatcherFlowAnalyticsConfiguration: record<enabled: bool, trafficAnalyticsInterval: int, workspaceId: string, workspaceRegion: string, workspaceResourceId: string>>, properties: record<enabled: bool, format: record<type: string, version: int>, retentionPolicy: record<days: int, enabled: bool>, storageId: string>, targetResourceId: string> {
+]: any -> oneof<record<flowAnalyticsConfiguration: record<networkWatcherFlowAnalyticsConfiguration: record<enabled: bool, trafficAnalyticsInterval: int, workspaceId: string, workspaceRegion: string, workspaceResourceId: string>>, properties: record<enabled: bool, format: record<type: string, version: int>, retentionPolicy: record<days: int, enabled: bool>, storageId: string>, targetResourceId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1110,7 +1126,7 @@ export def "network-watchers-get-troubleshooting-result" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
   target_resource_id: string # The target resource ID to query the troubleshooting result.
-]: any -> record<code: string, endTime: string, results: table<detail: string, id: string, reasonType: string, recommendedActions: list, summary: string>, startTime: string> {
+]: any -> oneof<record<code: string, endTime: string, results: table<detail: string, id: string, reasonType: string, recommendedActions: list, summary: string>, startTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1157,7 +1173,7 @@ export def "network-watchers-get-vm-security-rules" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
   target_resource_id: string # ID of the target VM.
-]: any -> record<networkInterfaces: table<id: string, securityRuleAssociations: record>> {
+]: any -> oneof<record<networkInterfaces: table<id: string, securityRuleAssociations: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1189,8 +1205,6 @@ export def "network-watchers-get-vm-security-rules" [
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkWatchers/{networkWatcherName}/topology
 # operationId: NetworkWatchers_GetTopology
-# --targetSubnet shape: {id?: string}
-# --targetVirtualNetwork shape: {id?: string}
 export def "network-watchers-get-topology" [
   subscription_id: string
   resource_group_name: string
@@ -1208,7 +1222,7 @@ export def "network-watchers-get-topology" [
   --target-resource-group-name: string # The name of the target resource group to perform topology on.
   --target-subnet: any # Reference to another subresource. — shape: {id?: string}
   --target-virtual-network: any # Reference to another subresource. — shape: {id?: string}
-]: any -> record<createdDateTime: string, id: string, lastModified: string, resources: table<associations: list, id: string, location: string, name: string>> {
+]: any -> oneof<record<createdDateTime: string, id: string, lastModified: string, resources: table<associations: list, id: string, location: string, name: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1240,7 +1254,6 @@ export def "network-watchers-get-topology" [
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkWatchers/{networkWatcherName}/troubleshoot
 # operationId: NetworkWatchers_GetTroubleshooting
-# --properties shape: {storageId: string, storagePath: string}
 export def "network-watchers-get-troubleshooting" [
   subscription_id: string
   resource_group_name: string
@@ -1257,7 +1270,7 @@ export def "network-watchers-get-troubleshooting" [
   --api-version: string # Client API version. (required)
   properties: any # Storage location provided for troubleshoot. — shape: {storageId: string, storagePath: string}
   target_resource_id: string # The target resource to troubleshoot.
-]: any -> record<code: string, endTime: string, results: table<detail: string, id: string, reasonType: string, recommendedActions: list, summary: string>, startTime: string> {
+]: any -> oneof<record<code: string, endTime: string, results: table<detail: string, id: string, reasonType: string, recommendedActions: list, summary: string>, startTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

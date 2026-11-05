@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -141,9 +165,9 @@ def format-completer [] { ["radiodns"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-api-v2-broadcastservices" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-api-v2-broadcastservices" "get-api-v2-broadcastservices-id" "post-api-v2-cddrive-files-content" "delete-api-v2-cddrive-files-file-id" "get-api-v2-cddrive-files-file-id" "get-api-v2-cddrive-files-file-id-content" "post-api-v2-cddrive-folders" "delete-api-v2-cddrive-folders-folder-id" "get-api-v2-cddrive-folders-folder-id" "get-api-v2-cddrive-folders-folder-id-items" "get-api-v2-episodes" "get-api-v2-episodes-id" "post-api-v2-metapub-program-information-batch" "get-api-v2-metapub-program-information-batch-batch-id" "get-api-v2-pieces" "post-api-v2-pieces" "delete-api-v2-pieces-id" "get-api-v2-pieces-id" "get-api-v2-programs-search" "get-api-v2-programs-id" "get-api-v2-segments" "post-api-v2-segments" "delete-api-v2-segments-id" "get-api-v2-segments-id" "get-api-v2-segments-id-content" "get-api-v2-spotinsertions" "post-api-v2-spotinsertions" "delete-api-v2-spotinsertions-id" "get-api-v2-spotinsertions-id" "get-api-v2-spots" "post-api-v2-spots" "delete-api-v2-spots-id" "get-api-v2-spots-id" "get-radiodns-spi-3-1-gi-xml" "get-radiodns-spi-3-1-si-xml" "get-radiodns-spi-3-1-id-fqdn-sid-date-pi-xml" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -177,7 +201,7 @@ export def "get-api-v2-broadcastservices" [
   --page-start: int # The start page of the results to return. The first item is indexed at 0. (format: int32, default: 0)
   --page-size: int # The number of items to return. Must be between 0 and 500, inclusive. (format: int32, default: 500)
   --order-by-id: string@order-by-id-completer # The sort order of the list of broadcast services, based on broadcast service ID. If unspecified, the broadcast services are returned in random order. If using paging to iterate through the results, sort order should be specified.
-]: nothing -> table<beginAirDate: string, beginTransmissionDate: string, createdDate: string, customerId: int, endAirDate: string, endTransmissionDate: string, id: int, lastModifiedDate: string, programId: int, title: string> {
+]: nothing -> oneof<table<beginAirDate: string, beginTransmissionDate: string, createdDate: string, customerId: int, endAirDate: string, endTransmissionDate: string, id: int, lastModifiedDate: string, programId: int, title: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageStart" $page_start "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "orderById" $order_by_id "scalar")] | flatten | str join "&"
@@ -212,7 +236,7 @@ export def "get-api-v2-broadcastservices-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<createdDate: string, description: string, id: int, lastModifiedDate: string, name: string> {
+]: nothing -> oneof<record<createdDate: string, description: string, id: int, lastModifiedDate: string, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -250,7 +274,7 @@ export def "post-api-v2-cddrive-files-content" [
   --file: string # The file content being uploaded. (format: binary)
   --name: string # The name of the file, including extension.
   --parent-id: int # The ID of the parent folder or 0 for the root folder. (format: int64)
-]: any -> record<createdDate: string, id: int, lastModifiedDate: string, name: string, parentId: int, size: int> {
+]: any -> oneof<record<createdDate: string, id: int, lastModifiedDate: string, name: string, parentId: int, size: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -326,7 +350,7 @@ export def "get-api-v2-cddrive-files-file-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<createdDate: string, id: int, lastModifiedDate: string, name: string, parentId: int, size: int> {
+]: nothing -> oneof<record<createdDate: string, id: int, lastModifiedDate: string, name: string, parentId: int, size: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'file-id' must be non-empty" } }
@@ -400,7 +424,7 @@ export def "post-api-v2-cddrive-folders" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # the name of the folder
   --parent-id: int # The ID of the parent folder or 0 for the root folder. (format: int64)
-]: any -> record<createdDate: string, id: int, lastModifiedDate: string, name: string, parentId: int> {
+]: any -> oneof<record<createdDate: string, id: int, lastModifiedDate: string, name: string, parentId: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -409,7 +433,7 @@ export def "post-api-v2-cddrive-folders" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -475,7 +499,7 @@ export def "get-api-v2-cddrive-folders-folder-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<createdDate: string, id: int, lastModifiedDate: string, name: string, parentId: int> {
+]: nothing -> oneof<record<createdDate: string, id: int, lastModifiedDate: string, name: string, parentId: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'folder-id' must be non-empty" } }
@@ -512,7 +536,7 @@ export def "get-api-v2-cddrive-folders-folder-id-items" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # The offset into the items to begin the response. (format: int32, default: 0)
   --limit: int # The maximum number of items to return in the response. (format: int32, default: 20)
-]: nothing -> record<entries: table<id: int, name: string, type: string>, limit: int, offset: int, totalCount: int> {
+]: nothing -> oneof<record<entries: table<id: int, name: string, type: string>, limit: int, offset: int, totalCount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'folder-id' must be non-empty" } }
@@ -554,7 +578,7 @@ export def "get-api-v2-episodes" [
   --page-start: int # The start page of the results to return. The first item is indexed at 0. (format: int32, default: 0)
   --page-size: int # The number of items to return. Must be between 0 and 500, inclusive. (format: int32, default: 500)
   --order-by-id: string@order-by-id-completer # The sort order of the list of episodes, based on episode ID. If unspecified, the episodes are returned in random order. If using paging to iterate through the results, sort order should be specified.
-]: nothing -> table<beginAirDate: string, beginTransmissionDate: string, createdDate: string, customerId: int, endAirDate: string, endTransmissionDate: string, id: int, lastModifiedDate: string, programId: int, title: string> {
+]: nothing -> oneof<table<beginAirDate: string, beginTransmissionDate: string, createdDate: string, customerId: int, endAirDate: string, endTransmissionDate: string, id: int, lastModifiedDate: string, programId: int, title: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($program_id == null) { error make --unspanned { msg: "required query parameter 'programId' missing: pass --program-id" } }
@@ -590,7 +614,7 @@ export def "get-api-v2-episodes-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<beginAirDate: string, beginTransmissionDate: string, createdDate: string, customerId: int, endAirDate: string, endTransmissionDate: string, id: int, lastModifiedDate: string, programId: int, title: string> {
+]: nothing -> oneof<record<beginAirDate: string, beginTransmissionDate: string, createdDate: string, customerId: int, endAirDate: string, endTransmissionDate: string, id: int, lastModifiedDate: string, programId: int, title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -616,7 +640,6 @@ export def "get-api-v2-episodes-id" [
 # POST /api/v2/metapub/program-information/batch
 # DEPRECATED
 # Docs: /api/epg-cd-mapping.html — Find RadioDns to ContentDepot Mapping here
-# --program shape: {airDate: string, title: string}
 @deprecated
 export def "post-api-v2-metapub-program-information-batch" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -632,7 +655,7 @@ export def "post-api-v2-metapub-program-information-batch" [
   --name: string # An optional human readable name for the batch.
   --program: record # The program information to associate the ingested metadata with. This is only required if the metadata format doesn't provide the program title and air date information directly. — shape: {airDate: string, title: string}
   uri: string # The URI to the metadata file. Currently only the ```cddrive``` scheme is supported. (format: uri)
-]: any -> record<createdDate: string, finishedDate: string, format: string, id: int, message: string, name: string, program: record<airDate: string, title: string>, status: string, uri: string> {
+]: any -> oneof<record<createdDate: string, finishedDate: string, format: string, id: int, message: string, name: string, program: record<airDate: string, title: string>, status: string, uri: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -671,7 +694,7 @@ export def "get-api-v2-metapub-program-information-batch-batch-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<createdDate: string, finishedDate: string, format: string, id: int, message: string, name: string, program: record<airDate: string, title: string>, status: string, uri: string> {
+]: nothing -> oneof<record<createdDate: string, finishedDate: string, format: string, id: int, message: string, name: string, program: record<airDate: string, title: string>, status: string, uri: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($batch_id | is-empty) { error make --unspanned { msg: "path parameter 'batch-id' must be non-empty" } }
@@ -706,7 +729,7 @@ export def "get-api-v2-pieces" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --episode-id: int # The ID of the episode that owns the piece. (required, format: int64)
-]: nothing -> table<contributor: string, createdDate: string, description: string, episodeId: int, fullDescription: string, id: int, imageCdDriveUri: string, imageFileName: string, imageFileSize: int, imageOriginalFileName: string, lastModifiedDate: string, relativeEndTime: int, relativeStartTime: int, segmentNumber: int, title: string> {
+]: nothing -> oneof<table<contributor: string, createdDate: string, description: string, episodeId: int, fullDescription: string, id: int, imageCdDriveUri: string, imageFileName: string, imageFileSize: int, imageOriginalFileName: string, lastModifiedDate: string, relativeEndTime: int, relativeStartTime: int, segmentNumber: int, title: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($episode_id == null) { error make --unspanned { msg: "required query parameter 'episodeId' missing: pass --episode-id" } }
@@ -753,7 +776,7 @@ export def "post-api-v2-pieces" [
   relative_start_time: int # Seconds relative to the start of the episode. (format: int32)
   --segment-number: int # The number of the segment that this piece is in, starting with 1. This is an optional field but it can be used to provide more detail by linking the piece to a specific audio segment. (format: int32)
   title: string # The human readable title of the piece that is normally displayed on an end user's device.
-]: any -> record<contributor: string, createdDate: string, description: string, episodeId: int, fullDescription: string, id: int, imageCdDriveUri: string, imageFileName: string, imageFileSize: int, imageOriginalFileName: string, lastModifiedDate: string, relativeEndTime: int, relativeStartTime: int, segmentNumber: int, title: string> {
+]: any -> oneof<record<contributor: string, createdDate: string, description: string, episodeId: int, fullDescription: string, id: int, imageCdDriveUri: string, imageFileName: string, imageFileSize: int, imageOriginalFileName: string, lastModifiedDate: string, relativeEndTime: int, relativeStartTime: int, segmentNumber: int, title: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -825,7 +848,7 @@ export def "get-api-v2-pieces-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<contributor: string, createdDate: string, description: string, episodeId: int, fullDescription: string, id: int, imageCdDriveUri: string, imageFileName: string, imageFileSize: int, imageOriginalFileName: string, lastModifiedDate: string, relativeEndTime: int, relativeStartTime: int, segmentNumber: int, title: string> {
+]: nothing -> oneof<record<contributor: string, createdDate: string, description: string, episodeId: int, fullDescription: string, id: int, imageCdDriveUri: string, imageFileName: string, imageFileSize: int, imageOriginalFileName: string, lastModifiedDate: string, relativeEndTime: int, relativeStartTime: int, segmentNumber: int, title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -862,7 +885,7 @@ export def "get-api-v2-programs-search" [
   --keywords: string # Free text search that matches against the program title or description.
   --page-start: int # The start page of the results to return. The first item is indexed at 0. (format: int32, default: 0)
   --page-size: int # The number of items to return. Must be between 0 and 500, inclusive. (format: int32, default: 500)
-]: nothing -> table<createdDate: string, customerId: int, id: int, lastModifiedDate: string, title: string> {
+]: nothing -> oneof<table<createdDate: string, customerId: int, id: int, lastModifiedDate: string, title: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "keywords" $keywords "scalar") (serialize-qp "pageStart" $page_start "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
@@ -897,7 +920,7 @@ export def "get-api-v2-programs-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<createdDate: string, customerId: int, id: int, lastModifiedDate: string, title: string> {
+]: nothing -> oneof<record<createdDate: string, customerId: int, id: int, lastModifiedDate: string, title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -936,7 +959,7 @@ export def "get-api-v2-segments" [
   --page-start: int # The start page of the results to return. The first item is indexed at 0. (format: int32, default: 0)
   --page-size: int # The number of items to return. Must be between 0 and 500, inclusive. (format: int32, default: 500)
   --order-by-id: string@order-by-id-completer # The sort order of the list of segments, based on segment ID. If unspecified, the segments are returned in random order. If using paging to iterate through the results, sort order should be specified.
-]: nothing -> table<channels: int, createdDate: string, episodeId: int, fileName: string, fileSize: int, id: int, inCue: string, lastModifiedDate: string, length: int, originalFileName: string, outCue: string, segmentNumber: int> {
+]: nothing -> oneof<table<channels: int, createdDate: string, episodeId: int, fileName: string, fileSize: int, id: int, inCue: string, lastModifiedDate: string, length: int, originalFileName: string, outCue: string, segmentNumber: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($episode_id == null) { error make --unspanned { msg: "required query parameter 'episodeId' missing: pass --episode-id" } }
@@ -976,7 +999,7 @@ export def "post-api-v2-segments" [
   --in-cue: string # The incue for the segment. Defaults to the program segment incue.
   --out-cue: string # The outcue for the segment. Defaults to the program segment outcue.
   segment_number: int # The segment number of the segment. (format: int32)
-]: any -> record<channels: int, createdDate: string, episodeId: int, fileName: string, fileSize: int, id: int, inCue: string, lastModifiedDate: string, length: int, originalFileName: string, outCue: string, segmentNumber: int> {
+]: any -> oneof<record<channels: int, createdDate: string, episodeId: int, fileName: string, fileSize: int, id: int, inCue: string, lastModifiedDate: string, length: int, originalFileName: string, outCue: string, segmentNumber: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -985,7 +1008,7 @@ export def "post-api-v2-segments" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1049,7 +1072,7 @@ export def "get-api-v2-segments-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<channels: int, createdDate: string, episodeId: int, fileName: string, fileSize: int, id: int, inCue: string, lastModifiedDate: string, length: int, originalFileName: string, outCue: string, segmentNumber: int> {
+]: nothing -> oneof<record<channels: int, createdDate: string, episodeId: int, fileName: string, fileSize: int, id: int, inCue: string, lastModifiedDate: string, length: int, originalFileName: string, outCue: string, segmentNumber: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1121,7 +1144,7 @@ export def "get-api-v2-spotinsertions" [
   --page-start: int # The start page of the results to return. The first item is indexed at 0. (format: int32, default: 0)
   --page-size: int # The number of items to return. Must be between 0 and 500, inclusive. (format: int32, default: 500)
   --order-by-id: string@order-by-id-completer # The sort order of the list of spot insertions, based on ID. If unspecified, the spot insertions are returned in random order. If using paging to iterate through the results, sort order should be specified.
-]: nothing -> table<broadcastServiceId: int, createdDate: string, cue: string, customerId: int, duration: int, endDate: string, id: int, programId: int, spots: list<int>, startDate: string> {
+]: nothing -> oneof<table<broadcastServiceId: int, createdDate: string, cue: string, customerId: int, duration: int, endDate: string, id: int, programId: int, spots: list<int>, startDate: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageStart" $page_start "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "orderById" $order_by_id "scalar")] | flatten | str join "&"
@@ -1162,7 +1185,7 @@ export def "post-api-v2-spotinsertions" [
   program_id: int # The ID of the program for the spot insertion. (format: int64)
   spots: list<int> # The ordered list of spot IDs to play.
   start_date: string # The date the spot insertion can start. The time will be set to midnight Eastern Time. (format: date, e.g. 2020-01-31)
-]: any -> record<broadcastServiceId: int, createdDate: string, cue: string, customerId: int, duration: int, endDate: string, id: int, programId: int, spots: list<int>, startDate: string> {
+]: any -> oneof<record<broadcastServiceId: int, createdDate: string, cue: string, customerId: int, duration: int, endDate: string, id: int, programId: int, spots: list<int>, startDate: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1234,7 +1257,7 @@ export def "get-api-v2-spotinsertions-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<broadcastServiceId: int, createdDate: string, cue: string, customerId: int, duration: int, endDate: string, id: int, programId: int, spots: list<int>, startDate: string> {
+]: nothing -> oneof<record<broadcastServiceId: int, createdDate: string, cue: string, customerId: int, duration: int, endDate: string, id: int, programId: int, spots: list<int>, startDate: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1271,7 +1294,7 @@ export def "get-api-v2-spots" [
   --page-start: int # The start page of the spot to return. The first item is indexed at 0. (format: int32, default: 0)
   --page-size: int # The number of items to return. Must be between 0 and 500, inclusive. (format: int32, default: 500)
   --order-by-id: string@order-by-id-completer # The sort order of the list of spots, based on spot ID. If unspecified, the spots are returned in random order. If using paging to iterate through the results, sort order should be specified.
-]: nothing -> table<createdDate: string, duration: int, fileName: string, fileSize: int, id: int, lastModifiedDate: string, lastUploadedDate: string, name: string, notes: string, originalFileName: string> {
+]: nothing -> oneof<table<createdDate: string, duration: int, fileName: string, fileSize: int, id: int, lastModifiedDate: string, lastUploadedDate: string, name: string, notes: string, originalFileName: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageStart" $page_start "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "orderById" $order_by_id "scalar")] | flatten | str join "&"
@@ -1308,7 +1331,7 @@ export def "post-api-v2-spots" [
   cd_drive_uri: string # The URI to the spot content in CD Drive. Format should be 'cddrive:id:{value}' or 'cddrive://{path}'.
   name: string # The name of the spot to create/update.
   notes: string # Notes pertaining to the spot.
-]: any -> record<createdDate: string, duration: int, fileName: string, fileSize: int, id: int, lastModifiedDate: string, lastUploadedDate: string, name: string, notes: string, originalFileName: string> {
+]: any -> oneof<record<createdDate: string, duration: int, fileName: string, fileSize: int, id: int, lastModifiedDate: string, lastUploadedDate: string, name: string, notes: string, originalFileName: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1317,7 +1340,7 @@ export def "post-api-v2-spots" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1381,7 +1404,7 @@ export def "get-api-v2-spots-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<createdDate: string, duration: int, fileName: string, fileSize: int, id: int, lastModifiedDate: string, lastUploadedDate: string, name: string, notes: string, originalFileName: string> {
+]: nothing -> oneof<record<createdDate: string, duration: int, fileName: string, fileSize: int, id: int, lastModifiedDate: string, lastUploadedDate: string, name: string, notes: string, originalFileName: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }

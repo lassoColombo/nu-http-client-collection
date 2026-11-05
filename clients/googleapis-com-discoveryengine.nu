@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -120,9 +144,9 @@ def reconciliation-mode-completer [] { ["FULL" "INCREMENTAL" "RECONCILIATION_MOD
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "discoveryengine-projects-locations-data-stores-branches-documents-delete" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["discoveryengine-projects-locations-data-stores-branches-documents-delete" "discoveryengine-projects-operations-get" "discoveryengine-projects-locations-data-stores-branches-documents-patch" "discoveryengine-projects-operations-list" "discoveryengine-projects-locations-data-stores-branches-documents-list" "discoveryengine-projects-locations-data-stores-branches-documents-create" "discoveryengine-projects-locations-data-stores-branches-documents-import" "discoveryengine-projects-locations-data-stores-user-events-collect" "discoveryengine-projects-locations-data-stores-user-events-import" "discoveryengine-projects-locations-data-stores-user-events-write" "discoveryengine-projects-locations-data-stores-serving-configs-recommend" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -166,7 +190,7 @@ export def "discoveryengine-projects-locations-data-stores-branches-documents-de
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -214,7 +238,7 @@ export def "discoveryengine-projects-operations-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: nothing -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -269,7 +293,7 @@ export def "discoveryengine-projects-locations-data-stores-branches-documents-pa
   --parent-document-id: string # The identifier of the parent document. Currently supports at most two level document hierarchy. Id should conform to [RFC-1034](https://tools.ietf.org/html/rfc1034) standard with a length limit of 63 characters.
   --schema-id: string # The identifier of the schema located in the same data store.
   --struct-data: record # The structured JSON data for the document. It should conform to the registered schema or an INVALID_ARGUMENT error is thrown.
-]: any -> record<id: string, jsonData: string, name: string, parentDocumentId: string, schemaId: string, structData: record> {
+]: any -> oneof<record<id: string, jsonData: string, name: string, parentDocumentId: string, schemaId: string, structData: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -323,7 +347,7 @@ export def "discoveryengine-projects-operations-list" [
   --filter: string # The standard list filter.
   --page-size: int # The standard list page size.
   --page-token: string # The standard list page token.
-]: nothing -> record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>> {
+]: nothing -> oneof<record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -373,7 +397,7 @@ export def "discoveryengine-projects-locations-data-stores-branches-documents-li
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # Maximum number of Documents to return. If unspecified, defaults to 100. The maximum allowed value is 1000. Values above 1000 will be coerced to 1000. If this field is negative, an INVALID_ARGUMENT error is returned.
   --page-token: string # A page token ListDocumentsResponse.next_page_token, received from a previous DocumentService.ListDocuments call. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to DocumentService.ListDocuments must match the call that provided the page token. Otherwise, an INVALID_ARGUMENT error is returned.
-]: nothing -> record<documents: table<id: string, jsonData: string, name: string, parentDocumentId: string, schemaId: string, structData: record>, nextPageToken: string> {
+]: nothing -> oneof<record<documents: table<id: string, jsonData: string, name: string, parentDocumentId: string, schemaId: string, structData: record>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -428,7 +452,7 @@ export def "discoveryengine-projects-locations-data-stores-branches-documents-cr
   --parent-document-id: string # The identifier of the parent document. Currently supports at most two level document hierarchy. Id should conform to [RFC-1034](https://tools.ietf.org/html/rfc1034) standard with a length limit of 63 characters.
   --schema-id: string # The identifier of the schema located in the same data store.
   --struct-data: record # The structured JSON data for the document. It should conform to the registered schema or an INVALID_ARGUMENT error is thrown.
-]: any -> record<id: string, jsonData: string, name: string, parentDocumentId: string, schemaId: string, structData: record> {
+]: any -> oneof<record<id: string, jsonData: string, name: string, parentDocumentId: string, schemaId: string, structData: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -457,10 +481,6 @@ export def "discoveryengine-projects-locations-data-stores-branches-documents-cr
 #
 # POST /v1beta/{parent}/documents:import
 # operationId: discoveryengine.projects.locations.dataStores.branches.documents.import
-# --bigquerySource shape: {dataSchema?: string, datasetId?: string, gcsStagingDir?: string, partitionDate?: record, projectId?: string, tableId?: string}
-# --errorConfig shape: {gcsPrefix?: string}
-# --gcsSource shape: {dataSchema?: string, inputUris?: list<string>}
-# --inlineSource shape: {documents?: list}
 export def "discoveryengine-projects-locations-data-stores-branches-documents-import" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -488,7 +508,7 @@ export def "discoveryengine-projects-locations-data-stores-branches-documents-im
   --gcs-source: record # Cloud Storage location for input content. — shape: {dataSchema?: string, inputUris?: list<string>}
   --inline-source: record # The inline source for the input config for ImportDocuments method. — shape: {documents?: list}
   --reconciliation-mode: string@reconciliation-mode-completer # The mode of reconciliation between existing documents and the documents to be imported. Defaults to ReconciliationMode.INCREMENTAL.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -542,7 +562,7 @@ export def "discoveryengine-projects-locations-data-stores-user-events-collect" 
   --ets: string # The event timestamp in milliseconds. This prevents browser caching of otherwise identical get requests. The name is abbreviated to reduce the payload bytes.
   --uri: string # The URL including cgi-parameters but excluding the hash fragment with a length limit of 5,000 characters. This is often more useful than the referer URL, because many browsers only send the domain for 3rd party requests.
   --user-event: string # Required. URL encoded UserEvent proto with a length limit of 2,000,000 characters.
-]: nothing -> record<contentType: string, data: string, extensions: list<record>> {
+]: nothing -> oneof<record<contentType: string, data: string, extensions: list<record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -568,10 +588,6 @@ export def "discoveryengine-projects-locations-data-stores-user-events-collect" 
 #
 # POST /v1beta/{parent}/userEvents:import
 # operationId: discoveryengine.projects.locations.dataStores.userEvents.import
-# --bigquerySource shape: {dataSchema?: string, datasetId?: string, gcsStagingDir?: string, partitionDate?: record, projectId?: string, tableId?: string}
-# --errorConfig shape: {gcsPrefix?: string}
-# --gcsSource shape: {dataSchema?: string, inputUris?: list<string>}
-# --inlineSource shape: {userEvents?: list}
 export def "discoveryengine-projects-locations-data-stores-user-events-import" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -598,7 +614,7 @@ export def "discoveryengine-projects-locations-data-stores-user-events-import" [
   --error-config: record # Configuration of destination for Import related errors. — shape: {gcsPrefix?: string}
   --gcs-source: record # Cloud Storage location for input content. — shape: {dataSchema?: string, inputUris?: list<string>}
   --inline-source: record # The inline source for the input config for ImportUserEvents method. — shape: {userEvents?: list}
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -627,14 +643,6 @@ export def "discoveryengine-projects-locations-data-stores-user-events-import" [
 #
 # POST /v1beta/{parent}/userEvents:write
 # operationId: discoveryengine.projects.locations.dataStores.userEvents.write
-# --completionInfo shape: {selectedPosition?: int, selectedSuggestion?: string}
-# --documents item shape: {id?: string, name?: string, promotionIds?: list<string>, quantity?: int}
-# --mediaInfo shape: {mediaProgressDuration?: string, mediaProgressPercentage?: float}
-# --pageInfo shape: {pageCategory?: string, pageviewId?: string, referrerUri?: string, uri?: string}
-# --panel shape: {displayName?: string, panelId?: string, panelPosition?: int, totalPanels?: int}
-# --searchInfo shape: {offset?: int, orderBy?: string, searchQuery?: string}
-# --transactionInfo shape: {cost?: float, currency?: string, discountValue?: float, tax?: float, transactionId?: string, value?: float}
-# --userInfo shape: {userAgent?: string, userId?: string}
 export def "discoveryengine-projects-locations-data-stores-user-events-write" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -675,7 +683,7 @@ export def "discoveryengine-projects-locations-data-stores-user-events-write" [
   --transaction-info: record # A transaction represents the entire purchase transaction. — shape: {cost?: float, currency?: string, discountValue?: float, tax?: float, transactionId?: string, value?: float}
   --user-info: record # Information of an end user. — shape: {userAgent?: string, userId?: string}
   --user-pseudo-id: string # Required. A unique identifier for tracking visitors. For example, this could be implemented with an HTTP cookie, which should be able to uniquely identify a visitor on a single device. This unique identifier should not change if the visitor log in/out of the website. Do not set the field to the same fixed ID for different users. This mixes the event history of those users together, which results in degraded model quality. The field must be a UTF-8 encoded string with a length limit of 128 characters. Otherwise, an INVALID_ARGUMENT error is returned. The field should not contain PII or user-data. We recommend to use Google Analytics [Client ID](https://developers.google.com/analytics/devguides/collection/analyticsjs/field-reference#clientId) for this field.
-]: any -> record<attributes: record, attributionToken: string, completionInfo: record<selectedPosition: int, selectedSuggestion: string>, directUserRequest: bool, documents: table<id: string, name: string, promotionIds: list, quantity: int>, eventTime: string, eventType: string, filter: string, mediaInfo: record<mediaProgressDuration: string, mediaProgressPercentage: float>, pageInfo: record<pageCategory: string, pageviewId: string, referrerUri: string, uri: string>, panel: record<displayName: string, panelId: string, panelPosition: int, totalPanels: int>, promotionIds: list<string>, searchInfo: record<offset: int, orderBy: string, searchQuery: string>, sessionId: string, tagIds: list<string>, transactionInfo: record<cost: float, currency: string, discountValue: float, tax: float, transactionId: string, value: float>, userInfo: record<userAgent: string, userId: string>, userPseudoId: string> {
+]: any -> oneof<record<attributes: record, attributionToken: string, completionInfo: record<selectedPosition: int, selectedSuggestion: string>, directUserRequest: bool, documents: table<id: string, name: string, promotionIds: list, quantity: int>, eventTime: string, eventType: string, filter: string, mediaInfo: record<mediaProgressDuration: string, mediaProgressPercentage: float>, pageInfo: record<pageCategory: string, pageviewId: string, referrerUri: string, uri: string>, panel: record<displayName: string, panelId: string, panelPosition: int, totalPanels: int>, promotionIds: list<string>, searchInfo: record<offset: int, orderBy: string, searchQuery: string>, sessionId: string, tagIds: list<string>, transactionInfo: record<cost: float, currency: string, discountValue: float, tax: float, transactionId: string, value: float>, userInfo: record<userAgent: string, userId: string>, userPseudoId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -704,7 +712,6 @@ export def "discoveryengine-projects-locations-data-stores-user-events-write" [
 #
 # POST /v1beta/{servingConfig}:recommend
 # operationId: discoveryengine.projects.locations.dataStores.servingConfigs.recommend
-# --userEvent shape: {attributes?: record, attributionToken?: string, completionInfo?: record, directUserRequest?: bool, documents?: list, eventTime?: string, eventType?: string, filter?: string, mediaInfo?: record, pageInfo?: record, panel?: record, promotionIds?: list<string>, searchInfo?: record, sessionId?: string, tagIds?: list<string>, transactionInfo?: record, userInfo?: record, userPseudoId?: string}
 export def "discoveryengine-projects-locations-data-stores-serving-configs-recommend" [
   serving_config: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -733,7 +740,7 @@ export def "discoveryengine-projects-locations-data-stores-serving-configs-recom
   --user-event: record # UserEvent captures all metadata information Discovery Engine API needs to know about how end users interact with customers' website. — shape: {attributes?: record, attributionToken?: string, completionInfo?: record, directUserRequest?: bool, documents?: list, eventTime?: string, eventType?: string, filter?: string, mediaInfo?: record, pageInfo?: record, panel?: record, promotionIds?: list<string>, searchInfo?: record, sessionId?: string, tagIds?: list<string>, transactionInfo?: record, userInfo?: record, userPseudoId?: string}
   --user-labels: record # The user labels applied to a resource must meet the following requirements: * Each resource can have multiple labels, up to a maximum of 64. * Each label must be a key-value pair. * Keys have a minimum length of 1 character and a maximum length of 63 characters and cannot be empty. Values can be empty and have a maximum length of 63 characters. * Keys and values can contain only lowercase letters, numeric characters, underscores, and dashes. All characters must use UTF-8 encoding, and international characters are allowed. * The key portion of a label must be unique. However, you can use the same key with multiple resources. * Keys must start with a lowercase letter or international character. See [Requirements for labels](https://cloud.google.com/resource-manager/docs/creating-managing-labels#requirements) for more details.
   --validate-only: oneof<nothing, bool> # Use validate only mode for this recommendation query. If set to true, a fake model will be used that returns arbitrary Document IDs. Note that the validate only mode should only be used for testing the API, or if the model is not ready.
-]: any -> record<attributionToken: string, missingIds: list<string>, results: table<document: record, id: string, metadata: record>, validateOnly: bool> {
+]: any -> oneof<record<attributionToken: string, missingIds: list<string>, results: table<document: record, id: string, metadata: record>, validateOnly: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

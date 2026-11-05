@@ -14,27 +14,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -42,8 +51,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -54,7 +68,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -89,7 +112,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -117,9 +141,9 @@ def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "access-add" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["access-add" "access-del" "access-get-acldb" "access-get-admindir" "access-get-adminuser" "access-get-enabled" "access-list" "access-load" "access-save" "access-set-acldb" "access-set-enabled" "new" "from-add" "from-del" "from-list" "get-changed" "get-config-changed" "get-delay" "get-drops" "get-host" "get-inform-timeout" "get-interface" "get-mask" "get-mibs" "get-number-starts" "get-oiddir" "get-owner" "get-pdusize" "get-port" "get-privdir" "get-protocols" "get-read-community" "get-scen" "get-sim" "get-starttime" "get-agent-state" "get-state-changed" "get-statistics" "get-trace" "get-validate" "get-write-community" "halt" "add-ipalias" "del-ipalias" "list-ipaliases" "start-ipalias" "status-ipalias" "stop-ipalias" "pause-now" "protocol-coap-get-args" "protocol-coap-get-config" "protocol-coap-get-statistics" "protocol-coap-get-trace" "protocol-coap-set-config" "protocol-coap-set-trace" "protocol-dhcp-get-args" "protocol-dhcp-get-config" "protocol-dhcp-get-statistics" "protocol-dhcp-get-trace" "protocol-dhcp-params" "protocol-dhcp-set-config" "protocol-dhcp-set-trace" "protocol-ipmi-get-args" "protocol-ipmi-get-config" "protocol-ipmi-get-statistics" "protocol-ipmi-get-trace" "protocol-ipmi-get-attr" "protocol-ipmi-set-config" "protocol-ipmi-set-trace" "protocol-ipmi-set-attr" "protocol-mqtt-client-get-protstate" "protocol-mqtt-client-get-state" "protocol-mqtt-client-message-card" "protocol-mqtt-client-message-get" "protocol-mqtt-client-message-set" "protocol-mqtt-client-resubscribe" "protocol-mqtt-client-runtime-abort" "protocol-mqtt-client-runtime-connect" "protocol-mqtt-client-runtime-disconnect" "protocol-mqtt-client-set-broker" "protocol-mqtt-client-set-cleansession" "protocol-mqtt-client-set-clientid" "protocol-mqtt-client-set-keepalive" "protocol-mqtt-client-set-on-disconnect" "protocol-mqtt-client-set-password" "protocol-mqtt-client-set-port" "protocol-mqtt-client-set-username" "protocol-mqtt-client-set-willmsg" "protocol-mqtt-client-set-willqos" "protocol-mqtt-client-set-willretain" "protocol-mqtt-client-set-willtopic" "protocol-mqtt-client-subscribe-card" "protocol-mqtt-client-subscribe-get" "protocol-mqtt-client-subscribe-set" "protocol-mqtt-client-unsubscribe" "protocol-mqtt-get-args" "protocol-mqtt-get-config" "protocol-mqtt-get-statistics" "protocol-mqtt-get-trace" "protocol-mqtt-set-config" "protocol-mqtt-set-trace" "protocol-netflow-change-dfs" "protocol-netflow-change-tfs" "protocol-netflow-change-attr" "protocol-netflow-list" "protocol-netflow-get-args" "protocol-netflow-get-config" "protocol-netflow-get-statistics" "protocol-netflow-get-trace" "protocol-netflow-halt" "protocol-netflow-reload" "protocol-netflow-resume" "protocol-netflow-set-collector" "protocol-netflow-set-config" "protocol-netflow-set-file-name" "protocol-netflow-set-trace" "protocol-proxy-get-args" "protocol-proxy-get-config" "protocol-proxy-get-statistics" "protocol-proxy-get-trace" "protocol-proxy-port-add" "protocol-proxy-port-isstarted" "protocol-proxy-port-list" "protocol-proxy-port-remove" "protocol-proxy-port-start" "protocol-proxy-port-stop" "protocol-proxy-set-config" "protocol-proxy-set-trace" "protocol-sflow-get-args" "protocol-sflow-get-config" "protocol-sflow-get-statistics" "protocol-sflow-get-trace" "protocol-sflow-halt" "protocol-sflow-reload" "protocol-sflow-resume" "protocol-sflow-set-config" "protocol-sflow-set-trace" "protocol-snmptcp-get-args" "protocol-snmptcp-get-config" "protocol-snmptcp-get-statistics" "protocol-snmptcp-get-trace" "protocol-snmptcp-ipalias-disable" "protocol-snmptcp-ipalias-enable" "protocol-snmptcp-ipalias-isenabled" "protocol-snmptcp-ipalias-list" "protocol-snmptcp-set-config" "protocol-snmptcp-set-trace" "protocol-snmpv3-access-add" "protocol-snmpv3-access-clear" "protocol-snmpv3-access-del" "protocol-snmpv3-access-list" "protocol-snmpv3-get-config" "protocol-snmpv3-get-context-engineid" "protocol-snmpv3-get-engineboots" "protocol-snmpv3-get-engineid" "protocol-snmpv3-get-enginetime" "protocol-snmpv3-group-add" "protocol-snmpv3-group-clear" "protocol-snmpv3-group-del" "protocol-snmpv3-group-list" "protocol-snmpv3-set-config" "protocol-snmpv3-user-add" "protocol-snmpv3-user-clear" "protocol-snmpv3-user-del" "protocol-snmpv3-user-list" "protocol-snmpv3-usm-save" "protocol-snmpv3-usm-saveas" "protocol-snmpv3-vacm-save" "protocol-snmpv3-vacm-saveas" "protocol-snmpv3-view-add" "protocol-snmpv3-view-clear" "protocol-snmpv3-view-del" "protocol-snmpv3-view-list" "protocol-ssh-get-args" "protocol-ssh-get-config" "protocol-ssh-get-statistics" "protocol-ssh-get-trace" "protocol-ssh-ipalias-disable" "protocol-ssh-ipalias-enable" "protocol-ssh-ipalias-isenabled" "protocol-ssh-ipalias-list" "protocol-ssh-set-config" "protocol-ssh-set-trace" "protocol-syslog-get-args" "protocol-syslog-get-config" "protocol-syslog-get-statistics" "protocol-syslog-get-trace" "protocol-syslog-get-attr" "protocol-syslog-send" "protocol-syslog-set-config" "protocol-syslog-set-trace" "protocol-syslog-set-attr" "protocol-telnet-connection-logon" "protocol-telnet-connection-request" "protocol-telnet-connection-signal" "protocol-telnet-get-args" "protocol-telnet-get-config" "protocol-telnet-get-statistics" "protocol-telnet-get-trace" "protocol-telnet-ipalias-disable" "protocol-telnet-ipalias-enable" "protocol-telnet-ipalias-isenabled" "protocol-telnet-ipalias-list" "protocol-telnet-server-get-connections" "protocol-telnet-server-get-keymap" "protocol-telnet-server-get-rulesdb" "protocol-telnet-server-get-state" "protocol-telnet-server-get-userdb" "protocol-telnet-server-get-users" "protocol-telnet-set-config" "protocol-telnet-set-trace" "protocol-tftp-get-args" "protocol-tftp-get-config" "protocol-tftp-get-statistics" "protocol-tftp-get-trace" "protocol-tftp-session-read" "protocol-tftp-session-write" "protocol-tftp-set-config" "protocol-tftp-set-trace" "protocol-tftp-session-get-parameter" "protocol-tftp-session-set-parameter" "protocol-tftp-session-start" "protocol-tftp-session-status" "protocol-tftp-session-stop" "protocol-tod-get-args" "protocol-tod-get-config" "protocol-tod-get-statistics" "protocol-tod-get-trace" "protocol-tod-gettime" "protocol-tod-set-config" "protocol-tod-set-trace" "protocol-web-get-args" "protocol-web-get-config" "protocol-web-get-statistics" "protocol-web-get-trace" "protocol-web-port-add" "protocol-web-port-exists" "protocol-web-port-remove" "protocol-web-port-set" "protocol-web-port-start" "protocol-web-port-stop" "protocol-web-set-config" "protocol-web-set-trace" "protocol-get-config" "reload" "agent-remove" "resume" "put-mimic-agent-agent-num-save" "set-delay" "set-drops" "set-host" "set-inform-timeout" "set-interface" "set-mask" "set-mibs" "set-oiddir" "set-owner" "set-pdusize" "set-port" "set-privdir" "set-protocols" "set-read-community" "set-starttime" "set-trace" "set-validate" "set-write-community" "put-mimic-agent-agent-num-start" "stop" "agent-store-copy" "agent-store-exists" "agent-store-get" "agent-store-list" "agent-store-lreplace" "agent-store-persists" "agent-store-set" "agent-store-unset" "add-timer-script" "del-timer-script" "list-timer-scripts" "trap-config-add" "trap-config-del" "trap-config-list" "trap-list" "add" "eval-value" "get-value" "get-info" "get-instances" "get-objects" "meval-value" "mget-value" "get-mib" "mset-value" "munset-value" "get-name" "get-oid" "remove" "set-value" "split-oid" "get-state" "set-state" "unset-value" "get-variables" "cfg-new" "get-active-data-list" "get-active-list" "get-cfgfile" "get-cfg-file-changed" "get-changed-config-list" "get-changed-state-list" "get-clients" "get-configured-list" "get-interfaces" "get-last" "get-log" "get-max" "get-netaddr" "get-netdev" "get-product" "get-daemon-protocols" "get-return" "get-version" "cfg-load" "mget-info" "protocol-coap-get-stats-hdr" "protocol-dhcp-get-stats-hdr" "protocol-ipmi-get-stats-hdr" "protocol-mqtt-get-stats-hdr" "protocol-netflow-get-stats-hdr" "protocol-proxy-get-stats-hdr" "protocol-sflow-get-stats-hdr" "protocol-snmptcp-get-stats-hdr" "protocol-ssh-get-stats-hdr" "protocol-syslog-get-stats-hdr" "protocol-telnet-get-stats-hdr" "protocol-tftp-get-stats-hdr" "protocol-tod-get-stats-hdr" "protocol-web-get-stats-hdr" "cfg-save" "cfg-saveas" "set-log" "set-netdev" "store-save" "start-all-agents" "stop-all-agents" "store-exists" "store-get" "store-list" "store-lreplace" "store-persists" "store-set" "store-unset" "terminate" "add-daemon-timer-script" "del-daemon-timer-script" "list-daemon-timer-scripts" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -363,7 +387,7 @@ export def "access-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<access_mask: string, agent_range: string, user: string> {
+]: nothing -> oneof<table<access_mask: string, agent_range: string, user: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/access/list" $auth.query)
@@ -398,7 +422,7 @@ export def "access-load" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($filename | is-empty) { error make --unspanned { msg: "path parameter 'filename' must be non-empty" } }
@@ -434,7 +458,7 @@ export def "access-save" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($filename | is-empty) { error make --unspanned { msg: "path parameter 'filename' must be non-empty" } }
@@ -664,7 +688,7 @@ export def "from-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<IP: string, port: int> {
+]: nothing -> oneof<table<IP: string, port: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -988,7 +1012,7 @@ export def "get-mibs" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<device: string, mib: string, scenario: int> {
+]: nothing -> oneof<table<device: string, mib: string, scenario: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -1240,7 +1264,7 @@ export def "get-protocols" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -1492,7 +1516,7 @@ export def "get-statistics" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<int> {
+]: nothing -> oneof<list<int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -1756,7 +1780,7 @@ export def "list-ipaliases" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<IP: string, interface: string, mask: string, port: int> {
+]: nothing -> oneof<table<IP: string, interface: string, mask: string, port: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -1948,7 +1972,7 @@ export def "protocol-coap-get-args" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -1984,7 +2008,7 @@ export def "protocol-coap-get-config" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<keystore: string, primary_port: int, rule: string, secure_port: int> {
+]: nothing -> oneof<record<keystore: string, primary_port: int, rule: string, secure_port: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -2020,7 +2044,7 @@ export def "protocol-coap-get-statistics" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<int> {
+]: nothing -> oneof<list<int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -2056,7 +2080,7 @@ export def "protocol-coap-get-trace" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<keystore: string, primary_port: int, rule: string, secure_port: int> {
+]: nothing -> oneof<record<keystore: string, primary_port: int, rule: string, secure_port: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -2170,7 +2194,7 @@ export def "protocol-dhcp-get-args" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -2206,7 +2230,7 @@ export def "protocol-dhcp-get-config" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<add_options: string, classid: string, hwaddr: string, script: string> {
+]: nothing -> oneof<record<add_options: string, classid: string, hwaddr: string, script: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -2242,7 +2266,7 @@ export def "protocol-dhcp-get-statistics" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<int> {
+]: nothing -> oneof<list<int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -2278,7 +2302,7 @@ export def "protocol-dhcp-get-trace" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<add_options: string, classid: string, hwaddr: string, script: string> {
+]: nothing -> oneof<record<add_options: string, classid: string, hwaddr: string, script: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -2314,7 +2338,7 @@ export def "protocol-dhcp-params" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -2428,7 +2452,7 @@ export def "protocol-ipmi-get-args" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -2464,7 +2488,7 @@ export def "protocol-ipmi-get-config" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<primary_port: int, secure_port: int, version: string> {
+]: nothing -> oneof<record<primary_port: int, secure_port: int, version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -2500,7 +2524,7 @@ export def "protocol-ipmi-get-statistics" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<int> {
+]: nothing -> oneof<list<int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -2536,7 +2560,7 @@ export def "protocol-ipmi-get-trace" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<primary_port: int, secure_port: int, version: string> {
+]: nothing -> oneof<record<primary_port: int, secure_port: int, version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -2728,7 +2752,7 @@ export def "protocol-mqtt-client-get-protstate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<int> {
+]: nothing -> oneof<list<int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -2764,7 +2788,7 @@ export def "protocol-mqtt-client-get-state" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<int> {
+]: nothing -> oneof<list<int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -2800,7 +2824,7 @@ export def "protocol-mqtt-client-message-card" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<int> {
+]: nothing -> oneof<list<int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -2838,7 +2862,7 @@ export def "protocol-mqtt-client-message-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -2879,7 +2903,7 @@ export def "protocol-mqtt-client-message-set" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -2956,7 +2980,7 @@ export def "protocol-mqtt-client-runtime-abort" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -2992,7 +3016,7 @@ export def "protocol-mqtt-client-runtime-connect" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -3028,7 +3052,7 @@ export def "protocol-mqtt-client-runtime-disconnect" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -3065,7 +3089,7 @@ export def "protocol-mqtt-client-set-broker" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<int> {
+]: nothing -> oneof<list<int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -3103,7 +3127,7 @@ export def "protocol-mqtt-client-set-cleansession" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<int> {
+]: nothing -> oneof<list<int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -3141,7 +3165,7 @@ export def "protocol-mqtt-client-set-clientid" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<int> {
+]: nothing -> oneof<list<int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -3179,7 +3203,7 @@ export def "protocol-mqtt-client-set-keepalive" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<int> {
+]: nothing -> oneof<list<int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -3217,7 +3241,7 @@ export def "protocol-mqtt-client-set-on-disconnect" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<int> {
+]: nothing -> oneof<list<int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -3255,7 +3279,7 @@ export def "protocol-mqtt-client-set-password" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<int> {
+]: nothing -> oneof<list<int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -3293,7 +3317,7 @@ export def "protocol-mqtt-client-set-port" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<int> {
+]: nothing -> oneof<list<int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -3331,7 +3355,7 @@ export def "protocol-mqtt-client-set-username" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<int> {
+]: nothing -> oneof<list<int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -3369,7 +3393,7 @@ export def "protocol-mqtt-client-set-willmsg" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<int> {
+]: nothing -> oneof<list<int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -3407,7 +3431,7 @@ export def "protocol-mqtt-client-set-willqos" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<int> {
+]: nothing -> oneof<list<int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -3445,7 +3469,7 @@ export def "protocol-mqtt-client-set-willretain" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<int> {
+]: nothing -> oneof<list<int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -3483,7 +3507,7 @@ export def "protocol-mqtt-client-set-willtopic" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<int> {
+]: nothing -> oneof<list<int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -3520,7 +3544,7 @@ export def "protocol-mqtt-client-subscribe-card" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<int> {
+]: nothing -> oneof<list<int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -3558,7 +3582,7 @@ export def "protocol-mqtt-client-subscribe-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -3599,7 +3623,7 @@ export def "protocol-mqtt-client-subscribe-set" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -3676,7 +3700,7 @@ export def "protocol-mqtt-get-args" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -3712,7 +3736,7 @@ export def "protocol-mqtt-get-config" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<broker: string, clientid: string, filename: string, is_tls: string, password: string, port: int, tls_conf_filename: string, username: string, version: string> {
+]: nothing -> oneof<record<broker: string, clientid: string, filename: string, is_tls: string, password: string, port: int, tls_conf_filename: string, username: string, version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -3748,7 +3772,7 @@ export def "protocol-mqtt-get-statistics" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<int> {
+]: nothing -> oneof<list<int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -3784,7 +3808,7 @@ export def "protocol-mqtt-get-trace" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<broker: string, clientid: string, filename: string, is_tls: string, password: string, port: int, tls_conf_filename: string, username: string, version: string> {
+]: nothing -> oneof<record<broker: string, clientid: string, filename: string, is_tls: string, password: string, port: int, tls_conf_filename: string, username: string, version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -4018,7 +4042,7 @@ export def "protocol-netflow-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -4054,7 +4078,7 @@ export def "protocol-netflow-get-args" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -4090,7 +4114,7 @@ export def "protocol-netflow-get-config" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<bundleflowsets: int, collector: string, collectorport: int, filename: string> {
+]: nothing -> oneof<record<bundleflowsets: int, collector: string, collectorport: int, filename: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -4126,7 +4150,7 @@ export def "protocol-netflow-get-statistics" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<int> {
+]: nothing -> oneof<list<int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -4162,7 +4186,7 @@ export def "protocol-netflow-get-trace" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<bundleflowsets: int, collector: string, collectorport: int, filename: string> {
+]: nothing -> oneof<record<bundleflowsets: int, collector: string, collectorport: int, filename: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -4460,7 +4484,7 @@ export def "protocol-proxy-get-args" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -4496,7 +4520,7 @@ export def "protocol-proxy-get-config" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<TCP_NODELAY: int, client_to_server: string, disconnect_delay: int, max_connects: int, portno: int, pre_connect: string, server_to_client: string, target: string, transport: string> {
+]: nothing -> oneof<record<TCP_NODELAY: int, client_to_server: string, disconnect_delay: int, max_connects: int, portno: int, pre_connect: string, server_to_client: string, target: string, transport: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -4532,7 +4556,7 @@ export def "protocol-proxy-get-statistics" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<int> {
+]: nothing -> oneof<list<int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -4568,7 +4592,7 @@ export def "protocol-proxy-get-trace" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<TCP_NODELAY: int, client_to_server: string, disconnect_delay: int, max_connects: int, portno: int, pre_connect: string, server_to_client: string, target: string, transport: string> {
+]: nothing -> oneof<record<TCP_NODELAY: int, client_to_server: string, disconnect_delay: int, max_connects: int, portno: int, pre_connect: string, server_to_client: string, target: string, transport: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -4684,7 +4708,7 @@ export def "protocol-proxy-port-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<int> {
+]: nothing -> oneof<list<int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -4912,7 +4936,7 @@ export def "protocol-sflow-get-args" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -4948,7 +4972,7 @@ export def "protocol-sflow-get-config" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<collector: string, collectorport: int, encoding_type: string, filename: string, flows_per_min: int, include_samples: string, records_per_sample: string, samples_per_datagram: string> {
+]: nothing -> oneof<record<collector: string, collectorport: int, encoding_type: string, filename: string, flows_per_min: int, include_samples: string, records_per_sample: string, samples_per_datagram: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -4984,7 +5008,7 @@ export def "protocol-sflow-get-statistics" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<int> {
+]: nothing -> oneof<list<int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -5020,7 +5044,7 @@ export def "protocol-sflow-get-trace" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<collector: string, collectorport: int, encoding_type: string, filename: string, flows_per_min: int, include_samples: string, records_per_sample: string, samples_per_datagram: string> {
+]: nothing -> oneof<record<collector: string, collectorport: int, encoding_type: string, filename: string, flows_per_min: int, include_samples: string, records_per_sample: string, samples_per_datagram: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -5242,7 +5266,7 @@ export def "protocol-snmptcp-get-args" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -5278,7 +5302,7 @@ export def "protocol-snmptcp-get-config" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<connections: int> {
+]: nothing -> oneof<record<connections: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -5314,7 +5338,7 @@ export def "protocol-snmptcp-get-statistics" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<int> {
+]: nothing -> oneof<list<int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -5350,7 +5374,7 @@ export def "protocol-snmptcp-get-trace" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<connections: int> {
+]: nothing -> oneof<record<connections: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -5506,7 +5530,7 @@ export def "protocol-snmptcp-ipalias-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<IP: string, interface: string, mask: string, port: int> {
+]: nothing -> oneof<table<IP: string, interface: string, mask: string, port: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -5746,7 +5770,7 @@ export def "protocol-snmpv3-access-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -5782,7 +5806,7 @@ export def "protocol-snmpv3-get-config" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<context_engine_id: string, engine_id: string, usm_db: string, vacm_db: string> {
+]: nothing -> oneof<record<context_engine_id: string, engine_id: string, usm_db: string, vacm_db: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -6078,7 +6102,7 @@ export def "protocol-snmpv3-group-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -6276,7 +6300,7 @@ export def "protocol-snmpv3-user-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -6312,7 +6336,7 @@ export def "protocol-snmpv3-usm-save" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -6349,7 +6373,7 @@ export def "protocol-snmpv3-usm-saveas" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -6386,7 +6410,7 @@ export def "protocol-snmpv3-vacm-save" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -6423,7 +6447,7 @@ export def "protocol-snmpv3-vacm-saveas" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -6578,7 +6602,7 @@ export def "protocol-snmpv3-view-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -6614,7 +6638,7 @@ export def "protocol-ssh-get-args" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -6650,7 +6674,7 @@ export def "protocol-ssh-get-config" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<port: int, version: string> {
+]: nothing -> oneof<record<port: int, version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -6686,7 +6710,7 @@ export def "protocol-ssh-get-statistics" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<int> {
+]: nothing -> oneof<list<int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -6722,7 +6746,7 @@ export def "protocol-ssh-get-trace" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<port: int, version: string> {
+]: nothing -> oneof<record<port: int, version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -6878,7 +6902,7 @@ export def "protocol-ssh-ipalias-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<IP: string, interface: string, mask: string, port: int> {
+]: nothing -> oneof<table<IP: string, interface: string, mask: string, port: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -6992,7 +7016,7 @@ export def "protocol-syslog-get-args" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -7028,7 +7052,7 @@ export def "protocol-syslog-get-config" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<client: string, hostname: string, localport: int, separator: string, sequence: int, server: string, serverport: int, timestamp: string> {
+]: nothing -> oneof<record<client: string, hostname: string, localport: int, separator: string, sequence: int, server: string, serverport: int, timestamp: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -7064,7 +7088,7 @@ export def "protocol-syslog-get-statistics" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<int> {
+]: nothing -> oneof<list<int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -7100,7 +7124,7 @@ export def "protocol-syslog-get-trace" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<client: string, hostname: string, localport: int, separator: string, sequence: int, server: string, serverport: int, timestamp: string> {
+]: nothing -> oneof<record<client: string, hostname: string, localport: int, separator: string, sequence: int, server: string, serverport: int, timestamp: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -7341,7 +7365,7 @@ export def "protocol-telnet-connection-logon" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -7382,7 +7406,7 @@ export def "protocol-telnet-connection-request" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -7422,7 +7446,7 @@ export def "protocol-telnet-connection-signal" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -7460,7 +7484,7 @@ export def "protocol-telnet-get-args" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -7496,7 +7520,7 @@ export def "protocol-telnet-get-config" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<keymap: string, paging_prompt: string, port: int, prompt: string, rule: string, userdb: string> {
+]: nothing -> oneof<record<keymap: string, paging_prompt: string, port: int, prompt: string, rule: string, userdb: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -7532,7 +7556,7 @@ export def "protocol-telnet-get-statistics" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<int> {
+]: nothing -> oneof<list<int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -7568,7 +7592,7 @@ export def "protocol-telnet-get-trace" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<keymap: string, paging_prompt: string, port: int, prompt: string, rule: string, userdb: string> {
+]: nothing -> oneof<record<keymap: string, paging_prompt: string, port: int, prompt: string, rule: string, userdb: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -7724,7 +7748,7 @@ export def "protocol-telnet-ipalias-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<IP: string, interface: string, mask: string, port: int> {
+]: nothing -> oneof<table<IP: string, interface: string, mask: string, port: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -7760,7 +7784,7 @@ export def "protocol-telnet-server-get-connections" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<int> {
+]: nothing -> oneof<list<int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -7796,7 +7820,7 @@ export def "protocol-telnet-server-get-keymap" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -7832,7 +7856,7 @@ export def "protocol-telnet-server-get-rulesdb" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -7868,7 +7892,7 @@ export def "protocol-telnet-server-get-state" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<int> {
+]: nothing -> oneof<list<int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -7904,7 +7928,7 @@ export def "protocol-telnet-server-get-userdb" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -7940,7 +7964,7 @@ export def "protocol-telnet-server-get-users" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<groups: list<string>, hasPassword: int, password: string, username: string> {
+]: nothing -> oneof<table<groups: list<string>, hasPassword: int, password: string, username: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -8054,7 +8078,7 @@ export def "protocol-tftp-get-args" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -8090,7 +8114,7 @@ export def "protocol-tftp-get-config" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<cache: int, client: string, dstfile: string, mode: string, port: int, retries: int, script: string, server: string, srcfile: string, timeout: int, trace: string> {
+]: nothing -> oneof<record<cache: int, client: string, dstfile: string, mode: string, port: int, retries: int, script: string, server: string, srcfile: string, timeout: int, trace: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -8126,7 +8150,7 @@ export def "protocol-tftp-get-statistics" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<int> {
+]: nothing -> oneof<list<int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -8162,7 +8186,7 @@ export def "protocol-tftp-get-trace" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<cache: int, client: string, dstfile: string, mode: string, port: int, retries: int, script: string, server: string, srcfile: string, timeout: int, trace: string> {
+]: nothing -> oneof<record<cache: int, client: string, dstfile: string, mode: string, port: int, retries: int, script: string, server: string, srcfile: string, timeout: int, trace: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -8199,7 +8223,7 @@ export def "protocol-tftp-session-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<int> {
+]: nothing -> oneof<list<int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -8237,7 +8261,7 @@ export def "protocol-tftp-session-write" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<int> {
+]: nothing -> oneof<list<int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -8548,7 +8572,7 @@ export def "protocol-tod-get-args" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -8584,7 +8608,7 @@ export def "protocol-tod-get-config" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<port: int, retries: int, script: string, server: string, timeout: int> {
+]: nothing -> oneof<record<port: int, retries: int, script: string, server: string, timeout: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -8620,7 +8644,7 @@ export def "protocol-tod-get-statistics" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<int> {
+]: nothing -> oneof<list<int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -8656,7 +8680,7 @@ export def "protocol-tod-get-trace" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<port: int, retries: int, script: string, server: string, timeout: int> {
+]: nothing -> oneof<record<port: int, retries: int, script: string, server: string, timeout: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -8697,7 +8721,7 @@ export def "protocol-tod-gettime" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -8816,7 +8840,7 @@ export def "protocol-web-get-args" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -8852,7 +8876,7 @@ export def "protocol-web-get-config" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<is_persistent_connections: int, password: string, port: int, rule: string, username: string, wsdl: string> {
+]: nothing -> oneof<record<is_persistent_connections: int, password: string, port: int, rule: string, username: string, wsdl: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -8888,7 +8912,7 @@ export def "protocol-web-get-statistics" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<int> {
+]: nothing -> oneof<list<int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -8924,7 +8948,7 @@ export def "protocol-web-get-trace" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<is_persistent_connections: int, password: string, port: int, rule: string, username: string, wsdl: string> {
+]: nothing -> oneof<record<is_persistent_connections: int, password: string, port: int, rule: string, username: string, wsdl: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -8999,7 +9023,7 @@ export def "protocol-web-port-exists" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -9271,7 +9295,7 @@ export def "protocol-get-config" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -9911,7 +9935,7 @@ export def "set-protocols" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> list<int> {
+]: any -> oneof<list<int>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -10326,7 +10350,7 @@ export def "agent-store-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -10610,7 +10634,7 @@ export def "list-timer-scripts" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<arg: string, interval: int, script: string> {
+]: nothing -> oneof<table<arg: string, interval: int, script: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -10726,7 +10750,7 @@ export def "trap-config-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<IP: string, port: int> {
+]: nothing -> oneof<table<IP: string, port: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -10762,7 +10786,7 @@ export def "trap-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -10959,7 +10983,7 @@ export def "get-instances" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -10997,7 +11021,7 @@ export def "get-objects" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -11035,7 +11059,7 @@ export def "meval-value" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -11073,7 +11097,7 @@ export def "mget-value" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -11391,7 +11415,7 @@ export def "split-oid" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -11550,7 +11574,7 @@ export def "get-variables" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -11589,7 +11613,7 @@ export def "cfg-new" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($first_agent_num | is-empty) { error make --unspanned { msg: "path parameter 'firstAgentNum' must be non-empty" } }
@@ -11625,7 +11649,7 @@ export def "get-active-data-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<int> {
+]: nothing -> oneof<list<int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/get/active_data_list" $auth.query)
@@ -11659,7 +11683,7 @@ export def "get-active-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<int> {
+]: nothing -> oneof<list<int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/get/active_list" $auth.query)
@@ -11693,7 +11717,7 @@ export def "get-cfgfile" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/get/cfgfile" $auth.query)
@@ -11727,7 +11751,7 @@ export def "get-cfg-file-changed" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/get/cfgfile_changed" $auth.query)
@@ -11761,7 +11785,7 @@ export def "get-changed-config-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<int> {
+]: nothing -> oneof<list<int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/get/changed_config_list" $auth.query)
@@ -11795,7 +11819,7 @@ export def "get-changed-state-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<agentNum: int, state: int> {
+]: nothing -> oneof<table<agentNum: int, state: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/get/changed_state_list" $auth.query)
@@ -11829,7 +11853,7 @@ export def "get-clients" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/get/clients" $auth.query)
@@ -11863,7 +11887,7 @@ export def "get-configured-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<int> {
+]: nothing -> oneof<list<int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/get/configured_list" $auth.query)
@@ -11897,7 +11921,7 @@ export def "get-interfaces" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/get/interfaces" $auth.query)
@@ -11965,7 +11989,7 @@ export def "get-log" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/get/log" $auth.query)
@@ -12033,7 +12057,7 @@ export def "get-netaddr" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/get/netaddr" $auth.query)
@@ -12067,7 +12091,7 @@ export def "get-netdev" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/get/netdev" $auth.query)
@@ -12101,7 +12125,7 @@ export def "get-product" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/get/product" $auth.query)
@@ -12135,7 +12159,7 @@ export def "get-daemon-protocols" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/get/protocols" $auth.query)
@@ -12169,7 +12193,7 @@ export def "get-return" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/get/return" $auth.query)
@@ -12241,7 +12265,7 @@ export def "cfg-load" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($cfg_file | is-empty) { error make --unspanned { msg: "path parameter 'cfgFile' must be non-empty" } }
@@ -12280,7 +12304,7 @@ export def "mget-info" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($info_array | is-empty) { error make --unspanned { msg: "path parameter 'infoArray' must be non-empty" } }
@@ -12315,7 +12339,7 @@ export def "protocol-coap-get-stats-hdr" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/protocol/msg/coap/get/stats_hdr" $auth.query)
@@ -12349,7 +12373,7 @@ export def "protocol-dhcp-get-stats-hdr" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/protocol/msg/dhcp/get/stats_hdr" $auth.query)
@@ -12383,7 +12407,7 @@ export def "protocol-ipmi-get-stats-hdr" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/protocol/msg/ipmi/get/stats_hdr" $auth.query)
@@ -12417,7 +12441,7 @@ export def "protocol-mqtt-get-stats-hdr" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/protocol/msg/mqtt/get/stats_hdr" $auth.query)
@@ -12451,7 +12475,7 @@ export def "protocol-netflow-get-stats-hdr" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/protocol/msg/netflow/get/stats_hdr" $auth.query)
@@ -12485,7 +12509,7 @@ export def "protocol-proxy-get-stats-hdr" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/protocol/msg/proxy/get/stats_hdr" $auth.query)
@@ -12519,7 +12543,7 @@ export def "protocol-sflow-get-stats-hdr" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/protocol/msg/sflow/get/stats_hdr" $auth.query)
@@ -12553,7 +12577,7 @@ export def "protocol-snmptcp-get-stats-hdr" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/protocol/msg/snmptcp/get/stats_hdr" $auth.query)
@@ -12587,7 +12611,7 @@ export def "protocol-ssh-get-stats-hdr" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/protocol/msg/ssh/get/stats_hdr" $auth.query)
@@ -12621,7 +12645,7 @@ export def "protocol-syslog-get-stats-hdr" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/protocol/msg/syslog/get/stats_hdr" $auth.query)
@@ -12655,7 +12679,7 @@ export def "protocol-telnet-get-stats-hdr" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/protocol/msg/telnet/get/stats_hdr" $auth.query)
@@ -12689,7 +12713,7 @@ export def "protocol-tftp-get-stats-hdr" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/protocol/msg/tftp/get/stats_hdr" $auth.query)
@@ -12723,7 +12747,7 @@ export def "protocol-tod-get-stats-hdr" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/protocol/msg/tod/get/stats_hdr" $auth.query)
@@ -12757,7 +12781,7 @@ export def "protocol-web-get-stats-hdr" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/protocol/msg/web/get/stats_hdr" $auth.query)
@@ -12791,7 +12815,7 @@ export def "cfg-save" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/save" $auth.query)
@@ -12828,7 +12852,7 @@ export def "cfg-saveas" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($cfg_file | is-empty) { error make --unspanned { msg: "path parameter 'cfgFile' must be non-empty" } }
@@ -12903,7 +12927,7 @@ export def "set-netdev" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/set/netdev" $auth.query)
@@ -12937,7 +12961,7 @@ export def "store-save" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/set/persistent" $auth.query)
@@ -12971,7 +12995,7 @@ export def "start-all-agents" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/start" $auth.query)
@@ -13005,7 +13029,7 @@ export def "stop-all-agents" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/stop" $auth.query)
@@ -13111,7 +13135,7 @@ export def "store-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/store/list" $auth.query)
@@ -13301,7 +13325,7 @@ export def "terminate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/terminate" $auth.query)
@@ -13415,7 +13439,7 @@ export def "list-daemon-timer-scripts" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<arg: string, interval: int, script: string> {
+]: nothing -> oneof<table<arg: string, interval: int, script: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/timer/script/list" $auth.query)

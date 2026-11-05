@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -127,9 +151,9 @@ def job-state-matcher-completer [] { ["ACTIVE" "ALL" "NON_ACTIVE"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "dataproc-projects-regions-clusters-list" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["dataproc-projects-regions-clusters-list" "dataproc-projects-regions-clusters-create" "dataproc-projects-regions-clusters-delete" "dataproc-projects-regions-clusters-get" "dataproc-projects-regions-clusters-patch" "dataproc-projects-regions-clusters-diagnose" "dataproc-projects-regions-clusters-repair" "dataproc-projects-regions-clusters-start" "dataproc-projects-regions-clusters-stop" "dataproc-projects-regions-jobs-list" "dataproc-projects-regions-jobs-delete" "dataproc-projects-regions-jobs-get" "dataproc-projects-regions-jobs-patch" "dataproc-projects-regions-jobs-cancel" "dataproc-projects-regions-jobs-submit" "dataproc-projects-regions-jobs-submit-as-operation" "dataproc-projects-regions-workflow-templates-delete" "dataproc-projects-regions-workflow-templates-get" "dataproc-projects-regions-workflow-templates-update" "dataproc-projects-regions-operations-cancel" "dataproc-projects-regions-workflow-templates-instantiate" "dataproc-projects-regions-clusters-node-groups-resize" "dataproc-projects-regions-autoscaling-policies-list" "dataproc-projects-regions-autoscaling-policies-create" "dataproc-projects-locations-batches-list" "dataproc-projects-locations-batches-create" "dataproc-projects-regions-clusters-node-groups-create" "dataproc-projects-regions-workflow-templates-list" "dataproc-projects-regions-workflow-templates-create" "dataproc-projects-regions-workflow-templates-instantiate-inline" "dataproc-projects-regions-clusters-inject-credentials" "dataproc-projects-regions-workflow-templates-get-iam-policy" "dataproc-projects-regions-workflow-templates-set-iam-policy" "dataproc-projects-regions-workflow-templates-test-iam-permissions" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -177,7 +201,7 @@ export def "dataproc-projects-regions-clusters-list" [
   --filter: string # Optional. A filter constraining the clusters to list. Filters are case-sensitive and have the following syntax:field = value AND field = value ...where field is one of status.state, clusterName, or labels.[KEY], and [KEY] is a label key. value can be * to match all values. status.state can be one of the following: ACTIVE, INACTIVE, CREATING, RUNNING, ERROR, DELETING, or UPDATING. ACTIVE contains the CREATING, UPDATING, and RUNNING states. INACTIVE contains the DELETING and ERROR states. clusterName is the name of the cluster provided at creation time. Only the logical AND operator is supported; space-separated items are treated as having an implicit AND operator.Example filter:status.state = ACTIVE AND clusterName = mycluster AND labels.env = staging AND labels.starred = *
   --page-size: int # Optional. The standard List page size.
   --page-token: string # Optional. The standard List page token.
-]: nothing -> record<clusters: table<clusterName: string, clusterUuid: string, config: record, labels: record, metrics: record, projectId: string, status: record, statusHistory: list, virtualClusterConfig: record>, nextPageToken: string> {
+]: nothing -> oneof<record<clusters: table<clusterName: string, clusterUuid: string, config: record, labels: record, metrics: record, projectId: string, status: record, statusHistory: list, virtualClusterConfig: record>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -204,9 +228,6 @@ export def "dataproc-projects-regions-clusters-list" [
 #
 # POST /v1/projects/{projectId}/regions/{region}/clusters
 # operationId: dataproc.projects.regions.clusters.create
-# --config shape: {autoscalingConfig?: record, auxiliaryNodeGroups?: list, configBucket?: string, dataprocMetricConfig?: record, encryptionConfig?: record, endpointConfig?: record, gceClusterConfig?: record, gkeClusterConfig?: record, initializationActions?: list, lifecycleConfig?: record, masterConfig?: record, metastoreConfig?: record, secondaryWorkerConfig?: record, securityConfig?: record, softwareConfig?: record, tempBucket?: string, workerConfig?: record}
-# --metrics shape: {hdfsMetrics?: record, yarnMetrics?: record}
-# --virtualClusterConfig shape: {auxiliaryServicesConfig?: record, kubernetesClusterConfig?: record, stagingBucket?: string}
 export def "dataproc-projects-regions-clusters-create" [
   project_id: string
   region: string
@@ -239,7 +260,7 @@ export def "dataproc-projects-regions-clusters-create" [
   --body-project-id: string # Required. The Google Cloud Platform project ID that the cluster belongs to.
   --status: record # The status of a cluster and its instances.
   --virtual-cluster-config: record # The Dataproc cluster config for a cluster that does not directly control the underlying compute resources, such as a Dataproc-on-GKE cluster (https://cloud.google.com/dataproc/docs/guides/dpgke/dataproc-gke-overview). — shape: {auxiliaryServicesConfig?: record, kubernetesClusterConfig?: record, stagingBucket?: string}
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -295,7 +316,7 @@ export def "dataproc-projects-regions-clusters-delete" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --cluster-uuid: string # Optional. Specifying the cluster_uuid means the RPC should fail (with error NOT_FOUND) if cluster with specified UUID does not exist.
   --request-id: string # Optional. A unique ID used to identify the request. If the server receives two DeleteClusterRequest (https://cloud.google.com/dataproc/docs/reference/rpc/google.cloud.dataproc.v1#google.cloud.dataproc.v1.DeleteClusterRequest)s with the same id, then the second request will be ignored and the first google.longrunning.Operation created and stored in the backend is returned.It is recommended to always set this value to a UUID (https://en.wikipedia.org/wiki/Universally_unique_identifier).The ID must contain only letters (a-z, A-Z), numbers (0-9), underscores (_), and hyphens (-). The maximum length is 40 characters.
-]: nothing -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: nothing -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -347,7 +368,7 @@ export def "dataproc-projects-regions-clusters-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<clusterName: string, clusterUuid: string, config: record<autoscalingConfig: record<policyUri: string>, auxiliaryNodeGroups: list<record>, configBucket: string, dataprocMetricConfig: record<metrics: list>, encryptionConfig: record<gcePdKmsKeyName: string, kmsKey: string>, endpointConfig: record<enableHttpPortAccess: bool, httpPorts: record>, gceClusterConfig: record<confidentialInstanceConfig: record, internalIpOnly: bool, metadata: record, networkUri: string, nodeGroupAffinity: record, privateIpv6GoogleAccess: string, reservationAffinity: record, serviceAccount: string, serviceAccountScopes: list, shieldedInstanceConfig: record, subnetworkUri: string, tags: list, zoneUri: string>, gkeClusterConfig: record<gkeClusterTarget: string, namespacedGkeDeploymentTarget: record, nodePoolTarget: list>, initializationActions: list<record>, lifecycleConfig: record<autoDeleteTime: string, autoDeleteTtl: string, idleDeleteTtl: string, idleStartTime: string>, masterConfig: record<accelerators: list, diskConfig: record, imageUri: string, instanceNames: list, instanceReferences: list, isPreemptible: bool, machineTypeUri: string, managedGroupConfig: record, minCpuPlatform: string, numInstances: int, preemptibility: string>, metastoreConfig: record<dataprocMetastoreService: string>, secondaryWorkerConfig: record<accelerators: list, diskConfig: record, imageUri: string, instanceNames: list, instanceReferences: list, isPreemptible: bool, machineTypeUri: string, managedGroupConfig: record, minCpuPlatform: string, numInstances: int, preemptibility: string>, securityConfig: record<identityConfig: record, kerberosConfig: record>, softwareConfig: record<imageVersion: string, optionalComponents: list, properties: record>, tempBucket: string, workerConfig: record<accelerators: list, diskConfig: record, imageUri: string, instanceNames: list, instanceReferences: list, isPreemptible: bool, machineTypeUri: string, managedGroupConfig: record, minCpuPlatform: string, numInstances: int, preemptibility: string>>, labels: record, metrics: record<hdfsMetrics: record, yarnMetrics: record>, projectId: string, status: record<detail: string, state: string, stateStartTime: string, substate: string>, statusHistory: table<detail: string, state: string, stateStartTime: string, substate: string>, virtualClusterConfig: record<auxiliaryServicesConfig: record<metastoreConfig: record, sparkHistoryServerConfig: record>, kubernetesClusterConfig: record<gkeClusterConfig: record, kubernetesNamespace: string, kubernetesSoftwareConfig: record>, stagingBucket: string>> {
+]: nothing -> oneof<record<clusterName: string, clusterUuid: string, config: record<autoscalingConfig: record<policyUri: string>, auxiliaryNodeGroups: list<record>, configBucket: string, dataprocMetricConfig: record<metrics: list>, encryptionConfig: record<gcePdKmsKeyName: string, kmsKey: string>, endpointConfig: record<enableHttpPortAccess: bool, httpPorts: record>, gceClusterConfig: record<confidentialInstanceConfig: record, internalIpOnly: bool, metadata: record, networkUri: string, nodeGroupAffinity: record, privateIpv6GoogleAccess: string, reservationAffinity: record, serviceAccount: string, serviceAccountScopes: list, shieldedInstanceConfig: record, subnetworkUri: string, tags: list, zoneUri: string>, gkeClusterConfig: record<gkeClusterTarget: string, namespacedGkeDeploymentTarget: record, nodePoolTarget: list>, initializationActions: list<record>, lifecycleConfig: record<autoDeleteTime: string, autoDeleteTtl: string, idleDeleteTtl: string, idleStartTime: string>, masterConfig: record<accelerators: list, diskConfig: record, imageUri: string, instanceNames: list, instanceReferences: list, isPreemptible: bool, machineTypeUri: string, managedGroupConfig: record, minCpuPlatform: string, numInstances: int, preemptibility: string>, metastoreConfig: record<dataprocMetastoreService: string>, secondaryWorkerConfig: record<accelerators: list, diskConfig: record, imageUri: string, instanceNames: list, instanceReferences: list, isPreemptible: bool, machineTypeUri: string, managedGroupConfig: record, minCpuPlatform: string, numInstances: int, preemptibility: string>, securityConfig: record<identityConfig: record, kerberosConfig: record>, softwareConfig: record<imageVersion: string, optionalComponents: list, properties: record>, tempBucket: string, workerConfig: record<accelerators: list, diskConfig: record, imageUri: string, instanceNames: list, instanceReferences: list, isPreemptible: bool, machineTypeUri: string, managedGroupConfig: record, minCpuPlatform: string, numInstances: int, preemptibility: string>>, labels: record, metrics: record<hdfsMetrics: record, yarnMetrics: record>, projectId: string, status: record<detail: string, state: string, stateStartTime: string, substate: string>, statusHistory: table<detail: string, state: string, stateStartTime: string, substate: string>, virtualClusterConfig: record<auxiliaryServicesConfig: record<metastoreConfig: record, sparkHistoryServerConfig: record>, kubernetesClusterConfig: record<gkeClusterConfig: record, kubernetesNamespace: string, kubernetesSoftwareConfig: record>, stagingBucket: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -375,9 +396,6 @@ export def "dataproc-projects-regions-clusters-get" [
 #
 # PATCH /v1/projects/{projectId}/regions/{region}/clusters/{clusterName}
 # operationId: dataproc.projects.regions.clusters.patch
-# --config shape: {autoscalingConfig?: record, auxiliaryNodeGroups?: list, configBucket?: string, dataprocMetricConfig?: record, encryptionConfig?: record, endpointConfig?: record, gceClusterConfig?: record, gkeClusterConfig?: record, initializationActions?: list, lifecycleConfig?: record, masterConfig?: record, metastoreConfig?: record, secondaryWorkerConfig?: record, securityConfig?: record, softwareConfig?: record, tempBucket?: string, workerConfig?: record}
-# --metrics shape: {hdfsMetrics?: record, yarnMetrics?: record}
-# --virtualClusterConfig shape: {auxiliaryServicesConfig?: record, kubernetesClusterConfig?: record, stagingBucket?: string}
 export def "dataproc-projects-regions-clusters-patch" [
   project_id: string
   region: string
@@ -412,7 +430,7 @@ export def "dataproc-projects-regions-clusters-patch" [
   --body-project-id: string # Required. The Google Cloud Platform project ID that the cluster belongs to.
   --status: record # The status of a cluster and its instances.
   --virtual-cluster-config: record # The Dataproc cluster config for a cluster that does not directly control the underlying compute resources, such as a Dataproc-on-GKE cluster (https://cloud.google.com/dataproc/docs/guides/dpgke/dataproc-gke-overview). — shape: {auxiliaryServicesConfig?: record, kubernetesClusterConfig?: record, stagingBucket?: string}
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -443,7 +461,6 @@ export def "dataproc-projects-regions-clusters-patch" [
 #
 # POST /v1/projects/{projectId}/regions/{region}/clusters/{clusterName}:diagnose
 # operationId: dataproc.projects.regions.clusters.diagnose
-# --diagnosisInterval shape: {endTime?: string, startTime?: string}
 export def "dataproc-projects-regions-clusters-diagnose" [
   project_id: string
   region: string
@@ -473,7 +490,7 @@ export def "dataproc-projects-regions-clusters-diagnose" [
   --jobs: list<string> # Optional. Specifies a list of jobs on which diagnosis is to be performed. Format: projects/{project}/regions/{region}/jobs/{job}
   --yarn-application-id: string # Optional. DEPRECATED Specifies the yarn application on which diagnosis is to be performed.
   --yarn-application-ids: list<string> # Optional. Specifies a list of yarn applications on which diagnosis is to be performed.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -504,7 +521,6 @@ export def "dataproc-projects-regions-clusters-diagnose" [
 #
 # POST /v1/projects/{projectId}/regions/{region}/clusters/{clusterName}:repair
 # operationId: dataproc.projects.regions.clusters.repair
-# --nodePools item shape: {id?: string, instanceNames?: list<string>, repairAction?: "REPAIR_ACTION_UNSPECIFIED"|"DELETE"}
 export def "dataproc-projects-regions-clusters-repair" [
   project_id: string
   region: string
@@ -534,7 +550,7 @@ export def "dataproc-projects-regions-clusters-repair" [
   --node-pools: list # Optional. Node pools and corresponding repair action to be taken. All node pools should be unique in this request. i.e. Multiple entries for the same node pool id are not allowed. — item shape: {id?: string, instanceNames?: list<string>, repairAction?: "REPAIR_ACTION_UNSPECIFIED"|"DELETE"}
   --parent-operation-id: string # Optional. operation id of the parent operation sending the repair request
   --request-id: string # Optional. A unique ID used to identify the request. If the server receives two RepairClusterRequests with the same ID, the second request is ignored, and the first google.longrunning.Operation created and stored in the backend is returned.Recommendation: Set this value to a UUID (https://en.wikipedia.org/wiki/Universally_unique_identifier).The ID must contain only letters (a-z, A-Z), numbers (0-9), underscores (_), and hyphens (-). The maximum length is 40 characters.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -591,7 +607,7 @@ export def "dataproc-projects-regions-clusters-start" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --cluster-uuid: string # Optional. Specifying the cluster_uuid means the RPC will fail (with error NOT_FOUND) if a cluster with the specified UUID does not exist.
   --request-id: string # Optional. A unique ID used to identify the request. If the server receives two StartClusterRequest (https://cloud.google.com/dataproc/docs/reference/rpc/google.cloud.dataproc.v1#google.cloud.dataproc.v1.StartClusterRequest)s with the same id, then the second request will be ignored and the first google.longrunning.Operation created and stored in the backend is returned.Recommendation: Set this value to a UUID (https://en.wikipedia.org/wiki/Universally_unique_identifier).The ID must contain only letters (a-z, A-Z), numbers (0-9), underscores (_), and hyphens (-). The maximum length is 40 characters.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -648,7 +664,7 @@ export def "dataproc-projects-regions-clusters-stop" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --cluster-uuid: string # Optional. Specifying the cluster_uuid means the RPC will fail (with error NOT_FOUND) if a cluster with the specified UUID does not exist.
   --request-id: string # Optional. A unique ID used to identify the request. If the server receives two StopClusterRequest (https://cloud.google.com/dataproc/docs/reference/rpc/google.cloud.dataproc.v1#google.cloud.dataproc.v1.StopClusterRequest)s with the same id, then the second request will be ignored and the first google.longrunning.Operation created and stored in the backend is returned.Recommendation: Set this value to a UUID (https://en.wikipedia.org/wiki/Universally_unique_identifier).The ID must contain only letters (a-z, A-Z), numbers (0-9), underscores (_), and hyphens (-). The maximum length is 40 characters.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -707,7 +723,7 @@ export def "dataproc-projects-regions-jobs-list" [
   --job-state-matcher: string@job-state-matcher-completer # Optional. Specifies enumerated categories of jobs to list. (default = match ALL jobs).If filter is provided, jobStateMatcher will be ignored.
   --page-size: int # Optional. The number of results to return in each response.
   --page-token: string # Optional. The page token, returned by a previous call, to request the next page of results.
-]: nothing -> record<jobs: table<done: bool, driverControlFilesUri: string, driverOutputResourceUri: string, driverSchedulingConfig: record, hadoopJob: record, hiveJob: record, jobUuid: string, labels: record, pigJob: record, placement: record, prestoJob: record, pysparkJob: record, reference: record, scheduling: record, sparkJob: record, sparkRJob: record, sparkSqlJob: record, status: record, statusHistory: list, trinoJob: record, yarnApplications: list>, nextPageToken: string> {
+]: nothing -> oneof<record<jobs: table<done: bool, driverControlFilesUri: string, driverOutputResourceUri: string, driverSchedulingConfig: record, hadoopJob: record, hiveJob: record, jobUuid: string, labels: record, pigJob: record, placement: record, prestoJob: record, pysparkJob: record, reference: record, scheduling: record, sparkJob: record, sparkRJob: record, sparkSqlJob: record, status: record, statusHistory: list, trinoJob: record, yarnApplications: list>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -758,7 +774,7 @@ export def "dataproc-projects-regions-jobs-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -810,7 +826,7 @@ export def "dataproc-projects-regions-jobs-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<done: bool, driverControlFilesUri: string, driverOutputResourceUri: string, driverSchedulingConfig: record<memoryMb: int, vcores: int>, hadoopJob: record<archiveUris: list<string>, args: list<string>, fileUris: list<string>, jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, mainClass: string, mainJarFileUri: string, properties: record>, hiveJob: record<continueOnFailure: bool, jarFileUris: list<string>, properties: record, queryFileUri: string, queryList: record<queries: list>, scriptVariables: record>, jobUuid: string, labels: record, pigJob: record<continueOnFailure: bool, jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, properties: record, queryFileUri: string, queryList: record<queries: list>, scriptVariables: record>, placement: record<clusterLabels: record, clusterName: string, clusterUuid: string>, prestoJob: record<clientTags: list<string>, continueOnFailure: bool, loggingConfig: record<driverLogLevels: record>, outputFormat: string, properties: record, queryFileUri: string, queryList: record<queries: list>>, pysparkJob: record<archiveUris: list<string>, args: list<string>, fileUris: list<string>, jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, mainPythonFileUri: string, properties: record, pythonFileUris: list<string>>, reference: record<jobId: string, projectId: string>, scheduling: record<maxFailuresPerHour: int, maxFailuresTotal: int>, sparkJob: record<archiveUris: list<string>, args: list<string>, fileUris: list<string>, jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, mainClass: string, mainJarFileUri: string, properties: record>, sparkRJob: record<archiveUris: list<string>, args: list<string>, fileUris: list<string>, loggingConfig: record<driverLogLevels: record>, mainRFileUri: string, properties: record>, sparkSqlJob: record<jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, properties: record, queryFileUri: string, queryList: record<queries: list>, scriptVariables: record>, status: record<details: string, state: string, stateStartTime: string, substate: string>, statusHistory: table<details: string, state: string, stateStartTime: string, substate: string>, trinoJob: record<clientTags: list<string>, continueOnFailure: bool, loggingConfig: record<driverLogLevels: record>, outputFormat: string, properties: record, queryFileUri: string, queryList: record<queries: list>>, yarnApplications: table<name: string, progress: float, state: string, trackingUrl: string>> {
+]: nothing -> oneof<record<done: bool, driverControlFilesUri: string, driverOutputResourceUri: string, driverSchedulingConfig: record<memoryMb: int, vcores: int>, hadoopJob: record<archiveUris: list<string>, args: list<string>, fileUris: list<string>, jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, mainClass: string, mainJarFileUri: string, properties: record>, hiveJob: record<continueOnFailure: bool, jarFileUris: list<string>, properties: record, queryFileUri: string, queryList: record<queries: list>, scriptVariables: record>, jobUuid: string, labels: record, pigJob: record<continueOnFailure: bool, jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, properties: record, queryFileUri: string, queryList: record<queries: list>, scriptVariables: record>, placement: record<clusterLabels: record, clusterName: string, clusterUuid: string>, prestoJob: record<clientTags: list<string>, continueOnFailure: bool, loggingConfig: record<driverLogLevels: record>, outputFormat: string, properties: record, queryFileUri: string, queryList: record<queries: list>>, pysparkJob: record<archiveUris: list<string>, args: list<string>, fileUris: list<string>, jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, mainPythonFileUri: string, properties: record, pythonFileUris: list<string>>, reference: record<jobId: string, projectId: string>, scheduling: record<maxFailuresPerHour: int, maxFailuresTotal: int>, sparkJob: record<archiveUris: list<string>, args: list<string>, fileUris: list<string>, jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, mainClass: string, mainJarFileUri: string, properties: record>, sparkRJob: record<archiveUris: list<string>, args: list<string>, fileUris: list<string>, loggingConfig: record<driverLogLevels: record>, mainRFileUri: string, properties: record>, sparkSqlJob: record<jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, properties: record, queryFileUri: string, queryList: record<queries: list>, scriptVariables: record>, status: record<details: string, state: string, stateStartTime: string, substate: string>, statusHistory: table<details: string, state: string, stateStartTime: string, substate: string>, trinoJob: record<clientTags: list<string>, continueOnFailure: bool, loggingConfig: record<driverLogLevels: record>, outputFormat: string, properties: record, queryFileUri: string, queryList: record<queries: list>>, yarnApplications: table<name: string, progress: float, state: string, trackingUrl: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -838,20 +854,6 @@ export def "dataproc-projects-regions-jobs-get" [
 #
 # PATCH /v1/projects/{projectId}/regions/{region}/jobs/{jobId}
 # operationId: dataproc.projects.regions.jobs.patch
-# --driverSchedulingConfig shape: {memoryMb?: int, vcores?: int}
-# --hadoopJob shape: {archiveUris?: list<string>, args?: list<string>, fileUris?: list<string>, jarFileUris?: list<string>, loggingConfig?: record, mainClass?: string, mainJarFileUri?: string, properties?: record}
-# --hiveJob shape: {continueOnFailure?: bool, jarFileUris?: list<string>, properties?: record, queryFileUri?: string, queryList?: record, scriptVariables?: record}
-# --pigJob shape: {continueOnFailure?: bool, jarFileUris?: list<string>, loggingConfig?: record, properties?: record, queryFileUri?: string, queryList?: record, scriptVariables?: record}
-# --placement shape: {clusterLabels?: record, clusterName?: string}
-# --prestoJob shape: {clientTags?: list<string>, continueOnFailure?: bool, loggingConfig?: record, outputFormat?: string, properties?: record, queryFileUri?: string, queryList?: record}
-# --pysparkJob shape: {archiveUris?: list<string>, args?: list<string>, fileUris?: list<string>, jarFileUris?: list<string>, loggingConfig?: record, mainPythonFileUri?: string, properties?: record, pythonFileUris?: list<string>}
-# --reference shape: {jobId?: string, projectId?: string}
-# --scheduling shape: {maxFailuresPerHour?: int, maxFailuresTotal?: int}
-# --sparkJob shape: {archiveUris?: list<string>, args?: list<string>, fileUris?: list<string>, jarFileUris?: list<string>, loggingConfig?: record, mainClass?: string, mainJarFileUri?: string, properties?: record}
-# --sparkRJob shape: {archiveUris?: list<string>, args?: list<string>, fileUris?: list<string>, loggingConfig?: record, mainRFileUri?: string, properties?: record}
-# --sparkSqlJob shape: {jarFileUris?: list<string>, loggingConfig?: record, properties?: record, queryFileUri?: string, queryList?: record, scriptVariables?: record}
-# --trinoJob shape: {clientTags?: list<string>, continueOnFailure?: bool, loggingConfig?: record, outputFormat?: string, properties?: record, queryFileUri?: string, queryList?: record}
-# --yarnApplications item shape: {name?: string, progress?: float, state?: "STATE_UNSPECIFIED"|"NEW"|"NEW_SAVING"|"SUBMITTED"|"ACCEPTED"|"RUNNING"|"FINISHED"|"FAILED"|"KILLED", trackingUrl?: string}
 export def "dataproc-projects-regions-jobs-patch" [
   project_id: string
   region: string
@@ -892,7 +894,7 @@ export def "dataproc-projects-regions-jobs-patch" [
   --spark-sql-job: record # A Dataproc job for running Apache Spark SQL (https://spark.apache.org/sql/) queries. — shape: {jarFileUris?: list<string>, loggingConfig?: record, properties?: record, queryFileUri?: string, queryList?: record, scriptVariables?: record}
   --status: record # Dataproc job status.
   --trino-job: record # A Dataproc job for running Trino (https://trino.io/) queries. IMPORTANT: The Dataproc Trino Optional Component (https://cloud.google.com/dataproc/docs/concepts/components/trino) must be enabled when the cluster is created to submit a Trino job to the cluster. — shape: {clientTags?: list<string>, continueOnFailure?: bool, loggingConfig?: record, outputFormat?: string, properties?: record, queryFileUri?: string, queryList?: record}
-]: any -> record<done: bool, driverControlFilesUri: string, driverOutputResourceUri: string, driverSchedulingConfig: record<memoryMb: int, vcores: int>, hadoopJob: record<archiveUris: list<string>, args: list<string>, fileUris: list<string>, jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, mainClass: string, mainJarFileUri: string, properties: record>, hiveJob: record<continueOnFailure: bool, jarFileUris: list<string>, properties: record, queryFileUri: string, queryList: record<queries: list>, scriptVariables: record>, jobUuid: string, labels: record, pigJob: record<continueOnFailure: bool, jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, properties: record, queryFileUri: string, queryList: record<queries: list>, scriptVariables: record>, placement: record<clusterLabels: record, clusterName: string, clusterUuid: string>, prestoJob: record<clientTags: list<string>, continueOnFailure: bool, loggingConfig: record<driverLogLevels: record>, outputFormat: string, properties: record, queryFileUri: string, queryList: record<queries: list>>, pysparkJob: record<archiveUris: list<string>, args: list<string>, fileUris: list<string>, jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, mainPythonFileUri: string, properties: record, pythonFileUris: list<string>>, reference: record<jobId: string, projectId: string>, scheduling: record<maxFailuresPerHour: int, maxFailuresTotal: int>, sparkJob: record<archiveUris: list<string>, args: list<string>, fileUris: list<string>, jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, mainClass: string, mainJarFileUri: string, properties: record>, sparkRJob: record<archiveUris: list<string>, args: list<string>, fileUris: list<string>, loggingConfig: record<driverLogLevels: record>, mainRFileUri: string, properties: record>, sparkSqlJob: record<jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, properties: record, queryFileUri: string, queryList: record<queries: list>, scriptVariables: record>, status: record<details: string, state: string, stateStartTime: string, substate: string>, statusHistory: table<details: string, state: string, stateStartTime: string, substate: string>, trinoJob: record<clientTags: list<string>, continueOnFailure: bool, loggingConfig: record<driverLogLevels: record>, outputFormat: string, properties: record, queryFileUri: string, queryList: record<queries: list>>, yarnApplications: table<name: string, progress: float, state: string, trackingUrl: string>> {
+]: any -> oneof<record<done: bool, driverControlFilesUri: string, driverOutputResourceUri: string, driverSchedulingConfig: record<memoryMb: int, vcores: int>, hadoopJob: record<archiveUris: list<string>, args: list<string>, fileUris: list<string>, jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, mainClass: string, mainJarFileUri: string, properties: record>, hiveJob: record<continueOnFailure: bool, jarFileUris: list<string>, properties: record, queryFileUri: string, queryList: record<queries: list>, scriptVariables: record>, jobUuid: string, labels: record, pigJob: record<continueOnFailure: bool, jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, properties: record, queryFileUri: string, queryList: record<queries: list>, scriptVariables: record>, placement: record<clusterLabels: record, clusterName: string, clusterUuid: string>, prestoJob: record<clientTags: list<string>, continueOnFailure: bool, loggingConfig: record<driverLogLevels: record>, outputFormat: string, properties: record, queryFileUri: string, queryList: record<queries: list>>, pysparkJob: record<archiveUris: list<string>, args: list<string>, fileUris: list<string>, jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, mainPythonFileUri: string, properties: record, pythonFileUris: list<string>>, reference: record<jobId: string, projectId: string>, scheduling: record<maxFailuresPerHour: int, maxFailuresTotal: int>, sparkJob: record<archiveUris: list<string>, args: list<string>, fileUris: list<string>, jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, mainClass: string, mainJarFileUri: string, properties: record>, sparkRJob: record<archiveUris: list<string>, args: list<string>, fileUris: list<string>, loggingConfig: record<driverLogLevels: record>, mainRFileUri: string, properties: record>, sparkSqlJob: record<jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, properties: record, queryFileUri: string, queryList: record<queries: list>, scriptVariables: record>, status: record<details: string, state: string, stateStartTime: string, substate: string>, statusHistory: table<details: string, state: string, stateStartTime: string, substate: string>, trinoJob: record<clientTags: list<string>, continueOnFailure: bool, loggingConfig: record<driverLogLevels: record>, outputFormat: string, properties: record, queryFileUri: string, queryList: record<queries: list>>, yarnApplications: table<name: string, progress: float, state: string, trackingUrl: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -948,7 +950,7 @@ export def "dataproc-projects-regions-jobs-cancel" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record<done: bool, driverControlFilesUri: string, driverOutputResourceUri: string, driverSchedulingConfig: record<memoryMb: int, vcores: int>, hadoopJob: record<archiveUris: list<string>, args: list<string>, fileUris: list<string>, jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, mainClass: string, mainJarFileUri: string, properties: record>, hiveJob: record<continueOnFailure: bool, jarFileUris: list<string>, properties: record, queryFileUri: string, queryList: record<queries: list>, scriptVariables: record>, jobUuid: string, labels: record, pigJob: record<continueOnFailure: bool, jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, properties: record, queryFileUri: string, queryList: record<queries: list>, scriptVariables: record>, placement: record<clusterLabels: record, clusterName: string, clusterUuid: string>, prestoJob: record<clientTags: list<string>, continueOnFailure: bool, loggingConfig: record<driverLogLevels: record>, outputFormat: string, properties: record, queryFileUri: string, queryList: record<queries: list>>, pysparkJob: record<archiveUris: list<string>, args: list<string>, fileUris: list<string>, jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, mainPythonFileUri: string, properties: record, pythonFileUris: list<string>>, reference: record<jobId: string, projectId: string>, scheduling: record<maxFailuresPerHour: int, maxFailuresTotal: int>, sparkJob: record<archiveUris: list<string>, args: list<string>, fileUris: list<string>, jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, mainClass: string, mainJarFileUri: string, properties: record>, sparkRJob: record<archiveUris: list<string>, args: list<string>, fileUris: list<string>, loggingConfig: record<driverLogLevels: record>, mainRFileUri: string, properties: record>, sparkSqlJob: record<jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, properties: record, queryFileUri: string, queryList: record<queries: list>, scriptVariables: record>, status: record<details: string, state: string, stateStartTime: string, substate: string>, statusHistory: table<details: string, state: string, stateStartTime: string, substate: string>, trinoJob: record<clientTags: list<string>, continueOnFailure: bool, loggingConfig: record<driverLogLevels: record>, outputFormat: string, properties: record, queryFileUri: string, queryList: record<queries: list>>, yarnApplications: table<name: string, progress: float, state: string, trackingUrl: string>> {
+]: any -> oneof<record<done: bool, driverControlFilesUri: string, driverOutputResourceUri: string, driverSchedulingConfig: record<memoryMb: int, vcores: int>, hadoopJob: record<archiveUris: list<string>, args: list<string>, fileUris: list<string>, jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, mainClass: string, mainJarFileUri: string, properties: record>, hiveJob: record<continueOnFailure: bool, jarFileUris: list<string>, properties: record, queryFileUri: string, queryList: record<queries: list>, scriptVariables: record>, jobUuid: string, labels: record, pigJob: record<continueOnFailure: bool, jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, properties: record, queryFileUri: string, queryList: record<queries: list>, scriptVariables: record>, placement: record<clusterLabels: record, clusterName: string, clusterUuid: string>, prestoJob: record<clientTags: list<string>, continueOnFailure: bool, loggingConfig: record<driverLogLevels: record>, outputFormat: string, properties: record, queryFileUri: string, queryList: record<queries: list>>, pysparkJob: record<archiveUris: list<string>, args: list<string>, fileUris: list<string>, jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, mainPythonFileUri: string, properties: record, pythonFileUris: list<string>>, reference: record<jobId: string, projectId: string>, scheduling: record<maxFailuresPerHour: int, maxFailuresTotal: int>, sparkJob: record<archiveUris: list<string>, args: list<string>, fileUris: list<string>, jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, mainClass: string, mainJarFileUri: string, properties: record>, sparkRJob: record<archiveUris: list<string>, args: list<string>, fileUris: list<string>, loggingConfig: record<driverLogLevels: record>, mainRFileUri: string, properties: record>, sparkSqlJob: record<jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, properties: record, queryFileUri: string, queryList: record<queries: list>, scriptVariables: record>, status: record<details: string, state: string, stateStartTime: string, substate: string>, statusHistory: table<details: string, state: string, stateStartTime: string, substate: string>, trinoJob: record<clientTags: list<string>, continueOnFailure: bool, loggingConfig: record<driverLogLevels: record>, outputFormat: string, properties: record, queryFileUri: string, queryList: record<queries: list>>, yarnApplications: table<name: string, progress: float, state: string, trackingUrl: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -979,7 +981,6 @@ export def "dataproc-projects-regions-jobs-cancel" [
 #
 # POST /v1/projects/{projectId}/regions/{region}/jobs:submit
 # operationId: dataproc.projects.regions.jobs.submit
-# --job shape: {driverSchedulingConfig?: record, hadoopJob?: record, hiveJob?: record, labels?: record, pigJob?: record, placement?: record, prestoJob?: record, pysparkJob?: record, reference?: record, scheduling?: record, sparkJob?: record, sparkRJob?: record, sparkSqlJob?: record, status?: record, trinoJob?: record}
 export def "dataproc-projects-regions-jobs-submit" [
   project_id: string
   region: string
@@ -1005,7 +1006,7 @@ export def "dataproc-projects-regions-jobs-submit" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --job: record # A Dataproc job resource. — shape: {driverSchedulingConfig?: record, hadoopJob?: record, hiveJob?: record, labels?: record, pigJob?: record, placement?: record, prestoJob?: record, pysparkJob?: record, reference?: record, scheduling?: record, sparkJob?: record, sparkRJob?: record, sparkSqlJob?: record, status?: record, trinoJob?: record}
   --request-id: string # Optional. A unique id used to identify the request. If the server receives two SubmitJobRequest (https://cloud.google.com/dataproc/docs/reference/rpc/google.cloud.dataproc.v1#google.cloud.dataproc.v1.SubmitJobRequest)s with the same id, then the second request will be ignored and the first Job created and stored in the backend is returned.It is recommended to always set this value to a UUID (https://en.wikipedia.org/wiki/Universally_unique_identifier).The id must contain only letters (a-z, A-Z), numbers (0-9), underscores (_), and hyphens (-). The maximum length is 40 characters.
-]: any -> record<done: bool, driverControlFilesUri: string, driverOutputResourceUri: string, driverSchedulingConfig: record<memoryMb: int, vcores: int>, hadoopJob: record<archiveUris: list<string>, args: list<string>, fileUris: list<string>, jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, mainClass: string, mainJarFileUri: string, properties: record>, hiveJob: record<continueOnFailure: bool, jarFileUris: list<string>, properties: record, queryFileUri: string, queryList: record<queries: list>, scriptVariables: record>, jobUuid: string, labels: record, pigJob: record<continueOnFailure: bool, jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, properties: record, queryFileUri: string, queryList: record<queries: list>, scriptVariables: record>, placement: record<clusterLabels: record, clusterName: string, clusterUuid: string>, prestoJob: record<clientTags: list<string>, continueOnFailure: bool, loggingConfig: record<driverLogLevels: record>, outputFormat: string, properties: record, queryFileUri: string, queryList: record<queries: list>>, pysparkJob: record<archiveUris: list<string>, args: list<string>, fileUris: list<string>, jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, mainPythonFileUri: string, properties: record, pythonFileUris: list<string>>, reference: record<jobId: string, projectId: string>, scheduling: record<maxFailuresPerHour: int, maxFailuresTotal: int>, sparkJob: record<archiveUris: list<string>, args: list<string>, fileUris: list<string>, jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, mainClass: string, mainJarFileUri: string, properties: record>, sparkRJob: record<archiveUris: list<string>, args: list<string>, fileUris: list<string>, loggingConfig: record<driverLogLevels: record>, mainRFileUri: string, properties: record>, sparkSqlJob: record<jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, properties: record, queryFileUri: string, queryList: record<queries: list>, scriptVariables: record>, status: record<details: string, state: string, stateStartTime: string, substate: string>, statusHistory: table<details: string, state: string, stateStartTime: string, substate: string>, trinoJob: record<clientTags: list<string>, continueOnFailure: bool, loggingConfig: record<driverLogLevels: record>, outputFormat: string, properties: record, queryFileUri: string, queryList: record<queries: list>>, yarnApplications: table<name: string, progress: float, state: string, trackingUrl: string>> {
+]: any -> oneof<record<done: bool, driverControlFilesUri: string, driverOutputResourceUri: string, driverSchedulingConfig: record<memoryMb: int, vcores: int>, hadoopJob: record<archiveUris: list<string>, args: list<string>, fileUris: list<string>, jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, mainClass: string, mainJarFileUri: string, properties: record>, hiveJob: record<continueOnFailure: bool, jarFileUris: list<string>, properties: record, queryFileUri: string, queryList: record<queries: list>, scriptVariables: record>, jobUuid: string, labels: record, pigJob: record<continueOnFailure: bool, jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, properties: record, queryFileUri: string, queryList: record<queries: list>, scriptVariables: record>, placement: record<clusterLabels: record, clusterName: string, clusterUuid: string>, prestoJob: record<clientTags: list<string>, continueOnFailure: bool, loggingConfig: record<driverLogLevels: record>, outputFormat: string, properties: record, queryFileUri: string, queryList: record<queries: list>>, pysparkJob: record<archiveUris: list<string>, args: list<string>, fileUris: list<string>, jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, mainPythonFileUri: string, properties: record, pythonFileUris: list<string>>, reference: record<jobId: string, projectId: string>, scheduling: record<maxFailuresPerHour: int, maxFailuresTotal: int>, sparkJob: record<archiveUris: list<string>, args: list<string>, fileUris: list<string>, jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, mainClass: string, mainJarFileUri: string, properties: record>, sparkRJob: record<archiveUris: list<string>, args: list<string>, fileUris: list<string>, loggingConfig: record<driverLogLevels: record>, mainRFileUri: string, properties: record>, sparkSqlJob: record<jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, properties: record, queryFileUri: string, queryList: record<queries: list>, scriptVariables: record>, status: record<details: string, state: string, stateStartTime: string, substate: string>, statusHistory: table<details: string, state: string, stateStartTime: string, substate: string>, trinoJob: record<clientTags: list<string>, continueOnFailure: bool, loggingConfig: record<driverLogLevels: record>, outputFormat: string, properties: record, queryFileUri: string, queryList: record<queries: list>>, yarnApplications: table<name: string, progress: float, state: string, trackingUrl: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1035,7 +1036,6 @@ export def "dataproc-projects-regions-jobs-submit" [
 #
 # POST /v1/projects/{projectId}/regions/{region}/jobs:submitAsOperation
 # operationId: dataproc.projects.regions.jobs.submitAsOperation
-# --job shape: {driverSchedulingConfig?: record, hadoopJob?: record, hiveJob?: record, labels?: record, pigJob?: record, placement?: record, prestoJob?: record, pysparkJob?: record, reference?: record, scheduling?: record, sparkJob?: record, sparkRJob?: record, sparkSqlJob?: record, status?: record, trinoJob?: record}
 export def "dataproc-projects-regions-jobs-submit-as-operation" [
   project_id: string
   region: string
@@ -1061,7 +1061,7 @@ export def "dataproc-projects-regions-jobs-submit-as-operation" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --job: record # A Dataproc job resource. — shape: {driverSchedulingConfig?: record, hadoopJob?: record, hiveJob?: record, labels?: record, pigJob?: record, placement?: record, prestoJob?: record, pysparkJob?: record, reference?: record, scheduling?: record, sparkJob?: record, sparkRJob?: record, sparkSqlJob?: record, status?: record, trinoJob?: record}
   --request-id: string # Optional. A unique id used to identify the request. If the server receives two SubmitJobRequest (https://cloud.google.com/dataproc/docs/reference/rpc/google.cloud.dataproc.v1#google.cloud.dataproc.v1.SubmitJobRequest)s with the same id, then the second request will be ignored and the first Job created and stored in the backend is returned.It is recommended to always set this value to a UUID (https://en.wikipedia.org/wiki/Universally_unique_identifier).The id must contain only letters (a-z, A-Z), numbers (0-9), underscores (_), and hyphens (-). The maximum length is 40 characters.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1114,7 +1114,7 @@ export def "dataproc-projects-regions-workflow-templates-delete" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --version: int # Optional. The version of workflow template to delete. If specified, will only delete the template if the current server version matches specified version.
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -1165,7 +1165,7 @@ export def "dataproc-projects-regions-workflow-templates-get" [
   --version: int # Optional. The version of workflow template to retrieve. Only previously instantiated versions can be retrieved.If unspecified, retrieves the current version.
   --page-size: int # The standard list page size.
   --page-token: string # The standard list page token.
-]: nothing -> record<createTime: string, dagTimeout: string, id: string, jobs: table<hadoopJob: record, hiveJob: record, labels: record, pigJob: record, prerequisiteStepIds: list, prestoJob: record, pysparkJob: record, scheduling: record, sparkJob: record, sparkRJob: record, sparkSqlJob: record, stepId: string, trinoJob: record>, labels: record, name: string, parameters: table<description: string, fields: list, name: string, validation: record>, placement: record<clusterSelector: record<clusterLabels: record, zone: string>, managedCluster: record<clusterName: string, config: record, labels: record>>, updateTime: string, version: int> {
+]: nothing -> oneof<record<createTime: string, dagTimeout: string, id: string, jobs: table<hadoopJob: record, hiveJob: record, labels: record, pigJob: record, prerequisiteStepIds: list, prestoJob: record, pysparkJob: record, scheduling: record, sparkJob: record, sparkRJob: record, sparkSqlJob: record, stepId: string, trinoJob: record>, labels: record, name: string, parameters: table<description: string, fields: list, name: string, validation: record>, placement: record<clusterSelector: record<clusterLabels: record, zone: string>, managedCluster: record<clusterName: string, config: record, labels: record>>, updateTime: string, version: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -1191,9 +1191,6 @@ export def "dataproc-projects-regions-workflow-templates-get" [
 #
 # PUT /v1/{name}
 # operationId: dataproc.projects.regions.workflowTemplates.update
-# --jobs item shape: {hadoopJob?: record, hiveJob?: record, labels?: record, pigJob?: record, prerequisiteStepIds?: list<string>, prestoJob?: record, pysparkJob?: record, scheduling?: record, sparkJob?: record, sparkRJob?: record, sparkSqlJob?: record, stepId?: string, trinoJob?: record}
-# --parameters item shape: {description?: string, fields?: list<string>, name?: string, validation?: record}
-# --placement shape: {clusterSelector?: record, managedCluster?: record}
 export def "dataproc-projects-regions-workflow-templates-update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1223,7 +1220,7 @@ export def "dataproc-projects-regions-workflow-templates-update" [
   --parameters: list # Optional. Template parameters whose values are substituted into the template. Values for parameters must be provided when the template is instantiated. — item shape: {description?: string, fields?: list<string>, name?: string, validation?: record}
   --placement: record # Specifies workflow execution target.Either managed_cluster or cluster_selector is required. — shape: {clusterSelector?: record, managedCluster?: record}
   --version: int # Optional. Used to perform a consistent read-modify-write.This field should be left blank for a CreateWorkflowTemplate request. It is required for an UpdateWorkflowTemplate request, and must match the current server version. A typical update template flow would fetch the current template with a GetWorkflowTemplate request, which will return the current template with the version field filled in with the current server version. The user updates other fields in the template, then returns it as part of the UpdateWorkflowTemplate request. (format: int32)
-]: any -> record<createTime: string, dagTimeout: string, id: string, jobs: table<hadoopJob: record, hiveJob: record, labels: record, pigJob: record, prerequisiteStepIds: list, prestoJob: record, pysparkJob: record, scheduling: record, sparkJob: record, sparkRJob: record, sparkSqlJob: record, stepId: string, trinoJob: record>, labels: record, name: string, parameters: table<description: string, fields: list, name: string, validation: record>, placement: record<clusterSelector: record<clusterLabels: record, zone: string>, managedCluster: record<clusterName: string, config: record, labels: record>>, updateTime: string, version: int> {
+]: any -> oneof<record<createTime: string, dagTimeout: string, id: string, jobs: table<hadoopJob: record, hiveJob: record, labels: record, pigJob: record, prerequisiteStepIds: list, prestoJob: record, pysparkJob: record, scheduling: record, sparkJob: record, sparkRJob: record, sparkSqlJob: record, stepId: string, trinoJob: record>, labels: record, name: string, parameters: table<description: string, fields: list, name: string, validation: record>, placement: record<clusterSelector: record<clusterLabels: record, zone: string>, managedCluster: record<clusterName: string, config: record, labels: record>>, updateTime: string, version: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1274,7 +1271,7 @@ export def "dataproc-projects-regions-operations-cancel" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -1325,7 +1322,7 @@ export def "dataproc-projects-regions-workflow-templates-instantiate" [
   --parameters: record # Optional. Map from parameter names to values that should be used for those parameters. Values may not exceed 1000 characters.
   --request-id: string # Optional. A tag that prevents multiple concurrent workflow instances with the same tag from running. This mitigates risk of concurrent instances started due to retries.It is recommended to always set this value to a UUID (https://en.wikipedia.org/wiki/Universally_unique_identifier).The tag must contain only letters (a-z, A-Z), numbers (0-9), underscores (_), and hyphens (-). The maximum length is 40 characters.
   --version: int # Optional. The version of workflow template to instantiate. If specified, the workflow will be instantiated only if the current version of the workflow template has the supplied version.This option cannot be used to instantiate a previous version of workflow template. (format: int32)
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1379,7 +1376,7 @@ export def "dataproc-projects-regions-clusters-node-groups-resize" [
   --graceful-decommission-timeout: string # Optional. Timeout for graceful YARN decommissioning. Graceful decommissioning (https://cloud.google.com/dataproc/docs/concepts/configuring-clusters/scaling-clusters#graceful_decommissioning) allows the removal of nodes from the Compute Engine node group without interrupting jobs in progress. This timeout specifies how long to wait for jobs in progress to finish before forcefully removing nodes (and potentially interrupting jobs). Default timeout is 0 (for forceful decommission), and the maximum allowed timeout is 1 day. (see JSON representation of Duration (https://developers.google.com/protocol-buffers/docs/proto3#json)).Only supported on Dataproc image versions 1.2 and higher. (format: google-duration)
   --request-id: string # Optional. A unique ID used to identify the request. If the server receives two ResizeNodeGroupRequest (https://cloud.google.com/dataproc/docs/reference/rpc/google.cloud.dataproc.v1#google.cloud.dataproc.v1.ResizeNodeGroupRequests) with the same ID, the second request is ignored and the first google.longrunning.Operation created and stored in the backend is returned.Recommendation: Set this value to a UUID (https://en.wikipedia.org/wiki/Universally_unique_identifier).The ID must contain only letters (a-z, A-Z), numbers (0-9), underscores (_), and hyphens (-). The maximum length is 40 characters.
   --size: int # Required. The number of running instances for the node group to maintain. The group adds or removes instances to maintain the number of instances specified by this parameter. (format: int32)
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1432,7 +1429,7 @@ export def "dataproc-projects-regions-autoscaling-policies-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # Optional. The maximum number of results to return in each response. Must be less than or equal to 1000. Defaults to 100.
   --page-token: string # Optional. The page token, returned by a previous call, to request the next page of results.
-]: nothing -> record<nextPageToken: string, policies: table<basicAlgorithm: record, id: string, labels: record, name: string, secondaryWorkerConfig: record, workerConfig: record>> {
+]: nothing -> oneof<record<nextPageToken: string, policies: table<basicAlgorithm: record, id: string, labels: record, name: string, secondaryWorkerConfig: record, workerConfig: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1458,9 +1455,6 @@ export def "dataproc-projects-regions-autoscaling-policies-list" [
 #
 # POST /v1/{parent}/autoscalingPolicies
 # operationId: dataproc.projects.regions.autoscalingPolicies.create
-# --basicAlgorithm shape: {cooldownPeriod?: string, sparkStandaloneConfig?: record, yarnConfig?: record}
-# --secondaryWorkerConfig shape: {maxInstances?: int, minInstances?: int, weight?: int}
-# --workerConfig shape: {maxInstances?: int, minInstances?: int, weight?: int}
 export def "dataproc-projects-regions-autoscaling-policies-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1488,7 +1482,7 @@ export def "dataproc-projects-regions-autoscaling-policies-create" [
   --labels: record # Optional. The labels to associate with this autoscaling policy. Label keys must contain 1 to 63 characters, and must conform to RFC 1035 (https://www.ietf.org/rfc/rfc1035.txt). Label values may be empty, but, if present, must contain 1 to 63 characters, and must conform to RFC 1035 (https://www.ietf.org/rfc/rfc1035.txt). No more than 32 labels can be associated with an autoscaling policy.
   --secondary-worker-config: record # Configuration for the size bounds of an instance group, including its proportional size to other groups. — shape: {maxInstances?: int, minInstances?: int, weight?: int}
   --worker-config: record # Configuration for the size bounds of an instance group, including its proportional size to other groups. — shape: {maxInstances?: int, minInstances?: int, weight?: int}
-]: any -> record<basicAlgorithm: record<cooldownPeriod: string, sparkStandaloneConfig: record<gracefulDecommissionTimeout: string, scaleDownFactor: float, scaleDownMinWorkerFraction: float, scaleUpFactor: float, scaleUpMinWorkerFraction: float>, yarnConfig: record<gracefulDecommissionTimeout: string, scaleDownFactor: float, scaleDownMinWorkerFraction: float, scaleUpFactor: float, scaleUpMinWorkerFraction: float>>, id: string, labels: record, name: string, secondaryWorkerConfig: record<maxInstances: int, minInstances: int, weight: int>, workerConfig: record<maxInstances: int, minInstances: int, weight: int>> {
+]: any -> oneof<record<basicAlgorithm: record<cooldownPeriod: string, sparkStandaloneConfig: record<gracefulDecommissionTimeout: string, scaleDownFactor: float, scaleDownMinWorkerFraction: float, scaleUpFactor: float, scaleUpMinWorkerFraction: float>, yarnConfig: record<gracefulDecommissionTimeout: string, scaleDownFactor: float, scaleDownMinWorkerFraction: float, scaleUpFactor: float, scaleUpMinWorkerFraction: float>>, id: string, labels: record, name: string, secondaryWorkerConfig: record<maxInstances: int, minInstances: int, weight: int>, workerConfig: record<maxInstances: int, minInstances: int, weight: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1543,7 +1537,7 @@ export def "dataproc-projects-locations-batches-list" [
   --order-by: string # Optional. Field(s) on which to sort the list of batches.Currently the only supported sort orders are unspecified (empty) and create_time desc to sort by most recently created batches first.See https://google.aip.dev/132#ordering for more details.
   --page-size: int # Optional. The maximum number of batches to return in each response. The service may return fewer than this value. The default page size is 20; the maximum page size is 1000.
   --page-token: string # Optional. A page token received from a previous ListBatches call. Provide this token to retrieve the subsequent page.
-]: nothing -> record<batches: table<createTime: string, creator: string, environmentConfig: record, labels: record, name: string, operation: string, pysparkBatch: record, runtimeConfig: record, runtimeInfo: record, sparkBatch: record, sparkRBatch: record, sparkSqlBatch: record, state: string, stateHistory: list, stateMessage: string, stateTime: string, uuid: string>, nextPageToken: string> {
+]: nothing -> oneof<record<batches: table<createTime: string, creator: string, environmentConfig: record, labels: record, name: string, operation: string, pysparkBatch: record, runtimeConfig: record, runtimeInfo: record, sparkBatch: record, sparkRBatch: record, sparkSqlBatch: record, state: string, stateHistory: list, stateMessage: string, stateTime: string, uuid: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1569,13 +1563,6 @@ export def "dataproc-projects-locations-batches-list" [
 #
 # POST /v1/{parent}/batches
 # operationId: dataproc.projects.locations.batches.create
-# --environmentConfig shape: {executionConfig?: record, peripheralsConfig?: record}
-# --pysparkBatch shape: {archiveUris?: list<string>, args?: list<string>, fileUris?: list<string>, jarFileUris?: list<string>, mainPythonFileUri?: string, pythonFileUris?: list<string>}
-# --runtimeConfig shape: {containerImage?: string, properties?: record, version?: string}
-# --runtimeInfo shape: {approximateUsage?: record, currentUsage?: record}
-# --sparkBatch shape: {archiveUris?: list<string>, args?: list<string>, fileUris?: list<string>, jarFileUris?: list<string>, mainClass?: string, mainJarFileUri?: string}
-# --sparkRBatch shape: {archiveUris?: list<string>, args?: list<string>, fileUris?: list<string>, mainRFileUri?: string}
-# --sparkSqlBatch shape: {jarFileUris?: list<string>, queryFileUri?: string, queryVariables?: record}
 export def "dataproc-projects-locations-batches-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1608,7 +1595,7 @@ export def "dataproc-projects-locations-batches-create" [
   --spark-batch: record # A configuration for running an Apache Spark (https://spark.apache.org/) batch workload. — shape: {archiveUris?: list<string>, args?: list<string>, fileUris?: list<string>, jarFileUris?: list<string>, mainClass?: string, mainJarFileUri?: string}
   --spark-r-batch: record # A configuration for running an Apache SparkR (https://spark.apache.org/docs/latest/sparkr.html) batch workload. — shape: {archiveUris?: list<string>, args?: list<string>, fileUris?: list<string>, mainRFileUri?: string}
   --spark-sql-batch: record # A configuration for running Apache Spark SQL (https://spark.apache.org/sql/) queries as a batch workload. — shape: {jarFileUris?: list<string>, queryFileUri?: string, queryVariables?: record}
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1637,7 +1624,6 @@ export def "dataproc-projects-locations-batches-create" [
 #
 # POST /v1/{parent}/nodeGroups
 # operationId: dataproc.projects.regions.clusters.nodeGroups.create
-# --nodeGroupConfig shape: {accelerators?: list, diskConfig?: record, imageUri?: string, machineTypeUri?: string, managedGroupConfig?: record, minCpuPlatform?: string, numInstances?: int, preemptibility?: "PREEMPTIBILITY_UNSPECIFIED"|"NON_PREEMPTIBLE"|"PREEMPTIBLE"|"SPOT"}
 export def "dataproc-projects-regions-clusters-node-groups-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1666,7 +1652,7 @@ export def "dataproc-projects-regions-clusters-node-groups-create" [
   --name: string # The Node group resource name (https://aip.dev/122).
   --node-group-config: record # The config settings for Compute Engine resources in an instance group, such as a master or worker group. — shape: {accelerators?: list, diskConfig?: record, imageUri?: string, machineTypeUri?: string, managedGroupConfig?: record, minCpuPlatform?: string, numInstances?: int, preemptibility?: "PREEMPTIBILITY_UNSPECIFIED"|"NON_PREEMPTIBLE"|"PREEMPTIBLE"|"SPOT"}
   --roles: list<string> # Required. Node group roles.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1719,7 +1705,7 @@ export def "dataproc-projects-regions-workflow-templates-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # Optional. The maximum number of results to return in each response.
   --page-token: string # Optional. The page token, returned by a previous call, to request the next page of results.
-]: nothing -> record<nextPageToken: string, templates: table<createTime: string, dagTimeout: string, id: string, jobs: list, labels: record, name: string, parameters: list, placement: record, updateTime: string, version: int>> {
+]: nothing -> oneof<record<nextPageToken: string, templates: table<createTime: string, dagTimeout: string, id: string, jobs: list, labels: record, name: string, parameters: list, placement: record, updateTime: string, version: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1745,9 +1731,6 @@ export def "dataproc-projects-regions-workflow-templates-list" [
 #
 # POST /v1/{parent}/workflowTemplates
 # operationId: dataproc.projects.regions.workflowTemplates.create
-# --jobs item shape: {hadoopJob?: record, hiveJob?: record, labels?: record, pigJob?: record, prerequisiteStepIds?: list<string>, prestoJob?: record, pysparkJob?: record, scheduling?: record, sparkJob?: record, sparkRJob?: record, sparkSqlJob?: record, stepId?: string, trinoJob?: record}
-# --parameters item shape: {description?: string, fields?: list<string>, name?: string, validation?: record}
-# --placement shape: {clusterSelector?: record, managedCluster?: record}
 export def "dataproc-projects-regions-workflow-templates-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1777,7 +1760,7 @@ export def "dataproc-projects-regions-workflow-templates-create" [
   --parameters: list # Optional. Template parameters whose values are substituted into the template. Values for parameters must be provided when the template is instantiated. — item shape: {description?: string, fields?: list<string>, name?: string, validation?: record}
   --placement: record # Specifies workflow execution target.Either managed_cluster or cluster_selector is required. — shape: {clusterSelector?: record, managedCluster?: record}
   --version: int # Optional. Used to perform a consistent read-modify-write.This field should be left blank for a CreateWorkflowTemplate request. It is required for an UpdateWorkflowTemplate request, and must match the current server version. A typical update template flow would fetch the current template with a GetWorkflowTemplate request, which will return the current template with the version field filled in with the current server version. The user updates other fields in the template, then returns it as part of the UpdateWorkflowTemplate request. (format: int32)
-]: any -> record<createTime: string, dagTimeout: string, id: string, jobs: table<hadoopJob: record, hiveJob: record, labels: record, pigJob: record, prerequisiteStepIds: list, prestoJob: record, pysparkJob: record, scheduling: record, sparkJob: record, sparkRJob: record, sparkSqlJob: record, stepId: string, trinoJob: record>, labels: record, name: string, parameters: table<description: string, fields: list, name: string, validation: record>, placement: record<clusterSelector: record<clusterLabels: record, zone: string>, managedCluster: record<clusterName: string, config: record, labels: record>>, updateTime: string, version: int> {
+]: any -> oneof<record<createTime: string, dagTimeout: string, id: string, jobs: table<hadoopJob: record, hiveJob: record, labels: record, pigJob: record, prerequisiteStepIds: list, prestoJob: record, pysparkJob: record, scheduling: record, sparkJob: record, sparkRJob: record, sparkSqlJob: record, stepId: string, trinoJob: record>, labels: record, name: string, parameters: table<description: string, fields: list, name: string, validation: record>, placement: record<clusterSelector: record<clusterLabels: record, zone: string>, managedCluster: record<clusterName: string, config: record, labels: record>>, updateTime: string, version: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1806,9 +1789,6 @@ export def "dataproc-projects-regions-workflow-templates-create" [
 #
 # POST /v1/{parent}/workflowTemplates:instantiateInline
 # operationId: dataproc.projects.regions.workflowTemplates.instantiateInline
-# --jobs item shape: {hadoopJob?: record, hiveJob?: record, labels?: record, pigJob?: record, prerequisiteStepIds?: list<string>, prestoJob?: record, pysparkJob?: record, scheduling?: record, sparkJob?: record, sparkRJob?: record, sparkSqlJob?: record, stepId?: string, trinoJob?: record}
-# --parameters item shape: {description?: string, fields?: list<string>, name?: string, validation?: record}
-# --placement shape: {clusterSelector?: record, managedCluster?: record}
 export def "dataproc-projects-regions-workflow-templates-instantiate-inline" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1839,7 +1819,7 @@ export def "dataproc-projects-regions-workflow-templates-instantiate-inline" [
   --parameters: list # Optional. Template parameters whose values are substituted into the template. Values for parameters must be provided when the template is instantiated. — item shape: {description?: string, fields?: list<string>, name?: string, validation?: record}
   --placement: record # Specifies workflow execution target.Either managed_cluster or cluster_selector is required. — shape: {clusterSelector?: record, managedCluster?: record}
   --version: int # Optional. Used to perform a consistent read-modify-write.This field should be left blank for a CreateWorkflowTemplate request. It is required for an UpdateWorkflowTemplate request, and must match the current server version. A typical update template flow would fetch the current template with a GetWorkflowTemplate request, which will return the current template with the version field filled in with the current server version. The user updates other fields in the template, then returns it as part of the UpdateWorkflowTemplate request. (format: int32)
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1894,7 +1874,7 @@ export def "dataproc-projects-regions-clusters-inject-credentials" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --cluster-uuid: string # Required. The cluster UUID.
   --credentials-ciphertext: string # Required. The encrypted credentials being injected in to the cluster.The client is responsible for encrypting the credentials in a way that is supported by the cluster.A wrapped value is used here so that the actual contents of the encrypted credentials are not written to audit logs.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1925,7 +1905,6 @@ export def "dataproc-projects-regions-clusters-inject-credentials" [
 #
 # POST /v1/{resource}:getIamPolicy
 # operationId: dataproc.projects.regions.workflowTemplates.getIamPolicy
-# --options shape: {requestedPolicyVersion?: int}
 export def "dataproc-projects-regions-workflow-templates-get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1949,7 +1928,7 @@ export def "dataproc-projects-regions-workflow-templates-get-iam-policy" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --options: record # Encapsulates settings provided to GetIamPolicy. — shape: {requestedPolicyVersion?: int}
-]: any -> record<bindings: table<condition: record, members: list, role: string>, etag: string, version: int> {
+]: any -> oneof<record<bindings: table<condition: record, members: list, role: string>, etag: string, version: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1978,7 +1957,6 @@ export def "dataproc-projects-regions-workflow-templates-get-iam-policy" [
 #
 # POST /v1/{resource}:setIamPolicy
 # operationId: dataproc.projects.regions.workflowTemplates.setIamPolicy
-# --policy shape: {bindings?: list, etag?: string, version?: int}
 export def "dataproc-projects-regions-workflow-templates-set-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2002,7 +1980,7 @@ export def "dataproc-projects-regions-workflow-templates-set-iam-policy" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --policy: record # An Identity and Access Management (IAM) policy, which specifies access controls for Google Cloud resources.A Policy is a collection of bindings. A binding binds one or more members, or principals, to a single role. Principals can be user accounts, service accounts, Google groups, and domains (such as G Suite). A role is a named list of permissions; each role can be an IAM predefined role or a user-created custom role.For some types of Google Cloud resources, a binding can also specify a condition, which is a logical expression that allows access to a resource only if the expression evaluates to true. A condition can add constraints based on attributes of the request, the resource, or both. To learn which resources support conditions in their IAM policies, see the IAM documentation (https://cloud.google.com/iam/help/conditions/resource-policies).JSON example: { "bindings": [ { "role": "roles/resourcemanager.organizationAdmin", "members": [ "user:mike@example.com", "group:admins@example.com", "domain:google.com", "serviceAccount:my-project-id@appspot.gserviceaccount.com" ] }, { "role": "roles/resourcemanager.organizationViewer", "members": [ "user:eve@example.com" ], "condition": { "title": "expirable access", "description": "Does not grant access after Sep 2020", "expression": "request.time < timestamp('2020-10-01T00:00:00.000Z')", } } ], "etag": "BwWWja0YfJA=", "version": 3 } YAML example: bindings: - members: - user:mike@example.com - group:admins@example.com - domain:google.com - serviceAccount:my-project-id@appspot.gserviceaccount.com role: roles/resourcemanager.organizationAdmin - members: - user:eve@example.com role: roles/resourcemanager.organizationViewer condition: title: expirable access description: Does not grant access after Sep 2020 expression: request.time < timestamp('2020-10-01T00:00:00.000Z') etag: BwWWja0YfJA= version: 3 For a description of IAM and its features, see the IAM documentation (https://cloud.google.com/iam/docs/). — shape: {bindings?: list, etag?: string, version?: int}
-]: any -> record<bindings: table<condition: record, members: list, role: string>, etag: string, version: int> {
+]: any -> oneof<record<bindings: table<condition: record, members: list, role: string>, etag: string, version: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2054,7 +2032,7 @@ export def "dataproc-projects-regions-workflow-templates-test-iam-permissions" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --permissions: list<string> # The set of permissions to check for the resource. Permissions with wildcards (such as * or storage.*) are not allowed. For more information see IAM Overview (https://cloud.google.com/iam/docs/overview#permissions).
-]: any -> record<permissions: list<string>> {
+]: any -> oneof<record<permissions: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -147,9 +170,9 @@ def x-amz-target-completer-40 [] { ["AWSSimbaAPIService_v20180301.UpdateVolume"]
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "associate-file-system-aliases" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["associate-file-system-aliases" "cancel-data-repository-task" "copy-backup" "create-backup" "create-data-repository-association" "create-data-repository-task" "create-file-cache" "create-file-system" "create-file-system-from-backup" "create-snapshot" "create-storage-virtual-machine" "create-volume" "create-volume-from-backup" "delete-backup" "delete-data-repository-association" "delete-file-cache" "delete-file-system" "delete-snapshot" "delete-storage-virtual-machine" "delete-volume" "describe-backups" "describe-data-repository-associations" "describe-data-repository-tasks" "describe-file-caches" "describe-file-system-aliases" "describe-file-systems" "describe-snapshots" "describe-storage-virtual-machines" "describe-volumes" "disassociate-file-system-aliases" "list-tags-for-resource" "release-file-system-nfs-v3-locks" "restore-volume-from-snapshot" "tag-resource" "untag-resource" "update-data-repository-association" "update-file-cache" "update-file-system" "update-snapshot" "update-storage-virtual-machine" "update-volume" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -192,7 +215,7 @@ export def "associate-file-system-aliases" [
   --client-request-token: string # (Optional) An idempotency token for resource creation, in a string of up to 63 ASCII characters. This token is automatically filled on your behalf when you use the Command Line Interface (CLI) or an Amazon Web Services SDK.
   file_system_id: string # The globally unique ID of the file system, assigned by Amazon FSx.
   aliases: list<string> # An array of one or more DNS alias names to associate with the file system. The alias name has to comply with the following formatting requirements: Formatted as a fully-qualified domain name (FQDN), hostname.domain , for example, accounting.corp.example.com. Can contain alphanumeric characters and the hyphen (-). Cannot start or end with a hyphen. Can start with a numeric. For DNS alias names, Amazon FSx stores alphabetic characters as lowercase letters (a-z), regardless of how you specify them: as uppercase letters, lowercase letters, or the corresponding letters in escape codes.
-]: any -> record<Aliases: table<Name: string, Lifecycle: string>> {
+]: any -> oneof<record<Aliases: table<Name: string, Lifecycle: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -241,7 +264,7 @@ export def "cancel-data-repository-task" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-1 # required
   task_id: string # Specifies the data repository task to cancel.
-]: any -> record<Lifecycle: string, TaskId: string> {
+]: any -> oneof<record<Lifecycle: string, TaskId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -271,7 +294,6 @@ export def "cancel-data-repository-task" [
 #
 # POST /
 # operationId: CopyBackup
-# --Tags item shape: {Key: string, Value: string}
 export def "copy-backup" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -296,7 +318,7 @@ export def "copy-backup" [
   --kms-key-id: string # Specifies the ID of the Key Management Service (KMS) key to use for encrypting data on Amazon FSx file systems, as follows: Amazon FSx for Lustre PERSISTENT_1 and PERSISTENT_2 deployment types only. SCRATCH_1 and SCRATCH_2 types are encrypted using the Amazon FSx service KMS key for your account. Amazon FSx for NetApp ONTAP Amazon FSx for OpenZFS Amazon FSx for Windows File Server If a KmsKeyId isn't specified, the Amazon FSx-managed KMS key for your account is used. For more information, see Encrypt (https://docs.aws.amazon.com/kms/latest/APIReference/API_Encrypt.html) in the Key Management Service API Reference.
   --copy-tags: oneof<nothing, bool> # A Boolean flag indicating whether tags from the source backup should be copied to the backup copy. This value defaults to false. If you set CopyTags to true and the source backup has existing tags, you can use the Tags parameter to create new tags, provided that the sum of the source backup tags and the new tags doesn't exceed 50. Both sets of tags are merged. If there are tag conflicts (for example, two tags with the same key but different values), the tags created with the Tags parameter take precedence.
   --tags: list # A list of Tag values, with a maximum of 50 elements. — item shape: {Key: string, Value: string}
-]: any -> record<Backup: record<BackupId: string, Lifecycle: string, FailureDetails: record<Message: string>, Type: string, ProgressPercent: int, CreationTime: string, KmsKeyId: string, ResourceARN: string, Tags: list<record>, FileSystem: record<OwnerId: string, CreationTime: string, FileSystemId: string, FileSystemType: string, Lifecycle: string, FailureDetails: record, StorageCapacity: int, StorageType: string, VpcId: string, SubnetIds: list, NetworkInterfaceIds: list, DNSName: string, KmsKeyId: string, ResourceARN: string, Tags: list, WindowsConfiguration: record, LustreConfiguration: record, AdministrativeActions: list, OntapConfiguration: record, FileSystemTypeVersion: string, OpenZFSConfiguration: record>, DirectoryInformation: record<DomainName: string, ActiveDirectoryId: string, ResourceARN: string>, OwnerId: string, SourceBackupId: string, SourceBackupRegion: string, ResourceType: string, Volume: record<CreationTime: string, FileSystemId: string, Lifecycle: string, Name: string, OntapConfiguration: record, ResourceARN: string, Tags: list, VolumeId: string, VolumeType: string, LifecycleTransitionReason: record, AdministrativeActions: list, OpenZFSConfiguration: record>>> {
+]: any -> oneof<record<Backup: record<BackupId: string, Lifecycle: string, FailureDetails: record<Message: string>, Type: string, ProgressPercent: int, CreationTime: string, KmsKeyId: string, ResourceARN: string, Tags: list<record>, FileSystem: record<OwnerId: string, CreationTime: string, FileSystemId: string, FileSystemType: string, Lifecycle: string, FailureDetails: record, StorageCapacity: int, StorageType: string, VpcId: string, SubnetIds: list, NetworkInterfaceIds: list, DNSName: string, KmsKeyId: string, ResourceARN: string, Tags: list, WindowsConfiguration: record, LustreConfiguration: record, AdministrativeActions: list, OntapConfiguration: record, FileSystemTypeVersion: string, OpenZFSConfiguration: record>, DirectoryInformation: record<DomainName: string, ActiveDirectoryId: string, ResourceARN: string>, OwnerId: string, SourceBackupId: string, SourceBackupRegion: string, ResourceType: string, Volume: record<CreationTime: string, FileSystemId: string, Lifecycle: string, Name: string, OntapConfiguration: record, ResourceARN: string, Tags: list, VolumeId: string, VolumeType: string, LifecycleTransitionReason: record, AdministrativeActions: list, OpenZFSConfiguration: record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -326,7 +348,6 @@ export def "copy-backup" [
 #
 # POST /
 # operationId: CreateBackup
-# --Tags item shape: {Key: string, Value: string}
 export def "create-backup" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -349,7 +370,7 @@ export def "create-backup" [
   --client-request-token: string # (Optional) An idempotency token for resource creation, in a string of up to 63 ASCII characters. This token is automatically filled on your behalf when you use the Command Line Interface (CLI) or an Amazon Web Services SDK.
   --tags: list # A list of Tag values, with a maximum of 50 elements. — item shape: {Key: string, Value: string}
   --volume-id: string # (Optional) The ID of the FSx for ONTAP volume to back up.
-]: any -> record<Backup: record<BackupId: string, Lifecycle: string, FailureDetails: record<Message: string>, Type: string, ProgressPercent: int, CreationTime: string, KmsKeyId: string, ResourceARN: string, Tags: list<record>, FileSystem: record<OwnerId: string, CreationTime: string, FileSystemId: string, FileSystemType: string, Lifecycle: string, FailureDetails: record, StorageCapacity: int, StorageType: string, VpcId: string, SubnetIds: list, NetworkInterfaceIds: list, DNSName: string, KmsKeyId: string, ResourceARN: string, Tags: list, WindowsConfiguration: record, LustreConfiguration: record, AdministrativeActions: list, OntapConfiguration: record, FileSystemTypeVersion: string, OpenZFSConfiguration: record>, DirectoryInformation: record<DomainName: string, ActiveDirectoryId: string, ResourceARN: string>, OwnerId: string, SourceBackupId: string, SourceBackupRegion: string, ResourceType: string, Volume: record<CreationTime: string, FileSystemId: string, Lifecycle: string, Name: string, OntapConfiguration: record, ResourceARN: string, Tags: list, VolumeId: string, VolumeType: string, LifecycleTransitionReason: record, AdministrativeActions: list, OpenZFSConfiguration: record>>> {
+]: any -> oneof<record<Backup: record<BackupId: string, Lifecycle: string, FailureDetails: record<Message: string>, Type: string, ProgressPercent: int, CreationTime: string, KmsKeyId: string, ResourceARN: string, Tags: list<record>, FileSystem: record<OwnerId: string, CreationTime: string, FileSystemId: string, FileSystemType: string, Lifecycle: string, FailureDetails: record, StorageCapacity: int, StorageType: string, VpcId: string, SubnetIds: list, NetworkInterfaceIds: list, DNSName: string, KmsKeyId: string, ResourceARN: string, Tags: list, WindowsConfiguration: record, LustreConfiguration: record, AdministrativeActions: list, OntapConfiguration: record, FileSystemTypeVersion: string, OpenZFSConfiguration: record>, DirectoryInformation: record<DomainName: string, ActiveDirectoryId: string, ResourceARN: string>, OwnerId: string, SourceBackupId: string, SourceBackupRegion: string, ResourceType: string, Volume: record<CreationTime: string, FileSystemId: string, Lifecycle: string, Name: string, OntapConfiguration: record, ResourceARN: string, Tags: list, VolumeId: string, VolumeType: string, LifecycleTransitionReason: record, AdministrativeActions: list, OpenZFSConfiguration: record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -379,8 +400,6 @@ export def "create-backup" [
 #
 # POST /
 # operationId: CreateDataRepositoryAssociation
-# --S3 shape: {AutoImportPolicy?: record, AutoExportPolicy?: record}
-# --Tags item shape: {Key: string, Value: string}
 export def "create-data-repository-association" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -407,7 +426,7 @@ export def "create-data-repository-association" [
   --s3: record # The configuration for an Amazon S3 data repository linked to an Amazon FSx for Lustre file system with a data repository association. The configuration consists of an AutoImportPolicy that defines which file events on the data repository are automatically imported to the file system and an AutoExportPolicy that defines which file events on the file system are automatically exported to the data repository. File events are when files or directories are added, changed, or deleted on the file system or the data repository. Data repository associations on Amazon File Cache don't use S3DataRepositoryConfiguration because they don't support automatic import or automatic export. — shape: {AutoImportPolicy?: record, AutoExportPolicy?: record}
   --client-request-token: string # (Optional) An idempotency token for resource creation, in a string of up to 63 ASCII characters. This token is automatically filled on your behalf when you use the Command Line Interface (CLI) or an Amazon Web Services SDK.
   --tags: list # A list of Tag values, with a maximum of 50 elements. — item shape: {Key: string, Value: string}
-]: any -> record<Association: record<AssociationId: string, ResourceARN: string, FileSystemId: string, Lifecycle: string, FailureDetails: record<Message: string>, FileSystemPath: string, DataRepositoryPath: string, BatchImportMetaDataOnCreate: bool, ImportedFileChunkSize: int, S3: record<AutoImportPolicy: record, AutoExportPolicy: record>, Tags: list<record>, CreationTime: string, FileCacheId: string, FileCachePath: string, DataRepositorySubdirectories: list<string>, NFS: record<Version: string, DnsIps: list, AutoExportPolicy: record>>> {
+]: any -> oneof<record<Association: record<AssociationId: string, ResourceARN: string, FileSystemId: string, Lifecycle: string, FailureDetails: record<Message: string>, FileSystemPath: string, DataRepositoryPath: string, BatchImportMetaDataOnCreate: bool, ImportedFileChunkSize: int, S3: record<AutoImportPolicy: record, AutoExportPolicy: record>, Tags: list<record>, CreationTime: string, FileCacheId: string, FileCachePath: string, DataRepositorySubdirectories: list<string>, NFS: record<Version: string, DnsIps: list, AutoExportPolicy: record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -437,8 +456,6 @@ export def "create-data-repository-association" [
 #
 # POST /
 # operationId: CreateDataRepositoryTask
-# --Report shape: {Enabled: bool, Path?: string, Format?: "REPORT_CSV_20191124", Scope?: "FAILED_FILES_ONLY"}
-# --Tags item shape: {Key: string, Value: string}
 export def "create-data-repository-task" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -464,7 +481,7 @@ export def "create-data-repository-task" [
   --client-request-token: string # (Optional) An idempotency token for resource creation, in a string of up to 63 ASCII characters. This token is automatically filled on your behalf when you use the Command Line Interface (CLI) or an Amazon Web Services SDK.
   --tags: list # A list of Tag values, with a maximum of 50 elements. — item shape: {Key: string, Value: string}
   --capacity-to-release: int # Specifies the amount of data to release, in GiB, by an Amazon File Cache AUTO_RELEASE_DATA task that automatically releases files from the cache.
-]: any -> record<DataRepositoryTask: record<TaskId: string, Lifecycle: string, Type: string, CreationTime: string, StartTime: string, EndTime: string, ResourceARN: string, Tags: list<record>, FileSystemId: string, Paths: list<string>, FailureDetails: record<Message: string>, Status: record<TotalCount: int, SucceededCount: int, FailedCount: int, LastUpdatedTime: string, ReleasedCapacity: int>, Report: record<Enabled: bool, Path: string, Format: string, Scope: string>, CapacityToRelease: int, FileCacheId: string>> {
+]: any -> oneof<record<DataRepositoryTask: record<TaskId: string, Lifecycle: string, Type: string, CreationTime: string, StartTime: string, EndTime: string, ResourceARN: string, Tags: list<record>, FileSystemId: string, Paths: list<string>, FailureDetails: record<Message: string>, Status: record<TotalCount: int, SucceededCount: int, FailedCount: int, LastUpdatedTime: string, ReleasedCapacity: int>, Report: record<Enabled: bool, Path: string, Format: string, Scope: string>, CapacityToRelease: int, FileCacheId: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -494,9 +511,6 @@ export def "create-data-repository-task" [
 #
 # POST /
 # operationId: CreateFileCache
-# --Tags item shape: {Key: string, Value: string}
-# --LustreConfiguration shape: {PerUnitStorageThroughput: int, DeploymentType: "CACHE_1", WeeklyMaintenanceStartTime?: string, MetadataConfiguration: record}
-# --DataRepositoryAssociations item shape: {FileCachePath: string, DataRepositoryPath: string, DataRepositorySubdirectories?: list<string>, NFS?: record}
 export def "create-file-cache" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -526,7 +540,7 @@ export def "create-file-cache" [
   --kms-key-id: string # Specifies the ID of the Key Management Service (KMS) key to use for encrypting data on Amazon FSx file systems, as follows: Amazon FSx for Lustre PERSISTENT_1 and PERSISTENT_2 deployment types only. SCRATCH_1 and SCRATCH_2 types are encrypted using the Amazon FSx service KMS key for your account. Amazon FSx for NetApp ONTAP Amazon FSx for OpenZFS Amazon FSx for Windows File Server If a KmsKeyId isn't specified, the Amazon FSx-managed KMS key for your account is used. For more information, see Encrypt (https://docs.aws.amazon.com/kms/latest/APIReference/API_Encrypt.html) in the Key Management Service API Reference.
   --lustre-configuration: record # The Amazon File Cache configuration for the cache that you are creating. — shape: {PerUnitStorageThroughput: int, DeploymentType: "CACHE_1", WeeklyMaintenanceStartTime?: string, MetadataConfiguration: record}
   --data-repository-associations: list # A list of up to 8 configurations for data repository associations (DRAs) to be created during the cache creation. The DRAs link the cache to either an Amazon S3 data repository or a Network File System (NFS) data repository that supports the NFSv3 protocol. The DRA configurations must meet the following requirements: All configurations on the list must be of the same data repository type, either all S3 or all NFS. A cache can't link to different data repository types at the same time. An NFS DRA must link to an NFS file system that supports the NFSv3 protocol. DRA automatic import and automatic export is not supported. — item shape: {FileCachePath: string, DataRepositoryPath: string, DataRepositorySubdirectories?: list<string>, NFS?: record}
-]: any -> record<FileCache: record<OwnerId: string, CreationTime: string, FileCacheId: string, FileCacheType: string, FileCacheTypeVersion: string, Lifecycle: string, FailureDetails: record<Message: string>, StorageCapacity: int, VpcId: string, SubnetIds: list<string>, NetworkInterfaceIds: list<string>, DNSName: string, KmsKeyId: string, ResourceARN: string, Tags: list<record>, CopyTagsToDataRepositoryAssociations: bool, LustreConfiguration: record<PerUnitStorageThroughput: int, DeploymentType: string, MountName: string, WeeklyMaintenanceStartTime: string, MetadataConfiguration: record, LogConfiguration: record>, DataRepositoryAssociationIds: list<string>>> {
+]: any -> oneof<record<FileCache: record<OwnerId: string, CreationTime: string, FileCacheId: string, FileCacheType: string, FileCacheTypeVersion: string, Lifecycle: string, FailureDetails: record<Message: string>, StorageCapacity: int, VpcId: string, SubnetIds: list<string>, NetworkInterfaceIds: list<string>, DNSName: string, KmsKeyId: string, ResourceARN: string, Tags: list<record>, CopyTagsToDataRepositoryAssociations: bool, LustreConfiguration: record<PerUnitStorageThroughput: int, DeploymentType: string, MountName: string, WeeklyMaintenanceStartTime: string, MetadataConfiguration: record, LogConfiguration: record>, DataRepositoryAssociationIds: list<string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -556,11 +570,6 @@ export def "create-file-cache" [
 #
 # POST /
 # operationId: CreateFileSystem
-# --Tags item shape: {Key: string, Value: string}
-# --WindowsConfiguration shape: {ActiveDirectoryId?: string, SelfManagedActiveDirectoryConfiguration?: record, DeploymentType?: "MULTI_AZ_1"|"SINGLE_AZ_1"|"SINGLE_AZ_2", PreferredSubnetId?: string, ThroughputCapacity: int, WeeklyMaintenanceStartTime?: string, DailyAutomaticBackupStartTime?: string, AutomaticBackupRetentionDays?: int, CopyTagsToBackups?: bool, Aliases?: list<string>, AuditLogConfiguration?: record}
-# --LustreConfiguration shape: {WeeklyMaintenanceStartTime?: string, ImportPath?: string, ExportPath?: string, ImportedFileChunkSize?: int, DeploymentType?: "SCRATCH_1"|"SCRATCH_2"|"PERSISTENT_1"|"PERSISTENT_2", AutoImportPolicy?: "NONE"|"NEW"|"NEW_CHANGED"|"NEW_CHANGED_DELETED", PerUnitStorageThroughput?: int, DailyAutomaticBackupStartTime?: string, AutomaticBackupRetentionDays?: int, CopyTagsToBackups?: bool, DriveCacheType?: "NONE"|"READ", DataCompressionType?: "NONE"|"LZ4", LogConfiguration?: record, ... (1 more fields)}
-# --OntapConfiguration shape: {AutomaticBackupRetentionDays?: int, DailyAutomaticBackupStartTime?: string, DeploymentType: "MULTI_AZ_1"|"SINGLE_AZ_1", EndpointIpAddressRange?: string, FsxAdminPassword?: string, DiskIopsConfiguration?: record, PreferredSubnetId?: string, RouteTableIds?: list<string>, ThroughputCapacity: int, WeeklyMaintenanceStartTime?: string}
-# --OpenZFSConfiguration shape: {AutomaticBackupRetentionDays?: int, CopyTagsToBackups?: bool, CopyTagsToVolumes?: bool, DailyAutomaticBackupStartTime?: string, DeploymentType: "SINGLE_AZ_1"|"SINGLE_AZ_2", ThroughputCapacity: int, WeeklyMaintenanceStartTime?: string, DiskIopsConfiguration?: record, RootVolumeConfiguration?: record}
 export def "create-file-system" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -592,7 +601,7 @@ export def "create-file-system" [
   --ontap-configuration: record # The ONTAP configuration properties of the FSx for ONTAP file system that you are creating. — shape: {AutomaticBackupRetentionDays?: int, DailyAutomaticBackupStartTime?: string, DeploymentType: "MULTI_AZ_1"|"SINGLE_AZ_1", EndpointIpAddressRange?: string, FsxAdminPassword?: string, DiskIopsConfiguration?: record, PreferredSubnetId?: string, RouteTableIds?: list<string>, ThroughputCapacity: int, WeeklyMaintenanceStartTime?: string}
   --file-system-type-version: string # (Optional) For FSx for Lustre file systems, sets the Lustre version for the file system that you're creating. Valid values are 2.10 and 2.12: 2.10 is supported by the Scratch and Persistent_1 Lustre deployment types. 2.12 is supported by all Lustre deployment types. 2.12 is required when setting FSx for Lustre DeploymentType to PERSISTENT_2. Default value = 2.10, except when DeploymentType is set to PERSISTENT_2, then the default is 2.12. If you set FileSystemTypeVersion to 2.10 for a PERSISTENT_2 Lustre deployment type, the CreateFileSystem operation fails.
   --open-zfs-configuration: record # The Amazon FSx for OpenZFS configuration properties for the file system that you are creating. — shape: {AutomaticBackupRetentionDays?: int, CopyTagsToBackups?: bool, CopyTagsToVolumes?: bool, DailyAutomaticBackupStartTime?: string, DeploymentType: "SINGLE_AZ_1"|"SINGLE_AZ_2", ThroughputCapacity: int, WeeklyMaintenanceStartTime?: string, DiskIopsConfiguration?: record, RootVolumeConfiguration?: record}
-]: any -> record<FileSystem: record<OwnerId: string, CreationTime: string, FileSystemId: string, FileSystemType: string, Lifecycle: string, FailureDetails: record<Message: string>, StorageCapacity: int, StorageType: string, VpcId: string, SubnetIds: list<string>, NetworkInterfaceIds: list<string>, DNSName: string, KmsKeyId: string, ResourceARN: string, Tags: list<record>, WindowsConfiguration: record<ActiveDirectoryId: string, SelfManagedActiveDirectoryConfiguration: record, DeploymentType: string, RemoteAdministrationEndpoint: string, PreferredSubnetId: string, PreferredFileServerIp: string, ThroughputCapacity: int, MaintenanceOperationsInProgress: list, WeeklyMaintenanceStartTime: string, DailyAutomaticBackupStartTime: string, AutomaticBackupRetentionDays: int, CopyTagsToBackups: bool, Aliases: list, AuditLogConfiguration: record>, LustreConfiguration: record<WeeklyMaintenanceStartTime: string, DataRepositoryConfiguration: record, DeploymentType: string, PerUnitStorageThroughput: int, MountName: string, DailyAutomaticBackupStartTime: string, AutomaticBackupRetentionDays: int, CopyTagsToBackups: bool, DriveCacheType: string, DataCompressionType: string, LogConfiguration: record, RootSquashConfiguration: record>, AdministrativeActions: list<record>, OntapConfiguration: record<AutomaticBackupRetentionDays: int, DailyAutomaticBackupStartTime: string, DeploymentType: string, EndpointIpAddressRange: string, Endpoints: record, DiskIopsConfiguration: record, PreferredSubnetId: string, RouteTableIds: list, ThroughputCapacity: int, WeeklyMaintenanceStartTime: string>, FileSystemTypeVersion: string, OpenZFSConfiguration: record<AutomaticBackupRetentionDays: int, CopyTagsToBackups: bool, CopyTagsToVolumes: bool, DailyAutomaticBackupStartTime: string, DeploymentType: string, ThroughputCapacity: int, WeeklyMaintenanceStartTime: string, DiskIopsConfiguration: record, RootVolumeId: string>>> {
+]: any -> oneof<record<FileSystem: record<OwnerId: string, CreationTime: string, FileSystemId: string, FileSystemType: string, Lifecycle: string, FailureDetails: record<Message: string>, StorageCapacity: int, StorageType: string, VpcId: string, SubnetIds: list<string>, NetworkInterfaceIds: list<string>, DNSName: string, KmsKeyId: string, ResourceARN: string, Tags: list<record>, WindowsConfiguration: record<ActiveDirectoryId: string, SelfManagedActiveDirectoryConfiguration: record, DeploymentType: string, RemoteAdministrationEndpoint: string, PreferredSubnetId: string, PreferredFileServerIp: string, ThroughputCapacity: int, MaintenanceOperationsInProgress: list, WeeklyMaintenanceStartTime: string, DailyAutomaticBackupStartTime: string, AutomaticBackupRetentionDays: int, CopyTagsToBackups: bool, Aliases: list, AuditLogConfiguration: record>, LustreConfiguration: record<WeeklyMaintenanceStartTime: string, DataRepositoryConfiguration: record, DeploymentType: string, PerUnitStorageThroughput: int, MountName: string, DailyAutomaticBackupStartTime: string, AutomaticBackupRetentionDays: int, CopyTagsToBackups: bool, DriveCacheType: string, DataCompressionType: string, LogConfiguration: record, RootSquashConfiguration: record>, AdministrativeActions: list<record>, OntapConfiguration: record<AutomaticBackupRetentionDays: int, DailyAutomaticBackupStartTime: string, DeploymentType: string, EndpointIpAddressRange: string, Endpoints: record, DiskIopsConfiguration: record, PreferredSubnetId: string, RouteTableIds: list, ThroughputCapacity: int, WeeklyMaintenanceStartTime: string>, FileSystemTypeVersion: string, OpenZFSConfiguration: record<AutomaticBackupRetentionDays: int, CopyTagsToBackups: bool, CopyTagsToVolumes: bool, DailyAutomaticBackupStartTime: string, DeploymentType: string, ThroughputCapacity: int, WeeklyMaintenanceStartTime: string, DiskIopsConfiguration: record, RootVolumeId: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -622,10 +631,6 @@ export def "create-file-system" [
 #
 # POST /
 # operationId: CreateFileSystemFromBackup
-# --Tags item shape: {Key: string, Value: string}
-# --WindowsConfiguration shape: {ActiveDirectoryId?: string, SelfManagedActiveDirectoryConfiguration?: record, DeploymentType?: "MULTI_AZ_1"|"SINGLE_AZ_1"|"SINGLE_AZ_2", PreferredSubnetId?: string, ThroughputCapacity: int, WeeklyMaintenanceStartTime?: string, DailyAutomaticBackupStartTime?: string, AutomaticBackupRetentionDays?: int, CopyTagsToBackups?: bool, Aliases?: list<string>, AuditLogConfiguration?: record}
-# --LustreConfiguration shape: {WeeklyMaintenanceStartTime?: string, ImportPath?: string, ExportPath?: string, ImportedFileChunkSize?: int, DeploymentType?: "SCRATCH_1"|"SCRATCH_2"|"PERSISTENT_1"|"PERSISTENT_2", AutoImportPolicy?: "NONE"|"NEW"|"NEW_CHANGED"|"NEW_CHANGED_DELETED", PerUnitStorageThroughput?: int, DailyAutomaticBackupStartTime?: string, AutomaticBackupRetentionDays?: int, CopyTagsToBackups?: bool, DriveCacheType?: "NONE"|"READ", DataCompressionType?: "NONE"|"LZ4", LogConfiguration?: record, ... (1 more fields)}
-# --OpenZFSConfiguration shape: {AutomaticBackupRetentionDays?: int, CopyTagsToBackups?: bool, CopyTagsToVolumes?: bool, DailyAutomaticBackupStartTime?: string, DeploymentType: "SINGLE_AZ_1"|"SINGLE_AZ_2", ThroughputCapacity: int, WeeklyMaintenanceStartTime?: string, DiskIopsConfiguration?: record, RootVolumeConfiguration?: record}
 export def "create-file-system-from-backup" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -656,7 +661,7 @@ export def "create-file-system-from-backup" [
   --file-system-type-version: string # Sets the version for the Amazon FSx for Lustre file system that you're creating from a backup. Valid values are 2.10 and 2.12. You don't need to specify FileSystemTypeVersion because it will be applied using the backup's FileSystemTypeVersion setting. If you choose to specify FileSystemTypeVersion when creating from backup, the value must match the backup's FileSystemTypeVersion setting.
   --open-zfs-configuration: record # The Amazon FSx for OpenZFS configuration properties for the file system that you are creating. — shape: {AutomaticBackupRetentionDays?: int, CopyTagsToBackups?: bool, CopyTagsToVolumes?: bool, DailyAutomaticBackupStartTime?: string, DeploymentType: "SINGLE_AZ_1"|"SINGLE_AZ_2", ThroughputCapacity: int, WeeklyMaintenanceStartTime?: string, DiskIopsConfiguration?: record, RootVolumeConfiguration?: record}
   --storage-capacity: int # The storage capacity for your Amazon FSx file system, in gibibytes.
-]: any -> record<FileSystem: record<OwnerId: string, CreationTime: string, FileSystemId: string, FileSystemType: string, Lifecycle: string, FailureDetails: record<Message: string>, StorageCapacity: int, StorageType: string, VpcId: string, SubnetIds: list<string>, NetworkInterfaceIds: list<string>, DNSName: string, KmsKeyId: string, ResourceARN: string, Tags: list<record>, WindowsConfiguration: record<ActiveDirectoryId: string, SelfManagedActiveDirectoryConfiguration: record, DeploymentType: string, RemoteAdministrationEndpoint: string, PreferredSubnetId: string, PreferredFileServerIp: string, ThroughputCapacity: int, MaintenanceOperationsInProgress: list, WeeklyMaintenanceStartTime: string, DailyAutomaticBackupStartTime: string, AutomaticBackupRetentionDays: int, CopyTagsToBackups: bool, Aliases: list, AuditLogConfiguration: record>, LustreConfiguration: record<WeeklyMaintenanceStartTime: string, DataRepositoryConfiguration: record, DeploymentType: string, PerUnitStorageThroughput: int, MountName: string, DailyAutomaticBackupStartTime: string, AutomaticBackupRetentionDays: int, CopyTagsToBackups: bool, DriveCacheType: string, DataCompressionType: string, LogConfiguration: record, RootSquashConfiguration: record>, AdministrativeActions: list<record>, OntapConfiguration: record<AutomaticBackupRetentionDays: int, DailyAutomaticBackupStartTime: string, DeploymentType: string, EndpointIpAddressRange: string, Endpoints: record, DiskIopsConfiguration: record, PreferredSubnetId: string, RouteTableIds: list, ThroughputCapacity: int, WeeklyMaintenanceStartTime: string>, FileSystemTypeVersion: string, OpenZFSConfiguration: record<AutomaticBackupRetentionDays: int, CopyTagsToBackups: bool, CopyTagsToVolumes: bool, DailyAutomaticBackupStartTime: string, DeploymentType: string, ThroughputCapacity: int, WeeklyMaintenanceStartTime: string, DiskIopsConfiguration: record, RootVolumeId: string>>> {
+]: any -> oneof<record<FileSystem: record<OwnerId: string, CreationTime: string, FileSystemId: string, FileSystemType: string, Lifecycle: string, FailureDetails: record<Message: string>, StorageCapacity: int, StorageType: string, VpcId: string, SubnetIds: list<string>, NetworkInterfaceIds: list<string>, DNSName: string, KmsKeyId: string, ResourceARN: string, Tags: list<record>, WindowsConfiguration: record<ActiveDirectoryId: string, SelfManagedActiveDirectoryConfiguration: record, DeploymentType: string, RemoteAdministrationEndpoint: string, PreferredSubnetId: string, PreferredFileServerIp: string, ThroughputCapacity: int, MaintenanceOperationsInProgress: list, WeeklyMaintenanceStartTime: string, DailyAutomaticBackupStartTime: string, AutomaticBackupRetentionDays: int, CopyTagsToBackups: bool, Aliases: list, AuditLogConfiguration: record>, LustreConfiguration: record<WeeklyMaintenanceStartTime: string, DataRepositoryConfiguration: record, DeploymentType: string, PerUnitStorageThroughput: int, MountName: string, DailyAutomaticBackupStartTime: string, AutomaticBackupRetentionDays: int, CopyTagsToBackups: bool, DriveCacheType: string, DataCompressionType: string, LogConfiguration: record, RootSquashConfiguration: record>, AdministrativeActions: list<record>, OntapConfiguration: record<AutomaticBackupRetentionDays: int, DailyAutomaticBackupStartTime: string, DeploymentType: string, EndpointIpAddressRange: string, Endpoints: record, DiskIopsConfiguration: record, PreferredSubnetId: string, RouteTableIds: list, ThroughputCapacity: int, WeeklyMaintenanceStartTime: string>, FileSystemTypeVersion: string, OpenZFSConfiguration: record<AutomaticBackupRetentionDays: int, CopyTagsToBackups: bool, CopyTagsToVolumes: bool, DailyAutomaticBackupStartTime: string, DeploymentType: string, ThroughputCapacity: int, WeeklyMaintenanceStartTime: string, DiskIopsConfiguration: record, RootVolumeId: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -686,7 +691,6 @@ export def "create-file-system-from-backup" [
 #
 # POST /
 # operationId: CreateSnapshot
-# --Tags item shape: {Key: string, Value: string}
 export def "create-snapshot" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -709,7 +713,7 @@ export def "create-snapshot" [
   name: string # The name of the snapshot.
   volume_id: string # The ID of the volume that you are taking a snapshot of.
   --tags: list # A list of Tag values, with a maximum of 50 elements. — item shape: {Key: string, Value: string}
-]: any -> record<Snapshot: record<ResourceARN: string, SnapshotId: string, Name: string, VolumeId: string, CreationTime: string, Lifecycle: string, LifecycleTransitionReason: record<Message: string>, Tags: list<record>, AdministrativeActions: list<record>>> {
+]: any -> oneof<record<Snapshot: record<ResourceARN: string, SnapshotId: string, Name: string, VolumeId: string, CreationTime: string, Lifecycle: string, LifecycleTransitionReason: record<Message: string>, Tags: list<record>, AdministrativeActions: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -739,8 +743,6 @@ export def "create-snapshot" [
 #
 # POST /
 # operationId: CreateStorageVirtualMachine
-# --ActiveDirectoryConfiguration shape: {NetBiosName: string, SelfManagedActiveDirectoryConfiguration?: record}
-# --Tags item shape: {Key: string, Value: string}
 export def "create-storage-virtual-machine" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -766,7 +768,7 @@ export def "create-storage-virtual-machine" [
   --svm-admin-password: string # The password to use when managing the SVM using the NetApp ONTAP CLI or REST API. If you do not specify a password, you can still use the file system's fsxadmin user to manage the SVM. (format: password)
   --tags: list # A list of Tag values, with a maximum of 50 elements. — item shape: {Key: string, Value: string}
   --root-volume-security-style: string@root-volume-security-style-completer # The security style of the root volume of the SVM. Specify one of the following values: UNIX if the file system is managed by a UNIX administrator, the majority of users are NFS clients, and an application accessing the data uses a UNIX user as the service account. NTFS if the file system is managed by a Windows administrator, the majority of users are SMB clients, and an application accessing the data uses a Windows user as the service account. MIXED if the file system is managed by both UNIX and Windows administrators and users consist of both NFS and SMB clients.
-]: any -> record<StorageVirtualMachine: record<ActiveDirectoryConfiguration: record<NetBiosName: string, SelfManagedActiveDirectoryConfiguration: record>, CreationTime: string, Endpoints: record<Iscsi: record, Management: record, Nfs: record, Smb: record>, FileSystemId: string, Lifecycle: string, Name: string, ResourceARN: string, StorageVirtualMachineId: string, Subtype: string, UUID: string, Tags: list<record>, LifecycleTransitionReason: record<Message: string>, RootVolumeSecurityStyle: string>> {
+]: any -> oneof<record<StorageVirtualMachine: record<ActiveDirectoryConfiguration: record<NetBiosName: string, SelfManagedActiveDirectoryConfiguration: record>, CreationTime: string, Endpoints: record<Iscsi: record, Management: record, Nfs: record, Smb: record>, FileSystemId: string, Lifecycle: string, Name: string, ResourceARN: string, StorageVirtualMachineId: string, Subtype: string, UUID: string, Tags: list<record>, LifecycleTransitionReason: record<Message: string>, RootVolumeSecurityStyle: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -796,9 +798,6 @@ export def "create-storage-virtual-machine" [
 #
 # POST /
 # operationId: CreateVolume
-# --OntapConfiguration shape: {JunctionPath?: string, SecurityStyle?: "UNIX"|"NTFS"|"MIXED", SizeInMegabytes: int, StorageEfficiencyEnabled?: bool, StorageVirtualMachineId: string, TieringPolicy?: record, OntapVolumeType?: "RW"|"DP", SnapshotPolicy?: string, CopyTagsToBackups?: bool}
-# --Tags item shape: {Key: string, Value: string}
-# --OpenZFSConfiguration shape: {ParentVolumeId: string, StorageCapacityReservationGiB?: int, StorageCapacityQuotaGiB?: int, RecordSizeKiB?: int, DataCompressionType?: "NONE"|"ZSTD"|"LZ4", CopyTagsToSnapshots?: bool, OriginSnapshot?: record, ReadOnly?: bool, NfsExports?: list, UserAndGroupQuotas?: list}
 export def "create-volume" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -823,7 +822,7 @@ export def "create-volume" [
   --ontap-configuration: record # Specifies the configuration of the ONTAP volume that you are creating. — shape: {JunctionPath?: string, SecurityStyle?: "UNIX"|"NTFS"|"MIXED", SizeInMegabytes: int, StorageEfficiencyEnabled?: bool, StorageVirtualMachineId: string, TieringPolicy?: record, OntapVolumeType?: "RW"|"DP", SnapshotPolicy?: string, CopyTagsToBackups?: bool}
   --tags: list # A list of Tag values, with a maximum of 50 elements. — item shape: {Key: string, Value: string}
   --open-zfs-configuration: record # Specifies the configuration of the Amazon FSx for OpenZFS volume that you are creating. — shape: {ParentVolumeId: string, StorageCapacityReservationGiB?: int, StorageCapacityQuotaGiB?: int, RecordSizeKiB?: int, DataCompressionType?: "NONE"|"ZSTD"|"LZ4", CopyTagsToSnapshots?: bool, OriginSnapshot?: record, ReadOnly?: bool, NfsExports?: list, UserAndGroupQuotas?: list}
-]: any -> record<Volume: record<CreationTime: string, FileSystemId: string, Lifecycle: string, Name: string, OntapConfiguration: record<FlexCacheEndpointType: string, JunctionPath: string, SecurityStyle: string, SizeInMegabytes: int, StorageEfficiencyEnabled: bool, StorageVirtualMachineId: string, StorageVirtualMachineRoot: bool, TieringPolicy: record, UUID: string, OntapVolumeType: string, SnapshotPolicy: string, CopyTagsToBackups: bool>, ResourceARN: string, Tags: list<record>, VolumeId: string, VolumeType: string, LifecycleTransitionReason: record<Message: string>, AdministrativeActions: list<record>, OpenZFSConfiguration: record<ParentVolumeId: string, VolumePath: string, StorageCapacityReservationGiB: int, StorageCapacityQuotaGiB: int, RecordSizeKiB: int, DataCompressionType: string, CopyTagsToSnapshots: bool, OriginSnapshot: record, ReadOnly: bool, NfsExports: list, UserAndGroupQuotas: list, RestoreToSnapshot: string, DeleteIntermediateSnaphots: bool, DeleteClonedVolumes: bool>>> {
+]: any -> oneof<record<Volume: record<CreationTime: string, FileSystemId: string, Lifecycle: string, Name: string, OntapConfiguration: record<FlexCacheEndpointType: string, JunctionPath: string, SecurityStyle: string, SizeInMegabytes: int, StorageEfficiencyEnabled: bool, StorageVirtualMachineId: string, StorageVirtualMachineRoot: bool, TieringPolicy: record, UUID: string, OntapVolumeType: string, SnapshotPolicy: string, CopyTagsToBackups: bool>, ResourceARN: string, Tags: list<record>, VolumeId: string, VolumeType: string, LifecycleTransitionReason: record<Message: string>, AdministrativeActions: list<record>, OpenZFSConfiguration: record<ParentVolumeId: string, VolumePath: string, StorageCapacityReservationGiB: int, StorageCapacityQuotaGiB: int, RecordSizeKiB: int, DataCompressionType: string, CopyTagsToSnapshots: bool, OriginSnapshot: record, ReadOnly: bool, NfsExports: list, UserAndGroupQuotas: list, RestoreToSnapshot: string, DeleteIntermediateSnaphots: bool, DeleteClonedVolumes: bool>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -853,8 +852,6 @@ export def "create-volume" [
 #
 # POST /
 # operationId: CreateVolumeFromBackup
-# --OntapConfiguration shape: {JunctionPath?: string, SecurityStyle?: "UNIX"|"NTFS"|"MIXED", SizeInMegabytes: int, StorageEfficiencyEnabled?: bool, StorageVirtualMachineId: string, TieringPolicy?: record, OntapVolumeType?: "RW"|"DP", SnapshotPolicy?: string, CopyTagsToBackups?: bool}
-# --Tags item shape: {Key: string, Value: string}
 export def "create-volume-from-backup" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -878,7 +875,7 @@ export def "create-volume-from-backup" [
   name: string # The name of the new volume you're creating.
   --ontap-configuration: record # Specifies the configuration of the ONTAP volume that you are creating. — shape: {JunctionPath?: string, SecurityStyle?: "UNIX"|"NTFS"|"MIXED", SizeInMegabytes: int, StorageEfficiencyEnabled?: bool, StorageVirtualMachineId: string, TieringPolicy?: record, OntapVolumeType?: "RW"|"DP", SnapshotPolicy?: string, CopyTagsToBackups?: bool}
   --tags: list # A list of Tag values, with a maximum of 50 elements. — item shape: {Key: string, Value: string}
-]: any -> record<Volume: record<CreationTime: string, FileSystemId: string, Lifecycle: string, Name: string, OntapConfiguration: record<FlexCacheEndpointType: string, JunctionPath: string, SecurityStyle: string, SizeInMegabytes: int, StorageEfficiencyEnabled: bool, StorageVirtualMachineId: string, StorageVirtualMachineRoot: bool, TieringPolicy: record, UUID: string, OntapVolumeType: string, SnapshotPolicy: string, CopyTagsToBackups: bool>, ResourceARN: string, Tags: list<record>, VolumeId: string, VolumeType: string, LifecycleTransitionReason: record<Message: string>, AdministrativeActions: list<record>, OpenZFSConfiguration: record<ParentVolumeId: string, VolumePath: string, StorageCapacityReservationGiB: int, StorageCapacityQuotaGiB: int, RecordSizeKiB: int, DataCompressionType: string, CopyTagsToSnapshots: bool, OriginSnapshot: record, ReadOnly: bool, NfsExports: list, UserAndGroupQuotas: list, RestoreToSnapshot: string, DeleteIntermediateSnaphots: bool, DeleteClonedVolumes: bool>>> {
+]: any -> oneof<record<Volume: record<CreationTime: string, FileSystemId: string, Lifecycle: string, Name: string, OntapConfiguration: record<FlexCacheEndpointType: string, JunctionPath: string, SecurityStyle: string, SizeInMegabytes: int, StorageEfficiencyEnabled: bool, StorageVirtualMachineId: string, StorageVirtualMachineRoot: bool, TieringPolicy: record, UUID: string, OntapVolumeType: string, SnapshotPolicy: string, CopyTagsToBackups: bool>, ResourceARN: string, Tags: list<record>, VolumeId: string, VolumeType: string, LifecycleTransitionReason: record<Message: string>, AdministrativeActions: list<record>, OpenZFSConfiguration: record<ParentVolumeId: string, VolumePath: string, StorageCapacityReservationGiB: int, StorageCapacityQuotaGiB: int, RecordSizeKiB: int, DataCompressionType: string, CopyTagsToSnapshots: bool, OriginSnapshot: record, ReadOnly: bool, NfsExports: list, UserAndGroupQuotas: list, RestoreToSnapshot: string, DeleteIntermediateSnaphots: bool, DeleteClonedVolumes: bool>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -928,7 +925,7 @@ export def "delete-backup" [
   --x-amz-target: string@x-amz-target-completer-13 # required
   backup_id: string # The ID of the source backup. Specifies the backup that you are copying.
   --client-request-token: string # (Optional) An idempotency token for resource creation, in a string of up to 63 ASCII characters. This token is automatically filled on your behalf when you use the Command Line Interface (CLI) or an Amazon Web Services SDK.
-]: any -> record<BackupId: string, Lifecycle: string> {
+]: any -> oneof<record<BackupId: string, Lifecycle: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -979,7 +976,7 @@ export def "delete-data-repository-association" [
   association_id: string # The ID of the data repository association that you want to delete.
   --client-request-token: string # (Optional) An idempotency token for resource creation, in a string of up to 63 ASCII characters. This token is automatically filled on your behalf when you use the Command Line Interface (CLI) or an Amazon Web Services SDK.
   --delete-data-in-file-system: oneof<nothing, bool> # Set to true to delete the data in the file system that corresponds to the data repository association.
-]: any -> record<AssociationId: string, Lifecycle: string, DeleteDataInFileSystem: bool> {
+]: any -> oneof<record<AssociationId: string, Lifecycle: string, DeleteDataInFileSystem: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1029,7 +1026,7 @@ export def "delete-file-cache" [
   --x-amz-target: string@x-amz-target-completer-15 # required
   file_cache_id: string # The ID of the cache that's being deleted.
   --client-request-token: string # (Optional) An idempotency token for resource creation, in a string of up to 63 ASCII characters. This token is automatically filled on your behalf when you use the Command Line Interface (CLI) or an Amazon Web Services SDK.
-]: any -> record<FileCacheId: string, Lifecycle: string> {
+]: any -> oneof<record<FileCacheId: string, Lifecycle: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1059,9 +1056,6 @@ export def "delete-file-cache" [
 #
 # POST /
 # operationId: DeleteFileSystem
-# --WindowsConfiguration shape: {SkipFinalBackup?: bool, FinalBackupTags?: list}
-# --LustreConfiguration shape: {SkipFinalBackup?: bool, FinalBackupTags?: list}
-# --OpenZFSConfiguration shape: {SkipFinalBackup?: bool, FinalBackupTags?: list, Options?: list<string>}
 export def "delete-file-system" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1085,7 +1079,7 @@ export def "delete-file-system" [
   --windows-configuration: record # The configuration object for the Microsoft Windows file system used in the DeleteFileSystem operation. — shape: {SkipFinalBackup?: bool, FinalBackupTags?: list}
   --lustre-configuration: record # The configuration object for the Amazon FSx for Lustre file system being deleted in the DeleteFileSystem operation. — shape: {SkipFinalBackup?: bool, FinalBackupTags?: list}
   --open-zfs-configuration: record # The configuration object for the Amazon FSx for OpenZFS file system used in the DeleteFileSystem operation. — shape: {SkipFinalBackup?: bool, FinalBackupTags?: list, Options?: list<string>}
-]: any -> record<FileSystemId: string, Lifecycle: string, WindowsResponse: record<FinalBackupId: string, FinalBackupTags: list<record>>, LustreResponse: record<FinalBackupId: string, FinalBackupTags: list<record>>, OpenZFSResponse: record<FinalBackupId: string, FinalBackupTags: list<record>>> {
+]: any -> oneof<record<FileSystemId: string, Lifecycle: string, WindowsResponse: record<FinalBackupId: string, FinalBackupTags: list<record>>, LustreResponse: record<FinalBackupId: string, FinalBackupTags: list<record>>, OpenZFSResponse: record<FinalBackupId: string, FinalBackupTags: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1135,7 +1129,7 @@ export def "delete-snapshot" [
   --x-amz-target: string@x-amz-target-completer-17 # required
   --client-request-token: string # (Optional) An idempotency token for resource creation, in a string of up to 63 ASCII characters. This token is automatically filled on your behalf when you use the Command Line Interface (CLI) or an Amazon Web Services SDK.
   snapshot_id: string # The ID of the snapshot that you want to delete.
-]: any -> record<SnapshotId: string, Lifecycle: string> {
+]: any -> oneof<record<SnapshotId: string, Lifecycle: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1185,7 +1179,7 @@ export def "delete-storage-virtual-machine" [
   --x-amz-target: string@x-amz-target-completer-18 # required
   --client-request-token: string # (Optional) An idempotency token for resource creation, in a string of up to 63 ASCII characters. This token is automatically filled on your behalf when you use the Command Line Interface (CLI) or an Amazon Web Services SDK.
   storage_virtual_machine_id: string # The ID of the SVM that you want to delete.
-]: any -> record<StorageVirtualMachineId: string, Lifecycle: string> {
+]: any -> oneof<record<StorageVirtualMachineId: string, Lifecycle: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1215,8 +1209,6 @@ export def "delete-storage-virtual-machine" [
 #
 # POST /
 # operationId: DeleteVolume
-# --OntapConfiguration shape: {SkipFinalBackup?: bool, FinalBackupTags?: list}
-# --OpenZFSConfiguration shape: {Options?: list<string>}
 export def "delete-volume" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1239,7 +1231,7 @@ export def "delete-volume" [
   volume_id: string # The ID of the volume that you are deleting.
   --ontap-configuration: record # Use to specify skipping a final backup, or to add tags to a final backup. — shape: {SkipFinalBackup?: bool, FinalBackupTags?: list}
   --open-zfs-configuration: record # A value that specifies whether to delete all child volumes and snapshots. — shape: {Options?: list<string>}
-]: any -> record<VolumeId: string, Lifecycle: string, OntapResponse: record<FinalBackupId: string, FinalBackupTags: list<record>>> {
+]: any -> oneof<record<VolumeId: string, Lifecycle: string, OntapResponse: record<FinalBackupId: string, FinalBackupTags: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1269,7 +1261,6 @@ export def "delete-volume" [
 #
 # POST /
 # operationId: DescribeBackups
-# --Filters item shape: {Name?: "file-system-id"|"backup-type"|"file-system-type"|"volume-id"|"data-repository-type"|"file-cache-id"|"file-cache-type", Values?: list<string>}
 export def "describe-backups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1294,7 +1285,7 @@ export def "describe-backups" [
   --filters: list # A list of Filter elements. — item shape: {Name?: "file-system-id"|"backup-type"|"file-system-type"|"volume-id"|"data-repository-type"|"file-cache-id"|"file-cache-type", Values?: list<string>}
   --max-results-body: int # The maximum number of resources to return in the response. This value must be an integer greater than zero. (body field)
   --next-token-body: string # (Optional) Opaque pagination token returned from a previous operation (String). If present, this token indicates from what point you can continue processing the request, where the previous NextToken value left off. (body field)
-]: any -> record<Backups: table<BackupId: string, Lifecycle: string, FailureDetails: record, Type: string, ProgressPercent: int, CreationTime: string, KmsKeyId: string, ResourceARN: string, Tags: list, FileSystem: record, DirectoryInformation: record, OwnerId: string, SourceBackupId: string, SourceBackupRegion: string, ResourceType: string, Volume: record>, NextToken: string> {
+]: any -> oneof<record<Backups: table<BackupId: string, Lifecycle: string, FailureDetails: record, Type: string, ProgressPercent: int, CreationTime: string, KmsKeyId: string, ResourceARN: string, Tags: list, FileSystem: record, DirectoryInformation: record, OwnerId: string, SourceBackupId: string, SourceBackupRegion: string, ResourceType: string, Volume: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1325,7 +1316,6 @@ export def "describe-backups" [
 #
 # POST /
 # operationId: DescribeDataRepositoryAssociations
-# --Filters item shape: {Name?: "file-system-id"|"backup-type"|"file-system-type"|"volume-id"|"data-repository-type"|"file-cache-id"|"file-cache-type", Values?: list<string>}
 export def "describe-data-repository-associations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1350,7 +1340,7 @@ export def "describe-data-repository-associations" [
   --filters: list # A list of Filter elements. — item shape: {Name?: "file-system-id"|"backup-type"|"file-system-type"|"volume-id"|"data-repository-type"|"file-cache-id"|"file-cache-type", Values?: list<string>}
   --max-results-body: int # The maximum number of resources to return in the response. This value must be an integer greater than zero. (body field)
   --next-token-body: string # (Optional) Opaque pagination token returned from a previous operation (String). If present, this token indicates from what point you can continue processing the request, where the previous NextToken value left off. (body field)
-]: any -> record<Associations: table<AssociationId: string, ResourceARN: string, FileSystemId: string, Lifecycle: string, FailureDetails: record, FileSystemPath: string, DataRepositoryPath: string, BatchImportMetaDataOnCreate: bool, ImportedFileChunkSize: int, S3: record, Tags: list, CreationTime: string, FileCacheId: string, FileCachePath: string, DataRepositorySubdirectories: list, NFS: record>, NextToken: string> {
+]: any -> oneof<record<Associations: table<AssociationId: string, ResourceARN: string, FileSystemId: string, Lifecycle: string, FailureDetails: record, FileSystemPath: string, DataRepositoryPath: string, BatchImportMetaDataOnCreate: bool, ImportedFileChunkSize: int, S3: record, Tags: list, CreationTime: string, FileCacheId: string, FileCachePath: string, DataRepositorySubdirectories: list, NFS: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1381,7 +1371,6 @@ export def "describe-data-repository-associations" [
 #
 # POST /
 # operationId: DescribeDataRepositoryTasks
-# --Filters item shape: {Name?: "file-system-id"|"task-lifecycle"|"data-repository-association-id"|"file-cache-id", Values?: list<string>}
 export def "describe-data-repository-tasks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1406,7 +1395,7 @@ export def "describe-data-repository-tasks" [
   --filters: list # (Optional) You can use filters to narrow the DescribeDataRepositoryTasks response to include just tasks for specific file systems, or tasks in a specific lifecycle state. — item shape: {Name?: "file-system-id"|"task-lifecycle"|"data-repository-association-id"|"file-cache-id", Values?: list<string>}
   --max-results-body: int # The maximum number of resources to return in the response. This value must be an integer greater than zero. (body field)
   --next-token-body: string # (Optional) Opaque pagination token returned from a previous operation (String). If present, this token indicates from what point you can continue processing the request, where the previous NextToken value left off. (body field)
-]: any -> record<DataRepositoryTasks: table<TaskId: string, Lifecycle: string, Type: string, CreationTime: string, StartTime: string, EndTime: string, ResourceARN: string, Tags: list, FileSystemId: string, Paths: list, FailureDetails: record, Status: record, Report: record, CapacityToRelease: int, FileCacheId: string>, NextToken: string> {
+]: any -> oneof<record<DataRepositoryTasks: table<TaskId: string, Lifecycle: string, Type: string, CreationTime: string, StartTime: string, EndTime: string, ResourceARN: string, Tags: list, FileSystemId: string, Paths: list, FailureDetails: record, Status: record, Report: record, CapacityToRelease: int, FileCacheId: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1460,7 +1449,7 @@ export def "describe-file-caches" [
   --file-cache-ids: list<string> # IDs of the caches whose descriptions you want to retrieve (String).
   --max-results-body: int # The maximum number of resources to return in the response. This value must be an integer greater than zero. (body field)
   --next-token-body: string # (Optional) Opaque pagination token returned from a previous operation (String). If present, this token indicates from what point you can continue processing the request, where the previous NextToken value left off. (body field)
-]: any -> record<FileCaches: table<OwnerId: string, CreationTime: string, FileCacheId: string, FileCacheType: string, FileCacheTypeVersion: string, Lifecycle: string, FailureDetails: record, StorageCapacity: int, VpcId: string, SubnetIds: list, NetworkInterfaceIds: list, DNSName: string, KmsKeyId: string, ResourceARN: string, LustreConfiguration: record, DataRepositoryAssociationIds: list>, NextToken: string> {
+]: any -> oneof<record<FileCaches: table<OwnerId: string, CreationTime: string, FileCacheId: string, FileCacheType: string, FileCacheTypeVersion: string, Lifecycle: string, FailureDetails: record, StorageCapacity: int, VpcId: string, SubnetIds: list, NetworkInterfaceIds: list, DNSName: string, KmsKeyId: string, ResourceARN: string, LustreConfiguration: record, DataRepositoryAssociationIds: list>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1515,7 +1504,7 @@ export def "describe-file-system-aliases" [
   file_system_id: string # The globally unique ID of the file system, assigned by Amazon FSx.
   --max-results-body: int # The maximum number of resources to return in the response. This value must be an integer greater than zero. (body field)
   --next-token-body: string # (Optional) Opaque pagination token returned from a previous operation (String). If present, this token indicates from what point you can continue processing the request, where the previous NextToken value left off. (body field)
-]: any -> record<Aliases: table<Name: string, Lifecycle: string>, NextToken: string> {
+]: any -> oneof<record<Aliases: table<Name: string, Lifecycle: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1569,7 +1558,7 @@ export def "describe-file-systems" [
   --file-system-ids: list<string> # A list of file system IDs.
   --max-results-body: int # The maximum number of resources to return in the response. This value must be an integer greater than zero. (body field)
   --next-token-body: string # (Optional) Opaque pagination token returned from a previous operation (String). If present, this token indicates from what point you can continue processing the request, where the previous NextToken value left off. (body field)
-]: any -> record<FileSystems: table<OwnerId: string, CreationTime: string, FileSystemId: string, FileSystemType: string, Lifecycle: string, FailureDetails: record, StorageCapacity: int, StorageType: string, VpcId: string, SubnetIds: list, NetworkInterfaceIds: list, DNSName: string, KmsKeyId: string, ResourceARN: string, Tags: list, WindowsConfiguration: record, LustreConfiguration: record, AdministrativeActions: list, OntapConfiguration: record, FileSystemTypeVersion: string, OpenZFSConfiguration: record>, NextToken: string> {
+]: any -> oneof<record<FileSystems: table<OwnerId: string, CreationTime: string, FileSystemId: string, FileSystemType: string, Lifecycle: string, FailureDetails: record, StorageCapacity: int, StorageType: string, VpcId: string, SubnetIds: list, NetworkInterfaceIds: list, DNSName: string, KmsKeyId: string, ResourceARN: string, Tags: list, WindowsConfiguration: record, LustreConfiguration: record, AdministrativeActions: list, OntapConfiguration: record, FileSystemTypeVersion: string, OpenZFSConfiguration: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1600,7 +1589,6 @@ export def "describe-file-systems" [
 #
 # POST /
 # operationId: DescribeSnapshots
-# --Filters item shape: {Name?: "file-system-id"|"volume-id", Values?: list<string>}
 export def "describe-snapshots" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1625,7 +1613,7 @@ export def "describe-snapshots" [
   --filters: list # The filters structure. The supported names are file-system-id or volume-id. — item shape: {Name?: "file-system-id"|"volume-id", Values?: list<string>}
   --max-results-body: int # The maximum number of resources to return in the response. This value must be an integer greater than zero. (body field)
   --next-token-body: string # (Optional) Opaque pagination token returned from a previous operation (String). If present, this token indicates from what point you can continue processing the request, where the previous NextToken value left off. (body field)
-]: any -> record<Snapshots: table<ResourceARN: string, SnapshotId: string, Name: string, VolumeId: string, CreationTime: string, Lifecycle: string, LifecycleTransitionReason: record, Tags: list, AdministrativeActions: list>, NextToken: string> {
+]: any -> oneof<record<Snapshots: table<ResourceARN: string, SnapshotId: string, Name: string, VolumeId: string, CreationTime: string, Lifecycle: string, LifecycleTransitionReason: record, Tags: list, AdministrativeActions: list>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1656,7 +1644,6 @@ export def "describe-snapshots" [
 #
 # POST /
 # operationId: DescribeStorageVirtualMachines
-# --Filters item shape: {Name?: "file-system-id", Values?: list<string>}
 export def "describe-storage-virtual-machines" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1681,7 +1668,7 @@ export def "describe-storage-virtual-machines" [
   --filters: list # Enter a filter name:value pair to view a select set of SVMs. — item shape: {Name?: "file-system-id", Values?: list<string>}
   --max-results-body: int # The maximum number of resources to return in the response. This value must be an integer greater than zero. (body field)
   --next-token-body: string # (Optional) Opaque pagination token returned from a previous operation (String). If present, this token indicates from what point you can continue processing the request, where the previous NextToken value left off. (body field)
-]: any -> record<StorageVirtualMachines: table<ActiveDirectoryConfiguration: record, CreationTime: string, Endpoints: record, FileSystemId: string, Lifecycle: string, Name: string, ResourceARN: string, StorageVirtualMachineId: string, Subtype: string, UUID: string, Tags: list, LifecycleTransitionReason: record, RootVolumeSecurityStyle: string>, NextToken: string> {
+]: any -> oneof<record<StorageVirtualMachines: table<ActiveDirectoryConfiguration: record, CreationTime: string, Endpoints: record, FileSystemId: string, Lifecycle: string, Name: string, ResourceARN: string, StorageVirtualMachineId: string, Subtype: string, UUID: string, Tags: list, LifecycleTransitionReason: record, RootVolumeSecurityStyle: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1712,7 +1699,6 @@ export def "describe-storage-virtual-machines" [
 #
 # POST /
 # operationId: DescribeVolumes
-# --Filters item shape: {Name?: "file-system-id"|"storage-virtual-machine-id", Values?: list<string>}
 export def "describe-volumes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1737,7 +1723,7 @@ export def "describe-volumes" [
   --filters: list # Enter a filter Name and Values pair to view a select set of volumes. — item shape: {Name?: "file-system-id"|"storage-virtual-machine-id", Values?: list<string>}
   --max-results-body: int # The maximum number of resources to return in the response. This value must be an integer greater than zero. (body field)
   --next-token-body: string # (Optional) Opaque pagination token returned from a previous operation (String). If present, this token indicates from what point you can continue processing the request, where the previous NextToken value left off. (body field)
-]: any -> record<Volumes: table<CreationTime: string, FileSystemId: string, Lifecycle: string, Name: string, OntapConfiguration: record, ResourceARN: string, Tags: list, VolumeId: string, VolumeType: string, LifecycleTransitionReason: record, AdministrativeActions: list, OpenZFSConfiguration: record>, NextToken: string> {
+]: any -> oneof<record<Volumes: table<CreationTime: string, FileSystemId: string, Lifecycle: string, Name: string, OntapConfiguration: record, ResourceARN: string, Tags: list, VolumeId: string, VolumeType: string, LifecycleTransitionReason: record, AdministrativeActions: list, OpenZFSConfiguration: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1789,7 +1775,7 @@ export def "disassociate-file-system-aliases" [
   --client-request-token: string # (Optional) An idempotency token for resource creation, in a string of up to 63 ASCII characters. This token is automatically filled on your behalf when you use the Command Line Interface (CLI) or an Amazon Web Services SDK.
   file_system_id: string # The globally unique ID of the file system, assigned by Amazon FSx.
   aliases: list<string> # An array of one or more DNS alias names to disassociate, or remove, from the file system.
-]: any -> record<Aliases: table<Name: string, Lifecycle: string>> {
+]: any -> oneof<record<Aliases: table<Name: string, Lifecycle: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1842,7 +1828,7 @@ export def "list-tags-for-resource" [
   resource_arn: string # The Amazon Resource Name (ARN) for a given resource. ARNs uniquely identify Amazon Web Services resources. We require an ARN when you need to specify a resource unambiguously across all of Amazon Web Services. For more information, see Amazon Resource Names (ARNs) (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html) in the Amazon Web Services General Reference.
   --max-results-body: int # The maximum number of resources to return in the response. This value must be an integer greater than zero. (body field)
   --next-token-body: string # (Optional) Opaque pagination token returned from a previous operation (String). If present, this token indicates from what point you can continue processing the request, where the previous NextToken value left off. (body field)
-]: any -> record<Tags: table<Key: string, Value: string>, NextToken: string> {
+]: any -> oneof<record<Tags: table<Key: string, Value: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1893,7 +1879,7 @@ export def "release-file-system-nfs-v3-locks" [
   --x-amz-target: string@x-amz-target-completer-31 # required
   file_system_id: string # The globally unique ID of the file system, assigned by Amazon FSx.
   --client-request-token: string # (Optional) An idempotency token for resource creation, in a string of up to 63 ASCII characters. This token is automatically filled on your behalf when you use the Command Line Interface (CLI) or an Amazon Web Services SDK.
-]: any -> record<FileSystem: record<OwnerId: string, CreationTime: string, FileSystemId: string, FileSystemType: string, Lifecycle: string, FailureDetails: record<Message: string>, StorageCapacity: int, StorageType: string, VpcId: string, SubnetIds: list<string>, NetworkInterfaceIds: list<string>, DNSName: string, KmsKeyId: string, ResourceARN: string, Tags: list<record>, WindowsConfiguration: record<ActiveDirectoryId: string, SelfManagedActiveDirectoryConfiguration: record, DeploymentType: string, RemoteAdministrationEndpoint: string, PreferredSubnetId: string, PreferredFileServerIp: string, ThroughputCapacity: int, MaintenanceOperationsInProgress: list, WeeklyMaintenanceStartTime: string, DailyAutomaticBackupStartTime: string, AutomaticBackupRetentionDays: int, CopyTagsToBackups: bool, Aliases: list, AuditLogConfiguration: record>, LustreConfiguration: record<WeeklyMaintenanceStartTime: string, DataRepositoryConfiguration: record, DeploymentType: string, PerUnitStorageThroughput: int, MountName: string, DailyAutomaticBackupStartTime: string, AutomaticBackupRetentionDays: int, CopyTagsToBackups: bool, DriveCacheType: string, DataCompressionType: string, LogConfiguration: record, RootSquashConfiguration: record>, AdministrativeActions: list<record>, OntapConfiguration: record<AutomaticBackupRetentionDays: int, DailyAutomaticBackupStartTime: string, DeploymentType: string, EndpointIpAddressRange: string, Endpoints: record, DiskIopsConfiguration: record, PreferredSubnetId: string, RouteTableIds: list, ThroughputCapacity: int, WeeklyMaintenanceStartTime: string>, FileSystemTypeVersion: string, OpenZFSConfiguration: record<AutomaticBackupRetentionDays: int, CopyTagsToBackups: bool, CopyTagsToVolumes: bool, DailyAutomaticBackupStartTime: string, DeploymentType: string, ThroughputCapacity: int, WeeklyMaintenanceStartTime: string, DiskIopsConfiguration: record, RootVolumeId: string>>> {
+]: any -> oneof<record<FileSystem: record<OwnerId: string, CreationTime: string, FileSystemId: string, FileSystemType: string, Lifecycle: string, FailureDetails: record<Message: string>, StorageCapacity: int, StorageType: string, VpcId: string, SubnetIds: list<string>, NetworkInterfaceIds: list<string>, DNSName: string, KmsKeyId: string, ResourceARN: string, Tags: list<record>, WindowsConfiguration: record<ActiveDirectoryId: string, SelfManagedActiveDirectoryConfiguration: record, DeploymentType: string, RemoteAdministrationEndpoint: string, PreferredSubnetId: string, PreferredFileServerIp: string, ThroughputCapacity: int, MaintenanceOperationsInProgress: list, WeeklyMaintenanceStartTime: string, DailyAutomaticBackupStartTime: string, AutomaticBackupRetentionDays: int, CopyTagsToBackups: bool, Aliases: list, AuditLogConfiguration: record>, LustreConfiguration: record<WeeklyMaintenanceStartTime: string, DataRepositoryConfiguration: record, DeploymentType: string, PerUnitStorageThroughput: int, MountName: string, DailyAutomaticBackupStartTime: string, AutomaticBackupRetentionDays: int, CopyTagsToBackups: bool, DriveCacheType: string, DataCompressionType: string, LogConfiguration: record, RootSquashConfiguration: record>, AdministrativeActions: list<record>, OntapConfiguration: record<AutomaticBackupRetentionDays: int, DailyAutomaticBackupStartTime: string, DeploymentType: string, EndpointIpAddressRange: string, Endpoints: record, DiskIopsConfiguration: record, PreferredSubnetId: string, RouteTableIds: list, ThroughputCapacity: int, WeeklyMaintenanceStartTime: string>, FileSystemTypeVersion: string, OpenZFSConfiguration: record<AutomaticBackupRetentionDays: int, CopyTagsToBackups: bool, CopyTagsToVolumes: bool, DailyAutomaticBackupStartTime: string, DeploymentType: string, ThroughputCapacity: int, WeeklyMaintenanceStartTime: string, DiskIopsConfiguration: record, RootVolumeId: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1945,7 +1931,7 @@ export def "restore-volume-from-snapshot" [
   volume_id: string # The ID of the volume that you are restoring.
   snapshot_id: string # The ID of the source snapshot. Specifies the snapshot that you are restoring from.
   --options: list<string> # The settings used when restoring the specified volume from snapshot. DELETE_INTERMEDIATE_SNAPSHOTS - Deletes snapshots between the current state and the specified snapshot. If there are intermediate snapshots and this option isn't used, RestoreVolumeFromSnapshot fails. DELETE_CLONED_VOLUMES - Deletes any dependent clone volumes created from intermediate snapshots. If there are any dependent clone volumes and this option isn't used, RestoreVolumeFromSnapshot fails.
-]: any -> record<VolumeId: string, Lifecycle: string, AdministrativeActions: table<AdministrativeActionType: string, ProgressPercent: int, RequestTime: string, Status: string, TargetFileSystemValues: record, FailureDetails: record, TargetVolumeValues: record, TargetSnapshotValues: record>> {
+]: any -> oneof<record<VolumeId: string, Lifecycle: string, AdministrativeActions: table<AdministrativeActionType: string, ProgressPercent: int, RequestTime: string, Status: string, TargetFileSystemValues: record, FailureDetails: record, TargetVolumeValues: record, TargetSnapshotValues: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1975,7 +1961,6 @@ export def "restore-volume-from-snapshot" [
 #
 # POST /
 # operationId: TagResource
-# --Tags item shape: {Key: string, Value: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1996,7 +1981,7 @@ export def "tag-resource" [
   --x-amz-target: string@x-amz-target-completer-33 # required
   resource_arn: string # The Amazon Resource Name (ARN) for a given resource. ARNs uniquely identify Amazon Web Services resources. We require an ARN when you need to specify a resource unambiguously across all of Amazon Web Services. For more information, see Amazon Resource Names (ARNs) (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html) in the Amazon Web Services General Reference.
   tags: list # A list of Tag values, with a maximum of 50 elements. — item shape: {Key: string, Value: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2046,7 +2031,7 @@ export def "untag-resource" [
   --x-amz-target: string@x-amz-target-completer-34 # required
   resource_arn: string # The Amazon Resource Name (ARN) for a given resource. ARNs uniquely identify Amazon Web Services resources. We require an ARN when you need to specify a resource unambiguously across all of Amazon Web Services. For more information, see Amazon Resource Names (ARNs) (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html) in the Amazon Web Services General Reference.
   tag_keys: list<string> # A list of TagKey values, with a maximum of 50 elements.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2076,7 +2061,6 @@ export def "untag-resource" [
 #
 # POST /
 # operationId: UpdateDataRepositoryAssociation
-# --S3 shape: {AutoImportPolicy?: record, AutoExportPolicy?: record}
 export def "update-data-repository-association" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2099,7 +2083,7 @@ export def "update-data-repository-association" [
   --client-request-token: string # (Optional) An idempotency token for resource creation, in a string of up to 63 ASCII characters. This token is automatically filled on your behalf when you use the Command Line Interface (CLI) or an Amazon Web Services SDK.
   --imported-file-chunk-size: int # For files imported from a data repository, this value determines the stripe count and maximum amount of data per file (in MiB) stored on a single physical disk. The maximum number of disks that a single file can be striped across is limited by the total number of disks that make up the file system. The default chunk size is 1,024 MiB (1 GiB) and can go as high as 512,000 MiB (500 GiB). Amazon S3 objects have a maximum size of 5 TB.
   --s3: record # The configuration for an Amazon S3 data repository linked to an Amazon FSx for Lustre file system with a data repository association. The configuration consists of an AutoImportPolicy that defines which file events on the data repository are automatically imported to the file system and an AutoExportPolicy that defines which file events on the file system are automatically exported to the data repository. File events are when files or directories are added, changed, or deleted on the file system or the data repository. Data repository associations on Amazon File Cache don't use S3DataRepositoryConfiguration because they don't support automatic import or automatic export. — shape: {AutoImportPolicy?: record, AutoExportPolicy?: record}
-]: any -> record<Association: record<AssociationId: string, ResourceARN: string, FileSystemId: string, Lifecycle: string, FailureDetails: record<Message: string>, FileSystemPath: string, DataRepositoryPath: string, BatchImportMetaDataOnCreate: bool, ImportedFileChunkSize: int, S3: record<AutoImportPolicy: record, AutoExportPolicy: record>, Tags: list<record>, CreationTime: string, FileCacheId: string, FileCachePath: string, DataRepositorySubdirectories: list<string>, NFS: record<Version: string, DnsIps: list, AutoExportPolicy: record>>> {
+]: any -> oneof<record<Association: record<AssociationId: string, ResourceARN: string, FileSystemId: string, Lifecycle: string, FailureDetails: record<Message: string>, FileSystemPath: string, DataRepositoryPath: string, BatchImportMetaDataOnCreate: bool, ImportedFileChunkSize: int, S3: record<AutoImportPolicy: record, AutoExportPolicy: record>, Tags: list<record>, CreationTime: string, FileCacheId: string, FileCachePath: string, DataRepositorySubdirectories: list<string>, NFS: record<Version: string, DnsIps: list, AutoExportPolicy: record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2129,7 +2113,6 @@ export def "update-data-repository-association" [
 #
 # POST /
 # operationId: UpdateFileCache
-# --LustreConfiguration shape: {WeeklyMaintenanceStartTime?: string}
 export def "update-file-cache" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2151,7 +2134,7 @@ export def "update-file-cache" [
   file_cache_id: string # The ID of the cache that you are updating.
   --client-request-token: string # (Optional) An idempotency token for resource creation, in a string of up to 63 ASCII characters. This token is automatically filled on your behalf when you use the Command Line Interface (CLI) or an Amazon Web Services SDK.
   --lustre-configuration: record # The configuration update for an Amazon File Cache resource. — shape: {WeeklyMaintenanceStartTime?: string}
-]: any -> record<FileCache: record<OwnerId: string, CreationTime: string, FileCacheId: string, FileCacheType: string, FileCacheTypeVersion: string, Lifecycle: string, FailureDetails: record<Message: string>, StorageCapacity: int, VpcId: string, SubnetIds: list<string>, NetworkInterfaceIds: list<string>, DNSName: string, KmsKeyId: string, ResourceARN: string, LustreConfiguration: record<PerUnitStorageThroughput: int, DeploymentType: string, MountName: string, WeeklyMaintenanceStartTime: string, MetadataConfiguration: record, LogConfiguration: record>, DataRepositoryAssociationIds: list<string>>> {
+]: any -> oneof<record<FileCache: record<OwnerId: string, CreationTime: string, FileCacheId: string, FileCacheType: string, FileCacheTypeVersion: string, Lifecycle: string, FailureDetails: record<Message: string>, StorageCapacity: int, VpcId: string, SubnetIds: list<string>, NetworkInterfaceIds: list<string>, DNSName: string, KmsKeyId: string, ResourceARN: string, LustreConfiguration: record<PerUnitStorageThroughput: int, DeploymentType: string, MountName: string, WeeklyMaintenanceStartTime: string, MetadataConfiguration: record, LogConfiguration: record>, DataRepositoryAssociationIds: list<string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2181,10 +2164,6 @@ export def "update-file-cache" [
 #
 # POST /
 # operationId: UpdateFileSystem
-# --WindowsConfiguration shape: {WeeklyMaintenanceStartTime?: string, DailyAutomaticBackupStartTime?: string, AutomaticBackupRetentionDays?: int, ThroughputCapacity?: int, SelfManagedActiveDirectoryConfiguration?: record, AuditLogConfiguration?: record}
-# --LustreConfiguration shape: {WeeklyMaintenanceStartTime?: string, DailyAutomaticBackupStartTime?: string, AutomaticBackupRetentionDays?: int, AutoImportPolicy?: "NONE"|"NEW"|"NEW_CHANGED"|"NEW_CHANGED_DELETED", DataCompressionType?: "NONE"|"LZ4", LogConfiguration?: record, RootSquashConfiguration?: record}
-# --OntapConfiguration shape: {AutomaticBackupRetentionDays?: int, DailyAutomaticBackupStartTime?: string, FsxAdminPassword?: string, WeeklyMaintenanceStartTime?: string, DiskIopsConfiguration?: record, ThroughputCapacity?: int, AddRouteTableIds?: list<string>, RemoveRouteTableIds?: list<string>}
-# --OpenZFSConfiguration shape: {AutomaticBackupRetentionDays?: int, CopyTagsToBackups?: bool, CopyTagsToVolumes?: bool, DailyAutomaticBackupStartTime?: string, ThroughputCapacity?: int, WeeklyMaintenanceStartTime?: string, DiskIopsConfiguration?: record}
 export def "update-file-system" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2210,7 +2189,7 @@ export def "update-file-system" [
   --lustre-configuration: record # The configuration object for Amazon FSx for Lustre file systems used in the UpdateFileSystem operation. — shape: {WeeklyMaintenanceStartTime?: string, DailyAutomaticBackupStartTime?: string, AutomaticBackupRetentionDays?: int, AutoImportPolicy?: "NONE"|"NEW"|"NEW_CHANGED"|"NEW_CHANGED_DELETED", DataCompressionType?: "NONE"|"LZ4", LogConfiguration?: record, RootSquashConfiguration?: record}
   --ontap-configuration: record # The configuration updates for an Amazon FSx for NetApp ONTAP file system. — shape: {AutomaticBackupRetentionDays?: int, DailyAutomaticBackupStartTime?: string, FsxAdminPassword?: string, WeeklyMaintenanceStartTime?: string, DiskIopsConfiguration?: record, ThroughputCapacity?: int, AddRouteTableIds?: list<string>, RemoveRouteTableIds?: list<string>}
   --open-zfs-configuration: record # The configuration updates for an Amazon FSx for OpenZFS file system. — shape: {AutomaticBackupRetentionDays?: int, CopyTagsToBackups?: bool, CopyTagsToVolumes?: bool, DailyAutomaticBackupStartTime?: string, ThroughputCapacity?: int, WeeklyMaintenanceStartTime?: string, DiskIopsConfiguration?: record}
-]: any -> record<FileSystem: record<OwnerId: string, CreationTime: string, FileSystemId: string, FileSystemType: string, Lifecycle: string, FailureDetails: record<Message: string>, StorageCapacity: int, StorageType: string, VpcId: string, SubnetIds: list<string>, NetworkInterfaceIds: list<string>, DNSName: string, KmsKeyId: string, ResourceARN: string, Tags: list<record>, WindowsConfiguration: record<ActiveDirectoryId: string, SelfManagedActiveDirectoryConfiguration: record, DeploymentType: string, RemoteAdministrationEndpoint: string, PreferredSubnetId: string, PreferredFileServerIp: string, ThroughputCapacity: int, MaintenanceOperationsInProgress: list, WeeklyMaintenanceStartTime: string, DailyAutomaticBackupStartTime: string, AutomaticBackupRetentionDays: int, CopyTagsToBackups: bool, Aliases: list, AuditLogConfiguration: record>, LustreConfiguration: record<WeeklyMaintenanceStartTime: string, DataRepositoryConfiguration: record, DeploymentType: string, PerUnitStorageThroughput: int, MountName: string, DailyAutomaticBackupStartTime: string, AutomaticBackupRetentionDays: int, CopyTagsToBackups: bool, DriveCacheType: string, DataCompressionType: string, LogConfiguration: record, RootSquashConfiguration: record>, AdministrativeActions: list<record>, OntapConfiguration: record<AutomaticBackupRetentionDays: int, DailyAutomaticBackupStartTime: string, DeploymentType: string, EndpointIpAddressRange: string, Endpoints: record, DiskIopsConfiguration: record, PreferredSubnetId: string, RouteTableIds: list, ThroughputCapacity: int, WeeklyMaintenanceStartTime: string>, FileSystemTypeVersion: string, OpenZFSConfiguration: record<AutomaticBackupRetentionDays: int, CopyTagsToBackups: bool, CopyTagsToVolumes: bool, DailyAutomaticBackupStartTime: string, DeploymentType: string, ThroughputCapacity: int, WeeklyMaintenanceStartTime: string, DiskIopsConfiguration: record, RootVolumeId: string>>> {
+]: any -> oneof<record<FileSystem: record<OwnerId: string, CreationTime: string, FileSystemId: string, FileSystemType: string, Lifecycle: string, FailureDetails: record<Message: string>, StorageCapacity: int, StorageType: string, VpcId: string, SubnetIds: list<string>, NetworkInterfaceIds: list<string>, DNSName: string, KmsKeyId: string, ResourceARN: string, Tags: list<record>, WindowsConfiguration: record<ActiveDirectoryId: string, SelfManagedActiveDirectoryConfiguration: record, DeploymentType: string, RemoteAdministrationEndpoint: string, PreferredSubnetId: string, PreferredFileServerIp: string, ThroughputCapacity: int, MaintenanceOperationsInProgress: list, WeeklyMaintenanceStartTime: string, DailyAutomaticBackupStartTime: string, AutomaticBackupRetentionDays: int, CopyTagsToBackups: bool, Aliases: list, AuditLogConfiguration: record>, LustreConfiguration: record<WeeklyMaintenanceStartTime: string, DataRepositoryConfiguration: record, DeploymentType: string, PerUnitStorageThroughput: int, MountName: string, DailyAutomaticBackupStartTime: string, AutomaticBackupRetentionDays: int, CopyTagsToBackups: bool, DriveCacheType: string, DataCompressionType: string, LogConfiguration: record, RootSquashConfiguration: record>, AdministrativeActions: list<record>, OntapConfiguration: record<AutomaticBackupRetentionDays: int, DailyAutomaticBackupStartTime: string, DeploymentType: string, EndpointIpAddressRange: string, Endpoints: record, DiskIopsConfiguration: record, PreferredSubnetId: string, RouteTableIds: list, ThroughputCapacity: int, WeeklyMaintenanceStartTime: string>, FileSystemTypeVersion: string, OpenZFSConfiguration: record<AutomaticBackupRetentionDays: int, CopyTagsToBackups: bool, CopyTagsToVolumes: bool, DailyAutomaticBackupStartTime: string, DeploymentType: string, ThroughputCapacity: int, WeeklyMaintenanceStartTime: string, DiskIopsConfiguration: record, RootVolumeId: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2261,7 +2240,7 @@ export def "update-snapshot" [
   --client-request-token: string # (Optional) An idempotency token for resource creation, in a string of up to 63 ASCII characters. This token is automatically filled on your behalf when you use the Command Line Interface (CLI) or an Amazon Web Services SDK.
   name: string # The name of the snapshot to update.
   snapshot_id: string # The ID of the snapshot that you want to update, in the format fsvolsnap-0123456789abcdef0.
-]: any -> record<Snapshot: record<ResourceARN: string, SnapshotId: string, Name: string, VolumeId: string, CreationTime: string, Lifecycle: string, LifecycleTransitionReason: record<Message: string>, Tags: list<record>, AdministrativeActions: list<record>>> {
+]: any -> oneof<record<Snapshot: record<ResourceARN: string, SnapshotId: string, Name: string, VolumeId: string, CreationTime: string, Lifecycle: string, LifecycleTransitionReason: record<Message: string>, Tags: list<record>, AdministrativeActions: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2291,7 +2270,6 @@ export def "update-snapshot" [
 #
 # POST /
 # operationId: UpdateStorageVirtualMachine
-# --ActiveDirectoryConfiguration shape: {SelfManagedActiveDirectoryConfiguration?: record}
 export def "update-storage-virtual-machine" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2314,7 +2292,7 @@ export def "update-storage-virtual-machine" [
   --client-request-token: string # (Optional) An idempotency token for resource creation, in a string of up to 63 ASCII characters. This token is automatically filled on your behalf when you use the Command Line Interface (CLI) or an Amazon Web Services SDK.
   storage_virtual_machine_id: string # The ID of the SVM that you want to update, in the format svm-0123456789abcdef0.
   --svm-admin-password: string # Enter a new SvmAdminPassword if you are updating it. (format: password)
-]: any -> record<StorageVirtualMachine: record<ActiveDirectoryConfiguration: record<NetBiosName: string, SelfManagedActiveDirectoryConfiguration: record>, CreationTime: string, Endpoints: record<Iscsi: record, Management: record, Nfs: record, Smb: record>, FileSystemId: string, Lifecycle: string, Name: string, ResourceARN: string, StorageVirtualMachineId: string, Subtype: string, UUID: string, Tags: list<record>, LifecycleTransitionReason: record<Message: string>, RootVolumeSecurityStyle: string>> {
+]: any -> oneof<record<StorageVirtualMachine: record<ActiveDirectoryConfiguration: record<NetBiosName: string, SelfManagedActiveDirectoryConfiguration: record>, CreationTime: string, Endpoints: record<Iscsi: record, Management: record, Nfs: record, Smb: record>, FileSystemId: string, Lifecycle: string, Name: string, ResourceARN: string, StorageVirtualMachineId: string, Subtype: string, UUID: string, Tags: list<record>, LifecycleTransitionReason: record<Message: string>, RootVolumeSecurityStyle: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2344,8 +2322,6 @@ export def "update-storage-virtual-machine" [
 #
 # POST /
 # operationId: UpdateVolume
-# --OntapConfiguration shape: {JunctionPath?: string, SecurityStyle?: "UNIX"|"NTFS"|"MIXED", SizeInMegabytes?: int, StorageEfficiencyEnabled?: bool, TieringPolicy?: record, SnapshotPolicy?: string, CopyTagsToBackups?: bool}
-# --OpenZFSConfiguration shape: {StorageCapacityReservationGiB?: int, StorageCapacityQuotaGiB?: int, RecordSizeKiB?: int, DataCompressionType?: "NONE"|"ZSTD"|"LZ4", NfsExports?: list, UserAndGroupQuotas?: list, ReadOnly?: bool}
 export def "update-volume" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2369,7 +2345,7 @@ export def "update-volume" [
   --ontap-configuration: record # Used to specify changes to the ONTAP configuration for the volume you are updating. — shape: {JunctionPath?: string, SecurityStyle?: "UNIX"|"NTFS"|"MIXED", SizeInMegabytes?: int, StorageEfficiencyEnabled?: bool, TieringPolicy?: record, SnapshotPolicy?: string, CopyTagsToBackups?: bool}
   --name: string # The name of the OpenZFS volume. OpenZFS root volumes are automatically named FSX. Child volume names must be unique among their parent volume's children. The name of the volume is part of the mount string for the OpenZFS volume.
   --open-zfs-configuration: record # Used to specify changes to the OpenZFS configuration for the volume that you are updating. — shape: {StorageCapacityReservationGiB?: int, StorageCapacityQuotaGiB?: int, RecordSizeKiB?: int, DataCompressionType?: "NONE"|"ZSTD"|"LZ4", NfsExports?: list, UserAndGroupQuotas?: list, ReadOnly?: bool}
-]: any -> record<Volume: record<CreationTime: string, FileSystemId: string, Lifecycle: string, Name: string, OntapConfiguration: record<FlexCacheEndpointType: string, JunctionPath: string, SecurityStyle: string, SizeInMegabytes: int, StorageEfficiencyEnabled: bool, StorageVirtualMachineId: string, StorageVirtualMachineRoot: bool, TieringPolicy: record, UUID: string, OntapVolumeType: string, SnapshotPolicy: string, CopyTagsToBackups: bool>, ResourceARN: string, Tags: list<record>, VolumeId: string, VolumeType: string, LifecycleTransitionReason: record<Message: string>, AdministrativeActions: list<record>, OpenZFSConfiguration: record<ParentVolumeId: string, VolumePath: string, StorageCapacityReservationGiB: int, StorageCapacityQuotaGiB: int, RecordSizeKiB: int, DataCompressionType: string, CopyTagsToSnapshots: bool, OriginSnapshot: record, ReadOnly: bool, NfsExports: list, UserAndGroupQuotas: list, RestoreToSnapshot: string, DeleteIntermediateSnaphots: bool, DeleteClonedVolumes: bool>>> {
+]: any -> oneof<record<Volume: record<CreationTime: string, FileSystemId: string, Lifecycle: string, Name: string, OntapConfiguration: record<FlexCacheEndpointType: string, JunctionPath: string, SecurityStyle: string, SizeInMegabytes: int, StorageEfficiencyEnabled: bool, StorageVirtualMachineId: string, StorageVirtualMachineRoot: bool, TieringPolicy: record, UUID: string, OntapVolumeType: string, SnapshotPolicy: string, CopyTagsToBackups: bool>, ResourceARN: string, Tags: list<record>, VolumeId: string, VolumeType: string, LifecycleTransitionReason: record<Message: string>, AdministrativeActions: list<record>, OpenZFSConfiguration: record<ParentVolumeId: string, VolumePath: string, StorageCapacityReservationGiB: int, StorageCapacityQuotaGiB: int, RecordSizeKiB: int, DataCompressionType: string, CopyTagsToSnapshots: bool, OriginSnapshot: record, ReadOnly: bool, NfsExports: list, UserAndGroupQuotas: list, RestoreToSnapshot: string, DeleteIntermediateSnaphots: bool, DeleteClonedVolumes: bool>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

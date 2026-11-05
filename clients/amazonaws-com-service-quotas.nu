@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -120,9 +143,9 @@ def x-amz-target-completer-18 [] { ["ServiceQuotasV20190624.UntagResource"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "associate-service-quota-template" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["associate-service-quota-template" "delete-service-quota-increase-request-from-template" "disassociate-service-quota-template" "get-aws-default-service-quota" "get-association-for-service-quota-template" "get-requested-service-quota-change" "get-service-quota" "get-service-quota-increase-request-from-template" "list-aws-default-service-quotas" "list-requested-service-quota-change-history" "list-requested-service-quota-change-history-by-quota" "list-service-quota-increase-requests-in-template" "list-service-quotas" "list-services" "list-tags-for-resource" "put-service-quota-increase-request-into-template" "request-service-quota-increase" "tag-resource" "untag-resource" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -163,7 +186,7 @@ export def "associate-service-quota-template" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer # required
   --body: record
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -214,7 +237,7 @@ export def "delete-service-quota-increase-request-from-template" [
   service_code: string # The service identifier.
   quota_code: string # The quota identifier.
   aws_region: string # The AWS Region.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -263,7 +286,7 @@ export def "disassociate-service-quota-template" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-2 # required
   --body: record
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -313,7 +336,7 @@ export def "get-aws-default-service-quota" [
   --x-amz-target: string@x-amz-target-completer-3 # required
   service_code: string # The service identifier.
   quota_code: string # The quota identifier.
-]: any -> record<Quota: record<ServiceCode: string, ServiceName: string, QuotaArn: string, QuotaCode: string, QuotaName: string, Value: float, Unit: string, Adjustable: bool, GlobalQuota: bool, UsageMetric: record<MetricNamespace: string, MetricName: string, MetricDimensions: record, MetricStatisticRecommendation: string>, Period: record<PeriodValue: int, PeriodUnit: string>, ErrorReason: record<ErrorCode: string, ErrorMessage: string>>> {
+]: any -> oneof<record<Quota: record<ServiceCode: string, ServiceName: string, QuotaArn: string, QuotaCode: string, QuotaName: string, Value: float, Unit: string, Adjustable: bool, GlobalQuota: bool, UsageMetric: record<MetricNamespace: string, MetricName: string, MetricDimensions: record, MetricStatisticRecommendation: string>, Period: record<PeriodValue: int, PeriodUnit: string>, ErrorReason: record<ErrorCode: string, ErrorMessage: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -362,7 +385,7 @@ export def "get-association-for-service-quota-template" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-4 # required
   --body: record
-]: any -> record<ServiceQuotaTemplateAssociationStatus: string> {
+]: any -> oneof<record<ServiceQuotaTemplateAssociationStatus: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -411,7 +434,7 @@ export def "get-requested-service-quota-change" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-5 # required
   request_id: string # The ID of the quota increase request.
-]: any -> record<RequestedQuota: record<Id: string, CaseId: string, ServiceCode: string, ServiceName: string, QuotaCode: string, QuotaName: string, DesiredValue: float, Status: string, Created: string, LastUpdated: string, Requester: string, QuotaArn: string, GlobalQuota: bool, Unit: string>> {
+]: any -> oneof<record<RequestedQuota: record<Id: string, CaseId: string, ServiceCode: string, ServiceName: string, QuotaCode: string, QuotaName: string, DesiredValue: float, Status: string, Created: string, LastUpdated: string, Requester: string, QuotaArn: string, GlobalQuota: bool, Unit: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -461,7 +484,7 @@ export def "get-service-quota" [
   --x-amz-target: string@x-amz-target-completer-6 # required
   service_code: string # The service identifier.
   quota_code: string # The quota identifier.
-]: any -> record<Quota: record<ServiceCode: string, ServiceName: string, QuotaArn: string, QuotaCode: string, QuotaName: string, Value: float, Unit: string, Adjustable: bool, GlobalQuota: bool, UsageMetric: record<MetricNamespace: string, MetricName: string, MetricDimensions: record, MetricStatisticRecommendation: string>, Period: record<PeriodValue: int, PeriodUnit: string>, ErrorReason: record<ErrorCode: string, ErrorMessage: string>>> {
+]: any -> oneof<record<Quota: record<ServiceCode: string, ServiceName: string, QuotaArn: string, QuotaCode: string, QuotaName: string, Value: float, Unit: string, Adjustable: bool, GlobalQuota: bool, UsageMetric: record<MetricNamespace: string, MetricName: string, MetricDimensions: record, MetricStatisticRecommendation: string>, Period: record<PeriodValue: int, PeriodUnit: string>, ErrorReason: record<ErrorCode: string, ErrorMessage: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -512,7 +535,7 @@ export def "get-service-quota-increase-request-from-template" [
   service_code: string # The service identifier.
   quota_code: string # The quota identifier.
   aws_region: string # The AWS Region.
-]: any -> record<ServiceQuotaIncreaseRequestInTemplate: record<ServiceCode: string, ServiceName: string, QuotaCode: string, QuotaName: string, DesiredValue: float, AwsRegion: string, Unit: string, GlobalQuota: bool>> {
+]: any -> oneof<record<ServiceQuotaIncreaseRequestInTemplate: record<ServiceCode: string, ServiceName: string, QuotaCode: string, QuotaName: string, DesiredValue: float, AwsRegion: string, Unit: string, GlobalQuota: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -565,7 +588,7 @@ export def "list-aws-default-service-quotas" [
   service_code: string # The service identifier.
   --next-token-body: string # The token for the next page of results. (body field)
   --max-results-body: int # The maximum number of results to return with a single call. To retrieve the remaining results, if any, make another call with the token returned from this call. (body field)
-]: any -> record<NextToken: string, Quotas: table<ServiceCode: string, ServiceName: string, QuotaArn: string, QuotaCode: string, QuotaName: string, Value: float, Unit: string, Adjustable: bool, GlobalQuota: bool, UsageMetric: record, Period: record, ErrorReason: record>> {
+]: any -> oneof<record<NextToken: string, Quotas: table<ServiceCode: string, ServiceName: string, QuotaArn: string, QuotaCode: string, QuotaName: string, Value: float, Unit: string, Adjustable: bool, GlobalQuota: bool, UsageMetric: record, Period: record, ErrorReason: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -620,7 +643,7 @@ export def "list-requested-service-quota-change-history" [
   --status: string@status-completer # The status of the quota increase request.
   --next-token-body: string # The token for the next page of results. (body field)
   --max-results-body: int # The maximum number of results to return with a single call. To retrieve the remaining results, if any, make another call with the token returned from this call. (body field)
-]: any -> record<NextToken: string, RequestedQuotas: table<Id: string, CaseId: string, ServiceCode: string, ServiceName: string, QuotaCode: string, QuotaName: string, DesiredValue: float, Status: string, Created: string, LastUpdated: string, Requester: string, QuotaArn: string, GlobalQuota: bool, Unit: string>> {
+]: any -> oneof<record<NextToken: string, RequestedQuotas: table<Id: string, CaseId: string, ServiceCode: string, ServiceName: string, QuotaCode: string, QuotaName: string, DesiredValue: float, Status: string, Created: string, LastUpdated: string, Requester: string, QuotaArn: string, GlobalQuota: bool, Unit: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -676,7 +699,7 @@ export def "list-requested-service-quota-change-history-by-quota" [
   --status: string@status-completer # The status value of the quota increase request.
   --next-token-body: string # The token for the next page of results. (body field)
   --max-results-body: int # The maximum number of results to return with a single call. To retrieve the remaining results, if any, make another call with the token returned from this call. (body field)
-]: any -> record<NextToken: string, RequestedQuotas: table<Id: string, CaseId: string, ServiceCode: string, ServiceName: string, QuotaCode: string, QuotaName: string, DesiredValue: float, Status: string, Created: string, LastUpdated: string, Requester: string, QuotaArn: string, GlobalQuota: bool, Unit: string>> {
+]: any -> oneof<record<NextToken: string, RequestedQuotas: table<Id: string, CaseId: string, ServiceCode: string, ServiceName: string, QuotaCode: string, QuotaName: string, DesiredValue: float, Status: string, Created: string, LastUpdated: string, Requester: string, QuotaArn: string, GlobalQuota: bool, Unit: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -731,7 +754,7 @@ export def "list-service-quota-increase-requests-in-template" [
   --aws-region: string # The AWS Region.
   --next-token-body: string # The token for the next page of results. (body field)
   --max-results-body: int # The maximum number of results to return with a single call. To retrieve the remaining results, if any, make another call with the token returned from this call. (body field)
-]: any -> record<ServiceQuotaIncreaseRequestInTemplateList: table<ServiceCode: string, ServiceName: string, QuotaCode: string, QuotaName: string, DesiredValue: float, AwsRegion: string, Unit: string, GlobalQuota: bool>, NextToken: string> {
+]: any -> oneof<record<ServiceQuotaIncreaseRequestInTemplateList: table<ServiceCode: string, ServiceName: string, QuotaCode: string, QuotaName: string, DesiredValue: float, AwsRegion: string, Unit: string, GlobalQuota: bool>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -785,7 +808,7 @@ export def "list-service-quotas" [
   service_code: string # The service identifier.
   --next-token-body: string # The token for the next page of results. (body field)
   --max-results-body: int # The maximum number of results to return with a single call. To retrieve the remaining results, if any, make another call with the token returned from this call. (body field)
-]: any -> record<NextToken: string, Quotas: table<ServiceCode: string, ServiceName: string, QuotaArn: string, QuotaCode: string, QuotaName: string, Value: float, Unit: string, Adjustable: bool, GlobalQuota: bool, UsageMetric: record, Period: record, ErrorReason: record>> {
+]: any -> oneof<record<NextToken: string, Quotas: table<ServiceCode: string, ServiceName: string, QuotaArn: string, QuotaCode: string, QuotaName: string, Value: float, Unit: string, Adjustable: bool, GlobalQuota: bool, UsageMetric: record, Period: record, ErrorReason: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -838,7 +861,7 @@ export def "list-services" [
   --x-amz-target: string@x-amz-target-completer-13 # required
   --next-token-body: string # The token for the next page of results. (body field)
   --max-results-body: int # The maximum number of results to return with a single call. To retrieve the remaining results, if any, make another call with the token returned from this call. (body field)
-]: any -> record<NextToken: string, Services: table<ServiceCode: string, ServiceName: string>> {
+]: any -> oneof<record<NextToken: string, Services: table<ServiceCode: string, ServiceName: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -888,7 +911,7 @@ export def "list-tags-for-resource" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-14 # required
   resource_arn: string # The Amazon Resource Name (ARN) for the applied quota for which you want to list tags. You can get this information by using the Service Quotas console, or by listing the quotas using the list-service-quotas (https://docs.aws.amazon.com/cli/latest/reference/service-quotas/list-service-quotas.html) AWS CLI command or the ListServiceQuotas (https://docs.aws.amazon.com/servicequotas/2019-06-24/apireference/API_ListServiceQuotas.html) AWS API operation.
-]: any -> record<Tags: table<Key: string, Value: string>> {
+]: any -> oneof<record<Tags: table<Key: string, Value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -940,7 +963,7 @@ export def "put-service-quota-increase-request-into-template" [
   service_code: string # The service identifier.
   aws_region: string # The AWS Region.
   desired_value: float # The new, increased value for the quota. (format: double)
-]: any -> record<ServiceQuotaIncreaseRequestInTemplate: record<ServiceCode: string, ServiceName: string, QuotaCode: string, QuotaName: string, DesiredValue: float, AwsRegion: string, Unit: string, GlobalQuota: bool>> {
+]: any -> oneof<record<ServiceQuotaIncreaseRequestInTemplate: record<ServiceCode: string, ServiceName: string, QuotaCode: string, QuotaName: string, DesiredValue: float, AwsRegion: string, Unit: string, GlobalQuota: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -991,7 +1014,7 @@ export def "request-service-quota-increase" [
   service_code: string # The service identifier.
   quota_code: string # The quota identifier.
   desired_value: float # The new, increased value for the quota. (format: double)
-]: any -> record<RequestedQuota: record<Id: string, CaseId: string, ServiceCode: string, ServiceName: string, QuotaCode: string, QuotaName: string, DesiredValue: float, Status: string, Created: string, LastUpdated: string, Requester: string, QuotaArn: string, GlobalQuota: bool, Unit: string>> {
+]: any -> oneof<record<RequestedQuota: record<Id: string, CaseId: string, ServiceCode: string, ServiceName: string, QuotaCode: string, QuotaName: string, DesiredValue: float, Status: string, Created: string, LastUpdated: string, Requester: string, QuotaArn: string, GlobalQuota: bool, Unit: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1021,7 +1044,6 @@ export def "request-service-quota-increase" [
 #
 # POST /
 # operationId: TagResource
-# --Tags item shape: {Key: string, Value: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1042,7 +1064,7 @@ export def "tag-resource" [
   --x-amz-target: string@x-amz-target-completer-17 # required
   resource_arn: string # The Amazon Resource Name (ARN) for the applied quota. You can get this information by using the Service Quotas console, or by listing the quotas using the list-service-quotas (https://docs.aws.amazon.com/cli/latest/reference/service-quotas/list-service-quotas.html) AWS CLI command or the ListServiceQuotas (https://docs.aws.amazon.com/servicequotas/2019-06-24/apireference/API_ListServiceQuotas.html) AWS API operation.
   tags: list # The tags that you want to add to the resource. — item shape: {Key: string, Value: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1092,7 +1114,7 @@ export def "untag-resource" [
   --x-amz-target: string@x-amz-target-completer-18 # required
   resource_arn: string # The Amazon Resource Name (ARN) for the applied quota that you want to untag. You can get this information by using the Service Quotas console, or by listing the quotas using the list-service-quotas (https://docs.aws.amazon.com/cli/latest/reference/service-quotas/list-service-quotas.html) AWS CLI command or the ListServiceQuotas (https://docs.aws.amazon.com/servicequotas/2019-06-24/apireference/API_ListServiceQuotas.html) AWS API operation.
   tag_keys: list<string> # The keys of the tags that you want to remove from the resource.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

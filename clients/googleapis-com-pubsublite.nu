@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -120,9 +144,9 @@ def named-target-completer [] { ["HEAD" "NAMED_TARGET_UNSPECIFIED" "TAIL"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "pubsublite-admin-projects-locations-topics-delete" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["pubsublite-admin-projects-locations-topics-delete" "pubsublite-admin-projects-locations-topics-get" "pubsublite-admin-projects-locations-topics-patch" "pubsublite-admin-projects-locations-operations-list" "pubsublite-admin-projects-locations-topics-get-partitions" "pubsublite-admin-projects-locations-topics-subscriptions-list" "pubsublite-admin-projects-locations-reservations-topics-list" "pubsublite-admin-projects-locations-operations-cancel" "pubsublite-admin-projects-locations-subscriptions-seek" "pubsublite-admin-projects-locations-reservations-list" "pubsublite-admin-projects-locations-reservations-create" "pubsublite-admin-projects-locations-subscriptions-list" "pubsublite-admin-projects-locations-subscriptions-create" "pubsublite-admin-projects-locations-topics-list" "pubsublite-admin-projects-locations-topics-create" "pubsublite-cursor-projects-locations-subscriptions-cursors-list" "pubsublite-cursor-projects-locations-subscriptions-commit-cursor" "pubsublite-topic-stats-projects-locations-topics-compute-head-cursor" "pubsublite-topic-stats-projects-locations-topics-compute-message-stats" "pubsublite-topic-stats-projects-locations-topics-compute-time-cursor" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -166,7 +190,7 @@ export def "pubsublite-admin-projects-locations-topics-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -214,7 +238,7 @@ export def "pubsublite-admin-projects-locations-topics-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<name: string, partitionConfig: record<capacity: record<publishMibPerSec: int, subscribeMibPerSec: int>, count: string, scale: int>, reservationConfig: record<throughputReservation: string>, retentionConfig: record<perPartitionBytes: string, period: string>> {
+]: nothing -> oneof<record<name: string, partitionConfig: record<capacity: record<publishMibPerSec: int, subscribeMibPerSec: int>, count: string, scale: int>, reservationConfig: record<throughputReservation: string>, retentionConfig: record<perPartitionBytes: string, period: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -240,9 +264,6 @@ export def "pubsublite-admin-projects-locations-topics-get" [
 #
 # PATCH /v1/admin/{name}
 # operationId: pubsublite.admin.projects.locations.topics.patch
-# --partitionConfig shape: {capacity?: record, count?: string, scale?: int}
-# --reservationConfig shape: {throughputReservation?: string}
-# --retentionConfig shape: {perPartitionBytes?: string, period?: string}
 export def "pubsublite-admin-projects-locations-topics-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -270,7 +291,7 @@ export def "pubsublite-admin-projects-locations-topics-patch" [
   --partition-config: record # The settings for a topic's partitions. — shape: {capacity?: record, count?: string, scale?: int}
   --reservation-config: record # The settings for this topic's Reservation usage. — shape: {throughputReservation?: string}
   --retention-config: record # The settings for a topic's message retention. — shape: {perPartitionBytes?: string, period?: string}
-]: any -> record<name: string, partitionConfig: record<capacity: record<publishMibPerSec: int, subscribeMibPerSec: int>, count: string, scale: int>, reservationConfig: record<throughputReservation: string>, retentionConfig: record<perPartitionBytes: string, period: string>> {
+]: any -> oneof<record<name: string, partitionConfig: record<capacity: record<publishMibPerSec: int, subscribeMibPerSec: int>, count: string, scale: int>, reservationConfig: record<throughputReservation: string>, retentionConfig: record<perPartitionBytes: string, period: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -324,7 +345,7 @@ export def "pubsublite-admin-projects-locations-operations-list" [
   --filter: string # The standard list filter.
   --page-size: int # The standard list page size.
   --page-token: string # The standard list page token.
-]: nothing -> record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>> {
+]: nothing -> oneof<record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -372,7 +393,7 @@ export def "pubsublite-admin-projects-locations-topics-get-partitions" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<partitionCount: string> {
+]: nothing -> oneof<record<partitionCount: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -422,7 +443,7 @@ export def "pubsublite-admin-projects-locations-topics-subscriptions-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # The maximum number of subscriptions to return. The service may return fewer than this value. If unset or zero, all subscriptions for the given topic will be returned.
   --page-token: string # A page token, received from a previous `ListTopicSubscriptions` call. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to `ListTopicSubscriptions` must match the call that provided the page token.
-]: nothing -> record<nextPageToken: string, subscriptions: list<string>> {
+]: nothing -> oneof<record<nextPageToken: string, subscriptions: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -472,7 +493,7 @@ export def "pubsublite-admin-projects-locations-reservations-topics-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # The maximum number of topics to return. The service may return fewer than this value. If unset or zero, all topics for the given reservation will be returned.
   --page-token: string # A page token, received from a previous `ListReservationTopics` call. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to `ListReservationTopics` must match the call that provided the page token.
-]: nothing -> record<nextPageToken: string, topics: list<string>> {
+]: nothing -> oneof<record<nextPageToken: string, topics: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -521,7 +542,7 @@ export def "pubsublite-admin-projects-locations-operations-cancel" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -550,7 +571,6 @@ export def "pubsublite-admin-projects-locations-operations-cancel" [
 #
 # POST /v1/admin/{name}:seek
 # operationId: pubsublite.admin.projects.locations.subscriptions.seek
-# --timeTarget shape: {eventTime?: string, publishTime?: string}
 export def "pubsublite-admin-projects-locations-subscriptions-seek" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -575,7 +595,7 @@ export def "pubsublite-admin-projects-locations-subscriptions-seek" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --named-target: string@named-target-completer # Seek to a named position with respect to the message backlog.
   --time-target: record # A target publish or event time. Can be used for seeking to or retrieving the corresponding cursor. — shape: {eventTime?: string, publishTime?: string}
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -628,7 +648,7 @@ export def "pubsublite-admin-projects-locations-reservations-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # The maximum number of reservations to return. The service may return fewer than this value. If unset or zero, all reservations for the parent will be returned.
   --page-token: string # A page token, received from a previous `ListReservations` call. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to `ListReservations` must match the call that provided the page token.
-]: nothing -> record<nextPageToken: string, reservations: table<name: string, throughputCapacity: string>> {
+]: nothing -> oneof<record<nextPageToken: string, reservations: table<name: string, throughputCapacity: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -679,7 +699,7 @@ export def "pubsublite-admin-projects-locations-reservations-create" [
   --reservation-id: string # Required. The ID to use for the reservation, which will become the final component of the reservation's name. This value is structured like: `my-reservation-name`.
   --name: string # The name of the reservation. Structured like: projects/{project_number}/locations/{location}/reservations/{reservation_id}
   --throughput-capacity: string # The reserved throughput capacity. Every unit of throughput capacity is equivalent to 1 MiB/s of published messages or 2 MiB/s of subscribed messages. Any topics which are declared as using capacity from a Reservation will consume resources from this reservation instead of being charged individually. (format: int64)
-]: any -> record<name: string, throughputCapacity: string> {
+]: any -> oneof<record<name: string, throughputCapacity: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -732,7 +752,7 @@ export def "pubsublite-admin-projects-locations-subscriptions-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # The maximum number of subscriptions to return. The service may return fewer than this value. If unset or zero, all subscriptions for the parent will be returned.
   --page-token: string # A page token, received from a previous `ListSubscriptions` call. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to `ListSubscriptions` must match the call that provided the page token.
-]: nothing -> record<nextPageToken: string, subscriptions: table<deliveryConfig: record, exportConfig: record, name: string, topic: string>> {
+]: nothing -> oneof<record<nextPageToken: string, subscriptions: table<deliveryConfig: record, exportConfig: record, name: string, topic: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -758,8 +778,6 @@ export def "pubsublite-admin-projects-locations-subscriptions-list" [
 #
 # POST /v1/admin/{parent}/subscriptions
 # operationId: pubsublite.admin.projects.locations.subscriptions.create
-# --deliveryConfig shape: {deliveryRequirement?: "DELIVERY_REQUIREMENT_UNSPECIFIED"|"DELIVER_IMMEDIATELY"|"DELIVER_AFTER_STORED"}
-# --exportConfig shape: {deadLetterTopic?: string, desiredState?: "STATE_UNSPECIFIED"|"ACTIVE"|"PAUSED"|"PERMISSION_DENIED"|"NOT_FOUND", pubsubConfig?: record}
 export def "pubsublite-admin-projects-locations-subscriptions-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -788,7 +806,7 @@ export def "pubsublite-admin-projects-locations-subscriptions-create" [
   --export-config: record # Configuration for a Pub/Sub Lite subscription that writes messages to a destination. User subscriber clients must not connect to this subscription. — shape: {deadLetterTopic?: string, desiredState?: "STATE_UNSPECIFIED"|"ACTIVE"|"PAUSED"|"PERMISSION_DENIED"|"NOT_FOUND", pubsubConfig?: record}
   --name: string # The name of the subscription. Structured like: projects/{project_number}/locations/{location}/subscriptions/{subscription_id}
   --topic: string # The name of the topic this subscription is attached to. Structured like: projects/{project_number}/locations/{location}/topics/{topic_id}
-]: any -> record<deliveryConfig: record<deliveryRequirement: string>, exportConfig: record<currentState: string, deadLetterTopic: string, desiredState: string, pubsubConfig: record<topic: string>>, name: string, topic: string> {
+]: any -> oneof<record<deliveryConfig: record<deliveryRequirement: string>, exportConfig: record<currentState: string, deadLetterTopic: string, desiredState: string, pubsubConfig: record<topic: string>>, name: string, topic: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -841,7 +859,7 @@ export def "pubsublite-admin-projects-locations-topics-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # The maximum number of topics to return. The service may return fewer than this value. If unset or zero, all topics for the parent will be returned.
   --page-token: string # A page token, received from a previous `ListTopics` call. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to `ListTopics` must match the call that provided the page token.
-]: nothing -> record<nextPageToken: string, topics: table<name: string, partitionConfig: record, reservationConfig: record, retentionConfig: record>> {
+]: nothing -> oneof<record<nextPageToken: string, topics: table<name: string, partitionConfig: record, reservationConfig: record, retentionConfig: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -867,9 +885,6 @@ export def "pubsublite-admin-projects-locations-topics-list" [
 #
 # POST /v1/admin/{parent}/topics
 # operationId: pubsublite.admin.projects.locations.topics.create
-# --partitionConfig shape: {capacity?: record, count?: string, scale?: int}
-# --reservationConfig shape: {throughputReservation?: string}
-# --retentionConfig shape: {perPartitionBytes?: string, period?: string}
 export def "pubsublite-admin-projects-locations-topics-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -897,7 +912,7 @@ export def "pubsublite-admin-projects-locations-topics-create" [
   --partition-config: record # The settings for a topic's partitions. — shape: {capacity?: record, count?: string, scale?: int}
   --reservation-config: record # The settings for this topic's Reservation usage. — shape: {throughputReservation?: string}
   --retention-config: record # The settings for a topic's message retention. — shape: {perPartitionBytes?: string, period?: string}
-]: any -> record<name: string, partitionConfig: record<capacity: record<publishMibPerSec: int, subscribeMibPerSec: int>, count: string, scale: int>, reservationConfig: record<throughputReservation: string>, retentionConfig: record<perPartitionBytes: string, period: string>> {
+]: any -> oneof<record<name: string, partitionConfig: record<capacity: record<publishMibPerSec: int, subscribeMibPerSec: int>, count: string, scale: int>, reservationConfig: record<throughputReservation: string>, retentionConfig: record<perPartitionBytes: string, period: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -950,7 +965,7 @@ export def "pubsublite-cursor-projects-locations-subscriptions-cursors-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # The maximum number of cursors to return. The service may return fewer than this value. If unset or zero, all cursors for the parent will be returned.
   --page-token: string # A page token, received from a previous `ListPartitionCursors` call. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to `ListPartitionCursors` must match the call that provided the page token.
-]: nothing -> record<nextPageToken: string, partitionCursors: table<cursor: record, partition: string>> {
+]: nothing -> oneof<record<nextPageToken: string, partitionCursors: table<cursor: record, partition: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -976,7 +991,6 @@ export def "pubsublite-cursor-projects-locations-subscriptions-cursors-list" [
 #
 # POST /v1/cursor/{subscription}:commitCursor
 # operationId: pubsublite.cursor.projects.locations.subscriptions.commitCursor
-# --cursor shape: {offset?: string}
 export def "pubsublite-cursor-projects-locations-subscriptions-commit-cursor" [
   subscription: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1001,7 +1015,7 @@ export def "pubsublite-cursor-projects-locations-subscriptions-commit-cursor" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --cursor: record # A cursor that describes the position of a message within a topic partition. — shape: {offset?: string}
   --partition: string # The partition for which to update the cursor. Partitions are zero indexed, so `partition` must be in the range [0, topic.num_partitions). (format: int64)
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1053,7 +1067,7 @@ export def "pubsublite-topic-stats-projects-locations-topics-compute-head-cursor
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --partition: string # Required. The partition for which we should compute the head cursor. (format: int64)
-]: any -> record<headCursor: record<offset: string>> {
+]: any -> oneof<record<headCursor: record<offset: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1082,8 +1096,6 @@ export def "pubsublite-topic-stats-projects-locations-topics-compute-head-cursor
 #
 # POST /v1/topicStats/{topic}:computeMessageStats
 # operationId: pubsublite.topicStats.projects.locations.topics.computeMessageStats
-# --endCursor shape: {offset?: string}
-# --startCursor shape: {offset?: string}
 export def "pubsublite-topic-stats-projects-locations-topics-compute-message-stats" [
   topic: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1109,7 +1121,7 @@ export def "pubsublite-topic-stats-projects-locations-topics-compute-message-sta
   --end-cursor: record # A cursor that describes the position of a message within a topic partition. — shape: {offset?: string}
   --partition: string # Required. The partition for which we should compute message stats. (format: int64)
   --start-cursor: record # A cursor that describes the position of a message within a topic partition. — shape: {offset?: string}
-]: any -> record<messageBytes: string, messageCount: string, minimumEventTime: string, minimumPublishTime: string> {
+]: any -> oneof<record<messageBytes: string, messageCount: string, minimumEventTime: string, minimumPublishTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1138,7 +1150,6 @@ export def "pubsublite-topic-stats-projects-locations-topics-compute-message-sta
 #
 # POST /v1/topicStats/{topic}:computeTimeCursor
 # operationId: pubsublite.topicStats.projects.locations.topics.computeTimeCursor
-# --target shape: {eventTime?: string, publishTime?: string}
 export def "pubsublite-topic-stats-projects-locations-topics-compute-time-cursor" [
   topic: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1163,7 +1174,7 @@ export def "pubsublite-topic-stats-projects-locations-topics-compute-time-cursor
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --partition: string # Required. The partition for which we should compute the cursor. (format: int64)
   --target: record # A target publish or event time. Can be used for seeking to or retrieving the corresponding cursor. — shape: {eventTime?: string, publishTime?: string}
-]: any -> record<cursor: record<offset: string>> {
+]: any -> oneof<record<cursor: record<offset: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

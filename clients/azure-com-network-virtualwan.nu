@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -124,9 +148,9 @@ def authentication-method-completer [] { ["EAPMSCHAPv2" "EAPTLS"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "p2s-vpn-gateways-list" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["p2s-vpn-gateways-list" "virtual-hubs-list" "virtual-wans-list" "vpn-gateways-list" "vpn-sites-list" "p2s-vpn-gateways-list-by-resource-group" "p2s-vpn-gateways-delete" "p2s-vpn-gateways-get" "p2s-vpn-gateways-update-tags" "p2s-vpn-gateways-create-or-update" "p2s-vpn-gateways-generate-vpn-profile" "p2s-vpn-gateways-get-p2s-vpn-connection-health" "virtual-hubs-list-by-resource-group" "virtual-hubs-delete" "virtual-hubs-get" "virtual-hubs-update-tags" "virtual-hubs-create-or-update" "hub-virtual-network-connections-list" "hub-virtual-network-connections-get" "virtual-wans-list-by-resource-group" "virtual-wans-delete" "virtual-wans-get" "virtual-wans-update-tags" "virtual-wans-create-or-update" "supported-security-providers" "vpn-sites-configuration-download" "p2s-vpn-server-configurations-list-by-virtual-wan" "p2s-vpn-server-configurations-delete" "p2s-vpn-server-configurations-get" "p2s-vpn-server-configurations-create-or-update" "vpn-gateways-list-by-resource-group" "vpn-gateways-delete" "vpn-gateways-get" "vpn-gateways-update-tags" "vpn-gateways-create-or-update" "vpn-gateways-reset" "vpn-connections-list-by-vpn-gateway" "vpn-connections-delete" "vpn-connections-get" "vpn-connections-create-or-update" "vpn-link-connections-list-by-vpn-connection" "vpn-site-link-connections-get" "vpn-sites-list-by-resource-group" "vpn-sites-delete" "vpn-sites-get" "vpn-sites-update-tags" "vpn-sites-create-or-update" "vpn-site-links-list-by-vpn-site" "vpn-site-links-get" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -160,7 +184,7 @@ export def "p2s-vpn-gateways-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -199,7 +223,7 @@ export def "virtual-hubs-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -238,7 +262,7 @@ export def "virtual-wans-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -277,7 +301,7 @@ export def "vpn-gateways-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -316,7 +340,7 @@ export def "vpn-sites-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -356,7 +380,7 @@ export def "p2s-vpn-gateways-list-by-resource-group" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -441,7 +465,7 @@ export def "p2s-vpn-gateways-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<etag: string, properties: record<customRoutes: record<addressPrefixes: list>, p2SVpnServerConfiguration: record<id: string>, provisioningState: string, virtualHub: record<id: string>, vpnClientAddressPool: record<addressPrefixes: list>, vpnClientConnectionHealth: record<allocatedIpAddresses: list, totalEgressBytesTransferred: int, totalIngressBytesTransferred: int, vpnClientConnectionsCount: int>, vpnGatewayScaleUnit: int>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<etag: string, properties: record<customRoutes: record<addressPrefixes: list>, p2SVpnServerConfiguration: record<id: string>, provisioningState: string, virtualHub: record<id: string>, vpnClientAddressPool: record<addressPrefixes: list>, vpnClientConnectionHealth: record<allocatedIpAddresses: list, totalEgressBytesTransferred: int, totalIngressBytesTransferred: int, vpnClientConnectionsCount: int>, vpnGatewayScaleUnit: int>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -485,7 +509,7 @@ export def "p2s-vpn-gateways-update-tags" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
   --tags: record # Resource tags.
-]: any -> record<etag: string, properties: record<customRoutes: record<addressPrefixes: list>, p2SVpnServerConfiguration: record<id: string>, provisioningState: string, virtualHub: record<id: string>, vpnClientAddressPool: record<addressPrefixes: list>, vpnClientConnectionHealth: record<allocatedIpAddresses: list, totalEgressBytesTransferred: int, totalIngressBytesTransferred: int, vpnClientConnectionsCount: int>, vpnGatewayScaleUnit: int>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<etag: string, properties: record<customRoutes: record<addressPrefixes: list>, p2SVpnServerConfiguration: record<id: string>, provisioningState: string, virtualHub: record<id: string>, vpnClientAddressPool: record<addressPrefixes: list>, vpnClientConnectionHealth: record<allocatedIpAddresses: list, totalEgressBytesTransferred: int, totalIngressBytesTransferred: int, vpnClientConnectionsCount: int>, vpnGatewayScaleUnit: int>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -517,7 +541,6 @@ export def "p2s-vpn-gateways-update-tags" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/p2svpnGateways/{gatewayName}
 # operationId: P2sVpnGateways_CreateOrUpdate
-# --properties shape: {customRoutes?: any, p2SVpnServerConfiguration?: any, virtualHub?: any, vpnClientAddressPool?: any, vpnClientConnectionHealth?: any, vpnGatewayScaleUnit?: int}
 export def "p2s-vpn-gateways-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -536,7 +559,7 @@ export def "p2s-vpn-gateways-create-or-update" [
   --id: string # Resource ID.
   location: string # Resource location.
   --tags: record # Resource tags.
-]: any -> record<etag: string, properties: record<customRoutes: record<addressPrefixes: list>, p2SVpnServerConfiguration: record<id: string>, provisioningState: string, virtualHub: record<id: string>, vpnClientAddressPool: record<addressPrefixes: list>, vpnClientConnectionHealth: record<allocatedIpAddresses: list, totalEgressBytesTransferred: int, totalIngressBytesTransferred: int, vpnClientConnectionsCount: int>, vpnGatewayScaleUnit: int>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<etag: string, properties: record<customRoutes: record<addressPrefixes: list>, p2SVpnServerConfiguration: record<id: string>, provisioningState: string, virtualHub: record<id: string>, vpnClientAddressPool: record<addressPrefixes: list>, vpnClientConnectionHealth: record<allocatedIpAddresses: list, totalEgressBytesTransferred: int, totalIngressBytesTransferred: int, vpnClientConnectionsCount: int>, vpnGatewayScaleUnit: int>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -583,7 +606,7 @@ export def "p2s-vpn-gateways-generate-vpn-profile" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
   --authentication-method: string@authentication-method-completer # VPN client authentication method.
-]: any -> record<profileUrl: string> {
+]: any -> oneof<record<profileUrl: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -629,7 +652,7 @@ export def "p2s-vpn-gateways-get-p2s-vpn-connection-health" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<etag: string, properties: record<customRoutes: record<addressPrefixes: list>, p2SVpnServerConfiguration: record<id: string>, provisioningState: string, virtualHub: record<id: string>, vpnClientAddressPool: record<addressPrefixes: list>, vpnClientConnectionHealth: record<allocatedIpAddresses: list, totalEgressBytesTransferred: int, totalIngressBytesTransferred: int, vpnClientConnectionsCount: int>, vpnGatewayScaleUnit: int>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<etag: string, properties: record<customRoutes: record<addressPrefixes: list>, p2SVpnServerConfiguration: record<id: string>, provisioningState: string, virtualHub: record<id: string>, vpnClientAddressPool: record<addressPrefixes: list>, vpnClientConnectionHealth: record<allocatedIpAddresses: list, totalEgressBytesTransferred: int, totalIngressBytesTransferred: int, vpnClientConnectionsCount: int>, vpnGatewayScaleUnit: int>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -671,7 +694,7 @@ export def "virtual-hubs-list-by-resource-group" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -756,7 +779,7 @@ export def "virtual-hubs-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<etag: string, properties: record<addressPrefix: string, expressRouteGateway: record<id: string>, p2SVpnGateway: record<id: string>, provisioningState: string, routeTable: record<routes: list>, virtualNetworkConnections: list<record>, virtualWan: record<id: string>, vpnGateway: record<id: string>>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<etag: string, properties: record<addressPrefix: string, expressRouteGateway: record<id: string>, p2SVpnGateway: record<id: string>, provisioningState: string, routeTable: record<routes: list>, virtualNetworkConnections: list<record>, virtualWan: record<id: string>, vpnGateway: record<id: string>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -800,7 +823,7 @@ export def "virtual-hubs-update-tags" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
   --tags: record # Resource tags.
-]: any -> record<etag: string, properties: record<addressPrefix: string, expressRouteGateway: record<id: string>, p2SVpnGateway: record<id: string>, provisioningState: string, routeTable: record<routes: list>, virtualNetworkConnections: list<record>, virtualWan: record<id: string>, vpnGateway: record<id: string>>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<etag: string, properties: record<addressPrefix: string, expressRouteGateway: record<id: string>, p2SVpnGateway: record<id: string>, provisioningState: string, routeTable: record<routes: list>, virtualNetworkConnections: list<record>, virtualWan: record<id: string>, vpnGateway: record<id: string>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -832,7 +855,6 @@ export def "virtual-hubs-update-tags" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualHubs/{virtualHubName}
 # operationId: VirtualHubs_CreateOrUpdate
-# --properties shape: {addressPrefix?: string, expressRouteGateway?: any, p2SVpnGateway?: any, routeTable?: any, virtualNetworkConnections?: list, virtualWan?: any, vpnGateway?: any}
 export def "virtual-hubs-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -851,7 +873,7 @@ export def "virtual-hubs-create-or-update" [
   --id: string # Resource ID.
   location: string # Resource location.
   --tags: record # Resource tags.
-]: any -> record<etag: string, properties: record<addressPrefix: string, expressRouteGateway: record<id: string>, p2SVpnGateway: record<id: string>, provisioningState: string, routeTable: record<routes: list>, virtualNetworkConnections: list<record>, virtualWan: record<id: string>, vpnGateway: record<id: string>>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<etag: string, properties: record<addressPrefix: string, expressRouteGateway: record<id: string>, p2SVpnGateway: record<id: string>, provisioningState: string, routeTable: record<routes: list>, virtualNetworkConnections: list<record>, virtualWan: record<id: string>, vpnGateway: record<id: string>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -897,7 +919,7 @@ export def "hub-virtual-network-connections-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<nextLink: string, value: table<etag: string, name: string, properties: record, id: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<etag: string, name: string, properties: record, id: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -941,7 +963,7 @@ export def "hub-virtual-network-connections-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<etag: string, name: string, properties: record<allowHubToRemoteVnetTransit: bool, allowRemoteVnetToUseHubVnetGateways: bool, enableInternetSecurity: bool, provisioningState: string, remoteVirtualNetwork: record<id: string>>, id: string> {
+]: nothing -> oneof<record<etag: string, name: string, properties: record<allowHubToRemoteVnetTransit: bool, allowRemoteVnetToUseHubVnetGateways: bool, enableInternetSecurity: bool, provisioningState: string, remoteVirtualNetwork: record<id: string>>, id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -984,7 +1006,7 @@ export def "virtual-wans-list-by-resource-group" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1069,7 +1091,7 @@ export def "virtual-wans-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<etag: string, properties: record<allowBranchToBranchTraffic: bool, allowVnetToVnetTraffic: bool, disableVpnEncryption: bool, office365LocalBreakoutCategory: string, p2SVpnServerConfigurations: list<record>, provisioningState: string, securityProviderName: string, virtualHubs: list<record>, vpnSites: list<record>>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<etag: string, properties: record<allowBranchToBranchTraffic: bool, allowVnetToVnetTraffic: bool, disableVpnEncryption: bool, office365LocalBreakoutCategory: string, p2SVpnServerConfigurations: list<record>, provisioningState: string, securityProviderName: string, virtualHubs: list<record>, vpnSites: list<record>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1113,7 +1135,7 @@ export def "virtual-wans-update-tags" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
   --tags: record # Resource tags.
-]: any -> record<etag: string, properties: record<allowBranchToBranchTraffic: bool, allowVnetToVnetTraffic: bool, disableVpnEncryption: bool, office365LocalBreakoutCategory: string, p2SVpnServerConfigurations: list<record>, provisioningState: string, securityProviderName: string, virtualHubs: list<record>, vpnSites: list<record>>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<etag: string, properties: record<allowBranchToBranchTraffic: bool, allowVnetToVnetTraffic: bool, disableVpnEncryption: bool, office365LocalBreakoutCategory: string, p2SVpnServerConfigurations: list<record>, provisioningState: string, securityProviderName: string, virtualHubs: list<record>, vpnSites: list<record>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1145,7 +1167,6 @@ export def "virtual-wans-update-tags" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualWans/{VirtualWANName}
 # operationId: VirtualWans_CreateOrUpdate
-# --properties shape: {allowBranchToBranchTraffic?: bool, allowVnetToVnetTraffic?: bool, disableVpnEncryption?: bool, p2SVpnServerConfigurations?: list, securityProviderName?: string}
 export def "virtual-wans-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -1164,7 +1185,7 @@ export def "virtual-wans-create-or-update" [
   --id: string # Resource ID.
   location: string # Resource location.
   --tags: record # Resource tags.
-]: any -> record<etag: string, properties: record<allowBranchToBranchTraffic: bool, allowVnetToVnetTraffic: bool, disableVpnEncryption: bool, office365LocalBreakoutCategory: string, p2SVpnServerConfigurations: list<record>, provisioningState: string, securityProviderName: string, virtualHubs: list<record>, vpnSites: list<record>>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<etag: string, properties: record<allowBranchToBranchTraffic: bool, allowVnetToVnetTraffic: bool, disableVpnEncryption: bool, office365LocalBreakoutCategory: string, p2SVpnServerConfigurations: list<record>, provisioningState: string, securityProviderName: string, virtualHubs: list<record>, vpnSites: list<record>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1210,7 +1231,7 @@ export def "supported-security-providers" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<supportedProviders: table<name: string, type: string, url: string>> {
+]: nothing -> oneof<record<supportedProviders: table<name: string, type: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1301,7 +1322,7 @@ export def "p2s-vpn-server-configurations-list-by-virtual-wan" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<nextLink: string, value: table<etag: string, name: string, properties: record, id: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<etag: string, name: string, properties: record, id: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1390,7 +1411,7 @@ export def "p2s-vpn-server-configurations-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<etag: string, name: string, properties: record<etag: string, name: string, p2SVpnGateways: list<record>, p2SVpnServerConfigRadiusClientRootCertificates: list<record>, p2SVpnServerConfigRadiusServerRootCertificates: list<record>, p2SVpnServerConfigVpnClientRevokedCertificates: list<record>, p2SVpnServerConfigVpnClientRootCertificates: list<record>, provisioningState: string, radiusServerAddress: string, radiusServerSecret: string, vpnClientIpsecPolicies: list<record>, vpnProtocols: list<string>>, id: string> {
+]: nothing -> oneof<record<etag: string, name: string, properties: record<etag: string, name: string, p2SVpnGateways: list<record>, p2SVpnServerConfigRadiusClientRootCertificates: list<record>, p2SVpnServerConfigRadiusServerRootCertificates: list<record>, p2SVpnServerConfigVpnClientRevokedCertificates: list<record>, p2SVpnServerConfigVpnClientRootCertificates: list<record>, provisioningState: string, radiusServerAddress: string, radiusServerSecret: string, vpnClientIpsecPolicies: list<record>, vpnProtocols: list<string>>, id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1420,7 +1441,6 @@ export def "p2s-vpn-server-configurations-get" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualWans/{virtualWanName}/p2sVpnServerConfigurations/{p2SVpnServerConfigurationName}
 # operationId: P2sVpnServerConfigurations_CreateOrUpdate
-# --properties shape: {etag?: string, name?: string, p2SVpnServerConfigRadiusClientRootCertificates?: list, p2SVpnServerConfigRadiusServerRootCertificates?: list, p2SVpnServerConfigVpnClientRevokedCertificates?: list, p2SVpnServerConfigVpnClientRootCertificates?: list, radiusServerAddress?: string, radiusServerSecret?: string, vpnClientIpsecPolicies?: list, vpnProtocols?: list<string>}
 export def "p2s-vpn-server-configurations-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -1439,7 +1459,7 @@ export def "p2s-vpn-server-configurations-create-or-update" [
   --name: string # The name of the resource that is unique within a resource group. This name can be used to access the resource.
   --properties: any # Parameters for P2SVpnServerConfiguration. — shape: {etag?: string, name?: string, p2SVpnServerConfigRadiusClientRootCertificates?: list, p2SVpnServerConfigRadiusServerRootCertificates?: list, p2SVpnServerConfigVpnClientRevokedCertificates?: list, p2SVpnServerConfigVpnClientRootCertificates?: list, radiusServerAddress?: string, radiusServerSecret?: string, vpnClientIpsecPolicies?: list, vpnProtocols?: list<string>}
   --id: string # Resource ID.
-]: any -> record<etag: string, name: string, properties: record<etag: string, name: string, p2SVpnGateways: list<record>, p2SVpnServerConfigRadiusClientRootCertificates: list<record>, p2SVpnServerConfigRadiusServerRootCertificates: list<record>, p2SVpnServerConfigVpnClientRevokedCertificates: list<record>, p2SVpnServerConfigVpnClientRootCertificates: list<record>, provisioningState: string, radiusServerAddress: string, radiusServerSecret: string, vpnClientIpsecPolicies: list<record>, vpnProtocols: list<string>>, id: string> {
+]: any -> oneof<record<etag: string, name: string, properties: record<etag: string, name: string, p2SVpnGateways: list<record>, p2SVpnServerConfigRadiusClientRootCertificates: list<record>, p2SVpnServerConfigRadiusServerRootCertificates: list<record>, p2SVpnServerConfigVpnClientRevokedCertificates: list<record>, p2SVpnServerConfigVpnClientRootCertificates: list<record>, provisioningState: string, radiusServerAddress: string, radiusServerSecret: string, vpnClientIpsecPolicies: list<record>, vpnProtocols: list<string>>, id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1485,7 +1505,7 @@ export def "vpn-gateways-list-by-resource-group" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1570,7 +1590,7 @@ export def "vpn-gateways-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<etag: string, properties: record<bgpSettings: record<asn: int, bgpPeeringAddress: string, peerWeight: int>, connections: list<record>, provisioningState: string, virtualHub: record<id: string>, vpnGatewayScaleUnit: int>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<etag: string, properties: record<bgpSettings: record<asn: int, bgpPeeringAddress: string, peerWeight: int>, connections: list<record>, provisioningState: string, virtualHub: record<id: string>, vpnGatewayScaleUnit: int>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1614,7 +1634,7 @@ export def "vpn-gateways-update-tags" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
   --tags: record # Resource tags.
-]: any -> record<etag: string, properties: record<bgpSettings: record<asn: int, bgpPeeringAddress: string, peerWeight: int>, connections: list<record>, provisioningState: string, virtualHub: record<id: string>, vpnGatewayScaleUnit: int>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<etag: string, properties: record<bgpSettings: record<asn: int, bgpPeeringAddress: string, peerWeight: int>, connections: list<record>, provisioningState: string, virtualHub: record<id: string>, vpnGatewayScaleUnit: int>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1646,7 +1666,6 @@ export def "vpn-gateways-update-tags" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/vpnGateways/{gatewayName}
 # operationId: VpnGateways_CreateOrUpdate
-# --properties shape: {bgpSettings?: any, connections?: list, virtualHub?: any, vpnGatewayScaleUnit?: int}
 export def "vpn-gateways-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -1665,7 +1684,7 @@ export def "vpn-gateways-create-or-update" [
   --id: string # Resource ID.
   location: string # Resource location.
   --tags: record # Resource tags.
-]: any -> record<etag: string, properties: record<bgpSettings: record<asn: int, bgpPeeringAddress: string, peerWeight: int>, connections: list<record>, provisioningState: string, virtualHub: record<id: string>, vpnGatewayScaleUnit: int>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<etag: string, properties: record<bgpSettings: record<asn: int, bgpPeeringAddress: string, peerWeight: int>, connections: list<record>, provisioningState: string, virtualHub: record<id: string>, vpnGatewayScaleUnit: int>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1711,7 +1730,7 @@ export def "vpn-gateways-reset" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<etag: string, properties: record<bgpSettings: record<asn: int, bgpPeeringAddress: string, peerWeight: int>, connections: list<record>, provisioningState: string, virtualHub: record<id: string>, vpnGatewayScaleUnit: int>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<etag: string, properties: record<bgpSettings: record<asn: int, bgpPeeringAddress: string, peerWeight: int>, connections: list<record>, provisioningState: string, virtualHub: record<id: string>, vpnGatewayScaleUnit: int>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1754,7 +1773,7 @@ export def "vpn-connections-list-by-vpn-gateway" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<nextLink: string, value: table<etag: string, name: string, properties: record, id: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<etag: string, name: string, properties: record, id: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1843,7 +1862,7 @@ export def "vpn-connections-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<etag: string, name: string, properties: record<connectionBandwidth: int, connectionStatus: string, egressBytesTransferred: int, enableBgp: bool, enableInternetSecurity: bool, enableRateLimiting: bool, ingressBytesTransferred: int, ipsecPolicies: list<record>, provisioningState: string, remoteVpnSite: record<id: string>, routingWeight: int, sharedKey: string, useLocalAzureIpAddress: bool, usePolicyBasedTrafficSelectors: bool, vpnConnectionProtocolType: string, vpnLinkConnections: list<record>>, id: string> {
+]: nothing -> oneof<record<etag: string, name: string, properties: record<connectionBandwidth: int, connectionStatus: string, egressBytesTransferred: int, enableBgp: bool, enableInternetSecurity: bool, enableRateLimiting: bool, ingressBytesTransferred: int, ipsecPolicies: list<record>, provisioningState: string, remoteVpnSite: record<id: string>, routingWeight: int, sharedKey: string, useLocalAzureIpAddress: bool, usePolicyBasedTrafficSelectors: bool, vpnConnectionProtocolType: string, vpnLinkConnections: list<record>>, id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1873,7 +1892,6 @@ export def "vpn-connections-get" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/vpnGateways/{gatewayName}/vpnConnections/{connectionName}
 # operationId: VpnConnections_CreateOrUpdate
-# --properties shape: {connectionBandwidth?: int, enableBgp?: bool, enableInternetSecurity?: bool, enableRateLimiting?: bool, ipsecPolicies?: list, remoteVpnSite?: any, routingWeight?: int, sharedKey?: string, useLocalAzureIpAddress?: bool, usePolicyBasedTrafficSelectors?: bool, vpnConnectionProtocolType?: "IKEv2"|"IKEv1", vpnLinkConnections?: list}
 export def "vpn-connections-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -1892,7 +1910,7 @@ export def "vpn-connections-create-or-update" [
   --name: string # The name of the resource that is unique within a resource group. This name can be used to access the resource.
   --properties: any # Parameters for VpnConnection. — shape: {connectionBandwidth?: int, enableBgp?: bool, enableInternetSecurity?: bool, enableRateLimiting?: bool, ipsecPolicies?: list, remoteVpnSite?: any, routingWeight?: int, sharedKey?: string, useLocalAzureIpAddress?: bool, usePolicyBasedTrafficSelectors?: bool, vpnConnectionProtocolType?: "IKEv2"|"IKEv1", vpnLinkConnections?: list}
   --id: string # Resource ID.
-]: any -> record<etag: string, name: string, properties: record<connectionBandwidth: int, connectionStatus: string, egressBytesTransferred: int, enableBgp: bool, enableInternetSecurity: bool, enableRateLimiting: bool, ingressBytesTransferred: int, ipsecPolicies: list<record>, provisioningState: string, remoteVpnSite: record<id: string>, routingWeight: int, sharedKey: string, useLocalAzureIpAddress: bool, usePolicyBasedTrafficSelectors: bool, vpnConnectionProtocolType: string, vpnLinkConnections: list<record>>, id: string> {
+]: any -> oneof<record<etag: string, name: string, properties: record<connectionBandwidth: int, connectionStatus: string, egressBytesTransferred: int, enableBgp: bool, enableInternetSecurity: bool, enableRateLimiting: bool, ingressBytesTransferred: int, ipsecPolicies: list<record>, provisioningState: string, remoteVpnSite: record<id: string>, routingWeight: int, sharedKey: string, useLocalAzureIpAddress: bool, usePolicyBasedTrafficSelectors: bool, vpnConnectionProtocolType: string, vpnLinkConnections: list<record>>, id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1940,7 +1958,7 @@ export def "vpn-link-connections-list-by-vpn-connection" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<nextLink: string, value: table<etag: string, name: string, properties: record, type: string, id: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<etag: string, name: string, properties: record, type: string, id: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1986,7 +2004,7 @@ export def "vpn-site-link-connections-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<etag: string, name: string, properties: record<connectionBandwidth: int, connectionStatus: string, egressBytesTransferred: int, enableBgp: bool, enableRateLimiting: bool, ingressBytesTransferred: int, ipsecPolicies: list<record>, provisioningState: string, routingWeight: int, sharedKey: string, useLocalAzureIpAddress: bool, usePolicyBasedTrafficSelectors: bool, vpnConnectionProtocolType: string, vpnSiteLink: record<id: string>>, type: string, id: string> {
+]: nothing -> oneof<record<etag: string, name: string, properties: record<connectionBandwidth: int, connectionStatus: string, egressBytesTransferred: int, enableBgp: bool, enableRateLimiting: bool, ingressBytesTransferred: int, ipsecPolicies: list<record>, provisioningState: string, routingWeight: int, sharedKey: string, useLocalAzureIpAddress: bool, usePolicyBasedTrafficSelectors: bool, vpnConnectionProtocolType: string, vpnSiteLink: record<id: string>>, type: string, id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2030,7 +2048,7 @@ export def "vpn-sites-list-by-resource-group" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2115,7 +2133,7 @@ export def "vpn-sites-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<etag: string, properties: record<addressSpace: record<addressPrefixes: list>, bgpProperties: record<asn: int, bgpPeeringAddress: string, peerWeight: int>, deviceProperties: record<deviceModel: string, deviceVendor: string, linkSpeedInMbps: int>, ipAddress: string, isSecuritySite: bool, provisioningState: string, siteKey: string, virtualWan: record<id: string>, vpnSiteLinks: list<record>>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<etag: string, properties: record<addressSpace: record<addressPrefixes: list>, bgpProperties: record<asn: int, bgpPeeringAddress: string, peerWeight: int>, deviceProperties: record<deviceModel: string, deviceVendor: string, linkSpeedInMbps: int>, ipAddress: string, isSecuritySite: bool, provisioningState: string, siteKey: string, virtualWan: record<id: string>, vpnSiteLinks: list<record>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2159,7 +2177,7 @@ export def "vpn-sites-update-tags" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
   --tags: record # Resource tags.
-]: any -> record<etag: string, properties: record<addressSpace: record<addressPrefixes: list>, bgpProperties: record<asn: int, bgpPeeringAddress: string, peerWeight: int>, deviceProperties: record<deviceModel: string, deviceVendor: string, linkSpeedInMbps: int>, ipAddress: string, isSecuritySite: bool, provisioningState: string, siteKey: string, virtualWan: record<id: string>, vpnSiteLinks: list<record>>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<etag: string, properties: record<addressSpace: record<addressPrefixes: list>, bgpProperties: record<asn: int, bgpPeeringAddress: string, peerWeight: int>, deviceProperties: record<deviceModel: string, deviceVendor: string, linkSpeedInMbps: int>, ipAddress: string, isSecuritySite: bool, provisioningState: string, siteKey: string, virtualWan: record<id: string>, vpnSiteLinks: list<record>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2191,7 +2209,6 @@ export def "vpn-sites-update-tags" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/vpnSites/{vpnSiteName}
 # operationId: VpnSites_CreateOrUpdate
-# --properties shape: {addressSpace?: any, bgpProperties?: any, deviceProperties?: any, ipAddress?: string, isSecuritySite?: bool, siteKey?: string, virtualWan?: any, vpnSiteLinks?: list}
 export def "vpn-sites-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -2210,7 +2227,7 @@ export def "vpn-sites-create-or-update" [
   --id: string # Resource ID.
   location: string # Resource location.
   --tags: record # Resource tags.
-]: any -> record<etag: string, properties: record<addressSpace: record<addressPrefixes: list>, bgpProperties: record<asn: int, bgpPeeringAddress: string, peerWeight: int>, deviceProperties: record<deviceModel: string, deviceVendor: string, linkSpeedInMbps: int>, ipAddress: string, isSecuritySite: bool, provisioningState: string, siteKey: string, virtualWan: record<id: string>, vpnSiteLinks: list<record>>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<etag: string, properties: record<addressSpace: record<addressPrefixes: list>, bgpProperties: record<asn: int, bgpPeeringAddress: string, peerWeight: int>, deviceProperties: record<deviceModel: string, deviceVendor: string, linkSpeedInMbps: int>, ipAddress: string, isSecuritySite: bool, provisioningState: string, siteKey: string, virtualWan: record<id: string>, vpnSiteLinks: list<record>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2256,7 +2273,7 @@ export def "vpn-site-links-list-by-vpn-site" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<nextLink: string, value: table<etag: string, name: string, properties: record, type: string, id: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<etag: string, name: string, properties: record, type: string, id: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2300,7 +2317,7 @@ export def "vpn-site-links-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<etag: string, name: string, properties: record<bgpProperties: record<asn: int, bgpPeeringAddress: string>, ipAddress: string, linkProperties: record<linkProviderName: string, linkSpeedInMbps: int>, provisioningState: string>, type: string, id: string> {
+]: nothing -> oneof<record<etag: string, name: string, properties: record<bgpProperties: record<asn: int, bgpPeeringAddress: string>, ipAddress: string, linkProperties: record<linkProviderName: string, linkSpeedInMbps: int>, provisioningState: string>, type: string, id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }

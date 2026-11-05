@@ -12,27 +12,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -40,8 +49,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -52,7 +66,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -87,7 +110,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -154,9 +178,9 @@ def accept-completer-9 [] { ["application/json" "token"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-account-types" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-account-types" "get-account-types-id-account-type" "post-admin-jwt" "post-auth-init" "post-auth-jwt" "post-auth-renew" "delete-auth-token" "post-auth-token" "post-auth-token-access" "get-auth-token-code" "get-banks" "post-banks-categories" "delete-banks-categories-id-category" "post-banks-categories-id-category" "get-banks-id-bank" "get-banks-id-connector-connections" "get-banks-id-connector-logos" "get-banks-id-connector-logos-main" "get-banks-id-connector-logos-thumbnail" "get-banks-id-connector-sources" "get-banks-id-connector-sources-id-connector-source-fields" "get-banks-id-connector-sources-id-source" "get-categories" "post-categories-keywords" "delete-categories-keywords-id-keyword" "post-categorize" "get-certificate-type" "get-clients" "post-clients" "delete-clients-id-client" "get-clients-id-client" "put-clients-id-client" "delete-clients-id-client-logo" "post-clients-id-client-logo" "get-config" "post-config" "get-config-logs" "get-connections" "get-connections-id-connection-logs" "get-connections-id-connection-sources" "delete-connections-id-connection-sources-id-source" "post-connections-id-connection-sources-id-source" "put-connections-id-connection-sources-id-source" "get-connectors" "post-connectors" "put-connectors" "get-connectors-id-connector" "put-connectors-id-connector" "get-connectors-id-connector-logos" "post-connectors-id-connector-logos" "put-connectors-id-connector-logos" "get-connectors-id-connector-logos-main" "get-connectors-id-connector-logos-thumbnail" "delete-connectors-id-connector-logos-id-logo" "put-connectors-id-connector-logos-id-logo" "get-connectors-id-connector-sources" "put-connectors-id-connector-sources" "get-connectors-id-connector-sources-id-connector-source-fields" "get-connectors-id-connector-sources-id-source" "put-connectors-id-connector-sources-id-source" "get-incidents" "get-invoicing" "get-logs" "get-monitoring" "get-providers" "get-providers-id-connector-connections" "get-providers-id-connector-logos" "get-providers-id-connector-logos-main" "get-providers-id-connector-logos-thumbnail" "get-providers-id-connector-sources" "get-providers-id-connector-sources-id-connector-source-fields" "get-providers-id-connector-sources-id-source" "get-providers-id-provider" "get-psd2-registrations" "get-psd2-registrations-id-psd2-registration" "get-psd2-registrations-id-psd2registration-logs" "get-publickey" "post-test-sync" "post-test-webhooks" "get-users" "delete-users-id-user" "get-users-id-user" "get-users-id-user-account-types" "get-users-id-user-account-types-id-account-type" "get-users-id-user-accounts-id-account-categories" "get-users-id-user-accounts-id-account-transactionsclusters" "post-users-id-user-accounts-id-account-transactionsclusters" "delete-users-id-user-accounts-id-account-transactionsclusters-id-transactionscluster" "put-users-id-user-accounts-id-account-transactionsclusters-id-transactionscluster" "get-users-id-user-alerts" "get-users-id-user-categories" "get-users-id-user-categories-full" "post-users-id-user-categories-full" "delete-users-id-user-categories-full-id-full" "put-users-id-user-categories-full-id-full" "delete-users-id-user-config" "get-users-id-user-config" "post-users-id-user-config" "delete-users-id-user-connections" "get-users-id-user-connections" "post-users-id-user-connections" "delete-users-id-user-connections-id-connection" "post-users-id-user-connections-id-connection" "put-users-id-user-connections-id-connection" "delete-users-id-user-connections-id-connection-accounts" "get-users-id-user-connections-id-connection-accounts" "post-users-id-user-connections-id-connection-accounts" "put-users-id-user-connections-id-connection-accounts" "delete-users-id-user-connections-id-connection-accounts-id-account" "put-users-id-user-connections-id-connection-accounts-id-account" "get-users-id-user-connections-id-connection-accounts-id-account-categories" "get-users-id-user-connections-id-connection-accounts-id-account-delta" "get-users-id-user-connections-id-connection-accounts-id-account-logs" "get-users-id-user-connections-id-connection-accounts-id-account-sources" "delete-users-id-user-connections-id-connection-accounts-id-account-transactions" "get-users-id-user-connections-id-connection-accounts-id-account-transactions" "post-users-id-user-connections-id-connection-accounts-id-account-transactions" "put-users-id-user-connections-id-connection-accounts-id-account-transactions-id-transaction" "delete-users-id-user-connections-id-connection-accounts-id-account-transactions-id-transaction-informations" "get-users-id-user-connections-id-connection-accounts-id-account-transactions-id-transaction-informations" "put-users-id-user-connections-id-connection-accounts-id-account-transactions-id-transaction-informations" "delete-users-id-user-connections-id-connection-accounts-id-account-transactions-id-transaction-informations-id-information" "get-users-id-user-connections-id-connection-accounts-id-account-transactions-id-transaction-informations-id-information" "get-users-id-user-connections-id-connection-accounts-id-account-transactionsclusters" "post-users-id-user-connections-id-connection-accounts-id-account-transactionsclusters" "delete-users-id-user-connections-id-connection-accounts-id-account-transactionsclusters-id-transactionscluster" "put-users-id-user-connections-id-connection-accounts-id-account-transactionsclusters-id-transactionscluster" "get-users-id-user-connections-id-connection-informations" "get-users-id-user-connections-id-connection-logs" "get-users-id-user-connections-id-connection-sources" "delete-users-id-user-connections-id-connection-sources-id-source" "post-users-id-user-connections-id-connection-sources-id-source" "put-users-id-user-connections-id-connection-sources-id-source" "get-users-id-user-connections-id-connection-transactionsclusters" "post-users-id-user-connections-id-connection-transactionsclusters" "delete-users-id-user-connections-id-connection-transactionsclusters-id-transactionscluster" "put-users-id-user-connections-id-connection-transactionsclusters-id-transactionscluster" "get-users-id-user-forecast" "get-users-id-user-logs" "get-users-id-user-profiles" "get-users-id-user-profiles-main" "get-users-id-user-profiles-id-profile" "post-users-id-user-token" "get-users-id-user-transactionsclusters" "post-users-id-user-transactionsclusters" "delete-users-id-user-transactionsclusters-id-transactionscluster" "put-users-id-user-transactionsclusters-id-transactionscluster" "get-webauth" "delete-webhooks" "get-webhooks" "post-webhooks" "delete-webhooks-auth" "get-webhooks-auth" "post-webhooks-auth" "delete-webhooks-auth-id-auth" "post-webhooks-auth-id-auth" "put-webhooks-auth-id-auth" "delete-webhooks-id-webhook" "post-webhooks-id-webhook" "put-webhooks-id-webhook" "delete-webhooks-id-webhook-add-to-data" "get-webhooks-id-webhook-add-to-data" "post-webhooks-id-webhook-add-to-data" "delete-webhooks-id-webhook-add-to-data-key" "get-webhooks-id-webhook-add-to-data-key" "post-webhooks-id-webhook-add-to-data-key" "get-webhooks-id-webhook-logs" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -188,7 +212,7 @@ export def "get-account-types" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<accounttypes: table<color: string, display_name: string, display_name_p: string, id: int, id_parent: int, is_invest: bool, name: string, product: string, weboob_type_id: int>, total: float> {
+]: nothing -> oneof<record<accounttypes: table<color: string, display_name: string, display_name_p: string, id: int, id_parent: int, is_invest: bool, name: string, product: string, weboob_type_id: int>, total: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
@@ -224,7 +248,7 @@ export def "get-account-types-id-account-type" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<color: string, display_name: string, display_name_p: string, id: int, id_parent: int, is_invest: bool, name: string, product: string, weboob_type_id: int> {
+]: nothing -> oneof<record<color: string, display_name: string, display_name_p: string, id: int, id_parent: int, is_invest: bool, name: string, product: string, weboob_type_id: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_account_type | is-empty) { error make --unspanned { msg: "path parameter 'id_account_type' must be non-empty" } }
@@ -262,7 +286,7 @@ export def "post-admin-jwt" [
   --accept: string@accept-completer # Response content type
   --duration: int # number of minute before the token expiration (0 for token that won't expire unless the client application is deleted) (default: 1)
   --scope: string # scope requested for the token (default: config)
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -303,7 +327,7 @@ export def "post-auth-init" [
   --accept: string@accept-completer-1 # Response content type
   --client-id: string # ID of the client
   --client-secret: string # secret of the client
-]: any -> record<auth_token: string, expires_in: int, type: string> {
+]: any -> oneof<record<auth_token: string, expires_in: int, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -347,7 +371,7 @@ export def "post-auth-jwt" [
   --expire: oneof<nothing, bool> # if set to True, the token will expire n minutes after its creation, n being the value of configuration key auth.default_token_expire (default: True)
   --id-user: int # user for whom the token has to be generated. If not supplied, a user will be created
   --scope: string # scope requested for the token
-]: any -> record<jwt_token: string, payload: record> {
+]: any -> oneof<record<jwt_token: string, payload: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -391,7 +415,7 @@ export def "post-auth-renew" [
   --grant-type: string # default is "client_credentials"
   id_user: int # id of the user to generate a token for
   --revoke-previous: oneof<nothing, bool> # if true, all other permanent tokens for the user will be deleted
-]: any -> record<access_token: string, token_type: string> {
+]: any -> oneof<record<access_token: string, token_type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -468,7 +492,7 @@ export def "post-auth-token" [
   password: string # password
   --scope: string # scope requested for the token
   username: string # username
-]: any -> record<expires_in: int, scope: string, token: string> {
+]: any -> oneof<record<expires_in: int, scope: string, token: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -512,7 +536,7 @@ export def "post-auth-token-access" [
   code: string # user's temporary code
   --grant-type: string # default is "authorization_code"
   --redirect-uri: string # redirect uri used by user
-]: any -> record<access_token: string, token_type: string> {
+]: any -> oneof<record<access_token: string, token_type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -551,7 +575,7 @@ export def "get-auth-token-code" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-4 # Response content type
-]: nothing -> record<access: string, code: string, expires_in: int, type: record> {
+]: nothing -> oneof<record<access: string, code: string, expires_in: int, type: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/auth/token/code" $auth.query)
@@ -585,7 +609,7 @@ export def "get-banks" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<banks: table<auth_mechanism: string, beta: bool, charged: bool, code: string, color: string, hidden: bool, id: int, months_to_fetch: int, name: string, restricted: bool, siret: string, slug: string, sync_frequency: float, uuid: string>, total: float> {
+]: nothing -> oneof<record<banks: table<auth_mechanism: string, beta: bool, charged: bool, code: string, color: string, hidden: bool, id: int, months_to_fetch: int, name: string, restricted: bool, siret: string, slug: string, sync_frequency: float, uuid: string>, total: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
@@ -621,7 +645,7 @@ export def "post-banks-categories" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
   name: string # name of the category to be created
-]: any -> record<id: int, name: string> {
+]: any -> oneof<record<id: int, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -662,7 +686,7 @@ export def "delete-banks-categories-id-category" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<id: int, name: string> {
+]: nothing -> oneof<record<id: int, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_category | is-empty) { error make --unspanned { msg: "path parameter 'id_category' must be non-empty" } }
@@ -700,7 +724,7 @@ export def "post-banks-categories-id-category" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
   name: string # new name for the supplied category
-]: any -> record<id: int, name: string> {
+]: any -> oneof<record<id: int, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -742,7 +766,7 @@ export def "get-banks-id-bank" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<auth_mechanism: string, beta: bool, charged: bool, code: string, color: string, hidden: bool, id: int, months_to_fetch: int, name: string, restricted: bool, siret: string, slug: string, sync_frequency: float, uuid: string> {
+]: nothing -> oneof<record<auth_mechanism: string, beta: bool, charged: bool, code: string, color: string, hidden: bool, id: int, months_to_fetch: int, name: string, restricted: bool, siret: string, slug: string, sync_frequency: float, uuid: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_bank | is-empty) { error make --unspanned { msg: "path parameter 'id_bank' must be non-empty" } }
@@ -785,7 +809,7 @@ export def "get-banks-id-connector-connections" [
   --source: string # specify a source name that should have a null state
   --minutes-without-sync: int # Ensure the connection will not have a sync happening for at
   --expand: string
-]: nothing -> record<connections: table<active: bool, created: string, id: int, id_connector: int, id_user: int, last_push: string, last_update: string, next_try: string>, total: float> {
+]: nothing -> oneof<record<connections: table<active: bool, created: string, id: int, id_connector: int, id_user: int, last_push: string, last_update: string, next_try: string>, total: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_connector | is-empty) { error make --unspanned { msg: "path parameter 'id_connector' must be non-empty" } }
@@ -822,7 +846,7 @@ export def "get-banks-id-connector-logos" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<connectorlogos: table<id: int, id_connector: int, id_file: int, type: string>, total: float> {
+]: nothing -> oneof<record<connectorlogos: table<id: int, id_connector: int, id_file: int, type: string>, total: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_connector | is-empty) { error make --unspanned { msg: "path parameter 'id_connector' must be non-empty" } }
@@ -859,7 +883,7 @@ export def "get-banks-id-connector-logos-main" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<connectorlogos: table<id: int, id_connector: int, id_file: int, type: string>, total: float> {
+]: nothing -> oneof<record<connectorlogos: table<id: int, id_connector: int, id_file: int, type: string>, total: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_connector | is-empty) { error make --unspanned { msg: "path parameter 'id_connector' must be non-empty" } }
@@ -896,7 +920,7 @@ export def "get-banks-id-connector-logos-thumbnail" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<connectorlogos: table<id: int, id_connector: int, id_file: int, type: string>, total: float> {
+]: nothing -> oneof<record<connectorlogos: table<id: int, id_connector: int, id_file: int, type: string>, total: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_connector | is-empty) { error make --unspanned { msg: "path parameter 'id_connector' must be non-empty" } }
@@ -933,7 +957,7 @@ export def "get-banks-id-connector-sources" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<sources: table<auth_mechanism: string, disabled: string, disabled_capabilities: string, fallback: string, id: int, id_connector: int, id_weboob: string, name: string, priority: int, stability: string>, total: float> {
+]: nothing -> oneof<record<sources: table<auth_mechanism: string, disabled: string, disabled_capabilities: string, fallback: string, id: int, id_connector: int, id_weboob: string, name: string, priority: int, stability: string>, total: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_connector | is-empty) { error make --unspanned { msg: "path parameter 'id_connector' must be non-empty" } }
@@ -971,7 +995,7 @@ export def "get-banks-id-connector-sources-id-connector-source-fields" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<source_fields: table<id_connector_source: int, label: string, name: string, regex: string, required: bool, secret: bool, type: string>, total: float> {
+]: nothing -> oneof<record<source_fields: table<id_connector_source: int, label: string, name: string, regex: string, required: bool, secret: bool, type: string>, total: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_connector | is-empty) { error make --unspanned { msg: "path parameter 'id_connector' must be non-empty" } }
@@ -1010,7 +1034,7 @@ export def "get-banks-id-connector-sources-id-source" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<auth_mechanism: string, disabled: string, disabled_capabilities: string, fallback: string, id: int, id_connector: int, id_weboob: string, name: string, priority: int, stability: string> {
+]: nothing -> oneof<record<auth_mechanism: string, disabled: string, disabled_capabilities: string, fallback: string, id: int, id_connector: int, id_weboob: string, name: string, priority: int, stability: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_connector | is-empty) { error make --unspanned { msg: "path parameter 'id_connector' must be non-empty" } }
@@ -1047,7 +1071,7 @@ export def "get-categories" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<categories: table<color: string, id: int, id_logo: int, id_parent_category: int, id_parent_category_in_menu: int, id_user: int, income: bool, name: string, name_displayed: string, refundable: bool>, total: float> {
+]: nothing -> oneof<record<categories: table<color: string, id: int, id_logo: int, id_parent_category: int, id_parent_category_in_menu: int, id_user: int, income: bool, name: string, name_displayed: string, refundable: bool>, total: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
@@ -1082,7 +1106,7 @@ export def "post-categories-keywords" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<id: int, id_category: int, income: bool, keyword: string, priority: int> {
+]: nothing -> oneof<record<id: int, id_category: int, income: bool, keyword: string, priority: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
@@ -1118,7 +1142,7 @@ export def "delete-categories-keywords-id-keyword" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<id: int, id_category: int, income: bool, keyword: string, priority: int> {
+]: nothing -> oneof<record<id: int, id_category: int, income: bool, keyword: string, priority: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_keyword | is-empty) { error make --unspanned { msg: "path parameter 'id_keyword' must be non-empty" } }
@@ -1157,7 +1181,7 @@ export def "post-categorize" [
   type: string # type of the transaction (default: unknown)
   value: int # value of the transaction
   wording: string # label of the transaction
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1197,7 +1221,7 @@ export def "get-certificate-type" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<created: string, id: int, id_private_key_file: int, id_public_key_file: int, type: string> {
+]: nothing -> oneof<record<created: string, id: int, id_private_key_file: int, id_public_key_file: int, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
@@ -1233,7 +1257,7 @@ export def "get-clients" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<clients: table<config: string, id: int, id_logo: int, name: string, private_key: string, pro: bool, public_key: string, redirect_uris: string, secret: string>, total: float> {
+]: nothing -> oneof<record<clients: table<config: string, id: int, id_logo: int, name: string, private_key: string, pro: bool, public_key: string, redirect_uris: string, secret: string>, total: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
@@ -1272,7 +1296,7 @@ export def "post-clients" [
   --generate-keys: oneof<nothing, bool> # if True, generate a rsa pair of keys so the client can be used to generate jwt user tokens (default: False)
   --name: string # name of client
   --redirect-uris: string # list of allowed redirect uris
-]: any -> record<config: string, id: int, id_logo: int, name: string, private_key: string, pro: bool, public_key: string, redirect_uris: string, secret: string> {
+]: any -> oneof<record<config: string, id: int, id_logo: int, name: string, private_key: string, pro: bool, public_key: string, redirect_uris: string, secret: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1313,7 +1337,7 @@ export def "delete-clients-id-client" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<config: string, id: int, id_logo: int, name: string, private_key: string, pro: bool, public_key: string, redirect_uris: string, secret: string> {
+]: nothing -> oneof<record<config: string, id: int, id_logo: int, name: string, private_key: string, pro: bool, public_key: string, redirect_uris: string, secret: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_client | is-empty) { error make --unspanned { msg: "path parameter 'id_client' must be non-empty" } }
@@ -1350,7 +1374,7 @@ export def "get-clients-id-client" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<config: string, id: int, id_logo: int, name: string, private_key: string, pro: bool, public_key: string, redirect_uris: string, secret: string> {
+]: nothing -> oneof<record<config: string, id: int, id_logo: int, name: string, private_key: string, pro: bool, public_key: string, redirect_uris: string, secret: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_client | is-empty) { error make --unspanned { msg: "path parameter 'id_client' must be non-empty" } }
@@ -1399,7 +1423,7 @@ export def "put-clients-id-client" [
   --secondary-color: string # hexadecimal code of the client secondary color (e.g F45B9A)
   --secret: oneof<nothing, bool> # reset the secret
   --update-config: oneof<nothing, bool> # update the custom information about the client instead of replacing the existing one (default: True)
-]: any -> record<config: string, id: int, id_logo: int, name: string, private_key: string, pro: bool, public_key: string, redirect_uris: string, secret: string> {
+]: any -> oneof<record<config: string, id: int, id_logo: int, name: string, private_key: string, pro: bool, public_key: string, redirect_uris: string, secret: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1441,7 +1465,7 @@ export def "delete-clients-id-client-logo" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<content_type: string, file_size: int, filename: string, id: int> {
+]: nothing -> oneof<record<content_type: string, file_size: int, filename: string, id: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_client | is-empty) { error make --unspanned { msg: "path parameter 'id_client' must be non-empty" } }
@@ -1478,7 +1502,7 @@ export def "post-clients-id-client-logo" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<content_type: string, file_size: int, filename: string, id: int> {
+]: nothing -> oneof<record<content_type: string, file_size: int, filename: string, id: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_client | is-empty) { error make --unspanned { msg: "path parameter 'id_client' must be non-empty" } }
@@ -1586,7 +1610,7 @@ export def "get-config-logs" [
   --min-date: string # minimal date of the change (format: date)
   --max-date: string # maximum date of the change (format: date)
   --expand: string
-]: nothing -> record<configlogs: table<id: int, key: string, new_value: string, origin: string, previous_value: string, timestamp: string, type: string>, total: float> {
+]: nothing -> oneof<record<configlogs: table<id: int, key: string, new_value: string, origin: string, previous_value: string, timestamp: string, type: string>, total: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "min_date" $min_date "scalar") (serialize-qp "max_date" $max_date "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
@@ -1621,7 +1645,7 @@ export def "get-connections" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<connections: table<active: bool, created: string, id: int, id_connector: int, id_user: int, last_push: string, last_update: string, next_try: string>, total: float> {
+]: nothing -> oneof<record<connections: table<active: bool, created: string, id: int, id_connector: int, id_user: int, last_push: string, last_update: string, next_try: string>, total: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
@@ -1669,7 +1693,7 @@ export def "get-connections-id-connection-logs" [
   --id-source: int # ID of a source
   --id-max: int # filter "id" of logs, maximum id to return
   --expand: string
-]: nothing -> record<connectionlogs: table<error: string, error_message: string, error_uid: string, fields: string, id: int, id_connection: int, id_connector: int, id_source: int, id_user: int, login: string, nb_accounts: int, next_try: string, session_folder_id: string, start: string, statut: int, timestamp: string, worker: string>, total: float> {
+]: nothing -> oneof<record<connectionlogs: table<error: string, error_message: string, error_uid: string, fields: string, id: int, id_connection: int, id_connector: int, id_source: int, id_user: int, login: string, nb_accounts: int, next_try: string, session_folder_id: string, start: string, statut: int, timestamp: string, worker: string>, total: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_connection | is-empty) { error make --unspanned { msg: "path parameter 'id_connection' must be non-empty" } }
@@ -1706,7 +1730,7 @@ export def "get-connections-id-connection-sources" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<sources: table<access_expire: string, created: string, disabled: string, expire: string, id: int, id_connection: int, id_connector_source: int, last_update: string, name: string, next_try: string, state: string>, total: float> {
+]: nothing -> oneof<record<sources: table<access_expire: string, created: string, disabled: string, expire: string, id: int, id_connection: int, id_connector_source: int, last_update: string, name: string, next_try: string, state: string>, total: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_connection | is-empty) { error make --unspanned { msg: "path parameter 'id_connection' must be non-empty" } }
@@ -1744,7 +1768,7 @@ export def "delete-connections-id-connection-sources-id-source" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<access_expire: string, created: string, disabled: string, expire: string, id: int, id_connection: int, id_connector_source: int, last_update: string, name: string, next_try: string, state: string> {
+]: nothing -> oneof<record<access_expire: string, created: string, disabled: string, expire: string, id: int, id_connection: int, id_connector_source: int, last_update: string, name: string, next_try: string, state: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_connection | is-empty) { error make --unspanned { msg: "path parameter 'id_connection' must be non-empty" } }
@@ -1786,7 +1810,7 @@ export def "post-connections-id-connection-sources-id-source" [
   --expand: string
   --disabled: oneof<nothing, bool> # to enable or disable connector source
   --synchronize: oneof<nothing, bool> # whether to force a synchronization on the source if it's not disabled
-]: any -> record<access_expire: string, created: string, disabled: string, expire: string, id: int, id_connection: int, id_connector_source: int, last_update: string, name: string, next_try: string, state: string> {
+]: any -> oneof<record<access_expire: string, created: string, disabled: string, expire: string, id: int, id_connection: int, id_connector_source: int, last_update: string, name: string, next_try: string, state: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1834,7 +1858,7 @@ export def "put-connections-id-connection-sources-id-source" [
   --disabled: oneof<nothing, bool> # to enable or disable connector source
   --force: oneof<nothing, bool> # whether to force the synchronization on the source if it's in error
   --synchronize: oneof<nothing, bool> # whether to force a synchronization on the source if it's not disabled
-]: any -> record<access_expire: string, created: string, disabled: string, expire: string, id: int, id_connection: int, id_connector_source: int, last_update: string, name: string, next_try: string, state: string> {
+]: any -> oneof<record<access_expire: string, created: string, disabled: string, expire: string, id: int, id_connection: int, id_connector_source: int, last_update: string, name: string, next_try: string, state: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1876,7 +1900,7 @@ export def "get-connectors" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<connectors: table<auth_mechanism: string, beta: bool, charged: bool, code: string, color: string, hidden: bool, id: int, months_to_fetch: int, name: string, restricted: bool, siret: string, slug: string, sync_frequency: float, uuid: string>, total: float> {
+]: nothing -> oneof<record<connectors: table<auth_mechanism: string, beta: bool, charged: bool, code: string, color: string, hidden: bool, id: int, months_to_fetch: int, name: string, restricted: bool, siret: string, slug: string, sync_frequency: float, uuid: string>, total: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
@@ -1919,7 +1943,7 @@ export def "post-connectors" [
   --sendmail: oneof<nothing, bool> # if set, send an email to user
   --types: string # Type of connector, eg. banks or providers
   --url: string # Url of the bank
-]: any -> record<auth_mechanism: string, beta: bool, charged: bool, code: string, color: string, hidden: bool, id: int, months_to_fetch: int, name: string, restricted: bool, siret: string, slug: string, sync_frequency: float, uuid: string> {
+]: any -> oneof<record<auth_mechanism: string, beta: bool, charged: bool, code: string, color: string, hidden: bool, id: int, months_to_fetch: int, name: string, restricted: bool, siret: string, slug: string, sync_frequency: float, uuid: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1960,7 +1984,7 @@ export def "put-connectors" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
   --hidden: oneof<nothing, bool> # to enable or disable connector (bank or provider)
-]: any -> record<auth_mechanism: string, beta: bool, charged: bool, code: string, color: string, hidden: bool, id: int, months_to_fetch: int, name: string, restricted: bool, siret: string, slug: string, sync_frequency: float, uuid: string> {
+]: any -> oneof<record<auth_mechanism: string, beta: bool, charged: bool, code: string, color: string, hidden: bool, id: int, months_to_fetch: int, name: string, restricted: bool, siret: string, slug: string, sync_frequency: float, uuid: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2001,7 +2025,7 @@ export def "get-connectors-id-connector" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<auth_mechanism: string, beta: bool, charged: bool, code: string, color: string, hidden: bool, id: int, months_to_fetch: int, name: string, restricted: bool, siret: string, slug: string, sync_frequency: float, uuid: string> {
+]: nothing -> oneof<record<auth_mechanism: string, beta: bool, charged: bool, code: string, color: string, hidden: bool, id: int, months_to_fetch: int, name: string, restricted: bool, siret: string, slug: string, sync_frequency: float, uuid: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_connector | is-empty) { error make --unspanned { msg: "path parameter 'id_connector' must be non-empty" } }
@@ -2043,7 +2067,7 @@ export def "put-connectors-id-connector" [
   --hidden: oneof<nothing, bool> # to enable or disable connector (bank or provider)
   --id-categories: string # one or several comma separated categories to map to the given connector (or null to map no category)
   --sync-frequency: int # Allows you to overload global sync_frequency param
-]: any -> record<auth_mechanism: string, beta: bool, charged: bool, code: string, color: string, hidden: bool, id: int, months_to_fetch: int, name: string, restricted: bool, siret: string, slug: string, sync_frequency: float, uuid: string> {
+]: any -> oneof<record<auth_mechanism: string, beta: bool, charged: bool, code: string, color: string, hidden: bool, id: int, months_to_fetch: int, name: string, restricted: bool, siret: string, slug: string, sync_frequency: float, uuid: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2085,7 +2109,7 @@ export def "get-connectors-id-connector-logos" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<connectorlogos: table<id: int, id_connector: int, id_file: int, type: string>, total: float> {
+]: nothing -> oneof<record<connectorlogos: table<id: int, id_connector: int, id_file: int, type: string>, total: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_connector | is-empty) { error make --unspanned { msg: "path parameter 'id_connector' must be non-empty" } }
@@ -2122,7 +2146,7 @@ export def "post-connectors-id-connector-logos" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<id: int, id_connector: int, id_file: int, type: string> {
+]: nothing -> oneof<record<id: int, id_connector: int, id_file: int, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_connector | is-empty) { error make --unspanned { msg: "path parameter 'id_connector' must be non-empty" } }
@@ -2159,7 +2183,7 @@ export def "put-connectors-id-connector-logos" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<id: int, id_connector: int, id_file: int, type: string> {
+]: nothing -> oneof<record<id: int, id_connector: int, id_file: int, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_connector | is-empty) { error make --unspanned { msg: "path parameter 'id_connector' must be non-empty" } }
@@ -2196,7 +2220,7 @@ export def "get-connectors-id-connector-logos-main" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<connectorlogos: table<id: int, id_connector: int, id_file: int, type: string>, total: float> {
+]: nothing -> oneof<record<connectorlogos: table<id: int, id_connector: int, id_file: int, type: string>, total: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_connector | is-empty) { error make --unspanned { msg: "path parameter 'id_connector' must be non-empty" } }
@@ -2233,7 +2257,7 @@ export def "get-connectors-id-connector-logos-thumbnail" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<connectorlogos: table<id: int, id_connector: int, id_file: int, type: string>, total: float> {
+]: nothing -> oneof<record<connectorlogos: table<id: int, id_connector: int, id_file: int, type: string>, total: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_connector | is-empty) { error make --unspanned { msg: "path parameter 'id_connector' must be non-empty" } }
@@ -2271,7 +2295,7 @@ export def "delete-connectors-id-connector-logos-id-logo" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<id: int, id_connector: int, id_file: int, type: string> {
+]: nothing -> oneof<record<id: int, id_connector: int, id_file: int, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_connector | is-empty) { error make --unspanned { msg: "path parameter 'id_connector' must be non-empty" } }
@@ -2310,7 +2334,7 @@ export def "put-connectors-id-connector-logos-id-logo" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<id: int, id_connector: int, id_file: int, type: string> {
+]: nothing -> oneof<record<id: int, id_connector: int, id_file: int, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_connector | is-empty) { error make --unspanned { msg: "path parameter 'id_connector' must be non-empty" } }
@@ -2348,7 +2372,7 @@ export def "get-connectors-id-connector-sources" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<sources: table<auth_mechanism: string, disabled: string, disabled_capabilities: string, fallback: string, id: int, id_connector: int, id_weboob: string, name: string, priority: int, stability: string>, total: float> {
+]: nothing -> oneof<record<sources: table<auth_mechanism: string, disabled: string, disabled_capabilities: string, fallback: string, id: int, id_connector: int, id_weboob: string, name: string, priority: int, stability: string>, total: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_connector | is-empty) { error make --unspanned { msg: "path parameter 'id_connector' must be non-empty" } }
@@ -2387,7 +2411,7 @@ export def "put-connectors-id-connector-sources" [
   --expand: string
   --disabled-capabilities: string # list (json format) of capabilities the sources will be disabled for
   --unavailable-capabilities: string # list (json format) of capabilities the sources will be unavailable for
-]: any -> record<auth_mechanism: string, disabled: string, disabled_capabilities: string, fallback: string, id: int, id_connector: int, id_weboob: string, name: string, priority: int, stability: string> {
+]: any -> oneof<record<auth_mechanism: string, disabled: string, disabled_capabilities: string, fallback: string, id: int, id_connector: int, id_weboob: string, name: string, priority: int, stability: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2430,7 +2454,7 @@ export def "get-connectors-id-connector-sources-id-connector-source-fields" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<source_fields: table<id_connector_source: int, label: string, name: string, regex: string, required: bool, secret: bool, type: string>, total: float> {
+]: nothing -> oneof<record<source_fields: table<id_connector_source: int, label: string, name: string, regex: string, required: bool, secret: bool, type: string>, total: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_connector | is-empty) { error make --unspanned { msg: "path parameter 'id_connector' must be non-empty" } }
@@ -2469,7 +2493,7 @@ export def "get-connectors-id-connector-sources-id-source" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<auth_mechanism: string, disabled: string, disabled_capabilities: string, fallback: string, id: int, id_connector: int, id_weboob: string, name: string, priority: int, stability: string> {
+]: nothing -> oneof<record<auth_mechanism: string, disabled: string, disabled_capabilities: string, fallback: string, id: int, id_connector: int, id_weboob: string, name: string, priority: int, stability: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_connector | is-empty) { error make --unspanned { msg: "path parameter 'id_connector' must be non-empty" } }
@@ -2513,7 +2537,7 @@ export def "put-connectors-id-connector-sources-id-source" [
   --disabled-capabilities: string # list (json format) of capabilities this source will be disabled for
   --unavailable: oneof<nothing, bool> # to enable or disable the source (can only be edited by BI employees)
   --unavailable-capabilities: string # list (json format) of capabilities this source will be unavailable for
-]: any -> record<auth_mechanism: string, disabled: string, disabled_capabilities: string, fallback: string, id: int, id_connector: int, id_weboob: string, name: string, priority: int, stability: string> {
+]: any -> oneof<record<auth_mechanism: string, disabled: string, disabled_capabilities: string, fallback: string, id: int, id_connector: int, id_weboob: string, name: string, priority: int, stability: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2655,7 +2679,7 @@ export def "get-logs" [
   --id-source: int # ID of a source
   --id-max: int # filter "id" of logs, maximum id to return
   --expand: string
-]: nothing -> record<connectionlogs: table<error: string, error_message: string, error_uid: string, fields: string, id: int, id_connection: int, id_connector: int, id_source: int, id_user: int, login: string, nb_accounts: int, next_try: string, session_folder_id: string, start: string, statut: int, timestamp: string, worker: string>, total: float> {
+]: nothing -> oneof<record<connectionlogs: table<error: string, error_message: string, error_uid: string, fields: string, id: int, id_connection: int, id_connector: int, id_source: int, id_user: int, login: string, nb_accounts: int, next_try: string, session_folder_id: string, start: string, statut: int, timestamp: string, worker: string>, total: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "min_date" $min_date "scalar") (serialize-qp "max_date" $max_date "scalar") (serialize-qp "period" $period "scalar") (serialize-qp "id_user" $id_user "scalar") (serialize-qp "id_connection" $id_connection "scalar") (serialize-qp "id_connector" $id_connector "scalar") (serialize-qp "connector_uuid" $connector_uuid "scalar") (serialize-qp "error" $error "scalar") (serialize-qp "id_source" $id_source "scalar") (serialize-qp "id_max" $id_max "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
@@ -2725,7 +2749,7 @@ export def "get-providers" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<providers: table<auth_mechanism: string, beta: bool, charged: bool, code: string, color: string, hidden: bool, id: int, months_to_fetch: int, name: string, restricted: bool, siret: string, slug: string, sync_frequency: float, uuid: string>, total: float> {
+]: nothing -> oneof<record<providers: table<auth_mechanism: string, beta: bool, charged: bool, code: string, color: string, hidden: bool, id: int, months_to_fetch: int, name: string, restricted: bool, siret: string, slug: string, sync_frequency: float, uuid: string>, total: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
@@ -2762,7 +2786,7 @@ export def "get-providers-id-connector-connections" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --range: int # the length of the connection subset
   --expand: string
-]: nothing -> record<connections: table<active: bool, created: string, id: int, id_connector: int, id_user: int, last_push: string, last_update: string, next_try: string>, total: float> {
+]: nothing -> oneof<record<connections: table<active: bool, created: string, id: int, id_connector: int, id_user: int, last_push: string, last_update: string, next_try: string>, total: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_connector | is-empty) { error make --unspanned { msg: "path parameter 'id_connector' must be non-empty" } }
@@ -2799,7 +2823,7 @@ export def "get-providers-id-connector-logos" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<connectorlogos: table<id: int, id_connector: int, id_file: int, type: string>, total: float> {
+]: nothing -> oneof<record<connectorlogos: table<id: int, id_connector: int, id_file: int, type: string>, total: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_connector | is-empty) { error make --unspanned { msg: "path parameter 'id_connector' must be non-empty" } }
@@ -2836,7 +2860,7 @@ export def "get-providers-id-connector-logos-main" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<connectorlogos: table<id: int, id_connector: int, id_file: int, type: string>, total: float> {
+]: nothing -> oneof<record<connectorlogos: table<id: int, id_connector: int, id_file: int, type: string>, total: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_connector | is-empty) { error make --unspanned { msg: "path parameter 'id_connector' must be non-empty" } }
@@ -2873,7 +2897,7 @@ export def "get-providers-id-connector-logos-thumbnail" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<connectorlogos: table<id: int, id_connector: int, id_file: int, type: string>, total: float> {
+]: nothing -> oneof<record<connectorlogos: table<id: int, id_connector: int, id_file: int, type: string>, total: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_connector | is-empty) { error make --unspanned { msg: "path parameter 'id_connector' must be non-empty" } }
@@ -2910,7 +2934,7 @@ export def "get-providers-id-connector-sources" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<sources: table<auth_mechanism: string, disabled: string, disabled_capabilities: string, fallback: string, id: int, id_connector: int, id_weboob: string, name: string, priority: int, stability: string>, total: float> {
+]: nothing -> oneof<record<sources: table<auth_mechanism: string, disabled: string, disabled_capabilities: string, fallback: string, id: int, id_connector: int, id_weboob: string, name: string, priority: int, stability: string>, total: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_connector | is-empty) { error make --unspanned { msg: "path parameter 'id_connector' must be non-empty" } }
@@ -2948,7 +2972,7 @@ export def "get-providers-id-connector-sources-id-connector-source-fields" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<source_fields: table<id_connector_source: int, label: string, name: string, regex: string, required: bool, secret: bool, type: string>, total: float> {
+]: nothing -> oneof<record<source_fields: table<id_connector_source: int, label: string, name: string, regex: string, required: bool, secret: bool, type: string>, total: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_connector | is-empty) { error make --unspanned { msg: "path parameter 'id_connector' must be non-empty" } }
@@ -2987,7 +3011,7 @@ export def "get-providers-id-connector-sources-id-source" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<auth_mechanism: string, disabled: string, disabled_capabilities: string, fallback: string, id: int, id_connector: int, id_weboob: string, name: string, priority: int, stability: string> {
+]: nothing -> oneof<record<auth_mechanism: string, disabled: string, disabled_capabilities: string, fallback: string, id: int, id_connector: int, id_weboob: string, name: string, priority: int, stability: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_connector | is-empty) { error make --unspanned { msg: "path parameter 'id_connector' must be non-empty" } }
@@ -3025,7 +3049,7 @@ export def "get-providers-id-provider" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<auth_mechanism: string, beta: bool, charged: bool, code: string, color: string, hidden: bool, id: int, months_to_fetch: int, name: string, restricted: bool, siret: string, slug: string, sync_frequency: float, uuid: string> {
+]: nothing -> oneof<record<auth_mechanism: string, beta: bool, charged: bool, code: string, color: string, hidden: bool, id: int, months_to_fetch: int, name: string, restricted: bool, siret: string, slug: string, sync_frequency: float, uuid: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_provider | is-empty) { error make --unspanned { msg: "path parameter 'id_provider' must be non-empty" } }
@@ -3061,7 +3085,7 @@ export def "get-psd2-registrations" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<psd2registrations: table<id: int, id_connector_source: int, status: string>, total: float> {
+]: nothing -> oneof<record<psd2registrations: table<id: int, id_connector_source: int, status: string>, total: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
@@ -3097,7 +3121,7 @@ export def "get-psd2-registrations-id-psd2-registration" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<id: int, id_connector_source: int, status: string> {
+]: nothing -> oneof<record<id: int, id_connector_source: int, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_psd2_registration | is-empty) { error make --unspanned { msg: "path parameter 'id_psd2-registration' must be non-empty" } }
@@ -3138,7 +3162,7 @@ export def "get-psd2-registrations-id-psd2registration-logs" [
   --min-date: string # minimal (inclusive) date (format: date)
   --max-date: string # maximum (inclusive) date (format: date)
   --expand: string
-]: nothing -> record<psd2registrationlogs: table<created_at: string, error_message: string, id: int, id_psd2registration: int, type: string>, total: float> {
+]: nothing -> oneof<record<psd2registrationlogs: table<created_at: string, error_message: string, id: int, id_psd2registration: int, type: string>, total: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_psd2registration | is-empty) { error make --unspanned { msg: "path parameter 'id_psd2registration' must be non-empty" } }
@@ -3274,7 +3298,7 @@ export def "get-users" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # searches a user by mail (if it contains no '@', '@biapi.pro' will be added at the end)
   --expand: string
-]: nothing -> record<total: float, users: table<id: int, platform: string, signin: string>> {
+]: nothing -> oneof<record<total: float, users: table<id: int, platform: string, signin: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
@@ -3310,7 +3334,7 @@ export def "delete-users-id-user" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<id: int, platform: string, signin: string> {
+]: nothing -> oneof<record<id: int, platform: string, signin: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
@@ -3347,7 +3371,7 @@ export def "get-users-id-user" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<id: int, platform: string, signin: string> {
+]: nothing -> oneof<record<id: int, platform: string, signin: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
@@ -3384,7 +3408,7 @@ export def "get-users-id-user-account-types" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<accounttypes: table<color: string, display_name: string, display_name_p: string, id: int, id_parent: int, is_invest: bool, name: string, product: string, weboob_type_id: int>, total: float> {
+]: nothing -> oneof<record<accounttypes: table<color: string, display_name: string, display_name_p: string, id: int, id_parent: int, is_invest: bool, name: string, product: string, weboob_type_id: int>, total: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
@@ -3422,7 +3446,7 @@ export def "get-users-id-user-account-types-id-account-type" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<color: string, display_name: string, display_name_p: string, id: int, id_parent: int, is_invest: bool, name: string, product: string, weboob_type_id: int> {
+]: nothing -> oneof<record<color: string, display_name: string, display_name_p: string, id: int, id_parent: int, is_invest: bool, name: string, product: string, weboob_type_id: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
@@ -3498,7 +3522,7 @@ export def "get-users-id-user-accounts-id-account-transactionsclusters" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<total: float, transactionsclusters: table<created_by: string, enabled: bool, id: int, id_account: int, id_category: int, mean_amount: float, median_increment: int, next_date: string, wording: string>> {
+]: nothing -> oneof<record<total: float, transactionsclusters: table<created_by: string, enabled: bool, id: int, id_account: int, id_category: int, mean_amount: float, median_increment: int, next_date: string, wording: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
@@ -3537,7 +3561,7 @@ export def "post-users-id-user-accounts-id-account-transactionsclusters" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<created_by: string, enabled: bool, id: int, id_account: int, id_category: int, mean_amount: float, median_increment: int, next_date: string, wording: string> {
+]: nothing -> oneof<record<created_by: string, enabled: bool, id: int, id_account: int, id_category: int, mean_amount: float, median_increment: int, next_date: string, wording: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
@@ -3577,7 +3601,7 @@ export def "delete-users-id-user-accounts-id-account-transactionsclusters-id-tra
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<created_by: string, enabled: bool, id: int, id_account: int, id_category: int, mean_amount: float, median_increment: int, next_date: string, wording: string> {
+]: nothing -> oneof<record<created_by: string, enabled: bool, id: int, id_account: int, id_category: int, mean_amount: float, median_increment: int, next_date: string, wording: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
@@ -3618,7 +3642,7 @@ export def "put-users-id-user-accounts-id-account-transactionsclusters-id-transa
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<created_by: string, enabled: bool, id: int, id_account: int, id_category: int, mean_amount: float, median_increment: int, next_date: string, wording: string> {
+]: nothing -> oneof<record<created_by: string, enabled: bool, id: int, id_account: int, id_category: int, mean_amount: float, median_increment: int, next_date: string, wording: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
@@ -3657,7 +3681,7 @@ export def "get-users-id-user-alerts" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<alerts: table<id: int, id_account: int, id_investment: int, id_transaction: int, id_user: int, timestamp: string, type: string, value: float>, total: float> {
+]: nothing -> oneof<record<alerts: table<id: int, id_account: int, id_investment: int, id_transaction: int, id_user: int, timestamp: string, type: string, value: float>, total: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
@@ -3729,7 +3753,7 @@ export def "get-users-id-user-categories-full" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<categorys: table<color: string, id: int, id_logo: int, id_parent_category: int, id_parent_category_in_menu: int, id_user: int, income: bool, name: string, name_displayed: string, refundable: bool>, total: float> {
+]: nothing -> oneof<record<categorys: table<color: string, id: int, id_logo: int, id_parent_category: int, id_parent_category_in_menu: int, id_user: int, income: bool, name: string, name_displayed: string, refundable: bool>, total: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
@@ -3773,7 +3797,7 @@ export def "post-users-id-user-categories-full" [
   --income: oneof<nothing, bool> # Is an income category. If null, this is both an income and an expense category.
   --name: string # Name of the category.
   --refundable: oneof<nothing, bool> # This category accepts opposite sign of transactions.
-]: any -> record<color: string, id: int, id_logo: int, id_parent_category: int, id_parent_category_in_menu: int, id_user: int, income: bool, name: string, name_displayed: string, refundable: bool> {
+]: any -> oneof<record<color: string, id: int, id_logo: int, id_parent_category: int, id_parent_category_in_menu: int, id_user: int, income: bool, name: string, name_displayed: string, refundable: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3816,7 +3840,7 @@ export def "delete-users-id-user-categories-full-id-full" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<color: string, id: int, id_logo: int, id_parent_category: int, id_parent_category_in_menu: int, id_user: int, income: bool, name: string, name_displayed: string, refundable: bool> {
+]: nothing -> oneof<record<color: string, id: int, id_logo: int, id_parent_category: int, id_parent_category_in_menu: int, id_user: int, income: bool, name: string, name_displayed: string, refundable: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
@@ -3857,7 +3881,7 @@ export def "put-users-id-user-categories-full-id-full" [
   --expand: string
   --accountant-account: string # Accountant account number.
   --hide: string # Hide (but not delete) a category. Must be 0, 1 or toggle.
-]: any -> record<color: string, id: int, id_logo: int, id_parent_category: int, id_parent_category_in_menu: int, id_user: int, income: bool, name: string, name_displayed: string, refundable: bool> {
+]: any -> oneof<record<color: string, id: int, id_logo: int, id_parent_category: int, id_parent_category_in_menu: int, id_user: int, income: bool, name: string, name_displayed: string, refundable: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3935,7 +3959,7 @@ export def "get-users-id-user-config" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-7 # Response content type
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
@@ -4006,7 +4030,7 @@ export def "delete-users-id-user-connections" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<active: bool, created: string, id: int, id_connector: int, id_user: int, last_push: string, last_update: string, next_try: string> {
+]: nothing -> oneof<record<active: bool, created: string, id: int, id_connector: int, id_user: int, last_push: string, last_update: string, next_try: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
@@ -4043,7 +4067,7 @@ export def "get-users-id-user-connections" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<connections: table<active: bool, created: string, id: int, id_connector: int, id_user: int, last_push: string, last_update: string, next_try: string>, total: float> {
+]: nothing -> oneof<record<connections: table<active: bool, created: string, id: int, id_connector: int, id_user: int, last_push: string, last_update: string, next_try: string>, total: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
@@ -4083,7 +4107,7 @@ export def "post-users-id-user-connections" [
   --expand: string
   --connector-uuid: string # optional uuid of the connector (replaces id_connector)
   --id-connector: int # ID of the connector
-]: any -> record<active: bool, created: string, id: int, id_connector: int, id_user: int, last_push: string, last_update: string, next_try: string> {
+]: any -> oneof<record<active: bool, created: string, id: int, id_connector: int, id_user: int, last_push: string, last_update: string, next_try: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4126,7 +4150,7 @@ export def "delete-users-id-user-connections-id-connection" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<active: bool, created: string, id: int, id_connector: int, id_user: int, last_push: string, last_update: string, next_try: string> {
+]: nothing -> oneof<record<active: bool, created: string, id: int, id_connector: int, id_user: int, last_push: string, last_update: string, next_try: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
@@ -4173,7 +4197,7 @@ export def "post-users-id-user-connections-id-connection" [
   --expire: string # Set expiration of the connection to this date (format: date-time)
   --login: string # Set login to this new login
   --password: string # Set password to this new password
-]: any -> record<active: bool, created: string, id: int, id_connector: int, id_user: int, last_push: string, last_update: string, next_try: string> {
+]: any -> oneof<record<active: bool, created: string, id: int, id_connector: int, id_user: int, last_push: string, last_update: string, next_try: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4220,7 +4244,7 @@ export def "put-users-id-user-connections-id-connection" [
   --background: oneof<nothing, bool> # do the connection synchronization in background
   --psu-requested: oneof<nothing, bool> # Whether the connection synchronization is asked by the PSU or not (default is true)
   --expand: string
-]: nothing -> record<active: bool, created: string, id: int, id_connector: int, id_user: int, last_push: string, last_update: string, next_try: string> {
+]: nothing -> oneof<record<active: bool, created: string, id: int, id_connector: int, id_user: int, last_push: string, last_update: string, next_try: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
@@ -4259,7 +4283,7 @@ export def "delete-users-id-user-connections-id-connection-accounts" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<balance: float, bookmarked: int, coming: float, company_name: string, currency: record, deleted: string, disabled: string, display: bool, error: string, iban: string, id: int, id_connection: int, id_parent: int, id_source: int, id_type: int, id_user: int, last_update: string, name: string, number: string, opening_date: string, original_name: string, ownership: string, usage: string, webid: string> {
+]: nothing -> oneof<record<balance: float, bookmarked: int, coming: float, company_name: string, currency: record, deleted: string, disabled: string, display: bool, error: string, iban: string, id: int, id_connection: int, id_parent: int, id_source: int, id_type: int, id_user: int, last_update: string, name: string, number: string, opening_date: string, original_name: string, ownership: string, usage: string, webid: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
@@ -4298,7 +4322,7 @@ export def "get-users-id-user-connections-id-connection-accounts" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<accounts: table<balance: float, bookmarked: int, coming: float, company_name: string, currency: record, deleted: string, disabled: string, display: bool, error: string, iban: string, id: int, id_connection: int, id_parent: int, id_source: int, id_type: int, id_user: int, last_update: string, name: string, number: string, opening_date: string, original_name: string, ownership: string, usage: string, webid: string>, total: float> {
+]: nothing -> oneof<record<accounts: table<balance: float, bookmarked: int, coming: float, company_name: string, currency: record, deleted: string, disabled: string, display: bool, error: string, iban: string, id: int, id_connection: int, id_parent: int, id_source: int, id_type: int, id_user: int, last_update: string, name: string, number: string, opening_date: string, original_name: string, ownership: string, usage: string, webid: string>, total: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
@@ -4343,7 +4367,7 @@ export def "post-users-id-user-connections-id-connection-accounts" [
   --id-currency: string # the currency of the account (default: 'EUR')
   name: string # name of account
   --number: string # number of account
-]: any -> record<balance: float, bookmarked: int, coming: float, company_name: string, currency: record, deleted: string, disabled: string, display: bool, error: string, iban: string, id: int, id_connection: int, id_parent: int, id_source: int, id_type: int, id_user: int, last_update: string, name: string, number: string, opening_date: string, original_name: string, ownership: string, usage: string, webid: string> {
+]: any -> oneof<record<balance: float, bookmarked: int, coming: float, company_name: string, currency: record, deleted: string, disabled: string, display: bool, error: string, iban: string, id: int, id_connection: int, id_parent: int, id_source: int, id_type: int, id_user: int, last_update: string, name: string, number: string, opening_date: string, original_name: string, ownership: string, usage: string, webid: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4387,7 +4411,7 @@ export def "put-users-id-user-connections-id-connection-accounts" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<balance: float, bookmarked: int, coming: float, company_name: string, currency: record, deleted: string, disabled: string, display: bool, error: string, iban: string, id: int, id_connection: int, id_parent: int, id_source: int, id_type: int, id_user: int, last_update: string, name: string, number: string, opening_date: string, original_name: string, ownership: string, usage: string, webid: string> {
+]: nothing -> oneof<record<balance: float, bookmarked: int, coming: float, company_name: string, currency: record, deleted: string, disabled: string, display: bool, error: string, iban: string, id: int, id_connection: int, id_parent: int, id_source: int, id_type: int, id_user: int, last_update: string, name: string, number: string, opening_date: string, original_name: string, ownership: string, usage: string, webid: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
@@ -4427,7 +4451,7 @@ export def "delete-users-id-user-connections-id-connection-accounts-id-account" 
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<balance: float, bookmarked: int, coming: float, company_name: string, currency: record, deleted: string, disabled: string, display: bool, error: string, iban: string, id: int, id_connection: int, id_parent: int, id_source: int, id_type: int, id_user: int, last_update: string, name: string, number: string, opening_date: string, original_name: string, ownership: string, usage: string, webid: string> {
+]: nothing -> oneof<record<balance: float, bookmarked: int, coming: float, company_name: string, currency: record, deleted: string, disabled: string, display: bool, error: string, iban: string, id: int, id_connection: int, id_parent: int, id_source: int, id_type: int, id_user: int, last_update: string, name: string, number: string, opening_date: string, original_name: string, ownership: string, usage: string, webid: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
@@ -4475,7 +4499,7 @@ export def "put-users-id-user-connections-id-connection-accounts-id-account" [
   --iban: string # IBAN of the account
   --name: string # Label of the account
   --usage: string # Usage of the account : PRIV, ORGA or ASSO
-]: any -> record<balance: float, bookmarked: int, coming: float, company_name: string, currency: record, deleted: string, disabled: string, display: bool, error: string, iban: string, id: int, id_connection: int, id_parent: int, id_source: int, id_type: int, id_user: int, last_update: string, name: string, number: string, opening_date: string, original_name: string, ownership: string, usage: string, webid: string> {
+]: any -> oneof<record<balance: float, bookmarked: int, coming: float, company_name: string, currency: record, deleted: string, disabled: string, display: bool, error: string, iban: string, id: int, id_connection: int, id_parent: int, id_source: int, id_type: int, id_user: int, last_update: string, name: string, number: string, opening_date: string, original_name: string, ownership: string, usage: string, webid: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4607,7 +4631,7 @@ export def "get-users-id-user-connections-id-connection-accounts-id-account-logs
   --min-date: string # minimal (inclusive) date (format: date)
   --max-date: string # maximum (inclusive) date (format: date)
   --expand: string
-]: nothing -> record<accountlogs: table<balance: float, coming: float, error: string, error_message: string, id: int, id_account: int, id_connection_log: int, id_connector: int, timestamp: string>, total: float> {
+]: nothing -> oneof<record<accountlogs: table<balance: float, coming: float, error: string, error_message: string, id: int, id_account: int, id_connection_log: int, id_connector: int, timestamp: string>, total: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
@@ -4648,7 +4672,7 @@ export def "get-users-id-user-connections-id-connection-accounts-id-account-sour
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<sources: table<access_expire: string, created: string, disabled: string, expire: string, id: int, id_connection: int, id_connector_source: int, last_update: string, name: string, next_try: string, state: string>, total: float> {
+]: nothing -> oneof<record<sources: table<access_expire: string, created: string, disabled: string, expire: string, id: int, id_connection: int, id_connector_source: int, last_update: string, name: string, next_try: string, state: string>, total: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
@@ -4689,7 +4713,7 @@ export def "delete-users-id-user-connections-id-connection-accounts-id-account-t
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<active: bool, application_date: string, bdate: string, bdatetime: string, card: string, coming: bool, comment: string, commission: float, commission_currency: record, counterparty: string, country: string, date: string, date_scraped: string, datetime: string, deleted: string, gross_value: float, id: int, id_account: int, id_category: int, id_cluster: int, last_update: string, nature: string, original_currency: record, original_gross_value: float, original_value: float, original_wording: string, rdate: string, rdatetime: string, simplified_wording: string, state: string, stemmed_wording: string, value: float, vdate: string, vdatetime: string, webid: string, wording: string> {
+]: nothing -> oneof<record<active: bool, application_date: string, bdate: string, bdatetime: string, card: string, coming: bool, comment: string, commission: float, commission_currency: record, counterparty: string, country: string, date: string, date_scraped: string, datetime: string, deleted: string, gross_value: float, id: int, id_account: int, id_category: int, id_cluster: int, last_update: string, nature: string, original_currency: record, original_gross_value: float, original_value: float, original_wording: string, rdate: string, rdatetime: string, simplified_wording: string, state: string, stemmed_wording: string, value: float, vdate: string, vdatetime: string, webid: string, wording: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
@@ -4744,7 +4768,7 @@ export def "get-users-id-user-connections-id-connection-accounts-id-account-tran
   --value: string # "XX|-XX" or "±XX"
   --id-category: int # filter on given category id(s) (comma separated) or "null"
   --expand: string
-]: nothing -> record<total: float, transactions: table<active: bool, application_date: string, bdate: string, bdatetime: string, card: string, coming: bool, comment: string, commission: float, commission_currency: record, counterparty: string, country: string, date: string, date_scraped: string, datetime: string, deleted: string, gross_value: float, id: int, id_account: int, id_category: int, id_cluster: int, last_update: string, nature: string, original_currency: record, original_gross_value: float, original_value: float, original_wording: string, rdate: string, rdatetime: string, simplified_wording: string, state: string, stemmed_wording: string, value: float, vdate: string, vdatetime: string, webid: string, wording: string>> {
+]: nothing -> oneof<record<total: float, transactions: table<active: bool, application_date: string, bdate: string, bdatetime: string, card: string, coming: bool, comment: string, commission: float, commission_currency: record, counterparty: string, country: string, date: string, date_scraped: string, datetime: string, deleted: string, gross_value: float, id: int, id_account: int, id_category: int, id_cluster: int, last_update: string, nature: string, original_currency: record, original_gross_value: float, original_value: float, original_wording: string, rdate: string, rdatetime: string, simplified_wording: string, state: string, stemmed_wording: string, value: float, vdate: string, vdatetime: string, webid: string, wording: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
@@ -4795,7 +4819,7 @@ export def "post-users-id-user-connections-id-connection-accounts-id-account-tra
   --state: string # nature of the transaction (default: new)
   --type: string # type of the transaction (default: unknown)
   value: int # vallue of the transaction
-]: any -> record<active: bool, application_date: string, bdate: string, bdatetime: string, card: string, coming: bool, comment: string, commission: float, commission_currency: record, counterparty: string, country: string, date: string, date_scraped: string, datetime: string, deleted: string, gross_value: float, id: int, id_account: int, id_category: int, id_cluster: int, last_update: string, nature: string, original_currency: record, original_gross_value: float, original_value: float, original_wording: string, rdate: string, rdatetime: string, simplified_wording: string, state: string, stemmed_wording: string, value: float, vdate: string, vdatetime: string, webid: string, wording: string> {
+]: any -> oneof<record<active: bool, application_date: string, bdate: string, bdatetime: string, card: string, coming: bool, comment: string, commission: float, commission_currency: record, counterparty: string, country: string, date: string, date_scraped: string, datetime: string, deleted: string, gross_value: float, id: int, id_account: int, id_category: int, id_cluster: int, last_update: string, nature: string, original_currency: record, original_gross_value: float, original_value: float, original_wording: string, rdate: string, rdatetime: string, simplified_wording: string, state: string, stemmed_wording: string, value: float, vdate: string, vdatetime: string, webid: string, wording: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4847,7 +4871,7 @@ export def "put-users-id-user-connections-id-connection-accounts-id-account-tran
   --comment: string # change comment
   --id-category: int # ID of the associated category
   --wording: string # user rewording of the transaction
-]: any -> record<active: bool, application_date: string, bdate: string, bdatetime: string, card: string, coming: bool, comment: string, commission: float, commission_currency: record, counterparty: string, country: string, date: string, date_scraped: string, datetime: string, deleted: string, gross_value: float, id: int, id_account: int, id_category: int, id_cluster: int, last_update: string, nature: string, original_currency: record, original_gross_value: float, original_value: float, original_wording: string, rdate: string, rdatetime: string, simplified_wording: string, state: string, stemmed_wording: string, value: float, vdate: string, vdatetime: string, webid: string, wording: string> {
+]: any -> oneof<record<active: bool, application_date: string, bdate: string, bdatetime: string, card: string, coming: bool, comment: string, commission: float, commission_currency: record, counterparty: string, country: string, date: string, date_scraped: string, datetime: string, deleted: string, gross_value: float, id: int, id_account: int, id_category: int, id_cluster: int, last_update: string, nature: string, original_currency: record, original_gross_value: float, original_value: float, original_wording: string, rdate: string, rdatetime: string, simplified_wording: string, state: string, stemmed_wording: string, value: float, vdate: string, vdatetime: string, webid: string, wording: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4895,7 +4919,7 @@ export def "delete-users-id-user-connections-id-connection-accounts-id-account-t
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<id: int, id_transaction: int, key: string, value: string> {
+]: nothing -> oneof<record<id: int, id_transaction: int, key: string, value: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
@@ -4938,7 +4962,7 @@ export def "get-users-id-user-connections-id-connection-accounts-id-account-tran
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<total: float, transactioninformations: table<id: int, id_transaction: int, key: string, value: string>> {
+]: nothing -> oneof<record<total: float, transactioninformations: table<id: int, id_transaction: int, key: string, value: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
@@ -4981,7 +5005,7 @@ export def "put-users-id-user-connections-id-connection-accounts-id-account-tran
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<id: int, id_transaction: int, key: string, value: string> {
+]: nothing -> oneof<record<id: int, id_transaction: int, key: string, value: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
@@ -5025,7 +5049,7 @@ export def "delete-users-id-user-connections-id-connection-accounts-id-account-t
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<id: int, id_transaction: int, key: string, value: string> {
+]: nothing -> oneof<record<id: int, id_transaction: int, key: string, value: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
@@ -5070,7 +5094,7 @@ export def "get-users-id-user-connections-id-connection-accounts-id-account-tran
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<id: int, id_transaction: int, key: string, value: string> {
+]: nothing -> oneof<record<id: int, id_transaction: int, key: string, value: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
@@ -5113,7 +5137,7 @@ export def "get-users-id-user-connections-id-connection-accounts-id-account-tran
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<total: float, transactionsclusters: table<created_by: string, enabled: bool, id: int, id_account: int, id_category: int, mean_amount: float, median_increment: int, next_date: string, wording: string>> {
+]: nothing -> oneof<record<total: float, transactionsclusters: table<created_by: string, enabled: bool, id: int, id_account: int, id_category: int, mean_amount: float, median_increment: int, next_date: string, wording: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
@@ -5154,7 +5178,7 @@ export def "post-users-id-user-connections-id-connection-accounts-id-account-tra
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<created_by: string, enabled: bool, id: int, id_account: int, id_category: int, mean_amount: float, median_increment: int, next_date: string, wording: string> {
+]: nothing -> oneof<record<created_by: string, enabled: bool, id: int, id_account: int, id_category: int, mean_amount: float, median_increment: int, next_date: string, wording: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
@@ -5196,7 +5220,7 @@ export def "delete-users-id-user-connections-id-connection-accounts-id-account-t
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<created_by: string, enabled: bool, id: int, id_account: int, id_category: int, mean_amount: float, median_increment: int, next_date: string, wording: string> {
+]: nothing -> oneof<record<created_by: string, enabled: bool, id: int, id_account: int, id_category: int, mean_amount: float, median_increment: int, next_date: string, wording: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
@@ -5239,7 +5263,7 @@ export def "put-users-id-user-connections-id-connection-accounts-id-account-tran
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<created_by: string, enabled: bool, id: int, id_account: int, id_category: int, mean_amount: float, median_increment: int, next_date: string, wording: string> {
+]: nothing -> oneof<record<created_by: string, enabled: bool, id: int, id_account: int, id_category: int, mean_amount: float, median_increment: int, next_date: string, wording: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
@@ -5281,7 +5305,7 @@ export def "get-users-id-user-connections-id-connection-informations" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-8 # Response content type
   --expand: string
-]: nothing -> record<connections: table<active: bool, created: string, id: int, id_connector: int, id_user: int, last_push: string, last_update: string, next_try: string>, total: float> {
+]: nothing -> oneof<record<connections: table<active: bool, created: string, id: int, id_connector: int, id_user: int, last_push: string, last_update: string, next_try: string>, total: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
@@ -5332,7 +5356,7 @@ export def "get-users-id-user-connections-id-connection-logs" [
   --id-source: int # ID of a source
   --id-max: int # filter "id" of logs, maximum id to return
   --expand: string
-]: nothing -> record<connectionlogs: table<error: string, error_message: string, error_uid: string, fields: string, id: int, id_connection: int, id_connector: int, id_source: int, id_user: int, login: string, nb_accounts: int, next_try: string, session_folder_id: string, start: string, statut: int, timestamp: string, worker: string>, total: float> {
+]: nothing -> oneof<record<connectionlogs: table<error: string, error_message: string, error_uid: string, fields: string, id: int, id_connection: int, id_connector: int, id_source: int, id_user: int, login: string, nb_accounts: int, next_try: string, session_folder_id: string, start: string, statut: int, timestamp: string, worker: string>, total: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
@@ -5371,7 +5395,7 @@ export def "get-users-id-user-connections-id-connection-sources" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<sources: table<access_expire: string, created: string, disabled: string, expire: string, id: int, id_connection: int, id_connector_source: int, last_update: string, name: string, next_try: string, state: string>, total: float> {
+]: nothing -> oneof<record<sources: table<access_expire: string, created: string, disabled: string, expire: string, id: int, id_connection: int, id_connector_source: int, last_update: string, name: string, next_try: string, state: string>, total: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
@@ -5411,7 +5435,7 @@ export def "delete-users-id-user-connections-id-connection-sources-id-source" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<access_expire: string, created: string, disabled: string, expire: string, id: int, id_connection: int, id_connector_source: int, last_update: string, name: string, next_try: string, state: string> {
+]: nothing -> oneof<record<access_expire: string, created: string, disabled: string, expire: string, id: int, id_connection: int, id_connector_source: int, last_update: string, name: string, next_try: string, state: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
@@ -5455,7 +5479,7 @@ export def "post-users-id-user-connections-id-connection-sources-id-source" [
   --expand: string
   --disabled: oneof<nothing, bool> # to enable or disable connector source
   --synchronize: oneof<nothing, bool> # whether to force a synchronization on the source if it's not disabled
-]: any -> record<access_expire: string, created: string, disabled: string, expire: string, id: int, id_connection: int, id_connector_source: int, last_update: string, name: string, next_try: string, state: string> {
+]: any -> oneof<record<access_expire: string, created: string, disabled: string, expire: string, id: int, id_connection: int, id_connector_source: int, last_update: string, name: string, next_try: string, state: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5505,7 +5529,7 @@ export def "put-users-id-user-connections-id-connection-sources-id-source" [
   --disabled: oneof<nothing, bool> # to enable or disable connector source
   --force: oneof<nothing, bool> # whether to force the synchronization on the source if it's in error
   --synchronize: oneof<nothing, bool> # whether to force a synchronization on the source if it's not disabled
-]: any -> record<access_expire: string, created: string, disabled: string, expire: string, id: int, id_connection: int, id_connector_source: int, last_update: string, name: string, next_try: string, state: string> {
+]: any -> oneof<record<access_expire: string, created: string, disabled: string, expire: string, id: int, id_connection: int, id_connector_source: int, last_update: string, name: string, next_try: string, state: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5550,7 +5574,7 @@ export def "get-users-id-user-connections-id-connection-transactionsclusters" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<total: float, transactionsclusters: table<created_by: string, enabled: bool, id: int, id_account: int, id_category: int, mean_amount: float, median_increment: int, next_date: string, wording: string>> {
+]: nothing -> oneof<record<total: float, transactionsclusters: table<created_by: string, enabled: bool, id: int, id_account: int, id_category: int, mean_amount: float, median_increment: int, next_date: string, wording: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
@@ -5589,7 +5613,7 @@ export def "post-users-id-user-connections-id-connection-transactionsclusters" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<created_by: string, enabled: bool, id: int, id_account: int, id_category: int, mean_amount: float, median_increment: int, next_date: string, wording: string> {
+]: nothing -> oneof<record<created_by: string, enabled: bool, id: int, id_account: int, id_category: int, mean_amount: float, median_increment: int, next_date: string, wording: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
@@ -5629,7 +5653,7 @@ export def "delete-users-id-user-connections-id-connection-transactionsclusters-
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<created_by: string, enabled: bool, id: int, id_account: int, id_category: int, mean_amount: float, median_increment: int, next_date: string, wording: string> {
+]: nothing -> oneof<record<created_by: string, enabled: bool, id: int, id_account: int, id_category: int, mean_amount: float, median_increment: int, next_date: string, wording: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
@@ -5670,7 +5694,7 @@ export def "put-users-id-user-connections-id-connection-transactionsclusters-id-
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<created_by: string, enabled: bool, id: int, id_account: int, id_category: int, mean_amount: float, median_increment: int, next_date: string, wording: string> {
+]: nothing -> oneof<record<created_by: string, enabled: bool, id: int, id_account: int, id_category: int, mean_amount: float, median_increment: int, next_date: string, wording: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
@@ -5756,7 +5780,7 @@ export def "get-users-id-user-logs" [
   --id-source: int # ID of a source
   --id-max: int # filter "id" of logs, maximum id to return
   --expand: string
-]: nothing -> record<connectionlogs: table<error: string, error_message: string, error_uid: string, fields: string, id: int, id_connection: int, id_connector: int, id_source: int, id_user: int, login: string, nb_accounts: int, next_try: string, session_folder_id: string, start: string, statut: int, timestamp: string, worker: string>, total: float> {
+]: nothing -> oneof<record<connectionlogs: table<error: string, error_message: string, error_uid: string, fields: string, id: int, id_connection: int, id_connector: int, id_source: int, id_user: int, login: string, nb_accounts: int, next_try: string, session_folder_id: string, start: string, statut: int, timestamp: string, worker: string>, total: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
@@ -5793,7 +5817,7 @@ export def "get-users-id-user-profiles" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<profiles: table<admin: bool, conf: string, email: string, id: int, id_user: int, lang: string, role: string, statut: int>, total: float> {
+]: nothing -> oneof<record<profiles: table<admin: bool, conf: string, email: string, id: int, id_user: int, lang: string, role: string, statut: int>, total: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
@@ -5830,7 +5854,7 @@ export def "get-users-id-user-profiles-main" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<admin: bool, conf: string, email: string, id: int, id_user: int, lang: string, role: string, statut: int> {
+]: nothing -> oneof<record<admin: bool, conf: string, email: string, id: int, id_user: int, lang: string, role: string, statut: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
@@ -5868,7 +5892,7 @@ export def "get-users-id-user-profiles-id-profile" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<admin: bool, conf: string, email: string, id: int, id_user: int, lang: string, role: string, statut: int> {
+]: nothing -> oneof<record<admin: bool, conf: string, email: string, id: int, id_user: int, lang: string, role: string, statut: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
@@ -5907,7 +5931,7 @@ export def "post-users-id-user-token" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-9 # Response content type
   application: string # application name
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5948,7 +5972,7 @@ export def "get-users-id-user-transactionsclusters" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<total: float, transactionsclusters: table<created_by: string, enabled: bool, id: int, id_account: int, id_category: int, mean_amount: float, median_increment: int, next_date: string, wording: string>> {
+]: nothing -> oneof<record<total: float, transactionsclusters: table<created_by: string, enabled: bool, id: int, id_account: int, id_category: int, mean_amount: float, median_increment: int, next_date: string, wording: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
@@ -5985,7 +6009,7 @@ export def "post-users-id-user-transactionsclusters" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<created_by: string, enabled: bool, id: int, id_account: int, id_category: int, mean_amount: float, median_increment: int, next_date: string, wording: string> {
+]: nothing -> oneof<record<created_by: string, enabled: bool, id: int, id_account: int, id_category: int, mean_amount: float, median_increment: int, next_date: string, wording: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
@@ -6023,7 +6047,7 @@ export def "delete-users-id-user-transactionsclusters-id-transactionscluster" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<created_by: string, enabled: bool, id: int, id_account: int, id_category: int, mean_amount: float, median_increment: int, next_date: string, wording: string> {
+]: nothing -> oneof<record<created_by: string, enabled: bool, id: int, id_account: int, id_category: int, mean_amount: float, median_increment: int, next_date: string, wording: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
@@ -6062,7 +6086,7 @@ export def "put-users-id-user-transactionsclusters-id-transactionscluster" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<created_by: string, enabled: bool, id: int, id_account: int, id_category: int, mean_amount: float, median_increment: int, next_date: string, wording: string> {
+]: nothing -> oneof<record<created_by: string, enabled: bool, id: int, id_account: int, id_category: int, mean_amount: float, median_increment: int, next_date: string, wording: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
@@ -6132,7 +6156,7 @@ export def "delete-webhooks" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<add_to_data: string, created: string, deleted: string, flush_fail: string, id: int, id_auth: int, id_event: int, id_service: int, id_user: int, updated: string, url: string> {
+]: nothing -> oneof<record<add_to_data: string, created: string, deleted: string, flush_fail: string, id: int, id_auth: int, id_event: int, id_service: int, id_user: int, updated: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
@@ -6167,7 +6191,7 @@ export def "get-webhooks" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<total: float, webhooks: table<add_to_data: string, created: string, deleted: string, flush_fail: string, id: int, id_auth: int, id_event: int, id_service: int, id_user: int, updated: string, url: string>> {
+]: nothing -> oneof<record<total: float, webhooks: table<add_to_data: string, created: string, deleted: string, flush_fail: string, id: int, id_auth: int, id_event: int, id_service: int, id_user: int, updated: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
@@ -6208,7 +6232,7 @@ export def "post-webhooks" [
   --id-user: int # The user ID to associate with the webhook
   --params: string # The webhook parameters as an object with three keys: type, key and value
   --url: string # The webhook callback url
-]: any -> record<add_to_data: string, created: string, deleted: string, flush_fail: string, id: int, id_auth: int, id_event: int, id_service: int, id_user: int, updated: string, url: string> {
+]: any -> oneof<record<add_to_data: string, created: string, deleted: string, flush_fail: string, id: int, id_auth: int, id_event: int, id_service: int, id_user: int, updated: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6248,7 +6272,7 @@ export def "delete-webhooks-auth" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<id: int, name: string, type: string> {
+]: nothing -> oneof<record<id: int, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
@@ -6283,7 +6307,7 @@ export def "get-webhooks-auth" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<authproviders: table<id: int, name: string, type: string>, total: float> {
+]: nothing -> oneof<record<authproviders: table<id: int, name: string, type: string>, total: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
@@ -6321,7 +6345,7 @@ export def "post-webhooks-auth" [
   --config: string # The authentication process configuration. A dict contains either the certificate
   name: string # The name of the authentication process to differentiate
   type: int # The type of the authentication process (oauth, certificate, token, etc...)
-]: any -> record<id: int, name: string, type: string> {
+]: any -> oneof<record<id: int, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6362,7 +6386,7 @@ export def "delete-webhooks-auth-id-auth" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<id: int, name: string, type: string> {
+]: nothing -> oneof<record<id: int, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_auth | is-empty) { error make --unspanned { msg: "path parameter 'id_auth' must be non-empty" } }
@@ -6402,7 +6426,7 @@ export def "post-webhooks-auth-id-auth" [
   --config: string # The authentication process configuration. A dict containing either the certificate
   name: string # The name of the authentication process to differentiate
   type: int # The type of the authentication process (oauth, certificate, token, etc...)
-]: any -> record<id: int, name: string, type: string> {
+]: any -> oneof<record<id: int, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6447,7 +6471,7 @@ export def "put-webhooks-auth-id-auth" [
   --config: string # The authentication process configuration. A dict containt either the certificate
   name: string # The name of the authentication process to differentiate
   type: int # The type of the authentication process (oauth, certificate, token, etc...)
-]: any -> record<id: int, name: string, type: string> {
+]: any -> oneof<record<id: int, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6489,7 +6513,7 @@ export def "delete-webhooks-id-webhook" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<add_to_data: string, created: string, deleted: string, flush_fail: string, id: int, id_auth: int, id_event: int, id_service: int, id_user: int, updated: string, url: string> {
+]: nothing -> oneof<record<add_to_data: string, created: string, deleted: string, flush_fail: string, id: int, id_auth: int, id_event: int, id_service: int, id_user: int, updated: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_webhook | is-empty) { error make --unspanned { msg: "path parameter 'id_webhook' must be non-empty" } }
@@ -6532,7 +6556,7 @@ export def "post-webhooks-id-webhook" [
   --id-service: int # The service ID to associate with the webhook
   --id-user: int # The user ID to associate with the webhook
   --url: string # The webhook callback url
-]: any -> record<add_to_data: string, created: string, deleted: string, flush_fail: string, id: int, id_auth: int, id_event: int, id_service: int, id_user: int, updated: string, url: string> {
+]: any -> oneof<record<add_to_data: string, created: string, deleted: string, flush_fail: string, id: int, id_auth: int, id_event: int, id_service: int, id_user: int, updated: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6580,7 +6604,7 @@ export def "put-webhooks-id-webhook" [
   --id-service: int # The service ID to associate with the webhook
   --id-user: int # The user ID to associate with the webhook
   --url: string # The webhook callback url
-]: any -> record<add_to_data: string, created: string, deleted: string, flush_fail: string, id: int, id_auth: int, id_event: int, id_service: int, id_user: int, updated: string, url: string> {
+]: any -> oneof<record<add_to_data: string, created: string, deleted: string, flush_fail: string, id: int, id_auth: int, id_event: int, id_service: int, id_user: int, updated: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6622,7 +6646,7 @@ export def "delete-webhooks-id-webhook-add-to-data" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<add_to_data: string, created: string, deleted: string, flush_fail: string, id: int, id_auth: int, id_event: int, id_service: int, id_user: int, updated: string, url: string> {
+]: nothing -> oneof<record<add_to_data: string, created: string, deleted: string, flush_fail: string, id: int, id_auth: int, id_event: int, id_service: int, id_user: int, updated: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_webhook | is-empty) { error make --unspanned { msg: "path parameter 'id_webhook' must be non-empty" } }
@@ -6659,7 +6683,7 @@ export def "get-webhooks-id-webhook-add-to-data" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<total: float, webhooks: table<add_to_data: string, created: string, deleted: string, flush_fail: string, id: int, id_auth: int, id_event: int, id_service: int, id_user: int, updated: string, url: string>> {
+]: nothing -> oneof<record<total: float, webhooks: table<add_to_data: string, created: string, deleted: string, flush_fail: string, id: int, id_auth: int, id_event: int, id_service: int, id_user: int, updated: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_webhook | is-empty) { error make --unspanned { msg: "path parameter 'id_webhook' must be non-empty" } }
@@ -6696,7 +6720,7 @@ export def "post-webhooks-id-webhook-add-to-data" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<add_to_data: string, created: string, deleted: string, flush_fail: string, id: int, id_auth: int, id_event: int, id_service: int, id_user: int, updated: string, url: string> {
+]: nothing -> oneof<record<add_to_data: string, created: string, deleted: string, flush_fail: string, id: int, id_auth: int, id_event: int, id_service: int, id_user: int, updated: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_webhook | is-empty) { error make --unspanned { msg: "path parameter 'id_webhook' must be non-empty" } }
@@ -6734,7 +6758,7 @@ export def "delete-webhooks-id-webhook-add-to-data-key" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<add_to_data: string, created: string, deleted: string, flush_fail: string, id: int, id_auth: int, id_event: int, id_service: int, id_user: int, updated: string, url: string> {
+]: nothing -> oneof<record<add_to_data: string, created: string, deleted: string, flush_fail: string, id: int, id_auth: int, id_event: int, id_service: int, id_user: int, updated: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_webhook | is-empty) { error make --unspanned { msg: "path parameter 'id_webhook' must be non-empty" } }
@@ -6773,7 +6797,7 @@ export def "get-webhooks-id-webhook-add-to-data-key" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<add_to_data: string, created: string, deleted: string, flush_fail: string, id: int, id_auth: int, id_event: int, id_service: int, id_user: int, updated: string, url: string> {
+]: nothing -> oneof<record<add_to_data: string, created: string, deleted: string, flush_fail: string, id: int, id_auth: int, id_event: int, id_service: int, id_user: int, updated: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_webhook | is-empty) { error make --unspanned { msg: "path parameter 'id_webhook' must be non-empty" } }
@@ -6812,7 +6836,7 @@ export def "post-webhooks-id-webhook-add-to-data-key" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-]: nothing -> record<add_to_data: string, created: string, deleted: string, flush_fail: string, id: int, id_auth: int, id_event: int, id_service: int, id_user: int, updated: string, url: string> {
+]: nothing -> oneof<record<add_to_data: string, created: string, deleted: string, flush_fail: string, id: int, id_auth: int, id_event: int, id_service: int, id_user: int, updated: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_webhook | is-empty) { error make --unspanned { msg: "path parameter 'id_webhook' must be non-empty" } }
@@ -6855,7 +6879,7 @@ export def "get-webhooks-id-webhook-logs" [
   --min-date: string # minimal (inclusive) date (format: date)
   --max-date: string # maximum (inclusive) date (format: date)
   --expand: string
-]: nothing -> record<total: float, webhooklogs: table<id: int, id_service: int, id_user: int, id_webhook_data: int, next_try: string, response_code: int, response_date: string, timestamp: string>> {
+]: nothing -> oneof<record<total: float, webhooklogs: table<id: int, id_service: int, id_user: int, id_webhook_data: int, next_try: string, response_code: int, response_date: string, timestamp: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_webhook | is-empty) { error make --unspanned { msg: "path parameter 'id_webhook' must be non-empty" } }

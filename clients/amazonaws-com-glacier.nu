@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -119,9 +143,9 @@ def operation-completer-1 [] { ["remove"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "abort-multipart-upload" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["abort-multipart-upload" "complete-multipart-upload" "list-parts" "upload-multipart-part" "abort-vault-lock" "get-vault-lock" "initiate-vault-lock" "add-tags-to-vault" "complete-vault-lock" "create-vault" "delete-vault" "describe-vault" "delete-archive" "delete-vault-access-policy" "get-vault-access-policy" "set-vault-access-policy" "delete-vault-notifications" "get-vault-notifications" "set-vault-notifications" "describe-job" "get-data-retrieval-policy" "set-data-retrieval-policy" "get-job-output" "initiate-job" "list-jobs" "initiate-multipart-upload" "list-multipart-uploads" "list-provisioned-capacity" "purchase-provisioned-capacity" "list-tags-for-vault" "list-vaults" "remove-tags-from-vault" "upload-archive" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -214,7 +238,7 @@ export def "complete-multipart-upload" [
   --x-amz-signed-headers: string
   --x-amz-archive-size: string # The total size, in bytes, of the entire archive. This value should be the sum of all the sizes of the individual parts that you uploaded.
   --x-amz-sha256-tree-hash: string # The SHA256 tree hash of the entire archive. It is the tree hash of SHA256 tree hash of the individual parts. If the value you specify in the request does not match the SHA256 tree hash of the final assembled archive as computed by Amazon S3 Glacier (Glacier), Glacier returns an error and the request fails.
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
@@ -265,7 +289,7 @@ export def "list-parts" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<MultipartUploadId: string, VaultARN: string, ArchiveDescription: string, PartSizeInBytes: int, CreationDate: string, Parts: table<RangeInBytes: string, SHA256TreeHash: string>, Marker: string> {
+]: nothing -> oneof<record<MultipartUploadId: string, VaultARN: string, ArchiveDescription: string, PartSizeInBytes: int, CreationDate: string, Parts: table<RangeInBytes: string, SHA256TreeHash: string>, Marker: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
@@ -318,7 +342,7 @@ export def "upload-multipart-part" [
   --x-amz-sha256-tree-hash: string # The SHA256 tree hash of the data being uploaded.
   --content-range: string # Identifies the range of bytes in the assembled archive that will be uploaded in this part. Amazon S3 Glacier uses this information to assemble the archive in the proper sequence. The format of this header follows RFC 2616. An example header is Content-Range:bytes 0-4194303/*.
   --body: string # The data to upload.
-]: any -> any {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -416,7 +440,7 @@ export def "get-vault-lock" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Policy: string, State: string, ExpirationDate: string, CreationDate: string> {
+]: nothing -> oneof<record<Policy: string, State: string, ExpirationDate: string, CreationDate: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
@@ -444,7 +468,6 @@ export def "get-vault-lock" [
 #
 # POST /{accountId}/vaults/{vaultName}/lock-policy
 # operationId: InitiateVaultLock
-# --policy shape: {Policy?: string}
 export def "initiate-vault-lock" [
   account_id: string
   vault_name: string
@@ -465,7 +488,7 @@ export def "initiate-vault-lock" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --policy: record # Contains the vault lock policy. — shape: {Policy?: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -618,7 +641,7 @@ export def "create-vault" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
@@ -712,7 +735,7 @@ export def "describe-vault" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<VaultARN: string, VaultName: string, CreationDate: string, LastInventoryDate: string, NumberOfArchives: int, SizeInBytes: int> {
+]: nothing -> oneof<record<VaultARN: string, VaultName: string, CreationDate: string, LastInventoryDate: string, NumberOfArchives: int, SizeInBytes: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
@@ -855,7 +878,7 @@ export def "get-vault-access-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<policy: record<Policy: string>> {
+]: nothing -> oneof<record<policy: record<Policy: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
@@ -883,7 +906,6 @@ export def "get-vault-access-policy" [
 #
 # PUT /{accountId}/vaults/{vaultName}/access-policy
 # operationId: SetVaultAccessPolicy
-# --policy shape: {Policy?: string}
 export def "set-vault-access-policy" [
   account_id: string
   vault_name: string
@@ -1001,7 +1023,7 @@ export def "get-vault-notifications" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<vaultNotificationConfig: record<SNSTopic: string, Events: list<string>>> {
+]: nothing -> oneof<record<vaultNotificationConfig: record<SNSTopic: string, Events: list<string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
@@ -1029,7 +1051,6 @@ export def "get-vault-notifications" [
 #
 # PUT /{accountId}/vaults/{vaultName}/notification-configuration
 # operationId: SetVaultNotifications
-# --vaultNotificationConfig shape: {SNSTopic?: string, Events?: list<string>}
 export def "set-vault-notifications" [
   account_id: string
   vault_name: string
@@ -1101,7 +1122,7 @@ export def "describe-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<JobId: string, JobDescription: string, Action: string, ArchiveId: string, VaultARN: string, CreationDate: string, Completed: bool, StatusCode: string, StatusMessage: string, ArchiveSizeInBytes: int, InventorySizeInBytes: int, SNSTopic: string, CompletionDate: string, SHA256TreeHash: string, ArchiveSHA256TreeHash: string, RetrievalByteRange: string, Tier: string, InventoryRetrievalParameters: record<Format: string, StartDate: string, EndDate: string, Limit: string, Marker: string>, JobOutputPath: string, SelectParameters: record<InputSerialization: record<csv: record>, ExpressionType: string, Expression: string, OutputSerialization: record<csv: record>>, OutputLocation: record<S3: record<BucketName: string, Prefix: string, Encryption: record, CannedACL: string, AccessControlList: list, Tagging: record, UserMetadata: record, StorageClass: string>>> {
+]: nothing -> oneof<record<JobId: string, JobDescription: string, Action: string, ArchiveId: string, VaultARN: string, CreationDate: string, Completed: bool, StatusCode: string, StatusMessage: string, ArchiveSizeInBytes: int, InventorySizeInBytes: int, SNSTopic: string, CompletionDate: string, SHA256TreeHash: string, ArchiveSHA256TreeHash: string, RetrievalByteRange: string, Tier: string, InventoryRetrievalParameters: record<Format: string, StartDate: string, EndDate: string, Limit: string, Marker: string>, JobOutputPath: string, SelectParameters: record<InputSerialization: record<csv: record>, ExpressionType: string, Expression: string, OutputSerialization: record<csv: record>>, OutputLocation: record<S3: record<BucketName: string, Prefix: string, Encryption: record, CannedACL: string, AccessControlList: list, Tagging: record, UserMetadata: record, StorageClass: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
@@ -1148,7 +1169,7 @@ export def "get-data-retrieval-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Policy: record<Rules: list<record>>> {
+]: nothing -> oneof<record<Policy: record<Rules: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
@@ -1175,7 +1196,6 @@ export def "get-data-retrieval-policy" [
 #
 # PUT /{accountId}/policies/data-retrieval
 # operationId: SetDataRetrievalPolicy
-# --Policy shape: {Rules?: list}
 export def "set-data-retrieval-policy" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1246,7 +1266,7 @@ export def "get-job-output" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --range: string # The range of bytes to retrieve from the output. For example, if you want to download the first 1,048,576 bytes, specify the range as bytes=0-1048575. By default, this operation downloads the entire output. If the job output is large, then you can use a range to retrieve a portion of the output. This allows you to download the entire output in smaller chunks of bytes. For example, suppose you have 1 GB of job output you want to download and you decide to download 128 MB chunks of data at a time, which is a total of eight Get Job Output requests. You use the following process to download the job output: Download a 128 MB chunk of output by specifying the appropriate byte range. Verify that all 128 MB of data was received. Along with the data, the response includes a SHA256 tree hash of the payload. You compute the checksum of the payload on the client and compare it with the checksum you received in the response to ensure you received all the expected data. Repeat steps 1 and 2 for all the eight 128 MB chunks of output data, each time specifying the appropriate byte range. After downloading all the parts of the job output, you have a list of eight checksum values. Compute the tree hash of these values to find the checksum of the entire output. Using the DescribeJob API, obtain job information of the job that provided you the output. The response includes the checksum of the entire archive stored in Amazon S3 Glacier. You compare this value with the checksum you computed to ensure you have downloaded the entire archive content with no errors.
-]: nothing -> record<body: string, status: int> {
+]: nothing -> oneof<record<body: string, status: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
@@ -1275,7 +1295,6 @@ export def "get-job-output" [
 #
 # POST /{accountId}/vaults/{vaultName}/jobs
 # operationId: InitiateJob
-# --jobParameters shape: {Format?: string, Type?: string, ArchiveId?: string, Description?: string, SNSTopic?: string, RetrievalByteRange?: string, Tier?: string, InventoryRetrievalParameters?: record, SelectParameters?: record, OutputLocation?: record}
 export def "initiate-job" [
   account_id: string
   vault_name: string
@@ -1296,7 +1315,7 @@ export def "initiate-job" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --job-parameters: record # Provides options for defining a job. — shape: {Format?: string, Type?: string, ArchiveId?: string, Description?: string, SNSTopic?: string, RetrievalByteRange?: string, Tier?: string, InventoryRetrievalParameters?: record, SelectParameters?: record, OutputLocation?: record}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1350,7 +1369,7 @@ export def "list-jobs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<JobList: table<JobId: string, JobDescription: string, Action: string, ArchiveId: string, VaultARN: string, CreationDate: string, Completed: bool, StatusCode: string, StatusMessage: string, ArchiveSizeInBytes: int, InventorySizeInBytes: int, SNSTopic: string, CompletionDate: string, SHA256TreeHash: string, ArchiveSHA256TreeHash: string, RetrievalByteRange: string, Tier: string, InventoryRetrievalParameters: record, JobOutputPath: string, SelectParameters: record, OutputLocation: record>, Marker: string> {
+]: nothing -> oneof<record<JobList: table<JobId: string, JobDescription: string, Action: string, ArchiveId: string, VaultARN: string, CreationDate: string, Completed: bool, StatusCode: string, StatusMessage: string, ArchiveSizeInBytes: int, InventorySizeInBytes: int, SNSTopic: string, CompletionDate: string, SHA256TreeHash: string, ArchiveSHA256TreeHash: string, RetrievalByteRange: string, Tier: string, InventoryRetrievalParameters: record, JobOutputPath: string, SelectParameters: record, OutputLocation: record>, Marker: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
@@ -1400,7 +1419,7 @@ export def "initiate-multipart-upload" [
   --x-amz-signed-headers: string
   --x-amz-archive-description: string # The archive description that you are uploading in parts. The part size must be a megabyte (1024 KB) multiplied by a power of 2, for example 1048576 (1 MB), 2097152 (2 MB), 4194304 (4 MB), 8388608 (8 MB), and so on. The minimum allowable part size is 1 MB, and the maximum is 4 GB (4096 MB).
   --x-amz-part-size: string # The size of each part except the last, in bytes. The last part can be smaller than this part size.
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
@@ -1449,7 +1468,7 @@ export def "list-multipart-uploads" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<UploadsList: table<MultipartUploadId: string, VaultARN: string, ArchiveDescription: string, PartSizeInBytes: int, CreationDate: string>, Marker: string> {
+]: nothing -> oneof<record<UploadsList: table<MultipartUploadId: string, VaultARN: string, ArchiveDescription: string, PartSizeInBytes: int, CreationDate: string>, Marker: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
@@ -1496,7 +1515,7 @@ export def "list-provisioned-capacity" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ProvisionedCapacityList: table<CapacityId: string, StartDate: string, ExpirationDate: string>> {
+]: nothing -> oneof<record<ProvisionedCapacityList: table<CapacityId: string, StartDate: string, ExpirationDate: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
@@ -1541,7 +1560,7 @@ export def "purchase-provisioned-capacity" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
@@ -1587,7 +1606,7 @@ export def "list-tags-for-vault" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Tags: record> {
+]: nothing -> oneof<record<Tags: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
@@ -1635,7 +1654,7 @@ export def "list-vaults" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<VaultList: table<VaultARN: string, VaultName: string, CreationDate: string, LastInventoryDate: string, NumberOfArchives: int, SizeInBytes: int>, Marker: string> {
+]: nothing -> oneof<record<VaultList: table<VaultARN: string, VaultName: string, CreationDate: string, LastInventoryDate: string, NumberOfArchives: int, SizeInBytes: int>, Marker: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
@@ -1739,7 +1758,7 @@ export def "upload-archive" [
   --x-amz-archive-description: string # The optional description of the archive you are uploading.
   --x-amz-sha256-tree-hash: string # The SHA256 tree hash of the data being uploaded.
   --body: string # The data to upload.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -120,9 +144,9 @@ def role-completer [] { ["CLIENT_DEAL_APPROVER" "CLIENT_DEAL_NEGOTIATOR" "CLIENT
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "authorizedbuyersmarketplace-buyers-auction-packages-subscribe-clients" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["authorizedbuyersmarketplace-buyers-auction-packages-subscribe-clients" "authorizedbuyersmarketplace-buyers-auction-packages-unsubscribe-clients" "authorizedbuyersmarketplace-buyers-proposals-send-rfp" "authorizedbuyersmarketplace-buyers-finalized-deals-add-creative" "authorizedbuyersmarketplace-buyers-finalized-deals-set-ready-to-serve" "authorizedbuyersmarketplace-buyers-clients-users-delete" "authorizedbuyersmarketplace-buyers-publisher-profiles-get" "authorizedbuyersmarketplace-buyers-proposals-deals-patch" "authorizedbuyersmarketplace-buyers-proposals-accept" "authorizedbuyersmarketplace-buyers-clients-users-activate" "authorizedbuyersmarketplace-buyers-clients-users-deactivate" "authorizedbuyersmarketplace-buyers-finalized-deals-pause" "authorizedbuyersmarketplace-buyers-finalized-deals-resume" "authorizedbuyersmarketplace-buyers-auction-packages-subscribe" "authorizedbuyersmarketplace-buyers-auction-packages-unsubscribe" "authorizedbuyersmarketplace-buyers-auction-packages-list" "authorizedbuyersmarketplace-buyers-clients-list" "authorizedbuyersmarketplace-buyers-clients-create" "authorizedbuyersmarketplace-buyers-proposals-deals-list" "authorizedbuyersmarketplace-buyers-proposals-deals-batch-update" "authorizedbuyersmarketplace-buyers-finalized-deals-list" "authorizedbuyersmarketplace-buyers-proposals-list" "authorizedbuyersmarketplace-buyers-publisher-profiles-list" "authorizedbuyersmarketplace-buyers-clients-users-list" "authorizedbuyersmarketplace-buyers-clients-users-create" "authorizedbuyersmarketplace-buyers-proposals-add-note" "authorizedbuyersmarketplace-buyers-proposals-cancel-negotiation" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -167,7 +191,7 @@ export def "authorizedbuyersmarketplace-buyers-auction-packages-subscribe-client
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --clients: list<string> # Optional. A list of client buyers to subscribe to the auction package, with client buyer in the format `buyers/{accountId}/clients/{clientAccountId}`. The current buyer will be subscribed to the auction package regardless of the list contents if not already.
-]: any -> record<createTime: string, creator: string, description: string, displayName: string, name: string, subscribedClients: list<string>, updateTime: string> {
+]: any -> oneof<record<createTime: string, creator: string, description: string, displayName: string, name: string, subscribedClients: list<string>, updateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -219,7 +243,7 @@ export def "authorizedbuyersmarketplace-buyers-auction-packages-unsubscribe-clie
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --clients: list<string> # Optional. A list of client buyers to unsubscribe from the auction package, with client buyer in the format `buyers/{accountId}/clients/{clientAccountId}`.
-]: any -> record<createTime: string, creator: string, description: string, displayName: string, name: string, subscribedClients: list<string>, updateTime: string> {
+]: any -> oneof<record<createTime: string, creator: string, description: string, displayName: string, name: string, subscribedClients: list<string>, updateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -248,12 +272,6 @@ export def "authorizedbuyersmarketplace-buyers-auction-packages-unsubscribe-clie
 #
 # POST /v1/{buyer}/proposals:sendRfp
 # operationId: authorizedbuyersmarketplace.buyers.proposals.sendRfp
-# --buyerContacts item shape: {displayName?: string, email?: string}
-# --estimatedGrossSpend shape: {currencyCode?: string, nanos?: int, units?: string}
-# --geoTargeting shape: {excludedCriteriaIds?: list<string>, targetedCriteriaIds?: list<string>}
-# --inventorySizeTargeting shape: {excludedInventorySizes?: list, targetedInventorySizes?: list}
-# --preferredDealTerms shape: {fixedPrice?: record}
-# --programmaticGuaranteedTerms shape: {fixedPrice?: record, guaranteedLooks?: string, impressionCap?: string, minimumDailyLooks?: string, percentShareOfVoice?: string, reservationType?: "RESERVATION_TYPE_UNSPECIFIED"|"STANDARD"|"SPONSORSHIP"}
 export def "authorizedbuyersmarketplace-buyers-proposals-send-rfp" [
   buyer: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -288,7 +306,7 @@ export def "authorizedbuyersmarketplace-buyers-proposals-send-rfp" [
   --preferred-deal-terms: record # Pricing terms for Preferred Deals. — shape: {fixedPrice?: record}
   --programmatic-guaranteed-terms: record # Pricing terms for Programmatic Guaranteed Deals. — shape: {fixedPrice?: record, guaranteedLooks?: string, impressionCap?: string, minimumDailyLooks?: string, percentShareOfVoice?: string, reservationType?: "RESERVATION_TYPE_UNSPECIFIED"|"STANDARD"|"SPONSORSHIP"}
   --publisher-profile: string # Required. The profile of the publisher who will receive this RFP in the format: `buyers/{accountId}/publisherProfiles/{publisherProfileId}`.
-]: any -> record<billedBuyer: string, buyer: string, buyerContacts: table<displayName: string, email: string>, buyerPrivateData: record<referenceId: string>, client: string, dealType: string, displayName: string, isRenegotiating: bool, lastUpdaterOrCommentorRole: string, name: string, notes: table<createTime: string, creatorRole: string, note: string>, originatorRole: string, pausingConsented: bool, proposalRevision: string, publisherProfile: string, sellerContacts: table<displayName: string, email: string>, state: string, termsAndConditions: string, updateTime: string> {
+]: any -> oneof<record<billedBuyer: string, buyer: string, buyerContacts: table<displayName: string, email: string>, buyerPrivateData: record<referenceId: string>, client: string, dealType: string, displayName: string, isRenegotiating: bool, lastUpdaterOrCommentorRole: string, name: string, notes: table<createTime: string, creatorRole: string, note: string>, originatorRole: string, pausingConsented: bool, proposalRevision: string, publisherProfile: string, sellerContacts: table<displayName: string, email: string>, state: string, termsAndConditions: string, updateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -340,7 +358,7 @@ export def "authorizedbuyersmarketplace-buyers-finalized-deals-add-creative" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --creative: string # Name of the creative to add to the finalized deal, in the format `buyers/{buyerAccountId}/creatives/{creativeId}`. See creative.name.
-]: any -> record<deal: record<billedBuyer: string, buyer: string, client: string, createTime: string, creativeRequirements: record<creativeFormat: string, creativePreApprovalPolicy: string, creativeSafeFrameCompatibility: string, maxAdDurationMs: string, programmaticCreativeSource: string, skippableAdType: string>, dealType: string, deliveryControl: record<companionDeliveryType: string, creativeRotationType: string, deliveryRateType: string, frequencyCap: list, roadblockingType: string>, description: string, displayName: string, estimatedGrossSpend: record<currencyCode: string, nanos: int, units: string>, flightEndTime: string, flightStartTime: string, name: string, preferredDealTerms: record<fixedPrice: record>, privateAuctionTerms: record<floorPrice: record, openAuctionAllowed: bool>, programmaticGuaranteedTerms: record<fixedPrice: record, guaranteedLooks: string, impressionCap: string, minimumDailyLooks: string, percentShareOfVoice: string, reservationType: string>, proposalRevision: string, publisherProfile: string, sellerTimeZone: record<id: string, version: string>, targeting: record<daypartTargeting: record, geoTargeting: record, inventorySizeTargeting: record, inventoryTypeTargeting: record, placementTargeting: record, technologyTargeting: record, userListTargeting: record, videoTargeting: record>, updateTime: string>, dealPausingInfo: record<pauseReason: string, pauseRole: string, pausingConsented: bool>, dealServingStatus: string, name: string, readyToServe: bool, rtbMetrics: record<adImpressions7Days: string, bidRate7Days: float, bidRequests7Days: string, bids7Days: string, filteredBidRate7Days: float, mustBidRateCurrentMonth: float>> {
+]: any -> oneof<record<deal: record<billedBuyer: string, buyer: string, client: string, createTime: string, creativeRequirements: record<creativeFormat: string, creativePreApprovalPolicy: string, creativeSafeFrameCompatibility: string, maxAdDurationMs: string, programmaticCreativeSource: string, skippableAdType: string>, dealType: string, deliveryControl: record<companionDeliveryType: string, creativeRotationType: string, deliveryRateType: string, frequencyCap: list, roadblockingType: string>, description: string, displayName: string, estimatedGrossSpend: record<currencyCode: string, nanos: int, units: string>, flightEndTime: string, flightStartTime: string, name: string, preferredDealTerms: record<fixedPrice: record>, privateAuctionTerms: record<floorPrice: record, openAuctionAllowed: bool>, programmaticGuaranteedTerms: record<fixedPrice: record, guaranteedLooks: string, impressionCap: string, minimumDailyLooks: string, percentShareOfVoice: string, reservationType: string>, proposalRevision: string, publisherProfile: string, sellerTimeZone: record<id: string, version: string>, targeting: record<daypartTargeting: record, geoTargeting: record, inventorySizeTargeting: record, inventoryTypeTargeting: record, placementTargeting: record, technologyTargeting: record, userListTargeting: record, videoTargeting: record>, updateTime: string>, dealPausingInfo: record<pauseReason: string, pauseRole: string, pausingConsented: bool>, dealServingStatus: string, name: string, readyToServe: bool, rtbMetrics: record<adImpressions7Days: string, bidRate7Days: float, bidRequests7Days: string, bids7Days: string, filteredBidRate7Days: float, mustBidRateCurrentMonth: float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -392,7 +410,7 @@ export def "authorizedbuyersmarketplace-buyers-finalized-deals-set-ready-to-serv
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record<deal: record<billedBuyer: string, buyer: string, client: string, createTime: string, creativeRequirements: record<creativeFormat: string, creativePreApprovalPolicy: string, creativeSafeFrameCompatibility: string, maxAdDurationMs: string, programmaticCreativeSource: string, skippableAdType: string>, dealType: string, deliveryControl: record<companionDeliveryType: string, creativeRotationType: string, deliveryRateType: string, frequencyCap: list, roadblockingType: string>, description: string, displayName: string, estimatedGrossSpend: record<currencyCode: string, nanos: int, units: string>, flightEndTime: string, flightStartTime: string, name: string, preferredDealTerms: record<fixedPrice: record>, privateAuctionTerms: record<floorPrice: record, openAuctionAllowed: bool>, programmaticGuaranteedTerms: record<fixedPrice: record, guaranteedLooks: string, impressionCap: string, minimumDailyLooks: string, percentShareOfVoice: string, reservationType: string>, proposalRevision: string, publisherProfile: string, sellerTimeZone: record<id: string, version: string>, targeting: record<daypartTargeting: record, geoTargeting: record, inventorySizeTargeting: record, inventoryTypeTargeting: record, placementTargeting: record, technologyTargeting: record, userListTargeting: record, videoTargeting: record>, updateTime: string>, dealPausingInfo: record<pauseReason: string, pauseRole: string, pausingConsented: bool>, dealServingStatus: string, name: string, readyToServe: bool, rtbMetrics: record<adImpressions7Days: string, bidRate7Days: float, bidRequests7Days: string, bids7Days: string, filteredBidRate7Days: float, mustBidRateCurrentMonth: float>> {
+]: any -> oneof<record<deal: record<billedBuyer: string, buyer: string, client: string, createTime: string, creativeRequirements: record<creativeFormat: string, creativePreApprovalPolicy: string, creativeSafeFrameCompatibility: string, maxAdDurationMs: string, programmaticCreativeSource: string, skippableAdType: string>, dealType: string, deliveryControl: record<companionDeliveryType: string, creativeRotationType: string, deliveryRateType: string, frequencyCap: list, roadblockingType: string>, description: string, displayName: string, estimatedGrossSpend: record<currencyCode: string, nanos: int, units: string>, flightEndTime: string, flightStartTime: string, name: string, preferredDealTerms: record<fixedPrice: record>, privateAuctionTerms: record<floorPrice: record, openAuctionAllowed: bool>, programmaticGuaranteedTerms: record<fixedPrice: record, guaranteedLooks: string, impressionCap: string, minimumDailyLooks: string, percentShareOfVoice: string, reservationType: string>, proposalRevision: string, publisherProfile: string, sellerTimeZone: record<id: string, version: string>, targeting: record<daypartTargeting: record, geoTargeting: record, inventorySizeTargeting: record, inventoryTypeTargeting: record, placementTargeting: record, technologyTargeting: record, userListTargeting: record, videoTargeting: record>, updateTime: string>, dealPausingInfo: record<pauseReason: string, pauseRole: string, pausingConsented: bool>, dealServingStatus: string, name: string, readyToServe: bool, rtbMetrics: record<adImpressions7Days: string, bidRate7Days: float, bidRequests7Days: string, bids7Days: string, filteredBidRate7Days: float, mustBidRateCurrentMonth: float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -443,7 +461,7 @@ export def "authorizedbuyersmarketplace-buyers-clients-users-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -491,7 +509,7 @@ export def "authorizedbuyersmarketplace-buyers-publisher-profiles-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<audienceDescription: string, directDealsContact: string, displayName: string, domains: list<string>, isParent: bool, logoUrl: string, mediaKitUrl: string, mobileApps: table<appStore: string, externalAppId: string, name: string>, name: string, overview: string, pitchStatement: string, programmaticDealsContact: string, publisherCode: string, samplePageUrl: string, topHeadlines: list<string>> {
+]: nothing -> oneof<record<audienceDescription: string, directDealsContact: string, displayName: string, domains: list<string>, isParent: bool, logoUrl: string, mediaKitUrl: string, mobileApps: table<appStore: string, externalAppId: string, name: string>, name: string, overview: string, pitchStatement: string, programmaticDealsContact: string, publisherCode: string, samplePageUrl: string, topHeadlines: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -517,12 +535,6 @@ export def "authorizedbuyersmarketplace-buyers-publisher-profiles-get" [
 #
 # PATCH /v1/{name}
 # operationId: authorizedbuyersmarketplace.buyers.proposals.deals.patch
-# --estimatedGrossSpend shape: {currencyCode?: string, nanos?: int, units?: string}
-# --preferredDealTerms shape: {fixedPrice?: record}
-# --privateAuctionTerms shape: {floorPrice?: record}
-# --programmaticGuaranteedTerms shape: {fixedPrice?: record, guaranteedLooks?: string, impressionCap?: string, minimumDailyLooks?: string, percentShareOfVoice?: string, reservationType?: "RESERVATION_TYPE_UNSPECIFIED"|"STANDARD"|"SPONSORSHIP"}
-# --sellerTimeZone shape: {id?: string, version?: string}
-# --targeting shape: {daypartTargeting?: record, geoTargeting?: record, inventorySizeTargeting?: record, inventoryTypeTargeting?: record, placementTargeting?: record, technologyTargeting?: record, userListTargeting?: record, videoTargeting?: record}
 export def "authorizedbuyersmarketplace-buyers-proposals-deals-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -558,7 +570,7 @@ export def "authorizedbuyersmarketplace-buyers-proposals-deals-patch" [
   --publisher-profile: string # Immutable. Reference to the seller on the deal. Format: `buyers/{buyerAccountId}/publisherProfiles/{publisherProfileId}`
   --seller-time-zone: record # Represents a time zone from the [IANA Time Zone Database](https://www.iana.org/time-zones). — shape: {id?: string, version?: string}
   --targeting: record # Targeting represents different criteria that can be used to target inventory. For example, they can choose to target inventory only if the user is in the US. Multiple types of targeting are always applied as a logical AND, unless noted otherwise. — shape: {daypartTargeting?: record, geoTargeting?: record, inventorySizeTargeting?: record, inventoryTypeTargeting?: record, placementTargeting?: record, technologyTargeting?: record, userListTargeting?: record, videoTargeting?: record}
-]: any -> record<billedBuyer: string, buyer: string, client: string, createTime: string, creativeRequirements: record<creativeFormat: string, creativePreApprovalPolicy: string, creativeSafeFrameCompatibility: string, maxAdDurationMs: string, programmaticCreativeSource: string, skippableAdType: string>, dealType: string, deliveryControl: record<companionDeliveryType: string, creativeRotationType: string, deliveryRateType: string, frequencyCap: list<record>, roadblockingType: string>, description: string, displayName: string, estimatedGrossSpend: record<currencyCode: string, nanos: int, units: string>, flightEndTime: string, flightStartTime: string, name: string, preferredDealTerms: record<fixedPrice: record<amount: record, type: string>>, privateAuctionTerms: record<floorPrice: record<amount: record, type: string>, openAuctionAllowed: bool>, programmaticGuaranteedTerms: record<fixedPrice: record<amount: record, type: string>, guaranteedLooks: string, impressionCap: string, minimumDailyLooks: string, percentShareOfVoice: string, reservationType: string>, proposalRevision: string, publisherProfile: string, sellerTimeZone: record<id: string, version: string>, targeting: record<daypartTargeting: record<dayParts: list, timeZoneType: string>, geoTargeting: record<excludedCriteriaIds: list, targetedCriteriaIds: list>, inventorySizeTargeting: record<excludedInventorySizes: list, targetedInventorySizes: list>, inventoryTypeTargeting: record<inventoryTypes: list>, placementTargeting: record<mobileApplicationTargeting: record, uriTargeting: record>, technologyTargeting: record<deviceCapabilityTargeting: record, deviceCategoryTargeting: record, operatingSystemTargeting: record>, userListTargeting: record<excludedCriteriaIds: list, targetedCriteriaIds: list>, videoTargeting: record<excludedPositionTypes: list, targetedPositionTypes: list>>, updateTime: string> {
+]: any -> oneof<record<billedBuyer: string, buyer: string, client: string, createTime: string, creativeRequirements: record<creativeFormat: string, creativePreApprovalPolicy: string, creativeSafeFrameCompatibility: string, maxAdDurationMs: string, programmaticCreativeSource: string, skippableAdType: string>, dealType: string, deliveryControl: record<companionDeliveryType: string, creativeRotationType: string, deliveryRateType: string, frequencyCap: list<record>, roadblockingType: string>, description: string, displayName: string, estimatedGrossSpend: record<currencyCode: string, nanos: int, units: string>, flightEndTime: string, flightStartTime: string, name: string, preferredDealTerms: record<fixedPrice: record<amount: record, type: string>>, privateAuctionTerms: record<floorPrice: record<amount: record, type: string>, openAuctionAllowed: bool>, programmaticGuaranteedTerms: record<fixedPrice: record<amount: record, type: string>, guaranteedLooks: string, impressionCap: string, minimumDailyLooks: string, percentShareOfVoice: string, reservationType: string>, proposalRevision: string, publisherProfile: string, sellerTimeZone: record<id: string, version: string>, targeting: record<daypartTargeting: record<dayParts: list, timeZoneType: string>, geoTargeting: record<excludedCriteriaIds: list, targetedCriteriaIds: list>, inventorySizeTargeting: record<excludedInventorySizes: list, targetedInventorySizes: list>, inventoryTypeTargeting: record<inventoryTypes: list>, placementTargeting: record<mobileApplicationTargeting: record, uriTargeting: record>, technologyTargeting: record<deviceCapabilityTargeting: record, deviceCategoryTargeting: record, operatingSystemTargeting: record>, userListTargeting: record<excludedCriteriaIds: list, targetedCriteriaIds: list>, videoTargeting: record<excludedPositionTypes: list, targetedPositionTypes: list>>, updateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -610,7 +622,7 @@ export def "authorizedbuyersmarketplace-buyers-proposals-accept" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --proposal-revision: string # The last known client revision number of the proposal. (format: int64)
-]: any -> record<billedBuyer: string, buyer: string, buyerContacts: table<displayName: string, email: string>, buyerPrivateData: record<referenceId: string>, client: string, dealType: string, displayName: string, isRenegotiating: bool, lastUpdaterOrCommentorRole: string, name: string, notes: table<createTime: string, creatorRole: string, note: string>, originatorRole: string, pausingConsented: bool, proposalRevision: string, publisherProfile: string, sellerContacts: table<displayName: string, email: string>, state: string, termsAndConditions: string, updateTime: string> {
+]: any -> oneof<record<billedBuyer: string, buyer: string, buyerContacts: table<displayName: string, email: string>, buyerPrivateData: record<referenceId: string>, client: string, dealType: string, displayName: string, isRenegotiating: bool, lastUpdaterOrCommentorRole: string, name: string, notes: table<createTime: string, creatorRole: string, note: string>, originatorRole: string, pausingConsented: bool, proposalRevision: string, publisherProfile: string, sellerContacts: table<displayName: string, email: string>, state: string, termsAndConditions: string, updateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -662,7 +674,7 @@ export def "authorizedbuyersmarketplace-buyers-clients-users-activate" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record<email: string, name: string, state: string> {
+]: any -> oneof<record<email: string, name: string, state: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -714,7 +726,7 @@ export def "authorizedbuyersmarketplace-buyers-clients-users-deactivate" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record<email: string, name: string, state: string> {
+]: any -> oneof<record<email: string, name: string, state: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -766,7 +778,7 @@ export def "authorizedbuyersmarketplace-buyers-finalized-deals-pause" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --reason: string # The reason to pause the finalized deal, will be displayed to the seller. Maximum length is 1000 characters.
-]: any -> record<deal: record<billedBuyer: string, buyer: string, client: string, createTime: string, creativeRequirements: record<creativeFormat: string, creativePreApprovalPolicy: string, creativeSafeFrameCompatibility: string, maxAdDurationMs: string, programmaticCreativeSource: string, skippableAdType: string>, dealType: string, deliveryControl: record<companionDeliveryType: string, creativeRotationType: string, deliveryRateType: string, frequencyCap: list, roadblockingType: string>, description: string, displayName: string, estimatedGrossSpend: record<currencyCode: string, nanos: int, units: string>, flightEndTime: string, flightStartTime: string, name: string, preferredDealTerms: record<fixedPrice: record>, privateAuctionTerms: record<floorPrice: record, openAuctionAllowed: bool>, programmaticGuaranteedTerms: record<fixedPrice: record, guaranteedLooks: string, impressionCap: string, minimumDailyLooks: string, percentShareOfVoice: string, reservationType: string>, proposalRevision: string, publisherProfile: string, sellerTimeZone: record<id: string, version: string>, targeting: record<daypartTargeting: record, geoTargeting: record, inventorySizeTargeting: record, inventoryTypeTargeting: record, placementTargeting: record, technologyTargeting: record, userListTargeting: record, videoTargeting: record>, updateTime: string>, dealPausingInfo: record<pauseReason: string, pauseRole: string, pausingConsented: bool>, dealServingStatus: string, name: string, readyToServe: bool, rtbMetrics: record<adImpressions7Days: string, bidRate7Days: float, bidRequests7Days: string, bids7Days: string, filteredBidRate7Days: float, mustBidRateCurrentMonth: float>> {
+]: any -> oneof<record<deal: record<billedBuyer: string, buyer: string, client: string, createTime: string, creativeRequirements: record<creativeFormat: string, creativePreApprovalPolicy: string, creativeSafeFrameCompatibility: string, maxAdDurationMs: string, programmaticCreativeSource: string, skippableAdType: string>, dealType: string, deliveryControl: record<companionDeliveryType: string, creativeRotationType: string, deliveryRateType: string, frequencyCap: list, roadblockingType: string>, description: string, displayName: string, estimatedGrossSpend: record<currencyCode: string, nanos: int, units: string>, flightEndTime: string, flightStartTime: string, name: string, preferredDealTerms: record<fixedPrice: record>, privateAuctionTerms: record<floorPrice: record, openAuctionAllowed: bool>, programmaticGuaranteedTerms: record<fixedPrice: record, guaranteedLooks: string, impressionCap: string, minimumDailyLooks: string, percentShareOfVoice: string, reservationType: string>, proposalRevision: string, publisherProfile: string, sellerTimeZone: record<id: string, version: string>, targeting: record<daypartTargeting: record, geoTargeting: record, inventorySizeTargeting: record, inventoryTypeTargeting: record, placementTargeting: record, technologyTargeting: record, userListTargeting: record, videoTargeting: record>, updateTime: string>, dealPausingInfo: record<pauseReason: string, pauseRole: string, pausingConsented: bool>, dealServingStatus: string, name: string, readyToServe: bool, rtbMetrics: record<adImpressions7Days: string, bidRate7Days: float, bidRequests7Days: string, bids7Days: string, filteredBidRate7Days: float, mustBidRateCurrentMonth: float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -818,7 +830,7 @@ export def "authorizedbuyersmarketplace-buyers-finalized-deals-resume" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record<deal: record<billedBuyer: string, buyer: string, client: string, createTime: string, creativeRequirements: record<creativeFormat: string, creativePreApprovalPolicy: string, creativeSafeFrameCompatibility: string, maxAdDurationMs: string, programmaticCreativeSource: string, skippableAdType: string>, dealType: string, deliveryControl: record<companionDeliveryType: string, creativeRotationType: string, deliveryRateType: string, frequencyCap: list, roadblockingType: string>, description: string, displayName: string, estimatedGrossSpend: record<currencyCode: string, nanos: int, units: string>, flightEndTime: string, flightStartTime: string, name: string, preferredDealTerms: record<fixedPrice: record>, privateAuctionTerms: record<floorPrice: record, openAuctionAllowed: bool>, programmaticGuaranteedTerms: record<fixedPrice: record, guaranteedLooks: string, impressionCap: string, minimumDailyLooks: string, percentShareOfVoice: string, reservationType: string>, proposalRevision: string, publisherProfile: string, sellerTimeZone: record<id: string, version: string>, targeting: record<daypartTargeting: record, geoTargeting: record, inventorySizeTargeting: record, inventoryTypeTargeting: record, placementTargeting: record, technologyTargeting: record, userListTargeting: record, videoTargeting: record>, updateTime: string>, dealPausingInfo: record<pauseReason: string, pauseRole: string, pausingConsented: bool>, dealServingStatus: string, name: string, readyToServe: bool, rtbMetrics: record<adImpressions7Days: string, bidRate7Days: float, bidRequests7Days: string, bids7Days: string, filteredBidRate7Days: float, mustBidRateCurrentMonth: float>> {
+]: any -> oneof<record<deal: record<billedBuyer: string, buyer: string, client: string, createTime: string, creativeRequirements: record<creativeFormat: string, creativePreApprovalPolicy: string, creativeSafeFrameCompatibility: string, maxAdDurationMs: string, programmaticCreativeSource: string, skippableAdType: string>, dealType: string, deliveryControl: record<companionDeliveryType: string, creativeRotationType: string, deliveryRateType: string, frequencyCap: list, roadblockingType: string>, description: string, displayName: string, estimatedGrossSpend: record<currencyCode: string, nanos: int, units: string>, flightEndTime: string, flightStartTime: string, name: string, preferredDealTerms: record<fixedPrice: record>, privateAuctionTerms: record<floorPrice: record, openAuctionAllowed: bool>, programmaticGuaranteedTerms: record<fixedPrice: record, guaranteedLooks: string, impressionCap: string, minimumDailyLooks: string, percentShareOfVoice: string, reservationType: string>, proposalRevision: string, publisherProfile: string, sellerTimeZone: record<id: string, version: string>, targeting: record<daypartTargeting: record, geoTargeting: record, inventorySizeTargeting: record, inventoryTypeTargeting: record, placementTargeting: record, technologyTargeting: record, userListTargeting: record, videoTargeting: record>, updateTime: string>, dealPausingInfo: record<pauseReason: string, pauseRole: string, pausingConsented: bool>, dealServingStatus: string, name: string, readyToServe: bool, rtbMetrics: record<adImpressions7Days: string, bidRate7Days: float, bidRequests7Days: string, bids7Days: string, filteredBidRate7Days: float, mustBidRateCurrentMonth: float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -870,7 +882,7 @@ export def "authorizedbuyersmarketplace-buyers-auction-packages-subscribe" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record<createTime: string, creator: string, description: string, displayName: string, name: string, subscribedClients: list<string>, updateTime: string> {
+]: any -> oneof<record<createTime: string, creator: string, description: string, displayName: string, name: string, subscribedClients: list<string>, updateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -922,7 +934,7 @@ export def "authorizedbuyersmarketplace-buyers-auction-packages-unsubscribe" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record<createTime: string, creator: string, description: string, displayName: string, name: string, subscribedClients: list<string>, updateTime: string> {
+]: any -> oneof<record<createTime: string, creator: string, description: string, displayName: string, name: string, subscribedClients: list<string>, updateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -975,7 +987,7 @@ export def "authorizedbuyersmarketplace-buyers-auction-packages-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # Requested page size. The server may return fewer results than requested. Max allowed page size is 500.
   --page-token: string # The page token as returned. ListAuctionPackagesResponse.nextPageToken
-]: nothing -> record<auctionPackages: table<createTime: string, creator: string, description: string, displayName: string, name: string, subscribedClients: list, updateTime: string>, nextPageToken: string> {
+]: nothing -> oneof<record<auctionPackages: table<createTime: string, creator: string, description: string, displayName: string, name: string, subscribedClients: list, updateTime: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1026,7 +1038,7 @@ export def "authorizedbuyersmarketplace-buyers-clients-list" [
   --filter: string # Query string using the [Filtering Syntax](https://developers.google.com/authorized-buyers/apis/guides/v2/list-filters) Supported fields for filtering are: * partnerClientId Use this field to filter the clients by the partnerClientId. For example, if the partnerClientId of the client is "1234", the value of this field should be `partnerClientId = "1234"`, in order to get only the client whose partnerClientId is "1234" in the response.
   --page-size: int # Requested page size. If left blank, a default page size of 500 will be applied.
   --page-token: string # A token identifying a page of results the server should return. Typically, this is the value of ListClientsResponse.nextPageToken returned from the previous call to the list method.
-]: nothing -> record<clients: table<displayName: string, name: string, partnerClientId: string, role: string, sellerVisible: bool, state: string>, nextPageToken: string> {
+]: nothing -> oneof<record<clients: table<displayName: string, name: string, partnerClientId: string, role: string, sellerVisible: bool, state: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1078,7 +1090,7 @@ export def "authorizedbuyersmarketplace-buyers-clients-create" [
   --partner-client-id: string # Arbitrary unique identifier provided by the buyer. This field can be used to associate a client with an identifier in the namespace of the buyer, lookup clients by that identifier and verify whether an Authorized Buyers account of the client already exists. If present, must be unique across all the clients.
   --role: string@role-completer # Required. The role assigned to the client. Each role implies a set of permissions granted to the client.
   --seller-visible: oneof<nothing, bool> # Whether the client will be visible to sellers.
-]: any -> record<displayName: string, name: string, partnerClientId: string, role: string, sellerVisible: bool, state: string> {
+]: any -> oneof<record<displayName: string, name: string, partnerClientId: string, role: string, sellerVisible: bool, state: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1131,7 +1143,7 @@ export def "authorizedbuyersmarketplace-buyers-proposals-deals-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # Requested page size. The server may return fewer results than requested. If requested more than 500, the server will return 500 results per page. If unspecified, the server will pick a default page size of 100.
   --page-token: string # The page token as returned from ListDealsResponse.
-]: nothing -> record<deals: table<billedBuyer: string, buyer: string, client: string, createTime: string, creativeRequirements: record, dealType: string, deliveryControl: record, description: string, displayName: string, estimatedGrossSpend: record, flightEndTime: string, flightStartTime: string, name: string, preferredDealTerms: record, privateAuctionTerms: record, programmaticGuaranteedTerms: record, proposalRevision: string, publisherProfile: string, sellerTimeZone: record, targeting: record, updateTime: string>, nextPageToken: string> {
+]: nothing -> oneof<record<deals: table<billedBuyer: string, buyer: string, client: string, createTime: string, creativeRequirements: record, dealType: string, deliveryControl: record, description: string, displayName: string, estimatedGrossSpend: record, flightEndTime: string, flightStartTime: string, name: string, preferredDealTerms: record, privateAuctionTerms: record, programmaticGuaranteedTerms: record, proposalRevision: string, publisherProfile: string, sellerTimeZone: record, targeting: record, updateTime: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1157,7 +1169,6 @@ export def "authorizedbuyersmarketplace-buyers-proposals-deals-list" [
 #
 # POST /v1/{parent}/deals:batchUpdate
 # operationId: authorizedbuyersmarketplace.buyers.proposals.deals.batchUpdate
-# --requests item shape: {deal?: record, updateMask?: string}
 export def "authorizedbuyersmarketplace-buyers-proposals-deals-batch-update" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1181,7 +1192,7 @@ export def "authorizedbuyersmarketplace-buyers-proposals-deals-batch-update" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --requests: list # Required. List of request messages to update deals. — item shape: {deal?: record, updateMask?: string}
-]: any -> record<deals: table<billedBuyer: string, buyer: string, client: string, createTime: string, creativeRequirements: record, dealType: string, deliveryControl: record, description: string, displayName: string, estimatedGrossSpend: record, flightEndTime: string, flightStartTime: string, name: string, preferredDealTerms: record, privateAuctionTerms: record, programmaticGuaranteedTerms: record, proposalRevision: string, publisherProfile: string, sellerTimeZone: record, targeting: record, updateTime: string>> {
+]: any -> oneof<record<deals: table<billedBuyer: string, buyer: string, client: string, createTime: string, creativeRequirements: record, dealType: string, deliveryControl: record, description: string, displayName: string, estimatedGrossSpend: record, flightEndTime: string, flightStartTime: string, name: string, preferredDealTerms: record, privateAuctionTerms: record, programmaticGuaranteedTerms: record, proposalRevision: string, publisherProfile: string, sellerTimeZone: record, targeting: record, updateTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1236,7 +1247,7 @@ export def "authorizedbuyersmarketplace-buyers-finalized-deals-list" [
   --order-by: string # An optional query string to sort finalized deals using the [Cloud API sorting syntax](https://cloud.google.com/apis/design/design_patterns#sorting_order). If no sort order is specified, results will be returned in an arbitrary order. Supported columns for sorting are: * deal.displayName * deal.createTime * deal.updateTime * deal.flightStartTime * deal.flightEndTime * rtbMetrics.bidRequests7Days * rtbMetrics.bids7Days * rtbMetrics.adImpressions7Days * rtbMetrics.bidRate7Days * rtbMetrics.filteredBidRate7Days * rtbMetrics.mustBidRateCurrentMonth Example: 'deal.displayName, deal.updateTime desc'
   --page-size: int # Requested page size. The server may return fewer results than requested. If requested more than 500, the server will return 500 results per page. If unspecified, the server will pick a default page size of 100.
   --page-token: string # The page token as returned from ListFinalizedDealsResponse.
-]: nothing -> record<finalizedDeals: table<deal: record, dealPausingInfo: record, dealServingStatus: string, name: string, readyToServe: bool, rtbMetrics: record>, nextPageToken: string> {
+]: nothing -> oneof<record<finalizedDeals: table<deal: record, dealPausingInfo: record, dealServingStatus: string, name: string, readyToServe: bool, rtbMetrics: record>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1287,7 +1298,7 @@ export def "authorizedbuyersmarketplace-buyers-proposals-list" [
   --filter: string # Optional query string using the [Cloud API list filtering syntax](https://developers.google.com/authorized-buyers/apis/guides/v2/list-filters) Supported columns for filtering are: * displayName * dealType * updateTime * state
   --page-size: int # Requested page size. The server may return fewer results than requested. If unspecified, the server will put a size of 500.
   --page-token: string # The page token as returned from ListProposalsResponse.
-]: nothing -> record<nextPageToken: string, proposals: table<billedBuyer: string, buyer: string, buyerContacts: list, buyerPrivateData: record, client: string, dealType: string, displayName: string, isRenegotiating: bool, lastUpdaterOrCommentorRole: string, name: string, notes: list, originatorRole: string, pausingConsented: bool, proposalRevision: string, publisherProfile: string, sellerContacts: list, state: string, termsAndConditions: string, updateTime: string>> {
+]: nothing -> oneof<record<nextPageToken: string, proposals: table<billedBuyer: string, buyer: string, buyerContacts: list, buyerPrivateData: record, client: string, dealType: string, displayName: string, isRenegotiating: bool, lastUpdaterOrCommentorRole: string, name: string, notes: list, originatorRole: string, pausingConsented: bool, proposalRevision: string, publisherProfile: string, sellerContacts: list, state: string, termsAndConditions: string, updateTime: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1338,7 +1349,7 @@ export def "authorizedbuyersmarketplace-buyers-publisher-profiles-list" [
   --filter: string # Optional query string using the [Cloud API list filtering] (https://developers.google.com/authorized-buyers/apis/guides/v2/list-filters) syntax.
   --page-size: int # Requested page size. The server may return fewer results than requested. If requested more than 500, the server will return 500 results per page. If unspecified, the server will pick a default page size of 100.
   --page-token: string # The page token as returned from a previous ListPublisherProfilesResponse.
-]: nothing -> record<nextPageToken: string, publisherProfiles: table<audienceDescription: string, directDealsContact: string, displayName: string, domains: list, isParent: bool, logoUrl: string, mediaKitUrl: string, mobileApps: list, name: string, overview: string, pitchStatement: string, programmaticDealsContact: string, publisherCode: string, samplePageUrl: string, topHeadlines: list>> {
+]: nothing -> oneof<record<nextPageToken: string, publisherProfiles: table<audienceDescription: string, directDealsContact: string, displayName: string, domains: list, isParent: bool, logoUrl: string, mediaKitUrl: string, mobileApps: list, name: string, overview: string, pitchStatement: string, programmaticDealsContact: string, publisherCode: string, samplePageUrl: string, topHeadlines: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1388,7 +1399,7 @@ export def "authorizedbuyersmarketplace-buyers-clients-users-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # Requested page size. If left blank, a default page size of 500 will be applied.
   --page-token: string # A token identifying a page of results the server should return. Typically, this is the value of ListClientUsersResponse.nextPageToken returned from the previous call to the list method.
-]: nothing -> record<clientUsers: table<email: string, name: string, state: string>, nextPageToken: string> {
+]: nothing -> oneof<record<clientUsers: table<email: string, name: string, state: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1437,7 +1448,7 @@ export def "authorizedbuyersmarketplace-buyers-clients-users-create" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --email: string # Required. The client user's email address that has to be unique across all users for the same client.
-]: any -> record<email: string, name: string, state: string> {
+]: any -> oneof<record<email: string, name: string, state: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1466,7 +1477,6 @@ export def "authorizedbuyersmarketplace-buyers-clients-users-create" [
 #
 # POST /v1/{proposal}:addNote
 # operationId: authorizedbuyersmarketplace.buyers.proposals.addNote
-# --note shape: {note?: string}
 export def "authorizedbuyersmarketplace-buyers-proposals-add-note" [
   proposal: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1490,7 +1500,7 @@ export def "authorizedbuyersmarketplace-buyers-proposals-add-note" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --note: record # A text note attached to the proposal to facilitate the communication between buyers and sellers. — shape: {note?: string}
-]: any -> record<billedBuyer: string, buyer: string, buyerContacts: table<displayName: string, email: string>, buyerPrivateData: record<referenceId: string>, client: string, dealType: string, displayName: string, isRenegotiating: bool, lastUpdaterOrCommentorRole: string, name: string, notes: table<createTime: string, creatorRole: string, note: string>, originatorRole: string, pausingConsented: bool, proposalRevision: string, publisherProfile: string, sellerContacts: table<displayName: string, email: string>, state: string, termsAndConditions: string, updateTime: string> {
+]: any -> oneof<record<billedBuyer: string, buyer: string, buyerContacts: table<displayName: string, email: string>, buyerPrivateData: record<referenceId: string>, client: string, dealType: string, displayName: string, isRenegotiating: bool, lastUpdaterOrCommentorRole: string, name: string, notes: table<createTime: string, creatorRole: string, note: string>, originatorRole: string, pausingConsented: bool, proposalRevision: string, publisherProfile: string, sellerContacts: table<displayName: string, email: string>, state: string, termsAndConditions: string, updateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1542,7 +1552,7 @@ export def "authorizedbuyersmarketplace-buyers-proposals-cancel-negotiation" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record<billedBuyer: string, buyer: string, buyerContacts: table<displayName: string, email: string>, buyerPrivateData: record<referenceId: string>, client: string, dealType: string, displayName: string, isRenegotiating: bool, lastUpdaterOrCommentorRole: string, name: string, notes: table<createTime: string, creatorRole: string, note: string>, originatorRole: string, pausingConsented: bool, proposalRevision: string, publisherProfile: string, sellerContacts: table<displayName: string, email: string>, state: string, termsAndConditions: string, updateTime: string> {
+]: any -> oneof<record<billedBuyer: string, buyer: string, buyerContacts: table<displayName: string, email: string>, buyerPrivateData: record<referenceId: string>, client: string, dealType: string, displayName: string, isRenegotiating: bool, lastUpdaterOrCommentorRole: string, name: string, notes: table<createTime: string, creatorRole: string, note: string>, originatorRole: string, pausingConsented: bool, proposalRevision: string, publisherProfile: string, sellerContacts: table<displayName: string, email: string>, state: string, termsAndConditions: string, updateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

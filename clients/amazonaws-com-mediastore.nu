@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -121,9 +144,9 @@ def x-amz-target-completer-20 [] { ["MediaStore_20170901.UntagResource"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-container" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["create-container" "delete-container" "delete-container-policy" "delete-cors-policy" "delete-lifecycle-policy" "delete-metric-policy" "describe-container" "get-container-policy" "get-cors-policy" "get-lifecycle-policy" "get-metric-policy" "list-containers" "list-tags-for-resource" "put-container-policy" "put-cors-policy" "put-lifecycle-policy" "put-metric-policy" "start-access-logging" "stop-access-logging" "tag-resource" "untag-resource" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -145,7 +168,6 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: CreateContainer
-# --Tags item shape: {Key: string, Value?: string}
 export def "create-container" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -166,7 +188,7 @@ export def "create-container" [
   --x-amz-target: string@x-amz-target-completer # required
   container_name: string # The name for the container. The name must be from 1 to 255 characters. Container names must be unique to your AWS account within a specific region. As an example, you could create a container named movies in every region, as long as you don’t have an existing container with that name.
   --tags: list # An array of key:value pairs that you define. These values can be anything that you want. Typically, the tag key represents a category (such as "environment") and the tag value represents a specific value within that category (such as "test," "development," or "production"). You can add up to 50 tags to each container. For more information about tagging, including naming and usage conventions, see Tagging Resources in MediaStore (https://docs.aws.amazon.com/mediastore/latest/ug/tagging.html). — item shape: {Key: string, Value?: string}
-]: any -> record<Container: record<Endpoint: string, CreationTime: string, ARN: string, Name: string, Status: string, AccessLoggingEnabled: bool>> {
+]: any -> oneof<record<Container: record<Endpoint: string, CreationTime: string, ARN: string, Name: string, Status: string, AccessLoggingEnabled: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -215,7 +237,7 @@ export def "delete-container" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-1 # required
   container_name: string # The name of the container to delete.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -264,7 +286,7 @@ export def "delete-container-policy" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-2 # required
   container_name: string # The name of the container that holds the policy.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -313,7 +335,7 @@ export def "delete-cors-policy" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-3 # required
   container_name: string # The name of the container to remove the policy from.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -362,7 +384,7 @@ export def "delete-lifecycle-policy" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-4 # required
   container_name: string # The name of the container that holds the object lifecycle policy.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -411,7 +433,7 @@ export def "delete-metric-policy" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-5 # required
   container_name: string # The name of the container that is associated with the metric policy that you want to delete.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -460,7 +482,7 @@ export def "describe-container" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-6 # required
   --container-name: string # The name of the container to query.
-]: any -> record<Container: record<Endpoint: string, CreationTime: string, ARN: string, Name: string, Status: string, AccessLoggingEnabled: bool>> {
+]: any -> oneof<record<Container: record<Endpoint: string, CreationTime: string, ARN: string, Name: string, Status: string, AccessLoggingEnabled: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -509,7 +531,7 @@ export def "get-container-policy" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-7 # required
   container_name: string # The name of the container.
-]: any -> record<Policy: string> {
+]: any -> oneof<record<Policy: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -558,7 +580,7 @@ export def "get-cors-policy" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-8 # required
   container_name: string # The name of the container that the policy is assigned to.
-]: any -> record<CorsPolicy: table<AllowedOrigins: list, AllowedMethods: list, AllowedHeaders: list, MaxAgeSeconds: int, ExposeHeaders: list>> {
+]: any -> oneof<record<CorsPolicy: table<AllowedOrigins: list, AllowedMethods: list, AllowedHeaders: list, MaxAgeSeconds: int, ExposeHeaders: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -607,7 +629,7 @@ export def "get-lifecycle-policy" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-9 # required
   container_name: string # The name of the container that the object lifecycle policy is assigned to.
-]: any -> record<LifecyclePolicy: string> {
+]: any -> oneof<record<LifecyclePolicy: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -656,7 +678,7 @@ export def "get-metric-policy" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-10 # required
   container_name: string # The name of the container that is associated with the metric policy.
-]: any -> record<MetricPolicy: record<ContainerLevelMetrics: string, MetricPolicyRules: list<record>>> {
+]: any -> oneof<record<MetricPolicy: record<ContainerLevelMetrics: string, MetricPolicyRules: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -708,7 +730,7 @@ export def "list-containers" [
   --x-amz-target: string@x-amz-target-completer-11 # required
   --next-token-body: string # Only if you used MaxResults in the first command, enter the token (which was included in the previous response) to obtain the next set of containers. This token is included in a response only if there actually are more containers to list. (body field)
   --max-results-body: int # Enter the maximum number of containers in the response. Use from 1 to 255 characters. (body field)
-]: any -> record<Containers: table<Endpoint: string, CreationTime: string, ARN: string, Name: string, Status: string, AccessLoggingEnabled: bool>, NextToken: string> {
+]: any -> oneof<record<Containers: table<Endpoint: string, CreationTime: string, ARN: string, Name: string, Status: string, AccessLoggingEnabled: bool>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -758,7 +780,7 @@ export def "list-tags-for-resource" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-12 # required
   resource: string # The Amazon Resource Name (ARN) for the container.
-]: any -> record<Tags: table<Key: string, Value: string>> {
+]: any -> oneof<record<Tags: table<Key: string, Value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -808,7 +830,7 @@ export def "put-container-policy" [
   --x-amz-target: string@x-amz-target-completer-13 # required
   container_name: string # The name of the container.
   policy: string # The contents of the policy, which includes the following: One Version tag One Statement tag that contains the standard tags for the policy.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -838,7 +860,6 @@ export def "put-container-policy" [
 #
 # POST /
 # operationId: PutCorsPolicy
-# --CorsPolicy item shape: {AllowedOrigins: list<string>, AllowedMethods?: list<string>, AllowedHeaders: list<string>, MaxAgeSeconds?: int, ExposeHeaders?: list<string>}
 export def "put-cors-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -859,7 +880,7 @@ export def "put-cors-policy" [
   --x-amz-target: string@x-amz-target-completer-14 # required
   container_name: string # The name of the container that you want to assign the CORS policy to.
   cors_policy: list # The CORS policy of the container. — item shape: {AllowedOrigins: list<string>, AllowedMethods?: list<string>, AllowedHeaders: list<string>, MaxAgeSeconds?: int, ExposeHeaders?: list<string>}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -909,7 +930,7 @@ export def "put-lifecycle-policy" [
   --x-amz-target: string@x-amz-target-completer-15 # required
   container_name: string # The name of the container that you want to assign the object lifecycle policy to.
   lifecycle_policy: string # The object lifecycle policy to apply to the container.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -939,7 +960,6 @@ export def "put-lifecycle-policy" [
 #
 # POST /
 # operationId: PutMetricPolicy
-# --MetricPolicy shape: {ContainerLevelMetrics: "ENABLED"|"DISABLED", MetricPolicyRules?: list}
 export def "put-metric-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -960,7 +980,7 @@ export def "put-metric-policy" [
   --x-amz-target: string@x-amz-target-completer-16 # required
   container_name: string # The name of the container that you want to add the metric policy to.
   metric_policy: record # The metric policy that is associated with the container. A metric policy allows AWS Elemental MediaStore to send metrics to Amazon CloudWatch. In the policy, you must indicate whether you want MediaStore to send container-level metrics. You can also include rules to define groups of objects that you want MediaStore to send object-level metrics for. To view examples of how to construct a metric policy for your use case, see Example Metric Policies (https://docs.aws.amazon.com/mediastore/latest/ug/policies-metric-examples.html). — shape: {ContainerLevelMetrics: "ENABLED"|"DISABLED", MetricPolicyRules?: list}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1009,7 +1029,7 @@ export def "start-access-logging" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-17 # required
   container_name: string # The name of the container that you want to start access logging on.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1058,7 +1078,7 @@ export def "stop-access-logging" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-18 # required
   container_name: string # The name of the container that you want to stop access logging on.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1088,7 +1108,6 @@ export def "stop-access-logging" [
 #
 # POST /
 # operationId: TagResource
-# --Tags item shape: {Key: string, Value?: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1109,7 +1128,7 @@ export def "tag-resource" [
   --x-amz-target: string@x-amz-target-completer-19 # required
   resource: string # The Amazon Resource Name (ARN) for the container.
   tags: list # An array of key:value pairs that you want to add to the container. You need to specify only the tags that you want to add or update. For example, suppose a container already has two tags (customer:CompanyA and priority:High). You want to change the priority tag and also add a third tag (type:Contract). For TagResource, you specify the following tags: priority:Medium, type:Contract. The result is that your container has three tags: customer:CompanyA, priority:Medium, and type:Contract. — item shape: {Key: string, Value?: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1159,7 +1178,7 @@ export def "untag-resource" [
   --x-amz-target: string@x-amz-target-completer-20 # required
   resource: string # The Amazon Resource Name (ARN) for the container.
   tag_keys: list<string> # A comma-separated list of keys for tags that you want to remove from the container. For example, if your container has two tags (customer:CompanyA and priority:High) and you want to remove one of the tags (priority:High), you specify the key for the tag that you want to remove (priority).
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

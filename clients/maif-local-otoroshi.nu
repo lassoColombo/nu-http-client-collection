@@ -14,27 +14,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -42,8 +51,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -54,7 +68,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -89,7 +112,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -126,9 +150,9 @@ def accept-completer [] { ["application/json" "text/event-stream"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "all-api-keys" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["all-api-keys" "find-all-global-auth-modules" "create-global-auth-module" "delete-global-auth-module" "find-global-auth-module-by-id" "patch-global-auth-module" "update-global-auth-module" "all-certs" "create-cert" "delete-cert" "one-cert" "patch-cert" "put-cert" "find-all-client-validators" "create-client-validator" "delete-client-validator" "find-client-validator-by-id" "patch-client-validator" "update-client-validator" "find-all-data-exporters" "create-data-exporter-config" "deletebulk-data-exporter-config" "patch-bulk-data-exporter-config" "create-bulk-data-exporter-configs" "update-bulk-data-exporter-config" "data-exporter-template" "delete-data-exporter-config" "find-data-exporter-config-by-id" "patch-data-exporter-config" "update-data-exporter-config" "global-config" "patch-global-config" "put-global-config" "all-service-groups" "create-group" "api-keys-from-group" "create-api-key-from-group" "delete-api-key-from-group" "api-key-from-group" "patch-api-key-from-group" "update-api-key-from-group" "reset-api-key-from-group-quotas" "api-key-from-group-quotas" "delete-group" "service-group" "patch-group" "update-group" "service-group-services" "full-import-from-file" "global-live-stats" "service-live-stats" "full-export" "full-import" "find-all-scripts" "create-script" "compile-script" "delete-script" "find-script-by-id" "patch-script" "update-script" "all-services" "create-service" "delete-service" "service" "patch-service" "update-service" "api-keys" "create-api-key" "delete-api-key" "api-key" "patch-api-key" "update-api-key" "api-key-group" "reset-api-key-quotas" "api-key-quotas" "service-delete-target" "service-targets" "update-service-targets" "service-add-target" "delete-service-template" "service-template" "create-service-template" "update-service-template" "start-snow-monkey" "stop-snow-monkey" "get-snow-monkey-config" "patch-snow-monkey" "update-snow-monkey" "reset-snow-monkey" "get-snow-monkey-outages" "find-all-global-jwt-verifiers" "create-global-jwt-verifier" "delete-global-jwt-verifier" "find-global-jwt-verifiers-by-id" "patch-global-jwt-verifier" "update-global-jwt-verifier" "health" "all-lines" "services-for-a-line" "initiate-api-key" "initiate-service-group" "initiate-service" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -160,7 +184,7 @@ export def "all-api-keys" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<authorizedEntities: list<string>, clientId: string, clientName: string, clientSecret: string, dailyQuota: int, enabled: bool, metadata: record, monthlyQuota: int, throttlingQuota: int> {
+]: nothing -> oneof<table<authorizedEntities: list<string>, clientId: string, clientName: string, clientSecret: string, dailyQuota: int, enabled: bool, metadata: record, monthlyQuota: int, throttlingQuota: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/apikeys" $auth.query)
@@ -194,7 +218,7 @@ export def "find-all-global-auth-modules" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<any> {
+]: nothing -> oneof<list<any>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/auths" $auth.query)
@@ -218,7 +242,6 @@ export def "find-all-global-auth-modules" [
 #
 # POST /api/auths
 # operationId: createGlobalAuthModule
-# --users item shape: {email: string, metadata: record, name: string, password: string}
 export def "create-global-auth-module" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -231,18 +254,18 @@ export def "create-global-auth-module" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --admin-password: string # The admin password (e.g. a string value)
   --admin-username: string # The admin username (e.g. a string value)
-  --desc: string # Description of the config (e.g. a string value)
+  desc: string # Description of the config (e.g. a string value)
   --email-field: string # Field name to get email from user profile (e.g. a string value)
   --group-filter: string # Filter for groups (e.g. a string value)
-  --id: string # Unique id of the config (e.g. a string value)
-  --name: string # Name of the config (e.g. a string value)
+  id: string # Unique id of the config (e.g. a string value)
+  name: string # Name of the config (e.g. a string value)
   --name-field: string # Field name to get name from user profile (e.g. a string value)
   --otoroshi-data-field: string # Field name to get otoroshi metadata from. You can specify sub fields using | as separator (e.g. a string value)
   --search-base: string # LDAP search base (e.g. a string value)
   --search-filter: string # Filter for users (e.g. a string value)
   --server-url: string # URL of the ldap server (e.g. a string value)
-  --session-max-age: int # Max age of the session (format: int32, e.g. 123123)
-  --type: string # Type of settings. value is ldap (e.g. a string value)
+  session_max_age: int # Max age of the session (format: int32, e.g. 123123)
+  type: string # Type of settings. value is ldap (e.g. a string value)
   --user-base: string # LDAP user base DN (e.g. a string value)
   --users: list # List of users — item shape: {email: string, metadata: record, name: string, password: string}
   --access-token-field: string # Field name to get access token (e.g. a string value)
@@ -299,7 +322,7 @@ export def "delete-global-auth-module" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<deleted: bool> {
+]: nothing -> oneof<record<deleted: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -400,7 +423,6 @@ export def "patch-global-auth-module" [
 #
 # PUT /api/auths/{id}
 # operationId: updateGlobalAuthModule
-# --users item shape: {email: string, metadata: record, name: string, password: string}
 export def "update-global-auth-module" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -414,18 +436,18 @@ export def "update-global-auth-module" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --admin-password: string # The admin password (e.g. a string value)
   --admin-username: string # The admin username (e.g. a string value)
-  --desc: string # Description of the config (e.g. a string value)
+  desc: string # Description of the config (e.g. a string value)
   --email-field: string # Field name to get email from user profile (e.g. a string value)
   --group-filter: string # Filter for groups (e.g. a string value)
   --body-id: string # Unique id of the config (e.g. a string value)
-  --name: string # Name of the config (e.g. a string value)
+  name: string # Name of the config (e.g. a string value)
   --name-field: string # Field name to get name from user profile (e.g. a string value)
   --otoroshi-data-field: string # Field name to get otoroshi metadata from. You can specify sub fields using | as separator (e.g. a string value)
   --search-base: string # LDAP search base (e.g. a string value)
   --search-filter: string # Filter for users (e.g. a string value)
   --server-url: string # URL of the ldap server (e.g. a string value)
-  --session-max-age: int # Max age of the session (format: int32, e.g. 123123)
-  --type: string # Type of settings. value is ldap (e.g. a string value)
+  session_max_age: int # Max age of the session (format: int32, e.g. 123123)
+  type: string # Type of settings. value is ldap (e.g. a string value)
   --user-base: string # LDAP user base DN (e.g. a string value)
   --users: list # List of users — item shape: {email: string, metadata: record, name: string, password: string}
   --access-token-field: string # Field name to get access token (e.g. a string value)
@@ -452,6 +474,7 @@ export def "update-global-auth-module" [
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/auths/{id}") $auth.query)
   let req_body = {"adminPassword": $admin_password, "adminUsername": $admin_username, "desc": $desc, "emailField": $email_field, "groupFilter": $group_filter, "id": $body_id, "name": $name, "nameField": $name_field, "otoroshiDataField": $otoroshi_data_field, "searchBase": $search_base, "searchFilter": $search_filter, "serverUrl": $server_url, "sessionMaxAge": $session_max_age, "type": $type, "userBase": $user_base, "users": $users, "accessTokenField": $access_token_field, "authorizeUrl": $authorize_url, "callbackUrl": $callback_url, "claims": $claims, "clientId": $client_id, "clientSecret": $client_secret, "jwtVerifier": $jwt_verifier, "loginUrl": $login_url, "logoutUrl": $logout_url, "oidConfig": $oid_config, "readProfileFromToken": $read_profile_from_token, "scope": $scope, "tokenUrl": $token_url, "useCookies": $use_cookies, "useJson": $use_json, "userInfoUrl": $user_info_url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "id") == null) { error make --unspanned { msg: "required body field 'id' missing: pass --body-id or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -482,7 +505,7 @@ export def "all-certs" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<autoRenew: string, ca: string, caRef: string, chain: string, domain: string, from: string, id: string, privateKey: string, selfSigned: string, subject: string, to: string, valid: string> {
+]: nothing -> oneof<table<autoRenew: string, ca: string, caRef: string, chain: string, domain: string, from: string, id: string, privateKey: string, selfSigned: string, subject: string, to: string, valid: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/certificates" $auth.query)
@@ -528,7 +551,7 @@ export def "create-cert" [
   subject: string # Subject of the certificate (read only) (e.g. a string value)
   to: string # End date of validity (e.g. a string value)
   valid: string # Certificate is valid (read only) (e.g. a string value)
-]: any -> record<autoRenew: string, ca: string, caRef: string, chain: string, domain: string, from: string, id: string, privateKey: string, selfSigned: string, subject: string, to: string, valid: string> {
+]: any -> oneof<record<autoRenew: string, ca: string, caRef: string, chain: string, domain: string, from: string, id: string, privateKey: string, selfSigned: string, subject: string, to: string, valid: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -566,7 +589,7 @@ export def "delete-cert" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<deleted: bool> {
+]: nothing -> oneof<record<deleted: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -602,7 +625,7 @@ export def "one-cert" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<autoRenew: string, ca: string, caRef: string, chain: string, domain: string, from: string, id: string, privateKey: string, selfSigned: string, subject: string, to: string, valid: string> {
+]: nothing -> oneof<record<autoRenew: string, ca: string, caRef: string, chain: string, domain: string, from: string, id: string, privateKey: string, selfSigned: string, subject: string, to: string, valid: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -639,7 +662,7 @@ export def "patch-cert" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> record<autoRenew: string, ca: string, caRef: string, chain: string, domain: string, from: string, id: string, privateKey: string, selfSigned: string, subject: string, to: string, valid: string> {
+]: any -> oneof<record<autoRenew: string, ca: string, caRef: string, chain: string, domain: string, from: string, id: string, privateKey: string, selfSigned: string, subject: string, to: string, valid: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -690,7 +713,7 @@ export def "put-cert" [
   subject: string # Subject of the certificate (read only) (e.g. a string value)
   to: string # End date of validity (e.g. a string value)
   valid: string # Certificate is valid (read only) (e.g. a string value)
-]: any -> record<autoRenew: string, ca: string, caRef: string, chain: string, domain: string, from: string, id: string, privateKey: string, selfSigned: string, subject: string, to: string, valid: string> {
+]: any -> oneof<record<autoRenew: string, ca: string, caRef: string, chain: string, domain: string, from: string, id: string, privateKey: string, selfSigned: string, subject: string, to: string, valid: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -729,7 +752,7 @@ export def "find-all-client-validators" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<alwaysValid: bool, badTtl: int, description: string, goodTtl: int, headers: record, host: string, id: string, method: string, name: string, noCache: bool, path: string, timeout: int, url: string> {
+]: nothing -> oneof<table<alwaysValid: bool, badTtl: int, description: string, goodTtl: int, headers: record, host: string, id: string, method: string, name: string, noCache: bool, path: string, timeout: int, url: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/client-validators" $auth.query)
@@ -776,7 +799,7 @@ export def "create-client-validator" [
   path: string # The URL path (e.g. a string value)
   timeout: int # The call timeout (format: int64, e.g. 123)
   url: string # The URL of the server (e.g. a string value)
-]: any -> record<alwaysValid: bool, badTtl: int, description: string, goodTtl: int, headers: record, host: string, id: string, method: string, name: string, noCache: bool, path: string, timeout: int, url: string> {
+]: any -> oneof<record<alwaysValid: bool, badTtl: int, description: string, goodTtl: int, headers: record, host: string, id: string, method: string, name: string, noCache: bool, path: string, timeout: int, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -816,7 +839,7 @@ export def "delete-client-validator" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<deleted: bool> {
+]: nothing -> oneof<record<deleted: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -852,7 +875,7 @@ export def "find-client-validator-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<alwaysValid: bool, badTtl: int, description: string, goodTtl: int, headers: record, host: string, id: string, method: string, name: string, noCache: bool, path: string, timeout: int, url: string> {
+]: nothing -> oneof<record<alwaysValid: bool, badTtl: int, description: string, goodTtl: int, headers: record, host: string, id: string, method: string, name: string, noCache: bool, path: string, timeout: int, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -889,7 +912,7 @@ export def "patch-client-validator" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> record<alwaysValid: bool, badTtl: int, description: string, goodTtl: int, headers: record, host: string, id: string, method: string, name: string, noCache: bool, path: string, timeout: int, url: string> {
+]: any -> oneof<record<alwaysValid: bool, badTtl: int, description: string, goodTtl: int, headers: record, host: string, id: string, method: string, name: string, noCache: bool, path: string, timeout: int, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -941,7 +964,7 @@ export def "update-client-validator" [
   path: string # The URL path (e.g. a string value)
   timeout: int # The call timeout (format: int64, e.g. 123)
   url: string # The URL of the server (e.g. a string value)
-]: any -> record<alwaysValid: bool, badTtl: int, description: string, goodTtl: int, headers: record, host: string, id: string, method: string, name: string, noCache: bool, path: string, timeout: int, url: string> {
+]: any -> oneof<record<alwaysValid: bool, badTtl: int, description: string, goodTtl: int, headers: record, host: string, id: string, method: string, name: string, noCache: bool, path: string, timeout: int, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -982,7 +1005,7 @@ export def "find-all-data-exporters" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<bufferSize: int, config: any, desc: string, enabled: string, filtering: record<exclude: list, include: list>, groupDuration: int, groupSize: int, id: string, jsonWorkers: int, location: record<teams: list, tenant: string>, metadata: record, name: string, projection: record, sendWorkers: int, typ: string> {
+]: nothing -> oneof<table<bufferSize: int, config: any, desc: string, enabled: string, filtering: record<exclude: list, include: list>, groupDuration: int, groupSize: int, id: string, jsonWorkers: int, location: record<teams: list, tenant: string>, metadata: record, name: string, projection: record, sendWorkers: int, typ: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/data-exporter-configs" $auth.query)
@@ -1006,8 +1029,6 @@ export def "find-all-data-exporters" [
 #
 # POST /api/data-exporter-configs
 # operationId: createDataExporterConfig
-# --filtering shape: {exclude?: list, include?: list}
-# --location shape: {teams: list, tenant: string}
 export def "create-data-exporter-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1033,7 +1054,7 @@ export def "create-data-exporter-config" [
   --projection: record # projection (e.g. {key: value})
   --send-workers: int # send workers (format: int32, e.g. 123123)
   --typ: string@typ-completer # Type of data exporter
-]: any -> record<bufferSize: int, config: any, desc: string, enabled: string, filtering: record<exclude: list<record>, include: list<record>>, groupDuration: int, groupSize: int, id: string, jsonWorkers: int, location: record<teams: list<record>, tenant: string>, metadata: record, name: string, projection: record, sendWorkers: int, typ: string> {
+]: any -> oneof<record<bufferSize: int, config: any, desc: string, enabled: string, filtering: record<exclude: list<record>, include: list<record>>, groupDuration: int, groupSize: int, id: string, jsonWorkers: int, location: record<teams: list<record>, tenant: string>, metadata: record, name: string, projection: record, sendWorkers: int, typ: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1071,7 +1092,7 @@ export def "deletebulk-data-exporter-config" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> table<deleted: bool, id: bool, status: string> {
+]: any -> oneof<table<deleted: bool, id: bool, status: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1109,7 +1130,7 @@ export def "patch-bulk-data-exporter-config" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> table<id: bool, status: string, updated: bool> {
+]: any -> oneof<table<id: bool, status: string, updated: bool>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1147,7 +1168,7 @@ export def "create-bulk-data-exporter-configs" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> table<created: bool, id: bool, status: string> {
+]: any -> oneof<table<created: bool, id: bool, status: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1185,7 +1206,7 @@ export def "update-bulk-data-exporter-config" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> table<id: bool, status: string, updated: bool> {
+]: any -> oneof<table<id: bool, status: string, updated: bool>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1223,7 +1244,7 @@ export def "data-exporter-template" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --type: string # The data exporter config type
-]: nothing -> record<bufferSize: int, config: any, desc: string, enabled: string, filtering: record<exclude: list<record>, include: list<record>>, groupDuration: int, groupSize: int, id: string, jsonWorkers: int, location: record<teams: list<record>, tenant: string>, metadata: record, name: string, projection: record, sendWorkers: int, typ: string> {
+]: nothing -> oneof<record<bufferSize: int, config: any, desc: string, enabled: string, filtering: record<exclude: list<record>, include: list<record>>, groupDuration: int, groupSize: int, id: string, jsonWorkers: int, location: record<teams: list<record>, tenant: string>, metadata: record, name: string, projection: record, sendWorkers: int, typ: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar")] | flatten | str join "&"
@@ -1259,7 +1280,7 @@ export def "delete-data-exporter-config" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<deleted: bool> {
+]: nothing -> oneof<record<deleted: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($data_exporter_config_id | is-empty) { error make --unspanned { msg: "path parameter 'dataExporterConfigId' must be non-empty" } }
@@ -1295,7 +1316,7 @@ export def "find-data-exporter-config-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<bufferSize: int, config: any, desc: string, enabled: string, filtering: record<exclude: list<record>, include: list<record>>, groupDuration: int, groupSize: int, id: string, jsonWorkers: int, location: record<teams: list<record>, tenant: string>, metadata: record, name: string, projection: record, sendWorkers: int, typ: string> {
+]: nothing -> oneof<record<bufferSize: int, config: any, desc: string, enabled: string, filtering: record<exclude: list<record>, include: list<record>>, groupDuration: int, groupSize: int, id: string, jsonWorkers: int, location: record<teams: list<record>, tenant: string>, metadata: record, name: string, projection: record, sendWorkers: int, typ: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($data_exporter_config_id | is-empty) { error make --unspanned { msg: "path parameter 'dataExporterConfigId' must be non-empty" } }
@@ -1332,7 +1353,7 @@ export def "patch-data-exporter-config" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> record<bufferSize: int, config: any, desc: string, enabled: string, filtering: record<exclude: list<record>, include: list<record>>, groupDuration: int, groupSize: int, id: string, jsonWorkers: int, location: record<teams: list<record>, tenant: string>, metadata: record, name: string, projection: record, sendWorkers: int, typ: string> {
+]: any -> oneof<record<bufferSize: int, config: any, desc: string, enabled: string, filtering: record<exclude: list<record>, include: list<record>>, groupDuration: int, groupSize: int, id: string, jsonWorkers: int, location: record<teams: list<record>, tenant: string>, metadata: record, name: string, projection: record, sendWorkers: int, typ: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1360,8 +1381,6 @@ export def "patch-data-exporter-config" [
 #
 # PUT /api/data-exporter-configs/{dataExporterConfigId}
 # operationId: updateDataExporterConfig
-# --filtering shape: {exclude?: list, include?: list}
-# --location shape: {teams: list, tenant: string}
 export def "update-data-exporter-config" [
   data_exporter_config_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1388,7 +1407,7 @@ export def "update-data-exporter-config" [
   --projection: record # projection (e.g. {key: value})
   --send-workers: int # send workers (format: int32, e.g. 123123)
   --typ: string@typ-completer # Type of data exporter
-]: any -> record<bufferSize: int, config: any, desc: string, enabled: string, filtering: record<exclude: list<record>, include: list<record>>, groupDuration: int, groupSize: int, id: string, jsonWorkers: int, location: record<teams: list<record>, tenant: string>, metadata: record, name: string, projection: record, sendWorkers: int, typ: string> {
+]: any -> oneof<record<bufferSize: int, config: any, desc: string, enabled: string, filtering: record<exclude: list<record>, include: list<record>>, groupDuration: int, groupSize: int, id: string, jsonWorkers: int, location: record<teams: list<record>, tenant: string>, metadata: record, name: string, projection: record, sendWorkers: int, typ: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1426,7 +1445,7 @@ export def "global-config" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<alertsEmails: list<string>, alertsWebhooks: table<headers: record, url: string>, analyticsWebhooks: table<headers: record, url: string>, apiReadOnly: bool, autoLinkToDefaultGroup: bool, backofficeAuth0Config: record<callbackUrl: string, clientId: string, clientSecret: string, domain: string>, cleverSettings: record<consumerKey: string, consumerSecret: string, orgaId: string, secret: string, token: string>, elasticReadsConfig: record<clusterUri: string, headers: record, index: string, password: string, type: string, user: string>, elasticWritesConfigs: table<clusterUri: string, headers: record, index: string, password: string, type: string, user: string>, endlessIpAddresses: list<string>, ipFiltering: record<blacklist: list<string>, whitelist: list<string>>, limitConcurrentRequests: bool, lines: list<string>, mailerSettings: record<apiKey: string, apiKeyPrivate: string, apiKeyPublic: string, domain: string, eu: bool, header: record, type: string, url: string>, maxConcurrentRequests: int, maxHttp10ResponseSize: int, maxLogsSize: int, middleFingers: bool, perIpThrottlingQuota: int, privateAppsAuth0Config: record<callbackUrl: string, clientId: string, clientSecret: string, domain: string>, streamEntityOnly: bool, throttlingQuota: int, u2fLoginOnly: bool, useCircuitBreakers: bool> {
+]: nothing -> oneof<record<alertsEmails: list<string>, alertsWebhooks: table<headers: record, url: string>, analyticsWebhooks: table<headers: record, url: string>, apiReadOnly: bool, autoLinkToDefaultGroup: bool, backofficeAuth0Config: record<callbackUrl: string, clientId: string, clientSecret: string, domain: string>, cleverSettings: record<consumerKey: string, consumerSecret: string, orgaId: string, secret: string, token: string>, elasticReadsConfig: record<clusterUri: string, headers: record, index: string, password: string, type: string, user: string>, elasticWritesConfigs: table<clusterUri: string, headers: record, index: string, password: string, type: string, user: string>, endlessIpAddresses: list<string>, ipFiltering: record<blacklist: list<string>, whitelist: list<string>>, limitConcurrentRequests: bool, lines: list<string>, mailerSettings: record<apiKey: string, apiKeyPrivate: string, apiKeyPublic: string, domain: string, eu: bool, header: record, type: string, url: string>, maxConcurrentRequests: int, maxHttp10ResponseSize: int, maxLogsSize: int, middleFingers: bool, perIpThrottlingQuota: int, privateAppsAuth0Config: record<callbackUrl: string, clientId: string, clientSecret: string, domain: string>, streamEntityOnly: bool, throttlingQuota: int, u2fLoginOnly: bool, useCircuitBreakers: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/globalconfig" $auth.query)
@@ -1461,7 +1480,7 @@ export def "patch-global-config" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> record<alertsEmails: list<string>, alertsWebhooks: table<headers: record, url: string>, analyticsWebhooks: table<headers: record, url: string>, apiReadOnly: bool, autoLinkToDefaultGroup: bool, backofficeAuth0Config: record<callbackUrl: string, clientId: string, clientSecret: string, domain: string>, cleverSettings: record<consumerKey: string, consumerSecret: string, orgaId: string, secret: string, token: string>, elasticReadsConfig: record<clusterUri: string, headers: record, index: string, password: string, type: string, user: string>, elasticWritesConfigs: table<clusterUri: string, headers: record, index: string, password: string, type: string, user: string>, endlessIpAddresses: list<string>, ipFiltering: record<blacklist: list<string>, whitelist: list<string>>, limitConcurrentRequests: bool, lines: list<string>, mailerSettings: record<apiKey: string, apiKeyPrivate: string, apiKeyPublic: string, domain: string, eu: bool, header: record, type: string, url: string>, maxConcurrentRequests: int, maxHttp10ResponseSize: int, maxLogsSize: int, middleFingers: bool, perIpThrottlingQuota: int, privateAppsAuth0Config: record<callbackUrl: string, clientId: string, clientSecret: string, domain: string>, streamEntityOnly: bool, throttlingQuota: int, u2fLoginOnly: bool, useCircuitBreakers: bool> {
+]: any -> oneof<record<alertsEmails: list<string>, alertsWebhooks: table<headers: record, url: string>, analyticsWebhooks: table<headers: record, url: string>, apiReadOnly: bool, autoLinkToDefaultGroup: bool, backofficeAuth0Config: record<callbackUrl: string, clientId: string, clientSecret: string, domain: string>, cleverSettings: record<consumerKey: string, consumerSecret: string, orgaId: string, secret: string, token: string>, elasticReadsConfig: record<clusterUri: string, headers: record, index: string, password: string, type: string, user: string>, elasticWritesConfigs: table<clusterUri: string, headers: record, index: string, password: string, type: string, user: string>, endlessIpAddresses: list<string>, ipFiltering: record<blacklist: list<string>, whitelist: list<string>>, limitConcurrentRequests: bool, lines: list<string>, mailerSettings: record<apiKey: string, apiKeyPrivate: string, apiKeyPublic: string, domain: string, eu: bool, header: record, type: string, url: string>, maxConcurrentRequests: int, maxHttp10ResponseSize: int, maxLogsSize: int, middleFingers: bool, perIpThrottlingQuota: int, privateAppsAuth0Config: record<callbackUrl: string, clientId: string, clientSecret: string, domain: string>, streamEntityOnly: bool, throttlingQuota: int, u2fLoginOnly: bool, useCircuitBreakers: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1488,15 +1507,6 @@ export def "patch-global-config" [
 #
 # PUT /api/globalconfig
 # operationId: putGlobalConfig
-# --alertsWebhooks item shape: {headers: record, url: string}
-# --analyticsWebhooks item shape: {headers: record, url: string}
-# --backofficeAuth0Config shape: {callbackUrl: string, clientId: string, clientSecret: string, domain: string}
-# --cleverSettings shape: {consumerKey: string, consumerSecret: string, orgaId: string, secret: string, token: string}
-# --elasticReadsConfig shape: {clusterUri: string, headers: record, index: string, password: string, type: string, user: string}
-# --elasticWritesConfigs item shape: {clusterUri: string, headers: record, index: string, password: string, type: string, user: string}
-# --ipFiltering shape: {blacklist: list<string>, whitelist: list<string>}
-# --mailerSettings shape: {apiKey: string, apiKeyPrivate?: string, apiKeyPublic?: string, domain: string, eu?: bool, header?: record, type?: string, url?: string}
-# --privateAppsAuth0Config shape: {callbackUrl: string, clientId: string, clientSecret: string, domain: string}
 export def "put-global-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1531,7 +1541,7 @@ export def "put-global-config" [
   throttling_quota: int # Authorized number of calls per second globally, measured on 10 seconds (format: int64, e.g. 123)
   --u2f-login-only: oneof<nothing, bool> # If enabled, login to backoffice through Auth0 will be disabled (e.g. true)
   --use-circuit-breakers: oneof<nothing, bool> # If enabled, services will be authorized to use circuit breakers (e.g. true)
-]: any -> record<alertsEmails: list<string>, alertsWebhooks: table<headers: record, url: string>, analyticsWebhooks: table<headers: record, url: string>, apiReadOnly: bool, autoLinkToDefaultGroup: bool, backofficeAuth0Config: record<callbackUrl: string, clientId: string, clientSecret: string, domain: string>, cleverSettings: record<consumerKey: string, consumerSecret: string, orgaId: string, secret: string, token: string>, elasticReadsConfig: record<clusterUri: string, headers: record, index: string, password: string, type: string, user: string>, elasticWritesConfigs: table<clusterUri: string, headers: record, index: string, password: string, type: string, user: string>, endlessIpAddresses: list<string>, ipFiltering: record<blacklist: list<string>, whitelist: list<string>>, limitConcurrentRequests: bool, lines: list<string>, mailerSettings: record<apiKey: string, apiKeyPrivate: string, apiKeyPublic: string, domain: string, eu: bool, header: record, type: string, url: string>, maxConcurrentRequests: int, maxHttp10ResponseSize: int, maxLogsSize: int, middleFingers: bool, perIpThrottlingQuota: int, privateAppsAuth0Config: record<callbackUrl: string, clientId: string, clientSecret: string, domain: string>, streamEntityOnly: bool, throttlingQuota: int, u2fLoginOnly: bool, useCircuitBreakers: bool> {
+]: any -> oneof<record<alertsEmails: list<string>, alertsWebhooks: table<headers: record, url: string>, analyticsWebhooks: table<headers: record, url: string>, apiReadOnly: bool, autoLinkToDefaultGroup: bool, backofficeAuth0Config: record<callbackUrl: string, clientId: string, clientSecret: string, domain: string>, cleverSettings: record<consumerKey: string, consumerSecret: string, orgaId: string, secret: string, token: string>, elasticReadsConfig: record<clusterUri: string, headers: record, index: string, password: string, type: string, user: string>, elasticWritesConfigs: table<clusterUri: string, headers: record, index: string, password: string, type: string, user: string>, endlessIpAddresses: list<string>, ipFiltering: record<blacklist: list<string>, whitelist: list<string>>, limitConcurrentRequests: bool, lines: list<string>, mailerSettings: record<apiKey: string, apiKeyPrivate: string, apiKeyPublic: string, domain: string, eu: bool, header: record, type: string, url: string>, maxConcurrentRequests: int, maxHttp10ResponseSize: int, maxLogsSize: int, middleFingers: bool, perIpThrottlingQuota: int, privateAppsAuth0Config: record<callbackUrl: string, clientId: string, clientSecret: string, domain: string>, streamEntityOnly: bool, throttlingQuota: int, u2fLoginOnly: bool, useCircuitBreakers: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1574,7 +1584,7 @@ export def "all-service-groups" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<description: string, id: string, name: string> {
+]: nothing -> oneof<table<description: string, id: string, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/groups" $auth.query)
@@ -1611,7 +1621,7 @@ export def "create-group" [
   --description: string # The descriptoin of the group (e.g. a string value)
   id: string # The unique id of the group. Usually 64 random alpha numerical characters, but can be anything (e.g. a string value)
   name: string # The name of the group (e.g. a string value)
-]: any -> record<description: string, id: string, name: string> {
+]: any -> oneof<record<description: string, id: string, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1649,7 +1659,7 @@ export def "api-keys-from-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<authorizedEntities: list<string>, clientId: string, clientName: string, clientSecret: string, dailyQuota: int, enabled: bool, metadata: record, monthlyQuota: int, throttlingQuota: int> {
+]: nothing -> oneof<table<authorizedEntities: list<string>, clientId: string, clientName: string, clientSecret: string, dailyQuota: int, enabled: bool, metadata: record, monthlyQuota: int, throttlingQuota: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
@@ -1694,7 +1704,7 @@ export def "create-api-key-from-group" [
   --metadata: record # Bunch of metadata for the key (e.g. {key: value})
   --monthly-quota: int # Authorized number of calls per month (format: int64, e.g. 123)
   --throttling-quota: int # Authorized number of calls per second, measured on 10 seconds (format: int64, e.g. 123)
-]: any -> record<authorizedEntities: list<string>, clientId: string, clientName: string, clientSecret: string, dailyQuota: int, enabled: bool, metadata: record, monthlyQuota: int, throttlingQuota: int> {
+]: any -> oneof<record<authorizedEntities: list<string>, clientId: string, clientName: string, clientSecret: string, dailyQuota: int, enabled: bool, metadata: record, monthlyQuota: int, throttlingQuota: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1735,7 +1745,7 @@ export def "delete-api-key-from-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<deleted: bool> {
+]: nothing -> oneof<record<deleted: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
@@ -1773,7 +1783,7 @@ export def "api-key-from-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<authorizedEntities: list<string>, clientId: string, clientName: string, clientSecret: string, dailyQuota: int, enabled: bool, metadata: record, monthlyQuota: int, throttlingQuota: int> {
+]: nothing -> oneof<record<authorizedEntities: list<string>, clientId: string, clientName: string, clientSecret: string, dailyQuota: int, enabled: bool, metadata: record, monthlyQuota: int, throttlingQuota: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
@@ -1812,7 +1822,7 @@ export def "patch-api-key-from-group" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> record<authorizedEntities: list<string>, clientId: string, clientName: string, clientSecret: string, dailyQuota: int, enabled: bool, metadata: record, monthlyQuota: int, throttlingQuota: int> {
+]: any -> oneof<record<authorizedEntities: list<string>, clientId: string, clientName: string, clientSecret: string, dailyQuota: int, enabled: bool, metadata: record, monthlyQuota: int, throttlingQuota: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1862,7 +1872,7 @@ export def "update-api-key-from-group" [
   --metadata: record # Bunch of metadata for the key (e.g. {key: value})
   --monthly-quota: int # Authorized number of calls per month (format: int64, e.g. 123)
   --throttling-quota: int # Authorized number of calls per second, measured on 10 seconds (format: int64, e.g. 123)
-]: any -> record<authorizedEntities: list<string>, clientId: string, clientName: string, clientSecret: string, dailyQuota: int, enabled: bool, metadata: record, monthlyQuota: int, throttlingQuota: int> {
+]: any -> oneof<record<authorizedEntities: list<string>, clientId: string, clientName: string, clientSecret: string, dailyQuota: int, enabled: bool, metadata: record, monthlyQuota: int, throttlingQuota: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1905,7 +1915,7 @@ export def "reset-api-key-from-group-quotas" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<authorizedCallsPerDay: int, authorizedCallsPerMonth: int, authorizedCallsPerSec: int, currentCallsPerDay: int, currentCallsPerMonth: int, currentCallsPerSec: int, remainingCallsPerDay: int, remainingCallsPerMonth: int, remainingCallsPerSec: int> {
+]: nothing -> oneof<record<authorizedCallsPerDay: int, authorizedCallsPerMonth: int, authorizedCallsPerSec: int, currentCallsPerDay: int, currentCallsPerMonth: int, currentCallsPerSec: int, remainingCallsPerDay: int, remainingCallsPerMonth: int, remainingCallsPerSec: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
@@ -1943,7 +1953,7 @@ export def "api-key-from-group-quotas" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<authorizedCallsPerDay: int, authorizedCallsPerMonth: int, authorizedCallsPerSec: int, currentCallsPerDay: int, currentCallsPerMonth: int, currentCallsPerSec: int, remainingCallsPerDay: int, remainingCallsPerMonth: int, remainingCallsPerSec: int> {
+]: nothing -> oneof<record<authorizedCallsPerDay: int, authorizedCallsPerMonth: int, authorizedCallsPerSec: int, currentCallsPerDay: int, currentCallsPerMonth: int, currentCallsPerSec: int, remainingCallsPerDay: int, remainingCallsPerMonth: int, remainingCallsPerSec: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
@@ -1980,7 +1990,7 @@ export def "delete-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<deleted: bool> {
+]: nothing -> oneof<record<deleted: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($service_group_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceGroupId' must be non-empty" } }
@@ -2016,7 +2026,7 @@ export def "service-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<description: string, id: string, name: string> {
+]: nothing -> oneof<record<description: string, id: string, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($service_group_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceGroupId' must be non-empty" } }
@@ -2053,7 +2063,7 @@ export def "patch-group" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> record<description: string, id: string, name: string> {
+]: any -> oneof<record<description: string, id: string, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2095,7 +2105,7 @@ export def "update-group" [
   --description: string # The descriptoin of the group (e.g. a string value)
   id: string # The unique id of the group. Usually 64 random alpha numerical characters, but can be anything (e.g. a string value)
   name: string # The name of the group (e.g. a string value)
-]: any -> record<description: string, id: string, name: string> {
+]: any -> oneof<record<description: string, id: string, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2134,7 +2144,7 @@ export def "service-group-services" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<authorizedEntities: list<string>, clientId: string, clientName: string, clientSecret: string, dailyQuota: int, enabled: bool, metadata: record, monthlyQuota: int, throttlingQuota: int> {
+]: nothing -> oneof<table<authorizedEntities: list<string>, clientId: string, clientName: string, clientSecret: string, dailyQuota: int, enabled: bool, metadata: record, monthlyQuota: int, throttlingQuota: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($service_group_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceGroupId' must be non-empty" } }
@@ -2159,14 +2169,6 @@ export def "service-group-services" [
 #
 # POST /api/import
 # operationId: fullImportFromFile
-# --admins item shape: {createdAt: int, label: string, password: string, registration: record, username: string}
-# --apiKeys item shape: {authorizedEntities: list<string>, clientId: string, clientName: string, clientSecret: string, dailyQuota?: int, enabled: bool, metadata?: record, monthlyQuota?: int, throttlingQuota?: int}
-# --config shape: {alertsEmails: list<string>, alertsWebhooks: list, analyticsWebhooks: list, apiReadOnly: bool, autoLinkToDefaultGroup: bool, backofficeAuth0Config?: record, cleverSettings?: record, elasticReadsConfig?: record, elasticWritesConfigs?: list, endlessIpAddresses: list<string>, ipFiltering: record, limitConcurrentRequests: bool, lines?: list<string>, mailerSettings?: record, maxConcurrentRequests: int, maxHttp10ResponseSize?: int, maxLogsSize?: int, middleFingers?: bool, perIpThrottlingQuota: int, ... (5 more fields)}
-# --errorTemplates item shape: {messages: record, serviceId: string, template40x: string, template50x: string, templateBuild: string, templateMaintenance: string}
-# --serviceDescriptors item shape: {Canary?: record, additionalHeaders?: record, api?: record, authConfigRef?: string, buildMode: bool, chaosConfig?: record, clientConfig?: record, clientValidatorRef?: string, cors?: record, domain: string, enabled: bool, enforceSecureCommunication: bool, env: string, forceHttps: bool, groups: list<string>, gzip?: record, headersVerification?: record, healthCheck?: record, id: string, ipFiltering?: record, jwtVerifier?: any, localHost?: string, localScheme?: string, maintenanceMode: bool, ... (20 more fields)}
-# --serviceGroups item shape: {description?: string, id: string, name: string}
-# --simpleAdmins item shape: {createdAt: int, label: string, password: string, username: string}
-# --stats shape: {calls: int, dataIn: int, dataOut: int}
 export def "full-import-from-file" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2189,7 +2191,7 @@ export def "full-import-from-file" [
   service_groups: list # Current service groups at the time of export — item shape: {description?: string, id: string, name: string}
   simple_admins: list # Current simple admins at the time of export — item shape: {createdAt: int, label: string, password: string, username: string}
   stats: record # Global stats for the current Otoroshi instances — shape: {calls: int, dataIn: int, dataOut: int}
-]: any -> record<done: bool> {
+]: any -> oneof<record<done: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2226,7 +2228,7 @@ export def "global-live-stats" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<calls: int, concurrentHandledRequests: int, dataIn: int, dataInRate: float, dataOut: int, dataOutRate: float, duration: float, overhead: float, rate: float> {
+]: nothing -> oneof<record<calls: int, concurrentHandledRequests: int, dataIn: int, dataInRate: float, dataOut: int, dataOutRate: float, duration: float, overhead: float, rate: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/live" $auth.query)
@@ -2262,7 +2264,7 @@ export def "service-live-stats" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<calls: int, concurrentHandledRequests: int, dataIn: int, dataInRate: float, dataOut: int, dataOutRate: float, duration: float, overhead: float, rate: float> {
+]: nothing -> oneof<record<calls: int, concurrentHandledRequests: int, dataIn: int, dataInRate: float, dataOut: int, dataOutRate: float, duration: float, overhead: float, rate: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2297,7 +2299,7 @@ export def "full-export" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<admins: table<createdAt: int, label: string, password: string, registration: record, username: string>, apiKeys: table<authorizedEntities: list, clientId: string, clientName: string, clientSecret: string, dailyQuota: int, enabled: bool, metadata: record, monthlyQuota: int, throttlingQuota: int>, appConfig: record, config: record<alertsEmails: list<string>, alertsWebhooks: list<record>, analyticsWebhooks: list<record>, apiReadOnly: bool, autoLinkToDefaultGroup: bool, backofficeAuth0Config: record<callbackUrl: string, clientId: string, clientSecret: string, domain: string>, cleverSettings: record<consumerKey: string, consumerSecret: string, orgaId: string, secret: string, token: string>, elasticReadsConfig: record<clusterUri: string, headers: record, index: string, password: string, type: string, user: string>, elasticWritesConfigs: list<record>, endlessIpAddresses: list<string>, ipFiltering: record<blacklist: list, whitelist: list>, limitConcurrentRequests: bool, lines: list<string>, mailerSettings: record<apiKey: string, apiKeyPrivate: string, apiKeyPublic: string, domain: string, eu: bool, header: record, type: string, url: string>, maxConcurrentRequests: int, maxHttp10ResponseSize: int, maxLogsSize: int, middleFingers: bool, perIpThrottlingQuota: int, privateAppsAuth0Config: record<callbackUrl: string, clientId: string, clientSecret: string, domain: string>, streamEntityOnly: bool, throttlingQuota: int, u2fLoginOnly: bool, useCircuitBreakers: bool>, date: string, dateRaw: int, errorTemplates: table<messages: record, serviceId: string, template40x: string, template50x: string, templateBuild: string, templateMaintenance: string>, label: string, serviceDescriptors: table<Canary: record, additionalHeaders: record, api: record, authConfigRef: string, buildMode: bool, chaosConfig: record, clientConfig: record, clientValidatorRef: string, cors: record, domain: string, enabled: bool, enforceSecureCommunication: bool, env: string, forceHttps: bool, groups: list, gzip: record, headersVerification: record, healthCheck: record, id: string, ipFiltering: record, jwtVerifier: any, localHost: string, localScheme: string, maintenanceMode: bool, matchingHeaders: record, matchingRoot: string, metadata: record, name: string, overrideHost: bool, privateApp: bool, privatePatterns: list, publicPatterns: list, redirectToLocal: bool, redirection: record, root: string, secComExcludedPatterns: list, secComSettings: any, sendOtoroshiHeadersBack: bool, statsdConfig: record, subdomain: string, targets: list, transformerRef: string, userFacing: bool, xForwardedHeaders: bool>, serviceGroups: table<description: string, id: string, name: string>, simpleAdmins: table<createdAt: int, label: string, password: string, username: string>, stats: record<calls: int, dataIn: int, dataOut: int>> {
+]: nothing -> oneof<record<admins: table<createdAt: int, label: string, password: string, registration: record, username: string>, apiKeys: table<authorizedEntities: list, clientId: string, clientName: string, clientSecret: string, dailyQuota: int, enabled: bool, metadata: record, monthlyQuota: int, throttlingQuota: int>, appConfig: record, config: record<alertsEmails: list<string>, alertsWebhooks: list<record>, analyticsWebhooks: list<record>, apiReadOnly: bool, autoLinkToDefaultGroup: bool, backofficeAuth0Config: record<callbackUrl: string, clientId: string, clientSecret: string, domain: string>, cleverSettings: record<consumerKey: string, consumerSecret: string, orgaId: string, secret: string, token: string>, elasticReadsConfig: record<clusterUri: string, headers: record, index: string, password: string, type: string, user: string>, elasticWritesConfigs: list<record>, endlessIpAddresses: list<string>, ipFiltering: record<blacklist: list, whitelist: list>, limitConcurrentRequests: bool, lines: list<string>, mailerSettings: record<apiKey: string, apiKeyPrivate: string, apiKeyPublic: string, domain: string, eu: bool, header: record, type: string, url: string>, maxConcurrentRequests: int, maxHttp10ResponseSize: int, maxLogsSize: int, middleFingers: bool, perIpThrottlingQuota: int, privateAppsAuth0Config: record<callbackUrl: string, clientId: string, clientSecret: string, domain: string>, streamEntityOnly: bool, throttlingQuota: int, u2fLoginOnly: bool, useCircuitBreakers: bool>, date: string, dateRaw: int, errorTemplates: table<messages: record, serviceId: string, template40x: string, template50x: string, templateBuild: string, templateMaintenance: string>, label: string, serviceDescriptors: table<Canary: record, additionalHeaders: record, api: record, authConfigRef: string, buildMode: bool, chaosConfig: record, clientConfig: record, clientValidatorRef: string, cors: record, domain: string, enabled: bool, enforceSecureCommunication: bool, env: string, forceHttps: bool, groups: list, gzip: record, headersVerification: record, healthCheck: record, id: string, ipFiltering: record, jwtVerifier: any, localHost: string, localScheme: string, maintenanceMode: bool, matchingHeaders: record, matchingRoot: string, metadata: record, name: string, overrideHost: bool, privateApp: bool, privatePatterns: list, publicPatterns: list, redirectToLocal: bool, redirection: record, root: string, secComExcludedPatterns: list, secComSettings: any, sendOtoroshiHeadersBack: bool, statsdConfig: record, subdomain: string, targets: list, transformerRef: string, userFacing: bool, xForwardedHeaders: bool>, serviceGroups: table<description: string, id: string, name: string>, simpleAdmins: table<createdAt: int, label: string, password: string, username: string>, stats: record<calls: int, dataIn: int, dataOut: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/otoroshi.json" $auth.query)
@@ -2321,14 +2323,6 @@ export def "full-export" [
 #
 # POST /api/otoroshi.json
 # operationId: fullImport
-# --admins item shape: {createdAt: int, label: string, password: string, registration: record, username: string}
-# --apiKeys item shape: {authorizedEntities: list<string>, clientId: string, clientName: string, clientSecret: string, dailyQuota?: int, enabled: bool, metadata?: record, monthlyQuota?: int, throttlingQuota?: int}
-# --config shape: {alertsEmails: list<string>, alertsWebhooks: list, analyticsWebhooks: list, apiReadOnly: bool, autoLinkToDefaultGroup: bool, backofficeAuth0Config?: record, cleverSettings?: record, elasticReadsConfig?: record, elasticWritesConfigs?: list, endlessIpAddresses: list<string>, ipFiltering: record, limitConcurrentRequests: bool, lines?: list<string>, mailerSettings?: record, maxConcurrentRequests: int, maxHttp10ResponseSize?: int, maxLogsSize?: int, middleFingers?: bool, perIpThrottlingQuota: int, ... (5 more fields)}
-# --errorTemplates item shape: {messages: record, serviceId: string, template40x: string, template50x: string, templateBuild: string, templateMaintenance: string}
-# --serviceDescriptors item shape: {Canary?: record, additionalHeaders?: record, api?: record, authConfigRef?: string, buildMode: bool, chaosConfig?: record, clientConfig?: record, clientValidatorRef?: string, cors?: record, domain: string, enabled: bool, enforceSecureCommunication: bool, env: string, forceHttps: bool, groups: list<string>, gzip?: record, headersVerification?: record, healthCheck?: record, id: string, ipFiltering?: record, jwtVerifier?: any, localHost?: string, localScheme?: string, maintenanceMode: bool, ... (20 more fields)}
-# --serviceGroups item shape: {description?: string, id: string, name: string}
-# --simpleAdmins item shape: {createdAt: int, label: string, password: string, username: string}
-# --stats shape: {calls: int, dataIn: int, dataOut: int}
 export def "full-import" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2351,7 +2345,7 @@ export def "full-import" [
   service_groups: list # Current service groups at the time of export — item shape: {description?: string, id: string, name: string}
   simple_admins: list # Current simple admins at the time of export — item shape: {createdAt: int, label: string, password: string, username: string}
   stats: record # Global stats for the current Otoroshi instances — shape: {calls: int, dataIn: int, dataOut: int}
-]: any -> record<done: bool> {
+]: any -> oneof<record<done: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2388,7 +2382,7 @@ export def "find-all-scripts" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<code: record, desc: record, id: string, name: string> {
+]: nothing -> oneof<table<code: record, desc: record, id: string, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/scripts" $auth.query)
@@ -2426,7 +2420,7 @@ export def "create-script" [
   desc: record # The description of the script (e.g. {key: value})
   id: string # The id of the script (e.g. a string value)
   name: string # The name of the script (e.g. a string value)
-]: any -> record<code: record, desc: record, id: string, name: string> {
+]: any -> oneof<record<code: record, desc: record, id: string, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2467,7 +2461,7 @@ export def "compile-script" [
   desc: record # The description of the script (e.g. {key: value})
   id: string # The id of the script (e.g. a string value)
   name: string # The name of the script (e.g. a string value)
-]: any -> record<done: bool, error: record<column: string, file: record, line: string, message: record, rawMessage: record>> {
+]: any -> oneof<record<done: bool, error: record<column: string, file: record, line: string, message: record, rawMessage: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2505,7 +2499,7 @@ export def "delete-script" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<deleted: bool> {
+]: nothing -> oneof<record<deleted: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($script_id | is-empty) { error make --unspanned { msg: "path parameter 'scriptId' must be non-empty" } }
@@ -2541,7 +2535,7 @@ export def "find-script-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: record, desc: record, id: string, name: string> {
+]: nothing -> oneof<record<code: record, desc: record, id: string, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($script_id | is-empty) { error make --unspanned { msg: "path parameter 'scriptId' must be non-empty" } }
@@ -2578,7 +2572,7 @@ export def "patch-script" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> record<code: record, desc: record, id: string, name: string> {
+]: any -> oneof<record<code: record, desc: record, id: string, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2621,7 +2615,7 @@ export def "update-script" [
   desc: record # The description of the script (e.g. {key: value})
   id: string # The id of the script (e.g. a string value)
   name: string # The name of the script (e.g. a string value)
-]: any -> record<code: record, desc: record, id: string, name: string> {
+]: any -> oneof<record<code: record, desc: record, id: string, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2659,7 +2653,7 @@ export def "all-services" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<Canary: record<enabled: bool, root: string, targets: list, traffic: int>, additionalHeaders: record, api: record<exposeApi: bool, openApiDescriptorUrl: string>, authConfigRef: string, buildMode: bool, chaosConfig: record<badResponsesFaultConfig: record, enabled: bool, largeRequestFaultConfig: record, largeResponseFaultConfig: record, latencyInjectionFaultConfig: record>, clientConfig: record<backoffFactor: int, callTimeout: int, globalTimeout: int, maxErrors: int, retries: int, retryInitialDelay: int, sampleInterval: int, useCircuitBreaker: bool>, clientValidatorRef: string, cors: record<allowCredentials: bool, allowHeaders: list, allowMethods: list, allowOrigin: string, enabled: bool, excludedPatterns: list, exposeHeaders: list, maxAge: int>, domain: string, enabled: bool, enforceSecureCommunication: bool, env: string, forceHttps: bool, groups: list<string>, gzip: record<blackList: list, bufferSize: int, chunkedThreshold: int, compressionLevel: int, enabled: bool, excludedPatterns: list, whiteList: list>, headersVerification: record, healthCheck: record<enabled: bool, url: string>, id: string, ipFiltering: record<blacklist: list, whitelist: list>, jwtVerifier: any, localHost: string, localScheme: string, maintenanceMode: bool, matchingHeaders: record, matchingRoot: string, metadata: record, name: string, overrideHost: bool, privateApp: bool, privatePatterns: list<string>, publicPatterns: list<string>, redirectToLocal: bool, redirection: record<code: int, enabled: bool, to: string>, root: string, secComExcludedPatterns: list<string>, secComSettings: any, sendOtoroshiHeadersBack: bool, statsdConfig: record<datadog: bool, host: string, port: int>, subdomain: string, targets: list<record>, transformerRef: string, userFacing: bool, xForwardedHeaders: bool> {
+]: nothing -> oneof<table<Canary: record<enabled: bool, root: string, targets: list, traffic: int>, additionalHeaders: record, api: record<exposeApi: bool, openApiDescriptorUrl: string>, authConfigRef: string, buildMode: bool, chaosConfig: record<badResponsesFaultConfig: record, enabled: bool, largeRequestFaultConfig: record, largeResponseFaultConfig: record, latencyInjectionFaultConfig: record>, clientConfig: record<backoffFactor: int, callTimeout: int, globalTimeout: int, maxErrors: int, retries: int, retryInitialDelay: int, sampleInterval: int, useCircuitBreaker: bool>, clientValidatorRef: string, cors: record<allowCredentials: bool, allowHeaders: list, allowMethods: list, allowOrigin: string, enabled: bool, excludedPatterns: list, exposeHeaders: list, maxAge: int>, domain: string, enabled: bool, enforceSecureCommunication: bool, env: string, forceHttps: bool, groups: list<string>, gzip: record<blackList: list, bufferSize: int, chunkedThreshold: int, compressionLevel: int, enabled: bool, excludedPatterns: list, whiteList: list>, headersVerification: record, healthCheck: record<enabled: bool, url: string>, id: string, ipFiltering: record<blacklist: list, whitelist: list>, jwtVerifier: any, localHost: string, localScheme: string, maintenanceMode: bool, matchingHeaders: record, matchingRoot: string, metadata: record, name: string, overrideHost: bool, privateApp: bool, privatePatterns: list<string>, publicPatterns: list<string>, redirectToLocal: bool, redirection: record<code: int, enabled: bool, to: string>, root: string, secComExcludedPatterns: list<string>, secComSettings: any, sendOtoroshiHeadersBack: bool, statsdConfig: record<datadog: bool, host: string, port: int>, subdomain: string, targets: list<record>, transformerRef: string, userFacing: bool, xForwardedHeaders: bool>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/services" $auth.query)
@@ -2683,17 +2677,6 @@ export def "all-services" [
 #
 # POST /api/services
 # operationId: createService
-# --Canary shape: {enabled: bool, root: string, targets: list, traffic: int}
-# --api shape: {exposeApi: bool, openApiDescriptorUrl?: string}
-# --chaosConfig shape: {badResponsesFaultConfig?: record, enabled: bool, largeRequestFaultConfig?: record, largeResponseFaultConfig?: record, latencyInjectionFaultConfig?: record}
-# --clientConfig shape: {backoffFactor: int, callTimeout: int, globalTimeout: int, maxErrors: int, retries: int, retryInitialDelay: int, sampleInterval: int, useCircuitBreaker: bool}
-# --cors shape: {allowCredentials: bool, allowHeaders: list<string>, allowMethods: list<string>, allowOrigin: string, enabled: bool, excludedPatterns: list<string>, exposeHeaders: list<string>, maxAge: int}
-# --gzip shape: {blackList: list<string>, bufferSize: int, chunkedThreshold: int, compressionLevel: int, enabled: bool, excludedPatterns: list<string>, whiteList: list<string>}
-# --healthCheck shape: {enabled: bool, url?: string}
-# --ipFiltering shape: {blacklist: list<string>, whitelist: list<string>}
-# --redirection shape: {code: int, enabled: bool, to: string}
-# --statsdConfig shape: {datadog: bool, host: string, port: int}
-# --targets item shape: {host: string, scheme: string}
 export def "create-service" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2748,7 +2731,7 @@ export def "create-service" [
   --transformer-ref: string # A reference to a request transformer (e.g. a string value)
   --user-facing: oneof<nothing, bool> # The fact that this service will be seen by users and cannot be impacted by the Snow Monkey (e.g. true)
   --x-forwarded-headers: oneof<nothing, bool> # Send X-Forwarded-* headers (e.g. true)
-]: any -> record<Canary: record<enabled: bool, root: string, targets: list<record>, traffic: int>, additionalHeaders: record, api: record<exposeApi: bool, openApiDescriptorUrl: string>, authConfigRef: string, buildMode: bool, chaosConfig: record<badResponsesFaultConfig: record<ratio: float, responses: list>, enabled: bool, largeRequestFaultConfig: record<additionalRequestSize: int, ratio: float>, largeResponseFaultConfig: record<additionalRequestSize: int, ratio: float>, latencyInjectionFaultConfig: record<from: int, ratio: float, to: int>>, clientConfig: record<backoffFactor: int, callTimeout: int, globalTimeout: int, maxErrors: int, retries: int, retryInitialDelay: int, sampleInterval: int, useCircuitBreaker: bool>, clientValidatorRef: string, cors: record<allowCredentials: bool, allowHeaders: list<string>, allowMethods: list<string>, allowOrigin: string, enabled: bool, excludedPatterns: list<string>, exposeHeaders: list<string>, maxAge: int>, domain: string, enabled: bool, enforceSecureCommunication: bool, env: string, forceHttps: bool, groups: list<string>, gzip: record<blackList: list<string>, bufferSize: int, chunkedThreshold: int, compressionLevel: int, enabled: bool, excludedPatterns: list<string>, whiteList: list<string>>, headersVerification: record, healthCheck: record<enabled: bool, url: string>, id: string, ipFiltering: record<blacklist: list<string>, whitelist: list<string>>, jwtVerifier: any, localHost: string, localScheme: string, maintenanceMode: bool, matchingHeaders: record, matchingRoot: string, metadata: record, name: string, overrideHost: bool, privateApp: bool, privatePatterns: list<string>, publicPatterns: list<string>, redirectToLocal: bool, redirection: record<code: int, enabled: bool, to: string>, root: string, secComExcludedPatterns: list<string>, secComSettings: any, sendOtoroshiHeadersBack: bool, statsdConfig: record<datadog: bool, host: string, port: int>, subdomain: string, targets: table<host: string, scheme: string>, transformerRef: string, userFacing: bool, xForwardedHeaders: bool> {
+]: any -> oneof<record<Canary: record<enabled: bool, root: string, targets: list<record>, traffic: int>, additionalHeaders: record, api: record<exposeApi: bool, openApiDescriptorUrl: string>, authConfigRef: string, buildMode: bool, chaosConfig: record<badResponsesFaultConfig: record<ratio: float, responses: list>, enabled: bool, largeRequestFaultConfig: record<additionalRequestSize: int, ratio: float>, largeResponseFaultConfig: record<additionalRequestSize: int, ratio: float>, latencyInjectionFaultConfig: record<from: int, ratio: float, to: int>>, clientConfig: record<backoffFactor: int, callTimeout: int, globalTimeout: int, maxErrors: int, retries: int, retryInitialDelay: int, sampleInterval: int, useCircuitBreaker: bool>, clientValidatorRef: string, cors: record<allowCredentials: bool, allowHeaders: list<string>, allowMethods: list<string>, allowOrigin: string, enabled: bool, excludedPatterns: list<string>, exposeHeaders: list<string>, maxAge: int>, domain: string, enabled: bool, enforceSecureCommunication: bool, env: string, forceHttps: bool, groups: list<string>, gzip: record<blackList: list<string>, bufferSize: int, chunkedThreshold: int, compressionLevel: int, enabled: bool, excludedPatterns: list<string>, whiteList: list<string>>, headersVerification: record, healthCheck: record<enabled: bool, url: string>, id: string, ipFiltering: record<blacklist: list<string>, whitelist: list<string>>, jwtVerifier: any, localHost: string, localScheme: string, maintenanceMode: bool, matchingHeaders: record, matchingRoot: string, metadata: record, name: string, overrideHost: bool, privateApp: bool, privatePatterns: list<string>, publicPatterns: list<string>, redirectToLocal: bool, redirection: record<code: int, enabled: bool, to: string>, root: string, secComExcludedPatterns: list<string>, secComSettings: any, sendOtoroshiHeadersBack: bool, statsdConfig: record<datadog: bool, host: string, port: int>, subdomain: string, targets: table<host: string, scheme: string>, transformerRef: string, userFacing: bool, xForwardedHeaders: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2793,7 +2776,7 @@ export def "delete-service" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<deleted: bool> {
+]: nothing -> oneof<record<deleted: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($service_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceId' must be non-empty" } }
@@ -2829,7 +2812,7 @@ export def "service" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<Canary: record<enabled: bool, root: string, targets: list<record>, traffic: int>, additionalHeaders: record, api: record<exposeApi: bool, openApiDescriptorUrl: string>, authConfigRef: string, buildMode: bool, chaosConfig: record<badResponsesFaultConfig: record<ratio: float, responses: list>, enabled: bool, largeRequestFaultConfig: record<additionalRequestSize: int, ratio: float>, largeResponseFaultConfig: record<additionalRequestSize: int, ratio: float>, latencyInjectionFaultConfig: record<from: int, ratio: float, to: int>>, clientConfig: record<backoffFactor: int, callTimeout: int, globalTimeout: int, maxErrors: int, retries: int, retryInitialDelay: int, sampleInterval: int, useCircuitBreaker: bool>, clientValidatorRef: string, cors: record<allowCredentials: bool, allowHeaders: list<string>, allowMethods: list<string>, allowOrigin: string, enabled: bool, excludedPatterns: list<string>, exposeHeaders: list<string>, maxAge: int>, domain: string, enabled: bool, enforceSecureCommunication: bool, env: string, forceHttps: bool, groups: list<string>, gzip: record<blackList: list<string>, bufferSize: int, chunkedThreshold: int, compressionLevel: int, enabled: bool, excludedPatterns: list<string>, whiteList: list<string>>, headersVerification: record, healthCheck: record<enabled: bool, url: string>, id: string, ipFiltering: record<blacklist: list<string>, whitelist: list<string>>, jwtVerifier: any, localHost: string, localScheme: string, maintenanceMode: bool, matchingHeaders: record, matchingRoot: string, metadata: record, name: string, overrideHost: bool, privateApp: bool, privatePatterns: list<string>, publicPatterns: list<string>, redirectToLocal: bool, redirection: record<code: int, enabled: bool, to: string>, root: string, secComExcludedPatterns: list<string>, secComSettings: any, sendOtoroshiHeadersBack: bool, statsdConfig: record<datadog: bool, host: string, port: int>, subdomain: string, targets: table<host: string, scheme: string>, transformerRef: string, userFacing: bool, xForwardedHeaders: bool> {
+]: nothing -> oneof<record<Canary: record<enabled: bool, root: string, targets: list<record>, traffic: int>, additionalHeaders: record, api: record<exposeApi: bool, openApiDescriptorUrl: string>, authConfigRef: string, buildMode: bool, chaosConfig: record<badResponsesFaultConfig: record<ratio: float, responses: list>, enabled: bool, largeRequestFaultConfig: record<additionalRequestSize: int, ratio: float>, largeResponseFaultConfig: record<additionalRequestSize: int, ratio: float>, latencyInjectionFaultConfig: record<from: int, ratio: float, to: int>>, clientConfig: record<backoffFactor: int, callTimeout: int, globalTimeout: int, maxErrors: int, retries: int, retryInitialDelay: int, sampleInterval: int, useCircuitBreaker: bool>, clientValidatorRef: string, cors: record<allowCredentials: bool, allowHeaders: list<string>, allowMethods: list<string>, allowOrigin: string, enabled: bool, excludedPatterns: list<string>, exposeHeaders: list<string>, maxAge: int>, domain: string, enabled: bool, enforceSecureCommunication: bool, env: string, forceHttps: bool, groups: list<string>, gzip: record<blackList: list<string>, bufferSize: int, chunkedThreshold: int, compressionLevel: int, enabled: bool, excludedPatterns: list<string>, whiteList: list<string>>, headersVerification: record, healthCheck: record<enabled: bool, url: string>, id: string, ipFiltering: record<blacklist: list<string>, whitelist: list<string>>, jwtVerifier: any, localHost: string, localScheme: string, maintenanceMode: bool, matchingHeaders: record, matchingRoot: string, metadata: record, name: string, overrideHost: bool, privateApp: bool, privatePatterns: list<string>, publicPatterns: list<string>, redirectToLocal: bool, redirection: record<code: int, enabled: bool, to: string>, root: string, secComExcludedPatterns: list<string>, secComSettings: any, sendOtoroshiHeadersBack: bool, statsdConfig: record<datadog: bool, host: string, port: int>, subdomain: string, targets: table<host: string, scheme: string>, transformerRef: string, userFacing: bool, xForwardedHeaders: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($service_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceId' must be non-empty" } }
@@ -2866,7 +2849,7 @@ export def "patch-service" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> record<Canary: record<enabled: bool, root: string, targets: list<record>, traffic: int>, additionalHeaders: record, api: record<exposeApi: bool, openApiDescriptorUrl: string>, authConfigRef: string, buildMode: bool, chaosConfig: record<badResponsesFaultConfig: record<ratio: float, responses: list>, enabled: bool, largeRequestFaultConfig: record<additionalRequestSize: int, ratio: float>, largeResponseFaultConfig: record<additionalRequestSize: int, ratio: float>, latencyInjectionFaultConfig: record<from: int, ratio: float, to: int>>, clientConfig: record<backoffFactor: int, callTimeout: int, globalTimeout: int, maxErrors: int, retries: int, retryInitialDelay: int, sampleInterval: int, useCircuitBreaker: bool>, clientValidatorRef: string, cors: record<allowCredentials: bool, allowHeaders: list<string>, allowMethods: list<string>, allowOrigin: string, enabled: bool, excludedPatterns: list<string>, exposeHeaders: list<string>, maxAge: int>, domain: string, enabled: bool, enforceSecureCommunication: bool, env: string, forceHttps: bool, groups: list<string>, gzip: record<blackList: list<string>, bufferSize: int, chunkedThreshold: int, compressionLevel: int, enabled: bool, excludedPatterns: list<string>, whiteList: list<string>>, headersVerification: record, healthCheck: record<enabled: bool, url: string>, id: string, ipFiltering: record<blacklist: list<string>, whitelist: list<string>>, jwtVerifier: any, localHost: string, localScheme: string, maintenanceMode: bool, matchingHeaders: record, matchingRoot: string, metadata: record, name: string, overrideHost: bool, privateApp: bool, privatePatterns: list<string>, publicPatterns: list<string>, redirectToLocal: bool, redirection: record<code: int, enabled: bool, to: string>, root: string, secComExcludedPatterns: list<string>, secComSettings: any, sendOtoroshiHeadersBack: bool, statsdConfig: record<datadog: bool, host: string, port: int>, subdomain: string, targets: table<host: string, scheme: string>, transformerRef: string, userFacing: bool, xForwardedHeaders: bool> {
+]: any -> oneof<record<Canary: record<enabled: bool, root: string, targets: list<record>, traffic: int>, additionalHeaders: record, api: record<exposeApi: bool, openApiDescriptorUrl: string>, authConfigRef: string, buildMode: bool, chaosConfig: record<badResponsesFaultConfig: record<ratio: float, responses: list>, enabled: bool, largeRequestFaultConfig: record<additionalRequestSize: int, ratio: float>, largeResponseFaultConfig: record<additionalRequestSize: int, ratio: float>, latencyInjectionFaultConfig: record<from: int, ratio: float, to: int>>, clientConfig: record<backoffFactor: int, callTimeout: int, globalTimeout: int, maxErrors: int, retries: int, retryInitialDelay: int, sampleInterval: int, useCircuitBreaker: bool>, clientValidatorRef: string, cors: record<allowCredentials: bool, allowHeaders: list<string>, allowMethods: list<string>, allowOrigin: string, enabled: bool, excludedPatterns: list<string>, exposeHeaders: list<string>, maxAge: int>, domain: string, enabled: bool, enforceSecureCommunication: bool, env: string, forceHttps: bool, groups: list<string>, gzip: record<blackList: list<string>, bufferSize: int, chunkedThreshold: int, compressionLevel: int, enabled: bool, excludedPatterns: list<string>, whiteList: list<string>>, headersVerification: record, healthCheck: record<enabled: bool, url: string>, id: string, ipFiltering: record<blacklist: list<string>, whitelist: list<string>>, jwtVerifier: any, localHost: string, localScheme: string, maintenanceMode: bool, matchingHeaders: record, matchingRoot: string, metadata: record, name: string, overrideHost: bool, privateApp: bool, privatePatterns: list<string>, publicPatterns: list<string>, redirectToLocal: bool, redirection: record<code: int, enabled: bool, to: string>, root: string, secComExcludedPatterns: list<string>, secComSettings: any, sendOtoroshiHeadersBack: bool, statsdConfig: record<datadog: bool, host: string, port: int>, subdomain: string, targets: table<host: string, scheme: string>, transformerRef: string, userFacing: bool, xForwardedHeaders: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2894,17 +2877,6 @@ export def "patch-service" [
 #
 # PUT /api/services/{serviceId}
 # operationId: updateService
-# --Canary shape: {enabled: bool, root: string, targets: list, traffic: int}
-# --api shape: {exposeApi: bool, openApiDescriptorUrl?: string}
-# --chaosConfig shape: {badResponsesFaultConfig?: record, enabled: bool, largeRequestFaultConfig?: record, largeResponseFaultConfig?: record, latencyInjectionFaultConfig?: record}
-# --clientConfig shape: {backoffFactor: int, callTimeout: int, globalTimeout: int, maxErrors: int, retries: int, retryInitialDelay: int, sampleInterval: int, useCircuitBreaker: bool}
-# --cors shape: {allowCredentials: bool, allowHeaders: list<string>, allowMethods: list<string>, allowOrigin: string, enabled: bool, excludedPatterns: list<string>, exposeHeaders: list<string>, maxAge: int}
-# --gzip shape: {blackList: list<string>, bufferSize: int, chunkedThreshold: int, compressionLevel: int, enabled: bool, excludedPatterns: list<string>, whiteList: list<string>}
-# --healthCheck shape: {enabled: bool, url?: string}
-# --ipFiltering shape: {blacklist: list<string>, whitelist: list<string>}
-# --redirection shape: {code: int, enabled: bool, to: string}
-# --statsdConfig shape: {datadog: bool, host: string, port: int}
-# --targets item shape: {host: string, scheme: string}
 export def "update-service" [
   service_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2960,7 +2932,7 @@ export def "update-service" [
   --transformer-ref: string # A reference to a request transformer (e.g. a string value)
   --user-facing: oneof<nothing, bool> # The fact that this service will be seen by users and cannot be impacted by the Snow Monkey (e.g. true)
   --x-forwarded-headers: oneof<nothing, bool> # Send X-Forwarded-* headers (e.g. true)
-]: any -> record<Canary: record<enabled: bool, root: string, targets: list<record>, traffic: int>, additionalHeaders: record, api: record<exposeApi: bool, openApiDescriptorUrl: string>, authConfigRef: string, buildMode: bool, chaosConfig: record<badResponsesFaultConfig: record<ratio: float, responses: list>, enabled: bool, largeRequestFaultConfig: record<additionalRequestSize: int, ratio: float>, largeResponseFaultConfig: record<additionalRequestSize: int, ratio: float>, latencyInjectionFaultConfig: record<from: int, ratio: float, to: int>>, clientConfig: record<backoffFactor: int, callTimeout: int, globalTimeout: int, maxErrors: int, retries: int, retryInitialDelay: int, sampleInterval: int, useCircuitBreaker: bool>, clientValidatorRef: string, cors: record<allowCredentials: bool, allowHeaders: list<string>, allowMethods: list<string>, allowOrigin: string, enabled: bool, excludedPatterns: list<string>, exposeHeaders: list<string>, maxAge: int>, domain: string, enabled: bool, enforceSecureCommunication: bool, env: string, forceHttps: bool, groups: list<string>, gzip: record<blackList: list<string>, bufferSize: int, chunkedThreshold: int, compressionLevel: int, enabled: bool, excludedPatterns: list<string>, whiteList: list<string>>, headersVerification: record, healthCheck: record<enabled: bool, url: string>, id: string, ipFiltering: record<blacklist: list<string>, whitelist: list<string>>, jwtVerifier: any, localHost: string, localScheme: string, maintenanceMode: bool, matchingHeaders: record, matchingRoot: string, metadata: record, name: string, overrideHost: bool, privateApp: bool, privatePatterns: list<string>, publicPatterns: list<string>, redirectToLocal: bool, redirection: record<code: int, enabled: bool, to: string>, root: string, secComExcludedPatterns: list<string>, secComSettings: any, sendOtoroshiHeadersBack: bool, statsdConfig: record<datadog: bool, host: string, port: int>, subdomain: string, targets: table<host: string, scheme: string>, transformerRef: string, userFacing: bool, xForwardedHeaders: bool> {
+]: any -> oneof<record<Canary: record<enabled: bool, root: string, targets: list<record>, traffic: int>, additionalHeaders: record, api: record<exposeApi: bool, openApiDescriptorUrl: string>, authConfigRef: string, buildMode: bool, chaosConfig: record<badResponsesFaultConfig: record<ratio: float, responses: list>, enabled: bool, largeRequestFaultConfig: record<additionalRequestSize: int, ratio: float>, largeResponseFaultConfig: record<additionalRequestSize: int, ratio: float>, latencyInjectionFaultConfig: record<from: int, ratio: float, to: int>>, clientConfig: record<backoffFactor: int, callTimeout: int, globalTimeout: int, maxErrors: int, retries: int, retryInitialDelay: int, sampleInterval: int, useCircuitBreaker: bool>, clientValidatorRef: string, cors: record<allowCredentials: bool, allowHeaders: list<string>, allowMethods: list<string>, allowOrigin: string, enabled: bool, excludedPatterns: list<string>, exposeHeaders: list<string>, maxAge: int>, domain: string, enabled: bool, enforceSecureCommunication: bool, env: string, forceHttps: bool, groups: list<string>, gzip: record<blackList: list<string>, bufferSize: int, chunkedThreshold: int, compressionLevel: int, enabled: bool, excludedPatterns: list<string>, whiteList: list<string>>, headersVerification: record, healthCheck: record<enabled: bool, url: string>, id: string, ipFiltering: record<blacklist: list<string>, whitelist: list<string>>, jwtVerifier: any, localHost: string, localScheme: string, maintenanceMode: bool, matchingHeaders: record, matchingRoot: string, metadata: record, name: string, overrideHost: bool, privateApp: bool, privatePatterns: list<string>, publicPatterns: list<string>, redirectToLocal: bool, redirection: record<code: int, enabled: bool, to: string>, root: string, secComExcludedPatterns: list<string>, secComSettings: any, sendOtoroshiHeadersBack: bool, statsdConfig: record<datadog: bool, host: string, port: int>, subdomain: string, targets: table<host: string, scheme: string>, transformerRef: string, userFacing: bool, xForwardedHeaders: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3006,7 +2978,7 @@ export def "api-keys" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<authorizedEntities: list<string>, clientId: string, clientName: string, clientSecret: string, dailyQuota: int, enabled: bool, metadata: record, monthlyQuota: int, throttlingQuota: int> {
+]: nothing -> oneof<table<authorizedEntities: list<string>, clientId: string, clientName: string, clientSecret: string, dailyQuota: int, enabled: bool, metadata: record, monthlyQuota: int, throttlingQuota: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($service_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceId' must be non-empty" } }
@@ -3051,7 +3023,7 @@ export def "create-api-key" [
   --metadata: record # Bunch of metadata for the key (e.g. {key: value})
   --monthly-quota: int # Authorized number of calls per month (format: int64, e.g. 123)
   --throttling-quota: int # Authorized number of calls per second, measured on 10 seconds (format: int64, e.g. 123)
-]: any -> record<authorizedEntities: list<string>, clientId: string, clientName: string, clientSecret: string, dailyQuota: int, enabled: bool, metadata: record, monthlyQuota: int, throttlingQuota: int> {
+]: any -> oneof<record<authorizedEntities: list<string>, clientId: string, clientName: string, clientSecret: string, dailyQuota: int, enabled: bool, metadata: record, monthlyQuota: int, throttlingQuota: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3092,7 +3064,7 @@ export def "delete-api-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<deleted: bool> {
+]: nothing -> oneof<record<deleted: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($service_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceId' must be non-empty" } }
@@ -3130,7 +3102,7 @@ export def "api-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<authorizedEntities: list<string>, clientId: string, clientName: string, clientSecret: string, dailyQuota: int, enabled: bool, metadata: record, monthlyQuota: int, throttlingQuota: int> {
+]: nothing -> oneof<record<authorizedEntities: list<string>, clientId: string, clientName: string, clientSecret: string, dailyQuota: int, enabled: bool, metadata: record, monthlyQuota: int, throttlingQuota: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($service_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceId' must be non-empty" } }
@@ -3169,7 +3141,7 @@ export def "patch-api-key" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> record<authorizedEntities: list<string>, clientId: string, clientName: string, clientSecret: string, dailyQuota: int, enabled: bool, metadata: record, monthlyQuota: int, throttlingQuota: int> {
+]: any -> oneof<record<authorizedEntities: list<string>, clientId: string, clientName: string, clientSecret: string, dailyQuota: int, enabled: bool, metadata: record, monthlyQuota: int, throttlingQuota: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3219,7 +3191,7 @@ export def "update-api-key" [
   --metadata: record # Bunch of metadata for the key (e.g. {key: value})
   --monthly-quota: int # Authorized number of calls per month (format: int64, e.g. 123)
   --throttling-quota: int # Authorized number of calls per second, measured on 10 seconds (format: int64, e.g. 123)
-]: any -> record<authorizedEntities: list<string>, clientId: string, clientName: string, clientSecret: string, dailyQuota: int, enabled: bool, metadata: record, monthlyQuota: int, throttlingQuota: int> {
+]: any -> oneof<record<authorizedEntities: list<string>, clientId: string, clientName: string, clientSecret: string, dailyQuota: int, enabled: bool, metadata: record, monthlyQuota: int, throttlingQuota: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3262,7 +3234,7 @@ export def "api-key-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<description: string, id: string, name: string> {
+]: nothing -> oneof<record<description: string, id: string, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($service_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceId' must be non-empty" } }
@@ -3300,7 +3272,7 @@ export def "reset-api-key-quotas" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<authorizedCallsPerDay: int, authorizedCallsPerMonth: int, authorizedCallsPerSec: int, currentCallsPerDay: int, currentCallsPerMonth: int, currentCallsPerSec: int, remainingCallsPerDay: int, remainingCallsPerMonth: int, remainingCallsPerSec: int> {
+]: nothing -> oneof<record<authorizedCallsPerDay: int, authorizedCallsPerMonth: int, authorizedCallsPerSec: int, currentCallsPerDay: int, currentCallsPerMonth: int, currentCallsPerSec: int, remainingCallsPerDay: int, remainingCallsPerMonth: int, remainingCallsPerSec: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($service_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceId' must be non-empty" } }
@@ -3338,7 +3310,7 @@ export def "api-key-quotas" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<authorizedCallsPerDay: int, authorizedCallsPerMonth: int, authorizedCallsPerSec: int, currentCallsPerDay: int, currentCallsPerMonth: int, currentCallsPerSec: int, remainingCallsPerDay: int, remainingCallsPerMonth: int, remainingCallsPerSec: int> {
+]: nothing -> oneof<record<authorizedCallsPerDay: int, authorizedCallsPerMonth: int, authorizedCallsPerSec: int, currentCallsPerDay: int, currentCallsPerMonth: int, currentCallsPerSec: int, remainingCallsPerDay: int, remainingCallsPerMonth: int, remainingCallsPerSec: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($service_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceId' must be non-empty" } }
@@ -3375,7 +3347,7 @@ export def "service-delete-target" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<host: string, scheme: string> {
+]: nothing -> oneof<table<host: string, scheme: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($service_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceId' must be non-empty" } }
@@ -3411,7 +3383,7 @@ export def "service-targets" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<host: string, scheme: string> {
+]: nothing -> oneof<table<host: string, scheme: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($service_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceId' must be non-empty" } }
@@ -3448,7 +3420,7 @@ export def "update-service-targets" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> table<host: string, scheme: string> {
+]: any -> oneof<table<host: string, scheme: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3489,7 +3461,7 @@ export def "service-add-target" [
   --dry-run(-n) # Return the request that would be sent without executing it
   host: string # The host on which the HTTP call will be forwarded. Can be a domain name, or an IP address. Can also have a port (format: hostname, e.g. www.google.com)
   scheme: string # The protocol used for communication. Can be http or https (e.g. a string value)
-]: any -> table<host: string, scheme: string> {
+]: any -> oneof<table<host: string, scheme: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3528,7 +3500,7 @@ export def "delete-service-template" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<deleted: bool> {
+]: nothing -> oneof<record<deleted: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($service_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceId' must be non-empty" } }
@@ -3564,7 +3536,7 @@ export def "service-template" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<messages: record, serviceId: string, template40x: string, template50x: string, templateBuild: string, templateMaintenance: string> {
+]: nothing -> oneof<record<messages: record, serviceId: string, template40x: string, template50x: string, templateBuild: string, templateMaintenance: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($service_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceId' must be non-empty" } }
@@ -3606,7 +3578,7 @@ export def "create-service-template" [
   template50x: string # The html template for 50x errors (e.g. a string value)
   template_build: string # The html template for build page (e.g. a string value)
   template_maintenance: string # The html template for maintenance page (e.g. a string value)
-]: any -> record<messages: record, serviceId: string, template40x: string, template50x: string, templateBuild: string, templateMaintenance: string> {
+]: any -> oneof<record<messages: record, serviceId: string, template40x: string, template50x: string, templateBuild: string, templateMaintenance: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3652,7 +3624,7 @@ export def "update-service-template" [
   template50x: string # The html template for 50x errors (e.g. a string value)
   template_build: string # The html template for build page (e.g. a string value)
   template_maintenance: string # The html template for maintenance page (e.g. a string value)
-]: any -> record<messages: record, serviceId: string, template40x: string, template50x: string, templateBuild: string, templateMaintenance: string> {
+]: any -> oneof<record<messages: record, serviceId: string, template40x: string, template50x: string, templateBuild: string, templateMaintenance: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3691,7 +3663,7 @@ export def "start-snow-monkey" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<done: bool> {
+]: nothing -> oneof<record<done: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/snowmonkey/_start" $auth.query)
@@ -3725,7 +3697,7 @@ export def "stop-snow-monkey" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<done: bool> {
+]: nothing -> oneof<record<done: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/snowmonkey/_stop" $auth.query)
@@ -3759,7 +3731,7 @@ export def "get-snow-monkey-config" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<chaosConfig: record<badResponsesFaultConfig: record<ratio: float, responses: list>, enabled: bool, largeRequestFaultConfig: record<additionalRequestSize: int, ratio: float>, largeResponseFaultConfig: record<additionalRequestSize: int, ratio: float>, latencyInjectionFaultConfig: record<from: int, ratio: float, to: int>>, dryRun: bool, enabled: bool, includeUserFacingDescriptors: bool, outageDurationFrom: int, outageDurationTo: int, outageStrategy: string, startTime: string, stopTime: string, targetGroups: list<string>, timesPerDay: int> {
+]: nothing -> oneof<record<chaosConfig: record<badResponsesFaultConfig: record<ratio: float, responses: list>, enabled: bool, largeRequestFaultConfig: record<additionalRequestSize: int, ratio: float>, largeResponseFaultConfig: record<additionalRequestSize: int, ratio: float>, latencyInjectionFaultConfig: record<from: int, ratio: float, to: int>>, dryRun: bool, enabled: bool, includeUserFacingDescriptors: bool, outageDurationFrom: int, outageDurationTo: int, outageStrategy: string, startTime: string, stopTime: string, targetGroups: list<string>, timesPerDay: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/snowmonkey/config" $auth.query)
@@ -3796,7 +3768,7 @@ export def "patch-snow-monkey" [
   --description: string # The descriptoin of the group (e.g. a string value)
   id: string # The unique id of the group. Usually 64 random alpha numerical characters, but can be anything (e.g. a string value)
   name: string # The name of the group (e.g. a string value)
-]: any -> record<chaosConfig: record<badResponsesFaultConfig: record<ratio: float, responses: list>, enabled: bool, largeRequestFaultConfig: record<additionalRequestSize: int, ratio: float>, largeResponseFaultConfig: record<additionalRequestSize: int, ratio: float>, latencyInjectionFaultConfig: record<from: int, ratio: float, to: int>>, dryRun: bool, enabled: bool, includeUserFacingDescriptors: bool, outageDurationFrom: int, outageDurationTo: int, outageStrategy: string, startTime: string, stopTime: string, targetGroups: list<string>, timesPerDay: int> {
+]: any -> oneof<record<chaosConfig: record<badResponsesFaultConfig: record<ratio: float, responses: list>, enabled: bool, largeRequestFaultConfig: record<additionalRequestSize: int, ratio: float>, largeResponseFaultConfig: record<additionalRequestSize: int, ratio: float>, latencyInjectionFaultConfig: record<from: int, ratio: float, to: int>>, dryRun: bool, enabled: bool, includeUserFacingDescriptors: bool, outageDurationFrom: int, outageDurationTo: int, outageStrategy: string, startTime: string, stopTime: string, targetGroups: list<string>, timesPerDay: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3836,7 +3808,7 @@ export def "update-snow-monkey" [
   --description: string # The descriptoin of the group (e.g. a string value)
   id: string # The unique id of the group. Usually 64 random alpha numerical characters, but can be anything (e.g. a string value)
   name: string # The name of the group (e.g. a string value)
-]: any -> record<chaosConfig: record<badResponsesFaultConfig: record<ratio: float, responses: list>, enabled: bool, largeRequestFaultConfig: record<additionalRequestSize: int, ratio: float>, largeResponseFaultConfig: record<additionalRequestSize: int, ratio: float>, latencyInjectionFaultConfig: record<from: int, ratio: float, to: int>>, dryRun: bool, enabled: bool, includeUserFacingDescriptors: bool, outageDurationFrom: int, outageDurationTo: int, outageStrategy: string, startTime: string, stopTime: string, targetGroups: list<string>, timesPerDay: int> {
+]: any -> oneof<record<chaosConfig: record<badResponsesFaultConfig: record<ratio: float, responses: list>, enabled: bool, largeRequestFaultConfig: record<additionalRequestSize: int, ratio: float>, largeResponseFaultConfig: record<additionalRequestSize: int, ratio: float>, latencyInjectionFaultConfig: record<from: int, ratio: float, to: int>>, dryRun: bool, enabled: bool, includeUserFacingDescriptors: bool, outageDurationFrom: int, outageDurationTo: int, outageStrategy: string, startTime: string, stopTime: string, targetGroups: list<string>, timesPerDay: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3873,7 +3845,7 @@ export def "reset-snow-monkey" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<done: bool> {
+]: nothing -> oneof<record<done: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/snowmonkey/outages" $auth.query)
@@ -3907,7 +3879,7 @@ export def "get-snow-monkey-outages" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<descriptorId: string, descriptorName: string, duration: int, until: string> {
+]: nothing -> oneof<table<descriptorId: string, descriptorName: string, duration: int, until: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/snowmonkey/outages" $auth.query)
@@ -3941,7 +3913,7 @@ export def "find-all-global-jwt-verifiers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<algoSettings: any, desc: string, enabled: bool, id: string, name: string, source: any, strategy: any, strict: bool> {
+]: nothing -> oneof<table<algoSettings: any, desc: string, enabled: bool, id: string, name: string, source: any, strategy: any, strict: bool>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/verifiers" $auth.query)
@@ -3983,7 +3955,7 @@ export def "create-global-jwt-verifier" [
   source: any
   strategy: any
   --strict: oneof<nothing, bool> # Does it fail if JWT not found (e.g. true)
-]: any -> record<algoSettings: any, desc: string, enabled: bool, id: string, name: string, source: any, strategy: any, strict: bool> {
+]: any -> oneof<record<algoSettings: any, desc: string, enabled: bool, id: string, name: string, source: any, strategy: any, strict: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -4023,7 +3995,7 @@ export def "delete-global-jwt-verifier" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<deleted: bool> {
+]: nothing -> oneof<record<deleted: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($verifier_id | is-empty) { error make --unspanned { msg: "path parameter 'verifierId' must be non-empty" } }
@@ -4059,7 +4031,7 @@ export def "find-global-jwt-verifiers-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<algoSettings: any, desc: string, enabled: bool, id: string, name: string, source: any, strategy: any, strict: bool> {
+]: nothing -> oneof<record<algoSettings: any, desc: string, enabled: bool, id: string, name: string, source: any, strategy: any, strict: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($verifier_id | is-empty) { error make --unspanned { msg: "path parameter 'verifierId' must be non-empty" } }
@@ -4096,7 +4068,7 @@ export def "patch-global-jwt-verifier" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> record<algoSettings: any, desc: string, enabled: bool, id: string, name: string, source: any, strategy: any, strict: bool> {
+]: any -> oneof<record<algoSettings: any, desc: string, enabled: bool, id: string, name: string, source: any, strategy: any, strict: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -4143,7 +4115,7 @@ export def "update-global-jwt-verifier" [
   source: any
   strategy: any
   --strict: oneof<nothing, bool> # Does it fail if JWT not found (e.g. true)
-]: any -> record<algoSettings: any, desc: string, enabled: bool, id: string, name: string, source: any, strategy: any, strict: bool> {
+]: any -> oneof<record<algoSettings: any, desc: string, enabled: bool, id: string, name: string, source: any, strategy: any, strict: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -4183,7 +4155,7 @@ export def "health" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<datastore: string, otoroshi: string> {
+]: nothing -> oneof<record<datastore: string, otoroshi: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/health" $auth.query)
@@ -4252,7 +4224,7 @@ export def "services-for-a-line" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<Canary: record<enabled: bool, root: string, targets: list, traffic: int>, additionalHeaders: record, api: record<exposeApi: bool, openApiDescriptorUrl: string>, authConfigRef: string, buildMode: bool, chaosConfig: record<badResponsesFaultConfig: record, enabled: bool, largeRequestFaultConfig: record, largeResponseFaultConfig: record, latencyInjectionFaultConfig: record>, clientConfig: record<backoffFactor: int, callTimeout: int, globalTimeout: int, maxErrors: int, retries: int, retryInitialDelay: int, sampleInterval: int, useCircuitBreaker: bool>, clientValidatorRef: string, cors: record<allowCredentials: bool, allowHeaders: list, allowMethods: list, allowOrigin: string, enabled: bool, excludedPatterns: list, exposeHeaders: list, maxAge: int>, domain: string, enabled: bool, enforceSecureCommunication: bool, env: string, forceHttps: bool, groups: list<string>, gzip: record<blackList: list, bufferSize: int, chunkedThreshold: int, compressionLevel: int, enabled: bool, excludedPatterns: list, whiteList: list>, headersVerification: record, healthCheck: record<enabled: bool, url: string>, id: string, ipFiltering: record<blacklist: list, whitelist: list>, jwtVerifier: any, localHost: string, localScheme: string, maintenanceMode: bool, matchingHeaders: record, matchingRoot: string, metadata: record, name: string, overrideHost: bool, privateApp: bool, privatePatterns: list<string>, publicPatterns: list<string>, redirectToLocal: bool, redirection: record<code: int, enabled: bool, to: string>, root: string, secComExcludedPatterns: list<string>, secComSettings: any, sendOtoroshiHeadersBack: bool, statsdConfig: record<datadog: bool, host: string, port: int>, subdomain: string, targets: list<record>, transformerRef: string, userFacing: bool, xForwardedHeaders: bool> {
+]: nothing -> oneof<table<Canary: record<enabled: bool, root: string, targets: list, traffic: int>, additionalHeaders: record, api: record<exposeApi: bool, openApiDescriptorUrl: string>, authConfigRef: string, buildMode: bool, chaosConfig: record<badResponsesFaultConfig: record, enabled: bool, largeRequestFaultConfig: record, largeResponseFaultConfig: record, latencyInjectionFaultConfig: record>, clientConfig: record<backoffFactor: int, callTimeout: int, globalTimeout: int, maxErrors: int, retries: int, retryInitialDelay: int, sampleInterval: int, useCircuitBreaker: bool>, clientValidatorRef: string, cors: record<allowCredentials: bool, allowHeaders: list, allowMethods: list, allowOrigin: string, enabled: bool, excludedPatterns: list, exposeHeaders: list, maxAge: int>, domain: string, enabled: bool, enforceSecureCommunication: bool, env: string, forceHttps: bool, groups: list<string>, gzip: record<blackList: list, bufferSize: int, chunkedThreshold: int, compressionLevel: int, enabled: bool, excludedPatterns: list, whiteList: list>, headersVerification: record, healthCheck: record<enabled: bool, url: string>, id: string, ipFiltering: record<blacklist: list, whitelist: list>, jwtVerifier: any, localHost: string, localScheme: string, maintenanceMode: bool, matchingHeaders: record, matchingRoot: string, metadata: record, name: string, overrideHost: bool, privateApp: bool, privatePatterns: list<string>, publicPatterns: list<string>, redirectToLocal: bool, redirection: record<code: int, enabled: bool, to: string>, root: string, secComExcludedPatterns: list<string>, secComSettings: any, sendOtoroshiHeadersBack: bool, statsdConfig: record<datadog: bool, host: string, port: int>, subdomain: string, targets: list<record>, transformerRef: string, userFacing: bool, xForwardedHeaders: bool>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($line | is-empty) { error make --unspanned { msg: "path parameter 'line' must be non-empty" } }
@@ -4287,7 +4259,7 @@ export def "initiate-api-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<authorizedEntities: list<string>, clientId: string, clientName: string, clientSecret: string, dailyQuota: int, enabled: bool, metadata: record, monthlyQuota: int, throttlingQuota: int> {
+]: nothing -> oneof<record<authorizedEntities: list<string>, clientId: string, clientName: string, clientSecret: string, dailyQuota: int, enabled: bool, metadata: record, monthlyQuota: int, throttlingQuota: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/new/apikey" $auth.query)
@@ -4321,7 +4293,7 @@ export def "initiate-service-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<description: string, id: string, name: string> {
+]: nothing -> oneof<record<description: string, id: string, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/new/group" $auth.query)
@@ -4355,7 +4327,7 @@ export def "initiate-service" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<Canary: record<enabled: bool, root: string, targets: list<record>, traffic: int>, additionalHeaders: record, api: record<exposeApi: bool, openApiDescriptorUrl: string>, authConfigRef: string, buildMode: bool, chaosConfig: record<badResponsesFaultConfig: record<ratio: float, responses: list>, enabled: bool, largeRequestFaultConfig: record<additionalRequestSize: int, ratio: float>, largeResponseFaultConfig: record<additionalRequestSize: int, ratio: float>, latencyInjectionFaultConfig: record<from: int, ratio: float, to: int>>, clientConfig: record<backoffFactor: int, callTimeout: int, globalTimeout: int, maxErrors: int, retries: int, retryInitialDelay: int, sampleInterval: int, useCircuitBreaker: bool>, clientValidatorRef: string, cors: record<allowCredentials: bool, allowHeaders: list<string>, allowMethods: list<string>, allowOrigin: string, enabled: bool, excludedPatterns: list<string>, exposeHeaders: list<string>, maxAge: int>, domain: string, enabled: bool, enforceSecureCommunication: bool, env: string, forceHttps: bool, groups: list<string>, gzip: record<blackList: list<string>, bufferSize: int, chunkedThreshold: int, compressionLevel: int, enabled: bool, excludedPatterns: list<string>, whiteList: list<string>>, headersVerification: record, healthCheck: record<enabled: bool, url: string>, id: string, ipFiltering: record<blacklist: list<string>, whitelist: list<string>>, jwtVerifier: any, localHost: string, localScheme: string, maintenanceMode: bool, matchingHeaders: record, matchingRoot: string, metadata: record, name: string, overrideHost: bool, privateApp: bool, privatePatterns: list<string>, publicPatterns: list<string>, redirectToLocal: bool, redirection: record<code: int, enabled: bool, to: string>, root: string, secComExcludedPatterns: list<string>, secComSettings: any, sendOtoroshiHeadersBack: bool, statsdConfig: record<datadog: bool, host: string, port: int>, subdomain: string, targets: table<host: string, scheme: string>, transformerRef: string, userFacing: bool, xForwardedHeaders: bool> {
+]: nothing -> oneof<record<Canary: record<enabled: bool, root: string, targets: list<record>, traffic: int>, additionalHeaders: record, api: record<exposeApi: bool, openApiDescriptorUrl: string>, authConfigRef: string, buildMode: bool, chaosConfig: record<badResponsesFaultConfig: record<ratio: float, responses: list>, enabled: bool, largeRequestFaultConfig: record<additionalRequestSize: int, ratio: float>, largeResponseFaultConfig: record<additionalRequestSize: int, ratio: float>, latencyInjectionFaultConfig: record<from: int, ratio: float, to: int>>, clientConfig: record<backoffFactor: int, callTimeout: int, globalTimeout: int, maxErrors: int, retries: int, retryInitialDelay: int, sampleInterval: int, useCircuitBreaker: bool>, clientValidatorRef: string, cors: record<allowCredentials: bool, allowHeaders: list<string>, allowMethods: list<string>, allowOrigin: string, enabled: bool, excludedPatterns: list<string>, exposeHeaders: list<string>, maxAge: int>, domain: string, enabled: bool, enforceSecureCommunication: bool, env: string, forceHttps: bool, groups: list<string>, gzip: record<blackList: list<string>, bufferSize: int, chunkedThreshold: int, compressionLevel: int, enabled: bool, excludedPatterns: list<string>, whiteList: list<string>>, headersVerification: record, healthCheck: record<enabled: bool, url: string>, id: string, ipFiltering: record<blacklist: list<string>, whitelist: list<string>>, jwtVerifier: any, localHost: string, localScheme: string, maintenanceMode: bool, matchingHeaders: record, matchingRoot: string, metadata: record, name: string, overrideHost: bool, privateApp: bool, privatePatterns: list<string>, publicPatterns: list<string>, redirectToLocal: bool, redirection: record<code: int, enabled: bool, to: string>, root: string, secComExcludedPatterns: list<string>, secComSettings: any, sendOtoroshiHeadersBack: bool, statsdConfig: record<datadog: bool, host: string, port: int>, subdomain: string, targets: table<host: string, scheme: string>, transformerRef: string, userFacing: bool, xForwardedHeaders: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/new/service" $auth.query)

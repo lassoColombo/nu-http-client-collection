@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -120,9 +143,9 @@ def x-amz-target-completer-19 [] { ["KinesisAnalytics_20150814.UpdateApplication
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "add-application-cloud-watch-logging-option" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["add-application-cloud-watch-logging-option" "add-application-input" "add-application-input-processing-configuration" "add-application-output" "add-application-reference-data-source" "create-application" "delete-application" "delete-application-cloud-watch-logging-option" "delete-application-input-processing-configuration" "delete-application-output" "delete-application-reference-data-source" "describe-application" "discover-input-schema" "list-applications" "list-tags-for-resource" "start-application" "stop-application" "tag-resource" "untag-resource" "update-application" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -144,7 +167,6 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AddApplicationCloudWatchLoggingOption
-# --CloudWatchLoggingOption shape: {LogStreamARN: string, RoleARN: string}
 export def "add-application-cloud-watch-logging-option" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -166,7 +188,7 @@ export def "add-application-cloud-watch-logging-option" [
   application_name: string # The Kinesis Analytics application name.
   current_application_version_id: int # The version ID of the Kinesis Analytics application.
   cloud_watch_logging_option: record # Provides a description of CloudWatch logging options, including the log stream Amazon Resource Name (ARN) and the role ARN. — shape: {LogStreamARN: string, RoleARN: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -196,7 +218,6 @@ export def "add-application-cloud-watch-logging-option" [
 #
 # POST /
 # operationId: AddApplicationInput
-# --Input shape: {NamePrefix: string, InputProcessingConfiguration?: record, KinesisStreamsInput?: record, KinesisFirehoseInput?: record, InputParallelism?: record, InputSchema: record}
 export def "add-application-input" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -218,7 +239,7 @@ export def "add-application-input" [
   application_name: string # Name of your existing Amazon Kinesis Analytics application to which you want to add the streaming source.
   current_application_version_id: int # Current version of your Amazon Kinesis Analytics application. You can use the DescribeApplication (https://docs.aws.amazon.com/kinesisanalytics/latest/dev/API_DescribeApplication.html) operation to find the current application version.
   --body-input: record # When you configure the application input, you specify the streaming source, the in-application stream name that is created, and the mapping between the two. For more information, see Configuring Application Input (https://docs.aws.amazon.com/kinesisanalytics/latest/dev/how-it-works-input.html). — shape: {NamePrefix: string, InputProcessingConfiguration?: record, KinesisStreamsInput?: record, KinesisFirehoseInput?: record, InputParallelism?: record, InputSchema: record}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -249,7 +270,6 @@ export def "add-application-input" [
 #
 # POST /
 # operationId: AddApplicationInputProcessingConfiguration
-# --InputProcessingConfiguration shape: {InputLambdaProcessor: record}
 export def "add-application-input-processing-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -272,7 +292,7 @@ export def "add-application-input-processing-configuration" [
   current_application_version_id: int # Version of the application to which you want to add the input processing configuration. You can use the DescribeApplication (https://docs.aws.amazon.com/kinesisanalytics/latest/dev/API_DescribeApplication.html) operation to get the current application version. If the version specified is not the current version, the ConcurrentModificationException is returned.
   input_id: string # The ID of the input configuration to add the input processing configuration to. You can get a list of the input IDs for an application using the DescribeApplication (https://docs.aws.amazon.com/kinesisanalytics/latest/dev/API_DescribeApplication.html) operation.
   input_processing_configuration: record # Provides a description of a processor that is used to preprocess the records in the stream before being processed by your application code. Currently, the only input processor available is AWS Lambda (https://docs.aws.amazon.com/lambda/). — shape: {InputLambdaProcessor: record}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -302,7 +322,6 @@ export def "add-application-input-processing-configuration" [
 #
 # POST /
 # operationId: AddApplicationOutput
-# --Output shape: {Name: string, KinesisStreamsOutput?: record, KinesisFirehoseOutput?: record, LambdaOutput?: record, DestinationSchema: record}
 export def "add-application-output" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -324,7 +343,7 @@ export def "add-application-output" [
   application_name: string # Name of the application to which you want to add the output configuration.
   current_application_version_id: int # Version of the application to which you want to add the output configuration. You can use the DescribeApplication (https://docs.aws.amazon.com/kinesisanalytics/latest/dev/API_DescribeApplication.html) operation to get the current application version. If the version specified is not the current version, the ConcurrentModificationException is returned.
   output: record # Describes application output configuration in which you identify an in-application stream and a destination where you want the in-application stream data to be written. The destination can be an Amazon Kinesis stream or an Amazon Kinesis Firehose delivery stream. For limits on how many destinations an application can write and other limitations, see Limits (https://docs.aws.amazon.com/kinesisanalytics/latest/dev/limits.html). — shape: {Name: string, KinesisStreamsOutput?: record, KinesisFirehoseOutput?: record, LambdaOutput?: record, DestinationSchema: record}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -354,7 +373,6 @@ export def "add-application-output" [
 #
 # POST /
 # operationId: AddApplicationReferenceDataSource
-# --ReferenceDataSource shape: {TableName: string, S3ReferenceDataSource?: record, ReferenceSchema: record}
 export def "add-application-reference-data-source" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -376,7 +394,7 @@ export def "add-application-reference-data-source" [
   application_name: string # Name of an existing application.
   current_application_version_id: int # Version of the application for which you are adding the reference data source. You can use the DescribeApplication (https://docs.aws.amazon.com/kinesisanalytics/latest/dev/API_DescribeApplication.html) operation to get the current application version. If the version specified is not the current version, the ConcurrentModificationException is returned.
   reference_data_source: record # Describes the reference data source by providing the source information (S3 bucket name and object key name), the resulting in-application table name that is created, and the necessary schema to map the data elements in the Amazon S3 object to the in-application table. — shape: {TableName: string, S3ReferenceDataSource?: record, ReferenceSchema: record}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -406,10 +424,6 @@ export def "add-application-reference-data-source" [
 #
 # POST /
 # operationId: CreateApplication
-# --Inputs item shape: {NamePrefix: string, InputProcessingConfiguration?: record, KinesisStreamsInput?: record, KinesisFirehoseInput?: record, InputParallelism?: record, InputSchema: record}
-# --Outputs item shape: {Name: string, KinesisStreamsOutput?: record, KinesisFirehoseOutput?: record, LambdaOutput?: record, DestinationSchema: record}
-# --CloudWatchLoggingOptions item shape: {LogStreamARN: string, RoleARN: string}
-# --Tags item shape: {Key: string, Value?: string}
 export def "create-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -435,7 +449,7 @@ export def "create-application" [
   --cloud-watch-logging-options: list # Use this parameter to configure a CloudWatch log stream to monitor application configuration errors. For more information, see Working with Amazon CloudWatch Logs (https://docs.aws.amazon.com/kinesisanalytics/latest/dev/cloudwatch-logs.html). — item shape: {LogStreamARN: string, RoleARN: string}
   --application-code: string # One or more SQL statements that read input data, transform it, and generate output. For example, you can write a SQL statement that reads data from one in-application stream, generates a running average of the number of advertisement clicks by vendor, and insert resulting rows in another in-application stream using pumps. For more information about the typical pattern, see Application Code (https://docs.aws.amazon.com/kinesisanalytics/latest/dev/how-it-works-app-code.html). You can provide such series of SQL statements, where output of one statement can be used as the input for the next statement. You store intermediate results by creating in-application streams and pumps. Note that the application code must create the streams with names specified in the Outputs. For example, if your Outputs defines output streams named ExampleOutputStream1 and ExampleOutputStream2, then your application code must create these streams.
   --tags: list # A list of one or more tags to assign to the application. A tag is a key-value pair that identifies an application. Note that the maximum number of application tags includes system tags. The maximum number of user-defined application tags is 50. For more information, see Using Tagging (https://docs.aws.amazon.com/kinesisanalytics/latest/dev/how-tagging.html). — item shape: {Key: string, Value?: string}
-]: any -> record<ApplicationSummary: record<ApplicationName: string, ApplicationARN: string, ApplicationStatus: string>> {
+]: any -> oneof<record<ApplicationSummary: record<ApplicationName: string, ApplicationARN: string, ApplicationStatus: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -485,7 +499,7 @@ export def "delete-application" [
   --x-amz-target: string@x-amz-target-completer-6 # required
   application_name: string # Name of the Amazon Kinesis Analytics application to delete.
   create_timestamp: string # You can use the DescribeApplication operation to get this value. (format: date-time)
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -536,7 +550,7 @@ export def "delete-application-cloud-watch-logging-option" [
   application_name: string # The Kinesis Analytics application name.
   current_application_version_id: int # The version ID of the Kinesis Analytics application.
   cloud_watch_logging_option_id: string # The CloudWatchLoggingOptionId of the CloudWatch logging option to delete. You can get the CloudWatchLoggingOptionId by using the DescribeApplication (https://docs.aws.amazon.com/kinesisanalytics/latest/dev/API_DescribeApplication.html) operation.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -587,7 +601,7 @@ export def "delete-application-input-processing-configuration" [
   application_name: string # The Kinesis Analytics application name.
   current_application_version_id: int # The version ID of the Kinesis Analytics application.
   input_id: string # The ID of the input configuration from which to delete the input processing configuration. You can get a list of the input IDs for an application by using the DescribeApplication (https://docs.aws.amazon.com/kinesisanalytics/latest/dev/API_DescribeApplication.html) operation.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -638,7 +652,7 @@ export def "delete-application-output" [
   application_name: string # Amazon Kinesis Analytics application name.
   current_application_version_id: int # Amazon Kinesis Analytics application version. You can use the DescribeApplication (https://docs.aws.amazon.com/kinesisanalytics/latest/dev/API_DescribeApplication.html) operation to get the current application version. If the version specified is not the current version, the ConcurrentModificationException is returned.
   output_id: string # The ID of the configuration to delete. Each output configuration that is added to the application, either when the application is created or later using the AddApplicationOutput (https://docs.aws.amazon.com/kinesisanalytics/latest/dev/API_AddApplicationOutput.html) operation, has a unique ID. You need to provide the ID to uniquely identify the output configuration that you want to delete from the application configuration. You can use the DescribeApplication (https://docs.aws.amazon.com/kinesisanalytics/latest/dev/API_DescribeApplication.html) operation to get the specific OutputId.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -689,7 +703,7 @@ export def "delete-application-reference-data-source" [
   application_name: string # Name of an existing application.
   current_application_version_id: int # Version of the application. You can use the DescribeApplication (https://docs.aws.amazon.com/kinesisanalytics/latest/dev/API_DescribeApplication.html) operation to get the current application version. If the version specified is not the current version, the ConcurrentModificationException is returned.
   reference_id: string # ID of the reference data source. When you add a reference data source to your application using the AddApplicationReferenceDataSource (https://docs.aws.amazon.com/kinesisanalytics/latest/dev/API_AddApplicationReferenceDataSource.html), Amazon Kinesis Analytics assigns an ID. You can use the DescribeApplication (https://docs.aws.amazon.com/kinesisanalytics/latest/dev/API_DescribeApplication.html) operation to get the reference ID.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -738,7 +752,7 @@ export def "describe-application" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-11 # required
   application_name: string # Name of the application.
-]: any -> record<ApplicationDetail: record<ApplicationName: string, ApplicationDescription: string, ApplicationARN: string, ApplicationStatus: string, CreateTimestamp: string, LastUpdateTimestamp: string, InputDescriptions: list<record>, OutputDescriptions: list<record>, ReferenceDataSourceDescriptions: list<record>, CloudWatchLoggingOptionDescriptions: list<record>, ApplicationCode: string, ApplicationVersionId: int>> {
+]: any -> oneof<record<ApplicationDetail: record<ApplicationName: string, ApplicationDescription: string, ApplicationARN: string, ApplicationStatus: string, CreateTimestamp: string, LastUpdateTimestamp: string, InputDescriptions: list<record>, OutputDescriptions: list<record>, ReferenceDataSourceDescriptions: list<record>, CloudWatchLoggingOptionDescriptions: list<record>, ApplicationCode: string, ApplicationVersionId: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -768,9 +782,6 @@ export def "describe-application" [
 #
 # POST /
 # operationId: DiscoverInputSchema
-# --InputStartingPositionConfiguration shape: {InputStartingPosition?: "NOW"|"TRIM_HORIZON"|"LAST_STOPPED_POINT"}
-# --S3Configuration shape: {RoleARN: string, BucketARN: string, FileKey: string}
-# --InputProcessingConfiguration shape: {InputLambdaProcessor: record}
 export def "discover-input-schema" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -794,7 +805,7 @@ export def "discover-input-schema" [
   --input-starting-position-configuration: record # Describes the point at which the application reads from the streaming source. — shape: {InputStartingPosition?: "NOW"|"TRIM_HORIZON"|"LAST_STOPPED_POINT"}
   --s3-configuration: record # Provides a description of an Amazon S3 data source, including the Amazon Resource Name (ARN) of the S3 bucket, the ARN of the IAM role that is used to access the bucket, and the name of the Amazon S3 object that contains the data. — shape: {RoleARN: string, BucketARN: string, FileKey: string}
   --input-processing-configuration: record # Provides a description of a processor that is used to preprocess the records in the stream before being processed by your application code. Currently, the only input processor available is AWS Lambda (https://docs.aws.amazon.com/lambda/). — shape: {InputLambdaProcessor: record}
-]: any -> record<InputSchema: record<RecordFormat: record<RecordFormatType: string, MappingParameters: record>, RecordEncoding: string, RecordColumns: list<record>>, ParsedInputRecords: list<list<string>>, ProcessedInputRecords: list<string>, RawInputRecords: list<string>> {
+]: any -> oneof<record<InputSchema: record<RecordFormat: record<RecordFormatType: string, MappingParameters: record>, RecordEncoding: string, RecordColumns: list<record>>, ParsedInputRecords: list<list<string>>, ProcessedInputRecords: list<string>, RawInputRecords: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -844,7 +855,7 @@ export def "list-applications" [
   --x-amz-target: string@x-amz-target-completer-13 # required
   --limit: int # Maximum number of applications to list.
   --exclusive-start-application-name: string # Name of the application to start the list with. When using pagination to retrieve the list, you don't need to specify this parameter in the first request. However, in subsequent requests, you add the last application name from the previous response to get the next page of applications.
-]: any -> record<ApplicationSummaries: table<ApplicationName: string, ApplicationARN: string, ApplicationStatus: string>, HasMoreApplications: bool> {
+]: any -> oneof<record<ApplicationSummaries: table<ApplicationName: string, ApplicationARN: string, ApplicationStatus: string>, HasMoreApplications: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -893,7 +904,7 @@ export def "list-tags-for-resource" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-14 # required
   resource_arn: string # The ARN of the application for which to retrieve tags.
-]: any -> record<Tags: table<Key: string, Value: string>> {
+]: any -> oneof<record<Tags: table<Key: string, Value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -923,7 +934,6 @@ export def "list-tags-for-resource" [
 #
 # POST /
 # operationId: StartApplication
-# --InputConfigurations item shape: {Id: string, InputStartingPositionConfiguration: record}
 export def "start-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -944,7 +954,7 @@ export def "start-application" [
   --x-amz-target: string@x-amz-target-completer-15 # required
   application_name: string # Name of the application.
   input_configurations: list # Identifies the specific input, by ID, that the application starts consuming. Amazon Kinesis Analytics starts reading the streaming source associated with the input. You can also specify where in the streaming source you want Amazon Kinesis Analytics to start reading. — item shape: {Id: string, InputStartingPositionConfiguration: record}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -993,7 +1003,7 @@ export def "stop-application" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-16 # required
   application_name: string # Name of the running application to stop.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1023,7 +1033,6 @@ export def "stop-application" [
 #
 # POST /
 # operationId: TagResource
-# --Tags item shape: {Key: string, Value?: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1044,7 +1053,7 @@ export def "tag-resource" [
   --x-amz-target: string@x-amz-target-completer-17 # required
   resource_arn: string # The ARN of the application to assign the tags.
   tags: list # The key-value tags to assign to the application. — item shape: {Key: string, Value?: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1094,7 +1103,7 @@ export def "untag-resource" [
   --x-amz-target: string@x-amz-target-completer-18 # required
   resource_arn: string # The ARN of the Kinesis Analytics application from which to remove the tags.
   tag_keys: list<string> # A list of keys of tags to remove from the specified application.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1124,7 +1133,6 @@ export def "untag-resource" [
 #
 # POST /
 # operationId: UpdateApplication
-# --ApplicationUpdate shape: {InputUpdates?: list, ApplicationCodeUpdate?: string, OutputUpdates?: list, ReferenceDataSourceUpdates?: list, CloudWatchLoggingOptionUpdates?: list}
 export def "update-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1146,7 +1154,7 @@ export def "update-application" [
   application_name: string # Name of the Amazon Kinesis Analytics application to update.
   current_application_version_id: int # The current application version ID. You can use the DescribeApplication (https://docs.aws.amazon.com/kinesisanalytics/latest/dev/API_DescribeApplication.html) operation to get this value.
   application_update: record # Describes updates to apply to an existing Amazon Kinesis Analytics application. — shape: {InputUpdates?: list, ApplicationCodeUpdate?: string, OutputUpdates?: list, ReferenceDataSourceUpdates?: list, CloudWatchLoggingOptionUpdates?: list}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

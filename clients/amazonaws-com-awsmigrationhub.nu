@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -118,9 +141,9 @@ def x-amz-target-completer-16 [] { ["AWSMigrationHub.PutResourceAttributes"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "associate-created-artifact" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["associate-created-artifact" "associate-discovered-resource" "create-progress-update-stream" "delete-progress-update-stream" "describe-application-state" "describe-migration-task" "disassociate-created-artifact" "disassociate-discovered-resource" "import-migration-task" "list-application-states" "list-created-artifacts" "list-discovered-resources" "list-migration-tasks" "list-progress-update-streams" "notify-application-state" "notify-migration-task-state" "put-resource-attributes" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -142,7 +165,6 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AssociateCreatedArtifact
-# --CreatedArtifact shape: {Name: string, Description?: string}
 export def "associate-created-artifact" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -165,7 +187,7 @@ export def "associate-created-artifact" [
   migration_task_name: string # Unique identifier that references the migration task. Do not store personal data in this field.
   created_artifact: record # An ARN of the AWS cloud resource target receiving the migration (e.g., AMI, EC2 instance, RDS instance, etc.). — shape: {Name: string, Description?: string}
   --body-dry-run: oneof<nothing, bool> # Optional boolean flag to indicate whether any effect should take place. Used to test if the caller has permission to make the call.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -195,7 +217,6 @@ export def "associate-created-artifact" [
 #
 # POST /
 # operationId: AssociateDiscoveredResource
-# --DiscoveredResource shape: {ConfigurationId: string, Description?: string}
 export def "associate-discovered-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -218,7 +239,7 @@ export def "associate-discovered-resource" [
   migration_task_name: string # The identifier given to the MigrationTask. Do not store personal data in this field.
   discovered_resource: record # Object representing the on-premises resource being migrated. — shape: {ConfigurationId: string, Description?: string}
   --body-dry-run: oneof<nothing, bool> # Optional boolean flag to indicate whether any effect should take place. Used to test if the caller has permission to make the call.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -268,7 +289,7 @@ export def "create-progress-update-stream" [
   --x-amz-target: string@x-amz-target-completer-2 # required
   progress_update_stream_name: string # The name of the ProgressUpdateStream. Do not store personal data in this field.
   --body-dry-run: oneof<nothing, bool> # Optional boolean flag to indicate whether any effect should take place. Used to test if the caller has permission to make the call.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -318,7 +339,7 @@ export def "delete-progress-update-stream" [
   --x-amz-target: string@x-amz-target-completer-3 # required
   progress_update_stream_name: string # The name of the ProgressUpdateStream. Do not store personal data in this field.
   --body-dry-run: oneof<nothing, bool> # Optional boolean flag to indicate whether any effect should take place. Used to test if the caller has permission to make the call.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -367,7 +388,7 @@ export def "describe-application-state" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-4 # required
   application_id: string # The configurationId in Application Discovery Service that uniquely identifies the grouped application.
-]: any -> record<ApplicationStatus: string, LastUpdatedTime: string> {
+]: any -> oneof<record<ApplicationStatus: string, LastUpdatedTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -417,7 +438,7 @@ export def "describe-migration-task" [
   --x-amz-target: string@x-amz-target-completer-5 # required
   progress_update_stream: string # The name of the ProgressUpdateStream.
   migration_task_name: string # The identifier given to the MigrationTask. Do not store personal data in this field.
-]: any -> record<MigrationTask: record<ProgressUpdateStream: string, MigrationTaskName: string, Task: record<Status: string, StatusDetail: string, ProgressPercent: int>, UpdateDateTime: string, ResourceAttributeList: list<record>>> {
+]: any -> oneof<record<MigrationTask: record<ProgressUpdateStream: string, MigrationTaskName: string, Task: record<Status: string, StatusDetail: string, ProgressPercent: int>, UpdateDateTime: string, ResourceAttributeList: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -469,7 +490,7 @@ export def "disassociate-created-artifact" [
   migration_task_name: string # Unique identifier that references the migration task to be disassociated with the artifact. Do not store personal data in this field.
   created_artifact_name: string # An ARN of the AWS resource related to the migration (e.g., AMI, EC2 instance, RDS instance, etc.)
   --body-dry-run: oneof<nothing, bool> # Optional boolean flag to indicate whether any effect should take place. Used to test if the caller has permission to make the call.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -521,7 +542,7 @@ export def "disassociate-discovered-resource" [
   migration_task_name: string # The identifier given to the MigrationTask. Do not store personal data in this field.
   configuration_id: string # ConfigurationId of the Application Discovery Service resource to be disassociated.
   --body-dry-run: oneof<nothing, bool> # Optional boolean flag to indicate whether any effect should take place. Used to test if the caller has permission to make the call.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -572,7 +593,7 @@ export def "import-migration-task" [
   progress_update_stream: string # The name of the ProgressUpdateStream. >
   migration_task_name: string # Unique identifier that references the migration task. Do not store personal data in this field.
   --body-dry-run: oneof<nothing, bool> # Optional boolean flag to indicate whether any effect should take place. Used to test if the caller has permission to make the call.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -625,7 +646,7 @@ export def "list-application-states" [
   --application-ids: list<string> # The configurationIds from the Application Discovery Service that uniquely identifies your applications.
   --next-token-body: string # If a NextToken was returned by a previous call, there are more results available. To retrieve the next page of results, make the call again using the returned token in NextToken. (body field)
   --max-results-body: int # Maximum number of results to be returned per page. (body field)
-]: any -> record<ApplicationStateList: table<ApplicationId: string, ApplicationStatus: string, LastUpdatedTime: string>, NextToken: string> {
+]: any -> oneof<record<ApplicationStateList: table<ApplicationId: string, ApplicationStatus: string, LastUpdatedTime: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -680,7 +701,7 @@ export def "list-created-artifacts" [
   migration_task_name: string # Unique identifier that references the migration task. Do not store personal data in this field.
   --next-token-body: string # If a NextToken was returned by a previous call, there are more results available. To retrieve the next page of results, make the call again using the returned token in NextToken. (body field)
   --max-results-body: int # Maximum number of results to be returned per page. (body field)
-]: any -> record<NextToken: string, CreatedArtifactList: table<Name: string, Description: string>> {
+]: any -> oneof<record<NextToken: string, CreatedArtifactList: table<Name: string, Description: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -735,7 +756,7 @@ export def "list-discovered-resources" [
   migration_task_name: string # The name of the MigrationTask. Do not store personal data in this field.
   --next-token-body: string # If a NextToken was returned by a previous call, there are more results available. To retrieve the next page of results, make the call again using the returned token in NextToken. (body field)
   --max-results-body: int # The maximum number of results returned per page. (body field)
-]: any -> record<NextToken: string, DiscoveredResourceList: table<ConfigurationId: string, Description: string>> {
+]: any -> oneof<record<NextToken: string, DiscoveredResourceList: table<ConfigurationId: string, Description: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -789,7 +810,7 @@ export def "list-migration-tasks" [
   --next-token-body: string # If a NextToken was returned by a previous call, there are more results available. To retrieve the next page of results, make the call again using the returned token in NextToken. (body field)
   --max-results-body: int # Value to specify how many results are returned per page. (body field)
   --resource-name: string # Filter migration tasks by discovered resource name.
-]: any -> record<NextToken: string, MigrationTaskSummaryList: table<ProgressUpdateStream: string, MigrationTaskName: string, Status: string, ProgressPercent: int, StatusDetail: string, UpdateDateTime: string>> {
+]: any -> oneof<record<NextToken: string, MigrationTaskSummaryList: table<ProgressUpdateStream: string, MigrationTaskName: string, Status: string, ProgressPercent: int, StatusDetail: string, UpdateDateTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -842,7 +863,7 @@ export def "list-progress-update-streams" [
   --x-amz-target: string@x-amz-target-completer-13 # required
   --next-token-body: string # If a NextToken was returned by a previous call, there are more results available. To retrieve the next page of results, make the call again using the returned token in NextToken. (body field)
   --max-results-body: int # Filter to limit the maximum number of results to list per page. (body field)
-]: any -> record<ProgressUpdateStreamSummaryList: table<ProgressUpdateStreamName: string>, NextToken: string> {
+]: any -> oneof<record<ProgressUpdateStreamSummaryList: table<ProgressUpdateStreamName: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -895,7 +916,7 @@ export def "notify-application-state" [
   status: string@status-completer # Status of the application - Not Started, In-Progress, Complete.
   --update-date-time: string # The timestamp when the application state changed. (format: date-time)
   --body-dry-run: oneof<nothing, bool> # Optional boolean flag to indicate whether any effect should take place. Used to test if the caller has permission to make the call.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -925,7 +946,6 @@ export def "notify-application-state" [
 #
 # POST /
 # operationId: NotifyMigrationTaskState
-# --Task shape: {Status: "NOT_STARTED"|"IN_PROGRESS"|"FAILED"|"COMPLETED", StatusDetail?: string, ProgressPercent?: int}
 export def "notify-migration-task-state" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -950,7 +970,7 @@ export def "notify-migration-task-state" [
   update_date_time: string # The timestamp when the task was gathered. (format: date-time)
   next_update_seconds: int # Number of seconds after the UpdateDateTime within which the Migration Hub can expect an update. If Migration Hub does not receive an update within the specified interval, then the migration task will be considered stale.
   --body-dry-run: oneof<nothing, bool> # Optional boolean flag to indicate whether any effect should take place. Used to test if the caller has permission to make the call.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -980,7 +1000,6 @@ export def "notify-migration-task-state" [
 #
 # POST /
 # operationId: PutResourceAttributes
-# --ResourceAttributeList item shape: {Type: "IPV4_ADDRESS"|"IPV6_ADDRESS"|"MAC_ADDRESS"|"FQDN"|"VM_MANAGER_ID"|"VM_MANAGED_OBJECT_REFERENCE"|"VM_NAME"|"VM_PATH"|"BIOS_ID"|"MOTHERBOARD_SERIAL_NUMBER", Value: string}
 export def "put-resource-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1003,7 +1022,7 @@ export def "put-resource-attributes" [
   migration_task_name: string # Unique identifier that references the migration task. Do not store personal data in this field.
   resource_attribute_list: list # Information about the resource that is being migrated. This data will be used to map the task to a resource in the Application Discovery Service repository. Takes the object array of ResourceAttribute where the Type field is reserved for the following values: IPV4_ADDRESS | IPV6_ADDRESS | MAC_ADDRESS | FQDN | VM_MANAGER_ID | VM_MANAGED_OBJECT_REFERENCE | VM_NAME | VM_PATH | BIOS_ID | MOTHERBOARD_SERIAL_NUMBER where the identifying value can be a string up to 256 characters. If any "VM" related value is set for a ResourceAttribute object, it is required that VM_MANAGER_ID, as a minimum, is always set. If VM_MANAGER_ID is not set, then all "VM" fields will be discarded and "VM" fields will not be used for matching the migration task to a server in Application Discovery Service repository. See the Example (https://docs.aws.amazon.com/migrationhub/latest/ug/API_PutResourceAttributes.html#API_PutResourceAttributes_Examples) section below for a use case of specifying "VM" related values. If a server you are trying to match has multiple IP or MAC addresses, you should provide as many as you know in separate type/value pairs passed to the ResourceAttributeList parameter to maximize the chances of matching. — item shape: {Type: "IPV4_ADDRESS"|"IPV6_ADDRESS"|"MAC_ADDRESS"|"FQDN"|"VM_MANAGER_ID"|"VM_MANAGED_OBJECT_REFERENCE"|"VM_NAME"|"VM_PATH"|"BIOS_ID"|"MOTHERBOARD_SERIAL_NUMBER", Value: string}
   --body-dry-run: oneof<nothing, bool> # Optional boolean flag to indicate whether any effect should take place. Used to test if the caller has permission to make the call.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

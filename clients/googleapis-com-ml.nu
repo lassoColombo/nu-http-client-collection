@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -123,9 +147,9 @@ def state-completer-2 [] { ["ACTIVE" "COMPLETED" "REQUESTED" "STATE_UNSPECIFIED"
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "ml-projects-models-versions-delete" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["ml-projects-models-versions-delete" "ml-projects-operations-get" "ml-projects-models-versions-patch" "ml-projects-operations-list" "ml-projects-locations-studies-trials-add-measurement" "ml-projects-operations-cancel" "ml-projects-locations-studies-trials-check-early-stopping-state" "ml-projects-locations-studies-trials-complete" "ml-projects-explain" "ml-projects-get-config" "ml-projects-predict" "ml-projects-models-versions-set-default" "ml-projects-locations-studies-trials-stop" "ml-projects-jobs-list" "ml-projects-jobs-create" "ml-projects-locations-list" "ml-projects-models-list" "ml-projects-models-create" "ml-projects-locations-studies-list" "ml-projects-locations-studies-create" "ml-projects-locations-studies-trials-list" "ml-projects-locations-studies-trials-create" "ml-projects-locations-studies-trials-list-optimal-trials" "ml-projects-locations-studies-trials-suggest" "ml-projects-models-versions-list" "ml-projects-models-versions-create" "ml-projects-models-get-iam-policy" "ml-projects-models-set-iam-policy" "ml-projects-models-test-iam-permissions" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -169,7 +193,7 @@ export def "ml-projects-models-versions-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: nothing -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -217,7 +241,7 @@ export def "ml-projects-operations-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: nothing -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -243,13 +267,6 @@ export def "ml-projects-operations-get" [
 #
 # PATCH /v1/{name}
 # operationId: ml.projects.models.versions.patch
-# --acceleratorConfig shape: {count?: string, type?: "ACCELERATOR_TYPE_UNSPECIFIED"|"NVIDIA_TESLA_K80"|"NVIDIA_TESLA_P100"|"NVIDIA_TESLA_V100"|"NVIDIA_TESLA_P4"|"NVIDIA_TESLA_T4"|"NVIDIA_TESLA_A100"|"TPU_V2"|"TPU_V3"|"TPU_V2_POD"|"TPU_V3_POD"|"TPU_V4_POD"}
-# --autoScaling shape: {maxNodes?: int, metrics?: list, minNodes?: int}
-# --container shape: {args?: list<string>, command?: list<string>, env?: list, image?: string, ports?: list}
-# --explanationConfig shape: {integratedGradientsAttribution?: record, sampledShapleyAttribution?: record, xraiAttribution?: record}
-# --manualScaling shape: {nodes?: int}
-# --requestLoggingConfig shape: {bigqueryTableName?: string, samplingPercentage?: float}
-# --routes shape: {health?: string, predict?: string}
 export def "ml-projects-models-versions-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -297,7 +314,7 @@ export def "ml-projects-models-versions-patch" [
   --runtime-version: string # Required. The AI Platform runtime version to use for this deployment. For more information, see the [runtime version list](/ml-engine/docs/runtime-version-list) and [how to manage runtime versions](/ml-engine/docs/versioning).
   --service-account: string # Optional. Specifies the service account for resource access control. If you specify this field, then you must also specify either the `containerSpec` or the `predictionClass` field. Learn more about [using a custom service account](/ai-platform/prediction/docs/custom-service-account).
   --state: string@state-completer # Output only. The state of a version.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -351,7 +368,7 @@ export def "ml-projects-operations-list" [
   --filter: string # The standard list filter.
   --page-size: int # The standard list page size.
   --page-token: string # The standard list page token.
-]: nothing -> record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>> {
+]: nothing -> oneof<record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -377,7 +394,6 @@ export def "ml-projects-operations-list" [
 #
 # POST /v1/{name}:addMeasurement
 # operationId: ml.projects.locations.studies.trials.addMeasurement
-# --measurement shape: {elapsedTime?: string, metrics?: list, stepCount?: string}
 export def "ml-projects-locations-studies-trials-add-measurement" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -401,7 +417,7 @@ export def "ml-projects-locations-studies-trials-add-measurement" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --measurement: record # A message representing a measurement. — shape: {elapsedTime?: string, metrics?: list, stepCount?: string}
-]: any -> record<clientId: string, endTime: string, finalMeasurement: record<elapsedTime: string, metrics: list<record>, stepCount: string>, infeasibleReason: string, measurements: table<elapsedTime: string, metrics: list, stepCount: string>, name: string, parameters: table<floatValue: float, intValue: string, parameter: string, stringValue: string>, startTime: string, state: string, trialInfeasible: bool> {
+]: any -> oneof<record<clientId: string, endTime: string, finalMeasurement: record<elapsedTime: string, metrics: list<record>, stepCount: string>, infeasibleReason: string, measurements: table<elapsedTime: string, metrics: list, stepCount: string>, name: string, parameters: table<floatValue: float, intValue: string, parameter: string, stringValue: string>, startTime: string, state: string, trialInfeasible: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -453,7 +469,7 @@ export def "ml-projects-operations-cancel" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -505,7 +521,7 @@ export def "ml-projects-locations-studies-trials-check-early-stopping-state" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -534,7 +550,6 @@ export def "ml-projects-locations-studies-trials-check-early-stopping-state" [
 #
 # POST /v1/{name}:complete
 # operationId: ml.projects.locations.studies.trials.complete
-# --finalMeasurement shape: {elapsedTime?: string, metrics?: list, stepCount?: string}
 export def "ml-projects-locations-studies-trials-complete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -560,7 +575,7 @@ export def "ml-projects-locations-studies-trials-complete" [
   --final-measurement: record # A message representing a measurement. — shape: {elapsedTime?: string, metrics?: list, stepCount?: string}
   --infeasible-reason: string # Optional. A human readable reason why the trial was infeasible. This should only be provided if `trial_infeasible` is true.
   --trial-infeasible: oneof<nothing, bool> # Optional. True if the trial cannot be run with the given Parameter, and final_measurement will be ignored.
-]: any -> record<clientId: string, endTime: string, finalMeasurement: record<elapsedTime: string, metrics: list<record>, stepCount: string>, infeasibleReason: string, measurements: table<elapsedTime: string, metrics: list, stepCount: string>, name: string, parameters: table<floatValue: float, intValue: string, parameter: string, stringValue: string>, startTime: string, state: string, trialInfeasible: bool> {
+]: any -> oneof<record<clientId: string, endTime: string, finalMeasurement: record<elapsedTime: string, metrics: list<record>, stepCount: string>, infeasibleReason: string, measurements: table<elapsedTime: string, metrics: list, stepCount: string>, name: string, parameters: table<floatValue: float, intValue: string, parameter: string, stringValue: string>, startTime: string, state: string, trialInfeasible: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -589,7 +604,6 @@ export def "ml-projects-locations-studies-trials-complete" [
 #
 # POST /v1/{name}:explain
 # operationId: ml.projects.explain
-# --httpBody shape: {contentType?: string, data?: string, extensions?: list}
 export def "ml-projects-explain" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -613,7 +627,7 @@ export def "ml-projects-explain" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --http-body: record # Message that represents an arbitrary HTTP body. It should only be used for payload formats that can't be represented as JSON, such as raw binary or an HTML page. This message can be used both in streaming and non-streaming API methods in the request as well as the response. It can be used as a top-level request field, which is convenient if one wants to extract parameters from either the URL or HTTP template into the request fields and also want access to the raw HTTP body. Example: message GetResourceRequest { // A unique request id. string request_id = 1; // The raw HTTP body is bound to this field. google.api.HttpBody http_body = 2; } service ResourceService { rpc GetResource(GetResourceRequest) returns (google.api.HttpBody); rpc UpdateResource(google.api.HttpBody) returns (google.protobuf.Empty); } Example with streaming methods: service CaldavService { rpc GetCalendar(stream google.api.HttpBody) returns (stream google.api.HttpBody); rpc UpdateCalendar(stream google.api.HttpBody) returns (stream google.api.HttpBody); } Use of this type only changes how the request and response bodies are handled, all other features will continue to work unchanged. — shape: {contentType?: string, data?: string, extensions?: list}
-]: any -> record<contentType: string, data: string, extensions: list<record>> {
+]: any -> oneof<record<contentType: string, data: string, extensions: list<record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -664,7 +678,7 @@ export def "ml-projects-get-config" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<config: record<tpuServiceAccount: string>, serviceAccount: string, serviceAccountProject: string> {
+]: nothing -> oneof<record<config: record<tpuServiceAccount: string>, serviceAccount: string, serviceAccountProject: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -690,7 +704,6 @@ export def "ml-projects-get-config" [
 #
 # POST /v1/{name}:predict
 # operationId: ml.projects.predict
-# --httpBody shape: {contentType?: string, data?: string, extensions?: list}
 export def "ml-projects-predict" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -714,7 +727,7 @@ export def "ml-projects-predict" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --http-body: record # Message that represents an arbitrary HTTP body. It should only be used for payload formats that can't be represented as JSON, such as raw binary or an HTML page. This message can be used both in streaming and non-streaming API methods in the request as well as the response. It can be used as a top-level request field, which is convenient if one wants to extract parameters from either the URL or HTTP template into the request fields and also want access to the raw HTTP body. Example: message GetResourceRequest { // A unique request id. string request_id = 1; // The raw HTTP body is bound to this field. google.api.HttpBody http_body = 2; } service ResourceService { rpc GetResource(GetResourceRequest) returns (google.api.HttpBody); rpc UpdateResource(google.api.HttpBody) returns (google.protobuf.Empty); } Example with streaming methods: service CaldavService { rpc GetCalendar(stream google.api.HttpBody) returns (stream google.api.HttpBody); rpc UpdateCalendar(stream google.api.HttpBody) returns (stream google.api.HttpBody); } Use of this type only changes how the request and response bodies are handled, all other features will continue to work unchanged. — shape: {contentType?: string, data?: string, extensions?: list}
-]: any -> record<contentType: string, data: string, extensions: list<record>> {
+]: any -> oneof<record<contentType: string, data: string, extensions: list<record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -766,7 +779,7 @@ export def "ml-projects-models-versions-set-default" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record<acceleratorConfig: record<count: string, type: string>, autoScaling: record<maxNodes: int, metrics: list<record>, minNodes: int>, container: record<args: list<string>, command: list<string>, env: list<record>, image: string, ports: list<record>>, createTime: string, deploymentUri: string, description: string, errorMessage: string, etag: string, explanationConfig: record<integratedGradientsAttribution: record<numIntegralSteps: int>, sampledShapleyAttribution: record<numPaths: int>, xraiAttribution: record<numIntegralSteps: int>>, framework: string, isDefault: bool, labels: record, lastMigrationModelId: string, lastMigrationTime: string, lastUseTime: string, machineType: string, manualScaling: record<nodes: int>, name: string, packageUris: list<string>, predictionClass: string, pythonVersion: string, requestLoggingConfig: record<bigqueryTableName: string, samplingPercentage: float>, routes: record<health: string, predict: string>, runtimeVersion: string, serviceAccount: string, state: string> {
+]: any -> oneof<record<acceleratorConfig: record<count: string, type: string>, autoScaling: record<maxNodes: int, metrics: list<record>, minNodes: int>, container: record<args: list<string>, command: list<string>, env: list<record>, image: string, ports: list<record>>, createTime: string, deploymentUri: string, description: string, errorMessage: string, etag: string, explanationConfig: record<integratedGradientsAttribution: record<numIntegralSteps: int>, sampledShapleyAttribution: record<numPaths: int>, xraiAttribution: record<numIntegralSteps: int>>, framework: string, isDefault: bool, labels: record, lastMigrationModelId: string, lastMigrationTime: string, lastUseTime: string, machineType: string, manualScaling: record<nodes: int>, name: string, packageUris: list<string>, predictionClass: string, pythonVersion: string, requestLoggingConfig: record<bigqueryTableName: string, samplingPercentage: float>, routes: record<health: string, predict: string>, runtimeVersion: string, serviceAccount: string, state: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -818,7 +831,7 @@ export def "ml-projects-locations-studies-trials-stop" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record<clientId: string, endTime: string, finalMeasurement: record<elapsedTime: string, metrics: list<record>, stepCount: string>, infeasibleReason: string, measurements: table<elapsedTime: string, metrics: list, stepCount: string>, name: string, parameters: table<floatValue: float, intValue: string, parameter: string, stringValue: string>, startTime: string, state: string, trialInfeasible: bool> {
+]: any -> oneof<record<clientId: string, endTime: string, finalMeasurement: record<elapsedTime: string, metrics: list<record>, stepCount: string>, infeasibleReason: string, measurements: table<elapsedTime: string, metrics: list, stepCount: string>, name: string, parameters: table<floatValue: float, intValue: string, parameter: string, stringValue: string>, startTime: string, state: string, trialInfeasible: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -872,7 +885,7 @@ export def "ml-projects-jobs-list" [
   --filter: string # Optional. Specifies the subset of jobs to retrieve. You can filter on the value of one or more attributes of the job object. For example, retrieve jobs with a job identifier that starts with 'census': gcloud ai-platform jobs list --filter='jobId:census*' List all failed jobs with names that start with 'rnn': gcloud ai-platform jobs list --filter='jobId:rnn* AND state:FAILED' For more examples, see the guide to monitoring jobs.
   --page-size: int # Optional. The number of jobs to retrieve per "page" of results. If there are more remaining results than this number, the response message will contain a valid value in the `next_page_token` field. The default value is 20, and the maximum page size is 100.
   --page-token: string # Optional. A page token to request the next page of results. You get the token from the `next_page_token` field of the response from the previous call.
-]: nothing -> record<jobs: table<createTime: string, endTime: string, errorMessage: string, etag: string, jobId: string, jobPosition: string, labels: record, predictionInput: record, predictionOutput: record, startTime: string, state: string, trainingInput: record, trainingOutput: record>, nextPageToken: string> {
+]: nothing -> oneof<record<jobs: table<createTime: string, endTime: string, errorMessage: string, etag: string, jobId: string, jobPosition: string, labels: record, predictionInput: record, predictionOutput: record, startTime: string, state: string, trainingInput: record, trainingOutput: record>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -898,10 +911,6 @@ export def "ml-projects-jobs-list" [
 #
 # POST /v1/{parent}/jobs
 # operationId: ml.projects.jobs.create
-# --predictionInput shape: {batchSize?: string, dataFormat?: "DATA_FORMAT_UNSPECIFIED"|"JSON"|"TEXT"|"TF_RECORD"|"TF_RECORD_GZIP"|"CSV", inputPaths?: list<string>, maxWorkerCount?: string, modelName?: string, outputDataFormat?: "DATA_FORMAT_UNSPECIFIED"|"JSON"|"TEXT"|"TF_RECORD"|"TF_RECORD_GZIP"|"CSV", outputPath?: string, region?: string, runtimeVersion?: string, signatureName?: string, uri?: string, versionName?: string}
-# --predictionOutput shape: {errorCount?: string, nodeHours?: float, outputPath?: string, predictionCount?: string}
-# --trainingInput shape: {args?: list<string>, enableWebAccess?: bool, encryptionConfig?: record, evaluatorConfig?: record, evaluatorCount?: string, evaluatorType?: string, hyperparameters?: record, jobDir?: string, masterConfig?: record, masterType?: string, network?: string, packageUris?: list<string>, parameterServerConfig?: record, parameterServerCount?: string, parameterServerType?: string, pythonModule?: string, pythonVersion?: string, region?: string, runtimeVersion?: string, ... (7 more fields)}
-# --trainingOutput shape: {builtInAlgorithmOutput?: record, completedTrialCount?: string, consumedMLUnits?: float, hyperparameterMetricTag?: string, isBuiltInAlgorithmJob?: bool, isHyperparameterTuningJob?: bool, trials?: list}
 export def "ml-projects-jobs-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -936,7 +945,7 @@ export def "ml-projects-jobs-create" [
   --state: string@state-completer-1 # Output only. The detailed state of a job.
   --training-input: record # Represents input parameters for a training job. When using the gcloud command to submit your training job, you can specify the input parameters as command-line arguments and/or in a YAML configuration file referenced from the --config command-line argument. For details, see the guide to [submitting a training job](/ai-platform/training/docs/training-jobs). — shape: {args?: list<string>, enableWebAccess?: bool, encryptionConfig?: record, evaluatorConfig?: record, evaluatorCount?: string, evaluatorType?: string, hyperparameters?: record, jobDir?: string, masterConfig?: record, masterType?: string, network?: string, packageUris?: list<string>, parameterServerConfig?: record, parameterServerCount?: string, parameterServerType?: string, pythonModule?: string, pythonVersion?: string, region?: string, runtimeVersion?: string, ... (7 more fields)}
   --training-output: record # Represents results of a training job. Output only. — shape: {builtInAlgorithmOutput?: record, completedTrialCount?: string, consumedMLUnits?: float, hyperparameterMetricTag?: string, isBuiltInAlgorithmJob?: bool, isHyperparameterTuningJob?: bool, trials?: list}
-]: any -> record<createTime: string, endTime: string, errorMessage: string, etag: string, jobId: string, jobPosition: string, labels: record, predictionInput: record<batchSize: string, dataFormat: string, inputPaths: list<string>, maxWorkerCount: string, modelName: string, outputDataFormat: string, outputPath: string, region: string, runtimeVersion: string, signatureName: string, uri: string, versionName: string>, predictionOutput: record<errorCount: string, nodeHours: float, outputPath: string, predictionCount: string>, startTime: string, state: string, trainingInput: record<args: list<string>, enableWebAccess: bool, encryptionConfig: record<kmsKeyName: string>, evaluatorConfig: record<acceleratorConfig: record, containerArgs: list, containerCommand: list, diskConfig: record, imageUri: string, tpuTfVersion: string>, evaluatorCount: string, evaluatorType: string, hyperparameters: record<algorithm: string, enableTrialEarlyStopping: bool, goal: string, hyperparameterMetricTag: string, maxFailedTrials: int, maxParallelTrials: int, maxTrials: int, params: list, resumePreviousJobId: string>, jobDir: string, masterConfig: record<acceleratorConfig: record, containerArgs: list, containerCommand: list, diskConfig: record, imageUri: string, tpuTfVersion: string>, masterType: string, network: string, packageUris: list<string>, parameterServerConfig: record<acceleratorConfig: record, containerArgs: list, containerCommand: list, diskConfig: record, imageUri: string, tpuTfVersion: string>, parameterServerCount: string, parameterServerType: string, pythonModule: string, pythonVersion: string, region: string, runtimeVersion: string, scaleTier: string, scheduling: record<maxRunningTime: string, maxWaitTime: string, priority: int>, serviceAccount: string, useChiefInTfConfig: bool, workerConfig: record<acceleratorConfig: record, containerArgs: list, containerCommand: list, diskConfig: record, imageUri: string, tpuTfVersion: string>, workerCount: string, workerType: string>, trainingOutput: record<builtInAlgorithmOutput: record<framework: string, modelPath: string, pythonVersion: string, runtimeVersion: string>, completedTrialCount: string, consumedMLUnits: float, hyperparameterMetricTag: string, isBuiltInAlgorithmJob: bool, isHyperparameterTuningJob: bool, trials: list<record>, webAccessUris: record>> {
+]: any -> oneof<record<createTime: string, endTime: string, errorMessage: string, etag: string, jobId: string, jobPosition: string, labels: record, predictionInput: record<batchSize: string, dataFormat: string, inputPaths: list<string>, maxWorkerCount: string, modelName: string, outputDataFormat: string, outputPath: string, region: string, runtimeVersion: string, signatureName: string, uri: string, versionName: string>, predictionOutput: record<errorCount: string, nodeHours: float, outputPath: string, predictionCount: string>, startTime: string, state: string, trainingInput: record<args: list<string>, enableWebAccess: bool, encryptionConfig: record<kmsKeyName: string>, evaluatorConfig: record<acceleratorConfig: record, containerArgs: list, containerCommand: list, diskConfig: record, imageUri: string, tpuTfVersion: string>, evaluatorCount: string, evaluatorType: string, hyperparameters: record<algorithm: string, enableTrialEarlyStopping: bool, goal: string, hyperparameterMetricTag: string, maxFailedTrials: int, maxParallelTrials: int, maxTrials: int, params: list, resumePreviousJobId: string>, jobDir: string, masterConfig: record<acceleratorConfig: record, containerArgs: list, containerCommand: list, diskConfig: record, imageUri: string, tpuTfVersion: string>, masterType: string, network: string, packageUris: list<string>, parameterServerConfig: record<acceleratorConfig: record, containerArgs: list, containerCommand: list, diskConfig: record, imageUri: string, tpuTfVersion: string>, parameterServerCount: string, parameterServerType: string, pythonModule: string, pythonVersion: string, region: string, runtimeVersion: string, scaleTier: string, scheduling: record<maxRunningTime: string, maxWaitTime: string, priority: int>, serviceAccount: string, useChiefInTfConfig: bool, workerConfig: record<acceleratorConfig: record, containerArgs: list, containerCommand: list, diskConfig: record, imageUri: string, tpuTfVersion: string>, workerCount: string, workerType: string>, trainingOutput: record<builtInAlgorithmOutput: record<framework: string, modelPath: string, pythonVersion: string, runtimeVersion: string>, completedTrialCount: string, consumedMLUnits: float, hyperparameterMetricTag: string, isBuiltInAlgorithmJob: bool, isHyperparameterTuningJob: bool, trials: list<record>, webAccessUris: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -989,7 +998,7 @@ export def "ml-projects-locations-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # Optional. The number of locations to retrieve per "page" of results. If there are more remaining results than this number, the response message will contain a valid value in the `next_page_token` field. The default value is 20, and the maximum page size is 100.
   --page-token: string # Optional. A page token to request the next page of results. You get the token from the `next_page_token` field of the response from the previous call.
-]: nothing -> record<locations: table<capabilities: list, name: string>, nextPageToken: string> {
+]: nothing -> oneof<record<locations: table<capabilities: list, name: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1040,7 +1049,7 @@ export def "ml-projects-models-list" [
   --filter: string # Optional. Specifies the subset of models to retrieve.
   --page-size: int # Optional. The number of models to retrieve per "page" of results. If there are more remaining results than this number, the response message will contain a valid value in the `next_page_token` field. The default value is 20, and the maximum page size is 100.
   --page-token: string # Optional. A page token to request the next page of results. You get the token from the `next_page_token` field of the response from the previous call.
-]: nothing -> record<models: table<defaultVersion: record, description: string, etag: string, labels: record, name: string, onlinePredictionConsoleLogging: bool, onlinePredictionLogging: bool, regions: list>, nextPageToken: string> {
+]: nothing -> oneof<record<models: table<defaultVersion: record, description: string, etag: string, labels: record, name: string, onlinePredictionConsoleLogging: bool, onlinePredictionLogging: bool, regions: list>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1066,7 +1075,6 @@ export def "ml-projects-models-list" [
 #
 # POST /v1/{parent}/models
 # operationId: ml.projects.models.create
-# --defaultVersion shape: {acceleratorConfig?: record, autoScaling?: record, container?: record, createTime?: string, deploymentUri?: string, description?: string, errorMessage?: string, etag?: string, explanationConfig?: record, framework?: "FRAMEWORK_UNSPECIFIED"|"TENSORFLOW"|"SCIKIT_LEARN"|"XGBOOST", isDefault?: bool, labels?: record, lastUseTime?: string, machineType?: string, manualScaling?: record, name?: string, packageUris?: list<string>, predictionClass?: string, pythonVersion?: string, ... (5 more fields)}
 export def "ml-projects-models-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1097,7 +1105,7 @@ export def "ml-projects-models-create" [
   --online-prediction-console-logging: oneof<nothing, bool> # Optional. If true, online prediction nodes send `stderr` and `stdout` streams to Cloud Logging. These can be more verbose than the standard access logs (see `onlinePredictionLogging`) and can incur higher cost. However, they are helpful for debugging. Note that [logs may incur a cost](/stackdriver/pricing), especially if your project receives prediction requests at a high QPS. Estimate your costs before enabling this option. Default is false.
   --online-prediction-logging: oneof<nothing, bool> # Optional. If true, online prediction access logs are sent to Cloud Logging. These logs are like standard server access logs, containing information like timestamp and latency for each request. Note that [logs may incur a cost](/stackdriver/pricing), especially if your project receives prediction requests at a high queries per second rate (QPS). Estimate your costs before enabling this option. Default is false.
   --regions: list<string> # Optional. The list of regions where the model is going to be deployed. Only one region per model is supported. Defaults to 'us-central1' if nothing is set. See the available regions for AI Platform services. Note: * No matter where a model is deployed, it can always be accessed by users from anywhere, both for online and batch prediction. * The region for a batch prediction job is set by the region field when submitting the batch prediction job and does not take its value from this field.
-]: any -> record<defaultVersion: record<acceleratorConfig: record<count: string, type: string>, autoScaling: record<maxNodes: int, metrics: list, minNodes: int>, container: record<args: list, command: list, env: list, image: string, ports: list>, createTime: string, deploymentUri: string, description: string, errorMessage: string, etag: string, explanationConfig: record<integratedGradientsAttribution: record, sampledShapleyAttribution: record, xraiAttribution: record>, framework: string, isDefault: bool, labels: record, lastMigrationModelId: string, lastMigrationTime: string, lastUseTime: string, machineType: string, manualScaling: record<nodes: int>, name: string, packageUris: list<string>, predictionClass: string, pythonVersion: string, requestLoggingConfig: record<bigqueryTableName: string, samplingPercentage: float>, routes: record<health: string, predict: string>, runtimeVersion: string, serviceAccount: string, state: string>, description: string, etag: string, labels: record, name: string, onlinePredictionConsoleLogging: bool, onlinePredictionLogging: bool, regions: list<string>> {
+]: any -> oneof<record<defaultVersion: record<acceleratorConfig: record<count: string, type: string>, autoScaling: record<maxNodes: int, metrics: list, minNodes: int>, container: record<args: list, command: list, env: list, image: string, ports: list>, createTime: string, deploymentUri: string, description: string, errorMessage: string, etag: string, explanationConfig: record<integratedGradientsAttribution: record, sampledShapleyAttribution: record, xraiAttribution: record>, framework: string, isDefault: bool, labels: record, lastMigrationModelId: string, lastMigrationTime: string, lastUseTime: string, machineType: string, manualScaling: record<nodes: int>, name: string, packageUris: list<string>, predictionClass: string, pythonVersion: string, requestLoggingConfig: record<bigqueryTableName: string, samplingPercentage: float>, routes: record<health: string, predict: string>, runtimeVersion: string, serviceAccount: string, state: string>, description: string, etag: string, labels: record, name: string, onlinePredictionConsoleLogging: bool, onlinePredictionLogging: bool, regions: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1148,7 +1156,7 @@ export def "ml-projects-locations-studies-list" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<studies: table<createTime: string, inactiveReason: string, name: string, state: string, studyConfig: record>> {
+]: nothing -> oneof<record<studies: table<createTime: string, inactiveReason: string, name: string, state: string, studyConfig: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1174,7 +1182,6 @@ export def "ml-projects-locations-studies-list" [
 #
 # POST /v1/{parent}/studies
 # operationId: ml.projects.locations.studies.create
-# --studyConfig shape: {algorithm?: "ALGORITHM_UNSPECIFIED"|"GAUSSIAN_PROCESS_BANDIT"|"GRID_SEARCH"|"RANDOM_SEARCH", automatedStoppingConfig?: record, metrics?: list, parameters?: list}
 export def "ml-projects-locations-studies-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1199,7 +1206,7 @@ export def "ml-projects-locations-studies-create" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --study-id: string # Required. The ID to use for the study, which will become the final component of the study's resource name.
   --study-config: record # Represents configuration of a study. — shape: {algorithm?: "ALGORITHM_UNSPECIFIED"|"GAUSSIAN_PROCESS_BANDIT"|"GRID_SEARCH"|"RANDOM_SEARCH", automatedStoppingConfig?: record, metrics?: list, parameters?: list}
-]: any -> record<createTime: string, inactiveReason: string, name: string, state: string, studyConfig: record<algorithm: string, automatedStoppingConfig: record<decayCurveStoppingConfig: record, medianAutomatedStoppingConfig: record>, metrics: list<record>, parameters: list<record>>> {
+]: any -> oneof<record<createTime: string, inactiveReason: string, name: string, state: string, studyConfig: record<algorithm: string, automatedStoppingConfig: record<decayCurveStoppingConfig: record, medianAutomatedStoppingConfig: record>, metrics: list<record>, parameters: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1250,7 +1257,7 @@ export def "ml-projects-locations-studies-trials-list" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<trials: table<clientId: string, endTime: string, finalMeasurement: record, infeasibleReason: string, measurements: list, name: string, parameters: list, startTime: string, state: string, trialInfeasible: bool>> {
+]: nothing -> oneof<record<trials: table<clientId: string, endTime: string, finalMeasurement: record, infeasibleReason: string, measurements: list, name: string, parameters: list, startTime: string, state: string, trialInfeasible: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1276,9 +1283,6 @@ export def "ml-projects-locations-studies-trials-list" [
 #
 # POST /v1/{parent}/trials
 # operationId: ml.projects.locations.studies.trials.create
-# --finalMeasurement shape: {elapsedTime?: string, metrics?: list, stepCount?: string}
-# --measurements item shape: {elapsedTime?: string, metrics?: list, stepCount?: string}
-# --parameters item shape: {floatValue?: float, intValue?: string, parameter?: string, stringValue?: string}
 export def "ml-projects-locations-studies-trials-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1305,7 +1309,7 @@ export def "ml-projects-locations-studies-trials-create" [
   --measurements: list # A list of measurements that are strictly lexicographically ordered by their induced tuples (steps, elapsed_time). These are used for early stopping computations. — item shape: {elapsedTime?: string, metrics?: list, stepCount?: string}
   --parameters: list # The parameters of the trial. — item shape: {floatValue?: float, intValue?: string, parameter?: string, stringValue?: string}
   --state: string@state-completer-2 # The detailed state of a trial.
-]: any -> record<clientId: string, endTime: string, finalMeasurement: record<elapsedTime: string, metrics: list<record>, stepCount: string>, infeasibleReason: string, measurements: table<elapsedTime: string, metrics: list, stepCount: string>, name: string, parameters: table<floatValue: float, intValue: string, parameter: string, stringValue: string>, startTime: string, state: string, trialInfeasible: bool> {
+]: any -> oneof<record<clientId: string, endTime: string, finalMeasurement: record<elapsedTime: string, metrics: list<record>, stepCount: string>, infeasibleReason: string, measurements: table<elapsedTime: string, metrics: list, stepCount: string>, name: string, parameters: table<floatValue: float, intValue: string, parameter: string, stringValue: string>, startTime: string, state: string, trialInfeasible: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1357,7 +1361,7 @@ export def "ml-projects-locations-studies-trials-list-optimal-trials" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record<trials: table<clientId: string, endTime: string, finalMeasurement: record, infeasibleReason: string, measurements: list, name: string, parameters: list, startTime: string, state: string, trialInfeasible: bool>> {
+]: any -> oneof<record<trials: table<clientId: string, endTime: string, finalMeasurement: record, infeasibleReason: string, measurements: list, name: string, parameters: list, startTime: string, state: string, trialInfeasible: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1410,7 +1414,7 @@ export def "ml-projects-locations-studies-trials-suggest" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --client-id: string # Required. The identifier of the client that is requesting the suggestion. If multiple SuggestTrialsRequests have the same `client_id`, the service will return the identical suggested trial if the trial is pending, and provide a new trial if the last suggested trial was completed.
   --suggestion-count: int # Required. The number of suggestions requested. (format: int32)
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1464,7 +1468,7 @@ export def "ml-projects-models-versions-list" [
   --filter: string # Optional. Specifies the subset of versions to retrieve.
   --page-size: int # Optional. The number of versions to retrieve per "page" of results. If there are more remaining results than this number, the response message will contain a valid value in the `next_page_token` field. The default value is 20, and the maximum page size is 100.
   --page-token: string # Optional. A page token to request the next page of results. You get the token from the `next_page_token` field of the response from the previous call.
-]: nothing -> record<nextPageToken: string, versions: table<acceleratorConfig: record, autoScaling: record, container: record, createTime: string, deploymentUri: string, description: string, errorMessage: string, etag: string, explanationConfig: record, framework: string, isDefault: bool, labels: record, lastMigrationModelId: string, lastMigrationTime: string, lastUseTime: string, machineType: string, manualScaling: record, name: string, packageUris: list, predictionClass: string, pythonVersion: string, requestLoggingConfig: record, routes: record, runtimeVersion: string, serviceAccount: string, state: string>> {
+]: nothing -> oneof<record<nextPageToken: string, versions: table<acceleratorConfig: record, autoScaling: record, container: record, createTime: string, deploymentUri: string, description: string, errorMessage: string, etag: string, explanationConfig: record, framework: string, isDefault: bool, labels: record, lastMigrationModelId: string, lastMigrationTime: string, lastUseTime: string, machineType: string, manualScaling: record, name: string, packageUris: list, predictionClass: string, pythonVersion: string, requestLoggingConfig: record, routes: record, runtimeVersion: string, serviceAccount: string, state: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1490,13 +1494,6 @@ export def "ml-projects-models-versions-list" [
 #
 # POST /v1/{parent}/versions
 # operationId: ml.projects.models.versions.create
-# --acceleratorConfig shape: {count?: string, type?: "ACCELERATOR_TYPE_UNSPECIFIED"|"NVIDIA_TESLA_K80"|"NVIDIA_TESLA_P100"|"NVIDIA_TESLA_V100"|"NVIDIA_TESLA_P4"|"NVIDIA_TESLA_T4"|"NVIDIA_TESLA_A100"|"TPU_V2"|"TPU_V3"|"TPU_V2_POD"|"TPU_V3_POD"|"TPU_V4_POD"}
-# --autoScaling shape: {maxNodes?: int, metrics?: list, minNodes?: int}
-# --container shape: {args?: list<string>, command?: list<string>, env?: list, image?: string, ports?: list}
-# --explanationConfig shape: {integratedGradientsAttribution?: record, sampledShapleyAttribution?: record, xraiAttribution?: record}
-# --manualScaling shape: {nodes?: int}
-# --requestLoggingConfig shape: {bigqueryTableName?: string, samplingPercentage?: float}
-# --routes shape: {health?: string, predict?: string}
 export def "ml-projects-models-versions-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1543,7 +1540,7 @@ export def "ml-projects-models-versions-create" [
   --runtime-version: string # Required. The AI Platform runtime version to use for this deployment. For more information, see the [runtime version list](/ml-engine/docs/runtime-version-list) and [how to manage runtime versions](/ml-engine/docs/versioning).
   --service-account: string # Optional. Specifies the service account for resource access control. If you specify this field, then you must also specify either the `containerSpec` or the `predictionClass` field. Learn more about [using a custom service account](/ai-platform/prediction/docs/custom-service-account).
   --state: string@state-completer # Output only. The state of a version.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1595,7 +1592,7 @@ export def "ml-projects-models-get-iam-policy" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --options-requested-policy-version: int # Optional. The maximum policy version that will be used to format the policy. Valid values are 0, 1, and 3. Requests specifying an invalid value will be rejected. Requests for policies with any conditional role bindings must specify version 3. Policies with no conditional role bindings may specify any valid value or leave the field unset. The policy in the response might use the policy version that you specified, or it might use a lower policy version. For example, if you specify version 3, but the policy has no conditional role bindings, the response uses version 1. To learn which resources support conditions in their IAM policies, see the [IAM documentation](https://cloud.google.com/iam/help/conditions/resource-policies).
-]: nothing -> record<auditConfigs: table<auditLogConfigs: list, service: string>, bindings: table<condition: record, members: list, role: string>, etag: string, version: int> {
+]: nothing -> oneof<record<auditConfigs: table<auditLogConfigs: list, service: string>, bindings: table<condition: record, members: list, role: string>, etag: string, version: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource | is-empty) { error make --unspanned { msg: "path parameter 'resource' must be non-empty" } }
@@ -1621,7 +1618,6 @@ export def "ml-projects-models-get-iam-policy" [
 #
 # POST /v1/{resource}:setIamPolicy
 # operationId: ml.projects.models.setIamPolicy
-# --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
 export def "ml-projects-models-set-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1646,7 +1642,7 @@ export def "ml-projects-models-set-iam-policy" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --policy: record # An Identity and Access Management (IAM) policy, which specifies access controls for Google Cloud resources. A `Policy` is a collection of `bindings`. A `binding` binds one or more `members`, or principals, to a single `role`. Principals can be user accounts, service accounts, Google groups, and domains (such as G Suite). A `role` is a named list of permissions; each `role` can be an IAM predefined role or a user-created custom role. For some types of Google Cloud resources, a `binding` can also specify a `condition`, which is a logical expression that allows access to a resource only if the expression evaluates to `true`. A condition can add constraints based on attributes of the request, the resource, or both. To learn which resources support conditions in their IAM policies, see the [IAM documentation](https://cloud.google.com/iam/help/conditions/resource-policies). **JSON example:** { "bindings": [ { "role": "roles/resourcemanager.organizationAdmin", "members": [ "user:mike@example.com", "group:admins@example.com", "domain:google.com", "serviceAccount:my-project-id@appspot.gserviceaccount.com" ] }, { "role": "roles/resourcemanager.organizationViewer", "members": [ "user:eve@example.com" ], "condition": { "title": "expirable access", "description": "Does not grant access after Sep 2020", "expression": "request.time < timestamp('2020-10-01T00:00:00.000Z')", } } ], "etag": "BwWWja0YfJA=", "version": 3 } **YAML example:** bindings: - members: - user:mike@example.com - group:admins@example.com - domain:google.com - serviceAccount:my-project-id@appspot.gserviceaccount.com role: roles/resourcemanager.organizationAdmin - members: - user:eve@example.com role: roles/resourcemanager.organizationViewer condition: title: expirable access description: Does not grant access after Sep 2020 expression: request.time < timestamp('2020-10-01T00:00:00.000Z') etag: BwWWja0YfJA= version: 3 For a description of IAM and its features, see the [IAM documentation](https://cloud.google.com/iam/docs/). — shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
   --update-mask: string # OPTIONAL: A FieldMask specifying which fields of the policy to modify. Only the fields in the mask will be modified. If no mask is provided, the following default mask is used: `paths: "bindings, etag"` (format: google-fieldmask)
-]: any -> record<auditConfigs: table<auditLogConfigs: list, service: string>, bindings: table<condition: record, members: list, role: string>, etag: string, version: int> {
+]: any -> oneof<record<auditConfigs: table<auditLogConfigs: list, service: string>, bindings: table<condition: record, members: list, role: string>, etag: string, version: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1698,7 +1694,7 @@ export def "ml-projects-models-test-iam-permissions" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --permissions: list<string> # The set of permissions to check for the `resource`. Permissions with wildcards (such as `*` or `storage.*`) are not allowed. For more information see [IAM Overview](https://cloud.google.com/iam/docs/overview#permissions).
-]: any -> record<permissions: list<string>> {
+]: any -> oneof<record<permissions: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -162,6 +186,7 @@ def encryption-completer [] { ["auto" "no" "yes"] }
 def protocol-completer [] { ["H.323" "SIP"] }
 def type-completer-1 [] { ["normal" "restricted" "shared"] }
 def accept-completer-1 [] { ["application/json" "application/xml" "new"] }
+def type-completer-2 [] { ["1" "2" "3" "8"] }
 def action-completer-2 [] { ["start" "stop"] }
 def action-completer-3 [] { ["delete" "trash"] }
 def status-completer [] { ["approved" "denied" "pending"] }
@@ -171,27 +196,27 @@ def share-recording-completer [] { ["internally" "none" "publicly"] }
 def action-completer-5 [] { ["recover"] }
 def action-completer-6 [] { ["approve" "cancel" "deny"] }
 def action-completer-7 [] { ["end" "recover"] }
-def type-completer-2 [] { ["live" "past" "pastOne"] }
+def type-completer-3 [] { ["live" "past" "pastOne"] }
 def include-fields-completer [] { ["tracking_fields"] }
 def include-fields-completer-1 [] { ["registrant_id"] }
-def type-completer-3 [] { ["live" "past"] }
+def type-completer-4 [] { ["live" "past"] }
 def block-type-completer [] { ["inbound" "outbound"] }
 def match-type-completer [] { ["phoneNumber" "prefix"] }
 def status-completer-1 [] { ["active" "inactive"] }
 def time-type-completer [] { ["endTime" "startTime"] }
-def type-completer-4 [] { ["assigned" "unassigned"] }
-def type-completer-5 [] { ["all" "assigned" "unassigned"] }
+def type-completer-5 [] { ["assigned" "unassigned"] }
+def type-completer-6 [] { ["all" "assigned" "unassigned"] }
 def extension-type-completer [] { ["autoReceptionist" "callQueue" "commonAreaPhone" "user"] }
 def number-type-completer [] { ["toll" "tollfree"] }
-def type-completer-6 [] { ["autoReceptionist" "commonarea" "group" "interop" "user"] }
-def type-completer-7 [] { ["all" "missed"] }
+def type-completer-7 [] { ["autoReceptionist" "commonarea" "group" "interop" "user"] }
+def type-completer-8 [] { ["all" "missed"] }
 def status-completer-2 [] { ["all" "read" "unread"] }
 def category-type-completer [] { ["account" "all" "billing" "im" "phone_contacts" "recording" "role" "sub_account" "user" "user_settings" "webinar" "zoom_rooms"] }
-def type-completer-8 [] { ["1" "3"] }
-def type-completer-9 [] { ["active" "inactive"] }
-def type-completer-10 [] { ["past" "pastOne"] }
+def type-completer-9 [] { ["1" "3"] }
+def type-completer-10 [] { ["active" "inactive"] }
+def type-completer-11 [] { ["past" "pastOne"] }
 def status-completer-3 [] { ["Available" "InMeeting" "Offline" "UnderConstruction"] }
-def type-completer-11 [] { ["DigitalSignageOnly" "SchedulingDisplayOnly" "ZoomRoom"] }
+def type-completer-12 [] { ["DigitalSignageOnly" "SchedulingDisplayOnly" "ZoomRoom"] }
 def setting-type-completer [] { ["alert" "meeting"] }
 def method-completer [] { ["zoomroom.emergency_alert_displayed"] }
 def action-completer-8 [] { ["cancel" "downgrade" "upgrade"] }
@@ -203,9 +228,8 @@ def status-completer-4 [] { ["active" "inactive" "pending"] }
 def action-completer-9 [] { ["autoCreate" "create" "custCreate" "ssoCreate"] }
 def action-completer-10 [] { ["delete" "disassociate"] }
 def login-type-completer [] { ["0" "1" "100" "101" "99"] }
-def type-completer-12 [] { ["1" "2" "3" "99"] }
-def type-completer-13 [] { ["live" "scheduled" "upcoming"] }
-def type-completer-14 [] { ["1" "2" "3" "8"] }
+def type-completer-13 [] { ["1" "2" "3" "99"] }
+def type-completer-14 [] { ["live" "scheduled" "upcoming"] }
 def status-completer-5 [] { ["Available" "Away" "Do_No_Disturb"] }
 def option-completer-3 [] { ["meeting_authentication" "meeting_secuirty" "recording_authentication"] }
 def action-completer-11 [] { ["activate" "deactivate"] }
@@ -217,9 +241,9 @@ def action-completer-12 [] { ["end"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["accounts" "account-create" "account-disassociate" "account" "account-billing" "account-billing-update" "account-billing-invoices" "get-account-billing-invoice" "get-account-lock-settings" "update-account-lock-settings" "account-managed-domain" "account-options-update" "update-account-owner" "update-phone-settings" "set-up-account" "post-phone-sip-trunk" "update-phone-sip-trunk" "account-plans" "account-plan-create" "account-plan-addon-create" "account-plan-addon-update" "account-plan-addon-cancel" "account-plan-base-update" "account-plan-base-delete" "get-plan-usage" "get-account-cloud-recording" "account-settings" "account-settings-update" "del-vb" "upload-vb" "list-internal-callout-countries" "add-callout-countries" "delete-internal-call-out-country" "list-internal-numbers" "add-internal-numbers" "delete-internal-number" "delete-all-sip-numbers" "assign-sip-trunk-numbers" "assign-sip-config" "list-sip-trunks" "assign-sip-trunks" "delete-sip-trunk" "account-trusted-domain" "switch-user-account" "download-invoice-pdf" "list-archived-files" "delete-user-level-channel" "get-user-level-channel" "update-user-level-channel" "leave-channel" "join-channel" "remove-a-user-level-channel-member" "get-user-contacts" "get-user-contact" "get-channels" "create-channel" "delete-channel" "get-channel" "update-channel" "list-channel-members" "invite-channel-members" "remove-a-channel-member" "get-chat-messages" "senda-chat-message" "delete-chat-message" "edit-message" "search-company-contacts" "groups" "group-create" "group-delete" "group" "group-update" "get-group-lock-settings" "group-locked-settings" "group-members" "group-members-create" "group-members-delete" "update-a-group-member" "get-group-settings" "update-group-settings" "del-group-vb" "upload-group-vb" "device-list" "device-create" "device-delete" "device-update" "sendchatbot" "delete-a-chatbot-message" "edit-chatbot-message" "im-chat-sessions" "im-chat-messages" "im-groups" "im-group-create" "im-group-delete" "im-group" "im-group-update" "im-group-members" "im-group-members-create" "im-group-members-delete" "sendimmessages" "listimmessages" "in-meeting-recording-control" "meeting-delete" "meeting" "meeting-update" "create-batch-polls" "meeting-invitation" "get-live-stream-details" "meeting-live-stream-update" "meeting-live-stream-status-update" "meeting-polls" "meeting-poll-create" "meeting-poll-delete" "meeting-poll-get" "meeting-poll-update" "recording-delete" "recording-get" "meeting-recording-registrants" "meeting-recording-registrant-create" "recording-registrants-questions-get" "recording-registrant-question-update" "meeting-recording-registrant-status" "recording-setting-update" "recording-settings-update" "recording-status-update" "recording-delete-one" "recording-status-update-one" "meeting-registrants" "meeting-registrant-create" "meeting-registrants-questions-get" "meeting-registrant-question-update" "meeting-registrant-status" "meetingregistrantdelete" "meeting-status" "dashboard-client-feedback" "dashboard-client-feedback-detail" "list-meeting-satisfaction" "dashboard-crc" "dashboard-im" "dashboard-issue-zoom-room" "dashboard-issue-detail-zoom-room" "dashboard-meetings" "dashboard-meeting-detail" "dashboard-meeting-participants" "dashboard-meeting-participants-qos" "participant-feedback" "dashboard-meeting-participant-share" "dashboard-meeting-participant-qos" "dashboard-webinars" "dashboard-webinar-detail" "dashboard-webinar-participants" "dashboard-webinar-participants-qos" "participant-webinar-feedback" "dashboard-webinar-participant-share" "dashboard-webinar-participant-qos" "dashboard-zoom-rooms" "dashboard-zoom-room-issue" "dashboard-zoom-room" "list-past-meeting-files" "past-meetings" "list-past-meeting-polls" "past-meeting-details" "past-meeting-participants" "webinar-absentees" "list-past-webinar-files" "past-webinars" "list-webinar-participants" "list-past-webinar-poll-results" "list-past-webinar-qa" "add-auto-receptionist" "update-auto-receptionist" "unassign-all-phone-nums-auto-receptionist" "assign-phone-numbers-auto-receptionist" "unassign-a-phone-num-auto-receptionist" "list-blocked-list" "add-anumber-to-blocked-list" "delete-a-blocked-list" "get-a-blocked-list" "update-blocked-list" "add-byoc-number" "account-call-logs" "list-call-queues" "create-call-queue" "delete-a-call-queue" "get-a-call-queue" "update-call-queue" "change-call-queue-manager" "unassign-all-members" "add-members-to-call-queue" "unassign-member-from-call-queue" "unassign-a-phone-num-call-queue" "assign-phone-to-call-queue" "un-assign-phone-num-call-queue" "get-call-queue-recordings" "list-calling-plans" "list-common-area-phones" "add-common-area-phone" "delete-common-area-phone" "get-a-common-area-phone" "update-common-area-phone" "change-main-company-number" "list-phone-devices" "add-phone-device" "delete-a-device" "get-a-device" "update-a-device" "list-call-logs-metrics" "get-call-qo-s" "get-call-log-metrics-details" "list-account-phone-numbers" "get-phone-number-details" "update-phone-number-details" "get-phone-recordings" "get-ps-operation-logs" "list-setting-templates" "add-setting-template" "get-setting-template" "update-setting-template" "list-shared-line-groups" "create-a-shared-line-group" "delete-a-shared-line-group" "get-a-shared-line-group" "update-a-shared-line-group" "delete-members-of-slg" "add-members-to-shared-line-group" "delete-a-member-slg" "assign-phone-numbers-slg" "delete-a-phone-number-slg" "list-byocsip-trunk" "list-phone-sites" "create-phone-site" "delete-phone-site" "get-a-site" "update-site-details" "list-phone-users" "phone-user" "update-user-profile" "phone-user-call-logs" "delete-call-log" "assign-calling-plan" "unassign-calling-plan" "assign-phone-number" "unassign-phone-number" "phone-user-recordings" "phone-user-settings" "delete-user-setting" "update-user-setting" "add-user-setting" "phone-user-voice-mails" "delete-voicemail" "report-sign-in-sign-out-activities" "report-cloud-recording" "report-daily" "report-meeting-details" "report-meeting-participants" "report-meeting-polls" "report-operation-logs" "report-telephone" "report-users" "report-meetings" "report-webinar-details" "report-webinar-participants" "report-webinar-polls" "report-webinar-qa" "roles" "create-role" "delete-role" "get-role-information" "update-role" "role-members" "add-role-members" "role-member-delete" "list-zoom-rooms" "add-a-room" "get-zr-account-profile" "update-zr-acc-profile" "get-zr-account-settings" "update-zoom-room-acc-settings" "list-digital-signage-content" "manage-e911signage" "list-zr-locations" "add-azr-location" "get-zr-location-structure" "update-zoom-rooms-location-structure" "get-zr-location-profile" "update-zr-location-profile" "change-parent-location" "get-zr-location-settings" "update-zr-location-settings" "check-in-rooms" "delete-a-zoom-room" "get-zr-profile" "update-room-profile" "list-zr-devices" "change-zoom-rooms-app-version" "change-zr-location" "get-zr-settings" "update-zr-settings" "list-sip-phones" "create-sip-phone" "delete-sip-phone" "update-sip-phone" "list-sip-trunk-numbers" "trackingfield-list" "trackingfield-create" "trackingfield-delete" "trackingfield-get" "trackingfield-update" "tsp" "tsp-update" "users" "user-create" "user-email" "user-zak" "user-vanity-name" "user-delete" "user" "user-update" "user-assistants-delete" "user-assistants" "user-assistant-create" "user-assistant-delete" "user-email-update" "list-meeting-templates" "meetings" "meeting-create" "user-pa-cs" "user-password" "user-permission" "user-picture" "update-presence-status" "recordings-list" "user-schedulers-delete" "user-schedulers" "user-scheduler-delete" "user-settings" "user-settings-update" "del-user-vb" "upload-v-buser" "user-status" "user-sso-token-delete" "user-token" "user-ts-ps" "user-tsp-create" "tsp-url-update" "user-tsp-delete" "user-tsp" "user-tsp-update" "list-webinar-templates" "webinars" "webinar-create" "webinar-delete" "webinar" "webinar-update" "add-batch-webinar-registrants" "webinar-panelists-delete" "webinar-panelists" "webinar-panelist-create" "webinar-panelist-delete" "webinar-polls" "webinar-poll-create" "webinar-poll-delete" "webinar-poll-get" "webinar-poll-update" "webinar-registrants" "webinar-registrant-create" "webinar-registrants-questions-get" "webinar-registrant-question-update" "webinar-registrant-status" "delete-webinar-registrant" "webinar-registrant-get" "webinar-status" "get-tracking-sources" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -255,7 +279,7 @@ export def "accounts" [
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --page-number: int # **Deprecated** - This field has been deprecated and we will stop supporting it completely in a future release. Please use "next_page_token" for pagination instead of this field. The page number of the current page in the returned records. (default: 1)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
-]: nothing -> record<next_page_token: string, page_count: int, page_number: int, page_size: int, total_records: int, accounts: table<account_name: string, account_number: string, account_type: string, created_at: string, id: string, owner_email: string, seats: int, subscription_end_time: string, subscription_start_time: string>> {
+]: nothing -> oneof<record<next_page_token: string, page_count: int, page_number: int, page_size: int, total_records: int, accounts: table<account_name: string, account_number: string, account_type: string, created_at: string, id: string, owner_email: string, seats: int, subscription_end_time: string, subscription_start_time: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page_number" $page_number "scalar") (serialize-qp "next_page_token" $next_page_token "scalar")] | flatten | str join "&"
@@ -280,7 +304,6 @@ export def "accounts" [
 #
 # POST /accounts
 # operationId: accountCreate
-# --options shape: {billing_auto_renew?: bool, meeting_connector_list?: list<string>, pay_mode?: "master"|"sub", room_connector_list?: list<string>, share_mc?: bool, share_rc?: bool}
 export def "account-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -298,7 +321,7 @@ export def "account-create" [
   last_name: string # User's last name.
   --options: record # Account options object. — shape: {billing_auto_renew?: bool, meeting_connector_list?: list<string>, pay_mode?: "master"|"sub", room_connector_list?: list<string>, share_mc?: bool, share_rc?: bool}
   password: string # User's password. **Note:** If the account owner or admin has enabled [enhanced password requirements](https://support.zoom.us/hc/en-us/articles/360034675592-Advanced-security-settings#h_fa9186e4-6818-4f7a-915c-2e25c19f0acd), the value provided in this field must meet those requirements. These requirements can be retrieved by calling the [Get Account Settings API](https://marketplace.zoom.us/docs/api-reference/zoom-api/accounts/accountsettings) and referring to the `password_requirement` field present in the `security` object.
-]: any -> record<created_at: string, id: string, owner_email: string, owner_id: string> {
+]: any -> oneof<record<created_at: string, id: string, owner_email: string, owner_id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -373,7 +396,7 @@ export def "account" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<created_at: string, id: string, options: record<billing_auto_renew: bool, meeting_connector_list: list<string>, pay_mode: string, room_connector_list: list<string>, share_mc: bool, share_rc: bool>, owner_email: string, owner_id: string, vanity_url: string> {
+]: nothing -> oneof<record<created_at: string, id: string, options: record<billing_auto_renew: bool, meeting_connector_list: list<string>, pay_mode: string, room_connector_list: list<string>, share_mc: bool, share_rc: bool>, owner_email: string, owner_id: string, vanity_url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
@@ -410,7 +433,7 @@ export def "account-billing" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<address: string, apt: string, city: string, country: string, email: string, first_name: string, last_name: string, phone_number: string, state: string, zip: string> {
+]: nothing -> oneof<record<address: string, apt: string, city: string, country: string, email: string, first_name: string, last_name: string, phone_number: string, state: string, zip: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
@@ -498,7 +521,7 @@ export def "account-billing-invoices" [
   --accept: string@accept-completer # Response content type
   --from: string # Start date for the invoice query in `yyyy-mm-dd` format. The date range defined by the “from” and “to” parameters should not exceed one year. The range defined should fall within the past three years. (format: date)
   --to: string # End date for the invoice query in `yyyy-mm-dd` format (format: date)
-]: nothing -> record<currency: string, invoices: table<balance: float, due_date: string, id: string, invoice_date: string, invoice_number: string, status: string, target_date: string, tax_amount: float, total_amount: float>> {
+]: nothing -> oneof<record<currency: string, invoices: table<balance: float, due_date: string, id: string, invoice_date: string, invoice_number: string, status: string, target_date: string, tax_amount: float, total_amount: float>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
@@ -537,7 +560,7 @@ export def "get-account-billing-invoice" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<balance: float, currency: string, due_date: string, id: string, invoice_date: string, invoice_items: table<charge_name: string, charge_number: string, charge_type: string, end_date: string, quantity: int, start_date: string, tax_amount: float, total_amount: float>, invoice_number: string, status: string, target_date: string, tax_amount: float, total_amount: float> {
+]: nothing -> oneof<record<balance: float, currency: string, due_date: string, id: string, invoice_date: string, invoice_items: table<charge_name: string, charge_number: string, charge_type: string, end_date: string, quantity: int, start_date: string, tax_amount: float, total_amount: float>, invoice_number: string, status: string, target_date: string, tax_amount: float, total_amount: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
@@ -577,7 +600,7 @@ export def "get-account-lock-settings" [
   --accept: string@accept-completer # Response content type
   --option: string # `meeting_security`: Use this query parameter to view meeting security settings applied on the account.
   --custom-query-fields: string # Provide the name of the field by which you would like to filter the response. For example, if you provide "host_video" as the value of this field, you will get a response similar to the following: { "schedule_meeting": { "host_video": false } } You can provide multiple values by separating them with commas(example: "host_video,participant_video”).
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
@@ -603,13 +626,6 @@ export def "get-account-lock-settings" [
 #
 # PATCH /accounts/{accountId}/lock_settings
 # operationId: updateAccountLockSettings
-# --email_notification shape: {alternative_host_reminder?: bool, cancel_meeting_reminder?: bool, cloud_recording_available_reminder?: bool, jbh_reminder?: bool, schedule_for_host_reminder?: bool}
-# --in_meeting shape: {alert_guest_join?: bool, allow_show_zoom_windows?: bool, annotation?: bool, anonymous_question_answer?: bool, attendee_on_hold?: bool, auto_answer?: bool, auto_saving_chat?: bool, breakout_room?: bool, chat?: bool, closed_caption?: bool, co_host?: bool, custom_data_center_regions?: bool, dscp_marking?: bool, e2e_encryption?: bool, entry_exit_chime?: string, far_end_camera_control?: bool, feedback?: bool, file_transfer?: bool, group_hd?: bool, original_audio?: bool, polling?: bool, ... (12 more fields)}
-# --recording shape: {account_user_access_recording?: bool, auto_delete_cmr?: bool, auto_recording?: string, cloud_recording?: bool, cloud_recording_download?: bool, host_delete_cloud_recording?: bool, ip_address_access_control?: record, local_recording?: bool, prevent_host_access_recording?: bool, recording_authentication?: string}
-# --schedule_meeting shape: {audio_type?: bool, embed_password_in_join_link?: bool, enforce_login?: bool, enforce_login_domains?: string, enforce_login_with_domains?: bool, host_video?: bool, join_before_host?: bool, meeting_authentication?: bool, not_store_meeting_topic?: bool, participant_video?: bool, personal_meeting?: bool, require_password_for_instant_meetings?: bool, require_password_for_pmi_meetings?: bool, require_password_for_scheduling_new_meetings?: bool}
-# --telephony shape: {telephony_regions?: bool, third_party_audio?: bool}
-# --tsp shape: {call_out?: bool, show_international_numbers_link?: bool}
-# --meeting_security shape: {auto_security?: bool, embed_password_in_join_link?: bool, encryption_type?: "enhanced_encryption"|"e2ee", end_to_end_encrypted_meetings?: bool, meeting_password?: bool, meeting_password_requirement?: record, phone_password?: bool, pmi_password?: bool, require_password_for_scheduled_meeting?: bool, require_password_for_scheduled_webinar?: bool, waiting_room?: bool, waiting_room_settings?: record, webinar_password?: bool}
 export def "update-account-lock-settings" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -669,7 +685,7 @@ export def "account-managed-domain" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<domains: table<domain: string, status: string>, total_records: int> {
+]: nothing -> oneof<record<domains: table<domain: string, status: string>, total_records: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
@@ -780,7 +796,6 @@ export def "update-account-owner" [
 #
 # PATCH /accounts/{accountId}/phone/settings
 # operationId: updatePhoneSettings
-# --byoc shape: {enable?: bool}
 export def "update-phone-settings" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -822,7 +837,6 @@ export def "update-phone-settings" [
 #
 # POST /accounts/{accountId}/phone/setup
 # operationId: setUpAccount
-# --emergency_address shape: {address_line1: string, address_line2?: string, city?: string, country: string, state_code?: string, zip?: string}
 export def "set-up-account" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -864,7 +878,6 @@ export def "set-up-account" [
 #
 # POST /accounts/{accountId}/phone/sip_trunk/trunks
 # operationId: postPhoneSIPTrunk
-# --sip_trunks item shape: {carrier_account?: string, id?: string, name?: string}
 export def "post-phone-sip-trunk" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -878,7 +891,7 @@ export def "post-phone-sip-trunk" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --sip-trunks: list # SIP trunk configurations. — item shape: {carrier_account?: string, id?: string, name?: string}
-]: any -> record<sip_trunks: table<carrier_account: string, id: string, name: string>> {
+]: any -> oneof<record<sip_trunks: table<carrier_account: string, id: string, name: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -962,7 +975,7 @@ export def "account-plans" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<plan_audio: record<callout_countries: string, ddi_numbers: int, next_invoice_date: string, premium_countries: string, service_effective_date: string, status: string, tollfree_countries: string, type: string>, plan_base: record<hosts: int, next_invoice_date: string, service_effective_date: string, status: string, type: string>, plan_large_meeting: table<hosts: int, next_invoice_date: string, service_effective_date: string, status: string, type: string>, plan_phone: record<plan_base: record<callout_countries: string, next_invoice_date: string, service_effective_date: string, status: string, type: string>, plan_calling: list<record>, plan_number: list<record>>, plan_recording: string, plan_recording_next_invoice_date: string, plan_recording_service_effective_date: string, plan_recording_status: string, plan_room_connector: record<hosts: int, next_invoice_date: string, service_effective_date: string, status: string, type: string>, plan_webinar: table<hosts: int, next_invoice_date: string, service_effective_date: string, status: string, type: string>, plan_zoom_rooms: record<hosts: int, next_invoice_date: string, service_effective_date: string, status: string, type: string>> {
+]: nothing -> oneof<record<plan_audio: record<callout_countries: string, ddi_numbers: int, next_invoice_date: string, premium_countries: string, service_effective_date: string, status: string, tollfree_countries: string, type: string>, plan_base: record<hosts: int, next_invoice_date: string, service_effective_date: string, status: string, type: string>, plan_large_meeting: table<hosts: int, next_invoice_date: string, service_effective_date: string, status: string, type: string>, plan_phone: record<plan_base: record<callout_countries: string, next_invoice_date: string, service_effective_date: string, status: string, type: string>, plan_calling: list<record>, plan_number: list<record>>, plan_recording: string, plan_recording_next_invoice_date: string, plan_recording_service_effective_date: string, plan_recording_status: string, plan_room_connector: record<hosts: int, next_invoice_date: string, service_effective_date: string, status: string, type: string>, plan_webinar: table<hosts: int, next_invoice_date: string, service_effective_date: string, status: string, type: string>, plan_zoom_rooms: record<hosts: int, next_invoice_date: string, service_effective_date: string, status: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
@@ -987,14 +1000,6 @@ export def "account-plans" [
 #
 # POST /accounts/{accountId}/plans
 # operationId: accountPlanCreate
-# --contact shape: {address: string, apt?: string, city: string, country: string, email: string, first_name: string, last_name: string, phone_number: string, state: string, zip: string}
-# --plan_audio shape: {callout_countries?: string, ddi_numbers?: int, premium_countries?: string, tollfree_countries?: string, type?: string}
-# --plan_base shape: {hosts: int, type: string}
-# --plan_large_meeting item shape: {hosts?: int, type?: string}
-# --plan_phone shape: {plan_base?: record, plan_calling?: list, plan_number?: list}
-# --plan_room_connector shape: {hosts?: int, type?: string}
-# --plan_webinar item shape: {hosts?: int, type?: string}
-# --plan_zoom_rooms shape: {hosts?: int, type?: string}
 export def "account-plan-create" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1016,7 +1021,7 @@ export def "account-plan-create" [
   --plan-room-connector: record # Account plan object. — shape: {hosts?: int, type?: string}
   --plan-webinar: list # Additional webinar plans. — item shape: {hosts?: int, type?: string}
   --plan-zoom-rooms: record # Account plan object. — shape: {hosts?: int, type?: string}
-]: any -> record<plan_audio: record<callout_countries: string, ddi_numbers: int, premium_countries: string, tollfree_countries: string, type: string>, plan_base: record<hosts: int, type: string>, plan_large_meeting: table<hosts: int, type: string>, plan_phone: record<plan_base: record<callout_countries: string, type: string>, plan_calling: list<record>, plan_number: list<record>>, plan_recording: string, plan_room_connector: record<hosts: int, type: string>, plan_webinar: table<hosts: int, type: string>, plan_zoom_rooms: record<hosts: int, type: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1044,7 +1049,6 @@ export def "account-plan-create" [
 #
 # POST /accounts/{accountId}/plans/addons
 # operationId: accountPlanAddonCreate
-# --plan_details shape: {plan_base?: record, plan_calling?: list, plan_number?: list}
 export def "account-plan-addon-create" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1057,7 +1061,7 @@ export def "account-plan-addon-create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hosts: int # Number of hosts for this plan.
-  --type: string # Account plan type. (https://marketplace.zoom.us/docs/api-reference/other-references/plans)
+  type: string # Account plan type. (https://marketplace.zoom.us/docs/api-reference/other-references/plans)
   --plan-details: record # Phone Plan Object — shape: {plan_base?: record, plan_calling?: list, plan_number?: list}
 ]: any -> any {
   let input = $in
@@ -1228,7 +1232,7 @@ export def "account-plan-base-delete" [
   action: string # The action that needs to be taken for this sub account. Value must be set to "cancel".
   --comment: string # Additional comments about the cancellation decision.
   --reason: int@reason-completer # The reason for the cancellation of plan. Reason options:`1` - I am no longer working remote.`2` - I had challenges getting the support I needed.`3` - Features in the Basic Free Plan are sufficient.`4` - The expense is too high.`5` - I purchased the wrong product. `6` - Paid purchase not needed right now, will repurchase in the future.
-]: any -> any {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1268,7 +1272,7 @@ export def "get-plan-usage" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<plan_base: table<hosts: int, type: string, usage: int>, plan_large_meeting: table<hosts: int, type: string, usage: int>, plan_recording: record<free_storage: string, free_storage_usage: string, plan_storage: string, plan_storage_exceed: string, plan_storage_usage: string, type: string>, plan_united: record<hosts: int, name: string, type: string, usage: int>, plan_webinar: table<hosts: int, type: string, usage: int>, plan_zoom_rooms: table<hosts: int, type: string, usage: int>> {
+]: nothing -> oneof<record<plan_base: table<hosts: int, type: string, usage: int>, plan_large_meeting: table<hosts: int, type: string, usage: int>, plan_recording: record<free_storage: string, free_storage_usage: string, plan_storage: string, plan_storage_exceed: string, plan_storage_usage: string, type: string>, plan_united: record<hosts: int, name: string, type: string, usage: int>, plan_webinar: table<hosts: int, type: string, usage: int>, plan_zoom_rooms: table<hosts: int, type: string, usage: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
@@ -1309,7 +1313,7 @@ export def "get-account-cloud-recording" [
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
   --from: string # The start date in UTC for the monthly range for which you would like to retrieve recordings. The maximum range can be a month. If no value is provided for this field, the default will be current date. For example, if you make the API request on June 30, 2020, without providing the “from” and “to” parameters, by default the value of 'from' field will be “2020-06-30” and the value of the 'to' field will be “2020-07-01”. (format: date-time)
   --to: string # The end date for the monthly range for which you would like to retrieve recordings. The maximum range can be a month. (format: date-time)
-]: nothing -> record<from: string, meetings: table<duration: int, host_id: string, id: string, recording_count: int, recording_files: list, start_time: string, topic: string, total_size: int, uuid: string>, next_page_token: string, page_size: int, to: string, total_records: int> {
+]: nothing -> oneof<record<from: string, meetings: table<duration: int, host_id: string, id: string, recording_count: int, recording_files: list, start_time: string, topic: string, total_size: int, uuid: string>, next_page_token: string, page_size: int, to: string, total_records: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
@@ -1375,18 +1379,6 @@ export def "account-settings" [
 #
 # PATCH /accounts/{accountId}/settings
 # operationId: accountSettingsUpdate
-# --email_notification shape: {alternative_host_reminder?: bool, cancel_meeting_reminder?: bool, cloud_recording_avaliable_reminder?: bool, jbh_reminder?: bool, low_host_count_reminder?: bool, schedule_for_reminder?: bool}
-# --feature shape: {meeting_capacity?: int}
-# --in_meeting shape: {alert_guest_join?: bool, allow_live_streaming?: bool, allow_participants_to_rename?: bool, allow_show_zoom_windows?: bool, annotation?: bool, anonymous_question_answer?: bool, attendee_on_hold?: bool, auto_answer?: bool, auto_saving_chat?: bool, breakout_room?: bool, chat?: bool, closed_caption?: bool, co_host?: bool, custom_data_center_regions?: bool, custom_live_streaming_service?: bool, custom_service_instructions?: string, data_center_regions?: "EU"|"HK"|"AU"|"IN"|"TY"|"CN"|"US"|"CA", ... (34 more fields)}
-# --integration shape: {box?: bool, dropbox?: bool, google_calendar?: bool, google_drive?: bool, kubi?: bool, microsoft_one_drive?: bool}
-# --profile shape: {recording_storage_location?: record}
-# --recording shape: {account_user_access_recording?: bool, allow_recovery_deleted_cloud_recordings?: bool, archive?: record, auto_delete_cmr?: bool, auto_delete_cmr_days?: int, auto_recording?: "local"|"cloud"|"none", cloud_recording?: bool, cloud_recording_download?: bool, cloud_recording_download_host?: bool, host_delete_cloud_recording?: bool, ip_address_access_control?: record, local_recording?: bool, prevent_host_access_recording?: bool, record_audio_file?: bool, record_gallery_view?: bool, ... (7 more fields)}
-# --schedule_meeting shape: {audio_type?: "both"|"telephony"|"voip"|"thirdParty", enforce_login?: bool, enforce_login_domains?: string, enforce_login_with_domains?: bool, force_pmi_jbh_password?: bool, host_video?: bool, join_before_host?: bool, meeting_password_requirement?: record, not_store_meeting_topic?: bool, participant_video?: bool, personal_meeting?: bool, require_password_for_instant_meetings?: bool, require_password_for_pmi_meetings?: "jbh_only"|"all"|"none", require_password_for_scheduled_meetings?: bool, ... (3 more fields)}
-# --security shape: {admin_change_name_pic?: bool, hide_billing_info?: bool, import_photos_from_devices?: bool, password_requirement?: record, sign_again_period_for_inactivity_on_client?: int, sign_again_period_for_inactivity_on_web?: int, sign_in_with_two_factor_auth?: "all"|"group"|"role"|"none", sign_in_with_two_factor_auth_groups?: list<string>, sign_in_with_two_factor_auth_roles?: list<string>}
-# --telephony shape: {audio_conference_info?: string, telephony_regions?: record, third_party_audio?: bool}
-# --tsp shape: {call_out?: bool, call_out_countries?: list, display_toll_free_numbers?: bool, show_international_numbers_link?: bool}
-# --zoom_rooms shape: {auto_start_stop_scheduled_meetings?: bool, cmr_for_instant_meeting?: bool, force_private_meeting?: bool, hide_host_information?: bool, list_meetings_with_calendar?: bool, start_airplay_manually?: bool, ultrasonic?: bool, upcoming_meeting_alert?: bool, weekly_system_restart?: bool, zr_post_meeting_feedback?: bool}
-# --meeting_security shape: {auto_security?: bool, embed_password_in_join_link?: bool, encryption_type?: "enhanced_encryption"|"e2ee", end_to_end_encrypted_meetings?: bool, meeting_password?: bool, meeting_password_requirement?: record, phone_password?: bool, pmi_password?: bool, require_password_for_scheduled_meeting?: bool, require_password_for_scheduled_webinar?: bool, waiting_room?: bool, waiting_room_settings?: record, webinar_password?: bool}
 export def "account-settings-update" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1491,7 +1483,7 @@ export def "upload-vb" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --file: string # Provide the file's path here.
-]: any -> record<id: string, is_default: bool, name: string, size: string, type: string> {
+]: any -> oneof<record<id: string, is_default: bool, name: string, size: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1533,7 +1525,7 @@ export def "list-internal-callout-countries" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<callout_countries: table<code: string, id: string, name: string>, total_records: int> {
+]: nothing -> oneof<record<callout_countries: table<code: string, id: string, name: string>, total_records: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
@@ -1558,7 +1550,6 @@ export def "list-internal-callout-countries" [
 #
 # POST /accounts/{accountId}/sip_trunk/callout_countries
 # operationId: addCalloutCountries
-# --callout_countries item shape: {id: string}
 export def "add-callout-countries" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1572,7 +1563,7 @@ export def "add-callout-countries" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   callout_countries: list # List of callout countries. — item shape: {id: string}
-]: any -> record<callout_countries: table<code: string, id: string, name: string>> {
+]: any -> oneof<record<callout_countries: table<code: string, id: string, name: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1653,7 +1644,7 @@ export def "list-internal-numbers" [
   --accept: string@accept-completer # Response content type
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
-]: nothing -> record<internal_numbers: table<allow_for_external_meetings: bool, allow_join: bool, country: string, display_number: string, labels: string, languages: string, number: string, type: int, visible: bool>, next_page_token: string, page_size: int, total_records: int> {
+]: nothing -> oneof<record<internal_numbers: table<allow_for_external_meetings: bool, allow_join: bool, country: string, display_number: string, labels: string, languages: string, number: string, type: int, visible: bool>, next_page_token: string, page_size: int, total_records: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
@@ -1679,7 +1670,6 @@ export def "list-internal-numbers" [
 #
 # POST /accounts/{accountId}/sip_trunk/internal_numbers
 # operationId: addInternalNumbers
-# --internal_numbers item shape: {allow_for_external_meetings?: bool, allow_join?: bool, country: string, display_number: string, labels: string, languages: "en-GB"|"en-US"|"de-DE", number: string, type: "0"|"1", visible?: bool}
 export def "add-internal-numbers" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1693,7 +1683,7 @@ export def "add-internal-numbers" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --internal-numbers: list # item shape: {allow_for_external_meetings?: bool, allow_join?: bool, country: string, display_number: string, labels: string, languages: "en-GB"|"en-US"|"de-DE", number: string, type: "0"|"1", visible?: bool}
-]: any -> record<internal_numbers: table<allow_for_external_meetings: bool, allow_join: bool, country: string, display_number: string, id: string, labels: string, languages: string, number: string, type: int, visible: bool>> {
+]: any -> oneof<record<internal_numbers: table<allow_for_external_meetings: bool, allow_join: bool, country: string, display_number: string, id: string, labels: string, languages: string, number: string, type: int, visible: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1894,7 +1884,7 @@ export def "list-sip-trunks" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<sip_trunks: table<dnis: string, id: string, name: string, number_prefix: string, outbound_caller_id: string, sip_server_address: string>, total_records: int> {
+]: nothing -> oneof<record<sip_trunks: table<dnis: string, id: string, name: string, number_prefix: string, outbound_caller_id: string, sip_server_address: string>, total_records: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
@@ -1919,7 +1909,6 @@ export def "list-sip-trunks" [
 #
 # POST /accounts/{accountId}/sip_trunk/trunks
 # operationId: assignSIPTrunks
-# --sip_trunks item shape: {dnis?: string, id?: string, outbound_caller_id?: string}
 export def "assign-sip-trunks" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1933,7 +1922,7 @@ export def "assign-sip-trunks" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --sip-trunks: list # Array of one or more SIP Trunk objects. — item shape: {dnis?: string, id?: string, outbound_caller_id?: string}
-]: any -> record<sip_trunks: table<dnis: string, id: string, name: string, number_prefix: string, sip_server_address: string>> {
+]: any -> oneof<record<sip_trunks: table<dnis: string, id: string, name: string, number_prefix: string, sip_server_address: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1974,7 +1963,7 @@ export def "delete-sip-trunk" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
@@ -2012,7 +2001,7 @@ export def "account-trusted-domain" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<trusted_domains: list<string>> {
+]: nothing -> oneof<record<trusted_domains: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
@@ -2134,7 +2123,7 @@ export def "list-archived-files" [
   --from: string # Start date for the query in "yyyy-MM-dd'T'HH:mm:ss'Z'" format. The duration for the query defined using the "from" and "to" parameters should not exceed 7 days as this API only provides a week's data at once.
   --to: string # End date for the query in "yyyy-MM-dd'T'HH:mm:ss'Z'" format.
   --query-data-type: string@query-data-type-completer # Query data type for `from` and `to`. (default: meeting_start_time)
-]: nothing -> record<from: string, meetings: table<archive_files: list, duration: int, host_id: string, id: int, recording_count: int, start_time: string, timezone: string, topic: string, total_size: int, type: int, uuid: string>, next_page_token: string, page_size: int, to: string> {
+]: nothing -> oneof<record<from: string, meetings: table<archive_files: list, duration: int, host_id: string, id: int, recording_count: int, start_time: string, timezone: string, topic: string, total_size: int, type: int, uuid: string>, next_page_token: string, page_size: int, to: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "query_data_type" $query_data_type "scalar")] | flatten | str join "&"
@@ -2208,7 +2197,7 @@ export def "get-user-level-channel" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<id: string, name: string, type: int> {
+]: nothing -> oneof<record<id: string, name: string, type: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channelId' must be non-empty" } }
@@ -2323,7 +2312,7 @@ export def "join-channel" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<added_at: string, id: string> {
+]: nothing -> oneof<record<added_at: string, id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channelId' must be non-empty" } }
@@ -2401,7 +2390,7 @@ export def "get-user-contacts" [
   --type: string # The type of contact. The value can be one of the following: `company`: Contacts from the user's organization. `external`: External contacts. (default: company)
   --page-size: int # The number of records returned with a single API call. (default: 10)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
-]: nothing -> record<contacts: table<email: string, first_name: string, id: string, last_name: string>, next_page_token: string, page_size: int> {
+]: nothing -> oneof<record<contacts: table<email: string, first_name: string, id: string, last_name: string>, next_page_token: string, page_size: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar")] | flatten | str join "&"
@@ -2439,7 +2428,7 @@ export def "get-user-contact" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --query-presence-status: oneof<nothing, bool> # The presence status of the contact. Include this query parameter with a value of `true` to get the presence status of the contact in the response.
-]: nothing -> record<direct_numbers: list<string>, email: string, extension_number: string, first_name: string, id: string, last_name: string, phone_number: string, presence_status: string> {
+]: nothing -> oneof<record<direct_numbers: list<string>, email: string, extension_number: string, first_name: string, id: string, last_name: string, phone_number: string, presence_status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($contact_id | is-empty) { error make --unspanned { msg: "path parameter 'contactId' must be non-empty" } }
@@ -2479,7 +2468,7 @@ export def "get-channels" [
   --accept: string@accept-completer # Response content type
   --page-size: int # The number of records returned from a single API call. (default: 10)
   --next-page-token: string # The next page token is used to paginate through large result sets. The expiration period for this token is 15 minutes.
-]: nothing -> record<channels: table<channels_settings: record, id: string, name: string, type: int>, next_page_token: string, page_size: int, total_records: int> {
+]: nothing -> oneof<record<channels: table<channels_settings: record, id: string, name: string, type: int>, next_page_token: string, page_size: int, total_records: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -2505,7 +2494,6 @@ export def "get-channels" [
 #
 # POST /chat/users/{userId}/channels
 # operationId: createChannel
-# --members item shape: {email: string}
 export def "create-channel" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2521,7 +2509,7 @@ export def "create-channel" [
   --members: list # Member(s) to include in the channel. A max of 5 members can be added to the channel at once with this API. — item shape: {email: string}
   --name: string # Name of the channel.
   --type: int@type-completer # Type of the channel. The value can be one of the following: `1`: Private channel. In this type of channel, members must be invited to join a channel. `2`: Private channel with members that belong to one Zoom account. Members in this channel should be invited and the members should be from the same organization. `3`: Public channel. Anyone can search for this channel and join the channel. `4`: New chat. This is an instant channel which can be created by adding members to a new chat.
-]: any -> record<id: string, jid: string, name: string, type: int> {
+]: any -> oneof<record<id: string, jid: string, name: string, type: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2601,7 +2589,7 @@ export def "get-channel" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<id: string, name: string, type: int> {
+]: nothing -> oneof<record<id: string, name: string, type: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -2685,7 +2673,7 @@ export def "list-channel-members" [
   --accept: string@accept-completer # Response content type
   --page-size: int # The number of records returned with a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
-]: nothing -> record<members: table<email: string, first_name: string, id: string, last_name: string, role: string>, next_page_token: string, page_size: int, total_records: int> {
+]: nothing -> oneof<record<members: table<email: string, first_name: string, id: string, last_name: string, role: string>, next_page_token: string, page_size: int, total_records: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -2712,7 +2700,6 @@ export def "list-channel-members" [
 #
 # POST /chat/users/{userId}/channels/{channelId}/members
 # operationId: inviteChannelMembers
-# --members item shape: {email: string}
 export def "invite-channel-members" [
   user_id: string
   channel_id: string
@@ -2727,7 +2714,7 @@ export def "invite-channel-members" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --members: list # Members of a channel. You can invite up to a max number of 5 members with a single API call. — item shape: {email: string}
-]: any -> record<added_at: string, ids: list<string>> {
+]: any -> oneof<record<added_at: string, ids: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2815,7 +2802,7 @@ export def "get-chat-messages" [
   --page-size: int # The number of records returned with a single API call. (default: 10)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
   --include-deleted-and-edited-message: string # **Optional** Set the value of this field to `true` to include edited and deleted messages in the response.
-]: nothing -> record<date: string, messages: table<date_time: string, id: string, message: string, reply_main_message_id: string, reply_main_message_timestamp: int, sender: string, status: string, timestamp: int>, next_page_token: string, page_size: int> {
+]: nothing -> oneof<record<date: string, messages: table<date_time: string, id: string, message: string, reply_main_message_id: string, reply_main_message_timestamp: int, sender: string, status: string, timestamp: int>, next_page_token: string, page_size: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -2841,7 +2828,6 @@ export def "get-chat-messages" [
 #
 # POST /chat/users/{userId}/messages
 # operationId: sendaChatMessage
-# --at_items item shape: {at_contact?: string, at_type?: "1"|"2", end_position?: int, start_position?: int}
 export def "senda-chat-message" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2858,7 +2844,7 @@ export def "senda-chat-message" [
   message: string # The message to be sent.
   --to-channel: string # The Channel Id of the channel where you would like to send a message.
   --to-contact: string # The email address of the contact to whom you would like to send the message.
-]: any -> record<id: string> {
+]: any -> oneof<record<id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2986,7 +2972,7 @@ export def "search-company-contacts" [
   --query-presence-status: string # Set `query_presence_status` to `true` in order to include the presence status of a contact in the response.
   --page-size: int # The number of records to be returned with a single API call. (default: 1)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
-]: nothing -> record<contacts: table<dept: string, direct_numbers: list, email: string, extension_number: string, first_name: string, id: string, im_group_id: string, im_group_name: string, job_title: string, last_name: string, location: string, phone_number: string, presence_status: string, sip_phone_number: string>, next_page_token: string, page_size: int> {
+]: nothing -> oneof<record<contacts: table<dept: string, direct_numbers: list, email: string, extension_number: string, first_name: string, id: string, im_group_id: string, im_group_name: string, job_title: string, last_name: string, location: string, phone_number: string, presence_status: string, sip_phone_number: string>, next_page_token: string, page_size: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($search_key == null) { error make --unspanned { msg: "required query parameter 'search_key' missing: pass --search-key" } }
@@ -3023,7 +3009,7 @@ export def "groups" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<groups: table<id: string, name: string, total_members: int>, total_records: int> {
+]: nothing -> oneof<record<groups: table<id: string, name: string, total_members: int>, total_records: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/groups" $auth.query)
@@ -3059,7 +3045,7 @@ export def "group-create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --name: string # Group name.
-]: any -> record<id: string, name: string, total_members: int> {
+]: any -> oneof<record<id: string, name: string, total_members: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3134,7 +3120,7 @@ export def "group" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<id: string, name: string, total_members: int> {
+]: nothing -> oneof<record<id: string, name: string, total_members: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
@@ -3239,12 +3225,6 @@ export def "get-group-lock-settings" [
 #
 # PATCH /groups/{groupId}/lock_settings
 # operationId: groupLockedSettings
-# --email_notification shape: {alternative_host_reminder?: bool, cancel_meeting_reminder?: bool, cloud_recording_available_reminder?: bool, jbh_reminder?: bool, schedule_for_host_reminder?: bool}
-# --in_meeting shape: {alert_guest_join?: bool, allow_show_zoom_windows?: bool, annotation?: bool, attendee_on_hold?: bool, auto_answer?: bool, auto_saving_chat?: bool, breakout_room?: bool, chat?: bool, closed_caption?: bool, co_host?: bool, custom_data_center_regions?: bool, e2e_encryption?: bool, entry_exit_chime?: string, far_end_camera_control?: bool, feedback?: bool, file_transfer?: bool, group_hd?: bool, non_verbal_feedback?: bool, original_audio?: bool, polling?: bool, post_meeting_feedback?: bool, ... (13 more fields)}
-# --recording shape: {account_user_access_recording?: bool, auto_delete_cmr?: bool, auto_recording?: string, cloud_recording?: bool, cloud_recording_download?: bool, host_delete_cloud_recording?: bool, ip_address_access_control?: record, local_recording?: bool, recording_authentication?: string}
-# --schedule_meeting shape: {audio_type?: bool, embed_password_in_join_link?: bool, force_pmi_jbh_password?: bool, host_video?: bool, join_before_host?: bool, meeting_authentication?: bool, mute_upon_entry?: bool, participant_video?: bool, personal_meeting?: bool, pstn_password_protected?: bool, require_password_for_instant_meetings?: bool, require_password_for_pmi_meetings?: bool, require_password_for_scheduling_new_meetings?: bool, upcoming_meeting_reminder?: bool}
-# --telephony shape: {telephony_regions?: bool, third_party_audio?: bool}
-# --meeting_security shape: {auto_security?: bool, embed_password_in_join_link?: bool, encryption_type?: "enhanced_encryption"|"e2ee", end_to_end_encrypted_meetings?: bool, meeting_password?: bool, meeting_password_requirement?: record, phone_password?: bool, pmi_password?: bool, require_password_for_scheduled_meeting?: bool, require_password_for_scheduled_webinar?: bool, waiting_room?: bool, waiting_room_settings?: record, webinar_password?: bool}
 export def "group-locked-settings" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3309,7 +3289,7 @@ export def "group-members" [
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --page-number: int # **Deprecated** - This field has been deprecated and we will stop supporting it completely in a future release. Please use "next_page_token" for pagination instead of this field. The page number of the current page in the returned records. (default: 1)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
-]: nothing -> record<members: table<email: string, first_name: string, id: string, last_name: string, type: int>, next_page_token: string, page_count: int, page_number: int, page_size: int, total_records: int> {
+]: nothing -> oneof<record<members: table<email: string, first_name: string, id: string, last_name: string, type: int>, next_page_token: string, page_count: int, page_number: int, page_size: int, total_records: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
@@ -3335,7 +3315,6 @@ export def "group-members" [
 #
 # POST /groups/{groupId}/members
 # operationId: groupMembersCreate
-# --members item shape: {email?: string, id?: string}
 export def "group-members-create" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3349,7 +3328,7 @@ export def "group-members-create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --members: list # List of Group members — item shape: {email?: string, id?: string}
-]: any -> record<added_at: string, ids: string> {
+]: any -> oneof<record<added_at: string, ids: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3499,13 +3478,6 @@ export def "get-group-settings" [
 #
 # PATCH /groups/{groupId}/settings
 # operationId: updateGroupSettings
-# --email_notification shape: {alternative_host_reminder?: bool, cancel_meeting_reminder?: bool, cloud_recording_available_reminder?: bool, jbh_reminder?: bool, schedule_for_host_reminder?: bool}
-# --in_meeting shape: {alert_guest_join?: bool, allow_show_zoom_windows?: bool, annotation?: bool, attendee_on_hold?: bool, auto_answer?: bool, auto_saving_chat?: bool, breakout_room?: bool, chat?: bool, closed_caption?: bool, co_host?: bool, custom_data_center_regions?: bool, data_center_regions?: "EU"|"HK"|"AU"|"IN"|"TY"|"CN"|"US"|"CA", e2e_encryption?: bool, entry_exit_chime?: string, far_end_camera_control?: bool, feedback?: bool, file_transfer?: bool, group_hd?: bool, non_verbal_feedback?: bool, ... (21 more fields)}
-# --profile shape: {recording_storage_location?: record}
-# --recording shape: {account_user_access_recording?: bool, archive?: record, auto_recording?: string, cloud_recording?: bool, cloud_recording_download?: bool, cloud_recording_download_host?: bool, host_delete_cloud_recording?: bool, ip_address_access_control?: record, local_recording?: bool, prevent_host_access_recording?: bool, record_audio_file?: bool, record_gallery_view?: bool, record_speaker_view?: bool, recording_audio_transcript?: bool, save_chat_text?: bool, show_timestamp?: bool}
-# --schedule_meeting shape: {audio_type?: string, embed_password_in_join_link?: bool, force_pmi_jbh_password?: bool, host_video?: bool, join_before_host?: bool, mute_upon_entry?: bool, participant_video?: bool, pstn_password_protected?: bool, require_password_for_all_meetings?: bool, require_password_for_instant_meetings?: bool, require_password_for_pmi_meetings?: "all"|"jbh_only"|"none", require_password_for_scheduled_meetings?: bool, require_password_for_scheduling_new_meetings?: bool, upcoming_meeting_reminder?: bool}
-# --telephony shape: {audio_conference_info?: string, third_party_audio?: bool}
-# --meeting_security shape: {auto_security?: bool, embed_password_in_join_link?: bool, encryption_type?: "enhanced_encryption"|"e2ee", end_to_end_encrypted_meetings?: bool, meeting_password?: bool, meeting_password_requirement?: record, phone_password?: bool, pmi_password?: bool, require_password_for_scheduled_meeting?: bool, require_password_for_scheduled_webinar?: bool, waiting_room?: bool, waiting_room_settings?: record, webinar_password?: bool}
 export def "update-group-settings" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3608,7 +3580,7 @@ export def "upload-group-vb" [
   --accept: string@accept-completer # Response content type
   --file-ids: string # Provide the id of the file that is to be deleted. To delete multiple files, provide comma separated values for this field.
   --file: string # Provide the file's path here.
-]: any -> record<id: string, is_default: bool, name: string, size: string, type: string> {
+]: any -> oneof<record<id: string, is_default: bool, name: string, size: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3653,7 +3625,7 @@ export def "device-list" [
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --page-number: int # **Deprecated** - This field has been deprecated and we will stop supporting it completely in a future release. Please use "next_page_token" for pagination instead of this field. The page number of the current page in the returned records. (default: 1)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
-]: nothing -> record<next_page_token: string, page_count: int, page_number: int, page_size: int, total_records: int, devices: table<id: string, encryption: string, ip: string, name: string, protocol: string>> {
+]: nothing -> oneof<record<next_page_token: string, page_count: int, page_number: int, page_size: int, total_records: int, devices: table<id: string, encryption: string, ip: string, name: string, protocol: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page_number" $page_number "scalar") (serialize-qp "next_page_token" $next_page_token "scalar")] | flatten | str join "&"
@@ -3693,7 +3665,7 @@ export def "device-create" [
   ip: string # Device IP.
   name: string # Device name.
   protocol: string@protocol-completer # Device protocol:`H.323` - H.323.`SIP` - SIP.
-]: any -> record<id: string, encryption: string, ip: string, name: string, protocol: string> {
+]: any -> oneof<record<id: string, encryption: string, ip: string, name: string, protocol: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3858,7 +3830,7 @@ export def "delete-a-chatbot-message" [
   account_id: string # The AccountID of the Zoom account to which the message was sent. Retrieve this from the Chatbot request sent to your server as shown in the example [here]( https://marketplace.zoom.us/docs/guides/chatbots/sending-messages).
   robot_jid: string # The BotJID found in the Chat Subscription Section on the Features page of your App Dashboard.
   --user-jid: string # The UserJID of the user on whose behalf the message is being sent. Used to prevent members of a channel from getting notifications that were set up by a user who has left the channel.
-]: any -> record<message_id: string, robot_jid: string, sent_time: string, to_jid: string, user_jid: string> {
+]: any -> oneof<record<message_id: string, robot_jid: string, sent_time: string, to_jid: string, user_jid: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3903,7 +3875,7 @@ export def "edit-chatbot-message" [
   --is-markdown-support: oneof<nothing, bool> # **Optional** Enable or disable markdown parser to your chatbot message. Applies the markdown parser to your chatbot message if the value of this field is set to `true`. To learn more, refer to the Chatbot message [markdown reference](https://marketplace.zoom.us/docs/guides/chatbots/customizing-messages/message-with-markdown).
   robot_jid: string # Robot JID created when enabling chatbot features on your marketplace app.
   --user-jid: string # **Optional** The UserJID of the user on whose behalf the message is being sent. Use this field to prevent members of a channel from getting notifications that were set up by a user who has left the channel.
-]: any -> record<message_id: string, robot_jid: string, sent_time: string, to_jid: string, user_jid: string> {
+]: any -> oneof<record<message_id: string, robot_jid: string, sent_time: string, to_jid: string, user_jid: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3948,7 +3920,7 @@ export def "im-chat-sessions" [
   --to: string # End date. (required, format: date)
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
-]: nothing -> record<from: string, to: string, next_page_token: string, page_size: int, sessions: table<last_message_sent_time: string, name: string, session_id: string, type: string>> {
+]: nothing -> oneof<record<from: string, to: string, next_page_token: string, page_size: int, sessions: table<last_message_sent_time: string, name: string, session_id: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($from == null) { error make --unspanned { msg: "required query parameter 'from' missing: pass --from" } }
@@ -3993,7 +3965,7 @@ export def "im-chat-messages" [
   --to: string # End date. (required, format: date)
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
-]: nothing -> record<from: string, session_id: string, to: string, next_page_token: string, page_size: int, messages: table<action: string, action_time: string, date_time: string, message: string, sender: string>> {
+]: nothing -> oneof<record<from: string, session_id: string, to: string, next_page_token: string, page_size: int, messages: table<action: string, action_time: string, date_time: string, message: string, sender: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($session_id | is-empty) { error make --unspanned { msg: "path parameter 'sessionId' must be non-empty" } }
@@ -4032,7 +4004,7 @@ export def "im-groups" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<total_records: int, groups: table<id: string, name: string, total_members: int, search_by_account: bool, search_by_domain: bool, search_by_ma_account: bool, type: string>> {
+]: nothing -> oneof<record<total_records: int, groups: table<id: string, name: string, total_members: int, search_by_account: bool, search_by_domain: bool, search_by_ma_account: bool, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/im/groups" $auth.query)
@@ -4072,7 +4044,7 @@ export def "im-group-create" [
   --search-by-domain: oneof<nothing, bool> # Members can search for others in the same email domain.
   --search-by-ma-account: oneof<nothing, bool> # Members can search for others under same master account, including all sub accounts.
   --type: string@type-completer-1 # IM Group types:`normal` - Only members can see automatically see the other members of this group. Other people can search for members within this group. `shared` - Everyone under an account can see the group members automatically.`restricted` - Nobody can see the group or search for members except the members in the group. (default: normal)
-]: any -> record<id: string, name: string, search_by_account: bool, search_by_domain: bool, search_by_ma_account: bool, total_members: int> {
+]: any -> oneof<record<id: string, name: string, search_by_account: bool, search_by_domain: bool, search_by_ma_account: bool, total_members: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4147,7 +4119,7 @@ export def "im-group" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<id: string, name: string, total_members: int, search_by_account: bool, search_by_domain: bool, search_by_ma_account: bool, type: string> {
+]: nothing -> oneof<record<id: string, name: string, total_members: int, search_by_account: bool, search_by_domain: bool, search_by_ma_account: bool, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
@@ -4231,7 +4203,7 @@ export def "im-group-members" [
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --page-number: int # **Deprecated** - This field has been deprecated and we will stop supporting it completely in a future release. Please use "next_page_token" for pagination instead of this field. The page number of the current page in the returned records. (default: 1)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
-]: nothing -> record<next_page_token: string, page_count: int, page_number: int, page_size: int, total_records: int, members: table<email: string, first_name: string, id: string, last_name: string, type: int>> {
+]: nothing -> oneof<record<next_page_token: string, page_count: int, page_number: int, page_size: int, total_records: int, members: table<email: string, first_name: string, id: string, last_name: string, type: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
@@ -4257,7 +4229,6 @@ export def "im-group-members" [
 #
 # POST /im/groups/{groupId}/members
 # operationId: imGroupMembersCreate
-# --members item shape: {email?: string, id?: string}
 export def "im-group-members-create" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4271,7 +4242,7 @@ export def "im-group-members-create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --members: list # List of IM group members. — item shape: {email?: string, id?: string}
-]: any -> record<added_at: string, ids: string> {
+]: any -> oneof<record<added_at: string, ids: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4352,7 +4323,7 @@ export def "sendimmessages" [
   --accept: string@accept-completer # Response content type
   --chat-user: string # The email address (registered with Zoom) or the userId of the chat user.
   --message: string # IM message content.
-]: any -> record<id: string> {
+]: any -> oneof<record<id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4399,7 +4370,7 @@ export def "listimmessages" [
   --date: string # IM message's query date time, format as yyyy-MM-dd.
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
-]: nothing -> record<date: string, messages: table<date_time: string, id: string, message: string, sender: string, timstamp: int>, next_page_token: string, page_size: int> {
+]: nothing -> oneof<record<date: string, messages: table<date_time: string, id: string, message: string, sender: string, timstamp: int>, next_page_token: string, page_size: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -4520,7 +4491,7 @@ export def "meeting" [
   --accept: string@accept-completer # Response content type
   --occurrence-id: string # Meeting Occurrence ID. Provide this field to view meeting details of a particular occurrence of the [recurring meeting](https://support.zoom.us/hc/en-us/articles/214973206-Scheduling-Recurring-Meetings).
   --show-previous-occurrences: oneof<nothing, bool> # Set the value of this field to `true` if you would like to view meeting details of all previous occurrences of a [recurring meeting](https://support.zoom.us/hc/en-us/articles/214973206-Scheduling-Recurring-Meetings).
-]: nothing -> record<assistant_id: string, host_email: string, host_id: string, id: int, uuid: string, agenda: string, created_at: string, duration: int, encrypted_password: string, h323_password: string, join_url: string, occurrences: table<duration: int, occurrence_id: string, start_time: string, status: string>, password: string, pmi: int, recurrence: record<end_date_time: string, end_times: int, monthly_day: int, monthly_week: int, monthly_week_day: int, repeat_interval: int, type: int, weekly_days: string>, settings: record<allow_multiple_devices: bool, alternative_hosts: string, alternative_hosts_email_notification: bool, approval_type: int, approved_or_denied_countries_or_regions: record<approved_list: list, denied_list: list, enable: bool, method: string>, audio: string, authentication_domains: string, authentication_exception: list<record>, authentication_name: string, authentication_option: string, auto_recording: string, breakout_room: record<enable: bool, rooms: list>, close_registration: bool, cn_meeting: bool, contact_email: string, contact_name: string, custom_keys: list<record>, encryption_type: string, enforce_login: bool, enforce_login_domains: string, global_dial_in_countries: list<string>, global_dial_in_numbers: list<record>, host_video: bool, in_meeting: bool, jbh_time: int, join_before_host: bool, language_interpretation: record<enable: bool, interpreters: list>, meeting_authentication: bool, mute_upon_entry: bool, participant_video: bool, registrants_confirmation_email: bool, registrants_email_notification: bool, registration_type: int, show_share_button: bool, use_pmi: bool, waiting_room: bool, watermark: bool>, start_time: string, start_url: string, status: string, timezone: string, topic: string, tracking_fields: table<field: string, value: string, visible: bool>, type: int> {
+]: nothing -> oneof<record<assistant_id: string, host_email: string, host_id: string, id: int, uuid: string, agenda: string, created_at: string, duration: int, encrypted_password: string, h323_password: string, join_url: string, occurrences: table<duration: int, occurrence_id: string, start_time: string, status: string>, password: string, pmi: int, recurrence: record<end_date_time: string, end_times: int, monthly_day: int, monthly_week: int, monthly_week_day: int, repeat_interval: int, type: int, weekly_days: string>, settings: record<allow_multiple_devices: bool, alternative_hosts: string, alternative_hosts_email_notification: bool, approval_type: int, approved_or_denied_countries_or_regions: record<approved_list: list, denied_list: list, enable: bool, method: string>, audio: string, authentication_domains: string, authentication_exception: list<record>, authentication_name: string, authentication_option: string, auto_recording: string, breakout_room: record<enable: bool, rooms: list>, close_registration: bool, cn_meeting: bool, contact_email: string, contact_name: string, custom_keys: list<record>, encryption_type: string, enforce_login: bool, enforce_login_domains: string, global_dial_in_countries: list<string>, global_dial_in_numbers: list<record>, host_video: bool, in_meeting: bool, jbh_time: int, join_before_host: bool, language_interpretation: record<enable: bool, interpreters: list>, meeting_authentication: bool, mute_upon_entry: bool, participant_video: bool, registrants_confirmation_email: bool, registrants_email_notification: bool, registration_type: int, show_share_button: bool, use_pmi: bool, waiting_room: bool, watermark: bool>, start_time: string, start_url: string, status: string, timezone: string, topic: string, tracking_fields: table<field: string, value: string, visible: bool>, type: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($meeting_id | is-empty) { error make --unspanned { msg: "path parameter 'meetingId' must be non-empty" } }
@@ -4559,6 +4530,17 @@ export def "meeting-update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --occurrence-id: string # Meeting occurrence id. Support change of agenda, start_time, duration, settings: {host_video, participant_video, join_before_host, mute_upon_entry, waiting_room, watermark, auto_recording}
   --schedule-for: string # Email or userId if you want to schedule meeting for another user.
+  --agenda: string # Meeting description.
+  --duration: int # Meeting duration (minutes). Used for scheduled meetings only.
+  --password: string # Meeting passcode. Passcode may only contain the following characters: [a-z A-Z 0-9 @ - _ *] and can have a maximum of 10 characters. **Note:** If the account owner or the admin has configured [minimum passcode requirement settings](https://support.zoom.us/hc/en-us/articles/360033559832-Meeting-and-webinar-passwords#h_a427384b-e383-4f80-864d-794bf0a37604), the passcode value provided here must meet those requirements. If the requirements are enabled, you can view those requirements by calling either the [Get User Settings API](https://marketplace.zoom.us/docs/api-reference/zoom-api/users/usersettings) or the [Get Account Settings](https://marketplace.zoom.us/docs/api-reference/zoom-api/accounts/accountsettings) API.
+  --recurrence: record # Recurrence object. Use this object only for a meeting with type `8` i.e., a recurring meeting with fixed time. — shape: {end_date_time?: string, end_times?: int, monthly_day?: int, monthly_week?: "-1"|"1"|"2"|"3"|"4", monthly_week_day?: "1"|"2"|"3"|"4"|"5"|"6"|"7", repeat_interval?: int, type: "1"|"2"|"3", weekly_days?: "1"|"2"|"3"|"4"|"5"|"6"|"7"}
+  --settings: record # Meeting settings. — shape: {allow_multiple_devices?: bool, alternative_hosts?: string, alternative_hosts_email_notification?: bool, approval_type?: "0"|"1"|"2", approved_or_denied_countries_or_regions?: record, audio?: "both"|"telephony"|"voip", authentication_domains?: string, authentication_exception?: list, authentication_name?: string, authentication_option?: string, auto_recording?: "local"|"cloud"|"none", breakout_room?: record, close_registration?: bool, cn_meeting?: bool, contact_email?: string, ... (22 more fields)}
+  --start-time: string # Meeting start time. When using a format like "yyyy-MM-dd'T'HH:mm:ss'Z'", always use GMT time. When using a format like "yyyy-MM-dd'T'HH:mm:ss", you should use local time and specify the time zone. Only used for scheduled meetings and recurring meetings with a fixed time. (format: date-time)
+  --template-id: string # Unique identifier of the meeting template. Use this field if you would like to [schedule the meeting from a meeting template](https://support.zoom.us/hc/en-us/articles/360036559151-Meeting-templates#h_86f06cff-0852-4998-81c5-c83663c176fb). You can retrieve the value of this field by calling the [List meeting templates]() API.
+  --timezone: string # Time zone to format start_time. For example, "America/Los_Angeles". For scheduled meetings only. Please reference our [time zone](#timezones) list for supported time zones and their formats.
+  --topic: string # Meeting topic.
+  --tracking-fields: list # Tracking fields — item shape: {field?: string, value?: string}
+  --type: int@type-completer-2 # Meeting Types:`1` - Instant meeting.`2` - Scheduled meeting.`3` - Recurring meeting with no fixed time.`8` - Recurring meeting with a fixed time. (default: 2)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4566,7 +4548,7 @@ export def "meeting-update" [
   if ($meeting_id | is-empty) { error make --unspanned { msg: "path parameter 'meetingId' must be non-empty" } }
   let qp = [(serialize-qp "occurrence_id" $occurrence_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/meetings/{meeting_id}") $qp $auth.query)
-  let req_body = {"schedule_for": $schedule_for} | compact
+  let req_body = {"schedule_for": $schedule_for, "agenda": $agenda, "duration": $duration, "password": $password, "recurrence": $recurrence, "settings": $settings, "start_time": $start_time, "template_id": $template_id, "timezone": $timezone, "topic": $topic, "tracking_fields": $tracking_fields, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4588,7 +4570,6 @@ export def "meeting-update" [
 #
 # POST /meetings/{meetingId}/batch_polls
 # operationId: createBatchPolls
-# --questions item shape: {answers?: list<string>, name?: string, type?: "single"|"multiple"}
 export def "create-batch-polls" [
   meeting_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4603,7 +4584,7 @@ export def "create-batch-polls" [
   --accept: string@accept-completer # Response content type
   --questions: list # item shape: {answers?: list<string>, name?: string, type?: "single"|"multiple"}
   --title: string # Meeting Poll Title.
-]: any -> record<polls: table<id: string, questions: list, status: string, title: string>> {
+]: any -> oneof<record<polls: table<id: string, questions: list, status: string, title: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4643,7 +4624,7 @@ export def "meeting-invitation" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<invitation: string> {
+]: nothing -> oneof<record<invitation: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($meeting_id | is-empty) { error make --unspanned { msg: "path parameter 'meetingId' must be non-empty" } }
@@ -4680,7 +4661,7 @@ export def "get-live-stream-details" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<page_url: string, stream_key: string, stream_url: string> {
+]: nothing -> oneof<record<page_url: string, stream_key: string, stream_url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($meeting_id | is-empty) { error make --unspanned { msg: "path parameter 'meetingId' must be non-empty" } }
@@ -4747,7 +4728,6 @@ export def "meeting-live-stream-update" [
 #
 # PATCH /meetings/{meetingId}/livestream/status
 # operationId: meetingLiveStreamStatusUpdate
-# --settings shape: {active_speaker_name?: bool, display_name?: string}
 export def "meeting-live-stream-status-update" [
   meeting_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4801,7 +4781,7 @@ export def "meeting-polls" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<polls: table<id: string, status: string, questions: list, title: string>, total_records: int> {
+]: nothing -> oneof<record<polls: table<id: string, status: string, questions: list, title: string>, total_records: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($meeting_id | is-empty) { error make --unspanned { msg: "path parameter 'meetingId' must be non-empty" } }
@@ -4826,7 +4806,6 @@ export def "meeting-polls" [
 #
 # POST /meetings/{meetingId}/polls
 # operationId: meetingPollCreate
-# --questions item shape: {answers?: list<string>, name?: string, type?: "single"|"multiple"}
 export def "meeting-poll-create" [
   meeting_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4841,7 +4820,7 @@ export def "meeting-poll-create" [
   --accept: string@accept-completer # Response content type
   --questions: list # Array of Polls — item shape: {answers?: list<string>, name?: string, type?: "single"|"multiple"}
   --title: string # Title for the poll.
-]: any -> record<id: string, status: string, questions: table<answers: list, name: string, type: string>, title: string> {
+]: any -> oneof<record<id: string, status: string, questions: table<answers: list, name: string, type: string>, title: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4920,7 +4899,7 @@ export def "meeting-poll-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<id: string, status: string, questions: table<answers: list, name: string, type: string>, title: string> {
+]: nothing -> oneof<record<id: string, status: string, questions: table<answers: list, name: string, type: string>, title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($meeting_id | is-empty) { error make --unspanned { msg: "path parameter 'meetingId' must be non-empty" } }
@@ -4946,7 +4925,6 @@ export def "meeting-poll-get" [
 #
 # PUT /meetings/{meetingId}/polls/{pollId}
 # operationId: meetingPollUpdate
-# --questions item shape: {answers?: list<string>, name?: string, type?: "single"|"multiple"}
 export def "meeting-poll-update" [
   meeting_id: int
   poll_id: string
@@ -5042,7 +5020,7 @@ export def "recording-get" [
   --accept: string@accept-completer # Response content type
   --include-fields: string # Get the `download_access_token` field for downloading meeting recordings.
   --ttl: int # Time to live (TTL) of the `download_access_token`. This is only valid if the `include_fields` query parameter contains `download_access_token`. The range is between 0-604800.
-]: nothing -> record<account_id: string, duration: int, host_id: string, id: string, recording_count: string, start_time: string, topic: string, total_size: string, type: string, uuid: string, recording_files: table<deleted_time: string, download_url: string, file_size: float, file_type: string, id: string, meeting_id: string, play_url: string, recording_end: string, recording_start: string, recording_type: string, status: string>, download_access_token: string> {
+]: nothing -> oneof<record<account_id: string, duration: int, host_id: string, id: string, recording_count: string, start_time: string, topic: string, total_size: string, type: string, uuid: string, recording_files: table<deleted_time: string, download_url: string, file_size: float, file_type: string, id: string, meeting_id: string, play_url: string, recording_end: string, recording_start: string, recording_type: string, status: string>, download_access_token: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($meeting_id | is-empty) { error make --unspanned { msg: "path parameter 'meetingId' must be non-empty" } }
@@ -5084,7 +5062,7 @@ export def "meeting-recording-registrants" [
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --page-number: int # **Deprecated** - This field has been deprecated and we will stop supporting it completely in a future release. Please use "next_page_token" for pagination instead of this field. The page number of the current page in the returned records. (default: 1)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
-]: nothing -> record<next_page_token: string, page_count: int, page_number: int, page_size: int, total_records: int, registrants: table<id: string, address: string, city: string, comments: string, country: string, custom_questions: list, email: string, first_name: string, industry: string, job_title: string, last_name: string, no_of_employees: string, org: string, phone: string, purchasing_time_frame: string, role_in_purchase_process: string, state: string, zip: string>> {
+]: nothing -> oneof<record<next_page_token: string, page_count: int, page_number: int, page_size: int, total_records: int, registrants: table<id: string, address: string, city: string, comments: string, country: string, custom_questions: list, email: string, first_name: string, industry: string, job_title: string, last_name: string, no_of_employees: string, org: string, phone: string, purchasing_time_frame: string, role_in_purchase_process: string, state: string, zip: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($meeting_id | is-empty) { error make --unspanned { msg: "path parameter 'meetingId' must be non-empty" } }
@@ -5110,7 +5088,6 @@ export def "meeting-recording-registrants" [
 #
 # POST /meetings/{meetingId}/recordings/registrants
 # operationId: meetingRecordingRegistrantCreate
-# --custom_questions item shape: {title?: string, value?: string}
 export def "meeting-recording-registrant-create" [
   meeting_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5140,7 +5117,7 @@ export def "meeting-recording-registrant-create" [
   --role-in-purchase-process: string # Role in Purchase Process:`Decision Maker``Evaluator/Recommender``Influencer``Not involved`
   --state: string # Registrant's State/Province.
   --zip: string # Registrant's Zip/Postal Code.
-]: any -> record<id: int, registrant_id: string, share_url: string, topic: string> {
+]: any -> oneof<record<id: int, registrant_id: string, share_url: string, topic: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5180,7 +5157,7 @@ export def "recording-registrants-questions-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<custom_questions: table<answers: list, required: bool, title: string, type: string>, questions: table<field_name: string, required: bool>> {
+]: nothing -> oneof<record<custom_questions: table<answers: list, required: bool, title: string, type: string>, questions: table<field_name: string, required: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($meeting_id | is-empty) { error make --unspanned { msg: "path parameter 'meetingId' must be non-empty" } }
@@ -5205,8 +5182,6 @@ export def "recording-registrants-questions-get" [
 #
 # PATCH /meetings/{meetingId}/recordings/registrants/questions
 # operationId: recordingRegistrantQuestionUpdate
-# --custom_questions item shape: {answers?: list<string>, required?: bool, title?: string, type?: "short"|"single"|"multiple"}
-# --questions item shape: {field_name?: "last_name"|"address"|"city"|"country"|"zip"|"state"|"phone"|"industry"|"org"|"job_title"|"purchasing_time_frame"|"role_in_purchase_process"|"no_of_employees"|"comments", required?: bool}
 export def "recording-registrant-question-update" [
   meeting_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5248,7 +5223,6 @@ export def "recording-registrant-question-update" [
 #
 # PUT /meetings/{meetingId}/recordings/registrants/status
 # operationId: meetingRecordingRegistrantStatus
-# --registrants item shape: {id?: string}
 export def "meeting-recording-registrant-status" [
   meeting_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5302,7 +5276,7 @@ export def "recording-setting-update" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<approval_type: int, authentication_domains: string, authentication_option: string, on_demand: bool, password: string, recording_authentication: bool, send_email_to_host: bool, share_recording: string, show_social_share_buttons: bool, topic: string, viewer_download: bool> {
+]: nothing -> oneof<record<approval_type: int, authentication_domains: string, authentication_option: string, on_demand: bool, password: string, recording_authentication: bool, send_email_to_host: bool, share_recording: string, show_social_share_buttons: bool, topic: string, viewer_download: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($meeting_id | is-empty) { error make --unspanned { msg: "path parameter 'meetingId' must be non-empty" } }
@@ -5516,7 +5490,7 @@ export def "meeting-registrants" [
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --page-number: int # **Deprecated** - This field has been deprecated and we will stop supporting it completely in a future release. Please use "next_page_token" for pagination instead of this field. The page number of the current page in the returned records. (default: 1)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
-]: nothing -> record<next_page_token: string, page_count: int, page_number: int, page_size: int, total_records: int, registrants: table<id: string, address: string, city: string, comments: string, country: string, custom_questions: list, email: string, first_name: string, industry: string, job_title: string, last_name: string, no_of_employees: string, org: string, phone: string, purchasing_time_frame: string, role_in_purchase_process: string, state: string, zip: string, create_time: string, join_url: string, status: string>> {
+]: nothing -> oneof<record<next_page_token: string, page_count: int, page_number: int, page_size: int, total_records: int, registrants: table<id: string, address: string, city: string, comments: string, country: string, custom_questions: list, email: string, first_name: string, industry: string, job_title: string, last_name: string, no_of_employees: string, org: string, phone: string, purchasing_time_frame: string, role_in_purchase_process: string, state: string, zip: string, create_time: string, join_url: string, status: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($meeting_id | is-empty) { error make --unspanned { msg: "path parameter 'meetingId' must be non-empty" } }
@@ -5542,7 +5516,6 @@ export def "meeting-registrants" [
 #
 # POST /meetings/{meetingId}/registrants
 # operationId: meetingRegistrantCreate
-# --custom_questions item shape: {title?: string, value?: string}
 export def "meeting-registrant-create" [
   meeting_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5575,7 +5548,7 @@ export def "meeting-registrant-create" [
   --zip: string # Registrant's Zip/Postal Code.
   --language: string # Registrant's language preference for confirmation emails. The value can be one of the following: `en-US`,`de-DE`,`es-ES`,`fr-FR`,`jp-JP`,`pt-PT`,`ru-RU`,`zh-CN`, `zh-TW`, `ko-KO`, `it-IT`, `vi-VN`.
   --auto-approve: oneof<nothing, bool>
-]: any -> record<id: int, join_url: string, registrant_id: string, start_time: string, topic: string> {
+]: any -> oneof<record<id: int, join_url: string, registrant_id: string, start_time: string, topic: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5616,7 +5589,7 @@ export def "meeting-registrants-questions-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<custom_questions: table<answers: list, required: bool, title: string, type: string>, questions: table<field_name: string, required: bool>> {
+]: nothing -> oneof<record<custom_questions: table<answers: list, required: bool, title: string, type: string>, questions: table<field_name: string, required: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($meeting_id | is-empty) { error make --unspanned { msg: "path parameter 'meetingId' must be non-empty" } }
@@ -5641,8 +5614,6 @@ export def "meeting-registrants-questions-get" [
 #
 # PATCH /meetings/{meetingId}/registrants/questions
 # operationId: meetingRegistrantQuestionUpdate
-# --custom_questions item shape: {answers?: list<string>, required?: bool, title?: string, type?: "short"|"single"}
-# --questions item shape: {field_name?: "address"|"city"|"country"|"zip"|"state"|"phone"|"industry"|"org"|"job_title"|"purchasing_time_frame"|"role_in_purchase_process"|"no_of_employees"|"comments", required?: bool}
 export def "meeting-registrant-question-update" [
   meeting_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5684,7 +5655,6 @@ export def "meeting-registrant-question-update" [
 #
 # PUT /meetings/{meetingId}/registrants/status
 # operationId: meetingRegistrantStatus
-# --registrants item shape: {email?: string, id?: string}
 export def "meeting-registrant-status" [
   meeting_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5821,7 +5791,7 @@ export def "dashboard-client-feedback" [
   --accept: string@accept-completer # Response content type
   --from: string # Start date in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the report includes only one month worth of data at once. (required, format: date)
   --to: string # End date. (required, format: date)
-]: nothing -> record<client_feedbacks: table<feedback_id: string, feedback_name: string, participants_count: int>, from: string, to: string, total_records: int> {
+]: nothing -> oneof<record<client_feedbacks: table<feedback_id: string, feedback_name: string, participants_count: int>, from: string, to: string, total_records: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($from == null) { error make --unspanned { msg: "required query parameter 'from' missing: pass --from" } }
@@ -5864,7 +5834,7 @@ export def "dashboard-client-feedback-detail" [
   --to: string # format: date
   --page-size: int # default: 30
   --next-page-token: string
-]: nothing -> record<from: string, to: string, next_page_token: string, page_size: int, client_feedback_details: table<email: string, meeting_id: string, participant_name: string, time: string>> {
+]: nothing -> oneof<record<from: string, to: string, next_page_token: string, page_size: int, client_feedback_details: table<email: string, meeting_id: string, participant_name: string, time: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($feedback_id | is-empty) { error make --unspanned { msg: "path parameter 'feedbackId' must be non-empty" } }
@@ -5903,7 +5873,7 @@ export def "list-meeting-satisfaction" [
   --accept: string@accept-completer # Response content type
   --from: string # The start date for the query in “yyyy-mm-dd” format. (format: date)
   --to: string # The end date for the query in “yyyy-mm-dd” format. (format: date)
-]: nothing -> record<client_satisfaction: table<date: string, good_count: int, none_count: int, not_good_count: int, satisfaction_percent: int>, from: string, to: string, total_records: int> {
+]: nothing -> oneof<record<client_satisfaction: table<date: string, good_count: int, none_count: int, not_good_count: int, satisfaction_percent: int>, from: string, to: string, total_records: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar")] | flatten | str join "&"
@@ -5941,7 +5911,7 @@ export def "dashboard-crc" [
   --accept: string@accept-completer # Response content type
   --from: string # Start date in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the report includes only one month worth of data at once. (required, format: date)
   --to: string # End date. (required, format: date)
-]: nothing -> record<from: string, to: string, crc_ports_usage: table<crc_ports_hour_usage: list, date_time: string>> {
+]: nothing -> oneof<record<from: string, to: string, crc_ports_usage: table<crc_ports_hour_usage: list, date_time: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($from == null) { error make --unspanned { msg: "required query parameter 'from' missing: pass --from" } }
@@ -5983,7 +5953,7 @@ export def "dashboard-im" [
   --to: string # End date. (required, format: date)
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
-]: nothing -> record<from: string, to: string, next_page_token: string, page_count: int, page_size: int, total_records: int, users: table<calls_receive: int, calls_send: int, email: string, emoji_receive: int, emoji_send: int, files_receive: int, files_send: int, group_receive: int, group_send: int, images_receive: int, images_send: int, total_receive: int, total_send: int, user_id: string, user_name: string, videos_receive: int, videos_send: int, voice_receive: int, voice_send: int>> {
+]: nothing -> oneof<record<from: string, to: string, next_page_token: string, page_count: int, page_size: int, total_records: int, users: table<calls_receive: int, calls_send: int, email: string, emoji_receive: int, emoji_send: int, files_receive: int, files_send: int, group_receive: int, group_send: int, images_receive: int, images_send: int, total_receive: int, total_send: int, user_id: string, user_name: string, videos_receive: int, videos_send: int, voice_receive: int, voice_send: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($from == null) { error make --unspanned { msg: "required query parameter 'from' missing: pass --from" } }
@@ -6023,7 +5993,7 @@ export def "dashboard-issue-zoom-room" [
   --accept: string@accept-completer # Response content type
   --from: string # Start date in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the report includes only one month worth of data at once. (required, format: date)
   --to: string # End date. (required, format: date)
-]: nothing -> record<from: string, to: string, total_records: int, zoom_rooms: table<id: string, issues_count: int, room_name: string>> {
+]: nothing -> oneof<record<from: string, to: string, total_records: int, zoom_rooms: table<id: string, issues_count: int, room_name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($from == null) { error make --unspanned { msg: "required query parameter 'from' missing: pass --from" } }
@@ -6066,7 +6036,7 @@ export def "dashboard-issue-detail-zoom-room" [
   --to: string # End date. (required, format: date)
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
-]: nothing -> record<from: string, to: string, next_page_token: string, page_count: int, page_size: int, total_records: int, issue_details: table<issue: string, time: string>> {
+]: nothing -> oneof<record<from: string, to: string, next_page_token: string, page_count: int, page_size: int, total_records: int, issue_details: table<issue: string, time: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($zoomroom_id | is-empty) { error make --unspanned { msg: "path parameter 'zoomroomId' must be non-empty" } }
@@ -6105,13 +6075,13 @@ export def "dashboard-meetings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --type: string@type-completer-2 # Specify a value to get the response for the corresponding meeting type. The value of this field can be one of the following: `past` - Meeting that already occurred in the specified date range.`pastOne` - Past meetings that were attended by only one user. `live` - Live meetings. If you do not provide this field, the default value will be `live` and thus, the API will only query responses for live meetings. (default: live)
+  --type: string@type-completer-3 # Specify a value to get the response for the corresponding meeting type. The value of this field can be one of the following: `past` - Meeting that already occurred in the specified date range.`pastOne` - Past meetings that were attended by only one user. `live` - Live meetings. If you do not provide this field, the default value will be `live` and thus, the API will only query responses for live meetings. (default: live)
   --from: string # Start date in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the report includes only one month worth of data at once. (required, format: date)
   --to: string # End date. (required, format: date)
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
   --include-fields: string@include-fields-completer # Set the value of this field to "tracking_fields" if you would like to include tracking fields of each meeting in the response.
-]: nothing -> record<from: string, to: string, next_page_token: string, page_count: int, page_size: int, total_records: int, meetings: table<custom_keys: list, dept: string, duration: string, email: string, end_time: string, has_3rd_party_audio: bool, has_pstn: bool, has_recording: bool, has_screen_share: bool, has_sip: bool, has_video: bool, has_voip: bool, host: string, id: int, in_room_participants: int, participants: int, start_time: string, topic: string, tracking_fields: list, user_type: string, uuid: string>> {
+]: nothing -> oneof<record<from: string, to: string, next_page_token: string, page_count: int, page_size: int, total_records: int, meetings: table<custom_keys: list, dept: string, duration: string, email: string, end_time: string, has_3rd_party_audio: bool, has_pstn: bool, has_recording: bool, has_screen_share: bool, has_sip: bool, has_video: bool, has_voip: bool, host: string, id: int, in_room_participants: int, participants: int, start_time: string, topic: string, tracking_fields: list, user_type: string, uuid: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($from == null) { error make --unspanned { msg: "required query parameter 'from' missing: pass --from" } }
@@ -6150,8 +6120,8 @@ export def "dashboard-meeting-detail" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --type: string@type-completer-2 # The meeting types: `past` - Past meetings.`pastOne` - Past one user meetings.`live` - Live meetings. (default: live)
-]: nothing -> record<custom_keys: table<key: string, value: string>, dept: string, duration: string, email: string, end_time: string, has_3rd_party_audio: bool, has_pstn: bool, has_recording: bool, has_screen_share: bool, has_sip: bool, has_video: bool, has_voip: bool, host: string, id: int, in_room_participants: int, participants: int, start_time: string, topic: string, user_type: string, uuid: string> {
+  --type: string@type-completer-3 # The meeting types: `past` - Past meetings.`pastOne` - Past one user meetings.`live` - Live meetings. (default: live)
+]: nothing -> oneof<record<custom_keys: table<key: string, value: string>, dept: string, duration: string, email: string, end_time: string, has_3rd_party_audio: bool, has_pstn: bool, has_recording: bool, has_screen_share: bool, has_sip: bool, has_video: bool, has_voip: bool, host: string, id: int, in_room_participants: int, participants: int, start_time: string, topic: string, user_type: string, uuid: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($meeting_id | is-empty) { error make --unspanned { msg: "path parameter 'meetingId' must be non-empty" } }
@@ -6189,11 +6159,11 @@ export def "dashboard-meeting-participants" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --type: string@type-completer-2 # The meeting types: `past` - Past meetings.`pastOne` - Past one user meetings.`live` - Live meetings. (default: live)
+  --type: string@type-completer-3 # The meeting types: `past` - Past meetings.`pastOne` - Past one user meetings.`live` - Live meetings. (default: live)
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
   --include-fields: string@include-fields-completer-1 # Provide `registrant_id` as the value for this field if you would like to see the registrant ID attribute in the response of this API call. A registrant ID is a unique identifier of a [meeting registrant](https://marketplace.zoom.us/docs/api-reference/zoom-api/meetings/meetingregistrants). This is not supported for `live` meeting types.
-]: nothing -> record<next_page_token: string, page_count: int, page_size: int, total_records: int, participants: table<audio_quality: string, camera: string, connection_type: string, customer_key: string, data_center: string, device: string, domain: string, email: string, harddisk_id: string, id: string, in_room_participants: int, ip_address: string, join_time: string, leave_reason: string, leave_time: string, location: string, mac_addr: string, microphone: string, network_type: string, pc_name: string, recording: bool, registrant_id: string, screen_share_quality: string, share_application: bool, share_desktop: bool, share_whiteboard: bool, speaker: string, status: string, user_id: string, user_name: string, version: string, video_quality: string>> {
+]: nothing -> oneof<record<next_page_token: string, page_count: int, page_size: int, total_records: int, participants: table<audio_quality: string, camera: string, connection_type: string, customer_key: string, data_center: string, device: string, domain: string, email: string, harddisk_id: string, id: string, in_room_participants: int, ip_address: string, join_time: string, leave_reason: string, leave_time: string, location: string, mac_addr: string, microphone: string, network_type: string, pc_name: string, recording: bool, registrant_id: string, screen_share_quality: string, share_application: bool, share_desktop: bool, share_whiteboard: bool, speaker: string, status: string, user_id: string, user_name: string, version: string, video_quality: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($meeting_id | is-empty) { error make --unspanned { msg: "path parameter 'meetingId' must be non-empty" } }
@@ -6231,10 +6201,10 @@ export def "dashboard-meeting-participants-qos" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --type: string@type-completer-2 # The meeting types: `past` - Past meetings.`live` - Live Meetings. (default: live)
+  --type: string@type-completer-3 # The meeting types: `past` - Past meetings.`live` - Live Meetings. (default: live)
   --page-size: int # The number of items returned per page. (default: 1)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
-]: nothing -> record<next_page_token: string, page_count: int, page_size: int, total_records: int, participants: table<device: string, domain: string, harddisk_id: string, ip_address: string, join_time: string, leave_time: string, location: string, mac_addr: string, pc_name: string, user_id: string, user_name: string, user_qos: list, version: string>> {
+]: nothing -> oneof<record<next_page_token: string, page_count: int, page_size: int, total_records: int, participants: table<device: string, domain: string, harddisk_id: string, ip_address: string, join_time: string, leave_time: string, location: string, mac_addr: string, pc_name: string, user_id: string, user_name: string, user_qos: list, version: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($meeting_id | is-empty) { error make --unspanned { msg: "path parameter 'meetingId' must be non-empty" } }
@@ -6272,10 +6242,10 @@ export def "participant-feedback" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --type: string@type-completer-2 # Specify a value to get the response for the corresponding meeting type. The value of this field can be one of the following: `past` - Meeting that already occurred in the specified date range.`pastOne` - Past meetings that were attended by only one user. `live` - Live meetings. If you do not provide this field, the default value will be `live` and thus, the API will only query responses for live meetings. (default: live)
+  --type: string@type-completer-3 # Specify a value to get the response for the corresponding meeting type. The value of this field can be one of the following: `past` - Meeting that already occurred in the specified date range.`pastOne` - Past meetings that were attended by only one user. `live` - Live meetings. If you do not provide this field, the default value will be `live` and thus, the API will only query responses for live meetings. (default: live)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
   --page-size: int # The number of records returned within a single API call. (default: 30)
-]: nothing -> record<next_page_token: string, page_size: int, participants: table<date_time: string, email: string, quality: string, user_id: string>> {
+]: nothing -> oneof<record<next_page_token: string, page_size: int, participants: table<date_time: string, email: string, quality: string, user_id: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($meeting_id | is-empty) { error make --unspanned { msg: "path parameter 'meetingId' must be non-empty" } }
@@ -6313,10 +6283,10 @@ export def "dashboard-meeting-participant-share" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --type: string@type-completer-2 # The meeting types: `past` - Past meetings.`live` - Live Meetings. (default: live)
+  --type: string@type-completer-3 # The meeting types: `past` - Past meetings.`live` - Live Meetings. (default: live)
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceed the current page size. The expiration period for this token is 15 minutes.
-]: nothing -> record<next_page_token: string, page_count: int, page_size: int, total_records: int, participants: table<details: list, id: string, user_id: string, user_name: string>> {
+]: nothing -> oneof<record<next_page_token: string, page_count: int, page_size: int, total_records: int, participants: table<details: list, id: string, user_id: string, user_name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($meeting_id | is-empty) { error make --unspanned { msg: "path parameter 'meetingId' must be non-empty" } }
@@ -6355,8 +6325,8 @@ export def "dashboard-meeting-participant-qos" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --type: string@type-completer-2 # The meeting types: `past` - Past meetings.`live` - Live Meetings. (default: live)
-]: nothing -> record<device: string, domain: string, harddisk_id: string, ip_address: string, join_time: string, leave_time: string, location: string, mac_addr: string, pc_name: string, user_id: string, user_name: string, user_qos: table<as_device_from_crc: record, as_device_to_crc: record, as_input: record, as_output: record, audio_device_from_crc: record, audio_device_to_crc: record, audio_input: record, audio_output: record, cpu_usage: record, date_time: string, video_device_from_crc: record, video_device_to_crc: record, video_input: record, video_output: record>, version: string> {
+  --type: string@type-completer-3 # The meeting types: `past` - Past meetings.`live` - Live Meetings. (default: live)
+]: nothing -> oneof<record<device: string, domain: string, harddisk_id: string, ip_address: string, join_time: string, leave_time: string, location: string, mac_addr: string, pc_name: string, user_id: string, user_name: string, user_qos: table<as_device_from_crc: record, as_device_to_crc: record, as_input: record, as_output: record, audio_device_from_crc: record, audio_device_to_crc: record, audio_input: record, audio_output: record, cpu_usage: record, date_time: string, video_device_from_crc: record, video_device_to_crc: record, video_input: record, video_output: record>, version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($meeting_id | is-empty) { error make --unspanned { msg: "path parameter 'meetingId' must be non-empty" } }
@@ -6394,12 +6364,12 @@ export def "dashboard-webinars" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --type: string@type-completer-3 # The webinar type. (default: live)
+  --type: string@type-completer-4 # The webinar type. (default: live)
   --from: string # Start date in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the report includes only one month worth of data at once. (required, format: date)
   --to: string # End date. (required, format: date)
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
-]: nothing -> record<from: string, to: string, next_page_token: string, page_count: int, page_size: int, total_records: int, webinars: table<custom_keys: list, dept: string, duration: string, email: string, end_time: string, has_3rd_party_audio: bool, has_pstn: bool, has_recording: bool, has_screen_share: bool, has_sip: bool, has_video: bool, has_voip: bool, host: string, id: int, participants: int, start_time: string, topic: string, user_type: string, uuid: string>> {
+]: nothing -> oneof<record<from: string, to: string, next_page_token: string, page_count: int, page_size: int, total_records: int, webinars: table<custom_keys: list, dept: string, duration: string, email: string, end_time: string, has_3rd_party_audio: bool, has_pstn: bool, has_recording: bool, has_screen_share: bool, has_sip: bool, has_video: bool, has_voip: bool, host: string, id: int, participants: int, start_time: string, topic: string, user_type: string, uuid: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($from == null) { error make --unspanned { msg: "required query parameter 'from' missing: pass --from" } }
@@ -6438,8 +6408,8 @@ export def "dashboard-webinar-detail" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --type: string@type-completer-3 # The webinar type. (default: live)
-]: nothing -> record<custom_keys: table<key: string, value: string>, dept: string, duration: string, email: string, end_time: string, has_3rd_party_audio: bool, has_pstn: bool, has_recording: bool, has_screen_share: bool, has_sip: bool, has_video: bool, has_voip: bool, host: string, id: int, participants: int, start_time: string, topic: string, user_type: string, uuid: string> {
+  --type: string@type-completer-4 # The webinar type. (default: live)
+]: nothing -> oneof<record<custom_keys: table<key: string, value: string>, dept: string, duration: string, email: string, end_time: string, has_3rd_party_audio: bool, has_pstn: bool, has_recording: bool, has_screen_share: bool, has_sip: bool, has_video: bool, has_voip: bool, host: string, id: int, participants: int, start_time: string, topic: string, user_type: string, uuid: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($webinar_id | is-empty) { error make --unspanned { msg: "path parameter 'webinarId' must be non-empty" } }
@@ -6477,11 +6447,11 @@ export def "dashboard-webinar-participants" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --type: string@type-completer-3 # The webinar type. (default: live)
+  --type: string@type-completer-4 # The webinar type. (default: live)
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
   --include-fields: string@include-fields-completer-1 # Provide 'registrant_id' as the value for this field if you would like to see the registrant ID attribute in the response of this API call. A registrant ID is a unique identifier of a [webinar registrant](https://marketplace.zoom.us/docs/api-reference/zoom-api/webinars/webinarregistrants).
-]: nothing -> record<next_page_token: string, page_count: int, page_size: int, total_records: int, participants: table<audio_quality: string, connection_type: string, customer_key: string, data_center: string, device: string, domain: string, email: string, harddisk_id: string, id: string, ip_address: string, join_time: string, leave_reason: string, leave_time: string, location: string, mac_addr: string, microphone: string, network_type: string, pc_name: string, recording: bool, registrant_id: string, screen_share_quality: string, share_application: bool, share_desktop: bool, share_whiteboard: bool, speaker: string, user_id: string, user_name: string, version: string, video_quality: string>> {
+]: nothing -> oneof<record<next_page_token: string, page_count: int, page_size: int, total_records: int, participants: table<audio_quality: string, connection_type: string, customer_key: string, data_center: string, device: string, domain: string, email: string, harddisk_id: string, id: string, ip_address: string, join_time: string, leave_reason: string, leave_time: string, location: string, mac_addr: string, microphone: string, network_type: string, pc_name: string, recording: bool, registrant_id: string, screen_share_quality: string, share_application: bool, share_desktop: bool, share_whiteboard: bool, speaker: string, user_id: string, user_name: string, version: string, video_quality: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($webinar_id | is-empty) { error make --unspanned { msg: "path parameter 'webinarId' must be non-empty" } }
@@ -6519,10 +6489,10 @@ export def "dashboard-webinar-participants-qos" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --type: string@type-completer-3 # The webinar type. (default: live)
+  --type: string@type-completer-4 # The webinar type. (default: live)
   --page-size: int # The number of items returned per page. (default: 1)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
-]: nothing -> record<next_page_token: string, page_count: int, page_size: int, total_records: int, participants: table<device: string, domain: string, harddisk_id: string, ip_address: string, join_time: string, leave_time: string, location: string, mac_addr: string, pc_name: string, user_id: string, user_name: string, user_qos: list, version: string>> {
+]: nothing -> oneof<record<next_page_token: string, page_count: int, page_size: int, total_records: int, participants: table<device: string, domain: string, harddisk_id: string, ip_address: string, join_time: string, leave_time: string, location: string, mac_addr: string, pc_name: string, user_id: string, user_name: string, user_qos: list, version: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($webinar_id | is-empty) { error make --unspanned { msg: "path parameter 'webinarId' must be non-empty" } }
@@ -6560,10 +6530,10 @@ export def "participant-webinar-feedback" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --type: string@type-completer-2 # Specify a value to get the response for the corresponding meeting type. The value of this field can be one of the following: `past` - Meeting that already occurred in the specified date range.`pastOne` - Past meetings that were attended by only one user. `live` - Live meetings. If you do not provide this field, the default value will be `live` and thus, the API will only query responses for live meetings. (default: live)
+  --type: string@type-completer-3 # Specify a value to get the response for the corresponding meeting type. The value of this field can be one of the following: `past` - Meeting that already occurred in the specified date range.`pastOne` - Past meetings that were attended by only one user. `live` - Live meetings. If you do not provide this field, the default value will be `live` and thus, the API will only query responses for live meetings. (default: live)
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
-]: nothing -> record<next_page_token: string, page_size: int, participants: table<date_time: string, email: string, quality: string, user_id: string>> {
+]: nothing -> oneof<record<next_page_token: string, page_size: int, participants: table<date_time: string, email: string, quality: string, user_id: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($webinar_id | is-empty) { error make --unspanned { msg: "path parameter 'webinarId' must be non-empty" } }
@@ -6601,10 +6571,10 @@ export def "dashboard-webinar-participant-share" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --type: string@type-completer-3 # The webinar type. (default: live)
+  --type: string@type-completer-4 # The webinar type. (default: live)
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceed the current page size. The expiration period for this token is 15 minutes.
-]: nothing -> record<next_page_token: string, page_count: int, page_size: int, total_records: int, participants: table<details: list, id: string, user_id: string, user_name: string>> {
+]: nothing -> oneof<record<next_page_token: string, page_count: int, page_size: int, total_records: int, participants: table<details: list, id: string, user_id: string, user_name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($webinar_id | is-empty) { error make --unspanned { msg: "path parameter 'webinarId' must be non-empty" } }
@@ -6643,8 +6613,8 @@ export def "dashboard-webinar-participant-qos" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --type: string@type-completer-3 # The webinar type. (default: live)
-]: nothing -> record<device: string, domain: string, harddisk_id: string, ip_address: string, join_time: string, leave_time: string, location: string, mac_addr: string, pc_name: string, user_id: string, user_name: string, user_qos: table<as_device_from_crc: record, as_device_to_crc: record, as_input: record, as_output: record, audio_device_from_crc: record, audio_device_to_crc: record, audio_input: record, audio_output: record, cpu_usage: record, date_time: string, video_device_from_crc: record, video_device_to_crc: record, video_input: record, video_output: record>, version: string> {
+  --type: string@type-completer-4 # The webinar type. (default: live)
+]: nothing -> oneof<record<device: string, domain: string, harddisk_id: string, ip_address: string, join_time: string, leave_time: string, location: string, mac_addr: string, pc_name: string, user_id: string, user_name: string, user_qos: table<as_device_from_crc: record, as_device_to_crc: record, as_input: record, as_output: record, audio_device_from_crc: record, audio_device_to_crc: record, audio_input: record, audio_output: record, cpu_usage: record, date_time: string, video_device_from_crc: record, video_device_to_crc: record, video_input: record, video_output: record>, version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($webinar_id | is-empty) { error make --unspanned { msg: "path parameter 'webinarId' must be non-empty" } }
@@ -6685,7 +6655,7 @@ export def "dashboard-zoom-rooms" [
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --page-number: int # The page number of the current page in the returned records. (default: 1)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
-]: nothing -> record<next_page_token: string, page_count: int, page_number: int, page_size: int, total_records: int, zoom_rooms: table<account_type: string, calender_name: string, camera: string, device_ip: string, email: string, health: string, id: string, issues: list, last_start_time: string, location: string, microphone: string, room_name: string, speaker: string, status: string>> {
+]: nothing -> oneof<record<next_page_token: string, page_count: int, page_number: int, page_size: int, total_records: int, zoom_rooms: table<account_type: string, calender_name: string, camera: string, device_ip: string, email: string, health: string, id: string, issues: list, last_start_time: string, location: string, microphone: string, room_name: string, speaker: string, status: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page_number" $page_number "scalar") (serialize-qp "next_page_token" $next_page_token "scalar")] | flatten | str join "&"
@@ -6723,7 +6693,7 @@ export def "dashboard-zoom-room-issue" [
   --accept: string@accept-completer # Response content type
   --from: string # Start date in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the report includes only one month worth of data at once. (required, format: date)
   --to: string # End date. (required, format: date)
-]: nothing -> record<from: string, to: string, total_records: int, issues: table<issue_name: string, zoom_rooms_count: int>> {
+]: nothing -> oneof<record<from: string, to: string, total_records: int, issues: table<issue_name: string, zoom_rooms_count: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($from == null) { error make --unspanned { msg: "required query parameter 'from' missing: pass --from" } }
@@ -6766,7 +6736,7 @@ export def "dashboard-zoom-room" [
   --to: string # End date. (required, format: date)
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
-]: nothing -> record<account_type: string, calender_name: string, camera: string, device_ip: string, email: string, health: string, id: string, issues: list<string>, last_start_time: string, location: string, microphone: string, room_name: string, speaker: string, status: string, live_meeting: record<custom_keys: list<record>, dept: string, duration: string, email: string, end_time: string, has_3rd_party_audio: bool, has_pstn: bool, has_recording: bool, has_screen_share: bool, has_sip: bool, has_video: bool, has_voip: bool, host: string, id: int, in_room_participants: int, participants: int, start_time: string, topic: string, user_type: string, uuid: string>, past_meetings: record<from: string, to: string, next_page_token: string, page_count: int, page_size: int, total_records: int, meetings: list<record>>> {
+]: nothing -> oneof<record<account_type: string, calender_name: string, camera: string, device_ip: string, email: string, health: string, id: string, issues: list<string>, last_start_time: string, location: string, microphone: string, room_name: string, speaker: string, status: string, live_meeting: record<custom_keys: list<record>, dept: string, duration: string, email: string, end_time: string, has_3rd_party_audio: bool, has_pstn: bool, has_recording: bool, has_screen_share: bool, has_sip: bool, has_video: bool, has_voip: bool, host: string, id: int, in_room_participants: int, participants: int, start_time: string, topic: string, user_type: string, uuid: string>, past_meetings: record<from: string, to: string, next_page_token: string, page_count: int, page_size: int, total_records: int, meetings: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($zoomroom_id | is-empty) { error make --unspanned { msg: "path parameter 'zoomroomId' must be non-empty" } }
@@ -6806,7 +6776,7 @@ export def "list-past-meeting-files" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<in_meeting_files: table<download_url: string, file_name: string, file_size: int>, total_records: int> {
+]: nothing -> oneof<record<in_meeting_files: table<download_url: string, file_name: string, file_size: int>, total_records: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($meeting_id | is-empty) { error make --unspanned { msg: "path parameter 'meetingId' must be non-empty" } }
@@ -6843,7 +6813,7 @@ export def "past-meetings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<meetings: table<start_time: string, uuid: string>> {
+]: nothing -> oneof<record<meetings: table<start_time: string, uuid: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($meeting_id | is-empty) { error make --unspanned { msg: "path parameter 'meetingId' must be non-empty" } }
@@ -6880,7 +6850,7 @@ export def "list-past-meeting-polls" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<id: int, questions: table<email: string, name: string, question_details: list>, start_time: string, uuid: string> {
+]: nothing -> oneof<record<id: int, questions: table<email: string, name: string, question_details: list>, start_time: string, uuid: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($meeting_id | is-empty) { error make --unspanned { msg: "path parameter 'meetingId' must be non-empty" } }
@@ -6917,7 +6887,7 @@ export def "past-meeting-details" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<duration: int, end_time: string, host_id: string, id: int, participants_count: int, start_time: string, topic: string, total_minutes: int, type: int, user_email: string, user_name: string, uuid: string> {
+]: nothing -> oneof<record<duration: int, end_time: string, host_id: string, id: int, participants_count: int, start_time: string, topic: string, total_minutes: int, type: int, user_email: string, user_name: string, uuid: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($meeting_uuid | is-empty) { error make --unspanned { msg: "path parameter 'meetingUUID' must be non-empty" } }
@@ -6956,7 +6926,7 @@ export def "past-meeting-participants" [
   --accept: string@accept-completer # Response content type
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
-]: nothing -> record<next_page_token: string, page_count: int, page_size: int, total_records: int, participants: table<id: string, name: string, user_email: string>> {
+]: nothing -> oneof<record<next_page_token: string, page_count: int, page_size: int, total_records: int, participants: table<id: string, name: string, user_email: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($meeting_uuid | is-empty) { error make --unspanned { msg: "path parameter 'meetingUUID' must be non-empty" } }
@@ -6997,7 +6967,7 @@ export def "webinar-absentees" [
   --occurrence-id: string # The meeting occurrence ID.
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
-]: nothing -> record<next_page_token: string, page_count: int, page_number: int, page_size: int, total_records: int, registrants: table<id: string, address: string, city: string, comments: string, country: string, custom_questions: list, email: string, first_name: string, industry: string, job_title: string, last_name: string, no_of_employees: string, org: string, phone: string, purchasing_time_frame: string, role_in_purchase_process: string, state: string, zip: string, create_time: string, join_url: string, status: string>> {
+]: nothing -> oneof<record<next_page_token: string, page_count: int, page_number: int, page_size: int, total_records: int, registrants: table<id: string, address: string, city: string, comments: string, country: string, custom_questions: list, email: string, first_name: string, industry: string, job_title: string, last_name: string, no_of_employees: string, org: string, phone: string, purchasing_time_frame: string, role_in_purchase_process: string, state: string, zip: string, create_time: string, join_url: string, status: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($webinar_uuid | is-empty) { error make --unspanned { msg: "path parameter 'WebinarUUID' must be non-empty" } }
@@ -7035,7 +7005,7 @@ export def "list-past-webinar-files" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<in_meeting_files: table<download_url: string, file_name: string, file_size: int>, total_records: int> {
+]: nothing -> oneof<record<in_meeting_files: table<download_url: string, file_name: string, file_size: int>, total_records: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($webinar_id | is-empty) { error make --unspanned { msg: "path parameter 'webinarId' must be non-empty" } }
@@ -7072,7 +7042,7 @@ export def "past-webinars" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<webinars: table<start_time: string, uuid: string>> {
+]: nothing -> oneof<record<webinars: table<start_time: string, uuid: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($webinar_id | is-empty) { error make --unspanned { msg: "path parameter 'webinarId' must be non-empty" } }
@@ -7111,7 +7081,7 @@ export def "list-webinar-participants" [
   --accept: string@accept-completer # Response content type
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
-]: nothing -> record<next_page_token: string, page_count: int, page_size: int, participants: table<id: string, name: string, user_email: string>, total_records: int> {
+]: nothing -> oneof<record<next_page_token: string, page_count: int, page_size: int, participants: table<id: string, name: string, user_email: string>, total_records: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($webinar_id | is-empty) { error make --unspanned { msg: "path parameter 'webinarId' must be non-empty" } }
@@ -7149,7 +7119,7 @@ export def "list-past-webinar-poll-results" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<id: int, questions: table<email: string, name: string, question_details: list>, start_time: string, uuid: string> {
+]: nothing -> oneof<record<id: int, questions: table<email: string, name: string, question_details: list>, start_time: string, uuid: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($webinar_id | is-empty) { error make --unspanned { msg: "path parameter 'webinarId' must be non-empty" } }
@@ -7186,7 +7156,7 @@ export def "list-past-webinar-qa" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<id: int, questions: table<email: string, name: string, question_details: list>, start_time: string, uuid: string> {
+]: nothing -> oneof<record<id: int, questions: table<email: string, name: string, question_details: list>, start_time: string, uuid: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($webinar_id | is-empty) { error make --unspanned { msg: "path parameter 'webinarId' must be non-empty" } }
@@ -7224,7 +7194,7 @@ export def "add-auto-receptionist" [
   --accept: string@accept-completer # Response content type
   name: string # Provide a name to help identify the auto receptionist.
   --site-id: string # Unique identifier of the site where the auto receptionist is to be assigned. This field is required only if you have [multiple sites](https://support.zoom.us/hc/en-us/articles/360020809672-Managing-Multiple-Sites) enabled.
-]: any -> record<extension_number: int, id: string, name: string> {
+]: any -> oneof<record<extension_number: int, id: string, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7330,7 +7300,6 @@ export def "unassign-all-phone-nums-auto-receptionist" [
 #
 # POST /phone/auto_receptionists/{autoReceptionistId}/phone_numbers
 # operationId: assignPhoneNumbersAutoReceptionist
-# --phone_numbers item shape: {id?: string, number?: string}
 export def "assign-phone-numbers-auto-receptionist" [
   auto_receptionist_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7424,7 +7393,7 @@ export def "list-blocked-list" [
   --accept: string@accept-completer # Response content type
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
   --page-size: int # The total number of records returned from a single API call. (default: 30)
-]: nothing -> record<blocked_list: table<block_type: string, comment: string, id: string, match_type: string, phone_number: string, status: string>, next_page_token: string, page_size: int, total_records: int> {
+]: nothing -> oneof<record<blocked_list: table<block_type: string, comment: string, id: string, match_type: string, phone_number: string, status: string>, next_page_token: string, page_size: int, total_records: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "next_page_token" $next_page_token "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
@@ -7465,7 +7434,7 @@ export def "add-anumber-to-blocked-list" [
   --match-type: string@match-type-completer # Specify the match type for the blocked list. The values can be one of the following: `phoneNumber`: Choose this option (Phone Number Match) if you want to block a specific phone number. Then, in the `phone_number` field, provide the phone number along with the country code. `prefix`: Choose this option (Prefix Match) if you want to block all numbers with a specific country code and area code. Next, in the `phone_number` field, enter a country code as part of the prefix. For example, entering 1907 blocks numbers with country code 1 and area code 907.
   --phone-number: string # The phone number to be blocked if you passed "phoneNumber" as the value for the `match_type` field. If you passed "prefix" as the value for the `match_type` field, provide the prefix of the phone number here including the country code. For example, entering 1905 blocks numbers with country code 1 and area code 905.
   --status: string@status-completer-1 # Enable or disable the blocking. One of the following values are allowed: `active`: Keep the blocking active. `inactive`: Disable the blocking.
-]: any -> record<id: string> {
+]: any -> oneof<record<id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7541,7 +7510,7 @@ export def "get-a-blocked-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<block_type: string, comment: string, id: string, match_type: string, phone_number: string, status: string> {
+]: nothing -> oneof<record<block_type: string, comment: string, id: string, match_type: string, phone_number: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($blocked_list_id | is-empty) { error make --unspanned { msg: "path parameter 'blockedListId' must be non-empty" } }
@@ -7625,7 +7594,7 @@ export def "add-byoc-number" [
   carrier: string # Name of the carrier.
   phone_numbers: list<string> # Phone number(s) to be added to Zoom. The value should be in e164 format.
   --site-id: string # Unique identifier of the site. This field is only required if you have enabled multiple sites in the account. See [Managing multiple sites](https://support.zoom.us/hc/en-us/articles/360020809672-Managing-multiple-sites) or [Adding a site](https://support.zoom.us/hc/en-us/articles/360020809672-Managing-multiple-sites#h_05c88e35-1593-491f-b1a8-b7139a75dc15) for details.
-]: any -> record<phone_numbers: table<id: string, number: string>> {
+]: any -> oneof<record<phone_numbers: table<id: string, number: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7671,7 +7640,7 @@ export def "account-call-logs" [
   --path: string # Filter the API response by [path](https://support.zoom.us/hc/en-us/articles/360021114452-Viewing-and-identifying-logs#h_646b46c6-0623-4ab1-8b8b-ea5b8bcef679) of the call. The value of this field can be one of the following: `voiceMail`, `message`, `forward`, `extension`, `callQueue`, `ivrMenu`, `companyDirectory`, `autoReceptionist`, `contactCenter`, `disconnected`, `commonAreaPhone`, `pstn`, `transfer`, `sharedLines`, `sharedLineGroup`, `tollFreeBilling`, `meetingService`, `parkPickup`, `parkTimeout`, `monitor`, `takeover`, `sipGroup`
   --time-type: string@time-type-completer # Enables you to sort call logs by start or end time. Choose the sort time value. Values include `startTime` or `endTime`. (default: startTime)
   --site-id: string # Unique identifier of the [site](https://support.zoom.us/hc/en-us/articles/360020809672-Managing-multiple-sites). Use this query parameter if you have enabled multiple sites and would like to filter the response of this API call by call logs of a specific phone site.
-]: nothing -> record<call_logs: table<answer_start_time: string, call_id: string, call_type: string, callee_name: string, callee_number: string, callee_number_type: string, caller_name: string, caller_number: string, caller_number_type: string, charge: string, client_code: string, date_time: string, direction: string, duration: int, id: string, owner: record, path: string, rate: string, recording_id: string, recording_type: string, result: string, site: record, user_id: string, waiting_time: string>, from: string, next_page_token: string, page_count: int, page_size: int, to: string, total_records: int> {
+]: nothing -> oneof<record<call_logs: table<answer_start_time: string, call_id: string, call_type: string, callee_name: string, callee_number: string, callee_number_type: string, caller_name: string, caller_number: string, caller_number_type: string, charge: string, client_code: string, date_time: string, direction: string, duration: int, id: string, owner: record, path: string, rate: string, recording_id: string, recording_type: string, result: string, site: record, user_id: string, waiting_time: string>, from: string, next_page_token: string, page_count: int, page_size: int, to: string, total_records: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "next_page_token" $next_page_token "scalar") (serialize-qp "path" $path "scalar") (serialize-qp "time_type" $time_type "scalar") (serialize-qp "site_id" $site_id "scalar")] | flatten | str join "&"
@@ -7709,7 +7678,7 @@ export def "list-call-queues" [
   --accept: string@accept-completer # Response content type
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
   --page-size: int # The number of records returned from a single API call. (default: 30)
-]: nothing -> record<call_queues: table<extension_number: int, id: string, name: string, phone_numbers: list, site: record, status: string>, next_page_token: string, page_size: int, total_records: int> {
+]: nothing -> oneof<record<call_queues: table<extension_number: int, id: string, name: string, phone_numbers: list, site: record, status: string>, next_page_token: string, page_size: int, total_records: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "next_page_token" $next_page_token "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
@@ -7734,7 +7703,6 @@ export def "list-call-queues" [
 #
 # POST /phone/call_queues
 # operationId: createCallQueue
-# --members shape: {common_area_phone_ids?: list<string>, users?: list}
 export def "create-call-queue" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7751,7 +7719,7 @@ export def "create-call-queue" [
   --members: record # A list of one or more phone users to be included in the call queue. Provide either users or common area phone(s). Provide at least one user in the users object. — shape: {common_area_phone_ids?: list<string>, users?: list}
   name: string # Name of the Call Queue.
   site_id: string # Unique identifier of the site. Required only if [multiple sites](https://support.zoom.us/hc/en-us/articles/360020809672-Managing-Multiple-Sites) have been enabled. This can be retrieved from the [List Phone Sites](https://marketplace.zoom.us/docs/api-reference/zoom-api/phone-site/listphonesites) API.
-]: any -> record<extension_number: int, id: string, name: string, status: string> {
+]: any -> oneof<record<extension_number: int, id: string, name: string, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7827,7 +7795,7 @@ export def "get-a-call-queue" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<extension_number: int, id: string, members: record<common_area_phones: list<record>, users: list<record>>, name: string, phone_numbers: table<id: string, number: string, source: string>, site: record<id: string, name: string>, status: string> {
+]: nothing -> oneof<record<extension_number: int, id: string, members: record<common_area_phones: list<record>, users: list<record>>, name: string, phone_numbers: table<id: string, number: string, source: string>, site: record<id: string, name: string>, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($call_queue_id | is-empty) { error make --unspanned { msg: "path parameter 'callQueueId' must be non-empty" } }
@@ -7976,7 +7944,6 @@ export def "unassign-all-members" [
 #
 # POST /phone/call_queues/{callQueueId}/members
 # operationId: addMembersToCallQueue
-# --members shape: {common_area_phone_ids?: list<string>, users?: list}
 export def "add-members-to-call-queue" [
   call_queue_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7990,7 +7957,7 @@ export def "add-members-to-call-queue" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --members: record # A maximum of 10 members can be added at a time. — shape: {common_area_phone_ids?: list<string>, users?: list}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8069,7 +8036,7 @@ export def "unassign-a-phone-num-call-queue" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($call_queue_id | is-empty) { error make --unspanned { msg: "path parameter 'callQueueId' must be non-empty" } }
@@ -8094,7 +8061,6 @@ export def "unassign-a-phone-num-call-queue" [
 #
 # POST /phone/call_queues/{callQueueId}/phone_numbers
 # operationId: assignPhoneToCallQueue
-# --phone_numbers item shape: {id?: string, number?: string}
 export def "assign-phone-to-call-queue" [
   call_queue_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8108,7 +8074,7 @@ export def "assign-phone-to-call-queue" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --phone-numbers: list # Provide either the `id` or the `number` field. Only a max of 5 numbers can be assigned to a call queue at a time. — item shape: {id?: string, number?: string}
-]: any -> any {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8149,7 +8115,7 @@ export def "un-assign-phone-num-call-queue" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($call_queue_id | is-empty) { error make --unspanned { msg: "path parameter 'callQueueId' must be non-empty" } }
@@ -8191,7 +8157,7 @@ export def "get-call-queue-recordings" [
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
   --from: string # Start date (within a 6 month range). (format: date)
   --to: string # End date (within a 6 month range). (format: date)
-]: nothing -> record<from: string, next_page_token: string, page_size: int, recordings: table<callee_name: string, callee_number: string, callee_number_type: string, caller_name: string, caller_number: string, caller_number_type: string, date_time: string, direction: string, download_url: string, duration: int, id: string>, to: string, total_records: string> {
+]: nothing -> oneof<record<from: string, next_page_token: string, page_size: int, recordings: table<callee_name: string, callee_number: string, callee_number_type: string, caller_name: string, caller_number: string, caller_number_type: string, date_time: string, direction: string, download_url: string, duration: int, id: string>, to: string, total_records: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($call_queue_id | is-empty) { error make --unspanned { msg: "path parameter 'callQueueId' must be non-empty" } }
@@ -8228,7 +8194,7 @@ export def "list-calling-plans" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<calling_plans: table<assigned: int, available: int, name: string, subscribed: int, type: int>> {
+]: nothing -> oneof<record<calling_plans: table<assigned: int, available: int, name: string, subscribed: int, type: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/phone/calling_plans" $auth.query)
@@ -8265,7 +8231,7 @@ export def "list-common-area-phones" [
   --accept: string@accept-completer # Response content type
   --page-size: int # The total number of records returned from a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
-]: nothing -> record<common_area_phones: table<calling_plans: list, device_type: string, display_name: string, id: string, mac_address: string, phone_numbers: list, site: record, status: string>, next_page_token: string, page_size: int, total_records: int> {
+]: nothing -> oneof<record<common_area_phones: table<calling_plans: list, device_type: string, display_name: string, id: string, mac_address: string, phone_numbers: list, site: record, status: string>, next_page_token: string, page_size: int, total_records: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar")] | flatten | str join "&"
@@ -8309,7 +8275,7 @@ export def "add-common-area-phone" [
   --site-id: string # Unique identifier of the [site](https://support.zoom.us/hc/en-us/articles/360020809672). This can be retrieved from the [List Phone Sites](https://marketplace.zoom.us/docs/api-reference/zoom-api/phone-site/listphonesites) API.
   --time-zone: string # [Timezone ID](https://marketplace.zoom.us/docs/api-reference/other-references/abbreviation-lists) for the common area phone.
   type: string # Phone device manufacturer name. Refer to the "Manufacturer Name" field in [this](https://marketplace.zoom.us/docs/api-reference/other-references/zoomphone-supporteddevice) table.
-]: any -> record<display_name: string, id: string> {
+]: any -> oneof<record<display_name: string, id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8385,7 +8351,7 @@ export def "get-a-common-area-phone" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<device_type: string, id: string, mac_address: string, name: string, provision: record<sip_accounts: list<record>, type: string, url: string>, site: record<id: string, name: string>, status: string> {
+]: nothing -> oneof<record<device_type: string, id: string, mac_address: string, name: string, provision: record<sip_accounts: list<record>, type: string, url: string>, site: record<id: string, name: string>, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($common_area_phone_id | is-empty) { error make --unspanned { msg: "path parameter 'commonAreaPhoneId' must be non-empty" } }
@@ -8504,10 +8470,10 @@ export def "list-phone-devices" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --type: string@type-completer-4 # State of the device. The value should be either `assigned` to list devices that have been assigned to user(s) or `unassigned` to list devices that have not yet been assigned to any user in the Zoom account. (required)
+  --type: string@type-completer-5 # State of the device. The value should be either `assigned` to list devices that have been assigned to user(s) or `unassigned` to list devices that have not yet been assigned to any user in the Zoom account. (required)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
   --page-size: int # The number of records returned within a single API call. (default: 30)
-]: nothing -> record<devices: table<assignee: record, device_type: string, display_name: string, id: string, mac_address: string, site: record, status: string>, next_page_token: string, page_size: int, total_records: string> {
+]: nothing -> oneof<record<devices: table<assignee: record, device_type: string, display_name: string, id: string, mac_address: string, site: record, status: string>, next_page_token: string, page_size: int, total_records: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($type == null) { error make --unspanned { msg: "required query parameter 'type' missing: pass --type" } }
@@ -8625,7 +8591,7 @@ export def "get-a-device" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<assignee: record<extension_number: int, id: string, name: string>, device_type: string, display_name: string, id: string, mac_address: string, provision: record<sip_accounts: list<record>, type: string, url: string>, site: record<id: string, name: string>, status: string> {
+]: nothing -> oneof<record<assignee: record<extension_number: int, id: string, name: string>, device_type: string, display_name: string, id: string, mac_address: string, provision: record<sip_accounts: list<record>, type: string, url: string>, site: record<id: string, name: string>, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($device_id | is-empty) { error make --unspanned { msg: "path parameter 'deviceId' must be non-empty" } }
@@ -8710,7 +8676,7 @@ export def "list-call-logs-metrics" [
   --quality-type: string # Filter call logs by voice quality. Zoom uses MOS of 3.5 as a general baseline to categorize calls by call quality. A MOS greater than or equal to 3.5 means good quality, while below 3.5 means poor quality. The value of this field can be one of the following: * `good`: Retrieve call logs of the call(s) with good quality of voice. * `bad`: Retrieve call logs of the call(s) with good quality of voice. * `all`: Retrieve all call logs without filtering by voice quality.
   --page-size: int # The number of records returned within a single call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
-]: nothing -> record<call_logs: table<call_id: string, callee: record, caller: record, date_time: string, direction: string, duration: int, mos: string>, from: string, next_page_token: string, page_size: int, to: string, total_records: int> {
+]: nothing -> oneof<record<call_logs: table<call_id: string, callee: record, caller: record, date_time: string, direction: string, duration: int, mos: string>, from: string, next_page_token: string, page_size: int, to: string, total_records: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "site_id" $site_id "scalar") (serialize-qp "quality_type" $quality_type "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar")] | flatten | str join "&"
@@ -8747,7 +8713,7 @@ export def "get-call-qo-s" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<call_id: string, callee_qos: record<receiving: list<record>, sending: list<record>>, caller_qos: record<receiving: list<record>, sending: list<record>>> {
+]: nothing -> oneof<record<call_id: string, callee_qos: record<receiving: list<record>, sending: list<record>>, caller_qos: record<receiving: list<record>, sending: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($call_id | is-empty) { error make --unspanned { msg: "path parameter 'callId' must be non-empty" } }
@@ -8784,7 +8750,7 @@ export def "get-call-log-metrics-details" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<call_id: string, callee: record<codec: string, device_type: string, extension_number: string, headset: string, isp: string, microphone: string, phone_number: string, site_id: string>, caller: record<codec: string, device_type: string, extension_number: string, headset: string, isp: string, microphone: string, phone_number: string, site_id: string>, date_time: string, direction: string, duration: int, mos: string> {
+]: nothing -> oneof<record<call_id: string, callee: record<codec: string, device_type: string, extension_number: string, headset: string, isp: string, microphone: string, phone_number: string, site_id: string>, caller: record<codec: string, device_type: string, extension_number: string, headset: string, isp: string, microphone: string, phone_number: string, site_id: string>, date_time: string, direction: string, duration: int, mos: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($call_id | is-empty) { error make --unspanned { msg: "path parameter 'call_id' must be non-empty" } }
@@ -8821,13 +8787,13 @@ export def "list-account-phone-numbers" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
-  --type: string@type-completer-5 # Query response by number assignment. The value can be one of the following: `assigned`: The number has been assigned to either a user, a call queue, an auto-receptionist or a common area phone in an account. `unassigned`: The number is not assigned to anyone. `all`: Include both assigned and unassigned numbers in the response. `byoc`: Include Bring Your Own Carrier (BYOC) numbers only in the response.
+  --type: string@type-completer-6 # Query response by number assignment. The value can be one of the following: `assigned`: The number has been assigned to either a user, a call queue, an auto-receptionist or a common area phone in an account. `unassigned`: The number is not assigned to anyone. `all`: Include both assigned and unassigned numbers in the response. `byoc`: Include Bring Your Own Carrier (BYOC) numbers only in the response.
   --extension-type: string@extension-type-completer # The type of assignee to whom the number is assigned. The value can be one of the following: `user` `callQueue` `autoReceptionist` `commonAreaPhone`
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --number-type: string@number-type-completer # The type of phone number. The value can be either `toll` or `tollfree`.
   --pending-numbers: oneof<nothing, bool> # Include or exclude pending numbers in the response. The value can be either `true` or `false`.
   --site-id: string # Unique identifier of the site. Use this query parameter if you have enabled multiple sites and would like to filter the response of this API call by a specific phone site. See [Managing multiple sites](https://support.zoom.us/hc/en-us/articles/360020809672-Managing-multiple-sites) or [Adding a site](https://support.zoom.us/hc/en-us/articles/360020809672-Managing-multiple-sites#h_05c88e35-1593-491f-b1a8-b7139a75dc15) for details.
-]: nothing -> record<next_page_token: string, page_size: int, phone_numbers: table<assignee: record, capability: list, carrier: record, display_name: string, id: string, location: string, number: string, number_type: string, sip_group: record, site: record, source: string, status: string>, total_records: int> {
+]: nothing -> oneof<record<next_page_token: string, page_size: int, phone_numbers: table<assignee: record, capability: list, carrier: record, display_name: string, id: string, location: string, number: string, number_type: string, sip_group: record, site: record, source: string, status: string>, total_records: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "next_page_token" $next_page_token "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "extension_type" $extension_type "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "number_type" $number_type "scalar") (serialize-qp "pending_numbers" $pending_numbers "scalar") (serialize-qp "site_id" $site_id "scalar")] | flatten | str join "&"
@@ -8864,7 +8830,7 @@ export def "get-phone-number-details" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<assignee: record<extension_number: int, id: string, name: string, type: string>, capability: list<string>, display_name: string, id: string, location: string, number: string, number_type: string, site: record<id: string, name: string>, source: string, status: string> {
+]: nothing -> oneof<record<assignee: record<extension_number: int, id: string, name: string, type: string>, capability: list<string>, display_name: string, id: string, location: string, number: string, number_type: string, site: record<id: string, name: string>, source: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($number_id | is-empty) { error make --unspanned { msg: "path parameter 'numberId' must be non-empty" } }
@@ -8949,7 +8915,7 @@ export def "get-phone-recordings" [
   --owner-type: string # The owner type. The allowed values are null, `user`, or `callQueue`. The default is null. If null, returns all owner types. (default: all)
   --recording-type: string # The recording type. The allowed values are null, `OnDemand`, or `Automatic`. The default is null. If null, returns all recording types.
   --site-id: string # The site ID. The default is `All sites`. (default: All sites)
-]: nothing -> record<next_page_token: string, page_size: int, recordings: table<callee_name: string, callee_number: string, callee_number_type: string, caller_name: string, caller_number: string, caller_number_type: string, date_time: string, direction: string, download_url: string, duration: int, id: string, owner: record, recording_type: string, site: record>, total_records: int> {
+]: nothing -> oneof<record<next_page_token: string, page_size: int, recordings: table<callee_name: string, callee_number: string, callee_number_type: string, caller_name: string, caller_number: string, caller_number_type: string, date_time: string, direction: string, download_url: string, duration: int, id: string, owner: record, recording_type: string, site: record>, total_records: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "owner_type" $owner_type "scalar") (serialize-qp "recording_type" $recording_type "scalar") (serialize-qp "site_id" $site_id "scalar")] | flatten | str join "&"
@@ -8990,7 +8956,7 @@ export def "get-ps-operation-logs" [
   --category-type: string # Filter the response by the category of the action performed. By default, the value of this field is "all" and thus, the response will include log of all operations for the defined period.To only include response for a specific category type, provide a value for `category_type` from this [table](http://marketplace.zoom.us/docs/phone-operation-categories ). (default: all)
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
-]: nothing -> record<next_page_token: string, page_size: int, operation_logs: table<action: string, category_type: string, operation_detail: string, operator: string, time: string>> {
+]: nothing -> oneof<record<next_page_token: string, page_size: int, operation_logs: table<action: string, category_type: string, operation_detail: string, operator: string, time: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "category_type" $category_type "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar")] | flatten | str join "&"
@@ -9029,7 +8995,7 @@ export def "list-setting-templates" [
   --page-size: int # Number of records returns within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
   --site-id: string # Unique identifier of the site. This field is required only if multiple sites have been enabled. of the site. Required only when multiple sites are enabled. See [Managing multiple sites](https://support.zoom.us/hc/en-us/articles/360020809672-Managing-multiple-sites) for details. If this is not provided, the response lists the account level setting templates.
-]: nothing -> record<next_page_token: string, page_size: int, templates: table<description: string, id: string, name: string, type: string>, total_records: int> {
+]: nothing -> oneof<record<next_page_token: string, page_size: int, templates: table<description: string, id: string, name: string, type: string>, total_records: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar") (serialize-qp "site_id" $site_id "scalar")] | flatten | str join "&"
@@ -9068,8 +9034,8 @@ export def "add-setting-template" [
   --description: string # A description of the template.
   name: string # The name of the template.
   --site-id: string # Unique identifier of the site. Required only when multiple sites are enabled. See [Managing multiple sites](https://support.zoom.us/hc/en-us/articles/360020809672-Managing-multiple-sites) for details.
-  type: string@type-completer-6 # The type of template. Values include `user`, `group`, `autoReceptionist`, `commonarea`, or `interop`.
-]: any -> record<description: string, id: string, name: string, type: string> {
+  type: string@type-completer-7 # The type of template. Values include `user`, `group`, `autoReceptionist`, `commonarea`, or `interop`.
+]: any -> oneof<record<description: string, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9109,7 +9075,7 @@ export def "get-setting-template" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --custom-query-fields: string # Provide the name of the field to use to filter the response. For example, if you provide "description" as the value of the field, you will get a response similar to the following: {“description”: “template description”}.
-]: nothing -> record<description: string, id: string, name: string, policy: record<ad_hoc_call_recording: record<enable: bool, recording_start_prompt: bool, recording_transcription: bool>, auto_call_recording: record<enable: bool, recording_calls: string, recording_start_prompt: bool, recording_transcription: bool>, sms: record<enable: bool, international_sms: bool>, voicemail: record<allow_transcription: bool, enable: bool>>, profile: record<area_code: string, country: string>, type: string, user_settings: record<audio_prompt_language: string, block_calls_without_caller_id: bool, call_handling: record<business_hours: record, close_hours: record>, desk_phone: record<pin_code: string>, hold_music: string>> {
+]: nothing -> oneof<record<description: string, id: string, name: string, policy: record<ad_hoc_call_recording: record<enable: bool, recording_start_prompt: bool, recording_transcription: bool>, auto_call_recording: record<enable: bool, recording_calls: string, recording_start_prompt: bool, recording_transcription: bool>, sms: record<enable: bool, international_sms: bool>, voicemail: record<allow_transcription: bool, enable: bool>>, profile: record<area_code: string, country: string>, type: string, user_settings: record<audio_prompt_language: string, block_calls_without_caller_id: bool, call_handling: record<business_hours: record, close_hours: record>, desk_phone: record<pin_code: string>, hold_music: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
@@ -9135,9 +9101,6 @@ export def "get-setting-template" [
 #
 # PATCH /phone/setting_templates/{templateId}
 # operationId: updateSettingTemplate
-# --policy shape: {ad_hoc_call_recording?: record, auto_call_recording?: record, sms?: record, voicemail?: record}
-# --profile shape: {area_code?: string, country?: string}
-# --user_settings shape: {audio_prompt_language?: string, block_calls_without_caller_id?: bool, call_handling?: record, desk_phone?: record, hold_music?: "default"|"disable"}
 export def "update-setting-template" [
   template_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9196,7 +9159,7 @@ export def "list-shared-line-groups" [
   --accept: string@accept-completer # Response content type
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
-]: nothing -> record<next_page_token: string, page_size: int, shared_line_groups: table<display_name: string, extension_number: int, id: string, phone_numbers: list, site: record, status: string>, total_records: int> {
+]: nothing -> oneof<record<next_page_token: string, page_size: int, shared_line_groups: table<display_name: string, extension_number: int, id: string, phone_numbers: list, site: record, status: string>, total_records: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar")] | flatten | str join "&"
@@ -9312,7 +9275,7 @@ export def "get-a-shared-line-group" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<display_name: string, extension_number: int, id: string, members: record<common_area_phones: list<record>, users: list<record>>, phone_numbers: table<id: string, number: string>, primary_number: string, site: record<id: string, name: string>, status: string, timezone: string> {
+]: nothing -> oneof<record<display_name: string, extension_number: int, id: string, members: record<common_area_phones: list<record>, users: list<record>>, phone_numbers: table<id: string, number: string>, primary_number: string, site: record<id: string, name: string>, status: string, timezone: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($shared_line_group_id | is-empty) { error make --unspanned { msg: "path parameter 'sharedLineGroupId' must be non-empty" } }
@@ -9337,7 +9300,6 @@ export def "get-a-shared-line-group" [
 #
 # PATCH /phone/shared_line_groups/{sharedLineGroupId}
 # operationId: updateASharedLineGroup
-# --primary_number shape: {id?: string, number?: string}
 export def "update-a-shared-line-group" [
   shared_line_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9420,7 +9382,6 @@ export def "delete-members-of-slg" [
 #
 # POST /phone/shared_line_groups/{sharedLineGroupId}/members
 # operationId: addMembersToSharedLineGroup
-# --members shape: {common_area_phone_ids?: list<string>, users?: list}
 export def "add-members-to-shared-line-group" [
   shared_line_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9500,7 +9461,6 @@ export def "delete-a-member-slg" [
 #
 # POST /phone/shared_line_groups/{sharedLineGroupId}/phone_numbers
 # operationId: assignPhoneNumbersSLG
-# --phone_numbers item shape: {id?: string, number?: string}
 export def "assign-phone-numbers-slg" [
   shared_line_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9592,7 +9552,7 @@ export def "list-byocsip-trunk" [
   --accept: string@accept-completer # Response content type
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
   --page-size: int # The number of records returned within a single API call. (default: 30)
-]: nothing -> record<byoc_sip_trunk: table<carrier: string, carrier_account: string, id: string, name: string, region: string, sbc_label: string>, next_page_token: string, page_size: int> {
+]: nothing -> oneof<record<byoc_sip_trunk: table<carrier: string, carrier_account: string, id: string, name: string, region: string, sbc_label: string>, next_page_token: string, page_size: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "next_page_token" $next_page_token "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
@@ -9630,7 +9590,7 @@ export def "list-phone-sites" [
   --accept: string@accept-completer # Response content type
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
-]: nothing -> record<next_page_token: string, page_size: string, sites: table<country: record, id: string, main_auto_receptionist: record, name: string, site_code: string>, total_records: string> {
+]: nothing -> oneof<record<next_page_token: string, page_size: string, sites: table<country: record, id: string, main_auto_receptionist: record, name: string, site_code: string>, total_records: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar")] | flatten | str join "&"
@@ -9655,8 +9615,6 @@ export def "list-phone-sites" [
 #
 # POST /phone/sites
 # operationId: createPhoneSite
-# --default_emergency_address shape: {address_line1: string, address_line2?: string, city: string, country: string, state_code: string, zip: string}
-# --short_extension shape: {length?: int}
 export def "create-phone-site" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9673,7 +9631,7 @@ export def "create-phone-site" [
   name: string # Name of the Site.
   --short-extension: record # Short extension of the phone site. — shape: {length?: int}
   --site-code: int # Identifier for a site. If site code is enabled, this field is required.
-]: any -> any {
+]: any -> oneof<record<id: string, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9752,7 +9710,7 @@ export def "get-a-site" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<country: record<code: string, name: string>, id: string, main_auto_receptionist: record<extension_id: string, extension_number: int, id: string, name: string>, name: string, short_extension: record<length: int>, site_code: int> {
+]: nothing -> oneof<record<country: record<code: string, name: string>, id: string, main_auto_receptionist: record<extension_id: string, extension_number: int, id: string, name: string>, name: string, short_extension: record<length: int>, site_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($site_id | is-empty) { error make --unspanned { msg: "path parameter 'siteId' must be non-empty" } }
@@ -9833,7 +9791,7 @@ export def "list-phone-users" [
   --page-size: int # The number of records returned from a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
   --site-id: string # Unique Identifier of the site. This can be retrieved from the [List Phone Sites](https://marketplace.zoom.us/docs/api-reference/zoom-api/phone-site/listphonesites) API.
-]: nothing -> record<next_page_token: string, page_size: int, total_records: int, users: table<calling_plans: list, email: string, extension_number: int, id: string, name: string, phone_user_id: string, site: record, status: string>> {
+]: nothing -> oneof<record<next_page_token: string, page_size: int, total_records: int, users: table<calling_plans: list, email: string, extension_number: int, id: string, name: string, phone_user_id: string, site: record, status: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar") (serialize-qp "site_id" $site_id "scalar")] | flatten | str join "&"
@@ -9870,7 +9828,7 @@ export def "phone-user" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<calling_plan: table<type: int>, email: string, extension_number: int, id: string, phone_numbers: table<id: string, number: string>, phone_user_id: string, site_admin: bool, site_id: string, status: string> {
+]: nothing -> oneof<record<calling_plan: table<type: int>, email: string, extension_number: int, id: string, phone_numbers: table<id: string, number: string>, phone_user_id: string, site_admin: bool, site_id: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -9952,11 +9910,11 @@ export def "phone-user-call-logs" [
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --from: string # Start date in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the report includes only one month worth of data at once. (required, format: date)
   --to: string # End date. (required, format: date)
-  --type: string@type-completer-7
+  --type: string@type-completer-8
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
   --phone-number: string # Filter API responses to include call logs of only the phone number defined in this field.
   --time-type: string@time-type-completer # Enables you to sort call logs by start or end time. Choose the sort time value. Values include `startTime` or `endTime`. (default: startTime)
-]: nothing -> record<call_logs: table<accepted_by: record, call_id: string, callee_name: string, callee_number: string, callee_number_type: string, caller_name: string, caller_number: string, caller_number_type: string, charge: string, client_code: string, date_time: string, direction: string, duration: int, forwarded_by: record, forwarded_to: record, has_recording: bool, has_voicemail: bool, id: string, outgoing_by: record, path: string, rate: string, recording_type: string, result: string, site: record, user_id: string, waiting_time: int>, from: string, next_page_token: string, page_count: int, page_size: int, to: string, total_records: int> {
+]: nothing -> oneof<record<call_logs: table<accepted_by: record, call_id: string, callee_name: string, callee_number: string, callee_number_type: string, caller_name: string, caller_number: string, caller_number_type: string, charge: string, client_code: string, date_time: string, direction: string, duration: int, forwarded_by: record, forwarded_to: record, has_recording: bool, has_voicemail: bool, id: string, outgoing_by: record, path: string, rate: string, recording_type: string, result: string, site: record, user_id: string, waiting_time: int>, from: string, next_page_token: string, page_count: int, page_size: int, to: string, total_records: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -10023,7 +9981,6 @@ export def "delete-call-log" [
 #
 # POST /phone/users/{userId}/calling_plans
 # operationId: assignCallingPlan
-# --calling_plans item shape: {type?: string}
 export def "assign-calling-plan" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10104,7 +10061,6 @@ export def "unassign-calling-plan" [
 #
 # POST /phone/users/{userId}/phone_numbers
 # operationId: assignPhoneNumber
-# --phone_numbers item shape: {id?: string, number?: string}
 export def "assign-phone-number" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10118,7 +10074,7 @@ export def "assign-phone-number" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --phone-numbers: list # item shape: {id?: string, number?: string}
-]: any -> record<phone_numbers: table<id: string, number: string>> {
+]: any -> oneof<record<phone_numbers: table<id: string, number: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10201,7 +10157,7 @@ export def "phone-user-recordings" [
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
   --from: string # Start date for the query in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the response includes only one month worth of recording data. The month defined should fall within the last six months. (format: date)
   --to: string # End date. (required, format: date)
-]: nothing -> record<from: string, next_page_token: string, page_count: int, page_size: int, recordings: table<callee_name: string, callee_number: string, callee_number_type: string, caller_name: string, caller_number: string, caller_number_type: string, date_time: string, direction: string, download_url: string, duration: string, id: string>, to: string, total_records: int> {
+]: nothing -> oneof<record<from: string, next_page_token: string, page_count: int, page_size: int, recordings: table<callee_name: string, callee_number: string, callee_number_type: string, caller_name: string, caller_number: string, caller_number_type: string, date_time: string, direction: string, download_url: string, duration: string, id: string>, to: string, total_records: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -10240,7 +10196,7 @@ export def "phone-user-settings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<area_code: string, company_number: string, desk_phone: record<keys_positions: record<primary_number: string>>, outbound_caller: record<number: string>, outbound_caller_ids: record<is_default: bool, name: string, number: string>, voice_mail: record<access_user_id: string, delete: bool, download: bool, shared_id: string>> {
+]: nothing -> oneof<record<area_code: string, company_number: string, desk_phone: record<keys_positions: record<primary_number: string>>, outbound_caller: record<number: string>, outbound_caller_ids: record<is_default: bool, name: string, number: string>, voice_mail: record<access_user_id: string, delete: bool, download: bool, shared_id: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -10307,7 +10263,6 @@ export def "delete-user-setting" [
 #
 # PATCH /phone/users/{userId}/settings/{settingType}
 # operationId: updateUserSetting
-# --voice_mail shape: {access_user_id?: string, delete?: bool, download?: bool, shared_id?: string}
 export def "update-user-setting" [
   user_id: string
   setting_type: string
@@ -10351,7 +10306,6 @@ export def "update-user-setting" [
 #
 # POST /phone/users/{userId}/settings/{settingType}
 # operationId: addUserSetting
-# --voice_mail shape: {access_user_id?: string, delete?: bool, download?: bool}
 export def "add-user-setting" [
   user_id: string
   setting_type: string
@@ -10366,7 +10320,7 @@ export def "add-user-setting" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --voice-mail: record # Update the voicemail setting. — shape: {access_user_id?: string, delete?: bool, download?: bool}
-]: any -> record<voice_mail: record<access_user_id: string, delete: bool, download: bool, shared_id: string>> {
+]: any -> oneof<record<voice_mail: record<access_user_id: string, delete: bool, download: bool, shared_id: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10412,7 +10366,7 @@ export def "phone-user-voice-mails" [
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
   --from: string # Start date for the query in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the response includes only one month worth of voicemail data. The month defined should fall within the last six months. (format: date)
   --to: string # End date. (required, format: date)
-]: nothing -> record<from: string, next_page_token: string, page_count: int, page_size: int, to: string, total_records: int, voice_mails: table<callee_name: string, callee_number: string, callee_number_type: string, caller_name: string, caller_number: string, caller_number_type: string, date_time: string, download_url: string, duration: string, id: string, status: string>> {
+]: nothing -> oneof<record<from: string, next_page_token: string, page_count: int, page_size: int, to: string, total_records: int, voice_mails: table<callee_name: string, callee_number: string, callee_number_type: string, caller_name: string, caller_number: string, caller_number_type: string, date_time: string, download_url: string, duration: string, id: string, status: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -10491,7 +10445,7 @@ export def "report-sign-in-sign-out-activities" [
   --to: string # End date up to which you would like to view the activity logs report. (format: date)
   --page-size: int # The number of records to be returned within a single API call
   --next-page-token: string # Next page token is used to paginate through large result sets
-]: nothing -> record<activity_logs: table<client_type: string, email: string, ip_address: string, time: string, type: string, version: string>, from: string, next_page_token: string, page_size: string, to: string> {
+]: nothing -> oneof<record<activity_logs: table<client_type: string, email: string, ip_address: string, time: string, type: string, version: string>, from: string, next_page_token: string, page_size: string, to: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar")] | flatten | str join "&"
@@ -10529,7 +10483,7 @@ export def "report-cloud-recording" [
   --accept: string@accept-completer # Response content type
   --from: string # Start date in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the report includes only one month worth of data at once. (required, format: date)
   --to: string # End date. (required, format: date)
-]: nothing -> record<from: string, to: string, cloud_recording_storage: table<date: string, free_usage: string, plan_usage: string, usage: string>> {
+]: nothing -> oneof<record<from: string, to: string, cloud_recording_storage: table<date: string, free_usage: string, plan_usage: string, usage: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($from == null) { error make --unspanned { msg: "required query parameter 'from' missing: pass --from" } }
@@ -10569,7 +10523,7 @@ export def "report-daily" [
   --accept: string@accept-completer # Response content type
   --year: int # Year for this report
   --month: int # Month for this report
-]: nothing -> record<dates: table<date: string, meeting_minutes: int, meetings: int, new_users: int, participants: int>, month: int, year: int> {
+]: nothing -> oneof<record<dates: table<date: string, meeting_minutes: int, meetings: int, new_users: int, participants: int>, month: int, year: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "month" $month "scalar")] | flatten | str join "&"
@@ -10606,7 +10560,7 @@ export def "report-meeting-details" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<custom_keys: table<key: string, value: string>, dept: string, duration: int, end_time: string, id: int, participants_count: int, start_time: string, topic: string, total_minutes: int, tracking_fields: table<field: string, value: string>, type: int, user_email: string, user_name: string, uuid: string> {
+]: nothing -> oneof<record<custom_keys: table<key: string, value: string>, dept: string, duration: int, end_time: string, id: int, participants_count: int, start_time: string, topic: string, total_minutes: int, tracking_fields: table<field: string, value: string>, type: int, user_email: string, user_name: string, uuid: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($meeting_id | is-empty) { error make --unspanned { msg: "path parameter 'meetingId' must be non-empty" } }
@@ -10646,7 +10600,7 @@ export def "report-meeting-participants" [
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
   --include-fields: string@include-fields-completer-1 # Provide `registrant_id` as the value for this field if you would like to see the registrant ID attribute in the response of this API call. A registrant ID is a unique identifier of a [meeting registrant](https://marketplace.zoom.us/docs/api-reference/zoom-api/meetings/meetingregistrants).
-]: nothing -> record<next_page_token: string, page_count: int, page_size: int, total_records: int, participants: table<customer_key: string, duration: int, failover: bool, id: string, join_time: string, leave_time: string, name: string, registrant_id: string, user_email: string, user_id: string>> {
+]: nothing -> oneof<record<next_page_token: string, page_count: int, page_size: int, total_records: int, participants: table<customer_key: string, duration: int, failover: bool, id: string, join_time: string, leave_time: string, name: string, registrant_id: string, user_email: string, user_id: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($meeting_id | is-empty) { error make --unspanned { msg: "path parameter 'meetingId' must be non-empty" } }
@@ -10684,7 +10638,7 @@ export def "report-meeting-polls" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<id: int, questions: table<email: string, name: string, question_details: list>, start_time: string, uuid: string> {
+]: nothing -> oneof<record<id: int, questions: table<email: string, name: string, question_details: list>, start_time: string, uuid: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($meeting_id | is-empty) { error make --unspanned { msg: "path parameter 'meetingId' must be non-empty" } }
@@ -10725,7 +10679,7 @@ export def "report-operation-logs" [
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
   --category-type: string@category-type-completer # **Optional** Filter your response by a category type to see reports for a specific category. The value for this field can be one of the following: `all``user``user_settings``account``billing``im``recording``phone_contacts``webinar``sub_account``role``zoom_rooms`
-]: nothing -> record<next_page_token: string, page_size: int, operation_logs: table<action: string, category_type: string, operation_detail: string, operator: string, time: string>> {
+]: nothing -> oneof<record<next_page_token: string, page_size: int, operation_logs: table<action: string, category_type: string, operation_detail: string, operator: string, time: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($from == null) { error make --unspanned { msg: "required query parameter 'from' missing: pass --from" } }
@@ -10763,13 +10717,13 @@ export def "report-telephone" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --type: string@type-completer-8 # Audio types:`1` - Toll-free Call-in & Call-out.`2` - Toll `3` - SIP Connected Audio (default: 1)
+  --type: string@type-completer-9 # Audio types:`1` - Toll-free Call-in & Call-out.`2` - Toll `3` - SIP Connected Audio (default: 1)
   --from: string # Start date in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the report includes only one month worth of data at once. (required, format: date)
   --to: string # End date. (required, format: date)
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --page-number: int # **Deprecated** - This field has been deprecated and we will stop supporting it completely in a future release. Please use "next_page_token" for pagination instead of this field. The page number of the current page in the returned records. (default: 1)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
-]: nothing -> record<from: string, next_page_token: int, page_count: int, page_size: int, to: string, total_records: int, telephony_usage: table<call_in_number: string, country_name: string, dept: string, duration: int, end_time: string, host_email: string, host_id: string, host_name: string, meeting_id: int, meeting_type: string, phone_number: string, rate: float, signaled_number: string, start_time: string, total: float, type: string, uuid: string>> {
+]: nothing -> oneof<record<from: string, next_page_token: int, page_count: int, page_size: int, to: string, total_records: int, telephony_usage: table<call_in_number: string, country_name: string, dept: string, duration: int, end_time: string, host_email: string, host_id: string, host_name: string, meeting_id: int, meeting_type: string, phone_number: string, rate: float, signaled_number: string, start_time: string, total: float, type: string, uuid: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($from == null) { error make --unspanned { msg: "required query parameter 'from' missing: pass --from" } }
@@ -10807,13 +10761,13 @@ export def "report-users" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --type: string@type-completer-9 # Active or inactive hosts.`active` - Active hosts. `inactive` - Inactive hosts.
+  --type: string@type-completer-10 # Active or inactive hosts.`active` - Active hosts. `inactive` - Inactive hosts.
   --from: string # Start date in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the report includes only one month worth of data at once. (required, format: date)
   --to: string # End date. (required, format: date)
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --page-number: int # The page number of the current page in the returned records. (default: 1)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
-]: nothing -> record<from: string, next_page_token: string, page_count: int, page_number: int, page_size: int, to: string, total_records: int, total_meeting_minutes: int, total_meetings: int, total_participants: int, users: table<custom_attributes: record, dept: string, email: string, id: string, meeting_minutes: int, meetings: int, participants: int, type: int, user_name: string>> {
+]: nothing -> oneof<record<from: string, next_page_token: string, page_count: int, page_number: int, page_size: int, to: string, total_records: int, total_meeting_minutes: int, total_meetings: int, total_participants: int, users: table<custom_attributes: record, dept: string, email: string, id: string, meeting_minutes: int, meetings: int, participants: int, type: int, user_name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($from == null) { error make --unspanned { msg: "required query parameter 'from' missing: pass --from" } }
@@ -10856,8 +10810,8 @@ export def "report-meetings" [
   --to: string # End date. (required, format: date)
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
-  --type: string@type-completer-10 # The meeting types: `past` - Past meetings.`pastOne` - Past one user meetings. (default: past)
-]: nothing -> record<next_page_token: string, page_count: int, page_number: int, page_size: int, total_records: int, from: string, meetings: table<custom_keys: list, duration: int, end_time: string, id: int, participants_count: int, source: string, start_time: string, topic: string, total_minutes: int, type: int, user_email: string, user_name: string, uuid: string>, to: string> {
+  --type: string@type-completer-11 # The meeting types: `past` - Past meetings.`pastOne` - Past one user meetings. (default: past)
+]: nothing -> oneof<record<next_page_token: string, page_count: int, page_number: int, page_size: int, total_records: int, from: string, meetings: table<custom_keys: list, duration: int, end_time: string, id: int, participants_count: int, source: string, start_time: string, topic: string, total_minutes: int, type: int, user_email: string, user_name: string, uuid: string>, to: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -10897,7 +10851,7 @@ export def "report-webinar-details" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<custom_keys: table<key: string, value: string>, dept: string, duration: int, end_time: string, id: int, participants_count: int, start_time: string, topic: string, total_minutes: int, tracking_fields: table<field: string, value: string>, type: int, user_email: string, user_name: string, uuid: string> {
+]: nothing -> oneof<record<custom_keys: table<key: string, value: string>, dept: string, duration: int, end_time: string, id: int, participants_count: int, start_time: string, topic: string, total_minutes: int, tracking_fields: table<field: string, value: string>, type: int, user_email: string, user_name: string, uuid: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($webinar_id | is-empty) { error make --unspanned { msg: "path parameter 'webinarId' must be non-empty" } }
@@ -10937,7 +10891,7 @@ export def "report-webinar-participants" [
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
   --include-fields: string@include-fields-completer-1 # Enter 'registrant_id' as the value for this field if you would like to see the registrant ID attribute included in the response of this API call. A registrant ID is a unique identifier of a [webinar registrant](https://marketplace.zoom.us/docs/api-reference/zoom-api/webinars/webinarregistrants).
-]: nothing -> record<next_page_token: string, page_count: int, page_size: int, total_records: int, participants: table<customer_key: string, duration: int, failover: bool, id: string, join_time: string, leave_time: string, name: string, user_email: string, user_id: string>> {
+]: nothing -> oneof<record<next_page_token: string, page_count: int, page_size: int, total_records: int, participants: table<customer_key: string, duration: int, failover: bool, id: string, join_time: string, leave_time: string, name: string, user_email: string, user_id: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($webinar_id | is-empty) { error make --unspanned { msg: "path parameter 'webinarId' must be non-empty" } }
@@ -10975,7 +10929,7 @@ export def "report-webinar-polls" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<id: int, questions: table<email: string, name: string, question_details: list>, start_time: string, uuid: string> {
+]: nothing -> oneof<record<id: int, questions: table<email: string, name: string, question_details: list>, start_time: string, uuid: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($webinar_id | is-empty) { error make --unspanned { msg: "path parameter 'webinarId' must be non-empty" } }
@@ -11012,7 +10966,7 @@ export def "report-webinar-qa" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<id: int, questions: table<email: string, name: string, question_details: list>, start_time: string, uuid: string> {
+]: nothing -> oneof<record<id: int, questions: table<email: string, name: string, question_details: list>, start_time: string, uuid: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($webinar_id | is-empty) { error make --unspanned { msg: "path parameter 'webinarId' must be non-empty" } }
@@ -11048,7 +11002,7 @@ export def "roles" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<roles: table<description: string, id: string, name: string, total_members: int>, total_records: int> {
+]: nothing -> oneof<record<roles: table<description: string, id: string, name: string, total_members: int>, total_records: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/roles" $auth.query)
@@ -11086,7 +11040,7 @@ export def "create-role" [
   --description: string # Description of the role.
   --name: string # Name of the role.
   --privileges: list<string> # Privileges assigned to the role. Can be one or a combination of [these permissions](https://marketplace.zoom.us/docs/api-reference/other-references/privileges).
-]: any -> record<description: string, id: string, name: string, privileges: list<string>, total_members: int> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11125,7 +11079,7 @@ export def "delete-role" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($role_id | is-empty) { error make --unspanned { msg: "path parameter 'roleId' must be non-empty" } }
@@ -11162,7 +11116,7 @@ export def "get-role-information" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<description: string, id: string, name: string, privileges: list<string>, sub_account_privileges: record<second_level: int>, total_members: int> {
+]: nothing -> oneof<record<description: string, id: string, name: string, privileges: list<string>, sub_account_privileges: record<second_level: int>, total_members: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($role_id | is-empty) { error make --unspanned { msg: "path parameter 'roleId' must be non-empty" } }
@@ -11187,7 +11141,6 @@ export def "get-role-information" [
 #
 # PATCH /roles/{roleId}
 # operationId: updateRole
-# --sub_account_privileges shape: {second_level?: int}
 export def "update-role" [
   role_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11250,7 +11203,7 @@ export def "role-members" [
   --page-number: int # **Deprecated** - This field has been deprecated and we will stop supporting it completely in a future release. Please use "next_page_token" for pagination instead of this field. The page number of the current page in the returned records. (default: 1)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
   --page-size: int # The number of records returned within a single API call. (default: 30)
-]: nothing -> record<members: table<department: string, email: string, first_name: string, id: string, last_name: string, type: int>, next_page_token: string, page_count: int, page_number: int, page_size: int, total_records: int> {
+]: nothing -> oneof<record<members: table<department: string, email: string, first_name: string, id: string, last_name: string, type: int>, next_page_token: string, page_count: int, page_number: int, page_size: int, total_records: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($role_id | is-empty) { error make --unspanned { msg: "path parameter 'roleId' must be non-empty" } }
@@ -11276,7 +11229,6 @@ export def "role-members" [
 #
 # POST /roles/{roleId}/members
 # operationId: AddRoleMembers
-# --members item shape: {email?: string, id?: string}
 export def "add-role-members" [
   role_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11290,7 +11242,7 @@ export def "add-role-members" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --members: list # Array of userId/user email of users to whom you would like to assign this role. Upto 30 users can be assigned a role at once. — item shape: {email?: string, id?: string}
-]: any -> record<add_at: string, ids: string> {
+]: any -> oneof<record<add_at: string, ids: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11368,12 +11320,12 @@ export def "list-zoom-rooms" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --status: string@status-completer-3 # The status of the Zoom Room.
-  --type: string@type-completer-11 # Type of the Zoom Rooms.
+  --type: string@type-completer-12 # Type of the Zoom Rooms.
   --unassigned-rooms: oneof<nothing, bool> # Use this query parameter with a value of `true` if you would like to see Zoom Rooms in your account that have not been assigned to anyone yet. (default: false)
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
   --location-id: string # Parent location ID of the Zoom Room.
-]: nothing -> record<next_page_token: string, page_size: int, rooms: table<activation_code: string, id: string, location_id: string, name: string, room_id: string, status: string>> {
+]: nothing -> oneof<record<next_page_token: string, page_size: int, rooms: table<activation_code: string, id: string, location_id: string, name: string, room_id: string, status: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "unassigned_rooms" $unassigned_rooms "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar") (serialize-qp "location_id" $location_id "scalar")] | flatten | str join "&"
@@ -11411,8 +11363,8 @@ export def "add-a-room" [
   --accept: string@accept-completer # Response content type
   --location-id: string # **Optional**Location ID of the lowest level location in the [location hierarchy](https://support.zoom.us/hc/en-us/articles/115000342983-Zoom-Rooms-Location-Hierarchy) where the Zoom Room is to be added. For instance if the structure of the location hierarchy is set up as “country, states, city, campus, building, floor”, a room can only be added under the floor level location. This ID can be retrieved from the [List Zoom Room Locations](https://marketplace.zoom.us/docs/api-reference/zoom-api/rooms-location/listzrlocations) API.
   name: string # Name of the Zoom Room.
-  type: string@type-completer-11 # Type of the Zoom Room.
-]: any -> record<id: string, location_id: string, name: string, room_id: string, type: string> {
+  type: string@type-completer-12 # Type of the Zoom Room.
+]: any -> oneof<record<id: string, location_id: string, name: string, room_id: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11450,7 +11402,7 @@ export def "get-zr-account-profile" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<basic: record<required_code_to_ext: bool, room_passcode: string, support_email: string, support_phone: string>> {
+]: nothing -> oneof<record<basic: record<required_code_to_ext: bool, room_passcode: string, support_email: string, support_phone: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rooms/account_profile" $auth.query)
@@ -11474,7 +11426,6 @@ export def "get-zr-account-profile" [
 #
 # PATCH /rooms/account_profile
 # operationId: updateZRAccProfile
-# --basic shape: {required_code_to_ext?: bool, room_passcode?: string, support_email?: string, support_phone?: string}
 export def "update-zr-acc-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11487,7 +11438,7 @@ export def "update-zr-acc-profile" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --basic: record # shape: {required_code_to_ext?: bool, room_passcode?: string, support_email?: string, support_phone?: string}
-]: any -> any {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11526,7 +11477,7 @@ export def "get-zr-account-settings" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --setting-type: string@setting-type-completer # The type of setting that you would like to retrieve. `alert`: Alert Settings applied on the Zoom Rooms Account. `meeting`: Meeting settings of the Zoom Rooms Account. `signage`: View digital signage settings of the Zoom Rooms Account. (required, default: meeting)
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let setting_type = ($setting_type | default "meeting")
@@ -11552,10 +11503,6 @@ export def "get-zr-account-settings" [
 #
 # PATCH /rooms/account_settings
 # operationId: updateZoomRoomAccSettings
-# --zoom_rooms shape: {allow_multiple_content_sharing?: bool, audio_device_daily_auto_test?: bool, auto_direct_sharing?: bool, auto_start_scheduled_meeting?: bool, auto_stop_scheduled_meeting?: bool, count_attendees_number_in_room?: bool, display_feedback_survey?: bool, display_meeting_list?: bool, display_top_banner?: bool, email_address_prompt_before_recording?: bool, encrypt_shared_screen_content?: bool, hide_id_for_private_meeting?: bool, make_room_alternative_host?: bool, secure_connection_channel?: bool, ... (10 more fields)}
-# --client_alert shape: {detect_bluetooth_microphone_error_alert?: bool, detect_bluetooth_speaker_error_alert?: bool, detect_camera_error_alert?: bool, detect_microphone_error_alert?: bool, detect_speaker_error_alert?: bool}
-# --digital_signage shape: {banner?: record, display_period?: record, enable_digital_signage?: bool, layout?: string, mute?: bool, play_list?: list}
-# --notification shape: {audio_meet_usability_threshold?: bool, audio_not_meet_usability_threshold?: bool, battery_is_charging?: bool, battery_low_and_not_charging?: bool, battery_percentage?: string, controller_scheduling_disconnected?: bool, controller_scheduling_reconnected?: bool, cpu_usage_high_detected?: bool, mic_speaker_camera_disconnected?: bool, mic_speaker_camera_reconnected?: bool, network_stable_detected?: bool, network_unstable_detected?: bool, sip_registration_failed?: bool, ... (4 more fields)}
 export def "update-zoom-room-acc-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11572,7 +11519,7 @@ export def "update-zoom-room-acc-settings" [
   --client-alert: record # The Client Alert Settings section includes alerts that display on the TV screen of the Zoom Room. Disable these settings if you have deliberately disconnected one or more peripheral devices or have never enabled them. — shape: {detect_bluetooth_microphone_error_alert?: bool, detect_bluetooth_speaker_error_alert?: bool, detect_camera_error_alert?: bool, detect_microphone_error_alert?: bool, detect_speaker_error_alert?: bool}
   --digital-signage: record # shape: {banner?: record, display_period?: record, enable_digital_signage?: bool, layout?: string, mute?: bool, play_list?: list}
   --notification: record # [Notifications Settings](https://support.zoom.us/hc/en-us/articles/205394099-Zoom-Room-Alerts#h_b430b5f2-5150-4522-9c96-c77f22ab70bc) includes the circumstances in which the room sends an email alert to the support team to notify them of a potentially urgent issue. These issues can affect the operation of the room, but do not display on the TV screen. The email alert is sent to the email address specified in the Notification Email Recipients section. — shape: {audio_meet_usability_threshold?: bool, audio_not_meet_usability_threshold?: bool, battery_is_charging?: bool, battery_low_and_not_charging?: bool, battery_percentage?: string, controller_scheduling_disconnected?: bool, controller_scheduling_reconnected?: bool, cpu_usage_high_detected?: bool, mic_speaker_camera_disconnected?: bool, mic_speaker_camera_reconnected?: bool, network_stable_detected?: bool, network_unstable_detected?: bool, sip_registration_failed?: bool, ... (4 more fields)}
-]: any -> any {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11616,7 +11563,7 @@ export def "list-digital-signage-content" [
   --folder-id: string # Unique identifier of the folder where the content is located. Provide this field if you would like to filter the response by contents that are only available in a specific folder.
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
-]: nothing -> record<contents: table<id: string, name: string>, next_page_token: string, page_size: int> {
+]: nothing -> oneof<record<contents: table<id: string, name: string>, next_page_token: string, page_size: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "folder_id" $folder_id "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar")] | flatten | str join "&"
@@ -11641,7 +11588,6 @@ export def "list-digital-signage-content" [
 #
 # PATCH /rooms/events
 # operationId: manageE911signage
-# --params shape: {content?: string, target_ids?: list<string>, target_type?: "account"|"location"|"room"}
 export def "manage-e911signage" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11655,7 +11601,7 @@ export def "manage-e911signage" [
   --accept: string@accept-completer # Response content type
   --method: string@method-completer # To display the emergency content on the Zoom Rooms digital signage display, set the value of this field to be `zoomroom.emergency_alert_displayed`.
   --params: record # shape: {content?: string, target_ids?: list<string>, target_type?: "account"|"location"|"room"}
-]: any -> record<event_id: string> {
+]: any -> oneof<record<event_id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11697,7 +11643,7 @@ export def "list-zr-locations" [
   --type: string # Use this field to filter the response by the type of location. The value can be one of the following: `country`, `states`, `city`, `campus`, `building`, `floor`.
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
-]: nothing -> record<locations: table<id: string, name: string, parent_location_id: string, type: string>, next_page_token: string, page_size: int> {
+]: nothing -> oneof<record<locations: table<id: string, name: string, parent_location_id: string, type: string>, next_page_token: string, page_size: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "parent_location_id" $parent_location_id "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar")] | flatten | str join "&"
@@ -11735,7 +11681,7 @@ export def "add-azr-location" [
   --accept: string@accept-completer # Response content type
   --name: string # Name of the location. The name must be unique and shouldn't have already been used in the same account.
   --parent-location-id: string # The location ID of the location that is a level higher from the location that is being added. For example, to add a City named "City 1" as the child location under a State named "State 1", you must provide the location ID of "State 1". This can be retrieved using the [List Zoom Room Locations](https://marketplace.zoom.us/docs/api-reference/zoom-api/rooms-location/listzrlocations) API.
-]: any -> record<id: string, name: string, parent_location_id: string, type: string> {
+]: any -> oneof<record<id: string, name: string, parent_location_id: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11773,7 +11719,7 @@ export def "get-zr-location-structure" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<structures: list<string>> {
+]: nothing -> oneof<record<structures: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rooms/locations/structure" $auth.query)
@@ -11848,7 +11794,7 @@ export def "get-zr-location-profile" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<basic: record<address: string, description_: string, name: string, required_code_to_ext: bool, room_passcode: string, support_email: string, support_phone: string, timezone: string>> {
+]: nothing -> oneof<record<basic: record<address: string, description_: string, name: string, required_code_to_ext: bool, room_passcode: string, support_email: string, support_phone: string, timezone: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($location_id | is-empty) { error make --unspanned { msg: "path parameter 'locationId' must be non-empty" } }
@@ -11873,7 +11819,6 @@ export def "get-zr-location-profile" [
 #
 # PATCH /rooms/locations/{locationId}
 # operationId: updateZRLocationProfile
-# --basic shape: {address?: string, description ?: string, name?: string, required_code_to_ext?: bool, room_passcode?: string, support_email?: string, support_phone?: string, timezone?: string}
 export def "update-zr-location-profile" [
   location_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11969,7 +11914,7 @@ export def "get-zr-location-settings" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --setting-type: string # The type of setting that you would like to retrieve. `alert`: Alert Settings applied on the Zoom Rooms Account. `meeting`: Meeting settings of the Zoom Rooms Account. `signage`: Digital signage settings of the Zoom Rooms Account. (required, default: meeting)
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($location_id | is-empty) { error make --unspanned { msg: "path parameter 'locationId' must be non-empty" } }
@@ -11996,11 +11941,6 @@ export def "get-zr-location-settings" [
 #
 # PATCH /rooms/locations/{locationId}/settings
 # operationId: updateZRLocationSettings
-# --meeting_security shape: {encryption_type?: "enhanced_encryption"|"e2ee", end_to_end_encrypted_meetings?: bool}
-# --zoom_rooms shape: {allow_multiple_content_sharing?: bool, audio_device_daily_auto_test?: bool, auto_accept_incoming_call_and_fecc?: bool, auto_direct_sharing?: bool, auto_start_scheduled_meeting?: bool, auto_stop_scheduled_meeting?: bool, count_attendees_number_in_room?: bool, display_feedback_survey?: bool, display_meeting_list?: bool, display_top_banner?: bool, encrypt_shared_screen_content?: bool, hide_id_for_private_meeting?: bool, hide_self_view?: bool, lock_speaker_volume_control?: bool, ... (13 more fields)}
-# --client_alert shape: {detect_bluetooth_microphone_error_alert?: bool, detect_bluetooth_speaker_error_alert?: bool, detect_camera_error_alert?: bool, detect_microphone_error_alert?: bool, detect_speaker_error_alert?: bool}
-# --digital_signage shape: {banner?: record, display_period?: record, enable_digital_signage?: bool, layout?: string, mute?: bool, play_list?: list}
-# --notification shape: {audio_meet_usability_threshold?: bool, audio_not_meet_usability_threshold?: bool, battery_is_charging?: bool, battery_low_and_not_charging?: bool, battery_percentage?: string, controller_scheduling_disconnected?: bool, controller_scheduling_reconnected?: bool, cpu_usage_high_detected?: bool, mic_speaker_camera_disconnected?: bool, mic_speaker_camera_reconnected?: bool, network_unstable_detected?: bool, sip_registration_failed?: bool, sip_registration_re_enabled?: bool, ... (3 more fields)}
 export def "update-zr-location-settings" [
   location_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12049,7 +11989,6 @@ export def "update-zr-location-settings" [
 #
 # PATCH /rooms/{id}/events
 # operationId: checkInRooms
-# --params shape: {calendar_id?: string, change_key?: string, event_id: string, resource_email?: string}
 export def "check-in-rooms" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12104,7 +12043,7 @@ export def "delete-a-zoom-room" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($room_id | is-empty) { error make --unspanned { msg: "path parameter 'roomId' must be non-empty" } }
@@ -12141,7 +12080,7 @@ export def "get-zr-profile" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<basic: record<activation_code: string, hide_room_in_contacts: bool, name: string, required_code_to_ext: bool, room_passcode: string, support_email: string, support_phone: string>> {
+]: nothing -> oneof<record<basic: record<activation_code: string, hide_room_in_contacts: bool, name: string, required_code_to_ext: bool, room_passcode: string, support_email: string, support_phone: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($room_id | is-empty) { error make --unspanned { msg: "path parameter 'roomId' must be non-empty" } }
@@ -12166,7 +12105,6 @@ export def "get-zr-profile" [
 #
 # PATCH /rooms/{roomId}
 # operationId: updateRoomProfile
-# --basic shape: {hide_room_in_contacts?: bool, name?: string, required_code_to_ext?: bool, room_passcode?: string, support_email?: string, support_phone?: string}
 export def "update-room-profile" [
   room_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12180,7 +12118,7 @@ export def "update-room-profile" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --basic: record # shape: {hide_room_in_contacts?: bool, name?: string, required_code_to_ext?: bool, room_passcode?: string, support_email?: string, support_phone?: string}
-]: any -> any {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12220,7 +12158,7 @@ export def "list-zr-devices" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<devices: table<app_version: string, device_system: string, device_type: string, id: string, room_name: string, status: string>> {
+]: nothing -> oneof<record<devices: table<app_version: string, device_system: string, device_type: string, id: string, room_name: string, status: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($room_id | is-empty) { error make --unspanned { msg: "path parameter 'roomId' must be non-empty" } }
@@ -12342,7 +12280,7 @@ export def "get-zr-settings" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --setting-type: string # The type of setting that you would like to retrieve. `alert`: Alert Settings applied on the Zoom Rooms Account. `meeting`: Meeting settings of the Zoom Rooms Account. (required, default: meeting)
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($room_id | is-empty) { error make --unspanned { msg: "path parameter 'roomId' must be non-empty" } }
@@ -12369,11 +12307,6 @@ export def "get-zr-settings" [
 #
 # PATCH /rooms/{roomId}/settings
 # operationId: updateZRSettings
-# --meeting_security shape: {encryption_type?: "enhanced_encryption"|"e2ee", end_to_end_encrypted_meetings?: bool}
-# --zoom_rooms shape: {allow_multiple_content_sharing?: bool, audio_device_daily_auto_test?: bool, auto_direct_sharing?: bool, auto_start_scheduled_meeting?: bool, auto_stop_scheduled_meeting?: bool, count_attendees_number_in_room?: bool, display_feedback_survey?: bool, display_meeting_list?: bool, display_top_banner?: bool, encrypt_shared_screen_content?: bool, hide_id_for_private_meeting?: bool, hide_share_instruction?: bool, send_whiteboard_to_internal_contact_only?: bool, show_alert_before_meeting?: bool, ... (9 more fields)}
-# --client_alert shape: {detect_bluetooth_microphone_error_alert?: bool, detect_bluetooth_speaker_error_alert?: bool, detect_camera_error_alert?: bool, detect_microphone_error_alert?: bool, detect_speaker_error_alert?: bool}
-# --digital_signage shape: {banner?: record, display_period?: record, enable_digital_signage?: bool, layout?: string, mute?: bool, play_list?: list}
-# --notification shape: {audio_meet_usability_threshold?: bool, audio_not_meet_usability_threshold?: bool, battery_is_charging?: bool, battery_low_and_not_charging?: bool, battery_percentage?: string, controller_scheduling_disconnected?: bool, controller_scheduling_reconnected?: bool, cpu_usage_high_detected?: bool, mic_speaker_camera_disconnected?: bool, mic_speaker_camera_reconnected?: bool, network_unstable_detected?: bool, sip_registration_failed?: bool, sip_registration_re_enabled?: bool, ... (3 more fields)}
 export def "update-zr-settings" [
   room_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12436,7 +12369,7 @@ export def "list-sip-phones" [
   --search-key: string # User name or email address of a user. If this parameter is provided, only the SIP phone system integration enabled for that specific user will be returned. Otherwise, all SIP phones on an account will be returned.
   --page-size: int # The number of records returned within a single API call.
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
-]: nothing -> record<next_page_token: string, page_count: int, page_number: int, page_size: int, phones: table<authorization_name: string, domain: string, id: string, password: string, proxy_server: string, proxy_server2: string, proxy_server3: string, register_server: string, register_server2: string, register_server3: string, registration_expire_time: int, transport_protocol: string, transport_protocol2: string, transport_protocol3: string, user_email: string, user_name: string, voice_mail: string>, total_records: int> {
+]: nothing -> oneof<record<next_page_token: string, page_count: int, page_number: int, page_size: int, phones: table<authorization_name: string, domain: string, id: string, password: string, proxy_server: string, proxy_server2: string, proxy_server3: string, register_server: string, register_server2: string, register_server3: string, registration_expire_time: int, transport_protocol: string, transport_protocol2: string, transport_protocol3: string, user_email: string, user_name: string, voice_mail: string>, total_records: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_number" $page_number "scalar") (serialize-qp "search_key" $search_key "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar")] | flatten | str join "&"
@@ -12526,7 +12459,7 @@ export def "delete-sip-phone" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($phone_id | is-empty) { error make --unspanned { msg: "path parameter 'phoneId' must be non-empty" } }
@@ -12578,7 +12511,7 @@ export def "update-sip-phone" [
   --transport-protocol3: string@transport-protocol3-completer # Protocols supported by the SIP provider. The value must be either `UDP`, `TCP`, `TLS`, `AUTO`.
   user_name: string # The phone number associated with the user in the SIP account.
   voice_mail: string # The number to dial for checking voicemail.
-]: any -> any {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12617,7 +12550,7 @@ export def "list-sip-trunk-numbers" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<phone_numbers: table<country: string, number: string>, total_records: int> {
+]: nothing -> oneof<record<phone_numbers: table<country: string, number: string>, total_records: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sip_trunk/numbers" $auth.query)
@@ -12652,7 +12585,7 @@ export def "trackingfield-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<total_records: int, tracking_fields: table<id: string, field: string, recommended_values: list, required: bool, visible: bool>> {
+]: nothing -> oneof<record<total_records: int, tracking_fields: table<id: string, field: string, recommended_values: list, required: bool, visible: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tracking_fields" $auth.query)
@@ -12691,7 +12624,7 @@ export def "trackingfield-create" [
   --recommended-values: list<string> # Array of recommended values
   --required: oneof<nothing, bool> # Tracking Field Required
   --visible: oneof<nothing, bool> # Tracking Field Visible
-]: any -> record<id: string, field: string, recommended_values: list<string>, required: bool, visible: bool> {
+]: any -> oneof<record<id: string, field: string, recommended_values: list<string>, required: bool, visible: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12766,7 +12699,7 @@ export def "trackingfield-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<id: string, field: string, recommended_values: list<string>, required: bool, visible: bool> {
+]: nothing -> oneof<record<id: string, field: string, recommended_values: list<string>, required: bool, visible: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($field_id | is-empty) { error make --unspanned { msg: "path parameter 'fieldId' must be non-empty" } }
@@ -12845,7 +12778,7 @@ export def "tsp" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<dial_in_number_unrestricted: bool, dial_in_numbers: table<code: string, number: string, type: string>, enable: bool, master_account_setting_extended: bool, modify_credential_forbidden: bool, tsp_bridge: string, tsp_enabled: bool, tsp_provider: string> {
+]: nothing -> oneof<record<dial_in_number_unrestricted: bool, dial_in_numbers: table<code: string, number: string, type: string>, enable: bool, master_account_setting_extended: bool, modify_credential_forbidden: bool, tsp_bridge: string, tsp_enabled: bool, tsp_provider: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tsp" $auth.query)
@@ -12930,7 +12863,7 @@ export def "users" [
   --page-number: string # The page number of the current page in the returned records.
   --include-fields: string # Provide a value for this field if you would like to see the following attribute in the response of this API call: `custom_attributes`: Returns custom attributes that are associated with the user.`host_key`: Returns [host key](https://support.zoom.us/hc/en-us/articles/205172555-Using-your-host-key) of the user.
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
-]: nothing -> record<next_page_token: string, page_count: int, page_number: int, page_size: int, total_records: int, users: table<created_at: string, custom_attributes: list, dept: string, email: string, first_name: string, group_ids: list, host_key: string, id: string, im_group_ids: list, last_client_version: string, last_login_time: string, last_name: string, plan_united_type: string, pmi: int, role_id: string, status: string, timezone: string, type: int, verified: int>> {
+]: nothing -> oneof<record<next_page_token: string, page_count: int, page_number: int, page_size: int, total_records: int, users: table<created_at: string, custom_attributes: list, dept: string, email: string, first_name: string, group_ids: list, host_key: string, id: string, im_group_ids: list, last_client_version: string, last_login_time: string, last_name: string, plan_united_type: string, pmi: int, role_id: string, status: string, timezone: string, type: int, verified: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "role_id" $role_id "scalar") (serialize-qp "page_number" $page_number "scalar") (serialize-qp "include_fields" $include_fields "scalar") (serialize-qp "next_page_token" $next_page_token "scalar")] | flatten | str join "&"
@@ -12955,7 +12888,6 @@ export def "users" [
 #
 # POST /users
 # operationId: userCreate
-# --user_info shape: {email: string, first_name?: string, last_name?: string, password?: string, type: "1"|"2"|"3"|"99"}
 export def "user-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12969,7 +12901,7 @@ export def "user-create" [
   --accept: string@accept-completer # Response content type
   action: string@action-completer-9 # Specify how to create the new user: `create` - User will get an email sent from Zoom. There is a confirmation link in this email. The user will then need to use the link to activate their Zoom account. The user can then set or change their password.`autoCreate` - This action is provided for the enterprise customer who has a managed domain. This feature is disabled by default because of the security risk involved in creating a user who does not belong to your domain.`custCreate` - Users created via this option do not have passwords and will not have the ability to log into the Zoom Web Portal or the Zoom Client. These users can still host and join meetings using the `start_url` and `join_url` respectively. To use this option, you must contact the ISV Platform Sales team at isv@zoom.us.`ssoCreate` - This action is provided for the enabled “Pre-provisioning SSO User” option. A user created in this way has no password. If not a basic user, a personal vanity URL using the user name (no domain) of the provisioning email will be generated. If the user name or PMI is invalid or occupied, it will use a random number or random personal vanity URL.
   --user-info: record # shape: {email: string, first_name?: string, last_name?: string, password?: string, type: "1"|"2"|"3"|"99"}
-]: any -> record<email: string, first_name: string, id: string, last_name: string, type: int> {
+]: any -> oneof<record<email: string, first_name: string, id: string, last_name: string, type: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13008,7 +12940,7 @@ export def "user-email" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --email: string # The email address to be verified. (required)
-]: nothing -> record<existed_email: bool> {
+]: nothing -> oneof<record<existed_email: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($email == null) { error make --unspanned { msg: "required query parameter 'email' missing: pass --email" } }
@@ -13045,7 +12977,7 @@ export def "user-zak" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<token: string> {
+]: nothing -> oneof<record<token: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users/me/zak" $auth.query)
@@ -13081,7 +13013,7 @@ export def "user-vanity-name" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --vanity-name: string # Personal meeting room name. (required)
-]: nothing -> record<existed: bool> {
+]: nothing -> oneof<record<existed: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($vanity_name == null) { error make --unspanned { msg: "required query parameter 'vanity_name' missing: pass --vanity-name" } }
@@ -13162,7 +13094,7 @@ export def "user" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --login-type: string@login-type-completer # `0` - Facebook.`1` - Google.`99` - API.`100` - Zoom.`101` - SSO.
-]: nothing -> record<id: string, created_at: string, dept: string, email: string, first_name: string, last_client_version: string, last_login_time: string, last_name: string, pmi: int, role_name: string, timezone: string, type: int, use_pmi: bool, account_id: string, cms_user_id: string, company: string, custom_attributes: record<key: string, name: string, value: string>, group_ids: list<string>, host_key: string, im_group_ids: list<string>, jid: string, job_title: string, language: string, location: string, login_type: int, manager: string, personal_meeting_url: string, phone_country: string, phone_number: string, phone_numbers: record<code: string, country: string, number: string, verified: bool>, pic_url: string, plan_united_type: string, role_id: string, status: string, vanity_url: string, verified: int> {
+]: nothing -> oneof<record<id: string, created_at: string, dept: string, email: string, first_name: string, last_client_version: string, last_login_time: string, last_name: string, pmi: int, role_name: string, timezone: string, type: int, use_pmi: bool, account_id: string, cms_user_id: string, company: string, custom_attributes: record<key: string, name: string, value: string>, group_ids: list<string>, host_key: string, im_group_ids: list<string>, jid: string, job_title: string, language: string, location: string, login_type: int, manager: string, personal_meeting_url: string, phone_country: string, phone_number: string, phone_numbers: record<code: string, country: string, number: string, verified: bool>, pic_url: string, plan_united_type: string, role_id: string, status: string, vanity_url: string, verified: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -13188,8 +13120,6 @@ export def "user" [
 #
 # PATCH /users/{userId}
 # operationId: userUpdate
-# --custom_attributes shape: {key?: string, name?: string, value?: string}
-# --phone_numbers shape: {code?: string, country?: string, number?: string}
 export def "user-update" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13219,7 +13149,7 @@ export def "user-update" [
   --phone-numbers: record # shape: {code?: string, country?: string, number?: string}
   --pmi: int # Personal meeting ID: length must be 10.
   --timezone: string # The time zone ID for a user profile. For this parameter value please refer to the ID value in the [timezone](https://marketplace.zoom.us/docs/api-reference/other-references/abbreviation-lists#timezones) list.
-  --type: int@type-completer-12 # User types:`1` - Basic.`2` - Licensed.`3` - On-prem.`99` - None (this can only be set with `ssoCreate`).
+  --type: int@type-completer-13 # User types:`1` - Basic.`2` - Licensed.`3` - On-prem.`99` - None (this can only be set with `ssoCreate`).
   --use-pmi: oneof<nothing, bool> # Use Personal Meeting ID for instant meetings. (default: false)
   --vanity-name: string # Personal meeting room name.
 ]: any -> any {
@@ -13299,7 +13229,7 @@ export def "user-assistants" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<assistants: table<email: string, id: string>> {
+]: nothing -> oneof<record<assistants: table<email: string, id: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -13324,7 +13254,6 @@ export def "user-assistants" [
 #
 # POST /users/{userId}/assistants
 # operationId: userAssistantCreate
-# --assistants item shape: {email?: string, id?: string}
 export def "user-assistant-create" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13338,7 +13267,7 @@ export def "user-assistant-create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --assistants: list # List of User's assistants. — item shape: {email?: string, id?: string}
-]: any -> record<add_at: string, ids: string> {
+]: any -> oneof<record<add_at: string, ids: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13456,7 +13385,7 @@ export def "list-meeting-templates" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<templates: table<id: string, name: string, type: int>, total_records: int> {
+]: nothing -> oneof<record<templates: table<id: string, name: string, type: int>, total_records: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -13493,11 +13422,11 @@ export def "meetings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --type: string@type-completer-13 # The meeting types: `scheduled` - This includes all valid past meetings (unexpired), live meetings and upcoming scheduled meetings. It is equivalent to the combined list of "Previous Meetings" and "Upcoming Meetings" displayed in the user's [Meetings page](https://zoom.us/meeting) on the Zoom Web Portal.`live` - All the ongoing meetings.`upcoming` - All upcoming meetings including live meetings. (default: live)
+  --type: string@type-completer-14 # The meeting types: `scheduled` - This includes all valid past meetings (unexpired), live meetings and upcoming scheduled meetings. It is equivalent to the combined list of "Previous Meetings" and "Upcoming Meetings" displayed in the user's [Meetings page](https://zoom.us/meeting) on the Zoom Web Portal.`live` - All the ongoing meetings.`upcoming` - All upcoming meetings including live meetings. (default: live)
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
   --page-number: string # The page number of the current page in the returned records.
-]: nothing -> record<next_page_token: string, page_count: int, page_number: int, page_size: int, total_records: int, meetings: table<agenda: string, created_at: string, duration: int, host_id: string, id: int, join_url: string, pmi: string, start_time: string, timezone: string, topic: string, type: int, uuid: string>> {
+]: nothing -> oneof<record<next_page_token: string, page_count: int, page_number: int, page_size: int, total_records: int, meetings: table<agenda: string, created_at: string, duration: int, host_id: string, id: int, join_url: string, pmi: string, start_time: string, timezone: string, topic: string, type: int, uuid: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -13523,9 +13452,6 @@ export def "meetings" [
 #
 # POST /users/{userId}/meetings
 # operationId: meetingCreate
-# --recurrence shape: {end_date_time?: string, end_times?: int, monthly_day?: int, monthly_week?: "-1"|"1"|"2"|"3"|"4", monthly_week_day?: "1"|"2"|"3"|"4"|"5"|"6"|"7", repeat_interval?: int, type: "1"|"2"|"3", weekly_days?: "1"|"2"|"3"|"4"|"5"|"6"|"7"}
-# --settings shape: {additional_data_center_regions?: list<string>, allow_multiple_devices?: bool, alternative_hosts?: string, alternative_hosts_email_notification?: bool, approval_type?: "0"|"1"|"2", approved_or_denied_countries_or_regions?: record, audio?: "both"|"telephony"|"voip", authentication_domains?: string, authentication_option?: string, auto_recording?: "local"|"cloud"|"none", breakout_room?: record, close_registration?: bool, cn_meeting?: bool, contact_email?: string, contact_name?: string, ... (16 more fields)}
-# --tracking_fields item shape: {field: string, value?: string}
 export def "meeting-create" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13549,8 +13475,8 @@ export def "meeting-create" [
   --timezone: string # Time zone to format start_time. For example, "America/Los_Angeles". For scheduled meetings only. Please reference our [time zone](https://marketplace.zoom.us/docs/api-reference/other-references/abbreviation-lists#timezones) list for supported time zones and their formats.
   --topic: string # Meeting topic.
   --tracking-fields: list # Tracking fields — item shape: {field: string, value?: string}
-  --type: int@type-completer-14 # Meeting Type:`1` - Instant meeting.`2` - Scheduled meeting.`3` - Recurring meeting with no fixed time.`8` - Recurring meeting with fixed time. (default: 2)
-]: any -> record<assistant_id: string, host_email: string, id: int, registration_url: string, agenda: string, created_at: string, duration: int, h323_password: string, join_url: string, occurrences: table<duration: int, occurrence_id: string, start_time: string, status: string>, password: string, pmi: int, recurrence: record<end_date_time: string, end_times: int, monthly_day: int, monthly_week: int, monthly_week_day: int, repeat_interval: int, type: int, weekly_days: string>, settings: record<allow_multiple_devices: bool, alternative_hosts: string, alternative_hosts_email_notification: bool, approval_type: int, approved_or_denied_countries_or_regions: record<approved_list: list, denied_list: list, enable: bool, method: string>, audio: string, authentication_domains: string, authentication_exception: list<record>, authentication_name: string, authentication_option: string, auto_recording: string, breakout_room: record<enable: bool, rooms: list>, close_registration: bool, cn_meeting: bool, contact_email: string, contact_name: string, custom_keys: list<record>, encryption_type: string, enforce_login: bool, enforce_login_domains: string, global_dial_in_countries: list<string>, global_dial_in_numbers: list<record>, host_video: bool, in_meeting: bool, jbh_time: int, join_before_host: bool, language_interpretation: record<enable: bool, interpreters: list>, meeting_authentication: bool, mute_upon_entry: bool, participant_video: bool, registrants_confirmation_email: bool, registrants_email_notification: bool, registration_type: int, show_share_button: bool, use_pmi: bool, waiting_room: bool, watermark: bool>, start_time: string, start_url: string, timezone: string, topic: string, tracking_fields: table<field: string, value: string, visible: bool>, type: int> {
+  --type: int@type-completer-2 # Meeting Type:`1` - Instant meeting.`2` - Scheduled meeting.`3` - Recurring meeting with no fixed time.`8` - Recurring meeting with fixed time. (default: 2)
+]: any -> oneof<record<assistant_id: string, host_email: string, id: int, registration_url: string, agenda: string, created_at: string, duration: int, h323_password: string, join_url: string, occurrences: table<duration: int, occurrence_id: string, start_time: string, status: string>, password: string, pmi: int, recurrence: record<end_date_time: string, end_times: int, monthly_day: int, monthly_week: int, monthly_week_day: int, repeat_interval: int, type: int, weekly_days: string>, settings: record<allow_multiple_devices: bool, alternative_hosts: string, alternative_hosts_email_notification: bool, approval_type: int, approved_or_denied_countries_or_regions: record<approved_list: list, denied_list: list, enable: bool, method: string>, audio: string, authentication_domains: string, authentication_exception: list<record>, authentication_name: string, authentication_option: string, auto_recording: string, breakout_room: record<enable: bool, rooms: list>, close_registration: bool, cn_meeting: bool, contact_email: string, contact_name: string, custom_keys: list<record>, encryption_type: string, enforce_login: bool, enforce_login_domains: string, global_dial_in_countries: list<string>, global_dial_in_numbers: list<record>, host_video: bool, in_meeting: bool, jbh_time: int, join_before_host: bool, language_interpretation: record<enable: bool, interpreters: list>, meeting_authentication: bool, mute_upon_entry: bool, participant_video: bool, registrants_confirmation_email: bool, registrants_email_notification: bool, registration_type: int, show_share_button: bool, use_pmi: bool, waiting_room: bool, watermark: bool>, start_time: string, start_url: string, timezone: string, topic: string, tracking_fields: table<field: string, value: string, visible: bool>, type: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13590,7 +13516,7 @@ export def "user-pa-cs" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<pac_accounts: table<conference_id: int, dedicated_dial_in_number: list, global_dial_in_numbers: list, listen_only_password: string, participant_password: string>> {
+]: nothing -> oneof<record<pac_accounts: table<conference_id: int, dedicated_dial_in_number: list, global_dial_in_numbers: list, listen_only_password: string, participant_password: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -13667,7 +13593,7 @@ export def "user-permission" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<permissions: list<string>> {
+]: nothing -> oneof<record<permissions: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -13795,7 +13721,7 @@ export def "recordings-list" [
   --from: string # The start date in 'yyyy-mm-dd' UTC format for the date range for which you would like to retrieve recordings. The maximum range can be a month. If no value is provided for this field, the default will be current date. For example, if you make the API request on June 30, 2020, without providing the “from” and “to” parameters, by default the value of 'from' field will be “2020-06-30” and the value of the 'to' field will be “2020-07-01”. **Note**: The "trash" files cannot be filtered by date range and thus, the "from" and "to" fields should not be used for trash files. (format: date)
   --to: string # End date in 'yyyy-mm-dd' 'yyyy-mm-dd' UTC format. (format: date)
   --trash-type: string # The type of Cloud recording that you would like to retrieve from the trash. The value can be one of the following: `meeting_recordings`: List all meeting recordings from the trash. `recording_file`: List all individual recording files from the trash. (default: meeting_recordings)
-]: nothing -> record<from: string, to: string, next_page_token: string, page_count: int, page_size: int, total_records: int, meetings: table<account_id: string, duration: int, host_id: string, id: string, recording_count: string, start_time: string, topic: string, total_size: string, type: string, uuid: string, recording_files: list>> {
+]: nothing -> oneof<record<from: string, to: string, next_page_token: string, page_count: int, page_size: int, total_records: int, meetings: table<account_id: string, duration: int, host_id: string, id: string, recording_count: string, start_time: string, topic: string, total_size: string, type: string, uuid: string, recording_files: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -13869,7 +13795,7 @@ export def "user-schedulers" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<schedulers: table<email: string, id: string, pmi: int>> {
+]: nothing -> oneof<record<schedulers: table<email: string, id: string, pmi: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -13973,15 +13899,6 @@ export def "user-settings" [
 #
 # PATCH /users/{userId}/settings
 # operationId: userSettingsUpdate
-# --email_notification shape: {alternative_host_reminder?: bool, cancel_meeting_reminder?: bool, jbh_reminder?: bool, schedule_for_reminder?: bool}
-# --feature shape: {large_meeting?: bool, large_meeting_capacity?: int, meeting_capacity?: int, webinar?: bool, webinar_capacity?: int, zoom_phone?: bool}
-# --in_meeting shape: {allow_live_streaming?: bool, annotation?: bool, attendee_on_hold?: bool, auto_saving_chat?: bool, breakout_room?: bool, chat?: bool, closed_caption?: bool, co_host?: bool, custom_data_center_regions?: bool, custom_live_streaming_service?: bool, custom_service_instructions?: string, data_center_regions?: "HK"|"AU"|"IN"|"TY"|"CN"|"US"|"CA"|"DE"|"NL"|"LA", e2e_encryption?: bool, entry_exit_chime?: "host"|"all"|"none", far_end_camera_control?: bool, feedback?: bool, file_transfer?: bool, ... (17 more fields)}
-# --profile shape: {recording_storage_location?: record}
-# --recording shape: {ask_host_to_confirm_disclaimer?: bool, ask_participants_to_consent_disclaimer?: bool, auto_delete_cmr?: bool, auto_delete_cmr_days?: int, auto_recording?: "local"|"cloud"|"none", cloud_recording?: bool, host_pause_stop_recording?: bool, ip_address_access_control?: record, local_recording?: bool, record_audio_file?: bool, record_gallery_view?: bool, record_speaker_view?: bool, recording_audio_transcript?: bool, recording_disclaimer?: bool, recording_password_requirement?: record, ... (2 more fields)}
-# --schedule_meeting shape: {audio_type?: "both"|"telephony"|"voip"|"thirdParty", default_password_for_scheduled_meetings?: string, embed_password_in_join_link?: bool, force_pmi_jbh_password?: bool, host_video?: bool, join_before_host?: bool, meeting_password_requirement?: record, participants_video?: bool, personal_meeting?: bool, pmi_password?: string, pstn_password_protected?: bool, require_password_for_instant_meetings?: bool, require_password_for_pmi_meetings?: "jbh_only"|"all"|"none", ... (4 more fields)}
-# --telephony shape: {audio_conference_info?: string, show_international_numbers_link?: bool, telephony_regions?: record, third_party_audio?: bool}
-# --tsp shape: {call_out?: bool, call_out_countries?: list, show_international_numbers_link?: bool}
-# --meeting_security shape: {auto_security?: bool, embed_password_in_join_link?: bool, encryption_type?: "enhanced_encryption"|"e2ee", end_to_end_encrypted_meetings?: bool, meeting_password?: bool, meeting_password_requirement?: record, phone_password?: bool, pmi_password?: bool, require_password_for_scheduled_meeting?: bool, require_password_for_scheduled_webinar?: bool, waiting_room?: bool, waiting_room_settings?: record, webinar_password?: bool}
 export def "user-settings-update" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -14083,7 +14000,7 @@ export def "upload-v-buser" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --file: string # Provide the file's path here.
-]: any -> record<id: string, is_default: bool, name: string, size: string, type: string> {
+]: any -> oneof<record<id: string, is_default: bool, name: string, size: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -14203,7 +14120,7 @@ export def "user-token" [
   --accept: string@accept-completer # Response content type
   --type: string@type-completer-15 # User token types:`token` - Used for starting meetings with the client SDK. This token expires in 14 days and a new token will be returned after the expiry.`zak` - Used for generating the start meeting URL. The token expiration time is two hours. For API users, the expiration time is 90 days.
   --ttl: int # Use this field in conjunction with the `type` field where the value of `type` field is `zak`. The value of this field denotes the expiry time of the `zak` token in seconds. For example, if you would like the zak token to be expired after one hour of the token generation, the value of this field should be `3600`.
-]: nothing -> record<token: string> {
+]: nothing -> oneof<record<token: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -14241,7 +14158,7 @@ export def "user-ts-ps" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<tsp_accounts: table<conference_code: string, dial_in_numbers: list, id: int, leader_pin: string, tsp_bridge: string>> {
+]: nothing -> oneof<record<tsp_accounts: table<conference_code: string, dial_in_numbers: list, id: int, leader_pin: string, tsp_bridge: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -14266,7 +14183,6 @@ export def "user-ts-ps" [
 #
 # POST /users/{userId}/tsp
 # operationId: userTSPCreate
-# --dial_in_numbers item shape: {code?: string, country_label?: string, number?: string, type?: "toll"|"tollfree"|"media_link"}
 export def "user-tsp-create" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -14283,7 +14199,7 @@ export def "user-tsp-create" [
   --dial-in-numbers: list # List of dial in numbers. — item shape: {code?: string, country_label?: string, number?: string, type?: "toll"|"tollfree"|"media_link"}
   leader_pin: string # Leader PIN: numeric value, length is less than 16.
   --tsp-bridge: string@tsp-bridge-completer # Telephony bridge
-]: any -> record<conference_code: string, dial_in_numbers: table<code: string, country_label: string, number: string, type: string>, leader_pin: string, tsp_bridge: string> {
+]: any -> oneof<record<conference_code: string, dial_in_numbers: table<code: string, country_label: string, number: string, type: string>, leader_pin: string, tsp_bridge: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -14402,7 +14318,7 @@ export def "user-tsp" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<conference_code: string, dial_in_numbers: table<code: string, country_label: string, number: string, type: string>, id: int, leader_pin: string, tsp_bridge: string> {
+]: nothing -> oneof<record<conference_code: string, dial_in_numbers: table<code: string, country_label: string, number: string, type: string>, id: int, leader_pin: string, tsp_bridge: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -14428,7 +14344,6 @@ export def "user-tsp" [
 #
 # PATCH /users/{userId}/tsp/{tspId}
 # operationId: userTSPUpdate
-# --dial_in_numbers item shape: {code?: string, country_label?: string, number?: string, type?: "toll"|"tollfree"|"media_link"}
 export def "user-tsp-update" [
   user_id: string
   tsp_id: string@tsp-id-completer
@@ -14486,7 +14401,7 @@ export def "list-webinar-templates" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<templates: table<id: string, name: string>, total_records: int> {
+]: nothing -> oneof<record<templates: table<id: string, name: string>, total_records: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -14525,7 +14440,7 @@ export def "webinars" [
   --accept: string@accept-completer # Response content type
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --page-number: int # **Deprecated** - This field has been deprecated and we will stop supporting it completely in a future release. Please use "next_page_token" for pagination instead of this field. The page number of the current page in the returned records. (default: 1)
-]: nothing -> record<next_page_token: string, page_count: int, page_number: int, page_size: int, total_records: int, webinars: table<agenda: string, created_at: string, duration: int, host_id: string, id: int, join_url: string, start_time: string, timezone: string, topic: string, type: string, uuid: string>> {
+]: nothing -> oneof<record<next_page_token: string, page_count: int, page_number: int, page_size: int, total_records: int, webinars: table<agenda: string, created_at: string, duration: int, host_id: string, id: int, join_url: string, start_time: string, timezone: string, topic: string, type: string, uuid: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -14551,9 +14466,6 @@ export def "webinars" [
 #
 # POST /users/{userId}/webinars
 # operationId: webinarCreate
-# --recurrence shape: {end_date_time?: string, end_times?: int, monthly_day?: int, monthly_week?: "-1"|"1"|"2"|"3"|"4", monthly_week_day?: "1"|"2"|"3"|"4"|"5"|"6"|"7", repeat_interval?: int, type: "1"|"2"|"3", weekly_days?: string}
-# --settings shape: {allow_multiple_devices?: bool, alternative_hosts?: string, approval_type?: "0"|"1"|"2", attendees_and_panelists_reminder_email_notification?: record, audio?: "both"|"telephony"|"voip", authentication_domains?: string, authentication_option?: string, auto_recording?: "local"|"cloud"|"none", close_registration?: bool, contact_email?: string, contact_name?: string, email_language?: string, enforce_login?: bool, enforce_login_domains?: string, follow_up_absentees_email_notification?: record, ... (16 more fields)}
-# --tracking_fields item shape: {field: string, value?: string}
 export def "webinar-create" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -14576,7 +14488,7 @@ export def "webinar-create" [
   --topic: string # Webinar topic.
   --tracking-fields: list # Tracking fields — item shape: {field: string, value?: string}
   --type: int@type-completer-16 # Webinar Types:`5` - Webinar.`6` - Recurring webinar with no fixed time.`9` - Recurring webinar with a fixed time. (default: 5)
-]: any -> record<host_email: string, host_id: string, id: int, registrants_confirmation_email: bool, template_id: string, uuid: string, agenda: string, created_at: string, duration: int, join_url: string, occurrences: table<duration: int, occurrence_id: string, start_time: string, status: string>, password: string, recurrence: record<end_date_time: string, end_times: int, monthly_day: int, monthly_week: int, monthly_week_day: int, repeat_interval: int, type: int, weekly_days: string>, settings: record<allow_multiple_devices: bool, alternative_hosts: string, approval_type: int, attendees_and_panelists_reminder_email_notification: record<enable: bool, type: int>, audio: string, authentication_domains: string, authentication_name: string, authentication_option: string, auto_recording: string, close_registration: bool, contact_email: string, contact_name: string, email_language: string, enforce_login: bool, enforce_login_domains: string, follow_up_absentees_email_notification: record<enable: bool, type: int>, follow_up_attendees_email_notification: record<enable: bool, type: int>, global_dial_in_countries: list<string>, hd_video: bool, host_video: bool, meeting_authentication: bool, notify_registrants: bool, on_demand: bool, panelists_invitation_email_notification: bool, panelists_video: bool, post_webinar_survey: bool, practice_session: bool, question_and_answer: record<allow_anonymous_questions: bool, answer_questions: string, attendees_can_comment: bool, attendees_can_upvote: bool, enable: bool>, registrants_confirmation_email: bool, registrants_email_notification: bool, registrants_restrict_number: int, registration_type: int, show_share_button: bool, survey_url: string>, start_time: string, start_url: string, timezone: string, topic: string, tracking_fields: table<field: string, value: string>, type: int> {
+]: any -> oneof<record<host_email: string, host_id: string, id: int, registrants_confirmation_email: bool, template_id: string, uuid: string, agenda: string, created_at: string, duration: int, join_url: string, occurrences: table<duration: int, occurrence_id: string, start_time: string, status: string>, password: string, recurrence: record<end_date_time: string, end_times: int, monthly_day: int, monthly_week: int, monthly_week_day: int, repeat_interval: int, type: int, weekly_days: string>, settings: record<allow_multiple_devices: bool, alternative_hosts: string, approval_type: int, attendees_and_panelists_reminder_email_notification: record<enable: bool, type: int>, audio: string, authentication_domains: string, authentication_name: string, authentication_option: string, auto_recording: string, close_registration: bool, contact_email: string, contact_name: string, email_language: string, enforce_login: bool, enforce_login_domains: string, follow_up_absentees_email_notification: record<enable: bool, type: int>, follow_up_attendees_email_notification: record<enable: bool, type: int>, global_dial_in_countries: list<string>, hd_video: bool, host_video: bool, meeting_authentication: bool, notify_registrants: bool, on_demand: bool, panelists_invitation_email_notification: bool, panelists_video: bool, post_webinar_survey: bool, practice_session: bool, question_and_answer: record<allow_anonymous_questions: bool, answer_questions: string, attendees_can_comment: bool, attendees_can_upvote: bool, enable: bool>, registrants_confirmation_email: bool, registrants_email_notification: bool, registrants_restrict_number: int, registration_type: int, show_share_button: bool, survey_url: string>, start_time: string, start_url: string, timezone: string, topic: string, tracking_fields: table<field: string, value: string>, type: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -14657,7 +14569,7 @@ export def "webinar" [
   --accept: string@accept-completer # Response content type
   --occurrence-id: string # Unique Identifier that identifies an occurrence of a recurring webinar. [Recurring webinars](https://support.zoom.us/hc/en-us/articles/216354763-How-to-Schedule-A-Recurring-Webinar) can have a maximum of 50 occurrences. When you create a recurring Webinar using [Create a Webinar API](https://marketplace.zoom.us/docs/api-reference/zoom-api/webinars/webinarcreate), you can retrieve the Occurrence ID from the response of the API call.
   --show-previous-occurrences: oneof<nothing, bool> # Set the value of this field to `true` if you would like to view Webinar details of all previous occurrences of a recurring Webinar.
-]: nothing -> record<host_email: string, host_id: string, id: int, uuid: string, agenda: string, created_at: string, duration: int, join_url: string, occurrences: table<duration: int, occurrence_id: string, start_time: string, status: string>, password: string, recurrence: record<end_date_time: string, end_times: int, monthly_day: int, monthly_week: int, monthly_week_day: int, repeat_interval: int, type: int, weekly_days: string>, settings: record<allow_multiple_devices: bool, alternative_hosts: string, approval_type: int, attendees_and_panelists_reminder_email_notification: record<enable: bool, type: int>, audio: string, authentication_domains: string, authentication_name: string, authentication_option: string, auto_recording: string, close_registration: bool, contact_email: string, contact_name: string, email_language: string, enforce_login: bool, enforce_login_domains: string, follow_up_absentees_email_notification: record<enable: bool, type: int>, follow_up_attendees_email_notification: record<enable: bool, type: int>, global_dial_in_countries: list<string>, hd_video: bool, host_video: bool, meeting_authentication: bool, notify_registrants: bool, on_demand: bool, panelists_invitation_email_notification: bool, panelists_video: bool, post_webinar_survey: bool, practice_session: bool, question_and_answer: record<allow_anonymous_questions: bool, answer_questions: string, attendees_can_comment: bool, attendees_can_upvote: bool, enable: bool>, registrants_confirmation_email: bool, registrants_email_notification: bool, registrants_restrict_number: int, registration_type: int, show_share_button: bool, survey_url: string>, start_time: string, start_url: string, timezone: string, topic: string, tracking_fields: table<field: string, value: string>, type: int> {
+]: nothing -> oneof<record<host_email: string, host_id: string, id: int, uuid: string, agenda: string, created_at: string, duration: int, join_url: string, occurrences: table<duration: int, occurrence_id: string, start_time: string, status: string>, password: string, recurrence: record<end_date_time: string, end_times: int, monthly_day: int, monthly_week: int, monthly_week_day: int, repeat_interval: int, type: int, weekly_days: string>, settings: record<allow_multiple_devices: bool, alternative_hosts: string, approval_type: int, attendees_and_panelists_reminder_email_notification: record<enable: bool, type: int>, audio: string, authentication_domains: string, authentication_name: string, authentication_option: string, auto_recording: string, close_registration: bool, contact_email: string, contact_name: string, email_language: string, enforce_login: bool, enforce_login_domains: string, follow_up_absentees_email_notification: record<enable: bool, type: int>, follow_up_attendees_email_notification: record<enable: bool, type: int>, global_dial_in_countries: list<string>, hd_video: bool, host_video: bool, meeting_authentication: bool, notify_registrants: bool, on_demand: bool, panelists_invitation_email_notification: bool, panelists_video: bool, post_webinar_survey: bool, practice_session: bool, question_and_answer: record<allow_anonymous_questions: bool, answer_questions: string, attendees_can_comment: bool, attendees_can_upvote: bool, enable: bool>, registrants_confirmation_email: bool, registrants_email_notification: bool, registrants_restrict_number: int, registration_type: int, show_share_button: bool, survey_url: string>, start_time: string, start_url: string, timezone: string, topic: string, tracking_fields: table<field: string, value: string>, type: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($webinar_id | is-empty) { error make --unspanned { msg: "path parameter 'webinarId' must be non-empty" } }
@@ -14683,9 +14595,6 @@ export def "webinar" [
 #
 # PATCH /webinars/{webinarId}
 # operationId: webinarUpdate
-# --recurrence shape: {end_date_time?: string, end_times?: int, monthly_day?: int, monthly_week?: "-1"|"1"|"2"|"3"|"4", monthly_week_day?: "1"|"2"|"3"|"4"|"5"|"6"|"7", repeat_interval?: int, type: "1"|"2"|"3", weekly_days?: "1"|"2"|"3"|"4"|"5"|"6"|"7"}
-# --settings shape: {allow_multiple_devices?: bool, alternative_hosts?: string, approval_type?: "0"|"1"|"2", attendees_and_panelists_reminder_email_notification?: record, audio?: "both"|"telephony"|"voip", authentication_domains?: string, authentication_name?: string, authentication_option?: string, auto_recording?: "local"|"cloud"|"none", close_registration?: bool, contact_email?: string, contact_name?: string, email_language?: string, enforce_login?: bool, enforce_login_domains?: string, ... (19 more fields)}
-# --tracking_fields item shape: {field?: string, value?: string}
 export def "webinar-update" [
   webinar_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -14737,7 +14646,6 @@ export def "webinar-update" [
 #
 # POST /webinars/{webinarId}/batch_registrants
 # operationId: addBatchWebinarRegistrants
-# --registrants item shape: {email: string, first_name: string, last_name?: string}
 export def "add-batch-webinar-registrants" [
   webinar_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -14752,7 +14660,7 @@ export def "add-batch-webinar-registrants" [
   --accept: string@accept-completer # Response content type
   --auto-approve: oneof<nothing, bool> # If a meeting was scheduled with approval_type `1` (manual approval), but you would like to automatically approve the registrants that are added via this API, you can set the value of this field to `true`. You **cannot** use this field to change approval setting for a meeting that was originally scheduled with approval_type `0` (automatic approval).
   --registrants: list # item shape: {email: string, first_name: string, last_name?: string}
-]: any -> record<registrants: table<email: string, join_url: string, registrant_id: string>> {
+]: any -> oneof<record<registrants: table<email: string, join_url: string, registrant_id: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -14828,7 +14736,7 @@ export def "webinar-panelists" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<panelists: table<id: string, email: string, name: string, join_url: string>, total_records: int> {
+]: nothing -> oneof<record<panelists: table<id: string, email: string, name: string, join_url: string>, total_records: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($webinar_id | is-empty) { error make --unspanned { msg: "path parameter 'webinarId' must be non-empty" } }
@@ -14853,7 +14761,6 @@ export def "webinar-panelists" [
 #
 # POST /webinars/{webinarId}/panelists
 # operationId: webinarPanelistCreate
-# --panelists item shape: {email?: string, name?: string}
 export def "webinar-panelist-create" [
   webinar_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -14867,7 +14774,7 @@ export def "webinar-panelist-create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --panelists: list # List of panelist objects. — item shape: {email?: string, name?: string}
-]: any -> record<id: string, updated_at: string> {
+]: any -> oneof<record<id: string, updated_at: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -14945,7 +14852,7 @@ export def "webinar-polls" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<polls: table<id: string, status: string, questions: list, title: string>, total_records: int> {
+]: nothing -> oneof<record<polls: table<id: string, status: string, questions: list, title: string>, total_records: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($webinar_id | is-empty) { error make --unspanned { msg: "path parameter 'webinarId' must be non-empty" } }
@@ -14970,7 +14877,6 @@ export def "webinar-polls" [
 #
 # POST /webinars/{webinarId}/polls
 # operationId: webinarPollCreate
-# --questions item shape: {answers?: list<string>, name?: string, type?: "single"|"multiple"}
 export def "webinar-poll-create" [
   webinar_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -14985,7 +14891,7 @@ export def "webinar-poll-create" [
   --accept: string@accept-completer # Response content type
   --questions: list # Array of Polls — item shape: {answers?: list<string>, name?: string, type?: "single"|"multiple"}
   --title: string # Title for the poll.
-]: any -> record<id: string, status: string, questions: table<answers: list, name: string, type: string>, title: string> {
+]: any -> oneof<record<id: string, status: string, questions: table<answers: list, name: string, type: string>, title: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -15064,7 +14970,7 @@ export def "webinar-poll-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<id: string, status: string, questions: table<answers: list, name: string, type: string>, title: string> {
+]: nothing -> oneof<record<id: string, status: string, questions: table<answers: list, name: string, type: string>, title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($webinar_id | is-empty) { error make --unspanned { msg: "path parameter 'webinarId' must be non-empty" } }
@@ -15090,7 +14996,6 @@ export def "webinar-poll-get" [
 #
 # PUT /webinars/{webinarId}/polls/{pollId}
 # operationId: webinarPollUpdate
-# --questions item shape: {answers?: list<string>, name?: string, type?: "single"|"multiple"}
 export def "webinar-poll-update" [
   webinar_id: int
   poll_id: string
@@ -15152,7 +15057,7 @@ export def "webinar-registrants" [
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --page-number: int # **Deprecated** - This field has been deprecated and we will stop supporting it completely in a future release. Please use "next_page_token" for pagination instead of this field. The page number of the current page in the returned records. (default: 1)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
-]: nothing -> record<next_page_token: string, page_count: int, page_number: int, page_size: int, total_records: int, registrants: table<id: string, address: string, city: string, comments: string, country: string, custom_questions: list, email: string, first_name: string, industry: string, job_title: string, last_name: string, no_of_employees: string, org: string, phone: string, purchasing_time_frame: string, role_in_purchase_process: string, state: string, zip: string, create_time: string, join_url: string, status: string>> {
+]: nothing -> oneof<record<next_page_token: string, page_count: int, page_number: int, page_size: int, total_records: int, registrants: table<id: string, address: string, city: string, comments: string, country: string, custom_questions: list, email: string, first_name: string, industry: string, job_title: string, last_name: string, no_of_employees: string, org: string, phone: string, purchasing_time_frame: string, role_in_purchase_process: string, state: string, zip: string, create_time: string, join_url: string, status: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($webinar_id | is-empty) { error make --unspanned { msg: "path parameter 'webinarId' must be non-empty" } }
@@ -15178,7 +15083,6 @@ export def "webinar-registrants" [
 #
 # POST /webinars/{webinarId}/registrants
 # operationId: webinarRegistrantCreate
-# --custom_questions item shape: {title?: string, value?: string}
 export def "webinar-registrant-create" [
   webinar_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -15209,7 +15113,7 @@ export def "webinar-registrant-create" [
   --role-in-purchase-process: string # Role in Purchase Process:`Decision Maker``Evaluator/Recommender``Influencer``Not involved`
   --state: string # Registrant's State/Province.
   --zip: string # Registrant's Zip/Postal Code.
-]: any -> record<id: string, join_url: string, registrant_id: string, start_time: string, topic: string> {
+]: any -> oneof<record<id: string, join_url: string, registrant_id: string, start_time: string, topic: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -15250,7 +15154,7 @@ export def "webinar-registrants-questions-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<custom_questions: table<answers: list, required: bool, title: string, type: string>, questions: table<field_name: string, required: bool>> {
+]: nothing -> oneof<record<custom_questions: table<answers: list, required: bool, title: string, type: string>, questions: table<field_name: string, required: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($webinar_id | is-empty) { error make --unspanned { msg: "path parameter 'webinarId' must be non-empty" } }
@@ -15275,8 +15179,6 @@ export def "webinar-registrants-questions-get" [
 #
 # PATCH /webinars/{webinarId}/registrants/questions
 # operationId: webinarRegistrantQuestionUpdate
-# --custom_questions item shape: {answers?: list<string>, required?: bool, title?: string, type?: "short"|"single_radio"|"single_dropdown"|"multiple"}
-# --questions item shape: {field_name?: "last_name"|"address"|"city"|"country"|"zip"|"state"|"phone"|"industry"|"org"|"job_title"|"purchasing_time_frame"|"role_in_purchase_process"|"no_of_employees"|"comments", required?: bool}
 export def "webinar-registrant-question-update" [
   webinar_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -15318,7 +15220,6 @@ export def "webinar-registrant-question-update" [
 #
 # PUT /webinars/{webinarId}/registrants/status
 # operationId: webinarRegistrantStatus
-# --registrants item shape: {email?: string, id?: string}
 export def "webinar-registrant-status" [
   webinar_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -15416,7 +15317,7 @@ export def "webinar-registrant-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --occurrence-id: string # The meeting occurrence ID.
-]: nothing -> record<id: string, address: string, city: string, comments: string, country: string, custom_questions: table<title: string, value: string>, email: string, first_name: string, industry: string, job_title: string, last_name: string, no_of_employees: string, org: string, phone: string, purchasing_time_frame: string, role_in_purchase_process: string, state: string, zip: string, create_time: string, join_url: string, status: string> {
+]: nothing -> oneof<record<id: string, address: string, city: string, comments: string, country: string, custom_questions: table<title: string, value: string>, email: string, first_name: string, industry: string, job_title: string, last_name: string, no_of_employees: string, org: string, phone: string, purchasing_time_frame: string, role_in_purchase_process: string, state: string, zip: string, create_time: string, join_url: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($webinar_id | is-empty) { error make --unspanned { msg: "path parameter 'webinarId' must be non-empty" } }
@@ -15495,7 +15396,7 @@ export def "get-tracking-sources" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<total_records: int, tracking_sources: table<id: string, registration_count: int, source_name: string, tracking_url: string, visitor_count: int>> {
+]: nothing -> oneof<record<total_records: int, tracking_sources: table<id: string, registration_count: int, source_name: string, tracking_url: string, visitor_count: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($webinar_id | is-empty) { error make --unspanned { msg: "path parameter 'webinarId' must be non-empty" } }

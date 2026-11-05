@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -173,9 +197,9 @@ def action-completer-64 [] { ["UpdateAutoScalingGroup"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-attach-instances" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-attach-instances" "post-attach-instances" "get-attach-load-balancer-target-groups" "post-attach-load-balancer-target-groups" "get-attach-load-balancers" "post-attach-load-balancers" "get-attach-traffic-sources" "post-attach-traffic-sources" "get-batch-delete-scheduled-action" "post-batch-delete-scheduled-action" "get-batch-put-scheduled-update-group-action" "post-batch-put-scheduled-update-group-action" "get-cancel-instance-refresh" "post-cancel-instance-refresh" "get-complete-lifecycle-action" "post-complete-lifecycle-action" "get-create-auto-scaling-group" "post-create-auto-scaling-group" "get-create-launch-configuration" "post-create-launch-configuration" "get-create-or-update-tags" "post-create-or-update-tags" "get-delete-auto-scaling-group" "post-delete-auto-scaling-group" "get-delete-launch-configuration" "post-delete-launch-configuration" "get-delete-lifecycle-hook" "post-delete-lifecycle-hook" "get-delete-notification-configuration" "post-delete-notification-configuration" "get-delete-policy" "post-delete-policy" "get-delete-scheduled-action" "post-delete-scheduled-action" "get-delete-tags" "post-delete-tags" "get-delete-warm-pool" "post-delete-warm-pool" "get-describe-account-limits" "post-describe-account-limits" "get-describe-adjustment-types" "post-describe-adjustment-types" "get-describe-auto-scaling-groups" "post-describe-auto-scaling-groups" "get-describe-auto-scaling-instances" "post-describe-auto-scaling-instances" "get-describe-auto-scaling-notification-types" "post-describe-auto-scaling-notification-types" "get-describe-instance-refreshes" "post-describe-instance-refreshes" "get-describe-launch-configurations" "post-describe-launch-configurations" "get-describe-lifecycle-hook-types" "post-describe-lifecycle-hook-types" "get-describe-lifecycle-hooks" "post-describe-lifecycle-hooks" "get-describe-load-balancer-target-groups" "post-describe-load-balancer-target-groups" "get-describe-load-balancers" "post-describe-load-balancers" "get-describe-metric-collection-types" "post-describe-metric-collection-types" "get-describe-notification-configurations" "post-describe-notification-configurations" "get-describe-policies" "post-describe-policies" "get-describe-scaling-activities" "post-describe-scaling-activities" "get-describe-scaling-process-types" "post-describe-scaling-process-types" "get-describe-scheduled-actions" "post-describe-scheduled-actions" "get-describe-tags" "post-describe-tags" "get-describe-termination-policy-types" "post-describe-termination-policy-types" "get-describe-traffic-sources" "post-describe-traffic-sources" "get-describe-warm-pool" "post-describe-warm-pool" "get-detach-instances" "post-detach-instances" "get-detach-load-balancer-target-groups" "post-detach-load-balancer-target-groups" "get-detach-load-balancers" "post-detach-load-balancers" "get-detach-traffic-sources" "post-detach-traffic-sources" "get-disable-metrics-collection" "post-disable-metrics-collection" "get-enable-metrics-collection" "post-enable-metrics-collection" "get-enter-standby" "post-enter-standby" "get-execute-policy" "post-execute-policy" "get-exit-standby" "post-exit-standby" "get-get-predictive-scaling-forecast" "post-get-predictive-scaling-forecast" "get-put-lifecycle-hook" "post-put-lifecycle-hook" "get-put-notification-configuration" "post-put-notification-configuration" "get-put-scaling-policy" "post-put-scaling-policy" "get-put-scheduled-update-group-action" "post-put-scheduled-update-group-action" "get-put-warm-pool" "post-put-warm-pool" "get-record-lifecycle-action-heartbeat" "post-record-lifecycle-action-heartbeat" "get-resume-processes" "post-resume-processes" "get-rollback-instance-refresh" "post-rollback-instance-refresh" "get-set-desired-capacity" "post-set-desired-capacity" "get-set-instance-health" "post-set-instance-health" "get-set-instance-protection" "post-set-instance-protection" "get-start-instance-refresh" "post-start-instance-refresh" "get-suspend-processes" "post-suspend-processes" "get-terminate-instance-in-auto-scaling-group" "post-terminate-instance-in-auto-scaling-group" "get-update-auto-scaling-group" "post-update-auto-scaling-group" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -321,7 +345,7 @@ export def "get-attach-load-balancer-target-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($auto_scaling_group_name == null) { error make --unspanned { msg: "required query parameter 'AutoScalingGroupName' missing: pass --auto-scaling-group-name" } }
@@ -372,7 +396,7 @@ export def "post-attach-load-balancer-target-groups" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -425,7 +449,7 @@ export def "get-attach-load-balancers" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($auto_scaling_group_name == null) { error make --unspanned { msg: "required query parameter 'AutoScalingGroupName' missing: pass --auto-scaling-group-name" } }
@@ -476,7 +500,7 @@ export def "post-attach-load-balancers" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -529,7 +553,7 @@ export def "get-attach-traffic-sources" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($auto_scaling_group_name == null) { error make --unspanned { msg: "required query parameter 'AutoScalingGroupName' missing: pass --auto-scaling-group-name" } }
@@ -580,7 +604,7 @@ export def "post-attach-traffic-sources" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -633,7 +657,7 @@ export def "get-batch-delete-scheduled-action" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<FailedScheduledActions: table<ScheduledActionName: string, ErrorCode: string, ErrorMessage: string>> {
+]: nothing -> oneof<record<FailedScheduledActions: table<ScheduledActionName: string, ErrorCode: string, ErrorMessage: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($auto_scaling_group_name == null) { error make --unspanned { msg: "required query parameter 'AutoScalingGroupName' missing: pass --auto-scaling-group-name" } }
@@ -684,7 +708,7 @@ export def "post-batch-delete-scheduled-action" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<FailedScheduledActions: table<ScheduledActionName: string, ErrorCode: string, ErrorMessage: string>> {
+]: any -> oneof<record<FailedScheduledActions: table<ScheduledActionName: string, ErrorCode: string, ErrorMessage: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -737,7 +761,7 @@ export def "get-batch-put-scheduled-update-group-action" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<FailedScheduledUpdateGroupActions: table<ScheduledActionName: string, ErrorCode: string, ErrorMessage: string>> {
+]: nothing -> oneof<record<FailedScheduledUpdateGroupActions: table<ScheduledActionName: string, ErrorCode: string, ErrorMessage: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($auto_scaling_group_name == null) { error make --unspanned { msg: "required query parameter 'AutoScalingGroupName' missing: pass --auto-scaling-group-name" } }
@@ -788,7 +812,7 @@ export def "post-batch-put-scheduled-update-group-action" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<FailedScheduledUpdateGroupActions: table<ScheduledActionName: string, ErrorCode: string, ErrorMessage: string>> {
+]: any -> oneof<record<FailedScheduledUpdateGroupActions: table<ScheduledActionName: string, ErrorCode: string, ErrorMessage: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -840,7 +864,7 @@ export def "get-cancel-instance-refresh" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<InstanceRefreshId: string> {
+]: nothing -> oneof<record<InstanceRefreshId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($auto_scaling_group_name == null) { error make --unspanned { msg: "required query parameter 'AutoScalingGroupName' missing: pass --auto-scaling-group-name" } }
@@ -890,7 +914,7 @@ export def "post-cancel-instance-refresh" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<InstanceRefreshId: string> {
+]: any -> oneof<record<InstanceRefreshId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -946,7 +970,7 @@ export def "get-complete-lifecycle-action" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($lifecycle_hook_name == null) { error make --unspanned { msg: "required query parameter 'LifecycleHookName' missing: pass --lifecycle-hook-name" } }
@@ -998,7 +1022,7 @@ export def "post-complete-lifecycle-action" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1608,7 +1632,7 @@ export def "get-delete-lifecycle-hook" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($lifecycle_hook_name == null) { error make --unspanned { msg: "required query parameter 'LifecycleHookName' missing: pass --lifecycle-hook-name" } }
@@ -1659,7 +1683,7 @@ export def "post-delete-lifecycle-hook" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2125,7 +2149,7 @@ export def "get-delete-warm-pool" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($auto_scaling_group_name == null) { error make --unspanned { msg: "required query parameter 'AutoScalingGroupName' missing: pass --auto-scaling-group-name" } }
@@ -2175,7 +2199,7 @@ export def "post-delete-warm-pool" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2226,7 +2250,7 @@ export def "get-describe-account-limits" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<MaxNumberOfAutoScalingGroups: int, MaxNumberOfLaunchConfigurations: int, NumberOfAutoScalingGroups: int, NumberOfLaunchConfigurations: int> {
+]: nothing -> oneof<record<MaxNumberOfAutoScalingGroups: int, MaxNumberOfLaunchConfigurations: int, NumberOfAutoScalingGroups: int, NumberOfLaunchConfigurations: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DescribeAccountLimits")
@@ -2274,7 +2298,7 @@ export def "post-describe-account-limits" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<MaxNumberOfAutoScalingGroups: int, MaxNumberOfLaunchConfigurations: int, NumberOfAutoScalingGroups: int, NumberOfLaunchConfigurations: int> {
+]: nothing -> oneof<record<MaxNumberOfAutoScalingGroups: int, MaxNumberOfLaunchConfigurations: int, NumberOfAutoScalingGroups: int, NumberOfLaunchConfigurations: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DescribeAccountLimits")
@@ -2322,7 +2346,7 @@ export def "get-describe-adjustment-types" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<AdjustmentTypes: table<AdjustmentType: string>> {
+]: nothing -> oneof<record<AdjustmentTypes: table<AdjustmentType: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DescribeAdjustmentTypes")
@@ -2370,7 +2394,7 @@ export def "post-describe-adjustment-types" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<AdjustmentTypes: table<AdjustmentType: string>> {
+]: nothing -> oneof<record<AdjustmentTypes: table<AdjustmentType: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DescribeAdjustmentTypes")
@@ -2422,7 +2446,7 @@ export def "get-describe-auto-scaling-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<AutoScalingGroups: table<AutoScalingGroupName: string, AutoScalingGroupARN: string, LaunchConfigurationName: string, LaunchTemplate: record, MixedInstancesPolicy: record, MinSize: int, MaxSize: int, DesiredCapacity: int, PredictedCapacity: int, DefaultCooldown: int, AvailabilityZones: list, LoadBalancerNames: list, TargetGroupARNs: list, HealthCheckType: string, HealthCheckGracePeriod: int, Instances: list, CreatedTime: string, SuspendedProcesses: list, PlacementGroup: string, VPCZoneIdentifier: string, EnabledMetrics: list, Status: string, Tags: list, TerminationPolicies: list, NewInstancesProtectedFromScaleIn: bool, ServiceLinkedRoleARN: string, MaxInstanceLifetime: int, CapacityRebalance: bool, WarmPoolConfiguration: record, WarmPoolSize: int, Context: string, DesiredCapacityType: string, DefaultInstanceWarmup: int, TrafficSources: list>, NextToken: string> {
+]: nothing -> oneof<record<AutoScalingGroups: table<AutoScalingGroupName: string, AutoScalingGroupARN: string, LaunchConfigurationName: string, LaunchTemplate: record, MixedInstancesPolicy: record, MinSize: int, MaxSize: int, DesiredCapacity: int, PredictedCapacity: int, DefaultCooldown: int, AvailabilityZones: list, LoadBalancerNames: list, TargetGroupARNs: list, HealthCheckType: string, HealthCheckGracePeriod: int, Instances: list, CreatedTime: string, SuspendedProcesses: list, PlacementGroup: string, VPCZoneIdentifier: string, EnabledMetrics: list, Status: string, Tags: list, TerminationPolicies: list, NewInstancesProtectedFromScaleIn: bool, ServiceLinkedRoleARN: string, MaxInstanceLifetime: int, CapacityRebalance: bool, WarmPoolConfiguration: record, WarmPoolSize: int, Context: string, DesiredCapacityType: string, DefaultInstanceWarmup: int, TrafficSources: list>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DescribeAutoScalingGroups")
@@ -2473,7 +2497,7 @@ export def "post-describe-auto-scaling-groups" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<AutoScalingGroups: table<AutoScalingGroupName: string, AutoScalingGroupARN: string, LaunchConfigurationName: string, LaunchTemplate: record, MixedInstancesPolicy: record, MinSize: int, MaxSize: int, DesiredCapacity: int, PredictedCapacity: int, DefaultCooldown: int, AvailabilityZones: list, LoadBalancerNames: list, TargetGroupARNs: list, HealthCheckType: string, HealthCheckGracePeriod: int, Instances: list, CreatedTime: string, SuspendedProcesses: list, PlacementGroup: string, VPCZoneIdentifier: string, EnabledMetrics: list, Status: string, Tags: list, TerminationPolicies: list, NewInstancesProtectedFromScaleIn: bool, ServiceLinkedRoleARN: string, MaxInstanceLifetime: int, CapacityRebalance: bool, WarmPoolConfiguration: record, WarmPoolSize: int, Context: string, DesiredCapacityType: string, DefaultInstanceWarmup: int, TrafficSources: list>, NextToken: string> {
+]: any -> oneof<record<AutoScalingGroups: table<AutoScalingGroupName: string, AutoScalingGroupARN: string, LaunchConfigurationName: string, LaunchTemplate: record, MixedInstancesPolicy: record, MinSize: int, MaxSize: int, DesiredCapacity: int, PredictedCapacity: int, DefaultCooldown: int, AvailabilityZones: list, LoadBalancerNames: list, TargetGroupARNs: list, HealthCheckType: string, HealthCheckGracePeriod: int, Instances: list, CreatedTime: string, SuspendedProcesses: list, PlacementGroup: string, VPCZoneIdentifier: string, EnabledMetrics: list, Status: string, Tags: list, TerminationPolicies: list, NewInstancesProtectedFromScaleIn: bool, ServiceLinkedRoleARN: string, MaxInstanceLifetime: int, CapacityRebalance: bool, WarmPoolConfiguration: record, WarmPoolSize: int, Context: string, DesiredCapacityType: string, DefaultInstanceWarmup: int, TrafficSources: list>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2527,7 +2551,7 @@ export def "get-describe-auto-scaling-instances" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<AutoScalingInstances: table<InstanceId: string, InstanceType: string, AutoScalingGroupName: string, AvailabilityZone: string, LifecycleState: string, HealthStatus: string, LaunchConfigurationName: string, LaunchTemplate: record, ProtectedFromScaleIn: bool, WeightedCapacity: string>, NextToken: string> {
+]: nothing -> oneof<record<AutoScalingInstances: table<InstanceId: string, InstanceType: string, AutoScalingGroupName: string, AvailabilityZone: string, LifecycleState: string, HealthStatus: string, LaunchConfigurationName: string, LaunchTemplate: record, ProtectedFromScaleIn: bool, WeightedCapacity: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DescribeAutoScalingInstances")
@@ -2578,7 +2602,7 @@ export def "post-describe-auto-scaling-instances" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<AutoScalingInstances: table<InstanceId: string, InstanceType: string, AutoScalingGroupName: string, AvailabilityZone: string, LifecycleState: string, HealthStatus: string, LaunchConfigurationName: string, LaunchTemplate: record, ProtectedFromScaleIn: bool, WeightedCapacity: string>, NextToken: string> {
+]: any -> oneof<record<AutoScalingInstances: table<InstanceId: string, InstanceType: string, AutoScalingGroupName: string, AvailabilityZone: string, LifecycleState: string, HealthStatus: string, LaunchConfigurationName: string, LaunchTemplate: record, ProtectedFromScaleIn: bool, WeightedCapacity: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2629,7 +2653,7 @@ export def "get-describe-auto-scaling-notification-types" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<AutoScalingNotificationTypes: list<string>> {
+]: nothing -> oneof<record<AutoScalingNotificationTypes: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DescribeAutoScalingNotificationTypes")
@@ -2677,7 +2701,7 @@ export def "post-describe-auto-scaling-notification-types" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<AutoScalingNotificationTypes: list<string>> {
+]: nothing -> oneof<record<AutoScalingNotificationTypes: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DescribeAutoScalingNotificationTypes")
@@ -2729,7 +2753,7 @@ export def "get-describe-instance-refreshes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<InstanceRefreshes: table<InstanceRefreshId: string, AutoScalingGroupName: string, Status: string, StatusReason: string, StartTime: string, EndTime: string, PercentageComplete: int, InstancesToUpdate: int, ProgressDetails: record, Preferences: record, DesiredConfiguration: record, RollbackDetails: record>, NextToken: string> {
+]: nothing -> oneof<record<InstanceRefreshes: table<InstanceRefreshId: string, AutoScalingGroupName: string, Status: string, StatusReason: string, StartTime: string, EndTime: string, PercentageComplete: int, InstancesToUpdate: int, ProgressDetails: record, Preferences: record, DesiredConfiguration: record, RollbackDetails: record>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($auto_scaling_group_name == null) { error make --unspanned { msg: "required query parameter 'AutoScalingGroupName' missing: pass --auto-scaling-group-name" } }
@@ -2779,7 +2803,7 @@ export def "post-describe-instance-refreshes" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<InstanceRefreshes: table<InstanceRefreshId: string, AutoScalingGroupName: string, Status: string, StatusReason: string, StartTime: string, EndTime: string, PercentageComplete: int, InstancesToUpdate: int, ProgressDetails: record, Preferences: record, DesiredConfiguration: record, RollbackDetails: record>, NextToken: string> {
+]: any -> oneof<record<InstanceRefreshes: table<InstanceRefreshId: string, AutoScalingGroupName: string, Status: string, StatusReason: string, StartTime: string, EndTime: string, PercentageComplete: int, InstancesToUpdate: int, ProgressDetails: record, Preferences: record, DesiredConfiguration: record, RollbackDetails: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2833,7 +2857,7 @@ export def "get-describe-launch-configurations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<LaunchConfigurations: table<LaunchConfigurationName: string, LaunchConfigurationARN: string, ImageId: string, KeyName: string, SecurityGroups: list, ClassicLinkVPCId: string, ClassicLinkVPCSecurityGroups: list, UserData: string, InstanceType: string, KernelId: string, RamdiskId: string, BlockDeviceMappings: list, InstanceMonitoring: record, SpotPrice: string, IamInstanceProfile: string, CreatedTime: string, EbsOptimized: bool, AssociatePublicIpAddress: bool, PlacementTenancy: string, MetadataOptions: record>, NextToken: string> {
+]: nothing -> oneof<record<LaunchConfigurations: table<LaunchConfigurationName: string, LaunchConfigurationARN: string, ImageId: string, KeyName: string, SecurityGroups: list, ClassicLinkVPCId: string, ClassicLinkVPCSecurityGroups: list, UserData: string, InstanceType: string, KernelId: string, RamdiskId: string, BlockDeviceMappings: list, InstanceMonitoring: record, SpotPrice: string, IamInstanceProfile: string, CreatedTime: string, EbsOptimized: bool, AssociatePublicIpAddress: bool, PlacementTenancy: string, MetadataOptions: record>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DescribeLaunchConfigurations")
@@ -2884,7 +2908,7 @@ export def "post-describe-launch-configurations" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<LaunchConfigurations: table<LaunchConfigurationName: string, LaunchConfigurationARN: string, ImageId: string, KeyName: string, SecurityGroups: list, ClassicLinkVPCId: string, ClassicLinkVPCSecurityGroups: list, UserData: string, InstanceType: string, KernelId: string, RamdiskId: string, BlockDeviceMappings: list, InstanceMonitoring: record, SpotPrice: string, IamInstanceProfile: string, CreatedTime: string, EbsOptimized: bool, AssociatePublicIpAddress: bool, PlacementTenancy: string, MetadataOptions: record>, NextToken: string> {
+]: any -> oneof<record<LaunchConfigurations: table<LaunchConfigurationName: string, LaunchConfigurationARN: string, ImageId: string, KeyName: string, SecurityGroups: list, ClassicLinkVPCId: string, ClassicLinkVPCSecurityGroups: list, UserData: string, InstanceType: string, KernelId: string, RamdiskId: string, BlockDeviceMappings: list, InstanceMonitoring: record, SpotPrice: string, IamInstanceProfile: string, CreatedTime: string, EbsOptimized: bool, AssociatePublicIpAddress: bool, PlacementTenancy: string, MetadataOptions: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2935,7 +2959,7 @@ export def "get-describe-lifecycle-hook-types" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<LifecycleHookTypes: list<string>> {
+]: nothing -> oneof<record<LifecycleHookTypes: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DescribeLifecycleHookTypes")
@@ -2983,7 +3007,7 @@ export def "post-describe-lifecycle-hook-types" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<LifecycleHookTypes: list<string>> {
+]: nothing -> oneof<record<LifecycleHookTypes: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DescribeLifecycleHookTypes")
@@ -3033,7 +3057,7 @@ export def "get-describe-lifecycle-hooks" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<LifecycleHooks: table<LifecycleHookName: string, AutoScalingGroupName: string, LifecycleTransition: string, NotificationTargetARN: string, RoleARN: string, NotificationMetadata: string, HeartbeatTimeout: int, GlobalTimeout: int, DefaultResult: string>> {
+]: nothing -> oneof<record<LifecycleHooks: table<LifecycleHookName: string, AutoScalingGroupName: string, LifecycleTransition: string, NotificationTargetARN: string, RoleARN: string, NotificationMetadata: string, HeartbeatTimeout: int, GlobalTimeout: int, DefaultResult: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($auto_scaling_group_name == null) { error make --unspanned { msg: "required query parameter 'AutoScalingGroupName' missing: pass --auto-scaling-group-name" } }
@@ -3083,7 +3107,7 @@ export def "post-describe-lifecycle-hooks" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<LifecycleHooks: table<LifecycleHookName: string, AutoScalingGroupName: string, LifecycleTransition: string, NotificationTargetARN: string, RoleARN: string, NotificationMetadata: string, HeartbeatTimeout: int, GlobalTimeout: int, DefaultResult: string>> {
+]: any -> oneof<record<LifecycleHooks: table<LifecycleHookName: string, AutoScalingGroupName: string, LifecycleTransition: string, NotificationTargetARN: string, RoleARN: string, NotificationMetadata: string, HeartbeatTimeout: int, GlobalTimeout: int, DefaultResult: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3137,7 +3161,7 @@ export def "get-describe-load-balancer-target-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<LoadBalancerTargetGroups: table<LoadBalancerTargetGroupARN: string, State: string>, NextToken: string> {
+]: nothing -> oneof<record<LoadBalancerTargetGroups: table<LoadBalancerTargetGroupARN: string, State: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($auto_scaling_group_name == null) { error make --unspanned { msg: "required query parameter 'AutoScalingGroupName' missing: pass --auto-scaling-group-name" } }
@@ -3187,7 +3211,7 @@ export def "post-describe-load-balancer-target-groups" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<LoadBalancerTargetGroups: table<LoadBalancerTargetGroupARN: string, State: string>, NextToken: string> {
+]: any -> oneof<record<LoadBalancerTargetGroups: table<LoadBalancerTargetGroupARN: string, State: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3241,7 +3265,7 @@ export def "get-describe-load-balancers" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<LoadBalancers: table<LoadBalancerName: string, State: string>, NextToken: string> {
+]: nothing -> oneof<record<LoadBalancers: table<LoadBalancerName: string, State: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($auto_scaling_group_name == null) { error make --unspanned { msg: "required query parameter 'AutoScalingGroupName' missing: pass --auto-scaling-group-name" } }
@@ -3291,7 +3315,7 @@ export def "post-describe-load-balancers" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<LoadBalancers: table<LoadBalancerName: string, State: string>, NextToken: string> {
+]: any -> oneof<record<LoadBalancers: table<LoadBalancerName: string, State: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3342,7 +3366,7 @@ export def "get-describe-metric-collection-types" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Metrics: table<Metric: string>, Granularities: table<Granularity: string>> {
+]: nothing -> oneof<record<Metrics: table<Metric: string>, Granularities: table<Granularity: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DescribeMetricCollectionTypes")
@@ -3390,7 +3414,7 @@ export def "post-describe-metric-collection-types" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Metrics: table<Metric: string>, Granularities: table<Granularity: string>> {
+]: nothing -> oneof<record<Metrics: table<Metric: string>, Granularities: table<Granularity: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DescribeMetricCollectionTypes")
@@ -3441,7 +3465,7 @@ export def "get-describe-notification-configurations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NotificationConfigurations: table<AutoScalingGroupName: string, TopicARN: string, NotificationType: string>, NextToken: string> {
+]: nothing -> oneof<record<NotificationConfigurations: table<AutoScalingGroupName: string, TopicARN: string, NotificationType: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DescribeNotificationConfigurations")
@@ -3492,7 +3516,7 @@ export def "post-describe-notification-configurations" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<NotificationConfigurations: table<AutoScalingGroupName: string, TopicARN: string, NotificationType: string>, NextToken: string> {
+]: any -> oneof<record<NotificationConfigurations: table<AutoScalingGroupName: string, TopicARN: string, NotificationType: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3548,7 +3572,7 @@ export def "get-describe-policies" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ScalingPolicies: table<AutoScalingGroupName: string, PolicyName: string, PolicyARN: string, PolicyType: string, AdjustmentType: string, MinAdjustmentStep: int, MinAdjustmentMagnitude: int, ScalingAdjustment: int, Cooldown: int, StepAdjustments: list, MetricAggregationType: string, EstimatedInstanceWarmup: int, Alarms: list, TargetTrackingConfiguration: record, Enabled: bool, PredictiveScalingConfiguration: record>, NextToken: string> {
+]: nothing -> oneof<record<ScalingPolicies: table<AutoScalingGroupName: string, PolicyName: string, PolicyARN: string, PolicyType: string, AdjustmentType: string, MinAdjustmentStep: int, MinAdjustmentMagnitude: int, ScalingAdjustment: int, Cooldown: int, StepAdjustments: list, MetricAggregationType: string, EstimatedInstanceWarmup: int, Alarms: list, TargetTrackingConfiguration: record, Enabled: bool, PredictiveScalingConfiguration: record>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DescribePolicies")
@@ -3599,7 +3623,7 @@ export def "post-describe-policies" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<ScalingPolicies: table<AutoScalingGroupName: string, PolicyName: string, PolicyARN: string, PolicyType: string, AdjustmentType: string, MinAdjustmentStep: int, MinAdjustmentMagnitude: int, ScalingAdjustment: int, Cooldown: int, StepAdjustments: list, MetricAggregationType: string, EstimatedInstanceWarmup: int, Alarms: list, TargetTrackingConfiguration: record, Enabled: bool, PredictiveScalingConfiguration: record>, NextToken: string> {
+]: any -> oneof<record<ScalingPolicies: table<AutoScalingGroupName: string, PolicyName: string, PolicyARN: string, PolicyType: string, AdjustmentType: string, MinAdjustmentStep: int, MinAdjustmentMagnitude: int, ScalingAdjustment: int, Cooldown: int, StepAdjustments: list, MetricAggregationType: string, EstimatedInstanceWarmup: int, Alarms: list, TargetTrackingConfiguration: record, Enabled: bool, PredictiveScalingConfiguration: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3655,7 +3679,7 @@ export def "get-describe-scaling-activities" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Activities: table<ActivityId: string, AutoScalingGroupName: string, Description: string, Cause: string, StartTime: string, EndTime: string, StatusCode: string, StatusMessage: string, Progress: int, Details: string, AutoScalingGroupState: string, AutoScalingGroupARN: string>, NextToken: string> {
+]: nothing -> oneof<record<Activities: table<ActivityId: string, AutoScalingGroupName: string, Description: string, Cause: string, StartTime: string, EndTime: string, StatusCode: string, StatusMessage: string, Progress: int, Details: string, AutoScalingGroupState: string, AutoScalingGroupARN: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DescribeScalingActivities")
@@ -3706,7 +3730,7 @@ export def "post-describe-scaling-activities" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Activities: table<ActivityId: string, AutoScalingGroupName: string, Description: string, Cause: string, StartTime: string, EndTime: string, StatusCode: string, StatusMessage: string, Progress: int, Details: string, AutoScalingGroupState: string, AutoScalingGroupARN: string>, NextToken: string> {
+]: any -> oneof<record<Activities: table<ActivityId: string, AutoScalingGroupName: string, Description: string, Cause: string, StartTime: string, EndTime: string, StatusCode: string, StatusMessage: string, Progress: int, Details: string, AutoScalingGroupState: string, AutoScalingGroupARN: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3757,7 +3781,7 @@ export def "get-describe-scaling-process-types" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Processes: table<ProcessName: string>> {
+]: nothing -> oneof<record<Processes: table<ProcessName: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DescribeScalingProcessTypes")
@@ -3805,7 +3829,7 @@ export def "post-describe-scaling-process-types" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Processes: table<ProcessName: string>> {
+]: nothing -> oneof<record<Processes: table<ProcessName: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DescribeScalingProcessTypes")
@@ -3859,7 +3883,7 @@ export def "get-describe-scheduled-actions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ScheduledUpdateGroupActions: table<AutoScalingGroupName: string, ScheduledActionName: string, ScheduledActionARN: string, Time: string, StartTime: string, EndTime: string, Recurrence: string, MinSize: int, MaxSize: int, DesiredCapacity: int, TimeZone: string>, NextToken: string> {
+]: nothing -> oneof<record<ScheduledUpdateGroupActions: table<AutoScalingGroupName: string, ScheduledActionName: string, ScheduledActionARN: string, Time: string, StartTime: string, EndTime: string, Recurrence: string, MinSize: int, MaxSize: int, DesiredCapacity: int, TimeZone: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DescribeScheduledActions")
@@ -3910,7 +3934,7 @@ export def "post-describe-scheduled-actions" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<ScheduledUpdateGroupActions: table<AutoScalingGroupName: string, ScheduledActionName: string, ScheduledActionARN: string, Time: string, StartTime: string, EndTime: string, Recurrence: string, MinSize: int, MaxSize: int, DesiredCapacity: int, TimeZone: string>, NextToken: string> {
+]: any -> oneof<record<ScheduledUpdateGroupActions: table<AutoScalingGroupName: string, ScheduledActionName: string, ScheduledActionARN: string, Time: string, StartTime: string, EndTime: string, Recurrence: string, MinSize: int, MaxSize: int, DesiredCapacity: int, TimeZone: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3964,7 +3988,7 @@ export def "get-describe-tags" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Tags: table<ResourceId: string, ResourceType: string, Key: string, Value: string, PropagateAtLaunch: bool>, NextToken: string> {
+]: nothing -> oneof<record<Tags: table<ResourceId: string, ResourceType: string, Key: string, Value: string, PropagateAtLaunch: bool>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DescribeTags")
@@ -4015,7 +4039,7 @@ export def "post-describe-tags" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Tags: table<ResourceId: string, ResourceType: string, Key: string, Value: string, PropagateAtLaunch: bool>, NextToken: string> {
+]: any -> oneof<record<Tags: table<ResourceId: string, ResourceType: string, Key: string, Value: string, PropagateAtLaunch: bool>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4066,7 +4090,7 @@ export def "get-describe-termination-policy-types" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<TerminationPolicyTypes: list<string>> {
+]: nothing -> oneof<record<TerminationPolicyTypes: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DescribeTerminationPolicyTypes")
@@ -4114,7 +4138,7 @@ export def "post-describe-termination-policy-types" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<TerminationPolicyTypes: list<string>> {
+]: nothing -> oneof<record<TerminationPolicyTypes: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DescribeTerminationPolicyTypes")
@@ -4166,7 +4190,7 @@ export def "get-describe-traffic-sources" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<TrafficSources: table<TrafficSource: string, State: string, Identifier: string, Type: string>, NextToken: string> {
+]: nothing -> oneof<record<TrafficSources: table<TrafficSource: string, State: string, Identifier: string, Type: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($auto_scaling_group_name == null) { error make --unspanned { msg: "required query parameter 'AutoScalingGroupName' missing: pass --auto-scaling-group-name" } }
@@ -4218,7 +4242,7 @@ export def "post-describe-traffic-sources" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<TrafficSources: table<TrafficSource: string, State: string, Identifier: string, Type: string>, NextToken: string> {
+]: any -> oneof<record<TrafficSources: table<TrafficSource: string, State: string, Identifier: string, Type: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4272,7 +4296,7 @@ export def "get-describe-warm-pool" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<WarmPoolConfiguration: record<MaxGroupPreparedCapacity: int, MinSize: int, PoolState: string, Status: string, InstanceReusePolicy: record<ReuseOnScaleIn: bool>>, Instances: table<InstanceId: string, InstanceType: string, AvailabilityZone: string, LifecycleState: string, HealthStatus: string, LaunchConfigurationName: string, LaunchTemplate: record, ProtectedFromScaleIn: bool, WeightedCapacity: string>, NextToken: string> {
+]: nothing -> oneof<record<WarmPoolConfiguration: record<MaxGroupPreparedCapacity: int, MinSize: int, PoolState: string, Status: string, InstanceReusePolicy: record<ReuseOnScaleIn: bool>>, Instances: table<InstanceId: string, InstanceType: string, AvailabilityZone: string, LifecycleState: string, HealthStatus: string, LaunchConfigurationName: string, LaunchTemplate: record, ProtectedFromScaleIn: bool, WeightedCapacity: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($auto_scaling_group_name == null) { error make --unspanned { msg: "required query parameter 'AutoScalingGroupName' missing: pass --auto-scaling-group-name" } }
@@ -4322,7 +4346,7 @@ export def "post-describe-warm-pool" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<WarmPoolConfiguration: record<MaxGroupPreparedCapacity: int, MinSize: int, PoolState: string, Status: string, InstanceReusePolicy: record<ReuseOnScaleIn: bool>>, Instances: table<InstanceId: string, InstanceType: string, AvailabilityZone: string, LifecycleState: string, HealthStatus: string, LaunchConfigurationName: string, LaunchTemplate: record, ProtectedFromScaleIn: bool, WeightedCapacity: string>, NextToken: string> {
+]: any -> oneof<record<WarmPoolConfiguration: record<MaxGroupPreparedCapacity: int, MinSize: int, PoolState: string, Status: string, InstanceReusePolicy: record<ReuseOnScaleIn: bool>>, Instances: table<InstanceId: string, InstanceType: string, AvailabilityZone: string, LifecycleState: string, HealthStatus: string, LaunchConfigurationName: string, LaunchTemplate: record, ProtectedFromScaleIn: bool, WeightedCapacity: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4376,7 +4400,7 @@ export def "get-detach-instances" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Activities: table<ActivityId: string, AutoScalingGroupName: string, Description: string, Cause: string, StartTime: string, EndTime: string, StatusCode: string, StatusMessage: string, Progress: int, Details: string, AutoScalingGroupState: string, AutoScalingGroupARN: string>> {
+]: nothing -> oneof<record<Activities: table<ActivityId: string, AutoScalingGroupName: string, Description: string, Cause: string, StartTime: string, EndTime: string, StatusCode: string, StatusMessage: string, Progress: int, Details: string, AutoScalingGroupState: string, AutoScalingGroupARN: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($auto_scaling_group_name == null) { error make --unspanned { msg: "required query parameter 'AutoScalingGroupName' missing: pass --auto-scaling-group-name" } }
@@ -4427,7 +4451,7 @@ export def "post-detach-instances" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Activities: table<ActivityId: string, AutoScalingGroupName: string, Description: string, Cause: string, StartTime: string, EndTime: string, StatusCode: string, StatusMessage: string, Progress: int, Details: string, AutoScalingGroupState: string, AutoScalingGroupARN: string>> {
+]: any -> oneof<record<Activities: table<ActivityId: string, AutoScalingGroupName: string, Description: string, Cause: string, StartTime: string, EndTime: string, StatusCode: string, StatusMessage: string, Progress: int, Details: string, AutoScalingGroupState: string, AutoScalingGroupARN: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4480,7 +4504,7 @@ export def "get-detach-load-balancer-target-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($auto_scaling_group_name == null) { error make --unspanned { msg: "required query parameter 'AutoScalingGroupName' missing: pass --auto-scaling-group-name" } }
@@ -4531,7 +4555,7 @@ export def "post-detach-load-balancer-target-groups" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4584,7 +4608,7 @@ export def "get-detach-load-balancers" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($auto_scaling_group_name == null) { error make --unspanned { msg: "required query parameter 'AutoScalingGroupName' missing: pass --auto-scaling-group-name" } }
@@ -4635,7 +4659,7 @@ export def "post-detach-load-balancers" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4688,7 +4712,7 @@ export def "get-detach-traffic-sources" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($auto_scaling_group_name == null) { error make --unspanned { msg: "required query parameter 'AutoScalingGroupName' missing: pass --auto-scaling-group-name" } }
@@ -4739,7 +4763,7 @@ export def "post-detach-traffic-sources" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5001,7 +5025,7 @@ export def "get-enter-standby" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Activities: table<ActivityId: string, AutoScalingGroupName: string, Description: string, Cause: string, StartTime: string, EndTime: string, StatusCode: string, StatusMessage: string, Progress: int, Details: string, AutoScalingGroupState: string, AutoScalingGroupARN: string>> {
+]: nothing -> oneof<record<Activities: table<ActivityId: string, AutoScalingGroupName: string, Description: string, Cause: string, StartTime: string, EndTime: string, StatusCode: string, StatusMessage: string, Progress: int, Details: string, AutoScalingGroupState: string, AutoScalingGroupARN: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($auto_scaling_group_name == null) { error make --unspanned { msg: "required query parameter 'AutoScalingGroupName' missing: pass --auto-scaling-group-name" } }
@@ -5052,7 +5076,7 @@ export def "post-enter-standby" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Activities: table<ActivityId: string, AutoScalingGroupName: string, Description: string, Cause: string, StartTime: string, EndTime: string, StatusCode: string, StatusMessage: string, Progress: int, Details: string, AutoScalingGroupState: string, AutoScalingGroupARN: string>> {
+]: any -> oneof<record<Activities: table<ActivityId: string, AutoScalingGroupName: string, Description: string, Cause: string, StartTime: string, EndTime: string, StatusCode: string, StatusMessage: string, Progress: int, Details: string, AutoScalingGroupState: string, AutoScalingGroupARN: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5211,7 +5235,7 @@ export def "get-exit-standby" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Activities: table<ActivityId: string, AutoScalingGroupName: string, Description: string, Cause: string, StartTime: string, EndTime: string, StatusCode: string, StatusMessage: string, Progress: int, Details: string, AutoScalingGroupState: string, AutoScalingGroupARN: string>> {
+]: nothing -> oneof<record<Activities: table<ActivityId: string, AutoScalingGroupName: string, Description: string, Cause: string, StartTime: string, EndTime: string, StatusCode: string, StatusMessage: string, Progress: int, Details: string, AutoScalingGroupState: string, AutoScalingGroupARN: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($auto_scaling_group_name == null) { error make --unspanned { msg: "required query parameter 'AutoScalingGroupName' missing: pass --auto-scaling-group-name" } }
@@ -5261,7 +5285,7 @@ export def "post-exit-standby" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Activities: table<ActivityId: string, AutoScalingGroupName: string, Description: string, Cause: string, StartTime: string, EndTime: string, StatusCode: string, StatusMessage: string, Progress: int, Details: string, AutoScalingGroupState: string, AutoScalingGroupARN: string>> {
+]: any -> oneof<record<Activities: table<ActivityId: string, AutoScalingGroupName: string, Description: string, Cause: string, StartTime: string, EndTime: string, StatusCode: string, StatusMessage: string, Progress: int, Details: string, AutoScalingGroupState: string, AutoScalingGroupARN: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5316,7 +5340,7 @@ export def "get-get-predictive-scaling-forecast" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<LoadForecast: table<Timestamps: list, Values: list, MetricSpecification: record>, CapacityForecast: record<Timestamps: list<string>, Values: list<float>>, UpdateTime: string> {
+]: nothing -> oneof<record<LoadForecast: table<Timestamps: list, Values: list, MetricSpecification: record>, CapacityForecast: record<Timestamps: list<string>, Values: list<float>>, UpdateTime: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($auto_scaling_group_name == null) { error make --unspanned { msg: "required query parameter 'AutoScalingGroupName' missing: pass --auto-scaling-group-name" } }
@@ -5369,7 +5393,7 @@ export def "post-get-predictive-scaling-forecast" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<LoadForecast: table<Timestamps: list, Values: list, MetricSpecification: record>, CapacityForecast: record<Timestamps: list<string>, Values: list<float>>, UpdateTime: string> {
+]: any -> oneof<record<LoadForecast: table<Timestamps: list, Values: list, MetricSpecification: record>, CapacityForecast: record<Timestamps: list<string>, Values: list<float>>, UpdateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5428,7 +5452,7 @@ export def "get-put-lifecycle-hook" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($lifecycle_hook_name == null) { error make --unspanned { msg: "required query parameter 'LifecycleHookName' missing: pass --lifecycle-hook-name" } }
@@ -5479,7 +5503,7 @@ export def "post-put-lifecycle-hook" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5650,7 +5674,7 @@ export def "get-put-scaling-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<PolicyARN: string, Alarms: table<AlarmName: string, AlarmARN: string>> {
+]: nothing -> oneof<record<PolicyARN: string, Alarms: table<AlarmName: string, AlarmARN: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($auto_scaling_group_name == null) { error make --unspanned { msg: "required query parameter 'AutoScalingGroupName' missing: pass --auto-scaling-group-name" } }
@@ -5701,7 +5725,7 @@ export def "post-put-scaling-policy" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<PolicyARN: string, Alarms: table<AlarmName: string, AlarmARN: string>> {
+]: any -> oneof<record<PolicyARN: string, Alarms: table<AlarmName: string, AlarmARN: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5869,7 +5893,7 @@ export def "get-put-warm-pool" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($auto_scaling_group_name == null) { error make --unspanned { msg: "required query parameter 'AutoScalingGroupName' missing: pass --auto-scaling-group-name" } }
@@ -5919,7 +5943,7 @@ export def "post-put-warm-pool" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5974,7 +5998,7 @@ export def "get-record-lifecycle-action-heartbeat" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($lifecycle_hook_name == null) { error make --unspanned { msg: "required query parameter 'LifecycleHookName' missing: pass --lifecycle-hook-name" } }
@@ -6025,7 +6049,7 @@ export def "post-record-lifecycle-action-heartbeat" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6180,7 +6204,7 @@ export def "get-rollback-instance-refresh" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<InstanceRefreshId: string> {
+]: nothing -> oneof<record<InstanceRefreshId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "RollbackInstanceRefresh")
@@ -6229,7 +6253,7 @@ export def "post-rollback-instance-refresh" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<InstanceRefreshId: string> {
+]: any -> oneof<record<InstanceRefreshId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6493,7 +6517,7 @@ export def "get-set-instance-protection" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($instance_ids == null) { error make --unspanned { msg: "required query parameter 'InstanceIds' missing: pass --instance-ids" } }
@@ -6545,7 +6569,7 @@ export def "post-set-instance-protection" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6600,7 +6624,7 @@ export def "get-start-instance-refresh" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<InstanceRefreshId: string> {
+]: nothing -> oneof<record<InstanceRefreshId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($auto_scaling_group_name == null) { error make --unspanned { msg: "required query parameter 'AutoScalingGroupName' missing: pass --auto-scaling-group-name" } }
@@ -6650,7 +6674,7 @@ export def "post-start-instance-refresh" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<InstanceRefreshId: string> {
+]: any -> oneof<record<InstanceRefreshId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6806,7 +6830,7 @@ export def "get-terminate-instance-in-auto-scaling-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Activity: record<ActivityId: string, AutoScalingGroupName: string, Description: string, Cause: string, StartTime: string, EndTime: string, StatusCode: string, StatusMessage: string, Progress: int, Details: string, AutoScalingGroupState: string, AutoScalingGroupARN: string>> {
+]: nothing -> oneof<record<Activity: record<ActivityId: string, AutoScalingGroupName: string, Description: string, Cause: string, StartTime: string, EndTime: string, StatusCode: string, StatusMessage: string, Progress: int, Details: string, AutoScalingGroupState: string, AutoScalingGroupARN: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($instance_id == null) { error make --unspanned { msg: "required query parameter 'InstanceId' missing: pass --instance-id" } }
@@ -6857,7 +6881,7 @@ export def "post-terminate-instance-in-auto-scaling-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Activity: record<ActivityId: string, AutoScalingGroupName: string, Description: string, Cause: string, StartTime: string, EndTime: string, StatusCode: string, StatusMessage: string, Progress: int, Details: string, AutoScalingGroupState: string, AutoScalingGroupARN: string>> {
+]: any -> oneof<record<Activity: record<ActivityId: string, AutoScalingGroupName: string, Description: string, Cause: string, StartTime: string, EndTime: string, StatusCode: string, StatusMessage: string, Progress: int, Details: string, AutoScalingGroupState: string, AutoScalingGroupARN: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

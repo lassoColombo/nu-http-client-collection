@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -114,10 +138,10 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
 def accept-completer [] { ["application/json" "expiry" "token"] }
+def entity-type-completer [] { ["AristaSwitchDataSource" "BrocadeSwitchDataSource" "CheckpointFirewallDataSource" "CiscoSwitchDataSource" "DellSwitchDataSource" "HPOneViewDataSource" "HPVCManagerDataSource" "JuniperSwitchDataSource" "NSXVManagerDataSource" "PanFirewallDataSource" "UCSManagerDataSource" "VCenterDataSource"] }
 def snmp-version-completer [] { ["v2c" "v3"] }
 def switch-type-completer [] { ["CATALYST_3000" "CATALYST_4500" "CATALYST_6500" "NEXUS_5K" "NEXUS_7K" "NEXUS_9K"] }
 def switch-type-completer-1 [] { ["FORCE_10_MXL_10" "POWERCONNECT_8024" "S4048" "S6000" "Z9100"] }
-def entity-type-completer [] { ["AristaSwitchDataSource" "BrocadeSwitchDataSource" "CheckpointFirewallDataSource" "CiscoSwitchDataSource" "DellSwitchDataSource" "HPOneViewDataSource" "HPVCManagerDataSource" "JuniperSwitchDataSource" "NSXVManagerDataSource" "PanFirewallDataSource" "UCSManagerDataSource" "VCenterDataSource"] }
 def accept-completer-1 [] { ["application/json" "results" "total_count"] }
 def accept-completer-2 [] { ["application/json" "credentials" "enabled" "entity_id" "entity_type" "fqdn" "ip" "nickname" "notes" "proxy_id"] }
 def accept-completer-3 [] { ["application/json" "cursor" "end_time" "results" "start_time" "total_count"] }
@@ -151,9 +175,9 @@ def entity-type-completer-1 [] { ["Application" "BaseEvent" "BaseFirewall" "Base
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "delete" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["delete" "create" "list-arista-switches" "add-arista-switch" "delete-arista-switch" "get-arista-switch" "update-arista-switch" "disable-arista-switch" "enable-arista-switch" "get-arista-switch-snmp-config" "update-arista-switch-snmp-config" "list-brocade-switches" "add-brocade-switch" "delete-brocade-switch" "get-brocade-switch" "update-brocade-switch" "disable-brocade-switch" "enable-brocade-switch" "get-brocade-switch-snmp-config" "update-brocade-switch-snmp-config" "list-checkpoint-firewalls" "add-checkpoint-firewall" "delete-checkpoint-firewall" "get-checkpoint-firewall" "update-checkpoint-firewall" "disable-checkpoint-firewall" "enable-checkpoint-firewall" "list-cisco-switches" "add-cisco-switch" "delete-cisco-switch" "get-cisco-switch" "update-cisco-switch" "disable-cisco-switch" "enable-cisco-switch" "get-cisco-switch-snmp-config" "update-cisco-switch-snmp-config" "list-dell-switches" "add-dell-switch" "delete-dell-switch" "get-dell-switch" "update-dell-switch" "disable-dell-switch" "enable-dell-switch" "get-dell-switch-snmp-config" "update-dell-switch-snmp-config" "list-hpov-managers" "add-hpov-manager" "delete-hpov-manager" "get-hpov-manager" "update-hpov-manager" "disable-hpov-manager" "enable-hpov-manager" "list-hpvc-managers" "add-hpvc-manager" "delete-hpvc-manager" "get-hpvc-manager" "update-hpvc-manager" "disable-hpvc-manager" "enable-hpvc-manager" "list-juniper-switches" "add-juniper-switch" "delete-juniper-switch" "get-juniper-switch" "update-juniper-switch" "disable-juniper-switch" "enable-juniper-switch" "get-juniper-switch-snmp-config" "update-juniper-switch-snmp-config" "list-nsxv-managers" "add-nsxv-manager-datasource" "delete-nsxv-manager" "get-nsxv-manager" "update-nsxv-manager" "get-nsxv-controller-cluster" "update-nsxv-controller-cluster" "disable-nsxv-manager" "enable-nsxv-manager" "list-panorama-firewalls" "add-panorama-firewall" "delete-panorama-firewall" "get-panorama-firewall" "update-panorama-firewall" "disable-panorama-firewall" "enable-panorama-firewall" "list-ucs-managers" "add-ucs-manager" "delete-ucs-manager" "get-ucs-manager" "update-ucs-manager" "disable-ucs-manager" "enable-ucs-manager" "get-ucs-snmp-config" "update-ucs-snmp-config" "list-vcenters" "add-vcenter-datasource" "delete-vcenter" "get-vcenter" "update-vcenter" "disable-vcenter" "enable-vcenter" "list-clusters" "get-cluster" "list-datastores" "get-datastore" "list-distributed-virtual-portgroups" "get-distributed-virtual-portgroup" "list-distributed-virtual-switches" "get-distributed-virtual-switch" "list-firewall-rules" "get-firewall-rule" "list-firewalls" "get-firewall" "get-flows" "get-flow" "list-folders" "get-folder" "list-hosts" "get-host" "list-ip-sets" "get-ip-set" "list-layer2-networks" "get-layer2-network" "get-names" "get-name" "list-nsx-managers" "get-nsx-manager" "list-problem-events" "get-problem-event" "list-security-groups" "get-security-group" "list-security-tags" "get-security-tag" "list-service-groups" "get-service-group" "list-services" "get-service" "list-datacenters" "get-datacenter" "list-vcenter-managers" "get-vcenter-manager" "list-vmknics" "get-vmknic" "list-vms" "get-vm" "list-vnics" "get-vnic" "list-applications" "add-application" "delete-application" "get-application" "list-application-tiers" "add-tier" "delete-tier" "get-application-tier" "get-tier" "get-version" "list-nodes" "get-node" "list-recommended-rules" "export-nsx-recommended-rules" "search-entities" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -209,7 +233,6 @@ export def "delete" [
 #
 # POST /auth/token
 # operationId: create
-# --domain shape: {domain_type?: "LDAP"|"LOCAL", value?: string}
 export def "create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -224,7 +247,7 @@ export def "create" [
   --domain: record # shape: {domain_type?: "LDAP"|"LOCAL", value?: string}
   --password: string # e.g. password
   --username: string # e.g. admin@vrni.com
-]: any -> record<expiry: int, token: string> {
+]: any -> oneof<record<expiry: int, token: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -261,7 +284,7 @@ export def "list-arista-switches" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<results: table<entity_id: string, entity_type: string>, total_count: int> {
+]: nothing -> oneof<record<results: table<entity_id: string, entity_type: string>, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/data-sources/arista-switches" $auth.query)
@@ -295,13 +318,19 @@ export def "add-arista-switch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body: record
-]: any -> record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>> {
+  --enabled: oneof<nothing, bool> # default: true
+  --fqdn: string # e.g. your.domain.com
+  --ip: string # e.g. 192.168.10.1
+  nickname: string # e.g. vc1
+  --notes: string
+  proxy_id: string # proxy vm which should register this vcenter (e.g. 1000:104:12313412)
+  --credentials: record # shape: {password: string, username: string}
+]: any -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/data-sources/arista-switches" $auth.query)
-  let req_body = $body
+  let req_body = {"enabled": $enabled, "fqdn": $fqdn, "ip": $ip, "nickname": $nickname, "notes": $notes, "proxy_id": $proxy_id, "credentials": $credentials} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -370,7 +399,7 @@ export def "get-arista-switch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>> {
+]: nothing -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -406,14 +435,22 @@ export def "update-arista-switch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body: record
-]: any -> record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>> {
+  --enabled: oneof<nothing, bool> # default: true
+  --entity-id: string
+  --entity-type: string@entity-type-completer
+  --fqdn: string # e.g. your.domain.com
+  --ip: string # e.g. 192.168.10.1
+  --nickname: string # e.g. vc1
+  --notes: string
+  --proxy-id: string # proxy vm which should register this vcenter (e.g. 1000:104:12313412)
+  --credentials: record # shape: {password: string, username: string}
+]: any -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/arista-switches/{id}") $auth.query)
-  let req_body = $body
+  let req_body = {"enabled": $enabled, "entity_id": $entity_id, "entity_type": $entity_type, "fqdn": $fqdn, "ip": $ip, "nickname": $nickname, "notes": $notes, "proxy_id": $proxy_id, "credentials": $credentials} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -518,7 +555,7 @@ export def "get-arista-switch-snmp-config" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<config_snmp_2c: record<community_string: string>, config_snmp_3: record<authentication_password: string, authentication_type: string, context_name: string, privacy_password: string, privacy_type: string, username: string>, snmp_enabled: bool, snmp_version: string> {
+]: nothing -> oneof<record<config_snmp_2c: record<community_string: string>, config_snmp_3: record<authentication_password: string, authentication_type: string, context_name: string, privacy_password: string, privacy_type: string, username: string>, snmp_enabled: bool, snmp_version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -543,8 +580,6 @@ export def "get-arista-switch-snmp-config" [
 #
 # PUT /data-sources/arista-switches/{id}/snmp-config
 # operationId: updateAristaSwitchSnmpConfig
-# --config_snmp_2c shape: {community_string?: string}
-# --config_snmp_3 shape: {authentication_password?: string, authentication_type?: "NO_AUTH"|"MD5"|"SHA", context_name?: string, privacy_password?: string, privacy_type?: "AES"|"DES"|"AES128"|"AES192"|"AES256"|"3DES"|"NO_PRIV", username?: string}
 export def "update-arista-switch-snmp-config" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -560,7 +595,7 @@ export def "update-arista-switch-snmp-config" [
   --config-snmp-3: record # shape: {authentication_password?: string, authentication_type?: "NO_AUTH"|"MD5"|"SHA", context_name?: string, privacy_password?: string, privacy_type?: "AES"|"DES"|"AES128"|"AES192"|"AES256"|"3DES"|"NO_PRIV", username?: string}
   --snmp-enabled: oneof<nothing, bool> # default: false
   --snmp-version: string@snmp-version-completer
-]: any -> record<config_snmp_2c: record<community_string: string>, config_snmp_3: record<authentication_password: string, authentication_type: string, context_name: string, privacy_password: string, privacy_type: string, username: string>, snmp_enabled: bool, snmp_version: string> {
+]: any -> oneof<record<config_snmp_2c: record<community_string: string>, config_snmp_3: record<authentication_password: string, authentication_type: string, context_name: string, privacy_password: string, privacy_type: string, username: string>, snmp_enabled: bool, snmp_version: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -598,7 +633,7 @@ export def "list-brocade-switches" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<results: table<entity_id: string, entity_type: string>, total_count: int> {
+]: nothing -> oneof<record<results: table<entity_id: string, entity_type: string>, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/data-sources/brocade-switches" $auth.query)
@@ -632,13 +667,19 @@ export def "add-brocade-switch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body: record
-]: any -> record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>> {
+  --enabled: oneof<nothing, bool> # default: true
+  --fqdn: string # e.g. your.domain.com
+  --ip: string # e.g. 192.168.10.1
+  nickname: string # e.g. vc1
+  --notes: string
+  proxy_id: string # proxy vm which should register this vcenter (e.g. 1000:104:12313412)
+  --credentials: record # shape: {password: string, username: string}
+]: any -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/data-sources/brocade-switches" $auth.query)
-  let req_body = $body
+  let req_body = {"enabled": $enabled, "fqdn": $fqdn, "ip": $ip, "nickname": $nickname, "notes": $notes, "proxy_id": $proxy_id, "credentials": $credentials} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -707,7 +748,7 @@ export def "get-brocade-switch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>> {
+]: nothing -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -743,14 +784,22 @@ export def "update-brocade-switch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body: record
-]: any -> record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>> {
+  --enabled: oneof<nothing, bool> # default: true
+  --entity-id: string
+  --entity-type: string@entity-type-completer
+  --fqdn: string # e.g. your.domain.com
+  --ip: string # e.g. 192.168.10.1
+  --nickname: string # e.g. vc1
+  --notes: string
+  --proxy-id: string # proxy vm which should register this vcenter (e.g. 1000:104:12313412)
+  --credentials: record # shape: {password: string, username: string}
+]: any -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/brocade-switches/{id}") $auth.query)
-  let req_body = $body
+  let req_body = {"enabled": $enabled, "entity_id": $entity_id, "entity_type": $entity_type, "fqdn": $fqdn, "ip": $ip, "nickname": $nickname, "notes": $notes, "proxy_id": $proxy_id, "credentials": $credentials} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -855,7 +904,7 @@ export def "get-brocade-switch-snmp-config" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<config_snmp_2c: record<community_string: string>, config_snmp_3: record<authentication_password: string, authentication_type: string, context_name: string, privacy_password: string, privacy_type: string, username: string>, snmp_enabled: bool, snmp_version: string> {
+]: nothing -> oneof<record<config_snmp_2c: record<community_string: string>, config_snmp_3: record<authentication_password: string, authentication_type: string, context_name: string, privacy_password: string, privacy_type: string, username: string>, snmp_enabled: bool, snmp_version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -880,8 +929,6 @@ export def "get-brocade-switch-snmp-config" [
 #
 # PUT /data-sources/brocade-switches/{id}/snmp-config
 # operationId: updateBrocadeSwitchSnmpConfig
-# --config_snmp_2c shape: {community_string?: string}
-# --config_snmp_3 shape: {authentication_password?: string, authentication_type?: "NO_AUTH"|"MD5"|"SHA", context_name?: string, privacy_password?: string, privacy_type?: "AES"|"DES"|"AES128"|"AES192"|"AES256"|"3DES"|"NO_PRIV", username?: string}
 export def "update-brocade-switch-snmp-config" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -897,7 +944,7 @@ export def "update-brocade-switch-snmp-config" [
   --config-snmp-3: record # shape: {authentication_password?: string, authentication_type?: "NO_AUTH"|"MD5"|"SHA", context_name?: string, privacy_password?: string, privacy_type?: "AES"|"DES"|"AES128"|"AES192"|"AES256"|"3DES"|"NO_PRIV", username?: string}
   --snmp-enabled: oneof<nothing, bool> # default: false
   --snmp-version: string@snmp-version-completer
-]: any -> record<config_snmp_2c: record<community_string: string>, config_snmp_3: record<authentication_password: string, authentication_type: string, context_name: string, privacy_password: string, privacy_type: string, username: string>, snmp_enabled: bool, snmp_version: string> {
+]: any -> oneof<record<config_snmp_2c: record<community_string: string>, config_snmp_3: record<authentication_password: string, authentication_type: string, context_name: string, privacy_password: string, privacy_type: string, username: string>, snmp_enabled: bool, snmp_version: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -935,7 +982,7 @@ export def "list-checkpoint-firewalls" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<results: table<entity_id: string, entity_type: string>, total_count: int> {
+]: nothing -> oneof<record<results: table<entity_id: string, entity_type: string>, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/data-sources/checkpoint-firewalls" $auth.query)
@@ -969,13 +1016,19 @@ export def "add-checkpoint-firewall" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body: record
-]: any -> record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>> {
+  --enabled: oneof<nothing, bool> # default: true
+  --fqdn: string # e.g. your.domain.com
+  --ip: string # e.g. 192.168.10.1
+  nickname: string # e.g. vc1
+  --notes: string
+  proxy_id: string # proxy vm which should register this vcenter (e.g. 1000:104:12313412)
+  --credentials: record # shape: {password: string, username: string}
+]: any -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/data-sources/checkpoint-firewalls" $auth.query)
-  let req_body = $body
+  let req_body = {"enabled": $enabled, "fqdn": $fqdn, "ip": $ip, "nickname": $nickname, "notes": $notes, "proxy_id": $proxy_id, "credentials": $credentials} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1044,7 +1097,7 @@ export def "get-checkpoint-firewall" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>> {
+]: nothing -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1080,14 +1133,22 @@ export def "update-checkpoint-firewall" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body: record
-]: any -> record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>> {
+  --enabled: oneof<nothing, bool> # default: true
+  --entity-id: string
+  --entity-type: string@entity-type-completer
+  --fqdn: string # e.g. your.domain.com
+  --ip: string # e.g. 192.168.10.1
+  --nickname: string # e.g. vc1
+  --notes: string
+  --proxy-id: string # proxy vm which should register this vcenter (e.g. 1000:104:12313412)
+  --credentials: record # shape: {password: string, username: string}
+]: any -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/checkpoint-firewalls/{id}") $auth.query)
-  let req_body = $body
+  let req_body = {"enabled": $enabled, "entity_id": $entity_id, "entity_type": $entity_type, "fqdn": $fqdn, "ip": $ip, "nickname": $nickname, "notes": $notes, "proxy_id": $proxy_id, "credentials": $credentials} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1191,7 +1252,7 @@ export def "list-cisco-switches" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<results: table<entity_id: string, entity_type: string>, total_count: int> {
+]: nothing -> oneof<record<results: table<entity_id: string, entity_type: string>, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/data-sources/cisco-switches" $auth.query)
@@ -1225,13 +1286,20 @@ export def "add-cisco-switch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --enabled: oneof<nothing, bool> # default: true
+  --fqdn: string # e.g. your.domain.com
+  --ip: string # e.g. 192.168.10.1
+  nickname: string # e.g. vc1
+  --notes: string
+  proxy_id: string # proxy vm which should register this vcenter (e.g. 1000:104:12313412)
+  --credentials: record # shape: {password: string, username: string}
   --switch-type: string@switch-type-completer
-]: any -> record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>, switch_type: string> {
+]: any -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>, switch_type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/data-sources/cisco-switches" $auth.query)
-  let req_body = {"switch_type": $switch_type} | compact
+  let req_body = {"enabled": $enabled, "fqdn": $fqdn, "ip": $ip, "nickname": $nickname, "notes": $notes, "proxy_id": $proxy_id, "credentials": $credentials, "switch_type": $switch_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1300,7 +1368,7 @@ export def "get-cisco-switch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>, switch_type: string> {
+]: nothing -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>, switch_type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1336,14 +1404,23 @@ export def "update-cisco-switch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --enabled: oneof<nothing, bool> # default: true
+  --entity-id: string
+  --entity-type: string@entity-type-completer
+  --fqdn: string # e.g. your.domain.com
+  --ip: string # e.g. 192.168.10.1
+  --nickname: string # e.g. vc1
+  --notes: string
+  --proxy-id: string # proxy vm which should register this vcenter (e.g. 1000:104:12313412)
+  --credentials: record # shape: {password: string, username: string}
   --switch-type: string@switch-type-completer
-]: any -> record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>, switch_type: string> {
+]: any -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>, switch_type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/cisco-switches/{id}") $auth.query)
-  let req_body = {"switch_type": $switch_type} | compact
+  let req_body = {"enabled": $enabled, "entity_id": $entity_id, "entity_type": $entity_type, "fqdn": $fqdn, "ip": $ip, "nickname": $nickname, "notes": $notes, "proxy_id": $proxy_id, "credentials": $credentials, "switch_type": $switch_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1448,7 +1525,7 @@ export def "get-cisco-switch-snmp-config" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<config_snmp_2c: record<community_string: string>, config_snmp_3: record<authentication_password: string, authentication_type: string, context_name: string, privacy_password: string, privacy_type: string, username: string>, snmp_enabled: bool, snmp_version: string> {
+]: nothing -> oneof<record<config_snmp_2c: record<community_string: string>, config_snmp_3: record<authentication_password: string, authentication_type: string, context_name: string, privacy_password: string, privacy_type: string, username: string>, snmp_enabled: bool, snmp_version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1473,8 +1550,6 @@ export def "get-cisco-switch-snmp-config" [
 #
 # PUT /data-sources/cisco-switches/{id}/snmp-config
 # operationId: updateCiscoSwitchSnmpConfig
-# --config_snmp_2c shape: {community_string?: string}
-# --config_snmp_3 shape: {authentication_password?: string, authentication_type?: "NO_AUTH"|"MD5"|"SHA", context_name?: string, privacy_password?: string, privacy_type?: "AES"|"DES"|"AES128"|"AES192"|"AES256"|"3DES"|"NO_PRIV", username?: string}
 export def "update-cisco-switch-snmp-config" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1490,7 +1565,7 @@ export def "update-cisco-switch-snmp-config" [
   --config-snmp-3: record # shape: {authentication_password?: string, authentication_type?: "NO_AUTH"|"MD5"|"SHA", context_name?: string, privacy_password?: string, privacy_type?: "AES"|"DES"|"AES128"|"AES192"|"AES256"|"3DES"|"NO_PRIV", username?: string}
   --snmp-enabled: oneof<nothing, bool> # default: false
   --snmp-version: string@snmp-version-completer
-]: any -> record<config_snmp_2c: record<community_string: string>, config_snmp_3: record<authentication_password: string, authentication_type: string, context_name: string, privacy_password: string, privacy_type: string, username: string>, snmp_enabled: bool, snmp_version: string> {
+]: any -> oneof<record<config_snmp_2c: record<community_string: string>, config_snmp_3: record<authentication_password: string, authentication_type: string, context_name: string, privacy_password: string, privacy_type: string, username: string>, snmp_enabled: bool, snmp_version: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1528,7 +1603,7 @@ export def "list-dell-switches" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<results: table<entity_id: string, entity_type: string>, total_count: int> {
+]: nothing -> oneof<record<results: table<entity_id: string, entity_type: string>, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/data-sources/dell-switches" $auth.query)
@@ -1562,13 +1637,20 @@ export def "add-dell-switch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --enabled: oneof<nothing, bool> # default: true
+  --fqdn: string # e.g. your.domain.com
+  --ip: string # e.g. 192.168.10.1
+  nickname: string # e.g. vc1
+  --notes: string
+  proxy_id: string # proxy vm which should register this vcenter (e.g. 1000:104:12313412)
+  --credentials: record # shape: {password: string, username: string}
   --switch-type: string@switch-type-completer-1
-]: any -> record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>, switch_type: string> {
+]: any -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>, switch_type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/data-sources/dell-switches" $auth.query)
-  let req_body = {"switch_type": $switch_type} | compact
+  let req_body = {"enabled": $enabled, "fqdn": $fqdn, "ip": $ip, "nickname": $nickname, "notes": $notes, "proxy_id": $proxy_id, "credentials": $credentials, "switch_type": $switch_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1637,7 +1719,7 @@ export def "get-dell-switch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>, switch_type: string> {
+]: nothing -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>, switch_type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1673,14 +1755,23 @@ export def "update-dell-switch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --enabled: oneof<nothing, bool> # default: true
+  --entity-id: string
+  --entity-type: string@entity-type-completer
+  --fqdn: string # e.g. your.domain.com
+  --ip: string # e.g. 192.168.10.1
+  --nickname: string # e.g. vc1
+  --notes: string
+  --proxy-id: string # proxy vm which should register this vcenter (e.g. 1000:104:12313412)
+  --credentials: record # shape: {password: string, username: string}
   --switch-type: string@switch-type-completer-1
-]: any -> record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>, switch_type: string> {
+]: any -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>, switch_type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/dell-switches/{id}") $auth.query)
-  let req_body = {"switch_type": $switch_type} | compact
+  let req_body = {"enabled": $enabled, "entity_id": $entity_id, "entity_type": $entity_type, "fqdn": $fqdn, "ip": $ip, "nickname": $nickname, "notes": $notes, "proxy_id": $proxy_id, "credentials": $credentials, "switch_type": $switch_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1785,7 +1876,7 @@ export def "get-dell-switch-snmp-config" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<config_snmp_2c: record<community_string: string>, config_snmp_3: record<authentication_password: string, authentication_type: string, context_name: string, privacy_password: string, privacy_type: string, username: string>, snmp_enabled: bool, snmp_version: string> {
+]: nothing -> oneof<record<config_snmp_2c: record<community_string: string>, config_snmp_3: record<authentication_password: string, authentication_type: string, context_name: string, privacy_password: string, privacy_type: string, username: string>, snmp_enabled: bool, snmp_version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1810,8 +1901,6 @@ export def "get-dell-switch-snmp-config" [
 #
 # PUT /data-sources/dell-switches/{id}/snmp-config
 # operationId: updateDellSwitchSnmpConfig
-# --config_snmp_2c shape: {community_string?: string}
-# --config_snmp_3 shape: {authentication_password?: string, authentication_type?: "NO_AUTH"|"MD5"|"SHA", context_name?: string, privacy_password?: string, privacy_type?: "AES"|"DES"|"AES128"|"AES192"|"AES256"|"3DES"|"NO_PRIV", username?: string}
 export def "update-dell-switch-snmp-config" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1827,7 +1916,7 @@ export def "update-dell-switch-snmp-config" [
   --config-snmp-3: record # shape: {authentication_password?: string, authentication_type?: "NO_AUTH"|"MD5"|"SHA", context_name?: string, privacy_password?: string, privacy_type?: "AES"|"DES"|"AES128"|"AES192"|"AES256"|"3DES"|"NO_PRIV", username?: string}
   --snmp-enabled: oneof<nothing, bool> # default: false
   --snmp-version: string@snmp-version-completer
-]: any -> record<config_snmp_2c: record<community_string: string>, config_snmp_3: record<authentication_password: string, authentication_type: string, context_name: string, privacy_password: string, privacy_type: string, username: string>, snmp_enabled: bool, snmp_version: string> {
+]: any -> oneof<record<config_snmp_2c: record<community_string: string>, config_snmp_3: record<authentication_password: string, authentication_type: string, context_name: string, privacy_password: string, privacy_type: string, username: string>, snmp_enabled: bool, snmp_version: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1865,7 +1954,7 @@ export def "list-hpov-managers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<results: table<entity_id: string, entity_type: string>, total_count: int> {
+]: nothing -> oneof<record<results: table<entity_id: string, entity_type: string>, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/data-sources/hpov-managers" $auth.query)
@@ -1899,13 +1988,21 @@ export def "add-hpov-manager" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body: record
-]: any -> record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>> {
+  --enabled: oneof<nothing, bool> # default: true
+  --entity-id: string
+  --entity-type: string@entity-type-completer
+  --fqdn: string # e.g. your.domain.com
+  --ip: string # e.g. 192.168.10.1
+  --nickname: string # e.g. vc1
+  --notes: string
+  --proxy-id: string # proxy vm which should register this vcenter (e.g. 1000:104:12313412)
+  --credentials: record # shape: {password: string, username: string}
+]: any -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/data-sources/hpov-managers" $auth.query)
-  let req_body = $body
+  let req_body = {"enabled": $enabled, "entity_id": $entity_id, "entity_type": $entity_type, "fqdn": $fqdn, "ip": $ip, "nickname": $nickname, "notes": $notes, "proxy_id": $proxy_id, "credentials": $credentials} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1974,7 +2071,7 @@ export def "get-hpov-manager" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>> {
+]: nothing -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2010,14 +2107,22 @@ export def "update-hpov-manager" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body: record
-]: any -> record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>> {
+  --enabled: oneof<nothing, bool> # default: true
+  --entity-id: string
+  --entity-type: string@entity-type-completer
+  --fqdn: string # e.g. your.domain.com
+  --ip: string # e.g. 192.168.10.1
+  --nickname: string # e.g. vc1
+  --notes: string
+  --proxy-id: string # proxy vm which should register this vcenter (e.g. 1000:104:12313412)
+  --credentials: record # shape: {password: string, username: string}
+]: any -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/hpov-managers/{id}") $auth.query)
-  let req_body = $body
+  let req_body = {"enabled": $enabled, "entity_id": $entity_id, "entity_type": $entity_type, "fqdn": $fqdn, "ip": $ip, "nickname": $nickname, "notes": $notes, "proxy_id": $proxy_id, "credentials": $credentials} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2121,7 +2226,7 @@ export def "list-hpvc-managers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<results: table<entity_id: string, entity_type: string>, total_count: int> {
+]: nothing -> oneof<record<results: table<entity_id: string, entity_type: string>, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/data-sources/hpvc-managers" $auth.query)
@@ -2155,13 +2260,21 @@ export def "add-hpvc-manager" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body: record
-]: any -> record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>> {
+  --enabled: oneof<nothing, bool> # default: true
+  --entity-id: string
+  --entity-type: string@entity-type-completer
+  --fqdn: string # e.g. your.domain.com
+  --ip: string # e.g. 192.168.10.1
+  --nickname: string # e.g. vc1
+  --notes: string
+  --proxy-id: string # proxy vm which should register this vcenter (e.g. 1000:104:12313412)
+  --credentials: record # shape: {password: string, username: string}
+]: any -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/data-sources/hpvc-managers" $auth.query)
-  let req_body = $body
+  let req_body = {"enabled": $enabled, "entity_id": $entity_id, "entity_type": $entity_type, "fqdn": $fqdn, "ip": $ip, "nickname": $nickname, "notes": $notes, "proxy_id": $proxy_id, "credentials": $credentials} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2230,7 +2343,7 @@ export def "get-hpvc-manager" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>> {
+]: nothing -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2266,14 +2379,22 @@ export def "update-hpvc-manager" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body: record
-]: any -> record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>> {
+  --enabled: oneof<nothing, bool> # default: true
+  --entity-id: string
+  --entity-type: string@entity-type-completer
+  --fqdn: string # e.g. your.domain.com
+  --ip: string # e.g. 192.168.10.1
+  --nickname: string # e.g. vc1
+  --notes: string
+  --proxy-id: string # proxy vm which should register this vcenter (e.g. 1000:104:12313412)
+  --credentials: record # shape: {password: string, username: string}
+]: any -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/hpvc-managers/{id}") $auth.query)
-  let req_body = $body
+  let req_body = {"enabled": $enabled, "entity_id": $entity_id, "entity_type": $entity_type, "fqdn": $fqdn, "ip": $ip, "nickname": $nickname, "notes": $notes, "proxy_id": $proxy_id, "credentials": $credentials} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2377,7 +2498,7 @@ export def "list-juniper-switches" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<results: table<entity_id: string, entity_type: string>, total_count: int> {
+]: nothing -> oneof<record<results: table<entity_id: string, entity_type: string>, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/data-sources/juniper-switches" $auth.query)
@@ -2411,13 +2532,19 @@ export def "add-juniper-switch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body: record
-]: any -> record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>> {
+  --enabled: oneof<nothing, bool> # default: true
+  --fqdn: string # e.g. your.domain.com
+  --ip: string # e.g. 192.168.10.1
+  nickname: string # e.g. vc1
+  --notes: string
+  proxy_id: string # proxy vm which should register this vcenter (e.g. 1000:104:12313412)
+  --credentials: record # shape: {password: string, username: string}
+]: any -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/data-sources/juniper-switches" $auth.query)
-  let req_body = $body
+  let req_body = {"enabled": $enabled, "fqdn": $fqdn, "ip": $ip, "nickname": $nickname, "notes": $notes, "proxy_id": $proxy_id, "credentials": $credentials} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2486,7 +2613,7 @@ export def "get-juniper-switch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>> {
+]: nothing -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2522,14 +2649,22 @@ export def "update-juniper-switch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body: record
-]: any -> record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>> {
+  --enabled: oneof<nothing, bool> # default: true
+  --entity-id: string
+  --entity-type: string@entity-type-completer
+  --fqdn: string # e.g. your.domain.com
+  --ip: string # e.g. 192.168.10.1
+  --nickname: string # e.g. vc1
+  --notes: string
+  --proxy-id: string # proxy vm which should register this vcenter (e.g. 1000:104:12313412)
+  --credentials: record # shape: {password: string, username: string}
+]: any -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/juniper-switches/{id}") $auth.query)
-  let req_body = $body
+  let req_body = {"enabled": $enabled, "entity_id": $entity_id, "entity_type": $entity_type, "fqdn": $fqdn, "ip": $ip, "nickname": $nickname, "notes": $notes, "proxy_id": $proxy_id, "credentials": $credentials} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2634,7 +2769,7 @@ export def "get-juniper-switch-snmp-config" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<config_snmp_2c: record<community_string: string>, config_snmp_3: record<authentication_password: string, authentication_type: string, context_name: string, privacy_password: string, privacy_type: string, username: string>, snmp_enabled: bool, snmp_version: string> {
+]: nothing -> oneof<record<config_snmp_2c: record<community_string: string>, config_snmp_3: record<authentication_password: string, authentication_type: string, context_name: string, privacy_password: string, privacy_type: string, username: string>, snmp_enabled: bool, snmp_version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2659,8 +2794,6 @@ export def "get-juniper-switch-snmp-config" [
 #
 # PUT /data-sources/juniper-switches/{id}/snmp-config
 # operationId: updateJuniperSwitchSnmpConfig
-# --config_snmp_2c shape: {community_string?: string}
-# --config_snmp_3 shape: {authentication_password?: string, authentication_type?: "NO_AUTH"|"MD5"|"SHA", context_name?: string, privacy_password?: string, privacy_type?: "AES"|"DES"|"AES128"|"AES192"|"AES256"|"3DES"|"NO_PRIV", username?: string}
 export def "update-juniper-switch-snmp-config" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2676,7 +2809,7 @@ export def "update-juniper-switch-snmp-config" [
   --config-snmp-3: record # shape: {authentication_password?: string, authentication_type?: "NO_AUTH"|"MD5"|"SHA", context_name?: string, privacy_password?: string, privacy_type?: "AES"|"DES"|"AES128"|"AES192"|"AES256"|"3DES"|"NO_PRIV", username?: string}
   --snmp-enabled: oneof<nothing, bool> # default: false
   --snmp-version: string@snmp-version-completer
-]: any -> record<config_snmp_2c: record<community_string: string>, config_snmp_3: record<authentication_password: string, authentication_type: string, context_name: string, privacy_password: string, privacy_type: string, username: string>, snmp_enabled: bool, snmp_version: string> {
+]: any -> oneof<record<config_snmp_2c: record<community_string: string>, config_snmp_3: record<authentication_password: string, authentication_type: string, context_name: string, privacy_password: string, privacy_type: string, username: string>, snmp_enabled: bool, snmp_version: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2714,7 +2847,7 @@ export def "list-nsxv-managers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<results: table<entity_id: string, entity_type: string>, total_count: int> {
+]: nothing -> oneof<record<results: table<entity_id: string, entity_type: string>, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/data-sources/nsxv-managers" $auth.query)
@@ -2738,7 +2871,6 @@ export def "list-nsxv-managers" [
 #
 # POST /data-sources/nsxv-managers
 # operationId: addNsxvManagerDatasource
-# --credentials shape: {password: string, username: string}
 export def "add-nsxv-manager-datasource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2759,7 +2891,7 @@ export def "add-nsxv-manager-datasource" [
   credentials: record # shape: {password: string, username: string}
   --ipfix-enabled: oneof<nothing, bool> # default: false
   vcenter_id: string # Associated vcenter data source entity Id
-]: any -> record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, central_cli_enabled: bool, credentials: record<password: string, username: string>, ipfix_enabled: bool, vcenter_id: string> {
+]: any -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, central_cli_enabled: bool, credentials: record<password: string, username: string>, ipfix_enabled: bool, vcenter_id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2833,7 +2965,7 @@ export def "get-nsxv-manager" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, central_cli_enabled: bool, credentials: record<password: string, username: string>, ipfix_enabled: bool, vcenter_id: string> {
+]: nothing -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, central_cli_enabled: bool, credentials: record<password: string, username: string>, ipfix_enabled: bool, vcenter_id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2858,7 +2990,6 @@ export def "get-nsxv-manager" [
 #
 # PUT /data-sources/nsxv-managers/{id}
 # operationId: updateNsxvManager
-# --credentials shape: {password: string, username: string}
 export def "update-nsxv-manager" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2882,7 +3013,7 @@ export def "update-nsxv-manager" [
   --credentials: record # shape: {password: string, username: string}
   --ipfix-enabled: oneof<nothing, bool> # default: false
   --vcenter-id: string # Associated vcenter data source entity Id
-]: any -> record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, central_cli_enabled: bool, credentials: record<password: string, username: string>, ipfix_enabled: bool, vcenter_id: string> {
+]: any -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, central_cli_enabled: bool, credentials: record<password: string, username: string>, ipfix_enabled: bool, vcenter_id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2921,7 +3052,7 @@ export def "get-nsxv-controller-cluster" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<controller_password: string, enabled: bool> {
+]: nothing -> oneof<record<controller_password: string, enabled: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2959,7 +3090,7 @@ export def "update-nsxv-controller-cluster" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --controller-password: string
   --enabled: oneof<nothing, bool> # default: false
-]: any -> record<controller_password: string, enabled: bool> {
+]: any -> oneof<record<controller_password: string, enabled: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3069,7 +3200,7 @@ export def "list-panorama-firewalls" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<results: table<entity_id: string, entity_type: string>, total_count: int> {
+]: nothing -> oneof<record<results: table<entity_id: string, entity_type: string>, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/data-sources/panorama-firewalls" $auth.query)
@@ -3103,13 +3234,19 @@ export def "add-panorama-firewall" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body: record
-]: any -> record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>> {
+  --enabled: oneof<nothing, bool> # default: true
+  --fqdn: string # e.g. your.domain.com
+  --ip: string # e.g. 192.168.10.1
+  nickname: string # e.g. vc1
+  --notes: string
+  proxy_id: string # proxy vm which should register this vcenter (e.g. 1000:104:12313412)
+  --credentials: record # shape: {password: string, username: string}
+]: any -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/data-sources/panorama-firewalls" $auth.query)
-  let req_body = $body
+  let req_body = {"enabled": $enabled, "fqdn": $fqdn, "ip": $ip, "nickname": $nickname, "notes": $notes, "proxy_id": $proxy_id, "credentials": $credentials} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3178,7 +3315,7 @@ export def "get-panorama-firewall" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>> {
+]: nothing -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3214,14 +3351,22 @@ export def "update-panorama-firewall" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body: record
-]: any -> record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>> {
+  --enabled: oneof<nothing, bool> # default: true
+  --entity-id: string
+  --entity-type: string@entity-type-completer
+  --fqdn: string # e.g. your.domain.com
+  --ip: string # e.g. 192.168.10.1
+  --nickname: string # e.g. vc1
+  --notes: string
+  --proxy-id: string # proxy vm which should register this vcenter (e.g. 1000:104:12313412)
+  --credentials: record # shape: {password: string, username: string}
+]: any -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/panorama-firewalls/{id}") $auth.query)
-  let req_body = $body
+  let req_body = {"enabled": $enabled, "entity_id": $entity_id, "entity_type": $entity_type, "fqdn": $fqdn, "ip": $ip, "nickname": $nickname, "notes": $notes, "proxy_id": $proxy_id, "credentials": $credentials} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3325,7 +3470,7 @@ export def "list-ucs-managers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<results: table<entity_id: string, entity_type: string>, total_count: int> {
+]: nothing -> oneof<record<results: table<entity_id: string, entity_type: string>, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/data-sources/ucs-managers" $auth.query)
@@ -3359,13 +3504,21 @@ export def "add-ucs-manager" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body: record
-]: any -> record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>> {
+  --enabled: oneof<nothing, bool> # default: true
+  --entity-id: string
+  --entity-type: string@entity-type-completer
+  --fqdn: string # e.g. your.domain.com
+  --ip: string # e.g. 192.168.10.1
+  --nickname: string # e.g. vc1
+  --notes: string
+  --proxy-id: string # proxy vm which should register this vcenter (e.g. 1000:104:12313412)
+  --credentials: record # shape: {password: string, username: string}
+]: any -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/data-sources/ucs-managers" $auth.query)
-  let req_body = $body
+  let req_body = {"enabled": $enabled, "entity_id": $entity_id, "entity_type": $entity_type, "fqdn": $fqdn, "ip": $ip, "nickname": $nickname, "notes": $notes, "proxy_id": $proxy_id, "credentials": $credentials} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3434,7 +3587,7 @@ export def "get-ucs-manager" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>> {
+]: nothing -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3470,14 +3623,22 @@ export def "update-ucs-manager" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body: record
-]: any -> record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>> {
+  --enabled: oneof<nothing, bool> # default: true
+  --entity-id: string
+  --entity-type: string@entity-type-completer
+  --fqdn: string # e.g. your.domain.com
+  --ip: string # e.g. 192.168.10.1
+  --nickname: string # e.g. vc1
+  --notes: string
+  --proxy-id: string # proxy vm which should register this vcenter (e.g. 1000:104:12313412)
+  --credentials: record # shape: {password: string, username: string}
+]: any -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/data-sources/ucs-managers/{id}") $auth.query)
-  let req_body = $body
+  let req_body = {"enabled": $enabled, "entity_id": $entity_id, "entity_type": $entity_type, "fqdn": $fqdn, "ip": $ip, "nickname": $nickname, "notes": $notes, "proxy_id": $proxy_id, "credentials": $credentials} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3582,7 +3743,7 @@ export def "get-ucs-snmp-config" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<config_snmp_2c: record<community_string: string>, config_snmp_3: record<authentication_password: string, authentication_type: string, context_name: string, privacy_password: string, privacy_type: string, username: string>, snmp_enabled: bool, snmp_version: string> {
+]: nothing -> oneof<record<config_snmp_2c: record<community_string: string>, config_snmp_3: record<authentication_password: string, authentication_type: string, context_name: string, privacy_password: string, privacy_type: string, username: string>, snmp_enabled: bool, snmp_version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3607,8 +3768,6 @@ export def "get-ucs-snmp-config" [
 #
 # PUT /data-sources/ucs-managers/{id}/snmp-config
 # operationId: updateUcsSnmpConfig
-# --config_snmp_2c shape: {community_string?: string}
-# --config_snmp_3 shape: {authentication_password?: string, authentication_type?: "NO_AUTH"|"MD5"|"SHA", context_name?: string, privacy_password?: string, privacy_type?: "AES"|"DES"|"AES128"|"AES192"|"AES256"|"3DES"|"NO_PRIV", username?: string}
 export def "update-ucs-snmp-config" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3624,7 +3783,7 @@ export def "update-ucs-snmp-config" [
   --config-snmp-3: record # shape: {authentication_password?: string, authentication_type?: "NO_AUTH"|"MD5"|"SHA", context_name?: string, privacy_password?: string, privacy_type?: "AES"|"DES"|"AES128"|"AES192"|"AES256"|"3DES"|"NO_PRIV", username?: string}
   --snmp-enabled: oneof<nothing, bool> # default: false
   --snmp-version: string@snmp-version-completer
-]: any -> record<config_snmp_2c: record<community_string: string>, config_snmp_3: record<authentication_password: string, authentication_type: string, context_name: string, privacy_password: string, privacy_type: string, username: string>, snmp_enabled: bool, snmp_version: string> {
+]: any -> oneof<record<config_snmp_2c: record<community_string: string>, config_snmp_3: record<authentication_password: string, authentication_type: string, context_name: string, privacy_password: string, privacy_type: string, username: string>, snmp_enabled: bool, snmp_version: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3663,7 +3822,7 @@ export def "list-vcenters" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-]: nothing -> record<results: table<entity_id: string, entity_type: string>, total_count: int> {
+]: nothing -> oneof<record<results: table<entity_id: string, entity_type: string>, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/data-sources/vcenters" $auth.query)
@@ -3687,7 +3846,6 @@ export def "list-vcenters" [
 #
 # POST /data-sources/vcenters
 # operationId: addVcenterDatasource
-# --credentials shape: {password: string, username: string}
 export def "add-vcenter-datasource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3706,7 +3864,7 @@ export def "add-vcenter-datasource" [
   --notes: string
   proxy_id: string # proxy vm which should register this vcenter (e.g. 1000:104:12313412)
   --credentials: record # shape: {password: string, username: string}
-]: any -> record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>> {
+]: any -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3781,7 +3939,7 @@ export def "get-vcenter" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
-]: nothing -> record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>> {
+]: nothing -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3806,7 +3964,6 @@ export def "get-vcenter" [
 #
 # PUT /data-sources/vcenters/{id}
 # operationId: updateVcenter
-# --credentials shape: {password: string, username: string}
 export def "update-vcenter" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3827,7 +3984,7 @@ export def "update-vcenter" [
   --notes: string
   --proxy-id: string # proxy vm which should register this vcenter (e.g. 1000:104:12313412)
   --credentials: record # shape: {password: string, username: string}
-]: any -> record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>> {
+]: any -> oneof<record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3942,7 +4099,7 @@ export def "list-clusters" [
   --cursor: string # cursor from previous response
   --start-time: float # start time for query in epoch seconds
   --end-time: float # end time for query in epoch seconds
-]: nothing -> record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int> {
+]: nothing -> oneof<record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "size" $size "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar")] | flatten | str join "&"
@@ -3980,7 +4137,7 @@ export def "get-cluster" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-4 # Response content type
   --time: int # time in epoch seconds (format: int64)
-]: nothing -> record<entity_id: string, entity_type: string, name: string, nsx_manager: record<entity_id: string, entity_type: string>, num_cpu_cores: int, num_datastores: int, num_hosts: int, total_cpus: int, total_memory: int, vcenter_manager: record<entity_id: string, entity_type: string>, vendor_id: string> {
+]: nothing -> oneof<record<entity_id: string, entity_type: string, name: string, nsx_manager: record<entity_id: string, entity_type: string>, num_cpu_cores: int, num_datastores: int, num_hosts: int, total_cpus: int, total_memory: int, vcenter_manager: record<entity_id: string, entity_type: string>, vendor_id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4021,7 +4178,7 @@ export def "list-datastores" [
   --cursor: string # cursor from previous response
   --start-time: float # start time for query in epoch seconds
   --end-time: float # end time for query in epoch seconds
-]: nothing -> record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int> {
+]: nothing -> oneof<record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "size" $size "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar")] | flatten | str join "&"
@@ -4059,7 +4216,7 @@ export def "get-datastore" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-5 # Response content type
   --time: int # time in epoch seconds (format: int64)
-]: nothing -> record<entity_id: string, entity_type: string, name: string, vcenter_manager: record<entity_id: string, entity_type: string>, vendor_id: string> {
+]: nothing -> oneof<record<entity_id: string, entity_type: string, name: string, vcenter_manager: record<entity_id: string, entity_type: string>, vendor_id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4100,7 +4257,7 @@ export def "list-distributed-virtual-portgroups" [
   --cursor: string # cursor from previous response
   --start-time: float # start time for query in epoch seconds
   --end-time: float # end time for query in epoch seconds
-]: nothing -> record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int> {
+]: nothing -> oneof<record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "size" $size "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar")] | flatten | str join "&"
@@ -4138,7 +4295,7 @@ export def "get-distributed-virtual-portgroup" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-6 # Response content type
   --time: int # time in epoch seconds (format: int64)
-]: nothing -> record<entity_id: string, entity_type: string, name: string, distributed_virtual_switch: record<entity_id: string, entity_type: string>, vcenter_manager: record<entity_id: string, entity_type: string>, vendor_id: string> {
+]: nothing -> oneof<record<entity_id: string, entity_type: string, name: string, distributed_virtual_switch: record<entity_id: string, entity_type: string>, vcenter_manager: record<entity_id: string, entity_type: string>, vendor_id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4179,7 +4336,7 @@ export def "list-distributed-virtual-switches" [
   --cursor: string # cursor from previous response
   --start-time: float # start time for query in epoch seconds
   --end-time: float # end time for query in epoch seconds
-]: nothing -> record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int> {
+]: nothing -> oneof<record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "size" $size "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar")] | flatten | str join "&"
@@ -4217,7 +4374,7 @@ export def "get-distributed-virtual-switch" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-7 # Response content type
   --time: int # time in epoch seconds (format: int64)
-]: nothing -> record<entity_id: string, entity_type: string, name: string, hosts: table<entity_id: string, entity_type: string>, vcenter_manager: record<entity_id: string, entity_type: string>, vendor_id: string> {
+]: nothing -> oneof<record<entity_id: string, entity_type: string, name: string, hosts: table<entity_id: string, entity_type: string>, vcenter_manager: record<entity_id: string, entity_type: string>, vendor_id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4258,7 +4415,7 @@ export def "list-firewall-rules" [
   --cursor: string # cursor from previous response
   --start-time: float # start time for query in epoch seconds
   --end-time: float # end time for query in epoch seconds
-]: nothing -> record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int> {
+]: nothing -> oneof<record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "size" $size "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar")] | flatten | str join "&"
@@ -4296,7 +4453,7 @@ export def "get-firewall-rule" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-8 # Response content type
   --time: int # time in epoch seconds (format: int64)
-]: nothing -> record<entity_id: string, entity_type: string, name: string, action: string, destination_any: bool, destination_inversion: bool, destinations: table<entity_id: string, entity_type: string>, disabled: bool, port_ranges: table<display: string, end: int, iana_name: string, iana_port_display: string, start: int>, rule_id: string, section_id: string, section_name: string, sequence_number: int, service_any: bool, services: table<entity_id: string, entity_type: string>, source_any: bool, source_inversion: bool, sources: table<entity_id: string, entity_type: string>> {
+]: nothing -> oneof<record<entity_id: string, entity_type: string, name: string, action: string, destination_any: bool, destination_inversion: bool, destinations: table<entity_id: string, entity_type: string>, disabled: bool, port_ranges: table<display: string, end: int, iana_name: string, iana_port_display: string, start: int>, rule_id: string, section_id: string, section_name: string, sequence_number: int, service_any: bool, services: table<entity_id: string, entity_type: string>, source_any: bool, source_inversion: bool, sources: table<entity_id: string, entity_type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4337,7 +4494,7 @@ export def "list-firewalls" [
   --cursor: string # cursor from previous response
   --start-time: float # start time for query in epoch seconds
   --end-time: float # end time for query in epoch seconds
-]: nothing -> record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int> {
+]: nothing -> oneof<record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "size" $size "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar")] | flatten | str join "&"
@@ -4375,7 +4532,7 @@ export def "get-firewall" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-9 # Response content type
   --time: int # time in epoch seconds (format: int64)
-]: nothing -> record<entity_id: string, entity_type: string, name: string, action: string, destination_any: bool, destination_inversion: bool, destinations: table<entity_id: string, entity_type: string>, disabled: bool, port_ranges: table<display: string, end: int, iana_name: string, iana_port_display: string, start: int>, rule_id: string, section_id: string, section_name: string, sequence_number: int, service_any: bool, services: table<entity_id: string, entity_type: string>, source_any: bool, source_inversion: bool, sources: table<entity_id: string, entity_type: string>> {
+]: nothing -> oneof<record<entity_id: string, entity_type: string, name: string, action: string, destination_any: bool, destination_inversion: bool, destinations: table<entity_id: string, entity_type: string>, disabled: bool, port_ranges: table<display: string, end: int, iana_name: string, iana_port_display: string, start: int>, rule_id: string, section_id: string, section_name: string, sequence_number: int, service_any: bool, services: table<entity_id: string, entity_type: string>, source_any: bool, source_inversion: bool, sources: table<entity_id: string, entity_type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4416,7 +4573,7 @@ export def "get-flows" [
   --cursor: string # cursor from previous response
   --start-time: float # start time for query in epoch seconds
   --end-time: float # end time for query in epoch seconds
-]: nothing -> record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int> {
+]: nothing -> oneof<record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "size" $size "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar")] | flatten | str join "&"
@@ -4454,7 +4611,7 @@ export def "get-flow" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-10 # Response content type
   --time: int # time in epoch seconds (format: int64)
-]: nothing -> record<entity_id: string, entity_type: string, name: string, destination_cluster: record<entity_id: string, entity_type: string>, destination_datacenter: record<entity_id: string, entity_type: string>, destination_folders: table<entity_id: string, entity_type: string>, destination_host: record<entity_id: string, entity_type: string>, destination_ip: record<ip_address: string, netmask: string, network_address: string>, destination_ip_sets: table<entity_id: string, entity_type: string>, destination_l2_network: record<entity_id: string, entity_type: string>, destination_resource_pool: record<entity_id: string, entity_type: string>, destination_security_groups: table<entity_id: string, entity_type: string>, destination_security_tags: table<entity_id: string, entity_type: string>, destination_vm: record<entity_id: string, entity_type: string>, destination_vm_tags: list<string>, destination_vnic: record<entity_id: string, entity_type: string>, destination_vpc: record<entity_id: string, entity_type: string>, firewall_action: string, flow_tag: list<string>, port: record<display: string, end: int, iana_name: string, iana_port_display: string, start: int>, protocol: string, source_cluster: record<entity_id: string, entity_type: string>, source_datacenter: record<entity_id: string, entity_type: string>, source_folders: table<entity_id: string, entity_type: string>, source_host: record<entity_id: string, entity_type: string>, source_ip: record<ip_address: string, netmask: string, network_address: string>, source_ip_sets: table<entity_id: string, entity_type: string>, source_l2_network: record<entity_id: string, entity_type: string>, source_resource_pool: record<entity_id: string, entity_type: string>, source_security_groups: table<entity_id: string, entity_type: string>, source_security_tags: table<entity_id: string, entity_type: string>, source_vm: record<entity_id: string, entity_type: string>, source_vm_tags: list<string>, source_vnic: record<entity_id: string, entity_type: string>, source_vpc: record<entity_id: string, entity_type: string>, traffic_type: string, within_host: bool> {
+]: nothing -> oneof<record<entity_id: string, entity_type: string, name: string, destination_cluster: record<entity_id: string, entity_type: string>, destination_datacenter: record<entity_id: string, entity_type: string>, destination_folders: table<entity_id: string, entity_type: string>, destination_host: record<entity_id: string, entity_type: string>, destination_ip: record<ip_address: string, netmask: string, network_address: string>, destination_ip_sets: table<entity_id: string, entity_type: string>, destination_l2_network: record<entity_id: string, entity_type: string>, destination_resource_pool: record<entity_id: string, entity_type: string>, destination_security_groups: table<entity_id: string, entity_type: string>, destination_security_tags: table<entity_id: string, entity_type: string>, destination_vm: record<entity_id: string, entity_type: string>, destination_vm_tags: list<string>, destination_vnic: record<entity_id: string, entity_type: string>, destination_vpc: record<entity_id: string, entity_type: string>, firewall_action: string, flow_tag: list<string>, port: record<display: string, end: int, iana_name: string, iana_port_display: string, start: int>, protocol: string, source_cluster: record<entity_id: string, entity_type: string>, source_datacenter: record<entity_id: string, entity_type: string>, source_folders: table<entity_id: string, entity_type: string>, source_host: record<entity_id: string, entity_type: string>, source_ip: record<ip_address: string, netmask: string, network_address: string>, source_ip_sets: table<entity_id: string, entity_type: string>, source_l2_network: record<entity_id: string, entity_type: string>, source_resource_pool: record<entity_id: string, entity_type: string>, source_security_groups: table<entity_id: string, entity_type: string>, source_security_tags: table<entity_id: string, entity_type: string>, source_vm: record<entity_id: string, entity_type: string>, source_vm_tags: list<string>, source_vnic: record<entity_id: string, entity_type: string>, source_vpc: record<entity_id: string, entity_type: string>, traffic_type: string, within_host: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4495,7 +4652,7 @@ export def "list-folders" [
   --cursor: string # cursor from previous response
   --start-time: float # start time for query in epoch seconds
   --end-time: float # end time for query in epoch seconds
-]: nothing -> record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int> {
+]: nothing -> oneof<record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "size" $size "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar")] | flatten | str join "&"
@@ -4533,7 +4690,7 @@ export def "get-folder" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-5 # Response content type
   --time: int # time in epoch seconds (format: int64)
-]: nothing -> record<entity_id: string, entity_type: string, name: string, vcenter_manager: record<entity_id: string, entity_type: string>, vendor_id: string> {
+]: nothing -> oneof<record<entity_id: string, entity_type: string, name: string, vcenter_manager: record<entity_id: string, entity_type: string>, vendor_id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4574,7 +4731,7 @@ export def "list-hosts" [
   --cursor: string # cursor from previous response
   --start-time: float # start time for query in epoch seconds
   --end-time: float # end time for query in epoch seconds
-]: nothing -> record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int> {
+]: nothing -> oneof<record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "size" $size "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar")] | flatten | str join "&"
@@ -4612,7 +4769,7 @@ export def "get-host" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-11 # Response content type
   --time: int # time in epoch seconds (format: int64)
-]: nothing -> record<entity_id: string, entity_type: string, name: string, cluster: record<entity_id: string, entity_type: string>, connection_state: string, datastores: table<entity_id: string, entity_type: string>, maintenance_mode: string, nsx_manager: record<entity_id: string, entity_type: string>, service_tag: string, vcenter_manager: record<entity_id: string, entity_type: string>, vendor_id: string, vm_count: int, vmknics: table<entity_id: string, entity_type: string>> {
+]: nothing -> oneof<record<entity_id: string, entity_type: string, name: string, cluster: record<entity_id: string, entity_type: string>, connection_state: string, datastores: table<entity_id: string, entity_type: string>, maintenance_mode: string, nsx_manager: record<entity_id: string, entity_type: string>, service_tag: string, vcenter_manager: record<entity_id: string, entity_type: string>, vendor_id: string, vm_count: int, vmknics: table<entity_id: string, entity_type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4653,7 +4810,7 @@ export def "list-ip-sets" [
   --cursor: string # cursor from previous response
   --start-time: float # start time for query in epoch seconds
   --end-time: float # end time for query in epoch seconds
-]: nothing -> record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int> {
+]: nothing -> oneof<record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "size" $size "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar")] | flatten | str join "&"
@@ -4691,7 +4848,7 @@ export def "get-ip-set" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-12 # Response content type
   --time: int # time in epoch seconds (format: int64)
-]: nothing -> record<entity_id: string, entity_type: string, name: string, direct_destination_rules: table<firewall: record, rule_set_type: string, rules: list>, direct_source_rules: table<firewall: record, rule_set_type: string, rules: list>, indirect_destination_rules: table<firewall: record, rule_set_type: string, rules: list>, indirect_source_rules: table<firewall: record, rule_set_type: string, rules: list>, ip_addresses: table<ip_address: string, netmask: string, network_address: string>, ip_numeric_ranges: table<end: int, start: int>, ip_ranges: table<end_ip: string, start_ip: string>, parent_security_groups: table<entity_id: string, entity_type: string>, translated_vm_count: int, vendor: string, vendor_id: string> {
+]: nothing -> oneof<record<entity_id: string, entity_type: string, name: string, direct_destination_rules: table<firewall: record, rule_set_type: string, rules: list>, direct_source_rules: table<firewall: record, rule_set_type: string, rules: list>, indirect_destination_rules: table<firewall: record, rule_set_type: string, rules: list>, indirect_source_rules: table<firewall: record, rule_set_type: string, rules: list>, ip_addresses: table<ip_address: string, netmask: string, network_address: string>, ip_numeric_ranges: table<end: int, start: int>, ip_ranges: table<end_ip: string, start_ip: string>, parent_security_groups: table<entity_id: string, entity_type: string>, translated_vm_count: int, vendor: string, vendor_id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4732,7 +4889,7 @@ export def "list-layer2-networks" [
   --cursor: string # cursor from previous response
   --start-time: float # start time for query in epoch seconds
   --end-time: float # end time for query in epoch seconds
-]: nothing -> record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int> {
+]: nothing -> oneof<record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "size" $size "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar")] | flatten | str join "&"
@@ -4770,7 +4927,7 @@ export def "get-layer2-network" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-13 # Response content type
   --time: int # time in epoch seconds (format: int64)
-]: nothing -> record<entity_id: string, entity_type: string, name: string, gateways: list<string>, network_addresses: list<string>> {
+]: nothing -> oneof<record<entity_id: string, entity_type: string, name: string, gateways: list<string>, network_addresses: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4796,7 +4953,6 @@ export def "get-layer2-network" [
 #
 # POST /entities/names
 # operationId: getNames
-# --entities item shape: {entity_id?: string, time?: int}
 export def "get-names" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4808,7 +4964,7 @@ export def "get-names" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --entities: list # item shape: {entity_id?: string, time?: int}
-]: any -> record<entities: table<entity_id: string, entity_type: string, time: int, name: string>> {
+]: any -> oneof<record<entities: table<entity_id: string, entity_type: string, time: int, name: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4847,7 +5003,7 @@ export def "get-name" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --time: int # time in epoch seconds (format: int64)
-]: nothing -> record<entity_id: string, entity_type: string, time: int, name: string> {
+]: nothing -> oneof<record<entity_id: string, entity_type: string, time: int, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4888,7 +5044,7 @@ export def "list-nsx-managers" [
   --cursor: string # cursor from previous response
   --start-time: float # start time for query in epoch seconds
   --end-time: float # end time for query in epoch seconds
-]: nothing -> record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int> {
+]: nothing -> oneof<record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "size" $size "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar")] | flatten | str join "&"
@@ -4926,7 +5082,7 @@ export def "get-nsx-manager" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-14 # Response content type
   --time: int # time in epoch seconds (format: int64)
-]: nothing -> record<entity_id: string, entity_type: string, name: string> {
+]: nothing -> oneof<record<entity_id: string, entity_type: string, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4967,7 +5123,7 @@ export def "list-problem-events" [
   --cursor: string # cursor from previous response
   --start-time: float # start time for query in epoch seconds
   --end-time: float # end time for query in epoch seconds
-]: nothing -> record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int> {
+]: nothing -> oneof<record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "size" $size "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar")] | flatten | str join "&"
@@ -5005,7 +5161,7 @@ export def "get-problem-event" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-15 # Response content type
   --time: int # time in epoch seconds (format: int64)
-]: nothing -> record<entity_id: string, entity_type: string, name: string, admin_state: string, anchor_entities: table<entity_id: string, entity_type: string>, archived: bool, event_tags: list<string>, event_time_epoch_ms: int, message: string, related_entities: table<entity_id: string, entity_type: string>, event_close_time_epoch_ms: int, severity: string> {
+]: nothing -> oneof<record<entity_id: string, entity_type: string, name: string, admin_state: string, anchor_entities: table<entity_id: string, entity_type: string>, archived: bool, event_tags: list<string>, event_time_epoch_ms: int, message: string, related_entities: table<entity_id: string, entity_type: string>, event_close_time_epoch_ms: int, severity: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5046,7 +5202,7 @@ export def "list-security-groups" [
   --cursor: string # cursor from previous response
   --start-time: float # start time for query in epoch seconds
   --end-time: float # end time for query in epoch seconds
-]: nothing -> record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int> {
+]: nothing -> oneof<record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "size" $size "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar")] | flatten | str join "&"
@@ -5084,7 +5240,7 @@ export def "get-security-group" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-16 # Response content type
   --time: int # time in epoch seconds (format: int64)
-]: nothing -> record<entity_id: string, entity_type: string, name: string, members: table<entity_id: string, entity_type: string>, direct_destination_rules: table<firewall: record, rule_set_type: string, rules: list>, direct_members: table<entity_id: string, entity_type: string>, direct_source_rules: table<firewall: record, rule_set_type: string, rules: list>, excluded_members: table<entity_id: string, entity_type: string>, indirect_destination_rules: table<firewall: record, rule_set_type: string, rules: list>, indirect_source_rules: table<firewall: record, rule_set_type: string, rules: list>, parents: table<entity_id: string, entity_type: string>, translated_vm_count: int, vendor_id: string> {
+]: nothing -> oneof<record<entity_id: string, entity_type: string, name: string, members: table<entity_id: string, entity_type: string>, direct_destination_rules: table<firewall: record, rule_set_type: string, rules: list>, direct_members: table<entity_id: string, entity_type: string>, direct_source_rules: table<firewall: record, rule_set_type: string, rules: list>, excluded_members: table<entity_id: string, entity_type: string>, indirect_destination_rules: table<firewall: record, rule_set_type: string, rules: list>, indirect_source_rules: table<firewall: record, rule_set_type: string, rules: list>, parents: table<entity_id: string, entity_type: string>, translated_vm_count: int, vendor_id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5125,7 +5281,7 @@ export def "list-security-tags" [
   --cursor: string # cursor from previous response
   --start-time: float # start time for query in epoch seconds
   --end-time: float # end time for query in epoch seconds
-]: nothing -> record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int> {
+]: nothing -> oneof<record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "size" $size "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar")] | flatten | str join "&"
@@ -5163,7 +5319,7 @@ export def "get-security-tag" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-17 # Response content type
   --time: int # time in epoch seconds (format: int64)
-]: nothing -> record<entity_id: string, entity_type: string, name: string, description: string, direct_security_groups: table<entity_id: string, entity_type: string>, nsx_manager: record<entity_id: string, entity_type: string>, security_groups: table<entity_id: string, entity_type: string>, vendor_id: string> {
+]: nothing -> oneof<record<entity_id: string, entity_type: string, name: string, description: string, direct_security_groups: table<entity_id: string, entity_type: string>, nsx_manager: record<entity_id: string, entity_type: string>, security_groups: table<entity_id: string, entity_type: string>, vendor_id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5204,7 +5360,7 @@ export def "list-service-groups" [
   --cursor: string # cursor from previous response
   --start-time: float # start time for query in epoch seconds
   --end-time: float # end time for query in epoch seconds
-]: nothing -> record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int> {
+]: nothing -> oneof<record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "size" $size "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar")] | flatten | str join "&"
@@ -5242,7 +5398,7 @@ export def "get-service-group" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-18 # Response content type
   --time: int # time in epoch seconds (format: int64)
-]: nothing -> record<entity_id: string, entity_type: string, name: string, members: table<entity_id: string, entity_type: string>> {
+]: nothing -> oneof<record<entity_id: string, entity_type: string, name: string, members: table<entity_id: string, entity_type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5283,7 +5439,7 @@ export def "list-services" [
   --cursor: string # cursor from previous response
   --start-time: float # start time for query in epoch seconds
   --end-time: float # end time for query in epoch seconds
-]: nothing -> record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int> {
+]: nothing -> oneof<record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "size" $size "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar")] | flatten | str join "&"
@@ -5321,7 +5477,7 @@ export def "get-service" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-19 # Response content type
   --time: int # time in epoch seconds (format: int64)
-]: nothing -> record<entity_id: string, entity_type: string, name: string, port_ranges: table<display: string, end: int, iana_name: string, iana_port_display: string, start: int>, protocol: string> {
+]: nothing -> oneof<record<entity_id: string, entity_type: string, name: string, port_ranges: table<display: string, end: int, iana_name: string, iana_port_display: string, start: int>, protocol: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5362,7 +5518,7 @@ export def "list-datacenters" [
   --cursor: string # cursor from previous response
   --start-time: float # start time for query in epoch seconds
   --end-time: float # end time for query in epoch seconds
-]: nothing -> record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int> {
+]: nothing -> oneof<record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "size" $size "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar")] | flatten | str join "&"
@@ -5400,7 +5556,7 @@ export def "get-datacenter" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-5 # Response content type
   --time: int # time in epoch seconds (format: int64)
-]: nothing -> record<entity_id: string, entity_type: string, name: string, vcenter_manager: record<entity_id: string, entity_type: string>, vendor_id: string> {
+]: nothing -> oneof<record<entity_id: string, entity_type: string, name: string, vcenter_manager: record<entity_id: string, entity_type: string>, vendor_id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5441,7 +5597,7 @@ export def "list-vcenter-managers" [
   --cursor: string # cursor from previous response
   --start-time: float # start time for query in epoch seconds
   --end-time: float # end time for query in epoch seconds
-]: nothing -> record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int> {
+]: nothing -> oneof<record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "size" $size "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar")] | flatten | str join "&"
@@ -5479,7 +5635,7 @@ export def "get-vcenter-manager" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-20 # Response content type
   --time: int # time in epoch seconds (format: int64)
-]: nothing -> record<entity_id: string, entity_type: string, name: string, fqdn: string, ip_address: record<ip_address: string, netmask: string, network_address: string>, nsx_manager: record<entity_id: string, entity_type: string>, vm: record<entity_id: string, entity_type: string>> {
+]: nothing -> oneof<record<entity_id: string, entity_type: string, name: string, fqdn: string, ip_address: record<ip_address: string, netmask: string, network_address: string>, nsx_manager: record<entity_id: string, entity_type: string>, vm: record<entity_id: string, entity_type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5520,7 +5676,7 @@ export def "list-vmknics" [
   --cursor: string # cursor from previous response
   --start-time: float # start time for query in epoch seconds
   --end-time: float # end time for query in epoch seconds
-]: nothing -> record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int> {
+]: nothing -> oneof<record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "size" $size "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar")] | flatten | str join "&"
@@ -5558,7 +5714,7 @@ export def "get-vmknic" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-21 # Response content type
   --time: int # time in epoch seconds (format: int64)
-]: nothing -> record<entity_id: string, entity_type: string, name: string, host: record<entity_id: string, entity_type: string>, ip_addresses: table<ip_address: string, netmask: string, network_address: string>, layer2_network: record<entity_id: string, entity_type: string>, vlan: record<begin: int, end: int>> {
+]: nothing -> oneof<record<entity_id: string, entity_type: string, name: string, host: record<entity_id: string, entity_type: string>, ip_addresses: table<ip_address: string, netmask: string, network_address: string>, layer2_network: record<entity_id: string, entity_type: string>, vlan: record<begin: int, end: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5599,7 +5755,7 @@ export def "list-vms" [
   --cursor: string # cursor from previous response
   --start-time: float # start time for query in epoch seconds
   --end-time: float # end time for query in epoch seconds
-]: nothing -> record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int> {
+]: nothing -> oneof<record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "size" $size "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar")] | flatten | str join "&"
@@ -5637,7 +5793,7 @@ export def "get-vm" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-22 # Response content type
   --time: int # time in epoch seconds (format: int64)
-]: nothing -> record<entity_id: string, entity_type: string, name: string, default_gateway: string, destination_firewall_rules: table<firewall: record, rule_set_type: string, rules: list>, ip_addresses: table<ip_address: string, netmask: string, network_address: string>, ip_sets: table<entity_id: string, entity_type: string>, security_groups: table<entity_id: string, entity_type: string>, source_firewall_rules: table<firewall: record, rule_set_type: string, rules: list>, vnics: table<entity_id: string, entity_type: string>> {
+]: nothing -> oneof<record<entity_id: string, entity_type: string, name: string, default_gateway: string, destination_firewall_rules: table<firewall: record, rule_set_type: string, rules: list>, ip_addresses: table<ip_address: string, netmask: string, network_address: string>, ip_sets: table<entity_id: string, entity_type: string>, security_groups: table<entity_id: string, entity_type: string>, source_firewall_rules: table<firewall: record, rule_set_type: string, rules: list>, vnics: table<entity_id: string, entity_type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5678,7 +5834,7 @@ export def "list-vnics" [
   --cursor: string # cursor from previous response
   --start-time: float # start time for query in epoch seconds
   --end-time: float # end time for query in epoch seconds
-]: nothing -> record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int> {
+]: nothing -> oneof<record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "size" $size "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar")] | flatten | str join "&"
@@ -5716,7 +5872,7 @@ export def "get-vnic" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-23 # Response content type
   --time: int # time in epoch seconds (format: int64)
-]: nothing -> record<entity_id: string, entity_type: string, name: string, ip_addresses: table<ip_address: string, netmask: string, network_address: string>, layer2_network: record<entity_id: string, entity_type: string>, vlan: record<begin: int, end: int>, vm: record<entity_id: string, entity_type: string>> {
+]: nothing -> oneof<record<entity_id: string, entity_type: string, name: string, ip_addresses: table<ip_address: string, netmask: string, network_address: string>, layer2_network: record<entity_id: string, entity_type: string>, vlan: record<begin: int, end: int>, vm: record<entity_id: string, entity_type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5757,7 +5913,7 @@ export def "list-applications" [
   --cursor: string # cursor from previous response
   --start-time: float # start time for query in epoch seconds
   --end-time: float # end time for query in epoch seconds
-]: nothing -> record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string>, start_time: int, total_count: int> {
+]: nothing -> oneof<record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string>, start_time: int, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "size" $size "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar")] | flatten | str join "&"
@@ -5794,7 +5950,7 @@ export def "add-application" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-24 # Response content type
   --name: string
-]: any -> record<entity_id: string, entity_type: string, name: string, create_time: int, created_by: string, last_modified_by: string, last_modified_time: int> {
+]: any -> oneof<record<entity_id: string, entity_type: string, name: string, create_time: int, created_by: string, last_modified_by: string, last_modified_time: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5869,7 +6025,7 @@ export def "get-application" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-24 # Response content type
-]: nothing -> record<entity_id: string, entity_type: string, name: string, create_time: int, created_by: string, last_modified_by: string, last_modified_time: int> {
+]: nothing -> oneof<record<entity_id: string, entity_type: string, name: string, create_time: int, created_by: string, last_modified_by: string, last_modified_time: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5906,7 +6062,7 @@ export def "list-application-tiers" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-25 # Response content type
-]: nothing -> record<results: table<entity_id: string, entity_type: string, name: string, application: record, group_membership_criteria: list>> {
+]: nothing -> oneof<record<results: table<entity_id: string, entity_type: string, name: string, application: record, group_membership_criteria: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5931,7 +6087,6 @@ export def "list-application-tiers" [
 #
 # POST /groups/applications/{id}/tiers
 # operationId: addTier
-# --group_membership_criteria item shape: {ip_address_membership_criteria?: record, membership_type?: "SearchMembershipCriteria"|"IPAddressMembershipCriteria", search_membership_criteria?: record}
 export def "add-tier" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5946,7 +6101,7 @@ export def "add-tier" [
   --accept: string@accept-completer-26 # Response content type
   --group-membership-criteria: list # item shape: {ip_address_membership_criteria?: record, membership_type?: "SearchMembershipCriteria"|"IPAddressMembershipCriteria", search_membership_criteria?: record}
   --name: string
-]: any -> record<entity_id: string, entity_type: string, name: string, application: record<entity_id: string, entity_type: string>, group_membership_criteria: table<ip_address_membership_criteria: record, membership_type: string, search_membership_criteria: record>> {
+]: any -> oneof<record<entity_id: string, entity_type: string, name: string, application: record<entity_id: string, entity_type: string>, group_membership_criteria: table<ip_address_membership_criteria: record, membership_type: string, search_membership_criteria: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6025,7 +6180,7 @@ export def "get-application-tier" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-26 # Response content type
-]: nothing -> record<entity_id: string, entity_type: string, name: string, application: record<entity_id: string, entity_type: string>, group_membership_criteria: table<ip_address_membership_criteria: record, membership_type: string, search_membership_criteria: record>> {
+]: nothing -> oneof<record<entity_id: string, entity_type: string, name: string, application: record<entity_id: string, entity_type: string>, group_membership_criteria: table<ip_address_membership_criteria: record, membership_type: string, search_membership_criteria: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6064,7 +6219,7 @@ export def "get-tier" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-26 # Response content type
   --authorization: string # Authorization Header (required, format: NetworkInsight <token>)
-]: nothing -> record<entity_id: string, entity_type: string, name: string, application: record<entity_id: string, entity_type: string>, group_membership_criteria: table<ip_address_membership_criteria: record, membership_type: string, search_membership_criteria: record>> {
+]: nothing -> oneof<record<entity_id: string, entity_type: string, name: string, application: record<entity_id: string, entity_type: string>, group_membership_criteria: table<ip_address_membership_criteria: record, membership_type: string, search_membership_criteria: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tier_id | is-empty) { error make --unspanned { msg: "path parameter 'tier-id' must be non-empty" } }
@@ -6102,7 +6257,7 @@ export def "get-version" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<api_version: string> {
+]: nothing -> oneof<record<api_version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/info/version" $auth.query)
@@ -6137,7 +6292,7 @@ export def "list-nodes" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-]: nothing -> record<results: table<entity_type: string, id: string>, total_count: int> {
+]: nothing -> oneof<record<results: table<entity_type: string, id: string>, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/infra/nodes" $auth.query)
@@ -6173,7 +6328,7 @@ export def "get-node" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-27 # Response content type
-]: nothing -> record<entity_type: string, id: string, ip_address: string, name: string, node_id: string, node_type: string> {
+]: nothing -> oneof<record<entity_type: string, id: string, ip_address: string, name: string, node_id: string, node_type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6198,9 +6353,6 @@ export def "get-node" [
 #
 # POST /micro-seg/recommended-rules
 # operationId: listRecommendedRules
-# --group_1 shape: {entity?: record}
-# --group_2 shape: {entity?: record}
-# --time_range shape: {end_time?: int, start_time?: int}
 export def "list-recommended-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6215,7 +6367,7 @@ export def "list-recommended-rules" [
   --group-1: record # shape: {entity?: record}
   --group-2: record # shape: {entity?: record}
   --time-range: record # shape: {end_time?: int, start_time?: int}
-]: any -> record<results: table<action: string, destinations: list, port_ranges: list, protocols: list, sources: list>, time_range: record<end_time: int, start_time: int>> {
+]: any -> oneof<record<results: table<action: string, destinations: list, port_ranges: list, protocols: list, sources: list>, time_range: record<end_time: int, start_time: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6242,9 +6394,6 @@ export def "list-recommended-rules" [
 #
 # POST /micro-seg/recommended-rules/nsx
 # operationId: exportNsxRecommendedRules
-# --group_1 shape: {entity?: record}
-# --group_2 shape: {entity?: record}
-# --time_range shape: {end_time?: int, start_time?: int}
 export def "export-nsx-recommended-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6285,8 +6434,6 @@ export def "export-nsx-recommended-rules" [
 #
 # POST /search
 # operationId: searchEntities
-# --sort_by shape: {field?: string, order?: "ASC"|"DESC"}
-# --time_range shape: {end_time?: int, start_time?: int}
 export def "search-entities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6303,7 +6450,7 @@ export def "search-entities" [
   --size: int # format: int32
   --sort-by: record # shape: {field?: string, order?: "ASC"|"DESC"}
   --time-range: record # shape: {end_time?: int, start_time?: int}
-]: any -> record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int> {
+]: any -> oneof<record<cursor: string, end_time: int, results: table<entity_id: string, entity_type: string, time: int>, start_time: int, total_count: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

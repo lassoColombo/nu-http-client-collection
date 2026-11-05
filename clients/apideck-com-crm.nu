@@ -15,27 +15,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "x-apideck-app-id" => { {scheme: $scheme, headers: {"x-apideck-app-id": $token_val}, query: "", location: "header"} }
     "x-apideck-consumer-id" => { {scheme: $scheme, headers: {"x-apideck-consumer-id": $token_val}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -43,8 +52,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -55,7 +69,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -90,7 +113,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -124,9 +148,9 @@ def type-completer-1 [] { ["customer" "employee" "personal" "supplier"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "activities-all" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["activities-all" "activities-add" "activities-delete" "activities-one" "activities-update" "companies-all" "companies-add" "companies-delete" "companies-one" "companies-update" "contacts-all" "contacts-add" "contacts-delete" "contacts-one" "contacts-update" "leads-all" "leads-add" "leads-delete" "leads-one" "leads-update" "notes-all" "notes-add" "notes-delete" "notes-one" "notes-update" "opportunities-all" "opportunities-add" "opportunities-delete" "opportunities-one" "opportunities-update" "pipelines-all" "pipelines-add" "pipelines-delete" "pipelines-one" "pipelines-update" "users-all" "users-add" "users-delete" "users-one" "users-update" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -166,7 +190,7 @@ export def "activities-all" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: table<account_id: string, activity_date: string, activity_datetime: string, all_day_event: bool, archived: bool, asset_id: string, attendees: list, campaign_id: string, case_id: string, child: bool, company_id: string, contact_id: string, contract_id: string, created_at: string, created_by: string, custom_fields: list, custom_object_id: string, deleted: bool, description: string, done: bool, downstream_id: string, duration_minutes: int, duration_seconds: int, end_date: string, end_datetime: string, event_sub_type: string, group_event: bool, group_event_type: string, id: string, lead_id: string, location: string, location_address: record, note: string, opportunity_id: string, owner_id: string, private: bool, product_id: string, recurrent: bool, reminder_datetime: string, reminder_set: bool, show_as: string, solution_id: string, start_datetime: string, title: string, type: string, updated_at: string, updated_by: string, user_id: string, video_conference_id: string, video_conference_url: string>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: table<account_id: string, activity_date: string, activity_datetime: string, all_day_event: bool, archived: bool, asset_id: string, attendees: list, campaign_id: string, case_id: string, child: bool, company_id: string, contact_id: string, contract_id: string, created_at: string, created_by: string, custom_fields: list, custom_object_id: string, deleted: bool, description: string, done: bool, downstream_id: string, duration_minutes: int, duration_seconds: int, end_date: string, end_datetime: string, event_sub_type: string, group_event: bool, group_event_type: string, id: string, lead_id: string, location: string, location_address: record, note: string, opportunity_id: string, owner_id: string, private: bool, product_id: string, recurrent: bool, reminder_datetime: string, reminder_set: bool, show_as: string, solution_id: string, start_datetime: string, title: string, type: string, updated_at: string, updated_by: string, user_id: string, video_conference_id: string, video_conference_url: string>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
@@ -195,9 +219,6 @@ export def "activities-all" [
 #
 # POST /crm/activities
 # operationId: activitiesAdd
-# --attendees item shape: {email_address?: string, first_name?: string, is_organizer?: bool, last_name?: string, middle_name?: string, name?: string, prefix?: string, status?: "accepted"|"tentative"|"declined", suffix?: string}
-# --custom_fields item shape: {description?: string, id: string, name?: string, value?: any}
-# --location_address shape: {city?: string, contact_name?: string, country?: string, county?: string, email?: string, fax?: string, id?: string, latitude?: string, line1?: string, line2?: string, line3?: string, line4?: string, longitude?: string, name?: string, phone_number?: string, postal_code?: string, row_version?: string, salutation?: string, state?: string, street_number?: string, string?: string, type?: "primary"|"secondary"|"home"|"office"|"shipping"|"billing"|"other", website?: string}
 export def "activities-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -255,7 +276,7 @@ export def "activities-add" [
   --user-id: string # nullable, e.g. 12345
   --video-conference-id: string # e.g. zoom:88120759396
   --video-conference-url: string # e.g. https://us02web.zoom.us/j/88120759396
-]: any -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: any -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -302,7 +323,7 @@ export def "activities-delete" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -348,7 +369,7 @@ export def "activities-one" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: record<account_id: string, activity_date: string, activity_datetime: string, all_day_event: bool, archived: bool, asset_id: string, attendees: list<record>, campaign_id: string, case_id: string, child: bool, company_id: string, contact_id: string, contract_id: string, created_at: string, created_by: string, custom_fields: list<record>, custom_object_id: string, deleted: bool, description: string, done: bool, downstream_id: string, duration_minutes: int, duration_seconds: int, end_date: string, end_datetime: string, event_sub_type: string, group_event: bool, group_event_type: string, id: string, lead_id: string, location: string, location_address: record<city: string, contact_name: string, country: string, county: string, email: string, fax: string, id: string, latitude: string, line1: string, line2: string, line3: string, line4: string, longitude: string, name: string, phone_number: string, postal_code: string, row_version: string, salutation: string, state: string, street_number: string, string: string, type: string, website: string>, note: string, opportunity_id: string, owner_id: string, private: bool, product_id: string, recurrent: bool, reminder_datetime: string, reminder_set: bool, show_as: string, solution_id: string, start_datetime: string, title: string, type: string, updated_at: string, updated_by: string, user_id: string, video_conference_id: string, video_conference_url: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: record<account_id: string, activity_date: string, activity_datetime: string, all_day_event: bool, archived: bool, asset_id: string, attendees: list<record>, campaign_id: string, case_id: string, child: bool, company_id: string, contact_id: string, contract_id: string, created_at: string, created_by: string, custom_fields: list<record>, custom_object_id: string, deleted: bool, description: string, done: bool, downstream_id: string, duration_minutes: int, duration_seconds: int, end_date: string, end_datetime: string, event_sub_type: string, group_event: bool, group_event_type: string, id: string, lead_id: string, location: string, location_address: record<city: string, contact_name: string, country: string, county: string, email: string, fax: string, id: string, latitude: string, line1: string, line2: string, line3: string, line4: string, longitude: string, name: string, phone_number: string, postal_code: string, row_version: string, salutation: string, state: string, street_number: string, string: string, type: string, website: string>, note: string, opportunity_id: string, owner_id: string, private: bool, product_id: string, recurrent: bool, reminder_datetime: string, reminder_set: bool, show_as: string, solution_id: string, start_datetime: string, title: string, type: string, updated_at: string, updated_by: string, user_id: string, video_conference_id: string, video_conference_url: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -378,9 +399,6 @@ export def "activities-one" [
 #
 # PATCH /crm/activities/{id}
 # operationId: activitiesUpdate
-# --attendees item shape: {email_address?: string, first_name?: string, is_organizer?: bool, last_name?: string, middle_name?: string, name?: string, prefix?: string, status?: "accepted"|"tentative"|"declined", suffix?: string}
-# --custom_fields item shape: {description?: string, id: string, name?: string, value?: any}
-# --location_address shape: {city?: string, contact_name?: string, country?: string, county?: string, email?: string, fax?: string, id?: string, latitude?: string, line1?: string, line2?: string, line3?: string, line4?: string, longitude?: string, name?: string, phone_number?: string, postal_code?: string, row_version?: string, salutation?: string, state?: string, street_number?: string, string?: string, type?: "primary"|"secondary"|"home"|"office"|"shipping"|"billing"|"other", website?: string}
 export def "activities-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -439,7 +457,7 @@ export def "activities-update" [
   --user-id: string # nullable, e.g. 12345
   --video-conference-id: string # e.g. zoom:88120759396
   --video-conference-url: string # e.g. https://us02web.zoom.us/j/88120759396
-]: any -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: any -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -491,7 +509,7 @@ export def "companies-all" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: table<abn_branch: string, abn_or_tfn: string, acn: string, addresses: list, annual_revenue: string, bank_accounts: list, birthday: string, created_at: string, created_by: string, currency: string, custom_fields: list, deleted: bool, description: string, emails: list, fax: string, first_name: string, id: string, image: string, industry: string, interaction_count: int, last_activity_at: string, last_name: string, name: string, number_of_employees: string, owner_id: string, ownership: string, parent_id: string, payee_number: string, phone_numbers: list, read_only: bool, row_type: record, sales_tax_number: string, salutation: string, social_links: list, status: string, tags: list, updated_at: string, updated_by: string, vat_number: string, websites: list>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: table<abn_branch: string, abn_or_tfn: string, acn: string, addresses: list, annual_revenue: string, bank_accounts: list, birthday: string, created_at: string, created_by: string, currency: string, custom_fields: list, deleted: bool, description: string, emails: list, fax: string, first_name: string, id: string, image: string, industry: string, interaction_count: int, last_activity_at: string, last_name: string, name: string, number_of_employees: string, owner_id: string, ownership: string, parent_id: string, payee_number: string, phone_numbers: list, read_only: bool, row_type: record, sales_tax_number: string, salutation: string, social_links: list, status: string, tags: list, updated_at: string, updated_by: string, vat_number: string, websites: list>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
@@ -520,14 +538,6 @@ export def "companies-all" [
 #
 # POST /crm/companies
 # operationId: companiesAdd
-# --addresses item shape: {city?: string, contact_name?: string, country?: string, county?: string, email?: string, fax?: string, id?: string, latitude?: string, line1?: string, line2?: string, line3?: string, line4?: string, longitude?: string, name?: string, phone_number?: string, postal_code?: string, row_version?: string, salutation?: string, state?: string, street_number?: string, string?: string, type?: "primary"|"secondary"|"home"|"office"|"shipping"|"billing"|"other", website?: string}
-# --bank_accounts item shape: {account_name?: string, account_number?: string, account_type?: "bank_account"|"credit_card"|"other", bank_code?: string, bic?: string, branch_identifier?: string, bsb_number?: string, ... (2 more fields)}
-# --custom_fields item shape: {description?: string, id: string, name?: string, value?: any}
-# --emails item shape: {email: string, id?: string, type?: "primary"|"secondary"|"work"|"personal"|"billing"|"other"}
-# --phone_numbers item shape: {area_code?: string, country_code?: string, extension?: string, id?: string, number: string, type?: "primary"|"secondary"|"home"|"work"|"office"|"mobile"|"assistant"|"fax"|"direct-dial-in"|"personal"|"other"}
-# --row_type shape: {id?: string, name?: string}
-# --social_links item shape: {id?: string, type?: string, url: string}
-# --websites item shape: {id?: string, type?: "primary"|"secondary"|"work"|"personal"|"other", url: string}
 export def "companies-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -573,7 +583,7 @@ export def "companies-add" [
   --tags: list<string> # e.g. [New]
   --vat-number: string # VAT number (nullable, e.g. BE0689615164)
   --websites: list # item shape: {id?: string, type?: "primary"|"secondary"|"work"|"personal"|"other", url: string}
-]: any -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: any -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -620,7 +630,7 @@ export def "companies-delete" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -666,7 +676,7 @@ export def "companies-one" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: record<abn_branch: string, abn_or_tfn: string, acn: string, addresses: list<record>, annual_revenue: string, bank_accounts: list<record>, birthday: string, created_at: string, created_by: string, currency: string, custom_fields: list<record>, deleted: bool, description: string, emails: list<record>, fax: string, first_name: string, id: string, image: string, industry: string, interaction_count: int, last_activity_at: string, last_name: string, name: string, number_of_employees: string, owner_id: string, ownership: string, parent_id: string, payee_number: string, phone_numbers: list<record>, read_only: bool, row_type: record<id: string, name: string>, sales_tax_number: string, salutation: string, social_links: list<record>, status: string, tags: list<string>, updated_at: string, updated_by: string, vat_number: string, websites: list<record>>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: record<abn_branch: string, abn_or_tfn: string, acn: string, addresses: list<record>, annual_revenue: string, bank_accounts: list<record>, birthday: string, created_at: string, created_by: string, currency: string, custom_fields: list<record>, deleted: bool, description: string, emails: list<record>, fax: string, first_name: string, id: string, image: string, industry: string, interaction_count: int, last_activity_at: string, last_name: string, name: string, number_of_employees: string, owner_id: string, ownership: string, parent_id: string, payee_number: string, phone_numbers: list<record>, read_only: bool, row_type: record<id: string, name: string>, sales_tax_number: string, salutation: string, social_links: list<record>, status: string, tags: list<string>, updated_at: string, updated_by: string, vat_number: string, websites: list<record>>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -696,14 +706,6 @@ export def "companies-one" [
 #
 # PATCH /crm/companies/{id}
 # operationId: companiesUpdate
-# --addresses item shape: {city?: string, contact_name?: string, country?: string, county?: string, email?: string, fax?: string, id?: string, latitude?: string, line1?: string, line2?: string, line3?: string, line4?: string, longitude?: string, name?: string, phone_number?: string, postal_code?: string, row_version?: string, salutation?: string, state?: string, street_number?: string, string?: string, type?: "primary"|"secondary"|"home"|"office"|"shipping"|"billing"|"other", website?: string}
-# --bank_accounts item shape: {account_name?: string, account_number?: string, account_type?: "bank_account"|"credit_card"|"other", bank_code?: string, bic?: string, branch_identifier?: string, bsb_number?: string, ... (2 more fields)}
-# --custom_fields item shape: {description?: string, id: string, name?: string, value?: any}
-# --emails item shape: {email: string, id?: string, type?: "primary"|"secondary"|"work"|"personal"|"billing"|"other"}
-# --phone_numbers item shape: {area_code?: string, country_code?: string, extension?: string, id?: string, number: string, type?: "primary"|"secondary"|"home"|"work"|"office"|"mobile"|"assistant"|"fax"|"direct-dial-in"|"personal"|"other"}
-# --row_type shape: {id?: string, name?: string}
-# --social_links item shape: {id?: string, type?: string, url: string}
-# --websites item shape: {id?: string, type?: "primary"|"secondary"|"work"|"personal"|"other", url: string}
 export def "companies-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -750,7 +752,7 @@ export def "companies-update" [
   --tags: list<string> # e.g. [New]
   --vat-number: string # VAT number (nullable, e.g. BE0689615164)
   --websites: list # item shape: {id?: string, type?: "primary"|"secondary"|"work"|"personal"|"other", url: string}
-]: any -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: any -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -802,7 +804,7 @@ export def "contacts-all" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: table<active: bool, addresses: list, birthday: string, company_id: string, company_name: string, created_at: string, current_balance: float, custom_fields: list, department: string, description: string, email_domain: string, emails: list, fax: string, first_call_at: string, first_email_at: string, first_name: string, gender: string, id: string, image: string, language: string, last_activity_at: string, last_name: string, lead_id: string, lead_source: string, middle_name: string, name: string, owner_id: string, phone_numbers: list, photo_url: string, prefix: string, social_links: list, status: string, suffix: string, tags: list, title: string, type: string, updated_at: string, websites: list>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: table<active: bool, addresses: list, birthday: string, company_id: string, company_name: string, created_at: string, current_balance: float, custom_fields: list, department: string, description: string, email_domain: string, emails: list, fax: string, first_call_at: string, first_email_at: string, first_name: string, gender: string, id: string, image: string, language: string, last_activity_at: string, last_name: string, lead_id: string, lead_source: string, middle_name: string, name: string, owner_id: string, phone_numbers: list, photo_url: string, prefix: string, social_links: list, status: string, suffix: string, tags: list, title: string, type: string, updated_at: string, websites: list>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
@@ -831,12 +833,6 @@ export def "contacts-all" [
 #
 # POST /crm/contacts
 # operationId: contactsAdd
-# --addresses item shape: {city?: string, contact_name?: string, country?: string, county?: string, email?: string, fax?: string, id?: string, latitude?: string, line1?: string, line2?: string, line3?: string, line4?: string, longitude?: string, name?: string, phone_number?: string, postal_code?: string, row_version?: string, salutation?: string, state?: string, street_number?: string, string?: string, type?: "primary"|"secondary"|"home"|"office"|"shipping"|"billing"|"other", website?: string}
-# --custom_fields item shape: {description?: string, id: string, name?: string, value?: any}
-# --emails item shape: {email: string, id?: string, type?: "primary"|"secondary"|"work"|"personal"|"billing"|"other"}
-# --phone_numbers item shape: {area_code?: string, country_code?: string, extension?: string, id?: string, number: string, type?: "primary"|"secondary"|"home"|"work"|"office"|"mobile"|"assistant"|"fax"|"direct-dial-in"|"personal"|"other"}
-# --social_links item shape: {id?: string, type?: string, url: string}
-# --websites item shape: {id?: string, type?: "primary"|"secondary"|"work"|"personal"|"other", url: string}
 @deprecated --flag image
 export def "contacts-add" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -884,7 +880,7 @@ export def "contacts-add" [
   --title: string # nullable, e.g. CEO
   --type: string@type-completer-1 # nullable, e.g. personal
   --websites: list # item shape: {id?: string, type?: "primary"|"secondary"|"work"|"personal"|"other", url: string}
-]: any -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: any -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -931,7 +927,7 @@ export def "contacts-delete" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -977,7 +973,7 @@ export def "contacts-one" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: record<active: bool, addresses: list<record>, birthday: string, company_id: string, company_name: string, created_at: string, current_balance: float, custom_fields: list<record>, department: string, description: string, email_domain: string, emails: list<record>, fax: string, first_call_at: string, first_email_at: string, first_name: string, gender: string, id: string, image: string, language: string, last_activity_at: string, last_name: string, lead_id: string, lead_source: string, middle_name: string, name: string, owner_id: string, phone_numbers: list<record>, photo_url: string, prefix: string, social_links: list<record>, status: string, suffix: string, tags: list<string>, title: string, type: string, updated_at: string, websites: list<record>>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: record<active: bool, addresses: list<record>, birthday: string, company_id: string, company_name: string, created_at: string, current_balance: float, custom_fields: list<record>, department: string, description: string, email_domain: string, emails: list<record>, fax: string, first_call_at: string, first_email_at: string, first_name: string, gender: string, id: string, image: string, language: string, last_activity_at: string, last_name: string, lead_id: string, lead_source: string, middle_name: string, name: string, owner_id: string, phone_numbers: list<record>, photo_url: string, prefix: string, social_links: list<record>, status: string, suffix: string, tags: list<string>, title: string, type: string, updated_at: string, websites: list<record>>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1007,12 +1003,6 @@ export def "contacts-one" [
 #
 # PATCH /crm/contacts/{id}
 # operationId: contactsUpdate
-# --addresses item shape: {city?: string, contact_name?: string, country?: string, county?: string, email?: string, fax?: string, id?: string, latitude?: string, line1?: string, line2?: string, line3?: string, line4?: string, longitude?: string, name?: string, phone_number?: string, postal_code?: string, row_version?: string, salutation?: string, state?: string, street_number?: string, string?: string, type?: "primary"|"secondary"|"home"|"office"|"shipping"|"billing"|"other", website?: string}
-# --custom_fields item shape: {description?: string, id: string, name?: string, value?: any}
-# --emails item shape: {email: string, id?: string, type?: "primary"|"secondary"|"work"|"personal"|"billing"|"other"}
-# --phone_numbers item shape: {area_code?: string, country_code?: string, extension?: string, id?: string, number: string, type?: "primary"|"secondary"|"home"|"work"|"office"|"mobile"|"assistant"|"fax"|"direct-dial-in"|"personal"|"other"}
-# --social_links item shape: {id?: string, type?: string, url: string}
-# --websites item shape: {id?: string, type?: "primary"|"secondary"|"work"|"personal"|"other", url: string}
 @deprecated --flag image
 export def "contacts-update" [
   id: string
@@ -1061,7 +1051,7 @@ export def "contacts-update" [
   --title: string # nullable, e.g. CEO
   --type: string@type-completer-1 # nullable, e.g. personal
   --websites: list # item shape: {id?: string, type?: "primary"|"secondary"|"work"|"personal"|"other", url: string}
-]: any -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: any -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1113,7 +1103,7 @@ export def "leads-all" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: table<addresses: list, company_id: string, company_name: string, contact_id: string, created_at: string, currency: string, custom_fields: list, description: string, emails: list, fax: string, first_name: string, id: string, language: string, last_name: string, lead_source: string, monetary_amount: float, name: string, owner_id: string, phone_numbers: list, prefix: string, social_links: list, status: string, tags: list, title: string, updated_at: string, websites: list>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: table<addresses: list, company_id: string, company_name: string, contact_id: string, created_at: string, currency: string, custom_fields: list, description: string, emails: list, fax: string, first_name: string, id: string, language: string, last_name: string, lead_source: string, monetary_amount: float, name: string, owner_id: string, phone_numbers: list, prefix: string, social_links: list, status: string, tags: list, title: string, updated_at: string, websites: list>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
@@ -1142,12 +1132,6 @@ export def "leads-all" [
 #
 # POST /crm/leads
 # operationId: leadsAdd
-# --addresses item shape: {city?: string, contact_name?: string, country?: string, county?: string, email?: string, fax?: string, id?: string, latitude?: string, line1?: string, line2?: string, line3?: string, line4?: string, longitude?: string, name?: string, phone_number?: string, postal_code?: string, row_version?: string, salutation?: string, state?: string, street_number?: string, string?: string, type?: "primary"|"secondary"|"home"|"office"|"shipping"|"billing"|"other", website?: string}
-# --custom_fields item shape: {description?: string, id: string, name?: string, value?: any}
-# --emails item shape: {email: string, id?: string, type?: "primary"|"secondary"|"work"|"personal"|"billing"|"other"}
-# --phone_numbers item shape: {area_code?: string, country_code?: string, extension?: string, id?: string, number: string, type?: "primary"|"secondary"|"home"|"work"|"office"|"mobile"|"assistant"|"fax"|"direct-dial-in"|"personal"|"other"}
-# --social_links item shape: {id?: string, type?: string, url: string}
-# --websites item shape: {id?: string, type?: "primary"|"secondary"|"work"|"personal"|"other", url: string}
 export def "leads-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1185,7 +1169,7 @@ export def "leads-add" [
   --tags: list<string> # e.g. [New]
   --title: string # nullable, e.g. CEO
   --websites: list # item shape: {id?: string, type?: "primary"|"secondary"|"work"|"personal"|"other", url: string}
-]: any -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: any -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1232,7 +1216,7 @@ export def "leads-delete" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1278,7 +1262,7 @@ export def "leads-one" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: record<addresses: list<record>, company_id: string, company_name: string, contact_id: string, created_at: string, currency: string, custom_fields: list<record>, description: string, emails: list<record>, fax: string, first_name: string, id: string, language: string, last_name: string, lead_source: string, monetary_amount: float, name: string, owner_id: string, phone_numbers: list<record>, prefix: string, social_links: list<record>, status: string, tags: list<string>, title: string, updated_at: string, websites: list<record>>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: record<addresses: list<record>, company_id: string, company_name: string, contact_id: string, created_at: string, currency: string, custom_fields: list<record>, description: string, emails: list<record>, fax: string, first_name: string, id: string, language: string, last_name: string, lead_source: string, monetary_amount: float, name: string, owner_id: string, phone_numbers: list<record>, prefix: string, social_links: list<record>, status: string, tags: list<string>, title: string, updated_at: string, websites: list<record>>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1308,12 +1292,6 @@ export def "leads-one" [
 #
 # PATCH /crm/leads/{id}
 # operationId: leadsUpdate
-# --addresses item shape: {city?: string, contact_name?: string, country?: string, county?: string, email?: string, fax?: string, id?: string, latitude?: string, line1?: string, line2?: string, line3?: string, line4?: string, longitude?: string, name?: string, phone_number?: string, postal_code?: string, row_version?: string, salutation?: string, state?: string, street_number?: string, string?: string, type?: "primary"|"secondary"|"home"|"office"|"shipping"|"billing"|"other", website?: string}
-# --custom_fields item shape: {description?: string, id: string, name?: string, value?: any}
-# --emails item shape: {email: string, id?: string, type?: "primary"|"secondary"|"work"|"personal"|"billing"|"other"}
-# --phone_numbers item shape: {area_code?: string, country_code?: string, extension?: string, id?: string, number: string, type?: "primary"|"secondary"|"home"|"work"|"office"|"mobile"|"assistant"|"fax"|"direct-dial-in"|"personal"|"other"}
-# --social_links item shape: {id?: string, type?: string, url: string}
-# --websites item shape: {id?: string, type?: "primary"|"secondary"|"work"|"personal"|"other", url: string}
 export def "leads-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1352,7 +1330,7 @@ export def "leads-update" [
   --tags: list<string> # e.g. [New]
   --title: string # nullable, e.g. CEO
   --websites: list # item shape: {id?: string, type?: "primary"|"secondary"|"work"|"personal"|"other", url: string}
-]: any -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: any -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1402,7 +1380,7 @@ export def "notes-all" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: table<active: bool, company_id: string, contact_id: string, content: string, created_at: string, created_by: string, id: string, lead_id: string, opportunity_id: string, owner_id: string, title: string, updated_at: string, updated_by: string>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: table<active: bool, company_id: string, contact_id: string, content: string, created_at: string, created_by: string, id: string, lead_id: string, opportunity_id: string, owner_id: string, title: string, updated_at: string, updated_by: string>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
@@ -1453,7 +1431,7 @@ export def "notes-add" [
   --opportunity-id: string # nullable, e.g. 12345
   --owner-id: string # e.g. 12345
   --title: string # e.g. Meeting Notes
-]: any -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: any -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1500,7 +1478,7 @@ export def "notes-delete" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1546,7 +1524,7 @@ export def "notes-one" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: record<active: bool, company_id: string, contact_id: string, content: string, created_at: string, created_by: string, id: string, lead_id: string, opportunity_id: string, owner_id: string, title: string, updated_at: string, updated_by: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: record<active: bool, company_id: string, contact_id: string, content: string, created_at: string, created_by: string, id: string, lead_id: string, opportunity_id: string, owner_id: string, title: string, updated_at: string, updated_by: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1599,7 +1577,7 @@ export def "notes-update" [
   --opportunity-id: string # nullable, e.g. 12345
   --owner-id: string # e.g. 12345
   --title: string # e.g. Meeting Notes
-]: any -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: any -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1651,7 +1629,7 @@ export def "opportunities-all" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: table<close_date: string, company_id: string, company_name: string, contact_id: string, contact_ids: list, created_at: string, created_by: string, currency: string, custom_fields: list, date_last_contacted: string, date_lead_created: string, date_stage_changed: string, deleted: bool, description: string, expected_revenue: float, id: string, interaction_count: float, last_activity_at: string, lead_id: string, lead_source: string, loss_reason: string, loss_reason_id: string, monetary_amount: float, owner_id: string, pipeline_id: string, pipeline_stage_id: string, primary_contact_id: string, priority: string, source_id: string, stage_last_changed_at: string, status: string, status_id: string, tags: list, title: string, type: string, updated_at: string, updated_by: string, win_probability: float, won_reason: string, won_reason_id: string>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: table<close_date: string, company_id: string, company_name: string, contact_id: string, contact_ids: list, created_at: string, created_by: string, currency: string, custom_fields: list, date_last_contacted: string, date_lead_created: string, date_stage_changed: string, deleted: bool, description: string, expected_revenue: float, id: string, interaction_count: float, last_activity_at: string, lead_id: string, lead_source: string, loss_reason: string, loss_reason_id: string, monetary_amount: float, owner_id: string, pipeline_id: string, pipeline_stage_id: string, primary_contact_id: string, priority: string, source_id: string, stage_last_changed_at: string, status: string, status_id: string, tags: list, title: string, type: string, updated_at: string, updated_by: string, win_probability: float, won_reason: string, won_reason_id: string>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
@@ -1680,7 +1658,6 @@ export def "opportunities-all" [
 #
 # POST /crm/opportunities
 # operationId: opportunitiesAdd
-# --custom_fields item shape: {description?: string, id: string, name?: string, value?: any}
 export def "opportunities-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1723,7 +1700,7 @@ export def "opportunities-add" [
   --win-probability: float # The probability of winning the opportunity, expressed as a percentage. (nullable, e.g. 40)
   --won-reason: string # The reason why the opportunity was won. (nullable, e.g. Best pitch)
   --won-reason-id: string # The unique identifier of the reason why the opportunity was won. (nullable, e.g. 12345)
-]: any -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: any -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1770,7 +1747,7 @@ export def "opportunities-delete" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1816,7 +1793,7 @@ export def "opportunities-one" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: record<close_date: string, company_id: string, company_name: string, contact_id: string, contact_ids: list<string>, created_at: string, created_by: string, currency: string, custom_fields: list<record>, date_last_contacted: string, date_lead_created: string, date_stage_changed: string, deleted: bool, description: string, expected_revenue: float, id: string, interaction_count: float, last_activity_at: string, lead_id: string, lead_source: string, loss_reason: string, loss_reason_id: string, monetary_amount: float, owner_id: string, pipeline_id: string, pipeline_stage_id: string, primary_contact_id: string, priority: string, source_id: string, stage_last_changed_at: string, status: string, status_id: string, tags: list<string>, title: string, type: string, updated_at: string, updated_by: string, win_probability: float, won_reason: string, won_reason_id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: record<close_date: string, company_id: string, company_name: string, contact_id: string, contact_ids: list<string>, created_at: string, created_by: string, currency: string, custom_fields: list<record>, date_last_contacted: string, date_lead_created: string, date_stage_changed: string, deleted: bool, description: string, expected_revenue: float, id: string, interaction_count: float, last_activity_at: string, lead_id: string, lead_source: string, loss_reason: string, loss_reason_id: string, monetary_amount: float, owner_id: string, pipeline_id: string, pipeline_stage_id: string, primary_contact_id: string, priority: string, source_id: string, stage_last_changed_at: string, status: string, status_id: string, tags: list<string>, title: string, type: string, updated_at: string, updated_by: string, win_probability: float, won_reason: string, won_reason_id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1846,7 +1823,6 @@ export def "opportunities-one" [
 #
 # PATCH /crm/opportunities/{id}
 # operationId: opportunitiesUpdate
-# --custom_fields item shape: {description?: string, id: string, name?: string, value?: any}
 export def "opportunities-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1890,7 +1866,7 @@ export def "opportunities-update" [
   --win-probability: float # The probability of winning the opportunity, expressed as a percentage. (nullable, e.g. 40)
   --won-reason: string # The reason why the opportunity was won. (nullable, e.g. Best pitch)
   --won-reason-id: string # The unique identifier of the reason why the opportunity was won. (nullable, e.g. 12345)
-]: any -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: any -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1940,7 +1916,7 @@ export def "pipelines-all" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: table<active: bool, archived: bool, created_at: string, currency: string, display_order: int, id: string, name: string, stages: list, updated_at: string, win_probability_enabled: bool>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: table<active: bool, archived: bool, created_at: string, currency: string, display_order: int, id: string, name: string, stages: list, updated_at: string, win_probability_enabled: bool>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
@@ -1969,7 +1945,6 @@ export def "pipelines-all" [
 #
 # POST /crm/pipelines
 # operationId: pipelinesAdd
-# --stages item shape: {display_order?: int, name?: string, value?: string, win_probability?: int}
 export def "pipelines-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1992,7 +1967,7 @@ export def "pipelines-add" [
   name: string # e.g. Sales Pipeline
   --stages: list # item shape: {display_order?: int, name?: string, value?: string, win_probability?: int}
   --win-probability-enabled: oneof<nothing, bool> # e.g. true
-]: any -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: any -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2039,7 +2014,7 @@ export def "pipelines-delete" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2085,7 +2060,7 @@ export def "pipelines-one" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: record<active: bool, archived: bool, created_at: string, currency: string, display_order: int, id: string, name: string, stages: list<record>, updated_at: string, win_probability_enabled: bool>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: record<active: bool, archived: bool, created_at: string, currency: string, display_order: int, id: string, name: string, stages: list<record>, updated_at: string, win_probability_enabled: bool>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2115,7 +2090,6 @@ export def "pipelines-one" [
 #
 # PATCH /crm/pipelines/{id}
 # operationId: pipelinesUpdate
-# --stages item shape: {display_order?: int, name?: string, value?: string, win_probability?: int}
 export def "pipelines-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2139,7 +2113,7 @@ export def "pipelines-update" [
   name: string # e.g. Sales Pipeline
   --stages: list # item shape: {display_order?: int, name?: string, value?: string, win_probability?: int}
   --win-probability-enabled: oneof<nothing, bool> # e.g. true
-]: any -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: any -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2189,7 +2163,7 @@ export def "users-all" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: table<addresses: list, company_name: string, created_at: string, department: string, description: string, division: string, emails: list, employee_number: string, first_name: string, id: string, image: string, language: string, last_name: string, parent_id: string, password: string, phone_numbers: list, status: string, title: string, updated_at: string, username: string>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: table<addresses: list, company_name: string, created_at: string, department: string, description: string, division: string, emails: list, employee_number: string, first_name: string, id: string, image: string, language: string, last_name: string, parent_id: string, password: string, phone_numbers: list, status: string, title: string, updated_at: string, username: string>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
@@ -2218,9 +2192,6 @@ export def "users-all" [
 #
 # POST /crm/users
 # operationId: usersAdd
-# --addresses item shape: {city?: string, contact_name?: string, country?: string, county?: string, email?: string, fax?: string, id?: string, latitude?: string, line1?: string, line2?: string, line3?: string, line4?: string, longitude?: string, name?: string, phone_number?: string, postal_code?: string, row_version?: string, salutation?: string, state?: string, street_number?: string, string?: string, type?: "primary"|"secondary"|"home"|"office"|"shipping"|"billing"|"other", website?: string}
-# --emails item shape: {email: string, id?: string, type?: "primary"|"secondary"|"work"|"personal"|"billing"|"other"}
-# --phone_numbers item shape: {area_code?: string, country_code?: string, extension?: string, id?: string, number: string, type?: "primary"|"secondary"|"home"|"work"|"office"|"mobile"|"assistant"|"fax"|"direct-dial-in"|"personal"|"other"}
 @deprecated --flag department
 export def "users-add" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2253,7 +2224,7 @@ export def "users-add" [
   --status: string # nullable, e.g. active
   --title: string # The job title of the person. (nullable, e.g. CEO)
   --username: string # nullable, e.g. masterofcoin
-]: any -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: any -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2300,7 +2271,7 @@ export def "users-delete" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2346,7 +2317,7 @@ export def "users-one" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: record<addresses: list<record>, company_name: string, created_at: string, department: string, description: string, division: string, emails: list<record>, employee_number: string, first_name: string, id: string, image: string, language: string, last_name: string, parent_id: string, password: string, phone_numbers: list<record>, status: string, title: string, updated_at: string, username: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: record<addresses: list<record>, company_name: string, created_at: string, department: string, description: string, division: string, emails: list<record>, employee_number: string, first_name: string, id: string, image: string, language: string, last_name: string, parent_id: string, password: string, phone_numbers: list<record>, status: string, title: string, updated_at: string, username: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2376,9 +2347,6 @@ export def "users-one" [
 #
 # PATCH /crm/users/{id}
 # operationId: usersUpdate
-# --addresses item shape: {city?: string, contact_name?: string, country?: string, county?: string, email?: string, fax?: string, id?: string, latitude?: string, line1?: string, line2?: string, line3?: string, line4?: string, longitude?: string, name?: string, phone_number?: string, postal_code?: string, row_version?: string, salutation?: string, state?: string, street_number?: string, string?: string, type?: "primary"|"secondary"|"home"|"office"|"shipping"|"billing"|"other", website?: string}
-# --emails item shape: {email: string, id?: string, type?: "primary"|"secondary"|"work"|"personal"|"billing"|"other"}
-# --phone_numbers item shape: {area_code?: string, country_code?: string, extension?: string, id?: string, number: string, type?: "primary"|"secondary"|"home"|"work"|"office"|"mobile"|"assistant"|"fax"|"direct-dial-in"|"personal"|"other"}
 @deprecated --flag department
 export def "users-update" [
   id: string
@@ -2412,7 +2380,7 @@ export def "users-update" [
   --status: string # nullable, e.g. active
   --title: string # The job title of the person. (nullable, e.g. CEO)
   --username: string # nullable, e.g. masterofcoin
-]: any -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: any -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

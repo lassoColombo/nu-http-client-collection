@@ -15,27 +15,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -43,8 +52,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -55,7 +69,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -90,7 +113,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -160,9 +184,9 @@ def accept-completer-1 [] { ["application/json" "image/jpeg"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "request-code" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["request-code" "set-shards" "register-account" "upload-certificate" "download-ca-certificate" "delete-webhook-ca-certificate" "download-webhook-ca-certificate" "upload-webhook-ca-certificate" "check-contact" "get-all-groups" "create-group" "get-group-info" "update-group-info" "demote-group-admin" "promote-to-group-admin" "delete-group-icon" "get-group-icon-binary" "set-group-icon" "delete-group-invite" "get-group-invite" "leave-group" "remove-group-participant" "check-health" "upload-media" "delete-media" "download-media" "send-message" "mark-message-as-read" "get-metrics" "disable-two-step" "enable-two-step" "reset-application-settings" "get-application-settings" "update-application-settings" "get-media-providers" "update-media-providers" "delete-media-providers" "backup-settings" "get-business-profile" "update-business-profile" "get-profile-about" "update-profile-about" "delete-profile-photo" "get-profile-photo" "update-profile-photo" "restore-settings" "get-app-stats" "get-db-stats" "get-support-info" "create-user" "login-user" "logout-user" "delete-user" "get-user" "update-user" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -199,7 +223,7 @@ export def "request-code" [
   method: string@method-completer # Method of receiving your registration code
   phone_number: string # Phone number you are registering, without the country code or plus symbol (+)
   --pin: string # Existing 6-digit PIN — This is only required when two-factor verification is enabled on this account.
-]: any -> record<account: table<vname: string>> {
+]: any -> oneof<record<account: table<vname: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -495,7 +519,7 @@ export def "check-contact" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --blocking: string@blocking-completer # Blocking determines whether the request should wait for the processing to complete (synchronous) or not (asynchronous). (default: no_wait)
   contacts: list<string> # Array of contact phone numbers. The numbers can be in any standard telephone number format.
-]: any -> record<errors: table<code: int, details: string, href: string, title: string>, meta: record<api_status: string, version: string>, contacts: table<input: string, status: string, wa_id: string>> {
+]: any -> oneof<record<errors: table<code: int, details: string, href: string, title: string>, meta: record<api_status: string, version: string>, contacts: table<input: string, status: string, wa_id: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -532,7 +556,7 @@ export def "get-all-groups" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<errors: table<code: int, details: string, href: string, title: string>, meta: record<api_status: string, version: string>, groups: table<creation_time: int, id: string>> {
+]: nothing -> oneof<record<errors: table<code: int, details: string, href: string, title: string>, meta: record<api_status: string, version: string>, groups: table<creation_time: int, id: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/groups" $auth.query)
@@ -567,7 +591,7 @@ export def "create-group" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   subject: string
-]: any -> record<errors: table<code: int, details: string, href: string, title: string>, meta: record<api_status: string, version: string>, groups: table<creation_time: int, id: string>> {
+]: any -> oneof<record<errors: table<code: int, details: string, href: string, title: string>, meta: record<api_status: string, version: string>, groups: table<creation_time: int, id: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -605,7 +629,7 @@ export def "get-group-info" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<errors: table<code: int, details: string, href: string, title: string>, meta: record<api_status: string, version: string>, groups: table<admins: list, creation_time: int, creator: string, participants: list, subject: string>> {
+]: nothing -> oneof<record<errors: table<code: int, details: string, href: string, title: string>, meta: record<api_status: string, version: string>, groups: table<admins: list, creation_time: int, creator: string, participants: list, subject: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'GroupId' must be non-empty" } }
@@ -917,7 +941,7 @@ export def "get-group-invite" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<errors: table<code: int, details: string, href: string, title: string>, meta: record<api_status: string, version: string>, groups: table<link: string>> {
+]: nothing -> oneof<record<errors: table<code: int, details: string, href: string, title: string>, meta: record<api_status: string, version: string>, groups: table<link: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'GroupId' must be non-empty" } }
@@ -1063,7 +1087,7 @@ export def "upload-media" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: string
-]: any -> record<errors: table<code: int, details: string, href: string, title: string>, meta: record<api_status: string, version: string>, media: table<id: string>> {
+]: any -> oneof<record<errors: table<code: int, details: string, href: string, title: string>, meta: record<api_status: string, version: string>, media: table<id: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1162,14 +1186,6 @@ export def "download-media" [
 #
 # POST /messages
 # operationId: SendMessage
-# --audio shape: {id?: string, link?: string, provider?: record}
-# --contacts item shape: {addresses?: list, birthday?: string, emails?: list, ims?: list<string>, name?: record, org?: record, phones?: list, urls?: list}
-# --document shape: {caption?: string, filename?: string, id?: string, link?: string, provider?: record}
-# --hsm shape: {element_name: string, language: record, localizable_params: list, namespace: string}
-# --image shape: {caption?: string, id?: string, link?: string, provider?: record}
-# --location shape: {address: string, latitude: string, longitude: string, name: string}
-# --text shape: {body: string}
-# --video shape: {caption?: string, id?: string, link?: string, provider?: record}
 export def "send-message" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1182,9 +1198,9 @@ export def "send-message" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --audio: record # The media object containing audio — shape: {id?: string, link?: string, provider?: record}
   --contacts: list # item shape: {addresses?: list, birthday?: string, emails?: list, ims?: list<string>, name?: record, org?: record, phones?: list, urls?: list}
-  --document: record # The media object containing a document — shape: {caption?: string, filename?: string, id?: string, link?: string, provider?: record}
+  --document: record # The media object containing a document — shape: {caption: string, filename: string, id?: string, link?: string, provider?: record}
   --hsm: record # The containing element for the message content — Indicates that the message is highly structured. Parameters contained within provide the structure. (e.g. {element_name: hello_world, language: {code: en, policy: deterministic}, localizable_params: [{default: 1234}], namespace: business_a_namespace}) — shape: {element_name: string, language: record, localizable_params: list, namespace: string}
-  --image: record # The media object containing an image — shape: {caption?: string, id?: string, link?: string, provider?: record}
+  --image: record # The media object containing an image — shape: {caption: string, id?: string, link?: string, provider?: record}
   --location: record # e.g. {address: <Location's Address>, latitude: <Latitude>, longitude: <Longitude>, name: <Location Name>} — shape: {address: string, latitude: string, longitude: string, name: string}
   --preview-url: oneof<nothing, bool> # Specifying preview_url in the request is optional when not including a URL in your message. To include a URL preview, set preview_url to true in the message body and make sure the URL begins with http:// or https://. For more information, see the Sending URLs in Text Messages section.
   --recipient-type: string@recipient-type-completer # Determines whether the recipient is an individual or a group Specifying recipient_type in the request is optional when the value is individual. However, recipient_type is required when using group. If sending a text message to a group, see the Sending Group Messages documentation. (default: individual)
@@ -1192,8 +1208,8 @@ export def "send-message" [
   to: string # When recipient_type is individual, this field is the WhatsApp ID (phone number) returned from contacts endpoint. When recipient_type is group, this field is the WhatsApp group ID.
   --ttl: record
   --type: string@type-completer # type of the message (default: text)
-  --video: record # The media object containing a video — shape: {caption?: string, id?: string, link?: string, provider?: record}
-]: any -> record<errors: table<code: int, details: string, href: string, title: string>, meta: record<api_status: string, version: string>, messages: table<id: string>> {
+  --video: record # The media object containing a video — shape: {caption: string, id?: string, link?: string, provider?: record}
+]: any -> oneof<record<errors: table<code: int, details: string, href: string, title: string>, meta: record<api_status: string, version: string>, messages: table<id: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1272,7 +1288,7 @@ export def "get-metrics" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --format: string # e.g. prometheus
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
@@ -1413,7 +1429,7 @@ export def "get-application-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<callback_backoff_delay_ms: string, callback_persist: bool, heartbeat_interval: int, max_callback_backoff_delay_ms: string, media: record<auto_download: list<string>>, on_call_pager: string, pass_through: bool, sent_status: bool, unhealthy_interval: int, webhooks: record<max_concurrent_requests: int, url: string>> {
+]: nothing -> oneof<record<callback_backoff_delay_ms: string, callback_persist: bool, heartbeat_interval: int, max_callback_backoff_delay_ms: string, media: record<auto_download: list<string>>, on_call_pager: string, pass_through: bool, sent_status: bool, unhealthy_interval: int, webhooks: record<max_concurrent_requests: int, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/settings/application" $auth.query)
@@ -1437,8 +1453,6 @@ export def "get-application-settings" [
 #
 # PATCH /settings/application
 # operationId: UpdateApplicationSettings
-# --media shape: {auto_download: list<string>}
-# --webhooks shape: {max_concurrent_requests?: "6"|"12"|"18"|"24", url?: string}
 export def "update-application-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1459,7 +1473,7 @@ export def "update-application-settings" [
   --sent-status: oneof<nothing, bool> # Receive a notification that a message is sent to server. When true, you will receive a message indicating that a message has been sent. If false (default), you will not receive notification. (default: false)
   --unhealthy-interval: int # Multiconnect: Maximum amount of seconds a Master node waits for a Coreapp node to respond to a heartbeat before considering it unhealthy and starting the failover process. (default: 30)
   --webhooks: record # e.g. {max_concurrent_requests: 12, url: <Webhook URL, https>} — shape: {max_concurrent_requests?: "6"|"12"|"18"|"24", url?: string}
-]: any -> record<errors: table<code: int, details: string, href: string, title: string>, meta: record<api_status: string, version: string>> {
+]: any -> oneof<record<errors: table<code: int, details: string, href: string, title: string>, meta: record<api_status: string, version: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1496,7 +1510,7 @@ export def "get-media-providers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<errors: table<code: int, details: string, href: string, title: string>, meta: record<api_status: string, version: string>, settings: record<application: record<media: record>>> {
+]: nothing -> oneof<record<errors: table<code: int, details: string, href: string, title: string>, meta: record<api_status: string, version: string>, settings: record<application: record<media: record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/settings/application/media/providers" $auth.query)
@@ -1605,7 +1619,7 @@ export def "backup-settings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   password: string # Used to encrypt backup data for security
-]: any -> record<settings: record<data: string>> {
+]: any -> oneof<record<settings: record<data: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1642,7 +1656,7 @@ export def "get-business-profile" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<errors: table<code: int, details: string, href: string, title: string>, meta: record<api_status: string, version: string>, settings: record<business: record<profile: record>>> {
+]: nothing -> oneof<record<errors: table<code: int, details: string, href: string, title: string>, meta: record<api_status: string, version: string>, settings: record<business: record<profile: record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/settings/business/profile" $auth.query)
@@ -1718,7 +1732,7 @@ export def "get-profile-about" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<settings: record<profile: record<about: record>>> {
+]: nothing -> oneof<record<settings: record<profile: record<about: record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/settings/profile/about" $auth.query)
@@ -1826,7 +1840,7 @@ export def "get-profile-photo" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --format: string # e.g. link
-]: nothing -> record<settings: record<profile: record<photo: record>>> {
+]: nothing -> oneof<record<settings: record<profile: record<photo: record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
@@ -1942,7 +1956,7 @@ export def "get-app-stats" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --format: string # e.g. prometheus
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
@@ -1979,7 +1993,7 @@ export def "get-db-stats" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --format: string # e.g. prometheus
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
@@ -2014,7 +2028,7 @@ export def "get-support-info" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/support" $auth.query)
@@ -2050,7 +2064,7 @@ export def "create-user" [
   --dry-run(-n) # Return the request that would be sent without executing it
   password: string # username
   username: string # password
-]: any -> record<errors: table<code: int, details: string, href: string, title: string>, meta: record<api_status: string, version: string>, users: table<username: string>> {
+]: any -> oneof<record<errors: table<code: int, details: string, href: string, title: string>, meta: record<api_status: string, version: string>, users: table<username: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2088,7 +2102,7 @@ export def "login-user" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   new_password: string
-]: any -> record<errors: table<code: int, details: string, href: string, title: string>, meta: record<api_status: string, version: string>, users: table<expires_after: string, token: string>> {
+]: any -> oneof<record<errors: table<code: int, details: string, href: string, title: string>, meta: record<api_status: string, version: string>, users: table<expires_after: string, token: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2160,7 +2174,7 @@ export def "delete-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<errors: table<code: int, details: string, href: string, title: string>, meta: record<api_status: string, version: string>, users: table<username: string>> {
+]: nothing -> oneof<record<errors: table<code: int, details: string, href: string, title: string>, meta: record<api_status: string, version: string>, users: table<username: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_username | is-empty) { error make --unspanned { msg: "path parameter 'UserUsername' must be non-empty" } }
@@ -2196,7 +2210,7 @@ export def "get-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<errors: table<code: int, details: string, href: string, title: string>, meta: record<api_status: string, version: string>, users: table<ROLES: string, username: string>> {
+]: nothing -> oneof<record<errors: table<code: int, details: string, href: string, title: string>, meta: record<api_status: string, version: string>, users: table<ROLES: string, username: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_username | is-empty) { error make --unspanned { msg: "path parameter 'UserUsername' must be non-empty" } }
@@ -2233,7 +2247,7 @@ export def "update-user" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   password: string # password
-]: any -> record<errors: table<code: int, details: string, href: string, title: string>, meta: record<api_status: string, version: string>, users: table<username: string>> {
+]: any -> oneof<record<errors: table<code: int, details: string, href: string, title: string>, meta: record<api_status: string, version: string>, users: table<username: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

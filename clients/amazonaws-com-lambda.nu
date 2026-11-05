@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -132,9 +156,9 @@ def list-completer [] { ["ALL"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "add-layer-version-permission" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["add-layer-version-permission" "get-layer-version-policy" "add-permission" "get-policy" "create-alias" "list-aliases" "create-code-signing-config" "list-code-signing-configs" "create-event-source-mapping" "list-event-source-mappings" "create-function" "create-function-url-config" "delete-function-url-config" "get-function-url-config" "update-function-url-config" "delete-alias" "get-alias" "update-alias" "delete-code-signing-config" "get-code-signing-config" "update-code-signing-config" "delete-event-source-mapping" "get-event-source-mapping" "update-event-source-mapping" "delete-function" "get-function" "delete-function-code-signing-config" "get-function-code-signing-config" "put-function-code-signing-config" "delete-function-concurrency" "put-function-concurrency" "delete-function-event-invoke-config" "get-function-event-invoke-config" "put-function-event-invoke-config" "update-function-event-invoke-config" "delete-layer-version" "get-layer-version" "delete-provisioned-concurrency-config" "get-provisioned-concurrency-config" "put-provisioned-concurrency-config" "get-account-settings" "get-function-concurrency" "get-function-configuration" "update-function-configuration" "get-layer-version-by-arn" "get-runtime-management-config" "put-runtime-management-config" "invoke" "invoke-async" "invoke-with-response-stream" "list-function-event-invoke-configs" "list-function-url-configs" "list-functions" "list-functions-by-code-signing-config" "list-layer-versions" "publish-layer-version" "list-layers" "list-provisioned-concurrency-configs" "list-tags" "tag-resource" "list-versions-by-function" "publish-version" "remove-layer-version-permission" "remove-permission" "untag-resource" "update-function-code" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -180,7 +204,7 @@ export def "add-layer-version-permission" [
   action: string # The API action that grants access to the layer. For example, lambda:GetLayerVersion.
   principal: string # An account ID, or * to grant layer usage permission to all accounts in an organization, or all Amazon Web Services accounts (if organizationId is not specified). For the last case, make sure that you really do want all Amazon Web Services accounts to have usage permission to this layer.
   --organization-id: string # With the principal set to *, grant permission to all accounts in the specified organization.
-]: any -> record<Statement: string, RevisionId: string> {
+]: any -> oneof<record<Statement: string, RevisionId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -231,7 +255,7 @@ export def "get-layer-version-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Policy: string, RevisionId: string> {
+]: nothing -> oneof<record<Policy: string, RevisionId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($layer_name | is-empty) { error make --unspanned { msg: "path parameter 'LayerName' must be non-empty" } }
@@ -287,7 +311,7 @@ export def "add-permission" [
   --revision-id: string # Update the policy only if the revision ID matches the ID that's specified. Use this option to avoid modifying a policy that has changed since you last read it.
   --principal-org-id: string # The identifier for your organization in Organizations. Use this to grant permissions to all the Amazon Web Services accounts under this organization.
   --function-url-auth-type: string@function-url-auth-type-completer # The type of authentication that your function URL uses. Set to AWS_IAM if you want to restrict access to authenticated users only. Set to NONE if you want to bypass IAM authentication to create a public endpoint. For more information, see Security and auth model for Lambda function URLs (https://docs.aws.amazon.com/lambda/latest/dg/urls-auth.html).
-]: any -> record<Statement: string> {
+]: any -> oneof<record<Statement: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -337,7 +361,7 @@ export def "get-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Policy: string, RevisionId: string> {
+]: nothing -> oneof<record<Policy: string, RevisionId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
@@ -365,7 +389,6 @@ export def "get-policy" [
 #
 # POST /2015-03-31/functions/{FunctionName}/aliases
 # operationId: CreateAlias
-# --RoutingConfig shape: {AdditionalVersionWeights?: record}
 export def "create-alias" [
   function_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -388,7 +411,7 @@ export def "create-alias" [
   function_version: string # The function version that the alias invokes.
   --description: string # A description of the alias.
   --routing-config: record # The traffic-shifting (https://docs.aws.amazon.com/lambda/latest/dg/lambda-traffic-shifting-using-aliases.html) configuration of a Lambda function alias. — shape: {AdditionalVersionWeights?: record}
-]: any -> record<AliasArn: string, Name: string, FunctionVersion: string, Description: string, RoutingConfig: record<AdditionalVersionWeights: record>, RevisionId: string> {
+]: any -> oneof<record<AliasArn: string, Name: string, FunctionVersion: string, Description: string, RoutingConfig: record<AdditionalVersionWeights: record>, RevisionId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -439,7 +462,7 @@ export def "list-aliases" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextMarker: string, Aliases: table<AliasArn: string, Name: string, FunctionVersion: string, Description: string, RoutingConfig: record, RevisionId: string>> {
+]: nothing -> oneof<record<NextMarker: string, Aliases: table<AliasArn: string, Name: string, FunctionVersion: string, Description: string, RoutingConfig: record, RevisionId: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
@@ -467,8 +490,6 @@ export def "list-aliases" [
 #
 # POST /2020-04-22/code-signing-configs/
 # operationId: CreateCodeSigningConfig
-# --AllowedPublishers shape: {SigningProfileVersionArns?: list<string>}
-# --CodeSigningPolicies shape: {UntrustedArtifactOnDeployment?: "Warn"|"Enforce"}
 export def "create-code-signing-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -489,7 +510,7 @@ export def "create-code-signing-config" [
   --description: string # Descriptive name for this code signing configuration.
   allowed_publishers: record # List of signing profiles that can sign a code package. — shape: {SigningProfileVersionArns?: list<string>}
   --code-signing-policies: record # Code signing configuration policies (https://docs.aws.amazon.com/lambda/latest/dg/configuration-codesigning.html#config-codesigning-policies) specify the validation failure action for signature mismatch or expiry. — shape: {UntrustedArtifactOnDeployment?: "Warn"|"Enforce"}
-]: any -> record<CodeSigningConfig: record<CodeSigningConfigId: string, CodeSigningConfigArn: string, Description: string, AllowedPublishers: record<SigningProfileVersionArns: list>, CodeSigningPolicies: record<UntrustedArtifactOnDeployment: string>, LastModified: string>> {
+]: any -> oneof<record<CodeSigningConfig: record<CodeSigningConfigId: string, CodeSigningConfigArn: string, Description: string, AllowedPublishers: record<SigningProfileVersionArns: list>, CodeSigningPolicies: record<UntrustedArtifactOnDeployment: string>, LastModified: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -537,7 +558,7 @@ export def "list-code-signing-configs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextMarker: string, CodeSigningConfigs: table<CodeSigningConfigId: string, CodeSigningConfigArn: string, Description: string, AllowedPublishers: record, CodeSigningPolicies: record, LastModified: string>> {
+]: nothing -> oneof<record<NextMarker: string, CodeSigningConfigs: table<CodeSigningConfigId: string, CodeSigningConfigArn: string, Description: string, AllowedPublishers: record, CodeSigningPolicies: record, LastModified: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Marker" $marker "scalar") (serialize-qp "MaxItems" $max_items "scalar")] | flatten | str join "&"
@@ -564,14 +585,6 @@ export def "list-code-signing-configs" [
 #
 # POST /2015-03-31/event-source-mappings/
 # operationId: CreateEventSourceMapping
-# --FilterCriteria shape: {Filters?: list}
-# --DestinationConfig shape: {OnSuccess?: record, OnFailure?: record}
-# --SourceAccessConfigurations item shape: {Type?: "BASIC_AUTH"|"VPC_SUBNET"|"VPC_SECURITY_GROUP"|"SASL_SCRAM_512_AUTH"|"SASL_SCRAM_256_AUTH"|"VIRTUAL_HOST"|"CLIENT_CERTIFICATE_TLS_AUTH"|"SERVER_ROOT_CA_CERTIFICATE", URI?: string}
-# --SelfManagedEventSource shape: {Endpoints?: record}
-# --AmazonManagedKafkaEventSourceConfig shape: {ConsumerGroupId?: string}
-# --SelfManagedKafkaEventSourceConfig shape: {ConsumerGroupId?: string}
-# --ScalingConfig shape: {MaximumConcurrency?: int}
-# --DocumentDBEventSourceConfig shape: {DatabaseName?: string, CollectionName?: string, FullDocument?: "UpdateLookup"|"Default"}
 export def "create-event-source-mapping" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -612,7 +625,7 @@ export def "create-event-source-mapping" [
   --self-managed-kafka-event-source-config: record # Specific configuration settings for a self-managed Apache Kafka event source. — shape: {ConsumerGroupId?: string}
   --scaling-config: record # (Amazon SQS only) The scaling configuration for the event source. To remove the configuration, pass an empty value. — shape: {MaximumConcurrency?: int}
   --document-db-event-source-config: record # Specific configuration settings for a DocumentDB event source. — shape: {DatabaseName?: string, CollectionName?: string, FullDocument?: "UpdateLookup"|"Default"}
-]: any -> record<UUID: string, StartingPosition: string, StartingPositionTimestamp: string, BatchSize: int, MaximumBatchingWindowInSeconds: int, ParallelizationFactor: int, EventSourceArn: string, FilterCriteria: record<Filters: list<record>>, FunctionArn: string, LastModified: string, LastProcessingResult: string, State: string, StateTransitionReason: string, DestinationConfig: record<OnSuccess: record<Destination: string>, OnFailure: record<Destination: string>>, Topics: list<string>, Queues: list<string>, SourceAccessConfigurations: table<Type: string, URI: string>, SelfManagedEventSource: record<Endpoints: record>, MaximumRecordAgeInSeconds: int, BisectBatchOnFunctionError: bool, MaximumRetryAttempts: int, TumblingWindowInSeconds: int, FunctionResponseTypes: list<string>, AmazonManagedKafkaEventSourceConfig: record<ConsumerGroupId: string>, SelfManagedKafkaEventSourceConfig: record<ConsumerGroupId: string>, ScalingConfig: record<MaximumConcurrency: int>, DocumentDBEventSourceConfig: record<DatabaseName: string, CollectionName: string, FullDocument: string>> {
+]: any -> oneof<record<UUID: string, StartingPosition: string, StartingPositionTimestamp: string, BatchSize: int, MaximumBatchingWindowInSeconds: int, ParallelizationFactor: int, EventSourceArn: string, FilterCriteria: record<Filters: list<record>>, FunctionArn: string, LastModified: string, LastProcessingResult: string, State: string, StateTransitionReason: string, DestinationConfig: record<OnSuccess: record<Destination: string>, OnFailure: record<Destination: string>>, Topics: list<string>, Queues: list<string>, SourceAccessConfigurations: table<Type: string, URI: string>, SelfManagedEventSource: record<Endpoints: record>, MaximumRecordAgeInSeconds: int, BisectBatchOnFunctionError: bool, MaximumRetryAttempts: int, TumblingWindowInSeconds: int, FunctionResponseTypes: list<string>, AmazonManagedKafkaEventSourceConfig: record<ConsumerGroupId: string>, SelfManagedKafkaEventSourceConfig: record<ConsumerGroupId: string>, ScalingConfig: record<MaximumConcurrency: int>, DocumentDBEventSourceConfig: record<DatabaseName: string, CollectionName: string, FullDocument: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -662,7 +675,7 @@ export def "list-event-source-mappings" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextMarker: string, EventSourceMappings: table<UUID: string, StartingPosition: string, StartingPositionTimestamp: string, BatchSize: int, MaximumBatchingWindowInSeconds: int, ParallelizationFactor: int, EventSourceArn: string, FilterCriteria: record, FunctionArn: string, LastModified: string, LastProcessingResult: string, State: string, StateTransitionReason: string, DestinationConfig: record, Topics: list, Queues: list, SourceAccessConfigurations: list, SelfManagedEventSource: record, MaximumRecordAgeInSeconds: int, BisectBatchOnFunctionError: bool, MaximumRetryAttempts: int, TumblingWindowInSeconds: int, FunctionResponseTypes: list, AmazonManagedKafkaEventSourceConfig: record, SelfManagedKafkaEventSourceConfig: record, ScalingConfig: record, DocumentDBEventSourceConfig: record>> {
+]: nothing -> oneof<record<NextMarker: string, EventSourceMappings: table<UUID: string, StartingPosition: string, StartingPositionTimestamp: string, BatchSize: int, MaximumBatchingWindowInSeconds: int, ParallelizationFactor: int, EventSourceArn: string, FilterCriteria: record, FunctionArn: string, LastModified: string, LastProcessingResult: string, State: string, StateTransitionReason: string, DestinationConfig: record, Topics: list, Queues: list, SourceAccessConfigurations: list, SelfManagedEventSource: record, MaximumRecordAgeInSeconds: int, BisectBatchOnFunctionError: bool, MaximumRetryAttempts: int, TumblingWindowInSeconds: int, FunctionResponseTypes: list, AmazonManagedKafkaEventSourceConfig: record, SelfManagedKafkaEventSourceConfig: record, ScalingConfig: record, DocumentDBEventSourceConfig: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "EventSourceArn" $event_source_arn "scalar") (serialize-qp "FunctionName" $function_name "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "MaxItems" $max_items "scalar")] | flatten | str join "&"
@@ -689,15 +702,6 @@ export def "list-event-source-mappings" [
 #
 # POST /2015-03-31/functions
 # operationId: CreateFunction
-# --Code shape: {ZipFile?: string, S3Bucket?: string, S3Key?: string, S3ObjectVersion?: string, ImageUri?: string}
-# --VpcConfig shape: {SubnetIds?: list<string>, SecurityGroupIds?: list<string>}
-# --DeadLetterConfig shape: {TargetArn?: string}
-# --Environment shape: {Variables?: record}
-# --TracingConfig shape: {Mode?: "Active"|"PassThrough"}
-# --FileSystemConfigs item shape: {Arn: string, LocalMountPath: string}
-# --ImageConfig shape: {EntryPoint?: list<string>, Command?: list<string>, WorkingDirectory?: string}
-# --EphemeralStorage shape: {Size?: int}
-# --SnapStart shape: {ApplyOn?: "PublishedVersions"|"None"}
 export def "create-function" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -738,7 +742,7 @@ export def "create-function" [
   --architectures: list<string> # The instruction set architecture that the function supports. Enter a string array with one of the valid values (arm64 or x86_64). The default value is x86_64.
   --ephemeral-storage: record # The size of the function's /tmp directory in MB. The default value is 512, but it can be any whole number between 512 and 10,240 MB. — shape: {Size?: int}
   --snap-start: record # The function's Lambda SnapStart setting. Set ApplyOn to PublishedVersions to create a snapshot of the initialized execution environment when you publish a function version. SnapStart is supported with the java11 runtime. For more information, see Improving startup performance with Lambda SnapStart (https://docs.aws.amazon.com/lambda/latest/dg/snapstart.html). — shape: {ApplyOn?: "PublishedVersions"|"None"}
-]: any -> record<FunctionName: string, FunctionArn: string, Runtime: string, Role: string, Handler: string, CodeSize: int, Description: string, Timeout: int, MemorySize: int, LastModified: string, CodeSha256: string, Version: string, VpcConfig: record<SubnetIds: list<string>, SecurityGroupIds: list<string>, VpcId: string>, DeadLetterConfig: record<TargetArn: string>, Environment: record<Variables: record, Error: record<ErrorCode: string, Message: string>>, KMSKeyArn: string, TracingConfig: record<Mode: string>, MasterArn: string, RevisionId: string, Layers: table<Arn: string, CodeSize: int, SigningProfileVersionArn: string, SigningJobArn: string>, State: string, StateReason: string, StateReasonCode: string, LastUpdateStatus: string, LastUpdateStatusReason: string, LastUpdateStatusReasonCode: string, FileSystemConfigs: table<Arn: string, LocalMountPath: string>, PackageType: string, ImageConfigResponse: record<ImageConfig: record<EntryPoint: list, Command: list, WorkingDirectory: string>, Error: record<ErrorCode: string, Message: string>>, SigningProfileVersionArn: string, SigningJobArn: string, Architectures: list<string>, EphemeralStorage: record<Size: int>, SnapStart: record<ApplyOn: string, OptimizationStatus: string>, RuntimeVersionConfig: record<RuntimeVersionArn: string, Error: record<ErrorCode: string, Message: string>>> {
+]: any -> oneof<record<FunctionName: string, FunctionArn: string, Runtime: string, Role: string, Handler: string, CodeSize: int, Description: string, Timeout: int, MemorySize: int, LastModified: string, CodeSha256: string, Version: string, VpcConfig: record<SubnetIds: list<string>, SecurityGroupIds: list<string>, VpcId: string>, DeadLetterConfig: record<TargetArn: string>, Environment: record<Variables: record, Error: record<ErrorCode: string, Message: string>>, KMSKeyArn: string, TracingConfig: record<Mode: string>, MasterArn: string, RevisionId: string, Layers: table<Arn: string, CodeSize: int, SigningProfileVersionArn: string, SigningJobArn: string>, State: string, StateReason: string, StateReasonCode: string, LastUpdateStatus: string, LastUpdateStatusReason: string, LastUpdateStatusReasonCode: string, FileSystemConfigs: table<Arn: string, LocalMountPath: string>, PackageType: string, ImageConfigResponse: record<ImageConfig: record<EntryPoint: list, Command: list, WorkingDirectory: string>, Error: record<ErrorCode: string, Message: string>>, SigningProfileVersionArn: string, SigningJobArn: string, Architectures: list<string>, EphemeralStorage: record<Size: int>, SnapStart: record<ApplyOn: string, OptimizationStatus: string>, RuntimeVersionConfig: record<RuntimeVersionArn: string, Error: record<ErrorCode: string, Message: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -767,7 +771,6 @@ export def "create-function" [
 #
 # POST /2021-10-31/functions/{FunctionName}/url
 # operationId: CreateFunctionUrlConfig
-# --Cors shape: {AllowCredentials?: bool, AllowHeaders?: list<string>, AllowMethods?: list<string>, AllowOrigins?: list<string>, ExposeHeaders?: list<string>, MaxAge?: int}
 export def "create-function-url-config" [
   function_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -790,7 +793,7 @@ export def "create-function-url-config" [
   auth_type: string@auth-type-completer # The type of authentication that your function URL uses. Set to AWS_IAM if you want to restrict access to authenticated users only. Set to NONE if you want to bypass IAM authentication to create a public endpoint. For more information, see Security and auth model for Lambda function URLs (https://docs.aws.amazon.com/lambda/latest/dg/urls-auth.html).
   --cors: record # The cross-origin resource sharing (CORS) (https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS) settings for your Lambda function URL. Use CORS to grant access to your function URL from any origin. You can also use CORS to control access for specific HTTP headers and methods in requests to your function URL. — shape: {AllowCredentials?: bool, AllowHeaders?: list<string>, AllowMethods?: list<string>, AllowOrigins?: list<string>, ExposeHeaders?: list<string>, MaxAge?: int}
   --invoke-mode: string@invoke-mode-completer # Use one of the following options: BUFFERED – This is the default option. Lambda invokes your function using the Invoke API operation. Invocation results are available when the payload is complete. The maximum payload size is 6 MB. RESPONSE_STREAM – Your function streams payload results as they become available. Lambda invokes your function using the InvokeWithResponseStream API operation. The maximum response payload size is 20 MB, however, you can request a quota increase (https://docs.aws.amazon.com/servicequotas/latest/userguide/request-quota-increase.html).
-]: any -> record<FunctionUrl: string, FunctionArn: string, AuthType: string, Cors: record<AllowCredentials: bool, AllowHeaders: list<string>, AllowMethods: list<string>, AllowOrigins: list<string>, ExposeHeaders: list<string>, MaxAge: int>, CreationTime: string, InvokeMode: string> {
+]: any -> oneof<record<FunctionUrl: string, FunctionArn: string, AuthType: string, Cors: record<AllowCredentials: bool, AllowHeaders: list<string>, AllowMethods: list<string>, AllowOrigins: list<string>, ExposeHeaders: list<string>, MaxAge: int>, CreationTime: string, InvokeMode: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -887,7 +890,7 @@ export def "get-function-url-config" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<FunctionUrl: string, FunctionArn: string, AuthType: string, Cors: record<AllowCredentials: bool, AllowHeaders: list<string>, AllowMethods: list<string>, AllowOrigins: list<string>, ExposeHeaders: list<string>, MaxAge: int>, CreationTime: string, LastModifiedTime: string, InvokeMode: string> {
+]: nothing -> oneof<record<FunctionUrl: string, FunctionArn: string, AuthType: string, Cors: record<AllowCredentials: bool, AllowHeaders: list<string>, AllowMethods: list<string>, AllowOrigins: list<string>, ExposeHeaders: list<string>, MaxAge: int>, CreationTime: string, LastModifiedTime: string, InvokeMode: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
@@ -915,7 +918,6 @@ export def "get-function-url-config" [
 #
 # PUT /2021-10-31/functions/{FunctionName}/url
 # operationId: UpdateFunctionUrlConfig
-# --Cors shape: {AllowCredentials?: bool, AllowHeaders?: list<string>, AllowMethods?: list<string>, AllowOrigins?: list<string>, ExposeHeaders?: list<string>, MaxAge?: int}
 export def "update-function-url-config" [
   function_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -938,7 +940,7 @@ export def "update-function-url-config" [
   --auth-type: string@auth-type-completer # The type of authentication that your function URL uses. Set to AWS_IAM if you want to restrict access to authenticated users only. Set to NONE if you want to bypass IAM authentication to create a public endpoint. For more information, see Security and auth model for Lambda function URLs (https://docs.aws.amazon.com/lambda/latest/dg/urls-auth.html).
   --cors: record # The cross-origin resource sharing (CORS) (https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS) settings for your Lambda function URL. Use CORS to grant access to your function URL from any origin. You can also use CORS to control access for specific HTTP headers and methods in requests to your function URL. — shape: {AllowCredentials?: bool, AllowHeaders?: list<string>, AllowMethods?: list<string>, AllowOrigins?: list<string>, ExposeHeaders?: list<string>, MaxAge?: int}
   --invoke-mode: string@invoke-mode-completer # Use one of the following options: BUFFERED – This is the default option. Lambda invokes your function using the Invoke API operation. Invocation results are available when the payload is complete. The maximum payload size is 6 MB. RESPONSE_STREAM – Your function streams payload results as they become available. Lambda invokes your function using the InvokeWithResponseStream API operation. The maximum response payload size is 20 MB, however, you can request a quota increase (https://docs.aws.amazon.com/servicequotas/latest/userguide/request-quota-increase.html).
-]: any -> record<FunctionUrl: string, FunctionArn: string, AuthType: string, Cors: record<AllowCredentials: bool, AllowHeaders: list<string>, AllowMethods: list<string>, AllowOrigins: list<string>, ExposeHeaders: list<string>, MaxAge: int>, CreationTime: string, LastModifiedTime: string, InvokeMode: string> {
+]: any -> oneof<record<FunctionUrl: string, FunctionArn: string, AuthType: string, Cors: record<AllowCredentials: bool, AllowHeaders: list<string>, AllowMethods: list<string>, AllowOrigins: list<string>, ExposeHeaders: list<string>, MaxAge: int>, CreationTime: string, LastModifiedTime: string, InvokeMode: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1035,7 +1037,7 @@ export def "get-alias" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<AliasArn: string, Name: string, FunctionVersion: string, Description: string, RoutingConfig: record<AdditionalVersionWeights: record>, RevisionId: string> {
+]: nothing -> oneof<record<AliasArn: string, Name: string, FunctionVersion: string, Description: string, RoutingConfig: record<AdditionalVersionWeights: record>, RevisionId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
@@ -1063,7 +1065,6 @@ export def "get-alias" [
 #
 # PUT /2015-03-31/functions/{FunctionName}/aliases/{Name}
 # operationId: UpdateAlias
-# --RoutingConfig shape: {AdditionalVersionWeights?: record}
 export def "update-alias" [
   function_name: string
   name: string
@@ -1087,7 +1088,7 @@ export def "update-alias" [
   --description: string # A description of the alias.
   --routing-config: record # The traffic-shifting (https://docs.aws.amazon.com/lambda/latest/dg/lambda-traffic-shifting-using-aliases.html) configuration of a Lambda function alias. — shape: {AdditionalVersionWeights?: record}
   --revision-id: string # Only update the alias if the revision ID matches the ID that's specified. Use this option to avoid modifying an alias that has changed since you last read it.
-]: any -> record<AliasArn: string, Name: string, FunctionVersion: string, Description: string, RoutingConfig: record<AdditionalVersionWeights: record>, RevisionId: string> {
+]: any -> oneof<record<AliasArn: string, Name: string, FunctionVersion: string, Description: string, RoutingConfig: record<AdditionalVersionWeights: record>, RevisionId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1136,7 +1137,7 @@ export def "delete-code-signing-config" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($code_signing_config_arn | is-empty) { error make --unspanned { msg: "path parameter 'CodeSigningConfigArn' must be non-empty" } }
@@ -1181,7 +1182,7 @@ export def "get-code-signing-config" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CodeSigningConfig: record<CodeSigningConfigId: string, CodeSigningConfigArn: string, Description: string, AllowedPublishers: record<SigningProfileVersionArns: list>, CodeSigningPolicies: record<UntrustedArtifactOnDeployment: string>, LastModified: string>> {
+]: nothing -> oneof<record<CodeSigningConfig: record<CodeSigningConfigId: string, CodeSigningConfigArn: string, Description: string, AllowedPublishers: record<SigningProfileVersionArns: list>, CodeSigningPolicies: record<UntrustedArtifactOnDeployment: string>, LastModified: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($code_signing_config_arn | is-empty) { error make --unspanned { msg: "path parameter 'CodeSigningConfigArn' must be non-empty" } }
@@ -1208,8 +1209,6 @@ export def "get-code-signing-config" [
 #
 # PUT /2020-04-22/code-signing-configs/{CodeSigningConfigArn}
 # operationId: UpdateCodeSigningConfig
-# --AllowedPublishers shape: {SigningProfileVersionArns?: list<string>}
-# --CodeSigningPolicies shape: {UntrustedArtifactOnDeployment?: "Warn"|"Enforce"}
 export def "update-code-signing-config" [
   code_signing_config_arn: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1231,7 +1230,7 @@ export def "update-code-signing-config" [
   --description: string # Descriptive name for this code signing configuration.
   --allowed-publishers: record # List of signing profiles that can sign a code package. — shape: {SigningProfileVersionArns?: list<string>}
   --code-signing-policies: record # Code signing configuration policies (https://docs.aws.amazon.com/lambda/latest/dg/configuration-codesigning.html#config-codesigning-policies) specify the validation failure action for signature mismatch or expiry. — shape: {UntrustedArtifactOnDeployment?: "Warn"|"Enforce"}
-]: any -> record<CodeSigningConfig: record<CodeSigningConfigId: string, CodeSigningConfigArn: string, Description: string, AllowedPublishers: record<SigningProfileVersionArns: list>, CodeSigningPolicies: record<UntrustedArtifactOnDeployment: string>, LastModified: string>> {
+]: any -> oneof<record<CodeSigningConfig: record<CodeSigningConfigId: string, CodeSigningConfigArn: string, Description: string, AllowedPublishers: record<SigningProfileVersionArns: list>, CodeSigningPolicies: record<UntrustedArtifactOnDeployment: string>, LastModified: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1279,7 +1278,7 @@ export def "delete-event-source-mapping" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<UUID: string, StartingPosition: string, StartingPositionTimestamp: string, BatchSize: int, MaximumBatchingWindowInSeconds: int, ParallelizationFactor: int, EventSourceArn: string, FilterCriteria: record<Filters: list<record>>, FunctionArn: string, LastModified: string, LastProcessingResult: string, State: string, StateTransitionReason: string, DestinationConfig: record<OnSuccess: record<Destination: string>, OnFailure: record<Destination: string>>, Topics: list<string>, Queues: list<string>, SourceAccessConfigurations: table<Type: string, URI: string>, SelfManagedEventSource: record<Endpoints: record>, MaximumRecordAgeInSeconds: int, BisectBatchOnFunctionError: bool, MaximumRetryAttempts: int, TumblingWindowInSeconds: int, FunctionResponseTypes: list<string>, AmazonManagedKafkaEventSourceConfig: record<ConsumerGroupId: string>, SelfManagedKafkaEventSourceConfig: record<ConsumerGroupId: string>, ScalingConfig: record<MaximumConcurrency: int>, DocumentDBEventSourceConfig: record<DatabaseName: string, CollectionName: string, FullDocument: string>> {
+]: nothing -> oneof<record<UUID: string, StartingPosition: string, StartingPositionTimestamp: string, BatchSize: int, MaximumBatchingWindowInSeconds: int, ParallelizationFactor: int, EventSourceArn: string, FilterCriteria: record<Filters: list<record>>, FunctionArn: string, LastModified: string, LastProcessingResult: string, State: string, StateTransitionReason: string, DestinationConfig: record<OnSuccess: record<Destination: string>, OnFailure: record<Destination: string>>, Topics: list<string>, Queues: list<string>, SourceAccessConfigurations: table<Type: string, URI: string>, SelfManagedEventSource: record<Endpoints: record>, MaximumRecordAgeInSeconds: int, BisectBatchOnFunctionError: bool, MaximumRetryAttempts: int, TumblingWindowInSeconds: int, FunctionResponseTypes: list<string>, AmazonManagedKafkaEventSourceConfig: record<ConsumerGroupId: string>, SelfManagedKafkaEventSourceConfig: record<ConsumerGroupId: string>, ScalingConfig: record<MaximumConcurrency: int>, DocumentDBEventSourceConfig: record<DatabaseName: string, CollectionName: string, FullDocument: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($uuid | is-empty) { error make --unspanned { msg: "path parameter 'UUID' must be non-empty" } }
@@ -1324,7 +1323,7 @@ export def "get-event-source-mapping" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<UUID: string, StartingPosition: string, StartingPositionTimestamp: string, BatchSize: int, MaximumBatchingWindowInSeconds: int, ParallelizationFactor: int, EventSourceArn: string, FilterCriteria: record<Filters: list<record>>, FunctionArn: string, LastModified: string, LastProcessingResult: string, State: string, StateTransitionReason: string, DestinationConfig: record<OnSuccess: record<Destination: string>, OnFailure: record<Destination: string>>, Topics: list<string>, Queues: list<string>, SourceAccessConfigurations: table<Type: string, URI: string>, SelfManagedEventSource: record<Endpoints: record>, MaximumRecordAgeInSeconds: int, BisectBatchOnFunctionError: bool, MaximumRetryAttempts: int, TumblingWindowInSeconds: int, FunctionResponseTypes: list<string>, AmazonManagedKafkaEventSourceConfig: record<ConsumerGroupId: string>, SelfManagedKafkaEventSourceConfig: record<ConsumerGroupId: string>, ScalingConfig: record<MaximumConcurrency: int>, DocumentDBEventSourceConfig: record<DatabaseName: string, CollectionName: string, FullDocument: string>> {
+]: nothing -> oneof<record<UUID: string, StartingPosition: string, StartingPositionTimestamp: string, BatchSize: int, MaximumBatchingWindowInSeconds: int, ParallelizationFactor: int, EventSourceArn: string, FilterCriteria: record<Filters: list<record>>, FunctionArn: string, LastModified: string, LastProcessingResult: string, State: string, StateTransitionReason: string, DestinationConfig: record<OnSuccess: record<Destination: string>, OnFailure: record<Destination: string>>, Topics: list<string>, Queues: list<string>, SourceAccessConfigurations: table<Type: string, URI: string>, SelfManagedEventSource: record<Endpoints: record>, MaximumRecordAgeInSeconds: int, BisectBatchOnFunctionError: bool, MaximumRetryAttempts: int, TumblingWindowInSeconds: int, FunctionResponseTypes: list<string>, AmazonManagedKafkaEventSourceConfig: record<ConsumerGroupId: string>, SelfManagedKafkaEventSourceConfig: record<ConsumerGroupId: string>, ScalingConfig: record<MaximumConcurrency: int>, DocumentDBEventSourceConfig: record<DatabaseName: string, CollectionName: string, FullDocument: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($uuid | is-empty) { error make --unspanned { msg: "path parameter 'UUID' must be non-empty" } }
@@ -1351,11 +1350,6 @@ export def "get-event-source-mapping" [
 #
 # PUT /2015-03-31/event-source-mappings/{UUID}
 # operationId: UpdateEventSourceMapping
-# --FilterCriteria shape: {Filters?: list}
-# --DestinationConfig shape: {OnSuccess?: record, OnFailure?: record}
-# --SourceAccessConfigurations item shape: {Type?: "BASIC_AUTH"|"VPC_SUBNET"|"VPC_SECURITY_GROUP"|"SASL_SCRAM_512_AUTH"|"SASL_SCRAM_256_AUTH"|"VIRTUAL_HOST"|"CLIENT_CERTIFICATE_TLS_AUTH"|"SERVER_ROOT_CA_CERTIFICATE", URI?: string}
-# --ScalingConfig shape: {MaximumConcurrency?: int}
-# --DocumentDBEventSourceConfig shape: {DatabaseName?: string, CollectionName?: string, FullDocument?: "UpdateLookup"|"Default"}
 export def "update-event-source-mapping" [
   uuid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1389,7 +1383,7 @@ export def "update-event-source-mapping" [
   --function-response-types: list<string> # (Kinesis, DynamoDB Streams, and Amazon SQS) A list of current response type enums applied to the event source mapping.
   --scaling-config: record # (Amazon SQS only) The scaling configuration for the event source. To remove the configuration, pass an empty value. — shape: {MaximumConcurrency?: int}
   --document-db-event-source-config: record # Specific configuration settings for a DocumentDB event source. — shape: {DatabaseName?: string, CollectionName?: string, FullDocument?: "UpdateLookup"|"Default"}
-]: any -> record<UUID: string, StartingPosition: string, StartingPositionTimestamp: string, BatchSize: int, MaximumBatchingWindowInSeconds: int, ParallelizationFactor: int, EventSourceArn: string, FilterCriteria: record<Filters: list<record>>, FunctionArn: string, LastModified: string, LastProcessingResult: string, State: string, StateTransitionReason: string, DestinationConfig: record<OnSuccess: record<Destination: string>, OnFailure: record<Destination: string>>, Topics: list<string>, Queues: list<string>, SourceAccessConfigurations: table<Type: string, URI: string>, SelfManagedEventSource: record<Endpoints: record>, MaximumRecordAgeInSeconds: int, BisectBatchOnFunctionError: bool, MaximumRetryAttempts: int, TumblingWindowInSeconds: int, FunctionResponseTypes: list<string>, AmazonManagedKafkaEventSourceConfig: record<ConsumerGroupId: string>, SelfManagedKafkaEventSourceConfig: record<ConsumerGroupId: string>, ScalingConfig: record<MaximumConcurrency: int>, DocumentDBEventSourceConfig: record<DatabaseName: string, CollectionName: string, FullDocument: string>> {
+]: any -> oneof<record<UUID: string, StartingPosition: string, StartingPositionTimestamp: string, BatchSize: int, MaximumBatchingWindowInSeconds: int, ParallelizationFactor: int, EventSourceArn: string, FilterCriteria: record<Filters: list<record>>, FunctionArn: string, LastModified: string, LastProcessingResult: string, State: string, StateTransitionReason: string, DestinationConfig: record<OnSuccess: record<Destination: string>, OnFailure: record<Destination: string>>, Topics: list<string>, Queues: list<string>, SourceAccessConfigurations: table<Type: string, URI: string>, SelfManagedEventSource: record<Endpoints: record>, MaximumRecordAgeInSeconds: int, BisectBatchOnFunctionError: bool, MaximumRetryAttempts: int, TumblingWindowInSeconds: int, FunctionResponseTypes: list<string>, AmazonManagedKafkaEventSourceConfig: record<ConsumerGroupId: string>, SelfManagedKafkaEventSourceConfig: record<ConsumerGroupId: string>, ScalingConfig: record<MaximumConcurrency: int>, DocumentDBEventSourceConfig: record<DatabaseName: string, CollectionName: string, FullDocument: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1485,7 +1479,7 @@ export def "get-function" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Configuration: record<FunctionName: string, FunctionArn: string, Runtime: string, Role: string, Handler: string, CodeSize: int, Description: string, Timeout: int, MemorySize: int, LastModified: string, CodeSha256: string, Version: string, VpcConfig: record<SubnetIds: list, SecurityGroupIds: list, VpcId: string>, DeadLetterConfig: record<TargetArn: string>, Environment: record<Variables: record, Error: record>, KMSKeyArn: string, TracingConfig: record<Mode: string>, MasterArn: string, RevisionId: string, Layers: list<record>, State: string, StateReason: string, StateReasonCode: string, LastUpdateStatus: string, LastUpdateStatusReason: string, LastUpdateStatusReasonCode: string, FileSystemConfigs: list<record>, PackageType: string, ImageConfigResponse: record<ImageConfig: record, Error: record>, SigningProfileVersionArn: string, SigningJobArn: string, Architectures: list<string>, EphemeralStorage: record<Size: int>, SnapStart: record<ApplyOn: string, OptimizationStatus: string>, RuntimeVersionConfig: record<RuntimeVersionArn: string, Error: record>>, Code: record<RepositoryType: string, Location: string, ImageUri: string, ResolvedImageUri: string>, Tags: record, Concurrency: record<ReservedConcurrentExecutions: int>> {
+]: nothing -> oneof<record<Configuration: record<FunctionName: string, FunctionArn: string, Runtime: string, Role: string, Handler: string, CodeSize: int, Description: string, Timeout: int, MemorySize: int, LastModified: string, CodeSha256: string, Version: string, VpcConfig: record<SubnetIds: list, SecurityGroupIds: list, VpcId: string>, DeadLetterConfig: record<TargetArn: string>, Environment: record<Variables: record, Error: record>, KMSKeyArn: string, TracingConfig: record<Mode: string>, MasterArn: string, RevisionId: string, Layers: list<record>, State: string, StateReason: string, StateReasonCode: string, LastUpdateStatus: string, LastUpdateStatusReason: string, LastUpdateStatusReasonCode: string, FileSystemConfigs: list<record>, PackageType: string, ImageConfigResponse: record<ImageConfig: record, Error: record>, SigningProfileVersionArn: string, SigningJobArn: string, Architectures: list<string>, EphemeralStorage: record<Size: int>, SnapStart: record<ApplyOn: string, OptimizationStatus: string>, RuntimeVersionConfig: record<RuntimeVersionArn: string, Error: record>>, Code: record<RepositoryType: string, Location: string, ImageUri: string, ResolvedImageUri: string>, Tags: record, Concurrency: record<ReservedConcurrentExecutions: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
@@ -1576,7 +1570,7 @@ export def "get-function-code-signing-config" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CodeSigningConfigArn: string, FunctionName: string> {
+]: nothing -> oneof<record<CodeSigningConfigArn: string, FunctionName: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
@@ -1622,7 +1616,7 @@ export def "put-function-code-signing-config" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   code_signing_config_arn: string # The The Amazon Resource Name (ARN) of the code signing configuration.
-]: any -> record<CodeSigningConfigArn: string, FunctionName: string> {
+]: any -> oneof<record<CodeSigningConfigArn: string, FunctionName: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1716,7 +1710,7 @@ export def "put-function-concurrency" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   reserved_concurrent_executions: int # The number of simultaneous executions to reserve for the function.
-]: any -> record<ReservedConcurrentExecutions: int> {
+]: any -> oneof<record<ReservedConcurrentExecutions: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1812,7 +1806,7 @@ export def "get-function-event-invoke-config" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<LastModified: string, FunctionArn: string, MaximumRetryAttempts: int, MaximumEventAgeInSeconds: int, DestinationConfig: record<OnSuccess: record<Destination: string>, OnFailure: record<Destination: string>>> {
+]: nothing -> oneof<record<LastModified: string, FunctionArn: string, MaximumRetryAttempts: int, MaximumEventAgeInSeconds: int, DestinationConfig: record<OnSuccess: record<Destination: string>, OnFailure: record<Destination: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
@@ -1840,7 +1834,6 @@ export def "get-function-event-invoke-config" [
 #
 # PUT /2019-09-25/functions/{FunctionName}/event-invoke-config
 # operationId: PutFunctionEventInvokeConfig
-# --DestinationConfig shape: {OnSuccess?: record, OnFailure?: record}
 export def "put-function-event-invoke-config" [
   function_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1863,7 +1856,7 @@ export def "put-function-event-invoke-config" [
   --maximum-retry-attempts: int # The maximum number of times to retry when the function returns an error.
   --maximum-event-age-in-seconds: int # The maximum age of a request that Lambda sends to a function for processing.
   --destination-config: record # A configuration object that specifies the destination of an event after Lambda processes it. — shape: {OnSuccess?: record, OnFailure?: record}
-]: any -> record<LastModified: string, FunctionArn: string, MaximumRetryAttempts: int, MaximumEventAgeInSeconds: int, DestinationConfig: record<OnSuccess: record<Destination: string>, OnFailure: record<Destination: string>>> {
+]: any -> oneof<record<LastModified: string, FunctionArn: string, MaximumRetryAttempts: int, MaximumEventAgeInSeconds: int, DestinationConfig: record<OnSuccess: record<Destination: string>, OnFailure: record<Destination: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1894,7 +1887,6 @@ export def "put-function-event-invoke-config" [
 #
 # POST /2019-09-25/functions/{FunctionName}/event-invoke-config
 # operationId: UpdateFunctionEventInvokeConfig
-# --DestinationConfig shape: {OnSuccess?: record, OnFailure?: record}
 export def "update-function-event-invoke-config" [
   function_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1917,7 +1909,7 @@ export def "update-function-event-invoke-config" [
   --maximum-retry-attempts: int # The maximum number of times to retry when the function returns an error.
   --maximum-event-age-in-seconds: int # The maximum age of a request that Lambda sends to a function for processing.
   --destination-config: record # A configuration object that specifies the destination of an event after Lambda processes it. — shape: {OnSuccess?: record, OnFailure?: record}
-]: any -> record<LastModified: string, FunctionArn: string, MaximumRetryAttempts: int, MaximumEventAgeInSeconds: int, DestinationConfig: record<OnSuccess: record<Destination: string>, OnFailure: record<Destination: string>>> {
+]: any -> oneof<record<LastModified: string, FunctionArn: string, MaximumRetryAttempts: int, MaximumEventAgeInSeconds: int, DestinationConfig: record<OnSuccess: record<Destination: string>, OnFailure: record<Destination: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2014,7 +2006,7 @@ export def "get-layer-version" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Content: record<Location: string, CodeSha256: string, CodeSize: int, SigningProfileVersionArn: string, SigningJobArn: string>, LayerArn: string, LayerVersionArn: string, Description: string, CreatedDate: string, Version: int, CompatibleRuntimes: list<string>, LicenseInfo: string, CompatibleArchitectures: list<string>> {
+]: nothing -> oneof<record<Content: record<Location: string, CodeSha256: string, CodeSize: int, SigningProfileVersionArn: string, SigningJobArn: string>, LayerArn: string, LayerVersionArn: string, Description: string, CreatedDate: string, Version: int, CompatibleRuntimes: list<string>, LicenseInfo: string, CompatibleArchitectures: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($layer_name | is-empty) { error make --unspanned { msg: "path parameter 'LayerName' must be non-empty" } }
@@ -2109,7 +2101,7 @@ export def "get-provisioned-concurrency-config" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<RequestedProvisionedConcurrentExecutions: int, AvailableProvisionedConcurrentExecutions: int, AllocatedProvisionedConcurrentExecutions: int, Status: string, StatusReason: string, LastModified: string> {
+]: nothing -> oneof<record<RequestedProvisionedConcurrentExecutions: int, AvailableProvisionedConcurrentExecutions: int, AllocatedProvisionedConcurrentExecutions: int, Status: string, StatusReason: string, LastModified: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
@@ -2158,7 +2150,7 @@ export def "put-provisioned-concurrency-config" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   provisioned_concurrent_executions: int # The amount of provisioned concurrency to allocate for the version or alias.
-]: any -> record<RequestedProvisionedConcurrentExecutions: int, AvailableProvisionedConcurrentExecutions: int, AllocatedProvisionedConcurrentExecutions: int, Status: string, StatusReason: string, LastModified: string> {
+]: any -> oneof<record<RequestedProvisionedConcurrentExecutions: int, AvailableProvisionedConcurrentExecutions: int, AllocatedProvisionedConcurrentExecutions: int, Status: string, StatusReason: string, LastModified: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2207,7 +2199,7 @@ export def "get-account-settings" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<AccountLimit: record<TotalCodeSize: int, CodeSizeUnzipped: int, CodeSizeZipped: int, ConcurrentExecutions: int, UnreservedConcurrentExecutions: int>, AccountUsage: record<TotalCodeSize: int, FunctionCount: int>> {
+]: nothing -> oneof<record<AccountLimit: record<TotalCodeSize: int, CodeSizeUnzipped: int, CodeSizeZipped: int, ConcurrentExecutions: int, UnreservedConcurrentExecutions: int>, AccountUsage: record<TotalCodeSize: int, FunctionCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/2016-08-19/account-settings/" $auth.query)
@@ -2251,7 +2243,7 @@ export def "get-function-concurrency" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ReservedConcurrentExecutions: int> {
+]: nothing -> oneof<record<ReservedConcurrentExecutions: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
@@ -2297,7 +2289,7 @@ export def "get-function-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<FunctionName: string, FunctionArn: string, Runtime: string, Role: string, Handler: string, CodeSize: int, Description: string, Timeout: int, MemorySize: int, LastModified: string, CodeSha256: string, Version: string, VpcConfig: record<SubnetIds: list<string>, SecurityGroupIds: list<string>, VpcId: string>, DeadLetterConfig: record<TargetArn: string>, Environment: record<Variables: record, Error: record<ErrorCode: string, Message: string>>, KMSKeyArn: string, TracingConfig: record<Mode: string>, MasterArn: string, RevisionId: string, Layers: table<Arn: string, CodeSize: int, SigningProfileVersionArn: string, SigningJobArn: string>, State: string, StateReason: string, StateReasonCode: string, LastUpdateStatus: string, LastUpdateStatusReason: string, LastUpdateStatusReasonCode: string, FileSystemConfigs: table<Arn: string, LocalMountPath: string>, PackageType: string, ImageConfigResponse: record<ImageConfig: record<EntryPoint: list, Command: list, WorkingDirectory: string>, Error: record<ErrorCode: string, Message: string>>, SigningProfileVersionArn: string, SigningJobArn: string, Architectures: list<string>, EphemeralStorage: record<Size: int>, SnapStart: record<ApplyOn: string, OptimizationStatus: string>, RuntimeVersionConfig: record<RuntimeVersionArn: string, Error: record<ErrorCode: string, Message: string>>> {
+]: nothing -> oneof<record<FunctionName: string, FunctionArn: string, Runtime: string, Role: string, Handler: string, CodeSize: int, Description: string, Timeout: int, MemorySize: int, LastModified: string, CodeSha256: string, Version: string, VpcConfig: record<SubnetIds: list<string>, SecurityGroupIds: list<string>, VpcId: string>, DeadLetterConfig: record<TargetArn: string>, Environment: record<Variables: record, Error: record<ErrorCode: string, Message: string>>, KMSKeyArn: string, TracingConfig: record<Mode: string>, MasterArn: string, RevisionId: string, Layers: table<Arn: string, CodeSize: int, SigningProfileVersionArn: string, SigningJobArn: string>, State: string, StateReason: string, StateReasonCode: string, LastUpdateStatus: string, LastUpdateStatusReason: string, LastUpdateStatusReasonCode: string, FileSystemConfigs: table<Arn: string, LocalMountPath: string>, PackageType: string, ImageConfigResponse: record<ImageConfig: record<EntryPoint: list, Command: list, WorkingDirectory: string>, Error: record<ErrorCode: string, Message: string>>, SigningProfileVersionArn: string, SigningJobArn: string, Architectures: list<string>, EphemeralStorage: record<Size: int>, SnapStart: record<ApplyOn: string, OptimizationStatus: string>, RuntimeVersionConfig: record<RuntimeVersionArn: string, Error: record<ErrorCode: string, Message: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
@@ -2325,14 +2317,6 @@ export def "get-function-configuration" [
 #
 # PUT /2015-03-31/functions/{FunctionName}/configuration
 # operationId: UpdateFunctionConfiguration
-# --VpcConfig shape: {SubnetIds?: list<string>, SecurityGroupIds?: list<string>}
-# --Environment shape: {Variables?: record}
-# --DeadLetterConfig shape: {TargetArn?: string}
-# --TracingConfig shape: {Mode?: "Active"|"PassThrough"}
-# --FileSystemConfigs item shape: {Arn: string, LocalMountPath: string}
-# --ImageConfig shape: {EntryPoint?: list<string>, Command?: list<string>, WorkingDirectory?: string}
-# --EphemeralStorage shape: {Size?: int}
-# --SnapStart shape: {ApplyOn?: "PublishedVersions"|"None"}
 export def "update-function-configuration" [
   function_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2368,7 +2352,7 @@ export def "update-function-configuration" [
   --image-config: record # Configuration values that override the container image Dockerfile settings. For more information, see Container image settings (https://docs.aws.amazon.com/lambda/latest/dg/images-create.html#images-parms). — shape: {EntryPoint?: list<string>, Command?: list<string>, WorkingDirectory?: string}
   --ephemeral-storage: record # The size of the function's /tmp directory in MB. The default value is 512, but it can be any whole number between 512 and 10,240 MB. — shape: {Size?: int}
   --snap-start: record # The function's Lambda SnapStart setting. Set ApplyOn to PublishedVersions to create a snapshot of the initialized execution environment when you publish a function version. SnapStart is supported with the java11 runtime. For more information, see Improving startup performance with Lambda SnapStart (https://docs.aws.amazon.com/lambda/latest/dg/snapstart.html). — shape: {ApplyOn?: "PublishedVersions"|"None"}
-]: any -> record<FunctionName: string, FunctionArn: string, Runtime: string, Role: string, Handler: string, CodeSize: int, Description: string, Timeout: int, MemorySize: int, LastModified: string, CodeSha256: string, Version: string, VpcConfig: record<SubnetIds: list<string>, SecurityGroupIds: list<string>, VpcId: string>, DeadLetterConfig: record<TargetArn: string>, Environment: record<Variables: record, Error: record<ErrorCode: string, Message: string>>, KMSKeyArn: string, TracingConfig: record<Mode: string>, MasterArn: string, RevisionId: string, Layers: table<Arn: string, CodeSize: int, SigningProfileVersionArn: string, SigningJobArn: string>, State: string, StateReason: string, StateReasonCode: string, LastUpdateStatus: string, LastUpdateStatusReason: string, LastUpdateStatusReasonCode: string, FileSystemConfigs: table<Arn: string, LocalMountPath: string>, PackageType: string, ImageConfigResponse: record<ImageConfig: record<EntryPoint: list, Command: list, WorkingDirectory: string>, Error: record<ErrorCode: string, Message: string>>, SigningProfileVersionArn: string, SigningJobArn: string, Architectures: list<string>, EphemeralStorage: record<Size: int>, SnapStart: record<ApplyOn: string, OptimizationStatus: string>, RuntimeVersionConfig: record<RuntimeVersionArn: string, Error: record<ErrorCode: string, Message: string>>> {
+]: any -> oneof<record<FunctionName: string, FunctionArn: string, Runtime: string, Role: string, Handler: string, CodeSize: int, Description: string, Timeout: int, MemorySize: int, LastModified: string, CodeSha256: string, Version: string, VpcConfig: record<SubnetIds: list<string>, SecurityGroupIds: list<string>, VpcId: string>, DeadLetterConfig: record<TargetArn: string>, Environment: record<Variables: record, Error: record<ErrorCode: string, Message: string>>, KMSKeyArn: string, TracingConfig: record<Mode: string>, MasterArn: string, RevisionId: string, Layers: table<Arn: string, CodeSize: int, SigningProfileVersionArn: string, SigningJobArn: string>, State: string, StateReason: string, StateReasonCode: string, LastUpdateStatus: string, LastUpdateStatusReason: string, LastUpdateStatusReasonCode: string, FileSystemConfigs: table<Arn: string, LocalMountPath: string>, PackageType: string, ImageConfigResponse: record<ImageConfig: record<EntryPoint: list, Command: list, WorkingDirectory: string>, Error: record<ErrorCode: string, Message: string>>, SigningProfileVersionArn: string, SigningJobArn: string, Architectures: list<string>, EphemeralStorage: record<Size: int>, SnapStart: record<ApplyOn: string, OptimizationStatus: string>, RuntimeVersionConfig: record<RuntimeVersionArn: string, Error: record<ErrorCode: string, Message: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2417,7 +2401,7 @@ export def "get-layer-version-by-arn" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Content: record<Location: string, CodeSha256: string, CodeSize: int, SigningProfileVersionArn: string, SigningJobArn: string>, LayerArn: string, LayerVersionArn: string, Description: string, CreatedDate: string, Version: int, CompatibleRuntimes: list<string>, LicenseInfo: string, CompatibleArchitectures: list<string>> {
+]: nothing -> oneof<record<Content: record<Location: string, CodeSha256: string, CodeSize: int, SigningProfileVersionArn: string, SigningJobArn: string>, LayerArn: string, LayerVersionArn: string, Description: string, CreatedDate: string, Version: int, CompatibleRuntimes: list<string>, LicenseInfo: string, CompatibleArchitectures: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($arn == null) { error make --unspanned { msg: "required query parameter 'Arn' missing: pass --arn" } }
@@ -2465,7 +2449,7 @@ export def "get-runtime-management-config" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<UpdateRuntimeOn: string, RuntimeVersionArn: string, FunctionArn: string> {
+]: nothing -> oneof<record<UpdateRuntimeOn: string, RuntimeVersionArn: string, FunctionArn: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
@@ -2514,7 +2498,7 @@ export def "put-runtime-management-config" [
   --x-amz-signed-headers: string
   update_runtime_on: string@update-runtime-on-completer # Specify the runtime update mode. Auto (default) - Automatically update to the most recent and secure runtime version using a Two-phase runtime version rollout (https://docs.aws.amazon.com/lambda/latest/dg/runtimes-update.html#runtime-management-two-phase). This is the best choice for most customers to ensure they always benefit from runtime updates. Function update - Lambda updates the runtime of your function to the most recent and secure runtime version when you update your function. This approach synchronizes runtime updates with function deployments, giving you control over when runtime updates are applied and allowing you to detect and mitigate rare runtime update incompatibilities early. When using this setting, you need to regularly update your functions to keep their runtime up-to-date. Manual - You specify a runtime version in your function configuration. The function will use this runtime version indefinitely. In the rare case where a new runtime version is incompatible with an existing function, this allows you to roll back your function to an earlier runtime version. For more information, see Roll back a runtime version (https://docs.aws.amazon.com/lambda/latest/dg/runtimes-update.html#runtime-management-rollback).
   --runtime-version-arn: string # The ARN of the runtime version you want the function to use. This is only required if you're using the Manual runtime update mode.
-]: any -> record<UpdateRuntimeOn: string, FunctionArn: string, RuntimeVersionArn: string> {
+]: any -> oneof<record<UpdateRuntimeOn: string, FunctionArn: string, RuntimeVersionArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2568,7 +2552,7 @@ export def "invoke" [
   --x-amz-log-type: string@x-amz-log-type-completer # Set to Tail to include the execution log in the response. Applies to synchronously invoked functions only.
   --x-amz-client-context: string # Up to 3,583 bytes of base64-encoded data about the invoking client to pass to the function in the context object.
   --payload: string # The JSON that you want to provide to your Lambda function as input. You can enter the JSON directly. For example, --payload '{ "key": "value" }'. You can also specify a file path. For example, --payload file://payload.json. (format: password)
-]: any -> record<StatusCode: int, Payload: string> {
+]: any -> oneof<record<StatusCode: int, Payload: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2620,7 +2604,7 @@ export def "invoke-async" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   invoke_args: string # The JSON that you want to provide to your Lambda function as input.
-]: any -> record<Status: int> {
+]: any -> oneof<record<Status: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2673,7 +2657,7 @@ export def "invoke-with-response-stream" [
   --x-amz-log-type: string@x-amz-log-type-completer # Set to Tail to include the execution log in the response. Applies to synchronously invoked functions only.
   --x-amz-client-context: string # Up to 3,583 bytes of base64-encoded data about the invoking client to pass to the function in the context object.
   --payload: string # The JSON that you want to provide to your Lambda function as input. You can enter the JSON directly. For example, --payload '{ "key": "value" }'. You can also specify a file path. For example, --payload file://payload.json. (format: password)
-]: any -> record<StatusCode: int, EventStream: record<PayloadChunk: record<Payload: string>, InvokeComplete: record<ErrorCode: string, ErrorDetails: string, LogResult: string>>> {
+]: any -> oneof<record<StatusCode: int, EventStream: record<PayloadChunk: record<Payload: string>, InvokeComplete: record<ErrorCode: string, ErrorDetails: string, LogResult: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2724,7 +2708,7 @@ export def "list-function-event-invoke-configs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<FunctionEventInvokeConfigs: table<LastModified: string, FunctionArn: string, MaximumRetryAttempts: int, MaximumEventAgeInSeconds: int, DestinationConfig: record>, NextMarker: string> {
+]: nothing -> oneof<record<FunctionEventInvokeConfigs: table<LastModified: string, FunctionArn: string, MaximumRetryAttempts: int, MaximumEventAgeInSeconds: int, DestinationConfig: record>, NextMarker: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
@@ -2772,7 +2756,7 @@ export def "list-function-url-configs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<FunctionUrlConfigs: table<FunctionUrl: string, FunctionArn: string, CreationTime: string, LastModifiedTime: string, Cors: record, AuthType: string, InvokeMode: string>, NextMarker: string> {
+]: nothing -> oneof<record<FunctionUrlConfigs: table<FunctionUrl: string, FunctionArn: string, CreationTime: string, LastModifiedTime: string, Cors: record, AuthType: string, InvokeMode: string>, NextMarker: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
@@ -2821,7 +2805,7 @@ export def "list-functions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextMarker: string, Functions: table<FunctionName: string, FunctionArn: string, Runtime: string, Role: string, Handler: string, CodeSize: int, Description: string, Timeout: int, MemorySize: int, LastModified: string, CodeSha256: string, Version: string, VpcConfig: record, DeadLetterConfig: record, Environment: record, KMSKeyArn: string, TracingConfig: record, MasterArn: string, RevisionId: string, Layers: list, State: string, StateReason: string, StateReasonCode: string, LastUpdateStatus: string, LastUpdateStatusReason: string, LastUpdateStatusReasonCode: string, FileSystemConfigs: list, PackageType: string, ImageConfigResponse: record, SigningProfileVersionArn: string, SigningJobArn: string, Architectures: list, EphemeralStorage: record, SnapStart: record, RuntimeVersionConfig: record>> {
+]: nothing -> oneof<record<NextMarker: string, Functions: table<FunctionName: string, FunctionArn: string, Runtime: string, Role: string, Handler: string, CodeSize: int, Description: string, Timeout: int, MemorySize: int, LastModified: string, CodeSha256: string, Version: string, VpcConfig: record, DeadLetterConfig: record, Environment: record, KMSKeyArn: string, TracingConfig: record, MasterArn: string, RevisionId: string, Layers: list, State: string, StateReason: string, StateReasonCode: string, LastUpdateStatus: string, LastUpdateStatusReason: string, LastUpdateStatusReasonCode: string, FileSystemConfigs: list, PackageType: string, ImageConfigResponse: record, SigningProfileVersionArn: string, SigningJobArn: string, Architectures: list, EphemeralStorage: record, SnapStart: record, RuntimeVersionConfig: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "MasterRegion" $master_region "scalar") (serialize-qp "FunctionVersion" $function_version "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "MaxItems" $max_items "scalar")] | flatten | str join "&"
@@ -2868,7 +2852,7 @@ export def "list-functions-by-code-signing-config" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextMarker: string, FunctionArns: list<string>> {
+]: nothing -> oneof<record<NextMarker: string, FunctionArns: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($code_signing_config_arn | is-empty) { error make --unspanned { msg: "path parameter 'CodeSigningConfigArn' must be non-empty" } }
@@ -2918,7 +2902,7 @@ export def "list-layer-versions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextMarker: string, LayerVersions: table<LayerVersionArn: string, Version: int, Description: string, CreatedDate: string, CompatibleRuntimes: list, LicenseInfo: string, CompatibleArchitectures: list>> {
+]: nothing -> oneof<record<NextMarker: string, LayerVersions: table<LayerVersionArn: string, Version: int, Description: string, CreatedDate: string, CompatibleRuntimes: list, LicenseInfo: string, CompatibleArchitectures: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($layer_name | is-empty) { error make --unspanned { msg: "path parameter 'LayerName' must be non-empty" } }
@@ -2946,7 +2930,6 @@ export def "list-layer-versions" [
 #
 # POST /2018-10-31/layers/{LayerName}/versions
 # operationId: PublishLayerVersion
-# --Content shape: {S3Bucket?: string, S3Key?: string, S3ObjectVersion?: string, ZipFile?: string}
 export def "publish-layer-version" [
   layer_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2970,7 +2953,7 @@ export def "publish-layer-version" [
   --compatible-runtimes: list<string> # A list of compatible function runtimes (https://docs.aws.amazon.com/lambda/latest/dg/lambda-runtimes.html). Used for filtering with ListLayers and ListLayerVersions.
   --license-info: string # The layer's software license. It can be any of the following: An SPDX license identifier (https://spdx.org/licenses/). For example, MIT. The URL of a license hosted on the internet. For example, https://opensource.org/licenses/MIT. The full text of the license.
   --compatible-architectures: list<string> # A list of compatible instruction set architectures (https://docs.aws.amazon.com/lambda/latest/dg/foundation-arch.html).
-]: any -> record<Content: record<Location: string, CodeSha256: string, CodeSize: int, SigningProfileVersionArn: string, SigningJobArn: string>, LayerArn: string, LayerVersionArn: string, Description: string, CreatedDate: string, Version: int, CompatibleRuntimes: list<string>, LicenseInfo: string, CompatibleArchitectures: list<string>> {
+]: any -> oneof<record<Content: record<Location: string, CodeSha256: string, CodeSize: int, SigningProfileVersionArn: string, SigningJobArn: string>, LayerArn: string, LayerVersionArn: string, Description: string, CreatedDate: string, Version: int, CompatibleRuntimes: list<string>, LicenseInfo: string, CompatibleArchitectures: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3021,7 +3004,7 @@ export def "list-layers" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextMarker: string, Layers: table<LayerName: string, LayerArn: string, LatestMatchingVersion: record>> {
+]: nothing -> oneof<record<NextMarker: string, Layers: table<LayerName: string, LayerArn: string, LatestMatchingVersion: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "CompatibleRuntime" $compatible_runtime "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "MaxItems" $max_items "scalar") (serialize-qp "CompatibleArchitecture" $compatible_architecture "scalar")] | flatten | str join "&"
@@ -3069,7 +3052,7 @@ export def "list-provisioned-concurrency-configs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ProvisionedConcurrencyConfigs: table<FunctionArn: string, RequestedProvisionedConcurrentExecutions: int, AvailableProvisionedConcurrentExecutions: int, AllocatedProvisionedConcurrentExecutions: int, Status: string, StatusReason: string, LastModified: string>, NextMarker: string> {
+]: nothing -> oneof<record<ProvisionedConcurrencyConfigs: table<FunctionArn: string, RequestedProvisionedConcurrentExecutions: int, AvailableProvisionedConcurrentExecutions: int, AllocatedProvisionedConcurrentExecutions: int, Status: string, StatusReason: string, LastModified: string>, NextMarker: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
@@ -3116,7 +3099,7 @@ export def "list-tags" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Tags: record> {
+]: nothing -> oneof<record<Tags: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($arn | is-empty) { error make --unspanned { msg: "path parameter 'ARN' must be non-empty" } }
@@ -3212,7 +3195,7 @@ export def "list-versions-by-function" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextMarker: string, Versions: table<FunctionName: string, FunctionArn: string, Runtime: string, Role: string, Handler: string, CodeSize: int, Description: string, Timeout: int, MemorySize: int, LastModified: string, CodeSha256: string, Version: string, VpcConfig: record, DeadLetterConfig: record, Environment: record, KMSKeyArn: string, TracingConfig: record, MasterArn: string, RevisionId: string, Layers: list, State: string, StateReason: string, StateReasonCode: string, LastUpdateStatus: string, LastUpdateStatusReason: string, LastUpdateStatusReasonCode: string, FileSystemConfigs: list, PackageType: string, ImageConfigResponse: record, SigningProfileVersionArn: string, SigningJobArn: string, Architectures: list, EphemeralStorage: record, SnapStart: record, RuntimeVersionConfig: record>> {
+]: nothing -> oneof<record<NextMarker: string, Versions: table<FunctionName: string, FunctionArn: string, Runtime: string, Role: string, Handler: string, CodeSize: int, Description: string, Timeout: int, MemorySize: int, LastModified: string, CodeSha256: string, Version: string, VpcConfig: record, DeadLetterConfig: record, Environment: record, KMSKeyArn: string, TracingConfig: record, MasterArn: string, RevisionId: string, Layers: list, State: string, StateReason: string, StateReasonCode: string, LastUpdateStatus: string, LastUpdateStatusReason: string, LastUpdateStatusReasonCode: string, FileSystemConfigs: list, PackageType: string, ImageConfigResponse: record, SigningProfileVersionArn: string, SigningJobArn: string, Architectures: list, EphemeralStorage: record, SnapStart: record, RuntimeVersionConfig: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
@@ -3261,7 +3244,7 @@ export def "publish-version" [
   --code-sha256: string # Only publish a version if the hash value matches the value that's specified. Use this option to avoid publishing a version if the function code has changed since you last updated it. You can get the hash for the version that you uploaded from the output of UpdateFunctionCode.
   --description: string # A description for the version to override the description in the function configuration.
   --revision-id: string # Only update the function if the revision ID matches the ID that's specified. Use this option to avoid publishing a version if the function configuration has changed since you last updated it.
-]: any -> record<FunctionName: string, FunctionArn: string, Runtime: string, Role: string, Handler: string, CodeSize: int, Description: string, Timeout: int, MemorySize: int, LastModified: string, CodeSha256: string, Version: string, VpcConfig: record<SubnetIds: list<string>, SecurityGroupIds: list<string>, VpcId: string>, DeadLetterConfig: record<TargetArn: string>, Environment: record<Variables: record, Error: record<ErrorCode: string, Message: string>>, KMSKeyArn: string, TracingConfig: record<Mode: string>, MasterArn: string, RevisionId: string, Layers: table<Arn: string, CodeSize: int, SigningProfileVersionArn: string, SigningJobArn: string>, State: string, StateReason: string, StateReasonCode: string, LastUpdateStatus: string, LastUpdateStatusReason: string, LastUpdateStatusReasonCode: string, FileSystemConfigs: table<Arn: string, LocalMountPath: string>, PackageType: string, ImageConfigResponse: record<ImageConfig: record<EntryPoint: list, Command: list, WorkingDirectory: string>, Error: record<ErrorCode: string, Message: string>>, SigningProfileVersionArn: string, SigningJobArn: string, Architectures: list<string>, EphemeralStorage: record<Size: int>, SnapStart: record<ApplyOn: string, OptimizationStatus: string>, RuntimeVersionConfig: record<RuntimeVersionArn: string, Error: record<ErrorCode: string, Message: string>>> {
+]: any -> oneof<record<FunctionName: string, FunctionArn: string, Runtime: string, Role: string, Handler: string, CodeSize: int, Description: string, Timeout: int, MemorySize: int, LastModified: string, CodeSha256: string, Version: string, VpcConfig: record<SubnetIds: list<string>, SecurityGroupIds: list<string>, VpcId: string>, DeadLetterConfig: record<TargetArn: string>, Environment: record<Variables: record, Error: record<ErrorCode: string, Message: string>>, KMSKeyArn: string, TracingConfig: record<Mode: string>, MasterArn: string, RevisionId: string, Layers: table<Arn: string, CodeSize: int, SigningProfileVersionArn: string, SigningJobArn: string>, State: string, StateReason: string, StateReasonCode: string, LastUpdateStatus: string, LastUpdateStatusReason: string, LastUpdateStatusReasonCode: string, FileSystemConfigs: table<Arn: string, LocalMountPath: string>, PackageType: string, ImageConfigResponse: record<ImageConfig: record<EntryPoint: list, Command: list, WorkingDirectory: string>, Error: record<ErrorCode: string, Message: string>>, SigningProfileVersionArn: string, SigningJobArn: string, Architectures: list<string>, EphemeralStorage: record<Size: int>, SnapStart: record<ApplyOn: string, OptimizationStatus: string>, RuntimeVersionConfig: record<RuntimeVersionArn: string, Error: record<ErrorCode: string, Message: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3467,7 +3450,7 @@ export def "update-function-code" [
   --body-dry-run: oneof<nothing, bool> # Set to true to validate the request parameters and access permissions without modifying the function code.
   --revision-id: string # Update the function only if the revision ID matches the ID that's specified. Use this option to avoid modifying a function that has changed since you last read it.
   --architectures: list<string> # The instruction set architecture that the function supports. Enter a string array with one of the valid values (arm64 or x86_64). The default value is x86_64.
-]: any -> record<FunctionName: string, FunctionArn: string, Runtime: string, Role: string, Handler: string, CodeSize: int, Description: string, Timeout: int, MemorySize: int, LastModified: string, CodeSha256: string, Version: string, VpcConfig: record<SubnetIds: list<string>, SecurityGroupIds: list<string>, VpcId: string>, DeadLetterConfig: record<TargetArn: string>, Environment: record<Variables: record, Error: record<ErrorCode: string, Message: string>>, KMSKeyArn: string, TracingConfig: record<Mode: string>, MasterArn: string, RevisionId: string, Layers: table<Arn: string, CodeSize: int, SigningProfileVersionArn: string, SigningJobArn: string>, State: string, StateReason: string, StateReasonCode: string, LastUpdateStatus: string, LastUpdateStatusReason: string, LastUpdateStatusReasonCode: string, FileSystemConfigs: table<Arn: string, LocalMountPath: string>, PackageType: string, ImageConfigResponse: record<ImageConfig: record<EntryPoint: list, Command: list, WorkingDirectory: string>, Error: record<ErrorCode: string, Message: string>>, SigningProfileVersionArn: string, SigningJobArn: string, Architectures: list<string>, EphemeralStorage: record<Size: int>, SnapStart: record<ApplyOn: string, OptimizationStatus: string>, RuntimeVersionConfig: record<RuntimeVersionArn: string, Error: record<ErrorCode: string, Message: string>>> {
+]: any -> oneof<record<FunctionName: string, FunctionArn: string, Runtime: string, Role: string, Handler: string, CodeSize: int, Description: string, Timeout: int, MemorySize: int, LastModified: string, CodeSha256: string, Version: string, VpcConfig: record<SubnetIds: list<string>, SecurityGroupIds: list<string>, VpcId: string>, DeadLetterConfig: record<TargetArn: string>, Environment: record<Variables: record, Error: record<ErrorCode: string, Message: string>>, KMSKeyArn: string, TracingConfig: record<Mode: string>, MasterArn: string, RevisionId: string, Layers: table<Arn: string, CodeSize: int, SigningProfileVersionArn: string, SigningJobArn: string>, State: string, StateReason: string, StateReasonCode: string, LastUpdateStatus: string, LastUpdateStatusReason: string, LastUpdateStatusReasonCode: string, FileSystemConfigs: table<Arn: string, LocalMountPath: string>, PackageType: string, ImageConfigResponse: record<ImageConfig: record<EntryPoint: list, Command: list, WorkingDirectory: string>, Error: record<ErrorCode: string, Message: string>>, SigningProfileVersionArn: string, SigningJobArn: string, Architectures: list<string>, EphemeralStorage: record<Size: int>, SnapStart: record<ApplyOn: string, OptimizationStatus: string>, RuntimeVersionConfig: record<RuntimeVersionArn: string, Error: record<ErrorCode: string, Message: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

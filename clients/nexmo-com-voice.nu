@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -115,6 +139,9 @@ def auth-scheme-completer [] { ["bearer"] }
 # Completers for enum parameters
 def status-completer [] { ["answered" "busy" "cancelled" "completed" "failed" "machine" "rejected" "ringing" "started" "timeout" "unanswered"] }
 def order-completer [] { ["asc" "desc"] }
+def event-method-completer [] { ["GET" "POST"] }
+def machine-detection-completer [] { ["continue" "hangup"] }
+def answer-method-completer [] { ["GET" "POST"] }
 def action-completer [] { ["transfer"] }
 def language-completer [] { ["ar" "ca-ES" "cmn-CN" "cmn-TW" "cs-CZ" "cy-GB" "da-DK" "de-DE" "el-GR" "en-AU" "en-GB" "en-GB-WLS" "en-IN" "en-US" "en-ZA" "es-ES" "es-MX" "es-US" "eu-ES" "fi-FI" "fil-PH" "fr-CA" "fr-FR" "he-IL" "hi-IN" "hu-HU" "id-ID" "is-IS" "it-IT" "ja-JP" "ko-KR" "nb-NO" "nl-NL" "no-NO" "pl-PL" "pt-BR" "pt-PT" "ro-RO" "ru-RU" "sk-SK" "sv-SE" "th-TH" "tr-TR" "uk-UA" "vi-VN" "yue-CN"] }
 def voice-name-completer [] { ["Aditi" "Agnieszka" "Alva" "Amy" "Astrid" "Bianca" "Brian" "Carla" "Carmen" "Carmit" "Catarina" "Celine" "Cem" "Chantal" "Chipmunk" "Conchita" "Cristiano" "Damayanti" "Dora" "Emma" "Empar" "Enrique" "Eric" "Ewa" "Felipe" "Filiz" "Geraint" "Giorgio" "Gwyneth" "Hans" "Henrik" "Ines" "Ioana" "Iveta" "Ivy" "Jacek" "Jan" "Jennifer" "Joana" "Joanna" "Joey" "Jordi" "Justin" "Kanya" "Karl" "Kendra" "Kimberly" "Laila" "Laura" "Lea" "Lekha" "Liv" "Lotte" "Lucia" "Luciana" "Mads" "Maged" "Maja" "Mariska" "Marlene" "Mathieu" "Matthew" "Maxim" "Mei-Jia" "Melina" "Mia" "Miguel" "Miren" "Mizuki" "Montserrat" "Naja" "Nicole" "Nikos" "Nora" "Oskar" "Penelope" "Raveena" "Ricardo" "Ruben" "Russell" "Salli" "Satu" "Seoyeon" "Sin-Ji" "Sora" "Takumi" "Tarik" "Tatyana" "Tessa" "Tian-Tian" "Vicki" "Vitoria" "Yelda" "Zeina" "Zhiyu" "Zuzana"] }
@@ -122,9 +149,9 @@ def voice-name-completer [] { ["Aditi" "Agnieszka" "Alva" "Amy" "Astrid" "Bianca
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-calls" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-calls" "create-call" "get-call" "update-call" "start-dtmf" "stop-stream" "start-stream" "stop-talk" "start-talk" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -163,7 +190,7 @@ export def "get-calls" [
   --record-index: int # Return calls from this index in the response (default: 0)
   --order: string@order-completer # Either ascending or descending order. (default: asc)
   --conversation-uuid: string # Return all the records associated with a specific conversation. (format: uuid, e.g. CON-f972836a-550f-45fa-956c-12a2ab5b7d22)
-]: nothing -> record<_embedded: record<calls: list<record>>, _links: record<self: record<href: string>>, count: int, page_size: int, record_index: int> {
+]: nothing -> oneof<record<_embedded: record<calls: list<record>>, _links: record<self: record<href: string>>, count: int, page_size: int, record_index: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "date_start" $date_start "scalar") (serialize-qp "date_end" $date_end "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "record_index" $record_index "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "conversation_uuid" $conversation_uuid "scalar")] | flatten | str join "&"
@@ -198,13 +225,23 @@ export def "create-call" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body: record
-]: any -> record<conversation_uuid: string, direction: string, status: string, uuid: string> {
+  --ncco: list # The [Nexmo Call Control Object](/voice/voice-api/ncco-reference) to use for this call. (e.g. [{action: talk, text: Hello World}])
+  --event-method: string@event-method-completer # The HTTP method used to send event information to `event_url`. (default: POST)
+  --event-url: list<string> # **Required** unless `event_url` is configured at the application level, see [Create an Application](/api/application.v2#createApplication) The webhook endpoint where call progress events are sent to. For more information about the values sent, see [Event webhook](/voice/voice-api/webhook-reference#event-webhook). (e.g. [https://example.com/event])
+  from: record # Connect to a Phone (PSTN) number — shape: {number: string, type: string}
+  --length-timer: int # Set the number of seconds that elapse before Vonage hangs up after the call state changes to answered. (default: 7200)
+  --machine-detection: string@machine-detection-completer # Configure the behavior when Vonage detects that the call is answered by voicemail. If `continue`, Vonage sends an HTTP request to `event_url` with the Call event machine. If `hangup`, Vonage ends the call. (e.g. continue)
+  --random-from-number: oneof<nothing, bool> # Set to `true` to use random phone number as `from`. The number will be selected from the list of the numbers assigned to the current application. `random_from_number: true` cannot be used together with `from`. (default: false)
+  --ringing-timer: int # Set the number of seconds that elapse before Vonage hangs up after the call state changes to ‘ringing’. (default: 60)
+  to: list
+  --answer-method: string@answer-method-completer # The HTTP method used to send event information to answer_url. (default: GET)
+  --answer-url: list<string> # The webhook endpoint where you provide the [Nexmo Call Control Object](/voice/voice-api/ncco-reference) that governs this call. (e.g. [https://example.com/answer])
+]: any -> oneof<record<conversation_uuid: string, direction: string, status: string, uuid: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/" $auth.query)
-  let req_body = $body
+  let req_body = {"ncco": $ncco, "event_method": $event_method, "event_url": $event_url, "from": $from, "length_timer": $length_timer, "machine_detection": $machine_detection, "random_from_number": $random_from_number, "ringing_timer": $ringing_timer, "to": $to, "answer_method": $answer_method, "answer_url": $answer_url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -237,7 +274,7 @@ export def "get-call" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<_links: record<self: record<href: string>>, conversation_uuid: string, direction: string, duration: string, end_time: string, from: record<number: string, type: string>, network: string, price: string, rate: string, start_time: string, status: string, to: record<number: string, type: string>, uuid: string> {
+]: nothing -> oneof<record<_links: record<self: record<href: string>>, conversation_uuid: string, direction: string, duration: string, end_time: string, from: record<number: string, type: string>, network: string, price: string, rate: string, start_time: string, status: string, to: record<number: string, type: string>, uuid: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($uuid | is-empty) { error make --unspanned { msg: "path parameter 'uuid' must be non-empty" } }
@@ -262,7 +299,6 @@ export def "get-call" [
 #
 # PUT /{uuid}
 # operationId: updateCall
-# --destination shape: {ncco: list, type: string}
 export def "update-call" [
   uuid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -316,7 +352,7 @@ export def "start-dtmf" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --digits: string # The digits to send (e.g. 1713)
-]: any -> record<message: string, uuid: string> {
+]: any -> oneof<record<message: string, uuid: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -355,7 +391,7 @@ export def "stop-stream" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<message: string, uuid: string> {
+]: nothing -> oneof<record<message: string, uuid: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($uuid | is-empty) { error make --unspanned { msg: "path parameter 'uuid' must be non-empty" } }
@@ -394,7 +430,7 @@ export def "start-stream" [
   --level: string # Set the audio level of the stream in the range `-1 >= level <= 1` with a precision of 0.1. The default value is 0. (default: 0, e.g. 0.4)
   --loop: int # the number of times to play the file, 0 for infinite (default: 1)
   stream_url: list<string> # e.g. [https://example.com/waiting.mp3]
-]: any -> record<message: string, uuid: string> {
+]: any -> oneof<record<message: string, uuid: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -433,7 +469,7 @@ export def "stop-talk" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<message: string, uuid: string> {
+]: nothing -> oneof<record<message: string, uuid: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($uuid | is-empty) { error make --unspanned { msg: "path parameter 'uuid' must be non-empty" } }
@@ -477,7 +513,7 @@ export def "start-talk" [
   --style: int # The vocal style (vocal range, tessitura, and timbre) to use (default: 0)
   text: string # The text to read (e.g. Hello. How are you today?)
   --voice-name: string@voice-name-completer # DEPRECATED The voice & language to use (DEPRECATED, default: Kimberly)
-]: any -> record<message: string, uuid: string> {
+]: any -> oneof<record<message: string, uuid: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -183,9 +206,9 @@ def x-amz-target-completer-79 [] { ["WorkMailService.UpdateResource"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "associate-delegate-to-resource" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["associate-delegate-to-resource" "associate-member-to-group" "assume-impersonation-role" "cancel-mailbox-export-job" "create-alias" "create-availability-configuration" "create-group" "create-impersonation-role" "create-mobile-device-access-rule" "create-organization" "create-resource" "create-user" "delete-access-control-rule" "delete-alias" "delete-availability-configuration" "delete-email-monitoring-configuration" "delete-group" "delete-impersonation-role" "delete-mailbox-permissions" "delete-mobile-device-access-override" "delete-mobile-device-access-rule" "delete-organization" "delete-resource" "delete-retention-policy" "delete-user" "deregister-from-work-mail" "deregister-mail-domain" "describe-email-monitoring-configuration" "describe-group" "describe-inbound-dmarc-settings" "describe-mailbox-export-job" "describe-organization" "describe-resource" "describe-user" "disassociate-delegate-from-resource" "disassociate-member-from-group" "get-access-control-effect" "get-default-retention-policy" "get-impersonation-role" "get-impersonation-role-effect" "get-mail-domain" "get-mailbox-details" "get-mobile-device-access-effect" "get-mobile-device-access-override" "list-access-control-rules" "list-aliases" "list-availability-configurations" "list-group-members" "list-groups" "list-impersonation-roles" "list-mail-domains" "list-mailbox-export-jobs" "list-mailbox-permissions" "list-mobile-device-access-overrides" "list-mobile-device-access-rules" "list-organizations" "list-resource-delegates" "list-resources" "list-tags-for-resource" "list-users" "put-access-control-rule" "put-email-monitoring-configuration" "put-inbound-dmarc-settings" "put-mailbox-permissions" "put-mobile-device-access-override" "put-retention-policy" "register-mail-domain" "register-to-work-mail" "reset-password" "start-mailbox-export-job" "tag-resource" "test-availability-configuration" "untag-resource" "update-availability-configuration" "update-default-mail-domain" "update-impersonation-role" "update-mailbox-quota" "update-mobile-device-access-rule" "update-primary-email-address" "update-resource" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -228,7 +251,7 @@ export def "associate-delegate-to-resource" [
   organization_id: string # The organization under which the resource exists.
   resource_id: string # The resource for which members (users or groups) are associated.
   entity_id: string # The member (user or group) to associate to the resource.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -279,7 +302,7 @@ export def "associate-member-to-group" [
   organization_id: string # The organization under which the group exists.
   group_id: string # The group to which the member (user or group) is associated.
   member_id: string # The member (user or group) to associate to the group.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -329,7 +352,7 @@ export def "assume-impersonation-role" [
   --x-amz-target: string@x-amz-target-completer-2 # required
   organization_id: string # The WorkMail organization under which the impersonation role will be assumed.
   impersonation_role_id: string # The impersonation role ID to assume.
-]: any -> record<Token: string, ExpiresIn: int> {
+]: any -> oneof<record<Token: string, ExpiresIn: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -380,7 +403,7 @@ export def "cancel-mailbox-export-job" [
   client_token: string # The idempotency token for the client request.
   job_id: string # The job ID.
   organization_id: string # The organization ID.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -431,7 +454,7 @@ export def "create-alias" [
   organization_id: string # The organization under which the member (user or group) exists.
   entity_id: string # The member (user or group) to which this alias is added.
   alias: string # The alias to add to the member set.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -461,8 +484,6 @@ export def "create-alias" [
 #
 # POST /
 # operationId: CreateAvailabilityConfiguration
-# --EwsProvider shape: {EwsEndpoint: string, EwsUsername: string, EwsPassword: string}
-# --LambdaProvider shape: {LambdaArn: string}
 export def "create-availability-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -486,7 +507,7 @@ export def "create-availability-configuration" [
   domain_name: string # The domain to which the provider applies.
   --ews-provider: record # Describes an EWS based availability provider. This is only used as input to the service. — shape: {EwsEndpoint: string, EwsUsername: string, EwsPassword: string}
   --lambda-provider: record # Describes a Lambda based availability provider. — shape: {LambdaArn: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -536,7 +557,7 @@ export def "create-group" [
   --x-amz-target: string@x-amz-target-completer-6 # required
   organization_id: string # The organization under which the group is to be created.
   name: string # The name of the group.
-]: any -> record<GroupId: string> {
+]: any -> oneof<record<GroupId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -566,7 +587,6 @@ export def "create-group" [
 #
 # POST /
 # operationId: CreateImpersonationRole
-# --Rules item shape: {ImpersonationRuleId: string, Name?: string, Description?: string, Effect: "ALLOW"|"DENY", TargetUsers?: list<string>, NotTargetUsers?: list<string>}
 export def "create-impersonation-role" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -591,7 +611,7 @@ export def "create-impersonation-role" [
   type: string@type-completer # The impersonation role's type. The available impersonation role types are READ_ONLY or FULL_ACCESS.
   --description: string # The description of the new impersonation role.
   rules: list # The list of rules for the impersonation role. — item shape: {ImpersonationRuleId: string, Name?: string, Description?: string, Effect: "ALLOW"|"DENY", TargetUsers?: list<string>, NotTargetUsers?: list<string>}
-]: any -> record<ImpersonationRoleId: string> {
+]: any -> oneof<record<ImpersonationRoleId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -652,7 +672,7 @@ export def "create-mobile-device-access-rule" [
   --not-device-operating-systems: list<string> # Device operating systems that the rule will not match. All other device operating systems will match.
   --device-user-agents: list<string> # Device user agents that the rule will match.
   --not-device-user-agents: list<string> # Device user agents that the rule will not match. All other device user agents will match.
-]: any -> record<MobileDeviceAccessRuleId: string> {
+]: any -> oneof<record<MobileDeviceAccessRuleId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -682,7 +702,6 @@ export def "create-mobile-device-access-rule" [
 #
 # POST /
 # operationId: CreateOrganization
-# --Domains item shape: {DomainName?: string, HostedZoneId?: string}
 export def "create-organization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -707,7 +726,7 @@ export def "create-organization" [
   --domains: list # The email domains to associate with the organization. — item shape: {DomainName?: string, HostedZoneId?: string}
   --kms-key-arn: string # The Amazon Resource Name (ARN) of a customer managed key from AWS KMS.
   --enable-interoperability: oneof<nothing, bool> # When true, allows organization interoperability between WorkMail and Microsoft Exchange. If true, you must include a AD Connector directory ID in the request.
-]: any -> record<OrganizationId: string> {
+]: any -> oneof<record<OrganizationId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -758,7 +777,7 @@ export def "create-resource" [
   organization_id: string # The identifier associated with the organization for which the resource is created.
   name: string # The name of the new resource.
   type: string@type-completer-1 # The type of the new resource. The available types are equipment and room.
-]: any -> record<ResourceId: string> {
+]: any -> oneof<record<ResourceId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -810,7 +829,7 @@ export def "create-user" [
   name: string # The name for the new user. WorkMail directory user names have a maximum length of 64. All others have a maximum length of 20.
   display_name: string # The display name for the new user.
   password: string # The password for the new user. (format: password)
-]: any -> record<UserId: string> {
+]: any -> oneof<record<UserId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -860,7 +879,7 @@ export def "delete-access-control-rule" [
   --x-amz-target: string@x-amz-target-completer-12 # required
   organization_id: string # The identifier for the organization.
   name: string # The name of the access control rule.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -911,7 +930,7 @@ export def "delete-alias" [
   organization_id: string # The identifier for the organization under which the user exists.
   entity_id: string # The identifier for the member (user or group) from which to have the aliases removed.
   alias: string # The aliases to be removed from the user's set of aliases. Duplicate entries in the list are collapsed into single entries (the list is transformed into a set).
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -961,7 +980,7 @@ export def "delete-availability-configuration" [
   --x-amz-target: string@x-amz-target-completer-14 # required
   organization_id: string # The WorkMail organization for which the AvailabilityConfiguration will be deleted.
   domain_name: string # The domain for which the AvailabilityConfiguration will be deleted.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1010,7 +1029,7 @@ export def "delete-email-monitoring-configuration" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-15 # required
   organization_id: string # The ID of the organization from which the email monitoring configuration is deleted.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1060,7 +1079,7 @@ export def "delete-group" [
   --x-amz-target: string@x-amz-target-completer-16 # required
   organization_id: string # The organization that contains the group.
   group_id: string # The identifier of the group to be deleted.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1110,7 +1129,7 @@ export def "delete-impersonation-role" [
   --x-amz-target: string@x-amz-target-completer-17 # required
   organization_id: string # The WorkMail organization from which to delete the impersonation role.
   impersonation_role_id: string # The ID of the impersonation role to delete.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1161,7 +1180,7 @@ export def "delete-mailbox-permissions" [
   organization_id: string # The identifier of the organization under which the member (user or group) exists.
   entity_id: string # The identifier of the member (user or group) that owns the mailbox.
   grantee_id: string # The identifier of the member (user or group) for which to delete granted permissions.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1212,7 +1231,7 @@ export def "delete-mobile-device-access-override" [
   organization_id: string # The WorkMail organization for which the access override will be deleted.
   user_id: string # The WorkMail user for which you want to delete the override. Accepts the following types of user identities: User ID: 12345678-1234-1234-1234-123456789012 or S-1-1-12-1234567890-123456789-123456789-1234 Email address: user@domain.tld User name: user
   device_id: string # The mobile device for which you delete the override. DeviceId is case insensitive.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1262,7 +1281,7 @@ export def "delete-mobile-device-access-rule" [
   --x-amz-target: string@x-amz-target-completer-20 # required
   organization_id: string # The WorkMail organization under which the rule will be deleted.
   mobile_device_access_rule_id: string # The identifier of the rule to be deleted.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1313,7 +1332,7 @@ export def "delete-organization" [
   --client-token: string # The idempotency token associated with the request.
   organization_id: string # The organization ID.
   --delete-directory: oneof<nothing, bool> # If true, deletes the AWS Directory Service directory associated with the organization.
-]: any -> record<OrganizationId: string, State: string> {
+]: any -> oneof<record<OrganizationId: string, State: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1364,7 +1383,7 @@ export def "delete-resource" [
   --x-amz-target: string@x-amz-target-completer-22 # required
   organization_id: string # The identifier associated with the organization from which the resource is deleted.
   resource_id: string # The identifier of the resource to be deleted.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1414,7 +1433,7 @@ export def "delete-retention-policy" [
   --x-amz-target: string@x-amz-target-completer-23 # required
   organization_id: string # The organization ID.
   id: string # The retention policy ID.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1464,7 +1483,7 @@ export def "delete-user" [
   --x-amz-target: string@x-amz-target-completer-24 # required
   organization_id: string # The organization that contains the user to be deleted.
   user_id: string # The identifier of the user to be deleted.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1514,7 +1533,7 @@ export def "deregister-from-work-mail" [
   --x-amz-target: string@x-amz-target-completer-25 # required
   organization_id: string # The identifier for the organization under which the WorkMail entity exists.
   entity_id: string # The identifier for the member (user or group) to be updated.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1564,7 +1583,7 @@ export def "deregister-mail-domain" [
   --x-amz-target: string@x-amz-target-completer-26 # required
   organization_id: string # The WorkMail organization for which the domain will be deregistered.
   domain_name: string # The domain to deregister in WorkMail and SES.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1613,7 +1632,7 @@ export def "describe-email-monitoring-configuration" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-27 # required
   organization_id: string # The ID of the organization for which the email monitoring configuration is described.
-]: any -> record<RoleArn: string, LogGroupArn: string> {
+]: any -> oneof<record<RoleArn: string, LogGroupArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1663,7 +1682,7 @@ export def "describe-group" [
   --x-amz-target: string@x-amz-target-completer-28 # required
   organization_id: string # The identifier for the organization under which the group exists.
   group_id: string # The identifier for the group to be described.
-]: any -> record<GroupId: string, Name: string, Email: string, State: string, EnabledDate: string, DisabledDate: string> {
+]: any -> oneof<record<GroupId: string, Name: string, Email: string, State: string, EnabledDate: string, DisabledDate: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1712,7 +1731,7 @@ export def "describe-inbound-dmarc-settings" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-29 # required
   organization_id: string # Lists the ID of the given organization.
-]: any -> record<Enforced: bool> {
+]: any -> oneof<record<Enforced: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1762,7 +1781,7 @@ export def "describe-mailbox-export-job" [
   --x-amz-target: string@x-amz-target-completer-30 # required
   job_id: string # The mailbox export job ID.
   organization_id: string # The organization ID.
-]: any -> record<EntityId: string, Description: string, RoleArn: string, KmsKeyArn: string, S3BucketName: string, S3Prefix: string, S3Path: string, EstimatedProgress: int, State: string, ErrorInfo: string, StartTime: string, EndTime: string> {
+]: any -> oneof<record<EntityId: string, Description: string, RoleArn: string, KmsKeyArn: string, S3BucketName: string, S3Prefix: string, S3Path: string, EstimatedProgress: int, State: string, ErrorInfo: string, StartTime: string, EndTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1811,7 +1830,7 @@ export def "describe-organization" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-31 # required
   organization_id: string # The identifier for the organization to be described.
-]: any -> record<OrganizationId: string, Alias: string, State: string, DirectoryId: string, DirectoryType: string, DefaultMailDomain: string, CompletedDate: string, ErrorMessage: string, ARN: string> {
+]: any -> oneof<record<OrganizationId: string, Alias: string, State: string, DirectoryId: string, DirectoryType: string, DefaultMailDomain: string, CompletedDate: string, ErrorMessage: string, ARN: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1861,7 +1880,7 @@ export def "describe-resource" [
   --x-amz-target: string@x-amz-target-completer-32 # required
   organization_id: string # The identifier associated with the organization for which the resource is described.
   resource_id: string # The identifier of the resource to be described.
-]: any -> record<ResourceId: string, Email: string, Name: string, Type: string, BookingOptions: record<AutoAcceptRequests: bool, AutoDeclineRecurringRequests: bool, AutoDeclineConflictingRequests: bool>, State: string, EnabledDate: string, DisabledDate: string> {
+]: any -> oneof<record<ResourceId: string, Email: string, Name: string, Type: string, BookingOptions: record<AutoAcceptRequests: bool, AutoDeclineRecurringRequests: bool, AutoDeclineConflictingRequests: bool>, State: string, EnabledDate: string, DisabledDate: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1911,7 +1930,7 @@ export def "describe-user" [
   --x-amz-target: string@x-amz-target-completer-33 # required
   organization_id: string # The identifier for the organization under which the user exists.
   user_id: string # The identifier for the user to be described.
-]: any -> record<UserId: string, Name: string, Email: string, DisplayName: string, State: string, UserRole: string, EnabledDate: string, DisabledDate: string> {
+]: any -> oneof<record<UserId: string, Name: string, Email: string, DisplayName: string, State: string, UserRole: string, EnabledDate: string, DisabledDate: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1962,7 +1981,7 @@ export def "disassociate-delegate-from-resource" [
   organization_id: string # The identifier for the organization under which the resource exists.
   resource_id: string # The identifier of the resource from which delegates' set members are removed.
   entity_id: string # The identifier for the member (user, group) to be removed from the resource's delegates.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2013,7 +2032,7 @@ export def "disassociate-member-from-group" [
   organization_id: string # The identifier for the organization under which the group exists.
   group_id: string # The identifier for the group from which members are removed.
   member_id: string # The identifier for the member to be removed to the group.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2066,7 +2085,7 @@ export def "get-access-control-effect" [
   action: string # The access protocol action. Valid values include ActiveSync, AutoDiscover, EWS, IMAP, SMTP, WindowsOutlook, and WebMail.
   --user-id: string # The user ID.
   --impersonation-role-id: string # The impersonation role ID.
-]: any -> record<Effect: string, MatchedRules: list<string>> {
+]: any -> oneof<record<Effect: string, MatchedRules: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2115,7 +2134,7 @@ export def "get-default-retention-policy" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-37 # required
   organization_id: string # The organization ID.
-]: any -> record<Id: string, Name: string, Description: string, FolderConfigurations: table<Name: string, Action: string, Period: int>> {
+]: any -> oneof<record<Id: string, Name: string, Description: string, FolderConfigurations: table<Name: string, Action: string, Period: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2165,7 +2184,7 @@ export def "get-impersonation-role" [
   --x-amz-target: string@x-amz-target-completer-38 # required
   organization_id: string # The WorkMail organization from which to retrieve the impersonation role.
   impersonation_role_id: string # The impersonation role ID to retrieve.
-]: any -> record<ImpersonationRoleId: string, Name: string, Type: string, Description: string, Rules: table<ImpersonationRuleId: string, Name: string, Description: string, Effect: string, TargetUsers: list, NotTargetUsers: list>, DateCreated: string, DateModified: string> {
+]: any -> oneof<record<ImpersonationRoleId: string, Name: string, Type: string, Description: string, Rules: table<ImpersonationRuleId: string, Name: string, Description: string, Effect: string, TargetUsers: list, NotTargetUsers: list>, DateCreated: string, DateModified: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2216,7 +2235,7 @@ export def "get-impersonation-role-effect" [
   organization_id: string # The WorkMail organization where the impersonation role is defined.
   impersonation_role_id: string # The impersonation role ID to test.
   target_user: string # The WorkMail organization user chosen to test the impersonation role. The following identity formats are available: User ID: 12345678-1234-1234-1234-123456789012 or S-1-1-12-1234567890-123456789-123456789-1234 Email address: user@domain.tld User name: user
-]: any -> record<Type: string, Effect: string, MatchedRules: table<ImpersonationRuleId: string, Name: string>> {
+]: any -> oneof<record<Type: string, Effect: string, MatchedRules: table<ImpersonationRuleId: string, Name: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2266,7 +2285,7 @@ export def "get-mail-domain" [
   --x-amz-target: string@x-amz-target-completer-40 # required
   organization_id: string # The WorkMail organization for which the domain is retrieved.
   domain_name: string # The domain from which you want to retrieve details.
-]: any -> record<Records: table<Type: string, Hostname: string, Value: string>, IsTestDomain: bool, IsDefault: bool, OwnershipVerificationStatus: string, DkimVerificationStatus: string> {
+]: any -> oneof<record<Records: table<Type: string, Hostname: string, Value: string>, IsTestDomain: bool, IsDefault: bool, OwnershipVerificationStatus: string, DkimVerificationStatus: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2316,7 +2335,7 @@ export def "get-mailbox-details" [
   --x-amz-target: string@x-amz-target-completer-41 # required
   organization_id: string # The identifier for the organization that contains the user whose mailbox details are being requested.
   user_id: string # The identifier for the user whose mailbox details are being requested.
-]: any -> record<MailboxQuota: int, MailboxSize: float> {
+]: any -> oneof<record<MailboxQuota: int, MailboxSize: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2369,7 +2388,7 @@ export def "get-mobile-device-access-effect" [
   --device-model: string # Device model the simulated user will report.
   --device-operating-system: string # Device operating system the simulated user will report.
   --device-user-agent: string # Device user agent the simulated user will report.
-]: any -> record<Effect: string, MatchedRules: table<MobileDeviceAccessRuleId: string, Name: string>> {
+]: any -> oneof<record<Effect: string, MatchedRules: table<MobileDeviceAccessRuleId: string, Name: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2420,7 +2439,7 @@ export def "get-mobile-device-access-override" [
   organization_id: string # The WorkMail organization to which you want to apply the override.
   user_id: string # Identifies the WorkMail user for the override. Accepts the following types of user identities: User ID: 12345678-1234-1234-1234-123456789012 or S-1-1-12-1234567890-123456789-123456789-1234 Email address: user@domain.tld User name: user
   device_id: string # The mobile device to which the override applies. DeviceId is case insensitive.
-]: any -> record<UserId: string, DeviceId: string, Effect: string, Description: string, DateCreated: string, DateModified: string> {
+]: any -> oneof<record<UserId: string, DeviceId: string, Effect: string, Description: string, DateCreated: string, DateModified: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2469,7 +2488,7 @@ export def "list-access-control-rules" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-44 # required
   organization_id: string # The identifier for the organization.
-]: any -> record<Rules: table<Name: string, Effect: string, Description: string, IpRanges: list, NotIpRanges: list, Actions: list, NotActions: list, UserIds: list, NotUserIds: list, DateCreated: string, DateModified: string, ImpersonationRoleIds: list, NotImpersonationRoleIds: list>> {
+]: any -> oneof<record<Rules: table<Name: string, Effect: string, Description: string, IpRanges: list, NotIpRanges: list, Actions: list, NotActions: list, UserIds: list, NotUserIds: list, DateCreated: string, DateModified: string, ImpersonationRoleIds: list, NotImpersonationRoleIds: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2523,7 +2542,7 @@ export def "list-aliases" [
   entity_id: string # The identifier for the entity for which to list the aliases.
   --next-token-body: string # The token to use to retrieve the next page of results. The first call does not contain any tokens. (body field)
   --max-results-body: int # The maximum number of results to return in a single call. (body field)
-]: any -> record<Aliases: list<string>, NextToken: string> {
+]: any -> oneof<record<Aliases: list<string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2577,7 +2596,7 @@ export def "list-availability-configurations" [
   organization_id: string # The WorkMail organization for which the AvailabilityConfiguration's will be listed.
   --max-results-body: int # The maximum number of results to return in a single call. (body field)
   --next-token-body: string # The token to use to retrieve the next page of results. The first call does not require a token. (body field)
-]: any -> record<AvailabilityConfigurations: table<DomainName: string, ProviderType: string, EwsProvider: record, LambdaProvider: record, DateCreated: string, DateModified: string>, NextToken: string> {
+]: any -> oneof<record<AvailabilityConfigurations: table<DomainName: string, ProviderType: string, EwsProvider: record, LambdaProvider: record, DateCreated: string, DateModified: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2632,7 +2651,7 @@ export def "list-group-members" [
   group_id: string # The identifier for the group to which the members (users or groups) are associated.
   --next-token-body: string # The token to use to retrieve the next page of results. The first call does not contain any tokens. (body field)
   --max-results-body: int # The maximum number of results to return in a single call. (body field)
-]: any -> record<Members: table<Id: string, Name: string, Type: string, State: string, EnabledDate: string, DisabledDate: string>, NextToken: string> {
+]: any -> oneof<record<Members: table<Id: string, Name: string, Type: string, State: string, EnabledDate: string, DisabledDate: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2686,7 +2705,7 @@ export def "list-groups" [
   organization_id: string # The identifier for the organization under which the groups exist.
   --next-token-body: string # The token to use to retrieve the next page of results. The first call does not contain any tokens. (body field)
   --max-results-body: int # The maximum number of results to return in a single call. (body field)
-]: any -> record<Groups: table<Id: string, Email: string, Name: string, State: string, EnabledDate: string, DisabledDate: string>, NextToken: string> {
+]: any -> oneof<record<Groups: table<Id: string, Email: string, Name: string, State: string, EnabledDate: string, DisabledDate: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2740,7 +2759,7 @@ export def "list-impersonation-roles" [
   organization_id: string # The WorkMail organization to which the listed impersonation roles belong.
   --next-token-body: string # The token used to retrieve the next page of results. The first call doesn't require a token. (body field)
   --max-results-body: int # The maximum number of results returned in a single call. (body field)
-]: any -> record<Roles: table<ImpersonationRoleId: string, Name: string, Type: string, DateCreated: string, DateModified: string>, NextToken: string> {
+]: any -> oneof<record<Roles: table<ImpersonationRoleId: string, Name: string, Type: string, DateCreated: string, DateModified: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2794,7 +2813,7 @@ export def "list-mail-domains" [
   organization_id: string # The WorkMail organization for which to list domains.
   --max-results-body: int # The maximum number of results to return in a single call. (body field)
   --next-token-body: string # The token to use to retrieve the next page of results. The first call does not require a token. (body field)
-]: any -> record<MailDomains: table<DomainName: string, DefaultDomain: bool>, NextToken: string> {
+]: any -> oneof<record<MailDomains: table<DomainName: string, DefaultDomain: bool>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2848,7 +2867,7 @@ export def "list-mailbox-export-jobs" [
   organization_id: string # The organization ID.
   --next-token-body: string # The token to use to retrieve the next page of results. (body field)
   --max-results-body: int # The maximum number of results to return in a single call. (body field)
-]: any -> record<Jobs: table<JobId: string, EntityId: string, Description: string, S3BucketName: string, S3Path: string, EstimatedProgress: int, State: string, StartTime: string, EndTime: string>, NextToken: string> {
+]: any -> oneof<record<Jobs: table<JobId: string, EntityId: string, Description: string, S3BucketName: string, S3Path: string, EstimatedProgress: int, State: string, StartTime: string, EndTime: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2903,7 +2922,7 @@ export def "list-mailbox-permissions" [
   entity_id: string # The identifier of the user, group, or resource for which to list mailbox permissions.
   --next-token-body: string # The token to use to retrieve the next page of results. The first call does not contain any tokens. (body field)
   --max-results-body: int # The maximum number of results to return in a single call. (body field)
-]: any -> record<Permissions: table<GranteeId: string, GranteeType: string, PermissionValues: list>, NextToken: string> {
+]: any -> oneof<record<Permissions: table<GranteeId: string, GranteeType: string, PermissionValues: list>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2959,7 +2978,7 @@ export def "list-mobile-device-access-overrides" [
   --device-id: string # The mobile device to which the access override applies.
   --next-token-body: string # The token to use to retrieve the next page of results. The first call does not require a token. (body field)
   --max-results-body: int # The maximum number of results to return in a single call. (body field)
-]: any -> record<Overrides: table<UserId: string, DeviceId: string, Effect: string, Description: string, DateCreated: string, DateModified: string>, NextToken: string> {
+]: any -> oneof<record<Overrides: table<UserId: string, DeviceId: string, Effect: string, Description: string, DateCreated: string, DateModified: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3009,7 +3028,7 @@ export def "list-mobile-device-access-rules" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-54 # required
   organization_id: string # The WorkMail organization for which to list the rules.
-]: any -> record<Rules: table<MobileDeviceAccessRuleId: string, Name: string, Description: string, Effect: string, DeviceTypes: list, NotDeviceTypes: list, DeviceModels: list, NotDeviceModels: list, DeviceOperatingSystems: list, NotDeviceOperatingSystems: list, DeviceUserAgents: list, NotDeviceUserAgents: list, DateCreated: string, DateModified: string>> {
+]: any -> oneof<record<Rules: table<MobileDeviceAccessRuleId: string, Name: string, Description: string, Effect: string, DeviceTypes: list, NotDeviceTypes: list, DeviceModels: list, NotDeviceModels: list, DeviceOperatingSystems: list, NotDeviceOperatingSystems: list, DeviceUserAgents: list, NotDeviceUserAgents: list, DateCreated: string, DateModified: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3061,7 +3080,7 @@ export def "list-organizations" [
   --x-amz-target: string@x-amz-target-completer-55 # required
   --next-token-body: string # The token to use to retrieve the next page of results. The first call does not contain any tokens. (body field)
   --max-results-body: int # The maximum number of results to return in a single call. (body field)
-]: any -> record<OrganizationSummaries: table<OrganizationId: string, Alias: string, DefaultMailDomain: string, ErrorMessage: string, State: string>, NextToken: string> {
+]: any -> oneof<record<OrganizationSummaries: table<OrganizationId: string, Alias: string, DefaultMailDomain: string, ErrorMessage: string, State: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3116,7 +3135,7 @@ export def "list-resource-delegates" [
   resource_id: string # The identifier for the resource whose delegates are listed.
   --next-token-body: string # The token used to paginate through the delegates associated with a resource. (body field)
   --max-results-body: int # The number of maximum results in a page. (body field)
-]: any -> record<Delegates: table<Id: string, Type: string>, NextToken: string> {
+]: any -> oneof<record<Delegates: table<Id: string, Type: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3170,7 +3189,7 @@ export def "list-resources" [
   organization_id: string # The identifier for the organization under which the resources exist.
   --next-token-body: string # The token to use to retrieve the next page of results. The first call does not contain any tokens. (body field)
   --max-results-body: int # The maximum number of results to return in a single call. (body field)
-]: any -> record<Resources: table<Id: string, Email: string, Name: string, Type: string, State: string, EnabledDate: string, DisabledDate: string>, NextToken: string> {
+]: any -> oneof<record<Resources: table<Id: string, Email: string, Name: string, Type: string, State: string, EnabledDate: string, DisabledDate: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3220,7 +3239,7 @@ export def "list-tags-for-resource" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-58 # required
   resource_arn: string # The resource ARN.
-]: any -> record<Tags: table<Key: string, Value: string>> {
+]: any -> oneof<record<Tags: table<Key: string, Value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3273,7 +3292,7 @@ export def "list-users" [
   organization_id: string # The identifier for the organization under which the users exist.
   --next-token-body: string # The token to use to retrieve the next page of results. The first call does not contain any tokens. (body field)
   --max-results-body: int # The maximum number of results to return in a single call. (body field)
-]: any -> record<Users: table<Id: string, Email: string, Name: string, DisplayName: string, State: string, UserRole: string, EnabledDate: string, DisabledDate: string>, NextToken: string> {
+]: any -> oneof<record<Users: table<Id: string, Email: string, Name: string, DisplayName: string, State: string, UserRole: string, EnabledDate: string, DisabledDate: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3334,7 +3353,7 @@ export def "put-access-control-rule" [
   organization_id: string # The identifier of the organization.
   --impersonation-role-ids: list<string> # Impersonation role IDs to include in the rule.
   --not-impersonation-role-ids: list<string> # Impersonation role IDs to exclude from the rule.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3385,7 +3404,7 @@ export def "put-email-monitoring-configuration" [
   organization_id: string # The ID of the organization for which the email monitoring configuration is set.
   role_arn: string # The Amazon Resource Name (ARN) of the IAM Role associated with the email monitoring configuration.
   log_group_arn: string # The Amazon Resource Name (ARN) of the CloudWatch Log group associated with the email monitoring configuration.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3435,7 +3454,7 @@ export def "put-inbound-dmarc-settings" [
   --x-amz-target: string@x-amz-target-completer-62 # required
   organization_id: string # The ID of the organization that you are applying the DMARC policy to.
   --enforced: oneof<nothing, bool> # Enforces or suspends a policy after it's applied.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3488,7 +3507,7 @@ export def "put-mailbox-permissions" [
   entity_id: string # The identifier of the user, group, or resource for which to update mailbox permissions.
   grantee_id: string # The identifier of the user, group, or resource to which to grant the permissions.
   permission_values: list<string> # The permissions granted to the grantee. SEND_AS allows the grantee to send email as the owner of the mailbox (the grantee is not mentioned on these emails). SEND_ON_BEHALF allows the grantee to send email on behalf of the owner of the mailbox (the grantee is not mentioned as the physical sender of these emails). FULL_ACCESS allows the grantee full access to the mailbox, irrespective of other folder-level permissions set on the mailbox.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3541,7 +3560,7 @@ export def "put-mobile-device-access-override" [
   device_id: string # The mobile device for which you create the override. DeviceId is case insensitive.
   effect: string@effect-completer # The effect of the override, ALLOW or DENY.
   --description: string # A description of the override.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3571,7 +3590,6 @@ export def "put-mobile-device-access-override" [
 #
 # POST /
 # operationId: PutRetentionPolicy
-# --FolderConfigurations item shape: {Name: "INBOX"|"DELETED_ITEMS"|"SENT_ITEMS"|"DRAFTS"|"JUNK_EMAIL", Action: "NONE"|"DELETE"|"PERMANENTLY_DELETE", Period?: int}
 export def "put-retention-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3595,7 +3613,7 @@ export def "put-retention-policy" [
   name: string # The retention policy name.
   --description: string # The retention policy description. (format: password)
   folder_configurations: list # The retention policy folder configurations. — item shape: {Name: "INBOX"|"DELETED_ITEMS"|"SENT_ITEMS"|"DRAFTS"|"JUNK_EMAIL", Action: "NONE"|"DELETE"|"PERMANENTLY_DELETE", Period?: int}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3646,7 +3664,7 @@ export def "register-mail-domain" [
   --client-token: string # Idempotency token used when retrying requests.
   organization_id: string # The WorkMail organization under which you're creating the domain.
   domain_name: string # The name of the mail domain to create in WorkMail and SES.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3697,7 +3715,7 @@ export def "register-to-work-mail" [
   organization_id: string # The identifier for the organization under which the user, group, or resource exists.
   entity_id: string # The identifier for the user, group, or resource to be updated.
   email: string # The email for the user, group, or resource to be updated.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3748,7 +3766,7 @@ export def "reset-password" [
   organization_id: string # The identifier of the organization that contains the user for which the password is reset.
   user_id: string # The identifier of the user for whom the password is reset.
   password: string # The new password for the user. (format: password)
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3804,7 +3822,7 @@ export def "start-mailbox-export-job" [
   kms_key_arn: string # The Amazon Resource Name (ARN) of the symmetric AWS Key Management Service (AWS KMS) key that encrypts the exported mailbox content.
   s3_bucket_name: string # The name of the S3 bucket.
   s3_prefix: string # The S3 bucket prefix.
-]: any -> record<JobId: string> {
+]: any -> oneof<record<JobId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3834,7 +3852,6 @@ export def "start-mailbox-export-job" [
 #
 # POST /
 # operationId: TagResource
-# --Tags item shape: {Key: string, Value: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3855,7 +3872,7 @@ export def "tag-resource" [
   --x-amz-target: string@x-amz-target-completer-70 # required
   resource_arn: string # The resource ARN.
   tags: list # The tag key-value pairs. — item shape: {Key: string, Value: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3885,8 +3902,6 @@ export def "tag-resource" [
 #
 # POST /
 # operationId: TestAvailabilityConfiguration
-# --EwsProvider shape: {EwsEndpoint: string, EwsUsername: string, EwsPassword: string}
-# --LambdaProvider shape: {LambdaArn: string}
 export def "test-availability-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3909,7 +3924,7 @@ export def "test-availability-configuration" [
   --domain-name: string # The domain to which the provider applies. If this field is provided, a stored availability provider associated to this domain name will be tested.
   --ews-provider: record # Describes an EWS based availability provider. This is only used as input to the service. — shape: {EwsEndpoint: string, EwsUsername: string, EwsPassword: string}
   --lambda-provider: record # Describes a Lambda based availability provider. — shape: {LambdaArn: string}
-]: any -> record<TestPassed: bool, FailureReason: string> {
+]: any -> oneof<record<TestPassed: bool, FailureReason: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3959,7 +3974,7 @@ export def "untag-resource" [
   --x-amz-target: string@x-amz-target-completer-72 # required
   resource_arn: string # The resource ARN.
   tag_keys: list<string> # The tag keys.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3989,8 +4004,6 @@ export def "untag-resource" [
 #
 # POST /
 # operationId: UpdateAvailabilityConfiguration
-# --EwsProvider shape: {EwsEndpoint: string, EwsUsername: string, EwsPassword: string}
-# --LambdaProvider shape: {LambdaArn: string}
 export def "update-availability-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4013,7 +4026,7 @@ export def "update-availability-configuration" [
   domain_name: string # The domain to which the provider applies the availability configuration.
   --ews-provider: record # Describes an EWS based availability provider. This is only used as input to the service. — shape: {EwsEndpoint: string, EwsUsername: string, EwsPassword: string}
   --lambda-provider: record # Describes a Lambda based availability provider. — shape: {LambdaArn: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4063,7 +4076,7 @@ export def "update-default-mail-domain" [
   --x-amz-target: string@x-amz-target-completer-74 # required
   organization_id: string # The WorkMail organization for which to list domains.
   domain_name: string # The domain name that will become the default domain.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4093,7 +4106,6 @@ export def "update-default-mail-domain" [
 #
 # POST /
 # operationId: UpdateImpersonationRole
-# --Rules item shape: {ImpersonationRuleId: string, Name?: string, Description?: string, Effect: "ALLOW"|"DENY", TargetUsers?: list<string>, NotTargetUsers?: list<string>}
 export def "update-impersonation-role" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4118,7 +4130,7 @@ export def "update-impersonation-role" [
   type: string@type-completer # The updated impersonation role type.
   --description: string # The updated impersonation role description.
   rules: list # The updated list of rules. — item shape: {ImpersonationRuleId: string, Name?: string, Description?: string, Effect: "ALLOW"|"DENY", TargetUsers?: list<string>, NotTargetUsers?: list<string>}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4169,7 +4181,7 @@ export def "update-mailbox-quota" [
   organization_id: string # The identifier for the organization that contains the user for whom to update the mailbox quota.
   user_id: string # The identifer for the user for whom to update the mailbox quota.
   mailbox_quota: int # The updated mailbox quota, in MB, for the specified user.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4230,7 +4242,7 @@ export def "update-mobile-device-access-rule" [
   --not-device-operating-systems: list<string> # Device operating systems that the updated rule will not match. All other device operating systems will match.
   --device-user-agents: list<string> # User agents that the updated rule will match.
   --not-device-user-agents: list<string> # User agents that the updated rule will not match. All other user agents will match.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4281,7 +4293,7 @@ export def "update-primary-email-address" [
   organization_id: string # The organization that contains the user, group, or resource to update.
   entity_id: string # The user, group, or resource to update.
   email: string # The value of the email to be updated as primary.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4311,7 +4323,6 @@ export def "update-primary-email-address" [
 #
 # POST /
 # operationId: UpdateResource
-# --BookingOptions shape: {AutoAcceptRequests?: bool, AutoDeclineRecurringRequests?: bool, AutoDeclineConflictingRequests?: bool}
 export def "update-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4334,7 +4345,7 @@ export def "update-resource" [
   resource_id: string # The identifier of the resource to be updated.
   --name: string # The name of the resource to be updated.
   --booking-options: record # At least one delegate must be associated to the resource to disable automatic replies from the resource. — shape: {AutoAcceptRequests?: bool, AutoDeclineRecurringRequests?: bool, AutoDeclineConflictingRequests?: bool}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

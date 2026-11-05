@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -149,9 +173,9 @@ def rule-type-completer-1 [] { ["amqp" "amqp/external" "aws/kinesis" "aws/lambda
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-accounts-account-id-apps" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-accounts-account-id-apps" "post-accounts-account-id-apps" "get-apps-app-id-keys" "post-apps-app-id-keys" "patch-apps-app-id-keys-key-id" "post-apps-app-id-keys-key-id-revoke" "get-apps-app-id-namespaces" "post-apps-app-id-namespaces" "delete-apps-app-id-namespaces-namespace-id" "patch-apps-app-id-namespaces-namespace-id" "get-apps-app-id-queues" "post-apps-app-id-queues" "delete-apps-app-id-queues-queue-id" "get-apps-app-id-rules" "post-apps-app-id-rules" "delete-apps-app-id-rules-rule-id" "get-apps-app-id-rules-rule-id" "patch-apps-app-id-rules-rule-id" "delete-apps-id" "patch-apps-id" "post-apps-id-pkcs12" "get-me" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -183,7 +207,7 @@ export def "get-accounts-account-id-apps" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<_links: record, accountId: string, apnsUseSandboxEndpoint: bool, id: string, name: string, status: string, tlsOnly: bool> {
+]: nothing -> oneof<table<_links: record, accountId: string, apnsUseSandboxEndpoint: bool, id: string, name: string, status: string, tlsOnly: bool>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'account_id' must be non-empty" } }
@@ -225,7 +249,7 @@ export def "post-accounts-account-id-apps" [
   name: string # The name of the application for your reference only. (e.g. My App)
   --status: string@status-completer # The status of the application. Can be `enabled` or `disabled`. Enabled means available to accept inbound connections and all services are available. (e.g. enabled)
   --tls-only: oneof<nothing, bool> # Enforce TLS for all connections. (nullable, e.g. true)
-]: any -> record<_links: record, accountId: string, apnsUseSandboxEndpoint: bool, id: string, name: string, status: string, tlsOnly: bool> {
+]: any -> oneof<record<_links: record, accountId: string, apnsUseSandboxEndpoint: bool, id: string, name: string, status: string, tlsOnly: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -263,7 +287,7 @@ export def "get-apps-app-id-keys" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<appId: string, capability: record, created: int, id: string, key: string, modified: int, name: string> {
+]: nothing -> oneof<table<appId: string, capability: record, created: int, id: string, key: string, modified: int, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'app_id' must be non-empty" } }
@@ -301,7 +325,7 @@ export def "post-apps-app-id-keys" [
   capabilities: list<string> # The capabilities that this key has. More information on capabilities can be found in the Ably documentation (https://ably.com/documentation/core-features/authentication#capabilities-explained).
   channels: string # Specify the channels and queues that this key can be used with.
   name: string # The name for your API key. This is a friendly name for your reference.
-]: any -> record<appId: string, capability: record, created: int, id: string, key: string, modified: int, name: string> {
+]: any -> oneof<record<appId: string, capability: record, created: int, id: string, key: string, modified: int, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -343,7 +367,7 @@ export def "patch-apps-app-id-keys-key-id" [
   --capabilities: list<string> # The capabilities that this key has. More information on capabilities can be found in the Ably documentation (https://ably.com/documentation/core-features/authentication#capabilities-explained).
   --channels: string # Specify the channels and queues that this key can be used with.
   --name: string # The name for your API key. This is a friendly name for your reference.
-]: any -> record<appId: string, capability: record, created: int, id: string, key: string, modified: int, name: string> {
+]: any -> oneof<record<appId: string, capability: record, created: int, id: string, key: string, modified: int, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -419,7 +443,7 @@ export def "get-apps-app-id-namespaces" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<authenticated: bool, created: int, id: string, modified: int, persistLast: bool, persisted: bool, pushEnabled: bool, tlsOnly: bool> {
+]: nothing -> oneof<table<authenticated: bool, created: int, id: string, modified: int, persistLast: bool, persisted: bool, pushEnabled: bool, tlsOnly: bool>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'app_id' must be non-empty" } }
@@ -460,7 +484,7 @@ export def "post-apps-app-id-namespaces" [
   --persisted: oneof<nothing, bool> # If `true`, all messages on a channel will be stored for 24 hours. You can access stored messages via the History API. Please note that for each message stored, an additional message is deducted from your monthly allocation. (default: false, e.g. false)
   --push-enabled: oneof<nothing, bool> # If `true`, publishing messages with a push payload in the extras field is permitted and can trigger the delivery of a native push notification to registered devices for the channel. (default: false, e.g. false)
   --tls-only: oneof<nothing, bool> # If `true`, only clients that are connected using TLS will be permitted to subscribe to any channels within this namespace. (default: false, e.g. false)
-]: any -> record<authenticated: bool, created: int, id: string, modified: int, persistLast: bool, persisted: bool, pushEnabled: bool, tlsOnly: bool> {
+]: any -> oneof<record<authenticated: bool, created: int, id: string, modified: int, persistLast: bool, persisted: bool, pushEnabled: bool, tlsOnly: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -541,7 +565,7 @@ export def "patch-apps-app-id-namespaces-namespace-id" [
   --persisted: oneof<nothing, bool> # If `true`, all messages on a channel will be stored for 24 hours. You can access stored messages via the History API. Please note that for each message stored, an additional message is deducted from your monthly allocation. (default: false, e.g. false)
   --push-enabled: oneof<nothing, bool> # If `true`, publishing messages with a push payload in the extras field is permitted and can trigger the delivery of a native push notification to registered devices for the channel. (default: false, e.g. false)
   --tls-only: oneof<nothing, bool> # If `true`, only clients that are connected using TLS will be permitted to subscribe to any channels within this namespace. (default: false, e.g. false)
-]: any -> record<authenticated: bool, created: int, id: string, modified: int, persistLast: bool, persisted: bool, pushEnabled: bool, tlsOnly: bool> {
+]: any -> oneof<record<authenticated: bool, created: int, id: string, modified: int, persistLast: bool, persisted: bool, pushEnabled: bool, tlsOnly: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -580,7 +604,7 @@ export def "get-apps-app-id-queues" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<amqp: record<queueName: string, uri: string>, appId: string, deadletter: bool, deadletterId: string, id: string, maxLength: int, messages: record<ready: int, total: int, unacknowledged: int>, name: string, region: string, state: string, stats: record<acknowledgementRate: float, deliveryRate: float, publishRate: float>, stomp: record<destination: string, host: string, uri: string>, ttl: int> {
+]: nothing -> oneof<table<amqp: record<queueName: string, uri: string>, appId: string, deadletter: bool, deadletterId: string, id: string, maxLength: int, messages: record<ready: int, total: int, unacknowledged: int>, name: string, region: string, state: string, stats: record<acknowledgementRate: float, deliveryRate: float, publishRate: float>, stomp: record<destination: string, host: string, uri: string>, ttl: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'app_id' must be non-empty" } }
@@ -619,7 +643,7 @@ export def "post-apps-app-id-queues" [
   name: string # A friendly name for your queue. (e.g. My queue)
   region: string # The data center region. US East (Virginia) or EU West (Ireland). Values are `us-east-1-a` or `eu-west-1-a`. (e.g. us-east-1-a)
   ttl: int # TTL in minutes. (e.g. 60)
-]: any -> record<amqp: record<queueName: string, uri: string>, appId: string, deadletter: bool, deadletterId: string, id: string, maxLength: int, messages: record<ready: int, total: int, unacknowledged: int>, name: string, region: string, state: string, stats: record<acknowledgementRate: float, deliveryRate: float, publishRate: float>, stomp: record<destination: string, host: string, uri: string>, ttl: int> {
+]: any -> oneof<record<amqp: record<queueName: string, uri: string>, appId: string, deadletter: bool, deadletterId: string, id: string, maxLength: int, messages: record<ready: int, total: int, unacknowledged: int>, name: string, region: string, state: string, stats: record<acknowledgementRate: float, deliveryRate: float, publishRate: float>, stomp: record<destination: string, host: string, uri: string>, ttl: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -694,7 +718,7 @@ export def "get-apps-app-id-rules" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<any> {
+]: nothing -> oneof<list<any>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'app_id' must be non-empty" } }
@@ -719,8 +743,6 @@ export def "get-apps-app-id-rules" [
 #
 # POST /apps/{app_id}/rules
 # Discriminator (request): ruleType = amqp, amqp/external, aws/kinesis, aws/lambda, aws/sqs, http, http/azure-function, http/cloudflare-worker, http/google-cloud-function, http/ifttt, http/zapier, unsupported
-# --source shape: {channelFilter: string, type: "channel.message"|"channel.presence"|"channel.lifecycle"|"channel.occupancy"}
-# --target shape: {enveloped?: bool, format: "json"|"msgpack", headers?: list, signingKeyId?: string, url: string}
 export def "post-apps-app-id-rules" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -732,11 +754,11 @@ export def "post-apps-app-id-rules" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --request-mode: string@request-mode-completer # This is Single Request mode or Batch Request mode. Single Request mode sends each event separately to the endpoint specified by the rule. Batch Request mode rolls up multiple events into the same request. You can read more about the difference between single and batched events in the Ably documentation (https://ably.com/documentation/general/events#batching). (e.g. single)
+  request_mode: string@request-mode-completer # This is Single Request mode or Batch Request mode. Single Request mode sends each event separately to the endpoint specified by the rule. Batch Request mode rolls up multiple events into the same request. You can read more about the difference between single and batched events in the Ably documentation (https://ably.com/documentation/general/events#batching). (e.g. single)
   rule_type: string@rule-type-completer # The type of rule. See the documentation (https://ably.com/integrations) for further information.
-  --source: record # shape: {channelFilter: string, type: "channel.message"|"channel.presence"|"channel.lifecycle"|"channel.occupancy"}
+  source: record # shape: {channelFilter: string, type: "channel.message"|"channel.presence"|"channel.lifecycle"|"channel.occupancy"}
   --status: string@status-completer # The status of the rule. Rules can be enabled or disabled. (e.g. enabled)
-  --target: record # shape: {enveloped?: bool, format: "json"|"msgpack", headers?: list, signingKeyId?: string, url: string}
+  target: record # shape: {enveloped?: bool, format: "json"|"msgpack", headers?: list, signingKeyId?: string, url: string}
   --links: record # nullable
   --body-app-id: string # The Ably application ID. (e.g. 28GY6a)
   --created: float # Unix timestamp representing the date and time of creation of the rule. (e.g. 1602844091815)
@@ -846,8 +868,6 @@ export def "get-apps-app-id-rules-rule-id" [
 #
 # PATCH /apps/{app_id}/rules/{rule_id}
 # Discriminator (request): ruleType = amqp, amqp/external, aws/kinesis, aws/lambda, aws/sqs, http, http/azure-function, http/cloudflare-worker, http/google-cloud-function, http/ifttt, http/zapier
-# --source shape: {channelFilter: string, type: "channel.message"|"channel.presence"|"channel.lifecycle"|"channel.occupancy"}
-# --target shape: {enveloped?: bool, format?: "json"|"msgpack", headers?: list, signingKeyId?: string, url?: string}
 export def "patch-apps-app-id-rules-rule-id" [
   app_id: string
   rule_id: string
@@ -946,7 +966,7 @@ export def "patch-apps-id" [
   --name: string # The name of the application for your reference only. (e.g. My App)
   --status: string@status-completer # The status of the application. Can be `enabled` or `disabled`. Enabled means available to accept inbound connections and all services are available. (e.g. enabled)
   --tls-only: oneof<nothing, bool> # Enforce TLS for all connections. (nullable, e.g. true)
-]: any -> record<_links: record, accountId: string, apnsUseSandboxEndpoint: bool, id: string, name: string, status: string, tlsOnly: bool> {
+]: any -> oneof<record<_links: record, accountId: string, apnsUseSandboxEndpoint: bool, id: string, name: string, status: string, tlsOnly: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -986,7 +1006,7 @@ export def "post-apps-id-pkcs12" [
   --dry-run(-n) # Return the request that would be sent without executing it
   p12_file: string # The `.p12` file containing the app's APNs information. (format: binary)
   p12_pass: string # The password for the corresponding `.p12` file.
-]: any -> record<_links: record, accountId: string, apnsUseSandboxEndpoint: bool, id: string, name: string, status: string, tlsOnly: bool> {
+]: any -> oneof<record<_links: record, accountId: string, apnsUseSandboxEndpoint: bool, id: string, name: string, status: string, tlsOnly: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1025,7 +1045,7 @@ export def "get-me" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account: record<id: string, name: string>, token: record<capabilities: list<string>, id: int, name: string>, user: record<email: string, id: int>> {
+]: nothing -> oneof<record<account: record<id: string, name: string>, token: record<capabilities: list<string>, id: int, name: string>, user: record<email: string, id: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/me" $auth.query)

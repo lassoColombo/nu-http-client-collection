@@ -17,7 +17,6 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
     "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
@@ -32,22 +31,32 @@ def merge-auth [parts: list]: nothing -> record {
   {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -55,8 +64,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -67,7 +81,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -102,12 +125,13 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # HEAD — bodyless; default surfaces just the headers on success
 def send-head [req: record, insecure: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = (http head --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure $req.url)
+  let resp = http head --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure $req.url
   if (not $full) and (not $allow_errors) and (status-ok $resp.status $ok_codes) { return $resp.headers }
   $resp | handle-response $allow_errors $full $ok_codes
 }
@@ -146,9 +170,9 @@ def grant-type-completer-1 [] { ["refresh_token"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "token-registryauth" "token-registryoauth2"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "repository-get-list" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["repository-get-list" "repository-delete" "repository-get-attributes" "repository-update-attributes" "manifests-get-list" "manifests-get-attributes" "manifests-update-attributes" "tag-get-list" "tag-delete" "tag-get-attributes" "tag-update-attributes" "refresh-tokens-get-from-exchange" "access-tokens-get-from-login" "access-tokens-get" "v2-support-check" "blob-mount" "blob-delete" "blob-get" "blob-check" "manifests-delete" "manifests-get" "manifests-create" "blob-cancel-upload" "blob-get-status" "blob-upload" "blob-end-upload" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -182,7 +206,7 @@ export def "repository-get-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --last: string # Query parameter for the last item in previous query. Result set will include values lexically after last.
   --n: int # query parameter for max number of items
-]: nothing -> record<repositories: list<string>> {
+]: nothing -> oneof<record<repositories: list<string>>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_registryauth | default ($env | get -o AZURE_CONTAINER_REGISTRY_REGISTRYAUTH_TOKEN | default "")) "basic") (build-auth ($token_registryoauth2 | default ($env | get -o AZURE_CONTAINER_REGISTRY_REGISTRYOAUTH2_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "last" $last "scalar") (serialize-qp "n" $n "scalar")] | flatten | str join "&"
@@ -218,7 +242,7 @@ export def "repository-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<manifestsDeleted: list<string>, tagsDeleted: list<string>> {
+]: nothing -> oneof<record<manifestsDeleted: list<string>, tagsDeleted: list<string>>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_registryauth | default ($env | get -o AZURE_CONTAINER_REGISTRY_REGISTRYAUTH_TOKEN | default "")) "basic") (build-auth ($token_registryoauth2 | default ($env | get -o AZURE_CONTAINER_REGISTRY_REGISTRYOAUTH2_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -254,7 +278,7 @@ export def "repository-get-attributes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<changeableAttributes: record<deleteEnabled: bool, listEnabled: bool, readEnabled: bool, writeEnabled: bool>, createdTime: string, imageName: string, lastUpdateTime: string, manifestCount: int, registry: string, tagCount: int> {
+]: nothing -> oneof<record<changeableAttributes: record<deleteEnabled: bool, listEnabled: bool, readEnabled: bool, writeEnabled: bool>, createdTime: string, imageName: string, lastUpdateTime: string, manifestCount: int, registry: string, tagCount: int>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_registryauth | default ($env | get -o AZURE_CONTAINER_REGISTRY_REGISTRYAUTH_TOKEN | default "")) "basic") (build-auth ($token_registryoauth2 | default ($env | get -o AZURE_CONTAINER_REGISTRY_REGISTRYOAUTH2_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -336,7 +360,7 @@ export def "manifests-get-list" [
   --last: string # Query parameter for the last item in previous query. Result set will include values lexically after last.
   --n: int # query parameter for max number of items
   --orderby: string # orderby query parameter
-]: nothing -> record<imageName: string, manifests: table<architecture: string, changeableAttributes: record, configMediaType: string, createdTime: string, digest: string, imageSize: int, lastUpdateTime: string, mediaType: string, os: string, tags: list>, registry: string> {
+]: nothing -> oneof<record<imageName: string, manifests: table<architecture: string, changeableAttributes: record, configMediaType: string, createdTime: string, digest: string, imageSize: int, lastUpdateTime: string, mediaType: string, os: string, tags: list>, registry: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_registryauth | default ($env | get -o AZURE_CONTAINER_REGISTRY_REGISTRYAUTH_TOKEN | default "")) "basic") (build-auth ($token_registryoauth2 | default ($env | get -o AZURE_CONTAINER_REGISTRY_REGISTRYOAUTH2_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -374,7 +398,7 @@ export def "manifests-get-attributes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<imageName: string, manifest: record<architecture: string, changeableAttributes: record<deleteEnabled: bool, listEnabled: bool, readEnabled: bool, writeEnabled: bool>, configMediaType: string, createdTime: string, digest: string, imageSize: int, lastUpdateTime: string, mediaType: string, os: string, tags: list<string>>, registry: string> {
+]: nothing -> oneof<record<imageName: string, manifest: record<architecture: string, changeableAttributes: record<deleteEnabled: bool, listEnabled: bool, readEnabled: bool, writeEnabled: bool>, configMediaType: string, createdTime: string, digest: string, imageSize: int, lastUpdateTime: string, mediaType: string, os: string, tags: list<string>>, registry: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_registryauth | default ($env | get -o AZURE_CONTAINER_REGISTRY_REGISTRYAUTH_TOKEN | default "")) "basic") (build-auth ($token_registryoauth2 | default ($env | get -o AZURE_CONTAINER_REGISTRY_REGISTRYOAUTH2_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -460,7 +484,7 @@ export def "tag-get-list" [
   --n: int # query parameter for max number of items
   --orderby: string # orderby query parameter
   --digest: string # filter by digest
-]: nothing -> record<imageName: string, registry: string, tags: table<changeableAttributes: record, createdTime: string, digest: string, lastUpdateTime: string, name: string, signed: bool>> {
+]: nothing -> oneof<record<imageName: string, registry: string, tags: table<changeableAttributes: record, createdTime: string, digest: string, lastUpdateTime: string, name: string, signed: bool>>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_registryauth | default ($env | get -o AZURE_CONTAINER_REGISTRY_REGISTRYAUTH_TOKEN | default "")) "basic") (build-auth ($token_registryoauth2 | default ($env | get -o AZURE_CONTAINER_REGISTRY_REGISTRYOAUTH2_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -536,7 +560,7 @@ export def "tag-get-attributes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<imageName: string, registry: string, tag: record<changeableAttributes: record<deleteEnabled: bool, listEnabled: bool, readEnabled: bool, writeEnabled: bool>, createdTime: string, digest: string, lastUpdateTime: string, name: string, signed: bool>> {
+]: nothing -> oneof<record<imageName: string, registry: string, tag: record<changeableAttributes: record<deleteEnabled: bool, listEnabled: bool, readEnabled: bool, writeEnabled: bool>, createdTime: string, digest: string, lastUpdateTime: string, name: string, signed: bool>>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_registryauth | default ($env | get -o AZURE_CONTAINER_REGISTRY_REGISTRYAUTH_TOKEN | default "")) "basic") (build-auth ($token_registryoauth2 | default ($env | get -o AZURE_CONTAINER_REGISTRY_REGISTRYOAUTH2_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -622,7 +646,7 @@ export def "refresh-tokens-get-from-exchange" [
   --tenant: string # AAD tenant associated to the AAD credentials.
   --refresh-token: string # AAD refresh token, mandatory when grant_type is access_token_refresh_token or refresh_token
   --access-token: string # AAD access token, mandatory when grant_type is access_token_refresh_token or access_token.
-]: any -> record<refresh_token: string> {
+]: any -> oneof<record<refresh_token: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
@@ -631,7 +655,7 @@ export def "refresh-tokens-get-from-exchange" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -662,7 +686,7 @@ export def "access-tokens-get-from-login" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --service: string # Indicates the name of your Azure container registry. (required)
   --scope: string # Expected to be a valid scope, and can be specified more than once for multiple scope requests. You can obtain this from the Www-Authenticate response header from the challenge. (required)
-]: nothing -> record<access_token: string> {
+]: nothing -> oneof<record<access_token: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($service == null) { error make --unspanned { msg: "required query parameter 'service' missing: pass --service" } }
@@ -703,7 +727,7 @@ export def "access-tokens-get" [
   service: string # Indicates the name of your Azure container registry.
   scope: string # Which is expected to be a valid scope, and can be specified more than once for multiple scope requests. You obtained this from the Www-Authenticate response header from the challenge.
   refresh_token: string # Must be a valid ACR refresh token
-]: any -> record<access_token: string> {
+]: any -> oneof<record<access_token: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
@@ -712,7 +736,7 @@ export def "access-tokens-get" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -894,7 +918,7 @@ export def "blob-check" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_registryauth | default ($env | get -o AZURE_CONTAINER_REGISTRY_REGISTRYAUTH_TOKEN | default "")) "basic") (build-auth ($token_registryoauth2 | default ($env | get -o AZURE_CONTAINER_REGISTRY_REGISTRYOAUTH2_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -971,7 +995,7 @@ export def "manifests-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-accept: string # Accept header string delimited by comma. For example, application/vnd.docker.distribution.manifest.v2+json
-]: nothing -> record<annotations: record<org_opencontainers_image_authors: string, org_opencontainers_image_created: string, org_opencontainers_image_description: string, org_opencontainers_image_documentation: string, org_opencontainers_image_licenses: string, org_opencontainers_image_ref_name: string, org_opencontainers_image_revision: string, org_opencontainers_image_source: string, org_opencontainers_image_title: string, org_opencontainers_image_url: string, org_opencontainers_image_vendor: string, org_opencontainers_image_version: string>, architecture: string, config: record<annotations: record<org_opencontainers_image_authors: string, org_opencontainers_image_created: string, org_opencontainers_image_description: string, org_opencontainers_image_documentation: string, org_opencontainers_image_licenses: string, org_opencontainers_image_ref_name: string, org_opencontainers_image_revision: string, org_opencontainers_image_source: string, org_opencontainers_image_title: string, org_opencontainers_image_url: string, org_opencontainers_image_vendor: string, org_opencontainers_image_version: string>, digest: string, mediaType: string, size: int, urls: list<string>>, fsLayers: table<blobSum: string>, history: table<v1Compatibility: string>, layers: table<annotations: record, digest: string, mediaType: string, size: int, urls: list>, manifests: table<digest: string, mediaType: string, platform: record, size: int>, mediaType: string, name: string, signatures: table<header: record, protected: string, signature: string>, tag: string, schemaVersion: int> {
+]: nothing -> oneof<record<annotations: record<org_opencontainers_image_authors: string, org_opencontainers_image_created: string, org_opencontainers_image_description: string, org_opencontainers_image_documentation: string, org_opencontainers_image_licenses: string, org_opencontainers_image_ref_name: string, org_opencontainers_image_revision: string, org_opencontainers_image_source: string, org_opencontainers_image_title: string, org_opencontainers_image_url: string, org_opencontainers_image_vendor: string, org_opencontainers_image_version: string>, architecture: string, config: record<annotations: record<org_opencontainers_image_authors: string, org_opencontainers_image_created: string, org_opencontainers_image_description: string, org_opencontainers_image_documentation: string, org_opencontainers_image_licenses: string, org_opencontainers_image_ref_name: string, org_opencontainers_image_revision: string, org_opencontainers_image_source: string, org_opencontainers_image_title: string, org_opencontainers_image_url: string, org_opencontainers_image_vendor: string, org_opencontainers_image_version: string>, digest: string, mediaType: string, size: int, urls: list<string>>, fsLayers: table<blobSum: string>, history: table<v1Compatibility: string>, layers: table<annotations: record, digest: string, mediaType: string, size: int, urls: list>, manifests: table<digest: string, mediaType: string, platform: record, size: int>, mediaType: string, name: string, signatures: table<header: record, protected: string, signature: string>, tag: string, schemaVersion: int>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_registryauth | default ($env | get -o AZURE_CONTAINER_REGISTRY_REGISTRYAUTH_TOKEN | default "")) "basic") (build-auth ($token_registryoauth2 | default ($env | get -o AZURE_CONTAINER_REGISTRY_REGISTRYOAUTH2_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }

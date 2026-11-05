@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -123,9 +146,9 @@ def x-amz-target-completer-21 [] { ["secretsmanager.ValidateResourcePolicy"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cancel-rotate-secret" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["cancel-rotate-secret" "create-secret" "delete-resource-policy" "delete-secret" "describe-secret" "get-random-password" "get-resource-policy" "get-secret-value" "list-secret-version-ids" "list-secrets" "put-resource-policy" "put-secret-value" "remove-regions-from-replication" "replicate-secret-to-regions" "restore-secret" "rotate-secret" "stop-replication-to-replica" "tag-resource" "untag-resource" "update-secret" "update-secret-version-stage" "validate-resource-policy" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -166,7 +189,7 @@ export def "cancel-rotate-secret" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer # required
   secret_id: string # The ARN or name of the secret. For an ARN, we recommend that you specify a complete ARN rather than a partial ARN. See Finding a secret from a partial ARN (https://docs.aws.amazon.com/secretsmanager/latest/userguide/troubleshoot.html#ARN_secretnamehyphen).
-]: any -> record<ARN: string, Name: string, VersionId: string> {
+]: any -> oneof<record<ARN: string, Name: string, VersionId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -196,8 +219,6 @@ export def "cancel-rotate-secret" [
 #
 # POST /
 # operationId: CreateSecret
-# --Tags item shape: {Key?: string, Value?: string}
-# --AddReplicaRegions item shape: {Region?: string, KmsKeyId?: string}
 export def "create-secret" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -225,7 +246,7 @@ export def "create-secret" [
   --tags: list # A list of tags to attach to the secret. Each tag is a key and value pair of strings in a JSON text string, for example: [{"Key":"CostCenter","Value":"12345"},{"Key":"environment","Value":"production"}] Secrets Manager tag key names are case sensitive. A tag with the key "ABC" is a different tag from one with key "abc". If you check tags in permissions policies as part of your security strategy, then adding or removing a tag can change permissions. If the completion of this operation would result in you losing your permissions for this secret, then Secrets Manager blocks the operation and returns an Access Denied error. For more information, see Control access to secrets using tags (https://docs.aws.amazon.com/secretsmanager/latest/userguide/auth-and-access_examples.html#tag-secrets-abac) and Limit access to identities with tags that match secrets' tags (https://docs.aws.amazon.com/secretsmanager/latest/userguide/auth-and-access_examples.html#auth-and-access_tags2). For information about how to format a JSON parameter for the various command line tool environments, see Using JSON for Parameters (https://docs.aws.amazon.com/cli/latest/userguide/cli-using-param.html#cli-using-param-json). If your command-line tool or SDK requires quotation marks around the parameter, you should use single quotes to avoid confusion with the double quotes required in the JSON text. The following restrictions apply to tags: Maximum number of tags per secret: 50 Maximum key length: 127 Unicode characters in UTF-8 Maximum value length: 255 Unicode characters in UTF-8 Tag keys and values are case sensitive. Do not use the aws: prefix in your tag names or values because Amazon Web Services reserves it for Amazon Web Services use. You can't edit or delete tag names or values with this prefix. Tags with this prefix do not count against your tags per secret limit. If you use your tagging schema across multiple services and resources, other services might have restrictions on allowed characters. Generally allowed characters: letters, spaces, and numbers representable in UTF-8, plus the following special characters: + - = . _ : / @. — item shape: {Key?: string, Value?: string}
   --add-replica-regions: list # A list of Regions and KMS keys to replicate secrets. — item shape: {Region?: string, KmsKeyId?: string}
   --force-overwrite-replica-secret: oneof<nothing, bool> # Specifies whether to overwrite a secret with the same name in the destination Region. By default, secrets aren't overwritten.
-]: any -> record<ARN: string, Name: string, VersionId: string, ReplicationStatus: table<Region: string, KmsKeyId: string, Status: string, StatusMessage: string, LastAccessedDate: string>> {
+]: any -> oneof<record<ARN: string, Name: string, VersionId: string, ReplicationStatus: table<Region: string, KmsKeyId: string, Status: string, StatusMessage: string, LastAccessedDate: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -274,7 +295,7 @@ export def "delete-resource-policy" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-2 # required
   secret_id: string # The ARN or name of the secret to delete the attached resource-based policy for. For an ARN, we recommend that you specify a complete ARN rather than a partial ARN. See Finding a secret from a partial ARN (https://docs.aws.amazon.com/secretsmanager/latest/userguide/troubleshoot.html#ARN_secretnamehyphen).
-]: any -> record<ARN: string, Name: string> {
+]: any -> oneof<record<ARN: string, Name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -325,7 +346,7 @@ export def "delete-secret" [
   secret_id: string # The ARN or name of the secret to delete. For an ARN, we recommend that you specify a complete ARN rather than a partial ARN. See Finding a secret from a partial ARN (https://docs.aws.amazon.com/secretsmanager/latest/userguide/troubleshoot.html#ARN_secretnamehyphen).
   --recovery-window-in-days: int # The number of days from 7 to 30 that Secrets Manager waits before permanently deleting the secret. You can't use both this parameter and ForceDeleteWithoutRecovery in the same call. If you don't use either, then by default Secrets Manager uses a 30 day recovery window.
   --force-delete-without-recovery: oneof<nothing, bool> # Specifies whether to delete the secret without any recovery window. You can't use both this parameter and RecoveryWindowInDays in the same call. If you don't use either, then by default Secrets Manager uses a 30 day recovery window. Secrets Manager performs the actual deletion with an asynchronous background process, so there might be a short delay before the secret is permanently deleted. If you delete a secret and then immediately create a secret with the same name, use appropriate back off and retry logic. Use this parameter with caution. This parameter causes the operation to skip the normal recovery window before the permanent deletion that Secrets Manager would normally impose with the RecoveryWindowInDays parameter. If you delete a secret with the ForceDeleteWithoutRecovery parameter, then you have no opportunity to recover the secret. You lose the secret permanently.
-]: any -> record<ARN: string, Name: string, DeletionDate: string> {
+]: any -> oneof<record<ARN: string, Name: string, DeletionDate: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -374,7 +395,7 @@ export def "describe-secret" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-4 # required
   secret_id: string # The ARN or name of the secret. For an ARN, we recommend that you specify a complete ARN rather than a partial ARN. See Finding a secret from a partial ARN (https://docs.aws.amazon.com/secretsmanager/latest/userguide/troubleshoot.html#ARN_secretnamehyphen).
-]: any -> record<ARN: string, Name: string, Description: string, KmsKeyId: string, RotationEnabled: bool, RotationLambdaARN: string, RotationRules: record<AutomaticallyAfterDays: int, Duration: string, ScheduleExpression: string>, LastRotatedDate: string, LastChangedDate: string, LastAccessedDate: string, DeletedDate: string, NextRotationDate: string, Tags: table<Key: string, Value: string>, VersionIdsToStages: record, OwningService: string, CreatedDate: string, PrimaryRegion: string, ReplicationStatus: table<Region: string, KmsKeyId: string, Status: string, StatusMessage: string, LastAccessedDate: string>> {
+]: any -> oneof<record<ARN: string, Name: string, Description: string, KmsKeyId: string, RotationEnabled: bool, RotationLambdaARN: string, RotationRules: record<AutomaticallyAfterDays: int, Duration: string, ScheduleExpression: string>, LastRotatedDate: string, LastChangedDate: string, LastAccessedDate: string, DeletedDate: string, NextRotationDate: string, Tags: table<Key: string, Value: string>, VersionIdsToStages: record, OwningService: string, CreatedDate: string, PrimaryRegion: string, ReplicationStatus: table<Region: string, KmsKeyId: string, Status: string, StatusMessage: string, LastAccessedDate: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -430,7 +451,7 @@ export def "get-random-password" [
   --exclude-lowercase: oneof<nothing, bool> # Specifies whether to exclude lowercase letters from the password. If you don't include this switch, the password can contain lowercase letters.
   --include-space: oneof<nothing, bool> # Specifies whether to include the space character. If you include this switch, the password can contain space characters.
   --require-each-included-type: oneof<nothing, bool> # Specifies whether to include at least one upper and lowercase letter, one number, and one punctuation. If you don't include this switch, the password contains at least one of every character type.
-]: any -> record<RandomPassword: string> {
+]: any -> oneof<record<RandomPassword: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -479,7 +500,7 @@ export def "get-resource-policy" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-6 # required
   secret_id: string # The ARN or name of the secret to retrieve the attached resource-based policy for. For an ARN, we recommend that you specify a complete ARN rather than a partial ARN. See Finding a secret from a partial ARN (https://docs.aws.amazon.com/secretsmanager/latest/userguide/troubleshoot.html#ARN_secretnamehyphen).
-]: any -> record<ARN: string, Name: string, ResourcePolicy: string> {
+]: any -> oneof<record<ARN: string, Name: string, ResourcePolicy: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -530,7 +551,7 @@ export def "get-secret-value" [
   secret_id: string # The ARN or name of the secret to retrieve. For an ARN, we recommend that you specify a complete ARN rather than a partial ARN. See Finding a secret from a partial ARN (https://docs.aws.amazon.com/secretsmanager/latest/userguide/troubleshoot.html#ARN_secretnamehyphen).
   --version-id: string # The unique identifier of the version of the secret to retrieve. If you include both this parameter and VersionStage, the two parameters must refer to the same secret version. If you don't specify either a VersionStage or VersionId, then Secrets Manager returns the AWSCURRENT version. This value is typically a UUID-type (https://wikipedia.org/wiki/Universally_unique_identifier) value with 32 hexadecimal digits.
   --version-stage: string # The staging label of the version of the secret to retrieve. Secrets Manager uses staging labels to keep track of different versions during the rotation process. If you include both this parameter and VersionId, the two parameters must refer to the same secret version. If you don't specify either a VersionStage or VersionId, Secrets Manager returns the AWSCURRENT version.
-]: any -> record<ARN: string, Name: string, VersionId: string, SecretBinary: string, SecretString: string, VersionStages: list<string>, CreatedDate: string> {
+]: any -> oneof<record<ARN: string, Name: string, VersionId: string, SecretBinary: string, SecretString: string, VersionStages: list<string>, CreatedDate: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -584,7 +605,7 @@ export def "list-secret-version-ids" [
   --max-results-body: int # The number of results to include in the response. If there are more results available, in the response, Secrets Manager includes NextToken. To get the next results, call ListSecretVersionIds again with the value from NextToken. (body field)
   --next-token-body: string # A token that indicates where the output should continue from, if a previous call did not show all results. To get the next results, call ListSecretVersionIds again with this value. (body field)
   --include-deprecated: oneof<nothing, bool> # Specifies whether to include versions of secrets that don't have any staging labels attached to them. Versions without staging labels are considered deprecated and are subject to deletion by Secrets Manager. By default, versions without staging labels aren't included.
-]: any -> record<Versions: table<VersionId: string, VersionStages: list, LastAccessedDate: string, CreatedDate: string, KmsKeyIds: list>, NextToken: string, ARN: string, Name: string> {
+]: any -> oneof<record<Versions: table<VersionId: string, VersionStages: list, LastAccessedDate: string, CreatedDate: string, KmsKeyIds: list>, NextToken: string, ARN: string, Name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -615,7 +636,6 @@ export def "list-secret-version-ids" [
 #
 # POST /
 # operationId: ListSecrets
-# --Filters item shape: {Key?: "description"|"name"|"tag-key"|"tag-value"|"primary-region"|"owning-service"|"all", Values?: list<string>}
 export def "list-secrets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -641,7 +661,7 @@ export def "list-secrets" [
   --next-token-body: string # A token that indicates where the output should continue from, if a previous call did not show all results. To get the next results, call ListSecrets again with this value. (body field)
   --filters: list # The filters to apply to the list of secrets. — item shape: {Key?: "description"|"name"|"tag-key"|"tag-value"|"primary-region"|"owning-service"|"all", Values?: list<string>}
   --sort-order: string@sort-order-completer # Secrets are listed by CreatedDate.
-]: any -> record<SecretList: table<ARN: string, Name: string, Description: string, KmsKeyId: string, RotationEnabled: bool, RotationLambdaARN: string, RotationRules: record, LastRotatedDate: string, LastChangedDate: string, LastAccessedDate: string, DeletedDate: string, NextRotationDate: string, Tags: list, SecretVersionsToStages: record, OwningService: string, CreatedDate: string, PrimaryRegion: string>, NextToken: string> {
+]: any -> oneof<record<SecretList: table<ARN: string, Name: string, Description: string, KmsKeyId: string, RotationEnabled: bool, RotationLambdaARN: string, RotationRules: record, LastRotatedDate: string, LastChangedDate: string, LastAccessedDate: string, DeletedDate: string, NextRotationDate: string, Tags: list, SecretVersionsToStages: record, OwningService: string, CreatedDate: string, PrimaryRegion: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -693,7 +713,7 @@ export def "put-resource-policy" [
   secret_id: string # The ARN or name of the secret to attach the resource-based policy. For an ARN, we recommend that you specify a complete ARN rather than a partial ARN. See Finding a secret from a partial ARN (https://docs.aws.amazon.com/secretsmanager/latest/userguide/troubleshoot.html#ARN_secretnamehyphen).
   resource_policy: string # A JSON-formatted string for an Amazon Web Services resource-based policy. For example policies, see Permissions policy examples (https://docs.aws.amazon.com/secretsmanager/latest/userguide/auth-and-access_examples.html).
   --block-public-policy: oneof<nothing, bool> # Specifies whether to block resource-based policies that allow broad access to the secret, for example those that use a wildcard for the principal. By default, public policies aren't blocked.
-]: any -> record<ARN: string, Name: string> {
+]: any -> oneof<record<ARN: string, Name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -746,7 +766,7 @@ export def "put-secret-value" [
   --secret-binary: string # The binary data to encrypt and store in the new version of the secret. To use this parameter in the command-line tools, we recommend that you store your binary data in a file and then pass the contents of the file as a parameter. You must include SecretBinary or SecretString, but not both. You can't access this value from the Secrets Manager console. (format: password)
   --secret-string: string # The text to encrypt and store in the new version of the secret. You must include SecretBinary or SecretString, but not both. We recommend you create the secret string as JSON key/value pairs, as shown in the example. (format: password)
   --version-stages: list<string> # A list of staging labels to attach to this version of the secret. Secrets Manager uses staging labels to track versions of a secret through the rotation process. If you specify a staging label that's already associated with a different version of the same secret, then Secrets Manager removes the label from the other version and attaches it to this version. If you specify AWSCURRENT, and it is already attached to another version, then Secrets Manager also moves the staging label AWSPREVIOUS to the version that AWSCURRENT was removed from. If you don't include VersionStages, then Secrets Manager automatically moves the staging label AWSCURRENT to this version.
-]: any -> record<ARN: string, Name: string, VersionId: string, VersionStages: list<string>> {
+]: any -> oneof<record<ARN: string, Name: string, VersionId: string, VersionStages: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -796,7 +816,7 @@ export def "remove-regions-from-replication" [
   --x-amz-target: string@x-amz-target-completer-12 # required
   secret_id: string # The ARN or name of the secret.
   remove_replica_regions: list<string> # The Regions of the replicas to remove.
-]: any -> record<ARN: string, ReplicationStatus: table<Region: string, KmsKeyId: string, Status: string, StatusMessage: string, LastAccessedDate: string>> {
+]: any -> oneof<record<ARN: string, ReplicationStatus: table<Region: string, KmsKeyId: string, Status: string, StatusMessage: string, LastAccessedDate: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -826,7 +846,6 @@ export def "remove-regions-from-replication" [
 #
 # POST /
 # operationId: ReplicateSecretToRegions
-# --AddReplicaRegions item shape: {Region?: string, KmsKeyId?: string}
 export def "replicate-secret-to-regions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -848,7 +867,7 @@ export def "replicate-secret-to-regions" [
   secret_id: string # The ARN or name of the secret to replicate.
   add_replica_regions: list # A list of Regions in which to replicate the secret. — item shape: {Region?: string, KmsKeyId?: string}
   --force-overwrite-replica-secret: oneof<nothing, bool> # Specifies whether to overwrite a secret with the same name in the destination Region. By default, secrets aren't overwritten.
-]: any -> record<ARN: string, ReplicationStatus: table<Region: string, KmsKeyId: string, Status: string, StatusMessage: string, LastAccessedDate: string>> {
+]: any -> oneof<record<ARN: string, ReplicationStatus: table<Region: string, KmsKeyId: string, Status: string, StatusMessage: string, LastAccessedDate: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -897,7 +916,7 @@ export def "restore-secret" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-14 # required
   secret_id: string # The ARN or name of the secret to restore. For an ARN, we recommend that you specify a complete ARN rather than a partial ARN. See Finding a secret from a partial ARN (https://docs.aws.amazon.com/secretsmanager/latest/userguide/troubleshoot.html#ARN_secretnamehyphen).
-]: any -> record<ARN: string, Name: string> {
+]: any -> oneof<record<ARN: string, Name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -927,7 +946,6 @@ export def "restore-secret" [
 #
 # POST /
 # operationId: RotateSecret
-# --RotationRules shape: {AutomaticallyAfterDays?: int, Duration?: string, ScheduleExpression?: string}
 export def "rotate-secret" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -951,7 +969,7 @@ export def "rotate-secret" [
   --rotation-lambda-arn: string # For secrets that use a Lambda rotation function to rotate, the ARN of the Lambda rotation function. For secrets that use managed rotation, omit this field. For more information, see Managed rotation (https://docs.aws.amazon.com/secretsmanager/latest/userguide/rotate-secrets_managed.html) in the Secrets Manager User Guide.
   --rotation-rules: record # A structure that defines the rotation configuration for the secret. — shape: {AutomaticallyAfterDays?: int, Duration?: string, ScheduleExpression?: string}
   --rotate-immediately: oneof<nothing, bool> # Specifies whether to rotate the secret immediately or wait until the next scheduled rotation window. The rotation schedule is defined in RotateSecretRequest$RotationRules. For secrets that use a Lambda rotation function to rotate, if you don't immediately rotate the secret, Secrets Manager tests the rotation configuration by running the testSecret step (https://docs.aws.amazon.com/secretsmanager/latest/userguide/rotate-secrets_how.html) of the Lambda rotation function. The test creates an AWSPENDING version of the secret and then removes it. By default, Secrets Manager rotates the secret immediately.
-]: any -> record<ARN: string, Name: string, VersionId: string> {
+]: any -> oneof<record<ARN: string, Name: string, VersionId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1000,7 +1018,7 @@ export def "stop-replication-to-replica" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-16 # required
   secret_id: string # The ARN of the primary secret.
-]: any -> record<ARN: string> {
+]: any -> oneof<record<ARN: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1030,7 +1048,6 @@ export def "stop-replication-to-replica" [
 #
 # POST /
 # operationId: TagResource
-# --Tags item shape: {Key?: string, Value?: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1155,7 +1172,7 @@ export def "update-secret" [
   --kms-key-id: string # The ARN, key ID, or alias of the KMS key that Secrets Manager uses to encrypt new secret versions as well as any existing versions with the staging labels AWSCURRENT, AWSPENDING, or AWSPREVIOUS. For more information about versions and staging labels, see Concepts: Version (https://docs.aws.amazon.com/secretsmanager/latest/userguide/getting-started.html#term_version). A key alias is always prefixed by alias/, for example alias/aws/secretsmanager. For more information, see About aliases (https://docs.aws.amazon.com/kms/latest/developerguide/alias-about.html). If you set this to an empty string, Secrets Manager uses the Amazon Web Services managed key aws/secretsmanager. If this key doesn't already exist in your account, then Secrets Manager creates it for you automatically. All users and roles in the Amazon Web Services account automatically have access to use aws/secretsmanager. Creating aws/secretsmanager can result in a one-time significant delay in returning the result. You can only use the Amazon Web Services managed key aws/secretsmanager if you call this operation using credentials from the same Amazon Web Services account that owns the secret. If the secret is in a different account, then you must use a customer managed key and provide the ARN of that KMS key in this field. The user making the call must have permissions to both the secret and the KMS key in their respective accounts.
   --secret-binary: string # The binary data to encrypt and store in the new version of the secret. We recommend that you store your binary data in a file and then pass the contents of the file as a parameter. Either SecretBinary or SecretString must have a value, but not both. You can't access this parameter in the Secrets Manager console. (format: password)
   --secret-string: string # The text data to encrypt and store in the new version of the secret. We recommend you use a JSON structure of key/value pairs for your secret value. Either SecretBinary or SecretString must have a value, but not both. (format: password)
-]: any -> record<ARN: string, Name: string, VersionId: string> {
+]: any -> oneof<record<ARN: string, Name: string, VersionId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1207,7 +1224,7 @@ export def "update-secret-version-stage" [
   version_stage: string # The staging label to add to this version.
   --remove-from-version-id: string # The ID of the version that the staging label is to be removed from. If the staging label you are trying to attach to one version is already attached to a different version, then you must include this parameter and specify the version that the label is to be removed from. If the label is attached and you either do not specify this parameter, or the version ID does not match, then the operation fails.
   --move-to-version-id: string # The ID of the version to add the staging label to. To remove a label from a version, then do not specify this parameter. If the staging label is already attached to a different version of the secret, then you must also specify the RemoveFromVersionId parameter.
-]: any -> record<ARN: string, Name: string> {
+]: any -> oneof<record<ARN: string, Name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1257,7 +1274,7 @@ export def "validate-resource-policy" [
   --x-amz-target: string@x-amz-target-completer-21 # required
   --secret-id: string # This field is reserved for internal use.
   resource_policy: string # A JSON-formatted string that contains an Amazon Web Services resource-based policy. The policy in the string identifies who can access or manage this secret and its versions. For example policies, see Permissions policy examples (https://docs.aws.amazon.com/secretsmanager/latest/userguide/auth-and-access_examples.html).
-]: any -> record<PolicyValidationPassed: bool, ValidationErrors: table<CheckName: string, ErrorMessage: string>> {
+]: any -> oneof<record<PolicyValidationPassed: bool, ValidationErrors: table<CheckName: string, ErrorMessage: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

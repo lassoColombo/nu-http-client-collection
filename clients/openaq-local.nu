@@ -12,27 +12,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -40,8 +49,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -52,7 +66,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -87,7 +110,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["http://openaq.local"] }
@@ -102,9 +126,9 @@ def temporal-completer [] { ["day" "dow" "hod" "hour" "month" "moy" "year"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "favico-favicon-ico-get" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["favico-favicon-ico-get" "pong-ping-get" "cities-getv1-v1-cities-get" "countries-getv1-v1-countries-get" "countries-get-v1-countries-country-id-get" "latest-v1-get-v1-latest-get" "latest-v1-get-v1-latest-location-id-get" "locationsv1-get-v1-locations-get" "locationsv1-get-v1-locations-location-id-get" "measurements-get-v1-v1-measurements-get" "parameters-getv1-v1-parameters-get" "sources-v1-get-v1-sources-get" "averages-v2-get-v2-averages-get" "cities-get-v2-cities-get" "countries-get-v2-countries-get" "countries-get-v2-countries-country-id-get" "latest-get-v2-latest-get" "latest-get-v2-latest-location-id-get" "locations-get-v2-locations-get" "mobilegentilejson-v2-locations-tiles-mobile-generalized-tiles-json-get" "get-mobilegentile-v2-locations-tiles-mobile-generalized-z-x-y-pbf-get" "mobiletilejson-v2-locations-tiles-mobile-tiles-json-get" "get-mobiletile-v2-locations-tiles-mobile-z-x-y-pbf-get" "tilejson-v2-locations-tiles-tiles-json-get" "demo-v2-locations-tiles-viewer-get" "get-tile-v2-locations-tiles-z-x-y-pbf-get" "locations-get-v2-locations-location-id-get" "mfr-get-v2-manufacturers-get" "measurements-get-v2-measurements-get" "model-get-v2-models-get" "parameters-get-v2-parameters-get" "projects-get-v2-projects-get" "projects-get-v2-projects-project-id-get" "sources-get-v2-sources-get" "readme-get-v2-sources-readme-slug-get" "summary-get-v2-summary-get" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -213,7 +237,7 @@ export def "cities-getv1-v1-cities-get" [
   --city: list<string> # Limit results by a certain city or cities. (ex. ?city=Chicago or ?city=Chicago&city=Boston)
   --order-by: string # Order by a field (default: city)
   --entity: string
-]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: table<city: string, count: int, country: string, firstUpdated: string, lastUpdated: string, locations: int, parameters: list>> {
+]: nothing -> oneof<record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: table<city: string, count: int, country: string, firstUpdated: string, lastUpdated: string, locations: int, parameters: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "city" $city "multi") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "entity" $entity "scalar")] | flatten | str join "&"
@@ -255,7 +279,7 @@ export def "countries-getv1-v1-countries-get" [
   --country-id: string # Limit results by a certain country using two letter country code. (ex. /US)
   --country: list<string> # Limit results by a certain country using two letter country code. (ex. ?country=US or ?country=US&country=MX)
   --order-by: string # default: country
-]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: table<cities: int, code: string, count: int, firstUpdated: string, lastUpdated: string, locations: int, name: string, parameters: list, sources: int>> {
+]: nothing -> oneof<record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: table<cities: int, code: string, count: int, firstUpdated: string, lastUpdated: string, locations: int, name: string, parameters: list, sources: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "order_by" $order_by "scalar")] | flatten | str join "&"
@@ -297,7 +321,7 @@ export def "countries-get-v1-countries-country-id-get" [
   --sort: string # Define sort order. (default: asc)
   --country: list<string> # Limit results by a certain country using two letter country code. (ex. ?country=US or ?country=US&country=MX)
   --order-by: string # default: country
-]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: table<cities: int, code: string, count: int, firstUpdated: string, lastUpdated: string, locations: int, name: string, parameters: list, sources: int>> {
+]: nothing -> oneof<record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: table<cities: int, code: string, count: int, firstUpdated: string, lastUpdated: string, locations: int, name: string, parameters: list, sources: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($country_id | is-empty) { error make --unspanned { msg: "path parameter 'country_id' must be non-empty" } }
@@ -357,7 +381,7 @@ export def "latest-v1-get-v1-latest-get" [
   --model-name: list<string> # Model Name of Sensor
   --manufacturer-name: list<string> # Manufacturer of Sensor
   --dump-raw: oneof<nothing, bool> # default: false
-]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: list<any>> {
+]: nothing -> oneof<record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: list<any>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "has_geo" $has_geo "scalar") (serialize-qp "parameter_id" $parameter_id "scalar") (serialize-qp "parameter" $parameter "multi") (serialize-qp "unit" $unit "multi") (serialize-qp "coordinates" $coordinates "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "city" $city "multi") (serialize-qp "location_id" $location_id "scalar") (serialize-qp "location" $location "multi") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "isMobile" $is_mobile "scalar") (serialize-qp "isAnalysis" $is_analysis "scalar") (serialize-qp "sourceName" $source_name "multi") (serialize-qp "entity" $entity "scalar") (serialize-qp "sensorType" $sensor_type "scalar") (serialize-qp "modelName" $model_name "multi") (serialize-qp "manufacturerName" $manufacturer_name "multi") (serialize-qp "dumpRaw" $dump_raw "scalar")] | flatten | str join "&"
@@ -416,7 +440,7 @@ export def "latest-v1-get-v1-latest-location-id-get" [
   --model-name: list<string> # Model Name of Sensor
   --manufacturer-name: list<string> # Manufacturer of Sensor
   --dump-raw: oneof<nothing, bool> # default: false
-]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: list<any>> {
+]: nothing -> oneof<record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: list<any>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($location_id | is-empty) { error make --unspanned { msg: "path parameter 'location_id' must be non-empty" } }
@@ -476,7 +500,7 @@ export def "locationsv1-get-v1-locations-get" [
   --model-name: list<string> # Model Name of Sensor
   --manufacturer-name: list<string> # Manufacturer of Sensor
   --dump-raw: oneof<nothing, bool> # default: false
-]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: list<any>> {
+]: nothing -> oneof<record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: list<any>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "has_geo" $has_geo "scalar") (serialize-qp "parameter_id" $parameter_id "scalar") (serialize-qp "parameter" $parameter "multi") (serialize-qp "unit" $unit "multi") (serialize-qp "coordinates" $coordinates "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "city" $city "multi") (serialize-qp "location_id" $location_id "scalar") (serialize-qp "location" $location "multi") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "isMobile" $is_mobile "scalar") (serialize-qp "isAnalysis" $is_analysis "scalar") (serialize-qp "sourceName" $source_name "multi") (serialize-qp "entity" $entity "scalar") (serialize-qp "sensorType" $sensor_type "scalar") (serialize-qp "modelName" $model_name "multi") (serialize-qp "manufacturerName" $manufacturer_name "multi") (serialize-qp "dumpRaw" $dump_raw "scalar")] | flatten | str join "&"
@@ -535,7 +559,7 @@ export def "locationsv1-get-v1-locations-location-id-get" [
   --model-name: list<string> # Model Name of Sensor
   --manufacturer-name: list<string> # Manufacturer of Sensor
   --dump-raw: oneof<nothing, bool> # default: false
-]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: list<any>> {
+]: nothing -> oneof<record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: list<any>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($location_id | is-empty) { error make --unspanned { msg: "path parameter 'location_id' must be non-empty" } }
@@ -641,7 +665,7 @@ export def "parameters-getv1-v1-parameters-get" [
   --source-id: list<int>
   --source-slug: list<string>
   --order-by: string # default: id
-]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: table<description: string, displayName: string, id: int, isCore: bool, maxColorValue: float, name: string, preferredUnit: string>> {
+]: nothing -> oneof<record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: table<description: string, displayName: string, id: int, isCore: bool, maxColorValue: float, name: string, preferredUnit: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "sourceName" $source_name "multi") (serialize-qp "sourceId" $source_id "multi") (serialize-qp "sourceSlug" $source_slug "multi") (serialize-qp "order_by" $order_by "scalar")] | flatten | str join "&"
@@ -682,7 +706,7 @@ export def "sources-v1-get-v1-sources-get" [
   --sort: string # Define sort order. (default: asc)
   --name: string
   --order-by: string # default: name
-]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: list<any>> {
+]: nothing -> oneof<record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: list<any>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "order_by" $order_by "scalar")] | flatten | str join "&"
@@ -734,7 +758,7 @@ export def "averages-v2-get-v2-averages-get" [
   --temporal: string@temporal-completer # required
   --location: list<string>
   --group: oneof<nothing, bool> # default: false
-]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: list<any>> {
+]: nothing -> oneof<record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: list<any>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($spatial == null) { error make --unspanned { msg: "required query parameter 'spatial' missing: pass --spatial" } }
@@ -780,7 +804,7 @@ export def "cities-get-v2-cities-get" [
   --city: list<string> # Limit results by a certain city or cities. (ex. ?city=Chicago or ?city=Chicago&city=Boston)
   --order-by: string # Order by a field (default: city)
   --entity: string
-]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: table<city: string, count: int, country: string, firstUpdated: string, lastUpdated: string, locations: int, parameters: list>> {
+]: nothing -> oneof<record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: table<city: string, count: int, country: string, firstUpdated: string, lastUpdated: string, locations: int, parameters: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "city" $city "multi") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "entity" $entity "scalar")] | flatten | str join "&"
@@ -822,7 +846,7 @@ export def "countries-get-v2-countries-get" [
   --country-id: string # Limit results by a certain country using two letter country code. (ex. /US)
   --country: list<string> # Limit results by a certain country using two letter country code. (ex. ?country=US or ?country=US&country=MX)
   --order-by: string # default: country
-]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: table<cities: int, code: string, count: int, firstUpdated: string, lastUpdated: string, locations: int, name: string, parameters: list, sources: int>> {
+]: nothing -> oneof<record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: table<cities: int, code: string, count: int, firstUpdated: string, lastUpdated: string, locations: int, name: string, parameters: list, sources: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "order_by" $order_by "scalar")] | flatten | str join "&"
@@ -864,7 +888,7 @@ export def "countries-get-v2-countries-country-id-get" [
   --sort: string # Define sort order. (default: asc)
   --country: list<string> # Limit results by a certain country using two letter country code. (ex. ?country=US or ?country=US&country=MX)
   --order-by: string # default: country
-]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: table<cities: int, code: string, count: int, firstUpdated: string, lastUpdated: string, locations: int, name: string, parameters: list, sources: int>> {
+]: nothing -> oneof<record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: table<cities: int, code: string, count: int, firstUpdated: string, lastUpdated: string, locations: int, name: string, parameters: list, sources: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($country_id | is-empty) { error make --unspanned { msg: "path parameter 'country_id' must be non-empty" } }
@@ -924,7 +948,7 @@ export def "latest-get-v2-latest-get" [
   --model-name: list<string> # Model Name of Sensor
   --manufacturer-name: list<string> # Manufacturer of Sensor
   --dump-raw: oneof<nothing, bool> # default: false
-]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: list<any>> {
+]: nothing -> oneof<record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: list<any>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "has_geo" $has_geo "scalar") (serialize-qp "parameter_id" $parameter_id "scalar") (serialize-qp "parameter" $parameter "multi") (serialize-qp "unit" $unit "multi") (serialize-qp "coordinates" $coordinates "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "city" $city "multi") (serialize-qp "location_id" $location_id "scalar") (serialize-qp "location" $location "multi") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "isMobile" $is_mobile "scalar") (serialize-qp "isAnalysis" $is_analysis "scalar") (serialize-qp "sourceName" $source_name "multi") (serialize-qp "entity" $entity "scalar") (serialize-qp "sensorType" $sensor_type "scalar") (serialize-qp "modelName" $model_name "multi") (serialize-qp "manufacturerName" $manufacturer_name "multi") (serialize-qp "dumpRaw" $dump_raw "scalar")] | flatten | str join "&"
@@ -983,7 +1007,7 @@ export def "latest-get-v2-latest-location-id-get" [
   --model-name: list<string> # Model Name of Sensor
   --manufacturer-name: list<string> # Manufacturer of Sensor
   --dump-raw: oneof<nothing, bool> # default: false
-]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: list<any>> {
+]: nothing -> oneof<record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: list<any>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($location_id | is-empty) { error make --unspanned { msg: "path parameter 'location_id' must be non-empty" } }
@@ -1043,7 +1067,7 @@ export def "locations-get-v2-locations-get" [
   --model-name: list<string> # Model Name of Sensor
   --manufacturer-name: list<string> # Manufacturer of Sensor
   --dump-raw: oneof<nothing, bool> # default: false
-]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: list<any>> {
+]: nothing -> oneof<record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: list<any>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "has_geo" $has_geo "scalar") (serialize-qp "parameter_id" $parameter_id "scalar") (serialize-qp "parameter" $parameter "multi") (serialize-qp "unit" $unit "multi") (serialize-qp "coordinates" $coordinates "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "city" $city "multi") (serialize-qp "location_id" $location_id "scalar") (serialize-qp "location" $location "multi") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "isMobile" $is_mobile "scalar") (serialize-qp "isAnalysis" $is_analysis "scalar") (serialize-qp "sourceName" $source_name "multi") (serialize-qp "entity" $entity "scalar") (serialize-qp "sensorType" $sensor_type "scalar") (serialize-qp "modelName" $model_name "multi") (serialize-qp "manufacturerName" $manufacturer_name "multi") (serialize-qp "dumpRaw" $dump_raw "scalar")] | flatten | str join "&"
@@ -1078,7 +1102,7 @@ export def "mobilegentilejson-v2-locations-tiles-mobile-generalized-tiles-json-g
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<attribution: string, bounds: list<float>, data: list<string>, description: string, grids: list<string>, legend: string, maxzoom: int, minzoom: int, name: string, scheme: string, template: string, tilejson: string, tiles: list<string>, version: string> {
+]: nothing -> oneof<record<attribution: string, bounds: list<float>, data: list<string>, description: string, grids: list<string>, legend: string, maxzoom: int, minzoom: int, name: string, scheme: string, template: string, tilejson: string, tiles: list<string>, version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/locations/tiles/mobile-generalized/tiles.json" $auth.query)
@@ -1160,7 +1184,7 @@ export def "mobiletilejson-v2-locations-tiles-mobile-tiles-json-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<attribution: string, bounds: list<float>, data: list<string>, description: string, grids: list<string>, legend: string, maxzoom: int, minzoom: int, name: string, scheme: string, template: string, tilejson: string, tiles: list<string>, version: string> {
+]: nothing -> oneof<record<attribution: string, bounds: list<float>, data: list<string>, description: string, grids: list<string>, legend: string, maxzoom: int, minzoom: int, name: string, scheme: string, template: string, tilejson: string, tiles: list<string>, version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/locations/tiles/mobile/tiles.json" $auth.query)
@@ -1246,7 +1270,7 @@ export def "tilejson-v2-locations-tiles-tiles-json-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<attribution: string, bounds: list<float>, data: list<string>, description: string, grids: list<string>, legend: string, maxzoom: int, minzoom: int, name: string, scheme: string, template: string, tilejson: string, tiles: list<string>, version: string> {
+]: nothing -> oneof<record<attribution: string, bounds: list<float>, data: list<string>, description: string, grids: list<string>, legend: string, maxzoom: int, minzoom: int, name: string, scheme: string, template: string, tilejson: string, tiles: list<string>, version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/locations/tiles/tiles.json" $auth.query)
@@ -1386,7 +1410,7 @@ export def "locations-get-v2-locations-location-id-get" [
   --model-name: list<string> # Model Name of Sensor
   --manufacturer-name: list<string> # Manufacturer of Sensor
   --dump-raw: oneof<nothing, bool> # default: false
-]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: list<any>> {
+]: nothing -> oneof<record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: list<any>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($location_id | is-empty) { error make --unspanned { msg: "path parameter 'location_id' must be non-empty" } }
@@ -1422,7 +1446,7 @@ export def "mfr-get-v2-manufacturers-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: list<any>> {
+]: nothing -> oneof<record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: list<any>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/manufacturers" $auth.query)
@@ -1518,7 +1542,7 @@ export def "model-get-v2-models-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: list<any>> {
+]: nothing -> oneof<record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: list<any>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/models" $auth.query)
@@ -1560,7 +1584,7 @@ export def "parameters-get-v2-parameters-get" [
   --source-id: list<int>
   --source-slug: list<string>
   --order-by: string # default: id
-]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: table<description: string, displayName: string, id: int, isCore: bool, maxColorValue: float, name: string, preferredUnit: string>> {
+]: nothing -> oneof<record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: table<description: string, displayName: string, id: int, isCore: bool, maxColorValue: float, name: string, preferredUnit: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "sourceName" $source_name "multi") (serialize-qp "sourceId" $source_id "multi") (serialize-qp "sourceSlug" $source_slug "multi") (serialize-qp "order_by" $order_by "scalar")] | flatten | str join "&"
@@ -1612,7 +1636,7 @@ export def "projects-get-v2-projects-get" [
   --entity: string
   --sensor-type: string
   --source-name: list<string>
-]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: table<bbox: list, countries: list, entity: string, firstUpdated: string, id: int, isAnalysis: bool, isMobile: bool, lastUpdated: string, locationIds: list, locations: int, measurements: int, name: string, parameters: list, sensorType: string, sources: list, subtitle: string>> {
+]: nothing -> oneof<record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: table<bbox: list, countries: list, entity: string, firstUpdated: string, id: int, isAnalysis: bool, isMobile: bool, lastUpdated: string, locationIds: list, locations: int, measurements: int, name: string, parameters: list, sensorType: string, sources: list, subtitle: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "parameter_id" $parameter_id "scalar") (serialize-qp "parameter" $parameter "multi") (serialize-qp "unit" $unit "multi") (serialize-qp "project_id" $project_id "scalar") (serialize-qp "project" $project "multi") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "isMobile" $is_mobile "scalar") (serialize-qp "isAnalysis" $is_analysis "scalar") (serialize-qp "entity" $entity "scalar") (serialize-qp "sensorType" $sensor_type "scalar") (serialize-qp "sourceName" $source_name "multi")] | flatten | str join "&"
@@ -1664,7 +1688,7 @@ export def "projects-get-v2-projects-project-id-get" [
   --entity: string
   --sensor-type: string
   --source-name: list<string>
-]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: table<bbox: list, countries: list, entity: string, firstUpdated: string, id: int, isAnalysis: bool, isMobile: bool, lastUpdated: string, locationIds: list, locations: int, measurements: int, name: string, parameters: list, sensorType: string, sources: list, subtitle: string>> {
+]: nothing -> oneof<record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: table<bbox: list, countries: list, entity: string, firstUpdated: string, id: int, isAnalysis: bool, isMobile: bool, lastUpdated: string, locationIds: list, locations: int, measurements: int, name: string, parameters: list, sensorType: string, sources: list, subtitle: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
@@ -1708,7 +1732,7 @@ export def "sources-get-v2-sources-get" [
   --source-id: list<int>
   --source-slug: list<string>
   --order-by: string # default: sourceName
-]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: list<any>> {
+]: nothing -> oneof<record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: list<any>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "sourceName" $source_name "multi") (serialize-qp "sourceId" $source_id "multi") (serialize-qp "sourceSlug" $source_slug "multi") (serialize-qp "order_by" $order_by "scalar")] | flatten | str join "&"
@@ -1779,7 +1803,7 @@ export def "summary-get-v2-summary-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: list<any>> {
+]: nothing -> oneof<record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: list<any>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/summary" $auth.query)

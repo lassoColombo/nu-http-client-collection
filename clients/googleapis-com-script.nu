@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -120,9 +144,9 @@ def metrics-granularity-completer [] { ["DAILY" "UNSPECIFIED_GRANULARITY" "WEEKL
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "script-processes-list" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["script-processes-list" "script-processes-list-script-processes" "script-projects-create" "script-projects-get" "script-projects-get-content" "script-projects-update-content" "script-projects-deployments-list" "script-projects-deployments-create" "script-projects-deployments-delete" "script-projects-deployments-get" "script-projects-deployments-update" "script-projects-get-metrics" "script-projects-versions-list" "script-projects-versions-create" "script-projects-versions-get" "script-scripts-run" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -176,7 +200,7 @@ export def "script-processes-list" [
   --user-process-filter-statuses: list<string> # Optional field used to limit returned processes to those having one of the specified process statuses.
   --user-process-filter-types: list<string> # Optional field used to limit returned processes to those having one of the specified process types.
   --user-process-filter-user-access-levels: list<string> # Optional field used to limit returned processes to those having one of the specified user access levels.
-]: nothing -> record<nextPageToken: string, processes: table<duration: string, functionName: string, processStatus: string, processType: string, projectName: string, startTime: string, userAccessLevel: string>> {
+]: nothing -> oneof<record<nextPageToken: string, processes: table<duration: string, functionName: string, processStatus: string, processType: string, projectName: string, startTime: string, userAccessLevel: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "userProcessFilter.deploymentId" $user_process_filter_deployment_id "scalar") (serialize-qp "userProcessFilter.endTime" $user_process_filter_end_time "scalar") (serialize-qp "userProcessFilter.functionName" $user_process_filter_function_name "scalar") (serialize-qp "userProcessFilter.projectName" $user_process_filter_project_name "scalar") (serialize-qp "userProcessFilter.scriptId" $user_process_filter_script_id "scalar") (serialize-qp "userProcessFilter.startTime" $user_process_filter_start_time "scalar") (serialize-qp "userProcessFilter.statuses" $user_process_filter_statuses "multi") (serialize-qp "userProcessFilter.types" $user_process_filter_types "multi") (serialize-qp "userProcessFilter.userAccessLevels" $user_process_filter_user_access_levels "multi")] | flatten | str join "&"
@@ -232,7 +256,7 @@ export def "script-processes-list-script-processes" [
   --script-process-filter-statuses: list<string> # Optional field used to limit returned processes to those having one of the specified process statuses.
   --script-process-filter-types: list<string> # Optional field used to limit returned processes to those having one of the specified process types.
   --script-process-filter-user-access-levels: list<string> # Optional field used to limit returned processes to those having one of the specified user access levels.
-]: nothing -> record<nextPageToken: string, processes: table<duration: string, functionName: string, processStatus: string, processType: string, projectName: string, startTime: string, userAccessLevel: string>> {
+]: nothing -> oneof<record<nextPageToken: string, processes: table<duration: string, functionName: string, processStatus: string, processType: string, projectName: string, startTime: string, userAccessLevel: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "scriptId" $script_id "scalar") (serialize-qp "scriptProcessFilter.deploymentId" $script_process_filter_deployment_id "scalar") (serialize-qp "scriptProcessFilter.endTime" $script_process_filter_end_time "scalar") (serialize-qp "scriptProcessFilter.functionName" $script_process_filter_function_name "scalar") (serialize-qp "scriptProcessFilter.startTime" $script_process_filter_start_time "scalar") (serialize-qp "scriptProcessFilter.statuses" $script_process_filter_statuses "multi") (serialize-qp "scriptProcessFilter.types" $script_process_filter_types "multi") (serialize-qp "scriptProcessFilter.userAccessLevels" $script_process_filter_user_access_levels "multi")] | flatten | str join "&"
@@ -280,7 +304,7 @@ export def "script-projects-create" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --parent-id: string # The Drive ID of a parent file that the created script project is bound to. This is usually the ID of a Google Doc, Google Sheet, Google Form, or Google Slides file. If not set, a standalone script project is created.
   --title: string # The title for the project.
-]: any -> record<createTime: string, creator: record<domain: string, email: string, name: string, photoUrl: string>, lastModifyUser: record<domain: string, email: string, name: string, photoUrl: string>, parentId: string, scriptId: string, title: string, updateTime: string> {
+]: any -> oneof<record<createTime: string, creator: record<domain: string, email: string, name: string, photoUrl: string>, lastModifyUser: record<domain: string, email: string, name: string, photoUrl: string>, parentId: string, scriptId: string, title: string, updateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -330,7 +354,7 @@ export def "script-projects-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<createTime: string, creator: record<domain: string, email: string, name: string, photoUrl: string>, lastModifyUser: record<domain: string, email: string, name: string, photoUrl: string>, parentId: string, scriptId: string, title: string, updateTime: string> {
+]: nothing -> oneof<record<createTime: string, creator: record<domain: string, email: string, name: string, photoUrl: string>, lastModifyUser: record<domain: string, email: string, name: string, photoUrl: string>, parentId: string, scriptId: string, title: string, updateTime: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($script_id | is-empty) { error make --unspanned { msg: "path parameter 'scriptId' must be non-empty" } }
@@ -379,7 +403,7 @@ export def "script-projects-get-content" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --version-number: int # The version number of the project to retrieve. If not provided, the project's HEAD version is returned.
-]: nothing -> record<files: table<createTime: string, functionSet: record, lastModifyUser: record, name: string, source: string, type: string, updateTime: string>, scriptId: string> {
+]: nothing -> oneof<record<files: table<createTime: string, functionSet: record, lastModifyUser: record, name: string, source: string, type: string, updateTime: string>, scriptId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($script_id | is-empty) { error make --unspanned { msg: "path parameter 'scriptId' must be non-empty" } }
@@ -405,7 +429,6 @@ export def "script-projects-get-content" [
 #
 # PUT /v1/projects/{scriptId}/content
 # operationId: script.projects.updateContent
-# --files item shape: {createTime?: string, functionSet?: record, lastModifyUser?: record, name?: string, source?: string, type?: "ENUM_TYPE_UNSPECIFIED"|"SERVER_JS"|"HTML"|"JSON", updateTime?: string}
 export def "script-projects-update-content" [
   script_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -430,7 +453,7 @@ export def "script-projects-update-content" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --files: list # The list of script project files. One of the files is a script manifest; it must be named "appsscript", must have type of JSON, and include the manifest configurations for the project. — item shape: {createTime?: string, functionSet?: record, lastModifyUser?: record, name?: string, source?: string, type?: "ENUM_TYPE_UNSPECIFIED"|"SERVER_JS"|"HTML"|"JSON", updateTime?: string}
   --body-script-id: string # The script project's Drive ID.
-]: any -> record<files: table<createTime: string, functionSet: record, lastModifyUser: record, name: string, source: string, type: string, updateTime: string>, scriptId: string> {
+]: any -> oneof<record<files: table<createTime: string, functionSet: record, lastModifyUser: record, name: string, source: string, type: string, updateTime: string>, scriptId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -483,7 +506,7 @@ export def "script-projects-deployments-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # The maximum number of deployments on each returned page. Defaults to 50.
   --page-token: string # The token for continuing a previous list request on the next page. This should be set to the value of `nextPageToken` from a previous response.
-]: nothing -> record<deployments: table<deploymentConfig: record, deploymentId: string, entryPoints: list, updateTime: string>, nextPageToken: string> {
+]: nothing -> oneof<record<deployments: table<deploymentConfig: record, deploymentId: string, entryPoints: list, updateTime: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($script_id | is-empty) { error make --unspanned { msg: "path parameter 'scriptId' must be non-empty" } }
@@ -535,7 +558,7 @@ export def "script-projects-deployments-create" [
   --manifest-file-name: string # The manifest file name for this deployment.
   --body-script-id: string # The script project's Drive ID.
   --version-number: int # The version number on which this deployment is based. (format: int32)
-]: any -> record<deploymentConfig: record<description: string, manifestFileName: string, scriptId: string, versionNumber: int>, deploymentId: string, entryPoints: table<addOn: record, entryPointType: string, executionApi: record, webApp: record>, updateTime: string> {
+]: any -> oneof<record<deploymentConfig: record<description: string, manifestFileName: string, scriptId: string, versionNumber: int>, deploymentId: string, entryPoints: table<addOn: record, entryPointType: string, executionApi: record, webApp: record>, updateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -587,7 +610,7 @@ export def "script-projects-deployments-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($script_id | is-empty) { error make --unspanned { msg: "path parameter 'scriptId' must be non-empty" } }
@@ -637,7 +660,7 @@ export def "script-projects-deployments-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<deploymentConfig: record<description: string, manifestFileName: string, scriptId: string, versionNumber: int>, deploymentId: string, entryPoints: table<addOn: record, entryPointType: string, executionApi: record, webApp: record>, updateTime: string> {
+]: nothing -> oneof<record<deploymentConfig: record<description: string, manifestFileName: string, scriptId: string, versionNumber: int>, deploymentId: string, entryPoints: table<addOn: record, entryPointType: string, executionApi: record, webApp: record>, updateTime: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($script_id | is-empty) { error make --unspanned { msg: "path parameter 'scriptId' must be non-empty" } }
@@ -664,7 +687,6 @@ export def "script-projects-deployments-get" [
 #
 # PUT /v1/projects/{scriptId}/deployments/{deploymentId}
 # operationId: script.projects.deployments.update
-# --deploymentConfig shape: {description?: string, manifestFileName?: string, scriptId?: string, versionNumber?: int}
 export def "script-projects-deployments-update" [
   script_id: string
   deployment_id: string
@@ -689,7 +711,7 @@ export def "script-projects-deployments-update" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --deployment-config: record # Metadata the defines how a deployment is configured. — shape: {description?: string, manifestFileName?: string, scriptId?: string, versionNumber?: int}
-]: any -> record<deploymentConfig: record<description: string, manifestFileName: string, scriptId: string, versionNumber: int>, deploymentId: string, entryPoints: table<addOn: record, entryPointType: string, executionApi: record, webApp: record>, updateTime: string> {
+]: any -> oneof<record<deploymentConfig: record<description: string, manifestFileName: string, scriptId: string, versionNumber: int>, deploymentId: string, entryPoints: table<addOn: record, entryPointType: string, executionApi: record, webApp: record>, updateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -743,7 +765,7 @@ export def "script-projects-get-metrics" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --metrics-filter-deployment-id: string # Optional field indicating a specific deployment to retrieve metrics from.
   --metrics-granularity: string@metrics-granularity-completer # Required field indicating what granularity of metrics are returned.
-]: nothing -> record<activeUsers: table<endTime: string, startTime: string, value: string>, failedExecutions: table<endTime: string, startTime: string, value: string>, totalExecutions: table<endTime: string, startTime: string, value: string>> {
+]: nothing -> oneof<record<activeUsers: table<endTime: string, startTime: string, value: string>, failedExecutions: table<endTime: string, startTime: string, value: string>, totalExecutions: table<endTime: string, startTime: string, value: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($script_id | is-empty) { error make --unspanned { msg: "path parameter 'scriptId' must be non-empty" } }
@@ -793,7 +815,7 @@ export def "script-projects-versions-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # The maximum number of versions on each returned page. Defaults to 50.
   --page-token: string # The token for continuing a previous list request on the next page. This should be set to the value of `nextPageToken` from a previous response.
-]: nothing -> record<nextPageToken: string, versions: table<createTime: string, description: string, scriptId: string, versionNumber: int>> {
+]: nothing -> oneof<record<nextPageToken: string, versions: table<createTime: string, description: string, scriptId: string, versionNumber: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($script_id | is-empty) { error make --unspanned { msg: "path parameter 'scriptId' must be non-empty" } }
@@ -845,7 +867,7 @@ export def "script-projects-versions-create" [
   --description: string # The description for this version.
   --body-script-id: string # The script project's Drive ID.
   --version-number: int # The incremental ID that is created by Apps Script when a version is created. This is system assigned number and is immutable once created. (format: int32)
-]: any -> record<createTime: string, description: string, scriptId: string, versionNumber: int> {
+]: any -> oneof<record<createTime: string, description: string, scriptId: string, versionNumber: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -897,7 +919,7 @@ export def "script-projects-versions-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<createTime: string, description: string, scriptId: string, versionNumber: int> {
+]: nothing -> oneof<record<createTime: string, description: string, scriptId: string, versionNumber: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($script_id | is-empty) { error make --unspanned { msg: "path parameter 'scriptId' must be non-empty" } }
@@ -950,7 +972,7 @@ export def "script-scripts-run" [
   --function: string # The name of the function to execute in the given script. The name does not include parentheses or parameters. It can reference a function in an included library such as `Library.libFunction1`.
   --parameters: list # The parameters to be passed to the function being executed. The object type for each parameter should match the expected type in Apps Script. Parameters cannot be Apps Script-specific object types (such as a `Document` or a `Calendar`); they can only be primitive types such as `string`, `number`, `array`, `object`, or `boolean`. Optional.
   --session-state: string # *Deprecated*. For use with Android add-ons only. An ID that represents the user's current session in the Android app for Google Docs or Sheets, included as extra data in the [Intent](https://developer.android.com/guide/components/intents-filters.html) that launches the add-on. When an Android add-on is run with a session state, it gains the privileges of a [bound](https://developers.google.com/apps-script/guides/bound) script—that is, it can access information like the user's current cursor position (in Docs) or selected cell (in Sheets). To retrieve the state, call `Intent.getStringExtra("com.google.android.apps.docs.addons.SessionState")`. Optional.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

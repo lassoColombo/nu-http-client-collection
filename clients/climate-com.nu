@@ -14,27 +14,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "x-api-key" => { {scheme: $scheme, headers: {"X-Api-Key": $token_val}, query: "", location: "header"} }
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -42,8 +51,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -54,7 +68,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -89,7 +112,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -116,9 +140,9 @@ def content-type-completer-1 [] { ["application/vnd.climate.as-applied.zip" "app
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "upload-boundary" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["upload-boundary" "fetch-boundaries" "fetch-boundary-by-id" "post-export" "fetch-export-contents-by-id" "fetch-export-status-by-id" "fetch-farm-organization-by-type-and-id" "fetch-fields" "fetch-all-fields" "fetch-field-by-id" "get-v4-layers-as-applied" "get-v4-layers-as-applied-activity-id-contents" "get-v4-layers-as-harvested" "get-v4-layers-as-harvested-activity-id-contents" "get-v4-layers-as-planted" "get-v4-layers-as-planted-activity-id-contents" "get-v4-layers-scouting-observations" "get-v4-layers-scouting-observations-scouting-observation-id" "get-v4-layers-scouting-observations-scouting-observation-id-attachments" "get-v4-layers-scouting-observations-scouting-observation-id-attachments-attachment-id-contents" "fetch-operations" "get-resource-owner" "post-upload" "fetch-upload-statuses" "chunked-upload" "fetch-upload-status-by-id" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -140,7 +164,6 @@ export def commands []: nothing -> table {
 #
 # POST /v4/boundaries
 # operationId: uploadBoundary
-# --geometry shape: {coordinates: list<string>, type: "Point"|"Polygon"|"MultiPolygon"}
 export def "upload-boundary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -152,7 +175,7 @@ export def "upload-boundary" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   geometry: any # GeoJSON (e.g. {coordinates: [0, 0], type: Point}) — shape: {coordinates: list<string>, type: "Point"|"Polygon"|"MultiPolygon"}
-]: any -> record<id: string> {
+]: any -> oneof<record<id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -190,7 +213,7 @@ export def "fetch-boundaries" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   ids: list<string>
-]: any -> record<features: table<geometry: record, id: string, properties: record, type: string>, type: string> {
+]: any -> oneof<record<features: table<geometry: record, id: string, properties: record, type: string>, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -228,7 +251,7 @@ export def "fetch-boundary-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<geometry: record<coordinates: list<string>, type: string>, id: string, properties: record<area: record<q: float, u: string>, centroid: record<coordinates: list, type: string>>, type: string> {
+]: nothing -> oneof<record<geometry: record<coordinates: list<string>, type: string>, id: string, properties: record<area: record<q: float, u: string>, centroid: record<coordinates: list, type: string>>, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($boundary_id | is-empty) { error make --unspanned { msg: "path parameter 'boundaryId' must be non-empty" } }
@@ -265,7 +288,7 @@ export def "post-export" [
   --dry-run(-n) # Return the request that would be sent without executing it
   content_type: string@content-type-completer # Content type representing data being exported (e.g. application/vnd.climate.acrsi.geojson). (format: mime-type)
   --definition: record # Additional specifications for a client's data export request, dependent on the content type.
-]: any -> record<id: string> {
+]: any -> oneof<record<id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -305,7 +328,7 @@ export def "fetch-export-contents-by-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-accept: string # Must be either \*/* or application/octet-stream,application/json (required)
   --range: string # Byte range `bytes=start-end` (https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.35.1). e.g. bytes=0-1048576. Currently only single range value is supported. Both start and end need to be specified, end value should be greater than start and end - start should not be greater than 5MiB. (required)
-]: nothing -> any {
+]: nothing -> oneof<record<body: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($export_id | is-empty) { error make --unspanned { msg: "path parameter 'exportId' must be non-empty" } }
@@ -344,7 +367,7 @@ export def "fetch-export-status-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<checksum: string, error: string, size: int, status: string, xNextToken: string> {
+]: nothing -> oneof<record<checksum: string, error: string, size: int, status: string, xNextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($export_id | is-empty) { error make --unspanned { msg: "path parameter 'exportId' must be non-empty" } }
@@ -381,7 +404,7 @@ export def "fetch-farm-organization-by-type-and-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<id: string, name: string, type: string> {
+]: nothing -> oneof<record<id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($farm_organization_type | is-empty) { error make --unspanned { msg: "path parameter 'farmOrganizationType' must be non-empty" } }
@@ -420,7 +443,7 @@ export def "fetch-fields" [
   --field-name: string # Optional prefix filter for field name. Must be at least 3 characters.
   --x-next-token: string # Opaque string which allows for fetching the next batch of results. Can be used to poll for changes.
   --x-limit: int # Max number of results to return per batch. Must be between 1 and 100 inclusive. Defaults to 100. (format: int32)
-]: nothing -> record<results: table<boundaryId: string, id: string, name: string, parent: record, resourceOwnerId: string>> {
+]: nothing -> oneof<record<results: table<boundaryId: string, id: string, name: string, parent: record, resourceOwnerId: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fieldName" $field_name "scalar")] | flatten | str join "&"
@@ -460,7 +483,7 @@ export def "fetch-all-fields" [
   --field-name: string # Optional prefix filter for field name. Must be at least 3 characters.
   --x-next-token: string # Opaque string which allows for fetching the next batch of results. Can be used to poll for changes.
   --x-limit: int # Max number of results to return per batch. Must be between 1 and 100 inclusive. Defaults to 100. (format: int32)
-]: nothing -> record<results: table<boundaryId: string, id: string, name: string, parent: record, resourceOwnerId: string>> {
+]: nothing -> oneof<record<results: table<boundaryId: string, id: string, name: string, parent: record, resourceOwnerId: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fieldName" $field_name "scalar")] | flatten | str join "&"
@@ -498,7 +521,7 @@ export def "fetch-field-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<boundaryId: string, id: string, name: string, parent: record<id: string, type: string>, resourceOwnerId: string> {
+]: nothing -> oneof<record<boundaryId: string, id: string, name: string, parent: record<id: string, type: string>, resourceOwnerId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($field_id | is-empty) { error make --unspanned { msg: "path parameter 'fieldId' must be non-empty" } }
@@ -539,7 +562,7 @@ export def "get-v4-layers-as-applied" [
   --hdr-accept: string # Must be either \*/* or application/octet-stream,application/json (required)
   --x-next-token: string # Opaque string which allows for fetching the next batch of results. Can be used to poll for changes.
   --x-limit: int # Max number of results to return per batch. Must be between 1 and 100 inclusive. Defaults to 100. (format: int32)
-]: nothing -> record<results: table<createdAt: string, endTime: string, fieldIds: list, id: string, length: int, startTime: string, updatedAt: string>> {
+]: nothing -> oneof<record<results: table<createdAt: string, endTime: string, fieldIds: list, id: string, length: int, startTime: string, updatedAt: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "resourceOwnerId" $resource_owner_id "scalar") (serialize-qp "occurredAfter" $occurred_after "scalar") (serialize-qp "occurredBefore" $occurred_before "scalar") (serialize-qp "updatedAfter" $updated_after "scalar")] | flatten | str join "&"
@@ -578,7 +601,7 @@ export def "get-v4-layers-as-applied-activity-id-contents" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-accept: string # Must be either \*/* or application/octet-stream,application/json (required)
   --range: string # Byte range `bytes=start-end` (https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.35.1). e.g. bytes=0-1048576. Currently only single range value is supported. Both start and end need to be specified, end value should be greater than start and end - start should not be greater than 5MiB. (required)
-]: nothing -> record<body: string> {
+]: nothing -> oneof<record<body: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($activity_id | is-empty) { error make --unspanned { msg: "path parameter 'activityId' must be non-empty" } }
@@ -622,7 +645,7 @@ export def "get-v4-layers-as-harvested" [
   --hdr-accept: string # Must be either \*/* or application/octet-stream,application/json (required)
   --x-next-token: string # Opaque string which allows for fetching the next batch of results. Can be used to poll for changes.
   --x-limit: int # Max number of results to return per batch. Must be between 1 and 100 inclusive. Defaults to 100. (format: int32)
-]: nothing -> record<results: table<createdAt: string, endTime: string, fieldIds: list, id: string, length: int, startTime: string, updatedAt: string>> {
+]: nothing -> oneof<record<results: table<createdAt: string, endTime: string, fieldIds: list, id: string, length: int, startTime: string, updatedAt: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "resourceOwnerId" $resource_owner_id "scalar") (serialize-qp "occurredAfter" $occurred_after "scalar") (serialize-qp "occurredBefore" $occurred_before "scalar") (serialize-qp "updatedAfter" $updated_after "scalar")] | flatten | str join "&"
@@ -661,7 +684,7 @@ export def "get-v4-layers-as-harvested-activity-id-contents" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-accept: string # Must be either \*/* or application/octet-stream,application/json (required)
   --range: string # Byte range `bytes=start-end` (https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.35.1). e.g. bytes=0-1048576. Currently only single range value is supported. Both start and end need to be specified, end value should be greater than start and end - start should not be greater than 5MiB. (required)
-]: nothing -> record<body: string> {
+]: nothing -> oneof<record<body: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($activity_id | is-empty) { error make --unspanned { msg: "path parameter 'activityId' must be non-empty" } }
@@ -705,7 +728,7 @@ export def "get-v4-layers-as-planted" [
   --hdr-accept: string # Must be either \*/* or application/octet-stream,application/json (required)
   --x-next-token: string # Opaque string which allows for fetching the next batch of results. Can be used to poll for changes.
   --x-limit: int # Max number of results to return per batch. Must be between 1 and 100 inclusive. Defaults to 100. (format: int32)
-]: nothing -> record<results: table<createdAt: string, endTime: string, fieldIds: list, id: string, length: int, startTime: string, updatedAt: string>> {
+]: nothing -> oneof<record<results: table<createdAt: string, endTime: string, fieldIds: list, id: string, length: int, startTime: string, updatedAt: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "resourceOwnerId" $resource_owner_id "scalar") (serialize-qp "occurredAfter" $occurred_after "scalar") (serialize-qp "occurredBefore" $occurred_before "scalar") (serialize-qp "updatedAfter" $updated_after "scalar")] | flatten | str join "&"
@@ -744,7 +767,7 @@ export def "get-v4-layers-as-planted-activity-id-contents" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-accept: string # Must be either \*/* or application/octet-stream,application/json (required)
   --range: string # Byte range `bytes=start-end` (https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.35.1). e.g. bytes=0-1048576. Currently only single range value is supported. Both start and end need to be specified, end value should be greater than start and end - start should not be greater than 5MiB. (required)
-]: nothing -> record<body: string> {
+]: nothing -> oneof<record<body: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($activity_id | is-empty) { error make --unspanned { msg: "path parameter 'activityId' must be non-empty" } }
@@ -785,7 +808,7 @@ export def "get-v4-layers-scouting-observations" [
   --occurred-before: string # Optional end time by which to filter layer results. Time must be in ISO 8601 format with time zone, e.g. 2016-05-13T00:00:00Z (https://tools.ietf.org/html/rfc3339). Layers with a start time at or before (inclusive) the specified time. If both occurredAfter and occurredBefore are populated, occurredAfter must be <= occurredBefore. (format: date-time)
   --x-next-token: string # Opaque string which allows for fetching the next batch of results. Can be used to poll for changes.
   --x-limit: int # Max number of results to return per batch. Must be between 1 and 100 inclusive. Defaults to 100. (format: int32)
-]: nothing -> record<results: table<endTime: string, id: string, startTime: string, updatedAt: string>> {
+]: nothing -> oneof<record<results: table<endTime: string, id: string, startTime: string, updatedAt: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "occurredAfter" $occurred_after "scalar") (serialize-qp "occurredBefore" $occurred_before "scalar")] | flatten | str join "&"
@@ -822,7 +845,7 @@ export def "get-v4-layers-scouting-observations-scouting-observation-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<endTime: string, fieldIds: list<string>, id: string, location: record<coordinates: list<string>, type: string>, locationDisplayColor: string, note: string, startTime: string, status: string, tags: table<code: string>, timespan: string, title: string, updatedAt: string> {
+]: nothing -> oneof<record<endTime: string, fieldIds: list<string>, id: string, location: record<coordinates: list<string>, type: string>, locationDisplayColor: string, note: string, startTime: string, status: string, tags: table<code: string>, timespan: string, title: string, updatedAt: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($scouting_observation_id | is-empty) { error make --unspanned { msg: "path parameter 'scoutingObservationId' must be non-empty" } }
@@ -859,7 +882,7 @@ export def "get-v4-layers-scouting-observations-scouting-observation-id-attachme
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-next-token: string # Opaque string which allows for fetching the next batch of results. Can be used to poll for changes.
   --x-limit: int # Max number of results to return per batch. Must be between 1 and 100 inclusive. Defaults to 100. (format: int32)
-]: nothing -> record<results: table<contentType: string, id: string, length: int, status: string, updatedAt: string>> {
+]: nothing -> oneof<record<results: table<contentType: string, id: string, length: int, status: string, updatedAt: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($scouting_observation_id | is-empty) { error make --unspanned { msg: "path parameter 'scoutingObservationId' must be non-empty" } }
@@ -900,7 +923,7 @@ export def "get-v4-layers-scouting-observations-scouting-observation-id-attachme
   --accept: string@accept-completer # Response content type
   --hdr-accept: string # Must be either \*/* or application/octet-stream,application/json (required)
   --range: string # Byte range `bytes=start-end` (https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.35.1). e.g. bytes=0-1048576. Currently only single range value is supported. Both start and end need to be specified, end value should be greater than start and end - start should not be greater than 5MiB. (required)
-]: nothing -> record<body: string> {
+]: nothing -> oneof<record<body: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($scouting_observation_id | is-empty) { error make --unspanned { msg: "path parameter 'scoutingObservationId' must be non-empty" } }
@@ -940,7 +963,7 @@ export def "fetch-operations" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --resource-owner-id: string # Optional comma-separated list of resource owner unique identifiers by which to filter results.
-]: nothing -> record<results: table<id: string, name: string, resourceOwnerId: string>> {
+]: nothing -> oneof<record<results: table<id: string, name: string, resourceOwnerId: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "resourceOwnerId" $resource_owner_id "scalar")] | flatten | str join "&"
@@ -976,7 +999,7 @@ export def "get-resource-owner" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<email: string, id: string, name: string> {
+]: nothing -> oneof<record<email: string, id: string, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_owner_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceOwnerId' must be non-empty" } }
@@ -1056,7 +1079,7 @@ export def "fetch-upload-statuses" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   ids: list<string>
-]: any -> record<results: table<id: string, status: string>> {
+]: any -> oneof<record<results: table<id: string, status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1135,7 +1158,7 @@ export def "fetch-upload-status-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<id: string, status: string> {
+]: nothing -> oneof<record<id: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($upload_id | is-empty) { error make --unspanned { msg: "path parameter 'uploadId' must be non-empty" } }

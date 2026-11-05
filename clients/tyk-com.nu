@@ -12,27 +12,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -40,8 +49,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -52,7 +66,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -87,7 +110,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -115,9 +139,9 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-tyk-apis" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-tyk-apis" "post-tyk-apis" "delete-tyk-apis-api-id" "get-tyk-apis-api-id" "put-tyk-apis-api-id" "get-tyk-health" "get-tyk-keys" "post-tyk-keys-create" "delete-tyk-keys-key-id" "post-tyk-keys-key-id" "put-tyk-keys-key-id" "post-tyk-oauth-authorize-client" "post-tyk-oauth-clients-create" "get-tyk-oauth-clients-api-id" "delete-tyk-oauth-clients-api-id-client-id" "delete-tyk-oauth-refresh-key-id" "get-tyk-reload" "get-tyk-reload-group" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -149,7 +173,7 @@ export def "get-tyk-apis" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-tyk-authorization: string # tyk gateway shared secret (required, format: string)
-]: nothing -> table<api_id: string, auth: record<auth_header_name: string, use_cookie: bool, use_param: bool>, definition: record<key: string, location: string>, enable_jwt: bool, enable_signature_checking: bool, hmac_allowed_clock_skew: float, id: string, jwt_identity_base_field: string, jwt_policy_field_name: string, jwt_signing_method: string, jwt_source: string, name: string, notifications: record<oauth_on_keychange_url: string, shared_secret: string>, oauth_meta: record<allowed_access_types: list, allowed_authorize_types: list, auth_login_redirect: string>, org_id: string, slug: string, uptime_tests: record<CORS: record, active: bool, allowed_ips: list, cache_options: record, check_list: list, config: record, custom_middleware: record, do_not_track: string, domain: string, dont_set_quota_on_create: bool, enable_batch_request_support: bool, enable_ip_whitelisting: bool, event_handlers: record, expire_analytics_after: float, proxy: record, response_processors: list, session_lifetime: float, tags: list>, use_basic_auth: bool, use_keyless: bool, use_oauth2: bool, version_data: record<not_versioned: bool, versions: record>> {
+]: nothing -> oneof<table<api_id: string, auth: record<auth_header_name: string, use_cookie: bool, use_param: bool>, definition: record<key: string, location: string>, enable_jwt: bool, enable_signature_checking: bool, hmac_allowed_clock_skew: float, id: string, jwt_identity_base_field: string, jwt_policy_field_name: string, jwt_signing_method: string, jwt_source: string, name: string, notifications: record<oauth_on_keychange_url: string, shared_secret: string>, oauth_meta: record<allowed_access_types: list, allowed_authorize_types: list, auth_login_redirect: string>, org_id: string, slug: string, uptime_tests: record<CORS: record, active: bool, allowed_ips: list, cache_options: record, check_list: list, config: record, custom_middleware: record, do_not_track: string, domain: string, dont_set_quota_on_create: bool, enable_batch_request_support: bool, enable_ip_whitelisting: bool, event_handlers: record, expire_analytics_after: float, proxy: record, response_processors: list, session_lifetime: float, tags: list>, use_basic_auth: bool, use_keyless: bool, use_oauth2: bool, version_data: record<not_versioned: bool, versions: record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_tyk_authorization == null) { error make --unspanned { msg: "required header parameter 'x-tyk-authorization' missing: pass --x-tyk-authorization" } }
@@ -175,12 +199,6 @@ export def "get-tyk-apis" [
 # Create an *API Definition* object
 #
 # POST /tyk/apis/
-# --auth shape: {auth_header_name?: string, use_cookie?: bool, use_param?: bool}
-# --definition shape: {key?: string, location?: string}
-# --notifications shape: {oauth_on_keychange_url?: string, shared_secret?: string}
-# --oauth_meta shape: {allowed_access_types?: list<string>, allowed_authorize_types?: list<string>, auth_login_redirect?: string}
-# --uptime_tests shape: {CORS?: record, active?: bool, allowed_ips?: list<string>, cache_options?: record, check_list?: list, config?: record, custom_middleware?: record, do_not_track?: string, domain?: string, dont_set_quota_on_create?: bool, enable_batch_request_support?: bool, enable_ip_whitelisting?: bool, event_handlers?: record, expire_analytics_after?: float, proxy?: record, response_processors?: list, session_lifetime?: float, tags?: list<string>}
-# --version_data shape: {not_versioned?: bool, versions?: record}
 export def "post-tyk-apis" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -212,7 +230,7 @@ export def "post-tyk-apis" [
   --use-keyless: oneof<nothing, bool>
   --use-oauth2: oneof<nothing, bool>
   --version-data: record # shape: {not_versioned?: bool, versions?: record}
-]: any -> record<action: string, key: string, status: string> {
+]: any -> oneof<record<action: string, key: string, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -250,7 +268,7 @@ export def "delete-tyk-apis-api-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-tyk-authorization: string # tyk gateway shared secret (required, format: string)
-]: nothing -> record<action: string, key: string, status: string> {
+]: nothing -> oneof<record<action: string, key: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_id | is-empty) { error make --unspanned { msg: "path parameter 'apiID' must be non-empty" } }
@@ -289,7 +307,7 @@ export def "get-tyk-apis-api-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-tyk-authorization: string # tyk gateway shared secret (required, format: string)
-]: nothing -> record<api_id: string, auth: record<auth_header_name: string, use_cookie: bool, use_param: bool>, definition: record<key: string, location: string>, enable_jwt: bool, enable_signature_checking: bool, hmac_allowed_clock_skew: float, id: string, jwt_identity_base_field: string, jwt_policy_field_name: string, jwt_signing_method: string, jwt_source: string, name: string, notifications: record<oauth_on_keychange_url: string, shared_secret: string>, oauth_meta: record<allowed_access_types: list<string>, allowed_authorize_types: list<string>, auth_login_redirect: string>, org_id: string, slug: string, uptime_tests: record<CORS: record<allow_credentials: bool, allowed_headers: list, allowed_methods: list, allowed_origins: list, debug: bool, enable: bool, exposed_headers: list, max_age: float, options_passthrough: bool>, active: bool, allowed_ips: list<string>, cache_options: record<cache_all_safe_requests: bool, cache_timeout: float, enable_cache: bool, enable_upstream_cache_control: bool>, check_list: list<record>, config: record<expire_utime_after: float, recheck_wait: float, service_discovery: record>, custom_middleware: record<post: list, pre: list, response: list>, do_not_track: string, domain: string, dont_set_quota_on_create: bool, enable_batch_request_support: bool, enable_ip_whitelisting: bool, event_handlers: record, expire_analytics_after: float, proxy: record<check_host_against_uptime_tests: bool, enable_load_balancing: bool, listen_path: string, preserve_host_header: bool, service_discovery: record, strip_listen_path: bool, target_list: list, target_url: string>, response_processors: list<record>, session_lifetime: float, tags: list<string>>, use_basic_auth: bool, use_keyless: bool, use_oauth2: bool, version_data: record<not_versioned: bool, versions: record>> {
+]: nothing -> oneof<record<api_id: string, auth: record<auth_header_name: string, use_cookie: bool, use_param: bool>, definition: record<key: string, location: string>, enable_jwt: bool, enable_signature_checking: bool, hmac_allowed_clock_skew: float, id: string, jwt_identity_base_field: string, jwt_policy_field_name: string, jwt_signing_method: string, jwt_source: string, name: string, notifications: record<oauth_on_keychange_url: string, shared_secret: string>, oauth_meta: record<allowed_access_types: list<string>, allowed_authorize_types: list<string>, auth_login_redirect: string>, org_id: string, slug: string, uptime_tests: record<CORS: record<allow_credentials: bool, allowed_headers: list, allowed_methods: list, allowed_origins: list, debug: bool, enable: bool, exposed_headers: list, max_age: float, options_passthrough: bool>, active: bool, allowed_ips: list<string>, cache_options: record<cache_all_safe_requests: bool, cache_timeout: float, enable_cache: bool, enable_upstream_cache_control: bool>, check_list: list<record>, config: record<expire_utime_after: float, recheck_wait: float, service_discovery: record>, custom_middleware: record<post: list, pre: list, response: list>, do_not_track: string, domain: string, dont_set_quota_on_create: bool, enable_batch_request_support: bool, enable_ip_whitelisting: bool, event_handlers: record, expire_analytics_after: float, proxy: record<check_host_against_uptime_tests: bool, enable_load_balancing: bool, listen_path: string, preserve_host_header: bool, service_discovery: record, strip_listen_path: bool, target_list: list, target_url: string>, response_processors: list<record>, session_lifetime: float, tags: list<string>>, use_basic_auth: bool, use_keyless: bool, use_oauth2: bool, version_data: record<not_versioned: bool, versions: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_id | is-empty) { error make --unspanned { msg: "path parameter 'apiID' must be non-empty" } }
@@ -316,12 +334,6 @@ export def "get-tyk-apis-api-id" [
 # Updates an *API Definition* object, if it exists
 #
 # PUT /tyk/apis/{apiID}
-# --auth shape: {auth_header_name?: string, use_cookie?: bool, use_param?: bool}
-# --definition shape: {key?: string, location?: string}
-# --notifications shape: {oauth_on_keychange_url?: string, shared_secret?: string}
-# --oauth_meta shape: {allowed_access_types?: list<string>, allowed_authorize_types?: list<string>, auth_login_redirect?: string}
-# --uptime_tests shape: {CORS?: record, active?: bool, allowed_ips?: list<string>, cache_options?: record, check_list?: list, config?: record, custom_middleware?: record, do_not_track?: string, domain?: string, dont_set_quota_on_create?: bool, enable_batch_request_support?: bool, enable_ip_whitelisting?: bool, event_handlers?: record, expire_analytics_after?: float, proxy?: record, response_processors?: list, session_lifetime?: float, tags?: list<string>}
-# --version_data shape: {not_versioned?: bool, versions?: record}
 export def "put-tyk-apis-api-id" [
   api_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -355,7 +367,7 @@ export def "put-tyk-apis-api-id" [
   --use-keyless: oneof<nothing, bool>
   --use-oauth2: oneof<nothing, bool>
   --version-data: record # shape: {not_versioned?: bool, versions?: record}
-]: any -> record<action: string, key: string, status: string> {
+]: any -> oneof<record<action: string, key: string, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -397,7 +409,7 @@ export def "get-tyk-health" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-id: string # API ID to query (required, format: string)
   --x-tyk-authorization: string # tyk gateway shared secret (required, format: string)
-]: nothing -> record<average_requests_per_second: float, average_upstream_latency: float, key_failures_per_second: float, quota_violations_per_second: float, throttle_requests_per_second: float> {
+]: nothing -> oneof<record<average_requests_per_second: float, average_upstream_latency: float, key_failures_per_second: float, quota_violations_per_second: float, throttle_requests_per_second: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_id == null) { error make --unspanned { msg: "required query parameter 'api_id' missing: pass --api-id" } }
@@ -437,7 +449,7 @@ export def "get-tyk-keys" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-id: string # Back-end to target (required, format: string)
   --x-tyk-authorization: string # tyk gateway shared secret (required, format: string)
-]: nothing -> record<keys: list<string>> {
+]: nothing -> oneof<record<keys: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_id == null) { error make --unspanned { msg: "required query parameter 'api_id' missing: pass --api-id" } }
@@ -465,9 +477,6 @@ export def "get-tyk-keys" [
 # Create a new *API token* with the *session object* defined in the body
 #
 # POST /tyk/keys/create
-# --basic_auth_data shape: {hash_type?: ""|"bcrypt", password?: string}
-# --jwt_data shape: {secret?: string}
-# --monitor shape: {trigger_limits?: list<string>}
 export def "post-tyk-keys-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -500,7 +509,7 @@ export def "post-tyk-keys-create" [
   --quota-renews: float
   --rate: float
   --tags: list<string>
-]: any -> record<action: string, key: string, status: string> {
+]: any -> oneof<record<action: string, key: string, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -543,7 +552,7 @@ export def "delete-tyk-keys-key-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-id: string # Back-end to target (required, format: string)
   --x-tyk-authorization: string # tyk gateway shared secret (required, format: string)
-]: nothing -> record<action: string, key: string, status: string> {
+]: nothing -> oneof<record<action: string, key: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($key_id | is-empty) { error make --unspanned { msg: "path parameter 'keyId' must be non-empty" } }
@@ -572,9 +581,6 @@ export def "delete-tyk-keys-key-id" [
 # Add a pre-specified *API token* with the *session object* defined in the body, this operatin creates a custom token that dsoes not use the gateway naming convention for tokens
 #
 # POST /tyk/keys/{keyId}
-# --basic_auth_data shape: {hash_type?: ""|"bcrypt", password?: string}
-# --jwt_data shape: {secret?: string}
-# --monitor shape: {trigger_limits?: list<string>}
 export def "post-tyk-keys-key-id" [
   key_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -607,7 +613,7 @@ export def "post-tyk-keys-key-id" [
   --quota-renews: float
   --rate: float
   --tags: list<string>
-]: any -> record<action: string, key: string, status: string> {
+]: any -> oneof<record<action: string, key: string, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -637,9 +643,6 @@ export def "post-tyk-keys-key-id" [
 # Update an *API token* with the *session object* defined in the body, this operatin overwrites the existing object
 #
 # PUT /tyk/keys/{keyId}
-# --basic_auth_data shape: {hash_type?: ""|"bcrypt", password?: string}
-# --jwt_data shape: {secret?: string}
-# --monitor shape: {trigger_limits?: list<string>}
 export def "put-tyk-keys-key-id" [
   key_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -674,7 +677,7 @@ export def "put-tyk-keys-key-id" [
   --quota-renews: float
   --rate: float
   --tags: list<string>
-]: any -> record<action: string, key: string, status: string> {
+]: any -> oneof<record<action: string, key: string, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -721,7 +724,7 @@ export def "post-tyk-oauth-authorize-client" [
   client_id: string # Should be provided by requesting client as part of authorisation request. The Client ID that is making the request
   redirect_uri: string # Should be provided by requesting client as part of authorisation request. Must match with the record stored with Tyk
   key_rules: string # A string representation of a *Session Object (form-encoded)*. This should be provided by your application in order to apply any quotas or rules to the key
-]: any -> record<access_token: string, code: string, expires_in: float, redirect_to: string, token_type: string> {
+]: any -> oneof<record<access_token: string, code: string, expires_in: float, redirect_to: string, token_type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -733,7 +736,7 @@ export def "post-tyk-oauth-authorize-client" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"x-tyk-authorization": $x_tyk_authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -764,7 +767,7 @@ export def "post-tyk-oauth-clients-create" [
   --x-tyk-authorization: string # tyk gateway shared secret (required, format: string)
   --api-id: string
   --redirect-uri: string
-]: any -> record<client_id: string, redirect_uri: string, secret: string> {
+]: any -> oneof<record<client_id: string, redirect_uri: string, secret: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -805,7 +808,7 @@ export def "get-tyk-oauth-clients-api-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-tyk-authorization: string # tyk gateway shared secret (required, format: string)
-]: nothing -> table<client_id: string, redirect_uri: string, secret: string> {
+]: nothing -> oneof<table<client_id: string, redirect_uri: string, secret: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_id | is-empty) { error make --unspanned { msg: "path parameter 'apiId' must be non-empty" } }
@@ -845,7 +848,7 @@ export def "delete-tyk-oauth-clients-api-id-client-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-tyk-authorization: string # tyk gateway shared secret (required, format: string)
-]: nothing -> record<action: string, key: string, status: string> {
+]: nothing -> oneof<record<action: string, key: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_id | is-empty) { error make --unspanned { msg: "path parameter 'apiId' must be non-empty" } }
@@ -886,7 +889,7 @@ export def "delete-tyk-oauth-refresh-key-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-id: string # API ID (required)
   --x-tyk-authorization: string # tyk gateway shared secret (required, format: string)
-]: nothing -> record<action: string, key: string, status: string> {
+]: nothing -> oneof<record<action: string, key: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($key_id | is-empty) { error make --unspanned { msg: "path parameter 'keyId' must be non-empty" } }
@@ -926,7 +929,7 @@ export def "get-tyk-reload" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-tyk-authorization: string # tyk gateway shared secret (required, format: string)
-]: nothing -> record<error: string, status: string> {
+]: nothing -> oneof<record<error: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_tyk_authorization == null) { error make --unspanned { msg: "required header parameter 'x-tyk-authorization' missing: pass --x-tyk-authorization" } }
@@ -963,7 +966,7 @@ export def "get-tyk-reload-group" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-tyk-authorization: string # tyk gateway shared secret (required, format: string)
-]: nothing -> record<error: string, status: string> {
+]: nothing -> oneof<record<error: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_tyk_authorization == null) { error make --unspanned { msg: "required header parameter 'x-tyk-authorization' missing: pass --x-tyk-authorization" } }

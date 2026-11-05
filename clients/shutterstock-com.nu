@@ -15,27 +15,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
     "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -43,8 +52,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -55,7 +69,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -90,7 +113,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -150,9 +174,9 @@ def aspect-ratio-completer [] { ["16_9" "4_3" "nonstandard"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-custom-descriptors" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["list-custom-descriptors" "list-custom-instruments" "fetch-renders" "create-audio-renders" "get-track-list" "get-track-collection-list" "create-track-collection" "delete-track-collection" "get-track-collection" "rename-track-collection" "delete-track-collection-items" "get-track-collection-items" "add-track-collection-items" "list-genres" "list-instruments" "get-track-license-list" "license-track" "download-tracks" "list-moods" "search-tracks" "get-track" "bulk-search-images" "get-collections" "create-collection" "delete-collection" "update-collection" "delete-from-collection" "add-to-collection" "search-catalog" "get-contributor-list" "get-contributor" "get-contributor-collections-list" "get-contributor-collections" "get-contributor-collection-items" "upload-image" "get-keywords" "get-similar-images" "get-similar-videos" "get-editorial-categories" "list-editorial-image-categories" "get-editorial-image-license-list" "license-editorial-images" "get-editorial-image-livefeed-list" "get-editorial-image-livefeed" "get-editorial-image-livefeed-items" "search-editorial-images" "get-updated-editorial-images" "get-editorial-image" "license-editorial-image" "get-editorial-livefeed-list" "get-editorial-livefeed" "get-editorial-livefeed-items" "search-editorial" "get-updated-editorial-image" "list-editorial-video-categories" "get-editorial-video-license-list" "license-editorial-video" "search-editorial-videos" "get-editorial-video" "get-v2-editorial-id" "get-image-list" "upload-ephemeral-image" "list-image-categories" "get-image-collection-list" "create-image-collection" "get-featured-image-collection-list" "get-featured-image-collection" "get-featured-image-collection-items" "delete-image-collection" "get-image-collection" "rename-image-collection" "delete-image-collection-items" "get-image-collection-items" "add-image-collection-items" "get-image-license-list" "license-images" "download-image" "get-image-recommendations" "search-images" "get-image-suggestions" "get-image-keyword-suggestions" "get-updated-images" "get-image" "list-similar-images" "create-access-token" "authorize" "get-sfx-list-details" "get-sfx-license-list" "licenses-sfx" "download-sfx" "search-sfx" "get-sfx-details" "get-v2-test" "validate" "get-user" "get-access-token" "get-user-subscription-list" "get-video-list" "list-video-categories" "get-video-collection-list" "create-video-collection" "get-featured-video-collection-list" "get-featured-video-collection" "get-featured-video-collection-items" "delete-video-collection" "get-video-collection" "rename-video-collection" "delete-video-collection-items" "get-video-collection-items" "add-video-collection-items" "get-video-license-list" "license-videos" "download-videos" "search-videos" "get-video-suggestions" "get-updated-videos" "get-video" "find-similar-videos" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -197,7 +221,7 @@ export def "list-custom-descriptors" [
   --tempo-from: float # Show descriptors that have a tempo range that includes the specified tempo in beats per minute (e.g. 60)
   --name: string # Show descriptors with the specified name (case-sensitive) (e.g. Corporate Pop Inspirational High Energy)
   --tag: string # Show descriptors with the specified tag, such as Cinematic or Roomy (case-sensitive) (e.g. Cinematic)
-]: nothing -> record<data: table<average_render_speed: float, bands: list, id: string, instruments: list, max_tempo: float, min_tempo: float, name: string, previews: list, tags: list>, page: int, per_page: int> {
+]: nothing -> oneof<record<data: table<average_render_speed: float, bands: list, id: string, instruments: list, max_tempo: float, min_tempo: float, name: string, previews: list, tags: list>, page: int, per_page: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "render_speed_over" $render_speed_over "scalar") (serialize-qp "band_id" $band_id "scalar") (serialize-qp "band_name" $band_name "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "id" $id "multi") (serialize-qp "instrument_name" $instrument_name "scalar") (serialize-qp "instrument_id" $instrument_id "scalar") (serialize-qp "tempo" $tempo "scalar") (serialize-qp "tempo_to" $tempo_to "scalar") (serialize-qp "tempo_from" $tempo_from "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "tag" $tag "scalar")] | flatten | str join "&"
@@ -237,7 +261,7 @@ export def "list-custom-instruments" [
   --page: int # Page number (default: 1, e.g. 1)
   --name: string # Show instruments with the specified name (case-sensitive) (e.g. Precision Bass - Full)
   --tag: string # Show instruments with the specified tag, such as Percussion or Strings (case-sensitive) (e.g. Percussion)
-]: nothing -> record<data: table<id: string, name: string, previews: list, tags: list>, page: int, per_page: int> {
+]: nothing -> oneof<record<data: table<id: string, name: string, previews: list, tags: list>, page: int, per_page: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "multi") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "tag" $tag "scalar")] | flatten | str join "&"
@@ -273,7 +297,7 @@ export def "fetch-renders" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: list<string> # One or more render IDs (required, e.g. [L2w7h9VNFlkzpllSUunSYayenKjN, BeHx3UNXzMBB4dGsC9aa6VxnpcWl])
-]: nothing -> record<audio_renders: table<created_date: string, files: list, id: string, preset: string, progress_percent: int, status: string, timeline: record, updated_date: string>> {
+]: nothing -> oneof<record<audio_renders: table<created_date: string, files: list, id: string, preset: string, progress_percent: int, status: string, timeline: record, updated_date: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
@@ -299,7 +323,6 @@ export def "fetch-renders" [
 #
 # POST /v2/ai/audio/renders
 # operationId: createAudioRenders
-# --audio_renders item shape: {filename: string, preset: "MASTER_MP3"|"MASTER_WAV"|"STEMS_WAV", timeline: record}
 export def "create-audio-renders" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -311,7 +334,7 @@ export def "create-audio-renders" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   audio_renders: list # Parameters to create computer audio renders — item shape: {filename: string, preset: "MASTER_MP3"|"MASTER_WAV"|"STEMS_WAV", timeline: record}
-]: any -> record<audio_renders: table<created_date: string, files: list, id: string, preset: string, progress_percent: int, status: string, timeline: record, updated_date: string>> {
+]: any -> oneof<record<audio_renders: table<created_date: string, files: list, id: string, preset: string, progress_percent: int, status: string, timeline: record, updated_date: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -351,7 +374,7 @@ export def "get-track-list" [
   --id: list<string> # One or more audio IDs (required, e.g. [442583, 434750])
   --view: string@view-completer # Amount of detail to render in the response (default: minimal, e.g. full)
   --search-id: string # The ID of the search that is related to this request (e.g. 00000000-0000-0000-0000-000000000000)
-]: nothing -> record<data: table<added_date: string, affiliate_url: string, album: record, artists: list, assets: record, bpm: int, contributor: record, deleted_time: string, description: string, duration: float, genres: list, id: string, instruments: list, is_adult: bool, is_instrumental: bool, isrc: string, keywords: list, language: string, lyrics: string, media_type: string, model_releases: list, moods: list, published_time: string, recording_version: string, releases: list, similar_artists: list, submitted_time: string, title: string, updated_time: string, url: string, vocal_description: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
+]: nothing -> oneof<record<data: table<added_date: string, affiliate_url: string, album: record, artists: list, assets: record, bpm: int, contributor: record, deleted_time: string, description: string, duration: float, genres: list, id: string, instruments: list, is_adult: bool, is_instrumental: bool, isrc: string, keywords: list, language: string, lyrics: string, media_type: string, model_releases: list, moods: list, published_time: string, recording_version: string, releases: list, similar_artists: list, submitted_time: string, title: string, updated_time: string, url: string, vocal_description: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
@@ -390,7 +413,7 @@ export def "get-track-collection-list" [
   --page: int # Page number (default: 1, e.g. 1)
   --per-page: int # Number of results per page (default: 100, e.g. 100)
   --embed: list<string> # Which sharing information to include in the response, such as a URL to the collection (e.g. share_code)
-]: nothing -> record<data: table<cover_item: record, created_time: string, id: string, items_updated_time: string, name: string, share_code: string, share_url: string, total_item_count: int, updated_time: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
+]: nothing -> oneof<record<data: table<cover_item: record, created_time: string, id: string, items_updated_time: string, name: string, share_code: string, share_url: string, total_item_count: int, updated_time: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "embed" $embed "multi")] | flatten | str join "&"
@@ -426,7 +449,7 @@ export def "create-track-collection" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   name: string # The name of the collection
-]: any -> record<id: string> {
+]: any -> oneof<record<id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -502,7 +525,7 @@ export def "get-track-collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --embed: list<string> # Which sharing information to include in the response, such as a URL to the collection
   --share-code: string # Code to retrieve a shared collection
-]: nothing -> record<cover_item: record<added_time: string, id: string, media_type: string>, created_time: string, id: string, items_updated_time: string, name: string, share_code: string, share_url: string, total_item_count: int, updated_time: string> {
+]: nothing -> oneof<record<cover_item: record<added_time: string, id: string, media_type: string>, created_time: string, id: string, items_updated_time: string, name: string, share_code: string, share_url: string, total_item_count: int, updated_time: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -621,7 +644,7 @@ export def "get-track-collection-items" [
   --per-page: int # Number of results per page (default: 100)
   --share-code: string # Code to retrieve the contents of a shared collection
   --sort: string@sort-completer # Sort order (default: oldest)
-]: nothing -> record<data: table<added_time: string, id: string, media_type: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
+]: nothing -> oneof<record<data: table<added_time: string, id: string, media_type: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -647,7 +670,6 @@ export def "get-track-collection-items" [
 #
 # POST /v2/audio/collections/{id}/items
 # operationId: addTrackCollectionItems
-# --items item shape: {added_time?: string, id: string, media_type?: string}
 export def "add-track-collection-items" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -699,7 +721,7 @@ export def "list-genres" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --language: string # Which language the genres will be returned
-]: nothing -> record<data: list<string>> {
+]: nothing -> oneof<record<data: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "language" $language "scalar")] | flatten | str join "&"
@@ -735,7 +757,7 @@ export def "list-instruments" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --language: string # Which language the instruments will be returned in
-]: nothing -> record<data: list<string>> {
+]: nothing -> oneof<record<data: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "language" $language "scalar")] | flatten | str join "&"
@@ -780,7 +802,7 @@ export def "get-track-license-list" [
   --end-date: string # Show licenses created before the specified date (format: date-time, e.g. 2021-03-29T13:25:13.521Z)
   --download-availability: string@download-availability-completer # Filter licenses by download availability (default: all)
   --team-history: oneof<nothing, bool> # Set to true to see license history for all members of your team. (default: false)
-]: nothing -> record<data: table<audio: record, download_time: string, id: string, image: record, is_downloadable: bool, license: string, metadata: record, revshare: record, subscription_id: string, user: record, video: record>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
+]: nothing -> oneof<record<data: table<audio: record, download_time: string, id: string, image: record, is_downloadable: bool, license: string, metadata: record, revshare: record, subscription_id: string, user: record, video: record>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "audio_id" $audio_id "scalar") (serialize-qp "license" $license "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "download_availability" $download_availability "scalar") (serialize-qp "team_history" $team_history "scalar")] | flatten | str join "&"
@@ -805,7 +827,6 @@ export def "get-track-license-list" [
 #
 # POST /v2/audio/licenses
 # operationId: licenseTrack
-# --audio item shape: {audio_id: string, license?: "audio_platform"|"premier_music_basic"|"premier_music_extended"|"premier_music_pro"|"premier_music_comp"|"asset_all_music", search_id?: string}
 export def "license-track" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -819,7 +840,7 @@ export def "license-track" [
   --license: string@license-completer # License type (e.g. audio_platform)
   --search-id: string # The ID of the search that led to licensing this track (e.g. p5S6QwRikdFJTHXwsoiqTg)
   audio: list # List of audio tracks to license — item shape: {audio_id: string, license?: "audio_platform"|"premier_music_basic"|"premier_music_extended"|"premier_music_pro"|"premier_music_comp"|"asset_all_music", search_id?: string}
-]: any -> record<data: table<allotment_charge: float, audio_id: string, download: record, error: string, license_id: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
+]: any -> oneof<record<data: table<allotment_charge: float, audio_id: string, download: record, error: string, license_id: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -858,7 +879,7 @@ export def "download-tracks" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<shorts_loops_stems: string, url: string> {
+]: nothing -> oneof<record<shorts_loops_stems: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -894,7 +915,7 @@ export def "list-moods" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --language: string # Which language the moods will be returned in
-]: nothing -> record<data: list<string>> {
+]: nothing -> oneof<record<data: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "language" $language "scalar")] | flatten | str join "&"
@@ -951,7 +972,7 @@ export def "search-tracks" [
   --fields: string # Fields to display in the response; see the documentation for the fields parameter in the overview section
   --library: string@library-completer # Which library to search (default: premier)
   --language: string # Which language to search in
-]: nothing -> record<data: table<added_date: string, affiliate_url: string, album: record, artists: list, assets: record, bpm: int, contributor: record, deleted_time: string, description: string, duration: float, genres: list, id: string, instruments: list, is_adult: bool, is_instrumental: bool, isrc: string, keywords: list, language: string, lyrics: string, media_type: string, model_releases: list, moods: list, published_time: string, recording_version: string, releases: list, similar_artists: list, submitted_time: string, title: string, updated_time: string, url: string, vocal_description: string>, message: string, page: int, per_page: int, search_id: string, total_count: int> {
+]: nothing -> oneof<record<data: table<added_date: string, affiliate_url: string, album: record, artists: list, assets: record, bpm: int, contributor: record, deleted_time: string, description: string, duration: float, genres: list, id: string, instruments: list, is_adult: bool, is_instrumental: bool, isrc: string, keywords: list, language: string, lyrics: string, media_type: string, model_releases: list, moods: list, published_time: string, recording_version: string, releases: list, similar_artists: list, submitted_time: string, title: string, updated_time: string, url: string, vocal_description: string>, message: string, page: int, per_page: int, search_id: string, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "artists" $artists "multi") (serialize-qp "bpm" $bpm "scalar") (serialize-qp "bpm_from" $bpm_from "scalar") (serialize-qp "bpm_to" $bpm_to "scalar") (serialize-qp "duration" $duration "scalar") (serialize-qp "duration_from" $duration_from "scalar") (serialize-qp "duration_to" $duration_to "scalar") (serialize-qp "genre" $genre "multi") (serialize-qp "is_instrumental" $is_instrumental "scalar") (serialize-qp "instruments" $instruments "multi") (serialize-qp "moods" $moods "multi") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "vocal_description" $vocal_description "scalar") (serialize-qp "view" $view "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "library" $library "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
@@ -989,7 +1010,7 @@ export def "get-track" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --view: string@view-completer # Amount of detail to render in the response (default: full, e.g. full)
   --search-id: string # The ID of the search that is related to this request (e.g. 00000000-0000-0000-0000-000000000000)
-]: nothing -> record<added_date: string, affiliate_url: string, album: record<id: string, title: string>, artists: table<name: string>, assets: record<album_art: record<file_size: int, url: string>, clean_audio: record<file_size: int, url: string>, original_audio: record<file_size: int, url: string>, preview_mp3: record<file_size: int, url: string>, preview_ogg: record<file_size: int, url: string>, shorts_loops_stems: record<loops: any, shorts: any, stems: any>, waveform: record<file_size: int, url: string>>, bpm: int, contributor: record<id: string>, deleted_time: string, description: string, duration: float, genres: list<string>, id: string, instruments: list<string>, is_adult: bool, is_instrumental: bool, isrc: string, keywords: list<string>, language: string, lyrics: string, media_type: string, model_releases: table<id: string>, moods: list<string>, published_time: string, recording_version: string, releases: list<string>, similar_artists: table<name: string>, submitted_time: string, title: string, updated_time: string, url: string, vocal_description: string> {
+]: nothing -> oneof<record<added_date: string, affiliate_url: string, album: record<id: string, title: string>, artists: table<name: string>, assets: record<album_art: record<file_size: int, url: string>, clean_audio: record<file_size: int, url: string>, original_audio: record<file_size: int, url: string>, preview_mp3: record<file_size: int, url: string>, preview_ogg: record<file_size: int, url: string>, shorts_loops_stems: record<loops: any, shorts: any, stems: any>, waveform: record<file_size: int, url: string>>, bpm: int, contributor: record<id: string>, deleted_time: string, description: string, duration: float, genres: list<string>, id: string, instruments: list<string>, is_adult: bool, is_instrumental: bool, isrc: string, keywords: list<string>, language: string, lyrics: string, media_type: string, model_releases: table<id: string>, moods: list<string>, published_time: string, recording_version: string, releases: list<string>, similar_artists: table<name: string>, submitted_time: string, title: string, updated_time: string, url: string, vocal_description: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1063,7 +1084,7 @@ export def "bulk-search-images" [
   --width-from: int # Show images with the specified width or larger, in pixels (e.g. 1920)
   --width-to: int # Show images with the specified width or smaller, in pixels (e.g. 1920)
   --body: list
-]: any -> record<bulk_search_id: string, results: table<data: list, insights: record, message: string, page: int, per_page: int, search_id: string, spellcheck_info: record, total_count: int>> {
+]: any -> oneof<record<bulk_search_id: string, results: table<data: list, insights: record, message: string, page: int, per_page: int, search_id: string, spellcheck_info: record, total_count: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1105,7 +1126,7 @@ export def "get-collections" [
   --per-page: int # Number of results per page (default: 20, e.g. 20)
   --sort: string@sort-completer # Sort by (default: newest)
   --shared: oneof<nothing, bool> # Set to true to omit collections that you own and return only collections that are shared with you (default: false)
-]: nothing -> record<data: table<cover_asset: record, created_time: string, id: string, name: string, role_assignments: record, total_item_count: float, updated_time: string, visibility: string>, page: float, per_page: float, total_count: float> {
+]: nothing -> oneof<record<data: table<cover_asset: record, created_time: string, id: string, name: string, role_assignments: record, total_item_count: float, updated_time: string, visibility: string>, page: float, per_page: float, total_count: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "shared" $shared "scalar")] | flatten | str join "&"
@@ -1130,7 +1151,6 @@ export def "get-collections" [
 #
 # POST /v2/catalog/collections
 # operationId: createCollection
-# --items item shape: {asset: record}
 export def "create-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1144,7 +1164,7 @@ export def "create-collection" [
   --items: list # item shape: {asset: record}
   name: string
   --visibility: string@visibility-completer # default: private
-]: any -> record<cover_asset: record<asset: record<id: string, name: string, type: string>, collection_ids: list<string>, created_time: string, id: string>, created_time: string, id: string, name: string, role_assignments: record<collection_id: string, roles: record<editors: list, owners: list, viewers: list>>, total_item_count: float, updated_time: string, visibility: string> {
+]: any -> oneof<record<cover_asset: record<asset: record<id: string, name: string, type: string>, collection_ids: list<string>, created_time: string, id: string>, created_time: string, id: string, name: string, role_assignments: record<collection_id: string, roles: record<editors: list, owners: list, viewers: list>>, total_item_count: float, updated_time: string, visibility: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1207,7 +1227,6 @@ export def "delete-collection" [
 #
 # PATCH /v2/catalog/collections/{collection_id}
 # operationId: updateCollection
-# --cover_asset shape: {id: string}
 export def "update-collection" [
   collection_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1222,7 +1241,7 @@ export def "update-collection" [
   --cover-asset: record # shape: {id: string}
   --name: string
   --visibility: string@visibility-completer
-]: any -> record<cover_asset: record<asset: record<id: string, name: string, type: string>, collection_ids: list<string>, created_time: string, id: string>, created_time: string, id: string, name: string, role_assignments: record<collection_id: string, roles: record<editors: list, owners: list, viewers: list>>, total_item_count: float, updated_time: string, visibility: string> {
+]: any -> oneof<record<cover_asset: record<asset: record<id: string, name: string, type: string>, collection_ids: list<string>, created_time: string, id: string>, created_time: string, id: string, name: string, role_assignments: record<collection_id: string, roles: record<editors: list, owners: list, viewers: list>>, total_item_count: float, updated_time: string, visibility: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1250,7 +1269,6 @@ export def "update-collection" [
 #
 # DELETE /v2/catalog/collections/{collection_id}/items
 # operationId: deleteFromCollection
-# --items item shape: {id: string}
 export def "delete-from-collection" [
   collection_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1263,7 +1281,7 @@ export def "delete-from-collection" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   items: list # item shape: {id: string}
-]: any -> record<cover_asset: record<asset: record<id: string, name: string, type: string>, collection_ids: list<string>, created_time: string, id: string>, created_time: string, id: string, name: string, role_assignments: record<collection_id: string, roles: record<editors: list, owners: list, viewers: list>>, total_item_count: float, updated_time: string, visibility: string> {
+]: any -> oneof<record<cover_asset: record<asset: record<id: string, name: string, type: string>, collection_ids: list<string>, created_time: string, id: string>, created_time: string, id: string, name: string, role_assignments: record<collection_id: string, roles: record<editors: list, owners: list, viewers: list>>, total_item_count: float, updated_time: string, visibility: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1291,7 +1309,6 @@ export def "delete-from-collection" [
 #
 # POST /v2/catalog/collections/{collection_id}/items
 # operationId: addToCollection
-# --items item shape: {asset: record}
 export def "add-to-collection" [
   collection_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1304,7 +1321,7 @@ export def "add-to-collection" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   items: list # item shape: {asset: record}
-]: any -> record<cover_asset: record<asset: record<id: string, name: string, type: string>, collection_ids: list<string>, created_time: string, id: string>, created_time: string, id: string, name: string, role_assignments: record<collection_id: string, roles: record<editors: list, owners: list, viewers: list>>, total_item_count: float, updated_time: string, visibility: string> {
+]: any -> oneof<record<cover_asset: record<asset: record<id: string, name: string, type: string>, collection_ids: list<string>, created_time: string, id: string>, created_time: string, id: string, name: string, role_assignments: record<collection_id: string, roles: record<editors: list, owners: list, viewers: list>>, total_item_count: float, updated_time: string, visibility: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1348,7 +1365,7 @@ export def "search-catalog" [
   --query: string # One or more search terms separated by spaces (e.g. dogs on the beach)
   --collection-id: list<string> # Filter by collection id (e.g. [123456, 456789, 13579])
   --asset-type: list<string> # Filter by asset type (e.g. [image, editorial-image])
-]: nothing -> record<data: table<asset: record, collection_ids: list, created_time: string, id: string>, page: float, per_page: float, total_count: float> {
+]: nothing -> oneof<record<data: table<asset: record, collection_ids: list, created_time: string, id: string>, page: float, per_page: float, total_count: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sort" $sort "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "collection_id" $collection_id "multi") (serialize-qp "asset_type" $asset_type "multi")] | flatten | str join "&"
@@ -1384,7 +1401,7 @@ export def "get-contributor-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: list<string> # One or more contributor IDs (required, e.g. [800506, 1653538])
-]: nothing -> record<data: table<about: string, contributor_type: list, display_name: string, equipment: list, id: string, location: string, portfolio_url: string, social_media: record, styles: list, subjects: list, website: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
+]: nothing -> oneof<record<data: table<about: string, contributor_type: list, display_name: string, equipment: list, id: string, location: string, portfolio_url: string, social_media: record, styles: list, subjects: list, website: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
@@ -1421,7 +1438,7 @@ export def "get-contributor" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<about: string, contributor_type: list<string>, display_name: string, equipment: list<string>, id: string, location: string, portfolio_url: string, social_media: record<facebook: string, google_plus: string, linkedin: string, pinterest: string, tumblr: string, twitter: string>, styles: list<string>, subjects: list<string>, website: string> {
+]: nothing -> oneof<record<about: string, contributor_type: list<string>, display_name: string, equipment: list<string>, id: string, location: string, portfolio_url: string, social_media: record<facebook: string, google_plus: string, linkedin: string, pinterest: string, tumblr: string, twitter: string>, styles: list<string>, subjects: list<string>, website: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($contributor_id | is-empty) { error make --unspanned { msg: "path parameter 'contributor_id' must be non-empty" } }
@@ -1458,7 +1475,7 @@ export def "get-contributor-collections-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --sort: string@sort-completer-3 # Sort order
-]: nothing -> record<data: table<cover_item: record, created_time: string, id: string, items_updated_time: string, name: string, share_code: string, share_url: string, total_item_count: int, updated_time: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
+]: nothing -> oneof<record<data: table<cover_item: record, created_time: string, id: string, items_updated_time: string, name: string, share_code: string, share_url: string, total_item_count: int, updated_time: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($contributor_id | is-empty) { error make --unspanned { msg: "path parameter 'contributor_id' must be non-empty" } }
@@ -1496,7 +1513,7 @@ export def "get-contributor-collections" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<cover_item: record<added_time: string, id: string, media_type: string>, created_time: string, id: string, items_updated_time: string, name: string, share_code: string, share_url: string, total_item_count: int, updated_time: string> {
+]: nothing -> oneof<record<cover_item: record<added_time: string, id: string, media_type: string>, created_time: string, id: string, items_updated_time: string, name: string, share_code: string, share_url: string, total_item_count: int, updated_time: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($contributor_id | is-empty) { error make --unspanned { msg: "path parameter 'contributor_id' must be non-empty" } }
@@ -1537,7 +1554,7 @@ export def "get-contributor-collection-items" [
   --page: int # Page number (default: 1)
   --per-page: int # Number of results per page (default: 20)
   --sort: string@sort-completer # Sort order
-]: nothing -> record<data: table<added_time: string, id: string, media_type: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
+]: nothing -> oneof<record<data: table<added_time: string, id: string, media_type: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($contributor_id | is-empty) { error make --unspanned { msg: "path parameter 'contributor_id' must be non-empty" } }
@@ -1575,7 +1592,7 @@ export def "upload-image" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   base64_image: string # A Base 64 encoded jpeg or png; images can be no larger than 10mb and can be no larger than 10,000 pixels in width or height
-]: any -> record<upload_id: string> {
+]: any -> oneof<record<upload_id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1613,7 +1630,7 @@ export def "get-keywords" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --asset-id: string # The asset ID or upload ID to suggest keywords for (required, e.g. U6ba16262e3bc2db470b8e3cfa8aaab25)
-]: nothing -> record<data: list<string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string> {
+]: nothing -> oneof<record<data: list<string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($asset_id == null) { error make --unspanned { msg: "required query parameter 'asset_id' missing: pass --asset-id" } }
@@ -1656,7 +1673,7 @@ export def "get-similar-images" [
   --page: int # Page number (default: 1)
   --per-page: int # Number of results per page (default: 20)
   --view: string@view-completer # Amount of detail to render in the response (default: minimal)
-]: nothing -> record<data: table<added_date: string, affiliate_url: string, aspect: float, assets: record, categories: list, contributor: record, description: string, has_model_release: bool, has_property_release: bool, id: string, image_type: string, insights: record, is_adult: bool, is_editorial: bool, is_illustration: bool, keywords: list, media_type: string, model_releases: list, models: list, releases: list, url: string>, insights: record<label_performance: list<record>>, message: string, page: int, per_page: int, search_id: string, spellcheck_info: record, total_count: int> {
+]: nothing -> oneof<record<data: table<added_date: string, affiliate_url: string, aspect: float, assets: record, categories: list, contributor: record, description: string, has_model_release: bool, has_property_release: bool, id: string, image_type: string, insights: record, is_adult: bool, is_editorial: bool, is_illustration: bool, keywords: list, media_type: string, model_releases: list, models: list, releases: list, url: string>, insights: record<label_performance: list<record>>, message: string, page: int, per_page: int, search_id: string, spellcheck_info: record, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($asset_id == null) { error make --unspanned { msg: "required query parameter 'asset_id' missing: pass --asset-id" } }
@@ -1699,7 +1716,7 @@ export def "get-similar-videos" [
   --page: int # Page number (default: 1)
   --per-page: int # Number of results per page (default: 20)
   --view: string@view-completer # Amount of detail to render in the response (default: minimal)
-]: nothing -> record<data: table<added_date: string, affiliate_url: string, aspect: float, aspect_ratio: string, assets: record, categories: list, contributor: record, description: string, duration: float, has_model_release: bool, has_property_release: bool, id: string, is_adult: bool, is_editorial: bool, keywords: list, media_type: string, models: list, url: string>, message: string, page: int, per_page: int, search_id: string, total_count: int> {
+]: nothing -> oneof<record<data: table<added_date: string, affiliate_url: string, aspect: float, aspect_ratio: string, assets: record, categories: list, contributor: record, description: string, duration: float, has_model_release: bool, has_property_release: bool, id: string, is_adult: bool, is_editorial: bool, keywords: list, media_type: string, models: list, url: string>, message: string, page: int, per_page: int, search_id: string, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($asset_id == null) { error make --unspanned { msg: "required query parameter 'asset_id' missing: pass --asset-id" } }
@@ -1737,7 +1754,7 @@ export def "get-editorial-categories" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<name: string>> {
+]: nothing -> oneof<record<data: table<name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/editorial/categories" $auth.query)
@@ -1771,7 +1788,7 @@ export def "list-editorial-image-categories" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<name: string>> {
+]: nothing -> oneof<record<data: table<name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/editorial/images/categories" $auth.query)
@@ -1815,7 +1832,7 @@ export def "get-editorial-image-license-list" [
   --end-date: string # Show licenses created before the specified date (format: date-time, e.g. 2021-03-29T13:25:13.521Z)
   --download-availability: string@download-availability-completer # Filter licenses by download availability (default: all)
   --team-history: oneof<nothing, bool> # Set to true to see license history for all members of your team. (default: false)
-]: nothing -> record<data: table<audio: record, download_time: string, id: string, image: record, is_downloadable: bool, license: string, metadata: record, revshare: record, subscription_id: string, user: record, video: record>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
+]: nothing -> oneof<record<data: table<audio: record, download_time: string, id: string, image: record, is_downloadable: bool, license: string, metadata: record, revshare: record, subscription_id: string, user: record, video: record>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "image_id" $image_id "scalar") (serialize-qp "license" $license "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "download_availability" $download_availability "scalar") (serialize-qp "team_history" $team_history "scalar")] | flatten | str join "&"
@@ -1840,7 +1857,6 @@ export def "get-editorial-image-license-list" [
 #
 # POST /v2/editorial/images/licenses
 # operationId: licenseEditorialImages
-# --editorial item shape: {editorial_id: string, license: string, metadata?: record, size?: "small"|"medium"|"original"}
 export def "license-editorial-images" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1853,7 +1869,7 @@ export def "license-editorial-images" [
   --dry-run(-n) # Return the request that would be sent without executing it
   country: any # A valid ISO 3166-1 Alpha-2 or ISO 3166-1 Alpha-3 code. (e.g. USA)
   editorial: list # Editorial content to license — item shape: {editorial_id: string, license: string, metadata?: record, size?: "small"|"medium"|"original"}
-]: any -> record<data: table<allotment_charge: int, download: record, editorial_id: string, error: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
+]: any -> oneof<record<data: table<allotment_charge: int, download: record, editorial_id: string, error: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1893,7 +1909,7 @@ export def "get-editorial-image-livefeed-list" [
   --country: string # Returns only livefeeds that are available for distribution in a certain country (required, format: country-code-3, e.g. USA)
   --page: int # Page number (default: 1)
   --per-page: int # Number of results per page (default: 20)
-]: nothing -> record<data: table<cover_item: record, created_time: string, id: string, name: string, total_item_count: int>, message: string, page: int, per_page: int, total_count: int> {
+]: nothing -> oneof<record<data: table<cover_item: record, created_time: string, id: string, name: string, total_item_count: int>, message: string, page: int, per_page: int, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($country == null) { error make --unspanned { msg: "required query parameter 'country' missing: pass --country" } }
@@ -1931,7 +1947,7 @@ export def "get-editorial-image-livefeed" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --country: string # Returns only if the livefeed is available for distribution in a certain country (required, format: country-code-3, e.g. USA)
-]: nothing -> record<cover_item: record<height: int, id: string, url: string, width: int>, created_time: string, id: string, name: string, total_item_count: int> {
+]: nothing -> oneof<record<cover_item: record<height: int, id: string, url: string, width: int>, created_time: string, id: string, name: string, total_item_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1970,7 +1986,7 @@ export def "get-editorial-image-livefeed-items" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --country: string # Returns only if the livefeed items are available for distribution in a certain country (required, format: country-code-3, e.g. USA)
-]: nothing -> record<data: table<aspect: float, assets: record, byline: string, caption: string, categories: list, date_taken: string, description: string, id: string, keywords: list, special_instructions: string, title: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
+]: nothing -> oneof<record<data: table<aspect: float, assets: record, byline: string, caption: string, categories: list, date_taken: string, description: string, id: string, keywords: list, special_instructions: string, title: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2016,7 +2032,7 @@ export def "search-editorial-images" [
   --date-end: string # Show only editorial content generated on or before a specific date (format: date, e.g. 2021-05-29)
   --per-page: int # Number of results per page (default: 20)
   --cursor: string # The cursor of the page with which to start fetching results; this cursor is returned from previous requests (e.g. eyJ2IjoxLCJzIjoxfQ==)
-]: nothing -> record<data: table<aspect: float, assets: record, byline: string, caption: string, categories: list, date_taken: string, description: string, id: string, keywords: list, special_instructions: string, title: string>, message: string, next: string, page: int, per_page: int, prev: string, search_id: string, total_count: int> {
+]: nothing -> oneof<record<data: table<aspect: float, assets: record, byline: string, caption: string, categories: list, date_taken: string, description: string, id: string, keywords: list, special_instructions: string, title: string>, message: string, next: string, page: int, per_page: int, prev: string, search_id: string, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($country == null) { error make --unspanned { msg: "required query parameter 'country' missing: pass --country" } }
@@ -2062,7 +2078,7 @@ export def "get-updated-editorial-images" [
   --supplier-code: list<string> # Show only editorial content from certain suppliers (e.g. ABC)
   --country: string # Show only editorial content that is available for distribution in a certain country (required, format: country-code-3, e.g. USA)
   --per-page: int # Number of results per page (default: 500, e.g. 200)
-]: nothing -> record<data: table<aspect: float, assets: record, byline: string, caption: string, categories: list, commercial_status: record, created_time: string, date_taken: string, description: string, id: string, keywords: list, rights: record, special_instructions: string, supplier_code: string, title: string, updated_time: string, updates: list>, message: string, next: string, per_page: int, prev: string> {
+]: nothing -> oneof<record<data: table<aspect: float, assets: record, byline: string, caption: string, categories: list, commercial_status: record, created_time: string, date_taken: string, description: string, id: string, keywords: list, rights: record, special_instructions: string, supplier_code: string, title: string, updated_time: string, updates: list>, message: string, next: string, per_page: int, prev: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($type == null) { error make --unspanned { msg: "required query parameter 'type' missing: pass --type" } }
@@ -2103,7 +2119,7 @@ export def "get-editorial-image" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --country: string # Returns only if the content is available for distribution in a certain country (required, format: country-code-3, e.g. USA)
-]: nothing -> record<aspect: float, assets: record<medium_jpg: record<display_name: string, dpi: int, file_size: int, format: string, height: int, is_licensable: bool, width: int>, original: record<display_name: string, dpi: int, file_size: int, format: string, height: int, is_licensable: bool, width: int>, small_jpg: record<display_name: string, dpi: int, file_size: int, format: string, height: int, is_licensable: bool, width: int>, thumb_170: record<height: int, url: string, width: int>, thumb_220: record<height: int, url: string, width: int>, watermark_1500: record<height: int, url: string, width: int>, watermark_450: record<height: int, url: string, width: int>>, byline: string, caption: string, categories: table<name: string>, date_taken: string, description: string, id: string, keywords: list<string>, special_instructions: string, title: string> {
+]: nothing -> oneof<record<aspect: float, assets: record<medium_jpg: record<display_name: string, dpi: int, file_size: int, format: string, height: int, is_licensable: bool, width: int>, original: record<display_name: string, dpi: int, file_size: int, format: string, height: int, is_licensable: bool, width: int>, small_jpg: record<display_name: string, dpi: int, file_size: int, format: string, height: int, is_licensable: bool, width: int>, thumb_170: record<height: int, url: string, width: int>, thumb_220: record<height: int, url: string, width: int>, watermark_1500: record<height: int, url: string, width: int>, watermark_450: record<height: int, url: string, width: int>>, byline: string, caption: string, categories: table<name: string>, date_taken: string, description: string, id: string, keywords: list<string>, special_instructions: string, title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2131,7 +2147,6 @@ export def "get-editorial-image" [
 # POST /v2/editorial/licenses
 # DEPRECATED
 # operationId: licenseEditorialImage
-# --editorial item shape: {editorial_id: string, license: string, metadata?: record, size?: "small"|"medium"|"original"}
 @deprecated
 export def "license-editorial-image" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2145,7 +2160,7 @@ export def "license-editorial-image" [
   --dry-run(-n) # Return the request that would be sent without executing it
   country: any # A valid ISO 3166-1 Alpha-2 or ISO 3166-1 Alpha-3 code. (e.g. USA)
   editorial: list # Editorial content to license — item shape: {editorial_id: string, license: string, metadata?: record, size?: "small"|"medium"|"original"}
-]: any -> record<data: table<allotment_charge: int, download: record, editorial_id: string, error: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
+]: any -> oneof<record<data: table<allotment_charge: int, download: record, editorial_id: string, error: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2187,7 +2202,7 @@ export def "get-editorial-livefeed-list" [
   --country: string # Returns only livefeeds that are available for distribution in a certain country (required, format: country-code-3, e.g. USA)
   --page: int # Page number (default: 1)
   --per-page: int # Number of results per page (default: 20)
-]: nothing -> record<data: table<cover_item: record, created_time: string, id: string, name: string, total_item_count: int>, message: string, page: int, per_page: int, total_count: int> {
+]: nothing -> oneof<record<data: table<cover_item: record, created_time: string, id: string, name: string, total_item_count: int>, message: string, page: int, per_page: int, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($country == null) { error make --unspanned { msg: "required query parameter 'country' missing: pass --country" } }
@@ -2227,7 +2242,7 @@ export def "get-editorial-livefeed" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --country: string # Returns only if the livefeed is available for distribution in a certain country (required, format: country-code-3, e.g. USA)
-]: nothing -> record<cover_item: record<height: int, id: string, url: string, width: int>, created_time: string, id: string, name: string, total_item_count: int> {
+]: nothing -> oneof<record<cover_item: record<height: int, id: string, url: string, width: int>, created_time: string, id: string, name: string, total_item_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2268,7 +2283,7 @@ export def "get-editorial-livefeed-items" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --country: string # Returns only if the livefeed items are available for distribution in a certain country (required, format: country-code-3, e.g. USA)
-]: nothing -> record<data: table<aspect: float, assets: record, byline: string, caption: string, categories: list, date_taken: string, description: string, id: string, keywords: list, special_instructions: string, title: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
+]: nothing -> oneof<record<data: table<aspect: float, assets: record, byline: string, caption: string, categories: list, date_taken: string, description: string, id: string, keywords: list, special_instructions: string, title: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2316,7 +2331,7 @@ export def "search-editorial" [
   --date-end: string # Show only editorial content generated on or before a specific date (format: date)
   --per-page: int # Number of results per page (default: 20)
   --cursor: string # The cursor of the page with which to start fetching results; this cursor is returned from previous requests
-]: nothing -> record<data: table<aspect: float, assets: record, byline: string, caption: string, categories: list, date_taken: string, description: string, id: string, keywords: list, special_instructions: string, title: string>, message: string, next: string, page: int, per_page: int, prev: string, search_id: string, total_count: int> {
+]: nothing -> oneof<record<data: table<aspect: float, assets: record, byline: string, caption: string, categories: list, date_taken: string, description: string, id: string, keywords: list, special_instructions: string, title: string>, message: string, next: string, page: int, per_page: int, prev: string, search_id: string, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($country == null) { error make --unspanned { msg: "required query parameter 'country' missing: pass --country" } }
@@ -2364,7 +2379,7 @@ export def "get-updated-editorial-image" [
   --supplier-code: list<string> # Show only editorial content from certain suppliers (e.g. ABC)
   --country: string # Show only editorial content that is available for distribution in a certain country (required, format: country-code-3, e.g. USA)
   --per-page: int # Number of results per page (default: 500, e.g. 200)
-]: nothing -> record<data: table<aspect: float, assets: record, byline: string, caption: string, categories: list, commercial_status: record, created_time: string, date_taken: string, description: string, id: string, keywords: list, rights: record, special_instructions: string, supplier_code: string, title: string, updated_time: string, updates: list>, message: string, next: string, per_page: int, prev: string> {
+]: nothing -> oneof<record<data: table<aspect: float, assets: record, byline: string, caption: string, categories: list, commercial_status: record, created_time: string, date_taken: string, description: string, id: string, keywords: list, rights: record, special_instructions: string, supplier_code: string, title: string, updated_time: string, updates: list>, message: string, next: string, per_page: int, prev: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($type == null) { error make --unspanned { msg: "required query parameter 'type' missing: pass --type" } }
@@ -2403,7 +2418,7 @@ export def "list-editorial-video-categories" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<name: string>> {
+]: nothing -> oneof<record<data: table<name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/editorial/videos/categories" $auth.query)
@@ -2447,7 +2462,7 @@ export def "get-editorial-video-license-list" [
   --end-date: string # Show licenses created before the specified date (format: date-time, e.g. 2021-03-29T13:25:13.521Z)
   --download-availability: string@download-availability-completer # Filter licenses by download availability (default: all)
   --team-history: oneof<nothing, bool> # Set to true to see license history for all members of your team. (default: false)
-]: nothing -> record<data: table<audio: record, download_time: string, id: string, image: record, is_downloadable: bool, license: string, metadata: record, revshare: record, subscription_id: string, user: record, video: record>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
+]: nothing -> oneof<record<data: table<audio: record, download_time: string, id: string, image: record, is_downloadable: bool, license: string, metadata: record, revshare: record, subscription_id: string, user: record, video: record>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "video_id" $video_id "scalar") (serialize-qp "license" $license "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "download_availability" $download_availability "scalar") (serialize-qp "team_history" $team_history "scalar")] | flatten | str join "&"
@@ -2472,7 +2487,6 @@ export def "get-editorial-video-license-list" [
 #
 # POST /v2/editorial/videos/licenses
 # operationId: licenseEditorialVideo
-# --editorial item shape: {editorial_id: string, license: "premier_editorial_video_digital_only"|"premier_editorial_video_all_media"|"premier_editorial_video_all_media_single_territory"|"premier_editorial_video_comp", metadata?: record, size?: "original"}
 export def "license-editorial-video" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2485,7 +2499,7 @@ export def "license-editorial-video" [
   --dry-run(-n) # Return the request that would be sent without executing it
   country: any # A valid ISO 3166-1 Alpha-2 or ISO 3166-1 Alpha-3 code. (e.g. USA)
   editorial: list # Editorial content to license — item shape: {editorial_id: string, license: "premier_editorial_video_digital_only"|"premier_editorial_video_all_media"|"premier_editorial_video_all_media_single_territory"|"premier_editorial_video_comp", metadata?: record, size?: "original"}
-]: any -> record<data: table<allotment_charge: int, download: record, editorial_id: string, error: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
+]: any -> oneof<record<data: table<allotment_charge: int, download: record, editorial_id: string, error: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2533,7 +2547,7 @@ export def "search-editorial-videos" [
   --fps: float # Show only editorial video content generated with specific frames per second (e.g. 24)
   --per-page: int # Number of results per page (default: 20)
   --cursor: string # The cursor of the page with which to start fetching results; this cursor is returned from previous requests (e.g. eyJ2IjoxLCJzIjoxfQ==)
-]: nothing -> record<data: table<aspect: float, assets: record, byline: string, caption: string, categories: list, date_taken: string, description: string, id: string, keywords: list, title: string>, message: string, next: string, page: int, per_page: int, prev: string, search_id: string, total_count: int> {
+]: nothing -> oneof<record<data: table<aspect: float, assets: record, byline: string, caption: string, categories: list, date_taken: string, description: string, id: string, keywords: list, title: string>, message: string, next: string, page: int, per_page: int, prev: string, search_id: string, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($country == null) { error make --unspanned { msg: "required query parameter 'country' missing: pass --country" } }
@@ -2572,7 +2586,7 @@ export def "get-editorial-video" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --country: string # Returns only if the content is available for distribution in a certain country (required, format: country-code-3, e.g. USA)
   --search-id: string # The ID of the search that is related to this request (e.g. 00000000-0000-0000-0000-000000000000)
-]: nothing -> record<aspect: float, assets: record<original: record<display_name: string, file_size: int, format: string, fps: float, height: int, is_licensable: bool, width: int>, preview_mp4: record<url: string>, preview_webm: record<url: string>, thumb_jpg: record<url: string>>, byline: string, caption: string, categories: table<name: string>, date_taken: string, description: string, id: string, keywords: list<string>, title: string> {
+]: nothing -> oneof<record<aspect: float, assets: record<original: record<display_name: string, file_size: int, format: string, fps: float, height: int, is_licensable: bool, width: int>, preview_mp4: record<url: string>, preview_webm: record<url: string>, thumb_jpg: record<url: string>>, byline: string, caption: string, categories: table<name: string>, date_taken: string, description: string, id: string, keywords: list<string>, title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2613,7 +2627,7 @@ export def "get-v2-editorial-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --country: string # Returns only if the content is available for distribution in a certain country (required, format: country-code-3, e.g. USA)
   --search-id: string # The ID of the search that is related to this request (e.g. 00000000-0000-0000-0000-000000000000)
-]: nothing -> record<aspect: float, assets: record<medium_jpg: record<display_name: string, dpi: int, file_size: int, format: string, height: int, is_licensable: bool, width: int>, original: record<display_name: string, dpi: int, file_size: int, format: string, height: int, is_licensable: bool, width: int>, small_jpg: record<display_name: string, dpi: int, file_size: int, format: string, height: int, is_licensable: bool, width: int>, thumb_170: record<height: int, url: string, width: int>, thumb_220: record<height: int, url: string, width: int>, watermark_1500: record<height: int, url: string, width: int>, watermark_450: record<height: int, url: string, width: int>>, byline: string, caption: string, categories: table<name: string>, date_taken: string, description: string, id: string, keywords: list<string>, special_instructions: string, title: string> {
+]: nothing -> oneof<record<aspect: float, assets: record<medium_jpg: record<display_name: string, dpi: int, file_size: int, format: string, height: int, is_licensable: bool, width: int>, original: record<display_name: string, dpi: int, file_size: int, format: string, height: int, is_licensable: bool, width: int>, small_jpg: record<display_name: string, dpi: int, file_size: int, format: string, height: int, is_licensable: bool, width: int>, thumb_170: record<height: int, url: string, width: int>, thumb_220: record<height: int, url: string, width: int>, watermark_1500: record<height: int, url: string, width: int>, watermark_450: record<height: int, url: string, width: int>>, byline: string, caption: string, categories: table<name: string>, date_taken: string, description: string, id: string, keywords: list<string>, special_instructions: string, title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2653,7 +2667,7 @@ export def "get-image-list" [
   --id: list<string> # One or more image IDs (required, e.g. [1110335168, 465011609])
   --view: string@view-completer # Amount of detail to render in the response (default: minimal, e.g. minimal)
   --search-id: string # The ID of the search that is related to this request (e.g. 00000000-0000-0000-0000-000000000000)
-]: nothing -> record<data: table<added_date: string, affiliate_url: string, aspect: float, assets: record, categories: list, contributor: record, description: string, has_model_release: bool, has_property_release: bool, id: string, image_type: string, insights: record, is_adult: bool, is_editorial: bool, is_illustration: bool, keywords: list, media_type: string, model_releases: list, models: list, releases: list, url: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
+]: nothing -> oneof<record<data: table<added_date: string, affiliate_url: string, aspect: float, assets: record, categories: list, contributor: record, description: string, has_model_release: bool, has_property_release: bool, id: string, image_type: string, insights: record, is_adult: bool, is_editorial: bool, is_illustration: bool, keywords: list, media_type: string, model_releases: list, models: list, releases: list, url: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
@@ -2692,7 +2706,7 @@ export def "upload-ephemeral-image" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   base64_image: string # A Base 64 encoded jpeg or png; images can be no larger than 10mb and can be no larger than 10,000 pixels in width or height
-]: any -> record<id: string> {
+]: any -> oneof<record<id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2730,7 +2744,7 @@ export def "list-image-categories" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --language: string@language-completer # Language for the keywords and categories in the response (e.g. cs)
-]: nothing -> record<data: table<id: string, name: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
+]: nothing -> oneof<record<data: table<id: string, name: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "language" $language "scalar")] | flatten | str join "&"
@@ -2768,7 +2782,7 @@ export def "get-image-collection-list" [
   --embed: list<string> # Which sharing information to include in the response, such as a URL to the collection (e.g. share_code)
   --page: int # Page number (default: 1, e.g. 1)
   --per-page: int # Number of results per page (default: 100, e.g. 2)
-]: nothing -> record<data: table<cover_item: record, created_time: string, id: string, items_updated_time: string, name: string, share_code: string, share_url: string, total_item_count: int, updated_time: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
+]: nothing -> oneof<record<data: table<cover_item: record, created_time: string, id: string, items_updated_time: string, name: string, share_code: string, share_url: string, total_item_count: int, updated_time: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "embed" $embed "multi") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
@@ -2804,7 +2818,7 @@ export def "create-image-collection" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   name: string # The name of the collection
-]: any -> record<id: string> {
+]: any -> oneof<record<id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2844,7 +2858,7 @@ export def "get-featured-image-collection-list" [
   --embed: string@embed-completer # Which sharing information to include in the response, such as a URL to the collection (e.g. share_url)
   --type: list<string> # The types of collections to return (e.g. [photo])
   --asset-hint: string@asset-hint-completer # Cover image size (default: 1x, e.g. 1x)
-]: nothing -> record<data: table<cover_item: record, created_time: string, hero_item: record, id: string, items_updated_time: string, name: string, share_url: string, total_item_count: int, updated_time: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
+]: nothing -> oneof<record<data: table<cover_item: record, created_time: string, hero_item: record, id: string, items_updated_time: string, name: string, share_url: string, total_item_count: int, updated_time: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "embed" $embed "scalar") (serialize-qp "type" $type "multi") (serialize-qp "asset_hint" $asset_hint "scalar")] | flatten | str join "&"
@@ -2882,7 +2896,7 @@ export def "get-featured-image-collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --embed: string@embed-completer # Which sharing information to include in the response, such as a URL to the collection
   --asset-hint: string@asset-hint-completer # Cover image size (default: 1x)
-]: nothing -> record<cover_item: record<url: string>, created_time: string, hero_item: record<url: string>, id: string, items_updated_time: string, name: string, share_url: string, total_item_count: int, updated_time: string> {
+]: nothing -> oneof<record<cover_item: record<url: string>, created_time: string, hero_item: record<url: string>, id: string, items_updated_time: string, name: string, share_url: string, total_item_count: int, updated_time: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2921,7 +2935,7 @@ export def "get-featured-image-collection-items" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number (default: 1)
   --per-page: int # Number of results per page (default: 100)
-]: nothing -> record<data: table<added_time: string, id: string, media_type: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
+]: nothing -> oneof<record<data: table<added_time: string, id: string, media_type: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2996,7 +3010,7 @@ export def "get-image-collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --embed: list<string> # Which sharing information to include in the response, such as a URL to the collection
   --share-code: string # Code to retrieve a shared collection
-]: nothing -> record<cover_item: record<added_time: string, id: string, media_type: string>, created_time: string, id: string, items_updated_time: string, name: string, share_code: string, share_url: string, total_item_count: int, updated_time: string> {
+]: nothing -> oneof<record<cover_item: record<added_time: string, id: string, media_type: string>, created_time: string, id: string, items_updated_time: string, name: string, share_code: string, share_url: string, total_item_count: int, updated_time: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3115,7 +3129,7 @@ export def "get-image-collection-items" [
   --per-page: int # Number of results per page (default: 100)
   --share-code: string # Code to retrieve the contents of a shared collection
   --sort: string@sort-completer # Sort order (default: oldest)
-]: nothing -> record<data: table<added_time: string, id: string, media_type: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
+]: nothing -> oneof<record<data: table<added_time: string, id: string, media_type: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3141,7 +3155,6 @@ export def "get-image-collection-items" [
 #
 # POST /v2/images/collections/{id}/items
 # operationId: addImageCollectionItems
-# --items item shape: {added_time?: string, id: string, media_type?: string}
 export def "add-image-collection-items" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3202,7 +3215,7 @@ export def "get-image-license-list" [
   --end-date: string # Show licenses created before the specified date (format: date-time, e.g. 2021-03-29T13:25:13.521Z)
   --download-availability: string@download-availability-completer # Filter licenses by download availability (default: all)
   --team-history: oneof<nothing, bool> # Set to true to see license history for all members of your team. (default: false)
-]: nothing -> record<data: table<audio: record, download_time: string, id: string, image: record, is_downloadable: bool, license: string, metadata: record, revshare: record, subscription_id: string, user: record, video: record>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
+]: nothing -> oneof<record<data: table<audio: record, download_time: string, id: string, image: record, is_downloadable: bool, license: string, metadata: record, revshare: record, subscription_id: string, user: record, video: record>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "image_id" $image_id "scalar") (serialize-qp "license" $license "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "download_availability" $download_availability "scalar") (serialize-qp "team_history" $team_history "scalar")] | flatten | str join "&"
@@ -3243,7 +3256,7 @@ export def "license-images" [
   --size: string@size-completer # Image size (default: huge)
   --search-id: string # Search ID that was provided in the results of an image search
   images: list # Images to create licenses for
-]: any -> record<data: table<allotment_charge: int, download: record, error: string, image_id: string, license_id: string, price: record>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
+]: any -> oneof<record<data: table<allotment_charge: int, download: record, error: string, image_id: string, license_id: string, price: record>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3271,7 +3284,6 @@ export def "license-images" [
 #
 # POST /v2/images/licenses/{id}/downloads
 # operationId: downloadImage
-# --auth_cookie shape: {name: string, value: string}
 @deprecated --flag show-modal
 @deprecated --flag verification-code
 export def "download-image" [
@@ -3289,7 +3301,7 @@ export def "download-image" [
   --show-modal: oneof<nothing, bool> # (Deprecated) (DEPRECATED)
   --size: string@size-completer-1 # Size of the image
   --verification-code: string # (Deprecated) (DEPRECATED)
-]: any -> record<url: string> {
+]: any -> oneof<record<url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3330,7 +3342,7 @@ export def "get-image-recommendations" [
   --id: list<string> # Image IDs (required, e.g. [465011609])
   --max-items: int # Maximum number of results returned in the response (default: 20)
   --safe: oneof<nothing, bool> # Restrict results to safe images (default: true)
-]: nothing -> record<data: table<id: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
+]: nothing -> oneof<record<data: table<id: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
@@ -3408,7 +3420,7 @@ export def "search-images" [
   --width: int # (Deprecated; use width_from and width_to instead) Show images with the specified width (DEPRECATED)
   --width-from: int # Show images with the specified width or larger, in pixels (e.g. 1920)
   --width-to: int # Show images with the specified width or smaller, in pixels (e.g. 1920)
-]: nothing -> record<data: table<added_date: string, affiliate_url: string, aspect: float, assets: record, categories: list, contributor: record, description: string, has_model_release: bool, has_property_release: bool, id: string, image_type: string, insights: record, is_adult: bool, is_editorial: bool, is_illustration: bool, keywords: list, media_type: string, model_releases: list, models: list, releases: list, url: string>, insights: record<label_performance: list<record>>, message: string, page: int, per_page: int, search_id: string, spellcheck_info: record, total_count: int> {
+]: nothing -> oneof<record<data: table<added_date: string, affiliate_url: string, aspect: float, assets: record, categories: list, contributor: record, description: string, has_model_release: bool, has_property_release: bool, id: string, image_type: string, insights: record, is_adult: bool, is_editorial: bool, is_illustration: bool, keywords: list, media_type: string, model_releases: list, models: list, releases: list, url: string>, insights: record<label_performance: list<record>>, message: string, page: int, per_page: int, search_id: string, spellcheck_info: record, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "added_date" $added_date "scalar") (serialize-qp "added_date_start" $added_date_start "scalar") (serialize-qp "aspect_ratio_min" $aspect_ratio_min "scalar") (serialize-qp "aspect_ratio_max" $aspect_ratio_max "scalar") (serialize-qp "aspect_ratio" $aspect_ratio "scalar") (serialize-qp "ai_search" $ai_search "scalar") (serialize-qp "ai_labels_limit" $ai_labels_limit "scalar") (serialize-qp "ai_industry" $ai_industry "scalar") (serialize-qp "ai_objective" $ai_objective "scalar") (serialize-qp "added_date_end" $added_date_end "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "color" $color "scalar") (serialize-qp "contributor" $contributor "multi") (serialize-qp "contributor_country" $contributor_country "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "height_from" $height_from "scalar") (serialize-qp "height_to" $height_to "scalar") (serialize-qp "image_type" $image_type "multi") (serialize-qp "keyword_safe_search" $keyword_safe_search "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "license" $license "multi") (serialize-qp "model" $model "multi") (serialize-qp "orientation" $orientation "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "people_model_released" $people_model_released "scalar") (serialize-qp "people_age" $people_age "scalar") (serialize-qp "people_ethnicity" $people_ethnicity "multi") (serialize-qp "people_gender" $people_gender "scalar") (serialize-qp "people_number" $people_number "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "safe" $safe "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "spellcheck_query" $spellcheck_query "scalar") (serialize-qp "view" $view "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "width_from" $width_from "scalar") (serialize-qp "width_to" $width_to "scalar")] | flatten | str join "&"
@@ -3445,7 +3457,7 @@ export def "get-image-suggestions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # Search term for which you want keyword suggestions (required, e.g. cats)
   --limit: int # Limit the number of suggestions (default: 10)
-]: nothing -> record<data: list<string>> {
+]: nothing -> oneof<record<data: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
@@ -3482,7 +3494,7 @@ export def "get-image-keyword-suggestions" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   text: string # Plain text to extract keywords from
-]: any -> record<keywords: list<string>> {
+]: any -> oneof<record<keywords: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3526,7 +3538,7 @@ export def "get-updated-images" [
   --page: int # Page number (default: 1)
   --per-page: int # Number of results per page (default: 100)
   --sort: string@sort-completer # Sort order (default: newest)
-]: nothing -> record<data: table<id: string, updated_time: string, updates: list>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
+]: nothing -> oneof<record<data: table<id: string, updated_time: string, updates: list>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "multi") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "interval" $interval "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
@@ -3565,7 +3577,7 @@ export def "get-image" [
   --language: string@language-completer # Language for the keywords and categories in the response (e.g. cs)
   --view: string@view-completer # Amount of detail to render in the response (default: full)
   --search-id: string # The ID of the search that is related to this request (e.g. 00000000-0000-0000-0000-000000000000)
-]: nothing -> record<added_date: string, affiliate_url: string, aspect: float, assets: record<huge_jpg: record<display_name: string, dpi: int, file_size: int, format: string, height: int, is_licensable: bool, width: int>, huge_thumb: record<height: int, url: string, width: int>, large_thumb: record<height: int, url: string, width: int>, medium_jpg: record<display_name: string, dpi: int, file_size: int, format: string, height: int, is_licensable: bool, width: int>, preview: record<height: int, url: string, width: int>, preview_1000: record<height: int, url: string, width: int>, preview_1500: record<height: int, url: string, width: int>, small_jpg: record<display_name: string, dpi: int, file_size: int, format: string, height: int, is_licensable: bool, width: int>, small_thumb: record<height: int, url: string, width: int>, supersize_jpg: record<display_name: string, dpi: int, file_size: int, format: string, height: int, is_licensable: bool, width: int>, vector_eps: record<display_name: string, dpi: int, file_size: int, format: string, height: int, is_licensable: bool, width: int>>, categories: table<id: string, name: string>, contributor: record<id: string>, description: string, has_model_release: bool, has_property_release: bool, id: string, image_type: string, insights: record<labels: list<string>>, is_adult: bool, is_editorial: bool, is_illustration: bool, keywords: list<string>, media_type: string, model_releases: table<id: string>, models: table<id: string>, releases: list<string>, url: string> {
+]: nothing -> oneof<record<added_date: string, affiliate_url: string, aspect: float, assets: record<huge_jpg: record<display_name: string, dpi: int, file_size: int, format: string, height: int, is_licensable: bool, width: int>, huge_thumb: record<height: int, url: string, width: int>, large_thumb: record<height: int, url: string, width: int>, medium_jpg: record<display_name: string, dpi: int, file_size: int, format: string, height: int, is_licensable: bool, width: int>, preview: record<height: int, url: string, width: int>, preview_1000: record<height: int, url: string, width: int>, preview_1500: record<height: int, url: string, width: int>, small_jpg: record<display_name: string, dpi: int, file_size: int, format: string, height: int, is_licensable: bool, width: int>, small_thumb: record<height: int, url: string, width: int>, supersize_jpg: record<display_name: string, dpi: int, file_size: int, format: string, height: int, is_licensable: bool, width: int>, vector_eps: record<display_name: string, dpi: int, file_size: int, format: string, height: int, is_licensable: bool, width: int>>, categories: table<id: string, name: string>, contributor: record<id: string>, description: string, has_model_release: bool, has_property_release: bool, id: string, image_type: string, insights: record<labels: list<string>>, is_adult: bool, is_editorial: bool, is_illustration: bool, keywords: list<string>, media_type: string, model_releases: table<id: string>, models: table<id: string>, releases: list<string>, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3606,7 +3618,7 @@ export def "list-similar-images" [
   --page: int # Page number (default: 1)
   --per-page: int # Number of results per page (default: 20)
   --view: string@view-completer # Amount of detail to render in the response (default: minimal)
-]: nothing -> record<data: table<added_date: string, affiliate_url: string, aspect: float, assets: record, categories: list, contributor: record, description: string, has_model_release: bool, has_property_release: bool, id: string, image_type: string, insights: record, is_adult: bool, is_editorial: bool, is_illustration: bool, keywords: list, media_type: string, model_releases: list, models: list, releases: list, url: string>, insights: record<label_performance: list<record>>, message: string, page: int, per_page: int, search_id: string, spellcheck_info: record, total_count: int> {
+]: nothing -> oneof<record<data: table<added_date: string, affiliate_url: string, aspect: float, assets: record, categories: list, contributor: record, description: string, has_model_release: bool, has_property_release: bool, id: string, image_type: string, insights: record, is_adult: bool, is_editorial: bool, is_illustration: bool, keywords: list, media_type: string, model_releases: list, models: list, releases: list, url: string>, insights: record<label_performance: list<record>>, message: string, page: int, per_page: int, search_id: string, spellcheck_info: record, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3649,7 +3661,7 @@ export def "create-access-token" [
   grant_type: string@grant-type-completer # Grant type: authorization_code generates user tokens, client_credentials generates short-lived client grants
   --realm: string@realm-completer # User type to be authorized (usually 'customer') (default: customer)
   --refresh-token: string # Pass this along with grant_type=refresh_token to get a fresh access token
-]: any -> record<access_token: string, expires_in: int, refresh_token: string, token_type: string, user_token: string> {
+]: any -> oneof<record<access_token: string, expires_in: int, refresh_token: string, token_type: string, user_token: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3736,7 +3748,7 @@ export def "get-sfx-list-details" [
   --language: string@language-completer # Language for the keywords and categories in the response (e.g. cs)
   --library: string@library-completer-1 # Which library to fetch from (e.g. shutterstock)
   --search-id: string # The ID of the search that is related to this request (e.g. 00000000-0000-0000-0000-000000000000)
-]: nothing -> record<data: table<added_date: string, affiliate_url: string, artist: string, assets: record, contributor: record, description: string, duration: float, id: string, keywords: list, media_type: string, releases: list, title: string, updated_time: string, url: string>> {
+]: nothing -> oneof<record<data: table<added_date: string, affiliate_url: string, artist: string, assets: record, contributor: record, description: string, duration: float, id: string, keywords: list, media_type: string, releases: list, title: string, updated_time: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
@@ -3783,7 +3795,7 @@ export def "get-sfx-license-list" [
   --license-id: string # Filter by the license ID
   --download-availability: string@download-availability-completer # Filter licenses by download availability (default: all)
   --team-history: oneof<nothing, bool> # Set to true to see license history for all members of your team. (default: false)
-]: nothing -> record<data: table<audio: record, download_time: string, id: string, image: record, is_downloadable: bool, license: string, metadata: record, revshare: record, subscription_id: string, user: record, video: record>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
+]: nothing -> oneof<record<data: table<audio: record, download_time: string, id: string, image: record, is_downloadable: bool, license: string, metadata: record, revshare: record, subscription_id: string, user: record, video: record>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sfx_id" $sfx_id "scalar") (serialize-qp "license" $license "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "license_id" $license_id "scalar") (serialize-qp "download_availability" $download_availability "scalar") (serialize-qp "team_history" $team_history "scalar")] | flatten | str join "&"
@@ -3808,7 +3820,6 @@ export def "get-sfx-license-list" [
 #
 # POST /v2/sfx/licenses
 # operationId: licensesSFX
-# --sound_effects item shape: {audio_layout?: "ambisonic"|"5.1"|"stereo", format?: "wav"|"mp3", search_id?: string, sfx_id: string, subscription_id: string}
 export def "licenses-sfx" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3820,7 +3831,7 @@ export def "licenses-sfx" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   sound_effects: list # Sound effects to license for — item shape: {audio_layout?: "ambisonic"|"5.1"|"stereo", format?: "wav"|"mp3", search_id?: string, sfx_id: string, subscription_id: string}
-]: any -> record<data: table<allotment_charge: int, download: record, error: string, license_id: string, sfx_id: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string> {
+]: any -> oneof<record<data: table<allotment_charge: int, download: record, error: string, license_id: string, sfx_id: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3858,7 +3869,7 @@ export def "download-sfx" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<url: string> {
+]: nothing -> oneof<record<url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3906,7 +3917,7 @@ export def "search-sfx" [
   --sort: string@sort-completer-5 # Sort by (default: popular, e.g. popular)
   --view: string@view-completer # Amount of detail to render in the response (default: minimal, e.g. full)
   --language: string@language-completer # Set query and result language (uses Accept-Language header if not set) (e.g. cs)
-]: nothing -> record<data: table<added_date: string, affiliate_url: string, artist: string, assets: record, contributor: record, description: string, duration: float, id: string, keywords: list, media_type: string, releases: list, title: string, updated_time: string, url: string>, message: string, page: int, per_page: int, search_id: string, total_count: int> {
+]: nothing -> oneof<record<data: table<added_date: string, affiliate_url: string, artist: string, assets: record, contributor: record, description: string, duration: float, id: string, keywords: list, media_type: string, releases: list, title: string, updated_time: string, url: string>, message: string, page: int, per_page: int, search_id: string, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "added_date" $added_date "scalar") (serialize-qp "added_date_start" $added_date_start "scalar") (serialize-qp "added_date_end" $added_date_end "scalar") (serialize-qp "duration" $duration "scalar") (serialize-qp "duration_from" $duration_from "scalar") (serialize-qp "duration_to" $duration_to "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "safe" $safe "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "view" $view "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
@@ -3946,7 +3957,7 @@ export def "get-sfx-details" [
   --view: string@view-completer # Amount of detail to render in the response (default: minimal, e.g. full)
   --library: string@library-completer-1 # Which library to fetch from (e.g. shutterstock)
   --search-id: string # The ID of the search that is related to this request (e.g. 00000000-0000-0000-0000-000000000000)
-]: nothing -> record<added_date: string, affiliate_url: string, artist: string, assets: record<preview_mp3: record<file_size: int, url: string>, waveform: record<file_size: int, url: string>>, contributor: record<id: string>, description: string, duration: float, id: string, keywords: list<string>, media_type: string, releases: list<string>, title: string, updated_time: string, url: string> {
+]: nothing -> oneof<record<added_date: string, affiliate_url: string, artist: string, assets: record<preview_mp3: record<file_size: int, url: string>, waveform: record<file_size: int, url: string>>, contributor: record<id: string>, description: string, duration: float, id: string, keywords: list<string>, media_type: string, releases: list<string>, title: string, updated_time: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3983,7 +3994,7 @@ export def "get-v2-test" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --text: string # Text to echo (default: ok)
-]: nothing -> record<text: string> {
+]: nothing -> oneof<record<text: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
@@ -4021,7 +4032,7 @@ export def "validate" [
   --id: int # Integer ID (required, e.g. 123)
   --tag: list<string> # List of tags
   --user-agent: string # User agent
-]: nothing -> record<header: record<user_agent: string>, query: record<id: int, tag: list<string>>> {
+]: nothing -> oneof<record<header: record<user_agent: string>, query: record<id: int, tag: list<string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
@@ -4059,7 +4070,7 @@ export def "get-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<contributor_id: string, customer_id: string, email: string, first_name: string, full_name: string, id: string, is_premier: bool, is_premier_parent: bool, language: string, last_name: string, only_enhanced_license: bool, only_sensitive_use: bool, organization_id: string, premier_permissions: list<string>, username: string> {
+]: nothing -> oneof<record<contributor_id: string, customer_id: string, email: string, first_name: string, full_name: string, id: string, is_premier: bool, is_premier_parent: bool, language: string, last_name: string, only_enhanced_license: bool, only_sensitive_use: bool, organization_id: string, premier_permissions: list<string>, username: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user" $auth.query)
@@ -4093,7 +4104,7 @@ export def "get-access-token" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<client_id: string, contributor_id: string, customer_id: string, expires_in: int, organization_id: string, realm: string, scopes: list<string>, user_id: string, username: string> {
+]: nothing -> oneof<record<client_id: string, contributor_id: string, customer_id: string, expires_in: int, organization_id: string, realm: string, scopes: list<string>, user_id: string, username: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/access_token" $auth.query)
@@ -4127,7 +4138,7 @@ export def "get-user-subscription-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<allotment: record, asset_type: string, description: string, expiration_time: string, formats: list, id: string, license: string, metadata: record, price_per_download: record>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
+]: nothing -> oneof<record<data: table<allotment: record, asset_type: string, description: string, expiration_time: string, formats: list, id: string, license: string, metadata: record, price_per_download: record>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/subscriptions" $auth.query)
@@ -4164,7 +4175,7 @@ export def "get-video-list" [
   --id: list<string> # One or more video IDs (required, e.g. [639703, 993721])
   --view: string@view-completer # Amount of detail to render in the response (default: minimal)
   --search-id: string # The ID of the search that is related to this request (e.g. 00000000-0000-0000-0000-000000000000)
-]: nothing -> record<data: table<added_date: string, affiliate_url: string, aspect: float, aspect_ratio: string, assets: record, categories: list, contributor: record, description: string, duration: float, has_model_release: bool, has_property_release: bool, id: string, is_adult: bool, is_editorial: bool, keywords: list, media_type: string, models: list, url: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
+]: nothing -> oneof<record<data: table<added_date: string, affiliate_url: string, aspect: float, aspect_ratio: string, assets: record, categories: list, contributor: record, description: string, duration: float, has_model_release: bool, has_property_release: bool, id: string, is_adult: bool, is_editorial: bool, keywords: list, media_type: string, models: list, url: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
@@ -4201,7 +4212,7 @@ export def "list-video-categories" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --language: string@language-completer # Language for the keywords and categories in the response (e.g. cs)
-]: nothing -> record<data: table<id: string, name: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
+]: nothing -> oneof<record<data: table<id: string, name: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "language" $language "scalar")] | flatten | str join "&"
@@ -4239,7 +4250,7 @@ export def "get-video-collection-list" [
   --page: int # Page number (default: 1)
   --per-page: int # Number of results per page (default: 100)
   --embed: list<string> # Which sharing information to include in the response, such as a URL to the collection (e.g. share_code)
-]: nothing -> record<data: table<cover_item: record, created_time: string, id: string, items_updated_time: string, name: string, share_code: string, share_url: string, total_item_count: int, updated_time: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
+]: nothing -> oneof<record<data: table<cover_item: record, created_time: string, id: string, items_updated_time: string, name: string, share_code: string, share_url: string, total_item_count: int, updated_time: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "embed" $embed "multi")] | flatten | str join "&"
@@ -4275,7 +4286,7 @@ export def "create-video-collection" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   name: string # The name of the collection
-]: any -> record<id: string> {
+]: any -> oneof<record<id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4313,7 +4324,7 @@ export def "get-featured-video-collection-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --embed: string@embed-completer # What information to include in the response, such as a URL to the collection (e.g. share_url)
-]: nothing -> record<data: table<cover_item: record, created_time: string, hero_item: record, id: string, items_updated_time: string, name: string, share_url: string, total_item_count: int, updated_time: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
+]: nothing -> oneof<record<data: table<cover_item: record, created_time: string, hero_item: record, id: string, items_updated_time: string, name: string, share_url: string, total_item_count: int, updated_time: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "embed" $embed "scalar")] | flatten | str join "&"
@@ -4350,7 +4361,7 @@ export def "get-featured-video-collection" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --embed: string@embed-completer # What information to include in the response, such as a URL to the collection
-]: nothing -> record<cover_item: record<url: string>, created_time: string, hero_item: record<url: string>, id: string, items_updated_time: string, name: string, share_url: string, total_item_count: int, updated_time: string> {
+]: nothing -> oneof<record<cover_item: record<url: string>, created_time: string, hero_item: record<url: string>, id: string, items_updated_time: string, name: string, share_url: string, total_item_count: int, updated_time: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4389,7 +4400,7 @@ export def "get-featured-video-collection-items" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number (default: 1)
   --per-page: int # Number of results per page (default: 100)
-]: nothing -> record<data: table<added_time: string, id: string, media_type: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
+]: nothing -> oneof<record<data: table<added_time: string, id: string, media_type: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4464,7 +4475,7 @@ export def "get-video-collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --embed: list<string> # Which sharing information to include in the response, such as a URL to the collection
   --share-code: string # Code to retrieve a shared collection
-]: nothing -> record<cover_item: record<added_time: string, id: string, media_type: string>, created_time: string, id: string, items_updated_time: string, name: string, share_code: string, share_url: string, total_item_count: int, updated_time: string> {
+]: nothing -> oneof<record<cover_item: record<added_time: string, id: string, media_type: string>, created_time: string, id: string, items_updated_time: string, name: string, share_code: string, share_url: string, total_item_count: int, updated_time: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4583,7 +4594,7 @@ export def "get-video-collection-items" [
   --per-page: int # Number of results per page (default: 100)
   --share-code: string # Code to retrieve the contents of a shared collection
   --sort: string@sort-completer # Sort order (default: oldest)
-]: nothing -> record<data: table<added_time: string, id: string, media_type: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
+]: nothing -> oneof<record<data: table<added_time: string, id: string, media_type: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4609,7 +4620,6 @@ export def "get-video-collection-items" [
 #
 # POST /v2/videos/collections/{id}/items
 # operationId: addVideoCollectionItems
-# --items item shape: {added_time?: string, id: string, media_type?: string}
 export def "add-video-collection-items" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4670,7 +4680,7 @@ export def "get-video-license-list" [
   --end-date: string # Show licenses created before the specified date (format: date-time, e.g. 2021-03-29T13:25:13.521Z)
   --download-availability: string@download-availability-completer # Filter licenses by download availability (default: all)
   --team-history: oneof<nothing, bool> # Set to true to see license history for all members of your team. (default: false)
-]: nothing -> record<data: table<audio: record, download_time: string, id: string, image: record, is_downloadable: bool, license: string, metadata: record, revshare: record, subscription_id: string, user: record, video: record>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
+]: nothing -> oneof<record<data: table<audio: record, download_time: string, id: string, image: record, is_downloadable: bool, license: string, metadata: record, revshare: record, subscription_id: string, user: record, video: record>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "video_id" $video_id "scalar") (serialize-qp "license" $license "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "download_availability" $download_availability "scalar") (serialize-qp "team_history" $team_history "scalar")] | flatten | str join "&"
@@ -4695,7 +4705,6 @@ export def "get-video-license-list" [
 #
 # POST /v2/videos/licenses
 # operationId: licenseVideos
-# --videos item shape: {auth_cookie?: record, editorial_acknowledgement?: bool, metadata?: record, price?: float, search_id?: string, show_modal?: bool, size?: "web"|"sd"|"hd"|"4k", subscription_id?: string, video_id: string}
 export def "license-videos" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4710,7 +4719,7 @@ export def "license-videos" [
   --size: string@size-completer-2 # The size of the video to license (default: web)
   --search-id: string # The Search ID that led to this licensing event
   videos: list # Videos to license — item shape: {auth_cookie?: record, editorial_acknowledgement?: bool, metadata?: record, price?: float, search_id?: string, show_modal?: bool, size?: "web"|"sd"|"hd"|"4k", subscription_id?: string, video_id: string}
-]: any -> record<data: table<allotment_charge: int, download: record, error: string, license_id: string, price: record, video_id: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
+]: any -> oneof<record<data: table<allotment_charge: int, download: record, error: string, license_id: string, price: record, video_id: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4738,7 +4747,6 @@ export def "license-videos" [
 #
 # POST /v2/videos/licenses/{id}/downloads
 # operationId: downloadVideos
-# --auth_cookie shape: {name: string, value: string}
 @deprecated --flag show-modal
 @deprecated --flag verification-code
 export def "download-videos" [
@@ -4756,7 +4764,7 @@ export def "download-videos" [
   --show-modal: oneof<nothing, bool> # (Deprecated) (DEPRECATED)
   --size: string@size-completer-2 # Size of the video
   --verification-code: string # (Deprecated) (DEPRECATED)
-]: any -> record<url: string> {
+]: any -> oneof<record<url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4825,7 +4833,7 @@ export def "search-videos" [
   --safe: oneof<nothing, bool> # Enable or disable safe search (default: true)
   --sort: string@sort-completer-2 # Sort by one of these categories (default: popular)
   --view: string@view-completer # Amount of detail to render in the response (default: minimal)
-]: nothing -> record<data: table<added_date: string, affiliate_url: string, aspect: float, aspect_ratio: string, assets: record, categories: list, contributor: record, description: string, duration: float, has_model_release: bool, has_property_release: bool, id: string, is_adult: bool, is_editorial: bool, keywords: list, media_type: string, models: list, url: string>, message: string, page: int, per_page: int, search_id: string, total_count: int> {
+]: nothing -> oneof<record<data: table<added_date: string, affiliate_url: string, aspect: float, aspect_ratio: string, assets: record, categories: list, contributor: record, description: string, duration: float, has_model_release: bool, has_property_release: bool, id: string, is_adult: bool, is_editorial: bool, keywords: list, media_type: string, models: list, url: string>, message: string, page: int, per_page: int, search_id: string, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "added_date" $added_date "scalar") (serialize-qp "added_date_start" $added_date_start "scalar") (serialize-qp "added_date_end" $added_date_end "scalar") (serialize-qp "aspect_ratio" $aspect_ratio "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "contributor" $contributor "multi") (serialize-qp "contributor_country" $contributor_country "multi") (serialize-qp "duration" $duration "scalar") (serialize-qp "duration_from" $duration_from "scalar") (serialize-qp "duration_to" $duration_to "scalar") (serialize-qp "fps" $fps "scalar") (serialize-qp "fps_from" $fps_from "scalar") (serialize-qp "fps_to" $fps_to "scalar") (serialize-qp "keyword_safe_search" $keyword_safe_search "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "license" $license "multi") (serialize-qp "model" $model "multi") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "people_age" $people_age "scalar") (serialize-qp "people_ethnicity" $people_ethnicity "multi") (serialize-qp "people_gender" $people_gender "scalar") (serialize-qp "people_number" $people_number "scalar") (serialize-qp "people_model_released" $people_model_released "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "resolution" $resolution "scalar") (serialize-qp "safe" $safe "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
@@ -4862,7 +4870,7 @@ export def "get-video-suggestions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # Search term for which you want keyword suggestions (required, e.g. cats)
   --limit: int # Limit the number of the suggestions (default: 10)
-]: nothing -> record<data: list<string>> {
+]: nothing -> oneof<record<data: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
@@ -4904,7 +4912,7 @@ export def "get-updated-videos" [
   --page: int # Page number (default: 1)
   --per-page: int # Number of results per page (default: 100)
   --sort: string@sort-completer # Sort by oldest or newest videos first (default: newest)
-]: nothing -> record<data: table<id: string, updated_time: string, updates: list>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
+]: nothing -> oneof<record<data: table<id: string, updated_time: string, updates: list>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "interval" $interval "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
@@ -4943,7 +4951,7 @@ export def "get-video" [
   --language: string@language-completer # Language for the keywords and categories in the response (e.g. cs)
   --view: string@view-completer # Amount of detail to render in the response (default: full)
   --search-id: string # The ID of the search that is related to this request (e.g. 00000000-0000-0000-0000-000000000000)
-]: nothing -> record<added_date: string, affiliate_url: string, aspect: float, aspect_ratio: string, assets: record<4k: record<display_name: string, file_size: int, format: string, fps: float, height: int, is_licensable: bool, width: int>, hd: record<display_name: string, file_size: int, format: string, fps: float, height: int, is_licensable: bool, width: int>, preview_jpg: record<url: string>, preview_mp4: record<url: string>, preview_webm: record<url: string>, sd: record<display_name: string, file_size: int, format: string, fps: float, height: int, is_licensable: bool, width: int>, thumb_jpg: record<url: string>, thumb_jpgs: record<urls: list>, thumb_mp4: record<url: string>, thumb_webm: record<url: string>, web: record<display_name: string, file_size: int, format: string, fps: float, height: int, is_licensable: bool, width: int>>, categories: table<id: string, name: string>, contributor: record<id: string>, description: string, duration: float, has_model_release: bool, has_property_release: bool, id: string, is_adult: bool, is_editorial: bool, keywords: list<string>, media_type: string, models: table<id: string>, url: string> {
+]: nothing -> oneof<record<added_date: string, affiliate_url: string, aspect: float, aspect_ratio: string, assets: record<4k: record<display_name: string, file_size: int, format: string, fps: float, height: int, is_licensable: bool, width: int>, hd: record<display_name: string, file_size: int, format: string, fps: float, height: int, is_licensable: bool, width: int>, preview_jpg: record<url: string>, preview_mp4: record<url: string>, preview_webm: record<url: string>, sd: record<display_name: string, file_size: int, format: string, fps: float, height: int, is_licensable: bool, width: int>, thumb_jpg: record<url: string>, thumb_jpgs: record<urls: list>, thumb_mp4: record<url: string>, thumb_webm: record<url: string>, web: record<display_name: string, file_size: int, format: string, fps: float, height: int, is_licensable: bool, width: int>>, categories: table<id: string, name: string>, contributor: record<id: string>, description: string, duration: float, has_model_release: bool, has_property_release: bool, id: string, is_adult: bool, is_editorial: bool, keywords: list<string>, media_type: string, models: table<id: string>, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4984,7 +4992,7 @@ export def "find-similar-videos" [
   --page: int # Page number (default: 1)
   --per-page: int # Number of results per page (default: 20)
   --view: string@view-completer # Amount of detail to render in the response (default: minimal)
-]: nothing -> record<data: table<added_date: string, affiliate_url: string, aspect: float, aspect_ratio: string, assets: record, categories: list, contributor: record, description: string, duration: float, has_model_release: bool, has_property_release: bool, id: string, is_adult: bool, is_editorial: bool, keywords: list, media_type: string, models: list, url: string>, message: string, page: int, per_page: int, search_id: string, total_count: int> {
+]: nothing -> oneof<record<data: table<added_date: string, affiliate_url: string, aspect: float, aspect_ratio: string, assets: record, categories: list, contributor: record, description: string, duration: float, has_model_release: bool, has_property_release: bool, id: string, is_adult: bool, is_editorial: bool, keywords: list, media_type: string, models: list, url: string>, message: string, page: int, per_page: int, search_id: string, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }

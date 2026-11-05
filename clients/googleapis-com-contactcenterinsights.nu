@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -124,9 +148,9 @@ def type-completer [] { ["ALL_OF" "ANY_OF" "PHRASE_MATCHER_TYPE_UNSPECIFIED"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "contactcenterinsights-projects-locations-issue-models-calculate-issue-model-stats" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["contactcenterinsights-projects-locations-issue-models-calculate-issue-model-stats" "contactcenterinsights-projects-locations-conversations-calculate-stats" "contactcenterinsights-projects-locations-views-delete" "contactcenterinsights-projects-locations-views-get" "contactcenterinsights-projects-locations-views-patch" "contactcenterinsights-projects-locations-operations-list" "contactcenterinsights-projects-locations-operations-cancel" "contactcenterinsights-projects-locations-issue-models-deploy" "contactcenterinsights-projects-locations-issue-models-undeploy" "contactcenterinsights-projects-locations-conversations-analyses-list" "contactcenterinsights-projects-locations-conversations-analyses-create" "contactcenterinsights-projects-locations-conversations-list" "contactcenterinsights-projects-locations-conversations-create" "contactcenterinsights-projects-locations-conversations-bulk-analyze" "contactcenterinsights-projects-locations-conversations-ingest" "contactcenterinsights-projects-locations-conversations-upload" "contactcenterinsights-projects-locations-insightsdata-export" "contactcenterinsights-projects-locations-issue-models-list" "contactcenterinsights-projects-locations-issue-models-create" "contactcenterinsights-projects-locations-issue-models-issues-list" "contactcenterinsights-projects-locations-phrase-matchers-list" "contactcenterinsights-projects-locations-phrase-matchers-create" "contactcenterinsights-projects-locations-views-list" "contactcenterinsights-projects-locations-views-create" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -170,7 +194,7 @@ export def "contactcenterinsights-projects-locations-issue-models-calculate-issu
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<currentStats: record<analyzedConversationsCount: string, issueStats: record, unclassifiedConversationsCount: string>> {
+]: nothing -> oneof<record<currentStats: record<analyzedConversationsCount: string, issueStats: record, unclassifiedConversationsCount: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($issue_model | is-empty) { error make --unspanned { msg: "path parameter 'issueModel' must be non-empty" } }
@@ -219,7 +243,7 @@ export def "contactcenterinsights-projects-locations-conversations-calculate-sta
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --filter: string # A filter to reduce results to a specific subset. This field is useful for getting statistics about conversations with specific properties.
-]: nothing -> record<averageDuration: string, averageTurnCount: int, conversationCount: int, conversationCountTimeSeries: record<intervalDuration: string, points: list<record>>, customHighlighterMatches: record, issueMatches: record, issueMatchesStats: record, smartHighlighterMatches: record> {
+]: nothing -> oneof<record<averageDuration: string, averageTurnCount: int, conversationCount: int, conversationCountTimeSeries: record<intervalDuration: string, points: list<record>>, customHighlighterMatches: record, issueMatches: record, issueMatchesStats: record, smartHighlighterMatches: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
@@ -268,7 +292,7 @@ export def "contactcenterinsights-projects-locations-views-delete" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --force: oneof<nothing, bool> # If set to true, all of this conversation's analyses will also be deleted. Otherwise, the request will only succeed if the conversation has no analyses.
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -317,7 +341,7 @@ export def "contactcenterinsights-projects-locations-views-get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --view: string@view-completer # The level of details of the conversation. Default is `FULL`.
-]: nothing -> record<createTime: string, displayName: string, name: string, updateTime: string, value: string> {
+]: nothing -> oneof<record<createTime: string, displayName: string, name: string, updateTime: string, value: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -369,7 +393,7 @@ export def "contactcenterinsights-projects-locations-views-patch" [
   --display-name: string # The human-readable display name of the view.
   --body-name: string # Immutable. The resource name of the view. Format: projects/{project}/locations/{location}/views/{view}
   --value: string # String with specific view properties, must be non-empty.
-]: any -> record<createTime: string, displayName: string, name: string, updateTime: string, value: string> {
+]: any -> oneof<record<createTime: string, displayName: string, name: string, updateTime: string, value: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -423,7 +447,7 @@ export def "contactcenterinsights-projects-locations-operations-list" [
   --filter: string # The standard list filter.
   --page-size: int # The standard list page size.
   --page-token: string # The standard list page token.
-]: nothing -> record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>> {
+]: nothing -> oneof<record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -471,7 +495,7 @@ export def "contactcenterinsights-projects-locations-operations-cancel" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -520,7 +544,7 @@ export def "contactcenterinsights-projects-locations-issue-models-deploy" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body-name: string # Required. The issue model to deploy.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -572,7 +596,7 @@ export def "contactcenterinsights-projects-locations-issue-models-undeploy" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body-name: string # Required. The issue model to undeploy.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -626,7 +650,7 @@ export def "contactcenterinsights-projects-locations-conversations-analyses-list
   --filter: string # A filter to reduce results to a specific subset. Useful for querying conversations with specific properties.
   --page-size: int # The maximum number of analyses to return in the response. If this value is zero, the service will select a default size. A call might return fewer objects than requested. A non-empty `next_page_token` in the response indicates that more data is available.
   --page-token: string # The value returned by the last `ListAnalysesResponse`; indicates that this is a continuation of a prior `ListAnalyses` call and the system should return the next page of data.
-]: nothing -> record<analyses: table<analysisResult: record, annotatorSelector: record, createTime: string, name: string, requestTime: string>, nextPageToken: string> {
+]: nothing -> oneof<record<analyses: table<analysisResult: record, annotatorSelector: record, createTime: string, name: string, requestTime: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -652,8 +676,6 @@ export def "contactcenterinsights-projects-locations-conversations-analyses-list
 #
 # POST /v1/{parent}/analyses
 # operationId: contactcenterinsights.projects.locations.conversations.analyses.create
-# --analysisResult shape: {callAnalysisMetadata?: record, endTime?: string}
-# --annotatorSelector shape: {issueModels?: list<string>, phraseMatchers?: list<string>, runEntityAnnotator?: bool, runIntentAnnotator?: bool, runInterruptionAnnotator?: bool, runIssueModelAnnotator?: bool, runPhraseMatcherAnnotator?: bool, runSentimentAnnotator?: bool, runSilenceAnnotator?: bool}
 export def "contactcenterinsights-projects-locations-conversations-analyses-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -679,7 +701,7 @@ export def "contactcenterinsights-projects-locations-conversations-analyses-crea
   --analysis-result: record # The result of an analysis. — shape: {callAnalysisMetadata?: record, endTime?: string}
   --annotator-selector: record # Selector of all available annotators and phrase matchers to run. — shape: {issueModels?: list<string>, phraseMatchers?: list<string>, runEntityAnnotator?: bool, runIntentAnnotator?: bool, runInterruptionAnnotator?: bool, runIssueModelAnnotator?: bool, runPhraseMatcherAnnotator?: bool, runSentimentAnnotator?: bool, runSilenceAnnotator?: bool}
   --name: string # Immutable. The resource name of the analysis. Format: projects/{project}/locations/{location}/conversations/{conversation}/analyses/{analysis}
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -734,7 +756,7 @@ export def "contactcenterinsights-projects-locations-conversations-list" [
   --page-size: int # The maximum number of conversations to return in the response. A valid page size ranges from 0 to 1,000 inclusive. If the page size is zero or unspecified, a default page size of 100 will be chosen. Note that a call might return fewer results than the requested page size.
   --page-token: string # The value returned by the last `ListConversationsResponse`. This value indicates that this is a continuation of a prior `ListConversations` call and that the system should return the next page of data.
   --view: string@view-completer # The level of details of the conversation. Default is `BASIC`.
-]: nothing -> record<conversations: table<agentId: string, callMetadata: record, createTime: string, dataSource: record, dialogflowIntents: record, duration: string, expireTime: string, labels: record, languageCode: string, latestAnalysis: record, medium: string, name: string, obfuscatedUserId: string, runtimeAnnotations: list, startTime: string, transcript: record, ttl: string, turnCount: int, updateTime: string>, nextPageToken: string> {
+]: nothing -> oneof<record<conversations: table<agentId: string, callMetadata: record, createTime: string, dataSource: record, dialogflowIntents: record, duration: string, expireTime: string, labels: record, languageCode: string, latestAnalysis: record, medium: string, name: string, obfuscatedUserId: string, runtimeAnnotations: list, startTime: string, transcript: record, ttl: string, turnCount: int, updateTime: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -760,11 +782,6 @@ export def "contactcenterinsights-projects-locations-conversations-list" [
 #
 # POST /v1/{parent}/conversations
 # operationId: contactcenterinsights.projects.locations.conversations.create
-# --callMetadata shape: {agentChannel?: int, customerChannel?: int}
-# --dataSource shape: {dialogflowSource?: record, gcsSource?: record}
-# --latestAnalysis shape: {analysisResult?: record, annotatorSelector?: record, name?: string}
-# --runtimeAnnotations item shape: {annotationId?: string, answerFeedback?: record, articleSuggestion?: record, createTime?: string, dialogflowInteraction?: record, endBoundary?: record, faqAnswer?: record, smartComposeSuggestion?: record, smartReply?: record, startBoundary?: record}
-# --transcript shape: {transcriptSegments?: list}
 export def "contactcenterinsights-projects-locations-conversations-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -801,7 +818,7 @@ export def "contactcenterinsights-projects-locations-conversations-create" [
   --start-time: string # The time at which the conversation started. (format: google-datetime)
   --transcript: record # A message representing the transcript of a conversation. — shape: {transcriptSegments?: list}
   --ttl: string # Input only. The TTL for this resource. If specified, then this TTL will be used to calculate the expire time. (format: google-duration)
-]: any -> record<agentId: string, callMetadata: record<agentChannel: int, customerChannel: int>, createTime: string, dataSource: record<dialogflowSource: record<audioUri: string, dialogflowConversation: string>, gcsSource: record<audioUri: string, transcriptUri: string>>, dialogflowIntents: record, duration: string, expireTime: string, labels: record, languageCode: string, latestAnalysis: record<analysisResult: record<callAnalysisMetadata: record, endTime: string>, annotatorSelector: record<issueModels: list, phraseMatchers: list, runEntityAnnotator: bool, runIntentAnnotator: bool, runInterruptionAnnotator: bool, runIssueModelAnnotator: bool, runPhraseMatcherAnnotator: bool, runSentimentAnnotator: bool, runSilenceAnnotator: bool>, createTime: string, name: string, requestTime: string>, medium: string, name: string, obfuscatedUserId: string, runtimeAnnotations: table<annotationId: string, answerFeedback: record, articleSuggestion: record, createTime: string, dialogflowInteraction: record, endBoundary: record, faqAnswer: record, smartComposeSuggestion: record, smartReply: record, startBoundary: record>, startTime: string, transcript: record<transcriptSegments: list<record>>, ttl: string, turnCount: int, updateTime: string> {
+]: any -> oneof<record<agentId: string, callMetadata: record<agentChannel: int, customerChannel: int>, createTime: string, dataSource: record<dialogflowSource: record<audioUri: string, dialogflowConversation: string>, gcsSource: record<audioUri: string, transcriptUri: string>>, dialogflowIntents: record, duration: string, expireTime: string, labels: record, languageCode: string, latestAnalysis: record<analysisResult: record<callAnalysisMetadata: record, endTime: string>, annotatorSelector: record<issueModels: list, phraseMatchers: list, runEntityAnnotator: bool, runIntentAnnotator: bool, runInterruptionAnnotator: bool, runIssueModelAnnotator: bool, runPhraseMatcherAnnotator: bool, runSentimentAnnotator: bool, runSilenceAnnotator: bool>, createTime: string, name: string, requestTime: string>, medium: string, name: string, obfuscatedUserId: string, runtimeAnnotations: table<annotationId: string, answerFeedback: record, articleSuggestion: record, createTime: string, dialogflowInteraction: record, endBoundary: record, faqAnswer: record, smartComposeSuggestion: record, smartReply: record, startBoundary: record>, startTime: string, transcript: record<transcriptSegments: list<record>>, ttl: string, turnCount: int, updateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -830,7 +847,6 @@ export def "contactcenterinsights-projects-locations-conversations-create" [
 #
 # POST /v1/{parent}/conversations:bulkAnalyze
 # operationId: contactcenterinsights.projects.locations.conversations.bulkAnalyze
-# --annotatorSelector shape: {issueModels?: list<string>, phraseMatchers?: list<string>, runEntityAnnotator?: bool, runIntentAnnotator?: bool, runInterruptionAnnotator?: bool, runIssueModelAnnotator?: bool, runPhraseMatcherAnnotator?: bool, runSentimentAnnotator?: bool, runSilenceAnnotator?: bool}
 export def "contactcenterinsights-projects-locations-conversations-bulk-analyze" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -857,7 +873,7 @@ export def "contactcenterinsights-projects-locations-conversations-bulk-analyze"
   --annotator-selector: record # Selector of all available annotators and phrase matchers to run. — shape: {issueModels?: list<string>, phraseMatchers?: list<string>, runEntityAnnotator?: bool, runIntentAnnotator?: bool, runInterruptionAnnotator?: bool, runIssueModelAnnotator?: bool, runPhraseMatcherAnnotator?: bool, runSentimentAnnotator?: bool, runSilenceAnnotator?: bool}
   --filter: string # Required. Filter used to select the subset of conversations to analyze.
   --body-parent: string # Required. The parent resource to create analyses in.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -886,9 +902,6 @@ export def "contactcenterinsights-projects-locations-conversations-bulk-analyze"
 #
 # POST /v1/{parent}/conversations:ingest
 # operationId: contactcenterinsights.projects.locations.conversations.ingest
-# --conversationConfig shape: {agentId?: string}
-# --gcsSource shape: {bucketUri?: string}
-# --transcriptObjectConfig shape: {medium?: "MEDIUM_UNSPECIFIED"|"PHONE_CALL"|"CHAT"}
 export def "contactcenterinsights-projects-locations-conversations-ingest" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -915,7 +928,7 @@ export def "contactcenterinsights-projects-locations-conversations-ingest" [
   --gcs-source: record # Configuration for Cloud Storage bucket sources. — shape: {bucketUri?: string}
   --body-parent: string # Required. The parent resource for new conversations.
   --transcript-object-config: record # Configuration for processing transcript objects. — shape: {medium?: "MEDIUM_UNSPECIFIED"|"PHONE_CALL"|"CHAT"}
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -944,8 +957,6 @@ export def "contactcenterinsights-projects-locations-conversations-ingest" [
 #
 # POST /v1/{parent}/conversations:upload
 # operationId: contactcenterinsights.projects.locations.conversations.upload
-# --conversation shape: {agentId?: string, callMetadata?: record, dataSource?: record, expireTime?: string, labels?: record, languageCode?: string, latestAnalysis?: record, medium?: "MEDIUM_UNSPECIFIED"|"PHONE_CALL"|"CHAT", name?: string, obfuscatedUserId?: string, startTime?: string, transcript?: record, ttl?: string}
-# --redactionConfig shape: {deidentifyTemplate?: string, inspectTemplate?: string}
 export def "contactcenterinsights-projects-locations-conversations-upload" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -972,7 +983,7 @@ export def "contactcenterinsights-projects-locations-conversations-upload" [
   --conversation-id: string # Optional. A unique ID for the new conversation. This ID will become the final component of the conversation's resource name. If no ID is specified, a server-generated ID will be used. This value should be 4-64 characters and must match the regular expression `^[a-z0-9-]{4,64}$`. Valid characters are `a-z-`
   --body-parent: string # Required. The parent resource of the conversation.
   --redaction-config: record # DLP resources used for redaction while ingesting conversations. — shape: {deidentifyTemplate?: string, inspectTemplate?: string}
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1001,7 +1012,6 @@ export def "contactcenterinsights-projects-locations-conversations-upload" [
 #
 # POST /v1/{parent}/insightsdata:export
 # operationId: contactcenterinsights.projects.locations.insightsdata.export
-# --bigQueryDestination shape: {dataset?: string, projectId?: string, table?: string}
 export def "contactcenterinsights-projects-locations-insightsdata-export" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1029,7 +1039,7 @@ export def "contactcenterinsights-projects-locations-insightsdata-export" [
   --kms-key: string # A fully qualified KMS key name for BigQuery tables protected by CMEK. Format: projects/{project}/locations/{location}/keyRings/{keyring}/cryptoKeys/{key}/cryptoKeyVersions/{version}
   --body-parent: string # Required. The parent resource to export data from.
   --write-disposition: string@write-disposition-completer # Options for what to do if the destination table already exists.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1080,7 +1090,7 @@ export def "contactcenterinsights-projects-locations-issue-models-list" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<issueModels: table<createTime: string, displayName: string, inputDataConfig: record, issueCount: string, name: string, state: string, trainingStats: record, updateTime: string>> {
+]: nothing -> oneof<record<issueModels: table<createTime: string, displayName: string, inputDataConfig: record, issueCount: string, name: string, state: string, trainingStats: record, updateTime: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1106,8 +1116,6 @@ export def "contactcenterinsights-projects-locations-issue-models-list" [
 #
 # POST /v1/{parent}/issueModels
 # operationId: contactcenterinsights.projects.locations.issueModels.create
-# --inputDataConfig shape: {filter?: string, medium?: "MEDIUM_UNSPECIFIED"|"PHONE_CALL"|"CHAT"}
-# --trainingStats shape: {analyzedConversationsCount?: string, issueStats?: record, unclassifiedConversationsCount?: string}
 export def "contactcenterinsights-projects-locations-issue-models-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1134,7 +1142,7 @@ export def "contactcenterinsights-projects-locations-issue-models-create" [
   --input-data-config: record # Configs for the input data used to create the issue model. — shape: {filter?: string, medium?: "MEDIUM_UNSPECIFIED"|"PHONE_CALL"|"CHAT"}
   --name: string # Immutable. The resource name of the issue model. Format: projects/{project}/locations/{location}/issueModels/{issue_model}
   --training-stats: record # Aggregated statistics about an issue model. — shape: {analyzedConversationsCount?: string, issueStats?: record, unclassifiedConversationsCount?: string}
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1185,7 +1193,7 @@ export def "contactcenterinsights-projects-locations-issue-models-issues-list" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<issues: table<createTime: string, displayName: string, name: string, sampleUtterances: list, updateTime: string>> {
+]: nothing -> oneof<record<issues: table<createTime: string, displayName: string, name: string, sampleUtterances: list, updateTime: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1236,7 +1244,7 @@ export def "contactcenterinsights-projects-locations-phrase-matchers-list" [
   --filter: string # A filter to reduce results to a specific subset. Useful for querying phrase matchers with specific properties.
   --page-size: int # The maximum number of phrase matchers to return in the response. If this value is zero, the service will select a default size. A call might return fewer objects than requested. A non-empty `next_page_token` in the response indicates that more data is available.
   --page-token: string # The value returned by the last `ListPhraseMatchersResponse`. This value indicates that this is a continuation of a prior `ListPhraseMatchers` call and that the system should return the next page of data.
-]: nothing -> record<nextPageToken: string, phraseMatchers: table<activationUpdateTime: string, active: bool, displayName: string, name: string, phraseMatchRuleGroups: list, revisionCreateTime: string, revisionId: string, roleMatch: string, type: string, updateTime: string, versionTag: string>> {
+]: nothing -> oneof<record<nextPageToken: string, phraseMatchers: table<activationUpdateTime: string, active: bool, displayName: string, name: string, phraseMatchRuleGroups: list, revisionCreateTime: string, revisionId: string, roleMatch: string, type: string, updateTime: string, versionTag: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1262,7 +1270,6 @@ export def "contactcenterinsights-projects-locations-phrase-matchers-list" [
 #
 # POST /v1/{parent}/phraseMatchers
 # operationId: contactcenterinsights.projects.locations.phraseMatchers.create
-# --phraseMatchRuleGroups item shape: {phraseMatchRules?: list, type?: "PHRASE_MATCH_RULE_GROUP_TYPE_UNSPECIFIED"|"ALL_OF"|"ANY_OF"}
 export def "contactcenterinsights-projects-locations-phrase-matchers-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1292,7 +1299,7 @@ export def "contactcenterinsights-projects-locations-phrase-matchers-create" [
   --role-match: string@role-match-completer # The role whose utterances the phrase matcher should be matched against. If the role is ROLE_UNSPECIFIED it will be matched against any utterances in the transcript.
   --type: string@type-completer # Required. The type of this phrase matcher.
   --version-tag: string # The customized version tag to use for the phrase matcher. If not specified, it will default to `revision_id`.
-]: any -> record<activationUpdateTime: string, active: bool, displayName: string, name: string, phraseMatchRuleGroups: table<phraseMatchRules: list, type: string>, revisionCreateTime: string, revisionId: string, roleMatch: string, type: string, updateTime: string, versionTag: string> {
+]: any -> oneof<record<activationUpdateTime: string, active: bool, displayName: string, name: string, phraseMatchRuleGroups: table<phraseMatchRules: list, type: string>, revisionCreateTime: string, revisionId: string, roleMatch: string, type: string, updateTime: string, versionTag: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1345,7 +1352,7 @@ export def "contactcenterinsights-projects-locations-views-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # The maximum number of views to return in the response. If this value is zero, the service will select a default size. A call may return fewer objects than requested. A non-empty `next_page_token` in the response indicates that more data is available.
   --page-token: string # The value returned by the last `ListViewsResponse`; indicates that this is a continuation of a prior `ListViews` call and the system should return the next page of data.
-]: nothing -> record<nextPageToken: string, views: table<createTime: string, displayName: string, name: string, updateTime: string, value: string>> {
+]: nothing -> oneof<record<nextPageToken: string, views: table<createTime: string, displayName: string, name: string, updateTime: string, value: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1396,7 +1403,7 @@ export def "contactcenterinsights-projects-locations-views-create" [
   --display-name: string # The human-readable display name of the view.
   --name: string # Immutable. The resource name of the view. Format: projects/{project}/locations/{location}/views/{view}
   --value: string # String with specific view properties, must be non-empty.
-]: any -> record<createTime: string, displayName: string, name: string, updateTime: string, value: string> {
+]: any -> oneof<record<createTime: string, displayName: string, name: string, updateTime: string, value: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

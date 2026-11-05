@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -120,9 +144,9 @@ def insert-data-option-completer [] { ["INSERT_ROWS" "OVERWRITE"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "sheets-spreadsheets-create" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["sheets-spreadsheets-create" "sheets-spreadsheets-get" "sheets-spreadsheets-developer-metadata-get" "sheets-spreadsheets-developer-metadata-search" "sheets-spreadsheets-sheets-copy-to" "sheets-spreadsheets-values-get" "sheets-spreadsheets-values-update" "sheets-spreadsheets-values-append" "sheets-spreadsheets-values-clear" "sheets-spreadsheets-values-batch-clear" "sheets-spreadsheets-values-batch-clear-by-data-filter" "sheets-spreadsheets-values-batch-get" "sheets-spreadsheets-values-batch-get-by-data-filter" "sheets-spreadsheets-values-batch-update" "sheets-spreadsheets-values-batch-update-by-data-filter" "sheets-spreadsheets-batch-update" "sheets-spreadsheets-get-by-data-filter" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -144,12 +168,6 @@ export def commands []: nothing -> table {
 #
 # POST /v4/spreadsheets
 # operationId: sheets.spreadsheets.create
-# --dataSourceSchedules item shape: {dailySchedule?: record, enabled?: bool, monthlySchedule?: record, nextRun?: record, refreshScope?: "DATA_SOURCE_REFRESH_SCOPE_UNSPECIFIED"|"ALL_DATA_SOURCES", weeklySchedule?: record}
-# --dataSources item shape: {calculatedColumns?: list, dataSourceId?: string, sheetId?: int, spec?: record}
-# --developerMetadata item shape: {location?: record, metadataId?: int, metadataKey?: string, metadataValue?: string, visibility?: "DEVELOPER_METADATA_VISIBILITY_UNSPECIFIED"|"DOCUMENT"|"PROJECT"}
-# --namedRanges item shape: {name?: string, namedRangeId?: string, range?: record}
-# --properties shape: {autoRecalc?: "RECALCULATION_INTERVAL_UNSPECIFIED"|"ON_CHANGE"|"MINUTE"|"HOUR", defaultFormat?: record, iterativeCalculationSettings?: record, locale?: string, spreadsheetTheme?: record, timeZone?: string, title?: string}
-# --sheets item shape: {bandedRanges?: list, basicFilter?: record, charts?: list, columnGroups?: list, conditionalFormats?: list, data?: list, developerMetadata?: list, filterViews?: list, merges?: list, properties?: record, protectedRanges?: list, rowGroups?: list, slicers?: list}
 export def "sheets-spreadsheets-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -178,7 +196,7 @@ export def "sheets-spreadsheets-create" [
   --sheets: list # The sheets that are part of a spreadsheet. — item shape: {bandedRanges?: list, basicFilter?: record, charts?: list, columnGroups?: list, conditionalFormats?: list, data?: list, developerMetadata?: list, filterViews?: list, merges?: list, properties?: record, protectedRanges?: list, rowGroups?: list, slicers?: list}
   --spreadsheet-id: string # The ID of the spreadsheet. This field is read-only.
   --spreadsheet-url: string # The url of the spreadsheet. This field is read-only.
-]: any -> record<dataSourceSchedules: table<dailySchedule: record, enabled: bool, monthlySchedule: record, nextRun: record, refreshScope: string, weeklySchedule: record>, dataSources: table<calculatedColumns: list, dataSourceId: string, sheetId: int, spec: record>, developerMetadata: table<location: record, metadataId: int, metadataKey: string, metadataValue: string, visibility: string>, namedRanges: table<name: string, namedRangeId: string, range: record>, properties: record<autoRecalc: string, defaultFormat: record<backgroundColor: record, backgroundColorStyle: record, borders: record, horizontalAlignment: string, hyperlinkDisplayType: string, numberFormat: record, padding: record, textDirection: string, textFormat: record, textRotation: record, verticalAlignment: string, wrapStrategy: string>, iterativeCalculationSettings: record<convergenceThreshold: float, maxIterations: int>, locale: string, spreadsheetTheme: record<primaryFontFamily: string, themeColors: list>, timeZone: string, title: string>, sheets: table<bandedRanges: list, basicFilter: record, charts: list, columnGroups: list, conditionalFormats: list, data: list, developerMetadata: list, filterViews: list, merges: list, properties: record, protectedRanges: list, rowGroups: list, slicers: list>, spreadsheetId: string, spreadsheetUrl: string> {
+]: any -> oneof<record<dataSourceSchedules: table<dailySchedule: record, enabled: bool, monthlySchedule: record, nextRun: record, refreshScope: string, weeklySchedule: record>, dataSources: table<calculatedColumns: list, dataSourceId: string, sheetId: int, spec: record>, developerMetadata: table<location: record, metadataId: int, metadataKey: string, metadataValue: string, visibility: string>, namedRanges: table<name: string, namedRangeId: string, range: record>, properties: record<autoRecalc: string, defaultFormat: record<backgroundColor: record, backgroundColorStyle: record, borders: record, horizontalAlignment: string, hyperlinkDisplayType: string, numberFormat: record, padding: record, textDirection: string, textFormat: record, textRotation: record, verticalAlignment: string, wrapStrategy: string>, iterativeCalculationSettings: record<convergenceThreshold: float, maxIterations: int>, locale: string, spreadsheetTheme: record<primaryFontFamily: string, themeColors: list>, timeZone: string, title: string>, sheets: table<bandedRanges: list, basicFilter: record, charts: list, columnGroups: list, conditionalFormats: list, data: list, developerMetadata: list, filterViews: list, merges: list, properties: record, protectedRanges: list, rowGroups: list, slicers: list>, spreadsheetId: string, spreadsheetUrl: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -230,7 +248,7 @@ export def "sheets-spreadsheets-get" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --include-grid-data: oneof<nothing, bool> # True if grid data should be returned. This parameter is ignored if a field mask was set in the request.
   --ranges: list<string> # The ranges to retrieve from the spreadsheet.
-]: nothing -> record<dataSourceSchedules: table<dailySchedule: record, enabled: bool, monthlySchedule: record, nextRun: record, refreshScope: string, weeklySchedule: record>, dataSources: table<calculatedColumns: list, dataSourceId: string, sheetId: int, spec: record>, developerMetadata: table<location: record, metadataId: int, metadataKey: string, metadataValue: string, visibility: string>, namedRanges: table<name: string, namedRangeId: string, range: record>, properties: record<autoRecalc: string, defaultFormat: record<backgroundColor: record, backgroundColorStyle: record, borders: record, horizontalAlignment: string, hyperlinkDisplayType: string, numberFormat: record, padding: record, textDirection: string, textFormat: record, textRotation: record, verticalAlignment: string, wrapStrategy: string>, iterativeCalculationSettings: record<convergenceThreshold: float, maxIterations: int>, locale: string, spreadsheetTheme: record<primaryFontFamily: string, themeColors: list>, timeZone: string, title: string>, sheets: table<bandedRanges: list, basicFilter: record, charts: list, columnGroups: list, conditionalFormats: list, data: list, developerMetadata: list, filterViews: list, merges: list, properties: record, protectedRanges: list, rowGroups: list, slicers: list>, spreadsheetId: string, spreadsheetUrl: string> {
+]: nothing -> oneof<record<dataSourceSchedules: table<dailySchedule: record, enabled: bool, monthlySchedule: record, nextRun: record, refreshScope: string, weeklySchedule: record>, dataSources: table<calculatedColumns: list, dataSourceId: string, sheetId: int, spec: record>, developerMetadata: table<location: record, metadataId: int, metadataKey: string, metadataValue: string, visibility: string>, namedRanges: table<name: string, namedRangeId: string, range: record>, properties: record<autoRecalc: string, defaultFormat: record<backgroundColor: record, backgroundColorStyle: record, borders: record, horizontalAlignment: string, hyperlinkDisplayType: string, numberFormat: record, padding: record, textDirection: string, textFormat: record, textRotation: record, verticalAlignment: string, wrapStrategy: string>, iterativeCalculationSettings: record<convergenceThreshold: float, maxIterations: int>, locale: string, spreadsheetTheme: record<primaryFontFamily: string, themeColors: list>, timeZone: string, title: string>, sheets: table<bandedRanges: list, basicFilter: record, charts: list, columnGroups: list, conditionalFormats: list, data: list, developerMetadata: list, filterViews: list, merges: list, properties: record, protectedRanges: list, rowGroups: list, slicers: list>, spreadsheetId: string, spreadsheetUrl: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($spreadsheet_id | is-empty) { error make --unspanned { msg: "path parameter 'spreadsheetId' must be non-empty" } }
@@ -279,7 +297,7 @@ export def "sheets-spreadsheets-developer-metadata-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<location: record<dimensionRange: record<dimension: string, endIndex: int, sheetId: int, startIndex: int>, locationType: string, sheetId: int, spreadsheet: bool>, metadataId: int, metadataKey: string, metadataValue: string, visibility: string> {
+]: nothing -> oneof<record<location: record<dimensionRange: record<dimension: string, endIndex: int, sheetId: int, startIndex: int>, locationType: string, sheetId: int, spreadsheet: bool>, metadataId: int, metadataKey: string, metadataValue: string, visibility: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($spreadsheet_id | is-empty) { error make --unspanned { msg: "path parameter 'spreadsheetId' must be non-empty" } }
@@ -306,7 +324,6 @@ export def "sheets-spreadsheets-developer-metadata-get" [
 #
 # POST /v4/spreadsheets/{spreadsheetId}/developerMetadata:search
 # operationId: sheets.spreadsheets.developerMetadata.search
-# --dataFilters item shape: {a1Range?: string, developerMetadataLookup?: record, gridRange?: record}
 export def "sheets-spreadsheets-developer-metadata-search" [
   spreadsheet_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -330,7 +347,7 @@ export def "sheets-spreadsheets-developer-metadata-search" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --data-filters: list # The data filters describing the criteria used to determine which DeveloperMetadata entries to return. DeveloperMetadata matching any of the specified filters are included in the response. — item shape: {a1Range?: string, developerMetadataLookup?: record, gridRange?: record}
-]: any -> record<matchedDeveloperMetadata: table<dataFilters: list, developerMetadata: record>> {
+]: any -> oneof<record<matchedDeveloperMetadata: table<dataFilters: list, developerMetadata: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -383,7 +400,7 @@ export def "sheets-spreadsheets-sheets-copy-to" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --destination-spreadsheet-id: string # The ID of the spreadsheet to copy the sheet to.
-]: any -> record<dataSourceSheetProperties: record<columns: list<record>, dataExecutionStatus: record<errorCode: string, errorMessage: string, lastRefreshTime: string, state: string>, dataSourceId: string>, gridProperties: record<columnCount: int, columnGroupControlAfter: bool, frozenColumnCount: int, frozenRowCount: int, hideGridlines: bool, rowCount: int, rowGroupControlAfter: bool>, hidden: bool, index: int, rightToLeft: bool, sheetId: int, sheetType: string, tabColor: record<alpha: float, blue: float, green: float, red: float>, tabColorStyle: record<rgbColor: record<alpha: float, blue: float, green: float, red: float>, themeColor: string>, title: string> {
+]: any -> oneof<record<dataSourceSheetProperties: record<columns: list<record>, dataExecutionStatus: record<errorCode: string, errorMessage: string, lastRefreshTime: string, state: string>, dataSourceId: string>, gridProperties: record<columnCount: int, columnGroupControlAfter: bool, frozenColumnCount: int, frozenRowCount: int, hideGridlines: bool, rowCount: int, rowGroupControlAfter: bool>, hidden: bool, index: int, rightToLeft: bool, sheetId: int, sheetType: string, tabColor: record<alpha: float, blue: float, green: float, red: float>, tabColorStyle: record<rgbColor: record<alpha: float, blue: float, green: float, red: float>, themeColor: string>, title: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -439,7 +456,7 @@ export def "sheets-spreadsheets-values-get" [
   --date-time-render-option: string@date-time-render-option-completer # How dates, times, and durations should be represented in the output. This is ignored if value_render_option is FORMATTED_VALUE. The default dateTime render option is SERIAL_NUMBER.
   --major-dimension: string@major-dimension-completer # The major dimension that results should use. For example, if the spreadsheet data in Sheet1 is: `A1=1,B1=2,A2=3,B2=4`, then requesting `range=Sheet1!A1:B2?majorDimension=ROWS` returns `[[1,2],[3,4]]`, whereas requesting `range=Sheet1!A1:B2?majorDimension=COLUMNS` returns `[[1,3],[2,4]]`.
   --value-render-option: string@value-render-option-completer # How values should be represented in the output. The default render option is FORMATTED_VALUE.
-]: nothing -> record<majorDimension: string, range: string, values: list<list<any>>> {
+]: nothing -> oneof<record<majorDimension: string, range: string, values: list<list<any>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($spreadsheet_id | is-empty) { error make --unspanned { msg: "path parameter 'spreadsheetId' must be non-empty" } }
@@ -496,7 +513,7 @@ export def "sheets-spreadsheets-values-update" [
   --major-dimension: string@major-dimension-completer # The major dimension of the values. For output, if the spreadsheet data is: `A1=1,B1=2,A2=3,B2=4`, then requesting `range=A1:B2,majorDimension=ROWS` will return `[[1,2],[3,4]]`, whereas requesting `range=A1:B2,majorDimension=COLUMNS` will return `[[1,3],[2,4]]`. For input, with `range=A1:B2,majorDimension=ROWS` then `[[1,2],[3,4]]` will set `A1=1,B1=2,A2=3,B2=4`. With `range=A1:B2,majorDimension=COLUMNS` then `[[1,2],[3,4]]` will set `A1=1,B1=3,A2=2,B2=4`. When writing, if this field is not set, it defaults to ROWS.
   --body-range: string # The range the values cover, in [A1 notation](/sheets/api/guides/concepts#cell). For output, this range indicates the entire requested range, even though the values will exclude trailing rows and columns. When appending values, this field represents the range to search for a table, after which values will be appended.
   --values: list # The data that was read or to be written. This is an array of arrays, the outer array representing all the data and each inner array representing a major dimension. Each item in the inner array corresponds with one cell. For output, empty trailing rows and columns will not be included. For input, supported value types are: bool, string, and double. Null values will be skipped. To set a cell to an empty value, set the string value to an empty string.
-]: any -> record<spreadsheetId: string, updatedCells: int, updatedColumns: int, updatedData: record<majorDimension: string, range: string, values: list<list>>, updatedRange: string, updatedRows: int> {
+]: any -> oneof<record<spreadsheetId: string, updatedCells: int, updatedColumns: int, updatedData: record<majorDimension: string, range: string, values: list<list>>, updatedRange: string, updatedRows: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -557,7 +574,7 @@ export def "sheets-spreadsheets-values-append" [
   --major-dimension: string@major-dimension-completer # The major dimension of the values. For output, if the spreadsheet data is: `A1=1,B1=2,A2=3,B2=4`, then requesting `range=A1:B2,majorDimension=ROWS` will return `[[1,2],[3,4]]`, whereas requesting `range=A1:B2,majorDimension=COLUMNS` will return `[[1,3],[2,4]]`. For input, with `range=A1:B2,majorDimension=ROWS` then `[[1,2],[3,4]]` will set `A1=1,B1=2,A2=3,B2=4`. With `range=A1:B2,majorDimension=COLUMNS` then `[[1,2],[3,4]]` will set `A1=1,B1=3,A2=2,B2=4`. When writing, if this field is not set, it defaults to ROWS.
   --body-range: string # The range the values cover, in [A1 notation](/sheets/api/guides/concepts#cell). For output, this range indicates the entire requested range, even though the values will exclude trailing rows and columns. When appending values, this field represents the range to search for a table, after which values will be appended.
   --values: list # The data that was read or to be written. This is an array of arrays, the outer array representing all the data and each inner array representing a major dimension. Each item in the inner array corresponds with one cell. For output, empty trailing rows and columns will not be included. For input, supported value types are: bool, string, and double. Null values will be skipped. To set a cell to an empty value, set the string value to an empty string.
-]: any -> record<spreadsheetId: string, tableRange: string, updates: record<spreadsheetId: string, updatedCells: int, updatedColumns: int, updatedData: record<majorDimension: string, range: string, values: list>, updatedRange: string, updatedRows: int>> {
+]: any -> oneof<record<spreadsheetId: string, tableRange: string, updates: record<spreadsheetId: string, updatedCells: int, updatedColumns: int, updatedData: record<majorDimension: string, range: string, values: list>, updatedRange: string, updatedRows: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -611,7 +628,7 @@ export def "sheets-spreadsheets-values-clear" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record<clearedRange: string, spreadsheetId: string> {
+]: any -> oneof<record<clearedRange: string, spreadsheetId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -664,7 +681,7 @@ export def "sheets-spreadsheets-values-batch-clear" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --ranges: list<string> # The ranges to clear, in [A1 notation or R1C1 notation](/sheets/api/guides/concepts#cell).
-]: any -> record<clearedRanges: list<string>, spreadsheetId: string> {
+]: any -> oneof<record<clearedRanges: list<string>, spreadsheetId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -693,7 +710,6 @@ export def "sheets-spreadsheets-values-batch-clear" [
 #
 # POST /v4/spreadsheets/{spreadsheetId}/values:batchClearByDataFilter
 # operationId: sheets.spreadsheets.values.batchClearByDataFilter
-# --dataFilters item shape: {a1Range?: string, developerMetadataLookup?: record, gridRange?: record}
 export def "sheets-spreadsheets-values-batch-clear-by-data-filter" [
   spreadsheet_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -717,7 +733,7 @@ export def "sheets-spreadsheets-values-batch-clear-by-data-filter" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --data-filters: list # The DataFilters used to determine which ranges to clear. — item shape: {a1Range?: string, developerMetadataLookup?: record, gridRange?: record}
-]: any -> record<clearedRanges: list<string>, spreadsheetId: string> {
+]: any -> oneof<record<clearedRanges: list<string>, spreadsheetId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -772,7 +788,7 @@ export def "sheets-spreadsheets-values-batch-get" [
   --major-dimension: string@major-dimension-completer # The major dimension that results should use. For example, if the spreadsheet data is: `A1=1,B1=2,A2=3,B2=4`, then requesting `ranges=["A1:B2"],majorDimension=ROWS` returns `[[1,2],[3,4]]`, whereas requesting `ranges=["A1:B2"],majorDimension=COLUMNS` returns `[[1,3],[2,4]]`.
   --ranges: list<string> # The [A1 notation or R1C1 notation](/sheets/api/guides/concepts#cell) of the range to retrieve values from.
   --value-render-option: string@value-render-option-completer # How values should be represented in the output. The default render option is ValueRenderOption.FORMATTED_VALUE.
-]: nothing -> record<spreadsheetId: string, valueRanges: table<majorDimension: string, range: string, values: list>> {
+]: nothing -> oneof<record<spreadsheetId: string, valueRanges: table<majorDimension: string, range: string, values: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($spreadsheet_id | is-empty) { error make --unspanned { msg: "path parameter 'spreadsheetId' must be non-empty" } }
@@ -798,7 +814,6 @@ export def "sheets-spreadsheets-values-batch-get" [
 #
 # POST /v4/spreadsheets/{spreadsheetId}/values:batchGetByDataFilter
 # operationId: sheets.spreadsheets.values.batchGetByDataFilter
-# --dataFilters item shape: {a1Range?: string, developerMetadataLookup?: record, gridRange?: record}
 export def "sheets-spreadsheets-values-batch-get-by-data-filter" [
   spreadsheet_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -825,7 +840,7 @@ export def "sheets-spreadsheets-values-batch-get-by-data-filter" [
   --date-time-render-option: string@date-time-render-option-completer # How dates, times, and durations should be represented in the output. This is ignored if value_render_option is FORMATTED_VALUE. The default dateTime render option is SERIAL_NUMBER.
   --major-dimension: string@major-dimension-completer # The major dimension that results should use. For example, if the spreadsheet data is: `A1=1,B1=2,A2=3,B2=4`, then a request that selects that range and sets `majorDimension=ROWS` returns `[[1,2],[3,4]]`, whereas a request that sets `majorDimension=COLUMNS` returns `[[1,3],[2,4]]`.
   --value-render-option: string@value-render-option-completer # How values should be represented in the output. The default render option is FORMATTED_VALUE.
-]: any -> record<spreadsheetId: string, valueRanges: table<dataFilters: list, valueRange: record>> {
+]: any -> oneof<record<spreadsheetId: string, valueRanges: table<dataFilters: list, valueRange: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -854,7 +869,6 @@ export def "sheets-spreadsheets-values-batch-get-by-data-filter" [
 #
 # POST /v4/spreadsheets/{spreadsheetId}/values:batchUpdate
 # operationId: sheets.spreadsheets.values.batchUpdate
-# --data item shape: {majorDimension?: "DIMENSION_UNSPECIFIED"|"ROWS"|"COLUMNS", range?: string, values?: list}
 export def "sheets-spreadsheets-values-batch-update" [
   spreadsheet_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -882,7 +896,7 @@ export def "sheets-spreadsheets-values-batch-update" [
   --response-date-time-render-option: string@response-date-time-render-option-completer # Determines how dates, times, and durations in the response should be rendered. This is ignored if response_value_render_option is FORMATTED_VALUE. The default dateTime render option is SERIAL_NUMBER.
   --response-value-render-option: string@response-value-render-option-completer # Determines how values in the response should be rendered. The default render option is FORMATTED_VALUE.
   --value-input-option: string@value-input-option-completer # How the input data should be interpreted.
-]: any -> record<responses: table<spreadsheetId: string, updatedCells: int, updatedColumns: int, updatedData: record, updatedRange: string, updatedRows: int>, spreadsheetId: string, totalUpdatedCells: int, totalUpdatedColumns: int, totalUpdatedRows: int, totalUpdatedSheets: int> {
+]: any -> oneof<record<responses: table<spreadsheetId: string, updatedCells: int, updatedColumns: int, updatedData: record, updatedRange: string, updatedRows: int>, spreadsheetId: string, totalUpdatedCells: int, totalUpdatedColumns: int, totalUpdatedRows: int, totalUpdatedSheets: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -911,7 +925,6 @@ export def "sheets-spreadsheets-values-batch-update" [
 #
 # POST /v4/spreadsheets/{spreadsheetId}/values:batchUpdateByDataFilter
 # operationId: sheets.spreadsheets.values.batchUpdateByDataFilter
-# --data item shape: {dataFilter?: record, majorDimension?: "DIMENSION_UNSPECIFIED"|"ROWS"|"COLUMNS", values?: list}
 export def "sheets-spreadsheets-values-batch-update-by-data-filter" [
   spreadsheet_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -939,7 +952,7 @@ export def "sheets-spreadsheets-values-batch-update-by-data-filter" [
   --response-date-time-render-option: string@response-date-time-render-option-completer # Determines how dates, times, and durations in the response should be rendered. This is ignored if response_value_render_option is FORMATTED_VALUE. The default dateTime render option is SERIAL_NUMBER.
   --response-value-render-option: string@response-value-render-option-completer # Determines how values in the response should be rendered. The default render option is FORMATTED_VALUE.
   --value-input-option: string@value-input-option-completer # How the input data should be interpreted.
-]: any -> record<responses: table<dataFilter: record, updatedCells: int, updatedColumns: int, updatedData: record, updatedRange: string, updatedRows: int>, spreadsheetId: string, totalUpdatedCells: int, totalUpdatedColumns: int, totalUpdatedRows: int, totalUpdatedSheets: int> {
+]: any -> oneof<record<responses: table<dataFilter: record, updatedCells: int, updatedColumns: int, updatedData: record, updatedRange: string, updatedRows: int>, spreadsheetId: string, totalUpdatedCells: int, totalUpdatedColumns: int, totalUpdatedRows: int, totalUpdatedSheets: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -968,7 +981,6 @@ export def "sheets-spreadsheets-values-batch-update-by-data-filter" [
 #
 # POST /v4/spreadsheets/{spreadsheetId}:batchUpdate
 # operationId: sheets.spreadsheets.batchUpdate
-# --requests item shape: {addBanding?: record, addChart?: record, addConditionalFormatRule?: record, addDataSource?: record, addDimensionGroup?: record, addFilterView?: record, addNamedRange?: record, addProtectedRange?: record, addSheet?: record, addSlicer?: record, appendCells?: record, appendDimension?: record, autoFill?: record, autoResizeDimensions?: record, clearBasicFilter?: record, copyPaste?: record, createDeveloperMetadata?: record, cutPaste?: record, deleteBanding?: record, deleteConditionalFormatRule?: record, ... (45 more fields)}
 export def "sheets-spreadsheets-batch-update" [
   spreadsheet_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -995,7 +1007,7 @@ export def "sheets-spreadsheets-batch-update" [
   --requests: list # A list of updates to apply to the spreadsheet. Requests will be applied in the order they are specified. If any request is not valid, no requests will be applied. — item shape: {addBanding?: record, addChart?: record, addConditionalFormatRule?: record, addDataSource?: record, addDimensionGroup?: record, addFilterView?: record, addNamedRange?: record, addProtectedRange?: record, addSheet?: record, addSlicer?: record, appendCells?: record, appendDimension?: record, autoFill?: record, autoResizeDimensions?: record, clearBasicFilter?: record, copyPaste?: record, createDeveloperMetadata?: record, cutPaste?: record, deleteBanding?: record, deleteConditionalFormatRule?: record, ... (45 more fields)}
   --response-include-grid-data: oneof<nothing, bool> # True if grid data should be returned. Meaningful only if include_spreadsheet_in_response is 'true'. This parameter is ignored if a field mask was set in the request.
   --response-ranges: list<string> # Limits the ranges included in the response spreadsheet. Meaningful only if include_spreadsheet_in_response is 'true'.
-]: any -> record<replies: table<addBanding: record, addChart: record, addDataSource: record, addDimensionGroup: record, addFilterView: record, addNamedRange: record, addProtectedRange: record, addSheet: record, addSlicer: record, createDeveloperMetadata: record, deleteConditionalFormatRule: record, deleteDeveloperMetadata: record, deleteDimensionGroup: record, deleteDuplicates: record, duplicateFilterView: record, duplicateSheet: record, findReplace: record, refreshDataSource: record, trimWhitespace: record, updateConditionalFormatRule: record, updateDataSource: record, updateDeveloperMetadata: record, updateEmbeddedObjectPosition: record>, spreadsheetId: string, updatedSpreadsheet: record<dataSourceSchedules: list<record>, dataSources: list<record>, developerMetadata: list<record>, namedRanges: list<record>, properties: record<autoRecalc: string, defaultFormat: record, iterativeCalculationSettings: record, locale: string, spreadsheetTheme: record, timeZone: string, title: string>, sheets: list<record>, spreadsheetId: string, spreadsheetUrl: string>> {
+]: any -> oneof<record<replies: table<addBanding: record, addChart: record, addDataSource: record, addDimensionGroup: record, addFilterView: record, addNamedRange: record, addProtectedRange: record, addSheet: record, addSlicer: record, createDeveloperMetadata: record, deleteConditionalFormatRule: record, deleteDeveloperMetadata: record, deleteDimensionGroup: record, deleteDuplicates: record, duplicateFilterView: record, duplicateSheet: record, findReplace: record, refreshDataSource: record, trimWhitespace: record, updateConditionalFormatRule: record, updateDataSource: record, updateDeveloperMetadata: record, updateEmbeddedObjectPosition: record>, spreadsheetId: string, updatedSpreadsheet: record<dataSourceSchedules: list<record>, dataSources: list<record>, developerMetadata: list<record>, namedRanges: list<record>, properties: record<autoRecalc: string, defaultFormat: record, iterativeCalculationSettings: record, locale: string, spreadsheetTheme: record, timeZone: string, title: string>, sheets: list<record>, spreadsheetId: string, spreadsheetUrl: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1024,7 +1036,6 @@ export def "sheets-spreadsheets-batch-update" [
 #
 # POST /v4/spreadsheets/{spreadsheetId}:getByDataFilter
 # operationId: sheets.spreadsheets.getByDataFilter
-# --dataFilters item shape: {a1Range?: string, developerMetadataLookup?: record, gridRange?: record}
 export def "sheets-spreadsheets-get-by-data-filter" [
   spreadsheet_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1049,7 +1060,7 @@ export def "sheets-spreadsheets-get-by-data-filter" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --data-filters: list # The DataFilters used to select which ranges to retrieve from the spreadsheet. — item shape: {a1Range?: string, developerMetadataLookup?: record, gridRange?: record}
   --include-grid-data: oneof<nothing, bool> # True if grid data should be returned. This parameter is ignored if a field mask was set in the request.
-]: any -> record<dataSourceSchedules: table<dailySchedule: record, enabled: bool, monthlySchedule: record, nextRun: record, refreshScope: string, weeklySchedule: record>, dataSources: table<calculatedColumns: list, dataSourceId: string, sheetId: int, spec: record>, developerMetadata: table<location: record, metadataId: int, metadataKey: string, metadataValue: string, visibility: string>, namedRanges: table<name: string, namedRangeId: string, range: record>, properties: record<autoRecalc: string, defaultFormat: record<backgroundColor: record, backgroundColorStyle: record, borders: record, horizontalAlignment: string, hyperlinkDisplayType: string, numberFormat: record, padding: record, textDirection: string, textFormat: record, textRotation: record, verticalAlignment: string, wrapStrategy: string>, iterativeCalculationSettings: record<convergenceThreshold: float, maxIterations: int>, locale: string, spreadsheetTheme: record<primaryFontFamily: string, themeColors: list>, timeZone: string, title: string>, sheets: table<bandedRanges: list, basicFilter: record, charts: list, columnGroups: list, conditionalFormats: list, data: list, developerMetadata: list, filterViews: list, merges: list, properties: record, protectedRanges: list, rowGroups: list, slicers: list>, spreadsheetId: string, spreadsheetUrl: string> {
+]: any -> oneof<record<dataSourceSchedules: table<dailySchedule: record, enabled: bool, monthlySchedule: record, nextRun: record, refreshScope: string, weeklySchedule: record>, dataSources: table<calculatedColumns: list, dataSourceId: string, sheetId: int, spec: record>, developerMetadata: table<location: record, metadataId: int, metadataKey: string, metadataValue: string, visibility: string>, namedRanges: table<name: string, namedRangeId: string, range: record>, properties: record<autoRecalc: string, defaultFormat: record<backgroundColor: record, backgroundColorStyle: record, borders: record, horizontalAlignment: string, hyperlinkDisplayType: string, numberFormat: record, padding: record, textDirection: string, textFormat: record, textRotation: record, verticalAlignment: string, wrapStrategy: string>, iterativeCalculationSettings: record<convergenceThreshold: float, maxIterations: int>, locale: string, spreadsheetTheme: record<primaryFontFamily: string, themeColors: list>, timeZone: string, title: string>, sheets: table<bandedRanges: list, basicFilter: record, charts: list, columnGroups: list, conditionalFormats: list, data: list, developerMetadata: list, filterViews: list, merges: list, properties: record, protectedRanges: list, rowGroups: list, slicers: list>, spreadsheetId: string, spreadsheetUrl: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

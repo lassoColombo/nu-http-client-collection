@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -116,9 +139,9 @@ def x-amz-target-completer-12 [] { ["AWSCloud9WorkspaceManagementService.UpdateE
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-environment-ec2" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["create-environment-ec2" "create-environment-membership" "delete-environment" "delete-environment-membership" "describe-environment-memberships" "describe-environment-status" "describe-environments" "list-environments" "list-tags-for-resource" "tag-resource" "untag-resource" "update-environment" "update-environment-membership" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -140,7 +163,6 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: CreateEnvironmentEC2
-# --tags item shape: {Key: string, Value: string}
 export def "create-environment-ec2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -170,7 +192,7 @@ export def "create-environment-ec2" [
   --tags: list # An array of key-value pairs that will be associated with the new Cloud9 development environment. — item shape: {Key: string, Value: string}
   --connection-type: string@connection-type-completer # The connection type used for connecting to an Amazon EC2 environment. Valid values are CONNECT_SSH (default) and CONNECT_SSM (connected through Amazon EC2 Systems Manager). For more information, see Accessing no-ingress EC2 instances with Amazon EC2 Systems Manager (https://docs.aws.amazon.com/cloud9/latest/user-guide/ec2-ssm.html) in the Cloud9 User Guide.
   --body-dry-run: oneof<nothing, bool> # Checks whether you have the required permissions for the action, without actually making the request, and provides an error response. If you have the required permissions, the error response is DryRunOperation. Otherwise, it is UnauthorizedOperation.
-]: any -> record<environmentId: string> {
+]: any -> oneof<record<environmentId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -221,7 +243,7 @@ export def "create-environment-membership" [
   environment_id: string # The ID of the environment that contains the environment member you want to add.
   user_arn: string # The Amazon Resource Name (ARN) of the environment member you want to add.
   permissions: string@permissions-completer # The type of environment member permissions you want to associate with this environment member. Available values include: read-only: Has read-only access to the environment. read-write: Has read-write access to the environment.
-]: any -> record<membership: record<permissions: string, userId: string, userArn: string, environmentId: string, lastAccess: string>> {
+]: any -> oneof<record<membership: record<permissions: string, userId: string, userArn: string, environmentId: string, lastAccess: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -270,7 +292,7 @@ export def "delete-environment" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-2 # required
   environment_id: string # The ID of the environment to delete.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -320,7 +342,7 @@ export def "delete-environment-membership" [
   --x-amz-target: string@x-amz-target-completer-3 # required
   environment_id: string # The ID of the environment to delete the environment member from.
   user_arn: string # The Amazon Resource Name (ARN) of the environment member to delete from the environment.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -375,7 +397,7 @@ export def "describe-environment-memberships" [
   --permissions: list<string> # The type of environment member permissions to get information about. Available values include: owner: Owns the environment. read-only: Has read-only access to the environment. read-write: Has read-write access to the environment. If no value is specified, information about all environment members are returned.
   --next-token-body: string # During a previous call, if there are more than 25 items in the list, only the first 25 items are returned, along with a unique string called a next token. To get the next batch of items in the list, call this operation again, adding the next token to the call. To get all of the items in the list, keep calling this operation with each subsequent next token that is returned, until no more next tokens are returned. (body field)
   --max-results-body: int # The maximum number of environment members to get information about. (body field)
-]: any -> record<memberships: table<permissions: string, userId: string, userArn: string, environmentId: string, lastAccess: string>, nextToken: string> {
+]: any -> oneof<record<memberships: table<permissions: string, userId: string, userArn: string, environmentId: string, lastAccess: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -425,7 +447,7 @@ export def "describe-environment-status" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-5 # required
   environment_id: string # The ID of the environment to get status information about.
-]: any -> record<status: string, message: string> {
+]: any -> oneof<record<status: string, message: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -474,7 +496,7 @@ export def "describe-environments" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-6 # required
   environment_ids: list<string> # The IDs of individual environments to get information about.
-]: any -> record<environments: table<id: string, name: string, description: string, type: string, connectionType: string, arn: string, ownerArn: string, lifecycle: record, managedCredentialsStatus: string>> {
+]: any -> oneof<record<environments: table<id: string, name: string, description: string, type: string, connectionType: string, arn: string, ownerArn: string, lifecycle: record, managedCredentialsStatus: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -526,7 +548,7 @@ export def "list-environments" [
   --x-amz-target: string@x-amz-target-completer-7 # required
   --next-token-body: string # During a previous call, if there are more than 25 items in the list, only the first 25 items are returned, along with a unique string called a next token. To get the next batch of items in the list, call this operation again, adding the next token to the call. To get all of the items in the list, keep calling this operation with each subsequent next token that is returned, until no more next tokens are returned. (body field)
   --max-results-body: int # The maximum number of environments to get identifiers for. (body field)
-]: any -> record<nextToken: string, environmentIds: list<string>> {
+]: any -> oneof<record<nextToken: string, environmentIds: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -576,7 +598,7 @@ export def "list-tags-for-resource" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-8 # required
   resource_arn: string # The Amazon Resource Name (ARN) of the Cloud9 development environment to get the tags for.
-]: any -> record<Tags: table<Key: string, Value: string>> {
+]: any -> oneof<record<Tags: table<Key: string, Value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -606,7 +628,6 @@ export def "list-tags-for-resource" [
 #
 # POST /
 # operationId: TagResource
-# --Tags item shape: {Key: string, Value: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -627,7 +648,7 @@ export def "tag-resource" [
   --x-amz-target: string@x-amz-target-completer-9 # required
   resource_arn: string # The Amazon Resource Name (ARN) of the Cloud9 development environment to add tags to.
   tags: list # The list of tags to add to the given Cloud9 development environment. — item shape: {Key: string, Value: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -677,7 +698,7 @@ export def "untag-resource" [
   --x-amz-target: string@x-amz-target-completer-10 # required
   resource_arn: string # The Amazon Resource Name (ARN) of the Cloud9 development environment to remove tags from.
   tag_keys: list<string> # The tag names of the tags to remove from the given Cloud9 development environment.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -729,7 +750,7 @@ export def "update-environment" [
   --name: string # A replacement name for the environment.
   --description: string # Any new or replacement description for the environment. (format: password)
   --managed-credentials-action: string@managed-credentials-action-completer # Allows the environment owner to turn on or turn off the Amazon Web Services managed temporary credentials for an Cloud9 environment by using one of the following values: ENABLE DISABLE Only the environment owner can change the status of managed temporary credentials. An AccessDeniedException is thrown if an attempt to turn on or turn off managed temporary credentials is made by an account that's not the environment owner.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -780,7 +801,7 @@ export def "update-environment-membership" [
   environment_id: string # The ID of the environment for the environment member whose settings you want to change.
   user_arn: string # The Amazon Resource Name (ARN) of the environment member whose settings you want to change.
   permissions: string@permissions-completer # The replacement type of environment member permissions you want to associate with this environment member. Available values include: read-only: Has read-only access to the environment. read-write: Has read-write access to the environment.
-]: any -> record<membership: record<permissions: string, userId: string, userArn: string, environmentId: string, lastAccess: string>> {
+]: any -> oneof<record<membership: record<permissions: string, userId: string, userArn: string, environmentId: string, lastAccess: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

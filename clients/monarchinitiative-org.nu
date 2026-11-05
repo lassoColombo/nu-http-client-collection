@@ -12,27 +12,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -40,8 +49,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -52,7 +66,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -87,7 +110,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -126,9 +150,9 @@ def per-page-completer [] { ["10" "2" "20" "30" "40" "50"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-associations-between" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-associations-between" "get-association-by-subject-category-search" "get-association-by-subject-and-object-category-search" "get-associations-from" "get-associations-to" "get-association-by-subject-and-assoc-type" "get-association-object" "get-anatomy-gene-associations" "get-anatomy-gene-by-taxon-associations" "get-case-disease-associations" "get-case-genotype-associations" "get-case-model-associations" "get-case-phenotype-associations" "get-case-variant-associations" "get-disease-case-associations" "get-disease-gene-associations" "get-disease-genotype-associations" "get-disease-model-associations" "get-disease-model-taxon-associations" "get-disease-pathway-associations" "get-disease-phenotype-associations" "get-disease-publication-associations" "get-disease-substance-associations" "get-disease-variant-associations" "get-function-associations" "get-function-gene-associations" "get-function-publication-associations" "get-function-taxon-associations" "get-gene-anatomy-associations" "get-gene-case-associations" "get-gene-disease-associations" "get-gene-expression-associations" "get-gene-function-associations" "get-gene-genotype-associations" "get-gene-homolog-associations" "get-gene-interactions" "get-gene-model-associations" "get-gene-ortholog-disease-associations" "get-gene-ortholog-phenotype-associations" "get-gene-pathway-associations" "get-gene-phenotype-associations" "get-gene-publication-associations" "get-gene-variant-associations" "get-genotype-case-associations" "get-genotype-disease-associations" "get-genotype-gene-associations" "get-genotype-genotype-associations" "get-genotype-model-associations" "get-genotype-phenotype-associations" "get-genotype-publication-associations" "get-genotype-variant-associations" "get-goterm-gene-associations" "get-model-case-associations" "get-model-disease-associations" "get-model-gene-associations" "get-model-genotype-associations" "get-model-phenotype-associations" "get-model-publication-associations" "get-model-variant-associations" "get-pathway-disease-associations" "get-pathway-gene-associations" "get-pathway-phenotype-associations" "get-phenotype-anatomy-associations" "get-phenotype-case-associations" "get-phenotype-disease-associations" "get-phenotype-gene-by-taxon-associations" "get-phenotype-gene-associations" "get-phenotype-genotype-associations" "get-phenotype-pathway-associations" "get-phenotype-publication-associations" "get-phenotype-variant-associations" "get-publication-disease-associations" "get-publication-gene-associations" "get-publication-genotype-associations" "get-publication-model-associations" "get-publication-phenotype-associations" "get-publication-variant-associations" "get-substance-participant-in-associations" "get-substance-role-associations" "get-substance-treats-associations" "get-variant-case-associations" "get-variant-disease-associations" "get-variant-gene-associations" "get-variant-genotype-associations" "get-variant-model-associations" "get-variant-phenotype-associations" "get-variant-publication-associations" "get-generic-object" "get-generic-associations" "get-generic-object-by-type" "get-entity-set-associations" "get-entity-set-summary" "get-entity-set-graph-resource" "get-entity-set-homologs" "get-over-representation" "get-entity-set-anatomy-slimmer" "get-entity-set-function-slimmer" "get-entity-set-phenotype-slimmer" "get-activity-collection" "get-instance-object" "get-model-instances" "get-model-collection" "get-model-contributors" "get-model-properties" "get-model-property-values" "get-model-query" "get-model-object" "get-physical-interaction" "get-evidence-graph-object" "get-evidence-graph-table" "get-features-within-resource" "get-edge-resource" "get-node-resource" "get-identifier-mapper" "get-prefix-collection" "get-prefix-contract" "get-prefix-expand" "get-pedigree" "get-individual" "get-mart-case-associations-resource" "get-mart-disease-associations-resource" "get-mart-gene-associations-resource" "get-mart-ortholog-associations-resource" "get-mart-paralog-associations-resource" "get-metadata-for-datasets" "post-disease-mme" "post-fly-mme" "post-mouse-mme" "post-nematode-mme" "post-zebrafish-mme" "get-annotate" "post-annotate" "get-annotate-entities" "post-annotate-entities" "get-ontol-identifier-resource" "post-ontol-identifier-resource" "get-information-content-resource" "get-ontol-labeler-resource" "get-extract-ontology-subgraph-resource" "post-extract-ontology-subgraph-resource" "get-ontology-terms-shared-ancestor" "get-ontology-subset" "get-ontology-term" "get-ontology-term-graph" "get-ontology-term-subgraph" "get-ontology-term-subsets" "get-dl-query" "get-sparql-query" "get-pair-sim-jaccard-resource" "get-relation-usage-resource" "get-relation-usage-between-resource" "get-relation-usage-pivot-resource" "get-relation-usage-pivot-label-resource" "get-autocomplete" "get-search-hpo-entities" "get-search-entities" "get-sim-compare" "post-sim-compare" "get-annotation-score" "post-annotation-score" "get-sim-search" "get-variant-sets-collection" "post-variant-sets-collection" "get-variant-analyze" "get-variant-sets-archive-collection" "delete-variant-set-item" "get-variant-set-item" "put-variant-set-item" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -168,7 +192,7 @@ export def "get-associations-between" [
   --unselect-evidence: oneof<nothing, bool> # If true, excludes evidence objects in response (default: false)
   --exclude-automatic-assertions: oneof<nothing, bool> # If true, excludes associations that involve IEAs (ECO:0000501) (default: false)
   --use-compact-associations: oneof<nothing, bool> # If true, returns results in compact associations format (default: false)
-]: nothing -> table<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: list<record>, compact_associations: list<record>, objects: list<string>> {
+]: nothing -> oneof<table<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: list<record>, compact_associations: list<record>, objects: list<string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subject | is-empty) { error make --unspanned { msg: "path parameter 'subject' must be non-empty" } }
@@ -215,7 +239,7 @@ export def "get-association-by-subject-category-search" [
   --subject-taxon: string # Subject taxon ID, e.g. NCBITaxon:9606 (Includes inferred associations, by default)
   --object-taxon: string # Object taxon ID, e.g. NCBITaxon:10090 (Includes inferred associations, by default)
   --relation: string # Filter by relation CURIE, e.g. RO:0002200 (has_phenotype), RO:0002607 (is marker for), RO:HOM0000017 (orthologous to), etc.
-]: nothing -> table<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: list<record>, compact_associations: list<record>, objects: list<string>> {
+]: nothing -> oneof<table<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: list<record>, compact_associations: list<record>, objects: list<string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subject_category | is-empty) { error make --unspanned { msg: "path parameter 'subject_category' must be non-empty" } }
@@ -264,7 +288,7 @@ export def "get-association-by-subject-and-object-category-search" [
   --subject-taxon: string # Subject taxon ID, e.g. NCBITaxon:9606 (Includes inferred associations, by default)
   --object-taxon: string # Object taxon ID, e.g. NCBITaxon:10090 (Includes inferred associations, by default)
   --relation: string # Filter by relation CURIE, e.g. RO:0002200 (has_phenotype), RO:0002607 (is marker for), RO:HOM0000017 (orthologous to), etc.
-]: nothing -> table<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: list<record>, compact_associations: list<record>, objects: list<string>> {
+]: nothing -> oneof<table<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: list<record>, compact_associations: list<record>, objects: list<string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subject_category | is-empty) { error make --unspanned { msg: "path parameter 'subject_category' must be non-empty" } }
@@ -310,7 +334,7 @@ export def "get-associations-from" [
   --use-compact-associations: oneof<nothing, bool> # If true, returns results in compact associations format (default: false)
   --object-taxon: string # Object taxon ID, e.g. NCBITaxon:10090 (Includes inferred associations, by default)
   --relation: string # Filter by relation CURIE, e.g. RO:0002200 (has_phenotype), RO:0002607 (is marker for), RO:HOM0000017 (orthologous to), etc.
-]: nothing -> table<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: list<record>, compact_associations: list<record>, objects: list<string>> {
+]: nothing -> oneof<table<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: list<record>, compact_associations: list<record>, objects: list<string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subject | is-empty) { error make --unspanned { msg: "path parameter 'subject' must be non-empty" } }
@@ -353,7 +377,7 @@ export def "get-associations-to" [
   --unselect-evidence: oneof<nothing, bool> # If true, excludes evidence objects in response (default: false)
   --exclude-automatic-assertions: oneof<nothing, bool> # If true, excludes associations that involve IEAs (ECO:0000501) (default: false)
   --use-compact-associations: oneof<nothing, bool> # If true, returns results in compact associations format (default: false)
-]: nothing -> table<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: list<record>, compact_associations: list<record>, objects: list<string>> {
+]: nothing -> oneof<table<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: list<record>, compact_associations: list<record>, objects: list<string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
@@ -398,7 +422,7 @@ export def "get-association-by-subject-and-assoc-type" [
   --use-compact-associations: oneof<nothing, bool> # If true, returns results in compact associations format (default: false)
   --subject: string # Subject CURIE
   --object: string # Object CURIE
-]: nothing -> table<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: list<record>, compact_associations: list<record>, objects: list<string>> {
+]: nothing -> oneof<table<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: list<record>, compact_associations: list<record>, objects: list<string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($association_type | is-empty) { error make --unspanned { msg: "path parameter 'association_type' must be non-empty" } }
@@ -435,7 +459,7 @@ export def "get-association-object" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: list<record>, compact_associations: list<record>, objects: list<string>> {
+]: nothing -> oneof<table<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: list<record>, compact_associations: list<record>, objects: list<string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -487,7 +511,7 @@ export def "get-anatomy-gene-associations" [
   --relation: string # A relation CURIE to filter associations
   --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -592,7 +616,7 @@ export def "get-case-disease-associations" [
   --slim: list<string> # Map objects up (slim) to a higher level category. Value can be ontology class ID or subset ID
   --evidence: string # Object id, e.g. ECO:0000501 (for IEA; Includes inferred by default) or a specific publication or other supporting object, e.g. ZFIN:ZDB-PUB-060503-2
   --direct: oneof<nothing, bool> # Set true to only include direct associations, and false to include inferred (via subclass or subclass|part of), default=False (default: false)
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -640,7 +664,7 @@ export def "get-case-genotype-associations" [
   --slim: list<string> # Map objects up (slim) to a higher level category. Value can be ontology class ID or subset ID
   --evidence: string # Object id, e.g. ECO:0000501 (for IEA; Includes inferred by default) or a specific publication or other supporting object, e.g. ZFIN:ZDB-PUB-060503-2
   --direct: oneof<nothing, bool> # Set true to only include direct associations, and false to include inferred (via subclass or subclass|part of), default=False (default: false)
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -688,7 +712,7 @@ export def "get-case-model-associations" [
   --slim: list<string> # Map objects up (slim) to a higher level category. Value can be ontology class ID or subset ID
   --evidence: string # Object id, e.g. ECO:0000501 (for IEA; Includes inferred by default) or a specific publication or other supporting object, e.g. ZFIN:ZDB-PUB-060503-2
   --direct: oneof<nothing, bool> # Set true to only include direct associations, and false to include inferred (via subclass or subclass|part of), default=False (default: false)
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -736,7 +760,7 @@ export def "get-case-phenotype-associations" [
   --slim: list<string> # Map objects up (slim) to a higher level category. Value can be ontology class ID or subset ID
   --evidence: string # Object id, e.g. ECO:0000501 (for IEA; Includes inferred by default) or a specific publication or other supporting object, e.g. ZFIN:ZDB-PUB-060503-2
   --direct: oneof<nothing, bool> # Set true to only include direct associations, and false to include inferred (via subclass or subclass|part of), default=False (default: false)
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -784,7 +808,7 @@ export def "get-case-variant-associations" [
   --slim: list<string> # Map objects up (slim) to a higher level category. Value can be ontology class ID or subset ID
   --evidence: string # Object id, e.g. ECO:0000501 (for IEA; Includes inferred by default) or a specific publication or other supporting object, e.g. ZFIN:ZDB-PUB-060503-2
   --direct: oneof<nothing, bool> # Set true to only include direct associations, and false to include inferred (via subclass or subclass|part of), default=False (default: false)
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -832,7 +856,7 @@ export def "get-disease-case-associations" [
   --slim: list<string> # Map objects up (slim) to a higher level category. Value can be ontology class ID or subset ID
   --evidence: string # Object id, e.g. ECO:0000501 (for IEA; Includes inferred by default) or a specific publication or other supporting object, e.g. ZFIN:ZDB-PUB-060503-2
   --direct: oneof<nothing, bool> # Set true to only include direct associations, and false to include inferred (via subclass or subclass|part of), default=False (default: false)
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -886,7 +910,7 @@ export def "get-disease-gene-associations" [
   --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
   --association-type: string@association-type-completer # Additional filters: causal, non_causal, both (default: both)
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -939,7 +963,7 @@ export def "get-disease-genotype-associations" [
   --relation: string # A relation CURIE to filter associations
   --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -992,7 +1016,7 @@ export def "get-disease-model-associations" [
   --relation: string # A relation CURIE to filter associations
   --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1043,7 +1067,7 @@ export def "get-disease-model-taxon-associations" [
   --slim: list<string> # Map objects up (slim) to a higher level category. Value can be ontology class ID or subset ID
   --evidence: string # Object id, e.g. ECO:0000501 (for IEA; Includes inferred by default) or a specific publication or other supporting object, e.g. ZFIN:ZDB-PUB-060503-2
   --direct: oneof<nothing, bool> # Set true to only include direct associations, and false to include inferred (via subclass or subclass|part of), default=False (default: false)
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1097,7 +1121,7 @@ export def "get-disease-pathway-associations" [
   --relation: string # A relation CURIE to filter associations
   --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1150,7 +1174,7 @@ export def "get-disease-phenotype-associations" [
   --relation: string # A relation CURIE to filter associations
   --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string, frequency: record, onset: record>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string, frequency: record, onset: record>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1203,7 +1227,7 @@ export def "get-disease-publication-associations" [
   --relation: string # A relation CURIE to filter associations
   --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1304,7 +1328,7 @@ export def "get-disease-variant-associations" [
   --relation: string # A relation CURIE to filter associations
   --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1398,7 +1422,7 @@ export def "get-function-gene-associations" [
   --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
   --relationship-type: string@relationship-type-completer # relationship type ('involved_in', 'involved_in_regulation_of' or 'acts_upstream_of_or_within') (default: involved_in)
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1531,7 +1555,7 @@ export def "get-gene-anatomy-associations" [
   --relation: string # A relation CURIE to filter associations
   --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1579,7 +1603,7 @@ export def "get-gene-case-associations" [
   --slim: list<string> # Map objects up (slim) to a higher level category. Value can be ontology class ID or subset ID
   --evidence: string # Object id, e.g. ECO:0000501 (for IEA; Includes inferred by default) or a specific publication or other supporting object, e.g. ZFIN:ZDB-PUB-060503-2
   --direct: oneof<nothing, bool> # Set true to only include direct associations, and false to include inferred (via subclass or subclass|part of), default=False (default: false)
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1633,7 +1657,7 @@ export def "get-gene-disease-associations" [
   --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
   --association-type: string@association-type-completer # Additional filters: causal, non_causal, both (default: both)
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1686,7 +1710,7 @@ export def "get-gene-expression-associations" [
   --relation: string # A relation CURIE to filter associations
   --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1734,7 +1758,7 @@ export def "get-gene-function-associations" [
   --slim: list<string> # Map objects up (slim) to a higher level category. Value can be ontology class ID or subset ID
   --evidence: string # Object id, e.g. ECO:0000501 (for IEA; Includes inferred by default) or a specific publication or other supporting object, e.g. ZFIN:ZDB-PUB-060503-2
   --direct: oneof<nothing, bool> # Set true to only include direct associations, and false to include inferred (via subclass or subclass|part of), default=False (default: false)
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1787,7 +1811,7 @@ export def "get-gene-genotype-associations" [
   --relation: string # A relation CURIE to filter associations
   --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1838,7 +1862,7 @@ export def "get-gene-homolog-associations" [
   --taxon: list<string> # Taxon CURIE of homolog, e.g. NCBITaxon:9606 (Can be an ancestral node in the ontology; includes inferred associations by default)
   --homology-type: string@homology-type-completer # P (paralog), O (Ortholog) or LDO (least-diverged ortholog)
   --direct-taxon: oneof<nothing, bool> # Set true to exclude inferred taxa (default: false)
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1891,7 +1915,7 @@ export def "get-gene-interactions" [
   --relation: string # A relation CURIE to filter associations
   --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1944,7 +1968,7 @@ export def "get-gene-model-associations" [
   --relation: string # A relation CURIE to filter associations
   --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1997,7 +2021,7 @@ export def "get-gene-ortholog-disease-associations" [
   --relation: string # A relation CURIE to filter associations
   --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2050,7 +2074,7 @@ export def "get-gene-ortholog-phenotype-associations" [
   --relation: string # A relation CURIE to filter associations
   --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2103,7 +2127,7 @@ export def "get-gene-pathway-associations" [
   --relation: string # A relation CURIE to filter associations
   --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2156,7 +2180,7 @@ export def "get-gene-phenotype-associations" [
   --relation: string # A relation CURIE to filter associations
   --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2209,7 +2233,7 @@ export def "get-gene-publication-associations" [
   --relation: string # A relation CURIE to filter associations
   --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2262,7 +2286,7 @@ export def "get-gene-variant-associations" [
   --relation: string # A relation CURIE to filter associations
   --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2310,7 +2334,7 @@ export def "get-genotype-case-associations" [
   --slim: list<string> # Map objects up (slim) to a higher level category. Value can be ontology class ID or subset ID
   --evidence: string # Object id, e.g. ECO:0000501 (for IEA; Includes inferred by default) or a specific publication or other supporting object, e.g. ZFIN:ZDB-PUB-060503-2
   --direct: oneof<nothing, bool> # Set true to only include direct associations, and false to include inferred (via subclass or subclass|part of), default=False (default: false)
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2363,7 +2387,7 @@ export def "get-genotype-disease-associations" [
   --relation: string # A relation CURIE to filter associations
   --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2416,7 +2440,7 @@ export def "get-genotype-gene-associations" [
   --relation: string # A relation CURIE to filter associations
   --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2469,7 +2493,7 @@ export def "get-genotype-genotype-associations" [
   --relation: string # A relation CURIE to filter associations
   --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2522,7 +2546,7 @@ export def "get-genotype-model-associations" [
   --relation: string # A relation CURIE to filter associations
   --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2575,7 +2599,7 @@ export def "get-genotype-phenotype-associations" [
   --relation: string # A relation CURIE to filter associations
   --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2628,7 +2652,7 @@ export def "get-genotype-publication-associations" [
   --relation: string # A relation CURIE to filter associations
   --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2681,7 +2705,7 @@ export def "get-genotype-variant-associations" [
   --relation: string # A relation CURIE to filter associations
   --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2732,7 +2756,7 @@ export def "get-goterm-gene-associations" [
   --evidence: string # Object id, e.g. ECO:0000501 (for IEA; Includes inferred by default) or a specific publication or other supporting object, e.g. ZFIN:ZDB-PUB-060503-2
   --direct: oneof<nothing, bool> # Set true to only include direct associations, and false to include inferred (via subclass or subclass|part of), default=False (default: false)
   --relationship-type: string@relationship-type-completer # relationship type ('involved_in', 'involved_in_regulation_of' or 'acts_upstream_of_or_within') (default: involved_in)
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2780,7 +2804,7 @@ export def "get-model-case-associations" [
   --slim: list<string> # Map objects up (slim) to a higher level category. Value can be ontology class ID or subset ID
   --evidence: string # Object id, e.g. ECO:0000501 (for IEA; Includes inferred by default) or a specific publication or other supporting object, e.g. ZFIN:ZDB-PUB-060503-2
   --direct: oneof<nothing, bool> # Set true to only include direct associations, and false to include inferred (via subclass or subclass|part of), default=False (default: false)
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2833,7 +2857,7 @@ export def "get-model-disease-associations" [
   --relation: string # A relation CURIE to filter associations
   --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2886,7 +2910,7 @@ export def "get-model-gene-associations" [
   --relation: string # A relation CURIE to filter associations
   --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2939,7 +2963,7 @@ export def "get-model-genotype-associations" [
   --relation: string # A relation CURIE to filter associations
   --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2992,7 +3016,7 @@ export def "get-model-phenotype-associations" [
   --relation: string # A relation CURIE to filter associations
   --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3045,7 +3069,7 @@ export def "get-model-publication-associations" [
   --relation: string # A relation CURIE to filter associations
   --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3098,7 +3122,7 @@ export def "get-model-variant-associations" [
   --relation: string # A relation CURIE to filter associations
   --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3151,7 +3175,7 @@ export def "get-pathway-disease-associations" [
   --relation: string # A relation CURIE to filter associations
   --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3204,7 +3228,7 @@ export def "get-pathway-gene-associations" [
   --relation: string # A relation CURIE to filter associations
   --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3257,7 +3281,7 @@ export def "get-pathway-phenotype-associations" [
   --relation: string # A relation CURIE to filter associations
   --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3305,7 +3329,7 @@ export def "get-phenotype-anatomy-associations" [
   --slim: list<string> # Map objects up (slim) to a higher level category. Value can be ontology class ID or subset ID
   --evidence: string # Object id, e.g. ECO:0000501 (for IEA; Includes inferred by default) or a specific publication or other supporting object, e.g. ZFIN:ZDB-PUB-060503-2
   --direct: oneof<nothing, bool> # Set true to only include direct associations, and false to include inferred (via subclass or subclass|part of), default=False (default: false)
-]: nothing -> table<category: list<string>, id: string, iri: string, label: string, consider: list<string>, deprecated: bool, description: string, replaced_by: list<string>, synonyms: list<record>, types: list<string>> {
+]: nothing -> oneof<table<category: list<string>, id: string, iri: string, label: string, consider: list<string>, deprecated: bool, description: string, replaced_by: list<string>, synonyms: list<record>, types: list<string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3353,7 +3377,7 @@ export def "get-phenotype-case-associations" [
   --slim: list<string> # Map objects up (slim) to a higher level category. Value can be ontology class ID or subset ID
   --evidence: string # Object id, e.g. ECO:0000501 (for IEA; Includes inferred by default) or a specific publication or other supporting object, e.g. ZFIN:ZDB-PUB-060503-2
   --direct: oneof<nothing, bool> # Set true to only include direct associations, and false to include inferred (via subclass or subclass|part of), default=False (default: false)
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3406,7 +3430,7 @@ export def "get-phenotype-disease-associations" [
   --relation: string # A relation CURIE to filter associations
   --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string, frequency: record, onset: record>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string, frequency: record, onset: record>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3511,7 +3535,7 @@ export def "get-phenotype-gene-associations" [
   --relation: string # A relation CURIE to filter associations
   --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3564,7 +3588,7 @@ export def "get-phenotype-genotype-associations" [
   --relation: string # A relation CURIE to filter associations
   --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3617,7 +3641,7 @@ export def "get-phenotype-pathway-associations" [
   --relation: string # A relation CURIE to filter associations
   --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3670,7 +3694,7 @@ export def "get-phenotype-publication-associations" [
   --relation: string # A relation CURIE to filter associations
   --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3723,7 +3747,7 @@ export def "get-phenotype-variant-associations" [
   --relation: string # A relation CURIE to filter associations
   --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3776,7 +3800,7 @@ export def "get-publication-disease-associations" [
   --relation: string # A relation CURIE to filter associations
   --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3829,7 +3853,7 @@ export def "get-publication-gene-associations" [
   --relation: string # A relation CURIE to filter associations
   --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3882,7 +3906,7 @@ export def "get-publication-genotype-associations" [
   --relation: string # A relation CURIE to filter associations
   --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3935,7 +3959,7 @@ export def "get-publication-model-associations" [
   --relation: string # A relation CURIE to filter associations
   --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3988,7 +4012,7 @@ export def "get-publication-phenotype-associations" [
   --relation: string # A relation CURIE to filter associations
   --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4041,7 +4065,7 @@ export def "get-publication-variant-associations" [
   --relation: string # A relation CURIE to filter associations
   --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4089,7 +4113,7 @@ export def "get-substance-participant-in-associations" [
   --slim: list<string> # Map objects up (slim) to a higher level category. Value can be ontology class ID or subset ID
   --evidence: string # Object id, e.g. ECO:0000501 (for IEA; Includes inferred by default) or a specific publication or other supporting object, e.g. ZFIN:ZDB-PUB-060503-2
   --direct: oneof<nothing, bool> # Set true to only include direct associations, and false to include inferred (via subclass or subclass|part of), default=False (default: false)
-]: nothing -> table<evidence_graph: record<edges: list, nodes: list>, evidence_types: list<record>, id: string, negated: bool, object: record<category: list, id: string, iri: string, label: string, taxon: record>, object_eq: list<string>, object_extensions: list<record>, provided_by: list<string>, publications: list<record>, qualifiers: list<string>, relation: record<category: list, id: string, iri: string, label: string, inverse: bool>, slim: list<string>, subject: record<category: list, id: string, iri: string, label: string, taxon: record>, subject_eq: list<string>, subject_extensions: list<record>, type: string> {
+]: nothing -> oneof<table<evidence_graph: record<edges: list, nodes: list>, evidence_types: list<record>, id: string, negated: bool, object: record<category: list, id: string, iri: string, label: string, taxon: record>, object_eq: list<string>, object_extensions: list<record>, provided_by: list<string>, publications: list<record>, qualifiers: list<string>, relation: record<category: list, id: string, iri: string, label: string, inverse: bool>, slim: list<string>, subject: record<category: list, id: string, iri: string, label: string, taxon: record>, subject_eq: list<string>, subject_extensions: list<record>, type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4137,7 +4161,7 @@ export def "get-substance-role-associations" [
   --slim: list<string> # Map objects up (slim) to a higher level category. Value can be ontology class ID or subset ID
   --evidence: string # Object id, e.g. ECO:0000501 (for IEA; Includes inferred by default) or a specific publication or other supporting object, e.g. ZFIN:ZDB-PUB-060503-2
   --direct: oneof<nothing, bool> # Set true to only include direct associations, and false to include inferred (via subclass or subclass|part of), default=False (default: false)
-]: nothing -> table<evidence_graph: record<edges: list, nodes: list>, evidence_types: list<record>, id: string, negated: bool, object: record<category: list, id: string, iri: string, label: string, taxon: record>, object_eq: list<string>, object_extensions: list<record>, provided_by: list<string>, publications: list<record>, qualifiers: list<string>, relation: record<category: list, id: string, iri: string, label: string, inverse: bool>, slim: list<string>, subject: record<category: list, id: string, iri: string, label: string, taxon: record>, subject_eq: list<string>, subject_extensions: list<record>, type: string> {
+]: nothing -> oneof<table<evidence_graph: record<edges: list, nodes: list>, evidence_types: list<record>, id: string, negated: bool, object: record<category: list, id: string, iri: string, label: string, taxon: record>, object_eq: list<string>, object_extensions: list<record>, provided_by: list<string>, publications: list<record>, qualifiers: list<string>, relation: record<category: list, id: string, iri: string, label: string, inverse: bool>, slim: list<string>, subject: record<category: list, id: string, iri: string, label: string, taxon: record>, subject_eq: list<string>, subject_extensions: list<record>, type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4233,7 +4257,7 @@ export def "get-variant-case-associations" [
   --slim: list<string> # Map objects up (slim) to a higher level category. Value can be ontology class ID or subset ID
   --evidence: string # Object id, e.g. ECO:0000501 (for IEA; Includes inferred by default) or a specific publication or other supporting object, e.g. ZFIN:ZDB-PUB-060503-2
   --direct: oneof<nothing, bool> # Set true to only include direct associations, and false to include inferred (via subclass or subclass|part of), default=False (default: false)
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4286,7 +4310,7 @@ export def "get-variant-disease-associations" [
   --relation: string # A relation CURIE to filter associations
   --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4339,7 +4363,7 @@ export def "get-variant-gene-associations" [
   --relation: string # A relation CURIE to filter associations
   --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4392,7 +4416,7 @@ export def "get-variant-genotype-associations" [
   --relation: string # A relation CURIE to filter associations
   --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4440,7 +4464,7 @@ export def "get-variant-model-associations" [
   --slim: list<string> # Map objects up (slim) to a higher level category. Value can be ontology class ID or subset ID
   --evidence: string # Object id, e.g. ECO:0000501 (for IEA; Includes inferred by default) or a specific publication or other supporting object, e.g. ZFIN:ZDB-PUB-060503-2
   --direct: oneof<nothing, bool> # Set true to only include direct associations, and false to include inferred (via subclass or subclass|part of), default=False (default: false)
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4493,7 +4517,7 @@ export def "get-variant-phenotype-associations" [
   --relation: string # A relation CURIE to filter associations
   --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4546,7 +4570,7 @@ export def "get-variant-publication-associations" [
   --relation: string # A relation CURIE to filter associations
   --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4594,7 +4618,7 @@ export def "get-generic-object" [
   --slim: list<string> # Map objects up (slim) to a higher level category. Value can be ontology class ID or subset ID
   --evidence: string # Object id, e.g. ECO:0000501 (for IEA; Includes inferred by default) or a specific publication or other supporting object, e.g. ZFIN:ZDB-PUB-060503-2
   --direct: oneof<nothing, bool> # Set true to only include direct associations, and false to include inferred (via subclass or subclass|part of), default=False (default: false)
-]: nothing -> record<category: list<string>, id: string, iri: string, label: string, consider: list<string>, deprecated: bool, description: string, replaced_by: list<string>, synonyms: table<pred: string, val: string, xrefs: list>, types: list<string>, association_counts: record, taxon: record<id: string, label: string>, xrefs: list<string>> {
+]: nothing -> oneof<record<category: list<string>, id: string, iri: string, label: string, consider: list<string>, deprecated: bool, description: string, replaced_by: list<string>, synonyms: table<pred: string, val: string, xrefs: list>, types: list<string>, association_counts: record, taxon: record<id: string, label: string>, xrefs: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4647,7 +4671,7 @@ export def "get-generic-associations" [
   --relation: string # A relation CURIE to filter associations
   --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4739,7 +4763,7 @@ export def "get-entity-set-associations" [
   --background: list<string> # Entity ids in background set, e.g. NCBIGene:84570, NCBIGene:3630; used in over-representation tests
   --object-category: string # E.g. phenotype, function
   --object-slim: string # Slim or subset to which the descriptors are to be mapped, NOT IMPLEMENTED
-]: nothing -> table<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: list<record>, compact_associations: list<record>, objects: list<string>> {
+]: nothing -> oneof<table<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: list<record>, compact_associations: list<record>, objects: list<string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "subject" $subject "multi") (serialize-qp "background" $background "multi") (serialize-qp "object_category" $object_category "scalar") (serialize-qp "object_slim" $object_slim "scalar")] | flatten | str join "&"
@@ -4853,7 +4877,7 @@ export def "get-entity-set-homologs" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --subject: list<string> # Entity ids to be examined, e.g. NCBIGene:9342, NCBIGene:7227, NCBIGene:8131, NCBIGene:157570, NCBIGene:51164, NCBIGene:6689, NCBIGene:6387
-]: nothing -> table<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: list<record>, compact_associations: list<record>, objects: list<string>> {
+]: nothing -> oneof<table<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: list<record>, compact_associations: list<record>, objects: list<string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "subject" $subject "multi")] | flatten | str join "&"
@@ -5097,7 +5121,7 @@ export def "get-instance-object" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --title: string # string to search for in title of model
   --contributor: string # string to search for in contributor of model
-]: nothing -> table<evidence_graph: record<edges: list, nodes: list>, evidence_types: list<record>, id: string, negated: bool, object: record<category: list, id: string, iri: string, label: string, taxon: record>, object_eq: list<string>, object_extensions: list<record>, provided_by: list<string>, publications: list<record>, qualifiers: list<string>, relation: record<category: list, id: string, iri: string, label: string, inverse: bool>, slim: list<string>, subject: record<category: list, id: string, iri: string, label: string, taxon: record>, subject_eq: list<string>, subject_extensions: list<record>, type: string> {
+]: nothing -> oneof<table<evidence_graph: record<edges: list, nodes: list>, evidence_types: list<record>, id: string, negated: bool, object: record<category: list, id: string, iri: string, label: string, taxon: record>, object_eq: list<string>, object_extensions: list<record>, provided_by: list<string>, publications: list<record>, qualifiers: list<string>, relation: record<category: list, id: string, iri: string, label: string, inverse: bool>, slim: list<string>, subject: record<category: list, id: string, iri: string, label: string, taxon: record>, subject_eq: list<string>, subject_extensions: list<record>, type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5420,7 +5444,7 @@ export def "get-evidence-graph-object" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<edges: list<record>, nodes: list<record>> {
+]: nothing -> oneof<table<edges: list<record>, nodes: list<record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5457,7 +5481,7 @@ export def "get-evidence-graph-table" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --is-publication: oneof<nothing, bool> # If true, considers dc:source as edge (default: false)
-]: nothing -> table<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: list<record>, compact_associations: list<record>, objects: list<string>> {
+]: nothing -> oneof<table<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: list<record>, compact_associations: list<record>, objects: list<string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5497,7 +5521,7 @@ export def "get-features-within-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<category: list<string>, id: string, iri: string, label: string, consider: list<string>, deprecated: bool, description: string, replaced_by: list<string>, synonyms: list<record>, types: list<string>, association_counts: record, taxon: record<id: string, label: string>, xrefs: list<string>, homology_associations: list<record>, locations: list<record>, seq: record<category: list, id: string, iri: string, label: string, consider: list, deprecated: bool, description: string, replaced_by: list, synonyms: list, types: list, association_counts: record, taxon: record, xrefs: list, alphabet: string, md5checksum: string, residues: string, seqlen: string>> {
+]: nothing -> oneof<table<category: list<string>, id: string, iri: string, label: string, consider: list<string>, deprecated: bool, description: string, replaced_by: list<string>, synonyms: list<record>, types: list<string>, association_counts: record, taxon: record<id: string, label: string>, xrefs: list<string>, homology_associations: list<record>, locations: list<record>, seq: record<category: list, id: string, iri: string, label: string, consider: list, deprecated: bool, description: string, replaced_by: list, synonyms: list, types: list, association_counts: record, taxon: record, xrefs: list, alphabet: string, md5checksum: string, residues: string, seqlen: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($build | is-empty) { error make --unspanned { msg: "path parameter 'build' must be non-empty" } }
@@ -5541,7 +5565,7 @@ export def "get-edge-resource" [
   --relationship-type: list<string> # Relationship type to traverse
   --entail: oneof<nothing, bool> # Include sub-properties and equivalent properties (default: false)
   --graph: string@graph-completer # Which monarch graph to query (default: data)
-]: nothing -> table<edges: list<record>, nodes: list<record>> {
+]: nothing -> oneof<table<edges: list<record>, nodes: list<record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5578,7 +5602,7 @@ export def "get-node-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<category: list<string>, id: string, iri: string, label: string, consider: list<string>, deprecated: bool, description: string, replaced_by: list<string>, synonyms: list<record>, types: list<string>, association_counts: record, taxon: record<id: string, label: string>, xrefs: list<string>> {
+]: nothing -> oneof<table<category: list<string>, id: string, iri: string, label: string, consider: list<string>, deprecated: bool, description: string, replaced_by: list<string>, synonyms: list<record>, types: list<string>, association_counts: record, taxon: record<id: string, label: string>, xrefs: list<string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5615,7 +5639,7 @@ export def "get-identifier-mapper" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<evidence_graph: record<edges: list, nodes: list>, evidence_types: list<record>, id: string, negated: bool, object: record<category: list, id: string, iri: string, label: string, taxon: record>, object_eq: list<string>, object_extensions: list<record>, provided_by: list<string>, publications: list<record>, qualifiers: list<string>, relation: record<category: list, id: string, iri: string, label: string, inverse: bool>, slim: list<string>, subject: record<category: list, id: string, iri: string, label: string, taxon: record>, subject_eq: list<string>, subject_extensions: list<record>, type: string> {
+]: nothing -> oneof<table<evidence_graph: record<edges: list, nodes: list>, evidence_types: list<record>, id: string, negated: bool, object: record<category: list, id: string, iri: string, label: string, taxon: record>, object_eq: list<string>, object_extensions: list<record>, provided_by: list<string>, publications: list<record>, qualifiers: list<string>, relation: record<category: list, id: string, iri: string, label: string, inverse: bool>, slim: list<string>, subject: record<category: list, id: string, iri: string, label: string, taxon: record>, subject_eq: list<string>, subject_extensions: list<record>, type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
@@ -5758,7 +5782,7 @@ export def "get-pedigree" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<evidence_graph: record<edges: list, nodes: list>, evidence_types: list<record>, id: string, negated: bool, object: record<category: list, id: string, iri: string, label: string, taxon: record>, object_eq: list<string>, object_extensions: list<record>, provided_by: list<string>, publications: list<record>, qualifiers: list<string>, relation: record<category: list, id: string, iri: string, label: string, inverse: bool>, slim: list<string>, subject: record<category: list, id: string, iri: string, label: string, taxon: record>, subject_eq: list<string>, subject_extensions: list<record>, type: string> {
+]: nothing -> oneof<table<evidence_graph: record<edges: list, nodes: list>, evidence_types: list<record>, id: string, negated: bool, object: record<category: list, id: string, iri: string, label: string, taxon: record>, object_eq: list<string>, object_extensions: list<record>, provided_by: list<string>, publications: list<record>, qualifiers: list<string>, relation: record<category: list, id: string, iri: string, label: string, inverse: bool>, slim: list<string>, subject: record<category: list, id: string, iri: string, label: string, taxon: record>, subject_eq: list<string>, subject_extensions: list<record>, type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5794,7 +5818,7 @@ export def "get-individual" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<evidence_graph: record<edges: list, nodes: list>, evidence_types: list<record>, id: string, negated: bool, object: record<category: list, id: string, iri: string, label: string, taxon: record>, object_eq: list<string>, object_extensions: list<record>, provided_by: list<string>, publications: list<record>, qualifiers: list<string>, relation: record<category: list, id: string, iri: string, label: string, inverse: bool>, slim: list<string>, subject: record<category: list, id: string, iri: string, label: string, taxon: record>, subject_eq: list<string>, subject_extensions: list<record>, type: string> {
+]: nothing -> oneof<table<evidence_graph: record<edges: list, nodes: list>, evidence_types: list<record>, id: string, negated: bool, object: record<category: list, id: string, iri: string, label: string, taxon: record>, object_eq: list<string>, object_extensions: list<record>, provided_by: list<string>, publications: list<record>, qualifiers: list<string>, relation: record<category: list, id: string, iri: string, label: string, inverse: bool>, slim: list<string>, subject: record<category: list, id: string, iri: string, label: string, taxon: record>, subject_eq: list<string>, subject_extensions: list<record>, type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6343,7 +6367,7 @@ export def "get-annotate-entities" [
   --include-abbreviation: oneof<nothing, bool> # Should abbreviations be included (default: false)
   --include-acronym: oneof<nothing, bool> # Should acronyms be included (default: false)
   --include-numbers: oneof<nothing, bool> # Should numbers be included (default: false)
-]: nothing -> record<content: string, spans: table<end: int, start: int, text: string, token: list>> {
+]: nothing -> oneof<record<content: string, spans: table<end: int, start: int, text: string, token: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "content" $content "scalar") (serialize-qp "include_category" $include_category "multi") (serialize-qp "exclude_category" $exclude_category "multi") (serialize-qp "min_length" $min_length "scalar") (serialize-qp "longest_only" $longest_only "scalar") (serialize-qp "include_abbreviation" $include_abbreviation "scalar") (serialize-qp "include_acronym" $include_acronym "scalar") (serialize-qp "include_numbers" $include_numbers "scalar")] | flatten | str join "&"
@@ -6386,7 +6410,7 @@ export def "post-annotate-entities" [
   --include-abbreviation: oneof<nothing, bool> # Should abbreviations be included (default: false)
   --include-acronym: oneof<nothing, bool> # Should acronyms be included (default: false)
   --include-numbers: oneof<nothing, bool> # Should numbers be included (default: false)
-]: nothing -> record<content: string, spans: table<end: int, start: int, text: string, token: list>> {
+]: nothing -> oneof<record<content: string, spans: table<end: int, start: int, text: string, token: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "content" $content "scalar") (serialize-qp "include_category" $include_category "multi") (serialize-qp "exclude_category" $exclude_category "multi") (serialize-qp "min_length" $min_length "scalar") (serialize-qp "longest_only" $longest_only "scalar") (serialize-qp "include_abbreviation" $include_abbreviation "scalar") (serialize-qp "include_acronym" $include_acronym "scalar") (serialize-qp "include_numbers" $include_numbers "scalar")] | flatten | str join "&"
@@ -6889,7 +6913,7 @@ export def "get-dl-query" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<evidence_graph: record<edges: list, nodes: list>, evidence_types: list<record>, id: string, negated: bool, object: record<category: list, id: string, iri: string, label: string, taxon: record>, object_eq: list<string>, object_extensions: list<record>, provided_by: list<string>, publications: list<record>, qualifiers: list<string>, relation: record<category: list, id: string, iri: string, label: string, inverse: bool>, slim: list<string>, subject: record<category: list, id: string, iri: string, label: string, taxon: record>, subject_eq: list<string>, subject_extensions: list<record>, type: string> {
+]: nothing -> oneof<table<evidence_graph: record<edges: list, nodes: list>, evidence_types: list<record>, id: string, negated: bool, object: record<category: list, id: string, iri: string, label: string, taxon: record>, object_eq: list<string>, object_extensions: list<record>, provided_by: list<string>, publications: list<record>, qualifiers: list<string>, relation: record<category: list, id: string, iri: string, label: string, inverse: bool>, slim: list<string>, subject: record<category: list, id: string, iri: string, label: string, taxon: record>, subject_eq: list<string>, subject_extensions: list<record>, type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($query | is-empty) { error make --unspanned { msg: "path parameter 'query' must be non-empty" } }
@@ -6925,7 +6949,7 @@ export def "get-sparql-query" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<evidence_graph: record<edges: list, nodes: list>, evidence_types: list<record>, id: string, negated: bool, object: record<category: list, id: string, iri: string, label: string, taxon: record>, object_eq: list<string>, object_extensions: list<record>, provided_by: list<string>, publications: list<record>, qualifiers: list<string>, relation: record<category: list, id: string, iri: string, label: string, inverse: bool>, slim: list<string>, subject: record<category: list, id: string, iri: string, label: string, taxon: record>, subject_eq: list<string>, subject_extensions: list<record>, type: string> {
+]: nothing -> oneof<table<evidence_graph: record<edges: list, nodes: list>, evidence_types: list<record>, id: string, negated: bool, object: record<category: list, id: string, iri: string, label: string, taxon: record>, object_eq: list<string>, object_extensions: list<record>, provided_by: list<string>, publications: list<record>, qualifiers: list<string>, relation: record<category: list, id: string, iri: string, label: string, inverse: bool>, slim: list<string>, subject: record<category: list, id: string, iri: string, label: string, taxon: record>, subject_eq: list<string>, subject_extensions: list<record>, type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($query | is-empty) { error make --unspanned { msg: "path parameter 'query' must be non-empty" } }
@@ -7002,7 +7026,7 @@ export def "get-relation-usage-resource" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --subject-taxon: string # SUBJECT TAXON id, e.g. NCBITaxon:9606. Includes inferred by default
   --evidence: string # Object id, e.g. ECO:0000501 (for IEA; Includes inferred by default) or a specific publication or other supporting ibject, e.g. ZFIN:ZDB-PUB-060503-2.
-]: nothing -> table<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: list<record>, compact_associations: list<record>, objects: list<string>> {
+]: nothing -> oneof<table<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: list<record>, compact_associations: list<record>, objects: list<string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "subject_taxon" $subject_taxon "scalar") (serialize-qp "evidence" $evidence "scalar")] | flatten | str join "&"
@@ -7041,7 +7065,7 @@ export def "get-relation-usage-between-resource" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --subject-taxon: string # SUBJECT TAXON id, e.g. NCBITaxon:9606. Includes inferred by default
   --evidence: string # Object id, e.g. ECO:0000501 (for IEA; Includes inferred by default) or a specific publication or other supporting ibject, e.g. ZFIN:ZDB-PUB-060503-2.
-]: nothing -> table<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: list<record>, compact_associations: list<record>, objects: list<string>> {
+]: nothing -> oneof<table<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: list<record>, compact_associations: list<record>, objects: list<string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subject_category | is-empty) { error make --unspanned { msg: "path parameter 'subject_category' must be non-empty" } }
@@ -7080,7 +7104,7 @@ export def "get-relation-usage-pivot-resource" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --subject-taxon: string # SUBJECT TAXON id, e.g. NCBITaxon:9606. Includes inferred by default
   --evidence: string # Object id, e.g. ECO:0000501 (for IEA; Includes inferred by default) or a specific publication or other supporting ibject, e.g. ZFIN:ZDB-PUB-060503-2.
-]: nothing -> table<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: list<record>, compact_associations: list<record>, objects: list<string>> {
+]: nothing -> oneof<table<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: list<record>, compact_associations: list<record>, objects: list<string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "subject_taxon" $subject_taxon "scalar") (serialize-qp "evidence" $evidence "scalar")] | flatten | str join "&"
@@ -7117,7 +7141,7 @@ export def "get-relation-usage-pivot-label-resource" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --subject-taxon: string # SUBJECT TAXON id, e.g. NCBITaxon:9606. Includes inferred by default
   --evidence: string # Object id, e.g. ECO:0000501 (for IEA; Includes inferred by default) or a specific publication or other supporting ibject, e.g. ZFIN:ZDB-PUB-060503-2.
-]: nothing -> table<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: list<record>, compact_associations: list<record>, objects: list<string>> {
+]: nothing -> oneof<table<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: list<record>, compact_associations: list<record>, objects: list<string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "subject_taxon" $subject_taxon "scalar") (serialize-qp "evidence" $evidence "scalar")] | flatten | str join "&"
@@ -7166,7 +7190,7 @@ export def "get-autocomplete" [
   --min-match: string # minimum should match parameter, see solr docs for details
   --exclude-groups: oneof<nothing, bool> # Exclude grouping classes (classes with subclasses) (default: false)
   --minimal-tokenizer: oneof<nothing, bool> # set to true to use the minimal tokenizer, good for variants and genotypes (default: false)
-]: nothing -> record<docs: table<category: list, equivalent_ids: list, has_highlight: bool, highlight: string, id: string, label: list, match: string, taxon: string, taxon_label: string>> {
+]: nothing -> oneof<record<docs: table<category: list, equivalent_ids: list, has_highlight: bool, highlight: string, id: string, label: list, match: string, taxon: string, taxon_label: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($term | is-empty) { error make --unspanned { msg: "path parameter 'term' must be non-empty" } }
@@ -7210,7 +7234,7 @@ export def "get-search-hpo-entities" [
   --anatomical-system: string # anatomical system id
   --anatomical-system-label: string # anatomical system label
   --highlight-class: string # highlight class
-]: nothing -> record<results: table<highlight: string, id: string, label: string, matched_synonym: string>> {
+]: nothing -> oneof<record<results: table<highlight: string, id: string, label: string, matched_synonym: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($term | is-empty) { error make --unspanned { msg: "path parameter 'term' must be non-empty" } }
@@ -7260,7 +7284,7 @@ export def "get-search-entities" [
   --min-match: string # minimum should match parameter, see solr docs for details
   --exclude-groups: oneof<nothing, bool> # Exclude grouping classes (classes with subclasses) (default: false)
   --minimal-tokenizer: oneof<nothing, bool> # set to true to use the minimal tokenizer, good for variants and genotypes (default: false)
-]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int> {
+]: nothing -> oneof<record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($term | is-empty) { error make --unspanned { msg: "path parameter 'term' must be non-empty" } }
@@ -7300,7 +7324,7 @@ export def "get-sim-compare" [
   --metric: string@metric-completer # Metric for computing similarity (default: phenodigm)
   --ref-id: list<string> # A phenotype or identifier that is composed of phenotypes (eg disease, gene) (default: [])
   --query-id: list<string> # A phenotype or identifier that is composed of phenotypes (eg disease, gene) (default: [])
-]: nothing -> record<matches: table<id: string, label: string, taxon: record, type: string, pairwise_match: list, rank: string, score: float, significance: string>, metadata: record<max_max_ic: float>, query: record<ids: list<record>, negated_ids: list<record>, reference: record<id: string, label: string, taxon: record, type: string>, target_ids: list<list>, unresolved_ids: list<string>>> {
+]: nothing -> oneof<record<matches: table<id: string, label: string, taxon: record, type: string, pairwise_match: list, rank: string, score: float, significance: string>, metadata: record<max_max_ic: float>, query: record<ids: list<record>, negated_ids: list<record>, reference: record<id: string, label: string, taxon: record, type: string>, target_ids: list<list>, unresolved_ids: list<string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "is_feature_set" $is_feature_set "scalar") (serialize-qp "metric" $metric "scalar") (serialize-qp "ref_id" $ref_id "multi") (serialize-qp "query_id" $query_id "multi")] | flatten | str join "&"
@@ -7337,7 +7361,7 @@ export def "post-sim-compare" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --query-ids: list # list of query profiles
   --reference-ids: list<string> # list of ids
-]: any -> record<matches: table<id: string, label: string, taxon: record, type: string, pairwise_match: list, rank: string, score: float, significance: string>, metadata: record<max_max_ic: float>, query: record<ids: list<record>, negated_ids: list<record>, reference: record<id: string, label: string, taxon: record, type: string>, target_ids: list<list>, unresolved_ids: list<string>>> {
+]: any -> oneof<record<matches: table<id: string, label: string, taxon: record, type: string, pairwise_match: list, rank: string, score: float, significance: string>, metadata: record<max_max_ic: float>, query: record<ids: list<record>, negated_ids: list<record>, reference: record<id: string, label: string, taxon: record, type: string>, target_ids: list<list>, unresolved_ids: list<string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7376,7 +7400,7 @@ export def "get-annotation-score" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: list<string> # Phenotype identifier (eg HP:0004935)
   --absent-id: list<string> # absent phenotype (eg HP:0002828) (default: [])
-]: nothing -> record<categorical_score: float, scaled_score: float, simple_score: float> {
+]: nothing -> oneof<record<categorical_score: float, scaled_score: float, simple_score: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "multi") (serialize-qp "absent_id" $absent_id "multi")] | flatten | str join "&"
@@ -7401,7 +7425,6 @@ export def "get-annotation-score" [
 #
 # POST /sim/score
 # operationId: post_annotation_score
-# --features item shape: {id?: string, isPresent?: bool, label?: string, type?: string}
 export def "post-annotation-score" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7414,7 +7437,7 @@ export def "post-annotation-score" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --features: list # list of features — item shape: {id?: string, isPresent?: bool, label?: string, type?: string}
   --id: string # curie formatted id
-]: any -> record<categorical_score: float, scaled_score: float, simple_score: float> {
+]: any -> oneof<record<categorical_score: float, scaled_score: float, simple_score: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7456,7 +7479,7 @@ export def "get-sim-search" [
   --id: list<string> # A phenotype or identifier that is composed of phenotypes (eg disease, gene) (default: [])
   --limit: int # number of rows, max 500 (default: 20)
   --taxon: string # ncbi taxon id
-]: nothing -> record<matches: table<id: string, label: string, taxon: record, type: string, pairwise_match: list, rank: string, score: float, significance: string>, metadata: record<max_max_ic: float>, query: record<ids: list<record>, negated_ids: list<record>, reference: record<id: string, label: string, taxon: record, type: string>, target_ids: list<list>, unresolved_ids: list<string>>> {
+]: nothing -> oneof<record<matches: table<id: string, label: string, taxon: record, type: string, pairwise_match: list, rank: string, score: float, significance: string>, metadata: record<max_max_ic: float>, query: record<ids: list<record>, negated_ids: list<record>, reference: record<id: string, label: string, taxon: record, type: string>, target_ids: list<list>, unresolved_ids: list<string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "is_feature_set" $is_feature_set "scalar") (serialize-qp "metric" $metric "scalar") (serialize-qp "id" $id "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "taxon" $taxon "scalar")] | flatten | str join "&"
@@ -7493,7 +7516,7 @@ export def "get-variant-sets-collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number (default: 1)
   --per-page: int@per-page-completer # Results per page {error_msg} (default: 10)
-]: nothing -> record<page: int, pages: int, per_page: int, total: int, items: table<body: string, category: string, category_id: int, id: int, pub_date: string, title: string>> {
+]: nothing -> oneof<record<page: int, pages: int, per_page: int, total: int, items: table<body: string, category: string, category_id: int, id: int, pub_date: string, title: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
@@ -7572,7 +7595,7 @@ export def "get-variant-analyze" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<evidence_graph: record<edges: list, nodes: list>, evidence_types: list<record>, id: string, negated: bool, object: record<category: list, id: string, iri: string, label: string, taxon: record>, object_eq: list<string>, object_extensions: list<record>, provided_by: list<string>, publications: list<record>, qualifiers: list<string>, relation: record<category: list, id: string, iri: string, label: string, inverse: bool>, slim: list<string>, subject: record<category: list, id: string, iri: string, label: string, taxon: record>, subject_eq: list<string>, subject_extensions: list<record>, type: string> {
+]: nothing -> oneof<table<evidence_graph: record<edges: list, nodes: list>, evidence_types: list<record>, id: string, negated: bool, object: record<category: list, id: string, iri: string, label: string, taxon: record>, object_eq: list<string>, object_extensions: list<record>, provided_by: list<string>, publications: list<record>, qualifiers: list<string>, relation: record<category: list, id: string, iri: string, label: string, inverse: bool>, slim: list<string>, subject: record<category: list, id: string, iri: string, label: string, taxon: record>, subject_eq: list<string>, subject_extensions: list<record>, type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7612,7 +7635,7 @@ export def "get-variant-sets-archive-collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number (default: 1)
   --per-page: int@per-page-completer # Results per page {error_msg} (default: 10)
-]: nothing -> record<page: int, pages: int, per_page: int, total: int, items: table<body: string, category: string, category_id: int, id: int, pub_date: string, title: string>> {
+]: nothing -> oneof<record<page: int, pages: int, per_page: int, total: int, items: table<body: string, category: string, category_id: int, id: int, pub_date: string, title: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($year | is-empty) { error make --unspanned { msg: "path parameter 'year' must be non-empty" } }
@@ -7687,7 +7710,7 @@ export def "get-variant-set-item" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<body: string, category: string, category_id: int, id: int, pub_date: string, title: string> {
+]: nothing -> oneof<record<body: string, category: string, category_id: int, id: int, pub_date: string, title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }

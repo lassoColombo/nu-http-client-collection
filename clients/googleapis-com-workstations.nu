@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -119,9 +143,9 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "workstations-projects-locations-workstation-clusters-workstation-configs-workstations-delete" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["workstations-projects-locations-workstation-clusters-workstation-configs-workstations-delete" "workstations-projects-locations-workstation-clusters-workstation-configs-workstations-get" "workstations-projects-locations-workstation-clusters-workstation-configs-workstations-patch" "workstations-projects-locations-operations-list" "workstations-projects-locations-operations-cancel" "workstations-projects-locations-workstation-clusters-workstation-configs-workstations-start" "workstations-projects-locations-workstation-clusters-workstation-configs-workstations-stop" "workstations-projects-locations-workstation-clusters-list" "workstations-projects-locations-workstation-clusters-create" "workstations-projects-locations-workstation-clusters-workstation-configs-list" "workstations-projects-locations-workstation-clusters-workstation-configs-create" "workstations-projects-locations-workstation-clusters-workstation-configs-list-usable" "workstations-projects-locations-workstation-clusters-workstation-configs-workstations-list" "workstations-projects-locations-workstation-clusters-workstation-configs-workstations-create" "workstations-projects-locations-workstation-clusters-workstation-configs-workstations-list-usable" "workstations-projects-locations-workstation-clusters-workstation-configs-workstations-get-iam-policy" "workstations-projects-locations-workstation-clusters-workstation-configs-workstations-set-iam-policy" "workstations-projects-locations-workstation-clusters-workstation-configs-workstations-test-iam-permissions" "workstations-projects-locations-workstation-clusters-workstation-configs-workstations-generate-access-token" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -167,7 +191,7 @@ export def "workstations-projects-locations-workstation-clusters-workstation-con
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --etag: string # If set, the request will be rejected if the latest version of the workstation on the server does not have this etag.
   --validate-only: oneof<nothing, bool> # If set, validate the request and preview the review, but do not actually apply it.
-]: nothing -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: nothing -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -215,7 +239,7 @@ export def "workstations-projects-locations-workstation-clusters-workstation-con
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<annotations: record, createTime: string, deleteTime: string, displayName: string, env: record, etag: string, host: string, labels: record, name: string, reconciling: bool, state: string, uid: string, updateTime: string> {
+]: nothing -> oneof<record<annotations: record, createTime: string, deleteTime: string, displayName: string, env: record, etag: string, host: string, labels: record, name: string, reconciling: bool, state: string, uid: string, updateTime: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -272,7 +296,7 @@ export def "workstations-projects-locations-workstation-clusters-workstation-con
   --etag: string # Checksum computed by the server. May be sent on update and delete requests to ensure that the client has an up-to-date value before proceeding.
   --labels: record # Client-specified labels that are applied to the resource and that are also propagated to the underlying Compute Engine resources.
   --body-name: string # Full name of this resource.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -326,7 +350,7 @@ export def "workstations-projects-locations-operations-list" [
   --filter: string # The standard list filter.
   --page-size: int # The standard list page size.
   --page-token: string # The standard list page token.
-]: nothing -> record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>> {
+]: nothing -> oneof<record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -375,7 +399,7 @@ export def "workstations-projects-locations-operations-cancel" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -428,7 +452,7 @@ export def "workstations-projects-locations-workstation-clusters-workstation-con
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --etag: string # If set, the request will be rejected if the latest version of the workstation on the server does not have this etag.
   --validate-only: oneof<nothing, bool> # If set, validate the request and preview the review, but do not actually apply it.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -481,7 +505,7 @@ export def "workstations-projects-locations-workstation-clusters-workstation-con
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --etag: string # If set, the request will be rejected if the latest version of the workstation on the server does not have this etag.
   --validate-only: oneof<nothing, bool> # If set, validate the request and preview the review, but do not actually apply it.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -534,7 +558,7 @@ export def "workstations-projects-locations-workstation-clusters-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # Maximum number of items to return.
   --page-token: string # next_page_token value returned from a previous List request, if any.
-]: nothing -> record<nextPageToken: string, unreachable: list<string>, workstationClusters: table<annotations: record, conditions: list, controlPlaneIp: string, createTime: string, degraded: bool, deleteTime: string, displayName: string, etag: string, labels: record, name: string, network: string, privateClusterConfig: record, reconciling: bool, subnetwork: string, uid: string, updateTime: string>> {
+]: nothing -> oneof<record<nextPageToken: string, unreachable: list<string>, workstationClusters: table<annotations: record, conditions: list, controlPlaneIp: string, createTime: string, degraded: bool, deleteTime: string, displayName: string, etag: string, labels: record, name: string, network: string, privateClusterConfig: record, reconciling: bool, subnetwork: string, uid: string, updateTime: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -560,8 +584,6 @@ export def "workstations-projects-locations-workstation-clusters-list" [
 #
 # POST /v1beta/{parent}/workstationClusters
 # operationId: workstations.projects.locations.workstationClusters.create
-# --conditions item shape: {code?: int, details?: list, message?: string}
-# --privateClusterConfig shape: {allowedProjects?: list<string>, enablePrivateEndpoint?: bool}
 export def "workstations-projects-locations-workstation-clusters-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -594,7 +616,7 @@ export def "workstations-projects-locations-workstation-clusters-create" [
   --network: string # Immutable. Name of the Compute Engine network in which instances associated with this cluster will be created.
   --private-cluster-config: record # Configuration options for private clusters. — shape: {allowedProjects?: list<string>, enablePrivateEndpoint?: bool}
   --subnetwork: string # Immutable. Name of the Compute Engine subnetwork in which instances associated with this cluster will be created. Must be part of the subnetwork specified for this cluster.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -647,7 +669,7 @@ export def "workstations-projects-locations-workstation-clusters-workstation-con
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # Maximum number of items to return.
   --page-token: string # next_page_token value returned from a previous List request, if any.
-]: nothing -> record<nextPageToken: string, unreachable: list<string>, workstationConfigs: table<annotations: record, conditions: list, container: record, createTime: string, degraded: bool, deleteTime: string, displayName: string, enableAuditAgent: bool, encryptionKey: record, etag: string, host: record, idleTimeout: string, labels: record, name: string, persistentDirectories: list, reconciling: bool, runningTimeout: string, uid: string, updateTime: string>> {
+]: nothing -> oneof<record<nextPageToken: string, unreachable: list<string>, workstationConfigs: table<annotations: record, conditions: list, container: record, createTime: string, degraded: bool, deleteTime: string, displayName: string, enableAuditAgent: bool, encryptionKey: record, etag: string, host: record, idleTimeout: string, labels: record, name: string, persistentDirectories: list, reconciling: bool, runningTimeout: string, uid: string, updateTime: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -673,11 +695,6 @@ export def "workstations-projects-locations-workstation-clusters-workstation-con
 #
 # POST /v1beta/{parent}/workstationConfigs
 # operationId: workstations.projects.locations.workstationClusters.workstationConfigs.create
-# --conditions item shape: {code?: int, details?: list, message?: string}
-# --container shape: {args?: list<string>, command?: list<string>, env?: record, image?: string, runAsUser?: int, workingDir?: string}
-# --encryptionKey shape: {kmsKey?: string, kmsKeyServiceAccount?: string}
-# --host shape: {gceInstance?: record}
-# --persistentDirectories item shape: {gcePd?: record, mountPath?: string}
 export def "workstations-projects-locations-workstation-clusters-workstation-configs-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -714,7 +731,7 @@ export def "workstations-projects-locations-workstation-clusters-workstation-con
   --name: string # Full name of this resource.
   --persistent-directories: list # Directories to persist across workstation sessions. — item shape: {gcePd?: record, mountPath?: string}
   --running-timeout: string # How long to wait before automatically stopping a workstation after it started. A value of 0 indicates that workstations using this configuration should never time out. Must be greater than 0 and less than 24 hours if encryption_key is set. Defaults to 12 hours. (format: google-duration)
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -767,7 +784,7 @@ export def "workstations-projects-locations-workstation-clusters-workstation-con
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # Maximum number of items to return.
   --page-token: string # next_page_token value returned from a previous List request, if any.
-]: nothing -> record<nextPageToken: string, unreachable: list<string>, workstationConfigs: table<annotations: record, conditions: list, container: record, createTime: string, degraded: bool, deleteTime: string, displayName: string, enableAuditAgent: bool, encryptionKey: record, etag: string, host: record, idleTimeout: string, labels: record, name: string, persistentDirectories: list, reconciling: bool, runningTimeout: string, uid: string, updateTime: string>> {
+]: nothing -> oneof<record<nextPageToken: string, unreachable: list<string>, workstationConfigs: table<annotations: record, conditions: list, container: record, createTime: string, degraded: bool, deleteTime: string, displayName: string, enableAuditAgent: bool, encryptionKey: record, etag: string, host: record, idleTimeout: string, labels: record, name: string, persistentDirectories: list, reconciling: bool, runningTimeout: string, uid: string, updateTime: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -817,7 +834,7 @@ export def "workstations-projects-locations-workstation-clusters-workstation-con
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # Maximum number of items to return.
   --page-token: string # next_page_token value returned from a previous List request, if any.
-]: nothing -> record<nextPageToken: string, unreachable: list<string>, workstations: table<annotations: record, createTime: string, deleteTime: string, displayName: string, env: record, etag: string, host: string, labels: record, name: string, reconciling: bool, state: string, uid: string, updateTime: string>> {
+]: nothing -> oneof<record<nextPageToken: string, unreachable: list<string>, workstations: table<annotations: record, createTime: string, deleteTime: string, displayName: string, env: record, etag: string, host: string, labels: record, name: string, reconciling: bool, state: string, uid: string, updateTime: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -873,7 +890,7 @@ export def "workstations-projects-locations-workstation-clusters-workstation-con
   --etag: string # Checksum computed by the server. May be sent on update and delete requests to ensure that the client has an up-to-date value before proceeding.
   --labels: record # Client-specified labels that are applied to the resource and that are also propagated to the underlying Compute Engine resources.
   --name: string # Full name of this resource.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -926,7 +943,7 @@ export def "workstations-projects-locations-workstation-clusters-workstation-con
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # Maximum number of items to return.
   --page-token: string # next_page_token value returned from a previous List request, if any.
-]: nothing -> record<nextPageToken: string, unreachable: list<string>, workstations: table<annotations: record, createTime: string, deleteTime: string, displayName: string, env: record, etag: string, host: string, labels: record, name: string, reconciling: bool, state: string, uid: string, updateTime: string>> {
+]: nothing -> oneof<record<nextPageToken: string, unreachable: list<string>, workstations: table<annotations: record, createTime: string, deleteTime: string, displayName: string, env: record, etag: string, host: string, labels: record, name: string, reconciling: bool, state: string, uid: string, updateTime: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -975,7 +992,7 @@ export def "workstations-projects-locations-workstation-clusters-workstation-con
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --options-requested-policy-version: int # Optional. The maximum policy version that will be used to format the policy. Valid values are 0, 1, and 3. Requests specifying an invalid value will be rejected. Requests for policies with any conditional role bindings must specify version 3. Policies with no conditional role bindings may specify any valid value or leave the field unset. The policy in the response might use the policy version that you specified, or it might use a lower policy version. For example, if you specify version 3, but the policy has no conditional role bindings, the response uses version 1. To learn which resources support conditions in their IAM policies, see the [IAM documentation](https://cloud.google.com/iam/help/conditions/resource-policies).
-]: nothing -> record<auditConfigs: table<auditLogConfigs: list, service: string>, bindings: table<condition: record, members: list, role: string>, etag: string, version: int> {
+]: nothing -> oneof<record<auditConfigs: table<auditLogConfigs: list, service: string>, bindings: table<condition: record, members: list, role: string>, etag: string, version: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource | is-empty) { error make --unspanned { msg: "path parameter 'resource' must be non-empty" } }
@@ -1001,7 +1018,6 @@ export def "workstations-projects-locations-workstation-clusters-workstation-con
 #
 # POST /v1beta/{resource}:setIamPolicy
 # operationId: workstations.projects.locations.workstationClusters.workstationConfigs.workstations.setIamPolicy
-# --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
 export def "workstations-projects-locations-workstation-clusters-workstation-configs-workstations-set-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1026,7 +1042,7 @@ export def "workstations-projects-locations-workstation-clusters-workstation-con
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --policy: record # An Identity and Access Management (IAM) policy, which specifies access controls for Google Cloud resources. A `Policy` is a collection of `bindings`. A `binding` binds one or more `members`, or principals, to a single `role`. Principals can be user accounts, service accounts, Google groups, and domains (such as G Suite). A `role` is a named list of permissions; each `role` can be an IAM predefined role or a user-created custom role. For some types of Google Cloud resources, a `binding` can also specify a `condition`, which is a logical expression that allows access to a resource only if the expression evaluates to `true`. A condition can add constraints based on attributes of the request, the resource, or both. To learn which resources support conditions in their IAM policies, see the [IAM documentation](https://cloud.google.com/iam/help/conditions/resource-policies). **JSON example:** { "bindings": [ { "role": "roles/resourcemanager.organizationAdmin", "members": [ "user:mike@example.com", "group:admins@example.com", "domain:google.com", "serviceAccount:my-project-id@appspot.gserviceaccount.com" ] }, { "role": "roles/resourcemanager.organizationViewer", "members": [ "user:eve@example.com" ], "condition": { "title": "expirable access", "description": "Does not grant access after Sep 2020", "expression": "request.time < timestamp('2020-10-01T00:00:00.000Z')", } } ], "etag": "BwWWja0YfJA=", "version": 3 } **YAML example:** bindings: - members: - user:mike@example.com - group:admins@example.com - domain:google.com - serviceAccount:my-project-id@appspot.gserviceaccount.com role: roles/resourcemanager.organizationAdmin - members: - user:eve@example.com role: roles/resourcemanager.organizationViewer condition: title: expirable access description: Does not grant access after Sep 2020 expression: request.time < timestamp('2020-10-01T00:00:00.000Z') etag: BwWWja0YfJA= version: 3 For a description of IAM and its features, see the [IAM documentation](https://cloud.google.com/iam/docs/). — shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
   --update-mask: string # OPTIONAL: A FieldMask specifying which fields of the policy to modify. Only the fields in the mask will be modified. If no mask is provided, the following default mask is used: `paths: "bindings, etag"` (format: google-fieldmask)
-]: any -> record<auditConfigs: table<auditLogConfigs: list, service: string>, bindings: table<condition: record, members: list, role: string>, etag: string, version: int> {
+]: any -> oneof<record<auditConfigs: table<auditLogConfigs: list, service: string>, bindings: table<condition: record, members: list, role: string>, etag: string, version: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1078,7 +1094,7 @@ export def "workstations-projects-locations-workstation-clusters-workstation-con
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --permissions: list<string> # The set of permissions to check for the `resource`. Permissions with wildcards (such as `*` or `storage.*`) are not allowed. For more information see [IAM Overview](https://cloud.google.com/iam/docs/overview#permissions).
-]: any -> record<permissions: list<string>> {
+]: any -> oneof<record<permissions: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1131,7 +1147,7 @@ export def "workstations-projects-locations-workstation-clusters-workstation-con
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --expire-time: string # Desired expiration time of the access token. This value must be at most 24 hours in the future. If a value is not specified, the token's expiration time will be set to a default value of 1 hour in the future. (format: google-datetime)
   --ttl: string # Desired lifetime duration of the access token. This value must be at most 24 hours. If a value is not specified, the token's lifetime will be set to a default value of 1 hour. (format: google-duration)
-]: any -> record<accessToken: string, expireTime: string> {
+]: any -> oneof<record<accessToken: string, expireTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

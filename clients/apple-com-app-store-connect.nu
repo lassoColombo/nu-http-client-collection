@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -116,9 +140,9 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "age-rating-declarations-update-instance" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["age-rating-declarations-update-instance" "app-categories-get-collection" "app-categories-get-instance" "app-categories-parent-get-to-one-related" "app-categories-subcategories-get-to-many-related" "app-encryption-declarations-get-collection" "app-encryption-declarations-get-instance" "app-encryption-declarations-app-get-to-one-related" "app-encryption-declarations-builds-create-to-many-relationship" "app-info-localizations-create-instance" "app-info-localizations-delete-instance" "app-info-localizations-get-instance" "app-info-localizations-update-instance" "app-infos-get-instance" "app-infos-update-instance" "app-infos-age-rating-declaration-get-to-one-related" "app-infos-app-info-localizations-get-to-many-related" "app-infos-primary-category-get-to-one-related" "app-infos-primary-subcategory-one-get-to-one-related" "app-infos-primary-subcategory-two-get-to-one-related" "app-infos-secondary-category-get-to-one-related" "app-infos-secondary-subcategory-one-get-to-one-related" "app-infos-secondary-subcategory-two-get-to-one-related" "app-pre-orders-create-instance" "app-pre-orders-delete-instance" "app-pre-orders-get-instance" "app-pre-orders-update-instance" "app-preview-sets-create-instance" "app-preview-sets-delete-instance" "app-preview-sets-get-instance" "app-preview-sets-app-previews-get-to-many-related" "app-preview-sets-app-previews-get-to-many-relationship" "app-preview-sets-app-previews-replace-to-many-relationship" "app-previews-create-instance" "app-previews-delete-instance" "app-previews-get-instance" "app-previews-update-instance" "app-price-points-get-collection" "app-price-points-get-instance" "app-price-points-territory-get-to-one-related" "app-price-tiers-get-collection" "app-price-tiers-get-instance" "app-price-tiers-price-points-get-to-many-related" "app-prices-get-instance" "app-screenshot-sets-create-instance" "app-screenshot-sets-delete-instance" "app-screenshot-sets-get-instance" "app-screenshot-sets-app-screenshots-get-to-many-related" "app-screenshot-sets-app-screenshots-get-to-many-relationship" "app-screenshot-sets-app-screenshots-replace-to-many-relationship" "app-screenshots-create-instance" "app-screenshots-delete-instance" "app-screenshots-get-instance" "app-screenshots-update-instance" "app-store-review-attachments-create-instance" "app-store-review-attachments-delete-instance" "app-store-review-attachments-get-instance" "app-store-review-attachments-update-instance" "app-store-review-details-create-instance" "app-store-review-details-get-instance" "app-store-review-details-update-instance" "app-store-review-details-app-store-review-attachments-get-to-many-related" "app-store-version-localizations-create-instance" "app-store-version-localizations-delete-instance" "app-store-version-localizations-get-instance" "app-store-version-localizations-update-instance" "app-store-version-localizations-app-preview-sets-get-to-many-related" "app-store-version-localizations-app-screenshot-sets-get-to-many-related" "app-store-version-phased-releases-create-instance" "app-store-version-phased-releases-delete-instance" "app-store-version-phased-releases-update-instance" "app-store-version-submissions-create-instance" "app-store-version-submissions-delete-instance" "app-store-versions-create-instance" "app-store-versions-delete-instance" "app-store-versions-get-instance" "app-store-versions-update-instance" "app-store-versions-age-rating-declaration-get-to-one-related" "app-store-versions-app-store-review-detail-get-to-one-related" "app-store-versions-app-store-version-localizations-get-to-many-related" "app-store-versions-app-store-version-phased-release-get-to-one-related" "app-store-versions-app-store-version-submission-get-to-one-related" "app-store-versions-build-get-to-one-related" "app-store-versions-idfa-declaration-get-to-one-related" "app-store-versions-build-get-to-one-relationship" "app-store-versions-build-update-to-one-relationship" "app-store-versions-routing-app-coverage-get-to-one-related" "apps-get-collection" "apps-get-instance" "apps-update-instance" "apps-app-infos-get-to-many-related" "apps-app-store-versions-get-to-many-related" "apps-available-territories-get-to-many-related" "apps-beta-app-localizations-get-to-many-related" "apps-beta-app-review-detail-get-to-one-related" "apps-beta-groups-get-to-many-related" "apps-beta-license-agreement-get-to-one-related" "apps-builds-get-to-many-related" "apps-end-user-license-agreement-get-to-one-related" "apps-game-center-enabled-versions-get-to-many-related" "apps-in-app-purchases-get-to-many-related" "apps-perf-power-metrics-get-to-many-related" "apps-pre-order-get-to-one-related" "apps-pre-release-versions-get-to-many-related" "apps-prices-get-to-many-related" "apps-beta-testers-delete-to-many-relationship" "beta-app-localizations-get-collection" "beta-app-localizations-create-instance" "beta-app-localizations-delete-instance" "beta-app-localizations-get-instance" "beta-app-localizations-update-instance" "beta-app-localizations-app-get-to-one-related" "beta-app-review-details-get-collection" "beta-app-review-details-get-instance" "beta-app-review-details-update-instance" "beta-app-review-details-app-get-to-one-related" "beta-app-review-submissions-get-collection" "beta-app-review-submissions-create-instance" "beta-app-review-submissions-get-instance" "beta-app-review-submissions-build-get-to-one-related" "beta-build-localizations-get-collection" "beta-build-localizations-create-instance" "beta-build-localizations-delete-instance" "beta-build-localizations-get-instance" "beta-build-localizations-update-instance" "beta-build-localizations-build-get-to-one-related" "beta-groups-get-collection" "beta-groups-create-instance" "beta-groups-delete-instance" "beta-groups-get-instance" "beta-groups-update-instance" "beta-groups-app-get-to-one-related" "beta-groups-beta-testers-get-to-many-related" "beta-groups-builds-get-to-many-related" "beta-groups-beta-testers-delete-to-many-relationship" "beta-groups-beta-testers-get-to-many-relationship" "beta-groups-beta-testers-create-to-many-relationship" "beta-groups-builds-delete-to-many-relationship" "beta-groups-builds-get-to-many-relationship" "beta-groups-builds-create-to-many-relationship" "beta-license-agreements-get-collection" "beta-license-agreements-get-instance" "beta-license-agreements-update-instance" "beta-license-agreements-app-get-to-one-related" "beta-tester-invitations-create-instance" "beta-testers-get-collection" "beta-testers-create-instance" "beta-testers-delete-instance" "beta-testers-get-instance" "beta-testers-apps-get-to-many-related" "beta-testers-beta-groups-get-to-many-related" "beta-testers-builds-get-to-many-related" "beta-testers-apps-delete-to-many-relationship" "beta-testers-apps-get-to-many-relationship" "beta-testers-beta-groups-delete-to-many-relationship" "beta-testers-beta-groups-get-to-many-relationship" "beta-testers-beta-groups-create-to-many-relationship" "beta-testers-builds-delete-to-many-relationship" "beta-testers-builds-get-to-many-relationship" "beta-testers-builds-create-to-many-relationship" "build-beta-details-get-collection" "build-beta-details-get-instance" "build-beta-details-update-instance" "build-beta-details-build-get-to-one-related" "build-beta-notifications-create-instance" "builds-get-collection" "builds-get-instance" "builds-update-instance" "builds-app-get-to-one-related" "builds-app-encryption-declaration-get-to-one-related" "builds-app-store-version-get-to-one-related" "builds-beta-app-review-submission-get-to-one-related" "builds-beta-build-localizations-get-to-many-related" "builds-build-beta-detail-get-to-one-related" "builds-diagnostic-signatures-get-to-many-related" "builds-icons-get-to-many-related" "builds-individual-testers-get-to-many-related" "builds-perf-power-metrics-get-to-many-related" "builds-pre-release-version-get-to-one-related" "builds-app-encryption-declaration-get-to-one-relationship" "builds-app-encryption-declaration-update-to-one-relationship" "builds-beta-groups-delete-to-many-relationship" "builds-beta-groups-create-to-many-relationship" "builds-individual-testers-delete-to-many-relationship" "builds-individual-testers-get-to-many-relationship" "builds-individual-testers-create-to-many-relationship" "bundle-id-capabilities-create-instance" "bundle-id-capabilities-delete-instance" "bundle-id-capabilities-update-instance" "bundle-ids-get-collection" "bundle-ids-create-instance" "bundle-ids-delete-instance" "bundle-ids-get-instance" "bundle-ids-update-instance" "bundle-ids-app-get-to-one-related" "bundle-ids-bundle-id-capabilities-get-to-many-related" "bundle-ids-profiles-get-to-many-related" "certificates-get-collection" "certificates-create-instance" "certificates-delete-instance" "certificates-get-instance" "devices-get-collection" "devices-create-instance" "devices-get-instance" "devices-update-instance" "diagnostic-signatures-logs-get-to-many-related" "end-user-license-agreements-create-instance" "end-user-license-agreements-delete-instance" "end-user-license-agreements-get-instance" "end-user-license-agreements-update-instance" "end-user-license-agreements-territories-get-to-many-related" "finance-reports-get-collection" "game-center-enabled-versions-compatible-versions-get-to-many-related" "game-center-enabled-versions-compatible-versions-delete-to-many-relationship" "game-center-enabled-versions-compatible-versions-get-to-many-relationship" "game-center-enabled-versions-compatible-versions-replace-to-many-relationship" "game-center-enabled-versions-compatible-versions-create-to-many-relationship" "idfa-declarations-create-instance" "idfa-declarations-delete-instance" "idfa-declarations-update-instance" "in-app-purchases-get-instance" "pre-release-versions-get-collection" "pre-release-versions-get-instance" "pre-release-versions-app-get-to-one-related" "pre-release-versions-builds-get-to-many-related" "profiles-get-collection" "profiles-create-instance" "profiles-delete-instance" "profiles-get-instance" "profiles-bundle-id-get-to-one-related" "profiles-certificates-get-to-many-related" "profiles-devices-get-to-many-related" "routing-app-coverages-create-instance" "routing-app-coverages-delete-instance" "routing-app-coverages-get-instance" "routing-app-coverages-update-instance" "sales-reports-get-collection" "territories-get-collection" "user-invitations-get-collection" "user-invitations-create-instance" "user-invitations-delete-instance" "user-invitations-get-instance" "user-invitations-visible-apps-get-to-many-related" "users-get-collection" "users-delete-instance" "users-get-instance" "users-update-instance" "users-visible-apps-delete-to-many-relationship" "users-visible-apps-get-to-many-relationship" "users-visible-apps-replace-to-many-relationship" "users-visible-apps-create-to-many-relationship" "users-visible-apps-get-to-many-related" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -139,7 +163,6 @@ export def commands []: nothing -> table {
 # PATCH /v1/ageRatingDeclarations/{id}
 #
 # operationId: ageRatingDeclarations-update_instance
-# --data shape: {attributes?: record, id: string, type: "ageRatingDeclarations"}
 export def "age-rating-declarations-update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -152,7 +175,7 @@ export def "age-rating-declarations-update-instance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   data: record # shape: {attributes?: record, id: string, type: "ageRatingDeclarations"}
-]: any -> record<data: record<attributes: record<alcoholTobaccoOrDrugUseOrReferences: string, contests: string, gambling: bool, gamblingAndContests: bool, gamblingSimulated: string, horrorOrFearThemes: string, kidsAgeBand: string, matureOrSuggestiveThemes: string, medicalOrTreatmentInformation: string, profanityOrCrudeHumor: string, seventeenPlus: bool, sexualContentGraphicAndNudity: string, sexualContentOrNudity: string, unrestrictedWebAccess: bool, violenceCartoonOrFantasy: string, violenceRealistic: string, violenceRealisticProlongedGraphicOrSadistic: string>, id: string, links: record<self: string>, type: string>, links: record<self: string>> {
+]: any -> oneof<record<data: record<attributes: record<alcoholTobaccoOrDrugUseOrReferences: string, contests: string, gambling: bool, gamblingAndContests: bool, gamblingSimulated: string, horrorOrFearThemes: string, kidsAgeBand: string, matureOrSuggestiveThemes: string, medicalOrTreatmentInformation: string, profanityOrCrudeHumor: string, seventeenPlus: bool, sexualContentGraphicAndNudity: string, sexualContentOrNudity: string, unrestrictedWebAccess: bool, violenceCartoonOrFantasy: string, violenceRealistic: string, violenceRealisticProlongedGraphicOrSadistic: string>, id: string, links: record<self: string>, type: string>, links: record<self: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -195,7 +218,7 @@ export def "app-categories-get-collection" [
   --limit: int # maximum resources per page
   --include: list<string> # comma-separated list of relationships to include
   --limit-subcategories: int # maximum number of related subcategories returned (when they are included)
-]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter[platforms]" $filter_platforms "csv") (serialize-qp "exists[parent]" $exists_parent "csv") (serialize-qp "fields[appCategories]" $fields_app_categories "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "include" $include "csv") (serialize-qp "limit[subcategories]" $limit_subcategories "scalar")] | flatten | str join "&"
@@ -233,7 +256,7 @@ export def "app-categories-get-instance" [
   --fields-app-categories: list<string> # the fields to include for returned resources of type appCategories
   --include: list<string> # comma-separated list of relationships to include
   --limit-subcategories: int # maximum number of related subcategories returned (when they are included)
-]: nothing -> record<data: record<attributes: record<platforms: list>, id: string, links: record<self: string>, relationships: record<parent: record, subcategories: record>, type: string>, included: list<any>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<platforms: list>, id: string, links: record<self: string>, relationships: record<parent: record, subcategories: record>, type: string>, included: list<any>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -270,7 +293,7 @@ export def "app-categories-parent-get-to-one-related" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-app-categories: list<string> # the fields to include for returned resources of type appCategories
-]: nothing -> record<data: record<attributes: record<platforms: list>, id: string, links: record<self: string>, relationships: record<parent: record, subcategories: record>, type: string>, included: list<any>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<platforms: list>, id: string, links: record<self: string>, relationships: record<parent: record, subcategories: record>, type: string>, included: list<any>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -308,7 +331,7 @@ export def "app-categories-subcategories-get-to-many-related" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-app-categories: list<string> # the fields to include for returned resources of type appCategories
   --limit: int # maximum resources per page
-]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -350,7 +373,7 @@ export def "app-encryption-declarations-get-collection" [
   --limit: int # maximum resources per page
   --include: list<string> # comma-separated list of relationships to include
   --fields-apps: list<string> # the fields to include for returned resources of type apps
-]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter[platform]" $filter_platform "csv") (serialize-qp "filter[app]" $filter_app "csv") (serialize-qp "filter[builds]" $filter_builds "csv") (serialize-qp "fields[appEncryptionDeclarations]" $fields_app_encryption_declarations "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "include" $include "csv") (serialize-qp "fields[apps]" $fields_apps "csv")] | flatten | str join "&"
@@ -388,7 +411,7 @@ export def "app-encryption-declarations-get-instance" [
   --fields-app-encryption-declarations: list<string> # the fields to include for returned resources of type appEncryptionDeclarations
   --include: list<string> # comma-separated list of relationships to include
   --fields-apps: list<string> # the fields to include for returned resources of type apps
-]: nothing -> record<data: record<attributes: record<appEncryptionDeclarationState: string, availableOnFrenchStore: bool, codeValue: string, containsProprietaryCryptography: bool, containsThirdPartyCryptography: bool, documentName: string, documentType: string, documentUrl: string, exempt: bool, platform: string, uploadedDate: string, usesEncryption: bool>, id: string, links: record<self: string>, relationships: record<app: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<appEncryptionDeclarationState: string, availableOnFrenchStore: bool, codeValue: string, containsProprietaryCryptography: bool, containsThirdPartyCryptography: bool, documentName: string, documentType: string, documentUrl: string, exempt: bool, platform: string, uploadedDate: string, usesEncryption: bool>, id: string, links: record<self: string>, relationships: record<app: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -425,7 +448,7 @@ export def "app-encryption-declarations-app-get-to-one-related" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-apps: list<string> # the fields to include for returned resources of type apps
-]: nothing -> record<data: record<attributes: record<availableInNewTerritories: bool, bundleId: string, contentRightsDeclaration: string, isOrEverWasMadeForKids: bool, name: string, primaryLocale: string, sku: string>, id: string, links: record<self: string>, relationships: record<appInfos: record, appStoreVersions: record, availableTerritories: record, betaAppLocalizations: record, betaAppReviewDetail: record, betaGroups: record, betaLicenseAgreement: record, builds: record, endUserLicenseAgreement: record, gameCenterEnabledVersions: record, inAppPurchases: record, preOrder: record, preReleaseVersions: record, prices: record>, type: string>, included: list<any>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<availableInNewTerritories: bool, bundleId: string, contentRightsDeclaration: string, isOrEverWasMadeForKids: bool, name: string, primaryLocale: string, sku: string>, id: string, links: record<self: string>, relationships: record<appInfos: record, appStoreVersions: record, availableTerritories: record, betaAppLocalizations: record, betaAppReviewDetail: record, betaGroups: record, betaLicenseAgreement: record, builds: record, endUserLicenseAgreement: record, gameCenterEnabledVersions: record, inAppPurchases: record, preOrder: record, preReleaseVersions: record, prices: record>, type: string>, included: list<any>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -450,7 +473,6 @@ export def "app-encryption-declarations-app-get-to-one-related" [
 # POST /v1/appEncryptionDeclarations/{id}/relationships/builds
 #
 # operationId: appEncryptionDeclarations-builds-create_to_many_relationship
-# --data item shape: {id: string, type: "builds"}
 export def "app-encryption-declarations-builds-create-to-many-relationship" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -490,7 +512,6 @@ export def "app-encryption-declarations-builds-create-to-many-relationship" [
 # POST /v1/appInfoLocalizations
 #
 # operationId: appInfoLocalizations-create_instance
-# --data shape: {attributes: record, relationships: record, type: "appInfoLocalizations"}
 export def "app-info-localizations-create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -502,7 +523,7 @@ export def "app-info-localizations-create-instance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   data: record # shape: {attributes: record, relationships: record, type: "appInfoLocalizations"}
-]: any -> record<data: record<attributes: record<locale: string, name: string, privacyPolicyText: string, privacyPolicyUrl: string, subtitle: string>, id: string, links: record<self: string>, relationships: record<appInfo: record>, type: string>, links: record<self: string>> {
+]: any -> oneof<record<data: record<attributes: record<locale: string, name: string, privacyPolicyText: string, privacyPolicyUrl: string, subtitle: string>, id: string, links: record<self: string>, relationships: record<appInfo: record>, type: string>, links: record<self: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -576,7 +597,7 @@ export def "app-info-localizations-get-instance" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-app-info-localizations: list<string> # the fields to include for returned resources of type appInfoLocalizations
   --include: list<string> # comma-separated list of relationships to include
-]: nothing -> record<data: record<attributes: record<locale: string, name: string, privacyPolicyText: string, privacyPolicyUrl: string, subtitle: string>, id: string, links: record<self: string>, relationships: record<appInfo: record>, type: string>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<locale: string, name: string, privacyPolicyText: string, privacyPolicyUrl: string, subtitle: string>, id: string, links: record<self: string>, relationships: record<appInfo: record>, type: string>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -601,7 +622,6 @@ export def "app-info-localizations-get-instance" [
 # PATCH /v1/appInfoLocalizations/{id}
 #
 # operationId: appInfoLocalizations-update_instance
-# --data shape: {attributes?: record, id: string, type: "appInfoLocalizations"}
 export def "app-info-localizations-update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -614,7 +634,7 @@ export def "app-info-localizations-update-instance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   data: record # shape: {attributes?: record, id: string, type: "appInfoLocalizations"}
-]: any -> record<data: record<attributes: record<locale: string, name: string, privacyPolicyText: string, privacyPolicyUrl: string, subtitle: string>, id: string, links: record<self: string>, relationships: record<appInfo: record>, type: string>, links: record<self: string>> {
+]: any -> oneof<record<data: record<attributes: record<locale: string, name: string, privacyPolicyText: string, privacyPolicyUrl: string, subtitle: string>, id: string, links: record<self: string>, relationships: record<appInfo: record>, type: string>, links: record<self: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -658,7 +678,7 @@ export def "app-infos-get-instance" [
   --fields-app-categories: list<string> # the fields to include for returned resources of type appCategories
   --fields-app-info-localizations: list<string> # the fields to include for returned resources of type appInfoLocalizations
   --limit-app-info-localizations: int # maximum number of related appInfoLocalizations returned (when they are included)
-]: nothing -> record<data: record<attributes: record<appStoreAgeRating: string, appStoreState: string, brazilAgeRating: string, kidsAgeBand: string>, id: string, links: record<self: string>, relationships: record<ageRatingDeclaration: record, app: record, appInfoLocalizations: record, primaryCategory: record, primarySubcategoryOne: record, primarySubcategoryTwo: record, secondaryCategory: record, secondarySubcategoryOne: record, secondarySubcategoryTwo: record>, type: string>, included: list<any>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<appStoreAgeRating: string, appStoreState: string, brazilAgeRating: string, kidsAgeBand: string>, id: string, links: record<self: string>, relationships: record<ageRatingDeclaration: record, app: record, appInfoLocalizations: record, primaryCategory: record, primarySubcategoryOne: record, primarySubcategoryTwo: record, secondaryCategory: record, secondarySubcategoryOne: record, secondarySubcategoryTwo: record>, type: string>, included: list<any>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -683,7 +703,6 @@ export def "app-infos-get-instance" [
 # PATCH /v1/appInfos/{id}
 #
 # operationId: appInfos-update_instance
-# --data shape: {id: string, relationships?: record, type: "appInfos"}
 export def "app-infos-update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -696,7 +715,7 @@ export def "app-infos-update-instance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   data: record # shape: {id: string, relationships?: record, type: "appInfos"}
-]: any -> record<data: record<attributes: record<appStoreAgeRating: string, appStoreState: string, brazilAgeRating: string, kidsAgeBand: string>, id: string, links: record<self: string>, relationships: record<ageRatingDeclaration: record, app: record, appInfoLocalizations: record, primaryCategory: record, primarySubcategoryOne: record, primarySubcategoryTwo: record, secondaryCategory: record, secondarySubcategoryOne: record, secondarySubcategoryTwo: record>, type: string>, included: list<any>, links: record<self: string>> {
+]: any -> oneof<record<data: record<attributes: record<appStoreAgeRating: string, appStoreState: string, brazilAgeRating: string, kidsAgeBand: string>, id: string, links: record<self: string>, relationships: record<ageRatingDeclaration: record, app: record, appInfoLocalizations: record, primaryCategory: record, primarySubcategoryOne: record, primarySubcategoryTwo: record, secondaryCategory: record, secondarySubcategoryOne: record, secondarySubcategoryTwo: record>, type: string>, included: list<any>, links: record<self: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -735,7 +754,7 @@ export def "app-infos-age-rating-declaration-get-to-one-related" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-age-rating-declarations: list<string> # the fields to include for returned resources of type ageRatingDeclarations
-]: nothing -> record<data: record<attributes: record<alcoholTobaccoOrDrugUseOrReferences: string, contests: string, gambling: bool, gamblingAndContests: bool, gamblingSimulated: string, horrorOrFearThemes: string, kidsAgeBand: string, matureOrSuggestiveThemes: string, medicalOrTreatmentInformation: string, profanityOrCrudeHumor: string, seventeenPlus: bool, sexualContentGraphicAndNudity: string, sexualContentOrNudity: string, unrestrictedWebAccess: bool, violenceCartoonOrFantasy: string, violenceRealistic: string, violenceRealisticProlongedGraphicOrSadistic: string>, id: string, links: record<self: string>, type: string>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<alcoholTobaccoOrDrugUseOrReferences: string, contests: string, gambling: bool, gamblingAndContests: bool, gamblingSimulated: string, horrorOrFearThemes: string, kidsAgeBand: string, matureOrSuggestiveThemes: string, medicalOrTreatmentInformation: string, profanityOrCrudeHumor: string, seventeenPlus: bool, sexualContentGraphicAndNudity: string, sexualContentOrNudity: string, unrestrictedWebAccess: bool, violenceCartoonOrFantasy: string, violenceRealistic: string, violenceRealisticProlongedGraphicOrSadistic: string>, id: string, links: record<self: string>, type: string>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -776,7 +795,7 @@ export def "app-infos-app-info-localizations-get-to-many-related" [
   --fields-app-info-localizations: list<string> # the fields to include for returned resources of type appInfoLocalizations
   --limit: int # maximum resources per page
   --include: list<string> # comma-separated list of relationships to include
-]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -813,7 +832,7 @@ export def "app-infos-primary-category-get-to-one-related" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-app-categories: list<string> # the fields to include for returned resources of type appCategories
-]: nothing -> record<data: record<attributes: record<platforms: list>, id: string, links: record<self: string>, relationships: record<parent: record, subcategories: record>, type: string>, included: list<any>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<platforms: list>, id: string, links: record<self: string>, relationships: record<parent: record, subcategories: record>, type: string>, included: list<any>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -850,7 +869,7 @@ export def "app-infos-primary-subcategory-one-get-to-one-related" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-app-categories: list<string> # the fields to include for returned resources of type appCategories
-]: nothing -> record<data: record<attributes: record<platforms: list>, id: string, links: record<self: string>, relationships: record<parent: record, subcategories: record>, type: string>, included: list<any>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<platforms: list>, id: string, links: record<self: string>, relationships: record<parent: record, subcategories: record>, type: string>, included: list<any>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -887,7 +906,7 @@ export def "app-infos-primary-subcategory-two-get-to-one-related" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-app-categories: list<string> # the fields to include for returned resources of type appCategories
-]: nothing -> record<data: record<attributes: record<platforms: list>, id: string, links: record<self: string>, relationships: record<parent: record, subcategories: record>, type: string>, included: list<any>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<platforms: list>, id: string, links: record<self: string>, relationships: record<parent: record, subcategories: record>, type: string>, included: list<any>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -924,7 +943,7 @@ export def "app-infos-secondary-category-get-to-one-related" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-app-categories: list<string> # the fields to include for returned resources of type appCategories
-]: nothing -> record<data: record<attributes: record<platforms: list>, id: string, links: record<self: string>, relationships: record<parent: record, subcategories: record>, type: string>, included: list<any>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<platforms: list>, id: string, links: record<self: string>, relationships: record<parent: record, subcategories: record>, type: string>, included: list<any>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -961,7 +980,7 @@ export def "app-infos-secondary-subcategory-one-get-to-one-related" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-app-categories: list<string> # the fields to include for returned resources of type appCategories
-]: nothing -> record<data: record<attributes: record<platforms: list>, id: string, links: record<self: string>, relationships: record<parent: record, subcategories: record>, type: string>, included: list<any>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<platforms: list>, id: string, links: record<self: string>, relationships: record<parent: record, subcategories: record>, type: string>, included: list<any>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -998,7 +1017,7 @@ export def "app-infos-secondary-subcategory-two-get-to-one-related" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-app-categories: list<string> # the fields to include for returned resources of type appCategories
-]: nothing -> record<data: record<attributes: record<platforms: list>, id: string, links: record<self: string>, relationships: record<parent: record, subcategories: record>, type: string>, included: list<any>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<platforms: list>, id: string, links: record<self: string>, relationships: record<parent: record, subcategories: record>, type: string>, included: list<any>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1023,7 +1042,6 @@ export def "app-infos-secondary-subcategory-two-get-to-one-related" [
 # POST /v1/appPreOrders
 #
 # operationId: appPreOrders-create_instance
-# --data shape: {attributes?: record, relationships: record, type: "appPreOrders"}
 export def "app-pre-orders-create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1035,7 +1053,7 @@ export def "app-pre-orders-create-instance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   data: record # shape: {attributes?: record, relationships: record, type: "appPreOrders"}
-]: any -> record<data: record<attributes: record<appReleaseDate: string, preOrderAvailableDate: string>, id: string, links: record<self: string>, relationships: record<app: record>, type: string>, links: record<self: string>> {
+]: any -> oneof<record<data: record<attributes: record<appReleaseDate: string, preOrderAvailableDate: string>, id: string, links: record<self: string>, relationships: record<app: record>, type: string>, links: record<self: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1109,7 +1127,7 @@ export def "app-pre-orders-get-instance" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-app-pre-orders: list<string> # the fields to include for returned resources of type appPreOrders
   --include: list<string> # comma-separated list of relationships to include
-]: nothing -> record<data: record<attributes: record<appReleaseDate: string, preOrderAvailableDate: string>, id: string, links: record<self: string>, relationships: record<app: record>, type: string>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<appReleaseDate: string, preOrderAvailableDate: string>, id: string, links: record<self: string>, relationships: record<app: record>, type: string>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1134,7 +1152,6 @@ export def "app-pre-orders-get-instance" [
 # PATCH /v1/appPreOrders/{id}
 #
 # operationId: appPreOrders-update_instance
-# --data shape: {attributes?: record, id: string, type: "appPreOrders"}
 export def "app-pre-orders-update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1147,7 +1164,7 @@ export def "app-pre-orders-update-instance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   data: record # shape: {attributes?: record, id: string, type: "appPreOrders"}
-]: any -> record<data: record<attributes: record<appReleaseDate: string, preOrderAvailableDate: string>, id: string, links: record<self: string>, relationships: record<app: record>, type: string>, links: record<self: string>> {
+]: any -> oneof<record<data: record<attributes: record<appReleaseDate: string, preOrderAvailableDate: string>, id: string, links: record<self: string>, relationships: record<app: record>, type: string>, links: record<self: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1174,7 +1191,6 @@ export def "app-pre-orders-update-instance" [
 # POST /v1/appPreviewSets
 #
 # operationId: appPreviewSets-create_instance
-# --data shape: {attributes: record, relationships: record, type: "appPreviewSets"}
 export def "app-preview-sets-create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1186,7 +1202,7 @@ export def "app-preview-sets-create-instance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   data: record # shape: {attributes: record, relationships: record, type: "appPreviewSets"}
-]: any -> record<data: record<attributes: record<previewType: string>, id: string, links: record<self: string>, relationships: record<appPreviews: record, appStoreVersionLocalization: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>> {
+]: any -> oneof<record<data: record<attributes: record<previewType: string>, id: string, links: record<self: string>, relationships: record<appPreviews: record, appStoreVersionLocalization: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1262,7 +1278,7 @@ export def "app-preview-sets-get-instance" [
   --include: list<string> # comma-separated list of relationships to include
   --fields-app-previews: list<string> # the fields to include for returned resources of type appPreviews
   --limit-app-previews: int # maximum number of related appPreviews returned (when they are included)
-]: nothing -> record<data: record<attributes: record<previewType: string>, id: string, links: record<self: string>, relationships: record<appPreviews: record, appStoreVersionLocalization: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<previewType: string>, id: string, links: record<self: string>, relationships: record<appPreviews: record, appStoreVersionLocalization: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1302,7 +1318,7 @@ export def "app-preview-sets-app-previews-get-to-many-related" [
   --fields-app-preview-sets: list<string> # the fields to include for returned resources of type appPreviewSets
   --limit: int # maximum resources per page
   --include: list<string> # comma-separated list of relationships to include
-]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1339,7 +1355,7 @@ export def "app-preview-sets-app-previews-get-to-many-relationship" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # maximum resources per page
-]: nothing -> record<data: table<id: string, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<id: string, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1364,7 +1380,6 @@ export def "app-preview-sets-app-previews-get-to-many-relationship" [
 # PATCH /v1/appPreviewSets/{id}/relationships/appPreviews
 #
 # operationId: appPreviewSets-appPreviews-replace_to_many_relationship
-# --data item shape: {id: string, type: "appPreviews"}
 export def "app-preview-sets-app-previews-replace-to-many-relationship" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1404,7 +1419,6 @@ export def "app-preview-sets-app-previews-replace-to-many-relationship" [
 # POST /v1/appPreviews
 #
 # operationId: appPreviews-create_instance
-# --data shape: {attributes: record, relationships: record, type: "appPreviews"}
 export def "app-previews-create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1416,7 +1430,7 @@ export def "app-previews-create-instance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   data: record # shape: {attributes: record, relationships: record, type: "appPreviews"}
-]: any -> record<data: record<attributes: record<assetDeliveryState: record, fileName: string, fileSize: int, mimeType: string, previewFrameTimeCode: string, previewImage: record, sourceFileChecksum: string, uploadOperations: list, videoUrl: string>, id: string, links: record<self: string>, relationships: record<appPreviewSet: record>, type: string>, links: record<self: string>> {
+]: any -> oneof<record<data: record<attributes: record<assetDeliveryState: record, fileName: string, fileSize: int, mimeType: string, previewFrameTimeCode: string, previewImage: record, sourceFileChecksum: string, uploadOperations: list, videoUrl: string>, id: string, links: record<self: string>, relationships: record<appPreviewSet: record>, type: string>, links: record<self: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1490,7 +1504,7 @@ export def "app-previews-get-instance" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-app-previews: list<string> # the fields to include for returned resources of type appPreviews
   --include: list<string> # comma-separated list of relationships to include
-]: nothing -> record<data: record<attributes: record<assetDeliveryState: record, fileName: string, fileSize: int, mimeType: string, previewFrameTimeCode: string, previewImage: record, sourceFileChecksum: string, uploadOperations: list, videoUrl: string>, id: string, links: record<self: string>, relationships: record<appPreviewSet: record>, type: string>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<assetDeliveryState: record, fileName: string, fileSize: int, mimeType: string, previewFrameTimeCode: string, previewImage: record, sourceFileChecksum: string, uploadOperations: list, videoUrl: string>, id: string, links: record<self: string>, relationships: record<appPreviewSet: record>, type: string>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1515,7 +1529,6 @@ export def "app-previews-get-instance" [
 # PATCH /v1/appPreviews/{id}
 #
 # operationId: appPreviews-update_instance
-# --data shape: {attributes?: record, id: string, type: "appPreviews"}
 export def "app-previews-update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1528,7 +1541,7 @@ export def "app-previews-update-instance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   data: record # shape: {attributes?: record, id: string, type: "appPreviews"}
-]: any -> record<data: record<attributes: record<assetDeliveryState: record, fileName: string, fileSize: int, mimeType: string, previewFrameTimeCode: string, previewImage: record, sourceFileChecksum: string, uploadOperations: list, videoUrl: string>, id: string, links: record<self: string>, relationships: record<appPreviewSet: record>, type: string>, links: record<self: string>> {
+]: any -> oneof<record<data: record<attributes: record<assetDeliveryState: record, fileName: string, fileSize: int, mimeType: string, previewFrameTimeCode: string, previewImage: record, sourceFileChecksum: string, uploadOperations: list, videoUrl: string>, id: string, links: record<self: string>, relationships: record<appPreviewSet: record>, type: string>, links: record<self: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1571,7 +1584,7 @@ export def "app-price-points-get-collection" [
   --limit: int # maximum resources per page
   --include: list<string> # comma-separated list of relationships to include
   --fields-territories: list<string> # the fields to include for returned resources of type territories
-]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: table<attributes: record, id: string, links: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: table<attributes: record, id: string, links: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter[priceTier]" $filter_price_tier "csv") (serialize-qp "filter[territory]" $filter_territory "csv") (serialize-qp "fields[appPricePoints]" $fields_app_price_points "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "include" $include "csv") (serialize-qp "fields[territories]" $fields_territories "csv")] | flatten | str join "&"
@@ -1609,7 +1622,7 @@ export def "app-price-points-get-instance" [
   --fields-app-price-points: list<string> # the fields to include for returned resources of type appPricePoints
   --include: list<string> # comma-separated list of relationships to include
   --fields-territories: list<string> # the fields to include for returned resources of type territories
-]: nothing -> record<data: record<attributes: record<customerPrice: string, proceeds: string>, id: string, links: record<self: string>, relationships: record<priceTier: record, territory: record>, type: string>, included: table<attributes: record, id: string, links: record, type: string>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<customerPrice: string, proceeds: string>, id: string, links: record<self: string>, relationships: record<priceTier: record, territory: record>, type: string>, included: table<attributes: record, id: string, links: record, type: string>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1646,7 +1659,7 @@ export def "app-price-points-territory-get-to-one-related" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-territories: list<string> # the fields to include for returned resources of type territories
-]: nothing -> record<data: record<attributes: record<currency: string>, id: string, links: record<self: string>, type: string>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<currency: string>, id: string, links: record<self: string>, type: string>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1687,7 +1700,7 @@ export def "app-price-tiers-get-collection" [
   --include: list<string> # comma-separated list of relationships to include
   --fields-app-price-points: list<string> # the fields to include for returned resources of type appPricePoints
   --limit-price-points: int # maximum number of related pricePoints returned (when they are included)
-]: nothing -> record<data: table<id: string, links: record, relationships: record, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<id: string, links: record, relationships: record, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter[id]" $filter_id "csv") (serialize-qp "fields[appPriceTiers]" $fields_app_price_tiers "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "include" $include "csv") (serialize-qp "fields[appPricePoints]" $fields_app_price_points "csv") (serialize-qp "limit[pricePoints]" $limit_price_points "scalar")] | flatten | str join "&"
@@ -1726,7 +1739,7 @@ export def "app-price-tiers-get-instance" [
   --include: list<string> # comma-separated list of relationships to include
   --fields-app-price-points: list<string> # the fields to include for returned resources of type appPricePoints
   --limit-price-points: int # maximum number of related pricePoints returned (when they are included)
-]: nothing -> record<data: record<id: string, links: record<self: string>, relationships: record<pricePoints: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<id: string, links: record<self: string>, relationships: record<pricePoints: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1764,7 +1777,7 @@ export def "app-price-tiers-price-points-get-to-many-related" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-app-price-points: list<string> # the fields to include for returned resources of type appPricePoints
   --limit: int # maximum resources per page
-]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: table<attributes: record, id: string, links: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: table<attributes: record, id: string, links: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1802,7 +1815,7 @@ export def "app-prices-get-instance" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-app-prices: list<string> # the fields to include for returned resources of type appPrices
   --include: list<string> # comma-separated list of relationships to include
-]: nothing -> record<data: record<id: string, links: record<self: string>, relationships: record<app: record, priceTier: record>, type: string>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<id: string, links: record<self: string>, relationships: record<app: record, priceTier: record>, type: string>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1827,7 +1840,6 @@ export def "app-prices-get-instance" [
 # POST /v1/appScreenshotSets
 #
 # operationId: appScreenshotSets-create_instance
-# --data shape: {attributes: record, relationships: record, type: "appScreenshotSets"}
 export def "app-screenshot-sets-create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1839,7 +1851,7 @@ export def "app-screenshot-sets-create-instance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   data: record # shape: {attributes: record, relationships: record, type: "appScreenshotSets"}
-]: any -> record<data: record<attributes: record<screenshotDisplayType: string>, id: string, links: record<self: string>, relationships: record<appScreenshots: record, appStoreVersionLocalization: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>> {
+]: any -> oneof<record<data: record<attributes: record<screenshotDisplayType: string>, id: string, links: record<self: string>, relationships: record<appScreenshots: record, appStoreVersionLocalization: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1915,7 +1927,7 @@ export def "app-screenshot-sets-get-instance" [
   --include: list<string> # comma-separated list of relationships to include
   --fields-app-screenshots: list<string> # the fields to include for returned resources of type appScreenshots
   --limit-app-screenshots: int # maximum number of related appScreenshots returned (when they are included)
-]: nothing -> record<data: record<attributes: record<screenshotDisplayType: string>, id: string, links: record<self: string>, relationships: record<appScreenshots: record, appStoreVersionLocalization: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<screenshotDisplayType: string>, id: string, links: record<self: string>, relationships: record<appScreenshots: record, appStoreVersionLocalization: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1955,7 +1967,7 @@ export def "app-screenshot-sets-app-screenshots-get-to-many-related" [
   --fields-app-screenshots: list<string> # the fields to include for returned resources of type appScreenshots
   --limit: int # maximum resources per page
   --include: list<string> # comma-separated list of relationships to include
-]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1992,7 +2004,7 @@ export def "app-screenshot-sets-app-screenshots-get-to-many-relationship" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # maximum resources per page
-]: nothing -> record<data: table<id: string, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<id: string, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2017,7 +2029,6 @@ export def "app-screenshot-sets-app-screenshots-get-to-many-relationship" [
 # PATCH /v1/appScreenshotSets/{id}/relationships/appScreenshots
 #
 # operationId: appScreenshotSets-appScreenshots-replace_to_many_relationship
-# --data item shape: {id: string, type: "appScreenshots"}
 export def "app-screenshot-sets-app-screenshots-replace-to-many-relationship" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2057,7 +2068,6 @@ export def "app-screenshot-sets-app-screenshots-replace-to-many-relationship" [
 # POST /v1/appScreenshots
 #
 # operationId: appScreenshots-create_instance
-# --data shape: {attributes: record, relationships: record, type: "appScreenshots"}
 export def "app-screenshots-create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2069,7 +2079,7 @@ export def "app-screenshots-create-instance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   data: record # shape: {attributes: record, relationships: record, type: "appScreenshots"}
-]: any -> record<data: record<attributes: record<assetDeliveryState: record, assetToken: string, assetType: string, fileName: string, fileSize: int, imageAsset: record, sourceFileChecksum: string, uploadOperations: list>, id: string, links: record<self: string>, relationships: record<appScreenshotSet: record>, type: string>, links: record<self: string>> {
+]: any -> oneof<record<data: record<attributes: record<assetDeliveryState: record, assetToken: string, assetType: string, fileName: string, fileSize: int, imageAsset: record, sourceFileChecksum: string, uploadOperations: list>, id: string, links: record<self: string>, relationships: record<appScreenshotSet: record>, type: string>, links: record<self: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2143,7 +2153,7 @@ export def "app-screenshots-get-instance" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-app-screenshots: list<string> # the fields to include for returned resources of type appScreenshots
   --include: list<string> # comma-separated list of relationships to include
-]: nothing -> record<data: record<attributes: record<assetDeliveryState: record, assetToken: string, assetType: string, fileName: string, fileSize: int, imageAsset: record, sourceFileChecksum: string, uploadOperations: list>, id: string, links: record<self: string>, relationships: record<appScreenshotSet: record>, type: string>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<assetDeliveryState: record, assetToken: string, assetType: string, fileName: string, fileSize: int, imageAsset: record, sourceFileChecksum: string, uploadOperations: list>, id: string, links: record<self: string>, relationships: record<appScreenshotSet: record>, type: string>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2168,7 +2178,6 @@ export def "app-screenshots-get-instance" [
 # PATCH /v1/appScreenshots/{id}
 #
 # operationId: appScreenshots-update_instance
-# --data shape: {attributes?: record, id: string, type: "appScreenshots"}
 export def "app-screenshots-update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2181,7 +2190,7 @@ export def "app-screenshots-update-instance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   data: record # shape: {attributes?: record, id: string, type: "appScreenshots"}
-]: any -> record<data: record<attributes: record<assetDeliveryState: record, assetToken: string, assetType: string, fileName: string, fileSize: int, imageAsset: record, sourceFileChecksum: string, uploadOperations: list>, id: string, links: record<self: string>, relationships: record<appScreenshotSet: record>, type: string>, links: record<self: string>> {
+]: any -> oneof<record<data: record<attributes: record<assetDeliveryState: record, assetToken: string, assetType: string, fileName: string, fileSize: int, imageAsset: record, sourceFileChecksum: string, uploadOperations: list>, id: string, links: record<self: string>, relationships: record<appScreenshotSet: record>, type: string>, links: record<self: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2208,7 +2217,6 @@ export def "app-screenshots-update-instance" [
 # POST /v1/appStoreReviewAttachments
 #
 # operationId: appStoreReviewAttachments-create_instance
-# --data shape: {attributes: record, relationships: record, type: "appStoreReviewAttachments"}
 export def "app-store-review-attachments-create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2220,7 +2228,7 @@ export def "app-store-review-attachments-create-instance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   data: record # shape: {attributes: record, relationships: record, type: "appStoreReviewAttachments"}
-]: any -> record<data: record<attributes: record<assetDeliveryState: record, fileName: string, fileSize: int, sourceFileChecksum: string, uploadOperations: list>, id: string, links: record<self: string>, relationships: record<appStoreReviewDetail: record>, type: string>, links: record<self: string>> {
+]: any -> oneof<record<data: record<attributes: record<assetDeliveryState: record, fileName: string, fileSize: int, sourceFileChecksum: string, uploadOperations: list>, id: string, links: record<self: string>, relationships: record<appStoreReviewDetail: record>, type: string>, links: record<self: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2294,7 +2302,7 @@ export def "app-store-review-attachments-get-instance" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-app-store-review-attachments: list<string> # the fields to include for returned resources of type appStoreReviewAttachments
   --include: list<string> # comma-separated list of relationships to include
-]: nothing -> record<data: record<attributes: record<assetDeliveryState: record, fileName: string, fileSize: int, sourceFileChecksum: string, uploadOperations: list>, id: string, links: record<self: string>, relationships: record<appStoreReviewDetail: record>, type: string>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<assetDeliveryState: record, fileName: string, fileSize: int, sourceFileChecksum: string, uploadOperations: list>, id: string, links: record<self: string>, relationships: record<appStoreReviewDetail: record>, type: string>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2319,7 +2327,6 @@ export def "app-store-review-attachments-get-instance" [
 # PATCH /v1/appStoreReviewAttachments/{id}
 #
 # operationId: appStoreReviewAttachments-update_instance
-# --data shape: {attributes?: record, id: string, type: "appStoreReviewAttachments"}
 export def "app-store-review-attachments-update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2332,7 +2339,7 @@ export def "app-store-review-attachments-update-instance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   data: record # shape: {attributes?: record, id: string, type: "appStoreReviewAttachments"}
-]: any -> record<data: record<attributes: record<assetDeliveryState: record, fileName: string, fileSize: int, sourceFileChecksum: string, uploadOperations: list>, id: string, links: record<self: string>, relationships: record<appStoreReviewDetail: record>, type: string>, links: record<self: string>> {
+]: any -> oneof<record<data: record<attributes: record<assetDeliveryState: record, fileName: string, fileSize: int, sourceFileChecksum: string, uploadOperations: list>, id: string, links: record<self: string>, relationships: record<appStoreReviewDetail: record>, type: string>, links: record<self: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2359,7 +2366,6 @@ export def "app-store-review-attachments-update-instance" [
 # POST /v1/appStoreReviewDetails
 #
 # operationId: appStoreReviewDetails-create_instance
-# --data shape: {attributes?: record, relationships: record, type: "appStoreReviewDetails"}
 export def "app-store-review-details-create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2371,7 +2377,7 @@ export def "app-store-review-details-create-instance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   data: record # shape: {attributes?: record, relationships: record, type: "appStoreReviewDetails"}
-]: any -> record<data: record<attributes: record<contactEmail: string, contactFirstName: string, contactLastName: string, contactPhone: string, demoAccountName: string, demoAccountPassword: string, demoAccountRequired: bool, notes: string>, id: string, links: record<self: string>, relationships: record<appStoreReviewAttachments: record, appStoreVersion: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>> {
+]: any -> oneof<record<data: record<attributes: record<contactEmail: string, contactFirstName: string, contactLastName: string, contactPhone: string, demoAccountName: string, demoAccountPassword: string, demoAccountRequired: bool, notes: string>, id: string, links: record<self: string>, relationships: record<appStoreReviewAttachments: record, appStoreVersion: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2412,7 +2418,7 @@ export def "app-store-review-details-get-instance" [
   --include: list<string> # comma-separated list of relationships to include
   --fields-app-store-review-attachments: list<string> # the fields to include for returned resources of type appStoreReviewAttachments
   --limit-app-store-review-attachments: int # maximum number of related appStoreReviewAttachments returned (when they are included)
-]: nothing -> record<data: record<attributes: record<contactEmail: string, contactFirstName: string, contactLastName: string, contactPhone: string, demoAccountName: string, demoAccountPassword: string, demoAccountRequired: bool, notes: string>, id: string, links: record<self: string>, relationships: record<appStoreReviewAttachments: record, appStoreVersion: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<contactEmail: string, contactFirstName: string, contactLastName: string, contactPhone: string, demoAccountName: string, demoAccountPassword: string, demoAccountRequired: bool, notes: string>, id: string, links: record<self: string>, relationships: record<appStoreReviewAttachments: record, appStoreVersion: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2437,7 +2443,6 @@ export def "app-store-review-details-get-instance" [
 # PATCH /v1/appStoreReviewDetails/{id}
 #
 # operationId: appStoreReviewDetails-update_instance
-# --data shape: {attributes?: record, id: string, type: "appStoreReviewDetails"}
 export def "app-store-review-details-update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2450,7 +2455,7 @@ export def "app-store-review-details-update-instance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   data: record # shape: {attributes?: record, id: string, type: "appStoreReviewDetails"}
-]: any -> record<data: record<attributes: record<contactEmail: string, contactFirstName: string, contactLastName: string, contactPhone: string, demoAccountName: string, demoAccountPassword: string, demoAccountRequired: bool, notes: string>, id: string, links: record<self: string>, relationships: record<appStoreReviewAttachments: record, appStoreVersion: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>> {
+]: any -> oneof<record<data: record<attributes: record<contactEmail: string, contactFirstName: string, contactLastName: string, contactPhone: string, demoAccountName: string, demoAccountPassword: string, demoAccountRequired: bool, notes: string>, id: string, links: record<self: string>, relationships: record<appStoreReviewAttachments: record, appStoreVersion: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2492,7 +2497,7 @@ export def "app-store-review-details-app-store-review-attachments-get-to-many-re
   --fields-app-store-review-attachments: list<string> # the fields to include for returned resources of type appStoreReviewAttachments
   --limit: int # maximum resources per page
   --include: list<string> # comma-separated list of relationships to include
-]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2517,7 +2522,6 @@ export def "app-store-review-details-app-store-review-attachments-get-to-many-re
 # POST /v1/appStoreVersionLocalizations
 #
 # operationId: appStoreVersionLocalizations-create_instance
-# --data shape: {attributes: record, relationships: record, type: "appStoreVersionLocalizations"}
 export def "app-store-version-localizations-create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2529,7 +2533,7 @@ export def "app-store-version-localizations-create-instance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   data: record # shape: {attributes: record, relationships: record, type: "appStoreVersionLocalizations"}
-]: any -> record<data: record<attributes: record<description: string, keywords: string, locale: string, marketingUrl: string, promotionalText: string, supportUrl: string, whatsNew: string>, id: string, links: record<self: string>, relationships: record<appPreviewSets: record, appScreenshotSets: record, appStoreVersion: record>, type: string>, included: list<any>, links: record<self: string>> {
+]: any -> oneof<record<data: record<attributes: record<description: string, keywords: string, locale: string, marketingUrl: string, promotionalText: string, supportUrl: string, whatsNew: string>, id: string, links: record<self: string>, relationships: record<appPreviewSets: record, appScreenshotSets: record, appStoreVersion: record>, type: string>, included: list<any>, links: record<self: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2607,7 +2611,7 @@ export def "app-store-version-localizations-get-instance" [
   --fields-app-preview-sets: list<string> # the fields to include for returned resources of type appPreviewSets
   --limit-app-preview-sets: int # maximum number of related appPreviewSets returned (when they are included)
   --limit-app-screenshot-sets: int # maximum number of related appScreenshotSets returned (when they are included)
-]: nothing -> record<data: record<attributes: record<description: string, keywords: string, locale: string, marketingUrl: string, promotionalText: string, supportUrl: string, whatsNew: string>, id: string, links: record<self: string>, relationships: record<appPreviewSets: record, appScreenshotSets: record, appStoreVersion: record>, type: string>, included: list<any>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<description: string, keywords: string, locale: string, marketingUrl: string, promotionalText: string, supportUrl: string, whatsNew: string>, id: string, links: record<self: string>, relationships: record<appPreviewSets: record, appScreenshotSets: record, appStoreVersion: record>, type: string>, included: list<any>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2632,7 +2636,6 @@ export def "app-store-version-localizations-get-instance" [
 # PATCH /v1/appStoreVersionLocalizations/{id}
 #
 # operationId: appStoreVersionLocalizations-update_instance
-# --data shape: {attributes?: record, id: string, type: "appStoreVersionLocalizations"}
 export def "app-store-version-localizations-update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2645,7 +2648,7 @@ export def "app-store-version-localizations-update-instance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   data: record # shape: {attributes?: record, id: string, type: "appStoreVersionLocalizations"}
-]: any -> record<data: record<attributes: record<description: string, keywords: string, locale: string, marketingUrl: string, promotionalText: string, supportUrl: string, whatsNew: string>, id: string, links: record<self: string>, relationships: record<appPreviewSets: record, appScreenshotSets: record, appStoreVersion: record>, type: string>, included: list<any>, links: record<self: string>> {
+]: any -> oneof<record<data: record<attributes: record<description: string, keywords: string, locale: string, marketingUrl: string, promotionalText: string, supportUrl: string, whatsNew: string>, id: string, links: record<self: string>, relationships: record<appPreviewSets: record, appScreenshotSets: record, appStoreVersion: record>, type: string>, included: list<any>, links: record<self: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2689,7 +2692,7 @@ export def "app-store-version-localizations-app-preview-sets-get-to-many-related
   --fields-app-preview-sets: list<string> # the fields to include for returned resources of type appPreviewSets
   --limit: int # maximum resources per page
   --include: list<string> # comma-separated list of relationships to include
-]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2731,7 +2734,7 @@ export def "app-store-version-localizations-app-screenshot-sets-get-to-many-rela
   --fields-app-screenshots: list<string> # the fields to include for returned resources of type appScreenshots
   --limit: int # maximum resources per page
   --include: list<string> # comma-separated list of relationships to include
-]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2756,7 +2759,6 @@ export def "app-store-version-localizations-app-screenshot-sets-get-to-many-rela
 # POST /v1/appStoreVersionPhasedReleases
 #
 # operationId: appStoreVersionPhasedReleases-create_instance
-# --data shape: {attributes?: record, relationships: record, type: "appStoreVersionPhasedReleases"}
 export def "app-store-version-phased-releases-create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2768,7 +2770,7 @@ export def "app-store-version-phased-releases-create-instance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   data: record # shape: {attributes?: record, relationships: record, type: "appStoreVersionPhasedReleases"}
-]: any -> record<data: record<attributes: record<currentDayNumber: int, phasedReleaseState: string, startDate: string, totalPauseDuration: int>, id: string, links: record<self: string>, type: string>, links: record<self: string>> {
+]: any -> oneof<record<data: record<attributes: record<currentDayNumber: int, phasedReleaseState: string, startDate: string, totalPauseDuration: int>, id: string, links: record<self: string>, type: string>, links: record<self: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2829,7 +2831,6 @@ export def "app-store-version-phased-releases-delete-instance" [
 # PATCH /v1/appStoreVersionPhasedReleases/{id}
 #
 # operationId: appStoreVersionPhasedReleases-update_instance
-# --data shape: {attributes?: record, id: string, type: "appStoreVersionPhasedReleases"}
 export def "app-store-version-phased-releases-update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2842,7 +2843,7 @@ export def "app-store-version-phased-releases-update-instance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   data: record # shape: {attributes?: record, id: string, type: "appStoreVersionPhasedReleases"}
-]: any -> record<data: record<attributes: record<currentDayNumber: int, phasedReleaseState: string, startDate: string, totalPauseDuration: int>, id: string, links: record<self: string>, type: string>, links: record<self: string>> {
+]: any -> oneof<record<data: record<attributes: record<currentDayNumber: int, phasedReleaseState: string, startDate: string, totalPauseDuration: int>, id: string, links: record<self: string>, type: string>, links: record<self: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2869,7 +2870,6 @@ export def "app-store-version-phased-releases-update-instance" [
 # POST /v1/appStoreVersionSubmissions
 #
 # operationId: appStoreVersionSubmissions-create_instance
-# --data shape: {relationships: record, type: "appStoreVersionSubmissions"}
 export def "app-store-version-submissions-create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2881,7 +2881,7 @@ export def "app-store-version-submissions-create-instance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   data: record # shape: {relationships: record, type: "appStoreVersionSubmissions"}
-]: any -> record<data: record<id: string, links: record<self: string>, relationships: record<appStoreVersion: record>, type: string>, links: record<self: string>> {
+]: any -> oneof<record<data: record<id: string, links: record<self: string>, relationships: record<appStoreVersion: record>, type: string>, links: record<self: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2942,7 +2942,6 @@ export def "app-store-version-submissions-delete-instance" [
 # POST /v1/appStoreVersions
 #
 # operationId: appStoreVersions-create_instance
-# --data shape: {attributes: record, relationships: record, type: "appStoreVersions"}
 export def "app-store-versions-create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2954,7 +2953,7 @@ export def "app-store-versions-create-instance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   data: record # shape: {attributes: record, relationships: record, type: "appStoreVersions"}
-]: any -> record<data: record<attributes: record<appStoreState: string, copyright: string, createdDate: string, downloadable: bool, earliestReleaseDate: string, platform: string, releaseType: string, usesIdfa: bool, versionString: string>, id: string, links: record<self: string>, relationships: record<ageRatingDeclaration: record, app: record, appStoreReviewDetail: record, appStoreVersionLocalizations: record, appStoreVersionPhasedRelease: record, appStoreVersionSubmission: record, build: record, idfaDeclaration: record, routingAppCoverage: record>, type: string>, included: list<any>, links: record<self: string>> {
+]: any -> oneof<record<data: record<attributes: record<appStoreState: string, copyright: string, createdDate: string, downloadable: bool, earliestReleaseDate: string, platform: string, releaseType: string, usesIdfa: bool, versionString: string>, id: string, links: record<self: string>, relationships: record<ageRatingDeclaration: record, app: record, appStoreReviewDetail: record, appStoreVersionLocalizations: record, appStoreVersionPhasedRelease: record, appStoreVersionSubmission: record, build: record, idfaDeclaration: record, routingAppCoverage: record>, type: string>, included: list<any>, links: record<self: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3038,7 +3037,7 @@ export def "app-store-versions-get-instance" [
   --fields-builds: list<string> # the fields to include for returned resources of type builds
   --fields-app-store-version-submissions: list<string> # the fields to include for returned resources of type appStoreVersionSubmissions
   --limit-app-store-version-localizations: int # maximum number of related appStoreVersionLocalizations returned (when they are included)
-]: nothing -> record<data: record<attributes: record<appStoreState: string, copyright: string, createdDate: string, downloadable: bool, earliestReleaseDate: string, platform: string, releaseType: string, usesIdfa: bool, versionString: string>, id: string, links: record<self: string>, relationships: record<ageRatingDeclaration: record, app: record, appStoreReviewDetail: record, appStoreVersionLocalizations: record, appStoreVersionPhasedRelease: record, appStoreVersionSubmission: record, build: record, idfaDeclaration: record, routingAppCoverage: record>, type: string>, included: list<any>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<appStoreState: string, copyright: string, createdDate: string, downloadable: bool, earliestReleaseDate: string, platform: string, releaseType: string, usesIdfa: bool, versionString: string>, id: string, links: record<self: string>, relationships: record<ageRatingDeclaration: record, app: record, appStoreReviewDetail: record, appStoreVersionLocalizations: record, appStoreVersionPhasedRelease: record, appStoreVersionSubmission: record, build: record, idfaDeclaration: record, routingAppCoverage: record>, type: string>, included: list<any>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3063,7 +3062,6 @@ export def "app-store-versions-get-instance" [
 # PATCH /v1/appStoreVersions/{id}
 #
 # operationId: appStoreVersions-update_instance
-# --data shape: {attributes?: record, id: string, relationships?: record, type: "appStoreVersions"}
 export def "app-store-versions-update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3076,7 +3074,7 @@ export def "app-store-versions-update-instance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   data: record # shape: {attributes?: record, id: string, relationships?: record, type: "appStoreVersions"}
-]: any -> record<data: record<attributes: record<appStoreState: string, copyright: string, createdDate: string, downloadable: bool, earliestReleaseDate: string, platform: string, releaseType: string, usesIdfa: bool, versionString: string>, id: string, links: record<self: string>, relationships: record<ageRatingDeclaration: record, app: record, appStoreReviewDetail: record, appStoreVersionLocalizations: record, appStoreVersionPhasedRelease: record, appStoreVersionSubmission: record, build: record, idfaDeclaration: record, routingAppCoverage: record>, type: string>, included: list<any>, links: record<self: string>> {
+]: any -> oneof<record<data: record<attributes: record<appStoreState: string, copyright: string, createdDate: string, downloadable: bool, earliestReleaseDate: string, platform: string, releaseType: string, usesIdfa: bool, versionString: string>, id: string, links: record<self: string>, relationships: record<ageRatingDeclaration: record, app: record, appStoreReviewDetail: record, appStoreVersionLocalizations: record, appStoreVersionPhasedRelease: record, appStoreVersionSubmission: record, build: record, idfaDeclaration: record, routingAppCoverage: record>, type: string>, included: list<any>, links: record<self: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3118,7 +3116,7 @@ export def "app-store-versions-age-rating-declaration-get-to-one-related" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-age-rating-declarations: list<string> # the fields to include for returned resources of type ageRatingDeclarations (DEPRECATED)
-]: nothing -> record<data: record<attributes: record<alcoholTobaccoOrDrugUseOrReferences: string, contests: string, gambling: bool, gamblingAndContests: bool, gamblingSimulated: string, horrorOrFearThemes: string, kidsAgeBand: string, matureOrSuggestiveThemes: string, medicalOrTreatmentInformation: string, profanityOrCrudeHumor: string, seventeenPlus: bool, sexualContentGraphicAndNudity: string, sexualContentOrNudity: string, unrestrictedWebAccess: bool, violenceCartoonOrFantasy: string, violenceRealistic: string, violenceRealisticProlongedGraphicOrSadistic: string>, id: string, links: record<self: string>, type: string>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<alcoholTobaccoOrDrugUseOrReferences: string, contests: string, gambling: bool, gamblingAndContests: bool, gamblingSimulated: string, horrorOrFearThemes: string, kidsAgeBand: string, matureOrSuggestiveThemes: string, medicalOrTreatmentInformation: string, profanityOrCrudeHumor: string, seventeenPlus: bool, sexualContentGraphicAndNudity: string, sexualContentOrNudity: string, unrestrictedWebAccess: bool, violenceCartoonOrFantasy: string, violenceRealistic: string, violenceRealisticProlongedGraphicOrSadistic: string>, id: string, links: record<self: string>, type: string>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3158,7 +3156,7 @@ export def "app-store-versions-app-store-review-detail-get-to-one-related" [
   --fields-app-store-versions: list<string> # the fields to include for returned resources of type appStoreVersions
   --fields-app-store-review-attachments: list<string> # the fields to include for returned resources of type appStoreReviewAttachments
   --include: list<string> # comma-separated list of relationships to include
-]: nothing -> record<data: record<attributes: record<contactEmail: string, contactFirstName: string, contactLastName: string, contactPhone: string, demoAccountName: string, demoAccountPassword: string, demoAccountRequired: bool, notes: string>, id: string, links: record<self: string>, relationships: record<appStoreReviewAttachments: record, appStoreVersion: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<contactEmail: string, contactFirstName: string, contactLastName: string, contactPhone: string, demoAccountName: string, demoAccountPassword: string, demoAccountRequired: bool, notes: string>, id: string, links: record<self: string>, relationships: record<appStoreReviewAttachments: record, appStoreVersion: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3196,7 +3194,7 @@ export def "app-store-versions-app-store-version-localizations-get-to-many-relat
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-app-store-version-localizations: list<string> # the fields to include for returned resources of type appStoreVersionLocalizations
   --limit: int # maximum resources per page
-]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3233,7 +3231,7 @@ export def "app-store-versions-app-store-version-phased-release-get-to-one-relat
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-app-store-version-phased-releases: list<string> # the fields to include for returned resources of type appStoreVersionPhasedReleases
-]: nothing -> record<data: record<attributes: record<currentDayNumber: int, phasedReleaseState: string, startDate: string, totalPauseDuration: int>, id: string, links: record<self: string>, type: string>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<currentDayNumber: int, phasedReleaseState: string, startDate: string, totalPauseDuration: int>, id: string, links: record<self: string>, type: string>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3272,7 +3270,7 @@ export def "app-store-versions-app-store-version-submission-get-to-one-related" 
   --fields-app-store-versions: list<string> # the fields to include for returned resources of type appStoreVersions
   --fields-app-store-version-submissions: list<string> # the fields to include for returned resources of type appStoreVersionSubmissions
   --include: list<string> # comma-separated list of relationships to include
-]: nothing -> record<data: record<id: string, links: record<self: string>, relationships: record<appStoreVersion: record>, type: string>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<id: string, links: record<self: string>, relationships: record<appStoreVersion: record>, type: string>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3309,7 +3307,7 @@ export def "app-store-versions-build-get-to-one-related" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-builds: list<string> # the fields to include for returned resources of type builds
-]: nothing -> record<data: record<attributes: record<expirationDate: string, expired: bool, iconAssetToken: record, minOsVersion: string, processingState: string, uploadedDate: string, usesNonExemptEncryption: bool, version: string>, id: string, links: record<self: string>, relationships: record<app: record, appEncryptionDeclaration: record, appStoreVersion: record, betaAppReviewSubmission: record, betaBuildLocalizations: record, buildBetaDetail: record, icons: record, individualTesters: record, preReleaseVersion: record>, type: string>, included: list<any>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<expirationDate: string, expired: bool, iconAssetToken: record, minOsVersion: string, processingState: string, uploadedDate: string, usesNonExemptEncryption: bool, version: string>, id: string, links: record<self: string>, relationships: record<app: record, appEncryptionDeclaration: record, appStoreVersion: record, betaAppReviewSubmission: record, betaBuildLocalizations: record, buildBetaDetail: record, icons: record, individualTesters: record, preReleaseVersion: record>, type: string>, included: list<any>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3346,7 +3344,7 @@ export def "app-store-versions-idfa-declaration-get-to-one-related" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-idfa-declarations: list<string> # the fields to include for returned resources of type idfaDeclarations
-]: nothing -> record<data: record<attributes: record<attributesActionWithPreviousAd: bool, attributesAppInstallationToPreviousAd: bool, honorsLimitedAdTracking: bool, servesAds: bool>, id: string, links: record<self: string>, relationships: record<appStoreVersion: record>, type: string>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<attributesActionWithPreviousAd: bool, attributesAppInstallationToPreviousAd: bool, honorsLimitedAdTracking: bool, servesAds: bool>, id: string, links: record<self: string>, relationships: record<appStoreVersion: record>, type: string>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3382,7 +3380,7 @@ export def "app-store-versions-build-get-to-one-relationship" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<id: string, type: string>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<id: string, type: string>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3406,7 +3404,6 @@ export def "app-store-versions-build-get-to-one-relationship" [
 # PATCH /v1/appStoreVersions/{id}/relationships/build
 #
 # operationId: appStoreVersions-build-update_to_one_relationship
-# --data shape: {id: string, type: "builds"}
 export def "app-store-versions-build-update-to-one-relationship" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3458,7 +3455,7 @@ export def "app-store-versions-routing-app-coverage-get-to-one-related" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-routing-app-coverages: list<string> # the fields to include for returned resources of type routingAppCoverages
-]: nothing -> record<data: record<attributes: record<assetDeliveryState: record, fileName: string, fileSize: int, sourceFileChecksum: string, uploadOperations: list>, id: string, links: record<self: string>, relationships: record<appStoreVersion: record>, type: string>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<assetDeliveryState: record, fileName: string, fileSize: int, sourceFileChecksum: string, uploadOperations: list>, id: string, links: record<self: string>, relationships: record<appStoreVersion: record>, type: string>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3530,7 +3527,7 @@ export def "apps-get-collection" [
   --limit-in-app-purchases: int # maximum number of related inAppPurchases returned (when they are included)
   --limit-pre-release-versions: int # maximum number of related preReleaseVersions returned (when they are included)
   --limit-prices: int # maximum number of related prices returned (when they are included)
-]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter[appStoreVersions.appStoreState]" $filter_app_store_versions_app_store_state "csv") (serialize-qp "filter[appStoreVersions.platform]" $filter_app_store_versions_platform "csv") (serialize-qp "filter[bundleId]" $filter_bundle_id "csv") (serialize-qp "filter[name]" $filter_name "csv") (serialize-qp "filter[sku]" $filter_sku "csv") (serialize-qp "filter[appStoreVersions]" $filter_app_store_versions "csv") (serialize-qp "filter[id]" $filter_id "csv") (serialize-qp "exists[gameCenterEnabledVersions]" $exists_game_center_enabled_versions "csv") (serialize-qp "sort" $sort "csv") (serialize-qp "fields[apps]" $fields_apps "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "include" $include "csv") (serialize-qp "fields[betaGroups]" $fields_beta_groups "csv") (serialize-qp "fields[perfPowerMetrics]" $fields_perf_power_metrics "csv") (serialize-qp "fields[appInfos]" $fields_app_infos "csv") (serialize-qp "fields[appPreOrders]" $fields_app_pre_orders "csv") (serialize-qp "fields[preReleaseVersions]" $fields_pre_release_versions "csv") (serialize-qp "fields[appPrices]" $fields_app_prices "csv") (serialize-qp "fields[inAppPurchases]" $fields_in_app_purchases "csv") (serialize-qp "fields[betaAppReviewDetails]" $fields_beta_app_review_details "csv") (serialize-qp "fields[territories]" $fields_territories "csv") (serialize-qp "fields[gameCenterEnabledVersions]" $fields_game_center_enabled_versions "csv") (serialize-qp "fields[appStoreVersions]" $fields_app_store_versions "csv") (serialize-qp "fields[builds]" $fields_builds "csv") (serialize-qp "fields[betaAppLocalizations]" $fields_beta_app_localizations "csv") (serialize-qp "fields[betaLicenseAgreements]" $fields_beta_license_agreements "csv") (serialize-qp "fields[endUserLicenseAgreements]" $fields_end_user_license_agreements "csv") (serialize-qp "limit[appInfos]" $limit_app_infos "scalar") (serialize-qp "limit[appStoreVersions]" $limit_app_store_versions "scalar") (serialize-qp "limit[availableTerritories]" $limit_available_territories "scalar") (serialize-qp "limit[betaAppLocalizations]" $limit_beta_app_localizations "scalar") (serialize-qp "limit[betaGroups]" $limit_beta_groups "scalar") (serialize-qp "limit[builds]" $limit_builds "scalar") (serialize-qp "limit[gameCenterEnabledVersions]" $limit_game_center_enabled_versions "scalar") (serialize-qp "limit[inAppPurchases]" $limit_in_app_purchases "scalar") (serialize-qp "limit[preReleaseVersions]" $limit_pre_release_versions "scalar") (serialize-qp "limit[prices]" $limit_prices "scalar")] | flatten | str join "&"
@@ -3592,7 +3589,7 @@ export def "apps-get-instance" [
   --limit-in-app-purchases: int # maximum number of related inAppPurchases returned (when they are included)
   --limit-pre-release-versions: int # maximum number of related preReleaseVersions returned (when they are included)
   --limit-prices: int # maximum number of related prices returned (when they are included)
-]: nothing -> record<data: record<attributes: record<availableInNewTerritories: bool, bundleId: string, contentRightsDeclaration: string, isOrEverWasMadeForKids: bool, name: string, primaryLocale: string, sku: string>, id: string, links: record<self: string>, relationships: record<appInfos: record, appStoreVersions: record, availableTerritories: record, betaAppLocalizations: record, betaAppReviewDetail: record, betaGroups: record, betaLicenseAgreement: record, builds: record, endUserLicenseAgreement: record, gameCenterEnabledVersions: record, inAppPurchases: record, preOrder: record, preReleaseVersions: record, prices: record>, type: string>, included: list<any>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<availableInNewTerritories: bool, bundleId: string, contentRightsDeclaration: string, isOrEverWasMadeForKids: bool, name: string, primaryLocale: string, sku: string>, id: string, links: record<self: string>, relationships: record<appInfos: record, appStoreVersions: record, availableTerritories: record, betaAppLocalizations: record, betaAppReviewDetail: record, betaGroups: record, betaLicenseAgreement: record, builds: record, endUserLicenseAgreement: record, gameCenterEnabledVersions: record, inAppPurchases: record, preOrder: record, preReleaseVersions: record, prices: record>, type: string>, included: list<any>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3617,7 +3614,6 @@ export def "apps-get-instance" [
 # PATCH /v1/apps/{id}
 #
 # operationId: apps-update_instance
-# --data shape: {attributes?: record, id: string, relationships?: record, type: "apps"}
 export def "apps-update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3630,7 +3626,7 @@ export def "apps-update-instance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   data: record # shape: {attributes?: record, id: string, relationships?: record, type: "apps"}
-]: any -> record<data: record<attributes: record<availableInNewTerritories: bool, bundleId: string, contentRightsDeclaration: string, isOrEverWasMadeForKids: bool, name: string, primaryLocale: string, sku: string>, id: string, links: record<self: string>, relationships: record<appInfos: record, appStoreVersions: record, availableTerritories: record, betaAppLocalizations: record, betaAppReviewDetail: record, betaGroups: record, betaLicenseAgreement: record, builds: record, endUserLicenseAgreement: record, gameCenterEnabledVersions: record, inAppPurchases: record, preOrder: record, preReleaseVersions: record, prices: record>, type: string>, included: list<any>, links: record<self: string>> {
+]: any -> oneof<record<data: record<attributes: record<availableInNewTerritories: bool, bundleId: string, contentRightsDeclaration: string, isOrEverWasMadeForKids: bool, name: string, primaryLocale: string, sku: string>, id: string, links: record<self: string>, relationships: record<appInfos: record, appStoreVersions: record, availableTerritories: record, betaAppLocalizations: record, betaAppReviewDetail: record, betaGroups: record, betaLicenseAgreement: record, builds: record, endUserLicenseAgreement: record, gameCenterEnabledVersions: record, inAppPurchases: record, preOrder: record, preReleaseVersions: record, prices: record>, type: string>, included: list<any>, links: record<self: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3675,7 +3671,7 @@ export def "apps-app-infos-get-to-many-related" [
   --fields-apps: list<string> # the fields to include for returned resources of type apps
   --limit: int # maximum resources per page
   --include: list<string> # comma-separated list of relationships to include
-]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3727,7 +3723,7 @@ export def "apps-app-store-versions-get-to-many-related" [
   --fields-apps: list<string> # the fields to include for returned resources of type apps
   --limit: int # maximum resources per page
   --include: list<string> # comma-separated list of relationships to include
-]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3765,7 +3761,7 @@ export def "apps-available-territories-get-to-many-related" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-territories: list<string> # the fields to include for returned resources of type territories
   --limit: int # maximum resources per page
-]: nothing -> record<data: table<attributes: record, id: string, links: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<attributes: record, id: string, links: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3803,7 +3799,7 @@ export def "apps-beta-app-localizations-get-to-many-related" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-beta-app-localizations: list<string> # the fields to include for returned resources of type betaAppLocalizations
   --limit: int # maximum resources per page
-]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3840,7 +3836,7 @@ export def "apps-beta-app-review-detail-get-to-one-related" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-beta-app-review-details: list<string> # the fields to include for returned resources of type betaAppReviewDetails
-]: nothing -> record<data: record<attributes: record<contactEmail: string, contactFirstName: string, contactLastName: string, contactPhone: string, demoAccountName: string, demoAccountPassword: string, demoAccountRequired: bool, notes: string>, id: string, links: record<self: string>, relationships: record<app: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<contactEmail: string, contactFirstName: string, contactLastName: string, contactPhone: string, demoAccountName: string, demoAccountPassword: string, demoAccountRequired: bool, notes: string>, id: string, links: record<self: string>, relationships: record<app: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3878,7 +3874,7 @@ export def "apps-beta-groups-get-to-many-related" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-beta-groups: list<string> # the fields to include for returned resources of type betaGroups
   --limit: int # maximum resources per page
-]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3915,7 +3911,7 @@ export def "apps-beta-license-agreement-get-to-one-related" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-beta-license-agreements: list<string> # the fields to include for returned resources of type betaLicenseAgreements
-]: nothing -> record<data: record<attributes: record<agreementText: string>, id: string, links: record<self: string>, relationships: record<app: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<agreementText: string>, id: string, links: record<self: string>, relationships: record<app: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3953,7 +3949,7 @@ export def "apps-builds-get-to-many-related" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-builds: list<string> # the fields to include for returned resources of type builds
   --limit: int # maximum resources per page
-]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3990,7 +3986,7 @@ export def "apps-end-user-license-agreement-get-to-one-related" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-end-user-license-agreements: list<string> # the fields to include for returned resources of type endUserLicenseAgreements
-]: nothing -> record<data: record<attributes: record<agreementText: string>, id: string, links: record<self: string>, relationships: record<app: record, territories: record>, type: string>, included: table<attributes: record, id: string, links: record, type: string>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<agreementText: string>, id: string, links: record<self: string>, relationships: record<app: record, territories: record>, type: string>, included: table<attributes: record, id: string, links: record, type: string>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4034,7 +4030,7 @@ export def "apps-game-center-enabled-versions-get-to-many-related" [
   --fields-apps: list<string> # the fields to include for returned resources of type apps
   --limit: int # maximum resources per page
   --include: list<string> # comma-separated list of relationships to include
-]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4077,7 +4073,7 @@ export def "apps-in-app-purchases-get-to-many-related" [
   --fields-apps: list<string> # the fields to include for returned resources of type apps
   --limit: int # maximum resources per page
   --include: list<string> # comma-separated list of relationships to include
-]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4116,7 +4112,7 @@ export def "apps-perf-power-metrics-get-to-many-related" [
   --filter-device-type: list<string> # filter by attribute 'deviceType'
   --filter-metric-type: list<string> # filter by attribute 'metricType'
   --filter-platform: list<string> # filter by attribute 'platform'
-]: nothing -> record<data: table<attributes: record, id: string, links: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<attributes: record, id: string, links: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4153,7 +4149,7 @@ export def "apps-pre-order-get-to-one-related" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-app-pre-orders: list<string> # the fields to include for returned resources of type appPreOrders
-]: nothing -> record<data: record<attributes: record<appReleaseDate: string, preOrderAvailableDate: string>, id: string, links: record<self: string>, relationships: record<app: record>, type: string>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<appReleaseDate: string, preOrderAvailableDate: string>, id: string, links: record<self: string>, relationships: record<app: record>, type: string>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4191,7 +4187,7 @@ export def "apps-pre-release-versions-get-to-many-related" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-pre-release-versions: list<string> # the fields to include for returned resources of type preReleaseVersions
   --limit: int # maximum resources per page
-]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4232,7 +4228,7 @@ export def "apps-prices-get-to-many-related" [
   --fields-apps: list<string> # the fields to include for returned resources of type apps
   --limit: int # maximum resources per page
   --include: list<string> # comma-separated list of relationships to include
-]: nothing -> record<data: table<id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4257,7 +4253,6 @@ export def "apps-prices-get-to-many-related" [
 # DELETE /v1/apps/{id}/relationships/betaTesters
 #
 # operationId: apps-betaTesters-delete_to_many_relationship
-# --data item shape: {id: string, type: "betaTesters"}
 export def "apps-beta-testers-delete-to-many-relationship" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4313,7 +4308,7 @@ export def "beta-app-localizations-get-collection" [
   --limit: int # maximum resources per page
   --include: list<string> # comma-separated list of relationships to include
   --fields-apps: list<string> # the fields to include for returned resources of type apps
-]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter[locale]" $filter_locale "csv") (serialize-qp "filter[app]" $filter_app "csv") (serialize-qp "fields[betaAppLocalizations]" $fields_beta_app_localizations "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "include" $include "csv") (serialize-qp "fields[apps]" $fields_apps "csv")] | flatten | str join "&"
@@ -4337,7 +4332,6 @@ export def "beta-app-localizations-get-collection" [
 # POST /v1/betaAppLocalizations
 #
 # operationId: betaAppLocalizations-create_instance
-# --data shape: {attributes: record, relationships: record, type: "betaAppLocalizations"}
 export def "beta-app-localizations-create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4349,7 +4343,7 @@ export def "beta-app-localizations-create-instance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   data: record # shape: {attributes: record, relationships: record, type: "betaAppLocalizations"}
-]: any -> record<data: record<attributes: record<description: string, feedbackEmail: string, locale: string, marketingUrl: string, privacyPolicyUrl: string, tvOsPrivacyPolicy: string>, id: string, links: record<self: string>, relationships: record<app: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>> {
+]: any -> oneof<record<data: record<attributes: record<description: string, feedbackEmail: string, locale: string, marketingUrl: string, privacyPolicyUrl: string, tvOsPrivacyPolicy: string>, id: string, links: record<self: string>, relationships: record<app: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4424,7 +4418,7 @@ export def "beta-app-localizations-get-instance" [
   --fields-beta-app-localizations: list<string> # the fields to include for returned resources of type betaAppLocalizations
   --include: list<string> # comma-separated list of relationships to include
   --fields-apps: list<string> # the fields to include for returned resources of type apps
-]: nothing -> record<data: record<attributes: record<description: string, feedbackEmail: string, locale: string, marketingUrl: string, privacyPolicyUrl: string, tvOsPrivacyPolicy: string>, id: string, links: record<self: string>, relationships: record<app: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<description: string, feedbackEmail: string, locale: string, marketingUrl: string, privacyPolicyUrl: string, tvOsPrivacyPolicy: string>, id: string, links: record<self: string>, relationships: record<app: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4449,7 +4443,6 @@ export def "beta-app-localizations-get-instance" [
 # PATCH /v1/betaAppLocalizations/{id}
 #
 # operationId: betaAppLocalizations-update_instance
-# --data shape: {attributes?: record, id: string, type: "betaAppLocalizations"}
 export def "beta-app-localizations-update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4462,7 +4455,7 @@ export def "beta-app-localizations-update-instance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   data: record # shape: {attributes?: record, id: string, type: "betaAppLocalizations"}
-]: any -> record<data: record<attributes: record<description: string, feedbackEmail: string, locale: string, marketingUrl: string, privacyPolicyUrl: string, tvOsPrivacyPolicy: string>, id: string, links: record<self: string>, relationships: record<app: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>> {
+]: any -> oneof<record<data: record<attributes: record<description: string, feedbackEmail: string, locale: string, marketingUrl: string, privacyPolicyUrl: string, tvOsPrivacyPolicy: string>, id: string, links: record<self: string>, relationships: record<app: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4501,7 +4494,7 @@ export def "beta-app-localizations-app-get-to-one-related" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-apps: list<string> # the fields to include for returned resources of type apps
-]: nothing -> record<data: record<attributes: record<availableInNewTerritories: bool, bundleId: string, contentRightsDeclaration: string, isOrEverWasMadeForKids: bool, name: string, primaryLocale: string, sku: string>, id: string, links: record<self: string>, relationships: record<appInfos: record, appStoreVersions: record, availableTerritories: record, betaAppLocalizations: record, betaAppReviewDetail: record, betaGroups: record, betaLicenseAgreement: record, builds: record, endUserLicenseAgreement: record, gameCenterEnabledVersions: record, inAppPurchases: record, preOrder: record, preReleaseVersions: record, prices: record>, type: string>, included: list<any>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<availableInNewTerritories: bool, bundleId: string, contentRightsDeclaration: string, isOrEverWasMadeForKids: bool, name: string, primaryLocale: string, sku: string>, id: string, links: record<self: string>, relationships: record<appInfos: record, appStoreVersions: record, availableTerritories: record, betaAppLocalizations: record, betaAppReviewDetail: record, betaGroups: record, betaLicenseAgreement: record, builds: record, endUserLicenseAgreement: record, gameCenterEnabledVersions: record, inAppPurchases: record, preOrder: record, preReleaseVersions: record, prices: record>, type: string>, included: list<any>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4541,7 +4534,7 @@ export def "beta-app-review-details-get-collection" [
   --limit: int # maximum resources per page
   --include: list<string> # comma-separated list of relationships to include
   --fields-apps: list<string> # the fields to include for returned resources of type apps
-]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($filter_app == null) { error make --unspanned { msg: "required query parameter 'filter[app]' missing: pass --filter-app" } }
@@ -4580,7 +4573,7 @@ export def "beta-app-review-details-get-instance" [
   --fields-beta-app-review-details: list<string> # the fields to include for returned resources of type betaAppReviewDetails
   --include: list<string> # comma-separated list of relationships to include
   --fields-apps: list<string> # the fields to include for returned resources of type apps
-]: nothing -> record<data: record<attributes: record<contactEmail: string, contactFirstName: string, contactLastName: string, contactPhone: string, demoAccountName: string, demoAccountPassword: string, demoAccountRequired: bool, notes: string>, id: string, links: record<self: string>, relationships: record<app: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<contactEmail: string, contactFirstName: string, contactLastName: string, contactPhone: string, demoAccountName: string, demoAccountPassword: string, demoAccountRequired: bool, notes: string>, id: string, links: record<self: string>, relationships: record<app: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4605,7 +4598,6 @@ export def "beta-app-review-details-get-instance" [
 # PATCH /v1/betaAppReviewDetails/{id}
 #
 # operationId: betaAppReviewDetails-update_instance
-# --data shape: {attributes?: record, id: string, type: "betaAppReviewDetails"}
 export def "beta-app-review-details-update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4618,7 +4610,7 @@ export def "beta-app-review-details-update-instance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   data: record # shape: {attributes?: record, id: string, type: "betaAppReviewDetails"}
-]: any -> record<data: record<attributes: record<contactEmail: string, contactFirstName: string, contactLastName: string, contactPhone: string, demoAccountName: string, demoAccountPassword: string, demoAccountRequired: bool, notes: string>, id: string, links: record<self: string>, relationships: record<app: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>> {
+]: any -> oneof<record<data: record<attributes: record<contactEmail: string, contactFirstName: string, contactLastName: string, contactPhone: string, demoAccountName: string, demoAccountPassword: string, demoAccountRequired: bool, notes: string>, id: string, links: record<self: string>, relationships: record<app: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4657,7 +4649,7 @@ export def "beta-app-review-details-app-get-to-one-related" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-apps: list<string> # the fields to include for returned resources of type apps
-]: nothing -> record<data: record<attributes: record<availableInNewTerritories: bool, bundleId: string, contentRightsDeclaration: string, isOrEverWasMadeForKids: bool, name: string, primaryLocale: string, sku: string>, id: string, links: record<self: string>, relationships: record<appInfos: record, appStoreVersions: record, availableTerritories: record, betaAppLocalizations: record, betaAppReviewDetail: record, betaGroups: record, betaLicenseAgreement: record, builds: record, endUserLicenseAgreement: record, gameCenterEnabledVersions: record, inAppPurchases: record, preOrder: record, preReleaseVersions: record, prices: record>, type: string>, included: list<any>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<availableInNewTerritories: bool, bundleId: string, contentRightsDeclaration: string, isOrEverWasMadeForKids: bool, name: string, primaryLocale: string, sku: string>, id: string, links: record<self: string>, relationships: record<appInfos: record, appStoreVersions: record, availableTerritories: record, betaAppLocalizations: record, betaAppReviewDetail: record, betaGroups: record, betaLicenseAgreement: record, builds: record, endUserLicenseAgreement: record, gameCenterEnabledVersions: record, inAppPurchases: record, preOrder: record, preReleaseVersions: record, prices: record>, type: string>, included: list<any>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4698,7 +4690,7 @@ export def "beta-app-review-submissions-get-collection" [
   --limit: int # maximum resources per page
   --include: list<string> # comma-separated list of relationships to include
   --fields-builds: list<string> # the fields to include for returned resources of type builds
-]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($filter_build == null) { error make --unspanned { msg: "required query parameter 'filter[build]' missing: pass --filter-build" } }
@@ -4723,7 +4715,6 @@ export def "beta-app-review-submissions-get-collection" [
 # POST /v1/betaAppReviewSubmissions
 #
 # operationId: betaAppReviewSubmissions-create_instance
-# --data shape: {relationships: record, type: "betaAppReviewSubmissions"}
 export def "beta-app-review-submissions-create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4735,7 +4726,7 @@ export def "beta-app-review-submissions-create-instance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   data: record # shape: {relationships: record, type: "betaAppReviewSubmissions"}
-]: any -> record<data: record<attributes: record<betaReviewState: string>, id: string, links: record<self: string>, relationships: record<build: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>> {
+]: any -> oneof<record<data: record<attributes: record<betaReviewState: string>, id: string, links: record<self: string>, relationships: record<build: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4775,7 +4766,7 @@ export def "beta-app-review-submissions-get-instance" [
   --fields-beta-app-review-submissions: list<string> # the fields to include for returned resources of type betaAppReviewSubmissions
   --include: list<string> # comma-separated list of relationships to include
   --fields-builds: list<string> # the fields to include for returned resources of type builds
-]: nothing -> record<data: record<attributes: record<betaReviewState: string>, id: string, links: record<self: string>, relationships: record<build: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<betaReviewState: string>, id: string, links: record<self: string>, relationships: record<build: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4812,7 +4803,7 @@ export def "beta-app-review-submissions-build-get-to-one-related" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-builds: list<string> # the fields to include for returned resources of type builds
-]: nothing -> record<data: record<attributes: record<expirationDate: string, expired: bool, iconAssetToken: record, minOsVersion: string, processingState: string, uploadedDate: string, usesNonExemptEncryption: bool, version: string>, id: string, links: record<self: string>, relationships: record<app: record, appEncryptionDeclaration: record, appStoreVersion: record, betaAppReviewSubmission: record, betaBuildLocalizations: record, buildBetaDetail: record, icons: record, individualTesters: record, preReleaseVersion: record>, type: string>, included: list<any>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<expirationDate: string, expired: bool, iconAssetToken: record, minOsVersion: string, processingState: string, uploadedDate: string, usesNonExemptEncryption: bool, version: string>, id: string, links: record<self: string>, relationships: record<app: record, appEncryptionDeclaration: record, appStoreVersion: record, betaAppReviewSubmission: record, betaBuildLocalizations: record, buildBetaDetail: record, icons: record, individualTesters: record, preReleaseVersion: record>, type: string>, included: list<any>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4853,7 +4844,7 @@ export def "beta-build-localizations-get-collection" [
   --limit: int # maximum resources per page
   --include: list<string> # comma-separated list of relationships to include
   --fields-builds: list<string> # the fields to include for returned resources of type builds
-]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter[locale]" $filter_locale "csv") (serialize-qp "filter[build]" $filter_build "csv") (serialize-qp "fields[betaBuildLocalizations]" $fields_beta_build_localizations "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "include" $include "csv") (serialize-qp "fields[builds]" $fields_builds "csv")] | flatten | str join "&"
@@ -4877,7 +4868,6 @@ export def "beta-build-localizations-get-collection" [
 # POST /v1/betaBuildLocalizations
 #
 # operationId: betaBuildLocalizations-create_instance
-# --data shape: {attributes: record, relationships: record, type: "betaBuildLocalizations"}
 export def "beta-build-localizations-create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4889,7 +4879,7 @@ export def "beta-build-localizations-create-instance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   data: record # shape: {attributes: record, relationships: record, type: "betaBuildLocalizations"}
-]: any -> record<data: record<attributes: record<locale: string, whatsNew: string>, id: string, links: record<self: string>, relationships: record<build: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>> {
+]: any -> oneof<record<data: record<attributes: record<locale: string, whatsNew: string>, id: string, links: record<self: string>, relationships: record<build: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4964,7 +4954,7 @@ export def "beta-build-localizations-get-instance" [
   --fields-beta-build-localizations: list<string> # the fields to include for returned resources of type betaBuildLocalizations
   --include: list<string> # comma-separated list of relationships to include
   --fields-builds: list<string> # the fields to include for returned resources of type builds
-]: nothing -> record<data: record<attributes: record<locale: string, whatsNew: string>, id: string, links: record<self: string>, relationships: record<build: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<locale: string, whatsNew: string>, id: string, links: record<self: string>, relationships: record<build: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4989,7 +4979,6 @@ export def "beta-build-localizations-get-instance" [
 # PATCH /v1/betaBuildLocalizations/{id}
 #
 # operationId: betaBuildLocalizations-update_instance
-# --data shape: {attributes?: record, id: string, type: "betaBuildLocalizations"}
 export def "beta-build-localizations-update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5002,7 +4991,7 @@ export def "beta-build-localizations-update-instance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   data: record # shape: {attributes?: record, id: string, type: "betaBuildLocalizations"}
-]: any -> record<data: record<attributes: record<locale: string, whatsNew: string>, id: string, links: record<self: string>, relationships: record<build: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>> {
+]: any -> oneof<record<data: record<attributes: record<locale: string, whatsNew: string>, id: string, links: record<self: string>, relationships: record<build: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5041,7 +5030,7 @@ export def "beta-build-localizations-build-get-to-one-related" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-builds: list<string> # the fields to include for returned resources of type builds
-]: nothing -> record<data: record<attributes: record<expirationDate: string, expired: bool, iconAssetToken: record, minOsVersion: string, processingState: string, uploadedDate: string, usesNonExemptEncryption: bool, version: string>, id: string, links: record<self: string>, relationships: record<app: record, appEncryptionDeclaration: record, appStoreVersion: record, betaAppReviewSubmission: record, betaBuildLocalizations: record, buildBetaDetail: record, icons: record, individualTesters: record, preReleaseVersion: record>, type: string>, included: list<any>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<expirationDate: string, expired: bool, iconAssetToken: record, minOsVersion: string, processingState: string, uploadedDate: string, usesNonExemptEncryption: bool, version: string>, id: string, links: record<self: string>, relationships: record<app: record, appEncryptionDeclaration: record, appStoreVersion: record, betaAppReviewSubmission: record, betaBuildLocalizations: record, buildBetaDetail: record, icons: record, individualTesters: record, preReleaseVersion: record>, type: string>, included: list<any>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5093,7 +5082,7 @@ export def "beta-groups-get-collection" [
   --fields-apps: list<string> # the fields to include for returned resources of type apps
   --limit-beta-testers: int # maximum number of related betaTesters returned (when they are included)
   --limit-builds: int # maximum number of related builds returned (when they are included)
-]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter[isInternalGroup]" $filter_is_internal_group "csv") (serialize-qp "filter[name]" $filter_name "csv") (serialize-qp "filter[publicLink]" $filter_public_link "csv") (serialize-qp "filter[publicLinkEnabled]" $filter_public_link_enabled "csv") (serialize-qp "filter[publicLinkLimitEnabled]" $filter_public_link_limit_enabled "csv") (serialize-qp "filter[app]" $filter_app "csv") (serialize-qp "filter[builds]" $filter_builds "csv") (serialize-qp "filter[id]" $filter_id "csv") (serialize-qp "sort" $sort "csv") (serialize-qp "fields[betaGroups]" $fields_beta_groups "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "include" $include "csv") (serialize-qp "fields[builds]" $fields_builds "csv") (serialize-qp "fields[betaTesters]" $fields_beta_testers "csv") (serialize-qp "fields[apps]" $fields_apps "csv") (serialize-qp "limit[betaTesters]" $limit_beta_testers "scalar") (serialize-qp "limit[builds]" $limit_builds "scalar")] | flatten | str join "&"
@@ -5117,7 +5106,6 @@ export def "beta-groups-get-collection" [
 # POST /v1/betaGroups
 #
 # operationId: betaGroups-create_instance
-# --data shape: {attributes: record, relationships: record, type: "betaGroups"}
 export def "beta-groups-create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5129,7 +5117,7 @@ export def "beta-groups-create-instance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   data: record # shape: {attributes: record, relationships: record, type: "betaGroups"}
-]: any -> record<data: record<attributes: record<createdDate: string, feedbackEnabled: bool, isInternalGroup: bool, name: string, publicLink: string, publicLinkEnabled: bool, publicLinkId: string, publicLinkLimit: int, publicLinkLimitEnabled: bool>, id: string, links: record<self: string>, relationships: record<app: record, betaTesters: record, builds: record>, type: string>, included: list<any>, links: record<self: string>> {
+]: any -> oneof<record<data: record<attributes: record<createdDate: string, feedbackEnabled: bool, isInternalGroup: bool, name: string, publicLink: string, publicLinkEnabled: bool, publicLinkId: string, publicLinkLimit: int, publicLinkLimitEnabled: bool>, id: string, links: record<self: string>, relationships: record<app: record, betaTesters: record, builds: record>, type: string>, included: list<any>, links: record<self: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5208,7 +5196,7 @@ export def "beta-groups-get-instance" [
   --fields-apps: list<string> # the fields to include for returned resources of type apps
   --limit-beta-testers: int # maximum number of related betaTesters returned (when they are included)
   --limit-builds: int # maximum number of related builds returned (when they are included)
-]: nothing -> record<data: record<attributes: record<createdDate: string, feedbackEnabled: bool, isInternalGroup: bool, name: string, publicLink: string, publicLinkEnabled: bool, publicLinkId: string, publicLinkLimit: int, publicLinkLimitEnabled: bool>, id: string, links: record<self: string>, relationships: record<app: record, betaTesters: record, builds: record>, type: string>, included: list<any>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<createdDate: string, feedbackEnabled: bool, isInternalGroup: bool, name: string, publicLink: string, publicLinkEnabled: bool, publicLinkId: string, publicLinkLimit: int, publicLinkLimitEnabled: bool>, id: string, links: record<self: string>, relationships: record<app: record, betaTesters: record, builds: record>, type: string>, included: list<any>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5233,7 +5221,6 @@ export def "beta-groups-get-instance" [
 # PATCH /v1/betaGroups/{id}
 #
 # operationId: betaGroups-update_instance
-# --data shape: {attributes?: record, id: string, type: "betaGroups"}
 export def "beta-groups-update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5246,7 +5233,7 @@ export def "beta-groups-update-instance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   data: record # shape: {attributes?: record, id: string, type: "betaGroups"}
-]: any -> record<data: record<attributes: record<createdDate: string, feedbackEnabled: bool, isInternalGroup: bool, name: string, publicLink: string, publicLinkEnabled: bool, publicLinkId: string, publicLinkLimit: int, publicLinkLimitEnabled: bool>, id: string, links: record<self: string>, relationships: record<app: record, betaTesters: record, builds: record>, type: string>, included: list<any>, links: record<self: string>> {
+]: any -> oneof<record<data: record<attributes: record<createdDate: string, feedbackEnabled: bool, isInternalGroup: bool, name: string, publicLink: string, publicLinkEnabled: bool, publicLinkId: string, publicLinkLimit: int, publicLinkLimitEnabled: bool>, id: string, links: record<self: string>, relationships: record<app: record, betaTesters: record, builds: record>, type: string>, included: list<any>, links: record<self: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5285,7 +5272,7 @@ export def "beta-groups-app-get-to-one-related" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-apps: list<string> # the fields to include for returned resources of type apps
-]: nothing -> record<data: record<attributes: record<availableInNewTerritories: bool, bundleId: string, contentRightsDeclaration: string, isOrEverWasMadeForKids: bool, name: string, primaryLocale: string, sku: string>, id: string, links: record<self: string>, relationships: record<appInfos: record, appStoreVersions: record, availableTerritories: record, betaAppLocalizations: record, betaAppReviewDetail: record, betaGroups: record, betaLicenseAgreement: record, builds: record, endUserLicenseAgreement: record, gameCenterEnabledVersions: record, inAppPurchases: record, preOrder: record, preReleaseVersions: record, prices: record>, type: string>, included: list<any>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<availableInNewTerritories: bool, bundleId: string, contentRightsDeclaration: string, isOrEverWasMadeForKids: bool, name: string, primaryLocale: string, sku: string>, id: string, links: record<self: string>, relationships: record<appInfos: record, appStoreVersions: record, availableTerritories: record, betaAppLocalizations: record, betaAppReviewDetail: record, betaGroups: record, betaLicenseAgreement: record, builds: record, endUserLicenseAgreement: record, gameCenterEnabledVersions: record, inAppPurchases: record, preOrder: record, preReleaseVersions: record, prices: record>, type: string>, included: list<any>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5323,7 +5310,7 @@ export def "beta-groups-beta-testers-get-to-many-related" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-beta-testers: list<string> # the fields to include for returned resources of type betaTesters
   --limit: int # maximum resources per page
-]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5361,7 +5348,7 @@ export def "beta-groups-builds-get-to-many-related" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-builds: list<string> # the fields to include for returned resources of type builds
   --limit: int # maximum resources per page
-]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5386,7 +5373,6 @@ export def "beta-groups-builds-get-to-many-related" [
 # DELETE /v1/betaGroups/{id}/relationships/betaTesters
 #
 # operationId: betaGroups-betaTesters-delete_to_many_relationship
-# --data item shape: {id: string, type: "betaTesters"}
 export def "beta-groups-beta-testers-delete-to-many-relationship" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5438,7 +5424,7 @@ export def "beta-groups-beta-testers-get-to-many-relationship" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # maximum resources per page
-]: nothing -> record<data: table<id: string, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<id: string, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5463,7 +5449,6 @@ export def "beta-groups-beta-testers-get-to-many-relationship" [
 # POST /v1/betaGroups/{id}/relationships/betaTesters
 #
 # operationId: betaGroups-betaTesters-create_to_many_relationship
-# --data item shape: {id: string, type: "betaTesters"}
 export def "beta-groups-beta-testers-create-to-many-relationship" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5503,7 +5488,6 @@ export def "beta-groups-beta-testers-create-to-many-relationship" [
 # DELETE /v1/betaGroups/{id}/relationships/builds
 #
 # operationId: betaGroups-builds-delete_to_many_relationship
-# --data item shape: {id: string, type: "builds"}
 export def "beta-groups-builds-delete-to-many-relationship" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5555,7 +5539,7 @@ export def "beta-groups-builds-get-to-many-relationship" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # maximum resources per page
-]: nothing -> record<data: table<id: string, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<id: string, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5580,7 +5564,6 @@ export def "beta-groups-builds-get-to-many-relationship" [
 # POST /v1/betaGroups/{id}/relationships/builds
 #
 # operationId: betaGroups-builds-create_to_many_relationship
-# --data item shape: {id: string, type: "builds"}
 export def "beta-groups-builds-create-to-many-relationship" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5635,7 +5618,7 @@ export def "beta-license-agreements-get-collection" [
   --limit: int # maximum resources per page
   --include: list<string> # comma-separated list of relationships to include
   --fields-apps: list<string> # the fields to include for returned resources of type apps
-]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter[app]" $filter_app "csv") (serialize-qp "fields[betaLicenseAgreements]" $fields_beta_license_agreements "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "include" $include "csv") (serialize-qp "fields[apps]" $fields_apps "csv")] | flatten | str join "&"
@@ -5673,7 +5656,7 @@ export def "beta-license-agreements-get-instance" [
   --fields-beta-license-agreements: list<string> # the fields to include for returned resources of type betaLicenseAgreements
   --include: list<string> # comma-separated list of relationships to include
   --fields-apps: list<string> # the fields to include for returned resources of type apps
-]: nothing -> record<data: record<attributes: record<agreementText: string>, id: string, links: record<self: string>, relationships: record<app: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<agreementText: string>, id: string, links: record<self: string>, relationships: record<app: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5698,7 +5681,6 @@ export def "beta-license-agreements-get-instance" [
 # PATCH /v1/betaLicenseAgreements/{id}
 #
 # operationId: betaLicenseAgreements-update_instance
-# --data shape: {attributes?: record, id: string, type: "betaLicenseAgreements"}
 export def "beta-license-agreements-update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5711,7 +5693,7 @@ export def "beta-license-agreements-update-instance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   data: record # shape: {attributes?: record, id: string, type: "betaLicenseAgreements"}
-]: any -> record<data: record<attributes: record<agreementText: string>, id: string, links: record<self: string>, relationships: record<app: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>> {
+]: any -> oneof<record<data: record<attributes: record<agreementText: string>, id: string, links: record<self: string>, relationships: record<app: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5750,7 +5732,7 @@ export def "beta-license-agreements-app-get-to-one-related" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-apps: list<string> # the fields to include for returned resources of type apps
-]: nothing -> record<data: record<attributes: record<availableInNewTerritories: bool, bundleId: string, contentRightsDeclaration: string, isOrEverWasMadeForKids: bool, name: string, primaryLocale: string, sku: string>, id: string, links: record<self: string>, relationships: record<appInfos: record, appStoreVersions: record, availableTerritories: record, betaAppLocalizations: record, betaAppReviewDetail: record, betaGroups: record, betaLicenseAgreement: record, builds: record, endUserLicenseAgreement: record, gameCenterEnabledVersions: record, inAppPurchases: record, preOrder: record, preReleaseVersions: record, prices: record>, type: string>, included: list<any>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<availableInNewTerritories: bool, bundleId: string, contentRightsDeclaration: string, isOrEverWasMadeForKids: bool, name: string, primaryLocale: string, sku: string>, id: string, links: record<self: string>, relationships: record<appInfos: record, appStoreVersions: record, availableTerritories: record, betaAppLocalizations: record, betaAppReviewDetail: record, betaGroups: record, betaLicenseAgreement: record, builds: record, endUserLicenseAgreement: record, gameCenterEnabledVersions: record, inAppPurchases: record, preOrder: record, preReleaseVersions: record, prices: record>, type: string>, included: list<any>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5775,7 +5757,6 @@ export def "beta-license-agreements-app-get-to-one-related" [
 # POST /v1/betaTesterInvitations
 #
 # operationId: betaTesterInvitations-create_instance
-# --data shape: {relationships: record, type: "betaTesterInvitations"}
 export def "beta-tester-invitations-create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5787,7 +5768,7 @@ export def "beta-tester-invitations-create-instance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   data: record # shape: {relationships: record, type: "betaTesterInvitations"}
-]: any -> record<data: record<id: string, links: record<self: string>, type: string>, links: record<self: string>> {
+]: any -> oneof<record<data: record<id: string, links: record<self: string>, type: string>, links: record<self: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5840,7 +5821,7 @@ export def "beta-testers-get-collection" [
   --limit-apps: int # maximum number of related apps returned (when they are included)
   --limit-beta-groups: int # maximum number of related betaGroups returned (when they are included)
   --limit-builds: int # maximum number of related builds returned (when they are included)
-]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter[email]" $filter_email "csv") (serialize-qp "filter[firstName]" $filter_first_name "csv") (serialize-qp "filter[inviteType]" $filter_invite_type "csv") (serialize-qp "filter[lastName]" $filter_last_name "csv") (serialize-qp "filter[apps]" $filter_apps "csv") (serialize-qp "filter[betaGroups]" $filter_beta_groups "csv") (serialize-qp "filter[builds]" $filter_builds "csv") (serialize-qp "sort" $sort "csv") (serialize-qp "fields[betaTesters]" $fields_beta_testers "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "include" $include "csv") (serialize-qp "fields[betaGroups]" $fields_beta_groups "csv") (serialize-qp "fields[builds]" $fields_builds "csv") (serialize-qp "fields[apps]" $fields_apps "csv") (serialize-qp "limit[apps]" $limit_apps "scalar") (serialize-qp "limit[betaGroups]" $limit_beta_groups "scalar") (serialize-qp "limit[builds]" $limit_builds "scalar")] | flatten | str join "&"
@@ -5864,7 +5845,6 @@ export def "beta-testers-get-collection" [
 # POST /v1/betaTesters
 #
 # operationId: betaTesters-create_instance
-# --data shape: {attributes: record, relationships?: record, type: "betaTesters"}
 export def "beta-testers-create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5876,7 +5856,7 @@ export def "beta-testers-create-instance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   data: record # shape: {attributes: record, relationships?: record, type: "betaTesters"}
-]: any -> record<data: record<attributes: record<email: string, firstName: string, inviteType: string, lastName: string>, id: string, links: record<self: string>, relationships: record<apps: record, betaGroups: record, builds: record>, type: string>, included: list<any>, links: record<self: string>> {
+]: any -> oneof<record<data: record<attributes: record<email: string, firstName: string, inviteType: string, lastName: string>, id: string, links: record<self: string>, relationships: record<apps: record, betaGroups: record, builds: record>, type: string>, included: list<any>, links: record<self: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5956,7 +5936,7 @@ export def "beta-testers-get-instance" [
   --limit-apps: int # maximum number of related apps returned (when they are included)
   --limit-beta-groups: int # maximum number of related betaGroups returned (when they are included)
   --limit-builds: int # maximum number of related builds returned (when they are included)
-]: nothing -> record<data: record<attributes: record<email: string, firstName: string, inviteType: string, lastName: string>, id: string, links: record<self: string>, relationships: record<apps: record, betaGroups: record, builds: record>, type: string>, included: list<any>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<email: string, firstName: string, inviteType: string, lastName: string>, id: string, links: record<self: string>, relationships: record<apps: record, betaGroups: record, builds: record>, type: string>, included: list<any>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5994,7 +5974,7 @@ export def "beta-testers-apps-get-to-many-related" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-apps: list<string> # the fields to include for returned resources of type apps
   --limit: int # maximum resources per page
-]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6032,7 +6012,7 @@ export def "beta-testers-beta-groups-get-to-many-related" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-beta-groups: list<string> # the fields to include for returned resources of type betaGroups
   --limit: int # maximum resources per page
-]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6070,7 +6050,7 @@ export def "beta-testers-builds-get-to-many-related" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-builds: list<string> # the fields to include for returned resources of type builds
   --limit: int # maximum resources per page
-]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6095,7 +6075,6 @@ export def "beta-testers-builds-get-to-many-related" [
 # DELETE /v1/betaTesters/{id}/relationships/apps
 #
 # operationId: betaTesters-apps-delete_to_many_relationship
-# --data item shape: {id: string, type: "apps"}
 export def "beta-testers-apps-delete-to-many-relationship" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6147,7 +6126,7 @@ export def "beta-testers-apps-get-to-many-relationship" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # maximum resources per page
-]: nothing -> record<data: table<id: string, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<id: string, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6172,7 +6151,6 @@ export def "beta-testers-apps-get-to-many-relationship" [
 # DELETE /v1/betaTesters/{id}/relationships/betaGroups
 #
 # operationId: betaTesters-betaGroups-delete_to_many_relationship
-# --data item shape: {id: string, type: "betaGroups"}
 export def "beta-testers-beta-groups-delete-to-many-relationship" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6224,7 +6202,7 @@ export def "beta-testers-beta-groups-get-to-many-relationship" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # maximum resources per page
-]: nothing -> record<data: table<id: string, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<id: string, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6249,7 +6227,6 @@ export def "beta-testers-beta-groups-get-to-many-relationship" [
 # POST /v1/betaTesters/{id}/relationships/betaGroups
 #
 # operationId: betaTesters-betaGroups-create_to_many_relationship
-# --data item shape: {id: string, type: "betaGroups"}
 export def "beta-testers-beta-groups-create-to-many-relationship" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6289,7 +6266,6 @@ export def "beta-testers-beta-groups-create-to-many-relationship" [
 # DELETE /v1/betaTesters/{id}/relationships/builds
 #
 # operationId: betaTesters-builds-delete_to_many_relationship
-# --data item shape: {id: string, type: "builds"}
 export def "beta-testers-builds-delete-to-many-relationship" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6341,7 +6317,7 @@ export def "beta-testers-builds-get-to-many-relationship" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # maximum resources per page
-]: nothing -> record<data: table<id: string, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<id: string, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6366,7 +6342,6 @@ export def "beta-testers-builds-get-to-many-relationship" [
 # POST /v1/betaTesters/{id}/relationships/builds
 #
 # operationId: betaTesters-builds-create_to_many_relationship
-# --data item shape: {id: string, type: "builds"}
 export def "beta-testers-builds-create-to-many-relationship" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6422,7 +6397,7 @@ export def "build-beta-details-get-collection" [
   --limit: int # maximum resources per page
   --include: list<string> # comma-separated list of relationships to include
   --fields-builds: list<string> # the fields to include for returned resources of type builds
-]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter[build]" $filter_build "csv") (serialize-qp "filter[id]" $filter_id "csv") (serialize-qp "fields[buildBetaDetails]" $fields_build_beta_details "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "include" $include "csv") (serialize-qp "fields[builds]" $fields_builds "csv")] | flatten | str join "&"
@@ -6460,7 +6435,7 @@ export def "build-beta-details-get-instance" [
   --fields-build-beta-details: list<string> # the fields to include for returned resources of type buildBetaDetails
   --include: list<string> # comma-separated list of relationships to include
   --fields-builds: list<string> # the fields to include for returned resources of type builds
-]: nothing -> record<data: record<attributes: record<autoNotifyEnabled: bool, externalBuildState: string, internalBuildState: string>, id: string, links: record<self: string>, relationships: record<build: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<autoNotifyEnabled: bool, externalBuildState: string, internalBuildState: string>, id: string, links: record<self: string>, relationships: record<build: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6485,7 +6460,6 @@ export def "build-beta-details-get-instance" [
 # PATCH /v1/buildBetaDetails/{id}
 #
 # operationId: buildBetaDetails-update_instance
-# --data shape: {attributes?: record, id: string, type: "buildBetaDetails"}
 export def "build-beta-details-update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6498,7 +6472,7 @@ export def "build-beta-details-update-instance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   data: record # shape: {attributes?: record, id: string, type: "buildBetaDetails"}
-]: any -> record<data: record<attributes: record<autoNotifyEnabled: bool, externalBuildState: string, internalBuildState: string>, id: string, links: record<self: string>, relationships: record<build: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>> {
+]: any -> oneof<record<data: record<attributes: record<autoNotifyEnabled: bool, externalBuildState: string, internalBuildState: string>, id: string, links: record<self: string>, relationships: record<build: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6537,7 +6511,7 @@ export def "build-beta-details-build-get-to-one-related" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-builds: list<string> # the fields to include for returned resources of type builds
-]: nothing -> record<data: record<attributes: record<expirationDate: string, expired: bool, iconAssetToken: record, minOsVersion: string, processingState: string, uploadedDate: string, usesNonExemptEncryption: bool, version: string>, id: string, links: record<self: string>, relationships: record<app: record, appEncryptionDeclaration: record, appStoreVersion: record, betaAppReviewSubmission: record, betaBuildLocalizations: record, buildBetaDetail: record, icons: record, individualTesters: record, preReleaseVersion: record>, type: string>, included: list<any>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<expirationDate: string, expired: bool, iconAssetToken: record, minOsVersion: string, processingState: string, uploadedDate: string, usesNonExemptEncryption: bool, version: string>, id: string, links: record<self: string>, relationships: record<app: record, appEncryptionDeclaration: record, appStoreVersion: record, betaAppReviewSubmission: record, betaBuildLocalizations: record, buildBetaDetail: record, icons: record, individualTesters: record, preReleaseVersion: record>, type: string>, included: list<any>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6562,7 +6536,6 @@ export def "build-beta-details-build-get-to-one-related" [
 # POST /v1/buildBetaNotifications
 #
 # operationId: buildBetaNotifications-create_instance
-# --data shape: {relationships: record, type: "buildBetaNotifications"}
 export def "build-beta-notifications-create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6574,7 +6547,7 @@ export def "build-beta-notifications-create-instance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   data: record # shape: {relationships: record, type: "buildBetaNotifications"}
-]: any -> record<data: record<id: string, links: record<self: string>, type: string>, links: record<self: string>> {
+]: any -> oneof<record<data: record<id: string, links: record<self: string>, type: string>, links: record<self: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6640,7 +6613,7 @@ export def "builds-get-collection" [
   --limit-beta-build-localizations: int # maximum number of related betaBuildLocalizations returned (when they are included)
   --limit-icons: int # maximum number of related icons returned (when they are included)
   --limit-individual-testers: int # maximum number of related individualTesters returned (when they are included)
-]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter[betaAppReviewSubmission.betaReviewState]" $filter_beta_app_review_submission_beta_review_state "csv") (serialize-qp "filter[expired]" $filter_expired "csv") (serialize-qp "filter[preReleaseVersion.platform]" $filter_pre_release_version_platform "csv") (serialize-qp "filter[preReleaseVersion.version]" $filter_pre_release_version_version "csv") (serialize-qp "filter[processingState]" $filter_processing_state "csv") (serialize-qp "filter[usesNonExemptEncryption]" $filter_uses_non_exempt_encryption "csv") (serialize-qp "filter[version]" $filter_version "csv") (serialize-qp "filter[app]" $filter_app "csv") (serialize-qp "filter[appStoreVersion]" $filter_app_store_version "csv") (serialize-qp "filter[betaGroups]" $filter_beta_groups "csv") (serialize-qp "filter[preReleaseVersion]" $filter_pre_release_version "csv") (serialize-qp "filter[id]" $filter_id "csv") (serialize-qp "sort" $sort "csv") (serialize-qp "fields[builds]" $fields_builds "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "include" $include "csv") (serialize-qp "fields[appEncryptionDeclarations]" $fields_app_encryption_declarations "csv") (serialize-qp "fields[betaAppReviewSubmissions]" $fields_beta_app_review_submissions "csv") (serialize-qp "fields[buildBetaDetails]" $fields_build_beta_details "csv") (serialize-qp "fields[buildIcons]" $fields_build_icons "csv") (serialize-qp "fields[perfPowerMetrics]" $fields_perf_power_metrics "csv") (serialize-qp "fields[preReleaseVersions]" $fields_pre_release_versions "csv") (serialize-qp "fields[appStoreVersions]" $fields_app_store_versions "csv") (serialize-qp "fields[diagnosticSignatures]" $fields_diagnostic_signatures "csv") (serialize-qp "fields[betaTesters]" $fields_beta_testers "csv") (serialize-qp "fields[betaBuildLocalizations]" $fields_beta_build_localizations "csv") (serialize-qp "fields[apps]" $fields_apps "csv") (serialize-qp "limit[betaBuildLocalizations]" $limit_beta_build_localizations "scalar") (serialize-qp "limit[icons]" $limit_icons "scalar") (serialize-qp "limit[individualTesters]" $limit_individual_testers "scalar")] | flatten | str join "&"
@@ -6691,7 +6664,7 @@ export def "builds-get-instance" [
   --limit-beta-build-localizations: int # maximum number of related betaBuildLocalizations returned (when they are included)
   --limit-icons: int # maximum number of related icons returned (when they are included)
   --limit-individual-testers: int # maximum number of related individualTesters returned (when they are included)
-]: nothing -> record<data: record<attributes: record<expirationDate: string, expired: bool, iconAssetToken: record, minOsVersion: string, processingState: string, uploadedDate: string, usesNonExemptEncryption: bool, version: string>, id: string, links: record<self: string>, relationships: record<app: record, appEncryptionDeclaration: record, appStoreVersion: record, betaAppReviewSubmission: record, betaBuildLocalizations: record, buildBetaDetail: record, icons: record, individualTesters: record, preReleaseVersion: record>, type: string>, included: list<any>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<expirationDate: string, expired: bool, iconAssetToken: record, minOsVersion: string, processingState: string, uploadedDate: string, usesNonExemptEncryption: bool, version: string>, id: string, links: record<self: string>, relationships: record<app: record, appEncryptionDeclaration: record, appStoreVersion: record, betaAppReviewSubmission: record, betaBuildLocalizations: record, buildBetaDetail: record, icons: record, individualTesters: record, preReleaseVersion: record>, type: string>, included: list<any>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6716,7 +6689,6 @@ export def "builds-get-instance" [
 # PATCH /v1/builds/{id}
 #
 # operationId: builds-update_instance
-# --data shape: {attributes?: record, id: string, relationships?: record, type: "builds"}
 export def "builds-update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6729,7 +6701,7 @@ export def "builds-update-instance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   data: record # shape: {attributes?: record, id: string, relationships?: record, type: "builds"}
-]: any -> record<data: record<attributes: record<expirationDate: string, expired: bool, iconAssetToken: record, minOsVersion: string, processingState: string, uploadedDate: string, usesNonExemptEncryption: bool, version: string>, id: string, links: record<self: string>, relationships: record<app: record, appEncryptionDeclaration: record, appStoreVersion: record, betaAppReviewSubmission: record, betaBuildLocalizations: record, buildBetaDetail: record, icons: record, individualTesters: record, preReleaseVersion: record>, type: string>, included: list<any>, links: record<self: string>> {
+]: any -> oneof<record<data: record<attributes: record<expirationDate: string, expired: bool, iconAssetToken: record, minOsVersion: string, processingState: string, uploadedDate: string, usesNonExemptEncryption: bool, version: string>, id: string, links: record<self: string>, relationships: record<app: record, appEncryptionDeclaration: record, appStoreVersion: record, betaAppReviewSubmission: record, betaBuildLocalizations: record, buildBetaDetail: record, icons: record, individualTesters: record, preReleaseVersion: record>, type: string>, included: list<any>, links: record<self: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6768,7 +6740,7 @@ export def "builds-app-get-to-one-related" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-apps: list<string> # the fields to include for returned resources of type apps
-]: nothing -> record<data: record<attributes: record<availableInNewTerritories: bool, bundleId: string, contentRightsDeclaration: string, isOrEverWasMadeForKids: bool, name: string, primaryLocale: string, sku: string>, id: string, links: record<self: string>, relationships: record<appInfos: record, appStoreVersions: record, availableTerritories: record, betaAppLocalizations: record, betaAppReviewDetail: record, betaGroups: record, betaLicenseAgreement: record, builds: record, endUserLicenseAgreement: record, gameCenterEnabledVersions: record, inAppPurchases: record, preOrder: record, preReleaseVersions: record, prices: record>, type: string>, included: list<any>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<availableInNewTerritories: bool, bundleId: string, contentRightsDeclaration: string, isOrEverWasMadeForKids: bool, name: string, primaryLocale: string, sku: string>, id: string, links: record<self: string>, relationships: record<appInfos: record, appStoreVersions: record, availableTerritories: record, betaAppLocalizations: record, betaAppReviewDetail: record, betaGroups: record, betaLicenseAgreement: record, builds: record, endUserLicenseAgreement: record, gameCenterEnabledVersions: record, inAppPurchases: record, preOrder: record, preReleaseVersions: record, prices: record>, type: string>, included: list<any>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6805,7 +6777,7 @@ export def "builds-app-encryption-declaration-get-to-one-related" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-app-encryption-declarations: list<string> # the fields to include for returned resources of type appEncryptionDeclarations
-]: nothing -> record<data: record<attributes: record<appEncryptionDeclarationState: string, availableOnFrenchStore: bool, codeValue: string, containsProprietaryCryptography: bool, containsThirdPartyCryptography: bool, documentName: string, documentType: string, documentUrl: string, exempt: bool, platform: string, uploadedDate: string, usesEncryption: bool>, id: string, links: record<self: string>, relationships: record<app: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<appEncryptionDeclarationState: string, availableOnFrenchStore: bool, codeValue: string, containsProprietaryCryptography: bool, containsThirdPartyCryptography: bool, documentName: string, documentType: string, documentUrl: string, exempt: bool, platform: string, uploadedDate: string, usesEncryption: bool>, id: string, links: record<self: string>, relationships: record<app: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6842,7 +6814,7 @@ export def "builds-app-store-version-get-to-one-related" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-app-store-versions: list<string> # the fields to include for returned resources of type appStoreVersions
-]: nothing -> record<data: record<attributes: record<appStoreState: string, copyright: string, createdDate: string, downloadable: bool, earliestReleaseDate: string, platform: string, releaseType: string, usesIdfa: bool, versionString: string>, id: string, links: record<self: string>, relationships: record<ageRatingDeclaration: record, app: record, appStoreReviewDetail: record, appStoreVersionLocalizations: record, appStoreVersionPhasedRelease: record, appStoreVersionSubmission: record, build: record, idfaDeclaration: record, routingAppCoverage: record>, type: string>, included: list<any>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<appStoreState: string, copyright: string, createdDate: string, downloadable: bool, earliestReleaseDate: string, platform: string, releaseType: string, usesIdfa: bool, versionString: string>, id: string, links: record<self: string>, relationships: record<ageRatingDeclaration: record, app: record, appStoreReviewDetail: record, appStoreVersionLocalizations: record, appStoreVersionPhasedRelease: record, appStoreVersionSubmission: record, build: record, idfaDeclaration: record, routingAppCoverage: record>, type: string>, included: list<any>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6879,7 +6851,7 @@ export def "builds-beta-app-review-submission-get-to-one-related" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-beta-app-review-submissions: list<string> # the fields to include for returned resources of type betaAppReviewSubmissions
-]: nothing -> record<data: record<attributes: record<betaReviewState: string>, id: string, links: record<self: string>, relationships: record<build: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<betaReviewState: string>, id: string, links: record<self: string>, relationships: record<build: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6917,7 +6889,7 @@ export def "builds-beta-build-localizations-get-to-many-related" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-beta-build-localizations: list<string> # the fields to include for returned resources of type betaBuildLocalizations
   --limit: int # maximum resources per page
-]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6954,7 +6926,7 @@ export def "builds-build-beta-detail-get-to-one-related" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-build-beta-details: list<string> # the fields to include for returned resources of type buildBetaDetails
-]: nothing -> record<data: record<attributes: record<autoNotifyEnabled: bool, externalBuildState: string, internalBuildState: string>, id: string, links: record<self: string>, relationships: record<build: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<autoNotifyEnabled: bool, externalBuildState: string, internalBuildState: string>, id: string, links: record<self: string>, relationships: record<build: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6993,7 +6965,7 @@ export def "builds-diagnostic-signatures-get-to-many-related" [
   --filter-diagnostic-type: list<string> # filter by attribute 'diagnosticType'
   --fields-diagnostic-signatures: list<string> # the fields to include for returned resources of type diagnosticSignatures
   --limit: int # maximum resources per page
-]: nothing -> record<data: table<attributes: record, id: string, links: record, type: string>, included: table<id: string, links: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<attributes: record, id: string, links: record, type: string>, included: table<id: string, links: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7031,7 +7003,7 @@ export def "builds-icons-get-to-many-related" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-build-icons: list<string> # the fields to include for returned resources of type buildIcons
   --limit: int # maximum resources per page
-]: nothing -> record<data: table<attributes: record, id: string, links: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<attributes: record, id: string, links: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7069,7 +7041,7 @@ export def "builds-individual-testers-get-to-many-related" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-beta-testers: list<string> # the fields to include for returned resources of type betaTesters
   --limit: int # maximum resources per page
-]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7108,7 +7080,7 @@ export def "builds-perf-power-metrics-get-to-many-related" [
   --filter-device-type: list<string> # filter by attribute 'deviceType'
   --filter-metric-type: list<string> # filter by attribute 'metricType'
   --filter-platform: list<string> # filter by attribute 'platform'
-]: nothing -> record<data: table<attributes: record, id: string, links: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<attributes: record, id: string, links: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7145,7 +7117,7 @@ export def "builds-pre-release-version-get-to-one-related" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-pre-release-versions: list<string> # the fields to include for returned resources of type preReleaseVersions
-]: nothing -> record<data: record<attributes: record<platform: string, version: string>, id: string, links: record<self: string>, relationships: record<app: record, builds: record>, type: string>, included: list<any>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<platform: string, version: string>, id: string, links: record<self: string>, relationships: record<app: record, builds: record>, type: string>, included: list<any>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7181,7 +7153,7 @@ export def "builds-app-encryption-declaration-get-to-one-relationship" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<id: string, type: string>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<id: string, type: string>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7205,7 +7177,6 @@ export def "builds-app-encryption-declaration-get-to-one-relationship" [
 # PATCH /v1/builds/{id}/relationships/appEncryptionDeclaration
 #
 # operationId: builds-appEncryptionDeclaration-update_to_one_relationship
-# --data shape: {id: string, type: "appEncryptionDeclarations"}
 export def "builds-app-encryption-declaration-update-to-one-relationship" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7245,7 +7216,6 @@ export def "builds-app-encryption-declaration-update-to-one-relationship" [
 # DELETE /v1/builds/{id}/relationships/betaGroups
 #
 # operationId: builds-betaGroups-delete_to_many_relationship
-# --data item shape: {id: string, type: "betaGroups"}
 export def "builds-beta-groups-delete-to-many-relationship" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7285,7 +7255,6 @@ export def "builds-beta-groups-delete-to-many-relationship" [
 # POST /v1/builds/{id}/relationships/betaGroups
 #
 # operationId: builds-betaGroups-create_to_many_relationship
-# --data item shape: {id: string, type: "betaGroups"}
 export def "builds-beta-groups-create-to-many-relationship" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7325,7 +7294,6 @@ export def "builds-beta-groups-create-to-many-relationship" [
 # DELETE /v1/builds/{id}/relationships/individualTesters
 #
 # operationId: builds-individualTesters-delete_to_many_relationship
-# --data item shape: {id: string, type: "betaTesters"}
 export def "builds-individual-testers-delete-to-many-relationship" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7377,7 +7345,7 @@ export def "builds-individual-testers-get-to-many-relationship" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # maximum resources per page
-]: nothing -> record<data: table<id: string, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<id: string, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7402,7 +7370,6 @@ export def "builds-individual-testers-get-to-many-relationship" [
 # POST /v1/builds/{id}/relationships/individualTesters
 #
 # operationId: builds-individualTesters-create_to_many_relationship
-# --data item shape: {id: string, type: "betaTesters"}
 export def "builds-individual-testers-create-to-many-relationship" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7442,7 +7409,6 @@ export def "builds-individual-testers-create-to-many-relationship" [
 # POST /v1/bundleIdCapabilities
 #
 # operationId: bundleIdCapabilities-create_instance
-# --data shape: {attributes: record, relationships: record, type: "bundleIdCapabilities"}
 export def "bundle-id-capabilities-create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7454,7 +7420,7 @@ export def "bundle-id-capabilities-create-instance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   data: record # shape: {attributes: record, relationships: record, type: "bundleIdCapabilities"}
-]: any -> record<data: record<attributes: record<capabilityType: string, settings: list>, id: string, links: record<self: string>, type: string>, links: record<self: string>> {
+]: any -> oneof<record<data: record<attributes: record<capabilityType: string, settings: list>, id: string, links: record<self: string>, type: string>, links: record<self: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7515,7 +7481,6 @@ export def "bundle-id-capabilities-delete-instance" [
 # PATCH /v1/bundleIdCapabilities/{id}
 #
 # operationId: bundleIdCapabilities-update_instance
-# --data shape: {attributes?: record, id: string, type: "bundleIdCapabilities"}
 export def "bundle-id-capabilities-update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7528,7 +7493,7 @@ export def "bundle-id-capabilities-update-instance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   data: record # shape: {attributes?: record, id: string, type: "bundleIdCapabilities"}
-]: any -> record<data: record<attributes: record<capabilityType: string, settings: list>, id: string, links: record<self: string>, type: string>, links: record<self: string>> {
+]: any -> oneof<record<data: record<attributes: record<capabilityType: string, settings: list>, id: string, links: record<self: string>, type: string>, links: record<self: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7579,7 +7544,7 @@ export def "bundle-ids-get-collection" [
   --fields-apps: list<string> # the fields to include for returned resources of type apps
   --limit-bundle-id-capabilities: int # maximum number of related bundleIdCapabilities returned (when they are included)
   --limit-profiles: int # maximum number of related profiles returned (when they are included)
-]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter[identifier]" $filter_identifier "csv") (serialize-qp "filter[name]" $filter_name "csv") (serialize-qp "filter[platform]" $filter_platform "csv") (serialize-qp "filter[seedId]" $filter_seed_id "csv") (serialize-qp "filter[id]" $filter_id "csv") (serialize-qp "sort" $sort "csv") (serialize-qp "fields[bundleIds]" $fields_bundle_ids "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "include" $include "csv") (serialize-qp "fields[bundleIdCapabilities]" $fields_bundle_id_capabilities "csv") (serialize-qp "fields[profiles]" $fields_profiles "csv") (serialize-qp "fields[apps]" $fields_apps "csv") (serialize-qp "limit[bundleIdCapabilities]" $limit_bundle_id_capabilities "scalar") (serialize-qp "limit[profiles]" $limit_profiles "scalar")] | flatten | str join "&"
@@ -7603,7 +7568,6 @@ export def "bundle-ids-get-collection" [
 # POST /v1/bundleIds
 #
 # operationId: bundleIds-create_instance
-# --data shape: {attributes: record, type: "bundleIds"}
 export def "bundle-ids-create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7615,7 +7579,7 @@ export def "bundle-ids-create-instance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   data: record # shape: {attributes: record, type: "bundleIds"}
-]: any -> record<data: record<attributes: record<identifier: string, name: string, platform: string, seedId: string>, id: string, links: record<self: string>, relationships: record<app: record, bundleIdCapabilities: record, profiles: record>, type: string>, included: list<any>, links: record<self: string>> {
+]: any -> oneof<record<data: record<attributes: record<identifier: string, name: string, platform: string, seedId: string>, id: string, links: record<self: string>, relationships: record<app: record, bundleIdCapabilities: record, profiles: record>, type: string>, included: list<any>, links: record<self: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7694,7 +7658,7 @@ export def "bundle-ids-get-instance" [
   --fields-apps: list<string> # the fields to include for returned resources of type apps
   --limit-bundle-id-capabilities: int # maximum number of related bundleIdCapabilities returned (when they are included)
   --limit-profiles: int # maximum number of related profiles returned (when they are included)
-]: nothing -> record<data: record<attributes: record<identifier: string, name: string, platform: string, seedId: string>, id: string, links: record<self: string>, relationships: record<app: record, bundleIdCapabilities: record, profiles: record>, type: string>, included: list<any>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<identifier: string, name: string, platform: string, seedId: string>, id: string, links: record<self: string>, relationships: record<app: record, bundleIdCapabilities: record, profiles: record>, type: string>, included: list<any>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7719,7 +7683,6 @@ export def "bundle-ids-get-instance" [
 # PATCH /v1/bundleIds/{id}
 #
 # operationId: bundleIds-update_instance
-# --data shape: {attributes?: record, id: string, type: "bundleIds"}
 export def "bundle-ids-update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7732,7 +7695,7 @@ export def "bundle-ids-update-instance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   data: record # shape: {attributes?: record, id: string, type: "bundleIds"}
-]: any -> record<data: record<attributes: record<identifier: string, name: string, platform: string, seedId: string>, id: string, links: record<self: string>, relationships: record<app: record, bundleIdCapabilities: record, profiles: record>, type: string>, included: list<any>, links: record<self: string>> {
+]: any -> oneof<record<data: record<attributes: record<identifier: string, name: string, platform: string, seedId: string>, id: string, links: record<self: string>, relationships: record<app: record, bundleIdCapabilities: record, profiles: record>, type: string>, included: list<any>, links: record<self: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7771,7 +7734,7 @@ export def "bundle-ids-app-get-to-one-related" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-apps: list<string> # the fields to include for returned resources of type apps
-]: nothing -> record<data: record<attributes: record<availableInNewTerritories: bool, bundleId: string, contentRightsDeclaration: string, isOrEverWasMadeForKids: bool, name: string, primaryLocale: string, sku: string>, id: string, links: record<self: string>, relationships: record<appInfos: record, appStoreVersions: record, availableTerritories: record, betaAppLocalizations: record, betaAppReviewDetail: record, betaGroups: record, betaLicenseAgreement: record, builds: record, endUserLicenseAgreement: record, gameCenterEnabledVersions: record, inAppPurchases: record, preOrder: record, preReleaseVersions: record, prices: record>, type: string>, included: list<any>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<availableInNewTerritories: bool, bundleId: string, contentRightsDeclaration: string, isOrEverWasMadeForKids: bool, name: string, primaryLocale: string, sku: string>, id: string, links: record<self: string>, relationships: record<appInfos: record, appStoreVersions: record, availableTerritories: record, betaAppLocalizations: record, betaAppReviewDetail: record, betaGroups: record, betaLicenseAgreement: record, builds: record, endUserLicenseAgreement: record, gameCenterEnabledVersions: record, inAppPurchases: record, preOrder: record, preReleaseVersions: record, prices: record>, type: string>, included: list<any>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7809,7 +7772,7 @@ export def "bundle-ids-bundle-id-capabilities-get-to-many-related" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-bundle-id-capabilities: list<string> # the fields to include for returned resources of type bundleIdCapabilities
   --limit: int # maximum resources per page
-]: nothing -> record<data: table<attributes: record, id: string, links: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<attributes: record, id: string, links: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7847,7 +7810,7 @@ export def "bundle-ids-profiles-get-to-many-related" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-profiles: list<string> # the fields to include for returned resources of type profiles
   --limit: int # maximum resources per page
-]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7889,7 +7852,7 @@ export def "certificates-get-collection" [
   --sort: list<string> # comma-separated list of sort expressions; resources will be sorted as specified
   --fields-certificates: list<string> # the fields to include for returned resources of type certificates
   --limit: int # maximum resources per page
-]: nothing -> record<data: table<attributes: record, id: string, links: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<attributes: record, id: string, links: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter[certificateType]" $filter_certificate_type "csv") (serialize-qp "filter[displayName]" $filter_display_name "csv") (serialize-qp "filter[serialNumber]" $filter_serial_number "csv") (serialize-qp "filter[id]" $filter_id "csv") (serialize-qp "sort" $sort "csv") (serialize-qp "fields[certificates]" $fields_certificates "csv") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
@@ -7913,7 +7876,6 @@ export def "certificates-get-collection" [
 # POST /v1/certificates
 #
 # operationId: certificates-create_instance
-# --data shape: {attributes: record, type: "certificates"}
 export def "certificates-create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7925,7 +7887,7 @@ export def "certificates-create-instance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   data: record # shape: {attributes: record, type: "certificates"}
-]: any -> record<data: record<attributes: record<certificateContent: string, certificateType: string, displayName: string, expirationDate: string, name: string, platform: string, serialNumber: string>, id: string, links: record<self: string>, type: string>, links: record<self: string>> {
+]: any -> oneof<record<data: record<attributes: record<certificateContent: string, certificateType: string, displayName: string, expirationDate: string, name: string, platform: string, serialNumber: string>, id: string, links: record<self: string>, type: string>, links: record<self: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7998,7 +7960,7 @@ export def "certificates-get-instance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-certificates: list<string> # the fields to include for returned resources of type certificates
-]: nothing -> record<data: record<attributes: record<certificateContent: string, certificateType: string, displayName: string, expirationDate: string, name: string, platform: string, serialNumber: string>, id: string, links: record<self: string>, type: string>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<certificateContent: string, certificateType: string, displayName: string, expirationDate: string, name: string, platform: string, serialNumber: string>, id: string, links: record<self: string>, type: string>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -8041,7 +8003,7 @@ export def "devices-get-collection" [
   --sort: list<string> # comma-separated list of sort expressions; resources will be sorted as specified
   --fields-devices: list<string> # the fields to include for returned resources of type devices
   --limit: int # maximum resources per page
-]: nothing -> record<data: table<attributes: record, id: string, links: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<attributes: record, id: string, links: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter[name]" $filter_name "csv") (serialize-qp "filter[platform]" $filter_platform "csv") (serialize-qp "filter[status]" $filter_status "csv") (serialize-qp "filter[udid]" $filter_udid "csv") (serialize-qp "filter[id]" $filter_id "csv") (serialize-qp "sort" $sort "csv") (serialize-qp "fields[devices]" $fields_devices "csv") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
@@ -8065,7 +8027,6 @@ export def "devices-get-collection" [
 # POST /v1/devices
 #
 # operationId: devices-create_instance
-# --data shape: {attributes: record, type: "devices"}
 export def "devices-create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8077,7 +8038,7 @@ export def "devices-create-instance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   data: record # shape: {attributes: record, type: "devices"}
-]: any -> record<data: record<attributes: record<addedDate: string, deviceClass: string, model: string, name: string, platform: string, status: string, udid: string>, id: string, links: record<self: string>, type: string>, links: record<self: string>> {
+]: any -> oneof<record<data: record<attributes: record<addedDate: string, deviceClass: string, model: string, name: string, platform: string, status: string, udid: string>, id: string, links: record<self: string>, type: string>, links: record<self: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8115,7 +8076,7 @@ export def "devices-get-instance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-devices: list<string> # the fields to include for returned resources of type devices
-]: nothing -> record<data: record<attributes: record<addedDate: string, deviceClass: string, model: string, name: string, platform: string, status: string, udid: string>, id: string, links: record<self: string>, type: string>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<addedDate: string, deviceClass: string, model: string, name: string, platform: string, status: string, udid: string>, id: string, links: record<self: string>, type: string>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -8140,7 +8101,6 @@ export def "devices-get-instance" [
 # PATCH /v1/devices/{id}
 #
 # operationId: devices-update_instance
-# --data shape: {attributes?: record, id: string, type: "devices"}
 export def "devices-update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8153,7 +8113,7 @@ export def "devices-update-instance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   data: record # shape: {attributes?: record, id: string, type: "devices"}
-]: any -> record<data: record<attributes: record<addedDate: string, deviceClass: string, model: string, name: string, platform: string, status: string, udid: string>, id: string, links: record<self: string>, type: string>, links: record<self: string>> {
+]: any -> oneof<record<data: record<attributes: record<addedDate: string, deviceClass: string, model: string, name: string, platform: string, status: string, udid: string>, id: string, links: record<self: string>, type: string>, links: record<self: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8192,7 +8152,7 @@ export def "diagnostic-signatures-logs-get-to-many-related" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # maximum resources per page
-]: nothing -> record<data: table<id: string, links: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<id: string, links: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -8217,7 +8177,6 @@ export def "diagnostic-signatures-logs-get-to-many-related" [
 # POST /v1/endUserLicenseAgreements
 #
 # operationId: endUserLicenseAgreements-create_instance
-# --data shape: {attributes: record, relationships: record, type: "endUserLicenseAgreements"}
 export def "end-user-license-agreements-create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8229,7 +8188,7 @@ export def "end-user-license-agreements-create-instance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   data: record # shape: {attributes: record, relationships: record, type: "endUserLicenseAgreements"}
-]: any -> record<data: record<attributes: record<agreementText: string>, id: string, links: record<self: string>, relationships: record<app: record, territories: record>, type: string>, included: table<attributes: record, id: string, links: record, type: string>, links: record<self: string>> {
+]: any -> oneof<record<data: record<attributes: record<agreementText: string>, id: string, links: record<self: string>, relationships: record<app: record, territories: record>, type: string>, included: table<attributes: record, id: string, links: record, type: string>, links: record<self: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8305,7 +8264,7 @@ export def "end-user-license-agreements-get-instance" [
   --include: list<string> # comma-separated list of relationships to include
   --fields-territories: list<string> # the fields to include for returned resources of type territories
   --limit-territories: int # maximum number of related territories returned (when they are included)
-]: nothing -> record<data: record<attributes: record<agreementText: string>, id: string, links: record<self: string>, relationships: record<app: record, territories: record>, type: string>, included: table<attributes: record, id: string, links: record, type: string>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<agreementText: string>, id: string, links: record<self: string>, relationships: record<app: record, territories: record>, type: string>, included: table<attributes: record, id: string, links: record, type: string>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -8330,7 +8289,6 @@ export def "end-user-license-agreements-get-instance" [
 # PATCH /v1/endUserLicenseAgreements/{id}
 #
 # operationId: endUserLicenseAgreements-update_instance
-# --data shape: {attributes?: record, id: string, relationships?: record, type: "endUserLicenseAgreements"}
 export def "end-user-license-agreements-update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8343,7 +8301,7 @@ export def "end-user-license-agreements-update-instance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   data: record # shape: {attributes?: record, id: string, relationships?: record, type: "endUserLicenseAgreements"}
-]: any -> record<data: record<attributes: record<agreementText: string>, id: string, links: record<self: string>, relationships: record<app: record, territories: record>, type: string>, included: table<attributes: record, id: string, links: record, type: string>, links: record<self: string>> {
+]: any -> oneof<record<data: record<attributes: record<agreementText: string>, id: string, links: record<self: string>, relationships: record<app: record, territories: record>, type: string>, included: table<attributes: record, id: string, links: record, type: string>, links: record<self: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8383,7 +8341,7 @@ export def "end-user-license-agreements-territories-get-to-many-related" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-territories: list<string> # the fields to include for returned resources of type territories
   --limit: int # maximum resources per page
-]: nothing -> record<data: table<attributes: record, id: string, links: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<attributes: record, id: string, links: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -8470,7 +8428,7 @@ export def "game-center-enabled-versions-compatible-versions-get-to-many-related
   --fields-apps: list<string> # the fields to include for returned resources of type apps
   --limit: int # maximum resources per page
   --include: list<string> # comma-separated list of relationships to include
-]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -8495,7 +8453,6 @@ export def "game-center-enabled-versions-compatible-versions-get-to-many-related
 # DELETE /v1/gameCenterEnabledVersions/{id}/relationships/compatibleVersions
 #
 # operationId: gameCenterEnabledVersions-compatibleVersions-delete_to_many_relationship
-# --data item shape: {id: string, type: "gameCenterEnabledVersions"}
 export def "game-center-enabled-versions-compatible-versions-delete-to-many-relationship" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8547,7 +8504,7 @@ export def "game-center-enabled-versions-compatible-versions-get-to-many-relatio
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # maximum resources per page
-]: nothing -> record<data: table<id: string, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<id: string, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -8572,7 +8529,6 @@ export def "game-center-enabled-versions-compatible-versions-get-to-many-relatio
 # PATCH /v1/gameCenterEnabledVersions/{id}/relationships/compatibleVersions
 #
 # operationId: gameCenterEnabledVersions-compatibleVersions-replace_to_many_relationship
-# --data item shape: {id: string, type: "gameCenterEnabledVersions"}
 export def "game-center-enabled-versions-compatible-versions-replace-to-many-relationship" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8612,7 +8568,6 @@ export def "game-center-enabled-versions-compatible-versions-replace-to-many-rel
 # POST /v1/gameCenterEnabledVersions/{id}/relationships/compatibleVersions
 #
 # operationId: gameCenterEnabledVersions-compatibleVersions-create_to_many_relationship
-# --data item shape: {id: string, type: "gameCenterEnabledVersions"}
 export def "game-center-enabled-versions-compatible-versions-create-to-many-relationship" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8652,7 +8607,6 @@ export def "game-center-enabled-versions-compatible-versions-create-to-many-rela
 # POST /v1/idfaDeclarations
 #
 # operationId: idfaDeclarations-create_instance
-# --data shape: {attributes: record, relationships: record, type: "idfaDeclarations"}
 export def "idfa-declarations-create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8664,7 +8618,7 @@ export def "idfa-declarations-create-instance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   data: record # shape: {attributes: record, relationships: record, type: "idfaDeclarations"}
-]: any -> record<data: record<attributes: record<attributesActionWithPreviousAd: bool, attributesAppInstallationToPreviousAd: bool, honorsLimitedAdTracking: bool, servesAds: bool>, id: string, links: record<self: string>, relationships: record<appStoreVersion: record>, type: string>, links: record<self: string>> {
+]: any -> oneof<record<data: record<attributes: record<attributesActionWithPreviousAd: bool, attributesAppInstallationToPreviousAd: bool, honorsLimitedAdTracking: bool, servesAds: bool>, id: string, links: record<self: string>, relationships: record<appStoreVersion: record>, type: string>, links: record<self: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8725,7 +8679,6 @@ export def "idfa-declarations-delete-instance" [
 # PATCH /v1/idfaDeclarations/{id}
 #
 # operationId: idfaDeclarations-update_instance
-# --data shape: {attributes?: record, id: string, type: "idfaDeclarations"}
 export def "idfa-declarations-update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8738,7 +8691,7 @@ export def "idfa-declarations-update-instance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   data: record # shape: {attributes?: record, id: string, type: "idfaDeclarations"}
-]: any -> record<data: record<attributes: record<attributesActionWithPreviousAd: bool, attributesAppInstallationToPreviousAd: bool, honorsLimitedAdTracking: bool, servesAds: bool>, id: string, links: record<self: string>, relationships: record<appStoreVersion: record>, type: string>, links: record<self: string>> {
+]: any -> oneof<record<data: record<attributes: record<attributesActionWithPreviousAd: bool, attributesAppInstallationToPreviousAd: bool, honorsLimitedAdTracking: bool, servesAds: bool>, id: string, links: record<self: string>, relationships: record<appStoreVersion: record>, type: string>, links: record<self: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8779,7 +8732,7 @@ export def "in-app-purchases-get-instance" [
   --fields-in-app-purchases: list<string> # the fields to include for returned resources of type inAppPurchases
   --include: list<string> # comma-separated list of relationships to include
   --limit-apps: int # maximum number of related apps returned (when they are included)
-]: nothing -> record<data: record<attributes: record<inAppPurchaseType: string, productId: string, referenceName: string, state: string>, id: string, links: record<self: string>, relationships: record<apps: record>, type: string>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<inAppPurchaseType: string, productId: string, referenceName: string, state: string>, id: string, links: record<self: string>, relationships: record<apps: record>, type: string>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -8827,7 +8780,7 @@ export def "pre-release-versions-get-collection" [
   --fields-builds: list<string> # the fields to include for returned resources of type builds
   --fields-apps: list<string> # the fields to include for returned resources of type apps
   --limit-builds: int # maximum number of related builds returned (when they are included)
-]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter[builds.expired]" $filter_builds_expired "csv") (serialize-qp "filter[builds.processingState]" $filter_builds_processing_state "csv") (serialize-qp "filter[platform]" $filter_platform "csv") (serialize-qp "filter[version]" $filter_version "csv") (serialize-qp "filter[app]" $filter_app "csv") (serialize-qp "filter[builds]" $filter_builds "csv") (serialize-qp "sort" $sort "csv") (serialize-qp "fields[preReleaseVersions]" $fields_pre_release_versions "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "include" $include "csv") (serialize-qp "fields[builds]" $fields_builds "csv") (serialize-qp "fields[apps]" $fields_apps "csv") (serialize-qp "limit[builds]" $limit_builds "scalar")] | flatten | str join "&"
@@ -8867,7 +8820,7 @@ export def "pre-release-versions-get-instance" [
   --fields-builds: list<string> # the fields to include for returned resources of type builds
   --fields-apps: list<string> # the fields to include for returned resources of type apps
   --limit-builds: int # maximum number of related builds returned (when they are included)
-]: nothing -> record<data: record<attributes: record<platform: string, version: string>, id: string, links: record<self: string>, relationships: record<app: record, builds: record>, type: string>, included: list<any>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<platform: string, version: string>, id: string, links: record<self: string>, relationships: record<app: record, builds: record>, type: string>, included: list<any>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -8904,7 +8857,7 @@ export def "pre-release-versions-app-get-to-one-related" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-apps: list<string> # the fields to include for returned resources of type apps
-]: nothing -> record<data: record<attributes: record<availableInNewTerritories: bool, bundleId: string, contentRightsDeclaration: string, isOrEverWasMadeForKids: bool, name: string, primaryLocale: string, sku: string>, id: string, links: record<self: string>, relationships: record<appInfos: record, appStoreVersions: record, availableTerritories: record, betaAppLocalizations: record, betaAppReviewDetail: record, betaGroups: record, betaLicenseAgreement: record, builds: record, endUserLicenseAgreement: record, gameCenterEnabledVersions: record, inAppPurchases: record, preOrder: record, preReleaseVersions: record, prices: record>, type: string>, included: list<any>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<availableInNewTerritories: bool, bundleId: string, contentRightsDeclaration: string, isOrEverWasMadeForKids: bool, name: string, primaryLocale: string, sku: string>, id: string, links: record<self: string>, relationships: record<appInfos: record, appStoreVersions: record, availableTerritories: record, betaAppLocalizations: record, betaAppReviewDetail: record, betaGroups: record, betaLicenseAgreement: record, builds: record, endUserLicenseAgreement: record, gameCenterEnabledVersions: record, inAppPurchases: record, preOrder: record, preReleaseVersions: record, prices: record>, type: string>, included: list<any>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -8942,7 +8895,7 @@ export def "pre-release-versions-builds-get-to-many-related" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-builds: list<string> # the fields to include for returned resources of type builds
   --limit: int # maximum resources per page
-]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -8990,7 +8943,7 @@ export def "profiles-get-collection" [
   --fields-bundle-ids: list<string> # the fields to include for returned resources of type bundleIds
   --limit-certificates: int # maximum number of related certificates returned (when they are included)
   --limit-devices: int # maximum number of related devices returned (when they are included)
-]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter[name]" $filter_name "csv") (serialize-qp "filter[profileState]" $filter_profile_state "csv") (serialize-qp "filter[profileType]" $filter_profile_type "csv") (serialize-qp "filter[id]" $filter_id "csv") (serialize-qp "sort" $sort "csv") (serialize-qp "fields[profiles]" $fields_profiles "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "include" $include "csv") (serialize-qp "fields[certificates]" $fields_certificates "csv") (serialize-qp "fields[devices]" $fields_devices "csv") (serialize-qp "fields[bundleIds]" $fields_bundle_ids "csv") (serialize-qp "limit[certificates]" $limit_certificates "scalar") (serialize-qp "limit[devices]" $limit_devices "scalar")] | flatten | str join "&"
@@ -9014,7 +8967,6 @@ export def "profiles-get-collection" [
 # POST /v1/profiles
 #
 # operationId: profiles-create_instance
-# --data shape: {attributes: record, relationships: record, type: "profiles"}
 export def "profiles-create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9026,7 +8978,7 @@ export def "profiles-create-instance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   data: record # shape: {attributes: record, relationships: record, type: "profiles"}
-]: any -> record<data: record<attributes: record<createdDate: string, expirationDate: string, name: string, platform: string, profileContent: string, profileState: string, profileType: string, uuid: string>, id: string, links: record<self: string>, relationships: record<bundleId: record, certificates: record, devices: record>, type: string>, included: list<any>, links: record<self: string>> {
+]: any -> oneof<record<data: record<attributes: record<createdDate: string, expirationDate: string, name: string, platform: string, profileContent: string, profileState: string, profileType: string, uuid: string>, id: string, links: record<self: string>, relationships: record<bundleId: record, certificates: record, devices: record>, type: string>, included: list<any>, links: record<self: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9105,7 +9057,7 @@ export def "profiles-get-instance" [
   --fields-bundle-ids: list<string> # the fields to include for returned resources of type bundleIds
   --limit-certificates: int # maximum number of related certificates returned (when they are included)
   --limit-devices: int # maximum number of related devices returned (when they are included)
-]: nothing -> record<data: record<attributes: record<createdDate: string, expirationDate: string, name: string, platform: string, profileContent: string, profileState: string, profileType: string, uuid: string>, id: string, links: record<self: string>, relationships: record<bundleId: record, certificates: record, devices: record>, type: string>, included: list<any>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<createdDate: string, expirationDate: string, name: string, platform: string, profileContent: string, profileState: string, profileType: string, uuid: string>, id: string, links: record<self: string>, relationships: record<bundleId: record, certificates: record, devices: record>, type: string>, included: list<any>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -9142,7 +9094,7 @@ export def "profiles-bundle-id-get-to-one-related" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-bundle-ids: list<string> # the fields to include for returned resources of type bundleIds
-]: nothing -> record<data: record<attributes: record<identifier: string, name: string, platform: string, seedId: string>, id: string, links: record<self: string>, relationships: record<app: record, bundleIdCapabilities: record, profiles: record>, type: string>, included: list<any>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<identifier: string, name: string, platform: string, seedId: string>, id: string, links: record<self: string>, relationships: record<app: record, bundleIdCapabilities: record, profiles: record>, type: string>, included: list<any>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -9180,7 +9132,7 @@ export def "profiles-certificates-get-to-many-related" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-certificates: list<string> # the fields to include for returned resources of type certificates
   --limit: int # maximum resources per page
-]: nothing -> record<data: table<attributes: record, id: string, links: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<attributes: record, id: string, links: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -9218,7 +9170,7 @@ export def "profiles-devices-get-to-many-related" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-devices: list<string> # the fields to include for returned resources of type devices
   --limit: int # maximum resources per page
-]: nothing -> record<data: table<attributes: record, id: string, links: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<attributes: record, id: string, links: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -9243,7 +9195,6 @@ export def "profiles-devices-get-to-many-related" [
 # POST /v1/routingAppCoverages
 #
 # operationId: routingAppCoverages-create_instance
-# --data shape: {attributes: record, relationships: record, type: "routingAppCoverages"}
 export def "routing-app-coverages-create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9255,7 +9206,7 @@ export def "routing-app-coverages-create-instance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   data: record # shape: {attributes: record, relationships: record, type: "routingAppCoverages"}
-]: any -> record<data: record<attributes: record<assetDeliveryState: record, fileName: string, fileSize: int, sourceFileChecksum: string, uploadOperations: list>, id: string, links: record<self: string>, relationships: record<appStoreVersion: record>, type: string>, links: record<self: string>> {
+]: any -> oneof<record<data: record<attributes: record<assetDeliveryState: record, fileName: string, fileSize: int, sourceFileChecksum: string, uploadOperations: list>, id: string, links: record<self: string>, relationships: record<appStoreVersion: record>, type: string>, links: record<self: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9329,7 +9280,7 @@ export def "routing-app-coverages-get-instance" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-routing-app-coverages: list<string> # the fields to include for returned resources of type routingAppCoverages
   --include: list<string> # comma-separated list of relationships to include
-]: nothing -> record<data: record<attributes: record<assetDeliveryState: record, fileName: string, fileSize: int, sourceFileChecksum: string, uploadOperations: list>, id: string, links: record<self: string>, relationships: record<appStoreVersion: record>, type: string>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<assetDeliveryState: record, fileName: string, fileSize: int, sourceFileChecksum: string, uploadOperations: list>, id: string, links: record<self: string>, relationships: record<appStoreVersion: record>, type: string>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -9354,7 +9305,6 @@ export def "routing-app-coverages-get-instance" [
 # PATCH /v1/routingAppCoverages/{id}
 #
 # operationId: routingAppCoverages-update_instance
-# --data shape: {attributes?: record, id: string, type: "routingAppCoverages"}
 export def "routing-app-coverages-update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9367,7 +9317,7 @@ export def "routing-app-coverages-update-instance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   data: record # shape: {attributes?: record, id: string, type: "routingAppCoverages"}
-]: any -> record<data: record<attributes: record<assetDeliveryState: record, fileName: string, fileSize: int, sourceFileChecksum: string, uploadOperations: list>, id: string, links: record<self: string>, relationships: record<appStoreVersion: record>, type: string>, links: record<self: string>> {
+]: any -> oneof<record<data: record<attributes: record<assetDeliveryState: record, fileName: string, fileSize: int, sourceFileChecksum: string, uploadOperations: list>, id: string, links: record<self: string>, relationships: record<appStoreVersion: record>, type: string>, links: record<self: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9450,7 +9400,7 @@ export def "territories-get-collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-territories: list<string> # the fields to include for returned resources of type territories
   --limit: int # maximum resources per page
-]: nothing -> record<data: table<attributes: record, id: string, links: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<attributes: record, id: string, links: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[territories]" $fields_territories "csv") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
@@ -9493,7 +9443,7 @@ export def "user-invitations-get-collection" [
   --include: list<string> # comma-separated list of relationships to include
   --fields-apps: list<string> # the fields to include for returned resources of type apps
   --limit-visible-apps: int # maximum number of related visibleApps returned (when they are included)
-]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter[email]" $filter_email "csv") (serialize-qp "filter[roles]" $filter_roles "csv") (serialize-qp "filter[visibleApps]" $filter_visible_apps "csv") (serialize-qp "sort" $sort "csv") (serialize-qp "fields[userInvitations]" $fields_user_invitations "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "include" $include "csv") (serialize-qp "fields[apps]" $fields_apps "csv") (serialize-qp "limit[visibleApps]" $limit_visible_apps "scalar")] | flatten | str join "&"
@@ -9517,7 +9467,6 @@ export def "user-invitations-get-collection" [
 # POST /v1/userInvitations
 #
 # operationId: userInvitations-create_instance
-# --data shape: {attributes: record, relationships?: record, type: "userInvitations"}
 export def "user-invitations-create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9529,7 +9478,7 @@ export def "user-invitations-create-instance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   data: record # shape: {attributes: record, relationships?: record, type: "userInvitations"}
-]: any -> record<data: record<attributes: record<allAppsVisible: bool, email: string, expirationDate: string, firstName: string, lastName: string, provisioningAllowed: bool, roles: list>, id: string, links: record<self: string>, relationships: record<visibleApps: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>> {
+]: any -> oneof<record<data: record<attributes: record<allAppsVisible: bool, email: string, expirationDate: string, firstName: string, lastName: string, provisioningAllowed: bool, roles: list>, id: string, links: record<self: string>, relationships: record<visibleApps: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9605,7 +9554,7 @@ export def "user-invitations-get-instance" [
   --include: list<string> # comma-separated list of relationships to include
   --fields-apps: list<string> # the fields to include for returned resources of type apps
   --limit-visible-apps: int # maximum number of related visibleApps returned (when they are included)
-]: nothing -> record<data: record<attributes: record<allAppsVisible: bool, email: string, expirationDate: string, firstName: string, lastName: string, provisioningAllowed: bool, roles: list>, id: string, links: record<self: string>, relationships: record<visibleApps: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<allAppsVisible: bool, email: string, expirationDate: string, firstName: string, lastName: string, provisioningAllowed: bool, roles: list>, id: string, links: record<self: string>, relationships: record<visibleApps: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -9643,7 +9592,7 @@ export def "user-invitations-visible-apps-get-to-many-related" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-apps: list<string> # the fields to include for returned resources of type apps
   --limit: int # maximum resources per page
-]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -9687,7 +9636,7 @@ export def "users-get-collection" [
   --include: list<string> # comma-separated list of relationships to include
   --fields-apps: list<string> # the fields to include for returned resources of type apps
   --limit-visible-apps: int # maximum number of related visibleApps returned (when they are included)
-]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter[roles]" $filter_roles "csv") (serialize-qp "filter[username]" $filter_username "csv") (serialize-qp "filter[visibleApps]" $filter_visible_apps "csv") (serialize-qp "sort" $sort "csv") (serialize-qp "fields[users]" $fields_users "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "include" $include "csv") (serialize-qp "fields[apps]" $fields_apps "csv") (serialize-qp "limit[visibleApps]" $limit_visible_apps "scalar")] | flatten | str join "&"
@@ -9761,7 +9710,7 @@ export def "users-get-instance" [
   --include: list<string> # comma-separated list of relationships to include
   --fields-apps: list<string> # the fields to include for returned resources of type apps
   --limit-visible-apps: int # maximum number of related visibleApps returned (when they are included)
-]: nothing -> record<data: record<attributes: record<allAppsVisible: bool, firstName: string, lastName: string, provisioningAllowed: bool, roles: list, username: string>, id: string, links: record<self: string>, relationships: record<visibleApps: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<allAppsVisible: bool, firstName: string, lastName: string, provisioningAllowed: bool, roles: list, username: string>, id: string, links: record<self: string>, relationships: record<visibleApps: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -9786,7 +9735,6 @@ export def "users-get-instance" [
 # PATCH /v1/users/{id}
 #
 # operationId: users-update_instance
-# --data shape: {attributes?: record, id: string, relationships?: record, type: "users"}
 export def "users-update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9799,7 +9747,7 @@ export def "users-update-instance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   data: record # shape: {attributes?: record, id: string, relationships?: record, type: "users"}
-]: any -> record<data: record<attributes: record<allAppsVisible: bool, firstName: string, lastName: string, provisioningAllowed: bool, roles: list, username: string>, id: string, links: record<self: string>, relationships: record<visibleApps: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>> {
+]: any -> oneof<record<data: record<attributes: record<allAppsVisible: bool, firstName: string, lastName: string, provisioningAllowed: bool, roles: list, username: string>, id: string, links: record<self: string>, relationships: record<visibleApps: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9826,7 +9774,6 @@ export def "users-update-instance" [
 # DELETE /v1/users/{id}/relationships/visibleApps
 #
 # operationId: users-visibleApps-delete_to_many_relationship
-# --data item shape: {id: string, type: "apps"}
 export def "users-visible-apps-delete-to-many-relationship" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9878,7 +9825,7 @@ export def "users-visible-apps-get-to-many-relationship" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # maximum resources per page
-]: nothing -> record<data: table<id: string, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<id: string, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -9903,7 +9850,6 @@ export def "users-visible-apps-get-to-many-relationship" [
 # PATCH /v1/users/{id}/relationships/visibleApps
 #
 # operationId: users-visibleApps-replace_to_many_relationship
-# --data item shape: {id: string, type: "apps"}
 export def "users-visible-apps-replace-to-many-relationship" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9943,7 +9889,6 @@ export def "users-visible-apps-replace-to-many-relationship" [
 # POST /v1/users/{id}/relationships/visibleApps
 #
 # operationId: users-visibleApps-create_to_many_relationship
-# --data item shape: {id: string, type: "apps"}
 export def "users-visible-apps-create-to-many-relationship" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9996,7 +9941,7 @@ export def "users-visible-apps-get-to-many-related" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-apps: list<string> # the fields to include for returned resources of type apps
   --limit: int # maximum resources per page
-]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
+]: nothing -> oneof<record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }

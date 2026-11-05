@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["https://www.googleapis.com/plus/v1"] }
@@ -106,9 +130,9 @@ def order-by-completer-1 [] { ["alphabetical" "best"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "plus-activities-search" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["plus-activities-search" "plus-activities-get" "plus-comments-list" "plus-people-list-by-activity" "plus-comments-get" "plus-people-search" "plus-people-get" "plus-activities-list" "plus-people-list" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -152,7 +176,7 @@ export def "plus-activities-search" [
   --max-results: int # The maximum number of activities to include in the response, which is used for paging. For any response, the actual number returned might be less than the specified maxResults.
   --order-by: string@order-by-completer # Specifies how to order search results.
   --page-token: string # The continuation token, which is used to page through large result sets. To get the next page of results, set this parameter to the value of "nextPageToken" from the previous response. This token can be of any length.
-]: nothing -> record<etag: string, id: string, items: table<access: record, actor: record, address: string, annotation: string, crosspostSource: string, etag: string, geocode: string, id: string, kind: string, location: record, object: record, placeId: string, placeName: string, provider: record, published: string, radius: string, title: string, updated: string, url: string, verb: string>, kind: string, nextLink: string, nextPageToken: string, selfLink: string, title: string, updated: string> {
+]: nothing -> oneof<record<etag: string, id: string, items: table<access: record, actor: record, address: string, annotation: string, crosspostSource: string, etag: string, geocode: string, id: string, kind: string, location: record, object: record, placeId: string, placeName: string, provider: record, published: string, radius: string, title: string, updated: string, url: string, verb: string>, kind: string, nextLink: string, nextPageToken: string, selfLink: string, title: string, updated: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
@@ -196,7 +220,7 @@ export def "plus-activities-get" [
   --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
-]: nothing -> record<access: record<description: string, items: list<record>, kind: string>, actor: record<clientSpecificActorInfo: record<youtubeActorInfo: record>, displayName: string, id: string, image: record<url: string>, name: record<familyName: string, givenName: string>, url: string, verification: record<adHocVerified: string>>, address: string, annotation: string, crosspostSource: string, etag: string, geocode: string, id: string, kind: string, location: record<address: record<formatted: string>, displayName: string, id: string, kind: string, position: record<latitude: float, longitude: float>>, object: record<actor: record<clientSpecificActorInfo: record, displayName: string, id: string, image: record, url: string, verification: record>, attachments: list<record>, content: string, id: string, objectType: string, originalContent: string, plusoners: record<selfLink: string, totalItems: int>, replies: record<selfLink: string, totalItems: int>, resharers: record<selfLink: string, totalItems: int>, url: string>, placeId: string, placeName: string, provider: record<title: string>, published: string, radius: string, title: string, updated: string, url: string, verb: string> {
+]: nothing -> oneof<record<access: record<description: string, items: list<record>, kind: string>, actor: record<clientSpecificActorInfo: record<youtubeActorInfo: record>, displayName: string, id: string, image: record<url: string>, name: record<familyName: string, givenName: string>, url: string, verification: record<adHocVerified: string>>, address: string, annotation: string, crosspostSource: string, etag: string, geocode: string, id: string, kind: string, location: record<address: record<formatted: string>, displayName: string, id: string, kind: string, position: record<latitude: float, longitude: float>>, object: record<actor: record<clientSpecificActorInfo: record, displayName: string, id: string, image: record, url: string, verification: record>, attachments: list<record>, content: string, id: string, objectType: string, originalContent: string, plusoners: record<selfLink: string, totalItems: int>, replies: record<selfLink: string, totalItems: int>, resharers: record<selfLink: string, totalItems: int>, url: string>, placeId: string, placeName: string, provider: record<title: string>, published: string, radius: string, title: string, updated: string, url: string, verb: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($activity_id | is-empty) { error make --unspanned { msg: "path parameter 'activityId' must be non-empty" } }
@@ -243,7 +267,7 @@ export def "plus-comments-list" [
   --max-results: int # The maximum number of comments to include in the response, which is used for paging. For any response, the actual number returned might be less than the specified maxResults.
   --page-token: string # The continuation token, which is used to page through large result sets. To get the next page of results, set this parameter to the value of "nextPageToken" from the previous response.
   --sort-order: string@sort-order-completer # The order in which to sort the list of comments.
-]: nothing -> record<etag: string, id: string, items: table<actor: record, etag: string, id: string, inReplyTo: list, kind: string, object: record, plusoners: record, published: string, selfLink: string, updated: string, verb: string>, kind: string, nextLink: string, nextPageToken: string, title: string, updated: string> {
+]: nothing -> oneof<record<etag: string, id: string, items: table<actor: record, etag: string, id: string, inReplyTo: list, kind: string, object: record, plusoners: record, published: string, selfLink: string, updated: string, verb: string>, kind: string, nextLink: string, nextPageToken: string, title: string, updated: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($activity_id | is-empty) { error make --unspanned { msg: "path parameter 'activityId' must be non-empty" } }
@@ -290,7 +314,7 @@ export def "plus-people-list-by-activity" [
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --max-results: int # The maximum number of people to include in the response, which is used for paging. For any response, the actual number returned might be less than the specified maxResults.
   --page-token: string # The continuation token, which is used to page through large result sets. To get the next page of results, set this parameter to the value of "nextPageToken" from the previous response.
-]: nothing -> record<etag: string, items: table<aboutMe: string, ageRange: record, birthday: string, braggingRights: string, circledByCount: int, cover: record, currentLocation: string, displayName: string, domain: string, emails: list, etag: string, gender: string, id: string, image: record, isPlusUser: bool, kind: string, language: string, name: record, nickname: string, objectType: string, occupation: string, organizations: list, placesLived: list, plusOneCount: int, relationshipStatus: string, skills: string, tagline: string, url: string, urls: list, verified: bool>, kind: string, nextPageToken: string, selfLink: string, title: string, totalItems: int> {
+]: nothing -> oneof<record<etag: string, items: table<aboutMe: string, ageRange: record, birthday: string, braggingRights: string, circledByCount: int, cover: record, currentLocation: string, displayName: string, domain: string, emails: list, etag: string, gender: string, id: string, image: record, isPlusUser: bool, kind: string, language: string, name: record, nickname: string, objectType: string, occupation: string, organizations: list, placesLived: list, plusOneCount: int, relationshipStatus: string, skills: string, tagline: string, url: string, urls: list, verified: bool>, kind: string, nextPageToken: string, selfLink: string, title: string, totalItems: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($activity_id | is-empty) { error make --unspanned { msg: "path parameter 'activityId' must be non-empty" } }
@@ -335,7 +359,7 @@ export def "plus-comments-get" [
   --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
-]: nothing -> record<actor: record<clientSpecificActorInfo: record<youtubeActorInfo: record>, displayName: string, id: string, image: record<url: string>, url: string, verification: record<adHocVerified: string>>, etag: string, id: string, inReplyTo: table<id: string, url: string>, kind: string, object: record<content: string, objectType: string, originalContent: string>, plusoners: record<totalItems: int>, published: string, selfLink: string, updated: string, verb: string> {
+]: nothing -> oneof<record<actor: record<clientSpecificActorInfo: record<youtubeActorInfo: record>, displayName: string, id: string, image: record<url: string>, url: string, verification: record<adHocVerified: string>>, etag: string, id: string, inReplyTo: table<id: string, url: string>, kind: string, object: record<content: string, objectType: string, originalContent: string>, plusoners: record<totalItems: int>, published: string, selfLink: string, updated: string, verb: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'commentId' must be non-empty" } }
@@ -382,7 +406,7 @@ export def "plus-people-search" [
   --language: string # Specify the preferred language to search with. See search language codes for available values.
   --max-results: int # The maximum number of people to include in the response, which is used for paging. For any response, the actual number returned might be less than the specified maxResults.
   --page-token: string # The continuation token, which is used to page through large result sets. To get the next page of results, set this parameter to the value of "nextPageToken" from the previous response. This token can be of any length.
-]: nothing -> record<etag: string, items: table<aboutMe: string, ageRange: record, birthday: string, braggingRights: string, circledByCount: int, cover: record, currentLocation: string, displayName: string, domain: string, emails: list, etag: string, gender: string, id: string, image: record, isPlusUser: bool, kind: string, language: string, name: record, nickname: string, objectType: string, occupation: string, organizations: list, placesLived: list, plusOneCount: int, relationshipStatus: string, skills: string, tagline: string, url: string, urls: list, verified: bool>, kind: string, nextPageToken: string, selfLink: string, title: string, totalItems: int> {
+]: nothing -> oneof<record<etag: string, items: table<aboutMe: string, ageRange: record, birthday: string, braggingRights: string, circledByCount: int, cover: record, currentLocation: string, displayName: string, domain: string, emails: list, etag: string, gender: string, id: string, image: record, isPlusUser: bool, kind: string, language: string, name: record, nickname: string, objectType: string, occupation: string, organizations: list, placesLived: list, plusOneCount: int, relationshipStatus: string, skills: string, tagline: string, url: string, urls: list, verified: bool>, kind: string, nextPageToken: string, selfLink: string, title: string, totalItems: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
@@ -426,7 +450,7 @@ export def "plus-people-get" [
   --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
-]: nothing -> record<aboutMe: string, ageRange: record<max: int, min: int>, birthday: string, braggingRights: string, circledByCount: int, cover: record<coverInfo: record<leftImageOffset: int, topImageOffset: int>, coverPhoto: record<height: int, url: string, width: int>, layout: string>, currentLocation: string, displayName: string, domain: string, emails: table<type: string, value: string>, etag: string, gender: string, id: string, image: record<isDefault: bool, url: string>, isPlusUser: bool, kind: string, language: string, name: record<familyName: string, formatted: string, givenName: string, honorificPrefix: string, honorificSuffix: string, middleName: string>, nickname: string, objectType: string, occupation: string, organizations: table<department: string, description: string, endDate: string, location: string, name: string, primary: bool, startDate: string, title: string, type: string>, placesLived: table<primary: bool, value: string>, plusOneCount: int, relationshipStatus: string, skills: string, tagline: string, url: string, urls: table<label: string, type: string, value: string>, verified: bool> {
+]: nothing -> oneof<record<aboutMe: string, ageRange: record<max: int, min: int>, birthday: string, braggingRights: string, circledByCount: int, cover: record<coverInfo: record<leftImageOffset: int, topImageOffset: int>, coverPhoto: record<height: int, url: string, width: int>, layout: string>, currentLocation: string, displayName: string, domain: string, emails: table<type: string, value: string>, etag: string, gender: string, id: string, image: record<isDefault: bool, url: string>, isPlusUser: bool, kind: string, language: string, name: record<familyName: string, formatted: string, givenName: string, honorificPrefix: string, honorificSuffix: string, middleName: string>, nickname: string, objectType: string, occupation: string, organizations: table<department: string, description: string, endDate: string, location: string, name: string, primary: bool, startDate: string, title: string, type: string>, placesLived: table<primary: bool, value: string>, plusOneCount: int, relationshipStatus: string, skills: string, tagline: string, url: string, urls: table<label: string, type: string, value: string>, verified: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -473,7 +497,7 @@ export def "plus-activities-list" [
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --max-results: int # The maximum number of activities to include in the response, which is used for paging. For any response, the actual number returned might be less than the specified maxResults.
   --page-token: string # The continuation token, which is used to page through large result sets. To get the next page of results, set this parameter to the value of "nextPageToken" from the previous response.
-]: nothing -> record<etag: string, id: string, items: table<access: record, actor: record, address: string, annotation: string, crosspostSource: string, etag: string, geocode: string, id: string, kind: string, location: record, object: record, placeId: string, placeName: string, provider: record, published: string, radius: string, title: string, updated: string, url: string, verb: string>, kind: string, nextLink: string, nextPageToken: string, selfLink: string, title: string, updated: string> {
+]: nothing -> oneof<record<etag: string, id: string, items: table<access: record, actor: record, address: string, annotation: string, crosspostSource: string, etag: string, geocode: string, id: string, kind: string, location: record, object: record, placeId: string, placeName: string, provider: record, published: string, radius: string, title: string, updated: string, url: string, verb: string>, kind: string, nextLink: string, nextPageToken: string, selfLink: string, title: string, updated: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -522,7 +546,7 @@ export def "plus-people-list" [
   --max-results: int # The maximum number of people to include in the response, which is used for paging. For any response, the actual number returned might be less than the specified maxResults.
   --order-by: string@order-by-completer-1 # The order to return people in.
   --page-token: string # The continuation token, which is used to page through large result sets. To get the next page of results, set this parameter to the value of "nextPageToken" from the previous response.
-]: nothing -> record<etag: string, items: table<aboutMe: string, ageRange: record, birthday: string, braggingRights: string, circledByCount: int, cover: record, currentLocation: string, displayName: string, domain: string, emails: list, etag: string, gender: string, id: string, image: record, isPlusUser: bool, kind: string, language: string, name: record, nickname: string, objectType: string, occupation: string, organizations: list, placesLived: list, plusOneCount: int, relationshipStatus: string, skills: string, tagline: string, url: string, urls: list, verified: bool>, kind: string, nextPageToken: string, selfLink: string, title: string, totalItems: int> {
+]: nothing -> oneof<record<etag: string, items: table<aboutMe: string, ageRange: record, birthday: string, braggingRights: string, circledByCount: int, cover: record, currentLocation: string, displayName: string, domain: string, emails: list, etag: string, gender: string, id: string, image: record, isPlusUser: bool, kind: string, language: string, name: record, nickname: string, objectType: string, occupation: string, organizations: list, placesLived: list, plusOneCount: int, relationshipStatus: string, skills: string, tagline: string, url: string, urls: list, verified: bool>, kind: string, nextPageToken: string, selfLink: string, title: string, totalItems: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }

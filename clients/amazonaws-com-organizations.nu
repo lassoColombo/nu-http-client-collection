@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -162,9 +185,9 @@ def x-amz-target-completer-54 [] { ["AWSOrganizationsV20161128.UpdatePolicy"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accept-handshake" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["accept-handshake" "attach-policy" "cancel-handshake" "close-account" "create-account" "create-gov-cloud-account" "create-organization" "create-organizational-unit" "create-policy" "decline-handshake" "delete-organization" "delete-organizational-unit" "delete-policy" "delete-resource-policy" "deregister-delegated-administrator" "describe-account" "describe-create-account-status" "describe-effective-policy" "describe-handshake" "describe-organization" "describe-organizational-unit" "describe-policy" "describe-resource-policy" "detach-policy" "disable-aws-service-access" "disable-policy-type" "enable-aws-service-access" "enable-all-features" "enable-policy-type" "invite-account-to-organization" "leave-organization" "list-aws-service-access-for-organization" "list-accounts" "list-accounts-for-parent" "list-children" "list-create-account-status" "list-delegated-administrators" "list-delegated-services-for-account" "list-handshakes-for-account" "list-handshakes-for-organization" "list-organizational-units-for-parent" "list-parents" "list-policies" "list-policies-for-target" "list-roots" "list-tags-for-resource" "list-targets-for-policy" "move-account" "put-resource-policy" "register-delegated-administrator" "remove-account-from-organization" "tag-resource" "untag-resource" "update-organizational-unit" "update-policy" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -205,7 +228,7 @@ export def "accept-handshake" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer # required
   handshake_id: string # The unique identifier (ID) of the handshake that you want to accept. The regex pattern (http://wikipedia.org/wiki/regex) for handshake ID string requires "h-" followed by from 8 to 32 lowercase letters or digits.
-]: any -> record<Handshake: record<Id: string, Arn: string, Parties: list<record>, State: string, RequestedTimestamp: string, ExpirationTimestamp: string, Action: string, Resources: list<record>>> {
+]: any -> oneof<record<Handshake: record<Id: string, Arn: string, Parties: list<record>, State: string, RequestedTimestamp: string, ExpirationTimestamp: string, Action: string, Resources: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -304,7 +327,7 @@ export def "cancel-handshake" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-2 # required
   handshake_id: string # The unique identifier (ID) of the handshake that you want to cancel. You can get the ID from the ListHandshakesForOrganization operation. The regex pattern (http://wikipedia.org/wiki/regex) for handshake ID string requires "h-" followed by from 8 to 32 lowercase letters or digits.
-]: any -> record<Handshake: record<Id: string, Arn: string, Parties: list<record>, State: string, RequestedTimestamp: string, ExpirationTimestamp: string, Action: string, Resources: list<record>>> {
+]: any -> oneof<record<Handshake: record<Id: string, Arn: string, Parties: list<record>, State: string, RequestedTimestamp: string, ExpirationTimestamp: string, Action: string, Resources: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -383,7 +406,6 @@ export def "close-account" [
 #
 # POST /
 # operationId: CreateAccount
-# --Tags item shape: {Key: string, Value: string}
 export def "create-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -407,7 +429,7 @@ export def "create-account" [
   --role-name: string # The name of an IAM role that Organizations automatically preconfigures in the new member account. This role trusts the management account, allowing users in the management account to assume the role, as permitted by the management account administrator. The role has administrator permissions in the new member account. If you don't specify this parameter, the role name defaults to OrganizationAccountAccessRole. For more information about how to use this role to access the member account, see the following links: Accessing and Administering the Member Accounts in Your Organization (https://docs.aws.amazon.com/organizations/latest/userguide/orgs_manage_accounts_access.html#orgs_manage_accounts_create-cross-account-role) in the Organizations User Guide Steps 2 and 3 in Tutorial: Delegate Access Across Amazon Web Services accounts Using IAM Roles (https://docs.aws.amazon.com/IAM/latest/UserGuide/tutorial_cross-account-with-roles.html) in the IAM User Guide The regex pattern (http://wikipedia.org/wiki/regex) that is used to validate this parameter. The pattern can include uppercase letters, lowercase letters, digits with no spaces, and any of the following characters: =,.@-
   --iam-user-access-to-billing: string@iam-user-access-to-billing-completer # If set to ALLOW, the new account enables IAM users to access account billing information if they have the required permissions. If set to DENY, only the root user of the new account can access account billing information. For more information, see Activating Access to the Billing and Cost Management Console (https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/grantaccess.html#ControllingAccessWebsite-Activate) in the Amazon Web Services Billing and Cost Management User Guide. If you don't specify this parameter, the value defaults to ALLOW, and IAM users and roles with the required permissions can access billing information for the new account.
   --tags: list # A list of tags that you want to attach to the newly created account. For each tag in the list, you must specify both a tag key and a value. You can set the value to an empty string, but you can't set it to null. For more information about tagging, see Tagging Organizations resources (https://docs.aws.amazon.com/organizations/latest/userguide/orgs_tagging.html) in the Organizations User Guide. If any one of the tags is not valid or if you exceed the maximum allowed number of tags for an account, then the entire request fails and the account is not created. — item shape: {Key: string, Value: string}
-]: any -> record<CreateAccountStatus: record<Id: string, AccountName: string, State: string, RequestedTimestamp: string, CompletedTimestamp: string, AccountId: string, GovCloudAccountId: string, FailureReason: string>> {
+]: any -> oneof<record<CreateAccountStatus: record<Id: string, AccountName: string, State: string, RequestedTimestamp: string, CompletedTimestamp: string, AccountId: string, GovCloudAccountId: string, FailureReason: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -437,7 +459,6 @@ export def "create-account" [
 #
 # POST /
 # operationId: CreateGovCloudAccount
-# --Tags item shape: {Key: string, Value: string}
 export def "create-gov-cloud-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -461,7 +482,7 @@ export def "create-gov-cloud-account" [
   --role-name: string # (Optional) The name of an IAM role that Organizations automatically preconfigures in the new member accounts in both the Amazon Web Services GovCloud (US) Region and in the commercial Region. This role trusts the management account, allowing users in the management account to assume the role, as permitted by the management account administrator. The role has administrator permissions in the new member account. If you don't specify this parameter, the role name defaults to OrganizationAccountAccessRole. For more information about how to use this role to access the member account, see Accessing and Administering the Member Accounts in Your Organization (https://docs.aws.amazon.com/organizations/latest/userguide/orgs_manage_accounts_access.html#orgs_manage_accounts_create-cross-account-role) in the Organizations User Guide and steps 2 and 3 in Tutorial: Delegate Access Across Amazon Web Services accounts Using IAM Roles (https://docs.aws.amazon.com/IAM/latest/UserGuide/tutorial_cross-account-with-roles.html) in the IAM User Guide. The regex pattern (http://wikipedia.org/wiki/regex) that is used to validate this parameter. The pattern can include uppercase letters, lowercase letters, digits with no spaces, and any of the following characters: =,.@-
   --iam-user-access-to-billing: string@iam-user-access-to-billing-completer # If set to ALLOW, the new linked account in the commercial Region enables IAM users to access account billing information if they have the required permissions. If set to DENY, only the root user of the new account can access account billing information. For more information, see Activating Access to the Billing and Cost Management Console (https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/grantaccess.html#ControllingAccessWebsite-Activate) in the Amazon Web Services Billing and Cost Management User Guide. If you don't specify this parameter, the value defaults to ALLOW, and IAM users and roles with the required permissions can access billing information for the new account.
   --tags: list # A list of tags that you want to attach to the newly created account. These tags are attached to the commercial account associated with the GovCloud account, and not to the GovCloud account itself. To add tags to the actual GovCloud account, call the TagResource operation in the GovCloud region after the new GovCloud account exists. For each tag in the list, you must specify both a tag key and a value. You can set the value to an empty string, but you can't set it to null. For more information about tagging, see Tagging Organizations resources (https://docs.aws.amazon.com/organizations/latest/userguide/orgs_tagging.html) in the Organizations User Guide. If any one of the tags is not valid or if you exceed the maximum allowed number of tags for an account, then the entire request fails and the account is not created. — item shape: {Key: string, Value: string}
-]: any -> record<CreateAccountStatus: record<Id: string, AccountName: string, State: string, RequestedTimestamp: string, CompletedTimestamp: string, AccountId: string, GovCloudAccountId: string, FailureReason: string>> {
+]: any -> oneof<record<CreateAccountStatus: record<Id: string, AccountName: string, State: string, RequestedTimestamp: string, CompletedTimestamp: string, AccountId: string, GovCloudAccountId: string, FailureReason: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -510,7 +531,7 @@ export def "create-organization" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-6 # required
   --feature-set: string@feature-set-completer # Specifies the feature set supported by the new organization. Each feature set supports different levels of functionality. CONSOLIDATED_BILLING: All member accounts have their bills consolidated to and paid by the management account. For more information, see Consolidated billing (https://docs.aws.amazon.com/organizations/latest/userguide/orgs_getting-started_concepts.html#feature-set-cb-only) in the Organizations User Guide. The consolidated billing feature subset isn't available for organizations in the Amazon Web Services GovCloud (US) Region. ALL: In addition to all the features supported by the consolidated billing feature set, the management account can also apply any policy type to any member account in the organization. For more information, see All features (https://docs.aws.amazon.com/organizations/latest/userguide/orgs_getting-started_concepts.html#feature-set-all) in the Organizations User Guide.
-]: any -> record<Organization: record<Id: string, Arn: string, FeatureSet: string, MasterAccountArn: string, MasterAccountId: string, MasterAccountEmail: string, AvailablePolicyTypes: list<record>>> {
+]: any -> oneof<record<Organization: record<Id: string, Arn: string, FeatureSet: string, MasterAccountArn: string, MasterAccountId: string, MasterAccountEmail: string, AvailablePolicyTypes: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -540,7 +561,6 @@ export def "create-organization" [
 #
 # POST /
 # operationId: CreateOrganizationalUnit
-# --Tags item shape: {Key: string, Value: string}
 export def "create-organizational-unit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -562,7 +582,7 @@ export def "create-organizational-unit" [
   parent_id: string # The unique identifier (ID) of the parent root or OU that you want to create the new OU in. The regex pattern (http://wikipedia.org/wiki/regex) for a parent ID string requires one of the following: Root - A string that begins with "r-" followed by from 4 to 32 lowercase letters or digits. Organizational unit (OU) - A string that begins with "ou-" followed by from 4 to 32 lowercase letters or digits (the ID of the root that the OU is in). This string is followed by a second "-" dash and from 8 to 32 additional lowercase letters or digits.
   name: string # The friendly name to assign to the new OU.
   --tags: list # A list of tags that you want to attach to the newly created OU. For each tag in the list, you must specify both a tag key and a value. You can set the value to an empty string, but you can't set it to null. For more information about tagging, see Tagging Organizations resources (https://docs.aws.amazon.com/organizations/latest/userguide/orgs_tagging.html) in the Organizations User Guide. If any one of the tags is not valid or if you exceed the allowed number of tags for an OU, then the entire request fails and the OU is not created. — item shape: {Key: string, Value: string}
-]: any -> record<OrganizationalUnit: record<Id: string, Arn: string, Name: string>> {
+]: any -> oneof<record<OrganizationalUnit: record<Id: string, Arn: string, Name: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -592,7 +612,6 @@ export def "create-organizational-unit" [
 #
 # POST /
 # operationId: CreatePolicy
-# --Tags item shape: {Key: string, Value: string}
 export def "create-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -616,7 +635,7 @@ export def "create-policy" [
   name: string # The friendly name to assign to the policy. The regex pattern (http://wikipedia.org/wiki/regex) that is used to validate this parameter is a string of any of the characters in the ASCII character range.
   type: string@type-completer # The type of policy to create. You can specify one of the following values: AISERVICES_OPT_OUT_POLICY (https://docs.aws.amazon.com/organizations/latest/userguide/orgs_manage_policies_ai-opt-out.html) BACKUP_POLICY (https://docs.aws.amazon.com/organizations/latest/userguide/orgs_manage_policies_backup.html) SERVICE_CONTROL_POLICY (https://docs.aws.amazon.com/organizations/latest/userguide/orgs_manage_policies_scp.html) TAG_POLICY (https://docs.aws.amazon.com/organizations/latest/userguide/orgs_manage_policies_tag-policies.html)
   --tags: list # A list of tags that you want to attach to the newly created policy. For each tag in the list, you must specify both a tag key and a value. You can set the value to an empty string, but you can't set it to null. For more information about tagging, see Tagging Organizations resources (https://docs.aws.amazon.com/organizations/latest/userguide/orgs_tagging.html) in the Organizations User Guide. If any one of the tags is not valid or if you exceed the allowed number of tags for a policy, then the entire request fails and the policy is not created. — item shape: {Key: string, Value: string}
-]: any -> record<Policy: record<PolicySummary: record<Id: string, Arn: string, Name: string, Description: string, Type: string, AwsManaged: bool>, Content: string>> {
+]: any -> oneof<record<Policy: record<PolicySummary: record<Id: string, Arn: string, Name: string, Description: string, Type: string, AwsManaged: bool>, Content: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -665,7 +684,7 @@ export def "decline-handshake" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-9 # required
   handshake_id: string # The unique identifier (ID) of the handshake that you want to decline. You can get the ID from the ListHandshakesForAccount operation. The regex pattern (http://wikipedia.org/wiki/regex) for handshake ID string requires "h-" followed by from 8 to 32 lowercase letters or digits.
-]: any -> record<Handshake: record<Id: string, Arn: string, Parties: list<record>, State: string, RequestedTimestamp: string, ExpirationTimestamp: string, Action: string, Resources: list<record>>> {
+]: any -> oneof<record<Handshake: record<Id: string, Arn: string, Parties: list<record>, State: string, RequestedTimestamp: string, ExpirationTimestamp: string, Action: string, Resources: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -952,7 +971,7 @@ export def "describe-account" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-15 # required
   account_id: string # The unique identifier (ID) of the Amazon Web Services account that you want information about. You can get the ID from the ListAccounts or ListAccountsForParent operations. The regex pattern (http://wikipedia.org/wiki/regex) for an account ID string requires exactly 12 digits.
-]: any -> record<Account: record<Id: string, Arn: string, Email: string, Name: string, Status: string, JoinedMethod: string, JoinedTimestamp: string>> {
+]: any -> oneof<record<Account: record<Id: string, Arn: string, Email: string, Name: string, Status: string, JoinedMethod: string, JoinedTimestamp: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1001,7 +1020,7 @@ export def "describe-create-account-status" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-16 # required
   create_account_request_id: string # Specifies the Id value that uniquely identifies the CreateAccount request. You can get the value from the CreateAccountStatus.Id response in an earlier CreateAccount request, or from the ListCreateAccountStatus operation. The regex pattern (http://wikipedia.org/wiki/regex) for a create account request ID string requires "car-" followed by from 8 to 32 lowercase letters or digits.
-]: any -> record<CreateAccountStatus: record<Id: string, AccountName: string, State: string, RequestedTimestamp: string, CompletedTimestamp: string, AccountId: string, GovCloudAccountId: string, FailureReason: string>> {
+]: any -> oneof<record<CreateAccountStatus: record<Id: string, AccountName: string, State: string, RequestedTimestamp: string, CompletedTimestamp: string, AccountId: string, GovCloudAccountId: string, FailureReason: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1051,7 +1070,7 @@ export def "describe-effective-policy" [
   --x-amz-target: string@x-amz-target-completer-17 # required
   policy_type: string@policy-type-completer # The type of policy that you want information about. You can specify one of the following values: AISERVICES_OPT_OUT_POLICY (https://docs.aws.amazon.com/organizations/latest/userguide/orgs_manage_policies_ai-opt-out.html) BACKUP_POLICY (https://docs.aws.amazon.com/organizations/latest/userguide/orgs_manage_policies_backup.html) TAG_POLICY (https://docs.aws.amazon.com/organizations/latest/userguide/orgs_manage_policies_tag-policies.html)
   --target-id: string # When you're signed in as the management account, specify the ID of the account that you want details about. Specifying an organization root or organizational unit (OU) as the target is not supported.
-]: any -> record<EffectivePolicy: record<PolicyContent: string, LastUpdatedTimestamp: string, TargetId: string, PolicyType: string>> {
+]: any -> oneof<record<EffectivePolicy: record<PolicyContent: string, LastUpdatedTimestamp: string, TargetId: string, PolicyType: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1100,7 +1119,7 @@ export def "describe-handshake" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-18 # required
   handshake_id: string # The unique identifier (ID) of the handshake that you want information about. You can get the ID from the original call to InviteAccountToOrganization, or from a call to ListHandshakesForAccount or ListHandshakesForOrganization. The regex pattern (http://wikipedia.org/wiki/regex) for handshake ID string requires "h-" followed by from 8 to 32 lowercase letters or digits.
-]: any -> record<Handshake: record<Id: string, Arn: string, Parties: list<record>, State: string, RequestedTimestamp: string, ExpirationTimestamp: string, Action: string, Resources: list<record>>> {
+]: any -> oneof<record<Handshake: record<Id: string, Arn: string, Parties: list<record>, State: string, RequestedTimestamp: string, ExpirationTimestamp: string, Action: string, Resources: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1148,7 +1167,7 @@ export def "describe-organization" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-19 # required
-]: nothing -> record<Organization: record<Id: string, Arn: string, FeatureSet: string, MasterAccountArn: string, MasterAccountId: string, MasterAccountEmail: string, AvailablePolicyTypes: list<record>>> {
+]: nothing -> oneof<record<Organization: record<Id: string, Arn: string, FeatureSet: string, MasterAccountArn: string, MasterAccountId: string, MasterAccountEmail: string, AvailablePolicyTypes: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let x_amz_target = ($x_amz_target | default "AWSOrganizationsV20161128.DescribeOrganization")
@@ -1194,7 +1213,7 @@ export def "describe-organizational-unit" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-20 # required
   organizational_unit_id: string # The unique identifier (ID) of the organizational unit that you want details about. You can get the ID from the ListOrganizationalUnitsForParent operation. The regex pattern (http://wikipedia.org/wiki/regex) for an organizational unit ID string requires "ou-" followed by from 4 to 32 lowercase letters or digits (the ID of the root that contains the OU). This string is followed by a second "-" dash and from 8 to 32 additional lowercase letters or digits.
-]: any -> record<OrganizationalUnit: record<Id: string, Arn: string, Name: string>> {
+]: any -> oneof<record<OrganizationalUnit: record<Id: string, Arn: string, Name: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1243,7 +1262,7 @@ export def "describe-policy" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-21 # required
   policy_id: string # The unique identifier (ID) of the policy that you want details about. You can get the ID from the ListPolicies or ListPoliciesForTarget operations. The regex pattern (http://wikipedia.org/wiki/regex) for a policy ID string requires "p-" followed by from 8 to 128 lowercase or uppercase letters, digits, or the underscore character (_).
-]: any -> record<Policy: record<PolicySummary: record<Id: string, Arn: string, Name: string, Description: string, Type: string, AwsManaged: bool>, Content: string>> {
+]: any -> oneof<record<Policy: record<PolicySummary: record<Id: string, Arn: string, Name: string, Description: string, Type: string, AwsManaged: bool>, Content: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1291,7 +1310,7 @@ export def "describe-resource-policy" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-22 # required
-]: nothing -> record<ResourcePolicy: record<ResourcePolicySummary: record<Id: string, Arn: string>, Content: string>> {
+]: nothing -> oneof<record<ResourcePolicy: record<ResourcePolicySummary: record<Id: string, Arn: string>, Content: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let x_amz_target = ($x_amz_target | default "AWSOrganizationsV20161128.DescribeResourcePolicy")
@@ -1437,7 +1456,7 @@ export def "disable-policy-type" [
   --x-amz-target: string@x-amz-target-completer-25 # required
   root_id: string # The unique identifier (ID) of the root in which you want to disable a policy type. You can get the ID from the ListRoots operation. The regex pattern (http://wikipedia.org/wiki/regex) for a root ID string requires "r-" followed by from 4 to 32 lowercase letters or digits.
   policy_type: string@policy-type-completer-1 # The policy type that you want to disable in this root. You can specify one of the following values: AISERVICES_OPT_OUT_POLICY (https://docs.aws.amazon.com/organizations/latest/userguide/orgs_manage_policies_ai-opt-out.html) BACKUP_POLICY (https://docs.aws.amazon.com/organizations/latest/userguide/orgs_manage_policies_backup.html) SERVICE_CONTROL_POLICY (https://docs.aws.amazon.com/organizations/latest/userguide/orgs_manage_policies_scp.html) TAG_POLICY (https://docs.aws.amazon.com/organizations/latest/userguide/orgs_manage_policies_tag-policies.html)
-]: any -> record<Root: record<Id: string, Arn: string, Name: string, PolicyTypes: list<record>>> {
+]: any -> oneof<record<Root: record<Id: string, Arn: string, Name: string, PolicyTypes: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1535,7 +1554,7 @@ export def "enable-all-features" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-27 # required
   --body: record
-]: any -> record<Handshake: record<Id: string, Arn: string, Parties: list<record>, State: string, RequestedTimestamp: string, ExpirationTimestamp: string, Action: string, Resources: list<record>>> {
+]: any -> oneof<record<Handshake: record<Id: string, Arn: string, Parties: list<record>, State: string, RequestedTimestamp: string, ExpirationTimestamp: string, Action: string, Resources: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1585,7 +1604,7 @@ export def "enable-policy-type" [
   --x-amz-target: string@x-amz-target-completer-28 # required
   root_id: string # The unique identifier (ID) of the root in which you want to enable a policy type. You can get the ID from the ListRoots operation. The regex pattern (http://wikipedia.org/wiki/regex) for a root ID string requires "r-" followed by from 4 to 32 lowercase letters or digits.
   policy_type: string@policy-type-completer-1 # The policy type that you want to enable. You can specify one of the following values: AISERVICES_OPT_OUT_POLICY (https://docs.aws.amazon.com/organizations/latest/userguide/orgs_manage_policies_ai-opt-out.html) BACKUP_POLICY (https://docs.aws.amazon.com/organizations/latest/userguide/orgs_manage_policies_backup.html) SERVICE_CONTROL_POLICY (https://docs.aws.amazon.com/organizations/latest/userguide/orgs_manage_policies_scp.html) TAG_POLICY (https://docs.aws.amazon.com/organizations/latest/userguide/orgs_manage_policies_tag-policies.html)
-]: any -> record<Root: record<Id: string, Arn: string, Name: string, PolicyTypes: list<record>>> {
+]: any -> oneof<record<Root: record<Id: string, Arn: string, Name: string, PolicyTypes: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1615,8 +1634,6 @@ export def "enable-policy-type" [
 #
 # POST /
 # operationId: InviteAccountToOrganization
-# --Target shape: {Id: string, Type: "ACCOUNT"|"ORGANIZATION"|"EMAIL"}
-# --Tags item shape: {Key: string, Value: string}
 export def "invite-account-to-organization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1638,7 +1655,7 @@ export def "invite-account-to-organization" [
   target: record # Identifies a participant in a handshake. — shape: {Id: string, Type: "ACCOUNT"|"ORGANIZATION"|"EMAIL"}
   --notes: string # Additional information that you want to include in the generated email to the recipient account owner. (format: password)
   --tags: list # A list of tags that you want to attach to the account when it becomes a member of the organization. For each tag in the list, you must specify both a tag key and a value. You can set the value to an empty string, but you can't set it to null. For more information about tagging, see Tagging Organizations resources (https://docs.aws.amazon.com/organizations/latest/userguide/orgs_tagging.html) in the Organizations User Guide. Any tags in the request are checked for compliance with any applicable tag policies when the request is made. The request is rejected if the tags in the request don't match the requirements of the policy at that time. Tag policy compliance is not checked again when the invitation is accepted and the tags are actually attached to the account. That means that if the tag policy changes between the invitation and the acceptance, then that tags could potentially be non-compliant. If any one of the tags is not valid or if you exceed the allowed number of tags for an account, then the entire request fails and invitations are not sent. — item shape: {Key: string, Value: string}
-]: any -> record<Handshake: record<Id: string, Arn: string, Parties: list<record>, State: string, RequestedTimestamp: string, ExpirationTimestamp: string, Action: string, Resources: list<record>>> {
+]: any -> oneof<record<Handshake: record<Id: string, Arn: string, Parties: list<record>, State: string, RequestedTimestamp: string, ExpirationTimestamp: string, Action: string, Resources: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1735,7 +1752,7 @@ export def "list-aws-service-access-for-organization" [
   --x-amz-target: string@x-amz-target-completer-31 # required
   --next-token-body: string # The parameter for receiving additional results if you receive a NextToken response in a previous request. A NextToken response indicates that more output is available. Set this parameter to the value of the previous call's NextToken response to indicate where the output should continue from. (body field)
   --max-results-body: int # The total number of results that you want included on each page of the response. If you do not include this parameter, it defaults to a value that is specific to the operation. If additional items exist beyond the maximum you specify, the NextToken response element is present and has a value (is not null). Include that value as the NextToken request parameter in the next call to the operation to get the next part of the results. Note that Organizations might return fewer results than the maximum even when there are more results available. You should check NextToken after every operation to ensure that you receive all of the results. (body field)
-]: any -> record<EnabledServicePrincipals: table<ServicePrincipal: string, DateEnabled: string>, NextToken: string> {
+]: any -> oneof<record<EnabledServicePrincipals: table<ServicePrincipal: string, DateEnabled: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1788,7 +1805,7 @@ export def "list-accounts" [
   --x-amz-target: string@x-amz-target-completer-32 # required
   --next-token-body: string # The parameter for receiving additional results if you receive a NextToken response in a previous request. A NextToken response indicates that more output is available. Set this parameter to the value of the previous call's NextToken response to indicate where the output should continue from. (body field)
   --max-results-body: int # The total number of results that you want included on each page of the response. If you do not include this parameter, it defaults to a value that is specific to the operation. If additional items exist beyond the maximum you specify, the NextToken response element is present and has a value (is not null). Include that value as the NextToken request parameter in the next call to the operation to get the next part of the results. Note that Organizations might return fewer results than the maximum even when there are more results available. You should check NextToken after every operation to ensure that you receive all of the results. (body field)
-]: any -> record<Accounts: table<Id: string, Arn: string, Email: string, Name: string, Status: string, JoinedMethod: string, JoinedTimestamp: string>, NextToken: string> {
+]: any -> oneof<record<Accounts: table<Id: string, Arn: string, Email: string, Name: string, Status: string, JoinedMethod: string, JoinedTimestamp: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1842,7 +1859,7 @@ export def "list-accounts-for-parent" [
   parent_id: string # The unique identifier (ID) for the parent root or organization unit (OU) whose accounts you want to list.
   --next-token-body: string # The parameter for receiving additional results if you receive a NextToken response in a previous request. A NextToken response indicates that more output is available. Set this parameter to the value of the previous call's NextToken response to indicate where the output should continue from. (body field)
   --max-results-body: int # The total number of results that you want included on each page of the response. If you do not include this parameter, it defaults to a value that is specific to the operation. If additional items exist beyond the maximum you specify, the NextToken response element is present and has a value (is not null). Include that value as the NextToken request parameter in the next call to the operation to get the next part of the results. Note that Organizations might return fewer results than the maximum even when there are more results available. You should check NextToken after every operation to ensure that you receive all of the results. (body field)
-]: any -> record<Accounts: table<Id: string, Arn: string, Email: string, Name: string, Status: string, JoinedMethod: string, JoinedTimestamp: string>, NextToken: string> {
+]: any -> oneof<record<Accounts: table<Id: string, Arn: string, Email: string, Name: string, Status: string, JoinedMethod: string, JoinedTimestamp: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1897,7 +1914,7 @@ export def "list-children" [
   child_type: string@child-type-completer # Filters the output to include only the specified child type.
   --next-token-body: string # The parameter for receiving additional results if you receive a NextToken response in a previous request. A NextToken response indicates that more output is available. Set this parameter to the value of the previous call's NextToken response to indicate where the output should continue from. (body field)
   --max-results-body: int # The total number of results that you want included on each page of the response. If you do not include this parameter, it defaults to a value that is specific to the operation. If additional items exist beyond the maximum you specify, the NextToken response element is present and has a value (is not null). Include that value as the NextToken request parameter in the next call to the operation to get the next part of the results. Note that Organizations might return fewer results than the maximum even when there are more results available. You should check NextToken after every operation to ensure that you receive all of the results. (body field)
-]: any -> record<Children: table<Id: string, Type: string>, NextToken: string> {
+]: any -> oneof<record<Children: table<Id: string, Type: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1951,7 +1968,7 @@ export def "list-create-account-status" [
   --states: list<string> # A list of one or more states that you want included in the response. If this parameter isn't present, all requests are included in the response.
   --next-token-body: string # The parameter for receiving additional results if you receive a NextToken response in a previous request. A NextToken response indicates that more output is available. Set this parameter to the value of the previous call's NextToken response to indicate where the output should continue from. (body field)
   --max-results-body: int # The total number of results that you want included on each page of the response. If you do not include this parameter, it defaults to a value that is specific to the operation. If additional items exist beyond the maximum you specify, the NextToken response element is present and has a value (is not null). Include that value as the NextToken request parameter in the next call to the operation to get the next part of the results. Note that Organizations might return fewer results than the maximum even when there are more results available. You should check NextToken after every operation to ensure that you receive all of the results. (body field)
-]: any -> record<CreateAccountStatuses: table<Id: string, AccountName: string, State: string, RequestedTimestamp: string, CompletedTimestamp: string, AccountId: string, GovCloudAccountId: string, FailureReason: string>, NextToken: string> {
+]: any -> oneof<record<CreateAccountStatuses: table<Id: string, AccountName: string, State: string, RequestedTimestamp: string, CompletedTimestamp: string, AccountId: string, GovCloudAccountId: string, FailureReason: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2005,7 +2022,7 @@ export def "list-delegated-administrators" [
   --service-principal: string # Specifies a service principal name. If specified, then the operation lists the delegated administrators only for the specified service. If you don't specify a service principal, the operation lists all delegated administrators for all services in your organization.
   --next-token-body: string # The parameter for receiving additional results if you receive a NextToken response in a previous request. A NextToken response indicates that more output is available. Set this parameter to the value of the previous call's NextToken response to indicate where the output should continue from. (body field)
   --max-results-body: int # The total number of results that you want included on each page of the response. If you do not include this parameter, it defaults to a value that is specific to the operation. If additional items exist beyond the maximum you specify, the NextToken response element is present and has a value (is not null). Include that value as the NextToken request parameter in the next call to the operation to get the next part of the results. Note that Organizations might return fewer results than the maximum even when there are more results available. You should check NextToken after every operation to ensure that you receive all of the results. (body field)
-]: any -> record<DelegatedAdministrators: table<Id: string, Arn: string, Email: string, Name: string, Status: string, JoinedMethod: string, JoinedTimestamp: string, DelegationEnabledDate: string>, NextToken: string> {
+]: any -> oneof<record<DelegatedAdministrators: table<Id: string, Arn: string, Email: string, Name: string, Status: string, JoinedMethod: string, JoinedTimestamp: string, DelegationEnabledDate: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2059,7 +2076,7 @@ export def "list-delegated-services-for-account" [
   account_id: string # The account ID number of a delegated administrator account in the organization.
   --next-token-body: string # The parameter for receiving additional results if you receive a NextToken response in a previous request. A NextToken response indicates that more output is available. Set this parameter to the value of the previous call's NextToken response to indicate where the output should continue from. (body field)
   --max-results-body: int # The total number of results that you want included on each page of the response. If you do not include this parameter, it defaults to a value that is specific to the operation. If additional items exist beyond the maximum you specify, the NextToken response element is present and has a value (is not null). Include that value as the NextToken request parameter in the next call to the operation to get the next part of the results. Note that Organizations might return fewer results than the maximum even when there are more results available. You should check NextToken after every operation to ensure that you receive all of the results. (body field)
-]: any -> record<DelegatedServices: table<ServicePrincipal: string, DelegationEnabledDate: string>, NextToken: string> {
+]: any -> oneof<record<DelegatedServices: table<ServicePrincipal: string, DelegationEnabledDate: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2090,7 +2107,6 @@ export def "list-delegated-services-for-account" [
 #
 # POST /
 # operationId: ListHandshakesForAccount
-# --Filter shape: {ActionType?: "INVITE"|"ENABLE_ALL_FEATURES"|"APPROVE_ALL_FEATURES"|"ADD_ORGANIZATIONS_SERVICE_LINKED_ROLE", ParentHandshakeId?: string}
 export def "list-handshakes-for-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2114,7 +2130,7 @@ export def "list-handshakes-for-account" [
   --filter: record # Specifies the criteria that are used to select the handshakes for the operation. — shape: {ActionType?: "INVITE"|"ENABLE_ALL_FEATURES"|"APPROVE_ALL_FEATURES"|"ADD_ORGANIZATIONS_SERVICE_LINKED_ROLE", ParentHandshakeId?: string}
   --next-token-body: string # The parameter for receiving additional results if you receive a NextToken response in a previous request. A NextToken response indicates that more output is available. Set this parameter to the value of the previous call's NextToken response to indicate where the output should continue from. (body field)
   --max-results-body: int # The total number of results that you want included on each page of the response. If you do not include this parameter, it defaults to a value that is specific to the operation. If additional items exist beyond the maximum you specify, the NextToken response element is present and has a value (is not null). Include that value as the NextToken request parameter in the next call to the operation to get the next part of the results. Note that Organizations might return fewer results than the maximum even when there are more results available. You should check NextToken after every operation to ensure that you receive all of the results. (body field)
-]: any -> record<Handshakes: table<Id: string, Arn: string, Parties: list, State: string, RequestedTimestamp: string, ExpirationTimestamp: string, Action: string, Resources: list>, NextToken: string> {
+]: any -> oneof<record<Handshakes: table<Id: string, Arn: string, Parties: list, State: string, RequestedTimestamp: string, ExpirationTimestamp: string, Action: string, Resources: list>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2145,7 +2161,6 @@ export def "list-handshakes-for-account" [
 #
 # POST /
 # operationId: ListHandshakesForOrganization
-# --Filter shape: {ActionType?: "INVITE"|"ENABLE_ALL_FEATURES"|"APPROVE_ALL_FEATURES"|"ADD_ORGANIZATIONS_SERVICE_LINKED_ROLE", ParentHandshakeId?: string}
 export def "list-handshakes-for-organization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2169,7 +2184,7 @@ export def "list-handshakes-for-organization" [
   --filter: record # Specifies the criteria that are used to select the handshakes for the operation. — shape: {ActionType?: "INVITE"|"ENABLE_ALL_FEATURES"|"APPROVE_ALL_FEATURES"|"ADD_ORGANIZATIONS_SERVICE_LINKED_ROLE", ParentHandshakeId?: string}
   --next-token-body: string # The parameter for receiving additional results if you receive a NextToken response in a previous request. A NextToken response indicates that more output is available. Set this parameter to the value of the previous call's NextToken response to indicate where the output should continue from. (body field)
   --max-results-body: int # The total number of results that you want included on each page of the response. If you do not include this parameter, it defaults to a value that is specific to the operation. If additional items exist beyond the maximum you specify, the NextToken response element is present and has a value (is not null). Include that value as the NextToken request parameter in the next call to the operation to get the next part of the results. Note that Organizations might return fewer results than the maximum even when there are more results available. You should check NextToken after every operation to ensure that you receive all of the results. (body field)
-]: any -> record<Handshakes: table<Id: string, Arn: string, Parties: list, State: string, RequestedTimestamp: string, ExpirationTimestamp: string, Action: string, Resources: list>, NextToken: string> {
+]: any -> oneof<record<Handshakes: table<Id: string, Arn: string, Parties: list, State: string, RequestedTimestamp: string, ExpirationTimestamp: string, Action: string, Resources: list>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2223,7 +2238,7 @@ export def "list-organizational-units-for-parent" [
   parent_id: string # The unique identifier (ID) of the root or OU whose child OUs you want to list. The regex pattern (http://wikipedia.org/wiki/regex) for a parent ID string requires one of the following: Root - A string that begins with "r-" followed by from 4 to 32 lowercase letters or digits. Organizational unit (OU) - A string that begins with "ou-" followed by from 4 to 32 lowercase letters or digits (the ID of the root that the OU is in). This string is followed by a second "-" dash and from 8 to 32 additional lowercase letters or digits.
   --next-token-body: string # The parameter for receiving additional results if you receive a NextToken response in a previous request. A NextToken response indicates that more output is available. Set this parameter to the value of the previous call's NextToken response to indicate where the output should continue from. (body field)
   --max-results-body: int # The total number of results that you want included on each page of the response. If you do not include this parameter, it defaults to a value that is specific to the operation. If additional items exist beyond the maximum you specify, the NextToken response element is present and has a value (is not null). Include that value as the NextToken request parameter in the next call to the operation to get the next part of the results. Note that Organizations might return fewer results than the maximum even when there are more results available. You should check NextToken after every operation to ensure that you receive all of the results. (body field)
-]: any -> record<OrganizationalUnits: table<Id: string, Arn: string, Name: string>, NextToken: string> {
+]: any -> oneof<record<OrganizationalUnits: table<Id: string, Arn: string, Name: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2277,7 +2292,7 @@ export def "list-parents" [
   child_id: string # The unique identifier (ID) of the OU or account whose parent containers you want to list. Don't specify a root. The regex pattern (http://wikipedia.org/wiki/regex) for a child ID string requires one of the following: Account - A string that consists of exactly 12 digits. Organizational unit (OU) - A string that begins with "ou-" followed by from 4 to 32 lowercase letters or digits (the ID of the root that contains the OU). This string is followed by a second "-" dash and from 8 to 32 additional lowercase letters or digits.
   --next-token-body: string # The parameter for receiving additional results if you receive a NextToken response in a previous request. A NextToken response indicates that more output is available. Set this parameter to the value of the previous call's NextToken response to indicate where the output should continue from. (body field)
   --max-results-body: int # The total number of results that you want included on each page of the response. If you do not include this parameter, it defaults to a value that is specific to the operation. If additional items exist beyond the maximum you specify, the NextToken response element is present and has a value (is not null). Include that value as the NextToken request parameter in the next call to the operation to get the next part of the results. Note that Organizations might return fewer results than the maximum even when there are more results available. You should check NextToken after every operation to ensure that you receive all of the results. (body field)
-]: any -> record<Parents: table<Id: string, Type: string>, NextToken: string> {
+]: any -> oneof<record<Parents: table<Id: string, Type: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2331,7 +2346,7 @@ export def "list-policies" [
   filter: string@filter-completer # Specifies the type of policy that you want to include in the response. You must specify one of the following values: AISERVICES_OPT_OUT_POLICY (https://docs.aws.amazon.com/organizations/latest/userguide/orgs_manage_policies_ai-opt-out.html) BACKUP_POLICY (https://docs.aws.amazon.com/organizations/latest/userguide/orgs_manage_policies_backup.html) SERVICE_CONTROL_POLICY (https://docs.aws.amazon.com/organizations/latest/userguide/orgs_manage_policies_scp.html) TAG_POLICY (https://docs.aws.amazon.com/organizations/latest/userguide/orgs_manage_policies_tag-policies.html)
   --next-token-body: string # The parameter for receiving additional results if you receive a NextToken response in a previous request. A NextToken response indicates that more output is available. Set this parameter to the value of the previous call's NextToken response to indicate where the output should continue from. (body field)
   --max-results-body: int # The total number of results that you want included on each page of the response. If you do not include this parameter, it defaults to a value that is specific to the operation. If additional items exist beyond the maximum you specify, the NextToken response element is present and has a value (is not null). Include that value as the NextToken request parameter in the next call to the operation to get the next part of the results. Note that Organizations might return fewer results than the maximum even when there are more results available. You should check NextToken after every operation to ensure that you receive all of the results. (body field)
-]: any -> record<Policies: table<Id: string, Arn: string, Name: string, Description: string, Type: string, AwsManaged: bool>, NextToken: string> {
+]: any -> oneof<record<Policies: table<Id: string, Arn: string, Name: string, Description: string, Type: string, AwsManaged: bool>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2386,7 +2401,7 @@ export def "list-policies-for-target" [
   filter: string@filter-completer # The type of policy that you want to include in the returned list. You must specify one of the following values: AISERVICES_OPT_OUT_POLICY (https://docs.aws.amazon.com/organizations/latest/userguide/orgs_manage_policies_ai-opt-out.html) BACKUP_POLICY (https://docs.aws.amazon.com/organizations/latest/userguide/orgs_manage_policies_backup.html) SERVICE_CONTROL_POLICY (https://docs.aws.amazon.com/organizations/latest/userguide/orgs_manage_policies_scp.html) TAG_POLICY (https://docs.aws.amazon.com/organizations/latest/userguide/orgs_manage_policies_tag-policies.html)
   --next-token-body: string # The parameter for receiving additional results if you receive a NextToken response in a previous request. A NextToken response indicates that more output is available. Set this parameter to the value of the previous call's NextToken response to indicate where the output should continue from. (body field)
   --max-results-body: int # The total number of results that you want included on each page of the response. If you do not include this parameter, it defaults to a value that is specific to the operation. If additional items exist beyond the maximum you specify, the NextToken response element is present and has a value (is not null). Include that value as the NextToken request parameter in the next call to the operation to get the next part of the results. Note that Organizations might return fewer results than the maximum even when there are more results available. You should check NextToken after every operation to ensure that you receive all of the results. (body field)
-]: any -> record<Policies: table<Id: string, Arn: string, Name: string, Description: string, Type: string, AwsManaged: bool>, NextToken: string> {
+]: any -> oneof<record<Policies: table<Id: string, Arn: string, Name: string, Description: string, Type: string, AwsManaged: bool>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2439,7 +2454,7 @@ export def "list-roots" [
   --x-amz-target: string@x-amz-target-completer-44 # required
   --next-token-body: string # The parameter for receiving additional results if you receive a NextToken response in a previous request. A NextToken response indicates that more output is available. Set this parameter to the value of the previous call's NextToken response to indicate where the output should continue from. (body field)
   --max-results-body: int # The total number of results that you want included on each page of the response. If you do not include this parameter, it defaults to a value that is specific to the operation. If additional items exist beyond the maximum you specify, the NextToken response element is present and has a value (is not null). Include that value as the NextToken request parameter in the next call to the operation to get the next part of the results. Note that Organizations might return fewer results than the maximum even when there are more results available. You should check NextToken after every operation to ensure that you receive all of the results. (body field)
-]: any -> record<Roots: table<Id: string, Arn: string, Name: string, PolicyTypes: list>, NextToken: string> {
+]: any -> oneof<record<Roots: table<Id: string, Arn: string, Name: string, PolicyTypes: list>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2491,7 +2506,7 @@ export def "list-tags-for-resource" [
   --x-amz-target: string@x-amz-target-completer-45 # required
   resource_id: string # The ID of the resource with the tags to list. You can specify any of the following taggable resources. Amazon Web Services account – specify the account ID number. Organizational unit – specify the OU ID that begins with ou- and looks similar to: ou-1a2b-34uvwxyz Root – specify the root ID that begins with r- and looks similar to: r-1a2b Policy – specify the policy ID that begins with p- andlooks similar to: p-12abcdefg3
   --next-token-body: string # The parameter for receiving additional results if you receive a NextToken response in a previous request. A NextToken response indicates that more output is available. Set this parameter to the value of the previous call's NextToken response to indicate where the output should continue from. (body field)
-]: any -> record<Tags: table<Key: string, Value: string>, NextToken: string> {
+]: any -> oneof<record<Tags: table<Key: string, Value: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2545,7 +2560,7 @@ export def "list-targets-for-policy" [
   policy_id: string # The unique identifier (ID) of the policy whose attachments you want to know. The regex pattern (http://wikipedia.org/wiki/regex) for a policy ID string requires "p-" followed by from 8 to 128 lowercase or uppercase letters, digits, or the underscore character (_).
   --next-token-body: string # The parameter for receiving additional results if you receive a NextToken response in a previous request. A NextToken response indicates that more output is available. Set this parameter to the value of the previous call's NextToken response to indicate where the output should continue from. (body field)
   --max-results-body: int # The total number of results that you want included on each page of the response. If you do not include this parameter, it defaults to a value that is specific to the operation. If additional items exist beyond the maximum you specify, the NextToken response element is present and has a value (is not null). Include that value as the NextToken request parameter in the next call to the operation to get the next part of the results. Note that Organizations might return fewer results than the maximum even when there are more results available. You should check NextToken after every operation to ensure that you receive all of the results. (body field)
-]: any -> record<Targets: table<TargetId: string, Arn: string, Name: string, Type: string>, NextToken: string> {
+]: any -> oneof<record<Targets: table<TargetId: string, Arn: string, Name: string, Type: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2627,7 +2642,6 @@ export def "move-account" [
 #
 # POST /
 # operationId: PutResourcePolicy
-# --Tags item shape: {Key: string, Value: string}
 export def "put-resource-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2648,7 +2662,7 @@ export def "put-resource-policy" [
   --x-amz-target: string@x-amz-target-completer-48 # required
   content: string # If provided, the new content for the resource policy. The text must be correctly formatted JSON that complies with the syntax for the resource policy's type. For more information, see Service Control Policy Syntax (https://docs.aws.amazon.com/organizations/latest/userguide/orgs_reference_scp-syntax.html) in the Organizations User Guide.
   --tags: list # A list of tags that you want to attach to the newly created resource policy. For each tag in the list, you must specify both a tag key and a value. You can set the value to an empty string, but you can't set it to null. For more information about tagging, see Tagging Organizations resources (https://docs.aws.amazon.com/organizations/latest/userguide/orgs_tagging.html) in the Organizations User Guide. Calls with tags apply to the initial creation of the resource policy, otherwise an exception is thrown. If any one of the tags is not valid or if you exceed the allowed number of tags for the resource policy, then the entire request fails and the resource policy is not created. — item shape: {Key: string, Value: string}
-]: any -> record<ResourcePolicy: record<ResourcePolicySummary: record<Id: string, Arn: string>, Content: string>> {
+]: any -> oneof<record<ResourcePolicy: record<ResourcePolicySummary: record<Id: string, Arn: string>, Content: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2777,7 +2791,6 @@ export def "remove-account-from-organization" [
 #
 # POST /
 # operationId: TagResource
-# --Tags item shape: {Key: string, Value: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2898,7 +2911,7 @@ export def "update-organizational-unit" [
   --x-amz-target: string@x-amz-target-completer-53 # required
   organizational_unit_id: string # The unique identifier (ID) of the OU that you want to rename. You can get the ID from the ListOrganizationalUnitsForParent operation. The regex pattern (http://wikipedia.org/wiki/regex) for an organizational unit ID string requires "ou-" followed by from 4 to 32 lowercase letters or digits (the ID of the root that contains the OU). This string is followed by a second "-" dash and from 8 to 32 additional lowercase letters or digits.
   --name: string # The new name that you want to assign to the OU. The regex pattern (http://wikipedia.org/wiki/regex) that is used to validate this parameter is a string of any of the characters in the ASCII character range.
-]: any -> record<OrganizationalUnit: record<Id: string, Arn: string, Name: string>> {
+]: any -> oneof<record<OrganizationalUnit: record<Id: string, Arn: string, Name: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2950,7 +2963,7 @@ export def "update-policy" [
   --name: string # If provided, the new name for the policy. The regex pattern (http://wikipedia.org/wiki/regex) that is used to validate this parameter is a string of any of the characters in the ASCII character range.
   --description: string # If provided, the new description for the policy.
   --content: string # If provided, the new content for the policy. The text must be correctly formatted JSON that complies with the syntax for the policy's type. For more information, see Service Control Policy Syntax (https://docs.aws.amazon.com/organizations/latest/userguide/orgs_reference_scp-syntax.html) in the Organizations User Guide.
-]: any -> record<Policy: record<PolicySummary: record<Id: string, Arn: string, Name: string, Description: string, Type: string, AwsManaged: bool>, Content: string>> {
+]: any -> oneof<record<Policy: record<PolicySummary: record<Id: string, Arn: string, Name: string, Description: string, Type: string, AwsManaged: bool>, Content: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

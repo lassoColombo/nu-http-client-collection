@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -168,9 +191,9 @@ def x-amz-target-completer-62 [] { ["AmazonForecast.UpdateDatasetGroup"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-auto-predictor" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["create-auto-predictor" "create-dataset" "create-dataset-group" "create-dataset-import-job" "create-explainability" "create-explainability-export" "create-forecast" "create-forecast-export-job" "create-monitor" "create-predictor" "create-predictor-backtest-export-job" "create-what-if-analysis" "create-what-if-forecast" "create-what-if-forecast-export" "delete-dataset" "delete-dataset-group" "delete-dataset-import-job" "delete-explainability" "delete-explainability-export" "delete-forecast" "delete-forecast-export-job" "delete-monitor" "delete-predictor" "delete-predictor-backtest-export-job" "delete-resource-tree" "delete-what-if-analysis" "delete-what-if-forecast" "delete-what-if-forecast-export" "describe-auto-predictor" "describe-dataset" "describe-dataset-group" "describe-dataset-import-job" "describe-explainability" "describe-explainability-export" "describe-forecast" "describe-forecast-export-job" "describe-monitor" "describe-predictor" "describe-predictor-backtest-export-job" "describe-what-if-analysis" "describe-what-if-forecast" "describe-what-if-forecast-export" "get-accuracy-metrics" "list-dataset-groups" "list-dataset-import-jobs" "list-datasets" "list-explainabilities" "list-explainability-exports" "list-forecast-export-jobs" "list-forecasts" "list-monitor-evaluations" "list-monitors" "list-predictor-backtest-export-jobs" "list-predictors" "list-tags-for-resource" "list-what-if-analyses" "list-what-if-forecast-exports" "list-what-if-forecasts" "resume-resource" "stop-resource" "tag-resource" "untag-resource" "update-dataset-group" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -192,11 +215,6 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: CreateAutoPredictor
-# --DataConfig shape: {DatasetGroupArn: string, AttributeConfigs?: list, AdditionalDatasets?: list}
-# --EncryptionConfig shape: {RoleArn: string, KMSKeyArn: string}
-# --Tags item shape: {Key: string, Value: string}
-# --MonitorConfig shape: {MonitorName: string}
-# --TimeAlignmentBoundary shape: {Month?: "JANUARY"|"FEBRUARY"|"MARCH"|"APRIL"|"MAY"|"JUNE"|"JULY"|"AUGUST"|"SEPTEMBER"|"OCTOBER"|"NOVEMBER"|"DECEMBER", DayOfMonth?: int, DayOfWeek?: "MONDAY"|"TUESDAY"|"WEDNESDAY"|"THURSDAY"|"FRIDAY"|"SATURDAY"|"SUNDAY", Hour?: int}
 export def "create-auto-predictor" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -228,7 +246,7 @@ export def "create-auto-predictor" [
   --tags: list # Optional metadata to help you categorize and organize your predictors. Each tag consists of a key and an optional value, both of which you define. Tag keys and values are case sensitive. The following restrictions apply to tags: For each resource, each tag key must be unique and each tag key must have one value. Maximum number of tags per resource: 50. Maximum key length: 128 Unicode characters in UTF-8. Maximum value length: 256 Unicode characters in UTF-8. Accepted characters: all letters and numbers, spaces representable in UTF-8, and + - = . _ : / @. If your tagging schema is used across other services and resources, the character restrictions of those services also apply. Key prefixes cannot include any upper or lowercase combination of aws: or AWS:. Values can have this prefix. If a tag value has aws as its prefix but the key does not, Forecast considers it to be a user tag and will count against the limit of 50 tags. Tags with only the key prefix of aws do not count against your tags per resource limit. You cannot edit or delete tag keys with this prefix. — item shape: {Key: string, Value: string}
   --monitor-config: record # The configuration details for the predictor monitor. — shape: {MonitorName: string}
   --time-alignment-boundary: record # The time boundary Forecast uses to align and aggregate your data to match your forecast frequency. Provide the unit of time and the time boundary as a key value pair. If you don't provide a time boundary, Forecast uses a set of Default Time Boundaries (https://docs.aws.amazon.com/forecast/latest/dg/data-aggregation.html#default-time-boundaries). For more information about aggregation, see Data Aggregation for Different Forecast Frequencies (https://docs.aws.amazon.com/forecast/latest/dg/data-aggregation.html). For more information setting a custom time boundary, see Specifying a Time Boundary (https://docs.aws.amazon.com/forecast/latest/dg/data-aggregation.html#specifying-time-boundary). — shape: {Month?: "JANUARY"|"FEBRUARY"|"MARCH"|"APRIL"|"MAY"|"JUNE"|"JULY"|"AUGUST"|"SEPTEMBER"|"OCTOBER"|"NOVEMBER"|"DECEMBER", DayOfMonth?: int, DayOfWeek?: "MONDAY"|"TUESDAY"|"WEDNESDAY"|"THURSDAY"|"FRIDAY"|"SATURDAY"|"SUNDAY", Hour?: int}
-]: any -> record<PredictorArn: string> {
+]: any -> oneof<record<PredictorArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -258,9 +276,6 @@ export def "create-auto-predictor" [
 #
 # POST /
 # operationId: CreateDataset
-# --Schema shape: {Attributes?: list}
-# --EncryptionConfig shape: {RoleArn: string, KMSKeyArn: string}
-# --Tags item shape: {Key: string, Value: string}
 export def "create-dataset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -286,7 +301,7 @@ export def "create-dataset" [
   schema: record # Defines the fields of a dataset. — shape: {Attributes?: list}
   --encryption-config: record # An Key Management Service (KMS) key and an Identity and Access Management (IAM) role that Amazon Forecast can assume to access the key. You can specify this optional object in the CreateDataset and CreatePredictor requests. — shape: {RoleArn: string, KMSKeyArn: string}
   --tags: list # The optional metadata that you apply to the dataset to help you categorize and organize them. Each tag consists of a key and an optional value, both of which you define. The following basic restrictions apply to tags: Maximum number of tags per resource - 50. For each resource, each tag key must be unique, and each tag key can have only one value. Maximum key length - 128 Unicode characters in UTF-8. Maximum value length - 256 Unicode characters in UTF-8. If your tagging schema is used across multiple services and resources, remember that other services may have restrictions on allowed characters. Generally allowed characters are: letters, numbers, and spaces representable in UTF-8, and the following characters: + - = . _ : / @. Tag keys and values are case sensitive. Do not use aws:, AWS:, or any upper or lowercase combination of such as a prefix for keys as it is reserved for Amazon Web Services use. You cannot edit or delete tag keys with this prefix. Values can have this prefix. If a tag value has aws as its prefix but the key does not, then Forecast considers it to be a user tag and will count against the limit of 50 tags. Tags with only the key prefix of aws do not count against your tags per resource limit. — item shape: {Key: string, Value: string}
-]: any -> record<DatasetArn: string> {
+]: any -> oneof<record<DatasetArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -316,7 +331,6 @@ export def "create-dataset" [
 #
 # POST /
 # operationId: CreateDatasetGroup
-# --Tags item shape: {Key: string, Value: string}
 export def "create-dataset-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -339,7 +353,7 @@ export def "create-dataset-group" [
   domain: string@domain-completer # The domain associated with the dataset group. When you add a dataset to a dataset group, this value and the value specified for the Domain parameter of the CreateDataset (https://docs.aws.amazon.com/forecast/latest/dg/API_CreateDataset.html) operation must match. The Domain and DatasetType that you choose determine the fields that must be present in training data that you import to a dataset. For example, if you choose the RETAIL domain and TARGET_TIME_SERIES as the DatasetType, Amazon Forecast requires that item_id, timestamp, and demand fields are present in your data. For more information, see Dataset groups (https://docs.aws.amazon.com/forecast/latest/dg/howitworks-datasets-groups.html).
   --dataset-arns: list<string> # An array of Amazon Resource Names (ARNs) of the datasets that you want to include in the dataset group.
   --tags: list # The optional metadata that you apply to the dataset group to help you categorize and organize them. Each tag consists of a key and an optional value, both of which you define. The following basic restrictions apply to tags: Maximum number of tags per resource - 50. For each resource, each tag key must be unique, and each tag key can have only one value. Maximum key length - 128 Unicode characters in UTF-8. Maximum value length - 256 Unicode characters in UTF-8. If your tagging schema is used across multiple services and resources, remember that other services may have restrictions on allowed characters. Generally allowed characters are: letters, numbers, and spaces representable in UTF-8, and the following characters: + - = . _ : / @. Tag keys and values are case sensitive. Do not use aws:, AWS:, or any upper or lowercase combination of such as a prefix for keys as it is reserved for Amazon Web Services use. You cannot edit or delete tag keys with this prefix. Values can have this prefix. If a tag value has aws as its prefix but the key does not, then Forecast considers it to be a user tag and will count against the limit of 50 tags. Tags with only the key prefix of aws do not count against your tags per resource limit. — item shape: {Key: string, Value: string}
-]: any -> record<DatasetGroupArn: string> {
+]: any -> oneof<record<DatasetGroupArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -369,8 +383,6 @@ export def "create-dataset-group" [
 #
 # POST /
 # operationId: CreateDatasetImportJob
-# --DataSource shape: {S3Config: record}
-# --Tags item shape: {Key: string, Value: string}
 export def "create-dataset-import-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -399,7 +411,7 @@ export def "create-dataset-import-job" [
   --tags: list # The optional metadata that you apply to the dataset import job to help you categorize and organize them. Each tag consists of a key and an optional value, both of which you define. The following basic restrictions apply to tags: Maximum number of tags per resource - 50. For each resource, each tag key must be unique, and each tag key can have only one value. Maximum key length - 128 Unicode characters in UTF-8. Maximum value length - 256 Unicode characters in UTF-8. If your tagging schema is used across multiple services and resources, remember that other services may have restrictions on allowed characters. Generally allowed characters are: letters, numbers, and spaces representable in UTF-8, and the following characters: + - = . _ : / @. Tag keys and values are case sensitive. Do not use aws:, AWS:, or any upper or lowercase combination of such as a prefix for keys as it is reserved for Amazon Web Services use. You cannot edit or delete tag keys with this prefix. Values can have this prefix. If a tag value has aws as its prefix but the key does not, then Forecast considers it to be a user tag and will count against the limit of 50 tags. Tags with only the key prefix of aws do not count against your tags per resource limit. — item shape: {Key: string, Value: string}
   --format: string # The format of the imported data, CSV or PARQUET. The default value is CSV.
   --import-mode: string@import-mode-completer # Specifies whether the dataset import job is a FULL or INCREMENTAL import. A FULL dataset import replaces all of the existing data with the newly imported data. An INCREMENTAL import appends the imported data to the existing data.
-]: any -> record<DatasetImportJobArn: string> {
+]: any -> oneof<record<DatasetImportJobArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -429,10 +441,6 @@ export def "create-dataset-import-job" [
 #
 # POST /
 # operationId: CreateExplainability
-# --ExplainabilityConfig shape: {TimeSeriesGranularity: "ALL"|"SPECIFIC", TimePointGranularity: "ALL"|"SPECIFIC"}
-# --DataSource shape: {S3Config: record}
-# --Schema shape: {Attributes?: list}
-# --Tags item shape: {Key: string, Value: string}
 export def "create-explainability" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -460,7 +468,7 @@ export def "create-explainability" [
   --start-date-time: string # If TimePointGranularity is set to SPECIFIC, define the first point for the Explainability. Use the following timestamp format: yyyy-MM-ddTHH:mm:ss (example: 2015-01-01T20:00:00)
   --end-date-time: string # If TimePointGranularity is set to SPECIFIC, define the last time point for the Explainability. Use the following timestamp format: yyyy-MM-ddTHH:mm:ss (example: 2015-01-01T20:00:00)
   --tags: list # Optional metadata to help you categorize and organize your resources. Each tag consists of a key and an optional value, both of which you define. Tag keys and values are case sensitive. The following restrictions apply to tags: For each resource, each tag key must be unique and each tag key must have one value. Maximum number of tags per resource: 50. Maximum key length: 128 Unicode characters in UTF-8. Maximum value length: 256 Unicode characters in UTF-8. Accepted characters: all letters and numbers, spaces representable in UTF-8, and + - = . _ : / @. If your tagging schema is used across other services and resources, the character restrictions of those services also apply. Key prefixes cannot include any upper or lowercase combination of aws: or AWS:. Values can have this prefix. If a tag value has aws as its prefix but the key does not, Forecast considers it to be a user tag and will count against the limit of 50 tags. Tags with only the key prefix of aws do not count against your tags per resource limit. You cannot edit or delete tag keys with this prefix. — item shape: {Key: string, Value: string}
-]: any -> record<ExplainabilityArn: string> {
+]: any -> oneof<record<ExplainabilityArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -490,8 +498,6 @@ export def "create-explainability" [
 #
 # POST /
 # operationId: CreateExplainabilityExport
-# --Destination shape: {S3Config: record}
-# --Tags item shape: {Key: string, Value: string}
 export def "create-explainability-export" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -515,7 +521,7 @@ export def "create-explainability-export" [
   destination: record # The destination for an export job. Provide an S3 path, an Identity and Access Management (IAM) role that allows Amazon Forecast to access the location, and an Key Management Service (KMS) key (optional). — shape: {S3Config: record}
   --tags: list # Optional metadata to help you categorize and organize your resources. Each tag consists of a key and an optional value, both of which you define. Tag keys and values are case sensitive. The following restrictions apply to tags: For each resource, each tag key must be unique and each tag key must have one value. Maximum number of tags per resource: 50. Maximum key length: 128 Unicode characters in UTF-8. Maximum value length: 256 Unicode characters in UTF-8. Accepted characters: all letters and numbers, spaces representable in UTF-8, and + - = . _ : / @. If your tagging schema is used across other services and resources, the character restrictions of those services also apply. Key prefixes cannot include any upper or lowercase combination of aws: or AWS:. Values can have this prefix. If a tag value has aws as its prefix but the key does not, Forecast considers it to be a user tag and will count against the limit of 50 tags. Tags with only the key prefix of aws do not count against your tags per resource limit. You cannot edit or delete tag keys with this prefix. — item shape: {Key: string, Value: string}
   --format: string # The format of the exported data, CSV or PARQUET.
-]: any -> record<ExplainabilityExportArn: string> {
+]: any -> oneof<record<ExplainabilityExportArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -545,8 +551,6 @@ export def "create-explainability-export" [
 #
 # POST /
 # operationId: CreateForecast
-# --Tags item shape: {Key: string, Value: string}
-# --TimeSeriesSelector shape: {TimeSeriesIdentifiers?: record}
 export def "create-forecast" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -570,7 +574,7 @@ export def "create-forecast" [
   --forecast-types: list<string> # The quantiles at which probabilistic forecasts are generated. You can currently specify up to 5 quantiles per forecast. Accepted values include 0.01 to 0.99 (increments of .01 only) and mean. The mean forecast is different from the median (0.50) when the distribution is not symmetric (for example, Beta and Negative Binomial). The default quantiles are the quantiles you specified during predictor creation. If you didn't specify quantiles, the default values are ["0.1", "0.5", "0.9"].
   --tags: list # The optional metadata that you apply to the forecast to help you categorize and organize them. Each tag consists of a key and an optional value, both of which you define. The following basic restrictions apply to tags: Maximum number of tags per resource - 50. For each resource, each tag key must be unique, and each tag key can have only one value. Maximum key length - 128 Unicode characters in UTF-8. Maximum value length - 256 Unicode characters in UTF-8. If your tagging schema is used across multiple services and resources, remember that other services may have restrictions on allowed characters. Generally allowed characters are: letters, numbers, and spaces representable in UTF-8, and the following characters: + - = . _ : / @. Tag keys and values are case sensitive. Do not use aws:, AWS:, or any upper or lowercase combination of such as a prefix for keys as it is reserved for Amazon Web Services use. You cannot edit or delete tag keys with this prefix. Values can have this prefix. If a tag value has aws as its prefix but the key does not, then Forecast considers it to be a user tag and will count against the limit of 50 tags. Tags with only the key prefix of aws do not count against your tags per resource limit. — item shape: {Key: string, Value: string}
   --time-series-selector: record # Defines the set of time series that are used to create the forecasts in a TimeSeriesIdentifiers object. The TimeSeriesIdentifiers object needs the following information: DataSource Format Schema — shape: {TimeSeriesIdentifiers?: record}
-]: any -> record<ForecastArn: string> {
+]: any -> oneof<record<ForecastArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -600,8 +604,6 @@ export def "create-forecast" [
 #
 # POST /
 # operationId: CreateForecastExportJob
-# --Destination shape: {S3Config: record}
-# --Tags item shape: {Key: string, Value: string}
 export def "create-forecast-export-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -625,7 +627,7 @@ export def "create-forecast-export-job" [
   destination: record # The destination for an export job. Provide an S3 path, an Identity and Access Management (IAM) role that allows Amazon Forecast to access the location, and an Key Management Service (KMS) key (optional). — shape: {S3Config: record}
   --tags: list # The optional metadata that you apply to the forecast export job to help you categorize and organize them. Each tag consists of a key and an optional value, both of which you define. The following basic restrictions apply to tags: Maximum number of tags per resource - 50. For each resource, each tag key must be unique, and each tag key can have only one value. Maximum key length - 128 Unicode characters in UTF-8. Maximum value length - 256 Unicode characters in UTF-8. If your tagging schema is used across multiple services and resources, remember that other services may have restrictions on allowed characters. Generally allowed characters are: letters, numbers, and spaces representable in UTF-8, and the following characters: + - = . _ : / @. Tag keys and values are case sensitive. Do not use aws:, AWS:, or any upper or lowercase combination of such as a prefix for keys as it is reserved for Amazon Web Services use. You cannot edit or delete tag keys with this prefix. Values can have this prefix. If a tag value has aws as its prefix but the key does not, then Forecast considers it to be a user tag and will count against the limit of 50 tags. Tags with only the key prefix of aws do not count against your tags per resource limit. — item shape: {Key: string, Value: string}
   --format: string # The format of the exported data, CSV or PARQUET. The default value is CSV.
-]: any -> record<ForecastExportJobArn: string> {
+]: any -> oneof<record<ForecastExportJobArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -655,7 +657,6 @@ export def "create-forecast-export-job" [
 #
 # POST /
 # operationId: CreateMonitor
-# --Tags item shape: {Key: string, Value: string}
 export def "create-monitor" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -677,7 +678,7 @@ export def "create-monitor" [
   monitor_name: string # The name of the monitor resource.
   resource_arn: string # The Amazon Resource Name (ARN) of the predictor to monitor.
   --tags: list # A list of tags (https://docs.aws.amazon.com/forecast/latest/dg/tagging-forecast-resources.html) to apply to the monitor resource. — item shape: {Key: string, Value: string}
-]: any -> record<MonitorArn: string> {
+]: any -> oneof<record<MonitorArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -707,12 +708,6 @@ export def "create-monitor" [
 #
 # POST /
 # operationId: CreatePredictor
-# --EvaluationParameters shape: {NumberOfBacktestWindows?: int, BackTestWindowOffset?: int}
-# --HPOConfig shape: {ParameterRanges?: record}
-# --InputDataConfig shape: {DatasetGroupArn: string, SupplementaryFeatures?: list}
-# --FeaturizationConfig shape: {ForecastFrequency: string, ForecastDimensions?: list<string>, Featurizations?: list}
-# --EncryptionConfig shape: {RoleArn: string, KMSKeyArn: string}
-# --Tags item shape: {Key: string, Value: string}
 export def "create-predictor" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -746,7 +741,7 @@ export def "create-predictor" [
   --encryption-config: record # An Key Management Service (KMS) key and an Identity and Access Management (IAM) role that Amazon Forecast can assume to access the key. You can specify this optional object in the CreateDataset and CreatePredictor requests. — shape: {RoleArn: string, KMSKeyArn: string}
   --tags: list # The optional metadata that you apply to the predictor to help you categorize and organize them. Each tag consists of a key and an optional value, both of which you define. The following basic restrictions apply to tags: Maximum number of tags per resource - 50. For each resource, each tag key must be unique, and each tag key can have only one value. Maximum key length - 128 Unicode characters in UTF-8. Maximum value length - 256 Unicode characters in UTF-8. If your tagging schema is used across multiple services and resources, remember that other services may have restrictions on allowed characters. Generally allowed characters are: letters, numbers, and spaces representable in UTF-8, and the following characters: + - = . _ : / @. Tag keys and values are case sensitive. Do not use aws:, AWS:, or any upper or lowercase combination of such as a prefix for keys as it is reserved for Amazon Web Services use. You cannot edit or delete tag keys with this prefix. Values can have this prefix. If a tag value has aws as its prefix but the key does not, then Forecast considers it to be a user tag and will count against the limit of 50 tags. Tags with only the key prefix of aws do not count against your tags per resource limit. — item shape: {Key: string, Value: string}
   --optimization-metric: string@optimization-metric-completer # The accuracy metric used to optimize the predictor.
-]: any -> record<PredictorArn: string> {
+]: any -> oneof<record<PredictorArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -776,8 +771,6 @@ export def "create-predictor" [
 #
 # POST /
 # operationId: CreatePredictorBacktestExportJob
-# --Destination shape: {S3Config: record}
-# --Tags item shape: {Key: string, Value: string}
 export def "create-predictor-backtest-export-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -801,7 +794,7 @@ export def "create-predictor-backtest-export-job" [
   destination: record # The destination for an export job. Provide an S3 path, an Identity and Access Management (IAM) role that allows Amazon Forecast to access the location, and an Key Management Service (KMS) key (optional). — shape: {S3Config: record}
   --tags: list # Optional metadata to help you categorize and organize your backtests. Each tag consists of a key and an optional value, both of which you define. Tag keys and values are case sensitive. The following restrictions apply to tags: For each resource, each tag key must be unique and each tag key must have one value. Maximum number of tags per resource: 50. Maximum key length: 128 Unicode characters in UTF-8. Maximum value length: 256 Unicode characters in UTF-8. Accepted characters: all letters and numbers, spaces representable in UTF-8, and + - = . _ : / @. If your tagging schema is used across other services and resources, the character restrictions of those services also apply. Key prefixes cannot include any upper or lowercase combination of aws: or AWS:. Values can have this prefix. If a tag value has aws as its prefix but the key does not, Forecast considers it to be a user tag and will count against the limit of 50 tags. Tags with only the key prefix of aws do not count against your tags per resource limit. You cannot edit or delete tag keys with this prefix. — item shape: {Key: string, Value: string}
   --format: string # The format of the exported data, CSV or PARQUET. The default value is CSV.
-]: any -> record<PredictorBacktestExportJobArn: string> {
+]: any -> oneof<record<PredictorBacktestExportJobArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -831,8 +824,6 @@ export def "create-predictor-backtest-export-job" [
 #
 # POST /
 # operationId: CreateWhatIfAnalysis
-# --TimeSeriesSelector shape: {TimeSeriesIdentifiers?: record}
-# --Tags item shape: {Key: string, Value: string}
 export def "create-what-if-analysis" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -855,7 +846,7 @@ export def "create-what-if-analysis" [
   forecast_arn: string # The Amazon Resource Name (ARN) of the baseline forecast.
   --time-series-selector: record # Defines the set of time series that are used to create the forecasts in a TimeSeriesIdentifiers object. The TimeSeriesIdentifiers object needs the following information: DataSource Format Schema — shape: {TimeSeriesIdentifiers?: record}
   --tags: list # A list of tags (https://docs.aws.amazon.com/forecast/latest/dg/tagging-forecast-resources.html) to apply to the what if forecast. — item shape: {Key: string, Value: string}
-]: any -> record<WhatIfAnalysisArn: string> {
+]: any -> oneof<record<WhatIfAnalysisArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -885,9 +876,6 @@ export def "create-what-if-analysis" [
 #
 # POST /
 # operationId: CreateWhatIfForecast
-# --TimeSeriesTransformations item shape: {Action?: record, TimeSeriesConditions?: list}
-# --TimeSeriesReplacementsDataSource shape: {S3Config: record, Schema: record, Format?: string, TimestampFormat?: string}
-# --Tags item shape: {Key: string, Value: string}
 export def "create-what-if-forecast" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -911,7 +899,7 @@ export def "create-what-if-forecast" [
   --time-series-transformations: list # The transformations that are applied to the baseline time series. Each transformation contains an action and a set of conditions. An action is applied only when all conditions are met. If no conditions are provided, the action is applied to all items. — item shape: {Action?: record, TimeSeriesConditions?: list}
   --time-series-replacements-data-source: record # A replacement dataset is a modified version of the baseline related time series that contains only the values that you want to include in a what-if forecast. The replacement dataset must contain the forecast dimensions and item identifiers in the baseline related time series as well as at least 1 changed time series. This dataset is merged with the baseline related time series to create a transformed dataset that is used for the what-if forecast. — shape: {S3Config: record, Schema: record, Format?: string, TimestampFormat?: string}
   --tags: list # A list of tags (https://docs.aws.amazon.com/forecast/latest/dg/tagging-forecast-resources.html) to apply to the what if forecast. — item shape: {Key: string, Value: string}
-]: any -> record<WhatIfForecastArn: string> {
+]: any -> oneof<record<WhatIfForecastArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -941,8 +929,6 @@ export def "create-what-if-forecast" [
 #
 # POST /
 # operationId: CreateWhatIfForecastExport
-# --Destination shape: {S3Config: record}
-# --Tags item shape: {Key: string, Value: string}
 export def "create-what-if-forecast-export" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -966,7 +952,7 @@ export def "create-what-if-forecast-export" [
   destination: record # The destination for an export job. Provide an S3 path, an Identity and Access Management (IAM) role that allows Amazon Forecast to access the location, and an Key Management Service (KMS) key (optional). — shape: {S3Config: record}
   --tags: list # A list of tags (https://docs.aws.amazon.com/forecast/latest/dg/tagging-forecast-resources.html) to apply to the what if forecast. — item shape: {Key: string, Value: string}
   --format: string # The format of the exported data, CSV or PARQUET.
-]: any -> record<WhatIfForecastExportArn: string> {
+]: any -> oneof<record<WhatIfForecastExportArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1701,7 +1687,7 @@ export def "describe-auto-predictor" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-28 # required
   predictor_arn: string # The Amazon Resource Name (ARN) of the predictor.
-]: any -> record<PredictorArn: string, PredictorName: string, ForecastHorizon: int, ForecastTypes: list<string>, ForecastFrequency: string, ForecastDimensions: list<string>, DatasetImportJobArns: list<string>, DataConfig: record<DatasetGroupArn: string, AttributeConfigs: list<record>, AdditionalDatasets: list<record>>, EncryptionConfig: record<RoleArn: string, KMSKeyArn: string>, ReferencePredictorSummary: record<Arn: string, State: string>, EstimatedTimeRemainingInMinutes: int, Status: string, Message: string, CreationTime: string, LastModificationTime: string, OptimizationMetric: string, ExplainabilityInfo: record<ExplainabilityArn: string, Status: string>, MonitorInfo: record<MonitorArn: string, Status: string>, TimeAlignmentBoundary: record<Month: string, DayOfMonth: int, DayOfWeek: string, Hour: int>> {
+]: any -> oneof<record<PredictorArn: string, PredictorName: string, ForecastHorizon: int, ForecastTypes: list<string>, ForecastFrequency: string, ForecastDimensions: list<string>, DatasetImportJobArns: list<string>, DataConfig: record<DatasetGroupArn: string, AttributeConfigs: list<record>, AdditionalDatasets: list<record>>, EncryptionConfig: record<RoleArn: string, KMSKeyArn: string>, ReferencePredictorSummary: record<Arn: string, State: string>, EstimatedTimeRemainingInMinutes: int, Status: string, Message: string, CreationTime: string, LastModificationTime: string, OptimizationMetric: string, ExplainabilityInfo: record<ExplainabilityArn: string, Status: string>, MonitorInfo: record<MonitorArn: string, Status: string>, TimeAlignmentBoundary: record<Month: string, DayOfMonth: int, DayOfWeek: string, Hour: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1750,7 +1736,7 @@ export def "describe-dataset" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-29 # required
   dataset_arn: string # The Amazon Resource Name (ARN) of the dataset.
-]: any -> record<DatasetArn: string, DatasetName: string, Domain: string, DatasetType: string, DataFrequency: string, Schema: record<Attributes: list<record>>, EncryptionConfig: record<RoleArn: string, KMSKeyArn: string>, Status: string, CreationTime: string, LastModificationTime: string> {
+]: any -> oneof<record<DatasetArn: string, DatasetName: string, Domain: string, DatasetType: string, DataFrequency: string, Schema: record<Attributes: list<record>>, EncryptionConfig: record<RoleArn: string, KMSKeyArn: string>, Status: string, CreationTime: string, LastModificationTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1799,7 +1785,7 @@ export def "describe-dataset-group" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-30 # required
   dataset_group_arn: string # The Amazon Resource Name (ARN) of the dataset group.
-]: any -> record<DatasetGroupName: string, DatasetGroupArn: string, DatasetArns: list<string>, Domain: string, Status: string, CreationTime: string, LastModificationTime: string> {
+]: any -> oneof<record<DatasetGroupName: string, DatasetGroupArn: string, DatasetArns: list<string>, Domain: string, Status: string, CreationTime: string, LastModificationTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1848,7 +1834,7 @@ export def "describe-dataset-import-job" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-31 # required
   dataset_import_job_arn: string # The Amazon Resource Name (ARN) of the dataset import job.
-]: any -> record<DatasetImportJobName: string, DatasetImportJobArn: string, DatasetArn: string, TimestampFormat: string, TimeZone: string, UseGeolocationForTimeZone: bool, GeolocationFormat: string, DataSource: record<S3Config: record<Path: string, RoleArn: string, KMSKeyArn: string>>, EstimatedTimeRemainingInMinutes: int, FieldStatistics: record, DataSize: float, Status: string, Message: string, CreationTime: string, LastModificationTime: string, Format: string, ImportMode: string> {
+]: any -> oneof<record<DatasetImportJobName: string, DatasetImportJobArn: string, DatasetArn: string, TimestampFormat: string, TimeZone: string, UseGeolocationForTimeZone: bool, GeolocationFormat: string, DataSource: record<S3Config: record<Path: string, RoleArn: string, KMSKeyArn: string>>, EstimatedTimeRemainingInMinutes: int, FieldStatistics: record, DataSize: float, Status: string, Message: string, CreationTime: string, LastModificationTime: string, Format: string, ImportMode: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1897,7 +1883,7 @@ export def "describe-explainability" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-32 # required
   explainability_arn: string # The Amazon Resource Name (ARN) of the Explaianability to describe.
-]: any -> record<ExplainabilityArn: string, ExplainabilityName: string, ResourceArn: string, ExplainabilityConfig: record<TimeSeriesGranularity: string, TimePointGranularity: string>, EnableVisualization: bool, DataSource: record<S3Config: record<Path: string, RoleArn: string, KMSKeyArn: string>>, Schema: record<Attributes: list<record>>, StartDateTime: string, EndDateTime: string, EstimatedTimeRemainingInMinutes: int, Message: string, Status: string, CreationTime: string, LastModificationTime: string> {
+]: any -> oneof<record<ExplainabilityArn: string, ExplainabilityName: string, ResourceArn: string, ExplainabilityConfig: record<TimeSeriesGranularity: string, TimePointGranularity: string>, EnableVisualization: bool, DataSource: record<S3Config: record<Path: string, RoleArn: string, KMSKeyArn: string>>, Schema: record<Attributes: list<record>>, StartDateTime: string, EndDateTime: string, EstimatedTimeRemainingInMinutes: int, Message: string, Status: string, CreationTime: string, LastModificationTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1946,7 +1932,7 @@ export def "describe-explainability-export" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-33 # required
   explainability_export_arn: string # The Amazon Resource Name (ARN) of the Explainability export.
-]: any -> record<ExplainabilityExportArn: string, ExplainabilityExportName: string, ExplainabilityArn: string, Destination: record<S3Config: record<Path: string, RoleArn: string, KMSKeyArn: string>>, Message: string, Status: string, CreationTime: string, LastModificationTime: string, Format: string> {
+]: any -> oneof<record<ExplainabilityExportArn: string, ExplainabilityExportName: string, ExplainabilityArn: string, Destination: record<S3Config: record<Path: string, RoleArn: string, KMSKeyArn: string>>, Message: string, Status: string, CreationTime: string, LastModificationTime: string, Format: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1995,7 +1981,7 @@ export def "describe-forecast" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-34 # required
   forecast_arn: string # The Amazon Resource Name (ARN) of the forecast.
-]: any -> record<ForecastArn: string, ForecastName: string, ForecastTypes: list<string>, PredictorArn: string, DatasetGroupArn: string, EstimatedTimeRemainingInMinutes: int, Status: string, Message: string, CreationTime: string, LastModificationTime: string, TimeSeriesSelector: record<TimeSeriesIdentifiers: record<DataSource: record, Schema: record, Format: string>>> {
+]: any -> oneof<record<ForecastArn: string, ForecastName: string, ForecastTypes: list<string>, PredictorArn: string, DatasetGroupArn: string, EstimatedTimeRemainingInMinutes: int, Status: string, Message: string, CreationTime: string, LastModificationTime: string, TimeSeriesSelector: record<TimeSeriesIdentifiers: record<DataSource: record, Schema: record, Format: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2044,7 +2030,7 @@ export def "describe-forecast-export-job" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-35 # required
   forecast_export_job_arn: string # The Amazon Resource Name (ARN) of the forecast export job.
-]: any -> record<ForecastExportJobArn: string, ForecastExportJobName: string, ForecastArn: string, Destination: record<S3Config: record<Path: string, RoleArn: string, KMSKeyArn: string>>, Message: string, Status: string, CreationTime: string, LastModificationTime: string, Format: string> {
+]: any -> oneof<record<ForecastExportJobArn: string, ForecastExportJobName: string, ForecastArn: string, Destination: record<S3Config: record<Path: string, RoleArn: string, KMSKeyArn: string>>, Message: string, Status: string, CreationTime: string, LastModificationTime: string, Format: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2093,7 +2079,7 @@ export def "describe-monitor" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-36 # required
   monitor_arn: string # The Amazon Resource Name (ARN) of the monitor resource to describe.
-]: any -> record<MonitorName: string, MonitorArn: string, ResourceArn: string, Status: string, LastEvaluationTime: string, LastEvaluationState: string, Baseline: record<PredictorBaseline: record<BaselineMetrics: list>>, Message: string, CreationTime: string, LastModificationTime: string, EstimatedEvaluationTimeRemainingInMinutes: int> {
+]: any -> oneof<record<MonitorName: string, MonitorArn: string, ResourceArn: string, Status: string, LastEvaluationTime: string, LastEvaluationState: string, Baseline: record<PredictorBaseline: record<BaselineMetrics: list>>, Message: string, CreationTime: string, LastModificationTime: string, EstimatedEvaluationTimeRemainingInMinutes: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2142,7 +2128,7 @@ export def "describe-predictor" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-37 # required
   predictor_arn: string # The Amazon Resource Name (ARN) of the predictor that you want information about.
-]: any -> record<PredictorArn: string, PredictorName: string, AlgorithmArn: string, AutoMLAlgorithmArns: list<string>, ForecastHorizon: int, ForecastTypes: list<string>, PerformAutoML: bool, AutoMLOverrideStrategy: string, PerformHPO: bool, TrainingParameters: record, EvaluationParameters: record<NumberOfBacktestWindows: int, BackTestWindowOffset: int>, HPOConfig: record<ParameterRanges: record<CategoricalParameterRanges: list, ContinuousParameterRanges: list, IntegerParameterRanges: list>>, InputDataConfig: record<DatasetGroupArn: string, SupplementaryFeatures: list<record>>, FeaturizationConfig: record<ForecastFrequency: string, ForecastDimensions: list<string>, Featurizations: list<record>>, EncryptionConfig: record<RoleArn: string, KMSKeyArn: string>, PredictorExecutionDetails: record<PredictorExecutions: list<record>>, EstimatedTimeRemainingInMinutes: int, IsAutoPredictor: bool, DatasetImportJobArns: list<string>, Status: string, Message: string, CreationTime: string, LastModificationTime: string, OptimizationMetric: string> {
+]: any -> oneof<record<PredictorArn: string, PredictorName: string, AlgorithmArn: string, AutoMLAlgorithmArns: list<string>, ForecastHorizon: int, ForecastTypes: list<string>, PerformAutoML: bool, AutoMLOverrideStrategy: string, PerformHPO: bool, TrainingParameters: record, EvaluationParameters: record<NumberOfBacktestWindows: int, BackTestWindowOffset: int>, HPOConfig: record<ParameterRanges: record<CategoricalParameterRanges: list, ContinuousParameterRanges: list, IntegerParameterRanges: list>>, InputDataConfig: record<DatasetGroupArn: string, SupplementaryFeatures: list<record>>, FeaturizationConfig: record<ForecastFrequency: string, ForecastDimensions: list<string>, Featurizations: list<record>>, EncryptionConfig: record<RoleArn: string, KMSKeyArn: string>, PredictorExecutionDetails: record<PredictorExecutions: list<record>>, EstimatedTimeRemainingInMinutes: int, IsAutoPredictor: bool, DatasetImportJobArns: list<string>, Status: string, Message: string, CreationTime: string, LastModificationTime: string, OptimizationMetric: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2191,7 +2177,7 @@ export def "describe-predictor-backtest-export-job" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-38 # required
   predictor_backtest_export_job_arn: string # The Amazon Resource Name (ARN) of the predictor backtest export job.
-]: any -> record<PredictorBacktestExportJobArn: string, PredictorBacktestExportJobName: string, PredictorArn: string, Destination: record<S3Config: record<Path: string, RoleArn: string, KMSKeyArn: string>>, Message: string, Status: string, CreationTime: string, LastModificationTime: string, Format: string> {
+]: any -> oneof<record<PredictorBacktestExportJobArn: string, PredictorBacktestExportJobName: string, PredictorArn: string, Destination: record<S3Config: record<Path: string, RoleArn: string, KMSKeyArn: string>>, Message: string, Status: string, CreationTime: string, LastModificationTime: string, Format: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2240,7 +2226,7 @@ export def "describe-what-if-analysis" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-39 # required
   what_if_analysis_arn: string # The Amazon Resource Name (ARN) of the what-if analysis that you are interested in.
-]: any -> record<WhatIfAnalysisName: string, WhatIfAnalysisArn: string, ForecastArn: string, EstimatedTimeRemainingInMinutes: int, Status: string, Message: string, CreationTime: string, LastModificationTime: string, TimeSeriesSelector: record<TimeSeriesIdentifiers: record<DataSource: record, Schema: record, Format: string>>> {
+]: any -> oneof<record<WhatIfAnalysisName: string, WhatIfAnalysisArn: string, ForecastArn: string, EstimatedTimeRemainingInMinutes: int, Status: string, Message: string, CreationTime: string, LastModificationTime: string, TimeSeriesSelector: record<TimeSeriesIdentifiers: record<DataSource: record, Schema: record, Format: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2289,7 +2275,7 @@ export def "describe-what-if-forecast" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-40 # required
   what_if_forecast_arn: string # The Amazon Resource Name (ARN) of the what-if forecast that you are interested in.
-]: any -> record<WhatIfForecastName: string, WhatIfForecastArn: string, WhatIfAnalysisArn: string, EstimatedTimeRemainingInMinutes: int, Status: string, Message: string, CreationTime: string, LastModificationTime: string, TimeSeriesTransformations: table<Action: record, TimeSeriesConditions: list>, TimeSeriesReplacementsDataSource: record<S3Config: record<Path: string, RoleArn: string, KMSKeyArn: string>, Schema: record<Attributes: list>, Format: string, TimestampFormat: string>, ForecastTypes: list<string>> {
+]: any -> oneof<record<WhatIfForecastName: string, WhatIfForecastArn: string, WhatIfAnalysisArn: string, EstimatedTimeRemainingInMinutes: int, Status: string, Message: string, CreationTime: string, LastModificationTime: string, TimeSeriesTransformations: table<Action: record, TimeSeriesConditions: list>, TimeSeriesReplacementsDataSource: record<S3Config: record<Path: string, RoleArn: string, KMSKeyArn: string>, Schema: record<Attributes: list>, Format: string, TimestampFormat: string>, ForecastTypes: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2338,7 +2324,7 @@ export def "describe-what-if-forecast-export" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-41 # required
   what_if_forecast_export_arn: string # The Amazon Resource Name (ARN) of the what-if forecast export that you are interested in.
-]: any -> record<WhatIfForecastExportArn: string, WhatIfForecastExportName: string, WhatIfForecastArns: list<string>, Destination: record<S3Config: record<Path: string, RoleArn: string, KMSKeyArn: string>>, Message: string, Status: string, CreationTime: string, EstimatedTimeRemainingInMinutes: int, LastModificationTime: string, Format: string> {
+]: any -> oneof<record<WhatIfForecastExportArn: string, WhatIfForecastExportName: string, WhatIfForecastArns: list<string>, Destination: record<S3Config: record<Path: string, RoleArn: string, KMSKeyArn: string>>, Message: string, Status: string, CreationTime: string, EstimatedTimeRemainingInMinutes: int, LastModificationTime: string, Format: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2387,7 +2373,7 @@ export def "get-accuracy-metrics" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-42 # required
   predictor_arn: string # The Amazon Resource Name (ARN) of the predictor to get metrics for.
-]: any -> record<PredictorEvaluationResults: table<AlgorithmArn: string, TestWindows: list>, IsAutoPredictor: bool, AutoMLOverrideStrategy: string, OptimizationMetric: string> {
+]: any -> oneof<record<PredictorEvaluationResults: table<AlgorithmArn: string, TestWindows: list>, IsAutoPredictor: bool, AutoMLOverrideStrategy: string, OptimizationMetric: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2439,7 +2425,7 @@ export def "list-dataset-groups" [
   --x-amz-target: string@x-amz-target-completer-43 # required
   --next-token-body: string # If the result of the previous request was truncated, the response includes a NextToken. To retrieve the next set of results, use the token in the next request. Tokens expire after 24 hours. (body field)
   --max-results-body: int # The number of items to return in the response. (body field)
-]: any -> record<DatasetGroups: table<DatasetGroupArn: string, DatasetGroupName: string, CreationTime: string, LastModificationTime: string>, NextToken: string> {
+]: any -> oneof<record<DatasetGroups: table<DatasetGroupArn: string, DatasetGroupName: string, CreationTime: string, LastModificationTime: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2470,7 +2456,6 @@ export def "list-dataset-groups" [
 #
 # POST /
 # operationId: ListDatasetImportJobs
-# --Filters item shape: {Key: string, Value: string, Condition: "IS"|"IS_NOT"}
 export def "list-dataset-import-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2494,7 +2479,7 @@ export def "list-dataset-import-jobs" [
   --next-token-body: string # If the result of the previous request was truncated, the response includes a NextToken. To retrieve the next set of results, use the token in the next request. Tokens expire after 24 hours. (body field)
   --max-results-body: int # The number of items to return in the response. (body field)
   --filters: list # An array of filters. For each filter, you provide a condition and a match statement. The condition is either IS or IS_NOT, which specifies whether to include or exclude the datasets that match the statement from the list, respectively. The match statement consists of a key and a value. Filter properties Condition - The condition to apply. Valid values are IS and IS_NOT. To include the datasets that match the statement, specify IS. To exclude matching datasets, specify IS_NOT. Key - The name of the parameter to filter on. Valid values are DatasetArn and Status. Value - The value to match. For example, to list all dataset import jobs whose status is ACTIVE, you specify the following filter: "Filters": [ { "Condition": "IS", "Key": "Status", "Value": "ACTIVE" } ] — item shape: {Key: string, Value: string, Condition: "IS"|"IS_NOT"}
-]: any -> record<DatasetImportJobs: table<DatasetImportJobArn: string, DatasetImportJobName: string, DataSource: record, Status: string, Message: string, CreationTime: string, LastModificationTime: string, ImportMode: string>, NextToken: string> {
+]: any -> oneof<record<DatasetImportJobs: table<DatasetImportJobArn: string, DatasetImportJobName: string, DataSource: record, Status: string, Message: string, CreationTime: string, LastModificationTime: string, ImportMode: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2547,7 +2532,7 @@ export def "list-datasets" [
   --x-amz-target: string@x-amz-target-completer-45 # required
   --next-token-body: string # If the result of the previous request was truncated, the response includes a NextToken. To retrieve the next set of results, use the token in the next request. Tokens expire after 24 hours. (body field)
   --max-results-body: int # The number of items to return in the response. (body field)
-]: any -> record<Datasets: table<DatasetArn: string, DatasetName: string, DatasetType: string, Domain: string, CreationTime: string, LastModificationTime: string>, NextToken: string> {
+]: any -> oneof<record<Datasets: table<DatasetArn: string, DatasetName: string, DatasetType: string, Domain: string, CreationTime: string, LastModificationTime: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2578,7 +2563,6 @@ export def "list-datasets" [
 #
 # POST /
 # operationId: ListExplainabilities
-# --Filters item shape: {Key: string, Value: string, Condition: "IS"|"IS_NOT"}
 export def "list-explainabilities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2602,7 +2586,7 @@ export def "list-explainabilities" [
   --next-token-body: string # If the result of the previous request was truncated, the response includes a NextToken. To retrieve the next set of results, use the token in the next request. Tokens expire after 24 hours. (body field)
   --max-results-body: int # The number of items returned in the response. (body field)
   --filters: list # An array of filters. For each filter, provide a condition and a match statement. The condition is either IS or IS_NOT, which specifies whether to include or exclude the resources that match the statement from the list. The match statement consists of a key and a value. Filter properties Condition - The condition to apply. Valid values are IS and IS_NOT. Key - The name of the parameter to filter on. Valid values are ResourceArn and Status. Value - The value to match. — item shape: {Key: string, Value: string, Condition: "IS"|"IS_NOT"}
-]: any -> record<Explainabilities: table<ExplainabilityArn: string, ExplainabilityName: string, ResourceArn: string, ExplainabilityConfig: record, Status: string, Message: string, CreationTime: string, LastModificationTime: string>, NextToken: string> {
+]: any -> oneof<record<Explainabilities: table<ExplainabilityArn: string, ExplainabilityName: string, ResourceArn: string, ExplainabilityConfig: record, Status: string, Message: string, CreationTime: string, LastModificationTime: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2633,7 +2617,6 @@ export def "list-explainabilities" [
 #
 # POST /
 # operationId: ListExplainabilityExports
-# --Filters item shape: {Key: string, Value: string, Condition: "IS"|"IS_NOT"}
 export def "list-explainability-exports" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2657,7 +2640,7 @@ export def "list-explainability-exports" [
   --next-token-body: string # If the result of the previous request was truncated, the response includes a NextToken. To retrieve the next set of results, use the token in the next request. Tokens expire after 24 hours. (body field)
   --max-results-body: int # The number of items to return in the response. (body field)
   --filters: list # An array of filters. For each filter, provide a condition and a match statement. The condition is either IS or IS_NOT, which specifies whether to include or exclude resources that match the statement from the list. The match statement consists of a key and a value. Filter properties Condition - The condition to apply. Valid values are IS and IS_NOT. Key - The name of the parameter to filter on. Valid values are ResourceArn and Status. Value - The value to match. — item shape: {Key: string, Value: string, Condition: "IS"|"IS_NOT"}
-]: any -> record<ExplainabilityExports: table<ExplainabilityExportArn: string, ExplainabilityExportName: string, Destination: record, Status: string, Message: string, CreationTime: string, LastModificationTime: string>, NextToken: string> {
+]: any -> oneof<record<ExplainabilityExports: table<ExplainabilityExportArn: string, ExplainabilityExportName: string, Destination: record, Status: string, Message: string, CreationTime: string, LastModificationTime: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2688,7 +2671,6 @@ export def "list-explainability-exports" [
 #
 # POST /
 # operationId: ListForecastExportJobs
-# --Filters item shape: {Key: string, Value: string, Condition: "IS"|"IS_NOT"}
 export def "list-forecast-export-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2712,7 +2694,7 @@ export def "list-forecast-export-jobs" [
   --next-token-body: string # If the result of the previous request was truncated, the response includes a NextToken. To retrieve the next set of results, use the token in the next request. Tokens expire after 24 hours. (body field)
   --max-results-body: int # The number of items to return in the response. (body field)
   --filters: list # An array of filters. For each filter, you provide a condition and a match statement. The condition is either IS or IS_NOT, which specifies whether to include or exclude the forecast export jobs that match the statement from the list, respectively. The match statement consists of a key and a value. Filter properties Condition - The condition to apply. Valid values are IS and IS_NOT. To include the forecast export jobs that match the statement, specify IS. To exclude matching forecast export jobs, specify IS_NOT. Key - The name of the parameter to filter on. Valid values are ForecastArn and Status. Value - The value to match. For example, to list all jobs that export a forecast named electricityforecast, specify the following filter: "Filters": [ { "Condition": "IS", "Key": "ForecastArn", "Value": "arn:aws:forecast:us-west-2:<acct-id>:forecast/electricityforecast" } ] — item shape: {Key: string, Value: string, Condition: "IS"|"IS_NOT"}
-]: any -> record<ForecastExportJobs: table<ForecastExportJobArn: string, ForecastExportJobName: string, Destination: record, Status: string, Message: string, CreationTime: string, LastModificationTime: string>, NextToken: string> {
+]: any -> oneof<record<ForecastExportJobs: table<ForecastExportJobArn: string, ForecastExportJobName: string, Destination: record, Status: string, Message: string, CreationTime: string, LastModificationTime: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2743,7 +2725,6 @@ export def "list-forecast-export-jobs" [
 #
 # POST /
 # operationId: ListForecasts
-# --Filters item shape: {Key: string, Value: string, Condition: "IS"|"IS_NOT"}
 export def "list-forecasts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2767,7 +2748,7 @@ export def "list-forecasts" [
   --next-token-body: string # If the result of the previous request was truncated, the response includes a NextToken. To retrieve the next set of results, use the token in the next request. Tokens expire after 24 hours. (body field)
   --max-results-body: int # The number of items to return in the response. (body field)
   --filters: list # An array of filters. For each filter, you provide a condition and a match statement. The condition is either IS or IS_NOT, which specifies whether to include or exclude the forecasts that match the statement from the list, respectively. The match statement consists of a key and a value. Filter properties Condition - The condition to apply. Valid values are IS and IS_NOT. To include the forecasts that match the statement, specify IS. To exclude matching forecasts, specify IS_NOT. Key - The name of the parameter to filter on. Valid values are DatasetGroupArn, PredictorArn, and Status. Value - The value to match. For example, to list all forecasts whose status is not ACTIVE, you would specify: "Filters": [ { "Condition": "IS_NOT", "Key": "Status", "Value": "ACTIVE" } ] — item shape: {Key: string, Value: string, Condition: "IS"|"IS_NOT"}
-]: any -> record<Forecasts: table<ForecastArn: string, ForecastName: string, PredictorArn: string, CreatedUsingAutoPredictor: bool, DatasetGroupArn: string, Status: string, Message: string, CreationTime: string, LastModificationTime: string>, NextToken: string> {
+]: any -> oneof<record<Forecasts: table<ForecastArn: string, ForecastName: string, PredictorArn: string, CreatedUsingAutoPredictor: bool, DatasetGroupArn: string, Status: string, Message: string, CreationTime: string, LastModificationTime: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2798,7 +2779,6 @@ export def "list-forecasts" [
 #
 # POST /
 # operationId: ListMonitorEvaluations
-# --Filters item shape: {Key: string, Value: string, Condition: "IS"|"IS_NOT"}
 export def "list-monitor-evaluations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2823,7 +2803,7 @@ export def "list-monitor-evaluations" [
   --max-results-body: int # The maximum number of monitoring results to return. (body field)
   monitor_arn: string # The Amazon Resource Name (ARN) of the monitor resource to get results from.
   --filters: list # An array of filters. For each filter, provide a condition and a match statement. The condition is either IS or IS_NOT, which specifies whether to include or exclude the resources that match the statement from the list. The match statement consists of a key and a value. Filter properties Condition - The condition to apply. Valid values are IS and IS_NOT. Key - The name of the parameter to filter on. The only valid value is EvaluationState. Value - The value to match. Valid values are only SUCCESS or FAILURE. For example, to list only successful monitor evaluations, you would specify: "Filters": [ { "Condition": "IS", "Key": "EvaluationState", "Value": "SUCCESS" } ] — item shape: {Key: string, Value: string, Condition: "IS"|"IS_NOT"}
-]: any -> record<NextToken: string, PredictorMonitorEvaluations: table<ResourceArn: string, MonitorArn: string, EvaluationTime: string, EvaluationState: string, WindowStartDatetime: string, WindowEndDatetime: string, PredictorEvent: record, MonitorDataSource: record, MetricResults: list, NumItemsEvaluated: int, Message: string>> {
+]: any -> oneof<record<NextToken: string, PredictorMonitorEvaluations: table<ResourceArn: string, MonitorArn: string, EvaluationTime: string, EvaluationState: string, WindowStartDatetime: string, WindowEndDatetime: string, PredictorEvent: record, MonitorDataSource: record, MetricResults: list, NumItemsEvaluated: int, Message: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2854,7 +2834,6 @@ export def "list-monitor-evaluations" [
 #
 # POST /
 # operationId: ListMonitors
-# --Filters item shape: {Key: string, Value: string, Condition: "IS"|"IS_NOT"}
 export def "list-monitors" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2878,7 +2857,7 @@ export def "list-monitors" [
   --next-token-body: string # If the result of the previous request was truncated, the response includes a NextToken. To retrieve the next set of results, use the token in the next request. Tokens expire after 24 hours. (body field)
   --max-results-body: int # The maximum number of monitors to include in the response. (body field)
   --filters: list # An array of filters. For each filter, provide a condition and a match statement. The condition is either IS or IS_NOT, which specifies whether to include or exclude the resources that match the statement from the list. The match statement consists of a key and a value. Filter properties Condition - The condition to apply. Valid values are IS and IS_NOT. Key - The name of the parameter to filter on. The only valid value is Status. Value - The value to match. For example, to list all monitors who's status is ACTIVE, you would specify: "Filters": [ { "Condition": "IS", "Key": "Status", "Value": "ACTIVE" } ] — item shape: {Key: string, Value: string, Condition: "IS"|"IS_NOT"}
-]: any -> record<Monitors: table<MonitorArn: string, MonitorName: string, ResourceArn: string, Status: string, CreationTime: string, LastModificationTime: string>, NextToken: string> {
+]: any -> oneof<record<Monitors: table<MonitorArn: string, MonitorName: string, ResourceArn: string, Status: string, CreationTime: string, LastModificationTime: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2909,7 +2888,6 @@ export def "list-monitors" [
 #
 # POST /
 # operationId: ListPredictorBacktestExportJobs
-# --Filters item shape: {Key: string, Value: string, Condition: "IS"|"IS_NOT"}
 export def "list-predictor-backtest-export-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2933,7 +2911,7 @@ export def "list-predictor-backtest-export-jobs" [
   --next-token-body: string # If the result of the previous request was truncated, the response includes a NextToken. To retrieve the next set of results, use the token in the next request. Tokens expire after 24 hours. (body field)
   --max-results-body: int # The number of items to return in the response. (body field)
   --filters: list # An array of filters. For each filter, provide a condition and a match statement. The condition is either IS or IS_NOT, which specifies whether to include or exclude the predictor backtest export jobs that match the statement from the list. The match statement consists of a key and a value. Filter properties Condition - The condition to apply. Valid values are IS and IS_NOT. To include the predictor backtest export jobs that match the statement, specify IS. To exclude matching predictor backtest export jobs, specify IS_NOT. Key - The name of the parameter to filter on. Valid values are PredictorArn and Status. Value - The value to match. — item shape: {Key: string, Value: string, Condition: "IS"|"IS_NOT"}
-]: any -> record<PredictorBacktestExportJobs: table<PredictorBacktestExportJobArn: string, PredictorBacktestExportJobName: string, Destination: record, Status: string, Message: string, CreationTime: string, LastModificationTime: string>, NextToken: string> {
+]: any -> oneof<record<PredictorBacktestExportJobs: table<PredictorBacktestExportJobArn: string, PredictorBacktestExportJobName: string, Destination: record, Status: string, Message: string, CreationTime: string, LastModificationTime: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2964,7 +2942,6 @@ export def "list-predictor-backtest-export-jobs" [
 #
 # POST /
 # operationId: ListPredictors
-# --Filters item shape: {Key: string, Value: string, Condition: "IS"|"IS_NOT"}
 export def "list-predictors" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2988,7 +2965,7 @@ export def "list-predictors" [
   --next-token-body: string # If the result of the previous request was truncated, the response includes a NextToken. To retrieve the next set of results, use the token in the next request. Tokens expire after 24 hours. (body field)
   --max-results-body: int # The number of items to return in the response. (body field)
   --filters: list # An array of filters. For each filter, you provide a condition and a match statement. The condition is either IS or IS_NOT, which specifies whether to include or exclude the predictors that match the statement from the list, respectively. The match statement consists of a key and a value. Filter properties Condition - The condition to apply. Valid values are IS and IS_NOT. To include the predictors that match the statement, specify IS. To exclude matching predictors, specify IS_NOT. Key - The name of the parameter to filter on. Valid values are DatasetGroupArn and Status. Value - The value to match. For example, to list all predictors whose status is ACTIVE, you would specify: "Filters": [ { "Condition": "IS", "Key": "Status", "Value": "ACTIVE" } ] — item shape: {Key: string, Value: string, Condition: "IS"|"IS_NOT"}
-]: any -> record<Predictors: table<PredictorArn: string, PredictorName: string, DatasetGroupArn: string, IsAutoPredictor: bool, ReferencePredictorSummary: record, Status: string, Message: string, CreationTime: string, LastModificationTime: string>, NextToken: string> {
+]: any -> oneof<record<Predictors: table<PredictorArn: string, PredictorName: string, DatasetGroupArn: string, IsAutoPredictor: bool, ReferencePredictorSummary: record, Status: string, Message: string, CreationTime: string, LastModificationTime: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3038,7 +3015,7 @@ export def "list-tags-for-resource" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-54 # required
   resource_arn: string # The Amazon Resource Name (ARN) that identifies the resource for which to list the tags.
-]: any -> record<Tags: table<Key: string, Value: string>> {
+]: any -> oneof<record<Tags: table<Key: string, Value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3068,7 +3045,6 @@ export def "list-tags-for-resource" [
 #
 # POST /
 # operationId: ListWhatIfAnalyses
-# --Filters item shape: {Key: string, Value: string, Condition: "IS"|"IS_NOT"}
 export def "list-what-if-analyses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3092,7 +3068,7 @@ export def "list-what-if-analyses" [
   --next-token-body: string # If the result of the previous request was truncated, the response includes a NextToken. To retrieve the next set of results, use the token in the next request. Tokens expire after 24 hours. (body field)
   --max-results-body: int # The number of items to return in the response. (body field)
   --filters: list # An array of filters. For each filter, you provide a condition and a match statement. The condition is either IS or IS_NOT, which specifies whether to include or exclude the what-if analysis jobs that match the statement from the list, respectively. The match statement consists of a key and a value. Filter properties Condition - The condition to apply. Valid values are IS and IS_NOT. To include the what-if analysis jobs that match the statement, specify IS. To exclude matching what-if analysis jobs, specify IS_NOT. Key - The name of the parameter to filter on. Valid values are WhatIfAnalysisArn and Status. Value - The value to match. For example, to list all jobs that export a forecast named electricityWhatIf, specify the following filter: "Filters": [ { "Condition": "IS", "Key": "WhatIfAnalysisArn", "Value": "arn:aws:forecast:us-west-2:<acct-id>:forecast/electricityWhatIf" } ] — item shape: {Key: string, Value: string, Condition: "IS"|"IS_NOT"}
-]: any -> record<WhatIfAnalyses: table<WhatIfAnalysisArn: string, WhatIfAnalysisName: string, ForecastArn: string, Status: string, Message: string, CreationTime: string, LastModificationTime: string>, NextToken: string> {
+]: any -> oneof<record<WhatIfAnalyses: table<WhatIfAnalysisArn: string, WhatIfAnalysisName: string, ForecastArn: string, Status: string, Message: string, CreationTime: string, LastModificationTime: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3123,7 +3099,6 @@ export def "list-what-if-analyses" [
 #
 # POST /
 # operationId: ListWhatIfForecastExports
-# --Filters item shape: {Key: string, Value: string, Condition: "IS"|"IS_NOT"}
 export def "list-what-if-forecast-exports" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3147,7 +3122,7 @@ export def "list-what-if-forecast-exports" [
   --next-token-body: string # If the result of the previous request was truncated, the response includes a NextToken. To retrieve the next set of results, use the token in the next&#x2028; request. Tokens expire after 24 hours. (body field)
   --max-results-body: int # The number of items to return in the response. (body field)
   --filters: list # An array of filters. For each filter, you provide a condition and a match statement. The condition is either IS or IS_NOT, which specifies whether to include or exclude the what-if forecast export jobs that match the statement from the list, respectively. The match statement consists of a key and a value. Filter properties Condition - The condition to apply. Valid values are IS and IS_NOT. To include the forecast export jobs that match the statement, specify IS. To exclude matching forecast export jobs, specify IS_NOT. Key - The name of the parameter to filter on. Valid values are WhatIfForecastExportArn and Status. Value - The value to match. For example, to list all jobs that export a forecast named electricityWIFExport, specify the following filter: "Filters": [ { "Condition": "IS", "Key": "WhatIfForecastExportArn", "Value": "arn:aws:forecast:us-west-2:<acct-id>:forecast/electricityWIFExport" } ] — item shape: {Key: string, Value: string, Condition: "IS"|"IS_NOT"}
-]: any -> record<WhatIfForecastExports: table<WhatIfForecastExportArn: string, WhatIfForecastArns: list, WhatIfForecastExportName: string, Destination: record, Status: string, Message: string, CreationTime: string, LastModificationTime: string>, NextToken: string> {
+]: any -> oneof<record<WhatIfForecastExports: table<WhatIfForecastExportArn: string, WhatIfForecastArns: list, WhatIfForecastExportName: string, Destination: record, Status: string, Message: string, CreationTime: string, LastModificationTime: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3178,7 +3153,6 @@ export def "list-what-if-forecast-exports" [
 #
 # POST /
 # operationId: ListWhatIfForecasts
-# --Filters item shape: {Key: string, Value: string, Condition: "IS"|"IS_NOT"}
 export def "list-what-if-forecasts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3202,7 +3176,7 @@ export def "list-what-if-forecasts" [
   --next-token-body: string # If the result of the previous request was truncated, the response includes a NextToken. To retrieve the next set of results, use the token in the next&#x2028; request. Tokens expire after 24 hours. (body field)
   --max-results-body: int # The number of items to return in the response. (body field)
   --filters: list # An array of filters. For each filter, you provide a condition and a match statement. The condition is either IS or IS_NOT, which specifies whether to include or exclude the what-if forecast export jobs that match the statement from the list, respectively. The match statement consists of a key and a value. Filter properties Condition - The condition to apply. Valid values are IS and IS_NOT. To include the forecast export jobs that match the statement, specify IS. To exclude matching forecast export jobs, specify IS_NOT. Key - The name of the parameter to filter on. Valid values are WhatIfForecastArn and Status. Value - The value to match. For example, to list all jobs that export a forecast named electricityWhatIfForecast, specify the following filter: "Filters": [ { "Condition": "IS", "Key": "WhatIfForecastArn", "Value": "arn:aws:forecast:us-west-2:<acct-id>:forecast/electricityWhatIfForecast" } ] — item shape: {Key: string, Value: string, Condition: "IS"|"IS_NOT"}
-]: any -> record<WhatIfForecasts: table<WhatIfForecastArn: string, WhatIfForecastName: string, WhatIfAnalysisArn: string, Status: string, Message: string, CreationTime: string, LastModificationTime: string>, NextToken: string> {
+]: any -> oneof<record<WhatIfForecasts: table<WhatIfForecastArn: string, WhatIfForecastName: string, WhatIfAnalysisArn: string, Status: string, Message: string, CreationTime: string, LastModificationTime: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3331,7 +3305,6 @@ export def "stop-resource" [
 #
 # POST /
 # operationId: TagResource
-# --Tags item shape: {Key: string, Value: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3352,7 +3325,7 @@ export def "tag-resource" [
   --x-amz-target: string@x-amz-target-completer-60 # required
   resource_arn: string # The Amazon Resource Name (ARN) that identifies the resource for which to list the tags.
   tags: list # The tags to add to the resource. A tag is an array of key-value pairs. The following basic restrictions apply to tags: Maximum number of tags per resource - 50. For each resource, each tag key must be unique, and each tag key can have only one value. Maximum key length - 128 Unicode characters in UTF-8. Maximum value length - 256 Unicode characters in UTF-8. If your tagging schema is used across multiple services and resources, remember that other services may have restrictions on allowed characters. Generally allowed characters are: letters, numbers, and spaces representable in UTF-8, and the following characters: + - = . _ : / @. Tag keys and values are case sensitive. Do not use aws:, AWS:, or any upper or lowercase combination of such as a prefix for keys as it is reserved for Amazon Web Services use. You cannot edit or delete tag keys with this prefix. Values can have this prefix. If a tag value has aws as its prefix but the key does not, then Forecast considers it to be a user tag and will count against the limit of 50 tags. Tags with only the key prefix of aws do not count against your tags per resource limit. — item shape: {Key: string, Value: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3402,7 +3375,7 @@ export def "untag-resource" [
   --x-amz-target: string@x-amz-target-completer-61 # required
   resource_arn: string # The Amazon Resource Name (ARN) that identifies the resource for which to list the tags.
   tag_keys: list<string> # The keys of the tags to be removed.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3452,7 +3425,7 @@ export def "update-dataset-group" [
   --x-amz-target: string@x-amz-target-completer-62 # required
   dataset_group_arn: string # The ARN of the dataset group.
   dataset_arns: list<string> # An array of the Amazon Resource Names (ARNs) of the datasets to add to the dataset group.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

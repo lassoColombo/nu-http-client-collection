@@ -16,27 +16,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
     "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "jwt" => { {scheme: $scheme, headers: {"jwt": $token_val}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -44,8 +53,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -56,7 +70,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -91,7 +114,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -153,9 +177,9 @@ def action-completer [] { ["publish" "start" "stop" "unpublish"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-region-options-using-get" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-region-options-using-get" "get-analytics-data-using-get" "get-data-count-using-get" "get-retention-using-get" "get-billing-details" "put-billing-details" "get-game-summary-using-get" "test-push-amazon-notifications-using-post" "test-push-apple-dev-notifications-using-post" "test-push-apple-prod-notifications-using-post" "test-push-google-notifications-using-post" "test-windows8-notifications-using-post" "test-windows-phone8-notifications-using-post" "test-viber-integration-notifications-using-post" "test-viber-production-notifications-using-post" "get-script-differences-using-get" "export-zip-using-get" "import-accept-using-post" "import-zip-using-post" "get-script-versions-using-get-1" "get-script-versions-using-get" "get-segment-query-filters-using-get" "get-segment-query-filters-config-using-get" "update-segment-query-filters-config-using-put" "get-segment-query-standard-filters-using-get" "get-snapshots-using-get-1" "create-snapshots-using-post" "get-live-snapshot-id-using-get" "get-snapshots-using-get" "revert-to-snapshot-using-post" "delete-snapshot-using-delete-1" "get-snapshot-using-get" "copy-snapshot-to-new-game-using-post" "copy-snapshot-to-existing-game-using-post-1" "publish-snapshot-using-post-1" "unpublish-snapshot-using-post" "get-test-harness-scenarios-using-get" "create-test-harness-scenario-using-post" "delete-test-harness-scenario-using-delete" "get-test-harness-scenario-using-get" "update-test-harness-scenario-using-put" "update-credential-secret-using-post" "get-games-endpoints-using-get" "get-experiments-using-get" "create-experiment-using-post" "delete-experiment-using-delete" "get-experiment-using-get" "update-experiment-using-put" "do-action-experiment-using-post" "list-queries-using-get" "create-query-using-post" "delete-query-using-delete" "get-query-using-get" "update-query-using-put" "list-screens-using-get" "create-screen-using-post" "list-executable-screens-using-get" "delete-screen-using-delete" "get-screen-using-get" "update-screen-using-put" "list-snapshots-using-get" "create-snapshot-using-post" "delete-snapshot-using-delete" "copy-snapshot-to-existing-game-using-post" "publish-snapshot-using-post" "revert-snapshot-using-post" "list-snippets-using-get" "create-snippet-using-post" "delete-snippet-using-delete" "get-snippet-using-get" "update-snippet-using-put" "restore-deleted-game-using-post" "set-game-region-using-post" "get-game-region-options-using-get" "list-using-get" "list-deleted-using-get" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -187,7 +211,7 @@ export def "get-region-options-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<locked: bool, options: table<regionCode: string, regionName: string, selected: bool>> {
+]: nothing -> oneof<record<locked: bool, options: table<regionCode: string, regionName: string, selected: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/restv2/game/regions" $auth.query)
@@ -228,7 +252,7 @@ export def "get-analytics-data-using-get" [
   --start-date: string # yyyy-MM-dd (required, format: date)
   --end-date: string # yyyy-MM-dd (required, format: date)
   --keys: string # the keys to select. For example "ReturningUsers", "NewUsers", etc
-]: nothing -> table<_id: string> {
+]: nothing -> oneof<table<_id: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -272,7 +296,7 @@ export def "get-data-count-using-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --stage: string@stage-completer # stage (required)
   --query-name: string@query-name-completer # queryName (required)
-]: nothing -> record<result: string> {
+]: nothing -> oneof<record<result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -312,7 +336,7 @@ export def "get-retention-using-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --stage: string@stage-completer # stage (required)
-]: nothing -> record<result: string> {
+]: nothing -> oneof<record<result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -350,7 +374,7 @@ export def "get-billing-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<building: string, city: string, companyName: string, country: string, email1: string, email2: string, email3: string, firstName1: string, firstName2: string, firstName3: string, lastName1: string, lastName2: string, lastName3: string, postcode: string, state: string, street: string, taxNumber: string> {
+]: nothing -> oneof<record<building: string, city: string, companyName: string, country: string, email1: string, email2: string, email3: string, firstName1: string, firstName2: string, firstName3: string, lastName1: string, lastName2: string, lastName3: string, postcode: string, state: string, street: string, taxNumber: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -403,7 +427,7 @@ export def "put-billing-details" [
   --state: string
   street: string
   --tax-number: string
-]: any -> record<building: string, city: string, companyName: string, country: string, email1: string, email2: string, email3: string, firstName1: string, firstName2: string, firstName3: string, lastName1: string, lastName2: string, lastName3: string, postcode: string, state: string, street: string, taxNumber: string> {
+]: any -> oneof<record<building: string, city: string, companyName: string, country: string, email1: string, email2: string, email3: string, firstName1: string, firstName2: string, firstName3: string, lastName1: string, lastName2: string, lastName3: string, postcode: string, state: string, street: string, taxNumber: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
@@ -445,7 +469,7 @@ export def "get-game-summary-using-get" [
   --stage: string@stage-completer # stage (required)
   --start-date: string # yyyy-MM-dd (required, format: date)
   --end-date: string # yyyy-MM-dd (required, format: date)
-]: nothing -> record<logLevelData: list<record>, logLevelSummary: table<count: int, level: string>, message: string> {
+]: nothing -> oneof<record<logLevelData: list<record>, logLevelSummary: table<count: int, level: string>, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -491,7 +515,7 @@ export def "test-push-amazon-notifications-using-post" [
   --subtitle: string
   --summary: string
   --title: string
-]: any -> record<summaries: table<error: bool, outgoingMessageParts: record, resultParts: record, title: string>> {
+]: any -> oneof<record<summaries: table<error: bool, outgoingMessageParts: record, resultParts: record, title: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
@@ -536,7 +560,7 @@ export def "test-push-apple-dev-notifications-using-post" [
   --subtitle: string
   --summary: string
   --title: string
-]: any -> record<summaries: table<error: bool, outgoingMessageParts: record, resultParts: record, title: string>> {
+]: any -> oneof<record<summaries: table<error: bool, outgoingMessageParts: record, resultParts: record, title: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
@@ -581,7 +605,7 @@ export def "test-push-apple-prod-notifications-using-post" [
   --subtitle: string
   --summary: string
   --title: string
-]: any -> record<summaries: table<error: bool, outgoingMessageParts: record, resultParts: record, title: string>> {
+]: any -> oneof<record<summaries: table<error: bool, outgoingMessageParts: record, resultParts: record, title: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
@@ -626,7 +650,7 @@ export def "test-push-google-notifications-using-post" [
   --subtitle: string
   --summary: string
   --title: string
-]: any -> record<summaries: table<error: bool, outgoingMessageParts: record, resultParts: record, title: string>> {
+]: any -> oneof<record<summaries: table<error: bool, outgoingMessageParts: record, resultParts: record, title: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
@@ -671,7 +695,7 @@ export def "test-windows8-notifications-using-post" [
   --subtitle: string
   --summary: string
   --title: string
-]: any -> record<summaries: table<error: bool, outgoingMessageParts: record, resultParts: record, title: string>> {
+]: any -> oneof<record<summaries: table<error: bool, outgoingMessageParts: record, resultParts: record, title: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
@@ -716,7 +740,7 @@ export def "test-windows-phone8-notifications-using-post" [
   --subtitle: string
   --summary: string
   --title: string
-]: any -> record<summaries: table<error: bool, outgoingMessageParts: record, resultParts: record, title: string>> {
+]: any -> oneof<record<summaries: table<error: bool, outgoingMessageParts: record, resultParts: record, title: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
@@ -761,7 +785,7 @@ export def "test-viber-integration-notifications-using-post" [
   --subtitle: string
   --summary: string
   --title: string
-]: any -> record<summaries: table<error: bool, outgoingMessageParts: record, resultParts: record, title: string>> {
+]: any -> oneof<record<summaries: table<error: bool, outgoingMessageParts: record, resultParts: record, title: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
@@ -806,7 +830,7 @@ export def "test-viber-production-notifications-using-post" [
   --subtitle: string
   --summary: string
   --title: string
-]: any -> record<summaries: table<error: bool, outgoingMessageParts: record, resultParts: record, title: string>> {
+]: any -> oneof<record<summaries: table<error: bool, outgoingMessageParts: record, resultParts: record, title: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
@@ -847,7 +871,7 @@ export def "get-script-differences-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<differences: table<bind: string, changeType: string, fileName: string, script1: string, script2: string, type: string>> {
+]: nothing -> oneof<record<differences: table<bind: string, changeType: string, fileName: string, script1: string, script2: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -921,15 +945,15 @@ export def "import-accept-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body: string # body (required)
+  --qp-body: string # body (required)
   file: string # file (format: binary)
-]: any -> record<message: string> {
+]: any -> oneof<record<message: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
-  if ($body == null) { error make --unspanned { msg: "required query parameter 'body' missing: pass --body" } }
-  let qp = [(serialize-qp "body" $body "scalar")] | flatten | str join "&"
+  if ($qp_body == null) { error make --unspanned { msg: "required query parameter 'body' missing: pass --qp-body" } }
+  let qp = [(serialize-qp "body" $qp_body "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/scripts/import/accept") $qp $auth.query)
   let req_body = {"file": $file} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -940,7 +964,7 @@ export def "import-accept-using-post" [
   let req = {
     method: "post"
     url: $full_url
-    query: ({"body": $body} | compact)
+    query: ({"body": $qp_body} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: $mp.content_type
@@ -967,7 +991,7 @@ export def "import-zip-using-post" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   file: string # file (format: binary)
-]: any -> record<differences: table<bind: string, changeType: string, fileName: string, script1: string, script2: string, type: string>> {
+]: any -> oneof<record<differences: table<bind: string, changeType: string, fileName: string, script1: string, script2: string, type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
@@ -1009,7 +1033,7 @@ export def "get-script-versions-using-get-1" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int # pageSize (format: int32, default: 100)
-]: nothing -> record<scriptVersions: table<cloudCodeVersion: int, createdDate: string, description: string, id: string, live: bool>> {
+]: nothing -> oneof<record<scriptVersions: table<cloudCodeVersion: int, createdDate: string, description: string, id: string, live: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -1048,7 +1072,7 @@ export def "get-script-versions-using-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int # pageSize (format: int32, default: 100)
-]: nothing -> record<scriptVersions: table<cloudCodeVersion: int, createdDate: string, description: string, id: string, live: bool>> {
+]: nothing -> oneof<record<scriptVersions: table<cloudCodeVersion: int, createdDate: string, description: string, id: string, live: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -1086,7 +1110,7 @@ export def "get-segment-query-filters-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<filters: table<key: string, name: string, options: list, type: string>> {
+]: nothing -> oneof<record<filters: table<key: string, name: string, options: list, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -1122,7 +1146,7 @@ export def "get-segment-query-filters-config-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<customFilters: table<key: string, name: string, options: list, type: string>, hiddenFilters: list<string>> {
+]: nothing -> oneof<record<customFilters: table<key: string, name: string, options: list, type: string>, hiddenFilters: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -1147,7 +1171,6 @@ export def "get-segment-query-filters-config-using-get" [
 #
 # PUT /restv2/game/{apiKey}/admin/segmentQueryFilters/config
 # operationId: updateSegmentQueryFiltersConfigUsingPUT
-# --customFilters item shape: {key?: string, name?: string, options?: list, type?: string}
 export def "update-segment-query-filters-config-using-put" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1161,7 +1184,7 @@ export def "update-segment-query-filters-config-using-put" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --custom-filters: list # item shape: {key?: string, name?: string, options?: list, type?: string}
   --hidden-filters: list<string>
-]: any -> record<customFilters: table<key: string, name: string, options: list, type: string>, hiddenFilters: list<string>> {
+]: any -> oneof<record<customFilters: table<key: string, name: string, options: list, type: string>, hiddenFilters: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
@@ -1200,7 +1223,7 @@ export def "get-segment-query-standard-filters-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<filters: table<key: string, name: string, options: list, type: string>> {
+]: nothing -> oneof<record<filters: table<key: string, name: string, options: list, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -1237,7 +1260,7 @@ export def "get-snapshots-using-get-1" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int # pageSize (format: int32, default: 20)
-]: nothing -> table<created: string, createdBy: string, description: string, id: string, indexProgress: record, published: bool, status: string> {
+]: nothing -> oneof<table<created: string, createdBy: string, description: string, id: string, indexProgress: record, published: bool, status: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -1275,7 +1298,7 @@ export def "create-snapshots-using-post" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --description: string
-]: any -> record<created: string, createdBy: string, description: string, id: string, indexProgress: record, published: bool, status: string> {
+]: any -> oneof<record<created: string, createdBy: string, description: string, id: string, indexProgress: record, published: bool, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
@@ -1314,7 +1337,7 @@ export def "get-live-snapshot-id-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<message: string> {
+]: nothing -> oneof<record<message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -1352,7 +1375,7 @@ export def "get-snapshots-using-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int # pageSize (format: int32, default: 20)
-]: nothing -> table<created: string, createdBy: string, description: string, id: string, indexProgress: record, published: bool, status: string> {
+]: nothing -> oneof<table<created: string, createdBy: string, description: string, id: string, indexProgress: record, published: bool, status: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -1391,7 +1414,7 @@ export def "revert-to-snapshot-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<message: string> {
+]: nothing -> oneof<record<message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -1429,7 +1452,7 @@ export def "delete-snapshot-using-delete-1" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<message: string> {
+]: nothing -> oneof<record<message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -1467,7 +1490,7 @@ export def "get-snapshot-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created: string, createdBy: string, description: string, id: string, indexProgress: record, published: bool, status: string> {
+]: nothing -> oneof<record<created: string, createdBy: string, description: string, id: string, indexProgress: record, published: bool, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -1509,7 +1532,7 @@ export def "copy-snapshot-to-new-game-using-post" [
   --include-metadata: oneof<nothing, bool> # includeMetadata (default: true)
   --include-binaries: oneof<nothing, bool> # includeBinaries (default: true)
   --include-collaborators: oneof<nothing, bool> # includeCollaborators (default: true)
-]: nothing -> record<targetGameApiKey: string> {
+]: nothing -> oneof<record<targetGameApiKey: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -1553,7 +1576,7 @@ export def "copy-snapshot-to-existing-game-using-post-1" [
   --include-metadata: oneof<nothing, bool> # includeMetadata (default: true)
   --include-binaries: oneof<nothing, bool> # includeBinaries (default: true)
   --include-collaborators: oneof<nothing, bool> # includeCollaborators (default: true)
-]: nothing -> record<targetGameApiKey: string> {
+]: nothing -> oneof<record<targetGameApiKey: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -1631,7 +1654,7 @@ export def "unpublish-snapshot-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<message: string> {
+]: nothing -> oneof<record<message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -1668,7 +1691,7 @@ export def "get-test-harness-scenarios-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<scenarioJson: record, scenarioName: string> {
+]: nothing -> oneof<table<scenarioJson: record, scenarioName: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -1706,7 +1729,7 @@ export def "create-test-harness-scenario-using-post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --scenario-json: record
   --scenario-name: string
-]: any -> record<scenarioJson: record, scenarioName: string> {
+]: any -> oneof<record<scenarioJson: record, scenarioName: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
@@ -1746,7 +1769,7 @@ export def "delete-test-harness-scenario-using-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<message: string> {
+]: nothing -> oneof<record<message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -1784,7 +1807,7 @@ export def "get-test-harness-scenario-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<scenarioJson: record, scenarioName: string> {
+]: nothing -> oneof<record<scenarioJson: record, scenarioName: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -1824,7 +1847,7 @@ export def "update-test-harness-scenario-using-put" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --scenario-json: record
   --body-scenario-name: string
-]: any -> record<scenarioJson: record, scenarioName: string> {
+]: any -> oneof<record<scenarioJson: record, scenarioName: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
@@ -1902,7 +1925,7 @@ export def "get-games-endpoints-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<liveElasticSearch: string, liveNosql: string, previewElasticSearch: string, previewNosql: string> {
+]: nothing -> oneof<record<liveElasticSearch: string, liveNosql: string, previewElasticSearch: string, previewNosql: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -1938,7 +1961,7 @@ export def "get-experiments-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<active: bool, changedFieldsAndInitialValues: record, complete: bool, config: record<playerMongoQuery: string, playerQuery: string, variants: string>, endDate: string, id: int, measurements: string, measurementsEsQuery: string, name: string, percentHash: string, publishedStages: list<string>, startDate: string> {
+]: nothing -> oneof<table<active: bool, changedFieldsAndInitialValues: record, complete: bool, config: record<playerMongoQuery: string, playerQuery: string, variants: string>, endDate: string, id: int, measurements: string, measurementsEsQuery: string, name: string, percentHash: string, publishedStages: list<string>, startDate: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -1963,7 +1986,6 @@ export def "get-experiments-using-get" [
 #
 # POST /restv2/game/{apiKey}/manage/experiments
 # operationId: createExperimentUsingPOST
-# --config shape: {playerMongoQuery?: string, playerQuery?: string, variants?: string}
 export def "create-experiment-using-post" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1987,7 +2009,7 @@ export def "create-experiment-using-post" [
   --percent-hash: string
   --published-stages: list<string>
   --start-date: string # format: date-time
-]: any -> record<active: bool, changedFieldsAndInitialValues: record, complete: bool, config: record<playerMongoQuery: string, playerQuery: string, variants: string>, endDate: string, id: int, measurements: string, measurementsEsQuery: string, name: string, percentHash: string, publishedStages: list<string>, startDate: string> {
+]: any -> oneof<record<active: bool, changedFieldsAndInitialValues: record, complete: bool, config: record<playerMongoQuery: string, playerQuery: string, variants: string>, endDate: string, id: int, measurements: string, measurementsEsQuery: string, name: string, percentHash: string, publishedStages: list<string>, startDate: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
@@ -2027,7 +2049,7 @@ export def "delete-experiment-using-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<message: string> {
+]: nothing -> oneof<record<message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -2065,7 +2087,7 @@ export def "get-experiment-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<active: bool, changedFieldsAndInitialValues: record, complete: bool, config: record<playerMongoQuery: string, playerQuery: string, variants: string>, endDate: string, id: int, measurements: string, measurementsEsQuery: string, name: string, percentHash: string, publishedStages: list<string>, startDate: string> {
+]: nothing -> oneof<record<active: bool, changedFieldsAndInitialValues: record, complete: bool, config: record<playerMongoQuery: string, playerQuery: string, variants: string>, endDate: string, id: int, measurements: string, measurementsEsQuery: string, name: string, percentHash: string, publishedStages: list<string>, startDate: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -2091,7 +2113,6 @@ export def "get-experiment-using-get" [
 #
 # PUT /restv2/game/{apiKey}/manage/experiments/{id}
 # operationId: updateExperimentUsingPUT
-# --config shape: {playerMongoQuery?: string, playerQuery?: string, variants?: string}
 export def "update-experiment-using-put" [
   api_key: string
   id: int
@@ -2116,7 +2137,7 @@ export def "update-experiment-using-put" [
   --percent-hash: string
   --published-stages: list<string>
   --start-date: string # format: date-time
-]: any -> record<active: bool, changedFieldsAndInitialValues: record, complete: bool, config: record<playerMongoQuery: string, playerQuery: string, variants: string>, endDate: string, id: int, measurements: string, measurementsEsQuery: string, name: string, percentHash: string, publishedStages: list<string>, startDate: string> {
+]: any -> oneof<record<active: bool, changedFieldsAndInitialValues: record, complete: bool, config: record<playerMongoQuery: string, playerQuery: string, variants: string>, endDate: string, id: int, measurements: string, measurementsEsQuery: string, name: string, percentHash: string, publishedStages: list<string>, startDate: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
@@ -2158,7 +2179,7 @@ export def "do-action-experiment-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<active: bool, changedFieldsAndInitialValues: record, complete: bool, config: record<playerMongoQuery: string, playerQuery: string, variants: string>, endDate: string, id: int, measurements: string, measurementsEsQuery: string, name: string, percentHash: string, publishedStages: list<string>, startDate: string> {
+]: nothing -> oneof<record<active: bool, changedFieldsAndInitialValues: record, complete: bool, config: record<playerMongoQuery: string, playerQuery: string, variants: string>, endDate: string, id: int, measurements: string, measurementsEsQuery: string, name: string, percentHash: string, publishedStages: list<string>, startDate: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -2196,7 +2217,7 @@ export def "list-queries-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<name: string, shortCode: string> {
+]: nothing -> oneof<table<name: string, shortCode: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -2236,7 +2257,7 @@ export def "create-query-using-post" [
   --name: string
   --qb-rules: string
   --short-code: string
-]: any -> record<esRules: string, name: string, qbRules: string, shortCode: string> {
+]: any -> oneof<record<esRules: string, name: string, qbRules: string, shortCode: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
@@ -2276,7 +2297,7 @@ export def "delete-query-using-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<message: string> {
+]: nothing -> oneof<record<message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -2314,7 +2335,7 @@ export def "get-query-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<esRules: string, name: string, qbRules: string, shortCode: string> {
+]: nothing -> oneof<record<esRules: string, name: string, qbRules: string, shortCode: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -2356,7 +2377,7 @@ export def "update-query-using-put" [
   --name: string
   --qb-rules: string
   --body-short-code: string
-]: any -> record<esRules: string, name: string, qbRules: string, shortCode: string> {
+]: any -> oneof<record<esRules: string, name: string, qbRules: string, shortCode: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
@@ -2396,7 +2417,7 @@ export def "list-screens-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<name: string, shortCode: string> {
+]: nothing -> oneof<table<name: string, shortCode: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -2436,7 +2457,7 @@ export def "create-screen-using-post" [
   --name: string
   --short-code: string
   --template: string
-]: any -> record<groups: list<string>, name: string, shortCode: string, template: string> {
+]: any -> oneof<record<groups: list<string>, name: string, shortCode: string, template: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
@@ -2475,7 +2496,7 @@ export def "list-executable-screens-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<name: string, shortCode: string> {
+]: nothing -> oneof<table<name: string, shortCode: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -2512,7 +2533,7 @@ export def "delete-screen-using-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<message: string> {
+]: nothing -> oneof<record<message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -2550,7 +2571,7 @@ export def "get-screen-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<groups: list<string>, name: string, shortCode: string, template: string> {
+]: nothing -> oneof<record<groups: list<string>, name: string, shortCode: string, template: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -2592,7 +2613,7 @@ export def "update-screen-using-put" [
   --name: string
   --body-short-code: string
   --template: string
-]: any -> record<groups: list<string>, name: string, shortCode: string, template: string> {
+]: any -> oneof<record<groups: list<string>, name: string, shortCode: string, template: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
@@ -2632,7 +2653,7 @@ export def "list-snapshots-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<date: string, description: string, id: string, published: bool> {
+]: nothing -> oneof<table<date: string, description: string, id: string, published: bool>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -2669,7 +2690,7 @@ export def "create-snapshot-using-post" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --description: string
-]: any -> record<date: string, description: string, id: string, published: bool> {
+]: any -> oneof<record<date: string, description: string, id: string, published: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
@@ -2709,7 +2730,7 @@ export def "delete-snapshot-using-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<message: string> {
+]: nothing -> oneof<record<message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -2748,7 +2769,7 @@ export def "copy-snapshot-to-existing-game-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<message: string> {
+]: nothing -> oneof<record<message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -2787,7 +2808,7 @@ export def "publish-snapshot-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<message: string> {
+]: nothing -> oneof<record<message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -2825,7 +2846,7 @@ export def "revert-snapshot-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<message: string> {
+]: nothing -> oneof<record<message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -2862,7 +2883,7 @@ export def "list-snippets-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<name: string, shortCode: string> {
+]: nothing -> oneof<table<name: string, shortCode: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -2904,7 +2925,7 @@ export def "create-snippet-using-post" [
   --script-data: string
   --short-code: string
   --template: string
-]: any -> record<groups: list<string>, name: string, script: string, scriptData: string, shortCode: string, template: string> {
+]: any -> oneof<record<groups: list<string>, name: string, script: string, scriptData: string, shortCode: string, template: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
@@ -2944,7 +2965,7 @@ export def "delete-snippet-using-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<message: string> {
+]: nothing -> oneof<record<message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -2982,7 +3003,7 @@ export def "get-snippet-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<groups: list<string>, name: string, script: string, scriptData: string, shortCode: string, template: string> {
+]: nothing -> oneof<record<groups: list<string>, name: string, script: string, scriptData: string, shortCode: string, template: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -3026,7 +3047,7 @@ export def "update-snippet-using-put" [
   --script-data: string
   --body-short-code: string
   --template: string
-]: any -> record<groups: list<string>, name: string, script: string, scriptData: string, shortCode: string, template: string> {
+]: any -> oneof<record<groups: list<string>, name: string, script: string, scriptData: string, shortCode: string, template: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
@@ -3066,7 +3087,7 @@ export def "restore-deleted-game-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<message: string> {
+]: nothing -> oneof<record<message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -3103,7 +3124,7 @@ export def "set-game-region-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<message: string> {
+]: nothing -> oneof<record<message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($game_api_key | is-empty) { error make --unspanned { msg: "path parameter 'gameApiKey' must be non-empty" } }
@@ -3140,7 +3161,7 @@ export def "get-game-region-options-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<locked: bool, options: table<regionCode: string, regionName: string, selected: bool>> {
+]: nothing -> oneof<record<locked: bool, options: table<regionCode: string, regionName: string, selected: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($game_api_key | is-empty) { error make --unspanned { msg: "path parameter 'gameApiKey' must be non-empty" } }
@@ -3175,7 +3196,7 @@ export def "list-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<_id: string, name: string> {
+]: nothing -> oneof<table<_id: string, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/restv2/games" $auth.query)
@@ -3209,7 +3230,7 @@ export def "list-deleted-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<apiKey: string, name: string> {
+]: nothing -> oneof<table<apiKey: string, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/restv2/games/deleted" $auth.query)

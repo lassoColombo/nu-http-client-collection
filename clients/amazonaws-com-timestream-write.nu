@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -120,9 +143,9 @@ def x-amz-target-completer-18 [] { ["Timestream_20181101.WriteRecords"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-batch-load-task" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["create-batch-load-task" "create-database" "create-table" "delete-database" "delete-table" "describe-batch-load-task" "describe-database" "describe-endpoints" "describe-table" "list-batch-load-tasks" "list-databases" "list-tables" "list-tags-for-resource" "resume-batch-load-task" "tag-resource" "untag-resource" "update-database" "update-table" "write-records" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -144,9 +167,6 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: CreateBatchLoadTask
-# --DataModelConfiguration shape: {DataModel?: record, DataModelS3Configuration?: record}
-# --DataSourceConfiguration shape: {DataSourceS3Configuration: record, CsvConfiguration?: record, DataFormat: "CSV"}
-# --ReportConfiguration shape: {ReportS3Configuration?: record}
 export def "create-batch-load-task" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -172,7 +192,7 @@ export def "create-batch-load-task" [
   target_database_name: string # Target Timestream database for a batch load task.
   target_table_name: string # Target Timestream table for a batch load task.
   --record-version: int
-]: any -> record<TaskId: string> {
+]: any -> oneof<record<TaskId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -202,7 +222,6 @@ export def "create-batch-load-task" [
 #
 # POST /
 # operationId: CreateDatabase
-# --Tags item shape: {Key: string, Value: string}
 export def "create-database" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -224,7 +243,7 @@ export def "create-database" [
   database_name: string # The name of the Timestream database.
   --kms-key-id: string # The KMS key for the database. If the KMS key is not specified, the database will be encrypted with a Timestream managed KMS key located in your account. For more information, see Amazon Web Services managed keys (https://docs.aws.amazon.com/kms/latest/developerguide/concepts.html#aws-managed-cmk).
   --tags: list # A list of key-value pairs to label the table. — item shape: {Key: string, Value: string}
-]: any -> record<Database: record<Arn: string, DatabaseName: string, TableCount: int, KmsKeyId: string, CreationTime: string, LastUpdatedTime: string>> {
+]: any -> oneof<record<Database: record<Arn: string, DatabaseName: string, TableCount: int, KmsKeyId: string, CreationTime: string, LastUpdatedTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -254,9 +273,6 @@ export def "create-database" [
 #
 # POST /
 # operationId: CreateTable
-# --RetentionProperties shape: {MemoryStoreRetentionPeriodInHours: int, MagneticStoreRetentionPeriodInDays: int}
-# --Tags item shape: {Key: string, Value: string}
-# --MagneticStoreWriteProperties shape: {EnableMagneticStoreWrites: bool, MagneticStoreRejectedDataLocation?: record}
 export def "create-table" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -280,7 +296,7 @@ export def "create-table" [
   --retention-properties: record # Retention properties contain the duration for which your time-series data must be stored in the magnetic store and the memory store. — shape: {MemoryStoreRetentionPeriodInHours: int, MagneticStoreRetentionPeriodInDays: int}
   --tags: list # A list of key-value pairs to label the table. — item shape: {Key: string, Value: string}
   --magnetic-store-write-properties: record # The set of properties on a table for configuring magnetic store writes. — shape: {EnableMagneticStoreWrites: bool, MagneticStoreRejectedDataLocation?: record}
-]: any -> record<Table: record<Arn: string, TableName: string, DatabaseName: string, TableStatus: string, RetentionProperties: record<MemoryStoreRetentionPeriodInHours: int, MagneticStoreRetentionPeriodInDays: int>, CreationTime: string, LastUpdatedTime: string, MagneticStoreWriteProperties: record<EnableMagneticStoreWrites: bool, MagneticStoreRejectedDataLocation: record>>> {
+]: any -> oneof<record<Table: record<Arn: string, TableName: string, DatabaseName: string, TableStatus: string, RetentionProperties: record<MemoryStoreRetentionPeriodInHours: int, MagneticStoreRetentionPeriodInDays: int>, CreationTime: string, LastUpdatedTime: string, MagneticStoreWriteProperties: record<EnableMagneticStoreWrites: bool, MagneticStoreRejectedDataLocation: record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -428,7 +444,7 @@ export def "describe-batch-load-task" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-5 # required
   task_id: string # The ID of the batch load task.
-]: any -> record<BatchLoadTaskDescription: record<TaskId: string, ErrorMessage: string, DataSourceConfiguration: record<DataSourceS3Configuration: record, CsvConfiguration: record, DataFormat: string>, ProgressReport: record<RecordsProcessed: int, RecordsIngested: int, ParseFailures: int, RecordIngestionFailures: int, FileFailures: int, BytesMetered: int>, ReportConfiguration: record<ReportS3Configuration: record>, DataModelConfiguration: record<DataModel: record, DataModelS3Configuration: record>, TargetDatabaseName: string, TargetTableName: string, TaskStatus: string, RecordVersion: int, CreationTime: string, LastUpdatedTime: string, ResumableUntil: string>> {
+]: any -> oneof<record<BatchLoadTaskDescription: record<TaskId: string, ErrorMessage: string, DataSourceConfiguration: record<DataSourceS3Configuration: record, CsvConfiguration: record, DataFormat: string>, ProgressReport: record<RecordsProcessed: int, RecordsIngested: int, ParseFailures: int, RecordIngestionFailures: int, FileFailures: int, BytesMetered: int>, ReportConfiguration: record<ReportS3Configuration: record>, DataModelConfiguration: record<DataModel: record, DataModelS3Configuration: record>, TargetDatabaseName: string, TargetTableName: string, TaskStatus: string, RecordVersion: int, CreationTime: string, LastUpdatedTime: string, ResumableUntil: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -477,7 +493,7 @@ export def "describe-database" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-6 # required
   database_name: string # The name of the Timestream database.
-]: any -> record<Database: record<Arn: string, DatabaseName: string, TableCount: int, KmsKeyId: string, CreationTime: string, LastUpdatedTime: string>> {
+]: any -> oneof<record<Database: record<Arn: string, DatabaseName: string, TableCount: int, KmsKeyId: string, CreationTime: string, LastUpdatedTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -526,7 +542,7 @@ export def "describe-endpoints" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-7 # required
   --body: record
-]: any -> record<Endpoints: table<Address: string, CachePeriodInMinutes: int>> {
+]: any -> oneof<record<Endpoints: table<Address: string, CachePeriodInMinutes: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -576,7 +592,7 @@ export def "describe-table" [
   --x-amz-target: string@x-amz-target-completer-8 # required
   database_name: string # The name of the Timestream database.
   table_name: string # The name of the Timestream table.
-]: any -> record<Table: record<Arn: string, TableName: string, DatabaseName: string, TableStatus: string, RetentionProperties: record<MemoryStoreRetentionPeriodInHours: int, MagneticStoreRetentionPeriodInDays: int>, CreationTime: string, LastUpdatedTime: string, MagneticStoreWriteProperties: record<EnableMagneticStoreWrites: bool, MagneticStoreRejectedDataLocation: record>>> {
+]: any -> oneof<record<Table: record<Arn: string, TableName: string, DatabaseName: string, TableStatus: string, RetentionProperties: record<MemoryStoreRetentionPeriodInHours: int, MagneticStoreRetentionPeriodInDays: int>, CreationTime: string, LastUpdatedTime: string, MagneticStoreWriteProperties: record<EnableMagneticStoreWrites: bool, MagneticStoreRejectedDataLocation: record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -629,7 +645,7 @@ export def "list-batch-load-tasks" [
   --next-token-body: string # A token to specify where to start paginating. This is the NextToken from a previously truncated response. (body field)
   --max-results-body: int # The total number of items to return in the output. If the total number of items available is more than the value specified, a NextToken is provided in the output. To resume pagination, provide the NextToken value as argument of a subsequent API invocation. (body field)
   --task-status: string@task-status-completer # Status of the batch load task.
-]: any -> record<NextToken: string, BatchLoadTasks: table<TaskId: string, TaskStatus: string, DatabaseName: string, TableName: string, CreationTime: string, LastUpdatedTime: string, ResumableUntil: string>> {
+]: any -> oneof<record<NextToken: string, BatchLoadTasks: table<TaskId: string, TaskStatus: string, DatabaseName: string, TableName: string, CreationTime: string, LastUpdatedTime: string, ResumableUntil: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -682,7 +698,7 @@ export def "list-databases" [
   --x-amz-target: string@x-amz-target-completer-10 # required
   --next-token-body: string # The pagination token. To resume pagination, provide the NextToken value as argument of a subsequent API invocation. (body field)
   --max-results-body: int # The total number of items to return in the output. If the total number of items available is more than the value specified, a NextToken is provided in the output. To resume pagination, provide the NextToken value as argument of a subsequent API invocation. (body field)
-]: any -> record<Databases: table<Arn: string, DatabaseName: string, TableCount: int, KmsKeyId: string, CreationTime: string, LastUpdatedTime: string>, NextToken: string> {
+]: any -> oneof<record<Databases: table<Arn: string, DatabaseName: string, TableCount: int, KmsKeyId: string, CreationTime: string, LastUpdatedTime: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -736,7 +752,7 @@ export def "list-tables" [
   --database-name: string # The name of the Timestream database.
   --next-token-body: string # The pagination token. To resume pagination, provide the NextToken value as argument of a subsequent API invocation. (body field)
   --max-results-body: int # The total number of items to return in the output. If the total number of items available is more than the value specified, a NextToken is provided in the output. To resume pagination, provide the NextToken value as argument of a subsequent API invocation. (body field)
-]: any -> record<Tables: table<Arn: string, TableName: string, DatabaseName: string, TableStatus: string, RetentionProperties: record, CreationTime: string, LastUpdatedTime: string, MagneticStoreWriteProperties: record>, NextToken: string> {
+]: any -> oneof<record<Tables: table<Arn: string, TableName: string, DatabaseName: string, TableStatus: string, RetentionProperties: record, CreationTime: string, LastUpdatedTime: string, MagneticStoreWriteProperties: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -786,7 +802,7 @@ export def "list-tags-for-resource" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-12 # required
   resource_arn: string # The Timestream resource with tags to be listed. This value is an Amazon Resource Name (ARN).
-]: any -> record<Tags: table<Key: string, Value: string>> {
+]: any -> oneof<record<Tags: table<Key: string, Value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -834,7 +850,7 @@ export def "resume-batch-load-task" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-13 # required
   task_id: string # The ID of the batch load task to resume.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -864,7 +880,6 @@ export def "resume-batch-load-task" [
 #
 # POST /
 # operationId: TagResource
-# --Tags item shape: {Key: string, Value: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -885,7 +900,7 @@ export def "tag-resource" [
   --x-amz-target: string@x-amz-target-completer-14 # required
   resource_arn: string # Identifies the Timestream resource to which tags should be added. This value is an Amazon Resource Name (ARN).
   tags: list # The tags to be assigned to the Timestream resource. — item shape: {Key: string, Value: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -935,7 +950,7 @@ export def "untag-resource" [
   --x-amz-target: string@x-amz-target-completer-15 # required
   resource_arn: string # The Timestream resource that the tags will be removed from. This value is an Amazon Resource Name (ARN).
   tag_keys: list<string> # A list of tags keys. Existing tags of the resource whose keys are members of this list will be removed from the Timestream resource.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -985,7 +1000,7 @@ export def "update-database" [
   --x-amz-target: string@x-amz-target-completer-16 # required
   database_name: string # The name of the database.
   kms_key_id: string # The identifier of the new KMS key (KmsKeyId) to be used to encrypt the data stored in the database. If the KmsKeyId currently registered with the database is the same as the KmsKeyId in the request, there will not be any update. You can specify the KmsKeyId using any of the following: Key ID: 1234abcd-12ab-34cd-56ef-1234567890ab Key ARN: arn:aws:kms:us-east-1:111122223333:key/1234abcd-12ab-34cd-56ef-1234567890ab Alias name: alias/ExampleAlias Alias ARN: arn:aws:kms:us-east-1:111122223333:alias/ExampleAlias
-]: any -> record<Database: record<Arn: string, DatabaseName: string, TableCount: int, KmsKeyId: string, CreationTime: string, LastUpdatedTime: string>> {
+]: any -> oneof<record<Database: record<Arn: string, DatabaseName: string, TableCount: int, KmsKeyId: string, CreationTime: string, LastUpdatedTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1015,8 +1030,6 @@ export def "update-database" [
 #
 # POST /
 # operationId: UpdateTable
-# --RetentionProperties shape: {MemoryStoreRetentionPeriodInHours: int, MagneticStoreRetentionPeriodInDays: int}
-# --MagneticStoreWriteProperties shape: {EnableMagneticStoreWrites: bool, MagneticStoreRejectedDataLocation?: record}
 export def "update-table" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1039,7 +1052,7 @@ export def "update-table" [
   table_name: string # The name of the Timestream table.
   --retention-properties: record # Retention properties contain the duration for which your time-series data must be stored in the magnetic store and the memory store. — shape: {MemoryStoreRetentionPeriodInHours: int, MagneticStoreRetentionPeriodInDays: int}
   --magnetic-store-write-properties: record # The set of properties on a table for configuring magnetic store writes. — shape: {EnableMagneticStoreWrites: bool, MagneticStoreRejectedDataLocation?: record}
-]: any -> record<Table: record<Arn: string, TableName: string, DatabaseName: string, TableStatus: string, RetentionProperties: record<MemoryStoreRetentionPeriodInHours: int, MagneticStoreRetentionPeriodInDays: int>, CreationTime: string, LastUpdatedTime: string, MagneticStoreWriteProperties: record<EnableMagneticStoreWrites: bool, MagneticStoreRejectedDataLocation: record>>> {
+]: any -> oneof<record<Table: record<Arn: string, TableName: string, DatabaseName: string, TableStatus: string, RetentionProperties: record<MemoryStoreRetentionPeriodInHours: int, MagneticStoreRetentionPeriodInDays: int>, CreationTime: string, LastUpdatedTime: string, MagneticStoreWriteProperties: record<EnableMagneticStoreWrites: bool, MagneticStoreRejectedDataLocation: record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1069,8 +1082,6 @@ export def "update-table" [
 #
 # POST /
 # operationId: WriteRecords
-# --CommonAttributes shape: {Dimensions?: list, MeasureName?: string, MeasureValue?: string, MeasureValueType?: "DOUBLE"|"BIGINT"|"VARCHAR"|"BOOLEAN"|"TIMESTAMP"|"MULTI", Time?: string, TimeUnit?: "MILLISECONDS"|"SECONDS"|"MICROSECONDS"|"NANOSECONDS", Version?: int, MeasureValues?: list}
-# --Records item shape: {Dimensions?: list, MeasureName?: string, MeasureValue?: string, MeasureValueType?: "DOUBLE"|"BIGINT"|"VARCHAR"|"BOOLEAN"|"TIMESTAMP"|"MULTI", Time?: string, TimeUnit?: "MILLISECONDS"|"SECONDS"|"MICROSECONDS"|"NANOSECONDS", Version?: int, MeasureValues?: list}
 export def "write-records" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1093,7 +1104,7 @@ export def "write-records" [
   table_name: string # The name of the Timestream table.
   --common-attributes: record # Represents a time-series data point being written into Timestream. Each record contains an array of dimensions. Dimensions represent the metadata attributes of a time-series data point, such as the instance name or Availability Zone of an EC2 instance. A record also contains the measure name, which is the name of the measure being collected (for example, the CPU utilization of an EC2 instance). Additionally, a record contains the measure value and the value type, which is the data type of the measure value. Also, the record contains the timestamp of when the measure was collected and the timestamp unit, which represents the granularity of the timestamp. Records have a Version field, which is a 64-bit long that you can use for updating data points. Writes of a duplicate record with the same dimension, timestamp, and measure name but different measure value will only succeed if the Version attribute of the record in the write request is higher than that of the existing record. Timestream defaults to a Version of 1 for records without the Version field. — shape: {Dimensions?: list, MeasureName?: string, MeasureValue?: string, MeasureValueType?: "DOUBLE"|"BIGINT"|"VARCHAR"|"BOOLEAN"|"TIMESTAMP"|"MULTI", Time?: string, TimeUnit?: "MILLISECONDS"|"SECONDS"|"MICROSECONDS"|"NANOSECONDS", Version?: int, MeasureValues?: list}
   records: list # An array of records that contain the unique measure, dimension, time, and version attributes for each time-series data point. — item shape: {Dimensions?: list, MeasureName?: string, MeasureValue?: string, MeasureValueType?: "DOUBLE"|"BIGINT"|"VARCHAR"|"BOOLEAN"|"TIMESTAMP"|"MULTI", Time?: string, TimeUnit?: "MILLISECONDS"|"SECONDS"|"MICROSECONDS"|"NANOSECONDS", Version?: int, MeasureValues?: list}
-]: any -> record<RecordsIngested: record<Total: int, MemoryStore: int, MagneticStore: int>> {
+]: any -> oneof<record<RecordsIngested: record<Total: int, MemoryStore: int, MagneticStore: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

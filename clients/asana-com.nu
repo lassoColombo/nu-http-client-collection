@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -152,9 +176,9 @@ def type-completer [] { ["custom_field" "portfolio" "project" "tag" "task" "user
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-attachments-for-object" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-attachments-for-object" "create-attachment-for-object" "delete-attachment" "get-attachment" "create-batch-request" "create-custom-field" "delete-custom-field" "get-custom-field" "update-custom-field" "create-enum-option-for-custom-field" "insert-enum-option-for-custom-field" "update-enum-option" "get-events" "get-goal-relationships" "get-goal-relationship" "update-goal-relationship" "get-goals" "create-goal" "delete-goal" "get-goal" "update-goal" "add-followers" "add-supporting-relationship" "get-parent-goals-for-goal" "remove-followers" "remove-supporting-relationship" "create-goal-metric" "update-goal-metric" "get-job" "create-organization-export" "get-organization-export" "get-portfolio-memberships" "get-portfolio-membership" "get-portfolios" "create-portfolio" "delete-portfolio" "get-portfolio" "update-portfolio" "add-custom-field-setting-for-portfolio" "add-item-for-portfolio" "add-members-for-portfolio" "get-custom-field-settings-for-portfolio" "get-items-for-portfolio" "get-portfolio-memberships-for-portfolio" "remove-custom-field-setting-for-portfolio" "remove-item-for-portfolio" "remove-members-for-portfolio" "delete-project-brief" "get-project-brief" "update-project-brief" "get-project-membership" "delete-project-status" "get-project-status" "get-project-templates" "get-project-template" "instantiate-project" "get-projects" "create-project" "delete-project" "get-project" "update-project" "add-custom-field-setting-for-project" "add-followers-for-project" "add-members-for-project" "get-custom-field-settings-for-project" "duplicate-project" "create-project-brief" "get-project-memberships-for-project" "get-project-statuses-for-project" "create-project-status-for-project" "remove-custom-field-setting-for-project" "remove-followers-for-project" "remove-members-for-project" "project-save-as-template" "get-sections-for-project" "create-section-for-project" "insert-section-for-project" "get-task-counts-for-project" "get-tasks-for-project" "delete-section" "get-section" "update-section" "add-task-for-section" "get-tasks-for-section" "get-statuses-for-object" "create-status-for-object" "delete-status" "get-status" "delete-story" "get-story" "update-story" "get-tags" "create-tag" "delete-tag" "get-tag" "update-tag" "get-tasks-for-tag" "get-tasks" "create-task" "delete-task" "get-task" "update-task" "add-dependencies-for-task" "add-dependents-for-task" "add-followers-for-task" "add-project-for-task" "add-tag-for-task" "get-dependencies-for-task" "get-dependents-for-task" "duplicate-task" "get-projects-for-task" "remove-dependencies-for-task" "remove-dependents-for-task" "remove-follower-for-task" "remove-project-for-task" "remove-tag-for-task" "set-parent-for-task" "get-stories-for-task" "create-story-for-task" "get-subtasks-for-task" "create-subtask-for-task" "get-tags-for-task" "get-team-memberships" "get-team-membership" "create-team" "update-team" "get-team" "add-user-for-team" "get-project-templates-for-team" "get-projects-for-team" "create-project-for-team" "remove-user-for-team" "get-team-memberships-for-team" "get-users-for-team" "get-time-periods" "get-time-period" "get-user-task-list" "get-tasks-for-user-task-list" "get-users" "get-user" "get-favorites-for-user" "get-team-memberships-for-user" "get-teams-for-user" "get-user-task-list-for-user" "get-workspace-memberships-for-user" "get-webhooks" "create-webhook" "delete-webhook" "get-webhook" "update-webhook" "get-workspace-membership" "get-workspaces" "get-workspace" "update-workspace" "add-user-for-workspace" "get-audit-log-events" "get-custom-fields-for-workspace" "get-projects-for-workspace" "create-project-for-workspace" "remove-user-for-workspace" "get-tags-for-workspace" "create-tag-for-workspace" "search-tasks-for-workspace" "get-teams-for-workspace" "typeahead-for-workspace" "get-users-for-workspace" "get-workspace-memberships-for-workspace" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -191,7 +215,7 @@ export def "get-attachments-for-object" [
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. 'Note: You can only pass in an offset that was returned to you via a previously paginated request.' (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
   --parent: string # Globally unique identifier for object to fetch statuses from. Must be a GID for a `project`, `project_brief`, or `task`. (required, e.g. 159874)
-]: nothing -> record<data: table<gid: string, resource_type: string, name: string, resource_subtype: string>> {
+]: nothing -> oneof<record<data: table<gid: string, resource_type: string, name: string, resource_subtype: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent == null) { error make --unspanned { msg: "required query parameter 'parent' missing: pass --parent" } }
@@ -235,7 +259,7 @@ export def "create-attachment-for-object" [
   --parent: string # Required identifier of the parent task, project, or project_brief, as a string.
   --resource-subtype: string@resource-subtype-completer # The type of the attachment. Must be one of the given values. If not specified, a file attachment of type `asana` will be assumed. Note that if the value of `resource_subtype` is `external`, a `parent`, `name`, and `url` must also be provided. (e.g. external)
   --url: string # The URL of the external resource being attached. Required for attachments of type `external`.
-]: any -> record<data: record<gid: string, resource_type: string, name: string, resource_subtype: string, connected_to_app: bool, created_at: string, download_url: string, host: string, parent: record<gid: string, resource_type: string, name: string, resource_subtype: string>, permanent_url: string, size: int, view_url: string>> {
+]: any -> oneof<record<data: record<gid: string, resource_type: string, name: string, resource_subtype: string, connected_to_app: bool, created_at: string, download_url: string, host: string, parent: record<gid: string, resource_type: string, name: string, resource_subtype: string>, permanent_url: string, size: int, view_url: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -278,7 +302,7 @@ export def "delete-attachment" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
-]: nothing -> record<data: record> {
+]: nothing -> oneof<record<data: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($attachment_gid | is-empty) { error make --unspanned { msg: "path parameter 'attachment_gid' must be non-empty" } }
@@ -317,7 +341,7 @@ export def "get-attachment" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
-]: nothing -> record<data: record<gid: string, resource_type: string, name: string, resource_subtype: string, connected_to_app: bool, created_at: string, download_url: string, host: string, parent: record<gid: string, resource_type: string, name: string, resource_subtype: string>, permanent_url: string, size: int, view_url: string>> {
+]: nothing -> oneof<record<data: record<gid: string, resource_type: string, name: string, resource_subtype: string, connected_to_app: bool, created_at: string, download_url: string, host: string, parent: record<gid: string, resource_type: string, name: string, resource_subtype: string>, permanent_url: string, size: int, view_url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($attachment_gid | is-empty) { error make --unspanned { msg: "path parameter 'attachment_gid' must be non-empty" } }
@@ -343,7 +367,6 @@ export def "get-attachment" [
 #
 # POST /batch
 # operationId: createBatchRequest
-# --data shape: {actions?: list}
 export def "create-batch-request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -357,7 +380,7 @@ export def "create-batch-request" [
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --data: record # A request object for use in a batch request. — shape: {actions?: list}
-]: any -> record<data: table<body: record, headers: record, status_code: int>> {
+]: any -> oneof<record<data: table<body: record, headers: record, status_code: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -385,7 +408,6 @@ export def "create-batch-request" [
 #
 # POST /custom_fields
 # operationId: createCustomField
-# --data shape: {date_value?: record, enabled?: bool, enum_options?: list, enum_value?: record, multi_enum_values?: list, name?: string, number_value?: float, resource_subtype?: "text"|"enum"|"multi_enum"|"number"|"date"|"people", text_value?: string, currency_code?: string, custom_label?: string, custom_label_position?: "prefix"|"suffix", description?: string, format?: "currency"|"identifier"|"percentage"|"custom"|"none", has_notifications_enabled?: bool, precision?: int, people_value?: list<string>, ... (1 more fields)}
 export def "create-custom-field" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -401,7 +423,7 @@ export def "create-custom-field" [
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. 'Note: You can only pass in an offset that was returned to you via a previously paginated request.' (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
   --data: record # A generic Asana Resource, containing a globally unique identifier. — shape: {date_value?: record, enabled?: bool, enum_options?: list, enum_value?: record, multi_enum_values?: list, name?: string, number_value?: float, resource_subtype?: "text"|"enum"|"multi_enum"|"number"|"date"|"people", text_value?: string, currency_code?: string, custom_label?: string, custom_label_position?: "prefix"|"suffix", description?: string, format?: "currency"|"identifier"|"percentage"|"custom"|"none", has_notifications_enabled?: bool, precision?: int, people_value?: list<string>, ... (1 more fields)}
-]: any -> record<data: record<gid: string, resource_type: string, date_value: record<date: string, date_time: string>, display_value: string, enabled: bool, enum_options: list<record>, enum_value: record<gid: string, resource_type: string, color: string, enabled: bool, name: string>, multi_enum_values: list<record>, name: string, number_value: float, resource_subtype: string, text_value: string, type: string, asana_created_field: string, currency_code: string, custom_label: string, custom_label_position: string, description: string, format: string, has_notifications_enabled: bool, is_global_to_workspace: bool, precision: int, created_by: record<gid: string, resource_type: string, name: string>, people_value: list<record>>> {
+]: any -> oneof<record<data: record<gid: string, resource_type: string, date_value: record<date: string, date_time: string>, display_value: string, enabled: bool, enum_options: list<record>, enum_value: record<gid: string, resource_type: string, color: string, enabled: bool, name: string>, multi_enum_values: list<record>, name: string, number_value: float, resource_subtype: string, text_value: string, type: string, asana_created_field: string, currency_code: string, custom_label: string, custom_label_position: string, description: string, format: string, has_notifications_enabled: bool, is_global_to_workspace: bool, precision: int, created_by: record<gid: string, resource_type: string, name: string>, people_value: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -442,7 +464,7 @@ export def "delete-custom-field" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
-]: nothing -> record<data: record> {
+]: nothing -> oneof<record<data: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($custom_field_gid | is-empty) { error make --unspanned { msg: "path parameter 'custom_field_gid' must be non-empty" } }
@@ -481,7 +503,7 @@ export def "get-custom-field" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
-]: nothing -> record<data: record<gid: string, resource_type: string, date_value: record<date: string, date_time: string>, display_value: string, enabled: bool, enum_options: list<record>, enum_value: record<gid: string, resource_type: string, color: string, enabled: bool, name: string>, multi_enum_values: list<record>, name: string, number_value: float, resource_subtype: string, text_value: string, type: string, asana_created_field: string, currency_code: string, custom_label: string, custom_label_position: string, description: string, format: string, has_notifications_enabled: bool, is_global_to_workspace: bool, precision: int, created_by: record<gid: string, resource_type: string, name: string>, people_value: list<record>>> {
+]: nothing -> oneof<record<data: record<gid: string, resource_type: string, date_value: record<date: string, date_time: string>, display_value: string, enabled: bool, enum_options: list<record>, enum_value: record<gid: string, resource_type: string, color: string, enabled: bool, name: string>, multi_enum_values: list<record>, name: string, number_value: float, resource_subtype: string, text_value: string, type: string, asana_created_field: string, currency_code: string, custom_label: string, custom_label_position: string, description: string, format: string, has_notifications_enabled: bool, is_global_to_workspace: bool, precision: int, created_by: record<gid: string, resource_type: string, name: string>, people_value: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($custom_field_gid | is-empty) { error make --unspanned { msg: "path parameter 'custom_field_gid' must be non-empty" } }
@@ -507,7 +529,6 @@ export def "get-custom-field" [
 #
 # PUT /custom_fields/{custom_field_gid}
 # operationId: updateCustomField
-# --data shape: {date_value?: record, enabled?: bool, enum_options?: list, enum_value?: record, multi_enum_values?: list, name?: string, number_value?: float, resource_subtype?: "text"|"enum"|"multi_enum"|"number"|"date"|"people", text_value?: string, currency_code?: string, custom_label?: string, custom_label_position?: "prefix"|"suffix", description?: string, format?: "currency"|"identifier"|"percentage"|"custom"|"none", has_notifications_enabled?: bool, precision?: int, people_value?: list<string>, ... (1 more fields)}
 export def "update-custom-field" [
   custom_field_gid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -522,7 +543,7 @@ export def "update-custom-field" [
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --data: record # A generic Asana Resource, containing a globally unique identifier. — shape: {date_value?: record, enabled?: bool, enum_options?: list, enum_value?: record, multi_enum_values?: list, name?: string, number_value?: float, resource_subtype?: "text"|"enum"|"multi_enum"|"number"|"date"|"people", text_value?: string, currency_code?: string, custom_label?: string, custom_label_position?: "prefix"|"suffix", description?: string, format?: "currency"|"identifier"|"percentage"|"custom"|"none", has_notifications_enabled?: bool, precision?: int, people_value?: list<string>, ... (1 more fields)}
-]: any -> record<data: record<gid: string, resource_type: string, date_value: record<date: string, date_time: string>, display_value: string, enabled: bool, enum_options: list<record>, enum_value: record<gid: string, resource_type: string, color: string, enabled: bool, name: string>, multi_enum_values: list<record>, name: string, number_value: float, resource_subtype: string, text_value: string, type: string, asana_created_field: string, currency_code: string, custom_label: string, custom_label_position: string, description: string, format: string, has_notifications_enabled: bool, is_global_to_workspace: bool, precision: int, created_by: record<gid: string, resource_type: string, name: string>, people_value: list<record>>> {
+]: any -> oneof<record<data: record<gid: string, resource_type: string, date_value: record<date: string, date_time: string>, display_value: string, enabled: bool, enum_options: list<record>, enum_value: record<gid: string, resource_type: string, color: string, enabled: bool, name: string>, multi_enum_values: list<record>, name: string, number_value: float, resource_subtype: string, text_value: string, type: string, asana_created_field: string, currency_code: string, custom_label: string, custom_label_position: string, description: string, format: string, has_notifications_enabled: bool, is_global_to_workspace: bool, precision: int, created_by: record<gid: string, resource_type: string, name: string>, people_value: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -551,7 +572,6 @@ export def "update-custom-field" [
 #
 # POST /custom_fields/{custom_field_gid}/enum_options
 # operationId: createEnumOptionForCustomField
-# --data shape: {color?: string, enabled?: bool, name?: string, insert_after?: string, insert_before?: string}
 export def "create-enum-option-for-custom-field" [
   custom_field_gid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -568,7 +588,7 @@ export def "create-enum-option-for-custom-field" [
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. 'Note: You can only pass in an offset that was returned to you via a previously paginated request.' (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
   --data: record # A generic Asana Resource, containing a globally unique identifier. — shape: {color?: string, enabled?: bool, name?: string, insert_after?: string, insert_before?: string}
-]: any -> record<data: record<gid: string, resource_type: string, color: string, enabled: bool, name: string>> {
+]: any -> oneof<record<data: record<gid: string, resource_type: string, color: string, enabled: bool, name: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -597,7 +617,6 @@ export def "create-enum-option-for-custom-field" [
 #
 # POST /custom_fields/{custom_field_gid}/enum_options/insert
 # operationId: insertEnumOptionForCustomField
-# --data shape: {after_enum_option?: string, before_enum_option?: string, enum_option: string}
 export def "insert-enum-option-for-custom-field" [
   custom_field_gid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -612,7 +631,7 @@ export def "insert-enum-option-for-custom-field" [
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --data: record # shape: {after_enum_option?: string, before_enum_option?: string, enum_option: string}
-]: any -> record<data: record<gid: string, resource_type: string, color: string, enabled: bool, name: string>> {
+]: any -> oneof<record<data: record<gid: string, resource_type: string, color: string, enabled: bool, name: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -641,7 +660,6 @@ export def "insert-enum-option-for-custom-field" [
 #
 # PUT /enum_options/{enum_option_gid}
 # operationId: updateEnumOption
-# --data shape: {color?: string, enabled?: bool, name?: string, insert_after?: string, insert_before?: string}
 export def "update-enum-option" [
   enum_option_gid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -656,7 +674,7 @@ export def "update-enum-option" [
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --data: record # A generic Asana Resource, containing a globally unique identifier. — shape: {color?: string, enabled?: bool, name?: string, insert_after?: string, insert_before?: string}
-]: any -> record<data: record<gid: string, resource_type: string, color: string, enabled: bool, name: string>> {
+]: any -> oneof<record<data: record<gid: string, resource_type: string, color: string, enabled: bool, name: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -699,7 +717,7 @@ export def "get-events" [
   --sync: string # A sync token received from the last request, or none on first sync. Events will be returned from the point in time that the sync token was generated. *Note: On your first request, omit the sync token. The response will be the same as for an expired sync token, and will include a new valid sync token.If the sync token is too old (which may happen from time to time) the API will return a `412 Precondition Failed` error, and include a fresh sync token in the response.* (e.g. de4774f6915eae04714ca93bb2f5ee81)
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
-]: nothing -> record<data: table<action: string, change: record, created_at: string, parent: record, resource: record, type: string, user: record>, has_more: bool, sync: string> {
+]: nothing -> oneof<record<data: table<action: string, change: record, created_at: string, parent: record, resource: record, type: string, user: record>, has_more: bool, sync: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource == null) { error make --unspanned { msg: "required query parameter 'resource' missing: pass --resource" } }
@@ -739,7 +757,7 @@ export def "get-goal-relationships" [
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --supported-goal: string # Globally unique identifier for the supported goal in the goal relationship. (required, e.g. 12345)
   --resource-subtype: string # If provided, filter to goal relationships with a given resource_subtype. (e.g. subgoal)
-]: nothing -> record<data: table<gid: string, resource_type: string, contribution_weight: float, resource_subtype: string, supporting_resource: record>> {
+]: nothing -> oneof<record<data: table<gid: string, resource_type: string, contribution_weight: float, resource_subtype: string, supporting_resource: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($supported_goal == null) { error make --unspanned { msg: "required query parameter 'supported_goal' missing: pass --supported-goal" } }
@@ -778,7 +796,7 @@ export def "get-goal-relationship" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
-]: nothing -> record<data: record<gid: string, resource_type: string, contribution_weight: float, resource_subtype: string, supporting_resource: record<gid: string, resource_type: string, name: string>, supported_goal: record<gid: string, resource_type: string, name: string, owner: record>>> {
+]: nothing -> oneof<record<data: record<gid: string, resource_type: string, contribution_weight: float, resource_subtype: string, supporting_resource: record<gid: string, resource_type: string, name: string>, supported_goal: record<gid: string, resource_type: string, name: string, owner: record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($goal_relationship_gid | is-empty) { error make --unspanned { msg: "path parameter 'goal_relationship_gid' must be non-empty" } }
@@ -804,7 +822,6 @@ export def "get-goal-relationship" [
 #
 # PUT /goal_relationships/{goal_relationship_gid}
 # operationId: updateGoalRelationship
-# --data shape: {contribution_weight?: float, supporting_resource?: record, supported_goal?: record}
 export def "update-goal-relationship" [
   goal_relationship_gid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -819,7 +836,7 @@ export def "update-goal-relationship" [
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --data: record # A generic Asana Resource, containing a globally unique identifier. — shape: {contribution_weight?: float, supporting_resource?: record, supported_goal?: record}
-]: any -> record<data: record<gid: string, resource_type: string, contribution_weight: float, resource_subtype: string, supporting_resource: record<gid: string, resource_type: string, name: string>, supported_goal: record<gid: string, resource_type: string, name: string, owner: record>>> {
+]: any -> oneof<record<data: record<gid: string, resource_type: string, contribution_weight: float, resource_subtype: string, supporting_resource: record<gid: string, resource_type: string, name: string>, supported_goal: record<gid: string, resource_type: string, name: string, owner: record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -868,7 +885,7 @@ export def "get-goals" [
   --team: string # Globally unique identifier for the team. (e.g. 31326)
   --workspace: string # Globally unique identifier for the workspace. (e.g. 31326)
   --time-periods: list<string> # Globally unique identifiers for the time periods. (e.g. 221693,506165)
-]: nothing -> record<data: table<gid: string, resource_type: string, name: string, owner: record>> {
+]: nothing -> oneof<record<data: table<gid: string, resource_type: string, name: string, owner: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "portfolio" $portfolio "scalar") (serialize-qp "project" $project "scalar") (serialize-qp "is_workspace_level" $is_workspace_level "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "workspace" $workspace "scalar") (serialize-qp "time_periods" $time_periods "multi")] | flatten | str join "&"
@@ -893,7 +910,6 @@ export def "get-goals" [
 #
 # POST /goals
 # operationId: createGoal
-# --data shape: {due_on?: string, html_notes?: string, is_workspace_level?: bool, liked?: bool, name?: string, notes?: string, start_on?: string, status?: string, followers?: list<string>, owner?: string, team?: string, time_period?: string, workspace?: string}
 export def "create-goal" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -909,7 +925,7 @@ export def "create-goal" [
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. 'Note: You can only pass in an offset that was returned to you via a previously paginated request.' (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
   --data: record # A generic Asana Resource, containing a globally unique identifier. — shape: {due_on?: string, html_notes?: string, is_workspace_level?: bool, liked?: bool, name?: string, notes?: string, start_on?: string, status?: string, followers?: list<string>, owner?: string, team?: string, time_period?: string, workspace?: string}
-]: any -> record<data: record<gid: string, resource_type: string, due_on: string, html_notes: string, is_workspace_level: bool, liked: bool, name: string, notes: string, start_on: string, status: string, current_status_update: record<gid: string, resource_type: string, resource_subtype: string, title: string>, followers: list<record>, likes: list<record>, metric: record<gid: string, resource_type: string, currency_code: string, current_display_value: string, current_number_value: float, initial_number_value: float, precision: int, progress_source: string, resource_subtype: string, target_number_value: float, unit: string, can_manage: bool>, num_likes: int, owner: record<gid: string, resource_type: string, name: string>, team: record<gid: string, resource_type: string, name: string>, time_period: record<gid: string, resource_type: string, display_name: string, end_on: string, period: string, start_on: string>, workspace: record<gid: string, resource_type: string, name: string>>> {
+]: any -> oneof<record<data: record<gid: string, resource_type: string, due_on: string, html_notes: string, is_workspace_level: bool, liked: bool, name: string, notes: string, start_on: string, status: string, current_status_update: record<gid: string, resource_type: string, resource_subtype: string, title: string>, followers: list<record>, likes: list<record>, metric: record<gid: string, resource_type: string, currency_code: string, current_display_value: string, current_number_value: float, initial_number_value: float, precision: int, progress_source: string, resource_subtype: string, target_number_value: float, unit: string, can_manage: bool>, num_likes: int, owner: record<gid: string, resource_type: string, name: string>, team: record<gid: string, resource_type: string, name: string>, time_period: record<gid: string, resource_type: string, display_name: string, end_on: string, period: string, start_on: string>, workspace: record<gid: string, resource_type: string, name: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -950,7 +966,7 @@ export def "delete-goal" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
-]: nothing -> record<data: record> {
+]: nothing -> oneof<record<data: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($goal_gid | is-empty) { error make --unspanned { msg: "path parameter 'goal_gid' must be non-empty" } }
@@ -989,7 +1005,7 @@ export def "get-goal" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
-]: nothing -> record<data: record<gid: string, resource_type: string, due_on: string, html_notes: string, is_workspace_level: bool, liked: bool, name: string, notes: string, start_on: string, status: string, current_status_update: record<gid: string, resource_type: string, resource_subtype: string, title: string>, followers: list<record>, likes: list<record>, metric: record<gid: string, resource_type: string, currency_code: string, current_display_value: string, current_number_value: float, initial_number_value: float, precision: int, progress_source: string, resource_subtype: string, target_number_value: float, unit: string, can_manage: bool>, num_likes: int, owner: record<gid: string, resource_type: string, name: string>, team: record<gid: string, resource_type: string, name: string>, time_period: record<gid: string, resource_type: string, display_name: string, end_on: string, period: string, start_on: string>, workspace: record<gid: string, resource_type: string, name: string>>> {
+]: nothing -> oneof<record<data: record<gid: string, resource_type: string, due_on: string, html_notes: string, is_workspace_level: bool, liked: bool, name: string, notes: string, start_on: string, status: string, current_status_update: record<gid: string, resource_type: string, resource_subtype: string, title: string>, followers: list<record>, likes: list<record>, metric: record<gid: string, resource_type: string, currency_code: string, current_display_value: string, current_number_value: float, initial_number_value: float, precision: int, progress_source: string, resource_subtype: string, target_number_value: float, unit: string, can_manage: bool>, num_likes: int, owner: record<gid: string, resource_type: string, name: string>, team: record<gid: string, resource_type: string, name: string>, time_period: record<gid: string, resource_type: string, display_name: string, end_on: string, period: string, start_on: string>, workspace: record<gid: string, resource_type: string, name: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($goal_gid | is-empty) { error make --unspanned { msg: "path parameter 'goal_gid' must be non-empty" } }
@@ -1015,7 +1031,6 @@ export def "get-goal" [
 #
 # PUT /goals/{goal_gid}
 # operationId: updateGoal
-# --data shape: {due_on?: string, html_notes?: string, is_workspace_level?: bool, liked?: bool, name?: string, notes?: string, start_on?: string, status?: string, followers?: list<string>, owner?: string, team?: string, time_period?: string, workspace?: string}
 export def "update-goal" [
   goal_gid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1030,7 +1045,7 @@ export def "update-goal" [
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --data: record # A generic Asana Resource, containing a globally unique identifier. — shape: {due_on?: string, html_notes?: string, is_workspace_level?: bool, liked?: bool, name?: string, notes?: string, start_on?: string, status?: string, followers?: list<string>, owner?: string, team?: string, time_period?: string, workspace?: string}
-]: any -> record<data: record<gid: string, resource_type: string, due_on: string, html_notes: string, is_workspace_level: bool, liked: bool, name: string, notes: string, start_on: string, status: string, current_status_update: record<gid: string, resource_type: string, resource_subtype: string, title: string>, followers: list<record>, likes: list<record>, metric: record<gid: string, resource_type: string, currency_code: string, current_display_value: string, current_number_value: float, initial_number_value: float, precision: int, progress_source: string, resource_subtype: string, target_number_value: float, unit: string, can_manage: bool>, num_likes: int, owner: record<gid: string, resource_type: string, name: string>, team: record<gid: string, resource_type: string, name: string>, time_period: record<gid: string, resource_type: string, display_name: string, end_on: string, period: string, start_on: string>, workspace: record<gid: string, resource_type: string, name: string>>> {
+]: any -> oneof<record<data: record<gid: string, resource_type: string, due_on: string, html_notes: string, is_workspace_level: bool, liked: bool, name: string, notes: string, start_on: string, status: string, current_status_update: record<gid: string, resource_type: string, resource_subtype: string, title: string>, followers: list<record>, likes: list<record>, metric: record<gid: string, resource_type: string, currency_code: string, current_display_value: string, current_number_value: float, initial_number_value: float, precision: int, progress_source: string, resource_subtype: string, target_number_value: float, unit: string, can_manage: bool>, num_likes: int, owner: record<gid: string, resource_type: string, name: string>, team: record<gid: string, resource_type: string, name: string>, time_period: record<gid: string, resource_type: string, display_name: string, end_on: string, period: string, start_on: string>, workspace: record<gid: string, resource_type: string, name: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1059,7 +1074,6 @@ export def "update-goal" [
 #
 # POST /goals/{goal_gid}/addFollowers
 # operationId: addFollowers
-# --data shape: {followers: list<string>}
 export def "add-followers" [
   goal_gid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1074,7 +1088,7 @@ export def "add-followers" [
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --data: record # shape: {followers: list<string>}
-]: any -> record<data: record<gid: string, resource_type: string, due_on: string, html_notes: string, is_workspace_level: bool, liked: bool, name: string, notes: string, start_on: string, status: string, current_status_update: record<gid: string, resource_type: string, resource_subtype: string, title: string>, followers: list<record>, likes: list<record>, metric: record<gid: string, resource_type: string, currency_code: string, current_display_value: string, current_number_value: float, initial_number_value: float, precision: int, progress_source: string, resource_subtype: string, target_number_value: float, unit: string, can_manage: bool>, num_likes: int, owner: record<gid: string, resource_type: string, name: string>, team: record<gid: string, resource_type: string, name: string>, time_period: record<gid: string, resource_type: string, display_name: string, end_on: string, period: string, start_on: string>, workspace: record<gid: string, resource_type: string, name: string>>> {
+]: any -> oneof<record<data: record<gid: string, resource_type: string, due_on: string, html_notes: string, is_workspace_level: bool, liked: bool, name: string, notes: string, start_on: string, status: string, current_status_update: record<gid: string, resource_type: string, resource_subtype: string, title: string>, followers: list<record>, likes: list<record>, metric: record<gid: string, resource_type: string, currency_code: string, current_display_value: string, current_number_value: float, initial_number_value: float, precision: int, progress_source: string, resource_subtype: string, target_number_value: float, unit: string, can_manage: bool>, num_likes: int, owner: record<gid: string, resource_type: string, name: string>, team: record<gid: string, resource_type: string, name: string>, time_period: record<gid: string, resource_type: string, display_name: string, end_on: string, period: string, start_on: string>, workspace: record<gid: string, resource_type: string, name: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1103,7 +1117,6 @@ export def "add-followers" [
 #
 # POST /goals/{goal_gid}/addSupportingRelationship
 # operationId: addSupportingRelationship
-# --data shape: {contribution_weight?: float, insert_after?: string, insert_before?: string, supporting_resource: string}
 export def "add-supporting-relationship" [
   goal_gid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1118,7 +1131,7 @@ export def "add-supporting-relationship" [
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --data: record # shape: {contribution_weight?: float, insert_after?: string, insert_before?: string, supporting_resource: string}
-]: any -> record<data: record<gid: string, resource_type: string, contribution_weight: float, resource_subtype: string, supporting_resource: record<gid: string, resource_type: string, name: string>, supported_goal: record<gid: string, resource_type: string, name: string, owner: record>>> {
+]: any -> oneof<record<data: record<gid: string, resource_type: string, contribution_weight: float, resource_subtype: string, supporting_resource: record<gid: string, resource_type: string, name: string>, supported_goal: record<gid: string, resource_type: string, name: string, owner: record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1160,7 +1173,7 @@ export def "get-parent-goals-for-goal" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
-]: nothing -> record<data: table<gid: string, resource_type: string, name: string, owner: record>> {
+]: nothing -> oneof<record<data: table<gid: string, resource_type: string, name: string, owner: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($goal_gid | is-empty) { error make --unspanned { msg: "path parameter 'goal_gid' must be non-empty" } }
@@ -1186,7 +1199,6 @@ export def "get-parent-goals-for-goal" [
 #
 # POST /goals/{goal_gid}/removeFollowers
 # operationId: removeFollowers
-# --data shape: {followers: list<string>}
 export def "remove-followers" [
   goal_gid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1201,7 +1213,7 @@ export def "remove-followers" [
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --data: record # shape: {followers: list<string>}
-]: any -> record<data: record<gid: string, resource_type: string, due_on: string, html_notes: string, is_workspace_level: bool, liked: bool, name: string, notes: string, start_on: string, status: string, current_status_update: record<gid: string, resource_type: string, resource_subtype: string, title: string>, followers: list<record>, likes: list<record>, metric: record<gid: string, resource_type: string, currency_code: string, current_display_value: string, current_number_value: float, initial_number_value: float, precision: int, progress_source: string, resource_subtype: string, target_number_value: float, unit: string, can_manage: bool>, num_likes: int, owner: record<gid: string, resource_type: string, name: string>, team: record<gid: string, resource_type: string, name: string>, time_period: record<gid: string, resource_type: string, display_name: string, end_on: string, period: string, start_on: string>, workspace: record<gid: string, resource_type: string, name: string>>> {
+]: any -> oneof<record<data: record<gid: string, resource_type: string, due_on: string, html_notes: string, is_workspace_level: bool, liked: bool, name: string, notes: string, start_on: string, status: string, current_status_update: record<gid: string, resource_type: string, resource_subtype: string, title: string>, followers: list<record>, likes: list<record>, metric: record<gid: string, resource_type: string, currency_code: string, current_display_value: string, current_number_value: float, initial_number_value: float, precision: int, progress_source: string, resource_subtype: string, target_number_value: float, unit: string, can_manage: bool>, num_likes: int, owner: record<gid: string, resource_type: string, name: string>, team: record<gid: string, resource_type: string, name: string>, time_period: record<gid: string, resource_type: string, display_name: string, end_on: string, period: string, start_on: string>, workspace: record<gid: string, resource_type: string, name: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1230,7 +1242,6 @@ export def "remove-followers" [
 #
 # POST /goals/{goal_gid}/removeSupportingRelationship
 # operationId: removeSupportingRelationship
-# --data shape: {supporting_resource: string}
 export def "remove-supporting-relationship" [
   goal_gid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1245,7 +1256,7 @@ export def "remove-supporting-relationship" [
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --data: record # shape: {supporting_resource: string}
-]: any -> record<data: record> {
+]: any -> oneof<record<data: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1274,7 +1285,6 @@ export def "remove-supporting-relationship" [
 #
 # POST /goals/{goal_gid}/setMetric
 # operationId: createGoalMetric
-# --data shape: {currency_code?: string, current_number_value?: float, initial_number_value?: float, precision?: int, progress_source?: "manual"|"subgoal_progress"|"project_task_completion"|"project_milestone_completion"|"external", target_number_value?: float, unit?: "none"|"currency"|"percentage"}
 export def "create-goal-metric" [
   goal_gid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1289,7 +1299,7 @@ export def "create-goal-metric" [
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --data: record # A generic Asana Resource, containing a globally unique identifier. — shape: {currency_code?: string, current_number_value?: float, initial_number_value?: float, precision?: int, progress_source?: "manual"|"subgoal_progress"|"project_task_completion"|"project_milestone_completion"|"external", target_number_value?: float, unit?: "none"|"currency"|"percentage"}
-]: any -> record<data: record<gid: string, resource_type: string, due_on: string, html_notes: string, is_workspace_level: bool, liked: bool, name: string, notes: string, start_on: string, status: string, current_status_update: record<gid: string, resource_type: string, resource_subtype: string, title: string>, followers: list<record>, likes: list<record>, metric: record<gid: string, resource_type: string, currency_code: string, current_display_value: string, current_number_value: float, initial_number_value: float, precision: int, progress_source: string, resource_subtype: string, target_number_value: float, unit: string, can_manage: bool>, num_likes: int, owner: record<gid: string, resource_type: string, name: string>, team: record<gid: string, resource_type: string, name: string>, time_period: record<gid: string, resource_type: string, display_name: string, end_on: string, period: string, start_on: string>, workspace: record<gid: string, resource_type: string, name: string>>> {
+]: any -> oneof<record<data: record<gid: string, resource_type: string, due_on: string, html_notes: string, is_workspace_level: bool, liked: bool, name: string, notes: string, start_on: string, status: string, current_status_update: record<gid: string, resource_type: string, resource_subtype: string, title: string>, followers: list<record>, likes: list<record>, metric: record<gid: string, resource_type: string, currency_code: string, current_display_value: string, current_number_value: float, initial_number_value: float, precision: int, progress_source: string, resource_subtype: string, target_number_value: float, unit: string, can_manage: bool>, num_likes: int, owner: record<gid: string, resource_type: string, name: string>, team: record<gid: string, resource_type: string, name: string>, time_period: record<gid: string, resource_type: string, display_name: string, end_on: string, period: string, start_on: string>, workspace: record<gid: string, resource_type: string, name: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1318,7 +1328,6 @@ export def "create-goal-metric" [
 #
 # POST /goals/{goal_gid}/setMetricCurrentValue
 # operationId: updateGoalMetric
-# --data shape: {current_number_value?: float}
 export def "update-goal-metric" [
   goal_gid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1333,7 +1342,7 @@ export def "update-goal-metric" [
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --data: record # A generic Asana Resource, containing a globally unique identifier. — shape: {current_number_value?: float}
-]: any -> record<data: record<gid: string, resource_type: string, due_on: string, html_notes: string, is_workspace_level: bool, liked: bool, name: string, notes: string, start_on: string, status: string, current_status_update: record<gid: string, resource_type: string, resource_subtype: string, title: string>, followers: list<record>, likes: list<record>, metric: record<gid: string, resource_type: string, currency_code: string, current_display_value: string, current_number_value: float, initial_number_value: float, precision: int, progress_source: string, resource_subtype: string, target_number_value: float, unit: string, can_manage: bool>, num_likes: int, owner: record<gid: string, resource_type: string, name: string>, team: record<gid: string, resource_type: string, name: string>, time_period: record<gid: string, resource_type: string, display_name: string, end_on: string, period: string, start_on: string>, workspace: record<gid: string, resource_type: string, name: string>>> {
+]: any -> oneof<record<data: record<gid: string, resource_type: string, due_on: string, html_notes: string, is_workspace_level: bool, liked: bool, name: string, notes: string, start_on: string, status: string, current_status_update: record<gid: string, resource_type: string, resource_subtype: string, title: string>, followers: list<record>, likes: list<record>, metric: record<gid: string, resource_type: string, currency_code: string, current_display_value: string, current_number_value: float, initial_number_value: float, precision: int, progress_source: string, resource_subtype: string, target_number_value: float, unit: string, can_manage: bool>, num_likes: int, owner: record<gid: string, resource_type: string, name: string>, team: record<gid: string, resource_type: string, name: string>, time_period: record<gid: string, resource_type: string, display_name: string, end_on: string, period: string, start_on: string>, workspace: record<gid: string, resource_type: string, name: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1375,7 +1384,7 @@ export def "get-job" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
-]: nothing -> record<data: record<gid: string, resource_type: string, new_project: record<gid: string, resource_type: string, name: string>, new_project_template: record<gid: string, resource_type: string, name: string>, new_task: record<gid: string, resource_type: string, name: string, resource_subtype: string>, resource_subtype: string, status: string>> {
+]: nothing -> oneof<record<data: record<gid: string, resource_type: string, new_project: record<gid: string, resource_type: string, name: string>, new_project_template: record<gid: string, resource_type: string, name: string>, new_task: record<gid: string, resource_type: string, name: string, resource_subtype: string>, resource_subtype: string, status: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_gid | is-empty) { error make --unspanned { msg: "path parameter 'job_gid' must be non-empty" } }
@@ -1401,7 +1410,6 @@ export def "get-job" [
 #
 # POST /organization_exports
 # operationId: createOrganizationExport
-# --data shape: {organization?: string}
 export def "create-organization-export" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1417,7 +1425,7 @@ export def "create-organization-export" [
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. 'Note: You can only pass in an offset that was returned to you via a previously paginated request.' (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
   --data: record # An *organization_export* request starts a job to export the complete data of the given Organization. — shape: {organization?: string}
-]: any -> record<data: record<gid: string, resource_type: string, created_at: string, download_url: string, organization: record<gid: string, resource_type: string, name: string>, state: string>> {
+]: any -> oneof<record<data: record<gid: string, resource_type: string, created_at: string, download_url: string, organization: record<gid: string, resource_type: string, name: string>, state: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1458,7 +1466,7 @@ export def "get-organization-export" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
-]: nothing -> record<data: record<gid: string, resource_type: string, created_at: string, download_url: string, organization: record<gid: string, resource_type: string, name: string>, state: string>> {
+]: nothing -> oneof<record<data: record<gid: string, resource_type: string, created_at: string, download_url: string, organization: record<gid: string, resource_type: string, name: string>, state: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organization_export_gid | is-empty) { error make --unspanned { msg: "path parameter 'organization_export_gid' must be non-empty" } }
@@ -1501,7 +1509,7 @@ export def "get-portfolio-memberships" [
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. 'Note: You can only pass in an offset that was returned to you via a previously paginated request.' (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
-]: nothing -> record<data: table<gid: string, resource_type: string, portfolio: record, user: record>> {
+]: nothing -> oneof<record<data: table<gid: string, resource_type: string, portfolio: record, user: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "portfolio" $portfolio "scalar") (serialize-qp "workspace" $workspace "scalar") (serialize-qp "user" $user "scalar") (serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -1539,7 +1547,7 @@ export def "get-portfolio-membership" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
-]: nothing -> record<data: record<gid: string, resource_type: string, portfolio: record<gid: string, resource_type: string, name: string>, user: record<gid: string, resource_type: string, name: string>>> {
+]: nothing -> oneof<record<data: record<gid: string, resource_type: string, portfolio: record<gid: string, resource_type: string, name: string>, user: record<gid: string, resource_type: string, name: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($portfolio_membership_gid | is-empty) { error make --unspanned { msg: "path parameter 'portfolio_membership_gid' must be non-empty" } }
@@ -1581,7 +1589,7 @@ export def "get-portfolios" [
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. 'Note: You can only pass in an offset that was returned to you via a previously paginated request.' (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
   --workspace: string # The workspace or organization to filter portfolios on. (required, e.g. 1331)
   --owner: string # The user who owns the portfolio. Currently, API users can only get a list of portfolios that they themselves own. (required, e.g. 14916)
-]: nothing -> record<data: table<gid: string, resource_type: string, name: string>> {
+]: nothing -> oneof<record<data: table<gid: string, resource_type: string, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($workspace == null) { error make --unspanned { msg: "required query parameter 'workspace' missing: pass --workspace" } }
@@ -1608,7 +1616,6 @@ export def "get-portfolios" [
 #
 # POST /portfolios
 # operationId: createPortfolio
-# --data shape: {name?: string, color?: "dark-pink"|"dark-green"|"dark-blue"|"dark-red"|"dark-teal"|"dark-brown"|"dark-orange"|"dark-purple"|"dark-warm-gray"|"light-pink"|"light-green"|"light-blue"|"light-red"|"light-teal"|"light-brown"|"light-orange"|"light-purple"|"light-warm-gray", public?: bool, workspace?: string}
 export def "create-portfolio" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1622,7 +1629,7 @@ export def "create-portfolio" [
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --data: record # A generic Asana Resource, containing a globally unique identifier. — shape: {name?: string, color?: "dark-pink"|"dark-green"|"dark-blue"|"dark-red"|"dark-teal"|"dark-brown"|"dark-orange"|"dark-purple"|"dark-warm-gray"|"light-pink"|"light-green"|"light-blue"|"light-red"|"light-teal"|"light-brown"|"light-orange"|"light-purple"|"light-warm-gray", public?: bool, workspace?: string}
-]: any -> record<data: record<gid: string, resource_type: string, name: string, color: string, created_at: string, created_by: record<gid: string, resource_type: string, name: string>, current_status_update: record<gid: string, resource_type: string, resource_subtype: string, title: string>, custom_field_settings: list<record>, custom_fields: list<record>, due_on: string, members: list<record>, owner: record<gid: string, resource_type: string, name: string>, permalink_url: string, public: bool, start_on: string, workspace: record<gid: string, resource_type: string, name: string>>> {
+]: any -> oneof<record<data: record<gid: string, resource_type: string, name: string, color: string, created_at: string, created_by: record<gid: string, resource_type: string, name: string>, current_status_update: record<gid: string, resource_type: string, resource_subtype: string, title: string>, custom_field_settings: list<record>, custom_fields: list<record>, due_on: string, members: list<record>, owner: record<gid: string, resource_type: string, name: string>, permalink_url: string, public: bool, start_on: string, workspace: record<gid: string, resource_type: string, name: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1663,7 +1670,7 @@ export def "delete-portfolio" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
-]: nothing -> record<data: record> {
+]: nothing -> oneof<record<data: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($portfolio_gid | is-empty) { error make --unspanned { msg: "path parameter 'portfolio_gid' must be non-empty" } }
@@ -1702,7 +1709,7 @@ export def "get-portfolio" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
-]: nothing -> record<data: record<gid: string, resource_type: string, name: string, color: string, created_at: string, created_by: record<gid: string, resource_type: string, name: string>, current_status_update: record<gid: string, resource_type: string, resource_subtype: string, title: string>, custom_field_settings: list<record>, custom_fields: list<record>, due_on: string, members: list<record>, owner: record<gid: string, resource_type: string, name: string>, permalink_url: string, public: bool, start_on: string, workspace: record<gid: string, resource_type: string, name: string>>> {
+]: nothing -> oneof<record<data: record<gid: string, resource_type: string, name: string, color: string, created_at: string, created_by: record<gid: string, resource_type: string, name: string>, current_status_update: record<gid: string, resource_type: string, resource_subtype: string, title: string>, custom_field_settings: list<record>, custom_fields: list<record>, due_on: string, members: list<record>, owner: record<gid: string, resource_type: string, name: string>, permalink_url: string, public: bool, start_on: string, workspace: record<gid: string, resource_type: string, name: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($portfolio_gid | is-empty) { error make --unspanned { msg: "path parameter 'portfolio_gid' must be non-empty" } }
@@ -1728,7 +1735,6 @@ export def "get-portfolio" [
 #
 # PUT /portfolios/{portfolio_gid}
 # operationId: updatePortfolio
-# --data shape: {name?: string, color?: "dark-pink"|"dark-green"|"dark-blue"|"dark-red"|"dark-teal"|"dark-brown"|"dark-orange"|"dark-purple"|"dark-warm-gray"|"light-pink"|"light-green"|"light-blue"|"light-red"|"light-teal"|"light-brown"|"light-orange"|"light-purple"|"light-warm-gray", public?: bool, workspace?: string}
 export def "update-portfolio" [
   portfolio_gid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1743,7 +1749,7 @@ export def "update-portfolio" [
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --data: record # A generic Asana Resource, containing a globally unique identifier. — shape: {name?: string, color?: "dark-pink"|"dark-green"|"dark-blue"|"dark-red"|"dark-teal"|"dark-brown"|"dark-orange"|"dark-purple"|"dark-warm-gray"|"light-pink"|"light-green"|"light-blue"|"light-red"|"light-teal"|"light-brown"|"light-orange"|"light-purple"|"light-warm-gray", public?: bool, workspace?: string}
-]: any -> record<data: record<gid: string, resource_type: string, name: string, color: string, created_at: string, created_by: record<gid: string, resource_type: string, name: string>, current_status_update: record<gid: string, resource_type: string, resource_subtype: string, title: string>, custom_field_settings: list<record>, custom_fields: list<record>, due_on: string, members: list<record>, owner: record<gid: string, resource_type: string, name: string>, permalink_url: string, public: bool, start_on: string, workspace: record<gid: string, resource_type: string, name: string>>> {
+]: any -> oneof<record<data: record<gid: string, resource_type: string, name: string, color: string, created_at: string, created_by: record<gid: string, resource_type: string, name: string>, current_status_update: record<gid: string, resource_type: string, resource_subtype: string, title: string>, custom_field_settings: list<record>, custom_fields: list<record>, due_on: string, members: list<record>, owner: record<gid: string, resource_type: string, name: string>, permalink_url: string, public: bool, start_on: string, workspace: record<gid: string, resource_type: string, name: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1772,7 +1778,6 @@ export def "update-portfolio" [
 #
 # POST /portfolios/{portfolio_gid}/addCustomFieldSetting
 # operationId: addCustomFieldSettingForPortfolio
-# --data shape: {custom_field: string, insert_after?: string, insert_before?: string, is_important?: bool}
 export def "add-custom-field-setting-for-portfolio" [
   portfolio_gid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1786,7 +1791,7 @@ export def "add-custom-field-setting-for-portfolio" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --data: record # shape: {custom_field: string, insert_after?: string, insert_before?: string, is_important?: bool}
-]: any -> record<data: record<gid: string, resource_type: string, custom_field: record<gid: string, resource_type: string, date_value: record, display_value: string, enabled: bool, enum_options: list, enum_value: record, multi_enum_values: list, name: string, number_value: float, resource_subtype: string, text_value: string, type: string, asana_created_field: string, currency_code: string, custom_label: string, custom_label_position: string, description: string, format: string, has_notifications_enabled: bool, is_global_to_workspace: bool, precision: int, created_by: record, people_value: list>, is_important: bool, parent: record<gid: string, resource_type: string, name: string>, project: record<gid: string, resource_type: string, name: string>>> {
+]: any -> oneof<record<data: record<gid: string, resource_type: string, custom_field: record<gid: string, resource_type: string, date_value: record, display_value: string, enabled: bool, enum_options: list, enum_value: record, multi_enum_values: list, name: string, number_value: float, resource_subtype: string, text_value: string, type: string, asana_created_field: string, currency_code: string, custom_label: string, custom_label_position: string, description: string, format: string, has_notifications_enabled: bool, is_global_to_workspace: bool, precision: int, created_by: record, people_value: list>, is_important: bool, parent: record<gid: string, resource_type: string, name: string>, project: record<gid: string, resource_type: string, name: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1815,7 +1820,6 @@ export def "add-custom-field-setting-for-portfolio" [
 #
 # POST /portfolios/{portfolio_gid}/addItem
 # operationId: addItemForPortfolio
-# --data shape: {insert_after?: string, insert_before?: string, item: string}
 export def "add-item-for-portfolio" [
   portfolio_gid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1830,7 +1834,7 @@ export def "add-item-for-portfolio" [
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --data: record # shape: {insert_after?: string, insert_before?: string, item: string}
-]: any -> record<data: record> {
+]: any -> oneof<record<data: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1859,7 +1863,6 @@ export def "add-item-for-portfolio" [
 #
 # POST /portfolios/{portfolio_gid}/addMembers
 # operationId: addMembersForPortfolio
-# --data shape: {members: string}
 export def "add-members-for-portfolio" [
   portfolio_gid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1874,7 +1877,7 @@ export def "add-members-for-portfolio" [
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --data: record # shape: {members: string}
-]: any -> record<data: record<gid: string, resource_type: string, name: string, color: string, created_at: string, created_by: record<gid: string, resource_type: string, name: string>, current_status_update: record<gid: string, resource_type: string, resource_subtype: string, title: string>, custom_field_settings: list<record>, custom_fields: list<record>, due_on: string, members: list<record>, owner: record<gid: string, resource_type: string, name: string>, permalink_url: string, public: bool, start_on: string, workspace: record<gid: string, resource_type: string, name: string>>> {
+]: any -> oneof<record<data: record<gid: string, resource_type: string, name: string, color: string, created_at: string, created_by: record<gid: string, resource_type: string, name: string>, current_status_update: record<gid: string, resource_type: string, resource_subtype: string, title: string>, custom_field_settings: list<record>, custom_fields: list<record>, due_on: string, members: list<record>, owner: record<gid: string, resource_type: string, name: string>, permalink_url: string, public: bool, start_on: string, workspace: record<gid: string, resource_type: string, name: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1918,7 +1921,7 @@ export def "get-custom-field-settings-for-portfolio" [
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. 'Note: You can only pass in an offset that was returned to you via a previously paginated request.' (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
-]: nothing -> record<data: table<gid: string, resource_type: string, custom_field: record, is_important: bool, parent: record, project: record>> {
+]: nothing -> oneof<record<data: table<gid: string, resource_type: string, custom_field: record, is_important: bool, parent: record, project: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($portfolio_gid | is-empty) { error make --unspanned { msg: "path parameter 'portfolio_gid' must be non-empty" } }
@@ -1959,7 +1962,7 @@ export def "get-items-for-portfolio" [
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. 'Note: You can only pass in an offset that was returned to you via a previously paginated request.' (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
-]: nothing -> record<data: table<gid: string, resource_type: string, name: string>> {
+]: nothing -> oneof<record<data: table<gid: string, resource_type: string, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($portfolio_gid | is-empty) { error make --unspanned { msg: "path parameter 'portfolio_gid' must be non-empty" } }
@@ -2001,7 +2004,7 @@ export def "get-portfolio-memberships-for-portfolio" [
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. 'Note: You can only pass in an offset that was returned to you via a previously paginated request.' (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
-]: nothing -> record<data: table<gid: string, resource_type: string, portfolio: record, user: record>> {
+]: nothing -> oneof<record<data: table<gid: string, resource_type: string, portfolio: record, user: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($portfolio_gid | is-empty) { error make --unspanned { msg: "path parameter 'portfolio_gid' must be non-empty" } }
@@ -2027,7 +2030,6 @@ export def "get-portfolio-memberships-for-portfolio" [
 #
 # POST /portfolios/{portfolio_gid}/removeCustomFieldSetting
 # operationId: removeCustomFieldSettingForPortfolio
-# --data shape: {custom_field: string}
 export def "remove-custom-field-setting-for-portfolio" [
   portfolio_gid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2041,7 +2043,7 @@ export def "remove-custom-field-setting-for-portfolio" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --data: record # shape: {custom_field: string}
-]: any -> record<data: record> {
+]: any -> oneof<record<data: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2070,7 +2072,6 @@ export def "remove-custom-field-setting-for-portfolio" [
 #
 # POST /portfolios/{portfolio_gid}/removeItem
 # operationId: removeItemForPortfolio
-# --data shape: {item: string}
 export def "remove-item-for-portfolio" [
   portfolio_gid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2085,7 +2086,7 @@ export def "remove-item-for-portfolio" [
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --data: record # shape: {item: string}
-]: any -> record<data: record> {
+]: any -> oneof<record<data: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2114,7 +2115,6 @@ export def "remove-item-for-portfolio" [
 #
 # POST /portfolios/{portfolio_gid}/removeMembers
 # operationId: removeMembersForPortfolio
-# --data shape: {members: string}
 export def "remove-members-for-portfolio" [
   portfolio_gid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2129,7 +2129,7 @@ export def "remove-members-for-portfolio" [
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --data: record # shape: {members: string}
-]: any -> record<data: record<gid: string, resource_type: string, name: string, color: string, created_at: string, created_by: record<gid: string, resource_type: string, name: string>, current_status_update: record<gid: string, resource_type: string, resource_subtype: string, title: string>, custom_field_settings: list<record>, custom_fields: list<record>, due_on: string, members: list<record>, owner: record<gid: string, resource_type: string, name: string>, permalink_url: string, public: bool, start_on: string, workspace: record<gid: string, resource_type: string, name: string>>> {
+]: any -> oneof<record<data: record<gid: string, resource_type: string, name: string, color: string, created_at: string, created_by: record<gid: string, resource_type: string, name: string>, current_status_update: record<gid: string, resource_type: string, resource_subtype: string, title: string>, custom_field_settings: list<record>, custom_fields: list<record>, due_on: string, members: list<record>, owner: record<gid: string, resource_type: string, name: string>, permalink_url: string, public: bool, start_on: string, workspace: record<gid: string, resource_type: string, name: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2171,7 +2171,7 @@ export def "delete-project-brief" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
-]: nothing -> record<data: record> {
+]: nothing -> oneof<record<data: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_brief_gid | is-empty) { error make --unspanned { msg: "path parameter 'project_brief_gid' must be non-empty" } }
@@ -2210,7 +2210,7 @@ export def "get-project-brief" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
-]: nothing -> record<data: record<gid: string, resource_type: string, html_text: string, title: string, permalink_url: string, project: record<gid: string, resource_type: string, name: string>, text: string>> {
+]: nothing -> oneof<record<data: record<gid: string, resource_type: string, html_text: string, title: string, permalink_url: string, project: record<gid: string, resource_type: string, name: string>, text: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_brief_gid | is-empty) { error make --unspanned { msg: "path parameter 'project_brief_gid' must be non-empty" } }
@@ -2236,7 +2236,6 @@ export def "get-project-brief" [
 #
 # PUT /project_briefs/{project_brief_gid}
 # operationId: updateProjectBrief
-# --data shape: {html_text?: string, title?: string, text?: string}
 export def "update-project-brief" [
   project_brief_gid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2251,7 +2250,7 @@ export def "update-project-brief" [
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --data: record # A generic Asana Resource, containing a globally unique identifier. — shape: {html_text?: string, title?: string, text?: string}
-]: any -> record<data: record<gid: string, resource_type: string, html_text: string, title: string, permalink_url: string, project: record<gid: string, resource_type: string, name: string>, text: string>> {
+]: any -> oneof<record<data: record<gid: string, resource_type: string, html_text: string, title: string, permalink_url: string, project: record<gid: string, resource_type: string, name: string>, text: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2293,7 +2292,7 @@ export def "get-project-membership" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
-]: nothing -> record<data: record<gid: string, resource_type: string, user: record<gid: string, resource_type: string, name: string>, project: record<gid: string, resource_type: string, name: string>, write_access: string>> {
+]: nothing -> oneof<record<data: record<gid: string, resource_type: string, user: record<gid: string, resource_type: string, name: string>, project: record<gid: string, resource_type: string, name: string>, write_access: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_membership_gid | is-empty) { error make --unspanned { msg: "path parameter 'project_membership_gid' must be non-empty" } }
@@ -2332,7 +2331,7 @@ export def "delete-project-status" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
-]: nothing -> record<data: record> {
+]: nothing -> oneof<record<data: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_status_gid | is-empty) { error make --unspanned { msg: "path parameter 'project_status_gid' must be non-empty" } }
@@ -2371,7 +2370,7 @@ export def "get-project-status" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
-]: nothing -> record<data: record<gid: string, resource_type: string, title: string, color: string, html_text: string, text: string, author: record<gid: string, resource_type: string, name: string>, created_at: string, created_by: record<gid: string, resource_type: string, name: string>, modified_at: string>> {
+]: nothing -> oneof<record<data: record<gid: string, resource_type: string, title: string, color: string, html_text: string, text: string, author: record<gid: string, resource_type: string, name: string>, created_at: string, created_by: record<gid: string, resource_type: string, name: string>, modified_at: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_status_gid | is-empty) { error make --unspanned { msg: "path parameter 'project_status_gid' must be non-empty" } }
@@ -2413,7 +2412,7 @@ export def "get-project-templates" [
   --team: string # The team to filter projects on. (e.g. 14916)
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. 'Note: You can only pass in an offset that was returned to you via a previously paginated request.' (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
-]: nothing -> record<data: table<gid: string, resource_type: string, name: string>> {
+]: nothing -> oneof<record<data: table<gid: string, resource_type: string, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "workspace" $workspace "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -2451,7 +2450,7 @@ export def "get-project-template" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
-]: nothing -> record<data: record<gid: string, resource_type: string, name: string, color: string, description: string, html_description: string, owner: record<gid: string, resource_type: string, name: string>, public: bool, requested_dates: list<record>, team: record<gid: string, resource_type: string, name: string>>> {
+]: nothing -> oneof<record<data: record<gid: string, resource_type: string, name: string, color: string, description: string, html_description: string, owner: record<gid: string, resource_type: string, name: string>, public: bool, requested_dates: list<record>, team: record<gid: string, resource_type: string, name: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_template_gid | is-empty) { error make --unspanned { msg: "path parameter 'project_template_gid' must be non-empty" } }
@@ -2477,7 +2476,6 @@ export def "get-project-template" [
 #
 # POST /project_templates/{project_template_gid}/instantiateProject
 # operationId: instantiateProject
-# --data shape: {is_strict?: bool, name: string, public: bool, requested_dates?: list, team?: string, workspace?: string}
 export def "instantiate-project" [
   project_template_gid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2492,7 +2490,7 @@ export def "instantiate-project" [
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --data: record # shape: {is_strict?: bool, name: string, public: bool, requested_dates?: list, team?: string, workspace?: string}
-]: any -> record<data: record<gid: string, resource_type: string, new_project: record<gid: string, resource_type: string, name: string>, new_project_template: record<gid: string, resource_type: string, name: string>, new_task: record<gid: string, resource_type: string, name: string, resource_subtype: string>, resource_subtype: string, status: string>> {
+]: any -> oneof<record<data: record<gid: string, resource_type: string, new_project: record<gid: string, resource_type: string, name: string>, new_project_template: record<gid: string, resource_type: string, name: string>, new_task: record<gid: string, resource_type: string, name: string, resource_subtype: string>, resource_subtype: string, status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2538,7 +2536,7 @@ export def "get-projects" [
   --workspace: string # The workspace or organization to filter projects on. (e.g. 1331)
   --team: string # The team to filter projects on. (e.g. 14916)
   --archived: oneof<nothing, bool> # Only return projects whose `archived` field takes on the value of this parameter. (e.g. false)
-]: nothing -> record<data: table<gid: string, resource_type: string, name: string>> {
+]: nothing -> oneof<record<data: table<gid: string, resource_type: string, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "workspace" $workspace "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "archived" $archived "scalar")] | flatten | str join "&"
@@ -2563,7 +2561,6 @@ export def "get-projects" [
 #
 # POST /projects
 # operationId: createProject
-# --data shape: {name?: string, archived?: bool, color?: "dark-pink"|"dark-green"|"dark-blue"|"dark-red"|"dark-teal"|"dark-brown"|"dark-orange"|"dark-purple"|"dark-warm-gray"|"light-pink"|"light-green"|"light-blue"|"light-red"|"light-teal"|"light-brown"|"light-orange"|"light-purple"|"light-warm-gray", current_status?: record, current_status_update?: record, default_view?: "list"|"board"|"calendar"|"timeline", due_date?: string, due_on?: string, html_notes?: string, is_template?: bool, notes?: string, ... (7 more fields)}
 export def "create-project" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2577,7 +2574,7 @@ export def "create-project" [
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --data: record # A generic Asana Resource, containing a globally unique identifier. — shape: {name?: string, archived?: bool, color?: "dark-pink"|"dark-green"|"dark-blue"|"dark-red"|"dark-teal"|"dark-brown"|"dark-orange"|"dark-purple"|"dark-warm-gray"|"light-pink"|"light-green"|"light-blue"|"light-red"|"light-teal"|"light-brown"|"light-orange"|"light-purple"|"light-warm-gray", current_status?: record, current_status_update?: record, default_view?: "list"|"board"|"calendar"|"timeline", due_date?: string, due_on?: string, html_notes?: string, is_template?: bool, notes?: string, ... (7 more fields)}
-]: any -> record<data: record<gid: string, resource_type: string, name: string, archived: bool, color: string, created_at: string, current_status: record<gid: string, resource_type: string, title: string, color: string, html_text: string, text: string, author: record, created_at: string, created_by: record, modified_at: string>, current_status_update: record<gid: string, resource_type: string, resource_subtype: string, title: string>, custom_field_settings: list<record>, default_view: string, due_date: string, due_on: string, html_notes: string, is_template: bool, members: list<record>, modified_at: string, notes: string, public: bool, start_on: string, workspace: record<gid: string, resource_type: string, name: string>, completed: bool, completed_at: string, completed_by: record<gid: string, resource_type: string, name: string>, created_from_template: record<gid: string, resource_type: string, name: string>, custom_fields: list<record>, followers: list<record>, icon: string, owner: record<gid: string, resource_type: string, name: string>, permalink_url: string, project_brief: record<gid: string, resource_type: string>, team: record<gid: string, resource_type: string, name: string>>> {
+]: any -> oneof<record<data: record<gid: string, resource_type: string, name: string, archived: bool, color: string, created_at: string, current_status: record<gid: string, resource_type: string, title: string, color: string, html_text: string, text: string, author: record, created_at: string, created_by: record, modified_at: string>, current_status_update: record<gid: string, resource_type: string, resource_subtype: string, title: string>, custom_field_settings: list<record>, default_view: string, due_date: string, due_on: string, html_notes: string, is_template: bool, members: list<record>, modified_at: string, notes: string, public: bool, start_on: string, workspace: record<gid: string, resource_type: string, name: string>, completed: bool, completed_at: string, completed_by: record<gid: string, resource_type: string, name: string>, created_from_template: record<gid: string, resource_type: string, name: string>, custom_fields: list<record>, followers: list<record>, icon: string, owner: record<gid: string, resource_type: string, name: string>, permalink_url: string, project_brief: record<gid: string, resource_type: string>, team: record<gid: string, resource_type: string, name: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2618,7 +2615,7 @@ export def "delete-project" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
-]: nothing -> record<data: record> {
+]: nothing -> oneof<record<data: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_gid | is-empty) { error make --unspanned { msg: "path parameter 'project_gid' must be non-empty" } }
@@ -2657,7 +2654,7 @@ export def "get-project" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
-]: nothing -> record<data: record<gid: string, resource_type: string, name: string, archived: bool, color: string, created_at: string, current_status: record<gid: string, resource_type: string, title: string, color: string, html_text: string, text: string, author: record, created_at: string, created_by: record, modified_at: string>, current_status_update: record<gid: string, resource_type: string, resource_subtype: string, title: string>, custom_field_settings: list<record>, default_view: string, due_date: string, due_on: string, html_notes: string, is_template: bool, members: list<record>, modified_at: string, notes: string, public: bool, start_on: string, workspace: record<gid: string, resource_type: string, name: string>, completed: bool, completed_at: string, completed_by: record<gid: string, resource_type: string, name: string>, created_from_template: record<gid: string, resource_type: string, name: string>, custom_fields: list<record>, followers: list<record>, icon: string, owner: record<gid: string, resource_type: string, name: string>, permalink_url: string, project_brief: record<gid: string, resource_type: string>, team: record<gid: string, resource_type: string, name: string>>> {
+]: nothing -> oneof<record<data: record<gid: string, resource_type: string, name: string, archived: bool, color: string, created_at: string, current_status: record<gid: string, resource_type: string, title: string, color: string, html_text: string, text: string, author: record, created_at: string, created_by: record, modified_at: string>, current_status_update: record<gid: string, resource_type: string, resource_subtype: string, title: string>, custom_field_settings: list<record>, default_view: string, due_date: string, due_on: string, html_notes: string, is_template: bool, members: list<record>, modified_at: string, notes: string, public: bool, start_on: string, workspace: record<gid: string, resource_type: string, name: string>, completed: bool, completed_at: string, completed_by: record<gid: string, resource_type: string, name: string>, created_from_template: record<gid: string, resource_type: string, name: string>, custom_fields: list<record>, followers: list<record>, icon: string, owner: record<gid: string, resource_type: string, name: string>, permalink_url: string, project_brief: record<gid: string, resource_type: string>, team: record<gid: string, resource_type: string, name: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_gid | is-empty) { error make --unspanned { msg: "path parameter 'project_gid' must be non-empty" } }
@@ -2683,7 +2680,6 @@ export def "get-project" [
 #
 # PUT /projects/{project_gid}
 # operationId: updateProject
-# --data shape: {name?: string, archived?: bool, color?: "dark-pink"|"dark-green"|"dark-blue"|"dark-red"|"dark-teal"|"dark-brown"|"dark-orange"|"dark-purple"|"dark-warm-gray"|"light-pink"|"light-green"|"light-blue"|"light-red"|"light-teal"|"light-brown"|"light-orange"|"light-purple"|"light-warm-gray", current_status?: record, current_status_update?: record, default_view?: "list"|"board"|"calendar"|"timeline", due_date?: string, due_on?: string, html_notes?: string, is_template?: bool, notes?: string, ... (7 more fields)}
 export def "update-project" [
   project_gid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2698,7 +2694,7 @@ export def "update-project" [
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --data: record # A generic Asana Resource, containing a globally unique identifier. — shape: {name?: string, archived?: bool, color?: "dark-pink"|"dark-green"|"dark-blue"|"dark-red"|"dark-teal"|"dark-brown"|"dark-orange"|"dark-purple"|"dark-warm-gray"|"light-pink"|"light-green"|"light-blue"|"light-red"|"light-teal"|"light-brown"|"light-orange"|"light-purple"|"light-warm-gray", current_status?: record, current_status_update?: record, default_view?: "list"|"board"|"calendar"|"timeline", due_date?: string, due_on?: string, html_notes?: string, is_template?: bool, notes?: string, ... (7 more fields)}
-]: any -> record<data: record<gid: string, resource_type: string, name: string, archived: bool, color: string, created_at: string, current_status: record<gid: string, resource_type: string, title: string, color: string, html_text: string, text: string, author: record, created_at: string, created_by: record, modified_at: string>, current_status_update: record<gid: string, resource_type: string, resource_subtype: string, title: string>, custom_field_settings: list<record>, default_view: string, due_date: string, due_on: string, html_notes: string, is_template: bool, members: list<record>, modified_at: string, notes: string, public: bool, start_on: string, workspace: record<gid: string, resource_type: string, name: string>, completed: bool, completed_at: string, completed_by: record<gid: string, resource_type: string, name: string>, created_from_template: record<gid: string, resource_type: string, name: string>, custom_fields: list<record>, followers: list<record>, icon: string, owner: record<gid: string, resource_type: string, name: string>, permalink_url: string, project_brief: record<gid: string, resource_type: string>, team: record<gid: string, resource_type: string, name: string>>> {
+]: any -> oneof<record<data: record<gid: string, resource_type: string, name: string, archived: bool, color: string, created_at: string, current_status: record<gid: string, resource_type: string, title: string, color: string, html_text: string, text: string, author: record, created_at: string, created_by: record, modified_at: string>, current_status_update: record<gid: string, resource_type: string, resource_subtype: string, title: string>, custom_field_settings: list<record>, default_view: string, due_date: string, due_on: string, html_notes: string, is_template: bool, members: list<record>, modified_at: string, notes: string, public: bool, start_on: string, workspace: record<gid: string, resource_type: string, name: string>, completed: bool, completed_at: string, completed_by: record<gid: string, resource_type: string, name: string>, created_from_template: record<gid: string, resource_type: string, name: string>, custom_fields: list<record>, followers: list<record>, icon: string, owner: record<gid: string, resource_type: string, name: string>, permalink_url: string, project_brief: record<gid: string, resource_type: string>, team: record<gid: string, resource_type: string, name: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2727,7 +2723,6 @@ export def "update-project" [
 #
 # POST /projects/{project_gid}/addCustomFieldSetting
 # operationId: addCustomFieldSettingForProject
-# --data shape: {custom_field: string, insert_after?: string, insert_before?: string, is_important?: bool}
 export def "add-custom-field-setting-for-project" [
   project_gid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2741,7 +2736,7 @@ export def "add-custom-field-setting-for-project" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --data: record # shape: {custom_field: string, insert_after?: string, insert_before?: string, is_important?: bool}
-]: any -> record<data: record<gid: string, resource_type: string, custom_field: record<gid: string, resource_type: string, date_value: record, display_value: string, enabled: bool, enum_options: list, enum_value: record, multi_enum_values: list, name: string, number_value: float, resource_subtype: string, text_value: string, type: string, asana_created_field: string, currency_code: string, custom_label: string, custom_label_position: string, description: string, format: string, has_notifications_enabled: bool, is_global_to_workspace: bool, precision: int, created_by: record, people_value: list>, is_important: bool, parent: record<gid: string, resource_type: string, name: string>, project: record<gid: string, resource_type: string, name: string>>> {
+]: any -> oneof<record<data: record<gid: string, resource_type: string, custom_field: record<gid: string, resource_type: string, date_value: record, display_value: string, enabled: bool, enum_options: list, enum_value: record, multi_enum_values: list, name: string, number_value: float, resource_subtype: string, text_value: string, type: string, asana_created_field: string, currency_code: string, custom_label: string, custom_label_position: string, description: string, format: string, has_notifications_enabled: bool, is_global_to_workspace: bool, precision: int, created_by: record, people_value: list>, is_important: bool, parent: record<gid: string, resource_type: string, name: string>, project: record<gid: string, resource_type: string, name: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2770,7 +2765,6 @@ export def "add-custom-field-setting-for-project" [
 #
 # POST /projects/{project_gid}/addFollowers
 # operationId: addFollowersForProject
-# --data shape: {followers: string}
 export def "add-followers-for-project" [
   project_gid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2785,7 +2779,7 @@ export def "add-followers-for-project" [
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --data: record # shape: {followers: string}
-]: any -> record<data: record<gid: string, resource_type: string, name: string, archived: bool, color: string, created_at: string, current_status: record<gid: string, resource_type: string, title: string, color: string, html_text: string, text: string, author: record, created_at: string, created_by: record, modified_at: string>, current_status_update: record<gid: string, resource_type: string, resource_subtype: string, title: string>, custom_field_settings: list<record>, default_view: string, due_date: string, due_on: string, html_notes: string, is_template: bool, members: list<record>, modified_at: string, notes: string, public: bool, start_on: string, workspace: record<gid: string, resource_type: string, name: string>, completed: bool, completed_at: string, completed_by: record<gid: string, resource_type: string, name: string>, created_from_template: record<gid: string, resource_type: string, name: string>, custom_fields: list<record>, followers: list<record>, icon: string, owner: record<gid: string, resource_type: string, name: string>, permalink_url: string, project_brief: record<gid: string, resource_type: string>, team: record<gid: string, resource_type: string, name: string>>> {
+]: any -> oneof<record<data: record<gid: string, resource_type: string, name: string, archived: bool, color: string, created_at: string, current_status: record<gid: string, resource_type: string, title: string, color: string, html_text: string, text: string, author: record, created_at: string, created_by: record, modified_at: string>, current_status_update: record<gid: string, resource_type: string, resource_subtype: string, title: string>, custom_field_settings: list<record>, default_view: string, due_date: string, due_on: string, html_notes: string, is_template: bool, members: list<record>, modified_at: string, notes: string, public: bool, start_on: string, workspace: record<gid: string, resource_type: string, name: string>, completed: bool, completed_at: string, completed_by: record<gid: string, resource_type: string, name: string>, created_from_template: record<gid: string, resource_type: string, name: string>, custom_fields: list<record>, followers: list<record>, icon: string, owner: record<gid: string, resource_type: string, name: string>, permalink_url: string, project_brief: record<gid: string, resource_type: string>, team: record<gid: string, resource_type: string, name: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2814,7 +2808,6 @@ export def "add-followers-for-project" [
 #
 # POST /projects/{project_gid}/addMembers
 # operationId: addMembersForProject
-# --data shape: {members: string}
 export def "add-members-for-project" [
   project_gid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2829,7 +2822,7 @@ export def "add-members-for-project" [
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --data: record # shape: {members: string}
-]: any -> record<data: record<gid: string, resource_type: string, name: string, archived: bool, color: string, created_at: string, current_status: record<gid: string, resource_type: string, title: string, color: string, html_text: string, text: string, author: record, created_at: string, created_by: record, modified_at: string>, current_status_update: record<gid: string, resource_type: string, resource_subtype: string, title: string>, custom_field_settings: list<record>, default_view: string, due_date: string, due_on: string, html_notes: string, is_template: bool, members: list<record>, modified_at: string, notes: string, public: bool, start_on: string, workspace: record<gid: string, resource_type: string, name: string>, completed: bool, completed_at: string, completed_by: record<gid: string, resource_type: string, name: string>, created_from_template: record<gid: string, resource_type: string, name: string>, custom_fields: list<record>, followers: list<record>, icon: string, owner: record<gid: string, resource_type: string, name: string>, permalink_url: string, project_brief: record<gid: string, resource_type: string>, team: record<gid: string, resource_type: string, name: string>>> {
+]: any -> oneof<record<data: record<gid: string, resource_type: string, name: string, archived: bool, color: string, created_at: string, current_status: record<gid: string, resource_type: string, title: string, color: string, html_text: string, text: string, author: record, created_at: string, created_by: record, modified_at: string>, current_status_update: record<gid: string, resource_type: string, resource_subtype: string, title: string>, custom_field_settings: list<record>, default_view: string, due_date: string, due_on: string, html_notes: string, is_template: bool, members: list<record>, modified_at: string, notes: string, public: bool, start_on: string, workspace: record<gid: string, resource_type: string, name: string>, completed: bool, completed_at: string, completed_by: record<gid: string, resource_type: string, name: string>, created_from_template: record<gid: string, resource_type: string, name: string>, custom_fields: list<record>, followers: list<record>, icon: string, owner: record<gid: string, resource_type: string, name: string>, permalink_url: string, project_brief: record<gid: string, resource_type: string>, team: record<gid: string, resource_type: string, name: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2873,7 +2866,7 @@ export def "get-custom-field-settings-for-project" [
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. 'Note: You can only pass in an offset that was returned to you via a previously paginated request.' (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
-]: nothing -> record<data: table<gid: string, resource_type: string, custom_field: record, is_important: bool, parent: record, project: record>> {
+]: nothing -> oneof<record<data: table<gid: string, resource_type: string, custom_field: record, is_important: bool, parent: record, project: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_gid | is-empty) { error make --unspanned { msg: "path parameter 'project_gid' must be non-empty" } }
@@ -2899,7 +2892,6 @@ export def "get-custom-field-settings-for-project" [
 #
 # POST /projects/{project_gid}/duplicate
 # operationId: duplicateProject
-# --data shape: {include?: "members"|"notes"|"forms"|"task_notes"|"task_assignee"|"task_subtasks"|"task_attachments"|"task_dates"|"task_dependencies"|"task_followers"|"task_tags"|"task_projects", name: string, schedule_dates?: record, team?: string}
 export def "duplicate-project" [
   project_gid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2914,7 +2906,7 @@ export def "duplicate-project" [
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --data: record # shape: {include?: "members"|"notes"|"forms"|"task_notes"|"task_assignee"|"task_subtasks"|"task_attachments"|"task_dates"|"task_dependencies"|"task_followers"|"task_tags"|"task_projects", name: string, schedule_dates?: record, team?: string}
-]: any -> record<data: record<gid: string, resource_type: string, new_project: record<gid: string, resource_type: string, name: string>, new_project_template: record<gid: string, resource_type: string, name: string>, new_task: record<gid: string, resource_type: string, name: string, resource_subtype: string>, resource_subtype: string, status: string>> {
+]: any -> oneof<record<data: record<gid: string, resource_type: string, new_project: record<gid: string, resource_type: string, name: string>, new_project_template: record<gid: string, resource_type: string, name: string>, new_task: record<gid: string, resource_type: string, name: string, resource_subtype: string>, resource_subtype: string, status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2943,7 +2935,6 @@ export def "duplicate-project" [
 #
 # POST /projects/{project_gid}/project_briefs
 # operationId: createProjectBrief
-# --data shape: {html_text?: string, title?: string, text?: string}
 export def "create-project-brief" [
   project_gid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2958,7 +2949,7 @@ export def "create-project-brief" [
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --data: record # A generic Asana Resource, containing a globally unique identifier. — shape: {html_text?: string, title?: string, text?: string}
-]: any -> record<data: record<gid: string, resource_type: string, html_text: string, title: string, permalink_url: string, project: record<gid: string, resource_type: string, name: string>, text: string>> {
+]: any -> oneof<record<data: record<gid: string, resource_type: string, html_text: string, title: string, permalink_url: string, project: record<gid: string, resource_type: string, name: string>, text: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3003,7 +2994,7 @@ export def "get-project-memberships-for-project" [
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. 'Note: You can only pass in an offset that was returned to you via a previously paginated request.' (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
-]: nothing -> record<data: table<gid: string, resource_type: string, user: record>> {
+]: nothing -> oneof<record<data: table<gid: string, resource_type: string, user: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_gid | is-empty) { error make --unspanned { msg: "path parameter 'project_gid' must be non-empty" } }
@@ -3044,7 +3035,7 @@ export def "get-project-statuses-for-project" [
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. 'Note: You can only pass in an offset that was returned to you via a previously paginated request.' (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
-]: nothing -> record<data: table<gid: string, resource_type: string, title: string>> {
+]: nothing -> oneof<record<data: table<gid: string, resource_type: string, title: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_gid | is-empty) { error make --unspanned { msg: "path parameter 'project_gid' must be non-empty" } }
@@ -3070,7 +3061,6 @@ export def "get-project-statuses-for-project" [
 #
 # POST /projects/{project_gid}/project_statuses
 # operationId: createProjectStatusForProject
-# --data shape: {title?: string, color: "green"|"yellow"|"red"|"blue", html_text?: string, text: string}
 export def "create-project-status-for-project" [
   project_gid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3085,7 +3075,7 @@ export def "create-project-status-for-project" [
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --data: record # A generic Asana Resource, containing a globally unique identifier. — shape: {title?: string, color: "green"|"yellow"|"red"|"blue", html_text?: string, text: string}
-]: any -> record<data: record<gid: string, resource_type: string, title: string, color: string, html_text: string, text: string, author: record<gid: string, resource_type: string, name: string>, created_at: string, created_by: record<gid: string, resource_type: string, name: string>, modified_at: string>> {
+]: any -> oneof<record<data: record<gid: string, resource_type: string, title: string, color: string, html_text: string, text: string, author: record<gid: string, resource_type: string, name: string>, created_at: string, created_by: record<gid: string, resource_type: string, name: string>, modified_at: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3114,7 +3104,6 @@ export def "create-project-status-for-project" [
 #
 # POST /projects/{project_gid}/removeCustomFieldSetting
 # operationId: removeCustomFieldSettingForProject
-# --data shape: {custom_field: string}
 export def "remove-custom-field-setting-for-project" [
   project_gid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3128,7 +3117,7 @@ export def "remove-custom-field-setting-for-project" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --data: record # shape: {custom_field: string}
-]: any -> record<data: record> {
+]: any -> oneof<record<data: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3157,7 +3146,6 @@ export def "remove-custom-field-setting-for-project" [
 #
 # POST /projects/{project_gid}/removeFollowers
 # operationId: removeFollowersForProject
-# --data shape: {followers: string}
 export def "remove-followers-for-project" [
   project_gid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3172,7 +3160,7 @@ export def "remove-followers-for-project" [
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --data: record # shape: {followers: string}
-]: any -> record<data: record<gid: string, resource_type: string, name: string, archived: bool, color: string, created_at: string, current_status: record<gid: string, resource_type: string, title: string, color: string, html_text: string, text: string, author: record, created_at: string, created_by: record, modified_at: string>, current_status_update: record<gid: string, resource_type: string, resource_subtype: string, title: string>, custom_field_settings: list<record>, default_view: string, due_date: string, due_on: string, html_notes: string, is_template: bool, members: list<record>, modified_at: string, notes: string, public: bool, start_on: string, workspace: record<gid: string, resource_type: string, name: string>, completed: bool, completed_at: string, completed_by: record<gid: string, resource_type: string, name: string>, created_from_template: record<gid: string, resource_type: string, name: string>, custom_fields: list<record>, followers: list<record>, icon: string, owner: record<gid: string, resource_type: string, name: string>, permalink_url: string, project_brief: record<gid: string, resource_type: string>, team: record<gid: string, resource_type: string, name: string>>> {
+]: any -> oneof<record<data: record<gid: string, resource_type: string, name: string, archived: bool, color: string, created_at: string, current_status: record<gid: string, resource_type: string, title: string, color: string, html_text: string, text: string, author: record, created_at: string, created_by: record, modified_at: string>, current_status_update: record<gid: string, resource_type: string, resource_subtype: string, title: string>, custom_field_settings: list<record>, default_view: string, due_date: string, due_on: string, html_notes: string, is_template: bool, members: list<record>, modified_at: string, notes: string, public: bool, start_on: string, workspace: record<gid: string, resource_type: string, name: string>, completed: bool, completed_at: string, completed_by: record<gid: string, resource_type: string, name: string>, created_from_template: record<gid: string, resource_type: string, name: string>, custom_fields: list<record>, followers: list<record>, icon: string, owner: record<gid: string, resource_type: string, name: string>, permalink_url: string, project_brief: record<gid: string, resource_type: string>, team: record<gid: string, resource_type: string, name: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3201,7 +3189,6 @@ export def "remove-followers-for-project" [
 #
 # POST /projects/{project_gid}/removeMembers
 # operationId: removeMembersForProject
-# --data shape: {members: string}
 export def "remove-members-for-project" [
   project_gid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3216,7 +3203,7 @@ export def "remove-members-for-project" [
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --data: record # shape: {members: string}
-]: any -> record<data: record<gid: string, resource_type: string, name: string, archived: bool, color: string, created_at: string, current_status: record<gid: string, resource_type: string, title: string, color: string, html_text: string, text: string, author: record, created_at: string, created_by: record, modified_at: string>, current_status_update: record<gid: string, resource_type: string, resource_subtype: string, title: string>, custom_field_settings: list<record>, default_view: string, due_date: string, due_on: string, html_notes: string, is_template: bool, members: list<record>, modified_at: string, notes: string, public: bool, start_on: string, workspace: record<gid: string, resource_type: string, name: string>, completed: bool, completed_at: string, completed_by: record<gid: string, resource_type: string, name: string>, created_from_template: record<gid: string, resource_type: string, name: string>, custom_fields: list<record>, followers: list<record>, icon: string, owner: record<gid: string, resource_type: string, name: string>, permalink_url: string, project_brief: record<gid: string, resource_type: string>, team: record<gid: string, resource_type: string, name: string>>> {
+]: any -> oneof<record<data: record<gid: string, resource_type: string, name: string, archived: bool, color: string, created_at: string, current_status: record<gid: string, resource_type: string, title: string, color: string, html_text: string, text: string, author: record, created_at: string, created_by: record, modified_at: string>, current_status_update: record<gid: string, resource_type: string, resource_subtype: string, title: string>, custom_field_settings: list<record>, default_view: string, due_date: string, due_on: string, html_notes: string, is_template: bool, members: list<record>, modified_at: string, notes: string, public: bool, start_on: string, workspace: record<gid: string, resource_type: string, name: string>, completed: bool, completed_at: string, completed_by: record<gid: string, resource_type: string, name: string>, created_from_template: record<gid: string, resource_type: string, name: string>, custom_fields: list<record>, followers: list<record>, icon: string, owner: record<gid: string, resource_type: string, name: string>, permalink_url: string, project_brief: record<gid: string, resource_type: string>, team: record<gid: string, resource_type: string, name: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3245,7 +3232,6 @@ export def "remove-members-for-project" [
 #
 # POST /projects/{project_gid}/saveAsTemplate
 # operationId: projectSaveAsTemplate
-# --data shape: {name: string, public: bool, team?: string, workspace?: string}
 export def "project-save-as-template" [
   project_gid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3260,7 +3246,7 @@ export def "project-save-as-template" [
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --data: record # shape: {name: string, public: bool, team?: string, workspace?: string}
-]: any -> record<data: record<gid: string, resource_type: string, new_project: record<gid: string, resource_type: string, name: string>, new_project_template: record<gid: string, resource_type: string, name: string>, new_task: record<gid: string, resource_type: string, name: string, resource_subtype: string>, resource_subtype: string, status: string>> {
+]: any -> oneof<record<data: record<gid: string, resource_type: string, new_project: record<gid: string, resource_type: string, name: string>, new_project_template: record<gid: string, resource_type: string, name: string>, new_task: record<gid: string, resource_type: string, name: string, resource_subtype: string>, resource_subtype: string, status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3304,7 +3290,7 @@ export def "get-sections-for-project" [
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. 'Note: You can only pass in an offset that was returned to you via a previously paginated request.' (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
-]: nothing -> record<data: table<gid: string, resource_type: string, name: string>> {
+]: nothing -> oneof<record<data: table<gid: string, resource_type: string, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_gid | is-empty) { error make --unspanned { msg: "path parameter 'project_gid' must be non-empty" } }
@@ -3330,7 +3316,6 @@ export def "get-sections-for-project" [
 #
 # POST /projects/{project_gid}/sections
 # operationId: createSectionForProject
-# --data shape: {insert_after?: string, insert_before?: string, name: string}
 export def "create-section-for-project" [
   project_gid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3345,7 +3330,7 @@ export def "create-section-for-project" [
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --data: record # shape: {insert_after?: string, insert_before?: string, name: string}
-]: any -> record<data: record<gid: string, resource_type: string, name: string, created_at: string, project: record<gid: string, resource_type: string, name: string>, projects: list<record>>> {
+]: any -> oneof<record<data: record<gid: string, resource_type: string, name: string, created_at: string, project: record<gid: string, resource_type: string, name: string>, projects: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3374,7 +3359,6 @@ export def "create-section-for-project" [
 #
 # POST /projects/{project_gid}/sections/insert
 # operationId: insertSectionForProject
-# --data shape: {after_section?: string, before_section?: string, project: string, section: string}
 export def "insert-section-for-project" [
   project_gid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3389,7 +3373,7 @@ export def "insert-section-for-project" [
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --data: record # shape: {after_section?: string, before_section?: string, project: string, section: string}
-]: any -> record<data: record> {
+]: any -> oneof<record<data: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3433,7 +3417,7 @@ export def "get-task-counts-for-project" [
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. 'Note: You can only pass in an offset that was returned to you via a previously paginated request.' (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
-]: nothing -> record<data: record<num_completed_milestones: int, num_completed_tasks: int, num_incomplete_milestones: int, num_incomplete_tasks: int, num_milestones: int, num_tasks: int>> {
+]: nothing -> oneof<record<data: record<num_completed_milestones: int, num_completed_tasks: int, num_incomplete_milestones: int, num_incomplete_tasks: int, num_milestones: int, num_tasks: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_gid | is-empty) { error make --unspanned { msg: "path parameter 'project_gid' must be non-empty" } }
@@ -3475,7 +3459,7 @@ export def "get-tasks-for-project" [
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. 'Note: You can only pass in an offset that was returned to you via a previously paginated request.' (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
-]: nothing -> record<data: table<gid: string, resource_type: string, name: string, resource_subtype: string>> {
+]: nothing -> oneof<record<data: table<gid: string, resource_type: string, name: string, resource_subtype: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_gid | is-empty) { error make --unspanned { msg: "path parameter 'project_gid' must be non-empty" } }
@@ -3514,7 +3498,7 @@ export def "delete-section" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
-]: nothing -> record<data: record> {
+]: nothing -> oneof<record<data: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($section_gid | is-empty) { error make --unspanned { msg: "path parameter 'section_gid' must be non-empty" } }
@@ -3553,7 +3537,7 @@ export def "get-section" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
-]: nothing -> record<data: record<gid: string, resource_type: string, name: string, created_at: string, project: record<gid: string, resource_type: string, name: string>, projects: list<record>>> {
+]: nothing -> oneof<record<data: record<gid: string, resource_type: string, name: string, created_at: string, project: record<gid: string, resource_type: string, name: string>, projects: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($section_gid | is-empty) { error make --unspanned { msg: "path parameter 'section_gid' must be non-empty" } }
@@ -3579,7 +3563,6 @@ export def "get-section" [
 #
 # PUT /sections/{section_gid}
 # operationId: updateSection
-# --data shape: {insert_after?: string, insert_before?: string, name: string}
 export def "update-section" [
   section_gid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3594,7 +3577,7 @@ export def "update-section" [
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --data: record # shape: {insert_after?: string, insert_before?: string, name: string}
-]: any -> record<data: record<gid: string, resource_type: string, name: string, created_at: string, project: record<gid: string, resource_type: string, name: string>, projects: list<record>>> {
+]: any -> oneof<record<data: record<gid: string, resource_type: string, name: string, created_at: string, project: record<gid: string, resource_type: string, name: string>, projects: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3623,7 +3606,6 @@ export def "update-section" [
 #
 # POST /sections/{section_gid}/addTask
 # operationId: addTaskForSection
-# --data shape: {insert_after?: string, insert_before?: string, task: string}
 export def "add-task-for-section" [
   section_gid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3638,7 +3620,7 @@ export def "add-task-for-section" [
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --data: record # shape: {insert_after?: string, insert_before?: string, task: string}
-]: any -> record<data: record> {
+]: any -> oneof<record<data: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3682,7 +3664,7 @@ export def "get-tasks-for-section" [
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. 'Note: You can only pass in an offset that was returned to you via a previously paginated request.' (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
-]: nothing -> record<data: table<gid: string, resource_type: string, name: string, resource_subtype: string>> {
+]: nothing -> oneof<record<data: table<gid: string, resource_type: string, name: string, resource_subtype: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($section_gid | is-empty) { error make --unspanned { msg: "path parameter 'section_gid' must be non-empty" } }
@@ -3724,7 +3706,7 @@ export def "get-statuses-for-object" [
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. 'Note: You can only pass in an offset that was returned to you via a previously paginated request.' (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
   --parent: string # Globally unique identifier for object to fetch statuses from. Must be a GID for a project, portfolio, or goal. (required, e.g. 159874)
   --created-since: string # Only return statuses that have been created since the given time. (format: date-time, e.g. 2012-02-22T02:06:58.158Z)
-]: nothing -> record<data: table<gid: string, resource_type: string, resource_subtype: string, title: string>> {
+]: nothing -> oneof<record<data: table<gid: string, resource_type: string, resource_subtype: string, title: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent == null) { error make --unspanned { msg: "required query parameter 'parent' missing: pass --parent" } }
@@ -3750,7 +3732,6 @@ export def "get-statuses-for-object" [
 #
 # POST /status_updates
 # operationId: createStatusForObject
-# --data shape: {title?: string, html_text?: string, status_type: "on_track"|"at_risk"|"off_track"|"on_hold"|"complete"|"achieved"|"partial"|"missed"|"dropped", text: string, parent: string}
 export def "create-status-for-object" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3766,7 +3747,7 @@ export def "create-status-for-object" [
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. 'Note: You can only pass in an offset that was returned to you via a previously paginated request.' (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
   --data: record # A generic Asana Resource, containing a globally unique identifier. — shape: {title?: string, html_text?: string, status_type: "on_track"|"at_risk"|"off_track"|"on_hold"|"complete"|"achieved"|"partial"|"missed"|"dropped", text: string, parent: string}
-]: any -> record<data: record<gid: string, resource_type: string, resource_subtype: string, title: string, html_text: string, status_type: string, text: string, author: record<gid: string, resource_type: string, name: string>, created_at: string, created_by: record<gid: string, resource_type: string, name: string>, hearted: bool, hearts: list<record>, liked: bool, likes: list<record>, modified_at: string, num_hearts: int, num_likes: int, parent: record<gid: string, resource_type: string, name: string>>> {
+]: any -> oneof<record<data: record<gid: string, resource_type: string, resource_subtype: string, title: string, html_text: string, status_type: string, text: string, author: record<gid: string, resource_type: string, name: string>, created_at: string, created_by: record<gid: string, resource_type: string, name: string>, hearted: bool, hearts: list<record>, liked: bool, likes: list<record>, modified_at: string, num_hearts: int, num_likes: int, parent: record<gid: string, resource_type: string, name: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3807,7 +3788,7 @@ export def "delete-status" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
-]: nothing -> record<data: record> {
+]: nothing -> oneof<record<data: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($status_gid | is-empty) { error make --unspanned { msg: "path parameter 'status_gid' must be non-empty" } }
@@ -3846,7 +3827,7 @@ export def "get-status" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
-]: nothing -> record<data: record<gid: string, resource_type: string, resource_subtype: string, title: string, html_text: string, status_type: string, text: string, author: record<gid: string, resource_type: string, name: string>, created_at: string, created_by: record<gid: string, resource_type: string, name: string>, hearted: bool, hearts: list<record>, liked: bool, likes: list<record>, modified_at: string, num_hearts: int, num_likes: int, parent: record<gid: string, resource_type: string, name: string>>> {
+]: nothing -> oneof<record<data: record<gid: string, resource_type: string, resource_subtype: string, title: string, html_text: string, status_type: string, text: string, author: record<gid: string, resource_type: string, name: string>, created_at: string, created_by: record<gid: string, resource_type: string, name: string>, hearted: bool, hearts: list<record>, liked: bool, likes: list<record>, modified_at: string, num_hearts: int, num_likes: int, parent: record<gid: string, resource_type: string, name: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($status_gid | is-empty) { error make --unspanned { msg: "path parameter 'status_gid' must be non-empty" } }
@@ -3885,7 +3866,7 @@ export def "delete-story" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
-]: nothing -> record<data: record> {
+]: nothing -> oneof<record<data: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($story_gid | is-empty) { error make --unspanned { msg: "path parameter 'story_gid' must be non-empty" } }
@@ -3926,7 +3907,7 @@ export def "get-story" [
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. 'Note: You can only pass in an offset that was returned to you via a previously paginated request.' (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
-]: nothing -> record<data: record<gid: string, resource_type: string, created_at: string, html_text: string, is_pinned: bool, resource_subtype: string, sticker_name: string, text: string, assignee: record<gid: string, resource_type: string, name: string>, created_by: record<gid: string, resource_type: string, name: string>, custom_field: record<gid: string, resource_type: string, date_value: record, display_value: string, enabled: bool, enum_options: list, enum_value: record, multi_enum_values: list, name: string, number_value: float, resource_subtype: string, text_value: string, type: string>, dependency: record<gid: string, resource_type: string, name: string, resource_subtype: string>, duplicate_of: record<gid: string, resource_type: string, name: string, resource_subtype: string>, duplicated_from: record<gid: string, resource_type: string, name: string, resource_subtype: string>, follower: record<gid: string, resource_type: string, name: string>, hearted: bool, hearts: list<record>, is_editable: bool, is_edited: bool, liked: bool, likes: list<record>, new_approval_status: string, new_date_value: record<due_at: string, due_on: string, start_on: string>, new_dates: record<due_at: string, due_on: string, start_on: string>, new_enum_value: record<gid: string, resource_type: string, color: string, enabled: bool, name: string>, new_multi_enum_values: list<record>, new_name: string, new_number_value: int, new_people_value: list<record>, new_resource_subtype: string, new_section: record<gid: string, resource_type: string, name: string>, new_text_value: string, num_hearts: int, num_likes: int, old_approval_status: string, old_date_value: record<due_at: string, due_on: string, start_on: string>, old_dates: record<due_at: string, due_on: string, start_on: string>, old_enum_value: record<gid: string, resource_type: string, color: string, enabled: bool, name: string>, old_multi_enum_values: list<record>, old_name: string, old_number_value: int, old_people_value: list<record>, old_resource_subtype: string, old_section: record<gid: string, resource_type: string, name: string>, old_text_value: string, previews: list<record>, project: record<gid: string, resource_type: string, name: string>, source: string, story: record<gid: string, resource_type: string, created_at: string, created_by: record, resource_subtype: string, text: string>, tag: record<gid: string, resource_type: string, name: string>, target: record<gid: string, resource_type: string, name: string, resource_subtype: string>, task: record<gid: string, resource_type: string, name: string, resource_subtype: string>, type: string>> {
+]: nothing -> oneof<record<data: record<gid: string, resource_type: string, created_at: string, html_text: string, is_pinned: bool, resource_subtype: string, sticker_name: string, text: string, assignee: record<gid: string, resource_type: string, name: string>, created_by: record<gid: string, resource_type: string, name: string>, custom_field: record<gid: string, resource_type: string, date_value: record, display_value: string, enabled: bool, enum_options: list, enum_value: record, multi_enum_values: list, name: string, number_value: float, resource_subtype: string, text_value: string, type: string>, dependency: record<gid: string, resource_type: string, name: string, resource_subtype: string>, duplicate_of: record<gid: string, resource_type: string, name: string, resource_subtype: string>, duplicated_from: record<gid: string, resource_type: string, name: string, resource_subtype: string>, follower: record<gid: string, resource_type: string, name: string>, hearted: bool, hearts: list<record>, is_editable: bool, is_edited: bool, liked: bool, likes: list<record>, new_approval_status: string, new_date_value: record<due_at: string, due_on: string, start_on: string>, new_dates: record<due_at: string, due_on: string, start_on: string>, new_enum_value: record<gid: string, resource_type: string, color: string, enabled: bool, name: string>, new_multi_enum_values: list<record>, new_name: string, new_number_value: int, new_people_value: list<record>, new_resource_subtype: string, new_section: record<gid: string, resource_type: string, name: string>, new_text_value: string, num_hearts: int, num_likes: int, old_approval_status: string, old_date_value: record<due_at: string, due_on: string, start_on: string>, old_dates: record<due_at: string, due_on: string, start_on: string>, old_enum_value: record<gid: string, resource_type: string, color: string, enabled: bool, name: string>, old_multi_enum_values: list<record>, old_name: string, old_number_value: int, old_people_value: list<record>, old_resource_subtype: string, old_section: record<gid: string, resource_type: string, name: string>, old_text_value: string, previews: list<record>, project: record<gid: string, resource_type: string, name: string>, source: string, story: record<gid: string, resource_type: string, created_at: string, created_by: record, resource_subtype: string, text: string>, tag: record<gid: string, resource_type: string, name: string>, target: record<gid: string, resource_type: string, name: string, resource_subtype: string>, task: record<gid: string, resource_type: string, name: string, resource_subtype: string>, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($story_gid | is-empty) { error make --unspanned { msg: "path parameter 'story_gid' must be non-empty" } }
@@ -3952,7 +3933,6 @@ export def "get-story" [
 #
 # PUT /stories/{story_gid}
 # operationId: updateStory
-# --data shape: {html_text?: string, is_pinned?: bool, sticker_name?: "green_checkmark"|"people_dancing"|"dancing_unicorn"|"heart"|"party_popper"|"people_waving_flags"|"splashing_narwhal"|"trophy"|"yeti_riding_unicorn"|"celebrating_people"|"determined_climbers"|"phoenix_spreading_love", text?: string}
 export def "update-story" [
   story_gid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3967,7 +3947,7 @@ export def "update-story" [
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --data: record # A generic Asana Resource, containing a globally unique identifier. — shape: {html_text?: string, is_pinned?: bool, sticker_name?: "green_checkmark"|"people_dancing"|"dancing_unicorn"|"heart"|"party_popper"|"people_waving_flags"|"splashing_narwhal"|"trophy"|"yeti_riding_unicorn"|"celebrating_people"|"determined_climbers"|"phoenix_spreading_love", text?: string}
-]: any -> record<data: record<gid: string, resource_type: string, created_at: string, html_text: string, is_pinned: bool, resource_subtype: string, sticker_name: string, text: string, assignee: record<gid: string, resource_type: string, name: string>, created_by: record<gid: string, resource_type: string, name: string>, custom_field: record<gid: string, resource_type: string, date_value: record, display_value: string, enabled: bool, enum_options: list, enum_value: record, multi_enum_values: list, name: string, number_value: float, resource_subtype: string, text_value: string, type: string>, dependency: record<gid: string, resource_type: string, name: string, resource_subtype: string>, duplicate_of: record<gid: string, resource_type: string, name: string, resource_subtype: string>, duplicated_from: record<gid: string, resource_type: string, name: string, resource_subtype: string>, follower: record<gid: string, resource_type: string, name: string>, hearted: bool, hearts: list<record>, is_editable: bool, is_edited: bool, liked: bool, likes: list<record>, new_approval_status: string, new_date_value: record<due_at: string, due_on: string, start_on: string>, new_dates: record<due_at: string, due_on: string, start_on: string>, new_enum_value: record<gid: string, resource_type: string, color: string, enabled: bool, name: string>, new_multi_enum_values: list<record>, new_name: string, new_number_value: int, new_people_value: list<record>, new_resource_subtype: string, new_section: record<gid: string, resource_type: string, name: string>, new_text_value: string, num_hearts: int, num_likes: int, old_approval_status: string, old_date_value: record<due_at: string, due_on: string, start_on: string>, old_dates: record<due_at: string, due_on: string, start_on: string>, old_enum_value: record<gid: string, resource_type: string, color: string, enabled: bool, name: string>, old_multi_enum_values: list<record>, old_name: string, old_number_value: int, old_people_value: list<record>, old_resource_subtype: string, old_section: record<gid: string, resource_type: string, name: string>, old_text_value: string, previews: list<record>, project: record<gid: string, resource_type: string, name: string>, source: string, story: record<gid: string, resource_type: string, created_at: string, created_by: record, resource_subtype: string, text: string>, tag: record<gid: string, resource_type: string, name: string>, target: record<gid: string, resource_type: string, name: string, resource_subtype: string>, task: record<gid: string, resource_type: string, name: string, resource_subtype: string>, type: string>> {
+]: any -> oneof<record<data: record<gid: string, resource_type: string, created_at: string, html_text: string, is_pinned: bool, resource_subtype: string, sticker_name: string, text: string, assignee: record<gid: string, resource_type: string, name: string>, created_by: record<gid: string, resource_type: string, name: string>, custom_field: record<gid: string, resource_type: string, date_value: record, display_value: string, enabled: bool, enum_options: list, enum_value: record, multi_enum_values: list, name: string, number_value: float, resource_subtype: string, text_value: string, type: string>, dependency: record<gid: string, resource_type: string, name: string, resource_subtype: string>, duplicate_of: record<gid: string, resource_type: string, name: string, resource_subtype: string>, duplicated_from: record<gid: string, resource_type: string, name: string, resource_subtype: string>, follower: record<gid: string, resource_type: string, name: string>, hearted: bool, hearts: list<record>, is_editable: bool, is_edited: bool, liked: bool, likes: list<record>, new_approval_status: string, new_date_value: record<due_at: string, due_on: string, start_on: string>, new_dates: record<due_at: string, due_on: string, start_on: string>, new_enum_value: record<gid: string, resource_type: string, color: string, enabled: bool, name: string>, new_multi_enum_values: list<record>, new_name: string, new_number_value: int, new_people_value: list<record>, new_resource_subtype: string, new_section: record<gid: string, resource_type: string, name: string>, new_text_value: string, num_hearts: int, num_likes: int, old_approval_status: string, old_date_value: record<due_at: string, due_on: string, start_on: string>, old_dates: record<due_at: string, due_on: string, start_on: string>, old_enum_value: record<gid: string, resource_type: string, color: string, enabled: bool, name: string>, old_multi_enum_values: list<record>, old_name: string, old_number_value: int, old_people_value: list<record>, old_resource_subtype: string, old_section: record<gid: string, resource_type: string, name: string>, old_text_value: string, previews: list<record>, project: record<gid: string, resource_type: string, name: string>, source: string, story: record<gid: string, resource_type: string, created_at: string, created_by: record, resource_subtype: string, text: string>, tag: record<gid: string, resource_type: string, name: string>, target: record<gid: string, resource_type: string, name: string, resource_subtype: string>, task: record<gid: string, resource_type: string, name: string, resource_subtype: string>, type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4011,7 +3991,7 @@ export def "get-tags" [
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. 'Note: You can only pass in an offset that was returned to you via a previously paginated request.' (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
   --workspace: string # The workspace to filter tags on. (e.g. 1331)
-]: nothing -> record<data: table<gid: string, resource_type: string, name: string>> {
+]: nothing -> oneof<record<data: table<gid: string, resource_type: string, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "workspace" $workspace "scalar")] | flatten | str join "&"
@@ -4036,7 +4016,6 @@ export def "get-tags" [
 #
 # POST /tags
 # operationId: createTag
-# --data shape: {name?: string, color?: "dark-pink"|"dark-green"|"dark-blue"|"dark-red"|"dark-teal"|"dark-brown"|"dark-orange"|"dark-purple"|"dark-warm-gray"|"light-pink"|"light-green"|"light-blue"|"light-red"|"light-teal"|"light-brown"|"light-orange"|"light-purple"|"light-warm-gray", notes?: string, followers?: list<string>, workspace?: string}
 export def "create-tag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4050,7 +4029,7 @@ export def "create-tag" [
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --data: record # A generic Asana Resource, containing a globally unique identifier. — shape: {name?: string, color?: "dark-pink"|"dark-green"|"dark-blue"|"dark-red"|"dark-teal"|"dark-brown"|"dark-orange"|"dark-purple"|"dark-warm-gray"|"light-pink"|"light-green"|"light-blue"|"light-red"|"light-teal"|"light-brown"|"light-orange"|"light-purple"|"light-warm-gray", notes?: string, followers?: list<string>, workspace?: string}
-]: any -> record<data: record<gid: string, resource_type: string, name: string, color: string, notes: string, created_at: string, followers: list<record>, permalink_url: string, workspace: record<gid: string, resource_type: string, name: string>>> {
+]: any -> oneof<record<data: record<gid: string, resource_type: string, name: string, color: string, notes: string, created_at: string, followers: list<record>, permalink_url: string, workspace: record<gid: string, resource_type: string, name: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4093,7 +4072,7 @@ export def "delete-tag" [
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. 'Note: You can only pass in an offset that was returned to you via a previously paginated request.' (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
-]: nothing -> record<data: record> {
+]: nothing -> oneof<record<data: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tag_gid | is-empty) { error make --unspanned { msg: "path parameter 'tag_gid' must be non-empty" } }
@@ -4134,7 +4113,7 @@ export def "get-tag" [
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. 'Note: You can only pass in an offset that was returned to you via a previously paginated request.' (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
-]: nothing -> record<data: record<gid: string, resource_type: string, name: string, color: string, notes: string, created_at: string, followers: list<record>, permalink_url: string, workspace: record<gid: string, resource_type: string, name: string>>> {
+]: nothing -> oneof<record<data: record<gid: string, resource_type: string, name: string, color: string, notes: string, created_at: string, followers: list<record>, permalink_url: string, workspace: record<gid: string, resource_type: string, name: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tag_gid | is-empty) { error make --unspanned { msg: "path parameter 'tag_gid' must be non-empty" } }
@@ -4175,7 +4154,7 @@ export def "update-tag" [
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. 'Note: You can only pass in an offset that was returned to you via a previously paginated request.' (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
-]: nothing -> record<data: record<gid: string, resource_type: string, name: string, color: string, notes: string, created_at: string, followers: list<record>, permalink_url: string, workspace: record<gid: string, resource_type: string, name: string>>> {
+]: nothing -> oneof<record<data: record<gid: string, resource_type: string, name: string, color: string, notes: string, created_at: string, followers: list<record>, permalink_url: string, workspace: record<gid: string, resource_type: string, name: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tag_gid | is-empty) { error make --unspanned { msg: "path parameter 'tag_gid' must be non-empty" } }
@@ -4216,7 +4195,7 @@ export def "get-tasks-for-tag" [
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. 'Note: You can only pass in an offset that was returned to you via a previously paginated request.' (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
-]: nothing -> record<data: table<gid: string, resource_type: string, name: string, resource_subtype: string>> {
+]: nothing -> oneof<record<data: table<gid: string, resource_type: string, name: string, resource_subtype: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tag_gid | is-empty) { error make --unspanned { msg: "path parameter 'tag_gid' must be non-empty" } }
@@ -4262,7 +4241,7 @@ export def "get-tasks" [
   --workspace: string # The workspace to filter tasks on. *Note: If you specify `workspace`, you must also specify the `assignee` to filter on.* (e.g. 321654)
   --completed-since: string # Only return tasks that are either incomplete or that have been completed since this time. (format: date-time, e.g. 2012-02-22T02:06:58.158Z)
   --modified-since: string # Only return tasks that have been modified since the given time. *Note: A task is considered “modified” if any of its properties change, or associations between it and other objects are modified (e.g. a task being added to a project). A task is not considered modified just because another object it is associated with (e.g. a subtask) is modified. Actions that count as modifying the task include assigning, renaming, completing, and adding stories.* (format: date-time, e.g. 2012-02-22T02:06:58.158Z)
-]: nothing -> record<data: table<gid: string, resource_type: string, name: string, resource_subtype: string>> {
+]: nothing -> oneof<record<data: table<gid: string, resource_type: string, name: string, resource_subtype: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "assignee" $assignee "scalar") (serialize-qp "project" $project "scalar") (serialize-qp "section" $section "scalar") (serialize-qp "workspace" $workspace "scalar") (serialize-qp "completed_since" $completed_since "scalar") (serialize-qp "modified_since" $modified_since "scalar")] | flatten | str join "&"
@@ -4287,7 +4266,6 @@ export def "get-tasks" [
 #
 # POST /tasks
 # operationId: createTask
-# --data shape: {name?: string, resource_subtype?: "default_task"|"milestone"|"section"|"approval", approval_status?: "pending"|"approved"|"rejected"|"changes_requested", assignee_status?: "today"|"upcoming"|"later"|"new"|"inbox", completed?: bool, completed_by?: record, due_at?: string, due_on?: string, external?: record, html_notes?: string, liked?: bool, notes?: string, start_at?: string, start_on?: string, assignee?: string, assignee_section?: string, custom_fields?: record, followers?: list<string>, ... (4 more fields)}
 export def "create-task" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4301,7 +4279,7 @@ export def "create-task" [
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --data: record # A generic Asana Resource, containing a globally unique identifier. — shape: {name?: string, resource_subtype?: "default_task"|"milestone"|"section"|"approval", approval_status?: "pending"|"approved"|"rejected"|"changes_requested", assignee_status?: "today"|"upcoming"|"later"|"new"|"inbox", completed?: bool, completed_by?: record, due_at?: string, due_on?: string, external?: record, html_notes?: string, liked?: bool, notes?: string, start_at?: string, start_on?: string, assignee?: string, assignee_section?: string, custom_fields?: record, followers?: list<string>, ... (4 more fields)}
-]: any -> record<data: record<gid: string, resource_type: string, name: string, resource_subtype: string, actual_time_minutes: float, approval_status: string, assignee_status: string, completed: bool, completed_at: string, completed_by: record<gid: string, resource_type: string, name: string>, created_at: string, dependencies: list<record>, dependents: list<record>, due_at: string, due_on: string, external: record<data: string, gid: string>, hearted: bool, hearts: list<record>, html_notes: string, is_rendered_as_separator: bool, liked: bool, likes: list<record>, memberships: list<record>, modified_at: string, notes: string, num_hearts: int, num_likes: int, num_subtasks: int, start_at: string, start_on: string, assignee: record<gid: string, resource_type: string, name: string>, assignee_section: record<gid: string, resource_type: string, name: string>, custom_fields: list<record>, followers: list<record>, parent: record<gid: string, resource_type: string, name: string, resource_subtype: string>, permalink_url: string, projects: list<record>, tags: list<record>, workspace: record<gid: string, resource_type: string, name: string>>> {
+]: any -> oneof<record<data: record<gid: string, resource_type: string, name: string, resource_subtype: string, actual_time_minutes: float, approval_status: string, assignee_status: string, completed: bool, completed_at: string, completed_by: record<gid: string, resource_type: string, name: string>, created_at: string, dependencies: list<record>, dependents: list<record>, due_at: string, due_on: string, external: record<data: string, gid: string>, hearted: bool, hearts: list<record>, html_notes: string, is_rendered_as_separator: bool, liked: bool, likes: list<record>, memberships: list<record>, modified_at: string, notes: string, num_hearts: int, num_likes: int, num_subtasks: int, start_at: string, start_on: string, assignee: record<gid: string, resource_type: string, name: string>, assignee_section: record<gid: string, resource_type: string, name: string>, custom_fields: list<record>, followers: list<record>, parent: record<gid: string, resource_type: string, name: string, resource_subtype: string>, permalink_url: string, projects: list<record>, tags: list<record>, workspace: record<gid: string, resource_type: string, name: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4342,7 +4320,7 @@ export def "delete-task" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
-]: nothing -> record<data: record> {
+]: nothing -> oneof<record<data: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($task_gid | is-empty) { error make --unspanned { msg: "path parameter 'task_gid' must be non-empty" } }
@@ -4381,7 +4359,7 @@ export def "get-task" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
-]: nothing -> record<data: record<gid: string, resource_type: string, name: string, resource_subtype: string, actual_time_minutes: float, approval_status: string, assignee_status: string, completed: bool, completed_at: string, completed_by: record<gid: string, resource_type: string, name: string>, created_at: string, dependencies: list<record>, dependents: list<record>, due_at: string, due_on: string, external: record<data: string, gid: string>, hearted: bool, hearts: list<record>, html_notes: string, is_rendered_as_separator: bool, liked: bool, likes: list<record>, memberships: list<record>, modified_at: string, notes: string, num_hearts: int, num_likes: int, num_subtasks: int, start_at: string, start_on: string, assignee: record<gid: string, resource_type: string, name: string>, assignee_section: record<gid: string, resource_type: string, name: string>, custom_fields: list<record>, followers: list<record>, parent: record<gid: string, resource_type: string, name: string, resource_subtype: string>, permalink_url: string, projects: list<record>, tags: list<record>, workspace: record<gid: string, resource_type: string, name: string>>> {
+]: nothing -> oneof<record<data: record<gid: string, resource_type: string, name: string, resource_subtype: string, actual_time_minutes: float, approval_status: string, assignee_status: string, completed: bool, completed_at: string, completed_by: record<gid: string, resource_type: string, name: string>, created_at: string, dependencies: list<record>, dependents: list<record>, due_at: string, due_on: string, external: record<data: string, gid: string>, hearted: bool, hearts: list<record>, html_notes: string, is_rendered_as_separator: bool, liked: bool, likes: list<record>, memberships: list<record>, modified_at: string, notes: string, num_hearts: int, num_likes: int, num_subtasks: int, start_at: string, start_on: string, assignee: record<gid: string, resource_type: string, name: string>, assignee_section: record<gid: string, resource_type: string, name: string>, custom_fields: list<record>, followers: list<record>, parent: record<gid: string, resource_type: string, name: string, resource_subtype: string>, permalink_url: string, projects: list<record>, tags: list<record>, workspace: record<gid: string, resource_type: string, name: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($task_gid | is-empty) { error make --unspanned { msg: "path parameter 'task_gid' must be non-empty" } }
@@ -4407,7 +4385,6 @@ export def "get-task" [
 #
 # PUT /tasks/{task_gid}
 # operationId: updateTask
-# --data shape: {name?: string, resource_subtype?: "default_task"|"milestone"|"section"|"approval", approval_status?: "pending"|"approved"|"rejected"|"changes_requested", assignee_status?: "today"|"upcoming"|"later"|"new"|"inbox", completed?: bool, completed_by?: record, due_at?: string, due_on?: string, external?: record, html_notes?: string, liked?: bool, notes?: string, start_at?: string, start_on?: string, assignee?: string, assignee_section?: string, custom_fields?: record, followers?: list<string>, ... (4 more fields)}
 export def "update-task" [
   task_gid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4422,7 +4399,7 @@ export def "update-task" [
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --data: record # A generic Asana Resource, containing a globally unique identifier. — shape: {name?: string, resource_subtype?: "default_task"|"milestone"|"section"|"approval", approval_status?: "pending"|"approved"|"rejected"|"changes_requested", assignee_status?: "today"|"upcoming"|"later"|"new"|"inbox", completed?: bool, completed_by?: record, due_at?: string, due_on?: string, external?: record, html_notes?: string, liked?: bool, notes?: string, start_at?: string, start_on?: string, assignee?: string, assignee_section?: string, custom_fields?: record, followers?: list<string>, ... (4 more fields)}
-]: any -> record<data: record<gid: string, resource_type: string, name: string, resource_subtype: string, actual_time_minutes: float, approval_status: string, assignee_status: string, completed: bool, completed_at: string, completed_by: record<gid: string, resource_type: string, name: string>, created_at: string, dependencies: list<record>, dependents: list<record>, due_at: string, due_on: string, external: record<data: string, gid: string>, hearted: bool, hearts: list<record>, html_notes: string, is_rendered_as_separator: bool, liked: bool, likes: list<record>, memberships: list<record>, modified_at: string, notes: string, num_hearts: int, num_likes: int, num_subtasks: int, start_at: string, start_on: string, assignee: record<gid: string, resource_type: string, name: string>, assignee_section: record<gid: string, resource_type: string, name: string>, custom_fields: list<record>, followers: list<record>, parent: record<gid: string, resource_type: string, name: string, resource_subtype: string>, permalink_url: string, projects: list<record>, tags: list<record>, workspace: record<gid: string, resource_type: string, name: string>>> {
+]: any -> oneof<record<data: record<gid: string, resource_type: string, name: string, resource_subtype: string, actual_time_minutes: float, approval_status: string, assignee_status: string, completed: bool, completed_at: string, completed_by: record<gid: string, resource_type: string, name: string>, created_at: string, dependencies: list<record>, dependents: list<record>, due_at: string, due_on: string, external: record<data: string, gid: string>, hearted: bool, hearts: list<record>, html_notes: string, is_rendered_as_separator: bool, liked: bool, likes: list<record>, memberships: list<record>, modified_at: string, notes: string, num_hearts: int, num_likes: int, num_subtasks: int, start_at: string, start_on: string, assignee: record<gid: string, resource_type: string, name: string>, assignee_section: record<gid: string, resource_type: string, name: string>, custom_fields: list<record>, followers: list<record>, parent: record<gid: string, resource_type: string, name: string, resource_subtype: string>, permalink_url: string, projects: list<record>, tags: list<record>, workspace: record<gid: string, resource_type: string, name: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4451,7 +4428,6 @@ export def "update-task" [
 #
 # POST /tasks/{task_gid}/addDependencies
 # operationId: addDependenciesForTask
-# --data shape: {dependencies?: list<string>}
 export def "add-dependencies-for-task" [
   task_gid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4466,7 +4442,7 @@ export def "add-dependencies-for-task" [
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --data: record # e.g. {dependencies: [133713, 184253]} — shape: {dependencies?: list<string>}
-]: any -> record<data: record> {
+]: any -> oneof<record<data: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4495,7 +4471,6 @@ export def "add-dependencies-for-task" [
 #
 # POST /tasks/{task_gid}/addDependents
 # operationId: addDependentsForTask
-# --data shape: {dependents?: list<string>}
 export def "add-dependents-for-task" [
   task_gid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4510,7 +4485,7 @@ export def "add-dependents-for-task" [
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --data: record # A set of dependent tasks. (e.g. {dependents: [133713, 184253]}) — shape: {dependents?: list<string>}
-]: any -> record<data: record> {
+]: any -> oneof<record<data: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4539,7 +4514,6 @@ export def "add-dependents-for-task" [
 #
 # POST /tasks/{task_gid}/addFollowers
 # operationId: addFollowersForTask
-# --data shape: {followers: list<string>}
 export def "add-followers-for-task" [
   task_gid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4554,7 +4528,7 @@ export def "add-followers-for-task" [
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --data: record # shape: {followers: list<string>}
-]: any -> record<data: record<gid: string, resource_type: string, name: string, resource_subtype: string, actual_time_minutes: float, approval_status: string, assignee_status: string, completed: bool, completed_at: string, completed_by: record<gid: string, resource_type: string, name: string>, created_at: string, dependencies: list<record>, dependents: list<record>, due_at: string, due_on: string, external: record<data: string, gid: string>, hearted: bool, hearts: list<record>, html_notes: string, is_rendered_as_separator: bool, liked: bool, likes: list<record>, memberships: list<record>, modified_at: string, notes: string, num_hearts: int, num_likes: int, num_subtasks: int, start_at: string, start_on: string, assignee: record<gid: string, resource_type: string, name: string>, assignee_section: record<gid: string, resource_type: string, name: string>, custom_fields: list<record>, followers: list<record>, parent: record<gid: string, resource_type: string, name: string, resource_subtype: string>, permalink_url: string, projects: list<record>, tags: list<record>, workspace: record<gid: string, resource_type: string, name: string>>> {
+]: any -> oneof<record<data: record<gid: string, resource_type: string, name: string, resource_subtype: string, actual_time_minutes: float, approval_status: string, assignee_status: string, completed: bool, completed_at: string, completed_by: record<gid: string, resource_type: string, name: string>, created_at: string, dependencies: list<record>, dependents: list<record>, due_at: string, due_on: string, external: record<data: string, gid: string>, hearted: bool, hearts: list<record>, html_notes: string, is_rendered_as_separator: bool, liked: bool, likes: list<record>, memberships: list<record>, modified_at: string, notes: string, num_hearts: int, num_likes: int, num_subtasks: int, start_at: string, start_on: string, assignee: record<gid: string, resource_type: string, name: string>, assignee_section: record<gid: string, resource_type: string, name: string>, custom_fields: list<record>, followers: list<record>, parent: record<gid: string, resource_type: string, name: string, resource_subtype: string>, permalink_url: string, projects: list<record>, tags: list<record>, workspace: record<gid: string, resource_type: string, name: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4583,7 +4557,6 @@ export def "add-followers-for-task" [
 #
 # POST /tasks/{task_gid}/addProject
 # operationId: addProjectForTask
-# --data shape: {insert_after?: string, insert_before?: string, project: string, section?: string}
 export def "add-project-for-task" [
   task_gid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4598,7 +4571,7 @@ export def "add-project-for-task" [
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --data: record # shape: {insert_after?: string, insert_before?: string, project: string, section?: string}
-]: any -> record<data: record> {
+]: any -> oneof<record<data: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4627,7 +4600,6 @@ export def "add-project-for-task" [
 #
 # POST /tasks/{task_gid}/addTag
 # operationId: addTagForTask
-# --data shape: {tag: string}
 export def "add-tag-for-task" [
   task_gid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4642,7 +4614,7 @@ export def "add-tag-for-task" [
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --data: record # shape: {tag: string}
-]: any -> record<data: record> {
+]: any -> oneof<record<data: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4686,7 +4658,7 @@ export def "get-dependencies-for-task" [
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. 'Note: You can only pass in an offset that was returned to you via a previously paginated request.' (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
-]: nothing -> record<data: table<gid: string, resource_type: string, name: string, resource_subtype: string>> {
+]: nothing -> oneof<record<data: table<gid: string, resource_type: string, name: string, resource_subtype: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($task_gid | is-empty) { error make --unspanned { msg: "path parameter 'task_gid' must be non-empty" } }
@@ -4727,7 +4699,7 @@ export def "get-dependents-for-task" [
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. 'Note: You can only pass in an offset that was returned to you via a previously paginated request.' (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
-]: nothing -> record<data: table<gid: string, resource_type: string, name: string, resource_subtype: string>> {
+]: nothing -> oneof<record<data: table<gid: string, resource_type: string, name: string, resource_subtype: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($task_gid | is-empty) { error make --unspanned { msg: "path parameter 'task_gid' must be non-empty" } }
@@ -4753,7 +4725,6 @@ export def "get-dependents-for-task" [
 #
 # POST /tasks/{task_gid}/duplicate
 # operationId: duplicateTask
-# --data shape: {include?: "notes"|"assignee"|"subtasks"|"attachments"|"tags"|"followers"|"projects"|"dates"|"dependencies"|"parent", name?: string}
 export def "duplicate-task" [
   task_gid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4768,7 +4739,7 @@ export def "duplicate-task" [
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --data: record # shape: {include?: "notes"|"assignee"|"subtasks"|"attachments"|"tags"|"followers"|"projects"|"dates"|"dependencies"|"parent", name?: string}
-]: any -> record<data: record<gid: string, resource_type: string, new_project: record<gid: string, resource_type: string, name: string>, new_project_template: record<gid: string, resource_type: string, name: string>, new_task: record<gid: string, resource_type: string, name: string, resource_subtype: string>, resource_subtype: string, status: string>> {
+]: any -> oneof<record<data: record<gid: string, resource_type: string, new_project: record<gid: string, resource_type: string, name: string>, new_project_template: record<gid: string, resource_type: string, name: string>, new_task: record<gid: string, resource_type: string, name: string, resource_subtype: string>, resource_subtype: string, status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4812,7 +4783,7 @@ export def "get-projects-for-task" [
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. 'Note: You can only pass in an offset that was returned to you via a previously paginated request.' (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
-]: nothing -> record<data: table<gid: string, resource_type: string, name: string>> {
+]: nothing -> oneof<record<data: table<gid: string, resource_type: string, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($task_gid | is-empty) { error make --unspanned { msg: "path parameter 'task_gid' must be non-empty" } }
@@ -4838,7 +4809,6 @@ export def "get-projects-for-task" [
 #
 # POST /tasks/{task_gid}/removeDependencies
 # operationId: removeDependenciesForTask
-# --data shape: {dependencies?: list<string>}
 export def "remove-dependencies-for-task" [
   task_gid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4853,7 +4823,7 @@ export def "remove-dependencies-for-task" [
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --data: record # e.g. {dependencies: [133713, 184253]} — shape: {dependencies?: list<string>}
-]: any -> record<data: record> {
+]: any -> oneof<record<data: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4882,7 +4852,6 @@ export def "remove-dependencies-for-task" [
 #
 # POST /tasks/{task_gid}/removeDependents
 # operationId: removeDependentsForTask
-# --data shape: {dependents?: list<string>}
 export def "remove-dependents-for-task" [
   task_gid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4897,7 +4866,7 @@ export def "remove-dependents-for-task" [
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --data: record # A set of dependent tasks. (e.g. {dependents: [133713, 184253]}) — shape: {dependents?: list<string>}
-]: any -> record<data: record> {
+]: any -> oneof<record<data: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4926,7 +4895,6 @@ export def "remove-dependents-for-task" [
 #
 # POST /tasks/{task_gid}/removeFollowers
 # operationId: removeFollowerForTask
-# --data shape: {followers: list<string>}
 export def "remove-follower-for-task" [
   task_gid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4941,7 +4909,7 @@ export def "remove-follower-for-task" [
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --data: record # shape: {followers: list<string>}
-]: any -> record<data: record<gid: string, resource_type: string, name: string, resource_subtype: string, actual_time_minutes: float, approval_status: string, assignee_status: string, completed: bool, completed_at: string, completed_by: record<gid: string, resource_type: string, name: string>, created_at: string, dependencies: list<record>, dependents: list<record>, due_at: string, due_on: string, external: record<data: string, gid: string>, hearted: bool, hearts: list<record>, html_notes: string, is_rendered_as_separator: bool, liked: bool, likes: list<record>, memberships: list<record>, modified_at: string, notes: string, num_hearts: int, num_likes: int, num_subtasks: int, start_at: string, start_on: string, assignee: record<gid: string, resource_type: string, name: string>, assignee_section: record<gid: string, resource_type: string, name: string>, custom_fields: list<record>, followers: list<record>, parent: record<gid: string, resource_type: string, name: string, resource_subtype: string>, permalink_url: string, projects: list<record>, tags: list<record>, workspace: record<gid: string, resource_type: string, name: string>>> {
+]: any -> oneof<record<data: record<gid: string, resource_type: string, name: string, resource_subtype: string, actual_time_minutes: float, approval_status: string, assignee_status: string, completed: bool, completed_at: string, completed_by: record<gid: string, resource_type: string, name: string>, created_at: string, dependencies: list<record>, dependents: list<record>, due_at: string, due_on: string, external: record<data: string, gid: string>, hearted: bool, hearts: list<record>, html_notes: string, is_rendered_as_separator: bool, liked: bool, likes: list<record>, memberships: list<record>, modified_at: string, notes: string, num_hearts: int, num_likes: int, num_subtasks: int, start_at: string, start_on: string, assignee: record<gid: string, resource_type: string, name: string>, assignee_section: record<gid: string, resource_type: string, name: string>, custom_fields: list<record>, followers: list<record>, parent: record<gid: string, resource_type: string, name: string, resource_subtype: string>, permalink_url: string, projects: list<record>, tags: list<record>, workspace: record<gid: string, resource_type: string, name: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4970,7 +4938,6 @@ export def "remove-follower-for-task" [
 #
 # POST /tasks/{task_gid}/removeProject
 # operationId: removeProjectForTask
-# --data shape: {project: string}
 export def "remove-project-for-task" [
   task_gid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4985,7 +4952,7 @@ export def "remove-project-for-task" [
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --data: record # shape: {project: string}
-]: any -> record<data: record> {
+]: any -> oneof<record<data: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5014,7 +4981,6 @@ export def "remove-project-for-task" [
 #
 # POST /tasks/{task_gid}/removeTag
 # operationId: removeTagForTask
-# --data shape: {tag: string}
 export def "remove-tag-for-task" [
   task_gid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5029,7 +4995,7 @@ export def "remove-tag-for-task" [
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --data: record # shape: {tag: string}
-]: any -> record<data: record> {
+]: any -> oneof<record<data: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5058,7 +5024,6 @@ export def "remove-tag-for-task" [
 #
 # POST /tasks/{task_gid}/setParent
 # operationId: setParentForTask
-# --data shape: {insert_after?: string, insert_before?: string, parent: string}
 export def "set-parent-for-task" [
   task_gid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5073,7 +5038,7 @@ export def "set-parent-for-task" [
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --data: record # shape: {insert_after?: string, insert_before?: string, parent: string}
-]: any -> record<data: record<gid: string, resource_type: string, name: string, resource_subtype: string, actual_time_minutes: float, approval_status: string, assignee_status: string, completed: bool, completed_at: string, completed_by: record<gid: string, resource_type: string, name: string>, created_at: string, dependencies: list<record>, dependents: list<record>, due_at: string, due_on: string, external: record<data: string, gid: string>, hearted: bool, hearts: list<record>, html_notes: string, is_rendered_as_separator: bool, liked: bool, likes: list<record>, memberships: list<record>, modified_at: string, notes: string, num_hearts: int, num_likes: int, num_subtasks: int, start_at: string, start_on: string, assignee: record<gid: string, resource_type: string, name: string>, assignee_section: record<gid: string, resource_type: string, name: string>, custom_fields: list<record>, followers: list<record>, parent: record<gid: string, resource_type: string, name: string, resource_subtype: string>, permalink_url: string, projects: list<record>, tags: list<record>, workspace: record<gid: string, resource_type: string, name: string>>> {
+]: any -> oneof<record<data: record<gid: string, resource_type: string, name: string, resource_subtype: string, actual_time_minutes: float, approval_status: string, assignee_status: string, completed: bool, completed_at: string, completed_by: record<gid: string, resource_type: string, name: string>, created_at: string, dependencies: list<record>, dependents: list<record>, due_at: string, due_on: string, external: record<data: string, gid: string>, hearted: bool, hearts: list<record>, html_notes: string, is_rendered_as_separator: bool, liked: bool, likes: list<record>, memberships: list<record>, modified_at: string, notes: string, num_hearts: int, num_likes: int, num_subtasks: int, start_at: string, start_on: string, assignee: record<gid: string, resource_type: string, name: string>, assignee_section: record<gid: string, resource_type: string, name: string>, custom_fields: list<record>, followers: list<record>, parent: record<gid: string, resource_type: string, name: string, resource_subtype: string>, permalink_url: string, projects: list<record>, tags: list<record>, workspace: record<gid: string, resource_type: string, name: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5117,7 +5082,7 @@ export def "get-stories-for-task" [
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. 'Note: You can only pass in an offset that was returned to you via a previously paginated request.' (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
-]: nothing -> record<data: table<gid: string, resource_type: string, created_at: string, created_by: record, resource_subtype: string, text: string>> {
+]: nothing -> oneof<record<data: table<gid: string, resource_type: string, created_at: string, created_by: record, resource_subtype: string, text: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($task_gid | is-empty) { error make --unspanned { msg: "path parameter 'task_gid' must be non-empty" } }
@@ -5143,7 +5108,6 @@ export def "get-stories-for-task" [
 #
 # POST /tasks/{task_gid}/stories
 # operationId: createStoryForTask
-# --data shape: {html_text?: string, is_pinned?: bool, sticker_name?: "green_checkmark"|"people_dancing"|"dancing_unicorn"|"heart"|"party_popper"|"people_waving_flags"|"splashing_narwhal"|"trophy"|"yeti_riding_unicorn"|"celebrating_people"|"determined_climbers"|"phoenix_spreading_love", text?: string}
 export def "create-story-for-task" [
   task_gid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5158,7 +5122,7 @@ export def "create-story-for-task" [
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --data: record # A generic Asana Resource, containing a globally unique identifier. — shape: {html_text?: string, is_pinned?: bool, sticker_name?: "green_checkmark"|"people_dancing"|"dancing_unicorn"|"heart"|"party_popper"|"people_waving_flags"|"splashing_narwhal"|"trophy"|"yeti_riding_unicorn"|"celebrating_people"|"determined_climbers"|"phoenix_spreading_love", text?: string}
-]: any -> record<data: record<gid: string, resource_type: string, created_at: string, html_text: string, is_pinned: bool, resource_subtype: string, sticker_name: string, text: string, assignee: record<gid: string, resource_type: string, name: string>, created_by: record<gid: string, resource_type: string, name: string>, custom_field: record<gid: string, resource_type: string, date_value: record, display_value: string, enabled: bool, enum_options: list, enum_value: record, multi_enum_values: list, name: string, number_value: float, resource_subtype: string, text_value: string, type: string>, dependency: record<gid: string, resource_type: string, name: string, resource_subtype: string>, duplicate_of: record<gid: string, resource_type: string, name: string, resource_subtype: string>, duplicated_from: record<gid: string, resource_type: string, name: string, resource_subtype: string>, follower: record<gid: string, resource_type: string, name: string>, hearted: bool, hearts: list<record>, is_editable: bool, is_edited: bool, liked: bool, likes: list<record>, new_approval_status: string, new_date_value: record<due_at: string, due_on: string, start_on: string>, new_dates: record<due_at: string, due_on: string, start_on: string>, new_enum_value: record<gid: string, resource_type: string, color: string, enabled: bool, name: string>, new_multi_enum_values: list<record>, new_name: string, new_number_value: int, new_people_value: list<record>, new_resource_subtype: string, new_section: record<gid: string, resource_type: string, name: string>, new_text_value: string, num_hearts: int, num_likes: int, old_approval_status: string, old_date_value: record<due_at: string, due_on: string, start_on: string>, old_dates: record<due_at: string, due_on: string, start_on: string>, old_enum_value: record<gid: string, resource_type: string, color: string, enabled: bool, name: string>, old_multi_enum_values: list<record>, old_name: string, old_number_value: int, old_people_value: list<record>, old_resource_subtype: string, old_section: record<gid: string, resource_type: string, name: string>, old_text_value: string, previews: list<record>, project: record<gid: string, resource_type: string, name: string>, source: string, story: record<gid: string, resource_type: string, created_at: string, created_by: record, resource_subtype: string, text: string>, tag: record<gid: string, resource_type: string, name: string>, target: record<gid: string, resource_type: string, name: string, resource_subtype: string>, task: record<gid: string, resource_type: string, name: string, resource_subtype: string>, type: string>> {
+]: any -> oneof<record<data: record<gid: string, resource_type: string, created_at: string, html_text: string, is_pinned: bool, resource_subtype: string, sticker_name: string, text: string, assignee: record<gid: string, resource_type: string, name: string>, created_by: record<gid: string, resource_type: string, name: string>, custom_field: record<gid: string, resource_type: string, date_value: record, display_value: string, enabled: bool, enum_options: list, enum_value: record, multi_enum_values: list, name: string, number_value: float, resource_subtype: string, text_value: string, type: string>, dependency: record<gid: string, resource_type: string, name: string, resource_subtype: string>, duplicate_of: record<gid: string, resource_type: string, name: string, resource_subtype: string>, duplicated_from: record<gid: string, resource_type: string, name: string, resource_subtype: string>, follower: record<gid: string, resource_type: string, name: string>, hearted: bool, hearts: list<record>, is_editable: bool, is_edited: bool, liked: bool, likes: list<record>, new_approval_status: string, new_date_value: record<due_at: string, due_on: string, start_on: string>, new_dates: record<due_at: string, due_on: string, start_on: string>, new_enum_value: record<gid: string, resource_type: string, color: string, enabled: bool, name: string>, new_multi_enum_values: list<record>, new_name: string, new_number_value: int, new_people_value: list<record>, new_resource_subtype: string, new_section: record<gid: string, resource_type: string, name: string>, new_text_value: string, num_hearts: int, num_likes: int, old_approval_status: string, old_date_value: record<due_at: string, due_on: string, start_on: string>, old_dates: record<due_at: string, due_on: string, start_on: string>, old_enum_value: record<gid: string, resource_type: string, color: string, enabled: bool, name: string>, old_multi_enum_values: list<record>, old_name: string, old_number_value: int, old_people_value: list<record>, old_resource_subtype: string, old_section: record<gid: string, resource_type: string, name: string>, old_text_value: string, previews: list<record>, project: record<gid: string, resource_type: string, name: string>, source: string, story: record<gid: string, resource_type: string, created_at: string, created_by: record, resource_subtype: string, text: string>, tag: record<gid: string, resource_type: string, name: string>, target: record<gid: string, resource_type: string, name: string, resource_subtype: string>, task: record<gid: string, resource_type: string, name: string, resource_subtype: string>, type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5202,7 +5166,7 @@ export def "get-subtasks-for-task" [
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. 'Note: You can only pass in an offset that was returned to you via a previously paginated request.' (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
-]: nothing -> record<data: table<gid: string, resource_type: string, name: string, resource_subtype: string>> {
+]: nothing -> oneof<record<data: table<gid: string, resource_type: string, name: string, resource_subtype: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($task_gid | is-empty) { error make --unspanned { msg: "path parameter 'task_gid' must be non-empty" } }
@@ -5228,7 +5192,6 @@ export def "get-subtasks-for-task" [
 #
 # POST /tasks/{task_gid}/subtasks
 # operationId: createSubtaskForTask
-# --data shape: {name?: string, resource_subtype?: "default_task"|"milestone"|"section"|"approval", approval_status?: "pending"|"approved"|"rejected"|"changes_requested", assignee_status?: "today"|"upcoming"|"later"|"new"|"inbox", completed?: bool, completed_by?: record, due_at?: string, due_on?: string, external?: record, html_notes?: string, liked?: bool, notes?: string, start_at?: string, start_on?: string, assignee?: string, assignee_section?: string, custom_fields?: record, followers?: list<string>, ... (4 more fields)}
 export def "create-subtask-for-task" [
   task_gid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5243,7 +5206,7 @@ export def "create-subtask-for-task" [
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --data: record # A generic Asana Resource, containing a globally unique identifier. — shape: {name?: string, resource_subtype?: "default_task"|"milestone"|"section"|"approval", approval_status?: "pending"|"approved"|"rejected"|"changes_requested", assignee_status?: "today"|"upcoming"|"later"|"new"|"inbox", completed?: bool, completed_by?: record, due_at?: string, due_on?: string, external?: record, html_notes?: string, liked?: bool, notes?: string, start_at?: string, start_on?: string, assignee?: string, assignee_section?: string, custom_fields?: record, followers?: list<string>, ... (4 more fields)}
-]: any -> record<data: record<gid: string, resource_type: string, name: string, resource_subtype: string, actual_time_minutes: float, approval_status: string, assignee_status: string, completed: bool, completed_at: string, completed_by: record<gid: string, resource_type: string, name: string>, created_at: string, dependencies: list<record>, dependents: list<record>, due_at: string, due_on: string, external: record<data: string, gid: string>, hearted: bool, hearts: list<record>, html_notes: string, is_rendered_as_separator: bool, liked: bool, likes: list<record>, memberships: list<record>, modified_at: string, notes: string, num_hearts: int, num_likes: int, num_subtasks: int, start_at: string, start_on: string, assignee: record<gid: string, resource_type: string, name: string>, assignee_section: record<gid: string, resource_type: string, name: string>, custom_fields: list<record>, followers: list<record>, parent: record<gid: string, resource_type: string, name: string, resource_subtype: string>, permalink_url: string, projects: list<record>, tags: list<record>, workspace: record<gid: string, resource_type: string, name: string>>> {
+]: any -> oneof<record<data: record<gid: string, resource_type: string, name: string, resource_subtype: string, actual_time_minutes: float, approval_status: string, assignee_status: string, completed: bool, completed_at: string, completed_by: record<gid: string, resource_type: string, name: string>, created_at: string, dependencies: list<record>, dependents: list<record>, due_at: string, due_on: string, external: record<data: string, gid: string>, hearted: bool, hearts: list<record>, html_notes: string, is_rendered_as_separator: bool, liked: bool, likes: list<record>, memberships: list<record>, modified_at: string, notes: string, num_hearts: int, num_likes: int, num_subtasks: int, start_at: string, start_on: string, assignee: record<gid: string, resource_type: string, name: string>, assignee_section: record<gid: string, resource_type: string, name: string>, custom_fields: list<record>, followers: list<record>, parent: record<gid: string, resource_type: string, name: string, resource_subtype: string>, permalink_url: string, projects: list<record>, tags: list<record>, workspace: record<gid: string, resource_type: string, name: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5287,7 +5250,7 @@ export def "get-tags-for-task" [
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. 'Note: You can only pass in an offset that was returned to you via a previously paginated request.' (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
-]: nothing -> record<data: table<gid: string, resource_type: string, name: string>> {
+]: nothing -> oneof<record<data: table<gid: string, resource_type: string, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($task_gid | is-empty) { error make --unspanned { msg: "path parameter 'task_gid' must be non-empty" } }
@@ -5330,7 +5293,7 @@ export def "get-team-memberships" [
   --team: string # Globally unique identifier for the team. (e.g. 159874)
   --user: string # A string identifying a user. This can either be the string "me", an email, or the gid of a user. This parameter must be used with the workspace parameter. (e.g. 512241)
   --workspace: string # Globally unique identifier for the workspace. This parameter must be used with the user parameter. (e.g. 31326)
-]: nothing -> record<data: table<gid: string, resource_type: string, is_guest: bool, team: record, user: record>> {
+]: nothing -> oneof<record<data: table<gid: string, resource_type: string, is_guest: bool, team: record, user: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "user" $user "scalar") (serialize-qp "workspace" $workspace "scalar")] | flatten | str join "&"
@@ -5368,7 +5331,7 @@ export def "get-team-membership" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
-]: nothing -> record<data: record<gid: string, resource_type: string, is_guest: bool, team: record<gid: string, resource_type: string, name: string>, user: record<gid: string, resource_type: string, name: string>>> {
+]: nothing -> oneof<record<data: record<gid: string, resource_type: string, is_guest: bool, team: record<gid: string, resource_type: string, name: string>, user: record<gid: string, resource_type: string, name: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($team_membership_gid | is-empty) { error make --unspanned { msg: "path parameter 'team_membership_gid' must be non-empty" } }
@@ -5394,7 +5357,6 @@ export def "get-team-membership" [
 #
 # POST /teams
 # operationId: createTeam
-# --data shape: {name?: string, description?: string, html_description?: string, organization?: string, visibility?: "secret"|"request_to_join"|"public"}
 export def "create-team" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5410,7 +5372,7 @@ export def "create-team" [
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. 'Note: You can only pass in an offset that was returned to you via a previously paginated request.' (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
   --data: record # A generic Asana Resource, containing a globally unique identifier. — shape: {name?: string, description?: string, html_description?: string, organization?: string, visibility?: "secret"|"request_to_join"|"public"}
-]: any -> record<data: record<gid: string, resource_type: string, name: string, description: string, html_description: string, organization: record<gid: string, resource_type: string, name: string>, permalink_url: string, visibility: string>> {
+]: any -> oneof<record<data: record<gid: string, resource_type: string, name: string, description: string, html_description: string, organization: record<gid: string, resource_type: string, name: string>, permalink_url: string, visibility: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5438,7 +5400,6 @@ export def "create-team" [
 #
 # PUT /teams
 # operationId: updateTeam
-# --data shape: {name?: string, description?: string, html_description?: string, organization?: string, visibility?: "secret"|"request_to_join"|"public"}
 export def "update-team" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5454,7 +5415,7 @@ export def "update-team" [
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. 'Note: You can only pass in an offset that was returned to you via a previously paginated request.' (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
   --data: record # A generic Asana Resource, containing a globally unique identifier. — shape: {name?: string, description?: string, html_description?: string, organization?: string, visibility?: "secret"|"request_to_join"|"public"}
-]: any -> record<data: record<gid: string, resource_type: string, name: string, description: string, html_description: string, organization: record<gid: string, resource_type: string, name: string>, permalink_url: string, visibility: string>> {
+]: any -> oneof<record<data: record<gid: string, resource_type: string, name: string, description: string, html_description: string, organization: record<gid: string, resource_type: string, name: string>, permalink_url: string, visibility: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5497,7 +5458,7 @@ export def "get-team" [
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. 'Note: You can only pass in an offset that was returned to you via a previously paginated request.' (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
-]: nothing -> record<data: record<gid: string, resource_type: string, name: string, description: string, html_description: string, organization: record<gid: string, resource_type: string, name: string>, permalink_url: string, visibility: string>> {
+]: nothing -> oneof<record<data: record<gid: string, resource_type: string, name: string, description: string, html_description: string, organization: record<gid: string, resource_type: string, name: string>, permalink_url: string, visibility: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($team_gid | is-empty) { error make --unspanned { msg: "path parameter 'team_gid' must be non-empty" } }
@@ -5523,7 +5484,6 @@ export def "get-team" [
 #
 # POST /teams/{team_gid}/addUser
 # operationId: addUserForTeam
-# --data shape: {user?: string}
 export def "add-user-for-team" [
   team_gid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5538,7 +5498,7 @@ export def "add-user-for-team" [
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --data: record # A user identification object for specification with the addUser/removeUser endpoints. — shape: {user?: string}
-]: any -> record<data: record<gid: string, resource_type: string, is_guest: bool, team: record<gid: string, resource_type: string, name: string>, user: record<gid: string, resource_type: string, name: string>>> {
+]: any -> oneof<record<data: record<gid: string, resource_type: string, is_guest: bool, team: record<gid: string, resource_type: string, name: string>, user: record<gid: string, resource_type: string, name: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5582,7 +5542,7 @@ export def "get-project-templates-for-team" [
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. 'Note: You can only pass in an offset that was returned to you via a previously paginated request.' (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
-]: nothing -> record<data: table<gid: string, resource_type: string, name: string>> {
+]: nothing -> oneof<record<data: table<gid: string, resource_type: string, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($team_gid | is-empty) { error make --unspanned { msg: "path parameter 'team_gid' must be non-empty" } }
@@ -5624,7 +5584,7 @@ export def "get-projects-for-team" [
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. 'Note: You can only pass in an offset that was returned to you via a previously paginated request.' (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
   --archived: oneof<nothing, bool> # Only return projects whose `archived` field takes on the value of this parameter. (e.g. false)
-]: nothing -> record<data: table<gid: string, resource_type: string, name: string>> {
+]: nothing -> oneof<record<data: table<gid: string, resource_type: string, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($team_gid | is-empty) { error make --unspanned { msg: "path parameter 'team_gid' must be non-empty" } }
@@ -5650,7 +5610,6 @@ export def "get-projects-for-team" [
 #
 # POST /teams/{team_gid}/projects
 # operationId: createProjectForTeam
-# --data shape: {name?: string, archived?: bool, color?: "dark-pink"|"dark-green"|"dark-blue"|"dark-red"|"dark-teal"|"dark-brown"|"dark-orange"|"dark-purple"|"dark-warm-gray"|"light-pink"|"light-green"|"light-blue"|"light-red"|"light-teal"|"light-brown"|"light-orange"|"light-purple"|"light-warm-gray", current_status?: record, current_status_update?: record, default_view?: "list"|"board"|"calendar"|"timeline", due_date?: string, due_on?: string, html_notes?: string, is_template?: bool, notes?: string, ... (7 more fields)}
 export def "create-project-for-team" [
   team_gid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5665,7 +5624,7 @@ export def "create-project-for-team" [
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --data: record # A generic Asana Resource, containing a globally unique identifier. — shape: {name?: string, archived?: bool, color?: "dark-pink"|"dark-green"|"dark-blue"|"dark-red"|"dark-teal"|"dark-brown"|"dark-orange"|"dark-purple"|"dark-warm-gray"|"light-pink"|"light-green"|"light-blue"|"light-red"|"light-teal"|"light-brown"|"light-orange"|"light-purple"|"light-warm-gray", current_status?: record, current_status_update?: record, default_view?: "list"|"board"|"calendar"|"timeline", due_date?: string, due_on?: string, html_notes?: string, is_template?: bool, notes?: string, ... (7 more fields)}
-]: any -> record<data: record<gid: string, resource_type: string, name: string, archived: bool, color: string, created_at: string, current_status: record<gid: string, resource_type: string, title: string, color: string, html_text: string, text: string, author: record, created_at: string, created_by: record, modified_at: string>, current_status_update: record<gid: string, resource_type: string, resource_subtype: string, title: string>, custom_field_settings: list<record>, default_view: string, due_date: string, due_on: string, html_notes: string, is_template: bool, members: list<record>, modified_at: string, notes: string, public: bool, start_on: string, workspace: record<gid: string, resource_type: string, name: string>, completed: bool, completed_at: string, completed_by: record<gid: string, resource_type: string, name: string>, created_from_template: record<gid: string, resource_type: string, name: string>, custom_fields: list<record>, followers: list<record>, icon: string, owner: record<gid: string, resource_type: string, name: string>, permalink_url: string, project_brief: record<gid: string, resource_type: string>, team: record<gid: string, resource_type: string, name: string>>> {
+]: any -> oneof<record<data: record<gid: string, resource_type: string, name: string, archived: bool, color: string, created_at: string, current_status: record<gid: string, resource_type: string, title: string, color: string, html_text: string, text: string, author: record, created_at: string, created_by: record, modified_at: string>, current_status_update: record<gid: string, resource_type: string, resource_subtype: string, title: string>, custom_field_settings: list<record>, default_view: string, due_date: string, due_on: string, html_notes: string, is_template: bool, members: list<record>, modified_at: string, notes: string, public: bool, start_on: string, workspace: record<gid: string, resource_type: string, name: string>, completed: bool, completed_at: string, completed_by: record<gid: string, resource_type: string, name: string>, created_from_template: record<gid: string, resource_type: string, name: string>, custom_fields: list<record>, followers: list<record>, icon: string, owner: record<gid: string, resource_type: string, name: string>, permalink_url: string, project_brief: record<gid: string, resource_type: string>, team: record<gid: string, resource_type: string, name: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5694,7 +5653,6 @@ export def "create-project-for-team" [
 #
 # POST /teams/{team_gid}/removeUser
 # operationId: removeUserForTeam
-# --data shape: {user?: string}
 export def "remove-user-for-team" [
   team_gid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5709,7 +5667,7 @@ export def "remove-user-for-team" [
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --data: record # A user identification object for specification with the addUser/removeUser endpoints. — shape: {user?: string}
-]: any -> any {
+]: any -> oneof<record<data: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5753,7 +5711,7 @@ export def "get-team-memberships-for-team" [
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. 'Note: You can only pass in an offset that was returned to you via a previously paginated request.' (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
-]: nothing -> record<data: table<gid: string, resource_type: string, is_guest: bool, team: record, user: record>> {
+]: nothing -> oneof<record<data: table<gid: string, resource_type: string, is_guest: bool, team: record, user: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($team_gid | is-empty) { error make --unspanned { msg: "path parameter 'team_gid' must be non-empty" } }
@@ -5793,7 +5751,7 @@ export def "get-users-for-team" [
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. 'Note: You can only pass in an offset that was returned to you via a previously paginated request.' (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
-]: nothing -> record<data: table<gid: string, resource_type: string, name: string>> {
+]: nothing -> oneof<record<data: table<gid: string, resource_type: string, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($team_gid | is-empty) { error make --unspanned { msg: "path parameter 'team_gid' must be non-empty" } }
@@ -5836,7 +5794,7 @@ export def "get-time-periods" [
   --start-on: string # ISO 8601 date string (format: date, e.g. 2019-09-15)
   --end-on: string # ISO 8601 date string (format: date, e.g. 2019-09-15)
   --workspace: string # Globally unique identifier for the workspace. (required, e.g. 31326)
-]: nothing -> record<data: table<gid: string, resource_type: string, display_name: string, end_on: string, period: string, start_on: string>> {
+]: nothing -> oneof<record<data: table<gid: string, resource_type: string, display_name: string, end_on: string, period: string, start_on: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($workspace == null) { error make --unspanned { msg: "required query parameter 'workspace' missing: pass --workspace" } }
@@ -5875,7 +5833,7 @@ export def "get-time-period" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
-]: nothing -> record<data: record<gid: string, resource_type: string, display_name: string, end_on: string, period: string, start_on: string, parent: record<gid: string, resource_type: string, display_name: string, end_on: string, period: string, start_on: string>>> {
+]: nothing -> oneof<record<data: record<gid: string, resource_type: string, display_name: string, end_on: string, period: string, start_on: string, parent: record<gid: string, resource_type: string, display_name: string, end_on: string, period: string, start_on: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($time_period_gid | is-empty) { error make --unspanned { msg: "path parameter 'time_period_gid' must be non-empty" } }
@@ -5914,7 +5872,7 @@ export def "get-user-task-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
-]: nothing -> record<data: record<gid: string, resource_type: string, name: string, owner: record<gid: string, resource_type: string, name: string>, workspace: record<gid: string, resource_type: string, name: string>>> {
+]: nothing -> oneof<record<data: record<gid: string, resource_type: string, name: string, owner: record<gid: string, resource_type: string, name: string>, workspace: record<gid: string, resource_type: string, name: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_task_list_gid | is-empty) { error make --unspanned { msg: "path parameter 'user_task_list_gid' must be non-empty" } }
@@ -5956,7 +5914,7 @@ export def "get-tasks-for-user-task-list" [
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. 'Note: You can only pass in an offset that was returned to you via a previously paginated request.' (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
-]: nothing -> record<data: table<gid: string, resource_type: string, name: string, resource_subtype: string>> {
+]: nothing -> oneof<record<data: table<gid: string, resource_type: string, name: string, resource_subtype: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_task_list_gid | is-empty) { error make --unspanned { msg: "path parameter 'user_task_list_gid' must be non-empty" } }
@@ -5998,7 +5956,7 @@ export def "get-users" [
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. 'Note: You can only pass in an offset that was returned to you via a previously paginated request.' (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
-]: nothing -> record<data: table<gid: string, resource_type: string, name: string>> {
+]: nothing -> oneof<record<data: table<gid: string, resource_type: string, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "workspace" $workspace "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -6036,7 +5994,7 @@ export def "get-user" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
-]: nothing -> record<data: record<gid: string, resource_type: string, name: string, email: string, photo: record<image_1024x1024: string, image_128x128: string, image_21x21: string, image_27x27: string, image_36x36: string, image_60x60: string>, workspaces: list<record>>> {
+]: nothing -> oneof<record<data: record<gid: string, resource_type: string, name: string, email: string, photo: record<image_1024x1024: string, image_128x128: string, image_21x21: string, image_27x27: string, image_36x36: string, image_60x60: string>, workspaces: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_gid | is-empty) { error make --unspanned { msg: "path parameter 'user_gid' must be non-empty" } }
@@ -6077,7 +6035,7 @@ export def "get-favorites-for-user" [
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --resource-type: string@resource-type-completer # The resource type of favorites to be returned. (required, default: project)
   --workspace: string # The workspace in which to get favorites. (required, e.g. 1234)
-]: nothing -> record<data: table<gid: string, resource_type: string, name: string>> {
+]: nothing -> oneof<record<data: table<gid: string, resource_type: string, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_gid | is-empty) { error make --unspanned { msg: "path parameter 'user_gid' must be non-empty" } }
@@ -6121,7 +6079,7 @@ export def "get-team-memberships-for-user" [
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. 'Note: You can only pass in an offset that was returned to you via a previously paginated request.' (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
   --workspace: string # Globally unique identifier for the workspace. (required, e.g. 31326)
-]: nothing -> record<data: table<gid: string, resource_type: string, is_guest: bool, team: record, user: record>> {
+]: nothing -> oneof<record<data: table<gid: string, resource_type: string, is_guest: bool, team: record, user: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_gid | is-empty) { error make --unspanned { msg: "path parameter 'user_gid' must be non-empty" } }
@@ -6164,7 +6122,7 @@ export def "get-teams-for-user" [
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. 'Note: You can only pass in an offset that was returned to you via a previously paginated request.' (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
   --organization: string # The workspace or organization to filter teams on. (required, e.g. 1331)
-]: nothing -> record<data: table<gid: string, resource_type: string, name: string>> {
+]: nothing -> oneof<record<data: table<gid: string, resource_type: string, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_gid | is-empty) { error make --unspanned { msg: "path parameter 'user_gid' must be non-empty" } }
@@ -6205,7 +6163,7 @@ export def "get-user-task-list-for-user" [
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --workspace: string # The workspace in which to get the user task list. (required, e.g. 1234)
-]: nothing -> record<data: record<gid: string, resource_type: string, name: string, owner: record<gid: string, resource_type: string, name: string>, workspace: record<gid: string, resource_type: string, name: string>>> {
+]: nothing -> oneof<record<data: record<gid: string, resource_type: string, name: string, owner: record<gid: string, resource_type: string, name: string>, workspace: record<gid: string, resource_type: string, name: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_gid | is-empty) { error make --unspanned { msg: "path parameter 'user_gid' must be non-empty" } }
@@ -6247,7 +6205,7 @@ export def "get-workspace-memberships-for-user" [
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. 'Note: You can only pass in an offset that was returned to you via a previously paginated request.' (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
-]: nothing -> record<data: table<gid: string, resource_type: string, user: record, workspace: record>> {
+]: nothing -> oneof<record<data: table<gid: string, resource_type: string, user: record, workspace: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_gid | is-empty) { error make --unspanned { msg: "path parameter 'user_gid' must be non-empty" } }
@@ -6289,7 +6247,7 @@ export def "get-webhooks" [
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. 'Note: You can only pass in an offset that was returned to you via a previously paginated request.' (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
   --workspace: string # The workspace to query for webhooks in. (required, e.g. 1331)
   --resource: string # Only return webhooks for the given resource. (e.g. 51648)
-]: nothing -> record<data: table<gid: string, resource_type: string, active: bool, resource: record, target: string, created_at: string, filters: list, last_failure_at: string, last_failure_content: string, last_success_at: string>> {
+]: nothing -> oneof<record<data: table<gid: string, resource_type: string, active: bool, resource: record, target: string, created_at: string, filters: list, last_failure_at: string, last_failure_content: string, last_success_at: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($workspace == null) { error make --unspanned { msg: "required query parameter 'workspace' missing: pass --workspace" } }
@@ -6315,7 +6273,6 @@ export def "get-webhooks" [
 #
 # POST /webhooks
 # operationId: createWebhook
-# --data shape: {filters?: list, resource: string, target: string}
 export def "create-webhook" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6329,7 +6286,7 @@ export def "create-webhook" [
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --data: record # shape: {filters?: list, resource: string, target: string}
-]: any -> record<data: record<gid: string, resource_type: string, active: bool, resource: record<gid: string, resource_type: string, name: string>, target: string, created_at: string, filters: list<record>, last_failure_at: string, last_failure_content: string, last_success_at: string>> {
+]: any -> oneof<record<data: record<gid: string, resource_type: string, active: bool, resource: record<gid: string, resource_type: string, name: string>, target: string, created_at: string, filters: list<record>, last_failure_at: string, last_failure_content: string, last_success_at: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6370,7 +6327,7 @@ export def "delete-webhook" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
-]: nothing -> record<data: record> {
+]: nothing -> oneof<record<data: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($webhook_gid | is-empty) { error make --unspanned { msg: "path parameter 'webhook_gid' must be non-empty" } }
@@ -6409,7 +6366,7 @@ export def "get-webhook" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
-]: nothing -> record<data: record<gid: string, resource_type: string, active: bool, resource: record<gid: string, resource_type: string, name: string>, target: string, created_at: string, filters: list<record>, last_failure_at: string, last_failure_content: string, last_success_at: string>> {
+]: nothing -> oneof<record<data: record<gid: string, resource_type: string, active: bool, resource: record<gid: string, resource_type: string, name: string>, target: string, created_at: string, filters: list<record>, last_failure_at: string, last_failure_content: string, last_success_at: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($webhook_gid | is-empty) { error make --unspanned { msg: "path parameter 'webhook_gid' must be non-empty" } }
@@ -6435,7 +6392,6 @@ export def "get-webhook" [
 #
 # PUT /webhooks/{webhook_gid}
 # operationId: updateWebhook
-# --data shape: {filters?: list}
 export def "update-webhook" [
   webhook_gid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6450,7 +6406,7 @@ export def "update-webhook" [
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --data: record # shape: {filters?: list}
-]: any -> record<data: record<gid: string, resource_type: string, active: bool, resource: record<gid: string, resource_type: string, name: string>, target: string, created_at: string, filters: list<record>, last_failure_at: string, last_failure_content: string, last_success_at: string>> {
+]: any -> oneof<record<data: record<gid: string, resource_type: string, active: bool, resource: record<gid: string, resource_type: string, name: string>, target: string, created_at: string, filters: list<record>, last_failure_at: string, last_failure_content: string, last_success_at: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6492,7 +6448,7 @@ export def "get-workspace-membership" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
-]: nothing -> record<data: record<gid: string, resource_type: string, user: record<gid: string, resource_type: string, name: string>, workspace: record<gid: string, resource_type: string, name: string>, is_active: bool, is_admin: bool, is_guest: bool, user_task_list: record<gid: string, resource_type: string, name: string, owner: record, workspace: record>, vacation_dates: record<end_on: string, start_on: string>>> {
+]: nothing -> oneof<record<data: record<gid: string, resource_type: string, user: record<gid: string, resource_type: string, name: string>, workspace: record<gid: string, resource_type: string, name: string>, is_active: bool, is_admin: bool, is_guest: bool, user_task_list: record<gid: string, resource_type: string, name: string, owner: record, workspace: record>, vacation_dates: record<end_on: string, start_on: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($workspace_membership_gid | is-empty) { error make --unspanned { msg: "path parameter 'workspace_membership_gid' must be non-empty" } }
@@ -6532,7 +6488,7 @@ export def "get-workspaces" [
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. 'Note: You can only pass in an offset that was returned to you via a previously paginated request.' (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
-]: nothing -> record<data: table<gid: string, resource_type: string, name: string>> {
+]: nothing -> oneof<record<data: table<gid: string, resource_type: string, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -6570,7 +6526,7 @@ export def "get-workspace" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
-]: nothing -> record<data: record<gid: string, resource_type: string, name: string, email_domains: list<string>, is_organization: bool>> {
+]: nothing -> oneof<record<data: record<gid: string, resource_type: string, name: string, email_domains: list<string>, is_organization: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($workspace_gid | is-empty) { error make --unspanned { msg: "path parameter 'workspace_gid' must be non-empty" } }
@@ -6596,7 +6552,6 @@ export def "get-workspace" [
 #
 # PUT /workspaces/{workspace_gid}
 # operationId: updateWorkspace
-# --data shape: {name?: string}
 export def "update-workspace" [
   workspace_gid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6611,7 +6566,7 @@ export def "update-workspace" [
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --data: record # A generic Asana Resource, containing a globally unique identifier. — shape: {name?: string}
-]: any -> record<data: record<gid: string, resource_type: string, name: string, email_domains: list<string>, is_organization: bool>> {
+]: any -> oneof<record<data: record<gid: string, resource_type: string, name: string, email_domains: list<string>, is_organization: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6640,7 +6595,6 @@ export def "update-workspace" [
 #
 # POST /workspaces/{workspace_gid}/addUser
 # operationId: addUserForWorkspace
-# --data shape: {user?: string}
 export def "add-user-for-workspace" [
   workspace_gid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6655,7 +6609,7 @@ export def "add-user-for-workspace" [
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --data: record # A user identification object for specification with the addUser/removeUser endpoints. — shape: {user?: string}
-]: any -> record<data: record<gid: string, resource_type: string, name: string, email: string, photo: record<image_1024x1024: string, image_128x128: string, image_21x21: string, image_27x27: string, image_36x36: string, image_60x60: string>>> {
+]: any -> oneof<record<data: record<gid: string, resource_type: string, name: string, email: string, photo: record<image_1024x1024: string, image_128x128: string, image_21x21: string, image_27x27: string, image_36x36: string, image_60x60: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6703,7 +6657,7 @@ export def "get-audit-log-events" [
   --resource-gid: string # Filter to events with this resource ID.
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. 'Note: You can only pass in an offset that was returned to you via a previously paginated request.' (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
-]: nothing -> record<data: table<actor: record, context: record, created_at: string, details: record, event_category: string, event_type: string, gid: string, resource: record>> {
+]: nothing -> oneof<record<data: table<actor: record, context: record, created_at: string, details: record, event_category: string, event_type: string, gid: string, resource: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($workspace_gid | is-empty) { error make --unspanned { msg: "path parameter 'workspace_gid' must be non-empty" } }
@@ -6744,7 +6698,7 @@ export def "get-custom-fields-for-workspace" [
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. 'Note: You can only pass in an offset that was returned to you via a previously paginated request.' (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
-]: nothing -> record<data: table<gid: string, resource_type: string, date_value: record, display_value: string, enabled: bool, enum_options: list, enum_value: record, multi_enum_values: list, name: string, number_value: float, resource_subtype: string, text_value: string, type: string, asana_created_field: string, currency_code: string, custom_label: string, custom_label_position: string, description: string, format: string, has_notifications_enabled: bool, is_global_to_workspace: bool, precision: int, created_by: record, people_value: list>> {
+]: nothing -> oneof<record<data: table<gid: string, resource_type: string, date_value: record, display_value: string, enabled: bool, enum_options: list, enum_value: record, multi_enum_values: list, name: string, number_value: float, resource_subtype: string, text_value: string, type: string, asana_created_field: string, currency_code: string, custom_label: string, custom_label_position: string, description: string, format: string, has_notifications_enabled: bool, is_global_to_workspace: bool, precision: int, created_by: record, people_value: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($workspace_gid | is-empty) { error make --unspanned { msg: "path parameter 'workspace_gid' must be non-empty" } }
@@ -6786,7 +6740,7 @@ export def "get-projects-for-workspace" [
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. 'Note: You can only pass in an offset that was returned to you via a previously paginated request.' (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
   --archived: oneof<nothing, bool> # Only return projects whose `archived` field takes on the value of this parameter. (e.g. false)
-]: nothing -> record<data: table<gid: string, resource_type: string, name: string>> {
+]: nothing -> oneof<record<data: table<gid: string, resource_type: string, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($workspace_gid | is-empty) { error make --unspanned { msg: "path parameter 'workspace_gid' must be non-empty" } }
@@ -6812,7 +6766,6 @@ export def "get-projects-for-workspace" [
 #
 # POST /workspaces/{workspace_gid}/projects
 # operationId: createProjectForWorkspace
-# --data shape: {name?: string, archived?: bool, color?: "dark-pink"|"dark-green"|"dark-blue"|"dark-red"|"dark-teal"|"dark-brown"|"dark-orange"|"dark-purple"|"dark-warm-gray"|"light-pink"|"light-green"|"light-blue"|"light-red"|"light-teal"|"light-brown"|"light-orange"|"light-purple"|"light-warm-gray", current_status?: record, current_status_update?: record, default_view?: "list"|"board"|"calendar"|"timeline", due_date?: string, due_on?: string, html_notes?: string, is_template?: bool, notes?: string, ... (7 more fields)}
 export def "create-project-for-workspace" [
   workspace_gid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6827,7 +6780,7 @@ export def "create-project-for-workspace" [
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --data: record # A generic Asana Resource, containing a globally unique identifier. — shape: {name?: string, archived?: bool, color?: "dark-pink"|"dark-green"|"dark-blue"|"dark-red"|"dark-teal"|"dark-brown"|"dark-orange"|"dark-purple"|"dark-warm-gray"|"light-pink"|"light-green"|"light-blue"|"light-red"|"light-teal"|"light-brown"|"light-orange"|"light-purple"|"light-warm-gray", current_status?: record, current_status_update?: record, default_view?: "list"|"board"|"calendar"|"timeline", due_date?: string, due_on?: string, html_notes?: string, is_template?: bool, notes?: string, ... (7 more fields)}
-]: any -> record<data: record<gid: string, resource_type: string, name: string, archived: bool, color: string, created_at: string, current_status: record<gid: string, resource_type: string, title: string, color: string, html_text: string, text: string, author: record, created_at: string, created_by: record, modified_at: string>, current_status_update: record<gid: string, resource_type: string, resource_subtype: string, title: string>, custom_field_settings: list<record>, default_view: string, due_date: string, due_on: string, html_notes: string, is_template: bool, members: list<record>, modified_at: string, notes: string, public: bool, start_on: string, workspace: record<gid: string, resource_type: string, name: string>, completed: bool, completed_at: string, completed_by: record<gid: string, resource_type: string, name: string>, created_from_template: record<gid: string, resource_type: string, name: string>, custom_fields: list<record>, followers: list<record>, icon: string, owner: record<gid: string, resource_type: string, name: string>, permalink_url: string, project_brief: record<gid: string, resource_type: string>, team: record<gid: string, resource_type: string, name: string>>> {
+]: any -> oneof<record<data: record<gid: string, resource_type: string, name: string, archived: bool, color: string, created_at: string, current_status: record<gid: string, resource_type: string, title: string, color: string, html_text: string, text: string, author: record, created_at: string, created_by: record, modified_at: string>, current_status_update: record<gid: string, resource_type: string, resource_subtype: string, title: string>, custom_field_settings: list<record>, default_view: string, due_date: string, due_on: string, html_notes: string, is_template: bool, members: list<record>, modified_at: string, notes: string, public: bool, start_on: string, workspace: record<gid: string, resource_type: string, name: string>, completed: bool, completed_at: string, completed_by: record<gid: string, resource_type: string, name: string>, created_from_template: record<gid: string, resource_type: string, name: string>, custom_fields: list<record>, followers: list<record>, icon: string, owner: record<gid: string, resource_type: string, name: string>, permalink_url: string, project_brief: record<gid: string, resource_type: string>, team: record<gid: string, resource_type: string, name: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6856,7 +6809,6 @@ export def "create-project-for-workspace" [
 #
 # POST /workspaces/{workspace_gid}/removeUser
 # operationId: removeUserForWorkspace
-# --data shape: {user?: string}
 export def "remove-user-for-workspace" [
   workspace_gid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6871,7 +6823,7 @@ export def "remove-user-for-workspace" [
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --data: record # A user identification object for specification with the addUser/removeUser endpoints. — shape: {user?: string}
-]: any -> any {
+]: any -> oneof<record<data: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6915,7 +6867,7 @@ export def "get-tags-for-workspace" [
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. 'Note: You can only pass in an offset that was returned to you via a previously paginated request.' (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
-]: nothing -> record<data: table<gid: string, resource_type: string, name: string>> {
+]: nothing -> oneof<record<data: table<gid: string, resource_type: string, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($workspace_gid | is-empty) { error make --unspanned { msg: "path parameter 'workspace_gid' must be non-empty" } }
@@ -6941,7 +6893,6 @@ export def "get-tags-for-workspace" [
 #
 # POST /workspaces/{workspace_gid}/tags
 # operationId: createTagForWorkspace
-# --data shape: {name?: string, color?: "dark-pink"|"dark-green"|"dark-blue"|"dark-red"|"dark-teal"|"dark-brown"|"dark-orange"|"dark-purple"|"dark-warm-gray"|"light-pink"|"light-green"|"light-blue"|"light-red"|"light-teal"|"light-brown"|"light-orange"|"light-purple"|"light-warm-gray", notes?: string, workspace?: record}
 export def "create-tag-for-workspace" [
   workspace_gid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6956,7 +6907,7 @@ export def "create-tag-for-workspace" [
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --data: record # A generic Asana Resource, containing a globally unique identifier. — shape: {name?: string, color?: "dark-pink"|"dark-green"|"dark-blue"|"dark-red"|"dark-teal"|"dark-brown"|"dark-orange"|"dark-purple"|"dark-warm-gray"|"light-pink"|"light-green"|"light-blue"|"light-red"|"light-teal"|"light-brown"|"light-orange"|"light-purple"|"light-warm-gray", notes?: string, workspace?: record}
-]: any -> record<data: record<gid: string, resource_type: string, name: string, color: string, notes: string, created_at: string, followers: list<record>, permalink_url: string, workspace: record<gid: string, resource_type: string, name: string>>> {
+]: any -> oneof<record<data: record<gid: string, resource_type: string, name: string, color: string, notes: string, created_at: string, followers: list<record>, permalink_url: string, workspace: record<gid: string, resource_type: string, name: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7050,7 +7001,7 @@ export def "search-tasks-for-workspace" [
   --is-subtask: oneof<nothing, bool> # Filter to subtasks (e.g. false)
   --sort-by: string@sort-by-completer # One of `due_date`, `created_at`, `completed_at`, `likes`, or `modified_at`, defaults to `modified_at` (default: modified_at, e.g. likes)
   --sort-ascending: oneof<nothing, bool> # Default `false` (default: false, e.g. true)
-]: nothing -> record<data: table<gid: string, resource_type: string, name: string, resource_subtype: string>> {
+]: nothing -> oneof<record<data: table<gid: string, resource_type: string, name: string, resource_subtype: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($workspace_gid | is-empty) { error make --unspanned { msg: "path parameter 'workspace_gid' must be non-empty" } }
@@ -7091,7 +7042,7 @@ export def "get-teams-for-workspace" [
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. 'Note: You can only pass in an offset that was returned to you via a previously paginated request.' (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
-]: nothing -> record<data: table<gid: string, resource_type: string, name: string>> {
+]: nothing -> oneof<record<data: table<gid: string, resource_type: string, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($workspace_gid | is-empty) { error make --unspanned { msg: "path parameter 'workspace_gid' must be non-empty" } }
@@ -7134,7 +7085,7 @@ export def "typeahead-for-workspace" [
   --count: int # The number of results to return. The default is 20 if this parameter is omitted, with a minimum of 1 and a maximum of 100. If there are fewer results found than requested, all will be returned. (e.g. 20)
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
-]: nothing -> record<data: table<gid: string, resource_type: string, name: string>> {
+]: nothing -> oneof<record<data: table<gid: string, resource_type: string, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($workspace_gid | is-empty) { error make --unspanned { msg: "path parameter 'workspace_gid' must be non-empty" } }
@@ -7175,7 +7126,7 @@ export def "get-users-for-workspace" [
   --opt-pretty: oneof<nothing, bool> # Provides “pretty” output. Provides the response in a “pretty” format. In the case of JSON this means doing proper line breaking and indentation to make it readable. This will take extra time and increase the response size so it is advisable only to use this during debugging. (e.g. true, allows empty value)
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. 'Note: You can only pass in an offset that was returned to you via a previously paginated request.' (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
-]: nothing -> record<data: table<gid: string, resource_type: string, name: string>> {
+]: nothing -> oneof<record<data: table<gid: string, resource_type: string, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($workspace_gid | is-empty) { error make --unspanned { msg: "path parameter 'workspace_gid' must be non-empty" } }
@@ -7217,7 +7168,7 @@ export def "get-workspace-memberships-for-workspace" [
   --opt-fields: list<string> # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --limit: int # Results per page. The number of objects to return per page. The value must be between 1 and 100. (e.g. 50)
   --offset: string # Offset token. An offset to the next page returned by the API. A pagination request will return an offset token, which can be used as an input parameter to the next request. If an offset is not passed in, the API will return the first page of results. 'Note: You can only pass in an offset that was returned to you via a previously paginated request.' (e.g. eyJ0eXAiOJiKV1iQLCJhbGciOiJIUzI1NiJ9)
-]: nothing -> record<data: table<gid: string, resource_type: string, user: record, workspace: record>> {
+]: nothing -> oneof<record<data: table<gid: string, resource_type: string, user: record, workspace: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($workspace_gid | is-empty) { error make --unspanned { msg: "path parameter 'workspace_gid' must be non-empty" } }

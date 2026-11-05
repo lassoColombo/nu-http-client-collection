@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -124,9 +148,9 @@ def type-completer [] { ["Microsoft.DataLakeStore/accounts"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["operations-list" "accounts-list" "locations-get-capability" "accounts-check-name-availability" "locations-get-usage" "accounts-list-by-resource-group" "accounts-delete" "accounts-get" "accounts-update" "accounts-create" "accounts-enable-key-vault" "firewall-rules-list-by-account" "firewall-rules-delete" "firewall-rules-get" "firewall-rules-update" "firewall-rules-create-or-update" "trusted-id-providers-list-by-account" "trusted-id-providers-delete" "trusted-id-providers-get" "trusted-id-providers-update" "trusted-id-providers-create-or-update" "virtual-network-rules-list-by-account" "virtual-network-rules-delete" "virtual-network-rules-get" "virtual-network-rules-update" "virtual-network-rules-create-or-update" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -159,7 +183,7 @@ export def "operations-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<nextLink: string, value: table<display: record, name: string, origin: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<display: record, name: string, origin: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
@@ -203,7 +227,7 @@ export def "accounts-list" [
   --orderby: string # OrderBy clause. One or more comma-separated expressions with an optional "asc" (the default) or "desc" depending on the order you'd like the values sorted, e.g. Categories?$orderby=CategoryName desc. Optional.
   --count: oneof<nothing, bool> # The Boolean value of true or false to request a count of the matching resources included with the resources in the response, e.g. Categories?$count=true. Optional.
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -243,7 +267,7 @@ export def "locations-get-capability" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<accountCount: int, maxAccountCount: int, migrationState: bool, state: string, subscriptionId: string> {
+]: nothing -> oneof<record<accountCount: int, maxAccountCount: int, migrationState: bool, state: string, subscriptionId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -286,7 +310,7 @@ export def "accounts-check-name-availability" [
   --api-version: string # Client Api Version. (required)
   name: string # The Data Lake Store name to check availability for.
   type: string@type-completer # The resource type. Note: This should not be set by the user, as the constant value is Microsoft.DataLakeStore/accounts
-]: any -> record<message: string, nameAvailable: bool, reason: string> {
+]: any -> oneof<record<message: string, nameAvailable: bool, reason: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -330,7 +354,7 @@ export def "locations-get-usage" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<value: table<currentValue: int, id: string, limit: int, name: record, unit: string>> {
+]: nothing -> oneof<record<value: table<currentValue: int, id: string, limit: int, name: record, unit: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -377,7 +401,7 @@ export def "accounts-list-by-resource-group" [
   --orderby: string # OrderBy clause. One or more comma-separated expressions with an optional "asc" (the default) or "desc" depending on the order you'd like the values sorted, e.g. Categories?$orderby=CategoryName desc. Optional.
   --count: oneof<nothing, bool> # A Boolean value of true or false to request a count of the matching resources included with the resources in the response, e.g. Categories?$count=true. Optional.
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -462,7 +486,7 @@ export def "accounts-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<identity: record<principalId: string, tenantId: string, type: string>, properties: record<currentTier: string, defaultGroup: string, encryptionConfig: record<keyVaultMetaInfo: record, type: string>, encryptionProvisioningState: string, encryptionState: string, firewallAllowAzureIps: string, firewallRules: list<record>, firewallState: string, newTier: string, trustedIdProviderState: string, trustedIdProviders: list<record>, virtualNetworkRules: list<record>, accountId: string, creationTime: string, endpoint: string, lastModifiedTime: string, provisioningState: string, state: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<identity: record<principalId: string, tenantId: string, type: string>, properties: record<currentTier: string, defaultGroup: string, encryptionConfig: record<keyVaultMetaInfo: record, type: string>, encryptionProvisioningState: string, encryptionState: string, firewallAllowAzureIps: string, firewallRules: list<record>, firewallState: string, newTier: string, trustedIdProviderState: string, trustedIdProviders: list<record>, virtualNetworkRules: list<record>, accountId: string, creationTime: string, endpoint: string, lastModifiedTime: string, provisioningState: string, state: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -491,7 +515,6 @@ export def "accounts-get" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeStore/accounts/{accountName}
 # operationId: Accounts_Update
-# --properties shape: {defaultGroup?: string, encryptionConfig?: any, firewallAllowAzureIps?: "Enabled"|"Disabled", firewallRules?: list, firewallState?: "Enabled"|"Disabled", newTier?: "Consumption"|"Commitment_1TB"|"Commitment_10TB"|"Commitment_100TB"|"Commitment_500TB"|"Commitment_1PB"|"Commitment_5PB", trustedIdProviderState?: "Enabled"|"Disabled", trustedIdProviders?: list, virtualNetworkRules?: list}
 export def "accounts-update" [
   subscription_id: string
   resource_group_name: string
@@ -508,7 +531,7 @@ export def "accounts-update" [
   --api-version: string # Client Api Version. (required)
   --properties: any # Data Lake Store account properties information to be updated. — shape: {defaultGroup?: string, encryptionConfig?: any, firewallAllowAzureIps?: "Enabled"|"Disabled", firewallRules?: list, firewallState?: "Enabled"|"Disabled", newTier?: "Consumption"|"Commitment_1TB"|"Commitment_10TB"|"Commitment_100TB"|"Commitment_500TB"|"Commitment_1PB"|"Commitment_5PB", trustedIdProviderState?: "Enabled"|"Disabled", trustedIdProviders?: list, virtualNetworkRules?: list}
   --tags: record # Resource tags
-]: any -> record<identity: record<principalId: string, tenantId: string, type: string>, properties: record<currentTier: string, defaultGroup: string, encryptionConfig: record<keyVaultMetaInfo: record, type: string>, encryptionProvisioningState: string, encryptionState: string, firewallAllowAzureIps: string, firewallRules: list<record>, firewallState: string, newTier: string, trustedIdProviderState: string, trustedIdProviders: list<record>, virtualNetworkRules: list<record>, accountId: string, creationTime: string, endpoint: string, lastModifiedTime: string, provisioningState: string, state: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<identity: record<principalId: string, tenantId: string, type: string>, properties: record<currentTier: string, defaultGroup: string, encryptionConfig: record<keyVaultMetaInfo: record, type: string>, encryptionProvisioningState: string, encryptionState: string, firewallAllowAzureIps: string, firewallRules: list<record>, firewallState: string, newTier: string, trustedIdProviderState: string, trustedIdProviders: list<record>, virtualNetworkRules: list<record>, accountId: string, creationTime: string, endpoint: string, lastModifiedTime: string, provisioningState: string, state: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -540,8 +563,6 @@ export def "accounts-update" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeStore/accounts/{accountName}
 # operationId: Accounts_Create
-# --identity shape: {type: "SystemAssigned"}
-# --properties shape: {defaultGroup?: string, encryptionConfig?: any, encryptionState?: "Enabled"|"Disabled", firewallAllowAzureIps?: "Enabled"|"Disabled", firewallRules?: list, firewallState?: "Enabled"|"Disabled", newTier?: "Consumption"|"Commitment_1TB"|"Commitment_10TB"|"Commitment_100TB"|"Commitment_500TB"|"Commitment_1PB"|"Commitment_5PB", trustedIdProviderState?: "Enabled"|"Disabled", trustedIdProviders?: list, virtualNetworkRules?: list}
 export def "accounts-create" [
   subscription_id: string
   resource_group_name: string
@@ -560,7 +581,7 @@ export def "accounts-create" [
   location: string # The resource location.
   --properties: any # shape: {defaultGroup?: string, encryptionConfig?: any, encryptionState?: "Enabled"|"Disabled", firewallAllowAzureIps?: "Enabled"|"Disabled", firewallRules?: list, firewallState?: "Enabled"|"Disabled", newTier?: "Consumption"|"Commitment_1TB"|"Commitment_10TB"|"Commitment_100TB"|"Commitment_500TB"|"Commitment_1PB"|"Commitment_5PB", trustedIdProviderState?: "Enabled"|"Disabled", trustedIdProviders?: list, virtualNetworkRules?: list}
   --tags: record # The resource tags.
-]: any -> record<identity: record<principalId: string, tenantId: string, type: string>, properties: record<currentTier: string, defaultGroup: string, encryptionConfig: record<keyVaultMetaInfo: record, type: string>, encryptionProvisioningState: string, encryptionState: string, firewallAllowAzureIps: string, firewallRules: list<record>, firewallState: string, newTier: string, trustedIdProviderState: string, trustedIdProviders: list<record>, virtualNetworkRules: list<record>, accountId: string, creationTime: string, endpoint: string, lastModifiedTime: string, provisioningState: string, state: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<identity: record<principalId: string, tenantId: string, type: string>, properties: record<currentTier: string, defaultGroup: string, encryptionConfig: record<keyVaultMetaInfo: record, type: string>, encryptionProvisioningState: string, encryptionState: string, firewallAllowAzureIps: string, firewallRules: list<record>, firewallState: string, newTier: string, trustedIdProviderState: string, trustedIdProviders: list<record>, virtualNetworkRules: list<record>, accountId: string, creationTime: string, endpoint: string, lastModifiedTime: string, provisioningState: string, state: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -649,7 +670,7 @@ export def "firewall-rules-list-by-account" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -738,7 +759,7 @@ export def "firewall-rules-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<properties: record<endIpAddress: string, startIpAddress: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<endIpAddress: string, startIpAddress: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -768,7 +789,6 @@ export def "firewall-rules-get" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeStore/accounts/{accountName}/firewallRules/{firewallRuleName}
 # operationId: FirewallRules_Update
-# --properties shape: {endIpAddress?: string, startIpAddress?: string}
 export def "firewall-rules-update" [
   subscription_id: string
   resource_group_name: string
@@ -785,7 +805,7 @@ export def "firewall-rules-update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
   --properties: any # The firewall rule properties to use when updating a firewall rule. — shape: {endIpAddress?: string, startIpAddress?: string}
-]: any -> record<properties: record<endIpAddress: string, startIpAddress: string>, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<endIpAddress: string, startIpAddress: string>, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -818,7 +838,6 @@ export def "firewall-rules-update" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeStore/accounts/{accountName}/firewallRules/{firewallRuleName}
 # operationId: FirewallRules_CreateOrUpdate
-# --properties shape: {endIpAddress: string, startIpAddress: string}
 export def "firewall-rules-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -835,7 +854,7 @@ export def "firewall-rules-create-or-update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
   properties: any # The firewall rule properties to use when creating a new firewall rule. — shape: {endIpAddress: string, startIpAddress: string}
-]: any -> record<properties: record<endIpAddress: string, startIpAddress: string>, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<endIpAddress: string, startIpAddress: string>, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -882,7 +901,7 @@ export def "trusted-id-providers-list-by-account" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -971,7 +990,7 @@ export def "trusted-id-providers-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<properties: record<idProvider: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<idProvider: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1001,7 +1020,6 @@ export def "trusted-id-providers-get" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeStore/accounts/{accountName}/trustedIdProviders/{trustedIdProviderName}
 # operationId: TrustedIdProviders_Update
-# --properties shape: {idProvider?: string}
 export def "trusted-id-providers-update" [
   subscription_id: string
   resource_group_name: string
@@ -1018,7 +1036,7 @@ export def "trusted-id-providers-update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
   --properties: any # The trusted identity provider properties to use when updating a trusted identity provider. — shape: {idProvider?: string}
-]: any -> record<properties: record<idProvider: string>, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<idProvider: string>, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1051,7 +1069,6 @@ export def "trusted-id-providers-update" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeStore/accounts/{accountName}/trustedIdProviders/{trustedIdProviderName}
 # operationId: TrustedIdProviders_CreateOrUpdate
-# --properties shape: {idProvider: string}
 export def "trusted-id-providers-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -1068,7 +1085,7 @@ export def "trusted-id-providers-create-or-update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
   properties: any # The trusted identity provider properties to use when creating a new trusted identity provider. — shape: {idProvider: string}
-]: any -> record<properties: record<idProvider: string>, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<idProvider: string>, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1115,7 +1132,7 @@ export def "virtual-network-rules-list-by-account" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1204,7 +1221,7 @@ export def "virtual-network-rules-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<properties: record<subnetId: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<subnetId: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1234,7 +1251,6 @@ export def "virtual-network-rules-get" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeStore/accounts/{accountName}/virtualNetworkRules/{virtualNetworkRuleName}
 # operationId: VirtualNetworkRules_Update
-# --properties shape: {subnetId?: string}
 export def "virtual-network-rules-update" [
   subscription_id: string
   resource_group_name: string
@@ -1251,7 +1267,7 @@ export def "virtual-network-rules-update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
   --properties: any # The virtual network rule properties to use when updating a virtual network rule. — shape: {subnetId?: string}
-]: any -> record<properties: record<subnetId: string>, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<subnetId: string>, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1284,7 +1300,6 @@ export def "virtual-network-rules-update" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeStore/accounts/{accountName}/virtualNetworkRules/{virtualNetworkRuleName}
 # operationId: VirtualNetworkRules_CreateOrUpdate
-# --properties shape: {subnetId: string}
 export def "virtual-network-rules-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -1301,7 +1316,7 @@ export def "virtual-network-rules-create-or-update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
   properties: any # The virtual network rule properties to use when creating a new virtual network rule. — shape: {subnetId: string}
-]: any -> record<properties: record<subnetId: string>, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<subnetId: string>, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

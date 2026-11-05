@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,12 +111,13 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # HEAD — bodyless; default surfaces just the headers on success
 def send-head [req: record, insecure: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = (http head --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure $req.url)
+  let resp = http head --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure $req.url
   if (not $full) and (not $allow_errors) and (status-ok $resp.status $ok_codes) { return $resp.headers }
   $resp | handle-response $allow_errors $full $ok_codes
 }
@@ -137,7 +161,7 @@ def confirmed-completer [] { ["true"] }
 def type-completer-1 [] { ["encrypted" "plain" "secret" "sensitive" "system"] }
 def force-new-completer [] { ["0" "1"] }
 def skip-auto-detection-confirmation-completer [] { ["0" "1"] }
-def framework-completer [] { ["" "angular" "astro" "blitzjs" "brunch" "create-react-app" "docusaurus" "docusaurus-2" "dojo" "eleventy" "ember" "gatsby" "gridsome" "hexo" "hugo" "hydrogen" "ionic-angular" "ionic-react" "jekyll" "middleman" "nextjs" "nuxtjs" "parcel" "polymer" "preact" "redwoodjs" "remix" "saber" "sanity" "sapper" "scully" "solidstart" "stencil" "svelte" "sveltekit" "sveltekit-1" "umijs" "vite" "vitepress" "vue" "vuepress" "zola"] }
+def framework-completer [] { ["angular" "astro" "blitzjs" "brunch" "create-react-app" "docusaurus" "docusaurus-2" "dojo" "eleventy" "ember" "gatsby" "gridsome" "hexo" "hugo" "hydrogen" "ionic-angular" "ionic-react" "jekyll" "middleman" "nextjs" "nuxtjs" "parcel" "polymer" "preact" "redwoodjs" "remix" "saber" "sanity" "sapper" "scully" "solidstart" "stencil" "svelte" "sveltekit" "sveltekit-1" "umijs" "vite" "vitepress" "vue" "vuepress" "zola"] }
 def target-completer [] { ["production" "staging"] }
 def direction-completer [] { ["backward" "forward"] }
 def follow-completer [] { ["0" "1"] }
@@ -156,14 +180,14 @@ def production-completer [] { ["false" "true"] }
 def redirects-completer [] { ["false" "true"] }
 def verified-completer [] { ["false" "true"] }
 def order-completer [] { ["ASC" "DESC"] }
-def redirect-status-code-completer [] { ["" "301" "302" "307" "308"] }
+def redirect-status-code-completer [] { ["301" "302" "307" "308"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-edge-configs" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-edge-configs" "create-edge-config" "delete-edge-config" "get-edge-config" "update-edge-config" "get-edge-config-item" "get-edge-config-items" "patcht-edge-config-items" "create-edge-config-token" "get-edge-config-token" "delete-edge-config-tokens" "get-edge-config-tokens" "email-login" "verify-token" "get-all-checks" "create-check" "get-check" "update-check" "rerequest-check" "update-record" "delete-configuration" "get-configuration" "get-configurations" "git-namespaces" "delete-integration-log-drain" "get-v1-integrations-search-repo" "get-configurable-log-drains" "create-configurable-log-drain" "delete-configurable-log-drain" "get-configurable-log-drain" "get-project-env" "create-team" "delete-team" "delete-team-invite-code" "invite-user-to-team" "join-team" "remove-team-member" "update-team-member" "request-access-to-team" "get-team-access-request" "request-delete" "get-webhooks" "create-webhook" "delete-webhook" "get-webhook" "create-project-env" "list-deployment-builds" "cancel-deployment" "create-deployment" "get-deployment" "delete-deployment" "delete-alias" "get-deployment-events" "list-deployment-aliases" "assign-alias" "create-record" "remove-record" "upload-file" "get-integration-log-drains" "create-log-drain" "delete-secret" "rename-secret" "create-secret" "get-teams" "get-team" "patch-team" "get-team-members" "get-auth-user" "list-user-events" "get-secrets" "get-secret" "create-auth-token" "delete-auth-token" "list-aliases" "get-alias" "create-or-transfer-domain" "buy-domain" "check-domain-price" "check-domain-status" "get-records" "get-domains" "get-domain" "list-auth-tokens" "get-auth-token" "get-deployments" "list-deployment-files" "get-deployment-file-contents" "delete-domain" "get-domain-config" "issue-cert" "upload-cert" "remove-cert" "get-cert-by-id" "artifact-query" "record-events" "status" "download-artifact" "artifact-exists" "upload-artifact" "get-projects" "create-project" "delete-project" "get-project" "update-project" "get-project-domains" "add-project-domain" "remove-project-domain" "get-project-domain" "update-project-domain" "verify-project-domain" "filter-project-envs" "remove-project-env" "edit-project-env" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -196,7 +220,7 @@ export def "get-edge-configs" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> record<createdAt: float, creator: string, domain: string, id: string, itemCount: float, name: string, recordType: string, sizeInBytes: float, ttl: float, type: string, value: string> {
+]: nothing -> oneof<record<createdAt: float, creator: string, domain: string, id: string, itemCount: float, name: string, recordType: string, sizeInBytes: float, ttl: float, type: string, value: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
@@ -234,7 +258,7 @@ export def "create-edge-config" [
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
   --items: record
   slug: string
-]: any -> record<blocking: bool, completedAt: float, conclusion: string, createdAt: float, deploymentId: string, detailsUrl: string, externalId: string, id: string, integrationId: string, itemCount: float, name: string, output: record<metrics: record<CLS: record, FCP: record, LCP: record, TBT: record, virtualExperienceScore: record>>, path: string, rerequestable: bool, sizeInBytes: float, startedAt: float, status: string, updatedAt: float> {
+]: any -> oneof<record<blocking: bool, completedAt: float, conclusion: string, createdAt: float, deploymentId: string, detailsUrl: string, externalId: string, id: string, integrationId: string, itemCount: float, name: string, output: record<metrics: record<CLS: record, FCP: record, LCP: record, TBT: record, virtualExperienceScore: record>>, path: string, rerequestable: bool, sizeInBytes: float, startedAt: float, status: string, updatedAt: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -312,7 +336,7 @@ export def "get-edge-config" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> record<createdAt: float, creator: string, domain: string, id: string, itemCount: float, name: string, recordType: string, sizeInBytes: float, ttl: float, type: string, value: string> {
+]: nothing -> oneof<record<createdAt: float, creator: string, domain: string, id: string, itemCount: float, name: string, recordType: string, sizeInBytes: float, ttl: float, type: string, value: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($edge_config_id | is-empty) { error make --unspanned { msg: "path parameter 'edgeConfigId' must be non-empty" } }
@@ -351,7 +375,7 @@ export def "update-edge-config" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
   slug: string
-]: any -> record<blocking: bool, completedAt: float, conclusion: string, createdAt: float, deploymentId: string, detailsUrl: string, externalId: string, id: string, integrationId: string, itemCount: float, name: string, output: record<metrics: record<CLS: record, FCP: record, LCP: record, TBT: record, virtualExperienceScore: record>>, path: string, rerequestable: bool, sizeInBytes: float, startedAt: float, status: string, updatedAt: float> {
+]: any -> oneof<record<blocking: bool, completedAt: float, conclusion: string, createdAt: float, deploymentId: string, detailsUrl: string, externalId: string, id: string, integrationId: string, itemCount: float, name: string, output: record<metrics: record<CLS: record, FCP: record, LCP: record, TBT: record, virtualExperienceScore: record>>, path: string, rerequestable: bool, sizeInBytes: float, startedAt: float, status: string, updatedAt: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -393,7 +417,7 @@ export def "get-edge-config-item" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> record<createdAt: float, edgeConfigId: string, key: string, updatedAt: float, value: any> {
+]: nothing -> oneof<record<createdAt: float, edgeConfigId: string, key: string, updatedAt: float, value: any>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($edge_config_id | is-empty) { error make --unspanned { msg: "path parameter 'edgeConfigId' must be non-empty" } }
@@ -432,7 +456,7 @@ export def "get-edge-config-items" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> record<createdAt: float, edgeConfigId: string, key: string, updatedAt: float, value: any> {
+]: nothing -> oneof<record<createdAt: float, edgeConfigId: string, key: string, updatedAt: float, value: any>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($edge_config_id | is-empty) { error make --unspanned { msg: "path parameter 'edgeConfigId' must be non-empty" } }
@@ -471,7 +495,7 @@ export def "patcht-edge-config-items" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
   items: list
-]: any -> record<status: string> {
+]: any -> oneof<record<status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -513,7 +537,7 @@ export def "create-edge-config-token" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
   label: string
-]: any -> record<id: string, token: string> {
+]: any -> oneof<record<id: string, token: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -555,7 +579,7 @@ export def "get-edge-config-token" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> record<createdAt: float, edgeConfigId: string, id: string, label: string, token: string> {
+]: nothing -> oneof<record<createdAt: float, edgeConfigId: string, id: string, label: string, token: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($edge_config_id | is-empty) { error make --unspanned { msg: "path parameter 'edgeConfigId' must be non-empty" } }
@@ -636,7 +660,7 @@ export def "get-edge-config-tokens" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> record<createdAt: float, edgeConfigId: string, id: string, label: string, token: string> {
+]: nothing -> oneof<record<createdAt: float, edgeConfigId: string, id: string, label: string, token: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($edge_config_id | is-empty) { error make --unspanned { msg: "path parameter 'edgeConfigId' must be non-empty" } }
@@ -674,7 +698,7 @@ export def "email-login" [
   --dry-run(-n) # Return the request that would be sent without executing it
   email: string # The user email.
   --token-name: string # The desired name for the token. It will be displayed on the user account details.
-]: any -> record<securityCode: string, token: string> {
+]: any -> oneof<record<securityCode: string, token: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
@@ -715,7 +739,7 @@ export def "verify-token" [
   --qp-token: string # The token returned when the login was requested. (required)
   --token-name: string # The desired name for the token. It will be displayed on the user account details.
   --sso-user-id: string # The SAML Profile ID, when connecting a SAML Profile to a Team member for the first time.
-]: nothing -> record<email: string, teamId: string, token: string> {
+]: nothing -> oneof<record<email: string, teamId: string, token: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
@@ -753,7 +777,7 @@ export def "get-all-checks" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> record<checks: table<completedAt: float, conclusion: string, createdAt: float, detailsUrl: string, id: string, integrationId: string, name: string, output: record, path: string, rerequestable: bool, startedAt: float, status: string, updatedAt: float>> {
+]: nothing -> oneof<record<checks: table<completedAt: float, conclusion: string, createdAt: float, detailsUrl: string, id: string, integrationId: string, name: string, output: record, path: string, rerequestable: bool, startedAt: float, status: string, updatedAt: float>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($deployment_id | is-empty) { error make --unspanned { msg: "path parameter 'deploymentId' must be non-empty" } }
@@ -797,7 +821,7 @@ export def "create-check" [
   name: string # The name of the check being created
   --path: string # Path of the page that is being checked
   --rerequestable: oneof<nothing, bool> # Whether a user should be able to request for the check to be rerun if it fails
-]: any -> record<blocking: bool, completedAt: float, conclusion: string, createdAt: float, deploymentId: string, detailsUrl: string, externalId: string, id: string, integrationId: string, name: string, output: record<metrics: record<CLS: record, FCP: record, LCP: record, TBT: record, virtualExperienceScore: record>>, path: string, rerequestable: bool, startedAt: float, status: string, updatedAt: float> {
+]: any -> oneof<record<blocking: bool, completedAt: float, conclusion: string, createdAt: float, deploymentId: string, detailsUrl: string, externalId: string, id: string, integrationId: string, name: string, output: record<metrics: record<CLS: record, FCP: record, LCP: record, TBT: record, virtualExperienceScore: record>>, path: string, rerequestable: bool, startedAt: float, status: string, updatedAt: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -840,7 +864,7 @@ export def "get-check" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> record<createdAt: float, creator: string, domain: string, id: string, name: string, recordType: string, ttl: float, type: string, value: string> {
+]: nothing -> oneof<record<createdAt: float, creator: string, domain: string, id: string, name: string, recordType: string, ttl: float, type: string, value: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($deployment_id | is-empty) { error make --unspanned { msg: "path parameter 'deploymentId' must be non-empty" } }
@@ -867,7 +891,6 @@ export def "get-check" [
 #
 # PATCH /v1/deployments/{deploymentId}/checks/{checkId}
 # operationId: updateCheck
-# --output shape: {metrics?: record}
 export def "update-check" [
   deployment_id: string
   check_id: string
@@ -888,7 +911,7 @@ export def "update-check" [
   --output: record # The results of the check Run — shape: {metrics?: record}
   --path: string # Path of the page that is being checked
   --status: any@status-completer # The current status of the check
-]: any -> record<blocking: bool, completedAt: float, conclusion: string, createdAt: float, deploymentId: string, detailsUrl: string, externalId: string, id: string, integrationId: string, name: string, output: record<metrics: record<CLS: record, FCP: record, LCP: record, TBT: record, virtualExperienceScore: record>>, path: string, rerequestable: bool, startedAt: float, status: string, updatedAt: float> {
+]: any -> oneof<record<blocking: bool, completedAt: float, conclusion: string, createdAt: float, deploymentId: string, detailsUrl: string, externalId: string, id: string, integrationId: string, name: string, output: record<metrics: record<CLS: record, FCP: record, LCP: record, TBT: record, virtualExperienceScore: record>>, path: string, rerequestable: bool, startedAt: float, status: string, updatedAt: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -931,7 +954,7 @@ export def "rerequest-check" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($deployment_id | is-empty) { error make --unspanned { msg: "path parameter 'deploymentId' must be non-empty" } }
@@ -958,7 +981,6 @@ export def "rerequest-check" [
 #
 # PATCH /v1/domains/records/{recordId}
 # operationId: updateRecord
-# --srv shape: {port: int, priority: int, target: string, weight: int}
 export def "update-record" [
   record_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -977,7 +999,7 @@ export def "update-record" [
   --ttl: int # The Time to live (TTL) value of the DNS record (nullable)
   --type: string@type-completer # The type of the DNS record (nullable)
   --value: string # The value of the DNS record (nullable)
-]: any -> record<createdAt: float, creator: string, domain: string, id: string, name: string, recordType: string, ttl: float, type: string, value: string> {
+]: any -> oneof<record<createdAt: float, creator: string, domain: string, id: string, name: string, recordType: string, ttl: float, type: string, value: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1132,7 +1154,7 @@ export def "git-namespaces" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --provider: string@provider-completer
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> table<id: any, name: string, ownerType: string, provider: string, slug: string> {
+]: nothing -> oneof<table<id: any, name: string, ownerType: string, provider: string, slug: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "provider" $provider "scalar") (serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
@@ -1209,7 +1231,7 @@ export def "get-v1-integrations-search-repo" [
   --provider: string@provider-completer
   --installation-id: string
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> record<gitAccount: record<namespaceId: any, provider: string>, repos: table<defaultBranch: string, id: any, name: string, namespace: string, ownerType: string, private: bool, slug: string, updatedAt: float, url: string>> {
+]: nothing -> oneof<record<gitAccount: record<namespaceId: any, provider: string>, repos: table<defaultBranch: string, id: any, name: string, namespace: string, ownerType: string, private: bool, slug: string, updatedAt: float, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "namespaceId" $namespace_id "scalar") (serialize-qp "provider" $provider "scalar") (serialize-qp "installationId" $installation_id "scalar") (serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
@@ -1246,7 +1268,7 @@ export def "get-configurable-log-drains" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --project-id: string
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> table<branch: string, configurationId: string, createdAt: float, deliveryFormat: string, environment: string, headers: record, id: string, ownerId: string, projectIds: list<string>, sources: list<string>, type: string, url: string> {
+]: nothing -> oneof<table<branch: string, configurationId: string, createdAt: float, deliveryFormat: string, environment: string, headers: record, id: string, ownerId: string, projectIds: list<string>, sources: list<string>, type: string, url: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "projectId" $project_id "scalar") (serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
@@ -1289,7 +1311,7 @@ export def "create-configurable-log-drain" [
   --project-ids: list<string>
   sources: list<string>
   url: string # The log drain url (format: uri)
-]: any -> record<branch: string, configurationId: string, createdAt: float, deliveryFormat: string, environment: string, headers: record, id: string, ownerId: string, projectIds: list<string>, secret: string, sources: list<string>, type: string, url: string> {
+]: any -> oneof<record<branch: string, configurationId: string, createdAt: float, deliveryFormat: string, environment: string, headers: record, id: string, ownerId: string, projectIds: list<string>, secret: string, sources: list<string>, type: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1367,7 +1389,7 @@ export def "get-configurable-log-drain" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> record<branch: string, configurationId: string, createdAt: float, deliveryFormat: string, environment: string, headers: record, id: string, ownerId: string, projectIds: list<string>, sources: list<string>, type: string, url: string> {
+]: nothing -> oneof<record<branch: string, configurationId: string, createdAt: float, deliveryFormat: string, environment: string, headers: record, id: string, ownerId: string, projectIds: list<string>, sources: list<string>, type: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1406,7 +1428,7 @@ export def "get-project-env" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> record<configurationId: string, createdAt: float, createdBy: string, decrypted: bool, edgeConfigId: string, edgeConfigTokenId: string, gitBranch: string, id: string, key: string, target: any, type: string, updatedAt: float, updatedBy: string, value: string> {
+]: nothing -> oneof<record<configurationId: string, createdAt: float, createdBy: string, decrypted: bool, edgeConfigId: string, edgeConfigTokenId: string, gitBranch: string, id: string, key: string, target: any, type: string, updatedAt: float, updatedBy: string, value: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_or_name | is-empty) { error make --unspanned { msg: "path parameter 'idOrName' must be non-empty" } }
@@ -1445,7 +1467,7 @@ export def "create-team" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The desired name for the Team. It will be generated from the provided slug if nothing is provided
   slug: string # The desired slug for the Team
-]: any -> record<id: string> {
+]: any -> oneof<record<id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1472,7 +1494,6 @@ export def "create-team" [
 #
 # DELETE /v1/teams/{teamId}
 # operationId: deleteTeam
-# --reasons item shape: {description: string, slug: string}
 export def "delete-team" [
   team_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1485,7 +1506,7 @@ export def "delete-team" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --reasons: list # Optional array of objects that describe the reason why the team is being deleted. — item shape: {description: string, slug: string}
-]: any -> record<id: string> {
+]: any -> oneof<record<id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1525,7 +1546,7 @@ export def "delete-team-invite-code" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<id: string> {
+]: nothing -> oneof<record<id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($team_id | is-empty) { error make --unspanned { msg: "path parameter 'teamId' must be non-empty" } }
@@ -1565,7 +1586,7 @@ export def "invite-user-to-team" [
   --email: string # The email address of the user to invite (format: email)
   --role: any
   --uid: string # The id of the user to invite
-]: any -> record<email: string, role: string, uid: string, username: string> {
+]: any -> oneof<record<email: string, role: string, uid: string, username: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1606,7 +1627,7 @@ export def "join-team" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --invite-code: string # The invite code to join the team.
   --body-team-id: string # The team ID.
-]: any -> record<from: string, name: string, slug: string, teamId: string> {
+]: any -> oneof<record<from: string, name: string, slug: string, teamId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1646,7 +1667,7 @@ export def "remove-team-member" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<id: string> {
+]: nothing -> oneof<record<id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($team_id | is-empty) { error make --unspanned { msg: "path parameter 'teamId' must be non-empty" } }
@@ -1672,7 +1693,6 @@ export def "remove-team-member" [
 #
 # PATCH /v1/teams/{teamId}/members/{uid}
 # operationId: updateTeamMember
-# --joinedFrom shape: {ssoUserId?: any}
 export def "update-team-member" [
   team_id: string
   uid: string
@@ -1688,7 +1708,7 @@ export def "update-team-member" [
   --confirmed: oneof<nothing, bool> # Accept a user who requested access to the team.
   --joined-from: record # shape: {ssoUserId?: any}
   --role: string # The role in the team of the member. (default: [MEMBER, VIEWER])
-]: any -> record<id: string> {
+]: any -> oneof<record<id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1717,7 +1737,6 @@ export def "update-team-member" [
 #
 # POST /v1/teams/{teamId}/request
 # operationId: requestAccessToTeam
-# --joinedFrom shape: {commitId?: string, gitUserId?: any, gitUserLogin?: string, origin: "import"|"teams"|"github"|"gitlab"|"bitbucket"|"feedback", repoId?: string, repoPath?: string}
 export def "request-access-to-team" [
   team_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1730,7 +1749,7 @@ export def "request-access-to-team" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   joined_from: record # shape: {commitId?: string, gitUserId?: any, gitUserLogin?: string, origin: "import"|"teams"|"github"|"gitlab"|"bitbucket"|"feedback", repoId?: string, repoPath?: string}
-]: any -> record<accessRequestedAt: float, bitbucket: record<login: string>, confirmed: bool, github: record<login: string>, gitlab: record<login: string>, joinedFrom: record<commitId: string, dsyncConnectedAt: float, dsyncUserId: string, gitUserId: any, gitUserLogin: string, idpUserId: string, origin: string, repoId: string, repoPath: string, ssoConnectedAt: float, ssoUserId: string>, teamName: string, teamSlug: string> {
+]: any -> oneof<record<accessRequestedAt: float, bitbucket: record<login: string>, confirmed: bool, github: record<login: string>, gitlab: record<login: string>, joinedFrom: record<commitId: string, dsyncConnectedAt: float, dsyncUserId: string, gitUserId: any, gitUserLogin: string, idpUserId: string, origin: string, repoId: string, repoPath: string, ssoConnectedAt: float, ssoUserId: string>, teamName: string, teamSlug: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1770,7 +1789,7 @@ export def "get-team-access-request" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<accessRequestedAt: float, bitbucket: record<login: string>, confirmed: bool, github: record<login: string>, gitlab: record<login: string>, joinedFrom: record<commitId: string, dsyncConnectedAt: float, dsyncUserId: string, gitUserId: any, gitUserLogin: string, idpUserId: string, origin: string, repoId: string, repoPath: string, ssoConnectedAt: float, ssoUserId: string>, teamName: string, teamSlug: string> {
+]: nothing -> oneof<record<accessRequestedAt: float, bitbucket: record<login: string>, confirmed: bool, github: record<login: string>, gitlab: record<login: string>, joinedFrom: record<commitId: string, dsyncConnectedAt: float, dsyncUserId: string, gitUserId: any, gitUserLogin: string, idpUserId: string, origin: string, repoId: string, repoPath: string, ssoConnectedAt: float, ssoUserId: string>, teamName: string, teamSlug: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($team_id | is-empty) { error make --unspanned { msg: "path parameter 'teamId' must be non-empty" } }
@@ -1796,7 +1815,6 @@ export def "get-team-access-request" [
 #
 # DELETE /v1/user
 # operationId: requestDelete
-# --reasons item shape: {description: string, slug: string}
 export def "request-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1808,7 +1826,7 @@ export def "request-delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --reasons: list # Optional array of objects that describe the reason why the User account is being deleted. — item shape: {description: string, slug: string}
-]: any -> record<email: string, id: string, message: string> {
+]: any -> oneof<record<email: string, id: string, message: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1886,7 +1904,7 @@ export def "create-webhook" [
   events: list<string>
   --project-ids: list<string>
   url: string # format: uri
-]: any -> record<createdAt: float, events: list<string>, id: string, ownerId: string, projectIds: list<string>, secret: string, updatedAt: float, url: string> {
+]: any -> oneof<record<createdAt: float, events: list<string>, id: string, ownerId: string, projectIds: list<string>, secret: string, updatedAt: float, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1964,7 +1982,7 @@ export def "get-webhook" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> record<createdAt: float, events: list<string>, id: string, ownerId: string, projectIds: list<string>, updatedAt: float, url: string> {
+]: nothing -> oneof<record<createdAt: float, events: list<string>, id: string, ownerId: string, projectIds: list<string>, updatedAt: float, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2048,7 +2066,7 @@ export def "list-deployment-builds" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> record<builds: table<config: record, copiedFrom: string, createdAt: float, createdIn: string, deployedAt: float, deploymentId: string, entrypoint: string, fingerprint: string, id: string, output: list, readyState: string, readyStateAt: float, scheduledAt: float, use: string>> {
+]: nothing -> oneof<record<builds: table<config: record, copiedFrom: string, createdAt: float, createdIn: string, deployedAt: float, deploymentId: string, entrypoint: string, fingerprint: string, id: string, output: list, readyState: string, readyStateAt: float, scheduledAt: float, use: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($deployment_id | is-empty) { error make --unspanned { msg: "path parameter 'deploymentId' must be non-empty" } }
@@ -2086,7 +2104,7 @@ export def "cancel-deployment" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> record<alias: list<string>, aliasAssigned: bool, aliasAssignedAt: any, aliasError: record<code: string, message: string>, aliasFinal: string, aliasWarning: record<action: string, code: string, link: string, message: string>, automaticAliases: list<string>, bootedAt: float, build: record<env: list<string>>, buildErrorAt: float, buildingAt: float, builds: table<config: record, src: string, use: string>, canceledAt: float, checksConclusion: string, checksState: string, createdAt: float, createdIn: string, creator: record<uid: string, username: string>, env: list<string>, errorCode: string, errorLink: string, errorMessage: string, errorStep: string, functions: record, gitRepo: any, gitSource: any, id: string, inspectorUrl: string, isInConcurrentBuildsQueue: bool, lambdas: table<createdAt: float, entrypoint: string, id: string, output: list, readyState: string, readyStateAt: float>, meta: record, monorepoManager: string, name: string, ownerId: string, plan: string, previewCommentsEnabled: bool, projectId: string, public: bool, readyState: string, regions: list<string>, routes: list<any>, source: string, target: string, team: record<id: string, name: string, slug: string>, type: string, url: string, userAliases: list<string>, version: float> {
+]: nothing -> oneof<record<alias: list<string>, aliasAssigned: bool, aliasAssignedAt: any, aliasError: record<code: string, message: string>, aliasFinal: string, aliasWarning: record<action: string, code: string, link: string, message: string>, automaticAliases: list<string>, bootedAt: float, build: record<env: list<string>>, buildErrorAt: float, buildingAt: float, builds: table<config: record, src: string, use: string>, canceledAt: float, checksConclusion: string, checksState: string, createdAt: float, createdIn: string, creator: record<uid: string, username: string>, env: list<string>, errorCode: string, errorLink: string, errorMessage: string, errorStep: string, functions: record, gitRepo: any, gitSource: any, id: string, inspectorUrl: string, isInConcurrentBuildsQueue: bool, lambdas: table<createdAt: float, entrypoint: string, id: string, output: list, readyState: string, readyStateAt: float>, meta: record, monorepoManager: string, name: string, ownerId: string, plan: string, previewCommentsEnabled: bool, projectId: string, public: bool, readyState: string, regions: list<string>, routes: list<any>, source: string, target: string, team: record<id: string, name: string, slug: string>, type: string, url: string, userAliases: list<string>, version: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2112,15 +2130,6 @@ export def "cancel-deployment" [
 #
 # POST /v13/deployments
 # operationId: createDeployment
-# --build shape: {env?: record}
-# --builds item shape: {config?: record, src?: string, use: string}
-# --crons item shape: {path: string, schedule: string}
-# --git shape: {deploymentEnabled?: any}
-# --gitMetadata shape: {commitAuthorName?: string, commitMessage?: string, commitRef?: string, commitSha?: string, dirty?: bool, remoteUrl: string}
-# --headers item shape: {has?: list, headers: list, missing?: list, source: string}
-# --projectSettings shape: {buildCommand?: string, commandForIgnoringBuildStep?: string, devCommand?: string, ... (7 more fields)}
-# --redirects item shape: {destination: string, has?: list, missing?: list, permanent?: bool, source: string}
-# --rewrites item shape: {destination: string, has?: list, missing?: list, source: string}
 @deprecated --flag build
 @deprecated --flag builds
 @deprecated --flag body-env
@@ -2171,7 +2180,7 @@ export def "create-deployment" [
   --target: string@target-completer # Either not defined, `staging`, or `production`. If `staging`, a staging alias in the format `..now.sh` will be assigned. If `production`, any aliases defined in `alias` will be assigned
   --trailing-slash: oneof<nothing, bool> # When `false`, visiting a path that ends with a forward slash will respond with a `308` status code and redirect to the path without the trailing slash.
   --with-latest-commit: oneof<nothing, bool> # When `true` and `deploymentId` is passed in, the sha from the previous deployment's `gitSource` is removed forcing the latest commit to be used.
-]: any -> record<alias: list<string>, aliasAssigned: bool, aliasAssignedAt: any, aliasError: record<code: string, message: string>, aliasFinal: string, aliasWarning: record<action: string, code: string, link: string, message: string>, automaticAliases: list<string>, bootedAt: float, build: record<env: list<string>>, buildErrorAt: float, buildingAt: float, builds: list<record>, canceledAt: float, checksConclusion: string, checksState: string, createdAt: float, createdIn: string, creator: record<uid: string, username: string>, env: list<string>, errorCode: string, errorLink: string, errorMessage: string, errorStep: string, functions: record, gitRepo: any, gitSource: any, id: string, inspectorUrl: string, isInConcurrentBuildsQueue: bool, lambdas: table<createdAt: float, entrypoint: string, id: string, output: list, readyState: string, readyStateAt: float>, meta: record, monorepoManager: string, name: string, ownerId: string, plan: string, previewCommentsEnabled: bool, projectId: string, public: bool, readyState: string, regions: list<string>, routes: list<any>, source: string, target: string, team: record<id: string, name: string, slug: string>, type: string, url: string, userAliases: list<string>, version: float> {
+]: any -> oneof<record<alias: list<string>, aliasAssigned: bool, aliasAssignedAt: any, aliasError: record<code: string, message: string>, aliasFinal: string, aliasWarning: record<action: string, code: string, link: string, message: string>, automaticAliases: list<string>, bootedAt: float, build: record<env: list<string>>, buildErrorAt: float, buildingAt: float, builds: list<record>, canceledAt: float, checksConclusion: string, checksState: string, createdAt: float, createdIn: string, creator: record<uid: string, username: string>, env: list<string>, errorCode: string, errorLink: string, errorMessage: string, errorStep: string, functions: record, gitRepo: any, gitSource: any, id: string, inspectorUrl: string, isInConcurrentBuildsQueue: bool, lambdas: table<createdAt: float, entrypoint: string, id: string, output: list, readyState: string, readyStateAt: float>, meta: record, monorepoManager: string, name: string, ownerId: string, plan: string, previewCommentsEnabled: bool, projectId: string, public: bool, readyState: string, regions: list<string>, routes: list<any>, source: string, target: string, team: record<id: string, name: string, slug: string>, type: string, url: string, userAliases: list<string>, version: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2251,7 +2260,7 @@ export def "delete-deployment" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --url: string # A Deployment or Alias URL. In case it is passed, the ID will be ignored
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> record<state: string, uid: string> {
+]: nothing -> oneof<record<state: string, uid: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2289,7 +2298,7 @@ export def "delete-alias" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> record<status: string> {
+]: nothing -> oneof<record<status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($alias_id | is-empty) { error make --unspanned { msg: "path parameter 'aliasId' must be non-empty" } }
@@ -2337,7 +2346,7 @@ export def "get-deployment-events" [
   --delimiter: float@delimiter-completer
   --builds: float@builds-completer
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> list<any> {
+]: nothing -> oneof<list<any>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_or_url | is-empty) { error make --unspanned { msg: "path parameter 'idOrUrl' must be non-empty" } }
@@ -2375,7 +2384,7 @@ export def "list-deployment-aliases" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> record<aliases: table<alias: string, created: string, protectionBypass: record, redirect: string, uid: string>> {
+]: nothing -> oneof<record<aliases: table<alias: string, created: string, protectionBypass: record, redirect: string, uid: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2415,7 +2424,7 @@ export def "assign-alias" [
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
   --alias: string # The alias we want to assign to the deployment defined in the URL
   --redirect: string # The redirect property will take precedence over the deployment id from the URL and consists of a hostname (like test.com) to which the alias should redirect using status code 307 (nullable)
-]: any -> record<alias: string, created: string, oldDeploymentId: string, uid: string> {
+]: any -> oneof<record<alias: string, created: string, oldDeploymentId: string, uid: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2444,7 +2453,6 @@ export def "assign-alias" [
 #
 # POST /v2/domains/{domain}/records
 # operationId: createRecord
-# --srv shape: {port: any, priority: any, target?: string, weight: any}
 export def "create-record" [
   domain: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2458,7 +2466,7 @@ export def "create-record" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
   type: string@type-completer # The type of record, it could be one of the valid DNS records.
-  --name: string # A subdomain name or an empty string for the root domain.
+  name: string # A subdomain name or an empty string for the root domain.
   --ttl: float # The TTL value. Must be a number between 60 and 2147483647. Default value is 60.
   --value: string # The record value must be a valid IPv4 address. (format: ipv4)
   --mx-priority: float
@@ -2505,7 +2513,7 @@ export def "remove-record" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain | is-empty) { error make --unspanned { msg: "path parameter 'domain' must be non-empty" } }
@@ -2585,7 +2593,7 @@ export def "get-integration-log-drains" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> table<branch: string, clientId: string, configurationId: string, createdAt: float, createdFrom: string, deliveryFormat: string, environment: string, headers: record, id: string, name: string, ownerId: string, projectId: string, projectIds: list<string>, sources: list<string>, type: string, url: string> {
+]: nothing -> oneof<table<branch: string, clientId: string, configurationId: string, createdAt: float, createdFrom: string, deliveryFormat: string, environment: string, headers: record, id: string, name: string, ownerId: string, projectId: string, projectIds: list<string>, sources: list<string>, type: string, url: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
@@ -2630,7 +2638,7 @@ export def "create-log-drain" [
   --secret: string # A secret to sign log drain notification headers so a consumer can verify their authenticity
   --sources: list<string>
   url: string # The url where you will receive logs. The protocol must be `https://` or `http://` when type is `json` and `ndjson`, and `syslog+tls:` or `syslog:` when the type is `syslog`. (format: uri)
-]: any -> record<branch: string, clientId: string, configurationId: string, createdAt: float, createdFrom: string, deliveryFormat: string, environment: string, headers: record, id: string, name: string, ownerId: string, projectId: string, projectIds: list<string>, sources: list<string>, type: string, url: string> {
+]: any -> oneof<record<branch: string, clientId: string, configurationId: string, createdAt: float, createdFrom: string, deliveryFormat: string, environment: string, headers: record, id: string, name: string, ownerId: string, projectId: string, projectIds: list<string>, sources: list<string>, type: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2670,7 +2678,7 @@ export def "delete-secret" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> record<created: float, name: string, uid: string> {
+]: nothing -> oneof<record<created: float, name: string, uid: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_or_name | is-empty) { error make --unspanned { msg: "path parameter 'idOrName' must be non-empty" } }
@@ -2709,7 +2717,7 @@ export def "rename-secret" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
   --body-name: string # The name of the new secret.
-]: any -> record<created: string, name: string, oldName: string, uid: string> {
+]: any -> oneof<record<created: string, name: string, oldName: string, uid: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2756,7 +2764,7 @@ export def "create-secret" [
   --body-name: string # The name of the secret (max 100 characters).
   --project-id: string # Associate a secret to a project. (DEPRECATED)
   value: string # The value of the new secret.
-]: any -> record<created: string, createdAt: float, decryptable: bool, name: string, projectId: string, teamId: string, uid: string, userId: string, value: record<data: list<float>, type: string>> {
+]: any -> oneof<record<created: string, createdAt: float, decryptable: bool, name: string, projectId: string, teamId: string, uid: string, userId: string, value: record<data: list<float>, type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2799,7 +2807,7 @@ export def "get-teams" [
   --limit: float # Maximum number of Teams which may be returned.
   --since: float # Timestamp (in milliseconds) to only include Teams created since then.
   --until: float # Timestamp (in milliseconds) to only include Teams created until then.
-]: nothing -> record<pagination: record<count: float, next: float, prev: float>, teams: list<any>> {
+]: nothing -> oneof<record<pagination: record<count: float, next: float, prev: float>, teams: list<any>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "until" $until "scalar")] | flatten | str join "&"
@@ -2836,7 +2844,7 @@ export def "get-team" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --slug: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($team_id | is-empty) { error make --unspanned { msg: "path parameter 'teamId' must be non-empty" } }
@@ -2862,8 +2870,6 @@ export def "get-team" [
 #
 # PATCH /v2/teams/{teamId}
 # operationId: patchTeam
-# --remoteCaching shape: {enabled?: bool}
-# --saml shape: {enforced?: bool, roles?: record}
 export def "patch-team" [
   team_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2887,7 +2893,7 @@ export def "patch-team" [
   --saml: record # shape: {enforced?: bool, roles?: record}
   --sensitive-environment-variable-policy: string # Sensitive environment variable policy: one of on, off or default.
   --slug: string # A new slug for the team.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2932,7 +2938,7 @@ export def "get-team-members" [
   --search: string # Search team members by their name, username, and email.
   --role: string@role-completer # Only return members with the specified team role.
   --exclude-project: string # Exclude members who belong to the specified project.
-]: nothing -> record<emailInviteCodes: table<createdAt: float, email: string, id: string, isDSyncUser: bool, role: string>, members: table<accessRequestedAt: float, avatar: string, bitbucket: record, confirmed: bool, createdAt: float, email: string, github: record, gitlab: record, joinedFrom: record, name: string, role: string, uid: string, username: string>, pagination: record<count: float, hasNext: bool, next: float, prev: float>> {
+]: nothing -> oneof<record<emailInviteCodes: table<createdAt: float, email: string, id: string, isDSyncUser: bool, role: string>, members: table<accessRequestedAt: float, avatar: string, bitbucket: record, confirmed: bool, createdAt: float, email: string, github: record, gitlab: record, joinedFrom: record, name: string, role: string, uid: string, username: string>, pagination: record<count: float, hasNext: bool, next: float, prev: float>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($team_id | is-empty) { error make --unspanned { msg: "path parameter 'teamId' must be non-empty" } }
@@ -2968,7 +2974,7 @@ export def "get-auth-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<user: any> {
+]: nothing -> oneof<record<user: any>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user" $auth.query)
@@ -3008,7 +3014,7 @@ export def "list-user-events" [
   --types: string # Comma-delimited list of event \"types\" to filter the results by.
   --user-id: string # When retrieving events for a Team, the `userId` parameter may be specified to filter events generated by a specific member of the Team.
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> record<events: table<createdAt: float, entities: list, id: string, text: string, user: record, userId: string>> {
+]: nothing -> oneof<record<events: table<createdAt: float, entities: list, id: string, text: string, user: record, userId: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "types" $types "scalar") (serialize-qp "userId" $user_id "scalar") (serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
@@ -3046,7 +3052,7 @@ export def "get-secrets" [
   --id: string # Filter out secrets based on comma separated secret ids.
   --project-id: string # Filter out secrets that belong to a project.
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> record<pagination: record<count: float, next: float, prev: float>, secrets: table<created: string, createdAt: float, decryptable: bool, name: string, projectId: string, teamId: string, uid: string, userId: string, value: string>> {
+]: nothing -> oneof<record<pagination: record<count: float, next: float, prev: float>, secrets: table<created: string, createdAt: float, decryptable: bool, name: string, projectId: string, teamId: string, uid: string, userId: string, value: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "projectId" $project_id "scalar") (serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
@@ -3084,7 +3090,7 @@ export def "get-secret" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --decrypt: string@decrypt-completer # Whether to try to decrypt the value of the secret. Only works if `decryptable` has been set to `true` when the secret was created.
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> record<created: string, createdAt: float, decryptable: bool, name: string, projectId: string, teamId: string, uid: string, userId: string, value: string> {
+]: nothing -> oneof<record<created: string, createdAt: float, decryptable: bool, name: string, projectId: string, teamId: string, uid: string, userId: string, value: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_or_name | is-empty) { error make --unspanned { msg: "path parameter 'idOrName' must be non-empty" } }
@@ -3122,11 +3128,11 @@ export def "create-auth-token" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
   --expires-at: float
-  --name: string
+  name: string
   --client-id: string
   --installation-id: string
   --type: any@type-completer-2
-]: any -> record<bearerToken: string, token: record<activeAt: float, createdAt: float, expiresAt: float, id: string, name: string, origin: string, scopes: list<any>, type: string>> {
+]: any -> oneof<record<bearerToken: string, token: record<activeAt: float, createdAt: float, expiresAt: float, id: string, name: string, origin: string, scopes: list<any>, type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3165,7 +3171,7 @@ export def "delete-auth-token" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<tokenId: string> {
+]: nothing -> oneof<record<tokenId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($token_id | is-empty) { error make --unspanned { msg: "path parameter 'tokenId' must be non-empty" } }
@@ -3208,7 +3214,7 @@ export def "list-aliases" [
   --until: float # Get aliases created before this JavaScript timestamp
   --rollback-deployment-id: string # Get aliases that would be rolled back for the given deployment
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> record<aliases: table<alias: string, created: string, createdAt: float, creator: record, deletedAt: float, deployment: record, deploymentId: string, projectId: string, protectionBypass: record, redirect: string, redirectStatusCode: float, uid: string, updatedAt: float>, pagination: record<count: float, next: float, prev: float>> {
+]: nothing -> oneof<record<aliases: table<alias: string, created: string, createdAt: float, creator: record, deletedAt: float, deployment: record, deploymentId: string, projectId: string, protectionBypass: record, redirect: string, redirectStatusCode: float, uid: string, updatedAt: float>, pagination: record<count: float, next: float, prev: float>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "projectId" $project_id "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "rollbackDeploymentId" $rollback_deployment_id "scalar") (serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
@@ -3249,7 +3255,7 @@ export def "get-alias" [
   --since: float # Get the alias only if it was created after this JavaScript timestamp
   --until: float # Get the alias only if it was created before this JavaScript timestamp
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> record<alias: string, created: string, createdAt: float, creator: record<email: string, uid: string, username: string>, deletedAt: float, deployment: record<id: string, meta: string, url: string>, deploymentId: string, projectId: string, protectionBypass: record, redirect: string, redirectStatusCode: float, uid: string, updatedAt: float> {
+]: nothing -> oneof<record<alias: string, created: string, createdAt: float, creator: record<email: string, uid: string, username: string>, deletedAt: float, deployment: record<id: string, meta: string, url: string>, deploymentId: string, projectId: string, protectionBypass: record, redirect: string, redirectStatusCode: float, uid: string, updatedAt: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_or_alias | is-empty) { error make --unspanned { msg: "path parameter 'idOrAlias' must be non-empty" } }
@@ -3287,12 +3293,12 @@ export def "create-or-transfer-domain" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
   --method: string # The domain operation to perform. It can be either `add` or `transfer-in`.
-  --name: string # The domain name you want to add.
+  name: string # The domain name you want to add.
   --body-token: string # The move-in token from Move Requested email.
   --auth-code: string # The authorization code assigned to the domain.
   --expected-price: float # The price you expect to be charged for the required 1 year renewal.
   --cdn-enabled: oneof<nothing, bool> # Whether the domain has the Vercel Edge Network enabled or not.
-]: any -> record<domain: record<boughtAt: float, createdAt: float, creator: record<customerId: string, email: string, id: string, isDomainReseller: bool, username: string>, customNameservers: list<string>, expiresAt: float, id: string, intendedNameservers: list<string>, name: string, nameservers: list<string>, orderedAt: float, renew: bool, serviceType: string, transferStartedAt: float, transferredAt: float, verified: bool>> {
+]: any -> oneof<record<domain: record<boughtAt: float, createdAt: float, creator: record<customerId: string, email: string, id: string, isDomainReseller: bool, username: string>, customNameservers: list<string>, expiresAt: float, id: string, intendedNameservers: list<string>, name: string, nameservers: list<string>, orderedAt: float, renew: bool, serviceType: string, transferStartedAt: float, transferredAt: float, verified: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3334,7 +3340,7 @@ export def "buy-domain" [
   --expected-price: float # The price you expect to be charged for the purchase.
   name: string # The domain name to purchase.
   --renew: oneof<nothing, bool> # Indicates whether the domain should be automatically renewed.
-]: any -> record<domain: record<created: float, ns: list<string>, pending: bool, uid: string, verified: bool>> {
+]: any -> oneof<record<domain: record<created: float, ns: list<string>, pending: bool, uid: string, verified: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3375,7 +3381,7 @@ export def "check-domain-price" [
   --name: string # The name of the domain for which the price needs to be checked. (required)
   --type: string@type-completer-3 # In which status of the domain the price needs to be checked.
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> record<period: float, price: float> {
+]: nothing -> oneof<record<period: float, price: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name == null) { error make --unspanned { msg: "required query parameter 'name' missing: pass --name" } }
@@ -3413,7 +3419,7 @@ export def "check-domain-status" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The name of the domain for which we would like to check the status. (required)
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> record<available: bool> {
+]: nothing -> oneof<record<available: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name == null) { error make --unspanned { msg: "required query parameter 'name' missing: pass --name" } }
@@ -3494,7 +3500,7 @@ export def "get-domains" [
   --since: float # Get domains created after this JavaScript timestamp.
   --until: float # Get domains created before this JavaScript timestamp.
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> record<domains: table<boughtAt: float, createdAt: float, creator: record, customNameservers: list, expiresAt: float, id: string, intendedNameservers: list, name: string, nameservers: list, orderedAt: float, renew: bool, serviceType: string, transferStartedAt: float, transferredAt: float, verified: bool>, pagination: record<count: float, next: float, prev: float>> {
+]: nothing -> oneof<record<domains: table<boughtAt: float, createdAt: float, creator: record, customNameservers: list, expiresAt: float, id: string, intendedNameservers: list, name: string, nameservers: list, orderedAt: float, renew: bool, serviceType: string, transferStartedAt: float, transferredAt: float, verified: bool>, pagination: record<count: float, next: float, prev: float>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
@@ -3531,7 +3537,7 @@ export def "get-domain" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> record<domain: record<boughtAt: float, createdAt: float, creator: record<customerId: string, email: string, id: string, isDomainReseller: bool, username: string>, customNameservers: list<string>, expiresAt: float, id: string, intendedNameservers: list<string>, name: string, nameservers: list<string>, orderedAt: float, renew: bool, serviceType: string, suffix: bool, transferStartedAt: float, transferredAt: float, verified: bool>> {
+]: nothing -> oneof<record<domain: record<boughtAt: float, createdAt: float, creator: record<customerId: string, email: string, id: string, isDomainReseller: bool, username: string>, customNameservers: list<string>, expiresAt: float, id: string, intendedNameservers: list<string>, name: string, nameservers: list<string>, orderedAt: float, renew: bool, serviceType: string, suffix: bool, transferStartedAt: float, transferredAt: float, verified: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain | is-empty) { error make --unspanned { msg: "path parameter 'domain' must be non-empty" } }
@@ -3567,7 +3573,7 @@ export def "list-auth-tokens" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<pagination: record<count: float, next: float, prev: float>, testingToken: record<activeAt: float, createdAt: float, expiresAt: float, id: string, name: string, origin: string, scopes: list<any>, type: string>, tokens: table<activeAt: float, createdAt: float, expiresAt: float, id: string, name: string, origin: string, scopes: list, type: string>> {
+]: nothing -> oneof<record<pagination: record<count: float, next: float, prev: float>, testingToken: record<activeAt: float, createdAt: float, expiresAt: float, id: string, name: string, origin: string, scopes: list<any>, type: string>, tokens: table<activeAt: float, createdAt: float, expiresAt: float, id: string, name: string, origin: string, scopes: list, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v5/user/tokens" $auth.query)
@@ -3602,7 +3608,7 @@ export def "get-auth-token" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<token: record<activeAt: float, createdAt: float, expiresAt: float, id: string, name: string, origin: string, scopes: list<any>, type: string>> {
+]: nothing -> oneof<record<token: record<activeAt: float, createdAt: float, expiresAt: float, id: string, name: string, origin: string, scopes: list<any>, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($token_id | is-empty) { error make --unspanned { msg: "path parameter 'tokenId' must be non-empty" } }
@@ -3649,7 +3655,7 @@ export def "get-deployments" [
   --state: string # Filter deployments based on their state (`BUILDING`, `ERROR`, `INITIALIZING`, `QUEUED`, `READY`, `CANCELED`)
   --rollback-candidate: oneof<nothing, bool> # Filter deployments based on their rollback candidacy
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> record<deployments: table<aliasAssigned: any, aliasError: record, buildingAt: float, checksConclusion: string, checksState: string, created: float, createdAt: float, creator: record, inspectorUrl: string, isRollbackCandidate: bool, meta: record, name: string, ready: float, source: string, state: string, target: string, type: string, uid: string, url: string>, pagination: record<count: float, next: float, prev: float>> {
+]: nothing -> oneof<record<deployments: table<aliasAssigned: any, aliasError: record, buildingAt: float, checksConclusion: string, checksState: string, created: float, createdAt: float, creator: record, inspectorUrl: string, isRollbackCandidate: bool, meta: record, name: string, ready: float, source: string, state: string, target: string, type: string, uid: string, url: string>, pagination: record<count: float, next: float, prev: float>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "app" $app "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "projectId" $project_id "scalar") (serialize-qp "target" $target "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "users" $users "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "rollbackCandidate" $rollback_candidate "scalar") (serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
@@ -3686,7 +3692,7 @@ export def "list-deployment-files" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> table<children: list<any>, contentType: string, mode: float, name: string, symlink: string, type: string, uid: string> {
+]: nothing -> oneof<table<children: list<any>, contentType: string, mode: float, name: string, symlink: string, type: string, uid: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3764,7 +3770,7 @@ export def "delete-domain" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> record<uid: string> {
+]: nothing -> oneof<record<uid: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain | is-empty) { error make --unspanned { msg: "path parameter 'domain' must be non-empty" } }
@@ -3802,7 +3808,7 @@ export def "get-domain-config" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> record<acceptedChallenges: list<string>, configuredBy: string, misconfigured: bool> {
+]: nothing -> oneof<record<acceptedChallenges: list<string>, configuredBy: string, misconfigured: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain | is-empty) { error make --unspanned { msg: "path parameter 'domain' must be non-empty" } }
@@ -3840,7 +3846,7 @@ export def "issue-cert" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
   --cns: list<string> # The common names the cert should be issued for
-]: any -> record<autoRenew: bool, cns: list<string>, createdAt: float, expiresAt: float, id: string> {
+]: any -> oneof<record<autoRenew: bool, cns: list<string>, createdAt: float, expiresAt: float, id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3883,7 +3889,7 @@ export def "upload-cert" [
   cert: string # The certificate
   key: string # The certificate key
   --skip-validation: oneof<nothing, bool> # Skip validation of the certificate
-]: any -> record<autoRenew: bool, cns: list<string>, createdAt: float, expiresAt: float, id: string> {
+]: any -> oneof<record<autoRenew: bool, cns: list<string>, createdAt: float, expiresAt: float, id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3923,7 +3929,7 @@ export def "remove-cert" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3961,7 +3967,7 @@ export def "get-cert-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> record<autoRenew: bool, cns: list<string>, createdAt: float, expiresAt: float, id: string> {
+]: nothing -> oneof<record<autoRenew: bool, cns: list<string>, createdAt: float, expiresAt: float, id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3999,7 +4005,7 @@ export def "artifact-query" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
   hashes: list<string> # artifact hashes
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4082,7 +4088,7 @@ export def "status" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> record<status: string> {
+]: nothing -> oneof<record<status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
@@ -4161,7 +4167,7 @@ export def "artifact-exists" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($hash | is-empty) { error make --unspanned { msg: "path parameter 'hash' must be non-empty" } }
@@ -4205,7 +4211,7 @@ export def "upload-artifact" [
   --x-artifact-client-interactive: int # 1 if the client is an interactive shell. Otherwise 0
   --x-artifact-tag: string # The base64 encoded tag for this artifact. The value is sent back to clients when the artifact is downloaded as the header `x-artifact-tag`
   --body: any
-]: any -> record<urls: list<string>> {
+]: any -> oneof<record<urls: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4259,7 +4265,7 @@ export def "get-projects" [
   --edge-config-token-id: string # Filter results by connected Edge Config Token ID
   --connect-configuration-id: string # Filter results by linked Connect configuration ID
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> record<pagination: record<count: float, next: float, prev: float>, projects: table<accountId: string, analytics: record, autoExposeSystemEnvs: bool, buildCommand: string, commandForIgnoringBuildStep: string, connectConfigurationId: string, createdAt: float, devCommand: string, directoryListing: bool, enablePreviewFeedback: bool, env: list, framework: string, gitForkProtection: bool, hasFloatingAliases: bool, id: string, installCommand: string, lastRollbackTarget: record, latestDeployments: list, link: any, live: bool, name: string, nodeVersion: string, outputDirectory: string, passwordProtection: record, permissions: record, protectionBypass: record, publicSource: bool, rootDirectory: string, serverlessFunctionRegion: string, skipGitConnectDuringLink: bool, sourceFilesOutsideRootDirectory: bool, ssoProtection: record, targets: record, transferCompletedAt: float, transferStartedAt: float, transferToAccountId: string, transferredFromAccountId: string, updatedAt: float>> {
+]: nothing -> oneof<record<pagination: record<count: float, next: float, prev: float>, projects: table<accountId: string, analytics: record, autoExposeSystemEnvs: bool, buildCommand: string, commandForIgnoringBuildStep: string, connectConfigurationId: string, createdAt: float, devCommand: string, directoryListing: bool, enablePreviewFeedback: bool, env: list, framework: string, gitForkProtection: bool, hasFloatingAliases: bool, id: string, installCommand: string, lastRollbackTarget: record, latestDeployments: list, link: any, live: bool, name: string, nodeVersion: string, outputDirectory: string, passwordProtection: record, permissions: record, protectionBypass: record, publicSource: bool, rootDirectory: string, serverlessFunctionRegion: string, skipGitConnectDuringLink: bool, sourceFilesOutsideRootDirectory: bool, ssoProtection: record, targets: record, transferCompletedAt: float, transferStartedAt: float, transferToAccountId: string, transferredFromAccountId: string, updatedAt: float>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "gitForkProtection" $git_fork_protection "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "repo" $repo "scalar") (serialize-qp "repoId" $repo_id "scalar") (serialize-qp "repoUrl" $repo_url "scalar") (serialize-qp "excludeRepos" $exclude_repos "scalar") (serialize-qp "edgeConfigId" $edge_config_id "scalar") (serialize-qp "edgeConfigTokenId" $edge_config_token_id "scalar") (serialize-qp "connectConfigurationId" $connect_configuration_id "scalar") (serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
@@ -4284,8 +4290,6 @@ export def "get-projects" [
 #
 # POST /v9/projects
 # operationId: createProject
-# --environmentVariables item shape: {gitBranch?: string, key: string, target: any, type?: "system"|"secret"|"encrypted"|"plain", value: string}
-# --gitRepository shape: {repo: string, type: "github"|"gitlab"|"bitbucket"}
 @deprecated --flag skip-git-connect-during-link
 export def "create-project" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -4311,7 +4315,7 @@ export def "create-project" [
   --root-directory: string # The name of a directory or relative path to the source code of your project. When `null` is used it will default to the project root (nullable)
   --serverless-function-region: string # The region to deploy Serverless Functions in this project (nullable)
   --skip-git-connect-during-link: oneof<nothing, bool> # Opts-out of the message prompting a CLI user to connect a Git repository in `vercel link`. (DEPRECATED)
-]: any -> record<accountId: string, analytics: record<canceledAt: float, disabledAt: float, enabledAt: float, id: string, paidAt: float, sampleRatePercent: float, spendLimitInDollars: float>, autoExposeSystemEnvs: bool, buildCommand: string, commandForIgnoringBuildStep: string, connectConfigurationId: string, createdAt: float, devCommand: string, directoryListing: bool, enablePreviewFeedback: bool, env: table<configurationId: string, createdAt: float, createdBy: string, decrypted: bool, edgeConfigId: string, edgeConfigTokenId: string, gitBranch: string, id: string, key: string, target: any, type: string, updatedAt: float, updatedBy: string, value: string>, framework: string, gitForkProtection: bool, hasFloatingAliases: bool, id: string, installCommand: string, lastRollbackTarget: record<fromDeploymentId: string, jobStatus: string, requestedAt: float, toDeploymentId: string>, latestDeployments: table<alias: list, aliasAssigned: any, aliasError: record, aliasFinal: string, automaticAliases: list, buildingAt: float, builds: list, checksConclusion: string, checksState: string, createdAt: float, createdIn: string, creator: record, deploymentHostname: string, forced: bool, id: string, meta: record, monorepoManager: string, name: string, plan: string, previewCommentsEnabled: bool, private: bool, readyAt: float, readyState: string, requestedAt: float, target: string, teamId: string, type: string, url: string, userId: string, withCache: bool>, link: any, live: bool, name: string, nodeVersion: string, outputDirectory: string, passwordProtection: record<deploymentType: string>, permissions: record<Monitoring: list<string>, aliasGlobal: list<string>, aliasProject: list<string>, aliasProtectionBypass: list<string>, analytics: list<string>, analyticsSampling: list<string>, analyticsUsage: list<string>, auditLog: list<string>, awsBillingIntegration: list<string>, billingAddress: list<string>, billingInformation: list<string>, billingInvoice: list<string>, billingInvoiceEmailRecipient: list<string>, billingInvoiceLanguage: list<string>, billingPlan: list<string>, billingPurchaseOrder: list<string>, billingTaxId: list<string>, cacheArtifact: list<string>, cacheArtifactUsageEvent: list<string>, concurrentBuilds: list<string>, connect: list<string>, connectConfiguration: list<string>, connectConfigurationLink: list<string>, deployment: list<string>, deploymentCheck: list<string>, deploymentCheckPreview: list<string>, deploymentPreview: list<string>, deploymentPrivate: list<string>, deploymentProductionGit: list<string>, deploymentRollback: list<string>, domain: list<string>, domainAcceptDelegation: list<string>, domainAuthCodes: list<string>, domainCertificate: list<string>, domainCheckConfig: list<string>, domainMove: list<string>, domainPurchase: list<string>, domainRecord: list<string>, domainTransferIn: list<string>, edgeConfig: list<string>, edgeConfigItem: list<string>, edgeConfigToken: list<string>, endpointVerification: list<string>, event: list<string>, fileUpload: list<string>, gitRepository: list<string>, integration: list<string>, integrationConfiguration: list<string>, integrationConfigurationProjects: list<string>, integrationConfigurationTransfer: list<string>, integrationVercelConfigurationOverride: list<string>, job: list<string>, logDrain: list<string>, monitoringChart: list<string>, monitoringQuery: list<string>, notificationDomainConfiguration: list<string>, notificationDomainExpire: list<string>, notificationDomainMoved: list<string>, notificationDomainPurchase: list<string>, notificationDomainRenewal: list<string>, notificationDomainTransfer: list<string>, notificationDomainUnverified: list<string>, notificationPaymentFailed: list<string>, notificationSpendCap: list<string>, notificationUsageAlert: list<string>, openTelemetryEndpoint: list<string>, passwordProtection: list<string>, paymentMethod: list<string>, permissions: list<string>, previewDeploymentSuffix: list<string>, proTrialOnboarding: list<string>, project: list<string>, projectDeploymentHook: list<string>, projectDomain: list<string>, projectDomainMove: list<string>, projectEnvVars: list<string>, projectEnvVarsProduction: list<string>, projectEnvVarsUnownedByIntegration: list<string>, projectIntegrationConfiguration: list<string>, projectLink: list<string>, projectMember: list<string>, projectProductionBranch: list<string>, projectProtectionBypass: list<string>, projectTransfer: list<string>, rateLimit: list<string>, redis: list<string>, remoteCaching: list<string>, samlConfig: list<string>, secret: list<string>, sensitiveEnvironmentVariablePolicy: list<string>, sharedEnvVars: list<string>, sharedEnvVarsProduction: list<string>, spendCapConfiguration: list<string>, spendCapState: list<string>, supportCase: list<string>, supportCaseComment: list<string>, team: list<string>, teamAccessRequest: list<string>, teamFellowMembership: list<string>, teamInvite: list<string>, teamInviteCode: list<string>, teamJoin: list<string>, teamOwnMembership: list<string>, teamOwnMembershipDisconnectSAML: list<string>, token: list<string>, usage: list<string>, user: list<string>, userConnection: list<string>, webAnalytics: list<string>, webhook: list<string>, webhook_event: list<string>>, protectionBypass: record, publicSource: bool, rootDirectory: string, serverlessFunctionRegion: string, skipGitConnectDuringLink: bool, sourceFilesOutsideRootDirectory: bool, ssoProtection: record<deploymentType: string>, targets: record, transferCompletedAt: float, transferStartedAt: float, transferToAccountId: string, transferredFromAccountId: string, updatedAt: float> {
+]: any -> oneof<record<accountId: string, analytics: record<canceledAt: float, disabledAt: float, enabledAt: float, id: string, paidAt: float, sampleRatePercent: float, spendLimitInDollars: float>, autoExposeSystemEnvs: bool, buildCommand: string, commandForIgnoringBuildStep: string, connectConfigurationId: string, createdAt: float, devCommand: string, directoryListing: bool, enablePreviewFeedback: bool, env: table<configurationId: string, createdAt: float, createdBy: string, decrypted: bool, edgeConfigId: string, edgeConfigTokenId: string, gitBranch: string, id: string, key: string, target: any, type: string, updatedAt: float, updatedBy: string, value: string>, framework: string, gitForkProtection: bool, hasFloatingAliases: bool, id: string, installCommand: string, lastRollbackTarget: record<fromDeploymentId: string, jobStatus: string, requestedAt: float, toDeploymentId: string>, latestDeployments: table<alias: list, aliasAssigned: any, aliasError: record, aliasFinal: string, automaticAliases: list, buildingAt: float, builds: list, checksConclusion: string, checksState: string, createdAt: float, createdIn: string, creator: record, deploymentHostname: string, forced: bool, id: string, meta: record, monorepoManager: string, name: string, plan: string, previewCommentsEnabled: bool, private: bool, readyAt: float, readyState: string, requestedAt: float, target: string, teamId: string, type: string, url: string, userId: string, withCache: bool>, link: any, live: bool, name: string, nodeVersion: string, outputDirectory: string, passwordProtection: record<deploymentType: string>, permissions: record<Monitoring: list<string>, aliasGlobal: list<string>, aliasProject: list<string>, aliasProtectionBypass: list<string>, analytics: list<string>, analyticsSampling: list<string>, analyticsUsage: list<string>, auditLog: list<string>, awsBillingIntegration: list<string>, billingAddress: list<string>, billingInformation: list<string>, billingInvoice: list<string>, billingInvoiceEmailRecipient: list<string>, billingInvoiceLanguage: list<string>, billingPlan: list<string>, billingPurchaseOrder: list<string>, billingTaxId: list<string>, cacheArtifact: list<string>, cacheArtifactUsageEvent: list<string>, concurrentBuilds: list<string>, connect: list<string>, connectConfiguration: list<string>, connectConfigurationLink: list<string>, deployment: list<string>, deploymentCheck: list<string>, deploymentCheckPreview: list<string>, deploymentPreview: list<string>, deploymentPrivate: list<string>, deploymentProductionGit: list<string>, deploymentRollback: list<string>, domain: list<string>, domainAcceptDelegation: list<string>, domainAuthCodes: list<string>, domainCertificate: list<string>, domainCheckConfig: list<string>, domainMove: list<string>, domainPurchase: list<string>, domainRecord: list<string>, domainTransferIn: list<string>, edgeConfig: list<string>, edgeConfigItem: list<string>, edgeConfigToken: list<string>, endpointVerification: list<string>, event: list<string>, fileUpload: list<string>, gitRepository: list<string>, integration: list<string>, integrationConfiguration: list<string>, integrationConfigurationProjects: list<string>, integrationConfigurationTransfer: list<string>, integrationVercelConfigurationOverride: list<string>, job: list<string>, logDrain: list<string>, monitoringChart: list<string>, monitoringQuery: list<string>, notificationDomainConfiguration: list<string>, notificationDomainExpire: list<string>, notificationDomainMoved: list<string>, notificationDomainPurchase: list<string>, notificationDomainRenewal: list<string>, notificationDomainTransfer: list<string>, notificationDomainUnverified: list<string>, notificationPaymentFailed: list<string>, notificationSpendCap: list<string>, notificationUsageAlert: list<string>, openTelemetryEndpoint: list<string>, passwordProtection: list<string>, paymentMethod: list<string>, permissions: list<string>, previewDeploymentSuffix: list<string>, proTrialOnboarding: list<string>, project: list<string>, projectDeploymentHook: list<string>, projectDomain: list<string>, projectDomainMove: list<string>, projectEnvVars: list<string>, projectEnvVarsProduction: list<string>, projectEnvVarsUnownedByIntegration: list<string>, projectIntegrationConfiguration: list<string>, projectLink: list<string>, projectMember: list<string>, projectProductionBranch: list<string>, projectProtectionBypass: list<string>, projectTransfer: list<string>, rateLimit: list<string>, redis: list<string>, remoteCaching: list<string>, samlConfig: list<string>, secret: list<string>, sensitiveEnvironmentVariablePolicy: list<string>, sharedEnvVars: list<string>, sharedEnvVarsProduction: list<string>, spendCapConfiguration: list<string>, spendCapState: list<string>, supportCase: list<string>, supportCaseComment: list<string>, team: list<string>, teamAccessRequest: list<string>, teamFellowMembership: list<string>, teamInvite: list<string>, teamInviteCode: list<string>, teamJoin: list<string>, teamOwnMembership: list<string>, teamOwnMembershipDisconnectSAML: list<string>, token: list<string>, usage: list<string>, user: list<string>, userConnection: list<string>, webAnalytics: list<string>, webhook: list<string>, webhook_event: list<string>>, protectionBypass: record, publicSource: bool, rootDirectory: string, serverlessFunctionRegion: string, skipGitConnectDuringLink: bool, sourceFilesOutsideRootDirectory: bool, ssoProtection: record<deploymentType: string>, targets: record, transferCompletedAt: float, transferStartedAt: float, transferToAccountId: string, transferredFromAccountId: string, updatedAt: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4389,7 +4393,7 @@ export def "get-project" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> record<accountId: string, analytics: record<canceledAt: float, disabledAt: float, enabledAt: float, id: string, paidAt: float, sampleRatePercent: float, spendLimitInDollars: float>, autoExposeSystemEnvs: bool, buildCommand: string, commandForIgnoringBuildStep: string, connectConfigurationId: string, createdAt: float, devCommand: string, directoryListing: bool, enablePreviewFeedback: bool, env: table<configurationId: string, createdAt: float, createdBy: string, decrypted: bool, edgeConfigId: string, edgeConfigTokenId: string, gitBranch: string, id: string, key: string, target: any, type: string, updatedAt: float, updatedBy: string, value: string>, framework: string, gitForkProtection: bool, hasFloatingAliases: bool, id: string, installCommand: string, lastRollbackTarget: record<fromDeploymentId: string, jobStatus: string, requestedAt: float, toDeploymentId: string>, latestDeployments: table<alias: list, aliasAssigned: any, aliasError: record, aliasFinal: string, automaticAliases: list, buildingAt: float, builds: list, checksConclusion: string, checksState: string, createdAt: float, createdIn: string, creator: record, deploymentHostname: string, forced: bool, id: string, meta: record, monorepoManager: string, name: string, plan: string, previewCommentsEnabled: bool, private: bool, readyAt: float, readyState: string, requestedAt: float, target: string, teamId: string, type: string, url: string, userId: string, withCache: bool>, link: any, live: bool, name: string, nodeVersion: string, outputDirectory: string, passwordProtection: record<deploymentType: string>, permissions: record<Monitoring: list<string>, aliasGlobal: list<string>, aliasProject: list<string>, aliasProtectionBypass: list<string>, analytics: list<string>, analyticsSampling: list<string>, analyticsUsage: list<string>, auditLog: list<string>, awsBillingIntegration: list<string>, billingAddress: list<string>, billingInformation: list<string>, billingInvoice: list<string>, billingInvoiceEmailRecipient: list<string>, billingInvoiceLanguage: list<string>, billingPlan: list<string>, billingPurchaseOrder: list<string>, billingTaxId: list<string>, cacheArtifact: list<string>, cacheArtifactUsageEvent: list<string>, concurrentBuilds: list<string>, connect: list<string>, connectConfiguration: list<string>, connectConfigurationLink: list<string>, deployment: list<string>, deploymentCheck: list<string>, deploymentCheckPreview: list<string>, deploymentPreview: list<string>, deploymentPrivate: list<string>, deploymentProductionGit: list<string>, deploymentRollback: list<string>, domain: list<string>, domainAcceptDelegation: list<string>, domainAuthCodes: list<string>, domainCertificate: list<string>, domainCheckConfig: list<string>, domainMove: list<string>, domainPurchase: list<string>, domainRecord: list<string>, domainTransferIn: list<string>, edgeConfig: list<string>, edgeConfigItem: list<string>, edgeConfigToken: list<string>, endpointVerification: list<string>, event: list<string>, fileUpload: list<string>, gitRepository: list<string>, integration: list<string>, integrationConfiguration: list<string>, integrationConfigurationProjects: list<string>, integrationConfigurationTransfer: list<string>, integrationVercelConfigurationOverride: list<string>, job: list<string>, logDrain: list<string>, monitoringChart: list<string>, monitoringQuery: list<string>, notificationDomainConfiguration: list<string>, notificationDomainExpire: list<string>, notificationDomainMoved: list<string>, notificationDomainPurchase: list<string>, notificationDomainRenewal: list<string>, notificationDomainTransfer: list<string>, notificationDomainUnverified: list<string>, notificationPaymentFailed: list<string>, notificationSpendCap: list<string>, notificationUsageAlert: list<string>, openTelemetryEndpoint: list<string>, passwordProtection: list<string>, paymentMethod: list<string>, permissions: list<string>, previewDeploymentSuffix: list<string>, proTrialOnboarding: list<string>, project: list<string>, projectDeploymentHook: list<string>, projectDomain: list<string>, projectDomainMove: list<string>, projectEnvVars: list<string>, projectEnvVarsProduction: list<string>, projectEnvVarsUnownedByIntegration: list<string>, projectIntegrationConfiguration: list<string>, projectLink: list<string>, projectMember: list<string>, projectProductionBranch: list<string>, projectProtectionBypass: list<string>, projectTransfer: list<string>, rateLimit: list<string>, redis: list<string>, remoteCaching: list<string>, samlConfig: list<string>, secret: list<string>, sensitiveEnvironmentVariablePolicy: list<string>, sharedEnvVars: list<string>, sharedEnvVarsProduction: list<string>, spendCapConfiguration: list<string>, spendCapState: list<string>, supportCase: list<string>, supportCaseComment: list<string>, team: list<string>, teamAccessRequest: list<string>, teamFellowMembership: list<string>, teamInvite: list<string>, teamInviteCode: list<string>, teamJoin: list<string>, teamOwnMembership: list<string>, teamOwnMembershipDisconnectSAML: list<string>, token: list<string>, usage: list<string>, user: list<string>, userConnection: list<string>, webAnalytics: list<string>, webhook: list<string>, webhook_event: list<string>>, protectionBypass: record, publicSource: bool, rootDirectory: string, serverlessFunctionRegion: string, skipGitConnectDuringLink: bool, sourceFilesOutsideRootDirectory: bool, ssoProtection: record<deploymentType: string>, targets: record, transferCompletedAt: float, transferStartedAt: float, transferToAccountId: string, transferredFromAccountId: string, updatedAt: float> {
+]: nothing -> oneof<record<accountId: string, analytics: record<canceledAt: float, disabledAt: float, enabledAt: float, id: string, paidAt: float, sampleRatePercent: float, spendLimitInDollars: float>, autoExposeSystemEnvs: bool, buildCommand: string, commandForIgnoringBuildStep: string, connectConfigurationId: string, createdAt: float, devCommand: string, directoryListing: bool, enablePreviewFeedback: bool, env: table<configurationId: string, createdAt: float, createdBy: string, decrypted: bool, edgeConfigId: string, edgeConfigTokenId: string, gitBranch: string, id: string, key: string, target: any, type: string, updatedAt: float, updatedBy: string, value: string>, framework: string, gitForkProtection: bool, hasFloatingAliases: bool, id: string, installCommand: string, lastRollbackTarget: record<fromDeploymentId: string, jobStatus: string, requestedAt: float, toDeploymentId: string>, latestDeployments: table<alias: list, aliasAssigned: any, aliasError: record, aliasFinal: string, automaticAliases: list, buildingAt: float, builds: list, checksConclusion: string, checksState: string, createdAt: float, createdIn: string, creator: record, deploymentHostname: string, forced: bool, id: string, meta: record, monorepoManager: string, name: string, plan: string, previewCommentsEnabled: bool, private: bool, readyAt: float, readyState: string, requestedAt: float, target: string, teamId: string, type: string, url: string, userId: string, withCache: bool>, link: any, live: bool, name: string, nodeVersion: string, outputDirectory: string, passwordProtection: record<deploymentType: string>, permissions: record<Monitoring: list<string>, aliasGlobal: list<string>, aliasProject: list<string>, aliasProtectionBypass: list<string>, analytics: list<string>, analyticsSampling: list<string>, analyticsUsage: list<string>, auditLog: list<string>, awsBillingIntegration: list<string>, billingAddress: list<string>, billingInformation: list<string>, billingInvoice: list<string>, billingInvoiceEmailRecipient: list<string>, billingInvoiceLanguage: list<string>, billingPlan: list<string>, billingPurchaseOrder: list<string>, billingTaxId: list<string>, cacheArtifact: list<string>, cacheArtifactUsageEvent: list<string>, concurrentBuilds: list<string>, connect: list<string>, connectConfiguration: list<string>, connectConfigurationLink: list<string>, deployment: list<string>, deploymentCheck: list<string>, deploymentCheckPreview: list<string>, deploymentPreview: list<string>, deploymentPrivate: list<string>, deploymentProductionGit: list<string>, deploymentRollback: list<string>, domain: list<string>, domainAcceptDelegation: list<string>, domainAuthCodes: list<string>, domainCertificate: list<string>, domainCheckConfig: list<string>, domainMove: list<string>, domainPurchase: list<string>, domainRecord: list<string>, domainTransferIn: list<string>, edgeConfig: list<string>, edgeConfigItem: list<string>, edgeConfigToken: list<string>, endpointVerification: list<string>, event: list<string>, fileUpload: list<string>, gitRepository: list<string>, integration: list<string>, integrationConfiguration: list<string>, integrationConfigurationProjects: list<string>, integrationConfigurationTransfer: list<string>, integrationVercelConfigurationOverride: list<string>, job: list<string>, logDrain: list<string>, monitoringChart: list<string>, monitoringQuery: list<string>, notificationDomainConfiguration: list<string>, notificationDomainExpire: list<string>, notificationDomainMoved: list<string>, notificationDomainPurchase: list<string>, notificationDomainRenewal: list<string>, notificationDomainTransfer: list<string>, notificationDomainUnverified: list<string>, notificationPaymentFailed: list<string>, notificationSpendCap: list<string>, notificationUsageAlert: list<string>, openTelemetryEndpoint: list<string>, passwordProtection: list<string>, paymentMethod: list<string>, permissions: list<string>, previewDeploymentSuffix: list<string>, proTrialOnboarding: list<string>, project: list<string>, projectDeploymentHook: list<string>, projectDomain: list<string>, projectDomainMove: list<string>, projectEnvVars: list<string>, projectEnvVarsProduction: list<string>, projectEnvVarsUnownedByIntegration: list<string>, projectIntegrationConfiguration: list<string>, projectLink: list<string>, projectMember: list<string>, projectProductionBranch: list<string>, projectProtectionBypass: list<string>, projectTransfer: list<string>, rateLimit: list<string>, redis: list<string>, remoteCaching: list<string>, samlConfig: list<string>, secret: list<string>, sensitiveEnvironmentVariablePolicy: list<string>, sharedEnvVars: list<string>, sharedEnvVarsProduction: list<string>, spendCapConfiguration: list<string>, spendCapState: list<string>, supportCase: list<string>, supportCaseComment: list<string>, team: list<string>, teamAccessRequest: list<string>, teamFellowMembership: list<string>, teamInvite: list<string>, teamInviteCode: list<string>, teamJoin: list<string>, teamOwnMembership: list<string>, teamOwnMembershipDisconnectSAML: list<string>, token: list<string>, usage: list<string>, user: list<string>, userConnection: list<string>, webAnalytics: list<string>, webhook: list<string>, webhook_event: list<string>>, protectionBypass: record, publicSource: bool, rootDirectory: string, serverlessFunctionRegion: string, skipGitConnectDuringLink: bool, sourceFilesOutsideRootDirectory: bool, ssoProtection: record<deploymentType: string>, targets: record, transferCompletedAt: float, transferStartedAt: float, transferToAccountId: string, transferredFromAccountId: string, updatedAt: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_or_name | is-empty) { error make --unspanned { msg: "path parameter 'idOrName' must be non-empty" } }
@@ -4415,8 +4419,6 @@ export def "get-project" [
 #
 # PATCH /v9/projects/{idOrName}
 # operationId: updateProject
-# --passwordProtection shape: {deploymentType: "all"|"preview", password?: string}
-# --ssoProtection shape: {deploymentType: "all"|"preview"}
 @deprecated --flag skip-git-connect-during-link
 export def "update-project" [
   id_or_name: string
@@ -4449,7 +4451,7 @@ export def "update-project" [
   --skip-git-connect-during-link: oneof<nothing, bool> # Opts-out of the message prompting a CLI user to connect a Git repository in `vercel link`. (DEPRECATED)
   --source-files-outside-root-directory: oneof<nothing, bool> # Indicates if there are source files outside of the root directory
   --sso-protection: record # Ensures visitors to your Preview Deployments are logged into Vercel and have a minimum of Viewer access on your team (nullable) — shape: {deploymentType: "all"|"preview"}
-]: any -> record<accountId: string, analytics: record<canceledAt: float, disabledAt: float, enabledAt: float, id: string, paidAt: float, sampleRatePercent: float, spendLimitInDollars: float>, autoExposeSystemEnvs: bool, buildCommand: string, commandForIgnoringBuildStep: string, connectConfigurationId: string, createdAt: float, devCommand: string, directoryListing: bool, enablePreviewFeedback: bool, env: table<configurationId: string, createdAt: float, createdBy: string, decrypted: bool, edgeConfigId: string, edgeConfigTokenId: string, gitBranch: string, id: string, key: string, target: any, type: string, updatedAt: float, updatedBy: string, value: string>, framework: string, gitForkProtection: bool, hasFloatingAliases: bool, id: string, installCommand: string, lastRollbackTarget: record<fromDeploymentId: string, jobStatus: string, requestedAt: float, toDeploymentId: string>, latestDeployments: table<alias: list, aliasAssigned: any, aliasError: record, aliasFinal: string, automaticAliases: list, buildingAt: float, builds: list, checksConclusion: string, checksState: string, createdAt: float, createdIn: string, creator: record, deploymentHostname: string, forced: bool, id: string, meta: record, monorepoManager: string, name: string, plan: string, previewCommentsEnabled: bool, private: bool, readyAt: float, readyState: string, requestedAt: float, target: string, teamId: string, type: string, url: string, userId: string, withCache: bool>, link: any, live: bool, name: string, nodeVersion: string, outputDirectory: string, passwordProtection: record<deploymentType: string>, permissions: record<Monitoring: list<string>, aliasGlobal: list<string>, aliasProject: list<string>, aliasProtectionBypass: list<string>, analytics: list<string>, analyticsSampling: list<string>, analyticsUsage: list<string>, auditLog: list<string>, awsBillingIntegration: list<string>, billingAddress: list<string>, billingInformation: list<string>, billingInvoice: list<string>, billingInvoiceEmailRecipient: list<string>, billingInvoiceLanguage: list<string>, billingPlan: list<string>, billingPurchaseOrder: list<string>, billingTaxId: list<string>, cacheArtifact: list<string>, cacheArtifactUsageEvent: list<string>, concurrentBuilds: list<string>, connect: list<string>, connectConfiguration: list<string>, connectConfigurationLink: list<string>, deployment: list<string>, deploymentCheck: list<string>, deploymentCheckPreview: list<string>, deploymentPreview: list<string>, deploymentPrivate: list<string>, deploymentProductionGit: list<string>, deploymentRollback: list<string>, domain: list<string>, domainAcceptDelegation: list<string>, domainAuthCodes: list<string>, domainCertificate: list<string>, domainCheckConfig: list<string>, domainMove: list<string>, domainPurchase: list<string>, domainRecord: list<string>, domainTransferIn: list<string>, edgeConfig: list<string>, edgeConfigItem: list<string>, edgeConfigToken: list<string>, endpointVerification: list<string>, event: list<string>, fileUpload: list<string>, gitRepository: list<string>, integration: list<string>, integrationConfiguration: list<string>, integrationConfigurationProjects: list<string>, integrationConfigurationTransfer: list<string>, integrationVercelConfigurationOverride: list<string>, job: list<string>, logDrain: list<string>, monitoringChart: list<string>, monitoringQuery: list<string>, notificationDomainConfiguration: list<string>, notificationDomainExpire: list<string>, notificationDomainMoved: list<string>, notificationDomainPurchase: list<string>, notificationDomainRenewal: list<string>, notificationDomainTransfer: list<string>, notificationDomainUnverified: list<string>, notificationPaymentFailed: list<string>, notificationSpendCap: list<string>, notificationUsageAlert: list<string>, openTelemetryEndpoint: list<string>, passwordProtection: list<string>, paymentMethod: list<string>, permissions: list<string>, previewDeploymentSuffix: list<string>, proTrialOnboarding: list<string>, project: list<string>, projectDeploymentHook: list<string>, projectDomain: list<string>, projectDomainMove: list<string>, projectEnvVars: list<string>, projectEnvVarsProduction: list<string>, projectEnvVarsUnownedByIntegration: list<string>, projectIntegrationConfiguration: list<string>, projectLink: list<string>, projectMember: list<string>, projectProductionBranch: list<string>, projectProtectionBypass: list<string>, projectTransfer: list<string>, rateLimit: list<string>, redis: list<string>, remoteCaching: list<string>, samlConfig: list<string>, secret: list<string>, sensitiveEnvironmentVariablePolicy: list<string>, sharedEnvVars: list<string>, sharedEnvVarsProduction: list<string>, spendCapConfiguration: list<string>, spendCapState: list<string>, supportCase: list<string>, supportCaseComment: list<string>, team: list<string>, teamAccessRequest: list<string>, teamFellowMembership: list<string>, teamInvite: list<string>, teamInviteCode: list<string>, teamJoin: list<string>, teamOwnMembership: list<string>, teamOwnMembershipDisconnectSAML: list<string>, token: list<string>, usage: list<string>, user: list<string>, userConnection: list<string>, webAnalytics: list<string>, webhook: list<string>, webhook_event: list<string>>, protectionBypass: record, publicSource: bool, rootDirectory: string, serverlessFunctionRegion: string, skipGitConnectDuringLink: bool, sourceFilesOutsideRootDirectory: bool, ssoProtection: record<deploymentType: string>, targets: record, transferCompletedAt: float, transferStartedAt: float, transferToAccountId: string, transferredFromAccountId: string, updatedAt: float> {
+]: any -> oneof<record<accountId: string, analytics: record<canceledAt: float, disabledAt: float, enabledAt: float, id: string, paidAt: float, sampleRatePercent: float, spendLimitInDollars: float>, autoExposeSystemEnvs: bool, buildCommand: string, commandForIgnoringBuildStep: string, connectConfigurationId: string, createdAt: float, devCommand: string, directoryListing: bool, enablePreviewFeedback: bool, env: table<configurationId: string, createdAt: float, createdBy: string, decrypted: bool, edgeConfigId: string, edgeConfigTokenId: string, gitBranch: string, id: string, key: string, target: any, type: string, updatedAt: float, updatedBy: string, value: string>, framework: string, gitForkProtection: bool, hasFloatingAliases: bool, id: string, installCommand: string, lastRollbackTarget: record<fromDeploymentId: string, jobStatus: string, requestedAt: float, toDeploymentId: string>, latestDeployments: table<alias: list, aliasAssigned: any, aliasError: record, aliasFinal: string, automaticAliases: list, buildingAt: float, builds: list, checksConclusion: string, checksState: string, createdAt: float, createdIn: string, creator: record, deploymentHostname: string, forced: bool, id: string, meta: record, monorepoManager: string, name: string, plan: string, previewCommentsEnabled: bool, private: bool, readyAt: float, readyState: string, requestedAt: float, target: string, teamId: string, type: string, url: string, userId: string, withCache: bool>, link: any, live: bool, name: string, nodeVersion: string, outputDirectory: string, passwordProtection: record<deploymentType: string>, permissions: record<Monitoring: list<string>, aliasGlobal: list<string>, aliasProject: list<string>, aliasProtectionBypass: list<string>, analytics: list<string>, analyticsSampling: list<string>, analyticsUsage: list<string>, auditLog: list<string>, awsBillingIntegration: list<string>, billingAddress: list<string>, billingInformation: list<string>, billingInvoice: list<string>, billingInvoiceEmailRecipient: list<string>, billingInvoiceLanguage: list<string>, billingPlan: list<string>, billingPurchaseOrder: list<string>, billingTaxId: list<string>, cacheArtifact: list<string>, cacheArtifactUsageEvent: list<string>, concurrentBuilds: list<string>, connect: list<string>, connectConfiguration: list<string>, connectConfigurationLink: list<string>, deployment: list<string>, deploymentCheck: list<string>, deploymentCheckPreview: list<string>, deploymentPreview: list<string>, deploymentPrivate: list<string>, deploymentProductionGit: list<string>, deploymentRollback: list<string>, domain: list<string>, domainAcceptDelegation: list<string>, domainAuthCodes: list<string>, domainCertificate: list<string>, domainCheckConfig: list<string>, domainMove: list<string>, domainPurchase: list<string>, domainRecord: list<string>, domainTransferIn: list<string>, edgeConfig: list<string>, edgeConfigItem: list<string>, edgeConfigToken: list<string>, endpointVerification: list<string>, event: list<string>, fileUpload: list<string>, gitRepository: list<string>, integration: list<string>, integrationConfiguration: list<string>, integrationConfigurationProjects: list<string>, integrationConfigurationTransfer: list<string>, integrationVercelConfigurationOverride: list<string>, job: list<string>, logDrain: list<string>, monitoringChart: list<string>, monitoringQuery: list<string>, notificationDomainConfiguration: list<string>, notificationDomainExpire: list<string>, notificationDomainMoved: list<string>, notificationDomainPurchase: list<string>, notificationDomainRenewal: list<string>, notificationDomainTransfer: list<string>, notificationDomainUnverified: list<string>, notificationPaymentFailed: list<string>, notificationSpendCap: list<string>, notificationUsageAlert: list<string>, openTelemetryEndpoint: list<string>, passwordProtection: list<string>, paymentMethod: list<string>, permissions: list<string>, previewDeploymentSuffix: list<string>, proTrialOnboarding: list<string>, project: list<string>, projectDeploymentHook: list<string>, projectDomain: list<string>, projectDomainMove: list<string>, projectEnvVars: list<string>, projectEnvVarsProduction: list<string>, projectEnvVarsUnownedByIntegration: list<string>, projectIntegrationConfiguration: list<string>, projectLink: list<string>, projectMember: list<string>, projectProductionBranch: list<string>, projectProtectionBypass: list<string>, projectTransfer: list<string>, rateLimit: list<string>, redis: list<string>, remoteCaching: list<string>, samlConfig: list<string>, secret: list<string>, sensitiveEnvironmentVariablePolicy: list<string>, sharedEnvVars: list<string>, sharedEnvVarsProduction: list<string>, spendCapConfiguration: list<string>, spendCapState: list<string>, supportCase: list<string>, supportCaseComment: list<string>, team: list<string>, teamAccessRequest: list<string>, teamFellowMembership: list<string>, teamInvite: list<string>, teamInviteCode: list<string>, teamJoin: list<string>, teamOwnMembership: list<string>, teamOwnMembershipDisconnectSAML: list<string>, token: list<string>, usage: list<string>, user: list<string>, userConnection: list<string>, webAnalytics: list<string>, webhook: list<string>, webhook_event: list<string>>, protectionBypass: record, publicSource: bool, rootDirectory: string, serverlessFunctionRegion: string, skipGitConnectDuringLink: bool, sourceFilesOutsideRootDirectory: bool, ssoProtection: record<deploymentType: string>, targets: record, transferCompletedAt: float, transferStartedAt: float, transferToAccountId: string, transferredFromAccountId: string, updatedAt: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4499,7 +4501,7 @@ export def "get-project-domains" [
   --until: float # Get domains created before this JavaScript timestamp.
   --order: string@order-completer # Domains sort order by createdAt (default: DESC)
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> record<domains: table<apexName: string, createdAt: float, gitBranch: string, name: string, projectId: string, redirect: string, redirectStatusCode: float, updatedAt: float, verification: list, verified: bool>, pagination: record<count: float, next: float, prev: float>> {
+]: nothing -> oneof<record<domains: table<apexName: string, createdAt: float, gitBranch: string, name: string, projectId: string, redirect: string, redirectStatusCode: float, updatedAt: float, verification: list, verified: bool>, pagination: record<count: float, next: float, prev: float>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_or_name | is-empty) { error make --unspanned { msg: "path parameter 'idOrName' must be non-empty" } }
@@ -4541,7 +4543,7 @@ export def "add-project-domain" [
   name: string # The project domain name
   --redirect: string # Target destination domain for redirect (nullable)
   --redirect-status-code: int@redirect-status-code-completer # Status code for domain redirect (nullable)
-]: any -> record<apexName: string, createdAt: float, gitBranch: string, name: string, projectId: string, redirect: string, redirectStatusCode: float, updatedAt: float, verification: table<domain: string, reason: string, type: string, value: string>, verified: bool> {
+]: any -> oneof<record<apexName: string, createdAt: float, gitBranch: string, name: string, projectId: string, redirect: string, redirectStatusCode: float, updatedAt: float, verification: table<domain: string, reason: string, type: string, value: string>, verified: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4583,7 +4585,7 @@ export def "remove-project-domain" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_or_name | is-empty) { error make --unspanned { msg: "path parameter 'idOrName' must be non-empty" } }
@@ -4623,7 +4625,7 @@ export def "get-project-domain" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> record<apexName: string, createdAt: float, gitBranch: string, name: string, projectId: string, redirect: string, redirectStatusCode: float, updatedAt: float, verification: table<domain: string, reason: string, type: string, value: string>, verified: bool> {
+]: nothing -> oneof<record<apexName: string, createdAt: float, gitBranch: string, name: string, projectId: string, redirect: string, redirectStatusCode: float, updatedAt: float, verification: table<domain: string, reason: string, type: string, value: string>, verified: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_or_name | is-empty) { error make --unspanned { msg: "path parameter 'idOrName' must be non-empty" } }
@@ -4666,7 +4668,7 @@ export def "update-project-domain" [
   --git-branch: string # Git branch to link the project domain (nullable)
   --redirect: string # Target destination domain for redirect (nullable)
   --redirect-status-code: int@redirect-status-code-completer # Status code for domain redirect (nullable)
-]: any -> record<apexName: string, createdAt: float, gitBranch: string, name: string, projectId: string, redirect: string, redirectStatusCode: float, updatedAt: float, verification: table<domain: string, reason: string, type: string, value: string>, verified: bool> {
+]: any -> oneof<record<apexName: string, createdAt: float, gitBranch: string, name: string, projectId: string, redirect: string, redirectStatusCode: float, updatedAt: float, verification: table<domain: string, reason: string, type: string, value: string>, verified: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4709,7 +4711,7 @@ export def "verify-project-domain" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-]: nothing -> record<apexName: string, createdAt: float, gitBranch: string, name: string, projectId: string, redirect: string, redirectStatusCode: float, updatedAt: float, verification: table<domain: string, reason: string, type: string, value: string>, verified: bool> {
+]: nothing -> oneof<record<apexName: string, createdAt: float, gitBranch: string, name: string, projectId: string, redirect: string, redirectStatusCode: float, updatedAt: float, verification: table<domain: string, reason: string, type: string, value: string>, verified: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_or_name | is-empty) { error make --unspanned { msg: "path parameter 'idOrName' must be non-empty" } }
@@ -4835,7 +4837,7 @@ export def "edit-project-env" [
   --target: list # The target environment of the environment variable
   --type: string@type-completer-1 # The type of environment variable
   --value: string # The value of the environment variable
-]: any -> record<configurationId: string, createdAt: float, createdBy: string, decrypted: bool, edgeConfigId: string, edgeConfigTokenId: string, gitBranch: string, id: string, key: string, target: any, type: string, updatedAt: float, updatedBy: string, value: string> {
+]: any -> oneof<record<configurationId: string, createdAt: float, createdBy: string, decrypted: bool, edgeConfigId: string, edgeConfigTokenId: string, gitBranch: string, id: string, key: string, target: any, type: string, updatedAt: float, updatedBy: string, value: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

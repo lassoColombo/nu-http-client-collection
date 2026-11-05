@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -172,9 +195,9 @@ def x-amz-target-completer-64 [] { ["RekognitionService.UpdateStreamProcessor"] 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "compare-faces" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["compare-faces" "copy-project-version" "create-collection" "create-dataset" "create-face-liveness-session" "create-project" "create-project-version" "create-stream-processor" "delete-collection" "delete-dataset" "delete-faces" "delete-project" "delete-project-policy" "delete-project-version" "delete-stream-processor" "describe-collection" "describe-dataset" "describe-project-versions" "describe-projects" "describe-stream-processor" "detect-custom-labels" "detect-faces" "detect-labels" "detect-moderation-labels" "detect-protective-equipment" "detect-text" "distribute-dataset-entries" "get-celebrity-info" "get-celebrity-recognition" "get-content-moderation" "get-face-detection" "get-face-liveness-session-results" "get-face-search" "get-label-detection" "get-person-tracking" "get-segment-detection" "get-text-detection" "index-faces" "list-collections" "list-dataset-entries" "list-dataset-labels" "list-faces" "list-project-policies" "list-stream-processors" "list-tags-for-resource" "put-project-policy" "recognize-celebrities" "search-faces" "search-faces-by-image" "start-celebrity-recognition" "start-content-moderation" "start-face-detection" "start-face-search" "start-label-detection" "start-person-tracking" "start-project-version" "start-segment-detection" "start-stream-processor" "start-text-detection" "stop-project-version" "stop-stream-processor" "tag-resource" "untag-resource" "update-dataset-entries" "update-stream-processor" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -196,8 +219,6 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: CompareFaces
-# --SourceImage shape: {Bytes?: string, S3Object?: record}
-# --TargetImage shape: {Bytes?: string, S3Object?: record}
 export def "compare-faces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -220,7 +241,7 @@ export def "compare-faces" [
   target_image: record # Provides the input image either as bytes or an S3 object. You pass image bytes to an Amazon Rekognition API operation by using the Bytes property. For example, you would use the Bytes property to pass an image loaded from a local file system. Image bytes passed by using the Bytes property must be base64-encoded. Your code may not need to encode image bytes if you are using an AWS SDK to call Amazon Rekognition API operations. For more information, see Analyzing an Image Loaded from a Local File System in the Amazon Rekognition Developer Guide. You pass images stored in an S3 bucket to an Amazon Rekognition API operation by using the S3Object property. Images stored in an S3 bucket do not need to be base64-encoded. The region for the S3 bucket containing the S3 object must match the region you use for Amazon Rekognition operations. If you use the AWS CLI to call Amazon Rekognition operations, passing image bytes using the Bytes property is not supported. You must first upload the image to an Amazon S3 bucket and then call the operation using the S3Object property. For Amazon Rekognition to process an S3 object, the user must have permission to access the S3 object. For more information, see How Amazon Rekognition works with IAM in the Amazon Rekognition Developer Guide. — shape: {Bytes?: string, S3Object?: record}
   --similarity-threshold: float # The minimum level of confidence in the face matches that a match must meet to be included in the FaceMatches array. (format: float)
   --quality-filter: string@quality-filter-completer # A filter that specifies a quality bar for how much filtering is done to identify faces. Filtered faces aren't compared. If you specify AUTO, Amazon Rekognition chooses the quality bar. If you specify LOW, MEDIUM, or HIGH, filtering removes all faces that don’t meet the chosen quality bar. The quality bar is based on a variety of common use cases. Low-quality detections can occur for a number of reasons. Some examples are an object that's misidentified as a face, a face that's too blurry, or a face with a pose that's too extreme to use. If you specify NONE, no filtering is performed. The default value is NONE. To use quality filtering, the collection you are using must be associated with version 3 of the face model or higher.
-]: any -> record<SourceImageFace: record<BoundingBox: record<Width: float, Height: float, Left: float, Top: float>, Confidence: float>, FaceMatches: table<Similarity: float, Face: record>, UnmatchedFaces: table<BoundingBox: record, Confidence: float, Landmarks: list, Pose: record, Quality: record, Emotions: list, Smile: record>, SourceImageOrientationCorrection: string, TargetImageOrientationCorrection: string> {
+]: any -> oneof<record<SourceImageFace: record<BoundingBox: record<Width: float, Height: float, Left: float, Top: float>, Confidence: float>, FaceMatches: table<Similarity: float, Face: record>, UnmatchedFaces: table<BoundingBox: record, Confidence: float, Landmarks: list, Pose: record, Quality: record, Emotions: list, Smile: record>, SourceImageOrientationCorrection: string, TargetImageOrientationCorrection: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -250,7 +271,6 @@ export def "compare-faces" [
 #
 # POST /
 # operationId: CopyProjectVersion
-# --OutputConfig shape: {S3Bucket?: string, S3KeyPrefix?: string}
 export def "copy-project-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -276,7 +296,7 @@ export def "copy-project-version" [
   output_config: record # The S3 bucket and folder location where training output is placed. — shape: {S3Bucket?: string, S3KeyPrefix?: string}
   --tags: record # The key-value tags to assign to the model version.
   --kms-key-id: string # The identifier for your AWS Key Management Service key (AWS KMS key). You can supply the Amazon Resource Name (ARN) of your KMS key, the ID of your KMS key, an alias for your KMS key, or an alias ARN. The key is used to encrypt training results and manifest files written to the output Amazon S3 bucket (OutputConfig). If you choose to use your own KMS key, you need the following permissions on the KMS key. kms:CreateGrant kms:DescribeKey kms:GenerateDataKey kms:Decrypt If you don't specify a value for KmsKeyId, images copied into the service are encrypted using a key that AWS owns and manages.
-]: any -> record<ProjectVersionArn: string> {
+]: any -> oneof<record<ProjectVersionArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -326,7 +346,7 @@ export def "create-collection" [
   --x-amz-target: string@x-amz-target-completer-2 # required
   collection_id: string # ID for the collection that you are creating.
   --tags: record # A set of tags (key-value pairs) that you want to attach to the collection.
-]: any -> record<StatusCode: int, CollectionArn: string, FaceModelVersion: string> {
+]: any -> oneof<record<StatusCode: int, CollectionArn: string, FaceModelVersion: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -356,7 +376,6 @@ export def "create-collection" [
 #
 # POST /
 # operationId: CreateDataset
-# --DatasetSource shape: {GroundTruthManifest?: record, DatasetArn?: string}
 export def "create-dataset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -378,7 +397,7 @@ export def "create-dataset" [
   --dataset-source: record # The source that Amazon Rekognition Custom Labels uses to create a dataset. To use an Amazon Sagemaker format manifest file, specify the S3 bucket location in the GroundTruthManifest field. The S3 bucket must be in your AWS account. To create a copy of an existing dataset, specify the Amazon Resource Name (ARN) of an existing dataset in DatasetArn. You need to specify a value for DatasetArn or GroundTruthManifest, but not both. if you supply both values, or if you don't specify any values, an InvalidParameterException exception occurs. For more information, see CreateDataset. — shape: {GroundTruthManifest?: record, DatasetArn?: string}
   dataset_type: string@dataset-type-completer # The type of the dataset. Specify train to create a training dataset. Specify test to create a test dataset.
   project_arn: string # The ARN of the Amazon Rekognition Custom Labels project to which you want to asssign the dataset.
-]: any -> record<DatasetArn: string> {
+]: any -> oneof<record<DatasetArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -408,7 +427,6 @@ export def "create-dataset" [
 #
 # POST /
 # operationId: CreateFaceLivenessSession
-# --Settings shape: {OutputConfig?: record, AuditImagesLimit?: int}
 export def "create-face-liveness-session" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -430,7 +448,7 @@ export def "create-face-liveness-session" [
   --kms-key-id: string # The identifier for your AWS Key Management Service key (AWS KMS key). Used to encrypt audit images and reference images.
   --settings: record # A session settings object. It contains settings for the operation to be performed. It accepts arguments for OutputConfig and AuditImagesLimit. — shape: {OutputConfig?: record, AuditImagesLimit?: int}
   --client-request-token: string # Idempotent token is used to recognize the Face Liveness request. If the same token is used with multiple CreateFaceLivenessSession requests, the same session is returned. This token is employed to avoid unintentionally creating the same session multiple times.
-]: any -> record<SessionId: string> {
+]: any -> oneof<record<SessionId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -479,7 +497,7 @@ export def "create-project" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-5 # required
   project_name: string # The name of the project to create.
-]: any -> record<ProjectArn: string> {
+]: any -> oneof<record<ProjectArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -509,9 +527,6 @@ export def "create-project" [
 #
 # POST /
 # operationId: CreateProjectVersion
-# --OutputConfig shape: {S3Bucket?: string, S3KeyPrefix?: string}
-# --TrainingData shape: {Assets?: list}
-# --TestingData shape: {Assets?: list, AutoCreate?: bool}
 export def "create-project-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -537,7 +552,7 @@ export def "create-project-version" [
   --testing-data: record # The dataset used for testing. Optionally, if AutoCreate is set, Amazon Rekognition Custom Labels uses the training dataset to create a test dataset with a temporary split of the training dataset. — shape: {Assets?: list, AutoCreate?: bool}
   --tags: record # A set of tags (key-value pairs) that you want to attach to the model.
   --kms-key-id: string # The identifier for your AWS Key Management Service key (AWS KMS key). You can supply the Amazon Resource Name (ARN) of your KMS key, the ID of your KMS key, an alias for your KMS key, or an alias ARN. The key is used to encrypt training and test images copied into the service for model training. Your source images are unaffected. The key is also used to encrypt training results and manifest files written to the output Amazon S3 bucket (OutputConfig). If you choose to use your own KMS key, you need the following permissions on the KMS key. kms:CreateGrant kms:DescribeKey kms:GenerateDataKey kms:Decrypt If you don't specify a value for KmsKeyId, images copied into the service are encrypted using a key that AWS owns and manages.
-]: any -> record<ProjectVersionArn: string> {
+]: any -> oneof<record<ProjectVersionArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -567,12 +582,6 @@ export def "create-project-version" [
 #
 # POST /
 # operationId: CreateStreamProcessor
-# --Input shape: {KinesisVideoStream?: record}
-# --Output shape: {KinesisDataStream?: record, S3Destination?: record}
-# --Settings shape: {FaceSearch?: record, ConnectedHome?: record}
-# --NotificationChannel shape: {SNSTopicArn: string}
-# --RegionsOfInterest item shape: {BoundingBox?: record, Polygon?: list}
-# --DataSharingPreference shape: {OptIn: bool}
 export def "create-stream-processor" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -601,7 +610,7 @@ export def "create-stream-processor" [
   --kms-key-id: string # The identifier for your AWS Key Management Service key (AWS KMS key). This is an optional parameter for label detection stream processors and should not be used to create a face search stream processor. You can supply the Amazon Resource Name (ARN) of your KMS key, the ID of your KMS key, an alias for your KMS key, or an alias ARN. The key is used to encrypt results and data published to your Amazon S3 bucket, which includes image frames and hero images. Your source images are unaffected.
   --regions-of-interest: list # Specifies locations in the frames where Amazon Rekognition checks for objects or people. You can specify up to 10 regions of interest, and each region has either a polygon or a bounding box. This is an optional parameter for label detection stream processors and should not be used to create a face search stream processor. — item shape: {BoundingBox?: record, Polygon?: list}
   --data-sharing-preference: record # Allows you to opt in or opt out to share data with Rekognition to improve model performance. You can choose this option at the account level or on a per-stream basis. Note that if you opt out at the account level this setting is ignored on individual streams. — shape: {OptIn: bool}
-]: any -> record<StreamProcessorArn: string> {
+]: any -> oneof<record<StreamProcessorArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -651,7 +660,7 @@ export def "delete-collection" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-8 # required
   collection_id: string # ID of the collection to delete.
-]: any -> record<StatusCode: int> {
+]: any -> oneof<record<StatusCode: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -700,7 +709,7 @@ export def "delete-dataset" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-9 # required
   dataset_arn: string # The ARN of the Amazon Rekognition Custom Labels dataset that you want to delete.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -750,7 +759,7 @@ export def "delete-faces" [
   --x-amz-target: string@x-amz-target-completer-10 # required
   collection_id: string # Collection from which to remove the specific faces.
   face_ids: list<string> # An array of face IDs to delete.
-]: any -> record<DeletedFaces: list<string>> {
+]: any -> oneof<record<DeletedFaces: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -799,7 +808,7 @@ export def "delete-project" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-11 # required
   project_arn: string # The Amazon Resource Name (ARN) of the project that you want to delete.
-]: any -> record<Status: string> {
+]: any -> oneof<record<Status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -850,7 +859,7 @@ export def "delete-project-policy" [
   project_arn: string # The Amazon Resource Name (ARN) of the project that the project policy you want to delete is attached to.
   policy_name: string # The name of the policy that you want to delete.
   --policy-revision-id: string # The ID of the project policy revision that you want to delete.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -899,7 +908,7 @@ export def "delete-project-version" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-13 # required
   project_version_arn: string # The Amazon Resource Name (ARN) of the model version that you want to delete.
-]: any -> record<Status: string> {
+]: any -> oneof<record<Status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -948,7 +957,7 @@ export def "delete-stream-processor" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-14 # required
   name: string # The name of the stream processor you want to delete.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -997,7 +1006,7 @@ export def "describe-collection" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-15 # required
   collection_id: string # The ID of the collection to describe.
-]: any -> record<FaceCount: int, FaceModelVersion: string, CollectionARN: string, CreationTimestamp: string> {
+]: any -> oneof<record<FaceCount: int, FaceModelVersion: string, CollectionARN: string, CreationTimestamp: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1046,7 +1055,7 @@ export def "describe-dataset" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-16 # required
   dataset_arn: string # The Amazon Resource Name (ARN) of the dataset that you want to describe.
-]: any -> record<DatasetDescription: record<CreationTimestamp: string, LastUpdatedTimestamp: string, Status: string, StatusMessage: string, StatusMessageCode: string, DatasetStats: record<LabeledEntries: int, TotalEntries: int, TotalLabels: int, ErrorEntries: int>>> {
+]: any -> oneof<record<DatasetDescription: record<CreationTimestamp: string, LastUpdatedTimestamp: string, Status: string, StatusMessage: string, StatusMessageCode: string, DatasetStats: record<LabeledEntries: int, TotalEntries: int, TotalLabels: int, ErrorEntries: int>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1100,7 +1109,7 @@ export def "describe-project-versions" [
   --version-names: list<string> # A list of model version names that you want to describe. You can add up to 10 model version names to the list. If you don't specify a value, all model descriptions are returned. A version name is part of a model (ProjectVersion) ARN. For example, my-model.2020-01-21T09.10.15 is the version name in the following ARN. arn:aws:rekognition:us-east-1:123456789012:project/getting-started/version/my-model.2020-01-21T09.10.15/1234567890123.
   --next-token-body: string # If the previous response was incomplete (because there is more results to retrieve), Amazon Rekognition Custom Labels returns a pagination token in the response. You can use this pagination token to retrieve the next set of results. (body field)
   --max-results-body: int # The maximum number of results to return per paginated call. The largest value you can specify is 100. If you specify a value greater than 100, a ValidationException error occurs. The default value is 100. (body field)
-]: any -> record<ProjectVersionDescriptions: table<ProjectVersionArn: string, CreationTimestamp: string, MinInferenceUnits: int, Status: string, StatusMessage: string, BillableTrainingTimeInSeconds: int, TrainingEndTimestamp: string, OutputConfig: record, TrainingDataResult: record, TestingDataResult: record, EvaluationResult: record, ManifestSummary: record, KmsKeyId: string, MaxInferenceUnits: int, SourceProjectVersionArn: string>, NextToken: string> {
+]: any -> oneof<record<ProjectVersionDescriptions: table<ProjectVersionArn: string, CreationTimestamp: string, MinInferenceUnits: int, Status: string, StatusMessage: string, BillableTrainingTimeInSeconds: int, TrainingEndTimestamp: string, OutputConfig: record, TrainingDataResult: record, TestingDataResult: record, EvaluationResult: record, ManifestSummary: record, KmsKeyId: string, MaxInferenceUnits: int, SourceProjectVersionArn: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1154,7 +1163,7 @@ export def "describe-projects" [
   --next-token-body: string # If the previous response was incomplete (because there is more results to retrieve), Amazon Rekognition Custom Labels returns a pagination token in the response. You can use this pagination token to retrieve the next set of results. (body field)
   --max-results-body: int # The maximum number of results to return per paginated call. The largest value you can specify is 100. If you specify a value greater than 100, a ValidationException error occurs. The default value is 100. (body field)
   --project-names: list<string> # A list of the projects that you want Amazon Rekognition Custom Labels to describe. If you don't specify a value, the response includes descriptions for all the projects in your AWS account.
-]: any -> record<ProjectDescriptions: table<ProjectArn: string, CreationTimestamp: string, Status: string, Datasets: list>, NextToken: string> {
+]: any -> oneof<record<ProjectDescriptions: table<ProjectArn: string, CreationTimestamp: string, Status: string, Datasets: list>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1204,7 +1213,7 @@ export def "describe-stream-processor" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-19 # required
   name: string # Name of the stream processor for which you want information.
-]: any -> record<Name: string, StreamProcessorArn: string, Status: string, StatusMessage: string, CreationTimestamp: string, LastUpdateTimestamp: string, Input: record<KinesisVideoStream: record<Arn: string>>, Output: record<KinesisDataStream: record<Arn: string>, S3Destination: record<Bucket: string, KeyPrefix: string>>, RoleArn: string, Settings: record<FaceSearch: record<CollectionId: string, FaceMatchThreshold: float>, ConnectedHome: record<Labels: list, MinConfidence: float>>, NotificationChannel: record<SNSTopicArn: string>, KmsKeyId: string, RegionsOfInterest: table<BoundingBox: record, Polygon: list>, DataSharingPreference: record<OptIn: bool>> {
+]: any -> oneof<record<Name: string, StreamProcessorArn: string, Status: string, StatusMessage: string, CreationTimestamp: string, LastUpdateTimestamp: string, Input: record<KinesisVideoStream: record<Arn: string>>, Output: record<KinesisDataStream: record<Arn: string>, S3Destination: record<Bucket: string, KeyPrefix: string>>, RoleArn: string, Settings: record<FaceSearch: record<CollectionId: string, FaceMatchThreshold: float>, ConnectedHome: record<Labels: list, MinConfidence: float>>, NotificationChannel: record<SNSTopicArn: string>, KmsKeyId: string, RegionsOfInterest: table<BoundingBox: record, Polygon: list>, DataSharingPreference: record<OptIn: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1234,7 +1243,6 @@ export def "describe-stream-processor" [
 #
 # POST /
 # operationId: DetectCustomLabels
-# --Image shape: {Bytes?: string, S3Object?: record}
 export def "detect-custom-labels" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1257,7 +1265,7 @@ export def "detect-custom-labels" [
   image: record # Provides the input image either as bytes or an S3 object. You pass image bytes to an Amazon Rekognition API operation by using the Bytes property. For example, you would use the Bytes property to pass an image loaded from a local file system. Image bytes passed by using the Bytes property must be base64-encoded. Your code may not need to encode image bytes if you are using an AWS SDK to call Amazon Rekognition API operations. For more information, see Analyzing an Image Loaded from a Local File System in the Amazon Rekognition Developer Guide. You pass images stored in an S3 bucket to an Amazon Rekognition API operation by using the S3Object property. Images stored in an S3 bucket do not need to be base64-encoded. The region for the S3 bucket containing the S3 object must match the region you use for Amazon Rekognition operations. If you use the AWS CLI to call Amazon Rekognition operations, passing image bytes using the Bytes property is not supported. You must first upload the image to an Amazon S3 bucket and then call the operation using the S3Object property. For Amazon Rekognition to process an S3 object, the user must have permission to access the S3 object. For more information, see How Amazon Rekognition works with IAM in the Amazon Rekognition Developer Guide. — shape: {Bytes?: string, S3Object?: record}
   --max-results: int # Maximum number of results you want the service to return in the response. The service returns the specified number of highest confidence labels ranked from highest confidence to lowest.
   --min-confidence: float # Specifies the minimum confidence level for the labels to return. DetectCustomLabels doesn't return any labels with a confidence value that's lower than this specified value. If you specify a value of 0, DetectCustomLabels returns all labels, regardless of the assumed threshold applied to each label. If you don't specify a value for MinConfidence, DetectCustomLabels returns labels based on the assumed threshold of each label. (format: float)
-]: any -> record<CustomLabels: table<Name: string, Confidence: float, Geometry: record>> {
+]: any -> oneof<record<CustomLabels: table<Name: string, Confidence: float, Geometry: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1287,7 +1295,6 @@ export def "detect-custom-labels" [
 #
 # POST /
 # operationId: DetectFaces
-# --Image shape: {Bytes?: string, S3Object?: record}
 export def "detect-faces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1308,7 +1315,7 @@ export def "detect-faces" [
   --x-amz-target: string@x-amz-target-completer-21 # required
   image: record # Provides the input image either as bytes or an S3 object. You pass image bytes to an Amazon Rekognition API operation by using the Bytes property. For example, you would use the Bytes property to pass an image loaded from a local file system. Image bytes passed by using the Bytes property must be base64-encoded. Your code may not need to encode image bytes if you are using an AWS SDK to call Amazon Rekognition API operations. For more information, see Analyzing an Image Loaded from a Local File System in the Amazon Rekognition Developer Guide. You pass images stored in an S3 bucket to an Amazon Rekognition API operation by using the S3Object property. Images stored in an S3 bucket do not need to be base64-encoded. The region for the S3 bucket containing the S3 object must match the region you use for Amazon Rekognition operations. If you use the AWS CLI to call Amazon Rekognition operations, passing image bytes using the Bytes property is not supported. You must first upload the image to an Amazon S3 bucket and then call the operation using the S3Object property. For Amazon Rekognition to process an S3 object, the user must have permission to access the S3 object. For more information, see How Amazon Rekognition works with IAM in the Amazon Rekognition Developer Guide. — shape: {Bytes?: string, S3Object?: record}
   --attributes: list<string> # An array of facial attributes you want to be returned. This can be the default list of attributes or all attributes. If you don't specify a value for Attributes or if you specify ["DEFAULT"], the API returns the following subset of facial attributes: BoundingBox, Confidence, Pose, Quality, and Landmarks. If you provide ["ALL"], all facial attributes are returned, but the operation takes longer to complete. If you provide both, ["ALL", "DEFAULT"], the service uses a logical AND operator to determine which attributes to return (in this case, all attributes).
-]: any -> record<FaceDetails: table<BoundingBox: record, AgeRange: record, Smile: record, Eyeglasses: record, Sunglasses: record, Gender: record, Beard: record, Mustache: record, EyesOpen: record, MouthOpen: record, Emotions: list, Landmarks: list, Pose: record, Quality: record, Confidence: float>, OrientationCorrection: string> {
+]: any -> oneof<record<FaceDetails: table<BoundingBox: record, AgeRange: record, Smile: record, Eyeglasses: record, Sunglasses: record, Gender: record, Beard: record, Mustache: record, EyesOpen: record, MouthOpen: record, Emotions: list, Landmarks: list, Pose: record, Quality: record, Confidence: float>, OrientationCorrection: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1338,8 +1345,6 @@ export def "detect-faces" [
 #
 # POST /
 # operationId: DetectLabels
-# --Image shape: {Bytes?: string, S3Object?: record}
-# --Settings shape: {GeneralLabels?: record, ImageProperties?: record}
 export def "detect-labels" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1363,7 +1368,7 @@ export def "detect-labels" [
   --min-confidence: float # Specifies the minimum confidence level for the labels to return. Amazon Rekognition doesn't return any labels with confidence lower than this specified value. If MinConfidence is not specified, the operation returns labels with a confidence values greater than or equal to 55 percent. (format: float)
   --features: list<string> # A list of the types of analysis to perform. Specifying GENERAL_LABELS uses the label detection feature, while specifying IMAGE_PROPERTIES returns information regarding image color and quality. If no option is specified GENERAL_LABELS is used by default.
   --settings: record # Settings for the DetectLabels request. Settings can include filters for both GENERAL_LABELS and IMAGE_PROPERTIES. GENERAL_LABELS filters can be inclusive or exclusive and applied to individual labels or label categories. IMAGE_PROPERTIES filters allow specification of a maximum number of dominant colors. — shape: {GeneralLabels?: record, ImageProperties?: record}
-]: any -> record<Labels: table<Name: string, Confidence: float, Instances: list, Parents: list, Aliases: list, Categories: list>, OrientationCorrection: string, LabelModelVersion: string, ImageProperties: record<Quality: record<Brightness: float, Sharpness: float, Contrast: float>, DominantColors: list<record>, Foreground: record<Quality: record, DominantColors: list>, Background: record<Quality: record, DominantColors: list>>> {
+]: any -> oneof<record<Labels: table<Name: string, Confidence: float, Instances: list, Parents: list, Aliases: list, Categories: list>, OrientationCorrection: string, LabelModelVersion: string, ImageProperties: record<Quality: record<Brightness: float, Sharpness: float, Contrast: float>, DominantColors: list<record>, Foreground: record<Quality: record, DominantColors: list>, Background: record<Quality: record, DominantColors: list>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1393,8 +1398,6 @@ export def "detect-labels" [
 #
 # POST /
 # operationId: DetectModerationLabels
-# --Image shape: {Bytes?: string, S3Object?: record}
-# --HumanLoopConfig shape: {HumanLoopName: string, FlowDefinitionArn: string, DataAttributes?: record}
 export def "detect-moderation-labels" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1416,7 +1419,7 @@ export def "detect-moderation-labels" [
   image: record # Provides the input image either as bytes or an S3 object. You pass image bytes to an Amazon Rekognition API operation by using the Bytes property. For example, you would use the Bytes property to pass an image loaded from a local file system. Image bytes passed by using the Bytes property must be base64-encoded. Your code may not need to encode image bytes if you are using an AWS SDK to call Amazon Rekognition API operations. For more information, see Analyzing an Image Loaded from a Local File System in the Amazon Rekognition Developer Guide. You pass images stored in an S3 bucket to an Amazon Rekognition API operation by using the S3Object property. Images stored in an S3 bucket do not need to be base64-encoded. The region for the S3 bucket containing the S3 object must match the region you use for Amazon Rekognition operations. If you use the AWS CLI to call Amazon Rekognition operations, passing image bytes using the Bytes property is not supported. You must first upload the image to an Amazon S3 bucket and then call the operation using the S3Object property. For Amazon Rekognition to process an S3 object, the user must have permission to access the S3 object. For more information, see How Amazon Rekognition works with IAM in the Amazon Rekognition Developer Guide. — shape: {Bytes?: string, S3Object?: record}
   --min-confidence: float # Specifies the minimum confidence level for the labels to return. Amazon Rekognition doesn't return any labels with a confidence level lower than this specified value. If you don't specify MinConfidence, the operation returns labels with confidence values greater than or equal to 50 percent. (format: float)
   --human-loop-config: record # Sets up the flow definition the image will be sent to if one of the conditions is met. You can also set certain attributes of the image before review. — shape: {HumanLoopName: string, FlowDefinitionArn: string, DataAttributes?: record}
-]: any -> record<ModerationLabels: table<Confidence: float, Name: string, ParentName: string>, ModerationModelVersion: string, HumanLoopActivationOutput: record<HumanLoopArn: string, HumanLoopActivationReasons: list<string>, HumanLoopActivationConditionsEvaluationResults: string>> {
+]: any -> oneof<record<ModerationLabels: table<Confidence: float, Name: string, ParentName: string>, ModerationModelVersion: string, HumanLoopActivationOutput: record<HumanLoopArn: string, HumanLoopActivationReasons: list<string>, HumanLoopActivationConditionsEvaluationResults: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1446,8 +1449,6 @@ export def "detect-moderation-labels" [
 #
 # POST /
 # operationId: DetectProtectiveEquipment
-# --Image shape: {Bytes?: string, S3Object?: record}
-# --SummarizationAttributes shape: {MinConfidence: float, RequiredEquipmentTypes: list<string>}
 export def "detect-protective-equipment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1468,7 +1469,7 @@ export def "detect-protective-equipment" [
   --x-amz-target: string@x-amz-target-completer-24 # required
   image: record # Provides the input image either as bytes or an S3 object. You pass image bytes to an Amazon Rekognition API operation by using the Bytes property. For example, you would use the Bytes property to pass an image loaded from a local file system. Image bytes passed by using the Bytes property must be base64-encoded. Your code may not need to encode image bytes if you are using an AWS SDK to call Amazon Rekognition API operations. For more information, see Analyzing an Image Loaded from a Local File System in the Amazon Rekognition Developer Guide. You pass images stored in an S3 bucket to an Amazon Rekognition API operation by using the S3Object property. Images stored in an S3 bucket do not need to be base64-encoded. The region for the S3 bucket containing the S3 object must match the region you use for Amazon Rekognition operations. If you use the AWS CLI to call Amazon Rekognition operations, passing image bytes using the Bytes property is not supported. You must first upload the image to an Amazon S3 bucket and then call the operation using the S3Object property. For Amazon Rekognition to process an S3 object, the user must have permission to access the S3 object. For more information, see How Amazon Rekognition works with IAM in the Amazon Rekognition Developer Guide. — shape: {Bytes?: string, S3Object?: record}
   --summarization-attributes: record # Specifies summary attributes to return from a call to DetectProtectiveEquipment. You can specify which types of PPE to summarize. You can also specify a minimum confidence value for detections. Summary information is returned in the Summary (ProtectiveEquipmentSummary) field of the response from DetectProtectiveEquipment. The summary includes which persons in an image were detected wearing the requested types of person protective equipment (PPE), which persons were detected as not wearing PPE, and the persons in which a determination could not be made. For more information, see ProtectiveEquipmentSummary. — shape: {MinConfidence: float, RequiredEquipmentTypes: list<string>}
-]: any -> record<ProtectiveEquipmentModelVersion: string, Persons: table<BodyParts: list, BoundingBox: record, Confidence: float, Id: int>, Summary: record<PersonsWithRequiredEquipment: list<int>, PersonsWithoutRequiredEquipment: list<int>, PersonsIndeterminate: list<int>>> {
+]: any -> oneof<record<ProtectiveEquipmentModelVersion: string, Persons: table<BodyParts: list, BoundingBox: record, Confidence: float, Id: int>, Summary: record<PersonsWithRequiredEquipment: list<int>, PersonsWithoutRequiredEquipment: list<int>, PersonsIndeterminate: list<int>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1498,8 +1499,6 @@ export def "detect-protective-equipment" [
 #
 # POST /
 # operationId: DetectText
-# --Image shape: {Bytes?: string, S3Object?: record}
-# --Filters shape: {WordFilter?: record, RegionsOfInterest?: list}
 export def "detect-text" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1520,7 +1519,7 @@ export def "detect-text" [
   --x-amz-target: string@x-amz-target-completer-25 # required
   image: record # Provides the input image either as bytes or an S3 object. You pass image bytes to an Amazon Rekognition API operation by using the Bytes property. For example, you would use the Bytes property to pass an image loaded from a local file system. Image bytes passed by using the Bytes property must be base64-encoded. Your code may not need to encode image bytes if you are using an AWS SDK to call Amazon Rekognition API operations. For more information, see Analyzing an Image Loaded from a Local File System in the Amazon Rekognition Developer Guide. You pass images stored in an S3 bucket to an Amazon Rekognition API operation by using the S3Object property. Images stored in an S3 bucket do not need to be base64-encoded. The region for the S3 bucket containing the S3 object must match the region you use for Amazon Rekognition operations. If you use the AWS CLI to call Amazon Rekognition operations, passing image bytes using the Bytes property is not supported. You must first upload the image to an Amazon S3 bucket and then call the operation using the S3Object property. For Amazon Rekognition to process an S3 object, the user must have permission to access the S3 object. For more information, see How Amazon Rekognition works with IAM in the Amazon Rekognition Developer Guide. — shape: {Bytes?: string, S3Object?: record}
   --filters: record # A set of optional parameters that you can use to set the criteria that the text must meet to be included in your response. WordFilter looks at a word’s height, width, and minimum confidence. RegionOfInterest lets you set a specific region of the image to look for text in. — shape: {WordFilter?: record, RegionsOfInterest?: list}
-]: any -> record<TextDetections: table<DetectedText: string, Type: string, Id: int, ParentId: int, Confidence: float, Geometry: record>, TextModelVersion: string> {
+]: any -> oneof<record<TextDetections: table<DetectedText: string, Type: string, Id: int, ParentId: int, Confidence: float, Geometry: record>, TextModelVersion: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1550,7 +1549,6 @@ export def "detect-text" [
 #
 # POST /
 # operationId: DistributeDatasetEntries
-# --Datasets item shape: {Arn: string}
 export def "distribute-dataset-entries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1570,7 +1568,7 @@ export def "distribute-dataset-entries" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-26 # required
   datasets: list # The ARNS for the training dataset and test dataset that you want to use. The datasets must belong to the same project. The test dataset must be empty. — item shape: {Arn: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1619,7 +1617,7 @@ export def "get-celebrity-info" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-27 # required
   id: string # The ID for the celebrity. You get the celebrity ID from a call to the RecognizeCelebrities operation, which recognizes celebrities in an image.
-]: any -> record<Urls: list<string>, Name: string, KnownGender: record<Type: string>> {
+]: any -> oneof<record<Urls: list<string>, Name: string, KnownGender: record<Type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1673,7 +1671,7 @@ export def "get-celebrity-recognition" [
   --max-results-body: int # Maximum number of results to return per paginated call. The largest value you can specify is 1000. If you specify a value greater than 1000, a maximum of 1000 results is returned. The default value is 1000. (body field)
   --next-token-body: string # If the previous response was incomplete (because there is more recognized celebrities to retrieve), Amazon Rekognition Video returns a pagination token in the response. You can use this pagination token to retrieve the next set of celebrities. (body field)
   --sort-by: string@sort-by-completer # Sort to use for celebrities returned in Celebrities field. Specify ID to sort by the celebrity identifier, specify TIMESTAMP to sort by the time the celebrity was recognized.
-]: any -> record<JobStatus: string, StatusMessage: string, VideoMetadata: record<Codec: string, DurationMillis: int, Format: string, FrameRate: float, FrameHeight: int, FrameWidth: int, ColorRange: string>, NextToken: string, Celebrities: table<Timestamp: int, Celebrity: record>> {
+]: any -> oneof<record<JobStatus: string, StatusMessage: string, VideoMetadata: record<Codec: string, DurationMillis: int, Format: string, FrameRate: float, FrameHeight: int, FrameWidth: int, ColorRange: string>, NextToken: string, Celebrities: table<Timestamp: int, Celebrity: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1728,7 +1726,7 @@ export def "get-content-moderation" [
   --max-results-body: int # Maximum number of results to return per paginated call. The largest value you can specify is 1000. If you specify a value greater than 1000, a maximum of 1000 results is returned. The default value is 1000. (body field)
   --next-token-body: string # If the previous response was incomplete (because there is more data to retrieve), Amazon Rekognition returns a pagination token in the response. You can use this pagination token to retrieve the next set of content moderation labels. (body field)
   --sort-by: string@sort-by-completer-1 # Sort to use for elements in the ModerationLabelDetections array. Use TIMESTAMP to sort array elements by the time labels are detected. Use NAME to alphabetically group elements for a label together. Within each label group, the array element are sorted by detection confidence. The default sort is by TIMESTAMP.
-]: any -> record<JobStatus: string, StatusMessage: string, VideoMetadata: record<Codec: string, DurationMillis: int, Format: string, FrameRate: float, FrameHeight: int, FrameWidth: int, ColorRange: string>, ModerationLabels: table<Timestamp: int, ModerationLabel: record>, NextToken: string, ModerationModelVersion: string> {
+]: any -> oneof<record<JobStatus: string, StatusMessage: string, VideoMetadata: record<Codec: string, DurationMillis: int, Format: string, FrameRate: float, FrameHeight: int, FrameWidth: int, ColorRange: string>, ModerationLabels: table<Timestamp: int, ModerationLabel: record>, NextToken: string, ModerationModelVersion: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1782,7 +1780,7 @@ export def "get-face-detection" [
   job_id: string # Unique identifier for the face detection job. The JobId is returned from StartFaceDetection.
   --max-results-body: int # Maximum number of results to return per paginated call. The largest value you can specify is 1000. If you specify a value greater than 1000, a maximum of 1000 results is returned. The default value is 1000. (body field)
   --next-token-body: string # If the previous response was incomplete (because there are more faces to retrieve), Amazon Rekognition Video returns a pagination token in the response. You can use this pagination token to retrieve the next set of faces. (body field)
-]: any -> record<JobStatus: string, StatusMessage: string, VideoMetadata: record<Codec: string, DurationMillis: int, Format: string, FrameRate: float, FrameHeight: int, FrameWidth: int, ColorRange: string>, NextToken: string, Faces: table<Timestamp: int, Face: record>> {
+]: any -> oneof<record<JobStatus: string, StatusMessage: string, VideoMetadata: record<Codec: string, DurationMillis: int, Format: string, FrameRate: float, FrameHeight: int, FrameWidth: int, ColorRange: string>, NextToken: string, Faces: table<Timestamp: int, Face: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1832,7 +1830,7 @@ export def "get-face-liveness-session-results" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-31 # required
   session_id: string # A unique 128-bit UUID. This is used to uniquely identify the session and also acts as an idempotency token for all operations associated with the session.
-]: any -> record<SessionId: string, Status: string, Confidence: float, ReferenceImage: record<Bytes: string, S3Object: record<Bucket: string, Name: string, Version: string>, BoundingBox: record<Width: float, Height: float, Left: float, Top: float>>, AuditImages: table<Bytes: string, S3Object: record, BoundingBox: record>> {
+]: any -> oneof<record<SessionId: string, Status: string, Confidence: float, ReferenceImage: record<Bytes: string, S3Object: record<Bucket: string, Name: string, Version: string>, BoundingBox: record<Width: float, Height: float, Left: float, Top: float>>, AuditImages: table<Bytes: string, S3Object: record, BoundingBox: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1886,7 +1884,7 @@ export def "get-face-search" [
   --max-results-body: int # Maximum number of results to return per paginated call. The largest value you can specify is 1000. If you specify a value greater than 1000, a maximum of 1000 results is returned. The default value is 1000. (body field)
   --next-token-body: string # If the previous response was incomplete (because there is more search results to retrieve), Amazon Rekognition Video returns a pagination token in the response. You can use this pagination token to retrieve the next set of search results. (body field)
   --sort-by: string@sort-by-completer-2 # Sort to use for grouping faces in the response. Use TIMESTAMP to group faces by the time that they are recognized. Use INDEX to sort by recognized faces.
-]: any -> record<JobStatus: string, StatusMessage: string, NextToken: string, VideoMetadata: record<Codec: string, DurationMillis: int, Format: string, FrameRate: float, FrameHeight: int, FrameWidth: int, ColorRange: string>, Persons: table<Timestamp: int, Person: record, FaceMatches: list>> {
+]: any -> oneof<record<JobStatus: string, StatusMessage: string, NextToken: string, VideoMetadata: record<Codec: string, DurationMillis: int, Format: string, FrameRate: float, FrameHeight: int, FrameWidth: int, ColorRange: string>, Persons: table<Timestamp: int, Person: record, FaceMatches: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1942,7 +1940,7 @@ export def "get-label-detection" [
   --next-token-body: string # If the previous response was incomplete (because there are more labels to retrieve), Amazon Rekognition Video returns a pagination token in the response. You can use this pagination token to retrieve the next set of labels. (body field)
   --sort-by: string@sort-by-completer-1 # Sort to use for elements in the Labels array. Use TIMESTAMP to sort array elements by the time labels are detected. Use NAME to alphabetically group elements for a label together. Within each label group, the array element are sorted by detection confidence. The default sort is by TIMESTAMP.
   --aggregate-by: string@aggregate-by-completer # Defines how to aggregate the returned results. Results can be aggregated by timestamps or segments.
-]: any -> record<JobStatus: string, StatusMessage: string, VideoMetadata: record<Codec: string, DurationMillis: int, Format: string, FrameRate: float, FrameHeight: int, FrameWidth: int, ColorRange: string>, NextToken: string, Labels: table<Timestamp: int, Label: record, StartTimestampMillis: int, EndTimestampMillis: int, DurationMillis: int>, LabelModelVersion: string> {
+]: any -> oneof<record<JobStatus: string, StatusMessage: string, VideoMetadata: record<Codec: string, DurationMillis: int, Format: string, FrameRate: float, FrameHeight: int, FrameWidth: int, ColorRange: string>, NextToken: string, Labels: table<Timestamp: int, Label: record, StartTimestampMillis: int, EndTimestampMillis: int, DurationMillis: int>, LabelModelVersion: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1997,7 +1995,7 @@ export def "get-person-tracking" [
   --max-results-body: int # Maximum number of results to return per paginated call. The largest value you can specify is 1000. If you specify a value greater than 1000, a maximum of 1000 results is returned. The default value is 1000. (body field)
   --next-token-body: string # If the previous response was incomplete (because there are more persons to retrieve), Amazon Rekognition Video returns a pagination token in the response. You can use this pagination token to retrieve the next set of persons. (body field)
   --sort-by: string@sort-by-completer-2 # Sort to use for elements in the Persons array. Use TIMESTAMP to sort array elements by the time persons are detected. Use INDEX to sort by the tracked persons. If you sort by INDEX, the array elements for each person are sorted by detection confidence. The default sort is by TIMESTAMP.
-]: any -> record<JobStatus: string, StatusMessage: string, VideoMetadata: record<Codec: string, DurationMillis: int, Format: string, FrameRate: float, FrameHeight: int, FrameWidth: int, ColorRange: string>, NextToken: string, Persons: table<Timestamp: int, Person: record>> {
+]: any -> oneof<record<JobStatus: string, StatusMessage: string, VideoMetadata: record<Codec: string, DurationMillis: int, Format: string, FrameRate: float, FrameHeight: int, FrameWidth: int, ColorRange: string>, NextToken: string, Persons: table<Timestamp: int, Person: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2051,7 +2049,7 @@ export def "get-segment-detection" [
   job_id: string # Job identifier for the text detection operation for which you want results returned. You get the job identifer from an initial call to StartSegmentDetection.
   --max-results-body: int # Maximum number of results to return per paginated call. The largest value you can specify is 1000. (body field)
   --next-token-body: string # If the response is truncated, Amazon Rekognition Video returns this token that you can use in the subsequent request to retrieve the next set of text. (body field)
-]: any -> record<JobStatus: string, StatusMessage: string, VideoMetadata: table<Codec: string, DurationMillis: int, Format: string, FrameRate: float, FrameHeight: int, FrameWidth: int, ColorRange: string>, AudioMetadata: table<Codec: string, DurationMillis: int, SampleRate: int, NumberOfChannels: int>, NextToken: string, Segments: table<Type: string, StartTimestampMillis: int, EndTimestampMillis: int, DurationMillis: int, StartTimecodeSMPTE: string, EndTimecodeSMPTE: string, DurationSMPTE: string, TechnicalCueSegment: record, ShotSegment: record, StartFrameNumber: int, EndFrameNumber: int, DurationFrames: int>, SelectedSegmentTypes: table<Type: string, ModelVersion: string>> {
+]: any -> oneof<record<JobStatus: string, StatusMessage: string, VideoMetadata: table<Codec: string, DurationMillis: int, Format: string, FrameRate: float, FrameHeight: int, FrameWidth: int, ColorRange: string>, AudioMetadata: table<Codec: string, DurationMillis: int, SampleRate: int, NumberOfChannels: int>, NextToken: string, Segments: table<Type: string, StartTimestampMillis: int, EndTimestampMillis: int, DurationMillis: int, StartTimecodeSMPTE: string, EndTimecodeSMPTE: string, DurationSMPTE: string, TechnicalCueSegment: record, ShotSegment: record, StartFrameNumber: int, EndFrameNumber: int, DurationFrames: int>, SelectedSegmentTypes: table<Type: string, ModelVersion: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2105,7 +2103,7 @@ export def "get-text-detection" [
   job_id: string # Job identifier for the text detection operation for which you want results returned. You get the job identifer from an initial call to StartTextDetection.
   --max-results-body: int # Maximum number of results to return per paginated call. The largest value you can specify is 1000. (body field)
   --next-token-body: string # If the previous response was incomplete (because there are more labels to retrieve), Amazon Rekognition Video returns a pagination token in the response. You can use this pagination token to retrieve the next set of text. (body field)
-]: any -> record<JobStatus: string, StatusMessage: string, VideoMetadata: record<Codec: string, DurationMillis: int, Format: string, FrameRate: float, FrameHeight: int, FrameWidth: int, ColorRange: string>, TextDetections: table<Timestamp: int, TextDetection: record>, NextToken: string, TextModelVersion: string> {
+]: any -> oneof<record<JobStatus: string, StatusMessage: string, VideoMetadata: record<Codec: string, DurationMillis: int, Format: string, FrameRate: float, FrameHeight: int, FrameWidth: int, ColorRange: string>, TextDetections: table<Timestamp: int, TextDetection: record>, NextToken: string, TextModelVersion: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2136,7 +2134,6 @@ export def "get-text-detection" [
 #
 # POST /
 # operationId: IndexFaces
-# --Image shape: {Bytes?: string, S3Object?: record}
 export def "index-faces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2161,7 +2158,7 @@ export def "index-faces" [
   --detection-attributes: list<string> # An array of facial attributes that you want to be returned. This can be the default list of attributes or all attributes. If you don't specify a value for Attributes or if you specify ["DEFAULT"], the API returns the following subset of facial attributes: BoundingBox, Confidence, Pose, Quality, and Landmarks. If you provide ["ALL"], all facial attributes are returned, but the operation takes longer to complete. If you provide both, ["ALL", "DEFAULT"], the service uses a logical AND operator to determine which attributes to return (in this case, all attributes).
   --max-faces: int # The maximum number of faces to index. The value of MaxFaces must be greater than or equal to 1. IndexFaces returns no more than 100 detected faces in an image, even if you specify a larger value for MaxFaces. If IndexFaces detects more faces than the value of MaxFaces, the faces with the lowest quality are filtered out first. If there are still more faces than the value of MaxFaces, the faces with the smallest bounding boxes are filtered out (up to the number that's needed to satisfy the value of MaxFaces). Information about the unindexed faces is available in the UnindexedFaces array. The faces that are returned by IndexFaces are sorted by the largest face bounding box size to the smallest size, in descending order. MaxFaces can be used with a collection associated with any version of the face model.
   --quality-filter: string@quality-filter-completer # A filter that specifies a quality bar for how much filtering is done to identify faces. Filtered faces aren't indexed. If you specify AUTO, Amazon Rekognition chooses the quality bar. If you specify LOW, MEDIUM, or HIGH, filtering removes all faces that don’t meet the chosen quality bar. The default value is AUTO. The quality bar is based on a variety of common use cases. Low-quality detections can occur for a number of reasons. Some examples are an object that's misidentified as a face, a face that's too blurry, or a face with a pose that's too extreme to use. If you specify NONE, no filtering is performed. To use quality filtering, the collection you are using must be associated with version 3 of the face model or higher.
-]: any -> record<FaceRecords: table<Face: record, FaceDetail: record>, OrientationCorrection: string, FaceModelVersion: string, UnindexedFaces: table<Reasons: list, FaceDetail: record>> {
+]: any -> oneof<record<FaceRecords: table<Face: record, FaceDetail: record>, OrientationCorrection: string, FaceModelVersion: string, UnindexedFaces: table<Reasons: list, FaceDetail: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2213,7 +2210,7 @@ export def "list-collections" [
   --x-amz-target: string@x-amz-target-completer-38 # required
   --next-token-body: string # Pagination token from the previous response. (body field)
   --max-results-body: int # Maximum number of collection IDs to return. (body field)
-]: any -> record<CollectionIds: list<string>, NextToken: string, FaceModelVersions: list<string>> {
+]: any -> oneof<record<CollectionIds: list<string>, NextToken: string, FaceModelVersions: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2271,7 +2268,7 @@ export def "list-dataset-entries" [
   --has-errors: oneof<nothing, bool> # Specifies an error filter for the response. Specify True to only include entries that have errors.
   --next-token-body: string # If the previous response was incomplete (because there is more results to retrieve), Amazon Rekognition Custom Labels returns a pagination token in the response. You can use this pagination token to retrieve the next set of results. (body field)
   --max-results-body: int # The maximum number of results to return per paginated call. The largest value you can specify is 100. If you specify a value greater than 100, a ValidationException error occurs. The default value is 100. (body field)
-]: any -> record<DatasetEntries: list<string>, NextToken: string> {
+]: any -> oneof<record<DatasetEntries: list<string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2325,7 +2322,7 @@ export def "list-dataset-labels" [
   dataset_arn: string # The Amazon Resource Name (ARN) of the dataset that you want to use.
   --next-token-body: string # If the previous response was incomplete (because there is more results to retrieve), Amazon Rekognition Custom Labels returns a pagination token in the response. You can use this pagination token to retrieve the next set of results. (body field)
   --max-results-body: int # The maximum number of results to return per paginated call. The largest value you can specify is 100. If you specify a value greater than 100, a ValidationException error occurs. The default value is 100. (body field)
-]: any -> record<DatasetLabelDescriptions: table<LabelName: string, LabelStats: record>, NextToken: string> {
+]: any -> oneof<record<DatasetLabelDescriptions: table<LabelName: string, LabelStats: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2379,7 +2376,7 @@ export def "list-faces" [
   collection_id: string # ID of the collection from which to list the faces.
   --next-token-body: string # If the previous response was incomplete (because there is more data to retrieve), Amazon Rekognition returns a pagination token in the response. You can use this pagination token to retrieve the next set of faces. (body field)
   --max-results-body: int # Maximum number of faces to return. (body field)
-]: any -> record<Faces: table<FaceId: string, BoundingBox: record, ImageId: string, ExternalImageId: string, Confidence: float, IndexFacesModelVersion: string>, NextToken: string, FaceModelVersion: string> {
+]: any -> oneof<record<Faces: table<FaceId: string, BoundingBox: record, ImageId: string, ExternalImageId: string, Confidence: float, IndexFacesModelVersion: string>, NextToken: string, FaceModelVersion: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2433,7 +2430,7 @@ export def "list-project-policies" [
   project_arn: string # The ARN of the project for which you want to list the project policies.
   --next-token-body: string # If the previous response was incomplete (because there is more results to retrieve), Amazon Rekognition Custom Labels returns a pagination token in the response. You can use this pagination token to retrieve the next set of results. (body field)
   --max-results-body: int # The maximum number of results to return per paginated call. The largest value you can specify is 5. If you specify a value greater than 5, a ValidationException error occurs. The default value is 5. (body field)
-]: any -> record<ProjectPolicies: table<ProjectArn: string, PolicyName: string, PolicyRevisionId: string, PolicyDocument: string, CreationTimestamp: string, LastUpdatedTimestamp: string>, NextToken: string> {
+]: any -> oneof<record<ProjectPolicies: table<ProjectArn: string, PolicyName: string, PolicyRevisionId: string, PolicyDocument: string, CreationTimestamp: string, LastUpdatedTimestamp: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2486,7 +2483,7 @@ export def "list-stream-processors" [
   --x-amz-target: string@x-amz-target-completer-43 # required
   --next-token-body: string # If the previous response was incomplete (because there are more stream processors to retrieve), Amazon Rekognition Video returns a pagination token in the response. You can use this pagination token to retrieve the next set of stream processors. (body field)
   --max-results-body: int # Maximum number of stream processors you want Amazon Rekognition Video to return in the response. The default is 1000. (body field)
-]: any -> record<NextToken: string, StreamProcessors: table<Name: string, Status: string>> {
+]: any -> oneof<record<NextToken: string, StreamProcessors: table<Name: string, Status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2536,7 +2533,7 @@ export def "list-tags-for-resource" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-44 # required
   resource_arn: string # Amazon Resource Name (ARN) of the model, collection, or stream processor that contains the tags that you want a list of.
-]: any -> record<Tags: record> {
+]: any -> oneof<record<Tags: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2588,7 +2585,7 @@ export def "put-project-policy" [
   policy_name: string # A name for the policy.
   --policy-revision-id: string # The revision ID for the Project Policy. Each time you modify a policy, Amazon Rekognition Custom Labels generates and assigns a new PolicyRevisionId and then deletes the previous version of the policy.
   policy_document: string # A resource policy to add to the model. The policy is a JSON structure that contains one or more statements that define the policy. The policy must follow the IAM syntax. For more information about the contents of a JSON policy document, see IAM JSON policy reference (https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies.html).
-]: any -> record<PolicyRevisionId: string> {
+]: any -> oneof<record<PolicyRevisionId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2618,7 +2615,6 @@ export def "put-project-policy" [
 #
 # POST /
 # operationId: RecognizeCelebrities
-# --Image shape: {Bytes?: string, S3Object?: record}
 export def "recognize-celebrities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2638,7 +2634,7 @@ export def "recognize-celebrities" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-46 # required
   image: record # Provides the input image either as bytes or an S3 object. You pass image bytes to an Amazon Rekognition API operation by using the Bytes property. For example, you would use the Bytes property to pass an image loaded from a local file system. Image bytes passed by using the Bytes property must be base64-encoded. Your code may not need to encode image bytes if you are using an AWS SDK to call Amazon Rekognition API operations. For more information, see Analyzing an Image Loaded from a Local File System in the Amazon Rekognition Developer Guide. You pass images stored in an S3 bucket to an Amazon Rekognition API operation by using the S3Object property. Images stored in an S3 bucket do not need to be base64-encoded. The region for the S3 bucket containing the S3 object must match the region you use for Amazon Rekognition operations. If you use the AWS CLI to call Amazon Rekognition operations, passing image bytes using the Bytes property is not supported. You must first upload the image to an Amazon S3 bucket and then call the operation using the S3Object property. For Amazon Rekognition to process an S3 object, the user must have permission to access the S3 object. For more information, see How Amazon Rekognition works with IAM in the Amazon Rekognition Developer Guide. — shape: {Bytes?: string, S3Object?: record}
-]: any -> record<CelebrityFaces: table<Urls: list, Name: string, Id: string, Face: record, MatchConfidence: float, KnownGender: record>, UnrecognizedFaces: table<BoundingBox: record, Confidence: float, Landmarks: list, Pose: record, Quality: record, Emotions: list, Smile: record>, OrientationCorrection: string> {
+]: any -> oneof<record<CelebrityFaces: table<Urls: list, Name: string, Id: string, Face: record, MatchConfidence: float, KnownGender: record>, UnrecognizedFaces: table<BoundingBox: record, Confidence: float, Landmarks: list, Pose: record, Quality: record, Emotions: list, Smile: record>, OrientationCorrection: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2690,7 +2686,7 @@ export def "search-faces" [
   face_id: string # ID of a face to find matches for in the collection.
   --max-faces: int # Maximum number of faces to return. The operation returns the maximum number of faces with the highest confidence in the match.
   --face-match-threshold: float # Optional value specifying the minimum confidence in the face match to return. For example, don't return any matches where confidence in matches is less than 70%. The default value is 80%. (format: float)
-]: any -> record<SearchedFaceId: string, FaceMatches: table<Similarity: float, Face: record>, FaceModelVersion: string> {
+]: any -> oneof<record<SearchedFaceId: string, FaceMatches: table<Similarity: float, Face: record>, FaceModelVersion: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2720,7 +2716,6 @@ export def "search-faces" [
 #
 # POST /
 # operationId: SearchFacesByImage
-# --Image shape: {Bytes?: string, S3Object?: record}
 export def "search-faces-by-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2744,7 +2739,7 @@ export def "search-faces-by-image" [
   --max-faces: int # Maximum number of faces to return. The operation returns the maximum number of faces with the highest confidence in the match.
   --face-match-threshold: float # (Optional) Specifies the minimum confidence in the face match to return. For example, don't return any matches where confidence in matches is less than 70%. The default value is 80%. (format: float)
   --quality-filter: string@quality-filter-completer # A filter that specifies a quality bar for how much filtering is done to identify faces. Filtered faces aren't searched for in the collection. If you specify AUTO, Amazon Rekognition chooses the quality bar. If you specify LOW, MEDIUM, or HIGH, filtering removes all faces that don’t meet the chosen quality bar. The quality bar is based on a variety of common use cases. Low-quality detections can occur for a number of reasons. Some examples are an object that's misidentified as a face, a face that's too blurry, or a face with a pose that's too extreme to use. If you specify NONE, no filtering is performed. The default value is NONE. To use quality filtering, the collection you are using must be associated with version 3 of the face model or higher.
-]: any -> record<SearchedFaceBoundingBox: record<Width: float, Height: float, Left: float, Top: float>, SearchedFaceConfidence: float, FaceMatches: table<Similarity: float, Face: record>, FaceModelVersion: string> {
+]: any -> oneof<record<SearchedFaceBoundingBox: record<Width: float, Height: float, Left: float, Top: float>, SearchedFaceConfidence: float, FaceMatches: table<Similarity: float, Face: record>, FaceModelVersion: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2774,8 +2769,6 @@ export def "search-faces-by-image" [
 #
 # POST /
 # operationId: StartCelebrityRecognition
-# --Video shape: {S3Object?: record}
-# --NotificationChannel shape: {SNSTopicArn: string, RoleArn: string}
 export def "start-celebrity-recognition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2798,7 +2791,7 @@ export def "start-celebrity-recognition" [
   --client-request-token: string # Idempotent token used to identify the start request. If you use the same token with multiple StartCelebrityRecognition requests, the same JobId is returned. Use ClientRequestToken to prevent the same job from being accidently started more than once.
   --notification-channel: record # The Amazon Simple Notification Service topic to which Amazon Rekognition publishes the completion status of a video analysis operation. For more information, see Calling Amazon Rekognition Video operations (https://docs.aws.amazon.com/rekognition/latest/dg/api-video.html). Note that the Amazon SNS topic must have a topic name that begins with AmazonRekognition if you are using the AmazonRekognitionServiceRole permissions policy to access the topic. For more information, see Giving access to multiple Amazon SNS topics (https://docs.aws.amazon.com/rekognition/latest/dg/api-video-roles.html#api-video-roles-all-topics). — shape: {SNSTopicArn: string, RoleArn: string}
   --job-tag: string # An identifier you specify that's returned in the completion notification that's published to your Amazon Simple Notification Service topic. For example, you can use JobTag to group related jobs and identify them in the completion notification.
-]: any -> record<JobId: string> {
+]: any -> oneof<record<JobId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2828,8 +2821,6 @@ export def "start-celebrity-recognition" [
 #
 # POST /
 # operationId: StartContentModeration
-# --Video shape: {S3Object?: record}
-# --NotificationChannel shape: {SNSTopicArn: string, RoleArn: string}
 export def "start-content-moderation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2853,7 +2844,7 @@ export def "start-content-moderation" [
   --client-request-token: string # Idempotent token used to identify the start request. If you use the same token with multiple StartContentModeration requests, the same JobId is returned. Use ClientRequestToken to prevent the same job from being accidently started more than once.
   --notification-channel: record # The Amazon Simple Notification Service topic to which Amazon Rekognition publishes the completion status of a video analysis operation. For more information, see Calling Amazon Rekognition Video operations (https://docs.aws.amazon.com/rekognition/latest/dg/api-video.html). Note that the Amazon SNS topic must have a topic name that begins with AmazonRekognition if you are using the AmazonRekognitionServiceRole permissions policy to access the topic. For more information, see Giving access to multiple Amazon SNS topics (https://docs.aws.amazon.com/rekognition/latest/dg/api-video-roles.html#api-video-roles-all-topics). — shape: {SNSTopicArn: string, RoleArn: string}
   --job-tag: string # An identifier you specify that's returned in the completion notification that's published to your Amazon Simple Notification Service topic. For example, you can use JobTag to group related jobs and identify them in the completion notification.
-]: any -> record<JobId: string> {
+]: any -> oneof<record<JobId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2883,8 +2874,6 @@ export def "start-content-moderation" [
 #
 # POST /
 # operationId: StartFaceDetection
-# --Video shape: {S3Object?: record}
-# --NotificationChannel shape: {SNSTopicArn: string, RoleArn: string}
 export def "start-face-detection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2908,7 +2897,7 @@ export def "start-face-detection" [
   --notification-channel: record # The Amazon Simple Notification Service topic to which Amazon Rekognition publishes the completion status of a video analysis operation. For more information, see Calling Amazon Rekognition Video operations (https://docs.aws.amazon.com/rekognition/latest/dg/api-video.html). Note that the Amazon SNS topic must have a topic name that begins with AmazonRekognition if you are using the AmazonRekognitionServiceRole permissions policy to access the topic. For more information, see Giving access to multiple Amazon SNS topics (https://docs.aws.amazon.com/rekognition/latest/dg/api-video-roles.html#api-video-roles-all-topics). — shape: {SNSTopicArn: string, RoleArn: string}
   --face-attributes: string@face-attributes-completer # The face attributes you want returned. DEFAULT - The following subset of facial attributes are returned: BoundingBox, Confidence, Pose, Quality and Landmarks. ALL - All facial attributes are returned.
   --job-tag: string # An identifier you specify that's returned in the completion notification that's published to your Amazon Simple Notification Service topic. For example, you can use JobTag to group related jobs and identify them in the completion notification.
-]: any -> record<JobId: string> {
+]: any -> oneof<record<JobId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2938,8 +2927,6 @@ export def "start-face-detection" [
 #
 # POST /
 # operationId: StartFaceSearch
-# --Video shape: {S3Object?: record}
-# --NotificationChannel shape: {SNSTopicArn: string, RoleArn: string}
 export def "start-face-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2964,7 +2951,7 @@ export def "start-face-search" [
   collection_id: string # ID of the collection that contains the faces you want to search for.
   --notification-channel: record # The Amazon Simple Notification Service topic to which Amazon Rekognition publishes the completion status of a video analysis operation. For more information, see Calling Amazon Rekognition Video operations (https://docs.aws.amazon.com/rekognition/latest/dg/api-video.html). Note that the Amazon SNS topic must have a topic name that begins with AmazonRekognition if you are using the AmazonRekognitionServiceRole permissions policy to access the topic. For more information, see Giving access to multiple Amazon SNS topics (https://docs.aws.amazon.com/rekognition/latest/dg/api-video-roles.html#api-video-roles-all-topics). — shape: {SNSTopicArn: string, RoleArn: string}
   --job-tag: string # An identifier you specify that's returned in the completion notification that's published to your Amazon Simple Notification Service topic. For example, you can use JobTag to group related jobs and identify them in the completion notification.
-]: any -> record<JobId: string> {
+]: any -> oneof<record<JobId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2994,9 +2981,6 @@ export def "start-face-search" [
 #
 # POST /
 # operationId: StartLabelDetection
-# --Video shape: {S3Object?: record}
-# --NotificationChannel shape: {SNSTopicArn: string, RoleArn: string}
-# --Settings shape: {GeneralLabels?: record}
 export def "start-label-detection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3022,7 +3006,7 @@ export def "start-label-detection" [
   --job-tag: string # An identifier you specify that's returned in the completion notification that's published to your Amazon Simple Notification Service topic. For example, you can use JobTag to group related jobs and identify them in the completion notification.
   --features: list<string> # The features to return after video analysis. You can specify that GENERAL_LABELS are returned.
   --settings: record # Contains the specified filters that should be applied to a list of returned GENERAL_LABELS. — shape: {GeneralLabels?: record}
-]: any -> record<JobId: string> {
+]: any -> oneof<record<JobId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3052,8 +3036,6 @@ export def "start-label-detection" [
 #
 # POST /
 # operationId: StartPersonTracking
-# --Video shape: {S3Object?: record}
-# --NotificationChannel shape: {SNSTopicArn: string, RoleArn: string}
 export def "start-person-tracking" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3076,7 +3058,7 @@ export def "start-person-tracking" [
   --client-request-token: string # Idempotent token used to identify the start request. If you use the same token with multiple StartPersonTracking requests, the same JobId is returned. Use ClientRequestToken to prevent the same job from being accidently started more than once.
   --notification-channel: record # The Amazon Simple Notification Service topic to which Amazon Rekognition publishes the completion status of a video analysis operation. For more information, see Calling Amazon Rekognition Video operations (https://docs.aws.amazon.com/rekognition/latest/dg/api-video.html). Note that the Amazon SNS topic must have a topic name that begins with AmazonRekognition if you are using the AmazonRekognitionServiceRole permissions policy to access the topic. For more information, see Giving access to multiple Amazon SNS topics (https://docs.aws.amazon.com/rekognition/latest/dg/api-video-roles.html#api-video-roles-all-topics). — shape: {SNSTopicArn: string, RoleArn: string}
   --job-tag: string # An identifier you specify that's returned in the completion notification that's published to your Amazon Simple Notification Service topic. For example, you can use JobTag to group related jobs and identify them in the completion notification.
-]: any -> record<JobId: string> {
+]: any -> oneof<record<JobId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3127,7 +3109,7 @@ export def "start-project-version" [
   project_version_arn: string # The Amazon Resource Name(ARN) of the model version that you want to start.
   min_inference_units: int # The minimum number of inference units to use. A single inference unit represents 1 hour of processing. For information about the number of transactions per second (TPS) that an inference unit can support, see Running a trained Amazon Rekognition Custom Labels model in the Amazon Rekognition Custom Labels Guide. Use a higher number to increase the TPS throughput of your model. You are charged for the number of inference units that you use.
   --max-inference-units: int # The maximum number of inference units to use for auto-scaling the model. If you don't specify a value, Amazon Rekognition Custom Labels doesn't auto-scale the model.
-]: any -> record<Status: string> {
+]: any -> oneof<record<Status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3157,9 +3139,6 @@ export def "start-project-version" [
 #
 # POST /
 # operationId: StartSegmentDetection
-# --Video shape: {S3Object?: record}
-# --NotificationChannel shape: {SNSTopicArn: string, RoleArn: string}
-# --Filters shape: {TechnicalCueFilter?: record, ShotFilter?: record}
 export def "start-segment-detection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3184,7 +3163,7 @@ export def "start-segment-detection" [
   --job-tag: string # An identifier you specify that's returned in the completion notification that's published to your Amazon Simple Notification Service topic. For example, you can use JobTag to group related jobs and identify them in the completion notification.
   --filters: record # Filters applied to the technical cue or shot detection segments. For more information, see StartSegmentDetection. — shape: {TechnicalCueFilter?: record, ShotFilter?: record}
   segment_types: list<string> # An array of segment types to detect in the video. Valid values are TECHNICAL_CUE and SHOT.
-]: any -> record<JobId: string> {
+]: any -> oneof<record<JobId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3214,8 +3193,6 @@ export def "start-segment-detection" [
 #
 # POST /
 # operationId: StartStreamProcessor
-# --StartSelector shape: {KVSStreamStartSelector?: record}
-# --StopSelector shape: {MaxDurationInSeconds?: int}
 export def "start-stream-processor" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3237,7 +3214,7 @@ export def "start-stream-processor" [
   name: string # The name of the stream processor to start processing.
   --start-selector: record # This is a required parameter for label detection stream processors and should not be used to start a face search stream processor. — shape: {KVSStreamStartSelector?: record}
   --stop-selector: record # Specifies when to stop processing the stream. You can specify a maximum amount of time to process the video. — shape: {MaxDurationInSeconds?: int}
-]: any -> record<SessionId: string> {
+]: any -> oneof<record<SessionId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3267,9 +3244,6 @@ export def "start-stream-processor" [
 #
 # POST /
 # operationId: StartTextDetection
-# --Video shape: {S3Object?: record}
-# --NotificationChannel shape: {SNSTopicArn: string, RoleArn: string}
-# --Filters shape: {WordFilter?: record, RegionsOfInterest?: list}
 export def "start-text-detection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3293,7 +3267,7 @@ export def "start-text-detection" [
   --notification-channel: record # The Amazon Simple Notification Service topic to which Amazon Rekognition publishes the completion status of a video analysis operation. For more information, see Calling Amazon Rekognition Video operations (https://docs.aws.amazon.com/rekognition/latest/dg/api-video.html). Note that the Amazon SNS topic must have a topic name that begins with AmazonRekognition if you are using the AmazonRekognitionServiceRole permissions policy to access the topic. For more information, see Giving access to multiple Amazon SNS topics (https://docs.aws.amazon.com/rekognition/latest/dg/api-video-roles.html#api-video-roles-all-topics). — shape: {SNSTopicArn: string, RoleArn: string}
   --job-tag: string # An identifier returned in the completion status published by your Amazon Simple Notification Service topic. For example, you can use JobTag to group related jobs and identify them in the completion notification.
   --filters: record # Set of optional parameters that let you set the criteria text must meet to be included in your response. WordFilter looks at a word's height, width and minimum confidence. RegionOfInterest lets you set a specific region of the screen to look for text in. — shape: {WordFilter?: record, RegionsOfInterest?: list}
-]: any -> record<JobId: string> {
+]: any -> oneof<record<JobId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3342,7 +3316,7 @@ export def "stop-project-version" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-59 # required
   project_version_arn: string # The Amazon Resource Name (ARN) of the model version that you want to delete. This operation requires permissions to perform the rekognition:StopProjectVersion action.
-]: any -> record<Status: string> {
+]: any -> oneof<record<Status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3391,7 +3365,7 @@ export def "stop-stream-processor" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-60 # required
   name: string # The name of a stream processor created by CreateStreamProcessor.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3441,7 +3415,7 @@ export def "tag-resource" [
   --x-amz-target: string@x-amz-target-completer-61 # required
   resource_arn: string # Amazon Resource Name (ARN) of the model, collection, or stream processor that you want to assign the tags to.
   tags: record # The key-value tags to assign to the resource.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3491,7 +3465,7 @@ export def "untag-resource" [
   --x-amz-target: string@x-amz-target-completer-62 # required
   resource_arn: string # Amazon Resource Name (ARN) of the model, collection, or stream processor that you want to remove the tags from.
   tag_keys: list<string> # A list of the tags that you want to remove.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3521,7 +3495,6 @@ export def "untag-resource" [
 #
 # POST /
 # operationId: UpdateDatasetEntries
-# --Changes shape: {GroundTruth: string}
 export def "update-dataset-entries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3542,7 +3515,7 @@ export def "update-dataset-entries" [
   --x-amz-target: string@x-amz-target-completer-63 # required
   dataset_arn: string # The Amazon Resource Name (ARN) of the dataset that you want to update.
   changes: record # Describes updates or additions to a dataset. A Single update or addition is an entry (JSON Line) that provides information about a single image. To update an existing entry, you match the source-ref field of the update entry with the source-ref filed of the entry that you want to update. If the source-ref field doesn't match an existing entry, the entry is added to dataset as a new entry. — shape: {GroundTruth: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3572,9 +3545,6 @@ export def "update-dataset-entries" [
 #
 # POST /
 # operationId: UpdateStreamProcessor
-# --SettingsForUpdate shape: {ConnectedHomeForUpdate?: record}
-# --RegionsOfInterestForUpdate item shape: {BoundingBox?: record, Polygon?: list}
-# --DataSharingPreferenceForUpdate shape: {OptIn: bool}
 export def "update-stream-processor" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3598,7 +3568,7 @@ export def "update-stream-processor" [
   --regions-of-interest-for-update: list # Specifies locations in the frames where Amazon Rekognition checks for objects or people. This is an optional parameter for label detection stream processors. — item shape: {BoundingBox?: record, Polygon?: list}
   --data-sharing-preference-for-update: record # Allows you to opt in or opt out to share data with Rekognition to improve model performance. You can choose this option at the account level or on a per-stream basis. Note that if you opt out at the account level this setting is ignored on individual streams. — shape: {OptIn: bool}
   --parameters-to-delete: list<string> # A list of parameters you want to delete from the stream processor.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -122,9 +146,9 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "registries-get-build-source-upload-url" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["registries-get-build-source-upload-url" "runs-list" "runs-get" "runs-update" "runs-cancel" "runs-get-log-sas-url" "registries-schedule-run" "task-runs-list" "task-runs-delete" "task-runs-get" "task-runs-update" "task-runs-create" "tasks-list" "tasks-delete" "tasks-get" "tasks-update" "tasks-create" "tasks-get-details" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -160,7 +184,7 @@ export def "registries-get-build-source-upload-url" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The client API version. (required)
-]: nothing -> record<relativePath: string, uploadUrl: string> {
+]: nothing -> oneof<record<relativePath: string, uploadUrl: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -205,7 +229,7 @@ export def "runs-list" [
   --api-version: string # The client API version. (required)
   --filter: string # The runs filter to apply on the operation. Arithmetic operators are not supported. The allowed string function is 'contains'. All logical operators except 'Not', 'Has', 'All' are allowed.
   --top: int # $top is supported for get list of runs, which limits the maximum number of runs to return. (format: int32)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -249,7 +273,7 @@ export def "runs-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The client API version. (required)
-]: nothing -> record<properties: record<agentConfiguration: record<cpu: int>, createTime: string, customRegistries: list<string>, finishTime: string, imageUpdateTrigger: record<id: string, images: list, timestamp: string>, isArchiveEnabled: bool, lastUpdatedTime: string, outputImages: list<record>, platform: record<architecture: string, os: string, variant: string>, provisioningState: string, runErrorMessage: string, runId: string, runType: string, sourceRegistryAuth: string, sourceTrigger: record<branchName: string, commitId: string, eventType: string, id: string, providerType: string, pullRequestId: string, repositoryUrl: string>, startTime: string, status: string, task: string, timerTrigger: record<scheduleOccurrence: string, timerTriggerName: string>, updateTriggerToken: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<agentConfiguration: record<cpu: int>, createTime: string, customRegistries: list<string>, finishTime: string, imageUpdateTrigger: record<id: string, images: list, timestamp: string>, isArchiveEnabled: bool, lastUpdatedTime: string, outputImages: list<record>, platform: record<architecture: string, os: string, variant: string>, provisioningState: string, runErrorMessage: string, runId: string, runType: string, sourceRegistryAuth: string, sourceTrigger: record<branchName: string, commitId: string, eventType: string, id: string, providerType: string, pullRequestId: string, repositoryUrl: string>, startTime: string, status: string, task: string, timerTrigger: record<scheduleOccurrence: string, timerTriggerName: string>, updateTriggerToken: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -295,7 +319,7 @@ export def "runs-update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The client API version. (required)
   --is-archive-enabled: oneof<nothing, bool> # The value that indicates whether archiving is enabled or not.
-]: any -> record<properties: record<agentConfiguration: record<cpu: int>, createTime: string, customRegistries: list<string>, finishTime: string, imageUpdateTrigger: record<id: string, images: list, timestamp: string>, isArchiveEnabled: bool, lastUpdatedTime: string, outputImages: list<record>, platform: record<architecture: string, os: string, variant: string>, provisioningState: string, runErrorMessage: string, runId: string, runType: string, sourceRegistryAuth: string, sourceTrigger: record<branchName: string, commitId: string, eventType: string, id: string, providerType: string, pullRequestId: string, repositoryUrl: string>, startTime: string, status: string, task: string, timerTrigger: record<scheduleOccurrence: string, timerTriggerName: string>, updateTriggerToken: string>, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<agentConfiguration: record<cpu: int>, createTime: string, customRegistries: list<string>, finishTime: string, imageUpdateTrigger: record<id: string, images: list, timestamp: string>, isArchiveEnabled: bool, lastUpdatedTime: string, outputImages: list<record>, platform: record<architecture: string, os: string, variant: string>, provisioningState: string, runErrorMessage: string, runId: string, runType: string, sourceRegistryAuth: string, sourceTrigger: record<branchName: string, commitId: string, eventType: string, id: string, providerType: string, pullRequestId: string, repositoryUrl: string>, startTime: string, status: string, task: string, timerTrigger: record<scheduleOccurrence: string, timerTriggerName: string>, updateTriggerToken: string>, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -388,7 +412,7 @@ export def "runs-get-log-sas-url" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The client API version. (required)
-]: nothing -> record<logLink: string> {
+]: nothing -> oneof<record<logLink: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -435,7 +459,7 @@ export def "registries-schedule-run" [
   --api-version: string # The client API version. (required)
   --is-archive-enabled: oneof<nothing, bool> # The value that indicates whether archiving is enabled for the run or not. (default: false)
   type: string # The type of the run request.
-]: any -> record<properties: record<agentConfiguration: record<cpu: int>, createTime: string, customRegistries: list<string>, finishTime: string, imageUpdateTrigger: record<id: string, images: list, timestamp: string>, isArchiveEnabled: bool, lastUpdatedTime: string, outputImages: list<record>, platform: record<architecture: string, os: string, variant: string>, provisioningState: string, runErrorMessage: string, runId: string, runType: string, sourceRegistryAuth: string, sourceTrigger: record<branchName: string, commitId: string, eventType: string, id: string, providerType: string, pullRequestId: string, repositoryUrl: string>, startTime: string, status: string, task: string, timerTrigger: record<scheduleOccurrence: string, timerTriggerName: string>, updateTriggerToken: string>, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<agentConfiguration: record<cpu: int>, createTime: string, customRegistries: list<string>, finishTime: string, imageUpdateTrigger: record<id: string, images: list, timestamp: string>, isArchiveEnabled: bool, lastUpdatedTime: string, outputImages: list<record>, platform: record<architecture: string, os: string, variant: string>, provisioningState: string, runErrorMessage: string, runId: string, runType: string, sourceRegistryAuth: string, sourceTrigger: record<branchName: string, commitId: string, eventType: string, id: string, providerType: string, pullRequestId: string, repositoryUrl: string>, startTime: string, status: string, task: string, timerTrigger: record<scheduleOccurrence: string, timerTriggerName: string>, updateTriggerToken: string>, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -481,7 +505,7 @@ export def "task-runs-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The client API version. (required)
-]: nothing -> record<nextLink: string, value: table<identity: record, properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<identity: record, properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -570,7 +594,7 @@ export def "task-runs-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The client API version. (required)
-]: nothing -> record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, properties: record<forceUpdateTag: string, provisioningState: string, runRequest: record<isArchiveEnabled: bool, type: string>, runResult: record<properties: record, id: string, name: string, type: string>>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, properties: record<forceUpdateTag: string, provisioningState: string, runRequest: record<isArchiveEnabled: bool, type: string>, runResult: record<properties: record, id: string, name: string, type: string>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -600,8 +624,6 @@ export def "task-runs-get" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ContainerRegistry/registries/{registryName}/taskRuns/{taskRunName}
 # operationId: TaskRuns_Update
-# --identity shape: {principalId?: string, tenantId?: string, type?: "SystemAssigned"|"UserAssigned"|"SystemAssigned, UserAssigned"|"None", userAssignedIdentities?: record}
-# --properties shape: {forceUpdateTag?: string, runRequest?: record}
 export def "task-runs-update" [
   subscription_id: string
   resource_group_name: string
@@ -620,7 +642,7 @@ export def "task-runs-update" [
   --identity: record # Managed identity for the resource. — shape: {principalId?: string, tenantId?: string, type?: "SystemAssigned"|"UserAssigned"|"SystemAssigned, UserAssigned"|"None", userAssignedIdentities?: record}
   --properties: record # The properties of a task run update parameters. — shape: {forceUpdateTag?: string, runRequest?: record}
   --tags: record # The ARM resource tags.
-]: any -> record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, properties: record<forceUpdateTag: string, provisioningState: string, runRequest: record<isArchiveEnabled: bool, type: string>, runResult: record<properties: record, id: string, name: string, type: string>>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, properties: record<forceUpdateTag: string, provisioningState: string, runRequest: record<isArchiveEnabled: bool, type: string>, runResult: record<properties: record, id: string, name: string, type: string>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -653,8 +675,6 @@ export def "task-runs-update" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ContainerRegistry/registries/{registryName}/taskRuns/{taskRunName}
 # operationId: TaskRuns_Create
-# --identity shape: {principalId?: string, tenantId?: string, type?: "SystemAssigned"|"UserAssigned"|"SystemAssigned, UserAssigned"|"None", userAssignedIdentities?: record}
-# --properties shape: {forceUpdateTag?: string, runRequest?: record, runResult?: record}
 export def "task-runs-create" [
   subscription_id: string
   resource_group_name: string
@@ -674,7 +694,7 @@ export def "task-runs-create" [
   --properties: record # The properties of task run. — shape: {forceUpdateTag?: string, runRequest?: record, runResult?: record}
   location: string # The location of the resource. This cannot be changed after the resource is created.
   --tags: record # The tags of the resource.
-]: any -> record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, properties: record<forceUpdateTag: string, provisioningState: string, runRequest: record<isArchiveEnabled: bool, type: string>, runResult: record<properties: record, id: string, name: string, type: string>>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, properties: record<forceUpdateTag: string, provisioningState: string, runRequest: record<isArchiveEnabled: bool, type: string>, runResult: record<properties: record, id: string, name: string, type: string>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -721,7 +741,7 @@ export def "tasks-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The client API version. (required)
-]: nothing -> record<nextLink: string, value: table<identity: record, properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<identity: record, properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -810,7 +830,7 @@ export def "tasks-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The client API version. (required)
-]: nothing -> record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, properties: record<agentConfiguration: record<cpu: int>, creationDate: string, credentials: record<customRegistries: record, sourceRegistry: record>, platform: record<architecture: string, os: string, variant: string>, provisioningState: string, status: string, step: record<baseImageDependencies: list, contextAccessToken: string, contextPath: string, type: string>, timeout: int, trigger: record<baseImageTrigger: record, sourceTriggers: list, timerTriggers: list>>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, properties: record<agentConfiguration: record<cpu: int>, creationDate: string, credentials: record<customRegistries: record, sourceRegistry: record>, platform: record<architecture: string, os: string, variant: string>, provisioningState: string, status: string, step: record<baseImageDependencies: list, contextAccessToken: string, contextPath: string, type: string>, timeout: int, trigger: record<baseImageTrigger: record, sourceTriggers: list, timerTriggers: list>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -840,8 +860,6 @@ export def "tasks-get" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ContainerRegistry/registries/{registryName}/tasks/{taskName}
 # operationId: Tasks_Update
-# --identity shape: {principalId?: string, tenantId?: string, type?: "SystemAssigned"|"UserAssigned"|"SystemAssigned, UserAssigned"|"None", userAssignedIdentities?: record}
-# --properties shape: {agentConfiguration?: record, credentials?: record, platform?: record, status?: "Disabled"|"Enabled", step?: record, timeout?: int, trigger?: record}
 export def "tasks-update" [
   subscription_id: string
   resource_group_name: string
@@ -860,7 +878,7 @@ export def "tasks-update" [
   --identity: record # Managed identity for the resource. — shape: {principalId?: string, tenantId?: string, type?: "SystemAssigned"|"UserAssigned"|"SystemAssigned, UserAssigned"|"None", userAssignedIdentities?: record}
   --properties: record # The properties for updating a task. — shape: {agentConfiguration?: record, credentials?: record, platform?: record, status?: "Disabled"|"Enabled", step?: record, timeout?: int, trigger?: record}
   --tags: record # The ARM resource tags.
-]: any -> record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, properties: record<agentConfiguration: record<cpu: int>, creationDate: string, credentials: record<customRegistries: record, sourceRegistry: record>, platform: record<architecture: string, os: string, variant: string>, provisioningState: string, status: string, step: record<baseImageDependencies: list, contextAccessToken: string, contextPath: string, type: string>, timeout: int, trigger: record<baseImageTrigger: record, sourceTriggers: list, timerTriggers: list>>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, properties: record<agentConfiguration: record<cpu: int>, creationDate: string, credentials: record<customRegistries: record, sourceRegistry: record>, platform: record<architecture: string, os: string, variant: string>, provisioningState: string, status: string, step: record<baseImageDependencies: list, contextAccessToken: string, contextPath: string, type: string>, timeout: int, trigger: record<baseImageTrigger: record, sourceTriggers: list, timerTriggers: list>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -893,8 +911,6 @@ export def "tasks-update" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ContainerRegistry/registries/{registryName}/tasks/{taskName}
 # operationId: Tasks_Create
-# --identity shape: {principalId?: string, tenantId?: string, type?: "SystemAssigned"|"UserAssigned"|"SystemAssigned, UserAssigned"|"None", userAssignedIdentities?: record}
-# --properties shape: {agentConfiguration?: record, credentials?: record, platform: record, status?: "Disabled"|"Enabled", step: record, timeout?: int, trigger?: record}
 export def "tasks-create" [
   subscription_id: string
   resource_group_name: string
@@ -914,7 +930,7 @@ export def "tasks-create" [
   --properties: record # The properties of a task. — shape: {agentConfiguration?: record, credentials?: record, platform: record, status?: "Disabled"|"Enabled", step: record, timeout?: int, trigger?: record}
   location: string # The location of the resource. This cannot be changed after the resource is created.
   --tags: record # The tags of the resource.
-]: any -> record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, properties: record<agentConfiguration: record<cpu: int>, creationDate: string, credentials: record<customRegistries: record, sourceRegistry: record>, platform: record<architecture: string, os: string, variant: string>, provisioningState: string, status: string, step: record<baseImageDependencies: list, contextAccessToken: string, contextPath: string, type: string>, timeout: int, trigger: record<baseImageTrigger: record, sourceTriggers: list, timerTriggers: list>>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, properties: record<agentConfiguration: record<cpu: int>, creationDate: string, credentials: record<customRegistries: record, sourceRegistry: record>, platform: record<architecture: string, os: string, variant: string>, provisioningState: string, status: string, step: record<baseImageDependencies: list, contextAccessToken: string, contextPath: string, type: string>, timeout: int, trigger: record<baseImageTrigger: record, sourceTriggers: list, timerTriggers: list>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -962,7 +978,7 @@ export def "tasks-get-details" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The client API version. (required)
-]: nothing -> record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, properties: record<agentConfiguration: record<cpu: int>, creationDate: string, credentials: record<customRegistries: record, sourceRegistry: record>, platform: record<architecture: string, os: string, variant: string>, provisioningState: string, status: string, step: record<baseImageDependencies: list, contextAccessToken: string, contextPath: string, type: string>, timeout: int, trigger: record<baseImageTrigger: record, sourceTriggers: list, timerTriggers: list>>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, properties: record<agentConfiguration: record<cpu: int>, creationDate: string, credentials: record<customRegistries: record, sourceRegistry: record>, platform: record<architecture: string, os: string, variant: string>, provisioningState: string, status: string, step: record<baseImageDependencies: list, contextAccessToken: string, contextPath: string, type: string>, timeout: int, trigger: record<baseImageTrigger: record, sourceTriggers: list, timerTriggers: list>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }

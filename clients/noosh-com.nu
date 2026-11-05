@@ -14,27 +14,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -42,8 +51,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -54,7 +68,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -89,7 +112,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -153,9 +177,9 @@ def accept-completer [] { ["*/*" "application/json" "application/x-json-smile" "
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-file-tags" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-file-tags" "get-files" "upload-file" "get-file" "get-spec" "put-spec" "post-team-member-of-project" "get-spec-type-fields" "get-country-list" "get-workgroup-list" "get-automatic-invitation-list" "get-billing-recipients" "get-buy-order-list-of-workgroup" "get-buy-order-of-workgroup" "get-client-workgroup-list" "get-specific-client-workgroup" "get-project-category-list-of-client" "get-project-home-user-field-list-of-client" "get-project-status-of-client" "get-contact-list" "get-contact-user-info" "get-wg-task-status-list-of-workgroup" "get-custom-task-types-of-wg" "get-deactivation-reason-list" "task-priority-list" "get-default-task-status-list" "get-workgroup-detail" "put-workgroup" "get-exchange-rate-list" "post-exchange-rate" "get-my-time-card-list" "get-my-time-card" "get-product-type-list-of-workgroup" "get-spec-product-type-list-of-workgroup" "post-spec-product-type-list-of-workgroup" "upload-profile-image" "get-project-category-list" "get-project-home-user-fields-list" "get-project-status" "get-project-list" "post-project" "delete-project" "get-project" "patch-project" "put-project" "get-buy-order-list" "post-buy-order" "get-buy-order" "put-buy-order" "attach-project" "get-estimate-list" "post-estimate" "get-estimate" "get-invoices" "get-invoice" "get-invoice-files" "get-member-roles" "get-order" "get-quote-list" "get-quote" "put-quote" "get-rfe-list" "post-rfe" "get-rfe" "get-rfq-list" "get-rfq" "get-sell-order-list" "get-sell-order" "put-sell-order" "get-shipment-list" "post-shipment" "get-shipment" "put-shipment-location" "get-spec-list" "post-spec" "get-v1-workgroups-workgroup-id-projects-project-id-specs-spec-id" "put-v1-workgroups-workgroup-id-projects-project-id-specs-spec-id" "get-task-list-of-project" "post-task-for-project" "get-task-of-project" "get-team-member-list-of-client-project" "get-team-member-list-of-project" "post-v1-workgroups-workgroup-id-projects-project-id-teammembers" "delete-team-member-of-project" "get-quote-state-list" "get-v1-workgroups-workgroup-id-quotes" "get-received-time-card-list" "get-received-time-card" "get-sell-order-list-of-workgroup" "get-sell-order-of-workgroup" "get-spec-template-list" "get-spec-template" "get-v1-workgroups-workgroup-id-spec-types-spec-type-id-spec-type-fields" "get-supplier-workgroup-list" "get-supplier-workgroup-detail" "get-task-types-of-workgroup" "get-task-list-of-workgroup" "get-task-of-workgroup" "get-team-template-list" "get-team-template-detail" "get-workgroup-member-list" "get-workgroup-member-info" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -190,7 +214,7 @@ export def "get-file-tags" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<result: table<isSpec: bool, tagId: int, tagName: string>, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<result: table<isSpec: bool, tagId: int, tagName: string>, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -229,7 +253,7 @@ export def "get-files" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<result: record<description: string, download_link: string, file_id: int, file_name: string, file_size: any, file_type: string, is_remote: bool, modified_date: string, tagList: list<record>, upload_date: string, uploaded_by: string>, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<result: record<description: string, download_link: string, file_id: int, file_name: string, file_size: any, file_type: string, is_remote: bool, modified_date: string, tagList: list<record>, upload_date: string, uploaded_by: string>, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -269,7 +293,7 @@ export def "upload-file" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --body: string
-]: any -> record<result: record<description: string, download_link: string, file_id: int, file_name: string, file_size: any, file_type: string, is_remote: bool, modified_date: string, tagList: list<record>, upload_date: string, uploaded_by: string>, status_code: int, status_reason: string> {
+]: any -> oneof<record<result: record<description: string, download_link: string, file_id: int, file_name: string, file_size: any, file_type: string, is_remote: bool, modified_date: string, tagList: list<record>, upload_date: string, uploaded_by: string>, status_code: int, status_reason: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -314,7 +338,7 @@ export def "get-file" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<result: record<description: string, download_link: string, file_id: int, file_name: string, file_size: any, file_type: string, is_remote: bool, modified_date: string, tagList: list<record>, upload_date: string, uploaded_by: string>, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<result: record<description: string, download_link: string, file_id: int, file_name: string, file_size: any, file_type: string, is_remote: bool, modified_date: string, tagList: list<record>, upload_date: string, uploaded_by: string>, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -355,7 +379,7 @@ export def "get-spec" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<result: record<client_status: string, create_date: string, created_by: record<email: string, first_name: string, last_name: string, middle_name: string>, first_level_custom_fields: record<property_attributes: list, property_id: int, property_name: string>, header_custom_fields: record<property_attributes: list, property_id: int, property_name: string>, job_id: int, last_updated: string, product_type: string, product_type_info: record<label: string, product_type_id: int>, quantity_1: int, quantity_2: int, quantity_3: int, quantity_4: int, quantity_5: int, reference_number: string, second_level_custom_fields: list<record>, sku: string, spec_id: int, spec_name: string, spec_options: list<record>, spec_options_complete: list<record>, spec_original: record<spec_id: int, spec_name: string>, spec_type: record<spec_type_id: int, spec_type_name: string>, supplier_status: string, uofms: list<record>, user_state: string>, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<result: record<client_status: string, create_date: string, created_by: record<email: string, first_name: string, last_name: string, middle_name: string>, first_level_custom_fields: record<property_attributes: list, property_id: int, property_name: string>, header_custom_fields: record<property_attributes: list, property_id: int, property_name: string>, job_id: int, last_updated: string, product_type: string, product_type_info: record<label: string, product_type_id: int>, quantity_1: int, quantity_2: int, quantity_3: int, quantity_4: int, quantity_5: int, reference_number: string, second_level_custom_fields: list<record>, sku: string, spec_id: int, spec_name: string, spec_options: list<record>, spec_options_complete: list<record>, spec_original: record<spec_id: int, spec_name: string>, spec_type: record<spec_type_id: int, spec_type_name: string>, supplier_status: string, uofms: list<record>, user_state: string>, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -382,10 +406,6 @@ export def "get-spec" [
 #
 # PUT /1.1/workgroups/{workgroup_id}/projects/{project_id}/specs/{spec_id}
 # operationId: putSpec
-# --first_level_custom_fields shape: {property_attributes?: list, property_id?: int, property_name?: string}
-# --header_custom_fields shape: {property_attributes?: list, property_id?: int, property_name?: string}
-# --second_level_custom_fields item shape: {property_attributes?: list, property_id?: int, property_name?: string}
-# --versions item shape: {description?: string, qty?: int}
 export def "put-spec" [
   workgroup_id: string
   project_id: string
@@ -413,7 +433,7 @@ export def "put-spec" [
   --spec-name: string # e.g. sample spec_name
   --spec-type-id: int # format: int64, e.g. 1
   --versions: list # item shape: {description?: string, qty?: int}
-]: any -> record<spec_id: int, spec_name: string, status_code: int, status_reason: string> {
+]: any -> oneof<record<spec_id: int, spec_name: string, status_code: int, status_reason: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -459,7 +479,7 @@ export def "post-team-member-of-project" [
   --role-id: int # format: int64, e.g. 1
   --team-template-id: int # format: int64, e.g. 1
   --user-id: int # format: int64, e.g. 1
-]: any -> record<results: table<role: record, team_member_id: int, user: record, was_invited_before: bool>, status_code: int, status_reason: string> {
+]: any -> oneof<record<results: table<role: record, team_member_id: int, user: record, was_invited_before: bool>, status_code: int, status_reason: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -501,7 +521,7 @@ export def "get-spec-type-fields" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<result: any, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<result: any, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -538,7 +558,7 @@ export def "get-country-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<result: table<constant_token: string, country: string, country_id: int>, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<result: table<constant_token: string, country: string, country_id: int>, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/countries" $auth.query)
@@ -575,7 +595,7 @@ export def "get-workgroup-list" [
   --accept: string@accept-completer # Response content type
   --workgroup-name: string # Workgroup Name
   --workgroup-types: list<string> # 1000001 for Buyer, 1000002 for supplier, 1000003 for agent, 1000004 for Broker/Outsourcer and 1000005 for Partner
-]: nothing -> record<results: table<is_default: bool, parent_workgroup: record, workgroup_id: int, workgroup_name: string>, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<results: table<is_default: bool, parent_workgroup: record, workgroup_id: int, workgroup_name: string>, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "workgroup_name" $workgroup_name "scalar") (serialize-qp "workgroup_types" $workgroup_types "csv")] | flatten | str join "&"
@@ -612,7 +632,7 @@ export def "get-automatic-invitation-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<results: table<automatic_invitation_type_name: string, team_template: record>, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<results: table<automatic_invitation_type_name: string, team_template: record>, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -649,7 +669,7 @@ export def "get-billing-recipients" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<results: table<address: string, company_name: string, email: string, first_name: string, last_name: string, primary_phone: string, user_id: int, workgroup_name: string>, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<results: table<address: string, company_name: string, email: string, first_name: string, last_name: string, primary_phone: string, user_id: int, workgroup_name: string>, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -686,7 +706,7 @@ export def "get-buy-order-list-of-workgroup" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<results: table<buyer_workgroup: record, change_orders: list, closing_change_orders: list, comments: string, completion_date: string, currency: string, grand_total: any, grand_total_with_changes: any, last_changed: string, last_status_change: string, order_id: int, order_number: string, order_title: string, payment_reference: string, print_order_ids: list, project: record, status: string, status_comments: string, supplier_reference: string, supplier_workgroup: record, transactional_currency: string, transactional_grand_total: any, transactional_grand_total_with_changes: any>, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<results: table<buyer_workgroup: record, change_orders: list, closing_change_orders: list, comments: string, completion_date: string, currency: string, grand_total: any, grand_total_with_changes: any, last_changed: string, last_status_change: string, order_id: int, order_number: string, order_title: string, payment_reference: string, print_order_ids: list, project: record, status: string, status_comments: string, supplier_reference: string, supplier_workgroup: record, transactional_currency: string, transactional_grand_total: any, transactional_grand_total_with_changes: any>, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -724,7 +744,7 @@ export def "get-buy-order-of-workgroup" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<result: record<accepted_date: string, annulled_date: string, approved_date: string, awarded_date: string, budget_type: string, buyer: record<email: string, first_name: string, last_name: string, middle_name: string, user_id: int>, buyer_workgroup: record<workgroup_id: int, workgroup_name: string>, change_orders: list<record>, classification: string, closed_date: string, closing_change_orders: list<record>, comments: string, completion_date: string, creator_user_id: int, currency: string, custom_fields: list<record>, grand_total: any, grand_total_with_changes: any, item_count: int, last_activity_date: string, last_changed: string, last_status_change: string, misc_cost: float, order_id: int, order_items: list<record>, order_number: string, order_title: string, order_total: any, overs_percent: float, parent_order_id: int, payment_reference: string, print_order_ids: list<int>, project: record<project_id: int, project_name: string, project_number: string>, quote_id: int, shipping: any, status: string, status_comments: string, supplier: record<email: string, first_name: string, last_name: string, middle_name: string, user_id: int>, supplier_reference: string, supplier_selection_reason: string, supplier_workgroup: record<workgroup_id: int, workgroup_name: string>, tax: any, transactional_currency: string, transactional_grand_total: any, transactional_grand_total_with_changes: any, transactional_order_total: any, transactional_shipping: any, transactional_tax: any, unders_percent: float>, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<result: record<accepted_date: string, annulled_date: string, approved_date: string, awarded_date: string, budget_type: string, buyer: record<email: string, first_name: string, last_name: string, middle_name: string, user_id: int>, buyer_workgroup: record<workgroup_id: int, workgroup_name: string>, change_orders: list<record>, classification: string, closed_date: string, closing_change_orders: list<record>, comments: string, completion_date: string, creator_user_id: int, currency: string, custom_fields: list<record>, grand_total: any, grand_total_with_changes: any, item_count: int, last_activity_date: string, last_changed: string, last_status_change: string, misc_cost: float, order_id: int, order_items: list<record>, order_number: string, order_title: string, order_total: any, overs_percent: float, parent_order_id: int, payment_reference: string, print_order_ids: list<int>, project: record<project_id: int, project_name: string, project_number: string>, quote_id: int, shipping: any, status: string, status_comments: string, supplier: record<email: string, first_name: string, last_name: string, middle_name: string, user_id: int>, supplier_reference: string, supplier_selection_reason: string, supplier_workgroup: record<workgroup_id: int, workgroup_name: string>, tax: any, transactional_currency: string, transactional_grand_total: any, transactional_grand_total_with_changes: any, transactional_order_total: any, transactional_shipping: any, transactional_tax: any, unders_percent: float>, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -762,7 +782,7 @@ export def "get-client-workgroup-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<results: table<client_ac_workgroup_id: int, client_workgroup_id: int, client_workgroup_name: string>, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<results: table<client_ac_workgroup_id: int, client_workgroup_id: int, client_workgroup_name: string>, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -800,7 +820,7 @@ export def "get-specific-client-workgroup" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<result: record<client_ac_workgroup_id: int, client_workgroup_id: int, client_workgroup_name: string, custom_fields: list<record>, margin_percent: any, markup: any, markup_percent: any>, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<result: record<client_ac_workgroup_id: int, client_workgroup_id: int, client_workgroup_name: string, custom_fields: list<record>, margin_percent: any, markup: any, markup_percent: any>, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -839,7 +859,7 @@ export def "get-project-category-list-of-client" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<results: table<project_category_id: int, project_category_name: string>, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<results: table<project_category_id: int, project_category_name: string>, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -878,7 +898,7 @@ export def "get-project-home-user-field-list-of-client" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<results: table<is_required: bool, label: string, ordinal_number: int, param_name: string, type: string, user_field_id: int>, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<results: table<is_required: bool, label: string, ordinal_number: int, param_name: string, type: string, user_field_id: int>, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -917,7 +937,7 @@ export def "get-project-status-of-client" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<results: table<project_status_id: int, project_status_name: string>, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<results: table<project_status_id: int, project_status_name: string>, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -955,7 +975,7 @@ export def "get-contact-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<results: table<address: string, company_name: string, email: string, first_name: string, last_name: string, primary_phone: string, user_id: int, workgroup_name: string>, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<results: table<address: string, company_name: string, email: string, first_name: string, last_name: string, primary_phone: string, user_id: int, workgroup_name: string>, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -993,7 +1013,7 @@ export def "get-contact-user-info" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<result: record<address: any, company_name: string, email: string, fax_number: string, first_name: string, last_name: string, locale: string, middle_name: string, organization: string, phone_number: string, time_zone: string, title: string, user_id: int>, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<result: record<address: any, company_name: string, email: string, fax_number: string, first_name: string, last_name: string, locale: string, middle_name: string, organization: string, phone_number: string, time_zone: string, title: string, user_id: int>, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -1031,7 +1051,7 @@ export def "get-wg-task-status-list-of-workgroup" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<result: table<description: string, is_active: bool, is_default: bool, task_status_name: string, tasks_status_id: int>, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<result: table<description: string, is_active: bool, is_default: bool, task_status_name: string, tasks_status_id: int>, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -1068,7 +1088,7 @@ export def "get-custom-task-types-of-wg" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<results: table<task_type: string, task_type_id: int>, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<results: table<task_type: string, task_type_id: int>, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -1105,7 +1125,7 @@ export def "get-deactivation-reason-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<results: table<deactivation_reason_id: int, deactivation_reason_name: string>, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<results: table<deactivation_reason_id: int, deactivation_reason_name: string>, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -1142,7 +1162,7 @@ export def "task-priority-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<results: table<task_priority_id: int, task_priority_name: string>, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<results: table<task_priority_id: int, task_priority_name: string>, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -1179,7 +1199,7 @@ export def "get-default-task-status-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<results: table<task_status_id: int, task_status_name: string>, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<results: table<task_status_id: int, task_status_name: string>, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -1216,7 +1236,7 @@ export def "get-workgroup-detail" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<result: record<address_line1: string, address_line2: string, address_line3: string, city: string, country: string, country_code: string, custom_fields: list<record>, default_currency: string, portal: string, postal: string, state: string, workgroup_id: int, workgroup_name: string>, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<result: record<address_line1: string, address_line2: string, address_line3: string, city: string, country: string, country_code: string, custom_fields: list<record>, default_currency: string, portal: string, postal: string, state: string, workgroup_id: int, workgroup_name: string>, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -1241,7 +1261,6 @@ export def "get-workgroup-detail" [
 #
 # PUT /v1/workgroups/{workgroup_id}/detail
 # operationId: putWorkgroup
-# --custom_fields item shape: {date_value?: string, number_value?: any, param_name?: string, string_value?: string}
 export def "put-workgroup" [
   workgroup_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1264,7 +1283,7 @@ export def "put-workgroup" [
   --postal: string # e.g. sample postal
   --state: string # e.g. sample state
   --workgroup-name: string # e.g. sample workgroup_name
-]: any -> record<status_code: int, status_reason: string, workgroup_id: int, workgroup_name: string> {
+]: any -> oneof<record<status_code: int, status_reason: string, workgroup_id: int, workgroup_name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1304,7 +1323,7 @@ export def "get-exchange-rate-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<status_code: int, status_reason: string> {
+]: nothing -> oneof<record<status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -1329,7 +1348,6 @@ export def "get-exchange-rate-list" [
 #
 # POST /v1/workgroups/{workgroup_id}/exchangeRate
 # operationId: postExchangeRate
-# --exchange_rates item shape: {activate_date?: string, buClientWorkgroupId?: int, currency?: string, rate?: any, target?: string}
 export def "post-exchange-rate" [
   workgroup_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1383,7 +1401,7 @@ export def "get-my-time-card-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<results: table<is_submit: bool, last_updated_date: string, no_of_workdays: int, submit_date: string, timecard_id: int, total_hours: any, week_beginning: string>, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<results: table<is_submit: bool, last_updated_date: string, no_of_workdays: int, submit_date: string, timecard_id: int, total_hours: any, week_beginning: string>, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -1421,7 +1439,7 @@ export def "get-my-time-card" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<billable_hours: any, is_submit: bool, last_updated_date: string, no_of_workdays: int, nonbillable_hours: any, submit_date: string, time_card_line: table<activity_name: string, day1_hours_spent: any, day2_hours_spent: any, day3_hours_spent: any, day4_hours_spent: any, day5_hours_spent: any, day6_hours_spent: any, day7_hours_spent: any, project: record, task: record, time_card_line_id: int, total_hours_spent: any>, timecard_id: int, total_hours: any, week_beginning: string> {
+]: nothing -> oneof<record<billable_hours: any, is_submit: bool, last_updated_date: string, no_of_workdays: int, nonbillable_hours: any, submit_date: string, time_card_line: table<activity_name: string, day1_hours_spent: any, day2_hours_spent: any, day3_hours_spent: any, day4_hours_spent: any, day5_hours_spent: any, day6_hours_spent: any, day7_hours_spent: any, project: record, task: record, time_card_line_id: int, total_hours_spent: any>, timecard_id: int, total_hours: any, week_beginning: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -1459,7 +1477,7 @@ export def "get-product-type-list-of-workgroup" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<result: table<is_checked: bool, label: string, product_type_id: int>, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<result: table<is_checked: bool, label: string, product_type_id: int>, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -1496,7 +1514,7 @@ export def "get-spec-product-type-list-of-workgroup" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<result: table<is_checked: bool, label: string, product_type_id: int>, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<result: table<is_checked: bool, label: string, product_type_id: int>, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -1521,7 +1539,6 @@ export def "get-spec-product-type-list-of-workgroup" [
 #
 # POST /v1/workgroups/{workgroup_id}/productTypesOfSpecTypes
 # operationId: postSpecProductTypeListOfWorkgroup
-# --spec_prdType_list item shape: {prdType_labels?: list<string>, spec_type_id?: int}
 export def "post-spec-product-type-list-of-workgroup" [
   workgroup_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1536,7 +1553,7 @@ export def "post-spec-product-type-list-of-workgroup" [
   --accept: string@accept-completer # Response content type
   --enable-differentiate-prd-type-preference: oneof<nothing, bool> # e.g. false
   --spec-prd-type-list: list # item shape: {prdType_labels?: list<string>, spec_type_id?: int}
-]: any -> record<enableDifferentiatePrdTypePreference: bool, spec_prdType_list: table<prdType_labels: list, spec_type_id: int>> {
+]: any -> oneof<record<enableDifferentiatePrdTypePreference: bool, spec_prdType_list: table<prdType_labels: list, spec_type_id: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1577,7 +1594,7 @@ export def "upload-profile-image" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --body: string
-]: any -> record<profileImgUrl: string, status_code: int, status_reason: string> {
+]: any -> oneof<record<profileImgUrl: string, status_code: int, status_reason: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1617,7 +1634,7 @@ export def "get-project-category-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<results: table<project_category_id: int, project_category_name: string>, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<results: table<project_category_id: int, project_category_name: string>, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -1654,7 +1671,7 @@ export def "get-project-home-user-fields-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<results: table<is_required: bool, label: string, ordinal_number: int, param_name: string, type: string, user_field_id: int>, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<results: table<is_required: bool, label: string, ordinal_number: int, param_name: string, type: string, user_field_id: int>, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -1691,7 +1708,7 @@ export def "get-project-status" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<results: table<project_status_id: int, project_status_name: string>, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<results: table<project_status_id: int, project_status_name: string>, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -1728,7 +1745,7 @@ export def "get-project-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<results: table<client_account: string, client_workgroup_id: int, completion_date: string, is_active: bool, is_hot: bool, last_spec_update: string, project_id: int, project_name: string, project_number: string, project_status: string>, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<results: table<client_account: string, client_workgroup_id: int, completion_date: string, is_active: bool, is_hot: bool, last_spec_update: string, project_id: int, project_name: string, project_number: string, project_status: string>, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -1753,7 +1770,6 @@ export def "get-project-list" [
 #
 # POST /v1/workgroups/{workgroup_id}/projects
 # operationId: postProject
-# --custom_fields item shape: {date_value?: string, number_value?: any, param_name?: string, string_value?: string}
 export def "post-project" [
   workgroup_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1782,7 +1798,7 @@ export def "post-project" [
   --project-number: string # e.g. sample project_number
   --project-owner-user-id: int # format: int64, e.g. 1
   project_status_id: int # format: int64, e.g. 1
-]: any -> record<project_id: int, status_code: int, status_reason: string> {
+]: any -> oneof<record<project_id: int, status_code: int, status_reason: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1823,7 +1839,7 @@ export def "delete-project" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<status_code: int, status_reason: string> {
+]: nothing -> oneof<record<status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -1862,7 +1878,7 @@ export def "get-project" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<result: record<category: string, client_account: string, client_user: string, client_user_id: int, client_workgroup_id: int, comments: string, completion_date: string, custom_fields: list<record>, deactivation_reason: string, is_active: bool, is_hot: bool, last_spec_update: string, mod_date: string, owner_workgroup: string, parent_project: record<client_account: string, client_user: string, client_user_id: int, client_workgroup_id: int, comments: string, created_by: record, project_create_date: string, project_description: string, project_id: int, project_name: string, project_number: string>, project_create_date: string, project_description: string, project_id: int, project_name: string, project_number: string, project_status: string, team_owners: string>, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<result: record<category: string, client_account: string, client_user: string, client_user_id: int, client_workgroup_id: int, comments: string, completion_date: string, custom_fields: list<record>, deactivation_reason: string, is_active: bool, is_hot: bool, last_spec_update: string, mod_date: string, owner_workgroup: string, parent_project: record<client_account: string, client_user: string, client_user_id: int, client_workgroup_id: int, comments: string, created_by: record, project_create_date: string, project_description: string, project_id: int, project_name: string, project_number: string>, project_create_date: string, project_description: string, project_id: int, project_name: string, project_number: string, project_status: string, team_owners: string>, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -1888,7 +1904,6 @@ export def "get-project" [
 #
 # PATCH /v1/workgroups/{workgroup_id}/projects/{project_id}
 # operationId: patchProject
-# --custom_fields item shape: {date_value?: string, number_value?: any, param_name?: string, string_value?: string}
 export def "patch-project" [
   workgroup_id: string
   project_id: string
@@ -1915,7 +1930,7 @@ export def "patch-project" [
   --project-name: string # e.g. sample project_name
   --project-number: string # e.g. sample project_number
   --project-status-id: int # format: int64, e.g. 1
-]: any -> record<status_code: int, status_reason: string> {
+]: any -> oneof<record<status_code: int, status_reason: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1944,7 +1959,6 @@ export def "patch-project" [
 #
 # PUT /v1/workgroups/{workgroup_id}/projects/{project_id}
 # operationId: putProject
-# --custom_fields item shape: {date_value?: string, number_value?: any, param_name?: string, string_value?: string}
 export def "put-project" [
   workgroup_id: string
   project_id: string
@@ -1974,7 +1988,7 @@ export def "put-project" [
   --project-number: string # e.g. sample project_number
   --project-owner-user-id: int # format: int64, e.g. 1
   project_status_id: int # format: int64, e.g. 1
-]: any -> record<status_code: int, status_reason: string> {
+]: any -> oneof<record<status_code: int, status_reason: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2016,7 +2030,7 @@ export def "get-buy-order-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<results: table<buyer_workgroup: record, change_orders: list, closing_change_orders: list, comments: string, completion_date: string, currency: string, grand_total: any, grand_total_with_changes: any, last_changed: string, last_status_change: string, order_id: int, order_number: string, order_title: string, payment_reference: string, print_order_ids: list, status: string, status_comments: string, supplier_reference: string, supplier_workgroup: record, transactional_currency: string, transactional_grand_total: any, transactional_grand_total_with_changes: any>, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<results: table<buyer_workgroup: record, change_orders: list, closing_change_orders: list, comments: string, completion_date: string, currency: string, grand_total: any, grand_total_with_changes: any, last_changed: string, last_status_change: string, order_id: int, order_number: string, order_title: string, payment_reference: string, print_order_ids: list, status: string, status_comments: string, supplier_reference: string, supplier_workgroup: record, transactional_currency: string, transactional_grand_total: any, transactional_grand_total_with_changes: any>, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -2042,8 +2056,6 @@ export def "get-buy-order-list" [
 #
 # POST /v1/workgroups/{workgroup_id}/projects/{project_id}/buyOrders
 # operationId: postBuyOrder
-# --custom_fields item shape: {date_value?: string, number_value?: any, param_name?: string, string_value?: string}
-# --order_items item shape: {completion_date?: string, custom_fields?: list, ex_tax_value_calculated?: any, notes?: string, per?: int, price?: any, quantity?: any, shipping?: any, spec_id?: int, spec_reference_id?: int, tax?: string}
 export def "post-buy-order" [
   workgroup_id: string
   project_id: string
@@ -2073,7 +2085,7 @@ export def "post-buy-order" [
   --supplier-user-id: int # format: int64, e.g. 1
   --tax: string # e.g. sample tax
   --title: string # e.g. sample title
-]: any -> record<buyer_user_id: int, comments: string, custom_fields: table<date_value: string, number_value: any, param_name: string, string_value: string>, invoice_or_billing_recipient: int, order_completion_date: string, order_items: table<completion_date: string, custom_fields: list, ex_tax_value_calculated: any, notes: string, per: int, price: any, quantity: any, shipping: any, spec_id: int, spec_reference_id: int, tax: string>, other_selection_reason: string, payment_method_id: int, payment_reference_no: string, sellOrder: bool, shipping: any, supplier_reference: string, supplier_selection_reason_id: int, supplier_user_id: int, tax: string, title: string> {
+]: any -> oneof<record<buyer_user_id: int, comments: string, custom_fields: table<date_value: string, number_value: any, param_name: string, string_value: string>, invoice_or_billing_recipient: int, order_completion_date: string, order_items: table<completion_date: string, custom_fields: list, ex_tax_value_calculated: any, notes: string, per: int, price: any, quantity: any, shipping: any, spec_id: int, spec_reference_id: int, tax: string>, other_selection_reason: string, payment_method_id: int, payment_reference_no: string, sellOrder: bool, shipping: any, supplier_reference: string, supplier_selection_reason_id: int, supplier_user_id: int, tax: string, title: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2116,7 +2128,7 @@ export def "get-buy-order" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<accepted_date: string, annulled_date: string, approved_date: string, awarded_date: string, budget_type: string, buyer: record<email: string, first_name: string, last_name: string, middle_name: string, user_id: int>, buyer_workgroup: record<workgroup_id: int, workgroup_name: string>, change_orders: table<accepted_date: string, annulled_date: string, approved_date: string, awarded_date: string, budget_type: string, buyer: record, buyer_workgroup: record, classification: string, closed_date: string, comments: string, completion_date: string, creator_user_id: int, currency: string, custom_fields: list, grand_total: any, item_count: int, last_activity_date: string, last_changed: string, last_status_change: string, misc_cost: float, order_id: int, order_number: string, order_title: string, order_total: any, overs_percent: float, parent_order_id: int, payment_reference: string, print_order_ids: list, quote_id: int, shipping: any, status: string, status_comments: string, supplier: record, supplier_reference: string, supplier_selection_reason: string, supplier_workgroup: record, tax: any, transactional_currency: string, transactional_grand_total: any, transactional_order_total: any, transactional_shipping: any, transactional_tax: any, unders_percent: float>, classification: string, closed_date: string, closing_change_orders: table<accepted_date: string, annulled_date: string, approved_date: string, awarded_date: string, budget_type: string, buyer: record, buyer_workgroup: record, classification: string, closed_date: string, comments: string, completion_date: string, creator_user_id: int, currency: string, custom_fields: list, grand_total: any, item_count: int, last_activity_date: string, last_changed: string, last_status_change: string, misc_cost: float, order_id: int, order_number: string, order_title: string, order_total: any, overs_percent: float, parent_order_id: int, payment_reference: string, print_order_ids: list, quote_id: int, shipping: any, status: string, status_comments: string, supplier: record, supplier_reference: string, supplier_selection_reason: string, supplier_workgroup: record, tax: any, transactional_currency: string, transactional_grand_total: any, transactional_order_total: any, transactional_shipping: any, transactional_tax: any, unders_percent: float>, comments: string, completion_date: string, creator_user_id: int, currency: string, custom_fields: table<date_value: string, number_value: any, param_id: int, param_name: string, property_attribute_id: int, string_value: string>, grand_total: any, grand_total_with_changes: any, item_count: int, last_activity_date: string, last_changed: string, last_status_change: string, misc_cost: float, order_id: int, order_items: table<comments: string, completion_date: string, custom_fields: list, item_id: int, item_price: float, quantity: float, shipping: any, spec: record, tax: any, transactional_item_price: float, transactional_shipping: any, transactional_tax: any, transactional_unit_price: any, unit_description: string, unit_price: any>, order_number: string, order_title: string, order_total: any, overs_percent: float, parent_order_id: int, payment_reference: string, print_order_ids: list<int>, quote_id: int, shipping: any, status: string, status_comments: string, supplier: record<email: string, first_name: string, last_name: string, middle_name: string, user_id: int>, supplier_reference: string, supplier_selection_reason: string, supplier_workgroup: record<workgroup_id: int, workgroup_name: string>, tax: any, transactional_currency: string, transactional_grand_total: any, transactional_grand_total_with_changes: any, transactional_order_total: any, transactional_shipping: any, transactional_tax: any, unders_percent: float> {
+]: nothing -> oneof<record<accepted_date: string, annulled_date: string, approved_date: string, awarded_date: string, budget_type: string, buyer: record<email: string, first_name: string, last_name: string, middle_name: string, user_id: int>, buyer_workgroup: record<workgroup_id: int, workgroup_name: string>, change_orders: table<accepted_date: string, annulled_date: string, approved_date: string, awarded_date: string, budget_type: string, buyer: record, buyer_workgroup: record, classification: string, closed_date: string, comments: string, completion_date: string, creator_user_id: int, currency: string, custom_fields: list, grand_total: any, item_count: int, last_activity_date: string, last_changed: string, last_status_change: string, misc_cost: float, order_id: int, order_number: string, order_title: string, order_total: any, overs_percent: float, parent_order_id: int, payment_reference: string, print_order_ids: list, quote_id: int, shipping: any, status: string, status_comments: string, supplier: record, supplier_reference: string, supplier_selection_reason: string, supplier_workgroup: record, tax: any, transactional_currency: string, transactional_grand_total: any, transactional_order_total: any, transactional_shipping: any, transactional_tax: any, unders_percent: float>, classification: string, closed_date: string, closing_change_orders: table<accepted_date: string, annulled_date: string, approved_date: string, awarded_date: string, budget_type: string, buyer: record, buyer_workgroup: record, classification: string, closed_date: string, comments: string, completion_date: string, creator_user_id: int, currency: string, custom_fields: list, grand_total: any, item_count: int, last_activity_date: string, last_changed: string, last_status_change: string, misc_cost: float, order_id: int, order_number: string, order_title: string, order_total: any, overs_percent: float, parent_order_id: int, payment_reference: string, print_order_ids: list, quote_id: int, shipping: any, status: string, status_comments: string, supplier: record, supplier_reference: string, supplier_selection_reason: string, supplier_workgroup: record, tax: any, transactional_currency: string, transactional_grand_total: any, transactional_order_total: any, transactional_shipping: any, transactional_tax: any, unders_percent: float>, comments: string, completion_date: string, creator_user_id: int, currency: string, custom_fields: table<date_value: string, number_value: any, param_id: int, param_name: string, property_attribute_id: int, string_value: string>, grand_total: any, grand_total_with_changes: any, item_count: int, last_activity_date: string, last_changed: string, last_status_change: string, misc_cost: float, order_id: int, order_items: table<comments: string, completion_date: string, custom_fields: list, item_id: int, item_price: float, quantity: float, shipping: any, spec: record, tax: any, transactional_item_price: float, transactional_shipping: any, transactional_tax: any, transactional_unit_price: any, unit_description: string, unit_price: any>, order_number: string, order_title: string, order_total: any, overs_percent: float, parent_order_id: int, payment_reference: string, print_order_ids: list<int>, quote_id: int, shipping: any, status: string, status_comments: string, supplier: record<email: string, first_name: string, last_name: string, middle_name: string, user_id: int>, supplier_reference: string, supplier_selection_reason: string, supplier_workgroup: record<workgroup_id: int, workgroup_name: string>, tax: any, transactional_currency: string, transactional_grand_total: any, transactional_grand_total_with_changes: any, transactional_order_total: any, transactional_shipping: any, transactional_tax: any, unders_percent: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -2143,7 +2155,6 @@ export def "get-buy-order" [
 #
 # PUT /v1/workgroups/{workgroup_id}/projects/{project_id}/buyOrders/{order_id}
 # operationId: putBuyOrder
-# --custom_fields item shape: {date_value?: string, number_value?: any, param_name?: string, string_value?: string}
 export def "put-buy-order" [
   workgroup_id: string
   project_id: string
@@ -2171,7 +2182,7 @@ export def "put-buy-order" [
   --reject-reason: string # e.g. sample reject_reason
   --supplier-selection-reason-id: int # format: int64, e.g. 1
   --unders-percent: any # Java type: java.math.BigDecimal
-]: any -> record<order_id: int, status_code: int, status_reason: string> {
+]: any -> oneof<record<order_id: int, status_code: int, status_reason: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2215,7 +2226,7 @@ export def "attach-project" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --child-project-ids: list<int>
-]: any -> record<status_code: int, status_reason: string> {
+]: any -> oneof<record<status_code: int, status_reason: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2257,7 +2268,7 @@ export def "get-estimate-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<result: table<create_date: string, currency: string, estimate_id: int, estimate_title: string, expiration_date: string, project: record, rfe: record, status: string, submit_date: string, supplier_workgroup: record, transactional_currency: string>, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<result: table<create_date: string, currency: string, estimate_id: int, estimate_title: string, expiration_date: string, project: record, rfe: record, status: string, submit_date: string, supplier_workgroup: record, transactional_currency: string>, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -2283,7 +2294,6 @@ export def "get-estimate-list" [
 #
 # POST /v1/workgroups/{workgroup_id}/projects/{project_id}/estimates
 # operationId: postEstimate
-# --estimate_items item shape: {paper_items?: list, quantity_1_price?: any, quantity_1_shipping?: any, quantity_1_tax?: any, quantity_2_price?: any, quantity_2_shipping?: any, quantity_2_tax?: any, quantity_3_price?: any, quantity_3_shipping?: any, quantity_3_tax?: any, quantity_4_price?: any, quantity_4_shipping?: any, quantity_4_tax?: any, quantity_5_price?: any, quantity_5_shipping?: any, quantity_5_tax?: any, rfe_item_id?: int}
 export def "post-estimate" [
   workgroup_id: string
   project_id: string
@@ -2304,7 +2314,7 @@ export def "post-estimate" [
   --expiration-date: string # format: date
   --owner-reference: string # e.g. sample owner_reference
   --rfe-id: int # format: int64, e.g. 1
-]: any -> record<comments: string, description: string, estimate_items: table<paper_items: list, quantity_1_price: any, quantity_1_shipping: any, quantity_1_tax: any, quantity_2_price: any, quantity_2_shipping: any, quantity_2_tax: any, quantity_3_price: any, quantity_3_shipping: any, quantity_3_tax: any, quantity_4_price: any, quantity_4_shipping: any, quantity_4_tax: any, quantity_5_price: any, quantity_5_shipping: any, quantity_5_tax: any, rfe_item_id: int>, estimate_title: string, expiration_date: string, owner_reference: string, rfe_id: int> {
+]: any -> oneof<record<comments: string, description: string, estimate_items: table<paper_items: list, quantity_1_price: any, quantity_1_shipping: any, quantity_1_tax: any, quantity_2_price: any, quantity_2_shipping: any, quantity_2_tax: any, quantity_3_price: any, quantity_3_shipping: any, quantity_3_tax: any, quantity_4_price: any, quantity_4_shipping: any, quantity_4_tax: any, quantity_5_price: any, quantity_5_shipping: any, quantity_5_tax: any, rfe_item_id: int>, estimate_title: string, expiration_date: string, owner_reference: string, rfe_id: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2347,7 +2357,7 @@ export def "get-estimate" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<result: record<comments: string, create_date: string, currency: string, custom_fields: list<record>, description: string, estimate_id: int, estimate_title: string, expiration_date: string, items: list<record>, project: record<project_id: int, project_name: string, project_number: string>, reference_number: string, rfe: record<rfe_due_date: string, rfe_id: int, rfe_title: string, status: string>, status: string, submit_date: string, submitted_by: string, submitted_by_user_id: int, supplier_workgroup: record<workgroup_id: int, workgroup_name: string>, transactional_currency: string>, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<result: record<comments: string, create_date: string, currency: string, custom_fields: list<record>, description: string, estimate_id: int, estimate_title: string, expiration_date: string, items: list<record>, project: record<project_id: int, project_name: string, project_number: string>, reference_number: string, rfe: record<rfe_due_date: string, rfe_id: int, rfe_title: string, status: string>, status: string, submit_date: string, submitted_by: string, submitted_by_user_id: int, supplier_workgroup: record<workgroup_id: int, workgroup_name: string>, transactional_currency: string>, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -2388,7 +2398,7 @@ export def "get-invoices" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<result: table<comments: string, currency: string, custom_fields: list, grand_total: any, invoice_date: string, invoice_due_date: string, invoice_id: int, invoice_number: string, invoice_to: string, is_final: int, is_nonBillable: int, items: list, order_reference: string, order_title: string, payment_method: string, prepared_by: string, project_number: int, reference_number: string, shipping: any, status: string, sub_total: any, tax: any, transactional_currency: string, transactional_grand_total: any, transactional_shipping: any, transactional_sub_total: any, transactional_tax: any>, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<result: table<comments: string, currency: string, custom_fields: list, grand_total: any, invoice_date: string, invoice_due_date: string, invoice_id: int, invoice_number: string, invoice_to: string, is_final: int, is_nonBillable: int, items: list, order_reference: string, order_title: string, payment_method: string, prepared_by: string, project_number: int, reference_number: string, shipping: any, status: string, sub_total: any, tax: any, transactional_currency: string, transactional_grand_total: any, transactional_shipping: any, transactional_sub_total: any, transactional_tax: any>, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -2429,7 +2439,7 @@ export def "get-invoice" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<result: record<comments: string, currency: string, custom_fields: list<record>, grand_total: any, invoice_date: string, invoice_due_date: string, invoice_id: int, invoice_number: string, invoice_to: string, is_final: int, is_nonBillable: int, items: list<record>, order_reference: string, order_title: string, payment_method: string, prepared_by: string, project_number: int, reference_number: string, shipping: any, status: string, sub_total: any, tax: any, transactional_currency: string, transactional_grand_total: any, transactional_shipping: any, transactional_sub_total: any, transactional_tax: any>, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<result: record<comments: string, currency: string, custom_fields: list<record>, grand_total: any, invoice_date: string, invoice_due_date: string, invoice_id: int, invoice_number: string, invoice_to: string, is_final: int, is_nonBillable: int, items: list<record>, order_reference: string, order_title: string, payment_method: string, prepared_by: string, project_number: int, reference_number: string, shipping: any, status: string, sub_total: any, tax: any, transactional_currency: string, transactional_grand_total: any, transactional_shipping: any, transactional_sub_total: any, transactional_tax: any>, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -2470,7 +2480,7 @@ export def "get-invoice-files" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<result: table<description: string, download_link: string, file_id: int, file_name: string, file_size: any, file_type: string, is_remote: bool, modified_date: string, tagList: list, upload_date: string, uploaded_by: string>, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<result: table<description: string, download_link: string, file_id: int, file_name: string, file_size: any, file_type: string, is_remote: bool, modified_date: string, tagList: list, upload_date: string, uploaded_by: string>, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -2511,7 +2521,7 @@ export def "get-member-roles" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<result: table<role_id: int, role_name: string>, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<result: table<role_id: int, role_name: string>, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -2552,7 +2562,7 @@ export def "get-order" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<accepted_date: string, annulled_date: string, approved_date: string, awarded_date: string, budget_type: string, buyer: record<email: string, first_name: string, last_name: string, middle_name: string, user_id: int>, buyer_workgroup: record<workgroup_id: int, workgroup_name: string>, change_orders: table<accepted_date: string, annulled_date: string, approved_date: string, awarded_date: string, budget_type: string, buyer: record, buyer_workgroup: record, classification: string, closed_date: string, comments: string, completion_date: string, creator_user_id: int, currency: string, custom_fields: list, grand_total: any, item_count: int, last_activity_date: string, last_changed: string, last_status_change: string, misc_cost: float, order_id: int, order_number: string, order_title: string, order_total: any, overs_percent: float, parent_order_id: int, payment_reference: string, print_order_ids: list, quote_id: int, shipping: any, status: string, status_comments: string, supplier: record, supplier_reference: string, supplier_selection_reason: string, supplier_workgroup: record, tax: any, transactional_currency: string, transactional_grand_total: any, transactional_order_total: any, transactional_shipping: any, transactional_tax: any, unders_percent: float>, classification: string, closed_date: string, closing_change_orders: table<accepted_date: string, annulled_date: string, approved_date: string, awarded_date: string, budget_type: string, buyer: record, buyer_workgroup: record, classification: string, closed_date: string, comments: string, completion_date: string, creator_user_id: int, currency: string, custom_fields: list, grand_total: any, item_count: int, last_activity_date: string, last_changed: string, last_status_change: string, misc_cost: float, order_id: int, order_number: string, order_title: string, order_total: any, overs_percent: float, parent_order_id: int, payment_reference: string, print_order_ids: list, quote_id: int, shipping: any, status: string, status_comments: string, supplier: record, supplier_reference: string, supplier_selection_reason: string, supplier_workgroup: record, tax: any, transactional_currency: string, transactional_grand_total: any, transactional_order_total: any, transactional_shipping: any, transactional_tax: any, unders_percent: float>, comments: string, completion_date: string, creator_user_id: int, currency: string, custom_fields: table<date_value: string, number_value: any, param_id: int, param_name: string, property_attribute_id: int, string_value: string>, grand_total: any, grand_total_with_changes: any, is_sell_order: bool, item_count: int, last_activity_date: string, last_changed: string, last_status_change: string, misc_cost: float, order_id: int, order_items: table<comments: string, completion_date: string, custom_fields: list, item_id: int, item_price: float, quantity: float, shipping: any, spec: record, tax: any, transactional_item_price: float, transactional_shipping: any, transactional_tax: any, transactional_unit_price: any, unit_description: string, unit_price: any>, order_number: string, order_title: string, order_total: any, overs_percent: float, parent_order_id: int, payment_reference: string, print_order_ids: list<int>, quote_id: int, shipping: any, status: string, status_comments: string, supplier: record<email: string, first_name: string, last_name: string, middle_name: string, user_id: int>, supplier_reference: string, supplier_selection_reason: string, supplier_workgroup: record<workgroup_id: int, workgroup_name: string>, tax: any, transactional_currency: string, transactional_grand_total: any, transactional_grand_total_with_changes: any, transactional_order_total: any, transactional_shipping: any, transactional_tax: any, unders_percent: float> {
+]: nothing -> oneof<record<accepted_date: string, annulled_date: string, approved_date: string, awarded_date: string, budget_type: string, buyer: record<email: string, first_name: string, last_name: string, middle_name: string, user_id: int>, buyer_workgroup: record<workgroup_id: int, workgroup_name: string>, change_orders: table<accepted_date: string, annulled_date: string, approved_date: string, awarded_date: string, budget_type: string, buyer: record, buyer_workgroup: record, classification: string, closed_date: string, comments: string, completion_date: string, creator_user_id: int, currency: string, custom_fields: list, grand_total: any, item_count: int, last_activity_date: string, last_changed: string, last_status_change: string, misc_cost: float, order_id: int, order_number: string, order_title: string, order_total: any, overs_percent: float, parent_order_id: int, payment_reference: string, print_order_ids: list, quote_id: int, shipping: any, status: string, status_comments: string, supplier: record, supplier_reference: string, supplier_selection_reason: string, supplier_workgroup: record, tax: any, transactional_currency: string, transactional_grand_total: any, transactional_order_total: any, transactional_shipping: any, transactional_tax: any, unders_percent: float>, classification: string, closed_date: string, closing_change_orders: table<accepted_date: string, annulled_date: string, approved_date: string, awarded_date: string, budget_type: string, buyer: record, buyer_workgroup: record, classification: string, closed_date: string, comments: string, completion_date: string, creator_user_id: int, currency: string, custom_fields: list, grand_total: any, item_count: int, last_activity_date: string, last_changed: string, last_status_change: string, misc_cost: float, order_id: int, order_number: string, order_title: string, order_total: any, overs_percent: float, parent_order_id: int, payment_reference: string, print_order_ids: list, quote_id: int, shipping: any, status: string, status_comments: string, supplier: record, supplier_reference: string, supplier_selection_reason: string, supplier_workgroup: record, tax: any, transactional_currency: string, transactional_grand_total: any, transactional_order_total: any, transactional_shipping: any, transactional_tax: any, unders_percent: float>, comments: string, completion_date: string, creator_user_id: int, currency: string, custom_fields: table<date_value: string, number_value: any, param_id: int, param_name: string, property_attribute_id: int, string_value: string>, grand_total: any, grand_total_with_changes: any, is_sell_order: bool, item_count: int, last_activity_date: string, last_changed: string, last_status_change: string, misc_cost: float, order_id: int, order_items: table<comments: string, completion_date: string, custom_fields: list, item_id: int, item_price: float, quantity: float, shipping: any, spec: record, tax: any, transactional_item_price: float, transactional_shipping: any, transactional_tax: any, transactional_unit_price: any, unit_description: string, unit_price: any>, order_number: string, order_title: string, order_total: any, overs_percent: float, parent_order_id: int, payment_reference: string, print_order_ids: list<int>, quote_id: int, shipping: any, status: string, status_comments: string, supplier: record<email: string, first_name: string, last_name: string, middle_name: string, user_id: int>, supplier_reference: string, supplier_selection_reason: string, supplier_workgroup: record<workgroup_id: int, workgroup_name: string>, tax: any, transactional_currency: string, transactional_grand_total: any, transactional_grand_total_with_changes: any, transactional_order_total: any, transactional_shipping: any, transactional_tax: any, unders_percent: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -2593,12 +2603,12 @@ export def "get-quote-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --quote-state-id-use-filters-quote-state-id-111111: string # Quote Object State Id, use /workgroups/{workgroup_id}/quoteStates to get correct value
-]: nothing -> record<result: table<currency: string, grand_total: any, quote_id: int, quote_title: string, rfq: record, status: string, submit_date: string, transactional_currency: string, transactional_grand_total: any>, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<result: table<currency: string, grand_total: any, quote_id: int, quote_title: string, rfq: record, status: string, submit_date: string, transactional_currency: string, transactional_grand_total: any>, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
-  let qp = [(serialize-qp "quote_state_id, use filters={"quote_state_id":111111}" $quote_state_id_use_filters_quote_state_id_111111 "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "quote_state_id, use filters={\"quote_state_id\":111111}" $quote_state_id_use_filters_quote_state_id_111111 "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/quotes") $qp $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2634,7 +2644,7 @@ export def "get-quote" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<result: record<client: string, client_user_id: int, comments: string, creator_user_id: int, currency: string, custom_fields: list<record>, description: string, grand_total: any, is_show_supplier_information: bool, last_update_by_user_id: int, proposed_order_completion_date: string, quote_expiration_date: string, quote_id: int, quote_items: list<record>, quote_items_total: any, quote_title: string, shipping: any, status: string, submit_date: string, tax: any, transactional_currency: string, transactional_grand_total: any, transactional_quote_items_total: any, transactional_shipping: any, transactional_tax: any, vat_code: string, vat_rate: any>, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<result: record<client: string, client_user_id: int, comments: string, creator_user_id: int, currency: string, custom_fields: list<record>, description: string, grand_total: any, is_show_supplier_information: bool, last_update_by_user_id: int, proposed_order_completion_date: string, quote_expiration_date: string, quote_id: int, quote_items: list<record>, quote_items_total: any, quote_title: string, shipping: any, status: string, submit_date: string, tax: any, transactional_currency: string, transactional_grand_total: any, transactional_quote_items_total: any, transactional_shipping: any, transactional_tax: any, vat_code: string, vat_rate: any>, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -2679,7 +2689,7 @@ export def "put-quote" [
   --po-number: string # e.g. sample po_number
   --body-quote-id: int # format: int64, e.g. 1
   --state-change-comments: string # e.g. sample state_change_comments
-]: any -> record<status_code: int, status_reason: string> {
+]: any -> oneof<record<status_code: int, status_reason: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2722,7 +2732,7 @@ export def "get-rfe-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<results: table<estimate_due_date: string, rfe_id: int, rfe_items: list, rfe_title: string, supplier_estimates: list>, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<results: table<estimate_due_date: string, rfe_id: int, rfe_items: list, rfe_title: string, supplier_estimates: list>, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -2748,7 +2758,6 @@ export def "get-rfe-list" [
 #
 # POST /v1/workgroups/{workgroup_id}/projects/{project_id}/rfes
 # operationId: postRfe
-# --specs item shape: {quantity_1?: int, quantity_2?: int, quantity_3?: int, quantity_4?: int, quantity_5?: int, spec_id?: int}
 export def "post-rfe" [
   workgroup_id: string
   project_id: string
@@ -2770,7 +2779,7 @@ export def "post-rfe" [
   --rfe-title: string # e.g. sample rfe_title
   --specs: list # item shape: {quantity_1?: int, quantity_2?: int, quantity_3?: int, quantity_4?: int, quantity_5?: int, spec_id?: int}
   --supplier-user-ids: list<int>
-]: any -> record<rfq_id: int, status_code: int, status_reason: string> {
+]: any -> oneof<record<rfq_id: int, status_code: int, status_reason: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2813,7 +2822,7 @@ export def "get-rfe" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<result: record<description: string, details: string, estimate_due_date: string, estimators: list<string>, itemized_tax_and_shipping: int, proposed_order_completion_date: string, reference_number: string, requestor: string, rfe_id: int, rfe_items: list<record>, status: string, submitted_date: string, supplier_estimates: list<record>, title: string>, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<result: record<description: string, details: string, estimate_due_date: string, estimators: list<string>, itemized_tax_and_shipping: int, proposed_order_completion_date: string, reference_number: string, requestor: string, rfe_id: int, rfe_items: list<record>, status: string, submitted_date: string, supplier_estimates: list<record>, title: string>, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -2853,7 +2862,7 @@ export def "get-rfq-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<result: table<quotes: list, received_date: string, rfq_id: int, rfq_title: string, status: string>, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<result: table<quotes: list, received_date: string, rfq_id: int, rfq_title: string, status: string>, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -2893,7 +2902,7 @@ export def "get-rfq" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<result: record<comments: string, description: string, proposed_completion_date: string, quote_due_date: string, quotes: list<record>, received_date: string, recipient_name: string, requestor_name: string, rfq_id: int, rfq_items: list<record>, rfq_title: string, status: string>, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<result: record<comments: string, description: string, proposed_completion_date: string, quote_due_date: string, quotes: list<record>, received_date: string, recipient_name: string, requestor_name: string, rfq_id: int, rfq_items: list<record>, rfq_title: string, status: string>, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -2933,7 +2942,7 @@ export def "get-sell-order-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<results: table<buyer_workgroup: record, change_orders: list, closing_change_orders: list, comments: string, completion_date: string, currency: string, grand_total: any, grand_total_with_changes: any, last_changed: string, last_status_change: string, order_id: int, order_number: string, order_title: string, payment_reference: string, print_order_ids: list, status: string, status_comments: string, supplier_reference: string, supplier_workgroup: record, transactional_currency: string, transactional_grand_total: any, transactional_grand_total_with_changes: any>, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<results: table<buyer_workgroup: record, change_orders: list, closing_change_orders: list, comments: string, completion_date: string, currency: string, grand_total: any, grand_total_with_changes: any, last_changed: string, last_status_change: string, order_id: int, order_number: string, order_title: string, payment_reference: string, print_order_ids: list, status: string, status_comments: string, supplier_reference: string, supplier_workgroup: record, transactional_currency: string, transactional_grand_total: any, transactional_grand_total_with_changes: any>, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -2973,7 +2982,7 @@ export def "get-sell-order" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<accepted_date: string, annulled_date: string, approved_date: string, awarded_date: string, budget_type: string, buyer: record<email: string, first_name: string, last_name: string, middle_name: string, user_id: int>, buyer_workgroup: record<workgroup_id: int, workgroup_name: string>, change_orders: table<accepted_date: string, annulled_date: string, approved_date: string, awarded_date: string, budget_type: string, buyer: record, buyer_workgroup: record, classification: string, closed_date: string, comments: string, completion_date: string, creator_user_id: int, currency: string, custom_fields: list, grand_total: any, item_count: int, last_activity_date: string, last_changed: string, last_status_change: string, misc_cost: float, order_id: int, order_number: string, order_title: string, order_total: any, overs_percent: float, parent_order_id: int, payment_reference: string, print_order_ids: list, quote_id: int, shipping: any, status: string, status_comments: string, supplier: record, supplier_reference: string, supplier_selection_reason: string, supplier_workgroup: record, tax: any, transactional_currency: string, transactional_grand_total: any, transactional_order_total: any, transactional_shipping: any, transactional_tax: any, unders_percent: float>, classification: string, closed_date: string, closing_change_orders: table<accepted_date: string, annulled_date: string, approved_date: string, awarded_date: string, budget_type: string, buyer: record, buyer_workgroup: record, classification: string, closed_date: string, comments: string, completion_date: string, creator_user_id: int, currency: string, custom_fields: list, grand_total: any, item_count: int, last_activity_date: string, last_changed: string, last_status_change: string, misc_cost: float, order_id: int, order_number: string, order_title: string, order_total: any, overs_percent: float, parent_order_id: int, payment_reference: string, print_order_ids: list, quote_id: int, shipping: any, status: string, status_comments: string, supplier: record, supplier_reference: string, supplier_selection_reason: string, supplier_workgroup: record, tax: any, transactional_currency: string, transactional_grand_total: any, transactional_order_total: any, transactional_shipping: any, transactional_tax: any, unders_percent: float>, comments: string, completion_date: string, creator_user_id: int, currency: string, custom_fields: table<date_value: string, number_value: any, param_id: int, param_name: string, property_attribute_id: int, string_value: string>, grand_total: any, grand_total_with_changes: any, item_count: int, last_activity_date: string, last_changed: string, last_status_change: string, misc_cost: float, order_id: int, order_items: table<comments: string, completion_date: string, custom_fields: list, item_id: int, item_price: float, quantity: float, shipping: any, spec: record, tax: any, transactional_item_price: float, transactional_shipping: any, transactional_tax: any, transactional_unit_price: any, unit_description: string, unit_price: any>, order_number: string, order_title: string, order_total: any, overs_percent: float, parent_order_id: int, payment_reference: string, print_order_ids: list<int>, quote_id: int, shipping: any, status: string, status_comments: string, supplier: record<email: string, first_name: string, last_name: string, middle_name: string, user_id: int>, supplier_reference: string, supplier_selection_reason: string, supplier_workgroup: record<workgroup_id: int, workgroup_name: string>, tax: any, transactional_currency: string, transactional_grand_total: any, transactional_grand_total_with_changes: any, transactional_order_total: any, transactional_shipping: any, transactional_tax: any, unders_percent: float> {
+]: nothing -> oneof<record<accepted_date: string, annulled_date: string, approved_date: string, awarded_date: string, budget_type: string, buyer: record<email: string, first_name: string, last_name: string, middle_name: string, user_id: int>, buyer_workgroup: record<workgroup_id: int, workgroup_name: string>, change_orders: table<accepted_date: string, annulled_date: string, approved_date: string, awarded_date: string, budget_type: string, buyer: record, buyer_workgroup: record, classification: string, closed_date: string, comments: string, completion_date: string, creator_user_id: int, currency: string, custom_fields: list, grand_total: any, item_count: int, last_activity_date: string, last_changed: string, last_status_change: string, misc_cost: float, order_id: int, order_number: string, order_title: string, order_total: any, overs_percent: float, parent_order_id: int, payment_reference: string, print_order_ids: list, quote_id: int, shipping: any, status: string, status_comments: string, supplier: record, supplier_reference: string, supplier_selection_reason: string, supplier_workgroup: record, tax: any, transactional_currency: string, transactional_grand_total: any, transactional_order_total: any, transactional_shipping: any, transactional_tax: any, unders_percent: float>, classification: string, closed_date: string, closing_change_orders: table<accepted_date: string, annulled_date: string, approved_date: string, awarded_date: string, budget_type: string, buyer: record, buyer_workgroup: record, classification: string, closed_date: string, comments: string, completion_date: string, creator_user_id: int, currency: string, custom_fields: list, grand_total: any, item_count: int, last_activity_date: string, last_changed: string, last_status_change: string, misc_cost: float, order_id: int, order_number: string, order_title: string, order_total: any, overs_percent: float, parent_order_id: int, payment_reference: string, print_order_ids: list, quote_id: int, shipping: any, status: string, status_comments: string, supplier: record, supplier_reference: string, supplier_selection_reason: string, supplier_workgroup: record, tax: any, transactional_currency: string, transactional_grand_total: any, transactional_order_total: any, transactional_shipping: any, transactional_tax: any, unders_percent: float>, comments: string, completion_date: string, creator_user_id: int, currency: string, custom_fields: table<date_value: string, number_value: any, param_id: int, param_name: string, property_attribute_id: int, string_value: string>, grand_total: any, grand_total_with_changes: any, item_count: int, last_activity_date: string, last_changed: string, last_status_change: string, misc_cost: float, order_id: int, order_items: table<comments: string, completion_date: string, custom_fields: list, item_id: int, item_price: float, quantity: float, shipping: any, spec: record, tax: any, transactional_item_price: float, transactional_shipping: any, transactional_tax: any, transactional_unit_price: any, unit_description: string, unit_price: any>, order_number: string, order_title: string, order_total: any, overs_percent: float, parent_order_id: int, payment_reference: string, print_order_ids: list<int>, quote_id: int, shipping: any, status: string, status_comments: string, supplier: record<email: string, first_name: string, last_name: string, middle_name: string, user_id: int>, supplier_reference: string, supplier_selection_reason: string, supplier_workgroup: record<workgroup_id: int, workgroup_name: string>, tax: any, transactional_currency: string, transactional_grand_total: any, transactional_grand_total_with_changes: any, transactional_order_total: any, transactional_shipping: any, transactional_tax: any, unders_percent: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -3000,7 +3009,6 @@ export def "get-sell-order" [
 #
 # PUT /v1/workgroups/{workgroup_id}/projects/{project_id}/sellOrders/{order_id}
 # operationId: putSellOrder
-# --custom_fields item shape: {date_value?: string, number_value?: any, param_name?: string, string_value?: string}
 export def "put-sell-order" [
   workgroup_id: string
   project_id: string
@@ -3028,7 +3036,7 @@ export def "put-sell-order" [
   --reject-reason: string # e.g. sample reject_reason
   --supplier-selection-reason-id: int # format: int64, e.g. 1
   --unders-percent: any # Java type: java.math.BigDecimal
-]: any -> record<order_id: int, status_code: int, status_reason: string> {
+]: any -> oneof<record<order_id: int, status_code: int, status_reason: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3071,7 +3079,7 @@ export def "get-shipment-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<result: table<locations_count: int, qty_received: int, qty_requested: int, qty_shipped: int, received_date: string, shipment_id: int, shipment_status: string, shipped_date: string, spec: record>, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<result: table<locations_count: int, qty_received: int, qty_requested: int, qty_shipped: int, received_date: string, shipment_id: int, shipment_status: string, shipped_date: string, spec: record>, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -3097,8 +3105,6 @@ export def "get-shipment-list" [
 #
 # POST /v1/workgroups/{workgroup_id}/projects/{project_id}/shipments
 # operationId: postShipment
-# --shipment_custom_fields item shape: {date_value?: string, number_value?: any, param_name?: string, string_value?: string}
-# --shipment_request_custom_fields item shape: {date_value?: string, number_value?: any, param_name?: string, string_value?: string}
 export def "post-shipment" [
   workgroup_id: string
   project_id: string
@@ -3141,7 +3147,7 @@ export def "post-shipment" [
   --state: string # e.g. sample state
   --work-phone-number: string # e.g. sample work_phone_number
   --workgroup-name: string # e.g. sample workgroup_name
-]: any -> record<results: table<location_id: int, shipment_id: int, spec_id: int>, status_code: int, status_reason: string> {
+]: any -> oneof<record<results: table<location_id: int, shipment_id: int, spec_id: int>, status_code: int, status_reason: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3184,7 +3190,7 @@ export def "get-shipment" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<result: record<locations: list<record>, locations_count: int, qty_received: int, qty_requested: int, qty_shipped: int, received_date: string, shipment_id: int, shipment_status: string, shipped_date: string, spec: record<job_id: int, reference_number: string, spec_id: int, spec_name: string>>, resut: record<locations: list<record>, locations_count: int, qty_received: int, qty_requested: int, qty_shipped: int, received_date: string, shipment_id: int, shipment_status: string, shipped_date: string, spec: record<job_id: int, reference_number: string, spec_id: int, spec_name: string>>, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<result: record<locations: list<record>, locations_count: int, qty_received: int, qty_requested: int, qty_shipped: int, received_date: string, shipment_id: int, shipment_status: string, shipped_date: string, spec: record<job_id: int, reference_number: string, spec_id: int, spec_name: string>>, resut: record<locations: list<record>, locations_count: int, qty_received: int, qty_requested: int, qty_shipped: int, received_date: string, shipment_id: int, shipment_status: string, shipped_date: string, spec: record<job_id: int, reference_number: string, spec_id: int, spec_name: string>>, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -3234,7 +3240,7 @@ export def "put-shipment-location" [
   --shipped-date: string # format: date
   --shipping-cost: any # Java type: java.math.BigDecimal
   --type: string # e.g. sample type
-]: any -> record<status_code: int, status_reason: string> {
+]: any -> oneof<record<status_code: int, status_reason: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3278,7 +3284,7 @@ export def "get-spec-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<results: table<client_status: string, create_date: string, created_by: record, job_id: int, last_updated: string, reference_number: string, spec_id: int, spec_name: string, spec_options_complete: list, supplier_status: string, uofms: list, user_state: string>, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<results: table<client_status: string, create_date: string, created_by: record, job_id: int, last_updated: string, reference_number: string, spec_id: int, spec_name: string, spec_options_complete: list, supplier_status: string, uofms: list, user_state: string>, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -3304,7 +3310,6 @@ export def "get-spec-list" [
 #
 # POST /v1/workgroups/{workgroup_id}/projects/{project_id}/specs
 # operationId: postSpec
-# --versions item shape: {description?: string, qty?: int}
 export def "post-spec" [
   workgroup_id: string
   project_id: string
@@ -3330,7 +3335,7 @@ export def "post-spec" [
   --spec-template-id: int # format: int64, e.g. 1
   --spec-type-id: int # format: int64, e.g. 1
   --versions: list # item shape: {description?: string, qty?: int}
-]: any -> record<spec_id: int, status_code: int, status_reason: string> {
+]: any -> oneof<record<spec_id: int, status_code: int, status_reason: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3372,7 +3377,7 @@ export def "get-v1-workgroups-workgroup-id-projects-project-id-specs-spec-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<results: table<client_status: string, create_date: string, created_by: record, job_id: int, last_updated: string, reference_number: string, spec_id: int, spec_name: string, spec_options_complete: list, supplier_status: string, uofms: list, user_state: string>, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<results: table<client_status: string, create_date: string, created_by: record, job_id: int, last_updated: string, reference_number: string, spec_id: int, spec_name: string, spec_options_complete: list, supplier_status: string, uofms: list, user_state: string>, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -3398,7 +3403,6 @@ export def "get-v1-workgroups-workgroup-id-projects-project-id-specs-spec-id" [
 # Update a specific Spec
 #
 # PUT /v1/workgroups/{workgroup_id}/projects/{project_id}/specs/{spec_id}
-# --inks_and_paper item shape: {custom_fields?: list, paper_id?: int}
 export def "put-v1-workgroups-workgroup-id-projects-project-id-specs-spec-id" [
   workgroup_id: string
   project_id: string
@@ -3422,7 +3426,7 @@ export def "put-v1-workgroups-workgroup-id-projects-project-id-specs-spec-id" [
   --quantity-5: int # format: int64, e.g. 1
   --sku: string # e.g. sample sku
   --spec-name: string # e.g. sample spec_name
-]: any -> record<spec_id: int, spec_name: string, status_code: int, status_reason: string> {
+]: any -> oneof<record<spec_id: int, spec_name: string, status_code: int, status_reason: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3465,7 +3469,7 @@ export def "get-task-list-of-project" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<results: table<actual_end: string, actual_hours: any, actual_start: string, assign_to: record, baseline_duration: any, baseline_end_date: string, baseline_start_date: string, current_duration: any, is_milestone: bool, mod_date: string, plan_end: string, plan_start: string, priority: string, schedule_code: string, status: string, task_id: int, task_name: string, task_type: string>, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<results: table<actual_end: string, actual_hours: any, actual_start: string, assign_to: record, baseline_duration: any, baseline_end_date: string, baseline_start_date: string, current_duration: any, is_milestone: bool, mod_date: string, plan_end: string, plan_start: string, priority: string, schedule_code: string, status: string, task_id: int, task_name: string, task_type: string>, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -3523,7 +3527,7 @@ export def "post-task-for-project" [
   --status-id: int # format: int64, e.g. 1
   --task-id: int # format: int64, e.g. 1
   --task-type-id: int # format: int64, e.g. 1
-]: any -> record<status_code: int, status_reason: string, task_id: int> {
+]: any -> oneof<record<status_code: int, status_reason: string, task_id: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3566,7 +3570,7 @@ export def "get-task-of-project" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<result: record<actual_duration: any, actual_end: string, actual_hours: any, actual_start: string, assign_to: record<email: string, first_name: string, last_name: string, middle_name: string>, baseline_duration: any, baseline_end_date: string, baseline_start_date: string, comments: string, create_date: string, creator_workgroup_name: string, current_duration: any, description: string, is_milestone: bool, last_updated_by: record<email: string, first_name: string, last_name: string, middle_name: string>, mod_date: string, percent_complete: int, plan_duration: any, plan_end: string, plan_start: string, priority: string, requested_by: record<email: string, first_name: string, last_name: string, middle_name: string>, schedule_code: string, status: string, task_id: int, task_name: string, task_type: string>, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<result: record<actual_duration: any, actual_end: string, actual_hours: any, actual_start: string, assign_to: record<email: string, first_name: string, last_name: string, middle_name: string>, baseline_duration: any, baseline_end_date: string, baseline_start_date: string, comments: string, create_date: string, creator_workgroup_name: string, current_duration: any, description: string, is_milestone: bool, last_updated_by: record<email: string, first_name: string, last_name: string, middle_name: string>, mod_date: string, percent_complete: int, plan_duration: any, plan_end: string, plan_start: string, priority: string, requested_by: record<email: string, first_name: string, last_name: string, middle_name: string>, schedule_code: string, status: string, task_id: int, task_name: string, task_type: string>, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -3606,7 +3610,7 @@ export def "get-team-member-list-of-client-project" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<results: table<company_name: string, name: string, phone: string, role: string, teammember_id: int, user_id: int, workgroup_name: string>, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<results: table<company_name: string, name: string, phone: string, role: string, teammember_id: int, user_id: int, workgroup_name: string>, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -3645,7 +3649,7 @@ export def "get-team-member-list-of-project" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<results: table<company_name: string, name: string, phone: string, role: string, teammember_id: int, user_id: int, workgroup_name: string>, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<results: table<company_name: string, name: string, phone: string, role: string, teammember_id: int, user_id: int, workgroup_name: string>, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -3685,7 +3689,7 @@ export def "post-v1-workgroups-workgroup-id-projects-project-id-teammembers" [
   --accept: string@accept-completer # Response content type
   role_id: int # format: int64, e.g. 1
   user_id: int # format: int64, e.g. 1
-]: any -> record<status_code: int, status_reason: string, teammember_id: int> {
+]: any -> oneof<record<status_code: int, status_reason: string, teammember_id: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3728,7 +3732,7 @@ export def "delete-team-member-of-project" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<status_code: int, status_reason: string, teammember_id: int> {
+]: nothing -> oneof<record<status_code: int, status_reason: string, teammember_id: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -3767,7 +3771,7 @@ export def "get-quote-state-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<results: table<object_state_id: int, object_state_name: string>, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<results: table<object_state_id: int, object_state_name: string>, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -3804,11 +3808,11 @@ export def "get-v1-workgroups-workgroup-id-quotes" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --quote-state-id-use-filters-quote-state-id-111111: string # Quote Object State Id, use /workgroups/{workgroup_id}/quoteStates to get correct value
-]: nothing -> record<currency: string, grand_total: any, project: record<project_id: int, project_name: string, project_number: string>, quote_id: int, quote_title: string, rfq: record<received_date: string, rfq_id: int, rfq_title: string, status: string>, status: string, submit_date: string, transactional_currency: string, transactional_grand_total: any> {
+]: nothing -> oneof<record<currency: string, grand_total: any, project: record<project_id: int, project_name: string, project_number: string>, quote_id: int, quote_title: string, rfq: record<received_date: string, rfq_id: int, rfq_title: string, status: string>, status: string, submit_date: string, transactional_currency: string, transactional_grand_total: any>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
-  let qp = [(serialize-qp "quote_state_id, use filters={"quote_state_id":111111}" $quote_state_id_use_filters_quote_state_id_111111 "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "quote_state_id, use filters={\"quote_state_id\":111111}" $quote_state_id_use_filters_quote_state_id_111111 "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/quotes") $qp $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3842,7 +3846,7 @@ export def "get-received-time-card-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<results: table<is_submit: bool, last_updated_date: string, no_of_workdays: int, submit_date: string, timecard_id: int, total_hours: any, week_beginning: string>, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<results: table<is_submit: bool, last_updated_date: string, no_of_workdays: int, submit_date: string, timecard_id: int, total_hours: any, week_beginning: string>, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -3880,7 +3884,7 @@ export def "get-received-time-card" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<billable_hours: any, is_submit: bool, last_updated_date: string, no_of_workdays: int, nonbillable_hours: any, owner: record<email: string, first_name: string, last_name: string, middle_name: string>, submit_date: string, time_card_line: table<activity_name: string, day1_hours_spent: any, day2_hours_spent: any, day3_hours_spent: any, day4_hours_spent: any, day5_hours_spent: any, day6_hours_spent: any, day7_hours_spent: any, project: record, task: record, time_card_line_id: int, total_hours_spent: any>, timecard_id: int, total_hours: any, week_beginning: string> {
+]: nothing -> oneof<record<billable_hours: any, is_submit: bool, last_updated_date: string, no_of_workdays: int, nonbillable_hours: any, owner: record<email: string, first_name: string, last_name: string, middle_name: string>, submit_date: string, time_card_line: table<activity_name: string, day1_hours_spent: any, day2_hours_spent: any, day3_hours_spent: any, day4_hours_spent: any, day5_hours_spent: any, day6_hours_spent: any, day7_hours_spent: any, project: record, task: record, time_card_line_id: int, total_hours_spent: any>, timecard_id: int, total_hours: any, week_beginning: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -3918,7 +3922,7 @@ export def "get-sell-order-list-of-workgroup" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<results: table<buyer_workgroup: record, change_orders: list, closing_change_orders: list, comments: string, completion_date: string, currency: string, grand_total: any, grand_total_with_changes: any, last_changed: string, last_status_change: string, order_id: int, order_number: string, order_title: string, payment_reference: string, print_order_ids: list, project: record, status: string, status_comments: string, supplier_reference: string, supplier_workgroup: record, transactional_currency: string, transactional_grand_total: any, transactional_grand_total_with_changes: any>, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<results: table<buyer_workgroup: record, change_orders: list, closing_change_orders: list, comments: string, completion_date: string, currency: string, grand_total: any, grand_total_with_changes: any, last_changed: string, last_status_change: string, order_id: int, order_number: string, order_title: string, payment_reference: string, print_order_ids: list, project: record, status: string, status_comments: string, supplier_reference: string, supplier_workgroup: record, transactional_currency: string, transactional_grand_total: any, transactional_grand_total_with_changes: any>, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -3956,7 +3960,7 @@ export def "get-sell-order-of-workgroup" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<result: record<accepted_date: string, annulled_date: string, approved_date: string, awarded_date: string, budget_type: string, buyer: record<email: string, first_name: string, last_name: string, middle_name: string, user_id: int>, buyer_workgroup: record<workgroup_id: int, workgroup_name: string>, change_orders: list<record>, classification: string, closed_date: string, closing_change_orders: list<record>, comments: string, completion_date: string, creator_user_id: int, currency: string, custom_fields: list<record>, grand_total: any, grand_total_with_changes: any, item_count: int, last_activity_date: string, last_changed: string, last_status_change: string, misc_cost: float, order_id: int, order_items: list<record>, order_number: string, order_title: string, order_total: any, overs_percent: float, parent_order_id: int, payment_reference: string, print_order_ids: list<int>, project: record<project_id: int, project_name: string, project_number: string>, quote_id: int, shipping: any, status: string, status_comments: string, supplier: record<email: string, first_name: string, last_name: string, middle_name: string, user_id: int>, supplier_reference: string, supplier_selection_reason: string, supplier_workgroup: record<workgroup_id: int, workgroup_name: string>, tax: any, transactional_currency: string, transactional_grand_total: any, transactional_grand_total_with_changes: any, transactional_order_total: any, transactional_shipping: any, transactional_tax: any, unders_percent: float>, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<result: record<accepted_date: string, annulled_date: string, approved_date: string, awarded_date: string, budget_type: string, buyer: record<email: string, first_name: string, last_name: string, middle_name: string, user_id: int>, buyer_workgroup: record<workgroup_id: int, workgroup_name: string>, change_orders: list<record>, classification: string, closed_date: string, closing_change_orders: list<record>, comments: string, completion_date: string, creator_user_id: int, currency: string, custom_fields: list<record>, grand_total: any, grand_total_with_changes: any, item_count: int, last_activity_date: string, last_changed: string, last_status_change: string, misc_cost: float, order_id: int, order_items: list<record>, order_number: string, order_title: string, order_total: any, overs_percent: float, parent_order_id: int, payment_reference: string, print_order_ids: list<int>, project: record<project_id: int, project_name: string, project_number: string>, quote_id: int, shipping: any, status: string, status_comments: string, supplier: record<email: string, first_name: string, last_name: string, middle_name: string, user_id: int>, supplier_reference: string, supplier_selection_reason: string, supplier_workgroup: record<workgroup_id: int, workgroup_name: string>, tax: any, transactional_currency: string, transactional_grand_total: any, transactional_grand_total_with_changes: any, transactional_order_total: any, transactional_shipping: any, transactional_tax: any, unders_percent: float>, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -3994,7 +3998,7 @@ export def "get-spec-template-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<results: table<created_by: record, created_date: string, is_active: bool, is_externally_published: bool, is_locked: bool, last_updated_date: string, spec_template_id: int, spec_template_name: string>, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<results: table<created_by: record, created_date: string, is_active: bool, is_externally_published: bool, is_locked: bool, last_updated_date: string, spec_template_id: int, spec_template_name: string>, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -4032,7 +4036,7 @@ export def "get-spec-template" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<result: record<created_by: record<email: string, first_name: string, last_name: string, middle_name: string>, created_date: string, is_active: bool, is_externally_published: bool, is_locked: bool, last_updated_date: string, product_type: string, product_type_info: record<label: string, product_type_id: int>, spec_template_id: int, spec_template_name: string, spec_type: record<spec_type_id: int, spec_type_name: string>>, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<result: record<created_by: record<email: string, first_name: string, last_name: string, middle_name: string>, created_date: string, is_active: bool, is_externally_published: bool, is_locked: bool, last_updated_date: string, product_type: string, product_type_info: record<label: string, product_type_id: int>, spec_template_id: int, spec_template_name: string, spec_type: record<spec_type_id: int, spec_type_name: string>>, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -4070,7 +4074,7 @@ export def "get-v1-workgroups-workgroup-id-spec-types-spec-type-id-spec-type-fie
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<result: table<data_type: string, param_name: string>, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<result: table<data_type: string, param_name: string>, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -4108,7 +4112,7 @@ export def "get-supplier-workgroup-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<result: table<bu_supplier_workgroup_id: int, bu_supplier_workgroup_name: string, client_workgroup_id: int, client_workgroup_name: string, is_approved: bool, supplier_code: string, supplier_workgroup_id: int, supplier_workgroup_name: string>, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<result: table<bu_supplier_workgroup_id: int, bu_supplier_workgroup_name: string, client_workgroup_id: int, client_workgroup_name: string, is_approved: bool, supplier_code: string, supplier_workgroup_id: int, supplier_workgroup_name: string>, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -4146,7 +4150,7 @@ export def "get-supplier-workgroup-detail" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<result: record<additional_workgroups_contain_same_supplier: list<record>, bu_supplier_workgroup_id: int, bu_supplier_workgroup_name: string, client_workgroup_id: int, client_workgroup_name: string, is_approved: bool, supplier_code: string, supplier_workgroup_id: int, supplier_workgroup_name: string>, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<result: record<additional_workgroups_contain_same_supplier: list<record>, bu_supplier_workgroup_id: int, bu_supplier_workgroup_name: string, client_workgroup_id: int, client_workgroup_name: string, is_approved: bool, supplier_code: string, supplier_workgroup_id: int, supplier_workgroup_name: string>, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -4184,7 +4188,7 @@ export def "get-task-types-of-workgroup" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<results: table<task_type: string, task_type_id: int>, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<results: table<task_type: string, task_type_id: int>, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -4221,7 +4225,7 @@ export def "get-task-list-of-workgroup" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<results: table<actual_end: string, actual_hours: any, actual_start: string, assign_to: record, baseline_duration: any, baseline_end_date: string, baseline_start_date: string, current_duration: any, is_milestone: bool, mod_date: string, plan_end: string, plan_start: string, priority: string, project: record, schedule_code: string, status: string, task_id: int, task_name: string, task_type: string>, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<results: table<actual_end: string, actual_hours: any, actual_start: string, assign_to: record, baseline_duration: any, baseline_end_date: string, baseline_start_date: string, current_duration: any, is_milestone: bool, mod_date: string, plan_end: string, plan_start: string, priority: string, project: record, schedule_code: string, status: string, task_id: int, task_name: string, task_type: string>, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -4259,7 +4263,7 @@ export def "get-task-of-workgroup" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<result: record<actual_duration: any, actual_end: string, actual_hours: any, actual_start: string, assign_to: record<email: string, first_name: string, last_name: string, middle_name: string>, baseline_duration: any, baseline_end_date: string, baseline_start_date: string, comments: string, create_date: string, creator_workgroup_name: string, current_duration: any, description: string, is_milestone: bool, last_updated_by: record<email: string, first_name: string, last_name: string, middle_name: string>, mod_date: string, percent_complete: int, plan_duration: any, plan_end: string, plan_start: string, priority: string, project: record<project_id: int, project_name: string, project_number: string>, requested_by: record<email: string, first_name: string, last_name: string, middle_name: string>, schedule_code: string, status: string, task_id: int, task_name: string, task_type: string>, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<result: record<actual_duration: any, actual_end: string, actual_hours: any, actual_start: string, assign_to: record<email: string, first_name: string, last_name: string, middle_name: string>, baseline_duration: any, baseline_end_date: string, baseline_start_date: string, comments: string, create_date: string, creator_workgroup_name: string, current_duration: any, description: string, is_milestone: bool, last_updated_by: record<email: string, first_name: string, last_name: string, middle_name: string>, mod_date: string, percent_complete: int, plan_duration: any, plan_end: string, plan_start: string, priority: string, project: record<project_id: int, project_name: string, project_number: string>, requested_by: record<email: string, first_name: string, last_name: string, middle_name: string>, schedule_code: string, status: string, task_id: int, task_name: string, task_type: string>, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -4297,7 +4301,7 @@ export def "get-team-template-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<results: table<team_template_id: int, team_template_name: string>, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<results: table<team_template_id: int, team_template_name: string>, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -4335,7 +4339,7 @@ export def "get-team-template-detail" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<results: record<team_teample_item: list<record>, team_template_id: int, team_template_name: string>, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<results: record<team_teample_item: list<record>, team_template_id: int, team_template_name: string>, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -4373,7 +4377,7 @@ export def "get-workgroup-member-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<results: table<email: string, first_name: string, last_name: string, user_id: int>, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<results: table<email: string, first_name: string, last_name: string, user_id: int>, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
@@ -4411,7 +4415,7 @@ export def "get-workgroup-member-info" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<result: record<address: any, company_name: string, email: string, fax_number: string, first_name: string, last_name: string, locale: string, middle_name: string, organization: string, phone_number: string, time_zone: string, title: string, user_id: int>, status_code: int, status_reason: string> {
+]: nothing -> oneof<record<result: record<address: any, company_name: string, email: string, fax_number: string, first_name: string, last_name: string, locale: string, middle_name: string, organization: string, phone_number: string, time_zone: string, title: string, user_id: int>, status_code: int, status_reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }

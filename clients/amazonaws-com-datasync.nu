@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -148,9 +171,9 @@ def x-amz-target-completer-43 [] { ["FmrsService.UpdateTaskExecution"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cancel-task-execution" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["cancel-task-execution" "create-agent" "create-location-efs" "create-location-fsx-lustre" "create-location-fsx-ontap" "create-location-fsx-open-zfs" "create-location-fsx-windows" "create-location-hdfs" "create-location-nfs" "create-location-object-storage" "create-location-s3" "create-location-smb" "create-task" "delete-agent" "delete-location" "delete-task" "describe-agent" "describe-location-efs" "describe-location-fsx-lustre" "describe-location-fsx-ontap" "describe-location-fsx-open-zfs" "describe-location-fsx-windows" "describe-location-hdfs" "describe-location-nfs" "describe-location-object-storage" "describe-location-s3" "describe-location-smb" "describe-task" "describe-task-execution" "list-agents" "list-locations" "list-tags-for-resource" "list-task-executions" "list-tasks" "start-task-execution" "tag-resource" "untag-resource" "update-agent" "update-location-hdfs" "update-location-nfs" "update-location-object-storage" "update-location-smb" "update-task" "update-task-execution" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -191,7 +214,7 @@ export def "cancel-task-execution" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer # required
   task_execution_arn: string # The Amazon Resource Name (ARN) of the task execution to stop.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -221,7 +244,6 @@ export def "cancel-task-execution" [
 #
 # POST /
 # operationId: CreateAgent
-# --Tags item shape: {Key: string, Value?: string}
 export def "create-agent" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -246,7 +268,7 @@ export def "create-agent" [
   --vpc-endpoint-id: string # The ID of the VPC (virtual private cloud) endpoint that the agent has access to. This is the client-side VPC endpoint, also called a PrivateLink. If you don't have a PrivateLink VPC endpoint, see Creating a VPC Endpoint Service Configuration (https://docs.aws.amazon.com/vpc/latest/userguide/endpoint-service.html#create-endpoint-service) in the Amazon VPC User Guide. VPC endpoint ID looks like this: vpce-01234d5aff67890e1.
   --subnet-arns: list<string> # The Amazon Resource Names (ARNs) of the subnets in which DataSync will create elastic network interfaces for each data transfer task. The agent that runs a task must be private. When you start a task that is associated with an agent created in a VPC, or one that has access to an IP address in a VPC, then the task is also private. In this case, DataSync creates four network interfaces for each task in your subnet. For a data transfer to work, the agent must be able to route to all these four network interfaces.
   --security-group-arns: list<string> # The ARNs of the security groups used to protect your data transfer task subnets. See SecurityGroupArns (https://docs.aws.amazon.com/datasync/latest/userguide/API_Ec2Config.html#DataSync-Type-Ec2Config-SecurityGroupArns).
-]: any -> record<AgentArn: string> {
+]: any -> oneof<record<AgentArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -276,8 +298,6 @@ export def "create-agent" [
 #
 # POST /
 # operationId: CreateLocationEfs
-# --Ec2Config shape: {SubnetArn: string, SecurityGroupArns: list<string>}
-# --Tags item shape: {Key: string, Value?: string}
 export def "create-location-efs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -303,7 +323,7 @@ export def "create-location-efs" [
   --access-point-arn: string # Specifies the Amazon Resource Name (ARN) of the access point that DataSync uses to access the Amazon EFS file system.
   --file-system-access-role-arn: string # Specifies an Identity and Access Management (IAM) role that DataSync assumes when mounting the Amazon EFS file system.
   --in-transit-encryption: string@in-transit-encryption-completer # Specifies whether you want DataSync to use Transport Layer Security (TLS) 1.2 encryption when it copies data to or from the Amazon EFS file system. If you specify an access point using AccessPointArn or an IAM role using FileSystemAccessRoleArn, you must set this parameter to TLS1_2.
-]: any -> record<LocationArn: string> {
+]: any -> oneof<record<LocationArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -333,7 +353,6 @@ export def "create-location-efs" [
 #
 # POST /
 # operationId: CreateLocationFsxLustre
-# --Tags item shape: {Key: string, Value?: string}
 export def "create-location-fsx-lustre" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -356,7 +375,7 @@ export def "create-location-fsx-lustre" [
   security_group_arns: list<string> # The Amazon Resource Names (ARNs) of the security groups that are used to configure the FSx for Lustre file system.
   --subdirectory: string # A subdirectory in the location's path. This subdirectory in the FSx for Lustre file system is used to read data from the FSx for Lustre source location or write data to the FSx for Lustre destination.
   --tags: list # The key-value pair that represents a tag that you want to add to the resource. The value can be an empty string. This value helps you manage, filter, and search for your resources. We recommend that you create a name tag for your location. — item shape: {Key: string, Value?: string}
-]: any -> record<LocationArn: string> {
+]: any -> oneof<record<LocationArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -386,8 +405,6 @@ export def "create-location-fsx-lustre" [
 #
 # POST /
 # operationId: CreateLocationFsxOntap
-# --Protocol shape: {NFS?: record, SMB?: record}
-# --Tags item shape: {Key: string, Value?: string}
 export def "create-location-fsx-ontap" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -411,7 +428,7 @@ export def "create-location-fsx-ontap" [
   storage_virtual_machine_arn: string # Specifies the ARN of the storage virtual machine (SVM) in your file system where you want to copy data to or from.
   --subdirectory: string # Specifies a path to the file share in the SVM where you'll copy your data. You can specify a junction path (also known as a mount point), qtree path (for NFS file shares), or share name (for SMB file shares). For example, your mount path might be /vol1, /vol1/tree1, or /share1. Don't specify a junction path in the SVM's root volume. For more information, see Managing FSx for ONTAP storage virtual machines (https://docs.aws.amazon.com/fsx/latest/ONTAPGuide/managing-svms.html) in the Amazon FSx for NetApp ONTAP User Guide.
   --tags: list # Specifies labels that help you categorize, filter, and search for your Amazon Web Services resources. We recommend creating at least a name tag for your location. — item shape: {Key: string, Value?: string}
-]: any -> record<LocationArn: string> {
+]: any -> oneof<record<LocationArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -441,8 +458,6 @@ export def "create-location-fsx-ontap" [
 #
 # POST /
 # operationId: CreateLocationFsxOpenZfs
-# --Protocol shape: {NFS?: record, SMB?: record}
-# --Tags item shape: {Key: string, Value?: string}
 export def "create-location-fsx-open-zfs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -466,7 +481,7 @@ export def "create-location-fsx-open-zfs" [
   security_group_arns: list<string> # The ARNs of the security groups that are used to configure the FSx for OpenZFS file system.
   --subdirectory: string # A subdirectory in the location's path that must begin with /fsx. DataSync uses this subdirectory to read or write data (depending on whether the file system is a source or destination location).
   --tags: list # The key-value pair that represents a tag that you want to add to the resource. The value can be an empty string. This value helps you manage, filter, and search for your resources. We recommend that you create a name tag for your location. — item shape: {Key: string, Value?: string}
-]: any -> record<LocationArn: string> {
+]: any -> oneof<record<LocationArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -496,7 +511,6 @@ export def "create-location-fsx-open-zfs" [
 #
 # POST /
 # operationId: CreateLocationFsxWindows
-# --Tags item shape: {Key: string, Value?: string}
 export def "create-location-fsx-windows" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -522,7 +536,7 @@ export def "create-location-fsx-windows" [
   user: string # Specifies the user who has the permissions to access files and folders in the file system. For information about choosing a user name that ensures sufficient permissions to files, folders, and metadata, see user (create-fsx-location.html#FSxWuser).
   --domain: string # Specifies the name of the Windows domain that the FSx for Windows File Server belongs to.
   password: string # Specifies the password of the user who has the permissions to access files and folders in the file system. (format: password)
-]: any -> record<LocationArn: string> {
+]: any -> oneof<record<LocationArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -552,9 +566,6 @@ export def "create-location-fsx-windows" [
 #
 # POST /
 # operationId: CreateLocationHdfs
-# --NameNodes item shape: {Hostname: string, Port: int}
-# --QopConfiguration shape: {RpcProtection?: "DISABLED"|"AUTHENTICATION"|"INTEGRITY"|"PRIVACY", DataTransferProtection?: "DISABLED"|"AUTHENTICATION"|"INTEGRITY"|"PRIVACY"}
-# --Tags item shape: {Key: string, Value?: string}
 export def "create-location-hdfs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -586,7 +597,7 @@ export def "create-location-hdfs" [
   --kerberos-krb5-conf: string # The krb5.conf file that contains the Kerberos configuration information. You can load the krb5.conf file by providing the file's address. If you're using the CLI, it performs the base64 encoding for you. Otherwise, provide the base64-encoded text. If KERBEROS is specified for AuthenticationType, this parameter is required.
   agent_arns: list<string> # The Amazon Resource Names (ARNs) of the agents that are used to connect to the HDFS cluster.
   --tags: list # The key-value pair that represents the tag that you want to add to the location. The value can be an empty string. We recommend using tags to name your resources. — item shape: {Key: string, Value?: string}
-]: any -> record<LocationArn: string> {
+]: any -> oneof<record<LocationArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -616,9 +627,6 @@ export def "create-location-hdfs" [
 #
 # POST /
 # operationId: CreateLocationNfs
-# --OnPremConfig shape: {AgentArns: list<string>}
-# --MountOptions shape: {Version?: "AUTOMATIC"|"NFS3"|"NFS4_0"|"NFS4_1"}
-# --Tags item shape: {Key: string, Value?: string}
 export def "create-location-nfs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -642,7 +650,7 @@ export def "create-location-nfs" [
   on_prem_config: record # A list of Amazon Resource Names (ARNs) of agents to use for a Network File System (NFS) location. — shape: {AgentArns: list<string>}
   --mount-options: record # Specifies how DataSync can access a location using the NFS protocol. — shape: {Version?: "AUTOMATIC"|"NFS3"|"NFS4_0"|"NFS4_1"}
   --tags: list # The key-value pair that represents the tag that you want to add to the location. The value can be an empty string. We recommend using tags to name your resources. — item shape: {Key: string, Value?: string}
-]: any -> record<LocationArn: string> {
+]: any -> oneof<record<LocationArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -672,7 +680,6 @@ export def "create-location-nfs" [
 #
 # POST /
 # operationId: CreateLocationObjectStorage
-# --Tags item shape: {Key: string, Value?: string}
 export def "create-location-object-storage" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -701,7 +708,7 @@ export def "create-location-object-storage" [
   agent_arns: list<string> # Specifies the Amazon Resource Names (ARNs) of the DataSync agents that can securely connect with your location.
   --tags: list # Specifies the key-value pair that represents a tag that you want to add to the resource. Tags can help you manage, filter, and search for your resources. We recommend creating a name tag for your location. — item shape: {Key: string, Value?: string}
   --server-certificate: string # Specifies a certificate to authenticate with an object storage system that uses a private or self-signed certificate authority (CA). You must specify a Base64-encoded .pem file (for example, file:///home/user/.ssh/storage_sys_certificate.pem). The certificate can be up to 32768 bytes (before Base64 encoding). To use this parameter, configure ServerProtocol to HTTPS.
-]: any -> record<LocationArn: string> {
+]: any -> oneof<record<LocationArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -731,8 +738,6 @@ export def "create-location-object-storage" [
 #
 # POST /
 # operationId: CreateLocationS3
-# --S3Config shape: {BucketAccessRoleArn: string}
-# --Tags item shape: {Key: string, Value?: string}
 export def "create-location-s3" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -757,7 +762,7 @@ export def "create-location-s3" [
   s3_config: record # The Amazon Resource Name (ARN) of the Identity and Access Management (IAM) role used to access an Amazon S3 bucket. For detailed information about using such a role, see Creating a Location for Amazon S3 in the DataSync User Guide. — shape: {BucketAccessRoleArn: string}
   --agent-arns: list<string> # If you're using DataSync on an Amazon Web Services Outpost, specify the Amazon Resource Names (ARNs) of the DataSync agents deployed on your Outpost. For more information about launching a DataSync agent on an Amazon Web Services Outpost, see Deploy your DataSync agent on Outposts (https://docs.aws.amazon.com/datasync/latest/userguide/deploy-agents.html#outposts-agent).
   --tags: list # The key-value pair that represents the tag that you want to add to the location. The value can be an empty string. We recommend using tags to name your resources. — item shape: {Key: string, Value?: string}
-]: any -> record<LocationArn: string> {
+]: any -> oneof<record<LocationArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -787,8 +792,6 @@ export def "create-location-s3" [
 #
 # POST /
 # operationId: CreateLocationSmb
-# --MountOptions shape: {Version?: "AUTOMATIC"|"SMB2"|"SMB3"|"SMB1"|"SMB2_0"}
-# --Tags item shape: {Key: string, Value?: string}
 export def "create-location-smb" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -815,7 +818,7 @@ export def "create-location-smb" [
   agent_arns: list<string> # Specifies the DataSync agent (or agents) which you want to connect to your SMB file server. You specify an agent by using its Amazon Resource Name (ARN).
   --mount-options: record # Specifies the version of the Server Message Block (SMB) protocol that DataSync uses to access an SMB file server. — shape: {Version?: "AUTOMATIC"|"SMB2"|"SMB3"|"SMB1"|"SMB2_0"}
   --tags: list # Specifies labels that help you categorize, filter, and search for your Amazon Web Services resources. We recommend creating at least a name tag for your location. — item shape: {Key: string, Value?: string}
-]: any -> record<LocationArn: string> {
+]: any -> oneof<record<LocationArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -845,11 +848,6 @@ export def "create-location-smb" [
 #
 # POST /
 # operationId: CreateTask
-# --Options shape: {VerifyMode?: "POINT_IN_TIME_CONSISTENT"|"ONLY_FILES_TRANSFERRED"|"NONE", OverwriteMode?: "ALWAYS"|"NEVER", Atime?: "NONE"|"BEST_EFFORT", Mtime?: "NONE"|"PRESERVE", Uid?: "NONE"|"INT_VALUE"|"NAME"|"BOTH", Gid?: "NONE"|"INT_VALUE"|"NAME"|"BOTH", PreserveDeletedFiles?: "PRESERVE"|"REMOVE", PreserveDevices?: "NONE"|"PRESERVE", PosixPermissions?: "NONE"|"PRESERVE", BytesPerSecond?: int, TaskQueueing?: "ENABLED"|"DISABLED", LogLevel?: "OFF"|"BASIC"|"TRANSFER", TransferMode?: "CHANGED"|"ALL", ... (2 more fields)}
-# --Excludes item shape: {FilterType?: "SIMPLE_PATTERN", Value?: string}
-# --Schedule shape: {ScheduleExpression: string}
-# --Tags item shape: {Key: string, Value?: string}
-# --Includes item shape: {FilterType?: "SIMPLE_PATTERN", Value?: string}
 export def "create-task" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -877,7 +875,7 @@ export def "create-task" [
   --schedule: record # Specifies the schedule you want your task to use for repeated executions. For more information, see Schedule Expressions for Rules (https://docs.aws.amazon.com/AmazonCloudWatch/latest/events/ScheduledEvents.html). — shape: {ScheduleExpression: string}
   --tags: list # Specifies the tags that you want to apply to the Amazon Resource Name (ARN) representing the task. Tags are key-value pairs that help you manage, filter, and search for your DataSync resources. — item shape: {Key: string, Value?: string}
   --includes: list # Specifies a list of filter rules that include specific data during your transfer. For more information and examples, see Filtering data transferred by DataSync (https://docs.aws.amazon.com/datasync/latest/userguide/filtering.html). — item shape: {FilterType?: "SIMPLE_PATTERN", Value?: string}
-]: any -> record<TaskArn: string> {
+]: any -> oneof<record<TaskArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -926,7 +924,7 @@ export def "delete-agent" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-13 # required
   agent_arn: string # The Amazon Resource Name (ARN) of the agent to delete. Use the ListAgents operation to return a list of agents for your account and Amazon Web Services Region.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -975,7 +973,7 @@ export def "delete-location" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-14 # required
   location_arn: string # The Amazon Resource Name (ARN) of the location to delete.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1024,7 +1022,7 @@ export def "delete-task" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-15 # required
   task_arn: string # Specifies the Amazon Resource Name (ARN) of the task that you want to delete.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1073,7 +1071,7 @@ export def "describe-agent" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-16 # required
   agent_arn: string # Specifies the Amazon Resource Name (ARN) of the DataSync agent to describe.
-]: any -> record<AgentArn: string, Name: string, Status: string, LastConnectionTime: string, CreationTime: string, EndpointType: string, PrivateLinkConfig: record<VpcEndpointId: string, PrivateLinkEndpoint: string, SubnetArns: list<string>, SecurityGroupArns: list<string>>> {
+]: any -> oneof<record<AgentArn: string, Name: string, Status: string, LastConnectionTime: string, CreationTime: string, EndpointType: string, PrivateLinkConfig: record<VpcEndpointId: string, PrivateLinkEndpoint: string, SubnetArns: list<string>, SecurityGroupArns: list<string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1122,7 +1120,7 @@ export def "describe-location-efs" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-17 # required
   location_arn: string # The Amazon Resource Name (ARN) of the Amazon EFS file system location that you want information about.
-]: any -> record<LocationArn: string, LocationUri: string, Ec2Config: record<SubnetArn: string, SecurityGroupArns: list<string>>, CreationTime: string, AccessPointArn: string, FileSystemAccessRoleArn: string, InTransitEncryption: string> {
+]: any -> oneof<record<LocationArn: string, LocationUri: string, Ec2Config: record<SubnetArn: string, SecurityGroupArns: list<string>>, CreationTime: string, AccessPointArn: string, FileSystemAccessRoleArn: string, InTransitEncryption: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1171,7 +1169,7 @@ export def "describe-location-fsx-lustre" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-18 # required
   location_arn: string # The Amazon Resource Name (ARN) of the FSx for Lustre location to describe.
-]: any -> record<LocationArn: string, LocationUri: string, SecurityGroupArns: list<string>, CreationTime: string> {
+]: any -> oneof<record<LocationArn: string, LocationUri: string, SecurityGroupArns: list<string>, CreationTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1220,7 +1218,7 @@ export def "describe-location-fsx-ontap" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-19 # required
   location_arn: string # Specifies the Amazon Resource Name (ARN) of the FSx for ONTAP file system location that you want information about.
-]: any -> record<CreationTime: string, LocationArn: string, LocationUri: string, Protocol: record<NFS: record<MountOptions: record>, SMB: record<Domain: string, MountOptions: record, Password: string, User: string>>, SecurityGroupArns: list<string>, StorageVirtualMachineArn: string, FsxFilesystemArn: string> {
+]: any -> oneof<record<CreationTime: string, LocationArn: string, LocationUri: string, Protocol: record<NFS: record<MountOptions: record>, SMB: record<Domain: string, MountOptions: record, Password: string, User: string>>, SecurityGroupArns: list<string>, StorageVirtualMachineArn: string, FsxFilesystemArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1269,7 +1267,7 @@ export def "describe-location-fsx-open-zfs" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-20 # required
   location_arn: string # The Amazon Resource Name (ARN) of the FSx for OpenZFS location to describe.
-]: any -> record<LocationArn: string, LocationUri: string, SecurityGroupArns: list<string>, Protocol: record<NFS: record<MountOptions: record>, SMB: record<Domain: string, MountOptions: record, Password: string, User: string>>, CreationTime: string> {
+]: any -> oneof<record<LocationArn: string, LocationUri: string, SecurityGroupArns: list<string>, Protocol: record<NFS: record<MountOptions: record>, SMB: record<Domain: string, MountOptions: record, Password: string, User: string>>, CreationTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1318,7 +1316,7 @@ export def "describe-location-fsx-windows" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-21 # required
   location_arn: string # The Amazon Resource Name (ARN) of the FSx for Windows File Server location to describe.
-]: any -> record<LocationArn: string, LocationUri: string, SecurityGroupArns: list<string>, CreationTime: string, User: string, Domain: string> {
+]: any -> oneof<record<LocationArn: string, LocationUri: string, SecurityGroupArns: list<string>, CreationTime: string, User: string, Domain: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1367,7 +1365,7 @@ export def "describe-location-hdfs" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-22 # required
   location_arn: string # The Amazon Resource Name (ARN) of the HDFS cluster location to describe.
-]: any -> record<LocationArn: string, LocationUri: string, NameNodes: table<Hostname: string, Port: int>, BlockSize: int, ReplicationFactor: int, KmsKeyProviderUri: string, QopConfiguration: record<RpcProtection: string, DataTransferProtection: string>, AuthenticationType: string, SimpleUser: string, KerberosPrincipal: string, AgentArns: list<string>, CreationTime: string> {
+]: any -> oneof<record<LocationArn: string, LocationUri: string, NameNodes: table<Hostname: string, Port: int>, BlockSize: int, ReplicationFactor: int, KmsKeyProviderUri: string, QopConfiguration: record<RpcProtection: string, DataTransferProtection: string>, AuthenticationType: string, SimpleUser: string, KerberosPrincipal: string, AgentArns: list<string>, CreationTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1416,7 +1414,7 @@ export def "describe-location-nfs" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-23 # required
   location_arn: string # The Amazon Resource Name (ARN) of the NFS location to describe.
-]: any -> record<LocationArn: string, LocationUri: string, OnPremConfig: record<AgentArns: list<string>>, MountOptions: record<Version: string>, CreationTime: string> {
+]: any -> oneof<record<LocationArn: string, LocationUri: string, OnPremConfig: record<AgentArns: list<string>>, MountOptions: record<Version: string>, CreationTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1465,7 +1463,7 @@ export def "describe-location-object-storage" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-24 # required
   location_arn: string # The Amazon Resource Name (ARN) of the object storage system location that you want information about.
-]: any -> record<LocationArn: string, LocationUri: string, AccessKey: string, ServerPort: int, ServerProtocol: string, AgentArns: list<string>, CreationTime: string, ServerCertificate: string> {
+]: any -> oneof<record<LocationArn: string, LocationUri: string, AccessKey: string, ServerPort: int, ServerProtocol: string, AgentArns: list<string>, CreationTime: string, ServerCertificate: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1514,7 +1512,7 @@ export def "describe-location-s3" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-25 # required
   location_arn: string # The Amazon Resource Name (ARN) of the Amazon S3 bucket location to describe.
-]: any -> record<LocationArn: string, LocationUri: string, S3StorageClass: string, S3Config: record<BucketAccessRoleArn: string>, AgentArns: list<string>, CreationTime: string> {
+]: any -> oneof<record<LocationArn: string, LocationUri: string, S3StorageClass: string, S3Config: record<BucketAccessRoleArn: string>, AgentArns: list<string>, CreationTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1563,7 +1561,7 @@ export def "describe-location-smb" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-26 # required
   location_arn: string # The Amazon Resource Name (ARN) of the SMB location to describe.
-]: any -> record<LocationArn: string, LocationUri: string, AgentArns: list<string>, User: string, Domain: string, MountOptions: record<Version: string>, CreationTime: string> {
+]: any -> oneof<record<LocationArn: string, LocationUri: string, AgentArns: list<string>, User: string, Domain: string, MountOptions: record<Version: string>, CreationTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1612,7 +1610,7 @@ export def "describe-task" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-27 # required
   task_arn: string # The Amazon Resource Name (ARN) of the task to describe.
-]: any -> record<TaskArn: string, Status: string, Name: string, CurrentTaskExecutionArn: string, SourceLocationArn: string, DestinationLocationArn: string, CloudWatchLogGroupArn: string, SourceNetworkInterfaceArns: list<string>, DestinationNetworkInterfaceArns: list<string>, Options: record<VerifyMode: string, OverwriteMode: string, Atime: string, Mtime: string, Uid: string, Gid: string, PreserveDeletedFiles: string, PreserveDevices: string, PosixPermissions: string, BytesPerSecond: int, TaskQueueing: string, LogLevel: string, TransferMode: string, SecurityDescriptorCopyFlags: string, ObjectTags: string>, Excludes: table<FilterType: string, Value: string>, Schedule: record<ScheduleExpression: string>, ErrorCode: string, ErrorDetail: string, CreationTime: string, Includes: table<FilterType: string, Value: string>> {
+]: any -> oneof<record<TaskArn: string, Status: string, Name: string, CurrentTaskExecutionArn: string, SourceLocationArn: string, DestinationLocationArn: string, CloudWatchLogGroupArn: string, SourceNetworkInterfaceArns: list<string>, DestinationNetworkInterfaceArns: list<string>, Options: record<VerifyMode: string, OverwriteMode: string, Atime: string, Mtime: string, Uid: string, Gid: string, PreserveDeletedFiles: string, PreserveDevices: string, PosixPermissions: string, BytesPerSecond: int, TaskQueueing: string, LogLevel: string, TransferMode: string, SecurityDescriptorCopyFlags: string, ObjectTags: string>, Excludes: table<FilterType: string, Value: string>, Schedule: record<ScheduleExpression: string>, ErrorCode: string, ErrorDetail: string, CreationTime: string, Includes: table<FilterType: string, Value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1661,7 +1659,7 @@ export def "describe-task-execution" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-28 # required
   task_execution_arn: string # The Amazon Resource Name (ARN) of the task that is being executed.
-]: any -> record<TaskExecutionArn: string, Status: string, Options: record<VerifyMode: string, OverwriteMode: string, Atime: string, Mtime: string, Uid: string, Gid: string, PreserveDeletedFiles: string, PreserveDevices: string, PosixPermissions: string, BytesPerSecond: int, TaskQueueing: string, LogLevel: string, TransferMode: string, SecurityDescriptorCopyFlags: string, ObjectTags: string>, Excludes: table<FilterType: string, Value: string>, Includes: table<FilterType: string, Value: string>, StartTime: string, EstimatedFilesToTransfer: int, EstimatedBytesToTransfer: int, FilesTransferred: int, BytesWritten: int, BytesTransferred: int, Result: record<PrepareDuration: int, PrepareStatus: string, TotalDuration: int, TransferDuration: int, TransferStatus: string, VerifyDuration: int, VerifyStatus: string, ErrorCode: string, ErrorDetail: string>, BytesCompressed: int> {
+]: any -> oneof<record<TaskExecutionArn: string, Status: string, Options: record<VerifyMode: string, OverwriteMode: string, Atime: string, Mtime: string, Uid: string, Gid: string, PreserveDeletedFiles: string, PreserveDevices: string, PosixPermissions: string, BytesPerSecond: int, TaskQueueing: string, LogLevel: string, TransferMode: string, SecurityDescriptorCopyFlags: string, ObjectTags: string>, Excludes: table<FilterType: string, Value: string>, Includes: table<FilterType: string, Value: string>, StartTime: string, EstimatedFilesToTransfer: int, EstimatedBytesToTransfer: int, FilesTransferred: int, BytesWritten: int, BytesTransferred: int, Result: record<PrepareDuration: int, PrepareStatus: string, TotalDuration: int, TransferDuration: int, TransferStatus: string, VerifyDuration: int, VerifyStatus: string, ErrorCode: string, ErrorDetail: string>, BytesCompressed: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1713,7 +1711,7 @@ export def "list-agents" [
   --x-amz-target: string@x-amz-target-completer-29 # required
   --max-results-body: int # Specifies the maximum number of DataSync agents to list in a response. By default, a response shows a maximum of 100 agents. (body field)
   --next-token-body: string # Specifies an opaque string that indicates the position to begin the next list of results in the response. (body field)
-]: any -> record<Agents: table<AgentArn: string, Name: string, Status: string>, NextToken: string> {
+]: any -> oneof<record<Agents: table<AgentArn: string, Name: string, Status: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1744,7 +1742,6 @@ export def "list-agents" [
 #
 # POST /
 # operationId: ListLocations
-# --Filters item shape: {Name: "LocationUri"|"LocationType"|"CreationTime", Values: list<string>, Operator: "Equals"|"NotEquals"|"In"|"LessThanOrEqual"|"LessThan"|"GreaterThanOrEqual"|"GreaterThan"|"Contains"|"NotContains"|"BeginsWith"}
 export def "list-locations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1768,7 +1765,7 @@ export def "list-locations" [
   --max-results-body: int # The maximum number of locations to return. (body field)
   --next-token-body: string # An opaque string that indicates the position at which to begin the next list of locations. (body field)
   --filters: list # You can use API filters to narrow down the list of resources returned by ListLocations. For example, to retrieve all tasks on a specific source location, you can use ListLocations with filter name LocationType S3 and Operator Equals. — item shape: {Name: "LocationUri"|"LocationType"|"CreationTime", Values: list<string>, Operator: "Equals"|"NotEquals"|"In"|"LessThanOrEqual"|"LessThan"|"GreaterThanOrEqual"|"GreaterThan"|"Contains"|"NotContains"|"BeginsWith"}
-]: any -> record<Locations: table<LocationArn: string, LocationUri: string>, NextToken: string> {
+]: any -> oneof<record<Locations: table<LocationArn: string, LocationUri: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1822,7 +1819,7 @@ export def "list-tags-for-resource" [
   resource_arn: string # Specifies the Amazon Resource Name (ARN) of the resource that you want tag information on.
   --max-results-body: int # Specifies how many results that you want in the response. (body field)
   --next-token-body: string # Specifies an opaque string that indicates the position to begin the next list of results in the response. (body field)
-]: any -> record<Tags: table<Key: string, Value: string>, NextToken: string> {
+]: any -> oneof<record<Tags: table<Key: string, Value: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1876,7 +1873,7 @@ export def "list-task-executions" [
   --task-arn: string # The Amazon Resource Name (ARN) of the task whose tasks you want to list.
   --max-results-body: int # The maximum number of executed tasks to list. (body field)
   --next-token-body: string # An opaque string that indicates the position at which to begin the next list of the executed tasks. (body field)
-]: any -> record<TaskExecutions: table<TaskExecutionArn: string, Status: string>, NextToken: string> {
+]: any -> oneof<record<TaskExecutions: table<TaskExecutionArn: string, Status: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1907,7 +1904,6 @@ export def "list-task-executions" [
 #
 # POST /
 # operationId: ListTasks
-# --Filters item shape: {Name: "LocationId"|"CreationTime", Values: list<string>, Operator: "Equals"|"NotEquals"|"In"|"LessThanOrEqual"|"LessThan"|"GreaterThanOrEqual"|"GreaterThan"|"Contains"|"NotContains"|"BeginsWith"}
 export def "list-tasks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1931,7 +1927,7 @@ export def "list-tasks" [
   --max-results-body: int # The maximum number of tasks to return. (body field)
   --next-token-body: string # An opaque string that indicates the position at which to begin the next list of tasks. (body field)
   --filters: list # You can use API filters to narrow down the list of resources returned by ListTasks. For example, to retrieve all tasks on a specific source location, you can use ListTasks with filter name LocationId and Operator Equals with the ARN for the location. — item shape: {Name: "LocationId"|"CreationTime", Values: list<string>, Operator: "Equals"|"NotEquals"|"In"|"LessThanOrEqual"|"LessThan"|"GreaterThanOrEqual"|"GreaterThan"|"Contains"|"NotContains"|"BeginsWith"}
-]: any -> record<Tasks: table<TaskArn: string, Status: string, Name: string>, NextToken: string> {
+]: any -> oneof<record<Tasks: table<TaskArn: string, Status: string, Name: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1962,10 +1958,6 @@ export def "list-tasks" [
 #
 # POST /
 # operationId: StartTaskExecution
-# --OverrideOptions shape: {VerifyMode?: "POINT_IN_TIME_CONSISTENT"|"ONLY_FILES_TRANSFERRED"|"NONE", OverwriteMode?: "ALWAYS"|"NEVER", Atime?: "NONE"|"BEST_EFFORT", Mtime?: "NONE"|"PRESERVE", Uid?: "NONE"|"INT_VALUE"|"NAME"|"BOTH", Gid?: "NONE"|"INT_VALUE"|"NAME"|"BOTH", PreserveDeletedFiles?: "PRESERVE"|"REMOVE", PreserveDevices?: "NONE"|"PRESERVE", PosixPermissions?: "NONE"|"PRESERVE", BytesPerSecond?: int, TaskQueueing?: "ENABLED"|"DISABLED", LogLevel?: "OFF"|"BASIC"|"TRANSFER", TransferMode?: "CHANGED"|"ALL", ... (2 more fields)}
-# --Includes item shape: {FilterType?: "SIMPLE_PATTERN", Value?: string}
-# --Excludes item shape: {FilterType?: "SIMPLE_PATTERN", Value?: string}
-# --Tags item shape: {Key: string, Value?: string}
 export def "start-task-execution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1989,7 +1981,7 @@ export def "start-task-execution" [
   --includes: list # Specifies a list of filter rules that determines which files to include when running a task. The pattern should contain a single filter string that consists of the patterns to include. The patterns are delimited by "|" (that is, a pipe), for example, "/folder1|/folder2". — item shape: {FilterType?: "SIMPLE_PATTERN", Value?: string}
   --excludes: list # Specifies a list of filter rules that determines which files to exclude from a task. The list contains a single filter string that consists of the patterns to exclude. The patterns are delimited by "|" (that is, a pipe), for example, "/folder1|/folder2". — item shape: {FilterType?: "SIMPLE_PATTERN", Value?: string}
   --tags: list # Specifies the tags that you want to apply to the Amazon Resource Name (ARN) representing the task execution. Tags are key-value pairs that help you manage, filter, and search for your DataSync resources. — item shape: {Key: string, Value?: string}
-]: any -> record<TaskExecutionArn: string> {
+]: any -> oneof<record<TaskExecutionArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2019,7 +2011,6 @@ export def "start-task-execution" [
 #
 # POST /
 # operationId: TagResource
-# --Tags item shape: {Key: string, Value?: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2040,7 +2031,7 @@ export def "tag-resource" [
   --x-amz-target: string@x-amz-target-completer-35 # required
   resource_arn: string # Specifies the Amazon Resource Name (ARN) of the resource to apply the tag to.
   tags: list # Specifies the tags that you want to apply to the resource. — item shape: {Key: string, Value?: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2090,7 +2081,7 @@ export def "untag-resource" [
   --x-amz-target: string@x-amz-target-completer-36 # required
   resource_arn: string # Specifies the Amazon Resource Name (ARN) of the resource to remove the tags from.
   keys: list<string> # Specifies the keys in the tags that you want to remove.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2140,7 +2131,7 @@ export def "update-agent" [
   --x-amz-target: string@x-amz-target-completer-37 # required
   agent_arn: string # The Amazon Resource Name (ARN) of the agent to update.
   --name: string # The name that you want to use to configure the agent.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2170,8 +2161,6 @@ export def "update-agent" [
 #
 # POST /
 # operationId: UpdateLocationHdfs
-# --NameNodes item shape: {Hostname: string, Port: int}
-# --QopConfiguration shape: {RpcProtection?: "DISABLED"|"AUTHENTICATION"|"INTEGRITY"|"PRIVACY", DataTransferProtection?: "DISABLED"|"AUTHENTICATION"|"INTEGRITY"|"PRIVACY"}
 export def "update-location-hdfs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2203,7 +2192,7 @@ export def "update-location-hdfs" [
   --kerberos-keytab: string # The Kerberos key table (keytab) that contains mappings between the defined Kerberos principal and the encrypted keys. You can load the keytab from a file by providing the file's address. If you use the CLI, it performs base64 encoding for you. Otherwise, provide the base64-encoded text.
   --kerberos-krb5-conf: string # The krb5.conf file that contains the Kerberos configuration information. You can load the krb5.conf file by providing the file's address. If you're using the CLI, it performs the base64 encoding for you. Otherwise, provide the base64-encoded text.
   --agent-arns: list<string> # The ARNs of the agents that are used to connect to the HDFS cluster.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2233,8 +2222,6 @@ export def "update-location-hdfs" [
 #
 # POST /
 # operationId: UpdateLocationNfs
-# --OnPremConfig shape: {AgentArns: list<string>}
-# --MountOptions shape: {Version?: "AUTOMATIC"|"NFS3"|"NFS4_0"|"NFS4_1"}
 export def "update-location-nfs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2257,7 +2244,7 @@ export def "update-location-nfs" [
   --subdirectory: string # The subdirectory in the NFS file system that is used to read data from the NFS source location or write data to the NFS destination. The NFS path should be a path that's exported by the NFS server, or a subdirectory of that path. The path should be such that it can be mounted by other NFS clients in your network. To see all the paths exported by your NFS server, run "showmount -e nfs-server-name" from an NFS client that has access to your server. You can specify any directory that appears in the results, and any subdirectory of that directory. Ensure that the NFS export is accessible without Kerberos authentication. To transfer all the data in the folder that you specified, DataSync must have permissions to read all the data. To ensure this, either configure the NFS export with no_root_squash, or ensure that the files you want DataSync to access have permissions that allow read access for all users. Doing either option enables the agent to read the files. For the agent to access directories, you must additionally enable all execute access. If you are copying data to or from your Snowcone device, see NFS Server on Snowcone (https://docs.aws.amazon.com/datasync/latest/userguide/create-nfs-location.html#nfs-on-snowcone) for more information. For information about NFS export configuration, see 18.7. The /etc/exports Configuration File in the Red Hat Enterprise Linux documentation.
   --on-prem-config: record # A list of Amazon Resource Names (ARNs) of agents to use for a Network File System (NFS) location. — shape: {AgentArns: list<string>}
   --mount-options: record # Specifies how DataSync can access a location using the NFS protocol. — shape: {Version?: "AUTOMATIC"|"NFS3"|"NFS4_0"|"NFS4_1"}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2313,7 +2300,7 @@ export def "update-location-object-storage" [
   --secret-key: string # Specifies the secret key (for example, a password) if credentials are required to authenticate with the object storage server. (format: password)
   --agent-arns: list<string> # Specifies the Amazon Resource Names (ARNs) of the DataSync agents that can securely connect with your location.
   --server-certificate: string # Specifies a certificate to authenticate with an object storage system that uses a private or self-signed certificate authority (CA). You must specify a Base64-encoded .pem file (for example, file:///home/user/.ssh/storage_sys_certificate.pem). The certificate can be up to 32768 bytes (before Base64 encoding). To use this parameter, configure ServerProtocol to HTTPS. Updating the certificate doesn't interfere with tasks that you have in progress.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2343,7 +2330,6 @@ export def "update-location-object-storage" [
 #
 # POST /
 # operationId: UpdateLocationSmb
-# --MountOptions shape: {Version?: "AUTOMATIC"|"SMB2"|"SMB3"|"SMB1"|"SMB2_0"}
 export def "update-location-smb" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2369,7 +2355,7 @@ export def "update-location-smb" [
   --password: string # The password of the user who can mount the share has the permissions to access files and folders in the SMB share. (format: password)
   --agent-arns: list<string> # The Amazon Resource Names (ARNs) of agents to use for a Simple Message Block (SMB) location.
   --mount-options: record # Specifies the version of the Server Message Block (SMB) protocol that DataSync uses to access an SMB file server. — shape: {Version?: "AUTOMATIC"|"SMB2"|"SMB3"|"SMB1"|"SMB2_0"}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2399,10 +2385,6 @@ export def "update-location-smb" [
 #
 # POST /
 # operationId: UpdateTask
-# --Options shape: {VerifyMode?: "POINT_IN_TIME_CONSISTENT"|"ONLY_FILES_TRANSFERRED"|"NONE", OverwriteMode?: "ALWAYS"|"NEVER", Atime?: "NONE"|"BEST_EFFORT", Mtime?: "NONE"|"PRESERVE", Uid?: "NONE"|"INT_VALUE"|"NAME"|"BOTH", Gid?: "NONE"|"INT_VALUE"|"NAME"|"BOTH", PreserveDeletedFiles?: "PRESERVE"|"REMOVE", PreserveDevices?: "NONE"|"PRESERVE", PosixPermissions?: "NONE"|"PRESERVE", BytesPerSecond?: int, TaskQueueing?: "ENABLED"|"DISABLED", LogLevel?: "OFF"|"BASIC"|"TRANSFER", TransferMode?: "CHANGED"|"ALL", ... (2 more fields)}
-# --Excludes item shape: {FilterType?: "SIMPLE_PATTERN", Value?: string}
-# --Schedule shape: {ScheduleExpression: string}
-# --Includes item shape: {FilterType?: "SIMPLE_PATTERN", Value?: string}
 export def "update-task" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2428,7 +2410,7 @@ export def "update-task" [
   --name: string # The name of the task to update.
   --cloud-watch-log-group-arn: string # The Amazon Resource Name (ARN) of the resource name of the Amazon CloudWatch log group.
   --includes: list # Specifies a list of filter rules that include specific data during your transfer. For more information and examples, see Filtering data transferred by DataSync (https://docs.aws.amazon.com/datasync/latest/userguide/filtering.html). — item shape: {FilterType?: "SIMPLE_PATTERN", Value?: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2458,7 +2440,6 @@ export def "update-task" [
 #
 # POST /
 # operationId: UpdateTaskExecution
-# --Options shape: {VerifyMode?: "POINT_IN_TIME_CONSISTENT"|"ONLY_FILES_TRANSFERRED"|"NONE", OverwriteMode?: "ALWAYS"|"NEVER", Atime?: "NONE"|"BEST_EFFORT", Mtime?: "NONE"|"PRESERVE", Uid?: "NONE"|"INT_VALUE"|"NAME"|"BOTH", Gid?: "NONE"|"INT_VALUE"|"NAME"|"BOTH", PreserveDeletedFiles?: "PRESERVE"|"REMOVE", PreserveDevices?: "NONE"|"PRESERVE", PosixPermissions?: "NONE"|"PRESERVE", BytesPerSecond?: int, TaskQueueing?: "ENABLED"|"DISABLED", LogLevel?: "OFF"|"BASIC"|"TRANSFER", TransferMode?: "CHANGED"|"ALL", ... (2 more fields)}
 export def "update-task-execution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2479,7 +2460,7 @@ export def "update-task-execution" [
   --x-amz-target: string@x-amz-target-completer-43 # required
   task_execution_arn: string # The Amazon Resource Name (ARN) of the specific task execution that is being updated.
   options: record # Configures your DataSync task settings. These options include how DataSync handles files, objects, and their associated metadata. You also can specify how DataSync verifies data integrity, set bandwidth limits for your task, among other options. Each task setting has a default value. Unless you need to, you don't have to configure any of these Options before starting your task. — shape: {VerifyMode?: "POINT_IN_TIME_CONSISTENT"|"ONLY_FILES_TRANSFERRED"|"NONE", OverwriteMode?: "ALWAYS"|"NEVER", Atime?: "NONE"|"BEST_EFFORT", Mtime?: "NONE"|"PRESERVE", Uid?: "NONE"|"INT_VALUE"|"NAME"|"BOTH", Gid?: "NONE"|"INT_VALUE"|"NAME"|"BOTH", PreserveDeletedFiles?: "PRESERVE"|"REMOVE", PreserveDevices?: "NONE"|"PRESERVE", PosixPermissions?: "NONE"|"PRESERVE", BytesPerSecond?: int, TaskQueueing?: "ENABLED"|"DISABLED", LogLevel?: "OFF"|"BASIC"|"TRANSFER", TransferMode?: "CHANGED"|"ALL", ... (2 more fields)}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

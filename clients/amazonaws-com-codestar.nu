@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -118,9 +141,9 @@ def x-amz-target-completer-17 [] { ["CodeStar_20170419.UpdateUserProfile"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "associate-team-member" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["associate-team-member" "create-project" "create-user-profile" "delete-project" "delete-user-profile" "describe-project" "describe-user-profile" "disassociate-team-member" "list-projects" "list-resources" "list-tags-for-project" "list-team-members" "list-user-profiles" "tag-project" "untag-project" "update-project" "update-team-member" "update-user-profile" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -165,7 +188,7 @@ export def "associate-team-member" [
   user_arn: string # The Amazon Resource Name (ARN) for the IAM user you want to add to the AWS CodeStar project.
   project_role: string # The AWS CodeStar project role that will apply to this user. This role determines what actions a user can take in an AWS CodeStar project.
   --remote-access-allowed: oneof<nothing, bool> # Whether the team member is allowed to use an SSH public/private key pair to remotely access project resources, for example Amazon EC2 instances.
-]: any -> record<clientRequestToken: string> {
+]: any -> oneof<record<clientRequestToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -195,8 +218,6 @@ export def "associate-team-member" [
 #
 # POST /
 # operationId: CreateProject
-# --sourceCode item shape: {source: record, destination: record}
-# --toolchain shape: {source: record, roleArn?: string, stackParameters?: record}
 export def "create-project" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -222,7 +243,7 @@ export def "create-project" [
   --source-code: list # A list of the Code objects submitted with the project request. If this parameter is specified, the request must also include the toolchain parameter. — item shape: {source: record, destination: record}
   --toolchain: record # The toolchain template file provided with the project request. AWS CodeStar uses the template to provision the toolchain stack in AWS CloudFormation. — shape: {source: record, roleArn?: string, stackParameters?: record}
   --tags: record # The tags created for the project.
-]: any -> record<id: string, arn: string, clientRequestToken: string, projectTemplateId: string> {
+]: any -> oneof<record<id: string, arn: string, clientRequestToken: string, projectTemplateId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -274,7 +295,7 @@ export def "create-user-profile" [
   display_name: string # The name that will be displayed as the friendly name for the user in AWS CodeStar. (format: password)
   email_address: string # The email address that will be displayed as part of the user's profile in AWS CodeStar. (format: password)
   --ssh-public-key: string # The SSH public key associated with the user in AWS CodeStar. If a project owner allows the user remote access to project resources, this public key will be used along with the user's private key for SSH access.
-]: any -> record<userArn: string, displayName: string, emailAddress: string, sshPublicKey: string, createdTimestamp: string, lastModifiedTimestamp: string> {
+]: any -> oneof<record<userArn: string, displayName: string, emailAddress: string, sshPublicKey: string, createdTimestamp: string, lastModifiedTimestamp: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -325,7 +346,7 @@ export def "delete-project" [
   id: string # The ID of the project to be deleted in AWS CodeStar.
   --client-request-token: string # A user- or system-generated token that identifies the entity that requested project deletion. This token can be used to repeat the request.
   --delete-stack: oneof<nothing, bool> # Whether to send a delete request for the primary stack in AWS CloudFormation originally used to generate the project and its resources. This option will delete all AWS resources for the project (except for any buckets in Amazon S3) as well as deleting the project itself. Recommended for most use cases.
-]: any -> record<stackId: string, projectArn: string> {
+]: any -> oneof<record<stackId: string, projectArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -374,7 +395,7 @@ export def "delete-user-profile" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-4 # required
   user_arn: string # The Amazon Resource Name (ARN) of the user to delete from AWS CodeStar.
-]: any -> record<userArn: string> {
+]: any -> oneof<record<userArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -423,7 +444,7 @@ export def "describe-project" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-5 # required
   id: string # The ID of the project.
-]: any -> record<name: string, id: string, arn: string, description: string, clientRequestToken: string, createdTimeStamp: string, stackId: string, projectTemplateId: string, status: record<state: string, reason: string>> {
+]: any -> oneof<record<name: string, id: string, arn: string, description: string, clientRequestToken: string, createdTimeStamp: string, stackId: string, projectTemplateId: string, status: record<state: string, reason: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -472,7 +493,7 @@ export def "describe-user-profile" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-6 # required
   user_arn: string # The Amazon Resource Name (ARN) of the user.
-]: any -> record<userArn: string, displayName: string, emailAddress: string, sshPublicKey: string, createdTimestamp: string, lastModifiedTimestamp: string> {
+]: any -> oneof<record<userArn: string, displayName: string, emailAddress: string, sshPublicKey: string, createdTimestamp: string, lastModifiedTimestamp: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -522,7 +543,7 @@ export def "disassociate-team-member" [
   --x-amz-target: string@x-amz-target-completer-7 # required
   project_id: string # The ID of the AWS CodeStar project from which you want to remove a team member.
   user_arn: string # The Amazon Resource Name (ARN) of the IAM user or group whom you want to remove from the project.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -572,7 +593,7 @@ export def "list-projects" [
   --x-amz-target: string@x-amz-target-completer-8 # required
   --next-token: string # The continuation token to be used to return the next set of results, if the results cannot be returned in one response.
   --max-results: int # The maximum amount of data that can be contained in a single set of results.
-]: any -> record<projects: table<projectId: string, projectArn: string>, nextToken: string> {
+]: any -> oneof<record<projects: table<projectId: string, projectArn: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -623,7 +644,7 @@ export def "list-resources" [
   project_id: string # The ID of the project.
   --next-token: string # The continuation token for the next set of results, if the results cannot be returned in one response.
   --max-results: int # The maximum amount of data that can be contained in a single set of results.
-]: any -> record<resources: table<id: string>, nextToken: string> {
+]: any -> oneof<record<resources: table<id: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -674,7 +695,7 @@ export def "list-tags-for-project" [
   id: string # The ID of the project to get tags for.
   --next-token: string # Reserved for future use.
   --max-results: int # Reserved for future use.
-]: any -> record<tags: record, nextToken: string> {
+]: any -> oneof<record<tags: record, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -725,7 +746,7 @@ export def "list-team-members" [
   project_id: string # The ID of the project for which you want to list team members.
   --next-token: string # The continuation token for the next set of results, if the results cannot be returned in one response.
   --max-results: int # The maximum number of team members you want returned in a response.
-]: any -> record<teamMembers: table<userArn: string, projectRole: string, remoteAccessAllowed: bool>, nextToken: string> {
+]: any -> oneof<record<teamMembers: table<userArn: string, projectRole: string, remoteAccessAllowed: bool>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -775,7 +796,7 @@ export def "list-user-profiles" [
   --x-amz-target: string@x-amz-target-completer-12 # required
   --next-token: string # The continuation token for the next set of results, if the results cannot be returned in one response.
   --max-results: int # The maximum number of results to return in a response.
-]: any -> record<userProfiles: table<userArn: string, displayName: string, emailAddress: string, sshPublicKey: string>, nextToken: string> {
+]: any -> oneof<record<userProfiles: table<userArn: string, displayName: string, emailAddress: string, sshPublicKey: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -825,7 +846,7 @@ export def "tag-project" [
   --x-amz-target: string@x-amz-target-completer-13 # required
   id: string # The ID of the project you want to add a tag to.
   tags: record # The tags you want to add to the project.
-]: any -> record<tags: record> {
+]: any -> oneof<record<tags: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -875,7 +896,7 @@ export def "untag-project" [
   --x-amz-target: string@x-amz-target-completer-14 # required
   id: string # The ID of the project to remove tags from.
   tags: list<string> # The tags to remove from the project.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -926,7 +947,7 @@ export def "update-project" [
   id: string # The ID of the project you want to update.
   --name: string # The name of the project you want to update. (format: password)
   --description: string # The description of the project, if any. (format: password)
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -978,7 +999,7 @@ export def "update-team-member" [
   user_arn: string # The Amazon Resource Name (ARN) of the user for whom you want to change team membership attributes.
   --project-role: string # The role assigned to the user in the project. Project roles have different levels of access. For more information, see Working with Teams (http://docs.aws.amazon.com/codestar/latest/userguide/working-with-teams.html) in the AWS CodeStar User Guide.
   --remote-access-allowed: oneof<nothing, bool> # Whether a team member is allowed to remotely access project resources using the SSH public key associated with the user's profile. Even if this is set to True, the user must associate a public key with their profile before the user can access resources.
-]: any -> record<userArn: string, projectRole: string, remoteAccessAllowed: bool> {
+]: any -> oneof<record<userArn: string, projectRole: string, remoteAccessAllowed: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1030,7 +1051,7 @@ export def "update-user-profile" [
   --display-name: string # The name that is displayed as the friendly name for the user in AWS CodeStar. (format: password)
   --email-address: string # The email address that is displayed as part of the user's profile in AWS CodeStar. (format: password)
   --ssh-public-key: string # The SSH public key associated with the user in AWS CodeStar. If a project owner allows the user remote access to project resources, this public key will be used along with the user's private key for SSH access.
-]: any -> record<userArn: string, displayName: string, emailAddress: string, sshPublicKey: string, createdTimestamp: string, lastModifiedTimestamp: string> {
+]: any -> oneof<record<userArn: string, displayName: string, emailAddress: string, sshPublicKey: string, createdTimestamp: string, lastModifiedTimestamp: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

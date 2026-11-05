@@ -14,27 +14,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -42,8 +51,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -54,7 +68,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -89,7 +112,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -130,9 +154,9 @@ def comparator-completer [] { ["contains" "doesNotContain" "isNotOneOf" "isOneOf
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-v1-code-references" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["post-v1-code-references" "post-v1-code-references-delete-reports" "delete-config" "get-config" "update-config" "get-deleted-settings" "get-sdk-keys" "get-setting-values" "get-settings" "create-setting" "delete-environment" "get-environment" "update-environment" "delete-integration-link" "add-or-update-integration-link" "get-setting-value" "update-setting-value" "replace-setting-value" "get-integration-link-details" "post-v1-jira-connect" "jira-add-or-update-integration-link" "get-me" "get-organizations" "get-organization-auditlogs" "get-organization-members" "delete-organization-member" "add-member-to-group" "create-product" "delete-permission-group" "get-permission-group" "update-permission-group" "get-products" "delete-product" "get-product" "update-product" "get-auditlogs" "get-configs" "create-config" "get-environments" "create-environment" "get-product-members" "invite-member" "delete-product-member" "get-permission-groups" "create-permission-group" "get-segments" "create-segment" "get-tags" "create-tag" "delete-segment" "get-segment" "update-segment" "delete-setting" "get-setting" "update-setting" "get-setting-value-by-sdkkey" "update-setting-value-by-sdkkey" "replace-setting-value-by-sdkkey" "delete-tag" "get-tag" "update-tag" "get-settings-by-tag" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -151,8 +175,6 @@ export def commands []: nothing -> table {
 }
 
 # POST /v1/code-references
-#
-# --flagReferences item shape: {references: list, settingId: int}
 export def "post-v1-code-references" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -284,7 +306,7 @@ export def "get-config" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<configId: string, description: string, name: string, order: int, product: record<description: string, name: string, order: int, organization: record<name: string, organizationId: string>, productId: string, reasonRequired: bool>> {
+]: nothing -> oneof<record<configId: string, description: string, name: string, order: int, product: record<description: string, name: string, order: int, organization: record<name: string, organizationId: string>, productId: string, reasonRequired: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($config_id | is-empty) { error make --unspanned { msg: "path parameter 'configId' must be non-empty" } }
@@ -323,7 +345,7 @@ export def "update-config" [
   --accept: string@accept-completer # Response content type
   --description: string # nullable
   --name: string # nullable
-]: any -> record<configId: string, description: string, name: string, order: int, product: record<description: string, name: string, order: int, organization: record<name: string, organizationId: string>, productId: string, reasonRequired: bool>> {
+]: any -> oneof<record<configId: string, description: string, name: string, order: int, product: record<description: string, name: string, order: int, organization: record<name: string, organizationId: string>, productId: string, reasonRequired: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -363,7 +385,7 @@ export def "get-deleted-settings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<configId: string, configName: string, hint: string, key: string, name: string, order: int, settingId: int, settingType: string, tags: list<record>> {
+]: nothing -> oneof<table<configId: string, configName: string, hint: string, key: string, name: string, order: int, settingId: int, settingType: string, tags: list<record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($config_id | is-empty) { error make --unspanned { msg: "path parameter 'configId' must be non-empty" } }
@@ -401,7 +423,7 @@ export def "get-sdk-keys" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<primary: string, secondary: string> {
+]: nothing -> oneof<record<primary: string, secondary: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($config_id | is-empty) { error make --unspanned { msg: "path parameter 'configId' must be non-empty" } }
@@ -440,7 +462,7 @@ export def "get-setting-values" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<config: record<configId: string, description: string, name: string, order: int, product: record<description: string, name: string, order: int, organization: record, productId: string, reasonRequired: bool>>, environment: record<color: string, description: string, environmentId: string, name: string, order: int, product: record<description: string, name: string, order: int, organization: record, productId: string, reasonRequired: bool>, reasonRequired: bool>, readOnly: bool, settingValues: table<integrationLinks: list, lastUpdaterUserEmail: string, lastUpdaterUserFullName: string, rolloutPercentageItems: list, rolloutRules: list, setting: record, settingTags: list, updatedAt: string, value: any>> {
+]: nothing -> oneof<record<config: record<configId: string, description: string, name: string, order: int, product: record<description: string, name: string, order: int, organization: record, productId: string, reasonRequired: bool>>, environment: record<color: string, description: string, environmentId: string, name: string, order: int, product: record<description: string, name: string, order: int, organization: record, productId: string, reasonRequired: bool>, reasonRequired: bool>, readOnly: bool, settingValues: table<integrationLinks: list, lastUpdaterUserEmail: string, lastUpdaterUserFullName: string, rolloutPercentageItems: list, rolloutRules: list, setting: record, settingTags: list, updatedAt: string, value: any>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($config_id | is-empty) { error make --unspanned { msg: "path parameter 'configId' must be non-empty" } }
@@ -478,7 +500,7 @@ export def "get-settings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<configId: string, configName: string, hint: string, key: string, name: string, order: int, settingId: int, settingType: string, tags: list<record>> {
+]: nothing -> oneof<table<configId: string, configName: string, hint: string, key: string, name: string, order: int, settingId: int, settingType: string, tags: list<record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($config_id | is-empty) { error make --unspanned { msg: "path parameter 'configId' must be non-empty" } }
@@ -503,7 +525,6 @@ export def "get-settings" [
 #
 # POST /v1/configs/{configId}/settings
 # operationId: create-setting
-# --initialValues item shape: {environmentId?: string, value?: any}
 export def "create-setting" [
   config_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -522,7 +543,7 @@ export def "create-setting" [
   name: string # The name of the setting, shown on the Dashboard UI.
   setting_type: string@setting-type-completer
   --tags: list<int> # The IDs of the tags which are attached to the setting. (nullable)
-]: any -> record<configId: string, configName: string, hint: string, key: string, name: string, order: int, settingId: int, settingType: string, tags: table<color: string, name: string, product: record, tagId: int>> {
+]: any -> oneof<record<configId: string, configName: string, hint: string, key: string, name: string, order: int, settingId: int, settingType: string, tags: table<color: string, name: string, product: record, tagId: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -598,7 +619,7 @@ export def "get-environment" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<color: string, description: string, environmentId: string, name: string, order: int, product: record<description: string, name: string, order: int, organization: record<name: string, organizationId: string>, productId: string, reasonRequired: bool>, reasonRequired: bool> {
+]: nothing -> oneof<record<color: string, description: string, environmentId: string, name: string, order: int, product: record<description: string, name: string, order: int, organization: record<name: string, organizationId: string>, productId: string, reasonRequired: bool>, reasonRequired: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($environment_id | is-empty) { error make --unspanned { msg: "path parameter 'environmentId' must be non-empty" } }
@@ -638,7 +659,7 @@ export def "update-environment" [
   --color: string # nullable
   --description: string # nullable
   --name: string # nullable
-]: any -> record<color: string, description: string, environmentId: string, name: string, order: int, product: record<description: string, name: string, order: int, organization: record<name: string, organizationId: string>, productId: string, reasonRequired: bool>, reasonRequired: bool> {
+]: any -> oneof<record<color: string, description: string, environmentId: string, name: string, order: int, product: record<description: string, name: string, order: int, organization: record<name: string, organizationId: string>, productId: string, reasonRequired: bool>, reasonRequired: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -681,7 +702,7 @@ export def "delete-integration-link" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<hasRemainingIntegrationLink: bool> {
+]: nothing -> oneof<record<hasRemainingIntegrationLink: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($environment_id | is-empty) { error make --unspanned { msg: "path parameter 'environmentId' must be non-empty" } }
@@ -726,7 +747,7 @@ export def "add-or-update-integration-link" [
   --accept: string@accept-completer # Response content type
   --description: string # nullable
   --url: string # nullable
-]: any -> record<description: string, integrationLinkType: string, key: string, url: string> {
+]: any -> oneof<record<description: string, integrationLinkType: string, key: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -770,7 +791,7 @@ export def "get-setting-value" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<config: record<configId: string, description: string, name: string, order: int, product: record<description: string, name: string, order: int, organization: record, productId: string, reasonRequired: bool>>, environment: record<color: string, description: string, environmentId: string, name: string, order: int, product: record<description: string, name: string, order: int, organization: record, productId: string, reasonRequired: bool>, reasonRequired: bool>, integrationLinks: table<description: string, integrationLinkType: string, key: string, url: string>, lastUpdaterUserEmail: string, lastUpdaterUserFullName: string, readOnly: bool, rolloutPercentageItems: table<percentage: int, value: any>, rolloutRules: table<comparator: string, comparisonAttribute: string, comparisonValue: string, segmentComparator: string, segmentId: string, value: any>, setting: record<createdAt: string, creatorEmail: string, creatorFullName: string, hint: string, isWatching: bool, key: string, name: string, order: int, settingId: int, settingType: string>, settingTags: table<color: string, name: string, settingTagId: int, tagId: int>, updatedAt: string, value: any> {
+]: nothing -> oneof<record<config: record<configId: string, description: string, name: string, order: int, product: record<description: string, name: string, order: int, organization: record, productId: string, reasonRequired: bool>>, environment: record<color: string, description: string, environmentId: string, name: string, order: int, product: record<description: string, name: string, order: int, organization: record, productId: string, reasonRequired: bool>, reasonRequired: bool>, integrationLinks: table<description: string, integrationLinkType: string, key: string, url: string>, lastUpdaterUserEmail: string, lastUpdaterUserFullName: string, readOnly: bool, rolloutPercentageItems: table<percentage: int, value: any>, rolloutRules: table<comparator: string, comparisonAttribute: string, comparisonValue: string, segmentComparator: string, segmentId: string, value: any>, setting: record<createdAt: string, creatorEmail: string, creatorFullName: string, hint: string, isWatching: bool, key: string, name: string, order: int, settingId: int, settingType: string>, settingTags: table<color: string, name: string, settingTagId: int, tagId: int>, updatedAt: string, value: any>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($environment_id | is-empty) { error make --unspanned { msg: "path parameter 'environmentId' must be non-empty" } }
@@ -796,7 +817,6 @@ export def "get-setting-value" [
 #
 # PATCH /v1/environments/{environmentId}/settings/{settingId}/value
 # operationId: update-setting-value
-# --operations item shape: {from?: record, op?: "unknown"|"add"|"remove"|"replace"|"move"|"copy"|"test", path?: record, value?: record}
 export def "update-setting-value" [
   environment_id: string
   setting_id: int
@@ -812,7 +832,7 @@ export def "update-setting-value" [
   --accept: string@accept-completer # Response content type
   --reason: string # The reason note for the Audit Log if the Product's "Config changes require a reason" preference is turned on.
   --operations: list # nullable — item shape: {from?: record, op?: "unknown"|"add"|"remove"|"replace"|"move"|"copy"|"test", path?: record, value?: record}
-]: any -> record<config: record<configId: string, description: string, name: string, order: int, product: record<description: string, name: string, order: int, organization: record, productId: string, reasonRequired: bool>>, environment: record<color: string, description: string, environmentId: string, name: string, order: int, product: record<description: string, name: string, order: int, organization: record, productId: string, reasonRequired: bool>, reasonRequired: bool>, integrationLinks: table<description: string, integrationLinkType: string, key: string, url: string>, lastUpdaterUserEmail: string, lastUpdaterUserFullName: string, readOnly: bool, rolloutPercentageItems: table<percentage: int, value: any>, rolloutRules: table<comparator: string, comparisonAttribute: string, comparisonValue: string, segmentComparator: string, segmentId: string, value: any>, setting: record<createdAt: string, creatorEmail: string, creatorFullName: string, hint: string, isWatching: bool, key: string, name: string, order: int, settingId: int, settingType: string>, settingTags: table<color: string, name: string, settingTagId: int, tagId: int>, updatedAt: string, value: any> {
+]: any -> oneof<record<config: record<configId: string, description: string, name: string, order: int, product: record<description: string, name: string, order: int, organization: record, productId: string, reasonRequired: bool>>, environment: record<color: string, description: string, environmentId: string, name: string, order: int, product: record<description: string, name: string, order: int, organization: record, productId: string, reasonRequired: bool>, reasonRequired: bool>, integrationLinks: table<description: string, integrationLinkType: string, key: string, url: string>, lastUpdaterUserEmail: string, lastUpdaterUserFullName: string, readOnly: bool, rolloutPercentageItems: table<percentage: int, value: any>, rolloutRules: table<comparator: string, comparisonAttribute: string, comparisonValue: string, segmentComparator: string, segmentId: string, value: any>, setting: record<createdAt: string, creatorEmail: string, creatorFullName: string, hint: string, isWatching: bool, key: string, name: string, order: int, settingId: int, settingType: string>, settingTags: table<color: string, name: string, settingTagId: int, tagId: int>, updatedAt: string, value: any>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -842,8 +862,6 @@ export def "update-setting-value" [
 #
 # PUT /v1/environments/{environmentId}/settings/{settingId}/value
 # operationId: replace-setting-value
-# --rolloutPercentageItems item shape: {percentage: int, value?: any}
-# --rolloutRules item shape: {comparator?: "isOneOf"|"isNotOneOf"|"contains"|"doesNotContain"|"semVerIsOneOf"|"semVerIsNotOneOf"|"semVerLess"|"semVerLessOrEquals"|"semVerGreater"|"semVerGreaterOrEquals"|"numberEquals"|"numberDoesNotEqual"|"numberLess"|"numberLessOrEquals"|"numberGreater"|"numberGreaterOrEquals"|"sensitiveIsOneOf"|"sensitiveIsNotOneOf", comparisonAttribute?: string, comparisonValue?: string, segmentComparator?: "isIn"|"isNotIn", segmentId?: string, value?: any}
 export def "replace-setting-value" [
   environment_id: string
   setting_id: int
@@ -861,7 +879,7 @@ export def "replace-setting-value" [
   --rollout-percentage-items: list # The percentage rule collection. (nullable) — item shape: {percentage: int, value?: any}
   --rollout-rules: list # The targeting rule collection. (nullable) — item shape: {comparator?: "isOneOf"|"isNotOneOf"|"contains"|"doesNotContain"|"semVerIsOneOf"|"semVerIsNotOneOf"|"semVerLess"|"semVerLessOrEquals"|"semVerGreater"|"semVerGreaterOrEquals"|"numberEquals"|"numberDoesNotEqual"|"numberLess"|"numberLessOrEquals"|"numberGreater"|"numberGreaterOrEquals"|"sensitiveIsOneOf"|"sensitiveIsNotOneOf", comparisonAttribute?: string, comparisonValue?: string, segmentComparator?: "isIn"|"isNotIn", segmentId?: string, value?: any}
   --value: any # The value to serve. It must respect the setting type. (nullable)
-]: any -> record<config: record<configId: string, description: string, name: string, order: int, product: record<description: string, name: string, order: int, organization: record, productId: string, reasonRequired: bool>>, environment: record<color: string, description: string, environmentId: string, name: string, order: int, product: record<description: string, name: string, order: int, organization: record, productId: string, reasonRequired: bool>, reasonRequired: bool>, integrationLinks: table<description: string, integrationLinkType: string, key: string, url: string>, lastUpdaterUserEmail: string, lastUpdaterUserFullName: string, readOnly: bool, rolloutPercentageItems: table<percentage: int, value: any>, rolloutRules: table<comparator: string, comparisonAttribute: string, comparisonValue: string, segmentComparator: string, segmentId: string, value: any>, setting: record<createdAt: string, creatorEmail: string, creatorFullName: string, hint: string, isWatching: bool, key: string, name: string, order: int, settingId: int, settingType: string>, settingTags: table<color: string, name: string, settingTagId: int, tagId: int>, updatedAt: string, value: any> {
+]: any -> oneof<record<config: record<configId: string, description: string, name: string, order: int, product: record<description: string, name: string, order: int, organization: record, productId: string, reasonRequired: bool>>, environment: record<color: string, description: string, environmentId: string, name: string, order: int, product: record<description: string, name: string, order: int, organization: record, productId: string, reasonRequired: bool>, reasonRequired: bool>, integrationLinks: table<description: string, integrationLinkType: string, key: string, url: string>, lastUpdaterUserEmail: string, lastUpdaterUserFullName: string, readOnly: bool, rolloutPercentageItems: table<percentage: int, value: any>, rolloutRules: table<comparator: string, comparisonAttribute: string, comparisonValue: string, segmentComparator: string, segmentId: string, value: any>, setting: record<createdAt: string, creatorEmail: string, creatorFullName: string, hint: string, isWatching: bool, key: string, name: string, order: int, settingId: int, settingType: string>, settingTags: table<color: string, name: string, settingTagId: int, tagId: int>, updatedAt: string, value: any>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -904,7 +922,7 @@ export def "get-integration-link-details" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<allIntegrationLinkCount: int, details: table<config: record, environment: record, product: record, readOnly: bool, setting: record, status: string>> {
+]: nothing -> oneof<record<allIntegrationLinkCount: int, details: table<config: record, environment: record, product: record, readOnly: bool, setting: record, status: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($integration_link_type | is-empty) { error make --unspanned { msg: "path parameter 'integrationLinkType' must be non-empty" } }
@@ -983,7 +1001,7 @@ export def "jira-add-or-update-integration-link" [
   --description: string # nullable
   jira_jwt_token: string
   --url: string # nullable
-]: any -> record<description: string, integrationLinkType: string, key: string, url: string> {
+]: any -> oneof<record<description: string, integrationLinkType: string, key: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1024,7 +1042,7 @@ export def "get-me" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<email: string, fullName: string> {
+]: nothing -> oneof<record<email: string, fullName: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/me" $auth.query)
@@ -1059,7 +1077,7 @@ export def "get-organizations" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<name: string, organizationId: string> {
+]: nothing -> oneof<table<name: string, organizationId: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/organizations" $auth.query)
@@ -1101,7 +1119,7 @@ export def "get-organization-auditlogs" [
   --audit-log-type: string # Filter Audit logs by Audit log type. (nullable)
   --from-utc-date-time: string # Filter Audit logs by starting UTC date. (format: date-time)
   --to-utc-date-time: string # Filter Audit logs by ending UTC date. (format: date-time)
-]: nothing -> table<actionTarget: string, auditLogDateTime: string, auditLogId: int, auditLogType: string, auditLogTypeEnum: string, details: string, userEmail: string, userName: string, where: string, why: string> {
+]: nothing -> oneof<table<actionTarget: string, auditLogDateTime: string, auditLogId: int, auditLogType: string, auditLogTypeEnum: string, details: string, userEmail: string, userName: string, where: string, why: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
@@ -1139,7 +1157,7 @@ export def "get-organization-members" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<email: string, fullName: string, userId: string> {
+]: nothing -> oneof<table<email: string, fullName: string, userId: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
@@ -1258,7 +1276,7 @@ export def "create-product" [
   --accept: string@accept-completer # Response content type
   --description: string # nullable
   name: string
-]: any -> record<description: string, name: string, order: int, organization: record<name: string, organizationId: string>, productId: string, reasonRequired: bool> {
+]: any -> oneof<record<description: string, name: string, order: int, organization: record<name: string, organizationId: string>, productId: string, reasonRequired: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1334,7 +1352,7 @@ export def "get-permission-group" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<accessType: string, canCreateOrUpdateConfig: bool, canCreateOrUpdateEnvironment: bool, canCreateOrUpdateSegments: bool, canCreateOrUpdateSetting: bool, canCreateOrUpdateTag: bool, canDeleteConfig: bool, canDeleteEnvironment: bool, canDeleteSegments: bool, canDeleteSetting: bool, canDeleteTag: bool, canManageIntegrations: bool, canManageMembers: bool, canManageProductPreferences: bool, canManageWebhook: bool, canRotateSdkKey: bool, canTagSetting: bool, canUseExportImport: bool, canViewProductAuditLog: bool, canViewProductStatistics: bool, canViewSdkKey: bool, environmentAccesses: table<color: string, description: string, environmentAccessType: string, environmentId: string, name: string, order: int, reasonRequired: bool>, name: string, newEnvironmentAccessType: string, permissionGroupId: int, product: record<description: string, name: string, order: int, organization: record<name: string, organizationId: string>, productId: string, reasonRequired: bool>> {
+]: nothing -> oneof<record<accessType: string, canCreateOrUpdateConfig: bool, canCreateOrUpdateEnvironment: bool, canCreateOrUpdateSegments: bool, canCreateOrUpdateSetting: bool, canCreateOrUpdateTag: bool, canDeleteConfig: bool, canDeleteEnvironment: bool, canDeleteSegments: bool, canDeleteSetting: bool, canDeleteTag: bool, canManageIntegrations: bool, canManageMembers: bool, canManageProductPreferences: bool, canManageWebhook: bool, canRotateSdkKey: bool, canTagSetting: bool, canUseExportImport: bool, canViewProductAuditLog: bool, canViewProductStatistics: bool, canViewSdkKey: bool, environmentAccesses: table<color: string, description: string, environmentAccessType: string, environmentId: string, name: string, order: int, reasonRequired: bool>, name: string, newEnvironmentAccessType: string, permissionGroupId: int, product: record<description: string, name: string, order: int, organization: record<name: string, organizationId: string>, productId: string, reasonRequired: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($permission_group_id | is-empty) { error make --unspanned { msg: "path parameter 'permissionGroupId' must be non-empty" } }
@@ -1359,7 +1377,6 @@ export def "get-permission-group" [
 #
 # PUT /v1/permissions/{permissionGroupId}
 # operationId: update-permission-group
-# --environmentAccesses item shape: {color?: string, description?: string, environmentAccessType?: "full"|"readOnly"|"none", environmentId?: string, name?: string, order?: int, reasonRequired?: bool}
 export def "update-permission-group" [
   permission_group_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1396,7 +1413,7 @@ export def "update-permission-group" [
   --environment-accesses: list # nullable — item shape: {color?: string, description?: string, environmentAccessType?: "full"|"readOnly"|"none", environmentId?: string, name?: string, order?: int, reasonRequired?: bool}
   --name: string # nullable
   --new-environment-access-type: string@new-environment-access-type-completer
-]: any -> record<accessType: string, canCreateOrUpdateConfig: bool, canCreateOrUpdateEnvironment: bool, canCreateOrUpdateSegments: bool, canCreateOrUpdateSetting: bool, canCreateOrUpdateTag: bool, canDeleteConfig: bool, canDeleteEnvironment: bool, canDeleteSegments: bool, canDeleteSetting: bool, canDeleteTag: bool, canManageIntegrations: bool, canManageMembers: bool, canManageProductPreferences: bool, canManageWebhook: bool, canRotateSdkKey: bool, canTagSetting: bool, canUseExportImport: bool, canViewProductAuditLog: bool, canViewProductStatistics: bool, canViewSdkKey: bool, environmentAccesses: table<color: string, description: string, environmentAccessType: string, environmentId: string, name: string, order: int, reasonRequired: bool>, name: string, newEnvironmentAccessType: string, permissionGroupId: int, product: record<description: string, name: string, order: int, organization: record<name: string, organizationId: string>, productId: string, reasonRequired: bool>> {
+]: any -> oneof<record<accessType: string, canCreateOrUpdateConfig: bool, canCreateOrUpdateEnvironment: bool, canCreateOrUpdateSegments: bool, canCreateOrUpdateSetting: bool, canCreateOrUpdateTag: bool, canDeleteConfig: bool, canDeleteEnvironment: bool, canDeleteSegments: bool, canDeleteSetting: bool, canDeleteTag: bool, canManageIntegrations: bool, canManageMembers: bool, canManageProductPreferences: bool, canManageWebhook: bool, canRotateSdkKey: bool, canTagSetting: bool, canUseExportImport: bool, canViewProductAuditLog: bool, canViewProductStatistics: bool, canViewSdkKey: bool, environmentAccesses: table<color: string, description: string, environmentAccessType: string, environmentId: string, name: string, order: int, reasonRequired: bool>, name: string, newEnvironmentAccessType: string, permissionGroupId: int, product: record<description: string, name: string, order: int, organization: record<name: string, organizationId: string>, productId: string, reasonRequired: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1435,7 +1452,7 @@ export def "get-products" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<description: string, name: string, order: int, organization: record<name: string, organizationId: string>, productId: string, reasonRequired: bool> {
+]: nothing -> oneof<table<description: string, name: string, order: int, organization: record<name: string, organizationId: string>, productId: string, reasonRequired: bool>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/products" $auth.query)
@@ -1507,7 +1524,7 @@ export def "get-product" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<description: string, name: string, order: int, organization: record<name: string, organizationId: string>, productId: string, reasonRequired: bool> {
+]: nothing -> oneof<record<description: string, name: string, order: int, organization: record<name: string, organizationId: string>, productId: string, reasonRequired: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
@@ -1546,7 +1563,7 @@ export def "update-product" [
   --accept: string@accept-completer # Response content type
   --description: string # nullable
   --name: string # nullable
-]: any -> record<description: string, name: string, order: int, organization: record<name: string, organizationId: string>, productId: string, reasonRequired: bool> {
+]: any -> oneof<record<description: string, name: string, order: int, organization: record<name: string, organizationId: string>, productId: string, reasonRequired: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1591,7 +1608,7 @@ export def "get-auditlogs" [
   --audit-log-type: string # Filter Audit logs by Audit log type. (nullable)
   --from-utc-date-time: string # Filter Audit logs by starting UTC date. (format: date-time)
   --to-utc-date-time: string # Filter Audit logs by ending UTC date. (format: date-time)
-]: nothing -> table<actionTarget: string, auditLogDateTime: string, auditLogId: int, auditLogType: string, auditLogTypeEnum: string, details: string, userEmail: string, userName: string, where: string, why: string> {
+]: nothing -> oneof<table<actionTarget: string, auditLogDateTime: string, auditLogId: int, auditLogType: string, auditLogTypeEnum: string, details: string, userEmail: string, userName: string, where: string, why: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
@@ -1629,7 +1646,7 @@ export def "get-configs" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<configId: string, description: string, name: string, order: int, product: record<description: string, name: string, order: int, organization: record, productId: string, reasonRequired: bool>> {
+]: nothing -> oneof<table<configId: string, description: string, name: string, order: int, product: record<description: string, name: string, order: int, organization: record, productId: string, reasonRequired: bool>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
@@ -1668,7 +1685,7 @@ export def "create-config" [
   --accept: string@accept-completer # Response content type
   --description: string # nullable
   name: string
-]: any -> record<configId: string, description: string, name: string, order: int, product: record<description: string, name: string, order: int, organization: record<name: string, organizationId: string>, productId: string, reasonRequired: bool>> {
+]: any -> oneof<record<configId: string, description: string, name: string, order: int, product: record<description: string, name: string, order: int, organization: record<name: string, organizationId: string>, productId: string, reasonRequired: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1708,7 +1725,7 @@ export def "get-environments" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<color: string, description: string, environmentId: string, name: string, order: int, product: record<description: string, name: string, order: int, organization: record, productId: string, reasonRequired: bool>, reasonRequired: bool> {
+]: nothing -> oneof<table<color: string, description: string, environmentId: string, name: string, order: int, product: record<description: string, name: string, order: int, organization: record, productId: string, reasonRequired: bool>, reasonRequired: bool>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
@@ -1748,7 +1765,7 @@ export def "create-environment" [
   --color: string # nullable
   --description: string # nullable
   name: string
-]: any -> record<color: string, description: string, environmentId: string, name: string, order: int, product: record<description: string, name: string, order: int, organization: record<name: string, organizationId: string>, productId: string, reasonRequired: bool>, reasonRequired: bool> {
+]: any -> oneof<record<color: string, description: string, environmentId: string, name: string, order: int, product: record<description: string, name: string, order: int, organization: record<name: string, organizationId: string>, productId: string, reasonRequired: bool>, reasonRequired: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1788,7 +1805,7 @@ export def "get-product-members" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<email: string, fullName: string, permissionGroupId: int, productId: string, userId: string> {
+]: nothing -> oneof<table<email: string, fullName: string, permissionGroupId: int, productId: string, userId: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
@@ -1904,7 +1921,7 @@ export def "get-permission-groups" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<accessType: string, canCreateOrUpdateConfig: bool, canCreateOrUpdateEnvironment: bool, canCreateOrUpdateSegments: bool, canCreateOrUpdateSetting: bool, canCreateOrUpdateTag: bool, canDeleteConfig: bool, canDeleteEnvironment: bool, canDeleteSegments: bool, canDeleteSetting: bool, canDeleteTag: bool, canManageIntegrations: bool, canManageMembers: bool, canManageProductPreferences: bool, canManageWebhook: bool, canRotateSdkKey: bool, canTagSetting: bool, canUseExportImport: bool, canViewProductAuditLog: bool, canViewProductStatistics: bool, canViewSdkKey: bool, environmentAccesses: list<record>, name: string, newEnvironmentAccessType: string, permissionGroupId: int, product: record<description: string, name: string, order: int, organization: record, productId: string, reasonRequired: bool>> {
+]: nothing -> oneof<table<accessType: string, canCreateOrUpdateConfig: bool, canCreateOrUpdateEnvironment: bool, canCreateOrUpdateSegments: bool, canCreateOrUpdateSetting: bool, canCreateOrUpdateTag: bool, canDeleteConfig: bool, canDeleteEnvironment: bool, canDeleteSegments: bool, canDeleteSetting: bool, canDeleteTag: bool, canManageIntegrations: bool, canManageMembers: bool, canManageProductPreferences: bool, canManageWebhook: bool, canRotateSdkKey: bool, canTagSetting: bool, canUseExportImport: bool, canViewProductAuditLog: bool, canViewProductStatistics: bool, canViewSdkKey: bool, environmentAccesses: list<record>, name: string, newEnvironmentAccessType: string, permissionGroupId: int, product: record<description: string, name: string, order: int, organization: record, productId: string, reasonRequired: bool>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
@@ -1929,7 +1946,6 @@ export def "get-permission-groups" [
 #
 # POST /v1/products/{productId}/permissions
 # operationId: create-permission-group
-# --environmentAccesses item shape: {color?: string, description?: string, environmentAccessType?: "full"|"readOnly"|"none", environmentId?: string, name?: string, order?: int, reasonRequired?: bool}
 export def "create-permission-group" [
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1966,7 +1982,7 @@ export def "create-permission-group" [
   --environment-accesses: list # nullable — item shape: {color?: string, description?: string, environmentAccessType?: "full"|"readOnly"|"none", environmentId?: string, name?: string, order?: int, reasonRequired?: bool}
   name: string
   --new-environment-access-type: string@new-environment-access-type-completer
-]: any -> record<accessType: string, canCreateOrUpdateConfig: bool, canCreateOrUpdateEnvironment: bool, canCreateOrUpdateSegments: bool, canCreateOrUpdateSetting: bool, canCreateOrUpdateTag: bool, canDeleteConfig: bool, canDeleteEnvironment: bool, canDeleteSegments: bool, canDeleteSetting: bool, canDeleteTag: bool, canManageIntegrations: bool, canManageMembers: bool, canManageProductPreferences: bool, canManageWebhook: bool, canRotateSdkKey: bool, canTagSetting: bool, canUseExportImport: bool, canViewProductAuditLog: bool, canViewProductStatistics: bool, canViewSdkKey: bool, environmentAccesses: table<color: string, description: string, environmentAccessType: string, environmentId: string, name: string, order: int, reasonRequired: bool>, name: string, newEnvironmentAccessType: string, permissionGroupId: int, product: record<description: string, name: string, order: int, organization: record<name: string, organizationId: string>, productId: string, reasonRequired: bool>> {
+]: any -> oneof<record<accessType: string, canCreateOrUpdateConfig: bool, canCreateOrUpdateEnvironment: bool, canCreateOrUpdateSegments: bool, canCreateOrUpdateSetting: bool, canCreateOrUpdateTag: bool, canDeleteConfig: bool, canDeleteEnvironment: bool, canDeleteSegments: bool, canDeleteSetting: bool, canDeleteTag: bool, canManageIntegrations: bool, canManageMembers: bool, canManageProductPreferences: bool, canManageWebhook: bool, canRotateSdkKey: bool, canTagSetting: bool, canUseExportImport: bool, canViewProductAuditLog: bool, canViewProductStatistics: bool, canViewSdkKey: bool, environmentAccesses: table<color: string, description: string, environmentAccessType: string, environmentId: string, name: string, order: int, reasonRequired: bool>, name: string, newEnvironmentAccessType: string, permissionGroupId: int, product: record<description: string, name: string, order: int, organization: record<name: string, organizationId: string>, productId: string, reasonRequired: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2006,7 +2022,7 @@ export def "get-segments" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<createdAt: string, creatorEmail: string, creatorFullName: string, description: string, lastUpdaterEmail: string, lastUpdaterFullName: string, name: string, product: record<description: string, name: string, order: int, organization: record, productId: string, reasonRequired: bool>, segmentId: string, updatedAt: string, usage: int> {
+]: nothing -> oneof<table<createdAt: string, creatorEmail: string, creatorFullName: string, description: string, lastUpdaterEmail: string, lastUpdaterFullName: string, name: string, product: record<description: string, name: string, order: int, organization: record, productId: string, reasonRequired: bool>, segmentId: string, updatedAt: string, usage: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
@@ -2048,7 +2064,7 @@ export def "create-segment" [
   comparison_value: string
   --description: string # nullable
   name: string
-]: any -> record<comparator: string, comparisonAttribute: string, comparisonValue: string, createdAt: string, creatorEmail: string, creatorFullName: string, description: string, lastUpdaterEmail: string, lastUpdaterFullName: string, name: string, product: record<description: string, name: string, order: int, organization: record<name: string, organizationId: string>, productId: string, reasonRequired: bool>, segmentId: string, updatedAt: string> {
+]: any -> oneof<record<comparator: string, comparisonAttribute: string, comparisonValue: string, createdAt: string, creatorEmail: string, creatorFullName: string, description: string, lastUpdaterEmail: string, lastUpdaterFullName: string, name: string, product: record<description: string, name: string, order: int, organization: record<name: string, organizationId: string>, productId: string, reasonRequired: bool>, segmentId: string, updatedAt: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2088,7 +2104,7 @@ export def "get-tags" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<color: string, name: string, product: record<description: string, name: string, order: int, organization: record, productId: string, reasonRequired: bool>, tagId: int> {
+]: nothing -> oneof<table<color: string, name: string, product: record<description: string, name: string, order: int, organization: record, productId: string, reasonRequired: bool>, tagId: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
@@ -2127,7 +2143,7 @@ export def "create-tag" [
   --accept: string@accept-completer # Response content type
   --color: string # nullable
   name: string
-]: any -> record<color: string, name: string, product: record<description: string, name: string, order: int, organization: record<name: string, organizationId: string>, productId: string, reasonRequired: bool>, tagId: int> {
+]: any -> oneof<record<color: string, name: string, product: record<description: string, name: string, order: int, organization: record<name: string, organizationId: string>, productId: string, reasonRequired: bool>, tagId: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2203,7 +2219,7 @@ export def "get-segment" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<comparator: string, comparisonAttribute: string, comparisonValue: string, createdAt: string, creatorEmail: string, creatorFullName: string, description: string, lastUpdaterEmail: string, lastUpdaterFullName: string, name: string, product: record<description: string, name: string, order: int, organization: record<name: string, organizationId: string>, productId: string, reasonRequired: bool>, segmentId: string, updatedAt: string> {
+]: nothing -> oneof<record<comparator: string, comparisonAttribute: string, comparisonValue: string, createdAt: string, creatorEmail: string, creatorFullName: string, description: string, lastUpdaterEmail: string, lastUpdaterFullName: string, name: string, product: record<description: string, name: string, order: int, organization: record<name: string, organizationId: string>, productId: string, reasonRequired: bool>, segmentId: string, updatedAt: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($segment_id | is-empty) { error make --unspanned { msg: "path parameter 'segmentId' must be non-empty" } }
@@ -2245,7 +2261,7 @@ export def "update-segment" [
   --comparison-value: string # nullable
   --description: string # nullable
   --name: string # nullable
-]: any -> record<comparator: string, comparisonAttribute: string, comparisonValue: string, createdAt: string, creatorEmail: string, creatorFullName: string, description: string, lastUpdaterEmail: string, lastUpdaterFullName: string, name: string, product: record<description: string, name: string, order: int, organization: record<name: string, organizationId: string>, productId: string, reasonRequired: bool>, segmentId: string, updatedAt: string> {
+]: any -> oneof<record<comparator: string, comparisonAttribute: string, comparisonValue: string, createdAt: string, creatorEmail: string, creatorFullName: string, description: string, lastUpdaterEmail: string, lastUpdaterFullName: string, name: string, product: record<description: string, name: string, order: int, organization: record<name: string, organizationId: string>, productId: string, reasonRequired: bool>, segmentId: string, updatedAt: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2321,7 +2337,7 @@ export def "get-setting" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<configId: string, configName: string, hint: string, key: string, name: string, order: int, settingId: int, settingType: string, tags: table<color: string, name: string, product: record, tagId: int>> {
+]: nothing -> oneof<record<configId: string, configName: string, hint: string, key: string, name: string, order: int, settingId: int, settingType: string, tags: table<color: string, name: string, product: record, tagId: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($setting_id | is-empty) { error make --unspanned { msg: "path parameter 'settingId' must be non-empty" } }
@@ -2346,7 +2362,6 @@ export def "get-setting" [
 #
 # PATCH /v1/settings/{settingId}
 # operationId: update-setting
-# --operations item shape: {from?: record, op?: "unknown"|"add"|"remove"|"replace"|"move"|"copy"|"test", path?: record, value?: record}
 export def "update-setting" [
   setting_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2360,7 +2375,7 @@ export def "update-setting" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --operations: list # nullable — item shape: {from?: record, op?: "unknown"|"add"|"remove"|"replace"|"move"|"copy"|"test", path?: record, value?: record}
-]: any -> record<configId: string, configName: string, hint: string, key: string, name: string, order: int, settingId: int, settingType: string, tags: table<color: string, name: string, product: record, tagId: int>> {
+]: any -> oneof<record<configId: string, configName: string, hint: string, key: string, name: string, order: int, settingId: int, settingType: string, tags: table<color: string, name: string, product: record, tagId: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2401,7 +2416,7 @@ export def "get-setting-value-by-sdkkey" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --x-configcat-sdkkey: string # The ConfigCat SDK Key. (https://app.configcat.com/sdkkey)
-]: nothing -> record<config: record<configId: string, description: string, name: string, order: int, product: record<description: string, name: string, order: int, organization: record, productId: string, reasonRequired: bool>>, environment: record<color: string, description: string, environmentId: string, name: string, order: int, product: record<description: string, name: string, order: int, organization: record, productId: string, reasonRequired: bool>, reasonRequired: bool>, integrationLinks: table<description: string, integrationLinkType: string, key: string, url: string>, lastUpdaterUserEmail: string, lastUpdaterUserFullName: string, readOnly: bool, rolloutPercentageItems: table<percentage: int, value: any>, rolloutRules: table<comparator: string, comparisonAttribute: string, comparisonValue: string, segmentComparator: string, segmentId: string, value: any>, setting: record<createdAt: string, creatorEmail: string, creatorFullName: string, hint: string, isWatching: bool, key: string, name: string, order: int, settingId: int, settingType: string>, settingTags: table<color: string, name: string, settingTagId: int, tagId: int>, updatedAt: string, value: any> {
+]: nothing -> oneof<record<config: record<configId: string, description: string, name: string, order: int, product: record<description: string, name: string, order: int, organization: record, productId: string, reasonRequired: bool>>, environment: record<color: string, description: string, environmentId: string, name: string, order: int, product: record<description: string, name: string, order: int, organization: record, productId: string, reasonRequired: bool>, reasonRequired: bool>, integrationLinks: table<description: string, integrationLinkType: string, key: string, url: string>, lastUpdaterUserEmail: string, lastUpdaterUserFullName: string, readOnly: bool, rolloutPercentageItems: table<percentage: int, value: any>, rolloutRules: table<comparator: string, comparisonAttribute: string, comparisonValue: string, segmentComparator: string, segmentId: string, value: any>, setting: record<createdAt: string, creatorEmail: string, creatorFullName: string, hint: string, isWatching: bool, key: string, name: string, order: int, settingId: int, settingType: string>, settingTags: table<color: string, name: string, settingTagId: int, tagId: int>, updatedAt: string, value: any>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($setting_key_or_id | is-empty) { error make --unspanned { msg: "path parameter 'settingKeyOrId' must be non-empty" } }
@@ -2428,7 +2443,6 @@ export def "get-setting-value-by-sdkkey" [
 #
 # PATCH /v1/settings/{settingKeyOrId}/value
 # operationId: update-setting-value-by-sdkkey
-# --operations item shape: {from?: record, op?: "unknown"|"add"|"remove"|"replace"|"move"|"copy"|"test", path?: record, value?: record}
 export def "update-setting-value-by-sdkkey" [
   setting_key_or_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2444,7 +2458,7 @@ export def "update-setting-value-by-sdkkey" [
   --reason: string # The reason note for the Audit Log if the Product's "Config changes require a reason" preference is turned on.
   --x-configcat-sdkkey: string # The ConfigCat SDK Key. (https://app.configcat.com/sdkkey)
   --operations: list # nullable — item shape: {from?: record, op?: "unknown"|"add"|"remove"|"replace"|"move"|"copy"|"test", path?: record, value?: record}
-]: any -> record<config: record<configId: string, description: string, name: string, order: int, product: record<description: string, name: string, order: int, organization: record, productId: string, reasonRequired: bool>>, environment: record<color: string, description: string, environmentId: string, name: string, order: int, product: record<description: string, name: string, order: int, organization: record, productId: string, reasonRequired: bool>, reasonRequired: bool>, integrationLinks: table<description: string, integrationLinkType: string, key: string, url: string>, lastUpdaterUserEmail: string, lastUpdaterUserFullName: string, readOnly: bool, rolloutPercentageItems: table<percentage: int, value: any>, rolloutRules: table<comparator: string, comparisonAttribute: string, comparisonValue: string, segmentComparator: string, segmentId: string, value: any>, setting: record<createdAt: string, creatorEmail: string, creatorFullName: string, hint: string, isWatching: bool, key: string, name: string, order: int, settingId: int, settingType: string>, settingTags: table<color: string, name: string, settingTagId: int, tagId: int>, updatedAt: string, value: any> {
+]: any -> oneof<record<config: record<configId: string, description: string, name: string, order: int, product: record<description: string, name: string, order: int, organization: record, productId: string, reasonRequired: bool>>, environment: record<color: string, description: string, environmentId: string, name: string, order: int, product: record<description: string, name: string, order: int, organization: record, productId: string, reasonRequired: bool>, reasonRequired: bool>, integrationLinks: table<description: string, integrationLinkType: string, key: string, url: string>, lastUpdaterUserEmail: string, lastUpdaterUserFullName: string, readOnly: bool, rolloutPercentageItems: table<percentage: int, value: any>, rolloutRules: table<comparator: string, comparisonAttribute: string, comparisonValue: string, segmentComparator: string, segmentId: string, value: any>, setting: record<createdAt: string, creatorEmail: string, creatorFullName: string, hint: string, isWatching: bool, key: string, name: string, order: int, settingId: int, settingType: string>, settingTags: table<color: string, name: string, settingTagId: int, tagId: int>, updatedAt: string, value: any>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2475,8 +2489,6 @@ export def "update-setting-value-by-sdkkey" [
 #
 # PUT /v1/settings/{settingKeyOrId}/value
 # operationId: replace-setting-value-by-sdkkey
-# --rolloutPercentageItems item shape: {percentage: int, value?: any}
-# --rolloutRules item shape: {comparator?: "isOneOf"|"isNotOneOf"|"contains"|"doesNotContain"|"semVerIsOneOf"|"semVerIsNotOneOf"|"semVerLess"|"semVerLessOrEquals"|"semVerGreater"|"semVerGreaterOrEquals"|"numberEquals"|"numberDoesNotEqual"|"numberLess"|"numberLessOrEquals"|"numberGreater"|"numberGreaterOrEquals"|"sensitiveIsOneOf"|"sensitiveIsNotOneOf", comparisonAttribute?: string, comparisonValue?: string, segmentComparator?: "isIn"|"isNotIn", segmentId?: string, value?: any}
 export def "replace-setting-value-by-sdkkey" [
   setting_key_or_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2494,7 +2506,7 @@ export def "replace-setting-value-by-sdkkey" [
   --rollout-percentage-items: list # The percentage rule collection. (nullable) — item shape: {percentage: int, value?: any}
   --rollout-rules: list # The targeting rule collection. (nullable) — item shape: {comparator?: "isOneOf"|"isNotOneOf"|"contains"|"doesNotContain"|"semVerIsOneOf"|"semVerIsNotOneOf"|"semVerLess"|"semVerLessOrEquals"|"semVerGreater"|"semVerGreaterOrEquals"|"numberEquals"|"numberDoesNotEqual"|"numberLess"|"numberLessOrEquals"|"numberGreater"|"numberGreaterOrEquals"|"sensitiveIsOneOf"|"sensitiveIsNotOneOf", comparisonAttribute?: string, comparisonValue?: string, segmentComparator?: "isIn"|"isNotIn", segmentId?: string, value?: any}
   --value: any # The value to serve. It must respect the setting type. (nullable)
-]: any -> record<config: record<configId: string, description: string, name: string, order: int, product: record<description: string, name: string, order: int, organization: record, productId: string, reasonRequired: bool>>, environment: record<color: string, description: string, environmentId: string, name: string, order: int, product: record<description: string, name: string, order: int, organization: record, productId: string, reasonRequired: bool>, reasonRequired: bool>, integrationLinks: table<description: string, integrationLinkType: string, key: string, url: string>, lastUpdaterUserEmail: string, lastUpdaterUserFullName: string, readOnly: bool, rolloutPercentageItems: table<percentage: int, value: any>, rolloutRules: table<comparator: string, comparisonAttribute: string, comparisonValue: string, segmentComparator: string, segmentId: string, value: any>, setting: record<createdAt: string, creatorEmail: string, creatorFullName: string, hint: string, isWatching: bool, key: string, name: string, order: int, settingId: int, settingType: string>, settingTags: table<color: string, name: string, settingTagId: int, tagId: int>, updatedAt: string, value: any> {
+]: any -> oneof<record<config: record<configId: string, description: string, name: string, order: int, product: record<description: string, name: string, order: int, organization: record, productId: string, reasonRequired: bool>>, environment: record<color: string, description: string, environmentId: string, name: string, order: int, product: record<description: string, name: string, order: int, organization: record, productId: string, reasonRequired: bool>, reasonRequired: bool>, integrationLinks: table<description: string, integrationLinkType: string, key: string, url: string>, lastUpdaterUserEmail: string, lastUpdaterUserFullName: string, readOnly: bool, rolloutPercentageItems: table<percentage: int, value: any>, rolloutRules: table<comparator: string, comparisonAttribute: string, comparisonValue: string, segmentComparator: string, segmentId: string, value: any>, setting: record<createdAt: string, creatorEmail: string, creatorFullName: string, hint: string, isWatching: bool, key: string, name: string, order: int, settingId: int, settingType: string>, settingTags: table<color: string, name: string, settingTagId: int, tagId: int>, updatedAt: string, value: any>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2573,7 +2585,7 @@ export def "get-tag" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<color: string, name: string, product: record<description: string, name: string, order: int, organization: record<name: string, organizationId: string>, productId: string, reasonRequired: bool>, tagId: int> {
+]: nothing -> oneof<record<color: string, name: string, product: record<description: string, name: string, order: int, organization: record<name: string, organizationId: string>, productId: string, reasonRequired: bool>, tagId: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($tag_id | is-empty) { error make --unspanned { msg: "path parameter 'tagId' must be non-empty" } }
@@ -2612,7 +2624,7 @@ export def "update-tag" [
   --accept: string@accept-completer # Response content type
   --color: string # nullable
   --name: string # nullable
-]: any -> record<color: string, name: string, product: record<description: string, name: string, order: int, organization: record<name: string, organizationId: string>, productId: string, reasonRequired: bool>, tagId: int> {
+]: any -> oneof<record<color: string, name: string, product: record<description: string, name: string, order: int, organization: record<name: string, organizationId: string>, productId: string, reasonRequired: bool>, tagId: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2652,7 +2664,7 @@ export def "get-settings-by-tag" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<configId: string, configName: string, hint: string, key: string, name: string, order: int, settingId: int, settingType: string, tags: list<record>> {
+]: nothing -> oneof<table<configId: string, configName: string, hint: string, key: string, name: string, order: int, settingId: int, settingType: string, tags: list<record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($tag_id | is-empty) { error make --unspanned { msg: "path parameter 'tagId' must be non-empty" } }

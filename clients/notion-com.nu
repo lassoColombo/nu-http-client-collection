@@ -12,27 +12,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -40,8 +49,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -52,7 +66,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -87,7 +110,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -115,9 +139,9 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "delete-a-block" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["delete-a-block" "retrieve-a-block" "update-a-block" "retrieve-block-children" "append-block-children" "retrieve-comments" "retrieve-a-database" "update-a-database" "query-a-database" "retrieve-a-page" "update-page-properties" "retrieve-a-page-property-item" "retrieve-a-user" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -151,7 +175,7 @@ export def "delete-a-block" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --notion-version: string # e.g. {{NOTION_VERSION}}
-]: nothing -> record<archived: bool, created_by: record<id: string, object: string>, created_time: string, has_children: bool, id: string, last_edited_by: record<id: string, object: string>, last_edited_time: string, object: string, paragraph: record<text: list<record>>, type: string> {
+]: nothing -> oneof<record<archived: bool, created_by: record<id: string, object: string>, created_time: string, has_children: bool, id: string, last_edited_by: record<id: string, object: string>, last_edited_time: string, object: string, paragraph: record<text: list<record>>, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -190,7 +214,7 @@ export def "retrieve-a-block" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --notion-version: string # e.g. {{NOTION_VERSION}}
-]: nothing -> record<created_time: string, has_children: bool, id: string, last_edited_time: string, object: string, paragraph: record<text: list<record>>, type: string> {
+]: nothing -> oneof<record<created_time: string, has_children: bool, id: string, last_edited_time: string, object: string, paragraph: record<text: list<record>>, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -217,7 +241,6 @@ export def "retrieve-a-block" [
 #
 # PATCH /v1/blocks/{id}
 # operationId: updateABlock
-# --paragraph shape: {rich_text?: list}
 export def "update-a-block" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -231,7 +254,7 @@ export def "update-a-block" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --notion-version: string # e.g. {{NOTION_VERSION}}
   --paragraph: record # shape: {rich_text?: list}
-]: any -> record<created_time: string, has_children: bool, id: string, last_edited_time: string, object: string, paragraph: record<text: list<record>>, type: string> {
+]: any -> oneof<record<created_time: string, has_children: bool, id: string, last_edited_time: string, object: string, paragraph: record<text: list<record>>, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -274,7 +297,7 @@ export def "retrieve-block-children" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: string # e.g. 100
   --notion-version: string # e.g. {{NOTION_VERSION}}
-]: nothing -> record<has_more: bool, next_cursor: any, object: string, results: table<created_time: string, has_children: bool, id: string, last_edited_time: string, object: string, paragraph: record, type: string, unsupported: record>> {
+]: nothing -> oneof<record<has_more: bool, next_cursor: any, object: string, results: table<created_time: string, has_children: bool, id: string, last_edited_time: string, object: string, paragraph: record, type: string, unsupported: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -302,7 +325,6 @@ export def "retrieve-block-children" [
 #
 # PATCH /v1/blocks/{id}/children
 # operationId: appendBlockChildren
-# --children item shape: {heading_2?: record, object?: string, paragraph?: record, type?: string}
 export def "append-block-children" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -316,7 +338,7 @@ export def "append-block-children" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --notion-version: string # e.g. {{NOTION_VERSION}}
   --children: list # e.g. [{heading_2: {text: [{text: {content: Lacinato kale}, type: text}]}, object: block, type: heading_2}, {object: block, paragraph: {rich_text: [{text: {content: Lacinato kale is a variety of kale with a long tradition in Italian cuisine, especially that of Tuscany. It is also known as Tuscan kale, Italian kale, dinosaur kale, kale, flat back kale, palm tree kale, or black Tuscan palm., link: {url: https://en.wikipedia.org/wiki/Lacinato_kale}}, type: text}]}, type: paragraph}] — item shape: {heading_2?: record, object?: string, paragraph?: record, type?: string}
-]: any -> record<child_page: record<title: string>, created_time: string, has_children: bool, id: string, last_edited_time: string, object: string, type: string> {
+]: any -> oneof<record<child_page: record<title: string>, created_time: string, has_children: bool, id: string, last_edited_time: string, object: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -359,7 +381,7 @@ export def "retrieve-comments" [
   --block-id: string # e.g. {{BLOCK_ID}}
   --page-size: string # e.g. 100
   --notion-version: string # e.g. {{NOTION_VERSION}}
-]: nothing -> record<comment: record, has_more: bool, next_cursor: any, object: string, results: table<created_by: record, created_time: string, discussion_id: string, id: string, last_edited_time: string, object: string, parent: record, rich_text: list>, type: string> {
+]: nothing -> oneof<record<comment: record, has_more: bool, next_cursor: any, object: string, results: table<created_by: record, created_time: string, discussion_id: string, id: string, last_edited_time: string, object: string, parent: record, rich_text: list>, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "block_id" $block_id "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
@@ -398,7 +420,7 @@ export def "retrieve-a-database" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --notion-version: string # e.g. {{NOTION_VERSION}}
-]: nothing -> record<archived: bool, cover: any, created_by: record<id: string, object: string>, created_time: string, icon: any, id: string, last_edited_by: record<id: string, object: string>, last_edited_time: string, object: string, parent: record<page_id: string, type: string>, properties: record<Author: record<id: string, multi_select: record, name: string, type: string>, Link: record<id: string, name: string, type: string, url: record>, Name: record<id: string, name: string, title: record, type: string>, Publisher: record<id: string, name: string, select: record, type: string>, Publishing_Release_Date: record<date: record, id: string, name: string, type: string>, Read: record<checkbox: record, id: string, name: string, type: string>, Score__5: record<id: string, name: string, select: record, type: string>, Status: record<id: string, name: string, select: record, type: string>, Summary: record<id: string, name: string, rich_text: record, type: string>, Type: record<id: string, name: string, select: record, type: string>>, title: table<annotations: record, href: any, plain_text: string, text: record, type: string>, url: string> {
+]: nothing -> oneof<record<archived: bool, cover: any, created_by: record<id: string, object: string>, created_time: string, icon: any, id: string, last_edited_by: record<id: string, object: string>, last_edited_time: string, object: string, parent: record<page_id: string, type: string>, properties: record<Author: record<id: string, multi_select: record, name: string, type: string>, Link: record<id: string, name: string, type: string, url: record>, Name: record<id: string, name: string, title: record, type: string>, Publisher: record<id: string, name: string, select: record, type: string>, Publishing_Release_Date: record<date: record, id: string, name: string, type: string>, Read: record<checkbox: record, id: string, name: string, type: string>, Score__5: record<id: string, name: string, select: record, type: string>, Status: record<id: string, name: string, select: record, type: string>, Summary: record<id: string, name: string, rich_text: record, type: string>, Type: record<id: string, name: string, select: record, type: string>>, title: table<annotations: record, href: any, plain_text: string, text: record, type: string>, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -425,8 +447,6 @@ export def "retrieve-a-database" [
 #
 # PATCH /v1/databases/{id}
 # operationId: updateADatabase
-# --properties shape: {Wine Pairing?: record}
-# --title item shape: {text?: record}
 export def "update-a-database" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -441,7 +461,7 @@ export def "update-a-database" [
   --notion-version: string # e.g. {{NOTION_VERSION}}
   --properties: record # shape: {Wine Pairing?: record}
   --title: list # e.g. [{text: {content: Ever Better Reading List Title}}] — item shape: {text?: record}
-]: any -> record<archived: bool, cover: any, created_by: record<id: string, object: string>, created_time: string, icon: any, id: string, last_edited_by: record<id: string, object: string>, last_edited_time: string, object: string, parent: record<page_id: string, type: string>, properties: record<Author: record<id: string, multi_select: record, name: string, type: string>, Link: record<id: string, name: string, type: string, url: record>, Name: record<id: string, name: string, title: record, type: string>, Publisher: record<id: string, name: string, select: record, type: string>, Publishing_Release_Date: record<date: record, id: string, name: string, type: string>, Read: record<checkbox: record, id: string, name: string, type: string>, Score__5: record<id: string, name: string, select: record, type: string>, Status: record<id: string, name: string, select: record, type: string>, Summary: record<id: string, name: string, rich_text: record, type: string>, Type: record<id: string, name: string, select: record, type: string>, Wine_Pairing: record<id: string, name: string, rich_text: record, type: string>>, title: table<annotations: record, href: any, plain_text: string, text: record, type: string>, url: string> {
+]: any -> oneof<record<archived: bool, cover: any, created_by: record<id: string, object: string>, created_time: string, icon: any, id: string, last_edited_by: record<id: string, object: string>, last_edited_time: string, object: string, parent: record<page_id: string, type: string>, properties: record<Author: record<id: string, multi_select: record, name: string, type: string>, Link: record<id: string, name: string, type: string, url: record>, Name: record<id: string, name: string, title: record, type: string>, Publisher: record<id: string, name: string, select: record, type: string>, Publishing_Release_Date: record<date: record, id: string, name: string, type: string>, Read: record<checkbox: record, id: string, name: string, type: string>, Score__5: record<id: string, name: string, select: record, type: string>, Status: record<id: string, name: string, select: record, type: string>, Summary: record<id: string, name: string, rich_text: record, type: string>, Type: record<id: string, name: string, select: record, type: string>, Wine_Pairing: record<id: string, name: string, rich_text: record, type: string>>, title: table<annotations: record, href: any, plain_text: string, text: record, type: string>, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -471,7 +491,6 @@ export def "update-a-database" [
 #
 # POST /v1/databases/{id}/query
 # operationId: queryADatabase
-# --filter shape: {property?: string, select?: record}
 export def "query-a-database" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -485,7 +504,7 @@ export def "query-a-database" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --notion-version: string # e.g. {{NOTION_VERSION}}
   --filter: record # shape: {property?: string, select?: record}
-]: any -> record<has_more: bool, next_cursor: any, object: string, results: table<archived: bool, cover: any, created_by: record, created_time: string, icon: any, id: string, last_edited_by: record, last_edited_time: string, object: string, parent: record, properties: record, url: string>> {
+]: any -> oneof<record<has_more: bool, next_cursor: any, object: string, results: table<archived: bool, cover: any, created_by: record, created_time: string, icon: any, id: string, last_edited_by: record, last_edited_time: string, object: string, parent: record, properties: record, url: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -528,7 +547,7 @@ export def "retrieve-a-page" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --notion-version: string # e.g. {{NOTION_VERSION}}
   --param: string # e.g. 
-]: nothing -> record<archived: bool, cover: any, created_by: record<id: string, object: string>, created_time: string, icon: record<emoji: string, type: string>, id: string, last_edited_by: record<id: string, object: string>, last_edited_time: string, object: string, parent: record<page_id: string, type: string>, properties: record<title: record<id: string, title: list, type: string>>, url: string> {
+]: nothing -> oneof<record<archived: bool, cover: any, created_by: record<id: string, object: string>, created_time: string, icon: record<emoji: string, type: string>, id: string, last_edited_by: record<id: string, object: string>, last_edited_time: string, object: string, parent: record<page_id: string, type: string>, properties: record<title: record<id: string, title: list, type: string>>, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -555,7 +574,6 @@ export def "retrieve-a-page" [
 #
 # PATCH /v1/pages/{id}
 # operationId: updatePageProperties
-# --properties shape: {Status?: record}
 export def "update-page-properties" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -569,7 +587,7 @@ export def "update-page-properties" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --notion-version: string # e.g. {{NOTION_VERSION}}
   --properties: record # shape: {Status?: record}
-]: any -> record<archived: bool, created_time: string, id: string, last_edited_time: string, object: string, parent: record<database_id: string, type: string>, properties: record<Author: record<id: string, multi_select: list, type: string>, Link: record<id: string, type: string, url: string>, Name: record<id: string, title: list, type: string>, Publisher: record<id: string, select: record, type: string>, Publishing_Release_Date: record<date: record, id: string, type: string>, Read: record<checkbox: bool, id: string, type: string>, Score__5: record<id: string, select: record, type: string>, Status: record<id: string, select: record, type: string>, Summary: record<id: string, rich_text: list, type: string>, Type: record<id: string, select: record, type: string>>> {
+]: any -> oneof<record<archived: bool, created_time: string, id: string, last_edited_time: string, object: string, parent: record<database_id: string, type: string>, properties: record<Author: record<id: string, multi_select: list, type: string>, Link: record<id: string, type: string, url: string>, Name: record<id: string, title: list, type: string>, Publisher: record<id: string, select: record, type: string>, Publishing_Release_Date: record<date: record, id: string, type: string>, Read: record<checkbox: bool, id: string, type: string>, Score__5: record<id: string, select: record, type: string>, Status: record<id: string, select: record, type: string>, Summary: record<id: string, rich_text: list, type: string>, Type: record<id: string, select: record, type: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -611,7 +629,7 @@ export def "retrieve-a-page-property-item" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<object: string, select: record<color: string, id: string, name: string>, type: string> {
+]: nothing -> oneof<record<object: string, select: record<color: string, id: string, name: string>, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($page_id | is-empty) { error make --unspanned { msg: "path parameter 'page_id' must be non-empty" } }
@@ -649,7 +667,7 @@ export def "retrieve-a-user" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --notion-version: string # e.g. {{NOTION_VERSION}}
-]: nothing -> record<avatar_url: any, id: string, name: string, object: string, person: record<email: string>, type: string> {
+]: nothing -> oneof<record<avatar_url: any, id: string, name: string, object: string, person: record<email: string>, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }

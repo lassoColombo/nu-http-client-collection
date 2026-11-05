@@ -15,27 +15,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
     "query-hapikey" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "hapikey")=(encode-path-segment $token_val)", location: "query"} }
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "private-app-legacy" => { {scheme: $scheme, headers: {"private-app-legacy": $token_val}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -43,8 +52,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -55,7 +69,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -90,7 +113,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -126,9 +150,9 @@ def accept-completer [] { ["*/*" "application/json"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-marketing-v3-marketing-events-attendance-create-create" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["post-marketing-v3-marketing-events-attendance-create-create" "post-marketing-v3-marketing-events-attendance-email-create-create-by-email" "post-marketing-v3-marketing-events-events-create" "post-marketing-v3-marketing-events-events-delete-archive-batch" "get-marketing-v3-marketing-events-events-search-do-search" "post-marketing-v3-marketing-events-events-upsert-do-upsert" "delete-marketing-v3-marketing-events-events-archive" "get-marketing-v3-marketing-events-events-get-by-id" "patch-marketing-v3-marketing-events-events-update" "put-marketing-v3-marketing-events-events-replace" "post-marketing-v3-marketing-events-events-cancel-do-cancel" "post-marketing-v3-marketing-events-events-complete-complete" "post-marketing-v3-marketing-events-events-email-upsert-do-email-upsert-by-id" "post-marketing-v3-marketing-events-events-upsert-do-upsert-by-id" "get-marketing-v3-marketing-events-settings-get-all" "post-marketing-v3-marketing-events-settings-create" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -150,7 +174,6 @@ export def commands []: nothing -> table {
 #
 # POST /marketing/v3/marketing-events/attendance/{externalEventId}/{subscriberState}/create
 # operationId: post-/marketing/v3/marketing-events/attendance/{externalEventId}/{subscriberState}/create_create
-# --inputs item shape: {interactionDateTime: int, properties?: record, vid?: int}
 export def "post-marketing-v3-marketing-events-attendance-create-create" [
   external_event_id: string
   subscriber_state: string
@@ -166,7 +189,7 @@ export def "post-marketing-v3-marketing-events-attendance-create-create" [
   --accept: string@accept-completer # Response content type
   --external-account-id: string # The account id associated with the marketing event
   inputs: list # List of HubSpot contacts to subscribe to the marketing event — item shape: {interactionDateTime: int, properties?: record, vid?: int}
-]: any -> record<completedAt: string, errors: table<category: record, context: record, errors: list, id: string, links: record, message: string, status: string, subCategory: record>, links: record, numErrors: int, requestedAt: string, results: table<vid: int>, startedAt: string, status: string> {
+]: any -> oneof<record<completedAt: string, errors: table<category: record, context: record, errors: list, id: string, links: record, message: string, status: string, subCategory: record>, links: record, numErrors: int, requestedAt: string, results: table<vid: int>, startedAt: string, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-app-legacy"))
   let base = ($base_url | default $BASE_URL)
@@ -196,7 +219,6 @@ export def "post-marketing-v3-marketing-events-attendance-create-create" [
 #
 # POST /marketing/v3/marketing-events/attendance/{externalEventId}/{subscriberState}/email-create
 # operationId: post-/marketing/v3/marketing-events/attendance/{externalEventId}/{subscriberState}/email-create_createByEmail
-# --inputs item shape: {contactProperties?: record, email: string, interactionDateTime: int, properties?: record}
 export def "post-marketing-v3-marketing-events-attendance-email-create-create-by-email" [
   external_event_id: string
   subscriber_state: string
@@ -212,7 +234,7 @@ export def "post-marketing-v3-marketing-events-attendance-email-create-create-by
   --accept: string@accept-completer # Response content type
   --external-account-id: string # The account id associated with the marketing event
   inputs: list # List of marketing event details to create or update — item shape: {contactProperties?: record, email: string, interactionDateTime: int, properties?: record}
-]: any -> record<completedAt: string, errors: table<category: record, context: record, errors: list, id: string, links: record, message: string, status: string, subCategory: record>, links: record, numErrors: int, requestedAt: string, results: table<email: string, vid: int>, startedAt: string, status: string> {
+]: any -> oneof<record<completedAt: string, errors: table<category: record, context: record, errors: list, id: string, links: record, message: string, status: string, subCategory: record>, links: record, numErrors: int, requestedAt: string, results: table<email: string, vid: int>, startedAt: string, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-app-legacy"))
   let base = ($base_url | default $BASE_URL)
@@ -241,7 +263,6 @@ export def "post-marketing-v3-marketing-events-attendance-email-create-create-by
 # POST /marketing/v3/marketing-events/events
 #
 # operationId: post-/marketing/v3/marketing-events/events_create
-# --customProperties item shape: {name: string, persistenceTimestamp?: int, requestId: string, selectedByUser: bool, selectedByUserTimestamp: int, ... (9 more fields)}
 export def "post-marketing-v3-marketing-events-events-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -264,7 +285,7 @@ export def "post-marketing-v3-marketing-events-events-create" [
   external_account_id: string # The accountId that is associated with this marketing event in the external event application.
   external_event_id: string # The id of the marketing event in the external event application.
   --start-date-time: string # The start date and time of the marketing event. (format: date-time)
-]: any -> record<customProperties: table<name: string, persistenceTimestamp: int, requestId: string, selectedByUser: bool, selectedByUserTimestamp: int, source: string, sourceId: string, sourceLabel: string, sourceMetadata: string, sourceVid: list, timestamp: int, updatedByUserId: int, useTimestampAsPersistenceTimestamp: bool, value: string>, endDateTime: string, eventCancelled: bool, eventDescription: string, eventName: string, eventOrganizer: string, eventType: string, eventUrl: string, startDateTime: string> {
+]: any -> oneof<record<customProperties: table<name: string, persistenceTimestamp: int, requestId: string, selectedByUser: bool, selectedByUserTimestamp: int, source: string, sourceId: string, sourceLabel: string, sourceMetadata: string, sourceVid: list, timestamp: int, updatedByUserId: int, useTimestampAsPersistenceTimestamp: bool, value: string>, endDateTime: string, eventCancelled: bool, eventDescription: string, eventName: string, eventOrganizer: string, eventType: string, eventUrl: string, startDateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-app-legacy"))
   let base = ($base_url | default $BASE_URL)
@@ -290,7 +311,6 @@ export def "post-marketing-v3-marketing-events-events-create" [
 # POST /marketing/v3/marketing-events/events/delete
 #
 # operationId: post-/marketing/v3/marketing-events/events/delete_archiveBatch
-# --inputs item shape: {appId: int, externalAccountId: string, externalEventId: string}
 export def "post-marketing-v3-marketing-events-events-delete-archive-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -302,7 +322,7 @@ export def "post-marketing-v3-marketing-events-events-delete-archive-batch" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   inputs: list # item shape: {appId: int, externalAccountId: string, externalEventId: string}
-]: any -> record<category: string, context: record, correlationId: string, errors: table<code: string, context: record, in: string, message: string, subCategory: string>, links: record, message: string, subCategory: string> {
+]: any -> oneof<record<category: string, context: record, correlationId: string, errors: table<code: string, context: record, in: string, message: string, subCategory: string>, links: record, message: string, subCategory: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-app-legacy"))
   let base = ($base_url | default $BASE_URL)
@@ -341,7 +361,7 @@ export def "get-marketing-v3-marketing-events-events-search-do-search" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --q: string # The id of the marketing event in the external event application (required)
-]: nothing -> record<results: table<appId: int, externalAccountId: string, externalEventId: string>> {
+]: nothing -> oneof<record<results: table<appId: int, externalAccountId: string, externalEventId: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($q == null) { error make --unspanned { msg: "required query parameter 'q' missing: pass --q" } }
@@ -366,7 +386,6 @@ export def "get-marketing-v3-marketing-events-events-search-do-search" [
 # POST /marketing/v3/marketing-events/events/upsert
 #
 # operationId: post-/marketing/v3/marketing-events/events/upsert_doUpsert
-# --inputs item shape: {customProperties?: list, endDateTime?: string, eventCancelled?: bool, eventDescription?: string, eventName: string, eventOrganizer: string, eventType?: string, eventUrl?: string, externalAccountId: string, externalEventId: string, startDateTime?: string}
 export def "post-marketing-v3-marketing-events-events-upsert-do-upsert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -379,7 +398,7 @@ export def "post-marketing-v3-marketing-events-events-upsert-do-upsert" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   inputs: list # item shape: {customProperties?: list, endDateTime?: string, eventCancelled?: bool, eventDescription?: string, eventName: string, eventOrganizer: string, eventType?: string, eventUrl?: string, externalAccountId: string, externalEventId: string, startDateTime?: string}
-]: any -> record<completedAt: string, errors: table<category: record, context: record, errors: list, id: string, links: record, message: string, status: string, subCategory: record>, links: record, numErrors: int, requestedAt: string, results: table<createdAt: string, customProperties: list, endDateTime: string, eventCancelled: bool, eventDescription: string, eventName: string, eventOrganizer: string, eventType: string, eventUrl: string, id: string, startDateTime: string, updatedAt: string>, startedAt: string, status: string> {
+]: any -> oneof<record<completedAt: string, errors: table<category: record, context: record, errors: list, id: string, links: record, message: string, status: string, subCategory: record>, links: record, numErrors: int, requestedAt: string, results: table<createdAt: string, customProperties: list, endDateTime: string, eventCancelled: bool, eventDescription: string, eventName: string, eventOrganizer: string, eventType: string, eventUrl: string, id: string, startDateTime: string, updatedAt: string>, startedAt: string, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-app-legacy"))
   let base = ($base_url | default $BASE_URL)
@@ -456,7 +475,7 @@ export def "get-marketing-v3-marketing-events-events-get-by-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --external-account-id: string # required
-]: nothing -> record<attendees: int, cancellations: int, createdAt: string, customProperties: table<name: string, persistenceTimestamp: int, requestId: string, selectedByUser: bool, selectedByUserTimestamp: int, source: string, sourceId: string, sourceLabel: string, sourceMetadata: string, sourceVid: list, timestamp: int, updatedByUserId: int, useTimestampAsPersistenceTimestamp: bool, value: string>, endDateTime: string, eventCancelled: bool, eventDescription: string, eventName: string, eventOrganizer: string, eventType: string, eventUrl: string, externalEventId: string, id: string, noShows: int, registrants: int, startDateTime: string, updatedAt: string> {
+]: nothing -> oneof<record<attendees: int, cancellations: int, createdAt: string, customProperties: table<name: string, persistenceTimestamp: int, requestId: string, selectedByUser: bool, selectedByUserTimestamp: int, source: string, sourceId: string, sourceLabel: string, sourceMetadata: string, sourceVid: list, timestamp: int, updatedByUserId: int, useTimestampAsPersistenceTimestamp: bool, value: string>, endDateTime: string, eventCancelled: bool, eventDescription: string, eventName: string, eventOrganizer: string, eventType: string, eventUrl: string, externalEventId: string, id: string, noShows: int, registrants: int, startDateTime: string, updatedAt: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($external_event_id | is-empty) { error make --unspanned { msg: "path parameter 'externalEventId' must be non-empty" } }
@@ -482,7 +501,6 @@ export def "get-marketing-v3-marketing-events-events-get-by-id" [
 # PATCH /marketing/v3/marketing-events/events/{externalEventId}
 #
 # operationId: patch-/marketing/v3/marketing-events/events/{externalEventId}_update
-# --customProperties item shape: {name: string, persistenceTimestamp?: int, requestId: string, selectedByUser: bool, selectedByUserTimestamp: int, ... (9 more fields)}
 export def "patch-marketing-v3-marketing-events-events-update" [
   external_event_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -505,7 +523,7 @@ export def "patch-marketing-v3-marketing-events-events-update" [
   --event-type: string # Describes what type of event this is. For example: `WEBINAR`, `CONFERENCE`, `WORKSHOP`
   --event-url: string # A URL in the external event application where the marketing event can be managed.
   --start-date-time: string # The start date and time of the marketing event. (format: date-time)
-]: any -> record<createdAt: string, customProperties: table<name: string, persistenceTimestamp: int, requestId: string, selectedByUser: bool, selectedByUserTimestamp: int, source: string, sourceId: string, sourceLabel: string, sourceMetadata: string, sourceVid: list, timestamp: int, updatedByUserId: int, useTimestampAsPersistenceTimestamp: bool, value: string>, endDateTime: string, eventCancelled: bool, eventDescription: string, eventName: string, eventOrganizer: string, eventType: string, eventUrl: string, id: string, startDateTime: string, updatedAt: string> {
+]: any -> oneof<record<createdAt: string, customProperties: table<name: string, persistenceTimestamp: int, requestId: string, selectedByUser: bool, selectedByUserTimestamp: int, source: string, sourceId: string, sourceLabel: string, sourceMetadata: string, sourceVid: list, timestamp: int, updatedByUserId: int, useTimestampAsPersistenceTimestamp: bool, value: string>, endDateTime: string, eventCancelled: bool, eventDescription: string, eventName: string, eventOrganizer: string, eventType: string, eventUrl: string, id: string, startDateTime: string, updatedAt: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-app-legacy"))
   let base = ($base_url | default $BASE_URL)
@@ -534,7 +552,6 @@ export def "patch-marketing-v3-marketing-events-events-update" [
 # PUT /marketing/v3/marketing-events/events/{externalEventId}
 #
 # operationId: put-/marketing/v3/marketing-events/events/{externalEventId}_replace
-# --customProperties item shape: {name: string, persistenceTimestamp?: int, requestId: string, selectedByUser: bool, selectedByUserTimestamp: int, ... (9 more fields)}
 export def "put-marketing-v3-marketing-events-events-replace" [
   external_event_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -558,7 +575,7 @@ export def "put-marketing-v3-marketing-events-events-replace" [
   external_account_id: string # The accountId that is associated with this marketing event in the external event application.
   --body-external-event-id: string # The id of the marketing event in the external event application.
   --start-date-time: string # The start date and time of the marketing event. (format: date-time)
-]: any -> record<createdAt: string, customProperties: table<name: string, persistenceTimestamp: int, requestId: string, selectedByUser: bool, selectedByUserTimestamp: int, source: string, sourceId: string, sourceLabel: string, sourceMetadata: string, sourceVid: list, timestamp: int, updatedByUserId: int, useTimestampAsPersistenceTimestamp: bool, value: string>, endDateTime: string, eventCancelled: bool, eventDescription: string, eventName: string, eventOrganizer: string, eventType: string, eventUrl: string, id: string, startDateTime: string, updatedAt: string> {
+]: any -> oneof<record<createdAt: string, customProperties: table<name: string, persistenceTimestamp: int, requestId: string, selectedByUser: bool, selectedByUserTimestamp: int, source: string, sourceId: string, sourceLabel: string, sourceMetadata: string, sourceVid: list, timestamp: int, updatedByUserId: int, useTimestampAsPersistenceTimestamp: bool, value: string>, endDateTime: string, eventCancelled: bool, eventDescription: string, eventName: string, eventOrganizer: string, eventType: string, eventUrl: string, id: string, startDateTime: string, updatedAt: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-app-legacy"))
   let base = ($base_url | default $BASE_URL)
@@ -599,7 +616,7 @@ export def "post-marketing-v3-marketing-events-events-cancel-do-cancel" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --external-account-id: string # required
-]: nothing -> record<customProperties: table<name: string, persistenceTimestamp: int, requestId: string, selectedByUser: bool, selectedByUserTimestamp: int, source: string, sourceId: string, sourceLabel: string, sourceMetadata: string, sourceVid: list, timestamp: int, updatedByUserId: int, useTimestampAsPersistenceTimestamp: bool, value: string>, endDateTime: string, eventCancelled: bool, eventDescription: string, eventName: string, eventOrganizer: string, eventType: string, eventUrl: string, startDateTime: string> {
+]: nothing -> oneof<record<customProperties: table<name: string, persistenceTimestamp: int, requestId: string, selectedByUser: bool, selectedByUserTimestamp: int, source: string, sourceId: string, sourceLabel: string, sourceMetadata: string, sourceVid: list, timestamp: int, updatedByUserId: int, useTimestampAsPersistenceTimestamp: bool, value: string>, endDateTime: string, eventCancelled: bool, eventDescription: string, eventName: string, eventOrganizer: string, eventType: string, eventUrl: string, startDateTime: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private-app-legacy"))
   let base = ($base_url | default $BASE_URL)
   if ($external_event_id | is-empty) { error make --unspanned { msg: "path parameter 'externalEventId' must be non-empty" } }
@@ -640,7 +657,7 @@ export def "post-marketing-v3-marketing-events-events-complete-complete" [
   --external-account-id: string # required
   end_date_time: string # format: date-time
   start_date_time: string # format: date-time
-]: any -> record<customProperties: table<name: string, persistenceTimestamp: int, requestId: string, selectedByUser: bool, selectedByUserTimestamp: int, source: string, sourceId: string, sourceLabel: string, sourceMetadata: string, sourceVid: list, timestamp: int, updatedByUserId: int, useTimestampAsPersistenceTimestamp: bool, value: string>, endDateTime: string, eventCancelled: bool, eventDescription: string, eventName: string, eventOrganizer: string, eventType: string, eventUrl: string, startDateTime: string> {
+]: any -> oneof<record<customProperties: table<name: string, persistenceTimestamp: int, requestId: string, selectedByUser: bool, selectedByUserTimestamp: int, source: string, sourceId: string, sourceLabel: string, sourceMetadata: string, sourceVid: list, timestamp: int, updatedByUserId: int, useTimestampAsPersistenceTimestamp: bool, value: string>, endDateTime: string, eventCancelled: bool, eventDescription: string, eventName: string, eventOrganizer: string, eventType: string, eventUrl: string, startDateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-app-legacy"))
   let base = ($base_url | default $BASE_URL)
@@ -669,7 +686,6 @@ export def "post-marketing-v3-marketing-events-events-complete-complete" [
 # POST /marketing/v3/marketing-events/events/{externalEventId}/{subscriberState}/email-upsert
 #
 # operationId: post-/marketing/v3/marketing-events/events/{externalEventId}/{subscriberState}/email-upsert_doEmailUpsertById
-# --inputs item shape: {contactProperties?: record, email: string, interactionDateTime: int, properties?: record}
 export def "post-marketing-v3-marketing-events-events-email-upsert-do-email-upsert-by-id" [
   external_event_id: string
   subscriber_state: string
@@ -684,7 +700,7 @@ export def "post-marketing-v3-marketing-events-events-email-upsert-do-email-upse
   --dry-run(-n) # Return the request that would be sent without executing it
   --external-account-id: string # required
   inputs: list # List of marketing event details to create or update — item shape: {contactProperties?: record, email: string, interactionDateTime: int, properties?: record}
-]: any -> record<category: string, context: record, correlationId: string, errors: table<code: string, context: record, in: string, message: string, subCategory: string>, links: record, message: string, subCategory: string> {
+]: any -> oneof<record<category: string, context: record, correlationId: string, errors: table<code: string, context: record, in: string, message: string, subCategory: string>, links: record, message: string, subCategory: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-app-legacy"))
   let base = ($base_url | default $BASE_URL)
@@ -714,7 +730,6 @@ export def "post-marketing-v3-marketing-events-events-email-upsert-do-email-upse
 # POST /marketing/v3/marketing-events/events/{externalEventId}/{subscriberState}/upsert
 #
 # operationId: post-/marketing/v3/marketing-events/events/{externalEventId}/{subscriberState}/upsert_doUpsertById
-# --inputs item shape: {interactionDateTime: int, properties?: record, vid?: int}
 export def "post-marketing-v3-marketing-events-events-upsert-do-upsert-by-id" [
   external_event_id: string
   subscriber_state: string
@@ -729,7 +744,7 @@ export def "post-marketing-v3-marketing-events-events-upsert-do-upsert-by-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --external-account-id: string # required
   inputs: list # List of HubSpot contacts to subscribe to the marketing event — item shape: {interactionDateTime: int, properties?: record, vid?: int}
-]: any -> record<category: string, context: record, correlationId: string, errors: table<code: string, context: record, in: string, message: string, subCategory: string>, links: record, message: string, subCategory: string> {
+]: any -> oneof<record<category: string, context: record, correlationId: string, errors: table<code: string, context: record, in: string, message: string, subCategory: string>, links: record, message: string, subCategory: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-app-legacy"))
   let base = ($base_url | default $BASE_URL)
@@ -771,7 +786,7 @@ export def "get-marketing-v3-marketing-events-settings-get-all" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<appId: int, eventDetailsUrl: string> {
+]: nothing -> oneof<record<appId: int, eventDetailsUrl: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-hapikey"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
@@ -808,7 +823,7 @@ export def "post-marketing-v3-marketing-events-settings-create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   event_details_url: string # The url that will be used to fetch marketing event details by id. Must contain a `%s` character sequence that will be substituted with the event id. For example: `https://my.event.app/events/%s`
-]: any -> record<appId: int, eventDetailsUrl: string> {
+]: any -> oneof<record<appId: int, eventDetailsUrl: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-hapikey"))
   let base = ($base_url | default $BASE_URL)

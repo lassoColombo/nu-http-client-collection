@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -149,9 +173,9 @@ def action-completer-41 [] { ["VerifySMSSandboxPhoneNumber"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-add-permission" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-add-permission" "post-add-permission" "get-check-if-phone-number-is-opted-out" "post-check-if-phone-number-is-opted-out" "get-confirm-subscription" "post-confirm-subscription" "get-create-platform-application" "post-create-platform-application" "get-create-platform-endpoint" "post-create-platform-endpoint" "get-create-sms-sandbox-phone-number" "post-create-sms-sandbox-phone-number" "get-create-topic" "post-create-topic" "get-delete-endpoint" "post-delete-endpoint" "get-delete-platform-application" "post-delete-platform-application" "get-delete-sms-sandbox-phone-number" "post-delete-sms-sandbox-phone-number" "get-delete-topic" "post-delete-topic" "get-get-data-protection-policy" "post-get-data-protection-policy" "get-get-endpoint-attributes" "post-get-endpoint-attributes" "get-get-platform-application-attributes" "post-get-platform-application-attributes" "get-get-sms-attributes" "post-get-sms-attributes" "get-get-sms-sandbox-account-status" "post-get-sms-sandbox-account-status" "get-get-subscription-attributes" "post-get-subscription-attributes" "get-get-topic-attributes" "post-get-topic-attributes" "get-list-endpoints-by-platform-application" "post-list-endpoints-by-platform-application" "get-list-origination-numbers" "post-list-origination-numbers" "get-list-phone-numbers-opted-out" "post-list-phone-numbers-opted-out" "get-list-platform-applications" "post-list-platform-applications" "get-list-sms-sandbox-phone-numbers" "post-list-sms-sandbox-phone-numbers" "get-list-subscriptions" "post-list-subscriptions" "get-list-subscriptions-by-topic" "post-list-subscriptions-by-topic" "get-list-tags-for-resource" "post-list-tags-for-resource" "get-list-topics" "post-list-topics" "get-opt-in-phone-number" "post-opt-in-phone-number" "get-publish" "post-publish" "get-publish-batch" "post-publish-batch" "get-put-data-protection-policy" "post-put-data-protection-policy" "get-remove-permission" "post-remove-permission" "get-set-endpoint-attributes" "post-set-endpoint-attributes" "get-set-platform-application-attributes" "post-set-platform-application-attributes" "get-set-sms-attributes" "post-set-sms-attributes" "get-set-subscription-attributes" "post-set-subscription-attributes" "get-set-topic-attributes" "post-set-topic-attributes" "get-subscribe" "post-subscribe" "get-tag-resource" "post-tag-resource" "get-unsubscribe" "post-unsubscribe" "get-untag-resource" "post-untag-resource" "get-verify-sms-sandbox-phone-number" "post-verify-sms-sandbox-phone-number" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -301,7 +325,7 @@ export def "get-check-if-phone-number-is-opted-out" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<isOptedOut: bool> {
+]: nothing -> oneof<record<isOptedOut: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($phone_number == null) { error make --unspanned { msg: "required query parameter 'phoneNumber' missing: pass --phone-number" } }
@@ -351,7 +375,7 @@ export def "post-check-if-phone-number-is-opted-out" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<isOptedOut: bool> {
+]: any -> oneof<record<isOptedOut: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -405,7 +429,7 @@ export def "get-confirm-subscription" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<SubscriptionArn: string> {
+]: nothing -> oneof<record<SubscriptionArn: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($topic_arn == null) { error make --unspanned { msg: "required query parameter 'TopicArn' missing: pass --topic-arn" } }
@@ -456,7 +480,7 @@ export def "post-confirm-subscription" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<SubscriptionArn: string> {
+]: any -> oneof<record<SubscriptionArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -510,7 +534,7 @@ export def "get-create-platform-application" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<PlatformApplicationArn: string> {
+]: nothing -> oneof<record<PlatformApplicationArn: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name == null) { error make --unspanned { msg: "required query parameter 'Name' missing: pass --name" } }
@@ -562,7 +586,7 @@ export def "post-create-platform-application" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<PlatformApplicationArn: string> {
+]: any -> oneof<record<PlatformApplicationArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -617,7 +641,7 @@ export def "get-create-platform-endpoint" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<EndpointArn: string> {
+]: nothing -> oneof<record<EndpointArn: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($platform_application_arn == null) { error make --unspanned { msg: "required query parameter 'PlatformApplicationArn' missing: pass --platform-application-arn" } }
@@ -668,7 +692,7 @@ export def "post-create-platform-endpoint" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<EndpointArn: string> {
+]: any -> oneof<record<EndpointArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -721,7 +745,7 @@ export def "get-create-sms-sandbox-phone-number" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($phone_number == null) { error make --unspanned { msg: "required query parameter 'PhoneNumber' missing: pass --phone-number" } }
@@ -771,7 +795,7 @@ export def "post-create-sms-sandbox-phone-number" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -826,7 +850,7 @@ export def "get-create-topic" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<TopicArn: string> {
+]: nothing -> oneof<record<TopicArn: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name == null) { error make --unspanned { msg: "required query parameter 'Name' missing: pass --name" } }
@@ -876,7 +900,7 @@ export def "post-create-topic" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<TopicArn: string> {
+]: any -> oneof<record<TopicArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1132,7 +1156,7 @@ export def "get-delete-sms-sandbox-phone-number" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($phone_number == null) { error make --unspanned { msg: "required query parameter 'PhoneNumber' missing: pass --phone-number" } }
@@ -1182,7 +1206,7 @@ export def "post-delete-sms-sandbox-phone-number" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1336,7 +1360,7 @@ export def "get-get-data-protection-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DataProtectionPolicy: string> {
+]: nothing -> oneof<record<DataProtectionPolicy: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn == null) { error make --unspanned { msg: "required query parameter 'ResourceArn' missing: pass --resource-arn" } }
@@ -1386,7 +1410,7 @@ export def "post-get-data-protection-policy" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<DataProtectionPolicy: string> {
+]: any -> oneof<record<DataProtectionPolicy: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1438,7 +1462,7 @@ export def "get-get-endpoint-attributes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Attributes: record> {
+]: nothing -> oneof<record<Attributes: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($endpoint_arn == null) { error make --unspanned { msg: "required query parameter 'EndpointArn' missing: pass --endpoint-arn" } }
@@ -1488,7 +1512,7 @@ export def "post-get-endpoint-attributes" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Attributes: record> {
+]: any -> oneof<record<Attributes: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1540,7 +1564,7 @@ export def "get-get-platform-application-attributes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Attributes: record> {
+]: nothing -> oneof<record<Attributes: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($platform_application_arn == null) { error make --unspanned { msg: "required query parameter 'PlatformApplicationArn' missing: pass --platform-application-arn" } }
@@ -1590,7 +1614,7 @@ export def "post-get-platform-application-attributes" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Attributes: record> {
+]: any -> oneof<record<Attributes: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1642,7 +1666,7 @@ export def "get-get-sms-attributes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<attributes: record> {
+]: nothing -> oneof<record<attributes: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "GetSMSAttributes")
@@ -1691,7 +1715,7 @@ export def "post-get-sms-attributes" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<attributes: record> {
+]: any -> oneof<record<attributes: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1742,7 +1766,7 @@ export def "get-get-sms-sandbox-account-status" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<IsInSandbox: bool> {
+]: nothing -> oneof<record<IsInSandbox: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "GetSMSSandboxAccountStatus")
@@ -1791,7 +1815,7 @@ export def "post-get-sms-sandbox-account-status" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<IsInSandbox: bool> {
+]: any -> oneof<record<IsInSandbox: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1843,7 +1867,7 @@ export def "get-get-subscription-attributes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Attributes: record> {
+]: nothing -> oneof<record<Attributes: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_arn == null) { error make --unspanned { msg: "required query parameter 'SubscriptionArn' missing: pass --subscription-arn" } }
@@ -1893,7 +1917,7 @@ export def "post-get-subscription-attributes" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Attributes: record> {
+]: any -> oneof<record<Attributes: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1945,7 +1969,7 @@ export def "get-get-topic-attributes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Attributes: record> {
+]: nothing -> oneof<record<Attributes: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($topic_arn == null) { error make --unspanned { msg: "required query parameter 'TopicArn' missing: pass --topic-arn" } }
@@ -1995,7 +2019,7 @@ export def "post-get-topic-attributes" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Attributes: record> {
+]: any -> oneof<record<Attributes: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2048,7 +2072,7 @@ export def "get-list-endpoints-by-platform-application" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Endpoints: table<EndpointArn: string, Attributes: record>, NextToken: string> {
+]: nothing -> oneof<record<Endpoints: table<EndpointArn: string, Attributes: record>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($platform_application_arn == null) { error make --unspanned { msg: "required query parameter 'PlatformApplicationArn' missing: pass --platform-application-arn" } }
@@ -2099,7 +2123,7 @@ export def "post-list-endpoints-by-platform-application" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Endpoints: table<EndpointArn: string, Attributes: record>, NextToken: string> {
+]: any -> oneof<record<Endpoints: table<EndpointArn: string, Attributes: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2152,7 +2176,7 @@ export def "get-list-origination-numbers" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextToken: string, PhoneNumbers: table<CreatedAt: string, PhoneNumber: string, Status: string, Iso2CountryCode: string, RouteType: string, NumberCapabilities: list>> {
+]: nothing -> oneof<record<NextToken: string, PhoneNumbers: table<CreatedAt: string, PhoneNumber: string, Status: string, Iso2CountryCode: string, RouteType: string, NumberCapabilities: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "ListOriginationNumbers")
@@ -2203,7 +2227,7 @@ export def "post-list-origination-numbers" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<NextToken: string, PhoneNumbers: table<CreatedAt: string, PhoneNumber: string, Status: string, Iso2CountryCode: string, RouteType: string, NumberCapabilities: list>> {
+]: any -> oneof<record<NextToken: string, PhoneNumbers: table<CreatedAt: string, PhoneNumber: string, Status: string, Iso2CountryCode: string, RouteType: string, NumberCapabilities: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2255,7 +2279,7 @@ export def "get-list-phone-numbers-opted-out" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<phoneNumbers: list<string>, nextToken: string> {
+]: nothing -> oneof<record<phoneNumbers: list<string>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "ListPhoneNumbersOptedOut")
@@ -2305,7 +2329,7 @@ export def "post-list-phone-numbers-opted-out" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<phoneNumbers: list<string>, nextToken: string> {
+]: any -> oneof<record<phoneNumbers: list<string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2357,7 +2381,7 @@ export def "get-list-platform-applications" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<PlatformApplications: table<PlatformApplicationArn: string, Attributes: record>, NextToken: string> {
+]: nothing -> oneof<record<PlatformApplications: table<PlatformApplicationArn: string, Attributes: record>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "ListPlatformApplications")
@@ -2407,7 +2431,7 @@ export def "post-list-platform-applications" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<PlatformApplications: table<PlatformApplicationArn: string, Attributes: record>, NextToken: string> {
+]: any -> oneof<record<PlatformApplications: table<PlatformApplicationArn: string, Attributes: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2460,7 +2484,7 @@ export def "get-list-sms-sandbox-phone-numbers" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<PhoneNumbers: table<PhoneNumber: string, Status: string>, NextToken: string> {
+]: nothing -> oneof<record<PhoneNumbers: table<PhoneNumber: string, Status: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "ListSMSSandboxPhoneNumbers")
@@ -2511,7 +2535,7 @@ export def "post-list-sms-sandbox-phone-numbers" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<PhoneNumbers: table<PhoneNumber: string, Status: string>, NextToken: string> {
+]: any -> oneof<record<PhoneNumbers: table<PhoneNumber: string, Status: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2563,7 +2587,7 @@ export def "get-list-subscriptions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Subscriptions: table<SubscriptionArn: string, Owner: string, Protocol: string, Endpoint: string, TopicArn: string>, NextToken: string> {
+]: nothing -> oneof<record<Subscriptions: table<SubscriptionArn: string, Owner: string, Protocol: string, Endpoint: string, TopicArn: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "ListSubscriptions")
@@ -2613,7 +2637,7 @@ export def "post-list-subscriptions" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Subscriptions: table<SubscriptionArn: string, Owner: string, Protocol: string, Endpoint: string, TopicArn: string>, NextToken: string> {
+]: any -> oneof<record<Subscriptions: table<SubscriptionArn: string, Owner: string, Protocol: string, Endpoint: string, TopicArn: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2666,7 +2690,7 @@ export def "get-list-subscriptions-by-topic" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Subscriptions: table<SubscriptionArn: string, Owner: string, Protocol: string, Endpoint: string, TopicArn: string>, NextToken: string> {
+]: nothing -> oneof<record<Subscriptions: table<SubscriptionArn: string, Owner: string, Protocol: string, Endpoint: string, TopicArn: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($topic_arn == null) { error make --unspanned { msg: "required query parameter 'TopicArn' missing: pass --topic-arn" } }
@@ -2717,7 +2741,7 @@ export def "post-list-subscriptions-by-topic" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Subscriptions: table<SubscriptionArn: string, Owner: string, Protocol: string, Endpoint: string, TopicArn: string>, NextToken: string> {
+]: any -> oneof<record<Subscriptions: table<SubscriptionArn: string, Owner: string, Protocol: string, Endpoint: string, TopicArn: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2769,7 +2793,7 @@ export def "get-list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Tags: table<Key: string, Value: string>> {
+]: nothing -> oneof<record<Tags: table<Key: string, Value: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn == null) { error make --unspanned { msg: "required query parameter 'ResourceArn' missing: pass --resource-arn" } }
@@ -2819,7 +2843,7 @@ export def "post-list-tags-for-resource" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Tags: table<Key: string, Value: string>> {
+]: any -> oneof<record<Tags: table<Key: string, Value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2871,7 +2895,7 @@ export def "get-list-topics" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Topics: table<TopicArn: string>, NextToken: string> {
+]: nothing -> oneof<record<Topics: table<TopicArn: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "ListTopics")
@@ -2921,7 +2945,7 @@ export def "post-list-topics" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Topics: table<TopicArn: string>, NextToken: string> {
+]: any -> oneof<record<Topics: table<TopicArn: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2973,7 +2997,7 @@ export def "get-opt-in-phone-number" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($phone_number == null) { error make --unspanned { msg: "required query parameter 'phoneNumber' missing: pass --phone-number" } }
@@ -3023,7 +3047,7 @@ export def "post-opt-in-phone-number" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3083,7 +3107,7 @@ export def "get-publish" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<MessageId: string, SequenceNumber: string> {
+]: nothing -> oneof<record<MessageId: string, SequenceNumber: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($message == null) { error make --unspanned { msg: "required query parameter 'Message' missing: pass --message" } }
@@ -3133,7 +3157,7 @@ export def "post-publish" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<MessageId: string, SequenceNumber: string> {
+]: any -> oneof<record<MessageId: string, SequenceNumber: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3186,7 +3210,7 @@ export def "get-publish-batch" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Successful: table<Id: string, MessageId: string, SequenceNumber: string>, Failed: table<Id: string, Code: string, Message: string, SenderFault: bool>> {
+]: nothing -> oneof<record<Successful: table<Id: string, MessageId: string, SequenceNumber: string>, Failed: table<Id: string, Code: string, Message: string, SenderFault: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($topic_arn == null) { error make --unspanned { msg: "required query parameter 'TopicArn' missing: pass --topic-arn" } }
@@ -3237,7 +3261,7 @@ export def "post-publish-batch" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Successful: table<Id: string, MessageId: string, SequenceNumber: string>, Failed: table<Id: string, Code: string, Message: string, SenderFault: bool>> {
+]: any -> oneof<record<Successful: table<Id: string, MessageId: string, SequenceNumber: string>, Failed: table<Id: string, Code: string, Message: string, SenderFault: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3705,7 +3729,7 @@ export def "get-set-sms-attributes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($attributes == null) { error make --unspanned { msg: "required query parameter 'attributes' missing: pass --attributes" } }
@@ -3755,7 +3779,7 @@ export def "post-set-sms-attributes" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4021,7 +4045,7 @@ export def "get-subscribe" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<SubscriptionArn: string> {
+]: nothing -> oneof<record<SubscriptionArn: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($topic_arn == null) { error make --unspanned { msg: "required query parameter 'TopicArn' missing: pass --topic-arn" } }
@@ -4072,7 +4096,7 @@ export def "post-subscribe" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<SubscriptionArn: string> {
+]: any -> oneof<record<SubscriptionArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4125,7 +4149,7 @@ export def "get-tag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn == null) { error make --unspanned { msg: "required query parameter 'ResourceArn' missing: pass --resource-arn" } }
@@ -4176,7 +4200,7 @@ export def "post-tag-resource" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4331,7 +4355,7 @@ export def "get-untag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn == null) { error make --unspanned { msg: "required query parameter 'ResourceArn' missing: pass --resource-arn" } }
@@ -4382,7 +4406,7 @@ export def "post-untag-resource" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4435,7 +4459,7 @@ export def "get-verify-sms-sandbox-phone-number" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($phone_number == null) { error make --unspanned { msg: "required query parameter 'PhoneNumber' missing: pass --phone-number" } }
@@ -4486,7 +4510,7 @@ export def "post-verify-sms-sandbox-phone-number" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -131,9 +154,9 @@ def x-amz-target-completer-27 [] { ["Kinesis_20131202.UpdateStreamMode"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "add-tags-to-stream" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["add-tags-to-stream" "create-stream" "decrease-stream-retention-period" "delete-stream" "deregister-stream-consumer" "describe-limits" "describe-stream" "describe-stream-consumer" "describe-stream-summary" "disable-enhanced-monitoring" "enable-enhanced-monitoring" "get-records" "get-shard-iterator" "increase-stream-retention-period" "list-shards" "list-stream-consumers" "list-streams" "list-tags-for-stream" "merge-shards" "put-record" "put-records" "register-stream-consumer" "remove-tags-from-stream" "split-shard" "start-stream-encryption" "stop-stream-encryption" "update-shard-count" "update-stream-mode" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -206,7 +229,6 @@ export def "add-tags-to-stream" [
 #
 # POST /
 # operationId: CreateStream
-# --StreamModeDetails shape: {StreamMode: "PROVISIONED"|"ON_DEMAND"}
 export def "create-stream" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -430,7 +452,7 @@ export def "describe-limits" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-5 # required
   --body: record
-]: any -> record<ShardLimit: int, OpenShardCount: int, OnDemandStreamCount: int, OnDemandStreamCountLimit: int> {
+]: any -> oneof<record<ShardLimit: int, OpenShardCount: int, OnDemandStreamCount: int, OnDemandStreamCountLimit: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -484,7 +506,7 @@ export def "describe-stream" [
   --limit-body: int # The maximum number of shards to return in a single call. The default value is 100. If you specify a value greater than 100, at most 100 results are returned. (body field)
   --exclusive-start-shard-id-body: string # The shard ID of the shard to start with. Specify this parameter to indicate that you want to describe the stream starting with the shard whose ID immediately follows ExclusiveStartShardId. If you don't specify this parameter, the default behavior for DescribeStream is to describe the stream starting with the first shard in the stream. (body field)
   --stream-arn: string # The ARN of the stream.
-]: any -> record<StreamDescription: record<StreamName: string, StreamARN: string, StreamStatus: string, StreamModeDetails: record<StreamMode: string>, Shards: list<record>, HasMoreShards: bool, RetentionPeriodHours: int, StreamCreationTimestamp: string, EnhancedMonitoring: list<record>, EncryptionType: string, KeyId: string>> {
+]: any -> oneof<record<StreamDescription: record<StreamName: string, StreamARN: string, StreamStatus: string, StreamModeDetails: record<StreamMode: string>, Shards: list<record>, HasMoreShards: bool, RetentionPeriodHours: int, StreamCreationTimestamp: string, EnhancedMonitoring: list<record>, EncryptionType: string, KeyId: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -536,7 +558,7 @@ export def "describe-stream-consumer" [
   --stream-arn: string # The ARN of the Kinesis data stream that the consumer is registered with. For more information, see Amazon Resource Names (ARNs) and Amazon Web Services Service Namespaces (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html#arn-syntax-kinesis-streams).
   --consumer-name: string # The name that you gave to the consumer.
   --consumer-arn: string # The ARN returned by Kinesis Data Streams when you registered the consumer.
-]: any -> record<ConsumerDescription: record<ConsumerName: string, ConsumerARN: string, ConsumerStatus: string, ConsumerCreationTimestamp: string, StreamARN: string>> {
+]: any -> oneof<record<ConsumerDescription: record<ConsumerName: string, ConsumerARN: string, ConsumerStatus: string, ConsumerCreationTimestamp: string, StreamARN: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -586,7 +608,7 @@ export def "describe-stream-summary" [
   --x-amz-target: string@x-amz-target-completer-8 # required
   --stream-name: string # The name of the stream to describe.
   --stream-arn: string # The ARN of the stream.
-]: any -> record<StreamDescriptionSummary: record<StreamName: string, StreamARN: string, StreamStatus: string, StreamModeDetails: record<StreamMode: string>, RetentionPeriodHours: int, StreamCreationTimestamp: string, EnhancedMonitoring: list<record>, EncryptionType: string, KeyId: string, OpenShardCount: int, ConsumerCount: int>> {
+]: any -> oneof<record<StreamDescriptionSummary: record<StreamName: string, StreamARN: string, StreamStatus: string, StreamModeDetails: record<StreamMode: string>, RetentionPeriodHours: int, StreamCreationTimestamp: string, EnhancedMonitoring: list<record>, EncryptionType: string, KeyId: string, OpenShardCount: int, ConsumerCount: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -637,7 +659,7 @@ export def "disable-enhanced-monitoring" [
   --stream-name: string # The name of the Kinesis data stream for which to disable enhanced monitoring.
   shard_level_metrics: list<string> # List of shard-level metrics to disable. The following are the valid shard-level metrics. The value "ALL" disables every metric. IncomingBytes IncomingRecords OutgoingBytes OutgoingRecords WriteProvisionedThroughputExceeded ReadProvisionedThroughputExceeded IteratorAgeMilliseconds ALL For more information, see Monitoring the Amazon Kinesis Data Streams Service with Amazon CloudWatch (https://docs.aws.amazon.com/kinesis/latest/dev/monitoring-with-cloudwatch.html) in the Amazon Kinesis Data Streams Developer Guide.
   --stream-arn: string # The ARN of the stream.
-]: any -> record<StreamName: string, CurrentShardLevelMetrics: list<string>, DesiredShardLevelMetrics: list<string>, StreamARN: string> {
+]: any -> oneof<record<StreamName: string, CurrentShardLevelMetrics: list<string>, DesiredShardLevelMetrics: list<string>, StreamARN: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -688,7 +710,7 @@ export def "enable-enhanced-monitoring" [
   --stream-name: string # The name of the stream for which to enable enhanced monitoring.
   shard_level_metrics: list<string> # List of shard-level metrics to enable. The following are the valid shard-level metrics. The value "ALL" enables every metric. IncomingBytes IncomingRecords OutgoingBytes OutgoingRecords WriteProvisionedThroughputExceeded ReadProvisionedThroughputExceeded IteratorAgeMilliseconds ALL For more information, see Monitoring the Amazon Kinesis Data Streams Service with Amazon CloudWatch (https://docs.aws.amazon.com/kinesis/latest/dev/monitoring-with-cloudwatch.html) in the Amazon Kinesis Data Streams Developer Guide.
   --stream-arn: string # The ARN of the stream.
-]: any -> record<StreamName: string, CurrentShardLevelMetrics: list<string>, DesiredShardLevelMetrics: list<string>, StreamARN: string> {
+]: any -> oneof<record<StreamName: string, CurrentShardLevelMetrics: list<string>, DesiredShardLevelMetrics: list<string>, StreamARN: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -739,7 +761,7 @@ export def "get-records" [
   shard_iterator: string # The position in the shard from which you want to start sequentially reading data records. A shard iterator specifies this position using the sequence number of a data record in the shard.
   --limit: int # The maximum number of records to return. Specify a value of up to 10,000. If you specify a value that is greater than 10,000, GetRecords throws InvalidArgumentException. The default value is 10,000.
   --stream-arn: string # The ARN of the stream.
-]: any -> record<Records: table<SequenceNumber: string, ApproximateArrivalTimestamp: string, Data: string, PartitionKey: string, EncryptionType: string>, NextShardIterator: string, MillisBehindLatest: int, ChildShards: table<ShardId: string, ParentShards: list, HashKeyRange: record>> {
+]: any -> oneof<record<Records: table<SequenceNumber: string, ApproximateArrivalTimestamp: string, Data: string, PartitionKey: string, EncryptionType: string>, NextShardIterator: string, MillisBehindLatest: int, ChildShards: table<ShardId: string, ParentShards: list, HashKeyRange: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -793,7 +815,7 @@ export def "get-shard-iterator" [
   --starting-sequence-number: string # The sequence number of the data record in the shard from which to start reading. Used with shard iterator type AT_SEQUENCE_NUMBER and AFTER_SEQUENCE_NUMBER.
   --timestamp: string # The time stamp of the data record from which to start reading. Used with shard iterator type AT_TIMESTAMP. A time stamp is the Unix epoch date with precision in milliseconds. For example, 2016-04-04T19:58:46.480-00:00 or 1459799926.480. If a record with this exact time stamp does not exist, the iterator returned is for the next (later) record. If the time stamp is older than the current trim horizon, the iterator returned is for the oldest untrimmed data record (TRIM_HORIZON). (format: date-time)
   --stream-arn: string # The ARN of the stream.
-]: any -> record<ShardIterator: string> {
+]: any -> oneof<record<ShardIterator: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -874,7 +896,6 @@ export def "increase-stream-retention-period" [
 #
 # POST /
 # operationId: ListShards
-# --ShardFilter shape: {Type: "AFTER_SHARD_ID"|"AT_TRIM_HORIZON"|"FROM_TRIM_HORIZON"|"AT_LATEST"|"AT_TIMESTAMP"|"FROM_TIMESTAMP", ShardId?: string, Timestamp?: string}
 export def "list-shards" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -900,7 +921,7 @@ export def "list-shards" [
   --stream-creation-timestamp: string # Specify this input parameter to distinguish data streams that have the same name. For example, if you create a data stream and then delete it, and you later create another data stream with the same name, you can use this input parameter to specify which of the two streams you want to list the shards for. You cannot specify this parameter if you specify the NextToken parameter. (format: date-time)
   --shard-filter: record # The request parameter used to filter out the response of the ListShards API. — shape: {Type: "AFTER_SHARD_ID"|"AT_TRIM_HORIZON"|"FROM_TRIM_HORIZON"|"AT_LATEST"|"AT_TIMESTAMP"|"FROM_TIMESTAMP", ShardId?: string, Timestamp?: string}
   --stream-arn: string # The ARN of the stream.
-]: any -> record<Shards: table<ShardId: string, ParentShardId: string, AdjacentParentShardId: string, HashKeyRange: record, SequenceNumberRange: record>, NextToken: string> {
+]: any -> oneof<record<Shards: table<ShardId: string, ParentShardId: string, AdjacentParentShardId: string, HashKeyRange: record, SequenceNumberRange: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -954,7 +975,7 @@ export def "list-stream-consumers" [
   --next-token-body: string # When the number of consumers that are registered with the data stream is greater than the default value for the MaxResults parameter, or if you explicitly specify a value for MaxResults that is less than the number of consumers that are registered with the data stream, the response includes a pagination token named NextToken. You can specify this NextToken value in a subsequent call to ListStreamConsumers to list the next set of registered consumers. Don't specify StreamName or StreamCreationTimestamp if you specify NextToken because the latter unambiguously identifies the stream. You can optionally specify a value for the MaxResults parameter when you specify NextToken. If you specify a MaxResults value that is less than the number of consumers that the operation returns if you don't specify MaxResults, the response will contain a new NextToken value. You can use the new NextToken value in a subsequent call to the ListStreamConsumers operation to list the next set of consumers. Tokens expire after 300 seconds. When you obtain a value for NextToken in the response to a call to ListStreamConsumers, you have 300 seconds to use that value. If you specify an expired token in a call to ListStreamConsumers, you get ExpiredNextTokenException. (body field)
   --max-results-body: int # The maximum number of consumers that you want a single call of ListStreamConsumers to return. The default value is 100. If you specify a value greater than 100, at most 100 results are returned. (body field)
   --stream-creation-timestamp: string # Specify this input parameter to distinguish data streams that have the same name. For example, if you create a data stream and then delete it, and you later create another data stream with the same name, you can use this input parameter to specify which of the two streams you want to list the consumers for. You can't specify this parameter if you specify the NextToken parameter. (format: date-time)
-]: any -> record<Consumers: table<ConsumerName: string, ConsumerARN: string, ConsumerStatus: string, ConsumerCreationTimestamp: string>, NextToken: string> {
+]: any -> oneof<record<Consumers: table<ConsumerName: string, ConsumerARN: string, ConsumerStatus: string, ConsumerCreationTimestamp: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1008,7 +1029,7 @@ export def "list-streams" [
   --limit-body: int # The maximum number of streams to list. The default value is 100. If you specify a value greater than 100, at most 100 results are returned. (body field)
   --exclusive-start-stream-name: string # The name of the stream to start the list with.
   --next-token-body: string # (body field)
-]: any -> record<StreamNames: list<string>, HasMoreStreams: bool, NextToken: string, StreamSummaries: table<StreamName: string, StreamARN: string, StreamStatus: string, StreamModeDetails: record, StreamCreationTimestamp: string>> {
+]: any -> oneof<record<StreamNames: list<string>, HasMoreStreams: bool, NextToken: string, StreamSummaries: table<StreamName: string, StreamARN: string, StreamStatus: string, StreamModeDetails: record, StreamCreationTimestamp: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1061,7 +1082,7 @@ export def "list-tags-for-stream" [
   --exclusive-start-tag-key: string # The key to use as the starting point for the list of tags. If this parameter is set, ListTagsForStream gets all tags that occur after ExclusiveStartTagKey.
   --limit: int # The number of tags to return. If this number is less than the total number of tags associated with the stream, HasMoreTags is set to true. To list additional tags, set ExclusiveStartTagKey to the last key in the response.
   --stream-arn: string # The ARN of the stream.
-]: any -> record<Tags: table<Key: string, Value: string>, HasMoreTags: bool> {
+]: any -> oneof<record<Tags: table<Key: string, Value: string>, HasMoreTags: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1167,7 +1188,7 @@ export def "put-record" [
   --explicit-hash-key: string # The hash value used to explicitly determine the shard the data record is assigned to by overriding the partition key hash.
   --sequence-number-for-ordering: string # Guarantees strictly increasing sequence numbers, for puts from the same client and to the same partition key. Usage: set the SequenceNumberForOrdering of record n to the sequence number of record n-1 (as returned in the result when putting record n-1). If this parameter is not set, records are coarsely ordered based on arrival time.
   --stream-arn: string # The ARN of the stream.
-]: any -> record<ShardId: string, SequenceNumber: string, EncryptionType: string> {
+]: any -> oneof<record<ShardId: string, SequenceNumber: string, EncryptionType: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1197,7 +1218,6 @@ export def "put-record" [
 #
 # POST /
 # operationId: PutRecords
-# --Records item shape: {Data: string, ExplicitHashKey?: string, PartitionKey: string}
 export def "put-records" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1219,7 +1239,7 @@ export def "put-records" [
   records: list # The records associated with the request. — item shape: {Data: string, ExplicitHashKey?: string, PartitionKey: string}
   --stream-name: string # The stream name associated with the request.
   --stream-arn: string # The ARN of the stream.
-]: any -> record<FailedRecordCount: int, Records: table<SequenceNumber: string, ShardId: string, ErrorCode: string, ErrorMessage: string>, EncryptionType: string> {
+]: any -> oneof<record<FailedRecordCount: int, Records: table<SequenceNumber: string, ShardId: string, ErrorCode: string, ErrorMessage: string>, EncryptionType: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1269,7 +1289,7 @@ export def "register-stream-consumer" [
   --x-amz-target: string@x-amz-target-completer-21 # required
   stream_arn: string # The ARN of the Kinesis data stream that you want to register the consumer with. For more info, see Amazon Resource Names (ARNs) and Amazon Web Services Service Namespaces (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html#arn-syntax-kinesis-streams).
   consumer_name: string # For a given Kinesis data stream, each consumer must have a unique name. However, consumer names don't have to be unique across data streams.
-]: any -> record<Consumer: record<ConsumerName: string, ConsumerARN: string, ConsumerStatus: string, ConsumerCreationTimestamp: string>> {
+]: any -> oneof<record<Consumer: record<ConsumerName: string, ConsumerARN: string, ConsumerStatus: string, ConsumerCreationTimestamp: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1528,7 +1548,7 @@ export def "update-shard-count" [
   target_shard_count: int # The new number of shards. This value has the following default limits. By default, you cannot do the following: Set this value to more than double your current shard count for a stream. Set this value below half your current shard count for a stream. Set this value to more than 10000 shards in a stream (the default limit for shard count per stream is 10000 per account per region), unless you request a limit increase. Scale a stream with more than 10000 shards down unless you set this value to less than 10000 shards.
   scaling_type: string@scaling-type-completer # The scaling type. Uniform scaling creates shards of equal size.
   --stream-arn: string # The ARN of the stream.
-]: any -> record<StreamName: string, CurrentShardCount: int, TargetShardCount: int, StreamARN: string> {
+]: any -> oneof<record<StreamName: string, CurrentShardCount: int, TargetShardCount: int, StreamARN: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1558,7 +1578,6 @@ export def "update-shard-count" [
 #
 # POST /
 # operationId: UpdateStreamMode
-# --StreamModeDetails shape: {StreamMode: "PROVISIONED"|"ON_DEMAND"}
 export def "update-stream-mode" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

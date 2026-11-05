@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -126,9 +150,9 @@ def host-caching-completer [] { ["None" "ReadOnly" "ReadWrite"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "provider-operations-list" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["provider-operations-list" "labs-list-by-subscription" "operations-get" "global-schedules-list-by-subscription" "labs-list-by-resource-group" "artifact-sources-list" "arm-templates-list" "arm-templates-get" "artifacts-list" "artifacts-get" "artifacts-generate-arm-template" "artifact-sources-delete" "artifact-sources-get" "artifact-sources-update" "artifact-sources-create-or-update" "costs-get" "costs-create-or-update" "custom-images-list" "custom-images-delete" "custom-images-get" "custom-images-update" "custom-images-create-or-update" "formulas-list" "formulas-delete" "formulas-get" "formulas-update" "formulas-create-or-update" "gallery-images-list" "notification-channels-list" "notification-channels-delete" "notification-channels-get" "notification-channels-update" "notification-channels-create-or-update" "notification-channels-notify" "policy-sets-evaluate-policies" "policies-list" "policies-delete" "policies-get" "policies-update" "policies-create-or-update" "schedules-list" "schedules-delete" "schedules-get" "schedules-update" "schedules-create-or-update" "schedules-execute" "schedules-list-applicable" "service-runners-delete" "service-runners-get" "service-runners-create-or-update" "users-list" "users-delete" "users-get" "users-update" "users-create-or-update" "disks-list" "disks-delete" "disks-get" "disks-update" "disks-create-or-update" "disks-attach" "disks-detach" "environments-list" "environments-delete" "environments-get" "environments-update" "environments-create-or-update" "secrets-list" "secrets-delete" "secrets-get" "secrets-update" "secrets-create-or-update" "service-fabrics-list" "service-fabrics-delete" "service-fabrics-get" "service-fabrics-update" "service-fabrics-create-or-update" "service-fabrics-list-applicable-schedules" "service-fabrics-start" "service-fabrics-stop" "service-fabric-schedules-list" "service-fabric-schedules-delete" "service-fabric-schedules-get" "service-fabric-schedules-update" "service-fabric-schedules-create-or-update" "service-fabric-schedules-execute" "virtual-machines-list" "virtual-machines-delete" "virtual-machines-get" "virtual-machines-update" "virtual-machines-create-or-update" "virtual-machines-add-data-disk" "virtual-machines-apply-artifacts" "virtual-machines-claim" "virtual-machines-detach-data-disk" "virtual-machines-get-rdp-file-contents" "virtual-machines-list-applicable-schedules" "virtual-machines-redeploy" "virtual-machines-resize" "virtual-machines-restart" "virtual-machines-start" "virtual-machines-stop" "virtual-machines-transfer-disks" "virtual-machines-un-claim" "virtual-machine-schedules-list" "virtual-machine-schedules-delete" "virtual-machine-schedules-get" "virtual-machine-schedules-update" "virtual-machine-schedules-create-or-update" "virtual-machine-schedules-execute" "virtual-networks-list" "virtual-networks-delete" "virtual-networks-get" "virtual-networks-update" "virtual-networks-create-or-update" "labs-delete" "labs-get" "labs-update" "labs-create-or-update" "labs-claim-any-vm" "labs-create-environment" "labs-export-resource-usage" "labs-generate-upload-uri" "labs-import-virtual-machine" "labs-list-vhds" "global-schedules-list-by-resource-group" "global-schedules-delete" "global-schedules-get" "global-schedules-update" "global-schedules-create-or-update" "global-schedules-execute" "global-schedules-retarget" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -161,7 +185,7 @@ export def "provider-operations-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required, default: 2018-09-15)
-]: nothing -> record<nextLink: string, value: table<display: record, name: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<display: record, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let api_version = ($api_version | default "2018-09-15")
@@ -203,7 +227,7 @@ export def "labs-list-by-subscription" [
   --top: int # The maximum number of resources to return from the operation. Example: '$top=10' (format: int32)
   --orderby: string # The ordering expression for the results, using OData notation. Example: '$orderby=name desc'
   --api-version: string # Client API version. (required, default: 2018-09-15)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -244,7 +268,7 @@ export def "operations-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required, default: 2018-09-15)
-]: nothing -> record<error: record<code: string, message: string>, status: string, statusCode: string> {
+]: nothing -> oneof<record<error: record<code: string, message: string>, status: string, statusCode: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -289,7 +313,7 @@ export def "global-schedules-list-by-subscription" [
   --top: int # The maximum number of resources to return from the operation. Example: '$top=10' (format: int32)
   --orderby: string # The ordering expression for the results, using OData notation. Example: '$orderby=name desc'
   --api-version: string # Client API version. (required, default: 2018-09-15)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -333,7 +357,7 @@ export def "labs-list-by-resource-group" [
   --top: int # The maximum number of resources to return from the operation. Example: '$top=10' (format: int32)
   --orderby: string # The ordering expression for the results, using OData notation. Example: '$orderby=name desc'
   --api-version: string # Client API version. (required, default: 2018-09-15)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -379,7 +403,7 @@ export def "artifact-sources-list" [
   --top: int # The maximum number of resources to return from the operation. Example: '$top=10' (format: int32)
   --orderby: string # The ordering expression for the results, using OData notation. Example: '$orderby=name desc'
   --api-version: string # Client API version. (required, default: 2018-09-15)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -427,7 +451,7 @@ export def "arm-templates-list" [
   --top: int # The maximum number of resources to return from the operation. Example: '$top=10' (format: int32)
   --orderby: string # The ordering expression for the results, using OData notation. Example: '$orderby=name desc'
   --api-version: string # Client API version. (required, default: 2018-09-15)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -474,7 +498,7 @@ export def "arm-templates-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Specify the $expand query. Example: 'properties($select=displayName)'
   --api-version: string # Client API version. (required, default: 2018-09-15)
-]: nothing -> record<properties: record<contents: record, createdDate: string, description: string, displayName: string, enabled: bool, icon: string, parametersValueFilesInfo: list<record>, publisher: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<properties: record<contents: record, createdDate: string, description: string, displayName: string, enabled: bool, icon: string, parametersValueFilesInfo: list<record>, publisher: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -524,7 +548,7 @@ export def "artifacts-list" [
   --top: int # The maximum number of resources to return from the operation. Example: '$top=10' (format: int32)
   --orderby: string # The ordering expression for the results, using OData notation. Example: '$orderby=name desc'
   --api-version: string # Client API version. (required, default: 2018-09-15)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -571,7 +595,7 @@ export def "artifacts-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Specify the $expand query. Example: 'properties($select=title)'
   --api-version: string # Client API version. (required, default: 2018-09-15)
-]: nothing -> record<properties: record<createdDate: string, description: string, filePath: string, icon: string, parameters: record, publisher: string, targetOsType: string, title: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<properties: record<createdDate: string, description: string, filePath: string, icon: string, parameters: record, publisher: string, targetOsType: string, title: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -602,7 +626,6 @@ export def "artifacts-get" [
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/artifactsources/{artifactSourceName}/artifacts/{name}/generateArmTemplate
 # operationId: Artifacts_GenerateArmTemplate
-# --parameters item shape: {name?: string, value?: string}
 export def "artifacts-generate-arm-template" [
   subscription_id: string
   resource_group_name: string
@@ -623,7 +646,7 @@ export def "artifacts-generate-arm-template" [
   --location: string # The location of the virtual machine.
   --parameters: list # The parameters of the ARM template. — item shape: {name?: string, value?: string}
   --virtual-machine-name: string # The resource name of the virtual machine.
-]: any -> record<parameters: record, template: record> {
+]: any -> oneof<record<parameters: record, template: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -718,7 +741,7 @@ export def "artifact-sources-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Specify the $expand query. Example: 'properties($select=displayName)'
   --api-version: string # Client API version. (required, default: 2018-09-15)
-]: nothing -> record<properties: record<armTemplateFolderPath: string, branchRef: string, createdDate: string, displayName: string, folderPath: string, provisioningState: string, securityToken: string, sourceType: string, status: string, uniqueIdentifier: string, uri: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<properties: record<armTemplateFolderPath: string, branchRef: string, createdDate: string, displayName: string, folderPath: string, provisioningState: string, securityToken: string, sourceType: string, status: string, uniqueIdentifier: string, uri: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -748,7 +771,6 @@ export def "artifact-sources-get" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/artifactsources/{name}
 # operationId: ArtifactSources_Update
-# --properties shape: {armTemplateFolderPath?: string, branchRef?: string, displayName?: string, folderPath?: string, securityToken?: string, sourceType?: "VsoGit"|"GitHub", status?: "Enabled"|"Disabled", uri?: string}
 export def "artifact-sources-update" [
   subscription_id: string
   resource_group_name: string
@@ -766,7 +788,7 @@ export def "artifact-sources-update" [
   --api-version: string # Client API version. (required, default: 2018-09-15)
   --properties: record # Properties of an artifact source. — shape: {armTemplateFolderPath?: string, branchRef?: string, displayName?: string, folderPath?: string, securityToken?: string, sourceType?: "VsoGit"|"GitHub", status?: "Enabled"|"Disabled", uri?: string}
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<armTemplateFolderPath: string, branchRef: string, createdDate: string, displayName: string, folderPath: string, provisioningState: string, securityToken: string, sourceType: string, status: string, uniqueIdentifier: string, uri: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<armTemplateFolderPath: string, branchRef: string, createdDate: string, displayName: string, folderPath: string, provisioningState: string, securityToken: string, sourceType: string, status: string, uniqueIdentifier: string, uri: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -799,7 +821,6 @@ export def "artifact-sources-update" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/artifactsources/{name}
 # operationId: ArtifactSources_CreateOrUpdate
-# --properties shape: {armTemplateFolderPath?: string, branchRef?: string, displayName?: string, folderPath?: string, securityToken?: string, sourceType?: "VsoGit"|"GitHub", status?: "Enabled"|"Disabled", uri?: string}
 export def "artifact-sources-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -818,7 +839,7 @@ export def "artifact-sources-create-or-update" [
   properties: record # Properties of an artifact source. — shape: {armTemplateFolderPath?: string, branchRef?: string, displayName?: string, folderPath?: string, securityToken?: string, sourceType?: "VsoGit"|"GitHub", status?: "Enabled"|"Disabled", uri?: string}
   --location: string # The location of the resource.
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<armTemplateFolderPath: string, branchRef: string, createdDate: string, displayName: string, folderPath: string, provisioningState: string, securityToken: string, sourceType: string, status: string, uniqueIdentifier: string, uri: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<armTemplateFolderPath: string, branchRef: string, createdDate: string, displayName: string, folderPath: string, provisioningState: string, securityToken: string, sourceType: string, status: string, uniqueIdentifier: string, uri: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -867,7 +888,7 @@ export def "costs-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Specify the $expand query. Example: 'properties($expand=labCostDetails)'
   --api-version: string # Client API version. (required, default: 2018-09-15)
-]: nothing -> record<properties: record<createdDate: string, currencyCode: string, endDateTime: string, labCostDetails: list<record>, labCostSummary: record<estimatedLabCost: float>, provisioningState: string, resourceCosts: list<record>, startDateTime: string, targetCost: record<costThresholds: list, cycleEndDateTime: string, cycleStartDateTime: string, cycleType: string, status: string, target: int>, uniqueIdentifier: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<properties: record<createdDate: string, currencyCode: string, endDateTime: string, labCostDetails: list<record>, labCostSummary: record<estimatedLabCost: float>, provisioningState: string, resourceCosts: list<record>, startDateTime: string, targetCost: record<costThresholds: list, cycleEndDateTime: string, cycleStartDateTime: string, cycleType: string, status: string, target: int>, uniqueIdentifier: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -897,7 +918,6 @@ export def "costs-get" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/costs/{name}
 # operationId: Costs_CreateOrUpdate
-# --properties shape: {createdDate?: string, currencyCode?: string, endDateTime?: string, labCostSummary?: record, startDateTime?: string, targetCost?: record}
 export def "costs-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -916,7 +936,7 @@ export def "costs-create-or-update" [
   properties: record # Properties of a cost item. — shape: {createdDate?: string, currencyCode?: string, endDateTime?: string, labCostSummary?: record, startDateTime?: string, targetCost?: record}
   --location: string # The location of the resource.
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<createdDate: string, currencyCode: string, endDateTime: string, labCostDetails: list<record>, labCostSummary: record<estimatedLabCost: float>, provisioningState: string, resourceCosts: list<record>, startDateTime: string, targetCost: record<costThresholds: list, cycleEndDateTime: string, cycleStartDateTime: string, cycleType: string, status: string, target: int>, uniqueIdentifier: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<createdDate: string, currencyCode: string, endDateTime: string, labCostDetails: list<record>, labCostSummary: record<estimatedLabCost: float>, provisioningState: string, resourceCosts: list<record>, startDateTime: string, targetCost: record<costThresholds: list, cycleEndDateTime: string, cycleStartDateTime: string, cycleType: string, status: string, target: int>, uniqueIdentifier: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -967,7 +987,7 @@ export def "custom-images-list" [
   --top: int # The maximum number of resources to return from the operation. Example: '$top=10' (format: int32)
   --orderby: string # The ordering expression for the results, using OData notation. Example: '$orderby=name desc'
   --api-version: string # Client API version. (required, default: 2018-09-15)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1057,7 +1077,7 @@ export def "custom-images-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Specify the $expand query. Example: 'properties($select=vm)'
   --api-version: string # Client API version. (required, default: 2018-09-15)
-]: nothing -> record<properties: record<author: string, creationDate: string, customImagePlan: record<id: string, offer: string, publisher: string>, dataDiskStorageInfo: list<record>, description: string, isPlanAuthorized: bool, managedImageId: string, managedSnapshotId: string, provisioningState: string, uniqueIdentifier: string, vhd: record<imageName: string, osType: string, sysPrep: bool>, vm: record<linuxOsInfo: record, sourceVmId: string, windowsOsInfo: record>>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<properties: record<author: string, creationDate: string, customImagePlan: record<id: string, offer: string, publisher: string>, dataDiskStorageInfo: list<record>, description: string, isPlanAuthorized: bool, managedImageId: string, managedSnapshotId: string, provisioningState: string, uniqueIdentifier: string, vhd: record<imageName: string, osType: string, sysPrep: bool>, vm: record<linuxOsInfo: record, sourceVmId: string, windowsOsInfo: record>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1087,7 +1107,6 @@ export def "custom-images-get" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/customimages/{name}
 # operationId: CustomImages_Update
-# --properties shape: {author?: string, customImagePlan?: record, dataDiskStorageInfo?: list, description?: string, isPlanAuthorized?: bool, managedImageId?: string, managedSnapshotId?: string, vhd?: record, vm?: record}
 export def "custom-images-update" [
   subscription_id: string
   resource_group_name: string
@@ -1105,7 +1124,7 @@ export def "custom-images-update" [
   --api-version: string # Client API version. (required, default: 2018-09-15)
   --properties: record # Properties of a custom image. — shape: {author?: string, customImagePlan?: record, dataDiskStorageInfo?: list, description?: string, isPlanAuthorized?: bool, managedImageId?: string, managedSnapshotId?: string, vhd?: record, vm?: record}
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<author: string, creationDate: string, customImagePlan: record<id: string, offer: string, publisher: string>, dataDiskStorageInfo: list<record>, description: string, isPlanAuthorized: bool, managedImageId: string, managedSnapshotId: string, provisioningState: string, uniqueIdentifier: string, vhd: record<imageName: string, osType: string, sysPrep: bool>, vm: record<linuxOsInfo: record, sourceVmId: string, windowsOsInfo: record>>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<author: string, creationDate: string, customImagePlan: record<id: string, offer: string, publisher: string>, dataDiskStorageInfo: list<record>, description: string, isPlanAuthorized: bool, managedImageId: string, managedSnapshotId: string, provisioningState: string, uniqueIdentifier: string, vhd: record<imageName: string, osType: string, sysPrep: bool>, vm: record<linuxOsInfo: record, sourceVmId: string, windowsOsInfo: record>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1138,7 +1157,6 @@ export def "custom-images-update" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/customimages/{name}
 # operationId: CustomImages_CreateOrUpdate
-# --properties shape: {author?: string, customImagePlan?: record, dataDiskStorageInfo?: list, description?: string, isPlanAuthorized?: bool, managedImageId?: string, managedSnapshotId?: string, vhd?: record, vm?: record}
 export def "custom-images-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -1157,7 +1175,7 @@ export def "custom-images-create-or-update" [
   properties: record # Properties of a custom image. — shape: {author?: string, customImagePlan?: record, dataDiskStorageInfo?: list, description?: string, isPlanAuthorized?: bool, managedImageId?: string, managedSnapshotId?: string, vhd?: record, vm?: record}
   --location: string # The location of the resource.
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<author: string, creationDate: string, customImagePlan: record<id: string, offer: string, publisher: string>, dataDiskStorageInfo: list<record>, description: string, isPlanAuthorized: bool, managedImageId: string, managedSnapshotId: string, provisioningState: string, uniqueIdentifier: string, vhd: record<imageName: string, osType: string, sysPrep: bool>, vm: record<linuxOsInfo: record, sourceVmId: string, windowsOsInfo: record>>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<author: string, creationDate: string, customImagePlan: record<id: string, offer: string, publisher: string>, dataDiskStorageInfo: list<record>, description: string, isPlanAuthorized: bool, managedImageId: string, managedSnapshotId: string, provisioningState: string, uniqueIdentifier: string, vhd: record<imageName: string, osType: string, sysPrep: bool>, vm: record<linuxOsInfo: record, sourceVmId: string, windowsOsInfo: record>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1208,7 +1226,7 @@ export def "formulas-list" [
   --top: int # The maximum number of resources to return from the operation. Example: '$top=10' (format: int32)
   --orderby: string # The ordering expression for the results, using OData notation. Example: '$orderby=name desc'
   --api-version: string # Client API version. (required, default: 2018-09-15)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1298,7 +1316,7 @@ export def "formulas-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Specify the $expand query. Example: 'properties($select=description)'
   --api-version: string # Client API version. (required, default: 2018-09-15)
-]: nothing -> record<properties: record<author: string, creationDate: string, description: string, formulaContent: record<location: string, name: string, properties: record, tags: record>, osType: string, provisioningState: string, uniqueIdentifier: string, vm: record<labVmId: string>>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<properties: record<author: string, creationDate: string, description: string, formulaContent: record<location: string, name: string, properties: record, tags: record>, osType: string, provisioningState: string, uniqueIdentifier: string, vm: record<labVmId: string>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1328,7 +1346,6 @@ export def "formulas-get" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/formulas/{name}
 # operationId: Formulas_Update
-# --properties shape: {author?: string, description?: string, formulaContent?: record, osType?: string, vm?: record}
 export def "formulas-update" [
   subscription_id: string
   resource_group_name: string
@@ -1346,7 +1363,7 @@ export def "formulas-update" [
   --api-version: string # Client API version. (required, default: 2018-09-15)
   --properties: record # Properties of a formula. — shape: {author?: string, description?: string, formulaContent?: record, osType?: string, vm?: record}
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<author: string, creationDate: string, description: string, formulaContent: record<location: string, name: string, properties: record, tags: record>, osType: string, provisioningState: string, uniqueIdentifier: string, vm: record<labVmId: string>>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<author: string, creationDate: string, description: string, formulaContent: record<location: string, name: string, properties: record, tags: record>, osType: string, provisioningState: string, uniqueIdentifier: string, vm: record<labVmId: string>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1379,7 +1396,6 @@ export def "formulas-update" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/formulas/{name}
 # operationId: Formulas_CreateOrUpdate
-# --properties shape: {author?: string, description?: string, formulaContent?: record, osType?: string, vm?: record}
 export def "formulas-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -1398,7 +1414,7 @@ export def "formulas-create-or-update" [
   properties: record # Properties of a formula. — shape: {author?: string, description?: string, formulaContent?: record, osType?: string, vm?: record}
   --location: string # The location of the resource.
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<author: string, creationDate: string, description: string, formulaContent: record<location: string, name: string, properties: record, tags: record>, osType: string, provisioningState: string, uniqueIdentifier: string, vm: record<labVmId: string>>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<author: string, creationDate: string, description: string, formulaContent: record<location: string, name: string, properties: record, tags: record>, osType: string, provisioningState: string, uniqueIdentifier: string, vm: record<labVmId: string>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1449,7 +1465,7 @@ export def "gallery-images-list" [
   --top: int # The maximum number of resources to return from the operation. Example: '$top=10' (format: int32)
   --orderby: string # The ordering expression for the results, using OData notation. Example: '$orderby=name desc'
   --api-version: string # Client API version. (required, default: 2018-09-15)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1496,7 +1512,7 @@ export def "notification-channels-list" [
   --top: int # The maximum number of resources to return from the operation. Example: '$top=10' (format: int32)
   --orderby: string # The ordering expression for the results, using OData notation. Example: '$orderby=name desc'
   --api-version: string # Client API version. (required, default: 2018-09-15)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1586,7 +1602,7 @@ export def "notification-channels-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Specify the $expand query. Example: 'properties($select=webHookUrl)'
   --api-version: string # Client API version. (required, default: 2018-09-15)
-]: nothing -> record<properties: record<createdDate: string, description: string, emailRecipient: string, events: list<record>, notificationLocale: string, provisioningState: string, uniqueIdentifier: string, webHookUrl: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<properties: record<createdDate: string, description: string, emailRecipient: string, events: list<record>, notificationLocale: string, provisioningState: string, uniqueIdentifier: string, webHookUrl: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1616,7 +1632,6 @@ export def "notification-channels-get" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/notificationchannels/{name}
 # operationId: NotificationChannels_Update
-# --properties shape: {description?: string, emailRecipient?: string, events?: list, notificationLocale?: string, webHookUrl?: string}
 export def "notification-channels-update" [
   subscription_id: string
   resource_group_name: string
@@ -1634,7 +1649,7 @@ export def "notification-channels-update" [
   --api-version: string # Client API version. (required, default: 2018-09-15)
   --properties: record # Properties of a schedule. — shape: {description?: string, emailRecipient?: string, events?: list, notificationLocale?: string, webHookUrl?: string}
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<createdDate: string, description: string, emailRecipient: string, events: list<record>, notificationLocale: string, provisioningState: string, uniqueIdentifier: string, webHookUrl: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<createdDate: string, description: string, emailRecipient: string, events: list<record>, notificationLocale: string, provisioningState: string, uniqueIdentifier: string, webHookUrl: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1667,7 +1682,6 @@ export def "notification-channels-update" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/notificationchannels/{name}
 # operationId: NotificationChannels_CreateOrUpdate
-# --properties shape: {description?: string, emailRecipient?: string, events?: list, notificationLocale?: string, webHookUrl?: string}
 export def "notification-channels-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -1686,7 +1700,7 @@ export def "notification-channels-create-or-update" [
   properties: record # Properties of a schedule. — shape: {description?: string, emailRecipient?: string, events?: list, notificationLocale?: string, webHookUrl?: string}
   --location: string # The location of the resource.
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<createdDate: string, description: string, emailRecipient: string, events: list<record>, notificationLocale: string, provisioningState: string, uniqueIdentifier: string, webHookUrl: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<createdDate: string, description: string, emailRecipient: string, events: list<record>, notificationLocale: string, provisioningState: string, uniqueIdentifier: string, webHookUrl: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1769,7 +1783,6 @@ export def "notification-channels-notify" [
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/policysets/{name}/evaluatePolicies
 # operationId: PolicySets_EvaluatePolicies
-# --policies item shape: {factData?: string, factName?: string, userObjectId?: string, valueOffset?: string}
 export def "policy-sets-evaluate-policies" [
   subscription_id: string
   resource_group_name: string
@@ -1786,7 +1799,7 @@ export def "policy-sets-evaluate-policies" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required, default: 2018-09-15)
   --policies: list # Policies to evaluate. — item shape: {factData?: string, factName?: string, userObjectId?: string, valueOffset?: string}
-]: any -> record<results: table<hasError: bool, policyViolations: list>> {
+]: any -> oneof<record<results: table<hasError: bool, policyViolations: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1838,7 +1851,7 @@ export def "policies-list" [
   --top: int # The maximum number of resources to return from the operation. Example: '$top=10' (format: int32)
   --orderby: string # The ordering expression for the results, using OData notation. Example: '$orderby=name desc'
   --api-version: string # Client API version. (required, default: 2018-09-15)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1932,7 +1945,7 @@ export def "policies-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Specify the $expand query. Example: 'properties($select=description)'
   --api-version: string # Client API version. (required, default: 2018-09-15)
-]: nothing -> record<properties: record<createdDate: string, description: string, evaluatorType: string, factData: string, factName: string, provisioningState: string, status: string, threshold: string, uniqueIdentifier: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<properties: record<createdDate: string, description: string, evaluatorType: string, factData: string, factName: string, provisioningState: string, status: string, threshold: string, uniqueIdentifier: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1963,7 +1976,6 @@ export def "policies-get" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/policysets/{policySetName}/policies/{name}
 # operationId: Policies_Update
-# --properties shape: {description?: string, evaluatorType?: "AllowedValuesPolicy"|"MaxValuePolicy", factData?: string, factName?: "UserOwnedLabVmCount"|"UserOwnedLabPremiumVmCount"|"LabVmCount"|"LabPremiumVmCount"|"LabVmSize"|"GalleryImage"|"UserOwnedLabVmCountInSubnet"|"LabTargetCost"|"EnvironmentTemplate"|"ScheduleEditPermission", status?: "Enabled"|"Disabled", threshold?: string}
 export def "policies-update" [
   subscription_id: string
   resource_group_name: string
@@ -1982,7 +1994,7 @@ export def "policies-update" [
   --api-version: string # Client API version. (required, default: 2018-09-15)
   --properties: record # Properties of a Policy. — shape: {description?: string, evaluatorType?: "AllowedValuesPolicy"|"MaxValuePolicy", factData?: string, factName?: "UserOwnedLabVmCount"|"UserOwnedLabPremiumVmCount"|"LabVmCount"|"LabPremiumVmCount"|"LabVmSize"|"GalleryImage"|"UserOwnedLabVmCountInSubnet"|"LabTargetCost"|"EnvironmentTemplate"|"ScheduleEditPermission", status?: "Enabled"|"Disabled", threshold?: string}
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<createdDate: string, description: string, evaluatorType: string, factData: string, factName: string, provisioningState: string, status: string, threshold: string, uniqueIdentifier: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<createdDate: string, description: string, evaluatorType: string, factData: string, factName: string, provisioningState: string, status: string, threshold: string, uniqueIdentifier: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2016,7 +2028,6 @@ export def "policies-update" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/policysets/{policySetName}/policies/{name}
 # operationId: Policies_CreateOrUpdate
-# --properties shape: {description?: string, evaluatorType?: "AllowedValuesPolicy"|"MaxValuePolicy", factData?: string, factName?: "UserOwnedLabVmCount"|"UserOwnedLabPremiumVmCount"|"LabVmCount"|"LabPremiumVmCount"|"LabVmSize"|"GalleryImage"|"UserOwnedLabVmCountInSubnet"|"LabTargetCost"|"EnvironmentTemplate"|"ScheduleEditPermission", status?: "Enabled"|"Disabled", threshold?: string}
 export def "policies-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -2036,7 +2047,7 @@ export def "policies-create-or-update" [
   properties: record # Properties of a Policy. — shape: {description?: string, evaluatorType?: "AllowedValuesPolicy"|"MaxValuePolicy", factData?: string, factName?: "UserOwnedLabVmCount"|"UserOwnedLabPremiumVmCount"|"LabVmCount"|"LabPremiumVmCount"|"LabVmSize"|"GalleryImage"|"UserOwnedLabVmCountInSubnet"|"LabTargetCost"|"EnvironmentTemplate"|"ScheduleEditPermission", status?: "Enabled"|"Disabled", threshold?: string}
   --location: string # The location of the resource.
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<createdDate: string, description: string, evaluatorType: string, factData: string, factName: string, provisioningState: string, status: string, threshold: string, uniqueIdentifier: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<createdDate: string, description: string, evaluatorType: string, factData: string, factName: string, provisioningState: string, status: string, threshold: string, uniqueIdentifier: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2088,7 +2099,7 @@ export def "schedules-list" [
   --top: int # The maximum number of resources to return from the operation. Example: '$top=10' (format: int32)
   --orderby: string # The ordering expression for the results, using OData notation. Example: '$orderby=name desc'
   --api-version: string # Client API version. (required, default: 2018-09-15)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2178,7 +2189,7 @@ export def "schedules-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Specify the $expand query. Example: 'properties($select=status)'
   --api-version: string # Client API version. (required, default: 2018-09-15)
-]: nothing -> record<properties: record<createdDate: string, dailyRecurrence: record<time: string>, hourlyRecurrence: record<minute: int>, notificationSettings: record<emailRecipient: string, notificationLocale: string, status: string, timeInMinutes: int, webhookUrl: string>, provisioningState: string, status: string, targetResourceId: string, taskType: string, timeZoneId: string, uniqueIdentifier: string, weeklyRecurrence: record<time: string, weekdays: list>>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<properties: record<createdDate: string, dailyRecurrence: record<time: string>, hourlyRecurrence: record<minute: int>, notificationSettings: record<emailRecipient: string, notificationLocale: string, status: string, timeInMinutes: int, webhookUrl: string>, provisioningState: string, status: string, targetResourceId: string, taskType: string, timeZoneId: string, uniqueIdentifier: string, weeklyRecurrence: record<time: string, weekdays: list>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2208,7 +2219,6 @@ export def "schedules-get" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/schedules/{name}
 # operationId: Schedules_Update
-# --properties shape: {dailyRecurrence?: record, hourlyRecurrence?: record, notificationSettings?: record, status?: "Enabled"|"Disabled", targetResourceId?: string, taskType?: string, timeZoneId?: string, weeklyRecurrence?: record}
 export def "schedules-update" [
   subscription_id: string
   resource_group_name: string
@@ -2226,7 +2236,7 @@ export def "schedules-update" [
   --api-version: string # Client API version. (required, default: 2018-09-15)
   --properties: record # Properties of a schedule. — shape: {dailyRecurrence?: record, hourlyRecurrence?: record, notificationSettings?: record, status?: "Enabled"|"Disabled", targetResourceId?: string, taskType?: string, timeZoneId?: string, weeklyRecurrence?: record}
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<createdDate: string, dailyRecurrence: record<time: string>, hourlyRecurrence: record<minute: int>, notificationSettings: record<emailRecipient: string, notificationLocale: string, status: string, timeInMinutes: int, webhookUrl: string>, provisioningState: string, status: string, targetResourceId: string, taskType: string, timeZoneId: string, uniqueIdentifier: string, weeklyRecurrence: record<time: string, weekdays: list>>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<createdDate: string, dailyRecurrence: record<time: string>, hourlyRecurrence: record<minute: int>, notificationSettings: record<emailRecipient: string, notificationLocale: string, status: string, timeInMinutes: int, webhookUrl: string>, provisioningState: string, status: string, targetResourceId: string, taskType: string, timeZoneId: string, uniqueIdentifier: string, weeklyRecurrence: record<time: string, weekdays: list>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2259,7 +2269,6 @@ export def "schedules-update" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/schedules/{name}
 # operationId: Schedules_CreateOrUpdate
-# --properties shape: {dailyRecurrence?: record, hourlyRecurrence?: record, notificationSettings?: record, status?: "Enabled"|"Disabled", targetResourceId?: string, taskType?: string, timeZoneId?: string, weeklyRecurrence?: record}
 export def "schedules-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -2278,7 +2287,7 @@ export def "schedules-create-or-update" [
   properties: record # Properties of a schedule. — shape: {dailyRecurrence?: record, hourlyRecurrence?: record, notificationSettings?: record, status?: "Enabled"|"Disabled", targetResourceId?: string, taskType?: string, timeZoneId?: string, weeklyRecurrence?: record}
   --location: string # The location of the resource.
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<createdDate: string, dailyRecurrence: record<time: string>, hourlyRecurrence: record<minute: int>, notificationSettings: record<emailRecipient: string, notificationLocale: string, status: string, timeInMinutes: int, webhookUrl: string>, provisioningState: string, status: string, targetResourceId: string, taskType: string, timeZoneId: string, uniqueIdentifier: string, weeklyRecurrence: record<time: string, weekdays: list>>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<createdDate: string, dailyRecurrence: record<time: string>, hourlyRecurrence: record<minute: int>, notificationSettings: record<emailRecipient: string, notificationLocale: string, status: string, timeInMinutes: int, webhookUrl: string>, provisioningState: string, status: string, targetResourceId: string, taskType: string, timeZoneId: string, uniqueIdentifier: string, weeklyRecurrence: record<time: string, weekdays: list>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2371,7 +2380,7 @@ export def "schedules-list-applicable" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required, default: 2018-09-15)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2461,7 +2470,7 @@ export def "service-runners-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required, default: 2018-09-15)
-]: nothing -> record<identity: record<clientSecretUrl: string, principalId: string, tenantId: string, type: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<identity: record<clientSecretUrl: string, principalId: string, tenantId: string, type: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2491,7 +2500,6 @@ export def "service-runners-get" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/servicerunners/{name}
 # operationId: ServiceRunners_CreateOrUpdate
-# --identity shape: {clientSecretUrl?: string, principalId?: string, tenantId?: string, type?: string}
 export def "service-runners-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -2510,7 +2518,7 @@ export def "service-runners-create-or-update" [
   --identity: record # Properties of a managed identity — shape: {clientSecretUrl?: string, principalId?: string, tenantId?: string, type?: string}
   --location: string # The location of the resource.
   --tags: record # The tags of the resource.
-]: any -> record<identity: record<clientSecretUrl: string, principalId: string, tenantId: string, type: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<identity: record<clientSecretUrl: string, principalId: string, tenantId: string, type: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2561,7 +2569,7 @@ export def "users-list" [
   --top: int # The maximum number of resources to return from the operation. Example: '$top=10' (format: int32)
   --orderby: string # The ordering expression for the results, using OData notation. Example: '$orderby=name desc'
   --api-version: string # Client API version. (required, default: 2018-09-15)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2651,7 +2659,7 @@ export def "users-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Specify the $expand query. Example: 'properties($select=identity)'
   --api-version: string # Client API version. (required, default: 2018-09-15)
-]: nothing -> record<properties: record<createdDate: string, identity: record<appId: string, objectId: string, principalId: string, principalName: string, tenantId: string>, provisioningState: string, secretStore: record<keyVaultId: string, keyVaultUri: string>, uniqueIdentifier: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<properties: record<createdDate: string, identity: record<appId: string, objectId: string, principalId: string, principalName: string, tenantId: string>, provisioningState: string, secretStore: record<keyVaultId: string, keyVaultUri: string>, uniqueIdentifier: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2681,7 +2689,6 @@ export def "users-get" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/users/{name}
 # operationId: Users_Update
-# --properties shape: {identity?: record, secretStore?: record}
 export def "users-update" [
   subscription_id: string
   resource_group_name: string
@@ -2699,7 +2706,7 @@ export def "users-update" [
   --api-version: string # Client API version. (required, default: 2018-09-15)
   --properties: record # Properties of a lab user profile. — shape: {identity?: record, secretStore?: record}
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<createdDate: string, identity: record<appId: string, objectId: string, principalId: string, principalName: string, tenantId: string>, provisioningState: string, secretStore: record<keyVaultId: string, keyVaultUri: string>, uniqueIdentifier: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<createdDate: string, identity: record<appId: string, objectId: string, principalId: string, principalName: string, tenantId: string>, provisioningState: string, secretStore: record<keyVaultId: string, keyVaultUri: string>, uniqueIdentifier: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2732,7 +2739,6 @@ export def "users-update" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/users/{name}
 # operationId: Users_CreateOrUpdate
-# --properties shape: {identity?: record, secretStore?: record}
 export def "users-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -2751,7 +2757,7 @@ export def "users-create-or-update" [
   --properties: record # Properties of a lab user profile. — shape: {identity?: record, secretStore?: record}
   --location: string # The location of the resource.
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<createdDate: string, identity: record<appId: string, objectId: string, principalId: string, principalName: string, tenantId: string>, provisioningState: string, secretStore: record<keyVaultId: string, keyVaultUri: string>, uniqueIdentifier: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<createdDate: string, identity: record<appId: string, objectId: string, principalId: string, principalName: string, tenantId: string>, provisioningState: string, secretStore: record<keyVaultId: string, keyVaultUri: string>, uniqueIdentifier: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2803,7 +2809,7 @@ export def "disks-list" [
   --top: int # The maximum number of resources to return from the operation. Example: '$top=10' (format: int32)
   --orderby: string # The ordering expression for the results, using OData notation. Example: '$orderby=name desc'
   --api-version: string # Client API version. (required, default: 2018-09-15)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2897,7 +2903,7 @@ export def "disks-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Specify the $expand query. Example: 'properties($select=diskType)'
   --api-version: string # Client API version. (required, default: 2018-09-15)
-]: nothing -> record<properties: record<createdDate: string, diskBlobName: string, diskSizeGiB: int, diskType: string, diskUri: string, hostCaching: string, leasedByLabVmId: string, managedDiskId: string, provisioningState: string, uniqueIdentifier: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<properties: record<createdDate: string, diskBlobName: string, diskSizeGiB: int, diskType: string, diskUri: string, hostCaching: string, leasedByLabVmId: string, managedDiskId: string, provisioningState: string, uniqueIdentifier: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2928,7 +2934,6 @@ export def "disks-get" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/users/{userName}/disks/{name}
 # operationId: Disks_Update
-# --properties shape: {diskBlobName?: string, diskSizeGiB?: int, diskType?: "Standard"|"Premium"|"StandardSSD", diskUri?: string, hostCaching?: string, leasedByLabVmId?: string, managedDiskId?: string}
 export def "disks-update" [
   subscription_id: string
   resource_group_name: string
@@ -2947,7 +2952,7 @@ export def "disks-update" [
   --api-version: string # Client API version. (required, default: 2018-09-15)
   --properties: record # Properties of a disk. — shape: {diskBlobName?: string, diskSizeGiB?: int, diskType?: "Standard"|"Premium"|"StandardSSD", diskUri?: string, hostCaching?: string, leasedByLabVmId?: string, managedDiskId?: string}
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<createdDate: string, diskBlobName: string, diskSizeGiB: int, diskType: string, diskUri: string, hostCaching: string, leasedByLabVmId: string, managedDiskId: string, provisioningState: string, uniqueIdentifier: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<createdDate: string, diskBlobName: string, diskSizeGiB: int, diskType: string, diskUri: string, hostCaching: string, leasedByLabVmId: string, managedDiskId: string, provisioningState: string, uniqueIdentifier: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2981,7 +2986,6 @@ export def "disks-update" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/users/{userName}/disks/{name}
 # operationId: Disks_CreateOrUpdate
-# --properties shape: {diskBlobName?: string, diskSizeGiB?: int, diskType?: "Standard"|"Premium"|"StandardSSD", diskUri?: string, hostCaching?: string, leasedByLabVmId?: string, managedDiskId?: string}
 export def "disks-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -3001,7 +3005,7 @@ export def "disks-create-or-update" [
   properties: record # Properties of a disk. — shape: {diskBlobName?: string, diskSizeGiB?: int, diskType?: "Standard"|"Premium"|"StandardSSD", diskUri?: string, hostCaching?: string, leasedByLabVmId?: string, managedDiskId?: string}
   --location: string # The location of the resource.
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<createdDate: string, diskBlobName: string, diskSizeGiB: int, diskType: string, diskUri: string, hostCaching: string, leasedByLabVmId: string, managedDiskId: string, provisioningState: string, uniqueIdentifier: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<createdDate: string, diskBlobName: string, diskSizeGiB: int, diskType: string, diskUri: string, hostCaching: string, leasedByLabVmId: string, managedDiskId: string, provisioningState: string, uniqueIdentifier: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3156,7 +3160,7 @@ export def "environments-list" [
   --top: int # The maximum number of resources to return from the operation. Example: '$top=10' (format: int32)
   --orderby: string # The ordering expression for the results, using OData notation. Example: '$orderby=name desc'
   --api-version: string # Client API version. (required, default: 2018-09-15)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3250,7 +3254,7 @@ export def "environments-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Specify the $expand query. Example: 'properties($select=deploymentProperties)'
   --api-version: string # Client API version. (required, default: 2018-09-15)
-]: nothing -> record<properties: record<armTemplateDisplayName: string, createdByUser: string, deploymentProperties: record<armTemplateId: string, parameters: list>, provisioningState: string, resourceGroupId: string, uniqueIdentifier: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<properties: record<armTemplateDisplayName: string, createdByUser: string, deploymentProperties: record<armTemplateId: string, parameters: list>, provisioningState: string, resourceGroupId: string, uniqueIdentifier: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3281,7 +3285,6 @@ export def "environments-get" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/users/{userName}/environments/{name}
 # operationId: Environments_Update
-# --properties shape: {armTemplateDisplayName?: string, deploymentProperties?: record}
 export def "environments-update" [
   subscription_id: string
   resource_group_name: string
@@ -3300,7 +3303,7 @@ export def "environments-update" [
   --api-version: string # Client API version. (required, default: 2018-09-15)
   --properties: record # Properties of an environment. — shape: {armTemplateDisplayName?: string, deploymentProperties?: record}
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<armTemplateDisplayName: string, createdByUser: string, deploymentProperties: record<armTemplateId: string, parameters: list>, provisioningState: string, resourceGroupId: string, uniqueIdentifier: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<armTemplateDisplayName: string, createdByUser: string, deploymentProperties: record<armTemplateId: string, parameters: list>, provisioningState: string, resourceGroupId: string, uniqueIdentifier: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3334,7 +3337,6 @@ export def "environments-update" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/users/{userName}/environments/{name}
 # operationId: Environments_CreateOrUpdate
-# --properties shape: {armTemplateDisplayName?: string, deploymentProperties?: record}
 export def "environments-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -3354,7 +3356,7 @@ export def "environments-create-or-update" [
   properties: record # Properties of an environment. — shape: {armTemplateDisplayName?: string, deploymentProperties?: record}
   --location: string # The location of the resource.
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<armTemplateDisplayName: string, createdByUser: string, deploymentProperties: record<armTemplateId: string, parameters: list>, provisioningState: string, resourceGroupId: string, uniqueIdentifier: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<armTemplateDisplayName: string, createdByUser: string, deploymentProperties: record<armTemplateId: string, parameters: list>, provisioningState: string, resourceGroupId: string, uniqueIdentifier: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3407,7 +3409,7 @@ export def "secrets-list" [
   --top: int # The maximum number of resources to return from the operation. Example: '$top=10' (format: int32)
   --orderby: string # The ordering expression for the results, using OData notation. Example: '$orderby=name desc'
   --api-version: string # Client API version. (required, default: 2018-09-15)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3501,7 +3503,7 @@ export def "secrets-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Specify the $expand query. Example: 'properties($select=value)'
   --api-version: string # Client API version. (required, default: 2018-09-15)
-]: nothing -> record<properties: record<provisioningState: string, uniqueIdentifier: string, value: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<properties: record<provisioningState: string, uniqueIdentifier: string, value: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3532,7 +3534,6 @@ export def "secrets-get" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/users/{userName}/secrets/{name}
 # operationId: Secrets_Update
-# --properties shape: {value?: string}
 export def "secrets-update" [
   subscription_id: string
   resource_group_name: string
@@ -3551,7 +3552,7 @@ export def "secrets-update" [
   --api-version: string # Client API version. (required, default: 2018-09-15)
   --properties: record # Properties of a secret. — shape: {value?: string}
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<provisioningState: string, uniqueIdentifier: string, value: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<provisioningState: string, uniqueIdentifier: string, value: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3585,7 +3586,6 @@ export def "secrets-update" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/users/{userName}/secrets/{name}
 # operationId: Secrets_CreateOrUpdate
-# --properties shape: {value?: string}
 export def "secrets-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -3605,7 +3605,7 @@ export def "secrets-create-or-update" [
   properties: record # Properties of a secret. — shape: {value?: string}
   --location: string # The location of the resource.
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<provisioningState: string, uniqueIdentifier: string, value: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<provisioningState: string, uniqueIdentifier: string, value: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3658,7 +3658,7 @@ export def "service-fabrics-list" [
   --top: int # The maximum number of resources to return from the operation. Example: '$top=10' (format: int32)
   --orderby: string # The ordering expression for the results, using OData notation. Example: '$orderby=name desc'
   --api-version: string # Client API version. (required, default: 2018-09-15)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3752,7 +3752,7 @@ export def "service-fabrics-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Specify the $expand query. Example: 'properties($expand=applicableSchedule)'
   --api-version: string # Client API version. (required, default: 2018-09-15)
-]: nothing -> record<properties: record<applicableSchedule: record<properties: record, id: string, location: string, name: string, tags: record, type: string>, environmentId: string, externalServiceFabricId: string, provisioningState: string, uniqueIdentifier: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<properties: record<applicableSchedule: record<properties: record, id: string, location: string, name: string, tags: record, type: string>, environmentId: string, externalServiceFabricId: string, provisioningState: string, uniqueIdentifier: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3783,7 +3783,6 @@ export def "service-fabrics-get" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/users/{userName}/servicefabrics/{name}
 # operationId: ServiceFabrics_Update
-# --properties shape: {environmentId?: string, externalServiceFabricId?: string}
 export def "service-fabrics-update" [
   subscription_id: string
   resource_group_name: string
@@ -3802,7 +3801,7 @@ export def "service-fabrics-update" [
   --api-version: string # Client API version. (required, default: 2018-09-15)
   --properties: record # Properties of a service fabric. — shape: {environmentId?: string, externalServiceFabricId?: string}
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<applicableSchedule: record<properties: record, id: string, location: string, name: string, tags: record, type: string>, environmentId: string, externalServiceFabricId: string, provisioningState: string, uniqueIdentifier: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<applicableSchedule: record<properties: record, id: string, location: string, name: string, tags: record, type: string>, environmentId: string, externalServiceFabricId: string, provisioningState: string, uniqueIdentifier: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3836,7 +3835,6 @@ export def "service-fabrics-update" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/users/{userName}/servicefabrics/{name}
 # operationId: ServiceFabrics_CreateOrUpdate
-# --properties shape: {applicableSchedule?: record, environmentId?: string, externalServiceFabricId?: string}
 export def "service-fabrics-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -3856,7 +3854,7 @@ export def "service-fabrics-create-or-update" [
   properties: record # Properties of a service fabric. — shape: {applicableSchedule?: record, environmentId?: string, externalServiceFabricId?: string}
   --location: string # The location of the resource.
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<applicableSchedule: record<properties: record, id: string, location: string, name: string, tags: record, type: string>, environmentId: string, externalServiceFabricId: string, provisioningState: string, uniqueIdentifier: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<applicableSchedule: record<properties: record, id: string, location: string, name: string, tags: record, type: string>, environmentId: string, externalServiceFabricId: string, provisioningState: string, uniqueIdentifier: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3906,7 +3904,7 @@ export def "service-fabrics-list-applicable-schedules" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required, default: 2018-09-15)
-]: nothing -> record<properties: record<labVmsShutdown: record<properties: record, id: string, location: string, name: string, tags: record, type: string>, labVmsStartup: record<properties: record, id: string, location: string, name: string, tags: record, type: string>>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<properties: record<labVmsShutdown: record<properties: record, id: string, location: string, name: string, tags: record, type: string>, labVmsStartup: record<properties: record, id: string, location: string, name: string, tags: record, type: string>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -4051,7 +4049,7 @@ export def "service-fabric-schedules-list" [
   --top: int # The maximum number of resources to return from the operation. Example: '$top=10' (format: int32)
   --orderby: string # The ordering expression for the results, using OData notation. Example: '$orderby=name desc'
   --api-version: string # Client API version. (required, default: 2018-09-15)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -4149,7 +4147,7 @@ export def "service-fabric-schedules-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Specify the $expand query. Example: 'properties($select=status)'
   --api-version: string # Client API version. (required, default: 2018-09-15)
-]: nothing -> record<properties: record<createdDate: string, dailyRecurrence: record<time: string>, hourlyRecurrence: record<minute: int>, notificationSettings: record<emailRecipient: string, notificationLocale: string, status: string, timeInMinutes: int, webhookUrl: string>, provisioningState: string, status: string, targetResourceId: string, taskType: string, timeZoneId: string, uniqueIdentifier: string, weeklyRecurrence: record<time: string, weekdays: list>>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<properties: record<createdDate: string, dailyRecurrence: record<time: string>, hourlyRecurrence: record<minute: int>, notificationSettings: record<emailRecipient: string, notificationLocale: string, status: string, timeInMinutes: int, webhookUrl: string>, provisioningState: string, status: string, targetResourceId: string, taskType: string, timeZoneId: string, uniqueIdentifier: string, weeklyRecurrence: record<time: string, weekdays: list>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -4181,7 +4179,6 @@ export def "service-fabric-schedules-get" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/users/{userName}/servicefabrics/{serviceFabricName}/schedules/{name}
 # operationId: ServiceFabricSchedules_Update
-# --properties shape: {dailyRecurrence?: record, hourlyRecurrence?: record, notificationSettings?: record, status?: "Enabled"|"Disabled", targetResourceId?: string, taskType?: string, timeZoneId?: string, weeklyRecurrence?: record}
 export def "service-fabric-schedules-update" [
   subscription_id: string
   resource_group_name: string
@@ -4201,7 +4198,7 @@ export def "service-fabric-schedules-update" [
   --api-version: string # Client API version. (required, default: 2018-09-15)
   --properties: record # Properties of a schedule. — shape: {dailyRecurrence?: record, hourlyRecurrence?: record, notificationSettings?: record, status?: "Enabled"|"Disabled", targetResourceId?: string, taskType?: string, timeZoneId?: string, weeklyRecurrence?: record}
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<createdDate: string, dailyRecurrence: record<time: string>, hourlyRecurrence: record<minute: int>, notificationSettings: record<emailRecipient: string, notificationLocale: string, status: string, timeInMinutes: int, webhookUrl: string>, provisioningState: string, status: string, targetResourceId: string, taskType: string, timeZoneId: string, uniqueIdentifier: string, weeklyRecurrence: record<time: string, weekdays: list>>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<createdDate: string, dailyRecurrence: record<time: string>, hourlyRecurrence: record<minute: int>, notificationSettings: record<emailRecipient: string, notificationLocale: string, status: string, timeInMinutes: int, webhookUrl: string>, provisioningState: string, status: string, targetResourceId: string, taskType: string, timeZoneId: string, uniqueIdentifier: string, weeklyRecurrence: record<time: string, weekdays: list>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4236,7 +4233,6 @@ export def "service-fabric-schedules-update" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/users/{userName}/servicefabrics/{serviceFabricName}/schedules/{name}
 # operationId: ServiceFabricSchedules_CreateOrUpdate
-# --properties shape: {dailyRecurrence?: record, hourlyRecurrence?: record, notificationSettings?: record, status?: "Enabled"|"Disabled", targetResourceId?: string, taskType?: string, timeZoneId?: string, weeklyRecurrence?: record}
 export def "service-fabric-schedules-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -4257,7 +4253,7 @@ export def "service-fabric-schedules-create-or-update" [
   properties: record # Properties of a schedule. — shape: {dailyRecurrence?: record, hourlyRecurrence?: record, notificationSettings?: record, status?: "Enabled"|"Disabled", targetResourceId?: string, taskType?: string, timeZoneId?: string, weeklyRecurrence?: record}
   --location: string # The location of the resource.
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<createdDate: string, dailyRecurrence: record<time: string>, hourlyRecurrence: record<minute: int>, notificationSettings: record<emailRecipient: string, notificationLocale: string, status: string, timeInMinutes: int, webhookUrl: string>, provisioningState: string, status: string, targetResourceId: string, taskType: string, timeZoneId: string, uniqueIdentifier: string, weeklyRecurrence: record<time: string, weekdays: list>>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<createdDate: string, dailyRecurrence: record<time: string>, hourlyRecurrence: record<minute: int>, notificationSettings: record<emailRecipient: string, notificationLocale: string, status: string, timeInMinutes: int, webhookUrl: string>, provisioningState: string, status: string, targetResourceId: string, taskType: string, timeZoneId: string, uniqueIdentifier: string, weeklyRecurrence: record<time: string, weekdays: list>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4359,7 +4355,7 @@ export def "virtual-machines-list" [
   --top: int # The maximum number of resources to return from the operation. Example: '$top=10' (format: int32)
   --orderby: string # The ordering expression for the results, using OData notation. Example: '$orderby=name desc'
   --api-version: string # Client API version. (required, default: 2018-09-15)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -4449,7 +4445,7 @@ export def "virtual-machines-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Specify the $expand query. Example: 'properties($expand=artifacts,computeVm,networkInterface,applicableSchedule)'
   --api-version: string # Client API version. (required, default: 2018-09-15)
-]: nothing -> record<properties: record<allowClaim: bool, applicableSchedule: record<properties: record, id: string, location: string, name: string, tags: record, type: string>, artifactDeploymentStatus: record<artifactsApplied: int, deploymentStatus: string, totalArtifacts: int>, artifacts: list<record>, computeId: string, computeVm: record<dataDiskIds: list, dataDisks: list, networkInterfaceId: string, osDiskId: string, osType: string, statuses: list, vmSize: string>, createdByUser: string, createdByUserId: string, createdDate: string, customImageId: string, dataDiskParameters: list<record>, disallowPublicIpAddress: bool, environmentId: string, expirationDate: string, fqdn: string, galleryImageReference: record<offer: string, osType: string, publisher: string, sku: string, version: string>, isAuthenticationWithSshKey: bool, labSubnetName: string, labVirtualNetworkId: string, lastKnownPowerState: string, networkInterface: record<dnsName: string, privateIpAddress: string, publicIpAddress: string, publicIpAddressId: string, rdpAuthority: string, sharedPublicIpAddressConfiguration: record, sshAuthority: string, subnetId: string, virtualNetworkId: string>, notes: string, osType: string, ownerObjectId: string, ownerUserPrincipalName: string, password: string, planId: string, provisioningState: string, scheduleParameters: list<record>, size: string, sshKey: string, storageType: string, uniqueIdentifier: string, userName: string, virtualMachineCreationSource: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<properties: record<allowClaim: bool, applicableSchedule: record<properties: record, id: string, location: string, name: string, tags: record, type: string>, artifactDeploymentStatus: record<artifactsApplied: int, deploymentStatus: string, totalArtifacts: int>, artifacts: list<record>, computeId: string, computeVm: record<dataDiskIds: list, dataDisks: list, networkInterfaceId: string, osDiskId: string, osType: string, statuses: list, vmSize: string>, createdByUser: string, createdByUserId: string, createdDate: string, customImageId: string, dataDiskParameters: list<record>, disallowPublicIpAddress: bool, environmentId: string, expirationDate: string, fqdn: string, galleryImageReference: record<offer: string, osType: string, publisher: string, sku: string, version: string>, isAuthenticationWithSshKey: bool, labSubnetName: string, labVirtualNetworkId: string, lastKnownPowerState: string, networkInterface: record<dnsName: string, privateIpAddress: string, publicIpAddress: string, publicIpAddressId: string, rdpAuthority: string, sharedPublicIpAddressConfiguration: record, sshAuthority: string, subnetId: string, virtualNetworkId: string>, notes: string, osType: string, ownerObjectId: string, ownerUserPrincipalName: string, password: string, planId: string, provisioningState: string, scheduleParameters: list<record>, size: string, sshKey: string, storageType: string, uniqueIdentifier: string, userName: string, virtualMachineCreationSource: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -4479,7 +4475,6 @@ export def "virtual-machines-get" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualmachines/{name}
 # operationId: VirtualMachines_Update
-# --properties shape: {allowClaim?: bool, artifactDeploymentStatus?: record, artifacts?: list, computeId?: string, createdByUser?: string, createdByUserId?: string, createdDate?: string, customImageId?: string, dataDiskParameters?: list, disallowPublicIpAddress?: bool, environmentId?: string, expirationDate?: string, fqdn?: string, galleryImageReference?: record, isAuthenticationWithSshKey?: bool, labSubnetName?: string, labVirtualNetworkId?: string, lastKnownPowerState?: string, networkInterface?: record, ... (12 more fields)}
 export def "virtual-machines-update" [
   subscription_id: string
   resource_group_name: string
@@ -4497,7 +4492,7 @@ export def "virtual-machines-update" [
   --api-version: string # Client API version. (required, default: 2018-09-15)
   --properties: record # Properties of a virtual machine. — shape: {allowClaim?: bool, artifactDeploymentStatus?: record, artifacts?: list, computeId?: string, createdByUser?: string, createdByUserId?: string, createdDate?: string, customImageId?: string, dataDiskParameters?: list, disallowPublicIpAddress?: bool, environmentId?: string, expirationDate?: string, fqdn?: string, galleryImageReference?: record, isAuthenticationWithSshKey?: bool, labSubnetName?: string, labVirtualNetworkId?: string, lastKnownPowerState?: string, networkInterface?: record, ... (12 more fields)}
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<allowClaim: bool, applicableSchedule: record<properties: record, id: string, location: string, name: string, tags: record, type: string>, artifactDeploymentStatus: record<artifactsApplied: int, deploymentStatus: string, totalArtifacts: int>, artifacts: list<record>, computeId: string, computeVm: record<dataDiskIds: list, dataDisks: list, networkInterfaceId: string, osDiskId: string, osType: string, statuses: list, vmSize: string>, createdByUser: string, createdByUserId: string, createdDate: string, customImageId: string, dataDiskParameters: list<record>, disallowPublicIpAddress: bool, environmentId: string, expirationDate: string, fqdn: string, galleryImageReference: record<offer: string, osType: string, publisher: string, sku: string, version: string>, isAuthenticationWithSshKey: bool, labSubnetName: string, labVirtualNetworkId: string, lastKnownPowerState: string, networkInterface: record<dnsName: string, privateIpAddress: string, publicIpAddress: string, publicIpAddressId: string, rdpAuthority: string, sharedPublicIpAddressConfiguration: record, sshAuthority: string, subnetId: string, virtualNetworkId: string>, notes: string, osType: string, ownerObjectId: string, ownerUserPrincipalName: string, password: string, planId: string, provisioningState: string, scheduleParameters: list<record>, size: string, sshKey: string, storageType: string, uniqueIdentifier: string, userName: string, virtualMachineCreationSource: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<allowClaim: bool, applicableSchedule: record<properties: record, id: string, location: string, name: string, tags: record, type: string>, artifactDeploymentStatus: record<artifactsApplied: int, deploymentStatus: string, totalArtifacts: int>, artifacts: list<record>, computeId: string, computeVm: record<dataDiskIds: list, dataDisks: list, networkInterfaceId: string, osDiskId: string, osType: string, statuses: list, vmSize: string>, createdByUser: string, createdByUserId: string, createdDate: string, customImageId: string, dataDiskParameters: list<record>, disallowPublicIpAddress: bool, environmentId: string, expirationDate: string, fqdn: string, galleryImageReference: record<offer: string, osType: string, publisher: string, sku: string, version: string>, isAuthenticationWithSshKey: bool, labSubnetName: string, labVirtualNetworkId: string, lastKnownPowerState: string, networkInterface: record<dnsName: string, privateIpAddress: string, publicIpAddress: string, publicIpAddressId: string, rdpAuthority: string, sharedPublicIpAddressConfiguration: record, sshAuthority: string, subnetId: string, virtualNetworkId: string>, notes: string, osType: string, ownerObjectId: string, ownerUserPrincipalName: string, password: string, planId: string, provisioningState: string, scheduleParameters: list<record>, size: string, sshKey: string, storageType: string, uniqueIdentifier: string, userName: string, virtualMachineCreationSource: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4530,7 +4525,6 @@ export def "virtual-machines-update" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualmachines/{name}
 # operationId: VirtualMachines_CreateOrUpdate
-# --properties shape: {allowClaim?: bool, applicableSchedule?: record, artifactDeploymentStatus?: record, artifacts?: list, computeId?: string, computeVm?: record, createdByUser?: string, createdByUserId?: string, createdDate?: string, customImageId?: string, dataDiskParameters?: list, disallowPublicIpAddress?: bool, environmentId?: string, expirationDate?: string, fqdn?: string, galleryImageReference?: record, isAuthenticationWithSshKey?: bool, labSubnetName?: string, labVirtualNetworkId?: string, ... (14 more fields)}
 export def "virtual-machines-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -4549,7 +4543,7 @@ export def "virtual-machines-create-or-update" [
   properties: record # Properties of a virtual machine. — shape: {allowClaim?: bool, applicableSchedule?: record, artifactDeploymentStatus?: record, artifacts?: list, computeId?: string, computeVm?: record, createdByUser?: string, createdByUserId?: string, createdDate?: string, customImageId?: string, dataDiskParameters?: list, disallowPublicIpAddress?: bool, environmentId?: string, expirationDate?: string, fqdn?: string, galleryImageReference?: record, isAuthenticationWithSshKey?: bool, labSubnetName?: string, labVirtualNetworkId?: string, ... (14 more fields)}
   --location: string # The location of the resource.
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<allowClaim: bool, applicableSchedule: record<properties: record, id: string, location: string, name: string, tags: record, type: string>, artifactDeploymentStatus: record<artifactsApplied: int, deploymentStatus: string, totalArtifacts: int>, artifacts: list<record>, computeId: string, computeVm: record<dataDiskIds: list, dataDisks: list, networkInterfaceId: string, osDiskId: string, osType: string, statuses: list, vmSize: string>, createdByUser: string, createdByUserId: string, createdDate: string, customImageId: string, dataDiskParameters: list<record>, disallowPublicIpAddress: bool, environmentId: string, expirationDate: string, fqdn: string, galleryImageReference: record<offer: string, osType: string, publisher: string, sku: string, version: string>, isAuthenticationWithSshKey: bool, labSubnetName: string, labVirtualNetworkId: string, lastKnownPowerState: string, networkInterface: record<dnsName: string, privateIpAddress: string, publicIpAddress: string, publicIpAddressId: string, rdpAuthority: string, sharedPublicIpAddressConfiguration: record, sshAuthority: string, subnetId: string, virtualNetworkId: string>, notes: string, osType: string, ownerObjectId: string, ownerUserPrincipalName: string, password: string, planId: string, provisioningState: string, scheduleParameters: list<record>, size: string, sshKey: string, storageType: string, uniqueIdentifier: string, userName: string, virtualMachineCreationSource: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<allowClaim: bool, applicableSchedule: record<properties: record, id: string, location: string, name: string, tags: record, type: string>, artifactDeploymentStatus: record<artifactsApplied: int, deploymentStatus: string, totalArtifacts: int>, artifacts: list<record>, computeId: string, computeVm: record<dataDiskIds: list, dataDisks: list, networkInterfaceId: string, osDiskId: string, osType: string, statuses: list, vmSize: string>, createdByUser: string, createdByUserId: string, createdDate: string, customImageId: string, dataDiskParameters: list<record>, disallowPublicIpAddress: bool, environmentId: string, expirationDate: string, fqdn: string, galleryImageReference: record<offer: string, osType: string, publisher: string, sku: string, version: string>, isAuthenticationWithSshKey: bool, labSubnetName: string, labVirtualNetworkId: string, lastKnownPowerState: string, networkInterface: record<dnsName: string, privateIpAddress: string, publicIpAddress: string, publicIpAddressId: string, rdpAuthority: string, sharedPublicIpAddressConfiguration: record, sshAuthority: string, subnetId: string, virtualNetworkId: string>, notes: string, osType: string, ownerObjectId: string, ownerUserPrincipalName: string, password: string, planId: string, provisioningState: string, scheduleParameters: list<record>, size: string, sshKey: string, storageType: string, uniqueIdentifier: string, userName: string, virtualMachineCreationSource: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4582,7 +4576,6 @@ export def "virtual-machines-create-or-update" [
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualmachines/{name}/addDataDisk
 # operationId: VirtualMachines_AddDataDisk
-# --attachNewDataDiskOptions shape: {diskName?: string, diskSizeGiB?: int, diskType?: "Standard"|"Premium"|"StandardSSD"}
 export def "virtual-machines-add-data-disk" [
   subscription_id: string
   resource_group_name: string
@@ -4634,7 +4627,6 @@ export def "virtual-machines-add-data-disk" [
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualmachines/{name}/applyArtifacts
 # operationId: VirtualMachines_ApplyArtifacts
-# --artifacts item shape: {artifactId?: string, artifactTitle?: string, deploymentStatusMessage?: string, installTime?: string, parameters?: list, status?: string, vmExtensionStatusMessage?: string}
 export def "virtual-machines-apply-artifacts" [
   subscription_id: string
   resource_group_name: string
@@ -4793,7 +4785,7 @@ export def "virtual-machines-get-rdp-file-contents" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required, default: 2018-09-15)
-]: nothing -> record<contents: string> {
+]: nothing -> oneof<record<contents: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -4838,7 +4830,7 @@ export def "virtual-machines-list-applicable-schedules" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required, default: 2018-09-15)
-]: nothing -> record<properties: record<labVmsShutdown: record<properties: record, id: string, location: string, name: string, tags: record, type: string>, labVmsStartup: record<properties: record, id: string, location: string, name: string, tags: record, type: string>>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<properties: record<labVmsShutdown: record<properties: record, id: string, location: string, name: string, tags: record, type: string>, labVmsStartup: record<properties: record, id: string, location: string, name: string, tags: record, type: string>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -5206,7 +5198,7 @@ export def "virtual-machine-schedules-list" [
   --top: int # The maximum number of resources to return from the operation. Example: '$top=10' (format: int32)
   --orderby: string # The ordering expression for the results, using OData notation. Example: '$orderby=name desc'
   --api-version: string # Client API version. (required, default: 2018-09-15)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -5300,7 +5292,7 @@ export def "virtual-machine-schedules-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Specify the $expand query. Example: 'properties($select=status)'
   --api-version: string # Client API version. (required, default: 2018-09-15)
-]: nothing -> record<properties: record<createdDate: string, dailyRecurrence: record<time: string>, hourlyRecurrence: record<minute: int>, notificationSettings: record<emailRecipient: string, notificationLocale: string, status: string, timeInMinutes: int, webhookUrl: string>, provisioningState: string, status: string, targetResourceId: string, taskType: string, timeZoneId: string, uniqueIdentifier: string, weeklyRecurrence: record<time: string, weekdays: list>>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<properties: record<createdDate: string, dailyRecurrence: record<time: string>, hourlyRecurrence: record<minute: int>, notificationSettings: record<emailRecipient: string, notificationLocale: string, status: string, timeInMinutes: int, webhookUrl: string>, provisioningState: string, status: string, targetResourceId: string, taskType: string, timeZoneId: string, uniqueIdentifier: string, weeklyRecurrence: record<time: string, weekdays: list>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -5331,7 +5323,6 @@ export def "virtual-machine-schedules-get" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualmachines/{virtualMachineName}/schedules/{name}
 # operationId: VirtualMachineSchedules_Update
-# --properties shape: {dailyRecurrence?: record, hourlyRecurrence?: record, notificationSettings?: record, status?: "Enabled"|"Disabled", targetResourceId?: string, taskType?: string, timeZoneId?: string, weeklyRecurrence?: record}
 export def "virtual-machine-schedules-update" [
   subscription_id: string
   resource_group_name: string
@@ -5350,7 +5341,7 @@ export def "virtual-machine-schedules-update" [
   --api-version: string # Client API version. (required, default: 2018-09-15)
   --properties: record # Properties of a schedule. — shape: {dailyRecurrence?: record, hourlyRecurrence?: record, notificationSettings?: record, status?: "Enabled"|"Disabled", targetResourceId?: string, taskType?: string, timeZoneId?: string, weeklyRecurrence?: record}
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<createdDate: string, dailyRecurrence: record<time: string>, hourlyRecurrence: record<minute: int>, notificationSettings: record<emailRecipient: string, notificationLocale: string, status: string, timeInMinutes: int, webhookUrl: string>, provisioningState: string, status: string, targetResourceId: string, taskType: string, timeZoneId: string, uniqueIdentifier: string, weeklyRecurrence: record<time: string, weekdays: list>>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<createdDate: string, dailyRecurrence: record<time: string>, hourlyRecurrence: record<minute: int>, notificationSettings: record<emailRecipient: string, notificationLocale: string, status: string, timeInMinutes: int, webhookUrl: string>, provisioningState: string, status: string, targetResourceId: string, taskType: string, timeZoneId: string, uniqueIdentifier: string, weeklyRecurrence: record<time: string, weekdays: list>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5384,7 +5375,6 @@ export def "virtual-machine-schedules-update" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualmachines/{virtualMachineName}/schedules/{name}
 # operationId: VirtualMachineSchedules_CreateOrUpdate
-# --properties shape: {dailyRecurrence?: record, hourlyRecurrence?: record, notificationSettings?: record, status?: "Enabled"|"Disabled", targetResourceId?: string, taskType?: string, timeZoneId?: string, weeklyRecurrence?: record}
 export def "virtual-machine-schedules-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -5404,7 +5394,7 @@ export def "virtual-machine-schedules-create-or-update" [
   properties: record # Properties of a schedule. — shape: {dailyRecurrence?: record, hourlyRecurrence?: record, notificationSettings?: record, status?: "Enabled"|"Disabled", targetResourceId?: string, taskType?: string, timeZoneId?: string, weeklyRecurrence?: record}
   --location: string # The location of the resource.
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<createdDate: string, dailyRecurrence: record<time: string>, hourlyRecurrence: record<minute: int>, notificationSettings: record<emailRecipient: string, notificationLocale: string, status: string, timeInMinutes: int, webhookUrl: string>, provisioningState: string, status: string, targetResourceId: string, taskType: string, timeZoneId: string, uniqueIdentifier: string, weeklyRecurrence: record<time: string, weekdays: list>>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<createdDate: string, dailyRecurrence: record<time: string>, hourlyRecurrence: record<minute: int>, notificationSettings: record<emailRecipient: string, notificationLocale: string, status: string, timeInMinutes: int, webhookUrl: string>, provisioningState: string, status: string, targetResourceId: string, taskType: string, timeZoneId: string, uniqueIdentifier: string, weeklyRecurrence: record<time: string, weekdays: list>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5503,7 +5493,7 @@ export def "virtual-networks-list" [
   --top: int # The maximum number of resources to return from the operation. Example: '$top=10' (format: int32)
   --orderby: string # The ordering expression for the results, using OData notation. Example: '$orderby=name desc'
   --api-version: string # Client API version. (required, default: 2018-09-15)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -5593,7 +5583,7 @@ export def "virtual-networks-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Specify the $expand query. Example: 'properties($expand=externalSubnets)'
   --api-version: string # Client API version. (required, default: 2018-09-15)
-]: nothing -> record<properties: record<allowedSubnets: list<record>, createdDate: string, description: string, externalProviderResourceId: string, externalSubnets: list<record>, provisioningState: string, subnetOverrides: list<record>, uniqueIdentifier: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<properties: record<allowedSubnets: list<record>, createdDate: string, description: string, externalProviderResourceId: string, externalSubnets: list<record>, provisioningState: string, subnetOverrides: list<record>, uniqueIdentifier: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -5623,7 +5613,6 @@ export def "virtual-networks-get" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualnetworks/{name}
 # operationId: VirtualNetworks_Update
-# --properties shape: {allowedSubnets?: list, description?: string, externalProviderResourceId?: string, subnetOverrides?: list}
 export def "virtual-networks-update" [
   subscription_id: string
   resource_group_name: string
@@ -5641,7 +5630,7 @@ export def "virtual-networks-update" [
   --api-version: string # Client API version. (required, default: 2018-09-15)
   --properties: record # Properties of a virtual network. — shape: {allowedSubnets?: list, description?: string, externalProviderResourceId?: string, subnetOverrides?: list}
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<allowedSubnets: list<record>, createdDate: string, description: string, externalProviderResourceId: string, externalSubnets: list<record>, provisioningState: string, subnetOverrides: list<record>, uniqueIdentifier: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<allowedSubnets: list<record>, createdDate: string, description: string, externalProviderResourceId: string, externalSubnets: list<record>, provisioningState: string, subnetOverrides: list<record>, uniqueIdentifier: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5674,7 +5663,6 @@ export def "virtual-networks-update" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualnetworks/{name}
 # operationId: VirtualNetworks_CreateOrUpdate
-# --properties shape: {allowedSubnets?: list, description?: string, externalProviderResourceId?: string, subnetOverrides?: list}
 export def "virtual-networks-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -5693,7 +5681,7 @@ export def "virtual-networks-create-or-update" [
   --properties: record # Properties of a virtual network. — shape: {allowedSubnets?: list, description?: string, externalProviderResourceId?: string, subnetOverrides?: list}
   --location: string # The location of the resource.
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<allowedSubnets: list<record>, createdDate: string, description: string, externalProviderResourceId: string, externalSubnets: list<record>, provisioningState: string, subnetOverrides: list<record>, uniqueIdentifier: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<allowedSubnets: list<record>, createdDate: string, description: string, externalProviderResourceId: string, externalSubnets: list<record>, provisioningState: string, subnetOverrides: list<record>, uniqueIdentifier: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5784,7 +5772,7 @@ export def "labs-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Specify the $expand query. Example: 'properties($select=defaultStorageAccount)'
   --api-version: string # Client API version. (required, default: 2018-09-15)
-]: nothing -> record<properties: record<announcement: record<enabled: string, expirationDate: string, expired: bool, markdown: string, provisioningState: string, title: string, uniqueIdentifier: string>, artifactsStorageAccount: string, createdDate: string, defaultPremiumStorageAccount: string, defaultStorageAccount: string, environmentPermission: string, extendedProperties: record, labStorageType: string, loadBalancerId: string, mandatoryArtifactsResourceIdsLinux: list<string>, mandatoryArtifactsResourceIdsWindows: list<string>, networkSecurityGroupId: string, premiumDataDiskStorageAccount: string, premiumDataDisks: string, provisioningState: string, publicIpId: string, support: record<enabled: string, markdown: string>, uniqueIdentifier: string, vaultName: string, vmCreationResourceGroup: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<properties: record<announcement: record<enabled: string, expirationDate: string, expired: bool, markdown: string, provisioningState: string, title: string, uniqueIdentifier: string>, artifactsStorageAccount: string, createdDate: string, defaultPremiumStorageAccount: string, defaultStorageAccount: string, environmentPermission: string, extendedProperties: record, labStorageType: string, loadBalancerId: string, mandatoryArtifactsResourceIdsLinux: list<string>, mandatoryArtifactsResourceIdsWindows: list<string>, networkSecurityGroupId: string, premiumDataDiskStorageAccount: string, premiumDataDisks: string, provisioningState: string, publicIpId: string, support: record<enabled: string, markdown: string>, uniqueIdentifier: string, vaultName: string, vmCreationResourceGroup: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -5813,7 +5801,6 @@ export def "labs-get" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{name}
 # operationId: Labs_Update
-# --properties shape: {announcement?: record, environmentPermission?: "Reader"|"Contributor", extendedProperties?: record, labStorageType?: "Standard"|"Premium"|"StandardSSD", mandatoryArtifactsResourceIdsLinux?: list<string>, mandatoryArtifactsResourceIdsWindows?: list<string>, premiumDataDisks?: "Disabled"|"Enabled", support?: record}
 export def "labs-update" [
   subscription_id: string
   resource_group_name: string
@@ -5830,7 +5817,7 @@ export def "labs-update" [
   --api-version: string # Client API version. (required, default: 2018-09-15)
   --properties: record # Properties of a lab. — shape: {announcement?: record, environmentPermission?: "Reader"|"Contributor", extendedProperties?: record, labStorageType?: "Standard"|"Premium"|"StandardSSD", mandatoryArtifactsResourceIdsLinux?: list<string>, mandatoryArtifactsResourceIdsWindows?: list<string>, premiumDataDisks?: "Disabled"|"Enabled", support?: record}
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<announcement: record<enabled: string, expirationDate: string, expired: bool, markdown: string, provisioningState: string, title: string, uniqueIdentifier: string>, artifactsStorageAccount: string, createdDate: string, defaultPremiumStorageAccount: string, defaultStorageAccount: string, environmentPermission: string, extendedProperties: record, labStorageType: string, loadBalancerId: string, mandatoryArtifactsResourceIdsLinux: list<string>, mandatoryArtifactsResourceIdsWindows: list<string>, networkSecurityGroupId: string, premiumDataDiskStorageAccount: string, premiumDataDisks: string, provisioningState: string, publicIpId: string, support: record<enabled: string, markdown: string>, uniqueIdentifier: string, vaultName: string, vmCreationResourceGroup: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<announcement: record<enabled: string, expirationDate: string, expired: bool, markdown: string, provisioningState: string, title: string, uniqueIdentifier: string>, artifactsStorageAccount: string, createdDate: string, defaultPremiumStorageAccount: string, defaultStorageAccount: string, environmentPermission: string, extendedProperties: record, labStorageType: string, loadBalancerId: string, mandatoryArtifactsResourceIdsLinux: list<string>, mandatoryArtifactsResourceIdsWindows: list<string>, networkSecurityGroupId: string, premiumDataDiskStorageAccount: string, premiumDataDisks: string, provisioningState: string, publicIpId: string, support: record<enabled: string, markdown: string>, uniqueIdentifier: string, vaultName: string, vmCreationResourceGroup: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5862,7 +5849,6 @@ export def "labs-update" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{name}
 # operationId: Labs_CreateOrUpdate
-# --properties shape: {announcement?: record, environmentPermission?: "Reader"|"Contributor", extendedProperties?: record, labStorageType?: "Standard"|"Premium"|"StandardSSD", mandatoryArtifactsResourceIdsLinux?: list<string>, mandatoryArtifactsResourceIdsWindows?: list<string>, premiumDataDisks?: "Disabled"|"Enabled", support?: record}
 export def "labs-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -5880,7 +5866,7 @@ export def "labs-create-or-update" [
   --properties: record # Properties of a lab. — shape: {announcement?: record, environmentPermission?: "Reader"|"Contributor", extendedProperties?: record, labStorageType?: "Standard"|"Premium"|"StandardSSD", mandatoryArtifactsResourceIdsLinux?: list<string>, mandatoryArtifactsResourceIdsWindows?: list<string>, premiumDataDisks?: "Disabled"|"Enabled", support?: record}
   --location: string # The location of the resource.
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<announcement: record<enabled: string, expirationDate: string, expired: bool, markdown: string, provisioningState: string, title: string, uniqueIdentifier: string>, artifactsStorageAccount: string, createdDate: string, defaultPremiumStorageAccount: string, defaultStorageAccount: string, environmentPermission: string, extendedProperties: record, labStorageType: string, loadBalancerId: string, mandatoryArtifactsResourceIdsLinux: list<string>, mandatoryArtifactsResourceIdsWindows: list<string>, networkSecurityGroupId: string, premiumDataDiskStorageAccount: string, premiumDataDisks: string, provisioningState: string, publicIpId: string, support: record<enabled: string, markdown: string>, uniqueIdentifier: string, vaultName: string, vmCreationResourceGroup: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<announcement: record<enabled: string, expirationDate: string, expired: bool, markdown: string, provisioningState: string, title: string, uniqueIdentifier: string>, artifactsStorageAccount: string, createdDate: string, defaultPremiumStorageAccount: string, defaultStorageAccount: string, environmentPermission: string, extendedProperties: record, labStorageType: string, loadBalancerId: string, mandatoryArtifactsResourceIdsLinux: list<string>, mandatoryArtifactsResourceIdsWindows: list<string>, networkSecurityGroupId: string, premiumDataDiskStorageAccount: string, premiumDataDisks: string, provisioningState: string, publicIpId: string, support: record<enabled: string, markdown: string>, uniqueIdentifier: string, vaultName: string, vmCreationResourceGroup: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5955,7 +5941,6 @@ export def "labs-claim-any-vm" [
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{name}/createEnvironment
 # operationId: Labs_CreateEnvironment
-# --properties shape: {allowClaim?: bool, artifactDeploymentStatus?: record, artifacts?: list, bulkCreationParameters?: record, computeId?: string, createdByUser?: string, createdByUserId?: string, createdDate?: string, customImageId?: string, dataDiskParameters?: list, disallowPublicIpAddress?: bool, environmentId?: string, expirationDate?: string, fqdn?: string, galleryImageReference?: record, isAuthenticationWithSshKey?: bool, labSubnetName?: string, labVirtualNetworkId?: string, lastKnownPowerState?: string, ... (13 more fields)}
 export def "labs-create-environment" [
   subscription_id: string
   resource_group_name: string
@@ -6069,7 +6054,7 @@ export def "labs-generate-upload-uri" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required, default: 2018-09-15)
   --blob-name: string # The blob name of the upload URI.
-]: any -> record<uploadUri: string> {
+]: any -> oneof<record<uploadUri: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6163,7 +6148,7 @@ export def "labs-list-vhds" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required, default: 2018-09-15)
-]: nothing -> record<nextLink: string, value: table<id: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<id: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -6209,7 +6194,7 @@ export def "global-schedules-list-by-resource-group" [
   --top: int # The maximum number of resources to return from the operation. Example: '$top=10' (format: int32)
   --orderby: string # The ordering expression for the results, using OData notation. Example: '$orderby=name desc'
   --api-version: string # Client API version. (required, default: 2018-09-15)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -6295,7 +6280,7 @@ export def "global-schedules-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Specify the $expand query. Example: 'properties($select=status)'
   --api-version: string # Client API version. (required, default: 2018-09-15)
-]: nothing -> record<properties: record<createdDate: string, dailyRecurrence: record<time: string>, hourlyRecurrence: record<minute: int>, notificationSettings: record<emailRecipient: string, notificationLocale: string, status: string, timeInMinutes: int, webhookUrl: string>, provisioningState: string, status: string, targetResourceId: string, taskType: string, timeZoneId: string, uniqueIdentifier: string, weeklyRecurrence: record<time: string, weekdays: list>>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<properties: record<createdDate: string, dailyRecurrence: record<time: string>, hourlyRecurrence: record<minute: int>, notificationSettings: record<emailRecipient: string, notificationLocale: string, status: string, timeInMinutes: int, webhookUrl: string>, provisioningState: string, status: string, targetResourceId: string, taskType: string, timeZoneId: string, uniqueIdentifier: string, weeklyRecurrence: record<time: string, weekdays: list>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -6324,7 +6309,6 @@ export def "global-schedules-get" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/schedules/{name}
 # operationId: GlobalSchedules_Update
-# --properties shape: {dailyRecurrence?: record, hourlyRecurrence?: record, notificationSettings?: record, status?: "Enabled"|"Disabled", targetResourceId?: string, taskType?: string, timeZoneId?: string, weeklyRecurrence?: record}
 export def "global-schedules-update" [
   subscription_id: string
   resource_group_name: string
@@ -6341,7 +6325,7 @@ export def "global-schedules-update" [
   --api-version: string # Client API version. (required, default: 2018-09-15)
   --properties: record # Properties of a schedule. — shape: {dailyRecurrence?: record, hourlyRecurrence?: record, notificationSettings?: record, status?: "Enabled"|"Disabled", targetResourceId?: string, taskType?: string, timeZoneId?: string, weeklyRecurrence?: record}
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<createdDate: string, dailyRecurrence: record<time: string>, hourlyRecurrence: record<minute: int>, notificationSettings: record<emailRecipient: string, notificationLocale: string, status: string, timeInMinutes: int, webhookUrl: string>, provisioningState: string, status: string, targetResourceId: string, taskType: string, timeZoneId: string, uniqueIdentifier: string, weeklyRecurrence: record<time: string, weekdays: list>>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<createdDate: string, dailyRecurrence: record<time: string>, hourlyRecurrence: record<minute: int>, notificationSettings: record<emailRecipient: string, notificationLocale: string, status: string, timeInMinutes: int, webhookUrl: string>, provisioningState: string, status: string, targetResourceId: string, taskType: string, timeZoneId: string, uniqueIdentifier: string, weeklyRecurrence: record<time: string, weekdays: list>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6373,7 +6357,6 @@ export def "global-schedules-update" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/schedules/{name}
 # operationId: GlobalSchedules_CreateOrUpdate
-# --properties shape: {dailyRecurrence?: record, hourlyRecurrence?: record, notificationSettings?: record, status?: "Enabled"|"Disabled", targetResourceId?: string, taskType?: string, timeZoneId?: string, weeklyRecurrence?: record}
 export def "global-schedules-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -6391,7 +6374,7 @@ export def "global-schedules-create-or-update" [
   properties: record # Properties of a schedule. — shape: {dailyRecurrence?: record, hourlyRecurrence?: record, notificationSettings?: record, status?: "Enabled"|"Disabled", targetResourceId?: string, taskType?: string, timeZoneId?: string, weeklyRecurrence?: record}
   --location: string # The location of the resource.
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<createdDate: string, dailyRecurrence: record<time: string>, hourlyRecurrence: record<minute: int>, notificationSettings: record<emailRecipient: string, notificationLocale: string, status: string, timeInMinutes: int, webhookUrl: string>, provisioningState: string, status: string, targetResourceId: string, taskType: string, timeZoneId: string, uniqueIdentifier: string, weeklyRecurrence: record<time: string, weekdays: list>>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<createdDate: string, dailyRecurrence: record<time: string>, hourlyRecurrence: record<minute: int>, notificationSettings: record<emailRecipient: string, notificationLocale: string, status: string, timeInMinutes: int, webhookUrl: string>, provisioningState: string, status: string, targetResourceId: string, taskType: string, timeZoneId: string, uniqueIdentifier: string, weeklyRecurrence: record<time: string, weekdays: list>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

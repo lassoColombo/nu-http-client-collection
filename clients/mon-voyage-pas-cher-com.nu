@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "x-api-key" => { {scheme: $scheme, headers: {"x-api-key": $token_val}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,12 +111,14 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # OPTIONS — bodyless
 def send-options [req: record, insecure: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http options --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http options --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["https://api.mon-voyage-pas-cher.com"] }
@@ -109,9 +134,9 @@ def unit-completer-1 [] { ["feet" "meters"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-airport" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-airport" "options-airports" "get-cities" "options-cities-findcitiesfromlatlong" "get-autocomplete" "options-cities-findcitiesfromtext" "get-significant-cities" "options-cities-significant" "get-continents" "options-continents" "get-countries" "options-countries" "get-distance" "options-distance" "get-elevation" "options-elevation" "get-ping" "get-sun" "options-sun-positions" "get-timezone" "options-timezone" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -148,7 +173,7 @@ export def "get-airport" [
   --radius: int # Radius in km for a lat/long search, will be ignore if a IATA is passed in location parameter code is passed (default: 100)
   --countrycode: string # Filter - The country ISO code 2 letters, provided by the GET /countries. If passed the results will be filtered to this country only, regardless if you passed a lat/long and a large radius
   --top-airports: oneof<nothing, bool> # Filter the results to only the top and large airports airports.
-]: nothing -> record<count: int, data: table<airlineroutescount: int, airport_website: string, altitude: int, cityname: string, countrycode: string, destinationscount: int, distance: string, iatacode: string, icao: string, istopdestination: bool, latitude: float, longitude: float, name: string, timezone: string, wikipedia_page: string>, message: string, status: string> {
+]: nothing -> oneof<record<count: int, data: table<airlineroutescount: int, airport_website: string, altitude: int, cityname: string, countrycode: string, destinationscount: int, distance: string, iatacode: string, icao: string, istopdestination: bool, latitude: float, longitude: float, name: string, timezone: string, wikipedia_page: string>, message: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($language == null) { error make --unspanned { msg: "required query parameter 'language' missing: pass --language" } }
@@ -183,7 +208,7 @@ export def "options-airports" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/airports" $auth.query)
@@ -224,7 +249,7 @@ export def "get-cities" [
   --limit: int # Limit of the result. Default is 20 rows, and maximum is 50. (default: 20)
   --offset: int # offset of the result set (default: 0)
   --sort: string@sort-completer # The order you want the result ordered. Default is population while when entering a lat/long, you can order the results by distance from requested lat/long point (required, default: distance,asc)
-]: nothing -> record<count: int, data: table<alternatename: list, asciiname: string, country: string, elevation: float, latitude: float, longitude: float, name: string, population: float, timezone: string>, message: string, status: string> {
+]: nothing -> oneof<record<count: int, data: table<alternatename: list, asciiname: string, country: string, elevation: float, latitude: float, longitude: float, name: string, population: float, timezone: string>, message: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($language == null) { error make --unspanned { msg: "required query parameter 'language' missing: pass --language" } }
@@ -260,7 +285,7 @@ export def "options-cities-findcitiesfromlatlong" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cities/findcitiesfromlatlong" $auth.query)
@@ -298,7 +323,7 @@ export def "get-autocomplete" [
   --language: string@language-completer # the language code of the language you want the content to be returned (required)
   --countrycode: string # if you want to limit the result to one country
   --sort: string@sort-completer-1 # The order you want the result ordered. Default is population while when entering a lat/long, you can order the results by distance from requested lat/long point (required, default: population,desc)
-]: nothing -> record<count: int, data: table<alternatename: list, asciiname: string, country: string, elevation: float, latitude: float, longitude: float, name: string, population: float, timezone: string>, message: string, status: string> {
+]: nothing -> oneof<record<count: int, data: table<alternatename: list, asciiname: string, country: string, elevation: float, latitude: float, longitude: float, name: string, population: float, timezone: string>, message: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($q == null) { error make --unspanned { msg: "required query parameter 'q' missing: pass --q" } }
@@ -335,7 +360,7 @@ export def "options-cities-findcitiesfromtext" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cities/findcitiesfromtext" $auth.query)
@@ -377,7 +402,7 @@ export def "get-significant-cities" [
   --limit: int # Limit of the result. Default is 20 rows, and maximum is 50. (default: 20)
   --offset: int # offset of the result set (default: 0)
   --sort: string@sort-completer # The order you want the result ordered. Default is population while when entering a lat/long, you can order the results by distance from requested lat/long point (required, default: population,desc)
-]: nothing -> record<count: int, data: table<alternatename: list, asciiname: string, country: string, elevation: float, latitude: float, longitude: float, name: string, population: float, timezone: string>, message: string, status: string> {
+]: nothing -> oneof<record<count: int, data: table<alternatename: list, asciiname: string, country: string, elevation: float, latitude: float, longitude: float, name: string, population: float, timezone: string>, message: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($language == null) { error make --unspanned { msg: "required query parameter 'language' missing: pass --language" } }
@@ -413,7 +438,7 @@ export def "options-cities-significant" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cities/significant" $auth.query)
@@ -449,7 +474,7 @@ export def "get-continents" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --language: string@language-completer # The language code of the language you want the content to be returned (required)
   --continentcode: string # The code of the continent you want to retrieve, this parameter is not required if you want ot retrieve all continents at once
-]: nothing -> record<count: int, data: table<code: string, countries_in: list, latitude: float, longitude: float, name: string, name_locale: string>, message: string, status: string> {
+]: nothing -> oneof<record<count: int, data: table<code: string, countries_in: list, latitude: float, longitude: float, name: string, name_locale: string>, message: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($language == null) { error make --unspanned { msg: "required query parameter 'language' missing: pass --language" } }
@@ -484,7 +509,7 @@ export def "options-continents" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/continents" $auth.query)
@@ -520,7 +545,7 @@ export def "get-countries" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --language: string@language-completer # the language code of the language you want the content to be returned (required)
   --countrycode: string # The code of the country you want to retrieve
-]: nothing -> record<count: int, data: table<airportscount: float, alternatename: list, areainsqkm: float, capital: string, currencycode: string, currencyname: string, fr_article: string, fr_preposition: string, iso_alpha2: string, languages: string, latitude: float, longitude: float, name: string, name_locale: string, neighbors: list, population: float, postalcode: string, postalcoderegex: string, tld: string>, message: string, status: string> {
+]: nothing -> oneof<record<count: int, data: table<airportscount: float, alternatename: list, areainsqkm: float, capital: string, currencycode: string, currencyname: string, fr_article: string, fr_preposition: string, iso_alpha2: string, languages: string, latitude: float, longitude: float, name: string, name_locale: string, neighbors: list, population: float, postalcode: string, postalcoderegex: string, tld: string>, message: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($language == null) { error make --unspanned { msg: "required query parameter 'language' missing: pass --language" } }
@@ -555,7 +580,7 @@ export def "options-countries" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/countries" $auth.query)
@@ -592,7 +617,7 @@ export def "get-distance" [
   --location-a: string # The location as a latitude / longitude point ( ex. 67.85572,20.22513 ) of location point A (required)
   --location-b: string # The location as a latitude / longitude point ( ex. 67.85572,20.22513 ) of location point B (required)
   --unit: string@unit-completer # The unit of length you want the elevation returned either meters or feet returned (default: kms)
-]: nothing -> record<count: int, data: float, message: string, status: string> {
+]: nothing -> oneof<record<count: int, data: float, message: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($location_a == null) { error make --unspanned { msg: "required query parameter 'locationA' missing: pass --location-a" } }
@@ -628,7 +653,7 @@ export def "options-distance" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/distance" $auth.query)
@@ -664,7 +689,7 @@ export def "get-elevation" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --locations: string # The location as a latitude / longitude point ( ex. 67.85572,20.22513 ) or a list of coordinates separated using the pipe ('|') character. The maximum number of coordinates you can send at one time is 20 ( ex. 67.85572,20.22513|27.85572,20.22513 ) (required, default: 67.85572,20.22513)
   --unit: string@unit-completer-1 # The unit of length you want the elevation returned either meters or feet returned (default: meters)
-]: nothing -> record<count: int, data: table<elevation: int, location: string, unit: string>, message: string, status: string> {
+]: nothing -> oneof<record<count: int, data: table<elevation: int, location: string, unit: string>, message: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let locations = ($locations | default "67.85572,20.22513")
@@ -699,7 +724,7 @@ export def "options-elevation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/elevation" $auth.query)
@@ -733,7 +758,7 @@ export def "get-ping" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: string, message: string, status: string> {
+]: nothing -> oneof<record<data: string, message: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/pong" $auth.query)
@@ -769,7 +794,7 @@ export def "get-sun" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --location: string # Here you can send either a latitude / longitude (required)
   --date: string # The date for what you will get the data ( full-date notation as defined by RFC 3339, section 5.6, for example, 2017-07-21 ), if not provided as parameter, today is going to be used (format: date)
-]: nothing -> record<count: int, data: record<dawn: string, dusk: string, goldenHour: string, goldenHourEnd: string, nadir: string, nauticalDawn: string, nauticalDusk: string, night: string, nightEnd: string, solarNoon: string, sunrise: string, sunriseEnd: string, sunset: string, sunsetStart: string>, message: string, status: string> {
+]: nothing -> oneof<record<count: int, data: record<dawn: string, dusk: string, goldenHour: string, goldenHourEnd: string, nadir: string, nauticalDawn: string, nauticalDusk: string, night: string, nightEnd: string, solarNoon: string, sunrise: string, sunriseEnd: string, sunset: string, sunsetStart: string>, message: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($location == null) { error make --unspanned { msg: "required query parameter 'location' missing: pass --location" } }
@@ -804,7 +829,7 @@ export def "options-sun-positions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sun_positions" $auth.query)
@@ -839,7 +864,7 @@ export def "get-timezone" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --location: string # Here you can send either a latitude / longitude ( ex. 67.85572,20.22513 ) or a IATA Code ( ex. LHR for London Heathrow) (required, default: 45.8326307,6.8650517)
-]: nothing -> record<count: int, data: record<time_now: string, timezone_name: string>, message: string, status: string> {
+]: nothing -> oneof<record<count: int, data: record<time_now: string, timezone_name: string>, message: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let location = ($location | default "45.8326307,6.8650517")
@@ -874,7 +899,7 @@ export def "options-timezone" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/timezone" $auth.query)

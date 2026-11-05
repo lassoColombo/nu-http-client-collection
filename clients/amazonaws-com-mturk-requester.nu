@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -143,9 +166,9 @@ def x-amz-target-completer-38 [] { ["MTurkRequesterServiceV20170117.UpdateQualif
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accept-qualification-request" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["accept-qualification-request" "approve-assignment" "associate-qualification-with-worker" "create-additional-assignments-for-hit" "create-hit" "create-hit-type" "create-hit-with-hit-type" "create-qualification-type" "create-worker-block" "delete-hit" "delete-qualification-type" "delete-worker-block" "disassociate-qualification-from-worker" "get-account-balance" "get-assignment" "get-file-upload-url" "get-hit" "get-qualification-score" "get-qualification-type" "list-assignments-for-hit" "list-bonus-payments" "list-hi-ts" "list-hi-ts-for-qualification-type" "list-qualification-requests" "list-qualification-types" "list-review-policy-results-for-hit" "list-reviewable-hi-ts" "list-worker-blocks" "list-workers-with-qualification-type" "notify-workers" "reject-assignment" "reject-qualification-request" "send-bonus" "send-test-event-notification" "update-expiration-for-hit" "update-hit-review-status" "update-hit-type-of-hit" "update-notification-settings" "update-qualification-type" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -187,7 +210,7 @@ export def "accept-qualification-request" [
   --x-amz-target: string@x-amz-target-completer # required
   qualification_request_id: string # The ID of the Qualification request, as returned by the GetQualificationRequests operation.
   --integer-value: int # The value of the Qualification. You can omit this value if you are using the presence or absence of the Qualification as the basis for a HIT requirement.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -238,7 +261,7 @@ export def "approve-assignment" [
   assignment_id: string # The ID of the assignment. The assignment must correspond to a HIT created by the Requester.
   --requester-feedback: string # A message for the Worker, which the Worker can see in the Status section of the web site.
   --override-rejection: oneof<nothing, bool> # A flag indicating that an assignment should be approved even if it was previously rejected. Defaults to False.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -290,7 +313,7 @@ export def "associate-qualification-with-worker" [
   worker_id: string # The ID of the Worker to whom the Qualification is being assigned. Worker IDs are included with submitted HIT assignments and Qualification requests.
   --integer-value: int # The value of the Qualification to assign.
   --send-notification: oneof<nothing, bool> # Specifies whether to send a notification email message to the Worker saying that the qualification was assigned to the Worker. Note: this is true by default.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -341,7 +364,7 @@ export def "create-additional-assignments-for-hit" [
   hit_id: string # The ID of the HIT to extend.
   number_of_additional_assignments: int # The number of additional assignments to request for this HIT.
   --unique-request-token: string # A unique identifier for this request, which allows you to retry the call on error without extending the HIT multiple times. This is useful in cases such as network timeouts where it is unclear whether or not the call succeeded on the server. If the extend HIT already exists in the system from a previous call using the same UniqueRequestToken, subsequent calls will return an error with a message containing the request ID.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -371,10 +394,6 @@ export def "create-additional-assignments-for-hit" [
 #
 # POST /
 # operationId: CreateHIT
-# --QualificationRequirements item shape: {QualificationTypeId: string, Comparator: "LessThan"|"LessThanOrEqualTo"|"GreaterThan"|"GreaterThanOrEqualTo"|"EqualTo"|"NotEqualTo"|"Exists"|"DoesNotExist"|"In"|"NotIn", IntegerValues?: list<int>, LocaleValues?: list, RequiredToPreview?: bool, ActionsGuarded?: "Accept"|"PreviewAndAccept"|"DiscoverPreviewAndAccept"}
-# --AssignmentReviewPolicy shape: {PolicyName: string, Parameters?: list}
-# --HITReviewPolicy shape: {PolicyName: string, Parameters?: list}
-# --HITLayoutParameters item shape: {Name: string, Value: string}
 export def "create-hit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -409,7 +428,7 @@ export def "create-hit" [
   --hit-review-policy: record # HIT Review Policy data structures represent HIT review policies, which you specify when you create a HIT. — shape: {PolicyName: string, Parameters?: list}
   --hit-layout-id: string # The HITLayoutId allows you to use a pre-existing HIT design with placeholder values and create an additional HIT by providing those values as HITLayoutParameters. Constraints: Either a Question parameter or a HITLayoutId parameter must be provided.
   --hit-layout-parameters: list # If the HITLayoutId is provided, any placeholder values must be filled in with values using the HITLayoutParameter structure. For more information, see HITLayout. — item shape: {Name: string, Value: string}
-]: any -> record<HIT: record<HITId: string, HITTypeId: string, HITGroupId: string, HITLayoutId: string, CreationTime: string, Title: string, Description: string, Question: string, Keywords: string, HITStatus: string, MaxAssignments: int, Reward: string, AutoApprovalDelayInSeconds: int, Expiration: string, AssignmentDurationInSeconds: int, RequesterAnnotation: string, QualificationRequirements: list<record>, HITReviewStatus: string, NumberOfAssignmentsPending: int, NumberOfAssignmentsAvailable: int, NumberOfAssignmentsCompleted: int>> {
+]: any -> oneof<record<HIT: record<HITId: string, HITTypeId: string, HITGroupId: string, HITLayoutId: string, CreationTime: string, Title: string, Description: string, Question: string, Keywords: string, HITStatus: string, MaxAssignments: int, Reward: string, AutoApprovalDelayInSeconds: int, Expiration: string, AssignmentDurationInSeconds: int, RequesterAnnotation: string, QualificationRequirements: list<record>, HITReviewStatus: string, NumberOfAssignmentsPending: int, NumberOfAssignmentsAvailable: int, NumberOfAssignmentsCompleted: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -439,7 +458,6 @@ export def "create-hit" [
 #
 # POST /
 # operationId: CreateHITType
-# --QualificationRequirements item shape: {QualificationTypeId: string, Comparator: "LessThan"|"LessThanOrEqualTo"|"GreaterThan"|"GreaterThanOrEqualTo"|"EqualTo"|"NotEqualTo"|"Exists"|"DoesNotExist"|"In"|"NotIn", IntegerValues?: list<int>, LocaleValues?: list, RequiredToPreview?: bool, ActionsGuarded?: "Accept"|"PreviewAndAccept"|"DiscoverPreviewAndAccept"}
 export def "create-hit-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -465,7 +483,7 @@ export def "create-hit-type" [
   --keywords: string # One or more words or phrases that describe the HIT, separated by commas. These words are used in searches to find HITs.
   description: string # A general description of the HIT. A description includes detailed information about the kind of task the HIT contains. On the Amazon Mechanical Turk web site, the HIT description appears in the expanded view of search results, and in the HIT and assignment screens. A good description gives the user enough information to evaluate the HIT before accepting it.
   --qualification-requirements: list # Conditions that a Worker's Qualifications must meet in order to accept the HIT. A HIT can have between zero and ten Qualification requirements. All requirements must be met in order for a Worker to accept the HIT. Additionally, other actions can be restricted using the ActionsGuarded field on each QualificationRequirement structure. — item shape: {QualificationTypeId: string, Comparator: "LessThan"|"LessThanOrEqualTo"|"GreaterThan"|"GreaterThanOrEqualTo"|"EqualTo"|"NotEqualTo"|"Exists"|"DoesNotExist"|"In"|"NotIn", IntegerValues?: list<int>, LocaleValues?: list, RequiredToPreview?: bool, ActionsGuarded?: "Accept"|"PreviewAndAccept"|"DiscoverPreviewAndAccept"}
-]: any -> record<HITTypeId: string> {
+]: any -> oneof<record<HITTypeId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -495,9 +513,6 @@ export def "create-hit-type" [
 #
 # POST /
 # operationId: CreateHITWithHITType
-# --AssignmentReviewPolicy shape: {PolicyName: string, Parameters?: list}
-# --HITReviewPolicy shape: {PolicyName: string, Parameters?: list}
-# --HITLayoutParameters item shape: {Name: string, Value: string}
 export def "create-hit-with-hit-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -526,7 +541,7 @@ export def "create-hit-with-hit-type" [
   --hit-review-policy: record # HIT Review Policy data structures represent HIT review policies, which you specify when you create a HIT. — shape: {PolicyName: string, Parameters?: list}
   --hit-layout-id: string # The HITLayoutId allows you to use a pre-existing HIT design with placeholder values and create an additional HIT by providing those values as HITLayoutParameters. Constraints: Either a Question parameter or a HITLayoutId parameter must be provided.
   --hit-layout-parameters: list # If the HITLayoutId is provided, any placeholder values must be filled in with values using the HITLayoutParameter structure. For more information, see HITLayout. — item shape: {Name: string, Value: string}
-]: any -> record<HIT: record<HITId: string, HITTypeId: string, HITGroupId: string, HITLayoutId: string, CreationTime: string, Title: string, Description: string, Question: string, Keywords: string, HITStatus: string, MaxAssignments: int, Reward: string, AutoApprovalDelayInSeconds: int, Expiration: string, AssignmentDurationInSeconds: int, RequesterAnnotation: string, QualificationRequirements: list<record>, HITReviewStatus: string, NumberOfAssignmentsPending: int, NumberOfAssignmentsAvailable: int, NumberOfAssignmentsCompleted: int>> {
+]: any -> oneof<record<HIT: record<HITId: string, HITTypeId: string, HITGroupId: string, HITLayoutId: string, CreationTime: string, Title: string, Description: string, Question: string, Keywords: string, HITStatus: string, MaxAssignments: int, Reward: string, AutoApprovalDelayInSeconds: int, Expiration: string, AssignmentDurationInSeconds: int, RequesterAnnotation: string, QualificationRequirements: list<record>, HITReviewStatus: string, NumberOfAssignmentsPending: int, NumberOfAssignmentsAvailable: int, NumberOfAssignmentsCompleted: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -584,7 +599,7 @@ export def "create-qualification-type" [
   --test-duration-in-seconds: int # The number of seconds the Worker has to complete the Qualification test, starting from the time the Worker requests the Qualification.
   --auto-granted: oneof<nothing, bool> # Specifies whether requests for the Qualification type are granted immediately, without prompting the Worker with a Qualification test. Constraints: If the Test parameter is specified, this parameter cannot be true.
   --auto-granted-value: int # The Qualification value to use for automatically granted Qualifications. This parameter is used only if the AutoGranted parameter is true.
-]: any -> record<QualificationType: record<QualificationTypeId: string, CreationTime: string, Name: string, Description: string, Keywords: string, QualificationTypeStatus: string, Test: string, TestDurationInSeconds: int, AnswerKey: string, RetryDelayInSeconds: int, IsRequestable: bool, AutoGranted: bool, AutoGrantedValue: int>> {
+]: any -> oneof<record<QualificationType: record<QualificationTypeId: string, CreationTime: string, Name: string, Description: string, Keywords: string, QualificationTypeStatus: string, Test: string, TestDurationInSeconds: int, AnswerKey: string, RetryDelayInSeconds: int, IsRequestable: bool, AutoGranted: bool, AutoGrantedValue: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -634,7 +649,7 @@ export def "create-worker-block" [
   --x-amz-target: string@x-amz-target-completer-8 # required
   worker_id: string # The ID of the Worker to block.
   reason: string # A message explaining the reason for blocking the Worker. This parameter enables you to keep track of your Workers. The Worker does not see this message.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -683,7 +698,7 @@ export def "delete-hit" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-9 # required
   hit_id: string # The ID of the HIT to be deleted.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -732,7 +747,7 @@ export def "delete-qualification-type" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-10 # required
   qualification_type_id: string # The ID of the QualificationType to dispose.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -782,7 +797,7 @@ export def "delete-worker-block" [
   --x-amz-target: string@x-amz-target-completer-11 # required
   worker_id: string # The ID of the Worker to unblock.
   --reason: string # A message that explains the reason for unblocking the Worker. The Worker does not see this message.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -833,7 +848,7 @@ export def "disassociate-qualification-from-worker" [
   worker_id: string # The ID of the Worker who possesses the Qualification to be revoked.
   qualification_type_id: string # The ID of the Qualification type of the Qualification to be revoked.
   --reason: string # A text message that explains why the Qualification was revoked. The user who had the Qualification sees this message.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -882,7 +897,7 @@ export def "get-account-balance" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-13 # required
   --body: record
-]: any -> record<AvailableBalance: string, OnHoldBalance: string> {
+]: any -> oneof<record<AvailableBalance: string, OnHoldBalance: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -931,7 +946,7 @@ export def "get-assignment" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-14 # required
   assignment_id: string # The ID of the Assignment to be retrieved.
-]: any -> record<Assignment: record<AssignmentId: string, WorkerId: string, HITId: string, AssignmentStatus: string, AutoApprovalTime: string, AcceptTime: string, SubmitTime: string, ApprovalTime: string, RejectionTime: string, Deadline: string, Answer: string, RequesterFeedback: string>, HIT: record<HITId: string, HITTypeId: string, HITGroupId: string, HITLayoutId: string, CreationTime: string, Title: string, Description: string, Question: string, Keywords: string, HITStatus: string, MaxAssignments: int, Reward: string, AutoApprovalDelayInSeconds: int, Expiration: string, AssignmentDurationInSeconds: int, RequesterAnnotation: string, QualificationRequirements: list<record>, HITReviewStatus: string, NumberOfAssignmentsPending: int, NumberOfAssignmentsAvailable: int, NumberOfAssignmentsCompleted: int>> {
+]: any -> oneof<record<Assignment: record<AssignmentId: string, WorkerId: string, HITId: string, AssignmentStatus: string, AutoApprovalTime: string, AcceptTime: string, SubmitTime: string, ApprovalTime: string, RejectionTime: string, Deadline: string, Answer: string, RequesterFeedback: string>, HIT: record<HITId: string, HITTypeId: string, HITGroupId: string, HITLayoutId: string, CreationTime: string, Title: string, Description: string, Question: string, Keywords: string, HITStatus: string, MaxAssignments: int, Reward: string, AutoApprovalDelayInSeconds: int, Expiration: string, AssignmentDurationInSeconds: int, RequesterAnnotation: string, QualificationRequirements: list<record>, HITReviewStatus: string, NumberOfAssignmentsPending: int, NumberOfAssignmentsAvailable: int, NumberOfAssignmentsCompleted: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -981,7 +996,7 @@ export def "get-file-upload-url" [
   --x-amz-target: string@x-amz-target-completer-15 # required
   assignment_id: string # The ID of the assignment that contains the question with a FileUploadAnswer.
   question_identifier: string # The identifier of the question with a FileUploadAnswer, as specified in the QuestionForm of the HIT.
-]: any -> record<FileUploadURL: string> {
+]: any -> oneof<record<FileUploadURL: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1030,7 +1045,7 @@ export def "get-hit" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-16 # required
   hit_id: string # The ID of the HIT to be retrieved.
-]: any -> record<HIT: record<HITId: string, HITTypeId: string, HITGroupId: string, HITLayoutId: string, CreationTime: string, Title: string, Description: string, Question: string, Keywords: string, HITStatus: string, MaxAssignments: int, Reward: string, AutoApprovalDelayInSeconds: int, Expiration: string, AssignmentDurationInSeconds: int, RequesterAnnotation: string, QualificationRequirements: list<record>, HITReviewStatus: string, NumberOfAssignmentsPending: int, NumberOfAssignmentsAvailable: int, NumberOfAssignmentsCompleted: int>> {
+]: any -> oneof<record<HIT: record<HITId: string, HITTypeId: string, HITGroupId: string, HITLayoutId: string, CreationTime: string, Title: string, Description: string, Question: string, Keywords: string, HITStatus: string, MaxAssignments: int, Reward: string, AutoApprovalDelayInSeconds: int, Expiration: string, AssignmentDurationInSeconds: int, RequesterAnnotation: string, QualificationRequirements: list<record>, HITReviewStatus: string, NumberOfAssignmentsPending: int, NumberOfAssignmentsAvailable: int, NumberOfAssignmentsCompleted: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1080,7 +1095,7 @@ export def "get-qualification-score" [
   --x-amz-target: string@x-amz-target-completer-17 # required
   qualification_type_id: string # The ID of the QualificationType.
   worker_id: string # The ID of the Worker whose Qualification is being updated.
-]: any -> record<Qualification: record<QualificationTypeId: string, WorkerId: string, GrantTime: string, IntegerValue: int, LocaleValue: record<Country: string, Subdivision: string>, Status: string>> {
+]: any -> oneof<record<Qualification: record<QualificationTypeId: string, WorkerId: string, GrantTime: string, IntegerValue: int, LocaleValue: record<Country: string, Subdivision: string>, Status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1129,7 +1144,7 @@ export def "get-qualification-type" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-18 # required
   qualification_type_id: string # The ID of the QualificationType.
-]: any -> record<QualificationType: record<QualificationTypeId: string, CreationTime: string, Name: string, Description: string, Keywords: string, QualificationTypeStatus: string, Test: string, TestDurationInSeconds: int, AnswerKey: string, RetryDelayInSeconds: int, IsRequestable: bool, AutoGranted: bool, AutoGrantedValue: int>> {
+]: any -> oneof<record<QualificationType: record<QualificationTypeId: string, CreationTime: string, Name: string, Description: string, Keywords: string, QualificationTypeStatus: string, Test: string, TestDurationInSeconds: int, AnswerKey: string, RetryDelayInSeconds: int, IsRequestable: bool, AutoGranted: bool, AutoGrantedValue: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1183,7 +1198,7 @@ export def "list-assignments-for-hit" [
   --next-token-body: string # If the previous response was incomplete (because there is more data to retrieve), Amazon Mechanical Turk returns a pagination token in the response. You can use this pagination token to retrieve the next set of results. (body field)
   --max-results-body: int # (body field)
   --assignment-statuses: list<string> # The status of the assignments to return: Submitted | Approved | Rejected
-]: any -> record<NextToken: string, NumResults: int, Assignments: table<AssignmentId: string, WorkerId: string, HITId: string, AssignmentStatus: string, AutoApprovalTime: string, AcceptTime: string, SubmitTime: string, ApprovalTime: string, RejectionTime: string, Deadline: string, Answer: string, RequesterFeedback: string>> {
+]: any -> oneof<record<NextToken: string, NumResults: int, Assignments: table<AssignmentId: string, WorkerId: string, HITId: string, AssignmentStatus: string, AutoApprovalTime: string, AcceptTime: string, SubmitTime: string, ApprovalTime: string, RejectionTime: string, Deadline: string, Answer: string, RequesterFeedback: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1238,7 +1253,7 @@ export def "list-bonus-payments" [
   --assignment-id: string # The ID of the assignment associated with the bonus payments to retrieve. If specified, only bonus payments for the given assignment are returned. Either the HITId parameter or the AssignmentId parameter must be specified
   --next-token-body: string # If the previous response was incomplete (because there is more data to retrieve), Amazon Mechanical Turk returns a pagination token in the response. You can use this pagination token to retrieve the next set of results. (body field)
   --max-results-body: int # (body field)
-]: any -> record<NumResults: int, NextToken: string, BonusPayments: table<WorkerId: string, BonusAmount: string, AssignmentId: string, Reason: string, GrantTime: string>> {
+]: any -> oneof<record<NumResults: int, NextToken: string, BonusPayments: table<WorkerId: string, BonusAmount: string, AssignmentId: string, Reason: string, GrantTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1291,7 +1306,7 @@ export def "list-hi-ts" [
   --x-amz-target: string@x-amz-target-completer-21 # required
   --next-token-body: string # If the previous response was incomplete (because there is more data to retrieve), Amazon Mechanical Turk returns a pagination token in the response. You can use this pagination token to retrieve the next set of results. (body field)
   --max-results-body: int # (body field)
-]: any -> record<NextToken: string, NumResults: int, HITs: table<HITId: string, HITTypeId: string, HITGroupId: string, HITLayoutId: string, CreationTime: string, Title: string, Description: string, Question: string, Keywords: string, HITStatus: string, MaxAssignments: int, Reward: string, AutoApprovalDelayInSeconds: int, Expiration: string, AssignmentDurationInSeconds: int, RequesterAnnotation: string, QualificationRequirements: list, HITReviewStatus: string, NumberOfAssignmentsPending: int, NumberOfAssignmentsAvailable: int, NumberOfAssignmentsCompleted: int>> {
+]: any -> oneof<record<NextToken: string, NumResults: int, HITs: table<HITId: string, HITTypeId: string, HITGroupId: string, HITLayoutId: string, CreationTime: string, Title: string, Description: string, Question: string, Keywords: string, HITStatus: string, MaxAssignments: int, Reward: string, AutoApprovalDelayInSeconds: int, Expiration: string, AssignmentDurationInSeconds: int, RequesterAnnotation: string, QualificationRequirements: list, HITReviewStatus: string, NumberOfAssignmentsPending: int, NumberOfAssignmentsAvailable: int, NumberOfAssignmentsCompleted: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1345,7 +1360,7 @@ export def "list-hi-ts-for-qualification-type" [
   qualification_type_id: string # The ID of the Qualification type to use when querying HITs.
   --next-token-body: string # If the previous response was incomplete (because there is more data to retrieve), Amazon Mechanical Turk returns a pagination token in the response. You can use this pagination token to retrieve the next set of results. (body field)
   --max-results-body: int # Limit the number of results returned. (body field)
-]: any -> record<NextToken: string, NumResults: int, HITs: table<HITId: string, HITTypeId: string, HITGroupId: string, HITLayoutId: string, CreationTime: string, Title: string, Description: string, Question: string, Keywords: string, HITStatus: string, MaxAssignments: int, Reward: string, AutoApprovalDelayInSeconds: int, Expiration: string, AssignmentDurationInSeconds: int, RequesterAnnotation: string, QualificationRequirements: list, HITReviewStatus: string, NumberOfAssignmentsPending: int, NumberOfAssignmentsAvailable: int, NumberOfAssignmentsCompleted: int>> {
+]: any -> oneof<record<NextToken: string, NumResults: int, HITs: table<HITId: string, HITTypeId: string, HITGroupId: string, HITLayoutId: string, CreationTime: string, Title: string, Description: string, Question: string, Keywords: string, HITStatus: string, MaxAssignments: int, Reward: string, AutoApprovalDelayInSeconds: int, Expiration: string, AssignmentDurationInSeconds: int, RequesterAnnotation: string, QualificationRequirements: list, HITReviewStatus: string, NumberOfAssignmentsPending: int, NumberOfAssignmentsAvailable: int, NumberOfAssignmentsCompleted: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1399,7 +1414,7 @@ export def "list-qualification-requests" [
   --qualification-type-id: string # The ID of the QualificationType.
   --next-token-body: string # If the previous response was incomplete (because there is more data to retrieve), Amazon Mechanical Turk returns a pagination token in the response. You can use this pagination token to retrieve the next set of results. (body field)
   --max-results-body: int # The maximum number of results to return in a single call. (body field)
-]: any -> record<NumResults: int, NextToken: string, QualificationRequests: table<QualificationRequestId: string, QualificationTypeId: string, WorkerId: string, Test: string, Answer: string, SubmitTime: string>> {
+]: any -> oneof<record<NumResults: int, NextToken: string, QualificationRequests: table<QualificationRequestId: string, QualificationTypeId: string, WorkerId: string, Test: string, Answer: string, SubmitTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1455,7 +1470,7 @@ export def "list-qualification-types" [
   --must-be-owned-by-caller: oneof<nothing, bool> # Specifies that only Qualification types that the Requester created are returned. If false, the operation returns all Qualification types.
   --next-token-body: string # If the previous response was incomplete (because there is more data to retrieve), Amazon Mechanical Turk returns a pagination token in the response. You can use this pagination token to retrieve the next set of results. (body field)
   --max-results-body: int # The maximum number of results to return in a single call. (body field)
-]: any -> record<NumResults: int, NextToken: string, QualificationTypes: table<QualificationTypeId: string, CreationTime: string, Name: string, Description: string, Keywords: string, QualificationTypeStatus: string, Test: string, TestDurationInSeconds: int, AnswerKey: string, RetryDelayInSeconds: int, IsRequestable: bool, AutoGranted: bool, AutoGrantedValue: int>> {
+]: any -> oneof<record<NumResults: int, NextToken: string, QualificationTypes: table<QualificationTypeId: string, CreationTime: string, Name: string, Description: string, Keywords: string, QualificationTypeStatus: string, Test: string, TestDurationInSeconds: int, AnswerKey: string, RetryDelayInSeconds: int, IsRequestable: bool, AutoGranted: bool, AutoGrantedValue: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1513,7 +1528,7 @@ export def "list-review-policy-results-for-hit" [
   --retrieve-results: oneof<nothing, bool> # Specify if the operation should retrieve a list of the results computed by the Review Policies.
   --next-token-body: string # If the previous response was incomplete (because there is more data to retrieve), Amazon Mechanical Turk returns a pagination token in the response. You can use this pagination token to retrieve the next set of results. (body field)
   --max-results-body: int # Limit the number of results returned. (body field)
-]: any -> record<HITId: string, AssignmentReviewPolicy: record<PolicyName: string, Parameters: list<record>>, HITReviewPolicy: record<PolicyName: string, Parameters: list<record>>, AssignmentReviewReport: record<ReviewResults: list<record>, ReviewActions: list<record>>, HITReviewReport: record<ReviewResults: list<record>, ReviewActions: list<record>>, NextToken: string> {
+]: any -> oneof<record<HITId: string, AssignmentReviewPolicy: record<PolicyName: string, Parameters: list<record>>, HITReviewPolicy: record<PolicyName: string, Parameters: list<record>>, AssignmentReviewReport: record<ReviewResults: list<record>, ReviewActions: list<record>>, HITReviewReport: record<ReviewResults: list<record>, ReviewActions: list<record>>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1568,7 +1583,7 @@ export def "list-reviewable-hi-ts" [
   --status: string@status-completer # Can be either Reviewable or Reviewing. Reviewable is the default value.
   --next-token-body: string # If the previous response was incomplete (because there is more data to retrieve), Amazon Mechanical Turk returns a pagination token in the response. You can use this pagination token to retrieve the next set of results. (body field)
   --max-results-body: int # Limit the number of results returned. (body field)
-]: any -> record<NextToken: string, NumResults: int, HITs: table<HITId: string, HITTypeId: string, HITGroupId: string, HITLayoutId: string, CreationTime: string, Title: string, Description: string, Question: string, Keywords: string, HITStatus: string, MaxAssignments: int, Reward: string, AutoApprovalDelayInSeconds: int, Expiration: string, AssignmentDurationInSeconds: int, RequesterAnnotation: string, QualificationRequirements: list, HITReviewStatus: string, NumberOfAssignmentsPending: int, NumberOfAssignmentsAvailable: int, NumberOfAssignmentsCompleted: int>> {
+]: any -> oneof<record<NextToken: string, NumResults: int, HITs: table<HITId: string, HITTypeId: string, HITGroupId: string, HITLayoutId: string, CreationTime: string, Title: string, Description: string, Question: string, Keywords: string, HITStatus: string, MaxAssignments: int, Reward: string, AutoApprovalDelayInSeconds: int, Expiration: string, AssignmentDurationInSeconds: int, RequesterAnnotation: string, QualificationRequirements: list, HITReviewStatus: string, NumberOfAssignmentsPending: int, NumberOfAssignmentsAvailable: int, NumberOfAssignmentsCompleted: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1621,7 +1636,7 @@ export def "list-worker-blocks" [
   --x-amz-target: string@x-amz-target-completer-27 # required
   --next-token-body: string # If the previous response was incomplete (because there is more data to retrieve), Amazon Mechanical Turk returns a pagination token in the response. You can use this pagination token to retrieve the next set of results. (body field)
   --max-results-body: int # (body field)
-]: any -> record<NextToken: string, NumResults: int, WorkerBlocks: table<WorkerId: string, Reason: string>> {
+]: any -> oneof<record<NextToken: string, NumResults: int, WorkerBlocks: table<WorkerId: string, Reason: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1676,7 +1691,7 @@ export def "list-workers-with-qualification-type" [
   --status: string@status-completer-1 # The status of the Qualifications to return. Can be Granted | Revoked.
   --next-token-body: string # If the previous response was incomplete (because there is more data to retrieve), Amazon Mechanical Turk returns a pagination token in the response. You can use this pagination token to retrieve the next set of results. (body field)
   --max-results-body: int # Limit the number of results returned. (body field)
-]: any -> record<NextToken: string, NumResults: int, Qualifications: table<QualificationTypeId: string, WorkerId: string, GrantTime: string, IntegerValue: int, LocaleValue: record, Status: string>> {
+]: any -> oneof<record<NextToken: string, NumResults: int, Qualifications: table<QualificationTypeId: string, WorkerId: string, GrantTime: string, IntegerValue: int, LocaleValue: record, Status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1728,7 +1743,7 @@ export def "notify-workers" [
   subject: string # The subject line of the email message to send. Can include up to 200 characters.
   message_text: string # The text of the email message to send. Can include up to 4,096 characters
   worker_ids: list<string> # A list of Worker IDs you wish to notify. You can notify upto 100 Workers at a time.
-]: any -> record<NotifyWorkersFailureStatuses: table<NotifyWorkersFailureCode: string, NotifyWorkersFailureMessage: string, WorkerId: string>> {
+]: any -> oneof<record<NotifyWorkersFailureStatuses: table<NotifyWorkersFailureCode: string, NotifyWorkersFailureMessage: string, WorkerId: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1778,7 +1793,7 @@ export def "reject-assignment" [
   --x-amz-target: string@x-amz-target-completer-30 # required
   assignment_id: string # The ID of the assignment. The assignment must correspond to a HIT created by the Requester.
   requester_feedback: string # A message for the Worker, which the Worker can see in the Status section of the web site.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1828,7 +1843,7 @@ export def "reject-qualification-request" [
   --x-amz-target: string@x-amz-target-completer-31 # required
   qualification_request_id: string # The ID of the Qualification request, as returned by the ListQualificationRequests operation.
   --reason: string # A text message explaining why the request was rejected, to be shown to the Worker who made the request.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1881,7 +1896,7 @@ export def "send-bonus" [
   assignment_id: string # The ID of the assignment for which this bonus is paid.
   reason: string # A message that explains the reason for the bonus payment. The Worker receiving the bonus can see this message.
   --unique-request-token: string # A unique identifier for this request, which allows you to retry the call on error without granting multiple bonuses. This is useful in cases such as network timeouts where it is unclear whether or not the call succeeded on the server. If the bonus already exists in the system from a previous call using the same UniqueRequestToken, subsequent calls will return an error with a message containing the request ID.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1911,7 +1926,6 @@ export def "send-bonus" [
 #
 # POST /
 # operationId: SendTestEventNotification
-# --Notification shape: {Destination: string, Transport: "Email"|"SQS"|"SNS", Version: string, EventTypes: list<string>}
 export def "send-test-event-notification" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1932,7 +1946,7 @@ export def "send-test-event-notification" [
   --x-amz-target: string@x-amz-target-completer-33 # required
   notification: record # The NotificationSpecification data structure describes a HIT event notification for a HIT type. — shape: {Destination: string, Transport: "Email"|"SQS"|"SNS", Version: string, EventTypes: list<string>}
   test_event_type: string@test-event-type-completer # The event to simulate to test the notification specification. This event is included in the test message even if the notification specification does not include the event type. The notification specification does not filter out the test event.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1982,7 +1996,7 @@ export def "update-expiration-for-hit" [
   --x-amz-target: string@x-amz-target-completer-34 # required
   hit_id: string # The HIT to update.
   expire_at: string # The date and time at which you want the HIT to expire (format: date-time)
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2032,7 +2046,7 @@ export def "update-hit-review-status" [
   --x-amz-target: string@x-amz-target-completer-35 # required
   hit_id: string # The ID of the HIT to update.
   --revert: oneof<nothing, bool> # Specifies how to update the HIT status. Default is False. Setting this to false will only transition a HIT from Reviewable to Reviewing Setting this to true will only transition a HIT from Reviewing to Reviewable
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2082,7 +2096,7 @@ export def "update-hit-type-of-hit" [
   --x-amz-target: string@x-amz-target-completer-36 # required
   hit_id: string # The HIT to update.
   hit_type_id: string # The ID of the new HIT type.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2112,7 +2126,6 @@ export def "update-hit-type-of-hit" [
 #
 # POST /
 # operationId: UpdateNotificationSettings
-# --Notification shape: {Destination: string, Transport: "Email"|"SQS"|"SNS", Version: string, EventTypes: list<string>}
 export def "update-notification-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2134,7 +2147,7 @@ export def "update-notification-settings" [
   hit_type_id: string # The ID of the HIT type whose notification specification is being updated.
   --notification: record # The NotificationSpecification data structure describes a HIT event notification for a HIT type. — shape: {Destination: string, Transport: "Email"|"SQS"|"SNS", Version: string, EventTypes: list<string>}
   --active: oneof<nothing, bool> # Specifies whether notifications are sent for HITs of this HIT type, according to the notification specification. You must specify either the Notification parameter or the Active parameter for the call to UpdateNotificationSettings to succeed.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2191,7 +2204,7 @@ export def "update-qualification-type" [
   --retry-delay-in-seconds: int # The amount of time, in seconds, that Workers must wait after requesting a Qualification of the specified Qualification type before they can retry the Qualification request. It is not possible to disable retries for a Qualification type after it has been created with retries enabled. If you want to disable retries, you must dispose of the existing retry-enabled Qualification type using DisposeQualificationType and then create a new Qualification type with retries disabled using CreateQualificationType.
   --auto-granted: oneof<nothing, bool> # Specifies whether requests for the Qualification type are granted immediately, without prompting the Worker with a Qualification test. Constraints: If the Test parameter is specified, this parameter cannot be true.
   --auto-granted-value: int # The Qualification value to use for automatically granted Qualifications. This parameter is used only if the AutoGranted parameter is true.
-]: any -> record<QualificationType: record<QualificationTypeId: string, CreationTime: string, Name: string, Description: string, Keywords: string, QualificationTypeStatus: string, Test: string, TestDurationInSeconds: int, AnswerKey: string, RetryDelayInSeconds: int, IsRequestable: bool, AutoGranted: bool, AutoGrantedValue: int>> {
+]: any -> oneof<record<QualificationType: record<QualificationTypeId: string, CreationTime: string, Name: string, Description: string, Keywords: string, QualificationTypeStatus: string, Test: string, TestDurationInSeconds: int, AnswerKey: string, RetryDelayInSeconds: int, IsRequestable: bool, AutoGranted: bool, AutoGrantedValue: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

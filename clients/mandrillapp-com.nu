@@ -12,27 +12,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -40,8 +49,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -52,7 +66,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -98,9 +121,9 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-exports-activity-json" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["post-exports-activity-json" "post-exports-info-json" "post-exports-list-json" "post-exports-rejects-json" "post-exports-whitelist-json" "post-inbound-add-domain-json" "post-inbound-add-route-json" "post-inbound-check-domain-json" "post-inbound-delete-domain-json" "post-inbound-delete-route-json" "post-inbound-domains-json" "post-inbound-routes-json" "post-inbound-send-raw-json" "post-inbound-update-route-json" "post-ips-cancel-warmup-json" "post-ips-check-custom-dns-json" "post-ips-create-pool-json" "post-ips-delete-pool-json" "post-ips-delete-json" "post-ips-info-json" "post-ips-list-pools-json" "post-ips-list-json" "post-ips-pool-info-json" "post-ips-provision-json" "post-ips-set-custom-dns-json" "post-ips-set-pool-json" "post-ips-start-warmup-json" "post-messages-cancel-scheduled-json" "post-messages-content-json" "post-messages-info-json" "post-messages-list-scheduled-json" "post-messages-parse-json" "post-messages-reschedule-json" "post-messages-search-time-series-json" "post-messages-search-json" "post-messages-send-raw-json" "post-messages-send-template-json" "post-messages-send-json" "post-metadata-add-json" "post-metadata-delete-json" "post-metadata-list-json" "post-metadata-update-json" "post-rejects-add-json" "post-rejects-delete-json" "post-rejects-list-json" "post-senders-add-domain-json" "post-senders-check-domain-json" "post-senders-domains-json" "post-senders-info-json" "post-senders-list-json" "post-senders-time-series-json" "post-senders-verify-domain-json" "post-subaccounts-add-json" "post-subaccounts-delete-json" "post-subaccounts-info-json" "post-subaccounts-list-json" "post-subaccounts-pause-json" "post-subaccounts-resume-json" "post-subaccounts-update-json" "post-tags-all-time-series-json" "post-tags-delete-json" "post-tags-info-json" "post-tags-list-json" "post-tags-time-series-json" "post-templates-add-json" "post-templates-delete-json" "post-templates-info-json" "post-templates-list-json" "post-templates-publish-json" "post-templates-render-json" "post-templates-time-series-json" "post-templates-update-json" "post-urls-add-tracking-domain-json" "post-urls-check-tracking-domain-json" "post-urls-list-json" "post-urls-search-json" "post-urls-time-series-json" "post-urls-tracking-domains-json" "post-users-info-json" "post-users-ping-json" "post-users-ping2-json" "post-users-senders-json" "post-webhooks-add-json" "post-webhooks-delete-json" "post-webhooks-info-json" "post-webhooks-list-json" "post-webhooks-update-json" "post-whitelists-add-json" "post-whitelists-delete-json" "post-whitelists-list-json" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -139,7 +162,7 @@ export def "post-exports-activity-json" [
   --senders: list<string>
   --states: list<string>
   --tags: list<string>
-]: any -> record<created_at: string, finished_at: any, id: string, result_url: any, state: string, type: string> {
+]: any -> oneof<record<created_at: string, finished_at: any, id: string, result_url: any, state: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -177,7 +200,7 @@ export def "post-exports-info-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: string
   --key: string
-]: any -> record<created_at: string, finished_at: string, id: string, result_url: string, state: string, type: string> {
+]: any -> oneof<record<created_at: string, finished_at: string, id: string, result_url: string, state: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -214,7 +237,7 @@ export def "post-exports-list-json" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
-]: any -> table<created_at: string, finished_at: string, id: string, result_url: string, state: string, type: string> {
+]: any -> oneof<table<created_at: string, finished_at: string, id: string, result_url: string, state: string, type: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -252,7 +275,7 @@ export def "post-exports-rejects-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
   --notify-email: string
-]: any -> record<created_at: string, finished_at: any, id: string, result_url: any, state: string, type: string> {
+]: any -> oneof<record<created_at: string, finished_at: any, id: string, result_url: any, state: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -290,7 +313,7 @@ export def "post-exports-whitelist-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
   --notify-email: string
-]: any -> record<created_at: string, finished_at: any, id: string, result_url: any, state: string, type: string> {
+]: any -> oneof<record<created_at: string, finished_at: any, id: string, result_url: any, state: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -328,7 +351,7 @@ export def "post-inbound-add-domain-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --domain: string
   --key: string
-]: any -> record<created_at: string, domain: string, valid_mx: bool> {
+]: any -> oneof<record<created_at: string, domain: string, valid_mx: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -368,7 +391,7 @@ export def "post-inbound-add-route-json" [
   --key: string
   --pattern: string
   --url: string
-]: any -> record<id: string, pattern: string, url: string> {
+]: any -> oneof<record<id: string, pattern: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -406,7 +429,7 @@ export def "post-inbound-check-domain-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --domain: string
   --key: string
-]: any -> record<created_at: string, domain: string, valid_mx: bool> {
+]: any -> oneof<record<created_at: string, domain: string, valid_mx: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -444,7 +467,7 @@ export def "post-inbound-delete-domain-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --domain: string
   --key: string
-]: any -> record<created_at: string, domain: string, valid_mx: bool> {
+]: any -> oneof<record<created_at: string, domain: string, valid_mx: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -482,7 +505,7 @@ export def "post-inbound-delete-route-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: string
   --key: string
-]: any -> record<id: string, pattern: string, url: string> {
+]: any -> oneof<record<id: string, pattern: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -519,7 +542,7 @@ export def "post-inbound-domains-json" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
-]: any -> table<created_at: string, domain: string, valid_mx: bool> {
+]: any -> oneof<table<created_at: string, domain: string, valid_mx: bool>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -557,7 +580,7 @@ export def "post-inbound-routes-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --domain: string
   --key: string
-]: any -> table<id: string, pattern: string, url: string> {
+]: any -> oneof<table<id: string, pattern: string, url: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -599,7 +622,7 @@ export def "post-inbound-send-raw-json" [
   --mail-from: string
   --raw-message: string
   --to: list<string>
-]: any -> table<email: string, pattern: string, url: string> {
+]: any -> oneof<table<email: string, pattern: string, url: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -639,7 +662,7 @@ export def "post-inbound-update-route-json" [
   --key: string
   --pattern: string
   --url: string
-]: any -> record<id: string, pattern: string, url: string> {
+]: any -> oneof<record<id: string, pattern: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -677,7 +700,7 @@ export def "post-ips-cancel-warmup-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ip: string
   --key: string
-]: any -> record<created_at: string, custom_dns: record<enabled: bool, error: string, valid: bool>, domain: string, ip: string, pool: string, warmup: record<end_at: string, start_at: string, warming_up: bool>> {
+]: any -> oneof<record<created_at: string, custom_dns: record<enabled: bool, error: string, valid: bool>, domain: string, ip: string, pool: string, warmup: record<end_at: string, start_at: string, warming_up: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -716,7 +739,7 @@ export def "post-ips-check-custom-dns-json" [
   --domain: string
   --ip: string
   --key: string
-]: any -> record<error: string, valid: bool> {
+]: any -> oneof<record<error: string, valid: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -754,7 +777,7 @@ export def "post-ips-create-pool-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
   --pool: string
-]: any -> record<created_at: string, ips: table<created_at: string, custom_dns: record, domain: string, ip: string, pool: string, warmup: record>, name: string> {
+]: any -> oneof<record<created_at: string, ips: table<created_at: string, custom_dns: record, domain: string, ip: string, pool: string, warmup: record>, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -792,7 +815,7 @@ export def "post-ips-delete-pool-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
   --pool: string
-]: any -> record<deleted: bool, pool: string> {
+]: any -> oneof<record<deleted: bool, pool: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -830,7 +853,7 @@ export def "post-ips-delete-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ip: string
   --key: string
-]: any -> record<deleted: bool, ip: string> {
+]: any -> oneof<record<deleted: bool, ip: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -868,7 +891,7 @@ export def "post-ips-info-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ip: string
   --key: string
-]: any -> record<created_at: string, custom_dns: record<enabled: bool, error: string, valid: bool>, domain: string, ip: string, pool: string, warmup: record<end_at: string, start_at: string, warming_up: bool>> {
+]: any -> oneof<record<created_at: string, custom_dns: record<enabled: bool, error: string, valid: bool>, domain: string, ip: string, pool: string, warmup: record<end_at: string, start_at: string, warming_up: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -905,7 +928,7 @@ export def "post-ips-list-pools-json" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
-]: any -> table<created_at: string, ips: list<record>, name: string> {
+]: any -> oneof<table<created_at: string, ips: list<record>, name: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -942,7 +965,7 @@ export def "post-ips-list-json" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
-]: any -> table<created_at: string, custom_dns: record<enabled: bool, error: string, valid: bool>, domain: string, ip: string, pool: string, warmup: record<end_at: string, start_at: string, warming_up: bool>> {
+]: any -> oneof<table<created_at: string, custom_dns: record<enabled: bool, error: string, valid: bool>, domain: string, ip: string, pool: string, warmup: record<end_at: string, start_at: string, warming_up: bool>>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -980,7 +1003,7 @@ export def "post-ips-pool-info-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
   --pool: string
-]: any -> record<created_at: string, ips: table<created_at: string, custom_dns: record, domain: string, ip: string, pool: string, warmup: record>, name: string> {
+]: any -> oneof<record<created_at: string, ips: table<created_at: string, custom_dns: record, domain: string, ip: string, pool: string, warmup: record>, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1019,7 +1042,7 @@ export def "post-ips-provision-json" [
   --key: string
   --pool: string
   --warmup: oneof<nothing, bool>
-]: any -> record<requested_at: string> {
+]: any -> oneof<record<requested_at: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1058,7 +1081,7 @@ export def "post-ips-set-custom-dns-json" [
   --domain: string
   --ip: string
   --key: string
-]: any -> record<created_at: string, custom_dns: record<enabled: bool, error: string, valid: bool>, domain: string, ip: string, pool: string, warmup: record<end_at: string, start_at: string, warming_up: bool>> {
+]: any -> oneof<record<created_at: string, custom_dns: record<enabled: bool, error: string, valid: bool>, domain: string, ip: string, pool: string, warmup: record<end_at: string, start_at: string, warming_up: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1098,7 +1121,7 @@ export def "post-ips-set-pool-json" [
   --ip: string
   --key: string
   --pool: string
-]: any -> record<created_at: string, custom_dns: record<enabled: bool, error: string, valid: bool>, domain: string, ip: string, pool: string, warmup: record<end_at: string, start_at: string, warming_up: bool>> {
+]: any -> oneof<record<created_at: string, custom_dns: record<enabled: bool, error: string, valid: bool>, domain: string, ip: string, pool: string, warmup: record<end_at: string, start_at: string, warming_up: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1136,7 +1159,7 @@ export def "post-ips-start-warmup-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ip: string
   --key: string
-]: any -> record<created_at: string, custom_dns: record<enabled: bool, error: string, valid: bool>, domain: string, ip: string, pool: string, warmup: record<end_at: string, start_at: string, warming_up: bool>> {
+]: any -> oneof<record<created_at: string, custom_dns: record<enabled: bool, error: string, valid: bool>, domain: string, ip: string, pool: string, warmup: record<end_at: string, start_at: string, warming_up: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1174,7 +1197,7 @@ export def "post-messages-cancel-scheduled-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: any
   --key: string
-]: any -> record<_id: string, created_at: string, from_email: string, send_at: string, subject: string, to: string> {
+]: any -> oneof<record<_id: string, created_at: string, from_email: string, send_at: string, subject: string, to: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1212,7 +1235,7 @@ export def "post-messages-content-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: string
   --key: string
-]: any -> record<_id: string, attachments: table<content: string, name: string, type: string>, from_email: string, from_name: string, headers: record<Reply_To: string>, html: string, subject: string, tags: list<string>, text: string, to: record<email: string, name: string>, ts: int> {
+]: any -> oneof<record<_id: string, attachments: table<content: string, name: string, type: string>, from_email: string, from_name: string, headers: record<Reply_To: string>, html: string, subject: string, tags: list<string>, text: string, to: record<email: string, name: string>, ts: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1250,7 +1273,7 @@ export def "post-messages-info-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: string
   --key: string
-]: any -> record<_id: string, clicks: int, clicks_detail: table<ip: string, location: string, ts: int, ua: string, url: string>, email: string, metadata: record<user_id: string, website: string>, opens: int, opens_detail: table<ip: string, location: string, ts: int, ua: string>, sender: string, smtp_events: table<diag: string, ts: int, type: string>, state: string, subject: string, tags: list<string>, template: string, ts: int> {
+]: any -> oneof<record<_id: string, clicks: int, clicks_detail: table<ip: string, location: string, ts: int, ua: string, url: string>, email: string, metadata: record<user_id: string, website: string>, opens: int, opens_detail: table<ip: string, location: string, ts: int, ua: string>, sender: string, smtp_events: table<diag: string, ts: int, type: string>, state: string, subject: string, tags: list<string>, template: string, ts: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1288,7 +1311,7 @@ export def "post-messages-list-scheduled-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
   --to: string
-]: any -> table<_id: string, created_at: string, from_email: string, send_at: string, subject: string, to: string> {
+]: any -> oneof<table<_id: string, created_at: string, from_email: string, send_at: string, subject: string, to: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1326,7 +1349,7 @@ export def "post-messages-parse-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
   --raw-message: string
-]: any -> record<attachments: table<binary: bool, content: string, name: string, type: string>, from_email: string, from_name: string, headers: record<Reply_To: string>, html: string, images: table<content: string, name: string, type: string>, subject: string, text: string, to: table<email: string, name: string>> {
+]: any -> oneof<record<attachments: table<binary: bool, content: string, name: string, type: string>, from_email: string, from_name: string, headers: record<Reply_To: string>, html: string, images: table<content: string, name: string, type: string>, subject: string, text: string, to: table<email: string, name: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1365,7 +1388,7 @@ export def "post-messages-reschedule-json" [
   --id: string
   --key: string
   --send-at: string
-]: any -> record<_id: string, created_at: string, from_email: string, send_at: string, subject: string, to: string> {
+]: any -> oneof<record<_id: string, created_at: string, from_email: string, send_at: string, subject: string, to: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1407,7 +1430,7 @@ export def "post-messages-search-time-series-json" [
   --query: string
   --senders: list<string>
   --tags: list<string>
-]: any -> table<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, time: string, unique_clicks: int, unique_opens: int, unsubs: int> {
+]: any -> oneof<table<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, time: string, unique_clicks: int, unique_opens: int, unsubs: int>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1451,7 +1474,7 @@ export def "post-messages-search-json" [
   --query: string
   --senders: list<string>
   --tags: list<string>
-]: any -> table<_id: string, clicks: int, clicks_detail: list<record>, email: string, metadata: record<user_id: string, website: string>, opens: int, opens_detail: list<record>, sender: string, state: string, subject: string, tags: list<string>, template: string, ts: int> {
+]: any -> oneof<table<_id: string, clicks: int, clicks_detail: list<record>, email: string, metadata: record<user_id: string, website: string>, opens: int, opens_detail: list<record>, sender: string, state: string, subject: string, tags: list<string>, template: string, ts: int>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1496,7 +1519,7 @@ export def "post-messages-send-raw-json" [
   --return-path-domain: any
   --send-at: string
   --to: list<string>
-]: any -> table<_id: string, email: string, reject_reason: string, status: string> {
+]: any -> oneof<table<_id: string, email: string, reject_reason: string, status: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1522,8 +1545,6 @@ export def "post-messages-send-raw-json" [
 # Send a new transactional message through Mandrill using a template
 #
 # POST /messages/send-template.json
-# --message shape: {attachments?: list, auto_html?: any, auto_text?: any, bcc_address?: string, from_email?: string, from_name?: string, global_merge_vars?: list, google_analytics_campaign?: string, google_analytics_domains?: list<string>, headers?: record, html?: string, images?: list, important?: bool, inline_css?: any, merge?: bool, merge_vars?: list, metadata?: record, preserve_recipients?: any, recipient_metadata?: list, return_path_domain?: any, signing_domain?: any, subaccount?: string, subject?: string, ... (8 more fields)}
-# --template_content item shape: {content?: string, name?: string}
 export def "post-messages-send-template-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1541,7 +1562,7 @@ export def "post-messages-send-template-json" [
   --send-at: string
   --template-content: list # item shape: {content?: string, name?: string}
   --template-name: string
-]: any -> table<_id: string, email: string, reject_reason: string, status: string> {
+]: any -> oneof<table<_id: string, email: string, reject_reason: string, status: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1567,7 +1588,6 @@ export def "post-messages-send-template-json" [
 # Send a new transactional message through Mandrill
 #
 # POST /messages/send.json
-# --message shape: {attachments?: list, auto_html?: any, auto_text?: any, bcc_address?: string, from_email?: string, from_name?: string, global_merge_vars?: list, google_analytics_campaign?: string, google_analytics_domains?: list<string>, headers?: record, html?: string, images?: list, important?: bool, inline_css?: any, merge?: bool, merge_vars?: list, metadata?: record, preserve_recipients?: any, recipient_metadata?: list, return_path_domain?: any, signing_domain?: any, subaccount?: string, subject?: string, ... (8 more fields)}
 export def "post-messages-send-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1583,7 +1603,7 @@ export def "post-messages-send-json" [
   --key: string
   --message: record # shape: {attachments?: list, auto_html?: any, auto_text?: any, bcc_address?: string, from_email?: string, from_name?: string, global_merge_vars?: list, google_analytics_campaign?: string, google_analytics_domains?: list<string>, headers?: record, html?: string, images?: list, important?: bool, inline_css?: any, merge?: bool, merge_vars?: list, metadata?: record, preserve_recipients?: any, recipient_metadata?: list, return_path_domain?: any, signing_domain?: any, subaccount?: string, subject?: string, ... (8 more fields)}
   --send-at: string
-]: any -> table<_id: string, email: string, reject_reason: string, status: string> {
+]: any -> oneof<table<_id: string, email: string, reject_reason: string, status: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1622,7 +1642,7 @@ export def "post-metadata-add-json" [
   --key: string
   --name: string
   --view-template: string
-]: any -> record<name: string, state: string, view_template: string> {
+]: any -> oneof<record<name: string, state: string, view_template: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1660,7 +1680,7 @@ export def "post-metadata-delete-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
   --name: string
-]: any -> record<name: string, state: string, view_template: string> {
+]: any -> oneof<record<name: string, state: string, view_template: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1697,7 +1717,7 @@ export def "post-metadata-list-json" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
-]: any -> table<name: string, state: string, view_template: string> {
+]: any -> oneof<table<name: string, state: string, view_template: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1736,7 +1756,7 @@ export def "post-metadata-update-json" [
   --key: string
   --name: string
   --view-template: string
-]: any -> record<name: string, state: string, view_template: string> {
+]: any -> oneof<record<name: string, state: string, view_template: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1776,7 +1796,7 @@ export def "post-rejects-add-json" [
   --email: string
   --key: string
   --subaccount: string
-]: any -> record<added: bool, email: string> {
+]: any -> oneof<record<added: bool, email: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1815,7 +1835,7 @@ export def "post-rejects-delete-json" [
   --email: string
   --key: string
   --subaccount: string
-]: any -> record<deleted: bool, email: string, subaccount: string> {
+]: any -> oneof<record<deleted: bool, email: string, subaccount: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1855,7 +1875,7 @@ export def "post-rejects-list-json" [
   --include-expired: oneof<nothing, bool>
   --key: string
   --subaccount: string
-]: any -> table<created_at: string, detail: string, email: string, expired: bool, expires_at: string, last_event_at: string, reason: string, sender: record<address: string, clicks: int, complaints: int, created_at: string, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, unique_clicks: int, unique_opens: int, unsubs: int>, subaccount: string> {
+]: any -> oneof<table<created_at: string, detail: string, email: string, expired: bool, expires_at: string, last_event_at: string, reason: string, sender: record<address: string, clicks: int, complaints: int, created_at: string, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, unique_clicks: int, unique_opens: int, unsubs: int>, subaccount: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1893,7 +1913,7 @@ export def "post-senders-add-domain-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --domain: string
   --key: string
-]: any -> record<created_at: string, dkim: record<error: string, valid: bool, valid_after: string>, domain: string, last_tested_at: string, spf: record<error: string, valid: bool, valid_after: string>, valid_signing: bool, verified_at: string> {
+]: any -> oneof<record<created_at: string, dkim: record<error: string, valid: bool, valid_after: string>, domain: string, last_tested_at: string, spf: record<error: string, valid: bool, valid_after: string>, valid_signing: bool, verified_at: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1931,7 +1951,7 @@ export def "post-senders-check-domain-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --domain: string
   --key: string
-]: any -> record<created_at: string, dkim: record<error: string, valid: bool, valid_after: string>, domain: string, last_tested_at: string, spf: record<error: string, valid: bool, valid_after: string>, valid_signing: bool, verified_at: string> {
+]: any -> oneof<record<created_at: string, dkim: record<error: string, valid: bool, valid_after: string>, domain: string, last_tested_at: string, spf: record<error: string, valid: bool, valid_after: string>, valid_signing: bool, verified_at: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1968,7 +1988,7 @@ export def "post-senders-domains-json" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
-]: any -> table<created_at: string, dkim: record<error: string, valid: bool, valid_after: string>, domain: string, last_tested_at: string, spf: record<error: string, valid: bool, valid_after: string>, valid_signing: bool, verified_at: string> {
+]: any -> oneof<table<created_at: string, dkim: record<error: string, valid: bool, valid_after: string>, domain: string, last_tested_at: string, spf: record<error: string, valid: bool, valid_after: string>, valid_signing: bool, verified_at: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2006,7 +2026,7 @@ export def "post-senders-info-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --address: string
   --key: string
-]: any -> record<address: string, clicks: int, complaints: int, created_at: string, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, stats: record<last_30_days: record<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, unique_clicks: int, unique_opens: int, unsubs: int>, last_60_days: record<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, unique_clicks: int, unique_opens: int, unsubs: int>, last_7_days: record<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, unique_clicks: int, unique_opens: int, unsubs: int>, last_90_days: record<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, unique_clicks: int, unique_opens: int, unsubs: int>, today: record<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, unique_clicks: int, unique_opens: int, unsubs: int>>, unsubs: int> {
+]: any -> oneof<record<address: string, clicks: int, complaints: int, created_at: string, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, stats: record<last_30_days: record<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, unique_clicks: int, unique_opens: int, unsubs: int>, last_60_days: record<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, unique_clicks: int, unique_opens: int, unsubs: int>, last_7_days: record<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, unique_clicks: int, unique_opens: int, unsubs: int>, last_90_days: record<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, unique_clicks: int, unique_opens: int, unsubs: int>, today: record<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, unique_clicks: int, unique_opens: int, unsubs: int>>, unsubs: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2043,7 +2063,7 @@ export def "post-senders-list-json" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
-]: any -> table<address: string, clicks: int, complaints: int, created_at: string, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, unique_clicks: int, unique_opens: int, unsubs: int> {
+]: any -> oneof<table<address: string, clicks: int, complaints: int, created_at: string, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, unique_clicks: int, unique_opens: int, unsubs: int>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2081,7 +2101,7 @@ export def "post-senders-time-series-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --address: string
   --key: string
-]: any -> table<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, time: string, unique_clicks: int, unique_opens: int> {
+]: any -> oneof<table<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, time: string, unique_clicks: int, unique_opens: int>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2120,7 +2140,7 @@ export def "post-senders-verify-domain-json" [
   --domain: string
   --key: string
   --mailbox: string
-]: any -> record<domain: string, email: string, status: string> {
+]: any -> oneof<record<domain: string, email: string, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2161,7 +2181,7 @@ export def "post-subaccounts-add-json" [
   --key: string
   --name: string
   --notes: string
-]: any -> record<created_at: string, custom_quota: int, first_sent_at: string, id: string, name: string, reputation: int, sent_monthly: int, sent_total: int, sent_weekly: int, status: string> {
+]: any -> oneof<record<created_at: string, custom_quota: int, first_sent_at: string, id: string, name: string, reputation: int, sent_monthly: int, sent_total: int, sent_weekly: int, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2199,7 +2219,7 @@ export def "post-subaccounts-delete-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: string
   --key: string
-]: any -> record<created_at: string, custom_quota: int, first_sent_at: string, id: string, name: string, reputation: int, sent_monthly: int, sent_total: int, sent_weekly: int, status: string> {
+]: any -> oneof<record<created_at: string, custom_quota: int, first_sent_at: string, id: string, name: string, reputation: int, sent_monthly: int, sent_total: int, sent_weekly: int, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2237,7 +2257,7 @@ export def "post-subaccounts-info-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: string
   --key: string
-]: any -> record<created_at: string, custom_quota: int, first_sent_at: string, hourly_quota: int, id: string, last_30_days: record<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, unique_clicks: int, unique_opens: int, unsubs: int>, name: string, notes: string, reputation: int, sent_hourly: int, sent_monthly: int, sent_total: int, sent_weekly: int, status: string> {
+]: any -> oneof<record<created_at: string, custom_quota: int, first_sent_at: string, hourly_quota: int, id: string, last_30_days: record<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, unique_clicks: int, unique_opens: int, unsubs: int>, name: string, notes: string, reputation: int, sent_hourly: int, sent_monthly: int, sent_total: int, sent_weekly: int, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2275,7 +2295,7 @@ export def "post-subaccounts-list-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
   --q: string
-]: any -> table<created_at: string, custom_quota: int, first_sent_at: string, id: string, name: string, reputation: int, sent_monthly: int, sent_total: int, sent_weekly: int, status: string> {
+]: any -> oneof<table<created_at: string, custom_quota: int, first_sent_at: string, id: string, name: string, reputation: int, sent_monthly: int, sent_total: int, sent_weekly: int, status: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2313,7 +2333,7 @@ export def "post-subaccounts-pause-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: string
   --key: string
-]: any -> record<created_at: string, custom_quota: int, first_sent_at: string, id: string, name: string, reputation: int, sent_monthly: int, sent_total: int, sent_weekly: int, status: string> {
+]: any -> oneof<record<created_at: string, custom_quota: int, first_sent_at: string, id: string, name: string, reputation: int, sent_monthly: int, sent_total: int, sent_weekly: int, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2351,7 +2371,7 @@ export def "post-subaccounts-resume-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: string
   --key: string
-]: any -> record<created_at: string, custom_quota: int, first_sent_at: string, id: string, name: string, reputation: int, sent_monthly: int, sent_total: int, sent_weekly: int, status: string> {
+]: any -> oneof<record<created_at: string, custom_quota: int, first_sent_at: string, id: string, name: string, reputation: int, sent_monthly: int, sent_total: int, sent_weekly: int, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2392,7 +2412,7 @@ export def "post-subaccounts-update-json" [
   --key: string
   --name: string
   --notes: string
-]: any -> record<created_at: string, custom_quota: int, first_sent_at: string, id: string, name: string, reputation: int, sent_monthly: int, sent_total: int, sent_weekly: int, status: string> {
+]: any -> oneof<record<created_at: string, custom_quota: int, first_sent_at: string, id: string, name: string, reputation: int, sent_monthly: int, sent_total: int, sent_weekly: int, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2429,7 +2449,7 @@ export def "post-tags-all-time-series-json" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
-]: any -> table<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, time: string, unique_clicks: int, unique_opens: int, unsubs: int> {
+]: any -> oneof<table<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, time: string, unique_clicks: int, unique_opens: int, unsubs: int>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2467,7 +2487,7 @@ export def "post-tags-delete-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
   --tag: string
-]: any -> record<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, reputation: int, sent: int, soft_bounces: int, tag: string, unique_clicks: int, unique_opens: int, unsubs: int> {
+]: any -> oneof<record<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, reputation: int, sent: int, soft_bounces: int, tag: string, unique_clicks: int, unique_opens: int, unsubs: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2505,7 +2525,7 @@ export def "post-tags-info-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
   --tag: string
-]: any -> record<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, stats: record<last_30_days: record<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, unique_clicks: int, unique_opens: int, unsubs: int>, last_60_days: record<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, unique_clicks: int, unique_opens: int, unsubs: int>, last_7_days: record<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, unique_clicks: int, unique_opens: int, unsubs: int>, last_90_days: record<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, unique_clicks: int, unique_opens: int, unsubs: int>, today: record<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, unique_clicks: int, unique_opens: int, unsubs: int>>, tag: string, unsubs: int> {
+]: any -> oneof<record<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, stats: record<last_30_days: record<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, unique_clicks: int, unique_opens: int, unsubs: int>, last_60_days: record<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, unique_clicks: int, unique_opens: int, unsubs: int>, last_7_days: record<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, unique_clicks: int, unique_opens: int, unsubs: int>, last_90_days: record<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, unique_clicks: int, unique_opens: int, unsubs: int>, today: record<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, unique_clicks: int, unique_opens: int, unsubs: int>>, tag: string, unsubs: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2542,7 +2562,7 @@ export def "post-tags-list-json" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
-]: any -> table<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, reputation: int, sent: int, soft_bounces: int, tag: string, unique_clicks: int, unique_opens: int, unsubs: int> {
+]: any -> oneof<table<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, reputation: int, sent: int, soft_bounces: int, tag: string, unique_clicks: int, unique_opens: int, unsubs: int>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2580,7 +2600,7 @@ export def "post-tags-time-series-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
   --tag: string
-]: any -> table<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, time: string, unique_clicks: int, unique_opens: int, unsubs: int> {
+]: any -> oneof<table<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, time: string, unique_clicks: int, unique_opens: int, unsubs: int>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2625,7 +2645,7 @@ export def "post-templates-add-json" [
   --publish: oneof<nothing, bool>
   --subject: string
   --text: string
-]: any -> record<code: string, created_at: string, from_email: string, from_name: string, labels: list<string>, name: string, publish_code: string, publish_from_email: string, publish_from_name: string, publish_name: string, publish_subject: string, publish_text: string, published_at: string, slug: string, subject: string, text: string, updated_at: string> {
+]: any -> oneof<record<code: string, created_at: string, from_email: string, from_name: string, labels: list<string>, name: string, publish_code: string, publish_from_email: string, publish_from_name: string, publish_name: string, publish_subject: string, publish_text: string, published_at: string, slug: string, subject: string, text: string, updated_at: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2663,7 +2683,7 @@ export def "post-templates-delete-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
   --name: string
-]: any -> record<code: string, created_at: string, from_email: string, from_name: string, labels: list<string>, name: string, publish_code: string, publish_from_email: string, publish_from_name: string, publish_name: string, publish_subject: string, publish_text: string, published_at: string, slug: string, subject: string, text: string, updated_at: string> {
+]: any -> oneof<record<code: string, created_at: string, from_email: string, from_name: string, labels: list<string>, name: string, publish_code: string, publish_from_email: string, publish_from_name: string, publish_name: string, publish_subject: string, publish_text: string, published_at: string, slug: string, subject: string, text: string, updated_at: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2701,7 +2721,7 @@ export def "post-templates-info-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
   --name: string
-]: any -> record<code: string, created_at: string, from_email: string, from_name: string, labels: list<string>, name: string, publish_code: string, publish_from_email: string, publish_from_name: string, publish_name: string, publish_subject: string, publish_text: string, published_at: string, slug: string, subject: string, text: string, updated_at: string> {
+]: any -> oneof<record<code: string, created_at: string, from_email: string, from_name: string, labels: list<string>, name: string, publish_code: string, publish_from_email: string, publish_from_name: string, publish_name: string, publish_subject: string, publish_text: string, published_at: string, slug: string, subject: string, text: string, updated_at: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2739,7 +2759,7 @@ export def "post-templates-list-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
   --label: string
-]: any -> table<code: string, created_at: string, from_email: string, from_name: string, labels: list<string>, name: string, publish_code: string, publish_from_email: string, publish_from_name: string, publish_name: string, publish_subject: string, publish_text: string, published_at: string, slug: string, subject: string, text: string, updated_at: string> {
+]: any -> oneof<table<code: string, created_at: string, from_email: string, from_name: string, labels: list<string>, name: string, publish_code: string, publish_from_email: string, publish_from_name: string, publish_name: string, publish_subject: string, publish_text: string, published_at: string, slug: string, subject: string, text: string, updated_at: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2777,7 +2797,7 @@ export def "post-templates-publish-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
   --name: string
-]: any -> record<code: string, created_at: string, from_email: string, from_name: string, labels: list<string>, name: string, publish_code: string, publish_from_email: string, publish_from_name: string, publish_name: string, publish_subject: string, publish_text: string, published_at: string, slug: string, subject: string, text: string, updated_at: string> {
+]: any -> oneof<record<code: string, created_at: string, from_email: string, from_name: string, labels: list<string>, name: string, publish_code: string, publish_from_email: string, publish_from_name: string, publish_name: string, publish_subject: string, publish_text: string, published_at: string, slug: string, subject: string, text: string, updated_at: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2803,8 +2823,6 @@ export def "post-templates-publish-json" [
 # Inject content and optionally merge fields into a template, returning the HTML that results
 #
 # POST /templates/render.json
-# --merge_vars item shape: {content?: string, name?: string}
-# --template_content item shape: {content?: string, name?: string}
 export def "post-templates-render-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2819,7 +2837,7 @@ export def "post-templates-render-json" [
   --merge-vars: list # item shape: {content?: string, name?: string}
   --template-content: list # item shape: {content?: string, name?: string}
   --template-name: string
-]: any -> record<html: string> {
+]: any -> oneof<record<html: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2857,7 +2875,7 @@ export def "post-templates-time-series-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
   --name: string
-]: any -> table<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, time: string, unique_clicks: int, unique_opens: int> {
+]: any -> oneof<table<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, time: string, unique_clicks: int, unique_opens: int>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2902,7 +2920,7 @@ export def "post-templates-update-json" [
   --publish: oneof<nothing, bool>
   --subject: string
   --text: string
-]: any -> record<code: string, created_at: string, from_email: string, from_name: string, labels: list<string>, name: string, publish_code: string, publish_from_email: string, publish_from_name: string, publish_name: string, publish_subject: string, publish_text: string, published_at: string, slug: string, subject: string, text: string, updated_at: string> {
+]: any -> oneof<record<code: string, created_at: string, from_email: string, from_name: string, labels: list<string>, name: string, publish_code: string, publish_from_email: string, publish_from_name: string, publish_name: string, publish_subject: string, publish_text: string, published_at: string, slug: string, subject: string, text: string, updated_at: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2940,7 +2958,7 @@ export def "post-urls-add-tracking-domain-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --domain: string
   --key: string
-]: any -> record<cname: record<error: string, valid: bool, valid_after: string>, created_at: string, domain: string, last_tested_at: string, valid_tracking: bool> {
+]: any -> oneof<record<cname: record<error: string, valid: bool, valid_after: string>, created_at: string, domain: string, last_tested_at: string, valid_tracking: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2978,7 +2996,7 @@ export def "post-urls-check-tracking-domain-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --domain: string
   --key: string
-]: any -> record<cname: record<error: string, valid: bool, valid_after: string>, created_at: string, domain: string, last_tested_at: string, valid_tracking: bool> {
+]: any -> oneof<record<cname: record<error: string, valid: bool, valid_after: string>, created_at: string, domain: string, last_tested_at: string, valid_tracking: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3015,7 +3033,7 @@ export def "post-urls-list-json" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
-]: any -> table<clicks: int, sent: int, unique_clicks: int, url: string> {
+]: any -> oneof<table<clicks: int, sent: int, unique_clicks: int, url: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3053,7 +3071,7 @@ export def "post-urls-search-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
   --q: string
-]: any -> table<clicks: int, sent: int, unique_clicks: int, url: string> {
+]: any -> oneof<table<clicks: int, sent: int, unique_clicks: int, url: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3091,7 +3109,7 @@ export def "post-urls-time-series-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
   --url: string
-]: any -> table<clicks: int, sent: int, time: string, unique_clicks: int> {
+]: any -> oneof<table<clicks: int, sent: int, time: string, unique_clicks: int>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3128,7 +3146,7 @@ export def "post-urls-tracking-domains-json" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
-]: any -> table<cname: record<error: string, valid: bool, valid_after: string>, created_at: string, domain: string, last_tested_at: string, valid_tracking: bool> {
+]: any -> oneof<table<cname: record<error: string, valid: bool, valid_after: string>, created_at: string, domain: string, last_tested_at: string, valid_tracking: bool>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3165,7 +3183,7 @@ export def "post-users-info-json" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
-]: any -> record<backlog: int, created_at: string, hourly_quota: int, public_id: string, reputation: int, stats: record<all_time: record<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, unique_clicks: int, unique_opens: int, unsubs: int>, last_30_days: record<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, unique_clicks: int, unique_opens: int, unsubs: int>, last_60_days: record<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, unique_clicks: int, unique_opens: int, unsubs: int>, last_7_days: record<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, unique_clicks: int, unique_opens: int, unsubs: int>, last_90_days: record<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, unique_clicks: int, unique_opens: int, unsubs: int>, today: record<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, unique_clicks: int, unique_opens: int, unsubs: int>>, username: string> {
+]: any -> oneof<record<backlog: int, created_at: string, hourly_quota: int, public_id: string, reputation: int, stats: record<all_time: record<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, unique_clicks: int, unique_opens: int, unsubs: int>, last_30_days: record<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, unique_clicks: int, unique_opens: int, unsubs: int>, last_60_days: record<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, unique_clicks: int, unique_opens: int, unsubs: int>, last_7_days: record<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, unique_clicks: int, unique_opens: int, unsubs: int>, last_90_days: record<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, unique_clicks: int, unique_opens: int, unsubs: int>, today: record<clicks: int, complaints: int, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, unique_clicks: int, unique_opens: int, unsubs: int>>, username: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3239,7 +3257,7 @@ export def "post-users-ping2-json" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
-]: any -> record<PING: string> {
+]: any -> oneof<record<PING: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3276,7 +3294,7 @@ export def "post-users-senders-json" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
-]: any -> table<address: string, clicks: int, complaints: int, created_at: string, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, unique_clicks: int, unique_opens: int, unsubs: int> {
+]: any -> oneof<table<address: string, clicks: int, complaints: int, created_at: string, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, unique_clicks: int, unique_opens: int, unsubs: int>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3316,7 +3334,7 @@ export def "post-webhooks-add-json" [
   --events: list<string>
   --key: string
   --url: string
-]: any -> record<auth_key: string, batches_sent: int, created_at: string, description: string, events: list<string>, events_sent: int, id: int, last_error: string, last_sent_at: string, url: string> {
+]: any -> oneof<record<auth_key: string, batches_sent: int, created_at: string, description: string, events: list<string>, events_sent: int, id: int, last_error: string, last_sent_at: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3354,7 +3372,7 @@ export def "post-webhooks-delete-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: int
   --key: string
-]: any -> record<auth_key: string, batches_sent: int, created_at: string, description: string, events: list<string>, events_sent: int, id: int, last_error: string, last_sent_at: string, url: string> {
+]: any -> oneof<record<auth_key: string, batches_sent: int, created_at: string, description: string, events: list<string>, events_sent: int, id: int, last_error: string, last_sent_at: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3392,7 +3410,7 @@ export def "post-webhooks-info-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: int
   --key: string
-]: any -> record<auth_key: string, batches_sent: int, created_at: string, description: string, events: list<string>, events_sent: int, id: int, last_error: string, last_sent_at: string, url: string> {
+]: any -> oneof<record<auth_key: string, batches_sent: int, created_at: string, description: string, events: list<string>, events_sent: int, id: int, last_error: string, last_sent_at: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3429,7 +3447,7 @@ export def "post-webhooks-list-json" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
-]: any -> table<auth_key: string, batches_sent: int, created_at: string, description: string, events: list<string>, events_sent: int, id: int, last_error: string, last_sent_at: string, url: string> {
+]: any -> oneof<table<auth_key: string, batches_sent: int, created_at: string, description: string, events: list<string>, events_sent: int, id: int, last_error: string, last_sent_at: string, url: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3470,7 +3488,7 @@ export def "post-webhooks-update-json" [
   --id: int
   --key: string
   --url: string
-]: any -> record<auth_key: string, batches_sent: int, created_at: string, description: string, events: list<string>, events_sent: int, id: int, last_error: string, last_sent_at: string, url: string> {
+]: any -> oneof<record<auth_key: string, batches_sent: int, created_at: string, description: string, events: list<string>, events_sent: int, id: int, last_error: string, last_sent_at: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3508,7 +3526,7 @@ export def "post-whitelists-add-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --email: string
   --key: string
-]: any -> record<email: string, whether: bool> {
+]: any -> oneof<record<email: string, whether: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3546,7 +3564,7 @@ export def "post-whitelists-delete-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --email: string
   --key: string
-]: any -> record<deleted: bool, email: string> {
+]: any -> oneof<record<deleted: bool, email: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3584,7 +3602,7 @@ export def "post-whitelists-list-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --email: string
   --key: string
-]: any -> table<created_at: string, detail: string, email: string> {
+]: any -> oneof<table<created_at: string, detail: string, email: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

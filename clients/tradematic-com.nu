@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "x-api-key" => { {scheme: $scheme, headers: {"X-API-Key": $token_val}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -116,9 +140,9 @@ def auth-scheme-completer [] { ["x-api-key"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-autofollow-strategies" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-autofollow-strategies" "post-autofollow-strategies" "get-autofollow-strategies-strategyid" "put-autofollow-strategies-strategyid" "put-autofollow-strategies-strategyid-content" "get-autofollow-strategies-strategyid-positions" "get-autofollow-strategies-strategyid-signals" "post-autofollow-strategies-strategyid-signals" "get-builder-rules" "get-builder-rules-ruleid" "get-client-apikeys" "post-client-apikeys" "delete-client-apikeys-keyid" "get-client-users" "post-client-users-login" "post-client-users-register" "get-client-users-userid" "get-cloud-accounts" "get-cloud-accounts-accountid" "post-cloud-accounts-accountid-closeall" "get-cloud-accounts-accountid-orders" "post-cloud-accounts-accountid-orders" "delete-cloud-accounts-accountid-orders-orderid" "get-cloud-accounts-accountid-snapshots" "post-cloud-accounts-accountid-sync" "get-cloud-accounts-accountid-trades" "get-cloud-commands" "get-cloud-commands-commandid" "get-cloud-connections" "post-cloud-connections" "delete-cloud-connections-connectionid" "get-cloud-connections-connectionid" "put-cloud-connections-connectionid" "get-cloud-connectors" "get-cloud-connectors-connectorid" "get-cloud-sessions" "get-cloud-sessions-sessionid" "get-cloud-strategies" "post-cloud-strategies-start" "get-cloud-strategies-strategyid" "post-cloud-strategies-strategyid-stop" "get-marketdata-markets" "get-marketdata-markets-marketid" "get-marketdata-symbols" "get-marketdata-symbols-symbolid" "get-marketdata-symbols-symbolid-histdata" "get-news-news" "get-news-news-newsid" "get-ping" "get-taskmanager-tasks" "post-taskmanager-tasks" "get-taskmanager-tasks-taskid" "get-taskmanager-tasks-taskid-bymonths" "get-taskmanager-tasks-taskid-byquarters" "get-taskmanager-tasks-taskid-byyears" "get-taskmanager-tasks-taskid-contribution" "get-taskmanager-tasks-taskid-drawdown" "get-taskmanager-tasks-taskid-equity" "get-taskmanager-tasks-taskid-equitypct" "get-taskmanager-tasks-taskid-equitypctsm" "get-taskmanager-tasks-taskid-folder" "get-taskmanager-tasks-taskid-performance" "get-taskmanager-tasks-taskid-result" "get-taskmanager-tasks-taskid-result2" "get-taskmanager-tasks-taskid-status" "get-taskmanager-tasks-taskid-trades" "get-time" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -149,7 +173,7 @@ export def "get-autofollow-strategies" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<apr: string, author: string, brokername: string, code: string, datascale: string, description: string, drawdown: string, folder: string, guid: string, image: string, limitorder: string, marketname: string, multiposition: string, name: string, owner: string, permissions: string, positionsize: string, risklevelcode: string, risklevelid: string, risklevelname: string, rules: record<longentry: list, longexit: list>, strategyid: string, strategytypeid: string, symbols: list<string>, taskfolder: string, taskid: string, taskresult: record<apr: string, curMonthProfit: string, curYearProfit: string, drawdown: string, halfYearProfit: string, monthProfit: string, prevMonthProfit: string, totalProfit: string, weekProfit: string, yearProfit: string>, timeframe: string, updatedate: string, url: string> {
+]: nothing -> oneof<table<apr: string, author: string, brokername: string, code: string, datascale: string, description: string, drawdown: string, folder: string, guid: string, image: string, limitorder: string, marketname: string, multiposition: string, name: string, owner: string, permissions: string, positionsize: string, risklevelcode: string, risklevelid: string, risklevelname: string, rules: record<longentry: list, longexit: list>, strategyid: string, strategytypeid: string, symbols: list<string>, taskfolder: string, taskid: string, taskresult: record<apr: string, curMonthProfit: string, curYearProfit: string, drawdown: string, halfYearProfit: string, monthProfit: string, prevMonthProfit: string, totalProfit: string, weekProfit: string, yearProfit: string>, timeframe: string, updatedate: string, url: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/autofollow/strategies" $auth.query)
@@ -172,7 +196,6 @@ export def "get-autofollow-strategies" [
 # Create new autofollow strategy
 #
 # POST /autofollow/strategies
-# --strategy shape: {apr?: string, author?: string, content?: string, description?: string, drawdown?: string, guid?: string, limitorder?: string, marketname?: string, multiposition?: string, name?: string, positionsize?: string, strategytypeid?: string, symbols?: string, timeframe?: string}
 export def "post-autofollow-strategies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -184,7 +207,7 @@ export def "post-autofollow-strategies" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --strategy: record # shape: {apr?: string, author?: string, content?: string, description?: string, drawdown?: string, guid?: string, limitorder?: string, marketname?: string, multiposition?: string, name?: string, positionsize?: string, strategytypeid?: string, symbols?: string, timeframe?: string}
-]: any -> record<strategyid: int> {
+]: any -> oneof<record<strategyid: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -221,7 +244,7 @@ export def "get-autofollow-strategies-strategyid" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<apr: string, author: string, brokername: string, code: string, datascale: string, description: string, drawdown: string, folder: string, guid: string, image: string, limitorder: string, marketname: string, multiposition: string, name: string, owner: string, permissions: string, positionsize: string, risklevelcode: string, risklevelid: string, risklevelname: string, rules: record<longentry: list<record>, longexit: list<record>>, strategyid: string, strategytypeid: string, symbols: list<string>, taskfolder: string, taskid: string, taskresult: record<apr: string, curMonthProfit: string, curYearProfit: string, drawdown: string, halfYearProfit: string, monthProfit: string, prevMonthProfit: string, totalProfit: string, weekProfit: string, yearProfit: string>, timeframe: string, updatedate: string, url: string> {
+]: nothing -> oneof<record<apr: string, author: string, brokername: string, code: string, datascale: string, description: string, drawdown: string, folder: string, guid: string, image: string, limitorder: string, marketname: string, multiposition: string, name: string, owner: string, permissions: string, positionsize: string, risklevelcode: string, risklevelid: string, risklevelname: string, rules: record<longentry: list<record>, longexit: list<record>>, strategyid: string, strategytypeid: string, symbols: list<string>, taskfolder: string, taskid: string, taskresult: record<apr: string, curMonthProfit: string, curYearProfit: string, drawdown: string, halfYearProfit: string, monthProfit: string, prevMonthProfit: string, totalProfit: string, weekProfit: string, yearProfit: string>, timeframe: string, updatedate: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($strategyid | is-empty) { error make --unspanned { msg: "path parameter 'strategyid' must be non-empty" } }
@@ -245,7 +268,6 @@ export def "get-autofollow-strategies-strategyid" [
 # Update autofollow strategy
 #
 # PUT /autofollow/strategies/{strategyid}
-# --strategy shape: {author?: string, description?: string, limitorder?: string, marketname?: string, multiposition?: string, name?: string, symbols?: string}
 export def "put-autofollow-strategies-strategyid" [
   strategyid: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -258,7 +280,7 @@ export def "put-autofollow-strategies-strategyid" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --strategy: record # shape: {author?: string, description?: string, limitorder?: string, marketname?: string, multiposition?: string, name?: string, symbols?: string}
-]: any -> record<result: string> {
+]: any -> oneof<record<result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -285,7 +307,6 @@ export def "put-autofollow-strategies-strategyid" [
 # Update rules for strategy that was created with strategy builder
 #
 # PUT /autofollow/strategies/{strategyid}/content
-# --strategy shape: {rules?: record}
 export def "put-autofollow-strategies-strategyid-content" [
   strategyid: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -298,7 +319,7 @@ export def "put-autofollow-strategies-strategyid-content" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --strategy: record # shape: {rules?: record}
-]: any -> record<strategyid: string> {
+]: any -> oneof<record<strategyid: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -336,7 +357,7 @@ export def "get-autofollow-strategies-strategyid-positions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<date: string, price: string, size: string, symbol: string> {
+]: nothing -> oneof<table<date: string, price: string, size: string, symbol: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($strategyid | is-empty) { error make --unspanned { msg: "path parameter 'strategyid' must be non-empty" } }
@@ -372,7 +393,7 @@ export def "get-autofollow-strategies-strategyid-signals" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --count: int # required, format: int64
-]: nothing -> table<position: string, price: string, shares: string, signalid: string, size: string, symbol: string, timestamp: string, type: string> {
+]: nothing -> oneof<table<position: string, price: string, shares: string, signalid: string, size: string, symbol: string, timestamp: string, type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($strategyid | is-empty) { error make --unspanned { msg: "path parameter 'strategyid' must be non-empty" } }
@@ -398,7 +419,6 @@ export def "get-autofollow-strategies-strategyid-signals" [
 # Send a new signal for autofollow strategy
 #
 # POST /autofollow/strategies/{strategyid}/signals
-# --signal shape: {position?: string, price?: string, shares?: string, size?: string, symbol?: string, timestamp?: string, type?: string}
 export def "post-autofollow-strategies-strategyid-signals" [
   strategyid: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -411,7 +431,7 @@ export def "post-autofollow-strategies-strategyid-signals" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --signal: record # shape: {position?: string, price?: string, shares?: string, size?: string, symbol?: string, timestamp?: string, type?: string}
-]: any -> record<signalid: string> {
+]: any -> oneof<record<signalid: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -448,7 +468,7 @@ export def "get-builder-rules" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<category: string, description: string, guid: string, name: string, parameters: list<record>, ruletype: string, validnot: string, validor: string> {
+]: nothing -> oneof<table<category: string, description: string, guid: string, name: string, parameters: list<record>, ruletype: string, validnot: string, validor: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/builder/rules" $auth.query)
@@ -482,7 +502,7 @@ export def "get-builder-rules-ruleid" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<category: string, description: string, guid: string, name: string, parameters: list<record>, ruletype: string, validnot: string, validor: string> {
+]: nothing -> oneof<table<category: string, description: string, guid: string, name: string, parameters: list<record>, ruletype: string, validnot: string, validor: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($ruleid | is-empty) { error make --unspanned { msg: "path parameter 'ruleid' must be non-empty" } }
@@ -516,7 +536,7 @@ export def "get-client-apikeys" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<key: string, keyid: string, permissions: string> {
+]: nothing -> oneof<table<key: string, keyid: string, permissions: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/client/apikeys" $auth.query)
@@ -549,7 +569,7 @@ export def "post-client-apikeys" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<key: string, keyid: int> {
+]: nothing -> oneof<record<key: string, keyid: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/client/apikeys" $auth.query)
@@ -583,7 +603,7 @@ export def "delete-client-apikeys-keyid" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<keyid: int> {
+]: nothing -> oneof<record<keyid: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($keyid | is-empty) { error make --unspanned { msg: "path parameter 'keyid' must be non-empty" } }
@@ -617,7 +637,7 @@ export def "get-client-users" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<comments: string, createdby: string, name: string, regdate: string, userid: string, username: string> {
+]: nothing -> oneof<table<comments: string, createdby: string, name: string, regdate: string, userid: string, username: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/client/users" $auth.query)
@@ -650,7 +670,7 @@ export def "post-client-users-login" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<name: string, userid: int> {
+]: nothing -> oneof<record<name: string, userid: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/client/users/login" $auth.query)
@@ -673,7 +693,6 @@ export def "post-client-users-login" [
 # Register a new user
 #
 # POST /client/users/register
-# --user shape: {name?: string, password?: string, username?: string}
 export def "post-client-users-register" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -685,7 +704,7 @@ export def "post-client-users-register" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --user: record # shape: {name?: string, password?: string, username?: string}
-]: any -> record<userid: int> {
+]: any -> oneof<record<userid: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -722,7 +741,7 @@ export def "get-client-users-userid" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<comments: string, createdby: string, name: string, regdate: string, userid: string, username: string> {
+]: nothing -> oneof<record<comments: string, createdby: string, name: string, regdate: string, userid: string, username: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($userid | is-empty) { error make --unspanned { msg: "path parameter 'userid' must be non-empty" } }
@@ -756,7 +775,7 @@ export def "get-cloud-accounts" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<account: string, accountid: string, accounttypename: string, cash: string, change: string, changepercent: string, comments: string, computer: string, currencyid: string, currencytext: string, hwid: string, positions: record, positionspercent: record, sessionid: string, typeid: string, value: string> {
+]: nothing -> oneof<table<account: string, accountid: string, accounttypename: string, cash: string, change: string, changepercent: string, comments: string, computer: string, currencyid: string, currencytext: string, hwid: string, positions: record, positionspercent: record, sessionid: string, typeid: string, value: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cloud/accounts" $auth.query)
@@ -790,7 +809,7 @@ export def "get-cloud-accounts-accountid" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account: string, accountid: string, accounttypename: string, cash: string, change: string, changepercent: string, comments: string, computer: string, currencyid: string, currencytext: string, hwid: string, positions: record, positionspercent: record, sessionid: string, typeid: string, value: string> {
+]: nothing -> oneof<record<account: string, accountid: string, accounttypename: string, cash: string, change: string, changepercent: string, comments: string, computer: string, currencyid: string, currencytext: string, hwid: string, positions: record, positionspercent: record, sessionid: string, typeid: string, value: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($accountid | is-empty) { error make --unspanned { msg: "path parameter 'accountid' must be non-empty" } }
@@ -825,7 +844,7 @@ export def "post-cloud-accounts-accountid-closeall" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<commandid: int> {
+]: nothing -> oneof<record<commandid: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($accountid | is-empty) { error make --unspanned { msg: "path parameter 'accountid' must be non-empty" } }
@@ -860,7 +879,7 @@ export def "get-cloud-accounts-accountid-orders" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<account: string, buy: string, message: string, number: string, orderid: string, price: string, shares: string, status: string, statusname: string, symbol: string, timestamp: string> {
+]: nothing -> oneof<table<account: string, buy: string, message: string, number: string, orderid: string, price: string, shares: string, status: string, statusname: string, symbol: string, timestamp: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($accountid | is-empty) { error make --unspanned { msg: "path parameter 'accountid' must be non-empty" } }
@@ -884,7 +903,6 @@ export def "get-cloud-accounts-accountid-orders" [
 # Place a new order
 #
 # POST /cloud/accounts/{accountid}/orders
-# --order shape: {buy?: string, price?: string, shares?: string, symbol?: string, type?: string}
 export def "post-cloud-accounts-accountid-orders" [
   accountid: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -897,7 +915,7 @@ export def "post-cloud-accounts-accountid-orders" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --order: record # shape: {buy?: string, price?: string, shares?: string, symbol?: string, type?: string}
-]: any -> record<commandid: int> {
+]: any -> oneof<record<commandid: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -936,7 +954,7 @@ export def "delete-cloud-accounts-accountid-orders-orderid" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<commandid: int> {
+]: nothing -> oneof<record<commandid: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($accountid | is-empty) { error make --unspanned { msg: "path parameter 'accountid' must be non-empty" } }
@@ -972,7 +990,7 @@ export def "get-cloud-accounts-accountid-snapshots" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<cash: string, daynum: string, snapshotid: string, timestamp: string, value: string> {
+]: nothing -> oneof<table<cash: string, daynum: string, snapshotid: string, timestamp: string, value: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($accountid | is-empty) { error make --unspanned { msg: "path parameter 'accountid' must be non-empty" } }
@@ -1007,7 +1025,7 @@ export def "post-cloud-accounts-accountid-sync" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<commandid: int> {
+]: nothing -> oneof<record<commandid: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($accountid | is-empty) { error make --unspanned { msg: "path parameter 'accountid' must be non-empty" } }
@@ -1042,7 +1060,7 @@ export def "get-cloud-accounts-accountid-trades" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<account: string, buy: string, number: string, price: string, shares: string, symbol: string, timestamp: string, tradeid: string> {
+]: nothing -> oneof<table<account: string, buy: string, number: string, price: string, shares: string, symbol: string, timestamp: string, tradeid: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($accountid | is-empty) { error make --unspanned { msg: "path parameter 'accountid' must be non-empty" } }
@@ -1076,7 +1094,7 @@ export def "get-cloud-commands" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<account: string, accountid: string, commanddate: string, commandid: string, commandstatusname: string, commandtypename: string, computer: string, hwid: string, message: string, parameters: record, status: string, timestamp: string, type: string> {
+]: nothing -> oneof<table<account: string, accountid: string, commanddate: string, commandid: string, commandstatusname: string, commandtypename: string, computer: string, hwid: string, message: string, parameters: record, status: string, timestamp: string, type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cloud/commands" $auth.query)
@@ -1110,7 +1128,7 @@ export def "get-cloud-commands-commandid" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account: string, accountid: string, commanddate: string, commandid: string, commandstatusname: string, commandtypename: string, computer: string, hwid: string, message: string, parameters: record, status: string, timestamp: string, type: string> {
+]: nothing -> oneof<record<account: string, accountid: string, commanddate: string, commandid: string, commandstatusname: string, commandtypename: string, computer: string, hwid: string, message: string, parameters: record, status: string, timestamp: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($commandid | is-empty) { error make --unspanned { msg: "path parameter 'commandid' must be non-empty" } }
@@ -1144,7 +1162,7 @@ export def "get-cloud-connections" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<active: string, connectionid: string, connectionstring: string, connectorcode: string, connectorid: string, connectorname: string, connectortypename: string, creationdate: string, host: string, login: string, password: string, port: string, sessionid: string, updatedate: string> {
+]: nothing -> oneof<table<active: string, connectionid: string, connectionstring: string, connectorcode: string, connectorid: string, connectorname: string, connectortypename: string, creationdate: string, host: string, login: string, password: string, port: string, sessionid: string, updatedate: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cloud/connections" $auth.query)
@@ -1167,7 +1185,6 @@ export def "get-cloud-connections" [
 # Create a new connection
 #
 # POST /cloud/connections
-# --connection shape: {active?: string, connectorid?: string, host?: string, login?: string, password?: string, port?: string}
 export def "post-cloud-connections" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1179,7 +1196,7 @@ export def "post-cloud-connections" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --connection: record # shape: {active?: string, connectorid?: string, host?: string, login?: string, password?: string, port?: string}
-]: any -> record<connectionid: int> {
+]: any -> oneof<record<connectionid: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1216,7 +1233,7 @@ export def "delete-cloud-connections-connectionid" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<connectionid: int> {
+]: nothing -> oneof<record<connectionid: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($connectionid | is-empty) { error make --unspanned { msg: "path parameter 'connectionid' must be non-empty" } }
@@ -1251,7 +1268,7 @@ export def "get-cloud-connections-connectionid" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<active: string, connectionid: string, connectionstring: string, connectorcode: string, connectorid: string, connectorname: string, connectortypename: string, creationdate: string, host: string, login: string, password: string, port: string, sessionid: string, updatedate: string> {
+]: nothing -> oneof<record<active: string, connectionid: string, connectionstring: string, connectorcode: string, connectorid: string, connectorname: string, connectortypename: string, creationdate: string, host: string, login: string, password: string, port: string, sessionid: string, updatedate: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($connectionid | is-empty) { error make --unspanned { msg: "path parameter 'connectionid' must be non-empty" } }
@@ -1275,7 +1292,6 @@ export def "get-cloud-connections-connectionid" [
 # Update existing connection
 #
 # PUT /cloud/connections/{connectionid}
-# --connection shape: {active?: string, connectorid?: string, host?: string, login?: string, password?: string, port?: string}
 export def "put-cloud-connections-connectionid" [
   connectionid: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1288,7 +1304,7 @@ export def "put-cloud-connections-connectionid" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --connection: record # shape: {active?: string, connectorid?: string, host?: string, login?: string, password?: string, port?: string}
-]: any -> record<connectionid: int> {
+]: any -> oneof<record<connectionid: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1325,7 +1341,7 @@ export def "get-cloud-connectors" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<code: string, connectorid: string, connectortypename: string, name: string, typeid: string> {
+]: nothing -> oneof<table<code: string, connectorid: string, connectortypename: string, name: string, typeid: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cloud/connectors" $auth.query)
@@ -1359,7 +1375,7 @@ export def "get-cloud-connectors-connectorid" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: string, connectorid: string, connectortypename: string, name: string, typeid: string> {
+]: nothing -> oneof<record<code: string, connectorid: string, connectortypename: string, name: string, typeid: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($connectorid | is-empty) { error make --unspanned { msg: "path parameter 'connectorid' must be non-empty" } }
@@ -1393,7 +1409,7 @@ export def "get-cloud-sessions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<computer: string, hwid: string, login: string, mode: string, sessionid: string, sessionmodename: string, sessionstatusname: string, status: string, timestamp: string, type: string, userid: string> {
+]: nothing -> oneof<table<computer: string, hwid: string, login: string, mode: string, sessionid: string, sessionmodename: string, sessionstatusname: string, status: string, timestamp: string, type: string, userid: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cloud/sessions" $auth.query)
@@ -1427,7 +1443,7 @@ export def "get-cloud-sessions-sessionid" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<computer: string, hwid: string, login: string, mode: string, sessionid: string, sessionmodename: string, sessionstatusname: string, status: string, timestamp: string, type: string, userid: string> {
+]: nothing -> oneof<record<computer: string, hwid: string, login: string, mode: string, sessionid: string, sessionmodename: string, sessionstatusname: string, status: string, timestamp: string, type: string, userid: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($sessionid | is-empty) { error make --unspanned { msg: "path parameter 'sessionid' must be non-empty" } }
@@ -1461,7 +1477,7 @@ export def "get-cloud-strategies" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<account: string, computer: string, hwid: string, message: string, status: string, strategy: string, strategyid: string, strategystatusname: string> {
+]: nothing -> oneof<table<account: string, computer: string, hwid: string, message: string, status: string, strategy: string, strategyid: string, strategystatusname: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cloud/strategies" $auth.query)
@@ -1484,7 +1500,6 @@ export def "get-cloud-strategies" [
 # Start a strategy execution for account
 #
 # POST /cloud/strategies/start
-# --data shape: {accountid?: string, strategyid?: string}
 export def "post-cloud-strategies-start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1496,7 +1511,7 @@ export def "post-cloud-strategies-start" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --data: record # shape: {accountid?: string, strategyid?: string}
-]: any -> record<commandid: int> {
+]: any -> oneof<record<commandid: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1533,7 +1548,7 @@ export def "get-cloud-strategies-strategyid" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<account: string, computer: string, hwid: string, message: string, status: string, strategy: string, strategyid: string, strategystatusname: string> {
+]: nothing -> oneof<table<account: string, computer: string, hwid: string, message: string, status: string, strategy: string, strategyid: string, strategystatusname: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($strategyid | is-empty) { error make --unspanned { msg: "path parameter 'strategyid' must be non-empty" } }
@@ -1568,7 +1583,7 @@ export def "post-cloud-strategies-strategyid-stop" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<commandid: int> {
+]: nothing -> oneof<record<commandid: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($strategyid | is-empty) { error make --unspanned { msg: "path parameter 'strategyid' must be non-empty" } }
@@ -1602,7 +1617,7 @@ export def "get-marketdata-markets" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<code: string, countryid: string, marketid: string, name: string> {
+]: nothing -> oneof<table<code: string, countryid: string, marketid: string, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/marketdata/markets" $auth.query)
@@ -1636,7 +1651,7 @@ export def "get-marketdata-markets-marketid" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: string, countryid: string, marketid: string, name: string> {
+]: nothing -> oneof<record<code: string, countryid: string, marketid: string, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($marketid | is-empty) { error make --unspanned { msg: "path parameter 'marketid' must be non-empty" } }
@@ -1672,7 +1687,7 @@ export def "get-marketdata-symbols" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --marketid: int # required, format: int64
   --filter: int # required, format: int64
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($marketid == null) { error make --unspanned { msg: "required query parameter 'marketid' missing: pass --marketid" } }
@@ -1747,7 +1762,7 @@ export def "get-marketdata-symbols-symbolid-histdata" [
   --tf: int # required, format: int64
   --from: int # required, format: int64
   --to: int # required, format: int64
-]: nothing -> record<adjusted: bool, queryCount: int, results: table<c: float, h: float, l: float, n: int, o: float, t: int, v: int>, resultsCount: int, status: string, ticker: string> {
+]: nothing -> oneof<record<adjusted: bool, queryCount: int, results: table<c: float, h: float, l: float, n: int, o: float, t: int, v: int>, resultsCount: int, status: string, ticker: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($symbolid | is-empty) { error make --unspanned { msg: "path parameter 'symbolid' must be non-empty" } }
@@ -1785,7 +1800,7 @@ export def "get-news-news" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<body: string, newsid: string, source: string, timestamp: string, title: string> {
+]: nothing -> oneof<table<body: string, newsid: string, source: string, timestamp: string, title: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/news/news" $auth.query)
@@ -1819,7 +1834,7 @@ export def "get-news-news-newsid" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<body: string, newsid: string, source: string, timestamp: string, title: string> {
+]: nothing -> oneof<record<body: string, newsid: string, source: string, timestamp: string, title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($newsid | is-empty) { error make --unspanned { msg: "path parameter 'newsid' must be non-empty" } }
@@ -1853,7 +1868,7 @@ export def "get-ping" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ping" $auth.query)
@@ -1886,7 +1901,7 @@ export def "get-taskmanager-tasks" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<isbenchmark: string, name: string, status: string, statusupdatedate: string, strategyid: string, taskid: string, usestaticdata: string> {
+]: nothing -> oneof<table<isbenchmark: string, name: string, status: string, statusupdatedate: string, strategyid: string, taskid: string, usestaticdata: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/taskmanager/tasks" $auth.query)
@@ -1909,7 +1924,6 @@ export def "get-taskmanager-tasks" [
 # Create a new task
 #
 # POST /taskmanager/tasks
-# --task shape: {isbenchmark?: string, strategyid?: string, tasktypeid?: string, userid2?: string}
 export def "post-taskmanager-tasks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1921,7 +1935,7 @@ export def "post-taskmanager-tasks" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --task: record # shape: {isbenchmark?: string, strategyid?: string, tasktypeid?: string, userid2?: string}
-]: any -> record<taskid: string> {
+]: any -> oneof<record<taskid: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1958,7 +1972,7 @@ export def "get-taskmanager-tasks-taskid" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<isbenchmark: string, name: string, status: string, statusupdatedate: string, strategyid: string, taskid: string, usestaticdata: string> {
+]: nothing -> oneof<record<isbenchmark: string, name: string, status: string, statusupdatedate: string, strategyid: string, taskid: string, usestaticdata: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($taskid | is-empty) { error make --unspanned { msg: "path parameter 'taskid' must be non-empty" } }
@@ -1993,7 +2007,7 @@ export def "get-taskmanager-tasks-taskid-bymonths" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<equitypct: string, period: string> {
+]: nothing -> oneof<table<equitypct: string, period: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($taskid | is-empty) { error make --unspanned { msg: "path parameter 'taskid' must be non-empty" } }
@@ -2028,7 +2042,7 @@ export def "get-taskmanager-tasks-taskid-byquarters" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<equitypct: string, period: string> {
+]: nothing -> oneof<table<equitypct: string, period: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($taskid | is-empty) { error make --unspanned { msg: "path parameter 'taskid' must be non-empty" } }
@@ -2063,7 +2077,7 @@ export def "get-taskmanager-tasks-taskid-byyears" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<equitypct: string, period: string> {
+]: nothing -> oneof<table<equitypct: string, period: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($taskid | is-empty) { error make --unspanned { msg: "path parameter 'taskid' must be non-empty" } }
@@ -2098,7 +2112,7 @@ export def "get-taskmanager-tasks-taskid-contribution" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<pandl: string, share: string, symbol: string> {
+]: nothing -> oneof<table<pandl: string, share: string, symbol: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($taskid | is-empty) { error make --unspanned { msg: "path parameter 'taskid' must be non-empty" } }
@@ -2133,7 +2147,7 @@ export def "get-taskmanager-tasks-taskid-drawdown" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<drawdownpct: string, timestamp: string> {
+]: nothing -> oneof<table<drawdownpct: string, timestamp: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($taskid | is-empty) { error make --unspanned { msg: "path parameter 'taskid' must be non-empty" } }
@@ -2168,7 +2182,7 @@ export def "get-taskmanager-tasks-taskid-equity" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<cash: string, equity: string, timestamp: string> {
+]: nothing -> oneof<table<cash: string, equity: string, timestamp: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($taskid | is-empty) { error make --unspanned { msg: "path parameter 'taskid' must be non-empty" } }
@@ -2203,7 +2217,7 @@ export def "get-taskmanager-tasks-taskid-equitypct" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<buyandhold: string, equity: string, timestamp: string> {
+]: nothing -> oneof<table<buyandhold: string, equity: string, timestamp: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($taskid | is-empty) { error make --unspanned { msg: "path parameter 'taskid' must be non-empty" } }
@@ -2238,7 +2252,7 @@ export def "get-taskmanager-tasks-taskid-equitypctsm" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<buyandhold: string, equity: string, timestamp: string> {
+]: nothing -> oneof<table<buyandhold: string, equity: string, timestamp: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($taskid | is-empty) { error make --unspanned { msg: "path parameter 'taskid' must be non-empty" } }
@@ -2273,7 +2287,7 @@ export def "get-taskmanager-tasks-taskid-folder" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<folder: string> {
+]: nothing -> oneof<record<folder: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($taskid | is-empty) { error make --unspanned { msg: "path parameter 'taskid' must be non-empty" } }
@@ -2308,7 +2322,7 @@ export def "get-taskmanager-tasks-taskid-performance" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<buyandhold: record<apr: string, avgbarsheld: string, avgloss: string, avglossbarsheld: string, avglosspct: string, avgprofit: string, avgprofitavgloss: string, avgprofitbarsheld: string, avgprofitpct: string, endcapital: string, exposure: string, grossloss: string, grossprofit: string, losingtrades: string, losingtradespct: string, mar: string, margininterest: string, maxconsecloss: string, maxconsecwin: string, maxdrawdown: string, maxdrawdowndate: string, maxdrawdownlength: string, maxdrawdownpct: string, maxdrawdownpctdate: string, mpr: string, netprofit: string, netprofitpct: string, profitabletrades: string, profitabletradespct: string, profitfactor: string, profitriskratio: string, rar: string, recoveryfactor: string, sharperatio: string, sortinoratio: string, startcapital: string, totalcommission: string, totaltrades: string, totalvolume: string, turnover: string>, long: record<apr: string, avgbarsheld: string, avgloss: string, avglossbarsheld: string, avglosspct: string, avgprofit: string, avgprofitavgloss: string, avgprofitbarsheld: string, avgprofitpct: string, endcapital: string, exposure: string, grossloss: string, grossprofit: string, losingtrades: string, losingtradespct: string, mar: string, margininterest: string, maxconsecloss: string, maxconsecwin: string, maxdrawdown: string, maxdrawdowndate: string, maxdrawdownlength: string, maxdrawdownpct: string, maxdrawdownpctdate: string, mpr: string, netprofit: string, netprofitpct: string, profitabletrades: string, profitabletradespct: string, profitfactor: string, profitriskratio: string, rar: string, recoveryfactor: string, sharperatio: string, sortinoratio: string, startcapital: string, totalcommission: string, totaltrades: string, totalvolume: string, turnover: string>, longshort: record<apr: string, avgbarsheld: string, avgloss: string, avglossbarsheld: string, avglosspct: string, avgprofit: string, avgprofitavgloss: string, avgprofitbarsheld: string, avgprofitpct: string, endcapital: string, exposure: string, grossloss: string, grossprofit: string, losingtrades: string, losingtradespct: string, mar: string, margininterest: string, maxconsecloss: string, maxconsecwin: string, maxdrawdown: string, maxdrawdowndate: string, maxdrawdownlength: string, maxdrawdownpct: string, maxdrawdownpctdate: string, mpr: string, netprofit: string, netprofitpct: string, profitabletrades: string, profitabletradespct: string, profitfactor: string, profitriskratio: string, rar: string, recoveryfactor: string, sharperatio: string, sortinoratio: string, startcapital: string, totalcommission: string, totaltrades: string, totalvolume: string, turnover: string>, short: record<apr: string, avgbarsheld: string, avgloss: string, avglossbarsheld: string, avglosspct: string, avgprofit: string, avgprofitavgloss: string, avgprofitbarsheld: string, avgprofitpct: string, endcapital: string, exposure: string, grossloss: string, grossprofit: string, losingtrades: string, losingtradespct: string, mar: string, margininterest: string, maxconsecloss: string, maxconsecwin: string, maxdrawdown: string, maxdrawdowndate: string, maxdrawdownlength: string, maxdrawdownpct: string, maxdrawdownpctdate: string, mpr: string, netprofit: string, netprofitpct: string, profitabletrades: string, profitabletradespct: string, profitfactor: string, profitriskratio: string, rar: string, recoveryfactor: string, sharperatio: string, sortinoratio: string, startcapital: string, totalcommission: string, totaltrades: string, totalvolume: string, turnover: string>> {
+]: nothing -> oneof<record<buyandhold: record<apr: string, avgbarsheld: string, avgloss: string, avglossbarsheld: string, avglosspct: string, avgprofit: string, avgprofitavgloss: string, avgprofitbarsheld: string, avgprofitpct: string, endcapital: string, exposure: string, grossloss: string, grossprofit: string, losingtrades: string, losingtradespct: string, mar: string, margininterest: string, maxconsecloss: string, maxconsecwin: string, maxdrawdown: string, maxdrawdowndate: string, maxdrawdownlength: string, maxdrawdownpct: string, maxdrawdownpctdate: string, mpr: string, netprofit: string, netprofitpct: string, profitabletrades: string, profitabletradespct: string, profitfactor: string, profitriskratio: string, rar: string, recoveryfactor: string, sharperatio: string, sortinoratio: string, startcapital: string, totalcommission: string, totaltrades: string, totalvolume: string, turnover: string>, long: record<apr: string, avgbarsheld: string, avgloss: string, avglossbarsheld: string, avglosspct: string, avgprofit: string, avgprofitavgloss: string, avgprofitbarsheld: string, avgprofitpct: string, endcapital: string, exposure: string, grossloss: string, grossprofit: string, losingtrades: string, losingtradespct: string, mar: string, margininterest: string, maxconsecloss: string, maxconsecwin: string, maxdrawdown: string, maxdrawdowndate: string, maxdrawdownlength: string, maxdrawdownpct: string, maxdrawdownpctdate: string, mpr: string, netprofit: string, netprofitpct: string, profitabletrades: string, profitabletradespct: string, profitfactor: string, profitriskratio: string, rar: string, recoveryfactor: string, sharperatio: string, sortinoratio: string, startcapital: string, totalcommission: string, totaltrades: string, totalvolume: string, turnover: string>, longshort: record<apr: string, avgbarsheld: string, avgloss: string, avglossbarsheld: string, avglosspct: string, avgprofit: string, avgprofitavgloss: string, avgprofitbarsheld: string, avgprofitpct: string, endcapital: string, exposure: string, grossloss: string, grossprofit: string, losingtrades: string, losingtradespct: string, mar: string, margininterest: string, maxconsecloss: string, maxconsecwin: string, maxdrawdown: string, maxdrawdowndate: string, maxdrawdownlength: string, maxdrawdownpct: string, maxdrawdownpctdate: string, mpr: string, netprofit: string, netprofitpct: string, profitabletrades: string, profitabletradespct: string, profitfactor: string, profitriskratio: string, rar: string, recoveryfactor: string, sharperatio: string, sortinoratio: string, startcapital: string, totalcommission: string, totaltrades: string, totalvolume: string, turnover: string>, short: record<apr: string, avgbarsheld: string, avgloss: string, avglossbarsheld: string, avglosspct: string, avgprofit: string, avgprofitavgloss: string, avgprofitbarsheld: string, avgprofitpct: string, endcapital: string, exposure: string, grossloss: string, grossprofit: string, losingtrades: string, losingtradespct: string, mar: string, margininterest: string, maxconsecloss: string, maxconsecwin: string, maxdrawdown: string, maxdrawdowndate: string, maxdrawdownlength: string, maxdrawdownpct: string, maxdrawdownpctdate: string, mpr: string, netprofit: string, netprofitpct: string, profitabletrades: string, profitabletradespct: string, profitfactor: string, profitriskratio: string, rar: string, recoveryfactor: string, sharperatio: string, sortinoratio: string, startcapital: string, totalcommission: string, totaltrades: string, totalvolume: string, turnover: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($taskid | is-empty) { error make --unspanned { msg: "path parameter 'taskid' must be non-empty" } }
@@ -2343,7 +2357,7 @@ export def "get-taskmanager-tasks-taskid-result" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<bymonths_csv: string, bymonths_png: string, byquarters_csv: string, byquarters_png: string, byyears_csv: string, byyears_png: string, contribution_csv: string, contribution_png: string, drawdown_csv: string, drawdown_png: string, equity_csv: string, equity_png: string, equitypct_csv: string, equitypct_png: string, equitypctnofill_csv: string, equitypctnofill_png: string, equitypctsm: string, equitypctsm_csv: string, equitypctsm_png: string, performance_csv: string, performance_png: string, trades_csv: string, trades_png: string> {
+]: nothing -> oneof<record<bymonths_csv: string, bymonths_png: string, byquarters_csv: string, byquarters_png: string, byyears_csv: string, byyears_png: string, contribution_csv: string, contribution_png: string, drawdown_csv: string, drawdown_png: string, equity_csv: string, equity_png: string, equitypct_csv: string, equitypct_png: string, equitypctnofill_csv: string, equitypctnofill_png: string, equitypctsm: string, equitypctsm_csv: string, equitypctsm_png: string, performance_csv: string, performance_png: string, trades_csv: string, trades_png: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($taskid | is-empty) { error make --unspanned { msg: "path parameter 'taskid' must be non-empty" } }
@@ -2378,7 +2392,7 @@ export def "get-taskmanager-tasks-taskid-result2" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<apr: string, curMonthProfit: string, curYearProfit: string, drawdown: string, halfYearProfit: string, monthProfit: string, prevMonthProfit: string, totalProfit: string, weekProfit: string, yearProfit: string> {
+]: nothing -> oneof<record<apr: string, curMonthProfit: string, curYearProfit: string, drawdown: string, halfYearProfit: string, monthProfit: string, prevMonthProfit: string, totalProfit: string, weekProfit: string, yearProfit: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($taskid | is-empty) { error make --unspanned { msg: "path parameter 'taskid' must be non-empty" } }
@@ -2413,7 +2427,7 @@ export def "get-taskmanager-tasks-taskid-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<status: string> {
+]: nothing -> oneof<record<status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($taskid | is-empty) { error make --unspanned { msg: "path parameter 'taskid' must be non-empty" } }
@@ -2448,7 +2462,7 @@ export def "get-taskmanager-tasks-taskid-trades" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<barsheld: string, changepct: string, commission: string, entrydatetime: string, entryprice: string, entrysignal: string, exitdatetime: string, exitprice: string, exitsignal: string, mae: string, mfe: string, pandl: string, position: string, shares: string, size: string, symbol: string> {
+]: nothing -> oneof<table<barsheld: string, changepct: string, commission: string, entrydatetime: string, entryprice: string, entrysignal: string, exitdatetime: string, exitprice: string, exitsignal: string, mae: string, mfe: string, pandl: string, position: string, shares: string, size: string, symbol: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($taskid | is-empty) { error make --unspanned { msg: "path parameter 'taskid' must be non-empty" } }
@@ -2482,7 +2496,7 @@ export def "get-time" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<servertime: int> {
+]: nothing -> oneof<record<servertime: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/time" $auth.query)

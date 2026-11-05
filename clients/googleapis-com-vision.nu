@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -102,9 +125,9 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "vision-files-annotate" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["vision-files-annotate" "vision-files-async-batch-annotate" "vision-images-annotate" "vision-images-async-batch-annotate" "vision-projects-locations-files-annotate" "vision-projects-locations-files-async-batch-annotate" "vision-projects-locations-images-annotate" "vision-projects-locations-images-async-batch-annotate" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -126,7 +149,6 @@ export def commands []: nothing -> table {
 #
 # POST /v1p1beta1/files:annotate
 # operationId: vision.files.annotate
-# --requests item shape: {features?: list, imageContext?: record, inputConfig?: record, pages?: list<int>}
 export def "vision-files-annotate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -150,7 +172,7 @@ export def "vision-files-annotate" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --parent: string # Optional. Target project and location to make a call. Format: `projects/{project-id}/locations/{location-id}`. If no parent is specified, a region will be chosen automatically. Supported location-ids: `us`: USA country only, `asia`: East asia areas, like Japan, Taiwan, `eu`: The European Union. Example: `projects/project-A/locations/eu`.
   --requests: list # Required. The list of file annotation requests. Right now we support only one AnnotateFileRequest in BatchAnnotateFilesRequest. — item shape: {features?: list, imageContext?: record, inputConfig?: record, pages?: list<int>}
-]: any -> record<responses: table<error: record, inputConfig: record, responses: list, totalPages: int>> {
+]: any -> oneof<record<responses: table<error: record, inputConfig: record, responses: list, totalPages: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -178,7 +200,6 @@ export def "vision-files-annotate" [
 #
 # POST /v1p1beta1/files:asyncBatchAnnotate
 # operationId: vision.files.asyncBatchAnnotate
-# --requests item shape: {features?: list, imageContext?: record, inputConfig?: record, outputConfig?: record}
 export def "vision-files-async-batch-annotate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -202,7 +223,7 @@ export def "vision-files-async-batch-annotate" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --parent: string # Optional. Target project and location to make a call. Format: `projects/{project-id}/locations/{location-id}`. If no parent is specified, a region will be chosen automatically. Supported location-ids: `us`: USA country only, `asia`: East asia areas, like Japan, Taiwan, `eu`: The European Union. Example: `projects/project-A/locations/eu`.
   --requests: list # Required. Individual async file annotation requests for this batch. — item shape: {features?: list, imageContext?: record, inputConfig?: record, outputConfig?: record}
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -230,7 +251,6 @@ export def "vision-files-async-batch-annotate" [
 #
 # POST /v1p1beta1/images:annotate
 # operationId: vision.images.annotate
-# --requests item shape: {features?: list, image?: record, imageContext?: record}
 export def "vision-images-annotate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -254,7 +274,7 @@ export def "vision-images-annotate" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --parent: string # Optional. Target project and location to make a call. Format: `projects/{project-id}/locations/{location-id}`. If no parent is specified, a region will be chosen automatically. Supported location-ids: `us`: USA country only, `asia`: East asia areas, like Japan, Taiwan, `eu`: The European Union. Example: `projects/project-A/locations/eu`.
   --requests: list # Required. Individual image annotation requests for this batch. — item shape: {features?: list, image?: record, imageContext?: record}
-]: any -> record<responses: table<context: record, cropHintsAnnotation: record, error: record, faceAnnotations: list, fullTextAnnotation: record, imagePropertiesAnnotation: record, labelAnnotations: list, landmarkAnnotations: list, localizedObjectAnnotations: list, logoAnnotations: list, productSearchResults: record, safeSearchAnnotation: record, textAnnotations: list, webDetection: record>> {
+]: any -> oneof<record<responses: table<context: record, cropHintsAnnotation: record, error: record, faceAnnotations: list, fullTextAnnotation: record, imagePropertiesAnnotation: record, labelAnnotations: list, landmarkAnnotations: list, localizedObjectAnnotations: list, logoAnnotations: list, productSearchResults: record, safeSearchAnnotation: record, textAnnotations: list, webDetection: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -282,8 +302,6 @@ export def "vision-images-annotate" [
 #
 # POST /v1p1beta1/images:asyncBatchAnnotate
 # operationId: vision.images.asyncBatchAnnotate
-# --outputConfig shape: {batchSize?: int, gcsDestination?: record}
-# --requests item shape: {features?: list, image?: record, imageContext?: record}
 export def "vision-images-async-batch-annotate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -308,7 +326,7 @@ export def "vision-images-async-batch-annotate" [
   --output-config: record # The desired output location and metadata. — shape: {batchSize?: int, gcsDestination?: record}
   --parent: string # Optional. Target project and location to make a call. Format: `projects/{project-id}/locations/{location-id}`. If no parent is specified, a region will be chosen automatically. Supported location-ids: `us`: USA country only, `asia`: East asia areas, like Japan, Taiwan, `eu`: The European Union. Example: `projects/project-A/locations/eu`.
   --requests: list # Required. Individual image annotation requests for this batch. — item shape: {features?: list, image?: record, imageContext?: record}
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -336,7 +354,6 @@ export def "vision-images-async-batch-annotate" [
 #
 # POST /v1p1beta1/{parent}/files:annotate
 # operationId: vision.projects.locations.files.annotate
-# --requests item shape: {features?: list, imageContext?: record, inputConfig?: record, pages?: list<int>}
 export def "vision-projects-locations-files-annotate" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -361,7 +378,7 @@ export def "vision-projects-locations-files-annotate" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body-parent: string # Optional. Target project and location to make a call. Format: `projects/{project-id}/locations/{location-id}`. If no parent is specified, a region will be chosen automatically. Supported location-ids: `us`: USA country only, `asia`: East asia areas, like Japan, Taiwan, `eu`: The European Union. Example: `projects/project-A/locations/eu`.
   --requests: list # Required. The list of file annotation requests. Right now we support only one AnnotateFileRequest in BatchAnnotateFilesRequest. — item shape: {features?: list, imageContext?: record, inputConfig?: record, pages?: list<int>}
-]: any -> record<responses: table<error: record, inputConfig: record, responses: list, totalPages: int>> {
+]: any -> oneof<record<responses: table<error: record, inputConfig: record, responses: list, totalPages: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -390,7 +407,6 @@ export def "vision-projects-locations-files-annotate" [
 #
 # POST /v1p1beta1/{parent}/files:asyncBatchAnnotate
 # operationId: vision.projects.locations.files.asyncBatchAnnotate
-# --requests item shape: {features?: list, imageContext?: record, inputConfig?: record, outputConfig?: record}
 export def "vision-projects-locations-files-async-batch-annotate" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -415,7 +431,7 @@ export def "vision-projects-locations-files-async-batch-annotate" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body-parent: string # Optional. Target project and location to make a call. Format: `projects/{project-id}/locations/{location-id}`. If no parent is specified, a region will be chosen automatically. Supported location-ids: `us`: USA country only, `asia`: East asia areas, like Japan, Taiwan, `eu`: The European Union. Example: `projects/project-A/locations/eu`.
   --requests: list # Required. Individual async file annotation requests for this batch. — item shape: {features?: list, imageContext?: record, inputConfig?: record, outputConfig?: record}
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -444,7 +460,6 @@ export def "vision-projects-locations-files-async-batch-annotate" [
 #
 # POST /v1p1beta1/{parent}/images:annotate
 # operationId: vision.projects.locations.images.annotate
-# --requests item shape: {features?: list, image?: record, imageContext?: record}
 export def "vision-projects-locations-images-annotate" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -469,7 +484,7 @@ export def "vision-projects-locations-images-annotate" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body-parent: string # Optional. Target project and location to make a call. Format: `projects/{project-id}/locations/{location-id}`. If no parent is specified, a region will be chosen automatically. Supported location-ids: `us`: USA country only, `asia`: East asia areas, like Japan, Taiwan, `eu`: The European Union. Example: `projects/project-A/locations/eu`.
   --requests: list # Required. Individual image annotation requests for this batch. — item shape: {features?: list, image?: record, imageContext?: record}
-]: any -> record<responses: table<context: record, cropHintsAnnotation: record, error: record, faceAnnotations: list, fullTextAnnotation: record, imagePropertiesAnnotation: record, labelAnnotations: list, landmarkAnnotations: list, localizedObjectAnnotations: list, logoAnnotations: list, productSearchResults: record, safeSearchAnnotation: record, textAnnotations: list, webDetection: record>> {
+]: any -> oneof<record<responses: table<context: record, cropHintsAnnotation: record, error: record, faceAnnotations: list, fullTextAnnotation: record, imagePropertiesAnnotation: record, labelAnnotations: list, landmarkAnnotations: list, localizedObjectAnnotations: list, logoAnnotations: list, productSearchResults: record, safeSearchAnnotation: record, textAnnotations: list, webDetection: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -498,8 +513,6 @@ export def "vision-projects-locations-images-annotate" [
 #
 # POST /v1p1beta1/{parent}/images:asyncBatchAnnotate
 # operationId: vision.projects.locations.images.asyncBatchAnnotate
-# --outputConfig shape: {batchSize?: int, gcsDestination?: record}
-# --requests item shape: {features?: list, image?: record, imageContext?: record}
 export def "vision-projects-locations-images-async-batch-annotate" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -525,7 +538,7 @@ export def "vision-projects-locations-images-async-batch-annotate" [
   --output-config: record # The desired output location and metadata. — shape: {batchSize?: int, gcsDestination?: record}
   --body-parent: string # Optional. Target project and location to make a call. Format: `projects/{project-id}/locations/{location-id}`. If no parent is specified, a region will be chosen automatically. Supported location-ids: `us`: USA country only, `asia`: East asia areas, like Japan, Taiwan, `eu`: The European Union. Example: `projects/project-A/locations/eu`.
   --requests: list # Required. Individual image annotation requests for this batch. — item shape: {features?: list, image?: record, imageContext?: record}
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

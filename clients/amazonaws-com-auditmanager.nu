@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -126,9 +150,9 @@ def action-completer [] { ["ACCEPT" "DECLINE" "REVOKE"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "associate-assessment-report-evidence-folder" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["associate-assessment-report-evidence-folder" "batch-associate-assessment-report-evidence" "batch-create-delegation-by-assessment" "batch-delete-delegation-by-assessment" "batch-disassociate-assessment-report-evidence" "batch-import-evidence-to-assessment-control" "create-assessment" "list-assessments" "create-assessment-framework" "create-assessment-report" "create-control" "delete-assessment" "get-assessment" "update-assessment" "delete-assessment-framework" "get-assessment-framework" "update-assessment-framework" "delete-assessment-framework-share" "delete-assessment-report" "delete-control" "get-control" "update-control" "deregister-account" "deregister-organization-admin-account" "disassociate-assessment-report-evidence-folder" "get-account-status" "get-assessment-report-url" "get-change-logs" "get-delegations" "get-evidence" "get-evidence-by-evidence-folder" "get-evidence-folder" "get-evidence-folders-by-assessment" "get-evidence-folders-by-assessment-control" "get-insights" "get-insights-by-assessment" "get-organization-admin-account" "get-services-in-scope" "get-settings" "list-assessment-control-insights-by-control-domain" "list-assessment-framework-share-requests" "list-assessment-frameworks" "list-assessment-reports" "list-control-domain-insights" "list-control-domain-insights-by-assessment" "list-control-insights-by-control-domain" "list-controls" "list-keywords-for-data-source" "list-notifications" "list-tags-for-resource" "tag-resource" "register-account" "register-organization-admin-account" "start-assessment-framework-share" "untag-resource" "update-assessment-control" "update-assessment-control-set-status" "update-assessment-framework-share" "update-assessment-status" "update-settings" "validate-assessment-report-integrity" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -169,7 +193,7 @@ export def "associate-assessment-report-evidence-folder" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   evidence_folder_id: string # The identifier for the folder that the evidence is stored in.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -219,7 +243,7 @@ export def "batch-associate-assessment-report-evidence" [
   --x-amz-signed-headers: string
   evidence_folder_id: string # The identifier for the folder that the evidence is stored in.
   evidence_ids: list<string> # The list of evidence identifiers.
-]: any -> record<evidenceIds: list<string>, errors: table<evidenceId: string, errorCode: string, errorMessage: string>> {
+]: any -> oneof<record<evidenceIds: list<string>, errors: table<evidenceId: string, errorCode: string, errorMessage: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -249,7 +273,6 @@ export def "batch-associate-assessment-report-evidence" [
 #
 # POST /assessments/{assessmentId}/delegations
 # operationId: BatchCreateDelegationByAssessment
-# --createDelegationRequests item shape: {comment?: string, controlSetId?: string, roleArn?: string, roleType?: "PROCESS_OWNER"|"RESOURCE_OWNER"}
 export def "batch-create-delegation-by-assessment" [
   assessment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -269,7 +292,7 @@ export def "batch-create-delegation-by-assessment" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   create_delegation_requests: list # The API request to batch create delegations in Audit Manager. — item shape: {comment?: string, controlSetId?: string, roleArn?: string, roleType?: "PROCESS_OWNER"|"RESOURCE_OWNER"}
-]: any -> record<delegations: table<id: string, assessmentName: string, assessmentId: string, status: string, roleArn: string, roleType: string, creationTime: string, lastUpdated: string, controlSetId: string, comment: string, createdBy: string>, errors: table<createDelegationRequest: record, errorCode: string, errorMessage: string>> {
+]: any -> oneof<record<delegations: table<id: string, assessmentName: string, assessmentId: string, status: string, roleArn: string, roleType: string, creationTime: string, lastUpdated: string, controlSetId: string, comment: string, createdBy: string>, errors: table<createDelegationRequest: record, errorCode: string, errorMessage: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -318,7 +341,7 @@ export def "batch-delete-delegation-by-assessment" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   delegation_ids: list<string> # The identifiers for the delegations.
-]: any -> record<errors: table<delegationId: string, errorCode: string, errorMessage: string>> {
+]: any -> oneof<record<errors: table<delegationId: string, errorCode: string, errorMessage: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -368,7 +391,7 @@ export def "batch-disassociate-assessment-report-evidence" [
   --x-amz-signed-headers: string
   evidence_folder_id: string # The identifier for the folder that the evidence is stored in.
   evidence_ids: list<string> # The list of evidence identifiers.
-]: any -> record<evidenceIds: list<string>, errors: table<evidenceId: string, errorCode: string, errorMessage: string>> {
+]: any -> oneof<record<evidenceIds: list<string>, errors: table<evidenceId: string, errorCode: string, errorMessage: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -398,7 +421,6 @@ export def "batch-disassociate-assessment-report-evidence" [
 #
 # POST /assessments/{assessmentId}/controlSets/{controlSetId}/controls/{controlId}/evidence
 # operationId: BatchImportEvidenceToAssessmentControl
-# --manualEvidence item shape: {s3ResourcePath?: string}
 export def "batch-import-evidence-to-assessment-control" [
   assessment_id: string
   control_set_id: string
@@ -420,7 +442,7 @@ export def "batch-import-evidence-to-assessment-control" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   manual_evidence: list # The list of manual evidence objects. — item shape: {s3ResourcePath?: string}
-]: any -> record<errors: table<manualEvidence: record, errorCode: string, errorMessage: string>> {
+]: any -> oneof<record<errors: table<manualEvidence: record, errorCode: string, errorMessage: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -452,9 +474,6 @@ export def "batch-import-evidence-to-assessment-control" [
 #
 # POST /assessments
 # operationId: CreateAssessment
-# --assessmentReportsDestination shape: {destinationType?: "S3", destination?: string}
-# --scope shape: {awsAccounts?: list, awsServices?: list}
-# --roles item shape: {roleType: "PROCESS_OWNER"|"RESOURCE_OWNER", roleArn: string}
 export def "create-assessment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -479,7 +498,7 @@ export def "create-assessment" [
   roles: list # The list of roles for the assessment. — item shape: {roleType: "PROCESS_OWNER"|"RESOURCE_OWNER", roleArn: string}
   framework_id: string # The identifier for the framework that the assessment will be created from.
   --tags: record # The tags that are associated with the assessment.
-]: any -> record<assessment: record<arn: string, awsAccount: record<id: string, emailAddress: string, name: string>, metadata: record<name: string, id: string, description: string, complianceType: string, status: string, assessmentReportsDestination: record, scope: record, roles: list, delegations: list, creationTime: string, lastUpdated: string>, framework: record<id: string, arn: string, metadata: record, controlSets: list>, tags: record>> {
+]: any -> oneof<record<assessment: record<arn: string, awsAccount: record<id: string, emailAddress: string, name: string>, metadata: record<name: string, id: string, description: string, complianceType: string, status: string, assessmentReportsDestination: record, scope: record, roles: list, delegations: list, creationTime: string, lastUpdated: string>, framework: record<id: string, arn: string, metadata: record, controlSets: list>, tags: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -528,7 +547,7 @@ export def "list-assessments" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<assessmentMetadata: table<name: string, id: string, complianceType: string, status: string, roles: list, delegations: list, creationTime: string, lastUpdated: string>, nextToken: string> {
+]: nothing -> oneof<record<assessmentMetadata: table<name: string, id: string, complianceType: string, status: string, roles: list, delegations: list, creationTime: string, lastUpdated: string>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
@@ -555,7 +574,6 @@ export def "list-assessments" [
 #
 # POST /assessmentFrameworks
 # operationId: CreateAssessmentFramework
-# --controlSets item shape: {name: string, controls?: list}
 export def "create-assessment-framework" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -578,7 +596,7 @@ export def "create-assessment-framework" [
   --compliance-type: string # The compliance type that the new custom framework supports, such as CIS or HIPAA.
   control_sets: list # The control sets that are associated with the framework. — item shape: {name: string, controls?: list}
   --tags: record # The tags that are associated with the framework.
-]: any -> record<framework: record<arn: string, id: string, name: string, type: string, complianceType: string, description: string, logo: string, controlSources: string, controlSets: list<record>, createdAt: string, lastUpdatedAt: string, createdBy: string, lastUpdatedBy: string, tags: record>> {
+]: any -> oneof<record<framework: record<arn: string, id: string, name: string, type: string, complianceType: string, description: string, logo: string, controlSources: string, controlSets: list<record>, createdAt: string, lastUpdatedAt: string, createdBy: string, lastUpdatedBy: string, tags: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -628,7 +646,7 @@ export def "create-assessment-report" [
   name: string # The name of the new assessment report.
   --description: string # The description of the assessment report.
   --query-statement: string # A SQL statement that represents an evidence finder query. Provide this parameter when you want to generate an assessment report from the results of an evidence finder search query. When you use this parameter, Audit Manager generates a one-time report using only the evidence from the query output. This report does not include any assessment evidence that was manually added to a report using the console (https://docs.aws.amazon.com/audit-manager/latest/userguide/generate-assessment-report.html#generate-assessment-report-include-evidence), or associated with a report using the API (https://docs.aws.amazon.com/audit-manager/latest/APIReference/API_BatchAssociateAssessmentReportEvidence.html). To use this parameter, the enablementStatus (https://docs.aws.amazon.com/audit-manager/latest/APIReference/API_EvidenceFinderEnablement.html#auditmanager-Type-EvidenceFinderEnablement-enablementStatus) of evidence finder must be ENABLED. For examples and help resolving queryStatement validation exceptions, see Troubleshooting evidence finder issues (https://docs.aws.amazon.com/audit-manager/latest/userguide/evidence-finder-issues.html#querystatement-exceptions) in the Audit Manager User Guide.
-]: any -> record<assessmentReport: record<id: string, name: string, description: string, awsAccountId: string, assessmentId: string, assessmentName: string, author: string, status: string, creationTime: string>> {
+]: any -> oneof<record<assessmentReport: record<id: string, name: string, description: string, awsAccountId: string, assessmentId: string, assessmentName: string, author: string, status: string, creationTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -658,7 +676,6 @@ export def "create-assessment-report" [
 #
 # POST /controls
 # operationId: CreateControl
-# --controlMappingSources item shape: {sourceName?: string, sourceDescription?: string, sourceSetUpOption?: "System_Controls_Mapping"|"Procedural_Controls_Mapping", sourceType?: "AWS_Cloudtrail"|"AWS_Config"|"AWS_Security_Hub"|"AWS_API_Call"|"MANUAL", sourceKeyword?: record, sourceFrequency?: "DAILY"|"WEEKLY"|"MONTHLY", troubleshootingText?: string}
 export def "create-control" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -683,7 +700,7 @@ export def "create-control" [
   --action-plan-instructions: string # The recommended actions to carry out if the control isn't fulfilled.
   control_mapping_sources: list # The data mapping sources for the control. — item shape: {sourceName?: string, sourceDescription?: string, sourceSetUpOption?: "System_Controls_Mapping"|"Procedural_Controls_Mapping", sourceType?: "AWS_Cloudtrail"|"AWS_Config"|"AWS_Security_Hub"|"AWS_API_Call"|"MANUAL", sourceKeyword?: record, sourceFrequency?: "DAILY"|"WEEKLY"|"MONTHLY", troubleshootingText?: string}
   --tags: record # The tags that are associated with the control.
-]: any -> record<control: record<arn: string, id: string, type: string, name: string, description: string, testingInformation: string, actionPlanTitle: string, actionPlanInstructions: string, controlSources: string, controlMappingSources: list<record>, createdAt: string, lastUpdatedAt: string, createdBy: string, lastUpdatedBy: string, tags: record>> {
+]: any -> oneof<record<control: record<arn: string, id: string, type: string, name: string, description: string, testingInformation: string, actionPlanTitle: string, actionPlanInstructions: string, controlSources: string, controlMappingSources: list<record>, createdAt: string, lastUpdatedAt: string, createdBy: string, lastUpdatedBy: string, tags: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -730,7 +747,7 @@ export def "delete-assessment" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($assessment_id | is-empty) { error make --unspanned { msg: "path parameter 'assessmentId' must be non-empty" } }
@@ -775,7 +792,7 @@ export def "get-assessment" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<assessment: record<arn: string, awsAccount: record<id: string, emailAddress: string, name: string>, metadata: record<name: string, id: string, description: string, complianceType: string, status: string, assessmentReportsDestination: record, scope: record, roles: list, delegations: list, creationTime: string, lastUpdated: string>, framework: record<id: string, arn: string, metadata: record, controlSets: list>, tags: record>, userRole: record<roleType: string, roleArn: string>> {
+]: nothing -> oneof<record<assessment: record<arn: string, awsAccount: record<id: string, emailAddress: string, name: string>, metadata: record<name: string, id: string, description: string, complianceType: string, status: string, assessmentReportsDestination: record, scope: record, roles: list, delegations: list, creationTime: string, lastUpdated: string>, framework: record<id: string, arn: string, metadata: record, controlSets: list>, tags: record>, userRole: record<roleType: string, roleArn: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($assessment_id | is-empty) { error make --unspanned { msg: "path parameter 'assessmentId' must be non-empty" } }
@@ -802,9 +819,6 @@ export def "get-assessment" [
 #
 # PUT /assessments/{assessmentId}
 # operationId: UpdateAssessment
-# --scope shape: {awsAccounts?: list, awsServices?: list}
-# --assessmentReportsDestination shape: {destinationType?: "S3", destination?: string}
-# --roles item shape: {roleType: "PROCESS_OWNER"|"RESOURCE_OWNER", roleArn: string}
 export def "update-assessment" [
   assessment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -828,7 +842,7 @@ export def "update-assessment" [
   scope: record # The wrapper that contains the Amazon Web Services accounts and services that are in scope for the assessment. — shape: {awsAccounts?: list, awsServices?: list}
   --assessment-reports-destination: record # The location where Audit Manager saves assessment reports for the given assessment. — shape: {destinationType?: "S3", destination?: string}
   --roles: list # The list of roles for the assessment. — item shape: {roleType: "PROCESS_OWNER"|"RESOURCE_OWNER", roleArn: string}
-]: any -> record<assessment: record<arn: string, awsAccount: record<id: string, emailAddress: string, name: string>, metadata: record<name: string, id: string, description: string, complianceType: string, status: string, assessmentReportsDestination: record, scope: record, roles: list, delegations: list, creationTime: string, lastUpdated: string>, framework: record<id: string, arn: string, metadata: record, controlSets: list>, tags: record>> {
+]: any -> oneof<record<assessment: record<arn: string, awsAccount: record<id: string, emailAddress: string, name: string>, metadata: record<name: string, id: string, description: string, complianceType: string, status: string, assessmentReportsDestination: record, scope: record, roles: list, delegations: list, creationTime: string, lastUpdated: string>, framework: record<id: string, arn: string, metadata: record, controlSets: list>, tags: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -876,7 +890,7 @@ export def "delete-assessment-framework" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($framework_id | is-empty) { error make --unspanned { msg: "path parameter 'frameworkId' must be non-empty" } }
@@ -921,7 +935,7 @@ export def "get-assessment-framework" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<framework: record<arn: string, id: string, name: string, type: string, complianceType: string, description: string, logo: string, controlSources: string, controlSets: list<record>, createdAt: string, lastUpdatedAt: string, createdBy: string, lastUpdatedBy: string, tags: record>> {
+]: nothing -> oneof<record<framework: record<arn: string, id: string, name: string, type: string, complianceType: string, description: string, logo: string, controlSources: string, controlSets: list<record>, createdAt: string, lastUpdatedAt: string, createdBy: string, lastUpdatedBy: string, tags: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($framework_id | is-empty) { error make --unspanned { msg: "path parameter 'frameworkId' must be non-empty" } }
@@ -948,7 +962,6 @@ export def "get-assessment-framework" [
 #
 # PUT /assessmentFrameworks/{frameworkId}
 # operationId: UpdateAssessmentFramework
-# --controlSets item shape: {id?: string, name: string, controls: list}
 export def "update-assessment-framework" [
   framework_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -971,7 +984,7 @@ export def "update-assessment-framework" [
   --description: string # The description of the updated framework.
   --compliance-type: string # The compliance type that the new custom framework supports, such as CIS or HIPAA.
   control_sets: list # The control sets that are associated with the framework. — item shape: {id?: string, name: string, controls: list}
-]: any -> record<framework: record<arn: string, id: string, name: string, type: string, complianceType: string, description: string, logo: string, controlSources: string, controlSets: list<record>, createdAt: string, lastUpdatedAt: string, createdBy: string, lastUpdatedBy: string, tags: record>> {
+]: any -> oneof<record<framework: record<arn: string, id: string, name: string, type: string, complianceType: string, description: string, logo: string, controlSources: string, controlSets: list<record>, createdAt: string, lastUpdatedAt: string, createdBy: string, lastUpdatedBy: string, tags: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1020,7 +1033,7 @@ export def "delete-assessment-framework-share" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($request_id | is-empty) { error make --unspanned { msg: "path parameter 'requestId' must be non-empty" } }
@@ -1068,7 +1081,7 @@ export def "delete-assessment-report" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($assessment_id | is-empty) { error make --unspanned { msg: "path parameter 'assessmentId' must be non-empty" } }
@@ -1114,7 +1127,7 @@ export def "delete-control" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($control_id | is-empty) { error make --unspanned { msg: "path parameter 'controlId' must be non-empty" } }
@@ -1159,7 +1172,7 @@ export def "get-control" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<control: record<arn: string, id: string, type: string, name: string, description: string, testingInformation: string, actionPlanTitle: string, actionPlanInstructions: string, controlSources: string, controlMappingSources: list<record>, createdAt: string, lastUpdatedAt: string, createdBy: string, lastUpdatedBy: string, tags: record>> {
+]: nothing -> oneof<record<control: record<arn: string, id: string, type: string, name: string, description: string, testingInformation: string, actionPlanTitle: string, actionPlanInstructions: string, controlSources: string, controlMappingSources: list<record>, createdAt: string, lastUpdatedAt: string, createdBy: string, lastUpdatedBy: string, tags: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($control_id | is-empty) { error make --unspanned { msg: "path parameter 'controlId' must be non-empty" } }
@@ -1186,7 +1199,6 @@ export def "get-control" [
 #
 # PUT /controls/{controlId}
 # operationId: UpdateControl
-# --controlMappingSources item shape: {sourceId?: string, sourceName?: string, sourceDescription?: string, sourceSetUpOption?: "System_Controls_Mapping"|"Procedural_Controls_Mapping", sourceType?: "AWS_Cloudtrail"|"AWS_Config"|"AWS_Security_Hub"|"AWS_API_Call"|"MANUAL", sourceKeyword?: record, sourceFrequency?: "DAILY"|"WEEKLY"|"MONTHLY", troubleshootingText?: string}
 export def "update-control" [
   control_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1211,7 +1223,7 @@ export def "update-control" [
   --action-plan-title: string # The title of the action plan for remediating the control.
   --action-plan-instructions: string # The recommended actions to carry out if the control isn't fulfilled.
   control_mapping_sources: list # The data mapping sources for the control. — item shape: {sourceId?: string, sourceName?: string, sourceDescription?: string, sourceSetUpOption?: "System_Controls_Mapping"|"Procedural_Controls_Mapping", sourceType?: "AWS_Cloudtrail"|"AWS_Config"|"AWS_Security_Hub"|"AWS_API_Call"|"MANUAL", sourceKeyword?: record, sourceFrequency?: "DAILY"|"WEEKLY"|"MONTHLY", troubleshootingText?: string}
-]: any -> record<control: record<arn: string, id: string, type: string, name: string, description: string, testingInformation: string, actionPlanTitle: string, actionPlanInstructions: string, controlSources: string, controlMappingSources: list<record>, createdAt: string, lastUpdatedAt: string, createdBy: string, lastUpdatedBy: string, tags: record>> {
+]: any -> oneof<record<control: record<arn: string, id: string, type: string, name: string, description: string, testingInformation: string, actionPlanTitle: string, actionPlanInstructions: string, controlSources: string, controlMappingSources: list<record>, createdAt: string, lastUpdatedAt: string, createdBy: string, lastUpdatedBy: string, tags: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1258,7 +1270,7 @@ export def "deregister-account" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<status: string> {
+]: nothing -> oneof<record<status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/deregisterAccount" $auth.query)
@@ -1302,7 +1314,7 @@ export def "deregister-organization-admin-account" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --admin-account-id: string # The identifier for the administrator account.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1350,7 +1362,7 @@ export def "disassociate-assessment-report-evidence-folder" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   evidence_folder_id: string # The unique identifier for the folder that the evidence is stored in.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1397,7 +1409,7 @@ export def "get-account-status" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<status: string> {
+]: nothing -> oneof<record<status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/status" $auth.query)
@@ -1442,7 +1454,7 @@ export def "get-assessment-report-url" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<preSignedUrl: record<hyperlinkName: string, link: string>> {
+]: nothing -> oneof<record<preSignedUrl: record<hyperlinkName: string, link: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($assessment_id | is-empty) { error make --unspanned { msg: "path parameter 'assessmentId' must be non-empty" } }
@@ -1492,7 +1504,7 @@ export def "get-change-logs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<changeLogs: table<objectType: string, objectName: string, action: string, createdAt: string, createdBy: string>, nextToken: string> {
+]: nothing -> oneof<record<changeLogs: table<objectType: string, objectName: string, action: string, createdAt: string, createdBy: string>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($assessment_id | is-empty) { error make --unspanned { msg: "path parameter 'assessmentId' must be non-empty" } }
@@ -1539,7 +1551,7 @@ export def "get-delegations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<delegations: table<id: string, assessmentName: string, assessmentId: string, status: string, roleArn: string, creationTime: string, controlSetName: string>, nextToken: string> {
+]: nothing -> oneof<record<delegations: table<id: string, assessmentName: string, assessmentId: string, status: string, roleArn: string, creationTime: string, controlSetName: string>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
@@ -1587,7 +1599,7 @@ export def "get-evidence" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<evidence: record<dataSource: string, evidenceAwsAccountId: string, time: string, eventSource: string, eventName: string, evidenceByType: string, resourcesIncluded: list<record>, attributes: record, iamId: string, complianceCheck: string, awsOrganization: string, awsAccountId: string, evidenceFolderId: string, id: string, assessmentReportSelection: string>> {
+]: nothing -> oneof<record<evidence: record<dataSource: string, evidenceAwsAccountId: string, time: string, eventSource: string, eventName: string, evidenceByType: string, resourcesIncluded: list<record>, attributes: record, iamId: string, complianceCheck: string, awsOrganization: string, awsAccountId: string, evidenceFolderId: string, id: string, assessmentReportSelection: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($assessment_id | is-empty) { error make --unspanned { msg: "path parameter 'assessmentId' must be non-empty" } }
@@ -1639,7 +1651,7 @@ export def "get-evidence-by-evidence-folder" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<evidence: table<dataSource: string, evidenceAwsAccountId: string, time: string, eventSource: string, eventName: string, evidenceByType: string, resourcesIncluded: list, attributes: record, iamId: string, complianceCheck: string, awsOrganization: string, awsAccountId: string, evidenceFolderId: string, id: string, assessmentReportSelection: string>, nextToken: string> {
+]: nothing -> oneof<record<evidence: table<dataSource: string, evidenceAwsAccountId: string, time: string, eventSource: string, eventName: string, evidenceByType: string, resourcesIncluded: list, attributes: record, iamId: string, complianceCheck: string, awsOrganization: string, awsAccountId: string, evidenceFolderId: string, id: string, assessmentReportSelection: string>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($assessment_id | is-empty) { error make --unspanned { msg: "path parameter 'assessmentId' must be non-empty" } }
@@ -1689,7 +1701,7 @@ export def "get-evidence-folder" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<evidenceFolder: record<name: string, date: string, assessmentId: string, controlSetId: string, controlId: string, id: string, dataSource: string, author: string, totalEvidence: int, assessmentReportSelectionCount: int, controlName: string, evidenceResourcesIncludedCount: int, evidenceByTypeConfigurationDataCount: int, evidenceByTypeManualCount: int, evidenceByTypeComplianceCheckCount: int, evidenceByTypeComplianceCheckIssuesCount: int, evidenceByTypeUserActivityCount: int, evidenceAwsServiceSourceCount: int>> {
+]: nothing -> oneof<record<evidenceFolder: record<name: string, date: string, assessmentId: string, controlSetId: string, controlId: string, id: string, dataSource: string, author: string, totalEvidence: int, assessmentReportSelectionCount: int, controlName: string, evidenceResourcesIncludedCount: int, evidenceByTypeConfigurationDataCount: int, evidenceByTypeManualCount: int, evidenceByTypeComplianceCheckCount: int, evidenceByTypeComplianceCheckIssuesCount: int, evidenceByTypeUserActivityCount: int, evidenceAwsServiceSourceCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($assessment_id | is-empty) { error make --unspanned { msg: "path parameter 'assessmentId' must be non-empty" } }
@@ -1738,7 +1750,7 @@ export def "get-evidence-folders-by-assessment" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<evidenceFolders: table<name: string, date: string, assessmentId: string, controlSetId: string, controlId: string, id: string, dataSource: string, author: string, totalEvidence: int, assessmentReportSelectionCount: int, controlName: string, evidenceResourcesIncludedCount: int, evidenceByTypeConfigurationDataCount: int, evidenceByTypeManualCount: int, evidenceByTypeComplianceCheckCount: int, evidenceByTypeComplianceCheckIssuesCount: int, evidenceByTypeUserActivityCount: int, evidenceAwsServiceSourceCount: int>, nextToken: string> {
+]: nothing -> oneof<record<evidenceFolders: table<name: string, date: string, assessmentId: string, controlSetId: string, controlId: string, id: string, dataSource: string, author: string, totalEvidence: int, assessmentReportSelectionCount: int, controlName: string, evidenceResourcesIncludedCount: int, evidenceByTypeConfigurationDataCount: int, evidenceByTypeManualCount: int, evidenceByTypeComplianceCheckCount: int, evidenceByTypeComplianceCheckIssuesCount: int, evidenceByTypeUserActivityCount: int, evidenceAwsServiceSourceCount: int>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($assessment_id | is-empty) { error make --unspanned { msg: "path parameter 'assessmentId' must be non-empty" } }
@@ -1788,7 +1800,7 @@ export def "get-evidence-folders-by-assessment-control" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<evidenceFolders: table<name: string, date: string, assessmentId: string, controlSetId: string, controlId: string, id: string, dataSource: string, author: string, totalEvidence: int, assessmentReportSelectionCount: int, controlName: string, evidenceResourcesIncludedCount: int, evidenceByTypeConfigurationDataCount: int, evidenceByTypeManualCount: int, evidenceByTypeComplianceCheckCount: int, evidenceByTypeComplianceCheckIssuesCount: int, evidenceByTypeUserActivityCount: int, evidenceAwsServiceSourceCount: int>, nextToken: string> {
+]: nothing -> oneof<record<evidenceFolders: table<name: string, date: string, assessmentId: string, controlSetId: string, controlId: string, id: string, dataSource: string, author: string, totalEvidence: int, assessmentReportSelectionCount: int, controlName: string, evidenceResourcesIncludedCount: int, evidenceByTypeConfigurationDataCount: int, evidenceByTypeManualCount: int, evidenceByTypeComplianceCheckCount: int, evidenceByTypeComplianceCheckIssuesCount: int, evidenceByTypeUserActivityCount: int, evidenceAwsServiceSourceCount: int>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($assessment_id | is-empty) { error make --unspanned { msg: "path parameter 'assessmentId' must be non-empty" } }
@@ -1835,7 +1847,7 @@ export def "get-insights" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<insights: record<activeAssessmentsCount: int, noncompliantEvidenceCount: int, compliantEvidenceCount: int, inconclusiveEvidenceCount: int, assessmentControlsCountByNoncompliantEvidence: int, totalAssessmentControlsCount: int, lastUpdated: string>> {
+]: nothing -> oneof<record<insights: record<activeAssessmentsCount: int, noncompliantEvidenceCount: int, compliantEvidenceCount: int, inconclusiveEvidenceCount: int, assessmentControlsCountByNoncompliantEvidence: int, totalAssessmentControlsCount: int, lastUpdated: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/insights" $auth.query)
@@ -1879,7 +1891,7 @@ export def "get-insights-by-assessment" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<insights: record<noncompliantEvidenceCount: int, compliantEvidenceCount: int, inconclusiveEvidenceCount: int, assessmentControlsCountByNoncompliantEvidence: int, totalAssessmentControlsCount: int, lastUpdated: string>> {
+]: nothing -> oneof<record<insights: record<noncompliantEvidenceCount: int, compliantEvidenceCount: int, inconclusiveEvidenceCount: int, assessmentControlsCountByNoncompliantEvidence: int, totalAssessmentControlsCount: int, lastUpdated: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($assessment_id | is-empty) { error make --unspanned { msg: "path parameter 'assessmentId' must be non-empty" } }
@@ -1923,7 +1935,7 @@ export def "get-organization-admin-account" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<adminAccountId: string, organizationId: string> {
+]: nothing -> oneof<record<adminAccountId: string, organizationId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/organizationAdminAccount" $auth.query)
@@ -1966,7 +1978,7 @@ export def "get-services-in-scope" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<serviceMetadata: table<name: string, displayName: string, description: string, category: string>> {
+]: nothing -> oneof<record<serviceMetadata: table<name: string, displayName: string, description: string, category: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/services" $auth.query)
@@ -2010,7 +2022,7 @@ export def "get-settings" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<settings: record<isAwsOrgEnabled: bool, snsTopic: string, defaultAssessmentReportsDestination: record<destinationType: string, destination: string>, defaultProcessOwners: list<record>, kmsKey: string, evidenceFinderEnablement: record<eventDataStoreArn: string, enablementStatus: string, backfillStatus: string, error: string>, deregistrationPolicy: record<deleteResources: string>>> {
+]: nothing -> oneof<record<settings: record<isAwsOrgEnabled: bool, snsTopic: string, defaultAssessmentReportsDestination: record<destinationType: string, destination: string>, defaultProcessOwners: list<record>, kmsKey: string, evidenceFinderEnablement: record<eventDataStoreArn: string, enablementStatus: string, backfillStatus: string, error: string>, deregistrationPolicy: record<deleteResources: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($attribute | is-empty) { error make --unspanned { msg: "path parameter 'attribute' must be non-empty" } }
@@ -2058,7 +2070,7 @@ export def "list-assessment-control-insights-by-control-domain" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<controlInsightsByAssessment: table<name: string, id: string, evidenceInsights: record, controlSetName: string, lastUpdated: string>, nextToken: string> {
+]: nothing -> oneof<record<controlInsightsByAssessment: table<name: string, id: string, evidenceInsights: record, controlSetName: string, lastUpdated: string>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($control_domain_id == null) { error make --unspanned { msg: "required query parameter 'controlDomainId' missing: pass --control-domain-id" } }
@@ -2107,7 +2119,7 @@ export def "list-assessment-framework-share-requests" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<assessmentFrameworkShareRequests: table<id: string, frameworkId: string, frameworkName: string, frameworkDescription: string, status: string, sourceAccount: string, destinationAccount: string, destinationRegion: string, expirationTime: string, creationTime: string, lastUpdated: string, comment: string, standardControlsCount: int, customControlsCount: int, complianceType: string>, nextToken: string> {
+]: nothing -> oneof<record<assessmentFrameworkShareRequests: table<id: string, frameworkId: string, frameworkName: string, frameworkDescription: string, status: string, sourceAccount: string, destinationAccount: string, destinationRegion: string, expirationTime: string, creationTime: string, lastUpdated: string, comment: string, standardControlsCount: int, customControlsCount: int, complianceType: string>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($request_type == null) { error make --unspanned { msg: "required query parameter 'requestType' missing: pass --request-type" } }
@@ -2155,7 +2167,7 @@ export def "list-assessment-frameworks" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<frameworkMetadataList: table<arn: string, id: string, type: string, name: string, description: string, logo: string, complianceType: string, controlsCount: int, controlSetsCount: int, createdAt: string, lastUpdatedAt: string>, nextToken: string> {
+]: nothing -> oneof<record<frameworkMetadataList: table<arn: string, id: string, type: string, name: string, description: string, logo: string, complianceType: string, controlsCount: int, controlSetsCount: int, createdAt: string, lastUpdatedAt: string>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($framework_type == null) { error make --unspanned { msg: "required query parameter 'frameworkType' missing: pass --framework-type" } }
@@ -2202,7 +2214,7 @@ export def "list-assessment-reports" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<assessmentReports: table<id: string, name: string, description: string, assessmentId: string, assessmentName: string, author: string, status: string, creationTime: string>, nextToken: string> {
+]: nothing -> oneof<record<assessmentReports: table<id: string, name: string, description: string, assessmentId: string, assessmentName: string, author: string, status: string, creationTime: string>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
@@ -2248,7 +2260,7 @@ export def "list-control-domain-insights" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<controlDomainInsights: table<name: string, id: string, controlsCountByNoncompliantEvidence: int, totalControlsCount: int, evidenceInsights: record, lastUpdated: string>, nextToken: string> {
+]: nothing -> oneof<record<controlDomainInsights: table<name: string, id: string, controlsCountByNoncompliantEvidence: int, totalControlsCount: int, evidenceInsights: record, lastUpdated: string>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
@@ -2295,7 +2307,7 @@ export def "list-control-domain-insights-by-assessment" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<controlDomainInsights: table<name: string, id: string, controlsCountByNoncompliantEvidence: int, totalControlsCount: int, evidenceInsights: record, lastUpdated: string>, nextToken: string> {
+]: nothing -> oneof<record<controlDomainInsights: table<name: string, id: string, controlsCountByNoncompliantEvidence: int, totalControlsCount: int, evidenceInsights: record, lastUpdated: string>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($assessment_id == null) { error make --unspanned { msg: "required query parameter 'assessmentId' missing: pass --assessment-id" } }
@@ -2343,7 +2355,7 @@ export def "list-control-insights-by-control-domain" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<controlInsightsMetadata: table<name: string, id: string, evidenceInsights: record, lastUpdated: string>, nextToken: string> {
+]: nothing -> oneof<record<controlInsightsMetadata: table<name: string, id: string, evidenceInsights: record, lastUpdated: string>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($control_domain_id == null) { error make --unspanned { msg: "required query parameter 'controlDomainId' missing: pass --control-domain-id" } }
@@ -2391,7 +2403,7 @@ export def "list-controls" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<controlMetadataList: table<arn: string, id: string, name: string, controlSources: string, createdAt: string, lastUpdatedAt: string>, nextToken: string> {
+]: nothing -> oneof<record<controlMetadataList: table<arn: string, id: string, name: string, controlSources: string, createdAt: string, lastUpdatedAt: string>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($control_type == null) { error make --unspanned { msg: "required query parameter 'controlType' missing: pass --control-type" } }
@@ -2439,7 +2451,7 @@ export def "list-keywords-for-data-source" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<keywords: list<string>, nextToken: string> {
+]: nothing -> oneof<record<keywords: list<string>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($source == null) { error make --unspanned { msg: "required query parameter 'source' missing: pass --source" } }
@@ -2486,7 +2498,7 @@ export def "list-notifications" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<notifications: table<id: string, assessmentId: string, assessmentName: string, controlSetId: string, controlSetName: string, description: string, eventTime: string, source: string>, nextToken: string> {
+]: nothing -> oneof<record<notifications: table<id: string, assessmentId: string, assessmentName: string, controlSetId: string, controlSetName: string, description: string, eventTime: string, source: string>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
@@ -2531,7 +2543,7 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<tags: record> {
+]: nothing -> oneof<record<tags: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
@@ -2577,7 +2589,7 @@ export def "tag-resource" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   tags: record # The tags that are associated with the resource.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2626,7 +2638,7 @@ export def "register-account" [
   --x-amz-signed-headers: string
   --kms-key: string # The KMS key details.
   --delegated-admin-account: string # The delegated administrator account for Audit Manager.
-]: any -> record<status: string> {
+]: any -> oneof<record<status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2673,7 +2685,7 @@ export def "register-organization-admin-account" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   admin_account_id: string # The identifier for the delegated administrator account.
-]: any -> record<adminAccountId: string, organizationId: string> {
+]: any -> oneof<record<adminAccountId: string, organizationId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2723,7 +2735,7 @@ export def "start-assessment-framework-share" [
   destination_account: string # The Amazon Web Services account of the recipient.
   destination_region: string # The Amazon Web Services Region of the recipient.
   --comment: string # An optional comment from the sender about the share request.
-]: any -> record<assessmentFrameworkShareRequest: record<id: string, frameworkId: string, frameworkName: string, frameworkDescription: string, status: string, sourceAccount: string, destinationAccount: string, destinationRegion: string, expirationTime: string, creationTime: string, lastUpdated: string, comment: string, standardControlsCount: int, customControlsCount: int, complianceType: string>> {
+]: any -> oneof<record<assessmentFrameworkShareRequest: record<id: string, frameworkId: string, frameworkName: string, frameworkDescription: string, status: string, sourceAccount: string, destinationAccount: string, destinationRegion: string, expirationTime: string, creationTime: string, lastUpdated: string, comment: string, standardControlsCount: int, customControlsCount: int, complianceType: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2772,7 +2784,7 @@ export def "untag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
@@ -2823,7 +2835,7 @@ export def "update-assessment-control" [
   --x-amz-signed-headers: string
   --control-status: string@control-status-completer # The status of the control.
   --comment-body: string # The comment body text for the control.
-]: any -> record<control: record<id: string, name: string, description: string, status: string, response: string, comments: list<record>, evidenceSources: list<string>, evidenceCount: int, assessmentReportEvidenceCount: int>> {
+]: any -> oneof<record<control: record<id: string, name: string, description: string, status: string, response: string, comments: list<record>, evidenceSources: list<string>, evidenceCount: int, assessmentReportEvidenceCount: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2876,7 +2888,7 @@ export def "update-assessment-control-set-status" [
   --x-amz-signed-headers: string
   status: string@status-completer-1 # The status of the control set that's being updated.
   comment: string # The comment that's related to the status update.
-]: any -> record<controlSet: record<id: string, description: string, status: string, roles: list<record>, controls: list<record>, delegations: list<record>, systemEvidenceCount: int, manualEvidenceCount: int>> {
+]: any -> oneof<record<controlSet: record<id: string, description: string, status: string, roles: list<record>, controls: list<record>, delegations: list<record>, systemEvidenceCount: int, manualEvidenceCount: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2927,7 +2939,7 @@ export def "update-assessment-framework-share" [
   --x-amz-signed-headers: string
   request_type: string@request-type-completer # Specifies whether the share request is a sent request or a received request.
   action: string@action-completer # Specifies the update action for the share request.
-]: any -> record<assessmentFrameworkShareRequest: record<id: string, frameworkId: string, frameworkName: string, frameworkDescription: string, status: string, sourceAccount: string, destinationAccount: string, destinationRegion: string, expirationTime: string, creationTime: string, lastUpdated: string, comment: string, standardControlsCount: int, customControlsCount: int, complianceType: string>> {
+]: any -> oneof<record<assessmentFrameworkShareRequest: record<id: string, frameworkId: string, frameworkName: string, frameworkDescription: string, status: string, sourceAccount: string, destinationAccount: string, destinationRegion: string, expirationTime: string, creationTime: string, lastUpdated: string, comment: string, standardControlsCount: int, customControlsCount: int, complianceType: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2976,7 +2988,7 @@ export def "update-assessment-status" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   status: string@status-completer # The current status of the assessment.
-]: any -> record<assessment: record<arn: string, awsAccount: record<id: string, emailAddress: string, name: string>, metadata: record<name: string, id: string, description: string, complianceType: string, status: string, assessmentReportsDestination: record, scope: record, roles: list, delegations: list, creationTime: string, lastUpdated: string>, framework: record<id: string, arn: string, metadata: record, controlSets: list>, tags: record>> {
+]: any -> oneof<record<assessment: record<arn: string, awsAccount: record<id: string, emailAddress: string, name: string>, metadata: record<name: string, id: string, description: string, complianceType: string, status: string, assessmentReportsDestination: record, scope: record, roles: list, delegations: list, creationTime: string, lastUpdated: string>, framework: record<id: string, arn: string, metadata: record, controlSets: list>, tags: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3006,9 +3018,6 @@ export def "update-assessment-status" [
 #
 # PUT /settings
 # operationId: UpdateSettings
-# --defaultAssessmentReportsDestination shape: {destinationType?: "S3", destination?: string}
-# --defaultProcessOwners item shape: {roleType: "PROCESS_OWNER"|"RESOURCE_OWNER", roleArn: string}
-# --deregistrationPolicy shape: {deleteResources?: "ALL"|"DEFAULT"}
 export def "update-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3032,7 +3041,7 @@ export def "update-settings" [
   --kms-key: string # The KMS key details.
   --evidence-finder-enabled: oneof<nothing, bool> # Specifies whether the evidence finder feature is enabled. Change this attribute to enable or disable evidence finder. When you use this attribute to disable evidence finder, Audit Manager deletes the event data store that’s used to query your evidence data. As a result, you can’t re-enable evidence finder and use the feature again. Your only alternative is to deregister (https://docs.aws.amazon.com/audit-manager/latest/APIReference/API_DeregisterAccount.html) and then re-register (https://docs.aws.amazon.com/audit-manager/latest/APIReference/API_RegisterAccount.html) Audit Manager.
   --deregistration-policy: record # The deregistration policy for the data that's stored in Audit Manager. You can use this attribute to determine how your data is handled when you deregister Audit Manager (https://docs.aws.amazon.com/audit-manager/latest/APIReference/API_DeregisterAccount.html). By default, Audit Manager retains evidence data for two years from the time of its creation. Other Audit Manager resources (including assessments, custom controls, and custom frameworks) remain in Audit Manager indefinitely, and are available if you re-register Audit Manager (https://docs.aws.amazon.com/audit-manager/latest/APIReference/API_RegisterAccount.html) in the future. For more information about data retention, see Data Protection (https://docs.aws.amazon.com/audit-manager/latest/userguide/data-protection.html) in the Audit Manager User Guide. If you choose to delete all data, this action permanently deletes all evidence data in your account within seven days. It also deletes all of the Audit Manager resources that you created, including assessments, custom controls, and custom frameworks. Your data will not be available if you re-register Audit Manager in the future. — shape: {deleteResources?: "ALL"|"DEFAULT"}
-]: any -> record<settings: record<isAwsOrgEnabled: bool, snsTopic: string, defaultAssessmentReportsDestination: record<destinationType: string, destination: string>, defaultProcessOwners: list<record>, kmsKey: string, evidenceFinderEnablement: record<eventDataStoreArn: string, enablementStatus: string, backfillStatus: string, error: string>, deregistrationPolicy: record<deleteResources: string>>> {
+]: any -> oneof<record<settings: record<isAwsOrgEnabled: bool, snsTopic: string, defaultAssessmentReportsDestination: record<destinationType: string, destination: string>, defaultProcessOwners: list<record>, kmsKey: string, evidenceFinderEnablement: record<eventDataStoreArn: string, enablementStatus: string, backfillStatus: string, error: string>, deregistrationPolicy: record<deleteResources: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3079,7 +3088,7 @@ export def "validate-assessment-report-integrity" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   s3_relative_path: string # The relative path of the Amazon S3 bucket that the assessment report is stored in.
-]: any -> record<signatureValid: bool, signatureAlgorithm: string, signatureDateTime: string, signatureKeyId: string, validationErrors: list<string>> {
+]: any -> oneof<record<signatureValid: bool, signatureAlgorithm: string, signatureDateTime: string, signatureKeyId: string, validationErrors: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

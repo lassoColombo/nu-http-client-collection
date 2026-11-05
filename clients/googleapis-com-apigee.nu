@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -141,9 +165,9 @@ def protocol-completer [] { ["GRPC" "HTTP" "PROTOCOL_UNSPECIFIED"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "apigee-organizations-create" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["apigee-organizations-create" "apigee-organizations-instances-report-status" "apigee-organizations-sites-apicategories-delete" "apigee-organizations-sites-apicategories-get" "apigee-organizations-sites-apicategories-patch" "apigee-organizations-sharedflows-revisions-update-shared-flow-revision" "apigee-organizations-reports-update" "apigee-organizations-developers-apps-attributes" "apigee-organizations-environments-keystores-aliases-get-certificate" "apigee-organizations-environments-keystores-aliases-csr" "apigee-organizations-environments-apis-revisions-debugsessions-delete-data" "apigee-organizations-environments-sharedflows-revisions-undeploy" "apigee-organizations-environments-sharedflows-revisions-get-deployments" "apigee-organizations-environments-sharedflows-revisions-deploy" "apigee-organizations-environments-apis-revisions-deployments-generate-deploy-change-report" "apigee-organizations-environments-apis-revisions-deployments-generate-undeploy-change-report" "apigee-organizations-operations-list" "apigee-organizations-instances-nat-addresses-activate" "apigee-organizations-developers-balance-adjust" "apigee-organizations-developers-balance-credit" "apigee-organizations-developers-subscriptions-expire" "apigee-organizations-environments-archive-deployments-generate-download-url" "apigee-organizations-get-project-mapping" "apigee-organizations-get-sync-authorization" "apigee-organizations-security-profiles-list-revisions" "apigee-organizations-set-sync-authorization" "apigee-organizations-environments-security-stats-query-tabular-stats" "apigee-organizations-environments-security-stats-query-time-series-stats" "apigee-organizations-set-addons" "apigee-organizations-list" "apigee-organizations-environments-keystores-aliases-create" "apigee-organizations-analytics-datastores-list" "apigee-organizations-analytics-datastores-create" "apigee-organizations-analytics-datastores-test" "apigee-organizations-environments-analytics-exports-list" "apigee-organizations-environments-analytics-exports-create" "apigee-organizations-sites-apicategories-list" "apigee-organizations-sites-apicategories-create" "apigee-organizations-apiproducts-list" "apigee-organizations-apiproducts-create" "apigee-organizations-apis-list" "apigee-organizations-apis-create" "apigee-organizations-developers-apps-list" "apigee-organizations-developers-apps-create" "apigee-organizations-environments-archive-deployments-list" "apigee-organizations-environments-archive-deployments-create" "apigee-organizations-environments-archive-deployments-generate-upload-url" "apigee-organizations-instances-attachments-list" "apigee-organizations-instances-attachments-create" "apigee-organizations-developers-attributes-list" "apigee-organizations-developers-attributes" "apigee-organizations-instances-canaryevaluations-create" "apigee-organizations-datacollectors-list" "apigee-organizations-datacollectors-create" "apigee-organizations-environments-apis-revisions-debugsessions-list" "apigee-organizations-environments-apis-revisions-debugsessions-create" "apigee-organizations-sharedflows-revisions-deployments-list" "apigee-organizations-developers-list" "apigee-organizations-developers-create" "apigee-organizations-endpoint-attachments-list" "apigee-organizations-endpoint-attachments-create" "apigee-organizations-keyvaluemaps-entries-list" "apigee-organizations-keyvaluemaps-entries-create" "apigee-organizations-envgroups-list" "apigee-organizations-envgroups-create" "apigee-organizations-security-profiles-environments-create" "apigee-organizations-host-queries-list" "apigee-organizations-host-queries-create" "apigee-organizations-host-security-reports-list" "apigee-organizations-host-security-reports-create" "apigee-organizations-instances-list" "apigee-organizations-instances-create" "apigee-organizations-developers-apps-keys-create" "apigee-organizations-developers-apps-keys-create-create" "apigee-organizations-environments-keystores-create" "apigee-organizations-keyvaluemaps-create" "apigee-organizations-instances-nat-addresses-list" "apigee-organizations-instances-nat-addresses-create" "apigee-organizations-environments-trace-config-overrides-list" "apigee-organizations-environments-trace-config-overrides-create" "apigee-organizations-environments-queries-list" "apigee-organizations-environments-queries-create" "apigee-organizations-apiproducts-rateplans-list" "apigee-organizations-apiproducts-rateplans-create" "apigee-organizations-environments-references-create" "apigee-organizations-reports-list" "apigee-organizations-reports-create" "apigee-organizations-environments-resourcefiles-list" "apigee-organizations-environments-resourcefiles-create" "apigee-organizations-environments-resourcefiles-list-environment-resources" "apigee-organizations-environments-resourcefiles-delete" "apigee-organizations-environments-resourcefiles-get" "apigee-organizations-environments-resourcefiles-update" "apigee-organizations-environments-security-incidents-list" "apigee-organizations-security-profiles-list" "apigee-organizations-environments-security-reports-list" "apigee-organizations-environments-security-reports-create" "apigee-organizations-sharedflows-list" "apigee-organizations-sharedflows-create" "apigee-organizations-developers-subscriptions-list" "apigee-organizations-developers-subscriptions-create" "apigee-organizations-environments-targetservers-create" "apigee-organizations-environments-subscribe" "apigee-organizations-environments-unsubscribe" "apigee-organizations-security-profiles-environments-compute-environment-scores" "apigee-projects-provision-organization" "apigee-organizations-environments-get-iam-policy" "apigee-organizations-environments-set-iam-policy" "apigee-organizations-environments-test-iam-permissions" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -165,8 +189,6 @@ export def commands []: nothing -> table {
 #
 # POST /v1/organizations
 # operationId: apigee.organizations.create
-# --addonsConfig shape: {advancedApiOpsConfig?: record, apiSecurityConfig?: record, connectorsPlatformConfig?: record, integrationConfig?: record, monetizationConfig?: record}
-# --properties shape: {property?: list}
 export def "apigee-organizations-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -205,7 +227,7 @@ export def "apigee-organizations-create" [
   --runtime-database-encryption-key-name: string # Cloud KMS key name used for encrypting the data that is stored and replicated across runtime instances. Update is not allowed after the organization is created. Required when [RuntimeType](#RuntimeType) is `CLOUD`. If not specified when [RuntimeType](#RuntimeType) is `TRIAL`, a Google-Managed encryption key will be used. For example: "projects/foo/locations/us/keyRings/bar/cryptoKeys/baz". **Note:** Not supported for Apigee hybrid.
   --runtime-type: string@runtime-type-completer # Required. Runtime type of the Apigee organization based on the Apigee subscription purchased.
   --type: string@type-completer # Not used by Apigee.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -233,7 +255,6 @@ export def "apigee-organizations-create" [
 #
 # POST /v1/{instance}:reportStatus
 # operationId: apigee.organizations.instances.reportStatus
-# --resources item shape: {resource?: string, revisions?: list, totalReplicas?: int, uid?: string}
 export def "apigee-organizations-instances-report-status" [
   instance: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -259,7 +280,7 @@ export def "apigee-organizations-instances-report-status" [
   --instance-uid: string # A unique ID for the instance which is guaranteed to be unique in case the user installs multiple hybrid runtimes with the same instance ID.
   --report-time: string # The time the report was generated in the runtime. Used to prevent an old status from overwriting a newer one. An instance should space out it's status reports so that clock skew does not play a factor. (format: google-datetime)
   --resources: list # Status for config resources — item shape: {resource?: string, revisions?: list, totalReplicas?: int, uid?: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -311,7 +332,7 @@ export def "apigee-organizations-sites-apicategories-delete" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --retention: string@retention-completer # Optional. This setting is applicable only for organizations that are soft-deleted (i.e., BillingType is not EVALUATION). It controls how long Organization data will be retained after the initial delete operation completes. During this period, the Organization may be restored to its last known state. After this period, the Organization will no longer be able to be restored.
-]: nothing -> record<errorCode: string, message: string, requestId: string, status: string> {
+]: nothing -> oneof<record<errorCode: string, message: string, requestId: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -373,7 +394,7 @@ export def "apigee-organizations-sites-apicategories-get" [
   --topk: string # Top number of results to return. For example, to return the top 5 results, set `topk=5`.
   --ts-ascending: oneof<nothing, bool> # Flag that specifies whether to list timestamps in ascending (`true`) or descending (`false`) order. Apigee recommends that you set this value to `true` if you are using `sortby` with `sort=DESC`.
   --tzo: string # Timezone offset value.
-]: nothing -> record<data: record<id: string, name: string, siteId: string, updateTime: string>, errorCode: string, message: string, requestId: string, status: string> {
+]: nothing -> oneof<record<data: record<id: string, name: string, siteId: string, updateTime: string>, errorCode: string, message: string, requestId: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -426,7 +447,7 @@ export def "apigee-organizations-sites-apicategories-patch" [
   --body-name: string # Name of the category.
   --site-id: string # Name of the portal.
   --update-time: string # Time the category was last modified in milliseconds since epoch. (format: int64)
-]: any -> record<data: record<id: string, name: string, siteId: string, updateTime: string>, errorCode: string, message: string, requestId: string, status: string> {
+]: any -> oneof<record<data: record<id: string, name: string, siteId: string, updateTime: string>, errorCode: string, message: string, requestId: string, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -481,7 +502,7 @@ export def "apigee-organizations-sharedflows-revisions-update-shared-flow-revisi
   --content-type: string # The HTTP Content-Type header value specifying the content type of the body.
   --data: string # The HTTP request/response body as raw binary. (format: byte)
   --extensions: list # Application specific response metadata. Must be set in the first response for streaming APIs.
-]: any -> record<configurationVersion: record<majorVersion: int, minorVersion: int>, contextInfo: string, createdAt: string, description: string, displayName: string, entityMetaDataAsProperties: record, lastModifiedAt: string, name: string, policies: list<string>, resourceFiles: record<resourceFile: list<record>>, resources: list<string>, revision: string, sharedFlows: list<string>, type: string> {
+]: any -> oneof<record<configurationVersion: record<majorVersion: int, minorVersion: int>, contextInfo: string, createdAt: string, description: string, displayName: string, entityMetaDataAsProperties: record, lastModifiedAt: string, name: string, policies: list<string>, resourceFiles: record<resourceFile: list<record>>, resources: list<string>, revision: string, sharedFlows: list<string>, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -510,8 +531,6 @@ export def "apigee-organizations-sharedflows-revisions-update-shared-flow-revisi
 #
 # PUT /v1/{name}
 # operationId: apigee.organizations.reports.update
-# --metrics item shape: {function?: string, name?: string}
-# --properties item shape: {property?: string, value?: list}
 export def "apigee-organizations-reports-update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -553,7 +572,7 @@ export def "apigee-organizations-reports-update" [
   --time-unit: string # This field contains the time unit of aggregation for the report
   --to-time: string # Legacy field: not used. Contains the end time for the report
   --topk: string # Legacy field: not used. This field contains the top k parameter value for restricting the result
-]: any -> record<chartType: string, comments: list<string>, createdAt: string, dimensions: list<string>, displayName: string, environment: string, filter: string, fromTime: string, lastModifiedAt: string, lastViewedAt: string, limit: string, metrics: table<function: string, name: string>, name: string, offset: string, organization: string, properties: table<property: string, value: list>, sortByCols: list<string>, sortOrder: string, tags: list<string>, timeUnit: string, toTime: string, topk: string> {
+]: any -> oneof<record<chartType: string, comments: list<string>, createdAt: string, dimensions: list<string>, displayName: string, environment: string, filter: string, fromTime: string, lastModifiedAt: string, lastViewedAt: string, limit: string, metrics: table<function: string, name: string>, name: string, offset: string, organization: string, properties: table<property: string, value: list>, sortByCols: list<string>, sortOrder: string, tags: list<string>, timeUnit: string, toTime: string, topk: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -582,7 +601,6 @@ export def "apigee-organizations-reports-update" [
 #
 # POST /v1/{name}/attributes
 # operationId: apigee.organizations.developers.apps.attributes
-# --attribute item shape: {name?: string, value?: string}
 export def "apigee-organizations-developers-apps-attributes" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -606,7 +624,7 @@ export def "apigee-organizations-developers-apps-attributes" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --attribute: list # List of attributes. — item shape: {name?: string, value?: string}
-]: any -> record<attribute: table<name: string, value: string>> {
+]: any -> oneof<record<attribute: table<name: string, value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -657,7 +675,7 @@ export def "apigee-organizations-environments-keystores-aliases-get-certificate"
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<contentType: string, data: string, extensions: list<record>> {
+]: nothing -> oneof<record<contentType: string, data: string, extensions: list<record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -705,7 +723,7 @@ export def "apigee-organizations-environments-keystores-aliases-csr" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<contentType: string, data: string, extensions: list<record>> {
+]: nothing -> oneof<record<contentType: string, data: string, extensions: list<record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -753,7 +771,7 @@ export def "apigee-organizations-environments-apis-revisions-debugsessions-delet
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -802,7 +820,7 @@ export def "apigee-organizations-environments-sharedflows-revisions-undeploy" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --sequenced-rollout: oneof<nothing, bool> # Flag that specifies whether to enable sequenced rollout. If set to `true`, the environment group routing rules corresponding to this deployment will be removed before removing the deployment from the runtime. This is likely to be a rare use case; it is only needed when the intended effect of undeploying this proxy is to cause the traffic it currently handles to be rerouted to some other existing proxy in the environment group. The [GenerateUndeployChangeReport API](GenerateUndeployChangeReport) may be used to examine routing changes before issuing the undeployment request, and its response will indicate if a sequenced rollout is recommended for the undeployment.
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -850,7 +868,7 @@ export def "apigee-organizations-environments-sharedflows-revisions-get-deployme
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<apiProxy: string, deployStartTime: string, environment: string, errors: table<code: int, details: list, message: string>, instances: table<deployedRevisions: list, deployedRoutes: list, instance: string>, pods: table<appVersion: string, deploymentStatus: string, deploymentStatusTime: string, deploymentTime: string, podName: string, podStatus: string, podStatusTime: string, statusCode: string, statusCodeDetails: string>, revision: string, routeConflicts: table<conflictingDeployment: record, description: string, environmentGroup: string>, serviceAccount: string, state: string> {
+]: nothing -> oneof<record<apiProxy: string, deployStartTime: string, environment: string, errors: table<code: int, details: list, message: string>, instances: table<deployedRevisions: list, deployedRoutes: list, instance: string>, pods: table<appVersion: string, deploymentStatus: string, deploymentStatusTime: string, deploymentTime: string, podName: string, podStatus: string, podStatusTime: string, statusCode: string, statusCodeDetails: string>, revision: string, routeConflicts: table<conflictingDeployment: record, description: string, environmentGroup: string>, serviceAccount: string, state: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -900,7 +918,7 @@ export def "apigee-organizations-environments-sharedflows-revisions-deploy" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --override: oneof<nothing, bool> # Flag that specifies whether the new deployment replaces other deployed revisions of the shared flow in the environment. Set `override` to `true` to replace other deployed revisions. By default, `override` is `false` and the deployment is rejected if other revisions of the shared flow are deployed in the environment.
   --service-account: string # Google Cloud IAM service account. The service account represents the identity of the deployed proxy, and determines what permissions it has. The format must be `{ACCOUNT_ID}@{PROJECT}.iam.gserviceaccount.com`.
-]: nothing -> record<apiProxy: string, deployStartTime: string, environment: string, errors: table<code: int, details: list, message: string>, instances: table<deployedRevisions: list, deployedRoutes: list, instance: string>, pods: table<appVersion: string, deploymentStatus: string, deploymentStatusTime: string, deploymentTime: string, podName: string, podStatus: string, podStatusTime: string, statusCode: string, statusCodeDetails: string>, revision: string, routeConflicts: table<conflictingDeployment: record, description: string, environmentGroup: string>, serviceAccount: string, state: string> {
+]: nothing -> oneof<record<apiProxy: string, deployStartTime: string, environment: string, errors: table<code: int, details: list, message: string>, instances: table<deployedRevisions: list, deployedRoutes: list, instance: string>, pods: table<appVersion: string, deploymentStatus: string, deploymentStatusTime: string, deploymentTime: string, podName: string, podStatus: string, podStatusTime: string, statusCode: string, statusCodeDetails: string>, revision: string, routeConflicts: table<conflictingDeployment: record, description: string, environmentGroup: string>, serviceAccount: string, state: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -949,7 +967,7 @@ export def "apigee-organizations-environments-apis-revisions-deployments-generat
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --override: oneof<nothing, bool> # Flag that specifies whether to force the deployment of the new revision over the currently deployed revision by overriding conflict checks.
-]: nothing -> record<routingChanges: table<description: string, environmentGroup: string, fromDeployment: record, shouldSequenceRollout: bool, toDeployment: record>, routingConflicts: table<conflictingDeployment: record, description: string, environmentGroup: string>, validationErrors: record<violations: list<record>>> {
+]: nothing -> oneof<record<routingChanges: table<description: string, environmentGroup: string, fromDeployment: record, shouldSequenceRollout: bool, toDeployment: record>, routingConflicts: table<conflictingDeployment: record, description: string, environmentGroup: string>, validationErrors: record<violations: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -997,7 +1015,7 @@ export def "apigee-organizations-environments-apis-revisions-deployments-generat
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<routingChanges: table<description: string, environmentGroup: string, fromDeployment: record, shouldSequenceRollout: bool, toDeployment: record>, routingConflicts: table<conflictingDeployment: record, description: string, environmentGroup: string>, validationErrors: record<violations: list<record>>> {
+]: nothing -> oneof<record<routingChanges: table<description: string, environmentGroup: string, fromDeployment: record, shouldSequenceRollout: bool, toDeployment: record>, routingConflicts: table<conflictingDeployment: record, description: string, environmentGroup: string>, validationErrors: record<violations: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -1048,7 +1066,7 @@ export def "apigee-organizations-operations-list" [
   --filter: string # The standard list filter.
   --page-size: int # The standard list page size.
   --page-token: string # The standard list page token.
-]: nothing -> record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>> {
+]: nothing -> oneof<record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -1097,7 +1115,7 @@ export def "apigee-organizations-instances-nat-addresses-activate" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1126,7 +1144,6 @@ export def "apigee-organizations-instances-nat-addresses-activate" [
 #
 # POST /v1/{name}:adjust
 # operationId: apigee.organizations.developers.balance.adjust
-# --adjustment shape: {currencyCode?: string, nanos?: int, units?: string}
 export def "apigee-organizations-developers-balance-adjust" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1150,7 +1167,7 @@ export def "apigee-organizations-developers-balance-adjust" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --adjustment: record # Represents an amount of money with its currency type. — shape: {currencyCode?: string, nanos?: int, units?: string}
-]: any -> record<wallets: table<balance: record, lastCreditTime: string>> {
+]: any -> oneof<record<wallets: table<balance: record, lastCreditTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1179,7 +1196,6 @@ export def "apigee-organizations-developers-balance-adjust" [
 #
 # POST /v1/{name}:credit
 # operationId: apigee.organizations.developers.balance.credit
-# --transactionAmount shape: {currencyCode?: string, nanos?: int, units?: string}
 export def "apigee-organizations-developers-balance-credit" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1204,7 +1220,7 @@ export def "apigee-organizations-developers-balance-credit" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --transaction-amount: record # Represents an amount of money with its currency type. — shape: {currencyCode?: string, nanos?: int, units?: string}
   --transaction-id: string # Each transaction_id uniquely identifies a credit balance request. If multiple requests are received with the same transaction_id, only one of them will be considered.
-]: any -> record<wallets: table<balance: record, lastCreditTime: string>> {
+]: any -> oneof<record<wallets: table<balance: record, lastCreditTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1256,7 +1272,7 @@ export def "apigee-organizations-developers-subscriptions-expire" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record<apiproduct: string, createdAt: string, endTime: string, lastModifiedAt: string, name: string, startTime: string> {
+]: any -> oneof<record<apiproduct: string, createdAt: string, endTime: string, lastModifiedAt: string, name: string, startTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1308,7 +1324,7 @@ export def "apigee-organizations-environments-archive-deployments-generate-downl
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record<downloadUri: string> {
+]: any -> oneof<record<downloadUri: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1359,7 +1375,7 @@ export def "apigee-organizations-get-project-mapping" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<location: string, organization: string, projectId: string, projectIds: list<string>> {
+]: nothing -> oneof<record<location: string, organization: string, projectId: string, projectIds: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -1408,7 +1424,7 @@ export def "apigee-organizations-get-sync-authorization" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record<etag: string, identities: list<string>> {
+]: any -> oneof<record<etag: string, identities: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1461,7 +1477,7 @@ export def "apigee-organizations-security-profiles-list-revisions" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # The maximum number of profile revisions to return. The service may return fewer than this value. If unspecified, at most 50 revisions will be returned.
   --page-token: string # A page token, received from a previous `ListSecurityProfileRevisions` call. Provide this to retrieve the subsequent page.
-]: nothing -> record<nextPageToken: string, securityProfiles: table<displayName: string, environments: list, maxScore: int, minScore: int, name: string, revisionCreateTime: string, revisionId: string, revisionPublishTime: string, revisionUpdateTime: string, scoringConfigs: list>> {
+]: nothing -> oneof<record<nextPageToken: string, securityProfiles: table<displayName: string, environments: list, maxScore: int, minScore: int, name: string, revisionCreateTime: string, revisionId: string, revisionPublishTime: string, revisionUpdateTime: string, scoringConfigs: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -1511,7 +1527,7 @@ export def "apigee-organizations-set-sync-authorization" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --etag: string # Entity tag (ETag) used for optimistic concurrency control as a way to help prevent simultaneous updates from overwriting each other. For example, when you call [getSyncAuthorization](organizations/getSyncAuthorization) an ETag is returned in the response. Pass that ETag when calling the [setSyncAuthorization](organizations/setSyncAuthorization) to ensure that you are updating the correct version. If you don't pass the ETag in the call to `setSyncAuthorization`, then the existing authorization is overwritten indiscriminately. **Note**: We strongly recommend that you use the ETag in the read-modify-write cycle to avoid race conditions. (format: byte)
   --identities: list<string> # Required. Array of service accounts to grant access to control plane resources, each specified using the following format: `serviceAccount:` service-account-name. The service-account-name is formatted like an email address. For example: `my-synchronizer-manager-service_account@my_project_id.iam.gserviceaccount.com` You might specify multiple service accounts, for example, if you have multiple environments and wish to assign a unique service account to each one. The service accounts must have **Apigee Synchronizer Manager** role. See also [Create service accounts](https://cloud.google.com/apigee/docs/hybrid/latest/sa-about#create-the-service-accounts).
-]: any -> record<etag: string, identities: list<string>> {
+]: any -> oneof<record<etag: string, identities: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1540,8 +1556,6 @@ export def "apigee-organizations-set-sync-authorization" [
 #
 # POST /v1/{orgenv}/securityStats:queryTabularStats
 # operationId: apigee.organizations.environments.securityStats.queryTabularStats
-# --metrics item shape: {aggregation?: "AGGREGATION_FUNCTION_UNSPECIFIED"|"AVG"|"SUM"|"MIN"|"MAX"|"COUNT_DISTINCT", name?: string, order?: "ORDER_UNSPECIFIED"|"ASCENDING"|"DESCENDING"}
-# --timeRange shape: {endTime?: string, startTime?: string}
 export def "apigee-organizations-environments-security-stats-query-tabular-stats" [
   orgenv: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1570,7 +1584,7 @@ export def "apigee-organizations-environments-security-stats-query-tabular-stats
   --page-size: int # Page size represents the number of rows. (format: int32)
   --page-token: string # Identifies a sequence of rows.
   --time-range: record # Represents a time interval, encoded as a Timestamp start (inclusive) and a Timestamp end (exclusive). The start must be less than or equal to the end. When the start equals the end, the interval is empty (matches no time). When both start and end are unspecified, the interval matches any time. — shape: {endTime?: string, startTime?: string}
-]: any -> record<columns: list<string>, nextPageToken: string, values: list<list<any>>> {
+]: any -> oneof<record<columns: list<string>, nextPageToken: string, values: list<list<any>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1599,8 +1613,6 @@ export def "apigee-organizations-environments-security-stats-query-tabular-stats
 #
 # POST /v1/{orgenv}/securityStats:queryTimeSeriesStats
 # operationId: apigee.organizations.environments.securityStats.queryTimeSeriesStats
-# --metrics item shape: {aggregation?: "AGGREGATION_FUNCTION_UNSPECIFIED"|"AVG"|"SUM"|"MIN"|"MAX"|"COUNT_DISTINCT", name?: string, order?: "ORDER_UNSPECIFIED"|"ASCENDING"|"DESCENDING"}
-# --timeRange shape: {endTime?: string, startTime?: string}
 export def "apigee-organizations-environments-security-stats-query-time-series-stats" [
   orgenv: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1631,7 +1643,7 @@ export def "apigee-organizations-environments-security-stats-query-time-series-s
   --time-range: record # Represents a time interval, encoded as a Timestamp start (inclusive) and a Timestamp end (exclusive). The start must be less than or equal to the end. When the start equals the end, the interval is empty (matches no time). When both start and end are unspecified, the interval matches any time. — shape: {endTime?: string, startTime?: string}
   --timestamp-order: string@timestamp-order-completer # Order the sequences in increasing or decreasing order of timestamps. Default is descending order of timestamps (latest first).
   --window-size: string@window-size-completer # Time buckets to group the stats by.
-]: any -> record<columns: list<string>, nextPageToken: string, values: table<dimensions: record, points: list>> {
+]: any -> oneof<record<columns: list<string>, nextPageToken: string, values: table<dimensions: record, points: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1660,7 +1672,6 @@ export def "apigee-organizations-environments-security-stats-query-time-series-s
 #
 # POST /v1/{org}:setAddons
 # operationId: apigee.organizations.setAddons
-# --addonsConfig shape: {advancedApiOpsConfig?: record, apiSecurityConfig?: record, connectorsPlatformConfig?: record, integrationConfig?: record, monetizationConfig?: record}
 export def "apigee-organizations-set-addons" [
   org: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1684,7 +1695,7 @@ export def "apigee-organizations-set-addons" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --addons-config: record # Add-on configurations for the Apigee organization. — shape: {advancedApiOpsConfig?: record, apiSecurityConfig?: record, connectorsPlatformConfig?: record, integrationConfig?: record, monetizationConfig?: record}
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1735,7 +1746,7 @@ export def "apigee-organizations-list" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<organizations: table<location: string, organization: string, projectId: string, projectIds: list>> {
+]: nothing -> oneof<record<organizations: table<location: string, organization: string, projectId: string, projectIds: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1791,7 +1802,7 @@ export def "apigee-organizations-environments-keystores-aliases-create" [
   --content-type: string # The HTTP Content-Type header value specifying the content type of the body.
   --data: string # The HTTP request/response body as raw binary. (format: byte)
   --extensions: list # Application specific response metadata. Must be set in the first response for streaming APIs.
-]: any -> record<alias: string, certsInfo: record<certInfo: list<record>>, type: string> {
+]: any -> oneof<record<alias: string, certsInfo: record<certInfo: list<record>>, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1843,7 +1854,7 @@ export def "apigee-organizations-analytics-datastores-list" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --target-type: string # Optional. TargetType is used to fetch all Datastores that match the type
-]: nothing -> record<datastores: table<createTime: string, datastoreConfig: record, displayName: string, lastUpdateTime: string, org: string, self: string, targetType: string>> {
+]: nothing -> oneof<record<datastores: table<createTime: string, datastoreConfig: record, displayName: string, lastUpdateTime: string, org: string, self: string, targetType: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1869,7 +1880,6 @@ export def "apigee-organizations-analytics-datastores-list" [
 #
 # POST /v1/{parent}/analytics/datastores
 # operationId: apigee.organizations.analytics.datastores.create
-# --datastoreConfig shape: {bucketName?: string, datasetName?: string, path?: string, projectId?: string, tablePrefix?: string}
 export def "apigee-organizations-analytics-datastores-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1895,7 +1905,7 @@ export def "apigee-organizations-analytics-datastores-create" [
   --datastore-config: record # Configuration detail for datastore — shape: {bucketName?: string, datasetName?: string, path?: string, projectId?: string, tablePrefix?: string}
   --display-name: string # Required. Display name in UI
   --target-type: string # Destination storage type. Supported types `gcs` or `bigquery`.
-]: any -> record<createTime: string, datastoreConfig: record<bucketName: string, datasetName: string, path: string, projectId: string, tablePrefix: string>, displayName: string, lastUpdateTime: string, org: string, self: string, targetType: string> {
+]: any -> oneof<record<createTime: string, datastoreConfig: record<bucketName: string, datasetName: string, path: string, projectId: string, tablePrefix: string>, displayName: string, lastUpdateTime: string, org: string, self: string, targetType: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1924,7 +1934,6 @@ export def "apigee-organizations-analytics-datastores-create" [
 #
 # POST /v1/{parent}/analytics/datastores:test
 # operationId: apigee.organizations.analytics.datastores.test
-# --datastoreConfig shape: {bucketName?: string, datasetName?: string, path?: string, projectId?: string, tablePrefix?: string}
 export def "apigee-organizations-analytics-datastores-test" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1950,7 +1959,7 @@ export def "apigee-organizations-analytics-datastores-test" [
   --datastore-config: record # Configuration detail for datastore — shape: {bucketName?: string, datasetName?: string, path?: string, projectId?: string, tablePrefix?: string}
   --display-name: string # Required. Display name in UI
   --target-type: string # Destination storage type. Supported types `gcs` or `bigquery`.
-]: any -> record<error: string, state: string> {
+]: any -> oneof<record<error: string, state: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2001,7 +2010,7 @@ export def "apigee-organizations-environments-analytics-exports-list" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<exports: table<created: string, datastoreName: string, description: string, error: string, executionTime: string, name: string, self: string, state: string, updated: string>> {
+]: nothing -> oneof<record<exports: table<created: string, datastoreName: string, description: string, error: string, executionTime: string, name: string, self: string, state: string, updated: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -2027,7 +2036,6 @@ export def "apigee-organizations-environments-analytics-exports-list" [
 #
 # POST /v1/{parent}/analytics/exports
 # operationId: apigee.organizations.environments.analytics.exports.create
-# --dateRange shape: {end?: string, start?: string}
 export def "apigee-organizations-environments-analytics-exports-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2056,7 +2064,7 @@ export def "apigee-organizations-environments-analytics-exports-create" [
   --description: string # Optional. Description of the export job.
   --name: string # Required. Display name of the export job.
   --output-format: string # Optional. Output format of the export. Valid values include: `csv` or `json`. Defaults to `json`. Note: Configure the delimiter for CSV output using the `csvDelimiter` property.
-]: any -> record<created: string, datastoreName: string, description: string, error: string, executionTime: string, name: string, self: string, state: string, updated: string> {
+]: any -> oneof<record<created: string, datastoreName: string, description: string, error: string, executionTime: string, name: string, self: string, state: string, updated: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2107,7 +2115,7 @@ export def "apigee-organizations-sites-apicategories-list" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<data: table<id: string, name: string, siteId: string, updateTime: string>, errorCode: string, message: string, requestId: string, status: string> {
+]: nothing -> oneof<record<data: table<id: string, name: string, siteId: string, updateTime: string>, errorCode: string, message: string, requestId: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -2159,7 +2167,7 @@ export def "apigee-organizations-sites-apicategories-create" [
   --name: string # Name of the category.
   --site-id: string # Name of the portal.
   --update-time: string # Time the category was last modified in milliseconds since epoch. (format: int64)
-]: any -> record<data: record<id: string, name: string, siteId: string, updateTime: string>, errorCode: string, message: string, requestId: string, status: string> {
+]: any -> oneof<record<data: record<id: string, name: string, siteId: string, updateTime: string>, errorCode: string, message: string, requestId: string, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2215,7 +2223,7 @@ export def "apigee-organizations-apiproducts-list" [
   --count: string # Enter the number of API products you want returned in the API call. The limit is 1000.
   --expand: oneof<nothing, bool> # Flag that specifies whether to expand the results. Set to `true` to get expanded details about each API.
   --start-key: string # Gets a list of API products starting with a specific API product in the list. For example, if you're returning 50 API products at a time (using the `count` query parameter), you can view products 50-99 by entering the name of the 50th API product in the first API (without using `startKey`). Product name is case sensitive.
-]: nothing -> record<apiProduct: table<apiResources: list, approvalType: string, attributes: list, createdAt: string, description: string, displayName: string, environments: list, graphqlOperationGroup: record, lastModifiedAt: string, name: string, operationGroup: record, proxies: list, quota: string, quotaCounterScope: string, quotaInterval: string, quotaTimeUnit: string, scopes: list>> {
+]: nothing -> oneof<record<apiProduct: table<apiResources: list, approvalType: string, attributes: list, createdAt: string, description: string, displayName: string, environments: list, graphqlOperationGroup: record, lastModifiedAt: string, name: string, operationGroup: record, proxies: list, quota: string, quotaCounterScope: string, quotaInterval: string, quotaTimeUnit: string, scopes: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -2241,9 +2249,6 @@ export def "apigee-organizations-apiproducts-list" [
 #
 # POST /v1/{parent}/apiproducts
 # operationId: apigee.organizations.apiproducts.create
-# --attributes item shape: {name?: string, value?: string}
-# --graphqlOperationGroup shape: {operationConfigType?: string, operationConfigs?: list}
-# --operationGroup shape: {operationConfigType?: string, operationConfigs?: list}
 export def "apigee-organizations-apiproducts-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2283,7 +2288,7 @@ export def "apigee-organizations-apiproducts-create" [
   --quota-interval: string # Time interval over which the number of request messages is calculated.
   --quota-time-unit: string # Time unit defined for the `quotaInterval`. Valid values include `minute`, `hour`, `day`, or `month`.
   --scopes: list<string> # Comma-separated list of OAuth scopes that are validated at runtime. Apigee validates that the scopes in any access token presented match the scopes defined in the OAuth policy associated with the API product.
-]: any -> record<apiResources: list<string>, approvalType: string, attributes: table<name: string, value: string>, createdAt: string, description: string, displayName: string, environments: list<string>, graphqlOperationGroup: record<operationConfigType: string, operationConfigs: list<record>>, lastModifiedAt: string, name: string, operationGroup: record<operationConfigType: string, operationConfigs: list<record>>, proxies: list<string>, quota: string, quotaCounterScope: string, quotaInterval: string, quotaTimeUnit: string, scopes: list<string>> {
+]: any -> oneof<record<apiResources: list<string>, approvalType: string, attributes: table<name: string, value: string>, createdAt: string, description: string, displayName: string, environments: list<string>, graphqlOperationGroup: record<operationConfigType: string, operationConfigs: list<record>>, lastModifiedAt: string, name: string, operationGroup: record<operationConfigType: string, operationConfigs: list<record>>, proxies: list<string>, quota: string, quotaCounterScope: string, quotaInterval: string, quotaTimeUnit: string, scopes: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2336,7 +2341,7 @@ export def "apigee-organizations-apis-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --include-meta-data: oneof<nothing, bool> # Flag that specifies whether to include API proxy metadata in the response.
   --include-revisions: oneof<nothing, bool> # Flag that specifies whether to include a list of revisions in the response.
-]: nothing -> record<proxies: table<apiProxyType: string, labels: record, latestRevisionId: string, metaData: record, name: string, readOnly: bool, revision: list>> {
+]: nothing -> oneof<record<proxies: table<apiProxyType: string, labels: record, latestRevisionId: string, metaData: record, name: string, readOnly: bool, revision: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -2390,7 +2395,7 @@ export def "apigee-organizations-apis-create" [
   --content-type: string # The HTTP Content-Type header value specifying the content type of the body.
   --data: string # The HTTP request/response body as raw binary. (format: byte)
   --extensions: list # Application specific response metadata. Must be set in the first response for streaming APIs.
-]: any -> record<archive: string, basepaths: list<string>, configurationVersion: record<majorVersion: int, minorVersion: int>, contextInfo: string, createdAt: string, description: string, displayName: string, entityMetaDataAsProperties: record, integrationEndpoints: list<string>, lastModifiedAt: string, name: string, policies: list<string>, proxies: list<string>, proxyEndpoints: list<string>, resourceFiles: record<resourceFile: list<record>>, resources: list<string>, revision: string, sharedFlows: list<string>, spec: string, targetEndpoints: list<string>, targetServers: list<string>, targets: list<string>, teams: list<string>, type: string> {
+]: any -> oneof<record<archive: string, basepaths: list<string>, configurationVersion: record<majorVersion: int, minorVersion: int>, contextInfo: string, createdAt: string, description: string, displayName: string, entityMetaDataAsProperties: record, integrationEndpoints: list<string>, lastModifiedAt: string, name: string, policies: list<string>, proxies: list<string>, proxyEndpoints: list<string>, resourceFiles: record<resourceFile: list<record>>, resources: list<string>, revision: string, sharedFlows: list<string>, spec: string, targetEndpoints: list<string>, targetServers: list<string>, targets: list<string>, teams: list<string>, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2449,7 +2454,7 @@ export def "apigee-organizations-developers-apps-list" [
   --key-status: string # Optional. Key status of the app. Valid values include `approved` or `revoked`. Defaults to `approved`.
   --rows: string # Optional. Maximum number of app IDs to return. Defaults to 10000.
   --status: string # Optional. Filter by the status of the app. Valid values are `approved` or `revoked`. Defaults to `approved`.
-]: nothing -> record<app: table<apiProducts: list, appFamily: string, appId: string, attributes: list, callbackUrl: string, createdAt: string, credentials: list, developerId: string, keyExpiresIn: string, lastModifiedAt: string, name: string, scopes: list, status: string>> {
+]: nothing -> oneof<record<app: table<apiProducts: list, appFamily: string, appId: string, attributes: list, callbackUrl: string, createdAt: string, credentials: list, developerId: string, keyExpiresIn: string, lastModifiedAt: string, name: string, scopes: list, status: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -2475,8 +2480,6 @@ export def "apigee-organizations-developers-apps-list" [
 #
 # POST /v1/{parent}/apps
 # operationId: apigee.organizations.developers.apps.create
-# --attributes item shape: {name?: string, value?: string}
-# --credentials item shape: {apiProducts?: list, attributes?: list, consumerKey?: string, consumerSecret?: string, expiresAt?: string, issuedAt?: string, scopes?: list<string>, status?: string}
 export def "apigee-organizations-developers-apps-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2509,7 +2512,7 @@ export def "apigee-organizations-developers-apps-create" [
   --name: string # Name of the developer app.
   --scopes: list<string> # Scopes to apply to the developer app. The specified scopes must already exist for the API product that you associate with the developer app.
   --status: string # Status of the credential. Valid values include `approved` or `revoked`.
-]: any -> record<apiProducts: list<string>, appFamily: string, appId: string, attributes: table<name: string, value: string>, callbackUrl: string, createdAt: string, credentials: table<apiProducts: list, attributes: list, consumerKey: string, consumerSecret: string, expiresAt: string, issuedAt: string, scopes: list, status: string>, developerId: string, keyExpiresIn: string, lastModifiedAt: string, name: string, scopes: list<string>, status: string> {
+]: any -> oneof<record<apiProducts: list<string>, appFamily: string, appId: string, attributes: table<name: string, value: string>, callbackUrl: string, createdAt: string, credentials: table<apiProducts: list, attributes: list, consumerKey: string, consumerSecret: string, expiresAt: string, issuedAt: string, scopes: list, status: string>, developerId: string, keyExpiresIn: string, lastModifiedAt: string, name: string, scopes: list<string>, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2563,7 +2566,7 @@ export def "apigee-organizations-environments-archive-deployments-list" [
   --filter: string # Optional. An optional query used to return a subset of Archive Deployments using the semantics defined in https://google.aip.dev/160.
   --page-size: int # Optional. Maximum number of Archive Deployments to return. If unspecified, at most 25 deployments will be returned.
   --page-token: string # Optional. Page token, returned from a previous ListArchiveDeployments call, that you can use to retrieve the next page.
-]: nothing -> record<archiveDeployments: table<createdAt: string, gcsUri: string, labels: record, name: string, operation: string, updatedAt: string>, nextPageToken: string> {
+]: nothing -> oneof<record<archiveDeployments: table<createdAt: string, gcsUri: string, labels: record, name: string, operation: string, updatedAt: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -2614,7 +2617,7 @@ export def "apigee-organizations-environments-archive-deployments-create" [
   --gcs-uri: string # Input only. The Google Cloud Storage signed URL returned from GenerateUploadUrl and used to upload the Archive zip file.
   --labels: record # User-supplied key-value pairs used to organize ArchiveDeployments. Label keys must be between 1 and 63 characters long, have a UTF-8 encoding of maximum 128 bytes, and must conform to the following PCRE regular expression: \p{Ll}\p{Lo}{0,62} Label values must be between 1 and 63 characters long, have a UTF-8 encoding of maximum 128 bytes, and must conform to the following PCRE regular expression: [\p{Ll}\p{Lo}\p{N}_-]{0,63} No more than 64 labels can be associated with a given store.
   --name: string # Name of the Archive Deployment in the following format: `organizations/{org}/environments/{env}/archiveDeployments/{id}`.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2666,7 +2669,7 @@ export def "apigee-organizations-environments-archive-deployments-generate-uploa
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record<uploadUri: string> {
+]: any -> oneof<record<uploadUri: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2719,7 +2722,7 @@ export def "apigee-organizations-instances-attachments-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # Maximum number of instance attachments to return. Defaults to 25.
   --page-token: string # Page token, returned by a previous ListInstanceAttachments call, that you can use to retrieve the next page of content.
-]: nothing -> record<attachments: table<createdAt: string, environment: string, name: string>, nextPageToken: string> {
+]: nothing -> oneof<record<attachments: table<createdAt: string, environment: string, name: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -2768,7 +2771,7 @@ export def "apigee-organizations-instances-attachments-create" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --environment: string # ID of the attached environment.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2819,7 +2822,7 @@ export def "apigee-organizations-developers-attributes-list" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<attribute: table<name: string, value: string>> {
+]: nothing -> oneof<record<attribute: table<name: string, value: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -2845,7 +2848,6 @@ export def "apigee-organizations-developers-attributes-list" [
 #
 # POST /v1/{parent}/attributes
 # operationId: apigee.organizations.developers.attributes
-# --attribute item shape: {name?: string, value?: string}
 export def "apigee-organizations-developers-attributes" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2869,7 +2871,7 @@ export def "apigee-organizations-developers-attributes" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --attribute: list # List of attributes. — item shape: {name?: string, value?: string}
-]: any -> record<attribute: table<name: string, value: string>> {
+]: any -> oneof<record<attribute: table<name: string, value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2898,7 +2900,6 @@ export def "apigee-organizations-developers-attributes" [
 #
 # POST /v1/{parent}/canaryevaluations
 # operationId: apigee.organizations.instances.canaryevaluations.create
-# --metricLabels shape: {env?: string, instance_id?: string, location?: string}
 export def "apigee-organizations-instances-canaryevaluations-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2926,7 +2927,7 @@ export def "apigee-organizations-instances-canaryevaluations-create" [
   --metric-labels: record # Labels that can be used to filter Apigee metrics. — shape: {env?: string, instance_id?: string, location?: string}
   --start-time: string # Required. Start time for the canary evaluation's analysis. (format: google-datetime)
   --treatment: string # Required. The newer version that is serving requests.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2979,7 +2980,7 @@ export def "apigee-organizations-datacollectors-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # Maximum number of data collectors to return. The page size defaults to 25.
   --page-token: string # Page token, returned from a previous ListDataCollectors call, that you can use to retrieve the next page.
-]: nothing -> record<dataCollectors: table<createdAt: string, description: string, lastModifiedAt: string, name: string, type: string>, nextPageToken: string> {
+]: nothing -> oneof<record<dataCollectors: table<createdAt: string, description: string, lastModifiedAt: string, name: string, type: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -3031,7 +3032,7 @@ export def "apigee-organizations-datacollectors-create" [
   --description: string # A description of the data collector.
   --name: string # ID of the data collector. Must begin with `dc_`.
   --type: string@type-completer-1 # Immutable. The type of data this data collector will collect.
-]: any -> record<createdAt: string, description: string, lastModifiedAt: string, name: string, type: string> {
+]: any -> oneof<record<createdAt: string, description: string, lastModifiedAt: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3084,7 +3085,7 @@ export def "apigee-organizations-environments-apis-revisions-debugsessions-list"
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # Maximum number of debug sessions to return. The page size defaults to 25.
   --page-token: string # Page token, returned from a previous ListDebugSessions call, that you can use to retrieve the next page.
-]: nothing -> record<nextPageToken: string, sessions: table<id: string, timestampMs: string>> {
+]: nothing -> oneof<record<nextPageToken: string, sessions: table<id: string, timestampMs: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -3139,7 +3140,7 @@ export def "apigee-organizations-environments-apis-revisions-debugsessions-creat
   --timeout-body: string # Optional. The time in seconds after which this DebugSession should end. This value will override the value in query param, if both are provided. (format: int64) (body field)
   --tracesize: int # Optional. The maximum number of bytes captured from the response payload. Min = 0, Max = 5120, Default = 5120. (format: int32)
   --validity: int # Optional. The length of time, in seconds, that this debug session is valid, starting from when it's received in the control plane. Min = 1, Max = 15, Default = 10. (format: int32)
-]: any -> record<count: int, createTime: string, filter: string, name: string, timeout: string, tracesize: int, validity: int> {
+]: any -> oneof<record<count: int, createTime: string, filter: string, name: string, timeout: string, tracesize: int, validity: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3191,7 +3192,7 @@ export def "apigee-organizations-sharedflows-revisions-deployments-list" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --shared-flows: oneof<nothing, bool> # Optional. Flag that specifies whether to return shared flow or API proxy deployments. Set to `true` to return shared flow deployments; set to `false` to return API proxy deployments. Defaults to `false`.
-]: nothing -> record<deployments: table<apiProxy: string, deployStartTime: string, environment: string, errors: list, instances: list, pods: list, revision: string, routeConflicts: list, serviceAccount: string, state: string>> {
+]: nothing -> oneof<record<deployments: table<apiProxy: string, deployStartTime: string, environment: string, errors: list, instances: list, pods: list, revision: string, routeConflicts: list, serviceAccount: string, state: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -3245,7 +3246,7 @@ export def "apigee-organizations-developers-list" [
   --ids: string # Optional. List of IDs to include, separated by commas.
   --include-company: oneof<nothing, bool> # Flag that specifies whether to include company details in the response.
   --start-key: string # **Note**: Must be used in conjunction with the `count` parameter. Email address of the developer from which to start displaying the list of developers. For example, if the an unfiltered list returns: ``` westley@example.com fezzik@example.com buttercup@example.com ``` and your `startKey` is `fezzik@example.com`, the list returned will be ``` fezzik@example.com buttercup@example.com ```
-]: nothing -> record<developer: table<accessType: string, appFamily: string, apps: list, attributes: list, companies: list, createdAt: string, developerId: string, email: string, firstName: string, lastModifiedAt: string, lastName: string, organizationName: string, status: string, userName: string>> {
+]: nothing -> oneof<record<developer: table<accessType: string, appFamily: string, apps: list, attributes: list, companies: list, createdAt: string, developerId: string, email: string, firstName: string, lastModifiedAt: string, lastName: string, organizationName: string, status: string, userName: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -3271,7 +3272,6 @@ export def "apigee-organizations-developers-list" [
 #
 # POST /v1/{parent}/developers
 # operationId: apigee.organizations.developers.create
-# --attributes item shape: {name?: string, value?: string}
 export def "apigee-organizations-developers-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3304,7 +3304,7 @@ export def "apigee-organizations-developers-create" [
   --first-name: string # Required. First name of the developer.
   --last-name: string # Required. Last name of the developer.
   --user-name: string # Required. User name of the developer. Not used by Apigee hybrid.
-]: any -> record<accessType: string, appFamily: string, apps: list<string>, attributes: table<name: string, value: string>, companies: list<string>, createdAt: string, developerId: string, email: string, firstName: string, lastModifiedAt: string, lastName: string, organizationName: string, status: string, userName: string> {
+]: any -> oneof<record<accessType: string, appFamily: string, apps: list<string>, attributes: table<name: string, value: string>, companies: list<string>, createdAt: string, developerId: string, email: string, firstName: string, lastModifiedAt: string, lastName: string, organizationName: string, status: string, userName: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3357,7 +3357,7 @@ export def "apigee-organizations-endpoint-attachments-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # Optional. Maximum number of endpoint attachments to return. If unspecified, at most 25 attachments will be returned.
   --page-token: string # Optional. Page token, returned from a previous `ListEndpointAttachments` call, that you can use to retrieve the next page.
-]: nothing -> record<endpointAttachments: table<connectionState: string, host: string, location: string, name: string, serviceAttachment: string, state: string>, nextPageToken: string> {
+]: nothing -> oneof<record<endpointAttachments: table<connectionState: string, host: string, location: string, name: string, serviceAttachment: string, state: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -3409,7 +3409,7 @@ export def "apigee-organizations-endpoint-attachments-create" [
   --location: string # Required. Location of the endpoint attachment.
   --name: string # Name of the endpoint attachment. Use the following structure in your request: `organizations/{org}/endpointAttachments/{endpoint_attachment}`
   --service-attachment: string # Format: projects/*/regions/*/serviceAttachments/*
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3462,7 +3462,7 @@ export def "apigee-organizations-keyvaluemaps-entries-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # Optional. Maximum number of key value entries to return. If unspecified, at most 100 entries will be returned.
   --page-token: string # Optional. Page token. If provides, must be a valid key value entry returned from a previous call that can be used to retrieve the next page.
-]: nothing -> record<keyValueEntries: table<name: string, value: string>, nextPageToken: string> {
+]: nothing -> oneof<record<keyValueEntries: table<name: string, value: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -3512,7 +3512,7 @@ export def "apigee-organizations-keyvaluemaps-entries-create" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --name: string # Resource URI that can be used to identify the scope of the key value map entries.
   --value: string # Required. Data or payload that is being retrieved and associated with the unique key.
-]: any -> record<name: string, value: string> {
+]: any -> oneof<record<name: string, value: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3565,7 +3565,7 @@ export def "apigee-organizations-envgroups-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # Maximum number of environment groups to return. The page size defaults to 25.
   --page-token: string # Page token, returned from a previous ListEnvironmentGroups call, that you can use to retrieve the next page.
-]: nothing -> record<environmentGroups: table<createdAt: string, hostnames: list, lastModifiedAt: string, name: string, state: string>, nextPageToken: string> {
+]: nothing -> oneof<record<environmentGroups: table<createdAt: string, hostnames: list, lastModifiedAt: string, name: string, state: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -3616,7 +3616,7 @@ export def "apigee-organizations-envgroups-create" [
   --name: string # ID of the environment group. Overrides any ID in the environment_group resource.
   --hostnames: list<string> # Required. Host names for this environment group.
   --name-body: string # ID of the environment group. (body field)
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3670,7 +3670,7 @@ export def "apigee-organizations-security-profiles-environments-create" [
   --name: string # Optional. Name of the environment.
   --name-body: string # Immutable. Name of the profile-environment association resource. Format: organizations/{org}/securityProfiles/{profile}/environments/{env} (body field)
   --security-profile-revision-id: string # Revision ID of the security profile. (format: int64)
-]: any -> record<attachTime: string, name: string, securityProfileRevisionId: string> {
+]: any -> oneof<record<attachTime: string, name: string, securityProfileRevisionId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3728,7 +3728,7 @@ export def "apigee-organizations-host-queries-list" [
   --status: string # Filter response list by asynchronous query status.
   --submitted-by: string # Filter response list by user who submitted queries.
   --to: string # Filter response list by returning asynchronous queries that created before this date time. Time must be in ISO date-time format like '2011-12-03T10:16:30Z'.
-]: nothing -> record<queries: table<created: string, envgroupHostname: string, error: string, executionTime: string, name: string, queryParams: record, reportDefinitionId: string, result: record, resultFileSize: string, resultRows: string, self: string, state: string, updated: string>> {
+]: nothing -> oneof<record<queries: table<created: string, envgroupHostname: string, error: string, executionTime: string, name: string, queryParams: record, reportDefinitionId: string, result: record, resultFileSize: string, resultRows: string, self: string, state: string, updated: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -3754,7 +3754,6 @@ export def "apigee-organizations-host-queries-list" [
 #
 # POST /v1/{parent}/hostQueries
 # operationId: apigee.organizations.hostQueries.create
-# --metrics item shape: {alias?: string, function?: string, name?: string, operator?: string, value?: string}
 export def "apigee-organizations-host-queries-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3788,7 +3787,7 @@ export def "apigee-organizations-host-queries-create" [
   --output-format: string # Valid values include: `csv` or `json`. Defaults to `json`. Note: Configure the delimiter for CSV output using the csvDelimiter property.
   --report-definition-id: string # Asynchronous Report ID.
   --time-range: any # Required. Time range for the query. Can use the following predefined strings to specify the time range: `last60minutes` `last24hours` `last7days` Or, specify the timeRange as a structure describing start and end timestamps in the ISO format: yyyy-mm-ddThh:mm:ssZ. Example: "timeRange": { "start": "2018-07-29T00:13:00Z", "end": "2018-08-01T00:18:00Z" }
-]: any -> record<created: string, envgroupHostname: string, error: string, executionTime: string, name: string, queryParams: record<dimensions: list<string>, endTimestamp: string, metrics: list<string>, outputFormat: string, startTimestamp: string, timeUnit: string>, reportDefinitionId: string, result: record<expires: string, self: string>, resultFileSize: string, resultRows: string, self: string, state: string, updated: string> {
+]: any -> oneof<record<created: string, envgroupHostname: string, error: string, executionTime: string, name: string, queryParams: record<dimensions: list<string>, endTimestamp: string, metrics: list<string>, outputFormat: string, startTimestamp: string, timeUnit: string>, reportDefinitionId: string, result: record<expires: string, self: string>, resultFileSize: string, resultRows: string, self: string, state: string, updated: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3847,7 +3846,7 @@ export def "apigee-organizations-host-security-reports-list" [
   --status: string # Filter response list by security report status.
   --submitted-by: string # Filter response list by user who submitted queries.
   --to: string # Filter response list by returning security reports that created before this date time. Time must be in ISO date-time format like '2011-12-03T10:16:30Z'.
-]: nothing -> record<nextPageToken: string, securityReports: table<created: string, displayName: string, envgroupHostname: string, error: string, executionTime: string, queryParams: record, reportDefinitionId: string, result: record, resultFileSize: string, resultRows: string, self: string, state: string, updated: string>> {
+]: nothing -> oneof<record<nextPageToken: string, securityReports: table<created: string, displayName: string, envgroupHostname: string, error: string, executionTime: string, queryParams: record, reportDefinitionId: string, result: record, resultFileSize: string, resultRows: string, self: string, state: string, updated: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -3873,7 +3872,6 @@ export def "apigee-organizations-host-security-reports-list" [
 #
 # POST /v1/{parent}/hostSecurityReports
 # operationId: apigee.organizations.hostSecurityReports.create
-# --metrics item shape: {aggregationFunction?: string, alias?: string, name?: string, operator?: string, value?: string}
 export def "apigee-organizations-host-security-reports-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3907,7 +3905,7 @@ export def "apigee-organizations-host-security-reports-create" [
   --mime-type: string # Valid values include: `csv` or `json`. Defaults to `json`. Note: Configure the delimiter for CSV output using the csvDelimiter property.
   --report-definition-id: string # Report Definition ID.
   --time-range: any # Required. Time range for the query. Can use the following predefined strings to specify the time range: `last60minutes` `last24hours` `last7days` Or, specify the timeRange as a structure describing start and end timestamps in the ISO format: yyyy-mm-ddThh:mm:ssZ. Example: "timeRange": { "start": "2018-07-29T00:13:00Z", "end": "2018-08-01T00:18:00Z" }
-]: any -> record<created: string, displayName: string, envgroupHostname: string, error: string, executionTime: string, queryParams: record<dimensions: list<string>, endTimestamp: string, metrics: list<string>, mimeType: string, startTimestamp: string, timeUnit: string>, reportDefinitionId: string, result: record<expires: string, self: string>, resultFileSize: string, resultRows: string, self: string, state: string, updated: string> {
+]: any -> oneof<record<created: string, displayName: string, envgroupHostname: string, error: string, executionTime: string, queryParams: record<dimensions: list<string>, endTimestamp: string, metrics: list<string>, mimeType: string, startTimestamp: string, timeUnit: string>, reportDefinitionId: string, result: record<expires: string, self: string>, resultFileSize: string, resultRows: string, self: string, state: string, updated: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3960,7 +3958,7 @@ export def "apigee-organizations-instances-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # Maximum number of instances to return. Defaults to 25.
   --page-token: string # Page token, returned from a previous ListInstances call, that you can use to retrieve the next page of content.
-]: nothing -> record<instances: table<consumerAcceptList: list, createdAt: string, description: string, diskEncryptionKeyName: string, displayName: string, host: string, ipRange: string, lastModifiedAt: string, location: string, name: string, peeringCidrRange: string, port: string, runtimeVersion: string, serviceAttachment: string, state: string>, nextPageToken: string> {
+]: nothing -> oneof<record<instances: table<consumerAcceptList: list, createdAt: string, description: string, diskEncryptionKeyName: string, displayName: string, host: string, ipRange: string, lastModifiedAt: string, location: string, name: string, peeringCidrRange: string, port: string, runtimeVersion: string, serviceAttachment: string, state: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -4016,7 +4014,7 @@ export def "apigee-organizations-instances-create" [
   --location: string # Required. Compute Engine location where the instance resides.
   --name: string # Required. Resource ID of the instance. Values must match the regular expression `^a-z{0,30}[a-z\d]$`.
   --peering-cidr-range: string@peering-cidr-range-completer # Optional. Size of the CIDR block range that will be reserved by the instance. PAID organizations support `SLASH_16` to `SLASH_20` and defaults to `SLASH_16`. Evaluation organizations support only `SLASH_23`.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4045,7 +4043,6 @@ export def "apigee-organizations-instances-create" [
 #
 # POST /v1/{parent}/keys
 # operationId: apigee.organizations.developers.apps.keys.create
-# --attributes item shape: {name?: string, value?: string}
 export def "apigee-organizations-developers-apps-keys-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4077,7 +4074,7 @@ export def "apigee-organizations-developers-apps-keys-create" [
   --issued-at: string # Time the developer app was created in milliseconds since epoch. (format: int64)
   --scopes: list<string> # Scopes to apply to the app. The specified scope names must already be defined for the API product that you associate with the app.
   --status: string # Status of the credential. Valid values include `approved` or `revoked`.
-]: any -> record<apiProducts: list<any>, attributes: table<name: string, value: string>, consumerKey: string, consumerSecret: string, expiresAt: string, expiresInSeconds: string, issuedAt: string, scopes: list<string>, status: string> {
+]: any -> oneof<record<apiProducts: list<any>, attributes: table<name: string, value: string>, consumerKey: string, consumerSecret: string, expiresAt: string, expiresInSeconds: string, issuedAt: string, scopes: list<string>, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4106,7 +4103,6 @@ export def "apigee-organizations-developers-apps-keys-create" [
 #
 # POST /v1/{parent}/keys/create
 # operationId: apigee.organizations.developers.apps.keys.create.create
-# --attributes item shape: {name?: string, value?: string}
 export def "apigee-organizations-developers-apps-keys-create-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4138,7 +4134,7 @@ export def "apigee-organizations-developers-apps-keys-create-create" [
   --issued-at: string # Time the developer app was created in milliseconds since epoch. (format: int64)
   --scopes: list<string> # Scopes to apply to the app. The specified scope names must already be defined for the API product that you associate with the app.
   --status: string # Status of the credential. Valid values include `approved` or `revoked`.
-]: any -> record<apiProducts: list<any>, attributes: table<name: string, value: string>, consumerKey: string, consumerSecret: string, expiresAt: string, expiresInSeconds: string, issuedAt: string, scopes: list<string>, status: string> {
+]: any -> oneof<record<apiProducts: list<any>, attributes: table<name: string, value: string>, consumerKey: string, consumerSecret: string, expiresAt: string, expiresInSeconds: string, issuedAt: string, scopes: list<string>, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4191,7 +4187,7 @@ export def "apigee-organizations-environments-keystores-create" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --name: string # Optional. Name of the keystore. Overrides the value in Keystore.
   --name-body: string # Required. Resource ID for this keystore. Values must match the regular expression `[\w[:space:].-]{1,255}`. (body field)
-]: any -> record<aliases: list<string>, name: string> {
+]: any -> oneof<record<aliases: list<string>, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4244,7 +4240,7 @@ export def "apigee-organizations-keyvaluemaps-create" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --encrypted: oneof<nothing, bool> # Required. Flag that specifies whether entry values will be encrypted. This field is retained for backward compatibility and the value of encrypted will always be `true`. Apigee X and hybrid do not support unencrypted key value maps.
   --name: string # Required. ID of the key value map.
-]: any -> record<encrypted: bool, name: string> {
+]: any -> oneof<record<encrypted: bool, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4297,7 +4293,7 @@ export def "apigee-organizations-instances-nat-addresses-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # Maximum number of natAddresses to return. Defaults to 25.
   --page-token: string # Page token, returned from a previous ListNatAddresses call, that you can use to retrieve the next page of content.
-]: nothing -> record<natAddresses: table<ipAddress: string, name: string, state: string>, nextPageToken: string> {
+]: nothing -> oneof<record<natAddresses: table<ipAddress: string, name: string, state: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -4346,7 +4342,7 @@ export def "apigee-organizations-instances-nat-addresses-create" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --name: string # Required. Resource ID of the NAT address.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4399,7 +4395,7 @@ export def "apigee-organizations-environments-trace-config-overrides-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # Maximum number of trace configuration overrides to return. If not specified, the maximum number returned is 25. The maximum number cannot exceed 100.
   --page-token: string # A page token, returned from a previous `ListTraceConfigOverrides` call. Token value that can be used to retrieve the subsequent page. When paginating, all other parameters provided to `ListTraceConfigOverrides` must match those specified in the call to obtain the page token.
-]: nothing -> record<nextPageToken: string, traceConfigOverrides: table<apiProxy: string, name: string, samplingConfig: record>> {
+]: nothing -> oneof<record<nextPageToken: string, traceConfigOverrides: table<apiProxy: string, name: string, samplingConfig: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -4425,7 +4421,6 @@ export def "apigee-organizations-environments-trace-config-overrides-list" [
 #
 # POST /v1/{parent}/overrides
 # operationId: apigee.organizations.environments.traceConfig.overrides.create
-# --samplingConfig shape: {sampler?: "SAMPLER_UNSPECIFIED"|"OFF"|"PROBABILITY", samplingRate?: float}
 export def "apigee-organizations-environments-trace-config-overrides-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4451,7 +4446,7 @@ export def "apigee-organizations-environments-trace-config-overrides-create" [
   --api-proxy: string # ID of the API proxy that will have its trace configuration overridden.
   --name: string # ID of the trace configuration override specified as a system-generated UUID.
   --sampling-config: record # TraceSamplingConfig represents the detail settings of distributed tracing. Only the fields that are defined in the distributed trace configuration can be overridden using the distribute trace configuration override APIs. — shape: {sampler?: "SAMPLER_UNSPECIFIED"|"OFF"|"PROBABILITY", samplingRate?: float}
-]: any -> record<apiProxy: string, name: string, samplingConfig: record<sampler: string, samplingRate: float>> {
+]: any -> oneof<record<apiProxy: string, name: string, samplingConfig: record<sampler: string, samplingRate: float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4508,7 +4503,7 @@ export def "apigee-organizations-environments-queries-list" [
   --status: string # Filter response list by asynchronous query status.
   --submitted-by: string # Filter response list by user who submitted queries.
   --to: string # Filter response list by returning asynchronous queries that created before this date time. Time must be in ISO date-time format like '2011-12-03T10:16:30Z'.
-]: nothing -> record<queries: table<created: string, envgroupHostname: string, error: string, executionTime: string, name: string, queryParams: record, reportDefinitionId: string, result: record, resultFileSize: string, resultRows: string, self: string, state: string, updated: string>> {
+]: nothing -> oneof<record<queries: table<created: string, envgroupHostname: string, error: string, executionTime: string, name: string, queryParams: record, reportDefinitionId: string, result: record, resultFileSize: string, resultRows: string, self: string, state: string, updated: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -4534,7 +4529,6 @@ export def "apigee-organizations-environments-queries-list" [
 #
 # POST /v1/{parent}/queries
 # operationId: apigee.organizations.environments.queries.create
-# --metrics item shape: {alias?: string, function?: string, name?: string, operator?: string, value?: string}
 export def "apigee-organizations-environments-queries-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4568,7 +4562,7 @@ export def "apigee-organizations-environments-queries-create" [
   --output-format: string # Valid values include: `csv` or `json`. Defaults to `json`. Note: Configure the delimiter for CSV output using the csvDelimiter property.
   --report-definition-id: string # Asynchronous Report ID.
   --time-range: any # Required. Time range for the query. Can use the following predefined strings to specify the time range: `last60minutes` `last24hours` `last7days` Or, specify the timeRange as a structure describing start and end timestamps in the ISO format: yyyy-mm-ddThh:mm:ssZ. Example: "timeRange": { "start": "2018-07-29T00:13:00Z", "end": "2018-08-01T00:18:00Z" }
-]: any -> record<created: string, envgroupHostname: string, error: string, executionTime: string, name: string, queryParams: record<dimensions: list<string>, endTimestamp: string, metrics: list<string>, outputFormat: string, startTimestamp: string, timeUnit: string>, reportDefinitionId: string, result: record<expires: string, self: string>, resultFileSize: string, resultRows: string, self: string, state: string, updated: string> {
+]: any -> oneof<record<created: string, envgroupHostname: string, error: string, executionTime: string, name: string, queryParams: record<dimensions: list<string>, endTimestamp: string, metrics: list<string>, outputFormat: string, startTimestamp: string, timeUnit: string>, reportDefinitionId: string, result: record<expires: string, self: string>, resultFileSize: string, resultRows: string, self: string, state: string, updated: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4624,7 +4618,7 @@ export def "apigee-organizations-apiproducts-rateplans-list" [
   --order-by: string # Name of the attribute used for sorting. Valid values include: * `name`: Name of the rate plan. * `state`: State of the rate plan (`DRAFT`, `PUBLISHED`). * `startTime`: Time when the rate plan becomes active. * `endTime`: Time when the rate plan expires. **Note**: Not supported by Apigee at this time.
   --start-key: string # Name of the rate plan from which to start displaying the list of rate plans. If omitted, the list starts from the first item. For example, to view the rate plans from 51-150, set the value of `startKey` to the name of the 51st rate plan and set the value of `count` to 100.
   --state: string@state-completer # State of the rate plans (`DRAFT`, `PUBLISHED`) that you want to display.
-]: nothing -> record<nextStartKey: string, ratePlans: table<apiproduct: string, billingPeriod: string, consumptionPricingRates: list, consumptionPricingType: string, createdAt: string, currencyCode: string, description: string, displayName: string, endTime: string, fixedFeeFrequency: int, fixedRecurringFee: record, lastModifiedAt: string, name: string, paymentFundingModel: string, revenueShareRates: list, revenueShareType: string, setupFee: record, startTime: string, state: string>> {
+]: nothing -> oneof<record<nextStartKey: string, ratePlans: table<apiproduct: string, billingPeriod: string, consumptionPricingRates: list, consumptionPricingType: string, createdAt: string, currencyCode: string, description: string, displayName: string, endTime: string, fixedFeeFrequency: int, fixedRecurringFee: record, lastModifiedAt: string, name: string, paymentFundingModel: string, revenueShareRates: list, revenueShareType: string, setupFee: record, startTime: string, state: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -4650,10 +4644,6 @@ export def "apigee-organizations-apiproducts-rateplans-list" [
 #
 # POST /v1/{parent}/rateplans
 # operationId: apigee.organizations.apiproducts.rateplans.create
-# --consumptionPricingRates item shape: {end?: string, fee?: record, start?: string}
-# --fixedRecurringFee shape: {currencyCode?: string, nanos?: int, units?: string}
-# --revenueShareRates item shape: {end?: string, sharePercentage?: float, start?: string}
-# --setupFee shape: {currencyCode?: string, nanos?: int, units?: string}
 export def "apigee-organizations-apiproducts-rateplans-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4692,7 +4682,7 @@ export def "apigee-organizations-apiproducts-rateplans-create" [
   --setup-fee: record # Represents an amount of money with its currency type. — shape: {currencyCode?: string, nanos?: int, units?: string}
   --start-time: string # Time when the rate plan becomes active in milliseconds since epoch. (format: int64)
   --state: string@state-completer # Current state of the rate plan (draft or published).
-]: any -> record<apiproduct: string, billingPeriod: string, consumptionPricingRates: table<end: string, fee: record, start: string>, consumptionPricingType: string, createdAt: string, currencyCode: string, description: string, displayName: string, endTime: string, fixedFeeFrequency: int, fixedRecurringFee: record<currencyCode: string, nanos: int, units: string>, lastModifiedAt: string, name: string, paymentFundingModel: string, revenueShareRates: table<end: string, sharePercentage: float, start: string>, revenueShareType: string, setupFee: record<currencyCode: string, nanos: int, units: string>, startTime: string, state: string> {
+]: any -> oneof<record<apiproduct: string, billingPeriod: string, consumptionPricingRates: table<end: string, fee: record, start: string>, consumptionPricingType: string, createdAt: string, currencyCode: string, description: string, displayName: string, endTime: string, fixedFeeFrequency: int, fixedRecurringFee: record<currencyCode: string, nanos: int, units: string>, lastModifiedAt: string, name: string, paymentFundingModel: string, revenueShareRates: table<end: string, sharePercentage: float, start: string>, revenueShareType: string, setupFee: record<currencyCode: string, nanos: int, units: string>, startTime: string, state: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4747,7 +4737,7 @@ export def "apigee-organizations-environments-references-create" [
   --name: string # Required. The resource id of this reference. Values must match the regular expression [\w\s\-.]+.
   --refers: string # Required. The id of the resource to which this reference refers. Must be the id of a resource that exists in the parent environment and is of the given resource_type.
   --resource-type: string # The type of resource referred to by this reference. Valid values are 'KeyStore' or 'TrustStore'.
-]: any -> record<description: string, name: string, refers: string, resourceType: string> {
+]: any -> oneof<record<description: string, name: string, refers: string, resourceType: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4799,7 +4789,7 @@ export def "apigee-organizations-reports-list" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --expand: oneof<nothing, bool> # Set to 'true' to get expanded details about each custom report.
-]: nothing -> record<qualifier: table<chartType: string, comments: list, createdAt: string, dimensions: list, displayName: string, environment: string, filter: string, fromTime: string, lastModifiedAt: string, lastViewedAt: string, limit: string, metrics: list, name: string, offset: string, organization: string, properties: list, sortByCols: list, sortOrder: string, tags: list, timeUnit: string, toTime: string, topk: string>> {
+]: nothing -> oneof<record<qualifier: table<chartType: string, comments: list, createdAt: string, dimensions: list, displayName: string, environment: string, filter: string, fromTime: string, lastModifiedAt: string, lastViewedAt: string, limit: string, metrics: list, name: string, offset: string, organization: string, properties: list, sortByCols: list, sortOrder: string, tags: list, timeUnit: string, toTime: string, topk: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -4825,8 +4815,6 @@ export def "apigee-organizations-reports-list" [
 #
 # POST /v1/{parent}/reports
 # operationId: apigee.organizations.reports.create
-# --metrics item shape: {function?: string, name?: string}
-# --properties item shape: {property?: string, value?: list}
 export def "apigee-organizations-reports-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4866,7 +4854,7 @@ export def "apigee-organizations-reports-create" [
   --time-unit: string # This field contains the time unit of aggregation for the report
   --to-time: string # Legacy field: not used. Contains the end time for the report
   --topk: string # Legacy field: not used. This field contains the top k parameter value for restricting the result
-]: any -> record<chartType: string, comments: list<string>, createdAt: string, dimensions: list<string>, displayName: string, environment: string, filter: string, fromTime: string, lastModifiedAt: string, lastViewedAt: string, limit: string, metrics: table<function: string, name: string>, name: string, offset: string, organization: string, properties: table<property: string, value: list>, sortByCols: list<string>, sortOrder: string, tags: list<string>, timeUnit: string, toTime: string, topk: string> {
+]: any -> oneof<record<chartType: string, comments: list<string>, createdAt: string, dimensions: list<string>, displayName: string, environment: string, filter: string, fromTime: string, lastModifiedAt: string, lastViewedAt: string, limit: string, metrics: table<function: string, name: string>, name: string, offset: string, organization: string, properties: table<property: string, value: list>, sortByCols: list<string>, sortOrder: string, tags: list<string>, timeUnit: string, toTime: string, topk: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4918,7 +4906,7 @@ export def "apigee-organizations-environments-resourcefiles-list" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --type: string # Optional. Type of resource files to list. {{ resource_file_type }}
-]: nothing -> record<resourceFile: table<name: string, type: string>> {
+]: nothing -> oneof<record<resourceFile: table<name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -4971,7 +4959,7 @@ export def "apigee-organizations-environments-resourcefiles-create" [
   --content-type: string # The HTTP Content-Type header value specifying the content type of the body.
   --data: string # The HTTP request/response body as raw binary. (format: byte)
   --extensions: list # Application specific response metadata. Must be set in the first response for streaming APIs.
-]: any -> record<name: string, type: string> {
+]: any -> oneof<record<name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5023,7 +5011,7 @@ export def "apigee-organizations-environments-resourcefiles-list-environment-res
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<resourceFile: table<name: string, type: string>> {
+]: nothing -> oneof<record<resourceFile: table<name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -5074,7 +5062,7 @@ export def "apigee-organizations-environments-resourcefiles-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<name: string, type: string> {
+]: nothing -> oneof<record<name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -5126,7 +5114,7 @@ export def "apigee-organizations-environments-resourcefiles-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<contentType: string, data: string, extensions: list<record>> {
+]: nothing -> oneof<record<contentType: string, data: string, extensions: list<record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -5181,7 +5169,7 @@ export def "apigee-organizations-environments-resourcefiles-update" [
   --content-type: string # The HTTP Content-Type header value specifying the content type of the body.
   --data: string # The HTTP request/response body as raw binary. (format: byte)
   --extensions: list # Application specific response metadata. Must be set in the first response for streaming APIs.
-]: any -> record<name: string, type: string> {
+]: any -> oneof<record<name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5237,7 +5225,7 @@ export def "apigee-organizations-environments-security-incidents-list" [
   --filter: string # The filter expression to be used to get the list of security incidents, where filtering can be done on API Proxies. Example: filter = "api_proxy = /", "first_detected_time >", "last_detected_time <"
   --page-size: int # The maximum number of incidents to return. The service may return fewer than this value. If unspecified, at most 50 incidents will be returned.
   --page-token: string # A page token, received from a previous `ListSecurityIncident` call. Provide this to retrieve the subsequent page.
-]: nothing -> record<nextPageToken: string, securityIncidents: table<detectionTypes: list, displayName: string, firstDetectedTime: string, lastDetectedTime: string, name: string, riskLevel: string, trafficCount: string>> {
+]: nothing -> oneof<record<nextPageToken: string, securityIncidents: table<detectionTypes: list, displayName: string, firstDetectedTime: string, lastDetectedTime: string, name: string, riskLevel: string, trafficCount: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -5287,7 +5275,7 @@ export def "apigee-organizations-security-profiles-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # The maximum number of profiles to return. The service may return fewer than this value. If unspecified, at most 50 profiles will be returned.
   --page-token: string # A page token, received from a previous `ListSecurityProfiles` call. Provide this to retrieve the subsequent page.
-]: nothing -> record<nextPageToken: string, securityProfiles: table<displayName: string, environments: list, maxScore: int, minScore: int, name: string, revisionCreateTime: string, revisionId: string, revisionPublishTime: string, revisionUpdateTime: string, scoringConfigs: list>> {
+]: nothing -> oneof<record<nextPageToken: string, securityProfiles: table<displayName: string, environments: list, maxScore: int, minScore: int, name: string, revisionCreateTime: string, revisionId: string, revisionPublishTime: string, revisionUpdateTime: string, scoringConfigs: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -5342,7 +5330,7 @@ export def "apigee-organizations-environments-security-reports-list" [
   --status: string # Filter response list by security reports status.
   --submitted-by: string # Filter response list by user who submitted queries.
   --to: string # Filter response list by returning security reports that created before this date time. Time must be in ISO date-time format like '2011-12-03T10:16:30Z'.
-]: nothing -> record<nextPageToken: string, securityReports: table<created: string, displayName: string, envgroupHostname: string, error: string, executionTime: string, queryParams: record, reportDefinitionId: string, result: record, resultFileSize: string, resultRows: string, self: string, state: string, updated: string>> {
+]: nothing -> oneof<record<nextPageToken: string, securityReports: table<created: string, displayName: string, envgroupHostname: string, error: string, executionTime: string, queryParams: record, reportDefinitionId: string, result: record, resultFileSize: string, resultRows: string, self: string, state: string, updated: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -5368,7 +5356,6 @@ export def "apigee-organizations-environments-security-reports-list" [
 #
 # POST /v1/{parent}/securityReports
 # operationId: apigee.organizations.environments.securityReports.create
-# --metrics item shape: {aggregationFunction?: string, alias?: string, name?: string, operator?: string, value?: string}
 export def "apigee-organizations-environments-security-reports-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5402,7 +5389,7 @@ export def "apigee-organizations-environments-security-reports-create" [
   --mime-type: string # Valid values include: `csv` or `json`. Defaults to `json`. Note: Configure the delimiter for CSV output using the csvDelimiter property.
   --report-definition-id: string # Report Definition ID.
   --time-range: any # Required. Time range for the query. Can use the following predefined strings to specify the time range: `last60minutes` `last24hours` `last7days` Or, specify the timeRange as a structure describing start and end timestamps in the ISO format: yyyy-mm-ddThh:mm:ssZ. Example: "timeRange": { "start": "2018-07-29T00:13:00Z", "end": "2018-08-01T00:18:00Z" }
-]: any -> record<created: string, displayName: string, envgroupHostname: string, error: string, executionTime: string, queryParams: record<dimensions: list<string>, endTimestamp: string, metrics: list<string>, mimeType: string, startTimestamp: string, timeUnit: string>, reportDefinitionId: string, result: record<expires: string, self: string>, resultFileSize: string, resultRows: string, self: string, state: string, updated: string> {
+]: any -> oneof<record<created: string, displayName: string, envgroupHostname: string, error: string, executionTime: string, queryParams: record<dimensions: list<string>, endTimestamp: string, metrics: list<string>, mimeType: string, startTimestamp: string, timeUnit: string>, reportDefinitionId: string, result: record<expires: string, self: string>, resultFileSize: string, resultRows: string, self: string, state: string, updated: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5455,7 +5442,7 @@ export def "apigee-organizations-sharedflows-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --include-meta-data: oneof<nothing, bool> # Indicates whether to include shared flow metadata in the response.
   --include-revisions: oneof<nothing, bool> # Indicates whether to include a list of revisions in the response.
-]: nothing -> record<sharedFlows: table<latestRevisionId: string, metaData: record, name: string, revision: list>> {
+]: nothing -> oneof<record<sharedFlows: table<latestRevisionId: string, metaData: record, name: string, revision: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -5508,7 +5495,7 @@ export def "apigee-organizations-sharedflows-create" [
   --content-type: string # The HTTP Content-Type header value specifying the content type of the body.
   --data: string # The HTTP request/response body as raw binary. (format: byte)
   --extensions: list # Application specific response metadata. Must be set in the first response for streaming APIs.
-]: any -> record<configurationVersion: record<majorVersion: int, minorVersion: int>, contextInfo: string, createdAt: string, description: string, displayName: string, entityMetaDataAsProperties: record, lastModifiedAt: string, name: string, policies: list<string>, resourceFiles: record<resourceFile: list<record>>, resources: list<string>, revision: string, sharedFlows: list<string>, type: string> {
+]: any -> oneof<record<configurationVersion: record<majorVersion: int, minorVersion: int>, contextInfo: string, createdAt: string, description: string, displayName: string, entityMetaDataAsProperties: record, lastModifiedAt: string, name: string, policies: list<string>, resourceFiles: record<resourceFile: list<record>>, resources: list<string>, revision: string, sharedFlows: list<string>, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5561,7 +5548,7 @@ export def "apigee-organizations-developers-subscriptions-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --count: int # Number of API product subscriptions to return in the API call. Use with `startKey` to provide more targeted filtering. Defaults to 100. The maximum limit is 1000.
   --start-key: string # Name of the API product subscription from which to start displaying the list of subscriptions. If omitted, the list starts from the first item. For example, to view the API product subscriptions from 51-150, set the value of `startKey` to the name of the 51st subscription and set the value of `count` to 100.
-]: nothing -> record<developerSubscriptions: table<apiproduct: string, createdAt: string, endTime: string, lastModifiedAt: string, name: string, startTime: string>, nextStartKey: string> {
+]: nothing -> oneof<record<developerSubscriptions: table<apiproduct: string, createdAt: string, endTime: string, lastModifiedAt: string, name: string, startTime: string>, nextStartKey: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -5612,7 +5599,7 @@ export def "apigee-organizations-developers-subscriptions-create" [
   --apiproduct: string # Name of the API product for which the developer is purchasing a subscription.
   --end-time: string # Time when the API product subscription ends in milliseconds since epoch. (format: int64)
   --start-time: string # Time when the API product subscription starts in milliseconds since epoch. (format: int64)
-]: any -> record<apiproduct: string, createdAt: string, endTime: string, lastModifiedAt: string, name: string, startTime: string> {
+]: any -> oneof<record<apiproduct: string, createdAt: string, endTime: string, lastModifiedAt: string, name: string, startTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5641,7 +5628,6 @@ export def "apigee-organizations-developers-subscriptions-create" [
 #
 # POST /v1/{parent}/targetservers
 # operationId: apigee.organizations.environments.targetservers.create
-# --sSLInfo shape: {ciphers?: list<string>, clientAuthEnabled?: bool, commonName?: record, enabled?: bool, ignoreValidationErrors?: bool, keyAlias?: string, keyStore?: string, protocols?: list<string>, trustStore?: string}
 export def "apigee-organizations-environments-targetservers-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5672,7 +5658,7 @@ export def "apigee-organizations-environments-targetservers-create" [
   --port: int # Required. The port number this target connects to on the given host. Value must be between 1 and 65535, inclusive. (format: int32)
   --protocol: string@protocol-completer # Immutable. The protocol used by this TargetServer.
   --s-sl-info: record # TLS configuration information for virtual hosts and TargetServers. — shape: {ciphers?: list<string>, clientAuthEnabled?: bool, commonName?: record, enabled?: bool, ignoreValidationErrors?: bool, keyAlias?: string, keyStore?: string, protocols?: list<string>, trustStore?: string}
-]: any -> record<description: string, host: string, isEnabled: bool, name: string, port: int, protocol: string, sSLInfo: record<ciphers: list<string>, clientAuthEnabled: bool, commonName: record<value: string, wildcardMatch: bool>, enabled: bool, ignoreValidationErrors: bool, keyAlias: string, keyStore: string, protocols: list<string>, trustStore: string>> {
+]: any -> oneof<record<description: string, host: string, isEnabled: bool, name: string, port: int, protocol: string, sSLInfo: record<ciphers: list<string>, clientAuthEnabled: bool, commonName: record<value: string, wildcardMatch: bool>, enabled: bool, ignoreValidationErrors: bool, keyAlias: string, keyStore: string, protocols: list<string>, trustStore: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5723,7 +5709,7 @@ export def "apigee-organizations-environments-subscribe" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<name: string> {
+]: nothing -> oneof<record<name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -5772,7 +5758,7 @@ export def "apigee-organizations-environments-unsubscribe" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --name: string # Full name of the Pub/Sub subcription. Use the following structure in your request: `subscription "projects/foo/subscription/bar"`
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5801,8 +5787,6 @@ export def "apigee-organizations-environments-unsubscribe" [
 #
 # POST /v1/{profileEnvironment}:computeEnvironmentScores
 # operationId: apigee.organizations.securityProfiles.environments.computeEnvironmentScores
-# --filters item shape: {scorePath?: string}
-# --timeRange shape: {endTime?: string, startTime?: string}
 export def "apigee-organizations-security-profiles-environments-compute-environment-scores" [
   profile_environment: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5829,7 +5813,7 @@ export def "apigee-organizations-security-profiles-environments-compute-environm
   --page-size: int # Optional. The maximum number of subcomponents to be returned in a single page. The service may return fewer than this value. If unspecified, at most 100 subcomponents will be returned in a single page. (format: int32)
   --page-token: string # Optional. A token that can be sent as `page_token` to retrieve the next page. If this field is omitted, there are no subsequent pages.
   --time-range: record # Represents a time interval, encoded as a Timestamp start (inclusive) and a Timestamp end (exclusive). The start must be less than or equal to the end. When the start equals the end, the interval is empty (matches no time). When both start and end are unspecified, the interval matches any time. — shape: {endTime?: string, startTime?: string}
-]: any -> record<nextPageToken: string, scores: table<component: record, subcomponents: list, timeRange: record>> {
+]: any -> oneof<record<nextPageToken: string, scores: table<component: record, subcomponents: list, timeRange: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5883,7 +5867,7 @@ export def "apigee-projects-provision-organization" [
   --analytics-region: string # Primary Cloud Platform region for analytics data storage. For valid values, see [Create an organization](https://cloud.google.com/apigee/docs/hybrid/latest/precog-provision). Defaults to `us-west1`.
   --authorized-network: string # Compute Engine network used for Service Networking to be peered with Apigee runtime instances. See [Getting started with the Service Networking API](https://cloud.google.com/service-infrastructure/docs/service-networking/getting-started). Apigee also supports shared VPC (that is, the host network project is not the same as the one that is peering with Apigee). See [Shared VPC overview](https://cloud.google.com/vpc/docs/shared-vpc). To use a shared VPC network, use the following format: `projects/{host-project-id}/{region}/networks/{network-name}`. For example: `projects/my-sharedvpc-host/global/networks/mynetwork`
   --runtime-location: string # Cloud Platform location for the runtime instance. Defaults to zone `us-west1-a`. If a region is provided, `EVAL` organizations will use the region for automatically selecting a zone for the runtime instance.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5935,7 +5919,7 @@ export def "apigee-organizations-environments-get-iam-policy" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --options-requested-policy-version: int # Optional. The maximum policy version that will be used to format the policy. Valid values are 0, 1, and 3. Requests specifying an invalid value will be rejected. Requests for policies with any conditional role bindings must specify version 3. Policies with no conditional role bindings may specify any valid value or leave the field unset. The policy in the response might use the policy version that you specified, or it might use a lower policy version. For example, if you specify version 3, but the policy has no conditional role bindings, the response uses version 1. To learn which resources support conditions in their IAM policies, see the [IAM documentation](https://cloud.google.com/iam/help/conditions/resource-policies).
-]: nothing -> record<auditConfigs: table<auditLogConfigs: list, service: string>, bindings: table<condition: record, members: list, role: string>, etag: string, version: int> {
+]: nothing -> oneof<record<auditConfigs: table<auditLogConfigs: list, service: string>, bindings: table<condition: record, members: list, role: string>, etag: string, version: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource | is-empty) { error make --unspanned { msg: "path parameter 'resource' must be non-empty" } }
@@ -5961,7 +5945,6 @@ export def "apigee-organizations-environments-get-iam-policy" [
 #
 # POST /v1/{resource}:setIamPolicy
 # operationId: apigee.organizations.environments.setIamPolicy
-# --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
 export def "apigee-organizations-environments-set-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5986,7 +5969,7 @@ export def "apigee-organizations-environments-set-iam-policy" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --policy: record # An Identity and Access Management (IAM) policy, which specifies access controls for Google Cloud resources. A `Policy` is a collection of `bindings`. A `binding` binds one or more `members`, or principals, to a single `role`. Principals can be user accounts, service accounts, Google groups, and domains (such as G Suite). A `role` is a named list of permissions; each `role` can be an IAM predefined role or a user-created custom role. For some types of Google Cloud resources, a `binding` can also specify a `condition`, which is a logical expression that allows access to a resource only if the expression evaluates to `true`. A condition can add constraints based on attributes of the request, the resource, or both. To learn which resources support conditions in their IAM policies, see the [IAM documentation](https://cloud.google.com/iam/help/conditions/resource-policies). **JSON example:** { "bindings": [ { "role": "roles/resourcemanager.organizationAdmin", "members": [ "user:mike@example.com", "group:admins@example.com", "domain:google.com", "serviceAccount:my-project-id@appspot.gserviceaccount.com" ] }, { "role": "roles/resourcemanager.organizationViewer", "members": [ "user:eve@example.com" ], "condition": { "title": "expirable access", "description": "Does not grant access after Sep 2020", "expression": "request.time < timestamp('2020-10-01T00:00:00.000Z')", } } ], "etag": "BwWWja0YfJA=", "version": 3 } **YAML example:** bindings: - members: - user:mike@example.com - group:admins@example.com - domain:google.com - serviceAccount:my-project-id@appspot.gserviceaccount.com role: roles/resourcemanager.organizationAdmin - members: - user:eve@example.com role: roles/resourcemanager.organizationViewer condition: title: expirable access description: Does not grant access after Sep 2020 expression: request.time < timestamp('2020-10-01T00:00:00.000Z') etag: BwWWja0YfJA= version: 3 For a description of IAM and its features, see the [IAM documentation](https://cloud.google.com/iam/docs/). — shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
   --update-mask: string # OPTIONAL: A FieldMask specifying which fields of the policy to modify. Only the fields in the mask will be modified. If no mask is provided, the following default mask is used: `paths: "bindings, etag"` (format: google-fieldmask)
-]: any -> record<auditConfigs: table<auditLogConfigs: list, service: string>, bindings: table<condition: record, members: list, role: string>, etag: string, version: int> {
+]: any -> oneof<record<auditConfigs: table<auditLogConfigs: list, service: string>, bindings: table<condition: record, members: list, role: string>, etag: string, version: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6038,7 +6021,7 @@ export def "apigee-organizations-environments-test-iam-permissions" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --permissions: list<string> # The set of permissions to check for the `resource`. Permissions with wildcards (such as `*` or `storage.*`) are not allowed. For more information see [IAM Overview](https://cloud.google.com/iam/docs/overview#permissions).
-]: any -> record<permissions: list<string>> {
+]: any -> oneof<record<permissions: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

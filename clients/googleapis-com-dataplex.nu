@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -130,9 +154,9 @@ def type-completer-1 [] { ["CURATED" "RAW" "TYPE_UNSPECIFIED"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "dataplex-projects-locations-operations-delete" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["dataplex-projects-locations-operations-delete" "dataplex-projects-locations-operations-get" "dataplex-projects-locations-lakes-zones-assets-patch" "dataplex-projects-locations-lakes-zones-entities-update" "dataplex-projects-locations-list" "dataplex-projects-locations-operations-list" "dataplex-projects-locations-operations-cancel" "dataplex-projects-locations-lakes-tasks-run" "dataplex-projects-locations-lakes-zones-assets-actions-list" "dataplex-projects-locations-lakes-zones-assets-list" "dataplex-projects-locations-lakes-zones-assets-create" "dataplex-projects-locations-data-taxonomies-attributes-list" "dataplex-projects-locations-data-taxonomies-attributes-create" "dataplex-projects-locations-lakes-content-list" "dataplex-projects-locations-lakes-content-create" "dataplex-projects-locations-lakes-contentitems-list" "dataplex-projects-locations-lakes-contentitems-create" "dataplex-projects-locations-data-attribute-bindings-list" "dataplex-projects-locations-data-attribute-bindings-create" "dataplex-projects-locations-data-scans-list" "dataplex-projects-locations-data-scans-create" "dataplex-projects-locations-data-taxonomies-list" "dataplex-projects-locations-data-taxonomies-create" "dataplex-projects-locations-lakes-zones-entities-list" "dataplex-projects-locations-lakes-zones-entities-create" "dataplex-projects-locations-lakes-environments-list" "dataplex-projects-locations-lakes-environments-create" "dataplex-projects-locations-lakes-tasks-jobs-list" "dataplex-projects-locations-lakes-list" "dataplex-projects-locations-lakes-create" "dataplex-projects-locations-lakes-zones-entities-partitions-list" "dataplex-projects-locations-lakes-zones-entities-partitions-create" "dataplex-projects-locations-lakes-environments-sessions-list" "dataplex-projects-locations-lakes-tasks-list" "dataplex-projects-locations-lakes-tasks-create" "dataplex-projects-locations-lakes-zones-list" "dataplex-projects-locations-lakes-zones-create" "dataplex-projects-locations-lakes-zones-assets-get-iam-policy" "dataplex-projects-locations-lakes-zones-assets-set-iam-policy" "dataplex-projects-locations-lakes-zones-assets-test-iam-permissions" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -177,7 +201,7 @@ export def "dataplex-projects-locations-operations-delete" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --etag: string # Optional. The etag associated with the partition.
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -226,7 +250,7 @@ export def "dataplex-projects-locations-operations-get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --view: string@view-completer # Optional. Used to select the subset of entity information to return. Defaults to BASIC.
-]: nothing -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: nothing -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -252,11 +276,6 @@ export def "dataplex-projects-locations-operations-get" [
 #
 # PATCH /v1/{name}
 # operationId: dataplex.projects.locations.lakes.zones.assets.patch
-# --discoverySpec shape: {csvOptions?: record, enabled?: bool, excludePatterns?: list<string>, includePatterns?: list<string>, jsonOptions?: record, schedule?: string}
-# --discoveryStatus shape: {lastRunDuration?: string, lastRunTime?: string, message?: string, state?: "STATE_UNSPECIFIED"|"SCHEDULED"|"IN_PROGRESS"|"PAUSED"|"DISABLED", stats?: record, updateTime?: string}
-# --resourceSpec shape: {name?: string, readAccessMode?: "ACCESS_MODE_UNSPECIFIED"|"DIRECT"|"MANAGED", type?: "TYPE_UNSPECIFIED"|"STORAGE_BUCKET"|"BIGQUERY_DATASET"}
-# --resourceStatus shape: {message?: string, state?: "STATE_UNSPECIFIED"|"READY"|"ERROR", updateTime?: string}
-# --securityStatus shape: {message?: string, state?: "STATE_UNSPECIFIED"|"READY"|"APPLYING"|"ERROR", updateTime?: string}
 export def "dataplex-projects-locations-lakes-zones-assets-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -289,7 +308,7 @@ export def "dataplex-projects-locations-lakes-zones-assets-patch" [
   --resource-spec: record # Identifies the cloud resource that is referenced by this asset. — shape: {name?: string, readAccessMode?: "ACCESS_MODE_UNSPECIFIED"|"DIRECT"|"MANAGED", type?: "TYPE_UNSPECIFIED"|"STORAGE_BUCKET"|"BIGQUERY_DATASET"}
   --resource-status: record # Status of the resource referenced by an asset. — shape: {message?: string, state?: "STATE_UNSPECIFIED"|"READY"|"ERROR", updateTime?: string}
   --security-status: record # Security policy status of the asset. Data security policy, i.e., readers, writers & owners, should be specified in the lake/zone/asset IAM policy. — shape: {message?: string, state?: "STATE_UNSPECIFIED"|"READY"|"APPLYING"|"ERROR", updateTime?: string}
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -318,9 +337,6 @@ export def "dataplex-projects-locations-lakes-zones-assets-patch" [
 #
 # PUT /v1/{name}
 # operationId: dataplex.projects.locations.lakes.zones.entities.update
-# --compatibility shape: {bigquery?: record, hiveMetastore?: record}
-# --format shape: {compressionFormat?: "COMPRESSION_FORMAT_UNSPECIFIED"|"GZIP"|"BZIP2", csv?: record, iceberg?: record, json?: record, mimeType?: string}
-# --schema shape: {fields?: list, partitionFields?: list, partitionStyle?: "PARTITION_STYLE_UNSPECIFIED"|"HIVE_COMPATIBLE", userManaged?: bool}
 export def "dataplex-projects-locations-lakes-zones-entities-update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -357,7 +373,7 @@ export def "dataplex-projects-locations-lakes-zones-entities-update" [
   --schema: record # Schema information describing the structure and layout of the data. — shape: {fields?: list, partitionFields?: list, partitionStyle?: "PARTITION_STYLE_UNSPECIFIED"|"HIVE_COMPATIBLE", userManaged?: bool}
   --system: string@system-completer # Required. Immutable. Identifies the storage system of the entity data.
   --type: string@type-completer # Required. Immutable. The type of entity.
-]: any -> record<access: record<read: string>, asset: string, catalogEntry: string, compatibility: record<bigquery: record<compatible: bool, reason: string>, hiveMetastore: record<compatible: bool, reason: string>>, createTime: string, dataPath: string, dataPathPattern: string, description: string, displayName: string, etag: string, format: record<compressionFormat: string, csv: record<delimiter: string, encoding: string, headerRows: int, quote: string>, format: string, iceberg: record<metadataLocation: string>, json: record<encoding: string>, mimeType: string>, id: string, name: string, schema: record<fields: list<record>, partitionFields: list<record>, partitionStyle: string, userManaged: bool>, system: string, type: string, uid: string, updateTime: string> {
+]: any -> oneof<record<access: record<read: string>, asset: string, catalogEntry: string, compatibility: record<bigquery: record<compatible: bool, reason: string>, hiveMetastore: record<compatible: bool, reason: string>>, createTime: string, dataPath: string, dataPathPattern: string, description: string, displayName: string, etag: string, format: record<compressionFormat: string, csv: record<delimiter: string, encoding: string, headerRows: int, quote: string>, format: string, iceberg: record<metadataLocation: string>, json: record<encoding: string>, mimeType: string>, id: string, name: string, schema: record<fields: list<record>, partitionFields: list<record>, partitionStyle: string, userManaged: bool>, system: string, type: string, uid: string, updateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -411,7 +427,7 @@ export def "dataplex-projects-locations-list" [
   --filter: string # A filter to narrow down results to a preferred subset. The filtering language accepts strings like "displayName=tokyo", and is documented in more detail in AIP-160 (https://google.aip.dev/160).
   --page-size: int # The maximum number of results to return. If not set, the service selects a default.
   --page-token: string # A page token received from the next_page_token field in the response. Send that page token to receive the subsequent page.
-]: nothing -> record<locations: table<displayName: string, labels: record, locationId: string, metadata: record, name: string>, nextPageToken: string> {
+]: nothing -> oneof<record<locations: table<displayName: string, labels: record, locationId: string, metadata: record, name: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -462,7 +478,7 @@ export def "dataplex-projects-locations-operations-list" [
   --filter: string # The standard list filter.
   --page-size: int # The standard list page size.
   --page-token: string # The standard list page token.
-]: nothing -> record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>> {
+]: nothing -> oneof<record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -511,7 +527,7 @@ export def "dataplex-projects-locations-operations-cancel" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -563,7 +579,7 @@ export def "dataplex-projects-locations-lakes-tasks-run" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record<job: record<endTime: string, message: string, name: string, retryCount: int, service: string, serviceJob: string, startTime: string, state: string, uid: string>> {
+]: any -> oneof<record<job: record<endTime: string, message: string, name: string, retryCount: int, service: string, serviceJob: string, startTime: string, state: string, uid: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -616,7 +632,7 @@ export def "dataplex-projects-locations-lakes-zones-assets-actions-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # Optional. Maximum number of actions to return. The service may return fewer than this value. If unspecified, at most 10 actions will be returned. The maximum value is 1000; values above 1000 will be coerced to 1000.
   --page-token: string # Optional. Page token received from a previous ListAssetActions call. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to ListAssetActions must match the call that provided the page token.
-]: nothing -> record<actions: table<asset: string, category: string, dataLocations: list, detectTime: string, failedSecurityPolicyApply: record, incompatibleDataSchema: record, invalidDataFormat: record, invalidDataOrganization: record, invalidDataPartition: record, issue: string, lake: string, missingData: record, missingResource: record, name: string, unauthorizedResource: record, zone: string>, nextPageToken: string> {
+]: nothing -> oneof<record<actions: table<asset: string, category: string, dataLocations: list, detectTime: string, failedSecurityPolicyApply: record, incompatibleDataSchema: record, invalidDataFormat: record, invalidDataOrganization: record, invalidDataPartition: record, issue: string, lake: string, missingData: record, missingResource: record, name: string, unauthorizedResource: record, zone: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -668,7 +684,7 @@ export def "dataplex-projects-locations-lakes-zones-assets-list" [
   --order-by: string # Optional. Order by fields for the result.
   --page-size: int # Optional. Maximum number of asset to return. The service may return fewer than this value. If unspecified, at most 10 assets will be returned. The maximum value is 1000; values above 1000 will be coerced to 1000.
   --page-token: string # Optional. Page token received from a previous ListAssets call. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to ListAssets must match the call that provided the page token.
-]: nothing -> record<assets: table<createTime: string, description: string, discoverySpec: record, discoveryStatus: record, displayName: string, labels: record, name: string, resourceSpec: record, resourceStatus: record, securityStatus: record, state: string, uid: string, updateTime: string>, nextPageToken: string> {
+]: nothing -> oneof<record<assets: table<createTime: string, description: string, discoverySpec: record, discoveryStatus: record, displayName: string, labels: record, name: string, resourceSpec: record, resourceStatus: record, securityStatus: record, state: string, uid: string, updateTime: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -694,11 +710,6 @@ export def "dataplex-projects-locations-lakes-zones-assets-list" [
 #
 # POST /v1/{parent}/assets
 # operationId: dataplex.projects.locations.lakes.zones.assets.create
-# --discoverySpec shape: {csvOptions?: record, enabled?: bool, excludePatterns?: list<string>, includePatterns?: list<string>, jsonOptions?: record, schedule?: string}
-# --discoveryStatus shape: {lastRunDuration?: string, lastRunTime?: string, message?: string, state?: "STATE_UNSPECIFIED"|"SCHEDULED"|"IN_PROGRESS"|"PAUSED"|"DISABLED", stats?: record, updateTime?: string}
-# --resourceSpec shape: {name?: string, readAccessMode?: "ACCESS_MODE_UNSPECIFIED"|"DIRECT"|"MANAGED", type?: "TYPE_UNSPECIFIED"|"STORAGE_BUCKET"|"BIGQUERY_DATASET"}
-# --resourceStatus shape: {message?: string, state?: "STATE_UNSPECIFIED"|"READY"|"ERROR", updateTime?: string}
-# --securityStatus shape: {message?: string, state?: "STATE_UNSPECIFIED"|"READY"|"APPLYING"|"ERROR", updateTime?: string}
 export def "dataplex-projects-locations-lakes-zones-assets-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -731,7 +742,7 @@ export def "dataplex-projects-locations-lakes-zones-assets-create" [
   --resource-spec: record # Identifies the cloud resource that is referenced by this asset. — shape: {name?: string, readAccessMode?: "ACCESS_MODE_UNSPECIFIED"|"DIRECT"|"MANAGED", type?: "TYPE_UNSPECIFIED"|"STORAGE_BUCKET"|"BIGQUERY_DATASET"}
   --resource-status: record # Status of the resource referenced by an asset. — shape: {message?: string, state?: "STATE_UNSPECIFIED"|"READY"|"ERROR", updateTime?: string}
   --security-status: record # Security policy status of the asset. Data security policy, i.e., readers, writers & owners, should be specified in the lake/zone/asset IAM policy. — shape: {message?: string, state?: "STATE_UNSPECIFIED"|"READY"|"APPLYING"|"ERROR", updateTime?: string}
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -786,7 +797,7 @@ export def "dataplex-projects-locations-data-taxonomies-attributes-list" [
   --order-by: string # Optional. Order by fields for the result.
   --page-size: int # Optional. Maximum number of DataAttributes to return. The service may return fewer than this value. If unspecified, at most 10 dataAttributes will be returned. The maximum value is 1000; values above 1000 will be coerced to 1000.
   --page-token: string # Optional. Page token received from a previous ListDataAttributes call. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to ListDataAttributes must match the call that provided the page token.
-]: nothing -> record<dataAttributes: table<attributeCount: int, createTime: string, dataAccessSpec: record, description: string, displayName: string, etag: string, labels: record, name: string, parentId: string, resourceAccessSpec: record, uid: string, updateTime: string>, nextPageToken: string, unreachableLocations: list<string>> {
+]: nothing -> oneof<record<dataAttributes: table<attributeCount: int, createTime: string, dataAccessSpec: record, description: string, displayName: string, etag: string, labels: record, name: string, parentId: string, resourceAccessSpec: record, uid: string, updateTime: string>, nextPageToken: string, unreachableLocations: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -812,8 +823,6 @@ export def "dataplex-projects-locations-data-taxonomies-attributes-list" [
 #
 # POST /v1/{parent}/attributes
 # operationId: dataplex.projects.locations.dataTaxonomies.attributes.create
-# --dataAccessSpec shape: {readers?: list<string>}
-# --resourceAccessSpec shape: {owners?: list<string>, readers?: list<string>, writers?: list<string>}
 export def "dataplex-projects-locations-data-taxonomies-attributes-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -845,7 +854,7 @@ export def "dataplex-projects-locations-data-taxonomies-attributes-create" [
   --labels: record # Optional. User-defined labels for the DataAttribute.
   --parent-id: string # Optional. The ID of the parent DataAttribute resource, should belong to the same data taxonomy. Circular dependency in parent chain is not valid. Maximum depth of the hierarchy allowed is 4. a -> b -> c -> d -> e, depth = 4
   --resource-access-spec: record # ResourceAccessSpec holds the access control configuration to be enforced on the resources, for example, Cloud Storage bucket, BigQuery dataset, BigQuery table. — shape: {owners?: list<string>, readers?: list<string>, writers?: list<string>}
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -899,7 +908,7 @@ export def "dataplex-projects-locations-lakes-content-list" [
   --filter: string # Optional. Filter request. Filters are case-sensitive. The following formats are supported:labels.key1 = "value1" labels:key1 type = "NOTEBOOK" type = "SQL_SCRIPT"These restrictions can be coinjoined with AND, OR and NOT conjunctions.
   --page-size: int # Optional. Maximum number of content to return. The service may return fewer than this value. If unspecified, at most 10 content will be returned. The maximum value is 1000; values above 1000 will be coerced to 1000.
   --page-token: string # Optional. Page token received from a previous ListContent call. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to ListContent must match the call that provided the page token.
-]: nothing -> record<content: table<createTime: string, dataText: string, description: string, labels: record, name: string, notebook: record, path: string, sqlScript: record, uid: string, updateTime: string>, nextPageToken: string> {
+]: nothing -> oneof<record<content: table<createTime: string, dataText: string, description: string, labels: record, name: string, notebook: record, path: string, sqlScript: record, uid: string, updateTime: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -925,8 +934,6 @@ export def "dataplex-projects-locations-lakes-content-list" [
 #
 # POST /v1/{parent}/content
 # operationId: dataplex.projects.locations.lakes.content.create
-# --notebook shape: {kernelType?: "KERNEL_TYPE_UNSPECIFIED"|"PYTHON3"}
-# --sqlScript shape: {engine?: "QUERY_ENGINE_UNSPECIFIED"|"SPARK"}
 export def "dataplex-projects-locations-lakes-content-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -956,7 +963,7 @@ export def "dataplex-projects-locations-lakes-content-create" [
   --notebook: record # Configuration for Notebook content. — shape: {kernelType?: "KERNEL_TYPE_UNSPECIFIED"|"PYTHON3"}
   --path: string # Required. The path for the Content file, represented as directory structure. Unique within a lake. Limited to alphanumerics, hyphens, underscores, dots and slashes.
   --sql-script: record # Configuration for the Sql Script content. — shape: {engine?: "QUERY_ENGINE_UNSPECIFIED"|"SPARK"}
-]: any -> record<createTime: string, dataText: string, description: string, labels: record, name: string, notebook: record<kernelType: string>, path: string, sqlScript: record<engine: string>, uid: string, updateTime: string> {
+]: any -> oneof<record<createTime: string, dataText: string, description: string, labels: record, name: string, notebook: record<kernelType: string>, path: string, sqlScript: record<engine: string>, uid: string, updateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1010,7 +1017,7 @@ export def "dataplex-projects-locations-lakes-contentitems-list" [
   --filter: string # Optional. Filter request. Filters are case-sensitive. The following formats are supported:labels.key1 = "value1" labels:key1 type = "NOTEBOOK" type = "SQL_SCRIPT"These restrictions can be coinjoined with AND, OR and NOT conjunctions.
   --page-size: int # Optional. Maximum number of content to return. The service may return fewer than this value. If unspecified, at most 10 content will be returned. The maximum value is 1000; values above 1000 will be coerced to 1000.
   --page-token: string # Optional. Page token received from a previous ListContent call. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to ListContent must match the call that provided the page token.
-]: nothing -> record<content: table<createTime: string, dataText: string, description: string, labels: record, name: string, notebook: record, path: string, sqlScript: record, uid: string, updateTime: string>, nextPageToken: string> {
+]: nothing -> oneof<record<content: table<createTime: string, dataText: string, description: string, labels: record, name: string, notebook: record, path: string, sqlScript: record, uid: string, updateTime: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1036,8 +1043,6 @@ export def "dataplex-projects-locations-lakes-contentitems-list" [
 #
 # POST /v1/{parent}/contentitems
 # operationId: dataplex.projects.locations.lakes.contentitems.create
-# --notebook shape: {kernelType?: "KERNEL_TYPE_UNSPECIFIED"|"PYTHON3"}
-# --sqlScript shape: {engine?: "QUERY_ENGINE_UNSPECIFIED"|"SPARK"}
 export def "dataplex-projects-locations-lakes-contentitems-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1067,7 +1072,7 @@ export def "dataplex-projects-locations-lakes-contentitems-create" [
   --notebook: record # Configuration for Notebook content. — shape: {kernelType?: "KERNEL_TYPE_UNSPECIFIED"|"PYTHON3"}
   --path: string # Required. The path for the Content file, represented as directory structure. Unique within a lake. Limited to alphanumerics, hyphens, underscores, dots and slashes.
   --sql-script: record # Configuration for the Sql Script content. — shape: {engine?: "QUERY_ENGINE_UNSPECIFIED"|"SPARK"}
-]: any -> record<createTime: string, dataText: string, description: string, labels: record, name: string, notebook: record<kernelType: string>, path: string, sqlScript: record<engine: string>, uid: string, updateTime: string> {
+]: any -> oneof<record<createTime: string, dataText: string, description: string, labels: record, name: string, notebook: record<kernelType: string>, path: string, sqlScript: record<engine: string>, uid: string, updateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1122,7 +1127,7 @@ export def "dataplex-projects-locations-data-attribute-bindings-list" [
   --order-by: string # Optional. Order by fields for the result.
   --page-size: int # Optional. Maximum number of DataAttributeBindings to return. The service may return fewer than this value. If unspecified, at most 10 DataAttributeBindings will be returned. The maximum value is 1000; values above 1000 will be coerced to 1000.
   --page-token: string # Optional. Page token received from a previous ListDataAttributeBindings call. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to ListDataAttributeBindings must match the call that provided the page token.
-]: nothing -> record<dataAttributeBindings: table<attributes: list, createTime: string, description: string, displayName: string, etag: string, labels: record, name: string, paths: list, resource: string, uid: string, updateTime: string>, nextPageToken: string, unreachableLocations: list<string>> {
+]: nothing -> oneof<record<dataAttributeBindings: table<attributes: list, createTime: string, description: string, displayName: string, etag: string, labels: record, name: string, paths: list, resource: string, uid: string, updateTime: string>, nextPageToken: string, unreachableLocations: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1148,7 +1153,6 @@ export def "dataplex-projects-locations-data-attribute-bindings-list" [
 #
 # POST /v1/{parent}/dataAttributeBindings
 # operationId: dataplex.projects.locations.dataAttributeBindings.create
-# --paths item shape: {attributes?: list<string>, name?: string}
 export def "dataplex-projects-locations-data-attribute-bindings-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1180,7 +1184,7 @@ export def "dataplex-projects-locations-data-attribute-bindings-create" [
   --labels: record # Optional. User-defined labels for the DataAttributeBinding.
   --paths: list # Optional. The list of paths for items within the associated resource (eg. columns and partitions within a table) along with attribute bindings. — item shape: {attributes?: list<string>, name?: string}
   --resource: string # Optional. Immutable. The resource name of the resource that is associated to attributes. Presently, only entity resource is supported in the form: projects/{project}/locations/{location}/lakes/{lake}/zones/{zone}/entities/{entity_id} Must belong in the same project and region as the attribute binding, and there can only exist one active binding for a resource.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1235,7 +1239,7 @@ export def "dataplex-projects-locations-data-scans-list" [
   --order-by: string # Optional. Order by fields (name or create_time) for the result. If not specified, the ordering is undefined.
   --page-size: int # Optional. Maximum number of dataScans to return. The service may return fewer than this value. If unspecified, at most 500 scans will be returned. The maximum value is 1000; values above 1000 will be coerced to 1000.
   --page-token: string # Optional. Page token received from a previous ListDataScans call. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to ListDataScans must match the call that provided the page token.
-]: nothing -> record<dataScans: table<createTime: string, data: record, dataProfileResult: record, dataProfileSpec: record, dataQualityResult: record, dataQualitySpec: record, description: string, displayName: string, executionSpec: record, executionStatus: record, labels: record, name: string, state: string, type: string, uid: string, updateTime: string>, nextPageToken: string, unreachable: list<string>> {
+]: nothing -> oneof<record<dataScans: table<createTime: string, data: record, dataProfileResult: record, dataProfileSpec: record, dataQualityResult: record, dataQualitySpec: record, description: string, displayName: string, executionSpec: record, executionStatus: record, labels: record, name: string, state: string, type: string, uid: string, updateTime: string>, nextPageToken: string, unreachable: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1261,12 +1265,6 @@ export def "dataplex-projects-locations-data-scans-list" [
 #
 # POST /v1/{parent}/dataScans
 # operationId: dataplex.projects.locations.dataScans.create
-# --data shape: {entity?: string, resource?: string}
-# --dataProfileResult shape: {profile?: record, rowCount?: string, scannedData?: record}
-# --dataQualityResult shape: {dimensions?: list, passed?: bool, rowCount?: string, rules?: list, scannedData?: record}
-# --dataQualitySpec shape: {rules?: list}
-# --executionSpec shape: {field?: string, trigger?: record}
-# --executionStatus shape: {latestJobEndTime?: string, latestJobStartTime?: string}
 export def "dataplex-projects-locations-data-scans-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1301,7 +1299,7 @@ export def "dataplex-projects-locations-data-scans-create" [
   --execution-spec: record # DataScan execution settings. — shape: {field?: string, trigger?: record}
   --execution-status: record # Status of the data scan execution. — shape: {latestJobEndTime?: string, latestJobStartTime?: string}
   --labels: record # Optional. User-defined labels for the scan.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1356,7 +1354,7 @@ export def "dataplex-projects-locations-data-taxonomies-list" [
   --order-by: string # Optional. Order by fields for the result.
   --page-size: int # Optional. Maximum number of DataTaxonomies to return. The service may return fewer than this value. If unspecified, at most 10 DataTaxonomies will be returned. The maximum value is 1000; values above 1000 will be coerced to 1000.
   --page-token: string # Optional. Page token received from a previous ListDataTaxonomies call. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to ListDataTaxonomies must match the call that provided the page token.
-]: nothing -> record<dataTaxonomies: table<attributeCount: int, createTime: string, description: string, displayName: string, etag: string, labels: record, name: string, uid: string, updateTime: string>, nextPageToken: string, unreachableLocations: list<string>> {
+]: nothing -> oneof<record<dataTaxonomies: table<attributeCount: int, createTime: string, description: string, displayName: string, etag: string, labels: record, name: string, uid: string, updateTime: string>, nextPageToken: string, unreachableLocations: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1410,7 +1408,7 @@ export def "dataplex-projects-locations-data-taxonomies-create" [
   --display-name: string # Optional. User friendly display name.
   --etag: string # This checksum is computed by the server based on the value of other fields, and may be sent on update and delete requests to ensure the client has an up-to-date value before proceeding.
   --labels: record # Optional. User-defined labels for the DataTaxonomy.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1465,7 +1463,7 @@ export def "dataplex-projects-locations-lakes-zones-entities-list" [
   --page-size: int # Optional. Maximum number of entities to return. The service may return fewer than this value. If unspecified, 100 entities will be returned by default. The maximum value is 500; larger values will will be truncated to 500.
   --page-token: string # Optional. Page token received from a previous ListEntities call. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to ListEntities must match the call that provided the page token.
   --view: string@view-completer-1 # Required. Specify the entity view to make a partial list request.
-]: nothing -> record<entities: table<access: record, asset: string, catalogEntry: string, compatibility: record, createTime: string, dataPath: string, dataPathPattern: string, description: string, displayName: string, etag: string, format: record, id: string, name: string, schema: record, system: string, type: string, uid: string, updateTime: string>, nextPageToken: string> {
+]: nothing -> oneof<record<entities: table<access: record, asset: string, catalogEntry: string, compatibility: record, createTime: string, dataPath: string, dataPathPattern: string, description: string, displayName: string, etag: string, format: record, id: string, name: string, schema: record, system: string, type: string, uid: string, updateTime: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1491,9 +1489,6 @@ export def "dataplex-projects-locations-lakes-zones-entities-list" [
 #
 # POST /v1/{parent}/entities
 # operationId: dataplex.projects.locations.lakes.zones.entities.create
-# --compatibility shape: {bigquery?: record, hiveMetastore?: record}
-# --format shape: {compressionFormat?: "COMPRESSION_FORMAT_UNSPECIFIED"|"GZIP"|"BZIP2", csv?: record, iceberg?: record, json?: record, mimeType?: string}
-# --schema shape: {fields?: list, partitionFields?: list, partitionStyle?: "PARTITION_STYLE_UNSPECIFIED"|"HIVE_COMPATIBLE", userManaged?: bool}
 export def "dataplex-projects-locations-lakes-zones-entities-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1530,7 +1525,7 @@ export def "dataplex-projects-locations-lakes-zones-entities-create" [
   --schema: record # Schema information describing the structure and layout of the data. — shape: {fields?: list, partitionFields?: list, partitionStyle?: "PARTITION_STYLE_UNSPECIFIED"|"HIVE_COMPATIBLE", userManaged?: bool}
   --system: string@system-completer # Required. Immutable. Identifies the storage system of the entity data.
   --type: string@type-completer # Required. Immutable. The type of entity.
-]: any -> record<access: record<read: string>, asset: string, catalogEntry: string, compatibility: record<bigquery: record<compatible: bool, reason: string>, hiveMetastore: record<compatible: bool, reason: string>>, createTime: string, dataPath: string, dataPathPattern: string, description: string, displayName: string, etag: string, format: record<compressionFormat: string, csv: record<delimiter: string, encoding: string, headerRows: int, quote: string>, format: string, iceberg: record<metadataLocation: string>, json: record<encoding: string>, mimeType: string>, id: string, name: string, schema: record<fields: list<record>, partitionFields: list<record>, partitionStyle: string, userManaged: bool>, system: string, type: string, uid: string, updateTime: string> {
+]: any -> oneof<record<access: record<read: string>, asset: string, catalogEntry: string, compatibility: record<bigquery: record<compatible: bool, reason: string>, hiveMetastore: record<compatible: bool, reason: string>>, createTime: string, dataPath: string, dataPathPattern: string, description: string, displayName: string, etag: string, format: record<compressionFormat: string, csv: record<delimiter: string, encoding: string, headerRows: int, quote: string>, format: string, iceberg: record<metadataLocation: string>, json: record<encoding: string>, mimeType: string>, id: string, name: string, schema: record<fields: list<record>, partitionFields: list<record>, partitionStyle: string, userManaged: bool>, system: string, type: string, uid: string, updateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1585,7 +1580,7 @@ export def "dataplex-projects-locations-lakes-environments-list" [
   --order-by: string # Optional. Order by fields for the result.
   --page-size: int # Optional. Maximum number of environments to return. The service may return fewer than this value. If unspecified, at most 10 environments will be returned. The maximum value is 1000; values above 1000 will be coerced to 1000.
   --page-token: string # Optional. Page token received from a previous ListEnvironments call. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to ListEnvironments must match the call that provided the page token.
-]: nothing -> record<environments: table<createTime: string, description: string, displayName: string, endpoints: record, infrastructureSpec: record, labels: record, name: string, sessionSpec: record, sessionStatus: record, state: string, uid: string, updateTime: string>, nextPageToken: string> {
+]: nothing -> oneof<record<environments: table<createTime: string, description: string, displayName: string, endpoints: record, infrastructureSpec: record, labels: record, name: string, sessionSpec: record, sessionStatus: record, state: string, uid: string, updateTime: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1611,8 +1606,6 @@ export def "dataplex-projects-locations-lakes-environments-list" [
 #
 # POST /v1/{parent}/environments
 # operationId: dataplex.projects.locations.lakes.environments.create
-# --infrastructureSpec shape: {compute?: record, osImage?: record}
-# --sessionSpec shape: {enableFastStartup?: bool, maxIdleDuration?: string}
 export def "dataplex-projects-locations-lakes-environments-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1644,7 +1637,7 @@ export def "dataplex-projects-locations-lakes-environments-create" [
   --labels: record # Optional. User defined labels for the environment.
   --session-spec: record # Configuration for sessions created for this environment. — shape: {enableFastStartup?: bool, maxIdleDuration?: string}
   --session-status: record # Status of sessions created for this environment.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1697,7 +1690,7 @@ export def "dataplex-projects-locations-lakes-tasks-jobs-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # Optional. Maximum number of jobs to return. The service may return fewer than this value. If unspecified, at most 10 jobs will be returned. The maximum value is 1000; values above 1000 will be coerced to 1000.
   --page-token: string # Optional. Page token received from a previous ListJobs call. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to ListJobs must match the call that provided the page token.
-]: nothing -> record<jobs: table<endTime: string, message: string, name: string, retryCount: int, service: string, serviceJob: string, startTime: string, state: string, uid: string>, nextPageToken: string> {
+]: nothing -> oneof<record<jobs: table<endTime: string, message: string, name: string, retryCount: int, service: string, serviceJob: string, startTime: string, state: string, uid: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1749,7 +1742,7 @@ export def "dataplex-projects-locations-lakes-list" [
   --order-by: string # Optional. Order by fields for the result.
   --page-size: int # Optional. Maximum number of Lakes to return. The service may return fewer than this value. If unspecified, at most 10 lakes will be returned. The maximum value is 1000; values above 1000 will be coerced to 1000.
   --page-token: string # Optional. Page token received from a previous ListLakes call. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to ListLakes must match the call that provided the page token.
-]: nothing -> record<lakes: table<assetStatus: record, createTime: string, description: string, displayName: string, labels: record, metastore: record, metastoreStatus: record, name: string, serviceAccount: string, state: string, uid: string, updateTime: string>, nextPageToken: string, unreachableLocations: list<string>> {
+]: nothing -> oneof<record<lakes: table<assetStatus: record, createTime: string, description: string, displayName: string, labels: record, metastore: record, metastoreStatus: record, name: string, serviceAccount: string, state: string, uid: string, updateTime: string>, nextPageToken: string, unreachableLocations: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1775,9 +1768,6 @@ export def "dataplex-projects-locations-lakes-list" [
 #
 # POST /v1/{parent}/lakes
 # operationId: dataplex.projects.locations.lakes.create
-# --assetStatus shape: {activeAssets?: int, securityPolicyApplyingAssets?: int, updateTime?: string}
-# --metastore shape: {service?: string}
-# --metastoreStatus shape: {endpoint?: string, message?: string, state?: "STATE_UNSPECIFIED"|"NONE"|"READY"|"UPDATING"|"ERROR", updateTime?: string}
 export def "dataplex-projects-locations-lakes-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1808,7 +1798,7 @@ export def "dataplex-projects-locations-lakes-create" [
   --labels: record # Optional. User-defined labels for the lake.
   --metastore: record # Settings to manage association of Dataproc Metastore with a lake. — shape: {service?: string}
   --metastore-status: record # Status of Lake and Dataproc Metastore service instance association. — shape: {endpoint?: string, message?: string, state?: "STATE_UNSPECIFIED"|"NONE"|"READY"|"UPDATING"|"ERROR", updateTime?: string}
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1862,7 +1852,7 @@ export def "dataplex-projects-locations-lakes-zones-entities-partitions-list" [
   --filter: string # Optional. Filter the partitions returned to the caller using a key value pair expression. Supported operators and syntax: logic operators: AND, OR comparison operators: <, >, >=, <= ,=, != LIKE operators: The right hand of a LIKE operator supports "." and "*" for wildcard searches, for example "value1 LIKE ".*oo.*" parenthetical grouping: ( )Sample filter expression: `?filter="key1 < value1 OR key2 > value2"Notes: Keys to the left of operators are case insensitive. Partition results are sorted first by creation time, then by lexicographic order. Up to 20 key value filter pairs are allowed, but due to performance considerations, only the first 10 will be used as a filter.
   --page-size: int # Optional. Maximum number of partitions to return. The service may return fewer than this value. If unspecified, 100 partitions will be returned by default. The maximum page size is 500; larger values will will be truncated to 500.
   --page-token: string # Optional. Page token received from a previous ListPartitions call. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to ListPartitions must match the call that provided the page token.
-]: nothing -> record<nextPageToken: string, partitions: table<etag: string, location: string, name: string, values: list>> {
+]: nothing -> oneof<record<nextPageToken: string, partitions: table<etag: string, location: string, name: string, values: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1914,7 +1904,7 @@ export def "dataplex-projects-locations-lakes-zones-entities-partitions-create" 
   --etag: string # Optional. The etag for this partition.
   --location: string # Required. Immutable. The location of the entity data within the partition, for example, gs://bucket/path/to/entity/key1=value1/key2=value2. Or projects//datasets//tables/
   --values: list<string> # Required. Immutable. The set of values representing the partition, which correspond to the partition schema defined in the parent entity.
-]: any -> record<etag: string, location: string, name: string, values: list<string>> {
+]: any -> oneof<record<etag: string, location: string, name: string, values: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1968,7 +1958,7 @@ export def "dataplex-projects-locations-lakes-environments-sessions-list" [
   --filter: string # Optional. Filter request. The following mode filter is supported to return only the sessions belonging to the requester when the mode is USER and return sessions of all the users when the mode is ADMIN. When no filter is sent default to USER mode. NOTE: When the mode is ADMIN, the requester should have dataplex.environments.listAllSessions permission to list all sessions, in absence of the permission, the request fails.mode = ADMIN | USER
   --page-size: int # Optional. Maximum number of sessions to return. The service may return fewer than this value. If unspecified, at most 10 sessions will be returned. The maximum value is 1000; values above 1000 will be coerced to 1000.
   --page-token: string # Optional. Page token received from a previous ListSessions call. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to ListSessions must match the call that provided the page token.
-]: nothing -> record<nextPageToken: string, sessions: table<createTime: string, name: string, state: string, userId: string>> {
+]: nothing -> oneof<record<nextPageToken: string, sessions: table<createTime: string, name: string, state: string, userId: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -2020,7 +2010,7 @@ export def "dataplex-projects-locations-lakes-tasks-list" [
   --order-by: string # Optional. Order by fields for the result.
   --page-size: int # Optional. Maximum number of tasks to return. The service may return fewer than this value. If unspecified, at most 10 tasks will be returned. The maximum value is 1000; values above 1000 will be coerced to 1000.
   --page-token: string # Optional. Page token received from a previous ListZones call. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to ListZones must match the call that provided the page token.
-]: nothing -> record<nextPageToken: string, tasks: table<createTime: string, description: string, displayName: string, executionSpec: record, executionStatus: record, labels: record, name: string, notebook: record, spark: record, state: string, triggerSpec: record, uid: string, updateTime: string>, unreachableLocations: list<string>> {
+]: nothing -> oneof<record<nextPageToken: string, tasks: table<createTime: string, description: string, displayName: string, executionSpec: record, executionStatus: record, labels: record, name: string, notebook: record, spark: record, state: string, triggerSpec: record, uid: string, updateTime: string>, unreachableLocations: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -2046,11 +2036,6 @@ export def "dataplex-projects-locations-lakes-tasks-list" [
 #
 # POST /v1/{parent}/tasks
 # operationId: dataplex.projects.locations.lakes.tasks.create
-# --executionSpec shape: {args?: record, kmsKey?: string, maxJobExecutionLifetime?: string, project?: string, serviceAccount?: string}
-# --executionStatus shape: {latestJob?: record}
-# --notebook shape: {archiveUris?: list<string>, fileUris?: list<string>, infrastructureSpec?: record, notebook?: string}
-# --spark shape: {archiveUris?: list<string>, fileUris?: list<string>, infrastructureSpec?: record, mainClass?: string, mainJarFileUri?: string, pythonScriptFile?: string, sqlScript?: string, sqlScriptFile?: string}
-# --triggerSpec shape: {disabled?: bool, maxRetries?: int, schedule?: string, startTime?: string, type?: "TYPE_UNSPECIFIED"|"ON_DEMAND"|"RECURRING"}
 export def "dataplex-projects-locations-lakes-tasks-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2083,7 +2068,7 @@ export def "dataplex-projects-locations-lakes-tasks-create" [
   --notebook: record # Config for running scheduled notebooks. — shape: {archiveUris?: list<string>, fileUris?: list<string>, infrastructureSpec?: record, notebook?: string}
   --spark: record # User-specified config for running a Spark task. — shape: {archiveUris?: list<string>, fileUris?: list<string>, infrastructureSpec?: record, mainClass?: string, mainJarFileUri?: string, pythonScriptFile?: string, sqlScript?: string, sqlScriptFile?: string}
   --trigger-spec: record # Task scheduling and trigger settings. — shape: {disabled?: bool, maxRetries?: int, schedule?: string, startTime?: string, type?: "TYPE_UNSPECIFIED"|"ON_DEMAND"|"RECURRING"}
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2138,7 +2123,7 @@ export def "dataplex-projects-locations-lakes-zones-list" [
   --order-by: string # Optional. Order by fields for the result.
   --page-size: int # Optional. Maximum number of zones to return. The service may return fewer than this value. If unspecified, at most 10 zones will be returned. The maximum value is 1000; values above 1000 will be coerced to 1000.
   --page-token: string # Optional. Page token received from a previous ListZones call. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to ListZones must match the call that provided the page token.
-]: nothing -> record<nextPageToken: string, zones: table<assetStatus: record, createTime: string, description: string, discoverySpec: record, displayName: string, labels: record, name: string, resourceSpec: record, state: string, type: string, uid: string, updateTime: string>> {
+]: nothing -> oneof<record<nextPageToken: string, zones: table<assetStatus: record, createTime: string, description: string, discoverySpec: record, displayName: string, labels: record, name: string, resourceSpec: record, state: string, type: string, uid: string, updateTime: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -2164,9 +2149,6 @@ export def "dataplex-projects-locations-lakes-zones-list" [
 #
 # POST /v1/{parent}/zones
 # operationId: dataplex.projects.locations.lakes.zones.create
-# --assetStatus shape: {activeAssets?: int, securityPolicyApplyingAssets?: int, updateTime?: string}
-# --discoverySpec shape: {csvOptions?: record, enabled?: bool, excludePatterns?: list<string>, includePatterns?: list<string>, jsonOptions?: record, schedule?: string}
-# --resourceSpec shape: {locationType?: "LOCATION_TYPE_UNSPECIFIED"|"SINGLE_REGION"|"MULTI_REGION"}
 export def "dataplex-projects-locations-lakes-zones-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2198,7 +2180,7 @@ export def "dataplex-projects-locations-lakes-zones-create" [
   --labels: record # Optional. User defined labels for the zone.
   --resource-spec: record # Settings for resources attached as assets within a zone. — shape: {locationType?: "LOCATION_TYPE_UNSPECIFIED"|"SINGLE_REGION"|"MULTI_REGION"}
   --type: string@type-completer-1 # Required. Immutable. The type of the zone.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2250,7 +2232,7 @@ export def "dataplex-projects-locations-lakes-zones-assets-get-iam-policy" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --options-requested-policy-version: int # Optional. The maximum policy version that will be used to format the policy.Valid values are 0, 1, and 3. Requests specifying an invalid value will be rejected.Requests for policies with any conditional role bindings must specify version 3. Policies with no conditional role bindings may specify any valid value or leave the field unset.The policy in the response might use the policy version that you specified, or it might use a lower policy version. For example, if you specify version 3, but the policy has no conditional role bindings, the response uses version 1.To learn which resources support conditions in their IAM policies, see the IAM documentation (https://cloud.google.com/iam/help/conditions/resource-policies).
-]: nothing -> record<auditConfigs: table<auditLogConfigs: list, service: string>, bindings: table<condition: record, members: list, role: string>, etag: string, version: int> {
+]: nothing -> oneof<record<auditConfigs: table<auditLogConfigs: list, service: string>, bindings: table<condition: record, members: list, role: string>, etag: string, version: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource | is-empty) { error make --unspanned { msg: "path parameter 'resource' must be non-empty" } }
@@ -2276,7 +2258,6 @@ export def "dataplex-projects-locations-lakes-zones-assets-get-iam-policy" [
 #
 # POST /v1/{resource}:setIamPolicy
 # operationId: dataplex.projects.locations.lakes.zones.assets.setIamPolicy
-# --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
 export def "dataplex-projects-locations-lakes-zones-assets-set-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2301,7 +2282,7 @@ export def "dataplex-projects-locations-lakes-zones-assets-set-iam-policy" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --policy: record # An Identity and Access Management (IAM) policy, which specifies access controls for Google Cloud resources.A Policy is a collection of bindings. A binding binds one or more members, or principals, to a single role. Principals can be user accounts, service accounts, Google groups, and domains (such as G Suite). A role is a named list of permissions; each role can be an IAM predefined role or a user-created custom role.For some types of Google Cloud resources, a binding can also specify a condition, which is a logical expression that allows access to a resource only if the expression evaluates to true. A condition can add constraints based on attributes of the request, the resource, or both. To learn which resources support conditions in their IAM policies, see the IAM documentation (https://cloud.google.com/iam/help/conditions/resource-policies).JSON example: { "bindings": [ { "role": "roles/resourcemanager.organizationAdmin", "members": [ "user:mike@example.com", "group:admins@example.com", "domain:google.com", "serviceAccount:my-project-id@appspot.gserviceaccount.com" ] }, { "role": "roles/resourcemanager.organizationViewer", "members": [ "user:eve@example.com" ], "condition": { "title": "expirable access", "description": "Does not grant access after Sep 2020", "expression": "request.time < timestamp('2020-10-01T00:00:00.000Z')", } } ], "etag": "BwWWja0YfJA=", "version": 3 } YAML example: bindings: - members: - user:mike@example.com - group:admins@example.com - domain:google.com - serviceAccount:my-project-id@appspot.gserviceaccount.com role: roles/resourcemanager.organizationAdmin - members: - user:eve@example.com role: roles/resourcemanager.organizationViewer condition: title: expirable access description: Does not grant access after Sep 2020 expression: request.time < timestamp('2020-10-01T00:00:00.000Z') etag: BwWWja0YfJA= version: 3 For a description of IAM and its features, see the IAM documentation (https://cloud.google.com/iam/docs/). — shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
   --update-mask: string # OPTIONAL: A FieldMask specifying which fields of the policy to modify. Only the fields in the mask will be modified. If no mask is provided, the following default mask is used:paths: "bindings, etag" (format: google-fieldmask)
-]: any -> record<auditConfigs: table<auditLogConfigs: list, service: string>, bindings: table<condition: record, members: list, role: string>, etag: string, version: int> {
+]: any -> oneof<record<auditConfigs: table<auditLogConfigs: list, service: string>, bindings: table<condition: record, members: list, role: string>, etag: string, version: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2353,7 +2334,7 @@ export def "dataplex-projects-locations-lakes-zones-assets-test-iam-permissions"
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --permissions: list<string> # The set of permissions to check for the resource. Permissions with wildcards (such as * or storage.*) are not allowed. For more information see IAM Overview (https://cloud.google.com/iam/docs/overview#permissions).
-]: any -> record<permissions: list<string>> {
+]: any -> oneof<record<permissions: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

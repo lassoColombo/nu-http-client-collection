@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "user_key" => { {scheme: $scheme, headers: {"user_key": $token_val}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -110,9 +134,9 @@ def accept-completer [] { ["application/json" "application/pdf"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "company-announcement" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["company-announcement" "company-deepsearch-isin" "company-deepsearch-lei" "company-deepsearch-name" "company-deepsearch-number" "company-monitor-change-types-list" "company-monitor-list" "company-monitor-id" "company-monitor-register" "company-monitor-unregister" "company-notification-list" "company-notification-id" "company-notification-register" "company-notification-unregister" "company-search-name" "company-search-number" "company-alternative-search" "company-id-announcements" "company-id-super" "company-id-dataset" "ein-verification-basic" "ein-verification-comprehensive" "ein-verification-lookup" "iban-basic" "iban-comprehensive" "nif-basic" "nif-comprehensive" "pep-monitor-list" "pep-monitor-unregister" "pep-monitor-update" "pep-order" "pep-retrieve" "product-availability" "product-catalog" "product-notifier" "product-notifier-create" "product-order-concierge" "product-order-ubo" "product-order-with-option" "product-order" "product-search" "product-status" "product-update-action" "product-retrieve" "system-countries" "health-check" "system-pricelist" "tin-verification-basic-check" "tin-verification-comprehensive-check" "tin-verification-name-lookup" "vat-basic" "vat-comprehensive" "vat-level-two" "vat-lookup" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -145,7 +169,7 @@ export def "company-announcement" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<countryCode: string, id: string, registrationNumber: string, structured: string, text: string, time: string, type: string> {
+]: nothing -> oneof<table<countryCode: string, id: string, registrationNumber: string, structured: string, text: string, time: string, type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -181,7 +205,7 @@ export def "company-deepsearch-isin" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --isin: string # A list of ISIN numbers seperated by comma (maximum) is 100
-]: any -> table<isin: string, listings: list<record>, validIsin: bool> {
+]: any -> oneof<table<isin: string, listings: list<record>, validIsin: bool>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
@@ -190,7 +214,7 @@ export def "company-deepsearch-isin" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -221,7 +245,7 @@ export def "company-deepsearch-lei" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Pagination for the ISIN number results (1000 numbers per page) (format: int32, e.g. 1)
-]: nothing -> record<company: record<address: list<string>, country: string, dateOfIncorporation: string, extraData: record, formattedAddress: list<string>, id: string, legalForm: string, managingDirectors: list<string>, name: string, registrationNumber: string, requestTime: int, secretaries: list<string>, sicNaceCodes: list<string>, status: string>, current_page: int, isins: list<string>, last_page: int, lei: string, next_page: string, total_num_isins: int, validLei: bool> {
+]: nothing -> oneof<record<company: record<address: list<string>, country: string, dateOfIncorporation: string, extraData: record, formattedAddress: list<string>, id: string, legalForm: string, managingDirectors: list<string>, name: string, registrationNumber: string, requestTime: int, secretaries: list<string>, sicNaceCodes: list<string>, status: string>, current_page: int, isins: list<string>, last_page: int, lei: string, next_page: string, total_num_isins: int, validLei: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   if ($number | is-empty) { error make --unspanned { msg: "path parameter 'number' must be non-empty" } }
@@ -259,7 +283,7 @@ export def "company-deepsearch-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<address: list<string>, country: string, dateOfIncorporation: string, extraData: record, formattedAddress: list<string>, id: string, legalForm: string, managingDirectors: list<string>, name: string, registrationNumber: string, requestTime: int, secretaries: list<string>, sicNaceCodes: list<string>, status: string> {
+]: nothing -> oneof<table<address: list<string>, country: string, dateOfIncorporation: string, extraData: record, formattedAddress: list<string>, id: string, legalForm: string, managingDirectors: list<string>, name: string, registrationNumber: string, requestTime: int, secretaries: list<string>, sicNaceCodes: list<string>, status: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   if ($country | is-empty) { error make --unspanned { msg: "path parameter 'country' must be non-empty" } }
@@ -297,7 +321,7 @@ export def "company-deepsearch-number" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<address: list<string>, country: string, dateOfIncorporation: string, extraData: record, formattedAddress: list<string>, id: string, legalForm: string, managingDirectors: list<string>, name: string, registrationNumber: string, requestTime: int, secretaries: list<string>, sicNaceCodes: list<string>, status: string> {
+]: nothing -> oneof<table<address: list<string>, country: string, dateOfIncorporation: string, extraData: record, formattedAddress: list<string>, id: string, legalForm: string, managingDirectors: list<string>, name: string, registrationNumber: string, requestTime: int, secretaries: list<string>, sicNaceCodes: list<string>, status: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   if ($country | is-empty) { error make --unspanned { msg: "path parameter 'country' must be non-empty" } }
@@ -333,7 +357,7 @@ export def "company-monitor-change-types-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/company/monitoring/changeTypes" $auth.query)
@@ -367,7 +391,7 @@ export def "company-monitor-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<callbackCount: int, callbackUrl: string, created: string, monitorStatus: string, notificationId: string, subjectId: string> {
+]: nothing -> oneof<table<callbackCount: int, callbackUrl: string, created: string, monitorStatus: string, notificationId: string, subjectId: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/company/monitoring/list" $auth.query)
@@ -402,7 +426,7 @@ export def "company-monitor-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<callbackCount: int, callbackUrl: string, created: string, monitorStatus: string, notificationId: string, subjectId: string> {
+]: nothing -> oneof<table<callbackCount: int, callbackUrl: string, created: string, monitorStatus: string, notificationId: string, subjectId: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -440,7 +464,7 @@ export def "company-monitor-register" [
   --dry-run(-n) # Return the request that would be sent without executing it
   callback_url: string # Callback URL
   change_type: string # ChangeType to monitor
-]: any -> record<monitorStatus: string, notificationId: string> {
+]: any -> oneof<record<monitorStatus: string, notificationId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
@@ -450,7 +474,7 @@ export def "company-monitor-register" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -515,7 +539,7 @@ export def "company-notification-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<callbackCount: int, callbackUrl: string, created: string, monitorStatus: string, notificationId: string, subjectId: string> {
+]: nothing -> oneof<table<callbackCount: int, callbackUrl: string, created: string, monitorStatus: string, notificationId: string, subjectId: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/company/notification/list" $auth.query)
@@ -550,7 +574,7 @@ export def "company-notification-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<callbackCount: int, callbackUrl: string, created: string, monitorStatus: string, notificationId: string, subjectId: string> {
+]: nothing -> oneof<table<callbackCount: int, callbackUrl: string, created: string, monitorStatus: string, notificationId: string, subjectId: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -587,7 +611,7 @@ export def "company-notification-register" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   callback_url: string # Callback URL
-]: any -> record<monitorStatus: string, notificationId: string> {
+]: any -> oneof<record<monitorStatus: string, notificationId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
@@ -597,7 +621,7 @@ export def "company-notification-register" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -665,7 +689,7 @@ export def "company-search-name" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # number of search results (format: int64)
-]: nothing -> table<address: list<string>, country: string, dateOfIncorporation: string, extraData: record, formattedAddress: list<string>, id: string, legalForm: string, managingDirectors: list<string>, name: string, registrationNumber: string, requestTime: int, secretaries: list<string>, sicNaceCodes: list<string>, status: string> {
+]: nothing -> oneof<table<address: list<string>, country: string, dateOfIncorporation: string, extraData: record, formattedAddress: list<string>, id: string, legalForm: string, managingDirectors: list<string>, name: string, registrationNumber: string, requestTime: int, secretaries: list<string>, sicNaceCodes: list<string>, status: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   if ($country | is-empty) { error make --unspanned { msg: "path parameter 'country' must be non-empty" } }
@@ -705,7 +729,7 @@ export def "company-search-number" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # number of search results (format: int64)
-]: nothing -> table<address: list<string>, country: string, dateOfIncorporation: string, extraData: record, formattedAddress: list<string>, id: string, legalForm: string, managingDirectors: list<string>, name: string, registrationNumber: string, requestTime: int, secretaries: list<string>, sicNaceCodes: list<string>, status: string> {
+]: nothing -> oneof<table<address: list<string>, country: string, dateOfIncorporation: string, extraData: record, formattedAddress: list<string>, id: string, legalForm: string, managingDirectors: list<string>, name: string, registrationNumber: string, requestTime: int, secretaries: list<string>, sicNaceCodes: list<string>, status: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   if ($country | is-empty) { error make --unspanned { msg: "path parameter 'country' must be non-empty" } }
@@ -749,7 +773,7 @@ export def "company-alternative-search" [
   --phone: string # Company contact phone number
   --url: string # Company url
   --vat: string # Company VAT number
-]: any -> table<address: list<string>, country: string, dateOfIncorporation: string, extraData: record, formattedAddress: list<string>, id: string, legalForm: string, managingDirectors: list<string>, name: string, registrationNumber: string, requestTime: int, secretaries: list<string>, sicNaceCodes: list<string>, status: string> {
+]: any -> oneof<table<address: list<string>, country: string, dateOfIncorporation: string, extraData: record, formattedAddress: list<string>, id: string, legalForm: string, managingDirectors: list<string>, name: string, registrationNumber: string, requestTime: int, secretaries: list<string>, sicNaceCodes: list<string>, status: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
@@ -759,7 +783,7 @@ export def "company-alternative-search" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -792,7 +816,7 @@ export def "company-id-announcements" [
   --limit: int # limit of announcements in response (default 10) (format: int32)
   --offset: int # to paginate through results (default 0) (format: int32)
   --data: oneof<nothing, bool> # If this parameter is set to false, you will only receive ids, and no additional data about announcements and no hits to the metric will be counted. (and potentially minimizing your costs) (format: )
-]: nothing -> table<countryCode: string, id: string, registrationNumber: string, structured: string, text: string, time: string, type: string> {
+]: nothing -> oneof<table<countryCode: string, id: string, registrationNumber: string, structured: string, text: string, time: string, type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -831,7 +855,7 @@ export def "company-id-super" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --lang: string@lang-completer # Optional data translation (only available in limited jurisdictions) (format: string)
-]: nothing -> table<address: list<string>, country: string, dateOfIncorporation: string, extraData: record, formattedAddress: list<string>, id: string, legalForm: string, managingDirectors: list<string>, name: string, registrationNumber: string, requestTime: int, secretaries: list<string>, sicNaceCodes: list<string>, status: string> {
+]: nothing -> oneof<table<address: list<string>, country: string, dateOfIncorporation: string, extraData: record, formattedAddress: list<string>, id: string, legalForm: string, managingDirectors: list<string>, name: string, registrationNumber: string, requestTime: int, secretaries: list<string>, sicNaceCodes: list<string>, status: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -872,7 +896,7 @@ export def "company-id-dataset" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --check-stock-listing: oneof<nothing, bool> # Try to retrieve additional stock information for this company. (Only available on refresh)
   --lang: string@lang-completer-1 # Optional data translation (only available in limited jurisdictions) (format: string)
-]: nothing -> record<address: list<string>, country: string, dateOfIncorporation: string, extraData: record, formattedAddress: list<string>, id: string, legalForm: string, managingDirectors: list<string>, name: string, registrationNumber: string, requestTime: int, secretaries: list<string>, sicNaceCodes: list<string>, status: string> {
+]: nothing -> oneof<record<address: list<string>, country: string, dateOfIncorporation: string, extraData: record, formattedAddress: list<string>, id: string, legalForm: string, managingDirectors: list<string>, name: string, registrationNumber: string, requestTime: int, secretaries: list<string>, sicNaceCodes: list<string>, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -910,7 +934,7 @@ export def "ein-verification-basic" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --ein: string # Nine letter EIN number with or without hyphens (required, format: string)
-]: nothing -> record<confidence_score: string, confidence_score_explanation: string, dba_score: string, dba_score_explanation: string, ein: string, irs_score: string, irs_score_explanation: string, timestamp: float, validationStatus: bool> {
+]: nothing -> oneof<record<confidence_score: string, confidence_score_explanation: string, dba_score: string, dba_score_explanation: string, ein: string, irs_score: string, irs_score_explanation: string, timestamp: float, validationStatus: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   if ($ein == null) { error make --unspanned { msg: "required query parameter 'ein' missing: pass --ein" } }
@@ -947,7 +971,7 @@ export def "ein-verification-comprehensive" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --ein: string # Nine letter EIN number with or without hyphens (required, format: string)
-]: nothing -> record<ein: string, matched_ein_companies: table<address: list, company_score: float, company_score_explanation: string, confidence_score: float, confidence_score_explanation: string, dba_score: string, dba_score_explanation: string, ein: string, formattedAddress: list, irs_score: string, irs_score_explanation: string, name: string, provided_status: string, provided_status_explanation: string>, timestamp: float, validationStatus: bool> {
+]: nothing -> oneof<record<ein: string, matched_ein_companies: table<address: list, company_score: float, company_score_explanation: string, confidence_score: float, confidence_score_explanation: string, dba_score: string, dba_score_explanation: string, ein: string, formattedAddress: list, irs_score: string, irs_score_explanation: string, name: string, provided_status: string, provided_status_explanation: string>, timestamp: float, validationStatus: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   if ($ein == null) { error make --unspanned { msg: "required query parameter 'ein' missing: pass --ein" } }
@@ -987,7 +1011,7 @@ export def "ein-verification-lookup" [
   --state: string # Optional state parameter to improve results. (Two letter code for example CA or US-CA for California) (format: string)
   --zip: string # Optional zip code parameter to improve results. (Zip is preferred over state) (format: string)
   --tight: oneof<nothing, bool> # Optional parameter to do tight matching. (Only the best match will be returned rather then the top 5)
-]: nothing -> record<matched_ein_companies: table<address: list, company_score: float, company_score_explanation: string, confidence_score: float, confidence_score_explanation: string, dba_score: string, dba_score_explanation: string, ein: string, formattedAddress: list, irs_score: string, irs_score_explanation: string, name: string, provided_status: string, provided_status_explanation: string>, searchterm_name: string, searchterm_state: string, searchterm_zip: string, tight_search: bool, timestamp: float> {
+]: nothing -> oneof<record<matched_ein_companies: table<address: list, company_score: float, company_score_explanation: string, confidence_score: float, confidence_score_explanation: string, dba_score: string, dba_score_explanation: string, ein: string, formattedAddress: list, irs_score: string, irs_score_explanation: string, name: string, provided_status: string, provided_status_explanation: string>, searchterm_name: string, searchterm_state: string, searchterm_zip: string, tight_search: bool, timestamp: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   if ($name == null) { error make --unspanned { msg: "required query parameter 'name' missing: pass --name" } }
@@ -1024,7 +1048,7 @@ export def "iban-basic" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   iban_number: string # IBAN number to validate (e.g. AT483200000012345864)
-]: any -> record<valid: bool> {
+]: any -> oneof<record<valid: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
@@ -1033,7 +1057,7 @@ export def "iban-basic" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1063,7 +1087,7 @@ export def "iban-comprehensive" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   iban_number: string # IBAN number to validate (e.g. AT483200000012345864)
-]: any -> record<valid: bool> {
+]: any -> oneof<record<valid: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
@@ -1072,7 +1096,7 @@ export def "iban-comprehensive" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1105,7 +1129,7 @@ export def "nif-basic" [
   --company-address: string # company address lines
   --company-name: string # Company name
   nif_number: string # NIF number to validate
-]: any -> record<companyName: string, confidenceScore: float, nifNumber: float, validationStatus: bool> {
+]: any -> oneof<record<companyName: string, confidenceScore: float, nifNumber: float, validationStatus: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
@@ -1115,7 +1139,7 @@ export def "nif-basic" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1148,7 +1172,7 @@ export def "nif-comprehensive" [
   --company-address: string # company address lines
   --company-name: string # Company name
   nif_number: string # NIF number to validate
-]: any -> record<activity: record, address: string, capital: float, companyName: string, confidenceScore: float, currency: string, email: string, fax: string, geo: string, legalType: string, nifNumber: float, phone: string, status: record, validationStatus: bool, website: string> {
+]: any -> oneof<record<activity: record, address: string, capital: float, companyName: string, confidenceScore: float, currency: string, email: string, fax: string, geo: string, legalType: string, nifNumber: float, phone: string, status: record, validationStatus: bool, website: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
@@ -1158,7 +1182,7 @@ export def "nif-comprehensive" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1187,7 +1211,7 @@ export def "pep-monitor-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<active: bool, caseId: string, created: string, identifier: string, structured: string, updated: string, webhook: string> {
+]: nothing -> oneof<table<active: bool, caseId: string, created: string, identifier: string, structured: string, updated: string, webhook: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/pepsanction/monitor/list" $auth.query)
@@ -1222,7 +1246,7 @@ export def "pep-monitor-unregister" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<active: bool, caseId: string, created: string, identifier: string, structured: string, updated: string, webhook: string> {
+]: nothing -> oneof<record<active: bool, caseId: string, created: string, identifier: string, structured: string, updated: string, webhook: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1259,7 +1283,7 @@ export def "pep-monitor-update" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --webhook: string # If Monitoring is enabled this parameter is required. This is where updates will be sent to (e.g. null)
-]: any -> record<active: bool, caseId: string, created: string, identifier: string, structured: string, updated: string, webhook: string> {
+]: any -> oneof<record<active: bool, caseId: string, created: string, identifier: string, structured: string, updated: string, webhook: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
@@ -1269,7 +1293,7 @@ export def "pep-monitor-update" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1316,7 +1340,7 @@ export def "pep-order" [
   --smart-match: oneof<nothing, bool> # Optional parameter for enabling SmartMatch to retrieve more results (e.g. false)
   --watchlists: string # Optional parameter for selecting only specific watch lists. By default all lists are queried (e.g. SANCTIONS,FINANCE,TERRORISM,CRIME,SMAGOV,OFAC,MEDICAL)
   --webhook: string # If Monitoring is enabled this parameter is required. This is where updates will be sent to (e.g. null)
-]: any -> record<availability: string, category: string, countryCode: string, description: string, hasOptions: bool, options: list<string>, price: float, provider: string, sku: string, type: string> {
+]: any -> oneof<record<availability: string, category: string, countryCode: string, description: string, hasOptions: bool, options: list<string>, price: float, provider: string, sku: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
@@ -1327,7 +1351,7 @@ export def "pep-order" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1358,7 +1382,7 @@ export def "pep-retrieve" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-accept: string@accept-completer # The type (pdf or json) in which the check should be returned (format: string, default: application/json)
-]: nothing -> record<listsChecked: string, results: record<Excerpts: string, ResultsURL: string, SearchType: string, SourceAgency: string, SourceEntity: string, SourceID: int, SourceName: string, SourceType: string>, search: string, status: string, timestamp: string, type: string> {
+]: nothing -> oneof<record<listsChecked: string, results: record<Excerpts: string, ResultsURL: string, SearchType: string, SourceAgency: string, SourceEntity: string, SourceID: int, SourceName: string, SourceType: string>, search: string, status: string, timestamp: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1397,7 +1421,7 @@ export def "product-availability" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<availability: string, category: string, countryCode: string, description: string, hasOptions: bool, options: list<string>, price: float, provider: string, sku: string, type: string> {
+]: nothing -> oneof<record<availability: string, category: string, countryCode: string, description: string, hasOptions: bool, options: list<string>, price: float, provider: string, sku: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   if ($sku | is-empty) { error make --unspanned { msg: "path parameter 'sku' must be non-empty" } }
@@ -1434,7 +1458,7 @@ export def "product-catalog" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<countryCode: string, description: string, form: string, method: string, name: string, price: float, sku: string, url: string> {
+]: nothing -> oneof<record<countryCode: string, description: string, form: string, method: string, name: string, price: float, sku: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   if ($country | is-empty) { error make --unspanned { msg: "path parameter 'country' must be non-empty" } }
@@ -1470,7 +1494,7 @@ export def "product-notifier" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<callback: string, identity: string, lastCallTime: string, lastResponseCode: int, notifierType: string, productOrderIdentity: string> {
+]: nothing -> oneof<record<callback: string, identity: string, lastCallTime: string, lastResponseCode: int, notifierType: string, productOrderIdentity: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   if ($notifier_id | is-empty) { error make --unspanned { msg: "path parameter 'notifierId' must be non-empty" } }
@@ -1508,7 +1532,7 @@ export def "product-notifier-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<callback: string, identity: string, lastCallTime: string, lastResponseCode: int, notifierType: string, productOrderIdentity: string> {
+]: nothing -> oneof<record<callback: string, identity: string, lastCallTime: string, lastResponseCode: int, notifierType: string, productOrderIdentity: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'orderId' must be non-empty" } }
@@ -1558,7 +1582,7 @@ export def "product-order-concierge" [
   --register-data: oneof<nothing, bool> # If you want register data of the company to be retrieved (e.g. false)
   --register-number: string # Registration number of the company for which a document should be ordered. (Not required if subjectId is given) (e.g. null)
   --subject-id: string # Kompanyid of the company you want to place the order for (e.g. null)
-]: any -> record<identity: string, option: string, ordered: string, owner: string, price: float, sku: string, status: string, subjectId: string, subjectValue: string> {
+]: any -> oneof<record<identity: string, option: string, ordered: string, owner: string, price: float, sku: string, status: string, subjectId: string, subjectValue: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
@@ -1567,7 +1591,7 @@ export def "product-order-concierge" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1602,7 +1626,7 @@ export def "product-order-ubo" [
   --levels: string # Define a threshold for different levels of crawling (e.g. 25,50)
   --strategy: string # Choose a matching strategy. Available options (FULL,LEVELS) (e.g. FULL)
   subject_id: string # KYC API Id (32 byte hexid) of the company you want to place the order for (e.g. null)
-]: any -> record<identity: string, option: string, ordered: string, owner: string, price: float, sku: string, status: string, subjectId: string, subjectValue: string> {
+]: any -> oneof<record<identity: string, option: string, ordered: string, owner: string, price: float, sku: string, status: string, subjectId: string, subjectValue: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
@@ -1611,7 +1635,7 @@ export def "product-order-ubo" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1643,7 +1667,7 @@ export def "product-order-with-option" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<identity: string, option: string, ordered: string, owner: string, price: float, sku: string, status: string, subjectId: string, subjectValue: string> {
+]: nothing -> oneof<record<identity: string, option: string, ordered: string, owner: string, price: float, sku: string, status: string, subjectId: string, subjectValue: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   if ($sku | is-empty) { error make --unspanned { msg: "path parameter 'sku' must be non-empty" } }
@@ -1682,7 +1706,7 @@ export def "product-order" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<identity: string, option: string, ordered: string, owner: string, price: float, sku: string, status: string, subjectId: string, subjectValue: string> {
+]: nothing -> oneof<record<identity: string, option: string, ordered: string, owner: string, price: float, sku: string, status: string, subjectId: string, subjectValue: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   if ($sku | is-empty) { error make --unspanned { msg: "path parameter 'sku' must be non-empty" } }
@@ -1719,7 +1743,7 @@ export def "product-search" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<availability: string, category: string, countryCode: string, description: string, hasOptions: bool, options: list<string>, price: float, provider: string, sku: string, type: string> {
+]: nothing -> oneof<table<availability: string, category: string, countryCode: string, description: string, hasOptions: bool, options: list<string>, price: float, provider: string, sku: string, type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   if ($subject_id | is-empty) { error make --unspanned { msg: "path parameter 'subjectId' must be non-empty" } }
@@ -1755,7 +1779,7 @@ export def "product-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<identity: string, option: string, ordered: string, owner: string, price: float, sku: string, status: string, subjectId: string, subjectValue: string> {
+]: nothing -> oneof<record<identity: string, option: string, ordered: string, owner: string, price: float, sku: string, status: string, subjectId: string, subjectValue: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'orderId' must be non-empty" } }
@@ -1793,7 +1817,7 @@ export def "product-update-action" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --credits: float # Specify an amount of credits which should be added to the order (e.g. 100)
-]: any -> record<identity: string, option: string, ordered: string, owner: string, price: float, sku: string, status: string, subjectId: string, subjectValue: string> {
+]: any -> oneof<record<identity: string, option: string, ordered: string, owner: string, price: float, sku: string, status: string, subjectId: string, subjectValue: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
@@ -1804,7 +1828,7 @@ export def "product-update-action" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1869,7 +1893,7 @@ export def "system-countries" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<country_code: string, country_name: string> {
+]: nothing -> oneof<table<country_code: string, country_name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/system/countries" $auth.query)
@@ -1903,7 +1927,7 @@ export def "health-check" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<name: string, status: string> {
+]: nothing -> oneof<table<name: string, status: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/system/health" $auth.query)
@@ -1937,7 +1961,7 @@ export def "system-pricelist" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<cost_per_unit: string, max: string, metric_id: string, min: string, sku: string> {
+]: nothing -> oneof<table<cost_per_unit: string, max: string, metric_id: string, min: string, sku: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/system/pricelist" $auth.query)
@@ -1973,7 +1997,7 @@ export def "tin-verification-basic-check" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --tin: string # Nine letter TIN number with or without hyphens (required, format: string)
   --name: string # Company Name (required, format: string)
-]: nothing -> record<matchStatus: string, name: string, possibleMatch: string, tin: string, validationStatus: string> {
+]: nothing -> oneof<record<matchStatus: string, name: string, possibleMatch: string, tin: string, validationStatus: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   if ($tin == null) { error make --unspanned { msg: "required query parameter 'tin' missing: pass --tin" } }
@@ -2013,7 +2037,7 @@ export def "tin-verification-comprehensive-check" [
   --tin: string # Nine letter TIN number with or without hyphens (required, format: string)
   --name: string # Company Name (required, format: string)
   --threshold: int # The percentage of minimum similarity threshold for company matching (optional, default: 70%) (format: int64)
-]: nothing -> record<einResult: string, matchedCompanies: table<address: list, country: string, dateOfIncorporation: string, extraData: record, formattedAddress: list, id: string, legalForm: string, managingDirectors: list, name: string, registrationNumber: string, requestTime: int, secretaries: list, sicNaceCodes: list, status: string>, tinResult: string> {
+]: nothing -> oneof<record<einResult: string, matchedCompanies: table<address: list, country: string, dateOfIncorporation: string, extraData: record, formattedAddress: list, id: string, legalForm: string, managingDirectors: list, name: string, registrationNumber: string, requestTime: int, secretaries: list, sicNaceCodes: list, status: string>, tinResult: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   if ($tin == null) { error make --unspanned { msg: "required query parameter 'tin' missing: pass --tin" } }
@@ -2051,7 +2075,7 @@ export def "tin-verification-name-lookup" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --tin: string # Nine letter TIN number with or without hyphens (required, format: string)
-]: nothing -> record<matchStatus: string, possibleMatch: string, tin: string> {
+]: nothing -> oneof<record<matchStatus: string, possibleMatch: string, tin: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   if ($tin == null) { error make --unspanned { msg: "required query parameter 'tin' missing: pass --tin" } }
@@ -2092,7 +2116,7 @@ export def "vat-basic" [
   --company-name: string # Company name
   --company-number: string # official company number
   vat_number: string # VAT number to validate
-]: any -> record<candidate: table<address: list, country: string, dateOfIncorporation: string, extraData: record, formattedAddress: list, id: string, legalForm: string, managingDirectors: list, name: string, registrationNumber: string, requestTime: int, secretaries: list, sicNaceCodes: list, status: string>, company: record<address: list<string>, country: string, dateOfIncorporation: string, extraData: record, formattedAddress: list<string>, id: string, legalForm: string, managingDirectors: list<string>, name: string, registrationNumber: string, requestTime: int, secretaries: list<string>, sicNaceCodes: list<string>, status: string>, confidenceScore: float, validationStatus: bool> {
+]: any -> oneof<record<candidate: table<address: list, country: string, dateOfIncorporation: string, extraData: record, formattedAddress: list, id: string, legalForm: string, managingDirectors: list, name: string, registrationNumber: string, requestTime: int, secretaries: list, sicNaceCodes: list, status: string>, company: record<address: list<string>, country: string, dateOfIncorporation: string, extraData: record, formattedAddress: list<string>, id: string, legalForm: string, managingDirectors: list<string>, name: string, registrationNumber: string, requestTime: int, secretaries: list<string>, sicNaceCodes: list<string>, status: string>, confidenceScore: float, validationStatus: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
@@ -2102,7 +2126,7 @@ export def "vat-basic" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -2136,7 +2160,7 @@ export def "vat-comprehensive" [
   --company-name: string # Company name
   --company-number: string # official company number
   vat_number: string # VAT number to validate
-]: any -> record<candidate: table<address: list, country: string, dateOfIncorporation: string, extraData: record, formattedAddress: list, id: string, legalForm: string, managingDirectors: list, name: string, registrationNumber: string, requestTime: int, secretaries: list, sicNaceCodes: list, status: string>, company: record<address: list<string>, country: string, dateOfIncorporation: string, extraData: record, formattedAddress: list<string>, id: string, legalForm: string, managingDirectors: list<string>, name: string, registrationNumber: string, requestTime: int, secretaries: list<string>, sicNaceCodes: list<string>, status: string>, confidenceScore: float, validationStatus: bool> {
+]: any -> oneof<record<candidate: table<address: list, country: string, dateOfIncorporation: string, extraData: record, formattedAddress: list, id: string, legalForm: string, managingDirectors: list, name: string, registrationNumber: string, requestTime: int, secretaries: list, sicNaceCodes: list, status: string>, company: record<address: list<string>, country: string, dateOfIncorporation: string, extraData: record, formattedAddress: list<string>, id: string, legalForm: string, managingDirectors: list<string>, name: string, registrationNumber: string, requestTime: int, secretaries: list<string>, sicNaceCodes: list<string>, status: string>, confidenceScore: float, validationStatus: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
@@ -2146,7 +2170,7 @@ export def "vat-comprehensive" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -2178,7 +2202,7 @@ export def "vat-level-two" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --confirmation: oneof<nothing, bool> # If a confirmation document should be ordered
   vat_number: string # VAT number to validate
-]: any -> record<address: string, confirmation: string, level: string, name: string, validationStatus: bool> {
+]: any -> oneof<record<address: string, confirmation: string, level: string, name: string, validationStatus: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
@@ -2188,7 +2212,7 @@ export def "vat-level-two" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -2220,7 +2244,7 @@ export def "vat-lookup" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --address: string # Company address (e.g. null)
   name: string # Company name (e.g. null)
-]: any -> record<matches: table<company: record, vat: string>, searchterm_address: string, searchterm_country: string, searchterm_name: string, timestamp: int> {
+]: any -> oneof<record<matches: table<company: record, vat: string>, searchterm_address: string, searchterm_country: string, searchterm_name: string, timestamp: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
@@ -2230,7 +2254,7 @@ export def "vat-lookup" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url

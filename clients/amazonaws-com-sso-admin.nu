@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -141,9 +164,9 @@ def x-amz-target-completer-36 [] { ["SWBExternalService.UpdatePermissionSet"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "attach-customer-managed-policy-reference-to-permission-set" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["attach-customer-managed-policy-reference-to-permission-set" "attach-managed-policy-to-permission-set" "create-account-assignment" "create-instance-access-control-attribute-configuration" "create-permission-set" "delete-account-assignment" "delete-inline-policy-from-permission-set" "delete-instance-access-control-attribute-configuration" "delete-permission-set" "delete-permissions-boundary-from-permission-set" "describe-account-assignment-creation-status" "describe-account-assignment-deletion-status" "describe-instance-access-control-attribute-configuration" "describe-permission-set" "describe-permission-set-provisioning-status" "detach-customer-managed-policy-reference-from-permission-set" "detach-managed-policy-from-permission-set" "get-inline-policy-for-permission-set" "get-permissions-boundary-for-permission-set" "list-account-assignment-creation-status" "list-account-assignment-deletion-status" "list-account-assignments" "list-accounts-for-provisioned-permission-set" "list-customer-managed-policy-references-in-permission-set" "list-instances" "list-managed-policies-in-permission-set" "list-permission-set-provisioning-status" "list-permission-sets" "list-permission-sets-provisioned-to-account" "list-tags-for-resource" "provision-permission-set" "put-inline-policy-to-permission-set" "put-permissions-boundary-to-permission-set" "tag-resource" "untag-resource" "update-instance-access-control-attribute-configuration" "update-permission-set" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -165,7 +188,6 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AttachCustomerManagedPolicyReferenceToPermissionSet
-# --CustomerManagedPolicyReference shape: {Name: string, Path?: string}
 export def "attach-customer-managed-policy-reference-to-permission-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -187,7 +209,7 @@ export def "attach-customer-managed-policy-reference-to-permission-set" [
   instance_arn: string # The ARN of the IAM Identity Center instance under which the operation will be executed.
   permission_set_arn: string # The ARN of the PermissionSet.
   customer_managed_policy_reference: record # Specifies the name and path of a customer managed policy. You must have an IAM policy that matches the name and path in each AWS account where you want to deploy your permission set. — shape: {Name: string, Path?: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -238,7 +260,7 @@ export def "attach-managed-policy-to-permission-set" [
   instance_arn: string # The ARN of the IAM Identity Center instance under which the operation will be executed. For more information about ARNs, see Amazon Resource Names (ARNs) and AWS Service Namespaces (/general/latest/gr/aws-arns-and-namespaces.html) in the AWS General Reference.
   permission_set_arn: string # The ARN of the PermissionSet that the managed policy should be attached to.
   managed_policy_arn: string # The AWS managed policy ARN to be attached to a permission set.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -292,7 +314,7 @@ export def "create-account-assignment" [
   permission_set_arn: string # The ARN of the permission set that the admin wants to grant the principal access to.
   principal_type: string@principal-type-completer # The entity type for which the assignment will be created.
   principal_id: string # An identifier for an object in IAM Identity Center, such as a user or group. PrincipalIds are GUIDs (For example, f81d4fae-7dec-11d0-a765-00a0c91e6bf6). For more information about PrincipalIds in IAM Identity Center, see the IAM Identity Center Identity Store API Reference (/singlesignon/latest/IdentityStoreAPIReference/welcome.html).
-]: any -> record<AccountAssignmentCreationStatus: record<Status: string, RequestId: string, FailureReason: string, TargetId: string, TargetType: string, PermissionSetArn: string, PrincipalType: string, PrincipalId: string, CreatedDate: string>> {
+]: any -> oneof<record<AccountAssignmentCreationStatus: record<Status: string, RequestId: string, FailureReason: string, TargetId: string, TargetType: string, PermissionSetArn: string, PrincipalType: string, PrincipalId: string, CreatedDate: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -322,7 +344,6 @@ export def "create-account-assignment" [
 #
 # POST /
 # operationId: CreateInstanceAccessControlAttributeConfiguration
-# --InstanceAccessControlAttributeConfiguration shape: {AccessControlAttributes: list}
 export def "create-instance-access-control-attribute-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -343,7 +364,7 @@ export def "create-instance-access-control-attribute-configuration" [
   --x-amz-target: string@x-amz-target-completer-3 # required
   instance_arn: string # The ARN of the IAM Identity Center instance under which the operation will be executed.
   instance_access_control_attribute_configuration: record # Specifies the attributes to add to your attribute-based access control (ABAC) configuration. — shape: {AccessControlAttributes: list}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -373,7 +394,6 @@ export def "create-instance-access-control-attribute-configuration" [
 #
 # POST /
 # operationId: CreatePermissionSet
-# --Tags item shape: {Key: string, Value: string}
 export def "create-permission-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -398,7 +418,7 @@ export def "create-permission-set" [
   --session-duration: string # The length of time that the application user sessions are valid in the ISO-8601 standard.
   --relay-state: string # Used to redirect users within the application during the federation authentication process.
   --tags: list # The tags to attach to the new PermissionSet. — item shape: {Key: string, Value: string}
-]: any -> record<PermissionSet: record<Name: string, PermissionSetArn: string, Description: string, CreatedDate: string, SessionDuration: string, RelayState: string>> {
+]: any -> oneof<record<PermissionSet: record<Name: string, PermissionSetArn: string, Description: string, CreatedDate: string, SessionDuration: string, RelayState: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -452,7 +472,7 @@ export def "delete-account-assignment" [
   permission_set_arn: string # The ARN of the permission set that will be used to remove access.
   principal_type: string@principal-type-completer # The entity type for which the assignment will be deleted.
   principal_id: string # An identifier for an object in IAM Identity Center, such as a user or group. PrincipalIds are GUIDs (For example, f81d4fae-7dec-11d0-a765-00a0c91e6bf6). For more information about PrincipalIds in IAM Identity Center, see the IAM Identity Center Identity Store API Reference (/singlesignon/latest/IdentityStoreAPIReference/welcome.html).
-]: any -> record<AccountAssignmentDeletionStatus: record<Status: string, RequestId: string, FailureReason: string, TargetId: string, TargetType: string, PermissionSetArn: string, PrincipalType: string, PrincipalId: string, CreatedDate: string>> {
+]: any -> oneof<record<AccountAssignmentDeletionStatus: record<Status: string, RequestId: string, FailureReason: string, TargetId: string, TargetType: string, PermissionSetArn: string, PrincipalType: string, PrincipalId: string, CreatedDate: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -502,7 +522,7 @@ export def "delete-inline-policy-from-permission-set" [
   --x-amz-target: string@x-amz-target-completer-6 # required
   instance_arn: string # The ARN of the IAM Identity Center instance under which the operation will be executed. For more information about ARNs, see Amazon Resource Names (ARNs) and AWS Service Namespaces (/general/latest/gr/aws-arns-and-namespaces.html) in the AWS General Reference.
   permission_set_arn: string # The ARN of the permission set that will be used to remove access.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -551,7 +571,7 @@ export def "delete-instance-access-control-attribute-configuration" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-7 # required
   instance_arn: string # The ARN of the IAM Identity Center instance under which the operation will be executed.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -601,7 +621,7 @@ export def "delete-permission-set" [
   --x-amz-target: string@x-amz-target-completer-8 # required
   instance_arn: string # The ARN of the IAM Identity Center instance under which the operation will be executed. For more information about ARNs, see Amazon Resource Names (ARNs) and AWS Service Namespaces (/general/latest/gr/aws-arns-and-namespaces.html) in the AWS General Reference.
   permission_set_arn: string # The ARN of the permission set that should be deleted.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -651,7 +671,7 @@ export def "delete-permissions-boundary-from-permission-set" [
   --x-amz-target: string@x-amz-target-completer-9 # required
   instance_arn: string # The ARN of the IAM Identity Center instance under which the operation will be executed.
   permission_set_arn: string # The ARN of the PermissionSet.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -701,7 +721,7 @@ export def "describe-account-assignment-creation-status" [
   --x-amz-target: string@x-amz-target-completer-10 # required
   instance_arn: string # The ARN of the IAM Identity Center instance under which the operation will be executed. For more information about ARNs, see Amazon Resource Names (ARNs) and AWS Service Namespaces (/general/latest/gr/aws-arns-and-namespaces.html) in the AWS General Reference.
   account_assignment_creation_request_id: string # The identifier that is used to track the request operation progress.
-]: any -> record<AccountAssignmentCreationStatus: record<Status: string, RequestId: string, FailureReason: string, TargetId: string, TargetType: string, PermissionSetArn: string, PrincipalType: string, PrincipalId: string, CreatedDate: string>> {
+]: any -> oneof<record<AccountAssignmentCreationStatus: record<Status: string, RequestId: string, FailureReason: string, TargetId: string, TargetType: string, PermissionSetArn: string, PrincipalType: string, PrincipalId: string, CreatedDate: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -751,7 +771,7 @@ export def "describe-account-assignment-deletion-status" [
   --x-amz-target: string@x-amz-target-completer-11 # required
   instance_arn: string # The ARN of the IAM Identity Center instance under which the operation will be executed. For more information about ARNs, see Amazon Resource Names (ARNs) and AWS Service Namespaces (/general/latest/gr/aws-arns-and-namespaces.html) in the AWS General Reference.
   account_assignment_deletion_request_id: string # The identifier that is used to track the request operation progress.
-]: any -> record<AccountAssignmentDeletionStatus: record<Status: string, RequestId: string, FailureReason: string, TargetId: string, TargetType: string, PermissionSetArn: string, PrincipalType: string, PrincipalId: string, CreatedDate: string>> {
+]: any -> oneof<record<AccountAssignmentDeletionStatus: record<Status: string, RequestId: string, FailureReason: string, TargetId: string, TargetType: string, PermissionSetArn: string, PrincipalType: string, PrincipalId: string, CreatedDate: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -800,7 +820,7 @@ export def "describe-instance-access-control-attribute-configuration" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-12 # required
   instance_arn: string # The ARN of the IAM Identity Center instance under which the operation will be executed.
-]: any -> record<Status: string, StatusReason: string, InstanceAccessControlAttributeConfiguration: record<AccessControlAttributes: list<record>>> {
+]: any -> oneof<record<Status: string, StatusReason: string, InstanceAccessControlAttributeConfiguration: record<AccessControlAttributes: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -850,7 +870,7 @@ export def "describe-permission-set" [
   --x-amz-target: string@x-amz-target-completer-13 # required
   instance_arn: string # The ARN of the IAM Identity Center instance under which the operation will be executed. For more information about ARNs, see Amazon Resource Names (ARNs) and AWS Service Namespaces (/general/latest/gr/aws-arns-and-namespaces.html) in the AWS General Reference.
   permission_set_arn: string # The ARN of the permission set.
-]: any -> record<PermissionSet: record<Name: string, PermissionSetArn: string, Description: string, CreatedDate: string, SessionDuration: string, RelayState: string>> {
+]: any -> oneof<record<PermissionSet: record<Name: string, PermissionSetArn: string, Description: string, CreatedDate: string, SessionDuration: string, RelayState: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -900,7 +920,7 @@ export def "describe-permission-set-provisioning-status" [
   --x-amz-target: string@x-amz-target-completer-14 # required
   instance_arn: string # The ARN of the IAM Identity Center instance under which the operation will be executed. For more information about ARNs, see Amazon Resource Names (ARNs) and AWS Service Namespaces (/general/latest/gr/aws-arns-and-namespaces.html) in the AWS General Reference.
   provision_permission_set_request_id: string # The identifier that is provided by the ProvisionPermissionSet call to retrieve the current status of the provisioning workflow.
-]: any -> record<PermissionSetProvisioningStatus: record<Status: string, RequestId: string, AccountId: string, PermissionSetArn: string, FailureReason: string, CreatedDate: string>> {
+]: any -> oneof<record<PermissionSetProvisioningStatus: record<Status: string, RequestId: string, AccountId: string, PermissionSetArn: string, FailureReason: string, CreatedDate: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -930,7 +950,6 @@ export def "describe-permission-set-provisioning-status" [
 #
 # POST /
 # operationId: DetachCustomerManagedPolicyReferenceFromPermissionSet
-# --CustomerManagedPolicyReference shape: {Name: string, Path?: string}
 export def "detach-customer-managed-policy-reference-from-permission-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -952,7 +971,7 @@ export def "detach-customer-managed-policy-reference-from-permission-set" [
   instance_arn: string # The ARN of the IAM Identity Center instance under which the operation will be executed.
   permission_set_arn: string # The ARN of the PermissionSet.
   customer_managed_policy_reference: record # Specifies the name and path of a customer managed policy. You must have an IAM policy that matches the name and path in each AWS account where you want to deploy your permission set. — shape: {Name: string, Path?: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1003,7 +1022,7 @@ export def "detach-managed-policy-from-permission-set" [
   instance_arn: string # The ARN of the IAM Identity Center instance under which the operation will be executed. For more information about ARNs, see Amazon Resource Names (ARNs) and AWS Service Namespaces (/general/latest/gr/aws-arns-and-namespaces.html) in the AWS General Reference.
   permission_set_arn: string # The ARN of the PermissionSet from which the policy should be detached.
   managed_policy_arn: string # The AWS managed policy ARN to be detached from a permission set.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1053,7 +1072,7 @@ export def "get-inline-policy-for-permission-set" [
   --x-amz-target: string@x-amz-target-completer-17 # required
   instance_arn: string # The ARN of the IAM Identity Center instance under which the operation will be executed. For more information about ARNs, see Amazon Resource Names (ARNs) and AWS Service Namespaces (/general/latest/gr/aws-arns-and-namespaces.html) in the AWS General Reference.
   permission_set_arn: string # The ARN of the permission set.
-]: any -> record<InlinePolicy: string> {
+]: any -> oneof<record<InlinePolicy: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1103,7 +1122,7 @@ export def "get-permissions-boundary-for-permission-set" [
   --x-amz-target: string@x-amz-target-completer-18 # required
   instance_arn: string # The ARN of the IAM Identity Center instance under which the operation will be executed.
   permission_set_arn: string # The ARN of the PermissionSet.
-]: any -> record<PermissionsBoundary: record<CustomerManagedPolicyReference: record<Name: string, Path: string>, ManagedPolicyArn: string>> {
+]: any -> oneof<record<PermissionsBoundary: record<CustomerManagedPolicyReference: record<Name: string, Path: string>, ManagedPolicyArn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1133,7 +1152,6 @@ export def "get-permissions-boundary-for-permission-set" [
 #
 # POST /
 # operationId: ListAccountAssignmentCreationStatus
-# --Filter shape: {Status?: "IN_PROGRESS"|"FAILED"|"SUCCEEDED"}
 export def "list-account-assignment-creation-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1158,7 +1176,7 @@ export def "list-account-assignment-creation-status" [
   --max-results-body: int # The maximum number of results to display for the assignment. (body field)
   --next-token-body: string # The pagination token for the list API. Initially the value is null. Use the output of previous API calls to make subsequent calls. (body field)
   --filter: record # Filters he operation status list based on the passed attribute value. — shape: {Status?: "IN_PROGRESS"|"FAILED"|"SUCCEEDED"}
-]: any -> record<AccountAssignmentsCreationStatus: table<Status: string, RequestId: string, CreatedDate: string>, NextToken: string> {
+]: any -> oneof<record<AccountAssignmentsCreationStatus: table<Status: string, RequestId: string, CreatedDate: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1189,7 +1207,6 @@ export def "list-account-assignment-creation-status" [
 #
 # POST /
 # operationId: ListAccountAssignmentDeletionStatus
-# --Filter shape: {Status?: "IN_PROGRESS"|"FAILED"|"SUCCEEDED"}
 export def "list-account-assignment-deletion-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1214,7 +1231,7 @@ export def "list-account-assignment-deletion-status" [
   --max-results-body: int # The maximum number of results to display for the assignment. (body field)
   --next-token-body: string # The pagination token for the list API. Initially the value is null. Use the output of previous API calls to make subsequent calls. (body field)
   --filter: record # Filters he operation status list based on the passed attribute value. — shape: {Status?: "IN_PROGRESS"|"FAILED"|"SUCCEEDED"}
-]: any -> record<AccountAssignmentsDeletionStatus: table<Status: string, RequestId: string, CreatedDate: string>, NextToken: string> {
+]: any -> oneof<record<AccountAssignmentsDeletionStatus: table<Status: string, RequestId: string, CreatedDate: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1270,7 +1287,7 @@ export def "list-account-assignments" [
   permission_set_arn: string # The ARN of the permission set from which to list assignments.
   --max-results-body: int # The maximum number of results to display for the assignment. (body field)
   --next-token-body: string # The pagination token for the list API. Initially the value is null. Use the output of previous API calls to make subsequent calls. (body field)
-]: any -> record<AccountAssignments: table<AccountId: string, PermissionSetArn: string, PrincipalType: string, PrincipalId: string>, NextToken: string> {
+]: any -> oneof<record<AccountAssignments: table<AccountId: string, PermissionSetArn: string, PrincipalType: string, PrincipalId: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1326,7 +1343,7 @@ export def "list-accounts-for-provisioned-permission-set" [
   --provisioning-status: string@provisioning-status-completer # The permission set provisioning status for an AWS account.
   --max-results-body: int # The maximum number of results to display for the PermissionSet. (body field)
   --next-token-body: string # The pagination token for the list API. Initially the value is null. Use the output of previous API calls to make subsequent calls. (body field)
-]: any -> record<AccountIds: list<string>, NextToken: string> {
+]: any -> oneof<record<AccountIds: list<string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1381,7 +1398,7 @@ export def "list-customer-managed-policy-references-in-permission-set" [
   permission_set_arn: string # The ARN of the PermissionSet.
   --max-results-body: int # The maximum number of results to display for the list call. (body field)
   --next-token-body: string # The pagination token for the list API. Initially the value is null. Use the output of previous API calls to make subsequent calls. (body field)
-]: any -> record<CustomerManagedPolicyReferences: table<Name: string, Path: string>, NextToken: string> {
+]: any -> oneof<record<CustomerManagedPolicyReferences: table<Name: string, Path: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1434,7 +1451,7 @@ export def "list-instances" [
   --x-amz-target: string@x-amz-target-completer-24 # required
   --max-results-body: int # The maximum number of results to display for the instance. (body field)
   --next-token-body: string # The pagination token for the list API. Initially the value is null. Use the output of previous API calls to make subsequent calls. (body field)
-]: any -> record<Instances: table<InstanceArn: string, IdentityStoreId: string>, NextToken: string> {
+]: any -> oneof<record<Instances: table<InstanceArn: string, IdentityStoreId: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1489,7 +1506,7 @@ export def "list-managed-policies-in-permission-set" [
   permission_set_arn: string # The ARN of the PermissionSet whose managed policies will be listed.
   --max-results-body: int # The maximum number of results to display for the PermissionSet. (body field)
   --next-token-body: string # The pagination token for the list API. Initially the value is null. Use the output of previous API calls to make subsequent calls. (body field)
-]: any -> record<AttachedManagedPolicies: table<Name: string, Arn: string>, NextToken: string> {
+]: any -> oneof<record<AttachedManagedPolicies: table<Name: string, Arn: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1520,7 +1537,6 @@ export def "list-managed-policies-in-permission-set" [
 #
 # POST /
 # operationId: ListPermissionSetProvisioningStatus
-# --Filter shape: {Status?: "IN_PROGRESS"|"FAILED"|"SUCCEEDED"}
 export def "list-permission-set-provisioning-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1545,7 +1561,7 @@ export def "list-permission-set-provisioning-status" [
   --max-results-body: int # The maximum number of results to display for the assignment. (body field)
   --next-token-body: string # The pagination token for the list API. Initially the value is null. Use the output of previous API calls to make subsequent calls. (body field)
   --filter: record # Filters he operation status list based on the passed attribute value. — shape: {Status?: "IN_PROGRESS"|"FAILED"|"SUCCEEDED"}
-]: any -> record<PermissionSetsProvisioningStatus: table<Status: string, RequestId: string, CreatedDate: string>, NextToken: string> {
+]: any -> oneof<record<PermissionSetsProvisioningStatus: table<Status: string, RequestId: string, CreatedDate: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1599,7 +1615,7 @@ export def "list-permission-sets" [
   instance_arn: string # The ARN of the IAM Identity Center instance under which the operation will be executed. For more information about ARNs, see Amazon Resource Names (ARNs) and AWS Service Namespaces (/general/latest/gr/aws-arns-and-namespaces.html) in the AWS General Reference.
   --next-token-body: string # The pagination token for the list API. Initially the value is null. Use the output of previous API calls to make subsequent calls. (body field)
   --max-results-body: int # The maximum number of results to display for the assignment. (body field)
-]: any -> record<PermissionSets: list<string>, NextToken: string> {
+]: any -> oneof<record<PermissionSets: list<string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1655,7 +1671,7 @@ export def "list-permission-sets-provisioned-to-account" [
   --provisioning-status: string@provisioning-status-completer # The status object for the permission set provisioning operation.
   --max-results-body: int # The maximum number of results to display for the assignment. (body field)
   --next-token-body: string # The pagination token for the list API. Initially the value is null. Use the output of previous API calls to make subsequent calls. (body field)
-]: any -> record<NextToken: string, PermissionSets: list<string>> {
+]: any -> oneof<record<NextToken: string, PermissionSets: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1708,7 +1724,7 @@ export def "list-tags-for-resource" [
   instance_arn: string # The ARN of the IAM Identity Center instance under which the operation will be executed. For more information about ARNs, see Amazon Resource Names (ARNs) and AWS Service Namespaces (/general/latest/gr/aws-arns-and-namespaces.html) in the AWS General Reference.
   resource_arn: string # The ARN of the resource with the tags to be listed.
   --next-token-body: string # The pagination token for the list API. Initially the value is null. Use the output of previous API calls to make subsequent calls. (body field)
-]: any -> record<Tags: table<Key: string, Value: string>, NextToken: string> {
+]: any -> oneof<record<Tags: table<Key: string, Value: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1761,7 +1777,7 @@ export def "provision-permission-set" [
   permission_set_arn: string # The ARN of the permission set.
   --target-id: string # TargetID is an AWS account identifier, typically a 10-12 digit string (For example, 123456789012).
   target_type: string@target-type-completer-1 # The entity type for which the assignment will be created.
-]: any -> record<PermissionSetProvisioningStatus: record<Status: string, RequestId: string, AccountId: string, PermissionSetArn: string, FailureReason: string, CreatedDate: string>> {
+]: any -> oneof<record<PermissionSetProvisioningStatus: record<Status: string, RequestId: string, AccountId: string, PermissionSetArn: string, FailureReason: string, CreatedDate: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1812,7 +1828,7 @@ export def "put-inline-policy-to-permission-set" [
   instance_arn: string # The ARN of the IAM Identity Center instance under which the operation will be executed. For more information about ARNs, see Amazon Resource Names (ARNs) and AWS Service Namespaces (/general/latest/gr/aws-arns-and-namespaces.html) in the AWS General Reference.
   permission_set_arn: string # The ARN of the permission set.
   inline_policy: string # The inline policy to attach to a PermissionSet.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1842,7 +1858,6 @@ export def "put-inline-policy-to-permission-set" [
 #
 # POST /
 # operationId: PutPermissionsBoundaryToPermissionSet
-# --PermissionsBoundary shape: {CustomerManagedPolicyReference?: record, ManagedPolicyArn?: string}
 export def "put-permissions-boundary-to-permission-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1864,7 +1879,7 @@ export def "put-permissions-boundary-to-permission-set" [
   instance_arn: string # The ARN of the IAM Identity Center instance under which the operation will be executed.
   permission_set_arn: string # The ARN of the PermissionSet.
   permissions_boundary: record # Specifies the configuration of the AWS managed or customer managed policy that you want to set as a permissions boundary. Specify either CustomerManagedPolicyReference to use the name and path of a customer managed policy, or ManagedPolicyArn to use the ARN of an AWS managed policy. A permissions boundary represents the maximum permissions that any policy can grant your role. For more information, see Permissions boundaries for IAM entities (https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies_boundaries.html) in the IAM User Guide. Policies used as permissions boundaries don't provide permissions. You must also attach an IAM policy to the role. To learn how the effective permissions for a role are evaluated, see IAM JSON policy evaluation logic (https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic.html) in the IAM User Guide. — shape: {CustomerManagedPolicyReference?: record, ManagedPolicyArn?: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1894,7 +1909,6 @@ export def "put-permissions-boundary-to-permission-set" [
 #
 # POST /
 # operationId: TagResource
-# --Tags item shape: {Key: string, Value: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1916,7 +1930,7 @@ export def "tag-resource" [
   instance_arn: string # The ARN of the IAM Identity Center instance under which the operation will be executed. For more information about ARNs, see Amazon Resource Names (ARNs) and AWS Service Namespaces (/general/latest/gr/aws-arns-and-namespaces.html) in the AWS General Reference.
   resource_arn: string # The ARN of the resource with the tags to be listed.
   tags: list # A set of key-value pairs that are used to manage the resource. — item shape: {Key: string, Value: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1967,7 +1981,7 @@ export def "untag-resource" [
   instance_arn: string # The ARN of the IAM Identity Center instance under which the operation will be executed. For more information about ARNs, see Amazon Resource Names (ARNs) and AWS Service Namespaces (/general/latest/gr/aws-arns-and-namespaces.html) in the AWS General Reference.
   resource_arn: string # The ARN of the resource with the tags to be listed.
   tag_keys: list<string> # The keys of tags that are attached to the resource.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1997,7 +2011,6 @@ export def "untag-resource" [
 #
 # POST /
 # operationId: UpdateInstanceAccessControlAttributeConfiguration
-# --InstanceAccessControlAttributeConfiguration shape: {AccessControlAttributes: list}
 export def "update-instance-access-control-attribute-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2018,7 +2031,7 @@ export def "update-instance-access-control-attribute-configuration" [
   --x-amz-target: string@x-amz-target-completer-35 # required
   instance_arn: string # The ARN of the IAM Identity Center instance under which the operation will be executed.
   instance_access_control_attribute_configuration: record # Specifies the attributes to add to your attribute-based access control (ABAC) configuration. — shape: {AccessControlAttributes: list}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2071,7 +2084,7 @@ export def "update-permission-set" [
   --description: string # The description of the PermissionSet.
   --session-duration: string # The length of time that the application user sessions are valid for in the ISO-8601 standard.
   --relay-state: string # Used to redirect users within the application during the federation authentication process.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

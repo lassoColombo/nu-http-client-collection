@@ -14,27 +14,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "email" => { {scheme: $scheme, headers: {"email": $token_val}, query: "", location: "header"} }
     "token" => { {scheme: $scheme, headers: {"token": $token_val}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -42,8 +51,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -54,7 +68,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -89,7 +112,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -149,9 +173,9 @@ def status-completer [] { ["DELIVERED" "FAILED" "FAILED_OPTOUT" "FAILED_REFUNDED
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-balance" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-balance" "get-statistics" "transfer" "search" "put-api-rest-v1-account-user" "get-user" "post-api-rest-v1-account-user-user-id" "get-api-rest-v1-contacts-all" "post-api-rest-v1-contacts-create" "delete-api-rest-v1-contacts-contact-id" "get-api-rest-v1-contacts-contact-id" "post-api-rest-v1-contacts-contact-id" "get-api-rest-v1-contacts-contact-id-add-from-group-group-id" "post-api-rest-v1-contacts-contact-id-add-from-group-group-id" "get-api-rest-v1-contacts-contact-id-add-to-group-group-id" "post-api-rest-v1-contacts-contact-id-add-to-group-group-id" "get-api-rest-v1-groups-all" "post-api-rest-v1-groups-create" "delete-api-rest-v1-groups-group-id" "get-api-rest-v1-groups-group-id" "post-api-rest-v1-groups-group-id" "get-api-rest-v1-groups-group-id-add-contact-contact-id" "post-api-rest-v1-groups-group-id-add-contact-contact-id" "get-api-rest-v1-groups-group-id-remove-contact-contact-id" "post-api-rest-v1-groups-group-id-remove-contact-contact-id" "get-api-rest-v1-messages-all" "analyse-full" "analyse-message-credit-cost" "analyse-message-encoding" "analyse-message-length" "analyse" "analyse-number-of-messages" "delete-api-rest-v1-messages-message-id" "get-api-rest-v1-messages-message-id" "post-api-rest-v1-messages-message-id-mark-read" "put-api-rest-v1-messages-message-id-mark-read" "post-api-rest-v1-messages-message-id-mark-unread" "put-api-rest-v1-messages-message-id-mark-unread" "get-api-rest-v1-sms-send" "post-api-rest-v1-sms-send" "get-api-rest-v1-sms-send-bulk" "post-api-rest-v1-sms-send-bulk" "get-api-rest-v1-sms-send-url-parameters" "post-api-rest-v1-sms-send-url-parameters" "get-api-rest-v1-sms-send-url-token" "post-api-rest-v1-sms-send-url-token" "get-api-rest-v1-templates-all" "delete-api-rest-v1-templates-template-id" "get-api-rest-v1-templates-template-id" "get-api-rest-v1-voice-all" "single-audio" "single-text" "delete-api-rest-v1-voice-message-id" "get-api-rest-v1-voice-message-id" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -184,7 +208,7 @@ export def "get-balance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<creditBalance: float, links: table<href: string, rel: string, templated: bool>> {
+]: nothing -> oneof<record<creditBalance: float, links: table<href: string, rel: string, templated: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/account/balance" $auth.query)
@@ -225,7 +249,7 @@ export def "get-statistics" [
   --campaign: string # optional campaign name
   --include-refunded-and-optout: oneof<nothing, bool> # optionally include refunded and optout counts, default is false
   --calculate-credit-value: oneof<nothing, bool> # optionally calculate using credit value rather than message count, default is false
-]: nothing -> record<from: string, grandTotal: record<delivered: float, failed: float, failedOptout: float, failedRefunded: float, sent: float, total: float>, showingCreditValue: bool, to: string, users: table<campaigns: list, total: record, user: record>> {
+]: nothing -> oneof<record<from: string, grandTotal: record<delivered: float, failed: float, failedOptout: float, failedRefunded: float, sent: float, total: float>, showingCreditValue: bool, to: string, users: table<campaigns: list, total: record, user: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "userEmailAddress" $user_email_address "scalar") (serialize-qp "campaign" $campaign "scalar") (serialize-qp "includeRefundedAndOptout" $include_refunded_and_optout "scalar") (serialize-qp "calculateCreditValue" $calculate_credit_value "scalar")] | flatten | str join "&"
@@ -264,7 +288,7 @@ export def "transfer" [
   --number-of-credits-to-transfer: int # format: int32
   --transfer-from-email-address: string
   --transfer-to-email-address: string
-]: any -> record<company: string, contactNumber: string, creditBalance: float, emailAddress: string, firstName: string, lastName: string, password: string, userId: int> {
+]: any -> oneof<record<company: string, contactNumber: string, creditBalance: float, emailAddress: string, firstName: string, lastName: string, password: string, userId: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
@@ -303,7 +327,7 @@ export def "search" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --search-email: string # search by email address (required)
-]: nothing -> record<webServiceUserList: table<company: string, contactNumber: string, creditBalance: float, emailAddress: string, firstName: string, lastName: string, password: string, userId: int>> {
+]: nothing -> oneof<record<webServiceUserList: table<company: string, contactNumber: string, creditBalance: float, emailAddress: string, firstName: string, lastName: string, password: string, userId: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
   if ($search_email == null) { error make --unspanned { msg: "required query parameter 'searchEmail' missing: pass --search-email" } }
@@ -347,7 +371,7 @@ export def "put-api-rest-v1-account-user" [
   --last-name: string
   --password: string
   --user-id: int # format: int64
-]: any -> record<company: string, contactNumber: string, creditBalance: float, emailAddress: string, firstName: string, lastName: string, password: string, userId: int> {
+]: any -> oneof<record<company: string, contactNumber: string, creditBalance: float, emailAddress: string, firstName: string, lastName: string, password: string, userId: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
@@ -386,7 +410,7 @@ export def "get-user" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<company: string, contactNumber: string, creditBalance: float, emailAddress: string, firstName: string, lastName: string, password: string, userId: int> {
+]: nothing -> oneof<record<company: string, contactNumber: string, creditBalance: float, emailAddress: string, firstName: string, lastName: string, password: string, userId: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -430,7 +454,7 @@ export def "post-api-rest-v1-account-user-user-id" [
   --last-name: string
   --password: string
   --body-user-id: int # format: int64
-]: any -> record<company: string, contactNumber: string, creditBalance: float, emailAddress: string, firstName: string, lastName: string, password: string, userId: int> {
+]: any -> oneof<record<company: string, contactNumber: string, creditBalance: float, emailAddress: string, firstName: string, lastName: string, password: string, userId: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
@@ -468,7 +492,7 @@ export def "get-api-rest-v1-contacts-all" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<links: table<href: string, rel: string, templated: bool>, webServiceContacts: table<contactId: string, contactNumber: string, firstName: string, lastName: string, links: list, title: string>> {
+]: nothing -> oneof<record<links: table<href: string, rel: string, templated: bool>, webServiceContacts: table<contactId: string, contactNumber: string, firstName: string, lastName: string, links: list, title: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/contacts/all" $auth.query)
@@ -491,7 +515,6 @@ export def "get-api-rest-v1-contacts-all" [
 # create
 #
 # POST /api/rest/v1/contacts/create
-# --links item shape: {href?: string, rel?: string, templated?: bool}
 export def "post-api-rest-v1-contacts-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -509,7 +532,7 @@ export def "post-api-rest-v1-contacts-create" [
   --last-name: string
   --links: list # item shape: {href?: string, rel?: string, templated?: bool}
   --title: string
-]: any -> record<contactId: string, contactNumber: string, firstName: string, lastName: string, links: table<href: string, rel: string, templated: bool>, title: string> {
+]: any -> oneof<record<contactId: string, contactNumber: string, firstName: string, lastName: string, links: table<href: string, rel: string, templated: bool>, title: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
@@ -583,7 +606,7 @@ export def "get-api-rest-v1-contacts-contact-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<contactId: string, contactNumber: string, firstName: string, lastName: string, links: table<href: string, rel: string, templated: bool>, title: string> {
+]: nothing -> oneof<record<contactId: string, contactNumber: string, firstName: string, lastName: string, links: table<href: string, rel: string, templated: bool>, title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
   if ($contact_id | is-empty) { error make --unspanned { msg: "path parameter 'contactId' must be non-empty" } }
@@ -607,7 +630,6 @@ export def "get-api-rest-v1-contacts-contact-id" [
 # update
 #
 # POST /api/rest/v1/contacts/{contactId}
-# --links item shape: {href?: string, rel?: string, templated?: bool}
 export def "post-api-rest-v1-contacts-contact-id" [
   contact_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -626,7 +648,7 @@ export def "post-api-rest-v1-contacts-contact-id" [
   --last-name: string
   --links: list # item shape: {href?: string, rel?: string, templated?: bool}
   --title: string
-]: any -> record<contactId: string, contactNumber: string, firstName: string, lastName: string, links: table<href: string, rel: string, templated: bool>, title: string> {
+]: any -> oneof<record<contactId: string, contactNumber: string, firstName: string, lastName: string, links: table<href: string, rel: string, templated: bool>, title: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
@@ -816,7 +838,7 @@ export def "get-api-rest-v1-groups-all" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<links: table<href: string, rel: string, templated: bool>, webServiceGroups: table<groupId: string, links: list, name: string>> {
+]: nothing -> oneof<record<links: table<href: string, rel: string, templated: bool>, webServiceGroups: table<groupId: string, links: list, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/groups/all" $auth.query)
@@ -839,7 +861,6 @@ export def "get-api-rest-v1-groups-all" [
 # create
 #
 # POST /api/rest/v1/groups/create
-# --links item shape: {href?: string, rel?: string, templated?: bool}
 export def "post-api-rest-v1-groups-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -854,7 +875,7 @@ export def "post-api-rest-v1-groups-create" [
   --group-id: string
   --links: list # item shape: {href?: string, rel?: string, templated?: bool}
   --name: string
-]: any -> record<groupId: string, links: table<href: string, rel: string, templated: bool>, name: string> {
+]: any -> oneof<record<groupId: string, links: table<href: string, rel: string, templated: bool>, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
@@ -928,7 +949,7 @@ export def "get-api-rest-v1-groups-group-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<groupId: string, links: table<href: string, rel: string, templated: bool>, name: string> {
+]: nothing -> oneof<record<groupId: string, links: table<href: string, rel: string, templated: bool>, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
@@ -952,7 +973,6 @@ export def "get-api-rest-v1-groups-group-id" [
 # update
 #
 # POST /api/rest/v1/groups/{groupId}
-# --links item shape: {href?: string, rel?: string, templated?: bool}
 export def "post-api-rest-v1-groups-group-id" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -968,7 +988,7 @@ export def "post-api-rest-v1-groups-group-id" [
   --body-group-id: string
   --links: list # item shape: {href?: string, rel?: string, templated?: bool}
   --name: string
-]: any -> record<groupId: string, links: table<href: string, rel: string, templated: bool>, name: string> {
+]: any -> oneof<record<groupId: string, links: table<href: string, rel: string, templated: bool>, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
@@ -1174,7 +1194,7 @@ export def "get-api-rest-v1-messages-all" [
   --deleted: oneof<nothing, bool> # return only deleted / not deleted messages
   --read: oneof<nothing, bool> # return only read / unread messages (inbox messages only)
   --replies-to-message-id: string # return only inbox messages which are a reply to the message with the given message id
-]: nothing -> record<elements: int, links: table<href: string, rel: string, templated: bool>, page: int, pageSize: int, totalElements: int, totalPages: int, webServiceMessages: table<campaign: string, contact: record, creditCost: float, dateTimeReceived: string, dateTimeScheduled: string, dateTimeSent: string, deleted: bool, fromNumber: string, links: list, message: string, messageId: string, messageStatus: string, messageType: string, numberOfMessages: int, read: bool, repliedToMessage: record, toNumber: string, userDataField: string>> {
+]: nothing -> oneof<record<elements: int, links: table<href: string, rel: string, templated: bool>, page: int, pageSize: int, totalElements: int, totalPages: int, webServiceMessages: table<campaign: string, contact: record, creditCost: float, dateTimeReceived: string, dateTimeScheduled: string, dateTimeSent: string, deleted: bool, fromNumber: string, links: list, message: string, messageId: string, messageStatus: string, messageType: string, numberOfMessages: int, read: bool, repliedToMessage: record, toNumber: string, userDataField: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "fromDateTimeSent" $from_date_time_sent "scalar") (serialize-qp "toDateTimeSent" $to_date_time_sent "scalar") (serialize-qp "fromDateTimeReceived" $from_date_time_received "scalar") (serialize-qp "toDateTimeReceived" $to_date_time_received "scalar") (serialize-qp "fromNumber" $from_number "scalar") (serialize-qp "toNumber" $to_number "scalar") (serialize-qp "message" $message "scalar") (serialize-qp "campaign" $campaign "scalar") (serialize-qp "dataField" $data_field "scalar") (serialize-qp "deleted" $deleted "scalar") (serialize-qp "read" $read "scalar") (serialize-qp "repliesToMessageId" $replies_to_message_id "scalar")] | flatten | str join "&"
@@ -1212,7 +1232,7 @@ export def "analyse-full" [
   --accept: string@accept-completer # Response content type
   --message: string
   --recipient-number: string
-]: any -> record<characterAnalysis: list<list<any>>, messageCreditCost: float, messageEncoding: string, messageLength: int, messageLengthWithinMaximumAllowed: bool, numberOfMessages: int> {
+]: any -> oneof<record<characterAnalysis: list<list<any>>, messageCreditCost: float, messageEncoding: string, messageLength: int, messageLengthWithinMaximumAllowed: bool, numberOfMessages: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
@@ -1486,7 +1506,7 @@ export def "get-api-rest-v1-messages-message-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<campaign: string, contact: record<contactId: string, links: list<record>>, creditCost: float, dateTimeReceived: string, dateTimeScheduled: string, dateTimeSent: string, deleted: bool, fromNumber: string, links: table<href: string, rel: string, templated: bool>, message: string, messageId: string, messageStatus: string, messageType: string, numberOfMessages: int, read: bool, repliedToMessage: record<links: list<record>, messageId: string>, toNumber: string, userDataField: string> {
+]: nothing -> oneof<record<campaign: string, contact: record<contactId: string, links: list<record>>, creditCost: float, dateTimeReceived: string, dateTimeScheduled: string, dateTimeSent: string, deleted: bool, fromNumber: string, links: table<href: string, rel: string, templated: bool>, message: string, messageId: string, messageStatus: string, messageType: string, numberOfMessages: int, read: bool, repliedToMessage: record<links: list<record>, messageId: string>, toNumber: string, userDataField: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
   if ($message_id | is-empty) { error make --unspanned { msg: "path parameter 'messageId' must be non-empty" } }
@@ -1522,7 +1542,7 @@ export def "post-api-rest-v1-messages-message-id-mark-read" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<campaign: string, contact: record<contactId: string, links: list<record>>, creditCost: float, dateTimeReceived: string, dateTimeScheduled: string, dateTimeSent: string, deleted: bool, fromNumber: string, links: table<href: string, rel: string, templated: bool>, message: string, messageId: string, messageStatus: string, messageType: string, numberOfMessages: int, read: bool, repliedToMessage: record<links: list<record>, messageId: string>, toNumber: string, userDataField: string> {
+]: nothing -> oneof<record<campaign: string, contact: record<contactId: string, links: list<record>>, creditCost: float, dateTimeReceived: string, dateTimeScheduled: string, dateTimeSent: string, deleted: bool, fromNumber: string, links: table<href: string, rel: string, templated: bool>, message: string, messageId: string, messageStatus: string, messageType: string, numberOfMessages: int, read: bool, repliedToMessage: record<links: list<record>, messageId: string>, toNumber: string, userDataField: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
   if ($message_id | is-empty) { error make --unspanned { msg: "path parameter 'messageId' must be non-empty" } }
@@ -1558,7 +1578,7 @@ export def "put-api-rest-v1-messages-message-id-mark-read" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<campaign: string, contact: record<contactId: string, links: list<record>>, creditCost: float, dateTimeReceived: string, dateTimeScheduled: string, dateTimeSent: string, deleted: bool, fromNumber: string, links: table<href: string, rel: string, templated: bool>, message: string, messageId: string, messageStatus: string, messageType: string, numberOfMessages: int, read: bool, repliedToMessage: record<links: list<record>, messageId: string>, toNumber: string, userDataField: string> {
+]: nothing -> oneof<record<campaign: string, contact: record<contactId: string, links: list<record>>, creditCost: float, dateTimeReceived: string, dateTimeScheduled: string, dateTimeSent: string, deleted: bool, fromNumber: string, links: table<href: string, rel: string, templated: bool>, message: string, messageId: string, messageStatus: string, messageType: string, numberOfMessages: int, read: bool, repliedToMessage: record<links: list<record>, messageId: string>, toNumber: string, userDataField: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
   if ($message_id | is-empty) { error make --unspanned { msg: "path parameter 'messageId' must be non-empty" } }
@@ -1594,7 +1614,7 @@ export def "post-api-rest-v1-messages-message-id-mark-unread" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<campaign: string, contact: record<contactId: string, links: list<record>>, creditCost: float, dateTimeReceived: string, dateTimeScheduled: string, dateTimeSent: string, deleted: bool, fromNumber: string, links: table<href: string, rel: string, templated: bool>, message: string, messageId: string, messageStatus: string, messageType: string, numberOfMessages: int, read: bool, repliedToMessage: record<links: list<record>, messageId: string>, toNumber: string, userDataField: string> {
+]: nothing -> oneof<record<campaign: string, contact: record<contactId: string, links: list<record>>, creditCost: float, dateTimeReceived: string, dateTimeScheduled: string, dateTimeSent: string, deleted: bool, fromNumber: string, links: table<href: string, rel: string, templated: bool>, message: string, messageId: string, messageStatus: string, messageType: string, numberOfMessages: int, read: bool, repliedToMessage: record<links: list<record>, messageId: string>, toNumber: string, userDataField: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
   if ($message_id | is-empty) { error make --unspanned { msg: "path parameter 'messageId' must be non-empty" } }
@@ -1630,7 +1650,7 @@ export def "put-api-rest-v1-messages-message-id-mark-unread" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<campaign: string, contact: record<contactId: string, links: list<record>>, creditCost: float, dateTimeReceived: string, dateTimeScheduled: string, dateTimeSent: string, deleted: bool, fromNumber: string, links: table<href: string, rel: string, templated: bool>, message: string, messageId: string, messageStatus: string, messageType: string, numberOfMessages: int, read: bool, repliedToMessage: record<links: list<record>, messageId: string>, toNumber: string, userDataField: string> {
+]: nothing -> oneof<record<campaign: string, contact: record<contactId: string, links: list<record>>, creditCost: float, dateTimeReceived: string, dateTimeScheduled: string, dateTimeSent: string, deleted: bool, fromNumber: string, links: table<href: string, rel: string, templated: bool>, message: string, messageId: string, messageStatus: string, messageType: string, numberOfMessages: int, read: bool, repliedToMessage: record<links: list<record>, messageId: string>, toNumber: string, userDataField: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
   if ($message_id | is-empty) { error make --unspanned { msg: "path parameter 'messageId' must be non-empty" } }
@@ -1665,7 +1685,7 @@ export def "get-api-rest-v1-sms-send" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<campaign: string, dataField: string, dateToSend: string, message: string, recipientNumber: string> {
+]: nothing -> oneof<record<campaign: string, dataField: string, dateToSend: string, message: string, recipientNumber: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/sms/send" $auth.query)
@@ -1704,7 +1724,7 @@ export def "post-api-rest-v1-sms-send" [
   --date-to-send: string # format: date-time
   --message: string
   --recipient-number: string
-]: any -> record<error: string, messageId: string> {
+]: any -> oneof<record<error: string, messageId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
@@ -1741,7 +1761,7 @@ export def "get-api-rest-v1-sms-send-bulk" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<defaultDateToSend: string, messagesPerMinute: int, sendSmsRequests: table<campaign: string, dataField: string, dateToSend: string, message: string, recipientNumber: string>> {
+]: nothing -> oneof<record<defaultDateToSend: string, messagesPerMinute: int, sendSmsRequests: table<campaign: string, dataField: string, dateToSend: string, message: string, recipientNumber: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/sms/send-bulk" $auth.query)
@@ -1764,7 +1784,6 @@ export def "get-api-rest-v1-sms-send-bulk" [
 # send-bulk
 #
 # POST /api/rest/v1/sms/send-bulk
-# --sendSmsRequests item shape: {campaign?: string, dataField?: string, dateToSend?: string, message?: string, recipientNumber?: string}
 export def "post-api-rest-v1-sms-send-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1779,7 +1798,7 @@ export def "post-api-rest-v1-sms-send-bulk" [
   --default-date-to-send: string # format: date-time
   --messages-per-minute: int # format: int32
   --send-sms-requests: list # item shape: {campaign?: string, dataField?: string, dateToSend?: string, message?: string, recipientNumber?: string}
-]: any -> record<sendSmsResponses: table<error: string, messageId: string>> {
+]: any -> oneof<record<sendSmsResponses: table<error: string, messageId: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
@@ -1988,7 +2007,7 @@ export def "get-api-rest-v1-templates-all" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<links: table<href: string, rel: string, templated: bool>, webServiceTemplates: table<data: string, links: list, name: string, templateId: int>> {
+]: nothing -> oneof<record<links: table<href: string, rel: string, templated: bool>, webServiceTemplates: table<data: string, links: list, name: string, templateId: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/templates/all" $auth.query)
@@ -2059,7 +2078,7 @@ export def "get-api-rest-v1-templates-template-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<data: string, links: table<href: string, rel: string, templated: bool>, name: string, templateId: int> {
+]: nothing -> oneof<record<data: string, links: table<href: string, rel: string, templated: bool>, name: string, templateId: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
   if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
@@ -2104,7 +2123,7 @@ export def "get-api-rest-v1-voice-all" [
   --campaign: string # search by campaign
   --data-field: string # search by data field
   --deleted: oneof<nothing, bool> # return only deleted / not deleted messages
-]: nothing -> record<elements: int, links: table<href: string, rel: string, templated: bool>, messages: table<audioFileUrl: string, campaign: string, dateTimeSent: string, deleted: bool, language: string, links: list, message: string, messageStatus: string, toNumber: string, userDataField: string, voiceMessageId: string>, page: int, pageSize: int, totalElements: int, totalPages: int> {
+]: nothing -> oneof<record<elements: int, links: table<href: string, rel: string, templated: bool>, messages: table<audioFileUrl: string, campaign: string, dateTimeSent: string, deleted: bool, language: string, links: list, message: string, messageStatus: string, toNumber: string, userDataField: string, voiceMessageId: string>, page: int, pageSize: int, totalElements: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "fromDateTimeSent" $from_date_time_sent "scalar") (serialize-qp "toDateTimeSent" $to_date_time_sent "scalar") (serialize-qp "toNumber" $to_number "scalar") (serialize-qp "message" $message "scalar") (serialize-qp "campaign" $campaign "scalar") (serialize-qp "dataField" $data_field "scalar") (serialize-qp "deleted" $deleted "scalar")] | flatten | str join "&"
@@ -2147,7 +2166,7 @@ export def "single-audio" [
   --retry-minimum-interval: int # optional minimum interval in minutes between retry attempts (format: int32)
   --retry-maximum-interval: int # optional maximum interval in minutes between retry attempts (format: int32)
   file: path # audio file to play, supports MP3 or WAV format
-]: any -> record<error: string, voiceMessageId: string> {
+]: any -> oneof<record<error: string, voiceMessageId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
@@ -2197,7 +2216,7 @@ export def "single-text" [
   --retry-count: int # format: int32
   --retry-maximum-interval: int # format: int32
   --retry-minimum-interval: int # format: int32
-]: any -> record<error: string, voiceMessageId: string> {
+]: any -> oneof<record<error: string, voiceMessageId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
@@ -2271,7 +2290,7 @@ export def "get-api-rest-v1-voice-message-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<audioFileUrl: string, campaign: string, dateTimeSent: string, deleted: bool, language: string, links: table<href: string, rel: string, templated: bool>, message: string, messageStatus: string, toNumber: string, userDataField: string, voiceMessageId: string> {
+]: nothing -> oneof<record<audioFileUrl: string, campaign: string, dateTimeSent: string, deleted: bool, language: string, links: table<href: string, rel: string, templated: bool>, message: string, messageStatus: string, toNumber: string, userDataField: string, voiceMessageId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
   if ($message_id | is-empty) { error make --unspanned { msg: "path parameter 'messageId' must be non-empty" } }

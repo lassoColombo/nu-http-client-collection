@@ -14,27 +14,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "query-auth-token" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "auth-token")=(encode-path-segment $token_val)", location: "query"} }
     "auth-token" => { {scheme: $scheme, headers: {"auth-token": $token_val}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -42,8 +51,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -54,7 +68,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -89,7 +112,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -126,9 +150,9 @@ def account-status-completer [] { ["not_paying" "paying" "prospect"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-accounts" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-accounts" "delete-accounts-id" "get-accounts-id" "put-accounts-id" "delete-accounts-id-tags" "get-accounts-id-tags" "post-accounts-id-tags" "get-comments" "get-features" "get-features-id" "delete-features-id-tags" "get-features-id-tags" "post-features-id-tags" "get-health-check-ping" "post-hooks" "post-hooks-unsubscribe" "get-search" "get-users" "post-users" "post-users-invite-end-user" "post-users-invite-vendor-user" "get-users-search" "delete-users-id" "get-users-id" "put-users-id" "delete-users-id-tags" "get-users-id-tags" "post-users-id-tags" "post-vendor-users" "get-votes" "post-votes" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -163,7 +187,7 @@ export def "get-accounts" [
   --start: float # Offset to start at
   --order-dir: string@order-dir-completer # The sort direction
   --order-by: string@order-by-completer # The field to use for sort
-]: nothing -> table<created_at: string, external_id: string, id: string, is_paying: bool, monthly_value: float, name: string, status: string> {
+]: nothing -> oneof<table<created_at: string, external_id: string, id: string, is_paying: bool, monthly_value: float, name: string, status: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "auth-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "order_dir" $order_dir "scalar") (serialize-qp "order_by" $order_by "scalar")] | flatten | str join "&"
@@ -198,7 +222,7 @@ export def "delete-accounts-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created_at: string, external_id: string, id: string, is_paying: bool, monthly_value: float, name: string, status: string> {
+]: nothing -> oneof<record<created_at: string, external_id: string, id: string, is_paying: bool, monthly_value: float, name: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -233,7 +257,7 @@ export def "get-accounts-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created_at: string, external_id: string, id: string, is_paying: bool, monthly_value: float, name: string, status: string> {
+]: nothing -> oneof<record<created_at: string, external_id: string, id: string, is_paying: bool, monthly_value: float, name: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -418,7 +442,7 @@ export def "get-comments" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --case-id: int # case_id (required)
-]: nothing -> table<created_at: string, feature_id: int, is_private: bool, text: string, updated_at: string, user_id: int> {
+]: nothing -> oneof<table<created_at: string, feature_id: int, is_private: bool, text: string, updated_at: string, user_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($case_id == null) { error make --unspanned { msg: "required query parameter 'case_id' missing: pass --case-id" } }
@@ -461,7 +485,7 @@ export def "get-features" [
   --order-by: string@order-by-completer-1 # The field to use for sort
   --tags: string # Tags to limit results by. Multiple tags can be provided via comma delimeted string. Tags with contexts can be used. E.g. "....&tags=TagExample,Multi:TagThis,Multi:TagThat".
   --products: string # Products to limit results by. Comma delimeted string of either ids or names. E.g. "...&products=1,2,3" or "...products=Product1,Product2".
-]: nothing -> table<app_url: string, created_at: string, created_by_user_id: int, declined_at: string, description: string, developing_at: string, effort: int, form_entry: string, id: float, is_private: bool, merged_to_feature_id: int, planned_at: string, products: list<string>, released_at: string, resolution: string, resolved_by_user_id: int, status: string, status_changed_at: string, tags: any, title: string, updated_at: string, updated_by_user_id: int, uploads: list<string>, vendor_id: int, view_count: int, waiting_at: string> {
+]: nothing -> oneof<table<app_url: string, created_at: string, created_by_user_id: int, declined_at: string, description: string, developing_at: string, effort: int, form_entry: string, id: float, is_private: bool, merged_to_feature_id: int, planned_at: string, products: list<string>, released_at: string, resolution: string, resolved_by_user_id: int, status: string, status_changed_at: string, tags: any, title: string, updated_at: string, updated_by_user_id: int, uploads: list<string>, vendor_id: int, view_count: int, waiting_at: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "auth-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "order_dir" $order_dir "scalar") (serialize-qp "is_private" $is_private "scalar") (serialize-qp "wanted_by" $wanted_by "scalar") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "products" $products "scalar")] | flatten | str join "&"
@@ -496,7 +520,7 @@ export def "get-features-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<app_url: string, created_at: string, created_by_user_id: int, declined_at: string, description: string, developing_at: string, effort: int, form_entry: string, id: float, is_private: bool, merged_to_feature_id: int, planned_at: string, products: list<string>, released_at: string, resolution: string, resolved_by_user_id: int, status: string, status_changed_at: string, tags: any, title: string, updated_at: string, updated_by_user_id: int, uploads: list<string>, vendor_id: int, view_count: int, waiting_at: string> {
+]: nothing -> oneof<record<app_url: string, created_at: string, created_by_user_id: int, declined_at: string, description: string, developing_at: string, effort: int, form_entry: string, id: float, is_private: bool, merged_to_feature_id: int, planned_at: string, products: list<string>, released_at: string, resolution: string, resolved_by_user_id: int, status: string, status_changed_at: string, tags: any, title: string, updated_at: string, updated_by_user_id: int, uploads: list<string>, vendor_id: int, view_count: int, waiting_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -752,7 +776,7 @@ export def "get-search" [
   --status: string@status-completer-1 # A comma seperated list of status values to filter by, if required. Valid values: 'new', 'waiting', 'planned', 'developing', 'released', 'declined'.
   --tags: string # Tags to limit results by - only applies when scope is 'case' or 'feature'. Multiple tags can be provided via comma delimeted string. Tags with contexts can be used. E.g. "....&tags=TagExample,Multi:TagThis,Multi:TagThat".
   --products: string # Products to limit results by. Comma delimeted string of either ids or names. E.g. "...&products=1,2,3" or "...products=Product1,Product2".
-]: nothing -> table<app_url: string, created_at: string, created_by_user_id: int, declined_at: string, description: string, developing_at: string, effort: int, form_entry: string, id: float, is_private: bool, merged_to_feature_id: int, planned_at: string, products: list<string>, released_at: string, resolution: string, resolved_by_user_id: int, status: string, status_changed_at: string, tags: any, title: string, updated_at: string, updated_by_user_id: int, uploads: list<string>, vendor_id: int, view_count: int, waiting_at: string> {
+]: nothing -> oneof<table<app_url: string, created_at: string, created_by_user_id: int, declined_at: string, description: string, developing_at: string, effort: int, form_entry: string, id: float, is_private: bool, merged_to_feature_id: int, planned_at: string, products: list<string>, released_at: string, resolution: string, resolved_by_user_id: int, status: string, status_changed_at: string, tags: any, title: string, updated_at: string, updated_by_user_id: int, uploads: list<string>, vendor_id: int, view_count: int, waiting_at: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "auth-token"))
   let base = ($base_url | default $BASE_URL)
   let scope = ($scope | default "feature")
@@ -794,7 +818,7 @@ export def "get-users" [
   --limit: int # Limit the number of records returned. Max value can be 300. If limit is set to more than 300 the api will return an error (default: 300)
   --order-by: string # The field to use for sort
   --order-dir: string@order-dir-completer # The sort direction
-]: nothing -> table<account: record<id: string, monthly_value: float, name: string, status: string>, created_at: string, email: string, external_id: string, id: string, name: string, roles: string> {
+]: nothing -> oneof<table<account: record<id: string, monthly_value: float, name: string, status: string>, created_at: string, email: string, external_id: string, id: string, name: string, roles: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($role == null) { error make --unspanned { msg: "required query parameter 'role' missing: pass --role" } }
@@ -819,8 +843,6 @@ export def "get-users" [
 # Ping to create or update an EndUser and Account in one call
 #
 # POST /users
-# --account shape: {created_at?: string, id?: string, is_paying?: bool, monthly_value?: float, name?: string, status?: string, tags?: any}
-# --user shape: {allowed_products?: list<string>, created_at?: string, email?: string, full_name?: string, id?: string, roles?: "endUser", tags?: any}
 export def "post-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -958,7 +980,7 @@ export def "get-users-search" [
   --external-id: string # Find using your external ID, rather than the ID generated by Feedback
   --email: string # Find user by their email address. Role param must be specified when using this option
   --role: string@role-completer # Users role ('vendorUser' or 'endUser'). Only useful when finding a user by their email address
-]: nothing -> record<account: record<id: string, monthly_value: float, name: string, status: string>, created_at: string, email: string, external_id: string, id: string, name: string, roles: string> {
+]: nothing -> oneof<record<account: record<id: string, monthly_value: float, name: string, status: string>, created_at: string, email: string, external_id: string, id: string, name: string, roles: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "auth-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "external_id" $external_id "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "role" $role "scalar")] | flatten | str join "&"
@@ -993,7 +1015,7 @@ export def "delete-users-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account: record<id: string, monthly_value: float, name: string, status: string>, created_at: string, email: string, external_id: string, id: string, name: string, roles: string> {
+]: nothing -> oneof<record<account: record<id: string, monthly_value: float, name: string, status: string>, created_at: string, email: string, external_id: string, id: string, name: string, roles: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1028,7 +1050,7 @@ export def "get-users-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account: record<id: string, monthly_value: float, name: string, status: string>, created_at: string, email: string, external_id: string, id: string, name: string, roles: string> {
+]: nothing -> oneof<record<account: record<id: string, monthly_value: float, name: string, status: string>, created_at: string, email: string, external_id: string, id: string, name: string, roles: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1067,7 +1089,7 @@ export def "put-users-id" [
   --external-id: string
   --name: string
   --permission-group-id: float # only valid for users with role 'vendorUser' (format: integer)
-]: any -> record<account: record<id: string, monthly_value: float, name: string, status: string>, created_at: string, email: string, external_id: string, id: string, name: string, roles: string> {
+]: any -> oneof<record<account: record<id: string, monthly_value: float, name: string, status: string>, created_at: string, email: string, external_id: string, id: string, name: string, roles: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -1258,7 +1280,7 @@ export def "get-votes" [
   --negative: oneof<nothing, bool> # Include only votes that are negative
   --offset: float # Offset to start at
   --limit: float # Limit the number of records returned
-]: nothing -> table<created_at: string, feature_id: int, quantity: int, updated_at: string, user_id: int> {
+]: nothing -> oneof<table<created_at: string, feature_id: int, quantity: int, updated_at: string, user_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "auth-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "user_id" $user_id "scalar") (serialize-qp "feature_id" $feature_id "scalar") (serialize-qp "positive" $positive "scalar") (serialize-qp "negative" $negative "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
@@ -1282,7 +1304,6 @@ export def "get-votes" [
 # update specified votes for a User
 #
 # POST /votes
-# --votes item shape: {feature_id?: string, quantity?: int}
 export def "post-votes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

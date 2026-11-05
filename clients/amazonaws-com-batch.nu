@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -115,9 +139,9 @@ def type-completer-1 [] { ["container" "multinode"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cancel-job" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["cancel-job" "create-compute-environment" "create-job-queue" "create-scheduling-policy" "delete-compute-environment" "delete-job-queue" "delete-scheduling-policy" "deregister-job-definition" "describe-compute-environments" "describe-job-definitions" "describe-job-queues" "describe-jobs" "describe-scheduling-policies" "list-jobs" "list-scheduling-policies" "list-tags-for-resource" "tag-resource" "register-job-definition" "submit-job" "terminate-job" "untag-resource" "update-compute-environment" "update-job-queue" "update-scheduling-policy" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -158,7 +182,7 @@ export def "cancel-job" [
   --x-amz-signed-headers: string
   job_id: string # The Batch job ID of the job to cancel.
   reason: string # A message to attach to the job that explains the reason for canceling it. This message is returned by future DescribeJobs operations on the job. This message is also recorded in the Batch activity logs.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -187,8 +211,6 @@ export def "cancel-job" [
 #
 # POST /v1/createcomputeenvironment
 # operationId: CreateComputeEnvironment
-# --computeResources shape: {type?: "EC2"|"SPOT"|"FARGATE"|"FARGATE_SPOT", allocationStrategy?: "BEST_FIT"|"BEST_FIT_PROGRESSIVE"|"SPOT_CAPACITY_OPTIMIZED", minvCpus?: int, maxvCpus?: int, desiredvCpus?: int, instanceTypes?: list<string>, imageId?: string, subnets?: list<string>, securityGroupIds?: list<string>, ec2KeyPair?: string, instanceRole?: string, tags?: record, placementGroup?: string, bidPercentage?: int, spotIamFleetRole?: string, launchTemplate?: record, ec2Configuration?: list}
-# --eksConfiguration shape: {eksClusterArn?: string, kubernetesNamespace?: string}
 export def "create-compute-environment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -214,7 +236,7 @@ export def "create-compute-environment" [
   --service-role: string # The full Amazon Resource Name (ARN) of the IAM role that allows Batch to make calls to other Amazon Web Services services on your behalf. For more information, see Batch service IAM role (https://docs.aws.amazon.com/batch/latest/userguide/service_IAM_role.html) in the Batch User Guide. If your account already created the Batch service-linked role, that role is used by default for your compute environment unless you specify a different role here. If the Batch service-linked role doesn't exist in your account, and no role is specified here, the service attempts to create the Batch service-linked role in your account. If your specified role has a path other than /, then you must specify either the full role ARN (recommended) or prefix the role name with the path. For example, if a role with the name bar has a path of /foo/, specify /foo/bar as the role name. For more information, see Friendly names and paths (https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_identifiers.html#identifiers-friendly-names) in the IAM User Guide. Depending on how you created your Batch service role, its ARN might contain the service-role path prefix. When you only specify the name of the service role, Batch assumes that your ARN doesn't use the service-role path prefix. Because of this, we recommend that you specify the full ARN of your service role when you create compute environments.
   --tags: record # The tags that you apply to the compute environment to help you categorize and organize your resources. Each tag consists of a key and an optional value. For more information, see Tagging Amazon Web Services Resources (https://docs.aws.amazon.com/general/latest/gr/aws_tagging.html) in Amazon Web Services General Reference. These tags can be updated or removed using the TagResource (https://docs.aws.amazon.com/batch/latest/APIReference/API_TagResource.html) and UntagResource (https://docs.aws.amazon.com/batch/latest/APIReference/API_UntagResource.html) API operations. These tags don't propagate to the underlying compute resources.
   --eks-configuration: record # Configuration for the Amazon EKS cluster that supports the Batch compute environment. The cluster must exist before the compute environment can be created. — shape: {eksClusterArn?: string, kubernetesNamespace?: string}
-]: any -> record<computeEnvironmentName: string, computeEnvironmentArn: string> {
+]: any -> oneof<record<computeEnvironmentName: string, computeEnvironmentArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -243,7 +265,6 @@ export def "create-compute-environment" [
 #
 # POST /v1/createjobqueue
 # operationId: CreateJobQueue
-# --computeEnvironmentOrder item shape: {order: int, computeEnvironment: string}
 export def "create-job-queue" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -267,7 +288,7 @@ export def "create-job-queue" [
   priority: int # The priority of the job queue. Job queues with a higher priority (or a higher integer value for the priority parameter) are evaluated first when associated with the same compute environment. Priority is determined in descending order. For example, a job queue with a priority value of 10 is given scheduling preference over a job queue with a priority value of 1. All of the compute environments must be either EC2 (EC2 or SPOT) or Fargate (FARGATE or FARGATE_SPOT); EC2 and Fargate compute environments can't be mixed.
   compute_environment_order: list # The set of compute environments mapped to a job queue and their order relative to each other. The job scheduler uses this parameter to determine which compute environment runs a specific job. Compute environments must be in the VALID state before you can associate them with a job queue. You can associate up to three compute environments with a job queue. All of the compute environments must be either EC2 (EC2 or SPOT) or Fargate (FARGATE or FARGATE_SPOT); EC2 and Fargate compute environments can't be mixed. All compute environments that are associated with a job queue must share the same architecture. Batch doesn't support mixing compute environment architecture types in a single job queue. — item shape: {order: int, computeEnvironment: string}
   --tags: record # The tags that you apply to the job queue to help you categorize and organize your resources. Each tag consists of a key and an optional value. For more information, see Tagging your Batch resources (https://docs.aws.amazon.com/batch/latest/userguide/using-tags.html) in Batch User Guide.
-]: any -> record<jobQueueName: string, jobQueueArn: string> {
+]: any -> oneof<record<jobQueueName: string, jobQueueArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -296,7 +317,6 @@ export def "create-job-queue" [
 #
 # POST /v1/createschedulingpolicy
 # operationId: CreateSchedulingPolicy
-# --fairsharePolicy shape: {shareDecaySeconds?: int, computeReservation?: int, shareDistribution?: list}
 export def "create-scheduling-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -317,7 +337,7 @@ export def "create-scheduling-policy" [
   name: string # The name of the scheduling policy. It can be up to 128 letters long. It can contain uppercase and lowercase letters, numbers, hyphens (-), and underscores (_).
   --fairshare-policy: record # The fair share policy for a scheduling policy. — shape: {shareDecaySeconds?: int, computeReservation?: int, shareDistribution?: list}
   --tags: record # The tags that you apply to the scheduling policy to help you categorize and organize your resources. Each tag consists of a key and an optional value. For more information, see Tagging Amazon Web Services Resources (https://docs.aws.amazon.com/general/latest/gr/aws_tagging.html) in Amazon Web Services General Reference. These tags can be updated or removed using the TagResource (https://docs.aws.amazon.com/batch/latest/APIReference/API_TagResource.html) and UntagResource (https://docs.aws.amazon.com/batch/latest/APIReference/API_UntagResource.html) API operations.
-]: any -> record<name: string, arn: string> {
+]: any -> oneof<record<name: string, arn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -364,7 +384,7 @@ export def "delete-compute-environment" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   compute_environment: string # The name or Amazon Resource Name (ARN) of the compute environment to delete.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -411,7 +431,7 @@ export def "delete-job-queue" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   job_queue: string # The short name or full Amazon Resource Name (ARN) of the queue to delete.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -458,7 +478,7 @@ export def "delete-scheduling-policy" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   arn: string # The Amazon Resource Name (ARN) of the scheduling policy to delete.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -505,7 +525,7 @@ export def "deregister-job-definition" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   job_definition: string # The name and revision (name:revision) or full Amazon Resource Name (ARN) of the job definition to deregister.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -556,7 +576,7 @@ export def "describe-compute-environments" [
   --compute-environments: list<string> # A list of up to 100 compute environment names or full Amazon Resource Name (ARN) entries.
   --max-results-body: int # The maximum number of cluster results returned by DescribeComputeEnvironments in paginated output. When this parameter is used, DescribeComputeEnvironments only returns maxResults results in a single page along with a nextToken response element. The remaining results of the initial request can be seen by sending another DescribeComputeEnvironments request with the returned nextToken value. This value can be between 1 and 100. If this parameter isn't used, then DescribeComputeEnvironments returns up to 100 results and a nextToken value if applicable. (body field)
   --next-token-body: string # The nextToken value returned from a previous paginated DescribeComputeEnvironments request where maxResults was used and the results exceeded the value of that parameter. Pagination continues from the end of the previous results that returned the nextToken value. This value is null when there are no more results to return. Treat this token as an opaque identifier that's only used to retrieve the next items in a list and not for other programmatic purposes. (body field)
-]: any -> record<computeEnvironments: table<computeEnvironmentName: string, computeEnvironmentArn: string, unmanagedvCpus: int, ecsClusterArn: string, tags: record, type: string, state: string, status: string, statusReason: string, computeResources: record, serviceRole: string, updatePolicy: record, eksConfiguration: record, containerOrchestrationType: string, uuid: string>, nextToken: string> {
+]: any -> oneof<record<computeEnvironments: table<computeEnvironmentName: string, computeEnvironmentArn: string, unmanagedvCpus: int, ecsClusterArn: string, tags: record, type: string, state: string, status: string, statusReason: string, computeResources: record, serviceRole: string, updatePolicy: record, eksConfiguration: record, containerOrchestrationType: string, uuid: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -610,7 +630,7 @@ export def "describe-job-definitions" [
   --job-definition-name: string # The name of the job definition to describe.
   --status: string # The status used to filter job definitions.
   --next-token-body: string # The nextToken value returned from a previous paginated DescribeJobDefinitions request where maxResults was used and the results exceeded the value of that parameter. Pagination continues from the end of the previous results that returned the nextToken value. This value is null when there are no more results to return. Treat this token as an opaque identifier that's only used to retrieve the next items in a list and not for other programmatic purposes. (body field)
-]: any -> record<jobDefinitions: table<jobDefinitionName: string, jobDefinitionArn: string, revision: int, status: string, type: string, schedulingPriority: int, parameters: record, retryStrategy: record, containerProperties: record, timeout: record, nodeProperties: record, tags: record, propagateTags: bool, platformCapabilities: list, eksProperties: record, containerOrchestrationType: string>, nextToken: string> {
+]: any -> oneof<record<jobDefinitions: table<jobDefinitionName: string, jobDefinitionArn: string, revision: int, status: string, type: string, schedulingPriority: int, parameters: record, retryStrategy: record, containerProperties: record, timeout: record, nodeProperties: record, tags: record, propagateTags: bool, platformCapabilities: list, eksProperties: record, containerOrchestrationType: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -662,7 +682,7 @@ export def "describe-job-queues" [
   --job-queues: list<string> # A list of up to 100 queue names or full queue Amazon Resource Name (ARN) entries.
   --max-results-body: int # The maximum number of results returned by DescribeJobQueues in paginated output. When this parameter is used, DescribeJobQueues only returns maxResults results in a single page and a nextToken response element. The remaining results of the initial request can be seen by sending another DescribeJobQueues request with the returned nextToken value. This value can be between 1 and 100. If this parameter isn't used, then DescribeJobQueues returns up to 100 results and a nextToken value if applicable. (body field)
   --next-token-body: string # The nextToken value returned from a previous paginated DescribeJobQueues request where maxResults was used and the results exceeded the value of that parameter. Pagination continues from the end of the previous results that returned the nextToken value. This value is null when there are no more results to return. Treat this token as an opaque identifier that's only used to retrieve the next items in a list and not for other programmatic purposes. (body field)
-]: any -> record<jobQueues: table<jobQueueName: string, jobQueueArn: string, state: string, schedulingPolicyArn: string, status: string, statusReason: string, priority: int, computeEnvironmentOrder: list, tags: record>, nextToken: string> {
+]: any -> oneof<record<jobQueues: table<jobQueueName: string, jobQueueArn: string, state: string, schedulingPolicyArn: string, status: string, statusReason: string, priority: int, computeEnvironmentOrder: list, tags: record>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -710,7 +730,7 @@ export def "describe-jobs" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   jobs: list<string> # A list of up to 100 job IDs.
-]: any -> record<jobs: table<jobArn: string, jobName: string, jobId: string, jobQueue: string, status: string, shareIdentifier: string, schedulingPriority: int, attempts: list, statusReason: string, createdAt: int, retryStrategy: record, startedAt: int, stoppedAt: int, dependsOn: list, jobDefinition: string, parameters: record, container: record, nodeDetails: record, nodeProperties: record, arrayProperties: record, timeout: record, tags: record, propagateTags: bool, platformCapabilities: list, eksProperties: record, eksAttempts: list, isCancelled: bool, isTerminated: bool>> {
+]: any -> oneof<record<jobs: table<jobArn: string, jobName: string, jobId: string, jobQueue: string, status: string, shareIdentifier: string, schedulingPriority: int, attempts: list, statusReason: string, createdAt: int, retryStrategy: record, startedAt: int, stoppedAt: int, dependsOn: list, jobDefinition: string, parameters: record, container: record, nodeDetails: record, nodeProperties: record, arrayProperties: record, timeout: record, tags: record, propagateTags: bool, platformCapabilities: list, eksProperties: record, eksAttempts: list, isCancelled: bool, isTerminated: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -757,7 +777,7 @@ export def "describe-scheduling-policies" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   arns: list<string> # A list of up to 100 scheduling policy Amazon Resource Name (ARN) entries.
-]: any -> record<schedulingPolicies: table<name: string, arn: string, fairsharePolicy: record, tags: record>> {
+]: any -> oneof<record<schedulingPolicies: table<name: string, arn: string, fairsharePolicy: record, tags: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -786,7 +806,6 @@ export def "describe-scheduling-policies" [
 #
 # POST /v1/listjobs
 # operationId: ListJobs
-# --filters item shape: {name?: string, values?: list<string>}
 export def "list-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -813,7 +832,7 @@ export def "list-jobs" [
   --max-results-body: int # The maximum number of results returned by ListJobs in paginated output. When this parameter is used, ListJobs only returns maxResults results in a single page and a nextToken response element. The remaining results of the initial request can be seen by sending another ListJobs request with the returned nextToken value. This value can be between 1 and 100. If this parameter isn't used, then ListJobs returns up to 100 results and a nextToken value if applicable. (body field)
   --next-token-body: string # The nextToken value returned from a previous paginated ListJobs request where maxResults was used and the results exceeded the value of that parameter. Pagination continues from the end of the previous results that returned the nextToken value. This value is null when there are no more results to return. Treat this token as an opaque identifier that's only used to retrieve the next items in a list and not for other programmatic purposes. (body field)
   --filters: list # The filter to apply to the query. Only one filter can be used at a time. When the filter is used, jobStatus is ignored. The filter doesn't apply to child jobs in an array or multi-node parallel (MNP) jobs. The results are sorted by the createdAt field, with the most recent jobs being first. JOB_NAME The value of the filter is a case-insensitive match for the job name. If the value ends with an asterisk (*), the filter matches any job name that begins with the string before the '*'. This corresponds to the jobName value. For example, test1 matches both Test1 and test1, and test1* matches both test1 and Test10. When the JOB_NAME filter is used, the results are grouped by the job name and version. JOB_DEFINITION The value for the filter is the name or Amazon Resource Name (ARN) of the job definition. This corresponds to the jobDefinition value. The value is case sensitive. When the value for the filter is the job definition name, the results include all the jobs that used any revision of that job definition name. If the value ends with an asterisk (*), the filter matches any job definition name that begins with the string before the '*'. For example, jd1 matches only jd1, and jd1* matches both jd1 and jd1A. The version of the job definition that's used doesn't affect the sort order. When the JOB_DEFINITION filter is used and the ARN is used (which is in the form arn:${Partition}:batch:${Region}:${Account}:job-definition/${JobDefinitionName}:${Revision}), the results include jobs that used the specified revision of the job definition. Asterisk (*) isn't supported when the ARN is used. BEFORE_CREATED_AT The value for the filter is the time that's before the job was created. This corresponds to the createdAt value. The value is a string representation of the number of milliseconds since 00:00:00 UTC (midnight) on January 1, 1970. AFTER_CREATED_AT The value for the filter is the time that's after the job was created. This corresponds to the createdAt value. The value is a string representation of the number of milliseconds since 00:00:00 UTC (midnight) on January 1, 1970. — item shape: {name?: string, values?: list<string>}
-]: any -> record<jobSummaryList: table<jobArn: string, jobId: string, jobName: string, createdAt: int, status: string, statusReason: string, startedAt: int, stoppedAt: int, container: record, arrayProperties: record, nodeProperties: record, jobDefinition: string>, nextToken: string> {
+]: any -> oneof<record<jobSummaryList: table<jobArn: string, jobId: string, jobName: string, createdAt: int, status: string, statusReason: string, startedAt: int, stoppedAt: int, container: record, arrayProperties: record, nodeProperties: record, jobDefinition: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -864,7 +883,7 @@ export def "list-scheduling-policies" [
   --x-amz-signed-headers: string
   --max-results-body: int # The maximum number of results that's returned by ListSchedulingPolicies in paginated output. When this parameter is used, ListSchedulingPolicies only returns maxResults results in a single page and a nextToken response element. You can see the remaining results of the initial request by sending another ListSchedulingPolicies request with the returned nextToken value. This value can be between 1 and 100. If this parameter isn't used, ListSchedulingPolicies returns up to 100 results and a nextToken value if applicable. (body field)
   --next-token-body: string # The nextToken value that's returned from a previous paginated ListSchedulingPolicies request where maxResults was used and the results exceeded the value of that parameter. Pagination continues from the end of the previous results that returned the nextToken value. This value is null when there are no more results to return. Treat this token as an opaque identifier that's only used to retrieve the next items in a list and not for other programmatic purposes. (body field)
-]: any -> record<schedulingPolicies: table<arn: string>, nextToken: string> {
+]: any -> oneof<record<schedulingPolicies: table<arn: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -912,7 +931,7 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<tags: record> {
+]: nothing -> oneof<record<tags: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
@@ -958,7 +977,7 @@ export def "tag-resource" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   tags: record # The tags that you apply to the resource to help you categorize and organize your resources. Each tag consists of a key and an optional value. For more information, see Tagging Amazon Web Services Resources (https://docs.aws.amazon.com/general/latest/gr/aws_tagging.html) in Amazon Web Services General Reference.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -988,11 +1007,6 @@ export def "tag-resource" [
 #
 # POST /v1/registerjobdefinition
 # operationId: RegisterJobDefinition
-# --containerProperties shape: {image?: string, vcpus?: int, memory?: int, command?: list<string>, jobRoleArn?: string, executionRoleArn?: string, volumes?: list, environment?: list, mountPoints?: list, readonlyRootFilesystem?: bool, privileged?: bool, ulimits?: list, user?: string, instanceType?: string, resourceRequirements?: list, linuxParameters?: record, logConfiguration?: record, secrets?: list, networkConfiguration?: record, fargatePlatformConfiguration?: record, ephemeralStorage?: record}
-# --nodeProperties shape: {numNodes?: int, mainNode?: int, nodeRangeProperties?: list}
-# --retryStrategy shape: {attempts?: int, evaluateOnExit?: list}
-# --timeout shape: {attemptDurationSeconds?: int}
-# --eksProperties shape: {podProperties?: record}
 export def "register-job-definition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1022,7 +1036,7 @@ export def "register-job-definition" [
   --tags: record # The tags that you apply to the job definition to help you categorize and organize your resources. Each tag consists of a key and an optional value. For more information, see Tagging Amazon Web Services Resources (https://docs.aws.amazon.com/batch/latest/userguide/using-tags.html) in Batch User Guide.
   --platform-capabilities: list<string> # The platform capabilities required by the job definition. If no value is specified, it defaults to EC2. To run the job on Fargate resources, specify FARGATE. If the job runs on Amazon EKS resources, then you must not specify platformCapabilities.
   --eks-properties: record # An object that contains the properties for the Kubernetes resources of a job. — shape: {podProperties?: record}
-]: any -> record<jobDefinitionName: string, jobDefinitionArn: string, revision: int> {
+]: any -> oneof<record<jobDefinitionName: string, jobDefinitionArn: string, revision: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1051,13 +1065,6 @@ export def "register-job-definition" [
 #
 # POST /v1/submitjob
 # operationId: SubmitJob
-# --arrayProperties shape: {size?: int}
-# --dependsOn item shape: {jobId?: string, type?: "N_TO_N"|"SEQUENTIAL"}
-# --containerOverrides shape: {vcpus?: int, memory?: int, command?: list<string>, instanceType?: string, environment?: list, resourceRequirements?: list}
-# --nodeOverrides shape: {numNodes?: int, nodePropertyOverrides?: list}
-# --retryStrategy shape: {attempts?: int, evaluateOnExit?: list}
-# --timeout shape: {attemptDurationSeconds?: int}
-# --eksPropertiesOverride shape: {podProperties?: record}
 export def "submit-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1090,7 +1097,7 @@ export def "submit-job" [
   --timeout: record # An object that represents a job timeout configuration. — shape: {attemptDurationSeconds?: int}
   --tags: record # The tags that you apply to the job request to help you categorize and organize your resources. Each tag consists of a key and an optional value. For more information, see Tagging Amazon Web Services Resources (https://docs.aws.amazon.com/general/latest/gr/aws_tagging.html) in Amazon Web Services General Reference.
   --eks-properties-override: record # An object that contains overrides for the Kubernetes resources of a job. — shape: {podProperties?: record}
-]: any -> record<jobArn: string, jobName: string, jobId: string> {
+]: any -> oneof<record<jobArn: string, jobName: string, jobId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1138,7 +1145,7 @@ export def "terminate-job" [
   --x-amz-signed-headers: string
   job_id: string # The Batch job ID of the job to terminate.
   reason: string # A message to attach to the job that explains the reason for canceling it. This message is returned by future DescribeJobs operations on the job. This message is also recorded in the Batch activity logs.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1186,7 +1193,7 @@ export def "untag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
@@ -1215,8 +1222,6 @@ export def "untag-resource" [
 #
 # POST /v1/updatecomputeenvironment
 # operationId: UpdateComputeEnvironment
-# --computeResources shape: {minvCpus?: int, maxvCpus?: int, desiredvCpus?: int, subnets?: list<string>, securityGroupIds?: list<string>, allocationStrategy?: "BEST_FIT_PROGRESSIVE"|"SPOT_CAPACITY_OPTIMIZED", instanceTypes?: list<string>, ec2KeyPair?: string, instanceRole?: string, tags?: record, placementGroup?: string, bidPercentage?: int, launchTemplate?: record, ec2Configuration?: list, updateToLatestImageVersion?: bool, type?: "EC2"|"SPOT"|"FARGATE"|"FARGATE_SPOT", imageId?: string}
-# --updatePolicy shape: {terminateJobsOnUpdate?: bool, jobExecutionTimeoutMinutes?: int}
 export def "update-compute-environment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1240,7 +1245,7 @@ export def "update-compute-environment" [
   --compute-resources: record # An object that represents the attributes of a compute environment that can be updated. For more information, see Updating compute environments (https://docs.aws.amazon.com/batch/latest/userguide/updating-compute-environments.html) in the Batch User Guide. — shape: {minvCpus?: int, maxvCpus?: int, desiredvCpus?: int, subnets?: list<string>, securityGroupIds?: list<string>, allocationStrategy?: "BEST_FIT_PROGRESSIVE"|"SPOT_CAPACITY_OPTIMIZED", instanceTypes?: list<string>, ec2KeyPair?: string, instanceRole?: string, tags?: record, placementGroup?: string, bidPercentage?: int, launchTemplate?: record, ec2Configuration?: list, updateToLatestImageVersion?: bool, type?: "EC2"|"SPOT"|"FARGATE"|"FARGATE_SPOT", imageId?: string}
   --service-role: string # The full Amazon Resource Name (ARN) of the IAM role that allows Batch to make calls to other Amazon Web Services services on your behalf. For more information, see Batch service IAM role (https://docs.aws.amazon.com/batch/latest/userguide/service_IAM_role.html) in the Batch User Guide. If the compute environment has a service-linked role, it can't be changed to use a regular IAM role. Likewise, if the compute environment has a regular IAM role, it can't be changed to use a service-linked role. To update the parameters for the compute environment that require an infrastructure update to change, the AWSServiceRoleForBatch service-linked role must be used. For more information, see Updating compute environments (https://docs.aws.amazon.com/batch/latest/userguide/updating-compute-environments.html) in the Batch User Guide. If your specified role has a path other than /, then you must either specify the full role ARN (recommended) or prefix the role name with the path. Depending on how you created your Batch service role, its ARN might contain the service-role path prefix. When you only specify the name of the service role, Batch assumes that your ARN doesn't use the service-role path prefix. Because of this, we recommend that you specify the full ARN of your service role when you create compute environments.
   --update-policy: record # Specifies the infrastructure update policy for the compute environment. For more information about infrastructure updates, see Updating compute environments (https://docs.aws.amazon.com/batch/latest/userguide/updating-compute-environments.html) in the Batch User Guide. — shape: {terminateJobsOnUpdate?: bool, jobExecutionTimeoutMinutes?: int}
-]: any -> record<computeEnvironmentName: string, computeEnvironmentArn: string> {
+]: any -> oneof<record<computeEnvironmentName: string, computeEnvironmentArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1269,7 +1274,6 @@ export def "update-compute-environment" [
 #
 # POST /v1/updatejobqueue
 # operationId: UpdateJobQueue
-# --computeEnvironmentOrder item shape: {order: int, computeEnvironment: string}
 export def "update-job-queue" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1292,7 +1296,7 @@ export def "update-job-queue" [
   --scheduling-policy-arn: string # Amazon Resource Name (ARN) of the fair share scheduling policy. Once a job queue is created, the fair share scheduling policy can be replaced but not removed. The format is aws:Partition:batch:Region:Account:scheduling-policy/Name . For example, aws:aws:batch:us-west-2:123456789012:scheduling-policy/MySchedulingPolicy.
   --priority: int # The priority of the job queue. Job queues with a higher priority (or a higher integer value for the priority parameter) are evaluated first when associated with the same compute environment. Priority is determined in descending order. For example, a job queue with a priority value of 10 is given scheduling preference over a job queue with a priority value of 1. All of the compute environments must be either EC2 (EC2 or SPOT) or Fargate (FARGATE or FARGATE_SPOT). EC2 and Fargate compute environments can't be mixed.
   --compute-environment-order: list # Details the set of compute environments mapped to a job queue and their order relative to each other. This is one of the parameters used by the job scheduler to determine which compute environment runs a given job. Compute environments must be in the VALID state before you can associate them with a job queue. All of the compute environments must be either EC2 (EC2 or SPOT) or Fargate (FARGATE or FARGATE_SPOT). EC2 and Fargate compute environments can't be mixed. All compute environments that are associated with a job queue must share the same architecture. Batch doesn't support mixing compute environment architecture types in a single job queue. — item shape: {order: int, computeEnvironment: string}
-]: any -> record<jobQueueName: string, jobQueueArn: string> {
+]: any -> oneof<record<jobQueueName: string, jobQueueArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1321,7 +1325,6 @@ export def "update-job-queue" [
 #
 # POST /v1/updateschedulingpolicy
 # operationId: UpdateSchedulingPolicy
-# --fairsharePolicy shape: {shareDecaySeconds?: int, computeReservation?: int, shareDistribution?: list}
 export def "update-scheduling-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1341,7 +1344,7 @@ export def "update-scheduling-policy" [
   --x-amz-signed-headers: string
   arn: string # The Amazon Resource Name (ARN) of the scheduling policy to update.
   --fairshare-policy: record # The fair share policy for a scheduling policy. — shape: {shareDecaySeconds?: int, computeReservation?: int, shareDistribution?: list}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

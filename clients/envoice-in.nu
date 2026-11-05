@@ -14,27 +14,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "x-auth-key" => { {scheme: $scheme, headers: {"x-auth-key": $token_val}, query: "", location: "header"} }
     "x-auth-secret" => { {scheme: $scheme, headers: {"x-auth-secret": $token_val}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -42,8 +51,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -54,7 +68,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -89,7 +112,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -112,9 +136,9 @@ def query-options-order-completer [] { ["Asc" "Desc" "None"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "client-api-all" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["client-api-all" "client-api-can-delete" "client-api-delete" "client-api-details" "client-api-new" "client-api-update" "estimation-api-all" "estimation-api-change-status" "estimation-api-convert" "estimation-api-delete" "estimation-api-details" "estimation-api-new" "estimation-api-send-to-client" "estimation-api-status" "estimation-api-update" "estimation-api-uri" "general-api-countries" "general-api-currencies" "general-api-date-formats" "general-api-ui-languages" "invoice-api-all" "get-api-invoice-allcategories" "invoice-api-change-status" "invoice-api-delete" "post-api-invoice-deletecategory" "invoice-api-details" "invoice-api-new" "post-api-invoice-newcategory" "invoice-api-pdf" "invoice-api-send-to-accountant" "invoice-api-send-to-client" "invoice-api-status" "invoice-api-update" "post-api-invoice-updatecategory" "invoice-api-uri" "order-api-all" "order-api-change-shipping-details" "order-api-change-status" "order-api-delete" "order-api-details" "order-api-new" "payment-api-supported" "payment-link-api-all" "payment-link-api-delete" "payment-link-api-new" "payment-link-api-uri" "product-api-all" "product-api-delete" "product-api-details" "product-api-new" "product-api-update" "tax-api-all" "tax-api-delete" "tax-api-new" "tax-api-update" "work-type-api-all" "work-type-api-delete" "work-type-api-details" "work-type-api-new" "work-type-api-search" "work-type-api-update" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -149,7 +173,7 @@ export def "client-api-all" [
   --accept: string@accept-completer # Response content type
   --x-auth-key: string # required, default: [authentication key]
   --x-auth-secret: string # required, default: [authentication secret]
-]: nothing -> table<AdditionalEmails: list<record>, Address: string, ClientCountryId: int, ClientCurrencyId: int, CompanyRegistrationNumber: string, CreatedOn: string, DefaultDueDateInDays: int, Email: string, Id: int, Name: string, PhoneNumber: string, UiLanguageId: int, Vat: string> {
+]: nothing -> oneof<table<AdditionalEmails: list<record>, Address: string, ClientCountryId: int, ClientCurrencyId: int, CompanyRegistrationNumber: string, CreatedOn: string, DefaultDueDateInDays: int, Email: string, Id: int, Name: string, PhoneNumber: string, UiLanguageId: int, Vat: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
   let x_auth_key = ($x_auth_key | default "[authentication key]")
@@ -280,7 +304,7 @@ export def "client-api-details" [
   --id: int # required, format: int32
   --x-auth-key: string # required, default: [authentication key]
   --x-auth-secret: string # required, default: [authentication secret]
-]: nothing -> record<AdditionalEmails: table<Email: string>, Address: string, ClientCountryId: int, ClientCurrencyId: int, CompanyRegistrationNumber: string, CreatedOn: string, DefaultDueDateInDays: int, Email: string, Id: int, Name: string, PhoneNumber: string, UiLanguageId: int, Vat: string> {
+]: nothing -> oneof<record<AdditionalEmails: table<Email: string>, Address: string, ClientCountryId: int, ClientCurrencyId: int, CompanyRegistrationNumber: string, CreatedOn: string, DefaultDueDateInDays: int, Email: string, Id: int, Name: string, PhoneNumber: string, UiLanguageId: int, Vat: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
@@ -310,7 +334,6 @@ export def "client-api-details" [
 #
 # POST /api/client/new
 # operationId: ClientApi_New
-# --AdditionalEmails item shape: {Email?: string}
 export def "client-api-new" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -366,7 +389,6 @@ export def "client-api-new" [
 #
 # POST /api/client/update
 # operationId: ClientApi_Update
-# --AdditionalEmails item shape: {Email?: string}
 export def "client-api-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -437,7 +459,7 @@ export def "estimation-api-all" [
   --query-options-page-size: int # format: int32
   --x-auth-key: string # required, default: [authentication key]
   --x-auth-secret: string # required, default: [authentication secret]
-]: nothing -> record<Count: int, ErrorMessages: table<Code: string, FaultMessage: string, Group: string, UserVisibleMessage: string>, IsFaulted: bool, Result: table<AccessToken: string, Client: record, ClonedFromId: int, Currency: record, DiscountAmount: float, ExpiresOn: string, Id: int, IssuedOn: string, Notes: string, Number: string, PoNumber: string, Status: string, SubTotalAmount: float, TaxAmount: float, Terms: string, TotalAmount: float>, TotalCount: int> {
+]: nothing -> oneof<record<Count: int, ErrorMessages: table<Code: string, FaultMessage: string, Group: string, UserVisibleMessage: string>, IsFaulted: bool, Result: table<AccessToken: string, Client: record, ClonedFromId: int, Currency: record, DiscountAmount: float, ExpiresOn: string, Id: int, IssuedOn: string, Notes: string, Number: string, PoNumber: string, Status: string, SubTotalAmount: float, TaxAmount: float, Terms: string, TotalAmount: float>, TotalCount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
   let x_auth_key = ($x_auth_key | default "[authentication key]")
@@ -526,7 +548,7 @@ export def "estimation-api-convert" [
   --x-auth-key: string # required, default: [authentication key]
   --x-auth-secret: string # required, default: [authentication secret]
   --body: int
-]: any -> record<AccessToken: string, Activities: table<Id: int, InvoiceNumber: string, Link: string, Message: string, Type: string>, Attachments: table<Id: int, Link: string, ObfuscatedFileName: string, OriginalFileName: string, Size: int, Type: string>, Client: record<AdditionalEmails: list<record>, Address: string, ClientCountryId: int, ClientCurrencyId: int, CompanyRegistrationNumber: string, CreatedOn: string, DefaultDueDateInDays: int, Email: string, Id: int, Name: string, PhoneNumber: string, UiLanguageId: int, Vat: string>, ClonedFromId: int, Currency: record<Code: string, Id: int, Name: string, Symbol: string, Value: string>, DiscountAmount: float, Duedate: string, EnablePartialPayments: bool, Id: int, InvoiceCategoryId: int, IssuedOn: string, Items: table<Cost: float, Description: string, DiscountAmount: float, DiscountPercentage: float, Id: int, Quantity: float, SubTotalAmount: float, TaxAmount: float, TaxId: int, TaxPercentage: float, TotalAmount: float, WorkTypeId: int>, Notes: string, Number: string, PaymentGateways: table<Name: string>, Payments: table<Amount: float, Id: int, IsAutomatic: bool, Note: string, PaidOn: string, ReferenceId: string, Type: string>, PoNumber: string, RecurringProfile: record<DayOfMonth: int, DayOfWeek: string, DueDateInDays: int, EndOfRecurrance: string, Month: int, RecurrancePattern: string, RecurranceValue: int, StartOfRecurrance: string, Status: string, Title: string>, RecurringProfileId: int, ShouldSendReminders: bool, Status: string, SubTotalAmount: float, TaxAmount: float, Terms: string, TotalAmount: float> {
+]: any -> oneof<record<AccessToken: string, Activities: table<Id: int, InvoiceNumber: string, Link: string, Message: string, Type: string>, Attachments: table<Id: int, Link: string, ObfuscatedFileName: string, OriginalFileName: string, Size: int, Type: string>, Client: record<AdditionalEmails: list<record>, Address: string, ClientCountryId: int, ClientCurrencyId: int, CompanyRegistrationNumber: string, CreatedOn: string, DefaultDueDateInDays: int, Email: string, Id: int, Name: string, PhoneNumber: string, UiLanguageId: int, Vat: string>, ClonedFromId: int, Currency: record<Code: string, Id: int, Name: string, Symbol: string, Value: string>, DiscountAmount: float, Duedate: string, EnablePartialPayments: bool, Id: int, InvoiceCategoryId: int, IssuedOn: string, Items: table<Cost: float, Description: string, DiscountAmount: float, DiscountPercentage: float, Id: int, Quantity: float, SubTotalAmount: float, TaxAmount: float, TaxId: int, TaxPercentage: float, TotalAmount: float, WorkTypeId: int>, Notes: string, Number: string, PaymentGateways: table<Name: string>, Payments: table<Amount: float, Id: int, IsAutomatic: bool, Note: string, PaidOn: string, ReferenceId: string, Type: string>, PoNumber: string, RecurringProfile: record<DayOfMonth: int, DayOfWeek: string, DueDateInDays: int, EndOfRecurrance: string, Month: int, RecurrancePattern: string, RecurranceValue: int, StartOfRecurrance: string, Status: string, Title: string>, RecurringProfileId: int, ShouldSendReminders: bool, Status: string, SubTotalAmount: float, TaxAmount: float, Terms: string, TotalAmount: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
@@ -616,7 +638,7 @@ export def "estimation-api-details" [
   --id: int # required, format: int32
   --x-auth-key: string # required, default: [authentication key]
   --x-auth-secret: string # required, default: [authentication secret]
-]: nothing -> record<AccessToken: string, Activities: table<EstimationNumber: string, Id: int, Link: string, Message: string, Type: string>, Attachments: table<Id: int, Link: string, ObfuscatedFileName: string, OriginalFileName: string, Size: int, Type: string>, Client: record<AdditionalEmails: list<record>, Address: string, ClientCountryId: int, ClientCurrencyId: int, CompanyRegistrationNumber: string, CreatedOn: string, DefaultDueDateInDays: int, Email: string, Id: int, Name: string, PhoneNumber: string, UiLanguageId: int, Vat: string>, ClonedFromId: int, Currency: record<Code: string, Id: int, Name: string, Symbol: string, Value: string>, DiscountAmount: float, ExpiresOn: string, Id: int, IssuedOn: string, Items: table<Cost: float, Description: string, DiscountAmount: float, DiscountPercentage: float, Id: int, Quantity: float, SubTotalAmount: float, TaxAmount: float, TaxId: int, TaxPercentage: float, TotalAmount: float, WorkTypeId: int>, Notes: string, Number: string, PaymentGateways: table<Name: string>, PoNumber: string, Status: string, SubTotalAmount: float, TaxAmount: float, Terms: string, TotalAmount: float> {
+]: nothing -> oneof<record<AccessToken: string, Activities: table<EstimationNumber: string, Id: int, Link: string, Message: string, Type: string>, Attachments: table<Id: int, Link: string, ObfuscatedFileName: string, OriginalFileName: string, Size: int, Type: string>, Client: record<AdditionalEmails: list<record>, Address: string, ClientCountryId: int, ClientCurrencyId: int, CompanyRegistrationNumber: string, CreatedOn: string, DefaultDueDateInDays: int, Email: string, Id: int, Name: string, PhoneNumber: string, UiLanguageId: int, Vat: string>, ClonedFromId: int, Currency: record<Code: string, Id: int, Name: string, Symbol: string, Value: string>, DiscountAmount: float, ExpiresOn: string, Id: int, IssuedOn: string, Items: table<Cost: float, Description: string, DiscountAmount: float, DiscountPercentage: float, Id: int, Quantity: float, SubTotalAmount: float, TaxAmount: float, TaxId: int, TaxPercentage: float, TotalAmount: float, WorkTypeId: int>, Notes: string, Number: string, PaymentGateways: table<Name: string>, PoNumber: string, Status: string, SubTotalAmount: float, TaxAmount: float, Terms: string, TotalAmount: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
@@ -646,9 +668,6 @@ export def "estimation-api-details" [
 #
 # POST /api/estimation/new
 # operationId: EstimationApi_New
-# --Attachments item shape: {Link?: string, ObfuscatedFileName?: string, OriginalFileName?: string, Size?: int, Type?: "External"|"Uploaded"}
-# --Items item shape: {Cost?: float, Description?: string, DiscountPercentage?: float, Quantity?: float, TaxId?: int, TaxPercentage?: float, WorkTypeId?: int}
-# --PaymentGateways item shape: {Name?: string}
 export def "estimation-api-new" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -675,7 +694,7 @@ export def "estimation-api-new" [
   --po-number: string # Unique number generated by the buyer
   --status: string@status-completer # Indicate the status of the estimation (paid/unpaid/overdue)
   --terms: string # Terms of agreement
-]: any -> record<AccessToken: string, Activities: table<EstimationNumber: string, Id: int, Link: string, Message: string, Type: string>, Attachments: table<Id: int, Link: string, ObfuscatedFileName: string, OriginalFileName: string, Size: int, Type: string>, Client: record<AdditionalEmails: list<record>, Address: string, ClientCountryId: int, ClientCurrencyId: int, CompanyRegistrationNumber: string, CreatedOn: string, DefaultDueDateInDays: int, Email: string, Id: int, Name: string, PhoneNumber: string, UiLanguageId: int, Vat: string>, ClonedFromId: int, Currency: record<Code: string, Id: int, Name: string, Symbol: string, Value: string>, DiscountAmount: float, ExpiresOn: string, Id: int, IssuedOn: string, Items: table<Cost: float, Description: string, DiscountAmount: float, DiscountPercentage: float, Id: int, Quantity: float, SubTotalAmount: float, TaxAmount: float, TaxId: int, TaxPercentage: float, TotalAmount: float, WorkTypeId: int>, Notes: string, Number: string, PaymentGateways: table<Name: string>, PoNumber: string, Status: string, SubTotalAmount: float, TaxAmount: float, Terms: string, TotalAmount: float> {
+]: any -> oneof<record<AccessToken: string, Activities: table<EstimationNumber: string, Id: int, Link: string, Message: string, Type: string>, Attachments: table<Id: int, Link: string, ObfuscatedFileName: string, OriginalFileName: string, Size: int, Type: string>, Client: record<AdditionalEmails: list<record>, Address: string, ClientCountryId: int, ClientCurrencyId: int, CompanyRegistrationNumber: string, CreatedOn: string, DefaultDueDateInDays: int, Email: string, Id: int, Name: string, PhoneNumber: string, UiLanguageId: int, Vat: string>, ClonedFromId: int, Currency: record<Code: string, Id: int, Name: string, Symbol: string, Value: string>, DiscountAmount: float, ExpiresOn: string, Id: int, IssuedOn: string, Items: table<Cost: float, Description: string, DiscountAmount: float, DiscountPercentage: float, Id: int, Quantity: float, SubTotalAmount: float, TaxAmount: float, TaxId: int, TaxPercentage: float, TotalAmount: float, WorkTypeId: int>, Notes: string, Number: string, PaymentGateways: table<Name: string>, PoNumber: string, Status: string, SubTotalAmount: float, TaxAmount: float, Terms: string, TotalAmount: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
@@ -800,9 +819,6 @@ export def "estimation-api-status" [
 #
 # POST /api/estimation/update
 # operationId: EstimationApi_Update
-# --Attachments item shape: {Id?: int, Link?: string, ObfuscatedFileName?: string, OriginalFileName?: string, Size?: int, Type?: "External"|"Uploaded"}
-# --Items item shape: {Cost?: float, Description?: string, DiscountPercentage?: float, Id?: int, Quantity?: float, TaxId?: int, TaxPercentage?: float, WorkTypeId?: int}
-# --PaymentGateways item shape: {Name?: string}
 export def "estimation-api-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -830,7 +846,7 @@ export def "estimation-api-update" [
   --po-number: string # Unique number generated by the buyer
   --status: string@status-completer # Indicate the status of the estimation (paid/unpaid/overdue)
   --terms: string # Terms of agreement
-]: any -> record<AccessToken: string, Activities: table<EstimationNumber: string, Id: int, Link: string, Message: string, Type: string>, Attachments: table<Id: int, Link: string, ObfuscatedFileName: string, OriginalFileName: string, Size: int, Type: string>, Client: record<AdditionalEmails: list<record>, Address: string, ClientCountryId: int, ClientCurrencyId: int, CompanyRegistrationNumber: string, CreatedOn: string, DefaultDueDateInDays: int, Email: string, Id: int, Name: string, PhoneNumber: string, UiLanguageId: int, Vat: string>, ClonedFromId: int, Currency: record<Code: string, Id: int, Name: string, Symbol: string, Value: string>, DiscountAmount: float, ExpiresOn: string, Id: int, IssuedOn: string, Items: table<Cost: float, Description: string, DiscountAmount: float, DiscountPercentage: float, Id: int, Quantity: float, SubTotalAmount: float, TaxAmount: float, TaxId: int, TaxPercentage: float, TotalAmount: float, WorkTypeId: int>, Notes: string, Number: string, PaymentGateways: table<Name: string>, PoNumber: string, Status: string, SubTotalAmount: float, TaxAmount: float, Terms: string, TotalAmount: float> {
+]: any -> oneof<record<AccessToken: string, Activities: table<EstimationNumber: string, Id: int, Link: string, Message: string, Type: string>, Attachments: table<Id: int, Link: string, ObfuscatedFileName: string, OriginalFileName: string, Size: int, Type: string>, Client: record<AdditionalEmails: list<record>, Address: string, ClientCountryId: int, ClientCurrencyId: int, CompanyRegistrationNumber: string, CreatedOn: string, DefaultDueDateInDays: int, Email: string, Id: int, Name: string, PhoneNumber: string, UiLanguageId: int, Vat: string>, ClonedFromId: int, Currency: record<Code: string, Id: int, Name: string, Symbol: string, Value: string>, DiscountAmount: float, ExpiresOn: string, Id: int, IssuedOn: string, Items: table<Cost: float, Description: string, DiscountAmount: float, DiscountPercentage: float, Id: int, Quantity: float, SubTotalAmount: float, TaxAmount: float, TaxId: int, TaxPercentage: float, TotalAmount: float, WorkTypeId: int>, Notes: string, Number: string, PaymentGateways: table<Name: string>, PoNumber: string, Status: string, SubTotalAmount: float, TaxAmount: float, Terms: string, TotalAmount: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
@@ -875,7 +891,7 @@ export def "estimation-api-uri" [
   --id: int # required, format: int32
   --x-auth-key: string # required, default: [authentication key]
   --x-auth-secret: string # required, default: [authentication secret]
-]: nothing -> record<Link: string> {
+]: nothing -> oneof<record<Link: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
@@ -918,7 +934,7 @@ export def "general-api-countries" [
   --accept: string@accept-completer # Response content type
   --x-auth-key: string # required, default: [authentication key]
   --x-auth-secret: string # required, default: [authentication secret]
-]: nothing -> table<Id: int, Name: string, Value: string> {
+]: nothing -> oneof<table<Id: int, Name: string, Value: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
   let x_auth_key = ($x_auth_key | default "[authentication key]")
@@ -959,7 +975,7 @@ export def "general-api-currencies" [
   --accept: string@accept-completer # Response content type
   --x-auth-key: string # required, default: [authentication key]
   --x-auth-secret: string # required, default: [authentication secret]
-]: nothing -> table<Code: string, Id: int, Name: string, Symbol: string, Value: string> {
+]: nothing -> oneof<table<Code: string, Id: int, Name: string, Symbol: string, Value: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
   let x_auth_key = ($x_auth_key | default "[authentication key]")
@@ -1000,7 +1016,7 @@ export def "general-api-date-formats" [
   --accept: string@accept-completer # Response content type
   --x-auth-key: string # required, default: [authentication key]
   --x-auth-secret: string # required, default: [authentication secret]
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
   let x_auth_key = ($x_auth_key | default "[authentication key]")
@@ -1041,7 +1057,7 @@ export def "general-api-ui-languages" [
   --accept: string@accept-completer # Response content type
   --x-auth-key: string # required, default: [authentication key]
   --x-auth-secret: string # required, default: [authentication secret]
-]: nothing -> table<Id: int, Name: string, UiCulture: string> {
+]: nothing -> oneof<table<Id: int, Name: string, UiCulture: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
   let x_auth_key = ($x_auth_key | default "[authentication key]")
@@ -1084,7 +1100,7 @@ export def "invoice-api-all" [
   --query-options-page-size: int # format: int32
   --x-auth-key: string # required, default: [authentication key]
   --x-auth-secret: string # required, default: [authentication secret]
-]: nothing -> record<Count: int, ErrorMessages: table<Code: string, FaultMessage: string, Group: string, UserVisibleMessage: string>, IsFaulted: bool, Result: table<AccessToken: string, Client: record, ClonedFromId: int, Currency: record, DiscountAmount: float, Duedate: string, EnablePartialPayments: bool, Id: int, InvoiceCategoryId: int, IssuedOn: string, Notes: string, Number: string, PoNumber: string, RecurringProfile: record, RecurringProfileId: int, ShouldSendReminders: bool, Status: string, SubTotalAmount: float, TaxAmount: float, Terms: string, TotalAmount: float>, TotalCount: int> {
+]: nothing -> oneof<record<Count: int, ErrorMessages: table<Code: string, FaultMessage: string, Group: string, UserVisibleMessage: string>, IsFaulted: bool, Result: table<AccessToken: string, Client: record, ClonedFromId: int, Currency: record, DiscountAmount: float, Duedate: string, EnablePartialPayments: bool, Id: int, InvoiceCategoryId: int, IssuedOn: string, Notes: string, Number: string, PoNumber: string, RecurringProfile: record, RecurringProfileId: int, ShouldSendReminders: bool, Status: string, SubTotalAmount: float, TaxAmount: float, Terms: string, TotalAmount: float>, TotalCount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
   let x_auth_key = ($x_auth_key | default "[authentication key]")
@@ -1126,7 +1142,7 @@ export def "get-api-invoice-allcategories" [
   --query: string
   --x-auth-key: string # required, default: [authentication key]
   --x-auth-secret: string # required, default: [authentication secret]
-]: nothing -> record<Count: int, ErrorMessages: table<Code: string, FaultMessage: string, Group: string, UserVisibleMessage: string>, IsFaulted: bool, Result: table<Id: int, Name: string>, TotalCount: int> {
+]: nothing -> oneof<record<Count: int, ErrorMessages: table<Code: string, FaultMessage: string, Group: string, UserVisibleMessage: string>, IsFaulted: bool, Result: table<Id: int, Name: string>, TotalCount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
   let x_auth_key = ($x_auth_key | default "[authentication key]")
@@ -1304,7 +1320,7 @@ export def "invoice-api-details" [
   --id: int # required, format: int32
   --x-auth-key: string # required, default: [authentication key]
   --x-auth-secret: string # required, default: [authentication secret]
-]: nothing -> record<AccessToken: string, Activities: table<Id: int, InvoiceNumber: string, Link: string, Message: string, Type: string>, Attachments: table<Id: int, Link: string, ObfuscatedFileName: string, OriginalFileName: string, Size: int, Type: string>, Client: record<AdditionalEmails: list<record>, Address: string, ClientCountryId: int, ClientCurrencyId: int, CompanyRegistrationNumber: string, CreatedOn: string, DefaultDueDateInDays: int, Email: string, Id: int, Name: string, PhoneNumber: string, UiLanguageId: int, Vat: string>, ClonedFromId: int, Currency: record<Code: string, Id: int, Name: string, Symbol: string, Value: string>, DiscountAmount: float, Duedate: string, EnablePartialPayments: bool, Id: int, InvoiceCategoryId: int, IssuedOn: string, Items: table<Cost: float, Description: string, DiscountAmount: float, DiscountPercentage: float, Id: int, Quantity: float, SubTotalAmount: float, TaxAmount: float, TaxId: int, TaxPercentage: float, TotalAmount: float, WorkTypeId: int>, Notes: string, Number: string, PaymentGateways: table<Name: string>, Payments: table<Amount: float, Id: int, IsAutomatic: bool, Note: string, PaidOn: string, ReferenceId: string, Type: string>, PoNumber: string, RecurringProfile: record<DayOfMonth: int, DayOfWeek: string, DueDateInDays: int, EndOfRecurrance: string, Month: int, RecurrancePattern: string, RecurranceValue: int, StartOfRecurrance: string, Status: string, Title: string>, RecurringProfileId: int, ShouldSendReminders: bool, Status: string, SubTotalAmount: float, TaxAmount: float, Terms: string, TotalAmount: float> {
+]: nothing -> oneof<record<AccessToken: string, Activities: table<Id: int, InvoiceNumber: string, Link: string, Message: string, Type: string>, Attachments: table<Id: int, Link: string, ObfuscatedFileName: string, OriginalFileName: string, Size: int, Type: string>, Client: record<AdditionalEmails: list<record>, Address: string, ClientCountryId: int, ClientCurrencyId: int, CompanyRegistrationNumber: string, CreatedOn: string, DefaultDueDateInDays: int, Email: string, Id: int, Name: string, PhoneNumber: string, UiLanguageId: int, Vat: string>, ClonedFromId: int, Currency: record<Code: string, Id: int, Name: string, Symbol: string, Value: string>, DiscountAmount: float, Duedate: string, EnablePartialPayments: bool, Id: int, InvoiceCategoryId: int, IssuedOn: string, Items: table<Cost: float, Description: string, DiscountAmount: float, DiscountPercentage: float, Id: int, Quantity: float, SubTotalAmount: float, TaxAmount: float, TaxId: int, TaxPercentage: float, TotalAmount: float, WorkTypeId: int>, Notes: string, Number: string, PaymentGateways: table<Name: string>, Payments: table<Amount: float, Id: int, IsAutomatic: bool, Note: string, PaidOn: string, ReferenceId: string, Type: string>, PoNumber: string, RecurringProfile: record<DayOfMonth: int, DayOfWeek: string, DueDateInDays: int, EndOfRecurrance: string, Month: int, RecurrancePattern: string, RecurranceValue: int, StartOfRecurrance: string, Status: string, Title: string>, RecurringProfileId: int, ShouldSendReminders: bool, Status: string, SubTotalAmount: float, TaxAmount: float, Terms: string, TotalAmount: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
@@ -1334,10 +1350,6 @@ export def "invoice-api-details" [
 #
 # POST /api/invoice/new
 # operationId: InvoiceApi_New
-# --Attachments item shape: {Link?: string, ObfuscatedFileName?: string, OriginalFileName?: string, Size?: int, Type?: "External"|"Uploaded"}
-# --Items item shape: {Cost?: float, Description?: string, DiscountPercentage?: float, Quantity?: float, TaxId?: int, TaxPercentage?: float, WorkTypeId?: int}
-# --PaymentGateways item shape: {Name?: string}
-# --RecurringProfile shape: {DayOfMonth?: int, DayOfWeek?: "Sunday"|"Monday"|"Tuesday"|"Wednesday"|"Thursday"|"Friday"|"Saturday", DueDateInDays?: int, EndOfRecurrance?: string, Month?: int, RecurrancePattern?: "Daily"|"Weekly"|"Monthly"|"Yearly", RecurranceValue?: int, StartOfRecurrance?: string, Status?: "Pending"|"Active"|"Cancelled"|"Finished", Title?: string}
 export def "invoice-api-new" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1368,7 +1380,7 @@ export def "invoice-api-new" [
   --should-send-reminders: oneof<nothing, bool> # Should send email reminders to client?
   --status: string@status-completer-1 # Indicate the status of the invoice (paid/unpaid/overdue)
   --terms: string # Terms of agreement
-]: any -> record<AccessToken: string, Activities: table<Id: int, InvoiceNumber: string, Link: string, Message: string, Type: string>, Attachments: table<Id: int, Link: string, ObfuscatedFileName: string, OriginalFileName: string, Size: int, Type: string>, Client: record<AdditionalEmails: list<record>, Address: string, ClientCountryId: int, ClientCurrencyId: int, CompanyRegistrationNumber: string, CreatedOn: string, DefaultDueDateInDays: int, Email: string, Id: int, Name: string, PhoneNumber: string, UiLanguageId: int, Vat: string>, ClonedFromId: int, Currency: record<Code: string, Id: int, Name: string, Symbol: string, Value: string>, DiscountAmount: float, Duedate: string, EnablePartialPayments: bool, Id: int, InvoiceCategoryId: int, IssuedOn: string, Items: table<Cost: float, Description: string, DiscountAmount: float, DiscountPercentage: float, Id: int, Quantity: float, SubTotalAmount: float, TaxAmount: float, TaxId: int, TaxPercentage: float, TotalAmount: float, WorkTypeId: int>, Notes: string, Number: string, PaymentGateways: table<Name: string>, Payments: table<Amount: float, Id: int, IsAutomatic: bool, Note: string, PaidOn: string, ReferenceId: string, Type: string>, PoNumber: string, RecurringProfile: record<DayOfMonth: int, DayOfWeek: string, DueDateInDays: int, EndOfRecurrance: string, Month: int, RecurrancePattern: string, RecurranceValue: int, StartOfRecurrance: string, Status: string, Title: string>, RecurringProfileId: int, ShouldSendReminders: bool, Status: string, SubTotalAmount: float, TaxAmount: float, Terms: string, TotalAmount: float> {
+]: any -> oneof<record<AccessToken: string, Activities: table<Id: int, InvoiceNumber: string, Link: string, Message: string, Type: string>, Attachments: table<Id: int, Link: string, ObfuscatedFileName: string, OriginalFileName: string, Size: int, Type: string>, Client: record<AdditionalEmails: list<record>, Address: string, ClientCountryId: int, ClientCurrencyId: int, CompanyRegistrationNumber: string, CreatedOn: string, DefaultDueDateInDays: int, Email: string, Id: int, Name: string, PhoneNumber: string, UiLanguageId: int, Vat: string>, ClonedFromId: int, Currency: record<Code: string, Id: int, Name: string, Symbol: string, Value: string>, DiscountAmount: float, Duedate: string, EnablePartialPayments: bool, Id: int, InvoiceCategoryId: int, IssuedOn: string, Items: table<Cost: float, Description: string, DiscountAmount: float, DiscountPercentage: float, Id: int, Quantity: float, SubTotalAmount: float, TaxAmount: float, TaxId: int, TaxPercentage: float, TotalAmount: float, WorkTypeId: int>, Notes: string, Number: string, PaymentGateways: table<Name: string>, Payments: table<Amount: float, Id: int, IsAutomatic: bool, Note: string, PaidOn: string, ReferenceId: string, Type: string>, PoNumber: string, RecurringProfile: record<DayOfMonth: int, DayOfWeek: string, DueDateInDays: int, EndOfRecurrance: string, Month: int, RecurrancePattern: string, RecurranceValue: int, StartOfRecurrance: string, Status: string, Title: string>, RecurringProfileId: int, ShouldSendReminders: bool, Status: string, SubTotalAmount: float, TaxAmount: float, Terms: string, TotalAmount: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1412,7 +1424,7 @@ export def "post-api-invoice-newcategory" [
   --x-auth-key: string # required, default: [authentication key]
   --x-auth-secret: string # required, default: [authentication secret]
   --name: string # Category name
-]: any -> record<Id: int, Name: string> {
+]: any -> oneof<record<Id: int, Name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1458,7 +1470,7 @@ export def "invoice-api-pdf" [
   --signed-version: oneof<nothing, bool>
   --x-auth-key: string # required, default: [authentication key]
   --x-auth-secret: string # required, default: [authentication secret]
-]: nothing -> record<Link: string> {
+]: nothing -> oneof<record<Link: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
@@ -1627,10 +1639,6 @@ export def "invoice-api-status" [
 #
 # POST /api/invoice/update
 # operationId: InvoiceApi_Update
-# --Attachments item shape: {Id?: int, Link?: string, ObfuscatedFileName?: string, OriginalFileName?: string, Size?: int, Type?: "External"|"Uploaded"}
-# --Items item shape: {Cost?: float, Description?: string, DiscountPercentage?: float, Id?: int, Quantity?: float, TaxId?: int, TaxPercentage?: float, WorkTypeId?: int}
-# --PaymentGateways item shape: {Name?: string}
-# --RecurringProfile shape: {DayOfMonth?: int, DayOfWeek?: "Sunday"|"Monday"|"Tuesday"|"Wednesday"|"Thursday"|"Friday"|"Saturday", DueDateInDays?: int, EndOfRecurrance?: string, Month?: int, RecurrancePattern?: "Daily"|"Weekly"|"Monthly"|"Yearly", RecurranceValue?: int, StartOfRecurrance?: string, Status?: "Pending"|"Active"|"Cancelled"|"Finished", Title?: string}
 export def "invoice-api-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1662,7 +1670,7 @@ export def "invoice-api-update" [
   --should-send-reminders: oneof<nothing, bool> # Should send email reminders to client?
   --status: string@status-completer-1 # Indicate the status of the invoice (paid/unpaid/overdue)
   --terms: string # Terms of agreement
-]: any -> record<AccessToken: string, Activities: table<Id: int, InvoiceNumber: string, Link: string, Message: string, Type: string>, Attachments: table<Id: int, Link: string, ObfuscatedFileName: string, OriginalFileName: string, Size: int, Type: string>, Client: record<AdditionalEmails: list<record>, Address: string, ClientCountryId: int, ClientCurrencyId: int, CompanyRegistrationNumber: string, CreatedOn: string, DefaultDueDateInDays: int, Email: string, Id: int, Name: string, PhoneNumber: string, UiLanguageId: int, Vat: string>, ClonedFromId: int, Currency: record<Code: string, Id: int, Name: string, Symbol: string, Value: string>, DiscountAmount: float, Duedate: string, EnablePartialPayments: bool, Id: int, InvoiceCategoryId: int, IssuedOn: string, Items: table<Cost: float, Description: string, DiscountAmount: float, DiscountPercentage: float, Id: int, Quantity: float, SubTotalAmount: float, TaxAmount: float, TaxId: int, TaxPercentage: float, TotalAmount: float, WorkTypeId: int>, Notes: string, Number: string, PaymentGateways: table<Name: string>, Payments: table<Amount: float, Id: int, IsAutomatic: bool, Note: string, PaidOn: string, ReferenceId: string, Type: string>, PoNumber: string, RecurringProfile: record<DayOfMonth: int, DayOfWeek: string, DueDateInDays: int, EndOfRecurrance: string, Month: int, RecurrancePattern: string, RecurranceValue: int, StartOfRecurrance: string, Status: string, Title: string>, RecurringProfileId: int, ShouldSendReminders: bool, Status: string, SubTotalAmount: float, TaxAmount: float, Terms: string, TotalAmount: float> {
+]: any -> oneof<record<AccessToken: string, Activities: table<Id: int, InvoiceNumber: string, Link: string, Message: string, Type: string>, Attachments: table<Id: int, Link: string, ObfuscatedFileName: string, OriginalFileName: string, Size: int, Type: string>, Client: record<AdditionalEmails: list<record>, Address: string, ClientCountryId: int, ClientCurrencyId: int, CompanyRegistrationNumber: string, CreatedOn: string, DefaultDueDateInDays: int, Email: string, Id: int, Name: string, PhoneNumber: string, UiLanguageId: int, Vat: string>, ClonedFromId: int, Currency: record<Code: string, Id: int, Name: string, Symbol: string, Value: string>, DiscountAmount: float, Duedate: string, EnablePartialPayments: bool, Id: int, InvoiceCategoryId: int, IssuedOn: string, Items: table<Cost: float, Description: string, DiscountAmount: float, DiscountPercentage: float, Id: int, Quantity: float, SubTotalAmount: float, TaxAmount: float, TaxId: int, TaxPercentage: float, TotalAmount: float, WorkTypeId: int>, Notes: string, Number: string, PaymentGateways: table<Name: string>, Payments: table<Amount: float, Id: int, IsAutomatic: bool, Note: string, PaidOn: string, ReferenceId: string, Type: string>, PoNumber: string, RecurringProfile: record<DayOfMonth: int, DayOfWeek: string, DueDateInDays: int, EndOfRecurrance: string, Month: int, RecurrancePattern: string, RecurranceValue: int, StartOfRecurrance: string, Status: string, Title: string>, RecurringProfileId: int, ShouldSendReminders: bool, Status: string, SubTotalAmount: float, TaxAmount: float, Terms: string, TotalAmount: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1707,7 +1715,7 @@ export def "post-api-invoice-updatecategory" [
   --x-auth-secret: string # required, default: [authentication secret]
   --id: int # Entity id (format: int32)
   --name: string # Category name
-]: any -> record<Id: int, Name: string> {
+]: any -> oneof<record<Id: int, Name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1752,7 +1760,7 @@ export def "invoice-api-uri" [
   --id: int # required, format: int32
   --x-auth-key: string # required, default: [authentication key]
   --x-auth-secret: string # required, default: [authentication secret]
-]: nothing -> record<Link: string> {
+]: nothing -> oneof<record<Link: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
@@ -1797,7 +1805,7 @@ export def "order-api-all" [
   --query-options-page-size: int # format: int32
   --x-auth-key: string # required, default: [authentication key]
   --x-auth-secret: string # required, default: [authentication secret]
-]: nothing -> record<Count: int, ErrorMessages: table<Code: string, FaultMessage: string, Group: string, UserVisibleMessage: string>, IsFaulted: bool, Result: table<AccessToken: string, AfterPaymentDescription: string, CouponCode: string, Currency: record, CurrencyId: int, Description: string, DiscountAmount: float, Id: int, Name: string, Note: string, OrderBillingDetails: record, OrderShippingDetails: record, ProductId: int, Referral: string, ShippingAmount: float, ShippingDescription: string, Status: string, SubTotalAmount: float, TaxAmount: float, TotalAmount: float, TotalWithShipping: float, WhatHappensNextDescription: string>, TotalCount: int> {
+]: nothing -> oneof<record<Count: int, ErrorMessages: table<Code: string, FaultMessage: string, Group: string, UserVisibleMessage: string>, IsFaulted: bool, Result: table<AccessToken: string, AfterPaymentDescription: string, CouponCode: string, Currency: record, CurrencyId: int, Description: string, DiscountAmount: float, Id: int, Name: string, Note: string, OrderBillingDetails: record, OrderShippingDetails: record, ProductId: int, Referral: string, ShippingAmount: float, ShippingDescription: string, Status: string, SubTotalAmount: float, TaxAmount: float, TotalAmount: float, TotalWithShipping: float, WhatHappensNextDescription: string>, TotalCount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
   let x_auth_key = ($x_auth_key | default "[authentication key]")
@@ -1982,7 +1990,7 @@ export def "order-api-details" [
   --id: int # required, format: int32
   --x-auth-key: string # required, default: [authentication key]
   --x-auth-secret: string # required, default: [authentication secret]
-]: nothing -> record<AccessToken: string, AfterPaymentDescription: string, Attachments: table<Link: string, ObfuscatedFileName: string, OriginalFileName: string, Size: int, Type: string>, CouponCode: string, Currency: record<Code: string, Id: int, Name: string, Symbol: string, Value: string>, CurrencyId: int, Description: string, DiscountAmount: float, Id: int, Items: table<Cost: float, Description: string, ProductItemId: int, Quantity: float, ReferenceId: string, SubTotalAmount: float, TaxAmount: float, TaxId: int, TaxPercentage: float, TotalAmount: float, WorkTypeId: int>, Name: string, Note: string, OrderBillingDetails: record<Address: string, CountryId: int, Email: string, Name: string, PhoneNumber: string>, OrderShippingDetails: record<Address: string, CountryId: int, Email: string, Name: string, PhoneNumber: string>, ProductId: int, Referral: string, ShippingAmount: float, ShippingDescription: string, Status: string, SubTotalAmount: float, TaxAmount: float, TotalAmount: float, TotalWithShipping: float, WhatHappensNextDescription: string> {
+]: nothing -> oneof<record<AccessToken: string, AfterPaymentDescription: string, Attachments: table<Link: string, ObfuscatedFileName: string, OriginalFileName: string, Size: int, Type: string>, CouponCode: string, Currency: record<Code: string, Id: int, Name: string, Symbol: string, Value: string>, CurrencyId: int, Description: string, DiscountAmount: float, Id: int, Items: table<Cost: float, Description: string, ProductItemId: int, Quantity: float, ReferenceId: string, SubTotalAmount: float, TaxAmount: float, TaxId: int, TaxPercentage: float, TotalAmount: float, WorkTypeId: int>, Name: string, Note: string, OrderBillingDetails: record<Address: string, CountryId: int, Email: string, Name: string, PhoneNumber: string>, OrderShippingDetails: record<Address: string, CountryId: int, Email: string, Name: string, PhoneNumber: string>, ProductId: int, Referral: string, ShippingAmount: float, ShippingDescription: string, Status: string, SubTotalAmount: float, TaxAmount: float, TotalAmount: float, TotalWithShipping: float, WhatHappensNextDescription: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
@@ -2012,10 +2020,6 @@ export def "order-api-details" [
 #
 # POST /api/order/new
 # operationId: OrderApi_New
-# --Attachments item shape: {Link?: string, ObfuscatedFileName?: string, OriginalFileName?: string, Size?: int, Type?: "External"|"Uploaded"}
-# --Items item shape: {Cost?: float, Description?: string, ProductItemId?: int, Quantity?: float, ReferenceId?: string, SubTotalAmount?: float, TaxAmount?: float, TaxId?: int, TaxPercentage?: float, TotalAmount?: float, WorkTypeId?: int}
-# --OrderBillingDetails shape: {Address?: string, CountryId?: int, Email?: string, Name?: string, PhoneNumber?: string}
-# --OrderShippingDetails shape: {Address?: string, CountryId?: int, Email?: string, Name?: string, PhoneNumber?: string}
 export def "order-api-new" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2093,7 +2097,7 @@ export def "payment-api-supported" [
   --accept: string@accept-completer # Response content type
   --x-auth-key: string # required, default: [authentication key]
   --x-auth-secret: string # required, default: [authentication secret]
-]: nothing -> table<Name: string, SupportedCurrencies: list<record>> {
+]: nothing -> oneof<table<Name: string, SupportedCurrencies: list<record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
   let x_auth_key = ($x_auth_key | default "[authentication key]")
@@ -2136,7 +2140,7 @@ export def "payment-link-api-all" [
   --query-options-page-size: int # format: int32
   --x-auth-key: string # required, default: [authentication key]
   --x-auth-secret: string # required, default: [authentication secret]
-]: nothing -> record<Count: int, ErrorMessages: table<Code: string, FaultMessage: string, Group: string, UserVisibleMessage: string>, IsFaulted: bool, Result: table<AccessToken: string, Client: record, ClientId: int, Currency: record, CurrencyId: int, DiscountAmount: float, Id: int, Invoice: record, Items: list, Number: string, SubTotalAmount: float, TaxAmount: float, TotalAmount: float, User: record, UserId: int>, TotalCount: int> {
+]: nothing -> oneof<record<Count: int, ErrorMessages: table<Code: string, FaultMessage: string, Group: string, UserVisibleMessage: string>, IsFaulted: bool, Result: table<AccessToken: string, Client: record, ClientId: int, Currency: record, CurrencyId: int, DiscountAmount: float, Id: int, Invoice: record, Items: list, Number: string, SubTotalAmount: float, TaxAmount: float, TotalAmount: float, User: record, UserId: int>, TotalCount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
   let x_auth_key = ($x_auth_key | default "[authentication key]")
@@ -2165,11 +2169,6 @@ export def "payment-link-api-all" [
 #
 # POST /api/paymentlink/delete
 # operationId: PaymentLinkApi_Delete
-# --Client shape: {Address?: string, ClientCountryId?: int, ClientCurrencyId?: int, CompanyRegistrationNumber?: string, DefaultDueDateInDays?: int, Email?: string, Id?: int, Name?: string, PhoneNumber?: string, UiLanguageId?: int, UserId?: int, Vat?: string}
-# --Currency shape: {Code?: string, Id?: int, Name?: string, Symbol?: string, Value?: string}
-# --Invoice shape: {AccessToken?: string, Activities?: list, Attachments?: list, ClientId?: int, ClonedFromId?: int, CurrencyId?: int, DiscountAmount?: float, Duedate?: string, EnablePartialPayments?: bool, EstimationId?: int, Id?: int, InvoiceCategoryId?: int, IsDigitallySigned?: bool, IssuedOn?: string, Items?: list, Notes?: string, Number?: string, OrderId?: int, PaymentGateways?: list, PaymentLinkId?: int, Payments?: list, PoNumber?: string, RecurringProfileId?: int, ShouldSendReminders?: bool, ... (6 more fields)}
-# --Items item shape: {Cost?: float, DiscountAmount?: float, DiscountPercentage?: float, Id?: int, PaymentLinkId?: int, Quantity?: float, SubTotalAmount?: float, Tax?: record, TaxAmount?: float, TaxId?: int, TaxPercentage?: float, TotalAmount?: float, WorkType?: record, WorkTypeId?: int}
-# --User shape: {ActionNotificationsLastReadOn?: string, Email?: string, ExternalConnections?: list, HasBeenOnboarded?: bool, Id?: int, IsLocked?: bool, IsVerified?: bool, KnowledgeNotificationsLastReadOn?: string, LastSeenOn?: string, Name?: string, Password?: string, PasswordSalt?: string, ReferralPath?: string, ReferredUsers?: int, ReferrerKey?: string, Settings?: record, Status?: "Normal"|"Fraudlent"|"Locked", SubscriptionPlan?: record, Type?: "Anonymous"|"Customer"|"SystemAdministrator"|"Collaborator", ... (3 more fields)}
 export def "payment-link-api-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2229,11 +2228,6 @@ export def "payment-link-api-delete" [
 #
 # POST /api/paymentlink/new
 # operationId: PaymentLinkApi_New
-# --Client shape: {Address?: string, ClientCountryId?: int, ClientCurrencyId?: int, CompanyRegistrationNumber?: string, DefaultDueDateInDays?: int, Email?: string, Id?: int, Name?: string, PhoneNumber?: string, UiLanguageId?: int, UserId?: int, Vat?: string}
-# --Currency shape: {Code?: string, Id?: int, Name?: string, Symbol?: string, Value?: string}
-# --Invoice shape: {AccessToken?: string, Activities?: list, Attachments?: list, ClientId?: int, ClonedFromId?: int, CurrencyId?: int, DiscountAmount?: float, Duedate?: string, EnablePartialPayments?: bool, EstimationId?: int, Id?: int, InvoiceCategoryId?: int, IsDigitallySigned?: bool, IssuedOn?: string, Items?: list, Notes?: string, Number?: string, OrderId?: int, PaymentGateways?: list, PaymentLinkId?: int, Payments?: list, PoNumber?: string, RecurringProfileId?: int, ShouldSendReminders?: bool, ... (6 more fields)}
-# --Items item shape: {Cost?: float, DiscountAmount?: float, DiscountPercentage?: float, Id?: int, PaymentLinkId?: int, Quantity?: float, SubTotalAmount?: float, Tax?: record, TaxAmount?: float, TaxId?: int, TaxPercentage?: float, TotalAmount?: float, WorkType?: record, WorkTypeId?: int}
-# --User shape: {ActionNotificationsLastReadOn?: string, Email?: string, ExternalConnections?: list, HasBeenOnboarded?: bool, Id?: int, IsLocked?: bool, IsVerified?: bool, KnowledgeNotificationsLastReadOn?: string, LastSeenOn?: string, Name?: string, Password?: string, PasswordSalt?: string, ReferralPath?: string, ReferredUsers?: int, ReferrerKey?: string, Settings?: record, Status?: "Normal"|"Fraudlent"|"Locked", SubscriptionPlan?: record, Type?: "Anonymous"|"Customer"|"SystemAdministrator"|"Collaborator", ... (3 more fields)}
 export def "payment-link-api-new" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2307,7 +2301,7 @@ export def "payment-link-api-uri" [
   --id: int # required, format: int32
   --x-auth-key: string # required, default: [authentication key]
   --x-auth-secret: string # required, default: [authentication secret]
-]: nothing -> record<Link: string> {
+]: nothing -> oneof<record<Link: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
@@ -2352,7 +2346,7 @@ export def "product-api-all" [
   --query-options-page-size: int # format: int32
   --x-auth-key: string # required, default: [authentication key]
   --x-auth-secret: string # required, default: [authentication secret]
-]: nothing -> record<Count: int, ErrorMessages: table<Code: string, FaultMessage: string, Group: string, UserVisibleMessage: string>, IsFaulted: bool, Result: table<AccessToken: string, AfterPaymentDescription: string, ButtonCallToAction: string, Currency: record, CurrencyId: int, Description: string, Id: int, IsFeatured: bool, Name: string, ShippingAmount: float, ShippingDescription: string, Status: string, SubTotalAmount: float, TotalAmount: float, TotalWithShipping: float, WhatHappensNextDescription: string>, TotalCount: int> {
+]: nothing -> oneof<record<Count: int, ErrorMessages: table<Code: string, FaultMessage: string, Group: string, UserVisibleMessage: string>, IsFaulted: bool, Result: table<AccessToken: string, AfterPaymentDescription: string, ButtonCallToAction: string, Currency: record, CurrencyId: int, Description: string, Id: int, IsFeatured: bool, Name: string, ShippingAmount: float, ShippingDescription: string, Status: string, SubTotalAmount: float, TotalAmount: float, TotalWithShipping: float, WhatHappensNextDescription: string>, TotalCount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
   let x_auth_key = ($x_auth_key | default "[authentication key]")
@@ -2440,7 +2434,7 @@ export def "product-api-details" [
   --id: int # required, format: int32
   --x-auth-key: string # required, default: [authentication key]
   --x-auth-secret: string # required, default: [authentication secret]
-]: nothing -> record<AccessToken: string, AfterPaymentDescription: string, Attachments: table<Id: int, Link: string, ObfuscatedFileName: string, OriginalFileName: string, Size: int, Type: string>, ButtonCallToAction: string, Coupons: table<Code: string, DiscountAmount: float, DiscountPercentage: float, Id: int, ValidUntil: string>, Currency: record<Code: string, Id: int, Name: string, Symbol: string, Value: string>, CurrencyId: int, Description: string, Discounts: table<DiscountAmount: float, DiscountPercentage: float, Id: int, Name: string, ValidFrom: string, ValidTo: string>, Id: int, IsFeatured: bool, Items: table<Cost: float, Description: string, Id: int, MinimumQuantity: float, ReferenceId: string, SubTotalAmount: float, TaxAmount: float, TaxId: int, TaxPercentage: float, TotalAmount: float, WorkTypeId: int>, Name: string, PaymentGateways: table<Name: string>, ShippingAmount: float, ShippingDescription: string, Status: string, SubTotalAmount: float, TotalAmount: float, TotalWithShipping: float, WhatHappensNextDescription: string> {
+]: nothing -> oneof<record<AccessToken: string, AfterPaymentDescription: string, Attachments: table<Id: int, Link: string, ObfuscatedFileName: string, OriginalFileName: string, Size: int, Type: string>, ButtonCallToAction: string, Coupons: table<Code: string, DiscountAmount: float, DiscountPercentage: float, Id: int, ValidUntil: string>, Currency: record<Code: string, Id: int, Name: string, Symbol: string, Value: string>, CurrencyId: int, Description: string, Discounts: table<DiscountAmount: float, DiscountPercentage: float, Id: int, Name: string, ValidFrom: string, ValidTo: string>, Id: int, IsFeatured: bool, Items: table<Cost: float, Description: string, Id: int, MinimumQuantity: float, ReferenceId: string, SubTotalAmount: float, TaxAmount: float, TaxId: int, TaxPercentage: float, TotalAmount: float, WorkTypeId: int>, Name: string, PaymentGateways: table<Name: string>, ShippingAmount: float, ShippingDescription: string, Status: string, SubTotalAmount: float, TotalAmount: float, TotalWithShipping: float, WhatHappensNextDescription: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
@@ -2470,11 +2464,6 @@ export def "product-api-details" [
 #
 # POST /api/product/new
 # operationId: ProductApi_New
-# --Attachments item shape: {Id?: int, Link?: string, ObfuscatedFileName?: string, OriginalFileName?: string, Size?: int, Type?: "External"|"Uploaded"}
-# --Coupons item shape: {Code?: string, DiscountAmount?: float, DiscountPercentage?: float, Id?: int, ValidUntil?: string}
-# --Discounts item shape: {DiscountAmount?: float, DiscountPercentage?: float, Id?: int, Name?: string, ValidFrom?: string, ValidTo?: string}
-# --Items item shape: {Cost?: float, Description?: string, Id?: int, MinimumQuantity?: float, ReferenceId?: string, SubTotalAmount?: float, TaxAmount?: float, TaxId?: int, TaxPercentage?: float, TotalAmount?: float, WorkTypeId?: int}
-# --PaymentGateways item shape: {Name?: string}
 export def "product-api-new" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2534,11 +2523,6 @@ export def "product-api-new" [
 #
 # POST /api/product/update
 # operationId: ProductApi_Update
-# --Attachments item shape: {Id?: int, Link?: string, ObfuscatedFileName?: string, OriginalFileName?: string, Size?: int, Type?: "External"|"Uploaded"}
-# --Coupons item shape: {Code?: string, DiscountAmount?: float, DiscountPercentage?: float, Id?: int, ValidUntil?: string}
-# --Discounts item shape: {DiscountAmount?: float, DiscountPercentage?: float, Id?: int, Name?: string, ValidFrom?: string, ValidTo?: string}
-# --Items item shape: {Cost?: float, Description?: string, Id?: int, MinimumQuantity?: float, ReferenceId?: string, SubTotalAmount?: float, TaxAmount?: float, TaxId?: int, TaxPercentage?: float, TotalAmount?: float, WorkTypeId?: int}
-# --PaymentGateways item shape: {Name?: string}
 export def "product-api-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2611,7 +2595,7 @@ export def "tax-api-all" [
   --accept: string@accept-completer # Response content type
   --x-auth-key: string # required, default: [authentication key]
   --x-auth-secret: string # required, default: [authentication secret]
-]: nothing -> table<CreatedOn: string, Id: int, Name: string, Percentage: float> {
+]: nothing -> oneof<table<CreatedOn: string, Id: int, Name: string, Percentage: float>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
   let x_auth_key = ($x_auth_key | default "[authentication key]")
@@ -2789,7 +2773,7 @@ export def "work-type-api-all" [
   --accept: string@accept-completer # Response content type
   --x-auth-key: string # required, default: [authentication key]
   --x-auth-secret: string # required, default: [authentication secret]
-]: nothing -> table<CreatedOn: string, Id: int, Title: string> {
+]: nothing -> oneof<table<CreatedOn: string, Id: int, Title: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
   let x_auth_key = ($x_auth_key | default "[authentication key]")
@@ -2876,7 +2860,7 @@ export def "work-type-api-details" [
   --work-type-id: int # required, format: int32
   --x-auth-key: string # required, default: [authentication key]
   --x-auth-secret: string # required, default: [authentication secret]
-]: nothing -> record<CreatedOn: string, Id: int, Title: string> {
+]: nothing -> oneof<record<CreatedOn: string, Id: int, Title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
   if ($work_type_id == null) { error make --unspanned { msg: "required query parameter 'workTypeId' missing: pass --work-type-id" } }
@@ -2969,7 +2953,7 @@ export def "work-type-api-search" [
   --query-options-page-size: int # format: int32
   --x-auth-key: string # required, default: [authentication key]
   --x-auth-secret: string # required, default: [authentication secret]
-]: nothing -> table<CreatedOn: string, Id: int, Title: string> {
+]: nothing -> oneof<table<CreatedOn: string, Id: int, Title: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
   let x_auth_key = ($x_auth_key | default "[authentication key]")

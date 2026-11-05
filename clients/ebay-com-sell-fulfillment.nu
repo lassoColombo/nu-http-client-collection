@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -104,9 +128,9 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-orders" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-orders" "get-order" "get-shipping-fulfillments" "create-shipping-fulfillment" "get-shipping-fulfillment" "issue-refund" "get-payment-dispute" "accept-payment-dispute" "get-activities" "add-evidence" "contest-payment-dispute" "fetch-evidence-content" "update-evidence" "upload-evidence-file" "get-payment-dispute-summaries" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -143,7 +167,7 @@ export def "get-orders" [
   --limit: string # The number of orders to return per page of the result set. Use this parameter in conjunction with the offset parameter to control the pagination of the output. For example, if offset is set to 10 and limit is set to 10, the call retrieves orders 11 thru 20 from the result set. If a limit is not set, the limit defaults to 50 and returns up to 50 orders. If a requested limit is more than 200, the call fails and returns an error. Note: This feature employs a zero-based list, where the first item in the list has an offset of 0. If the orderIds parameter is included in the request, this parameter will be ignored. Maximum: 200 Default: 50
   --offset: string # Specifies the number of orders to skip in the result set before returning the first order in the paginated response. Combine offset with the limit query parameter to control the items returned in the response. For example, if you supply an offset of 0 and a limit of 10, the first page of the response contains the first 10 items from the complete list of items retrieved by the call. If offset is 10 and limit is 20, the first page of the response contains items 11-30 from the complete result set. Default: 0
   --order-ids: string # A comma-separated list of the unique identifiers of the orders to retrieve (maximum 50). If one or more order ID values are specified through the orderIds query parameter, all other query parameters will be ignored.Note: getOrders can return orders up to two years old. Do not provide the orderId for an order created more than two years in the past.
-]: nothing -> record<href: string, limit: int, next: string, offset: int, orders: table<buyer: record, buyerCheckoutNotes: string, cancelStatus: record, creationDate: string, ebayCollectAndRemitTax: bool, fulfillmentHrefs: list, fulfillmentStartInstructions: list, lastModifiedDate: string, legacyOrderId: string, lineItems: list, orderFulfillmentStatus: string, orderId: string, orderPaymentStatus: string, paymentSummary: record, pricingSummary: record, program: record, salesRecordReference: string, sellerId: string, totalFeeBasisAmount: record, totalMarketplaceFee: record>, prev: string, total: int, warnings: table<category: string, domain: string, errorId: int, inputRefIds: list, longMessage: string, message: string, outputRefIds: list, parameters: list, subdomain: string>> {
+]: nothing -> oneof<record<href: string, limit: int, next: string, offset: int, orders: table<buyer: record, buyerCheckoutNotes: string, cancelStatus: record, creationDate: string, ebayCollectAndRemitTax: bool, fulfillmentHrefs: list, fulfillmentStartInstructions: list, lastModifiedDate: string, legacyOrderId: string, lineItems: list, orderFulfillmentStatus: string, orderId: string, orderPaymentStatus: string, paymentSummary: record, pricingSummary: record, program: record, salesRecordReference: string, sellerId: string, totalFeeBasisAmount: record, totalMarketplaceFee: record>, prev: string, total: int, warnings: table<category: string, domain: string, errorId: int, inputRefIds: list, longMessage: string, message: string, outputRefIds: list, parameters: list, subdomain: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fieldGroups" $field_groups "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "orderIds" $order_ids "scalar")] | flatten | str join "&"
@@ -180,7 +204,7 @@ export def "get-order" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --field-groups: string # The response type associated with the order. The only presently supported value is TAX_BREAKDOWN. This type returns a breakdown of tax and fee values associated with the order.
-]: nothing -> record<buyer: record<taxAddress: record<city: string, countryCode: string, postalCode: string, stateOrProvince: string>, taxIdentifier: record<issuingCountry: string, taxIdentifierType: string, taxpayerId: string>, username: string>, buyerCheckoutNotes: string, cancelStatus: record<cancelRequests: list<record>, cancelState: string, cancelledDate: string>, creationDate: string, ebayCollectAndRemitTax: bool, fulfillmentHrefs: list<string>, fulfillmentStartInstructions: table<ebaySupportedFulfillment: bool, finalDestinationAddress: record, fulfillmentInstructionsType: string, maxEstimatedDeliveryDate: string, minEstimatedDeliveryDate: string, pickupStep: record, shippingStep: record>, lastModifiedDate: string, legacyOrderId: string, lineItems: table<appliedPromotions: list, deliveryCost: record, discountedLineItemCost: record, ebayCollectAndRemitTaxes: list, ebayCollectedCharges: record, giftDetails: record, itemLocation: record, legacyItemId: string, legacyVariationId: string, lineItemCost: record, lineItemFulfillmentInstructions: record, lineItemFulfillmentStatus: string, lineItemId: string, listingMarketplaceId: string, properties: record, purchaseMarketplaceId: string, quantity: int, refunds: list, sku: string, soldFormat: string, taxes: list, title: string, total: record, variationAspects: list>, orderFulfillmentStatus: string, orderId: string, orderPaymentStatus: string, paymentSummary: record<payments: list<record>, refunds: list<record>, totalDueSeller: record<convertedFromCurrency: string, convertedFromValue: string, currency: string, value: string>>, pricingSummary: record<adjustment: record<convertedFromCurrency: string, convertedFromValue: string, currency: string, value: string>, deliveryCost: record<convertedFromCurrency: string, convertedFromValue: string, currency: string, value: string>, deliveryDiscount: record<convertedFromCurrency: string, convertedFromValue: string, currency: string, value: string>, fee: record<convertedFromCurrency: string, convertedFromValue: string, currency: string, value: string>, priceDiscount: record<convertedFromCurrency: string, convertedFromValue: string, currency: string, value: string>, priceSubtotal: record<convertedFromCurrency: string, convertedFromValue: string, currency: string, value: string>, tax: record<convertedFromCurrency: string, convertedFromValue: string, currency: string, value: string>, total: record<convertedFromCurrency: string, convertedFromValue: string, currency: string, value: string>>, program: record<authenticityVerification: record<outcomeReason: string, status: string>, ebayInternationalShipping: record<returnsManagedBy: string>, ebayShipping: record<shippingLabelProvidedBy: string>, ebayVault: record<fulfillmentType: string>, fulfillmentProgram: record<fulfilledBy: string>>, salesRecordReference: string, sellerId: string, totalFeeBasisAmount: record<convertedFromCurrency: string, convertedFromValue: string, currency: string, value: string>, totalMarketplaceFee: record<convertedFromCurrency: string, convertedFromValue: string, currency: string, value: string>> {
+]: nothing -> oneof<record<buyer: record<taxAddress: record<city: string, countryCode: string, postalCode: string, stateOrProvince: string>, taxIdentifier: record<issuingCountry: string, taxIdentifierType: string, taxpayerId: string>, username: string>, buyerCheckoutNotes: string, cancelStatus: record<cancelRequests: list<record>, cancelState: string, cancelledDate: string>, creationDate: string, ebayCollectAndRemitTax: bool, fulfillmentHrefs: list<string>, fulfillmentStartInstructions: table<ebaySupportedFulfillment: bool, finalDestinationAddress: record, fulfillmentInstructionsType: string, maxEstimatedDeliveryDate: string, minEstimatedDeliveryDate: string, pickupStep: record, shippingStep: record>, lastModifiedDate: string, legacyOrderId: string, lineItems: table<appliedPromotions: list, deliveryCost: record, discountedLineItemCost: record, ebayCollectAndRemitTaxes: list, ebayCollectedCharges: record, giftDetails: record, itemLocation: record, legacyItemId: string, legacyVariationId: string, lineItemCost: record, lineItemFulfillmentInstructions: record, lineItemFulfillmentStatus: string, lineItemId: string, listingMarketplaceId: string, properties: record, purchaseMarketplaceId: string, quantity: int, refunds: list, sku: string, soldFormat: string, taxes: list, title: string, total: record, variationAspects: list>, orderFulfillmentStatus: string, orderId: string, orderPaymentStatus: string, paymentSummary: record<payments: list<record>, refunds: list<record>, totalDueSeller: record<convertedFromCurrency: string, convertedFromValue: string, currency: string, value: string>>, pricingSummary: record<adjustment: record<convertedFromCurrency: string, convertedFromValue: string, currency: string, value: string>, deliveryCost: record<convertedFromCurrency: string, convertedFromValue: string, currency: string, value: string>, deliveryDiscount: record<convertedFromCurrency: string, convertedFromValue: string, currency: string, value: string>, fee: record<convertedFromCurrency: string, convertedFromValue: string, currency: string, value: string>, priceDiscount: record<convertedFromCurrency: string, convertedFromValue: string, currency: string, value: string>, priceSubtotal: record<convertedFromCurrency: string, convertedFromValue: string, currency: string, value: string>, tax: record<convertedFromCurrency: string, convertedFromValue: string, currency: string, value: string>, total: record<convertedFromCurrency: string, convertedFromValue: string, currency: string, value: string>>, program: record<authenticityVerification: record<outcomeReason: string, status: string>, ebayInternationalShipping: record<returnsManagedBy: string>, ebayShipping: record<shippingLabelProvidedBy: string>, ebayVault: record<fulfillmentType: string>, fulfillmentProgram: record<fulfilledBy: string>>, salesRecordReference: string, sellerId: string, totalFeeBasisAmount: record<convertedFromCurrency: string, convertedFromValue: string, currency: string, value: string>, totalMarketplaceFee: record<convertedFromCurrency: string, convertedFromValue: string, currency: string, value: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'orderId' must be non-empty" } }
@@ -217,7 +241,7 @@ export def "get-shipping-fulfillments" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<fulfillments: table<fulfillmentId: string, lineItems: list, shipmentTrackingNumber: string, shippedDate: string, shippingCarrierCode: string>, total: int, warnings: table<category: string, domain: string, errorId: int, inputRefIds: list, longMessage: string, message: string, outputRefIds: list, parameters: list, subdomain: string>> {
+]: nothing -> oneof<record<fulfillments: table<fulfillmentId: string, lineItems: list, shipmentTrackingNumber: string, shippedDate: string, shippingCarrierCode: string>, total: int, warnings: table<category: string, domain: string, errorId: int, inputRefIds: list, longMessage: string, message: string, outputRefIds: list, parameters: list, subdomain: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'orderId' must be non-empty" } }
@@ -242,7 +266,6 @@ export def "get-shipping-fulfillments" [
 #
 # POST /order/{orderId}/shipping_fulfillment
 # operationId: createShippingFulfillment
-# --lineItems item shape: {lineItemId?: string, quantity?: int}
 export def "create-shipping-fulfillment" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -258,7 +281,7 @@ export def "create-shipping-fulfillment" [
   --shipped-date: string # This is the actual date and time that the fulfillment package was shipped. This timestamp is in ISO 8601 format, which uses the 24-hour Universal Coordinated Time (UTC) clock. The seller should use the actual date/time that the package was shipped, but if this field is omitted, it will default to the current date/time.Format: [YYYY]-[MM]-[DD]T[hh]:[mm]:[ss].[sss]Z Example: 2015-08-04T19:09:02.768ZDefault: The current date and time.
   --shipping-carrier-code: string # The unique identifier of the shipping carrier being used to ship the line item(s). Technically, the shippingCarrierCode and trackingNumber fields are optional, but generally these fields will be provided if the shipping carrier and tracking number are known. Note: Use the Trading API's GeteBayDetails (https://developer.ebay.com/devzone/XML/docs/Reference/eBay/GeteBayDetails.html ) call to retrieve the latest shipping carrier enumeration values. When making the GeteBayDetails (https://developer.ebay.com/devzone/XML/docs/Reference/eBay/GeteBayDetails.html ) call, include the DetailName field in the request payload and set its value to ShippingCarrierDetails. Each valid shipping carrier enumeration value is returned in a ShippingCarrierDetails.ShippingCarrier field in the response payload.
   --tracking-number: string # The tracking number provided by the shipping carrier for this fulfillment. The seller should be careful that this tracking number is accurate since the buyer will use this tracking number to track shipment, and eBay has no way to verify the accuracy of this number.This field and the shippingCarrierCode field are mutually dependent. If you include one, you must also include the other.Note: If you include trackingNumber (and shippingCarrierCode) in the request, the resulting fulfillment's ID (returned in the HTTP location code) is the tracking number. If you do not include shipment tracking information, the resulting fulfillment ID will default to an arbitrary number such as 999.Note: Only alphanumeric characters are supported for shipment tracking numbers. Spaces, hyphens, and all other special characters are not supported. Do not include a space in the tracking number even if a space appears in the tracking number on the shipping label.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -298,7 +321,7 @@ export def "get-shipping-fulfillment" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<fulfillmentId: string, lineItems: table<lineItemId: string, quantity: int>, shipmentTrackingNumber: string, shippedDate: string, shippingCarrierCode: string> {
+]: nothing -> oneof<record<fulfillmentId: string, lineItems: table<lineItemId: string, quantity: int>, shipmentTrackingNumber: string, shippedDate: string, shippingCarrierCode: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'orderId' must be non-empty" } }
@@ -324,8 +347,6 @@ export def "get-shipping-fulfillment" [
 #
 # POST /order/{order_id}/issue_refund
 # operationId: issueRefund
-# --orderLevelRefundAmount shape: {currency?: string, value?: string}
-# --refundItems item shape: {legacyReference?: record, lineItemId?: string, refundAmount?: record}
 export def "issue-refund" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -341,7 +362,7 @@ export def "issue-refund" [
   --order-level-refund-amount: record # This type defines the monetary value of the payment dispute, and the currency used. — shape: {currency?: string, value?: string}
   --reason-for-refund: string # The enumeration value passed into this field indicates the reason for the refund. One of the defined enumeration values in the ReasonForRefundEnum type must be used.This field is required, and it is highly recommended that sellers use the correct refund reason, especially in the case of a buyer-requested cancellation or 'buyer remorse' return to indicate that there was nothing wrong with the item(s) or with the shipment of the order.Note: If issuing refunds for more than one order line item, keep in mind that the refund reason must be the same for each of the order line items. If the refund reason is different for one or more order line items in an order, the seller would need to make separate issueRefund calls, one for each refund reason. For implementation help, refer to eBay API documentation
   --refund-items: list # The refundItems array is only required if the seller is issuing a refund for one or more individual order line items in a multiple line item order. Otherwise, the seller just uses the orderLevelRefundAmount container to specify the amount of the refund for the entire order. — item shape: {legacyReference?: record, lineItemId?: string, refundAmount?: record}
-]: any -> record<refundId: string, refundStatus: string> {
+]: any -> oneof<record<refundId: string, refundStatus: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -380,7 +401,7 @@ export def "get-payment-dispute" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<amount: record<currency: string, value: string>, availableChoices: list<string>, buyerProvided: record<note: string, returnShipmentTracking: list<record>>, buyerUsername: string, closedDate: string, evidence: table<evidenceId: string, evidenceType: string, files: list, lineItems: list, providedDate: string, requestDate: string, respondByDate: string, shipmentTracking: list>, evidenceRequests: table<evidenceId: string, evidenceType: string, lineItems: list, requestDate: string, respondByDate: string>, lineItems: table<itemId: string, lineItemId: string>, monetaryTransactions: table<amount: record, date: string, reason: string, type: string>, note: string, openDate: string, orderId: string, paymentDisputeId: string, paymentDisputeStatus: string, reason: string, resolution: record<fees: record<currency: string, value: string>, protectedAmount: record<currency: string, value: string>, protectionStatus: string, reasonForClosure: string, recoupAmount: record<currency: string, value: string>, totalFeeCredit: record<currency: string, value: string>>, respondByDate: string, returnAddress: record<addressLine1: string, addressLine2: string, city: string, country: string, county: string, fullName: string, postalCode: string, primaryPhone: record<countryCode: string, number: string>, stateOrProvince: string>, revision: int, sellerResponse: string> {
+]: nothing -> oneof<record<amount: record<currency: string, value: string>, availableChoices: list<string>, buyerProvided: record<note: string, returnShipmentTracking: list<record>>, buyerUsername: string, closedDate: string, evidence: table<evidenceId: string, evidenceType: string, files: list, lineItems: list, providedDate: string, requestDate: string, respondByDate: string, shipmentTracking: list>, evidenceRequests: table<evidenceId: string, evidenceType: string, lineItems: list, requestDate: string, respondByDate: string>, lineItems: table<itemId: string, lineItemId: string>, monetaryTransactions: table<amount: record, date: string, reason: string, type: string>, note: string, openDate: string, orderId: string, paymentDisputeId: string, paymentDisputeStatus: string, reason: string, resolution: record<fees: record<currency: string, value: string>, protectedAmount: record<currency: string, value: string>, protectionStatus: string, reasonForClosure: string, recoupAmount: record<currency: string, value: string>, totalFeeCredit: record<currency: string, value: string>>, respondByDate: string, returnAddress: record<addressLine1: string, addressLine2: string, city: string, country: string, county: string, fullName: string, postalCode: string, primaryPhone: record<countryCode: string, number: string>, stateOrProvince: string>, revision: int, sellerResponse: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://apiz.ebay.com/sell/fulfillment/v1")
   if ($payment_dispute_id | is-empty) { error make --unspanned { msg: "path parameter 'payment_dispute_id' must be non-empty" } }
@@ -405,7 +426,6 @@ export def "get-payment-dispute" [
 #
 # POST /payment_dispute/{payment_dispute_id}/accept
 # operationId: acceptPaymentDispute
-# --returnAddress shape: {addressLine1?: string, addressLine2?: string, city?: string, country?: string, county?: string, fullName?: string, postalCode?: string, primaryPhone?: record, stateOrProvince?: string}
 export def "accept-payment-dispute" [
   payment_dispute_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -458,7 +478,7 @@ export def "get-activities" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<activity: table<activityDate: string, activityType: string, actor: string>> {
+]: nothing -> oneof<record<activity: table<activityDate: string, activityType: string, actor: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://apiz.ebay.com/sell/fulfillment/v1")
   if ($payment_dispute_id | is-empty) { error make --unspanned { msg: "path parameter 'payment_dispute_id' must be non-empty" } }
@@ -483,8 +503,6 @@ export def "get-activities" [
 #
 # POST /payment_dispute/{payment_dispute_id}/add_evidence
 # operationId: addEvidence
-# --files item shape: {fileId?: string}
-# --lineItems item shape: {itemId?: string, lineItemId?: string}
 export def "add-evidence" [
   payment_dispute_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -499,7 +517,7 @@ export def "add-evidence" [
   --evidence-type: string # This field is used to indicate the type of evidence being provided through one or more evidence files. All evidence files (if more than one) should be associated with the evidence type passed in this field. See the EvidenceTypeEnum type for the supported evidence types. For implementation help, refer to eBay API documentation
   --files: list # This array is used to specify one or more evidence files that will become part of a new evidence set associated with a payment dispute. At least one evidence file must be specified in the files array. The unique identifier of an evidence file is returned in the response payload of the uploadEvidence method. — item shape: {fileId?: string}
   --line-items: list # This required array identifies the order line item(s) for which the evidence file(s) will be applicable. Both the itemId and lineItemID fields are needed to identify each order line item, and both of these values are returned under the evidenceRequests.lineItems array in the getPaymentDispute response. — item shape: {itemId?: string, lineItemId?: string}
-]: any -> record<evidenceId: string> {
+]: any -> oneof<record<evidenceId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://apiz.ebay.com/sell/fulfillment/v1")
@@ -527,7 +545,6 @@ export def "add-evidence" [
 #
 # POST /payment_dispute/{payment_dispute_id}/contest
 # operationId: contestPaymentDispute
-# --returnAddress shape: {addressLine1?: string, addressLine2?: string, city?: string, country?: string, county?: string, fullName?: string, postalCode?: string, primaryPhone?: record, stateOrProvince?: string}
 export def "contest-payment-dispute" [
   payment_dispute_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -583,7 +600,7 @@ export def "fetch-evidence-content" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --evidence-id: string # The identifier of the evidential file set. The identifier of an evidential file set for a payment dispute is returned under the evidence array in the getPaymentDispute response.Below is an example of the syntax to use for this query parameter:evidence_id=12345678 (required)
   --file-id: string # The identifier of an evidential file. This file must belong to the evidential file set identified through the evidence_id query parameter. The identifier of each evidential file is returned under the evidence.files array in the getPaymentDispute response. Below is an example of the syntax to use for this query parameter:file_id=12345678 (required)
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://apiz.ebay.com/sell/fulfillment/v1")
   if ($payment_dispute_id | is-empty) { error make --unspanned { msg: "path parameter 'payment_dispute_id' must be non-empty" } }
@@ -611,8 +628,6 @@ export def "fetch-evidence-content" [
 #
 # POST /payment_dispute/{payment_dispute_id}/update_evidence
 # operationId: updateEvidence
-# --files item shape: {fileId?: string}
-# --lineItems item shape: {itemId?: string, lineItemId?: string}
 export def "update-evidence" [
   payment_dispute_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -667,7 +682,7 @@ export def "upload-evidence-file" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<fileId: string> {
+]: nothing -> oneof<record<fileId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://apiz.ebay.com/sell/fulfillment/v1")
   if ($payment_dispute_id | is-empty) { error make --unspanned { msg: "path parameter 'payment_dispute_id' must be non-empty" } }
@@ -709,7 +724,7 @@ export def "get-payment-dispute-summaries" [
   --payment-dispute-status: string # This filter is used if the seller wishes to only retrieve payment disputes in a specific state. More than one value can be specified. If no payment_dispute_status filter is used, payment disputes in all states are returned in the response. See DisputeStateEnum type for supported values.
   --limit: string # The value passed in this query parameter sets the maximum number of payment disputes to return per page of data. The value passed in this field should be an integer from 1 to 200. If this query parameter is not set, up to 200 records will be returned on each page of results.Min: 1; Max: 200; Default: 200
   --offset: string # This field is used to specify the number of records to skip in the result set before returning the first payment dispute in the paginated response. A zero-based index is used, so if you set the offset value to 0 (default value), the first payment dispute in the result set appears at the top of the response. Combine offset with the limit parameter to control the payment disputes returned in the response. For example, if you supply an offset value of 0 and a limit value of 10, the response will contain the first 10 payment disputes from the result set that matches the input criteria. If you supply an offset value of 10 and a limit value of 20, the response will contain payment disputes 11-30 from the result set that matches the input criteria.Min: 0; Max: total number of payment disputes - 1; Default: 0
-]: nothing -> record<href: string, limit: int, next: string, offset: int, paymentDisputeSummaries: table<amount: record, buyerUsername: string, closedDate: string, openDate: string, orderId: string, paymentDisputeId: string, paymentDisputeStatus: string, reason: string, respondByDate: string>, prev: string, total: int> {
+]: nothing -> oneof<record<href: string, limit: int, next: string, offset: int, paymentDisputeSummaries: table<amount: record, buyerUsername: string, closedDate: string, openDate: string, orderId: string, paymentDisputeId: string, paymentDisputeStatus: string, reason: string, respondByDate: string>, prev: string, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://apiz.ebay.com/sell/fulfillment/v1")
   let qp = [(serialize-qp "order_id" $order_id "scalar") (serialize-qp "buyer_username" $buyer_username "scalar") (serialize-qp "open_date_from" $open_date_from "scalar") (serialize-qp "open_date_to" $open_date_to "scalar") (serialize-qp "payment_dispute_status" $payment_dispute_status "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"

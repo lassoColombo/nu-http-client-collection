@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -113,9 +136,9 @@ def x-amz-target-completer-12 [] { ["Textract.StartLendingAnalysis"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "analyze-document" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["analyze-document" "analyze-expense" "analyze-id" "detect-document-text" "get-document-analysis" "get-document-text-detection" "get-expense-analysis" "get-lending-analysis" "get-lending-analysis-summary" "start-document-analysis" "start-document-text-detection" "start-expense-analysis" "start-lending-analysis" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -137,9 +160,6 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AnalyzeDocument
-# --Document shape: {Bytes?: string, S3Object?: record}
-# --HumanLoopConfig shape: {HumanLoopName: string, FlowDefinitionArn: string, DataAttributes?: record}
-# --QueriesConfig shape: {Queries: list}
 export def "analyze-document" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -162,7 +182,7 @@ export def "analyze-document" [
   feature_types: list<string> # A list of the types of analysis to perform. Add TABLES to the list to return information about the tables that are detected in the input document. Add FORMS to return detected form data. Add SIGNATURES to return the locations of detected signatures. To perform both forms and table analysis, add TABLES and FORMS to FeatureTypes. To detect signatures within form data and table data, add SIGNATURES to either TABLES or FORMS. All lines and words detected in the document are included in the response (including text that isn't related to the value of FeatureTypes).
   --human-loop-config: record # Sets up the human review workflow the document will be sent to if one of the conditions is met. You can also set certain attributes of the image before review. — shape: {HumanLoopName: string, FlowDefinitionArn: string, DataAttributes?: record}
   --queries-config: record # shape: {Queries: list}
-]: any -> record<DocumentMetadata: record<Pages: int>, Blocks: table<BlockType: string, Confidence: float, Text: string, TextType: string, RowIndex: int, ColumnIndex: int, RowSpan: int, ColumnSpan: int, Geometry: record, Id: string, Relationships: list, EntityTypes: list, SelectionStatus: string, Page: int, Query: record>, HumanLoopActivationOutput: record<HumanLoopArn: string, HumanLoopActivationReasons: list<string>, HumanLoopActivationConditionsEvaluationResults: string>, AnalyzeDocumentModelVersion: string> {
+]: any -> oneof<record<DocumentMetadata: record<Pages: int>, Blocks: table<BlockType: string, Confidence: float, Text: string, TextType: string, RowIndex: int, ColumnIndex: int, RowSpan: int, ColumnSpan: int, Geometry: record, Id: string, Relationships: list, EntityTypes: list, SelectionStatus: string, Page: int, Query: record>, HumanLoopActivationOutput: record<HumanLoopArn: string, HumanLoopActivationReasons: list<string>, HumanLoopActivationConditionsEvaluationResults: string>, AnalyzeDocumentModelVersion: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -192,7 +212,6 @@ export def "analyze-document" [
 #
 # POST /
 # operationId: AnalyzeExpense
-# --Document shape: {Bytes?: string, S3Object?: record}
 export def "analyze-expense" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -212,7 +231,7 @@ export def "analyze-expense" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-1 # required
   document: record # The input document, either as bytes or as an S3 object. You pass image bytes to an Amazon Textract API operation by using the Bytes property. For example, you would use the Bytes property to pass a document loaded from a local file system. Image bytes passed by using the Bytes property must be base64 encoded. Your code might not need to encode document file bytes if you're using an AWS SDK to call Amazon Textract API operations. You pass images stored in an S3 bucket to an Amazon Textract API operation by using the S3Object property. Documents stored in an S3 bucket don't need to be base64 encoded. The AWS Region for the S3 bucket that contains the S3 object must match the AWS Region that you use for Amazon Textract operations. If you use the AWS CLI to call Amazon Textract operations, passing image bytes using the Bytes property isn't supported. You must first upload the document to an Amazon S3 bucket, and then call the operation using the S3Object property. For Amazon Textract to process an S3 object, the user must have permission to access the S3 object. — shape: {Bytes?: string, S3Object?: record}
-]: any -> record<DocumentMetadata: record<Pages: int>, ExpenseDocuments: table<ExpenseIndex: int, SummaryFields: list, LineItemGroups: list, Blocks: list>> {
+]: any -> oneof<record<DocumentMetadata: record<Pages: int>, ExpenseDocuments: table<ExpenseIndex: int, SummaryFields: list, LineItemGroups: list, Blocks: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -242,7 +261,6 @@ export def "analyze-expense" [
 #
 # POST /
 # operationId: AnalyzeID
-# --DocumentPages item shape: {Bytes?: string, S3Object?: record}
 export def "analyze-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -262,7 +280,7 @@ export def "analyze-id" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-2 # required
   document_pages: list # The document being passed to AnalyzeID. — item shape: {Bytes?: string, S3Object?: record}
-]: any -> record<IdentityDocuments: table<DocumentIndex: int, IdentityDocumentFields: list, Blocks: list>, DocumentMetadata: record<Pages: int>, AnalyzeIDModelVersion: string> {
+]: any -> oneof<record<IdentityDocuments: table<DocumentIndex: int, IdentityDocumentFields: list, Blocks: list>, DocumentMetadata: record<Pages: int>, AnalyzeIDModelVersion: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -292,7 +310,6 @@ export def "analyze-id" [
 #
 # POST /
 # operationId: DetectDocumentText
-# --Document shape: {Bytes?: string, S3Object?: record}
 export def "detect-document-text" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -312,7 +329,7 @@ export def "detect-document-text" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-3 # required
   document: record # The input document, either as bytes or as an S3 object. You pass image bytes to an Amazon Textract API operation by using the Bytes property. For example, you would use the Bytes property to pass a document loaded from a local file system. Image bytes passed by using the Bytes property must be base64 encoded. Your code might not need to encode document file bytes if you're using an AWS SDK to call Amazon Textract API operations. You pass images stored in an S3 bucket to an Amazon Textract API operation by using the S3Object property. Documents stored in an S3 bucket don't need to be base64 encoded. The AWS Region for the S3 bucket that contains the S3 object must match the AWS Region that you use for Amazon Textract operations. If you use the AWS CLI to call Amazon Textract operations, passing image bytes using the Bytes property isn't supported. You must first upload the document to an Amazon S3 bucket, and then call the operation using the S3Object property. For Amazon Textract to process an S3 object, the user must have permission to access the S3 object. — shape: {Bytes?: string, S3Object?: record}
-]: any -> record<DocumentMetadata: record<Pages: int>, Blocks: table<BlockType: string, Confidence: float, Text: string, TextType: string, RowIndex: int, ColumnIndex: int, RowSpan: int, ColumnSpan: int, Geometry: record, Id: string, Relationships: list, EntityTypes: list, SelectionStatus: string, Page: int, Query: record>, DetectDocumentTextModelVersion: string> {
+]: any -> oneof<record<DocumentMetadata: record<Pages: int>, Blocks: table<BlockType: string, Confidence: float, Text: string, TextType: string, RowIndex: int, ColumnIndex: int, RowSpan: int, ColumnSpan: int, Geometry: record, Id: string, Relationships: list, EntityTypes: list, SelectionStatus: string, Page: int, Query: record>, DetectDocumentTextModelVersion: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -363,7 +380,7 @@ export def "get-document-analysis" [
   job_id: string # A unique identifier for the text-detection job. The JobId is returned from StartDocumentAnalysis. A JobId value is only valid for 7 days.
   --max-results: int # The maximum number of results to return per paginated call. The largest value that you can specify is 1,000. If you specify a value greater than 1,000, a maximum of 1,000 results is returned. The default value is 1,000.
   --next-token: string # If the previous response was incomplete (because there are more blocks to retrieve), Amazon Textract returns a pagination token in the response. You can use this pagination token to retrieve the next set of blocks.
-]: any -> record<DocumentMetadata: record<Pages: int>, JobStatus: string, NextToken: string, Blocks: table<BlockType: string, Confidence: float, Text: string, TextType: string, RowIndex: int, ColumnIndex: int, RowSpan: int, ColumnSpan: int, Geometry: record, Id: string, Relationships: list, EntityTypes: list, SelectionStatus: string, Page: int, Query: record>, Warnings: table<ErrorCode: string, Pages: list>, StatusMessage: string, AnalyzeDocumentModelVersion: string> {
+]: any -> oneof<record<DocumentMetadata: record<Pages: int>, JobStatus: string, NextToken: string, Blocks: table<BlockType: string, Confidence: float, Text: string, TextType: string, RowIndex: int, ColumnIndex: int, RowSpan: int, ColumnSpan: int, Geometry: record, Id: string, Relationships: list, EntityTypes: list, SelectionStatus: string, Page: int, Query: record>, Warnings: table<ErrorCode: string, Pages: list>, StatusMessage: string, AnalyzeDocumentModelVersion: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -414,7 +431,7 @@ export def "get-document-text-detection" [
   job_id: string # A unique identifier for the text detection job. The JobId is returned from StartDocumentTextDetection. A JobId value is only valid for 7 days.
   --max-results: int # The maximum number of results to return per paginated call. The largest value you can specify is 1,000. If you specify a value greater than 1,000, a maximum of 1,000 results is returned. The default value is 1,000.
   --next-token: string # If the previous response was incomplete (because there are more blocks to retrieve), Amazon Textract returns a pagination token in the response. You can use this pagination token to retrieve the next set of blocks.
-]: any -> record<DocumentMetadata: record<Pages: int>, JobStatus: string, NextToken: string, Blocks: table<BlockType: string, Confidence: float, Text: string, TextType: string, RowIndex: int, ColumnIndex: int, RowSpan: int, ColumnSpan: int, Geometry: record, Id: string, Relationships: list, EntityTypes: list, SelectionStatus: string, Page: int, Query: record>, Warnings: table<ErrorCode: string, Pages: list>, StatusMessage: string, DetectDocumentTextModelVersion: string> {
+]: any -> oneof<record<DocumentMetadata: record<Pages: int>, JobStatus: string, NextToken: string, Blocks: table<BlockType: string, Confidence: float, Text: string, TextType: string, RowIndex: int, ColumnIndex: int, RowSpan: int, ColumnSpan: int, Geometry: record, Id: string, Relationships: list, EntityTypes: list, SelectionStatus: string, Page: int, Query: record>, Warnings: table<ErrorCode: string, Pages: list>, StatusMessage: string, DetectDocumentTextModelVersion: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -465,7 +482,7 @@ export def "get-expense-analysis" [
   job_id: string # A unique identifier for the text detection job. The JobId is returned from StartExpenseAnalysis. A JobId value is only valid for 7 days.
   --max-results: int # The maximum number of results to return per paginated call. The largest value you can specify is 20. If you specify a value greater than 20, a maximum of 20 results is returned. The default value is 20.
   --next-token: string # If the previous response was incomplete (because there are more blocks to retrieve), Amazon Textract returns a pagination token in the response. You can use this pagination token to retrieve the next set of blocks.
-]: any -> record<DocumentMetadata: record<Pages: int>, JobStatus: string, NextToken: string, ExpenseDocuments: table<ExpenseIndex: int, SummaryFields: list, LineItemGroups: list, Blocks: list>, Warnings: table<ErrorCode: string, Pages: list>, StatusMessage: string, AnalyzeExpenseModelVersion: string> {
+]: any -> oneof<record<DocumentMetadata: record<Pages: int>, JobStatus: string, NextToken: string, ExpenseDocuments: table<ExpenseIndex: int, SummaryFields: list, LineItemGroups: list, Blocks: list>, Warnings: table<ErrorCode: string, Pages: list>, StatusMessage: string, AnalyzeExpenseModelVersion: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -516,7 +533,7 @@ export def "get-lending-analysis" [
   job_id: string # A unique identifier for the lending or text-detection job. The JobId is returned from StartLendingAnalysis. A JobId value is only valid for 7 days.
   --max-results: int # The maximum number of results to return per paginated call. The largest value that you can specify is 30. If you specify a value greater than 30, a maximum of 30 results is returned. The default value is 30.
   --next-token: string # If the previous response was incomplete, Amazon Textract returns a pagination token in the response. You can use this pagination token to retrieve the next set of lending results.
-]: any -> record<DocumentMetadata: record<Pages: int>, JobStatus: string, NextToken: string, Results: table<Page: int, PageClassification: record, Extractions: list>, Warnings: table<ErrorCode: string, Pages: list>, StatusMessage: string, AnalyzeLendingModelVersion: string> {
+]: any -> oneof<record<DocumentMetadata: record<Pages: int>, JobStatus: string, NextToken: string, Results: table<Page: int, PageClassification: record, Extractions: list>, Warnings: table<ErrorCode: string, Pages: list>, StatusMessage: string, AnalyzeLendingModelVersion: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -565,7 +582,7 @@ export def "get-lending-analysis-summary" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-8 # required
   job_id: string # A unique identifier for the lending or text-detection job. The JobId is returned from StartLendingAnalysis. A JobId value is only valid for 7 days.
-]: any -> record<DocumentMetadata: record<Pages: int>, JobStatus: string, Summary: record<DocumentGroups: list<record>, UndetectedDocumentTypes: list<string>>, Warnings: table<ErrorCode: string, Pages: list>, StatusMessage: string, AnalyzeLendingModelVersion: string> {
+]: any -> oneof<record<DocumentMetadata: record<Pages: int>, JobStatus: string, Summary: record<DocumentGroups: list<record>, UndetectedDocumentTypes: list<string>>, Warnings: table<ErrorCode: string, Pages: list>, StatusMessage: string, AnalyzeLendingModelVersion: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -595,10 +612,6 @@ export def "get-lending-analysis-summary" [
 #
 # POST /
 # operationId: StartDocumentAnalysis
-# --DocumentLocation shape: {S3Object?: record}
-# --NotificationChannel shape: {SNSTopicArn: string, RoleArn: string}
-# --OutputConfig shape: {S3Bucket: string, S3Prefix?: string}
-# --QueriesConfig shape: {Queries: list}
 export def "start-document-analysis" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -625,7 +638,7 @@ export def "start-document-analysis" [
   --output-config: record # Sets whether or not your output will go to a user created bucket. Used to set the name of the bucket, and the prefix on the output file. OutputConfig is an optional parameter which lets you adjust where your output will be placed. By default, Amazon Textract will store the results internally and can only be accessed by the Get API operations. With OutputConfig enabled, you can set the name of the bucket the output will be sent to the file prefix of the results where you can download your results. Additionally, you can set the KMSKeyID parameter to a customer master key (CMK) to encrypt your output. Without this parameter set Amazon Textract will encrypt server-side using the AWS managed CMK for Amazon S3. Decryption of Customer Content is necessary for processing of the documents by Amazon Textract. If your account is opted out under an AI services opt out policy then all unencrypted Customer Content is immediately and permanently deleted after the Customer Content has been processed by the service. No copy of of the output is retained by Amazon Textract. For information about how to opt out, see Managing AI services opt-out policy. (https://docs.aws.amazon.com/organizations/latest/userguide/orgs_manage_policies_ai-opt-out.html) For more information on data privacy, see the Data Privacy FAQ (https://aws.amazon.com/compliance/data-privacy-faq/). — shape: {S3Bucket: string, S3Prefix?: string}
   --kms-key-id: string # The KMS key used to encrypt the inference results. This can be in either Key ID or Key Alias format. When a KMS key is provided, the KMS key will be used for server-side encryption of the objects in the customer bucket. When this parameter is not enabled, the result will be encrypted server side,using SSE-S3.
   --queries-config: record # shape: {Queries: list}
-]: any -> record<JobId: string> {
+]: any -> oneof<record<JobId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -655,9 +668,6 @@ export def "start-document-analysis" [
 #
 # POST /
 # operationId: StartDocumentTextDetection
-# --DocumentLocation shape: {S3Object?: record}
-# --NotificationChannel shape: {SNSTopicArn: string, RoleArn: string}
-# --OutputConfig shape: {S3Bucket: string, S3Prefix?: string}
 export def "start-document-text-detection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -682,7 +692,7 @@ export def "start-document-text-detection" [
   --notification-channel: record # The Amazon Simple Notification Service (Amazon SNS) topic to which Amazon Textract publishes the completion status of an asynchronous document operation. — shape: {SNSTopicArn: string, RoleArn: string}
   --output-config: record # Sets whether or not your output will go to a user created bucket. Used to set the name of the bucket, and the prefix on the output file. OutputConfig is an optional parameter which lets you adjust where your output will be placed. By default, Amazon Textract will store the results internally and can only be accessed by the Get API operations. With OutputConfig enabled, you can set the name of the bucket the output will be sent to the file prefix of the results where you can download your results. Additionally, you can set the KMSKeyID parameter to a customer master key (CMK) to encrypt your output. Without this parameter set Amazon Textract will encrypt server-side using the AWS managed CMK for Amazon S3. Decryption of Customer Content is necessary for processing of the documents by Amazon Textract. If your account is opted out under an AI services opt out policy then all unencrypted Customer Content is immediately and permanently deleted after the Customer Content has been processed by the service. No copy of of the output is retained by Amazon Textract. For information about how to opt out, see Managing AI services opt-out policy. (https://docs.aws.amazon.com/organizations/latest/userguide/orgs_manage_policies_ai-opt-out.html) For more information on data privacy, see the Data Privacy FAQ (https://aws.amazon.com/compliance/data-privacy-faq/). — shape: {S3Bucket: string, S3Prefix?: string}
   --kms-key-id: string # The KMS key used to encrypt the inference results. This can be in either Key ID or Key Alias format. When a KMS key is provided, the KMS key will be used for server-side encryption of the objects in the customer bucket. When this parameter is not enabled, the result will be encrypted server side,using SSE-S3.
-]: any -> record<JobId: string> {
+]: any -> oneof<record<JobId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -712,9 +722,6 @@ export def "start-document-text-detection" [
 #
 # POST /
 # operationId: StartExpenseAnalysis
-# --DocumentLocation shape: {S3Object?: record}
-# --NotificationChannel shape: {SNSTopicArn: string, RoleArn: string}
-# --OutputConfig shape: {S3Bucket: string, S3Prefix?: string}
 export def "start-expense-analysis" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -739,7 +746,7 @@ export def "start-expense-analysis" [
   --notification-channel: record # The Amazon Simple Notification Service (Amazon SNS) topic to which Amazon Textract publishes the completion status of an asynchronous document operation. — shape: {SNSTopicArn: string, RoleArn: string}
   --output-config: record # Sets whether or not your output will go to a user created bucket. Used to set the name of the bucket, and the prefix on the output file. OutputConfig is an optional parameter which lets you adjust where your output will be placed. By default, Amazon Textract will store the results internally and can only be accessed by the Get API operations. With OutputConfig enabled, you can set the name of the bucket the output will be sent to the file prefix of the results where you can download your results. Additionally, you can set the KMSKeyID parameter to a customer master key (CMK) to encrypt your output. Without this parameter set Amazon Textract will encrypt server-side using the AWS managed CMK for Amazon S3. Decryption of Customer Content is necessary for processing of the documents by Amazon Textract. If your account is opted out under an AI services opt out policy then all unencrypted Customer Content is immediately and permanently deleted after the Customer Content has been processed by the service. No copy of of the output is retained by Amazon Textract. For information about how to opt out, see Managing AI services opt-out policy. (https://docs.aws.amazon.com/organizations/latest/userguide/orgs_manage_policies_ai-opt-out.html) For more information on data privacy, see the Data Privacy FAQ (https://aws.amazon.com/compliance/data-privacy-faq/). — shape: {S3Bucket: string, S3Prefix?: string}
   --kms-key-id: string # The KMS key used to encrypt the inference results. This can be in either Key ID or Key Alias format. When a KMS key is provided, the KMS key will be used for server-side encryption of the objects in the customer bucket. When this parameter is not enabled, the result will be encrypted server side,using SSE-S3.
-]: any -> record<JobId: string> {
+]: any -> oneof<record<JobId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -769,9 +776,6 @@ export def "start-expense-analysis" [
 #
 # POST /
 # operationId: StartLendingAnalysis
-# --DocumentLocation shape: {S3Object?: record}
-# --NotificationChannel shape: {SNSTopicArn: string, RoleArn: string}
-# --OutputConfig shape: {S3Bucket: string, S3Prefix?: string}
 export def "start-lending-analysis" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -796,7 +800,7 @@ export def "start-lending-analysis" [
   --notification-channel: record # The Amazon Simple Notification Service (Amazon SNS) topic to which Amazon Textract publishes the completion status of an asynchronous document operation. — shape: {SNSTopicArn: string, RoleArn: string}
   --output-config: record # Sets whether or not your output will go to a user created bucket. Used to set the name of the bucket, and the prefix on the output file. OutputConfig is an optional parameter which lets you adjust where your output will be placed. By default, Amazon Textract will store the results internally and can only be accessed by the Get API operations. With OutputConfig enabled, you can set the name of the bucket the output will be sent to the file prefix of the results where you can download your results. Additionally, you can set the KMSKeyID parameter to a customer master key (CMK) to encrypt your output. Without this parameter set Amazon Textract will encrypt server-side using the AWS managed CMK for Amazon S3. Decryption of Customer Content is necessary for processing of the documents by Amazon Textract. If your account is opted out under an AI services opt out policy then all unencrypted Customer Content is immediately and permanently deleted after the Customer Content has been processed by the service. No copy of of the output is retained by Amazon Textract. For information about how to opt out, see Managing AI services opt-out policy. (https://docs.aws.amazon.com/organizations/latest/userguide/orgs_manage_policies_ai-opt-out.html) For more information on data privacy, see the Data Privacy FAQ (https://aws.amazon.com/compliance/data-privacy-faq/). — shape: {S3Bucket: string, S3Prefix?: string}
   --kms-key-id: string # The KMS key used to encrypt the inference results. This can be in either Key ID or Key Alias format. When a KMS key is provided, the KMS key will be used for server-side encryption of the objects in the customer bucket. When this parameter is not enabled, the result will be encrypted server side, using SSE-S3.
-]: any -> record<JobId: string> {
+]: any -> oneof<record<JobId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

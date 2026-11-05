@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -123,9 +147,9 @@ def type-completer [] { ["DISCOVER" "GOOGLE_NEWS" "IMAGE" "NEWS" "VIDEO" "WEB"] 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "searchconsole-url-inspection-index-inspect" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["searchconsole-url-inspection-index-inspect" "searchconsole-url-testing-tools-mobile-friendly-test-run" "webmasters-sites-list" "webmasters-sites-delete" "webmasters-sites-get" "webmasters-sites-add" "webmasters-searchanalytics-query" "webmasters-sitemaps-list" "webmasters-sitemaps-delete" "webmasters-sitemaps-get" "webmasters-sitemaps-submit" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -171,7 +195,7 @@ export def "searchconsole-url-inspection-index-inspect" [
   --inspection-url: string # Required. URL to inspect. Must be under the property specified in "site_url".
   --language-code: string # Optional. An [IETF BCP-47](https://en.wikipedia.org/wiki/IETF_language_tag) language code representing the requested language for translated issue messages, e.g. "en-US", "or "de-CH". Default value is "en-US".
   --site-url: string # Required. The URL of the property as defined in Search Console. **Examples:** `http://www.example.com/` for a URL-prefix property, or `sc-domain:example.com` for a Domain property.
-]: any -> record<inspectionResult: record<ampResult: record<ampIndexStatusVerdict: string, ampUrl: string, indexingState: string, issues: list, lastCrawlTime: string, pageFetchState: string, robotsTxtState: string, verdict: string>, indexStatusResult: record<coverageState: string, crawledAs: string, googleCanonical: string, indexingState: string, lastCrawlTime: string, pageFetchState: string, referringUrls: list, robotsTxtState: string, sitemap: list, userCanonical: string, verdict: string>, inspectionResultLink: string, mobileUsabilityResult: record<issues: list, verdict: string>, richResultsResult: record<detectedItems: list, verdict: string>>> {
+]: any -> oneof<record<inspectionResult: record<ampResult: record<ampIndexStatusVerdict: string, ampUrl: string, indexingState: string, issues: list, lastCrawlTime: string, pageFetchState: string, robotsTxtState: string, verdict: string>, indexStatusResult: record<coverageState: string, crawledAs: string, googleCanonical: string, indexingState: string, lastCrawlTime: string, pageFetchState: string, referringUrls: list, robotsTxtState: string, sitemap: list, userCanonical: string, verdict: string>, inspectionResultLink: string, mobileUsabilityResult: record<issues: list, verdict: string>, richResultsResult: record<detectedItems: list, verdict: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -222,7 +246,7 @@ export def "searchconsole-url-testing-tools-mobile-friendly-test-run" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --request-screenshot: oneof<nothing, bool> # Whether or not screenshot is requested. Default is false.
   --url: string # URL for inspection.
-]: any -> record<mobileFriendliness: string, mobileFriendlyIssues: table<rule: string>, resourceIssues: table<blockedResource: record>, screenshot: record<data: string, mimeType: string>, testStatus: record<details: string, status: string>> {
+]: any -> oneof<record<mobileFriendliness: string, mobileFriendlyIssues: table<rule: string>, resourceIssues: table<blockedResource: record>, screenshot: record<data: string, mimeType: string>, testStatus: record<details: string, status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -271,7 +295,7 @@ export def "webmasters-sites-list" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<siteEntry: table<permissionLevel: string, siteUrl: string>> {
+]: nothing -> oneof<record<siteEntry: table<permissionLevel: string, siteUrl: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -366,7 +390,7 @@ export def "webmasters-sites-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<permissionLevel: string, siteUrl: string> {
+]: nothing -> oneof<record<permissionLevel: string, siteUrl: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($site_url | is-empty) { error make --unspanned { msg: "path parameter 'siteUrl' must be non-empty" } }
@@ -440,7 +464,6 @@ export def "webmasters-sites-add" [
 #
 # POST /webmasters/v3/sites/{siteUrl}/searchAnalytics/query
 # operationId: webmasters.searchanalytics.query
-# --dimensionFilterGroups item shape: {filters?: list, groupType?: "AND"}
 export def "webmasters-searchanalytics-query" [
   site_url: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -473,7 +496,7 @@ export def "webmasters-searchanalytics-query" [
   --start-date: string # [Required] Start date of the requested date range, in YYYY-MM-DD format, in PST time (UTC - 8:00). Must be less than or equal to the end date. This value is included in the range.
   --start-row: int # [Optional; Default is 0] Zero-based index of the first row in the response. Must be a non-negative number. (format: int32)
   --type: string@type-completer # Optional. [Optional; Default is \"web\"] Type of report: search type, or either Discover or Gnews.
-]: any -> record<responseAggregationType: string, rows: table<clicks: float, ctr: float, impressions: float, keys: list, position: float>> {
+]: any -> oneof<record<responseAggregationType: string, rows: table<clicks: float, ctr: float, impressions: float, keys: list, position: float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -525,7 +548,7 @@ export def "webmasters-sitemaps-list" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --sitemap-index: string # A URL of a site's sitemap index. For example: `http://www.example.com/sitemapindex.xml`.
-]: nothing -> record<sitemap: table<contents: list, errors: string, isPending: bool, isSitemapsIndex: bool, lastDownloaded: string, lastSubmitted: string, path: string, type: string, warnings: string>> {
+]: nothing -> oneof<record<sitemap: table<contents: list, errors: string, isPending: bool, isSitemapsIndex: bool, lastDownloaded: string, lastSubmitted: string, path: string, type: string, warnings: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($site_url | is-empty) { error make --unspanned { msg: "path parameter 'siteUrl' must be non-empty" } }
@@ -624,7 +647,7 @@ export def "webmasters-sitemaps-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<contents: table<indexed: string, submitted: string, type: string>, errors: string, isPending: bool, isSitemapsIndex: bool, lastDownloaded: string, lastSubmitted: string, path: string, type: string, warnings: string> {
+]: nothing -> oneof<record<contents: table<indexed: string, submitted: string, type: string>, errors: string, isPending: bool, isSitemapsIndex: bool, lastDownloaded: string, lastSubmitted: string, path: string, type: string, warnings: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($site_url | is-empty) { error make --unspanned { msg: "path parameter 'siteUrl' must be non-empty" } }

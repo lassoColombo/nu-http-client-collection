@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -146,9 +170,9 @@ def accept-completer [] { ["application/json" "application/xml" "text/json" "tex
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "schedule-series-add-booking" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["schedule-series-add-booking" "schedule-series-add-leave" "schedule-series-edit-booking" "schedule-series-edit-leave" "account-get" "bill-get" "bill-post" "bill-get-by-id" "bill-payment-get" "bill-payment-post" "bill-payment-get-by-id" "company-get" "company-post" "company-put" "company-lookup" "company-get-by-id" "contact-get" "contact-post" "contact-get-by-id" "credit-note-get" "credit-note-get-by-id" "currency-get" "estimate-get" "estimate-post" "estimate-get-by-id" "expense-delete" "expense-get" "expense-post" "expense-put" "expense-attachment" "expense-get-by-id" "expense-approval" "expense-category-get" "expense-group-lookup" "expense-merchange-lookup" "expense-payment-method-lookup" "expense-summary-get" "fixed-amount-get" "inventory-get" "inventory-get-by-id" "invoice-get" "invoice-post" "invoice-get-by-id" "payment-get" "payment-post" "payment-get-by-id" "project-get" "project-post" "project-put" "project-lookup" "project-get-by-id" "project-member-get" "project-member-post" "project-member-put" "project-timesheet-category-get" "project-timesheet-category-post" "schedule-assignment-get" "schedule-series-get" "section-delete" "section-get" "section-post" "task-delete" "task-get" "task-post" "task-put" "task-lookup" "task-get-by-id" "task-status-get" "task-type-get" "tax-get" "timesheet-get" "timesheet-post" "timesheet-put" "timesheet-delete" "timesheet-get-by-id" "timesheet-submission-post" "timesheet-summary-get" "timesheet-timer-get-running-timer" "timesheet-timer-stop-timer" "timesheet-timer-start-timer" "user-profile-get" "webhook-delete-by-url" "webhook-get" "webhook-post" "webhook-delete" "webhook-get-by-id" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -192,7 +216,7 @@ export def "schedule-series-add-booking" [
   --task-idfk: int # format: int32
   --total-duration: float # format: double
   --user-idfk: int # format: int32
-]: any -> record<AccountIDFK: int, CompanyIDFK: int, CompanyName: string, DateCreated: string, DateUpdated: string, EndDate: string, Firstname: string, HoursPerDay: float, Lastname: string, LeaveTypeIDFK: int, LeaveTypeName: string, Notes: string, ProjectIDFK: int, ProjectTitle: string, ScheduleOnDaysOff: bool, ScheduleSeriesID: int, StartDate: string, TaskIDFK: int, TaskTitle: string, TimeSheetCategoryIDFK: int, TimeSheetCategoryName: string, TotalDuration: float, UpdatedByUserIDFK: int, UserIDFK: int> {
+]: any -> oneof<record<AccountIDFK: int, CompanyIDFK: int, CompanyName: string, DateCreated: string, DateUpdated: string, EndDate: string, Firstname: string, HoursPerDay: float, Lastname: string, LeaveTypeIDFK: int, LeaveTypeName: string, Notes: string, ProjectIDFK: int, ProjectTitle: string, ScheduleOnDaysOff: bool, ScheduleSeriesID: int, StartDate: string, TaskIDFK: int, TaskTitle: string, TimeSheetCategoryIDFK: int, TimeSheetCategoryName: string, TotalDuration: float, UpdatedByUserIDFK: int, UserIDFK: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -237,7 +261,7 @@ export def "schedule-series-add-leave" [
   --leave-start-date: string # format: date-time
   --leave-type-idfk: int # format: int32
   --leave-user-idfk: int # format: int32
-]: any -> record<AccountIDFK: int, CompanyIDFK: int, CompanyName: string, DateCreated: string, DateUpdated: string, EndDate: string, Firstname: string, HoursPerDay: float, Lastname: string, LeaveTypeIDFK: int, LeaveTypeName: string, Notes: string, ProjectIDFK: int, ProjectTitle: string, ScheduleOnDaysOff: bool, ScheduleSeriesID: int, StartDate: string, TaskIDFK: int, TaskTitle: string, TimeSheetCategoryIDFK: int, TimeSheetCategoryName: string, TotalDuration: float, UpdatedByUserIDFK: int, UserIDFK: int> {
+]: any -> oneof<record<AccountIDFK: int, CompanyIDFK: int, CompanyName: string, DateCreated: string, DateUpdated: string, EndDate: string, Firstname: string, HoursPerDay: float, Lastname: string, LeaveTypeIDFK: int, LeaveTypeName: string, Notes: string, ProjectIDFK: int, ProjectTitle: string, ScheduleOnDaysOff: bool, ScheduleSeriesID: int, StartDate: string, TaskIDFK: int, TaskTitle: string, TimeSheetCategoryIDFK: int, TimeSheetCategoryName: string, TotalDuration: float, UpdatedByUserIDFK: int, UserIDFK: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -287,7 +311,7 @@ export def "schedule-series-edit-booking" [
   --task-idfk: int # format: int32
   --total-duration: float # format: double
   --user-idfk: int # format: int32
-]: any -> record<AccountIDFK: int, CompanyIDFK: int, CompanyName: string, DateCreated: string, DateUpdated: string, EndDate: string, Firstname: string, HoursPerDay: float, Lastname: string, LeaveTypeIDFK: int, LeaveTypeName: string, Notes: string, ProjectIDFK: int, ProjectTitle: string, ScheduleOnDaysOff: bool, ScheduleSeriesID: int, StartDate: string, TaskIDFK: int, TaskTitle: string, TimeSheetCategoryIDFK: int, TimeSheetCategoryName: string, TotalDuration: float, UpdatedByUserIDFK: int, UserIDFK: int> {
+]: any -> oneof<record<AccountIDFK: int, CompanyIDFK: int, CompanyName: string, DateCreated: string, DateUpdated: string, EndDate: string, Firstname: string, HoursPerDay: float, Lastname: string, LeaveTypeIDFK: int, LeaveTypeName: string, Notes: string, ProjectIDFK: int, ProjectTitle: string, ScheduleOnDaysOff: bool, ScheduleSeriesID: int, StartDate: string, TaskIDFK: int, TaskTitle: string, TimeSheetCategoryIDFK: int, TimeSheetCategoryName: string, TotalDuration: float, UpdatedByUserIDFK: int, UserIDFK: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -332,7 +356,7 @@ export def "schedule-series-edit-leave" [
   --schedule-series-id: int # format: int64
   --start-date: string # format: date-time
   --user-idfk: int # format: int32
-]: any -> record<AccountIDFK: int, CompanyIDFK: int, CompanyName: string, DateCreated: string, DateUpdated: string, EndDate: string, Firstname: string, HoursPerDay: float, Lastname: string, LeaveTypeIDFK: int, LeaveTypeName: string, Notes: string, ProjectIDFK: int, ProjectTitle: string, ScheduleOnDaysOff: bool, ScheduleSeriesID: int, StartDate: string, TaskIDFK: int, TaskTitle: string, TimeSheetCategoryIDFK: int, TimeSheetCategoryName: string, TotalDuration: float, UpdatedByUserIDFK: int, UserIDFK: int> {
+]: any -> oneof<record<AccountIDFK: int, CompanyIDFK: int, CompanyName: string, DateCreated: string, DateUpdated: string, EndDate: string, Firstname: string, HoursPerDay: float, Lastname: string, LeaveTypeIDFK: int, LeaveTypeName: string, Notes: string, ProjectIDFK: int, ProjectTitle: string, ScheduleOnDaysOff: bool, ScheduleSeriesID: int, StartDate: string, TaskIDFK: int, TaskTitle: string, TimeSheetCategoryIDFK: int, TimeSheetCategoryName: string, TotalDuration: float, UpdatedByUserIDFK: int, UserIDFK: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -370,7 +394,7 @@ export def "account-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<AccountEmail: string, AccountID: int, AllowHidingCompletedTasksOnTimesheet: bool, BrandPrimaryColor: string, BrandPrimaryColorLuminance: string, CompanyName: string, CurrentServerTimeISO: string, DefaultCurrencyCode: string, ExpenseApprovalRequired: bool, LockApprovedExpenses: bool, LockApprovedTimesheets: bool, SC: string, Subdomain: string, TimesheetDayOfWeek: int, TimesheetDisplayFormatCode: string, WeeklyTimesheetReminder: bool, has24HourTimesheetFormat: bool, hasStartEndTimesheets: bool> {
+]: nothing -> oneof<record<AccountEmail: string, AccountID: int, AllowHidingCompletedTasksOnTimesheet: bool, BrandPrimaryColor: string, BrandPrimaryColorLuminance: string, CompanyName: string, CurrentServerTimeISO: string, DefaultCurrencyCode: string, ExpenseApprovalRequired: bool, LockApprovedExpenses: bool, LockApprovedTimesheets: bool, SC: string, Subdomain: string, TimesheetDayOfWeek: int, TimesheetDisplayFormatCode: string, WeeklyTimesheetReminder: bool, has24HourTimesheetFormat: bool, hasStartEndTimesheets: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/Account" $auth.query)
@@ -410,7 +434,7 @@ export def "bill-get" [
   --page-number: int # Page to display. Starts from 1. (format: int32)
   --sort: string
   --company-idfk: int # format: int32
-]: nothing -> record<Bills: table<AccountIDFK: int, Balance: float, BillNumber: string, CompanyIDFK: int, CompanyName: string, CurrencyCode: string, DateCreated: string, DateIssued: string, DateUpdated: string, DateVerified: string, DueDate: string, ExchangeRate: float, Issuer: record, LineItems: list, Links: record, Notes: string, Recipient: record, Subject: string, SupplierPONumber: string, TaxAmount: float, TotalAmount: float, TransactionID: int, TransactionPrefix: string, TransactionStatusCode: string, TransactionTaxConfigCode: string>, PageNumber: int, PageSize: int, TotalCount: int> {
+]: nothing -> oneof<record<Bills: table<AccountIDFK: int, Balance: float, BillNumber: string, CompanyIDFK: int, CompanyName: string, CurrencyCode: string, DateCreated: string, DateIssued: string, DateUpdated: string, DateVerified: string, DueDate: string, ExchangeRate: float, Issuer: record, LineItems: list, Links: record, Notes: string, Recipient: record, Subject: string, SupplierPONumber: string, TaxAmount: float, TotalAmount: float, TransactionID: int, TransactionPrefix: string, TransactionStatusCode: string, TransactionTaxConfigCode: string>, PageNumber: int, PageSize: int, TotalCount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "UpdatedAfter" $updated_after "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "Sort" $sort "scalar") (serialize-qp "CompanyIDFK" $company_idfk "scalar")] | flatten | str join "&"
@@ -435,7 +459,6 @@ export def "bill-get" [
 #
 # POST /api/Bill
 # operationId: Bill_Post
-# --LineItems item shape: {Description?: string, Discount?: float, InventoryItemIDFK?: int, InventoryItemName?: string, ProjectIDFK?: int, Quantity: float, TaxIDFK?: int, TaxName?: string, TaxPercent?: float, UnitPrice: float}
 export def "bill-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -465,7 +488,7 @@ export def "bill-post" [
   --supplier-po-number: string # Plain UTF8 text. 100 characters max
   --transaction-prefix: string # A prefix for the Invoice number. e.g. 'INV'. If left blank it will be set to the account default. Max length 20 characters.
   --transaction-tax-config-code: string # Possible values are (EX --- Tax Exclusive, INC --- Tax Inclusive). If left empty it will use the account default.
-]: any -> record<AccountIDFK: int, Balance: float, BillNumber: string, CompanyIDFK: int, CompanyName: string, CurrencyCode: string, DateCreated: string, DateIssued: string, DateUpdated: string, DateVerified: string, DueDate: string, ExchangeRate: float, Issuer: record<BillingAddress: string, BillingAddressCity: string, BillingAddressLine: string, BillingAddressPostCode: string, BillingAddressState: string, BillingCountryCode: string, CompanyIDFK: int, CompanyName: string>, LineItems: table<Amount: float, Description: string, Discount: float, InventoryItemIDFK: int, InventoryItemName: string, InventoryItemSKU: string, ProjectIDFK: int, ProjectTitle: string, Quantity: float, TaxAmount: float, TaxCode: string, TaxIDFK: int, TaxName: string, TransactionLineItemID: int, UnitPrice: float>, Links: record<Edit: string, View: string, WebView: string>, Notes: string, Recipient: record<RecipientBillingAddressCity: string, RecipientBillingAddressCountryCode: string, RecipientBillingAddressLine: string, RecipientBillingAddressPostCode: string, RecipientBillingAddressState: string, RecipientFormattedBillingAddress: string>, Subject: string, SupplierPONumber: string, TaxAmount: float, TotalAmount: float, TransactionID: int, TransactionPrefix: string, TransactionStatusCode: string, TransactionTaxConfigCode: string> {
+]: any -> oneof<record<AccountIDFK: int, Balance: float, BillNumber: string, CompanyIDFK: int, CompanyName: string, CurrencyCode: string, DateCreated: string, DateIssued: string, DateUpdated: string, DateVerified: string, DueDate: string, ExchangeRate: float, Issuer: record<BillingAddress: string, BillingAddressCity: string, BillingAddressLine: string, BillingAddressPostCode: string, BillingAddressState: string, BillingCountryCode: string, CompanyIDFK: int, CompanyName: string>, LineItems: table<Amount: float, Description: string, Discount: float, InventoryItemIDFK: int, InventoryItemName: string, InventoryItemSKU: string, ProjectIDFK: int, ProjectTitle: string, Quantity: float, TaxAmount: float, TaxCode: string, TaxIDFK: int, TaxName: string, TransactionLineItemID: int, UnitPrice: float>, Links: record<Edit: string, View: string, WebView: string>, Notes: string, Recipient: record<RecipientBillingAddressCity: string, RecipientBillingAddressCountryCode: string, RecipientBillingAddressLine: string, RecipientBillingAddressPostCode: string, RecipientBillingAddressState: string, RecipientFormattedBillingAddress: string>, Subject: string, SupplierPONumber: string, TaxAmount: float, TotalAmount: float, TransactionID: int, TransactionPrefix: string, TransactionStatusCode: string, TransactionTaxConfigCode: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -543,7 +566,7 @@ export def "bill-payment-get" [
   --updated-after: string # format: date-time
   --page-size: int # Number of items per page (max 1000) (format: int32)
   --page-number: int # Page to display. Starts from 1. (format: int32)
-]: nothing -> record<PageNumber: int, PageSize: int, Payments: table<AccountIDFK: int, Balance: float, CurrencyCode: string, DateCreated: string, DateIssued: string, DateUpdated: string, ExchangeRate: float, Notes: string, PaymentAllocations: list, PaymentNumber: string, PaymentProviderCode: string, SupplierIDFK: int, TotalAmount: float, TransactionID: int, TransactionPrefix: string, TransactionReference: string, TransactionStatusCode: string>, TotalCount: int> {
+]: nothing -> oneof<record<PageNumber: int, PageSize: int, Payments: table<AccountIDFK: int, Balance: float, CurrencyCode: string, DateCreated: string, DateIssued: string, DateUpdated: string, ExchangeRate: float, Notes: string, PaymentAllocations: list, PaymentNumber: string, PaymentProviderCode: string, SupplierIDFK: int, TotalAmount: float, TransactionID: int, TransactionPrefix: string, TransactionReference: string, TransactionStatusCode: string>, TotalCount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "UpdatedAfter" $updated_after "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
@@ -568,7 +591,6 @@ export def "bill-payment-get" [
 #
 # POST /api/BillPayment
 # operationId: BillPayment_Post
-# --PaymentAllocations item shape: {AllocationAmount?: float, AllocationDate?: string, BillTransactionIDFK?: int}
 export def "bill-payment-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -591,7 +613,7 @@ export def "bill-payment-post" [
   --payment-provider-code: string # Optional for storing the payment provider who was the source of funds.
   --transaction-prefix: string # Optional to override the default prefix added to Payment Numbers
   --transaction-reference: string # Optional for storing the reference # of the payment method.
-]: any -> record<AccountIDFK: int, Balance: float, CurrencyCode: string, DateCreated: string, DateIssued: string, DateUpdated: string, ExchangeRate: float, Notes: string, PaymentAllocations: table<AllocationAmount: float, AllocationDate: string, BillTransactionIDFK: int, PaymentTransactionIDFK: int, TransactionAllocationID: int>, PaymentNumber: string, PaymentProviderCode: string, SupplierIDFK: int, TotalAmount: float, TransactionID: int, TransactionPrefix: string, TransactionReference: string, TransactionStatusCode: string> {
+]: any -> oneof<record<AccountIDFK: int, Balance: float, CurrencyCode: string, DateCreated: string, DateIssued: string, DateUpdated: string, ExchangeRate: float, Notes: string, PaymentAllocations: table<AllocationAmount: float, AllocationDate: string, BillTransactionIDFK: int, PaymentTransactionIDFK: int, TransactionAllocationID: int>, PaymentNumber: string, PaymentProviderCode: string, SupplierIDFK: int, TotalAmount: float, TransactionID: int, TransactionPrefix: string, TransactionReference: string, TransactionStatusCode: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -630,7 +652,7 @@ export def "bill-payment-get-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<AccountIDFK: int, Balance: float, CurrencyCode: string, DateCreated: string, DateIssued: string, DateUpdated: string, ExchangeRate: float, Notes: string, PaymentAllocations: table<AllocationAmount: float, AllocationDate: string, BillTransactionIDFK: int, PaymentTransactionIDFK: int, TransactionAllocationID: int>, PaymentNumber: string, PaymentProviderCode: string, SupplierIDFK: int, TotalAmount: float, TransactionID: int, TransactionPrefix: string, TransactionReference: string, TransactionStatusCode: string> {
+]: nothing -> oneof<record<AccountIDFK: int, Balance: float, CurrencyCode: string, DateCreated: string, DateIssued: string, DateUpdated: string, ExchangeRate: float, Notes: string, PaymentAllocations: table<AllocationAmount: float, AllocationDate: string, BillTransactionIDFK: int, PaymentTransactionIDFK: int, TransactionAllocationID: int>, PaymentNumber: string, PaymentProviderCode: string, SupplierIDFK: int, TotalAmount: float, TransactionID: int, TransactionPrefix: string, TransactionReference: string, TransactionStatusCode: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -670,7 +692,7 @@ export def "company-get" [
   --page-size: int # Number of results per page (format: int32)
   --page-number: int # 1 based page number to retrieve (format: int32)
   --sort: string # (optional) Supply one of: "DateUpdated", "DateCreated", "CompanyName","DateUpdated desc","DateCreated desc", "CompanyName desc"
-]: nothing -> record<Companies: table<BillingAddress: string, BillingAddressCity: string, BillingAddressLine: string, BillingAddressPostCode: string, BillingAddressState: string, BillingCountryCode: string, Comments: string, CompanyID: int, CompanyName: string, Contacts: list, CurrencyCode: string, DateCreated: string, DateUpdated: string, DefaultTradingTermIDFK: int, Fax: string, Phone: string, TaxNumber: string, website: string>, PageNumber: int, PageSize: int, TotalCount: int> {
+]: nothing -> oneof<record<Companies: table<BillingAddress: string, BillingAddressCity: string, BillingAddressLine: string, BillingAddressPostCode: string, BillingAddressState: string, BillingCountryCode: string, Comments: string, CompanyID: int, CompanyName: string, Contacts: list, CurrencyCode: string, DateCreated: string, DateUpdated: string, DefaultTradingTermIDFK: int, Fax: string, Phone: string, TaxNumber: string, website: string>, PageNumber: int, PageSize: int, TotalCount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "UpdatedAfter" $updated_after "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "Sort" $sort "scalar")] | flatten | str join "&"
@@ -719,7 +741,7 @@ export def "company-post" [
   --phone: string
   --tax-number: string
   --website: string
-]: any -> record<BillingAddress: string, BillingAddressCity: string, BillingAddressLine: string, BillingAddressPostCode: string, BillingAddressState: string, BillingCountryCode: string, Comments: string, CompanyID: int, CompanyName: string, Contacts: table<CompanyIDFK: int, CompanyName: string, ContactID: int, DateCreated: string, DateUpdated: string, Email: string, Firstname: string, Lastname: string, Mobile: string, Phone: string, PositionTitle: string, TimeZone: string>, CurrencyCode: string, DateCreated: string, DateUpdated: string, DefaultTradingTermIDFK: int, Fax: string, Phone: string, TaxNumber: string, website: string> {
+]: any -> oneof<record<BillingAddress: string, BillingAddressCity: string, BillingAddressLine: string, BillingAddressPostCode: string, BillingAddressState: string, BillingCountryCode: string, Comments: string, CompanyID: int, CompanyName: string, Contacts: table<CompanyIDFK: int, CompanyName: string, ContactID: int, DateCreated: string, DateUpdated: string, Email: string, Firstname: string, Lastname: string, Mobile: string, Phone: string, PositionTitle: string, TimeZone: string>, CurrencyCode: string, DateCreated: string, DateUpdated: string, DefaultTradingTermIDFK: int, Fax: string, Phone: string, TaxNumber: string, website: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -771,7 +793,7 @@ export def "company-put" [
   --phone: string
   --tax-number: string
   --website: string
-]: any -> record<BillingAddress: string, BillingAddressCity: string, BillingAddressLine: string, BillingAddressPostCode: string, BillingAddressState: string, BillingCountryCode: string, Comments: string, CompanyID: int, CompanyName: string, Contacts: table<CompanyIDFK: int, CompanyName: string, ContactID: int, DateCreated: string, DateUpdated: string, Email: string, Firstname: string, Lastname: string, Mobile: string, Phone: string, PositionTitle: string, TimeZone: string>, CurrencyCode: string, DateCreated: string, DateUpdated: string, DefaultTradingTermIDFK: int, Fax: string, Phone: string, TaxNumber: string, website: string> {
+]: any -> oneof<record<BillingAddress: string, BillingAddressCity: string, BillingAddressLine: string, BillingAddressPostCode: string, BillingAddressState: string, BillingCountryCode: string, Comments: string, CompanyID: int, CompanyName: string, Contacts: table<CompanyIDFK: int, CompanyName: string, ContactID: int, DateCreated: string, DateUpdated: string, Email: string, Firstname: string, Lastname: string, Mobile: string, Phone: string, PositionTitle: string, TimeZone: string>, CurrencyCode: string, DateCreated: string, DateUpdated: string, DefaultTradingTermIDFK: int, Fax: string, Phone: string, TaxNumber: string, website: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -812,7 +834,7 @@ export def "company-lookup" [
   --page-size: int # Number of items per page (max 1000) (format: int32)
   --page-number: int # Page to display. Starts from 1. (format: int32)
   --search: string # Search string to match against Company title
-]: nothing -> record<Companies: table<CompanyID: int, CompanyName: string>, PageNumber: int, PageSize: int, TotalCount: int> {
+]: nothing -> oneof<record<Companies: table<CompanyID: int, CompanyName: string>, PageNumber: int, PageSize: int, TotalCount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
@@ -849,7 +871,7 @@ export def "company-get-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<BillingAddress: string, BillingAddressCity: string, BillingAddressLine: string, BillingAddressPostCode: string, BillingAddressState: string, BillingCountryCode: string, Comments: string, CompanyID: int, CompanyName: string, Contacts: table<CompanyIDFK: int, CompanyName: string, ContactID: int, DateCreated: string, DateUpdated: string, Email: string, Firstname: string, Lastname: string, Mobile: string, Phone: string, PositionTitle: string, TimeZone: string>, CurrencyCode: string, DateCreated: string, DateUpdated: string, DefaultTradingTermIDFK: int, Fax: string, Phone: string, TaxNumber: string, website: string> {
+]: nothing -> oneof<record<BillingAddress: string, BillingAddressCity: string, BillingAddressLine: string, BillingAddressPostCode: string, BillingAddressState: string, BillingCountryCode: string, Comments: string, CompanyID: int, CompanyName: string, Contacts: table<CompanyIDFK: int, CompanyName: string, ContactID: int, DateCreated: string, DateUpdated: string, Email: string, Firstname: string, Lastname: string, Mobile: string, Phone: string, PositionTitle: string, TimeZone: string>, CurrencyCode: string, DateCreated: string, DateUpdated: string, DefaultTradingTermIDFK: int, Fax: string, Phone: string, TaxNumber: string, website: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -890,7 +912,7 @@ export def "contact-get" [
   --page-number: int # Page to display. Starts from 1. (format: int32)
   --sort: string
   --company-idfk: int # format: int32
-]: nothing -> record<Contacts: table<CompanyIDFK: int, CompanyName: string, ContactID: int, DateCreated: string, DateUpdated: string, Email: string, Firstname: string, Lastname: string, Mobile: string, Phone: string, PositionTitle: string, TimeZone: string>, PageNumber: int, PageSize: int, TotalCount: int> {
+]: nothing -> oneof<record<Contacts: table<CompanyIDFK: int, CompanyName: string, ContactID: int, DateCreated: string, DateUpdated: string, Email: string, Firstname: string, Lastname: string, Mobile: string, Phone: string, PositionTitle: string, TimeZone: string>, PageNumber: int, PageSize: int, TotalCount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "UpdatedAfter" $updated_after "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "Sort" $sort "scalar") (serialize-qp "CompanyIDFK" $company_idfk "scalar")] | flatten | str join "&"
@@ -942,7 +964,7 @@ export def "contact-post" [
   --phone: string
   --position-title: string
   --update-existing: oneof<nothing, bool>
-]: any -> record<CompanyIDFK: int, CompanyName: string, ContactID: int, DateCreated: string, DateUpdated: string, Email: string, Firstname: string, Lastname: string, Mobile: string, Phone: string, PositionTitle: string, TimeZone: string> {
+]: any -> oneof<record<CompanyIDFK: int, CompanyName: string, ContactID: int, DateCreated: string, DateUpdated: string, Email: string, Firstname: string, Lastname: string, Mobile: string, Phone: string, PositionTitle: string, TimeZone: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -981,7 +1003,7 @@ export def "contact-get-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<CompanyIDFK: int, CompanyName: string, ContactID: int, DateCreated: string, DateUpdated: string, Email: string, Firstname: string, Lastname: string, Mobile: string, Phone: string, PositionTitle: string, TimeZone: string> {
+]: nothing -> oneof<record<CompanyIDFK: int, CompanyName: string, ContactID: int, DateCreated: string, DateUpdated: string, Email: string, Firstname: string, Lastname: string, Mobile: string, Phone: string, PositionTitle: string, TimeZone: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1020,7 +1042,7 @@ export def "credit-note-get" [
   --updated-after: string # format: date-time
   --page-size: int # Number of items per page (max 1000) (format: int32)
   --page-number: int # Page to display. Starts from 1. (format: int32)
-]: nothing -> record<CreditNotes: table<Balance: float, CreditNoteAllocations: list, CreditNoteLineItems: list, CreditNoteNumber: string, CurrencyCode: string, CustomerIDFK: int, DateCreated: string, DateIssued: string, DateUpdated: string, Notes: string, TotalAmount: float, TransactionID: int, TransactionPrefix: string, TransactionStatusCode: string>, PageNumber: int, PageSize: int, TotalCount: int> {
+]: nothing -> oneof<record<CreditNotes: table<Balance: float, CreditNoteAllocations: list, CreditNoteLineItems: list, CreditNoteNumber: string, CurrencyCode: string, CustomerIDFK: int, DateCreated: string, DateIssued: string, DateUpdated: string, Notes: string, TotalAmount: float, TransactionID: int, TransactionPrefix: string, TransactionStatusCode: string>, PageNumber: int, PageSize: int, TotalCount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "UpdatedAfter" $updated_after "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
@@ -1057,7 +1079,7 @@ export def "credit-note-get-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<Balance: float, CreditNoteAllocations: table<AllocationAmount: float, AllocationDate: string, CreditNoteTransactionIDFK: int, InvoiceTransactionIDFK: int, TransactionAllocationID: int>, CreditNoteLineItems: table<Amount: float, Description: string, Discount: float, Quantity: float, TaxAmount: float, TaxIDFK: int, TransactionLineItemID: int, UnitPrice: float>, CreditNoteNumber: string, CurrencyCode: string, CustomerIDFK: int, DateCreated: string, DateIssued: string, DateUpdated: string, Notes: string, TotalAmount: float, TransactionID: int, TransactionPrefix: string, TransactionStatusCode: string> {
+]: nothing -> oneof<record<Balance: float, CreditNoteAllocations: table<AllocationAmount: float, AllocationDate: string, CreditNoteTransactionIDFK: int, InvoiceTransactionIDFK: int, TransactionAllocationID: int>, CreditNoteLineItems: table<Amount: float, Description: string, Discount: float, Quantity: float, TaxAmount: float, TaxIDFK: int, TransactionLineItemID: int, UnitPrice: float>, CreditNoteNumber: string, CurrencyCode: string, CustomerIDFK: int, DateCreated: string, DateIssued: string, DateUpdated: string, Notes: string, TotalAmount: float, TransactionID: int, TransactionPrefix: string, TransactionStatusCode: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1093,7 +1115,7 @@ export def "currency-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<Currencies: table<CurrencyCode: string, DecimalPlaces: int, Name: string, Symbol: string, Symbol2: string>> {
+]: nothing -> oneof<record<Currencies: table<CurrencyCode: string, DecimalPlaces: int, Name: string, Symbol: string, Symbol2: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/Currency" $auth.query)
@@ -1133,7 +1155,7 @@ export def "estimate-get" [
   --page-number: int # Page to display. Starts from 1. (format: int32)
   --sort: string
   --company-idfk: int # format: int32
-]: nothing -> record<Estimates: table<AccountIDFK: int, Balance: float, CompanyIDFK: int, CompanyName: string, CurrencyCode: string, DateCreated: string, DateIssued: string, DateSent: string, DateUpdated: string, DueDate: string, EstimateID: int, EstimateItemNumber: string, EstimatePrefix: string, EstimateStatusCode: string, EstimateTaxConfigCode: string, ExchangeRate: float, Issuer: record, LineItems: list, Links: record, Notes: string, Recipient: record, Subject: string, TaxAmount: float, TotalAmount: float>, PageNumber: int, PageSize: int, TotalCount: int> {
+]: nothing -> oneof<record<Estimates: table<AccountIDFK: int, Balance: float, CompanyIDFK: int, CompanyName: string, CurrencyCode: string, DateCreated: string, DateIssued: string, DateSent: string, DateUpdated: string, DueDate: string, EstimateID: int, EstimateItemNumber: string, EstimatePrefix: string, EstimateStatusCode: string, EstimateTaxConfigCode: string, ExchangeRate: float, Issuer: record, LineItems: list, Links: record, Notes: string, Recipient: record, Subject: string, TaxAmount: float, TotalAmount: float>, PageNumber: int, PageSize: int, TotalCount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "UpdatedAfter" $updated_after "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "Sort" $sort "scalar") (serialize-qp "CompanyIDFK" $company_idfk "scalar")] | flatten | str join "&"
@@ -1158,7 +1180,6 @@ export def "estimate-get" [
 #
 # POST /api/Estimate
 # operationId: Estimate_Post
-# --LineItems item shape: {Description?: string, Discount?: float, InventoryItemIDFK?: int, InventoryItemName?: string, Quantity: float, TaxIDFK?: int, TaxName?: string, TaxPercent?: float, UnitPrice: float}
 export def "estimate-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1187,7 +1208,7 @@ export def "estimate-post" [
   --line-items: list # item shape: {Description?: string, Discount?: float, InventoryItemIDFK?: int, InventoryItemName?: string, Quantity: float, TaxIDFK?: int, TaxName?: string, TaxPercent?: float, UnitPrice: float}
   --notes: string # Plain UTF8 text. (no HTML). Max 2000 characters
   --subject: string # Plain UTF8 text. (no HTML). 255 characters max
-]: any -> record<AccountIDFK: int, Balance: float, CompanyIDFK: int, CompanyName: string, CurrencyCode: string, DateCreated: string, DateIssued: string, DateSent: string, DateUpdated: string, DueDate: string, EstimateID: int, EstimateItemNumber: string, EstimatePrefix: string, EstimateStatusCode: string, EstimateTaxConfigCode: string, ExchangeRate: float, Issuer: record<BillingAddress: string, BillingAddressCity: string, BillingAddressLine: string, BillingAddressPostCode: string, BillingAddressState: string, BillingCountryCode: string, TaxNumber: string>, LineItems: table<Amount: float, Description: string, Discount: float, EstimateLineItemID: int, InventoryItemIDFK: int, InventoryItemName: string, InventoryItemSKU: string, Quantity: float, TaxAmount: float, TaxCode: string, TaxIDFK: int, TaxName: string, UnitPrice: float>, Links: record<ClientView: string, Edit: string, View: string>, Notes: string, Recipient: record<CompanyIDFK: int, CompanyName: string, RecipientBillingAddressCity: string, RecipientBillingAddressCountryCode: string, RecipientBillingAddressLine: string, RecipientBillingAddressPostCode: string, RecipientBillingAddressState: string, RecipientFormattedBillingAddress: string>, Subject: string, TaxAmount: float, TotalAmount: float> {
+]: any -> oneof<record<AccountIDFK: int, Balance: float, CompanyIDFK: int, CompanyName: string, CurrencyCode: string, DateCreated: string, DateIssued: string, DateSent: string, DateUpdated: string, DueDate: string, EstimateID: int, EstimateItemNumber: string, EstimatePrefix: string, EstimateStatusCode: string, EstimateTaxConfigCode: string, ExchangeRate: float, Issuer: record<BillingAddress: string, BillingAddressCity: string, BillingAddressLine: string, BillingAddressPostCode: string, BillingAddressState: string, BillingCountryCode: string, TaxNumber: string>, LineItems: table<Amount: float, Description: string, Discount: float, EstimateLineItemID: int, InventoryItemIDFK: int, InventoryItemName: string, InventoryItemSKU: string, Quantity: float, TaxAmount: float, TaxCode: string, TaxIDFK: int, TaxName: string, UnitPrice: float>, Links: record<ClientView: string, Edit: string, View: string>, Notes: string, Recipient: record<CompanyIDFK: int, CompanyName: string, RecipientBillingAddressCity: string, RecipientBillingAddressCountryCode: string, RecipientBillingAddressLine: string, RecipientBillingAddressPostCode: string, RecipientBillingAddressState: string, RecipientFormattedBillingAddress: string>, Subject: string, TaxAmount: float, TotalAmount: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1263,7 +1284,7 @@ export def "expense-delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --body: list
-]: any -> record<Results: table<ErrorMessage: string, ExpenseID: int, Success: bool>> {
+]: any -> oneof<record<Results: table<ErrorMessage: string, ExpenseID: int, Success: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1318,7 +1339,7 @@ export def "expense-get" [
   --page-size: int # Number of items per page (max 1000) (format: int32)
   --page-number: int # Page to display. Starts from 1. (format: int32)
   --sort: string
-]: nothing -> record<Expenses: table<Amount: float, AttachmentPreviewURL: string, AttachmentURL: string, ChargeableStatusCode: string, CurrencyCode: string, CustomerIDFK: int, CustomerName: string, DateCreated: string, DateUpdated: string, Email: string, ExchangeRate: float, ExpenseApprovalStatusCode: string, ExpenseCategoryHasUnitPrice: bool, ExpenseCategoryIDFK: int, ExpenseCategoryName: string, ExpenseCategoryUnitName: string, ExpenseCategoryUnitPrice: float, ExpenseDate: string, ExpenseID: int, ExpensePaymentMethodIDFK: int, ExpensePaymentMethodName: string, ExpenseReimbursementIDFK: int, ExpenseReimbursementStatusCode: string, ExpenseReportIDFK: int, ExpenseReportName: string, FileAttachmentIDFK: int, Firstname: string, Lastname: string, Merchant: string, MerchantTaxNumber: string, Notes: string, ProjectCode: string, ProjectIDFK: int, ProjectTitle: string, Quantity: float, TaskIDFK: int, TaskTitle: string, TaxAmount: float, TaxIDFK: int, TaxName: string, TransactionTaxConfigCode: string, TransactionTaxConfigName: string, UserIDFK: int, isChargeable: bool, isOfficialExchangeRate: bool, isReimbursable: bool>, PageNumber: int, PageSize: int, TotalCount: int> {
+]: nothing -> oneof<record<Expenses: table<Amount: float, AttachmentPreviewURL: string, AttachmentURL: string, ChargeableStatusCode: string, CurrencyCode: string, CustomerIDFK: int, CustomerName: string, DateCreated: string, DateUpdated: string, Email: string, ExchangeRate: float, ExpenseApprovalStatusCode: string, ExpenseCategoryHasUnitPrice: bool, ExpenseCategoryIDFK: int, ExpenseCategoryName: string, ExpenseCategoryUnitName: string, ExpenseCategoryUnitPrice: float, ExpenseDate: string, ExpenseID: int, ExpensePaymentMethodIDFK: int, ExpensePaymentMethodName: string, ExpenseReimbursementIDFK: int, ExpenseReimbursementStatusCode: string, ExpenseReportIDFK: int, ExpenseReportName: string, FileAttachmentIDFK: int, Firstname: string, Lastname: string, Merchant: string, MerchantTaxNumber: string, Notes: string, ProjectCode: string, ProjectIDFK: int, ProjectTitle: string, Quantity: float, TaskIDFK: int, TaskTitle: string, TaxAmount: float, TaxIDFK: int, TaxName: string, TransactionTaxConfigCode: string, TransactionTaxConfigName: string, UserIDFK: int, isChargeable: bool, isOfficialExchangeRate: bool, isReimbursable: bool>, PageNumber: int, PageSize: int, TotalCount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "UpdatedAfter" $updated_after "scalar") (serialize-qp "ExpenseDateFrom" $expense_date_from "scalar") (serialize-qp "ExpenseDateTo" $expense_date_to "scalar") (serialize-qp "UserEmail" $user_email "scalar") (serialize-qp "UserID" $user_id "scalar") (serialize-qp "CategoryName" $category_name "scalar") (serialize-qp "CustomerID" $customer_id "scalar") (serialize-qp "ProjectID" $project_id "scalar") (serialize-qp "isChargeable" $is_chargeable "scalar") (serialize-qp "isInvoiced" $is_invoiced "scalar") (serialize-qp "ExpenseReimbursementIDFK" $expense_reimbursement_idfk "scalar") (serialize-qp "ExpensePaymentMethodIDFK" $expense_payment_method_idfk "scalar") (serialize-qp "ExpenseApprovalStatusCode" $expense_approval_status_code "scalar") (serialize-qp "Search" $search "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "Sort" $sort "scalar")] | flatten | str join "&"
@@ -1380,7 +1401,7 @@ export def "expense-post" [
   --verify-and-save: oneof<nothing, bool> # Pass false if creating a draft expense. True otherwise.
   --is-chargeable: oneof<nothing, bool> # aka Billable. Defaults to false if not provided. If set to true, a CustomerIDFK or CustomerName must be provided.
   --is-reimbursable: oneof<nothing, bool> # Defaults to false if not provided.
-]: any -> record<Amount: float, AttachmentPreviewURL: string, AttachmentURL: string, ChargeableStatusCode: string, CurrencyCode: string, CustomerIDFK: int, CustomerName: string, DateCreated: string, DateUpdated: string, Email: string, ExchangeRate: float, ExpenseApprovalStatusCode: string, ExpenseCategoryHasUnitPrice: bool, ExpenseCategoryIDFK: int, ExpenseCategoryName: string, ExpenseCategoryUnitName: string, ExpenseCategoryUnitPrice: float, ExpenseDate: string, ExpenseID: int, ExpensePaymentMethodIDFK: int, ExpensePaymentMethodName: string, ExpenseReimbursementIDFK: int, ExpenseReimbursementStatusCode: string, ExpenseReportIDFK: int, ExpenseReportName: string, FileAttachmentIDFK: int, Firstname: string, Lastname: string, Merchant: string, MerchantTaxNumber: string, Notes: string, ProjectCode: string, ProjectIDFK: int, ProjectTitle: string, Quantity: float, TaskIDFK: int, TaskTitle: string, TaxAmount: float, TaxIDFK: int, TaxName: string, TransactionTaxConfigCode: string, TransactionTaxConfigName: string, UserIDFK: int, isChargeable: bool, isOfficialExchangeRate: bool, isReimbursable: bool> {
+]: any -> oneof<record<Amount: float, AttachmentPreviewURL: string, AttachmentURL: string, ChargeableStatusCode: string, CurrencyCode: string, CustomerIDFK: int, CustomerName: string, DateCreated: string, DateUpdated: string, Email: string, ExchangeRate: float, ExpenseApprovalStatusCode: string, ExpenseCategoryHasUnitPrice: bool, ExpenseCategoryIDFK: int, ExpenseCategoryName: string, ExpenseCategoryUnitName: string, ExpenseCategoryUnitPrice: float, ExpenseDate: string, ExpenseID: int, ExpensePaymentMethodIDFK: int, ExpensePaymentMethodName: string, ExpenseReimbursementIDFK: int, ExpenseReimbursementStatusCode: string, ExpenseReportIDFK: int, ExpenseReportName: string, FileAttachmentIDFK: int, Firstname: string, Lastname: string, Merchant: string, MerchantTaxNumber: string, Notes: string, ProjectCode: string, ProjectIDFK: int, ProjectTitle: string, Quantity: float, TaskIDFK: int, TaskTitle: string, TaxAmount: float, TaxIDFK: int, TaxName: string, TransactionTaxConfigCode: string, TransactionTaxConfigName: string, UserIDFK: int, isChargeable: bool, isOfficialExchangeRate: bool, isReimbursable: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1440,7 +1461,7 @@ export def "expense-put" [
   --verify-and-save: oneof<nothing, bool> # Pass false if creating a draft expense. True otherwise.
   --is-chargeable: oneof<nothing, bool> # aka Billable. Defaults to false if not provided. If set to true, a CustomerIDFK or CustomerName must be provided.
   --is-reimbursable: oneof<nothing, bool> # Defaults to false if not provided.
-]: any -> record<Amount: float, AttachmentPreviewURL: string, AttachmentURL: string, ChargeableStatusCode: string, CurrencyCode: string, CustomerIDFK: int, CustomerName: string, DateCreated: string, DateUpdated: string, Email: string, ExchangeRate: float, ExpenseApprovalStatusCode: string, ExpenseCategoryHasUnitPrice: bool, ExpenseCategoryIDFK: int, ExpenseCategoryName: string, ExpenseCategoryUnitName: string, ExpenseCategoryUnitPrice: float, ExpenseDate: string, ExpenseID: int, ExpensePaymentMethodIDFK: int, ExpensePaymentMethodName: string, ExpenseReimbursementIDFK: int, ExpenseReimbursementStatusCode: string, ExpenseReportIDFK: int, ExpenseReportName: string, FileAttachmentIDFK: int, Firstname: string, Lastname: string, Merchant: string, MerchantTaxNumber: string, Notes: string, ProjectCode: string, ProjectIDFK: int, ProjectTitle: string, Quantity: float, TaskIDFK: int, TaskTitle: string, TaxAmount: float, TaxIDFK: int, TaxName: string, TransactionTaxConfigCode: string, TransactionTaxConfigName: string, UserIDFK: int, isChargeable: bool, isOfficialExchangeRate: bool, isReimbursable: bool> {
+]: any -> oneof<record<Amount: float, AttachmentPreviewURL: string, AttachmentURL: string, ChargeableStatusCode: string, CurrencyCode: string, CustomerIDFK: int, CustomerName: string, DateCreated: string, DateUpdated: string, Email: string, ExchangeRate: float, ExpenseApprovalStatusCode: string, ExpenseCategoryHasUnitPrice: bool, ExpenseCategoryIDFK: int, ExpenseCategoryName: string, ExpenseCategoryUnitName: string, ExpenseCategoryUnitPrice: float, ExpenseDate: string, ExpenseID: int, ExpensePaymentMethodIDFK: int, ExpensePaymentMethodName: string, ExpenseReimbursementIDFK: int, ExpenseReimbursementStatusCode: string, ExpenseReportIDFK: int, ExpenseReportName: string, FileAttachmentIDFK: int, Firstname: string, Lastname: string, Merchant: string, MerchantTaxNumber: string, Notes: string, ProjectCode: string, ProjectIDFK: int, ProjectTitle: string, Quantity: float, TaskIDFK: int, TaskTitle: string, TaxAmount: float, TaxIDFK: int, TaxName: string, TransactionTaxConfigCode: string, TransactionTaxConfigName: string, UserIDFK: int, isChargeable: bool, isOfficialExchangeRate: bool, isReimbursable: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1478,7 +1499,7 @@ export def "expense-attachment" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   file: path # Upload software package
-]: any -> record<FileAttachments: table<FileAttachmentID: int, OriginalFilename: string, PreviewBaseURL: string, PublicFileURL: string, SizeBytes: int>> {
+]: any -> oneof<record<FileAttachments: table<FileAttachmentID: int, OriginalFilename: string, PreviewBaseURL: string, PublicFileURL: string, SizeBytes: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1519,7 +1540,7 @@ export def "expense-get-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<Amount: float, AttachmentPreviewURL: string, AttachmentURL: string, ChargeableStatusCode: string, CurrencyCode: string, CustomerIDFK: int, CustomerName: string, DateCreated: string, DateUpdated: string, Email: string, ExchangeRate: float, ExpenseApprovalStatusCode: string, ExpenseCategoryHasUnitPrice: bool, ExpenseCategoryIDFK: int, ExpenseCategoryName: string, ExpenseCategoryUnitName: string, ExpenseCategoryUnitPrice: float, ExpenseDate: string, ExpenseID: int, ExpensePaymentMethodIDFK: int, ExpensePaymentMethodName: string, ExpenseReimbursementIDFK: int, ExpenseReimbursementStatusCode: string, ExpenseReportIDFK: int, ExpenseReportName: string, FileAttachmentIDFK: int, Firstname: string, Lastname: string, Merchant: string, MerchantTaxNumber: string, Notes: string, ProjectCode: string, ProjectIDFK: int, ProjectTitle: string, Quantity: float, TaskIDFK: int, TaskTitle: string, TaxAmount: float, TaxIDFK: int, TaxName: string, TransactionTaxConfigCode: string, TransactionTaxConfigName: string, UserIDFK: int, isChargeable: bool, isOfficialExchangeRate: bool, isReimbursable: bool> {
+]: nothing -> oneof<record<Amount: float, AttachmentPreviewURL: string, AttachmentURL: string, ChargeableStatusCode: string, CurrencyCode: string, CustomerIDFK: int, CustomerName: string, DateCreated: string, DateUpdated: string, Email: string, ExchangeRate: float, ExpenseApprovalStatusCode: string, ExpenseCategoryHasUnitPrice: bool, ExpenseCategoryIDFK: int, ExpenseCategoryName: string, ExpenseCategoryUnitName: string, ExpenseCategoryUnitPrice: float, ExpenseDate: string, ExpenseID: int, ExpensePaymentMethodIDFK: int, ExpensePaymentMethodName: string, ExpenseReimbursementIDFK: int, ExpenseReimbursementStatusCode: string, ExpenseReportIDFK: int, ExpenseReportName: string, FileAttachmentIDFK: int, Firstname: string, Lastname: string, Merchant: string, MerchantTaxNumber: string, Notes: string, ProjectCode: string, ProjectIDFK: int, ProjectTitle: string, Quantity: float, TaskIDFK: int, TaskTitle: string, TaxAmount: float, TaxIDFK: int, TaxName: string, TransactionTaxConfigCode: string, TransactionTaxConfigName: string, UserIDFK: int, isChargeable: bool, isOfficialExchangeRate: bool, isReimbursable: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1558,7 +1579,7 @@ export def "expense-approval" [
   --user-id: int # The user to submit the Expenses for. Defaults to current user. Only allowed to be different from the current user when the current user has rights to Impersonate other users. (format: int32)
   --send-notifications: oneof<nothing, bool> # Send email alerts to expense approvers. Defaults to true
   --body: list
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1598,7 +1619,7 @@ export def "expense-category-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --is-enabled: oneof<nothing, bool> # Optional filter on for enabled/disabled categories. Defaults to true.
-]: nothing -> record<Categories: table<Enabled: bool, ExpenseCategoryID: int, Name: string, UnitName: string, UnitPrice: float, hasUnitPrice: bool>> {
+]: nothing -> oneof<record<Categories: table<Enabled: bool, ExpenseCategoryID: int, Name: string, UnitName: string, UnitPrice: float, hasUnitPrice: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "isEnabled" $is_enabled "scalar")] | flatten | str join "&"
@@ -1637,7 +1658,7 @@ export def "expense-group-lookup" [
   --page-size: int # Number of items per page (max 1000) (format: int32)
   --page-number: int # Page to display. Starts from 1. (format: int32)
   --search: string # Search string to match against Expense Group Name
-]: nothing -> record<ExpenseGroups: table<ExpenseGroupID: int, Name: string>, PageNumber: int, PageSize: int, TotalCount: int> {
+]: nothing -> oneof<record<ExpenseGroups: table<ExpenseGroupID: int, Name: string>, PageNumber: int, PageSize: int, TotalCount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
@@ -1676,7 +1697,7 @@ export def "expense-merchange-lookup" [
   --page-size: int # Number of items per page (max 1000) (format: int32)
   --page-number: int # Page to display. Starts from 1. (format: int32)
   --search: string # Search string to match against Expense Group Name
-]: nothing -> record<ExpenseMerchants: table<MerchantName: string>, PageNumber: int, PageSize: int, TotalCount: int> {
+]: nothing -> oneof<record<ExpenseMerchants: table<MerchantName: string>, PageNumber: int, PageSize: int, TotalCount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
@@ -1712,7 +1733,7 @@ export def "expense-payment-method-lookup" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<ExpensePaymentMethods: table<ExpensePaymentMethodID: int, Name: string>> {
+]: nothing -> oneof<record<ExpensePaymentMethods: table<ExpensePaymentMethodID: int, Name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/ExpensePaymentMethod/Lookup" $auth.query)
@@ -1752,7 +1773,7 @@ export def "expense-summary-get" [
   --model-expense-date-to: string # (Required) Filter for expenses with an expense date smaller or equal to the specified date. e.g. 2019-01-25. (format: date-time)
   --model-user-id: list<int> # (Optional) Defaults to the current user. Provide one or more UserIDs of Users whose expenses should be retrieved. If the current user doesn't have impersonation rights, then they will only see their own data.
   --model-project-id: int # (Optional) Filter by Project (format: int32)
-]: nothing -> record<ExpenseDateFrom: string, ExpenseDateTo: string, GroupData: table<GroupData: list, GroupID: string, GroupName: string, TotalAmount: float>, GroupingLevels: list<string>, TotalAmount: float, UserID: list<int>> {
+]: nothing -> oneof<record<ExpenseDateFrom: string, ExpenseDateTo: string, GroupData: table<GroupData: list, GroupID: string, GroupName: string, TotalAmount: float>, GroupingLevels: list<string>, TotalAmount: float, UserID: list<int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "model.groupBy" $model_group_by "multi") (serialize-qp "model.expenseDateFrom" $model_expense_date_from "scalar") (serialize-qp "model.expenseDateTo" $model_expense_date_to "scalar") (serialize-qp "model.userID" $model_user_id "multi") (serialize-qp "model.projectID" $model_project_id "scalar")] | flatten | str join "&"
@@ -1797,7 +1818,7 @@ export def "fixed-amount-get" [
   --page-size: int # Number of items per page (max 1000) (format: int32)
   --page-number: int # Page to display. Starts from 1. (format: int32)
   --sort: string # Optional sorting instruction. Currently possible values: "DateUpdated", "DateCreated", "DateUpdated desc", "DateCreated desc","EntryDate", "EntryDate desc", "StartTimeLocal","StartTimeLocal desc", "TimeSheetEntryID", "TimeSheetEntryID desc"
-]: nothing -> record<FixedAmounts: table<Amount: float, DateCreated: string, DateUpdated: string, FixedAmountID: int, InventoryItemIDFK: int, InventoryItemName: string, Notes: string, ProjectCode: string, ProjectIDFK: int, ProjectTitle: string, TaskIDFK: int, TaskTitle: string, UpdatedByUserIDFK: int, isInvoiced: bool>, PageNumber: int, PageSize: int, TotalCount: int> {
+]: nothing -> oneof<record<FixedAmounts: table<Amount: float, DateCreated: string, DateUpdated: string, FixedAmountID: int, InventoryItemIDFK: int, InventoryItemName: string, Notes: string, ProjectCode: string, ProjectIDFK: int, ProjectTitle: string, TaskIDFK: int, TaskTitle: string, UpdatedByUserIDFK: int, isInvoiced: bool>, PageNumber: int, PageSize: int, TotalCount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "UpdatedAfter" $updated_after "scalar") (serialize-qp "EntryDateFrom" $entry_date_from "scalar") (serialize-qp "EntryDateTo" $entry_date_to "scalar") (serialize-qp "ProjectID" $project_id "scalar") (serialize-qp "TaskID" $task_id "scalar") (serialize-qp "isInvoiced" $is_invoiced "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "Sort" $sort "scalar")] | flatten | str join "&"
@@ -1836,7 +1857,7 @@ export def "inventory-get" [
   --updated-after: string # format: date-time
   --page-size: int # Number of items per page (max 1000) (format: int32)
   --page-number: int # Page to display. Starts from 1. (format: int32)
-]: nothing -> record<Inventory: table<CostPrice: float, DateCreated: string, DateUpdated: string, Description: string, InventoryItemID: int, Name: string, SKU: string, SalePrice: float, SaleTaxIDFK: int, isHidden: bool>, PageNumber: int, PageSize: int, TotalCount: int> {
+]: nothing -> oneof<record<Inventory: table<CostPrice: float, DateCreated: string, DateUpdated: string, Description: string, InventoryItemID: int, Name: string, SKU: string, SalePrice: float, SaleTaxIDFK: int, isHidden: bool>, PageNumber: int, PageSize: int, TotalCount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "UpdatedAfter" $updated_after "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
@@ -1914,7 +1935,7 @@ export def "invoice-get" [
   --page-number: int # Page to display. Starts from 1. (format: int32)
   --sort: string
   --company-idfk: int # format: int32
-]: nothing -> record<Invoices: table<AccountIDFK: int, Balance: float, CompanyIDFK: int, CompanyName: string, CurrencyCode: string, CustomerPONumber: string, DateCreated: string, DateIssued: string, DateSent: string, DateUpdated: string, DueDate: string, ExchangeRate: float, InvoiceNumber: string, Issuer: record, LineItems: list, Links: record, Notes: string, Recipient: record, Subject: string, TaxAmount: float, TotalAmount: float, TransactionID: int, TransactionPrefix: string, TransactionStatusCode: string, TransactionTaxConfigCode: string>, PageNumber: int, PageSize: int, TotalCount: int> {
+]: nothing -> oneof<record<Invoices: table<AccountIDFK: int, Balance: float, CompanyIDFK: int, CompanyName: string, CurrencyCode: string, CustomerPONumber: string, DateCreated: string, DateIssued: string, DateSent: string, DateUpdated: string, DueDate: string, ExchangeRate: float, InvoiceNumber: string, Issuer: record, LineItems: list, Links: record, Notes: string, Recipient: record, Subject: string, TaxAmount: float, TotalAmount: float, TransactionID: int, TransactionPrefix: string, TransactionStatusCode: string, TransactionTaxConfigCode: string>, PageNumber: int, PageSize: int, TotalCount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "UpdatedAfter" $updated_after "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "Sort" $sort "scalar") (serialize-qp "CompanyIDFK" $company_idfk "scalar")] | flatten | str join "&"
@@ -1939,7 +1960,6 @@ export def "invoice-get" [
 #
 # POST /api/Invoice
 # operationId: Invoice_Post
-# --LineItems item shape: {Description?: string, Discount?: float, InventoryItemIDFK?: int, InventoryItemName?: string, ProjectIDFK?: int, Quantity: float, TaxIDFK?: int, TaxName?: string, TaxPercent?: float, UnitPrice: float}
 export def "invoice-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1969,7 +1989,7 @@ export def "invoice-post" [
   --subject: string # Plain UTF8 text. (no HTML). 255 characters max
   --transaction-prefix: string # A prefix for the Invoice number. e.g. 'INV'. If left blank it will be set to the account default. Max length 20 characters.
   --transaction-tax-config-code: string # Possible values are (EX --- Tax Exclusive, INC --- Tax Inclusive). If left empty it will use the account default.
-]: any -> record<AccountIDFK: int, Balance: float, CompanyIDFK: int, CompanyName: string, CurrencyCode: string, CustomerPONumber: string, DateCreated: string, DateIssued: string, DateSent: string, DateUpdated: string, DueDate: string, ExchangeRate: float, InvoiceNumber: string, Issuer: record<BillingAddress: string, BillingAddressCity: string, BillingAddressLine: string, BillingAddressPostCode: string, BillingAddressState: string, BillingCountryCode: string, TaxNumber: string>, LineItems: table<Amount: float, Description: string, Discount: float, InventoryItemIDFK: int, InventoryItemName: string, InventoryItemSKU: string, ProjectIDFK: int, ProjectTitle: string, Quantity: float, TaxAmount: float, TaxCode: string, TaxIDFK: int, TaxName: string, TransactionLineItemID: int, UnitPrice: float>, Links: record<ClientView: string, Edit: string, View: string>, Notes: string, Recipient: record<CompanyIDFK: int, CompanyName: string, RecipientBillingAddressCity: string, RecipientBillingAddressCountryCode: string, RecipientBillingAddressLine: string, RecipientBillingAddressPostCode: string, RecipientBillingAddressState: string, RecipientFormattedBillingAddress: string>, Subject: string, TaxAmount: float, TotalAmount: float, TransactionID: int, TransactionPrefix: string, TransactionStatusCode: string, TransactionTaxConfigCode: string> {
+]: any -> oneof<record<AccountIDFK: int, Balance: float, CompanyIDFK: int, CompanyName: string, CurrencyCode: string, CustomerPONumber: string, DateCreated: string, DateIssued: string, DateSent: string, DateUpdated: string, DueDate: string, ExchangeRate: float, InvoiceNumber: string, Issuer: record<BillingAddress: string, BillingAddressCity: string, BillingAddressLine: string, BillingAddressPostCode: string, BillingAddressState: string, BillingCountryCode: string, TaxNumber: string>, LineItems: table<Amount: float, Description: string, Discount: float, InventoryItemIDFK: int, InventoryItemName: string, InventoryItemSKU: string, ProjectIDFK: int, ProjectTitle: string, Quantity: float, TaxAmount: float, TaxCode: string, TaxIDFK: int, TaxName: string, TransactionLineItemID: int, UnitPrice: float>, Links: record<ClientView: string, Edit: string, View: string>, Notes: string, Recipient: record<CompanyIDFK: int, CompanyName: string, RecipientBillingAddressCity: string, RecipientBillingAddressCountryCode: string, RecipientBillingAddressLine: string, RecipientBillingAddressPostCode: string, RecipientBillingAddressState: string, RecipientFormattedBillingAddress: string>, Subject: string, TaxAmount: float, TotalAmount: float, TransactionID: int, TransactionPrefix: string, TransactionStatusCode: string, TransactionTaxConfigCode: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2047,7 +2067,7 @@ export def "payment-get" [
   --updated-after: string # format: date-time
   --page-size: int # Number of items per page (max 1000) (format: int32)
   --page-number: int # Page to display. Starts from 1. (format: int32)
-]: nothing -> record<PageNumber: int, PageSize: int, Payments: table<AccountIDFK: int, Balance: float, CurrencyCode: string, CustomerIDFK: int, DateCreated: string, DateIssued: string, DateUpdated: string, ExchangeRate: float, Notes: string, PaymentAllocations: list, PaymentNumber: string, PaymentProviderCode: string, TotalAmount: float, TransactionID: int, TransactionPrefix: string, TransactionReference: string, TransactionStatusCode: string>, TotalCount: int> {
+]: nothing -> oneof<record<PageNumber: int, PageSize: int, Payments: table<AccountIDFK: int, Balance: float, CurrencyCode: string, CustomerIDFK: int, DateCreated: string, DateIssued: string, DateUpdated: string, ExchangeRate: float, Notes: string, PaymentAllocations: list, PaymentNumber: string, PaymentProviderCode: string, TotalAmount: float, TransactionID: int, TransactionPrefix: string, TransactionReference: string, TransactionStatusCode: string>, TotalCount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "UpdatedAfter" $updated_after "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
@@ -2072,7 +2092,6 @@ export def "payment-get" [
 #
 # POST /api/Payment
 # operationId: Payment_Post
-# --PaymentAllocations item shape: {AllocationAmount?: float, AllocationDate?: string, InvoiceTransactionIDFK?: int}
 export def "payment-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2094,7 +2113,7 @@ export def "payment-post" [
   --payment-provider-code: string # Optional for storing the payment provider who was the source of funds.
   --transaction-prefix: string # Optional to override the default prefix added to Payment Numbers
   --transaction-reference: string # Optional for storing the reference # of the payment method.
-]: any -> record<AccountIDFK: int, Balance: float, CurrencyCode: string, CustomerIDFK: int, DateCreated: string, DateIssued: string, DateUpdated: string, ExchangeRate: float, Notes: string, PaymentAllocations: table<AllocationAmount: float, AllocationDate: string, InvoiceTransactionIDFK: int, PaymentTransactionIDFK: int, TransactionAllocationID: int>, PaymentNumber: string, PaymentProviderCode: string, TotalAmount: float, TransactionID: int, TransactionPrefix: string, TransactionReference: string, TransactionStatusCode: string> {
+]: any -> oneof<record<AccountIDFK: int, Balance: float, CurrencyCode: string, CustomerIDFK: int, DateCreated: string, DateIssued: string, DateUpdated: string, ExchangeRate: float, Notes: string, PaymentAllocations: table<AllocationAmount: float, AllocationDate: string, InvoiceTransactionIDFK: int, PaymentTransactionIDFK: int, TransactionAllocationID: int>, PaymentNumber: string, PaymentProviderCode: string, TotalAmount: float, TransactionID: int, TransactionPrefix: string, TransactionReference: string, TransactionStatusCode: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2133,7 +2152,7 @@ export def "payment-get-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<AccountIDFK: int, Balance: float, CurrencyCode: string, CustomerIDFK: int, DateCreated: string, DateIssued: string, DateUpdated: string, ExchangeRate: float, Notes: string, PaymentAllocations: table<AllocationAmount: float, AllocationDate: string, InvoiceTransactionIDFK: int, PaymentTransactionIDFK: int, TransactionAllocationID: int>, PaymentNumber: string, PaymentProviderCode: string, TotalAmount: float, TransactionID: int, TransactionPrefix: string, TransactionReference: string, TransactionStatusCode: string> {
+]: nothing -> oneof<record<AccountIDFK: int, Balance: float, CurrencyCode: string, CustomerIDFK: int, DateCreated: string, DateIssued: string, DateUpdated: string, ExchangeRate: float, Notes: string, PaymentAllocations: table<AllocationAmount: float, AllocationDate: string, InvoiceTransactionIDFK: int, PaymentTransactionIDFK: int, TransactionAllocationID: int>, PaymentNumber: string, PaymentProviderCode: string, TotalAmount: float, TransactionID: int, TransactionPrefix: string, TransactionReference: string, TransactionStatusCode: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2175,7 +2194,7 @@ export def "project-get" [
   --sort: string # A column to sort on. Current possible values: "DateUpdated", "DateCreated", "DateUpdated desc", "DateCreated desc"
   --timesheet-user-id: int # Filter to the projects that the supplied UserID can add timesheets to (format: int32)
   --include-archived: oneof<nothing, bool> # Include Archived Projects in the results
-]: nothing -> record<PageNumber: int, PageSize: int, Projects: table<CompanyIDFK: int, CompanyName: string, DateCreated: string, DateUpdated: string, DefaultAccountTaskTypeIDFK: int, DefaultAccountTaskTypeName: string, Notes: string, ProjectCategoryIDFK: int, ProjectCategoryName: string, ProjectCode: string, ProjectID: int, ProjectOwnerUserIDFK: int, Title: string, isArchived: bool, isTaskRequiredOnTimesheet: bool>, TotalCount: int> {
+]: nothing -> oneof<record<PageNumber: int, PageSize: int, Projects: table<CompanyIDFK: int, CompanyName: string, DateCreated: string, DateUpdated: string, DefaultAccountTaskTypeIDFK: int, DefaultAccountTaskTypeName: string, Notes: string, ProjectCategoryIDFK: int, ProjectCategoryName: string, ProjectCode: string, ProjectID: int, ProjectOwnerUserIDFK: int, Title: string, isArchived: bool, isTaskRequiredOnTimesheet: bool>, TotalCount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "UpdatedAfter" $updated_after "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "Sort" $sort "scalar") (serialize-qp "TimesheetUserID" $timesheet_user_id "scalar") (serialize-qp "includeArchived" $include_archived "scalar")] | flatten | str join "&"
@@ -2226,7 +2245,7 @@ export def "project-post" [
   --start-date: string # format: date-time
   --timesheet-approval-requiredby-default: oneof<nothing, bool>
   --is-task-required-on-timesheet: oneof<nothing, bool>
-]: any -> record<BudgetAmount: float, BudgetHours: float, CompanyIDFK: int, CompanyName: string, DateCreated: string, DateUpdated: string, DefaultAccountTaskTypeIDFK: int, DefaultAccountTaskTypeName: string, EndDate: string, Members: table<BudgetAmount: float, CostAmount: float, Email: string, Firstname: string, Fullname: string, Lastname: string, ProjectIDFK: int, RateAmount: float, UserIDFK: int, canCommentOnTasks: bool, canCreateTasks: bool, canDeleteTasks: bool, canUpdateTasks: bool, isMemberDisabled: bool, isProjectManager: bool, isTimesheetAllowed: bool, isTimesheetApprovalRequired: bool, isTimesheetApprover: bool>, Notes: string, ProjectBillableTypeCode: string, ProjectBudgetTypeCode: string, ProjectCategoryColor: string, ProjectCategoryIDFK: int, ProjectCategoryName: string, ProjectCode: string, ProjectHourlyRate: float, ProjectID: int, ProjectOwnerUserIDFK: int, ProjectStatusCode: string, ProjectTags: table<Name: string, ProjectTagID: int>, Sections: table<DisplayOrder: int, EndDate: string, SectionID: int, StartDate: string, Title: string>, StartDate: string, Title: string, isArchived: bool, isTaskRequiredOnTimesheet: bool> {
+]: any -> oneof<record<BudgetAmount: float, BudgetHours: float, CompanyIDFK: int, CompanyName: string, DateCreated: string, DateUpdated: string, DefaultAccountTaskTypeIDFK: int, DefaultAccountTaskTypeName: string, EndDate: string, Members: table<BudgetAmount: float, CostAmount: float, Email: string, Firstname: string, Fullname: string, Lastname: string, ProjectIDFK: int, RateAmount: float, UserIDFK: int, canCommentOnTasks: bool, canCreateTasks: bool, canDeleteTasks: bool, canUpdateTasks: bool, isMemberDisabled: bool, isProjectManager: bool, isTimesheetAllowed: bool, isTimesheetApprovalRequired: bool, isTimesheetApprover: bool>, Notes: string, ProjectBillableTypeCode: string, ProjectBudgetTypeCode: string, ProjectCategoryColor: string, ProjectCategoryIDFK: int, ProjectCategoryName: string, ProjectCode: string, ProjectHourlyRate: float, ProjectID: int, ProjectOwnerUserIDFK: int, ProjectStatusCode: string, ProjectTags: table<Name: string, ProjectTagID: int>, Sections: table<DisplayOrder: int, EndDate: string, SectionID: int, StartDate: string, Title: string>, StartDate: string, Title: string, isArchived: bool, isTaskRequiredOnTimesheet: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2278,7 +2297,7 @@ export def "project-put" [
   --start-date: string # format: date-time
   --timesheet-approval-requiredby-default: oneof<nothing, bool> # Whether timesheet approval should be required by default for newly added project members.
   --is-task-required-on-timesheet: oneof<nothing, bool> # Whether timesheets entered against this project require a task to be selected.
-]: any -> record<BudgetAmount: float, BudgetHours: float, CompanyIDFK: int, CompanyName: string, DateCreated: string, DateUpdated: string, DefaultAccountTaskTypeIDFK: int, DefaultAccountTaskTypeName: string, EndDate: string, Members: table<BudgetAmount: float, CostAmount: float, Email: string, Firstname: string, Fullname: string, Lastname: string, ProjectIDFK: int, RateAmount: float, UserIDFK: int, canCommentOnTasks: bool, canCreateTasks: bool, canDeleteTasks: bool, canUpdateTasks: bool, isMemberDisabled: bool, isProjectManager: bool, isTimesheetAllowed: bool, isTimesheetApprovalRequired: bool, isTimesheetApprover: bool>, Notes: string, ProjectBillableTypeCode: string, ProjectBudgetTypeCode: string, ProjectCategoryColor: string, ProjectCategoryIDFK: int, ProjectCategoryName: string, ProjectCode: string, ProjectHourlyRate: float, ProjectID: int, ProjectOwnerUserIDFK: int, ProjectStatusCode: string, ProjectTags: table<Name: string, ProjectTagID: int>, Sections: table<DisplayOrder: int, EndDate: string, SectionID: int, StartDate: string, Title: string>, StartDate: string, Title: string, isArchived: bool, isTaskRequiredOnTimesheet: bool> {
+]: any -> oneof<record<BudgetAmount: float, BudgetHours: float, CompanyIDFK: int, CompanyName: string, DateCreated: string, DateUpdated: string, DefaultAccountTaskTypeIDFK: int, DefaultAccountTaskTypeName: string, EndDate: string, Members: table<BudgetAmount: float, CostAmount: float, Email: string, Firstname: string, Fullname: string, Lastname: string, ProjectIDFK: int, RateAmount: float, UserIDFK: int, canCommentOnTasks: bool, canCreateTasks: bool, canDeleteTasks: bool, canUpdateTasks: bool, isMemberDisabled: bool, isProjectManager: bool, isTimesheetAllowed: bool, isTimesheetApprovalRequired: bool, isTimesheetApprover: bool>, Notes: string, ProjectBillableTypeCode: string, ProjectBudgetTypeCode: string, ProjectCategoryColor: string, ProjectCategoryIDFK: int, ProjectCategoryName: string, ProjectCode: string, ProjectHourlyRate: float, ProjectID: int, ProjectOwnerUserIDFK: int, ProjectStatusCode: string, ProjectTags: table<Name: string, ProjectTagID: int>, Sections: table<DisplayOrder: int, EndDate: string, SectionID: int, StartDate: string, Title: string>, StartDate: string, Title: string, isArchived: bool, isTaskRequiredOnTimesheet: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2321,7 +2340,7 @@ export def "project-lookup" [
   --timesheet-user-id: int # Optionally Filter to the projects that the supplied UserID can add timesheets to (format: int32)
   --company-idfk: int # Optionally Filter for a specific Company ID (format: int32)
   --search: string # Search string to match against Project title and Customer name
-]: nothing -> record<PageSize: int, companies: table<CompanyID: int, CompanyName: string, projects: list>, hasMore: bool, pageNumber: int> {
+]: nothing -> oneof<record<PageSize: int, companies: table<CompanyID: int, CompanyName: string, projects: list>, hasMore: bool, pageNumber: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "TimesheetUserID" $timesheet_user_id "scalar") (serialize-qp "CompanyIDFK" $company_idfk "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
@@ -2358,7 +2377,7 @@ export def "project-get-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<BudgetAmount: float, BudgetHours: float, CompanyIDFK: int, CompanyName: string, DateCreated: string, DateUpdated: string, DefaultAccountTaskTypeIDFK: int, DefaultAccountTaskTypeName: string, EndDate: string, Members: table<BudgetAmount: float, CostAmount: float, Email: string, Firstname: string, Fullname: string, Lastname: string, ProjectIDFK: int, RateAmount: float, UserIDFK: int, canCommentOnTasks: bool, canCreateTasks: bool, canDeleteTasks: bool, canUpdateTasks: bool, isMemberDisabled: bool, isProjectManager: bool, isTimesheetAllowed: bool, isTimesheetApprovalRequired: bool, isTimesheetApprover: bool>, Notes: string, ProjectBillableTypeCode: string, ProjectBudgetTypeCode: string, ProjectCategoryColor: string, ProjectCategoryIDFK: int, ProjectCategoryName: string, ProjectCode: string, ProjectHourlyRate: float, ProjectID: int, ProjectOwnerUserIDFK: int, ProjectStatusCode: string, ProjectTags: table<Name: string, ProjectTagID: int>, Sections: table<DisplayOrder: int, EndDate: string, SectionID: int, StartDate: string, Title: string>, StartDate: string, Title: string, isArchived: bool, isTaskRequiredOnTimesheet: bool> {
+]: nothing -> oneof<record<BudgetAmount: float, BudgetHours: float, CompanyIDFK: int, CompanyName: string, DateCreated: string, DateUpdated: string, DefaultAccountTaskTypeIDFK: int, DefaultAccountTaskTypeName: string, EndDate: string, Members: table<BudgetAmount: float, CostAmount: float, Email: string, Firstname: string, Fullname: string, Lastname: string, ProjectIDFK: int, RateAmount: float, UserIDFK: int, canCommentOnTasks: bool, canCreateTasks: bool, canDeleteTasks: bool, canUpdateTasks: bool, isMemberDisabled: bool, isProjectManager: bool, isTimesheetAllowed: bool, isTimesheetApprovalRequired: bool, isTimesheetApprover: bool>, Notes: string, ProjectBillableTypeCode: string, ProjectBudgetTypeCode: string, ProjectCategoryColor: string, ProjectCategoryIDFK: int, ProjectCategoryName: string, ProjectCode: string, ProjectHourlyRate: float, ProjectID: int, ProjectOwnerUserIDFK: int, ProjectStatusCode: string, ProjectTags: table<Name: string, ProjectTagID: int>, Sections: table<DisplayOrder: int, EndDate: string, SectionID: int, StartDate: string, Title: string>, StartDate: string, Title: string, isArchived: bool, isTaskRequiredOnTimesheet: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2396,7 +2415,7 @@ export def "project-member-get" [
   --accept: string@accept-completer # Response content type
   --project-id: int # Get Project members filtered by ProjectID (format: int32)
   --user-id: int # Get Project members filtered by UserID (format: int32)
-]: nothing -> record<ProjectMembers: table<BudgetAmount: float, CostAmount: float, Email: string, Firstname: string, Fullname: string, Lastname: string, ProjectIDFK: int, RateAmount: float, UserIDFK: int, canCommentOnTasks: bool, canCreateTasks: bool, canDeleteTasks: bool, canUpdateTasks: bool, isMemberDisabled: bool, isProjectManager: bool, isTimesheetAllowed: bool, isTimesheetApprovalRequired: bool, isTimesheetApprover: bool>> {
+]: nothing -> oneof<record<ProjectMembers: table<BudgetAmount: float, CostAmount: float, Email: string, Firstname: string, Fullname: string, Lastname: string, ProjectIDFK: int, RateAmount: float, UserIDFK: int, canCommentOnTasks: bool, canCreateTasks: bool, canDeleteTasks: bool, canUpdateTasks: bool, isMemberDisabled: bool, isProjectManager: bool, isTimesheetAllowed: bool, isTimesheetApprovalRequired: bool, isTimesheetApprover: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ProjectID" $project_id "scalar") (serialize-qp "UserID" $user_id "scalar")] | flatten | str join "&"
@@ -2445,7 +2464,7 @@ export def "project-member-post" [
   --is-timesheet-allowed: oneof<nothing, bool>
   --is-timesheet-approval-required: oneof<nothing, bool>
   --is-timesheet-approver: oneof<nothing, bool>
-]: any -> record<BudgetAmount: float, CostAmount: float, Email: string, Firstname: string, Fullname: string, Lastname: string, ProjectIDFK: int, RateAmount: float, UserIDFK: int, canCommentOnTasks: bool, canCreateTasks: bool, canDeleteTasks: bool, canUpdateTasks: bool, isMemberDisabled: bool, isProjectManager: bool, isTimesheetAllowed: bool, isTimesheetApprovalRequired: bool, isTimesheetApprover: bool> {
+]: any -> oneof<record<BudgetAmount: float, CostAmount: float, Email: string, Firstname: string, Fullname: string, Lastname: string, ProjectIDFK: int, RateAmount: float, UserIDFK: int, canCommentOnTasks: bool, canCreateTasks: bool, canDeleteTasks: bool, canUpdateTasks: bool, isMemberDisabled: bool, isProjectManager: bool, isTimesheetAllowed: bool, isTimesheetApprovalRequired: bool, isTimesheetApprover: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2497,7 +2516,7 @@ export def "project-member-put" [
   --is-timesheet-allowed: oneof<nothing, bool>
   --is-timesheet-approval-required: oneof<nothing, bool>
   --is-timesheet-approver: oneof<nothing, bool>
-]: any -> record<BudgetAmount: float, CostAmount: float, Email: string, Firstname: string, Fullname: string, Lastname: string, ProjectIDFK: int, RateAmount: float, UserIDFK: int, canCommentOnTasks: bool, canCreateTasks: bool, canDeleteTasks: bool, canUpdateTasks: bool, isMemberDisabled: bool, isProjectManager: bool, isTimesheetAllowed: bool, isTimesheetApprovalRequired: bool, isTimesheetApprover: bool> {
+]: any -> oneof<record<BudgetAmount: float, CostAmount: float, Email: string, Firstname: string, Fullname: string, Lastname: string, ProjectIDFK: int, RateAmount: float, UserIDFK: int, canCommentOnTasks: bool, canCreateTasks: bool, canDeleteTasks: bool, canUpdateTasks: bool, isMemberDisabled: bool, isProjectManager: bool, isTimesheetAllowed: bool, isTimesheetApprovalRequired: bool, isTimesheetApprover: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2536,7 +2555,7 @@ export def "project-timesheet-category-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --project-id: int # Get categories filtered by ProjectID (format: int32)
-]: nothing -> record<Categories: table<AccountIDFK: int, BudgetHours: float, CostAmount: float, Name: string, ProjectIDFK: int, RateAmount: float, TimeSheetCategoryIDFK: int, isBillable: bool, isDisabled: bool, isPayable: bool>> {
+]: nothing -> oneof<record<Categories: table<AccountIDFK: int, BudgetHours: float, CostAmount: float, Name: string, ProjectIDFK: int, RateAmount: float, TimeSheetCategoryIDFK: int, isBillable: bool, isDisabled: bool, isPayable: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ProjectID" $project_id "scalar")] | flatten | str join "&"
@@ -2579,7 +2598,7 @@ export def "project-timesheet-category-post" [
   --timesheet-category-idfk: int # format: int32
   --is-billable: oneof<nothing, bool>
   --is-payable: oneof<nothing, bool>
-]: any -> record<AccountIDFK: int, BudgetHours: float, CostAmount: float, Name: string, ProjectIDFK: int, RateAmount: float, TimeSheetCategoryIDFK: int, isBillable: bool, isDisabled: bool, isPayable: bool> {
+]: any -> oneof<record<AccountIDFK: int, BudgetHours: float, CostAmount: float, Name: string, ProjectIDFK: int, RateAmount: float, TimeSheetCategoryIDFK: int, isBillable: bool, isDisabled: bool, isPayable: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2626,7 +2645,7 @@ export def "schedule-assignment-get" [
   --page-size: int # Number of items per page (max 1000) (format: int32)
   --page-number: int # Page to display. Starts from 1. (format: int32)
   --sort: string # Optional sorting instruction. Currently possible values: "DateUpdated", "DateCreated", "DateUpdated desc", "DateCreated desc"
-]: nothing -> record<PageNumber: int, PageSize: int, ScheduleAssignments: table<AccountIDFK: int, DateCreated: string, DateUpdated: string, Duration: float, ScheduleAssignmentID: int, ScheduleDate: string, ScheduleSeriesIDFK: int, UserIDFK: int>, TotalCount: int> {
+]: nothing -> oneof<record<PageNumber: int, PageSize: int, ScheduleAssignments: table<AccountIDFK: int, DateCreated: string, DateUpdated: string, Duration: float, ScheduleAssignmentID: int, ScheduleDate: string, ScheduleSeriesIDFK: int, UserIDFK: int>, TotalCount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "UpdatedAfter" $updated_after "scalar") (serialize-qp "ScheduleDateFrom" $schedule_date_from "scalar") (serialize-qp "ScheduleDateTo" $schedule_date_to "scalar") (serialize-qp "ScheduleSeriesID" $schedule_series_id "scalar") (serialize-qp "UserID" $user_id "scalar") (serialize-qp "UserEmail" $user_email "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "Sort" $sort "scalar")] | flatten | str join "&"
@@ -2677,7 +2696,7 @@ export def "schedule-series-get" [
   --page-size: int # Number of items per page (max 1000) (format: int32)
   --page-number: int # Page to display. Starts from 1. (format: int32)
   --sort: string # Optional sorting instruction. Currently possible values: "DateUpdated", "DateCreated", "DateUpdated desc", "DateCreated desc"
-]: nothing -> record<PageNumber: int, PageSize: int, ScheduleSeries: table<AccountIDFK: int, CompanyIDFK: int, CompanyName: string, DateCreated: string, DateUpdated: string, EndDate: string, Firstname: string, HoursPerDay: float, Lastname: string, LeaveTypeIDFK: int, LeaveTypeName: string, Notes: string, ProjectIDFK: int, ProjectTitle: string, ScheduleOnDaysOff: bool, ScheduleSeriesID: int, StartDate: string, TaskIDFK: int, TaskTitle: string, TimeSheetCategoryIDFK: int, TimeSheetCategoryName: string, TotalDuration: float, UpdatedByUserIDFK: int, UserIDFK: int>, TotalCount: int> {
+]: nothing -> oneof<record<PageNumber: int, PageSize: int, ScheduleSeries: table<AccountIDFK: int, CompanyIDFK: int, CompanyName: string, DateCreated: string, DateUpdated: string, EndDate: string, Firstname: string, HoursPerDay: float, Lastname: string, LeaveTypeIDFK: int, LeaveTypeName: string, Notes: string, ProjectIDFK: int, ProjectTitle: string, ScheduleOnDaysOff: bool, ScheduleSeriesID: int, StartDate: string, TaskIDFK: int, TaskTitle: string, TimeSheetCategoryIDFK: int, TimeSheetCategoryName: string, TotalDuration: float, UpdatedByUserIDFK: int, UserIDFK: int>, TotalCount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "UpdatedAfter" $updated_after "scalar") (serialize-qp "ScheduleStartDateFrom" $schedule_start_date_from "scalar") (serialize-qp "ScheduleStartDateTo" $schedule_start_date_to "scalar") (serialize-qp "ScheduleEndDateFrom" $schedule_end_date_from "scalar") (serialize-qp "ScheduleEndDateTo" $schedule_end_date_to "scalar") (serialize-qp "UserID" $user_id "scalar") (serialize-qp "UserEmail" $user_email "scalar") (serialize-qp "TimeSheetCategoryID" $time_sheet_category_id "scalar") (serialize-qp "TimeSheetCategoryName" $time_sheet_category_name "scalar") (serialize-qp "LeaveTypeID" $leave_type_id "scalar") (serialize-qp "ProjectID" $project_id "scalar") (serialize-qp "CompanyID" $company_id "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "Sort" $sort "scalar")] | flatten | str join "&"
@@ -2714,7 +2733,7 @@ export def "section-delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --section-id: int # required, format: int64
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($section_id == null) { error make --unspanned { msg: "required query parameter 'SectionID' missing: pass --section-id" } }
@@ -2752,7 +2771,7 @@ export def "section-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --project-id: int # Get sections for Project with ProjectID (required, format: int32)
-]: nothing -> record<Sections: table<DisplayOrder: int, EndDate: string, EndDateUTC: string, ProjectIDFK: int, SectionID: int, StartDate: string, StartDateUTC: string, Title: string>, TotalCount: int> {
+]: nothing -> oneof<record<Sections: table<DisplayOrder: int, EndDate: string, EndDateUTC: string, ProjectIDFK: int, SectionID: int, StartDate: string, StartDateUTC: string, Title: string>, TotalCount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id == null) { error make --unspanned { msg: "required query parameter 'ProjectID' missing: pass --project-id" } }
@@ -2793,7 +2812,7 @@ export def "section-post" [
   --project-idfk: int # format: int32
   --start-date-utc: string # format: date-time
   --title: string
-]: any -> record<DisplayOrder: int, EndDate: string, EndDateUTC: string, ProjectIDFK: int, SectionID: int, StartDate: string, StartDateUTC: string, Title: string> {
+]: any -> oneof<record<DisplayOrder: int, EndDate: string, EndDateUTC: string, ProjectIDFK: int, SectionID: int, StartDate: string, StartDateUTC: string, Title: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2832,7 +2851,7 @@ export def "task-delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --task-id: int # required, format: int64
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($task_id == null) { error make --unspanned { msg: "required query parameter 'TaskID' missing: pass --task-id" } }
@@ -2875,7 +2894,7 @@ export def "task-get" [
   --sort: string # Optional sorting instruction. Currently possible values: "DateUpdated", "DateCreated", "DateUpdated desc", "DateCreated desc", "SectionTitle", "Title"
   --is-complete: oneof<nothing, bool> # Optional filter to only display tasks linked to a Task Status where isComplete=false, or where isComplete=true
   --project-id: int # Optional filter to only display tasks belonging to a specific ProjectID (format: int32)
-]: nothing -> record<PageNumber: int, PageSize: int, Tasks: table<AccountTaskTypeIDFK: int, ActualTime: float, AssignedToUsers: list, DateCompleted: string, DateCreated: string, DateDue: string, DateStart: string, DateUpdated: string, Description: string, DescriptionNoHTML: string, EstimatedEffort: float, PercentComplete: float, ProjectCode: string, ProjectIDFK: int, ProjectTitle: string, SectionIDFK: int, SectionTitle: string, Tags: list, TaskID: int, TaskPriorityCode: string, TaskPriorityName: string, TaskStatusCode: string, TaskStatusName: string, Title: string, isCompleteStatus: bool>, TotalCount: int> {
+]: nothing -> oneof<record<PageNumber: int, PageSize: int, Tasks: table<AccountTaskTypeIDFK: int, ActualTime: float, AssignedToUsers: list, DateCompleted: string, DateCreated: string, DateDue: string, DateStart: string, DateUpdated: string, Description: string, DescriptionNoHTML: string, EstimatedEffort: float, PercentComplete: float, ProjectCode: string, ProjectIDFK: int, ProjectTitle: string, SectionIDFK: int, SectionTitle: string, Tags: list, TaskID: int, TaskPriorityCode: string, TaskPriorityName: string, TaskStatusCode: string, TaskStatusName: string, Title: string, isCompleteStatus: bool>, TotalCount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "UpdatedAfter" $updated_after "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "Sort" $sort "scalar") (serialize-qp "isComplete" $is_complete "scalar") (serialize-qp "ProjectID" $project_id "scalar")] | flatten | str join "&"
@@ -2900,7 +2919,6 @@ export def "task-get" [
 #
 # POST /api/Task
 # operationId: Task_Post
-# --Tags item shape: {Color?: string, Name?: string}
 export def "task-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2923,7 +2941,7 @@ export def "task-post" [
   --tags: list # Collection of tags specifying Name and Color (Hex) — item shape: {Color?: string, Name?: string}
   --task-priority-code: string
   title: string
-]: any -> record<AccountTaskTypeIDFK: int, ActualTime: float, AssignedToUsers: table<AssignedToEmail: string, AssignedToFirstname: string, AssignedToLastname: string, AssignedToUserIDFK: int>, DateCompleted: string, DateCreated: string, DateDue: string, DateStart: string, DateUpdated: string, Description: string, DescriptionNoHTML: string, EstimatedEffort: float, PercentComplete: float, ProjectCode: string, ProjectIDFK: int, ProjectTitle: string, SectionIDFK: int, SectionTitle: string, Tags: table<Color: string, Name: string, TagID: int>, TaskID: int, TaskPriorityCode: string, TaskPriorityName: string, TaskStatusCode: string, TaskStatusName: string, Title: string, isCompleteStatus: bool> {
+]: any -> oneof<record<AccountTaskTypeIDFK: int, ActualTime: float, AssignedToUsers: table<AssignedToEmail: string, AssignedToFirstname: string, AssignedToLastname: string, AssignedToUserIDFK: int>, DateCompleted: string, DateCreated: string, DateDue: string, DateStart: string, DateUpdated: string, Description: string, DescriptionNoHTML: string, EstimatedEffort: float, PercentComplete: float, ProjectCode: string, ProjectIDFK: int, ProjectTitle: string, SectionIDFK: int, SectionTitle: string, Tags: table<Color: string, Name: string, TagID: int>, TaskID: int, TaskPriorityCode: string, TaskPriorityName: string, TaskStatusCode: string, TaskStatusName: string, Title: string, isCompleteStatus: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2950,7 +2968,6 @@ export def "task-post" [
 #
 # PUT /api/Task
 # operationId: Task_Put
-# --Tags item shape: {Color?: string, Name?: string}
 export def "task-put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2975,7 +2992,7 @@ export def "task-put" [
   --task-priority-code: string
   --task-status-code: string
   --title: string
-]: any -> record<AccountTaskTypeIDFK: int, ActualTime: float, AssignedToUsers: table<AssignedToEmail: string, AssignedToFirstname: string, AssignedToLastname: string, AssignedToUserIDFK: int>, DateCompleted: string, DateCreated: string, DateDue: string, DateStart: string, DateUpdated: string, Description: string, DescriptionNoHTML: string, EstimatedEffort: float, PercentComplete: float, ProjectCode: string, ProjectIDFK: int, ProjectTitle: string, SectionIDFK: int, SectionTitle: string, Tags: table<Color: string, Name: string, TagID: int>, TaskID: int, TaskPriorityCode: string, TaskPriorityName: string, TaskStatusCode: string, TaskStatusName: string, Title: string, isCompleteStatus: bool> {
+]: any -> oneof<record<AccountTaskTypeIDFK: int, ActualTime: float, AssignedToUsers: table<AssignedToEmail: string, AssignedToFirstname: string, AssignedToLastname: string, AssignedToUserIDFK: int>, DateCompleted: string, DateCreated: string, DateDue: string, DateStart: string, DateUpdated: string, Description: string, DescriptionNoHTML: string, EstimatedEffort: float, PercentComplete: float, ProjectCode: string, ProjectIDFK: int, ProjectTitle: string, SectionIDFK: int, SectionTitle: string, Tags: table<Color: string, Name: string, TagID: int>, TaskID: int, TaskPriorityCode: string, TaskPriorityName: string, TaskStatusCode: string, TaskStatusName: string, Title: string, isCompleteStatus: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3018,7 +3035,7 @@ export def "task-lookup" [
   --page-number: int # Page to display. Starts from 1. (format: int32)
   --hide-completed: oneof<nothing, bool> # (optional) true/false to hide completed tasks. Defaults false
   --search: string # (optional) Search string to match against Task title. Performs begins-with match
-]: nothing -> record<PageSize: int, hasMore: bool, pageNumber: int, sections: table<SectionTitle: string, tasks: list>> {
+]: nothing -> oneof<record<PageSize: int, hasMore: bool, pageNumber: int, sections: table<SectionTitle: string, tasks: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id == null) { error make --unspanned { msg: "required query parameter 'projectID' missing: pass --project-id" } }
@@ -3056,7 +3073,7 @@ export def "task-get-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<AccountTaskTypeIDFK: int, ActualTime: float, AssignedToUsers: table<AssignedToEmail: string, AssignedToFirstname: string, AssignedToLastname: string, AssignedToUserIDFK: int>, DateCompleted: string, DateCreated: string, DateDue: string, DateStart: string, DateUpdated: string, Description: string, DescriptionNoHTML: string, EstimatedEffort: float, PercentComplete: float, ProjectCode: string, ProjectIDFK: int, ProjectTitle: string, SectionIDFK: int, SectionTitle: string, Tags: table<Color: string, Name: string, TagID: int>, TaskID: int, TaskPriorityCode: string, TaskPriorityName: string, TaskStatusCode: string, TaskStatusName: string, Title: string, isCompleteStatus: bool> {
+]: nothing -> oneof<record<AccountTaskTypeIDFK: int, ActualTime: float, AssignedToUsers: table<AssignedToEmail: string, AssignedToFirstname: string, AssignedToLastname: string, AssignedToUserIDFK: int>, DateCompleted: string, DateCreated: string, DateDue: string, DateStart: string, DateUpdated: string, Description: string, DescriptionNoHTML: string, EstimatedEffort: float, PercentComplete: float, ProjectCode: string, ProjectIDFK: int, ProjectTitle: string, SectionIDFK: int, SectionTitle: string, Tags: table<Color: string, Name: string, TagID: int>, TaskID: int, TaskPriorityCode: string, TaskPriorityName: string, TaskStatusCode: string, TaskStatusName: string, Title: string, isCompleteStatus: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3092,7 +3109,7 @@ export def "task-status-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<statuses: table<AccountTaskTypeIDFK: int, Color: string, DisplayOrder: int, Name: string, TaskStatusCode: string, TaskTypeName: string, isComplete: bool>> {
+]: nothing -> oneof<record<statuses: table<AccountTaskTypeIDFK: int, Color: string, DisplayOrder: int, Name: string, TaskStatusCode: string, TaskTypeName: string, isComplete: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/TaskStatus" $auth.query)
@@ -3127,7 +3144,7 @@ export def "task-type-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<tasktypes: table<AccountTaskTypeID: int, Icon: string, IconType: string, Name: string, isDefault: bool>> {
+]: nothing -> oneof<record<tasktypes: table<AccountTaskTypeID: int, Icon: string, IconType: string, Name: string, isDefault: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/TaskType" $auth.query)
@@ -3162,7 +3179,7 @@ export def "tax-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<Taxes: table<CalculatedPercent: float, Name: string, TaxCode: string, TaxComponents: list, TaxID: int>> {
+]: nothing -> oneof<record<Taxes: table<CalculatedPercent: float, Name: string, TaxCode: string, TaxComponents: list, TaxID: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/Tax" $auth.query)
@@ -3211,7 +3228,7 @@ export def "timesheet-get" [
   --page-number: int # Page to display. Starts from 1. (format: int32)
   --include-invoice-details: oneof<nothing, bool> # Defaults to false. When true, the InvoiceIDFK value will be included in the response.
   --sort: string # Optional sorting instruction. Currently possible values: "DateUpdated", "DateCreated", "DateUpdated desc", "DateCreated desc","EntryDate", "EntryDate desc", "StartTimeLocal","StartTimeLocal desc", "TimeSheetEntryID", "TimeSheetEntryID desc"
-]: nothing -> record<PageNumber: int, PageSize: int, Timesheets: table<ApprovedBy: string, CategoryName: string, CustomMetadata: string, CustomerIDFK: int, CustomerName: string, DateApproved: string, DateCreated: string, DateUpdated: string, Duration: float, Email: string, EndTimeLocal: string, EndTimeUTC: string, EntryDate: string, Firstname: string, HasTimer: bool, InvoiceIDFK: int, InvoiceLineItemIDFK: int, Lastname: string, Notes: string, ProjectCode: string, ProjectIDFK: int, ProjectTitle: string, StartTimeLocal: string, StartTimeUTC: string, TaskIDFK: int, TaskTitle: string, TimerStartedAtUTC: string, TimesheetCategoryIDFK: int, TimesheetEntryApprovalStatusCode: string, TimesheetEntryID: int, TimesheetUserTimeZone: string, UserIDFK: int, isBillable: bool, isInvoiced: bool>, TotalCount: int> {
+]: nothing -> oneof<record<PageNumber: int, PageSize: int, Timesheets: table<ApprovedBy: string, CategoryName: string, CustomMetadata: string, CustomerIDFK: int, CustomerName: string, DateApproved: string, DateCreated: string, DateUpdated: string, Duration: float, Email: string, EndTimeLocal: string, EndTimeUTC: string, EntryDate: string, Firstname: string, HasTimer: bool, InvoiceIDFK: int, InvoiceLineItemIDFK: int, Lastname: string, Notes: string, ProjectCode: string, ProjectIDFK: int, ProjectTitle: string, StartTimeLocal: string, StartTimeUTC: string, TaskIDFK: int, TaskTitle: string, TimerStartedAtUTC: string, TimesheetCategoryIDFK: int, TimesheetEntryApprovalStatusCode: string, TimesheetEntryID: int, TimesheetUserTimeZone: string, UserIDFK: int, isBillable: bool, isInvoiced: bool>, TotalCount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "UpdatedAfter" $updated_after "scalar") (serialize-qp "EntryDateFrom" $entry_date_from "scalar") (serialize-qp "EntryDateTo" $entry_date_to "scalar") (serialize-qp "UserID" $user_id "scalar") (serialize-qp "UserEmail" $user_email "scalar") (serialize-qp "CategoryName" $category_name "scalar") (serialize-qp "ProjectID" $project_id "scalar") (serialize-qp "isBillable" $is_billable "scalar") (serialize-qp "isInvoiced" $is_invoiced "scalar") (serialize-qp "isTimerRunning" $is_timer_running "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "includeInvoiceDetails" $include_invoice_details "scalar") (serialize-qp "Sort" $sort "scalar")] | flatten | str join "&"
@@ -3257,7 +3274,7 @@ export def "timesheet-post" [
   --user-idfk: int # UserID for a Timesheet user in Avaza (format: int32)
   --has-start-end-time: oneof<nothing, bool> # If true, the start time will be take from the time component of the Entry Date field, and the end time will be calculated by adding the Duration to the StartDate
   --is-invoiced: oneof<nothing, bool> # Optional. False by default. Allows you to mark the timesheet as invoiced in an external system.
-]: any -> record<ApprovedBy: string, CategoryName: string, CustomMetadata: string, CustomerIDFK: int, CustomerName: string, DateApproved: string, DateCreated: string, DateUpdated: string, Duration: float, Email: string, EndTimeLocal: string, EndTimeUTC: string, EntryDate: string, Firstname: string, HasTimer: bool, InvoiceIDFK: int, InvoiceLineItemIDFK: int, Lastname: string, Notes: string, ProjectCode: string, ProjectIDFK: int, ProjectTitle: string, StartTimeLocal: string, StartTimeUTC: string, TaskIDFK: int, TaskTitle: string, TimerStartedAtUTC: string, TimesheetCategoryIDFK: int, TimesheetEntryApprovalStatusCode: string, TimesheetEntryID: int, TimesheetUserTimeZone: string, UserIDFK: int, isBillable: bool, isInvoiced: bool> {
+]: any -> oneof<record<ApprovedBy: string, CategoryName: string, CustomMetadata: string, CustomerIDFK: int, CustomerName: string, DateApproved: string, DateCreated: string, DateUpdated: string, Duration: float, Email: string, EndTimeLocal: string, EndTimeUTC: string, EntryDate: string, Firstname: string, HasTimer: bool, InvoiceIDFK: int, InvoiceLineItemIDFK: int, Lastname: string, Notes: string, ProjectCode: string, ProjectIDFK: int, ProjectTitle: string, StartTimeLocal: string, StartTimeUTC: string, TaskIDFK: int, TaskTitle: string, TimerStartedAtUTC: string, TimesheetCategoryIDFK: int, TimesheetEntryApprovalStatusCode: string, TimesheetEntryID: int, TimesheetUserTimeZone: string, UserIDFK: int, isBillable: bool, isInvoiced: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3305,7 +3322,7 @@ export def "timesheet-put" [
   time_sheet_entry_id: int # format: int64
   --timesheet-category-idfk: int # format: int32
   --has-start-end-time: oneof<nothing, bool>
-]: any -> record<ApprovedBy: string, CategoryName: string, CustomMetadata: string, CustomerIDFK: int, CustomerName: string, DateApproved: string, DateCreated: string, DateUpdated: string, Duration: float, Email: string, EndTimeLocal: string, EndTimeUTC: string, EntryDate: string, Firstname: string, HasTimer: bool, InvoiceIDFK: int, InvoiceLineItemIDFK: int, Lastname: string, Notes: string, ProjectCode: string, ProjectIDFK: int, ProjectTitle: string, StartTimeLocal: string, StartTimeUTC: string, TaskIDFK: int, TaskTitle: string, TimerStartedAtUTC: string, TimesheetCategoryIDFK: int, TimesheetEntryApprovalStatusCode: string, TimesheetEntryID: int, TimesheetUserTimeZone: string, UserIDFK: int, isBillable: bool, isInvoiced: bool> {
+]: any -> oneof<record<ApprovedBy: string, CategoryName: string, CustomMetadata: string, CustomerIDFK: int, CustomerName: string, DateApproved: string, DateCreated: string, DateUpdated: string, Duration: float, Email: string, EndTimeLocal: string, EndTimeUTC: string, EntryDate: string, Firstname: string, HasTimer: bool, InvoiceIDFK: int, InvoiceLineItemIDFK: int, Lastname: string, Notes: string, ProjectCode: string, ProjectIDFK: int, ProjectTitle: string, StartTimeLocal: string, StartTimeUTC: string, TaskIDFK: int, TaskTitle: string, TimerStartedAtUTC: string, TimesheetCategoryIDFK: int, TimesheetEntryApprovalStatusCode: string, TimesheetEntryID: int, TimesheetUserTimeZone: string, UserIDFK: int, isBillable: bool, isInvoiced: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3344,7 +3361,7 @@ export def "timesheet-delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3381,7 +3398,7 @@ export def "timesheet-get-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<ApprovedBy: string, CategoryName: string, CustomMetadata: string, CustomerIDFK: int, CustomerName: string, DateApproved: string, DateCreated: string, DateUpdated: string, Duration: float, Email: string, EndTimeLocal: string, EndTimeUTC: string, EntryDate: string, Firstname: string, HasTimer: bool, InvoiceIDFK: int, InvoiceLineItemIDFK: int, Lastname: string, Notes: string, ProjectCode: string, ProjectIDFK: int, ProjectTitle: string, StartTimeLocal: string, StartTimeUTC: string, TaskIDFK: int, TaskTitle: string, TimerStartedAtUTC: string, TimesheetCategoryIDFK: int, TimesheetEntryApprovalStatusCode: string, TimesheetEntryID: int, TimesheetUserTimeZone: string, UserIDFK: int, isBillable: bool, isInvoiced: bool> {
+]: nothing -> oneof<record<ApprovedBy: string, CategoryName: string, CustomMetadata: string, CustomerIDFK: int, CustomerName: string, DateApproved: string, DateCreated: string, DateUpdated: string, Duration: float, Email: string, EndTimeLocal: string, EndTimeUTC: string, EntryDate: string, Firstname: string, HasTimer: bool, InvoiceIDFK: int, InvoiceLineItemIDFK: int, Lastname: string, Notes: string, ProjectCode: string, ProjectIDFK: int, ProjectTitle: string, StartTimeLocal: string, StartTimeUTC: string, TaskIDFK: int, TaskTitle: string, TimerStartedAtUTC: string, TimesheetCategoryIDFK: int, TimesheetEntryApprovalStatusCode: string, TimesheetEntryID: int, TimesheetUserTimeZone: string, UserIDFK: int, isBillable: bool, isInvoiced: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3421,7 +3438,7 @@ export def "timesheet-submission-post" [
   --whole-week-of: string # A date (yyyy-MM-dd) that falls within a Week to have all timesheets in that week submitted. Respects the First Day of Week setting in your account Timesheet Settings to determine the week range. (format: date-time)
   --whole-day-of: string # A date (yyyy-MM-dd) to submit all timesheets on this day (format: date-time)
   --user-id: int # The user to submit timesheets for. Defaults to current user. Only allowed to be different from the current user when the current user has rights to Impersonate other users. (format: int32)
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "SendNotifications" $send_notifications "scalar") (serialize-qp "WholeWeekOf" $whole_week_of "scalar") (serialize-qp "WholeDayOf" $whole_day_of "scalar") (serialize-qp "UserID" $user_id "scalar")] | flatten | str join "&"
@@ -3464,7 +3481,7 @@ export def "timesheet-summary-get" [
   --model-project-id: int # (Optional) Filter by Project (format: int32)
   --model-is-billable: oneof<nothing, bool> # (Optional) Filter by the billable status of Timesheets.
   --model-is-invoiced: oneof<nothing, bool> # (Optional) Filter for timesheets by whether they have been Invoiced or not.
-]: nothing -> record<BillableHours: float, EntryDateFrom: string, EntryDateTo: string, GroupData: table<BillableHours: float, GroupData: list, GroupID: string, GroupName: string, TotalHours: float>, GroupingLevels: list<string>, TotalHours: float, UserID: list<int>> {
+]: nothing -> oneof<record<BillableHours: float, EntryDateFrom: string, EntryDateTo: string, GroupData: table<BillableHours: float, GroupData: list, GroupID: string, GroupName: string, TotalHours: float>, GroupingLevels: list<string>, TotalHours: float, UserID: list<int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "model.groupBy" $model_group_by "multi") (serialize-qp "model.entryDateFrom" $model_entry_date_from "scalar") (serialize-qp "model.entryDateTo" $model_entry_date_to "scalar") (serialize-qp "model.userID" $model_user_id "multi") (serialize-qp "model.projectID" $model_project_id "scalar") (serialize-qp "model.isBillable" $model_is_billable "scalar") (serialize-qp "model.isInvoiced" $model_is_invoiced "scalar")] | flatten | str join "&"
@@ -3501,7 +3518,7 @@ export def "timesheet-timer-get-running-timer" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --user-id: int # Optional - User ID number if impersonating a different user. Otherwise assumes the current user. Only users with certain security roles have permission to impersonate other users (format: int32)
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "UserID" $user_id "scalar")] | flatten | str join "&"
@@ -3539,7 +3556,7 @@ export def "timesheet-timer-stop-timer" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --user-id: int # Optional - User ID number if impersonating a different user. Otherwise assumes the current user. Only users with certain security roles have permission to impersonate other users (format: int32)
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3578,7 +3595,7 @@ export def "timesheet-timer-start-timer" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --user-id: int # Optional - User ID number if impersonating a different user. Otherwise assumes the current user. Only users with certain security roles have permission to impersonate other users (format: int32)
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3619,7 +3636,7 @@ export def "user-profile-get" [
   --tags: string
   --current-user-only: oneof<nothing, bool> # Optional boolean (true/false) to filter to only show current authenticated user (always true for non Admin/InvoiceManager users)
   --company-idfk: int # Optionally filter by Company ID (format: int32)
-]: nothing -> record<Users: table<AccountIDFK: int, CompanyIDFK: int, CompanyName: string, DefaultBillableRate: float, DefaultCostRate: float, Email: string, Firstname: string, FridayAvailableHours: float, IANATimezone: string, Lastname: string, Mobile: string, MondayAvailableHours: float, Phone: string, PositionTitle: string, Roles: list, SaturdayAvailableHours: float, SundayAvailableHours: float, Tags: list, ThursdayAvailableHours: float, TimeZone: string, TuesdayAvailableHours: float, UserID: int, WednesdayAvailableHours: float, isTeamMember: bool>> {
+]: nothing -> oneof<record<Users: table<AccountIDFK: int, CompanyIDFK: int, CompanyName: string, DefaultBillableRate: float, DefaultCostRate: float, Email: string, Firstname: string, FridayAvailableHours: float, IANATimezone: string, Lastname: string, Mobile: string, MondayAvailableHours: float, Phone: string, PositionTitle: string, Roles: list, SaturdayAvailableHours: float, SundayAvailableHours: float, Tags: list, ThursdayAvailableHours: float, TimeZone: string, TuesdayAvailableHours: float, UserID: int, WednesdayAvailableHours: float, isTeamMember: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Roles" $roles "scalar") (serialize-qp "Tags" $tags "scalar") (serialize-qp "CurrentUserOnly" $current_user_only "scalar") (serialize-qp "CompanyIDFK" $company_idfk "scalar")] | flatten | str join "&"
@@ -3656,7 +3673,7 @@ export def "webhook-delete-by-url" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --target-url: string # Target URL that should be used to delete subscriptions (required)
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($target_url == null) { error make --unspanned { msg: "required query parameter 'target_url' missing: pass --target-url" } }
@@ -3693,7 +3710,7 @@ export def "webhook-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<Webhooks: table<EventCode: string, NotificationURL: string, SubscriptionID: int, UserIDFK: int>> {
+]: nothing -> oneof<record<Webhooks: table<EventCode: string, NotificationURL: string, SubscriptionID: int, UserIDFK: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/Webhook" $auth.query)
@@ -3731,7 +3748,7 @@ export def "webhook-post" [
   event: string # The event code to be notified about. Possible values: company_created, contact_created, invoice_created, invoice_sent, project_created, task_created
   --secret: string # Optional Secret string (255 char max). If provided, the secret will be BASE 64 encoded and used as a basic authentication http header with webhook notifications. i.e. Authorization Basic [BASE64 of Secret]"
   target_url: string # The URL that should be notified of the event.
-]: any -> record<ID: int> {
+]: any -> oneof<record<ID: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3770,7 +3787,7 @@ export def "webhook-delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3807,7 +3824,7 @@ export def "webhook-get-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<Webhooks: table<EventCode: string, NotificationURL: string, SubscriptionID: int, UserIDFK: int>> {
+]: nothing -> oneof<record<Webhooks: table<EventCode: string, NotificationURL: string, SubscriptionID: int, UserIDFK: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }

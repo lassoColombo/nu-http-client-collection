@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -123,9 +146,9 @@ def x-amz-target-completer-22 [] { ["AWSCognitoIdentityService.UpdateIdentityPoo
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-identity-pool" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["create-identity-pool" "delete-identities" "delete-identity-pool" "describe-identity" "describe-identity-pool" "get-credentials-for-identity" "get-id" "get-identity-pool-roles" "get-open-id-token" "get-open-id-token-for-developer-identity" "get-principal-tag-attribute-map" "list-identities" "list-identity-pools" "list-tags-for-resource" "lookup-developer-identity" "merge-developer-identities" "set-identity-pool-roles" "set-principal-tag-attribute-map" "tag-resource" "unlink-developer-identity" "unlink-identity" "untag-resource" "update-identity-pool" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -147,7 +170,6 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: CreateIdentityPool
-# --CognitoIdentityProviders item shape: {ProviderName?: string, ClientId?: string, ServerSideTokenCheck?: bool}
 export def "create-identity-pool" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -175,7 +197,7 @@ export def "create-identity-pool" [
   --cognito-identity-providers: list # An array of Amazon Cognito user pools and their client IDs. — item shape: {ProviderName?: string, ClientId?: string, ServerSideTokenCheck?: bool}
   --saml-provider-ar-ns: list<string> # An array of Amazon Resource Names (ARNs) of the SAML provider for your identity pool.
   --identity-pool-tags: record # Tags to assign to the identity pool. A tag is a label that you can apply to identity pools to categorize and manage them in different ways, such as by purpose, owner, environment, or other criteria.
-]: any -> record<IdentityPoolId: string, IdentityPoolName: string, AllowUnauthenticatedIdentities: bool, AllowClassicFlow: bool, SupportedLoginProviders: record, DeveloperProviderName: string, OpenIdConnectProviderARNs: list<string>, CognitoIdentityProviders: table<ProviderName: string, ClientId: string, ServerSideTokenCheck: bool>, SamlProviderARNs: list<string>, IdentityPoolTags: record> {
+]: any -> oneof<record<IdentityPoolId: string, IdentityPoolName: string, AllowUnauthenticatedIdentities: bool, AllowClassicFlow: bool, SupportedLoginProviders: record, DeveloperProviderName: string, OpenIdConnectProviderARNs: list<string>, CognitoIdentityProviders: table<ProviderName: string, ClientId: string, ServerSideTokenCheck: bool>, SamlProviderARNs: list<string>, IdentityPoolTags: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -225,7 +247,7 @@ export def "delete-identities" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-1 # required
   identity_ids_to_delete: list<string> # A list of 1-60 identities that you want to delete.
-]: any -> record<UnprocessedIdentityIds: table<IdentityId: string, ErrorCode: string>> {
+]: any -> oneof<record<UnprocessedIdentityIds: table<IdentityId: string, ErrorCode: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -323,7 +345,7 @@ export def "describe-identity" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-3 # required
   identity_id: string # A unique identifier in the format REGION:GUID.
-]: any -> record<IdentityId: string, Logins: list<string>, CreationDate: string, LastModifiedDate: string> {
+]: any -> oneof<record<IdentityId: string, Logins: list<string>, CreationDate: string, LastModifiedDate: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -372,7 +394,7 @@ export def "describe-identity-pool" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-4 # required
   identity_pool_id: string # An identity pool ID in the format REGION:GUID.
-]: any -> record<IdentityPoolId: string, IdentityPoolName: string, AllowUnauthenticatedIdentities: bool, AllowClassicFlow: bool, SupportedLoginProviders: record, DeveloperProviderName: string, OpenIdConnectProviderARNs: list<string>, CognitoIdentityProviders: table<ProviderName: string, ClientId: string, ServerSideTokenCheck: bool>, SamlProviderARNs: list<string>, IdentityPoolTags: record> {
+]: any -> oneof<record<IdentityPoolId: string, IdentityPoolName: string, AllowUnauthenticatedIdentities: bool, AllowClassicFlow: bool, SupportedLoginProviders: record, DeveloperProviderName: string, OpenIdConnectProviderARNs: list<string>, CognitoIdentityProviders: table<ProviderName: string, ClientId: string, ServerSideTokenCheck: bool>, SamlProviderARNs: list<string>, IdentityPoolTags: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -423,7 +445,7 @@ export def "get-credentials-for-identity" [
   identity_id: string # A unique identifier in the format REGION:GUID.
   --logins: record # A set of optional name-value pairs that map provider names to provider tokens. The name-value pair will follow the syntax "provider_name": "provider_user_identifier". Logins should not be specified when trying to get credentials for an unauthenticated identity. The Logins parameter is required when using identities associated with external identity providers such as Facebook. For examples of Logins maps, see the code examples in the External Identity Providers (https://docs.aws.amazon.com/cognito/latest/developerguide/external-identity-providers.html) section of the Amazon Cognito Developer Guide.
   --custom-role-arn: string # The Amazon Resource Name (ARN) of the role to be assumed when multiple roles were received in the token from the identity provider. For example, a SAML-based identity provider. This parameter is optional for identity providers that do not support role customization.
-]: any -> record<IdentityId: string, Credentials: record<AccessKeyId: string, SecretKey: string, SessionToken: string, Expiration: string>> {
+]: any -> oneof<record<IdentityId: string, Credentials: record<AccessKeyId: string, SecretKey: string, SessionToken: string, Expiration: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -474,7 +496,7 @@ export def "get-id" [
   --account-id: string # A standard AWS account ID (9+ digits).
   identity_pool_id: string # An identity pool ID in the format REGION:GUID.
   --logins: record # A set of optional name-value pairs that map provider names to provider tokens. The available provider names for Logins are as follows: Facebook: graph.facebook.com Amazon Cognito user pool: cognito-idp.<region>.amazonaws.com/<YOUR_USER_POOL_ID>, for example, cognito-idp.us-east-1.amazonaws.com/us-east-1_123456789. Google: accounts.google.com Amazon: www.amazon.com Twitter: api.twitter.com Digits: www.digits.com
-]: any -> record<IdentityId: string> {
+]: any -> oneof<record<IdentityId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -523,7 +545,7 @@ export def "get-identity-pool-roles" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-7 # required
   identity_pool_id: string # An identity pool ID in the format REGION:GUID.
-]: any -> record<IdentityPoolId: string, Roles: record, RoleMappings: record> {
+]: any -> oneof<record<IdentityPoolId: string, Roles: record, RoleMappings: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -573,7 +595,7 @@ export def "get-open-id-token" [
   --x-amz-target: string@x-amz-target-completer-8 # required
   identity_id: string # A unique identifier in the format REGION:GUID.
   --logins: record # A set of optional name-value pairs that map provider names to provider tokens. When using graph.facebook.com and www.amazon.com, supply the access_token returned from the provider's authflow. For accounts.google.com, an Amazon Cognito user pool provider, or any other OpenID Connect provider, always include the id_token.
-]: any -> record<IdentityId: string, Token: string> {
+]: any -> oneof<record<IdentityId: string, Token: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -626,7 +648,7 @@ export def "get-open-id-token-for-developer-identity" [
   logins: record # A set of optional name-value pairs that map provider names to provider tokens. Each name-value pair represents a user from a public provider or developer provider. If the user is from a developer provider, the name-value pair will follow the syntax "developer_provider_name": "developer_user_identifier". The developer provider is the "domain" by which Cognito will refer to your users; you provided this domain while creating/updating the identity pool. The developer user identifier is an identifier from your backend that uniquely identifies a user. When you create an identity pool, you can specify the supported logins.
   --principal-tags: record # Use this operation to configure attribute mappings for custom providers.
   --token-duration: int # The expiration time of the token, in seconds. You can specify a custom expiration time for the token so that you can cache it. If you don't provide an expiration time, the token is valid for 15 minutes. You can exchange the token with Amazon STS for temporary AWS credentials, which are valid for a maximum of one hour. The maximum token duration you can set is 24 hours. You should take care in setting the expiration time for a token, as there are significant security implications: an attacker could use a leaked token to access your AWS resources for the token's duration. Please provide for a small grace period, usually no more than 5 minutes, to account for clock skew.
-]: any -> record<IdentityId: string, Token: string> {
+]: any -> oneof<record<IdentityId: string, Token: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -676,7 +698,7 @@ export def "get-principal-tag-attribute-map" [
   --x-amz-target: string@x-amz-target-completer-10 # required
   identity_pool_id: string # You can use this operation to get the ID of the Identity Pool you setup attribute mappings for.
   identity_provider_name: string # You can use this operation to get the provider name.
-]: any -> record<IdentityPoolId: string, IdentityProviderName: string, UseDefaults: bool, PrincipalTags: record> {
+]: any -> oneof<record<IdentityPoolId: string, IdentityProviderName: string, UseDefaults: bool, PrincipalTags: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -728,7 +750,7 @@ export def "list-identities" [
   max_results: int # The maximum number of identities to return.
   --next-token: string # A pagination token.
   --hide-disabled: oneof<nothing, bool> # An optional boolean parameter that allows you to hide disabled identities. If omitted, the ListIdentities API will include disabled identities in the response.
-]: any -> record<IdentityPoolId: string, Identities: table<IdentityId: string, Logins: list, CreationDate: string, LastModifiedDate: string>, NextToken: string> {
+]: any -> oneof<record<IdentityPoolId: string, Identities: table<IdentityId: string, Logins: list, CreationDate: string, LastModifiedDate: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -780,7 +802,7 @@ export def "list-identity-pools" [
   --x-amz-target: string@x-amz-target-completer-12 # required
   --max-results-body: int # The maximum number of identities to return. (body field)
   --next-token-body: string # A pagination token. (body field)
-]: any -> record<IdentityPools: table<IdentityPoolId: string, IdentityPoolName: string>, NextToken: string> {
+]: any -> oneof<record<IdentityPools: table<IdentityPoolId: string, IdentityPoolName: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -831,7 +853,7 @@ export def "list-tags-for-resource" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-13 # required
   resource_arn: string # The Amazon Resource Name (ARN) of the identity pool that the tags are assigned to.
-]: any -> record<Tags: record> {
+]: any -> oneof<record<Tags: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -884,7 +906,7 @@ export def "lookup-developer-identity" [
   --developer-user-identifier: string # A unique ID used by your backend authentication process to identify a user. Typically, a developer identity provider would issue many developer user identifiers, in keeping with the number of users.
   --max-results: int # The maximum number of identities to return.
   --next-token: string # A pagination token. The first call you make will have NextToken set to null. After that the service will return NextToken values as needed. For example, let's say you make a request with MaxResults set to 10, and there are 20 matches in the database. The service will return a pagination token as a part of the response. This token can be used to call the API again and get results starting from the 11th match.
-]: any -> record<IdentityId: string, DeveloperUserIdentifierList: list<string>, NextToken: string> {
+]: any -> oneof<record<IdentityId: string, DeveloperUserIdentifierList: list<string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -936,7 +958,7 @@ export def "merge-developer-identities" [
   destination_user_identifier: string # User identifier for the destination user. The value should be a DeveloperUserIdentifier.
   developer_provider_name: string # The "domain" by which Cognito will refer to your users. This is a (pseudo) domain name that you provide while creating an identity pool. This name acts as a placeholder that allows your backend and the Cognito service to communicate about the developer provider. For the DeveloperProviderName, you can use letters as well as period (.), underscore (_), and dash (-).
   identity_pool_id: string # An identity pool ID in the format REGION:GUID.
-]: any -> record<IdentityId: string> {
+]: any -> oneof<record<IdentityId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1039,7 +1061,7 @@ export def "set-principal-tag-attribute-map" [
   identity_provider_name: string # The provider name you want to use for attribute mappings.
   --use-defaults: oneof<nothing, bool> # You can use this operation to use default (username and clientID) attribute mappings.
   --principal-tags: record # You can use this operation to add principal tags.
-]: any -> record<IdentityPoolId: string, IdentityProviderName: string, UseDefaults: bool, PrincipalTags: record> {
+]: any -> oneof<record<IdentityPoolId: string, IdentityProviderName: string, UseDefaults: bool, PrincipalTags: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1089,7 +1111,7 @@ export def "tag-resource" [
   --x-amz-target: string@x-amz-target-completer-18 # required
   resource_arn: string # The Amazon Resource Name (ARN) of the identity pool.
   tags: record # The tags to assign to the identity pool.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1242,7 +1264,7 @@ export def "untag-resource" [
   --x-amz-target: string@x-amz-target-completer-21 # required
   resource_arn: string # The Amazon Resource Name (ARN) of the identity pool.
   tag_keys: list<string> # The keys of the tags to remove from the user pool.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1272,7 +1294,6 @@ export def "untag-resource" [
 #
 # POST /
 # operationId: UpdateIdentityPool
-# --CognitoIdentityProviders item shape: {ProviderName?: string, ClientId?: string, ServerSideTokenCheck?: bool}
 export def "update-identity-pool" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1301,7 +1322,7 @@ export def "update-identity-pool" [
   --cognito-identity-providers: list # A list representing an Amazon Cognito user pool and its client ID. — item shape: {ProviderName?: string, ClientId?: string, ServerSideTokenCheck?: bool}
   --saml-provider-ar-ns: list<string> # An array of Amazon Resource Names (ARNs) of the SAML provider for your identity pool.
   --identity-pool-tags: record # The tags that are assigned to the identity pool. A tag is a label that you can apply to identity pools to categorize and manage them in different ways, such as by purpose, owner, environment, or other criteria.
-]: any -> record<IdentityPoolId: string, IdentityPoolName: string, AllowUnauthenticatedIdentities: bool, AllowClassicFlow: bool, SupportedLoginProviders: record, DeveloperProviderName: string, OpenIdConnectProviderARNs: list<string>, CognitoIdentityProviders: table<ProviderName: string, ClientId: string, ServerSideTokenCheck: bool>, SamlProviderARNs: list<string>, IdentityPoolTags: record> {
+]: any -> oneof<record<IdentityPoolId: string, IdentityPoolName: string, AllowUnauthenticatedIdentities: bool, AllowClassicFlow: bool, SupportedLoginProviders: record, DeveloperProviderName: string, OpenIdConnectProviderARNs: list<string>, CognitoIdentityProviders: table<ProviderName: string, ClientId: string, ServerSideTokenCheck: bool>, SamlProviderARNs: list<string>, IdentityPoolTags: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

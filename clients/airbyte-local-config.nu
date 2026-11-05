@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -114,9 +138,9 @@ def default-geography-completer [] { ["auto" "eu" "us"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "save-stats" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["save-stats" "save-sync-config" "set-workflow-in-attempt" "create-connection" "delete-connection" "get-connection" "list-connections-for-workspace" "list-all-connections-for-workspace" "reset-connection" "search-connections" "sync-connection" "update-connection" "get-destination-definition-specification" "create-custom-destination-definition" "delete-destination-definition" "get-destination-definition" "get-destination-definition-for-workspace" "grant-destination-definition-to-workspace" "list-destination-definitions" "list-destination-definitions-for-workspace" "list-latest-destination-definitions" "list-private-destination-definitions" "revoke-destination-definition-from-workspace" "update-destination-definition" "complete-destination-o-auth" "get-destination-o-auth-consent" "set-instancewide-destination-oauth-params" "check-connection-to-destination" "check-connection-to-destination-for-update" "clone-destination" "create-destination" "delete-destination" "get-destination" "list-destinations-for-workspace" "search-destinations" "update-destination" "get-health-check" "cancel-job" "get-job-info" "get-job-debug-info" "get-last-replication-job" "get-job-info-light" "get-attempt-normalization-statuses-for-job" "list-jobs-for" "get-logs" "try-notification-config" "get-open-api-spec" "check-operation" "create-operation" "delete-operation" "get-operation" "list-operations-for-connection" "update-operation" "execute-destination-check-connection" "execute-source-check-connection" "execute-source-discover-schema" "get-source-definition-specification" "create-custom-source-definition" "delete-source-definition" "get-source-definition" "get-source-definition-for-workspace" "grant-source-definition-to-workspace" "list-source-definitions" "list-source-definitions-for-workspace" "list-latest-source-definitions" "list-private-source-definitions" "revoke-source-definition-from-workspace" "update-source-definition" "complete-source-o-auth" "get-source-o-auth-consent" "set-instancewide-source-oauth-params" "check-connection-to-source" "check-connection-to-source-for-update" "clone-source" "create-source" "delete-source" "discover-schema-for-source" "get-source" "list-sources-for-workspace" "get-most-recent-source-actor-catalog" "search-sources" "update-source" "write-discover-catalog-result" "create-or-update-state" "get-state" "web-backend-check-updates" "web-backend-create-connection" "web-backend-get-connection" "web-backend-list-connections-for-workspace" "web-backend-update-connection" "web-backend-list-geographies" "get-state-type" "web-backend-get-workspace-state" "create-workspace" "delete-workspace" "get-workspace" "get-workspace-by-connection-id" "get-workspace-by-slug" "list-workspaces" "update-workspace-feedback" "update-workspace" "update-workspace-name" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -138,8 +162,6 @@ export def commands []: nothing -> table {
 #
 # POST /v1/attempt/save_stats
 # operationId: saveStats
-# --stats shape: {bytesEmitted?: int, estimatedBytes?: int, estimatedRecords?: int, recordsCommitted?: int, recordsEmitted?: int, stateMessagesEmitted?: int}
-# --streamStats item shape: {stats: record, streamName: string, streamNamespace?: string}
 export def "save-stats" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -154,7 +176,7 @@ export def "save-stats" [
   job_id: int # format: int64
   stats: record # shape: {bytesEmitted?: int, estimatedBytes?: int, estimatedRecords?: int, recordsCommitted?: int, recordsEmitted?: int, stateMessagesEmitted?: int}
   --stream-stats: list # item shape: {stats: record, streamName: string, streamNamespace?: string}
-]: any -> record<succeeded: bool> {
+]: any -> oneof<record<succeeded: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -181,7 +203,6 @@ export def "save-stats" [
 #
 # POST /v1/attempt/save_sync_config
 # operationId: saveSyncConfig
-# --syncConfig shape: {destinationConfiguration: any, sourceConfiguration: any, state?: record}
 export def "save-sync-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -195,7 +216,7 @@ export def "save-sync-config" [
   attempt_number: int # format: int32
   job_id: int # format: int64
   sync_config: record # shape: {destinationConfiguration: any, sourceConfiguration: any, state?: record}
-]: any -> record<succeeded: bool> {
+]: any -> oneof<record<succeeded: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -236,7 +257,7 @@ export def "set-workflow-in-attempt" [
   job_id: int # format: int64
   --processing-task-queue: string # default: ""
   workflow_id: string
-]: any -> record<succeeded: bool> {
+]: any -> oneof<record<succeeded: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -263,10 +284,6 @@ export def "set-workflow-in-attempt" [
 #
 # POST /v1/connections/create
 # operationId: createConnection
-# --resourceRequirements shape: {cpu_limit?: string, cpu_request?: string, memory_limit?: string, memory_request?: string}
-# --schedule shape: {timeUnit: "minutes"|"hours"|"days"|"weeks"|"months", units: int}
-# --scheduleData shape: {basicSchedule?: record, cron?: record}
-# --syncCatalog shape: {streams: list}
 export def "create-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -294,7 +311,7 @@ export def "create-connection" [
   source_id: string # format: uuid
   status: string@status-completer # Active means that data is flowing through the connection. Inactive means it is not. Deprecated means the connection is off and cannot be re-activated. the schema field describes the elements of the schema that will be synced.
   --sync-catalog: record # describes the available schema (catalog). — shape: {streams: list}
-]: any -> record<breakingChange: bool, connectionId: string, destinationId: string, geography: string, name: string, namespaceDefinition: string, namespaceFormat: string, nonBreakingChangesPreference: string, notifySchemaChanges: bool, operationIds: list<string>, prefix: string, resourceRequirements: record<cpu_limit: string, cpu_request: string, memory_limit: string, memory_request: string>, schedule: record<timeUnit: string, units: int>, scheduleData: record<basicSchedule: record<timeUnit: string, units: int>, cron: record<cronExpression: string, cronTimeZone: string>>, scheduleType: string, sourceCatalogId: string, sourceId: string, status: string, syncCatalog: record<streams: list<record>>> {
+]: any -> oneof<record<breakingChange: bool, connectionId: string, destinationId: string, geography: string, name: string, namespaceDefinition: string, namespaceFormat: string, nonBreakingChangesPreference: string, notifySchemaChanges: bool, operationIds: list<string>, prefix: string, resourceRequirements: record<cpu_limit: string, cpu_request: string, memory_limit: string, memory_request: string>, schedule: record<timeUnit: string, units: int>, scheduleData: record<basicSchedule: record<timeUnit: string, units: int>, cron: record<cronExpression: string, cronTimeZone: string>>, scheduleType: string, sourceCatalogId: string, sourceId: string, status: string, syncCatalog: record<streams: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -370,7 +387,7 @@ export def "get-connection" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   connection_id: string # format: uuid
-]: any -> record<breakingChange: bool, connectionId: string, destinationId: string, geography: string, name: string, namespaceDefinition: string, namespaceFormat: string, nonBreakingChangesPreference: string, notifySchemaChanges: bool, operationIds: list<string>, prefix: string, resourceRequirements: record<cpu_limit: string, cpu_request: string, memory_limit: string, memory_request: string>, schedule: record<timeUnit: string, units: int>, scheduleData: record<basicSchedule: record<timeUnit: string, units: int>, cron: record<cronExpression: string, cronTimeZone: string>>, scheduleType: string, sourceCatalogId: string, sourceId: string, status: string, syncCatalog: record<streams: list<record>>> {
+]: any -> oneof<record<breakingChange: bool, connectionId: string, destinationId: string, geography: string, name: string, namespaceDefinition: string, namespaceFormat: string, nonBreakingChangesPreference: string, notifySchemaChanges: bool, operationIds: list<string>, prefix: string, resourceRequirements: record<cpu_limit: string, cpu_request: string, memory_limit: string, memory_request: string>, schedule: record<timeUnit: string, units: int>, scheduleData: record<basicSchedule: record<timeUnit: string, units: int>, cron: record<cronExpression: string, cronTimeZone: string>>, scheduleType: string, sourceCatalogId: string, sourceId: string, status: string, syncCatalog: record<streams: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -408,7 +425,7 @@ export def "list-connections-for-workspace" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   workspace_id: string # format: uuid
-]: any -> record<connections: table<breakingChange: bool, connectionId: string, destinationId: string, geography: string, name: string, namespaceDefinition: string, namespaceFormat: string, nonBreakingChangesPreference: string, notifySchemaChanges: bool, operationIds: list, prefix: string, resourceRequirements: record, schedule: record, scheduleData: record, scheduleType: string, sourceCatalogId: string, sourceId: string, status: string, syncCatalog: record>> {
+]: any -> oneof<record<connections: table<breakingChange: bool, connectionId: string, destinationId: string, geography: string, name: string, namespaceDefinition: string, namespaceFormat: string, nonBreakingChangesPreference: string, notifySchemaChanges: bool, operationIds: list, prefix: string, resourceRequirements: record, schedule: record, scheduleData: record, scheduleType: string, sourceCatalogId: string, sourceId: string, status: string, syncCatalog: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -446,7 +463,7 @@ export def "list-all-connections-for-workspace" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   workspace_id: string # format: uuid
-]: any -> record<connections: table<breakingChange: bool, connectionId: string, destinationId: string, geography: string, name: string, namespaceDefinition: string, namespaceFormat: string, nonBreakingChangesPreference: string, notifySchemaChanges: bool, operationIds: list, prefix: string, resourceRequirements: record, schedule: record, scheduleData: record, scheduleType: string, sourceCatalogId: string, sourceId: string, status: string, syncCatalog: record>> {
+]: any -> oneof<record<connections: table<breakingChange: bool, connectionId: string, destinationId: string, geography: string, name: string, namespaceDefinition: string, namespaceFormat: string, nonBreakingChangesPreference: string, notifySchemaChanges: bool, operationIds: list, prefix: string, resourceRequirements: record, schedule: record, scheduleData: record, scheduleType: string, sourceCatalogId: string, sourceId: string, status: string, syncCatalog: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -484,7 +501,7 @@ export def "reset-connection" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   connection_id: string # format: uuid
-]: any -> record<attempts: table<attempt: record, logs: record>, job: record<configId: string, configType: string, createdAt: int, id: int, resetConfig: record<streamsToReset: list>, startedAt: int, status: string, updatedAt: int>> {
+]: any -> oneof<record<attempts: table<attempt: record, logs: record>, job: record<configId: string, configType: string, createdAt: int, id: int, resetConfig: record<streamsToReset: list>, startedAt: int, status: string, updatedAt: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -511,10 +528,6 @@ export def "reset-connection" [
 #
 # POST /v1/connections/search
 # operationId: searchConnections
-# --destination shape: {connectionConfiguration?: any, destinationDefinitionId?: string, destinationId?: string, destinationName?: string, name?: string, workspaceId?: string}
-# --schedule shape: {timeUnit: "minutes"|"hours"|"days"|"weeks"|"months", units: int}
-# --scheduleData shape: {basicSchedule?: record, cron?: record}
-# --source shape: {connectionConfiguration?: any, name?: string, sourceDefinitionId?: string, sourceId?: string, sourceName?: string, workspaceId?: string}
 export def "search-connections" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -538,7 +551,7 @@ export def "search-connections" [
   --source: record # shape: {connectionConfiguration?: any, name?: string, sourceDefinitionId?: string, sourceId?: string, sourceName?: string, workspaceId?: string}
   --source-id: string # format: uuid
   --status: string@status-completer # Active means that data is flowing through the connection. Inactive means it is not. Deprecated means the connection is off and cannot be re-activated. the schema field describes the elements of the schema that will be synced.
-]: any -> record<connections: table<breakingChange: bool, connectionId: string, destinationId: string, geography: string, name: string, namespaceDefinition: string, namespaceFormat: string, nonBreakingChangesPreference: string, notifySchemaChanges: bool, operationIds: list, prefix: string, resourceRequirements: record, schedule: record, scheduleData: record, scheduleType: string, sourceCatalogId: string, sourceId: string, status: string, syncCatalog: record>> {
+]: any -> oneof<record<connections: table<breakingChange: bool, connectionId: string, destinationId: string, geography: string, name: string, namespaceDefinition: string, namespaceFormat: string, nonBreakingChangesPreference: string, notifySchemaChanges: bool, operationIds: list, prefix: string, resourceRequirements: record, schedule: record, scheduleData: record, scheduleType: string, sourceCatalogId: string, sourceId: string, status: string, syncCatalog: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -576,7 +589,7 @@ export def "sync-connection" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   connection_id: string # format: uuid
-]: any -> record<attempts: table<attempt: record, logs: record>, job: record<configId: string, configType: string, createdAt: int, id: int, resetConfig: record<streamsToReset: list>, startedAt: int, status: string, updatedAt: int>> {
+]: any -> oneof<record<attempts: table<attempt: record, logs: record>, job: record<configId: string, configType: string, createdAt: int, id: int, resetConfig: record<streamsToReset: list>, startedAt: int, status: string, updatedAt: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -603,10 +616,6 @@ export def "sync-connection" [
 #
 # POST /v1/connections/update
 # operationId: updateConnection
-# --resourceRequirements shape: {cpu_limit?: string, cpu_request?: string, memory_limit?: string, memory_request?: string}
-# --schedule shape: {timeUnit: "minutes"|"hours"|"days"|"weeks"|"months", units: int}
-# --scheduleData shape: {basicSchedule?: record, cron?: record}
-# --syncCatalog shape: {streams: list}
 export def "update-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -634,7 +643,7 @@ export def "update-connection" [
   --source-catalog-id: string # format: uuid
   --status: string@status-completer # Active means that data is flowing through the connection. Inactive means it is not. Deprecated means the connection is off and cannot be re-activated. the schema field describes the elements of the schema that will be synced.
   --sync-catalog: record # describes the available schema (catalog). — shape: {streams: list}
-]: any -> record<breakingChange: bool, connectionId: string, destinationId: string, geography: string, name: string, namespaceDefinition: string, namespaceFormat: string, nonBreakingChangesPreference: string, notifySchemaChanges: bool, operationIds: list<string>, prefix: string, resourceRequirements: record<cpu_limit: string, cpu_request: string, memory_limit: string, memory_request: string>, schedule: record<timeUnit: string, units: int>, scheduleData: record<basicSchedule: record<timeUnit: string, units: int>, cron: record<cronExpression: string, cronTimeZone: string>>, scheduleType: string, sourceCatalogId: string, sourceId: string, status: string, syncCatalog: record<streams: list<record>>> {
+]: any -> oneof<record<breakingChange: bool, connectionId: string, destinationId: string, geography: string, name: string, namespaceDefinition: string, namespaceFormat: string, nonBreakingChangesPreference: string, notifySchemaChanges: bool, operationIds: list<string>, prefix: string, resourceRequirements: record<cpu_limit: string, cpu_request: string, memory_limit: string, memory_request: string>, schedule: record<timeUnit: string, units: int>, scheduleData: record<basicSchedule: record<timeUnit: string, units: int>, cron: record<cronExpression: string, cronTimeZone: string>>, scheduleType: string, sourceCatalogId: string, sourceId: string, status: string, syncCatalog: record<streams: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -673,7 +682,7 @@ export def "get-destination-definition-specification" [
   --dry-run(-n) # Return the request that would be sent without executing it
   destination_definition_id: string # format: uuid
   workspace_id: string # format: uuid
-]: any -> record<advancedAuth: record<authFlowType: string, oauthConfigSpecification: record<completeOAuthOutputSpecification: any, completeOAuthServerInputSpecification: any, completeOAuthServerOutputSpecification: any, oauthUserInputFromConnectorConfigSpecification: any>, predicateKey: list<string>, predicateValue: string>, authSpecification: record<auth_type: string, oauth2Specification: record<oauthFlowInitParameters: list, oauthFlowOutputParameters: list, rootObject: list>>, connectionSpecification: any, destinationDefinitionId: string, documentationUrl: string, jobInfo: record<configId: string, configType: string, connectorConfigurationUpdated: bool, createdAt: int, endedAt: int, id: string, logs: record<logLines: list>, succeeded: bool>, supportedDestinationSyncModes: list<string>> {
+]: any -> oneof<record<advancedAuth: record<authFlowType: string, oauthConfigSpecification: record<completeOAuthOutputSpecification: any, completeOAuthServerInputSpecification: any, completeOAuthServerOutputSpecification: any, oauthUserInputFromConnectorConfigSpecification: any>, predicateKey: list<string>, predicateValue: string>, authSpecification: record<auth_type: string, oauth2Specification: record<oauthFlowInitParameters: list, oauthFlowOutputParameters: list, rootObject: list>>, connectionSpecification: any, destinationDefinitionId: string, documentationUrl: string, jobInfo: record<configId: string, configType: string, connectorConfigurationUpdated: bool, createdAt: int, endedAt: int, id: string, logs: record<logLines: list>, succeeded: bool>, supportedDestinationSyncModes: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -700,7 +709,6 @@ export def "get-destination-definition-specification" [
 #
 # POST /v1/destination_definitions/create_custom
 # operationId: createCustomDestinationDefinition
-# --destinationDefinition shape: {dockerImageTag: string, dockerRepository: string, documentationUrl: string, icon?: string, name: string, resourceRequirements?: record}
 export def "create-custom-destination-definition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -713,7 +721,7 @@ export def "create-custom-destination-definition" [
   --dry-run(-n) # Return the request that would be sent without executing it
   destination_definition: record # shape: {dockerImageTag: string, dockerRepository: string, documentationUrl: string, icon?: string, name: string, resourceRequirements?: record}
   workspace_id: string # format: uuid
-]: any -> record<destinationDefinitionId: string, dockerImageTag: string, dockerRepository: string, documentationUrl: string, icon: string, name: string, normalizationConfig: record<normalizationIntegrationType: string, normalizationRepository: string, normalizationTag: string, supported: bool>, protocolVersion: string, releaseDate: string, releaseStage: string, resourceRequirements: record<default: record<cpu_limit: string, cpu_request: string, memory_limit: string, memory_request: string>, jobSpecific: list<record>>, supportsDbt: bool> {
+]: any -> oneof<record<destinationDefinitionId: string, dockerImageTag: string, dockerRepository: string, documentationUrl: string, icon: string, name: string, normalizationConfig: record<normalizationIntegrationType: string, normalizationRepository: string, normalizationTag: string, supported: bool>, protocolVersion: string, releaseDate: string, releaseStage: string, resourceRequirements: record<default: record<cpu_limit: string, cpu_request: string, memory_limit: string, memory_request: string>, jobSpecific: list<record>>, supportsDbt: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -789,7 +797,7 @@ export def "get-destination-definition" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   destination_definition_id: string # format: uuid
-]: any -> record<destinationDefinitionId: string, dockerImageTag: string, dockerRepository: string, documentationUrl: string, icon: string, name: string, normalizationConfig: record<normalizationIntegrationType: string, normalizationRepository: string, normalizationTag: string, supported: bool>, protocolVersion: string, releaseDate: string, releaseStage: string, resourceRequirements: record<default: record<cpu_limit: string, cpu_request: string, memory_limit: string, memory_request: string>, jobSpecific: list<record>>, supportsDbt: bool> {
+]: any -> oneof<record<destinationDefinitionId: string, dockerImageTag: string, dockerRepository: string, documentationUrl: string, icon: string, name: string, normalizationConfig: record<normalizationIntegrationType: string, normalizationRepository: string, normalizationTag: string, supported: bool>, protocolVersion: string, releaseDate: string, releaseStage: string, resourceRequirements: record<default: record<cpu_limit: string, cpu_request: string, memory_limit: string, memory_request: string>, jobSpecific: list<record>>, supportsDbt: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -828,7 +836,7 @@ export def "get-destination-definition-for-workspace" [
   --dry-run(-n) # Return the request that would be sent without executing it
   destination_definition_id: string # format: uuid
   workspace_id: string # format: uuid
-]: any -> record<destinationDefinitionId: string, dockerImageTag: string, dockerRepository: string, documentationUrl: string, icon: string, name: string, normalizationConfig: record<normalizationIntegrationType: string, normalizationRepository: string, normalizationTag: string, supported: bool>, protocolVersion: string, releaseDate: string, releaseStage: string, resourceRequirements: record<default: record<cpu_limit: string, cpu_request: string, memory_limit: string, memory_request: string>, jobSpecific: list<record>>, supportsDbt: bool> {
+]: any -> oneof<record<destinationDefinitionId: string, dockerImageTag: string, dockerRepository: string, documentationUrl: string, icon: string, name: string, normalizationConfig: record<normalizationIntegrationType: string, normalizationRepository: string, normalizationTag: string, supported: bool>, protocolVersion: string, releaseDate: string, releaseStage: string, resourceRequirements: record<default: record<cpu_limit: string, cpu_request: string, memory_limit: string, memory_request: string>, jobSpecific: list<record>>, supportsDbt: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -867,7 +875,7 @@ export def "grant-destination-definition-to-workspace" [
   --dry-run(-n) # Return the request that would be sent without executing it
   destination_definition_id: string # format: uuid
   workspace_id: string # format: uuid
-]: any -> record<destinationDefinition: record<destinationDefinitionId: string, dockerImageTag: string, dockerRepository: string, documentationUrl: string, icon: string, name: string, normalizationConfig: record<normalizationIntegrationType: string, normalizationRepository: string, normalizationTag: string, supported: bool>, protocolVersion: string, releaseDate: string, releaseStage: string, resourceRequirements: record<default: record, jobSpecific: list>, supportsDbt: bool>, granted: bool> {
+]: any -> oneof<record<destinationDefinition: record<destinationDefinitionId: string, dockerImageTag: string, dockerRepository: string, documentationUrl: string, icon: string, name: string, normalizationConfig: record<normalizationIntegrationType: string, normalizationRepository: string, normalizationTag: string, supported: bool>, protocolVersion: string, releaseDate: string, releaseStage: string, resourceRequirements: record<default: record, jobSpecific: list>, supportsDbt: bool>, granted: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -904,7 +912,7 @@ export def "list-destination-definitions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<destinationDefinitions: table<destinationDefinitionId: string, dockerImageTag: string, dockerRepository: string, documentationUrl: string, icon: string, name: string, normalizationConfig: record, protocolVersion: string, releaseDate: string, releaseStage: string, resourceRequirements: record, supportsDbt: bool>> {
+]: nothing -> oneof<record<destinationDefinitions: table<destinationDefinitionId: string, dockerImageTag: string, dockerRepository: string, documentationUrl: string, icon: string, name: string, normalizationConfig: record, protocolVersion: string, releaseDate: string, releaseStage: string, resourceRequirements: record, supportsDbt: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/destination_definitions/list" $auth.query)
@@ -939,7 +947,7 @@ export def "list-destination-definitions-for-workspace" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   workspace_id: string # format: uuid
-]: any -> record<destinationDefinitions: table<destinationDefinitionId: string, dockerImageTag: string, dockerRepository: string, documentationUrl: string, icon: string, name: string, normalizationConfig: record, protocolVersion: string, releaseDate: string, releaseStage: string, resourceRequirements: record, supportsDbt: bool>> {
+]: any -> oneof<record<destinationDefinitions: table<destinationDefinitionId: string, dockerImageTag: string, dockerRepository: string, documentationUrl: string, icon: string, name: string, normalizationConfig: record, protocolVersion: string, releaseDate: string, releaseStage: string, resourceRequirements: record, supportsDbt: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -976,7 +984,7 @@ export def "list-latest-destination-definitions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<destinationDefinitions: table<destinationDefinitionId: string, dockerImageTag: string, dockerRepository: string, documentationUrl: string, icon: string, name: string, normalizationConfig: record, protocolVersion: string, releaseDate: string, releaseStage: string, resourceRequirements: record, supportsDbt: bool>> {
+]: nothing -> oneof<record<destinationDefinitions: table<destinationDefinitionId: string, dockerImageTag: string, dockerRepository: string, documentationUrl: string, icon: string, name: string, normalizationConfig: record, protocolVersion: string, releaseDate: string, releaseStage: string, resourceRequirements: record, supportsDbt: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/destination_definitions/list_latest" $auth.query)
@@ -1011,7 +1019,7 @@ export def "list-private-destination-definitions" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   workspace_id: string # format: uuid
-]: any -> record<destinationDefinitions: table<destinationDefinition: record, granted: bool>> {
+]: any -> oneof<record<destinationDefinitions: table<destinationDefinition: record, granted: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1077,7 +1085,6 @@ export def "revoke-destination-definition-from-workspace" [
 #
 # POST /v1/destination_definitions/update
 # operationId: updateDestinationDefinition
-# --resourceRequirements shape: {default?: record, jobSpecific?: list}
 export def "update-destination-definition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1091,7 +1098,7 @@ export def "update-destination-definition" [
   destination_definition_id: string # format: uuid
   --docker-image-tag: string
   --resource-requirements: record # actor definition specific resource requirements. if default is set, these are the requirements that should be set for ALL jobs run for this actor definition. it is overriden by the job type specific configurations. if not set, the platform will use defaults. these values will be overriden by configuration at the connection level. — shape: {default?: record, jobSpecific?: list}
-]: any -> record<destinationDefinitionId: string, dockerImageTag: string, dockerRepository: string, documentationUrl: string, icon: string, name: string, normalizationConfig: record<normalizationIntegrationType: string, normalizationRepository: string, normalizationTag: string, supported: bool>, protocolVersion: string, releaseDate: string, releaseStage: string, resourceRequirements: record<default: record<cpu_limit: string, cpu_request: string, memory_limit: string, memory_request: string>, jobSpecific: list<record>>, supportsDbt: bool> {
+]: any -> oneof<record<destinationDefinitionId: string, dockerImageTag: string, dockerRepository: string, documentationUrl: string, icon: string, name: string, normalizationConfig: record<normalizationIntegrationType: string, normalizationRepository: string, normalizationTag: string, supported: bool>, protocolVersion: string, releaseDate: string, releaseStage: string, resourceRequirements: record<default: record<cpu_limit: string, cpu_request: string, memory_limit: string, memory_request: string>, jobSpecific: list<record>>, supportsDbt: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1134,7 +1141,7 @@ export def "complete-destination-o-auth" [
   --query-params: record # The query parameters present in the redirect URL after a user granted consent e.g auth code
   --redirect-url: string # When completing OAuth flow to gain an access token, some API sometimes requires to verify that the app re-send the redirectUrl that was used when consent was given.
   workspace_id: string # format: uuid
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1176,7 +1183,7 @@ export def "get-destination-o-auth-consent" [
   --o-auth-input-configuration: any # The values required to configure OAuth flows. The schema for this must match the `OAuthConfigSpecification.oauthUserInputFromConnectorConfigSpecification` schema.
   redirect_url: string # The url to redirect to after getting the user consent
   workspace_id: string # format: uuid
-]: any -> record<consentUrl: string> {
+]: any -> oneof<record<consentUrl: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1253,7 +1260,7 @@ export def "check-connection-to-destination" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   destination_id: string # format: uuid
-]: any -> record<jobInfo: record<configId: string, configType: string, connectorConfigurationUpdated: bool, createdAt: int, endedAt: int, id: string, logs: record<logLines: list>, succeeded: bool>, message: string, status: string> {
+]: any -> oneof<record<jobInfo: record<configId: string, configType: string, connectorConfigurationUpdated: bool, createdAt: int, endedAt: int, id: string, logs: record<logLines: list>, succeeded: bool>, message: string, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1293,7 +1300,7 @@ export def "check-connection-to-destination-for-update" [
   connection_configuration: any # The values required to configure the destination. The schema for this must match the schema return by destination_definition_specifications/get for the destinationDefinition. (e.g. {user: charles})
   destination_id: string # format: uuid
   name: string
-]: any -> record<jobInfo: record<configId: string, configType: string, connectorConfigurationUpdated: bool, createdAt: int, endedAt: int, id: string, logs: record<logLines: list>, succeeded: bool>, message: string, status: string> {
+]: any -> oneof<record<jobInfo: record<configId: string, configType: string, connectorConfigurationUpdated: bool, createdAt: int, endedAt: int, id: string, logs: record<logLines: list>, succeeded: bool>, message: string, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1320,7 +1327,6 @@ export def "check-connection-to-destination-for-update" [
 #
 # POST /v1/destinations/clone
 # operationId: cloneDestination
-# --destinationConfiguration shape: {connectionConfiguration?: any, name?: string}
 export def "clone-destination" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1333,7 +1339,7 @@ export def "clone-destination" [
   --dry-run(-n) # Return the request that would be sent without executing it
   destination_clone_id: string # format: uuid
   --destination-configuration: record # shape: {connectionConfiguration?: any, name?: string}
-]: any -> record<connectionConfiguration: any, destinationDefinitionId: string, destinationId: string, destinationName: string, icon: string, name: string, workspaceId: string> {
+]: any -> oneof<record<connectionConfiguration: any, destinationDefinitionId: string, destinationId: string, destinationName: string, icon: string, name: string, workspaceId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1374,7 +1380,7 @@ export def "create-destination" [
   destination_definition_id: string # format: uuid
   name: string
   workspace_id: string # format: uuid
-]: any -> record<connectionConfiguration: any, destinationDefinitionId: string, destinationId: string, destinationName: string, icon: string, name: string, workspaceId: string> {
+]: any -> oneof<record<connectionConfiguration: any, destinationDefinitionId: string, destinationId: string, destinationName: string, icon: string, name: string, workspaceId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1450,7 +1456,7 @@ export def "get-destination" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   destination_id: string # format: uuid
-]: any -> record<connectionConfiguration: any, destinationDefinitionId: string, destinationId: string, destinationName: string, icon: string, name: string, workspaceId: string> {
+]: any -> oneof<record<connectionConfiguration: any, destinationDefinitionId: string, destinationId: string, destinationName: string, icon: string, name: string, workspaceId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1488,7 +1494,7 @@ export def "list-destinations-for-workspace" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   workspace_id: string # format: uuid
-]: any -> record<destinations: table<connectionConfiguration: any, destinationDefinitionId: string, destinationId: string, destinationName: string, icon: string, name: string, workspaceId: string>> {
+]: any -> oneof<record<destinations: table<connectionConfiguration: any, destinationDefinitionId: string, destinationId: string, destinationName: string, icon: string, name: string, workspaceId: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1531,7 +1537,7 @@ export def "search-destinations" [
   --destination-name: string
   --name: string
   --workspace-id: string # format: uuid
-]: any -> record<destinations: table<connectionConfiguration: any, destinationDefinitionId: string, destinationId: string, destinationName: string, icon: string, name: string, workspaceId: string>> {
+]: any -> oneof<record<destinations: table<connectionConfiguration: any, destinationDefinitionId: string, destinationId: string, destinationName: string, icon: string, name: string, workspaceId: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1571,7 +1577,7 @@ export def "update-destination" [
   connection_configuration: any # The values required to configure the destination. The schema for this must match the schema return by destination_definition_specifications/get for the destinationDefinition. (e.g. {user: charles})
   destination_id: string # format: uuid
   name: string
-]: any -> record<connectionConfiguration: any, destinationDefinitionId: string, destinationId: string, destinationName: string, icon: string, name: string, workspaceId: string> {
+]: any -> oneof<record<connectionConfiguration: any, destinationDefinitionId: string, destinationId: string, destinationName: string, icon: string, name: string, workspaceId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1608,7 +1614,7 @@ export def "get-health-check" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<available: bool> {
+]: nothing -> oneof<record<available: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/health" $auth.query)
@@ -1643,7 +1649,7 @@ export def "cancel-job" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   id: int # format: int64
-]: any -> record<attempts: table<attempt: record, logs: record>, job: record<configId: string, configType: string, createdAt: int, id: int, resetConfig: record<streamsToReset: list>, startedAt: int, status: string, updatedAt: int>> {
+]: any -> oneof<record<attempts: table<attempt: record, logs: record>, job: record<configId: string, configType: string, createdAt: int, id: int, resetConfig: record<streamsToReset: list>, startedAt: int, status: string, updatedAt: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1681,7 +1687,7 @@ export def "get-job-info" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   id: int # format: int64
-]: any -> record<attempts: table<attempt: record, logs: record>, job: record<configId: string, configType: string, createdAt: int, id: int, resetConfig: record<streamsToReset: list>, startedAt: int, status: string, updatedAt: int>> {
+]: any -> oneof<record<attempts: table<attempt: record, logs: record>, job: record<configId: string, configType: string, createdAt: int, id: int, resetConfig: record<streamsToReset: list>, startedAt: int, status: string, updatedAt: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1719,7 +1725,7 @@ export def "get-job-debug-info" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   id: int # format: int64
-]: any -> record<attempts: table<attempt: record, logs: record>, job: record<airbyteVersion: string, configId: string, configType: string, destinationDefinition: record<destinationDefinitionId: string, dockerImageTag: string, dockerRepository: string, documentationUrl: string, icon: string, name: string, normalizationConfig: record, protocolVersion: string, releaseDate: string, releaseStage: string, resourceRequirements: record, supportsDbt: bool>, id: int, sourceDefinition: record<dockerImageTag: string, dockerRepository: string, documentationUrl: string, icon: string, name: string, protocolVersion: string, releaseDate: string, releaseStage: string, resourceRequirements: record, sourceDefinitionId: string, sourceType: string>, status: string>, workflowState: record<running: bool>> {
+]: any -> oneof<record<attempts: table<attempt: record, logs: record>, job: record<airbyteVersion: string, configId: string, configType: string, destinationDefinition: record<destinationDefinitionId: string, dockerImageTag: string, dockerRepository: string, documentationUrl: string, icon: string, name: string, normalizationConfig: record, protocolVersion: string, releaseDate: string, releaseStage: string, resourceRequirements: record, supportsDbt: bool>, id: int, sourceDefinition: record<dockerImageTag: string, dockerRepository: string, documentationUrl: string, icon: string, name: string, protocolVersion: string, releaseDate: string, releaseStage: string, resourceRequirements: record, sourceDefinitionId: string, sourceType: string>, status: string>, workflowState: record<running: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1756,7 +1762,7 @@ export def "get-last-replication-job" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   connection_id: string # format: uuid
-]: any -> record<job: record<configId: string, configType: string, createdAt: int, id: int, resetConfig: record<streamsToReset: list>, startedAt: int, status: string, updatedAt: int>> {
+]: any -> oneof<record<job: record<configId: string, configType: string, createdAt: int, id: int, resetConfig: record<streamsToReset: list>, startedAt: int, status: string, updatedAt: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1794,7 +1800,7 @@ export def "get-job-info-light" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   id: int # format: int64
-]: any -> record<job: record<configId: string, configType: string, createdAt: int, id: int, resetConfig: record<streamsToReset: list>, startedAt: int, status: string, updatedAt: int>> {
+]: any -> oneof<record<job: record<configId: string, configType: string, createdAt: int, id: int, resetConfig: record<streamsToReset: list>, startedAt: int, status: string, updatedAt: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1832,7 +1838,7 @@ export def "get-attempt-normalization-statuses-for-job" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   id: int # format: int64
-]: any -> record<attemptNormalizationStatuses: table<attemptNumber: int, hasNormalizationFailed: bool, hasRecordsCommitted: bool, recordsCommitted: int>> {
+]: any -> oneof<record<attemptNormalizationStatuses: table<attemptNumber: int, hasNormalizationFailed: bool, hasRecordsCommitted: bool, recordsCommitted: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1859,7 +1865,6 @@ export def "get-attempt-normalization-statuses-for-job" [
 #
 # POST /v1/jobs/list
 # operationId: listJobsFor
-# --pagination shape: {pageSize?: int, rowOffset?: int}
 export def "list-jobs-for" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1874,7 +1879,7 @@ export def "list-jobs-for" [
   config_types: list<string>
   --including-job-id: int # format: int64
   --pagination: record # shape: {pageSize?: int, rowOffset?: int}
-]: any -> record<jobs: table<attempts: list, job: record>, totalJobCount: int> {
+]: any -> oneof<record<jobs: table<attempts: list, job: record>, totalJobCount: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1939,7 +1944,6 @@ export def "get-logs" [
 #
 # POST /v1/notifications/try
 # operationId: tryNotificationConfig
-# --slackConfiguration shape: {webhook: string}
 export def "try-notification-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1955,7 +1959,7 @@ export def "try-notification-config" [
   --send-on-failure: oneof<nothing, bool> # default: true
   --send-on-success: oneof<nothing, bool> # default: false
   --slack-configuration: record # shape: {webhook: string}
-]: any -> record<message: string, status: string> {
+]: any -> oneof<record<message: string, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2018,9 +2022,6 @@ export def "get-open-api-spec" [
 #
 # POST /v1/operations/check
 # operationId: checkOperation
-# --dbt shape: {dbtArguments?: string, dockerImage?: string, gitRepoBranch?: string, gitRepoUrl: string}
-# --normalization shape: {option?: "basic"}
-# --webhook shape: {dbtCloud?: record, executionBody?: string, executionUrl?: string, webhookConfigId?: string, webhookType?: "dbtCloud"}
 export def "check-operation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2035,7 +2036,7 @@ export def "check-operation" [
   --normalization: record # shape: {option?: "basic"}
   operator_type: string@operator-type-completer
   --webhook: record # shape: {dbtCloud?: record, executionBody?: string, executionUrl?: string, webhookConfigId?: string, webhookType?: "dbtCloud"}
-]: any -> record<message: string, status: string> {
+]: any -> oneof<record<message: string, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2062,7 +2063,6 @@ export def "check-operation" [
 #
 # POST /v1/operations/create
 # operationId: createOperation
-# --operatorConfiguration shape: {dbt?: record, normalization?: record, operatorType: "normalization"|"dbt"|"webhook", webhook?: record}
 export def "create-operation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2076,7 +2076,7 @@ export def "create-operation" [
   name: string
   operator_configuration: record # shape: {dbt?: record, normalization?: record, operatorType: "normalization"|"dbt"|"webhook", webhook?: record}
   workspace_id: string # format: uuid
-]: any -> record<name: string, operationId: string, operatorConfiguration: record<dbt: record<dbtArguments: string, dockerImage: string, gitRepoBranch: string, gitRepoUrl: string>, normalization: record<option: string>, operatorType: string, webhook: record<dbtCloud: record, executionBody: string, executionUrl: string, webhookConfigId: string, webhookType: string>>, workspaceId: string> {
+]: any -> oneof<record<name: string, operationId: string, operatorConfiguration: record<dbt: record<dbtArguments: string, dockerImage: string, gitRepoBranch: string, gitRepoUrl: string>, normalization: record<option: string>, operatorType: string, webhook: record<dbtCloud: record, executionBody: string, executionUrl: string, webhookConfigId: string, webhookType: string>>, workspaceId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2152,7 +2152,7 @@ export def "get-operation" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   operation_id: string # format: uuid
-]: any -> record<name: string, operationId: string, operatorConfiguration: record<dbt: record<dbtArguments: string, dockerImage: string, gitRepoBranch: string, gitRepoUrl: string>, normalization: record<option: string>, operatorType: string, webhook: record<dbtCloud: record, executionBody: string, executionUrl: string, webhookConfigId: string, webhookType: string>>, workspaceId: string> {
+]: any -> oneof<record<name: string, operationId: string, operatorConfiguration: record<dbt: record<dbtArguments: string, dockerImage: string, gitRepoBranch: string, gitRepoUrl: string>, normalization: record<option: string>, operatorType: string, webhook: record<dbtCloud: record, executionBody: string, executionUrl: string, webhookConfigId: string, webhookType: string>>, workspaceId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2190,7 +2190,7 @@ export def "list-operations-for-connection" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   connection_id: string # format: uuid
-]: any -> record<operations: table<name: string, operationId: string, operatorConfiguration: record, workspaceId: string>> {
+]: any -> oneof<record<operations: table<name: string, operationId: string, operatorConfiguration: record, workspaceId: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2217,7 +2217,6 @@ export def "list-operations-for-connection" [
 #
 # POST /v1/operations/update
 # operationId: updateOperation
-# --operatorConfiguration shape: {dbt?: record, normalization?: record, operatorType: "normalization"|"dbt"|"webhook", webhook?: record}
 export def "update-operation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2231,7 +2230,7 @@ export def "update-operation" [
   name: string
   operation_id: string # format: uuid
   operator_configuration: record # shape: {dbt?: record, normalization?: record, operatorType: "normalization"|"dbt"|"webhook", webhook?: record}
-]: any -> record<name: string, operationId: string, operatorConfiguration: record<dbt: record<dbtArguments: string, dockerImage: string, gitRepoBranch: string, gitRepoUrl: string>, normalization: record<option: string>, operatorType: string, webhook: record<dbtCloud: record, executionBody: string, executionUrl: string, webhookConfigId: string, webhookType: string>>, workspaceId: string> {
+]: any -> oneof<record<name: string, operationId: string, operatorConfiguration: record<dbt: record<dbtArguments: string, dockerImage: string, gitRepoBranch: string, gitRepoUrl: string>, normalization: record<option: string>, operatorType: string, webhook: record<dbtCloud: record, executionBody: string, executionUrl: string, webhookConfigId: string, webhookType: string>>, workspaceId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2272,7 +2271,7 @@ export def "execute-destination-check-connection" [
   destination_definition_id: string # format: uuid
   --destination-id: string # format: uuid
   workspace_id: string # format: uuid
-]: any -> record<jobInfo: record<configId: string, configType: string, connectorConfigurationUpdated: bool, createdAt: int, endedAt: int, id: string, logs: record<logLines: list>, succeeded: bool>, message: string, status: string> {
+]: any -> oneof<record<jobInfo: record<configId: string, configType: string, connectorConfigurationUpdated: bool, createdAt: int, endedAt: int, id: string, logs: record<logLines: list>, succeeded: bool>, message: string, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2313,7 +2312,7 @@ export def "execute-source-check-connection" [
   source_definition_id: string # format: uuid
   --source-id: string # format: uuid
   workspace_id: string # format: uuid
-]: any -> record<jobInfo: record<configId: string, configType: string, connectorConfigurationUpdated: bool, createdAt: int, endedAt: int, id: string, logs: record<logLines: list>, succeeded: bool>, message: string, status: string> {
+]: any -> oneof<record<jobInfo: record<configId: string, configType: string, connectorConfigurationUpdated: bool, createdAt: int, endedAt: int, id: string, logs: record<logLines: list>, succeeded: bool>, message: string, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2354,7 +2353,7 @@ export def "execute-source-discover-schema" [
   source_definition_id: string # format: uuid
   --source-id: string # format: uuid
   workspace_id: string # format: uuid
-]: any -> record<breakingChange: bool, catalog: record<streams: list<record>>, catalogDiff: record<transforms: list<record>>, catalogId: string, connectionStatus: string, jobInfo: record<configId: string, configType: string, connectorConfigurationUpdated: bool, createdAt: int, endedAt: int, id: string, logs: record<logLines: list>, succeeded: bool>> {
+]: any -> oneof<record<breakingChange: bool, catalog: record<streams: list<record>>, catalogDiff: record<transforms: list<record>>, catalogId: string, connectionStatus: string, jobInfo: record<configId: string, configType: string, connectorConfigurationUpdated: bool, createdAt: int, endedAt: int, id: string, logs: record<logLines: list>, succeeded: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2393,7 +2392,7 @@ export def "get-source-definition-specification" [
   --dry-run(-n) # Return the request that would be sent without executing it
   source_definition_id: string # format: uuid
   workspace_id: string # format: uuid
-]: any -> record<advancedAuth: record<authFlowType: string, oauthConfigSpecification: record<completeOAuthOutputSpecification: any, completeOAuthServerInputSpecification: any, completeOAuthServerOutputSpecification: any, oauthUserInputFromConnectorConfigSpecification: any>, predicateKey: list<string>, predicateValue: string>, authSpecification: record<auth_type: string, oauth2Specification: record<oauthFlowInitParameters: list, oauthFlowOutputParameters: list, rootObject: list>>, connectionSpecification: record, documentationUrl: string, jobInfo: record<configId: string, configType: string, connectorConfigurationUpdated: bool, createdAt: int, endedAt: int, id: string, logs: record<logLines: list>, succeeded: bool>, sourceDefinitionId: string> {
+]: any -> oneof<record<advancedAuth: record<authFlowType: string, oauthConfigSpecification: record<completeOAuthOutputSpecification: any, completeOAuthServerInputSpecification: any, completeOAuthServerOutputSpecification: any, oauthUserInputFromConnectorConfigSpecification: any>, predicateKey: list<string>, predicateValue: string>, authSpecification: record<auth_type: string, oauth2Specification: record<oauthFlowInitParameters: list, oauthFlowOutputParameters: list, rootObject: list>>, connectionSpecification: record, documentationUrl: string, jobInfo: record<configId: string, configType: string, connectorConfigurationUpdated: bool, createdAt: int, endedAt: int, id: string, logs: record<logLines: list>, succeeded: bool>, sourceDefinitionId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2420,7 +2419,6 @@ export def "get-source-definition-specification" [
 #
 # POST /v1/source_definitions/create_custom
 # operationId: createCustomSourceDefinition
-# --sourceDefinition shape: {dockerImageTag: string, dockerRepository: string, documentationUrl: string, icon?: string, name: string, resourceRequirements?: record}
 export def "create-custom-source-definition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2433,7 +2431,7 @@ export def "create-custom-source-definition" [
   --dry-run(-n) # Return the request that would be sent without executing it
   source_definition: record # shape: {dockerImageTag: string, dockerRepository: string, documentationUrl: string, icon?: string, name: string, resourceRequirements?: record}
   workspace_id: string # format: uuid
-]: any -> record<dockerImageTag: string, dockerRepository: string, documentationUrl: string, icon: string, name: string, protocolVersion: string, releaseDate: string, releaseStage: string, resourceRequirements: record<default: record<cpu_limit: string, cpu_request: string, memory_limit: string, memory_request: string>, jobSpecific: list<record>>, sourceDefinitionId: string, sourceType: string> {
+]: any -> oneof<record<dockerImageTag: string, dockerRepository: string, documentationUrl: string, icon: string, name: string, protocolVersion: string, releaseDate: string, releaseStage: string, resourceRequirements: record<default: record<cpu_limit: string, cpu_request: string, memory_limit: string, memory_request: string>, jobSpecific: list<record>>, sourceDefinitionId: string, sourceType: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2509,7 +2507,7 @@ export def "get-source-definition" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   source_definition_id: string # format: uuid
-]: any -> record<dockerImageTag: string, dockerRepository: string, documentationUrl: string, icon: string, name: string, protocolVersion: string, releaseDate: string, releaseStage: string, resourceRequirements: record<default: record<cpu_limit: string, cpu_request: string, memory_limit: string, memory_request: string>, jobSpecific: list<record>>, sourceDefinitionId: string, sourceType: string> {
+]: any -> oneof<record<dockerImageTag: string, dockerRepository: string, documentationUrl: string, icon: string, name: string, protocolVersion: string, releaseDate: string, releaseStage: string, resourceRequirements: record<default: record<cpu_limit: string, cpu_request: string, memory_limit: string, memory_request: string>, jobSpecific: list<record>>, sourceDefinitionId: string, sourceType: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2548,7 +2546,7 @@ export def "get-source-definition-for-workspace" [
   --dry-run(-n) # Return the request that would be sent without executing it
   source_definition_id: string # format: uuid
   workspace_id: string # format: uuid
-]: any -> record<dockerImageTag: string, dockerRepository: string, documentationUrl: string, icon: string, name: string, protocolVersion: string, releaseDate: string, releaseStage: string, resourceRequirements: record<default: record<cpu_limit: string, cpu_request: string, memory_limit: string, memory_request: string>, jobSpecific: list<record>>, sourceDefinitionId: string, sourceType: string> {
+]: any -> oneof<record<dockerImageTag: string, dockerRepository: string, documentationUrl: string, icon: string, name: string, protocolVersion: string, releaseDate: string, releaseStage: string, resourceRequirements: record<default: record<cpu_limit: string, cpu_request: string, memory_limit: string, memory_request: string>, jobSpecific: list<record>>, sourceDefinitionId: string, sourceType: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2587,7 +2585,7 @@ export def "grant-source-definition-to-workspace" [
   --dry-run(-n) # Return the request that would be sent without executing it
   source_definition_id: string # format: uuid
   workspace_id: string # format: uuid
-]: any -> record<granted: bool, sourceDefinition: record<dockerImageTag: string, dockerRepository: string, documentationUrl: string, icon: string, name: string, protocolVersion: string, releaseDate: string, releaseStage: string, resourceRequirements: record<default: record, jobSpecific: list>, sourceDefinitionId: string, sourceType: string>> {
+]: any -> oneof<record<granted: bool, sourceDefinition: record<dockerImageTag: string, dockerRepository: string, documentationUrl: string, icon: string, name: string, protocolVersion: string, releaseDate: string, releaseStage: string, resourceRequirements: record<default: record, jobSpecific: list>, sourceDefinitionId: string, sourceType: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2624,7 +2622,7 @@ export def "list-source-definitions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<sourceDefinitions: table<dockerImageTag: string, dockerRepository: string, documentationUrl: string, icon: string, name: string, protocolVersion: string, releaseDate: string, releaseStage: string, resourceRequirements: record, sourceDefinitionId: string, sourceType: string>> {
+]: nothing -> oneof<record<sourceDefinitions: table<dockerImageTag: string, dockerRepository: string, documentationUrl: string, icon: string, name: string, protocolVersion: string, releaseDate: string, releaseStage: string, resourceRequirements: record, sourceDefinitionId: string, sourceType: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/source_definitions/list" $auth.query)
@@ -2659,7 +2657,7 @@ export def "list-source-definitions-for-workspace" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   workspace_id: string # format: uuid
-]: any -> record<sourceDefinitions: table<dockerImageTag: string, dockerRepository: string, documentationUrl: string, icon: string, name: string, protocolVersion: string, releaseDate: string, releaseStage: string, resourceRequirements: record, sourceDefinitionId: string, sourceType: string>> {
+]: any -> oneof<record<sourceDefinitions: table<dockerImageTag: string, dockerRepository: string, documentationUrl: string, icon: string, name: string, protocolVersion: string, releaseDate: string, releaseStage: string, resourceRequirements: record, sourceDefinitionId: string, sourceType: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2696,7 +2694,7 @@ export def "list-latest-source-definitions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<sourceDefinitions: table<dockerImageTag: string, dockerRepository: string, documentationUrl: string, icon: string, name: string, protocolVersion: string, releaseDate: string, releaseStage: string, resourceRequirements: record, sourceDefinitionId: string, sourceType: string>> {
+]: nothing -> oneof<record<sourceDefinitions: table<dockerImageTag: string, dockerRepository: string, documentationUrl: string, icon: string, name: string, protocolVersion: string, releaseDate: string, releaseStage: string, resourceRequirements: record, sourceDefinitionId: string, sourceType: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/source_definitions/list_latest" $auth.query)
@@ -2731,7 +2729,7 @@ export def "list-private-source-definitions" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   workspace_id: string # format: uuid
-]: any -> record<sourceDefinitions: table<granted: bool, sourceDefinition: record>> {
+]: any -> oneof<record<sourceDefinitions: table<granted: bool, sourceDefinition: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2797,7 +2795,6 @@ export def "revoke-source-definition-from-workspace" [
 #
 # POST /v1/source_definitions/update
 # operationId: updateSourceDefinition
-# --resourceRequirements shape: {default?: record, jobSpecific?: list}
 export def "update-source-definition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2811,7 +2808,7 @@ export def "update-source-definition" [
   docker_image_tag: string
   --resource-requirements: record # actor definition specific resource requirements. if default is set, these are the requirements that should be set for ALL jobs run for this actor definition. it is overriden by the job type specific configurations. if not set, the platform will use defaults. these values will be overriden by configuration at the connection level. — shape: {default?: record, jobSpecific?: list}
   source_definition_id: string # format: uuid
-]: any -> record<dockerImageTag: string, dockerRepository: string, documentationUrl: string, icon: string, name: string, protocolVersion: string, releaseDate: string, releaseStage: string, resourceRequirements: record<default: record<cpu_limit: string, cpu_request: string, memory_limit: string, memory_request: string>, jobSpecific: list<record>>, sourceDefinitionId: string, sourceType: string> {
+]: any -> oneof<record<dockerImageTag: string, dockerRepository: string, documentationUrl: string, icon: string, name: string, protocolVersion: string, releaseDate: string, releaseStage: string, resourceRequirements: record<default: record<cpu_limit: string, cpu_request: string, memory_limit: string, memory_request: string>, jobSpecific: list<record>>, sourceDefinitionId: string, sourceType: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2854,7 +2851,7 @@ export def "complete-source-o-auth" [
   source_definition_id: string # format: uuid
   --source-id: string # format: uuid
   workspace_id: string # format: uuid
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2896,7 +2893,7 @@ export def "get-source-o-auth-consent" [
   source_definition_id: string # format: uuid
   --source-id: string # format: uuid
   workspace_id: string # format: uuid
-]: any -> record<consentUrl: string> {
+]: any -> oneof<record<consentUrl: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2973,7 +2970,7 @@ export def "check-connection-to-source" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   source_id: string # format: uuid
-]: any -> record<jobInfo: record<configId: string, configType: string, connectorConfigurationUpdated: bool, createdAt: int, endedAt: int, id: string, logs: record<logLines: list>, succeeded: bool>, message: string, status: string> {
+]: any -> oneof<record<jobInfo: record<configId: string, configType: string, connectorConfigurationUpdated: bool, createdAt: int, endedAt: int, id: string, logs: record<logLines: list>, succeeded: bool>, message: string, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3013,7 +3010,7 @@ export def "check-connection-to-source-for-update" [
   connection_configuration: any # The values required to configure the source. The schema for this must match the schema return by source_definition_specifications/get for the source. (e.g. {user: charles})
   name: string
   source_id: string # format: uuid
-]: any -> record<jobInfo: record<configId: string, configType: string, connectorConfigurationUpdated: bool, createdAt: int, endedAt: int, id: string, logs: record<logLines: list>, succeeded: bool>, message: string, status: string> {
+]: any -> oneof<record<jobInfo: record<configId: string, configType: string, connectorConfigurationUpdated: bool, createdAt: int, endedAt: int, id: string, logs: record<logLines: list>, succeeded: bool>, message: string, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3040,7 +3037,6 @@ export def "check-connection-to-source-for-update" [
 #
 # POST /v1/sources/clone
 # operationId: cloneSource
-# --sourceConfiguration shape: {connectionConfiguration?: any, name?: string}
 export def "clone-source" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3053,7 +3049,7 @@ export def "clone-source" [
   --dry-run(-n) # Return the request that would be sent without executing it
   source_clone_id: string # format: uuid
   --source-configuration: record # shape: {connectionConfiguration?: any, name?: string}
-]: any -> record<connectionConfiguration: any, icon: string, name: string, sourceDefinitionId: string, sourceId: string, sourceName: string, workspaceId: string> {
+]: any -> oneof<record<connectionConfiguration: any, icon: string, name: string, sourceDefinitionId: string, sourceId: string, sourceName: string, workspaceId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3094,7 +3090,7 @@ export def "create-source" [
   name: string
   source_definition_id: string # format: uuid
   workspace_id: string # format: uuid
-]: any -> record<connectionConfiguration: any, icon: string, name: string, sourceDefinitionId: string, sourceId: string, sourceName: string, workspaceId: string> {
+]: any -> oneof<record<connectionConfiguration: any, icon: string, name: string, sourceDefinitionId: string, sourceId: string, sourceName: string, workspaceId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3173,7 +3169,7 @@ export def "discover-schema-for-source" [
   --disable-cache: oneof<nothing, bool>
   --notify-schema-change: oneof<nothing, bool>
   source_id: string # format: uuid
-]: any -> record<breakingChange: bool, catalog: record<streams: list<record>>, catalogDiff: record<transforms: list<record>>, catalogId: string, connectionStatus: string, jobInfo: record<configId: string, configType: string, connectorConfigurationUpdated: bool, createdAt: int, endedAt: int, id: string, logs: record<logLines: list>, succeeded: bool>> {
+]: any -> oneof<record<breakingChange: bool, catalog: record<streams: list<record>>, catalogDiff: record<transforms: list<record>>, catalogId: string, connectionStatus: string, jobInfo: record<configId: string, configType: string, connectorConfigurationUpdated: bool, createdAt: int, endedAt: int, id: string, logs: record<logLines: list>, succeeded: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3211,7 +3207,7 @@ export def "get-source" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   source_id: string # format: uuid
-]: any -> record<connectionConfiguration: any, icon: string, name: string, sourceDefinitionId: string, sourceId: string, sourceName: string, workspaceId: string> {
+]: any -> oneof<record<connectionConfiguration: any, icon: string, name: string, sourceDefinitionId: string, sourceId: string, sourceName: string, workspaceId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3249,7 +3245,7 @@ export def "list-sources-for-workspace" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   workspace_id: string # format: uuid
-]: any -> record<sources: table<connectionConfiguration: any, icon: string, name: string, sourceDefinitionId: string, sourceId: string, sourceName: string, workspaceId: string>> {
+]: any -> oneof<record<sources: table<connectionConfiguration: any, icon: string, name: string, sourceDefinitionId: string, sourceId: string, sourceName: string, workspaceId: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3287,7 +3283,7 @@ export def "get-most-recent-source-actor-catalog" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   source_id: string # format: uuid
-]: any -> record<catalog: record, updatedAt: int> {
+]: any -> oneof<record<catalog: record, updatedAt: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3330,7 +3326,7 @@ export def "search-sources" [
   --source-id: string # format: uuid
   --source-name: string
   --workspace-id: string # format: uuid
-]: any -> record<sources: table<connectionConfiguration: any, icon: string, name: string, sourceDefinitionId: string, sourceId: string, sourceName: string, workspaceId: string>> {
+]: any -> oneof<record<sources: table<connectionConfiguration: any, icon: string, name: string, sourceDefinitionId: string, sourceId: string, sourceName: string, workspaceId: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3370,7 +3366,7 @@ export def "update-source" [
   connection_configuration: any # The values required to configure the source. The schema for this must match the schema return by source_definition_specifications/get for the source. (e.g. {user: charles})
   name: string
   source_id: string # format: uuid
-]: any -> record<connectionConfiguration: any, icon: string, name: string, sourceDefinitionId: string, sourceId: string, sourceName: string, workspaceId: string> {
+]: any -> oneof<record<connectionConfiguration: any, icon: string, name: string, sourceDefinitionId: string, sourceId: string, sourceName: string, workspaceId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3397,7 +3393,6 @@ export def "update-source" [
 #
 # POST /v1/sources/write_discover_catalog_result
 # operationId: writeDiscoverCatalogResult
-# --catalog shape: {streams: list}
 export def "write-discover-catalog-result" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3412,7 +3407,7 @@ export def "write-discover-catalog-result" [
   --configuration-hash: string
   --connector-version: string
   --source-id: string # format: uuid
-]: any -> record<catalogId: string> {
+]: any -> oneof<record<catalogId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3439,7 +3434,6 @@ export def "write-discover-catalog-result" [
 #
 # POST /v1/state/create_or_update
 # operationId: createOrUpdateState
-# --connectionState shape: {connectionId: string, globalState?: record, state?: record, stateType: "global"|"stream"|"legacy"|"not_set", streamState?: list}
 export def "create-or-update-state" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3452,7 +3446,7 @@ export def "create-or-update-state" [
   --dry-run(-n) # Return the request that would be sent without executing it
   connection_id: string # format: uuid
   connection_state: record # Contains the state for a connection. The stateType field identifies what type of state it is. Only the field corresponding to that type will be set, the rest will be null. If stateType=not_set, then none of the fields will be set. — shape: {connectionId: string, globalState?: record, state?: record, stateType: "global"|"stream"|"legacy"|"not_set", streamState?: list}
-]: any -> record<connectionId: string, globalState: record<shared_state: record, streamStates: list<record>>, state: record, stateType: string, streamState: table<streamDescriptor: record, streamState: record>> {
+]: any -> oneof<record<connectionId: string, globalState: record<shared_state: record, streamStates: list<record>>, state: record, stateType: string, streamState: table<streamDescriptor: record, streamState: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3490,7 +3484,7 @@ export def "get-state" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   connection_id: string # format: uuid
-]: any -> record<connectionId: string, globalState: record<shared_state: record, streamStates: list<record>>, state: record, stateType: string, streamState: table<streamDescriptor: record, streamState: record>> {
+]: any -> oneof<record<connectionId: string, globalState: record<shared_state: record, streamStates: list<record>>, state: record, stateType: string, streamState: table<streamDescriptor: record, streamState: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3527,7 +3521,7 @@ export def "web-backend-check-updates" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<destinationDefinitions: int, sourceDefinitions: int> {
+]: nothing -> oneof<record<destinationDefinitions: int, sourceDefinitions: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/web_backend/check_updates" $auth.query)
@@ -3551,11 +3545,6 @@ export def "web-backend-check-updates" [
 #
 # POST /v1/web_backend/connections/create
 # operationId: webBackendCreateConnection
-# --operations item shape: {name: string, operatorConfiguration: record, workspaceId: string}
-# --resourceRequirements shape: {cpu_limit?: string, cpu_request?: string, memory_limit?: string, memory_request?: string}
-# --schedule shape: {timeUnit: "minutes"|"hours"|"days"|"weeks"|"months", units: int}
-# --scheduleData shape: {basicSchedule?: record, cron?: record}
-# --syncCatalog shape: {streams: list}
 export def "web-backend-create-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3583,7 +3572,7 @@ export def "web-backend-create-connection" [
   source_id: string # format: uuid
   status: string@status-completer # Active means that data is flowing through the connection. Inactive means it is not. Deprecated means the connection is off and cannot be re-activated. the schema field describes the elements of the schema that will be synced.
   --sync-catalog: record # describes the available schema (catalog). — shape: {streams: list}
-]: any -> record<catalogDiff: record<transforms: list<record>>, catalogId: string, connectionId: string, destination: record<connectionConfiguration: any, destinationDefinitionId: string, destinationId: string, destinationName: string, icon: string, name: string, workspaceId: string>, destinationId: string, geography: string, isSyncing: bool, latestSyncJobCreatedAt: int, latestSyncJobStatus: string, name: string, namespaceDefinition: string, namespaceFormat: string, nonBreakingChangesPreference: string, notifySchemaChanges: bool, operationIds: list<string>, operations: table<name: string, operationId: string, operatorConfiguration: record, workspaceId: string>, prefix: string, resourceRequirements: record<cpu_limit: string, cpu_request: string, memory_limit: string, memory_request: string>, schedule: record<timeUnit: string, units: int>, scheduleData: record<basicSchedule: record<timeUnit: string, units: int>, cron: record<cronExpression: string, cronTimeZone: string>>, scheduleType: string, schemaChange: string, source: record<connectionConfiguration: any, icon: string, name: string, sourceDefinitionId: string, sourceId: string, sourceName: string, workspaceId: string>, sourceId: string, status: string, syncCatalog: record<streams: list<record>>> {
+]: any -> oneof<record<catalogDiff: record<transforms: list<record>>, catalogId: string, connectionId: string, destination: record<connectionConfiguration: any, destinationDefinitionId: string, destinationId: string, destinationName: string, icon: string, name: string, workspaceId: string>, destinationId: string, geography: string, isSyncing: bool, latestSyncJobCreatedAt: int, latestSyncJobStatus: string, name: string, namespaceDefinition: string, namespaceFormat: string, nonBreakingChangesPreference: string, notifySchemaChanges: bool, operationIds: list<string>, operations: table<name: string, operationId: string, operatorConfiguration: record, workspaceId: string>, prefix: string, resourceRequirements: record<cpu_limit: string, cpu_request: string, memory_limit: string, memory_request: string>, schedule: record<timeUnit: string, units: int>, scheduleData: record<basicSchedule: record<timeUnit: string, units: int>, cron: record<cronExpression: string, cronTimeZone: string>>, scheduleType: string, schemaChange: string, source: record<connectionConfiguration: any, icon: string, name: string, sourceDefinitionId: string, sourceId: string, sourceName: string, workspaceId: string>, sourceId: string, status: string, syncCatalog: record<streams: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3622,7 +3611,7 @@ export def "web-backend-get-connection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   connection_id: string # format: uuid
   --with-refreshed-catalog: oneof<nothing, bool>
-]: any -> record<catalogDiff: record<transforms: list<record>>, catalogId: string, connectionId: string, destination: record<connectionConfiguration: any, destinationDefinitionId: string, destinationId: string, destinationName: string, icon: string, name: string, workspaceId: string>, destinationId: string, geography: string, isSyncing: bool, latestSyncJobCreatedAt: int, latestSyncJobStatus: string, name: string, namespaceDefinition: string, namespaceFormat: string, nonBreakingChangesPreference: string, notifySchemaChanges: bool, operationIds: list<string>, operations: table<name: string, operationId: string, operatorConfiguration: record, workspaceId: string>, prefix: string, resourceRequirements: record<cpu_limit: string, cpu_request: string, memory_limit: string, memory_request: string>, schedule: record<timeUnit: string, units: int>, scheduleData: record<basicSchedule: record<timeUnit: string, units: int>, cron: record<cronExpression: string, cronTimeZone: string>>, scheduleType: string, schemaChange: string, source: record<connectionConfiguration: any, icon: string, name: string, sourceDefinitionId: string, sourceId: string, sourceName: string, workspaceId: string>, sourceId: string, status: string, syncCatalog: record<streams: list<record>>> {
+]: any -> oneof<record<catalogDiff: record<transforms: list<record>>, catalogId: string, connectionId: string, destination: record<connectionConfiguration: any, destinationDefinitionId: string, destinationId: string, destinationName: string, icon: string, name: string, workspaceId: string>, destinationId: string, geography: string, isSyncing: bool, latestSyncJobCreatedAt: int, latestSyncJobStatus: string, name: string, namespaceDefinition: string, namespaceFormat: string, nonBreakingChangesPreference: string, notifySchemaChanges: bool, operationIds: list<string>, operations: table<name: string, operationId: string, operatorConfiguration: record, workspaceId: string>, prefix: string, resourceRequirements: record<cpu_limit: string, cpu_request: string, memory_limit: string, memory_request: string>, schedule: record<timeUnit: string, units: int>, scheduleData: record<basicSchedule: record<timeUnit: string, units: int>, cron: record<cronExpression: string, cronTimeZone: string>>, scheduleType: string, schemaChange: string, source: record<connectionConfiguration: any, icon: string, name: string, sourceDefinitionId: string, sourceId: string, sourceName: string, workspaceId: string>, sourceId: string, status: string, syncCatalog: record<streams: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3662,7 +3651,7 @@ export def "web-backend-list-connections-for-workspace" [
   --destination-id: list<string>
   --source-id: list<string>
   workspace_id: string # format: uuid
-]: any -> record<connections: table<connectionId: string, destination: record, isSyncing: bool, latestSyncJobCreatedAt: int, latestSyncJobStatus: string, name: string, scheduleData: record, scheduleType: string, schemaChange: string, source: record, status: string>> {
+]: any -> oneof<record<connections: table<connectionId: string, destination: record, isSyncing: bool, latestSyncJobCreatedAt: int, latestSyncJobStatus: string, name: string, scheduleData: record, scheduleType: string, schemaChange: string, source: record, status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3689,11 +3678,6 @@ export def "web-backend-list-connections-for-workspace" [
 #
 # POST /v1/web_backend/connections/update
 # operationId: webBackendUpdateConnection
-# --operations item shape: {name: string, operationId?: string, operatorConfiguration: record, workspaceId: string}
-# --resourceRequirements shape: {cpu_limit?: string, cpu_request?: string, memory_limit?: string, memory_request?: string}
-# --schedule shape: {timeUnit: "minutes"|"hours"|"days"|"weeks"|"months", units: int}
-# --scheduleData shape: {basicSchedule?: record, cron?: record}
-# --syncCatalog shape: {streams: list}
 export def "web-backend-update-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3721,7 +3705,7 @@ export def "web-backend-update-connection" [
   --source-catalog-id: string # format: uuid
   --status: string@status-completer # Active means that data is flowing through the connection. Inactive means it is not. Deprecated means the connection is off and cannot be re-activated. the schema field describes the elements of the schema that will be synced.
   --sync-catalog: record # describes the available schema (catalog). — shape: {streams: list}
-]: any -> record<catalogDiff: record<transforms: list<record>>, catalogId: string, connectionId: string, destination: record<connectionConfiguration: any, destinationDefinitionId: string, destinationId: string, destinationName: string, icon: string, name: string, workspaceId: string>, destinationId: string, geography: string, isSyncing: bool, latestSyncJobCreatedAt: int, latestSyncJobStatus: string, name: string, namespaceDefinition: string, namespaceFormat: string, nonBreakingChangesPreference: string, notifySchemaChanges: bool, operationIds: list<string>, operations: table<name: string, operationId: string, operatorConfiguration: record, workspaceId: string>, prefix: string, resourceRequirements: record<cpu_limit: string, cpu_request: string, memory_limit: string, memory_request: string>, schedule: record<timeUnit: string, units: int>, scheduleData: record<basicSchedule: record<timeUnit: string, units: int>, cron: record<cronExpression: string, cronTimeZone: string>>, scheduleType: string, schemaChange: string, source: record<connectionConfiguration: any, icon: string, name: string, sourceDefinitionId: string, sourceId: string, sourceName: string, workspaceId: string>, sourceId: string, status: string, syncCatalog: record<streams: list<record>>> {
+]: any -> oneof<record<catalogDiff: record<transforms: list<record>>, catalogId: string, connectionId: string, destination: record<connectionConfiguration: any, destinationDefinitionId: string, destinationId: string, destinationName: string, icon: string, name: string, workspaceId: string>, destinationId: string, geography: string, isSyncing: bool, latestSyncJobCreatedAt: int, latestSyncJobStatus: string, name: string, namespaceDefinition: string, namespaceFormat: string, nonBreakingChangesPreference: string, notifySchemaChanges: bool, operationIds: list<string>, operations: table<name: string, operationId: string, operatorConfiguration: record, workspaceId: string>, prefix: string, resourceRequirements: record<cpu_limit: string, cpu_request: string, memory_limit: string, memory_request: string>, schedule: record<timeUnit: string, units: int>, scheduleData: record<basicSchedule: record<timeUnit: string, units: int>, cron: record<cronExpression: string, cronTimeZone: string>>, scheduleType: string, schemaChange: string, source: record<connectionConfiguration: any, icon: string, name: string, sourceDefinitionId: string, sourceId: string, sourceName: string, workspaceId: string>, sourceId: string, status: string, syncCatalog: record<streams: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3758,7 +3742,7 @@ export def "web-backend-list-geographies" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<geographies: list<string>> {
+]: nothing -> oneof<record<geographies: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/web_backend/geographies/list" $auth.query)
@@ -3831,7 +3815,7 @@ export def "web-backend-get-workspace-state" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   workspace_id: string # format: uuid
-]: any -> record<hasConnections: bool, hasDestinations: bool, hasSources: bool> {
+]: any -> oneof<record<hasConnections: bool, hasDestinations: bool, hasSources: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3858,8 +3842,6 @@ export def "web-backend-get-workspace-state" [
 #
 # POST /v1/workspaces/create
 # operationId: createWorkspace
-# --notifications item shape: {customerioConfiguration?: record, notificationType: "slack"|"customerio", sendOnFailure: bool, sendOnSuccess: bool, slackConfiguration?: record}
-# --webhookConfigs item shape: {authToken?: string, name?: string, validationUrl?: string}
 export def "create-workspace" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3879,7 +3861,7 @@ export def "create-workspace" [
   --notifications: list # item shape: {customerioConfiguration?: record, notificationType: "slack"|"customerio", sendOnFailure: bool, sendOnSuccess: bool, slackConfiguration?: record}
   --security-updates: oneof<nothing, bool>
   --webhook-configs: list # item shape: {authToken?: string, name?: string, validationUrl?: string}
-]: any -> record<anonymousDataCollection: bool, customerId: string, defaultGeography: string, displaySetupWizard: bool, email: string, feedbackDone: bool, firstCompletedSync: bool, initialSetupComplete: bool, name: string, news: bool, notifications: table<customerioConfiguration: record, notificationType: string, sendOnFailure: bool, sendOnSuccess: bool, slackConfiguration: record>, securityUpdates: bool, slug: string, webhookConfigs: table<id: string, name: string>, workspaceId: string> {
+]: any -> oneof<record<anonymousDataCollection: bool, customerId: string, defaultGeography: string, displaySetupWizard: bool, email: string, feedbackDone: bool, firstCompletedSync: bool, initialSetupComplete: bool, name: string, news: bool, notifications: table<customerioConfiguration: record, notificationType: string, sendOnFailure: bool, sendOnSuccess: bool, slackConfiguration: record>, securityUpdates: bool, slug: string, webhookConfigs: table<id: string, name: string>, workspaceId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3955,7 +3937,7 @@ export def "get-workspace" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   workspace_id: string # format: uuid
-]: any -> record<anonymousDataCollection: bool, customerId: string, defaultGeography: string, displaySetupWizard: bool, email: string, feedbackDone: bool, firstCompletedSync: bool, initialSetupComplete: bool, name: string, news: bool, notifications: table<customerioConfiguration: record, notificationType: string, sendOnFailure: bool, sendOnSuccess: bool, slackConfiguration: record>, securityUpdates: bool, slug: string, webhookConfigs: table<id: string, name: string>, workspaceId: string> {
+]: any -> oneof<record<anonymousDataCollection: bool, customerId: string, defaultGeography: string, displaySetupWizard: bool, email: string, feedbackDone: bool, firstCompletedSync: bool, initialSetupComplete: bool, name: string, news: bool, notifications: table<customerioConfiguration: record, notificationType: string, sendOnFailure: bool, sendOnSuccess: bool, slackConfiguration: record>, securityUpdates: bool, slug: string, webhookConfigs: table<id: string, name: string>, workspaceId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3993,7 +3975,7 @@ export def "get-workspace-by-connection-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   connection_id: string # format: uuid
-]: any -> record<anonymousDataCollection: bool, customerId: string, defaultGeography: string, displaySetupWizard: bool, email: string, feedbackDone: bool, firstCompletedSync: bool, initialSetupComplete: bool, name: string, news: bool, notifications: table<customerioConfiguration: record, notificationType: string, sendOnFailure: bool, sendOnSuccess: bool, slackConfiguration: record>, securityUpdates: bool, slug: string, webhookConfigs: table<id: string, name: string>, workspaceId: string> {
+]: any -> oneof<record<anonymousDataCollection: bool, customerId: string, defaultGeography: string, displaySetupWizard: bool, email: string, feedbackDone: bool, firstCompletedSync: bool, initialSetupComplete: bool, name: string, news: bool, notifications: table<customerioConfiguration: record, notificationType: string, sendOnFailure: bool, sendOnSuccess: bool, slackConfiguration: record>, securityUpdates: bool, slug: string, webhookConfigs: table<id: string, name: string>, workspaceId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4031,7 +4013,7 @@ export def "get-workspace-by-slug" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   slug: string
-]: any -> record<anonymousDataCollection: bool, customerId: string, defaultGeography: string, displaySetupWizard: bool, email: string, feedbackDone: bool, firstCompletedSync: bool, initialSetupComplete: bool, name: string, news: bool, notifications: table<customerioConfiguration: record, notificationType: string, sendOnFailure: bool, sendOnSuccess: bool, slackConfiguration: record>, securityUpdates: bool, slug: string, webhookConfigs: table<id: string, name: string>, workspaceId: string> {
+]: any -> oneof<record<anonymousDataCollection: bool, customerId: string, defaultGeography: string, displaySetupWizard: bool, email: string, feedbackDone: bool, firstCompletedSync: bool, initialSetupComplete: bool, name: string, news: bool, notifications: table<customerioConfiguration: record, notificationType: string, sendOnFailure: bool, sendOnSuccess: bool, slackConfiguration: record>, securityUpdates: bool, slug: string, webhookConfigs: table<id: string, name: string>, workspaceId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4068,7 +4050,7 @@ export def "list-workspaces" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<workspaces: table<anonymousDataCollection: bool, customerId: string, defaultGeography: string, displaySetupWizard: bool, email: string, feedbackDone: bool, firstCompletedSync: bool, initialSetupComplete: bool, name: string, news: bool, notifications: list, securityUpdates: bool, slug: string, webhookConfigs: list, workspaceId: string>> {
+]: nothing -> oneof<record<workspaces: table<anonymousDataCollection: bool, customerId: string, defaultGeography: string, displaySetupWizard: bool, email: string, feedbackDone: bool, firstCompletedSync: bool, initialSetupComplete: bool, name: string, news: bool, notifications: list, securityUpdates: bool, slug: string, webhookConfigs: list, workspaceId: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/workspaces/list" $auth.query)
@@ -4130,8 +4112,6 @@ export def "update-workspace-feedback" [
 #
 # POST /v1/workspaces/update
 # operationId: updateWorkspace
-# --notifications item shape: {customerioConfiguration?: record, notificationType: "slack"|"customerio", sendOnFailure: bool, sendOnSuccess: bool, slackConfiguration?: record}
-# --webhookConfigs item shape: {authToken?: string, name?: string, validationUrl?: string}
 export def "update-workspace" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4152,7 +4132,7 @@ export def "update-workspace" [
   --security-updates: oneof<nothing, bool>
   --webhook-configs: list # item shape: {authToken?: string, name?: string, validationUrl?: string}
   workspace_id: string # format: uuid
-]: any -> record<anonymousDataCollection: bool, customerId: string, defaultGeography: string, displaySetupWizard: bool, email: string, feedbackDone: bool, firstCompletedSync: bool, initialSetupComplete: bool, name: string, news: bool, notifications: table<customerioConfiguration: record, notificationType: string, sendOnFailure: bool, sendOnSuccess: bool, slackConfiguration: record>, securityUpdates: bool, slug: string, webhookConfigs: table<id: string, name: string>, workspaceId: string> {
+]: any -> oneof<record<anonymousDataCollection: bool, customerId: string, defaultGeography: string, displaySetupWizard: bool, email: string, feedbackDone: bool, firstCompletedSync: bool, initialSetupComplete: bool, name: string, news: bool, notifications: table<customerioConfiguration: record, notificationType: string, sendOnFailure: bool, sendOnSuccess: bool, slackConfiguration: record>, securityUpdates: bool, slug: string, webhookConfigs: table<id: string, name: string>, workspaceId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4191,7 +4171,7 @@ export def "update-workspace-name" [
   --dry-run(-n) # Return the request that would be sent without executing it
   name: string
   workspace_id: string # format: uuid
-]: any -> record<anonymousDataCollection: bool, customerId: string, defaultGeography: string, displaySetupWizard: bool, email: string, feedbackDone: bool, firstCompletedSync: bool, initialSetupComplete: bool, name: string, news: bool, notifications: table<customerioConfiguration: record, notificationType: string, sendOnFailure: bool, sendOnSuccess: bool, slackConfiguration: record>, securityUpdates: bool, slug: string, webhookConfigs: table<id: string, name: string>, workspaceId: string> {
+]: any -> oneof<record<anonymousDataCollection: bool, customerId: string, defaultGeography: string, displaySetupWizard: bool, email: string, feedbackDone: bool, firstCompletedSync: bool, initialSetupComplete: bool, name: string, news: bool, notifications: table<customerioConfiguration: record, notificationType: string, sendOnFailure: bool, sendOnSuccess: bool, slackConfiguration: record>, securityUpdates: bool, slug: string, webhookConfigs: table<id: string, name: string>, workspaceId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

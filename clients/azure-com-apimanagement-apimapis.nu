@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,12 +111,13 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # HEAD — bodyless; default surfaces just the headers on success
 def send-head [req: record, insecure: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = (http head --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure $req.url)
+  let resp = http head --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure $req.url
   if (not $full) and (not $allow_errors) and (status-ok $resp.status $ok_codes) { return $resp.headers }
   $resp | handle-response $allow_errors $full $ok_codes
 }
@@ -128,9 +152,9 @@ def accept-completer-1 [] { ["application/json" "application/vnd.ms-azure-apim.p
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api-list-by-service" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["api-list-by-service" "api-delete" "api-get" "api-get-entity-tag" "api-update" "api-create-or-update" "api-diagnostic-list-by-service" "api-diagnostic-delete" "api-diagnostic-get" "api-diagnostic-get-entity-tag" "api-diagnostic-update" "api-diagnostic-create-or-update" "api-issue-list-by-service" "api-issue-delete" "api-issue-get" "api-issue-get-entity-tag" "api-issue-update" "api-issue-create-or-update" "api-issue-attachment-list-by-service" "api-issue-attachment-delete" "api-issue-attachment-get" "api-issue-attachment-get-entity-tag" "api-issue-attachment-create-or-update" "api-issue-comment-list-by-service" "api-issue-comment-delete" "api-issue-comment-get" "api-issue-comment-get-entity-tag" "api-issue-comment-create-or-update" "api-operation-list-by-api" "api-operation-delete" "api-operation-get" "api-operation-get-entity-tag" "api-operation-update" "api-operation-create-or-update" "api-operation-policy-list-by-operation" "api-operation-policy-delete" "api-operation-policy-get" "api-operation-policy-get-entity-tag" "api-operation-policy-create-or-update" "tag-list-by-operation" "tag-detach-from-operation" "tag-get-by-operation" "tag-get-entity-state-by-operation" "tag-assign-to-operation" "operation-list-by-tags" "api-policy-list-by-api" "api-policy-delete" "api-policy-get" "api-policy-get-entity-tag" "api-policy-create-or-update" "api-product-list-by-apis" "api-release-list-by-service" "api-release-delete" "api-release-get" "api-release-get-entity-tag" "api-release-update" "api-release-create-or-update" "api-revision-list-by-service" "api-schema-list-by-api" "api-schema-delete" "api-schema-get" "api-schema-get-entity-tag" "api-schema-create-or-update" "api-tag-description-list-by-service" "api-tag-description-delete" "api-tag-description-get" "api-tag-description-get-entity-tag" "api-tag-description-create-or-update" "tag-list-by-api" "tag-detach-from-api" "tag-get-by-api" "tag-get-entity-state-by-api" "tag-assign-to-api" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -172,7 +196,7 @@ export def "api-list-by-service" [
   --tags: string # Include tags in the response.
   --expand-api-version-set: oneof<nothing, bool> # Include full ApiVersionSet resource in response
   --api-version: string # Version of the API to be used with the client request. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -267,7 +291,7 @@ export def "api-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # Version of the API to be used with the client request. (required)
-]: nothing -> record<properties: record<apiVersionSet: record<description: string, id: string, name: string, versionHeaderName: string, versionQueryName: string, versioningScheme: string>, displayName: string, path: string, protocols: list<string>, serviceUrl: string, sourceApiId: string, apiRevision: string, apiRevisionDescription: string, apiVersion: string, apiVersionDescription: string, apiVersionSetId: string, authenticationSettings: record<oAuth2: record, openid: record>, description: string, isCurrent: bool, isOnline: bool, subscriptionKeyParameterNames: record<header: string, query: string>, subscriptionRequired: bool, type: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<apiVersionSet: record<description: string, id: string, name: string, versionHeaderName: string, versionQueryName: string, versioningScheme: string>, displayName: string, path: string, protocols: list<string>, serviceUrl: string, sourceApiId: string, apiRevision: string, apiRevisionDescription: string, apiVersion: string, apiVersionDescription: string, apiVersionSetId: string, authenticationSettings: record<oAuth2: record, openid: record>, description: string, isCurrent: bool, isOnline: bool, subscriptionKeyParameterNames: record<header: string, query: string>, subscriptionRequired: bool, type: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -312,7 +336,7 @@ export def "api-get-entity-tag" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. (required)
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -342,7 +366,6 @@ export def "api-get-entity-tag" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}
 # operationId: Api_Update
-# --properties shape: {displayName?: string, path?: string, protocols?: list<string>, serviceUrl?: string, apiRevision?: string, apiRevisionDescription?: string, apiVersion?: string, apiVersionDescription?: string, apiVersionSetId?: string, authenticationSettings?: any, description?: string, isCurrent?: bool, subscriptionKeyParameterNames?: any, subscriptionRequired?: bool, type?: "http"|"soap"}
 export def "api-update" [
   subscription_id: string
   resource_group_name: string
@@ -396,7 +419,6 @@ export def "api-update" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}
 # operationId: Api_CreateOrUpdate
-# --properties shape: {apiType?: "http"|"soap", format?: "wadl-xml"|"wadl-link-json"|"swagger-json"|"swagger-link-json"|"wsdl"|"wsdl-link"|"openapi"|"openapi+json"|"openapi-link"|"openapi+json-link", value?: string, wsdlSelector?: record, apiVersionSet?: any, displayName?: string, path: string, protocols?: list<string>, serviceUrl?: string, sourceApiId?: string, apiRevision?: string, apiRevisionDescription?: string, apiVersion?: string, apiVersionDescription?: string, apiVersionSetId?: string, ... (6 more fields)}
 export def "api-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -414,7 +436,7 @@ export def "api-create-or-update" [
   --api-version: string # Version of the API to be used with the client request. (required)
   --if-match: string # ETag of the Entity. Not required when creating an entity, but required when updating an entity.
   --properties: any # Api Create or Update Properties. — shape: {apiType?: "http"|"soap", format?: "wadl-xml"|"wadl-link-json"|"swagger-json"|"swagger-link-json"|"wsdl"|"wsdl-link"|"openapi"|"openapi+json"|"openapi-link"|"openapi+json-link", value?: string, wsdlSelector?: record, apiVersionSet?: any, displayName?: string, path: string, protocols?: list<string>, serviceUrl?: string, sourceApiId?: string, apiRevision?: string, apiRevisionDescription?: string, apiVersion?: string, apiVersionDescription?: string, apiVersionSetId?: string, ... (6 more fields)}
-]: any -> record<properties: record<apiVersionSet: record<description: string, id: string, name: string, versionHeaderName: string, versionQueryName: string, versioningScheme: string>, displayName: string, path: string, protocols: list<string>, serviceUrl: string, sourceApiId: string, apiRevision: string, apiRevisionDescription: string, apiVersion: string, apiVersionDescription: string, apiVersionSetId: string, authenticationSettings: record<oAuth2: record, openid: record>, description: string, isCurrent: bool, isOnline: bool, subscriptionKeyParameterNames: record<header: string, query: string>, subscriptionRequired: bool, type: string>, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<apiVersionSet: record<description: string, id: string, name: string, versionHeaderName: string, versionQueryName: string, versioningScheme: string>, displayName: string, path: string, protocols: list<string>, serviceUrl: string, sourceApiId: string, apiRevision: string, apiRevisionDescription: string, apiVersion: string, apiVersionDescription: string, apiVersionSetId: string, authenticationSettings: record<oAuth2: record, openid: record>, description: string, isCurrent: bool, isOnline: bool, subscriptionKeyParameterNames: record<header: string, query: string>, subscriptionRequired: bool, type: string>, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -467,7 +489,7 @@ export def "api-diagnostic-list-by-service" [
   --top: int # Number of records to return. (format: int32)
   --skip: int # Number of records to skip. (format: int32)
   --api-version: string # Version of the API to be used with the client request. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -564,7 +586,7 @@ export def "api-diagnostic-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. (required)
-]: nothing -> record<properties: record<alwaysLog: string, backend: record<request: record, response: record>, frontend: record<request: record, response: record>, httpCorrelationProtocol: string, logClientIp: bool, loggerId: string, sampling: record<percentage: float, samplingType: string>, verbosity: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<alwaysLog: string, backend: record<request: record, response: record>, frontend: record<request: record, response: record>, httpCorrelationProtocol: string, logClientIp: bool, loggerId: string, sampling: record<percentage: float, samplingType: string>, verbosity: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -611,7 +633,7 @@ export def "api-diagnostic-get-entity-tag" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. (required)
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -642,7 +664,6 @@ export def "api-diagnostic-get-entity-tag" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/diagnostics/{diagnosticId}
 # operationId: ApiDiagnostic_Update
-# --properties shape: {alwaysLog?: "allErrors", backend?: any, frontend?: any, httpCorrelationProtocol?: "None"|"Legacy"|"W3C", logClientIp?: bool, loggerId: string, sampling?: any, verbosity?: "verbose"|"information"|"error"}
 export def "api-diagnostic-update" [
   subscription_id: string
   resource_group_name: string
@@ -698,7 +719,6 @@ export def "api-diagnostic-update" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/diagnostics/{diagnosticId}
 # operationId: ApiDiagnostic_CreateOrUpdate
-# --properties shape: {alwaysLog?: "allErrors", backend?: any, frontend?: any, httpCorrelationProtocol?: "None"|"Legacy"|"W3C", logClientIp?: bool, loggerId: string, sampling?: any, verbosity?: "verbose"|"information"|"error"}
 export def "api-diagnostic-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -717,7 +737,7 @@ export def "api-diagnostic-create-or-update" [
   --api-version: string # Version of the API to be used with the client request. (required)
   --if-match: string # ETag of the Entity. Not required when creating an entity, but required when updating an entity.
   --properties: any # Diagnostic Entity Properties — shape: {alwaysLog?: "allErrors", backend?: any, frontend?: any, httpCorrelationProtocol?: "None"|"Legacy"|"W3C", logClientIp?: bool, loggerId: string, sampling?: any, verbosity?: "verbose"|"information"|"error"}
-]: any -> record<properties: record<alwaysLog: string, backend: record<request: record, response: record>, frontend: record<request: record, response: record>, httpCorrelationProtocol: string, logClientIp: bool, loggerId: string, sampling: record<percentage: float, samplingType: string>, verbosity: string>, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<alwaysLog: string, backend: record<request: record, response: record>, frontend: record<request: record, response: record>, httpCorrelationProtocol: string, logClientIp: bool, loggerId: string, sampling: record<percentage: float, samplingType: string>, verbosity: string>, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -772,7 +792,7 @@ export def "api-issue-list-by-service" [
   --top: int # Number of records to return. (format: int32)
   --skip: int # Number of records to skip. (format: int32)
   --api-version: string # Version of the API to be used with the client request. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -870,7 +890,7 @@ export def "api-issue-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand-comments-attachments: oneof<nothing, bool> # Expand the comment attachments.
   --api-version: string # Version of the API to be used with the client request. (required)
-]: nothing -> record<properties: record<description: string, title: string, userId: string, apiId: string, createdDate: string, state: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<description: string, title: string, userId: string, apiId: string, createdDate: string, state: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -917,7 +937,7 @@ export def "api-issue-get-entity-tag" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. (required)
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -948,7 +968,6 @@ export def "api-issue-get-entity-tag" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/issues/{issueId}
 # operationId: ApiIssue_Update
-# --properties shape: {description?: string, title?: string, userId?: string, apiId?: string, createdDate?: string, state?: "proposed"|"open"|"removed"|"resolved"|"closed"}
 export def "api-issue-update" [
   subscription_id: string
   resource_group_name: string
@@ -1004,7 +1023,6 @@ export def "api-issue-update" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/issues/{issueId}
 # operationId: ApiIssue_CreateOrUpdate
-# --properties shape: {description: string, title: string, userId: string, apiId?: string, createdDate?: string, state?: "proposed"|"open"|"removed"|"resolved"|"closed"}
 export def "api-issue-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -1023,7 +1041,7 @@ export def "api-issue-create-or-update" [
   --api-version: string # Version of the API to be used with the client request. (required)
   --if-match: string # ETag of the Entity. Not required when creating an entity, but required when updating an entity.
   --properties: any # Issue contract Properties. — shape: {description: string, title: string, userId: string, apiId?: string, createdDate?: string, state?: "proposed"|"open"|"removed"|"resolved"|"closed"}
-]: any -> record<properties: record<description: string, title: string, userId: string, apiId: string, createdDate: string, state: string>, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<description: string, title: string, userId: string, apiId: string, createdDate: string, state: string>, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1078,7 +1096,7 @@ export def "api-issue-attachment-list-by-service" [
   --top: int # Number of records to return. (format: int32)
   --skip: int # Number of records to skip. (format: int32)
   --api-version: string # Version of the API to be used with the client request. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1179,7 +1197,7 @@ export def "api-issue-attachment-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. (required)
-]: nothing -> record<properties: record<content: string, contentFormat: string, title: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<content: string, contentFormat: string, title: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1228,7 +1246,7 @@ export def "api-issue-attachment-get-entity-tag" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. (required)
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1260,7 +1278,6 @@ export def "api-issue-attachment-get-entity-tag" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/issues/{issueId}/attachments/{attachmentId}
 # operationId: ApiIssueAttachment_CreateOrUpdate
-# --properties shape: {content: string, contentFormat: string, title: string}
 export def "api-issue-attachment-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -1280,7 +1297,7 @@ export def "api-issue-attachment-create-or-update" [
   --api-version: string # Version of the API to be used with the client request. (required)
   --if-match: string # ETag of the Entity. Not required when creating an entity, but required when updating an entity.
   --properties: any # Issue Attachment contract Properties. — shape: {content: string, contentFormat: string, title: string}
-]: any -> record<properties: record<content: string, contentFormat: string, title: string>, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<content: string, contentFormat: string, title: string>, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1336,7 +1353,7 @@ export def "api-issue-comment-list-by-service" [
   --top: int # Number of records to return. (format: int32)
   --skip: int # Number of records to skip. (format: int32)
   --api-version: string # Version of the API to be used with the client request. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1437,7 +1454,7 @@ export def "api-issue-comment-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. (required)
-]: nothing -> record<properties: record<createdDate: string, text: string, userId: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<createdDate: string, text: string, userId: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1486,7 +1503,7 @@ export def "api-issue-comment-get-entity-tag" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. (required)
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1518,7 +1535,6 @@ export def "api-issue-comment-get-entity-tag" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/issues/{issueId}/comments/{commentId}
 # operationId: ApiIssueComment_CreateOrUpdate
-# --properties shape: {createdDate?: string, text: string, userId: string}
 export def "api-issue-comment-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -1538,7 +1554,7 @@ export def "api-issue-comment-create-or-update" [
   --api-version: string # Version of the API to be used with the client request. (required)
   --if-match: string # ETag of the Entity. Not required when creating an entity, but required when updating an entity.
   --properties: any # Issue Comment contract Properties. — shape: {createdDate?: string, text: string, userId: string}
-]: any -> record<properties: record<createdDate: string, text: string, userId: string>, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<createdDate: string, text: string, userId: string>, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1594,7 +1610,7 @@ export def "api-operation-list-by-api" [
   --skip: int # Number of records to skip. (format: int32)
   --tags: string # Include tags in the response.
   --api-version: string # Version of the API to be used with the client request. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1691,7 +1707,7 @@ export def "api-operation-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. (required)
-]: nothing -> record<properties: record<displayName: string, method: string, urlTemplate: string, description: string, policies: string, request: record<description: string, headers: list, queryParameters: list, representations: list>, responses: list<record>, templateParameters: list<record>>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<displayName: string, method: string, urlTemplate: string, description: string, policies: string, request: record<description: string, headers: list, queryParameters: list, representations: list>, responses: list<record>, templateParameters: list<record>>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1738,7 +1754,7 @@ export def "api-operation-get-entity-tag" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. (required)
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1769,7 +1785,6 @@ export def "api-operation-get-entity-tag" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/operations/{operationId}
 # operationId: ApiOperation_Update
-# --properties shape: {displayName?: string, method?: string, urlTemplate?: string, description?: string, policies?: string, request?: any, responses?: list, templateParameters?: list}
 export def "api-operation-update" [
   subscription_id: string
   resource_group_name: string
@@ -1825,7 +1840,6 @@ export def "api-operation-update" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/operations/{operationId}
 # operationId: ApiOperation_CreateOrUpdate
-# --properties shape: {displayName: string, method: string, urlTemplate: string, description?: string, policies?: string, request?: any, responses?: list, templateParameters?: list}
 export def "api-operation-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -1844,7 +1858,7 @@ export def "api-operation-create-or-update" [
   --api-version: string # Version of the API to be used with the client request. (required)
   --if-match: string # ETag of the Entity. Not required when creating an entity, but required when updating an entity.
   --properties: any # Operation Contract Properties — shape: {displayName: string, method: string, urlTemplate: string, description?: string, policies?: string, request?: any, responses?: list, templateParameters?: list}
-]: any -> record<properties: record<displayName: string, method: string, urlTemplate: string, description: string, policies: string, request: record<description: string, headers: list, queryParameters: list, representations: list>, responses: list<record>, templateParameters: list<record>>, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<displayName: string, method: string, urlTemplate: string, description: string, policies: string, request: record<description: string, headers: list, queryParameters: list, representations: list>, responses: list<record>, templateParameters: list<record>>, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1896,7 +1910,7 @@ export def "api-operation-policy-list-by-operation" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1998,7 +2012,7 @@ export def "api-operation-policy-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --format: string@format-completer # Policy Export Format. (default: xml)
   --api-version: string # Version of the API to be used with the client request. (required)
-]: nothing -> record<properties: record<format: string, value: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<format: string, value: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2047,7 +2061,7 @@ export def "api-operation-policy-get-entity-tag" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. (required)
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2079,7 +2093,6 @@ export def "api-operation-policy-get-entity-tag" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/operations/{operationId}/policies/{policyId}
 # operationId: ApiOperationPolicy_CreateOrUpdate
-# --properties shape: {format?: "xml"|"xml-link"|"rawxml"|"rawxml-link", value: string}
 export def "api-operation-policy-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -2099,7 +2112,7 @@ export def "api-operation-policy-create-or-update" [
   --api-version: string # Version of the API to be used with the client request. (required)
   --if-match: string # ETag of the Entity. Not required when creating an entity, but required when updating an entity.
   --properties: any # Policy contract Properties. — shape: {format?: "xml"|"xml-link"|"rawxml"|"rawxml-link", value: string}
-]: any -> record<properties: record<format: string, value: string>, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<format: string, value: string>, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2155,7 +2168,7 @@ export def "tag-list-by-operation" [
   --top: int # Number of records to return. (format: int32)
   --skip: int # Number of records to skip. (format: int32)
   --api-version: string # Version of the API to be used with the client request. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2252,7 +2265,7 @@ export def "tag-get-by-operation" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. (required)
-]: nothing -> record<properties: record<displayName: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<displayName: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2301,7 +2314,7 @@ export def "tag-get-entity-state-by-operation" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. (required)
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2350,7 +2363,7 @@ export def "tag-assign-to-operation" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. (required)
-]: nothing -> record<properties: record<displayName: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<displayName: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2401,7 +2414,7 @@ export def "operation-list-by-tags" [
   --skip: int # Number of records to skip. (format: int32)
   --include-not-tagged-operations: oneof<nothing, bool> # Include not tagged Operations.
   --api-version: string # Version of the API to be used with the client request. (required)
-]: nothing -> record<nextLink: string, value: table<api: record, operation: record, product: record, tag: record>> {
+]: nothing -> oneof<record<nextLink: string, value: table<api: record, operation: record, product: record, tag: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2446,7 +2459,7 @@ export def "api-policy-list-by-api" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2545,7 +2558,7 @@ export def "api-policy-get" [
   --accept: string@accept-completer-1 # Response content type
   --format: string@format-completer # Policy Export Format. (default: xml)
   --api-version: string # Version of the API to be used with the client request. (required)
-]: nothing -> record<properties: record<format: string, value: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<format: string, value: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2592,7 +2605,7 @@ export def "api-policy-get-entity-tag" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. (required)
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2623,7 +2636,6 @@ export def "api-policy-get-entity-tag" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/policies/{policyId}
 # operationId: ApiPolicy_CreateOrUpdate
-# --properties shape: {format?: "xml"|"xml-link"|"rawxml"|"rawxml-link", value: string}
 export def "api-policy-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -2642,7 +2654,7 @@ export def "api-policy-create-or-update" [
   --api-version: string # Version of the API to be used with the client request. (required)
   --if-match: string # ETag of the Entity. Not required when creating an entity, but required when updating an entity.
   --properties: any # Policy contract Properties. — shape: {format?: "xml"|"xml-link"|"rawxml"|"rawxml-link", value: string}
-]: any -> record<properties: record<format: string, value: string>, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<format: string, value: string>, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2696,7 +2708,7 @@ export def "api-product-list-by-apis" [
   --top: int # Number of records to return. (format: int32)
   --skip: int # Number of records to skip. (format: int32)
   --api-version: string # Version of the API to be used with the client request. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2744,7 +2756,7 @@ export def "api-release-list-by-service" [
   --top: int # Number of records to return. (format: int32)
   --skip: int # Number of records to skip. (format: int32)
   --api-version: string # Version of the API to be used with the client request. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2841,7 +2853,7 @@ export def "api-release-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. (required)
-]: nothing -> record<properties: record<apiId: string, createdDateTime: string, notes: string, updatedDateTime: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<apiId: string, createdDateTime: string, notes: string, updatedDateTime: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2888,7 +2900,7 @@ export def "api-release-get-entity-tag" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. (required)
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2919,7 +2931,6 @@ export def "api-release-get-entity-tag" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/releases/{releaseId}
 # operationId: ApiRelease_Update
-# --properties shape: {apiId?: string, notes?: string}
 export def "api-release-update" [
   subscription_id: string
   resource_group_name: string
@@ -2975,7 +2986,6 @@ export def "api-release-update" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/releases/{releaseId}
 # operationId: ApiRelease_CreateOrUpdate
-# --properties shape: {apiId?: string, notes?: string}
 export def "api-release-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -2994,7 +3004,7 @@ export def "api-release-create-or-update" [
   --api-version: string # Version of the API to be used with the client request. (required)
   --if-match: string # ETag of the Entity. Not required when creating an entity, but required when updating an entity.
   --properties: any # API Release details — shape: {apiId?: string, notes?: string}
-]: any -> record<properties: record<apiId: string, createdDateTime: string, notes: string, updatedDateTime: string>, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<apiId: string, createdDateTime: string, notes: string, updatedDateTime: string>, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3048,7 +3058,7 @@ export def "api-revision-list-by-service" [
   --top: int # Number of records to return. (format: int32)
   --skip: int # Number of records to skip. (format: int32)
   --api-version: string # Version of the API to be used with the client request. (required)
-]: nothing -> record<nextLink: string, value: table<apiId: string, apiRevision: string, createdDateTime: string, description: string, isCurrent: bool, isOnline: bool, privateUrl: string, updatedDateTime: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<apiId: string, apiRevision: string, createdDateTime: string, description: string, isCurrent: bool, isOnline: bool, privateUrl: string, updatedDateTime: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3096,7 +3106,7 @@ export def "api-schema-list-by-api" [
   --top: int # Number of records to return. (format: int32)
   --skip: int # Number of records to skip. (format: int32)
   --api-version: string # Version of the API to be used with the client request. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3194,7 +3204,7 @@ export def "api-schema-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. (required)
-]: nothing -> record<properties: record<contentType: string, document: record<definitions: record, value: string>>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<contentType: string, document: record<definitions: record, value: string>>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3241,7 +3251,7 @@ export def "api-schema-get-entity-tag" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. (required)
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3272,7 +3282,6 @@ export def "api-schema-get-entity-tag" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/schemas/{schemaId}
 # operationId: ApiSchema_CreateOrUpdate
-# --properties shape: {contentType: string, document?: any}
 export def "api-schema-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -3291,7 +3300,7 @@ export def "api-schema-create-or-update" [
   --api-version: string # Version of the API to be used with the client request. (required)
   --if-match: string # ETag of the Entity. Not required when creating an entity, but required when updating an entity.
   --properties: any # API Schema create or update contract Properties. — shape: {contentType: string, document?: any}
-]: any -> record<properties: record<contentType: string, document: record<definitions: record, value: string>>, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<contentType: string, document: record<definitions: record, value: string>>, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3345,7 +3354,7 @@ export def "api-tag-description-list-by-service" [
   --top: int # Number of records to return. (format: int32)
   --skip: int # Number of records to skip. (format: int32)
   --api-version: string # Version of the API to be used with the client request. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3442,7 +3451,7 @@ export def "api-tag-description-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. (required)
-]: nothing -> record<properties: record<displayName: string, tagId: string, description: string, externalDocsDescription: string, externalDocsUrl: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<displayName: string, tagId: string, description: string, externalDocsDescription: string, externalDocsUrl: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3489,7 +3498,7 @@ export def "api-tag-description-get-entity-tag" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. (required)
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3520,7 +3529,6 @@ export def "api-tag-description-get-entity-tag" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/tagDescriptions/{tagDescriptionId}
 # operationId: ApiTagDescription_CreateOrUpdate
-# --properties shape: {description?: string, externalDocsDescription?: string, externalDocsUrl?: string}
 export def "api-tag-description-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -3539,7 +3547,7 @@ export def "api-tag-description-create-or-update" [
   --api-version: string # Version of the API to be used with the client request. (required)
   --if-match: string # ETag of the Entity. Not required when creating an entity, but required when updating an entity.
   --properties: any # Parameters supplied to the Create TagDescription operation. — shape: {description?: string, externalDocsDescription?: string, externalDocsUrl?: string}
-]: any -> record<properties: record<displayName: string, tagId: string, description: string, externalDocsDescription: string, externalDocsUrl: string>, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<displayName: string, tagId: string, description: string, externalDocsDescription: string, externalDocsUrl: string>, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3593,7 +3601,7 @@ export def "tag-list-by-api" [
   --top: int # Number of records to return. (format: int32)
   --skip: int # Number of records to skip. (format: int32)
   --api-version: string # Version of the API to be used with the client request. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3686,7 +3694,7 @@ export def "tag-get-by-api" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. (required)
-]: nothing -> record<properties: record<displayName: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<displayName: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3733,7 +3741,7 @@ export def "tag-get-entity-state-by-api" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. (required)
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3780,7 +3788,7 @@ export def "tag-assign-to-api" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. (required)
-]: nothing -> record<properties: record<displayName: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<displayName: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }

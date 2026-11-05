@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -115,9 +139,9 @@ def status-completer [] { ["CANCELLED" "FAILED" "FAILED_ROLLED_BACK" "IN_PROGRES
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "servicemanagement-operations-list" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["servicemanagement-operations-list" "servicemanagement-services-list" "servicemanagement-services-create" "servicemanagement-services-delete" "servicemanagement-services-get" "servicemanagement-services-get-config" "servicemanagement-services-configs-list" "servicemanagement-services-configs-create" "servicemanagement-services-configs-get" "servicemanagement-services-configs-submit" "servicemanagement-services-rollouts-list" "servicemanagement-services-rollouts-create" "servicemanagement-services-rollouts-get" "servicemanagement-services-undelete" "servicemanagement-services-generate-config-report" "servicemanagement-operations-get" "servicemanagement-services-consumers-get-iam-policy" "servicemanagement-services-consumers-set-iam-policy" "servicemanagement-services-consumers-test-iam-permissions" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -164,7 +188,7 @@ export def "servicemanagement-operations-list" [
   --name: string # Not used.
   --page-size: int # The maximum number of operations to return. If unspecified, defaults to 50. The maximum value is 100.
   --page-token: string # The standard list page token.
-]: nothing -> record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>> {
+]: nothing -> oneof<record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -214,7 +238,7 @@ export def "servicemanagement-services-list" [
   --page-size: int # The max number of items to include in the response list. Page size is 50 if not specified. Maximum value is 500.
   --page-token: string # Token identifying which result to start with; returned by a previous list call.
   --producer-project-id: string # Include services produced by the specified project.
-]: nothing -> record<nextPageToken: string, services: table<producerProjectId: string, serviceName: string>> {
+]: nothing -> oneof<record<nextPageToken: string, services: table<producerProjectId: string, serviceName: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "consumerId" $consumer_id "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "producerProjectId" $producer_project_id "scalar")] | flatten | str join "&"
@@ -262,7 +286,7 @@ export def "servicemanagement-services-create" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --producer-project-id: string # ID of the project that produces and owns this service.
   --service-name: string # The name of the service. See the [overview](https://cloud.google.com/service-infrastructure/docs/overview) for naming requirements.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -312,7 +336,7 @@ export def "servicemanagement-services-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: nothing -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
@@ -360,7 +384,7 @@ export def "servicemanagement-services-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<producerProjectId: string, serviceName: string> {
+]: nothing -> oneof<record<producerProjectId: string, serviceName: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
@@ -410,7 +434,7 @@ export def "servicemanagement-services-get-config" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --config-id: string # Required. The id of the service configuration resource. This field must be specified for the server to return all fields, including `SourceInfo`.
   --view: string@view-completer # Specifies which parts of the Service Config should be returned in the response.
-]: nothing -> record<apis: table<methods: list, mixins: list, name: string, options: list, sourceContext: record, syntax: string, version: string>, authentication: record<providers: list<record>, rules: list<record>>, backend: record<rules: list<record>>, billing: record<consumerDestinations: list<record>>, configVersion: int, context: record<rules: list<record>>, control: record<environment: string>, customError: record<rules: list<record>, types: list<string>>, documentation: record<documentationRootUrl: string, overview: string, pages: list<record>, rules: list<record>, serviceRootUrl: string, summary: string>, endpoints: table<aliases: list, allowCors: bool, name: string, target: string>, enums: table<edition: string, enumvalue: list, name: string, options: list, sourceContext: record, syntax: string>, http: record<fullyDecodeReservedExpansion: bool, rules: list<record>>, id: string, logging: record<consumerDestinations: list<record>, producerDestinations: list<record>>, logs: table<description: string, displayName: string, labels: list, name: string>, metrics: table<description: string, displayName: string, labels: list, launchStage: string, metadata: record, metricKind: string, monitoredResourceTypes: list, name: string, type: string, unit: string, valueType: string>, monitoredResources: table<description: string, displayName: string, labels: list, launchStage: string, name: string, type: string>, monitoring: record<consumerDestinations: list<record>, producerDestinations: list<record>>, name: string, producerProjectId: string, publishing: record<apiShortName: string, codeownerGithubTeams: list<string>, docTagPrefix: string, documentationUri: string, githubLabel: string, librarySettings: list<record>, methodSettings: list<record>, newIssueUri: string, organization: string, protoReferenceDocumentationUri: string>, quota: record<limits: list<record>, metricRules: list<record>>, sourceInfo: record<sourceFiles: list<record>>, systemParameters: record<rules: list<record>>, systemTypes: table<edition: string, fields: list, name: string, oneofs: list, options: list, sourceContext: record, syntax: string>, title: string, types: table<edition: string, fields: list, name: string, oneofs: list, options: list, sourceContext: record, syntax: string>, usage: record<producerNotificationChannel: string, requirements: list<string>, rules: list<record>>> {
+]: nothing -> oneof<record<apis: table<methods: list, mixins: list, name: string, options: list, sourceContext: record, syntax: string, version: string>, authentication: record<providers: list<record>, rules: list<record>>, backend: record<rules: list<record>>, billing: record<consumerDestinations: list<record>>, configVersion: int, context: record<rules: list<record>>, control: record<environment: string>, customError: record<rules: list<record>, types: list<string>>, documentation: record<documentationRootUrl: string, overview: string, pages: list<record>, rules: list<record>, serviceRootUrl: string, summary: string>, endpoints: table<aliases: list, allowCors: bool, name: string, target: string>, enums: table<edition: string, enumvalue: list, name: string, options: list, sourceContext: record, syntax: string>, http: record<fullyDecodeReservedExpansion: bool, rules: list<record>>, id: string, logging: record<consumerDestinations: list<record>, producerDestinations: list<record>>, logs: table<description: string, displayName: string, labels: list, name: string>, metrics: table<description: string, displayName: string, labels: list, launchStage: string, metadata: record, metricKind: string, monitoredResourceTypes: list, name: string, type: string, unit: string, valueType: string>, monitoredResources: table<description: string, displayName: string, labels: list, launchStage: string, name: string, type: string>, monitoring: record<consumerDestinations: list<record>, producerDestinations: list<record>>, name: string, producerProjectId: string, publishing: record<apiShortName: string, codeownerGithubTeams: list<string>, docTagPrefix: string, documentationUri: string, githubLabel: string, librarySettings: list<record>, methodSettings: list<record>, newIssueUri: string, organization: string, protoReferenceDocumentationUri: string>, quota: record<limits: list<record>, metricRules: list<record>>, sourceInfo: record<sourceFiles: list<record>>, systemParameters: record<rules: list<record>>, systemTypes: table<edition: string, fields: list, name: string, oneofs: list, options: list, sourceContext: record, syntax: string>, title: string, types: table<edition: string, fields: list, name: string, oneofs: list, options: list, sourceContext: record, syntax: string>, usage: record<producerNotificationChannel: string, requirements: list<string>, rules: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
@@ -460,7 +484,7 @@ export def "servicemanagement-services-configs-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # The max number of items to include in the response list. Page size is 50 if not specified. Maximum value is 100.
   --page-token: string # The token of the page to retrieve.
-]: nothing -> record<nextPageToken: string, serviceConfigs: table<apis: list, authentication: record, backend: record, billing: record, configVersion: int, context: record, control: record, customError: record, documentation: record, endpoints: list, enums: list, http: record, id: string, logging: record, logs: list, metrics: list, monitoredResources: list, monitoring: record, name: string, producerProjectId: string, publishing: record, quota: record, sourceInfo: record, systemParameters: record, systemTypes: list, title: string, types: list, usage: record>> {
+]: nothing -> oneof<record<nextPageToken: string, serviceConfigs: table<apis: list, authentication: record, backend: record, billing: record, configVersion: int, context: record, control: record, customError: record, documentation: record, endpoints: list, enums: list, http: record, id: string, logging: record, logs: list, metrics: list, monitoredResources: list, monitoring: record, name: string, producerProjectId: string, publishing: record, quota: record, sourceInfo: record, systemParameters: record, systemTypes: list, title: string, types: list, usage: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
@@ -486,29 +510,6 @@ export def "servicemanagement-services-configs-list" [
 #
 # POST /v1/services/{serviceName}/configs
 # operationId: servicemanagement.services.configs.create
-# --apis item shape: {methods?: list, mixins?: list, name?: string, options?: list, sourceContext?: record, syntax?: "SYNTAX_PROTO2"|"SYNTAX_PROTO3"|"SYNTAX_EDITIONS", version?: string}
-# --authentication shape: {providers?: list, rules?: list}
-# --backend shape: {rules?: list}
-# --billing shape: {consumerDestinations?: list}
-# --context shape: {rules?: list}
-# --control shape: {environment?: string}
-# --customError shape: {rules?: list, types?: list<string>}
-# --documentation shape: {documentationRootUrl?: string, overview?: string, pages?: list, rules?: list, serviceRootUrl?: string, summary?: string}
-# --endpoints item shape: {aliases?: list<string>, allowCors?: bool, name?: string, target?: string}
-# --enums item shape: {edition?: string, enumvalue?: list, name?: string, options?: list, sourceContext?: record, syntax?: "SYNTAX_PROTO2"|"SYNTAX_PROTO3"|"SYNTAX_EDITIONS"}
-# --http shape: {fullyDecodeReservedExpansion?: bool, rules?: list}
-# --logging shape: {consumerDestinations?: list, producerDestinations?: list}
-# --logs item shape: {description?: string, displayName?: string, labels?: list, name?: string}
-# --metrics item shape: {description?: string, displayName?: string, labels?: list, launchStage?: "LAUNCH_STAGE_UNSPECIFIED"|"UNIMPLEMENTED"|"PRELAUNCH"|"EARLY_ACCESS"|"ALPHA"|"BETA"|"GA"|"DEPRECATED", metadata?: record, metricKind?: "METRIC_KIND_UNSPECIFIED"|"GAUGE"|"DELTA"|"CUMULATIVE", monitoredResourceTypes?: list<string>, name?: string, type?: string, unit?: string, valueType?: "VALUE_TYPE_UNSPECIFIED"|"BOOL"|"INT64"|"DOUBLE"|"STRING"|"DISTRIBUTION"|"MONEY"}
-# --monitoredResources item shape: {description?: string, displayName?: string, labels?: list, launchStage?: "LAUNCH_STAGE_UNSPECIFIED"|"UNIMPLEMENTED"|"PRELAUNCH"|"EARLY_ACCESS"|"ALPHA"|"BETA"|"GA"|"DEPRECATED", name?: string, type?: string}
-# --monitoring shape: {consumerDestinations?: list, producerDestinations?: list}
-# --publishing shape: {apiShortName?: string, codeownerGithubTeams?: list<string>, docTagPrefix?: string, documentationUri?: string, githubLabel?: string, librarySettings?: list, methodSettings?: list, newIssueUri?: string, organization?: "CLIENT_LIBRARY_ORGANIZATION_UNSPECIFIED"|"CLOUD"|"ADS"|"PHOTOS"|"STREET_VIEW"|"SHOPPING", protoReferenceDocumentationUri?: string}
-# --quota shape: {limits?: list, metricRules?: list}
-# --sourceInfo shape: {sourceFiles?: list}
-# --systemParameters shape: {rules?: list}
-# --systemTypes item shape: {edition?: string, fields?: list, name?: string, oneofs?: list<string>, options?: list, sourceContext?: record, syntax?: "SYNTAX_PROTO2"|"SYNTAX_PROTO3"|"SYNTAX_EDITIONS"}
-# --types item shape: {edition?: string, fields?: list, name?: string, oneofs?: list<string>, options?: list, sourceContext?: record, syntax?: "SYNTAX_PROTO2"|"SYNTAX_PROTO3"|"SYNTAX_EDITIONS"}
-# --usage shape: {producerNotificationChannel?: string, requirements?: list<string>, rules?: list}
 export def "servicemanagement-services-configs-create" [
   service_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -559,7 +560,7 @@ export def "servicemanagement-services-configs-create" [
   --title: string # The product title for this service, it is the name displayed in Google Cloud Console.
   --types: list # A list of all proto message types included in this API service. Types referenced directly or indirectly by the `apis` are automatically included. Messages which are not referenced but shall be included, such as types used by the `google.protobuf.Any` type, should be listed here by name by the configuration author. Example: types: - name: google.protobuf.Int32 — item shape: {edition?: string, fields?: list, name?: string, oneofs?: list<string>, options?: list, sourceContext?: record, syntax?: "SYNTAX_PROTO2"|"SYNTAX_PROTO3"|"SYNTAX_EDITIONS"}
   --usage: record # Configuration controlling usage of a service. — shape: {producerNotificationChannel?: string, requirements?: list<string>, rules?: list}
-]: any -> record<apis: table<methods: list, mixins: list, name: string, options: list, sourceContext: record, syntax: string, version: string>, authentication: record<providers: list<record>, rules: list<record>>, backend: record<rules: list<record>>, billing: record<consumerDestinations: list<record>>, configVersion: int, context: record<rules: list<record>>, control: record<environment: string>, customError: record<rules: list<record>, types: list<string>>, documentation: record<documentationRootUrl: string, overview: string, pages: list<record>, rules: list<record>, serviceRootUrl: string, summary: string>, endpoints: table<aliases: list, allowCors: bool, name: string, target: string>, enums: table<edition: string, enumvalue: list, name: string, options: list, sourceContext: record, syntax: string>, http: record<fullyDecodeReservedExpansion: bool, rules: list<record>>, id: string, logging: record<consumerDestinations: list<record>, producerDestinations: list<record>>, logs: table<description: string, displayName: string, labels: list, name: string>, metrics: table<description: string, displayName: string, labels: list, launchStage: string, metadata: record, metricKind: string, monitoredResourceTypes: list, name: string, type: string, unit: string, valueType: string>, monitoredResources: table<description: string, displayName: string, labels: list, launchStage: string, name: string, type: string>, monitoring: record<consumerDestinations: list<record>, producerDestinations: list<record>>, name: string, producerProjectId: string, publishing: record<apiShortName: string, codeownerGithubTeams: list<string>, docTagPrefix: string, documentationUri: string, githubLabel: string, librarySettings: list<record>, methodSettings: list<record>, newIssueUri: string, organization: string, protoReferenceDocumentationUri: string>, quota: record<limits: list<record>, metricRules: list<record>>, sourceInfo: record<sourceFiles: list<record>>, systemParameters: record<rules: list<record>>, systemTypes: table<edition: string, fields: list, name: string, oneofs: list, options: list, sourceContext: record, syntax: string>, title: string, types: table<edition: string, fields: list, name: string, oneofs: list, options: list, sourceContext: record, syntax: string>, usage: record<producerNotificationChannel: string, requirements: list<string>, rules: list<record>>> {
+]: any -> oneof<record<apis: table<methods: list, mixins: list, name: string, options: list, sourceContext: record, syntax: string, version: string>, authentication: record<providers: list<record>, rules: list<record>>, backend: record<rules: list<record>>, billing: record<consumerDestinations: list<record>>, configVersion: int, context: record<rules: list<record>>, control: record<environment: string>, customError: record<rules: list<record>, types: list<string>>, documentation: record<documentationRootUrl: string, overview: string, pages: list<record>, rules: list<record>, serviceRootUrl: string, summary: string>, endpoints: table<aliases: list, allowCors: bool, name: string, target: string>, enums: table<edition: string, enumvalue: list, name: string, options: list, sourceContext: record, syntax: string>, http: record<fullyDecodeReservedExpansion: bool, rules: list<record>>, id: string, logging: record<consumerDestinations: list<record>, producerDestinations: list<record>>, logs: table<description: string, displayName: string, labels: list, name: string>, metrics: table<description: string, displayName: string, labels: list, launchStage: string, metadata: record, metricKind: string, monitoredResourceTypes: list, name: string, type: string, unit: string, valueType: string>, monitoredResources: table<description: string, displayName: string, labels: list, launchStage: string, name: string, type: string>, monitoring: record<consumerDestinations: list<record>, producerDestinations: list<record>>, name: string, producerProjectId: string, publishing: record<apiShortName: string, codeownerGithubTeams: list<string>, docTagPrefix: string, documentationUri: string, githubLabel: string, librarySettings: list<record>, methodSettings: list<record>, newIssueUri: string, organization: string, protoReferenceDocumentationUri: string>, quota: record<limits: list<record>, metricRules: list<record>>, sourceInfo: record<sourceFiles: list<record>>, systemParameters: record<rules: list<record>>, systemTypes: table<edition: string, fields: list, name: string, oneofs: list, options: list, sourceContext: record, syntax: string>, title: string, types: table<edition: string, fields: list, name: string, oneofs: list, options: list, sourceContext: record, syntax: string>, usage: record<producerNotificationChannel: string, requirements: list<string>, rules: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -612,7 +613,7 @@ export def "servicemanagement-services-configs-get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --view: string@view-completer # Specifies which parts of the Service Config should be returned in the response.
-]: nothing -> record<apis: table<methods: list, mixins: list, name: string, options: list, sourceContext: record, syntax: string, version: string>, authentication: record<providers: list<record>, rules: list<record>>, backend: record<rules: list<record>>, billing: record<consumerDestinations: list<record>>, configVersion: int, context: record<rules: list<record>>, control: record<environment: string>, customError: record<rules: list<record>, types: list<string>>, documentation: record<documentationRootUrl: string, overview: string, pages: list<record>, rules: list<record>, serviceRootUrl: string, summary: string>, endpoints: table<aliases: list, allowCors: bool, name: string, target: string>, enums: table<edition: string, enumvalue: list, name: string, options: list, sourceContext: record, syntax: string>, http: record<fullyDecodeReservedExpansion: bool, rules: list<record>>, id: string, logging: record<consumerDestinations: list<record>, producerDestinations: list<record>>, logs: table<description: string, displayName: string, labels: list, name: string>, metrics: table<description: string, displayName: string, labels: list, launchStage: string, metadata: record, metricKind: string, monitoredResourceTypes: list, name: string, type: string, unit: string, valueType: string>, monitoredResources: table<description: string, displayName: string, labels: list, launchStage: string, name: string, type: string>, monitoring: record<consumerDestinations: list<record>, producerDestinations: list<record>>, name: string, producerProjectId: string, publishing: record<apiShortName: string, codeownerGithubTeams: list<string>, docTagPrefix: string, documentationUri: string, githubLabel: string, librarySettings: list<record>, methodSettings: list<record>, newIssueUri: string, organization: string, protoReferenceDocumentationUri: string>, quota: record<limits: list<record>, metricRules: list<record>>, sourceInfo: record<sourceFiles: list<record>>, systemParameters: record<rules: list<record>>, systemTypes: table<edition: string, fields: list, name: string, oneofs: list, options: list, sourceContext: record, syntax: string>, title: string, types: table<edition: string, fields: list, name: string, oneofs: list, options: list, sourceContext: record, syntax: string>, usage: record<producerNotificationChannel: string, requirements: list<string>, rules: list<record>>> {
+]: nothing -> oneof<record<apis: table<methods: list, mixins: list, name: string, options: list, sourceContext: record, syntax: string, version: string>, authentication: record<providers: list<record>, rules: list<record>>, backend: record<rules: list<record>>, billing: record<consumerDestinations: list<record>>, configVersion: int, context: record<rules: list<record>>, control: record<environment: string>, customError: record<rules: list<record>, types: list<string>>, documentation: record<documentationRootUrl: string, overview: string, pages: list<record>, rules: list<record>, serviceRootUrl: string, summary: string>, endpoints: table<aliases: list, allowCors: bool, name: string, target: string>, enums: table<edition: string, enumvalue: list, name: string, options: list, sourceContext: record, syntax: string>, http: record<fullyDecodeReservedExpansion: bool, rules: list<record>>, id: string, logging: record<consumerDestinations: list<record>, producerDestinations: list<record>>, logs: table<description: string, displayName: string, labels: list, name: string>, metrics: table<description: string, displayName: string, labels: list, launchStage: string, metadata: record, metricKind: string, monitoredResourceTypes: list, name: string, type: string, unit: string, valueType: string>, monitoredResources: table<description: string, displayName: string, labels: list, launchStage: string, name: string, type: string>, monitoring: record<consumerDestinations: list<record>, producerDestinations: list<record>>, name: string, producerProjectId: string, publishing: record<apiShortName: string, codeownerGithubTeams: list<string>, docTagPrefix: string, documentationUri: string, githubLabel: string, librarySettings: list<record>, methodSettings: list<record>, newIssueUri: string, organization: string, protoReferenceDocumentationUri: string>, quota: record<limits: list<record>, metricRules: list<record>>, sourceInfo: record<sourceFiles: list<record>>, systemParameters: record<rules: list<record>>, systemTypes: table<edition: string, fields: list, name: string, oneofs: list, options: list, sourceContext: record, syntax: string>, title: string, types: table<edition: string, fields: list, name: string, oneofs: list, options: list, sourceContext: record, syntax: string>, usage: record<producerNotificationChannel: string, requirements: list<string>, rules: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
@@ -639,7 +640,6 @@ export def "servicemanagement-services-configs-get" [
 #
 # POST /v1/services/{serviceName}/configs:submit
 # operationId: servicemanagement.services.configs.submit
-# --configSource shape: {files?: list, id?: string}
 export def "servicemanagement-services-configs-submit" [
   service_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -664,7 +664,7 @@ export def "servicemanagement-services-configs-submit" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --config-source: record # Represents a source file which is used to generate the service configuration defined by `google.api.Service`. — shape: {files?: list, id?: string}
   --validate-only: oneof<nothing, bool> # Optional. If set, this will result in the generation of a `google.api.Service` configuration based on the `ConfigSource` provided, but the generated config and the sources will NOT be persisted.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -718,7 +718,7 @@ export def "servicemanagement-services-rollouts-list" [
   --filter: string # Required. Use `filter` to return subset of rollouts. The following filters are supported: -- By status. For example, `filter='status=SUCCESS'` -- By strategy. For example, `filter='strategy=TrafficPercentStrategy'`
   --page-size: int # The max number of items to include in the response list. Page size is 50 if not specified. Maximum value is 100.
   --page-token: string # The token of the page to retrieve.
-]: nothing -> record<nextPageToken: string, rollouts: table<createTime: string, createdBy: string, deleteServiceStrategy: record, rolloutId: string, serviceName: string, status: string, trafficPercentStrategy: record>> {
+]: nothing -> oneof<record<nextPageToken: string, rollouts: table<createTime: string, createdBy: string, deleteServiceStrategy: record, rolloutId: string, serviceName: string, status: string, trafficPercentStrategy: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
@@ -744,7 +744,6 @@ export def "servicemanagement-services-rollouts-list" [
 #
 # POST /v1/services/{serviceName}/rollouts
 # operationId: servicemanagement.services.rollouts.create
-# --trafficPercentStrategy shape: {percentages?: record}
 export def "servicemanagement-services-rollouts-create" [
   service_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -774,7 +773,7 @@ export def "servicemanagement-services-rollouts-create" [
   --body-service-name: string # The name of the service associated with this Rollout.
   --status: string@status-completer # The status of this rollout. Readonly. In case of a failed rollout, the system will automatically rollback to the current Rollout version. Readonly.
   --traffic-percent-strategy: record # Strategy that specifies how clients of Google Service Controller want to send traffic to use different config versions. This is generally used by API proxy to split traffic based on your configured percentage for each config version. One example of how to gradually rollout a new service configuration using this strategy: Day 1 Rollout { id: "example.googleapis.com/rollout_20160206" traffic_percent_strategy { percentages: { "example.googleapis.com/20160201": 70.00 "example.googleapis.com/20160206": 30.00 } } } Day 2 Rollout { id: "example.googleapis.com/rollout_20160207" traffic_percent_strategy: { percentages: { "example.googleapis.com/20160206": 100.00 } } } — shape: {percentages?: record}
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -826,7 +825,7 @@ export def "servicemanagement-services-rollouts-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<createTime: string, createdBy: string, deleteServiceStrategy: record, rolloutId: string, serviceName: string, status: string, trafficPercentStrategy: record<percentages: record>> {
+]: nothing -> oneof<record<createTime: string, createdBy: string, deleteServiceStrategy: record, rolloutId: string, serviceName: string, status: string, trafficPercentStrategy: record<percentages: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
@@ -875,7 +874,7 @@ export def "servicemanagement-services-undelete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: nothing -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
@@ -924,7 +923,7 @@ export def "servicemanagement-services-generate-config-report" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --new-config: record # Required. Service configuration for which we want to generate the report. For this version of API, the supported types are google.api.servicemanagement.v1.ConfigRef, google.api.servicemanagement.v1.ConfigSource, and google.api.Service
   --old-config: record # Optional. Service configuration against which the comparison will be done. For this version of API, the supported types are google.api.servicemanagement.v1.ConfigRef, google.api.servicemanagement.v1.ConfigSource, and google.api.Service
-]: any -> record<changeReports: table<configChanges: list>, diagnostics: table<kind: string, location: string, message: string>, id: string, serviceName: string> {
+]: any -> oneof<record<changeReports: table<configChanges: list>, diagnostics: table<kind: string, location: string, message: string>, id: string, serviceName: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -974,7 +973,7 @@ export def "servicemanagement-operations-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: nothing -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -1000,7 +999,6 @@ export def "servicemanagement-operations-get" [
 #
 # POST /v1/{resource}:getIamPolicy
 # operationId: servicemanagement.services.consumers.getIamPolicy
-# --options shape: {requestedPolicyVersion?: int}
 export def "servicemanagement-services-consumers-get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1024,7 +1022,7 @@ export def "servicemanagement-services-consumers-get-iam-policy" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --options: record # Encapsulates settings provided to GetIamPolicy. — shape: {requestedPolicyVersion?: int}
-]: any -> record<auditConfigs: table<auditLogConfigs: list, service: string>, bindings: table<condition: record, members: list, role: string>, etag: string, version: int> {
+]: any -> oneof<record<auditConfigs: table<auditLogConfigs: list, service: string>, bindings: table<condition: record, members: list, role: string>, etag: string, version: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1053,7 +1051,6 @@ export def "servicemanagement-services-consumers-get-iam-policy" [
 #
 # POST /v1/{resource}:setIamPolicy
 # operationId: servicemanagement.services.consumers.setIamPolicy
-# --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
 export def "servicemanagement-services-consumers-set-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1078,7 +1075,7 @@ export def "servicemanagement-services-consumers-set-iam-policy" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --policy: record # An Identity and Access Management (IAM) policy, which specifies access controls for Google Cloud resources. A `Policy` is a collection of `bindings`. A `binding` binds one or more `members`, or principals, to a single `role`. Principals can be user accounts, service accounts, Google groups, and domains (such as G Suite). A `role` is a named list of permissions; each `role` can be an IAM predefined role or a user-created custom role. For some types of Google Cloud resources, a `binding` can also specify a `condition`, which is a logical expression that allows access to a resource only if the expression evaluates to `true`. A condition can add constraints based on attributes of the request, the resource, or both. To learn which resources support conditions in their IAM policies, see the [IAM documentation](https://cloud.google.com/iam/help/conditions/resource-policies). **JSON example:** { "bindings": [ { "role": "roles/resourcemanager.organizationAdmin", "members": [ "user:mike@example.com", "group:admins@example.com", "domain:google.com", "serviceAccount:my-project-id@appspot.gserviceaccount.com" ] }, { "role": "roles/resourcemanager.organizationViewer", "members": [ "user:eve@example.com" ], "condition": { "title": "expirable access", "description": "Does not grant access after Sep 2020", "expression": "request.time < timestamp('2020-10-01T00:00:00.000Z')", } } ], "etag": "BwWWja0YfJA=", "version": 3 } **YAML example:** bindings: - members: - user:mike@example.com - group:admins@example.com - domain:google.com - serviceAccount:my-project-id@appspot.gserviceaccount.com role: roles/resourcemanager.organizationAdmin - members: - user:eve@example.com role: roles/resourcemanager.organizationViewer condition: title: expirable access description: Does not grant access after Sep 2020 expression: request.time < timestamp('2020-10-01T00:00:00.000Z') etag: BwWWja0YfJA= version: 3 For a description of IAM and its features, see the [IAM documentation](https://cloud.google.com/iam/docs/). — shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
   --update-mask: string # OPTIONAL: A FieldMask specifying which fields of the policy to modify. Only the fields in the mask will be modified. If no mask is provided, the following default mask is used: `paths: "bindings, etag"` (format: google-fieldmask)
-]: any -> record<auditConfigs: table<auditLogConfigs: list, service: string>, bindings: table<condition: record, members: list, role: string>, etag: string, version: int> {
+]: any -> oneof<record<auditConfigs: table<auditLogConfigs: list, service: string>, bindings: table<condition: record, members: list, role: string>, etag: string, version: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1130,7 +1127,7 @@ export def "servicemanagement-services-consumers-test-iam-permissions" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --permissions: list<string> # The set of permissions to check for the `resource`. Permissions with wildcards (such as `*` or `storage.*`) are not allowed. For more information see [IAM Overview](https://cloud.google.com/iam/docs/overview#permissions).
-]: any -> record<permissions: list<string>> {
+]: any -> oneof<record<permissions: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

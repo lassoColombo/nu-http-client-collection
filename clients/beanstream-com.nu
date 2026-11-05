@@ -12,27 +12,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -40,8 +49,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -52,7 +66,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -87,7 +110,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -115,9 +139,9 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-payments" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["post-payments" "get-payments-trans-id" "post-payments-trans-id-completions" "post-payments-trans-id-returns" "post-payments-trans-id-void" "post-profiles" "delete-profiles-profile-id" "get-profiles-profile-id" "put-profiles-profile-id" "get-profiles-profile-id-cards" "post-profiles-profile-id-cards" "delete-profiles-profile-id-cards-card-id" "put-profiles-profile-id-cards-card-id" "post-reports" "post-scripts-tokenization-tokens" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -138,12 +162,6 @@ export def commands []: nothing -> table {
 # Make Payment
 #
 # POST /payments
-# --billing shape: {address_line1?: string, address_line2?: string, city?: string, country?: string, email_address?: string, name?: string, phone_number?: string, postal_code?: string, province?: string}
-# --card shape: {complete?: bool, cvd?: string, expiry_month: string, expiry_year: string, name: string, number: string}
-# --custom shape: {ref1?: string, ref2?: string, ref3?: string, ref4?: string, ref5?: string}
-# --payment_profile shape: {card_id: int, complete?: bool, customer_code: string}
-# --shipping shape: {address_line1?: string, address_line2?: string, city?: string, country?: string, email_address?: string, name?: string, phone_number?: string, postal_code?: string, province?: string}
-# --token shape: {code: string, complete?: bool, name: string}
 export def "post-payments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -167,7 +185,7 @@ export def "post-payments" [
   --shipping: any # shape: {address_line1?: string, address_line2?: string, city?: string, country?: string, email_address?: string, name?: string, phone_number?: string, postal_code?: string, province?: string}
   --term-url: string # alphanumeric (256)
   --body-token: any # shape: {code: string, complete?: bool, name: string}
-]: any -> record<approved: int, auth_code: string, card: record<address_match: int, card_type: string, cvd_match: int, last_four: string, postal_result: int>, created: string, id: string, links: table<href: string, method: string, ref: string>, message: string, message_id: string, order_number: string, payment_method: string, type: string> {
+]: any -> oneof<record<approved: int, auth_code: string, card: record<address_match: int, card_type: string, cvd_match: int, last_four: string, postal_result: int>, created: string, id: string, links: table<href: string, method: string, ref: string>, message: string, message_id: string, order_number: string, payment_method: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -204,7 +222,7 @@ export def "get-payments-trans-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<adjusted_by: table<amount: float, approval: float, created: string, id: float, message: string, type: string, url: string>, amount: float, approved: bool, auth_code: string, batch_number: string, billing: record<address_line1: string, address_line2: string, city: string, country: string, email_address: string, name: string, phone_number: string, postal_code: string, province: string>, card: record<address_match: int, avs_result: string, card_type: string, cvd_match: int, expiry_month: string, expiry_year: string, last_four: string>, comments: string, created: string, custom: record<ref1: string, ref2: string, ref3: string, ref4: string, ref5: string>, id: float, links: table<href: string, method: string, ref: string>, message: string, message_id: float, order_number: string, payment_method: string, shipping: record<address_line1: string, address_line2: string, city: string, country: string, email_address: string, name: string, phone_number: string, postal_code: string, province: string>, total_completions: float, total_refunds: float, type: string> {
+]: nothing -> oneof<record<adjusted_by: table<amount: float, approval: float, created: string, id: float, message: string, type: string, url: string>, amount: float, approved: bool, auth_code: string, batch_number: string, billing: record<address_line1: string, address_line2: string, city: string, country: string, email_address: string, name: string, phone_number: string, postal_code: string, province: string>, card: record<address_match: int, avs_result: string, card_type: string, cvd_match: int, expiry_month: string, expiry_year: string, last_four: string>, comments: string, created: string, custom: record<ref1: string, ref2: string, ref3: string, ref4: string, ref5: string>, id: float, links: table<href: string, method: string, ref: string>, message: string, message_id: float, order_number: string, payment_method: string, shipping: record<address_line1: string, address_line2: string, city: string, country: string, email_address: string, name: string, phone_number: string, postal_code: string, province: string>, total_completions: float, total_refunds: float, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($trans_id | is-empty) { error make --unspanned { msg: "path parameter 'transId' must be non-empty" } }
@@ -228,12 +246,6 @@ export def "get-payments-trans-id" [
 # Complete pre-auth
 #
 # POST /payments/{transId}/completions
-# --billing shape: {address_line1?: string, address_line2?: string, city?: string, country?: string, email_address?: string, name?: string, phone_number?: string, postal_code?: string, province?: string}
-# --card shape: {complete?: bool, cvd?: string, expiry_month: string, expiry_year: string, name: string, number: string}
-# --custom shape: {ref1?: string, ref2?: string, ref3?: string, ref4?: string, ref5?: string}
-# --payment_profile shape: {card_id: int, complete?: bool, customer_code: string}
-# --shipping shape: {address_line1?: string, address_line2?: string, city?: string, country?: string, email_address?: string, name?: string, phone_number?: string, postal_code?: string, province?: string}
-# --token shape: {code: string, complete?: bool, name: string}
 export def "post-payments-trans-id-completions" [
   trans_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -258,7 +270,7 @@ export def "post-payments-trans-id-completions" [
   --shipping: any # shape: {address_line1?: string, address_line2?: string, city?: string, country?: string, email_address?: string, name?: string, phone_number?: string, postal_code?: string, province?: string}
   --term-url: string # alphanumeric (256)
   --body-token: any # shape: {code: string, complete?: bool, name: string}
-]: any -> record<approved: int, auth_code: string, card: record<address_match: int, card_type: string, cvd_match: int, last_four: string, postal_result: int>, created: string, id: string, links: table<href: string, method: string, ref: string>, message: string, message_id: string, order_number: string, payment_method: string, type: string> {
+]: any -> oneof<record<approved: int, auth_code: string, card: record<address_match: int, card_type: string, cvd_match: int, last_four: string, postal_result: int>, created: string, id: string, links: table<href: string, method: string, ref: string>, message: string, message_id: string, order_number: string, payment_method: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -298,7 +310,7 @@ export def "post-payments-trans-id-returns" [
   --dry-run(-n) # Return the request that would be sent without executing it
   amount: float # The amount of the transaction to return. Must be less than or equal to the original purchase amount. (format: double)
   --order-number: string # alphanumeric (30)
-]: any -> record<approved: int, auth_code: string, card: record<address_match: int, card_type: string, cvd_match: int, last_four: string, postal_result: int>, created: string, id: string, links: table<href: string, method: string, ref: string>, message: string, message_id: string, order_number: string, payment_method: string, type: string> {
+]: any -> oneof<record<approved: int, auth_code: string, card: record<address_match: int, card_type: string, cvd_match: int, last_four: string, postal_result: int>, created: string, id: string, links: table<href: string, method: string, ref: string>, message: string, message_id: string, order_number: string, payment_method: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -337,7 +349,7 @@ export def "post-payments-trans-id-void" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   amount: float # The amount of the transaction to void. Must be equal to the original purchase amount. You can void purchases as well as pre-auths and returns. The amount you are voiding has to match the amount of that transaction. (format: double)
-]: any -> record<approved: int, auth_code: string, card: record<address_match: int, card_type: string, cvd_match: int, last_four: string, postal_result: int>, created: string, id: string, links: table<href: string, method: string, ref: string>, message: string, message_id: string, order_number: string, payment_method: string, type: string> {
+]: any -> oneof<record<approved: int, auth_code: string, card: record<address_match: int, card_type: string, cvd_match: int, last_four: string, postal_result: int>, created: string, id: string, links: table<href: string, method: string, ref: string>, message: string, message_id: string, order_number: string, payment_method: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -364,10 +376,6 @@ export def "post-payments-trans-id-void" [
 # Create Profile
 #
 # POST /profiles
-# --billing shape: {address_line1?: string, address_line2?: string, city?: string, country?: string, email_address?: string, name?: string, phone_number?: string, postal_code?: string, province?: string}
-# --card shape: {cvd?: string, expiry_month: string, expiry_year: string, name: string, number: string}
-# --custom shape: {ref1?: string, ref2?: string, ref3?: string, ref4?: string, ref5?: string}
-# --token shape: {code: string, name: string}
 export def "post-profiles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -384,7 +392,7 @@ export def "post-profiles" [
   --custom: any # shape: {ref1?: string, ref2?: string, ref3?: string, ref4?: string, ref5?: string}
   --language: string # characters(2)
   --body-token: any # shape: {code: string, name: string}
-]: any -> record<code: float, customer_code: string, message: string> {
+]: any -> oneof<record<code: float, customer_code: string, message: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -421,7 +429,7 @@ export def "delete-profiles-profile-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: float, customer_code: string, message: string> {
+]: nothing -> oneof<record<code: float, customer_code: string, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
@@ -456,7 +464,7 @@ export def "get-profiles-profile-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account_ref: string, billing: record<address_line1: string, address_line2: string, city: string, country: string, email_address: string, name: string, phone_number: string, postal_code: string, province: string>, card: record<card_type: string, expiry_month: string, expiry_year: string, name: string, number: string>, code: int, custom: record<ref1: string, ref2: string, ref3: string, ref4: string, ref5: string>, customer_code: string, language: string, last_transaction: string, message: string, modified_date: string, profile_group: string, status: string, velocity_group: string> {
+]: nothing -> oneof<record<account_ref: string, billing: record<address_line1: string, address_line2: string, city: string, country: string, email_address: string, name: string, phone_number: string, postal_code: string, province: string>, card: record<card_type: string, expiry_month: string, expiry_year: string, name: string, number: string>, code: int, custom: record<ref1: string, ref2: string, ref3: string, ref4: string, ref5: string>, customer_code: string, language: string, last_transaction: string, message: string, modified_date: string, profile_group: string, status: string, velocity_group: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
@@ -480,9 +488,6 @@ export def "get-profiles-profile-id" [
 # Update Profile
 #
 # PUT /profiles/{profileId}
-# --billing shape: {address_line1?: string, address_line2?: string, city?: string, country?: string, email_address?: string, name?: string, phone_number?: string, postal_code?: string, province?: string}
-# --card shape: {code?: string, name?: string}
-# --custom shape: {ref1?: string, ref2?: string, ref3?: string, ref4?: string, ref5?: string}
 export def "put-profiles-profile-id" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -499,7 +504,7 @@ export def "put-profiles-profile-id" [
   --comment: string # alphanumeric(256)
   --custom: any # shape: {ref1?: string, ref2?: string, ref3?: string, ref4?: string, ref5?: string}
   --language: string # characters(2)
-]: any -> record<code: float, customer_code: string, message: string> {
+]: any -> oneof<record<code: float, customer_code: string, message: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -537,7 +542,7 @@ export def "get-profiles-profile-id-cards" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<card: table<card_id: string, card_type: string, expiry_month: string, expiry_year: string, function: string, number: string>, code: float, customer_code: string, message: string> {
+]: nothing -> oneof<record<card: table<card_id: string, card_type: string, expiry_month: string, expiry_year: string, function: string, number: string>, code: float, customer_code: string, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
@@ -576,7 +581,7 @@ export def "post-profiles-profile-id-cards" [
   --expiry-year: string # digits(2)
   --name: string # cardholder name. alphanumeric(64)
   --number: string # Credit card number. digits(20)
-]: any -> record<code: float, customer_code: string, message: string> {
+]: any -> oneof<record<code: float, customer_code: string, message: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -615,7 +620,7 @@ export def "delete-profiles-profile-id-cards-card-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: float, customer_code: string, message: string> {
+]: nothing -> oneof<record<code: float, customer_code: string, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
@@ -656,7 +661,7 @@ export def "put-profiles-profile-id-cards-card-id" [
   --expiry-year: string # digits(2)
   --name: string # cardholder name. alphanumeric(64)
   --number: string # Credit card number. digits(20)
-]: any -> record<code: float, customer_code: string, message: string> {
+]: any -> oneof<record<code: float, customer_code: string, message: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -684,7 +689,6 @@ export def "put-profiles-profile-id-cards-card-id" [
 # Search Query
 #
 # POST /reports
-# --criteria item shape: {field?: float, operator?: string, value?: string}
 export def "post-reports" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -701,7 +705,7 @@ export def "post-reports" [
   name: string # Only accepts 2 values. Can be either 'Search' for all fields or 'TransHistoryMinimal' for a subset of the fields returned in the results.
   start_date: string # The start date (inclusive) '2015-04-22T10:03:19' in the timezone of your merchant account.
   start_row: float # Used to page the results. 1-based (format: integer, default: 1)
-]: any -> record<records: table<b_address1: string, b_address2: string, b_city: string, b_country: string, b_email: string, b_name: string, b_phone: string, b_postal: string, b_province: string, customer_code: string, message_id: float, message_text: string, product_id: string, product_name: string, ref1: string, ref2: string, ref3: string, ref4: string, ref5: string, row_id: float, s_address1: string, s_address2: string, s_city: string, s_country: string, s_email: string, s_name: string, s_phone: string, s_postal: string, s_province: string, trn_amount: float, trn_approval_code: string, trn_avs_result: string, trn_batch_no: float, trn_card_expiry: string, trn_card_owner: string, trn_card_type: string, trn_completions: float, trn_cvd_result: float, trn_date_time: string, trn_id: float, trn_ip: string, trn_masked_card: string, trn_order_number: string, trn_payment_method: string, trn_reference: float, trn_response: float, trn_returns: float, trn_type: string, trn_voided: float>> {
+]: any -> oneof<record<records: table<b_address1: string, b_address2: string, b_city: string, b_country: string, b_email: string, b_name: string, b_phone: string, b_postal: string, b_province: string, customer_code: string, message_id: float, message_text: string, product_id: string, product_name: string, ref1: string, ref2: string, ref3: string, ref4: string, ref5: string, row_id: float, s_address1: string, s_address2: string, s_city: string, s_country: string, s_email: string, s_name: string, s_phone: string, s_postal: string, s_province: string, trn_amount: float, trn_approval_code: string, trn_avs_result: string, trn_batch_no: float, trn_card_expiry: string, trn_card_owner: string, trn_card_type: string, trn_completions: float, trn_cvd_result: float, trn_date_time: string, trn_id: float, trn_ip: string, trn_masked_card: string, trn_order_number: string, trn_payment_method: string, trn_reference: float, trn_response: float, trn_returns: float, trn_type: string, trn_voided: float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -741,7 +745,7 @@ export def "post-scripts-tokenization-tokens" [
   expiry_month: string # a 2 digit representation of the expiry month. For example March is 03.
   expiry_year: string # a 2 digit representation of the expiry year. For example 2016 is 16.
   number: string # The credit card number
-]: any -> record<code: string, message: string, token: string, version: int> {
+]: any -> oneof<record<code: string, message: string, token: string, version: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

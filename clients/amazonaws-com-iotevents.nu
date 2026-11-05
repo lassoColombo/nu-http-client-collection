@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -118,9 +142,9 @@ def evaluation-method-completer [] { ["BATCH" "SERIAL"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-alarm-model" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["create-alarm-model" "list-alarm-models" "create-detector-model" "list-detector-models" "create-input" "list-inputs" "delete-alarm-model" "describe-alarm-model" "update-alarm-model" "delete-detector-model" "describe-detector-model" "update-detector-model" "delete-input" "describe-input" "update-input" "describe-detector-model-analysis" "describe-logging-options" "put-logging-options" "get-detector-model-analysis-results" "list-alarm-model-versions" "list-detector-model-versions" "list-input-routings" "list-tags-for-resource" "tag-resource" "start-detector-model-analysis" "untag-resource" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -142,11 +166,6 @@ export def commands []: nothing -> table {
 #
 # POST /alarm-models
 # operationId: CreateAlarmModel
-# --tags item shape: {key: string, value: string}
-# --alarmRule shape: {simpleRule?: record}
-# --alarmNotification shape: {notificationActions?: list}
-# --alarmEventActions shape: {alarmActions?: list}
-# --alarmCapabilities shape: {initializationConfiguration?: record, acknowledgeFlow?: record}
 export def "create-alarm-model" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -174,7 +193,7 @@ export def "create-alarm-model" [
   --alarm-notification: record # Contains information about one or more notification actions. — shape: {notificationActions?: list}
   --alarm-event-actions: record # Contains information about one or more alarm actions. — shape: {alarmActions?: list}
   --alarm-capabilities: record # Contains the configuration information of alarm state changes. — shape: {initializationConfiguration?: record, acknowledgeFlow?: record}
-]: any -> record<creationTime: string, alarmModelArn: string, alarmModelVersion: string, lastUpdateTime: string, status: string> {
+]: any -> oneof<record<creationTime: string, alarmModelArn: string, alarmModelVersion: string, lastUpdateTime: string, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -222,7 +241,7 @@ export def "list-alarm-models" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<alarmModelSummaries: table<creationTime: string, alarmModelDescription: string, alarmModelName: string>, nextToken: string> {
+]: nothing -> oneof<record<alarmModelSummaries: table<creationTime: string, alarmModelDescription: string, alarmModelName: string>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
@@ -249,8 +268,6 @@ export def "list-alarm-models" [
 #
 # POST /detector-models
 # operationId: CreateDetectorModel
-# --detectorModelDefinition shape: {states?: list, initialStateName?: string}
-# --tags item shape: {key: string, value: string}
 export def "create-detector-model" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -275,7 +292,7 @@ export def "create-detector-model" [
   role_arn: string # The ARN of the role that grants permission to AWS IoT Events to perform its operations.
   --tags: list # Metadata that can be used to manage the detector model. — item shape: {key: string, value: string}
   --evaluation-method: string@evaluation-method-completer # Information about the order in which events are evaluated and how actions are executed.
-]: any -> record<detectorModelConfiguration: record<detectorModelName: string, detectorModelVersion: string, detectorModelDescription: string, detectorModelArn: string, roleArn: string, creationTime: string, lastUpdateTime: string, status: string, key: string, evaluationMethod: string>> {
+]: any -> oneof<record<detectorModelConfiguration: record<detectorModelName: string, detectorModelVersion: string, detectorModelDescription: string, detectorModelArn: string, roleArn: string, creationTime: string, lastUpdateTime: string, status: string, key: string, evaluationMethod: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -323,7 +340,7 @@ export def "list-detector-models" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<detectorModelSummaries: table<detectorModelName: string, detectorModelDescription: string, creationTime: string>, nextToken: string> {
+]: nothing -> oneof<record<detectorModelSummaries: table<detectorModelName: string, detectorModelDescription: string, creationTime: string>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
@@ -350,8 +367,6 @@ export def "list-detector-models" [
 #
 # POST /inputs
 # operationId: CreateInput
-# --inputDefinition shape: {attributes?: list}
-# --tags item shape: {key: string, value: string}
 export def "create-input" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -373,7 +388,7 @@ export def "create-input" [
   --input-description: string # A brief description of the input.
   input_definition: record # The definition of the input. — shape: {attributes?: list}
   --tags: list # Metadata that can be used to manage the input. — item shape: {key: string, value: string}
-]: any -> record<inputConfiguration: record<inputName: string, inputDescription: string, inputArn: string, creationTime: string, lastUpdateTime: string, status: string>> {
+]: any -> oneof<record<inputConfiguration: record<inputName: string, inputDescription: string, inputArn: string, creationTime: string, lastUpdateTime: string, status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -421,7 +436,7 @@ export def "list-inputs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<inputSummaries: table<inputName: string, inputDescription: string, inputArn: string, creationTime: string, lastUpdateTime: string, status: string>, nextToken: string> {
+]: nothing -> oneof<record<inputSummaries: table<inputName: string, inputDescription: string, inputArn: string, creationTime: string, lastUpdateTime: string, status: string>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
@@ -466,7 +481,7 @@ export def "delete-alarm-model" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($alarm_model_name | is-empty) { error make --unspanned { msg: "path parameter 'alarmModelName' must be non-empty" } }
@@ -512,7 +527,7 @@ export def "describe-alarm-model" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<creationTime: string, alarmModelArn: string, alarmModelVersion: string, lastUpdateTime: string, status: string, statusMessage: string, alarmModelName: string, alarmModelDescription: string, roleArn: string, key: string, severity: int, alarmRule: record<simpleRule: record<inputProperty: string, comparisonOperator: string, threshold: string>>, alarmNotification: record<notificationActions: list<record>>, alarmEventActions: record<alarmActions: list<record>>, alarmCapabilities: record<initializationConfiguration: record<disabledOnInitialization: bool>, acknowledgeFlow: record<enabled: bool>>> {
+]: nothing -> oneof<record<creationTime: string, alarmModelArn: string, alarmModelVersion: string, lastUpdateTime: string, status: string, statusMessage: string, alarmModelName: string, alarmModelDescription: string, roleArn: string, key: string, severity: int, alarmRule: record<simpleRule: record<inputProperty: string, comparisonOperator: string, threshold: string>>, alarmNotification: record<notificationActions: list<record>>, alarmEventActions: record<alarmActions: list<record>>, alarmCapabilities: record<initializationConfiguration: record<disabledOnInitialization: bool>, acknowledgeFlow: record<enabled: bool>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($alarm_model_name | is-empty) { error make --unspanned { msg: "path parameter 'alarmModelName' must be non-empty" } }
@@ -540,10 +555,6 @@ export def "describe-alarm-model" [
 #
 # POST /alarm-models/{alarmModelName}
 # operationId: UpdateAlarmModel
-# --alarmRule shape: {simpleRule?: record}
-# --alarmNotification shape: {notificationActions?: list}
-# --alarmEventActions shape: {alarmActions?: list}
-# --alarmCapabilities shape: {initializationConfiguration?: record, acknowledgeFlow?: record}
 export def "update-alarm-model" [
   alarm_model_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -569,7 +580,7 @@ export def "update-alarm-model" [
   --alarm-notification: record # Contains information about one or more notification actions. — shape: {notificationActions?: list}
   --alarm-event-actions: record # Contains information about one or more alarm actions. — shape: {alarmActions?: list}
   --alarm-capabilities: record # Contains the configuration information of alarm state changes. — shape: {initializationConfiguration?: record, acknowledgeFlow?: record}
-]: any -> record<creationTime: string, alarmModelArn: string, alarmModelVersion: string, lastUpdateTime: string, status: string> {
+]: any -> oneof<record<creationTime: string, alarmModelArn: string, alarmModelVersion: string, lastUpdateTime: string, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -617,7 +628,7 @@ export def "delete-detector-model" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($detector_model_name | is-empty) { error make --unspanned { msg: "path parameter 'detectorModelName' must be non-empty" } }
@@ -663,7 +674,7 @@ export def "describe-detector-model" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<detectorModel: record<detectorModelDefinition: record<states: list, initialStateName: string>, detectorModelConfiguration: record<detectorModelName: string, detectorModelVersion: string, detectorModelDescription: string, detectorModelArn: string, roleArn: string, creationTime: string, lastUpdateTime: string, status: string, key: string, evaluationMethod: string>>> {
+]: nothing -> oneof<record<detectorModel: record<detectorModelDefinition: record<states: list, initialStateName: string>, detectorModelConfiguration: record<detectorModelName: string, detectorModelVersion: string, detectorModelDescription: string, detectorModelArn: string, roleArn: string, creationTime: string, lastUpdateTime: string, status: string, key: string, evaluationMethod: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($detector_model_name | is-empty) { error make --unspanned { msg: "path parameter 'detectorModelName' must be non-empty" } }
@@ -691,7 +702,6 @@ export def "describe-detector-model" [
 #
 # POST /detector-models/{detectorModelName}
 # operationId: UpdateDetectorModel
-# --detectorModelDefinition shape: {states?: list, initialStateName?: string}
 export def "update-detector-model" [
   detector_model_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -714,7 +724,7 @@ export def "update-detector-model" [
   --detector-model-description: string # A brief description of the detector model.
   role_arn: string # The ARN of the role that grants permission to AWS IoT Events to perform its operations.
   --evaluation-method: string@evaluation-method-completer # Information about the order in which events are evaluated and how actions are executed.
-]: any -> record<detectorModelConfiguration: record<detectorModelName: string, detectorModelVersion: string, detectorModelDescription: string, detectorModelArn: string, roleArn: string, creationTime: string, lastUpdateTime: string, status: string, key: string, evaluationMethod: string>> {
+]: any -> oneof<record<detectorModelConfiguration: record<detectorModelName: string, detectorModelVersion: string, detectorModelDescription: string, detectorModelArn: string, roleArn: string, creationTime: string, lastUpdateTime: string, status: string, key: string, evaluationMethod: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -762,7 +772,7 @@ export def "delete-input" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($input_name | is-empty) { error make --unspanned { msg: "path parameter 'inputName' must be non-empty" } }
@@ -807,7 +817,7 @@ export def "describe-input" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<input: record<inputConfiguration: record<inputName: string, inputDescription: string, inputArn: string, creationTime: string, lastUpdateTime: string, status: string>, inputDefinition: record<attributes: list>>> {
+]: nothing -> oneof<record<input: record<inputConfiguration: record<inputName: string, inputDescription: string, inputArn: string, creationTime: string, lastUpdateTime: string, status: string>, inputDefinition: record<attributes: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($input_name | is-empty) { error make --unspanned { msg: "path parameter 'inputName' must be non-empty" } }
@@ -834,7 +844,6 @@ export def "describe-input" [
 #
 # PUT /inputs/{inputName}
 # operationId: UpdateInput
-# --inputDefinition shape: {attributes?: list}
 export def "update-input" [
   input_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -855,7 +864,7 @@ export def "update-input" [
   --x-amz-signed-headers: string
   --input-description: string # A brief description of the input.
   input_definition: record # The definition of the input. — shape: {attributes?: list}
-]: any -> record<inputConfiguration: record<inputName: string, inputDescription: string, inputArn: string, creationTime: string, lastUpdateTime: string, status: string>> {
+]: any -> oneof<record<inputConfiguration: record<inputName: string, inputDescription: string, inputArn: string, creationTime: string, lastUpdateTime: string, status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -903,7 +912,7 @@ export def "describe-detector-model-analysis" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<status: string> {
+]: nothing -> oneof<record<status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($analysis_id | is-empty) { error make --unspanned { msg: "path parameter 'analysisId' must be non-empty" } }
@@ -947,7 +956,7 @@ export def "describe-logging-options" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<loggingOptions: record<roleArn: string, level: string, enabled: bool, detectorDebugOptions: list<record>>> {
+]: nothing -> oneof<record<loggingOptions: record<roleArn: string, level: string, enabled: bool, detectorDebugOptions: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/logging" $auth.query)
@@ -973,7 +982,6 @@ export def "describe-logging-options" [
 #
 # PUT /logging
 # operationId: PutLoggingOptions
-# --loggingOptions shape: {roleArn?: string, level?: "ERROR"|"INFO"|"DEBUG", enabled?: bool, detectorDebugOptions?: list}
 export def "put-logging-options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1041,7 +1049,7 @@ export def "get-detector-model-analysis-results" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<analysisResults: table<type: string, level: string, message: string, locations: list>, nextToken: string> {
+]: nothing -> oneof<record<analysisResults: table<type: string, level: string, message: string, locations: list>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($analysis_id | is-empty) { error make --unspanned { msg: "path parameter 'analysisId' must be non-empty" } }
@@ -1089,7 +1097,7 @@ export def "list-alarm-model-versions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<alarmModelVersionSummaries: table<alarmModelName: string, alarmModelArn: string, alarmModelVersion: string, roleArn: string, creationTime: string, lastUpdateTime: string, status: string, statusMessage: string>, nextToken: string> {
+]: nothing -> oneof<record<alarmModelVersionSummaries: table<alarmModelName: string, alarmModelArn: string, alarmModelVersion: string, roleArn: string, creationTime: string, lastUpdateTime: string, status: string, statusMessage: string>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($alarm_model_name | is-empty) { error make --unspanned { msg: "path parameter 'alarmModelName' must be non-empty" } }
@@ -1137,7 +1145,7 @@ export def "list-detector-model-versions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<detectorModelVersionSummaries: table<detectorModelName: string, detectorModelVersion: string, detectorModelArn: string, roleArn: string, creationTime: string, lastUpdateTime: string, status: string, evaluationMethod: string>, nextToken: string> {
+]: nothing -> oneof<record<detectorModelVersionSummaries: table<detectorModelName: string, detectorModelVersion: string, detectorModelArn: string, roleArn: string, creationTime: string, lastUpdateTime: string, status: string, evaluationMethod: string>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($detector_model_name | is-empty) { error make --unspanned { msg: "path parameter 'detectorModelName' must be non-empty" } }
@@ -1165,7 +1173,6 @@ export def "list-detector-model-versions" [
 #
 # POST /input-routings
 # operationId: ListInputRoutings
-# --inputIdentifier shape: {iotEventsInputIdentifier?: record, iotSiteWiseInputIdentifier?: record}
 export def "list-input-routings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1186,7 +1193,7 @@ export def "list-input-routings" [
   input_identifier: record # The identifer of the input. — shape: {iotEventsInputIdentifier?: record, iotSiteWiseInputIdentifier?: record}
   --max-results: int # The maximum number of results to be returned per request.
   --next-token: string # The token that you can use to return the next set of results.
-]: any -> record<routedResources: table<name: string, arn: string>, nextToken: string> {
+]: any -> oneof<record<routedResources: table<name: string, arn: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1233,7 +1240,7 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<tags: table<key: string, value: string>> {
+]: nothing -> oneof<record<tags: table<key: string, value: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn == null) { error make --unspanned { msg: "required query parameter 'resourceArn' missing: pass --resource-arn" } }
@@ -1261,7 +1268,6 @@ export def "list-tags-for-resource" [
 #
 # POST /tags
 # operationId: TagResource
-# --tags item shape: {key: string, value: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1281,7 +1287,7 @@ export def "tag-resource" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   tags: list # The new or modified tags for the resource. — item shape: {key: string, value: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1312,7 +1318,6 @@ export def "tag-resource" [
 #
 # POST /analysis/detector-models/
 # operationId: StartDetectorModelAnalysis
-# --detectorModelDefinition shape: {states?: list, initialStateName?: string}
 export def "start-detector-model-analysis" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1331,7 +1336,7 @@ export def "start-detector-model-analysis" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   detector_model_definition: record # Information that defines how a detector operates. — shape: {states?: list, initialStateName?: string}
-]: any -> record<analysisId: string> {
+]: any -> oneof<record<analysisId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1379,7 +1384,7 @@ export def "untag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn == null) { error make --unspanned { msg: "required query parameter 'resourceArn' missing: pass --resource-arn" } }

@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -118,9 +142,9 @@ def accept-completer [] { ["application/json" "application/ld+json" "text/csv" "
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-agent-flush-aggregate-request-collection" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["post-agent-flush-aggregate-request-collection" "post-agent-flush-requests" "post-instance-collection" "put-instance-item" "agent-legacy-complex-rule-collection" "agent-legacy-straight-rule-collection" "agent-rule-collection" "get-aggregate-log-collection" "get-aggregate-log-item" "get-crawl-url-collection" "get-crawl-url-item" "get-crawl-collection" "post-crawl-collection" "get-crawl-item" "cancel-crawl-item" "post-explain-url-collection" "get-explain-url-item" "export-rule-collection" "post-impact-rule-change-collection" "get-impact-rule-change-item" "post-impact-smart-list-collection" "get-impact-smart-list-item" "get-import-collection" "post-import-collection" "get-import-item" "get-instance-collection" "get-instance-item" "logging-instance-item" "live-instance-item" "get-invitation-collection" "post-invitation-collection" "accept-invitation-item" "delete-invitation-item" "get-invitation-item" "get-log-collection" "get-log-item" "post-marker-collection" "delete-marker-item" "get-marker-item" "put-marker-item" "post-matching-url-collection" "get-matching-url-item" "get-notification-collection" "get-notification-item" "post-organization-collection" "delete-organization-item" "get-organization-item" "put-organization-item" "post-post-logs" "get-project-collection" "post-project-collection" "delete-project-item" "get-project-item" "put-project-item" "get-publish-history-collection" "get-publish-history-item" "get-rule-change-collection" "post-rule-change-collection" "delete-rule-change-item" "get-rule-change-item" "get-rule-set-version-collection" "get-rule-set-version-item" "clear-rule-set-version-item" "publish-rule-set-version-item" "get-rule-statistic-collection" "get-rule-statistic-item" "get-rule-collection" "get-rule-item" "get-smart-list-collection" "get-smart-list-item" "post-user-organization-collection" "delete-user-organization-item" "get-user-organization-item" "put-user-organization-item" "get-user-project-flattened-item" "post-user-project-collection" "delete-user-project-item" "get-user-project-item" "put-user-project-item" "get-user-collection" "post-user-collection" "post-forgot-password-request-collection" "forgot-password-user-item" "delete-user-item" "get-user-item" "confirm-new-email-user-item" "edit-email-user-item" "edit-info-user-item" "edit-password-user-item" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -156,7 +180,7 @@ export def "post-agent-flush-aggregate-request-collection" [
   instance_name: any
   instance_time: any
   logs: any
-]: any -> record<instanceName: any, instanceTime: any, logs: any> {
+]: any -> oneof<record<instanceName: any, instanceTime: any, logs: any>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -196,7 +220,7 @@ export def "post-agent-flush-requests" [
   instance_name: any
   instance_time: int
   logs: list<string>
-]: any -> record<instanceName: any, instanceTime: int, logs: list<string>> {
+]: any -> oneof<record<instanceName: any, instanceTime: int, logs: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -238,7 +262,7 @@ export def "post-instance-collection" [
   --message: string
   --rules-count: int
   --rules-hash: string
-]: any -> record<agentDuration: int, agentVersion: string, agentVersionStatus: string, config: string, createdAt: string, gone: bool, id: string, lastCompletedAt: string, lastStartedAt: string, live: bool, logging: bool, logsLastFlushedAt: string, message: string, misconfigured: bool, name: string, rulesCount: int, rulesHash: string, stale: bool, status: int, updatedAt: string> {
+]: any -> oneof<record<agentDuration: int, agentVersion: string, agentVersionStatus: string, config: string, createdAt: string, gone: bool, id: string, lastCompletedAt: string, lastStartedAt: string, live: bool, logging: bool, logsLastFlushedAt: string, message: string, misconfigured: bool, name: string, rulesCount: int, rulesHash: string, stale: bool, status: int, updatedAt: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -281,7 +305,7 @@ export def "put-instance-item" [
   --message: string
   --rules-count: int
   --rules-hash: string
-]: any -> record<agentDuration: int, agentVersion: string, agentVersionStatus: string, config: string, createdAt: string, gone: bool, id: string, lastCompletedAt: string, lastStartedAt: string, live: bool, logging: bool, logsLastFlushedAt: string, message: string, misconfigured: bool, name: string, rulesCount: int, rulesHash: string, stale: bool, status: int, updatedAt: string> {
+]: any -> oneof<record<agentDuration: int, agentVersion: string, agentVersionStatus: string, config: string, createdAt: string, gone: bool, id: string, lastCompletedAt: string, lastStartedAt: string, live: bool, logging: bool, logsLastFlushedAt: string, message: string, misconfigured: bool, name: string, rulesCount: int, rulesHash: string, stale: bool, status: int, updatedAt: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -321,7 +345,7 @@ export def "agent-legacy-complex-rule-collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --project-id: string # required
-]: nothing -> table<actions: list<string>, changes: list<record>, currentChange: record<action: string, actions: list, author: record, createdAt: string, examples: list, formattedSource: string, id: string, markers: list, matchOnResponseStatus: int, rank: int, ruleId: string, source: string>, examples: list<string>, formattedSource: string, id: string, markers: list<record>, matchOnResponseStatus: int, rank: int, source: string, updatedAt: string, viewCount: int> {
+]: nothing -> oneof<table<actions: list<string>, changes: list<record>, currentChange: record<action: string, actions: list, author: record, createdAt: string, examples: list, formattedSource: string, id: string, markers: list, matchOnResponseStatus: int, rank: int, ruleId: string, source: string>, examples: list<string>, formattedSource: string, id: string, markers: list<record>, matchOnResponseStatus: int, rank: int, source: string, updatedAt: string, viewCount: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id == null) { error make --unspanned { msg: "required query parameter 'projectId' missing: pass --project-id" } }
@@ -359,7 +383,7 @@ export def "agent-legacy-straight-rule-collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --project-id: string # required
-]: nothing -> table<actions: list<string>, changes: list<record>, currentChange: record<action: string, actions: list, author: record, createdAt: string, examples: list, formattedSource: string, id: string, markers: list, matchOnResponseStatus: int, rank: int, ruleId: string, source: string>, examples: list<string>, formattedSource: string, id: string, markers: list<record>, matchOnResponseStatus: int, rank: int, source: string, updatedAt: string, viewCount: int> {
+]: nothing -> oneof<table<actions: list<string>, changes: list<record>, currentChange: record<action: string, actions: list, author: record, createdAt: string, examples: list, formattedSource: string, id: string, markers: list, matchOnResponseStatus: int, rank: int, ruleId: string, source: string>, examples: list<string>, formattedSource: string, id: string, markers: list<record>, matchOnResponseStatus: int, rank: int, source: string, updatedAt: string, viewCount: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id == null) { error make --unspanned { msg: "required query parameter 'projectId' missing: pass --project-id" } }
@@ -397,7 +421,7 @@ export def "agent-rule-collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --project-id: string # required
-]: nothing -> table<actions: list<string>, changes: list<record>, currentChange: record<action: string, actions: list, author: record, createdAt: string, examples: list, formattedSource: string, id: string, markers: list, matchOnResponseStatus: int, rank: int, ruleId: string, source: string>, examples: list<string>, formattedSource: string, id: string, markers: list<record>, matchOnResponseStatus: int, rank: int, source: string, updatedAt: string, viewCount: int> {
+]: nothing -> oneof<table<actions: list<string>, changes: list<record>, currentChange: record<action: string, actions: list, author: record, createdAt: string, examples: list, formattedSource: string, id: string, markers: list, matchOnResponseStatus: int, rank: int, ruleId: string, source: string>, examples: list<string>, formattedSource: string, id: string, markers: list<record>, matchOnResponseStatus: int, rank: int, source: string, updatedAt: string, viewCount: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id == null) { error make --unspanned { msg: "required query parameter 'projectId' missing: pass --project-id" } }
@@ -456,7 +480,7 @@ export def "get-aggregate-log-collection" [
   --status-code-gte: string
   --status-code-lt: string
   --status-code-lte: string
-]: nothing -> table<fixed: bool, id: any, lastOccurrenceAt: string, ruleId: string, source: any, statusCode: int, target: any, viewCount: int> {
+]: nothing -> oneof<table<fixed: bool, id: any, lastOccurrenceAt: string, ruleId: string, source: any, statusCode: int, target: any, viewCount: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "projectId" $project_id "scalar") (serialize-qp "createdAt" $created_at "scalar") (serialize-qp "source" $source "scalar") (serialize-qp "target" $target "scalar") (serialize-qp "statusCode" $status_code "scalar") (serialize-qp "referrer" $referrer "scalar") (serialize-qp "userAgent" $user_agent "scalar") (serialize-qp "userAgentType" $user_agent_type "scalar") (serialize-qp "simplifiedUserAgent" $simplified_user_agent "scalar") (serialize-qp "ruleId" $rule_id "scalar") (serialize-qp "instanceName" $instance_name "scalar") (serialize-qp "excludeUrls" $exclude_urls "scalar") (serialize-qp "excludeEmptyReferrer" $exclude_empty_referrer "scalar") (serialize-qp "createdAt_gt" $created_at_gt "scalar") (serialize-qp "createdAt_gte" $created_at_gte "scalar") (serialize-qp "createdAt_lt" $created_at_lt "scalar") (serialize-qp "createdAt_lte" $created_at_lte "scalar") (serialize-qp "statusCode_gt" $status_code_gt "scalar") (serialize-qp "statusCode_gte" $status_code_gte "scalar") (serialize-qp "statusCode_lt" $status_code_lt "scalar") (serialize-qp "statusCode_lte" $status_code_lte "scalar")] | flatten | str join "&"
@@ -493,7 +517,7 @@ export def "get-aggregate-log-item" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<fixed: bool, id: any, lastOccurrenceAt: string, ruleId: string, source: any, statusCode: int, target: any, viewCount: int> {
+]: nothing -> oneof<record<fixed: bool, id: any, lastOccurrenceAt: string, ruleId: string, source: any, statusCode: int, target: any, viewCount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -530,7 +554,7 @@ export def "get-crawl-url-collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number
-]: nothing -> table<curlInfo: any, depth: any, description: any, error: any, id: any, redirectUrl: any, statusCode: any, title: any, url: any, urlsTo: string> {
+]: nothing -> oneof<table<curlInfo: any, depth: any, description: any, error: any, id: any, redirectUrl: any, statusCode: any, title: any, url: any, urlsTo: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar")] | flatten | str join "&"
@@ -567,7 +591,7 @@ export def "get-crawl-url-item" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<curlInfo: any, depth: any, description: any, error: any, id: any, redirectUrl: any, statusCode: any, title: any, url: any, urlsTo: string> {
+]: nothing -> oneof<record<curlInfo: any, depth: any, description: any, error: any, id: any, redirectUrl: any, statusCode: any, title: any, url: any, urlsTo: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -607,7 +631,7 @@ export def "get-crawl-collection" [
   --first-url: string
   --sort-created-at: string
   --page: int # The collection page number
-]: nothing -> table<archived: bool, author: record<name: string>, createdAt: string, error: string, finishedAt: string, firstUrl: string, id: string, stats: list<string>, trigger: string, updatedAt: string> {
+]: nothing -> oneof<table<archived: bool, author: record<name: string>, createdAt: string, error: string, finishedAt: string, firstUrl: string, id: string, stats: list<string>, trigger: string, updatedAt: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id == null) { error make --unspanned { msg: "required query parameter 'projectId' missing: pass --project-id" } }
@@ -657,7 +681,7 @@ export def "post-crawl-collection" [
   --ssl-checking-disabled: oneof<nothing, bool>
   --subdomain-included: oneof<nothing, bool>
   --user-agent: any
-]: any -> record<archived: bool, author: record<currentPassword: any, defaultOrganization: record<createdAt: string, id: string, name: string, projects: list, slug: string, updatedAt: string, userOrganizations: list>, email: string, id: string, name: string, newEmail: string, newEmailToken: string, newEmailTokenExpiredAt: string, password: string, plainPassword: string, plainPasswordRepeat: any, projectsFlattened: list<string>, superAdmin: bool, updatedAt: string, userOrganizations: list<record>, userProjects: list<string>>, createdAt: string, currentConcurrency: int, error: string, finishedAt: string, firstUrl: string, id: string, marking: list<string>, stats: list<string>, trigger: string, updatedAt: string> {
+]: any -> oneof<record<archived: bool, author: record<currentPassword: any, defaultOrganization: record<createdAt: string, id: string, name: string, projects: list, slug: string, updatedAt: string, userOrganizations: list>, email: string, id: string, name: string, newEmail: string, newEmailToken: string, newEmailTokenExpiredAt: string, password: string, plainPassword: string, plainPasswordRepeat: any, projectsFlattened: list<string>, superAdmin: bool, updatedAt: string, userOrganizations: list<record>, userProjects: list<string>>, createdAt: string, currentConcurrency: int, error: string, finishedAt: string, firstUrl: string, id: string, marking: list<string>, stats: list<string>, trigger: string, updatedAt: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -698,7 +722,7 @@ export def "get-crawl-item" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<archived: bool, author: record<name: string>, createdAt: string, error: string, finishedAt: string, firstUrl: string, id: string, stats: list<string>, trigger: string, updatedAt: string> {
+]: nothing -> oneof<record<archived: bool, author: record<name: string>, createdAt: string, error: string, finishedAt: string, firstUrl: string, id: string, stats: list<string>, trigger: string, updatedAt: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -723,7 +747,6 @@ export def "get-crawl-item" [
 #
 # POST /crawls/{id}/cancel
 # operationId: cancelCrawlItem
-# --author shape: {currentPassword?: any, defaultOrganization?: record, email: string, name: string, newEmail?: string, newEmailToken?: string, newEmailTokenExpiredAt?: string, password?: string, plainPassword?: string, plainPasswordRepeat?: any, projectsFlattened?: list<string>, superAdmin?: bool, updatedAt?: string, userOrganizations?: list, userProjects?: list<string>}
 export def "cancel-crawl-item" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -740,7 +763,7 @@ export def "cancel-crawl-item" [
   --current-concurrency: int
   --marking: list<string>
   --stats: list<string>
-]: any -> record<archived: bool, author: record<name: string>, createdAt: string, error: string, finishedAt: string, firstUrl: string, id: string, stats: list<string>, trigger: string, updatedAt: string> {
+]: any -> oneof<record<archived: bool, author: record<name: string>, createdAt: string, error: string, finishedAt: string, firstUrl: string, id: string, stats: list<string>, trigger: string, updatedAt: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -781,7 +804,7 @@ export def "post-explain-url-collection" [
   --accept: string@accept-completer # Response content type
   project: string
   url: string
-]: any -> record<explain: any, id: string, project: string, url: string> {
+]: any -> oneof<record<explain: any, id: string, project: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -820,7 +843,7 @@ export def "get-explain-url-item" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<explain: any, id: string, project: string, url: string> {
+]: nothing -> oneof<record<explain: any, id: string, project: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -859,7 +882,7 @@ export def "export-rule-collection" [
   --project-id: string # required
   --sort-id: string
   --sort-view-count: string
-]: nothing -> table<actions: list<string>, changes: list<record>, currentChange: record<action: string, actions: list, author: record, createdAt: string, examples: list, formattedSource: string, id: string, markers: list, matchOnResponseStatus: int, rank: int, ruleId: string, source: string>, examples: list<string>, formattedSource: string, id: string, markers: list<record>, matchOnResponseStatus: int, rank: int, source: string, updatedAt: string, viewCount: int> {
+]: nothing -> oneof<table<actions: list<string>, changes: list<record>, currentChange: record<action: string, actions: list, author: record, createdAt: string, examples: list, formattedSource: string, id: string, markers: list, matchOnResponseStatus: int, rank: int, ruleId: string, source: string>, examples: list<string>, formattedSource: string, id: string, markers: list<record>, matchOnResponseStatus: int, rank: int, source: string, updatedAt: string, viewCount: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id == null) { error make --unspanned { msg: "required query parameter 'projectId' missing: pass --project-id" } }
@@ -898,7 +921,7 @@ export def "post-impact-rule-change-collection" [
   --accept: string@accept-completer # Response content type
   project: string
   rule_change: string
-]: any -> record<impact: any> {
+]: any -> oneof<record<impact: any>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -937,7 +960,7 @@ export def "get-impact-rule-change-item" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<impact: any> {
+]: nothing -> oneof<record<impact: any>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -976,7 +999,7 @@ export def "post-impact-smart-list-collection" [
   project: string
   smart_list_id: string
   --smart-list-version: string
-]: any -> record<impact: any, smartList: any> {
+]: any -> oneof<record<impact: any, smartList: any>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1015,7 +1038,7 @@ export def "get-impact-smart-list-item" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<impact: any, smartList: any> {
+]: nothing -> oneof<record<impact: any, smartList: any>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1053,7 +1076,7 @@ export def "get-import-collection" [
   --accept: string@accept-completer # Response content type
   --project-id: string # required
   --page: int # The collection page number
-]: nothing -> table<author: string, completedAt: string, errorCount: int, id: string, importDuration: int, message: string, project: string, startedAt: string, statusAsText: any, successCount: int, updatedAt: string> {
+]: nothing -> oneof<table<author: string, completedAt: string, errorCount: int, id: string, importDuration: int, message: string, project: string, startedAt: string, statusAsText: any, successCount: int, updatedAt: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id == null) { error make --unspanned { msg: "required query parameter 'projectId' missing: pass --project-id" } }
@@ -1092,7 +1115,7 @@ export def "post-import-collection" [
   --accept: string@accept-completer # Response content type
   csv_content: any
   project: string
-]: any -> record<author: string, completedAt: string, errorCount: int, id: string, importDuration: int, message: string, project: string, startedAt: string, statusAsText: any, successCount: int, updatedAt: string> {
+]: any -> oneof<record<author: string, completedAt: string, errorCount: int, id: string, importDuration: int, message: string, project: string, startedAt: string, statusAsText: any, successCount: int, updatedAt: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1131,7 +1154,7 @@ export def "get-import-item" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<author: string, completedAt: string, errorCount: int, id: string, importDuration: int, message: string, project: string, startedAt: string, statusAsText: any, successCount: int, updatedAt: string> {
+]: nothing -> oneof<record<author: string, completedAt: string, errorCount: int, id: string, importDuration: int, message: string, project: string, startedAt: string, statusAsText: any, successCount: int, updatedAt: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1168,7 +1191,7 @@ export def "get-instance-collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --project-id: string # required
-]: nothing -> table<agentDuration: int, agentVersion: string, agentVersionStatus: string, config: string, createdAt: string, gone: bool, id: string, lastCompletedAt: string, lastStartedAt: string, live: bool, logging: bool, logsLastFlushedAt: string, message: string, misconfigured: bool, name: string, rulesCount: int, rulesHash: string, stale: bool, status: int, updatedAt: string> {
+]: nothing -> oneof<table<agentDuration: int, agentVersion: string, agentVersionStatus: string, config: string, createdAt: string, gone: bool, id: string, lastCompletedAt: string, lastStartedAt: string, live: bool, logging: bool, logsLastFlushedAt: string, message: string, misconfigured: bool, name: string, rulesCount: int, rulesHash: string, stale: bool, status: int, updatedAt: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id == null) { error make --unspanned { msg: "required query parameter 'projectId' missing: pass --project-id" } }
@@ -1206,7 +1229,7 @@ export def "get-instance-item" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<agentDuration: int, agentVersion: string, agentVersionStatus: string, config: string, createdAt: string, gone: bool, id: string, lastCompletedAt: string, lastStartedAt: string, live: bool, logging: bool, logsLastFlushedAt: string, message: string, misconfigured: bool, name: string, rulesCount: int, rulesHash: string, stale: bool, status: int, updatedAt: string> {
+]: nothing -> oneof<record<agentDuration: int, agentVersion: string, agentVersionStatus: string, config: string, createdAt: string, gone: bool, id: string, lastCompletedAt: string, lastStartedAt: string, live: bool, logging: bool, logsLastFlushedAt: string, message: string, misconfigured: bool, name: string, rulesCount: int, rulesHash: string, stale: bool, status: int, updatedAt: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1247,7 +1270,7 @@ export def "logging-instance-item" [
   --message: string
   --rules-count: int
   --rules-hash: string
-]: any -> record<agentDuration: int, agentVersion: string, agentVersionStatus: string, config: string, createdAt: string, gone: bool, id: string, lastCompletedAt: string, lastStartedAt: string, live: bool, logging: bool, logsLastFlushedAt: string, message: string, misconfigured: bool, name: string, rulesCount: int, rulesHash: string, stale: bool, status: int, updatedAt: string> {
+]: any -> oneof<record<agentDuration: int, agentVersion: string, agentVersionStatus: string, config: string, createdAt: string, gone: bool, id: string, lastCompletedAt: string, lastStartedAt: string, live: bool, logging: bool, logsLastFlushedAt: string, message: string, misconfigured: bool, name: string, rulesCount: int, rulesHash: string, stale: bool, status: int, updatedAt: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1291,7 +1314,7 @@ export def "live-instance-item" [
   --message: string
   --rules-count: int
   --rules-hash: string
-]: any -> record<agentDuration: int, agentVersion: string, agentVersionStatus: string, config: string, createdAt: string, gone: bool, id: string, lastCompletedAt: string, lastStartedAt: string, live: bool, logging: bool, logsLastFlushedAt: string, message: string, misconfigured: bool, name: string, rulesCount: int, rulesHash: string, stale: bool, status: int, updatedAt: string> {
+]: any -> oneof<record<agentDuration: int, agentVersion: string, agentVersionStatus: string, config: string, createdAt: string, gone: bool, id: string, lastCompletedAt: string, lastStartedAt: string, live: bool, logging: bool, logsLastFlushedAt: string, message: string, misconfigured: bool, name: string, rulesCount: int, rulesHash: string, stale: bool, status: int, updatedAt: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1332,7 +1355,7 @@ export def "get-invitation-collection" [
   --accept: string@accept-completer # Response content type
   --target-id: string # required
   --target-type: string # required
-]: nothing -> table<createdAt: string, email: string, id: string> {
+]: nothing -> oneof<table<createdAt: string, email: string, id: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($target_id == null) { error make --unspanned { msg: "required query parameter 'targetId' missing: pass --target-id" } }
@@ -1372,7 +1395,7 @@ export def "post-invitation-collection" [
   --accept: string@accept-completer # Response content type
   email: string
   target: string
-]: any -> record<createdAt: string, email: string, id: string> {
+]: any -> oneof<record<createdAt: string, email: string, id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1412,7 +1435,7 @@ export def "accept-invitation-item" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --email: string
-]: any -> record<createdAt: string, email: string, id: string> {
+]: any -> oneof<record<createdAt: string, email: string, id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1488,7 +1511,7 @@ export def "get-invitation-item" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<createdAt: string, email: string, id: string> {
+]: nothing -> oneof<record<createdAt: string, email: string, id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1546,7 +1569,7 @@ export def "get-log-collection" [
   --status-code-gte: string
   --status-code-lt: string
   --status-code-lte: string
-]: nothing -> table<createdAt: string, fixed: bool, fixedByVersions: list<string>, fromSmartList: bool, id: any, instanceName: any, method: any, notFixedByVersions: list<string>, proxy: string, referrer: any, ruleId: string, simplifiedUserAgent: any, smartList: string, source: any, statusCode: any, target: any, userAgent: any, userAgentType: any> {
+]: nothing -> oneof<table<createdAt: string, fixed: bool, fixedByVersions: list<string>, fromSmartList: bool, id: any, instanceName: any, method: any, notFixedByVersions: list<string>, proxy: string, referrer: any, ruleId: string, simplifiedUserAgent: any, smartList: string, source: any, statusCode: any, target: any, userAgent: any, userAgentType: any>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "projectId" $project_id "scalar") (serialize-qp "createdAt" $created_at "scalar") (serialize-qp "source" $source "scalar") (serialize-qp "target" $target "scalar") (serialize-qp "statusCode" $status_code "scalar") (serialize-qp "referrer" $referrer "scalar") (serialize-qp "userAgent" $user_agent "scalar") (serialize-qp "userAgentType" $user_agent_type "scalar") (serialize-qp "simplifiedUserAgent" $simplified_user_agent "scalar") (serialize-qp "ruleId" $rule_id "scalar") (serialize-qp "instanceName" $instance_name "scalar") (serialize-qp "excludeUrls" $exclude_urls "scalar") (serialize-qp "excludeEmptyReferrer" $exclude_empty_referrer "scalar") (serialize-qp "createdAt_gt" $created_at_gt "scalar") (serialize-qp "createdAt_gte" $created_at_gte "scalar") (serialize-qp "createdAt_lt" $created_at_lt "scalar") (serialize-qp "createdAt_lte" $created_at_lte "scalar") (serialize-qp "statusCode_gt" $status_code_gt "scalar") (serialize-qp "statusCode_gte" $status_code_gte "scalar") (serialize-qp "statusCode_lt" $status_code_lt "scalar") (serialize-qp "statusCode_lte" $status_code_lte "scalar")] | flatten | str join "&"
@@ -1583,7 +1606,7 @@ export def "get-log-item" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<createdAt: string, fixed: bool, fixedByVersions: list<string>, fromSmartList: bool, id: any, instanceName: any, method: any, notFixedByVersions: list<string>, proxy: string, referrer: any, ruleId: string, simplifiedUserAgent: any, smartList: string, source: any, statusCode: any, target: any, userAgent: any, userAgentType: any> {
+]: nothing -> oneof<record<createdAt: string, fixed: bool, fixedByVersions: list<string>, fromSmartList: bool, id: any, instanceName: any, method: any, notFixedByVersions: list<string>, proxy: string, referrer: any, ruleId: string, simplifiedUserAgent: any, smartList: string, source: any, statusCode: any, target: any, userAgent: any, userAgentType: any>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1625,7 +1648,7 @@ export def "post-marker-collection" [
   --options: list<string>
   --transformers: list<string>
   type: string
-]: any -> record<id: string, maximumOccurrence: int, minimumOccurrence: int, name: string, options: list<string>, regex: string, transformers: list<string>, type: string> {
+]: any -> oneof<record<id: string, maximumOccurrence: int, minimumOccurrence: int, name: string, options: list<string>, regex: string, transformers: list<string>, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1700,7 +1723,7 @@ export def "get-marker-item" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<id: string, maximumOccurrence: int, minimumOccurrence: int, name: string, options: list<string>, regex: string, transformers: list<string>, type: string> {
+]: nothing -> oneof<record<id: string, maximumOccurrence: int, minimumOccurrence: int, name: string, options: list<string>, regex: string, transformers: list<string>, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1745,7 +1768,7 @@ export def "put-marker-item" [
   --regex: string
   --transformers: list<string>
   type: string
-]: any -> record<id: string, maximumOccurrence: int, minimumOccurrence: int, name: string, options: list<string>, regex: string, transformers: list<string>, type: string> {
+]: any -> oneof<record<id: string, maximumOccurrence: int, minimumOccurrence: int, name: string, options: list<string>, regex: string, transformers: list<string>, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1786,7 +1809,7 @@ export def "post-matching-url-collection" [
   --accept: string@accept-completer # Response content type
   --project: string
   --rule-change: string
-]: any -> record<matching: any> {
+]: any -> oneof<record<matching: any>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1825,7 +1848,7 @@ export def "get-matching-url-item" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<matching: any> {
+]: nothing -> oneof<record<matching: any>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1862,7 +1885,7 @@ export def "get-notification-collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number
-]: nothing -> table<createdAt: string, id: string, message: string, updatedAt: string> {
+]: nothing -> oneof<table<createdAt: string, id: string, message: string, updatedAt: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar")] | flatten | str join "&"
@@ -1899,7 +1922,7 @@ export def "get-notification-item" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<createdAt: string, id: string, message: string, updatedAt: string> {
+]: nothing -> oneof<record<createdAt: string, id: string, message: string, updatedAt: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1936,7 +1959,7 @@ export def "post-organization-collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   name: string
-]: any -> record<id: string, name: string, slug: string> {
+]: any -> oneof<record<id: string, name: string, slug: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2011,7 +2034,7 @@ export def "get-organization-item" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<id: string, name: string, slug: string> {
+]: nothing -> oneof<record<id: string, name: string, slug: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2049,7 +2072,7 @@ export def "put-organization-item" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   name: string
-]: any -> record<id: string, name: string, slug: string> {
+]: any -> oneof<record<id: string, name: string, slug: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2090,7 +2113,7 @@ export def "post-post-logs" [
   instance_name: any
   instance_time: int
   logs: list<string>
-]: any -> record<instanceName: any, instanceTime: int, logs: list<string>> {
+]: any -> oneof<record<instanceName: any, instanceTime: int, logs: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2128,7 +2151,7 @@ export def "get-project-collection" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<id: string, name: string, organization: record<name: string, slug: string>, slug: string, token: string> {
+]: nothing -> oneof<table<id: string, name: string, organization: record<name: string, slug: string>, slug: string, token: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/projects" $auth.query)
@@ -2167,7 +2190,7 @@ export def "post-project-collection" [
   name: string
   --onboarding-completed-demos: list<string>
   --organization: record
-]: any -> record<complexRulesCount: int, complexRulesUpdatedAt: string, configuration: list<string>, createdAt: string, currentVersion: record<createdAt: string, current: bool, id: string, isSnapshot: bool, mergedRulesCount: int, name: string, publishedAt: string, working: bool>, id: string, ignoreProjectTypes: list<string>, isPublishing: bool, name: string, onboardingCompletedDemos: list<string>, organization: record<id: string, name: string, slug: string>, plan: int, rulesHash: string, slug: string, straightRulesCount: int, straightRulesUpdatedAt: string, token: string, updatedAt: string, userProjects: table<functionalRoles: list, id: string, user: string>, usersFlattened: table<functionalRoles: list, user: string>, workingVersion: record<createdAt: string, current: bool, id: string, isSnapshot: bool, mergedRulesCount: int, name: string, publishedAt: string, working: bool>> {
+]: any -> oneof<record<complexRulesCount: int, complexRulesUpdatedAt: string, configuration: list<string>, createdAt: string, currentVersion: record<createdAt: string, current: bool, id: string, isSnapshot: bool, mergedRulesCount: int, name: string, publishedAt: string, working: bool>, id: string, ignoreProjectTypes: list<string>, isPublishing: bool, name: string, onboardingCompletedDemos: list<string>, organization: record<id: string, name: string, slug: string>, plan: int, rulesHash: string, slug: string, straightRulesCount: int, straightRulesUpdatedAt: string, token: string, updatedAt: string, userProjects: table<functionalRoles: list, id: string, user: string>, usersFlattened: table<functionalRoles: list, user: string>, workingVersion: record<createdAt: string, current: bool, id: string, isSnapshot: bool, mergedRulesCount: int, name: string, publishedAt: string, working: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2242,7 +2265,7 @@ export def "get-project-item" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<complexRulesCount: int, complexRulesUpdatedAt: string, configuration: list<string>, createdAt: string, currentVersion: record<createdAt: string, current: bool, id: string, isSnapshot: bool, mergedRulesCount: int, name: string, publishedAt: string, working: bool>, id: string, ignoreProjectTypes: list<string>, isPublishing: bool, name: string, onboardingCompletedDemos: list<string>, organization: record<id: string, name: string, slug: string>, plan: int, rulesHash: string, slug: string, straightRulesCount: int, straightRulesUpdatedAt: string, token: string, updatedAt: string, userProjects: table<functionalRoles: list, id: string, user: string>, usersFlattened: table<functionalRoles: list, user: string>, workingVersion: record<createdAt: string, current: bool, id: string, isSnapshot: bool, mergedRulesCount: int, name: string, publishedAt: string, working: bool>> {
+]: nothing -> oneof<record<complexRulesCount: int, complexRulesUpdatedAt: string, configuration: list<string>, createdAt: string, currentVersion: record<createdAt: string, current: bool, id: string, isSnapshot: bool, mergedRulesCount: int, name: string, publishedAt: string, working: bool>, id: string, ignoreProjectTypes: list<string>, isPublishing: bool, name: string, onboardingCompletedDemos: list<string>, organization: record<id: string, name: string, slug: string>, plan: int, rulesHash: string, slug: string, straightRulesCount: int, straightRulesUpdatedAt: string, token: string, updatedAt: string, userProjects: table<functionalRoles: list, id: string, user: string>, usersFlattened: table<functionalRoles: list, user: string>, workingVersion: record<createdAt: string, current: bool, id: string, isSnapshot: bool, mergedRulesCount: int, name: string, publishedAt: string, working: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2282,7 +2305,7 @@ export def "put-project-item" [
   --ignore-project-types: list<string>
   name: string
   --onboarding-completed-demos: list<string>
-]: any -> record<complexRulesCount: int, complexRulesUpdatedAt: string, configuration: list<string>, createdAt: string, currentVersion: record<createdAt: string, current: bool, id: string, isSnapshot: bool, mergedRulesCount: int, name: string, publishedAt: string, working: bool>, id: string, ignoreProjectTypes: list<string>, isPublishing: bool, name: string, onboardingCompletedDemos: list<string>, organization: record<id: string, name: string, slug: string>, plan: int, rulesHash: string, slug: string, straightRulesCount: int, straightRulesUpdatedAt: string, token: string, updatedAt: string, userProjects: table<functionalRoles: list, id: string, user: string>, usersFlattened: table<functionalRoles: list, user: string>, workingVersion: record<createdAt: string, current: bool, id: string, isSnapshot: bool, mergedRulesCount: int, name: string, publishedAt: string, working: bool>> {
+]: any -> oneof<record<complexRulesCount: int, complexRulesUpdatedAt: string, configuration: list<string>, createdAt: string, currentVersion: record<createdAt: string, current: bool, id: string, isSnapshot: bool, mergedRulesCount: int, name: string, publishedAt: string, working: bool>, id: string, ignoreProjectTypes: list<string>, isPublishing: bool, name: string, onboardingCompletedDemos: list<string>, organization: record<id: string, name: string, slug: string>, plan: int, rulesHash: string, slug: string, straightRulesCount: int, straightRulesUpdatedAt: string, token: string, updatedAt: string, userProjects: table<functionalRoles: list, id: string, user: string>, usersFlattened: table<functionalRoles: list, user: string>, workingVersion: record<createdAt: string, current: bool, id: string, isSnapshot: bool, mergedRulesCount: int, name: string, publishedAt: string, working: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2327,7 +2350,7 @@ export def "get-publish-history-collection" [
   --created-at-after: string
   --created-at-strictly-after: string
   --page: int # The collection page number
-]: nothing -> table<added: int, author: record<name: string>, createdAt: string, deleted: int, id: string, summary: string, type: string, updated: int, version: record<createdAt: string, current: bool, id: string, isSnapshot: bool, mergedRulesCount: int, name: string, publishedAt: string, working: bool>> {
+]: nothing -> oneof<table<added: int, author: record<name: string>, createdAt: string, deleted: int, id: string, summary: string, type: string, updated: int, version: record<createdAt: string, current: bool, id: string, isSnapshot: bool, mergedRulesCount: int, name: string, publishedAt: string, working: bool>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id == null) { error make --unspanned { msg: "required query parameter 'projectId' missing: pass --project-id" } }
@@ -2365,7 +2388,7 @@ export def "get-publish-history-item" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<added: int, author: record<name: string>, createdAt: string, deleted: int, id: string, summary: string, type: string, updated: int, version: record<createdAt: string, current: bool, id: string, isSnapshot: bool, mergedRulesCount: int, name: string, publishedAt: string, working: bool>> {
+]: nothing -> oneof<record<added: int, author: record<name: string>, createdAt: string, deleted: int, id: string, summary: string, type: string, updated: int, version: record<createdAt: string, current: bool, id: string, isSnapshot: bool, mergedRulesCount: int, name: string, publishedAt: string, working: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2403,7 +2426,7 @@ export def "get-rule-change-collection" [
   --accept: string@accept-completer # Response content type
   --version-id: string # required
   --page: int # The collection page number
-]: nothing -> table<action: string, actions: list<string>, author: record<name: string>, createdAt: string, examples: list<string>, formattedSource: string, id: string, markers: list<record>, matchOnResponseStatus: int, rank: int, ruleId: string, source: string> {
+]: nothing -> oneof<table<action: string, actions: list<string>, author: record<name: string>, createdAt: string, examples: list<string>, formattedSource: string, id: string, markers: list<record>, matchOnResponseStatus: int, rank: int, ruleId: string, source: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($version_id == null) { error make --unspanned { msg: "required query parameter 'versionId' missing: pass --version-id" } }
@@ -2429,7 +2452,6 @@ export def "get-rule-change-collection" [
 #
 # POST /rule-changes
 # operationId: postRuleChangeCollection
-# --markers item shape: {maximumOccurrence?: int, minimumOccurrence?: int, name: string, options?: list<string>, transformers?: list<string>, type: string}
 export def "post-rule-change-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2450,7 +2472,7 @@ export def "post-rule-change-collection" [
   rank: int
   --rule-id: string
   source: string
-]: any -> record<action: string, actions: list<string>, author: record<name: string>, createdAt: string, examples: list<string>, formattedSource: string, id: string, markers: table<maximumOccurrence: int, minimumOccurrence: int, name: string, options: list, transformers: list, type: string>, matchOnResponseStatus: int, rank: int, ruleId: string, source: string> {
+]: any -> oneof<record<action: string, actions: list<string>, author: record<name: string>, createdAt: string, examples: list<string>, formattedSource: string, id: string, markers: table<maximumOccurrence: int, minimumOccurrence: int, name: string, options: list, transformers: list, type: string>, matchOnResponseStatus: int, rank: int, ruleId: string, source: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2525,7 +2547,7 @@ export def "get-rule-change-item" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<action: string, actions: list<string>, author: record<name: string>, createdAt: string, examples: list<string>, formattedSource: string, id: string, markers: table<maximumOccurrence: int, minimumOccurrence: int, name: string, options: list, transformers: list, type: string>, matchOnResponseStatus: int, rank: int, ruleId: string, source: string> {
+]: nothing -> oneof<record<action: string, actions: list<string>, author: record<name: string>, createdAt: string, examples: list<string>, formattedSource: string, id: string, markers: table<maximumOccurrence: int, minimumOccurrence: int, name: string, options: list, transformers: list, type: string>, matchOnResponseStatus: int, rank: int, ruleId: string, source: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2564,7 +2586,7 @@ export def "get-rule-set-version-collection" [
   --project-id: string # required
   --sort-created-at: string
   --page: int # The collection page number
-]: nothing -> table<createdAt: string, current: bool, id: string, isSnapshot: bool, mergedRulesCount: int, name: string, publishedAt: string, working: bool> {
+]: nothing -> oneof<table<createdAt: string, current: bool, id: string, isSnapshot: bool, mergedRulesCount: int, name: string, publishedAt: string, working: bool>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id == null) { error make --unspanned { msg: "required query parameter 'projectId' missing: pass --project-id" } }
@@ -2602,7 +2624,7 @@ export def "get-rule-set-version-item" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<createdAt: string, current: bool, id: string, isSnapshot: bool, mergedRulesCount: int, name: string, publishedAt: string, working: bool> {
+]: nothing -> oneof<record<createdAt: string, current: bool, id: string, isSnapshot: bool, mergedRulesCount: int, name: string, publishedAt: string, working: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2643,7 +2665,7 @@ export def "clear-rule-set-version-item" [
   --merged-rules-count: int
   --name: string
   --published-at: string # format: date-time
-]: any -> record<createdAt: string, current: bool, id: string, isSnapshot: bool, mergedRulesCount: int, name: string, publishedAt: string, working: bool> {
+]: any -> oneof<record<createdAt: string, current: bool, id: string, isSnapshot: bool, mergedRulesCount: int, name: string, publishedAt: string, working: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2687,7 +2709,7 @@ export def "publish-rule-set-version-item" [
   --merged-rules-count: int
   --name: string
   --published-at: string # format: date-time
-]: any -> record<createdAt: string, current: bool, id: string, isSnapshot: bool, mergedRulesCount: int, name: string, publishedAt: string, working: bool> {
+]: any -> oneof<record<createdAt: string, current: bool, id: string, isSnapshot: bool, mergedRulesCount: int, name: string, publishedAt: string, working: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2727,7 +2749,7 @@ export def "get-rule-statistic-collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --project-id: string # required
-]: nothing -> table<id: string, stats: string> {
+]: nothing -> oneof<table<id: string, stats: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id == null) { error make --unspanned { msg: "required query parameter 'projectId' missing: pass --project-id" } }
@@ -2765,7 +2787,7 @@ export def "get-rule-statistic-item" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<id: string, stats: string> {
+]: nothing -> oneof<record<id: string, stats: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2805,7 +2827,7 @@ export def "get-rule-collection" [
   --sort-id: string
   --sort-view-count: string
   --page: int # The collection page number
-]: nothing -> table<actions: list<string>, changes: list<record>, currentChange: record<action: string, actions: list, author: record, createdAt: string, examples: list, formattedSource: string, id: string, markers: list, matchOnResponseStatus: int, rank: int, ruleId: string, source: string>, examples: list<string>, formattedSource: string, id: string, markers: list<record>, matchOnResponseStatus: int, rank: int, source: string, updatedAt: string, viewCount: int> {
+]: nothing -> oneof<table<actions: list<string>, changes: list<record>, currentChange: record<action: string, actions: list, author: record, createdAt: string, examples: list, formattedSource: string, id: string, markers: list, matchOnResponseStatus: int, rank: int, ruleId: string, source: string>, examples: list<string>, formattedSource: string, id: string, markers: list<record>, matchOnResponseStatus: int, rank: int, source: string, updatedAt: string, viewCount: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id == null) { error make --unspanned { msg: "required query parameter 'projectId' missing: pass --project-id" } }
@@ -2843,7 +2865,7 @@ export def "get-rule-item" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<actions: list<string>, changes: table<action: string, actions: list, author: record, createdAt: string, examples: list, formattedSource: string, id: string, markers: list, matchOnResponseStatus: int, rank: int, ruleId: string, source: string>, currentChange: record<action: string, actions: list<string>, author: record<name: string>, createdAt: string, examples: list<string>, formattedSource: string, id: string, markers: list<record>, matchOnResponseStatus: int, rank: int, ruleId: string, source: string>, examples: list<string>, formattedSource: string, id: string, markers: table<maximumOccurrence: int, minimumOccurrence: int, name: string, options: list, transformers: list, type: string>, matchOnResponseStatus: int, rank: int, source: string, updatedAt: string, viewCount: int> {
+]: nothing -> oneof<record<actions: list<string>, changes: table<action: string, actions: list, author: record, createdAt: string, examples: list, formattedSource: string, id: string, markers: list, matchOnResponseStatus: int, rank: int, ruleId: string, source: string>, currentChange: record<action: string, actions: list<string>, author: record<name: string>, createdAt: string, examples: list<string>, formattedSource: string, id: string, markers: list<record>, matchOnResponseStatus: int, rank: int, ruleId: string, source: string>, examples: list<string>, formattedSource: string, id: string, markers: table<maximumOccurrence: int, minimumOccurrence: int, name: string, options: list, transformers: list, type: string>, matchOnResponseStatus: int, rank: int, source: string, updatedAt: string, viewCount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2879,7 +2901,7 @@ export def "get-smart-list-collection" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<defaultVersion: string, description: string, id: string, name: string, rules: string, versions: list<string>> {
+]: nothing -> oneof<table<defaultVersion: string, description: string, id: string, name: string, rules: string, versions: list<string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/smart-lists" $auth.query)
@@ -2915,7 +2937,7 @@ export def "get-smart-list-item" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<defaultVersion: string, description: string, id: string, name: string, rules: string, versions: list<string>> {
+]: nothing -> oneof<record<defaultVersion: string, description: string, id: string, name: string, rules: string, versions: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2952,7 +2974,7 @@ export def "post-user-organization-collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   functional_roles: list<string>
-]: any -> record<functionalRoles: list<string>, id: string, organization: string, user: string> {
+]: any -> oneof<record<functionalRoles: list<string>, id: string, organization: string, user: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3027,7 +3049,7 @@ export def "get-user-organization-item" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<functionalRoles: list<string>, id: string, organization: string, user: string> {
+]: nothing -> oneof<record<functionalRoles: list<string>, id: string, organization: string, user: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3065,7 +3087,7 @@ export def "put-user-organization-item" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   functional_roles: list<string>
-]: any -> record<functionalRoles: list<string>, id: string, organization: string, user: string> {
+]: any -> oneof<record<functionalRoles: list<string>, id: string, organization: string, user: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3105,7 +3127,7 @@ export def "get-user-project-flattened-item" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<functionalRoles: list<string>, user: string> {
+]: nothing -> oneof<record<functionalRoles: list<string>, user: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3144,7 +3166,7 @@ export def "post-user-project-collection" [
   functional_roles: list<string>
   project: string
   user: string
-]: any -> record<functionalRoles: list<string>, id: string, user: string> {
+]: any -> oneof<record<functionalRoles: list<string>, id: string, user: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3219,7 +3241,7 @@ export def "get-user-project-item" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<functionalRoles: list<string>, id: string, user: string> {
+]: nothing -> oneof<record<functionalRoles: list<string>, id: string, user: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3257,7 +3279,7 @@ export def "put-user-project-item" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   functional_roles: list<string>
-]: any -> record<functionalRoles: list<string>, id: string, user: string> {
+]: any -> oneof<record<functionalRoles: list<string>, id: string, user: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3298,7 +3320,7 @@ export def "get-user-collection" [
   --accept: string@accept-completer # Response content type
   --organization-id: string # required
   --search: string
-]: nothing -> table<email: string, id: string, name: string> {
+]: nothing -> oneof<table<email: string, id: string, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organization_id == null) { error make --unspanned { msg: "required query parameter 'organizationId' missing: pass --organization-id" } }
@@ -3337,7 +3359,7 @@ export def "post-user-collection" [
   --accept: string@accept-completer # Response content type
   email: string
   name: string
-]: any -> record<name: string> {
+]: any -> oneof<record<name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3376,7 +3398,7 @@ export def "post-forgot-password-request-collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   email: string
-]: any -> record<email: string> {
+]: any -> oneof<record<email: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3417,7 +3439,7 @@ export def "forgot-password-user-item" [
   --accept: string@accept-completer # Response content type
   --plain-password: string
   --plain-password-repeat: any
-]: any -> record<name: string> {
+]: any -> oneof<record<name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3493,7 +3515,7 @@ export def "get-user-item" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<name: string> {
+]: nothing -> oneof<record<name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3531,7 +3553,7 @@ export def "confirm-new-email-user-item" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<name: string> {
+]: nothing -> oneof<record<name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3570,7 +3592,7 @@ export def "edit-email-user-item" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   name: string
-]: any -> record<name: string> {
+]: any -> oneof<record<name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3611,7 +3633,7 @@ export def "edit-info-user-item" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   name: string
-]: any -> record<name: string> {
+]: any -> oneof<record<name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3652,7 +3674,7 @@ export def "edit-password-user-item" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   name: string
-]: any -> record<name: string> {
+]: any -> oneof<record<name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

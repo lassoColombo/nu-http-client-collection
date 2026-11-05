@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -124,9 +148,9 @@ def auto-renew-completer [] { ["false" "true"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "billing-accounts-list" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["billing-accounts-list" "billing-accounts-get" "billing-accounts-update" "agreements-list-by-billing-account" "agreements-get" "billing-permissions-list-by-billing-account" "billing-profiles-list-by-billing-account" "billing-profiles-get" "billing-profiles-update" "billing-profiles-create" "available-balances-get-by-billing-profile" "billing-permissions-list-by-billing-profile" "billing-role-assignments-list-by-billing-profile" "billing-role-assignments-delete-by-billing-profile" "billing-role-assignments-get-by-billing-profile" "billing-role-definitions-list-by-billing-profile" "billing-role-definitions-get-by-billing-profile" "billing-subscriptions-list-by-billing-profile" "billing-role-assignments-add-by-billing-profile" "customers-list-by-billing-profile" "partner-transfers-initiate" "partner-transfers-list" "partner-transfers-cancel" "partner-transfers-get" "instructions-list-by-billing-profile" "instructions-get" "instructions-put" "invoice-sections-list-by-billing-profile" "invoice-sections-get" "invoice-sections-update" "invoice-sections-create" "billing-permissions-list-by-invoice-sections" "billing-role-assignments-list-by-invoice-section" "billing-role-assignments-delete-by-invoice-section" "billing-role-assignments-get-by-invoice-section" "billing-role-definitions-list-by-invoice-section" "billing-role-definitions-get-by-invoice-section" "billing-subscriptions-list-by-invoice-section" "billing-subscriptions-get" "billing-subscriptions-transfer" "billing-subscriptions-validate-transfer" "billing-role-assignments-add-by-invoice-section" "invoice-sections-elevate-to-billing-profile" "transfers-initiate" "products-list-by-invoice-section" "products-get" "products-transfer" "products-update-auto-renew-by-invoice-section" "products-validate-transfer" "transactions-list-by-invoice-section" "transfers-list" "transfers-cancel" "transfers-get" "invoices-list-by-billing-profile" "invoices-get" "price-sheet-download" "payment-methods-list-by-billing-profile" "policies-get-by-billing-profile" "policies-update" "price-sheet-download-by-billing-profile" "transactions-list-by-billing-profile" "transactions-get" "billing-role-assignments-list-by-billing-account" "billing-role-assignments-delete-by-billing-account" "billing-role-assignments-get-by-billing-account" "billing-role-definitions-list-by-billing-account" "billing-role-definitions-get-by-billing-account" "billing-subscriptions-list-by-billing-account" "invoices-list-by-billing-subscription" "invoices-get-by-id" "billing-role-assignments-add-by-billing-account" "customers-list-by-billing-account" "customers-get" "billing-permissions-list-by-customer" "billing-subscriptions-list-by-customer" "billing-subscriptions-get-by-customer" "policies-get-by-customer" "policies-update-customer" "products-list-by-customer" "products-get-by-customer" "transactions-list-by-customer" "departments-list-by-billing-account-name" "departments-get" "enrollment-accounts-list-by-billing-account-name" "enrollment-accounts-get-by-enrollment-account-id" "invoices-list-by-billing-account" "billing-accounts-list-invoice-sections-by-create-subscription-permission" "payment-methods-list-by-billing-account" "products-list-by-billing-account" "transactions-list-by-billing-account" "operations-list" "recipient-transfers-list" "recipient-transfers-get" "recipient-transfers-accept" "recipient-transfers-decline" "recipient-transfers-validate" "address-validate" "line-of-credits-get" "line-of-credits-update" "billing-property-get" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -160,7 +184,7 @@ export def "billing-accounts-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
   --expand: string # May be used to expand the address, invoiceSections and billingProfiles.
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
@@ -199,7 +223,7 @@ export def "billing-accounts-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
   --expand: string # May be used to expand the address, invoiceSections and billingProfiles.
-]: nothing -> record<properties: record<address: record<addressLine1: string, addressLine2: string, addressLine3: string, city: string, companyName: string, country: string, firstName: string, lastName: string, postalCode: string, region: string>, agreementType: string, billingProfiles: list<record>, customerType: string, departments: list<record>, displayName: string, enrollmentAccounts: list<record>, enrollmentDetails: record<billingCycle: string, channel: string, countryCode: string, currency: string, endDate: string, language: string, policies: record, startDate: string, status: string>, organizationId: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<address: record<addressLine1: string, addressLine2: string, addressLine3: string, city: string, companyName: string, country: string, firstName: string, lastName: string, postalCode: string, region: string>, agreementType: string, billingProfiles: list<record>, customerType: string, departments: list<record>, displayName: string, enrollmentAccounts: list<record>, enrollmentDetails: record<billingCycle: string, channel: string, countryCode: string, currency: string, endDate: string, language: string, policies: record, startDate: string, status: string>, organizationId: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -226,7 +250,6 @@ export def "billing-accounts-get" [
 #
 # PATCH /providers/Microsoft.Billing/billingAccounts/{billingAccountName}
 # operationId: BillingAccounts_Update
-# --properties shape: {address?: any, billingProfiles?: list, departments?: list, enrollmentAccounts?: list, enrollmentDetails?: any}
 export def "billing-accounts-update" [
   billing_account_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -240,7 +263,7 @@ export def "billing-accounts-update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
   --properties: any # The properties of the billing account. — shape: {address?: any, billingProfiles?: list, departments?: list, enrollmentAccounts?: list, enrollmentDetails?: any}
-]: any -> record<properties: record<address: record<addressLine1: string, addressLine2: string, addressLine3: string, city: string, companyName: string, country: string, firstName: string, lastName: string, postalCode: string, region: string>, agreementType: string, billingProfiles: list<record>, customerType: string, departments: list<record>, displayName: string, enrollmentAccounts: list<record>, enrollmentDetails: record<billingCycle: string, channel: string, countryCode: string, currency: string, endDate: string, language: string, policies: record, startDate: string, status: string>, organizationId: string>, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<address: record<addressLine1: string, addressLine2: string, addressLine3: string, city: string, companyName: string, country: string, firstName: string, lastName: string, postalCode: string, region: string>, agreementType: string, billingProfiles: list<record>, customerType: string, departments: list<record>, displayName: string, enrollmentAccounts: list<record>, enrollmentDetails: record<billingCycle: string, channel: string, countryCode: string, currency: string, endDate: string, language: string, policies: record, startDate: string, status: string>, organizationId: string>, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -283,7 +306,7 @@ export def "agreements-list-by-billing-account" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
   --expand: string # May be used to expand the participants.
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -324,7 +347,7 @@ export def "agreements-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
   --expand: string # May be used to expand the participants.
-]: nothing -> record<properties: record<agreementLink: string, effectiveDate: string, expirationDate: string, participants: list<record>, status: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<agreementLink: string, effectiveDate: string, expirationDate: string, participants: list<record>, status: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -364,7 +387,7 @@ export def "billing-permissions-list-by-billing-account" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
-]: nothing -> record<value: table<actions: list, notActions: list>> {
+]: nothing -> oneof<record<value: table<actions: list, notActions: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -404,7 +427,7 @@ export def "billing-profiles-list-by-billing-account" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
   --expand: string # May be used to expand the invoiceSections.
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -445,7 +468,7 @@ export def "billing-profiles-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
   --expand: string # May be used to expand the invoiceSections.
-]: nothing -> record<properties: record<address: record<addressLine1: string, addressLine2: string, addressLine3: string, city: string, companyName: string, country: string, firstName: string, lastName: string, postalCode: string, region: string>, currency: string, displayName: string, enabledAzurePlans: list<record>, invoiceDay: int, invoiceEmailOptIn: bool, invoiceSections: list<record>, poNumber: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<address: record<addressLine1: string, addressLine2: string, addressLine3: string, city: string, companyName: string, country: string, firstName: string, lastName: string, postalCode: string, region: string>, currency: string, displayName: string, enabledAzurePlans: list<record>, invoiceDay: int, invoiceEmailOptIn: bool, invoiceSections: list<record>, poNumber: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -473,7 +496,6 @@ export def "billing-profiles-get" [
 #
 # PATCH /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}
 # operationId: BillingProfiles_Update
-# --properties shape: {address?: any, displayName?: string, enabledAzurePlans?: list, invoiceEmailOptIn?: bool, invoiceSections?: list, poNumber?: string}
 export def "billing-profiles-update" [
   billing_account_name: string
   billing_profile_name: string
@@ -488,7 +510,7 @@ export def "billing-profiles-update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
   --properties: any # The properties of the billing profile. — shape: {address?: any, displayName?: string, enabledAzurePlans?: list, invoiceEmailOptIn?: bool, invoiceSections?: list, poNumber?: string}
-]: any -> record<properties: record<address: record<addressLine1: string, addressLine2: string, addressLine3: string, city: string, companyName: string, country: string, firstName: string, lastName: string, postalCode: string, region: string>, currency: string, displayName: string, enabledAzurePlans: list<record>, invoiceDay: int, invoiceEmailOptIn: bool, invoiceSections: list<record>, poNumber: string>, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<address: record<addressLine1: string, addressLine2: string, addressLine3: string, city: string, companyName: string, country: string, firstName: string, lastName: string, postalCode: string, region: string>, currency: string, displayName: string, enabledAzurePlans: list<record>, invoiceDay: int, invoiceEmailOptIn: bool, invoiceSections: list<record>, poNumber: string>, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -519,8 +541,6 @@ export def "billing-profiles-update" [
 #
 # PUT /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}
 # operationId: BillingProfiles_Create
-# --address shape: {addressLine1?: string, addressLine2?: string, addressLine3?: string, city?: string, companyName?: string, country?: string, firstName?: string, lastName?: string, postalCode?: string, region?: string}
-# --enabledAzurePlans item shape: {skuId?: string}
 export def "billing-profiles-create" [
   billing_account_name: string
   billing_profile_name: string
@@ -539,7 +559,7 @@ export def "billing-profiles-create" [
   --enabled-azure-plans: list # Enabled azure plans for this billing profile. — item shape: {skuId?: string}
   --invoice-email-opt-in: oneof<nothing, bool> # If the billing profile is opted in to receive invoices via email.
   --po-number: string # Purchase order number.
-]: any -> record<properties: record<address: record<addressLine1: string, addressLine2: string, addressLine3: string, city: string, companyName: string, country: string, firstName: string, lastName: string, postalCode: string, region: string>, currency: string, displayName: string, enabledAzurePlans: list<record>, invoiceDay: int, invoiceEmailOptIn: bool, invoiceSections: list<record>, poNumber: string>, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<address: record<addressLine1: string, addressLine2: string, addressLine3: string, city: string, companyName: string, country: string, firstName: string, lastName: string, postalCode: string, region: string>, currency: string, displayName: string, enabledAzurePlans: list<record>, invoiceDay: int, invoiceEmailOptIn: bool, invoiceSections: list<record>, poNumber: string>, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -583,7 +603,7 @@ export def "available-balances-get-by-billing-profile" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
-]: nothing -> record<properties: record<amount: record<currency: string, value: float>>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<amount: record<currency: string, value: float>>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -624,7 +644,7 @@ export def "billing-permissions-list-by-billing-profile" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
-]: nothing -> record<value: table<actions: list, notActions: list>> {
+]: nothing -> oneof<record<value: table<actions: list, notActions: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -665,7 +685,7 @@ export def "billing-role-assignments-list-by-billing-profile" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
-]: nothing -> record<value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -707,7 +727,7 @@ export def "billing-role-assignments-delete-by-billing-profile" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
-]: nothing -> record<properties: record<createdByPrincipalId: string, createdByPrincipalTenantId: string, createdOn: string, name: string, principalId: string, roleDefinitionName: string, scope: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<createdByPrincipalId: string, createdByPrincipalTenantId: string, createdOn: string, name: string, principalId: string, roleDefinitionName: string, scope: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -750,7 +770,7 @@ export def "billing-role-assignments-get-by-billing-profile" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
-]: nothing -> record<properties: record<createdByPrincipalId: string, createdByPrincipalTenantId: string, createdOn: string, name: string, principalId: string, roleDefinitionName: string, scope: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<createdByPrincipalId: string, createdByPrincipalTenantId: string, createdOn: string, name: string, principalId: string, roleDefinitionName: string, scope: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -792,7 +812,7 @@ export def "billing-role-definitions-list-by-billing-profile" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
-]: nothing -> record<value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -834,7 +854,7 @@ export def "billing-role-definitions-get-by-billing-profile" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
-]: nothing -> record<properties: record<description: string, permissions: list<record>, roleName: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<description: string, permissions: list<record>, roleName: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -877,7 +897,7 @@ export def "billing-subscriptions-list-by-billing-profile" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -920,7 +940,7 @@ export def "billing-role-assignments-add-by-billing-profile" [
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
   --billing-role-definition-id: string # The role definition id
   --principal-id: string # The user's principal id that the role gets assigned to
-]: any -> record<value: table<properties: record, id: string, name: string, type: string>> {
+]: any -> oneof<record<value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -966,7 +986,7 @@ export def "customers-list-by-billing-profile" [
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
   --filter: string # May be used to filter the list of customers.
   --skiptoken: string # Skiptoken is only used if a previous operation returned a partial result. If a previous response contains a nextLink element, the value of the nextLink element will include a skiptoken parameter that specifies a starting point to use for subsequent calls.
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -994,7 +1014,6 @@ export def "customers-list-by-billing-profile" [
 #
 # POST /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/customers/{customerName}/initiateTransfer
 # operationId: PartnerTransfers_Initiate
-# --properties shape: {recipientEmailId?: string, resellerId?: string}
 export def "partner-transfers-initiate" [
   billing_account_name: string
   billing_profile_name: string
@@ -1009,7 +1028,7 @@ export def "partner-transfers-initiate" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --properties: record # Request parameters to initiate transfer. — shape: {recipientEmailId?: string, resellerId?: string}
-]: any -> record<properties: record<billingAccountId: string, billingProfileId: string, canceledBy: string, creationTime: string, detailedTransferStatus: list<record>, expirationTime: string, initiatorCustomerType: string, initiatorEmailId: string, invoiceSectionId: string, lastModifiedTime: string, recipientEmailId: string, resellerId: string, resellerName: string, transferStatus: string>> {
+]: any -> oneof<record<properties: record<billingAccountId: string, billingProfileId: string, canceledBy: string, creationTime: string, detailedTransferStatus: list<record>, expirationTime: string, initiatorCustomerType: string, initiatorEmailId: string, invoiceSectionId: string, lastModifiedTime: string, recipientEmailId: string, resellerId: string, resellerName: string, transferStatus: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1052,7 +1071,7 @@ export def "partner-transfers-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -1093,7 +1112,7 @@ export def "partner-transfers-cancel" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<properties: record<billingAccountId: string, billingProfileId: string, canceledBy: string, creationTime: string, detailedTransferStatus: list<record>, expirationTime: string, initiatorCustomerType: string, initiatorEmailId: string, invoiceSectionId: string, lastModifiedTime: string, recipientEmailId: string, resellerId: string, resellerName: string, transferStatus: string>> {
+]: nothing -> oneof<record<properties: record<billingAccountId: string, billingProfileId: string, canceledBy: string, creationTime: string, detailedTransferStatus: list<record>, expirationTime: string, initiatorCustomerType: string, initiatorEmailId: string, invoiceSectionId: string, lastModifiedTime: string, recipientEmailId: string, resellerId: string, resellerName: string, transferStatus: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -1135,7 +1154,7 @@ export def "partner-transfers-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<properties: record<billingAccountId: string, billingProfileId: string, canceledBy: string, creationTime: string, detailedTransferStatus: list<record>, expirationTime: string, initiatorCustomerType: string, initiatorEmailId: string, invoiceSectionId: string, lastModifiedTime: string, recipientEmailId: string, resellerId: string, resellerName: string, transferStatus: string>> {
+]: nothing -> oneof<record<properties: record<billingAccountId: string, billingProfileId: string, canceledBy: string, creationTime: string, detailedTransferStatus: list<record>, expirationTime: string, initiatorCustomerType: string, initiatorEmailId: string, invoiceSectionId: string, lastModifiedTime: string, recipientEmailId: string, resellerId: string, resellerName: string, transferStatus: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -1177,7 +1196,7 @@ export def "instructions-list-by-billing-profile" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -1219,7 +1238,7 @@ export def "instructions-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
-]: nothing -> record<properties: record<amount: float, endDate: string, startDate: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<amount: float, endDate: string, startDate: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -1248,7 +1267,6 @@ export def "instructions-get" [
 #
 # PUT /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/instructions/{instructionName}
 # operationId: Instructions_Put
-# --properties shape: {amount: float, endDate: string, startDate: string}
 export def "instructions-put" [
   billing_account_name: string
   billing_profile_name: string
@@ -1264,7 +1282,7 @@ export def "instructions-put" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
   --properties: any # A billing instruction used during invoice generation. — shape: {amount: float, endDate: string, startDate: string}
-]: any -> record<properties: record<amount: float, endDate: string, startDate: string>, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<amount: float, endDate: string, startDate: string>, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1309,7 +1327,7 @@ export def "invoice-sections-list-by-billing-profile" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -1351,7 +1369,7 @@ export def "invoice-sections-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
-]: nothing -> record<properties: record<displayName: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<displayName: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -1380,7 +1398,6 @@ export def "invoice-sections-get" [
 #
 # PATCH /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/invoiceSections/{invoiceSectionName}
 # operationId: InvoiceSections_Update
-# --properties shape: {displayName?: string}
 export def "invoice-sections-update" [
   billing_account_name: string
   billing_profile_name: string
@@ -1396,7 +1413,7 @@ export def "invoice-sections-update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
   --properties: any # The properties of an InvoiceSection. — shape: {displayName?: string}
-]: any -> record<properties: record<displayName: string>, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<displayName: string>, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1443,7 +1460,7 @@ export def "invoice-sections-create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
   --display-name: string # The name of the InvoiceSection.
-]: any -> record<properties: record<displayName: string>, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<displayName: string>, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1489,7 +1506,7 @@ export def "billing-permissions-list-by-invoice-sections" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
-]: nothing -> record<value: table<actions: list, notActions: list>> {
+]: nothing -> oneof<record<value: table<actions: list, notActions: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -1532,7 +1549,7 @@ export def "billing-role-assignments-list-by-invoice-section" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
-]: nothing -> record<value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -1576,7 +1593,7 @@ export def "billing-role-assignments-delete-by-invoice-section" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
-]: nothing -> record<properties: record<createdByPrincipalId: string, createdByPrincipalTenantId: string, createdOn: string, name: string, principalId: string, roleDefinitionName: string, scope: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<createdByPrincipalId: string, createdByPrincipalTenantId: string, createdOn: string, name: string, principalId: string, roleDefinitionName: string, scope: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -1621,7 +1638,7 @@ export def "billing-role-assignments-get-by-invoice-section" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
-]: nothing -> record<properties: record<createdByPrincipalId: string, createdByPrincipalTenantId: string, createdOn: string, name: string, principalId: string, roleDefinitionName: string, scope: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<createdByPrincipalId: string, createdByPrincipalTenantId: string, createdOn: string, name: string, principalId: string, roleDefinitionName: string, scope: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -1665,7 +1682,7 @@ export def "billing-role-definitions-list-by-invoice-section" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
-]: nothing -> record<value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -1709,7 +1726,7 @@ export def "billing-role-definitions-get-by-invoice-section" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
-]: nothing -> record<properties: record<description: string, permissions: list<record>, roleName: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<description: string, permissions: list<record>, roleName: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -1754,7 +1771,7 @@ export def "billing-subscriptions-list-by-invoice-section" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -1799,7 +1816,7 @@ export def "billing-subscriptions-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
-]: nothing -> record<properties: record<billingProfileDisplayName: string, billingProfileId: string, customerDisplayName: string, customerId: string, displayName: string, invoiceSectionDisplayName: string, invoiceSectionId: string, lastMonthCharges: record<currency: string, value: float>, monthToDateCharges: record<currency: string, value: float>, reseller: record<description: string, resellerId: string>, skuDescription: string, skuId: string, subscriptionBillingStatus: string, subscriptionId: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<billingProfileDisplayName: string, billingProfileId: string, customerDisplayName: string, customerId: string, displayName: string, invoiceSectionDisplayName: string, invoiceSectionId: string, lastMonthCharges: record<currency: string, value: float>, monthToDateCharges: record<currency: string, value: float>, reseller: record<description: string, resellerId: string>, skuDescription: string, skuId: string, subscriptionBillingStatus: string, subscriptionId: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -1845,7 +1862,7 @@ export def "billing-subscriptions-transfer" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --destination-billing-profile-id: string # The destination billing profile id.
   --destination-invoice-section-id: string # The destination invoice section id.
-]: any -> record<properties: record<billingSubscriptionName: string>> {
+]: any -> oneof<record<properties: record<billingSubscriptionName: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1892,7 +1909,7 @@ export def "billing-subscriptions-validate-transfer" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --destination-billing-profile-id: string # The destination billing profile id.
   --destination-invoice-section-id: string # The destination invoice section id.
-]: any -> record<errorDetails: record<code: string, details: string, message: string>, isTransferEligible: bool> {
+]: any -> oneof<record<errorDetails: record<code: string, details: string, message: string>, isTransferEligible: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1939,7 +1956,7 @@ export def "billing-role-assignments-add-by-invoice-section" [
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
   --billing-role-definition-id: string # The role definition id
   --principal-id: string # The user's principal id that the role gets assigned to
-]: any -> record<value: table<properties: record, id: string, name: string, type: string>> {
+]: any -> oneof<record<value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2011,7 +2028,6 @@ export def "invoice-sections-elevate-to-billing-profile" [
 #
 # POST /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/invoiceSections/{invoiceSectionName}/initiateTransfer
 # operationId: Transfers_Initiate
-# --properties shape: {recipientEmailId?: string, resellerId?: string}
 export def "transfers-initiate" [
   billing_account_name: string
   billing_profile_name: string
@@ -2026,7 +2042,7 @@ export def "transfers-initiate" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --properties: record # Request parameters to initiate transfer. — shape: {recipientEmailId?: string, resellerId?: string}
-]: any -> record<properties: record<billingAccountId: string, billingProfileId: string, canceledBy: string, creationTime: string, detailedTransferStatus: list<record>, expirationTime: string, initiatorCustomerType: string, initiatorEmailId: string, invoiceSectionId: string, lastModifiedTime: string, recipientEmailId: string, resellerId: string, resellerName: string, transferStatus: string>> {
+]: any -> oneof<record<properties: record<billingAccountId: string, billingProfileId: string, canceledBy: string, creationTime: string, detailedTransferStatus: list<record>, expirationTime: string, initiatorCustomerType: string, initiatorEmailId: string, invoiceSectionId: string, lastModifiedTime: string, recipientEmailId: string, resellerId: string, resellerName: string, transferStatus: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2072,7 +2088,7 @@ export def "products-list-by-invoice-section" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
   --filter: string # May be used to filter by product type. The filter supports 'eq', 'lt', 'gt', 'le', 'ge', and 'and'. It does not currently support 'ne', 'or', or 'not'. Tag filter is a key value pair string where key and value is separated by a colon (:).
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -2117,7 +2133,7 @@ export def "products-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
-]: nothing -> record<properties: record<availabilityId: string, billingFrequency: string, billingProfileDisplayName: string, billingProfileId: string, customerDisplayName: string, customerId: string, displayName: string, endDate: string, invoiceSectionDisplayName: string, invoiceSectionId: string, lastCharge: record<currency: string, value: float>, lastChargeDate: string, parentProductId: string, productType: string, productTypeId: string, purchaseDate: string, quantity: float, reseller: record<description: string, resellerId: string>, skuDescription: string, skuId: string, status: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<availabilityId: string, billingFrequency: string, billingProfileDisplayName: string, billingProfileId: string, customerDisplayName: string, customerId: string, displayName: string, endDate: string, invoiceSectionDisplayName: string, invoiceSectionId: string, lastCharge: record<currency: string, value: float>, lastChargeDate: string, parentProductId: string, productType: string, productTypeId: string, purchaseDate: string, quantity: float, reseller: record<description: string, resellerId: string>, skuDescription: string, skuId: string, status: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -2164,7 +2180,7 @@ export def "products-transfer" [
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
   --destination-billing-profile-id: string # The destination billing profile id.
   --destination-invoice-section-id: string # The destination invoice section id.
-]: any -> record<properties: record<availabilityId: string, billingFrequency: string, billingProfileDisplayName: string, billingProfileId: string, customerDisplayName: string, customerId: string, displayName: string, endDate: string, invoiceSectionDisplayName: string, invoiceSectionId: string, lastCharge: record<currency: string, value: float>, lastChargeDate: string, parentProductId: string, productType: string, productTypeId: string, purchaseDate: string, quantity: float, reseller: record<description: string, resellerId: string>, skuDescription: string, skuId: string, status: string>, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<availabilityId: string, billingFrequency: string, billingProfileDisplayName: string, billingProfileId: string, customerDisplayName: string, customerId: string, displayName: string, endDate: string, invoiceSectionDisplayName: string, invoiceSectionId: string, lastCharge: record<currency: string, value: float>, lastChargeDate: string, parentProductId: string, productType: string, productTypeId: string, purchaseDate: string, quantity: float, reseller: record<description: string, resellerId: string>, skuDescription: string, skuId: string, status: string>, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2213,7 +2229,7 @@ export def "products-update-auto-renew-by-invoice-section" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
   --auto-renew: string@auto-renew-completer # Request parameters to update auto renew policy a product.
-]: any -> record<properties: record<endDate: string>> {
+]: any -> oneof<record<properties: record<endDate: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2262,7 +2278,7 @@ export def "products-validate-transfer" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --destination-billing-profile-id: string # The destination billing profile id.
   --destination-invoice-section-id: string # The destination invoice section id.
-]: any -> record<errorDetails: record<code: string, details: string, message: string>, isTransferEligible: bool> {
+]: any -> oneof<record<errorDetails: record<code: string, details: string, message: string>, isTransferEligible: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2311,7 +2327,7 @@ export def "transactions-list-by-invoice-section" [
   --period-start-date: string # Start date (required)
   --period-end-date: string # End date (required)
   --filter: string # May be used to filter by transaction kind. The filter supports 'eq', 'lt', 'gt', 'le', 'ge', and 'and'. It does not currently support 'ne', 'or', or 'not'. Tag filter is a key value pair string where key and value is separated by a colon (:).
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -2355,7 +2371,7 @@ export def "transfers-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -2396,7 +2412,7 @@ export def "transfers-cancel" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<properties: record<billingAccountId: string, billingProfileId: string, canceledBy: string, creationTime: string, detailedTransferStatus: list<record>, expirationTime: string, initiatorCustomerType: string, initiatorEmailId: string, invoiceSectionId: string, lastModifiedTime: string, recipientEmailId: string, resellerId: string, resellerName: string, transferStatus: string>> {
+]: nothing -> oneof<record<properties: record<billingAccountId: string, billingProfileId: string, canceledBy: string, creationTime: string, detailedTransferStatus: list<record>, expirationTime: string, initiatorCustomerType: string, initiatorEmailId: string, invoiceSectionId: string, lastModifiedTime: string, recipientEmailId: string, resellerId: string, resellerName: string, transferStatus: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -2438,7 +2454,7 @@ export def "transfers-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<properties: record<billingAccountId: string, billingProfileId: string, canceledBy: string, creationTime: string, detailedTransferStatus: list<record>, expirationTime: string, initiatorCustomerType: string, initiatorEmailId: string, invoiceSectionId: string, lastModifiedTime: string, recipientEmailId: string, resellerId: string, resellerName: string, transferStatus: string>> {
+]: nothing -> oneof<record<properties: record<billingAccountId: string, billingProfileId: string, canceledBy: string, creationTime: string, detailedTransferStatus: list<record>, expirationTime: string, initiatorCustomerType: string, initiatorEmailId: string, invoiceSectionId: string, lastModifiedTime: string, recipientEmailId: string, resellerId: string, resellerName: string, transferStatus: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -2481,7 +2497,7 @@ export def "invoices-list-by-billing-profile" [
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
   --period-start-date: string # Invoice period start date. (required)
   --period-end-date: string # Invoice period end date. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -2525,7 +2541,7 @@ export def "invoices-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
-]: nothing -> record<properties: record<amountDue: record<currency: string, value: float>, billedAmount: record<currency: string, value: float>, billingProfileDisplayName: string, billingProfileId: string, documents: list<record>, dueDate: string, invoiceDate: string, invoicePeriodEndDate: string, invoicePeriodStartDate: string, invoiceType: any, payments: list<record>, purchaseOrderNumber: string, status: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<amountDue: record<currency: string, value: float>, billedAmount: record<currency: string, value: float>, billingProfileDisplayName: string, billingProfileId: string, documents: list<record>, dueDate: string, invoiceDate: string, invoicePeriodEndDate: string, invoicePeriodStartDate: string, invoiceType: any, payments: list<record>, purchaseOrderNumber: string, status: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -2568,7 +2584,7 @@ export def "price-sheet-download" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
-]: nothing -> record<expiryTime: string, url: string> {
+]: nothing -> oneof<record<expiryTime: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -2611,7 +2627,7 @@ export def "payment-methods-list-by-billing-profile" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -2653,7 +2669,7 @@ export def "policies-get-by-billing-profile" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
-]: nothing -> record<properties: record<marketplacePurchases: string, reservationPurchases: string, viewCharges: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<marketplacePurchases: string, reservationPurchases: string, viewCharges: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -2681,7 +2697,6 @@ export def "policies-get-by-billing-profile" [
 #
 # PUT /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/policies/default
 # operationId: Policies_Update
-# --properties shape: {marketplacePurchases?: "AllAllowed"|"OnlyFreeAllowed"|"NotAllowed", reservationPurchases?: "Allowed"|"NotAllowed", viewCharges?: "Allowed"|"NotAllowed"}
 export def "policies-update" [
   billing_account_name: string
   billing_profile_name: string
@@ -2696,7 +2711,7 @@ export def "policies-update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
   --properties: any # The properties of policy. — shape: {marketplacePurchases?: "AllAllowed"|"OnlyFreeAllowed"|"NotAllowed", reservationPurchases?: "Allowed"|"NotAllowed", viewCharges?: "Allowed"|"NotAllowed"}
-]: any -> record<properties: record<marketplacePurchases: string, reservationPurchases: string, viewCharges: string>, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<marketplacePurchases: string, reservationPurchases: string, viewCharges: string>, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2740,7 +2755,7 @@ export def "price-sheet-download-by-billing-profile" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
-]: nothing -> record<expiryTime: string, url: string> {
+]: nothing -> oneof<record<expiryTime: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -2785,7 +2800,7 @@ export def "transactions-list-by-billing-profile" [
   --period-start-date: string # Start date (required)
   --period-end-date: string # End date (required)
   --filter: string # May be used to filter by transaction kind. The filter supports 'eq', 'lt', 'gt', 'le', 'ge', and 'and'. It does not currently support 'ne', 'or', or 'not'. Tag filter is a key value pair string where key and value is separated by a colon (:).
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -2832,7 +2847,7 @@ export def "transactions-get" [
   --period-start-date: string # Start date (required)
   --period-end-date: string # End date (required)
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
-]: nothing -> record<properties: record<billingProfileDisplayName: string, billingProfileId: string, customerDisplayName: string, customerId: string, date: string, invoice: string, invoiceSectionDisplayName: string, invoiceSectionId: string, kind: string, orderId: string, orderName: string, productDescription: string, productFamily: string, productType: string, productTypeId: string, quantity: int, subscriptionId: string, subscriptionName: string, transactionAmount: record<currency: string, value: float>, transactionType: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<billingProfileDisplayName: string, billingProfileId: string, customerDisplayName: string, customerId: string, date: string, invoice: string, invoiceSectionDisplayName: string, invoiceSectionId: string, kind: string, orderId: string, orderName: string, productDescription: string, productFamily: string, productType: string, productTypeId: string, quantity: int, subscriptionId: string, subscriptionName: string, transactionAmount: record<currency: string, value: float>, transactionType: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -2875,7 +2890,7 @@ export def "billing-role-assignments-list-by-billing-account" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
-]: nothing -> record<value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -2915,7 +2930,7 @@ export def "billing-role-assignments-delete-by-billing-account" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
-]: nothing -> record<properties: record<createdByPrincipalId: string, createdByPrincipalTenantId: string, createdOn: string, name: string, principalId: string, roleDefinitionName: string, scope: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<createdByPrincipalId: string, createdByPrincipalTenantId: string, createdOn: string, name: string, principalId: string, roleDefinitionName: string, scope: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -2956,7 +2971,7 @@ export def "billing-role-assignments-get-by-billing-account" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
-]: nothing -> record<properties: record<createdByPrincipalId: string, createdByPrincipalTenantId: string, createdOn: string, name: string, principalId: string, roleDefinitionName: string, scope: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<createdByPrincipalId: string, createdByPrincipalTenantId: string, createdOn: string, name: string, principalId: string, roleDefinitionName: string, scope: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -2996,7 +3011,7 @@ export def "billing-role-definitions-list-by-billing-account" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
-]: nothing -> record<value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -3036,7 +3051,7 @@ export def "billing-role-definitions-get-by-billing-account" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
-]: nothing -> record<properties: record<description: string, permissions: list<record>, roleName: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<description: string, permissions: list<record>, roleName: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -3077,7 +3092,7 @@ export def "billing-subscriptions-list-by-billing-account" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -3120,7 +3135,7 @@ export def "invoices-list-by-billing-subscription" [
   --period-start-date: string # Invoice period start date. (required)
   --period-end-date: string # Invoice period end date. (required)
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -3165,7 +3180,7 @@ export def "invoices-get-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
-]: nothing -> record<properties: record<amountDue: record<currency: string, value: float>, billedAmount: record<currency: string, value: float>, billingProfileDisplayName: string, billingProfileId: string, documents: list<record>, dueDate: string, invoiceDate: string, invoicePeriodEndDate: string, invoicePeriodStartDate: string, invoiceType: any, payments: list<record>, purchaseOrderNumber: string, status: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<amountDue: record<currency: string, value: float>, billedAmount: record<currency: string, value: float>, billingProfileDisplayName: string, billingProfileId: string, documents: list<record>, dueDate: string, invoiceDate: string, invoicePeriodEndDate: string, invoicePeriodStartDate: string, invoiceType: any, payments: list<record>, purchaseOrderNumber: string, status: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -3208,7 +3223,7 @@ export def "billing-role-assignments-add-by-billing-account" [
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
   --billing-role-definition-id: string # The role definition id
   --principal-id: string # The user's principal id that the role gets assigned to
-]: any -> record<value: table<properties: record, id: string, name: string, type: string>> {
+]: any -> oneof<record<value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3252,7 +3267,7 @@ export def "customers-list-by-billing-account" [
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
   --filter: string # May be used to filter the list of customers.
   --skiptoken: string # Skiptoken is only used if a previous operation returned a partial result. If a previous response contains a nextLink element, the value of the nextLink element will include a skiptoken parameter that specifies a starting point to use for subsequent calls.
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -3293,7 +3308,7 @@ export def "customers-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
   --expand: string # May be used to expand enabledAzurePlans, resellers.
-]: nothing -> record<properties: record<displayName: string, enabledAzurePlans: list<record>, resellers: list<record>>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<displayName: string, enabledAzurePlans: list<record>, resellers: list<record>>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -3334,7 +3349,7 @@ export def "billing-permissions-list-by-customer" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
-]: nothing -> record<value: table<actions: list, notActions: list>> {
+]: nothing -> oneof<record<value: table<actions: list, notActions: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -3376,7 +3391,7 @@ export def "billing-subscriptions-list-by-customer" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -3419,7 +3434,7 @@ export def "billing-subscriptions-get-by-customer" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
-]: nothing -> record<properties: record<billingProfileDisplayName: string, billingProfileId: string, customerDisplayName: string, customerId: string, displayName: string, invoiceSectionDisplayName: string, invoiceSectionId: string, lastMonthCharges: record<currency: string, value: float>, monthToDateCharges: record<currency: string, value: float>, reseller: record<description: string, resellerId: string>, skuDescription: string, skuId: string, subscriptionBillingStatus: string, subscriptionId: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<billingProfileDisplayName: string, billingProfileId: string, customerDisplayName: string, customerId: string, displayName: string, invoiceSectionDisplayName: string, invoiceSectionId: string, lastMonthCharges: record<currency: string, value: float>, monthToDateCharges: record<currency: string, value: float>, reseller: record<description: string, resellerId: string>, skuDescription: string, skuId: string, subscriptionBillingStatus: string, subscriptionId: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -3462,7 +3477,7 @@ export def "policies-get-by-customer" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
-]: nothing -> record<properties: record<viewCharges: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<viewCharges: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -3490,7 +3505,6 @@ export def "policies-get-by-customer" [
 #
 # PUT /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/customers/{customerName}/policies/default
 # operationId: Policies_UpdateCustomer
-# --properties shape: {viewCharges?: "Allowed"|"NotAllowed"}
 export def "policies-update-customer" [
   billing_account_name: string
   customer_name: string
@@ -3505,7 +3519,7 @@ export def "policies-update-customer" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
   --properties: any # The properties of a Customer's policy. — shape: {viewCharges?: "Allowed"|"NotAllowed"}
-]: any -> record<properties: record<viewCharges: string>, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<viewCharges: string>, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3551,7 +3565,7 @@ export def "products-list-by-customer" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
   --filter: string # May be used to filter by product type. The filter supports 'eq', 'lt', 'gt', 'le', 'ge', and 'and'. It does not currently support 'ne', 'or', or 'not'. Tag filter is a key value pair string where key and value is separated by a colon (:).
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -3594,7 +3608,7 @@ export def "products-get-by-customer" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
-]: nothing -> record<properties: record<availabilityId: string, billingFrequency: string, billingProfileDisplayName: string, billingProfileId: string, customerDisplayName: string, customerId: string, displayName: string, endDate: string, invoiceSectionDisplayName: string, invoiceSectionId: string, lastCharge: record<currency: string, value: float>, lastChargeDate: string, parentProductId: string, productType: string, productTypeId: string, purchaseDate: string, quantity: float, reseller: record<description: string, resellerId: string>, skuDescription: string, skuId: string, status: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<availabilityId: string, billingFrequency: string, billingProfileDisplayName: string, billingProfileId: string, customerDisplayName: string, customerId: string, displayName: string, endDate: string, invoiceSectionDisplayName: string, invoiceSectionId: string, lastCharge: record<currency: string, value: float>, lastChargeDate: string, parentProductId: string, productType: string, productTypeId: string, purchaseDate: string, quantity: float, reseller: record<description: string, resellerId: string>, skuDescription: string, skuId: string, status: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -3640,7 +3654,7 @@ export def "transactions-list-by-customer" [
   --period-start-date: string # Start date (required)
   --period-end-date: string # End date (required)
   --filter: string # May be used to filter by transaction kind. The filter supports 'eq', 'lt', 'gt', 'le', 'ge', and 'and'. It does not currently support 'ne', 'or', or 'not'. Tag filter is a key value pair string where key and value is separated by a colon (:).
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -3684,7 +3698,7 @@ export def "departments-list-by-billing-account-name" [
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
   --expand: string # May be used to expand the enrollmentAccounts.
   --filter: string # The filter supports 'eq', 'lt', 'gt', 'le', 'ge', and 'and'. It does not currently support 'ne', 'or', or 'not'. Tag filter is a key value pair string where key and value is separated by a colon (:).
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -3726,7 +3740,7 @@ export def "departments-get" [
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
   --expand: string # May be used to expand the enrollmentAccounts.
   --filter: string # The filter supports 'eq', 'lt', 'gt', 'le', 'ge', and 'and'. It does not currently support 'ne', 'or', or 'not'. Tag filter is a key value pair string where key and value is separated by a colon (:).
-]: nothing -> record<properties: record<costCenter: string, departmentName: string, enrollmentAccounts: list<record>, status: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<costCenter: string, departmentName: string, enrollmentAccounts: list<record>, status: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -3768,7 +3782,7 @@ export def "enrollment-accounts-list-by-billing-account-name" [
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
   --expand: string # May be used to expand the department.
   --filter: string # The filter supports 'eq', 'lt', 'gt', 'le', 'ge', and 'and'. It does not currently support 'ne', 'or', or 'not'. Tag filter is a key value pair string where key and value is separated by a colon (:).
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -3810,7 +3824,7 @@ export def "enrollment-accounts-get-by-enrollment-account-id" [
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
   --expand: string # May be used to expand the Department.
   --filter: string # The filter supports 'eq', 'lt', 'gt', 'le', 'ge', and 'and'. It does not currently support 'ne', 'or', or 'not'. Tag filter is a key value pair string where key and value is separated by a colon (:).
-]: nothing -> record<properties: record<accountName: string, accountOwner: string, costCenter: string, department: record<properties: record, id: string, name: string, type: string>, endDate: string, startDate: string, status: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<accountName: string, accountOwner: string, costCenter: string, department: record<properties: record, id: string, name: string, type: string>, endDate: string, startDate: string, status: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -3852,7 +3866,7 @@ export def "invoices-list-by-billing-account" [
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
   --period-start-date: string # Invoice period start date. (required)
   --period-end-date: string # Invoice period end date. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -3893,7 +3907,7 @@ export def "billing-accounts-list-invoice-sections-by-create-subscription-permis
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
-]: nothing -> record<nextLink: string, value: table<billingProfileDisplayName: string, billingProfileId: string, enabledAzurePlans: list, invoiceSectionDisplayName: string, invoiceSectionId: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<billingProfileDisplayName: string, billingProfileId: string, enabledAzurePlans: list, invoiceSectionDisplayName: string, invoiceSectionId: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -3933,7 +3947,7 @@ export def "payment-methods-list-by-billing-account" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -3974,7 +3988,7 @@ export def "products-list-by-billing-account" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
   --filter: string # May be used to filter by product type. The filter supports 'eq', 'lt', 'gt', 'le', 'ge', and 'and'. It does not currently support 'ne', 'or', or 'not'. Tag filter is a key value pair string where key and value is separated by a colon (:).
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -4017,7 +4031,7 @@ export def "transactions-list-by-billing-account" [
   --period-start-date: string # Start date (required)
   --period-end-date: string # End date (required)
   --filter: string # May be used to filter by transaction kind. The filter supports 'eq', 'lt', 'gt', 'le', 'ge', and 'and'. It does not currently support 'ne', 'or', or 'not'. Tag filter is a key value pair string where key and value is separated by a colon (:).
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -4057,7 +4071,7 @@ export def "operations-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
-]: nothing -> record<nextLink: string, value: table<display: record, name: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<display: record, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
@@ -4093,7 +4107,7 @@ export def "recipient-transfers-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/providers/Microsoft.Billing/transfers" $auth.query)
@@ -4128,7 +4142,7 @@ export def "recipient-transfers-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<properties: record<allowedProductType: list<string>, canceledBy: string, creationTime: string, detailedTransferStatus: list<record>, expirationTime: string, initiatorCustomerType: string, initiatorEmailId: string, lastModifiedTime: string, recipientEmailId: string, resellerId: string, resellerName: string, transferStatus: string>> {
+]: nothing -> oneof<record<properties: record<allowedProductType: list<string>, canceledBy: string, creationTime: string, detailedTransferStatus: list<record>, expirationTime: string, initiatorCustomerType: string, initiatorEmailId: string, lastModifiedTime: string, recipientEmailId: string, resellerId: string, resellerName: string, transferStatus: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($transfer_name | is-empty) { error make --unspanned { msg: "path parameter 'transferName' must be non-empty" } }
@@ -4153,7 +4167,6 @@ export def "recipient-transfers-get" [
 #
 # POST /providers/Microsoft.Billing/transfers/{transferName}/acceptTransfer
 # operationId: RecipientTransfers_Accept
-# --properties shape: {productDetails?: list}
 export def "recipient-transfers-accept" [
   transfer_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4166,7 +4179,7 @@ export def "recipient-transfers-accept" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --properties: record # Request parameters to accept transfer. — shape: {productDetails?: list}
-]: any -> record<properties: record<allowedProductType: list<string>, canceledBy: string, creationTime: string, detailedTransferStatus: list<record>, expirationTime: string, initiatorCustomerType: string, initiatorEmailId: string, lastModifiedTime: string, recipientEmailId: string, resellerId: string, resellerName: string, transferStatus: string>> {
+]: any -> oneof<record<properties: record<allowedProductType: list<string>, canceledBy: string, creationTime: string, detailedTransferStatus: list<record>, expirationTime: string, initiatorCustomerType: string, initiatorEmailId: string, lastModifiedTime: string, recipientEmailId: string, resellerId: string, resellerName: string, transferStatus: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4205,7 +4218,7 @@ export def "recipient-transfers-decline" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<properties: record<allowedProductType: list<string>, canceledBy: string, creationTime: string, detailedTransferStatus: list<record>, expirationTime: string, initiatorCustomerType: string, initiatorEmailId: string, lastModifiedTime: string, recipientEmailId: string, resellerId: string, resellerName: string, transferStatus: string>> {
+]: nothing -> oneof<record<properties: record<allowedProductType: list<string>, canceledBy: string, creationTime: string, detailedTransferStatus: list<record>, expirationTime: string, initiatorCustomerType: string, initiatorEmailId: string, lastModifiedTime: string, recipientEmailId: string, resellerId: string, resellerName: string, transferStatus: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($transfer_name | is-empty) { error make --unspanned { msg: "path parameter 'transferName' must be non-empty" } }
@@ -4230,7 +4243,6 @@ export def "recipient-transfers-decline" [
 #
 # POST /providers/Microsoft.Billing/transfers/{transferName}/validateTransfer
 # operationId: RecipientTransfers_Validate
-# --properties shape: {productDetails?: list}
 export def "recipient-transfers-validate" [
   transfer_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4243,7 +4255,7 @@ export def "recipient-transfers-validate" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --properties: record # Request parameters to accept transfer. — shape: {productDetails?: list}
-]: any -> record<value: table<properties: record>> {
+]: any -> oneof<record<value: table<properties: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4292,7 +4304,7 @@ export def "address-validate" [
   --last-name: string # Last Name.
   --postal-code: string # Address Postal Code.
   --region: string # Address Region.
-]: any -> record<status: string, suggestedAddresses: table<addressLine1: string, addressLine2: string, addressLine3: string, city: string, companyName: string, country: string, firstName: string, lastName: string, postalCode: string, region: string>, validationMessage: string> {
+]: any -> oneof<record<status: string, suggestedAddresses: table<addressLine1: string, addressLine2: string, addressLine3: string, city: string, companyName: string, country: string, firstName: string, lastName: string, postalCode: string, region: string>, validationMessage: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4333,7 +4345,7 @@ export def "line-of-credits-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
-]: nothing -> record<properties: record<creditLimit: record<currency: string, value: float>, reason: string, remainingBalance: record<currency: string, value: float>, status: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<creditLimit: record<currency: string, value: float>, reason: string, remainingBalance: record<currency: string, value: float>, status: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -4360,7 +4372,6 @@ export def "line-of-credits-get" [
 #
 # PUT /subscriptions/{subscriptionId}/providers/Microsoft.Billing/billingAccounts/default/lineOfCredit/default
 # operationId: LineOfCredits_Update
-# --properties shape: {creditLimit?: any, remainingBalance?: any, status?: "Approved"|"Rejected"}
 export def "line-of-credits-update" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4374,7 +4385,7 @@ export def "line-of-credits-update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
   --properties: any # The properties of the line of credit. — shape: {creditLimit?: any, remainingBalance?: any, status?: "Approved"|"Rejected"}
-]: any -> record<properties: record<creditLimit: record<currency: string, value: float>, reason: string, remainingBalance: record<currency: string, value: float>, status: string>, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<creditLimit: record<currency: string, value: float>, reason: string, remainingBalance: record<currency: string, value: float>, status: string>, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4417,7 +4428,7 @@ export def "billing-property-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
-]: nothing -> record<properties: record<billingAccountDisplayName: string, billingAccountId: string, billingProfileDisplayName: string, billingProfileId: string, billingTenantId: string, costCenter: string, invoiceSectionDisplayName: string, invoiceSectionId: string, productId: string, productName: string, skuDescription: string, skuId: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<billingAccountDisplayName: string, billingAccountId: string, billingProfileDisplayName: string, billingProfileId: string, billingTenantId: string, costCenter: string, invoiceSectionDisplayName: string, invoiceSectionId: string, productId: string, productName: string, skuDescription: string, skuId: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }

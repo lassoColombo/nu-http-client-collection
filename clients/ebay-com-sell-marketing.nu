@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -116,9 +140,9 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-campaigns" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-campaigns" "create-campaign" "find-campaign-by-ad-reference" "get-campaign-by-name" "delete-campaign" "get-campaign" "get-ads" "create-ad-by-listing-id" "delete-ad" "get-ad" "update-bid" "get-ad-groups" "create-ad-group" "get-ad-group" "update-ad-group" "suggest-bids" "suggest-keywords" "bulk-create-ads-by-inventory-reference" "bulk-create-ads-by-listing-id" "bulk-create-keyword" "bulk-delete-ads-by-inventory-reference" "bulk-delete-ads-by-listing-id" "bulk-update-ads-bid-by-inventory-reference" "bulk-update-ads-bid-by-listing-id" "bulk-update-ads-status" "bulk-update-ads-status-by-listing-id" "bulk-update-keyword" "clone-campaign" "create-ads-by-inventory-reference" "delete-ads-by-inventory-reference" "end-campaign" "get-ads-by-inventory-reference" "get-keywords" "create-keyword" "get-keyword" "update-keyword" "pause-campaign" "resume-campaign" "suggest-items" "update-ad-rate-strategy" "update-campaign-budget" "update-campaign-identification" "get-report" "get-report-metadata" "get-report-metadata-for-report-type" "get-report-tasks" "create-report-task" "delete-report-task" "get-report-task" "bulk-create-negative-keyword" "bulk-update-negative-keyword" "create-item-price-markdown-promotion" "delete-item-price-markdown-promotion" "get-item-price-markdown-promotion" "update-item-price-markdown-promotion" "create-item-promotion" "delete-item-promotion" "get-item-promotion" "update-item-promotion" "get-negative-keywords" "create-negative-keyword" "get-negative-keyword" "update-negative-keyword" "get-promotions" "get-listing-set" "pause-promotion" "resume-promotion" "get-promotion-reports" "get-promotion-summary-report" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -157,7 +181,7 @@ export def "get-campaigns" [
   --limit: string # Specifies the maximum number of campaigns to return on a page in the paginated response. Default: 10 Maximum: 500
   --offset: string # Specifies the number of campaigns to skip in the result set before returning the first report in the paginated response. Combine offset with the limit query parameter to control the items returned in the response. For example, if you supply an offset of 0 and a limit of 10, the first page of the response contains the first 10 items from the complete list of items retrieved by the call. If offset is 10 and limit is 20, the first page of the response contains items 11-30 from the complete result set. Default: 0
   --start-date-range: string # Specifies the range of a campaign's start date in which to filter the results. The results are filtered to include only campaigns with a start date that is equal to this date or is within specified range.Valid format (UTC): yyyy-MM-ddThh:mm:ssZ..yyyy-MM-ddThh:mm:ssZ (starts within this range)yyyy-MM-ddThh:mm:ssZ (campaign starts on or after this date)..yyyy-MM-ddThh:mm:ssZ (campaign starts on or before this date)2016-09-08T00:00.00.000Z..2016-09-09T00:00:00Z (campaign starts on September 08, 2016)Note: The results might not include all the campaigns with this start date if other filters exclude them.
-]: nothing -> record<campaigns: table<alerts: list, budget: record, campaignCriterion: record, campaignId: string, campaignName: string, campaignStatus: string, endDate: string, fundingStrategy: record, marketplaceId: string, startDate: string>, href: string, limit: int, next: string, offset: int, prev: string, total: int> {
+]: nothing -> oneof<record<campaigns: table<alerts: list, budget: record, campaignCriterion: record, campaignId: string, campaignName: string, campaignStatus: string, endDate: string, fundingStrategy: record, marketplaceId: string, startDate: string>, href: string, limit: int, next: string, offset: int, prev: string, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "campaign_name" $campaign_name "scalar") (serialize-qp "campaign_status" $campaign_status "scalar") (serialize-qp "end_date_range" $end_date_range "scalar") (serialize-qp "funding_strategy" $funding_strategy "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "start_date_range" $start_date_range "scalar")] | flatten | str join "&"
@@ -182,9 +206,6 @@ export def "get-campaigns" [
 #
 # POST /ad_campaign
 # operationId: createCampaign
-# --budget shape: {daily?: record}
-# --campaignCriterion shape: {autoSelectFutureInventory?: bool, criterionType?: string, selectionRules?: list}
-# --fundingStrategy shape: {adRateStrategy?: string, bidPercentage?: string, dynamicAdRatePreferences?: list, fundingModel?: string}
 export def "create-campaign" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -202,7 +223,7 @@ export def "create-campaign" [
   --funding-strategy: record # This type defines how the Promoted Listings fee is calculated for a Promoted Listings ad campaign. — shape: {adRateStrategy?: string, bidPercentage?: string, dynamicAdRatePreferences?: list, fundingModel?: string}
   --marketplace-id: string # The ID of the eBay marketplace where the campaign is hosted. See the MarketplaceIdEnum type to get the appropriate enumeration value for the listing marketplace. For implementation help, refer to eBay API documentation
   --start-date: string # The date and time the campaign starts, in UTC format (yyyy-MM-ddThh:mm:ssZ). For display purposes, convert this time into the local time of the seller. On the date specified, the service derives the keywords for each listing in the campaign, creates an ad for each listing, and associates each new ad with the campaign. The campaign starts after this process is completed. The amount of time it takes the service to start the campaign depends on the number of listings in the campaign. Call getCampaign to check the status of the campaign.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -242,7 +263,7 @@ export def "find-campaign-by-ad-reference" [
   --inventory-reference-id: string # The seller's inventory reference ID of the listing to be used to find the campaign in which it is associated. This will either be a seller-defined SKU value or inventory item group ID, depending on the reference type specified. You must always pass in both inventory_reference_id and inventory_reference_type.
   --inventory-reference-type: string # The type of the seller's inventory reference ID, which is a listing or group of items. You must always pass in both inventory_reference_id and inventory_reference_type.
   --listing-id: string # Identifier of the eBay listing associated with the ad.
-]: nothing -> record<campaigns: table<alerts: list, budget: record, campaignCriterion: record, campaignId: string, campaignName: string, campaignStatus: string, endDate: string, fundingStrategy: record, marketplaceId: string, startDate: string>> {
+]: nothing -> oneof<record<campaigns: table<alerts: list, budget: record, campaignCriterion: record, campaignId: string, campaignName: string, campaignStatus: string, endDate: string, fundingStrategy: record, marketplaceId: string, startDate: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "inventory_reference_id" $inventory_reference_id "scalar") (serialize-qp "inventory_reference_type" $inventory_reference_type "scalar") (serialize-qp "listing_id" $listing_id "scalar")] | flatten | str join "&"
@@ -278,7 +299,7 @@ export def "get-campaign-by-name" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --campaign-name: string # The name of the campaign. (required)
-]: nothing -> record<alerts: table<alertType: string, details: list>, budget: record<daily: record<amount: record, budgetStatus: string>>, campaignCriterion: record<autoSelectFutureInventory: bool, criterionType: string, selectionRules: list<record>>, campaignId: string, campaignName: string, campaignStatus: string, endDate: string, fundingStrategy: record<adRateStrategy: string, bidPercentage: string, dynamicAdRatePreferences: list<record>, fundingModel: string>, marketplaceId: string, startDate: string> {
+]: nothing -> oneof<record<alerts: table<alertType: string, details: list>, budget: record<daily: record<amount: record, budgetStatus: string>>, campaignCriterion: record<autoSelectFutureInventory: bool, criterionType: string, selectionRules: list<record>>, campaignId: string, campaignName: string, campaignStatus: string, endDate: string, fundingStrategy: record<adRateStrategy: string, bidPercentage: string, dynamicAdRatePreferences: list<record>, fundingModel: string>, marketplaceId: string, startDate: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($campaign_name == null) { error make --unspanned { msg: "required query parameter 'campaign_name' missing: pass --campaign-name" } }
@@ -351,7 +372,7 @@ export def "get-campaign" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<alerts: table<alertType: string, details: list>, budget: record<daily: record<amount: record, budgetStatus: string>>, campaignCriterion: record<autoSelectFutureInventory: bool, criterionType: string, selectionRules: list<record>>, campaignId: string, campaignName: string, campaignStatus: string, endDate: string, fundingStrategy: record<adRateStrategy: string, bidPercentage: string, dynamicAdRatePreferences: list<record>, fundingModel: string>, marketplaceId: string, startDate: string> {
+]: nothing -> oneof<record<alerts: table<alertType: string, details: list>, budget: record<daily: record<amount: record, budgetStatus: string>>, campaignCriterion: record<autoSelectFutureInventory: bool, criterionType: string, selectionRules: list<record>>, campaignId: string, campaignName: string, campaignStatus: string, endDate: string, fundingStrategy: record<adRateStrategy: string, bidPercentage: string, dynamicAdRatePreferences: list<record>, fundingModel: string>, marketplaceId: string, startDate: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaign_id' must be non-empty" } }
@@ -392,7 +413,7 @@ export def "get-ads" [
   --limit: string # Specifies the maximum number of ads to return on a page in the paginated response. Default: 10 Maximum: 500
   --listing-ids: string # A comma-separated list of listing IDs. The response includes only active ads (ads associated with a RUNNING campaign). The results do not include listing IDs that are excluded by other conditions.
   --offset: string # Specifies the number of ads to skip in the result set before returning the first ad in the paginated response. Combine offset with the limit query parameter to control the items returned in the response. For example, if you supply an offset of 0 and a limit of 10, the first page of the response contains the first 10 items from the complete list of items retrieved by the call. If offset is 10 and limit is 20, the first page of the response contains items 11-30 from the complete result set. Default: 0
-]: nothing -> record<ads: table<adGroupId: string, adId: string, adStatus: string, alerts: list, bidPercentage: string, inventoryReferenceId: string, inventoryReferenceType: string, listingId: string>, href: string, limit: int, next: string, offset: int, prev: string, total: int> {
+]: nothing -> oneof<record<ads: table<adGroupId: string, adId: string, adStatus: string, alerts: list, bidPercentage: string, inventoryReferenceId: string, inventoryReferenceType: string, listingId: string>, href: string, limit: int, next: string, offset: int, prev: string, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaign_id' must be non-empty" } }
@@ -432,7 +453,7 @@ export def "create-ad-by-listing-id" [
   --ad-group-id: string # A unique eBay-assigned ID for an ad group in a campaign that uses the Cost Per Click (CPC) funding model. Required if the campaign's funding model is Cost Per Click (CPC).Create an ad group using the createAdGroup (/api-docs/sell/marketing/resources/adgroup/methods/createAdGroup) method.Specify the campaign to associate the ad group with using the campaign_id path parameter. Note: You can call the getAdGroups (/api-docs/sell/marketing/resources/adgroup/methods/getAdGroups) method to retrieve the ad group IDs for a seller.
   --bid-percentage: string # The user-defined bid percentage (also known as the ad rate) sets the level that eBay increases the visibility in search results for the associated listing. The higher the bidPercentage value, the more eBay promotes the listing.Required if the campaign's funding model is Cost Per Sale (CPS). The value specified here is also used to calculate the Promoted Listings fee. This percentage value is multiplied by the final sales price to determine the fee. The Promoted Listings fee is determined at the time the transaction completes and the seller is assessed the fee only when an item sells through a Promoted Listings ad campaign. The bidPercentage is a single precision value that is guided by the following rules: These values are valid: 4.1, 5.0, 5.5, ... These values are not valid: 0.01, 10.75, 99.99, and so on.This is default bid percentage for the campaigns using the Cost Per Sale (CPS) funding model, and this value will be overridden by any ads in the campaign that have their own set bid percentages.If a bid percentage is not provided for an ad, eBay uses the default bid percentage of the associated campaign.Minimum value: 2.0 Maximum value: 100.0
   --listing-id: string # A unique eBay-assigned ID for a listing that is generated when the listing is created. Note: This field accepts listing IDs, as generated by the Inventory API, and item IDs, as used in the eBay Traditional API set (e.g., the Trading and Finding APIs).
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -510,7 +531,7 @@ export def "get-ad" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<adGroupId: string, adId: string, adStatus: string, alerts: table<alertType: string, details: list>, bidPercentage: string, inventoryReferenceId: string, inventoryReferenceType: string, listingId: string> {
+]: nothing -> oneof<record<adGroupId: string, adId: string, adStatus: string, alerts: table<alertType: string, details: list>, bidPercentage: string, inventoryReferenceId: string, inventoryReferenceType: string, listingId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaign_id' must be non-empty" } }
@@ -592,7 +613,7 @@ export def "get-ad-groups" [
   --ad-group-status: string # A comma-separated list of ad group statuses. The results will be filtered to only include the given statuses of the ad group.The results might not include these ad groups if other search conditions exclude them.
   --limit: string # The number of results, from the current result set, to be returned in a single page.
   --offset: string # The number of results that will be skipped in the result set. This is used with the limit field to control the pagination of the output.For example, if the offset is set to 0 and the limit is set to 10, the method will retrieve items 1 through 10 from the list of items returned. If the offset is set to 10 and the limit is set to 10, the method will retrieve items 11 through 20 from the list of items returned.Default: 0
-]: nothing -> record<adGroups: table<adGroupId: string, adGroupStatus: string, defaultBid: record, name: string>, href: string, limit: int, next: string, offset: int, prev: string, total: int> {
+]: nothing -> oneof<record<adGroups: table<adGroupId: string, adGroupStatus: string, defaultBid: record, name: string>, href: string, limit: int, next: string, offset: int, prev: string, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaign_id' must be non-empty" } }
@@ -618,7 +639,6 @@ export def "get-ad-groups" [
 #
 # POST /ad_campaign/{campaign_id}/ad_group
 # operationId: createAdGroup
-# --defaultBid shape: {currency?: string, value?: string}
 export def "create-ad-group" [
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -632,7 +652,7 @@ export def "create-ad-group" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --default-bid: record # A complex type that describes the value of a monetary amount as represented by a global currency. — shape: {currency?: string, value?: string}
   --name: string # The seller-defined name of the ad group.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -672,7 +692,7 @@ export def "get-ad-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<adGroupId: string, adGroupStatus: string, defaultBid: record<currency: string, value: string>, name: string> {
+]: nothing -> oneof<record<adGroupId: string, adGroupStatus: string, defaultBid: record<currency: string, value: string>, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaign_id' must be non-empty" } }
@@ -698,7 +718,6 @@ export def "get-ad-group" [
 #
 # PUT /ad_campaign/{campaign_id}/ad_group/{ad_group_id}
 # operationId: updateAdGroup
-# --defaultBid shape: {currency?: string, value?: string}
 export def "update-ad-group" [
   campaign_id: string
   ad_group_id: string
@@ -743,7 +762,6 @@ export def "update-ad-group" [
 #
 # POST /ad_campaign/{campaign_id}/ad_group/{ad_group_id}/suggest_bids
 # operationId: suggestBids
-# --keywords item shape: {keywordText?: string, matchType?: string}
 export def "suggest-bids" [
   campaign_id: string
   ad_group_id: string
@@ -757,7 +775,7 @@ export def "suggest-bids" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --keywords: list # A list of keywords in the paginated collection. Maximum number of keywords: 500 — item shape: {keywordText?: string, matchType?: string}
-]: any -> record<suggestedBids: table<keywordText: string, matchType: string, proposedBid: record>> {
+]: any -> oneof<record<suggestedBids: table<keywordText: string, matchType: string, proposedBid: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -802,7 +820,7 @@ export def "suggest-keywords" [
   --exclusions: list<string> # A field used to indicate that the keywords already selected by sellers for the specified listing IDs should be filtered out of the response, and only new and unique keyword recommendations shall be returned.Valid Value: ADOPTED_KEYWORDS
   --listing-ids: list<string> # A set of comma-separated listing IDs in the paginated collection. Maximum number of listings requested: 300
   --match-type: string # A field that defines the match type for the keyword.Valid Values:BROADEXACTPHRASE For implementation help, refer to eBay API documentation
-]: any -> record<suggestedKeywords: table<additionalInfo: list, keywordText: string, matchType: string>> {
+]: any -> oneof<record<suggestedKeywords: table<additionalInfo: list, keywordText: string, matchType: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -831,7 +849,6 @@ export def "suggest-keywords" [
 #
 # POST /ad_campaign/{campaign_id}/bulk_create_ads_by_inventory_reference
 # operationId: bulkCreateAdsByInventoryReference
-# --requests item shape: {adGroupId?: string, bidPercentage?: string, inventoryReferenceId?: string, inventoryReferenceType?: string}
 export def "bulk-create-ads-by-inventory-reference" [
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -844,7 +861,7 @@ export def "bulk-create-ads-by-inventory-reference" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --requests: list # A list of inventory reference ID and inventory reference type pairs, and the bid percentage, which the call uses to create ads in bulk. — item shape: {adGroupId?: string, bidPercentage?: string, inventoryReferenceId?: string, inventoryReferenceType?: string}
-]: any -> record<responses: table<adGroupId: string, ads: list, errors: list, inventoryReferenceId: string, inventoryReferenceType: string, statusCode: int>> {
+]: any -> oneof<record<responses: table<adGroupId: string, ads: list, errors: list, inventoryReferenceId: string, inventoryReferenceType: string, statusCode: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -872,7 +889,6 @@ export def "bulk-create-ads-by-inventory-reference" [
 #
 # POST /ad_campaign/{campaign_id}/bulk_create_ads_by_listing_id
 # operationId: bulkCreateAdsByListingId
-# --requests item shape: {adGroupId?: string, bidPercentage?: string, listingId?: string}
 export def "bulk-create-ads-by-listing-id" [
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -885,7 +901,7 @@ export def "bulk-create-ads-by-listing-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --requests: list # An array of listing IDs and their associated bid percentages, which the request uses to create ads in bulk. This request accepts both listing IDs, as generated by the Inventory API, and an item IDs, as used in the eBay Traditional API set (e.g., the Trading and Finding APIs). Maximum: 500 IDs per call — item shape: {adGroupId?: string, bidPercentage?: string, listingId?: string}
-]: any -> record<responses: table<adGroupId: string, adId: string, errors: list, href: string, listingId: string, statusCode: int>> {
+]: any -> oneof<record<responses: table<adGroupId: string, adId: string, errors: list, href: string, listingId: string, statusCode: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -913,7 +929,6 @@ export def "bulk-create-ads-by-listing-id" [
 #
 # POST /ad_campaign/{campaign_id}/bulk_create_keyword
 # operationId: bulkCreateKeyword
-# --requests item shape: {adGroupId?: string, bid?: record, keywordText?: string, matchType?: string}
 export def "bulk-create-keyword" [
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -926,7 +941,7 @@ export def "bulk-create-keyword" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --requests: list # This array is used to pass in multiple keywords for one or more ad groups that belong to a campaign that uses the Cost Per Click (CPC) funding model. Up to {max value} keywords can be created with one call. — item shape: {adGroupId?: string, bid?: record, keywordText?: string, matchType?: string}
-]: any -> record<responses: table<adGroupId: string, errors: list, href: string, keywordId: string, keywordText: string, matchType: string, statusCode: int>> {
+]: any -> oneof<record<responses: table<adGroupId: string, errors: list, href: string, keywordId: string, keywordText: string, matchType: string, statusCode: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -954,7 +969,6 @@ export def "bulk-create-keyword" [
 #
 # POST /ad_campaign/{campaign_id}/bulk_delete_ads_by_inventory_reference
 # operationId: bulkDeleteAdsByInventoryReference
-# --requests item shape: {inventoryReferenceId?: string, inventoryReferenceType?: string}
 export def "bulk-delete-ads-by-inventory-reference" [
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -967,7 +981,7 @@ export def "bulk-delete-ads-by-inventory-reference" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --requests: list # A list of inventory referenceID and inventory reference type pairs that specify the set of ads to remove in bulk. — item shape: {inventoryReferenceId?: string, inventoryReferenceType?: string}
-]: any -> record<responses: table<adIds: list, errors: list, inventoryReferenceId: string, inventoryReferenceType: string, statusCode: int>> {
+]: any -> oneof<record<responses: table<adIds: list, errors: list, inventoryReferenceId: string, inventoryReferenceType: string, statusCode: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -995,7 +1009,6 @@ export def "bulk-delete-ads-by-inventory-reference" [
 #
 # POST /ad_campaign/{campaign_id}/bulk_delete_ads_by_listing_id
 # operationId: bulkDeleteAdsByListingId
-# --requests item shape: {listingId?: string}
 export def "bulk-delete-ads-by-listing-id" [
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1008,7 +1021,7 @@ export def "bulk-delete-ads-by-listing-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --requests: list # An array of the listing IDs that identify the ads to remove. — item shape: {listingId?: string}
-]: any -> record<responses: table<adId: string, errors: list, listingId: string, statusCode: int>> {
+]: any -> oneof<record<responses: table<adId: string, errors: list, listingId: string, statusCode: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1036,7 +1049,6 @@ export def "bulk-delete-ads-by-listing-id" [
 #
 # POST /ad_campaign/{campaign_id}/bulk_update_ads_bid_by_inventory_reference
 # operationId: bulkUpdateAdsBidByInventoryReference
-# --requests item shape: {adGroupId?: string, bidPercentage?: string, inventoryReferenceId?: string, inventoryReferenceType?: string}
 export def "bulk-update-ads-bid-by-inventory-reference" [
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1049,7 +1061,7 @@ export def "bulk-update-ads-bid-by-inventory-reference" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --requests: list # A list of inventory reference ID and inventory reference type pairs, and the bid percentage, which the call uses to create ads in bulk. — item shape: {adGroupId?: string, bidPercentage?: string, inventoryReferenceId?: string, inventoryReferenceType?: string}
-]: any -> record<responses: table<ads: list, errors: list, inventoryReferenceId: string, inventoryReferenceType: string, statusCode: int>> {
+]: any -> oneof<record<responses: table<ads: list, errors: list, inventoryReferenceId: string, inventoryReferenceType: string, statusCode: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1077,7 +1089,6 @@ export def "bulk-update-ads-bid-by-inventory-reference" [
 #
 # POST /ad_campaign/{campaign_id}/bulk_update_ads_bid_by_listing_id
 # operationId: bulkUpdateAdsBidByListingId
-# --requests item shape: {adGroupId?: string, bidPercentage?: string, listingId?: string}
 export def "bulk-update-ads-bid-by-listing-id" [
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1090,7 +1101,7 @@ export def "bulk-update-ads-bid-by-listing-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --requests: list # An array of listing IDs and their associated bid percentages, which the request uses to create ads in bulk. This request accepts both listing IDs, as generated by the Inventory API, and an item IDs, as used in the eBay Traditional API set (e.g., the Trading and Finding APIs). Maximum: 500 IDs per call — item shape: {adGroupId?: string, bidPercentage?: string, listingId?: string}
-]: any -> record<responses: table<adId: string, errors: list, href: string, listingId: string, statusCode: int>> {
+]: any -> oneof<record<responses: table<adId: string, errors: list, href: string, listingId: string, statusCode: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1118,7 +1129,6 @@ export def "bulk-update-ads-bid-by-listing-id" [
 #
 # POST /ad_campaign/{campaign_id}/bulk_update_ads_status
 # operationId: bulkUpdateAdsStatus
-# --requests item shape: {adId?: string, adStatus?: string}
 export def "bulk-update-ads-status" [
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1131,7 +1141,7 @@ export def "bulk-update-ads-status" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --requests: list # An array of listing IDs and bid percentages. — item shape: {adId?: string, adStatus?: string}
-]: any -> record<responses: table<adId: string, errors: list, href: string, statusCode: int>> {
+]: any -> oneof<record<responses: table<adId: string, errors: list, href: string, statusCode: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1159,7 +1169,6 @@ export def "bulk-update-ads-status" [
 #
 # POST /ad_campaign/{campaign_id}/bulk_update_ads_status_by_listing_id
 # operationId: bulkUpdateAdsStatusByListingId
-# --requests item shape: {adGroupId?: string, adStatus?: string, listingId?: string}
 export def "bulk-update-ads-status-by-listing-id" [
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1172,7 +1181,7 @@ export def "bulk-update-ads-status-by-listing-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --requests: list # An array of listing IDs and bid percentages. — item shape: {adGroupId?: string, adStatus?: string, listingId?: string}
-]: any -> record<responses: table<adGroupId: string, errors: list, href: string, listingId: string, statusCode: int>> {
+]: any -> oneof<record<responses: table<adGroupId: string, errors: list, href: string, listingId: string, statusCode: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1200,7 +1209,6 @@ export def "bulk-update-ads-status-by-listing-id" [
 #
 # POST /ad_campaign/{campaign_id}/bulk_update_keyword
 # operationId: bulkUpdateKeyword
-# --requests item shape: {bid?: record, keywordId?: string, keywordStatus?: string}
 export def "bulk-update-keyword" [
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1213,7 +1221,7 @@ export def "bulk-update-keyword" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --requests: list # Use this array to update the bid values and/or statuses of one or more existing keywords. — item shape: {bid?: record, keywordId?: string, keywordStatus?: string}
-]: any -> record<responses: table<errors: list, keywordId: string, statusCode: int>> {
+]: any -> oneof<record<responses: table<errors: list, keywordId: string, statusCode: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1241,7 +1249,6 @@ export def "bulk-update-keyword" [
 #
 # POST /ad_campaign/{campaign_id}/clone
 # operationId: cloneCampaign
-# --fundingStrategy shape: {adRateStrategy?: string, bidPercentage?: string, dynamicAdRatePreferences?: list, fundingModel?: string}
 export def "clone-campaign" [
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1257,7 +1264,7 @@ export def "clone-campaign" [
   --end-date: string # The date and time the campaign ends, in UTC format (yyyy-MM-ddThh:mm:ssZ). If this field is omitted, the campaign will have no defined end date, and will not end until the seller makes a decision to end the campaign with an endCampaign (/api-docs/sell/marketing/resources/campaign/methods/endCampaign) call, or if they update the campaign at a later time with an end date.
   --funding-strategy: record # This type defines how the Promoted Listings fee is calculated for a Promoted Listings ad campaign. — shape: {adRateStrategy?: string, bidPercentage?: string, dynamicAdRatePreferences?: list, fundingModel?: string}
   --start-date: string # The date and time the cloned campaign starts, in UTC format (yyyy-MM-ddThh:mm:ssZ). For display purposes, convert this time into the local time of the seller. On the date specified, the service derives the keywords for each listing in the campaign, creates an ad for each listing, and associates each new ad with the campaign. The campaign starts after this process is completed. The amount of time it takes the service to start the campaign depends on the number of listings in the campaign. Call getCampaign to check the status of the campaign.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1300,7 +1307,7 @@ export def "create-ads-by-inventory-reference" [
   --bid-percentage: string # The user-defined bid percentage (also known as the ad rate) sets the level that eBay increases the visibility in search results for the associated listing. The higher the bidPercentage value, the more eBay promotes the listing.Required if the campaign's funding model is Cost Per Sale (CPS).The value specified here is also used to calculate the Promoted Listings fee. This percentage value is multiplied by the final sales price to determine the fee.The Promoted Listings fee is determined at the time the transaction completes and the seller is assessed the fee only when an item sells through a Promoted Listings ad campaign.The bidPercentage is a single precision value that is guided by the following rules: These values are valid: 4.1, 5.0, 5.5, ... These values are not valid: 0.01, 10.75, 99.99, and so on.This is default bid percentage for the campaigns using the Cost Per Sale (CPS) funding model, and this value will be overridden by any ads in the campaign that have their own set bid percentages.If a bid percentage is not provided for an ad, eBay uses the default bid percentage of the associated campaign.Minimum value: 2.0 Maximum value: 100.0
   --inventory-reference-id: string # An ID that identifies a single-item listing or multiple-variation listing that is managed with the Inventory API (/api-docs/sell/inventory/resources/methods). The inventory reference ID is a seller-defined value that can be either an SKU for a single-item listing or an inventoryItemGroupKey for a multiple-value listing. An inventoryItemGroupKey is a value that the seller defines to indicate a listing that's the parent of an inventory item group (a multiple-variation listing, such as a listing for a shirt that's available in multiple sizes and colors). You must always specify both an inventoryReferenceId and an inventoryReferenceType to indicate an item that's managed with the Inventory API.
   --inventory-reference-type: string # Indicates the type of item the inventoryReferenceId references. The item can be either an INVENTORY_ITEM or INVENTORY_ITEM_GROUP. You must always pair an inventoryReferenceId with and inventoryReferenceType. For implementation help, refer to eBay API documentation
-]: any -> record<ads: table<adId: string, href: string>> {
+]: any -> oneof<record<ads: table<adId: string, href: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1341,7 +1348,7 @@ export def "delete-ads-by-inventory-reference" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --inventory-reference-id: string # The inventory reference ID is a seller-defined SKU value for a single-item listing, or a seller-defined identifier for an inventory item group. Both of these values are defined when using the Inventory API, and an inventory item group is used to create a multiple-variation listing.
   --inventory-reference-type: string # The enumeration value passed into this field indicates the type of value used for the corresponding inventoryReferenceId value. The enumeration value used here will either be INVENTORY_ITEM (to delete the ad for a single SKU listing) or INVENTORY_ITEM_GROUP (to delete the ad for a multiple-variation listing). For implementation help, refer to eBay API documentation
-]: any -> record<adIds: list<string>> {
+]: any -> oneof<record<adIds: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1418,7 +1425,7 @@ export def "get-ads-by-inventory-reference" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --inventory-reference-id: string # The inventory reference ID associated with the ad you want returned. A seller's inventory reference ID is the ID of either a listing or the ID of an inventory item group (the parent of a multi-variation listing, such as a shirt that is available in multiple sizes and colors). You must always supply in both an inventory_reference_id and an inventory_reference_type. (required)
   --inventory-reference-type: string # The type of the inventory reference ID. Set this value to either INVENTORY_ITEM (a single listing) or INVENTORY_ITEM_GROUP (a multi-variation listing). You must always pass in both an inventory_reference_id and an inventory_reference_type. (required)
-]: nothing -> record<ads: table<adGroupId: string, adId: string, adStatus: string, alerts: list, bidPercentage: string, inventoryReferenceId: string, inventoryReferenceType: string, listingId: string>> {
+]: nothing -> oneof<record<ads: table<adGroupId: string, adId: string, adStatus: string, alerts: list, bidPercentage: string, inventoryReferenceId: string, inventoryReferenceType: string, listingId: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaign_id' must be non-empty" } }
@@ -1461,7 +1468,7 @@ export def "get-keywords" [
   --keyword-status: string # A comma-separated list of keyword statuses. The results will be filtered to only include the given statuses of the keyword. If none are provided, all keywords are returned.
   --limit: string # Specifies the maximum number of results to return on a page in the paginated response. Default: 10 Maximum: 500
   --offset: string # Specifies the number of results to skip in the result set before returning the first report in the paginated response. Combine offset with the limit query parameter to control the items returned in the response. For example, if you supply an offset of 0 and a limit of 10, the first page of the response contains the first 10 items from the complete list of items retrieved by the call. If offset is 10 and limit is 20, the first page of the response contains items 11-30 from the complete result set. Default: 0
-]: nothing -> record<href: string, keywords: table<adGroupId: string, bid: record, keywordId: string, keywordStatus: string, keywordText: string, matchType: string>, limit: int, next: string, offset: int, prev: string, total: int> {
+]: nothing -> oneof<record<href: string, keywords: table<adGroupId: string, bid: record, keywordId: string, keywordStatus: string, keywordText: string, matchType: string>, limit: int, next: string, offset: int, prev: string, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaign_id' must be non-empty" } }
@@ -1487,7 +1494,6 @@ export def "get-keywords" [
 #
 # POST /ad_campaign/{campaign_id}/keyword
 # operationId: createKeyword
-# --bid shape: {currency?: string, value?: string}
 export def "create-keyword" [
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1503,7 +1509,7 @@ export def "create-keyword" [
   --bid: record # A complex type that describes the value of a monetary amount as represented by a global currency. — shape: {currency?: string, value?: string}
   --keyword-text: string # Input the keyword into this field.
   --match-type: string # A field that defines the match type for the keyword.Valid Values:BROADEXACTPHRASE For implementation help, refer to eBay API documentation
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1543,7 +1549,7 @@ export def "get-keyword" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<adGroupId: string, bid: record<currency: string, value: string>, keywordId: string, keywordStatus: string, keywordText: string, matchType: string> {
+]: nothing -> oneof<record<adGroupId: string, bid: record<currency: string, value: string>, keywordId: string, keywordStatus: string, keywordText: string, matchType: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaign_id' must be non-empty" } }
@@ -1569,7 +1575,6 @@ export def "get-keyword" [
 #
 # PUT /ad_campaign/{campaign_id}/keyword/{keyword_id}
 # operationId: updateKeyword
-# --bid shape: {currency?: string, value?: string}
 export def "update-keyword" [
   campaign_id: string
   keyword_id: string
@@ -1699,7 +1704,7 @@ export def "suggest-items" [
   --category-ids: string # Specifies the category ID that is used to limit the results. This refers to an exact leaf category (the lowest level in that category and has no children). This field can have one category ID, or a comma-separated list of IDs. To return all category IDs, set to null. Maximum: 10
   --limit: string # Specifies the maximum number of campaigns to return on a page in the paginated response. If no value is specified, the default value is used. Default: 10 Minimum: 1Maximum: 1000
   --offset: string # Specifies the number of campaigns to skip in the result set before returning the first report in the paginated response. Combine offset with the limit query parameter to control the items returned in the response. For example, if you supply an offset of 0 and a limit of 10, the first page of the response contains the first 10 items from the complete list of items retrieved by the call. If offset is 10 and limit is 20, the first page of the response contains items 11-30 from the complete result set. Default: 0
-]: nothing -> record<href: string, limit: int, next: string, offset: int, prev: string, suggestedItems: table<bases: list, listingId: string>, total: int> {
+]: nothing -> oneof<record<href: string, limit: int, next: string, offset: int, prev: string, suggestedItems: table<bases: list, listingId: string>, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaign_id' must be non-empty" } }
@@ -1725,7 +1730,6 @@ export def "suggest-items" [
 #
 # POST /ad_campaign/{campaign_id}/update_ad_rate_strategy
 # operationId: updateAdRateStrategy
-# --dynamicAdRatePreferences item shape: {adRateAdjustmentPercent?: string, adRateCapPercent?: string}
 export def "update-ad-rate-strategy" [
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1768,7 +1772,6 @@ export def "update-ad-rate-strategy" [
 #
 # POST /ad_campaign/{campaign_id}/update_campaign_budget
 # operationId: updateCampaignBudget
-# --daily shape: {amount?: record}
 export def "update-campaign-budget" [
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1862,7 +1865,7 @@ export def "get-report" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($report_id | is-empty) { error make --unspanned { msg: "path parameter 'report_id' must be non-empty" } }
@@ -1897,7 +1900,7 @@ export def "get-report-metadata" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<reportMetadata: table<dimensionMetadata: list, maxNumberOfDimensionsToRequest: int, maxNumberOfMetricsToRequest: int, metricMetadata: list, reportType: string>> {
+]: nothing -> oneof<record<reportMetadata: table<dimensionMetadata: list, maxNumberOfDimensionsToRequest: int, maxNumberOfMetricsToRequest: int, metricMetadata: list, reportType: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ad_report_metadata" $auth.query)
@@ -1932,7 +1935,7 @@ export def "get-report-metadata-for-report-type" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<dimensionMetadata: table<dataType: string, dimensionKey: string, dimensionKeyAnnotations: list>, maxNumberOfDimensionsToRequest: int, maxNumberOfMetricsToRequest: int, metricMetadata: table<dataType: string, metricKey: string>, reportType: string> {
+]: nothing -> oneof<record<dimensionMetadata: table<dataType: string, dimensionKey: string, dimensionKeyAnnotations: list>, maxNumberOfDimensionsToRequest: int, maxNumberOfMetricsToRequest: int, metricMetadata: table<dataType: string, metricKey: string>, reportType: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($report_type | is-empty) { error make --unspanned { msg: "path parameter 'report_type' must be non-empty" } }
@@ -1970,7 +1973,7 @@ export def "get-report-tasks" [
   --limit: string # Specifies the maximum number of report tasks to return on a page in the paginated response. Default: 10Maximum: 500
   --offset: string # Specifies the number of report tasks to skip in the result set before returning the first report in the paginated response. Combine offset with the limit query parameter to control the reports returned in the response. For example, if you supply an offset of 0 and a limit of 10, the response contains the first 10 reports from the complete list of report tasks retrieved by the call. If offset is 10 and limit is 10, the first page of the response contains reports 11-20 from the complete result set. Default: 0
   --report-task-statuses: string # This parameter filters the returned report tasks by their status. Supply a comma-separated list of the report statuses you want returned. The results are filtered to include only the report statuses you specify.Note: The results might not include some report tasks if other search conditions exclude them.Valid values: PENDING SUCCESS FAILED
-]: nothing -> record<href: string, limit: int, next: string, offset: int, prev: string, reportTasks: table<campaignIds: list, dateFrom: string, dateTo: string, dimensions: list, fundingModels: list, inventoryReferences: list, listingIds: list, marketplaceId: string, metricKeys: list, reportExpirationDate: string, reportFormat: string, reportHref: string, reportId: string, reportName: string, reportTaskCompletionDate: string, reportTaskCreationDate: string, reportTaskExpectedCompletionDate: string, reportTaskId: string, reportTaskStatus: string, reportTaskStatusMessage: string, reportType: string>, total: int> {
+]: nothing -> oneof<record<href: string, limit: int, next: string, offset: int, prev: string, reportTasks: table<campaignIds: list, dateFrom: string, dateTo: string, dimensions: list, fundingModels: list, inventoryReferences: list, listingIds: list, marketplaceId: string, metricKeys: list, reportExpirationDate: string, reportFormat: string, reportHref: string, reportId: string, reportName: string, reportTaskCompletionDate: string, reportTaskCreationDate: string, reportTaskExpectedCompletionDate: string, reportTaskId: string, reportTaskStatus: string, reportTaskStatusMessage: string, reportType: string>, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "report_task_statuses" $report_task_statuses "scalar")] | flatten | str join "&"
@@ -1995,8 +1998,6 @@ export def "get-report-tasks" [
 #
 # POST /ad_report_task
 # operationId: createReportTask
-# --dimensions item shape: {annotationKeys?: list<string>, dimensionKey?: string}
-# --inventoryReferences item shape: {inventoryReferenceId?: string, inventoryReferenceType?: string}
 export def "create-report-task" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2093,7 +2094,7 @@ export def "get-report-task" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<campaignIds: list<string>, dateFrom: string, dateTo: string, dimensions: table<annotationKeys: list, dimensionKey: string>, fundingModels: list<string>, inventoryReferences: table<inventoryReferenceId: string, inventoryReferenceType: string>, listingIds: list<string>, marketplaceId: string, metricKeys: list<string>, reportExpirationDate: string, reportFormat: string, reportHref: string, reportId: string, reportName: string, reportTaskCompletionDate: string, reportTaskCreationDate: string, reportTaskExpectedCompletionDate: string, reportTaskId: string, reportTaskStatus: string, reportTaskStatusMessage: string, reportType: string> {
+]: nothing -> oneof<record<campaignIds: list<string>, dateFrom: string, dateTo: string, dimensions: table<annotationKeys: list, dimensionKey: string>, fundingModels: list<string>, inventoryReferences: table<inventoryReferenceId: string, inventoryReferenceType: string>, listingIds: list<string>, marketplaceId: string, metricKeys: list<string>, reportExpirationDate: string, reportFormat: string, reportHref: string, reportId: string, reportName: string, reportTaskCompletionDate: string, reportTaskCreationDate: string, reportTaskExpectedCompletionDate: string, reportTaskId: string, reportTaskStatus: string, reportTaskStatusMessage: string, reportType: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($report_task_id | is-empty) { error make --unspanned { msg: "path parameter 'report_task_id' must be non-empty" } }
@@ -2118,7 +2119,6 @@ export def "get-report-task" [
 #
 # POST /bulk_create_negative_keyword
 # operationId: bulkCreateNegativeKeyword
-# --requests item shape: {adGroupId?: string, campaignId?: string, negativeKeywordMatchType?: string, negativeKeywordText?: string}
 export def "bulk-create-negative-keyword" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2130,7 +2130,7 @@ export def "bulk-create-negative-keyword" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --requests: list # This array is used to pass in multiple negative keywords for one or more ad groups that belong to a campaign that uses the Cost Per Click (CPC) funding model. — item shape: {adGroupId?: string, campaignId?: string, negativeKeywordMatchType?: string, negativeKeywordText?: string}
-]: any -> record<responses: table<adGroupId: string, campaignId: string, errors: list, href: string, negativeKeywordId: string, negativeKeywordMatchType: string, negativeKeywordText: string, statusCode: int>> {
+]: any -> oneof<record<responses: table<adGroupId: string, campaignId: string, errors: list, href: string, negativeKeywordId: string, negativeKeywordMatchType: string, negativeKeywordText: string, statusCode: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2157,7 +2157,6 @@ export def "bulk-create-negative-keyword" [
 #
 # POST /bulk_update_negative_keyword
 # operationId: bulkUpdateNegativeKeyword
-# --requests item shape: {negativeKeywordId?: string, negativeKeywordStatus?: string}
 export def "bulk-update-negative-keyword" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2169,7 +2168,7 @@ export def "bulk-update-negative-keyword" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --requests: list # An array to update the statuses of one or more existing negative keywords. — item shape: {negativeKeywordId?: string, negativeKeywordStatus?: string}
-]: any -> record<responses: table<errors: list, negativeKeywordId: string, statusCode: int>> {
+]: any -> oneof<record<responses: table<errors: list, negativeKeywordId: string, statusCode: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2196,7 +2195,6 @@ export def "bulk-update-negative-keyword" [
 #
 # POST /item_price_markdown
 # operationId: createItemPriceMarkdownPromotion
-# --selectedInventoryDiscounts item shape: {discountBenefit?: record, discountId?: string, inventoryCriterion?: record, ruleOrder?: int}
 export def "create-item-price-markdown-promotion" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2219,7 +2217,7 @@ export def "create-item-price-markdown-promotion" [
   --promotion-status: string # The current status of the promotion. When creating a new promotion, you must set this value to either DRAFT or SCHEDULED. Note that you must set this value to SCHEDULED when you update a RUNNING promotion. For implementation help, refer to eBay API documentation
   --selected-inventory-discounts: list # A list that defines the sets of selected items for the markdown promotion and the discount specified for promotion. — item shape: {discountBenefit?: record, discountId?: string, inventoryCriterion?: record, ruleOrder?: int}
   --start-date: string # The date and time the promotion starts in UTC format (yyyy-MM-ddThh:mm:ssZ). For display purposes, convert this time into the local time of the seller.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2293,7 +2291,7 @@ export def "get-item-price-markdown-promotion" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<applyFreeShipping: bool, autoSelectFutureInventory: bool, blockPriceIncreaseInItemRevision: bool, description: string, endDate: string, marketplaceId: string, name: string, priority: string, promotionImageUrl: string, promotionStatus: string, selectedInventoryDiscounts: table<discountBenefit: record, discountId: string, inventoryCriterion: record, ruleOrder: int>, startDate: string> {
+]: nothing -> oneof<record<applyFreeShipping: bool, autoSelectFutureInventory: bool, blockPriceIncreaseInItemRevision: bool, description: string, endDate: string, marketplaceId: string, name: string, priority: string, promotionImageUrl: string, promotionStatus: string, selectedInventoryDiscounts: table<discountBenefit: record, discountId: string, inventoryCriterion: record, ruleOrder: int>, startDate: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($promotion_id | is-empty) { error make --unspanned { msg: "path parameter 'promotion_id' must be non-empty" } }
@@ -2318,7 +2316,6 @@ export def "get-item-price-markdown-promotion" [
 #
 # PUT /item_price_markdown/{promotion_id}
 # operationId: updateItemPriceMarkdownPromotion
-# --selectedInventoryDiscounts item shape: {discountBenefit?: record, discountId?: string, inventoryCriterion?: record, ruleOrder?: int}
 export def "update-item-price-markdown-promotion" [
   promotion_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2342,7 +2339,7 @@ export def "update-item-price-markdown-promotion" [
   --promotion-status: string # The current status of the promotion. When creating a new promotion, you must set this value to either DRAFT or SCHEDULED. Note that you must set this value to SCHEDULED when you update a RUNNING promotion. For implementation help, refer to eBay API documentation
   --selected-inventory-discounts: list # A list that defines the sets of selected items for the markdown promotion and the discount specified for promotion. — item shape: {discountBenefit?: record, discountId?: string, inventoryCriterion?: record, ruleOrder?: int}
   --start-date: string # The date and time the promotion starts in UTC format (yyyy-MM-ddThh:mm:ssZ). For display purposes, convert this time into the local time of the seller.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2370,10 +2367,6 @@ export def "update-item-price-markdown-promotion" [
 #
 # POST /item_promotion
 # operationId: createItemPromotion
-# --budget shape: {currency?: string, value?: string}
-# --couponConfiguration shape: {couponCode?: string, couponType?: string, maxCouponRedemptionPerUser?: int}
-# --discountRules item shape: {discountBenefit?: record, discountSpecification?: record, maxDiscountAmount?: record, ruleOrder?: int}
-# --inventoryCriterion shape: {inventoryCriterionType?: string, inventoryItems?: list, listingIds?: list<string>, ruleCriteria?: record}
 export def "create-item-promotion" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2398,7 +2391,7 @@ export def "create-item-promotion" [
   --promotion-status: string # The current status of the promotion. When creating a new promotion, this value must be set to either DRAFT or SCHEDULED. Note that you must set this value to SCHEDULED when you update a RUNNING promotion. For implementation help, refer to eBay API documentation
   --promotion-type: string # Use this field to specify the type of the promotion you are creating. The supported types are: CODED_COUPON &ndash; A coupon code promotion set with createItemPromotion. MARKDOWN_SALE &ndash; A markdown promotion set with createItemPriceMarkdownPromotion. ORDER_DISCOUNT &ndash; A threshold promotion set with createItemPromotion. VOLUME_DISCOUNT &ndash; A volume pricing promotion set with createItemPromotion. See the Promotions Manager (/api-docs/sell/static/marketing/promotions-manager.html) documentation for details. Required if you are creating a volume pricing promotion (VOLUME_DISCOUNT). For implementation help, refer to eBay API documentation
   --start-date: string # The date and time the promotion starts in UTC format (yyyy-MM-ddThh:mm:ssZ). For display purposes, convert this time into the local time of the seller.
-]: any -> record<warnings: table<category: string, domain: string, errorId: int, inputRefIds: list, longMessage: string, message: string, outputRefIds: list, parameters: list, subdomain: string>> {
+]: any -> oneof<record<warnings: table<category: string, domain: string, errorId: int, inputRefIds: list, longMessage: string, message: string, outputRefIds: list, parameters: list, subdomain: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2472,7 +2465,7 @@ export def "get-item-promotion" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<applyDiscountToSingleItemOnly: bool, budget: record<currency: string, value: string>, couponConfiguration: record<couponCode: string, couponType: string, maxCouponRedemptionPerUser: int>, description: string, discountRules: table<discountBenefit: record, discountSpecification: record, maxDiscountAmount: record, ruleOrder: int>, endDate: string, inventoryCriterion: record<inventoryCriterionType: string, inventoryItems: list<record>, listingIds: list<string>, ruleCriteria: record<excludeInventoryItems: list, excludeListingIds: list, markupInventoryItems: list, markupListingIds: list, selectionRules: list>>, marketplaceId: string, name: string, priority: string, promotionId: string, promotionImageUrl: string, promotionStatus: string, promotionType: string, startDate: string> {
+]: nothing -> oneof<record<applyDiscountToSingleItemOnly: bool, budget: record<currency: string, value: string>, couponConfiguration: record<couponCode: string, couponType: string, maxCouponRedemptionPerUser: int>, description: string, discountRules: table<discountBenefit: record, discountSpecification: record, maxDiscountAmount: record, ruleOrder: int>, endDate: string, inventoryCriterion: record<inventoryCriterionType: string, inventoryItems: list<record>, listingIds: list<string>, ruleCriteria: record<excludeInventoryItems: list, excludeListingIds: list, markupInventoryItems: list, markupListingIds: list, selectionRules: list>>, marketplaceId: string, name: string, priority: string, promotionId: string, promotionImageUrl: string, promotionStatus: string, promotionType: string, startDate: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($promotion_id | is-empty) { error make --unspanned { msg: "path parameter 'promotion_id' must be non-empty" } }
@@ -2497,10 +2490,6 @@ export def "get-item-promotion" [
 #
 # PUT /item_promotion/{promotion_id}
 # operationId: updateItemPromotion
-# --budget shape: {currency?: string, value?: string}
-# --couponConfiguration shape: {couponCode?: string, couponType?: string, maxCouponRedemptionPerUser?: int}
-# --discountRules item shape: {discountBenefit?: record, discountSpecification?: record, maxDiscountAmount?: record, ruleOrder?: int}
-# --inventoryCriterion shape: {inventoryCriterionType?: string, inventoryItems?: list, listingIds?: list<string>, ruleCriteria?: record}
 export def "update-item-promotion" [
   promotion_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2526,7 +2515,7 @@ export def "update-item-promotion" [
   --promotion-status: string # The current status of the promotion. When creating a new promotion, this value must be set to either DRAFT or SCHEDULED. Note that you must set this value to SCHEDULED when you update a RUNNING promotion. For implementation help, refer to eBay API documentation
   --promotion-type: string # Use this field to specify the type of the promotion you are creating. The supported types are: CODED_COUPON &ndash; A coupon code promotion set with createItemPromotion. MARKDOWN_SALE &ndash; A markdown promotion set with createItemPriceMarkdownPromotion. ORDER_DISCOUNT &ndash; A threshold promotion set with createItemPromotion. VOLUME_DISCOUNT &ndash; A volume pricing promotion set with createItemPromotion. See the Promotions Manager (/api-docs/sell/static/marketing/promotions-manager.html) documentation for details. Required if you are creating a volume pricing promotion (VOLUME_DISCOUNT). For implementation help, refer to eBay API documentation
   --start-date: string # The date and time the promotion starts in UTC format (yyyy-MM-ddThh:mm:ssZ). For display purposes, convert this time into the local time of the seller.
-]: any -> record<warnings: table<category: string, domain: string, errorId: int, inputRefIds: list, longMessage: string, message: string, outputRefIds: list, parameters: list, subdomain: string>> {
+]: any -> oneof<record<warnings: table<category: string, domain: string, errorId: int, inputRefIds: list, longMessage: string, message: string, outputRefIds: list, parameters: list, subdomain: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2569,7 +2558,7 @@ export def "get-negative-keywords" [
   --limit: string # The number of results, from the current result set, to be returned in a single page.
   --negative-keyword-status: string # A comma-separated list of negative keyword statuses.This query parameter is used if the seller wants to filter the search results based on one or more negative keyword statuses.
   --offset: string # The number of results that will be skipped in the result set. This is used with the limit field to control the pagination of the output.For example, if the offset is set to 0 and the limit is set to 10, the method will retrieve items 1 through 10 from the list of items returned. If the offset is set to 10 and the limit is set to 10, the method will retrieve items 11 through 20 from the list of items returned.
-]: nothing -> record<href: string, limit: int, negativeKeywords: table<adGroupId: string, campaignId: string, negativeKeywordId: string, negativeKeywordMatchType: string, negativeKeywordStatus: string, negativeKeywordText: string>, next: string, offset: int, prev: string, total: int> {
+]: nothing -> oneof<record<href: string, limit: int, negativeKeywords: table<adGroupId: string, campaignId: string, negativeKeywordId: string, negativeKeywordMatchType: string, negativeKeywordStatus: string, negativeKeywordText: string>, next: string, offset: int, prev: string, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ad_group_ids" $ad_group_ids "scalar") (serialize-qp "campaign_ids" $campaign_ids "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "negative_keyword_status" $negative_keyword_status "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -2608,7 +2597,7 @@ export def "create-negative-keyword" [
   --campaign-id: string # A unique eBay-assigned ID for a campaign. This ID is generated when a campaign is created.Required if the negative keyword is being created at the ad group level.
   --negative-keyword-match-type: string # A field that defines the match type for the negative keyword.Note: Broad matching of negative keywords is not currently supported.Valid Values:EXACTPHRASE For implementation help, refer to eBay API documentation
   --negative-keyword-text: string # The negative keyword text.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2646,7 +2635,7 @@ export def "get-negative-keyword" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<adGroupId: string, campaignId: string, negativeKeywordId: string, negativeKeywordMatchType: string, negativeKeywordStatus: string, negativeKeywordText: string> {
+]: nothing -> oneof<record<adGroupId: string, campaignId: string, negativeKeywordId: string, negativeKeywordMatchType: string, negativeKeywordStatus: string, negativeKeywordText: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($negative_keyword_id | is-empty) { error make --unspanned { msg: "path parameter 'negative_keyword_id' must be non-empty" } }
@@ -2728,7 +2717,7 @@ export def "get-promotions" [
   --promotion-type: string # Filters the returned promotions based on their campaign promotion type. Specify one of the following values to indicate the promotion type you want returned: CODED_COUPON &ndash; A coupon code promotion set with createItemPromotion. MARKDOWN_SALE &ndash; A markdown promotion set with createItemPriceMarkdownPromotion. ORDER_DISCOUNT &ndash; A threshold promotion set with createItemPromotion. VOLUME_DISCOUNT &ndash; A volume pricing promotion set with createItemPromotion.
   --q: string # A string consisting of one or more keywords. eBay filters the response by returning only the promotions that contain the supplied keywords in the promotion title. Example: "iPhone" or "Harry Potter." Commas that separate keywords are ignored. For example, a keyword string of "iPhone, iPad" equals "iPhone iPad", and each results in a response that contains promotions with both "iPhone" and "iPad" in the title.
   --sort: string # Specifies the order for how to sort the response. If you precede the supplied value with a dash, the response is sorted in reverse order. Example: sort=END_DATE Sorts the promotions in the response by their end dates in ascending order sort=-PROMOTION_NAME Sorts the promotions by their promotion name in descending alphabetical order (Z-Az-a) Valid values:START_DATE END_DATE PROMOTION_NAME For implementation help, refer to eBay API documentation at https://developer.ebay.com/api-docs/sell/marketing/types/csb:SortField
-]: nothing -> record<href: string, limit: int, next: string, offset: int, prev: string, promotions: table<couponCode: string, description: string, endDate: string, marketplaceId: string, name: string, priority: string, promotionHref: string, promotionId: string, promotionImageUrl: string, promotionStatus: string, promotionType: string, startDate: string>, total: int> {
+]: nothing -> oneof<record<href: string, limit: int, next: string, offset: int, prev: string, promotions: table<couponCode: string, description: string, endDate: string, marketplaceId: string, name: string, priority: string, promotionHref: string, promotionId: string, promotionImageUrl: string, promotionStatus: string, promotionType: string, startDate: string>, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($marketplace_id == null) { error make --unspanned { msg: "required query parameter 'marketplace_id' missing: pass --marketplace-id" } }
@@ -2770,7 +2759,7 @@ export def "get-listing-set" [
   --q: string # Reserved for future use.
   --sort: string # Specifies the order in which to sort the associated listings in the response. If you precede the supplied value with a dash, the response is sorted in reverse order. Example: sort=PRICE - Sorts the associated listings by their current price in ascending order sort=-TITLE - Sorts the associated listings by their title in descending alphabetical order (Z-Az-a) Valid values:AVAILABLE PRICE TITLE For implementation help, refer to eBay API documentation at https://developer.ebay.com/api-docs/sell/marketing/types/csb:SortField
   --status: string # This query parameter applies only to markdown promotions. It filters the response based on the indicated status of the promotion. Currently, the only supported value for this parameter is MARKED_DOWN, which indicates active markdown promotions. For implementation help, refer to eBay API documentation at https://developer.ebay.com/api-docs/sell/marketing/types/sme:ItemMarkdownStatusEnum
-]: nothing -> record<href: string, limit: int, listings: table<currentPrice: record, freeShipping: bool, inventoryReferenceId: string, inventoryReferenceType: string, listingCategoryId: string, listingCondition: string, listingConditionId: string, listingId: string, listingPromotionStatuses: list, quantity: int, storeCategoryId: string, title: string>, next: string, offset: int, prev: string, total: int, warnings: table<category: string, domain: string, errorId: int, inputRefIds: list, longMessage: string, message: string, outputRefIds: list, parameters: list, subdomain: string>> {
+]: nothing -> oneof<record<href: string, limit: int, listings: table<currentPrice: record, freeShipping: bool, inventoryReferenceId: string, inventoryReferenceType: string, listingCategoryId: string, listingCondition: string, listingConditionId: string, listingId: string, listingPromotionStatuses: list, quantity: int, storeCategoryId: string, title: string>, next: string, offset: int, prev: string, total: int, warnings: table<category: string, domain: string, errorId: int, inputRefIds: list, longMessage: string, message: string, outputRefIds: list, parameters: list, subdomain: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($promotion_id | is-empty) { error make --unspanned { msg: "path parameter 'promotion_id' must be non-empty" } }
@@ -2884,7 +2873,7 @@ export def "get-promotion-reports" [
   --promotion-status: string # Limits the results to the promotions that are in the state specified by this query parameter. Valid values: DRAFT SCHEDULED RUNNING PAUSED ENDEDMaximum number of values supported: 1
   --promotion-type: string # Filters the returned promotions in the report based on their campaign promotion type. Specify one of the following values to indicate the promotion type you want returned in the report: CODED_COUPON &ndash; A coupon code promotion set with createItemPromotion. MARKDOWN_SALE &ndash; A markdown promotion set with createItemPriceMarkdownPromotion. ORDER_DISCOUNT &ndash; A threshold promotion set with createItemPromotion. VOLUME_DISCOUNT &ndash; A volume pricing promotion set with createItemPromotion.
   --q: string # A string consisting of one or more keywords. eBay filters the response by returning only the promotions that contain the supplied keywords in the promotion title. Example: "iPhone" or "Harry Potter." Commas that separate keywords are ignored. For example, a keyword string of "iPhone, iPad" equals "iPhone iPad", and each results in a response that contains promotions with both "iPhone" and "iPad" in the title.
-]: nothing -> record<href: string, limit: int, next: string, offset: int, prev: string, promotionReports: table<averageItemDiscount: record, averageItemRevenue: record, averageOrderDiscount: record, averageOrderRevenue: record, averageOrderSize: string, baseSale: record, itemsSoldQuantity: int, numberOfOrdersSold: int, percentageSalesLift: string, promotionHref: string, promotionId: string, promotionReportId: string, promotionSale: record, promotionType: string, totalDiscount: record, totalSale: record>, total: int> {
+]: nothing -> oneof<record<href: string, limit: int, next: string, offset: int, prev: string, promotionReports: table<averageItemDiscount: record, averageItemRevenue: record, averageOrderDiscount: record, averageOrderRevenue: record, averageOrderSize: string, baseSale: record, itemsSoldQuantity: int, numberOfOrdersSold: int, percentageSalesLift: string, promotionHref: string, promotionId: string, promotionReportId: string, promotionSale: record, promotionType: string, totalDiscount: record, totalSale: record>, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($marketplace_id == null) { error make --unspanned { msg: "required query parameter 'marketplace_id' missing: pass --marketplace-id" } }
@@ -2921,7 +2910,7 @@ export def "get-promotion-summary-report" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --marketplace-id: string # The eBay marketplace ID of the site you for which you want a promotion summary report. Valid values: EBAY_AU = Australia EBAY_DE = Germany EBAY_ES = Spain EBAY_FR = France EBAY_GB = Great Britain EBAY_IT = Italy EBAY_US = United States (required)
-]: nothing -> record<baseSale: record<currency: string, value: string>, lastUpdated: string, percentageSalesLift: string, promotionSale: record<currency: string, value: string>, totalSale: record<currency: string, value: string>> {
+]: nothing -> oneof<record<baseSale: record<currency: string, value: string>, lastUpdated: string, percentageSalesLift: string, promotionSale: record<currency: string, value: string>, totalSale: record<currency: string, value: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($marketplace_id == null) { error make --unspanned { msg: "required query parameter 'marketplace_id' missing: pass --marketplace-id" } }

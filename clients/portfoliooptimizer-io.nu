@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "x-api-key" => { {scheme: $scheme, headers: {"X-API-Key": $token_val}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -112,9 +135,9 @@ def subset-portfolios-enumeration-method-completer [] { ["complete" "randomSampl
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-assets-analysis-absorption-ratio" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["post-assets-analysis-absorption-ratio" "post-assets-analysis-turbulence-index" "post-assets-correlation-matrix" "post-assets-correlation-matrix-bounds" "post-assets-correlation-matrix-denoised" "post-assets-correlation-matrix-distance" "post-assets-correlation-matrix-effective-rank" "post-assets-correlation-matrix-informativeness" "post-assets-correlation-matrix-nearest" "post-assets-correlation-matrix-random" "post-assets-correlation-matrix-shrinkage" "post-assets-correlation-matrix-theory-implied" "post-assets-correlation-matrix-validation" "post-assets-covariance-matrix" "post-assets-covariance-matrix-effective-rank" "post-assets-covariance-matrix-exponentially-weighted" "post-assets-covariance-matrix-validation" "post-assets-kurtosis" "post-assets-prices-adjusted" "post-assets-prices-adjusted-forward" "post-assets-returns" "post-assets-returns-average" "post-assets-returns-simulation-bootstrap" "post-assets-skewness" "post-assets-variance" "post-assets-volatility" "post-factors-residualization" "post-portfolio-analysis-alpha" "post-portfolio-analysis-beta" "post-portfolio-analysis-conditional-value-at-risk" "post-portfolio-analysis-contributions-return" "post-portfolio-analysis-contributions-risk" "post-portfolio-analysis-correlation-spectrum" "post-portfolio-analysis-diversification-ratio" "post-portfolio-analysis-drawdowns" "post-portfolio-analysis-effective-number-of-bets" "post-portfolio-analysis-factors-exposures" "post-portfolio-analysis-mean-variance-efficient-frontier" "post-portfolio-analysis-mean-variance-minimum-variance-frontier" "post-portfolio-analysis-return" "post-portfolio-analysis-returns-average" "post-portfolio-analysis-sharpe-ratio" "post-portfolio-analysis-sharpe-ratio-bias-adjusted" "post-portfolio-analysis-sharpe-ratio-confidence-interval" "post-portfolio-analysis-sharpe-ratio-probabilistic" "post-portfolio-analysis-sharpe-ratio-probabilistic-minimum-track-record-length" "post-portfolio-analysis-tracking-error" "post-portfolio-analysis-ulcer-index" "post-portfolio-analysis-ulcer-performance-index" "post-portfolio-analysis-value-at-risk" "post-portfolio-analysis-volatility" "post-portfolio-construction-investable" "post-portfolio-construction-mimicking" "post-portfolio-construction-random" "post-portfolio-optimization-equal-risk-contributions" "post-portfolio-optimization-equal-sharpe-ratio-contributions" "post-portfolio-optimization-equal-volatility-weighted" "post-portfolio-optimization-equal-weighted" "post-portfolio-optimization-hierarchical-risk-parity" "post-portfolio-optimization-hierarchical-risk-parity-clustering-based" "post-portfolio-optimization-inverse-variance-weighted" "post-portfolio-optimization-inverse-volatility-weighted" "post-portfolio-optimization-market-capitalization-weighted" "post-portfolio-optimization-maximum-decorrelation" "post-portfolio-optimization-maximum-return" "post-portfolio-optimization-maximum-return-diversified" "post-portfolio-optimization-maximum-return-subset-resampling-based" "post-portfolio-optimization-maximum-sharpe-ratio" "post-portfolio-optimization-maximum-sharpe-ratio-diversified" "post-portfolio-optimization-maximum-sharpe-ratio-subset-resampling-based" "post-portfolio-optimization-maximum-ulcer-performance-index" "post-portfolio-optimization-mean-variance-efficient" "post-portfolio-optimization-mean-variance-efficient-diversified" "post-portfolio-optimization-mean-variance-efficient-subset-resampling-based" "post-portfolio-optimization-minimum-correlation" "post-portfolio-optimization-minimum-ulcer-index" "post-portfolio-optimization-minimum-variance" "post-portfolio-optimization-minimum-variance-diversified" "post-portfolio-optimization-minimum-variance-subset-resampling-based" "post-portfolio-optimization-most-diversified" "post-portfolio-simulation-rebalancing-drift-weight" "post-portfolio-simulation-rebalancing-fixed-weight" "post-portfolio-simulation-rebalancing-random-weight" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -135,7 +158,6 @@ export def commands []: nothing -> table {
 # Absorption Ratio
 #
 # POST /assets/analysis/absorption-ratio
-# --assetsCovarianceMatrixEigenvectors shape: {eigenvectorsRetained?: int}
 export def "post-assets-analysis-absorption-ratio" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -149,7 +171,7 @@ export def "post-assets-analysis-absorption-ratio" [
   assets: int # The number of assets
   assets_covariance_matrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
   --assets-covariance-matrix-eigenvectors: record # shape: {eigenvectorsRetained?: int}
-]: any -> record<assetsAbsorptionRatio: float> {
+]: any -> oneof<record<assetsAbsorptionRatio: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -189,7 +211,7 @@ export def "post-assets-analysis-turbulence-index" [
   assets_average_returns: list<float> # assetsAverageReturns[i] is the average return of asset i over an historical reference period
   assets_covariance_matrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j over an historical reference period
   assets_returns: list<float> # assetsReturns[i] is the return of asset i over a period different from the historical reference period
-]: any -> record<assetsTurbulenceIndex: float> {
+]: any -> oneof<record<assetsTurbulenceIndex: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -215,7 +237,6 @@ export def "post-assets-analysis-turbulence-index" [
 # Correlation Matrix
 #
 # POST /assets/correlation/matrix
-# --assets item shape: {assetReturns: list<float>}
 export def "post-assets-correlation-matrix" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -226,9 +247,9 @@ export def "post-assets-correlation-matrix" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --assets: list # item shape: {assetReturns: list<float>}
+  assets: list # item shape: {assetReturns: list<float>}
   --assets-covariance-matrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
-]: any -> record<assetsCorrelationMatrix: list<list<float>>> {
+]: any -> oneof<record<assetsCorrelationMatrix: list<list<float>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -267,7 +288,7 @@ export def "post-assets-correlation-matrix-bounds" [
   assets: int
   assets_correlation_matrix: list # assetsCorrelationMatrix[i][j] is the correlation between the asset i and the asset j
   assets_group: list<int> # assetsGroup[k] is the indexes of the assets belonging to the assets group
-]: any -> record<assetsCorrelationMatrixLowerBounds: list<list<float>>, assetsCorrelationMatrixUpperBounds: list<list<float>>> {
+]: any -> oneof<record<assetsCorrelationMatrixLowerBounds: list<list<float>>, assetsCorrelationMatrixUpperBounds: list<list<float>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -307,7 +328,7 @@ export def "post-assets-correlation-matrix-denoised" [
   assets_correlation_matrix: list # assetsCorrelationMatrix[i][j] is the correlation between the asset i and the asset j
   assets_correlation_matrix_aspect_ratio: float # The aspect ratio of the asset correlation matrix, defined as the number of assets divided by the number of asset returns per asset used to compute the asset correlation matrix
   --denoising-method: string@denoising-method-completer # The method used to denoise the asset correlation matrix (default: eigenvaluesClipping)
-]: any -> record<assetsCorrelationMatrix: list<list<float>>> {
+]: any -> oneof<record<assetsCorrelationMatrix: list<list<float>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -347,7 +368,7 @@ export def "post-assets-correlation-matrix-distance" [
   assets_correlation_matrix: list # assetsCorrelationMatrix[i][j] is the correlation between the asset i and the asset j
   --distance-metric: string@distance-metric-completer # The distance metric to use to compute the distance between the asset correlation matrix and the reference correlation matrix (default: euclidean)
   reference_correlation_matrix: list # referenceCorrelationMatrix[i][j] is the reference correlation between the asset i and the asset j
-]: any -> record<assetsCorrelationMatrixDistance: float> {
+]: any -> oneof<record<assetsCorrelationMatrixDistance: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -385,7 +406,7 @@ export def "post-assets-correlation-matrix-effective-rank" [
   --dry-run(-n) # Return the request that would be sent without executing it
   assets: int # The number of assets
   assets_correlation_matrix: list # assetsCorrelationMatrix[i][j] is the correlation between the asset i and the asset j
-]: any -> record<assetsCorrelationMatrixEffectiveRank: list<list<float>>> {
+]: any -> oneof<record<assetsCorrelationMatrixEffectiveRank: list<list<float>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -424,7 +445,7 @@ export def "post-assets-correlation-matrix-informativeness" [
   assets: int
   assets_correlation_matrix: list # assetsCorrelationMatrix[i][j] is the correlation between the asset i and the asset j
   --distance-metric: string@distance-metric-completer # The distance metric to use to compute the informativeness of the asset correlation matrix (default: euclidean)
-]: any -> record<assetsCorrelationMatrixInformativeness: float> {
+]: any -> oneof<record<assetsCorrelationMatrixInformativeness: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -463,7 +484,7 @@ export def "post-assets-correlation-matrix-nearest" [
   assets: int # The number of assets
   assets_approximate_correlation_matrix: list # assetsApproximateCorrelationMatrix[i][i] is the approximate correlation between the asset i and the asset j
   --assets-fixed-correlations: list # assetsFixedCorrelations[k] is the couple of indices (i,j) of the assets i and j for which to keep the approximate correlation assetsApproximateCorrelationMatrix[i][j] fixed
-]: any -> record<assetsCorrelationMatrix: list<list<float>>> {
+]: any -> oneof<record<assetsCorrelationMatrix: list<list<float>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -500,7 +521,7 @@ export def "post-assets-correlation-matrix-random" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   assets: int # The number of assets
-]: any -> record<assetsCorrelationMatrix: list<list<float>>> {
+]: any -> oneof<record<assetsCorrelationMatrix: list<list<float>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -536,12 +557,12 @@ export def "post-assets-correlation-matrix-shrinkage" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --assets: int
-  --assets-correlation-matrix: list # assetsCorrelationMatrix[i][j] is the correlation between the asset i and the asset j
-  --shrinkage-factor: float # The shrinkage factor
+  assets: int
+  assets_correlation_matrix: list # assetsCorrelationMatrix[i][j] is the correlation between the asset i and the asset j
+  shrinkage_factor: float # The shrinkage factor
   --target-equicorrelation-matrix: string@target-equicorrelation-matrix-completer # The shrinkage target correlation matrix
   --target-correlation-matrix: list # targetCorrelationMatrix[i][j] is the target correlation between the asset i and the asset j
-]: any -> record<assetsCorrelationMatrix: list<list<float>>> {
+]: any -> oneof<record<assetsCorrelationMatrix: list<list<float>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -567,7 +588,6 @@ export def "post-assets-correlation-matrix-shrinkage" [
 # Theory-Implied Correlation Matrix
 #
 # POST /assets/correlation/matrix/theory-implied
-# --assets item shape: {assetHierarchicalClassification: list}
 export def "post-assets-correlation-matrix-theory-implied" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -581,7 +601,7 @@ export def "post-assets-correlation-matrix-theory-implied" [
   assets: list # item shape: {assetHierarchicalClassification: list}
   assets_correlation_matrix: list # assetsCorrelationMatrix[i][j] is the correlation between the asset i and the asset j
   --clustering-method: string@clustering-method-completer # The hierarchical clustering method to use (default: averageLinkage)
-]: any -> record<assetsCorrelationMatrix: list<list<float>>> {
+]: any -> oneof<record<assetsCorrelationMatrix: list<list<float>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -619,7 +639,7 @@ export def "post-assets-correlation-matrix-validation" [
   --dry-run(-n) # Return the request that would be sent without executing it
   assets: int # The number of assets
   assets_correlation_matrix: list # assetsCorrelationMatrix[i][j] is the correlation between the asset i and the asset j
-]: any -> record<message: string> {
+]: any -> oneof<record<message: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -645,7 +665,6 @@ export def "post-assets-correlation-matrix-validation" [
 # Covariance Matrix
 #
 # POST /assets/covariance/matrix
-# --assets item shape: {assetReturns: list<float>}
 export def "post-assets-covariance-matrix" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -656,11 +675,11 @@ export def "post-assets-covariance-matrix" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --assets: list # item shape: {assetReturns: list<float>}
+  assets: list # item shape: {assetReturns: list<float>}
   --assets-correlation-matrix: list # assetsCorrelationMatrix[i][j] is the correlation between the asset i and the asset j
   --assets-variances: list<float> # assetsVariances[i] is the variance of the asset i
   --assets-volatilities: list<float> # assetsVolatilities[i] is the volatility of the asset i
-]: any -> record<assetsCovarianceMatrix: list<list<float>>> {
+]: any -> oneof<record<assetsCovarianceMatrix: list<list<float>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -698,7 +717,7 @@ export def "post-assets-covariance-matrix-effective-rank" [
   --dry-run(-n) # Return the request that would be sent without executing it
   assets: int # The number of assets
   assets_covariance_matrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
-]: any -> record<assetsCovarianceMatrixEffectiveRank: list<list<float>>> {
+]: any -> oneof<record<assetsCovarianceMatrixEffectiveRank: list<list<float>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -724,7 +743,6 @@ export def "post-assets-covariance-matrix-effective-rank" [
 # Exponentially Weighted Covariance Matrix
 #
 # POST /assets/covariance/matrix/exponentially-weighted
-# --assets item shape: {assetReturns: list<float>}
 export def "post-assets-covariance-matrix-exponentially-weighted" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -737,7 +755,7 @@ export def "post-assets-covariance-matrix-exponentially-weighted" [
   --dry-run(-n) # Return the request that would be sent without executing it
   assets: list # item shape: {assetReturns: list<float>}
   --decay-factor: float # The exponential decay factor (default: 0.94)
-]: any -> record<assetsCovarianceMatrix: list<list<float>>> {
+]: any -> oneof<record<assetsCovarianceMatrix: list<list<float>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -775,7 +793,7 @@ export def "post-assets-covariance-matrix-validation" [
   --dry-run(-n) # Return the request that would be sent without executing it
   assets: int # The number of assets
   assets_covariance_matrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
-]: any -> record<message: string> {
+]: any -> oneof<record<message: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -801,7 +819,6 @@ export def "post-assets-covariance-matrix-validation" [
 # Kurtosis
 #
 # POST /assets/kurtosis
-# --assets item shape: {assetReturns: list<float>}
 export def "post-assets-kurtosis" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -813,7 +830,7 @@ export def "post-assets-kurtosis" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   assets: list # item shape: {assetReturns: list<float>}
-]: any -> record<assets: table<assetKurtosis: float>> {
+]: any -> oneof<record<assets: table<assetKurtosis: float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -839,7 +856,6 @@ export def "post-assets-kurtosis" [
 # Adjusted Prices
 #
 # POST /assets/prices/adjusted
-# --assets item shape: {assetDividends?: list, assetPrices: list, assetSplits?: list}
 export def "post-assets-prices-adjusted" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -851,7 +867,7 @@ export def "post-assets-prices-adjusted" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   assets: list # item shape: {assetDividends?: list, assetPrices: list, assetSplits?: list}
-]: any -> record<assets: table<assetAdjustedPrices: list>> {
+]: any -> oneof<record<assets: table<assetAdjustedPrices: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -877,7 +893,6 @@ export def "post-assets-prices-adjusted" [
 # Forward-Adjusted Prices
 #
 # POST /assets/prices/adjusted/forward
-# --assets item shape: {assetDividends?: list, assetPrices: list, assetSplits?: list}
 export def "post-assets-prices-adjusted-forward" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -889,7 +904,7 @@ export def "post-assets-prices-adjusted-forward" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   assets: list # item shape: {assetDividends?: list, assetPrices: list, assetSplits?: list}
-]: any -> record<assets: table<assetAdjustedPrices: list>> {
+]: any -> oneof<record<assets: table<assetAdjustedPrices: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -915,7 +930,6 @@ export def "post-assets-prices-adjusted-forward" [
 # Arithmetic Returns
 #
 # POST /assets/returns
-# --assets item shape: {assetPrices: list<float>}
 export def "post-assets-returns" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -927,7 +941,7 @@ export def "post-assets-returns" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   assets: list # item shape: {assetPrices: list<float>}
-]: any -> record<assets: table<assetReturns: list>> {
+]: any -> oneof<record<assets: table<assetReturns: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -953,7 +967,6 @@ export def "post-assets-returns" [
 # Arithmetic Average Return
 #
 # POST /assets/returns/average
-# --assets item shape: {assetReturns: list<float>}
 export def "post-assets-returns-average" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -965,7 +978,7 @@ export def "post-assets-returns-average" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   assets: list # item shape: {assetReturns: list<float>}
-]: any -> record<assets: table<assetAverageReturn: float>> {
+]: any -> oneof<record<assets: table<assetAverageReturn: float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -991,7 +1004,6 @@ export def "post-assets-returns-average" [
 # Bootstrap
 #
 # POST /assets/returns/simulation/bootstrap
-# --assets item shape: {assetReturns: list<float>}
 export def "post-assets-returns-simulation-bootstrap" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1008,7 +1020,7 @@ export def "post-assets-returns-simulation-bootstrap" [
   --bootstrap-method: string@bootstrap-method-completer # The bootstrap method to use (default: stationaryBlock)
   --simulations: int # The number of simulations to perform (default: 25)
   --simulations-length: int # The number of time period(s) to simulate per simulation; if not provided, defaults to the common length of the assetReturns arrays
-]: any -> record<simulations: table<assets: list>> {
+]: any -> oneof<record<simulations: table<assets: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1034,7 +1046,6 @@ export def "post-assets-returns-simulation-bootstrap" [
 # Skewness
 #
 # POST /assets/skewness
-# --assets item shape: {assetReturns: list<float>}
 export def "post-assets-skewness" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1046,7 +1057,7 @@ export def "post-assets-skewness" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   assets: list # item shape: {assetReturns: list<float>}
-]: any -> record<assets: table<assetSkewness: float>> {
+]: any -> oneof<record<assets: table<assetSkewness: float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1072,7 +1083,6 @@ export def "post-assets-skewness" [
 # Variance
 #
 # POST /assets/variance
-# --assets item shape: {assetReturns: list<float>}
 export def "post-assets-variance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1083,9 +1093,9 @@ export def "post-assets-variance" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --assets: list # item shape: {assetReturns: list<float>}
+  assets: list # item shape: {assetReturns: list<float>}
   --assets-covariance-matrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
-]: any -> record<assets: table<assetVariance: float>> {
+]: any -> oneof<record<assets: table<assetVariance: float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1111,7 +1121,6 @@ export def "post-assets-variance" [
 # Volatility
 #
 # POST /assets/volatility
-# --assets item shape: {assetReturns: list<float>}
 export def "post-assets-volatility" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1122,9 +1131,9 @@ export def "post-assets-volatility" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --assets: list # item shape: {assetReturns: list<float>}
+  assets: list # item shape: {assetReturns: list<float>}
   --assets-covariance-matrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
-]: any -> record<assets: table<assetVolatility: float>> {
+]: any -> oneof<record<assets: table<assetVolatility: float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1150,7 +1159,6 @@ export def "post-assets-volatility" [
 # Residualization
 #
 # POST /factors/residualization
-# --factors item shape: {factorReturns: list<float>}
 export def "post-factors-residualization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1163,7 +1171,7 @@ export def "post-factors-residualization" [
   --dry-run(-n) # Return the request that would be sent without executing it
   factors: list # item shape: {factorReturns: list<float>}
   residualized_factor: int # The index of the factor to residualize
-]: any -> record<residualizedFactorReturns: list<float>> {
+]: any -> oneof<record<residualizedFactorReturns: list<float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1189,7 +1197,6 @@ export def "post-factors-residualization" [
 # Alpha
 #
 # POST /portfolio/analysis/alpha
-# --portfolios item shape: {portfolioReturns: list<float>}
 export def "post-portfolio-analysis-alpha" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1200,11 +1207,11 @@ export def "post-portfolio-analysis-alpha" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --benchmark-returns: list<float> # benchmarkReturns[t] is the return of the benchmark at the time t; the benchmarkReturns array must have the same length as all the portfolioReturns arrays
-  --portfolios: list # item shape: {portfolioReturns: list<float>}
+  benchmark_returns: list<float> # benchmarkReturns[t] is the return of the benchmark at the time t; the benchmarkReturns array must have the same length as all the portfolioReturns arrays
+  portfolios: list # item shape: {portfolioReturns: list<float>}
   --risk-free-rate: float # The risk free rate, assumed to be constant for any time t
   --risk-free-returns: list<float> # riskFreeReturns[t] is the risk free return at the time t; the riskFreeReturns array must have the same length as all the portfolioReturns arrays
-]: any -> record<portfolios: table<portfolioAlpha: float>> {
+]: any -> oneof<record<portfolios: table<portfolioAlpha: float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1230,7 +1237,6 @@ export def "post-portfolio-analysis-alpha" [
 # Beta
 #
 # POST /portfolio/analysis/beta
-# --portfolios item shape: {portfolioReturns: list<float>}
 export def "post-portfolio-analysis-beta" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1241,11 +1247,11 @@ export def "post-portfolio-analysis-beta" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --benchmark-returns: list<float> # benchmarkReturns[t] is the return of the benchmark at the time t; the benchmarkReturns array must have the same length as all the portfolioReturns arrays
-  --portfolios: list # item shape: {portfolioReturns: list<float>}
+  benchmark_returns: list<float> # benchmarkReturns[t] is the return of the benchmark at the time t; the benchmarkReturns array must have the same length as all the portfolioReturns arrays
+  portfolios: list # item shape: {portfolioReturns: list<float>}
   --risk-free-rate: float # The risk free rate, assumed to be constant for any time t
   --risk-free-returns: list<float> # riskFreeReturns[t] is the risk free return at the time t; the riskFreeReturns array must have the same length as all the portfolioReturns arrays
-]: any -> record<portfolios: table<portfolioBeta: float>> {
+]: any -> oneof<record<portfolios: table<portfolioBeta: float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1271,7 +1277,6 @@ export def "post-portfolio-analysis-beta" [
 # Conditional Value At Risk
 #
 # POST /portfolio/analysis/conditional-value-at-risk
-# --portfolios item shape: {portfolioValues: list<float>}
 export def "post-portfolio-analysis-conditional-value-at-risk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1284,7 +1289,7 @@ export def "post-portfolio-analysis-conditional-value-at-risk" [
   --dry-run(-n) # Return the request that would be sent without executing it
   alpha: float # The conditional value at risk level
   portfolios: list # item shape: {portfolioValues: list<float>}
-]: any -> record<portfolios: table<portfolioConditionalValueAtRisk: float>> {
+]: any -> oneof<record<portfolios: table<portfolioConditionalValueAtRisk: float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1310,7 +1315,6 @@ export def "post-portfolio-analysis-conditional-value-at-risk" [
 # Return Contributions
 #
 # POST /portfolio/analysis/contributions/return
-# --portfolios item shape: {assetsWeights: list<float>}
 export def "post-portfolio-analysis-contributions-return" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1325,7 +1329,7 @@ export def "post-portfolio-analysis-contributions-return" [
   --assets-groups: list
   assets_returns: list<float> # assetsReturns[i] is the arithmetic return of asset i
   portfolios: list # item shape: {assetsWeights: list<float>}
-]: any -> record<portfolios: table<assetsGroupsReturnContributions: list, assetsReturnContributions: list>> {
+]: any -> oneof<record<portfolios: table<assetsGroupsReturnContributions: list, assetsReturnContributions: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1351,7 +1355,6 @@ export def "post-portfolio-analysis-contributions-return" [
 # Risk Contributions
 #
 # POST /portfolio/analysis/contributions/risk
-# --portfolios item shape: {assetsWeights: list<float>}
 export def "post-portfolio-analysis-contributions-risk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1366,7 +1369,7 @@ export def "post-portfolio-analysis-contributions-risk" [
   assets_covariance_matrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
   --assets-groups: list
   portfolios: list # item shape: {assetsWeights: list<float>}
-]: any -> record<portfolios: table<assetsGroupsRiskContributions: list, assetsRiskContributions: list>> {
+]: any -> oneof<record<portfolios: table<assetsGroupsRiskContributions: list, assetsRiskContributions: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1392,7 +1395,6 @@ export def "post-portfolio-analysis-contributions-risk" [
 # Correlation Spectrum
 #
 # POST /portfolio/analysis/correlation-spectrum
-# --portfolios item shape: {assetsWeights: list<float>}
 export def "post-portfolio-analysis-correlation-spectrum" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1403,10 +1405,10 @@ export def "post-portfolio-analysis-correlation-spectrum" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --assets: int # The number of assets
+  assets: int # The number of assets
   --assets-covariance-matrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
-  --portfolios: list # item shape: {assetsWeights: list<float>}
-]: any -> record<portfolios: table<portfolioCorrelationSpectrum: list>> {
+  portfolios: list # item shape: {assetsWeights: list<float>}
+]: any -> oneof<record<portfolios: table<portfolioCorrelationSpectrum: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1432,7 +1434,6 @@ export def "post-portfolio-analysis-correlation-spectrum" [
 # Diversification Ratio
 #
 # POST /portfolio/analysis/diversification-ratio
-# --portfolios item shape: {assetsWeights: list<float>}
 export def "post-portfolio-analysis-diversification-ratio" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1443,10 +1444,10 @@ export def "post-portfolio-analysis-diversification-ratio" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --assets: int # The number of assets
+  assets: int # The number of assets
   --assets-covariance-matrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
-  --portfolios: list # item shape: {assetsWeights: list<float>}
-]: any -> record<portfolios: table<portfolioDiversificationRatio: float>> {
+  portfolios: list # item shape: {assetsWeights: list<float>}
+]: any -> oneof<record<portfolios: table<portfolioDiversificationRatio: float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1472,7 +1473,6 @@ export def "post-portfolio-analysis-diversification-ratio" [
 # Drawdowns
 #
 # POST /portfolio/analysis/drawdowns
-# --portfolios item shape: {portfolioValues: list<float>}
 export def "post-portfolio-analysis-drawdowns" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1484,7 +1484,7 @@ export def "post-portfolio-analysis-drawdowns" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   portfolios: list # item shape: {portfolioValues: list<float>}
-]: any -> record<portfolios: table<portfolioDrawdowns: list, portfolioWorstDrawdowns: list>> {
+]: any -> oneof<record<portfolios: table<portfolioDrawdowns: list, portfolioWorstDrawdowns: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1510,7 +1510,6 @@ export def "post-portfolio-analysis-drawdowns" [
 # Effective Number of Bets
 #
 # POST /portfolio/analysis/effective-number-of-bets
-# --portfolios item shape: {assetsWeights: list<float>}
 export def "post-portfolio-analysis-effective-number-of-bets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1525,7 +1524,7 @@ export def "post-portfolio-analysis-effective-number-of-bets" [
   assets_covariance_matrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
   --factors-extraction-method: string@factors-extraction-method-completer # The method used to extract the uncorrelated risk factors from the asset covariance matrix (default: exactMinimumLinearTorsion)
   portfolios: list # item shape: {assetsWeights: list<float>}
-]: any -> record<portfolios: table<portfolioEffectiveNumberOfBets: float>> {
+]: any -> oneof<record<portfolios: table<portfolioEffectiveNumberOfBets: float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1551,8 +1550,6 @@ export def "post-portfolio-analysis-effective-number-of-bets" [
 # Factor Exposures
 #
 # POST /portfolio/analysis/factors/exposures
-# --factors item shape: {factorReturns: list<float>}
-# --portfolios item shape: {portfolioReturns: list<float>}
 export def "post-portfolio-analysis-factors-exposures" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1565,7 +1562,7 @@ export def "post-portfolio-analysis-factors-exposures" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --factors: list # item shape: {factorReturns: list<float>}
   portfolios: list # item shape: {portfolioReturns: list<float>}
-]: any -> record<portfolios: table<portfolioAlpha: float, portfolioBetas: list, portfolioRSquared: float>> {
+]: any -> oneof<record<portfolios: table<portfolioAlpha: float, portfolioBetas: list, portfolioRSquared: float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1591,7 +1588,6 @@ export def "post-portfolio-analysis-factors-exposures" [
 # Mean-Variance Efficient Frontier
 #
 # POST /portfolio/analysis/mean-variance/efficient-frontier
-# --constraints shape: {assetsGroups?: list, assetsGroupsMatrix?: list, maximumAssetsGroupsWeights?: list<float>, maximumAssetsWeights?: list<float>, maximumPortfolioExposure?: float, minimumAssetsWeights?: list<float>, minimumPortfolioExposure?: float}
 export def "post-portfolio-analysis-mean-variance-efficient-frontier" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1607,7 +1603,7 @@ export def "post-portfolio-analysis-mean-variance-efficient-frontier" [
   assets_returns: list<float> # assetsReturns[i] is the arithmetic return of asset i
   --constraints: record # shape: {assetsGroups?: list, assetsGroupsMatrix?: list, maximumAssetsGroupsWeights?: list<float>, maximumAssetsWeights?: list<float>, maximumPortfolioExposure?: float, minimumAssetsWeights?: list<float>, minimumPortfolioExposure?: float}
   --portfolios: int # The number of portfolios to compute on the mean-variance efficient frontier (default: 25)
-]: any -> record<portfolios: table<assetsWeights: list, portfolioReturn: float, portfolioVolatility: float>> {
+]: any -> oneof<record<portfolios: table<assetsWeights: list, portfolioReturn: float, portfolioVolatility: float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1633,7 +1629,6 @@ export def "post-portfolio-analysis-mean-variance-efficient-frontier" [
 # Mean-Variance Minimum Variance Frontier
 #
 # POST /portfolio/analysis/mean-variance/minimum-variance-frontier
-# --constraints shape: {assetsGroups?: list, assetsGroupsMatrix?: list, maximumAssetsGroupsWeights?: list<float>, maximumAssetsWeights?: list<float>, maximumPortfolioExposure?: float, minimumAssetsWeights?: list<float>, minimumPortfolioExposure?: float}
 export def "post-portfolio-analysis-mean-variance-minimum-variance-frontier" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1649,7 +1644,7 @@ export def "post-portfolio-analysis-mean-variance-minimum-variance-frontier" [
   assets_returns: list<float> # assetsReturns[i] is the arithmetic return of asset i
   --constraints: record # shape: {assetsGroups?: list, assetsGroupsMatrix?: list, maximumAssetsGroupsWeights?: list<float>, maximumAssetsWeights?: list<float>, maximumPortfolioExposure?: float, minimumAssetsWeights?: list<float>, minimumPortfolioExposure?: float}
   --portfolios: int # The number of portfolios to compute on the mean-variance minimum variance frontier (default: 25)
-]: any -> record<portfolios: table<assetsWeights: list, portfolioReturn: float, portfolioVolatility: float>> {
+]: any -> oneof<record<portfolios: table<assetsWeights: list, portfolioReturn: float, portfolioVolatility: float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1675,7 +1670,6 @@ export def "post-portfolio-analysis-mean-variance-minimum-variance-frontier" [
 # Arithmetic Return
 #
 # POST /portfolio/analysis/return
-# --portfolios item shape: {assetsWeights: list<float>}
 export def "post-portfolio-analysis-return" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1688,8 +1682,8 @@ export def "post-portfolio-analysis-return" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --assets: int # The number of assets
   --assets-returns: list<float> # assetsReturns[i] is the arithmetic return of asset i
-  --portfolios: list # item shape: {assetsWeights: list<float>}
-]: any -> record<portfolios: table<portfolioReturn: float>> {
+  portfolios: list # item shape: {assetsWeights: list<float>}
+]: any -> oneof<record<portfolios: table<portfolioReturn: float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1715,7 +1709,6 @@ export def "post-portfolio-analysis-return" [
 # Arithmetic Average Return
 #
 # POST /portfolio/analysis/returns/average
-# --portfolios item shape: {portfolioValues: list<float>}
 export def "post-portfolio-analysis-returns-average" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1727,7 +1720,7 @@ export def "post-portfolio-analysis-returns-average" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   portfolios: list # item shape: {portfolioValues: list<float>}
-]: any -> record<portfolios: table<portfolioAverageReturn: float>> {
+]: any -> oneof<record<portfolios: table<portfolioAverageReturn: float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1753,7 +1746,6 @@ export def "post-portfolio-analysis-returns-average" [
 # Sharpe Ratio
 #
 # POST /portfolio/analysis/sharpe-ratio
-# --portfolios item shape: {assetsWeights: list<float>}
 export def "post-portfolio-analysis-sharpe-ratio" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1767,9 +1759,9 @@ export def "post-portfolio-analysis-sharpe-ratio" [
   --assets: int # The number of assets
   --assets-covariance-matrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
   --assets-returns: list<float> # assetsReturns[i] is the arithmetic return of asset i
-  --portfolios: list # item shape: {assetsWeights: list<float>}
-  --risk-free-rate: float # The risk free rate
-]: any -> record<portfolios: table<portfolioSharpeRatio: float>> {
+  portfolios: list # item shape: {assetsWeights: list<float>}
+  risk_free_rate: float # The risk free rate
+]: any -> oneof<record<portfolios: table<portfolioSharpeRatio: float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1795,7 +1787,6 @@ export def "post-portfolio-analysis-sharpe-ratio" [
 # Bias-Adjusted Sharpe Ratio
 #
 # POST /portfolio/analysis/sharpe-ratio/bias-adjusted
-# --portfolios item shape: {portfolioValues: list<float>}
 export def "post-portfolio-analysis-sharpe-ratio-bias-adjusted" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1808,7 +1799,7 @@ export def "post-portfolio-analysis-sharpe-ratio-bias-adjusted" [
   --dry-run(-n) # Return the request that would be sent without executing it
   portfolios: list # item shape: {portfolioValues: list<float>}
   risk_free_rate: float # The risk free rate
-]: any -> record<portfolios: table<portfolioBiasAdjustedSharpeRatio: float>> {
+]: any -> oneof<record<portfolios: table<portfolioBiasAdjustedSharpeRatio: float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1834,7 +1825,6 @@ export def "post-portfolio-analysis-sharpe-ratio-bias-adjusted" [
 # Sharpe Ratio Confidence Interval
 #
 # POST /portfolio/analysis/sharpe-ratio/confidence-interval
-# --portfolios item shape: {portfolioValues: list<float>}
 export def "post-portfolio-analysis-sharpe-ratio-confidence-interval" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1849,7 +1839,7 @@ export def "post-portfolio-analysis-sharpe-ratio-confidence-interval" [
   --confidence-level: float # The confidence level of the confidence interval to build, in percentage (default: 0.95)
   portfolios: list # item shape: {portfolioValues: list<float>}
   risk_free_rate: float # The risk free rate
-]: any -> record<portfolios: table<portfolioSharpeRatioConfidenceInterval: list>> {
+]: any -> oneof<record<portfolios: table<portfolioSharpeRatioConfidenceInterval: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1875,7 +1865,6 @@ export def "post-portfolio-analysis-sharpe-ratio-confidence-interval" [
 # Probabilistic Sharpe Ratio
 #
 # POST /portfolio/analysis/sharpe-ratio/probabilistic
-# --portfolios item shape: {portfolioValues: list<float>}
 export def "post-portfolio-analysis-sharpe-ratio-probabilistic" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1887,10 +1876,10 @@ export def "post-portfolio-analysis-sharpe-ratio-probabilistic" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --benchmark-sharpe-ratio: float # The Sharpe ratio of the benchmark, in the same sampling frequency as the sampling frequency of the portfolio values
-  --portfolios: list # item shape: {portfolioValues: list<float>}
-  --risk-free-rate: float # The risk free rate
+  portfolios: list # item shape: {portfolioValues: list<float>}
+  risk_free_rate: float # The risk free rate
   --benchmark-values: list<float> # benchmarkValues[t] is the value of the benchmark at the time t; the benchmarkValues array must have the same length as all the portfolioValues arrays
-]: any -> record<portfolios: table<portfolioProbabilisticSharpeRatio: float>> {
+]: any -> oneof<record<portfolios: table<portfolioProbabilisticSharpeRatio: float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1916,7 +1905,6 @@ export def "post-portfolio-analysis-sharpe-ratio-probabilistic" [
 # Minimum Track Record Length
 #
 # POST /portfolio/analysis/sharpe-ratio/probabilistic/minimum-track-record-length
-# --portfolios item shape: {portfolioValues: list<float>}
 export def "post-portfolio-analysis-sharpe-ratio-probabilistic-minimum-track-record-length" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1927,12 +1915,12 @@ export def "post-portfolio-analysis-sharpe-ratio-probabilistic-minimum-track-rec
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --benchmark-sharpe-ratio: float # The Sharpe ratio of the benchmark, in the same sampling frequency as the sampling frequency of the portfolio values
+  benchmark_sharpe_ratio: float # The Sharpe ratio of the benchmark, in the same sampling frequency as the sampling frequency of the portfolio values
   --confidence-level: float # The confidence level of the minimum track record length, in percentage (default: 0.95)
-  --portfolios: list # item shape: {portfolioValues: list<float>}
-  --risk-free-rate: float # The risk free rate
+  portfolios: list # item shape: {portfolioValues: list<float>}
+  risk_free_rate: float # The risk free rate
   --benchmark-values: list<float> # benchmarkValues[t] is the value of the benchmark at the time t; the benchmarkValues array must have the same length as all the portfolioValues arrays
-]: any -> record<portfolios: table<portfolioSharpeRatioMinimumTrackRecordLength: float>> {
+]: any -> oneof<record<portfolios: table<portfolioSharpeRatioMinimumTrackRecordLength: float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1958,7 +1946,6 @@ export def "post-portfolio-analysis-sharpe-ratio-probabilistic-minimum-track-rec
 # Tracking Error
 #
 # POST /portfolio/analysis/tracking-error
-# --portfolios item shape: {portfolioReturns: list<float>}
 export def "post-portfolio-analysis-tracking-error" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1971,7 +1958,7 @@ export def "post-portfolio-analysis-tracking-error" [
   --dry-run(-n) # Return the request that would be sent without executing it
   benchmark_returns: list<float> # benchmarkReturns[t] is the return of the benchmark at the time t; the benchmarkReturns array must have the same length as all the portfolioReturns arrays
   portfolios: list # item shape: {portfolioReturns: list<float>}
-]: any -> record<portfolios: table<portfolioTrackingError: float>> {
+]: any -> oneof<record<portfolios: table<portfolioTrackingError: float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1997,7 +1984,6 @@ export def "post-portfolio-analysis-tracking-error" [
 # Ulcer Index
 #
 # POST /portfolio/analysis/ulcer-index
-# --portfolios item shape: {portfolioValues: list<float>}
 export def "post-portfolio-analysis-ulcer-index" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2010,7 +1996,7 @@ export def "post-portfolio-analysis-ulcer-index" [
   --dry-run(-n) # Return the request that would be sent without executing it
   portfolios: list # item shape: {portfolioValues: list<float>}
   risk_free_rate: float # The risk free rate
-]: any -> record<portfolios: table<portfolioUlcerIndex: float>> {
+]: any -> oneof<record<portfolios: table<portfolioUlcerIndex: float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2036,7 +2022,6 @@ export def "post-portfolio-analysis-ulcer-index" [
 # Ulcer Performance Index
 #
 # POST /portfolio/analysis/ulcer-performance-index
-# --portfolios item shape: {portfolioValues: list<float>}
 export def "post-portfolio-analysis-ulcer-performance-index" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2049,7 +2034,7 @@ export def "post-portfolio-analysis-ulcer-performance-index" [
   --dry-run(-n) # Return the request that would be sent without executing it
   portfolios: list # item shape: {portfolioValues: list<float>}
   risk_free_rate: float # The risk free rate
-]: any -> record<portfolios: table<portfolioUlcerPerformanceIndex: float>> {
+]: any -> oneof<record<portfolios: table<portfolioUlcerPerformanceIndex: float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2075,7 +2060,6 @@ export def "post-portfolio-analysis-ulcer-performance-index" [
 # Value At Risk
 #
 # POST /portfolio/analysis/value-at-risk
-# --portfolios item shape: {portfolioValues: list<float>}
 export def "post-portfolio-analysis-value-at-risk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2088,7 +2072,7 @@ export def "post-portfolio-analysis-value-at-risk" [
   --dry-run(-n) # Return the request that would be sent without executing it
   alpha: float # The value at risk level
   portfolios: list # item shape: {portfolioValues: list<float>}
-]: any -> record<portfolios: table<portfolioValueAtRisk: float>> {
+]: any -> oneof<record<portfolios: table<portfolioValueAtRisk: float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2114,7 +2098,6 @@ export def "post-portfolio-analysis-value-at-risk" [
 # Volatility
 #
 # POST /portfolio/analysis/volatility
-# --portfolios item shape: {assetsWeights: list<float>}
 export def "post-portfolio-analysis-volatility" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2127,8 +2110,8 @@ export def "post-portfolio-analysis-volatility" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --assets: int # The number of assets
   --assets-covariance-matrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
-  --portfolios: list # item shape: {assetsWeights: list<float>}
-]: any -> record<portfolios: table<portfolioVolatility: float>> {
+  portfolios: list # item shape: {assetsWeights: list<float>}
+]: any -> oneof<record<portfolios: table<portfolioVolatility: float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2174,7 +2157,7 @@ export def "post-portfolio-construction-investable" [
   --assets-weights: list<float> # assetsWeights[i] is the desired weight of the asset i in the portfolio, in percentage (can be null to indicate no specific desire)
   --maximum-assets-groups-weights: list<float> # maximumAssetsGroupsWeights[k] is the maximum desired weight of the assets group k in the portfolio, in percentage (can be null to indicate no specific desire); requires assetsGroups to be present
   portfolio_value: float # The monetary value of the portfolio
-]: any -> record<assetsPositions: list<float>, assetsWeights: list<float>> {
+]: any -> oneof<record<assetsPositions: list<float>, assetsWeights: list<float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2200,8 +2183,6 @@ export def "post-portfolio-construction-investable" [
 # Mimicking Portfolio
 #
 # POST /portfolio/construction/mimicking
-# --assets item shape: {assetReturns: list<float>}
-# --constraints shape: {assetsGroups?: list, assetsGroupsMatrix?: list, maximumAssetsGroupsWeights?: list<float>, maximumAssetsWeights?: list<float>, maximumPortfolioExposure?: float, minimumAssetsWeights?: list<float>, minimumPortfolioExposure?: float}
 export def "post-portfolio-construction-mimicking" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2215,7 +2196,7 @@ export def "post-portfolio-construction-mimicking" [
   assets: list # item shape: {assetReturns: list<float>}
   benchmark_returns: list<float> # benchmarkReturns[t] is the return of the benchmark at the time t; the benchmarkReturns array must have the same length as all the assetReturns arrays
   --constraints: record # shape: {assetsGroups?: list, assetsGroupsMatrix?: list, maximumAssetsGroupsWeights?: list<float>, maximumAssetsWeights?: list<float>, maximumPortfolioExposure?: float, minimumAssetsWeights?: list<float>, minimumPortfolioExposure?: float}
-]: any -> record<assetsWeights: list<float>> {
+]: any -> oneof<record<assetsWeights: list<float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2241,7 +2222,6 @@ export def "post-portfolio-construction-mimicking" [
 # Random Portfolio
 #
 # POST /portfolio/construction/random
-# --constraints shape: {maximumAssetsWeights?: list<float>, maximumPortfolioExposure?: float, minimumAssetsWeights?: list<float>, minimumPortfolioExposure?: float}
 export def "post-portfolio-construction-random" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2255,7 +2235,7 @@ export def "post-portfolio-construction-random" [
   assets: int # The number of assets
   --constraints: record # shape: {maximumAssetsWeights?: list<float>, maximumPortfolioExposure?: float, minimumAssetsWeights?: list<float>, minimumPortfolioExposure?: float}
   --portfolios: int # The number of portfolios to construct (default: 25)
-]: any -> record<portfolios: table<assetsWeights: list>> {
+]: any -> oneof<record<portfolios: table<assetsWeights: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2281,7 +2261,6 @@ export def "post-portfolio-construction-random" [
 # Equal Risk Contributions Portfolio
 #
 # POST /portfolio/optimization/equal-risk-contributions
-# --constraints shape: {maximumAssetsWeights?: list<float>, minimumAssetsWeights?: list<float>}
 export def "post-portfolio-optimization-equal-risk-contributions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2295,7 +2274,7 @@ export def "post-portfolio-optimization-equal-risk-contributions" [
   assets: int # The number of assets
   assets_covariance_matrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
   --constraints: record # shape: {maximumAssetsWeights?: list<float>, minimumAssetsWeights?: list<float>}
-]: any -> record<assetsWeights: list<float>> {
+]: any -> oneof<record<assetsWeights: list<float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2335,7 +2314,7 @@ export def "post-portfolio-optimization-equal-sharpe-ratio-contributions" [
   assets_covariance_matrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
   assets_returns: list<float> # assetsReturns[i] is the arithmetic return of asset i
   risk_free_rate: float # The risk free rate
-]: any -> record<assetsWeights: list<float>> {
+]: any -> oneof<record<assetsWeights: list<float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2373,7 +2352,7 @@ export def "post-portfolio-optimization-equal-volatility-weighted" [
   --dry-run(-n) # Return the request that would be sent without executing it
   assets: int # The number of assets
   assets_volatilities: list<float> # assetsVolatilities[i] is the volatility of the asset i
-]: any -> record<assetsWeights: list<float>> {
+]: any -> oneof<record<assetsWeights: list<float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2410,7 +2389,7 @@ export def "post-portfolio-optimization-equal-weighted" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   assets: int # The number of assets
-]: any -> record<assetsWeights: list<float>> {
+]: any -> oneof<record<assetsWeights: list<float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2436,7 +2415,6 @@ export def "post-portfolio-optimization-equal-weighted" [
 # Hierarchical Risk Parity Portfolio
 #
 # POST /portfolio/optimization/hierarchical-risk-parity
-# --constraints shape: {maximumAssetsWeights?: list<float>, maximumPortfolioExposure?: float, minimumAssetsWeights?: list<float>, minimumPortfolioExposure?: float}
 export def "post-portfolio-optimization-hierarchical-risk-parity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2452,7 +2430,7 @@ export def "post-portfolio-optimization-hierarchical-risk-parity" [
   --clustering-method: string@clustering-method-completer # The hierarchical clustering method to use (default: singleLinkage)
   --clustering-ordering: string@clustering-ordering-completer # The order to impose on the hierarchical clustering tree leaves (default: r-hclust)
   --constraints: record # shape: {maximumAssetsWeights?: list<float>, maximumPortfolioExposure?: float, minimumAssetsWeights?: list<float>, minimumPortfolioExposure?: float}
-]: any -> record<assetsWeights: list<float>> {
+]: any -> oneof<record<assetsWeights: list<float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2478,7 +2456,6 @@ export def "post-portfolio-optimization-hierarchical-risk-parity" [
 # Hierarchical Clustering-Based Risk Parity Portfolio
 #
 # POST /portfolio/optimization/hierarchical-risk-parity/clustering-based
-# --constraints shape: {maximumAssetsWeights?: list<float>, maximumPortfolioExposure?: float, minimumAssetsWeights?: list<float>, minimumPortfolioExposure?: float}
 export def "post-portfolio-optimization-hierarchical-risk-parity-clustering-based" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2497,7 +2474,7 @@ export def "post-portfolio-optimization-hierarchical-risk-parity-clustering-base
   --clusters: int # The number of clusters to use in the hierarchical clustering tree; if not provided, the number of clusters to use is computed using the gap statistic method, as described in the first reference
   --constraints: record # shape: {maximumAssetsWeights?: list<float>, maximumPortfolioExposure?: float, minimumAssetsWeights?: list<float>, minimumPortfolioExposure?: float}
   --within-cluster-allocation-method: string@within-cluster-allocation-method-completer # The allocation method to use within clusters (default: equalWeighting)
-]: any -> record<assetsWeights: list<float>> {
+]: any -> oneof<record<assetsWeights: list<float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2535,7 +2512,7 @@ export def "post-portfolio-optimization-inverse-variance-weighted" [
   --dry-run(-n) # Return the request that would be sent without executing it
   assets: int # The number of assets
   assets_variances: list<float> # assetsVariances[i] is the variance of the asset i
-]: any -> record<assetsWeights: list<float>> {
+]: any -> oneof<record<assetsWeights: list<float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2573,7 +2550,7 @@ export def "post-portfolio-optimization-inverse-volatility-weighted" [
   --dry-run(-n) # Return the request that would be sent without executing it
   assets: int # The number of assets
   assets_volatilities: list<float> # assetsVolatilities[i] is the volatility of the asset i
-]: any -> record<assetsWeights: list<float>> {
+]: any -> oneof<record<assetsWeights: list<float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2611,7 +2588,7 @@ export def "post-portfolio-optimization-market-capitalization-weighted" [
   --dry-run(-n) # Return the request that would be sent without executing it
   assets: int # The number of assets
   assets_market_capitalizations: list<float> # assetsMarketCapitalizations[i] is the market capitalization of the asset i
-]: any -> record<assetsWeights: list<float>> {
+]: any -> oneof<record<assetsWeights: list<float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2637,7 +2614,6 @@ export def "post-portfolio-optimization-market-capitalization-weighted" [
 # Maximum Decorrelation Portfolio
 #
 # POST /portfolio/optimization/maximum-decorrelation
-# --constraints shape: {assetsGroups?: list, assetsGroupsMatrix?: list, maximumAssetsGroupsWeights?: list<float>, maximumAssetsWeights?: list<float>, maximumPortfolioExposure?: float, minimumAssetsWeights?: list<float>, minimumPortfolioExposure?: float}
 export def "post-portfolio-optimization-maximum-decorrelation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2652,7 +2628,7 @@ export def "post-portfolio-optimization-maximum-decorrelation" [
   assets_correlation_matrix: list # assetsCorrelationMatrix[i][j] is the correlation between the asset i and the asset j
   --assets-returns: list<float> # assetsReturns[i] is the arithmetic return of asset i
   --constraints: record # shape: {assetsGroups?: list, assetsGroupsMatrix?: list, maximumAssetsGroupsWeights?: list<float>, maximumAssetsWeights?: list<float>, maximumPortfolioExposure?: float, minimumAssetsWeights?: list<float>, minimumPortfolioExposure?: float}
-]: any -> record<assetsWeights: list<float>> {
+]: any -> oneof<record<assetsWeights: list<float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2678,7 +2654,6 @@ export def "post-portfolio-optimization-maximum-decorrelation" [
 # Maximum Return Portfolio
 #
 # POST /portfolio/optimization/maximum-return
-# --constraints shape: {assetsGroups?: list, assetsGroupsMatrix?: list, maximumAssetsGroupsWeights?: list<float>, maximumAssetsWeights?: list<float>, maximumPortfolioExposure?: float, minimumAssetsWeights?: list<float>, minimumPortfolioExposure?: float}
 export def "post-portfolio-optimization-maximum-return" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2693,7 +2668,7 @@ export def "post-portfolio-optimization-maximum-return" [
   --assets-covariance-matrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
   assets_returns: list<float> # assetsReturns[i] is the arithmetic return of asset i
   --constraints: record # shape: {assetsGroups?: list, assetsGroupsMatrix?: list, maximumAssetsGroupsWeights?: list<float>, maximumAssetsWeights?: list<float>, maximumPortfolioExposure?: float, minimumAssetsWeights?: list<float>, minimumPortfolioExposure?: float}
-]: any -> record<assetsWeights: list<float>> {
+]: any -> oneof<record<assetsWeights: list<float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2719,7 +2694,6 @@ export def "post-portfolio-optimization-maximum-return" [
 # Diversified Maximum Return Portfolio
 #
 # POST /portfolio/optimization/maximum-return/diversified
-# --constraints shape: {assetsGroups?: list, assetsGroupsMatrix?: list, deltaReturn?: float, deltaVolatility?: float, maximumAssetsGroupsWeights?: list<float>, maximumAssetsWeights?: list<float>, maximumPortfolioExposure?: float, minimumAssetsWeights?: list<float>, minimumPortfolioExposure?: float}
 export def "post-portfolio-optimization-maximum-return-diversified" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2734,7 +2708,7 @@ export def "post-portfolio-optimization-maximum-return-diversified" [
   --assets-covariance-matrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
   assets_returns: list<float> # assetsReturns[i] is the arithmetic return of asset i
   --constraints: record # shape: {assetsGroups?: list, assetsGroupsMatrix?: list, deltaReturn?: float, deltaVolatility?: float, maximumAssetsGroupsWeights?: list<float>, maximumAssetsWeights?: list<float>, maximumPortfolioExposure?: float, minimumAssetsWeights?: list<float>, minimumPortfolioExposure?: float}
-]: any -> record<assetsWeights: list<float>> {
+]: any -> oneof<record<assetsWeights: list<float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2760,7 +2734,6 @@ export def "post-portfolio-optimization-maximum-return-diversified" [
 # Subset Resampling-Based Maximum Return Portfolio
 #
 # POST /portfolio/optimization/maximum-return/subset-resampling-based
-# --constraints shape: {assetsGroups?: list, assetsGroupsMatrix?: list, maximumAssetsGroupsWeights?: list<float>, maximumAssetsWeights?: list<float>, maximumPortfolioExposure?: float, minimumAssetsWeights?: list<float>, minimumPortfolioExposure?: float}
 export def "post-portfolio-optimization-maximum-return-subset-resampling-based" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2779,7 +2752,7 @@ export def "post-portfolio-optimization-maximum-return-subset-resampling-based" 
   --subset-portfolios-aggregation-method: string@subset-portfolios-aggregation-method-completer # The method to aggregate the subset portfolios (default: average)
   --subset-portfolios-enumeration-method: string@subset-portfolios-enumeration-method-completer # The method to enumerate the subset portfolios (default: randomSampling)
   --subset-size: int # The number of assets to include in each subset portfolio; defaults to a value of order the square root of the total number of assets
-]: any -> record<assetsWeights: list<float>> {
+]: any -> oneof<record<assetsWeights: list<float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2805,7 +2778,6 @@ export def "post-portfolio-optimization-maximum-return-subset-resampling-based" 
 # Maximum Sharpe Ratio Portfolio
 #
 # POST /portfolio/optimization/maximum-sharpe-ratio
-# --constraints shape: {assetsGroups?: list, assetsGroupsMatrix?: list, maximumAssetsGroupsWeights?: list<float>, maximumAssetsWeights?: list<float>, maximumPortfolioExposure?: float, minimumAssetsWeights?: list<float>, minimumPortfolioExposure?: float}
 export def "post-portfolio-optimization-maximum-sharpe-ratio" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2821,7 +2793,7 @@ export def "post-portfolio-optimization-maximum-sharpe-ratio" [
   assets_returns: list<float> # assetsReturns[i] is the arithmetic return of asset i
   --constraints: record # shape: {assetsGroups?: list, assetsGroupsMatrix?: list, maximumAssetsGroupsWeights?: list<float>, maximumAssetsWeights?: list<float>, maximumPortfolioExposure?: float, minimumAssetsWeights?: list<float>, minimumPortfolioExposure?: float}
   risk_free_rate: float # The risk free rate
-]: any -> record<assetsWeights: list<float>> {
+]: any -> oneof<record<assetsWeights: list<float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2847,7 +2819,6 @@ export def "post-portfolio-optimization-maximum-sharpe-ratio" [
 # Diversified Maximum Sharpe Ratio Portfolio
 #
 # POST /portfolio/optimization/maximum-sharpe-ratio/diversified
-# --constraints shape: {assetsGroups?: list, assetsGroupsMatrix?: list, deltaReturn?: float, deltaVolatility?: float, maximumAssetsGroupsWeights?: list<float>, maximumAssetsWeights?: list<float>, maximumPortfolioExposure?: float, minimumAssetsWeights?: list<float>, minimumPortfolioExposure?: float}
 export def "post-portfolio-optimization-maximum-sharpe-ratio-diversified" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2863,7 +2834,7 @@ export def "post-portfolio-optimization-maximum-sharpe-ratio-diversified" [
   assets_returns: list<float> # assetsReturns[i] is the arithmetic return of asset i
   --constraints: record # shape: {assetsGroups?: list, assetsGroupsMatrix?: list, deltaReturn?: float, deltaVolatility?: float, maximumAssetsGroupsWeights?: list<float>, maximumAssetsWeights?: list<float>, maximumPortfolioExposure?: float, minimumAssetsWeights?: list<float>, minimumPortfolioExposure?: float}
   risk_free_rate: float # The risk free rate
-]: any -> record<assetsWeights: list<float>> {
+]: any -> oneof<record<assetsWeights: list<float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2889,7 +2860,6 @@ export def "post-portfolio-optimization-maximum-sharpe-ratio-diversified" [
 # Subset Resampling-Based Maximum Sharpe Ratio Portfolio
 #
 # POST /portfolio/optimization/maximum-sharpe-ratio/subset-resampling-based
-# --constraints shape: {assetsGroups?: list, assetsGroupsMatrix?: list, maximumAssetsGroupsWeights?: list<float>, maximumAssetsWeights?: list<float>, maximumPortfolioExposure?: float, minimumAssetsWeights?: list<float>, minimumPortfolioExposure?: float}
 export def "post-portfolio-optimization-maximum-sharpe-ratio-subset-resampling-based" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2909,7 +2879,7 @@ export def "post-portfolio-optimization-maximum-sharpe-ratio-subset-resampling-b
   --subset-portfolios-aggregation-method: string@subset-portfolios-aggregation-method-completer # The method to aggregate the subset portfolios (default: average)
   --subset-portfolios-enumeration-method: string@subset-portfolios-enumeration-method-completer # The method to enumerate the subset portfolios (default: randomSampling)
   --subset-size: int # The number of assets to include in each subset portfolio; defaults to a value of order the square root of the total number of assets
-]: any -> record<assetsWeights: list<float>> {
+]: any -> oneof<record<assetsWeights: list<float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2935,8 +2905,6 @@ export def "post-portfolio-optimization-maximum-sharpe-ratio-subset-resampling-b
 # Maximum Ulcer Performance Index Portfolio
 #
 # POST /portfolio/optimization/maximum-ulcer-performance-index
-# --assets item shape: {assetPrices: list<float>}
-# --constraints shape: {assetsGroups?: list, assetsGroupsMatrix?: list, maximumAssetsGroupsWeights?: list<float>, maximumAssetsWeights?: list<float>, maximumPortfolioExposure?: float, minimumAssetsWeights?: list<float>, minimumPortfolioExposure?: float}
 export def "post-portfolio-optimization-maximum-ulcer-performance-index" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2950,7 +2918,7 @@ export def "post-portfolio-optimization-maximum-ulcer-performance-index" [
   assets: list # item shape: {assetPrices: list<float>}
   --constraints: record # shape: {assetsGroups?: list, assetsGroupsMatrix?: list, maximumAssetsGroupsWeights?: list<float>, maximumAssetsWeights?: list<float>, maximumPortfolioExposure?: float, minimumAssetsWeights?: list<float>, minimumPortfolioExposure?: float}
   risk_free_rate: float # The risk free rate
-]: any -> record<assetsWeights: list<float>> {
+]: any -> oneof<record<assetsWeights: list<float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2976,7 +2944,6 @@ export def "post-portfolio-optimization-maximum-ulcer-performance-index" [
 # Mean-Variance Efficient Portfolio
 #
 # POST /portfolio/optimization/mean-variance-efficient
-# --constraints shape: {assetsGroups?: list, assetsGroupsMatrix?: list, maximumAssetsGroupsWeights?: list<float>, maximumAssetsWeights?: list<float>, maximumPortfolioExposure?: float, minimumAssetsWeights?: list<float>, minimumPortfolioExposure?: float, portfolioReturn?: float, portfolioVolatility?: float, riskTolerance?: float}
 export def "post-portfolio-optimization-mean-variance-efficient" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2991,7 +2958,7 @@ export def "post-portfolio-optimization-mean-variance-efficient" [
   assets_covariance_matrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
   assets_returns: list<float> # assetsReturns[i] is the arithmetic return of asset i
   constraints: record # shape: {assetsGroups?: list, assetsGroupsMatrix?: list, maximumAssetsGroupsWeights?: list<float>, maximumAssetsWeights?: list<float>, maximumPortfolioExposure?: float, minimumAssetsWeights?: list<float>, minimumPortfolioExposure?: float, portfolioReturn?: float, portfolioVolatility?: float, riskTolerance?: float}
-]: any -> record<assetsWeights: list<float>> {
+]: any -> oneof<record<assetsWeights: list<float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -3017,7 +2984,6 @@ export def "post-portfolio-optimization-mean-variance-efficient" [
 # Diversified Mean-Variance Efficient Portfolio
 #
 # POST /portfolio/optimization/mean-variance-efficient/diversified
-# --constraints shape: {assetsGroups?: list, assetsGroupsMatrix?: list, deltaReturn?: float, deltaVolatility?: float, maximumAssetsGroupsWeights?: list<float>, maximumAssetsWeights?: list<float>, maximumPortfolioExposure?: float, minimumAssetsWeights?: list<float>, minimumPortfolioExposure?: float, portfolioReturn?: float, portfolioVolatility?: float, riskTolerance?: float}
 export def "post-portfolio-optimization-mean-variance-efficient-diversified" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3032,7 +2998,7 @@ export def "post-portfolio-optimization-mean-variance-efficient-diversified" [
   assets_covariance_matrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
   assets_returns: list<float> # assetsReturns[i] is the arithmetic return of asset i
   constraints: record # shape: {assetsGroups?: list, assetsGroupsMatrix?: list, deltaReturn?: float, deltaVolatility?: float, maximumAssetsGroupsWeights?: list<float>, maximumAssetsWeights?: list<float>, maximumPortfolioExposure?: float, minimumAssetsWeights?: list<float>, minimumPortfolioExposure?: float, portfolioReturn?: float, portfolioVolatility?: float, riskTolerance?: float}
-]: any -> record<assetsWeights: list<float>> {
+]: any -> oneof<record<assetsWeights: list<float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -3058,7 +3024,6 @@ export def "post-portfolio-optimization-mean-variance-efficient-diversified" [
 # Subset Resampling-Based Mean-Variance Efficient Portfolio
 #
 # POST /portfolio/optimization/mean-variance-efficient/subset-resampling-based
-# --constraints shape: {assetsGroups?: list, assetsGroupsMatrix?: list, maximumAssetsGroupsWeights?: list<float>, maximumAssetsWeights?: list<float>, maximumPortfolioExposure?: float, minimumAssetsWeights?: list<float>, minimumPortfolioExposure?: float, portfolioReturn?: float, portfolioVolatility?: float, riskTolerance?: float}
 export def "post-portfolio-optimization-mean-variance-efficient-subset-resampling-based" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3077,7 +3042,7 @@ export def "post-portfolio-optimization-mean-variance-efficient-subset-resamplin
   --subset-portfolios-aggregation-method: string@subset-portfolios-aggregation-method-completer # The method to aggregate the subset portfolios (default: average)
   --subset-portfolios-enumeration-method: string@subset-portfolios-enumeration-method-completer # The method to enumerate the subset portfolios (default: randomSampling)
   --subset-size: int # The number of assets to include in each subset portfolio; defaults to a value of order the square root of the total number of assets
-]: any -> record<assetsWeights: list<float>> {
+]: any -> oneof<record<assetsWeights: list<float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -3116,7 +3081,7 @@ export def "post-portfolio-optimization-minimum-correlation" [
   assets: int
   assets_correlation_matrix: list # assetsCorrelationMatrix[i][j] is the correlation between the asset i and the asset j; required if assetsReturns is not provided
   assets_volatilities: list<float> # assetsVariances[i] is the volatility of the asset i; required if assetsCorrelationMatrix is provided and assetsVariances is not provided
-]: any -> record<assetsWeights: list<float>> {
+]: any -> oneof<record<assetsWeights: list<float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -3142,8 +3107,6 @@ export def "post-portfolio-optimization-minimum-correlation" [
 # Minimum Ulcer Index Portfolio
 #
 # POST /portfolio/optimization/minimum-ulcer-index
-# --assets item shape: {assetPrices: list<float>}
-# --constraints shape: {assetsGroups?: list, assetsGroupsMatrix?: list, maximumAssetsGroupsWeights?: list<float>, maximumAssetsWeights?: list<float>, maximumPortfolioExposure?: float, minimumAssetsWeights?: list<float>, minimumPortfolioExposure?: float}
 export def "post-portfolio-optimization-minimum-ulcer-index" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3156,7 +3119,7 @@ export def "post-portfolio-optimization-minimum-ulcer-index" [
   --dry-run(-n) # Return the request that would be sent without executing it
   assets: list # item shape: {assetPrices: list<float>}
   --constraints: record # shape: {assetsGroups?: list, assetsGroupsMatrix?: list, maximumAssetsGroupsWeights?: list<float>, maximumAssetsWeights?: list<float>, maximumPortfolioExposure?: float, minimumAssetsWeights?: list<float>, minimumPortfolioExposure?: float}
-]: any -> record<assetsWeights: list<float>> {
+]: any -> oneof<record<assetsWeights: list<float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -3182,7 +3145,6 @@ export def "post-portfolio-optimization-minimum-ulcer-index" [
 # Minimum Variance Portfolio
 #
 # POST /portfolio/optimization/minimum-variance
-# --constraints shape: {assetsGroups?: list, assetsGroupsMatrix?: list, maximumAssetsGroupsWeights?: list<float>, maximumAssetsWeights?: list<float>, maximumPortfolioExposure?: float, minimumAssetsWeights?: list<float>, minimumPortfolioExposure?: float}
 export def "post-portfolio-optimization-minimum-variance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3197,7 +3159,7 @@ export def "post-portfolio-optimization-minimum-variance" [
   assets_covariance_matrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
   --assets-returns: list<float> # assetsReturns[i] is the arithmetic return of asset i
   --constraints: record # shape: {assetsGroups?: list, assetsGroupsMatrix?: list, maximumAssetsGroupsWeights?: list<float>, maximumAssetsWeights?: list<float>, maximumPortfolioExposure?: float, minimumAssetsWeights?: list<float>, minimumPortfolioExposure?: float}
-]: any -> record<assetsWeights: list<float>> {
+]: any -> oneof<record<assetsWeights: list<float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -3223,7 +3185,6 @@ export def "post-portfolio-optimization-minimum-variance" [
 # Diversified Minimum Variance Portfolio
 #
 # POST /portfolio/optimization/minimum-variance/diversified
-# --constraints shape: {assetsGroups?: list, assetsGroupsMatrix?: list, deltaReturn?: float, deltaVolatility?: float, maximumAssetsGroupsWeights?: list<float>, maximumAssetsWeights?: list<float>, maximumPortfolioExposure?: float, minimumAssetsWeights?: list<float>, minimumPortfolioExposure?: float}
 export def "post-portfolio-optimization-minimum-variance-diversified" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3238,7 +3199,7 @@ export def "post-portfolio-optimization-minimum-variance-diversified" [
   assets_covariance_matrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
   --assets-returns: list<float> # assetsReturns[i] is the arithmetic return of asset i
   --constraints: record # shape: {assetsGroups?: list, assetsGroupsMatrix?: list, deltaReturn?: float, deltaVolatility?: float, maximumAssetsGroupsWeights?: list<float>, maximumAssetsWeights?: list<float>, maximumPortfolioExposure?: float, minimumAssetsWeights?: list<float>, minimumPortfolioExposure?: float}
-]: any -> record<assetsWeights: list<float>> {
+]: any -> oneof<record<assetsWeights: list<float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -3264,7 +3225,6 @@ export def "post-portfolio-optimization-minimum-variance-diversified" [
 # Subset Resampling-Based Minimum Variance Portfolio
 #
 # POST /portfolio/optimization/minimum-variance/subset-resampling-based
-# --constraints shape: {assetsGroups?: list, assetsGroupsMatrix?: list, maximumAssetsGroupsWeights?: list<float>, maximumAssetsWeights?: list<float>, maximumPortfolioExposure?: float, minimumAssetsWeights?: list<float>, minimumPortfolioExposure?: float}
 export def "post-portfolio-optimization-minimum-variance-subset-resampling-based" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3283,7 +3243,7 @@ export def "post-portfolio-optimization-minimum-variance-subset-resampling-based
   --subset-portfolios-aggregation-method: string@subset-portfolios-aggregation-method-completer # The method to aggregate the subset portfolios (default: average)
   --subset-portfolios-enumeration-method: string@subset-portfolios-enumeration-method-completer # The method to enumerate the subset portfolios (default: randomSampling)
   --subset-size: int # The number of assets to include in each subset portfolio; defaults to a value of order the square root of the total number of assets
-]: any -> record<assetsWeights: list<float>> {
+]: any -> oneof<record<assetsWeights: list<float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -3309,7 +3269,6 @@ export def "post-portfolio-optimization-minimum-variance-subset-resampling-based
 # Most Diversified Portfolio
 #
 # POST /portfolio/optimization/most-diversified
-# --constraints shape: {assetsGroups?: list, assetsGroupsMatrix?: list, maximumAssetsGroupsWeights?: list<float>, maximumAssetsWeights?: list<float>, maximumPortfolioExposure?: float, minimumAssetsWeights?: list<float>, minimumPortfolioExposure?: float}
 export def "post-portfolio-optimization-most-diversified" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3323,7 +3282,7 @@ export def "post-portfolio-optimization-most-diversified" [
   assets: int # The number of assets
   assets_covariance_matrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
   --constraints: record # shape: {assetsGroups?: list, assetsGroupsMatrix?: list, maximumAssetsGroupsWeights?: list<float>, maximumAssetsWeights?: list<float>, maximumPortfolioExposure?: float, minimumAssetsWeights?: list<float>, minimumPortfolioExposure?: float}
-]: any -> record<assetsWeights: list<float>> {
+]: any -> oneof<record<assetsWeights: list<float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -3349,8 +3308,6 @@ export def "post-portfolio-optimization-most-diversified" [
 # Drift-weight Portfolio Rebalancing
 #
 # POST /portfolio/simulation/rebalancing/drift-weight
-# --assets item shape: {assetPrices: list<float>}
-# --portfolios item shape: {assetsWeights: list<float>}
 export def "post-portfolio-simulation-rebalancing-drift-weight" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3363,7 +3320,7 @@ export def "post-portfolio-simulation-rebalancing-drift-weight" [
   --dry-run(-n) # Return the request that would be sent without executing it
   assets: list # item shape: {assetPrices: list<float>}
   portfolios: list # item shape: {assetsWeights: list<float>}
-]: any -> record<portfolios: table<portfolioValues: list>> {
+]: any -> oneof<record<portfolios: table<portfolioValues: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -3389,8 +3346,6 @@ export def "post-portfolio-simulation-rebalancing-drift-weight" [
 # Fixed-weight Portfolio Rebalancing
 #
 # POST /portfolio/simulation/rebalancing/fixed-weight
-# --assets item shape: {assetPrices: list<float>}
-# --portfolios item shape: {assetsWeights: list<float>}
 export def "post-portfolio-simulation-rebalancing-fixed-weight" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3403,7 +3358,7 @@ export def "post-portfolio-simulation-rebalancing-fixed-weight" [
   --dry-run(-n) # Return the request that would be sent without executing it
   assets: list # item shape: {assetPrices: list<float>}
   portfolios: list # item shape: {assetsWeights: list<float>}
-]: any -> record<portfolios: table<portfolioValues: list>> {
+]: any -> oneof<record<portfolios: table<portfolioValues: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -3429,7 +3384,6 @@ export def "post-portfolio-simulation-rebalancing-fixed-weight" [
 # Random-weight Portfolio Rebalancing
 #
 # POST /portfolio/simulation/rebalancing/random-weight
-# --assets item shape: {assetPrices: list<float>}
 export def "post-portfolio-simulation-rebalancing-random-weight" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3442,7 +3396,7 @@ export def "post-portfolio-simulation-rebalancing-random-weight" [
   --dry-run(-n) # Return the request that would be sent without executing it
   assets: list # item shape: {assetPrices: list<float>}
   --portfolios: int # The number of portfolios to simulate (default: 25)
-]: any -> record<portfolios: table<portfolioValues: list>> {
+]: any -> oneof<record<portfolios: table<portfolioValues: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)

@@ -12,27 +12,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -40,8 +49,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -52,7 +66,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -87,7 +110,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -123,9 +147,9 @@ def accept-completer [] { ["application/json" "application/x-ms-application" "te
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "home-get" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["home-get" "analysis-get-by-path" "analysis-get-analyses-query" "analysis-delete" "analysis-get" "analysis-update" "analysis-get-categories" "analysis-get-security" "analysis-get-security-entries" "analysis-create-security-entry" "analysis-delete-security-entry" "analysis-get-security-entry-by-name" "analysis-update-security-entry" "analysis-category-get-by-path" "analysis-category-delete" "analysis-category-get" "analysis-category-update" "analysis-category-get-security" "analysis-category-get-security-entries" "analysis-category-create-security-entry" "analysis-category-delete-security-entry" "analysis-category-get-security-entry-by-name" "analysis-category-update-security-entry" "analysis-rule-plug-in-get-by-path" "analysis-rule-plug-in-get" "analysis-rule-get-by-path" "analysis-rule-delete" "analysis-rule-get" "analysis-rule-update" "analysis-rule-get-analysis-rules" "analysis-rule-create-analysis-rule" "analysis-template-get-by-path" "analysis-template-create-from-analysis" "analysis-template-get-analysis-templates-query" "analysis-template-delete" "analysis-template-get" "analysis-template-update" "analysis-template-get-categories" "analysis-template-get-security" "analysis-template-get-security-entries" "analysis-template-create-security-entry" "analysis-template-delete-security-entry" "analysis-template-get-security-entry-by-name" "analysis-template-update-security-entry" "asset-database-get-by-path" "asset-database-delete" "asset-database-get" "asset-database-update" "asset-database-find-analyses" "asset-database-get-analysis-categories" "asset-database-create-analysis-category" "asset-database-get-analysis-templates" "asset-database-create-analysis-template" "asset-database-get-attribute-categories" "asset-database-create-attribute-category" "asset-database-find-element-attributes" "asset-database-get-element-categories" "asset-database-create-element-category" "asset-database-get-elements" "asset-database-create-element" "asset-database-get-element-templates" "asset-database-create-element-template" "asset-database-get-enumeration-sets" "asset-database-create-enumeration-set" "asset-database-find-event-frame-attributes" "asset-database-get-event-frames" "asset-database-create-event-frame" "asset-database-export" "asset-database-import" "asset-database-remove-referenced-element" "asset-database-get-referenced-elements" "asset-database-add-referenced-element" "asset-database-get-security" "asset-database-get-security-entries" "asset-database-create-security-entry" "asset-database-delete-security-entry" "asset-database-get-security-entry-by-name" "asset-database-update-security-entry" "asset-database-get-table-categories" "asset-database-create-table-category" "asset-database-get-tables" "asset-database-create-table" "asset-server-list" "asset-server-get-by-name" "asset-server-get-by-path" "asset-server-get" "asset-server-get-analysis-rule-plug-ins" "asset-server-get-databases" "asset-server-create-asset-database" "asset-server-get-notification-contact-templates" "asset-server-create-notification-contact-template" "asset-server-get-notification-plug-ins" "asset-server-get-security" "asset-server-get-security-entries" "asset-server-create-security-entry" "asset-server-delete-security-entry" "asset-server-get-security-entry-by-name" "asset-server-update-security-entry" "asset-server-get-security-identities" "asset-server-create-security-identity" "asset-server-get-security-identities-for-user" "asset-server-get-security-mappings" "asset-server-create-security-mapping" "asset-server-get-time-rule-plug-ins" "asset-server-get-unit-classes" "asset-server-create-unit-class" "attribute-category-get-by-path" "attribute-category-delete" "attribute-category-get" "attribute-category-update" "attribute-category-get-security" "attribute-category-get-security-entries" "attribute-category-create-security-entry" "attribute-category-delete-security-entry" "attribute-category-get-security-entry-by-name" "attribute-category-update-security-entry" "attribute-get-by-path" "attribute-get-multiple" "attribute-get-attributes-query" "attribute-delete" "attribute-get" "attribute-update" "attribute-get-attributes" "attribute-create-attribute" "attribute-get-categories" "attribute-create-config" "attribute-get-value" "attribute-set-value" "attribute-template-get-by-path" "attribute-template-delete" "attribute-template-get" "attribute-template-update" "attribute-template-get-attribute-templates" "attribute-template-create-attribute-template" "attribute-template-get-categories" "attribute-trait-get-by-category" "attribute-trait-get" "batch-execute" "calculation-get-at-intervals" "calculation-get-at-recorded" "calculation-get-summary" "calculation-get-at-times" "channel-instances" "data-server-list" "data-server-get-by-name" "data-server-get-by-path" "data-server-get" "data-server-get-enumeration-sets" "data-server-create-enumeration-set" "data-server-get-license" "data-server-get-points" "data-server-create-point" "element-category-get-by-path" "element-category-delete" "element-category-get" "element-category-update" "element-category-get-security" "element-category-get-security-entries" "element-category-create-security-entry" "element-category-delete-security-entry" "element-category-get-security-entry-by-name" "element-category-update-security-entry" "element-get-by-path" "element-get-multiple" "element-get-elements-query" "element-create-search-by-attribute" "element-execute-search-by-attribute" "element-delete" "element-get" "element-update" "element-get-analyses" "element-create-analysis" "element-get-attributes" "element-create-attribute" "element-get-categories" "element-create-config" "element-find-element-attributes" "element-get-elements" "element-create-element" "element-get-event-frames" "element-get-notification-rules" "element-create-notification-rule" "element-get-paths" "element-remove-referenced-element" "element-get-referenced-elements" "element-add-referenced-element" "element-get-security" "element-get-security-entries" "element-create-security-entry" "element-delete-security-entry" "element-get-security-entry-by-name" "element-update-security-entry" "element-template-get-by-path" "element-template-delete" "element-template-get" "element-template-update" "element-template-get-analysis-templates" "element-template-get-attribute-templates" "element-template-create-attribute-template" "element-template-get-base-element-templates" "element-template-get-categories" "element-template-get-derived-element-templates" "element-template-get-notification-rule-templates" "element-template-create-notification-rule-template" "element-template-get-security" "element-template-get-security-entries" "element-template-create-security-entry" "element-template-delete-security-entry" "element-template-get-security-entry-by-name" "element-template-update-security-entry" "enumeration-set-get-by-path" "enumeration-set-delete" "enumeration-set-get" "enumeration-set-update" "enumeration-set-get-values" "enumeration-set-create-value" "enumeration-set-get-security" "enumeration-set-get-security-entries" "enumeration-set-create-security-entry" "enumeration-set-delete-security-entry" "enumeration-set-get-security-entry-by-name" "enumeration-set-update-security-entry" "enumeration-value-get-by-path" "enumeration-value-delete-enumeration-value" "enumeration-value-get" "enumeration-value-update-enumeration-value" "event-frame-get-by-path" "event-frame-get-multiple" "event-frame-get-event-frames-query" "event-frame-create-search-by-attribute" "event-frame-execute-search-by-attribute" "event-frame-delete" "event-frame-get" "event-frame-update" "event-frame-acknowledge" "event-frame-get-annotations" "event-frame-create-annotation" "event-frame-delete-annotation" "event-frame-get-annotation-by-id" "event-frame-update-annotation" "event-frame-delete-annotation-attachment-media-by-id" "event-frame-get-annotation-attachment-media-metadata-by-id" "event-frame-get-attributes" "event-frame-create-attribute" "event-frame-capture-values" "event-frame-get-categories" "event-frame-create-config" "event-frame-find-event-frame-attributes" "event-frame-get-event-frames" "event-frame-create-event-frame" "event-frame-get-referenced-elements" "event-frame-get-security" "event-frame-get-security-entries" "event-frame-create-security-entry" "event-frame-delete-security-entry" "event-frame-get-security-entry-by-name" "event-frame-update-security-entry" "notification-contact-template-get-by-path" "notification-contact-template-get-notification-contact-templates-query" "notification-contact-template-delete" "notification-contact-template-get" "notification-contact-template-update" "notification-contact-template-get-notification-contact-templates" "notification-contact-template-get-security" "notification-contact-template-get-security-entries" "notification-contact-template-create-security-entry" "notification-contact-template-delete-security-entry" "notification-contact-template-get-security-entry-by-name" "notification-contact-template-update-security-entry" "notification-plug-in-get-by-path" "notification-plug-in-get" "notification-rule-get-by-path" "notification-rule-get-notification-rules-query" "notification-rule-delete" "notification-rule-get" "notification-rule-update" "notification-rule-get-notification-rule-subscribers" "notification-rule-create-notification-rule-subscriber" "notification-rule-get-security" "notification-rule-get-security-entries" "notification-rule-create-security-entry" "notification-rule-delete-security-entry" "notification-rule-get-security-entry-by-name" "notification-rule-update-security-entry" "notification-rule-subscriber-get-by-path" "notification-rule-subscriber-delete" "notification-rule-subscriber-get" "notification-rule-subscriber-update" "notification-rule-subscriber-get-notification-rule-subscribers" "notification-rule-template-get-by-path" "notification-rule-template-get-notification-rule-templates-query" "notification-rule-template-delete" "notification-rule-template-get" "notification-rule-template-update" "notification-rule-template-get-notification-rule-template-subscribers" "notification-rule-template-create-notification-rule-template-subscriber" "notification-rule-template-get-security" "notification-rule-template-get-security-entries" "notification-rule-template-create-security-entry" "notification-rule-template-delete-security-entry" "notification-rule-template-get-security-entry-by-name" "notification-rule-template-update-security-entry" "point-get-by-path" "point-get-multiple" "point-delete" "point-get" "point-update" "point-get-attributes" "point-get-attribute-by-name" "security-identity-get-by-path" "security-identity-delete" "security-identity-get" "security-identity-update" "security-identity-get-security" "security-identity-get-security-entries" "security-identity-get-security-entry-by-name" "security-identity-get-security-mappings" "security-mapping-get-by-path" "security-mapping-delete" "security-mapping-get" "security-mapping-update" "security-mapping-get-security" "security-mapping-get-security-entries" "security-mapping-get-security-entry-by-name" "stream-retrieve-stream-update" "stream-get-channel" "stream-get-end" "stream-get-interpolated" "stream-get-interpolated-at-times" "stream-get-plot" "stream-get-recorded" "stream-update-values" "stream-get-recorded-at-time" "stream-get-recorded-at-times" "stream-get-summary" "stream-register-stream-update" "stream-get-value" "stream-update-value" "stream-set-get-channel-ad-hoc" "stream-set-get-end-ad-hoc" "stream-set-get-interpolated-ad-hoc" "stream-set-get-interpolated-at-times-ad-hoc" "stream-set-get-joined" "stream-set-get-plot-ad-hoc" "stream-set-get-recorded-ad-hoc" "stream-set-update-values-ad-hoc" "stream-set-get-recorded-at-time-ad-hoc" "stream-set-get-recorded-at-times-ad-hoc" "stream-set-get-summaries-ad-hoc" "stream-set-retrieve-stream-set-updates" "stream-set-register-stream-set-updates" "stream-set-get-values-ad-hoc" "stream-set-update-value-ad-hoc" "stream-set-get-channel" "stream-set-get-end" "stream-set-get-interpolated" "stream-set-get-interpolated-at-times" "stream-set-get-plot" "stream-set-get-recorded" "stream-set-update-values" "stream-set-get-recorded-at-time" "stream-set-get-recorded-at-times" "stream-set-get-summaries" "stream-set-get-values" "stream-set-update-value" "system-landing" "system-cache-instances" "configuration-list" "configuration-delete" "configuration-get" "system-status" "system-user-info" "system-versions" "table-category-get-by-path" "table-category-delete" "table-category-get" "table-category-update" "table-category-get-security" "table-category-get-security-entries" "table-category-create-security-entry" "table-category-delete-security-entry" "table-category-get-security-entry-by-name" "table-category-update-security-entry" "table-get-by-path" "table-delete" "table-get" "table-update" "table-get-categories" "table-get-data" "table-update-data" "table-get-security" "table-get-security-entries" "table-create-security-entry" "table-delete-security-entry" "table-get-security-entry-by-name" "table-update-security-entry" "time-rule-plug-in-get-by-path" "time-rule-plug-in-get" "time-rule-get-by-path" "time-rule-delete" "time-rule-get" "time-rule-update" "unit-class-get-by-path" "unit-class-delete" "unit-class-get" "unit-class-update" "unit-class-get-canonical-unit" "unit-class-get-units" "unit-class-create-unit" "unit-get-by-path" "unit-delete" "unit-get" "unit-update" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -158,7 +182,7 @@ export def "home-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<Links: record<AssetServers: string, DataServers: string, Search: string, Self: string, System: string>, WebException: record<Errors: list<string>, StatusCode: int>> {
+]: nothing -> oneof<record<Links: record<AssetServers: string, DataServers: string, Search: string, Self: string, System: string>, WebException: record<Errors: list<string>, StatusCode: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/" $auth.query)
@@ -193,12 +217,13 @@ export def "analysis-get-by-path" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --path: string # The path to the Analysis.
+  --path: string # The path to the Analysis. (required)
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<AnalysisRulePlugInName: string, AutoCreated: bool, CategoryNames: list<string>, Description: string, GroupId: int, HasNotification: bool, HasTarget: bool, HasTemplate: bool, Id: string, IsConfigured: bool, IsTimeRuleDefinedByTemplate: bool, Links: record<AnalysisRule: string, AnalysisRulePlugIn: string, Categories: string, Database: string, Security: string, SecurityEntries: string, Self: string, Target: string, Template: string, TimeRule: string, TimeRulePlugIn: string>, MaximumQueueSize: int, Name: string, OutputTime: string, Path: string, Priority: string, PublishResults: bool, Status: string, TargetWebId: string, TemplateName: string, TimeRulePlugInName: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
+]: nothing -> oneof<record<AnalysisRulePlugInName: string, AutoCreated: bool, CategoryNames: list<string>, Description: string, GroupId: int, HasNotification: bool, HasTarget: bool, HasTemplate: bool, Id: string, IsConfigured: bool, IsTimeRuleDefinedByTemplate: bool, Links: record<AnalysisRule: string, AnalysisRulePlugIn: string, Categories: string, Database: string, Security: string, SecurityEntries: string, Self: string, Target: string, Template: string, TimeRule: string, TimeRulePlugIn: string>, MaximumQueueSize: int, Name: string, OutputTime: string, Path: string, Priority: string, PublishResults: bool, Status: string, TargetWebId: string, TemplateName: string, TimeRulePlugInName: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($path == null) { error make --unspanned { msg: "required query parameter 'path' missing: pass --path" } }
   let qp = [(serialize-qp "path" $path "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/analyses" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -238,7 +263,7 @@ export def "analysis-get-analyses-query" [
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --start-index: int # The starting index (zero based) of the items to be returned. The default is 0.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<AnalysisRulePlugInName: string, AutoCreated: bool, CategoryNames: list, Description: string, GroupId: int, HasNotification: bool, HasTarget: bool, HasTemplate: bool, Id: string, IsConfigured: bool, IsTimeRuleDefinedByTemplate: bool, Links: record, MaximumQueueSize: int, Name: string, OutputTime: string, Path: string, Priority: string, PublishResults: bool, Status: string, TargetWebId: string, TemplateName: string, TimeRulePlugInName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<AnalysisRulePlugInName: string, AutoCreated: bool, CategoryNames: list, Description: string, GroupId: int, HasNotification: bool, HasTarget: bool, HasTemplate: bool, Id: string, IsConfigured: bool, IsTimeRuleDefinedByTemplate: bool, Links: record, MaximumQueueSize: int, Name: string, OutputTime: string, Path: string, Priority: string, PublishResults: bool, Status: string, TargetWebId: string, TemplateName: string, TimeRulePlugInName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "databaseWebId" $database_web_id "scalar") (serialize-qp "maxCount" $max_count "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
@@ -314,7 +339,7 @@ export def "analysis-get" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<AnalysisRulePlugInName: string, AutoCreated: bool, CategoryNames: list<string>, Description: string, GroupId: int, HasNotification: bool, HasTarget: bool, HasTemplate: bool, Id: string, IsConfigured: bool, IsTimeRuleDefinedByTemplate: bool, Links: record<AnalysisRule: string, AnalysisRulePlugIn: string, Categories: string, Database: string, Security: string, SecurityEntries: string, Self: string, Target: string, Template: string, TimeRule: string, TimeRulePlugIn: string>, MaximumQueueSize: int, Name: string, OutputTime: string, Path: string, Priority: string, PublishResults: bool, Status: string, TargetWebId: string, TemplateName: string, TimeRulePlugInName: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
+]: nothing -> oneof<record<AnalysisRulePlugInName: string, AutoCreated: bool, CategoryNames: list<string>, Description: string, GroupId: int, HasNotification: bool, HasTarget: bool, HasTemplate: bool, Id: string, IsConfigured: bool, IsTimeRuleDefinedByTemplate: bool, Links: record<AnalysisRule: string, AnalysisRulePlugIn: string, Categories: string, Database: string, Security: string, SecurityEntries: string, Self: string, Target: string, Template: string, TimeRule: string, TimeRulePlugIn: string>, MaximumQueueSize: int, Name: string, OutputTime: string, Path: string, Priority: string, PublishResults: bool, Status: string, TargetWebId: string, TemplateName: string, TimeRulePlugInName: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -340,8 +365,6 @@ export def "analysis-get" [
 #
 # PATCH /analyses/{webId}
 # operationId: Analysis_Update
-# --Links shape: {AnalysisRule?: string, AnalysisRulePlugIn?: string, Categories?: string, Database?: string, Security?: string, SecurityEntries?: string, Self?: string, Target?: string, Template?: string, TimeRule?: string, TimeRulePlugIn?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "analysis-update" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -420,7 +443,7 @@ export def "analysis-get-categories" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<Description: string, Id: string, Links: record, Name: string, Path: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<Description: string, Id: string, Links: record, Name: string, Path: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -458,14 +481,15 @@ export def "analysis-get-security" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --user-identity: list<string> # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned.
+  --user-identity: list<string> # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned. (required)
   --force-refresh: oneof<nothing, bool> # Indicates if the security cache should be refreshed before getting security information. The default is 'false'.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<CanAnnotate: bool, CanDelete: bool, CanExecute: bool, CanRead: bool, CanReadData: bool, CanSubscribe: bool, CanSubscribeOthers: bool, CanWrite: bool, CanWriteData: bool, HasAdmin: bool, Links: record, OwnerWebId: string, Rights: list, SecurityItem: string, UserIdentity: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<CanAnnotate: bool, CanDelete: bool, CanExecute: bool, CanRead: bool, CanReadData: bool, CanSubscribe: bool, CanSubscribeOthers: bool, CanWrite: bool, CanWriteData: bool, HasAdmin: bool, Links: record, OwnerWebId: string, Rights: list, SecurityItem: string, UserIdentity: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($user_identity == null) { error make --unspanned { msg: "required query parameter 'userIdentity' missing: pass --user-identity" } }
   let qp = [(serialize-qp "userIdentity" $user_identity "multi") (serialize-qp "forceRefresh" $force_refresh "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/analyses/{web_id}/security") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -503,7 +527,7 @@ export def "analysis-get-security-entries" [
   --name-filter: string # The name query string used for filtering security entries. The default is no filter.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<AllowRights: list, DenyRights: list, Links: record, Name: string, SecurityIdentityName: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<AllowRights: list, DenyRights: list, Links: record, Name: string, SecurityIdentityName: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -529,8 +553,6 @@ export def "analysis-get-security-entries" [
 #
 # POST /analyses/{webId}/securityentries
 # operationId: Analysis_CreateSecurityEntry
-# --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "analysis-create-security-entry" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -636,7 +658,7 @@ export def "analysis-get-security-entry-by-name" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<AllowRights: list<string>, DenyRights: list<string>, Links: record<SecurableObject: string, SecurityIdentity: string, Self: string>, Name: string, SecurityIdentityName: string, WebException: record<Errors: list<string>, StatusCode: int>> {
+]: nothing -> oneof<record<AllowRights: list<string>, DenyRights: list<string>, Links: record<SecurableObject: string, SecurityIdentity: string, Self: string>, Name: string, SecurityIdentityName: string, WebException: record<Errors: list<string>, StatusCode: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -663,8 +685,6 @@ export def "analysis-get-security-entry-by-name" [
 #
 # PUT /analyses/{webId}/securityentries/{name}
 # operationId: Analysis_UpdateSecurityEntry
-# --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "analysis-update-security-entry" [
   web_id: string
   name: string
@@ -726,12 +746,13 @@ export def "analysis-category-get-by-path" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --path: string # The path to the target analysis category.
+  --path: string # The path to the target analysis category. (required)
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Description: string, Id: string, Links: record<Database: string, Security: string, SecurityEntries: string, Self: string>, Name: string, Path: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
+]: nothing -> oneof<record<Description: string, Id: string, Links: record<Database: string, Security: string, SecurityEntries: string, Self: string>, Name: string, Path: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($path == null) { error make --unspanned { msg: "required query parameter 'path' missing: pass --path" } }
   let qp = [(serialize-qp "path" $path "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/analysiscategories" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -805,7 +826,7 @@ export def "analysis-category-get" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Description: string, Id: string, Links: record<Database: string, Security: string, SecurityEntries: string, Self: string>, Name: string, Path: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
+]: nothing -> oneof<record<Description: string, Id: string, Links: record<Database: string, Security: string, SecurityEntries: string, Self: string>, Name: string, Path: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -831,8 +852,6 @@ export def "analysis-category-get" [
 #
 # PATCH /analysiscategories/{webId}
 # operationId: AnalysisCategory_Update
-# --Links shape: {Database?: string, Security?: string, SecurityEntries?: string, Self?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "analysis-category-update" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -892,14 +911,15 @@ export def "analysis-category-get-security" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --user-identity: list<string> # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned.
+  --user-identity: list<string> # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned. (required)
   --force-refresh: oneof<nothing, bool> # Indicates if the security cache should be refreshed before getting security information. The default is 'false'.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<CanAnnotate: bool, CanDelete: bool, CanExecute: bool, CanRead: bool, CanReadData: bool, CanSubscribe: bool, CanSubscribeOthers: bool, CanWrite: bool, CanWriteData: bool, HasAdmin: bool, Links: record, OwnerWebId: string, Rights: list, SecurityItem: string, UserIdentity: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<CanAnnotate: bool, CanDelete: bool, CanExecute: bool, CanRead: bool, CanReadData: bool, CanSubscribe: bool, CanSubscribeOthers: bool, CanWrite: bool, CanWriteData: bool, HasAdmin: bool, Links: record, OwnerWebId: string, Rights: list, SecurityItem: string, UserIdentity: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($user_identity == null) { error make --unspanned { msg: "required query parameter 'userIdentity' missing: pass --user-identity" } }
   let qp = [(serialize-qp "userIdentity" $user_identity "multi") (serialize-qp "forceRefresh" $force_refresh "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/analysiscategories/{web_id}/security") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -937,7 +957,7 @@ export def "analysis-category-get-security-entries" [
   --name-filter: string # The name query string used for filtering security entries. The default is no filter.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<AllowRights: list, DenyRights: list, Links: record, Name: string, SecurityIdentityName: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<AllowRights: list, DenyRights: list, Links: record, Name: string, SecurityIdentityName: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -963,8 +983,6 @@ export def "analysis-category-get-security-entries" [
 #
 # POST /analysiscategories/{webId}/securityentries
 # operationId: AnalysisCategory_CreateSecurityEntry
-# --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "analysis-category-create-security-entry" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1070,7 +1088,7 @@ export def "analysis-category-get-security-entry-by-name" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<AllowRights: list<string>, DenyRights: list<string>, Links: record<SecurableObject: string, SecurityIdentity: string, Self: string>, Name: string, SecurityIdentityName: string, WebException: record<Errors: list<string>, StatusCode: int>> {
+]: nothing -> oneof<record<AllowRights: list<string>, DenyRights: list<string>, Links: record<SecurableObject: string, SecurityIdentity: string, Self: string>, Name: string, SecurityIdentityName: string, WebException: record<Errors: list<string>, StatusCode: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -1097,8 +1115,6 @@ export def "analysis-category-get-security-entry-by-name" [
 #
 # PUT /analysiscategories/{webId}/securityentries/{name}
 # operationId: AnalysisCategory_UpdateSecurityEntry
-# --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "analysis-category-update-security-entry" [
   web_id: string
   name: string
@@ -1160,12 +1176,13 @@ export def "analysis-rule-plug-in-get-by-path" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --path: string # The path to the Analysis Rule Plug-in.
+  --path: string # The path to the Analysis Rule Plug-in. (required)
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<AssemblyFileName: string, AssemblyID: string, AssemblyLoadProperties: list<string>, AssemblyTime: string, CompatibilityVersion: int, Description: string, Id: string, IsBrowsable: bool, IsNonEditableConfig: bool, Links: record<AssetServer: string, Self: string>, LoadedAssemblyTime: string, LoadedVersion: string, Name: string, Path: string, Version: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
+]: nothing -> oneof<record<AssemblyFileName: string, AssemblyID: string, AssemblyLoadProperties: list<string>, AssemblyTime: string, CompatibilityVersion: int, Description: string, Id: string, IsBrowsable: bool, IsNonEditableConfig: bool, Links: record<AssetServer: string, Self: string>, LoadedAssemblyTime: string, LoadedVersion: string, Name: string, Path: string, Version: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($path == null) { error make --unspanned { msg: "required query parameter 'path' missing: pass --path" } }
   let qp = [(serialize-qp "path" $path "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/analysisruleplugins" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1202,7 +1219,7 @@ export def "analysis-rule-plug-in-get" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<AssemblyFileName: string, AssemblyID: string, AssemblyLoadProperties: list<string>, AssemblyTime: string, CompatibilityVersion: int, Description: string, Id: string, IsBrowsable: bool, IsNonEditableConfig: bool, Links: record<AssetServer: string, Self: string>, LoadedAssemblyTime: string, LoadedVersion: string, Name: string, Path: string, Version: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
+]: nothing -> oneof<record<AssemblyFileName: string, AssemblyID: string, AssemblyLoadProperties: list<string>, AssemblyTime: string, CompatibilityVersion: int, Description: string, Id: string, IsBrowsable: bool, IsNonEditableConfig: bool, Links: record<AssetServer: string, Self: string>, LoadedAssemblyTime: string, LoadedVersion: string, Name: string, Path: string, Version: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -1239,12 +1256,13 @@ export def "analysis-rule-get-by-path" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --path: string # The path to the Analysis Rule.
+  --path: string # The path to the Analysis Rule. (required)
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<ConfigString: string, Description: string, DisplayString: string, EditorType: string, HasChildren: bool, Id: string, IsConfigured: bool, IsInitializing: bool, Links: record<Analysis: string, AnalysisRules: string, AnalysisTemplate: string, Parent: string, PlugIn: string, Self: string>, Name: string, Path: string, PlugInName: string, SupportedBehaviors: list<string>, VariableMapping: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
+]: nothing -> oneof<record<ConfigString: string, Description: string, DisplayString: string, EditorType: string, HasChildren: bool, Id: string, IsConfigured: bool, IsInitializing: bool, Links: record<Analysis: string, AnalysisRules: string, AnalysisTemplate: string, Parent: string, PlugIn: string, Self: string>, Name: string, Path: string, PlugInName: string, SupportedBehaviors: list<string>, VariableMapping: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($path == null) { error make --unspanned { msg: "required query parameter 'path' missing: pass --path" } }
   let qp = [(serialize-qp "path" $path "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/analysisrules" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1318,7 +1336,7 @@ export def "analysis-rule-get" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<ConfigString: string, Description: string, DisplayString: string, EditorType: string, HasChildren: bool, Id: string, IsConfigured: bool, IsInitializing: bool, Links: record<Analysis: string, AnalysisRules: string, AnalysisTemplate: string, Parent: string, PlugIn: string, Self: string>, Name: string, Path: string, PlugInName: string, SupportedBehaviors: list<string>, VariableMapping: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
+]: nothing -> oneof<record<ConfigString: string, Description: string, DisplayString: string, EditorType: string, HasChildren: bool, Id: string, IsConfigured: bool, IsInitializing: bool, Links: record<Analysis: string, AnalysisRules: string, AnalysisTemplate: string, Parent: string, PlugIn: string, Self: string>, Name: string, Path: string, PlugInName: string, SupportedBehaviors: list<string>, VariableMapping: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -1344,8 +1362,6 @@ export def "analysis-rule-get" [
 #
 # PATCH /analysisrules/{webId}
 # operationId: AnalysisRule_Update
-# --Links shape: {Analysis?: string, AnalysisRules?: string, AnalysisTemplate?: string, Parent?: string, PlugIn?: string, Self?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "analysis-rule-update" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1422,7 +1438,7 @@ export def "analysis-rule-get-analysis-rules" [
   --sort-order: string # The order that the returned collection is sorted. The default is 'Ascending'.
   --start-index: int # The starting index (zero based) of the items to be returned. The default is 0.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<ConfigString: string, Description: string, DisplayString: string, EditorType: string, HasChildren: bool, Id: string, IsConfigured: bool, IsInitializing: bool, Links: record, Name: string, Path: string, PlugInName: string, SupportedBehaviors: list, VariableMapping: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<ConfigString: string, Description: string, DisplayString: string, EditorType: string, HasChildren: bool, Id: string, IsConfigured: bool, IsInitializing: bool, Links: record, Name: string, Path: string, PlugInName: string, SupportedBehaviors: list, VariableMapping: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -1448,8 +1464,6 @@ export def "analysis-rule-get-analysis-rules" [
 #
 # POST /analysisrules/{webId}/analysisrules
 # operationId: AnalysisRule_CreateAnalysisRule
-# --Links shape: {Analysis?: string, AnalysisRules?: string, AnalysisTemplate?: string, Parent?: string, PlugIn?: string, Self?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "analysis-rule-create-analysis-rule" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1519,12 +1533,13 @@ export def "analysis-template-get-by-path" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --path: string # The path to the analysis template.
+  --path: string # The path to the analysis template. (required)
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<AnalysisRulePlugInName: string, CategoryNames: list<string>, CreateEnabled: bool, Description: string, GroupId: int, HasNotificationTemplate: bool, HasTarget: bool, Id: string, Links: record<AnalysisRule: string, AnalysisRulePlugIn: string, Categories: string, Database: string, Security: string, SecurityEntries: string, Self: string, Target: string, TimeRule: string, TimeRulePlugIn: string>, Name: string, OutputTime: string, Path: string, TargetName: string, TimeRulePlugInName: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
+]: nothing -> oneof<record<AnalysisRulePlugInName: string, CategoryNames: list<string>, CreateEnabled: bool, Description: string, GroupId: int, HasNotificationTemplate: bool, HasTarget: bool, Id: string, Links: record<AnalysisRule: string, AnalysisRulePlugIn: string, Categories: string, Database: string, Security: string, SecurityEntries: string, Self: string, Target: string, TimeRule: string, TimeRulePlugIn: string>, Name: string, OutputTime: string, Path: string, TargetName: string, TimeRulePlugInName: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($path == null) { error make --unspanned { msg: "required query parameter 'path' missing: pass --path" } }
   let qp = [(serialize-qp "path" $path "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/analysistemplates" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1558,12 +1573,13 @@ export def "analysis-template-create-from-analysis" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --analysis-web-id: string # The ID of the Analysis, on which the template is created.
+  --analysis-web-id: string # The ID of the Analysis, on which the template is created. (required)
   --name: string # The name for the created template, which must be unique within the database's AnalysisTemplate collection. If the name ends with an asterisk (*), then a unique name will be generated based on the supplied name. The default is the specified Analysis' name suffixed with an asterisk (*).
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($analysis_web_id == null) { error make --unspanned { msg: "required query parameter 'analysisWebId' missing: pass --analysis-web-id" } }
   let qp = [(serialize-qp "analysisWebId" $analysis_web_id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/analysistemplates" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1603,7 +1619,7 @@ export def "analysis-template-get-analysis-templates-query" [
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --start-index: int # The starting index (zero based) of the items to be returned. The default is 0.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<AnalysisRulePlugInName: string, CategoryNames: list, CreateEnabled: bool, Description: string, GroupId: int, HasNotificationTemplate: bool, HasTarget: bool, Id: string, Links: record, Name: string, OutputTime: string, Path: string, TargetName: string, TimeRulePlugInName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<AnalysisRulePlugInName: string, CategoryNames: list, CreateEnabled: bool, Description: string, GroupId: int, HasNotificationTemplate: bool, HasTarget: bool, Id: string, Links: record, Name: string, OutputTime: string, Path: string, TargetName: string, TimeRulePlugInName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "databaseWebId" $database_web_id "scalar") (serialize-qp "maxCount" $max_count "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
@@ -1679,7 +1695,7 @@ export def "analysis-template-get" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<AnalysisRulePlugInName: string, CategoryNames: list<string>, CreateEnabled: bool, Description: string, GroupId: int, HasNotificationTemplate: bool, HasTarget: bool, Id: string, Links: record<AnalysisRule: string, AnalysisRulePlugIn: string, Categories: string, Database: string, Security: string, SecurityEntries: string, Self: string, Target: string, TimeRule: string, TimeRulePlugIn: string>, Name: string, OutputTime: string, Path: string, TargetName: string, TimeRulePlugInName: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
+]: nothing -> oneof<record<AnalysisRulePlugInName: string, CategoryNames: list<string>, CreateEnabled: bool, Description: string, GroupId: int, HasNotificationTemplate: bool, HasTarget: bool, Id: string, Links: record<AnalysisRule: string, AnalysisRulePlugIn: string, Categories: string, Database: string, Security: string, SecurityEntries: string, Self: string, Target: string, TimeRule: string, TimeRulePlugIn: string>, Name: string, OutputTime: string, Path: string, TargetName: string, TimeRulePlugInName: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -1705,8 +1721,6 @@ export def "analysis-template-get" [
 #
 # PATCH /analysistemplates/{webId}
 # operationId: AnalysisTemplate_Update
-# --Links shape: {AnalysisRule?: string, AnalysisRulePlugIn?: string, Categories?: string, Database?: string, Security?: string, SecurityEntries?: string, Self?: string, Target?: string, TimeRule?: string, TimeRulePlugIn?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "analysis-template-update" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1777,7 +1791,7 @@ export def "analysis-template-get-categories" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<Description: string, Id: string, Links: record, Name: string, Path: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<Description: string, Id: string, Links: record, Name: string, Path: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -1815,14 +1829,15 @@ export def "analysis-template-get-security" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --user-identity: list<string> # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned.
+  --user-identity: list<string> # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned. (required)
   --force-refresh: oneof<nothing, bool> # Indicates if the security cache should be refreshed before getting security information. The default is 'false'.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<CanAnnotate: bool, CanDelete: bool, CanExecute: bool, CanRead: bool, CanReadData: bool, CanSubscribe: bool, CanSubscribeOthers: bool, CanWrite: bool, CanWriteData: bool, HasAdmin: bool, Links: record, OwnerWebId: string, Rights: list, SecurityItem: string, UserIdentity: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<CanAnnotate: bool, CanDelete: bool, CanExecute: bool, CanRead: bool, CanReadData: bool, CanSubscribe: bool, CanSubscribeOthers: bool, CanWrite: bool, CanWriteData: bool, HasAdmin: bool, Links: record, OwnerWebId: string, Rights: list, SecurityItem: string, UserIdentity: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($user_identity == null) { error make --unspanned { msg: "required query parameter 'userIdentity' missing: pass --user-identity" } }
   let qp = [(serialize-qp "userIdentity" $user_identity "multi") (serialize-qp "forceRefresh" $force_refresh "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/analysistemplates/{web_id}/security") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1860,7 +1875,7 @@ export def "analysis-template-get-security-entries" [
   --name-filter: string # The name query string used for filtering security entries. The default is no filter.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<AllowRights: list, DenyRights: list, Links: record, Name: string, SecurityIdentityName: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<AllowRights: list, DenyRights: list, Links: record, Name: string, SecurityIdentityName: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -1886,8 +1901,6 @@ export def "analysis-template-get-security-entries" [
 #
 # POST /analysistemplates/{webId}/securityentries
 # operationId: AnalysisTemplate_CreateSecurityEntry
-# --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "analysis-template-create-security-entry" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1993,7 +2006,7 @@ export def "analysis-template-get-security-entry-by-name" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<AllowRights: list<string>, DenyRights: list<string>, Links: record<SecurableObject: string, SecurityIdentity: string, Self: string>, Name: string, SecurityIdentityName: string, WebException: record<Errors: list<string>, StatusCode: int>> {
+]: nothing -> oneof<record<AllowRights: list<string>, DenyRights: list<string>, Links: record<SecurableObject: string, SecurityIdentity: string, Self: string>, Name: string, SecurityIdentityName: string, WebException: record<Errors: list<string>, StatusCode: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -2020,8 +2033,6 @@ export def "analysis-template-get-security-entry-by-name" [
 #
 # PUT /analysistemplates/{webId}/securityentries/{name}
 # operationId: AnalysisTemplate_UpdateSecurityEntry
-# --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "analysis-template-update-security-entry" [
   web_id: string
   name: string
@@ -2083,12 +2094,13 @@ export def "asset-database-get-by-path" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --path: string # The path to the database.
+  --path: string # The path to the database. (required)
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Description: string, ExtendedProperties: record, Id: string, Links: record<AnalysisCategories: string, AnalysisTemplates: string, AssetServer: string, AttributeCategories: string, ElementCategories: string, ElementTemplates: string, Elements: string, EnumerationSets: string, EventFrames: string, Security: string, SecurityEntries: string, Self: string, TableCategories: string, Tables: string>, Name: string, Path: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
+]: nothing -> oneof<record<Description: string, ExtendedProperties: record, Id: string, Links: record<AnalysisCategories: string, AnalysisTemplates: string, AssetServer: string, AttributeCategories: string, ElementCategories: string, ElementTemplates: string, Elements: string, EnumerationSets: string, EventFrames: string, Security: string, SecurityEntries: string, Self: string, TableCategories: string, Tables: string>, Name: string, Path: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($path == null) { error make --unspanned { msg: "required query parameter 'path' missing: pass --path" } }
   let qp = [(serialize-qp "path" $path "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/assetdatabases" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2162,7 +2174,7 @@ export def "asset-database-get" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Description: string, ExtendedProperties: record, Id: string, Links: record<AnalysisCategories: string, AnalysisTemplates: string, AssetServer: string, AttributeCategories: string, ElementCategories: string, ElementTemplates: string, Elements: string, EnumerationSets: string, EventFrames: string, Security: string, SecurityEntries: string, Self: string, TableCategories: string, Tables: string>, Name: string, Path: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
+]: nothing -> oneof<record<Description: string, ExtendedProperties: record, Id: string, Links: record<AnalysisCategories: string, AnalysisTemplates: string, AssetServer: string, AttributeCategories: string, ElementCategories: string, ElementTemplates: string, Elements: string, EnumerationSets: string, EventFrames: string, Security: string, SecurityEntries: string, Self: string, TableCategories: string, Tables: string>, Name: string, Path: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -2188,8 +2200,6 @@ export def "asset-database-get" [
 #
 # PATCH /assetdatabases/{webId}
 # operationId: AssetDatabase_Update
-# --Links shape: {AnalysisCategories?: string, AnalysisTemplates?: string, AssetServer?: string, AttributeCategories?: string, ElementCategories?: string, ElementTemplates?: string, Elements?: string, EnumerationSets?: string, EventFrames?: string, Security?: string, SecurityEntries?: string, Self?: string, TableCategories?: string, Tables?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "asset-database-update" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2250,7 +2260,7 @@ export def "asset-database-find-analyses" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --field: list<string> # Specifies which of the object's properties are searched. Multiple search fields may be specified with multiple instances of the parameter. The default is 'Name'.
+  --field: list<string> # Specifies which of the object's properties are searched. Multiple search fields may be specified with multiple instances of the parameter. The default is 'Name'. (required)
   --max-count: int # The maximum number of objects to be returned per call (page size). The default is 1000.
   --query: string # The query string used for finding analyses. The default is null.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
@@ -2258,10 +2268,11 @@ export def "asset-database-find-analyses" [
   --sort-order: string # The order that the returned collection is sorted. The default is 'Ascending'.
   --start-index: int # The starting index (zero based) of the items to be returned. The default is 0.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<AnalysisRulePlugInName: string, AutoCreated: bool, CategoryNames: list, Description: string, GroupId: int, HasNotification: bool, HasTarget: bool, HasTemplate: bool, Id: string, IsConfigured: bool, IsTimeRuleDefinedByTemplate: bool, Links: record, MaximumQueueSize: int, Name: string, OutputTime: string, Path: string, Priority: string, PublishResults: bool, Status: string, TargetWebId: string, TemplateName: string, TimeRulePlugInName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<AnalysisRulePlugInName: string, AutoCreated: bool, CategoryNames: list, Description: string, GroupId: int, HasNotification: bool, HasTarget: bool, HasTemplate: bool, Id: string, IsConfigured: bool, IsTimeRuleDefinedByTemplate: bool, Links: record, MaximumQueueSize: int, Name: string, OutputTime: string, Path: string, Priority: string, PublishResults: bool, Status: string, TargetWebId: string, TemplateName: string, TimeRulePlugInName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($field == null) { error make --unspanned { msg: "required query parameter 'field' missing: pass --field" } }
   let qp = [(serialize-qp "field" $field "multi") (serialize-qp "maxCount" $max_count "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}/analyses") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2298,7 +2309,7 @@ export def "asset-database-get-analysis-categories" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<Description: string, Id: string, Links: record, Name: string, Path: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<Description: string, Id: string, Links: record, Name: string, Path: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -2324,8 +2335,6 @@ export def "asset-database-get-analysis-categories" [
 #
 # POST /assetdatabases/{webId}/analysiscategories
 # operationId: AssetDatabase_CreateAnalysisCategory
-# --Links shape: {Database?: string, Security?: string, SecurityEntries?: string, Self?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "asset-database-create-analysis-category" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2387,17 +2396,18 @@ export def "asset-database-get-analysis-templates" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --field: list<string> # Specifies which of the object's properties are searched. Multiple search fields may be specified with multiple instances of the parameter. The default is 'Name'.
+  --field: list<string> # Specifies which of the object's properties are searched. Multiple search fields may be specified with multiple instances of the parameter. The default is 'Name'. (required)
   --max-count: int # The maximum number of objects to be returned per call (page size). The default is 1000.
   --query: string # The query string used for finding objects. The default is no query string.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --sort-field: string # The field or property of the object used to sort the returned collection. The default is 'Name'.
   --sort-order: string # The order that the returned collection is sorted. The default is 'Ascending'.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<AnalysisRulePlugInName: string, CategoryNames: list, CreateEnabled: bool, Description: string, GroupId: int, HasNotificationTemplate: bool, HasTarget: bool, Id: string, Links: record, Name: string, OutputTime: string, Path: string, TargetName: string, TimeRulePlugInName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<AnalysisRulePlugInName: string, CategoryNames: list, CreateEnabled: bool, Description: string, GroupId: int, HasNotificationTemplate: bool, HasTarget: bool, Id: string, Links: record, Name: string, OutputTime: string, Path: string, TargetName: string, TimeRulePlugInName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($field == null) { error make --unspanned { msg: "required query parameter 'field' missing: pass --field" } }
   let qp = [(serialize-qp "field" $field "multi") (serialize-qp "maxCount" $max_count "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}/analysistemplates") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2420,8 +2430,6 @@ export def "asset-database-get-analysis-templates" [
 #
 # POST /assetdatabases/{webId}/analysistemplates
 # operationId: AssetDatabase_CreateAnalysisTemplate
-# --Links shape: {AnalysisRule?: string, AnalysisRulePlugIn?: string, Categories?: string, Database?: string, Security?: string, SecurityEntries?: string, Self?: string, Target?: string, TimeRule?: string, TimeRulePlugIn?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "asset-database-create-analysis-template" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2494,7 +2502,7 @@ export def "asset-database-get-attribute-categories" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<Description: string, Id: string, Links: record, Name: string, Path: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<Description: string, Id: string, Links: record, Name: string, Path: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -2520,8 +2528,6 @@ export def "asset-database-get-attribute-categories" [
 #
 # POST /assetdatabases/{webId}/attributecategories
 # operationId: AssetDatabase_CreateAttributeCategory
-# --Links shape: {Database?: string, Security?: string, SecurityEntries?: string, Self?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "asset-database-create-attribute-category" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2600,7 +2606,7 @@ export def "asset-database-find-element-attributes" [
   --sort-order: string # The order that the returned collection is sorted. The default is 'Ascending'.
   --start-index: int # The starting index (zero based) of the items to be returned. The default is 0.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<CategoryNames: list, ConfigString: string, DataReference: record, DataReferencePlugIn: string, DefaultUnitsName: string, DefaultUnitsNameAbbreviation: string, Description: string, DisplayDigits: int, HasChildren: bool, Id: string, IsConfigurationItem: bool, IsExcluded: bool, IsHidden: bool, IsManualDataEntry: bool, Links: record, Name: string, Path: string, Paths: list, Span: float, Step: bool, TraitName: string, Type: string, TypeQualifier: string, WebException: record, WebId: string, Zero: float>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<CategoryNames: list, ConfigString: string, DataReference: record, DataReferencePlugIn: string, DefaultUnitsName: string, DefaultUnitsNameAbbreviation: string, Description: string, DisplayDigits: int, HasChildren: bool, Id: string, IsConfigurationItem: bool, IsExcluded: bool, IsHidden: bool, IsManualDataEntry: bool, Links: record, Name: string, Path: string, Paths: list, Span: float, Step: bool, TraitName: string, Type: string, TypeQualifier: string, WebException: record, WebId: string, Zero: float>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -2640,7 +2646,7 @@ export def "asset-database-get-element-categories" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<Description: string, Id: string, Links: record, Name: string, Path: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<Description: string, Id: string, Links: record, Name: string, Path: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -2666,8 +2672,6 @@ export def "asset-database-get-element-categories" [
 #
 # POST /assetdatabases/{webId}/elementcategories
 # operationId: AssetDatabase_CreateElementCategory
-# --Links shape: {Database?: string, Security?: string, SecurityEntries?: string, Self?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "asset-database-create-element-category" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2742,7 +2746,7 @@ export def "asset-database-get-elements" [
   --start-index: int # The starting index (zero based) of the items to be returned. The default is 0.
   --template-name: string # Specify that returned elements must have this template or a template derived from this template. The default is no template filter.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<CategoryNames: list, Description: string, Errors: list, ExtendedProperties: record, HasChildren: bool, Id: string, Links: record, Name: string, Path: string, Paths: list, TemplateName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<CategoryNames: list, Description: string, Errors: list, ExtendedProperties: record, HasChildren: bool, Id: string, Links: record, Name: string, Path: string, Paths: list, TemplateName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -2768,9 +2772,6 @@ export def "asset-database-get-elements" [
 #
 # POST /assetdatabases/{webId}/elements
 # operationId: AssetDatabase_CreateElement
-# --Errors item shape: {FieldName?: string, Message?: list<string>}
-# --Links shape: {Analyses?: string, Attributes?: string, Categories?: string, Database?: string, DefaultAttribute?: string, Elements?: string, EndValue?: string, EventFrames?: string, InterpolatedData?: string, NotificationRules?: string, Parent?: string, PlotData?: string, RecordedData?: string, Security?: string, SecurityEntries?: string, Self?: string, SummaryData?: string, Template?: string, Value?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "asset-database-create-element" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2838,17 +2839,18 @@ export def "asset-database-get-element-templates" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --field: list<string> # Specifies which of the object's properties are searched. Multiple search fields may be specified with multiple instances of the parameter. The default is 'Name'.
+  --field: list<string> # Specifies which of the object's properties are searched. Multiple search fields may be specified with multiple instances of the parameter. The default is 'Name'. (required)
   --max-count: int # The maximum number of objects to be returned per call (page size). The default is 1000.
   --query: string # The query string used for finding objects. The default is no query string.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --sort-field: string # The field or property of the object used to sort the returned collection. The default is 'Name'.
   --sort-order: string # The order that the returned collection is sorted. The default is 'Ascending'.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<AllowElementToExtend: bool, BaseTemplate: string, CanBeAcknowledged: bool, CategoryNames: list, Description: string, ExtendedProperties: record, Id: string, InstanceType: string, Links: record, Name: string, NamingPattern: string, Path: string, Severity: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<AllowElementToExtend: bool, BaseTemplate: string, CanBeAcknowledged: bool, CategoryNames: list, Description: string, ExtendedProperties: record, Id: string, InstanceType: string, Links: record, Name: string, NamingPattern: string, Path: string, Severity: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($field == null) { error make --unspanned { msg: "required query parameter 'field' missing: pass --field" } }
   let qp = [(serialize-qp "field" $field "multi") (serialize-qp "maxCount" $max_count "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}/elementtemplates") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2871,8 +2873,6 @@ export def "asset-database-get-element-templates" [
 #
 # POST /assetdatabases/{webId}/elementtemplates
 # operationId: AssetDatabase_CreateElementTemplate
-# --Links shape: {AnalysisTemplates?: string, AttributeTemplates?: string, BaseTemplate?: string, BaseTemplates?: string, Categories?: string, Database?: string, DefaultAttribute?: string, DerivedTemplates?: string, NotificationRuleTemplates?: string, Security?: string, SecurityEntries?: string, Self?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "asset-database-create-element-template" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2944,7 +2944,7 @@ export def "asset-database-get-enumeration-sets" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<Description: string, Id: string, Links: record, Name: string, Path: string, SerializeDescription: bool, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<Description: string, Id: string, Links: record, Name: string, Path: string, SerializeDescription: bool, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -2970,8 +2970,6 @@ export def "asset-database-get-enumeration-sets" [
 #
 # POST /assetdatabases/{webId}/enumerationsets
 # operationId: AssetDatabase_CreateEnumerationSet
-# --Links shape: {DataServer?: string, Database?: string, Security?: string, SecurityEntries?: string, Self?: string, Values?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "asset-database-create-enumeration-set" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3054,7 +3052,7 @@ export def "asset-database-find-event-frame-attributes" [
   --start-index: int # The starting index (zero based) of the items to be returned. The default is 0.
   --start-time: string # A string representing the earliest starting time for the event frames to be matched. startTime must be less than or equal to the endTime. The default is '*-8h'.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<CategoryNames: list, ConfigString: string, DataReference: record, DataReferencePlugIn: string, DefaultUnitsName: string, DefaultUnitsNameAbbreviation: string, Description: string, DisplayDigits: int, HasChildren: bool, Id: string, IsConfigurationItem: bool, IsExcluded: bool, IsHidden: bool, IsManualDataEntry: bool, Links: record, Name: string, Path: string, Paths: list, Span: float, Step: bool, TraitName: string, Type: string, TypeQualifier: string, WebException: record, WebId: string, Zero: float>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<CategoryNames: list, ConfigString: string, DataReference: record, DataReferencePlugIn: string, DefaultUnitsName: string, DefaultUnitsNameAbbreviation: string, Description: string, DisplayDigits: int, HasChildren: bool, Id: string, IsConfigurationItem: bool, IsExcluded: bool, IsHidden: bool, IsManualDataEntry: bool, Links: record, Name: string, Path: string, Paths: list, Span: float, Step: bool, TraitName: string, Type: string, TypeQualifier: string, WebException: record, WebId: string, Zero: float>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -3110,7 +3108,7 @@ export def "asset-database-get-event-frames" [
   --start-time: string # The starting time for the search. startTime must be less than or equal to the endTime. The searchMode parameter will control whether the comparison will be performed against the event frame's startTime or endTime. The default is '*-8h'.
   --template-name: string # Specify that returned event frames must have this template or a template derived from this template. The default is no template filter. Specify this parameter by name.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<AcknowledgedBy: string, AcknowledgedDate: string, AreValuesCaptured: bool, CanBeAcknowledged: bool, CategoryNames: list, Description: string, EndTime: string, ExtendedProperties: record, HasChildren: bool, Id: string, IsAcknowledged: bool, IsAnnotated: bool, IsLocked: bool, Links: record, Name: string, Path: string, RefElementWebIds: list, Security: record, Severity: string, StartTime: string, TemplateName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<AcknowledgedBy: string, AcknowledgedDate: string, AreValuesCaptured: bool, CanBeAcknowledged: bool, CategoryNames: list, Description: string, EndTime: string, ExtendedProperties: record, HasChildren: bool, Id: string, IsAcknowledged: bool, IsAnnotated: bool, IsLocked: bool, Links: record, Name: string, Path: string, RefElementWebIds: list, Security: record, Severity: string, StartTime: string, TemplateName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -3136,9 +3134,6 @@ export def "asset-database-get-event-frames" [
 #
 # POST /assetdatabases/{webId}/eventframes
 # operationId: AssetDatabase_CreateEventFrame
-# --Links shape: {Annotations?: string, Attributes?: string, Categories?: string, Database?: string, DefaultAttribute?: string, EndValue?: string, EventFrames?: string, InterpolatedData?: string, Parent?: string, PlotData?: string, PrimaryReferencedElement?: string, RecordedData?: string, ReferencedElements?: string, Security?: string, SecurityEntries?: string, Self?: string, SummaryData?: string, Template?: string, Value?: string}
-# --Security shape: {CanAnnotate?: bool, CanDelete?: bool, CanExecute?: bool, CanRead?: bool, CanReadData?: bool, CanSubscribe?: bool, CanSubscribeOthers?: bool, CanWrite?: bool, CanWriteData?: bool, HasAdmin?: bool, Rights?: list<string>, WebException?: record}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "asset-database-create-event-frame" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3296,11 +3291,12 @@ export def "asset-database-remove-referenced-element" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --referenced-element-web-id: list<string> # The ID of the referenced element. Multiple referenced elements may be specified with multiple instances of the parameter.
+  --referenced-element-web-id: list<string> # The ID of the referenced element. Multiple referenced elements may be specified with multiple instances of the parameter. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($referenced_element_web_id == null) { error make --unspanned { msg: "required query parameter 'referencedElementWebId' missing: pass --referenced-element-web-id" } }
   let qp = [(serialize-qp "referencedElementWebId" $referenced_element_web_id "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}/referencedelements") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -3347,7 +3343,7 @@ export def "asset-database-get-referenced-elements" [
   --start-index: int # The starting index (zero based) of the items to be returned. The default is 0.
   --template-name: string # Specify that returned elements must have this template or a template derived from this template. The default is no template filter.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<CategoryNames: list, Description: string, Errors: list, ExtendedProperties: record, HasChildren: bool, Id: string, Links: record, Name: string, Path: string, Paths: list, TemplateName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<CategoryNames: list, Description: string, Errors: list, ExtendedProperties: record, HasChildren: bool, Id: string, Links: record, Name: string, Path: string, Paths: list, TemplateName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -3385,12 +3381,13 @@ export def "asset-database-add-referenced-element" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --referenced-element-web-id: list<string> # The ID of the referenced element. Multiple referenced elements may be specified with multiple instances of the parameter.
+  --referenced-element-web-id: list<string> # The ID of the referenced element. Multiple referenced elements may be specified with multiple instances of the parameter. (required)
   --reference-type: string # The name of the reference type between the parent and the referenced element. This must be a "strong" reference type. The default is "parent-child".
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($referenced_element_web_id == null) { error make --unspanned { msg: "required query parameter 'referencedElementWebId' missing: pass --referenced-element-web-id" } }
   let qp = [(serialize-qp "referencedElementWebId" $referenced_element_web_id "multi") (serialize-qp "referenceType" $reference_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}/referencedelements") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -3425,15 +3422,17 @@ export def "asset-database-get-security" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --security-item: list<string> # The security item of the desired security information to be returned. Multiple security items may be specified with multiple instances of the parameter. If the parameter is not specified, only 'Default' security item of the security information will be returned.
-  --user-identity: list<string> # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned.
+  --security-item: list<string> # The security item of the desired security information to be returned. Multiple security items may be specified with multiple instances of the parameter. If the parameter is not specified, only 'Default' security item of the security information will be returned. (required)
+  --user-identity: list<string> # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned. (required)
   --force-refresh: oneof<nothing, bool> # Indicates if the security cache should be refreshed before getting security information. The default is 'false'.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<CanAnnotate: bool, CanDelete: bool, CanExecute: bool, CanRead: bool, CanReadData: bool, CanSubscribe: bool, CanSubscribeOthers: bool, CanWrite: bool, CanWriteData: bool, HasAdmin: bool, Links: record, OwnerWebId: string, Rights: list, SecurityItem: string, UserIdentity: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<CanAnnotate: bool, CanDelete: bool, CanExecute: bool, CanRead: bool, CanReadData: bool, CanSubscribe: bool, CanSubscribeOthers: bool, CanWrite: bool, CanWriteData: bool, HasAdmin: bool, Links: record, OwnerWebId: string, Rights: list, SecurityItem: string, UserIdentity: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($security_item == null) { error make --unspanned { msg: "required query parameter 'securityItem' missing: pass --security-item" } }
+  if ($user_identity == null) { error make --unspanned { msg: "required query parameter 'userIdentity' missing: pass --user-identity" } }
   let qp = [(serialize-qp "securityItem" $security_item "multi") (serialize-qp "userIdentity" $user_identity "multi") (serialize-qp "forceRefresh" $force_refresh "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}/security") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -3472,7 +3471,7 @@ export def "asset-database-get-security-entries" [
   --security-item: string # The security item of the desired security entries information to be returned. If the parameter is not specified, security entries of the 'Default' security item will be returned.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<AllowRights: list, DenyRights: list, Links: record, Name: string, SecurityIdentityName: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<AllowRights: list, DenyRights: list, Links: record, Name: string, SecurityIdentityName: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -3498,8 +3497,6 @@ export def "asset-database-get-security-entries" [
 #
 # POST /assetdatabases/{webId}/securityentries
 # operationId: AssetDatabase_CreateSecurityEntry
-# --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "asset-database-create-security-entry" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3608,7 +3605,7 @@ export def "asset-database-get-security-entry-by-name" [
   --security-item: string # The security item of the desired security entries information to be returned. If the parameter is not specified, security entries of the 'Default' security item will be returned.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<AllowRights: list<string>, DenyRights: list<string>, Links: record<SecurableObject: string, SecurityIdentity: string, Self: string>, Name: string, SecurityIdentityName: string, WebException: record<Errors: list<string>, StatusCode: int>> {
+]: nothing -> oneof<record<AllowRights: list<string>, DenyRights: list<string>, Links: record<SecurableObject: string, SecurityIdentity: string, Self: string>, Name: string, SecurityIdentityName: string, WebException: record<Errors: list<string>, StatusCode: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -3635,8 +3632,6 @@ export def "asset-database-get-security-entry-by-name" [
 #
 # PUT /assetdatabases/{webId}/securityentries/{name}
 # operationId: AssetDatabase_UpdateSecurityEntry
-# --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "asset-database-update-security-entry" [
   web_id: string
   name: string
@@ -3702,7 +3697,7 @@ export def "asset-database-get-table-categories" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<Description: string, Id: string, Links: record, Name: string, Path: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<Description: string, Id: string, Links: record, Name: string, Path: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -3728,8 +3723,6 @@ export def "asset-database-get-table-categories" [
 #
 # POST /assetdatabases/{webId}/tablecategories
 # operationId: AssetDatabase_CreateTableCategory
-# --Links shape: {Database?: string, Security?: string, SecurityEntries?: string, Self?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "asset-database-create-table-category" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3793,7 +3786,7 @@ export def "asset-database-get-tables" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<CategoryNames: list, ConvertToLocalTime: bool, Description: string, Id: string, Links: record, Name: string, Path: string, TimeZone: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<CategoryNames: list, ConvertToLocalTime: bool, Description: string, Id: string, Links: record, Name: string, Path: string, TimeZone: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -3819,8 +3812,6 @@ export def "asset-database-get-tables" [
 #
 # POST /assetdatabases/{webId}/tables
 # operationId: AssetDatabase_CreateTable
-# --Links shape: {Categories?: string, Data?: string, Database?: string, Security?: string, SecurityEntries?: string, Self?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "asset-database-create-table" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3886,7 +3877,7 @@ export def "asset-server-list" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<Description: string, ExtendedProperties: record, Id: string, IsConnected: bool, Links: record, Name: string, Path: string, ServerTime: string, ServerVersion: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<Description: string, ExtendedProperties: record, Id: string, IsConnected: bool, Links: record, Name: string, Path: string, ServerTime: string, ServerVersion: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
@@ -3922,12 +3913,13 @@ export def "asset-server-get-by-name" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --name: string # The name of the server.
+  --name: string # The name of the server. (required)
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Description: string, ExtendedProperties: record, Id: string, IsConnected: bool, Links: record<AnalysisRulePlugIns: string, Databases: string, NotificationContactTemplates: string, NotificationPlugIns: string, Security: string, SecurityEntries: string, SecurityIdentities: string, SecurityMappings: string, Self: string, TimeRulePlugIns: string, UnitClasses: string>, Name: string, Path: string, ServerTime: string, ServerVersion: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
+]: nothing -> oneof<record<Description: string, ExtendedProperties: record, Id: string, IsConnected: bool, Links: record<AnalysisRulePlugIns: string, Databases: string, NotificationContactTemplates: string, NotificationPlugIns: string, Security: string, SecurityEntries: string, SecurityIdentities: string, SecurityMappings: string, Self: string, TimeRulePlugIns: string, UnitClasses: string>, Name: string, Path: string, ServerTime: string, ServerVersion: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($name == null) { error make --unspanned { msg: "required query parameter 'name' missing: pass --name" } }
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/assetservers" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -3961,12 +3953,13 @@ export def "asset-server-get-by-path" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --path: string # The path to the server.
+  --path: string # The path to the server. (required)
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Description: string, ExtendedProperties: record, Id: string, IsConnected: bool, Links: record<AnalysisRulePlugIns: string, Databases: string, NotificationContactTemplates: string, NotificationPlugIns: string, Security: string, SecurityEntries: string, SecurityIdentities: string, SecurityMappings: string, Self: string, TimeRulePlugIns: string, UnitClasses: string>, Name: string, Path: string, ServerTime: string, ServerVersion: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
+]: nothing -> oneof<record<Description: string, ExtendedProperties: record, Id: string, IsConnected: bool, Links: record<AnalysisRulePlugIns: string, Databases: string, NotificationContactTemplates: string, NotificationPlugIns: string, Security: string, SecurityEntries: string, SecurityIdentities: string, SecurityMappings: string, Self: string, TimeRulePlugIns: string, UnitClasses: string>, Name: string, Path: string, ServerTime: string, ServerVersion: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($path == null) { error make --unspanned { msg: "required query parameter 'path' missing: pass --path" } }
   let qp = [(serialize-qp "path" $path "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/assetservers" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -4003,7 +3996,7 @@ export def "asset-server-get" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Description: string, ExtendedProperties: record, Id: string, IsConnected: bool, Links: record<AnalysisRulePlugIns: string, Databases: string, NotificationContactTemplates: string, NotificationPlugIns: string, Security: string, SecurityEntries: string, SecurityIdentities: string, SecurityMappings: string, Self: string, TimeRulePlugIns: string, UnitClasses: string>, Name: string, Path: string, ServerTime: string, ServerVersion: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
+]: nothing -> oneof<record<Description: string, ExtendedProperties: record, Id: string, IsConnected: bool, Links: record<AnalysisRulePlugIns: string, Databases: string, NotificationContactTemplates: string, NotificationPlugIns: string, Security: string, SecurityEntries: string, SecurityIdentities: string, SecurityMappings: string, Self: string, TimeRulePlugIns: string, UnitClasses: string>, Name: string, Path: string, ServerTime: string, ServerVersion: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -4043,7 +4036,7 @@ export def "asset-server-get-analysis-rule-plug-ins" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<AssemblyFileName: string, AssemblyID: string, AssemblyLoadProperties: list, AssemblyTime: string, CompatibilityVersion: int, Description: string, Id: string, IsBrowsable: bool, IsNonEditableConfig: bool, Links: record, LoadedAssemblyTime: string, LoadedVersion: string, Name: string, Path: string, Version: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<AssemblyFileName: string, AssemblyID: string, AssemblyLoadProperties: list, AssemblyTime: string, CompatibilityVersion: int, Description: string, Id: string, IsBrowsable: bool, IsNonEditableConfig: bool, Links: record, LoadedAssemblyTime: string, LoadedVersion: string, Name: string, Path: string, Version: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -4083,7 +4076,7 @@ export def "asset-server-get-databases" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<Description: string, ExtendedProperties: record, Id: string, Links: record, Name: string, Path: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<Description: string, ExtendedProperties: record, Id: string, Links: record, Name: string, Path: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -4109,8 +4102,6 @@ export def "asset-server-get-databases" [
 #
 # POST /assetservers/{webId}/assetdatabases
 # operationId: AssetServer_CreateAssetDatabase
-# --Links shape: {AnalysisCategories?: string, AnalysisTemplates?: string, AssetServer?: string, AttributeCategories?: string, ElementCategories?: string, ElementTemplates?: string, Elements?: string, EnumerationSets?: string, EventFrames?: string, Security?: string, SecurityEntries?: string, Self?: string, TableCategories?: string, Tables?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "asset-server-create-asset-database" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4175,7 +4166,7 @@ export def "asset-server-get-notification-contact-templates" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<Available: bool, ConfigString: string, ContactType: string, Description: string, EscalationTimeout: string, HasChildren: bool, Id: string, Links: record, MaximumRetries: int, MinimumAcknowledgements: int, Name: string, NotifyWhenInstanceEnded: bool, Path: string, PlugInName: string, RetryInterval: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<Available: bool, ConfigString: string, ContactType: string, Description: string, EscalationTimeout: string, HasChildren: bool, Id: string, Links: record, MaximumRetries: int, MinimumAcknowledgements: int, Name: string, NotifyWhenInstanceEnded: bool, Path: string, PlugInName: string, RetryInterval: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -4201,8 +4192,6 @@ export def "asset-server-get-notification-contact-templates" [
 #
 # POST /assetservers/{webId}/notificationcontacttemplates
 # operationId: AssetServer_CreateNotificationContactTemplate
-# --Links shape: {AssetServer?: string, NotificationContactTemplates?: string, NotificationPlugIn?: string, Security?: string, SecurityEntries?: string, Self?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "asset-server-create-notification-contact-template" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4276,7 +4265,7 @@ export def "asset-server-get-notification-plug-ins" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<AssemblyFileName: string, AssemblyID: string, AssemblyLoadProperties: list, AssemblyTime: string, CompatibilityVersion: int, Description: string, Id: string, IsBrowsable: bool, IsNonEditableConfig: bool, Links: record, LoadedAssemblyTime: string, LoadedVersion: string, Name: string, Path: string, Version: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<AssemblyFileName: string, AssemblyID: string, AssemblyLoadProperties: list, AssemblyTime: string, CompatibilityVersion: int, Description: string, Id: string, IsBrowsable: bool, IsNonEditableConfig: bool, Links: record, LoadedAssemblyTime: string, LoadedVersion: string, Name: string, Path: string, Version: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -4314,15 +4303,17 @@ export def "asset-server-get-security" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --security-item: list<string> # The security item of the desired security information to be returned. Multiple security items may be specified with multiple instances of the parameter. If the parameter is not specified, only 'Default' security item of the security information will be returned.
-  --user-identity: list<string> # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned.
+  --security-item: list<string> # The security item of the desired security information to be returned. Multiple security items may be specified with multiple instances of the parameter. If the parameter is not specified, only 'Default' security item of the security information will be returned. (required)
+  --user-identity: list<string> # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned. (required)
   --force-refresh: oneof<nothing, bool> # Indicates if the security cache should be refreshed before getting security information. The default is 'false'.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<CanAnnotate: bool, CanDelete: bool, CanExecute: bool, CanRead: bool, CanReadData: bool, CanSubscribe: bool, CanSubscribeOthers: bool, CanWrite: bool, CanWriteData: bool, HasAdmin: bool, Links: record, OwnerWebId: string, Rights: list, SecurityItem: string, UserIdentity: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<CanAnnotate: bool, CanDelete: bool, CanExecute: bool, CanRead: bool, CanReadData: bool, CanSubscribe: bool, CanSubscribeOthers: bool, CanWrite: bool, CanWriteData: bool, HasAdmin: bool, Links: record, OwnerWebId: string, Rights: list, SecurityItem: string, UserIdentity: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($security_item == null) { error make --unspanned { msg: "required query parameter 'securityItem' missing: pass --security-item" } }
+  if ($user_identity == null) { error make --unspanned { msg: "required query parameter 'userIdentity' missing: pass --user-identity" } }
   let qp = [(serialize-qp "securityItem" $security_item "multi") (serialize-qp "userIdentity" $user_identity "multi") (serialize-qp "forceRefresh" $force_refresh "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetservers/{web_id}/security") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -4361,7 +4352,7 @@ export def "asset-server-get-security-entries" [
   --security-item: string # The security item of the desired security entries information to be returned. If the parameter is not specified, security entries of the 'Default' security item will be returned.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<AllowRights: list, DenyRights: list, Links: record, Name: string, SecurityIdentityName: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<AllowRights: list, DenyRights: list, Links: record, Name: string, SecurityIdentityName: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -4387,8 +4378,6 @@ export def "asset-server-get-security-entries" [
 #
 # POST /assetservers/{webId}/securityentries
 # operationId: AssetServer_CreateSecurityEntry
-# --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "asset-server-create-security-entry" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4497,7 +4486,7 @@ export def "asset-server-get-security-entry-by-name" [
   --security-item: string # The security item of the desired security entries information to be returned. If the parameter is not specified, security entries of the 'Default' security item will be returned.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<AllowRights: list<string>, DenyRights: list<string>, Links: record<SecurableObject: string, SecurityIdentity: string, Self: string>, Name: string, SecurityIdentityName: string, WebException: record<Errors: list<string>, StatusCode: int>> {
+]: nothing -> oneof<record<AllowRights: list<string>, DenyRights: list<string>, Links: record<SecurableObject: string, SecurityIdentity: string, Self: string>, Name: string, SecurityIdentityName: string, WebException: record<Errors: list<string>, StatusCode: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -4524,8 +4513,6 @@ export def "asset-server-get-security-entry-by-name" [
 #
 # PUT /assetservers/{webId}/securityentries/{name}
 # operationId: AssetServer_UpdateSecurityEntry
-# --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "asset-server-update-security-entry" [
   web_id: string
   name: string
@@ -4596,7 +4583,7 @@ export def "asset-server-get-security-identities" [
   --sort-field: string # The field or property of the object used to sort the returned collection. The default is 'Name'.
   --sort-order: string # The order that the returned collection is sorted. The default is 'Ascending'.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<Description: string, Id: string, IsEnabled: bool, Links: record, Name: string, Path: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<Description: string, Id: string, IsEnabled: bool, Links: record, Name: string, Path: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -4622,8 +4609,6 @@ export def "asset-server-get-security-identities" [
 #
 # POST /assetservers/{webId}/securityidentities
 # operationId: AssetServer_CreateSecurityIdentity
-# --Links shape: {AssetServer?: string, Security?: string, SecurityEntries?: string, SecurityMappings?: string, Self?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "asset-server-create-security-identity" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4686,13 +4671,14 @@ export def "asset-server-get-security-identities-for-user" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --user-identity: string # The user identity to search for.
+  --user-identity: string # The user identity to search for. (required)
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<Description: string, Id: string, IsEnabled: bool, Links: record, Name: string, Path: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<Description: string, Id: string, IsEnabled: bool, Links: record, Name: string, Path: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($user_identity == null) { error make --unspanned { msg: "required query parameter 'userIdentity' missing: pass --user-identity" } }
   let qp = [(serialize-qp "userIdentity" $user_identity "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetservers/{web_id}/securityidentities") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -4734,7 +4720,7 @@ export def "asset-server-get-security-mappings" [
   --sort-field: string # The field or property of the object used to sort the returned collection. The default is 'Name'.
   --sort-order: string # The order that the returned collection is sorted. The default is 'Ascending'.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<Account: string, Description: string, Id: string, Links: record, Name: string, Path: string, SecurityIdentityWebId: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<Account: string, Description: string, Id: string, Links: record, Name: string, Path: string, SecurityIdentityWebId: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -4760,8 +4746,6 @@ export def "asset-server-get-security-mappings" [
 #
 # POST /assetservers/{webId}/securitymappings
 # operationId: AssetServer_CreateSecurityMapping
-# --Links shape: {AssetServer?: string, Security?: string, SecurityEntries?: string, SecurityIdentity?: string, Self?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "asset-server-create-security-mapping" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4827,7 +4811,7 @@ export def "asset-server-get-time-rule-plug-ins" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<AssemblyFileName: string, AssemblyID: string, AssemblyLoadProperties: list, AssemblyTime: string, CompatibilityVersion: int, Description: string, Id: string, IsBrowsable: bool, IsNonEditableConfig: bool, Links: record, LoadedAssemblyTime: string, LoadedVersion: string, Name: string, Path: string, Version: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<AssemblyFileName: string, AssemblyID: string, AssemblyLoadProperties: list, AssemblyTime: string, CompatibilityVersion: int, Description: string, Id: string, IsBrowsable: bool, IsNonEditableConfig: bool, Links: record, LoadedAssemblyTime: string, LoadedVersion: string, Name: string, Path: string, Version: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -4867,7 +4851,7 @@ export def "asset-server-get-unit-classes" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<CanonicalUnitAbbreviation: string, CanonicalUnitName: string, Description: string, Id: string, Links: record, Name: string, Path: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<CanonicalUnitAbbreviation: string, CanonicalUnitName: string, Description: string, Id: string, Links: record, Name: string, Path: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -4893,8 +4877,6 @@ export def "asset-server-get-unit-classes" [
 #
 # POST /assetservers/{webId}/unitclasses
 # operationId: AssetServer_CreateUnitClass
-# --Links shape: {AssetServer?: string, CanonicalUnit?: string, Self?: string, Units?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "asset-server-create-unit-class" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4957,12 +4939,13 @@ export def "attribute-category-get-by-path" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --path: string # The path to the target attribute category.
+  --path: string # The path to the target attribute category. (required)
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Description: string, Id: string, Links: record<Database: string, Security: string, SecurityEntries: string, Self: string>, Name: string, Path: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
+]: nothing -> oneof<record<Description: string, Id: string, Links: record<Database: string, Security: string, SecurityEntries: string, Self: string>, Name: string, Path: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($path == null) { error make --unspanned { msg: "required query parameter 'path' missing: pass --path" } }
   let qp = [(serialize-qp "path" $path "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/attributecategories" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -5036,7 +5019,7 @@ export def "attribute-category-get" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Description: string, Id: string, Links: record<Database: string, Security: string, SecurityEntries: string, Self: string>, Name: string, Path: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
+]: nothing -> oneof<record<Description: string, Id: string, Links: record<Database: string, Security: string, SecurityEntries: string, Self: string>, Name: string, Path: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -5062,8 +5045,6 @@ export def "attribute-category-get" [
 #
 # PATCH /attributecategories/{webId}
 # operationId: AttributeCategory_Update
-# --Links shape: {Database?: string, Security?: string, SecurityEntries?: string, Self?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "attribute-category-update" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5123,14 +5104,15 @@ export def "attribute-category-get-security" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --user-identity: list<string> # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned.
+  --user-identity: list<string> # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned. (required)
   --force-refresh: oneof<nothing, bool> # Indicates if the security cache should be refreshed before getting security information. The default is 'false'.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<CanAnnotate: bool, CanDelete: bool, CanExecute: bool, CanRead: bool, CanReadData: bool, CanSubscribe: bool, CanSubscribeOthers: bool, CanWrite: bool, CanWriteData: bool, HasAdmin: bool, Links: record, OwnerWebId: string, Rights: list, SecurityItem: string, UserIdentity: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<CanAnnotate: bool, CanDelete: bool, CanExecute: bool, CanRead: bool, CanReadData: bool, CanSubscribe: bool, CanSubscribeOthers: bool, CanWrite: bool, CanWriteData: bool, HasAdmin: bool, Links: record, OwnerWebId: string, Rights: list, SecurityItem: string, UserIdentity: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($user_identity == null) { error make --unspanned { msg: "required query parameter 'userIdentity' missing: pass --user-identity" } }
   let qp = [(serialize-qp "userIdentity" $user_identity "multi") (serialize-qp "forceRefresh" $force_refresh "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/attributecategories/{web_id}/security") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -5168,7 +5150,7 @@ export def "attribute-category-get-security-entries" [
   --name-filter: string # The name query string used for filtering security entries. The default is no filter.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<AllowRights: list, DenyRights: list, Links: record, Name: string, SecurityIdentityName: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<AllowRights: list, DenyRights: list, Links: record, Name: string, SecurityIdentityName: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -5194,8 +5176,6 @@ export def "attribute-category-get-security-entries" [
 #
 # POST /attributecategories/{webId}/securityentries
 # operationId: AttributeCategory_CreateSecurityEntry
-# --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "attribute-category-create-security-entry" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5301,7 +5281,7 @@ export def "attribute-category-get-security-entry-by-name" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<AllowRights: list<string>, DenyRights: list<string>, Links: record<SecurableObject: string, SecurityIdentity: string, Self: string>, Name: string, SecurityIdentityName: string, WebException: record<Errors: list<string>, StatusCode: int>> {
+]: nothing -> oneof<record<AllowRights: list<string>, DenyRights: list<string>, Links: record<SecurableObject: string, SecurityIdentity: string, Self: string>, Name: string, SecurityIdentityName: string, WebException: record<Errors: list<string>, StatusCode: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -5328,8 +5308,6 @@ export def "attribute-category-get-security-entry-by-name" [
 #
 # PUT /attributecategories/{webId}/securityentries/{name}
 # operationId: AttributeCategory_UpdateSecurityEntry
-# --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "attribute-category-update-security-entry" [
   web_id: string
   name: string
@@ -5391,13 +5369,14 @@ export def "attribute-get-by-path" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --path: string # The path to the attribute.
+  --path: string # The path to the attribute. (required)
   --associations: string # Associated values to return in the response, separated by semicolons (;). This call supports DataReference to return attributes with data references. If this parameter is not specified, DataReference values are not returned.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<CategoryNames: list<string>, ConfigString: string, DataReference: record<PIPoint: record<Descriptor: string, DigitalSetName: string, DisplayDigits: int, EngineeringUnits: string, Future: bool, Id: int, Name: string, Path: string, PointClass: string, PointType: string, Span: float, Step: bool, WebId: string, Zero: float>, Type: string, WebException: record<Errors: list, StatusCode: int>>, DataReferencePlugIn: string, DefaultUnitsName: string, DefaultUnitsNameAbbreviation: string, Description: string, DisplayDigits: int, HasChildren: bool, Id: string, IsConfigurationItem: bool, IsExcluded: bool, IsHidden: bool, IsManualDataEntry: bool, Links: record<Attributes: string, Categories: string, Element: string, EndValue: string, EnumerationSet: string, EnumerationValues: string, EventFrame: string, InterpolatedData: string, Parent: string, PlotData: string, Point: string, RecordedData: string, Self: string, SummaryData: string, Template: string, Trait: string, Value: string>, Name: string, Path: string, Paths: list<string>, Span: float, Step: bool, TraitName: string, Type: string, TypeQualifier: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string, Zero: float> {
+]: nothing -> oneof<record<CategoryNames: list<string>, ConfigString: string, DataReference: record<PIPoint: record<Descriptor: string, DigitalSetName: string, DisplayDigits: int, EngineeringUnits: string, Future: bool, Id: int, Name: string, Path: string, PointClass: string, PointType: string, Span: float, Step: bool, WebId: string, Zero: float>, Type: string, WebException: record<Errors: list, StatusCode: int>>, DataReferencePlugIn: string, DefaultUnitsName: string, DefaultUnitsNameAbbreviation: string, Description: string, DisplayDigits: int, HasChildren: bool, Id: string, IsConfigurationItem: bool, IsExcluded: bool, IsHidden: bool, IsManualDataEntry: bool, Links: record<Attributes: string, Categories: string, Element: string, EndValue: string, EnumerationSet: string, EnumerationValues: string, EventFrame: string, InterpolatedData: string, Parent: string, PlotData: string, Point: string, RecordedData: string, Self: string, SummaryData: string, Template: string, Trait: string, Value: string>, Name: string, Path: string, Paths: list<string>, Span: float, Step: bool, TraitName: string, Type: string, TypeQualifier: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string, Zero: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($path == null) { error make --unspanned { msg: "required query parameter 'path' missing: pass --path" } }
   let qp = [(serialize-qp "path" $path "scalar") (serialize-qp "associations" $associations "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/attributes" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -5438,7 +5417,7 @@ export def "attribute-get-multiple" [
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id: list<string> # The ID of an attribute. Multiple attributes may be specified with multiple instances of the parameter.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<Exception: record, Identifier: string, IdentifierType: string, Object: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<Exception: record, Identifier: string, IdentifierType: string, Object: record>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "asParallel" $as_parallel "scalar") (serialize-qp "associations" $associations "scalar") (serialize-qp "includeMode" $include_mode "scalar") (serialize-qp "path" $path "multi") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webId" $web_id "multi") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
@@ -5481,7 +5460,7 @@ export def "attribute-get-attributes-query" [
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --start-index: int # The starting index (zero based) of the items to be returned. The default is 0.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<CategoryNames: list, ConfigString: string, DataReference: record, DataReferencePlugIn: string, DefaultUnitsName: string, DefaultUnitsNameAbbreviation: string, Description: string, DisplayDigits: int, HasChildren: bool, Id: string, IsConfigurationItem: bool, IsExcluded: bool, IsHidden: bool, IsManualDataEntry: bool, Links: record, Name: string, Path: string, Paths: list, Span: float, Step: bool, TraitName: string, Type: string, TypeQualifier: string, WebException: record, WebId: string, Zero: float>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<CategoryNames: list, ConfigString: string, DataReference: record, DataReferencePlugIn: string, DefaultUnitsName: string, DefaultUnitsNameAbbreviation: string, Description: string, DisplayDigits: int, HasChildren: bool, Id: string, IsConfigurationItem: bool, IsExcluded: bool, IsHidden: bool, IsManualDataEntry: bool, Links: record, Name: string, Path: string, Paths: list, Span: float, Step: bool, TraitName: string, Type: string, TypeQualifier: string, WebException: record, WebId: string, Zero: float>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "associations" $associations "scalar") (serialize-qp "databaseWebId" $database_web_id "scalar") (serialize-qp "maxCount" $max_count "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
@@ -5558,7 +5537,7 @@ export def "attribute-get" [
   --associations: string # Associated values to return in the response, separated by semicolons (;). This call supports DataReference to return attributes with data references. If this parameter is not specified, DataReference values are not returned.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<CategoryNames: list<string>, ConfigString: string, DataReference: record<PIPoint: record<Descriptor: string, DigitalSetName: string, DisplayDigits: int, EngineeringUnits: string, Future: bool, Id: int, Name: string, Path: string, PointClass: string, PointType: string, Span: float, Step: bool, WebId: string, Zero: float>, Type: string, WebException: record<Errors: list, StatusCode: int>>, DataReferencePlugIn: string, DefaultUnitsName: string, DefaultUnitsNameAbbreviation: string, Description: string, DisplayDigits: int, HasChildren: bool, Id: string, IsConfigurationItem: bool, IsExcluded: bool, IsHidden: bool, IsManualDataEntry: bool, Links: record<Attributes: string, Categories: string, Element: string, EndValue: string, EnumerationSet: string, EnumerationValues: string, EventFrame: string, InterpolatedData: string, Parent: string, PlotData: string, Point: string, RecordedData: string, Self: string, SummaryData: string, Template: string, Trait: string, Value: string>, Name: string, Path: string, Paths: list<string>, Span: float, Step: bool, TraitName: string, Type: string, TypeQualifier: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string, Zero: float> {
+]: nothing -> oneof<record<CategoryNames: list<string>, ConfigString: string, DataReference: record<PIPoint: record<Descriptor: string, DigitalSetName: string, DisplayDigits: int, EngineeringUnits: string, Future: bool, Id: int, Name: string, Path: string, PointClass: string, PointType: string, Span: float, Step: bool, WebId: string, Zero: float>, Type: string, WebException: record<Errors: list, StatusCode: int>>, DataReferencePlugIn: string, DefaultUnitsName: string, DefaultUnitsNameAbbreviation: string, Description: string, DisplayDigits: int, HasChildren: bool, Id: string, IsConfigurationItem: bool, IsExcluded: bool, IsHidden: bool, IsManualDataEntry: bool, Links: record<Attributes: string, Categories: string, Element: string, EndValue: string, EnumerationSet: string, EnumerationValues: string, EventFrame: string, InterpolatedData: string, Parent: string, PlotData: string, Point: string, RecordedData: string, Self: string, SummaryData: string, Template: string, Trait: string, Value: string>, Name: string, Path: string, Paths: list<string>, Span: float, Step: bool, TraitName: string, Type: string, TypeQualifier: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string, Zero: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -5584,9 +5563,6 @@ export def "attribute-get" [
 #
 # PATCH /attributes/{webId}
 # operationId: Attribute_Update
-# --DataReference shape: {PIPoint?: record, Type?: string, WebException?: record}
-# --Links shape: {Attributes?: string, Categories?: string, Element?: string, EndValue?: string, EnumerationSet?: string, EnumerationValues?: string, EventFrame?: string, InterpolatedData?: string, Parent?: string, PlotData?: string, Point?: string, RecordedData?: string, Self?: string, SummaryData?: string, Template?: string, Trait?: string, Value?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "attribute-update" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5681,7 +5657,7 @@ export def "attribute-get-attributes" [
   --trait-category: list<string> # The category of the attribute traits. Multiple categories may be specified with multiple instances of the parameter. If the parameter is not specified, or if its value is "all", then all attribute traits of all categories will be returned.
   --value-type: string # Specify that returned attributes' value type must be the given value type. The default is no value type filter.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<CategoryNames: list, ConfigString: string, DataReference: record, DataReferencePlugIn: string, DefaultUnitsName: string, DefaultUnitsNameAbbreviation: string, Description: string, DisplayDigits: int, HasChildren: bool, Id: string, IsConfigurationItem: bool, IsExcluded: bool, IsHidden: bool, IsManualDataEntry: bool, Links: record, Name: string, Path: string, Paths: list, Span: float, Step: bool, TraitName: string, Type: string, TypeQualifier: string, WebException: record, WebId: string, Zero: float>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<CategoryNames: list, ConfigString: string, DataReference: record, DataReferencePlugIn: string, DefaultUnitsName: string, DefaultUnitsNameAbbreviation: string, Description: string, DisplayDigits: int, HasChildren: bool, Id: string, IsConfigurationItem: bool, IsExcluded: bool, IsHidden: bool, IsManualDataEntry: bool, Links: record, Name: string, Path: string, Paths: list, Span: float, Step: bool, TraitName: string, Type: string, TypeQualifier: string, WebException: record, WebId: string, Zero: float>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -5707,9 +5683,6 @@ export def "attribute-get-attributes" [
 #
 # POST /attributes/{webId}/attributes
 # operationId: Attribute_CreateAttribute
-# --DataReference shape: {PIPoint?: record, Type?: string, WebException?: record}
-# --Links shape: {Attributes?: string, Categories?: string, Element?: string, EndValue?: string, EnumerationSet?: string, EnumerationValues?: string, EventFrame?: string, InterpolatedData?: string, Parent?: string, PlotData?: string, Point?: string, RecordedData?: string, Self?: string, SummaryData?: string, Template?: string, Trait?: string, Value?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "attribute-create-attribute" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5792,7 +5765,7 @@ export def "attribute-get-categories" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<Description: string, Id: string, Links: record, Name: string, Path: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<Description: string, Id: string, Links: record, Name: string, Path: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -5870,7 +5843,7 @@ export def "attribute-get-value" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
-]: nothing -> record<Annotated: bool, Errors: table<FieldName: string, Message: list>, Good: bool, Questionable: bool, Substituted: bool, Timestamp: string, UnitsAbbreviation: string, Value: record, WebException: record<Errors: list<string>, StatusCode: int>> {
+]: nothing -> oneof<record<Annotated: bool, Errors: table<FieldName: string, Message: list>, Good: bool, Questionable: bool, Substituted: bool, Timestamp: string, UnitsAbbreviation: string, Value: record, WebException: record<Errors: list<string>, StatusCode: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -5896,8 +5869,6 @@ export def "attribute-get-value" [
 #
 # PUT /attributes/{webId}/value
 # operationId: Attribute_SetValue
-# --Errors item shape: {FieldName?: string, Message?: list<string>}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "attribute-set-value" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5958,12 +5929,13 @@ export def "attribute-template-get-by-path" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --path: string # The path to the attribute template.
+  --path: string # The path to the attribute template. (required)
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<CategoryNames: list<string>, ConfigString: string, DataReferencePlugIn: string, DefaultUnitsName: string, DefaultUnitsNameAbbreviation: string, DefaultValue: record, Description: string, HasChildren: bool, Id: string, IsConfigurationItem: bool, IsExcluded: bool, IsHidden: bool, IsManualDataEntry: bool, Links: record<AttributeTemplates: string, Categories: string, ElementTemplate: string, Parent: string, Self: string, Trait: string>, Name: string, Path: string, TraitName: string, Type: string, TypeQualifier: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
+]: nothing -> oneof<record<CategoryNames: list<string>, ConfigString: string, DataReferencePlugIn: string, DefaultUnitsName: string, DefaultUnitsNameAbbreviation: string, DefaultValue: record, Description: string, HasChildren: bool, Id: string, IsConfigurationItem: bool, IsExcluded: bool, IsHidden: bool, IsManualDataEntry: bool, Links: record<AttributeTemplates: string, Categories: string, ElementTemplate: string, Parent: string, Self: string, Trait: string>, Name: string, Path: string, TraitName: string, Type: string, TypeQualifier: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($path == null) { error make --unspanned { msg: "required query parameter 'path' missing: pass --path" } }
   let qp = [(serialize-qp "path" $path "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/attributetemplates" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -6037,7 +6009,7 @@ export def "attribute-template-get" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<CategoryNames: list<string>, ConfigString: string, DataReferencePlugIn: string, DefaultUnitsName: string, DefaultUnitsNameAbbreviation: string, DefaultValue: record, Description: string, HasChildren: bool, Id: string, IsConfigurationItem: bool, IsExcluded: bool, IsHidden: bool, IsManualDataEntry: bool, Links: record<AttributeTemplates: string, Categories: string, ElementTemplate: string, Parent: string, Self: string, Trait: string>, Name: string, Path: string, TraitName: string, Type: string, TypeQualifier: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
+]: nothing -> oneof<record<CategoryNames: list<string>, ConfigString: string, DataReferencePlugIn: string, DefaultUnitsName: string, DefaultUnitsNameAbbreviation: string, DefaultValue: record, Description: string, HasChildren: bool, Id: string, IsConfigurationItem: bool, IsExcluded: bool, IsHidden: bool, IsManualDataEntry: bool, Links: record<AttributeTemplates: string, Categories: string, ElementTemplate: string, Parent: string, Self: string, Trait: string>, Name: string, Path: string, TraitName: string, Type: string, TypeQualifier: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -6063,8 +6035,6 @@ export def "attribute-template-get" [
 #
 # PATCH /attributetemplates/{webId}
 # operationId: AttributeTemplate_Update
-# --Links shape: {AttributeTemplates?: string, Categories?: string, ElementTemplate?: string, Parent?: string, Self?: string, Trait?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "attribute-template-update" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6140,7 +6110,7 @@ export def "attribute-template-get-attribute-templates" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<CategoryNames: list, ConfigString: string, DataReferencePlugIn: string, DefaultUnitsName: string, DefaultUnitsNameAbbreviation: string, DefaultValue: record, Description: string, HasChildren: bool, Id: string, IsConfigurationItem: bool, IsExcluded: bool, IsHidden: bool, IsManualDataEntry: bool, Links: record, Name: string, Path: string, TraitName: string, Type: string, TypeQualifier: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<CategoryNames: list, ConfigString: string, DataReferencePlugIn: string, DefaultUnitsName: string, DefaultUnitsNameAbbreviation: string, DefaultValue: record, Description: string, HasChildren: bool, Id: string, IsConfigurationItem: bool, IsExcluded: bool, IsHidden: bool, IsManualDataEntry: bool, Links: record, Name: string, Path: string, TraitName: string, Type: string, TypeQualifier: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -6166,8 +6136,6 @@ export def "attribute-template-get-attribute-templates" [
 #
 # POST /attributetemplates/{webId}/attributetemplates
 # operationId: AttributeTemplate_CreateAttributeTemplate
-# --Links shape: {AttributeTemplates?: string, Categories?: string, ElementTemplate?: string, Parent?: string, Self?: string, Trait?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "attribute-template-create-attribute-template" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6245,7 +6213,7 @@ export def "attribute-template-get-categories" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<Description: string, Id: string, Links: record, Name: string, Path: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<Description: string, Id: string, Links: record, Name: string, Path: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -6282,11 +6250,12 @@ export def "attribute-trait-get-by-category" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --category: list<string> # The category of the attribute traits. Multiple categories may be specified with multiple instances of the parameter. If the parameter is not specified, or if its value is "all", then all attribute traits of all categories will be returned.
+  --category: list<string> # The category of the attribute traits. Multiple categories may be specified with multiple instances of the parameter. If the parameter is not specified, or if its value is "all", then all attribute traits of all categories will be returned. (required)
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
-]: nothing -> record<Items: table<Abbreviation: string, AllowChildAttributes: bool, AllowDuplicates: bool, IsAllowedOnRootAttribute: bool, IsTypeInherited: bool, IsUOMInherited: bool, Links: record, Name: string, RequireNumeric: bool, RequireString: bool, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<Abbreviation: string, AllowChildAttributes: bool, AllowDuplicates: bool, IsAllowedOnRootAttribute: bool, IsTypeInherited: bool, IsUOMInherited: bool, Links: record, Name: string, RequireNumeric: bool, RequireString: bool, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($category == null) { error make --unspanned { msg: "required query parameter 'category' missing: pass --category" } }
   let qp = [(serialize-qp "category" $category "multi") (serialize-qp "selectedFields" $selected_fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/attributetraits" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -6322,7 +6291,7 @@ export def "attribute-trait-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
-]: nothing -> record<Abbreviation: string, AllowChildAttributes: bool, AllowDuplicates: bool, IsAllowedOnRootAttribute: bool, IsTypeInherited: bool, IsUOMInherited: bool, Links: record<Self: string>, Name: string, RequireNumeric: bool, RequireString: bool, WebException: record<Errors: list<string>, StatusCode: int>> {
+]: nothing -> oneof<record<Abbreviation: string, AllowChildAttributes: bool, AllowDuplicates: bool, IsAllowedOnRootAttribute: bool, IsTypeInherited: bool, IsUOMInherited: bool, Links: record<Self: string>, Name: string, RequireNumeric: bool, RequireString: bool, WebException: record<Errors: list<string>, StatusCode: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -6360,7 +6329,7 @@ export def "batch-execute" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --body: record
-]: any -> any {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6398,15 +6367,16 @@ export def "calculation-get-at-intervals" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --expression: string # A string containing the expression to be evaluated. The syntax for the expression generally follows the Performance Equation syntax as described in the PI Server documentation, with the exception that expressions which target AF objects use attribute names in place of tag names in the equation.
+  --expression: string # A string containing the expression to be evaluated. The syntax for the expression generally follows the Performance Equation syntax as described in the PI Server documentation, with the exception that expressions which target AF objects use attribute names in place of tag names in the equation. (required)
   --end-time: string # An optional end time. The default is '*' for element attributes and points. For event frame attributes, the default is the event frame's end time, or '*' if that is not set. Note that if endTime is earlier than startTime, the resulting values will be in time-descending order.
   --sample-interval: string # A time span specifies how often the filter expression is evaluated when computing the summary for an interval.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --start-time: string # An optional start time. The default is '*-1d' for element attributes and points. For event frame attributes, the default is the event frame's start time, or '*-1d' if that is not set.
   --web-id: string # The ID of the target object of the expression. A target object can be a Data Server, a database, an element, an event frame or an attribute. References to attributes or points are based on the target. If this parameter is not provided, the target object is set to null.
-]: nothing -> record<Items: table<Annotated: bool, Errors: list, Good: bool, Questionable: bool, Substituted: bool, Timestamp: string, UnitsAbbreviation: string, Value: record, WebException: record>, UnitsAbbreviation: string, WebException: record<Errors: list<string>, StatusCode: int>> {
+]: nothing -> oneof<record<Items: table<Annotated: bool, Errors: list, Good: bool, Questionable: bool, Substituted: bool, Timestamp: string, UnitsAbbreviation: string, Value: record, WebException: record>, UnitsAbbreviation: string, WebException: record<Errors: list<string>, StatusCode: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($expression == null) { error make --unspanned { msg: "required query parameter 'expression' missing: pass --expression" } }
   let qp = [(serialize-qp "expression" $expression "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "sampleInterval" $sample_interval "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "webId" $web_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/calculation/intervals" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -6440,14 +6410,15 @@ export def "calculation-get-at-recorded" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --expression: string # A string containing the expression to be evaluated. The syntax for the expression generally follows the Performance Equation syntax as described in the PI Server documentation, with the exception that expressions which target AF objects use attribute names in place of tag names in the equation.
+  --expression: string # A string containing the expression to be evaluated. The syntax for the expression generally follows the Performance Equation syntax as described in the PI Server documentation, with the exception that expressions which target AF objects use attribute names in place of tag names in the equation. (required)
   --end-time: string # An optional end time. The default is '*' for element attributes and points. For event frame attributes, the default is the event frame's end time, or '*' if that is not set. Note that if endTime is earlier than startTime, the resulting values will be in time-descending order.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --start-time: string # An optional start time. The default is '*-1d' for element attributes and points. For event frame attributes, the default is the event frame's start time, or '*-1d' if that is not set.
   --web-id: string # The ID of the target object of the expression. A target object can be a Data Server, a database, an element, an event frame or an attribute. References to attributes or points are based on the target. If this parameter is not provided, the target object is set to null.
-]: nothing -> record<Items: table<Annotated: bool, Errors: list, Good: bool, Questionable: bool, Substituted: bool, Timestamp: string, UnitsAbbreviation: string, Value: record, WebException: record>, UnitsAbbreviation: string, WebException: record<Errors: list<string>, StatusCode: int>> {
+]: nothing -> oneof<record<Items: table<Annotated: bool, Errors: list, Good: bool, Questionable: bool, Substituted: bool, Timestamp: string, UnitsAbbreviation: string, Value: record, WebException: record>, UnitsAbbreviation: string, WebException: record<Errors: list<string>, StatusCode: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($expression == null) { error make --unspanned { msg: "required query parameter 'expression' missing: pass --expression" } }
   let qp = [(serialize-qp "expression" $expression "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "webId" $web_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/calculation/recorded" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -6481,7 +6452,7 @@ export def "calculation-get-summary" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --expression: string # A string containing the expression to be evaluated. The syntax for the expression generally follows the Performance Equation syntax as described in the PI Server documentation, with the exception that expressions which target AF objects use attribute names in place of tag names in the equation.
+  --expression: string # A string containing the expression to be evaluated. The syntax for the expression generally follows the Performance Equation syntax as described in the PI Server documentation, with the exception that expressions which target AF objects use attribute names in place of tag names in the equation. (required)
   --calculation-basis: string # Specifies the method of evaluating the data over the time range. The default is 'TimeWeighted'.
   --end-time: string # An optional end time. The default is '*' for element attributes and points. For event frame attributes, the default is the event frame's end time, or '*' if that is not set. Note that if endTime is earlier than startTime, the resulting values will be in time-descending order.
   --sample-interval: string # A time span specifies how often the filter expression is evaluated when computing the summary for an interval, if the sampleType is 'Interval'.
@@ -6492,9 +6463,10 @@ export def "calculation-get-summary" [
   --summary-type: list<string> # Specifies the kinds of summaries to produce over the range. The default is 'Total'. Multiple summary types may be specified by using multiple instances of summaryType.
   --time-type: string # Specifies how to calculate the timestamp for each interval. The default is 'Auto'.
   --web-id: string # The ID of the target object of the expression. A target object can be a Data Server, a database, an element, an event frame or an attribute. References to attributes or points are based on the target. If this parameter is not provided, the target object is set to null.
-]: nothing -> record<Items: table<Type: string, Value: record, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<Type: string, Value: record, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($expression == null) { error make --unspanned { msg: "required query parameter 'expression' missing: pass --expression" } }
   let qp = [(serialize-qp "expression" $expression "scalar") (serialize-qp "calculationBasis" $calculation_basis "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "sampleInterval" $sample_interval "scalar") (serialize-qp "sampleType" $sample_type "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "summaryDuration" $summary_duration "scalar") (serialize-qp "summaryType" $summary_type "multi") (serialize-qp "timeType" $time_type "scalar") (serialize-qp "webId" $web_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/calculation/summary" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -6528,14 +6500,16 @@ export def "calculation-get-at-times" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --expression: string # A string containing the expression to be evaluated. The syntax for the expression generally follows the Performance Equation syntax as described in the PI Server documentation, with the exception that expressions which target AF objects use attribute names in place of tag names in the equation.
-  --time: list<string> # A list of timestamps at which to calculate the expression.
+  --expression: string # A string containing the expression to be evaluated. The syntax for the expression generally follows the Performance Equation syntax as described in the PI Server documentation, with the exception that expressions which target AF objects use attribute names in place of tag names in the equation. (required)
+  --time: list<string> # A list of timestamps at which to calculate the expression. (required)
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --sort-order: string # The order that the returned collection is sorted. The default is 'Ascending'.
   --web-id: string # The ID of the target object of the expression. A target object can be a Data Server, a database, an element, an event frame or an attribute. References to attributes or points are based on the target. If this parameter is not provided, the target object is set to null.
-]: nothing -> record<Items: table<Annotated: bool, Errors: list, Good: bool, Questionable: bool, Substituted: bool, Timestamp: string, UnitsAbbreviation: string, Value: record, WebException: record>, UnitsAbbreviation: string, WebException: record<Errors: list<string>, StatusCode: int>> {
+]: nothing -> oneof<record<Items: table<Annotated: bool, Errors: list, Good: bool, Questionable: bool, Substituted: bool, Timestamp: string, UnitsAbbreviation: string, Value: record, WebException: record>, UnitsAbbreviation: string, WebException: record<Errors: list<string>, StatusCode: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($expression == null) { error make --unspanned { msg: "required query parameter 'expression' missing: pass --expression" } }
+  if ($time == null) { error make --unspanned { msg: "required query parameter 'time' missing: pass --time" } }
   let qp = [(serialize-qp "expression" $expression "scalar") (serialize-qp "time" $time "multi") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "webId" $web_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/calculation/times" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -6569,7 +6543,7 @@ export def "channel-instances" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<Items: table<Id: string, LastMessageSentTime: string, SentMessageCount: int, StartTime: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<Id: string, LastMessageSentTime: string, SentMessageCount: int, StartTime: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/channels/instances" $auth.query)
@@ -6606,7 +6580,7 @@ export def "data-server-list" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<Id: string, IsConnected: bool, Links: record, Name: string, Path: string, ServerTime: string, ServerVersion: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<Id: string, IsConnected: bool, Links: record, Name: string, Path: string, ServerTime: string, ServerVersion: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
@@ -6642,12 +6616,13 @@ export def "data-server-get-by-name" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --name: string # The name of the server.
+  --name: string # The name of the server. (required)
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Id: string, IsConnected: bool, Links: record<EnumerationSets: string, Points: string, Self: string>, Name: string, Path: string, ServerTime: string, ServerVersion: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
+]: nothing -> oneof<record<Id: string, IsConnected: bool, Links: record<EnumerationSets: string, Points: string, Self: string>, Name: string, Path: string, ServerTime: string, ServerVersion: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($name == null) { error make --unspanned { msg: "required query parameter 'name' missing: pass --name" } }
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dataservers" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -6681,12 +6656,13 @@ export def "data-server-get-by-path" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --path: string # The path to the server. Note that the path supplied to this method must be of the form '\\servername'.
+  --path: string # The path to the server. Note that the path supplied to this method must be of the form '\\servername'. (required)
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Id: string, IsConnected: bool, Links: record<EnumerationSets: string, Points: string, Self: string>, Name: string, Path: string, ServerTime: string, ServerVersion: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
+]: nothing -> oneof<record<Id: string, IsConnected: bool, Links: record<EnumerationSets: string, Points: string, Self: string>, Name: string, Path: string, ServerTime: string, ServerVersion: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($path == null) { error make --unspanned { msg: "required query parameter 'path' missing: pass --path" } }
   let qp = [(serialize-qp "path" $path "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dataservers" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -6723,7 +6699,7 @@ export def "data-server-get" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Id: string, IsConnected: bool, Links: record<EnumerationSets: string, Points: string, Self: string>, Name: string, Path: string, ServerTime: string, ServerVersion: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
+]: nothing -> oneof<record<Id: string, IsConnected: bool, Links: record<EnumerationSets: string, Points: string, Self: string>, Name: string, Path: string, ServerTime: string, ServerVersion: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -6763,7 +6739,7 @@ export def "data-server-get-enumeration-sets" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<Description: string, Id: string, Links: record, Name: string, Path: string, SerializeDescription: bool, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<Description: string, Id: string, Links: record, Name: string, Path: string, SerializeDescription: bool, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -6789,8 +6765,6 @@ export def "data-server-get-enumeration-sets" [
 #
 # POST /dataservers/{webId}/enumerationsets
 # operationId: DataServer_CreateEnumerationSet
-# --Links shape: {DataServer?: string, Database?: string, Security?: string, SecurityEntries?: string, Self?: string, Values?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "data-server-create-enumeration-set" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6853,21 +6827,22 @@ export def "data-server-get-license" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-module: string # The case-sensitive name of the module.
+  --module: string # The case-sensitive name of the module. (required)
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<AmountLeft: string, AmountUsed: string, Links: record<Parent: string, Self: string>, Name: string, TotalAmount: string, WebException: record<Errors: list<string>, StatusCode: int>> {
+]: nothing -> oneof<record<AmountLeft: string, AmountUsed: string, Links: record<Parent: string, Self: string>, Name: string, TotalAmount: string, WebException: record<Errors: list<string>, StatusCode: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
-  let qp = [(serialize-qp "module" $qp_module "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
+  if ($module == null) { error make --unspanned { msg: "required query parameter 'module' missing: pass --module" } }
+  let qp = [(serialize-qp "module" $module "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/dataservers/{web_id}/license") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"module": $qp_module, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact)
+    query: ({"module": $module, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -6899,7 +6874,7 @@ export def "data-server-get-points" [
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --start-index: int # The starting index (zero based) of the items to be returned. The default is '0'.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<Descriptor: string, DigitalSetName: string, DisplayDigits: int, EngineeringUnits: string, Future: bool, Id: int, Links: record, Name: string, Path: string, PointClass: string, PointType: string, Span: float, Step: bool, WebException: record, WebId: string, Zero: float>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<Descriptor: string, DigitalSetName: string, DisplayDigits: int, EngineeringUnits: string, Future: bool, Id: int, Links: record, Name: string, Path: string, PointClass: string, PointType: string, Span: float, Step: bool, WebException: record, WebId: string, Zero: float>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -6925,8 +6900,6 @@ export def "data-server-get-points" [
 #
 # POST /dataservers/{webId}/points
 # operationId: DataServer_CreatePoint
-# --Links shape: {Attributes?: string, DataServer?: string, EndValue?: string, InterpolatedData?: string, PlotData?: string, RecordedData?: string, Self?: string, SummaryData?: string, Value?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "data-server-create-point" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6996,12 +6969,13 @@ export def "element-category-get-by-path" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --path: string # The path to the target element category.
+  --path: string # The path to the target element category. (required)
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Description: string, Id: string, Links: record<Database: string, Security: string, SecurityEntries: string, Self: string>, Name: string, Path: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
+]: nothing -> oneof<record<Description: string, Id: string, Links: record<Database: string, Security: string, SecurityEntries: string, Self: string>, Name: string, Path: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($path == null) { error make --unspanned { msg: "required query parameter 'path' missing: pass --path" } }
   let qp = [(serialize-qp "path" $path "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/elementcategories" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -7075,7 +7049,7 @@ export def "element-category-get" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Description: string, Id: string, Links: record<Database: string, Security: string, SecurityEntries: string, Self: string>, Name: string, Path: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
+]: nothing -> oneof<record<Description: string, Id: string, Links: record<Database: string, Security: string, SecurityEntries: string, Self: string>, Name: string, Path: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -7101,8 +7075,6 @@ export def "element-category-get" [
 #
 # PATCH /elementcategories/{webId}
 # operationId: ElementCategory_Update
-# --Links shape: {Database?: string, Security?: string, SecurityEntries?: string, Self?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "element-category-update" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7162,14 +7134,15 @@ export def "element-category-get-security" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --user-identity: list<string> # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned.
+  --user-identity: list<string> # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned. (required)
   --force-refresh: oneof<nothing, bool> # Indicates if the security cache should be refreshed before getting security information. The default is 'false'.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<CanAnnotate: bool, CanDelete: bool, CanExecute: bool, CanRead: bool, CanReadData: bool, CanSubscribe: bool, CanSubscribeOthers: bool, CanWrite: bool, CanWriteData: bool, HasAdmin: bool, Links: record, OwnerWebId: string, Rights: list, SecurityItem: string, UserIdentity: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<CanAnnotate: bool, CanDelete: bool, CanExecute: bool, CanRead: bool, CanReadData: bool, CanSubscribe: bool, CanSubscribeOthers: bool, CanWrite: bool, CanWriteData: bool, HasAdmin: bool, Links: record, OwnerWebId: string, Rights: list, SecurityItem: string, UserIdentity: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($user_identity == null) { error make --unspanned { msg: "required query parameter 'userIdentity' missing: pass --user-identity" } }
   let qp = [(serialize-qp "userIdentity" $user_identity "multi") (serialize-qp "forceRefresh" $force_refresh "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elementcategories/{web_id}/security") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -7207,7 +7180,7 @@ export def "element-category-get-security-entries" [
   --name-filter: string # The name query string used for filtering security entries. The default is no filter.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<AllowRights: list, DenyRights: list, Links: record, Name: string, SecurityIdentityName: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<AllowRights: list, DenyRights: list, Links: record, Name: string, SecurityIdentityName: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -7233,8 +7206,6 @@ export def "element-category-get-security-entries" [
 #
 # POST /elementcategories/{webId}/securityentries
 # operationId: ElementCategory_CreateSecurityEntry
-# --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "element-category-create-security-entry" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7340,7 +7311,7 @@ export def "element-category-get-security-entry-by-name" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<AllowRights: list<string>, DenyRights: list<string>, Links: record<SecurableObject: string, SecurityIdentity: string, Self: string>, Name: string, SecurityIdentityName: string, WebException: record<Errors: list<string>, StatusCode: int>> {
+]: nothing -> oneof<record<AllowRights: list<string>, DenyRights: list<string>, Links: record<SecurableObject: string, SecurityIdentity: string, Self: string>, Name: string, SecurityIdentityName: string, WebException: record<Errors: list<string>, StatusCode: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -7367,8 +7338,6 @@ export def "element-category-get-security-entry-by-name" [
 #
 # PUT /elementcategories/{webId}/securityentries/{name}
 # operationId: ElementCategory_UpdateSecurityEntry
-# --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "element-category-update-security-entry" [
   web_id: string
   name: string
@@ -7430,13 +7399,14 @@ export def "element-get-by-path" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --path: string # The path to the element.
+  --path: string # The path to the element. (required)
   --associations: string # Associated values to return in the response, separated by semicolons (;). This call supports Paths to return all paths to the element. If this parameter is not specified, paths are not returned.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<CategoryNames: list<string>, Description: string, Errors: table<FieldName: string, Message: list>, ExtendedProperties: record, HasChildren: bool, Id: string, Links: record<Analyses: string, Attributes: string, Categories: string, Database: string, DefaultAttribute: string, Elements: string, EndValue: string, EventFrames: string, InterpolatedData: string, NotificationRules: string, Parent: string, PlotData: string, RecordedData: string, Security: string, SecurityEntries: string, Self: string, SummaryData: string, Template: string, Value: string>, Name: string, Path: string, Paths: list<string>, TemplateName: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
+]: nothing -> oneof<record<CategoryNames: list<string>, Description: string, Errors: table<FieldName: string, Message: list>, ExtendedProperties: record, HasChildren: bool, Id: string, Links: record<Analyses: string, Attributes: string, Categories: string, Database: string, DefaultAttribute: string, Elements: string, EndValue: string, EventFrames: string, InterpolatedData: string, NotificationRules: string, Parent: string, PlotData: string, RecordedData: string, Security: string, SecurityEntries: string, Self: string, SummaryData: string, Template: string, Value: string>, Name: string, Path: string, Paths: list<string>, TemplateName: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($path == null) { error make --unspanned { msg: "required query parameter 'path' missing: pass --path" } }
   let qp = [(serialize-qp "path" $path "scalar") (serialize-qp "associations" $associations "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/elements" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -7477,7 +7447,7 @@ export def "element-get-multiple" [
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id: list<string> # The ID of an element. Multiple elements may be specified with multiple instances of the parameter.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<Exception: record, Identifier: string, IdentifierType: string, Object: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<Exception: record, Identifier: string, IdentifierType: string, Object: record>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "asParallel" $as_parallel "scalar") (serialize-qp "associations" $associations "scalar") (serialize-qp "includeMode" $include_mode "scalar") (serialize-qp "path" $path "multi") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webId" $web_id "multi") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
@@ -7521,7 +7491,7 @@ export def "element-get-elements-query" [
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --start-index: int # The starting index (zero based) of the items to be returned. The default is 0.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<CategoryNames: list, Description: string, Errors: list, ExtendedProperties: record, HasChildren: bool, Id: string, Links: record, Name: string, Path: string, Paths: list, TemplateName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<CategoryNames: list, Description: string, Errors: list, ExtendedProperties: record, HasChildren: bool, Id: string, Links: record, Name: string, Path: string, Paths: list, TemplateName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "associations" $associations "scalar") (serialize-qp "databaseWebId" $database_web_id "scalar") (serialize-qp "maxCount" $max_count "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "queryDate" $query_date "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
@@ -7546,8 +7516,6 @@ export def "element-get-elements-query" [
 #
 # POST /elements/searchbyattribute
 # operationId: Element_CreateSearchByAttribute
-# --ValueQueries item shape: {AttributeName?: string, AttributeUOM?: string, AttributeValue?: record, SearchOperator?: string, WebException?: record}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "element-create-search-by-attribute" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7566,7 +7534,7 @@ export def "element-create-search-by-attribute" [
   --search-root: string # format: webid, e.g. I1RDDqD5loBNH0erqeqJodtALA8fbgUnyQW02v-gLGIxumSg
   --value-queries: list # item shape: {AttributeName?: string, AttributeUOM?: string, AttributeValue?: record, SearchOperator?: string, WebException?: record}
   --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-]: any -> record<Items: table<CategoryNames: list, Description: string, Errors: list, ExtendedProperties: record, HasChildren: bool, Id: string, Links: record, Name: string, Path: string, Paths: list, TemplateName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: any -> oneof<record<Items: table<CategoryNames: list, Description: string, Errors: list, ExtendedProperties: record, HasChildren: bool, Id: string, Links: record, Name: string, Path: string, Paths: list, TemplateName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7617,7 +7585,7 @@ export def "element-execute-search-by-attribute" [
   --sort-order: string # The order that the returned collection is sorted. The default is 'Ascending'.
   --start-index: int # The starting index (zero based) of the items to be returned. The default is 0.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<CategoryNames: list, Description: string, Errors: list, ExtendedProperties: record, HasChildren: bool, Id: string, Links: record, Name: string, Path: string, Paths: list, TemplateName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<CategoryNames: list, Description: string, Errors: list, ExtendedProperties: record, HasChildren: bool, Id: string, Links: record, Name: string, Path: string, Paths: list, TemplateName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($search_id | is-empty) { error make --unspanned { msg: "path parameter 'searchId' must be non-empty" } }
@@ -7695,7 +7663,7 @@ export def "element-get" [
   --associations: string # Associated values to return in the response, separated by semicolons (;). This call supports Paths to return all paths to the element. If this parameter is not specified, paths are not returned.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<CategoryNames: list<string>, Description: string, Errors: table<FieldName: string, Message: list>, ExtendedProperties: record, HasChildren: bool, Id: string, Links: record<Analyses: string, Attributes: string, Categories: string, Database: string, DefaultAttribute: string, Elements: string, EndValue: string, EventFrames: string, InterpolatedData: string, NotificationRules: string, Parent: string, PlotData: string, RecordedData: string, Security: string, SecurityEntries: string, Self: string, SummaryData: string, Template: string, Value: string>, Name: string, Path: string, Paths: list<string>, TemplateName: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
+]: nothing -> oneof<record<CategoryNames: list<string>, Description: string, Errors: table<FieldName: string, Message: list>, ExtendedProperties: record, HasChildren: bool, Id: string, Links: record<Analyses: string, Attributes: string, Categories: string, Database: string, DefaultAttribute: string, Elements: string, EndValue: string, EventFrames: string, InterpolatedData: string, NotificationRules: string, Parent: string, PlotData: string, RecordedData: string, Security: string, SecurityEntries: string, Self: string, SummaryData: string, Template: string, Value: string>, Name: string, Path: string, Paths: list<string>, TemplateName: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -7721,9 +7689,6 @@ export def "element-get" [
 #
 # PATCH /elements/{webId}
 # operationId: Element_Update
-# --Errors item shape: {FieldName?: string, Message?: list<string>}
-# --Links shape: {Analyses?: string, Attributes?: string, Categories?: string, Database?: string, DefaultAttribute?: string, Elements?: string, EndValue?: string, EventFrames?: string, InterpolatedData?: string, NotificationRules?: string, Parent?: string, PlotData?: string, RecordedData?: string, Security?: string, SecurityEntries?: string, Self?: string, SummaryData?: string, Template?: string, Value?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "element-update" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7795,7 +7760,7 @@ export def "element-get-analyses" [
   --sort-order: string # The order that the returned collection is sorted. The default is 'Ascending'.
   --start-index: int # The starting index (zero based) of the items to be returned. The default is 0.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<AnalysisRulePlugInName: string, AutoCreated: bool, CategoryNames: list, Description: string, GroupId: int, HasNotification: bool, HasTarget: bool, HasTemplate: bool, Id: string, IsConfigured: bool, IsTimeRuleDefinedByTemplate: bool, Links: record, MaximumQueueSize: int, Name: string, OutputTime: string, Path: string, Priority: string, PublishResults: bool, Status: string, TargetWebId: string, TemplateName: string, TimeRulePlugInName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<AnalysisRulePlugInName: string, AutoCreated: bool, CategoryNames: list, Description: string, GroupId: int, HasNotification: bool, HasTarget: bool, HasTemplate: bool, Id: string, IsConfigured: bool, IsTimeRuleDefinedByTemplate: bool, Links: record, MaximumQueueSize: int, Name: string, OutputTime: string, Path: string, Priority: string, PublishResults: bool, Status: string, TargetWebId: string, TemplateName: string, TimeRulePlugInName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -7821,8 +7786,6 @@ export def "element-get-analyses" [
 #
 # POST /elements/{webId}/analyses
 # operationId: Element_CreateAnalysis
-# --Links shape: {AnalysisRule?: string, AnalysisRulePlugIn?: string, Categories?: string, Database?: string, Security?: string, SecurityEntries?: string, Self?: string, Target?: string, Template?: string, TimeRule?: string, TimeRulePlugIn?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "element-create-analysis" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7917,7 +7880,7 @@ export def "element-get-attributes" [
   --trait-category: list<string> # The category of the attribute traits. Multiple categories may be specified with multiple instances of the parameter. If the parameter is not specified, or if its value is "all", then all attribute traits of all categories will be returned.
   --value-type: string # Specify that returned attributes' value type must be the given value type. The default is no value type filter.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<CategoryNames: list, ConfigString: string, DataReference: record, DataReferencePlugIn: string, DefaultUnitsName: string, DefaultUnitsNameAbbreviation: string, Description: string, DisplayDigits: int, HasChildren: bool, Id: string, IsConfigurationItem: bool, IsExcluded: bool, IsHidden: bool, IsManualDataEntry: bool, Links: record, Name: string, Path: string, Paths: list, Span: float, Step: bool, TraitName: string, Type: string, TypeQualifier: string, WebException: record, WebId: string, Zero: float>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<CategoryNames: list, ConfigString: string, DataReference: record, DataReferencePlugIn: string, DefaultUnitsName: string, DefaultUnitsNameAbbreviation: string, Description: string, DisplayDigits: int, HasChildren: bool, Id: string, IsConfigurationItem: bool, IsExcluded: bool, IsHidden: bool, IsManualDataEntry: bool, Links: record, Name: string, Path: string, Paths: list, Span: float, Step: bool, TraitName: string, Type: string, TypeQualifier: string, WebException: record, WebId: string, Zero: float>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -7943,9 +7906,6 @@ export def "element-get-attributes" [
 #
 # POST /elements/{webId}/attributes
 # operationId: Element_CreateAttribute
-# --DataReference shape: {PIPoint?: record, Type?: string, WebException?: record}
-# --Links shape: {Attributes?: string, Categories?: string, Element?: string, EndValue?: string, EnumerationSet?: string, EnumerationValues?: string, EventFrame?: string, InterpolatedData?: string, Parent?: string, PlotData?: string, Point?: string, RecordedData?: string, Self?: string, SummaryData?: string, Template?: string, Trait?: string, Value?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "element-create-attribute" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8028,7 +7988,7 @@ export def "element-get-categories" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<Description: string, Id: string, Links: record, Name: string, Path: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<Description: string, Id: string, Links: record, Name: string, Path: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -8122,7 +8082,7 @@ export def "element-find-element-attributes" [
   --sort-order: string # The order that the returned collection is sorted. The default is 'Ascending'.
   --start-index: int # The starting index (zero based) of the items to be returned. The default is 0.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<CategoryNames: list, ConfigString: string, DataReference: record, DataReferencePlugIn: string, DefaultUnitsName: string, DefaultUnitsNameAbbreviation: string, Description: string, DisplayDigits: int, HasChildren: bool, Id: string, IsConfigurationItem: bool, IsExcluded: bool, IsHidden: bool, IsManualDataEntry: bool, Links: record, Name: string, Path: string, Paths: list, Span: float, Step: bool, TraitName: string, Type: string, TypeQualifier: string, WebException: record, WebId: string, Zero: float>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<CategoryNames: list, ConfigString: string, DataReference: record, DataReferencePlugIn: string, DefaultUnitsName: string, DefaultUnitsNameAbbreviation: string, Description: string, DisplayDigits: int, HasChildren: bool, Id: string, IsConfigurationItem: bool, IsExcluded: bool, IsHidden: bool, IsManualDataEntry: bool, Links: record, Name: string, Path: string, Paths: list, Span: float, Step: bool, TraitName: string, Type: string, TypeQualifier: string, WebException: record, WebId: string, Zero: float>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -8173,7 +8133,7 @@ export def "element-get-elements" [
   --start-index: int # The starting index (zero based) of the items to be returned. The default is 0.
   --template-name: string # Specify that returned elements must have this template or a template derived from this template. The default is no template filter.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<CategoryNames: list, Description: string, Errors: list, ExtendedProperties: record, HasChildren: bool, Id: string, Links: record, Name: string, Path: string, Paths: list, TemplateName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<CategoryNames: list, Description: string, Errors: list, ExtendedProperties: record, HasChildren: bool, Id: string, Links: record, Name: string, Path: string, Paths: list, TemplateName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -8199,9 +8159,6 @@ export def "element-get-elements" [
 #
 # POST /elements/{webId}/elements
 # operationId: Element_CreateElement
-# --Errors item shape: {FieldName?: string, Message?: list<string>}
-# --Links shape: {Analyses?: string, Attributes?: string, Categories?: string, Database?: string, DefaultAttribute?: string, Elements?: string, EndValue?: string, EventFrames?: string, InterpolatedData?: string, NotificationRules?: string, Parent?: string, PlotData?: string, RecordedData?: string, Security?: string, SecurityEntries?: string, Self?: string, SummaryData?: string, Template?: string, Value?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "element-create-element" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8284,7 +8241,7 @@ export def "element-get-event-frames" [
   --start-time: string # The starting time for the search. startTime must be less than or equal to the endTime. The searchMode parameter will control whether the comparison will be performed against the event frame's startTime or endTime. The default is '*-8h'.
   --template-name: string # Specify that returned event frames must have this template or a template derived from this template. The default is no template filter. Specify this parameter by name.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<AcknowledgedBy: string, AcknowledgedDate: string, AreValuesCaptured: bool, CanBeAcknowledged: bool, CategoryNames: list, Description: string, EndTime: string, ExtendedProperties: record, HasChildren: bool, Id: string, IsAcknowledged: bool, IsAnnotated: bool, IsLocked: bool, Links: record, Name: string, Path: string, RefElementWebIds: list, Security: record, Severity: string, StartTime: string, TemplateName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<AcknowledgedBy: string, AcknowledgedDate: string, AreValuesCaptured: bool, CanBeAcknowledged: bool, CategoryNames: list, Description: string, EndTime: string, ExtendedProperties: record, HasChildren: bool, Id: string, IsAcknowledged: bool, IsAnnotated: bool, IsLocked: bool, Links: record, Name: string, Path: string, RefElementWebIds: list, Security: record, Severity: string, StartTime: string, TemplateName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -8324,7 +8281,7 @@ export def "element-get-notification-rules" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<AutoCreated: bool, CategoryNames: list, Criteria: string, Description: string, Id: string, MultiTriggerEventOption: string, Name: string, NonrepetitionInterval: string, Path: string, ResendInterval: string, Status: string, TemplateName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<AutoCreated: bool, CategoryNames: list, Criteria: string, Description: string, Id: string, MultiTriggerEventOption: string, Name: string, NonrepetitionInterval: string, Path: string, ResendInterval: string, Status: string, TemplateName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -8350,7 +8307,6 @@ export def "element-get-notification-rules" [
 #
 # POST /elements/{webId}/notificationrules
 # operationId: Element_CreateNotificationRule
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "element-create-notification-rule" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8420,7 +8376,7 @@ export def "element-get-paths" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --relative-path: string # The full path in ShortName format to the parent object that the returned paths should be relative. For example, "\\Server1\Database2" would return all the paths to the element relative to the database. A path of "\\Server1\Database2\RootElement" would return all paths to the element relative to "RootElement". If null, then all the full paths to the element will be returned.
-]: nothing -> record<Items: list<string>> {
+]: nothing -> oneof<record<Items: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -8458,11 +8414,12 @@ export def "element-remove-referenced-element" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --referenced-element-web-id: list<string> # The ID of the referenced element. Multiple referenced elements may be specified with multiple instances of the parameter.
+  --referenced-element-web-id: list<string> # The ID of the referenced element. Multiple referenced elements may be specified with multiple instances of the parameter. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($referenced_element_web_id == null) { error make --unspanned { msg: "required query parameter 'referencedElementWebId' missing: pass --referenced-element-web-id" } }
   let qp = [(serialize-qp "referencedElementWebId" $referenced_element_web_id "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elements/{web_id}/referencedelements") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -8509,7 +8466,7 @@ export def "element-get-referenced-elements" [
   --start-index: int # The starting index (zero based) of the items to be returned. The default is 0.
   --template-name: string # Specify that returned elements must have this template or a template derived from this template. The default is no template filter.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<CategoryNames: list, Description: string, Errors: list, ExtendedProperties: record, HasChildren: bool, Id: string, Links: record, Name: string, Path: string, Paths: list, TemplateName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<CategoryNames: list, Description: string, Errors: list, ExtendedProperties: record, HasChildren: bool, Id: string, Links: record, Name: string, Path: string, Paths: list, TemplateName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -8547,12 +8504,13 @@ export def "element-add-referenced-element" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --referenced-element-web-id: list<string> # The ID of the referenced element. Multiple referenced elements may be specified with multiple instances of the parameter.
+  --referenced-element-web-id: list<string> # The ID of the referenced element. Multiple referenced elements may be specified with multiple instances of the parameter. (required)
   --reference-type: string # The name of the reference type between the parent and the referenced element. The default is "parent-child".
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($referenced_element_web_id == null) { error make --unspanned { msg: "required query parameter 'referencedElementWebId' missing: pass --referenced-element-web-id" } }
   let qp = [(serialize-qp "referencedElementWebId" $referenced_element_web_id "multi") (serialize-qp "referenceType" $reference_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elements/{web_id}/referencedelements") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -8587,14 +8545,15 @@ export def "element-get-security" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --user-identity: list<string> # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned.
+  --user-identity: list<string> # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned. (required)
   --force-refresh: oneof<nothing, bool> # Indicates if the security cache should be refreshed before getting security information. The default is 'false'.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<CanAnnotate: bool, CanDelete: bool, CanExecute: bool, CanRead: bool, CanReadData: bool, CanSubscribe: bool, CanSubscribeOthers: bool, CanWrite: bool, CanWriteData: bool, HasAdmin: bool, Links: record, OwnerWebId: string, Rights: list, SecurityItem: string, UserIdentity: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<CanAnnotate: bool, CanDelete: bool, CanExecute: bool, CanRead: bool, CanReadData: bool, CanSubscribe: bool, CanSubscribeOthers: bool, CanWrite: bool, CanWriteData: bool, HasAdmin: bool, Links: record, OwnerWebId: string, Rights: list, SecurityItem: string, UserIdentity: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($user_identity == null) { error make --unspanned { msg: "required query parameter 'userIdentity' missing: pass --user-identity" } }
   let qp = [(serialize-qp "userIdentity" $user_identity "multi") (serialize-qp "forceRefresh" $force_refresh "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elements/{web_id}/security") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -8632,7 +8591,7 @@ export def "element-get-security-entries" [
   --name-filter: string # The name query string used for filtering security entries. The default is no filter.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<AllowRights: list, DenyRights: list, Links: record, Name: string, SecurityIdentityName: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<AllowRights: list, DenyRights: list, Links: record, Name: string, SecurityIdentityName: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -8658,8 +8617,6 @@ export def "element-get-security-entries" [
 #
 # POST /elements/{webId}/securityentries
 # operationId: Element_CreateSecurityEntry
-# --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "element-create-security-entry" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8765,7 +8722,7 @@ export def "element-get-security-entry-by-name" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<AllowRights: list<string>, DenyRights: list<string>, Links: record<SecurableObject: string, SecurityIdentity: string, Self: string>, Name: string, SecurityIdentityName: string, WebException: record<Errors: list<string>, StatusCode: int>> {
+]: nothing -> oneof<record<AllowRights: list<string>, DenyRights: list<string>, Links: record<SecurableObject: string, SecurityIdentity: string, Self: string>, Name: string, SecurityIdentityName: string, WebException: record<Errors: list<string>, StatusCode: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -8792,8 +8749,6 @@ export def "element-get-security-entry-by-name" [
 #
 # PUT /elements/{webId}/securityentries/{name}
 # operationId: Element_UpdateSecurityEntry
-# --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "element-update-security-entry" [
   web_id: string
   name: string
@@ -8855,12 +8810,13 @@ export def "element-template-get-by-path" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --path: string # The path to the element template.
+  --path: string # The path to the element template. (required)
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<AllowElementToExtend: bool, BaseTemplate: string, CanBeAcknowledged: bool, CategoryNames: list<string>, Description: string, ExtendedProperties: record, Id: string, InstanceType: string, Links: record<AnalysisTemplates: string, AttributeTemplates: string, BaseTemplate: string, BaseTemplates: string, Categories: string, Database: string, DefaultAttribute: string, DerivedTemplates: string, NotificationRuleTemplates: string, Security: string, SecurityEntries: string, Self: string>, Name: string, NamingPattern: string, Path: string, Severity: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
+]: nothing -> oneof<record<AllowElementToExtend: bool, BaseTemplate: string, CanBeAcknowledged: bool, CategoryNames: list<string>, Description: string, ExtendedProperties: record, Id: string, InstanceType: string, Links: record<AnalysisTemplates: string, AttributeTemplates: string, BaseTemplate: string, BaseTemplates: string, Categories: string, Database: string, DefaultAttribute: string, DerivedTemplates: string, NotificationRuleTemplates: string, Security: string, SecurityEntries: string, Self: string>, Name: string, NamingPattern: string, Path: string, Severity: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($path == null) { error make --unspanned { msg: "required query parameter 'path' missing: pass --path" } }
   let qp = [(serialize-qp "path" $path "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/elementtemplates" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -8934,7 +8890,7 @@ export def "element-template-get" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<AllowElementToExtend: bool, BaseTemplate: string, CanBeAcknowledged: bool, CategoryNames: list<string>, Description: string, ExtendedProperties: record, Id: string, InstanceType: string, Links: record<AnalysisTemplates: string, AttributeTemplates: string, BaseTemplate: string, BaseTemplates: string, Categories: string, Database: string, DefaultAttribute: string, DerivedTemplates: string, NotificationRuleTemplates: string, Security: string, SecurityEntries: string, Self: string>, Name: string, NamingPattern: string, Path: string, Severity: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
+]: nothing -> oneof<record<AllowElementToExtend: bool, BaseTemplate: string, CanBeAcknowledged: bool, CategoryNames: list<string>, Description: string, ExtendedProperties: record, Id: string, InstanceType: string, Links: record<AnalysisTemplates: string, AttributeTemplates: string, BaseTemplate: string, BaseTemplates: string, Categories: string, Database: string, DefaultAttribute: string, DerivedTemplates: string, NotificationRuleTemplates: string, Security: string, SecurityEntries: string, Self: string>, Name: string, NamingPattern: string, Path: string, Severity: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -8960,8 +8916,6 @@ export def "element-template-get" [
 #
 # PATCH /elementtemplates/{webId}
 # operationId: ElementTemplate_Update
-# --Links shape: {AnalysisTemplates?: string, AttributeTemplates?: string, BaseTemplate?: string, BaseTemplates?: string, Categories?: string, Database?: string, DefaultAttribute?: string, DerivedTemplates?: string, NotificationRuleTemplates?: string, Security?: string, SecurityEntries?: string, Self?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "element-template-update" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9031,7 +8985,7 @@ export def "element-template-get-analysis-templates" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<AnalysisRulePlugInName: string, CategoryNames: list, CreateEnabled: bool, Description: string, GroupId: int, HasNotificationTemplate: bool, HasTarget: bool, Id: string, Links: record, Name: string, OutputTime: string, Path: string, TargetName: string, TimeRulePlugInName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<AnalysisRulePlugInName: string, CategoryNames: list, CreateEnabled: bool, Description: string, GroupId: int, HasNotificationTemplate: bool, HasTarget: bool, Id: string, Links: record, Name: string, OutputTime: string, Path: string, TargetName: string, TimeRulePlugInName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -9076,7 +9030,7 @@ export def "element-template-get-attribute-templates" [
   --show-inherited: oneof<nothing, bool> # Specifies if the result should include attribute templates inherited from base element templates. The default is 'false'.
   --start-index: int # The starting index (zero based) of the items to be returned. The default is 0.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<CategoryNames: list, ConfigString: string, DataReferencePlugIn: string, DefaultUnitsName: string, DefaultUnitsNameAbbreviation: string, DefaultValue: record, Description: string, HasChildren: bool, Id: string, IsConfigurationItem: bool, IsExcluded: bool, IsHidden: bool, IsManualDataEntry: bool, Links: record, Name: string, Path: string, TraitName: string, Type: string, TypeQualifier: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<CategoryNames: list, ConfigString: string, DataReferencePlugIn: string, DefaultUnitsName: string, DefaultUnitsNameAbbreviation: string, DefaultValue: record, Description: string, HasChildren: bool, Id: string, IsConfigurationItem: bool, IsExcluded: bool, IsHidden: bool, IsManualDataEntry: bool, Links: record, Name: string, Path: string, TraitName: string, Type: string, TypeQualifier: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -9102,8 +9056,6 @@ export def "element-template-get-attribute-templates" [
 #
 # POST /elementtemplates/{webId}/attributetemplates
 # operationId: ElementTemplate_CreateAttributeTemplate
-# --Links shape: {AttributeTemplates?: string, Categories?: string, ElementTemplate?: string, Parent?: string, Self?: string, Trait?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "element-template-create-attribute-template" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9182,7 +9134,7 @@ export def "element-template-get-base-element-templates" [
   --max-count: int # The maximum number of objects to be returned. The default is 1000.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<AllowElementToExtend: bool, BaseTemplate: string, CanBeAcknowledged: bool, CategoryNames: list, Description: string, ExtendedProperties: record, Id: string, InstanceType: string, Links: record, Name: string, NamingPattern: string, Path: string, Severity: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<AllowElementToExtend: bool, BaseTemplate: string, CanBeAcknowledged: bool, CategoryNames: list, Description: string, ExtendedProperties: record, Id: string, InstanceType: string, Links: record, Name: string, NamingPattern: string, Path: string, Severity: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -9223,7 +9175,7 @@ export def "element-template-get-categories" [
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --show-inherited: oneof<nothing, bool> # Specifies if the result should include categories inherited from base element templates. The default is 'false'.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<Description: string, Id: string, Links: record, Name: string, Path: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<Description: string, Id: string, Links: record, Name: string, Path: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -9265,7 +9217,7 @@ export def "element-template-get-derived-element-templates" [
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --show-descendants: oneof<nothing, bool> # Specifies if the result should include all descendant element templates from the current element template, even indirect ones. The default is 'false'.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<AllowElementToExtend: bool, BaseTemplate: string, CanBeAcknowledged: bool, CategoryNames: list, Description: string, ExtendedProperties: record, Id: string, InstanceType: string, Links: record, Name: string, NamingPattern: string, Path: string, Severity: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<AllowElementToExtend: bool, BaseTemplate: string, CanBeAcknowledged: bool, CategoryNames: list, Description: string, ExtendedProperties: record, Id: string, InstanceType: string, Links: record, Name: string, NamingPattern: string, Path: string, Severity: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -9305,7 +9257,7 @@ export def "element-template-get-notification-rule-templates" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<CategoryNames: list, Criteria: string, Description: string, Id: string, MultiTriggerEventOption: string, Name: string, NonrepetitionInterval: string, Path: string, ResendInterval: string, Status: string, TemplateName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<CategoryNames: list, Criteria: string, Description: string, Id: string, MultiTriggerEventOption: string, Name: string, NonrepetitionInterval: string, Path: string, ResendInterval: string, Status: string, TemplateName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -9331,7 +9283,6 @@ export def "element-template-get-notification-rule-templates" [
 #
 # POST /elementtemplates/{webId}/notificationruletemplates
 # operationId: ElementTemplate_CreateNotificationRuleTemplate
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "element-template-create-notification-rule-template" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9399,14 +9350,15 @@ export def "element-template-get-security" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --user-identity: list<string> # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned.
+  --user-identity: list<string> # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned. (required)
   --force-refresh: oneof<nothing, bool> # Indicates if the security cache should be refreshed before getting security information. The default is 'false'.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<CanAnnotate: bool, CanDelete: bool, CanExecute: bool, CanRead: bool, CanReadData: bool, CanSubscribe: bool, CanSubscribeOthers: bool, CanWrite: bool, CanWriteData: bool, HasAdmin: bool, Links: record, OwnerWebId: string, Rights: list, SecurityItem: string, UserIdentity: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<CanAnnotate: bool, CanDelete: bool, CanExecute: bool, CanRead: bool, CanReadData: bool, CanSubscribe: bool, CanSubscribeOthers: bool, CanWrite: bool, CanWriteData: bool, HasAdmin: bool, Links: record, OwnerWebId: string, Rights: list, SecurityItem: string, UserIdentity: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($user_identity == null) { error make --unspanned { msg: "required query parameter 'userIdentity' missing: pass --user-identity" } }
   let qp = [(serialize-qp "userIdentity" $user_identity "multi") (serialize-qp "forceRefresh" $force_refresh "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elementtemplates/{web_id}/security") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -9444,7 +9396,7 @@ export def "element-template-get-security-entries" [
   --name-filter: string # The name query string used for filtering security entries. The default is no filter.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<AllowRights: list, DenyRights: list, Links: record, Name: string, SecurityIdentityName: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<AllowRights: list, DenyRights: list, Links: record, Name: string, SecurityIdentityName: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -9470,8 +9422,6 @@ export def "element-template-get-security-entries" [
 #
 # POST /elementtemplates/{webId}/securityentries
 # operationId: ElementTemplate_CreateSecurityEntry
-# --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "element-template-create-security-entry" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9577,7 +9527,7 @@ export def "element-template-get-security-entry-by-name" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<AllowRights: list, DenyRights: list, Links: record, Name: string, SecurityIdentityName: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<AllowRights: list, DenyRights: list, Links: record, Name: string, SecurityIdentityName: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -9604,8 +9554,6 @@ export def "element-template-get-security-entry-by-name" [
 #
 # PUT /elementtemplates/{webId}/securityentries/{name}
 # operationId: ElementTemplate_UpdateSecurityEntry
-# --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "element-template-update-security-entry" [
   web_id: string
   name: string
@@ -9667,12 +9615,13 @@ export def "enumeration-set-get-by-path" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --path: string # The path to the target enumeration set.
+  --path: string # The path to the target enumeration set. (required)
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Description: string, Id: string, Links: record<DataServer: string, Database: string, Security: string, SecurityEntries: string, Self: string, Values: string>, Name: string, Path: string, SerializeDescription: bool, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
+]: nothing -> oneof<record<Description: string, Id: string, Links: record<DataServer: string, Database: string, Security: string, SecurityEntries: string, Self: string, Values: string>, Name: string, Path: string, SerializeDescription: bool, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($path == null) { error make --unspanned { msg: "required query parameter 'path' missing: pass --path" } }
   let qp = [(serialize-qp "path" $path "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/enumerationsets" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -9746,7 +9695,7 @@ export def "enumeration-set-get" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Description: string, Id: string, Links: record<DataServer: string, Database: string, Security: string, SecurityEntries: string, Self: string, Values: string>, Name: string, Path: string, SerializeDescription: bool, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
+]: nothing -> oneof<record<Description: string, Id: string, Links: record<DataServer: string, Database: string, Security: string, SecurityEntries: string, Self: string, Values: string>, Name: string, Path: string, SerializeDescription: bool, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -9772,8 +9721,6 @@ export def "enumeration-set-get" [
 #
 # PATCH /enumerationsets/{webId}
 # operationId: EnumerationSet_Update
-# --Links shape: {DataServer?: string, Database?: string, Security?: string, SecurityEntries?: string, Self?: string, Values?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "enumeration-set-update" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9836,7 +9783,7 @@ export def "enumeration-set-get-values" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<Description: string, Id: string, Links: record, Name: string, Parent: string, Path: string, SerializeDescription: bool, SerializeId: bool, SerializeLinks: bool, SerializePath: bool, SerializeWebId: bool, Value: int, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<Description: string, Id: string, Links: record, Name: string, Parent: string, Path: string, SerializeDescription: bool, SerializeId: bool, SerializeLinks: bool, SerializePath: bool, SerializeWebId: bool, Value: int, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -9862,8 +9809,6 @@ export def "enumeration-set-get-values" [
 #
 # POST /enumerationsets/{webId}/enumerationvalues
 # operationId: EnumerationSet_CreateValue
-# --Links shape: {EnumerationSet?: string, Parent?: string, Self?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "enumeration-set-create-value" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9932,14 +9877,15 @@ export def "enumeration-set-get-security" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --user-identity: list<string> # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned.
+  --user-identity: list<string> # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned. (required)
   --force-refresh: oneof<nothing, bool> # Indicates if the security cache should be refreshed before getting security information. The default is 'false'.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<CanAnnotate: bool, CanDelete: bool, CanExecute: bool, CanRead: bool, CanReadData: bool, CanSubscribe: bool, CanSubscribeOthers: bool, CanWrite: bool, CanWriteData: bool, HasAdmin: bool, Links: record, OwnerWebId: string, Rights: list, SecurityItem: string, UserIdentity: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<CanAnnotate: bool, CanDelete: bool, CanExecute: bool, CanRead: bool, CanReadData: bool, CanSubscribe: bool, CanSubscribeOthers: bool, CanWrite: bool, CanWriteData: bool, HasAdmin: bool, Links: record, OwnerWebId: string, Rights: list, SecurityItem: string, UserIdentity: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($user_identity == null) { error make --unspanned { msg: "required query parameter 'userIdentity' missing: pass --user-identity" } }
   let qp = [(serialize-qp "userIdentity" $user_identity "multi") (serialize-qp "forceRefresh" $force_refresh "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/enumerationsets/{web_id}/security") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -9977,7 +9923,7 @@ export def "enumeration-set-get-security-entries" [
   --name-filter: string # The name query string used for filtering security entries. The default is no filter.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<AllowRights: list, DenyRights: list, Links: record, Name: string, SecurityIdentityName: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<AllowRights: list, DenyRights: list, Links: record, Name: string, SecurityIdentityName: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -10003,8 +9949,6 @@ export def "enumeration-set-get-security-entries" [
 #
 # POST /enumerationsets/{webId}/securityentries
 # operationId: EnumerationSet_CreateSecurityEntry
-# --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "enumeration-set-create-security-entry" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10110,7 +10054,7 @@ export def "enumeration-set-get-security-entry-by-name" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<AllowRights: list<string>, DenyRights: list<string>, Links: record<SecurableObject: string, SecurityIdentity: string, Self: string>, Name: string, SecurityIdentityName: string, WebException: record<Errors: list<string>, StatusCode: int>> {
+]: nothing -> oneof<record<AllowRights: list<string>, DenyRights: list<string>, Links: record<SecurableObject: string, SecurityIdentity: string, Self: string>, Name: string, SecurityIdentityName: string, WebException: record<Errors: list<string>, StatusCode: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -10137,8 +10081,6 @@ export def "enumeration-set-get-security-entry-by-name" [
 #
 # PUT /enumerationsets/{webId}/securityentries/{name}
 # operationId: EnumerationSet_UpdateSecurityEntry
-# --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "enumeration-set-update-security-entry" [
   web_id: string
   name: string
@@ -10200,12 +10142,13 @@ export def "enumeration-value-get-by-path" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --path: string # The path to the target enumeration value.
+  --path: string # The path to the target enumeration value. (required)
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Description: string, Id: string, Links: record<EnumerationSet: string, Parent: string, Self: string>, Name: string, Parent: string, Path: string, SerializeDescription: bool, SerializeId: bool, SerializeLinks: bool, SerializePath: bool, SerializeWebId: bool, Value: int, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
+]: nothing -> oneof<record<Description: string, Id: string, Links: record<EnumerationSet: string, Parent: string, Self: string>, Name: string, Parent: string, Path: string, SerializeDescription: bool, SerializeId: bool, SerializeLinks: bool, SerializePath: bool, SerializeWebId: bool, Value: int, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($path == null) { error make --unspanned { msg: "required query parameter 'path' missing: pass --path" } }
   let qp = [(serialize-qp "path" $path "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/enumerationvalues" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -10279,7 +10222,7 @@ export def "enumeration-value-get" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Description: string, Id: string, Links: record<EnumerationSet: string, Parent: string, Self: string>, Name: string, Parent: string, Path: string, SerializeDescription: bool, SerializeId: bool, SerializeLinks: bool, SerializePath: bool, SerializeWebId: bool, Value: int, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
+]: nothing -> oneof<record<Description: string, Id: string, Links: record<EnumerationSet: string, Parent: string, Self: string>, Name: string, Parent: string, Path: string, SerializeDescription: bool, SerializeId: bool, SerializeLinks: bool, SerializePath: bool, SerializeWebId: bool, Value: int, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -10305,8 +10248,6 @@ export def "enumeration-value-get" [
 #
 # PATCH /enumerationvalues/{webId}
 # operationId: EnumerationValue_UpdateEnumerationValue
-# --Links shape: {EnumerationSet?: string, Parent?: string, Self?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "enumeration-value-update-enumeration-value" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10372,12 +10313,13 @@ export def "event-frame-get-by-path" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --path: string # The path to the event frame.
+  --path: string # The path to the event frame. (required)
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<AcknowledgedBy: string, AcknowledgedDate: string, AreValuesCaptured: bool, CanBeAcknowledged: bool, CategoryNames: list<string>, Description: string, EndTime: string, ExtendedProperties: record, HasChildren: bool, Id: string, IsAcknowledged: bool, IsAnnotated: bool, IsLocked: bool, Links: record<Annotations: string, Attributes: string, Categories: string, Database: string, DefaultAttribute: string, EndValue: string, EventFrames: string, InterpolatedData: string, Parent: string, PlotData: string, PrimaryReferencedElement: string, RecordedData: string, ReferencedElements: string, Security: string, SecurityEntries: string, Self: string, SummaryData: string, Template: string, Value: string>, Name: string, Path: string, RefElementWebIds: list<string>, Security: record<CanAnnotate: bool, CanDelete: bool, CanExecute: bool, CanRead: bool, CanReadData: bool, CanSubscribe: bool, CanSubscribeOthers: bool, CanWrite: bool, CanWriteData: bool, HasAdmin: bool, Rights: list<string>, WebException: record<Errors: list, StatusCode: int>>, Severity: string, StartTime: string, TemplateName: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
+]: nothing -> oneof<record<AcknowledgedBy: string, AcknowledgedDate: string, AreValuesCaptured: bool, CanBeAcknowledged: bool, CategoryNames: list<string>, Description: string, EndTime: string, ExtendedProperties: record, HasChildren: bool, Id: string, IsAcknowledged: bool, IsAnnotated: bool, IsLocked: bool, Links: record<Annotations: string, Attributes: string, Categories: string, Database: string, DefaultAttribute: string, EndValue: string, EventFrames: string, InterpolatedData: string, Parent: string, PlotData: string, PrimaryReferencedElement: string, RecordedData: string, ReferencedElements: string, Security: string, SecurityEntries: string, Self: string, SummaryData: string, Template: string, Value: string>, Name: string, Path: string, RefElementWebIds: list<string>, Security: record<CanAnnotate: bool, CanDelete: bool, CanExecute: bool, CanRead: bool, CanReadData: bool, CanSubscribe: bool, CanSubscribeOthers: bool, CanWrite: bool, CanWriteData: bool, HasAdmin: bool, Rights: list<string>, WebException: record<Errors: list, StatusCode: int>>, Severity: string, StartTime: string, TemplateName: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($path == null) { error make --unspanned { msg: "required query parameter 'path' missing: pass --path" } }
   let qp = [(serialize-qp "path" $path "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/eventframes" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -10417,7 +10359,7 @@ export def "event-frame-get-multiple" [
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id: list<string> # The ID of an event frame. Multiple event frames may be specified with multiple instances of the parameter.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<Exception: record, Identifier: string, IdentifierType: string, Object: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<Exception: record, Identifier: string, IdentifierType: string, Object: record>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "asParallel" $as_parallel "scalar") (serialize-qp "includeMode" $include_mode "scalar") (serialize-qp "path" $path "multi") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webId" $web_id "multi") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
@@ -10459,7 +10401,7 @@ export def "event-frame-get-event-frames-query" [
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --start-index: int # The starting index (zero based) of the items to be returned. The default is 0.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<AcknowledgedBy: string, AcknowledgedDate: string, AreValuesCaptured: bool, CanBeAcknowledged: bool, CategoryNames: list, Description: string, EndTime: string, ExtendedProperties: record, HasChildren: bool, Id: string, IsAcknowledged: bool, IsAnnotated: bool, IsLocked: bool, Links: record, Name: string, Path: string, RefElementWebIds: list, Security: record, Severity: string, StartTime: string, TemplateName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<AcknowledgedBy: string, AcknowledgedDate: string, AreValuesCaptured: bool, CanBeAcknowledged: bool, CategoryNames: list, Description: string, EndTime: string, ExtendedProperties: record, HasChildren: bool, Id: string, IsAcknowledged: bool, IsAnnotated: bool, IsLocked: bool, Links: record, Name: string, Path: string, RefElementWebIds: list, Security: record, Severity: string, StartTime: string, TemplateName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "databaseWebId" $database_web_id "scalar") (serialize-qp "maxCount" $max_count "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
@@ -10484,8 +10426,6 @@ export def "event-frame-get-event-frames-query" [
 #
 # POST /eventframes/searchbyattribute
 # operationId: EventFrame_CreateSearchByAttribute
-# --ValueQueries item shape: {AttributeName?: string, AttributeUOM?: string, AttributeValue?: record, SearchOperator?: string, WebException?: record}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "event-frame-create-search-by-attribute" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10504,7 +10444,7 @@ export def "event-frame-create-search-by-attribute" [
   --search-root: string # format: webid, e.g. I1RDDqD5loBNH0erqeqJodtALA8fbgUnyQW02v-gLGIxumSg
   --value-queries: list # item shape: {AttributeName?: string, AttributeUOM?: string, AttributeValue?: record, SearchOperator?: string, WebException?: record}
   --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-]: any -> record<Items: table<AcknowledgedBy: string, AcknowledgedDate: string, AreValuesCaptured: bool, CanBeAcknowledged: bool, CategoryNames: list, Description: string, EndTime: string, ExtendedProperties: record, HasChildren: bool, Id: string, IsAcknowledged: bool, IsAnnotated: bool, IsLocked: bool, Links: record, Name: string, Path: string, RefElementWebIds: list, Security: record, Severity: string, StartTime: string, TemplateName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: any -> oneof<record<Items: table<AcknowledgedBy: string, AcknowledgedDate: string, AreValuesCaptured: bool, CanBeAcknowledged: bool, CategoryNames: list, Description: string, EndTime: string, ExtendedProperties: record, HasChildren: bool, Id: string, IsAcknowledged: bool, IsAnnotated: bool, IsLocked: bool, Links: record, Name: string, Path: string, RefElementWebIds: list, Security: record, Severity: string, StartTime: string, TemplateName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10559,7 +10499,7 @@ export def "event-frame-execute-search-by-attribute" [
   --start-index: int # The starting index (zero based) of the items to be returned. The default is 0.
   --start-time: string # The starting time for the search. startTime must be less than or equal to the endTime. The searchMode parameter will control whether the comparison will be performed against the event frame's startTime or endTime. The default is '*-8h'.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<AcknowledgedBy: string, AcknowledgedDate: string, AreValuesCaptured: bool, CanBeAcknowledged: bool, CategoryNames: list, Description: string, EndTime: string, ExtendedProperties: record, HasChildren: bool, Id: string, IsAcknowledged: bool, IsAnnotated: bool, IsLocked: bool, Links: record, Name: string, Path: string, RefElementWebIds: list, Security: record, Severity: string, StartTime: string, TemplateName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<AcknowledgedBy: string, AcknowledgedDate: string, AreValuesCaptured: bool, CanBeAcknowledged: bool, CategoryNames: list, Description: string, EndTime: string, ExtendedProperties: record, HasChildren: bool, Id: string, IsAcknowledged: bool, IsAnnotated: bool, IsLocked: bool, Links: record, Name: string, Path: string, RefElementWebIds: list, Security: record, Severity: string, StartTime: string, TemplateName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($search_id | is-empty) { error make --unspanned { msg: "path parameter 'searchId' must be non-empty" } }
@@ -10636,7 +10576,7 @@ export def "event-frame-get" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<AcknowledgedBy: string, AcknowledgedDate: string, AreValuesCaptured: bool, CanBeAcknowledged: bool, CategoryNames: list<string>, Description: string, EndTime: string, ExtendedProperties: record, HasChildren: bool, Id: string, IsAcknowledged: bool, IsAnnotated: bool, IsLocked: bool, Links: record<Annotations: string, Attributes: string, Categories: string, Database: string, DefaultAttribute: string, EndValue: string, EventFrames: string, InterpolatedData: string, Parent: string, PlotData: string, PrimaryReferencedElement: string, RecordedData: string, ReferencedElements: string, Security: string, SecurityEntries: string, Self: string, SummaryData: string, Template: string, Value: string>, Name: string, Path: string, RefElementWebIds: list<string>, Security: record<CanAnnotate: bool, CanDelete: bool, CanExecute: bool, CanRead: bool, CanReadData: bool, CanSubscribe: bool, CanSubscribeOthers: bool, CanWrite: bool, CanWriteData: bool, HasAdmin: bool, Rights: list<string>, WebException: record<Errors: list, StatusCode: int>>, Severity: string, StartTime: string, TemplateName: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
+]: nothing -> oneof<record<AcknowledgedBy: string, AcknowledgedDate: string, AreValuesCaptured: bool, CanBeAcknowledged: bool, CategoryNames: list<string>, Description: string, EndTime: string, ExtendedProperties: record, HasChildren: bool, Id: string, IsAcknowledged: bool, IsAnnotated: bool, IsLocked: bool, Links: record<Annotations: string, Attributes: string, Categories: string, Database: string, DefaultAttribute: string, EndValue: string, EventFrames: string, InterpolatedData: string, Parent: string, PlotData: string, PrimaryReferencedElement: string, RecordedData: string, ReferencedElements: string, Security: string, SecurityEntries: string, Self: string, SummaryData: string, Template: string, Value: string>, Name: string, Path: string, RefElementWebIds: list<string>, Security: record<CanAnnotate: bool, CanDelete: bool, CanExecute: bool, CanRead: bool, CanReadData: bool, CanSubscribe: bool, CanSubscribeOthers: bool, CanWrite: bool, CanWriteData: bool, HasAdmin: bool, Rights: list<string>, WebException: record<Errors: list, StatusCode: int>>, Severity: string, StartTime: string, TemplateName: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -10662,9 +10602,6 @@ export def "event-frame-get" [
 #
 # PATCH /eventframes/{webId}
 # operationId: EventFrame_Update
-# --Links shape: {Annotations?: string, Attributes?: string, Categories?: string, Database?: string, DefaultAttribute?: string, EndValue?: string, EventFrames?: string, InterpolatedData?: string, Parent?: string, PlotData?: string, PrimaryReferencedElement?: string, RecordedData?: string, ReferencedElements?: string, Security?: string, SecurityEntries?: string, Self?: string, SummaryData?: string, Template?: string, Value?: string}
-# --Security shape: {CanAnnotate?: bool, CanDelete?: bool, CanExecute?: bool, CanRead?: bool, CanReadData?: bool, CanSubscribe?: bool, CanSubscribeOthers?: bool, CanWrite?: bool, CanWriteData?: bool, HasAdmin?: bool, Rights?: list<string>, WebException?: record}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "event-frame-update" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10779,7 +10716,7 @@ export def "event-frame-get-annotations" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<CreationDate: string, Creator: string, Description: string, Errors: list, Id: string, Links: record, Modifier: string, ModifyDate: string, Name: string, Value: record, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<CreationDate: string, Creator: string, Description: string, Errors: list, Id: string, Links: record, Modifier: string, ModifyDate: string, Name: string, Value: record, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -10805,9 +10742,6 @@ export def "event-frame-get-annotations" [
 #
 # POST /eventframes/{webId}/annotations
 # operationId: EventFrame_CreateAnnotation
-# --Errors item shape: {FieldName?: string, Message?: list<string>}
-# --Links shape: {MediaData?: string, MediaMetadata?: string, Owner?: string, Self?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "event-frame-create-annotation" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10915,7 +10849,7 @@ export def "event-frame-get-annotation-by-id" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<CreationDate: string, Creator: string, Description: string, Errors: table<FieldName: string, Message: list>, Id: string, Links: record<MediaData: string, MediaMetadata: string, Owner: string, Self: string>, Modifier: string, ModifyDate: string, Name: string, Value: record, WebException: record<Errors: list<string>, StatusCode: int>> {
+]: nothing -> oneof<record<CreationDate: string, Creator: string, Description: string, Errors: table<FieldName: string, Message: list>, Id: string, Links: record<MediaData: string, MediaMetadata: string, Owner: string, Self: string>, Modifier: string, ModifyDate: string, Name: string, Value: record, WebException: record<Errors: list<string>, StatusCode: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -10942,9 +10876,6 @@ export def "event-frame-get-annotation-by-id" [
 #
 # PATCH /eventframes/{webId}/annotations/{id}
 # operationId: EventFrame_UpdateAnnotation
-# --Errors item shape: {FieldName?: string, Message?: list<string>}
-# --Links shape: {MediaData?: string, MediaMetadata?: string, Owner?: string, Self?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "event-frame-update-annotation" [
   web_id: string
   id: string
@@ -11052,7 +10983,7 @@ export def "event-frame-get-annotation-attachment-media-metadata-by-id" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Author: string, ChangeDate: string, Description: string, Links: record<MediaData: string, Owner: string, Self: string>, Name: string, Size: float, WebException: record<Errors: list<string>, StatusCode: int>> {
+]: nothing -> oneof<record<Author: string, ChangeDate: string, Description: string, Links: record<MediaData: string, Owner: string, Self: string>, Name: string, Size: float, WebException: record<Errors: list<string>, StatusCode: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -11107,7 +11038,7 @@ export def "event-frame-get-attributes" [
   --trait-category: list<string> # The category of the attribute traits. Multiple categories may be specified with multiple instances of the parameter. If the parameter is not specified, or if its value is "all", then all attribute traits of all categories will be returned.
   --value-type: string # Specify that returned attributes' value type must be the given value type. The default is no value type filter.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<CategoryNames: list, ConfigString: string, DataReference: record, DataReferencePlugIn: string, DefaultUnitsName: string, DefaultUnitsNameAbbreviation: string, Description: string, DisplayDigits: int, HasChildren: bool, Id: string, IsConfigurationItem: bool, IsExcluded: bool, IsHidden: bool, IsManualDataEntry: bool, Links: record, Name: string, Path: string, Paths: list, Span: float, Step: bool, TraitName: string, Type: string, TypeQualifier: string, WebException: record, WebId: string, Zero: float>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<CategoryNames: list, ConfigString: string, DataReference: record, DataReferencePlugIn: string, DefaultUnitsName: string, DefaultUnitsNameAbbreviation: string, Description: string, DisplayDigits: int, HasChildren: bool, Id: string, IsConfigurationItem: bool, IsExcluded: bool, IsHidden: bool, IsManualDataEntry: bool, Links: record, Name: string, Path: string, Paths: list, Span: float, Step: bool, TraitName: string, Type: string, TypeQualifier: string, WebException: record, WebId: string, Zero: float>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -11133,9 +11064,6 @@ export def "event-frame-get-attributes" [
 #
 # POST /eventframes/{webId}/attributes
 # operationId: EventFrame_CreateAttribute
-# --DataReference shape: {PIPoint?: record, Type?: string, WebException?: record}
-# --Links shape: {Attributes?: string, Categories?: string, Element?: string, EndValue?: string, EnumerationSet?: string, EnumerationValues?: string, EventFrame?: string, InterpolatedData?: string, Parent?: string, PlotData?: string, Point?: string, RecordedData?: string, Self?: string, SummaryData?: string, Template?: string, Trait?: string, Value?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "event-frame-create-attribute" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11255,7 +11183,7 @@ export def "event-frame-get-categories" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<Description: string, Id: string, Links: record, Name: string, Path: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<Description: string, Id: string, Links: record, Name: string, Path: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -11352,7 +11280,7 @@ export def "event-frame-find-event-frame-attributes" [
   --start-index: int # The starting index (zero based) of the items to be returned. The default is 0.
   --start-time: string # A string representing the earliest starting time for the event frames to be matched. startTime must be less than or equal to the endTime. The default is '*-8h'.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<CategoryNames: list, ConfigString: string, DataReference: record, DataReferencePlugIn: string, DefaultUnitsName: string, DefaultUnitsNameAbbreviation: string, Description: string, DisplayDigits: int, HasChildren: bool, Id: string, IsConfigurationItem: bool, IsExcluded: bool, IsHidden: bool, IsManualDataEntry: bool, Links: record, Name: string, Path: string, Paths: list, Span: float, Step: bool, TraitName: string, Type: string, TypeQualifier: string, WebException: record, WebId: string, Zero: float>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<CategoryNames: list, ConfigString: string, DataReference: record, DataReferencePlugIn: string, DefaultUnitsName: string, DefaultUnitsNameAbbreviation: string, Description: string, DisplayDigits: int, HasChildren: bool, Id: string, IsConfigurationItem: bool, IsExcluded: bool, IsHidden: bool, IsManualDataEntry: bool, Links: record, Name: string, Path: string, Paths: list, Span: float, Step: bool, TraitName: string, Type: string, TypeQualifier: string, WebException: record, WebId: string, Zero: float>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -11408,7 +11336,7 @@ export def "event-frame-get-event-frames" [
   --start-time: string # The starting time for the search. startTime must be less than or equal to the endTime. The searchMode parameter will control whether the comparison will be performed against the event frame's startTime or endTime. The default is '*-8h'.
   --template-name: string # Specify that returned event frames must have this template or a template derived from this template. The default is no template filter. Specify this parameter by name.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<AcknowledgedBy: string, AcknowledgedDate: string, AreValuesCaptured: bool, CanBeAcknowledged: bool, CategoryNames: list, Description: string, EndTime: string, ExtendedProperties: record, HasChildren: bool, Id: string, IsAcknowledged: bool, IsAnnotated: bool, IsLocked: bool, Links: record, Name: string, Path: string, RefElementWebIds: list, Security: record, Severity: string, StartTime: string, TemplateName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<AcknowledgedBy: string, AcknowledgedDate: string, AreValuesCaptured: bool, CanBeAcknowledged: bool, CategoryNames: list, Description: string, EndTime: string, ExtendedProperties: record, HasChildren: bool, Id: string, IsAcknowledged: bool, IsAnnotated: bool, IsLocked: bool, Links: record, Name: string, Path: string, RefElementWebIds: list, Security: record, Severity: string, StartTime: string, TemplateName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -11434,9 +11362,6 @@ export def "event-frame-get-event-frames" [
 #
 # POST /eventframes/{webId}/eventframes
 # operationId: EventFrame_CreateEventFrame
-# --Links shape: {Annotations?: string, Attributes?: string, Categories?: string, Database?: string, DefaultAttribute?: string, EndValue?: string, EventFrames?: string, InterpolatedData?: string, Parent?: string, PlotData?: string, PrimaryReferencedElement?: string, RecordedData?: string, ReferencedElements?: string, Security?: string, SecurityEntries?: string, Self?: string, SummaryData?: string, Template?: string, Value?: string}
-# --Security shape: {CanAnnotate?: bool, CanDelete?: bool, CanExecute?: bool, CanRead?: bool, CanReadData?: bool, CanSubscribe?: bool, CanSubscribeOthers?: bool, CanWrite?: bool, CanWriteData?: bool, HasAdmin?: bool, Rights?: list<string>, WebException?: record}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "event-frame-create-event-frame" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11517,7 +11442,7 @@ export def "event-frame-get-referenced-elements" [
   --associations: string # Associated values to return in the response, separated by semicolons (;). This call supports Paths to return all paths to the element. If this parameter is not specified, paths are not returned.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<CategoryNames: list, Description: string, Errors: list, ExtendedProperties: record, HasChildren: bool, Id: string, Links: record, Name: string, Path: string, Paths: list, TemplateName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<CategoryNames: list, Description: string, Errors: list, ExtendedProperties: record, HasChildren: bool, Id: string, Links: record, Name: string, Path: string, Paths: list, TemplateName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -11555,14 +11480,15 @@ export def "event-frame-get-security" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --user-identity: list<string> # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned.
+  --user-identity: list<string> # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned. (required)
   --force-refresh: oneof<nothing, bool> # Indicates if the security cache should be refreshed before getting security information. The default is 'false'.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<CanAnnotate: bool, CanDelete: bool, CanExecute: bool, CanRead: bool, CanReadData: bool, CanSubscribe: bool, CanSubscribeOthers: bool, CanWrite: bool, CanWriteData: bool, HasAdmin: bool, Links: record, OwnerWebId: string, Rights: list, SecurityItem: string, UserIdentity: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<CanAnnotate: bool, CanDelete: bool, CanExecute: bool, CanRead: bool, CanReadData: bool, CanSubscribe: bool, CanSubscribeOthers: bool, CanWrite: bool, CanWriteData: bool, HasAdmin: bool, Links: record, OwnerWebId: string, Rights: list, SecurityItem: string, UserIdentity: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($user_identity == null) { error make --unspanned { msg: "required query parameter 'userIdentity' missing: pass --user-identity" } }
   let qp = [(serialize-qp "userIdentity" $user_identity "multi") (serialize-qp "forceRefresh" $force_refresh "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/eventframes/{web_id}/security") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -11600,7 +11526,7 @@ export def "event-frame-get-security-entries" [
   --name-filter: string # The name query string used for filtering security entries. The default is no filter.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<AllowRights: list, DenyRights: list, Links: record, Name: string, SecurityIdentityName: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<AllowRights: list, DenyRights: list, Links: record, Name: string, SecurityIdentityName: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -11626,8 +11552,6 @@ export def "event-frame-get-security-entries" [
 #
 # POST /eventframes/{webId}/securityentries
 # operationId: EventFrame_CreateSecurityEntry
-# --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "event-frame-create-security-entry" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11733,7 +11657,7 @@ export def "event-frame-get-security-entry-by-name" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<AllowRights: list<string>, DenyRights: list<string>, Links: record<SecurableObject: string, SecurityIdentity: string, Self: string>, Name: string, SecurityIdentityName: string, WebException: record<Errors: list<string>, StatusCode: int>> {
+]: nothing -> oneof<record<AllowRights: list<string>, DenyRights: list<string>, Links: record<SecurableObject: string, SecurityIdentity: string, Self: string>, Name: string, SecurityIdentityName: string, WebException: record<Errors: list<string>, StatusCode: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -11760,8 +11684,6 @@ export def "event-frame-get-security-entry-by-name" [
 #
 # PUT /eventframes/{webId}/securityentries/{name}
 # operationId: EventFrame_UpdateSecurityEntry
-# --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "event-frame-update-security-entry" [
   web_id: string
   name: string
@@ -11823,12 +11745,13 @@ export def "notification-contact-template-get-by-path" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --path: string # The path to the notification contact template.
+  --path: string # The path to the notification contact template. (required)
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Available: bool, ConfigString: string, ContactType: string, Description: string, EscalationTimeout: string, HasChildren: bool, Id: string, Links: record<AssetServer: string, NotificationContactTemplates: string, NotificationPlugIn: string, Security: string, SecurityEntries: string, Self: string>, MaximumRetries: int, MinimumAcknowledgements: int, Name: string, NotifyWhenInstanceEnded: bool, Path: string, PlugInName: string, RetryInterval: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
+]: nothing -> oneof<record<Available: bool, ConfigString: string, ContactType: string, Description: string, EscalationTimeout: string, HasChildren: bool, Id: string, Links: record<AssetServer: string, NotificationContactTemplates: string, NotificationPlugIn: string, Security: string, SecurityEntries: string, Self: string>, MaximumRetries: int, MinimumAcknowledgements: int, Name: string, NotifyWhenInstanceEnded: bool, Path: string, PlugInName: string, RetryInterval: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($path == null) { error make --unspanned { msg: "required query parameter 'path' missing: pass --path" } }
   let qp = [(serialize-qp "path" $path "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/notificationcontacttemplates" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -11868,7 +11791,7 @@ export def "notification-contact-template-get-notification-contact-templates-que
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --start-index: int # The starting index (zero based) of the items to be returned. The default is 0.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<Available: bool, ConfigString: string, ContactType: string, Description: string, EscalationTimeout: string, HasChildren: bool, Id: string, Links: record, MaximumRetries: int, MinimumAcknowledgements: int, Name: string, NotifyWhenInstanceEnded: bool, Path: string, PlugInName: string, RetryInterval: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<Available: bool, ConfigString: string, ContactType: string, Description: string, EscalationTimeout: string, HasChildren: bool, Id: string, Links: record, MaximumRetries: int, MinimumAcknowledgements: int, Name: string, NotifyWhenInstanceEnded: bool, Path: string, PlugInName: string, RetryInterval: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "assetServerWebId" $asset_server_web_id "scalar") (serialize-qp "maxCount" $max_count "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
@@ -11944,7 +11867,7 @@ export def "notification-contact-template-get" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Available: bool, ConfigString: string, ContactType: string, Description: string, EscalationTimeout: string, HasChildren: bool, Id: string, Links: record<AssetServer: string, NotificationContactTemplates: string, NotificationPlugIn: string, Security: string, SecurityEntries: string, Self: string>, MaximumRetries: int, MinimumAcknowledgements: int, Name: string, NotifyWhenInstanceEnded: bool, Path: string, PlugInName: string, RetryInterval: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
+]: nothing -> oneof<record<Available: bool, ConfigString: string, ContactType: string, Description: string, EscalationTimeout: string, HasChildren: bool, Id: string, Links: record<AssetServer: string, NotificationContactTemplates: string, NotificationPlugIn: string, Security: string, SecurityEntries: string, Self: string>, MaximumRetries: int, MinimumAcknowledgements: int, Name: string, NotifyWhenInstanceEnded: bool, Path: string, PlugInName: string, RetryInterval: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -11970,8 +11893,6 @@ export def "notification-contact-template-get" [
 #
 # PATCH /notificationcontacttemplates/{webId}
 # operationId: NotificationContactTemplate_Update
-# --Links shape: {AssetServer?: string, NotificationContactTemplates?: string, NotificationPlugIn?: string, Security?: string, SecurityEntries?: string, Self?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "notification-contact-template-update" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12043,7 +11964,7 @@ export def "notification-contact-template-get-notification-contact-templates" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Available: bool, ConfigString: string, ContactType: string, Description: string, EscalationTimeout: string, HasChildren: bool, Id: string, Links: record<AssetServer: string, NotificationContactTemplates: string, NotificationPlugIn: string, Security: string, SecurityEntries: string, Self: string>, MaximumRetries: int, MinimumAcknowledgements: int, Name: string, NotifyWhenInstanceEnded: bool, Path: string, PlugInName: string, RetryInterval: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
+]: nothing -> oneof<record<Available: bool, ConfigString: string, ContactType: string, Description: string, EscalationTimeout: string, HasChildren: bool, Id: string, Links: record<AssetServer: string, NotificationContactTemplates: string, NotificationPlugIn: string, Security: string, SecurityEntries: string, Self: string>, MaximumRetries: int, MinimumAcknowledgements: int, Name: string, NotifyWhenInstanceEnded: bool, Path: string, PlugInName: string, RetryInterval: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -12081,14 +12002,15 @@ export def "notification-contact-template-get-security" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --user-identity: list<string> # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned.
+  --user-identity: list<string> # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned. (required)
   --force-refresh: oneof<nothing, bool> # Indicates if the security cache should be refreshed before getting security information. The default is 'false'.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<CanAnnotate: bool, CanDelete: bool, CanExecute: bool, CanRead: bool, CanReadData: bool, CanSubscribe: bool, CanSubscribeOthers: bool, CanWrite: bool, CanWriteData: bool, HasAdmin: bool, Links: record, OwnerWebId: string, Rights: list, SecurityItem: string, UserIdentity: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<CanAnnotate: bool, CanDelete: bool, CanExecute: bool, CanRead: bool, CanReadData: bool, CanSubscribe: bool, CanSubscribeOthers: bool, CanWrite: bool, CanWriteData: bool, HasAdmin: bool, Links: record, OwnerWebId: string, Rights: list, SecurityItem: string, UserIdentity: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($user_identity == null) { error make --unspanned { msg: "required query parameter 'userIdentity' missing: pass --user-identity" } }
   let qp = [(serialize-qp "userIdentity" $user_identity "multi") (serialize-qp "forceRefresh" $force_refresh "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/notificationcontacttemplates/{web_id}/security") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -12126,7 +12048,7 @@ export def "notification-contact-template-get-security-entries" [
   --name-filter: string # The name query string used for filtering security entries. The default is no filter.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<AllowRights: list, DenyRights: list, Links: record, Name: string, SecurityIdentityName: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<AllowRights: list, DenyRights: list, Links: record, Name: string, SecurityIdentityName: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -12152,8 +12074,6 @@ export def "notification-contact-template-get-security-entries" [
 #
 # POST /notificationcontacttemplates/{webId}/securityentries
 # operationId: NotificationContactTemplate_CreateSecurityEntry
-# --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "notification-contact-template-create-security-entry" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12259,7 +12179,7 @@ export def "notification-contact-template-get-security-entry-by-name" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<AllowRights: list<string>, DenyRights: list<string>, Links: record<SecurableObject: string, SecurityIdentity: string, Self: string>, Name: string, SecurityIdentityName: string, WebException: record<Errors: list<string>, StatusCode: int>> {
+]: nothing -> oneof<record<AllowRights: list<string>, DenyRights: list<string>, Links: record<SecurableObject: string, SecurityIdentity: string, Self: string>, Name: string, SecurityIdentityName: string, WebException: record<Errors: list<string>, StatusCode: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -12286,8 +12206,6 @@ export def "notification-contact-template-get-security-entry-by-name" [
 #
 # PUT /notificationcontacttemplates/{webId}/securityentries/{name}
 # operationId: NotificationContactTemplate_UpdateSecurityEntry
-# --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "notification-contact-template-update-security-entry" [
   web_id: string
   name: string
@@ -12349,12 +12267,13 @@ export def "notification-plug-in-get-by-path" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --path: string # The path to the notification plugin.
+  --path: string # The path to the notification plugin. (required)
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<AssemblyFileName: string, AssemblyID: string, AssemblyLoadProperties: list<string>, AssemblyTime: string, CompatibilityVersion: int, Description: string, Id: string, IsBrowsable: bool, IsNonEditableConfig: bool, Links: record<AssetServer: string, Self: string>, LoadedAssemblyTime: string, LoadedVersion: string, Name: string, Path: string, Version: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
+]: nothing -> oneof<record<AssemblyFileName: string, AssemblyID: string, AssemblyLoadProperties: list<string>, AssemblyTime: string, CompatibilityVersion: int, Description: string, Id: string, IsBrowsable: bool, IsNonEditableConfig: bool, Links: record<AssetServer: string, Self: string>, LoadedAssemblyTime: string, LoadedVersion: string, Name: string, Path: string, Version: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($path == null) { error make --unspanned { msg: "required query parameter 'path' missing: pass --path" } }
   let qp = [(serialize-qp "path" $path "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/notificationplugIns" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -12391,7 +12310,7 @@ export def "notification-plug-in-get" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<AssemblyFileName: string, AssemblyID: string, AssemblyLoadProperties: list<string>, AssemblyTime: string, CompatibilityVersion: int, Description: string, Id: string, IsBrowsable: bool, IsNonEditableConfig: bool, Links: record<AssetServer: string, Self: string>, LoadedAssemblyTime: string, LoadedVersion: string, Name: string, Path: string, Version: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
+]: nothing -> oneof<record<AssemblyFileName: string, AssemblyID: string, AssemblyLoadProperties: list<string>, AssemblyTime: string, CompatibilityVersion: int, Description: string, Id: string, IsBrowsable: bool, IsNonEditableConfig: bool, Links: record<AssetServer: string, Self: string>, LoadedAssemblyTime: string, LoadedVersion: string, Name: string, Path: string, Version: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -12428,12 +12347,13 @@ export def "notification-rule-get-by-path" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --path: string # The path to the notification rule.
+  --path: string # The path to the notification rule. (required)
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<AutoCreated: bool, CategoryNames: list<string>, Criteria: string, Description: string, Id: string, MultiTriggerEventOption: string, Name: string, NonrepetitionInterval: string, Path: string, ResendInterval: string, Status: string, TemplateName: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
+]: nothing -> oneof<record<AutoCreated: bool, CategoryNames: list<string>, Criteria: string, Description: string, Id: string, MultiTriggerEventOption: string, Name: string, NonrepetitionInterval: string, Path: string, ResendInterval: string, Status: string, TemplateName: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($path == null) { error make --unspanned { msg: "required query parameter 'path' missing: pass --path" } }
   let qp = [(serialize-qp "path" $path "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/notificationrules" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -12473,7 +12393,7 @@ export def "notification-rule-get-notification-rules-query" [
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --start-index: int # The starting index (zero based) of the items to be returned. The default is 0.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<AutoCreated: bool, CategoryNames: list, Criteria: string, Description: string, Id: string, MultiTriggerEventOption: string, Name: string, NonrepetitionInterval: string, Path: string, ResendInterval: string, Status: string, TemplateName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<AutoCreated: bool, CategoryNames: list, Criteria: string, Description: string, Id: string, MultiTriggerEventOption: string, Name: string, NonrepetitionInterval: string, Path: string, ResendInterval: string, Status: string, TemplateName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "databaseWebId" $database_web_id "scalar") (serialize-qp "maxCount" $max_count "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
@@ -12549,7 +12469,7 @@ export def "notification-rule-get" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<AutoCreated: bool, CategoryNames: list<string>, Criteria: string, Description: string, Id: string, MultiTriggerEventOption: string, Name: string, NonrepetitionInterval: string, Path: string, ResendInterval: string, Status: string, TemplateName: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
+]: nothing -> oneof<record<AutoCreated: bool, CategoryNames: list<string>, Criteria: string, Description: string, Id: string, MultiTriggerEventOption: string, Name: string, NonrepetitionInterval: string, Path: string, ResendInterval: string, Status: string, TemplateName: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -12575,7 +12495,6 @@ export def "notification-rule-get" [
 #
 # PATCH /notificationrules/{webId}
 # operationId: NotificationRule_Update
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "notification-rule-update" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12644,7 +12563,7 @@ export def "notification-rule-get-notification-rule-subscribers" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<ConfigString: string, ContactTemplateName: string, ContactType: string, DeliveryFormatName: string, Description: string, EscalationTimeout: string, Id: string, MaximumRetries: int, Name: string, NotifyOption: string, Path: string, PlugInName: string, RetryInterval: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<ConfigString: string, ContactTemplateName: string, ContactType: string, DeliveryFormatName: string, Description: string, EscalationTimeout: string, Id: string, MaximumRetries: int, Name: string, NotifyOption: string, Path: string, PlugInName: string, RetryInterval: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -12670,7 +12589,6 @@ export def "notification-rule-get-notification-rule-subscribers" [
 #
 # POST /notificationrules/{webId}/notificationrulesubscribers
 # operationId: NotificationRule_CreateNotificationRuleSubscriber
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "notification-rule-create-notification-rule-subscriber" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12740,14 +12658,15 @@ export def "notification-rule-get-security" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --user-identity: list<string> # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned.
+  --user-identity: list<string> # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned. (required)
   --force-refresh: oneof<nothing, bool> # Indicates if the security cache should be refreshed before getting security information. The default is 'false'.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<CanAnnotate: bool, CanDelete: bool, CanExecute: bool, CanRead: bool, CanReadData: bool, CanSubscribe: bool, CanSubscribeOthers: bool, CanWrite: bool, CanWriteData: bool, HasAdmin: bool, Links: record, OwnerWebId: string, Rights: list, SecurityItem: string, UserIdentity: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<CanAnnotate: bool, CanDelete: bool, CanExecute: bool, CanRead: bool, CanReadData: bool, CanSubscribe: bool, CanSubscribeOthers: bool, CanWrite: bool, CanWriteData: bool, HasAdmin: bool, Links: record, OwnerWebId: string, Rights: list, SecurityItem: string, UserIdentity: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($user_identity == null) { error make --unspanned { msg: "required query parameter 'userIdentity' missing: pass --user-identity" } }
   let qp = [(serialize-qp "userIdentity" $user_identity "multi") (serialize-qp "forceRefresh" $force_refresh "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/notificationrules/{web_id}/security") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -12785,7 +12704,7 @@ export def "notification-rule-get-security-entries" [
   --name-filter: string # The name query string used for filtering security entries. The default is no filter.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<AllowRights: list, DenyRights: list, Links: record, Name: string, SecurityIdentityName: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<AllowRights: list, DenyRights: list, Links: record, Name: string, SecurityIdentityName: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -12811,8 +12730,6 @@ export def "notification-rule-get-security-entries" [
 #
 # POST /notificationrules/{webId}/securityentries
 # operationId: NotificationRule_CreateSecurityEntry
-# --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "notification-rule-create-security-entry" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12918,7 +12835,7 @@ export def "notification-rule-get-security-entry-by-name" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<AllowRights: list<string>, DenyRights: list<string>, Links: record<SecurableObject: string, SecurityIdentity: string, Self: string>, Name: string, SecurityIdentityName: string, WebException: record<Errors: list<string>, StatusCode: int>> {
+]: nothing -> oneof<record<AllowRights: list<string>, DenyRights: list<string>, Links: record<SecurableObject: string, SecurityIdentity: string, Self: string>, Name: string, SecurityIdentityName: string, WebException: record<Errors: list<string>, StatusCode: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -12945,8 +12862,6 @@ export def "notification-rule-get-security-entry-by-name" [
 #
 # PUT /notificationrules/{webId}/securityentries/{name}
 # operationId: NotificationRule_UpdateSecurityEntry
-# --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "notification-rule-update-security-entry" [
   web_id: string
   name: string
@@ -13008,12 +12923,13 @@ export def "notification-rule-subscriber-get-by-path" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --path: string # The path to the notification rule subscriber.
+  --path: string # The path to the notification rule subscriber. (required)
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<ConfigString: string, ContactTemplateName: string, ContactType: string, DeliveryFormatName: string, Description: string, EscalationTimeout: string, Id: string, MaximumRetries: int, Name: string, NotifyOption: string, Path: string, PlugInName: string, RetryInterval: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
+]: nothing -> oneof<record<ConfigString: string, ContactTemplateName: string, ContactType: string, DeliveryFormatName: string, Description: string, EscalationTimeout: string, Id: string, MaximumRetries: int, Name: string, NotifyOption: string, Path: string, PlugInName: string, RetryInterval: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($path == null) { error make --unspanned { msg: "required query parameter 'path' missing: pass --path" } }
   let qp = [(serialize-qp "path" $path "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/notificationrulesubscribers" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -13087,7 +13003,7 @@ export def "notification-rule-subscriber-get" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<ConfigString: string, ContactTemplateName: string, ContactType: string, DeliveryFormatName: string, Description: string, EscalationTimeout: string, Id: string, MaximumRetries: int, Name: string, NotifyOption: string, Path: string, PlugInName: string, RetryInterval: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
+]: nothing -> oneof<record<ConfigString: string, ContactTemplateName: string, ContactType: string, DeliveryFormatName: string, Description: string, EscalationTimeout: string, Id: string, MaximumRetries: int, Name: string, NotifyOption: string, Path: string, PlugInName: string, RetryInterval: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -13113,7 +13029,6 @@ export def "notification-rule-subscriber-get" [
 #
 # PATCH /notificationrulesubscribers/{webId}
 # operationId: NotificationRuleSubscriber_Update
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "notification-rule-subscriber-update" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13183,7 +13098,7 @@ export def "notification-rule-subscriber-get-notification-rule-subscribers" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<ConfigString: string, ContactTemplateName: string, ContactType: string, DeliveryFormatName: string, Description: string, EscalationTimeout: string, Id: string, MaximumRetries: int, Name: string, NotifyOption: string, Path: string, PlugInName: string, RetryInterval: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<ConfigString: string, ContactTemplateName: string, ContactType: string, DeliveryFormatName: string, Description: string, EscalationTimeout: string, Id: string, MaximumRetries: int, Name: string, NotifyOption: string, Path: string, PlugInName: string, RetryInterval: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -13220,12 +13135,13 @@ export def "notification-rule-template-get-by-path" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --path: string # The path to the notification rule template.
+  --path: string # The path to the notification rule template. (required)
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<CategoryNames: list<string>, Criteria: string, Description: string, Id: string, MultiTriggerEventOption: string, Name: string, NonrepetitionInterval: string, Path: string, ResendInterval: string, Status: string, TemplateName: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
+]: nothing -> oneof<record<CategoryNames: list<string>, Criteria: string, Description: string, Id: string, MultiTriggerEventOption: string, Name: string, NonrepetitionInterval: string, Path: string, ResendInterval: string, Status: string, TemplateName: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($path == null) { error make --unspanned { msg: "required query parameter 'path' missing: pass --path" } }
   let qp = [(serialize-qp "path" $path "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/notificationruletemplates" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -13265,7 +13181,7 @@ export def "notification-rule-template-get-notification-rule-templates-query" [
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --start-index: int # The starting index (zero based) of the items to be returned. The default is 0.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<CategoryNames: list, Criteria: string, Description: string, Id: string, MultiTriggerEventOption: string, Name: string, NonrepetitionInterval: string, Path: string, ResendInterval: string, Status: string, TemplateName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<CategoryNames: list, Criteria: string, Description: string, Id: string, MultiTriggerEventOption: string, Name: string, NonrepetitionInterval: string, Path: string, ResendInterval: string, Status: string, TemplateName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "databaseWebId" $database_web_id "scalar") (serialize-qp "maxCount" $max_count "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
@@ -13341,7 +13257,7 @@ export def "notification-rule-template-get" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<CategoryNames: list<string>, Criteria: string, Description: string, Id: string, MultiTriggerEventOption: string, Name: string, NonrepetitionInterval: string, Path: string, ResendInterval: string, Status: string, TemplateName: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
+]: nothing -> oneof<record<CategoryNames: list<string>, Criteria: string, Description: string, Id: string, MultiTriggerEventOption: string, Name: string, NonrepetitionInterval: string, Path: string, ResendInterval: string, Status: string, TemplateName: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -13367,7 +13283,6 @@ export def "notification-rule-template-get" [
 #
 # PATCH /notificationruletemplates/{webId}
 # operationId: NotificationRuleTemplate_Update
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "notification-rule-template-update" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13435,7 +13350,7 @@ export def "notification-rule-template-get-notification-rule-template-subscriber
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<ConfigString: string, ContactTemplateName: string, ContactType: string, DeliveryFormatName: string, Description: string, EscalationTimeout: string, Id: string, MaximumRetries: int, Name: string, NotifyOption: string, Path: string, PlugInName: string, RetryInterval: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<ConfigString: string, ContactTemplateName: string, ContactType: string, DeliveryFormatName: string, Description: string, EscalationTimeout: string, Id: string, MaximumRetries: int, Name: string, NotifyOption: string, Path: string, PlugInName: string, RetryInterval: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -13461,7 +13376,6 @@ export def "notification-rule-template-get-notification-rule-template-subscriber
 #
 # POST /notificationruletemplates/{webId}/notificationrulesubscribers
 # operationId: NotificationRuleTemplate_CreateNotificationRuleTemplateSubscriber
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "notification-rule-template-create-notification-rule-template-subscriber" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13531,14 +13445,15 @@ export def "notification-rule-template-get-security" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --user-identity: list<string> # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned.
+  --user-identity: list<string> # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned. (required)
   --force-refresh: oneof<nothing, bool> # Indicates if the security cache should be refreshed before getting security information. The default is 'false'.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<CanAnnotate: bool, CanDelete: bool, CanExecute: bool, CanRead: bool, CanReadData: bool, CanSubscribe: bool, CanSubscribeOthers: bool, CanWrite: bool, CanWriteData: bool, HasAdmin: bool, Links: record, OwnerWebId: string, Rights: list, SecurityItem: string, UserIdentity: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<CanAnnotate: bool, CanDelete: bool, CanExecute: bool, CanRead: bool, CanReadData: bool, CanSubscribe: bool, CanSubscribeOthers: bool, CanWrite: bool, CanWriteData: bool, HasAdmin: bool, Links: record, OwnerWebId: string, Rights: list, SecurityItem: string, UserIdentity: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($user_identity == null) { error make --unspanned { msg: "required query parameter 'userIdentity' missing: pass --user-identity" } }
   let qp = [(serialize-qp "userIdentity" $user_identity "multi") (serialize-qp "forceRefresh" $force_refresh "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/notificationruletemplates/{web_id}/security") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -13576,7 +13491,7 @@ export def "notification-rule-template-get-security-entries" [
   --name-filter: string # The name query string used for filtering security entries. The default is no filter.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<AllowRights: list, DenyRights: list, Links: record, Name: string, SecurityIdentityName: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<AllowRights: list, DenyRights: list, Links: record, Name: string, SecurityIdentityName: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -13602,8 +13517,6 @@ export def "notification-rule-template-get-security-entries" [
 #
 # POST /notificationruletemplates/{webId}/securityentries
 # operationId: NotificationRuleTemplate_CreateSecurityEntry
-# --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "notification-rule-template-create-security-entry" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13709,7 +13622,7 @@ export def "notification-rule-template-get-security-entry-by-name" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<AllowRights: list<string>, DenyRights: list<string>, Links: record<SecurableObject: string, SecurityIdentity: string, Self: string>, Name: string, SecurityIdentityName: string, WebException: record<Errors: list<string>, StatusCode: int>> {
+]: nothing -> oneof<record<AllowRights: list<string>, DenyRights: list<string>, Links: record<SecurableObject: string, SecurityIdentity: string, Self: string>, Name: string, SecurityIdentityName: string, WebException: record<Errors: list<string>, StatusCode: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -13736,8 +13649,6 @@ export def "notification-rule-template-get-security-entry-by-name" [
 #
 # PUT /notificationruletemplates/{webId}/securityentries/{name}
 # operationId: NotificationRuleTemplate_UpdateSecurityEntry
-# --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "notification-rule-template-update-security-entry" [
   web_id: string
   name: string
@@ -13799,12 +13710,13 @@ export def "point-get-by-path" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --path: string # The path to the point.
+  --path: string # The path to the point. (required)
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Descriptor: string, DigitalSetName: string, DisplayDigits: int, EngineeringUnits: string, Future: bool, Id: int, Links: record<Attributes: string, DataServer: string, EndValue: string, InterpolatedData: string, PlotData: string, RecordedData: string, Self: string, SummaryData: string, Value: string>, Name: string, Path: string, PointClass: string, PointType: string, Span: float, Step: bool, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string, Zero: float> {
+]: nothing -> oneof<record<Descriptor: string, DigitalSetName: string, DisplayDigits: int, EngineeringUnits: string, Future: bool, Id: int, Links: record<Attributes: string, DataServer: string, EndValue: string, InterpolatedData: string, PlotData: string, RecordedData: string, Self: string, SummaryData: string, Value: string>, Name: string, Path: string, PointClass: string, PointType: string, Span: float, Step: bool, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string, Zero: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($path == null) { error make --unspanned { msg: "required query parameter 'path' missing: pass --path" } }
   let qp = [(serialize-qp "path" $path "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/points" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -13844,7 +13756,7 @@ export def "point-get-multiple" [
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id: list<string> # The ID of a point. Multiple points may be specified with multiple instances of the parameter.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<Exception: record, Identifier: string, IdentifierType: string, Object: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<Exception: record, Identifier: string, IdentifierType: string, Object: record>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "asParallel" $as_parallel "scalar") (serialize-qp "includeMode" $include_mode "scalar") (serialize-qp "path" $path "multi") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webId" $web_id "multi") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
@@ -13920,7 +13832,7 @@ export def "point-get" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Descriptor: string, DigitalSetName: string, DisplayDigits: int, EngineeringUnits: string, Future: bool, Id: int, Links: record<Attributes: string, DataServer: string, EndValue: string, InterpolatedData: string, PlotData: string, RecordedData: string, Self: string, SummaryData: string, Value: string>, Name: string, Path: string, PointClass: string, PointType: string, Span: float, Step: bool, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string, Zero: float> {
+]: nothing -> oneof<record<Descriptor: string, DigitalSetName: string, DisplayDigits: int, EngineeringUnits: string, Future: bool, Id: int, Links: record<Attributes: string, DataServer: string, EndValue: string, InterpolatedData: string, PlotData: string, RecordedData: string, Self: string, SummaryData: string, Value: string>, Name: string, Path: string, PointClass: string, PointType: string, Span: float, Step: bool, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string, Zero: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -13946,8 +13858,6 @@ export def "point-get" [
 #
 # PATCH /points/{webId}
 # operationId: Point_Update
-# --Links shape: {Attributes?: string, DataServer?: string, EndValue?: string, InterpolatedData?: string, PlotData?: string, RecordedData?: string, Self?: string, SummaryData?: string, Value?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "point-update" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -14020,7 +13930,7 @@ export def "point-get-attributes" [
   --name-filter: string # The filter to the names of the list of point attributes to be returned. The default is no filter.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<Links: record, Name: string, Value: record, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<Links: record, Name: string, Value: record, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -14061,7 +13971,7 @@ export def "point-get-attribute-by-name" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Links: record<Point: string, Self: string>, Name: string, Value: record, WebException: record<Errors: list<string>, StatusCode: int>> {
+]: nothing -> oneof<record<Links: record<Point: string, Self: string>, Name: string, Value: record, WebException: record<Errors: list<string>, StatusCode: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -14099,12 +14009,13 @@ export def "security-identity-get-by-path" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --path: string # The path to the security identity.
+  --path: string # The path to the security identity. (required)
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Description: string, Id: string, IsEnabled: bool, Links: record<AssetServer: string, Security: string, SecurityEntries: string, SecurityMappings: string, Self: string>, Name: string, Path: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
+]: nothing -> oneof<record<Description: string, Id: string, IsEnabled: bool, Links: record<AssetServer: string, Security: string, SecurityEntries: string, SecurityMappings: string, Self: string>, Name: string, Path: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($path == null) { error make --unspanned { msg: "required query parameter 'path' missing: pass --path" } }
   let qp = [(serialize-qp "path" $path "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/securityidentities" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -14178,7 +14089,7 @@ export def "security-identity-get" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Description: string, Id: string, IsEnabled: bool, Links: record<AssetServer: string, Security: string, SecurityEntries: string, SecurityMappings: string, Self: string>, Name: string, Path: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
+]: nothing -> oneof<record<Description: string, Id: string, IsEnabled: bool, Links: record<AssetServer: string, Security: string, SecurityEntries: string, SecurityMappings: string, Self: string>, Name: string, Path: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -14204,8 +14115,6 @@ export def "security-identity-get" [
 #
 # PATCH /securityidentities/{webId}
 # operationId: SecurityIdentity_Update
-# --Links shape: {AssetServer?: string, Security?: string, SecurityEntries?: string, SecurityMappings?: string, Self?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "security-identity-update" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -14266,14 +14175,15 @@ export def "security-identity-get-security" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --user-identity: list<string> # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned.
+  --user-identity: list<string> # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned. (required)
   --force-refresh: oneof<nothing, bool> # Indicates if the security cache should be refreshed before getting security information. The default is 'false'.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<CanAnnotate: bool, CanDelete: bool, CanExecute: bool, CanRead: bool, CanReadData: bool, CanSubscribe: bool, CanSubscribeOthers: bool, CanWrite: bool, CanWriteData: bool, HasAdmin: bool, Links: record, OwnerWebId: string, Rights: list, SecurityItem: string, UserIdentity: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<CanAnnotate: bool, CanDelete: bool, CanExecute: bool, CanRead: bool, CanReadData: bool, CanSubscribe: bool, CanSubscribeOthers: bool, CanWrite: bool, CanWriteData: bool, HasAdmin: bool, Links: record, OwnerWebId: string, Rights: list, SecurityItem: string, UserIdentity: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($user_identity == null) { error make --unspanned { msg: "required query parameter 'userIdentity' missing: pass --user-identity" } }
   let qp = [(serialize-qp "userIdentity" $user_identity "multi") (serialize-qp "forceRefresh" $force_refresh "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/securityidentities/{web_id}/security") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -14311,7 +14221,7 @@ export def "security-identity-get-security-entries" [
   --name-filter: string # The name query string used for filtering security entries. The default is no filter.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<AllowRights: list, DenyRights: list, Links: record, Name: string, SecurityIdentityName: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<AllowRights: list, DenyRights: list, Links: record, Name: string, SecurityIdentityName: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -14352,7 +14262,7 @@ export def "security-identity-get-security-entry-by-name" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<AllowRights: list<string>, DenyRights: list<string>, Links: record<SecurableObject: string, SecurityIdentity: string, Self: string>, Name: string, SecurityIdentityName: string, WebException: record<Errors: list<string>, StatusCode: int>> {
+]: nothing -> oneof<record<AllowRights: list<string>, DenyRights: list<string>, Links: record<SecurableObject: string, SecurityIdentity: string, Self: string>, Name: string, SecurityIdentityName: string, WebException: record<Errors: list<string>, StatusCode: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -14393,7 +14303,7 @@ export def "security-identity-get-security-mappings" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<Account: string, Description: string, Id: string, Links: record, Name: string, Path: string, SecurityIdentityWebId: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<Account: string, Description: string, Id: string, Links: record, Name: string, Path: string, SecurityIdentityWebId: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -14430,12 +14340,13 @@ export def "security-mapping-get-by-path" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --path: string # The path to the security mapping.
+  --path: string # The path to the security mapping. (required)
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Account: string, Description: string, Id: string, Links: record<AssetServer: string, Security: string, SecurityEntries: string, SecurityIdentity: string, Self: string>, Name: string, Path: string, SecurityIdentityWebId: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
+]: nothing -> oneof<record<Account: string, Description: string, Id: string, Links: record<AssetServer: string, Security: string, SecurityEntries: string, SecurityIdentity: string, Self: string>, Name: string, Path: string, SecurityIdentityWebId: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($path == null) { error make --unspanned { msg: "required query parameter 'path' missing: pass --path" } }
   let qp = [(serialize-qp "path" $path "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/securitymappings" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -14509,7 +14420,7 @@ export def "security-mapping-get" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Account: string, Description: string, Id: string, Links: record<AssetServer: string, Security: string, SecurityEntries: string, SecurityIdentity: string, Self: string>, Name: string, Path: string, SecurityIdentityWebId: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
+]: nothing -> oneof<record<Account: string, Description: string, Id: string, Links: record<AssetServer: string, Security: string, SecurityEntries: string, SecurityIdentity: string, Self: string>, Name: string, Path: string, SecurityIdentityWebId: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -14535,8 +14446,6 @@ export def "security-mapping-get" [
 #
 # PATCH /securitymappings/{webId}
 # operationId: SecurityMapping_Update
-# --Links shape: {AssetServer?: string, Security?: string, SecurityEntries?: string, SecurityIdentity?: string, Self?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "security-mapping-update" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -14598,14 +14507,15 @@ export def "security-mapping-get-security" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --user-identity: list<string> # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned.
+  --user-identity: list<string> # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned. (required)
   --force-refresh: oneof<nothing, bool> # Indicates if the security cache should be refreshed before getting security information. The default is 'false'.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<CanAnnotate: bool, CanDelete: bool, CanExecute: bool, CanRead: bool, CanReadData: bool, CanSubscribe: bool, CanSubscribeOthers: bool, CanWrite: bool, CanWriteData: bool, HasAdmin: bool, Links: record, OwnerWebId: string, Rights: list, SecurityItem: string, UserIdentity: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<CanAnnotate: bool, CanDelete: bool, CanExecute: bool, CanRead: bool, CanReadData: bool, CanSubscribe: bool, CanSubscribeOthers: bool, CanWrite: bool, CanWriteData: bool, HasAdmin: bool, Links: record, OwnerWebId: string, Rights: list, SecurityItem: string, UserIdentity: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($user_identity == null) { error make --unspanned { msg: "required query parameter 'userIdentity' missing: pass --user-identity" } }
   let qp = [(serialize-qp "userIdentity" $user_identity "multi") (serialize-qp "forceRefresh" $force_refresh "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/securitymappings/{web_id}/security") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -14643,7 +14553,7 @@ export def "security-mapping-get-security-entries" [
   --name-filter: string # The name query string used for filtering security entries. The default is no filter.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<AllowRights: list, DenyRights: list, Links: record, Name: string, SecurityIdentityName: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<AllowRights: list, DenyRights: list, Links: record, Name: string, SecurityIdentityName: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -14684,7 +14594,7 @@ export def "security-mapping-get-security-entry-by-name" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<AllowRights: list<string>, DenyRights: list<string>, Links: record<SecurableObject: string, SecurityIdentity: string, Self: string>, Name: string, SecurityIdentityName: string, WebException: record<Errors: list<string>, StatusCode: int>> {
+]: nothing -> oneof<record<AllowRights: list<string>, DenyRights: list<string>, Links: record<SecurableObject: string, SecurityIdentity: string, Self: string>, Name: string, SecurityIdentityName: string, WebException: record<Errors: list<string>, StatusCode: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -14726,7 +14636,7 @@ export def "stream-retrieve-stream-update" [
   --desired-units: string # The name or abbreviation of the desired units of measure for the returned value, as found in the UOM database associated with the attribute. If not specified for an attribute, the attribute's default unit of measure is used. If the underlying stream is a point, this value may not be specified, as points are not associated with a unit of measure.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Events: table<Action: string, Annotated: bool, Errors: list, Good: bool, PreviousEventAction: string, Questionable: bool, Substituted: bool, Timestamp: string, UnitsAbbreviation: string, Value: record, WebException: record>, Exception: record<Errors: list<string>>, LatestMarker: string, RequestedMarker: string, Source: string, SourceName: string, SourcePath: string, Status: string> {
+]: nothing -> oneof<record<Events: table<Action: string, Annotated: bool, Errors: list, Good: bool, PreviousEventAction: string, Questionable: bool, Substituted: bool, Timestamp: string, UnitsAbbreviation: string, Value: record, WebException: record>, Exception: record<Errors: list<string>>, LatestMarker: string, RequestedMarker: string, Source: string, SourceName: string, SourcePath: string, Status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($marker | is-empty) { error make --unspanned { msg: "path parameter 'marker' must be non-empty" } }
@@ -14807,7 +14717,7 @@ export def "stream-get-end" [
   --accept: string@accept-completer # Response content type
   --desired-units: string # The name or abbreviation of the desired units of measure for the returned value, as found in the UOM database associated with the attribute. If not specified for an attribute, the attribute's default unit of measure is used. If the underlying stream is a point, this value may not be specified, as points are not associated with a unit of measure.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
-]: nothing -> record<Annotated: bool, Errors: table<FieldName: string, Message: list>, Good: bool, Questionable: bool, Substituted: bool, Timestamp: string, UnitsAbbreviation: string, Value: record, WebException: record<Errors: list<string>, StatusCode: int>> {
+]: nothing -> oneof<record<Annotated: bool, Errors: table<FieldName: string, Message: list>, Good: bool, Questionable: bool, Substituted: bool, Timestamp: string, UnitsAbbreviation: string, Value: record, WebException: record<Errors: list<string>, StatusCode: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -14855,7 +14765,7 @@ export def "stream-get-interpolated" [
   --sync-time: string # An optional start time anchor, in AFTime format. When specified, interpolated data retrieval will use the sync time as the origin for calculating the interval times.
   --sync-time-boundary-type: string # An optional string specifying the boundary type to use when applying a syncTime. The allowed values are 'Inside' and 'Outside'. The default is 'Inside'.
   --time-zone: string # The time zone in which the time string will be interpreted. This parameter will be ignored if a time zone is specified in the time string. If no time zone is specified in either places, the PI Web API server time zone will be used.
-]: nothing -> record<Items: table<Annotated: bool, Errors: list, Good: bool, Questionable: bool, Substituted: bool, Timestamp: string, UnitsAbbreviation: string, Value: record, WebException: record>, UnitsAbbreviation: string, WebException: record<Errors: list<string>, StatusCode: int>> {
+]: nothing -> oneof<record<Items: table<Annotated: bool, Errors: list, Good: bool, Questionable: bool, Substituted: bool, Timestamp: string, UnitsAbbreviation: string, Value: record, WebException: record>, UnitsAbbreviation: string, WebException: record<Errors: list<string>, StatusCode: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -14893,17 +14803,18 @@ export def "stream-get-interpolated-at-times" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --time: list<string> # The timestamp at which to retrieve an interpolated value. Multiple timestamps may be specified with multiple instances of the parameter.
+  --time: list<string> # The timestamp at which to retrieve an interpolated value. Multiple timestamps may be specified with multiple instances of the parameter. (required)
   --desired-units: string # The name or abbreviation of the desired units of measure for the returned value, as found in the UOM database associated with the attribute. If not specified for an attribute, the attribute's default unit of measure is used. If the underlying stream is a point, this value may not be specified, as points are not associated with a unit of measure.
   --filter-expression: string # An optional string containing a filter expression. Expression variables are relative to the data point. Use '.' to reference the containing attribute. If the attribute does not support filtering, the filter will be ignored. The default is no filtering.
   --include-filtered-values: oneof<nothing, bool> # Specify 'true' to indicate that values which fail the filter criteria are present in the returned data at the times where they occurred with a value set to a 'Filtered' enumeration value with bad status. Repeated consecutive failures are omitted.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --sort-order: string # The order that the returned collection is sorted. The default is 'Ascending'.
   --time-zone: string # The time zone in which the time string will be interpreted. This parameter will be ignored if a time zone is specified in the time string. If no time zone is specified in either places, the PI Web API server time zone will be used.
-]: nothing -> record<Items: table<Annotated: bool, Errors: list, Good: bool, Questionable: bool, Substituted: bool, Timestamp: string, UnitsAbbreviation: string, Value: record, WebException: record>, UnitsAbbreviation: string, WebException: record<Errors: list<string>, StatusCode: int>> {
+]: nothing -> oneof<record<Items: table<Annotated: bool, Errors: list, Good: bool, Questionable: bool, Substituted: bool, Timestamp: string, UnitsAbbreviation: string, Value: record, WebException: record>, UnitsAbbreviation: string, WebException: record<Errors: list<string>, StatusCode: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($time == null) { error make --unspanned { msg: "required query parameter 'time' missing: pass --time" } }
   let qp = [(serialize-qp "time" $time "multi") (serialize-qp "desiredUnits" $desired_units "scalar") (serialize-qp "filterExpression" $filter_expression "scalar") (serialize-qp "includeFilteredValues" $include_filtered_values "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "timeZone" $time_zone "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/streams/{web_id}/interpolatedattimes") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -14944,7 +14855,7 @@ export def "stream-get-plot" [
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --start-time: string # An optional start time. The default is '*-1d' for element attributes and points. For event frame attributes, the default is the event frame's start time, or '*-1d' if that is not set.
   --time-zone: string # The time zone in which the time string will be interpreted. This parameter will be ignored if a time zone is specified in the time string. If no time zone is specified in either places, the PI Web API server time zone will be used.
-]: nothing -> record<Items: table<Annotated: bool, Errors: list, Good: bool, Questionable: bool, Substituted: bool, Timestamp: string, UnitsAbbreviation: string, Value: record, WebException: record>, UnitsAbbreviation: string, WebException: record<Errors: list<string>, StatusCode: int>> {
+]: nothing -> oneof<record<Items: table<Annotated: bool, Errors: list, Good: bool, Questionable: bool, Substituted: bool, Timestamp: string, UnitsAbbreviation: string, Value: record, WebException: record>, UnitsAbbreviation: string, WebException: record<Errors: list<string>, StatusCode: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -14992,7 +14903,7 @@ export def "stream-get-recorded" [
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --start-time: string # An optional start time. The default is '*-1d' for element attributes and points. For event frame attributes, the default is the event frame's start time, or '*-1d' if that is not set.
   --time-zone: string # The time zone in which the time string will be interpreted. This parameter will be ignored if a time zone is specified in the time string. If no time zone is specified in either places, the PI Web API server time zone will be used.
-]: nothing -> record<Items: table<Annotated: bool, Annotations: list, Errors: list, Good: bool, Questionable: bool, Substituted: bool, Timestamp: string, UnitsAbbreviation: string, Value: record, WebException: record>, UnitsAbbreviation: string, WebException: record<Errors: list<string>, StatusCode: int>> {
+]: nothing -> oneof<record<Items: table<Annotated: bool, Annotations: list, Errors: list, Good: bool, Questionable: bool, Substituted: bool, Timestamp: string, UnitsAbbreviation: string, Value: record, WebException: record>, UnitsAbbreviation: string, WebException: record<Errors: list<string>, StatusCode: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -15033,7 +14944,7 @@ export def "stream-update-values" [
   --buffer-option: string # The desired AFBufferOption. The default is 'BufferIfPossible'.
   --update-option: string # The desired AFUpdateOption. The default is 'Replace'.
   --body: list
-]: any -> any {
+]: any -> oneof<record<Items: table<Message: string, Substatus: int, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -15074,16 +14985,17 @@ export def "stream-get-recorded-at-time" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --time: string # The timestamp at which the value is desired.
+  --time: string # The timestamp at which the value is desired. (required)
   --associations: string # Associated values to return in the response, separated by semicolons (;). This call supports Annotations to return events with annotation values. If this parameter is not specified, annotation values are not returned.
   --desired-units: string # The name or abbreviation of the desired units of measure for the returned value, as found in the UOM database associated with the attribute. If not specified for an attribute, the attribute's default unit of measure is used. If the underlying stream is a point, this value may not be specified, as points are not associated with a unit of measure.
   --retrieval-mode: string # An optional value that determines the value to return when a value doesn't exist at the exact time specified. The default is 'Auto'.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --time-zone: string # The time zone in which the time string will be interpreted. This parameter will be ignored if a time zone is specified in the time string. If no time zone is specified in either places, the PI Web API server time zone will be used.
-]: nothing -> record<Annotated: bool, Annotations: table<CreationDate: string, Creator: string, Description: string, Errors: list, Id: string, Modifier: string, ModifyDate: string, Name: string, Value: record, WebException: record>, Errors: table<FieldName: string, Message: list>, Good: bool, Questionable: bool, Substituted: bool, Timestamp: string, UnitsAbbreviation: string, Value: record, WebException: record<Errors: list<string>, StatusCode: int>> {
+]: nothing -> oneof<record<Annotated: bool, Annotations: table<CreationDate: string, Creator: string, Description: string, Errors: list, Id: string, Modifier: string, ModifyDate: string, Name: string, Value: record, WebException: record>, Errors: table<FieldName: string, Message: list>, Good: bool, Questionable: bool, Substituted: bool, Timestamp: string, UnitsAbbreviation: string, Value: record, WebException: record<Errors: list<string>, StatusCode: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($time == null) { error make --unspanned { msg: "required query parameter 'time' missing: pass --time" } }
   let qp = [(serialize-qp "time" $time "scalar") (serialize-qp "associations" $associations "scalar") (serialize-qp "desiredUnits" $desired_units "scalar") (serialize-qp "retrievalMode" $retrieval_mode "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "timeZone" $time_zone "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/streams/{web_id}/recordedattime") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -15118,17 +15030,18 @@ export def "stream-get-recorded-at-times" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --time: list<string> # The timestamp at which to retrieve a recorded value. Multiple timestamps may be specified with multiple instances of the parameter.
+  --time: list<string> # The timestamp at which to retrieve a recorded value. Multiple timestamps may be specified with multiple instances of the parameter. (required)
   --associations: string # Associated values to return in the response, separated by semicolons (;). This call supports Annotations to return events with annotation values. If this parameter is not specified, annotation values are not returned.
   --desired-units: string # The name or abbreviation of the desired units of measure for the returned value, as found in the UOM database associated with the attribute. If not specified for an attribute, the attribute's default unit of measure is used. If the underlying stream is a point, this value may not be specified, as points are not associated with a unit of measure.
   --retrieval-mode: string # An optional value that determines the value to return when a value doesn't exist at the exact time specified. The default is 'Auto'.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --sort-order: string # The order that the returned collection is sorted. The default is 'Ascending'.
   --time-zone: string # The time zone in which the time string will be interpreted. This parameter will be ignored if a time zone is specified in the time string. If no time zone is specified in either places, the PI Web API server time zone will be used.
-]: nothing -> record<Items: table<Annotated: bool, Annotations: list, Errors: list, Good: bool, Questionable: bool, Substituted: bool, Timestamp: string, UnitsAbbreviation: string, Value: record, WebException: record>, UnitsAbbreviation: string, WebException: record<Errors: list<string>, StatusCode: int>> {
+]: nothing -> oneof<record<Items: table<Annotated: bool, Annotations: list, Errors: list, Good: bool, Questionable: bool, Substituted: bool, Timestamp: string, UnitsAbbreviation: string, Value: record, WebException: record>, UnitsAbbreviation: string, WebException: record<Errors: list<string>, StatusCode: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($time == null) { error make --unspanned { msg: "required query parameter 'time' missing: pass --time" } }
   let qp = [(serialize-qp "time" $time "multi") (serialize-qp "associations" $associations "scalar") (serialize-qp "desiredUnits" $desired_units "scalar") (serialize-qp "retrievalMode" $retrieval_mode "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "timeZone" $time_zone "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/streams/{web_id}/recordedattimes") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -15174,7 +15087,7 @@ export def "stream-get-summary" [
   --summary-type: list<string> # Specifies the kinds of summaries to produce over the range. The default is 'Total'. Multiple summary types may be specified by using multiple instances of summaryType.
   --time-type: string # Specifies how to calculate the timestamp for each interval. The default is 'Auto'.
   --time-zone: string # The time zone in which the time string will be interpreted. This parameter will be ignored if a time zone is specified in the time string. If no time zone is specified in either places, the PI Web API server time zone will be used.
-]: nothing -> record<Items: table<Type: string, Value: record, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<Type: string, Value: record, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -15214,7 +15127,7 @@ export def "stream-register-stream-update" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Exception: record<Errors: list<string>>, LatestMarker: string, Source: string, SourceName: string, SourcePath: string, Status: string> {
+]: nothing -> oneof<record<Exception: record<Errors: list<string>>, LatestMarker: string, Source: string, SourceName: string, SourcePath: string, Status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -15256,7 +15169,7 @@ export def "stream-get-value" [
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --time: string # An optional time. The default time context is determined from the owning object - for example, the time range of the event frame or transfer which holds this attribute. Otherwise, the implementation of the Data Reference determines the meaning of no context. For Points or simply configured PI Point Data References, this means the snapshot value of the PI Point on the Data Server.
   --time-zone: string # The time zone in which the time string will be interpreted. This parameter will be ignored if a time zone is specified in the time string. If no time zone is specified in either places, the PI Web API server time zone will be used.
-]: nothing -> record<Annotated: bool, Errors: table<FieldName: string, Message: list>, Good: bool, Questionable: bool, Substituted: bool, Timestamp: string, UnitsAbbreviation: string, Value: record, WebException: record<Errors: list<string>, StatusCode: int>> {
+]: nothing -> oneof<record<Annotated: bool, Errors: table<FieldName: string, Message: list>, Good: bool, Questionable: bool, Substituted: bool, Timestamp: string, UnitsAbbreviation: string, Value: record, WebException: record<Errors: list<string>, StatusCode: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -15282,8 +15195,6 @@ export def "stream-get-value" [
 #
 # POST /streams/{webId}/value
 # operationId: Stream_UpdateValue
-# --Errors item shape: {FieldName?: string, Message?: list<string>}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "stream-update-value" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -15348,13 +15259,14 @@ export def "stream-set-get-channel-ad-hoc" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --web-id: list<string> # The ID of a stream. Multiple streams may be specified with multiple instances of the parameter.
+  --web-id: list<string> # The ID of a stream. Multiple streams may be specified with multiple instances of the parameter. (required)
   --heartbeat-rate: int # Specifies the maximum number of consecutive empty messages that can be elapsed with no new data updates from the PI System, after which the client receives an empty payload. It helps to check if the connection is still alive. Zero/negative values correspond to no heartbeat, and the default value is no heartbeat.
   --include-initial-values: oneof<nothing, bool> # Specified if the channel should send a message with the current values of all the streams after the connection is opened. The default is 'false'.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id == null) { error make --unspanned { msg: "required query parameter 'webId' missing: pass --web-id" } }
   let qp = [(serialize-qp "webId" $web_id "multi") (serialize-qp "heartbeatRate" $heartbeat_rate "scalar") (serialize-qp "includeInitialValues" $include_initial_values "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/streamsets/channel" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -15388,14 +15300,15 @@ export def "stream-set-get-end-ad-hoc" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --web-id: list<string> # The ID of a stream. Multiple streams may be specified with multiple instances of the parameter.
+  --web-id: list<string> # The ID of a stream. Multiple streams may be specified with multiple instances of the parameter. (required)
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --sort-field: string # The field or property of the object used to sort the returned collection. For better performance, by default no sorting is applied. 'Name' is the only supported field by which to sort.
   --sort-order: string # The order that the returned collection is sorted. The default is 'Ascending'
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<Items: list, Links: record, Name: string, Path: string, UnitsAbbreviation: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<Items: list, Links: record, Name: string, Path: string, UnitsAbbreviation: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id == null) { error make --unspanned { msg: "required query parameter 'webId' missing: pass --web-id" } }
   let qp = [(serialize-qp "webId" $web_id "multi") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/streamsets/end" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -15429,7 +15342,7 @@ export def "stream-set-get-interpolated-ad-hoc" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --web-id: list<string> # The ID of a stream. Multiple streams may be specified with multiple instances of the parameter.
+  --web-id: list<string> # The ID of a stream. Multiple streams may be specified with multiple instances of the parameter. (required)
   --end-time: string # An optional end time. The default is '*'. Note that if endTime is earlier than startTime, the resulting values will be in time-descending order.
   --filter-expression: string # An optional string containing a filter expression. Expression variables are relative to the data point. Use '.' to reference the containing attribute. If the attribute does not support filtering, the filter will be ignored. The default is no filtering.
   --include-filtered-values: oneof<nothing, bool> # Specify 'true' to indicate that values which fail the filter criteria are present in the returned data at the times where they occurred with a value set to a 'Filtered' enumeration value with bad status. Repeated consecutive failures are omitted.
@@ -15442,9 +15355,10 @@ export def "stream-set-get-interpolated-ad-hoc" [
   --sync-time-boundary-type: string # An optional string specifying the boundary type to use when applying a syncTime. The allowed values are 'Inside' and 'Outside'. The default is 'Inside'.
   --time-zone: string # The time zone in which the time string will be interpreted. This parameter will be ignored if a time zone is specified in the time string. If no time zone is specified in either places, the PI Web API server time zone will be used.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<Items: list, Links: record, Name: string, Path: string, UnitsAbbreviation: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<Items: list, Links: record, Name: string, Path: string, UnitsAbbreviation: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id == null) { error make --unspanned { msg: "required query parameter 'webId' missing: pass --web-id" } }
   let qp = [(serialize-qp "webId" $web_id "multi") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "filterExpression" $filter_expression "scalar") (serialize-qp "includeFilteredValues" $include_filtered_values "scalar") (serialize-qp "interval" $interval "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "syncTime" $sync_time "scalar") (serialize-qp "syncTimeBoundaryType" $sync_time_boundary_type "scalar") (serialize-qp "timeZone" $time_zone "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/streamsets/interpolated" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -15478,17 +15392,19 @@ export def "stream-set-get-interpolated-at-times-ad-hoc" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --time: list<string> # The timestamp at which to retrieve a interpolated value. Multiple timestamps may be specified with multiple instances of the parameter.
-  --web-id: list<string> # The ID of a stream. Multiple streams may be specified with multiple instances of the parameter.
+  --time: list<string> # The timestamp at which to retrieve a interpolated value. Multiple timestamps may be specified with multiple instances of the parameter. (required)
+  --web-id: list<string> # The ID of a stream. Multiple streams may be specified with multiple instances of the parameter. (required)
   --filter-expression: string # An optional string containing a filter expression. Expression variables are relative to the data point. Use '.' to reference the containing attribute. If the attribute does not support filtering, the filter will be ignored. The default is no filtering.
   --include-filtered-values: oneof<nothing, bool> # Specify 'true' to indicate that values which fail the filter criteria are present in the returned data at the times where they occurred with a value set to a 'Filtered' enumeration value with bad status. Repeated consecutive failures are omitted.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --sort-order: string # The order that the returned collection is sorted. The default is 'Ascending'.
   --time-zone: string # The time zone in which the time string will be interpreted. This parameter will be ignored if a time zone is specified in the time string. If no time zone is specified in either places, the PI Web API server time zone will be used.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<Items: list, Links: record, Name: string, Path: string, UnitsAbbreviation: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<Items: list, Links: record, Name: string, Path: string, UnitsAbbreviation: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($time == null) { error make --unspanned { msg: "required query parameter 'time' missing: pass --time" } }
+  if ($web_id == null) { error make --unspanned { msg: "required query parameter 'webId' missing: pass --web-id" } }
   let qp = [(serialize-qp "time" $time "multi") (serialize-qp "webId" $web_id "multi") (serialize-qp "filterExpression" $filter_expression "scalar") (serialize-qp "includeFilteredValues" $include_filtered_values "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "timeZone" $time_zone "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/streamsets/interpolatedattimes" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -15522,8 +15438,8 @@ export def "stream-set-get-joined" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --base-web-id: string # The ID of the base stream which is used for retrieving the recorded values.
-  --subordinate-web-id: list<string> # The ID of a stream whose values will be joined on the times with the values of the base stream. Multiple streams may be specified with multiple instances of the parameter.
+  --base-web-id: string # The ID of the base stream which is used for retrieving the recorded values. (required)
+  --subordinate-web-id: list<string> # The ID of a stream whose values will be joined on the times with the values of the base stream. Multiple streams may be specified with multiple instances of the parameter. (required)
   --boundary-type: string # An optional value that determines how the times and values of the returned end points are determined. The default is 'Inside'.
   --end-time: string # An optional end time. The default is '*' for element attributes and points. For event frame attributes, the default is the event frame's end time, or '*' if that is not set. Note that if endTime is earlier than startTime, the resulting values will be in time-descending order.
   --filter-expression: string # An optional string containing a filter expression. Expression variables are relative to the data point. Use '.' to reference the containing attribute. The default is no filtering.
@@ -15533,9 +15449,11 @@ export def "stream-set-get-joined" [
   --start-time: string # An optional start time. The default is '*-1d' for element attributes and points. For event frame attributes, the default is the event frame's start time, or '*-1d' if that is not set.
   --time-zone: string # The time zone in which the time string will be interpreted. This parameter will be ignored if a time zone is specified in the time string. If no time zone is specified in either place, the PI Web API server time zone will be used.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<Items: list, Links: record, Name: string, Path: string, UnitsAbbreviation: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<Items: list, Links: record, Name: string, Path: string, UnitsAbbreviation: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($base_web_id == null) { error make --unspanned { msg: "required query parameter 'baseWebId' missing: pass --base-web-id" } }
+  if ($subordinate_web_id == null) { error make --unspanned { msg: "required query parameter 'subordinateWebId' missing: pass --subordinate-web-id" } }
   let qp = [(serialize-qp "baseWebId" $base_web_id "scalar") (serialize-qp "subordinateWebId" $subordinate_web_id "multi") (serialize-qp "boundaryType" $boundary_type "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "filterExpression" $filter_expression "scalar") (serialize-qp "includeFilteredValues" $include_filtered_values "scalar") (serialize-qp "maxCount" $max_count "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "timeZone" $time_zone "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/streamsets/joined" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -15569,7 +15487,7 @@ export def "stream-set-get-plot-ad-hoc" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --web-id: list<string> # The ID of a stream. Multiple streams may be specified with multiple instances of the parameter.
+  --web-id: list<string> # The ID of a stream. Multiple streams may be specified with multiple instances of the parameter. (required)
   --end-time: string # An optional end time. The default is '*'. Note that if endTime is earlier than startTime, the resulting values will be in time-descending order.
   --intervals: int # The number of intervals to plot over. Typically, this would be the number of horizontal pixels in the trend. The default is '24'. For each interval, the data available is examined and significant values are returned. Each interval can produce up to 5 values if they are unique, the first value in the interval, the last value, the highest value, the lowest value and at most one exceptional point (bad status or digital state).
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
@@ -15578,9 +15496,10 @@ export def "stream-set-get-plot-ad-hoc" [
   --start-time: string # An optional start time. The default is '*-1d'.
   --time-zone: string # The time zone in which the time string will be interpreted. This parameter will be ignored if a time zone is specified in the time string. If no time zone is specified in either places, the PI Web API server time zone will be used.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<Items: list, Links: record, Name: string, Path: string, UnitsAbbreviation: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<Items: list, Links: record, Name: string, Path: string, UnitsAbbreviation: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id == null) { error make --unspanned { msg: "required query parameter 'webId' missing: pass --web-id" } }
   let qp = [(serialize-qp "webId" $web_id "multi") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "intervals" $intervals "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "timeZone" $time_zone "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/streamsets/plot" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -15614,7 +15533,7 @@ export def "stream-set-get-recorded-ad-hoc" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --web-id: list<string> # The ID of a stream. Multiple streams may be specified with multiple instances of the parameter.
+  --web-id: list<string> # The ID of a stream. Multiple streams may be specified with multiple instances of the parameter. (required)
   --boundary-type: string # An optional value that determines how the times and values of the returned end points are determined. The default is 'Inside'.
   --end-time: string # An optional end time. The default is '*'. Note that if endTime is earlier than startTime, the resulting values will be in time-descending order.
   --filter-expression: string # An optional string containing a filter expression. Expression variables are relative to the data point. Use '.' to reference the containing attribute. The default is no filtering.
@@ -15626,9 +15545,10 @@ export def "stream-set-get-recorded-ad-hoc" [
   --start-time: string # An optional start time. The default is '*-1d'.
   --time-zone: string # The time zone in which the time string will be interpreted. This parameter will be ignored if a time zone is specified in the time string. If no time zone is specified in either places, the PI Web API server time zone will be used.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<Items: list, Links: record, Name: string, Path: string, UnitsAbbreviation: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<Items: list, Links: record, Name: string, Path: string, UnitsAbbreviation: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id == null) { error make --unspanned { msg: "required query parameter 'webId' missing: pass --web-id" } }
   let qp = [(serialize-qp "webId" $web_id "multi") (serialize-qp "boundaryType" $boundary_type "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "filterExpression" $filter_expression "scalar") (serialize-qp "includeFilteredValues" $include_filtered_values "scalar") (serialize-qp "maxCount" $max_count "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "timeZone" $time_zone "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/streamsets/recorded" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -15665,7 +15585,7 @@ export def "stream-set-update-values-ad-hoc" [
   --buffer-option: string # The desired AFBufferOption. The default is 'BufferIfPossible'.
   --update-option: string # The desired AFUpdateOption. The default is 'Replace'.
   --body: list
-]: any -> record<Items: table<Items: list, Links: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: any -> oneof<record<Items: table<Items: list, Links: record>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -15704,15 +15624,17 @@ export def "stream-set-get-recorded-at-time-ad-hoc" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --time: string # The timestamp at which the values are desired.
-  --web-id: list<string> # The ID of a stream. Multiple streams may be specified with multiple instances of the parameter.
+  --time: string # The timestamp at which the values are desired. (required)
+  --web-id: list<string> # The ID of a stream. Multiple streams may be specified with multiple instances of the parameter. (required)
   --retrieval-mode: string # An optional value that determines the values to return when values don't exist at the exact time specified. The default is 'Auto'.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --time-zone: string # The time zone in which the time string will be interpreted. This parameter will be ignored if a time zone is specified in the time string. If no time zone is specified in either places, the PI Web API server time zone will be used.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<Links: record, Name: string, Path: string, Value: record, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<Links: record, Name: string, Path: string, Value: record, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($time == null) { error make --unspanned { msg: "required query parameter 'time' missing: pass --time" } }
+  if ($web_id == null) { error make --unspanned { msg: "required query parameter 'webId' missing: pass --web-id" } }
   let qp = [(serialize-qp "time" $time "scalar") (serialize-qp "webId" $web_id "multi") (serialize-qp "retrievalMode" $retrieval_mode "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "timeZone" $time_zone "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/streamsets/recordedattime" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -15746,16 +15668,18 @@ export def "stream-set-get-recorded-at-times-ad-hoc" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --time: list<string> # The timestamp at which to retrieve a recorded value. Multiple timestamps may be specified with multiple instances of the parameter.
-  --web-id: list<string> # The ID of a stream. Multiple streams may be specified with multiple instances of the parameter.
+  --time: list<string> # The timestamp at which to retrieve a recorded value. Multiple timestamps may be specified with multiple instances of the parameter. (required)
+  --web-id: list<string> # The ID of a stream. Multiple streams may be specified with multiple instances of the parameter. (required)
   --retrieval-mode: string # An optional value that determines the values to return when values don't exist at the exact time specified. The default is 'Auto'.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --sort-order: string # The order that the returned collection is sorted. The default is 'Ascending'.
   --time-zone: string # The time zone in which the time string will be interpreted. This parameter will be ignored if a time zone is specified in the time string. If no time zone is specified in either places, the PI Web API server time zone will be used.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<Items: list, Links: record, Name: string, Path: string, UnitsAbbreviation: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<Items: list, Links: record, Name: string, Path: string, UnitsAbbreviation: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($time == null) { error make --unspanned { msg: "required query parameter 'time' missing: pass --time" } }
+  if ($web_id == null) { error make --unspanned { msg: "required query parameter 'webId' missing: pass --web-id" } }
   let qp = [(serialize-qp "time" $time "multi") (serialize-qp "webId" $web_id "multi") (serialize-qp "retrievalMode" $retrieval_mode "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "timeZone" $time_zone "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/streamsets/recordedattimes" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -15789,7 +15713,7 @@ export def "stream-set-get-summaries-ad-hoc" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --web-id: list<string> # The ID of a stream. Multiple streams may be specified with multiple instances of the parameter.
+  --web-id: list<string> # The ID of a stream. Multiple streams may be specified with multiple instances of the parameter. (required)
   --calculation-basis: string # Specifies the method of evaluating the data over the time range. The default is 'TimeWeighted'.
   --end-time: string # An optional end time. The default is '*'. Note that if endTime is earlier than startTime, the resulting values will be in time-descending order.
   --filter-expression: string # A string containing a filter expression. Expression variables are relative to the attribute. Use '.' to reference the containing attribute. The default is no filtering.
@@ -15802,9 +15726,10 @@ export def "stream-set-get-summaries-ad-hoc" [
   --time-type: string # Specifies how to calculate the timestamp for each interval. The default is 'Auto'.
   --time-zone: string # The time zone in which the time string will be interpreted. This parameter will be ignored if a time zone is specified in the time string. If no time zone is specified in either places, the PI Web API server time zone will be used.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<Items: list, Links: record, Name: string, Path: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<Items: list, Links: record, Name: string, Path: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id == null) { error make --unspanned { msg: "required query parameter 'webId' missing: pass --web-id" } }
   let qp = [(serialize-qp "webId" $web_id "multi") (serialize-qp "calculationBasis" $calculation_basis "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "filterExpression" $filter_expression "scalar") (serialize-qp "sampleInterval" $sample_interval "scalar") (serialize-qp "sampleType" $sample_type "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "summaryDuration" $summary_duration "scalar") (serialize-qp "summaryType" $summary_type "multi") (serialize-qp "timeType" $time_type "scalar") (serialize-qp "timeZone" $time_zone "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/streamsets/summary" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -15838,12 +15763,13 @@ export def "stream-set-retrieve-stream-set-updates" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --marker: list<string> # Identifier of stream source and current position. Multiple markers may be specified with multiple instances of the parameter.
+  --marker: list<string> # Identifier of stream source and current position. Multiple markers may be specified with multiple instances of the parameter. (required)
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<Events: list, Exception: record, LatestMarker: string, RequestedMarker: string, Source: string, SourceName: string, SourcePath: string, Status: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<Events: list, Exception: record, LatestMarker: string, RequestedMarker: string, Source: string, SourceName: string, SourcePath: string, Status: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($marker == null) { error make --unspanned { msg: "required query parameter 'marker' missing: pass --marker" } }
   let qp = [(serialize-qp "marker" $marker "multi") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/streamsets/updates" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -15877,12 +15803,13 @@ export def "stream-set-register-stream-set-updates" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --web-id: list<string> # The ID of a stream. Multiple streams may be specified with multiple instances of the parameter.
+  --web-id: list<string> # The ID of a stream. Multiple streams may be specified with multiple instances of the parameter. (required)
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<Exception: record, LatestMarker: string, Source: string, SourceName: string, SourcePath: string, Status: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<Exception: record, LatestMarker: string, Source: string, SourceName: string, SourcePath: string, Status: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id == null) { error make --unspanned { msg: "required query parameter 'webId' missing: pass --web-id" } }
   let qp = [(serialize-qp "webId" $web_id "multi") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/streamsets/updates" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -15916,16 +15843,17 @@ export def "stream-set-get-values-ad-hoc" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --web-id: list<string> # The ID of a stream. Multiple streams may be specified with multiple instances of the parameter.
+  --web-id: list<string> # The ID of a stream. Multiple streams may be specified with multiple instances of the parameter. (required)
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --sort-field: string # The field or property of the object used to sort the returned collection. For better performance, by default no sorting is applied. 'Name' is the only supported field by which to sort.
   --sort-order: string # The order that the returned collection is sorted. The default is 'Ascending'
   --time: string # An AF time string, which is used as the time context to get stream values if it is provided. By default, it is not specified, and the default time context of the AF object will be used.
   --time-zone: string # The time zone in which the time string will be interpreted. This parameter will be ignored if a time zone is specified in the time string. If no time zone is specified in either places, the PI Web API server time zone will be used.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<Links: record, Name: string, Path: string, Value: record, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<Links: record, Name: string, Path: string, Value: record, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id == null) { error make --unspanned { msg: "required query parameter 'webId' missing: pass --web-id" } }
   let qp = [(serialize-qp "webId" $web_id "multi") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "time" $time "scalar") (serialize-qp "timeZone" $time_zone "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/streamsets/value" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -15962,7 +15890,7 @@ export def "stream-set-update-value-ad-hoc" [
   --buffer-option: string # The desired AFBufferOption. The default is 'BufferIfPossible'.
   --update-option: string # The desired AFUpdateOption. The default is 'Replace'.
   --body: list
-]: any -> record<Items: table<Message: string, Substatus: int, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: any -> oneof<record<Items: table<Message: string, Substatus: int, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -16059,7 +15987,7 @@ export def "stream-set-get-end" [
   --sort-order: string # The order that the returned collection is sorted. The default is 'Ascending'
   --template-name: string # Specify that included attributes must be members of this template. The default is no template filter.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<Links: record, Name: string, Path: string, Value: record, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<Links: record, Name: string, Path: string, Value: record, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -16115,7 +16043,7 @@ export def "stream-set-get-interpolated" [
   --template-name: string # Specify that included attributes must be members of this template. The default is no template filter.
   --time-zone: string # The time zone in which the time string will be interpreted. This parameter will be ignored if a time zone is specified in the time string. If no time zone is specified in either places, the PI Web API server time zone will be used.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<Items: list, Links: record, Name: string, Path: string, UnitsAbbreviation: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<Items: list, Links: record, Name: string, Path: string, UnitsAbbreviation: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -16153,7 +16081,7 @@ export def "stream-set-get-interpolated-at-times" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --time: list<string> # The timestamp at which to retrieve a interpolated value. Multiple timestamps may be specified with multiple instances of the parameter.
+  --time: list<string> # The timestamp at which to retrieve a interpolated value. Multiple timestamps may be specified with multiple instances of the parameter. (required)
   --category-name: string # Specify that included attributes must have this category. The default is no category filter.
   --filter-expression: string # An optional string containing a filter expression. Expression variables are relative to the data point. Use '.' to reference the containing attribute. If the attribute does not support filtering, the filter will be ignored. The default is no filtering.
   --include-filtered-values: oneof<nothing, bool> # Specify 'true' to indicate that values which fail the filter criteria are present in the returned data at the times where they occurred with a value set to a 'Filtered' enumeration value with bad status. Repeated consecutive failures are omitted.
@@ -16166,10 +16094,11 @@ export def "stream-set-get-interpolated-at-times" [
   --template-name: string # Specify that included attributes must be members of this template. The default is no template filter.
   --time-zone: string # The time zone in which the time string will be interpreted. This parameter will be ignored if a time zone is specified in the time string. If no time zone is specified in either places, the PI Web API server time zone will be used.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<Items: list, Links: record, Name: string, Path: string, UnitsAbbreviation: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<Items: list, Links: record, Name: string, Path: string, UnitsAbbreviation: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($time == null) { error make --unspanned { msg: "required query parameter 'time' missing: pass --time" } }
   let qp = [(serialize-qp "time" $time "multi") (serialize-qp "categoryName" $category_name "scalar") (serialize-qp "filterExpression" $filter_expression "scalar") (serialize-qp "includeFilteredValues" $include_filtered_values "scalar") (serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "searchFullHierarchy" $search_full_hierarchy "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "showExcluded" $show_excluded "scalar") (serialize-qp "showHidden" $show_hidden "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "templateName" $template_name "scalar") (serialize-qp "timeZone" $time_zone "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/streamsets/{web_id}/interpolatedattimes") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -16218,7 +16147,7 @@ export def "stream-set-get-plot" [
   --template-name: string # Specify that included attributes must be members of this template. The default is no template filter.
   --time-zone: string # The time zone in which the time string will be interpreted. This parameter will be ignored if a time zone is specified in the time string. If no time zone is specified in either places, the PI Web API server time zone will be used.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<Items: list, Links: record, Name: string, Path: string, UnitsAbbreviation: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<Items: list, Links: record, Name: string, Path: string, UnitsAbbreviation: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -16273,7 +16202,7 @@ export def "stream-set-get-recorded" [
   --template-name: string # Specify that included attributes must be members of this template. The default is no template filter.
   --time-zone: string # The time zone in which the time string will be interpreted. This parameter will be ignored if a time zone is specified in the time string. If no time zone is specified in either places, the PI Web API server time zone will be used.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<Items: list, Links: record, Name: string, Path: string, UnitsAbbreviation: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<Items: list, Links: record, Name: string, Path: string, UnitsAbbreviation: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -16314,7 +16243,7 @@ export def "stream-set-update-values" [
   --buffer-option: string # The desired AFBufferOption. The default is 'BufferIfPossible'.
   --update-option: string # The desired AFUpdateOption. The default is 'Replace'.
   --body: list
-]: any -> record<Items: table<Items: list, Links: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: any -> oneof<record<Items: table<Items: list, Links: record>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -16355,7 +16284,7 @@ export def "stream-set-get-recorded-at-time" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --time: string # The timestamp at which the values are desired.
+  --time: string # The timestamp at which the values are desired. (required)
   --category-name: string # Specify that included attributes must have this category. The default is no category filter.
   --name-filter: string # The name query string used for filtering attributes. The default is no filter.
   --retrieval-mode: string # An optional value that determines the values to return when values don't exist at the exact time specified. The default is 'Auto'.
@@ -16366,10 +16295,11 @@ export def "stream-set-get-recorded-at-time" [
   --template-name: string # Specify that included attributes must be members of this template. The default is no template filter.
   --time-zone: string # The time zone in which the time string will be interpreted. This parameter will be ignored if a time zone is specified in the time string. If no time zone is specified in either places, the PI Web API server time zone will be used.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<Links: record, Name: string, Path: string, Value: record, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<Links: record, Name: string, Path: string, Value: record, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($time == null) { error make --unspanned { msg: "required query parameter 'time' missing: pass --time" } }
   let qp = [(serialize-qp "time" $time "scalar") (serialize-qp "categoryName" $category_name "scalar") (serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "retrievalMode" $retrieval_mode "scalar") (serialize-qp "searchFullHierarchy" $search_full_hierarchy "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "showExcluded" $show_excluded "scalar") (serialize-qp "showHidden" $show_hidden "scalar") (serialize-qp "templateName" $template_name "scalar") (serialize-qp "timeZone" $time_zone "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/streamsets/{web_id}/recordedattime") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -16404,7 +16334,7 @@ export def "stream-set-get-recorded-at-times" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --time: list<string> # The timestamp at which to retrieve a recorded value. Multiple timestamps may be specified with multiple instances of the parameter.
+  --time: list<string> # The timestamp at which to retrieve a recorded value. Multiple timestamps may be specified with multiple instances of the parameter. (required)
   --category-name: string # Specify that included attributes must have this category. The default is no category filter.
   --name-filter: string # The name query string used for filtering attributes. The default is no filter.
   --retrieval-mode: string # An optional value that determines the values to return when values don't exist at the exact time specified. The default is 'Auto'.
@@ -16416,10 +16346,11 @@ export def "stream-set-get-recorded-at-times" [
   --template-name: string # Specify that included attributes must be members of this template. The default is no template filter.
   --time-zone: string # The time zone in which the time string will be interpreted. This parameter will be ignored if a time zone is specified in the time string. If no time zone is specified in either places, the PI Web API server time zone will be used.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<Items: list, Links: record, Name: string, Path: string, UnitsAbbreviation: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<Items: list, Links: record, Name: string, Path: string, UnitsAbbreviation: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($time == null) { error make --unspanned { msg: "required query parameter 'time' missing: pass --time" } }
   let qp = [(serialize-qp "time" $time "multi") (serialize-qp "categoryName" $category_name "scalar") (serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "retrievalMode" $retrieval_mode "scalar") (serialize-qp "searchFullHierarchy" $search_full_hierarchy "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "showExcluded" $show_excluded "scalar") (serialize-qp "showHidden" $show_hidden "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "templateName" $template_name "scalar") (serialize-qp "timeZone" $time_zone "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/streamsets/{web_id}/recordedattimes") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -16472,7 +16403,7 @@ export def "stream-set-get-summaries" [
   --time-type: string # Specifies how to calculate the timestamp for each interval. The default is 'Auto'.
   --time-zone: string # The time zone in which the time string will be interpreted. This parameter will be ignored if a time zone is specified in the time string. If no time zone is specified in either places, the PI Web API server time zone will be used.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<Items: list, Links: record, Name: string, Path: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<Items: list, Links: record, Name: string, Path: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -16522,7 +16453,7 @@ export def "stream-set-get-values" [
   --time: string # An AF time string, which is used as the time context to get stream values if it is provided. By default, it is not specified, and the default time context of the AF object will be used.
   --time-zone: string # The time zone in which the time string will be interpreted. This parameter will be ignored if a time zone is specified in the time string. If no time zone is specified in either places, the PI Web API server time zone will be used.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<Links: record, Name: string, Path: string, Value: record, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<Links: record, Name: string, Path: string, Value: record, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -16563,7 +16494,7 @@ export def "stream-set-update-value" [
   --buffer-option: string # The desired AFBufferOption. The default is 'BufferIfPossible'.
   --update-option: string # The desired AFUpdateOption. The default is 'Replace'.
   --body: list
-]: any -> record<Items: table<Message: string, Substatus: int, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: any -> oneof<record<Items: table<Message: string, Substatus: int, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -16603,7 +16534,7 @@ export def "system-landing" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<Links: record<CacheInstances: string, Configuration: string, Self: string, Status: string, UserInfo: string, Versions: string>, ProductTitle: string, ProductVersion: string, WebException: record<Errors: list<string>, StatusCode: int>> {
+]: nothing -> oneof<record<Links: record<CacheInstances: string, Configuration: string, Self: string, Status: string, UserInfo: string, Versions: string>, ProductTitle: string, ProductVersion: string, WebException: record<Errors: list<string>, StatusCode: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/system" $auth.query)
@@ -16638,7 +16569,7 @@ export def "system-cache-instances" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<Items: table<Id: string, LastRefreshTime: string, ScheduledExpirationTime: string, User: string, WebException: record, WillRefreshAfter: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<Id: string, LastRefreshTime: string, ScheduledExpirationTime: string, User: string, WebException: record, WillRefreshAfter: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/system/cacheinstances" $auth.query)
@@ -16673,7 +16604,7 @@ export def "configuration-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/system/configuration" $auth.query)
@@ -16746,7 +16677,7 @@ export def "configuration-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
@@ -16782,7 +16713,7 @@ export def "system-status" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<CacheInstances: int, ServerTime: string, State: string, UpTimeInMinutes: float, WebException: record<Errors: list<string>, StatusCode: int>> {
+]: nothing -> oneof<record<CacheInstances: int, ServerTime: string, State: string, UpTimeInMinutes: float, WebException: record<Errors: list<string>, StatusCode: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/system/status" $auth.query)
@@ -16817,7 +16748,7 @@ export def "system-user-info" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<IdentityType: string, ImpersonationLevel: string, IsAuthenticated: bool, Name: string, SID: string, WebException: record<Errors: list<string>, StatusCode: int>> {
+]: nothing -> oneof<record<IdentityType: string, ImpersonationLevel: string, IsAuthenticated: bool, Name: string, SID: string, WebException: record<Errors: list<string>, StatusCode: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/system/userinfo" $auth.query)
@@ -16852,7 +16783,7 @@ export def "system-versions" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/system/versions" $auth.query)
@@ -16887,12 +16818,13 @@ export def "table-category-get-by-path" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --path: string # The path to the target table category.
+  --path: string # The path to the target table category. (required)
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Description: string, Id: string, Links: record<Database: string, Security: string, SecurityEntries: string, Self: string>, Name: string, Path: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
+]: nothing -> oneof<record<Description: string, Id: string, Links: record<Database: string, Security: string, SecurityEntries: string, Self: string>, Name: string, Path: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($path == null) { error make --unspanned { msg: "required query parameter 'path' missing: pass --path" } }
   let qp = [(serialize-qp "path" $path "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/tablecategories" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -16966,7 +16898,7 @@ export def "table-category-get" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Description: string, Id: string, Links: record<Database: string, Security: string, SecurityEntries: string, Self: string>, Name: string, Path: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
+]: nothing -> oneof<record<Description: string, Id: string, Links: record<Database: string, Security: string, SecurityEntries: string, Self: string>, Name: string, Path: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -16992,8 +16924,6 @@ export def "table-category-get" [
 #
 # PATCH /tablecategories/{webId}
 # operationId: TableCategory_Update
-# --Links shape: {Database?: string, Security?: string, SecurityEntries?: string, Self?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "table-category-update" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -17053,14 +16983,15 @@ export def "table-category-get-security" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --user-identity: list<string> # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned.
+  --user-identity: list<string> # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned. (required)
   --force-refresh: oneof<nothing, bool> # Indicates if the security cache should be refreshed before getting security information. The default is 'false'.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<CanAnnotate: bool, CanDelete: bool, CanExecute: bool, CanRead: bool, CanReadData: bool, CanSubscribe: bool, CanSubscribeOthers: bool, CanWrite: bool, CanWriteData: bool, HasAdmin: bool, Links: record, OwnerWebId: string, Rights: list, SecurityItem: string, UserIdentity: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<CanAnnotate: bool, CanDelete: bool, CanExecute: bool, CanRead: bool, CanReadData: bool, CanSubscribe: bool, CanSubscribeOthers: bool, CanWrite: bool, CanWriteData: bool, HasAdmin: bool, Links: record, OwnerWebId: string, Rights: list, SecurityItem: string, UserIdentity: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($user_identity == null) { error make --unspanned { msg: "required query parameter 'userIdentity' missing: pass --user-identity" } }
   let qp = [(serialize-qp "userIdentity" $user_identity "multi") (serialize-qp "forceRefresh" $force_refresh "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/tablecategories/{web_id}/security") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -17098,7 +17029,7 @@ export def "table-category-get-security-entries" [
   --name-filter: string # The name query string used for filtering security entries. The default is no filter.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<AllowRights: list, DenyRights: list, Links: record, Name: string, SecurityIdentityName: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<AllowRights: list, DenyRights: list, Links: record, Name: string, SecurityIdentityName: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -17124,8 +17055,6 @@ export def "table-category-get-security-entries" [
 #
 # POST /tablecategories/{webId}/securityentries
 # operationId: TableCategory_CreateSecurityEntry
-# --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "table-category-create-security-entry" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -17231,7 +17160,7 @@ export def "table-category-get-security-entry-by-name" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<AllowRights: list<string>, DenyRights: list<string>, Links: record<SecurableObject: string, SecurityIdentity: string, Self: string>, Name: string, SecurityIdentityName: string, WebException: record<Errors: list<string>, StatusCode: int>> {
+]: nothing -> oneof<record<AllowRights: list<string>, DenyRights: list<string>, Links: record<SecurableObject: string, SecurityIdentity: string, Self: string>, Name: string, SecurityIdentityName: string, WebException: record<Errors: list<string>, StatusCode: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -17258,8 +17187,6 @@ export def "table-category-get-security-entry-by-name" [
 #
 # PUT /tablecategories/{webId}/securityentries/{name}
 # operationId: TableCategory_UpdateSecurityEntry
-# --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "table-category-update-security-entry" [
   web_id: string
   name: string
@@ -17321,12 +17248,13 @@ export def "table-get-by-path" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --path: string # The path to the table.
+  --path: string # The path to the table. (required)
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<CategoryNames: list<string>, ConvertToLocalTime: bool, Description: string, Id: string, Links: record<Categories: string, Data: string, Database: string, Security: string, SecurityEntries: string, Self: string>, Name: string, Path: string, TimeZone: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
+]: nothing -> oneof<record<CategoryNames: list<string>, ConvertToLocalTime: bool, Description: string, Id: string, Links: record<Categories: string, Data: string, Database: string, Security: string, SecurityEntries: string, Self: string>, Name: string, Path: string, TimeZone: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($path == null) { error make --unspanned { msg: "required query parameter 'path' missing: pass --path" } }
   let qp = [(serialize-qp "path" $path "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/tables" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -17400,7 +17328,7 @@ export def "table-get" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<CategoryNames: list<string>, ConvertToLocalTime: bool, Description: string, Id: string, Links: record<Categories: string, Data: string, Database: string, Security: string, SecurityEntries: string, Self: string>, Name: string, Path: string, TimeZone: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
+]: nothing -> oneof<record<CategoryNames: list<string>, ConvertToLocalTime: bool, Description: string, Id: string, Links: record<Categories: string, Data: string, Database: string, Security: string, SecurityEntries: string, Self: string>, Name: string, Path: string, TimeZone: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -17426,8 +17354,6 @@ export def "table-get" [
 #
 # PATCH /tables/{webId}
 # operationId: Table_Update
-# --Links shape: {Categories?: string, Data?: string, Database?: string, Security?: string, SecurityEntries?: string, Self?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "table-update" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -17492,7 +17418,7 @@ export def "table-get-categories" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<Description: string, Id: string, Links: record, Name: string, Path: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<Description: string, Id: string, Links: record, Name: string, Path: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -17531,7 +17457,7 @@ export def "table-get-data" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
-]: nothing -> record<Columns: record, Rows: list<record>, WebException: record<Errors: list<string>, StatusCode: int>> {
+]: nothing -> oneof<record<Columns: record, Rows: list<record>, WebException: record<Errors: list<string>, StatusCode: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -17557,7 +17483,6 @@ export def "table-get-data" [
 #
 # PUT /tables/{webId}/data
 # operationId: Table_UpdateData
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "table-update-data" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -17613,14 +17538,15 @@ export def "table-get-security" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --user-identity: list<string> # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned.
+  --user-identity: list<string> # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned. (required)
   --force-refresh: oneof<nothing, bool> # Indicates if the security cache should be refreshed before getting security information. The default is 'false'.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<CanAnnotate: bool, CanDelete: bool, CanExecute: bool, CanRead: bool, CanReadData: bool, CanSubscribe: bool, CanSubscribeOthers: bool, CanWrite: bool, CanWriteData: bool, HasAdmin: bool, Links: record, OwnerWebId: string, Rights: list, SecurityItem: string, UserIdentity: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<CanAnnotate: bool, CanDelete: bool, CanExecute: bool, CanRead: bool, CanReadData: bool, CanSubscribe: bool, CanSubscribeOthers: bool, CanWrite: bool, CanWriteData: bool, HasAdmin: bool, Links: record, OwnerWebId: string, Rights: list, SecurityItem: string, UserIdentity: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($user_identity == null) { error make --unspanned { msg: "required query parameter 'userIdentity' missing: pass --user-identity" } }
   let qp = [(serialize-qp "userIdentity" $user_identity "multi") (serialize-qp "forceRefresh" $force_refresh "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/tables/{web_id}/security") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -17658,7 +17584,7 @@ export def "table-get-security-entries" [
   --name-filter: string # The name query string used for filtering security entries. The default is no filter.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Items: table<AllowRights: list, DenyRights: list, Links: record, Name: string, SecurityIdentityName: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
+]: nothing -> oneof<record<Items: table<AllowRights: list, DenyRights: list, Links: record, Name: string, SecurityIdentityName: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -17684,8 +17610,6 @@ export def "table-get-security-entries" [
 #
 # POST /tables/{webId}/securityentries
 # operationId: Table_CreateSecurityEntry
-# --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "table-create-security-entry" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -17791,7 +17715,7 @@ export def "table-get-security-entry-by-name" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<AllowRights: list<string>, DenyRights: list<string>, Links: record<SecurableObject: string, SecurityIdentity: string, Self: string>, Name: string, SecurityIdentityName: string, WebException: record<Errors: list<string>, StatusCode: int>> {
+]: nothing -> oneof<record<AllowRights: list<string>, DenyRights: list<string>, Links: record<SecurableObject: string, SecurityIdentity: string, Self: string>, Name: string, SecurityIdentityName: string, WebException: record<Errors: list<string>, StatusCode: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -17818,8 +17742,6 @@ export def "table-get-security-entry-by-name" [
 #
 # PUT /tables/{webId}/securityentries/{name}
 # operationId: Table_UpdateSecurityEntry
-# --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "table-update-security-entry" [
   web_id: string
   name: string
@@ -17881,12 +17803,13 @@ export def "time-rule-plug-in-get-by-path" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --path: string # The path to the Time Rule Plug-in.
+  --path: string # The path to the Time Rule Plug-in. (required)
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<AssemblyFileName: string, AssemblyID: string, AssemblyLoadProperties: list<string>, AssemblyTime: string, CompatibilityVersion: int, Description: string, Id: string, IsBrowsable: bool, IsNonEditableConfig: bool, Links: record<AssetServer: string, Self: string>, LoadedAssemblyTime: string, LoadedVersion: string, Name: string, Path: string, Version: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
+]: nothing -> oneof<record<AssemblyFileName: string, AssemblyID: string, AssemblyLoadProperties: list<string>, AssemblyTime: string, CompatibilityVersion: int, Description: string, Id: string, IsBrowsable: bool, IsNonEditableConfig: bool, Links: record<AssetServer: string, Self: string>, LoadedAssemblyTime: string, LoadedVersion: string, Name: string, Path: string, Version: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($path == null) { error make --unspanned { msg: "required query parameter 'path' missing: pass --path" } }
   let qp = [(serialize-qp "path" $path "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/timeruleplugins" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -17923,7 +17846,7 @@ export def "time-rule-plug-in-get" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<AssemblyFileName: string, AssemblyID: string, AssemblyLoadProperties: list<string>, AssemblyTime: string, CompatibilityVersion: int, Description: string, Id: string, IsBrowsable: bool, IsNonEditableConfig: bool, Links: record<AssetServer: string, Self: string>, LoadedAssemblyTime: string, LoadedVersion: string, Name: string, Path: string, Version: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
+]: nothing -> oneof<record<AssemblyFileName: string, AssemblyID: string, AssemblyLoadProperties: list<string>, AssemblyTime: string, CompatibilityVersion: int, Description: string, Id: string, IsBrowsable: bool, IsNonEditableConfig: bool, Links: record<AssetServer: string, Self: string>, LoadedAssemblyTime: string, LoadedVersion: string, Name: string, Path: string, Version: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -17960,12 +17883,13 @@ export def "time-rule-get-by-path" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --path: string # The path to the Time Rule.
+  --path: string # The path to the Time Rule. (required)
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<ConfigString: string, ConfigStringStored: string, Description: string, DisplayString: string, EditorType: string, Id: string, IsConfigured: bool, IsInitializing: bool, Links: record<Analysis: string, AnalysisTemplate: string, PlugIn: string, Self: string>, MergeDuplicatedItems: bool, Name: string, Path: string, PlugInName: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
+]: nothing -> oneof<record<ConfigString: string, ConfigStringStored: string, Description: string, DisplayString: string, EditorType: string, Id: string, IsConfigured: bool, IsInitializing: bool, Links: record<Analysis: string, AnalysisTemplate: string, PlugIn: string, Self: string>, MergeDuplicatedItems: bool, Name: string, Path: string, PlugInName: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($path == null) { error make --unspanned { msg: "required query parameter 'path' missing: pass --path" } }
   let qp = [(serialize-qp "path" $path "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/timerules" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -18039,7 +17963,7 @@ export def "time-rule-get" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<ConfigString: string, ConfigStringStored: string, Description: string, DisplayString: string, EditorType: string, Id: string, IsConfigured: bool, IsInitializing: bool, Links: record<Analysis: string, AnalysisTemplate: string, PlugIn: string, Self: string>, MergeDuplicatedItems: bool, Name: string, Path: string, PlugInName: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
+]: nothing -> oneof<record<ConfigString: string, ConfigStringStored: string, Description: string, DisplayString: string, EditorType: string, Id: string, IsConfigured: bool, IsInitializing: bool, Links: record<Analysis: string, AnalysisTemplate: string, PlugIn: string, Self: string>, MergeDuplicatedItems: bool, Name: string, Path: string, PlugInName: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -18065,8 +17989,6 @@ export def "time-rule-get" [
 #
 # PATCH /timerules/{webId}
 # operationId: TimeRule_Update
-# --Links shape: {Analysis?: string, AnalysisTemplate?: string, PlugIn?: string, Self?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "time-rule-update" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -18133,12 +18055,13 @@ export def "unit-class-get-by-path" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --path: string # The path to the unit class.
+  --path: string # The path to the unit class. (required)
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<CanonicalUnitAbbreviation: string, CanonicalUnitName: string, Description: string, Id: string, Links: record<AssetServer: string, CanonicalUnit: string, Self: string, Units: string>, Name: string, Path: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
+]: nothing -> oneof<record<CanonicalUnitAbbreviation: string, CanonicalUnitName: string, Description: string, Id: string, Links: record<AssetServer: string, CanonicalUnit: string, Self: string, Units: string>, Name: string, Path: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($path == null) { error make --unspanned { msg: "required query parameter 'path' missing: pass --path" } }
   let qp = [(serialize-qp "path" $path "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/unitclasses" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -18212,7 +18135,7 @@ export def "unit-class-get" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<CanonicalUnitAbbreviation: string, CanonicalUnitName: string, Description: string, Id: string, Links: record<AssetServer: string, CanonicalUnit: string, Self: string, Units: string>, Name: string, Path: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
+]: nothing -> oneof<record<CanonicalUnitAbbreviation: string, CanonicalUnitName: string, Description: string, Id: string, Links: record<AssetServer: string, CanonicalUnit: string, Self: string, Units: string>, Name: string, Path: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -18238,8 +18161,6 @@ export def "unit-class-get" [
 #
 # PATCH /unitclasses/{webId}
 # operationId: UnitClass_Update
-# --Links shape: {AssetServer?: string, CanonicalUnit?: string, Self?: string, Units?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "unit-class-update" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -18303,7 +18224,7 @@ export def "unit-class-get-canonical-unit" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Abbreviation: string, Description: string, Factor: float, Id: string, Links: record<Class: string, ReferenceUnit: string, Self: string>, Name: string, Offset: float, Path: string, ReferenceFactor: float, ReferenceOffset: float, ReferenceUnitAbbreviation: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
+]: nothing -> oneof<record<Abbreviation: string, Description: string, Factor: float, Id: string, Links: record<Class: string, ReferenceUnit: string, Self: string>, Name: string, Offset: float, Path: string, ReferenceFactor: float, ReferenceOffset: float, ReferenceUnitAbbreviation: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -18343,7 +18264,7 @@ export def "unit-class-get-units" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Abbreviation: string, Description: string, Factor: float, Id: string, Links: record<Class: string, ReferenceUnit: string, Self: string>, Name: string, Offset: float, Path: string, ReferenceFactor: float, ReferenceOffset: float, ReferenceUnitAbbreviation: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
+]: nothing -> oneof<record<Abbreviation: string, Description: string, Factor: float, Id: string, Links: record<Class: string, ReferenceUnit: string, Self: string>, Name: string, Offset: float, Path: string, ReferenceFactor: float, ReferenceOffset: float, ReferenceUnitAbbreviation: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -18369,8 +18290,6 @@ export def "unit-class-get-units" [
 #
 # POST /unitclasses/{webId}/units
 # operationId: UnitClass_CreateUnit
-# --Links shape: {Class?: string, ReferenceUnit?: string, Self?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "unit-class-create-unit" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -18437,12 +18356,13 @@ export def "unit-get-by-path" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --path: string # The path to the unit.
+  --path: string # The path to the unit. (required)
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Abbreviation: string, Description: string, Factor: float, Id: string, Links: record<Class: string, ReferenceUnit: string, Self: string>, Name: string, Offset: float, Path: string, ReferenceFactor: float, ReferenceOffset: float, ReferenceUnitAbbreviation: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
+]: nothing -> oneof<record<Abbreviation: string, Description: string, Factor: float, Id: string, Links: record<Class: string, ReferenceUnit: string, Self: string>, Name: string, Offset: float, Path: string, ReferenceFactor: float, ReferenceOffset: float, ReferenceUnitAbbreviation: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($path == null) { error make --unspanned { msg: "required query parameter 'path' missing: pass --path" } }
   let qp = [(serialize-qp "path" $path "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/units" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -18516,7 +18436,7 @@ export def "unit-get" [
   --accept: string@accept-completer # Response content type
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-]: nothing -> record<Abbreviation: string, Description: string, Factor: float, Id: string, Links: record<Class: string, ReferenceUnit: string, Self: string>, Name: string, Offset: float, Path: string, ReferenceFactor: float, ReferenceOffset: float, ReferenceUnitAbbreviation: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
+]: nothing -> oneof<record<Abbreviation: string, Description: string, Factor: float, Id: string, Links: record<Class: string, ReferenceUnit: string, Self: string>, Name: string, Offset: float, Path: string, ReferenceFactor: float, ReferenceOffset: float, ReferenceUnitAbbreviation: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
@@ -18542,8 +18462,6 @@ export def "unit-get" [
 #
 # PATCH /units/{webId}
 # operationId: Unit_Update
-# --Links shape: {Class?: string, ReferenceUnit?: string, Self?: string}
-# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "unit-update" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL

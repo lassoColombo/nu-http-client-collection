@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -150,9 +174,9 @@ def type-completer-2 [] { ["image" "image-detection" "image-multi-label"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-api-usage-plans-v2" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-api-usage-plans-v2" "list-datasets" "upload-dataset-async" "upload-dataset-sync" "delete-dataset" "get-dataset" "get-examples" "get-trained-models" "update-dataset-async" "get-v2-language-deletion-id" "get-examples-by-label" "provide-feedback" "intent-multipart" "delete-model" "get-trained-model-metrics" "get-trained-model-learning-curve" "retrain" "sentiment-multipart" "train" "get-train-status-and-progress" "generate-token-v2" "revoke-refresh-token-v2" "update-dataset-async-1" "list-datasets-1" "create-dataset" "upload-dataset-async-1" "upload-dataset-sync-1" "delete-dataset-1" "get-dataset-1" "get-examples-1" "add-example" "get-trained-models-1" "update-dataset-async-2" "get-1" "detect-multipart" "get-examples-by-label-1" "provide-feedback-1" "delete-model-1" "get-trained-model-metrics-1" "get-trained-model-learning-curve-1" "ocr-multipart" "predict-multipart" "retrain-1" "train-1" "get-train-status-and-progress-1" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -184,7 +208,7 @@ export def "get-api-usage-plans-v2" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<endsAt: string, id: string, licenseId: string, object: string, organizationId: string, planData: list, predictionsMax: int, predictionsUsed: int, startsAt: string>, object: string> {
+]: nothing -> oneof<record<data: table<endsAt: string, id: string, licenseId: string, object: string, organizationId: string, planData: list, predictionsMax: int, predictionsUsed: int, startsAt: string>, object: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/apiusage" $auth.query)
@@ -221,7 +245,7 @@ export def "list-datasets" [
   --offset: string # Index of the dataset from which you want to start paging (default: 0)
   --count: string # Number of datsets to return. Maximum valid value is 25. If you specify a number greater than 25, the call returns 25 datasets. (default: 25)
   --global: oneof<nothing, bool> # If true, returns all global datasets. Global datasets are public datasets that Salesforce provides. (default: false)
-]: nothing -> record<data: table<available: bool, createdAt: string, id: int, labelSummary: record, language: string, name: string, numOfDuplicates: int, object: string, statusMsg: string, totalExamples: int, totalLabels: int, type: string, updatedAt: string>, object: string> {
+]: nothing -> oneof<record<data: table<available: bool, createdAt: string, id: int, labelSummary: record, language: string, name: string, numOfDuplicates: int, object: string, statusMsg: string, totalExamples: int, totalLabels: int, type: string, updatedAt: string>, object: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "global" $global "scalar")] | flatten | str join "&"
@@ -260,7 +284,7 @@ export def "upload-dataset-async" [
   --name: string # Name of the dataset. Optional. If this parameter is omitted, the dataset name is derived from the file name. (e.g. weather)
   --path: string # URL of the .csv, .tsv, or .json file.
   --type: string@type-completer # Type of dataset data.
-]: any -> record<available: bool, createdAt: string, id: int, labelSummary: record<labels: list<record>>, language: string, name: string, numOfDuplicates: int, object: string, statusMsg: string, totalExamples: int, totalLabels: int, type: string, updatedAt: string> {
+]: any -> oneof<record<available: bool, createdAt: string, id: int, labelSummary: record<labels: list<record>>, language: string, name: string, numOfDuplicates: int, object: string, statusMsg: string, totalExamples: int, totalLabels: int, type: string, updatedAt: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -303,7 +327,7 @@ export def "upload-dataset-sync" [
   --name: string # Name of the dataset. Optional. If this parameter is omitted, the dataset name is derived from the file name. (e.g. weather)
   --path: string # URL of the .csv, .tsv, or .json file.
   --type: string@type-completer # Type of dataset data.
-]: any -> record<available: bool, createdAt: string, id: int, labelSummary: record<labels: list<record>>, language: string, name: string, numOfDuplicates: int, object: string, statusMsg: string, totalExamples: int, totalLabels: int, type: string, updatedAt: string> {
+]: any -> oneof<record<available: bool, createdAt: string, id: int, labelSummary: record<labels: list<record>>, language: string, name: string, numOfDuplicates: int, object: string, statusMsg: string, totalExamples: int, totalLabels: int, type: string, updatedAt: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -343,7 +367,7 @@ export def "delete-dataset" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<deletedObjectId: string, id: string, message: string, object: string, organizationId: string, progress: float, status: string, type: string> {
+]: nothing -> oneof<record<deletedObjectId: string, id: string, message: string, object: string, organizationId: string, progress: float, status: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
@@ -379,7 +403,7 @@ export def "get-dataset" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<available: bool, createdAt: string, id: int, labelSummary: record<labels: list<record>>, language: string, name: string, numOfDuplicates: int, object: string, statusMsg: string, totalExamples: int, totalLabels: int, type: string, updatedAt: string> {
+]: nothing -> oneof<record<available: bool, createdAt: string, id: int, labelSummary: record<labels: list<record>>, language: string, name: string, numOfDuplicates: int, object: string, statusMsg: string, totalExamples: int, totalLabels: int, type: string, updatedAt: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
@@ -418,7 +442,7 @@ export def "get-examples" [
   --offset: string # Index of the example from which you want to start paging. (default: 0)
   --count: string # Number of examples to return. (default: 100)
   --source: string@source-completer # return examples that were created in the dataset as feedback
-]: nothing -> record<data: table<createdAt: string, id: int, label: record, location: string, name: string, object: string>, object: string> {
+]: nothing -> oneof<record<data: table<createdAt: string, id: int, label: record, location: string, name: string, object: string>, object: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
@@ -457,7 +481,7 @@ export def "get-trained-models" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: string # Index of the model from which you want to start paging. (default: 0)
   --count: string # Number of models to return. (default: 100)
-]: nothing -> record<data: table<algorithm: string, createdAt: string, datasetId: int, datasetVersionId: int, failureMsg: string, language: string, modelId: string, modelType: string, name: string, object: string, progress: float, status: string, updatedAt: string>, object: string> {
+]: nothing -> oneof<record<data: table<algorithm: string, createdAt: string, datasetId: int, datasetVersionId: int, failureMsg: string, language: string, modelId: string, modelType: string, name: string, object: string, progress: float, status: string, updatedAt: string>, object: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
@@ -496,7 +520,7 @@ export def "update-dataset-async" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --data: string # Path to the .csv, .tsv, or .json file on a local drive.
   --type: string # URL of the .csv, .tsv, or .json file.
-]: any -> record<available: bool, createdAt: string, id: int, labelSummary: record<labels: list<record>>, language: string, name: string, numOfDuplicates: int, object: string, statusMsg: string, totalExamples: int, totalLabels: int, type: string, updatedAt: string> {
+]: any -> oneof<record<available: bool, createdAt: string, id: int, labelSummary: record<labels: list<record>>, language: string, name: string, numOfDuplicates: int, object: string, statusMsg: string, totalExamples: int, totalLabels: int, type: string, updatedAt: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -537,7 +561,7 @@ export def "get-v2-language-deletion-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<deletedObjectId: string, id: string, message: string, object: string, organizationId: string, progress: float, status: string, type: string> {
+]: nothing -> oneof<record<deletedObjectId: string, id: string, message: string, object: string, organizationId: string, progress: float, status: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -575,7 +599,7 @@ export def "get-examples-by-label" [
   --label-id: string # Label Id (e.g. SomeLabelId)
   --offset: string # Index of the example from which you want to start paging. (default: 0)
   --count: string # Number of examples to return. (default: 100)
-]: nothing -> record<data: table<createdAt: string, id: int, label: record, location: string, name: string, object: string>, object: string> {
+]: nothing -> oneof<record<data: table<createdAt: string, id: int, label: record, location: string, name: string, object: string>, object: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "labelId" $label_id "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
@@ -614,7 +638,7 @@ export def "provide-feedback" [
   --expected-label: string # Correct label for the example. Must be a label that exists in the dataset.
   --model-id: string # ID of the model that misclassified the image. The feedback example is added to the dataset associated with this model.
   --name: string # Name of the example. Optional. Maximum length is 180 characters. (e.g. feedback-2)
-]: any -> record<createdAt: string, id: int, label: record<datasetId: int, id: int, name: string, numExamples: int>, location: string, name: string, object: string> {
+]: any -> oneof<record<createdAt: string, id: int, label: record<datasetId: int, id: int, name: string, numExamples: int>, location: string, name: string, object: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -657,7 +681,7 @@ export def "intent-multipart" [
   model_id: string # ID of the model that makes the prediction. The model must have been created from a dataset with a type of text-sentiment. (e.g. WJH4YCA7YX4PCWVNCYNWYHBMY4)
   --num-results: int # Number of probabilities to return. (format: int32, e.g. 3)
   --sample-id: string # String that you can pass in to tag the prediction. Optional. Can be any value, and is returned in the response.
-]: any -> record<object: string, probabilities: table<label: string, probability: float>, sampleId: string> {
+]: any -> oneof<record<object: string, probabilities: table<label: string, probability: float>, sampleId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -695,7 +719,7 @@ export def "delete-model" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<deletedObjectId: string, id: string, message: string, object: string, organizationId: string, progress: float, status: string, type: string> {
+]: nothing -> oneof<record<deletedObjectId: string, id: string, message: string, object: string, organizationId: string, progress: float, status: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($model_id | is-empty) { error make --unspanned { msg: "path parameter 'modelId' must be non-empty" } }
@@ -731,7 +755,7 @@ export def "get-trained-model-metrics" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<algorithm: string, createdAt: string, id: string, language: string, metricsData: record, object: string> {
+]: nothing -> oneof<record<algorithm: string, createdAt: string, id: string, language: string, metricsData: record, object: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($model_id | is-empty) { error make --unspanned { msg: "path parameter 'modelId' must be non-empty" } }
@@ -769,7 +793,7 @@ export def "get-trained-model-learning-curve" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: string # Index of the epoch from which you want to start paging (default: 0)
   --count: string # Number of epoch to return. Maximum valid value is 25. (default: 25)
-]: nothing -> record<data: table<epoch: record, epochResults: record, metricsData: record, object: string>, object: string> {
+]: nothing -> oneof<record<data: table<epoch: record, epochResults: record, metricsData: record, object: string>, object: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($model_id | is-empty) { error make --unspanned { msg: "path parameter 'modelId' must be non-empty" } }
@@ -795,7 +819,6 @@ export def "get-trained-model-learning-curve" [
 #
 # POST /v2/language/retrain
 # operationId: retrain
-# --trainParams shape: {trainSplitRatio?: float, withFeedback?: bool, withGlobalDatasetId?: int}
 export def "retrain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -811,7 +834,7 @@ export def "retrain" [
   --learning-rate: float # N/A for intent or sentiment models. (format: float, e.g. 0.0001)
   --model-id: string # ID of the model to be updated from the training. (e.g. 7JXCXTRXTMNLJCEF2DR5CJ46QU)
   --train-params: record # JSON that contains parameters that specify how the model is created — shape: {trainSplitRatio?: float, withFeedback?: bool, withGlobalDatasetId?: int}
-]: any -> record<algorithm: string, createdAt: string, datasetId: int, datasetVersionId: int, epochs: int, failureMsg: string, language: string, learningRate: float, modelId: string, modelType: string, name: string, object: string, progress: float, queuePosition: int, status: string, trainParams: string, trainStats: string, updatedAt: string> {
+]: any -> oneof<record<algorithm: string, createdAt: string, datasetId: int, datasetVersionId: int, epochs: int, failureMsg: string, language: string, learningRate: float, modelId: string, modelType: string, name: string, object: string, progress: float, queuePosition: int, status: string, trainParams: string, trainStats: string, updatedAt: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -854,7 +877,7 @@ export def "sentiment-multipart" [
   model_id: string # ID of the model that makes the prediction. The model must have been created from a dataset with a type of text-sentiment. (e.g. WJH4YCA7YX4PCWVNCYNWYHBMY4)
   --num-results: int # Number of probabilities to return. (format: int32, e.g. 3)
   --sample-id: string # String that you can pass in to tag the prediction. Optional. Can be any value, and is returned in the response.
-]: any -> record<object: string, probabilities: table<label: string, probability: float>, sampleId: string> {
+]: any -> oneof<record<object: string, probabilities: table<label: string, probability: float>, sampleId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -881,7 +904,6 @@ export def "sentiment-multipart" [
 #
 # POST /v2/language/train
 # operationId: train
-# --trainParams shape: {trainSplitRatio?: float, withFeedback?: bool, withGlobalDatasetId?: int}
 export def "train" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -898,7 +920,7 @@ export def "train" [
   --learning-rate: float # N/A for intent or sentiment models. (format: double)
   --name: string # Name of the model. Maximum length is 180 characters.
   --train-params: record # JSON that contains parameters that specify how the model is created — shape: {trainSplitRatio?: float, withFeedback?: bool, withGlobalDatasetId?: int}
-]: any -> record<algorithm: string, createdAt: string, datasetId: int, datasetVersionId: int, epochs: int, failureMsg: string, language: string, learningRate: float, modelId: string, modelType: string, name: string, object: string, progress: float, queuePosition: int, status: string, trainParams: string, trainStats: string, updatedAt: string> {
+]: any -> oneof<record<algorithm: string, createdAt: string, datasetId: int, datasetVersionId: int, epochs: int, failureMsg: string, language: string, learningRate: float, modelId: string, modelType: string, name: string, object: string, progress: float, queuePosition: int, status: string, trainParams: string, trainStats: string, updatedAt: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -938,7 +960,7 @@ export def "get-train-status-and-progress" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<algorithm: string, createdAt: string, datasetId: int, datasetVersionId: int, epochs: int, failureMsg: string, language: string, learningRate: float, modelId: string, modelType: string, name: string, object: string, progress: float, queuePosition: int, status: string, trainParams: string, trainStats: string, updatedAt: string> {
+]: nothing -> oneof<record<algorithm: string, createdAt: string, datasetId: int, datasetVersionId: int, epochs: int, failureMsg: string, language: string, learningRate: float, modelId: string, modelType: string, name: string, object: string, progress: float, queuePosition: int, status: string, trainParams: string, trainStats: string, updatedAt: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($model_id | is-empty) { error make --unspanned { msg: "path parameter 'modelId' must be non-empty" } }
@@ -979,7 +1001,7 @@ export def "generate-token-v2" [
   --refresh-token: string # The refresh token you created previously. (e.g. SomeRefreshToken)
   --scope: string # set to `offline` to generate a refresh token (e.g. offline)
   --valid-for: int # Number of seconds until the access token expires. Default is 60 seconds. Maximum value is 30 days (format: int32, default: 60, e.g. 120)
-]: any -> record<access_token: string, expires_in: string, refresh_token: string, token_type: string> {
+]: any -> oneof<record<access_token: string, expires_in: string, refresh_token: string, token_type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -988,7 +1010,7 @@ export def "generate-token-v2" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1055,7 +1077,7 @@ export def "update-dataset-async-1" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --data: string # Local .zip file to upload. The maximum .zip file size you can upload from a local drive is 50 MB.
   --model-id: string # ID of the model that misclassified the images. The feedback examples are added to the dataset associated with this model.
-]: any -> record<available: bool, createdAt: string, id: int, labelSummary: record<labels: list<record>>, language: string, name: string, numOfDuplicates: int, object: string, statusMsg: string, totalExamples: int, totalLabels: int, type: string, updatedAt: string> {
+]: any -> oneof<record<available: bool, createdAt: string, id: int, labelSummary: record<labels: list<record>>, language: string, name: string, numOfDuplicates: int, object: string, statusMsg: string, totalExamples: int, totalLabels: int, type: string, updatedAt: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1097,7 +1119,7 @@ export def "list-datasets-1" [
   --offset: string # Index of the dataset from which you want to start paging (default: 0)
   --count: string # Number of datsets to return. Maximum valid value is 25. If you specify a number greater than 25, the call returns 25 datasets. (default: 25)
   --global: oneof<nothing, bool> # If true, returns all global datasets. Global datasets are public datasets that Salesforce provides. (default: false)
-]: nothing -> record<data: table<available: bool, createdAt: string, id: int, labelSummary: record, language: string, name: string, numOfDuplicates: int, object: string, statusMsg: string, totalExamples: int, totalLabels: int, type: string, updatedAt: string>, object: string> {
+]: nothing -> oneof<record<data: table<available: bool, createdAt: string, id: int, labelSummary: record, language: string, name: string, numOfDuplicates: int, object: string, statusMsg: string, totalExamples: int, totalLabels: int, type: string, updatedAt: string>, object: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "global" $global "scalar")] | flatten | str join "&"
@@ -1135,7 +1157,7 @@ export def "create-dataset" [
   --labels: string # Optional comma-separated list of labels. If specified, creates the labels in the dataset. Maximum number of labels per dataset is 250. (e.g. beach,mountain)
   --name: string # Name of the dataset. Maximum length is 180 characters. (e.g. Beach and Mountain)
   --type: string@type-completer-1 # Type of dataset data
-]: any -> record<available: bool, createdAt: string, id: int, labelSummary: record<labels: list<record>>, language: string, name: string, numOfDuplicates: int, object: string, statusMsg: string, totalExamples: int, totalLabels: int, type: string, updatedAt: string> {
+]: any -> oneof<record<available: bool, createdAt: string, id: int, labelSummary: record<labels: list<record>>, language: string, name: string, numOfDuplicates: int, object: string, statusMsg: string, totalExamples: int, totalLabels: int, type: string, updatedAt: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1178,7 +1200,7 @@ export def "upload-dataset-async-1" [
   --name: string # Name of the dataset. Optional. If this parameter is omitted, the dataset name is derived from the .zip file name. (e.g. mountainvsbeach)
   --path: string # URL of the .zip file.
   --type: string@type-completer-2 # Type of dataset data.
-]: any -> record<available: bool, createdAt: string, id: int, labelSummary: record<labels: list<record>>, language: string, name: string, numOfDuplicates: int, object: string, statusMsg: string, totalExamples: int, totalLabels: int, type: string, updatedAt: string> {
+]: any -> oneof<record<available: bool, createdAt: string, id: int, labelSummary: record<labels: list<record>>, language: string, name: string, numOfDuplicates: int, object: string, statusMsg: string, totalExamples: int, totalLabels: int, type: string, updatedAt: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1221,7 +1243,7 @@ export def "upload-dataset-sync-1" [
   --name: string # Name of the dataset. Optional. If this parameter is omitted, the dataset name is derived from the .zip file name. (e.g. mountainvsbeach)
   --path: string # URL of the .zip file.
   --type: string@type-completer-2 # Type of dataset data.
-]: any -> record<available: bool, createdAt: string, id: int, labelSummary: record<labels: list<record>>, language: string, name: string, numOfDuplicates: int, object: string, statusMsg: string, totalExamples: int, totalLabels: int, type: string, updatedAt: string> {
+]: any -> oneof<record<available: bool, createdAt: string, id: int, labelSummary: record<labels: list<record>>, language: string, name: string, numOfDuplicates: int, object: string, statusMsg: string, totalExamples: int, totalLabels: int, type: string, updatedAt: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1261,7 +1283,7 @@ export def "delete-dataset-1" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<deletedObjectId: string, id: string, message: string, object: string, organizationId: string, progress: float, status: string, type: string> {
+]: nothing -> oneof<record<deletedObjectId: string, id: string, message: string, object: string, organizationId: string, progress: float, status: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
@@ -1297,7 +1319,7 @@ export def "get-dataset-1" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<available: bool, createdAt: string, id: int, labelSummary: record<labels: list<record>>, language: string, name: string, numOfDuplicates: int, object: string, statusMsg: string, totalExamples: int, totalLabels: int, type: string, updatedAt: string> {
+]: nothing -> oneof<record<available: bool, createdAt: string, id: int, labelSummary: record<labels: list<record>>, language: string, name: string, numOfDuplicates: int, object: string, statusMsg: string, totalExamples: int, totalLabels: int, type: string, updatedAt: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
@@ -1336,7 +1358,7 @@ export def "get-examples-1" [
   --offset: string # Index of the example from which you want to start paging. (default: 0)
   --count: string # Number of examples to return. (default: 100)
   --source: string@source-completer # return examples that were created in the dataset as feedback
-]: nothing -> record<data: table<createdAt: string, id: int, label: record, location: string, name: string, object: string>, object: string> {
+]: nothing -> oneof<record<data: table<createdAt: string, id: int, label: record, location: string, name: string, object: string>, object: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
@@ -1376,7 +1398,7 @@ export def "add-example" [
   --data: string # Location of the local image file to upload.
   --label-id: int # ID of the label to add to the example. (format: int64, e.g. 42)
   --name: string # Name of the example. Maximum length is 180 characters.
-]: any -> record<createdAt: string, id: int, label: record<datasetId: int, id: int, name: string, numExamples: int>, location: string, name: string, object: string> {
+]: any -> oneof<record<createdAt: string, id: int, label: record<datasetId: int, id: int, name: string, numExamples: int>, location: string, name: string, object: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1419,7 +1441,7 @@ export def "get-trained-models-1" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: string # Index of the model from which you want to start paging. (default: 0)
   --count: string # Number of models to return. (default: 100)
-]: nothing -> record<data: table<algorithm: string, createdAt: string, datasetId: int, datasetVersionId: int, failureMsg: string, language: string, modelId: string, modelType: string, name: string, object: string, progress: float, status: string, updatedAt: string>, object: string> {
+]: nothing -> oneof<record<data: table<algorithm: string, createdAt: string, datasetId: int, datasetVersionId: int, failureMsg: string, language: string, modelId: string, modelType: string, name: string, object: string, progress: float, status: string, updatedAt: string>, object: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
@@ -1458,7 +1480,7 @@ export def "update-dataset-async-2" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --data: string # Location of the local image file to upload.
   --path: string # URL of the .zip file.
-]: any -> record<available: bool, createdAt: string, id: int, labelSummary: record<labels: list<record>>, language: string, name: string, numOfDuplicates: int, object: string, statusMsg: string, totalExamples: int, totalLabels: int, type: string, updatedAt: string> {
+]: any -> oneof<record<available: bool, createdAt: string, id: int, labelSummary: record<labels: list<record>>, language: string, name: string, numOfDuplicates: int, object: string, statusMsg: string, totalExamples: int, totalLabels: int, type: string, updatedAt: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1499,7 +1521,7 @@ export def "get-1" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<deletedObjectId: string, id: string, message: string, object: string, organizationId: string, progress: float, status: string, type: string> {
+]: nothing -> oneof<record<deletedObjectId: string, id: string, message: string, object: string, organizationId: string, progress: float, status: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1538,7 +1560,7 @@ export def "detect-multipart" [
   --sample-base64-content: string # The image contained in a base64 string. (e.g. SomeBase64EncodedImage)
   --sample-id: string # String that you can pass in to tag the prediction. Optional. Can be any value, and is returned in the response.
   --sample-location: string # URL of the image file.
-]: any -> record<object: string, probabilities: table<boundingBox: record, label: string, probability: float>, sampleId: string> {
+]: any -> oneof<record<object: string, probabilities: table<boundingBox: record, label: string, probability: float>, sampleId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1578,7 +1600,7 @@ export def "get-examples-by-label-1" [
   --label-id: string # Label Id (e.g. SomeLabelId)
   --offset: string # Index of the example from which you want to start paging. (default: 0)
   --count: string # Number of examples to return. (default: 100)
-]: nothing -> record<data: table<createdAt: string, id: int, label: record, location: string, name: string, object: string>, object: string> {
+]: nothing -> oneof<record<data: table<createdAt: string, id: int, label: record, location: string, name: string, object: string>, object: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "labelId" $label_id "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
@@ -1617,7 +1639,7 @@ export def "provide-feedback-1" [
   --expected-label: string # Correct label for the example. Must be a label that exists in the dataset.
   --model-id: string # ID of the model that misclassified the image. The feedback example is added to the dataset associated with this model.
   --name: string # Name of the example. Optional. Maximum length is 180 characters. (e.g. feedback-1)
-]: any -> record<createdAt: string, id: int, label: record<datasetId: int, id: int, name: string, numExamples: int>, location: string, name: string, object: string> {
+]: any -> oneof<record<createdAt: string, id: int, label: record<datasetId: int, id: int, name: string, numExamples: int>, location: string, name: string, object: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1657,7 +1679,7 @@ export def "delete-model-1" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<deletedObjectId: string, id: string, message: string, object: string, organizationId: string, progress: float, status: string, type: string> {
+]: nothing -> oneof<record<deletedObjectId: string, id: string, message: string, object: string, organizationId: string, progress: float, status: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($model_id | is-empty) { error make --unspanned { msg: "path parameter 'modelId' must be non-empty" } }
@@ -1693,7 +1715,7 @@ export def "get-trained-model-metrics-1" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<algorithm: string, createdAt: string, id: string, language: string, metricsData: record, object: string> {
+]: nothing -> oneof<record<algorithm: string, createdAt: string, id: string, language: string, metricsData: record, object: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($model_id | is-empty) { error make --unspanned { msg: "path parameter 'modelId' must be non-empty" } }
@@ -1731,7 +1753,7 @@ export def "get-trained-model-learning-curve-1" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: string # Index of the epoch from which you want to start paging (default: 0)
   --count: string # Number of epoch to return. Maximum valid value is 25. (default: 25)
-]: nothing -> record<data: table<epoch: record, epochResults: record, metricsData: record, object: string>, object: string> {
+]: nothing -> oneof<record<data: table<epoch: record, epochResults: record, metricsData: record, object: string>, object: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($model_id | is-empty) { error make --unspanned { msg: "path parameter 'modelId' must be non-empty" } }
@@ -1772,7 +1794,7 @@ export def "ocr-multipart" [
   --sample-id: string # String that you can pass in to tag the prediction. Optional. Can be any value, and is returned in the response.
   --sample-location: string # URL of the image file. Use this parameter when sending in a file from a web location. Optional.
   --task: string # Optional. Designates the type of data in the image. Default is text. Valid values: contact, table, and text. (default: text, e.g. table)
-]: any -> record<object: string, probabilities: table<attributes: record, boundingBox: record, label: string, probability: float>, sampleId: string, task: string> {
+]: any -> oneof<record<object: string, probabilities: table<attributes: record, boundingBox: record, label: string, probability: float>, sampleId: string, task: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1816,7 +1838,7 @@ export def "predict-multipart" [
   --sample-base64-content: string # The image contained in a base64 string. (e.g. SomeBase64EncodedImage)
   --sample-id: string # String that you can pass in to tag the prediction. Optional. Can be any value, and is returned in the response.
   --sample-location: string # URL of the image file.
-]: any -> record<object: string, probabilities: table<label: string, probability: float>, sampleId: string> {
+]: any -> oneof<record<object: string, probabilities: table<label: string, probability: float>, sampleId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1843,7 +1865,6 @@ export def "predict-multipart" [
 #
 # POST /v2/vision/retrain
 # operationId: retrain_1
-# --trainParams shape: {trainSplitRatio?: float, withFeedback?: bool, withGlobalDatasetId?: int}
 export def "retrain-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1859,7 +1880,7 @@ export def "retrain-1" [
   --learning-rate: float # Specifies how much the gradient affects the optimization of the model at each time step. Optional. (format: float, e.g. 0.0001)
   --model-id: string # ID of the model to be updated from the training. (e.g. 7JXCXTRXTMNLJCEF2DR5CJ46QU)
   --train-params: record # JSON that contains parameters that specify how the model is created — shape: {trainSplitRatio?: float, withFeedback?: bool, withGlobalDatasetId?: int}
-]: any -> record<algorithm: string, createdAt: string, datasetId: int, datasetVersionId: int, epochs: int, failureMsg: string, language: string, learningRate: float, modelId: string, modelType: string, name: string, object: string, progress: float, queuePosition: int, status: string, trainParams: string, trainStats: string, updatedAt: string> {
+]: any -> oneof<record<algorithm: string, createdAt: string, datasetId: int, datasetVersionId: int, epochs: int, failureMsg: string, language: string, learningRate: float, modelId: string, modelType: string, name: string, object: string, progress: float, queuePosition: int, status: string, trainParams: string, trainStats: string, updatedAt: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1888,7 +1909,6 @@ export def "retrain-1" [
 #
 # POST /v2/vision/train
 # operationId: train_1
-# --trainParams shape: {trainSplitRatio?: float, withFeedback?: bool, withGlobalDatasetId?: int}
 export def "train-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1905,7 +1925,7 @@ export def "train-1" [
   --learning-rate: float # Specifies how much the gradient affects the optimization of the model at each time step. Optional. (format: double, e.g. 0.0001)
   --name: string # Name of the model. Maximum length is 180 characters.
   --train-params: record # JSON that contains parameters that specify how the model is created — shape: {trainSplitRatio?: float, withFeedback?: bool, withGlobalDatasetId?: int}
-]: any -> record<algorithm: string, createdAt: string, datasetId: int, datasetVersionId: int, epochs: int, failureMsg: string, language: string, learningRate: float, modelId: string, modelType: string, name: string, object: string, progress: float, queuePosition: int, status: string, trainParams: string, trainStats: string, updatedAt: string> {
+]: any -> oneof<record<algorithm: string, createdAt: string, datasetId: int, datasetVersionId: int, epochs: int, failureMsg: string, language: string, learningRate: float, modelId: string, modelType: string, name: string, object: string, progress: float, queuePosition: int, status: string, trainParams: string, trainStats: string, updatedAt: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1945,7 +1965,7 @@ export def "get-train-status-and-progress-1" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<algorithm: string, createdAt: string, datasetId: int, datasetVersionId: int, epochs: int, failureMsg: string, language: string, learningRate: float, modelId: string, modelType: string, name: string, object: string, progress: float, queuePosition: int, status: string, trainParams: string, trainStats: string, updatedAt: string> {
+]: nothing -> oneof<record<algorithm: string, createdAt: string, datasetId: int, datasetVersionId: int, epochs: int, failureMsg: string, language: string, learningRate: float, modelId: string, modelType: string, name: string, object: string, progress: float, queuePosition: int, status: string, trainParams: string, trainStats: string, updatedAt: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($model_id | is-empty) { error make --unspanned { msg: "path parameter 'modelId' must be non-empty" } }

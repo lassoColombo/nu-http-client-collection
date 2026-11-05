@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -124,9 +148,9 @@ def state-completer [] { ["STATE_CANARY_ACTIVE" "STATE_CANARY_PENDING_AGENTS" "S
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "clouddebugger-controller-debuggees-register" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["clouddebugger-controller-debuggees-register" "clouddebugger-controller-debuggees-breakpoints-list" "clouddebugger-controller-debuggees-breakpoints-update" "clouddebugger-debugger-debuggees-list" "clouddebugger-debugger-debuggees-breakpoints-list" "clouddebugger-debugger-debuggees-breakpoints-set" "clouddebugger-debugger-debuggees-breakpoints-delete" "clouddebugger-debugger-debuggees-breakpoints-get" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -148,7 +172,6 @@ export def commands []: nothing -> table {
 #
 # POST /v2/controller/debuggees/register
 # operationId: clouddebugger.controller.debuggees.register
-# --debuggee shape: {agentVersion?: string, canaryMode?: "CANARY_MODE_UNSPECIFIED"|"CANARY_MODE_ALWAYS_ENABLED"|"CANARY_MODE_ALWAYS_DISABLED"|"CANARY_MODE_DEFAULT_ENABLED"|"CANARY_MODE_DEFAULT_DISABLED", description?: string, extSourceContexts?: list, id?: string, isDisabled?: bool, isInactive?: bool, labels?: record, project?: string, sourceContexts?: list, status?: record, uniquifier?: string}
 export def "clouddebugger-controller-debuggees-register" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -171,7 +194,7 @@ export def "clouddebugger-controller-debuggees-register" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --debuggee: record # Represents the debugged application. The application may include one or more replicated processes executing the same code. Each of these processes is attached with a debugger agent, carrying out the debugging commands. Agents attached to the same debuggee identify themselves as such by using exactly the same Debuggee message value when registering. — shape: {agentVersion?: string, canaryMode?: "CANARY_MODE_UNSPECIFIED"|"CANARY_MODE_ALWAYS_ENABLED"|"CANARY_MODE_ALWAYS_DISABLED"|"CANARY_MODE_DEFAULT_ENABLED"|"CANARY_MODE_DEFAULT_DISABLED", description?: string, extSourceContexts?: list, id?: string, isDisabled?: bool, isInactive?: bool, labels?: record, project?: string, sourceContexts?: list, status?: record, uniquifier?: string}
-]: any -> record<agentId: string, debuggee: record<agentVersion: string, canaryMode: string, description: string, extSourceContexts: list<record>, id: string, isDisabled: bool, isInactive: bool, labels: record, project: string, sourceContexts: list<record>, status: record<description: record, isError: bool, refersTo: string>, uniquifier: string>> {
+]: any -> oneof<record<agentId: string, debuggee: record<agentVersion: string, canaryMode: string, description: string, extSourceContexts: list<record>, id: string, isDisabled: bool, isInactive: bool, labels: record, project: string, sourceContexts: list<record>, status: record<description: record, isError: bool, refersTo: string>, uniquifier: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -224,7 +247,7 @@ export def "clouddebugger-controller-debuggees-breakpoints-list" [
   --agent-id: string # Identifies the agent. This is the ID returned in the RegisterDebuggee response.
   --success-on-timeout: oneof<nothing, bool> # If set to `true` (recommended), returns `google.rpc.Code.OK` status and sets the `wait_expired` response field to `true` when the server-selected timeout has expired. If set to `false` (deprecated), returns `google.rpc.Code.ABORTED` status when the server-selected timeout has expired.
   --wait-token: string # A token that, if specified, blocks the method call until the list of active breakpoints has changed, or a server-selected timeout has expired. The value should be set from the `next_wait_token` field in the last response. The initial value should be set to `"init"`.
-]: nothing -> record<breakpoints: table<action: string, canaryExpireTime: string, condition: string, createTime: string, evaluatedExpressions: list, expressions: list, finalTime: string, id: string, isFinalState: bool, labels: record, location: record, logLevel: string, logMessageFormat: string, stackFrames: list, state: string, status: record, userEmail: string, variableTable: list>, nextWaitToken: string, waitExpired: bool> {
+]: nothing -> oneof<record<breakpoints: table<action: string, canaryExpireTime: string, condition: string, createTime: string, evaluatedExpressions: list, expressions: list, finalTime: string, id: string, isFinalState: bool, labels: record, location: record, logLevel: string, logMessageFormat: string, stackFrames: list, state: string, status: record, userEmail: string, variableTable: list>, nextWaitToken: string, waitExpired: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($debuggee_id | is-empty) { error make --unspanned { msg: "path parameter 'debuggeeId' must be non-empty" } }
@@ -250,7 +273,6 @@ export def "clouddebugger-controller-debuggees-breakpoints-list" [
 #
 # PUT /v2/controller/debuggees/{debuggeeId}/breakpoints/{id}
 # operationId: clouddebugger.controller.debuggees.breakpoints.update
-# --breakpoint shape: {action?: "CAPTURE"|"LOG", canaryExpireTime?: string, condition?: string, createTime?: string, evaluatedExpressions?: list, expressions?: list<string>, finalTime?: string, id?: string, isFinalState?: bool, labels?: record, location?: record, logLevel?: "INFO"|"WARNING"|"ERROR", logMessageFormat?: string, stackFrames?: list, state?: "STATE_UNSPECIFIED"|"STATE_CANARY_PENDING_AGENTS"|"STATE_CANARY_ACTIVE"|"STATE_ROLLING_TO_ALL"|"STATE_IS_FINAL", status?: record, userEmail?: string, ... (1 more fields)}
 export def "clouddebugger-controller-debuggees-breakpoints-update" [
   debuggee_id: string
   id: string
@@ -275,7 +297,7 @@ export def "clouddebugger-controller-debuggees-breakpoints-update" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --breakpoint: record # ------------------------------------------------------------------------------ ## Breakpoint (the resource) Represents the breakpoint specification, status and results. — shape: {action?: "CAPTURE"|"LOG", canaryExpireTime?: string, condition?: string, createTime?: string, evaluatedExpressions?: list, expressions?: list<string>, finalTime?: string, id?: string, isFinalState?: bool, labels?: record, location?: record, logLevel?: "INFO"|"WARNING"|"ERROR", logMessageFormat?: string, stackFrames?: list, state?: "STATE_UNSPECIFIED"|"STATE_CANARY_PENDING_AGENTS"|"STATE_CANARY_ACTIVE"|"STATE_ROLLING_TO_ALL"|"STATE_IS_FINAL", status?: record, userEmail?: string, ... (1 more fields)}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -329,7 +351,7 @@ export def "clouddebugger-debugger-debuggees-list" [
   --client-version: string # Required. The client version making the call. Schema: `domain/type/version` (e.g., `google.com/intellij/v1`).
   --include-inactive: oneof<nothing, bool> # When set to `true`, the result includes all debuggees. Otherwise, the result includes only debuggees that are active.
   --project: string # Required. Project number of a Google Cloud project whose debuggees to list.
-]: nothing -> record<debuggees: table<agentVersion: string, canaryMode: string, description: string, extSourceContexts: list, id: string, isDisabled: bool, isInactive: bool, labels: record, project: string, sourceContexts: list, status: record, uniquifier: string>> {
+]: nothing -> oneof<record<debuggees: table<agentVersion: string, canaryMode: string, description: string, extSourceContexts: list, id: string, isDisabled: bool, isInactive: bool, labels: record, project: string, sourceContexts: list, status: record, uniquifier: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientVersion" $client_version "scalar") (serialize-qp "includeInactive" $include_inactive "scalar") (serialize-qp "project" $project "scalar")] | flatten | str join "&"
@@ -382,7 +404,7 @@ export def "clouddebugger-debugger-debuggees-breakpoints-list" [
   --include-inactive: oneof<nothing, bool> # When set to `true`, the response includes active and inactive breakpoints. Otherwise, it includes only active breakpoints.
   --strip-results: oneof<nothing, bool> # This field is deprecated. The following fields are always stripped out of the result: `stack_frames`, `evaluated_expressions` and `variable_table`.
   --wait-token: string # A wait token that, if specified, blocks the call until the breakpoints list has changed, or a server selected timeout has expired. The value should be set from the last response. The error code `google.rpc.Code.ABORTED` (RPC) is returned on wait timeout, which should be called again with the same `wait_token`.
-]: nothing -> record<breakpoints: table<action: string, canaryExpireTime: string, condition: string, createTime: string, evaluatedExpressions: list, expressions: list, finalTime: string, id: string, isFinalState: bool, labels: record, location: record, logLevel: string, logMessageFormat: string, stackFrames: list, state: string, status: record, userEmail: string, variableTable: list>, nextWaitToken: string> {
+]: nothing -> oneof<record<breakpoints: table<action: string, canaryExpireTime: string, condition: string, createTime: string, evaluatedExpressions: list, expressions: list, finalTime: string, id: string, isFinalState: bool, labels: record, location: record, logLevel: string, logMessageFormat: string, stackFrames: list, state: string, status: record, userEmail: string, variableTable: list>, nextWaitToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($debuggee_id | is-empty) { error make --unspanned { msg: "path parameter 'debuggeeId' must be non-empty" } }
@@ -408,11 +430,6 @@ export def "clouddebugger-debugger-debuggees-breakpoints-list" [
 #
 # POST /v2/debugger/debuggees/{debuggeeId}/breakpoints/set
 # operationId: clouddebugger.debugger.debuggees.breakpoints.set
-# --evaluatedExpressions item shape: {members?: list, name?: string, status?: record, type?: string, value?: string, varTableIndex?: int}
-# --location shape: {column?: int, line?: int, path?: string}
-# --stackFrames item shape: {arguments?: list, function?: string, locals?: list, location?: record}
-# --status shape: {description?: record, isError?: bool, refersTo?: "UNSPECIFIED"|"BREAKPOINT_SOURCE_LOCATION"|"BREAKPOINT_CONDITION"|"BREAKPOINT_EXPRESSION"|"BREAKPOINT_AGE"|"BREAKPOINT_CANARY_FAILED"|"VARIABLE_NAME"|"VARIABLE_VALUE"}
-# --variableTable item shape: {members?: list, name?: string, status?: record, type?: string, value?: string, varTableIndex?: int}
 export def "clouddebugger-debugger-debuggees-breakpoints-set" [
   debuggee_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -455,7 +472,7 @@ export def "clouddebugger-debugger-debuggees-breakpoints-set" [
   --status: record # Represents a contextual status message. The message can indicate an error or informational status, and refer to specific parts of the containing object. For example, the `Breakpoint.status` field can indicate an error referring to the `BREAKPOINT_SOURCE_LOCATION` with the message `Location not found`. — shape: {description?: record, isError?: bool, refersTo?: "UNSPECIFIED"|"BREAKPOINT_SOURCE_LOCATION"|"BREAKPOINT_CONDITION"|"BREAKPOINT_EXPRESSION"|"BREAKPOINT_AGE"|"BREAKPOINT_CANARY_FAILED"|"VARIABLE_NAME"|"VARIABLE_VALUE"}
   --user-email: string # E-mail address of the user that created this breakpoint
   --variable-table: list # The `variable_table` exists to aid with computation, memory and network traffic optimization. It enables storing a variable once and reference it from multiple variables, including variables stored in the `variable_table` itself. For example, the same `this` object, which may appear at many levels of the stack, can have all of its data stored once in this table. The stack frame variables then would hold only a reference to it. The variable `var_table_index` field is an index into this repeated field. The stored objects are nameless and get their name from the referencing variable. The effective variable is a merge of the referencing variable and the referenced variable. — item shape: {members?: list, name?: string, status?: record, type?: string, value?: string, varTableIndex?: int}
-]: any -> record<breakpoint: record<action: string, canaryExpireTime: string, condition: string, createTime: string, evaluatedExpressions: list<record>, expressions: list<string>, finalTime: string, id: string, isFinalState: bool, labels: record, location: record<column: int, line: int, path: string>, logLevel: string, logMessageFormat: string, stackFrames: list<record>, state: string, status: record<description: record, isError: bool, refersTo: string>, userEmail: string, variableTable: list<record>>> {
+]: any -> oneof<record<breakpoint: record<action: string, canaryExpireTime: string, condition: string, createTime: string, evaluatedExpressions: list<record>, expressions: list<string>, finalTime: string, id: string, isFinalState: bool, labels: record, location: record<column: int, line: int, path: string>, logLevel: string, logMessageFormat: string, stackFrames: list<record>, state: string, status: record<description: record, isError: bool, refersTo: string>, userEmail: string, variableTable: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -508,7 +525,7 @@ export def "clouddebugger-debugger-debuggees-breakpoints-delete" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --client-version: string # Required. The client version making the call. Schema: `domain/type/version` (e.g., `google.com/intellij/v1`).
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($debuggee_id | is-empty) { error make --unspanned { msg: "path parameter 'debuggeeId' must be non-empty" } }
@@ -559,7 +576,7 @@ export def "clouddebugger-debugger-debuggees-breakpoints-get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --client-version: string # Required. The client version making the call. Schema: `domain/type/version` (e.g., `google.com/intellij/v1`).
-]: nothing -> record<breakpoint: record<action: string, canaryExpireTime: string, condition: string, createTime: string, evaluatedExpressions: list<record>, expressions: list<string>, finalTime: string, id: string, isFinalState: bool, labels: record, location: record<column: int, line: int, path: string>, logLevel: string, logMessageFormat: string, stackFrames: list<record>, state: string, status: record<description: record, isError: bool, refersTo: string>, userEmail: string, variableTable: list<record>>> {
+]: nothing -> oneof<record<breakpoint: record<action: string, canaryExpireTime: string, condition: string, createTime: string, evaluatedExpressions: list<record>, expressions: list<string>, finalTime: string, id: string, isFinalState: bool, labels: record, location: record<column: int, line: int, path: string>, logLevel: string, logMessageFormat: string, stackFrames: list<record>, state: string, status: record<description: record, isError: bool, refersTo: string>, userEmail: string, variableTable: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($debuggee_id | is-empty) { error make --unspanned { msg: "path parameter 'debuggeeId' must be non-empty" } }

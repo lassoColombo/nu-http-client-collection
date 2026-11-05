@@ -12,27 +12,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -40,8 +49,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -52,7 +66,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -87,7 +110,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -123,9 +147,9 @@ def show-genres-completer [] { ["0" "1"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-best-podcasts" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-best-podcasts" "get-curated-podcasts" "get-curated-podcast-by-id" "get-episodes-in-batch" "get-episode-by-id" "get-episode-recommendations" "get-genres" "just-listen" "get-languages" "get-playlists" "get-playlist-by-id" "get-podcasts-in-batch" "submit-podcast" "delete-podcast-by-id" "get-podcast-by-id" "get-podcast-audience" "get-podcast-recommendations" "get-regions" "get-related-searches" "search" "spellcheck" "get-trending-searches" "typeahead" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -165,7 +189,7 @@ export def "get-best-podcasts" [
   --sort: string@sort-completer # How do you want to sort these podcasts? If you'd like to sort by popularity, please use **listen_score**. (default: recent_added_first, e.g. listen_score)
   --safe-mode: int@safe-mode-completer # Whether or not to exclude podcasts with explicit language. 1 is yes, and 0 is no. (default: 0)
   --x-listen-api-key: string # Get API Key on listennotes.com/api (required)
-]: nothing -> record<has_next: bool, has_previous: bool, id: int, listennotes_url: string, name: string, next_page_number: int, page_number: int, parent_id: int, podcasts: table<audio_length_sec: int, country: string, description: string, earliest_pub_date_ms: int, email: string, explicit_content: bool, extra: record, genre_ids: list, id: string, image: string, is_claimed: bool, itunes_id: int, language: string, latest_episode_id: string, latest_pub_date_ms: int, listen_score: int, listen_score_global_rank: string, listennotes_url: string, looking_for: record, publisher: string, rss: string, thumbnail: string, title: string, total_episodes: int, type: string, update_frequency_hours: int, website: string>, previous_page_number: int, total: int> {
+]: nothing -> oneof<record<has_next: bool, has_previous: bool, id: int, listennotes_url: string, name: string, next_page_number: int, page_number: int, parent_id: int, podcasts: table<audio_length_sec: int, country: string, description: string, earliest_pub_date_ms: int, email: string, explicit_content: bool, extra: record, genre_ids: list, id: string, image: string, is_claimed: bool, itunes_id: int, language: string, latest_episode_id: string, latest_pub_date_ms: int, listen_score: int, listen_score_global_rank: string, listennotes_url: string, looking_for: record, publisher: string, rss: string, thumbnail: string, title: string, total_episodes: int, type: string, update_frequency_hours: int, website: string>, previous_page_number: int, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_listen_api_key == null) { error make --unspanned { msg: "required header parameter 'X-ListenAPI-Key' missing: pass --x-listen-api-key" } }
@@ -205,7 +229,7 @@ export def "get-curated-podcasts" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number of curated lists. (default: 1, e.g. 2)
   --x-listen-api-key: string # Get API Key on listennotes.com/api (required)
-]: nothing -> record<curated_lists: table<description: string, id: string, listennotes_url: string, podcasts: list, pub_date_ms: int, source_domain: string, source_url: string, title: string, total: int>, has_next: bool, has_previous: bool, next_page_number: int, page_number: int, previous_page_number: int, total: int> {
+]: nothing -> oneof<record<curated_lists: table<description: string, id: string, listennotes_url: string, podcasts: list, pub_date_ms: int, source_domain: string, source_url: string, title: string, total: int>, has_next: bool, has_previous: bool, next_page_number: int, page_number: int, previous_page_number: int, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_listen_api_key == null) { error make --unspanned { msg: "required header parameter 'X-ListenAPI-Key' missing: pass --x-listen-api-key" } }
@@ -245,7 +269,7 @@ export def "get-curated-podcast-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-listen-api-key: string # Get API Key on listennotes.com/api (required)
-]: nothing -> record<description: string, id: string, listennotes_url: string, podcasts: table<audio_length_sec: int, country: string, description: string, earliest_pub_date_ms: int, email: string, explicit_content: bool, extra: record, genre_ids: list, id: string, image: string, is_claimed: bool, itunes_id: int, language: string, latest_episode_id: string, latest_pub_date_ms: int, listen_score: int, listen_score_global_rank: string, listennotes_url: string, looking_for: record, publisher: string, rss: string, thumbnail: string, title: string, total_episodes: int, type: string, update_frequency_hours: int, website: string>, pub_date_ms: int, source_domain: string, source_url: string, title: string, total: int> {
+]: nothing -> oneof<record<description: string, id: string, listennotes_url: string, podcasts: table<audio_length_sec: int, country: string, description: string, earliest_pub_date_ms: int, email: string, explicit_content: bool, extra: record, genre_ids: list, id: string, image: string, is_claimed: bool, itunes_id: int, language: string, latest_episode_id: string, latest_pub_date_ms: int, listen_score: int, listen_score_global_rank: string, listennotes_url: string, looking_for: record, publisher: string, rss: string, thumbnail: string, title: string, total_episodes: int, type: string, update_frequency_hours: int, website: string>, pub_date_ms: int, source_domain: string, source_url: string, title: string, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -285,7 +309,7 @@ export def "get-episodes-in-batch" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-listen-api-key: string # Get API Key on listennotes.com/api (required)
   ids: string # Comma-separated list of episode ids.
-]: any -> record<episodes: table<audio: string, audio_length_sec: int, description: string, explicit_content: bool, id: string, image: string, link: string, listennotes_edit_url: string, listennotes_url: string, maybe_audio_invalid: bool, podcast: record, pub_date_ms: int, thumbnail: string, title: string>> {
+]: any -> oneof<record<episodes: table<audio: string, audio_length_sec: int, description: string, explicit_content: bool, id: string, image: string, link: string, listennotes_edit_url: string, listennotes_url: string, maybe_audio_invalid: bool, podcast: record, pub_date_ms: int, thumbnail: string, title: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -297,7 +321,7 @@ export def "get-episodes-in-batch" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-ListenAPI-Key": $x_listen_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -329,7 +353,7 @@ export def "get-episode-by-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --show-transcript: int # To include the transcript of this episode or not? If it is 1, then include the transcript in the **transcript** field. The default value is 0 - we don't include transcript by default, because 1) it would make the response data very big, thus slow response time; 2) less than 1% of episodes have transcripts. The transcript field is available only in the PRO/ENTERPRISE plan. (default: 0)
   --x-listen-api-key: string # Get API Key on listennotes.com/api (required)
-]: nothing -> record<audio: string, audio_length_sec: int, description: string, explicit_content: bool, id: string, image: string, link: string, listennotes_edit_url: string, listennotes_url: string, maybe_audio_invalid: bool, podcast: record<audio_length_sec: int, country: string, description: string, earliest_pub_date_ms: int, email: string, explicit_content: bool, extra: record<amazon_music_url: string, facebook_handle: string, google_url: string, instagram_handle: string, linkedin_url: string, patreon_handle: string, spotify_url: string, twitter_handle: string, url1: string, url2: string, url3: string, wechat_handle: string, youtube_url: string>, genre_ids: list<int>, id: string, image: string, is_claimed: bool, itunes_id: int, language: string, latest_episode_id: string, latest_pub_date_ms: int, listen_score: int, listen_score_global_rank: string, listennotes_url: string, looking_for: record<cohosts: bool, cross_promotion: bool, guests: bool, sponsors: bool>, publisher: string, rss: string, thumbnail: string, title: string, total_episodes: int, type: string, update_frequency_hours: int, website: string>, pub_date_ms: int, thumbnail: string, title: string, transcript: string> {
+]: nothing -> oneof<record<audio: string, audio_length_sec: int, description: string, explicit_content: bool, id: string, image: string, link: string, listennotes_edit_url: string, listennotes_url: string, maybe_audio_invalid: bool, podcast: record<audio_length_sec: int, country: string, description: string, earliest_pub_date_ms: int, email: string, explicit_content: bool, extra: record<amazon_music_url: string, facebook_handle: string, google_url: string, instagram_handle: string, linkedin_url: string, patreon_handle: string, spotify_url: string, twitter_handle: string, url1: string, url2: string, url3: string, wechat_handle: string, youtube_url: string>, genre_ids: list<int>, id: string, image: string, is_claimed: bool, itunes_id: int, language: string, latest_episode_id: string, latest_pub_date_ms: int, listen_score: int, listen_score_global_rank: string, listennotes_url: string, looking_for: record<cohosts: bool, cross_promotion: bool, guests: bool, sponsors: bool>, publisher: string, rss: string, thumbnail: string, title: string, total_episodes: int, type: string, update_frequency_hours: int, website: string>, pub_date_ms: int, thumbnail: string, title: string, transcript: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -371,7 +395,7 @@ export def "get-episode-recommendations" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --safe-mode: int@safe-mode-completer # Whether or not to exclude podcasts with explicit language. 1 is yes, and 0 is no. (default: 0)
   --x-listen-api-key: string # Get API Key on listennotes.com/api (required)
-]: nothing -> record<recommendations: table<audio: string, audio_length_sec: int, description: string, explicit_content: bool, id: string, image: string, link: string, listennotes_edit_url: string, listennotes_url: string, maybe_audio_invalid: bool, podcast: record, pub_date_ms: int, thumbnail: string, title: string>> {
+]: nothing -> oneof<record<recommendations: table<audio: string, audio_length_sec: int, description: string, explicit_content: bool, id: string, image: string, link: string, listennotes_edit_url: string, listennotes_url: string, maybe_audio_invalid: bool, podcast: record, pub_date_ms: int, thumbnail: string, title: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -412,7 +436,7 @@ export def "get-genres" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --top-level-only: int@top-level-only-completer # Just show top level genres? If 1, yes, just show top level genres. If 0, no, show all genres. (default: 0)
   --x-listen-api-key: string # Get API Key on listennotes.com/api (required)
-]: nothing -> record<genres: table<id: int, name: string, parent_id: int>> {
+]: nothing -> oneof<record<genres: table<id: int, name: string, parent_id: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_listen_api_key == null) { error make --unspanned { msg: "required header parameter 'X-ListenAPI-Key' missing: pass --x-listen-api-key" } }
@@ -451,7 +475,7 @@ export def "just-listen" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-listen-api-key: string # Get API Key on listennotes.com/api (required)
-]: nothing -> record<audio: string, audio_length_sec: int, description: string, explicit_content: bool, id: string, image: string, link: string, listennotes_edit_url: string, listennotes_url: string, maybe_audio_invalid: bool, podcast: record<id: string, image: string, listen_score: int, listen_score_global_rank: string, listennotes_url: string, publisher: string, thumbnail: string, title: string>, pub_date_ms: int, thumbnail: string, title: string> {
+]: nothing -> oneof<record<audio: string, audio_length_sec: int, description: string, explicit_content: bool, id: string, image: string, link: string, listennotes_edit_url: string, listennotes_url: string, maybe_audio_invalid: bool, podcast: record<id: string, image: string, listen_score: int, listen_score_global_rank: string, listennotes_url: string, publisher: string, thumbnail: string, title: string>, pub_date_ms: int, thumbnail: string, title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_listen_api_key == null) { error make --unspanned { msg: "required header parameter 'X-ListenAPI-Key' missing: pass --x-listen-api-key" } }
@@ -489,7 +513,7 @@ export def "get-languages" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-listen-api-key: string # Get API Key on listennotes.com/api (required)
-]: nothing -> record<languages: list<string>> {
+]: nothing -> oneof<record<languages: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_listen_api_key == null) { error make --unspanned { msg: "required header parameter 'X-ListenAPI-Key' missing: pass --x-listen-api-key" } }
@@ -529,7 +553,7 @@ export def "get-playlists" [
   --sort: string@sort-completer-1 # How do you want to sort playlists? (default: recent_added_first)
   --page: int # Page number of playlists. (default: 1)
   --x-listen-api-key: string # Get API Key on listennotes.com/api (required)
-]: nothing -> record<has_next: bool, has_previous: bool, next_page_number: int, page_number: int, playlists: table<description: string, episode_count: int, id: string, image: string, last_timestamp_ms: int, listennotes_url: string, name: string, podcast_count: int, thumbnail: string, total_audio_length_sec: int, visibility: string>, previous_page_number: int, total: int> {
+]: nothing -> oneof<record<has_next: bool, has_previous: bool, next_page_number: int, page_number: int, playlists: table<description: string, episode_count: int, id: string, image: string, last_timestamp_ms: int, listennotes_url: string, name: string, podcast_count: int, thumbnail: string, total_audio_length_sec: int, visibility: string>, previous_page_number: int, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_listen_api_key == null) { error make --unspanned { msg: "required header parameter 'X-ListenAPI-Key' missing: pass --x-listen-api-key" } }
@@ -572,7 +596,7 @@ export def "get-playlist-by-id" [
   --last-timestamp-ms: int # For playlist items pagination. It's the value of **last_timestamp_ms** from the response of last request. If it's 0 or not specified, just return the latest or the oldest 20 items, depending on the value of the **sort** parameter. (default: 0)
   --sort: string@sort-completer-2 # How do you want to sort playlist items? (default: recent_added_first)
   --x-listen-api-key: string # Get API Key on listennotes.com/api (required)
-]: nothing -> record<description: string, id: string, image: string, items: table<added_at_ms: int, data: any, id: int, notes: string, type: string>, last_timestamp_ms: int, listennotes_url: string, name: string, thumbnail: string, total: int, total_audio_length_sec: int, type: string, visibility: string> {
+]: nothing -> oneof<record<description: string, id: string, image: string, items: table<added_at_ms: int, data: any, id: int, notes: string, type: string>, last_timestamp_ms: int, listennotes_url: string, name: string, thumbnail: string, total: int, total_audio_length_sec: int, type: string, visibility: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -618,7 +642,7 @@ export def "get-podcasts-in-batch" [
   --rsses: string # Comma-separated rss urls.
   --show-latest-episodes: int@show-latest-episodes-completer # Whether or not to fetch up to 15 latest episodes from these podcasts, sorted by pub_date. 1 is yes, and 0 is no. (default: 0)
   --spotify-ids: string # Comma-separated Spotify ids, e.g., 3DDfEsKDIDrTlnPOiG4ZF4
-]: any -> record<latest_episodes: table<audio: string, audio_length_sec: int, description: string, explicit_content: bool, id: string, image: string, link: string, listennotes_edit_url: string, listennotes_url: string, maybe_audio_invalid: bool, podcast: record, pub_date_ms: int, thumbnail: string, title: string>, podcasts: table<audio_length_sec: int, country: string, description: string, earliest_pub_date_ms: int, email: string, explicit_content: bool, extra: record, genre_ids: list, id: string, image: string, is_claimed: bool, itunes_id: int, language: string, latest_episode_id: string, latest_pub_date_ms: int, listen_score: int, listen_score_global_rank: string, listennotes_url: string, looking_for: record, publisher: string, rss: string, thumbnail: string, title: string, total_episodes: int, type: string, update_frequency_hours: int, website: string>> {
+]: any -> oneof<record<latest_episodes: table<audio: string, audio_length_sec: int, description: string, explicit_content: bool, id: string, image: string, link: string, listennotes_edit_url: string, listennotes_url: string, maybe_audio_invalid: bool, podcast: record, pub_date_ms: int, thumbnail: string, title: string>, podcasts: table<audio_length_sec: int, country: string, description: string, earliest_pub_date_ms: int, email: string, explicit_content: bool, extra: record, genre_ids: list, id: string, image: string, is_claimed: bool, itunes_id: int, language: string, latest_episode_id: string, latest_pub_date_ms: int, listen_score: int, listen_score_global_rank: string, listennotes_url: string, looking_for: record, publisher: string, rss: string, thumbnail: string, title: string, total_episodes: int, type: string, update_frequency_hours: int, website: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -630,7 +654,7 @@ export def "get-podcasts-in-batch" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-ListenAPI-Key": $x_listen_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -662,7 +686,7 @@ export def "submit-podcast" [
   --x-listen-api-key: string # Get API Key on listennotes.com/api (required)
   --email: string # A valid email address. If **email** is specified, then we'll notify this email address once the podcast is accepted.
   rss: string # A valid podcast rss url.
-]: any -> record<podcast: record<id: string, image: string, listen_score: int, listen_score_global_rank: string, listennotes_url: string, publisher: string, thumbnail: string, title: string>, status: string> {
+]: any -> oneof<record<podcast: record<id: string, image: string, listen_score: int, listen_score_global_rank: string, listennotes_url: string, publisher: string, thumbnail: string, title: string>, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -674,7 +698,7 @@ export def "submit-podcast" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-ListenAPI-Key": $x_listen_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -706,7 +730,7 @@ export def "delete-podcast-by-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --reason: string # The reason why this podcast should be deleted, e.g., copyright violation, the podcaster wants to delete it... You can put "testing" here to indicate that you are testing this endpoint, so we will not actually delete the podcast. (e.g. the podcaster wants to delete it)
   --x-listen-api-key: string # Get API Key on listennotes.com/api (required)
-]: nothing -> record<status: string> {
+]: nothing -> oneof<record<status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -749,7 +773,7 @@ export def "get-podcast-by-id" [
   --next-episode-pub-date: int # For episodes pagination. It's the value of **next_episode_pub_date** from the response of last request. If not specified, just return latest 10 episodes or oldest 10 episodes, depending on the value of the **sort** parameter. (e.g. 1479154463000)
   --sort: string@sort-completer-3 # How do you want to sort the episodes of this podcast? (default: recent_first, e.g. recent_first)
   --x-listen-api-key: string # Get API Key on listennotes.com/api (required)
-]: nothing -> record<audio_length_sec: int, country: string, description: string, earliest_pub_date_ms: int, email: string, episodes: table<audio: string, audio_length_sec: int, description: string, explicit_content: bool, id: string, image: string, link: string, listennotes_edit_url: string, listennotes_url: string, maybe_audio_invalid: bool, pub_date_ms: int, thumbnail: string, title: string>, explicit_content: bool, extra: record<amazon_music_url: string, facebook_handle: string, google_url: string, instagram_handle: string, linkedin_url: string, patreon_handle: string, spotify_url: string, twitter_handle: string, url1: string, url2: string, url3: string, wechat_handle: string, youtube_url: string>, genre_ids: list<int>, id: string, image: string, is_claimed: bool, itunes_id: int, language: string, latest_episode_id: string, latest_pub_date_ms: int, listen_score: int, listen_score_global_rank: string, listennotes_url: string, looking_for: record<cohosts: bool, cross_promotion: bool, guests: bool, sponsors: bool>, next_episode_pub_date: int, publisher: string, rss: string, thumbnail: string, title: string, total_episodes: int, type: string, update_frequency_hours: int, website: string> {
+]: nothing -> oneof<record<audio_length_sec: int, country: string, description: string, earliest_pub_date_ms: int, email: string, episodes: table<audio: string, audio_length_sec: int, description: string, explicit_content: bool, id: string, image: string, link: string, listennotes_edit_url: string, listennotes_url: string, maybe_audio_invalid: bool, pub_date_ms: int, thumbnail: string, title: string>, explicit_content: bool, extra: record<amazon_music_url: string, facebook_handle: string, google_url: string, instagram_handle: string, linkedin_url: string, patreon_handle: string, spotify_url: string, twitter_handle: string, url1: string, url2: string, url3: string, wechat_handle: string, youtube_url: string>, genre_ids: list<int>, id: string, image: string, is_claimed: bool, itunes_id: int, language: string, latest_episode_id: string, latest_pub_date_ms: int, listen_score: int, listen_score_global_rank: string, listennotes_url: string, looking_for: record<cohosts: bool, cross_promotion: bool, guests: bool, sponsors: bool>, next_episode_pub_date: int, publisher: string, rss: string, thumbnail: string, title: string, total_episodes: int, type: string, update_frequency_hours: int, website: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -790,7 +814,7 @@ export def "get-podcast-audience" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-listen-api-key: string # Get API Key on listennotes.com/api (required)
-]: nothing -> record<by_regions: table<ratio: string, region: string>> {
+]: nothing -> oneof<record<by_regions: table<ratio: string, region: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -831,7 +855,7 @@ export def "get-podcast-recommendations" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --safe-mode: int@safe-mode-completer # Whether or not to exclude podcasts with explicit language. 1 is yes, and 0 is no. (default: 0)
   --x-listen-api-key: string # Get API Key on listennotes.com/api (required)
-]: nothing -> record<recommendations: table<audio_length_sec: int, country: string, description: string, earliest_pub_date_ms: int, email: string, explicit_content: bool, extra: record, genre_ids: list, id: string, image: string, is_claimed: bool, itunes_id: int, language: string, latest_episode_id: string, latest_pub_date_ms: int, listen_score: int, listen_score_global_rank: string, listennotes_url: string, looking_for: record, publisher: string, rss: string, thumbnail: string, title: string, total_episodes: int, type: string, update_frequency_hours: int, website: string>> {
+]: nothing -> oneof<record<recommendations: table<audio_length_sec: int, country: string, description: string, earliest_pub_date_ms: int, email: string, explicit_content: bool, extra: record, genre_ids: list, id: string, image: string, is_claimed: bool, itunes_id: int, language: string, latest_episode_id: string, latest_pub_date_ms: int, listen_score: int, listen_score_global_rank: string, listennotes_url: string, looking_for: record, publisher: string, rss: string, thumbnail: string, title: string, total_episodes: int, type: string, update_frequency_hours: int, website: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -871,7 +895,7 @@ export def "get-regions" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-listen-api-key: string # Get API Key on listennotes.com/api (required)
-]: nothing -> record<regions: record> {
+]: nothing -> oneof<record<regions: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_listen_api_key == null) { error make --unspanned { msg: "required header parameter 'X-ListenAPI-Key' missing: pass --x-listen-api-key" } }
@@ -910,7 +934,7 @@ export def "get-related-searches" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # Search term, e.g., person, place, topic... (required)
   --x-listen-api-key: string # Get API Key on listennotes.com/api (required)
-]: nothing -> record<terms: list<string>> {
+]: nothing -> oneof<record<terms: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($q == null) { error make --unspanned { msg: "required query parameter 'q' missing: pass --q" } }
@@ -970,7 +994,7 @@ export def "search" [
   --safe-mode: int@safe-mode-completer # Whether or not to exclude podcasts/episodes with explicit language. 1 is yes and 0 is no. It works only when **type** is *episode* or *podcast*. (default: 0)
   --unique-podcasts: int@unique-podcasts-completer # Whether or not to keep only one episode per podcast in search results. 1 is yes and 0 is no. It works only when **type** is *episode*. (default: 0)
   --x-listen-api-key: string # Get API Key on listennotes.com/api (required)
-]: nothing -> record<count: int, next_offset: int, results: list<any>, took: float, total: int> {
+]: nothing -> oneof<record<count: int, next_offset: int, results: list<any>, took: float, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($q == null) { error make --unspanned { msg: "required query parameter 'q' missing: pass --q" } }
@@ -1011,7 +1035,7 @@ export def "spellcheck" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # Search term, e.g., person, place, topic... (required)
   --x-listen-api-key: string # Get API Key on listennotes.com/api (required)
-]: nothing -> record<corrected_text_html: string, tokens: table<offset: int, suggestion: string, token: string>> {
+]: nothing -> oneof<record<corrected_text_html: string, tokens: table<offset: int, suggestion: string, token: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($q == null) { error make --unspanned { msg: "required query parameter 'q' missing: pass --q" } }
@@ -1051,7 +1075,7 @@ export def "get-trending-searches" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-listen-api-key: string # Get API Key on listennotes.com/api (required)
-]: nothing -> record<terms: list<string>> {
+]: nothing -> oneof<record<terms: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_listen_api_key == null) { error make --unspanned { msg: "required header parameter 'X-ListenAPI-Key' missing: pass --x-listen-api-key" } }
@@ -1093,7 +1117,7 @@ export def "typeahead" [
   --show-genres: int@show-genres-completer # Whether or not to autosuggest genres. 1 is yes, 0 is no. (default: 0)
   --safe-mode: int@safe-mode-completer # Whether or not to exclude podcasts/episodes with explicit language. 1 is yes and 0 is no. It works only when **show_podcasts** is *1*. (default: 0)
   --x-listen-api-key: string # Get API Key on listennotes.com/api (required)
-]: nothing -> record<genres: table<id: int, name: string, parent_id: int>, podcasts: table<explicit_content: bool, id: string, image: string, publisher_highlighted: string, publisher_original: string, thumbnail: string, title_highlighted: string, title_original: string>, terms: list<string>> {
+]: nothing -> oneof<record<genres: table<id: int, name: string, parent_id: int>, podcasts: table<explicit_content: bool, id: string, image: string, publisher_highlighted: string, publisher_original: string, thumbnail: string, title_highlighted: string, title_original: string>, terms: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($q == null) { error make --unspanned { msg: "required query parameter 'q' missing: pass --q" } }

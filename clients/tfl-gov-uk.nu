@@ -14,27 +14,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "query-app_key" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "app_key")=(encode-path-segment $token_val)", location: "query"} }
     "query-app_id" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "app_id")=(encode-path-segment $token_val)", location: "query"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -42,8 +51,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -54,7 +68,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -89,7 +112,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["https://api.digital.tfl.gov.uk"] }
@@ -108,9 +132,9 @@ def direction-completer-1 [] { ["Average" "From" "To"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accident-stats-get" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["accident-stats-get" "air-quality-get" "bike-point-get-all" "bike-point-search" "bike-point-get" "cabwise-get" "journey-journey-results" "journey-meta" "line-meta-disruption-categories" "line-meta-modes" "line-meta-service-types" "line-meta-severity" "line-get-by-mode" "line-disruption-by-mode" "line-route-by-mode" "line-status-by-mode" "line-route" "line-search" "line-status-by-severity" "line-get" "line-arrivals" "line-disruption" "line-line-routes-by-ids" "line-status-by-ids" "line-status" "line-route-sequence" "line-stop-points" "line-timetable" "line-timetable-to" "mode-get-active-service-types" "mode-arrivals" "occupancy-get-bike-points-occupancies" "get-occupancy-car-park" "occupancy-get" "occupancy-get-all-charge-connector-status" "occupancy-get-charge-connector-status" "place-get-by-geo" "place-get-streets-by-post-code" "place-meta-categories" "place-meta-place-types" "place-search" "place-get-by-type" "place-get" "place-get-at" "place-get-overlay" "road-get" "road-meta-categories" "road-meta-severities" "road-disruption-by-id" "road-disrupted-streets" "get-road-ids" "road-disruption" "road-status" "search-get" "search-bus-schedules" "search-meta-categories" "search-meta-search-providers" "search-meta-sorts" "stop-point-get-by-geo-point" "stop-point-meta-categories" "stop-point-meta-modes" "stop-point-meta-stop-types" "stop-point-get-by-mode" "stop-point-disruption-by-mode" "get-stop-point-search" "stop-point-search" "stop-point-get-service-types" "stop-point-get-by-sms" "stop-point-get-by-type" "stop-point-get-by-type-with-pagination" "stop-point-get" "stop-point-disruption" "stop-point-arrival-departures" "stop-point-arrivals" "stop-point-reachable-from" "stop-point-crowding" "stop-point-direction" "stop-point-route" "get-stop-point-id-place-types" "stop-point-get-car-parks-by-id" "stop-point-get-taxi-ranks-by-ids" "travel-time-get-compare-overlay" "travel-time-get-overlay" "vehicle-get" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -144,7 +168,7 @@ export def "accident-stats-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<borough: string, casualties: list<record>, date: string, id: int, lat: float, location: string, lon: float, severity: string, vehicles: list<record>> {
+]: nothing -> oneof<table<borough: string, casualties: list<record>, date: string, id: int, lat: float, location: string, lon: float, severity: string, vehicles: list<record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($year | is-empty) { error make --unspanned { msg: "path parameter 'year' must be non-empty" } }
@@ -180,7 +204,7 @@ export def "air-quality-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/AirQuality" $auth.query)
@@ -215,7 +239,7 @@ export def "bike-point-get-all" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<additionalProperties: list<record>, children: list<any>, childrenUrls: list<string>, commonName: string, distance: float, id: string, lat: float, lon: float, placeType: string, url: string> {
+]: nothing -> oneof<table<additionalProperties: list<record>, children: list<any>, childrenUrls: list<string>, commonName: string, distance: float, id: string, lat: float, lon: float, placeType: string, url: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/BikePoint" $auth.query)
@@ -251,7 +275,7 @@ export def "bike-point-search" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --query: string # The search term e.g. "St. James" (required)
-]: nothing -> table<additionalProperties: list<record>, children: list<any>, childrenUrls: list<string>, commonName: string, distance: float, id: string, lat: float, lon: float, placeType: string, url: string> {
+]: nothing -> oneof<table<additionalProperties: list<record>, children: list<any>, childrenUrls: list<string>, commonName: string, distance: float, id: string, lat: float, lon: float, placeType: string, url: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
@@ -289,7 +313,7 @@ export def "bike-point-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<additionalProperties: table<category: string, key: string, modified: string, sourceSystemKey: string, value: string>, children: list<any>, childrenUrls: list<string>, commonName: string, distance: float, id: string, lat: float, lon: float, placeType: string, url: string> {
+]: nothing -> oneof<record<additionalProperties: table<category: string, key: string, modified: string, sourceSystemKey: string, value: string>, children: list<any>, childrenUrls: list<string>, commonName: string, distance: float, id: string, lat: float, lon: float, placeType: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -335,7 +359,7 @@ export def "cabwise-get" [
   --legacy-format: oneof<nothing, bool> # Legacy Format
   --force-xml: oneof<nothing, bool> # Force Xml
   --twenty-four-seven-only: oneof<nothing, bool> # Twenty Four Seven Only
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($lat == null) { error make --unspanned { msg: "required query parameter 'lat' missing: pass --lat" } }
@@ -401,7 +425,7 @@ export def "journey-journey-results" [
   --route-between-entrances: oneof<nothing, bool> # A boolean to indicate whether public transport routes should include directions between platforms and station entrances.
   --use-real-time-live-arrivals: oneof<nothing, bool> # A boolean to indicate if we want to receive real time live arrivals data where available.
   --calc-one-direction: oneof<nothing, bool> # A boolean to make Journey Planner calculate journeys in one temporal direction only. In other words, only calculate journeys after the 'depart' time, or before the 'arrive' time. By default, the Journey Planner engine (EFA) calculates journeys in both temporal directions.
-]: nothing -> record<cycleHireDockingStationData: record<destinationId: string, destinationNumberOfBikes: int, destinationNumberOfEmptySlots: int, originId: string, originNumberOfBikes: int, originNumberOfEmptySlots: int>, journeyVector: record<from: string, to: string, uri: string, via: string>, journeys: table<arrivalDateTime: string, duration: int, fare: record, legs: list, startDateTime: string>, lines: table<created: string, crowding: record, disruptions: list, id: string, lineStatuses: list, modeName: string, modified: string, name: string, routeSections: list, serviceTypes: list>, recommendedMaxAgeMinutes: int, searchCriteria: record<dateTime: string, dateTimeType: string, timeAdjustments: record<earlier: record, earliest: record, later: record, latest: record>>, stopMessages: list<string>> {
+]: nothing -> oneof<record<cycleHireDockingStationData: record<destinationId: string, destinationNumberOfBikes: int, destinationNumberOfEmptySlots: int, originId: string, originNumberOfBikes: int, originNumberOfEmptySlots: int>, journeyVector: record<from: string, to: string, uri: string, via: string>, journeys: table<arrivalDateTime: string, duration: int, fare: record, legs: list, startDateTime: string>, lines: table<created: string, crowding: record, disruptions: list, id: string, lineStatuses: list, modeName: string, modified: string, name: string, routeSections: list, serviceTypes: list>, recommendedMaxAgeMinutes: int, searchCriteria: record<dateTime: string, dateTimeType: string, timeAdjustments: record<earlier: record, earliest: record, later: record, latest: record>>, stopMessages: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($from | is-empty) { error make --unspanned { msg: "path parameter 'from' must be non-empty" } }
@@ -439,7 +463,7 @@ export def "journey-meta" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<isFarePaying: bool, isScheduledService: bool, isTflService: bool, modeName: string, motType: string, network: string> {
+]: nothing -> oneof<table<isFarePaying: bool, isScheduledService: bool, isTflService: bool, modeName: string, motType: string, network: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Journey/Meta/Modes" $auth.query)
@@ -474,7 +498,7 @@ export def "line-meta-disruption-categories" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Line/Meta/DisruptionCategories" $auth.query)
@@ -509,7 +533,7 @@ export def "line-meta-modes" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<isFarePaying: bool, isScheduledService: bool, isTflService: bool, modeName: string, motType: string, network: string> {
+]: nothing -> oneof<table<isFarePaying: bool, isScheduledService: bool, isTflService: bool, modeName: string, motType: string, network: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Line/Meta/Modes" $auth.query)
@@ -544,7 +568,7 @@ export def "line-meta-service-types" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Line/Meta/ServiceTypes" $auth.query)
@@ -579,7 +603,7 @@ export def "line-meta-severity" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<description: string, modeName: string, severityLevel: int> {
+]: nothing -> oneof<table<description: string, modeName: string, severityLevel: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Line/Meta/Severity" $auth.query)
@@ -615,7 +639,7 @@ export def "line-get-by-mode" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<created: string, crowding: record<passengerFlows: list, trainLoadings: list>, disruptions: list<record>, id: string, lineStatuses: list<record>, modeName: string, modified: string, name: string, routeSections: list<record>, serviceTypes: list<record>> {
+]: nothing -> oneof<table<created: string, crowding: record<passengerFlows: list, trainLoadings: list>, disruptions: list<record>, id: string, lineStatuses: list<record>, modeName: string, modified: string, name: string, routeSections: list<record>, serviceTypes: list<record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($modes | is-empty) { error make --unspanned { msg: "path parameter 'modes' must be non-empty" } }
@@ -652,7 +676,7 @@ export def "line-disruption-by-mode" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<additionalInfo: string, affectedRoutes: list<record>, affectedStops: list<record>, category: string, categoryDescription: string, closureText: string, created: string, description: string, lastUpdate: string, summary: string, type: string> {
+]: nothing -> oneof<table<additionalInfo: string, affectedRoutes: list<record>, affectedStops: list<record>, category: string, categoryDescription: string, closureText: string, created: string, description: string, lastUpdate: string, summary: string, type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($modes | is-empty) { error make --unspanned { msg: "path parameter 'modes' must be non-empty" } }
@@ -690,7 +714,7 @@ export def "line-route-by-mode" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --service-types: list<string> # A comma seperated list of service types to filter on. Supported values: Regular, Night. Defaulted to 'Regular' if not specified
-]: nothing -> table<created: string, crowding: record<passengerFlows: list, trainLoadings: list>, disruptions: list<record>, id: string, lineStatuses: list<record>, modeName: string, modified: string, name: string, routeSections: list<record>, serviceTypes: list<record>> {
+]: nothing -> oneof<table<created: string, crowding: record<passengerFlows: list, trainLoadings: list>, disruptions: list<record>, id: string, lineStatuses: list<record>, modeName: string, modified: string, name: string, routeSections: list<record>, serviceTypes: list<record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($modes | is-empty) { error make --unspanned { msg: "path parameter 'modes' must be non-empty" } }
@@ -730,7 +754,7 @@ export def "line-status-by-mode" [
   --accept: string@accept-completer # Response content type
   --detail: oneof<nothing, bool> # Include details of the disruptions that are causing the line status including the affected stops and routes
   --severity-level: string # If specified, ensures that only those line status(es) are returned within the lines that have disruptions with the matching severity level.
-]: nothing -> table<created: string, crowding: record<passengerFlows: list, trainLoadings: list>, disruptions: list<record>, id: string, lineStatuses: list<record>, modeName: string, modified: string, name: string, routeSections: list<record>, serviceTypes: list<record>> {
+]: nothing -> oneof<table<created: string, crowding: record<passengerFlows: list, trainLoadings: list>, disruptions: list<record>, id: string, lineStatuses: list<record>, modeName: string, modified: string, name: string, routeSections: list<record>, serviceTypes: list<record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($modes | is-empty) { error make --unspanned { msg: "path parameter 'modes' must be non-empty" } }
@@ -768,7 +792,7 @@ export def "line-route" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --service-types: list<string> # A comma seperated list of service types to filter on. Supported values: Regular, Night. Defaulted to 'Regular' if not specified
-]: nothing -> table<created: string, crowding: record<passengerFlows: list, trainLoadings: list>, disruptions: list<record>, id: string, lineStatuses: list<record>, modeName: string, modified: string, name: string, routeSections: list<record>, serviceTypes: list<record>> {
+]: nothing -> oneof<table<created: string, crowding: record<passengerFlows: list, trainLoadings: list>, disruptions: list<record>, id: string, lineStatuses: list<record>, modeName: string, modified: string, name: string, routeSections: list<record>, serviceTypes: list<record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "serviceTypes" $service_types "multi")] | flatten | str join "&"
@@ -807,7 +831,7 @@ export def "line-search" [
   --accept: string@accept-completer # Response content type
   --modes: list<string> # Optionally filter by the specified modes
   --service-types: list<string> # A comma seperated list of service types to filter on. Supported values: Regular, Night. Defaulted to 'Regular' if not specified
-]: nothing -> record<input: string, searchMatches: table<id: string, lat: float, lineId: string, lineName: string, lineRouteSection: list, lon: float, matchedRouteSections: list, matchedStops: list, mode: string, name: string, url: string>> {
+]: nothing -> oneof<record<input: string, searchMatches: table<id: string, lat: float, lineId: string, lineName: string, lineRouteSection: list, lon: float, matchedRouteSections: list, matchedStops: list, mode: string, name: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($query | is-empty) { error make --unspanned { msg: "path parameter 'query' must be non-empty" } }
@@ -845,7 +869,7 @@ export def "line-status-by-severity" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<created: string, crowding: record<passengerFlows: list, trainLoadings: list>, disruptions: list<record>, id: string, lineStatuses: list<record>, modeName: string, modified: string, name: string, routeSections: list<record>, serviceTypes: list<record>> {
+]: nothing -> oneof<table<created: string, crowding: record<passengerFlows: list, trainLoadings: list>, disruptions: list<record>, id: string, lineStatuses: list<record>, modeName: string, modified: string, name: string, routeSections: list<record>, serviceTypes: list<record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($severity | is-empty) { error make --unspanned { msg: "path parameter 'severity' must be non-empty" } }
@@ -882,7 +906,7 @@ export def "line-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<created: string, crowding: record<passengerFlows: list, trainLoadings: list>, disruptions: list<record>, id: string, lineStatuses: list<record>, modeName: string, modified: string, name: string, routeSections: list<record>, serviceTypes: list<record>> {
+]: nothing -> oneof<table<created: string, crowding: record<passengerFlows: list, trainLoadings: list>, disruptions: list<record>, id: string, lineStatuses: list<record>, modeName: string, modified: string, name: string, routeSections: list<record>, serviceTypes: list<record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($ids | is-empty) { error make --unspanned { msg: "path parameter 'ids' must be non-empty" } }
@@ -922,7 +946,7 @@ export def "line-arrivals" [
   --accept: string@accept-completer # Response content type
   --direction: string@direction-completer # Optional. The direction of travel. Can be inbound or outbound or all. If left blank, and destinationStopId is set, will default to all
   --destination-station-id: string # Optional. Id of destination stop
-]: nothing -> table<bearing: string, currentLocation: string, destinationName: string, destinationNaptanId: string, direction: string, expectedArrival: string, id: string, lineId: string, lineName: string, modeName: string, naptanId: string, operationType: int, platformName: string, stationName: string, timeToLive: string, timeToStation: int, timestamp: string, timing: record<countdownServerAdjustment: string, insert: string, read: string, received: string, sent: string, source: string>, towards: string, vehicleId: string> {
+]: nothing -> oneof<table<bearing: string, currentLocation: string, destinationName: string, destinationNaptanId: string, direction: string, expectedArrival: string, id: string, lineId: string, lineName: string, modeName: string, naptanId: string, operationType: int, platformName: string, stationName: string, timeToLive: string, timeToStation: int, timestamp: string, timing: record<countdownServerAdjustment: string, insert: string, read: string, received: string, sent: string, source: string>, towards: string, vehicleId: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($ids | is-empty) { error make --unspanned { msg: "path parameter 'ids' must be non-empty" } }
@@ -961,7 +985,7 @@ export def "line-disruption" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<additionalInfo: string, affectedRoutes: list<record>, affectedStops: list<record>, category: string, categoryDescription: string, closureText: string, created: string, description: string, lastUpdate: string, summary: string, type: string> {
+]: nothing -> oneof<table<additionalInfo: string, affectedRoutes: list<record>, affectedStops: list<record>, category: string, categoryDescription: string, closureText: string, created: string, description: string, lastUpdate: string, summary: string, type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($ids | is-empty) { error make --unspanned { msg: "path parameter 'ids' must be non-empty" } }
@@ -999,7 +1023,7 @@ export def "line-line-routes-by-ids" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --service-types: list<string> # A comma seperated list of service types to filter on. Supported values: Regular, Night. Defaulted to 'Regular' if not specified
-]: nothing -> table<created: string, crowding: record<passengerFlows: list, trainLoadings: list>, disruptions: list<record>, id: string, lineStatuses: list<record>, modeName: string, modified: string, name: string, routeSections: list<record>, serviceTypes: list<record>> {
+]: nothing -> oneof<table<created: string, crowding: record<passengerFlows: list, trainLoadings: list>, disruptions: list<record>, id: string, lineStatuses: list<record>, modeName: string, modified: string, name: string, routeSections: list<record>, serviceTypes: list<record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($ids | is-empty) { error make --unspanned { msg: "path parameter 'ids' must be non-empty" } }
@@ -1038,7 +1062,7 @@ export def "line-status-by-ids" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --detail: oneof<nothing, bool> # Include details of the disruptions that are causing the line status including the affected stops and routes
-]: nothing -> table<created: string, crowding: record<passengerFlows: list, trainLoadings: list>, disruptions: list<record>, id: string, lineStatuses: list<record>, modeName: string, modified: string, name: string, routeSections: list<record>, serviceTypes: list<record>> {
+]: nothing -> oneof<table<created: string, crowding: record<passengerFlows: list, trainLoadings: list>, disruptions: list<record>, id: string, lineStatuses: list<record>, modeName: string, modified: string, name: string, routeSections: list<record>, serviceTypes: list<record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($ids | is-empty) { error make --unspanned { msg: "path parameter 'ids' must be non-empty" } }
@@ -1083,7 +1107,7 @@ export def "line-status" [
   --qp-end-date: string # required
   --date-range-start-date: string # format: date-time
   --date-range-end-date: string # format: date-time
-]: nothing -> table<created: string, crowding: record<passengerFlows: list, trainLoadings: list>, disruptions: list<record>, id: string, lineStatuses: list<record>, modeName: string, modified: string, name: string, routeSections: list<record>, serviceTypes: list<record>> {
+]: nothing -> oneof<table<created: string, crowding: record<passengerFlows: list, trainLoadings: list>, disruptions: list<record>, id: string, lineStatuses: list<record>, modeName: string, modified: string, name: string, routeSections: list<record>, serviceTypes: list<record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($ids | is-empty) { error make --unspanned { msg: "path parameter 'ids' must be non-empty" } }
@@ -1128,7 +1152,7 @@ export def "line-route-sequence" [
   --accept: string@accept-completer # Response content type
   --service-types: list<string> # A comma seperated list of service types to filter on. Supported values: Regular, Night. Defaulted to 'Regular' if not specified
   --exclude-crowding: oneof<nothing, bool> # That excludes crowding from line disruptions. Can be true or false.
-]: nothing -> record<direction: string, isOutboundOnly: bool, lineId: string, lineName: string, lineStrings: list<string>, mode: string, orderedLineRoutes: table<name: string, naptanIds: list, serviceType: string>, stations: table<accessibilitySummary: string, direction: string, hasDisruption: bool, icsId: string, id: string, lat: float, lines: list, lon: float, modes: list, name: string, parentId: string, routeId: int, stationId: string, status: bool, stopLetter: string, stopType: string, topMostParentId: string, towards: string, url: string, zone: string>, stopPointSequences: table<branchId: int, direction: string, lineId: string, lineName: string, nextBranchIds: list, prevBranchIds: list, serviceType: string, stopPoint: list>> {
+]: nothing -> oneof<record<direction: string, isOutboundOnly: bool, lineId: string, lineName: string, lineStrings: list<string>, mode: string, orderedLineRoutes: table<name: string, naptanIds: list, serviceType: string>, stations: table<accessibilitySummary: string, direction: string, hasDisruption: bool, icsId: string, id: string, lat: float, lines: list, lon: float, modes: list, name: string, parentId: string, routeId: int, stationId: string, status: bool, stopLetter: string, stopType: string, topMostParentId: string, towards: string, url: string, zone: string>, stopPointSequences: table<branchId: int, direction: string, lineId: string, lineName: string, nextBranchIds: list, prevBranchIds: list, serviceType: string, stopPoint: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1168,7 +1192,7 @@ export def "line-stop-points" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --tfl-operated-national-rail-stations-only: oneof<nothing, bool> # If the national-rail line is requested, this flag will filter the national rail stations so that only those operated by TfL are returned
-]: nothing -> table<accessibilitySummary: string, additionalProperties: list<record>, children: list<record>, childrenUrls: list<string>, commonName: string, distance: float, fullName: string, hubNaptanCode: string, icsCode: string, id: string, indicator: string, individualStopId: string, lat: float, lineGroup: list<record>, lineModeGroups: list<record>, lines: list<record>, lon: float, modes: list<string>, naptanId: string, naptanMode: string, placeType: string, platformName: string, smsCode: string, stationNaptan: string, status: bool, stopLetter: string, stopType: string, url: string> {
+]: nothing -> oneof<table<accessibilitySummary: string, additionalProperties: list<record>, children: list<record>, childrenUrls: list<string>, commonName: string, distance: float, fullName: string, hubNaptanCode: string, icsCode: string, id: string, indicator: string, individualStopId: string, lat: float, lineGroup: list<record>, lineModeGroups: list<record>, lines: list<record>, lon: float, modes: list<string>, naptanId: string, naptanMode: string, placeType: string, platformName: string, smsCode: string, stationNaptan: string, status: bool, stopLetter: string, stopType: string, url: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1207,7 +1231,7 @@ export def "line-timetable" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<direction: string, disambiguation: record<disambiguationOptions: list<record>>, lineId: string, lineName: string, pdfUrl: string, stations: table<accessibilitySummary: string, direction: string, hasDisruption: bool, icsId: string, id: string, lat: float, lines: list, lon: float, modes: list, name: string, parentId: string, routeId: int, stationId: string, status: bool, stopLetter: string, stopType: string, topMostParentId: string, towards: string, url: string, zone: string>, statusErrorMessage: string, stops: table<accessibilitySummary: string, direction: string, hasDisruption: bool, icsId: string, id: string, lat: float, lines: list, lon: float, modes: list, name: string, parentId: string, routeId: int, stationId: string, status: bool, stopLetter: string, stopType: string, topMostParentId: string, towards: string, url: string, zone: string>, timetable: record<departureStopId: string, routes: list<record>>> {
+]: nothing -> oneof<record<direction: string, disambiguation: record<disambiguationOptions: list<record>>, lineId: string, lineName: string, pdfUrl: string, stations: table<accessibilitySummary: string, direction: string, hasDisruption: bool, icsId: string, id: string, lat: float, lines: list, lon: float, modes: list, name: string, parentId: string, routeId: int, stationId: string, status: bool, stopLetter: string, stopType: string, topMostParentId: string, towards: string, url: string, zone: string>, statusErrorMessage: string, stops: table<accessibilitySummary: string, direction: string, hasDisruption: bool, icsId: string, id: string, lat: float, lines: list, lon: float, modes: list, name: string, parentId: string, routeId: int, stationId: string, status: bool, stopLetter: string, stopType: string, topMostParentId: string, towards: string, url: string, zone: string>, timetable: record<departureStopId: string, routes: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1247,7 +1271,7 @@ export def "line-timetable-to" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<direction: string, disambiguation: record<disambiguationOptions: list<record>>, lineId: string, lineName: string, pdfUrl: string, stations: table<accessibilitySummary: string, direction: string, hasDisruption: bool, icsId: string, id: string, lat: float, lines: list, lon: float, modes: list, name: string, parentId: string, routeId: int, stationId: string, status: bool, stopLetter: string, stopType: string, topMostParentId: string, towards: string, url: string, zone: string>, statusErrorMessage: string, stops: table<accessibilitySummary: string, direction: string, hasDisruption: bool, icsId: string, id: string, lat: float, lines: list, lon: float, modes: list, name: string, parentId: string, routeId: int, stationId: string, status: bool, stopLetter: string, stopType: string, topMostParentId: string, towards: string, url: string, zone: string>, timetable: record<departureStopId: string, routes: list<record>>> {
+]: nothing -> oneof<record<direction: string, disambiguation: record<disambiguationOptions: list<record>>, lineId: string, lineName: string, pdfUrl: string, stations: table<accessibilitySummary: string, direction: string, hasDisruption: bool, icsId: string, id: string, lat: float, lines: list, lon: float, modes: list, name: string, parentId: string, routeId: int, stationId: string, status: bool, stopLetter: string, stopType: string, topMostParentId: string, towards: string, url: string, zone: string>, statusErrorMessage: string, stops: table<accessibilitySummary: string, direction: string, hasDisruption: bool, icsId: string, id: string, lat: float, lines: list, lon: float, modes: list, name: string, parentId: string, routeId: int, stationId: string, status: bool, stopLetter: string, stopType: string, topMostParentId: string, towards: string, url: string, zone: string>, timetable: record<departureStopId: string, routes: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1285,7 +1309,7 @@ export def "mode-get-active-service-types" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<mode: string, serviceType: string> {
+]: nothing -> oneof<table<mode: string, serviceType: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Mode/ActiveServiceTypes" $auth.query)
@@ -1322,7 +1346,7 @@ export def "mode-arrivals" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --count: int # A number of arrivals to return for each stop, -1 to return all available. (format: int32)
-]: nothing -> table<bearing: string, currentLocation: string, destinationName: string, destinationNaptanId: string, direction: string, expectedArrival: string, id: string, lineId: string, lineName: string, modeName: string, naptanId: string, operationType: int, platformName: string, stationName: string, timeToLive: string, timeToStation: int, timestamp: string, timing: record<countdownServerAdjustment: string, insert: string, read: string, received: string, sent: string, source: string>, towards: string, vehicleId: string> {
+]: nothing -> oneof<table<bearing: string, currentLocation: string, destinationName: string, destinationNaptanId: string, direction: string, expectedArrival: string, id: string, lineId: string, lineName: string, modeName: string, naptanId: string, operationType: int, platformName: string, stationName: string, timeToLive: string, timeToStation: int, timestamp: string, timing: record<countdownServerAdjustment: string, insert: string, read: string, received: string, sent: string, source: string>, towards: string, vehicleId: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($mode | is-empty) { error make --unspanned { msg: "path parameter 'mode' must be non-empty" } }
@@ -1360,7 +1384,7 @@ export def "occupancy-get-bike-points-occupancies" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<bikesCount: int, eBikesCount: int, emptyDocks: int, id: string, name: string, standardBikesCount: int, totalDocks: int> {
+]: nothing -> oneof<table<bikesCount: int, eBikesCount: int, emptyDocks: int, id: string, name: string, standardBikesCount: int, totalDocks: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($ids | is-empty) { error make --unspanned { msg: "path parameter 'ids' must be non-empty" } }
@@ -1395,7 +1419,7 @@ export def "get-occupancy-car-park" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<bays: list<record>, carParkDetailsUrl: string, id: string, name: string> {
+]: nothing -> oneof<table<bays: list<record>, carParkDetailsUrl: string, id: string, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Occupancy/CarPark" $auth.query)
@@ -1431,7 +1455,7 @@ export def "occupancy-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<bays: table<bayCount: int, bayType: string, free: int, occupied: int>, carParkDetailsUrl: string, id: string, name: string> {
+]: nothing -> oneof<record<bays: table<bayCount: int, bayType: string, free: int, occupied: int>, carParkDetailsUrl: string, id: string, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1467,7 +1491,7 @@ export def "occupancy-get-all-charge-connector-status" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<id: int, sourceSystemPlaceId: string, status: string> {
+]: nothing -> oneof<table<id: int, sourceSystemPlaceId: string, status: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Occupancy/ChargeConnector" $auth.query)
@@ -1503,7 +1527,7 @@ export def "occupancy-get-charge-connector-status" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<id: int, sourceSystemPlaceId: string, status: string> {
+]: nothing -> oneof<table<id: int, sourceSystemPlaceId: string, status: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($ids | is-empty) { error make --unspanned { msg: "path parameter 'ids' must be non-empty" } }
@@ -1551,7 +1575,7 @@ export def "place-get-by-geo" [
   --place-geo-ne-lon: float # format: double
   --place-geo-lat: float # format: double
   --place-geo-lon: float # format: double
-]: nothing -> table<accessibilitySummary: string, additionalProperties: list<record>, children: list<record>, childrenUrls: list<string>, commonName: string, distance: float, fullName: string, hubNaptanCode: string, icsCode: string, id: string, indicator: string, individualStopId: string, lat: float, lineGroup: list<record>, lineModeGroups: list<record>, lines: list<record>, lon: float, modes: list<string>, naptanId: string, naptanMode: string, placeType: string, platformName: string, smsCode: string, stationNaptan: string, status: bool, stopLetter: string, stopType: string, url: string> {
+]: nothing -> oneof<table<accessibilitySummary: string, additionalProperties: list<record>, children: list<record>, childrenUrls: list<string>, commonName: string, distance: float, fullName: string, hubNaptanCode: string, icsCode: string, id: string, indicator: string, individualStopId: string, lat: float, lineGroup: list<record>, lineModeGroups: list<record>, lines: list<record>, lon: float, modes: list<string>, naptanId: string, naptanMode: string, placeType: string, platformName: string, smsCode: string, stationNaptan: string, status: bool, stopLetter: string, stopType: string, url: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "radius" $radius "scalar") (serialize-qp "categories" $categories "multi") (serialize-qp "includeChildren" $include_children "scalar") (serialize-qp "type" $type "multi") (serialize-qp "activeOnly" $active_only "scalar") (serialize-qp "numberOfPlacesToReturn" $number_of_places_to_return "scalar") (serialize-qp "placeGeo.swLat" $place_geo_sw_lat "scalar") (serialize-qp "placeGeo.swLon" $place_geo_sw_lon "scalar") (serialize-qp "placeGeo.neLat" $place_geo_ne_lat "scalar") (serialize-qp "placeGeo.neLon" $place_geo_ne_lon "scalar") (serialize-qp "placeGeo.lat" $place_geo_lat "scalar") (serialize-qp "placeGeo.lon" $place_geo_lon "scalar")] | flatten | str join "&"
@@ -1590,7 +1614,7 @@ export def "place-get-streets-by-post-code" [
   --accept: string@accept-completer # Response content type
   --qp-postcode: string # required
   --postcode-input-postcode: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($postcode | is-empty) { error make --unspanned { msg: "path parameter 'Postcode' must be non-empty" } }
@@ -1628,7 +1652,7 @@ export def "place-meta-categories" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<availableKeys: list<string>, category: string> {
+]: nothing -> oneof<table<availableKeys: list<string>, category: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Place/Meta/Categories" $auth.query)
@@ -1663,7 +1687,7 @@ export def "place-meta-place-types" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<availableKeys: list<string>, category: string> {
+]: nothing -> oneof<table<availableKeys: list<string>, category: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Place/Meta/PlaceTypes" $auth.query)
@@ -1700,7 +1724,7 @@ export def "place-search" [
   --accept: string@accept-completer # Response content type
   --name: string # The name of the place, you can use the /Place/Types/{types} endpoint to get a list of places for a given type including their names. (required)
   --types: list<string> # A comma-separated list of the types to return. Max. approx 12 types.
-]: nothing -> table<additionalProperties: list<record>, children: list<any>, childrenUrls: list<string>, commonName: string, distance: float, id: string, lat: float, lon: float, placeType: string, url: string> {
+]: nothing -> oneof<table<additionalProperties: list<record>, children: list<any>, childrenUrls: list<string>, commonName: string, distance: float, id: string, lat: float, lon: float, placeType: string, url: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($name == null) { error make --unspanned { msg: "required query parameter 'name' missing: pass --name" } }
@@ -1739,7 +1763,7 @@ export def "place-get-by-type" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --active-only: oneof<nothing, bool> # An optional parameter to limit the results to active records only (Currently only the 'VariableMessageSign' place type is supported)
-]: nothing -> table<additionalProperties: list<record>, children: list<any>, childrenUrls: list<string>, commonName: string, distance: float, id: string, lat: float, lon: float, placeType: string, url: string> {
+]: nothing -> oneof<table<additionalProperties: list<record>, children: list<any>, childrenUrls: list<string>, commonName: string, distance: float, id: string, lat: float, lon: float, placeType: string, url: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($types | is-empty) { error make --unspanned { msg: "path parameter 'types' must be non-empty" } }
@@ -1778,7 +1802,7 @@ export def "place-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --include-children: oneof<nothing, bool> # Defaults to false. If true child places e.g. individual charging stations at a charge point while be included, otherwise just the URLs of any child places will be returned
-]: nothing -> table<additionalProperties: list<record>, children: list<any>, childrenUrls: list<string>, commonName: string, distance: float, id: string, lat: float, lon: float, placeType: string, url: string> {
+]: nothing -> oneof<table<additionalProperties: list<record>, children: list<any>, childrenUrls: list<string>, commonName: string, distance: float, id: string, lat: float, lon: float, placeType: string, url: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1822,7 +1846,7 @@ export def "place-get-at" [
   --qp-lon: string # required
   --location-lat: float # required, format: double
   --location-lon: float # required, format: double
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
@@ -1875,7 +1899,7 @@ export def "place-get-overlay" [
   --qp-lon: string # required
   --location-lat: float # required, format: double
   --location-lon: float # required, format: double
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
@@ -1921,7 +1945,7 @@ export def "road-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<bounds: string, displayName: string, envelope: string, group: string, id: string, statusAggregationEndDate: string, statusAggregationStartDate: string, statusSeverity: string, statusSeverityDescription: string, url: string> {
+]: nothing -> oneof<table<bounds: string, displayName: string, envelope: string, group: string, id: string, statusAggregationEndDate: string, statusAggregationStartDate: string, statusSeverity: string, statusSeverityDescription: string, url: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Road" $auth.query)
@@ -1956,7 +1980,7 @@ export def "road-meta-categories" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Road/Meta/Categories" $auth.query)
@@ -1991,7 +2015,7 @@ export def "road-meta-severities" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<description: string, modeName: string, severityLevel: int> {
+]: nothing -> oneof<table<description: string, modeName: string, severityLevel: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Road/Meta/Severities" $auth.query)
@@ -2028,7 +2052,7 @@ export def "road-disruption-by-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --strip-content: oneof<nothing, bool> # Optional, defaults to false. When true, removes every property/node except for id, point, severity, severityDescription, startDate, endDate, corridor details, location and comments.
-]: nothing -> record<category: string, comments: string, corridorIds: list<string>, currentUpdate: string, currentUpdateDateTime: string, endDateTime: string, geography: record<geography: record<coordinateSystemId: int, wellKnownBinary: string, wellKnownText: string>>, geometry: record<geography: record<coordinateSystemId: int, wellKnownBinary: string, wellKnownText: string>>, hasClosures: bool, id: string, isProvisional: bool, lastModifiedTime: string, levelOfInterest: string, linkText: string, linkUrl: string, location: string, ordinal: int, point: string, publishEndDate: string, publishStartDate: string, recurringSchedules: table<endTime: string, startTime: string>, roadDisruptionImpactAreas: table<endDate: string, endTime: string, id: int, polygon: record, roadDisruptionId: string, startDate: string, startTime: string>, roadDisruptionLines: table<endDate: string, endTime: string, id: int, isDiversion: bool, multiLineString: record, roadDisruptionId: string, startDate: string, startTime: string>, roadProject: record<boroughsBenefited: list<string>, constructionEndDate: string, constructionStartDate: string, consultationEndDate: string, consultationPageUrl: string, consultationStartDate: string, contactEmail: string, contactName: string, cycleSuperhighwayId: string, externalPageUrl: string, phase: string, projectDescription: string, projectId: string, projectName: string, projectPageUrl: string, projectSummaryPageUrl: string, schemeName: string>, severity: string, startDateTime: string, status: string, streets: table<closure: string, directions: string, name: string, segments: list, sourceSystemId: int, sourceSystemKey: string>, subCategory: string, timeFrame: string, url: string> {
+]: nothing -> oneof<record<category: string, comments: string, corridorIds: list<string>, currentUpdate: string, currentUpdateDateTime: string, endDateTime: string, geography: record<geography: record<coordinateSystemId: int, wellKnownBinary: string, wellKnownText: string>>, geometry: record<geography: record<coordinateSystemId: int, wellKnownBinary: string, wellKnownText: string>>, hasClosures: bool, id: string, isProvisional: bool, lastModifiedTime: string, levelOfInterest: string, linkText: string, linkUrl: string, location: string, ordinal: int, point: string, publishEndDate: string, publishStartDate: string, recurringSchedules: table<endTime: string, startTime: string>, roadDisruptionImpactAreas: table<endDate: string, endTime: string, id: int, polygon: record, roadDisruptionId: string, startDate: string, startTime: string>, roadDisruptionLines: table<endDate: string, endTime: string, id: int, isDiversion: bool, multiLineString: record, roadDisruptionId: string, startDate: string, startTime: string>, roadProject: record<boroughsBenefited: list<string>, constructionEndDate: string, constructionStartDate: string, consultationEndDate: string, consultationPageUrl: string, consultationStartDate: string, contactEmail: string, contactName: string, cycleSuperhighwayId: string, externalPageUrl: string, phase: string, projectDescription: string, projectId: string, projectName: string, projectPageUrl: string, projectSummaryPageUrl: string, schemeName: string>, severity: string, startDateTime: string, status: string, streets: table<closure: string, directions: string, name: string, segments: list, sourceSystemId: int, sourceSystemKey: string>, subCategory: string, timeFrame: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($disruption_ids | is-empty) { error make --unspanned { msg: "path parameter 'disruptionIds' must be non-empty" } }
@@ -2067,7 +2091,7 @@ export def "road-disrupted-streets" [
   --accept: string@accept-completer # Response content type
   --start-date: string # Optional, the start time to filter on. (required, format: date-time)
   --end-date: string # Optional, The end time to filter on. (required, format: date-time)
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($start_date == null) { error make --unspanned { msg: "required query parameter 'startDate' missing: pass --start-date" } }
@@ -2105,7 +2129,7 @@ export def "get-road-ids" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<bounds: string, displayName: string, envelope: string, group: string, id: string, statusAggregationEndDate: string, statusAggregationStartDate: string, statusSeverity: string, statusSeverityDescription: string, url: string> {
+]: nothing -> oneof<table<bounds: string, displayName: string, envelope: string, group: string, id: string, statusAggregationEndDate: string, statusAggregationStartDate: string, statusSeverity: string, statusSeverityDescription: string, url: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($ids | is-empty) { error make --unspanned { msg: "path parameter 'ids' must be non-empty" } }
@@ -2146,7 +2170,7 @@ export def "road-disruption" [
   --severities: list<string> # an optional list of Severity names to filter on (a valid list of severities can be obtained from the /Road/Meta/severities endpoint)
   --categories: list<string> # an optional list of category names to filter on (a valid list of categories can be obtained from the /Road/Meta/categories endpoint)
   --closures: oneof<nothing, bool> # Optional, defaults to true. When true, always includes disruptions that have road closures, regardless of the severity filter. When false, the severity filter works as normal.
-]: nothing -> table<category: string, comments: string, corridorIds: list<string>, currentUpdate: string, currentUpdateDateTime: string, endDateTime: string, geography: record<geography: record>, geometry: record<geography: record>, hasClosures: bool, id: string, isProvisional: bool, lastModifiedTime: string, levelOfInterest: string, linkText: string, linkUrl: string, location: string, ordinal: int, point: string, publishEndDate: string, publishStartDate: string, recurringSchedules: list<record>, roadDisruptionImpactAreas: list<record>, roadDisruptionLines: list<record>, roadProject: record<boroughsBenefited: list, constructionEndDate: string, constructionStartDate: string, consultationEndDate: string, consultationPageUrl: string, consultationStartDate: string, contactEmail: string, contactName: string, cycleSuperhighwayId: string, externalPageUrl: string, phase: string, projectDescription: string, projectId: string, projectName: string, projectPageUrl: string, projectSummaryPageUrl: string, schemeName: string>, severity: string, startDateTime: string, status: string, streets: list<record>, subCategory: string, timeFrame: string, url: string> {
+]: nothing -> oneof<table<category: string, comments: string, corridorIds: list<string>, currentUpdate: string, currentUpdateDateTime: string, endDateTime: string, geography: record<geography: record>, geometry: record<geography: record>, hasClosures: bool, id: string, isProvisional: bool, lastModifiedTime: string, levelOfInterest: string, linkText: string, linkUrl: string, location: string, ordinal: int, point: string, publishEndDate: string, publishStartDate: string, recurringSchedules: list<record>, roadDisruptionImpactAreas: list<record>, roadDisruptionLines: list<record>, roadProject: record<boroughsBenefited: list, constructionEndDate: string, constructionStartDate: string, consultationEndDate: string, consultationPageUrl: string, consultationStartDate: string, contactEmail: string, contactName: string, cycleSuperhighwayId: string, externalPageUrl: string, phase: string, projectDescription: string, projectId: string, projectName: string, projectPageUrl: string, projectSummaryPageUrl: string, schemeName: string>, severity: string, startDateTime: string, status: string, streets: list<record>, subCategory: string, timeFrame: string, url: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($ids | is-empty) { error make --unspanned { msg: "path parameter 'ids' must be non-empty" } }
@@ -2186,7 +2210,7 @@ export def "road-status" [
   --accept: string@accept-completer # Response content type
   --date-range-nullable-start-date: string # format: date-time
   --date-range-nullable-end-date: string # format: date-time
-]: nothing -> table<bounds: string, displayName: string, envelope: string, group: string, id: string, statusAggregationEndDate: string, statusAggregationStartDate: string, statusSeverity: string, statusSeverityDescription: string, url: string> {
+]: nothing -> oneof<table<bounds: string, displayName: string, envelope: string, group: string, id: string, statusAggregationEndDate: string, statusAggregationStartDate: string, statusSeverity: string, statusSeverityDescription: string, url: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($ids | is-empty) { error make --unspanned { msg: "path parameter 'ids' must be non-empty" } }
@@ -2224,7 +2248,7 @@ export def "search-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --query: string # The search query (required)
-]: nothing -> record<from: int, matches: table<id: string, lat: float, lon: float, name: string, url: string>, maxScore: float, page: int, pageSize: int, provider: string, query: string, total: int> {
+]: nothing -> oneof<record<from: int, matches: table<id: string, lat: float, lon: float, name: string, url: string>, maxScore: float, page: int, pageSize: int, provider: string, query: string, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
@@ -2262,7 +2286,7 @@ export def "search-bus-schedules" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --query: string # The search query (required)
-]: nothing -> record<from: int, matches: table<id: string, lat: float, lon: float, name: string, url: string>, maxScore: float, page: int, pageSize: int, provider: string, query: string, total: int> {
+]: nothing -> oneof<record<from: int, matches: table<id: string, lat: float, lon: float, name: string, url: string>, maxScore: float, page: int, pageSize: int, provider: string, query: string, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
@@ -2299,7 +2323,7 @@ export def "search-meta-categories" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Search/Meta/Categories" $auth.query)
@@ -2334,7 +2358,7 @@ export def "search-meta-search-providers" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Search/Meta/SearchProviders" $auth.query)
@@ -2369,7 +2393,7 @@ export def "search-meta-sorts" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Search/Meta/Sorts" $auth.query)
@@ -2412,7 +2436,7 @@ export def "stop-point-get-by-geo-point" [
   --return-lines: oneof<nothing, bool> # true to return the lines that each stop point serves as a nested resource
   --location-lat: float # required, format: double
   --location-lon: float # required, format: double
-]: nothing -> record<centrePoint: list<float>, page: int, pageSize: int, stopPoints: table<accessibilitySummary: string, additionalProperties: list, children: list, childrenUrls: list, commonName: string, distance: float, fullName: string, hubNaptanCode: string, icsCode: string, id: string, indicator: string, individualStopId: string, lat: float, lineGroup: list, lineModeGroups: list, lines: list, lon: float, modes: list, naptanId: string, naptanMode: string, placeType: string, platformName: string, smsCode: string, stationNaptan: string, status: bool, stopLetter: string, stopType: string, url: string>, total: int> {
+]: nothing -> oneof<record<centrePoint: list<float>, page: int, pageSize: int, stopPoints: table<accessibilitySummary: string, additionalProperties: list, children: list, childrenUrls: list, commonName: string, distance: float, fullName: string, hubNaptanCode: string, icsCode: string, id: string, indicator: string, individualStopId: string, lat: float, lineGroup: list, lineModeGroups: list, lines: list, lon: float, modes: list, naptanId: string, naptanMode: string, placeType: string, platformName: string, smsCode: string, stationNaptan: string, status: bool, stopLetter: string, stopType: string, url: string>, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($stop_types == null) { error make --unspanned { msg: "required query parameter 'stopTypes' missing: pass --stop-types" } }
@@ -2451,7 +2475,7 @@ export def "stop-point-meta-categories" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<availableKeys: list<string>, category: string> {
+]: nothing -> oneof<table<availableKeys: list<string>, category: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/StopPoint/Meta/Categories" $auth.query)
@@ -2486,7 +2510,7 @@ export def "stop-point-meta-modes" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<isFarePaying: bool, isScheduledService: bool, isTflService: bool, modeName: string, motType: string, network: string> {
+]: nothing -> oneof<table<isFarePaying: bool, isScheduledService: bool, isTflService: bool, modeName: string, motType: string, network: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/StopPoint/Meta/Modes" $auth.query)
@@ -2521,7 +2545,7 @@ export def "stop-point-meta-stop-types" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/StopPoint/Meta/StopTypes" $auth.query)
@@ -2558,7 +2582,7 @@ export def "stop-point-get-by-mode" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The data set page to return. Page 1 equates to the first 1000 stop points, page 2 equates to 1001-2000 etc. Must be entered for bus mode as data set is too large. (format: int32)
-]: nothing -> record<centrePoint: list<float>, page: int, pageSize: int, stopPoints: table<accessibilitySummary: string, additionalProperties: list, children: list, childrenUrls: list, commonName: string, distance: float, fullName: string, hubNaptanCode: string, icsCode: string, id: string, indicator: string, individualStopId: string, lat: float, lineGroup: list, lineModeGroups: list, lines: list, lon: float, modes: list, naptanId: string, naptanMode: string, placeType: string, platformName: string, smsCode: string, stationNaptan: string, status: bool, stopLetter: string, stopType: string, url: string>, total: int> {
+]: nothing -> oneof<record<centrePoint: list<float>, page: int, pageSize: int, stopPoints: table<accessibilitySummary: string, additionalProperties: list, children: list, childrenUrls: list, commonName: string, distance: float, fullName: string, hubNaptanCode: string, icsCode: string, id: string, indicator: string, individualStopId: string, lat: float, lineGroup: list, lineModeGroups: list, lines: list, lon: float, modes: list, naptanId: string, naptanMode: string, placeType: string, platformName: string, smsCode: string, stationNaptan: string, status: bool, stopLetter: string, stopType: string, url: string>, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($modes | is-empty) { error make --unspanned { msg: "path parameter 'modes' must be non-empty" } }
@@ -2597,7 +2621,7 @@ export def "stop-point-disruption-by-mode" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --include-route-blocked-stops: oneof<nothing, bool>
-]: nothing -> table<additionalInformation: string, appearance: string, atcoCode: string, commonName: string, description: string, fromDate: string, mode: string, stationAtcoCode: string, toDate: string, type: string> {
+]: nothing -> oneof<table<additionalInformation: string, appearance: string, atcoCode: string, commonName: string, description: string, fromDate: string, mode: string, stationAtcoCode: string, toDate: string, type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($modes | is-empty) { error make --unspanned { msg: "path parameter 'modes' must be non-empty" } }
@@ -2640,7 +2664,7 @@ export def "get-stop-point-search" [
   --lines: list<string> # An optional, parameter separated list of the lines to filter by
   --include-hubs: oneof<nothing, bool> # If true, returns results including HUBs.
   --tfl-operated-national-rail-stations-only: oneof<nothing, bool> # If the national-rail mode is included, this flag will filter the national rail stations so that only those operated by TfL are returned
-]: nothing -> record<from: int, matches: table<id: string, lat: float, lon: float, name: string, url: string>, maxScore: float, page: int, pageSize: int, provider: string, query: string, total: int> {
+]: nothing -> oneof<record<from: int, matches: table<id: string, lat: float, lon: float, name: string, url: string>, maxScore: float, page: int, pageSize: int, provider: string, query: string, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
@@ -2684,7 +2708,7 @@ export def "stop-point-search" [
   --lines: list<string> # An optional, parameter separated list of the lines to filter by
   --include-hubs: oneof<nothing, bool> # If true, returns results including HUBs.
   --tfl-operated-national-rail-stations-only: oneof<nothing, bool> # If the national-rail mode is included, this flag will filter the national rail stations so that only those operated by TfL are returned
-]: nothing -> record<from: int, matches: table<id: string, lat: float, lon: float, name: string, url: string>, maxScore: float, page: int, pageSize: int, provider: string, query: string, total: int> {
+]: nothing -> oneof<record<from: int, matches: table<id: string, lat: float, lon: float, name: string, url: string>, maxScore: float, page: int, pageSize: int, provider: string, query: string, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($query | is-empty) { error make --unspanned { msg: "path parameter 'query' must be non-empty" } }
@@ -2724,7 +2748,7 @@ export def "stop-point-get-service-types" [
   --id: string # The Naptan id of the stop (required)
   --line-ids: list<string> # The lines which contain the given Naptan id (all lines relevant to the given stoppoint if empty)
   --modes: list<string> # The modes which the lines are relevant to (all if empty)
-]: nothing -> table<lineName: string, lineSpecificServiceTypes: list<record>> {
+]: nothing -> oneof<table<lineName: string, lineSpecificServiceTypes: list<record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
@@ -2763,7 +2787,7 @@ export def "stop-point-get-by-sms" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --output: string # If set to "web", a 302 redirect to relevant website bus stop page is returned. Valid values are : web. All other values are ignored.
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2801,7 +2825,7 @@ export def "stop-point-get-by-type" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<accessibilitySummary: string, additionalProperties: list<record>, children: list<record>, childrenUrls: list<string>, commonName: string, distance: float, fullName: string, hubNaptanCode: string, icsCode: string, id: string, indicator: string, individualStopId: string, lat: float, lineGroup: list<record>, lineModeGroups: list<record>, lines: list<record>, lon: float, modes: list<string>, naptanId: string, naptanMode: string, placeType: string, platformName: string, smsCode: string, stationNaptan: string, status: bool, stopLetter: string, stopType: string, url: string> {
+]: nothing -> oneof<table<accessibilitySummary: string, additionalProperties: list<record>, children: list<record>, childrenUrls: list<string>, commonName: string, distance: float, fullName: string, hubNaptanCode: string, icsCode: string, id: string, indicator: string, individualStopId: string, lat: float, lineGroup: list<record>, lineModeGroups: list<record>, lines: list<record>, lon: float, modes: list<string>, naptanId: string, naptanMode: string, placeType: string, platformName: string, smsCode: string, stationNaptan: string, status: bool, stopLetter: string, stopType: string, url: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($types | is-empty) { error make --unspanned { msg: "path parameter 'types' must be non-empty" } }
@@ -2839,7 +2863,7 @@ export def "stop-point-get-by-type-with-pagination" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<accessibilitySummary: string, additionalProperties: list<record>, children: list<record>, childrenUrls: list<string>, commonName: string, distance: float, fullName: string, hubNaptanCode: string, icsCode: string, id: string, indicator: string, individualStopId: string, lat: float, lineGroup: list<record>, lineModeGroups: list<record>, lines: list<record>, lon: float, modes: list<string>, naptanId: string, naptanMode: string, placeType: string, platformName: string, smsCode: string, stationNaptan: string, status: bool, stopLetter: string, stopType: string, url: string> {
+]: nothing -> oneof<table<accessibilitySummary: string, additionalProperties: list<record>, children: list<record>, childrenUrls: list<string>, commonName: string, distance: float, fullName: string, hubNaptanCode: string, icsCode: string, id: string, indicator: string, individualStopId: string, lat: float, lineGroup: list<record>, lineModeGroups: list<record>, lines: list<record>, lon: float, modes: list<string>, naptanId: string, naptanMode: string, placeType: string, platformName: string, smsCode: string, stationNaptan: string, status: bool, stopLetter: string, stopType: string, url: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($types | is-empty) { error make --unspanned { msg: "path parameter 'types' must be non-empty" } }
@@ -2878,7 +2902,7 @@ export def "stop-point-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --include-crowding-data: oneof<nothing, bool> # Include the crowding data (static). To Filter further use: /StopPoint/{ids}/Crowding/{line}
-]: nothing -> table<accessibilitySummary: string, additionalProperties: list<record>, children: list<record>, childrenUrls: list<string>, commonName: string, distance: float, fullName: string, hubNaptanCode: string, icsCode: string, id: string, indicator: string, individualStopId: string, lat: float, lineGroup: list<record>, lineModeGroups: list<record>, lines: list<record>, lon: float, modes: list<string>, naptanId: string, naptanMode: string, placeType: string, platformName: string, smsCode: string, stationNaptan: string, status: bool, stopLetter: string, stopType: string, url: string> {
+]: nothing -> oneof<table<accessibilitySummary: string, additionalProperties: list<record>, children: list<record>, childrenUrls: list<string>, commonName: string, distance: float, fullName: string, hubNaptanCode: string, icsCode: string, id: string, indicator: string, individualStopId: string, lat: float, lineGroup: list<record>, lineModeGroups: list<record>, lines: list<record>, lon: float, modes: list<string>, naptanId: string, naptanMode: string, placeType: string, platformName: string, smsCode: string, stationNaptan: string, status: bool, stopLetter: string, stopType: string, url: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($ids | is-empty) { error make --unspanned { msg: "path parameter 'ids' must be non-empty" } }
@@ -2919,7 +2943,7 @@ export def "stop-point-disruption" [
   --get-family: oneof<nothing, bool> # Specify true to return disruptions for entire family, or false to return disruptions for just this stop point. Defaults to false.
   --include-route-blocked-stops: oneof<nothing, bool>
   --flatten-response: oneof<nothing, bool> # Specify true to associate all disruptions with parent stop point. (Only applicable when getFamily is true).
-]: nothing -> table<additionalInformation: string, appearance: string, atcoCode: string, commonName: string, description: string, fromDate: string, mode: string, stationAtcoCode: string, toDate: string, type: string> {
+]: nothing -> oneof<table<additionalInformation: string, appearance: string, atcoCode: string, commonName: string, description: string, fromDate: string, mode: string, stationAtcoCode: string, toDate: string, type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($ids | is-empty) { error make --unspanned { msg: "path parameter 'ids' must be non-empty" } }
@@ -2958,7 +2982,7 @@ export def "stop-point-arrival-departures" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --line-ids: list<string> # A comma-separated list of line ids e.g. elizabeth, london-overground, thameslink (required)
-]: nothing -> table<cause: string, departureStatus: string, destinationName: string, destinationNaptanId: string, estimatedTimeOfArrival: string, estimatedTimeOfDeparture: string, minutesAndSecondsToArrival: string, minutesAndSecondsToDeparture: string, naptanId: string, platformName: string, scheduledTimeOfArrival: string, scheduledTimeOfDeparture: string, stationName: string, timing: record<countdownServerAdjustment: string, insert: string, read: string, received: string, sent: string, source: string>> {
+]: nothing -> oneof<table<cause: string, departureStatus: string, destinationName: string, destinationNaptanId: string, estimatedTimeOfArrival: string, estimatedTimeOfDeparture: string, minutesAndSecondsToArrival: string, minutesAndSecondsToDeparture: string, naptanId: string, platformName: string, scheduledTimeOfArrival: string, scheduledTimeOfDeparture: string, stationName: string, timing: record<countdownServerAdjustment: string, insert: string, read: string, received: string, sent: string, source: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2997,7 +3021,7 @@ export def "stop-point-arrivals" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<bearing: string, currentLocation: string, destinationName: string, destinationNaptanId: string, direction: string, expectedArrival: string, id: string, lineId: string, lineName: string, modeName: string, naptanId: string, operationType: int, platformName: string, stationName: string, timeToLive: string, timeToStation: int, timestamp: string, timing: record<countdownServerAdjustment: string, insert: string, read: string, received: string, sent: string, source: string>, towards: string, vehicleId: string> {
+]: nothing -> oneof<table<bearing: string, currentLocation: string, destinationName: string, destinationNaptanId: string, direction: string, expectedArrival: string, id: string, lineId: string, lineName: string, modeName: string, naptanId: string, operationType: int, platformName: string, stationName: string, timeToLive: string, timeToStation: int, timestamp: string, timing: record<countdownServerAdjustment: string, insert: string, read: string, received: string, sent: string, source: string>, towards: string, vehicleId: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3036,7 +3060,7 @@ export def "stop-point-reachable-from" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --service-types: list<string> # A comma-separated list of service types to filter on. If not specified. Supported values: Regular, Night. Defaulted to 'Regular' if not specified
-]: nothing -> table<accessibilitySummary: string, additionalProperties: list<record>, children: list<record>, childrenUrls: list<string>, commonName: string, distance: float, fullName: string, hubNaptanCode: string, icsCode: string, id: string, indicator: string, individualStopId: string, lat: float, lineGroup: list<record>, lineModeGroups: list<record>, lines: list<record>, lon: float, modes: list<string>, naptanId: string, naptanMode: string, placeType: string, platformName: string, smsCode: string, stationNaptan: string, status: bool, stopLetter: string, stopType: string, url: string> {
+]: nothing -> oneof<table<accessibilitySummary: string, additionalProperties: list<record>, children: list<record>, childrenUrls: list<string>, commonName: string, distance: float, fullName: string, hubNaptanCode: string, icsCode: string, id: string, indicator: string, individualStopId: string, lat: float, lineGroup: list<record>, lineModeGroups: list<record>, lines: list<record>, lon: float, modes: list<string>, naptanId: string, naptanMode: string, placeType: string, platformName: string, smsCode: string, stationNaptan: string, status: bool, stopLetter: string, stopType: string, url: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3077,7 +3101,7 @@ export def "stop-point-crowding" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --direction: string@direction-completer # The direction of travel. Can be inbound or outbound. (required)
-]: nothing -> table<accessibilitySummary: string, additionalProperties: list<record>, children: list<record>, childrenUrls: list<string>, commonName: string, distance: float, fullName: string, hubNaptanCode: string, icsCode: string, id: string, indicator: string, individualStopId: string, lat: float, lineGroup: list<record>, lineModeGroups: list<record>, lines: list<record>, lon: float, modes: list<string>, naptanId: string, naptanMode: string, placeType: string, platformName: string, smsCode: string, stationNaptan: string, status: bool, stopLetter: string, stopType: string, url: string> {
+]: nothing -> oneof<table<accessibilitySummary: string, additionalProperties: list<record>, children: list<record>, childrenUrls: list<string>, commonName: string, distance: float, fullName: string, hubNaptanCode: string, icsCode: string, id: string, indicator: string, individualStopId: string, lat: float, lineGroup: list<record>, lineModeGroups: list<record>, lines: list<record>, lon: float, modes: list<string>, naptanId: string, naptanMode: string, placeType: string, platformName: string, smsCode: string, stationNaptan: string, status: bool, stopLetter: string, stopType: string, url: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3159,7 +3183,7 @@ export def "stop-point-route" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --service-types: list<string> # A comma-separated list of service types to filter on. If not specified. Supported values: Regular, Night. Defaulted to 'Regular' if not specified
-]: nothing -> table<destinationName: string, direction: string, isActive: bool, lineId: string, lineString: string, mode: string, naptanId: string, routeSectionName: string, serviceType: string, validFrom: string, validTo: string, vehicleDestinationText: string> {
+]: nothing -> oneof<table<destinationName: string, direction: string, isActive: bool, lineId: string, lineString: string, mode: string, naptanId: string, routeSectionName: string, serviceType: string, validFrom: string, validTo: string, vehicleDestinationText: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3197,7 +3221,7 @@ export def "get-stop-point-id-place-types" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --place-types: list<string> # A comcomma-separated value representing the place types. (required)
-]: nothing -> table<additionalProperties: list<record>, children: list<any>, childrenUrls: list<string>, commonName: string, distance: float, id: string, lat: float, lon: float, placeType: string, url: string> {
+]: nothing -> oneof<table<additionalProperties: list<record>, children: list<any>, childrenUrls: list<string>, commonName: string, distance: float, id: string, lat: float, lon: float, placeType: string, url: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3236,7 +3260,7 @@ export def "stop-point-get-car-parks-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<additionalProperties: list<record>, children: list<any>, childrenUrls: list<string>, commonName: string, distance: float, id: string, lat: float, lon: float, placeType: string, url: string> {
+]: nothing -> oneof<table<additionalProperties: list<record>, children: list<any>, childrenUrls: list<string>, commonName: string, distance: float, id: string, lat: float, lon: float, placeType: string, url: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($stop_point_id | is-empty) { error make --unspanned { msg: "path parameter 'stopPointId' must be non-empty" } }
@@ -3273,7 +3297,7 @@ export def "stop-point-get-taxi-ranks-by-ids" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<additionalProperties: list<record>, children: list<any>, childrenUrls: list<string>, commonName: string, distance: float, id: string, lat: float, lon: float, placeType: string, url: string> {
+]: nothing -> oneof<table<additionalProperties: list<record>, children: list<any>, childrenUrls: list<string>, commonName: string, distance: float, id: string, lat: float, lon: float, placeType: string, url: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($stop_point_id | is-empty) { error make --unspanned { msg: "path parameter 'stopPointId' must be non-empty" } }
@@ -3323,7 +3347,7 @@ export def "travel-time-get-compare-overlay" [
   --travel-time-interval: int # The total minutes between the travel time bands (required, format: int32)
   --compare-type: string # required
   --compare-value: string # required
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($z | is-empty) { error make --unspanned { msg: "path parameter 'z' must be non-empty" } }
@@ -3385,7 +3409,7 @@ export def "travel-time-get-overlay" [
   --mode-id: string # The id of the mode. (required)
   --direction: string@direction-completer-1 # The direction of travel. (required)
   --travel-time-interval: int # The total minutes between the travel time bands (required, format: int32)
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($z | is-empty) { error make --unspanned { msg: "path parameter 'z' must be non-empty" } }
@@ -3434,7 +3458,7 @@ export def "vehicle-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<bearing: string, currentLocation: string, destinationName: string, destinationNaptanId: string, direction: string, expectedArrival: string, id: string, lineId: string, lineName: string, modeName: string, naptanId: string, operationType: int, platformName: string, stationName: string, timeToLive: string, timeToStation: int, timestamp: string, timing: record<countdownServerAdjustment: string, insert: string, read: string, received: string, sent: string, source: string>, towards: string, vehicleId: string> {
+]: nothing -> oneof<table<bearing: string, currentLocation: string, destinationName: string, destinationNaptanId: string, direction: string, expectedArrival: string, id: string, lineId: string, lineName: string, modeName: string, naptanId: string, operationType: int, platformName: string, stationName: string, timeToLive: string, timeToStation: int, timestamp: string, timing: record<countdownServerAdjustment: string, insert: string, read: string, received: string, sent: string, source: string>, towards: string, vehicleId: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($ids | is-empty) { error make --unspanned { msg: "path parameter 'ids' must be non-empty" } }

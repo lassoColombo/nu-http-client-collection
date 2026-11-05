@@ -12,27 +12,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -40,8 +49,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -52,7 +66,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -87,7 +110,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -121,9 +145,9 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "catalog-list-acls" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["catalog-list-acls" "catalog-list-databases" "catalog-get-database" "catalog-list-acls-by-database" "catalog-list-assemblies" "catalog-get-assembly" "catalog-list-credentials" "catalog-get-credential" "catalog-update-credential" "catalog-delete-credential" "catalog-create-credential" "catalog-list-external-data-sources" "catalog-get-external-data-source" "catalog-list-schemas" "catalog-get-schema" "catalog-list-packages" "catalog-get-package" "catalog-list-procedures" "catalog-get-procedure" "catalog-list-table-statistics-by-database-and-schema" "catalog-list-tables" "catalog-get-table" "catalog-list-table-partitions" "catalog-get-table-partition" "catalog-preview-table-partition" "catalog-preview-table" "catalog-list-table-statistics" "catalog-get-table-statistic" "catalog-list-table-fragments" "catalog-list-table-types" "catalog-get-table-type" "catalog-list-table-valued-functions" "catalog-get-table-valued-function" "catalog-list-types" "catalog-list-views" "catalog-get-view" "catalog-delete-all-secrets" "catalog-delete-secret" "catalog-get-secret" "catalog-update-secret" "catalog-create-secret" "catalog-list-table-statistics-by-database" "catalog-list-tables-by-database" "catalog-list-table-valued-functions-by-database" "catalog-list-views-by-database" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -162,7 +186,7 @@ export def "catalog-list-acls" [
   --orderby: string # OrderBy clause. One or more comma-separated expressions with an optional "asc" (the default) or "desc" depending on the order you'd like the values sorted, e.g. Categories?$orderby=CategoryName desc. Optional.
   --count: oneof<nothing, bool> # The Boolean value of true or false to request a count of the matching resources included with the resources in the response, e.g. Categories?$count=true. Optional.
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<value: table<aceType: string, permission: string, principalId: string>, nextLink: string> {
+]: nothing -> oneof<record<value: table<aceType: string, permission: string, principalId: string>, nextLink: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
@@ -205,7 +229,7 @@ export def "catalog-list-databases" [
   --orderby: string # OrderBy clause. One or more comma-separated expressions with an optional "asc" (the default) or "desc" depending on the order you'd like the values sorted, e.g. Categories?$orderby=CategoryName desc. Optional.
   --count: oneof<nothing, bool> # The Boolean value of true or false to request a count of the matching resources included with the resources in the response, e.g. Categories?$count=true. Optional.
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<value: table<databaseName: string, computeAccountName: string, version: string>, nextLink: string> {
+]: nothing -> oneof<record<value: table<databaseName: string, computeAccountName: string, version: string>, nextLink: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
@@ -243,7 +267,7 @@ export def "catalog-get-database" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<databaseName: string, computeAccountName: string, version: string> {
+]: nothing -> oneof<record<databaseName: string, computeAccountName: string, version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
@@ -288,7 +312,7 @@ export def "catalog-list-acls-by-database" [
   --orderby: string # OrderBy clause. One or more comma-separated expressions with an optional "asc" (the default) or "desc" depending on the order you'd like the values sorted, e.g. Categories?$orderby=CategoryName desc. Optional.
   --count: oneof<nothing, bool> # The Boolean value of true or false to request a count of the matching resources included with the resources in the response, e.g. Categories?$count=true. Optional.
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<value: table<aceType: string, permission: string, principalId: string>, nextLink: string> {
+]: nothing -> oneof<record<value: table<aceType: string, permission: string, principalId: string>, nextLink: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
@@ -333,7 +357,7 @@ export def "catalog-list-assemblies" [
   --orderby: string # OrderBy clause. One or more comma-separated expressions with an optional "asc" (the default) or "desc" depending on the order you'd like the values sorted, e.g. Categories?$orderby=CategoryName desc. Optional.
   --count: oneof<nothing, bool> # The Boolean value of true or false to request a count of the matching resources included with the resources in the response, e.g. Categories?$count=true. Optional.
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<value: table<assemblyClrName: string, clrName: string, databaseName: string, computeAccountName: string, version: string>, nextLink: string> {
+]: nothing -> oneof<record<value: table<assemblyClrName: string, clrName: string, databaseName: string, computeAccountName: string, version: string>, nextLink: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
@@ -373,7 +397,7 @@ export def "catalog-get-assembly" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<assemblyName: string, clrName: string, databaseName: string, dependencies: table<entityId: record>, files: table<contentPath: string, originalPath: string, type: string>, isUserDefined: bool, isVisible: bool, computeAccountName: string, version: string> {
+]: nothing -> oneof<record<assemblyName: string, clrName: string, databaseName: string, dependencies: table<entityId: record>, files: table<contentPath: string, originalPath: string, type: string>, isUserDefined: bool, isVisible: bool, computeAccountName: string, version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
@@ -419,7 +443,7 @@ export def "catalog-list-credentials" [
   --orderby: string # OrderBy clause. One or more comma-separated expressions with an optional "asc" (the default) or "desc" depending on the order you'd like the values sorted, e.g. Categories?$orderby=CategoryName desc. Optional.
   --count: oneof<nothing, bool> # The Boolean value of true or false to request a count of the matching resources included with the resources in the response, e.g. Categories?$count=true. Optional.
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<value: table<credentialName: string, computeAccountName: string, version: string>, nextLink: string> {
+]: nothing -> oneof<record<value: table<credentialName: string, computeAccountName: string, version: string>, nextLink: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
@@ -459,7 +483,7 @@ export def "catalog-get-credential" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<credentialName: string, computeAccountName: string, version: string> {
+]: nothing -> oneof<record<credentialName: string, computeAccountName: string, version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
@@ -646,7 +670,7 @@ export def "catalog-list-external-data-sources" [
   --orderby: string # OrderBy clause. One or more comma-separated expressions with an optional "asc" (the default) or "desc" depending on the order you'd like the values sorted, e.g. Categories?$orderby=CategoryName desc. Optional.
   --count: oneof<nothing, bool> # The Boolean value of true or false to request a count of the matching resources included with the resources in the response, e.g. Categories?$count=true. Optional.
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<value: table<databaseName: string, externalDataSourceName: string, provider: string, providerString: string, pushdownTypes: list, computeAccountName: string, version: string>, nextLink: string> {
+]: nothing -> oneof<record<value: table<databaseName: string, externalDataSourceName: string, provider: string, providerString: string, pushdownTypes: list, computeAccountName: string, version: string>, nextLink: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
@@ -686,7 +710,7 @@ export def "catalog-get-external-data-source" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<databaseName: string, externalDataSourceName: string, provider: string, providerString: string, pushdownTypes: list<string>, computeAccountName: string, version: string> {
+]: nothing -> oneof<record<databaseName: string, externalDataSourceName: string, provider: string, providerString: string, pushdownTypes: list<string>, computeAccountName: string, version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
@@ -732,7 +756,7 @@ export def "catalog-list-schemas" [
   --orderby: string # OrderBy clause. One or more comma-separated expressions with an optional "asc" (the default) or "desc" depending on the order you'd like the values sorted, e.g. Categories?$orderby=CategoryName desc. Optional.
   --count: oneof<nothing, bool> # The Boolean value of true or false to request a count of the matching resources included with the resources in the response, e.g. Categories?$count=true. Optional.
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<value: table<databaseName: string, schemaName: string, computeAccountName: string, version: string>, nextLink: string> {
+]: nothing -> oneof<record<value: table<databaseName: string, schemaName: string, computeAccountName: string, version: string>, nextLink: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
@@ -772,7 +796,7 @@ export def "catalog-get-schema" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<databaseName: string, schemaName: string, computeAccountName: string, version: string> {
+]: nothing -> oneof<record<databaseName: string, schemaName: string, computeAccountName: string, version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
@@ -819,7 +843,7 @@ export def "catalog-list-packages" [
   --orderby: string # OrderBy clause. One or more comma-separated expressions with an optional "asc" (the default) or "desc" depending on the order you'd like the values sorted, e.g. Categories?$orderby=CategoryName desc. Optional.
   --count: oneof<nothing, bool> # The Boolean value of true or false to request a count of the matching resources included with the resources in the response, e.g. Categories?$count=true. Optional.
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<value: table<databaseName: string, definition: string, packageName: string, schemaName: string, computeAccountName: string, version: string>, nextLink: string> {
+]: nothing -> oneof<record<value: table<databaseName: string, definition: string, packageName: string, schemaName: string, computeAccountName: string, version: string>, nextLink: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
@@ -861,7 +885,7 @@ export def "catalog-get-package" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<databaseName: string, definition: string, packageName: string, schemaName: string, computeAccountName: string, version: string> {
+]: nothing -> oneof<record<databaseName: string, definition: string, packageName: string, schemaName: string, computeAccountName: string, version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
@@ -909,7 +933,7 @@ export def "catalog-list-procedures" [
   --orderby: string # OrderBy clause. One or more comma-separated expressions with an optional "asc" (the default) or "desc" depending on the order you'd like the values sorted, e.g. Categories?$orderby=CategoryName desc. Optional.
   --count: oneof<nothing, bool> # The Boolean value of true or false to request a count of the matching resources included with the resources in the response, e.g. Categories?$count=true. Optional.
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<value: table<databaseName: string, definition: string, procName: string, schemaName: string, computeAccountName: string, version: string>, nextLink: string> {
+]: nothing -> oneof<record<value: table<databaseName: string, definition: string, procName: string, schemaName: string, computeAccountName: string, version: string>, nextLink: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
@@ -951,7 +975,7 @@ export def "catalog-get-procedure" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<databaseName: string, definition: string, procName: string, schemaName: string, computeAccountName: string, version: string> {
+]: nothing -> oneof<record<databaseName: string, definition: string, procName: string, schemaName: string, computeAccountName: string, version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
@@ -999,7 +1023,7 @@ export def "catalog-list-table-statistics-by-database-and-schema" [
   --orderby: string # OrderBy clause. One or more comma-separated expressions with an optional "asc" (the default) or "desc" depending on the order you'd like the values sorted, e.g. Categories?$orderby=CategoryName desc. Optional.
   --count: oneof<nothing, bool> # The Boolean value of true or false to request a count of the matching resources included with the resources in the response, e.g. Categories?$count=true. Optional.
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<value: table<colNames: list, createTime: string, databaseName: string, filterDefinition: string, hasFilter: bool, isAutoCreated: bool, isUserCreated: bool, schemaName: string, statDataPath: string, statisticsName: string, tableName: string, updateTime: string, userStatName: string, computeAccountName: string, version: string>, nextLink: string> {
+]: nothing -> oneof<record<value: table<colNames: list, createTime: string, databaseName: string, filterDefinition: string, hasFilter: bool, isAutoCreated: bool, isUserCreated: bool, schemaName: string, statDataPath: string, statisticsName: string, tableName: string, updateTime: string, userStatName: string, computeAccountName: string, version: string>, nextLink: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
@@ -1047,7 +1071,7 @@ export def "catalog-list-tables" [
   --count: oneof<nothing, bool> # The Boolean value of true or false to request a count of the matching resources included with the resources in the response, e.g. Categories?$count=true. Optional.
   --basic: oneof<nothing, bool> # The basic switch indicates what level of information to return when listing tables. When basic is true, only database_name, schema_name, table_name and version are returned for each table, otherwise all table metadata is returned. By default, it is false. Optional. (default: false)
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<value: table<columnList: list, databaseName: string, distributionInfo: record, externalTable: record, indexList: list, partitionKeyList: list, schemaName: string, tableName: string, computeAccountName: string, version: string>, nextLink: string> {
+]: nothing -> oneof<record<value: table<columnList: list, databaseName: string, distributionInfo: record, externalTable: record, indexList: list, partitionKeyList: list, schemaName: string, tableName: string, computeAccountName: string, version: string>, nextLink: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
@@ -1089,7 +1113,7 @@ export def "catalog-get-table" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<columnList: table<name: string, type: string>, databaseName: string, distributionInfo: record<count: int, dynamicCount: int, keys: list<record>, type: int>, externalTable: record<dataSource: record<name: record, version: string>, tableName: string>, indexList: table<columns: list, distributionInfo: record, indexId: int, indexKeys: list, isColumnstore: bool, isUnique: bool, name: string, partitionFunction: string, partitionKeyList: list, streamNames: list>, partitionKeyList: list<string>, schemaName: string, tableName: string, computeAccountName: string, version: string> {
+]: nothing -> oneof<record<columnList: table<name: string, type: string>, databaseName: string, distributionInfo: record<count: int, dynamicCount: int, keys: list<record>, type: int>, externalTable: record<dataSource: record<name: record, version: string>, tableName: string>, indexList: table<columns: list, distributionInfo: record, indexId: int, indexKeys: list, isColumnstore: bool, isUnique: bool, name: string, partitionFunction: string, partitionKeyList: list, streamNames: list>, partitionKeyList: list<string>, schemaName: string, tableName: string, computeAccountName: string, version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
@@ -1138,7 +1162,7 @@ export def "catalog-list-table-partitions" [
   --orderby: string # OrderBy clause. One or more comma-separated expressions with an optional "asc" (the default) or "desc" depending on the order you'd like the values sorted, e.g. Categories?$orderby=CategoryName desc. Optional.
   --count: oneof<nothing, bool> # The Boolean value of true or false to request a count of the matching resources included with the resources in the response, e.g. Categories?$count=true. Optional.
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<value: table<createDate: string, databaseName: string, indexId: int, label: list, parentName: record, partitionName: string, schemaName: string, computeAccountName: string, version: string>, nextLink: string> {
+]: nothing -> oneof<record<value: table<createDate: string, databaseName: string, indexId: int, label: list, parentName: record, partitionName: string, schemaName: string, computeAccountName: string, version: string>, nextLink: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
@@ -1182,7 +1206,7 @@ export def "catalog-get-table-partition" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<createDate: string, databaseName: string, indexId: int, label: list<string>, parentName: record<firstPart: string, secondPart: string, server: string, thirdPart: string>, partitionName: string, schemaName: string, computeAccountName: string, version: string> {
+]: nothing -> oneof<record<createDate: string, databaseName: string, indexId: int, label: list<string>, parentName: record<firstPart: string, secondPart: string, server: string, thirdPart: string>, partitionName: string, schemaName: string, computeAccountName: string, version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
@@ -1229,7 +1253,7 @@ export def "catalog-preview-table-partition" [
   --max-rows: int # The maximum number of preview rows to be retrieved.Rows returned may be less than or equal to this number depending on row sizes and number of rows in the partition. (format: int64)
   --max-columns: int # The maximum number of columns to be retrieved. (format: int64)
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<rows: list<list<string>>, schema: table<name: string, type: string>, totalColumnCount: int, totalRowCount: int, truncated: bool> {
+]: nothing -> oneof<record<rows: list<list<string>>, schema: table<name: string, type: string>, totalColumnCount: int, totalRowCount: int, truncated: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
@@ -1275,7 +1299,7 @@ export def "catalog-preview-table" [
   --max-rows: int # The maximum number of preview rows to be retrieved. Rows returned may be less than or equal to this number depending on row sizes and number of rows in the table. (format: int64)
   --max-columns: int # The maximum number of columns to be retrieved. (format: int64)
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<rows: list<list<string>>, schema: table<name: string, type: string>, totalColumnCount: int, totalRowCount: int, truncated: bool> {
+]: nothing -> oneof<record<rows: list<list<string>>, schema: table<name: string, type: string>, totalColumnCount: int, totalRowCount: int, truncated: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
@@ -1324,7 +1348,7 @@ export def "catalog-list-table-statistics" [
   --orderby: string # OrderBy clause. One or more comma-separated expressions with an optional "asc" (the default) or "desc" depending on the order you'd like the values sorted, e.g. Categories?$orderby=CategoryName desc. Optional.
   --count: oneof<nothing, bool> # The Boolean value of true or false to request a count of the matching resources included with the resources in the response, e.g. Categories?$count=true. Optional.
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<value: table<colNames: list, createTime: string, databaseName: string, filterDefinition: string, hasFilter: bool, isAutoCreated: bool, isUserCreated: bool, schemaName: string, statDataPath: string, statisticsName: string, tableName: string, updateTime: string, userStatName: string, computeAccountName: string, version: string>, nextLink: string> {
+]: nothing -> oneof<record<value: table<colNames: list, createTime: string, databaseName: string, filterDefinition: string, hasFilter: bool, isAutoCreated: bool, isUserCreated: bool, schemaName: string, statDataPath: string, statisticsName: string, tableName: string, updateTime: string, userStatName: string, computeAccountName: string, version: string>, nextLink: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
@@ -1368,7 +1392,7 @@ export def "catalog-get-table-statistic" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<colNames: list<string>, createTime: string, databaseName: string, filterDefinition: string, hasFilter: bool, isAutoCreated: bool, isUserCreated: bool, schemaName: string, statDataPath: string, statisticsName: string, tableName: string, updateTime: string, userStatName: string, computeAccountName: string, version: string> {
+]: nothing -> oneof<record<colNames: list<string>, createTime: string, databaseName: string, filterDefinition: string, hasFilter: bool, isAutoCreated: bool, isUserCreated: bool, schemaName: string, statDataPath: string, statisticsName: string, tableName: string, updateTime: string, userStatName: string, computeAccountName: string, version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
@@ -1418,7 +1442,7 @@ export def "catalog-list-table-fragments" [
   --orderby: string # OrderBy clause. One or more comma-separated expressions with an optional "asc" (the default) or "desc" depending on the order you'd like the values sorted, e.g. Categories?$orderby=CategoryName desc. Optional.
   --count: oneof<nothing, bool> # The Boolean value of true or false to request a count of the matching resources included with the resources in the response, e.g. Categories?$count=true. Optional.
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<value: table<createDate: string, fragmentId: string, indexId: int, parentId: string, rowCount: int, size: int, streamPath: string>, nextLink: string> {
+]: nothing -> oneof<record<value: table<createDate: string, fragmentId: string, indexId: int, parentId: string, rowCount: int, size: int, streamPath: string>, nextLink: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
@@ -1466,7 +1490,7 @@ export def "catalog-list-table-types" [
   --orderby: string # OrderBy clause. One or more comma-separated expressions with an optional "asc" (the default) or "desc" depending on the order you'd like the values sorted, e.g. Categories?$orderby=CategoryName desc. Optional.
   --count: oneof<nothing, bool> # The Boolean value of true or false to request a count of the matching resources included with the resources in the response, e.g. Categories?$count=true. Optional.
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<value: table<columns: list, cSharpName: string, databaseName: string, fullCSharpName: string, isAssemblyType: bool, isComplexType: bool, isNullable: bool, isTableType: bool, isUserDefined: bool, principalId: int, schemaId: int, schemaName: string, systemTypeId: int, typeFamily: string, typeName: string, userTypeId: int, computeAccountName: string, version: string>, nextLink: string> {
+]: nothing -> oneof<record<value: table<columns: list, cSharpName: string, databaseName: string, fullCSharpName: string, isAssemblyType: bool, isComplexType: bool, isNullable: bool, isTableType: bool, isUserDefined: bool, principalId: int, schemaId: int, schemaName: string, systemTypeId: int, typeFamily: string, typeName: string, userTypeId: int, computeAccountName: string, version: string>, nextLink: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
@@ -1508,7 +1532,7 @@ export def "catalog-get-table-type" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<columns: table<name: string, type: string>, cSharpName: string, databaseName: string, fullCSharpName: string, isAssemblyType: bool, isComplexType: bool, isNullable: bool, isTableType: bool, isUserDefined: bool, principalId: int, schemaId: int, schemaName: string, systemTypeId: int, typeFamily: string, typeName: string, userTypeId: int, computeAccountName: string, version: string> {
+]: nothing -> oneof<record<columns: table<name: string, type: string>, cSharpName: string, databaseName: string, fullCSharpName: string, isAssemblyType: bool, isComplexType: bool, isNullable: bool, isTableType: bool, isUserDefined: bool, principalId: int, schemaId: int, schemaName: string, systemTypeId: int, typeFamily: string, typeName: string, userTypeId: int, computeAccountName: string, version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
@@ -1556,7 +1580,7 @@ export def "catalog-list-table-valued-functions" [
   --orderby: string # OrderBy clause. One or more comma-separated expressions with an optional "asc" (the default) or "desc" depending on the order you'd like the values sorted, e.g. Categories?$orderby=CategoryName desc. Optional.
   --count: oneof<nothing, bool> # The Boolean value of true or false to request a count of the matching resources included with the resources in the response, e.g. Categories?$count=true. Optional.
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<value: table<databaseName: string, definition: string, schemaName: string, tvfName: string, computeAccountName: string, version: string>, nextLink: string> {
+]: nothing -> oneof<record<value: table<databaseName: string, definition: string, schemaName: string, tvfName: string, computeAccountName: string, version: string>, nextLink: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
@@ -1598,7 +1622,7 @@ export def "catalog-get-table-valued-function" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<databaseName: string, definition: string, schemaName: string, tvfName: string, computeAccountName: string, version: string> {
+]: nothing -> oneof<record<databaseName: string, definition: string, schemaName: string, tvfName: string, computeAccountName: string, version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
@@ -1646,7 +1670,7 @@ export def "catalog-list-types" [
   --orderby: string # OrderBy clause. One or more comma-separated expressions with an optional "asc" (the default) or "desc" depending on the order you'd like the values sorted, e.g. Categories?$orderby=CategoryName desc. Optional.
   --count: oneof<nothing, bool> # The Boolean value of true or false to request a count of the matching resources included with the resources in the response, e.g. Categories?$count=true. Optional.
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<value: table<cSharpName: string, databaseName: string, fullCSharpName: string, isAssemblyType: bool, isComplexType: bool, isNullable: bool, isTableType: bool, isUserDefined: bool, principalId: int, schemaId: int, schemaName: string, systemTypeId: int, typeFamily: string, typeName: string, userTypeId: int, computeAccountName: string, version: string>, nextLink: string> {
+]: nothing -> oneof<record<value: table<cSharpName: string, databaseName: string, fullCSharpName: string, isAssemblyType: bool, isComplexType: bool, isNullable: bool, isTableType: bool, isUserDefined: bool, principalId: int, schemaId: int, schemaName: string, systemTypeId: int, typeFamily: string, typeName: string, userTypeId: int, computeAccountName: string, version: string>, nextLink: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
@@ -1693,7 +1717,7 @@ export def "catalog-list-views" [
   --orderby: string # OrderBy clause. One or more comma-separated expressions with an optional "asc" (the default) or "desc" depending on the order you'd like the values sorted, e.g. Categories?$orderby=CategoryName desc. Optional.
   --count: oneof<nothing, bool> # The Boolean value of true or false to request a count of the matching resources included with the resources in the response, e.g. Categories?$count=true. Optional.
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<value: table<databaseName: string, definition: string, schemaName: string, viewName: string, computeAccountName: string, version: string>, nextLink: string> {
+]: nothing -> oneof<record<value: table<databaseName: string, definition: string, schemaName: string, viewName: string, computeAccountName: string, version: string>, nextLink: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
@@ -1735,7 +1759,7 @@ export def "catalog-get-view" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<databaseName: string, definition: string, schemaName: string, viewName: string, computeAccountName: string, version: string> {
+]: nothing -> oneof<record<databaseName: string, definition: string, schemaName: string, viewName: string, computeAccountName: string, version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
@@ -1863,7 +1887,7 @@ export def "catalog-get-secret" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<creationTime: string, databaseName: string, password: string, secretName: string, uri: string, computeAccountName: string, version: string> {
+]: nothing -> oneof<record<creationTime: string, databaseName: string, password: string, secretName: string, uri: string, computeAccountName: string, version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
@@ -2005,7 +2029,7 @@ export def "catalog-list-table-statistics-by-database" [
   --orderby: string # OrderBy clause. One or more comma-separated expressions with an optional "asc" (the default) or "desc" depending on the order you'd like the values sorted, e.g. Categories?$orderby=CategoryName desc. Optional.
   --count: oneof<nothing, bool> # The Boolean value of true or false to request a count of the matching resources included with the resources in the response, e.g. Categories?$count=true. Optional.
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<value: table<colNames: list, createTime: string, databaseName: string, filterDefinition: string, hasFilter: bool, isAutoCreated: bool, isUserCreated: bool, schemaName: string, statDataPath: string, statisticsName: string, tableName: string, updateTime: string, userStatName: string, computeAccountName: string, version: string>, nextLink: string> {
+]: nothing -> oneof<record<value: table<colNames: list, createTime: string, databaseName: string, filterDefinition: string, hasFilter: bool, isAutoCreated: bool, isUserCreated: bool, schemaName: string, statDataPath: string, statisticsName: string, tableName: string, updateTime: string, userStatName: string, computeAccountName: string, version: string>, nextLink: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
@@ -2051,7 +2075,7 @@ export def "catalog-list-tables-by-database" [
   --count: oneof<nothing, bool> # The Boolean value of true or false to request a count of the matching resources included with the resources in the response, e.g. Categories?$count=true. Optional.
   --basic: oneof<nothing, bool> # The basic switch indicates what level of information to return when listing tables. When basic is true, only database_name, schema_name, table_name and version are returned for each table, otherwise all table metadata is returned. By default, it is false (default: false)
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<value: table<columnList: list, databaseName: string, distributionInfo: record, externalTable: record, indexList: list, partitionKeyList: list, schemaName: string, tableName: string, computeAccountName: string, version: string>, nextLink: string> {
+]: nothing -> oneof<record<value: table<columnList: list, databaseName: string, distributionInfo: record, externalTable: record, indexList: list, partitionKeyList: list, schemaName: string, tableName: string, computeAccountName: string, version: string>, nextLink: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
@@ -2096,7 +2120,7 @@ export def "catalog-list-table-valued-functions-by-database" [
   --orderby: string # OrderBy clause. One or more comma-separated expressions with an optional "asc" (the default) or "desc" depending on the order you'd like the values sorted, e.g. Categories?$orderby=CategoryName desc. Optional.
   --count: oneof<nothing, bool> # The Boolean value of true or false to request a count of the matching resources included with the resources in the response, e.g. Categories?$count=true. Optional.
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<value: table<databaseName: string, definition: string, schemaName: string, tvfName: string, computeAccountName: string, version: string>, nextLink: string> {
+]: nothing -> oneof<record<value: table<databaseName: string, definition: string, schemaName: string, tvfName: string, computeAccountName: string, version: string>, nextLink: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
@@ -2141,7 +2165,7 @@ export def "catalog-list-views-by-database" [
   --orderby: string # OrderBy clause. One or more comma-separated expressions with an optional "asc" (the default) or "desc" depending on the order you'd like the values sorted, e.g. Categories?$orderby=CategoryName desc. Optional.
   --count: oneof<nothing, bool> # The Boolean value of true or false to request a count of the matching resources included with the resources in the response, e.g. Categories?$count=true. Optional.
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<value: table<databaseName: string, definition: string, schemaName: string, viewName: string, computeAccountName: string, version: string>, nextLink: string> {
+]: nothing -> oneof<record<value: table<databaseName: string, definition: string, schemaName: string, viewName: string, computeAccountName: string, version: string>, nextLink: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }

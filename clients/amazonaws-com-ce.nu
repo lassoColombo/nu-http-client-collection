@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -152,9 +175,9 @@ def x-amz-target-completer-36 [] { ["AWSInsightsIndexService.UpdateCostCategoryD
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-anomaly-monitor" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["create-anomaly-monitor" "create-anomaly-subscription" "create-cost-category-definition" "delete-anomaly-monitor" "delete-anomaly-subscription" "delete-cost-category-definition" "describe-cost-category-definition" "get-anomalies" "get-anomaly-monitors" "get-anomaly-subscriptions" "get-cost-and-usage" "get-cost-and-usage-with-resources" "get-cost-categories" "get-cost-forecast" "get-dimension-values" "get-reservation-coverage" "get-reservation-purchase-recommendation" "get-reservation-utilization" "get-rightsizing-recommendation" "get-savings-plans-coverage" "get-savings-plans-purchase-recommendation" "get-savings-plans-utilization" "get-savings-plans-utilization-details" "get-tags" "get-usage-forecast" "list-cost-allocation-tags" "list-cost-category-definitions" "list-savings-plans-purchase-recommendation-generation" "list-tags-for-resource" "provide-anomaly-feedback" "start-savings-plans-purchase-recommendation-generation" "tag-resource" "untag-resource" "update-anomaly-monitor" "update-anomaly-subscription" "update-cost-allocation-tags-status" "update-cost-category-definition" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -176,8 +199,6 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: CreateAnomalyMonitor
-# --AnomalyMonitor shape: {MonitorArn?: string, MonitorName: string, CreationDate?: string, LastUpdatedDate?: string, LastEvaluatedDate?: string, MonitorType: "DIMENSIONAL"|"CUSTOM", MonitorDimension?: "SERVICE", MonitorSpecification?: record, DimensionalValueCount?: int}
-# --ResourceTags item shape: {Key: string, Value: string}
 export def "create-anomaly-monitor" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -198,7 +219,7 @@ export def "create-anomaly-monitor" [
   --x-amz-target: string@x-amz-target-completer # required
   anomaly_monitor: record # This object continuously inspects your account's cost data for anomalies. It's based on MonitorType and MonitorSpecification. The content consists of detailed metadata and the current status of the monitor object. — shape: {MonitorArn?: string, MonitorName: string, CreationDate?: string, LastUpdatedDate?: string, LastEvaluatedDate?: string, MonitorType: "DIMENSIONAL"|"CUSTOM", MonitorDimension?: "SERVICE", MonitorSpecification?: record, DimensionalValueCount?: int}
   --resource-tags: list # An optional list of tags to associate with the specified AnomalyMonitor (https://docs.aws.amazon.com/aws-cost-management/latest/APIReference/API_AnomalyMonitor.html). You can use resource tags to control access to your monitor using IAM policies. Each tag consists of a key and a value, and each key must be unique for the resource. The following restrictions apply to resource tags: Although the maximum number of array members is 200, you can assign a maximum of 50 user-tags to one resource. The remaining are reserved for Amazon Web Services use The maximum length of a key is 128 characters The maximum length of a value is 256 characters Keys and values can only contain alphanumeric characters, spaces, and any of the following: _.:/=+@- Keys and values are case sensitive Keys and values are trimmed for any leading or trailing whitespaces Don’t use aws: as a prefix for your keys. This prefix is reserved for Amazon Web Services use — item shape: {Key: string, Value: string}
-]: any -> record<MonitorArn: string> {
+]: any -> oneof<record<MonitorArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -228,8 +249,6 @@ export def "create-anomaly-monitor" [
 #
 # POST /
 # operationId: CreateAnomalySubscription
-# --AnomalySubscription shape: {SubscriptionArn?: string, AccountId?: string, MonitorArnList: list<string>, Subscribers: list, Threshold?: float, Frequency: "DAILY"|"IMMEDIATE"|"WEEKLY", SubscriptionName: string, ThresholdExpression?: record}
-# --ResourceTags item shape: {Key: string, Value: string}
 export def "create-anomaly-subscription" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -250,7 +269,7 @@ export def "create-anomaly-subscription" [
   --x-amz-target: string@x-amz-target-completer-1 # required
   anomaly_subscription: record # The association between a monitor, threshold, and list of subscribers used to deliver notifications about anomalies detected by a monitor that exceeds a threshold. The content consists of the detailed metadata and the current status of the AnomalySubscription object. — shape: {SubscriptionArn?: string, AccountId?: string, MonitorArnList: list<string>, Subscribers: list, Threshold?: float, Frequency: "DAILY"|"IMMEDIATE"|"WEEKLY", SubscriptionName: string, ThresholdExpression?: record}
   --resource-tags: list # An optional list of tags to associate with the specified AnomalySubscription (https://docs.aws.amazon.com/aws-cost-management/latest/APIReference/API_AnomalySubscription.html). You can use resource tags to control access to your subscription using IAM policies. Each tag consists of a key and a value, and each key must be unique for the resource. The following restrictions apply to resource tags: Although the maximum number of array members is 200, you can assign a maximum of 50 user-tags to one resource. The remaining are reserved for Amazon Web Services use The maximum length of a key is 128 characters The maximum length of a value is 256 characters Keys and values can only contain alphanumeric characters, spaces, and any of the following: _.:/=+@- Keys and values are case sensitive Keys and values are trimmed for any leading or trailing whitespaces Don’t use aws: as a prefix for your keys. This prefix is reserved for Amazon Web Services use — item shape: {Key: string, Value: string}
-]: any -> record<SubscriptionArn: string> {
+]: any -> oneof<record<SubscriptionArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -280,9 +299,6 @@ export def "create-anomaly-subscription" [
 #
 # POST /
 # operationId: CreateCostCategoryDefinition
-# --Rules item shape: {Value?: string, Rule?: record, InheritedValue?: record, Type?: "REGULAR"|"INHERITED_VALUE"}
-# --SplitChargeRules item shape: {Source: string, Targets: list<string>, Method: "FIXED"|"PROPORTIONAL"|"EVEN", Parameters?: list}
-# --ResourceTags item shape: {Key: string, Value: string}
 export def "create-cost-category-definition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -308,7 +324,7 @@ export def "create-cost-category-definition" [
   --default-value: string # The default value for the cost category.
   --split-charge-rules: list # The split charge rules used to allocate your charges between your Cost Category values. — item shape: {Source: string, Targets: list<string>, Method: "FIXED"|"PROPORTIONAL"|"EVEN", Parameters?: list}
   --resource-tags: list # An optional list of tags to associate with the specified CostCategory (https://docs.aws.amazon.com/aws-cost-management/latest/APIReference/API_CostCategory.html). You can use resource tags to control access to your cost category using IAM policies. Each tag consists of a key and a value, and each key must be unique for the resource. The following restrictions apply to resource tags: Although the maximum number of array members is 200, you can assign a maximum of 50 user-tags to one resource. The remaining are reserved for Amazon Web Services use The maximum length of a key is 128 characters The maximum length of a value is 256 characters Keys and values can only contain alphanumeric characters, spaces, and any of the following: _.:/=+@- Keys and values are case sensitive Keys and values are trimmed for any leading or trailing whitespaces Don’t use aws: as a prefix for your keys. This prefix is reserved for Amazon Web Services use — item shape: {Key: string, Value: string}
-]: any -> record<CostCategoryArn: string, EffectiveStart: string> {
+]: any -> oneof<record<CostCategoryArn: string, EffectiveStart: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -357,7 +373,7 @@ export def "delete-anomaly-monitor" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-3 # required
   monitor_arn: string # The unique identifier of the cost anomaly monitor that you want to delete.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -406,7 +422,7 @@ export def "delete-anomaly-subscription" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-4 # required
   subscription_arn: string # The unique identifier of the cost anomaly subscription that you want to delete.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -455,7 +471,7 @@ export def "delete-cost-category-definition" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-5 # required
   cost_category_arn: string # The unique identifier for your Cost Category.
-]: any -> record<CostCategoryArn: string, EffectiveEnd: string> {
+]: any -> oneof<record<CostCategoryArn: string, EffectiveEnd: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -505,7 +521,7 @@ export def "describe-cost-category-definition" [
   --x-amz-target: string@x-amz-target-completer-6 # required
   cost_category_arn: string # The unique identifier for your Cost Category.
   --effective-on: string # The period of time that you want the usage and costs for.
-]: any -> record<CostCategory: record<CostCategoryArn: string, EffectiveStart: string, EffectiveEnd: string, Name: string, RuleVersion: string, Rules: list<record>, SplitChargeRules: list<record>, ProcessingStatus: list<record>, DefaultValue: string>> {
+]: any -> oneof<record<CostCategory: record<CostCategoryArn: string, EffectiveStart: string, EffectiveEnd: string, Name: string, RuleVersion: string, Rules: list<record>, SplitChargeRules: list<record>, ProcessingStatus: list<record>, DefaultValue: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -535,8 +551,6 @@ export def "describe-cost-category-definition" [
 #
 # POST /
 # operationId: GetAnomalies
-# --DateInterval shape: {StartDate: string, EndDate?: string}
-# --TotalImpact shape: {NumericOperator: "EQUAL"|"GREATER_THAN_OR_EQUAL"|"LESS_THAN_OR_EQUAL"|"GREATER_THAN"|"LESS_THAN"|"BETWEEN", StartValue: float, EndValue?: float}
 export def "get-anomalies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -561,7 +575,7 @@ export def "get-anomalies" [
   --total-impact: record # Filters cost anomalies based on the total impact. — shape: {NumericOperator: "EQUAL"|"GREATER_THAN_OR_EQUAL"|"LESS_THAN_OR_EQUAL"|"GREATER_THAN"|"LESS_THAN"|"BETWEEN", StartValue: float, EndValue?: float}
   --next-page-token: string # The token to retrieve the next set of results. Amazon Web Services provides the token when the response from a previous call has more results than the maximum page size.
   --max-results: int # The number of entries a paginated response contains.
-]: any -> record<Anomalies: table<AnomalyId: string, AnomalyStartDate: string, AnomalyEndDate: string, DimensionValue: string, RootCauses: list, AnomalyScore: record, Impact: record, MonitorArn: string, Feedback: string>, NextPageToken: string> {
+]: any -> oneof<record<Anomalies: table<AnomalyId: string, AnomalyStartDate: string, AnomalyEndDate: string, DimensionValue: string, RootCauses: list, AnomalyScore: record, Impact: record, MonitorArn: string, Feedback: string>, NextPageToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -612,7 +626,7 @@ export def "get-anomaly-monitors" [
   --monitor-arn-list: list<string> # A list of cost anomaly monitor ARNs.
   --next-page-token: string # The token to retrieve the next set of results. Amazon Web Services provides the token when the response from a previous call has more results than the maximum page size.
   --max-results: int # The number of entries that a paginated response contains.
-]: any -> record<AnomalyMonitors: table<MonitorArn: string, MonitorName: string, CreationDate: string, LastUpdatedDate: string, LastEvaluatedDate: string, MonitorType: string, MonitorDimension: string, MonitorSpecification: record, DimensionalValueCount: int>, NextPageToken: string> {
+]: any -> oneof<record<AnomalyMonitors: table<MonitorArn: string, MonitorName: string, CreationDate: string, LastUpdatedDate: string, LastEvaluatedDate: string, MonitorType: string, MonitorDimension: string, MonitorSpecification: record, DimensionalValueCount: int>, NextPageToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -664,7 +678,7 @@ export def "get-anomaly-subscriptions" [
   --monitor-arn: string # Cost anomaly monitor ARNs.
   --next-page-token: string # The token to retrieve the next set of results. Amazon Web Services provides the token when the response from a previous call has more results than the maximum page size.
   --max-results: int # The number of entries a paginated response contains.
-]: any -> record<AnomalySubscriptions: table<SubscriptionArn: string, AccountId: string, MonitorArnList: list, Subscribers: list, Threshold: float, Frequency: string, SubscriptionName: string, ThresholdExpression: record>, NextPageToken: string> {
+]: any -> oneof<record<AnomalySubscriptions: table<SubscriptionArn: string, AccountId: string, MonitorArnList: list, Subscribers: list, Threshold: float, Frequency: string, SubscriptionName: string, ThresholdExpression: record>, NextPageToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -694,9 +708,6 @@ export def "get-anomaly-subscriptions" [
 #
 # POST /
 # operationId: GetCostAndUsage
-# --TimePeriod shape: {Start: string, End: string}
-# --Filter shape: {Or?: list, And?: list, Not?: record, Dimensions?: record, Tags?: record, CostCategories?: record}
-# --GroupBy item shape: {Type?: "DIMENSION"|"TAG"|"COST_CATEGORY", Key?: string}
 export def "get-cost-and-usage" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -721,7 +732,7 @@ export def "get-cost-and-usage" [
   metrics: list<string> # Which metrics are returned in the query. For more information about blended and unblended rates, see Why does the "blended" annotation appear on some line items in my bill? (http://aws.amazon.com/premiumsupport/knowledge-center/blended-rates-intro/). Valid values are AmortizedCost, BlendedCost, NetAmortizedCost, NetUnblendedCost, NormalizedUsageAmount, UnblendedCost, and UsageQuantity. If you return the UsageQuantity metric, the service aggregates all usage numbers without taking into account the units. For example, if you aggregate usageQuantity across all of Amazon EC2, the results aren't meaningful because Amazon EC2 compute hours and data transfer are measured in different units (for example, hours and GB). To get more meaningful UsageQuantity metrics, filter by UsageType or UsageTypeGroups. Metrics is required for GetCostAndUsage requests.
   --group-by: list # You can group Amazon Web Services costs using up to two different groups, either dimensions, tag keys, cost categories, or any two group by types. Valid values for the DIMENSION type are AZ, INSTANCE_TYPE, LEGAL_ENTITY_NAME, INVOICING_ENTITY, LINKED_ACCOUNT, OPERATION, PLATFORM, PURCHASE_TYPE, SERVICE, TENANCY, RECORD_TYPE, and USAGE_TYPE. When you group by the TAG type and include a valid tag key, you get all tag values, including empty strings. — item shape: {Type?: "DIMENSION"|"TAG"|"COST_CATEGORY", Key?: string}
   --next-page-token: string # The token to retrieve the next set of results. Amazon Web Services provides the token when the response from a previous call has more results than the maximum page size.
-]: any -> record<NextPageToken: string, GroupDefinitions: table<Type: string, Key: string>, ResultsByTime: table<TimePeriod: record, Total: record, Groups: list, Estimated: bool>, DimensionValueAttributes: table<Value: string, Attributes: record>> {
+]: any -> oneof<record<NextPageToken: string, GroupDefinitions: table<Type: string, Key: string>, ResultsByTime: table<TimePeriod: record, Total: record, Groups: list, Estimated: bool>, DimensionValueAttributes: table<Value: string, Attributes: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -751,9 +762,6 @@ export def "get-cost-and-usage" [
 #
 # POST /
 # operationId: GetCostAndUsageWithResources
-# --TimePeriod shape: {Start: string, End: string}
-# --Filter shape: {Or?: list, And?: list, Not?: record, Dimensions?: record, Tags?: record, CostCategories?: record}
-# --GroupBy item shape: {Type?: "DIMENSION"|"TAG"|"COST_CATEGORY", Key?: string}
 export def "get-cost-and-usage-with-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -778,7 +786,7 @@ export def "get-cost-and-usage-with-resources" [
   --metrics: list<string> # Which metrics are returned in the query. For more information about blended and unblended rates, see Why does the "blended" annotation appear on some line items in my bill? (http://aws.amazon.com/premiumsupport/knowledge-center/blended-rates-intro/). Valid values are AmortizedCost, BlendedCost, NetAmortizedCost, NetUnblendedCost, NormalizedUsageAmount, UnblendedCost, and UsageQuantity. If you return the UsageQuantity metric, the service aggregates all usage numbers without taking the units into account. For example, if you aggregate usageQuantity across all of Amazon EC2, the results aren't meaningful because Amazon EC2 compute hours and data transfer are measured in different units (for example, hour or GB). To get more meaningful UsageQuantity metrics, filter by UsageType or UsageTypeGroups. Metrics is required for GetCostAndUsageWithResources requests.
   --group-by: list # You can group Amazon Web Services costs using up to two different groups: DIMENSION, TAG, COST_CATEGORY. — item shape: {Type?: "DIMENSION"|"TAG"|"COST_CATEGORY", Key?: string}
   --next-page-token: string # The token to retrieve the next set of results. Amazon Web Services provides the token when the response from a previous call has more results than the maximum page size.
-]: any -> record<NextPageToken: string, GroupDefinitions: table<Type: string, Key: string>, ResultsByTime: table<TimePeriod: record, Total: record, Groups: list, Estimated: bool>, DimensionValueAttributes: table<Value: string, Attributes: record>> {
+]: any -> oneof<record<NextPageToken: string, GroupDefinitions: table<Type: string, Key: string>, ResultsByTime: table<TimePeriod: record, Total: record, Groups: list, Estimated: bool>, DimensionValueAttributes: table<Value: string, Attributes: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -808,9 +816,6 @@ export def "get-cost-and-usage-with-resources" [
 #
 # POST /
 # operationId: GetCostCategories
-# --TimePeriod shape: {Start: string, End: string}
-# --Filter shape: {Or?: list, And?: list, Not?: record, Dimensions?: record, Tags?: record, CostCategories?: record}
-# --SortBy item shape: {Key: string, SortOrder?: "ASCENDING"|"DESCENDING"}
 export def "get-cost-categories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -836,7 +841,7 @@ export def "get-cost-categories" [
   --sort-by: list # The value that you sort the data by. The key represents the cost and usage metrics. The following values are supported: BlendedCost UnblendedCost AmortizedCost NetAmortizedCost NetUnblendedCost UsageQuantity NormalizedUsageAmount The supported key values for the SortOrder value are ASCENDING and DESCENDING. When you use the SortBy value, the NextPageToken and SearchString key values aren't supported. — item shape: {Key: string, SortOrder?: "ASCENDING"|"DESCENDING"}
   --max-results: int # This field is only used when the SortBy value is provided in the request. The maximum number of objects that are returned for this request. If MaxResults isn't specified with the SortBy value, the request returns 1000 results as the default value for this parameter. For GetCostCategories, MaxResults has an upper quota of 1000.
   --next-page-token: string # If the number of objects that are still available for retrieval exceeds the quota, Amazon Web Services returns a NextPageToken value in the response. To retrieve the next batch of objects, provide the NextPageToken from the previous call in your next request.
-]: any -> record<NextPageToken: string, CostCategoryNames: list<string>, CostCategoryValues: list<string>, ReturnSize: int, TotalSize: int> {
+]: any -> oneof<record<NextPageToken: string, CostCategoryNames: list<string>, CostCategoryValues: list<string>, ReturnSize: int, TotalSize: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -866,8 +871,6 @@ export def "get-cost-categories" [
 #
 # POST /
 # operationId: GetCostForecast
-# --TimePeriod shape: {Start: string, End: string}
-# --Filter shape: {Or?: list, And?: list, Not?: record, Dimensions?: record, Tags?: record, CostCategories?: record}
 export def "get-cost-forecast" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -891,7 +894,7 @@ export def "get-cost-forecast" [
   granularity: string@granularity-completer # How granular you want the forecast to be. You can get 3 months of DAILY forecasts or 12 months of MONTHLY forecasts. The GetCostForecast operation supports only DAILY and MONTHLY granularities.
   --filter: record # Use Expression to filter in various Cost Explorer APIs. Not all Expression types are supported in each API. Refer to the documentation for each specific API to see what is supported. There are two patterns: Simple dimension values. There are three types of simple dimension values: CostCategories, Tags, and Dimensions. Specify the CostCategories field to define a filter that acts on Cost Categories. Specify the Tags field to define a filter that acts on Cost Allocation Tags. Specify the Dimensions field to define a filter that acts on the DimensionValues (https://docs.aws.amazon.com/aws-cost-management/latest/APIReference/API_DimensionValues.html). For each filter type, you can set the dimension name and values for the filters that you plan to use. For example, you can filter for REGION==us-east-1 OR REGION==us-west-1. For GetRightsizingRecommendation, the Region is a full name (for example, REGION==US East (N. Virginia). The corresponding Expression for this example is as follows: { "Dimensions": { "Key": "REGION", "Values": [ "us-east-1", “us-west-1” ] } } As shown in the previous example, lists of dimension values are combined with OR when applying the filter. You can also set different match options to further control how the filter behaves. Not all APIs support match options. Refer to the documentation for each specific API to see what is supported. For example, you can filter for linked account names that start with “a”. The corresponding Expression for this example is as follows: { "Dimensions": { "Key": "LINKED_ACCOUNT_NAME", "MatchOptions": [ "STARTS_WITH" ], "Values": [ "a" ] } } Compound Expression types with logical operations. You can use multiple Expression types and the logical operators AND/OR/NOT to create a list of one or more Expression objects. By doing this, you can filter by more advanced options. For example, you can filter by ((REGION == us-east-1 OR REGION == us-west-1) OR (TAG.Type == Type1)) AND (USAGE_TYPE != DataTransfer). The corresponding Expression for this example is as follows: { "And": [ {"Or": [ {"Dimensions": { "Key": "REGION", "Values": [ "us-east-1", "us-west-1" ] }}, {"Tags": { "Key": "TagName", "Values": ["Value1"] } } ]}, {"Not": {"Dimensions": { "Key": "USAGE_TYPE", "Values": ["DataTransfer"] }}} ] } Because each Expression can have only one operator, the service returns an error if more than one is specified. The following example shows an Expression object that creates an error: { "And": [ ... ], "Dimensions": { "Key": "USAGE_TYPE", "Values": [ "DataTransfer" ] } } The following is an example of the corresponding error message: "Expression has more than one roots. Only one root operator is allowed for each expression: And, Or, Not, Dimensions, Tags, CostCategories" For the GetRightsizingRecommendation action, a combination of OR and NOT isn't supported. OR isn't supported between different dimensions, or dimensions and tags. NOT operators aren't supported. Dimensions are also limited to LINKED_ACCOUNT, REGION, or RIGHTSIZING_TYPE. For the GetReservationPurchaseRecommendation action, only NOT is supported. AND and OR aren't supported. Dimensions are limited to LINKED_ACCOUNT. — shape: {Or?: list, And?: list, Not?: record, Dimensions?: record, Tags?: record, CostCategories?: record}
   --prediction-interval-level: int # Cost Explorer always returns the mean forecast as a single point. You can request a prediction interval around the mean by specifying a confidence level. The higher the confidence level, the more confident Cost Explorer is about the actual value falling in the prediction interval. Higher confidence levels result in wider prediction intervals.
-]: any -> record<Total: record<Amount: string, Unit: string>, ForecastResultsByTime: table<TimePeriod: record, MeanValue: string, PredictionIntervalLowerBound: string, PredictionIntervalUpperBound: string>> {
+]: any -> oneof<record<Total: record<Amount: string, Unit: string>, ForecastResultsByTime: table<TimePeriod: record, MeanValue: string, PredictionIntervalLowerBound: string, PredictionIntervalUpperBound: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -921,9 +924,6 @@ export def "get-cost-forecast" [
 #
 # POST /
 # operationId: GetDimensionValues
-# --TimePeriod shape: {Start: string, End: string}
-# --Filter shape: {Or?: list, And?: list, Not?: record, Dimensions?: record, Tags?: record, CostCategories?: record}
-# --SortBy item shape: {Key: string, SortOrder?: "ASCENDING"|"DESCENDING"}
 export def "get-dimension-values" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -950,7 +950,7 @@ export def "get-dimension-values" [
   --sort-by: list # The value that you want to sort the data by. The key represents cost and usage metrics. The following values are supported: BlendedCost UnblendedCost AmortizedCost NetAmortizedCost NetUnblendedCost UsageQuantity NormalizedUsageAmount The supported values for the SortOrder key are ASCENDING or DESCENDING. When you specify a SortBy paramater, the context must be COST_AND_USAGE. Further, when using SortBy, NextPageToken and SearchString aren't supported. — item shape: {Key: string, SortOrder?: "ASCENDING"|"DESCENDING"}
   --max-results: int # This field is only used when SortBy is provided in the request. The maximum number of objects that are returned for this request. If MaxResults isn't specified with SortBy, the request returns 1000 results as the default value for this parameter. For GetDimensionValues, MaxResults has an upper limit of 1000.
   --next-page-token: string # The token to retrieve the next set of results. Amazon Web Services provides the token when the response from a previous call has more results than the maximum page size.
-]: any -> record<DimensionValues: table<Value: string, Attributes: record>, ReturnSize: int, TotalSize: int, NextPageToken: string> {
+]: any -> oneof<record<DimensionValues: table<Value: string, Attributes: record>, ReturnSize: int, TotalSize: int, NextPageToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -980,10 +980,6 @@ export def "get-dimension-values" [
 #
 # POST /
 # operationId: GetReservationCoverage
-# --TimePeriod shape: {Start: string, End: string}
-# --GroupBy item shape: {Type?: "DIMENSION"|"TAG"|"COST_CATEGORY", Key?: string}
-# --Filter shape: {Or?: list, And?: list, Not?: record, Dimensions?: record, Tags?: record, CostCategories?: record}
-# --SortBy shape: {Key: string, SortOrder?: "ASCENDING"|"DESCENDING"}
 export def "get-reservation-coverage" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1010,7 +1006,7 @@ export def "get-reservation-coverage" [
   --next-page-token: string # The token to retrieve the next set of results. Amazon Web Services provides the token when the response from a previous call has more results than the maximum page size.
   --sort-by: record # The details for how to sort the data. — shape: {Key: string, SortOrder?: "ASCENDING"|"DESCENDING"}
   --max-results: int # The maximum number of objects that you returned for this request. If more objects are available, in the response, Amazon Web Services provides a NextPageToken value that you can use in a subsequent call to get the next batch of objects.
-]: any -> record<CoveragesByTime: table<TimePeriod: record, Groups: list, Total: record>, Total: record<CoverageHours: record<OnDemandHours: string, ReservedHours: string, TotalRunningHours: string, CoverageHoursPercentage: string>, CoverageNormalizedUnits: record<OnDemandNormalizedUnits: string, ReservedNormalizedUnits: string, TotalRunningNormalizedUnits: string, CoverageNormalizedUnitsPercentage: string>, CoverageCost: record<OnDemandCost: string>>, NextPageToken: string> {
+]: any -> oneof<record<CoveragesByTime: table<TimePeriod: record, Groups: list, Total: record>, Total: record<CoverageHours: record<OnDemandHours: string, ReservedHours: string, TotalRunningHours: string, CoverageHoursPercentage: string>, CoverageNormalizedUnits: record<OnDemandNormalizedUnits: string, ReservedNormalizedUnits: string, TotalRunningNormalizedUnits: string, CoverageNormalizedUnitsPercentage: string>, CoverageCost: record<OnDemandCost: string>>, NextPageToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1040,8 +1036,6 @@ export def "get-reservation-coverage" [
 #
 # POST /
 # operationId: GetReservationPurchaseRecommendation
-# --Filter shape: {Or?: list, And?: list, Not?: record, Dimensions?: record, Tags?: record, CostCategories?: record}
-# --ServiceSpecification shape: {EC2Specification?: record}
 export def "get-reservation-purchase-recommendation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1070,7 +1064,7 @@ export def "get-reservation-purchase-recommendation" [
   --service-specification: record # Hardware specifications for the service that you want recommendations for. — shape: {EC2Specification?: record}
   --page-size: int # The number of recommendations that you want returned in a single response object.
   --next-page-token: string # The pagination token that indicates the next set of results that you want to retrieve.
-]: any -> record<Metadata: record<RecommendationId: string, GenerationTimestamp: string>, Recommendations: table<AccountScope: string, LookbackPeriodInDays: string, TermInYears: string, PaymentOption: string, ServiceSpecification: record, RecommendationDetails: list, RecommendationSummary: record>, NextPageToken: string> {
+]: any -> oneof<record<Metadata: record<RecommendationId: string, GenerationTimestamp: string>, Recommendations: table<AccountScope: string, LookbackPeriodInDays: string, TermInYears: string, PaymentOption: string, ServiceSpecification: record, RecommendationDetails: list, RecommendationSummary: record>, NextPageToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1100,10 +1094,6 @@ export def "get-reservation-purchase-recommendation" [
 #
 # POST /
 # operationId: GetReservationUtilization
-# --TimePeriod shape: {Start: string, End: string}
-# --GroupBy item shape: {Type?: "DIMENSION"|"TAG"|"COST_CATEGORY", Key?: string}
-# --Filter shape: {Or?: list, And?: list, Not?: record, Dimensions?: record, Tags?: record, CostCategories?: record}
-# --SortBy shape: {Key: string, SortOrder?: "ASCENDING"|"DESCENDING"}
 export def "get-reservation-utilization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1129,7 +1119,7 @@ export def "get-reservation-utilization" [
   --sort-by: record # The details for how to sort the data. — shape: {Key: string, SortOrder?: "ASCENDING"|"DESCENDING"}
   --next-page-token: string # The token to retrieve the next set of results. Amazon Web Services provides the token when the response from a previous call has more results than the maximum page size.
   --max-results: int # The maximum number of objects that you returned for this request. If more objects are available, in the response, Amazon Web Services provides a NextPageToken value that you can use in a subsequent call to get the next batch of objects.
-]: any -> record<UtilizationsByTime: table<TimePeriod: record, Groups: list, Total: record>, Total: record<UtilizationPercentage: string, UtilizationPercentageInUnits: string, PurchasedHours: string, PurchasedUnits: string, TotalActualHours: string, TotalActualUnits: string, UnusedHours: string, UnusedUnits: string, OnDemandCostOfRIHoursUsed: string, NetRISavings: string, TotalPotentialRISavings: string, AmortizedUpfrontFee: string, AmortizedRecurringFee: string, TotalAmortizedFee: string, RICostForUnusedHours: string, RealizedSavings: string, UnrealizedSavings: string>, NextPageToken: string> {
+]: any -> oneof<record<UtilizationsByTime: table<TimePeriod: record, Groups: list, Total: record>, Total: record<UtilizationPercentage: string, UtilizationPercentageInUnits: string, PurchasedHours: string, PurchasedUnits: string, TotalActualHours: string, TotalActualUnits: string, UnusedHours: string, UnusedUnits: string, OnDemandCostOfRIHoursUsed: string, NetRISavings: string, TotalPotentialRISavings: string, AmortizedUpfrontFee: string, AmortizedRecurringFee: string, TotalAmortizedFee: string, RICostForUnusedHours: string, RealizedSavings: string, UnrealizedSavings: string>, NextPageToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1159,8 +1149,6 @@ export def "get-reservation-utilization" [
 #
 # POST /
 # operationId: GetRightsizingRecommendation
-# --Filter shape: {Or?: list, And?: list, Not?: record, Dimensions?: record, Tags?: record, CostCategories?: record}
-# --Configuration shape: {RecommendationTarget: "SAME_INSTANCE_FAMILY"|"CROSS_INSTANCE_FAMILY", BenefitsConsidered: bool}
 export def "get-rightsizing-recommendation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1184,7 +1172,7 @@ export def "get-rightsizing-recommendation" [
   service: string # The specific service that you want recommendations for. The only valid value for GetRightsizingRecommendation is "AmazonEC2".
   --page-size: int # The number of recommendations that you want returned in a single response object.
   --next-page-token: string # The pagination token that indicates the next set of results that you want to retrieve.
-]: any -> record<Metadata: record<RecommendationId: string, GenerationTimestamp: string, LookbackPeriodInDays: string, AdditionalMetadata: string>, Summary: record<TotalRecommendationCount: string, EstimatedTotalMonthlySavingsAmount: string, SavingsCurrencyCode: string, SavingsPercentage: string>, RightsizingRecommendations: table<AccountId: string, CurrentInstance: record, RightsizingType: string, ModifyRecommendationDetail: record, TerminateRecommendationDetail: record, FindingReasonCodes: list>, NextPageToken: string, Configuration: record<RecommendationTarget: string, BenefitsConsidered: bool>> {
+]: any -> oneof<record<Metadata: record<RecommendationId: string, GenerationTimestamp: string, LookbackPeriodInDays: string, AdditionalMetadata: string>, Summary: record<TotalRecommendationCount: string, EstimatedTotalMonthlySavingsAmount: string, SavingsCurrencyCode: string, SavingsPercentage: string>, RightsizingRecommendations: table<AccountId: string, CurrentInstance: record, RightsizingType: string, ModifyRecommendationDetail: record, TerminateRecommendationDetail: record, FindingReasonCodes: list>, NextPageToken: string, Configuration: record<RecommendationTarget: string, BenefitsConsidered: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1214,10 +1202,6 @@ export def "get-rightsizing-recommendation" [
 #
 # POST /
 # operationId: GetSavingsPlansCoverage
-# --TimePeriod shape: {Start: string, End: string}
-# --GroupBy item shape: {Type?: "DIMENSION"|"TAG"|"COST_CATEGORY", Key?: string}
-# --Filter shape: {Or?: list, And?: list, Not?: record, Dimensions?: record, Tags?: record, CostCategories?: record}
-# --SortBy shape: {Key: string, SortOrder?: "ASCENDING"|"DESCENDING"}
 export def "get-savings-plans-coverage" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1246,7 +1230,7 @@ export def "get-savings-plans-coverage" [
   --next-token-body: string # The token to retrieve the next set of results. Amazon Web Services provides the token when the response from a previous call has more results than the maximum page size. (body field)
   --max-results-body: int # The number of items to be returned in a response. The default is 20, with a minimum value of 1. (body field)
   --sort-by: record # The details for how to sort the data. — shape: {Key: string, SortOrder?: "ASCENDING"|"DESCENDING"}
-]: any -> record<SavingsPlansCoverages: table<Attributes: record, Coverage: record, TimePeriod: record>, NextToken: string> {
+]: any -> oneof<record<SavingsPlansCoverages: table<Attributes: record, Coverage: record, TimePeriod: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1277,7 +1261,6 @@ export def "get-savings-plans-coverage" [
 #
 # POST /
 # operationId: GetSavingsPlansPurchaseRecommendation
-# --Filter shape: {Or?: list, And?: list, Not?: record, Dimensions?: record, Tags?: record, CostCategories?: record}
 export def "get-savings-plans-purchase-recommendation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1304,7 +1287,7 @@ export def "get-savings-plans-purchase-recommendation" [
   --page-size: int # The number of recommendations that you want returned in a single response object.
   lookback_period_in_days: string@lookback-period-in-days-completer # The lookback period that's used to generate the recommendation.
   --filter: record # Use Expression to filter in various Cost Explorer APIs. Not all Expression types are supported in each API. Refer to the documentation for each specific API to see what is supported. There are two patterns: Simple dimension values. There are three types of simple dimension values: CostCategories, Tags, and Dimensions. Specify the CostCategories field to define a filter that acts on Cost Categories. Specify the Tags field to define a filter that acts on Cost Allocation Tags. Specify the Dimensions field to define a filter that acts on the DimensionValues (https://docs.aws.amazon.com/aws-cost-management/latest/APIReference/API_DimensionValues.html). For each filter type, you can set the dimension name and values for the filters that you plan to use. For example, you can filter for REGION==us-east-1 OR REGION==us-west-1. For GetRightsizingRecommendation, the Region is a full name (for example, REGION==US East (N. Virginia). The corresponding Expression for this example is as follows: { "Dimensions": { "Key": "REGION", "Values": [ "us-east-1", “us-west-1” ] } } As shown in the previous example, lists of dimension values are combined with OR when applying the filter. You can also set different match options to further control how the filter behaves. Not all APIs support match options. Refer to the documentation for each specific API to see what is supported. For example, you can filter for linked account names that start with “a”. The corresponding Expression for this example is as follows: { "Dimensions": { "Key": "LINKED_ACCOUNT_NAME", "MatchOptions": [ "STARTS_WITH" ], "Values": [ "a" ] } } Compound Expression types with logical operations. You can use multiple Expression types and the logical operators AND/OR/NOT to create a list of one or more Expression objects. By doing this, you can filter by more advanced options. For example, you can filter by ((REGION == us-east-1 OR REGION == us-west-1) OR (TAG.Type == Type1)) AND (USAGE_TYPE != DataTransfer). The corresponding Expression for this example is as follows: { "And": [ {"Or": [ {"Dimensions": { "Key": "REGION", "Values": [ "us-east-1", "us-west-1" ] }}, {"Tags": { "Key": "TagName", "Values": ["Value1"] } } ]}, {"Not": {"Dimensions": { "Key": "USAGE_TYPE", "Values": ["DataTransfer"] }}} ] } Because each Expression can have only one operator, the service returns an error if more than one is specified. The following example shows an Expression object that creates an error: { "And": [ ... ], "Dimensions": { "Key": "USAGE_TYPE", "Values": [ "DataTransfer" ] } } The following is an example of the corresponding error message: "Expression has more than one roots. Only one root operator is allowed for each expression: And, Or, Not, Dimensions, Tags, CostCategories" For the GetRightsizingRecommendation action, a combination of OR and NOT isn't supported. OR isn't supported between different dimensions, or dimensions and tags. NOT operators aren't supported. Dimensions are also limited to LINKED_ACCOUNT, REGION, or RIGHTSIZING_TYPE. For the GetReservationPurchaseRecommendation action, only NOT is supported. AND and OR aren't supported. Dimensions are limited to LINKED_ACCOUNT. — shape: {Or?: list, And?: list, Not?: record, Dimensions?: record, Tags?: record, CostCategories?: record}
-]: any -> record<Metadata: record<RecommendationId: string, GenerationTimestamp: string, AdditionalMetadata: string>, SavingsPlansPurchaseRecommendation: record<AccountScope: string, SavingsPlansType: string, TermInYears: string, PaymentOption: string, LookbackPeriodInDays: string, SavingsPlansPurchaseRecommendationDetails: list<record>, SavingsPlansPurchaseRecommendationSummary: record<EstimatedROI: string, CurrencyCode: string, EstimatedTotalCost: string, CurrentOnDemandSpend: string, EstimatedSavingsAmount: string, TotalRecommendationCount: string, DailyCommitmentToPurchase: string, HourlyCommitmentToPurchase: string, EstimatedSavingsPercentage: string, EstimatedMonthlySavingsAmount: string, EstimatedOnDemandCostWithCurrentCommitment: string>>, NextPageToken: string> {
+]: any -> oneof<record<Metadata: record<RecommendationId: string, GenerationTimestamp: string, AdditionalMetadata: string>, SavingsPlansPurchaseRecommendation: record<AccountScope: string, SavingsPlansType: string, TermInYears: string, PaymentOption: string, LookbackPeriodInDays: string, SavingsPlansPurchaseRecommendationDetails: list<record>, SavingsPlansPurchaseRecommendationSummary: record<EstimatedROI: string, CurrencyCode: string, EstimatedTotalCost: string, CurrentOnDemandSpend: string, EstimatedSavingsAmount: string, TotalRecommendationCount: string, DailyCommitmentToPurchase: string, HourlyCommitmentToPurchase: string, EstimatedSavingsPercentage: string, EstimatedMonthlySavingsAmount: string, EstimatedOnDemandCostWithCurrentCommitment: string>>, NextPageToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1334,9 +1317,6 @@ export def "get-savings-plans-purchase-recommendation" [
 #
 # POST /
 # operationId: GetSavingsPlansUtilization
-# --TimePeriod shape: {Start: string, End: string}
-# --Filter shape: {Or?: list, And?: list, Not?: record, Dimensions?: record, Tags?: record, CostCategories?: record}
-# --SortBy shape: {Key: string, SortOrder?: "ASCENDING"|"DESCENDING"}
 export def "get-savings-plans-utilization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1359,7 +1339,7 @@ export def "get-savings-plans-utilization" [
   --granularity: string@granularity-completer # The granularity of the Amazon Web Services utillization data for your Savings Plans. The GetSavingsPlansUtilization operation supports only DAILY and MONTHLY granularities.
   --filter: record # Use Expression to filter in various Cost Explorer APIs. Not all Expression types are supported in each API. Refer to the documentation for each specific API to see what is supported. There are two patterns: Simple dimension values. There are three types of simple dimension values: CostCategories, Tags, and Dimensions. Specify the CostCategories field to define a filter that acts on Cost Categories. Specify the Tags field to define a filter that acts on Cost Allocation Tags. Specify the Dimensions field to define a filter that acts on the DimensionValues (https://docs.aws.amazon.com/aws-cost-management/latest/APIReference/API_DimensionValues.html). For each filter type, you can set the dimension name and values for the filters that you plan to use. For example, you can filter for REGION==us-east-1 OR REGION==us-west-1. For GetRightsizingRecommendation, the Region is a full name (for example, REGION==US East (N. Virginia). The corresponding Expression for this example is as follows: { "Dimensions": { "Key": "REGION", "Values": [ "us-east-1", “us-west-1” ] } } As shown in the previous example, lists of dimension values are combined with OR when applying the filter. You can also set different match options to further control how the filter behaves. Not all APIs support match options. Refer to the documentation for each specific API to see what is supported. For example, you can filter for linked account names that start with “a”. The corresponding Expression for this example is as follows: { "Dimensions": { "Key": "LINKED_ACCOUNT_NAME", "MatchOptions": [ "STARTS_WITH" ], "Values": [ "a" ] } } Compound Expression types with logical operations. You can use multiple Expression types and the logical operators AND/OR/NOT to create a list of one or more Expression objects. By doing this, you can filter by more advanced options. For example, you can filter by ((REGION == us-east-1 OR REGION == us-west-1) OR (TAG.Type == Type1)) AND (USAGE_TYPE != DataTransfer). The corresponding Expression for this example is as follows: { "And": [ {"Or": [ {"Dimensions": { "Key": "REGION", "Values": [ "us-east-1", "us-west-1" ] }}, {"Tags": { "Key": "TagName", "Values": ["Value1"] } } ]}, {"Not": {"Dimensions": { "Key": "USAGE_TYPE", "Values": ["DataTransfer"] }}} ] } Because each Expression can have only one operator, the service returns an error if more than one is specified. The following example shows an Expression object that creates an error: { "And": [ ... ], "Dimensions": { "Key": "USAGE_TYPE", "Values": [ "DataTransfer" ] } } The following is an example of the corresponding error message: "Expression has more than one roots. Only one root operator is allowed for each expression: And, Or, Not, Dimensions, Tags, CostCategories" For the GetRightsizingRecommendation action, a combination of OR and NOT isn't supported. OR isn't supported between different dimensions, or dimensions and tags. NOT operators aren't supported. Dimensions are also limited to LINKED_ACCOUNT, REGION, or RIGHTSIZING_TYPE. For the GetReservationPurchaseRecommendation action, only NOT is supported. AND and OR aren't supported. Dimensions are limited to LINKED_ACCOUNT. — shape: {Or?: list, And?: list, Not?: record, Dimensions?: record, Tags?: record, CostCategories?: record}
   --sort-by: record # The details for how to sort the data. — shape: {Key: string, SortOrder?: "ASCENDING"|"DESCENDING"}
-]: any -> record<SavingsPlansUtilizationsByTime: table<TimePeriod: record, Utilization: record, Savings: record, AmortizedCommitment: record>, Total: record<Utilization: record<TotalCommitment: string, UsedCommitment: string, UnusedCommitment: string, UtilizationPercentage: string>, Savings: record<NetSavings: string, OnDemandCostEquivalent: string>, AmortizedCommitment: record<AmortizedRecurringCommitment: string, AmortizedUpfrontCommitment: string, TotalAmortizedCommitment: string>>> {
+]: any -> oneof<record<SavingsPlansUtilizationsByTime: table<TimePeriod: record, Utilization: record, Savings: record, AmortizedCommitment: record>, Total: record<Utilization: record<TotalCommitment: string, UsedCommitment: string, UnusedCommitment: string, UtilizationPercentage: string>, Savings: record<NetSavings: string, OnDemandCostEquivalent: string>, AmortizedCommitment: record<AmortizedRecurringCommitment: string, AmortizedUpfrontCommitment: string, TotalAmortizedCommitment: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1389,9 +1369,6 @@ export def "get-savings-plans-utilization" [
 #
 # POST /
 # operationId: GetSavingsPlansUtilizationDetails
-# --TimePeriod shape: {Start: string, End: string}
-# --Filter shape: {Or?: list, And?: list, Not?: record, Dimensions?: record, Tags?: record, CostCategories?: record}
-# --SortBy shape: {Key: string, SortOrder?: "ASCENDING"|"DESCENDING"}
 export def "get-savings-plans-utilization-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1418,7 +1395,7 @@ export def "get-savings-plans-utilization-details" [
   --next-token-body: string # The token to retrieve the next set of results. Amazon Web Services provides the token when the response from a previous call has more results than the maximum page size. (body field)
   --max-results-body: int # The number of items to be returned in a response. The default is 20, with a minimum value of 1. (body field)
   --sort-by: record # The details for how to sort the data. — shape: {Key: string, SortOrder?: "ASCENDING"|"DESCENDING"}
-]: any -> record<SavingsPlansUtilizationDetails: table<SavingsPlanArn: string, Attributes: record, Utilization: record, Savings: record, AmortizedCommitment: record>, Total: record<Utilization: record<TotalCommitment: string, UsedCommitment: string, UnusedCommitment: string, UtilizationPercentage: string>, Savings: record<NetSavings: string, OnDemandCostEquivalent: string>, AmortizedCommitment: record<AmortizedRecurringCommitment: string, AmortizedUpfrontCommitment: string, TotalAmortizedCommitment: string>>, TimePeriod: record<Start: string, End: string>, NextToken: string> {
+]: any -> oneof<record<SavingsPlansUtilizationDetails: table<SavingsPlanArn: string, Attributes: record, Utilization: record, Savings: record, AmortizedCommitment: record>, Total: record<Utilization: record<TotalCommitment: string, UsedCommitment: string, UnusedCommitment: string, UtilizationPercentage: string>, Savings: record<NetSavings: string, OnDemandCostEquivalent: string>, AmortizedCommitment: record<AmortizedRecurringCommitment: string, AmortizedUpfrontCommitment: string, TotalAmortizedCommitment: string>>, TimePeriod: record<Start: string, End: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1449,9 +1426,6 @@ export def "get-savings-plans-utilization-details" [
 #
 # POST /
 # operationId: GetTags
-# --TimePeriod shape: {Start: string, End: string}
-# --Filter shape: {Or?: list, And?: list, Not?: record, Dimensions?: record, Tags?: record, CostCategories?: record}
-# --SortBy item shape: {Key: string, SortOrder?: "ASCENDING"|"DESCENDING"}
 export def "get-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1477,7 +1451,7 @@ export def "get-tags" [
   --sort-by: list # The value that you want to sort the data by. The key represents cost and usage metrics. The following values are supported: BlendedCost UnblendedCost AmortizedCost NetAmortizedCost NetUnblendedCost UsageQuantity NormalizedUsageAmount The supported values for SortOrder are ASCENDING and DESCENDING. When you use SortBy, NextPageToken and SearchString aren't supported. — item shape: {Key: string, SortOrder?: "ASCENDING"|"DESCENDING"}
   --max-results: int # This field is only used when SortBy is provided in the request. The maximum number of objects that are returned for this request. If MaxResults isn't specified with SortBy, the request returns 1000 results as the default value for this parameter. For GetTags, MaxResults has an upper quota of 1000.
   --next-page-token: string # The token to retrieve the next set of results. Amazon Web Services provides the token when the response from a previous call has more results than the maximum page size.
-]: any -> record<NextPageToken: string, Tags: list<string>, ReturnSize: int, TotalSize: int> {
+]: any -> oneof<record<NextPageToken: string, Tags: list<string>, ReturnSize: int, TotalSize: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1507,8 +1481,6 @@ export def "get-tags" [
 #
 # POST /
 # operationId: GetUsageForecast
-# --TimePeriod shape: {Start: string, End: string}
-# --Filter shape: {Or?: list, And?: list, Not?: record, Dimensions?: record, Tags?: record, CostCategories?: record}
 export def "get-usage-forecast" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1532,7 +1504,7 @@ export def "get-usage-forecast" [
   granularity: string@granularity-completer # How granular you want the forecast to be. You can get 3 months of DAILY forecasts or 12 months of MONTHLY forecasts. The GetUsageForecast operation supports only DAILY and MONTHLY granularities.
   --filter: record # Use Expression to filter in various Cost Explorer APIs. Not all Expression types are supported in each API. Refer to the documentation for each specific API to see what is supported. There are two patterns: Simple dimension values. There are three types of simple dimension values: CostCategories, Tags, and Dimensions. Specify the CostCategories field to define a filter that acts on Cost Categories. Specify the Tags field to define a filter that acts on Cost Allocation Tags. Specify the Dimensions field to define a filter that acts on the DimensionValues (https://docs.aws.amazon.com/aws-cost-management/latest/APIReference/API_DimensionValues.html). For each filter type, you can set the dimension name and values for the filters that you plan to use. For example, you can filter for REGION==us-east-1 OR REGION==us-west-1. For GetRightsizingRecommendation, the Region is a full name (for example, REGION==US East (N. Virginia). The corresponding Expression for this example is as follows: { "Dimensions": { "Key": "REGION", "Values": [ "us-east-1", “us-west-1” ] } } As shown in the previous example, lists of dimension values are combined with OR when applying the filter. You can also set different match options to further control how the filter behaves. Not all APIs support match options. Refer to the documentation for each specific API to see what is supported. For example, you can filter for linked account names that start with “a”. The corresponding Expression for this example is as follows: { "Dimensions": { "Key": "LINKED_ACCOUNT_NAME", "MatchOptions": [ "STARTS_WITH" ], "Values": [ "a" ] } } Compound Expression types with logical operations. You can use multiple Expression types and the logical operators AND/OR/NOT to create a list of one or more Expression objects. By doing this, you can filter by more advanced options. For example, you can filter by ((REGION == us-east-1 OR REGION == us-west-1) OR (TAG.Type == Type1)) AND (USAGE_TYPE != DataTransfer). The corresponding Expression for this example is as follows: { "And": [ {"Or": [ {"Dimensions": { "Key": "REGION", "Values": [ "us-east-1", "us-west-1" ] }}, {"Tags": { "Key": "TagName", "Values": ["Value1"] } } ]}, {"Not": {"Dimensions": { "Key": "USAGE_TYPE", "Values": ["DataTransfer"] }}} ] } Because each Expression can have only one operator, the service returns an error if more than one is specified. The following example shows an Expression object that creates an error: { "And": [ ... ], "Dimensions": { "Key": "USAGE_TYPE", "Values": [ "DataTransfer" ] } } The following is an example of the corresponding error message: "Expression has more than one roots. Only one root operator is allowed for each expression: And, Or, Not, Dimensions, Tags, CostCategories" For the GetRightsizingRecommendation action, a combination of OR and NOT isn't supported. OR isn't supported between different dimensions, or dimensions and tags. NOT operators aren't supported. Dimensions are also limited to LINKED_ACCOUNT, REGION, or RIGHTSIZING_TYPE. For the GetReservationPurchaseRecommendation action, only NOT is supported. AND and OR aren't supported. Dimensions are limited to LINKED_ACCOUNT. — shape: {Or?: list, And?: list, Not?: record, Dimensions?: record, Tags?: record, CostCategories?: record}
   --prediction-interval-level: int # Amazon Web Services Cost Explorer always returns the mean forecast as a single point. You can request a prediction interval around the mean by specifying a confidence level. The higher the confidence level, the more confident Cost Explorer is about the actual value falling in the prediction interval. Higher confidence levels result in wider prediction intervals.
-]: any -> record<Total: record<Amount: string, Unit: string>, ForecastResultsByTime: table<TimePeriod: record, MeanValue: string, PredictionIntervalLowerBound: string, PredictionIntervalUpperBound: string>> {
+]: any -> oneof<record<Total: record<Amount: string, Unit: string>, ForecastResultsByTime: table<TimePeriod: record, MeanValue: string, PredictionIntervalLowerBound: string, PredictionIntervalUpperBound: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1587,7 +1559,7 @@ export def "list-cost-allocation-tags" [
   --type: string@type-completer # The type of CostAllocationTag object that are returned for this request. The AWSGenerated type tags are tags that Amazon Web Services defines and applies to support Amazon Web Services resources for cost allocation purposes. The UserDefined type tags are tags that you define, create, and apply to resources.
   --next-token-body: string # The token to retrieve the next set of results. Amazon Web Services provides the token when the response from a previous call has more results than the maximum page size. (body field)
   --max-results-body: int # The maximum number of objects that are returned for this request. By default, the request returns 100 results. (body field)
-]: any -> record<CostAllocationTags: table<TagKey: string, Type: string, Status: string>, NextToken: string> {
+]: any -> oneof<record<CostAllocationTags: table<TagKey: string, Type: string, Status: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1641,7 +1613,7 @@ export def "list-cost-category-definitions" [
   --effective-on: string # The period of time that you want the usage and costs for.
   --next-token-body: string # The token to retrieve the next set of results. Amazon Web Services provides the token when the response from a previous call has more results than the maximum page size. (body field)
   --max-results-body: int # The number of entries a paginated response contains. (body field)
-]: any -> record<CostCategoryReferences: table<CostCategoryArn: string, Name: string, EffectiveStart: string, EffectiveEnd: string, NumberOfRules: int, ProcessingStatus: list, Values: list, DefaultValue: string>, NextToken: string> {
+]: any -> oneof<record<CostCategoryReferences: table<CostCategoryArn: string, Name: string, EffectiveStart: string, EffectiveEnd: string, NumberOfRules: int, ProcessingStatus: list, Values: list, DefaultValue: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1694,7 +1666,7 @@ export def "list-savings-plans-purchase-recommendation-generation" [
   --recommendation-ids: list<string> # The IDs for each specific recommendation.
   --page-size: int # The number of recommendations that you want returned in a single response object.
   --next-page-token: string # The token to retrieve the next set of results.
-]: any -> record<GenerationSummaryList: table<RecommendationId: string, GenerationStatus: string, GenerationStartedTime: string, GenerationCompletionTime: string, EstimatedCompletionTime: string>, NextPageToken: string> {
+]: any -> oneof<record<GenerationSummaryList: table<RecommendationId: string, GenerationStatus: string, GenerationStartedTime: string, GenerationCompletionTime: string, EstimatedCompletionTime: string>, NextPageToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1743,7 +1715,7 @@ export def "list-tags-for-resource" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-28 # required
   resource_arn: string # The Amazon Resource Name (ARN) of the resource. For a list of supported resources, see ResourceTag (https://docs.aws.amazon.com/aws-cost-management/latest/APIReference/API_ResourceTag.html).
-]: any -> record<ResourceTags: table<Key: string, Value: string>> {
+]: any -> oneof<record<ResourceTags: table<Key: string, Value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1793,7 +1765,7 @@ export def "provide-anomaly-feedback" [
   --x-amz-target: string@x-amz-target-completer-29 # required
   anomaly_id: string # A cost anomaly ID.
   feedback: string@feedback-completer # Describes whether the cost anomaly was a planned activity or you considered it an anomaly.
-]: any -> record<AnomalyId: string> {
+]: any -> oneof<record<AnomalyId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1842,7 +1814,7 @@ export def "start-savings-plans-purchase-recommendation-generation" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-30 # required
   --body: record
-]: any -> record<RecommendationId: string, GenerationStartedTime: string, EstimatedCompletionTime: string> {
+]: any -> oneof<record<RecommendationId: string, GenerationStartedTime: string, EstimatedCompletionTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1872,7 +1844,6 @@ export def "start-savings-plans-purchase-recommendation-generation" [
 #
 # POST /
 # operationId: TagResource
-# --ResourceTags item shape: {Key: string, Value: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1893,7 +1864,7 @@ export def "tag-resource" [
   --x-amz-target: string@x-amz-target-completer-31 # required
   resource_arn: string # The Amazon Resource Name (ARN) of the resource. For a list of supported resources, see ResourceTag (https://docs.aws.amazon.com/aws-cost-management/latest/APIReference/API_ResourceTag.html).
   resource_tags: list # A list of tag key-value pairs to be added to the resource. Each tag consists of a key and a value, and each key must be unique for the resource. The following restrictions apply to resource tags: Although the maximum number of array members is 200, you can assign a maximum of 50 user-tags to one resource. The remaining are reserved for Amazon Web Services use The maximum length of a key is 128 characters The maximum length of a value is 256 characters Keys and values can only contain alphanumeric characters, spaces, and any of the following: _.:/=+@- Keys and values are case sensitive Keys and values are trimmed for any leading or trailing whitespaces Don’t use aws: as a prefix for your keys. This prefix is reserved for Amazon Web Services use — item shape: {Key: string, Value: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1943,7 +1914,7 @@ export def "untag-resource" [
   --x-amz-target: string@x-amz-target-completer-32 # required
   resource_arn: string # The Amazon Resource Name (ARN) of the resource. For a list of supported resources, see ResourceTag (https://docs.aws.amazon.com/aws-cost-management/latest/APIReference/API_ResourceTag.html).
   resource_tag_keys: list<string> # A list of tag keys associated with tags that need to be removed from the resource. If you specify a tag key that doesn't exist, it's ignored. Although the maximum number of array members is 200, user-tag maximum is 50. The remaining are reserved for Amazon Web Services use.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1993,7 +1964,7 @@ export def "update-anomaly-monitor" [
   --x-amz-target: string@x-amz-target-completer-33 # required
   monitor_arn: string # Cost anomaly monitor Amazon Resource Names (ARNs).
   --monitor-name: string # The new name for the cost anomaly monitor.
-]: any -> record<MonitorArn: string> {
+]: any -> oneof<record<MonitorArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2023,8 +1994,6 @@ export def "update-anomaly-monitor" [
 #
 # POST /
 # operationId: UpdateAnomalySubscription
-# --Subscribers item shape: {Address?: string, Type?: "EMAIL"|"SNS", Status?: "CONFIRMED"|"DECLINED"}
-# --ThresholdExpression shape: {Or?: list, And?: list, Not?: record, Dimensions?: record, Tags?: record, CostCategories?: record}
 export def "update-anomaly-subscription" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2050,7 +2019,7 @@ export def "update-anomaly-subscription" [
   --subscribers: list # The update to the subscriber list. — item shape: {Address?: string, Type?: "EMAIL"|"SNS", Status?: "CONFIRMED"|"DECLINED"}
   --subscription-name: string # The new name of the subscription.
   --threshold-expression: record # Use Expression to filter in various Cost Explorer APIs. Not all Expression types are supported in each API. Refer to the documentation for each specific API to see what is supported. There are two patterns: Simple dimension values. There are three types of simple dimension values: CostCategories, Tags, and Dimensions. Specify the CostCategories field to define a filter that acts on Cost Categories. Specify the Tags field to define a filter that acts on Cost Allocation Tags. Specify the Dimensions field to define a filter that acts on the DimensionValues (https://docs.aws.amazon.com/aws-cost-management/latest/APIReference/API_DimensionValues.html). For each filter type, you can set the dimension name and values for the filters that you plan to use. For example, you can filter for REGION==us-east-1 OR REGION==us-west-1. For GetRightsizingRecommendation, the Region is a full name (for example, REGION==US East (N. Virginia). The corresponding Expression for this example is as follows: { "Dimensions": { "Key": "REGION", "Values": [ "us-east-1", “us-west-1” ] } } As shown in the previous example, lists of dimension values are combined with OR when applying the filter. You can also set different match options to further control how the filter behaves. Not all APIs support match options. Refer to the documentation for each specific API to see what is supported. For example, you can filter for linked account names that start with “a”. The corresponding Expression for this example is as follows: { "Dimensions": { "Key": "LINKED_ACCOUNT_NAME", "MatchOptions": [ "STARTS_WITH" ], "Values": [ "a" ] } } Compound Expression types with logical operations. You can use multiple Expression types and the logical operators AND/OR/NOT to create a list of one or more Expression objects. By doing this, you can filter by more advanced options. For example, you can filter by ((REGION == us-east-1 OR REGION == us-west-1) OR (TAG.Type == Type1)) AND (USAGE_TYPE != DataTransfer). The corresponding Expression for this example is as follows: { "And": [ {"Or": [ {"Dimensions": { "Key": "REGION", "Values": [ "us-east-1", "us-west-1" ] }}, {"Tags": { "Key": "TagName", "Values": ["Value1"] } } ]}, {"Not": {"Dimensions": { "Key": "USAGE_TYPE", "Values": ["DataTransfer"] }}} ] } Because each Expression can have only one operator, the service returns an error if more than one is specified. The following example shows an Expression object that creates an error: { "And": [ ... ], "Dimensions": { "Key": "USAGE_TYPE", "Values": [ "DataTransfer" ] } } The following is an example of the corresponding error message: "Expression has more than one roots. Only one root operator is allowed for each expression: And, Or, Not, Dimensions, Tags, CostCategories" For the GetRightsizingRecommendation action, a combination of OR and NOT isn't supported. OR isn't supported between different dimensions, or dimensions and tags. NOT operators aren't supported. Dimensions are also limited to LINKED_ACCOUNT, REGION, or RIGHTSIZING_TYPE. For the GetReservationPurchaseRecommendation action, only NOT is supported. AND and OR aren't supported. Dimensions are limited to LINKED_ACCOUNT. — shape: {Or?: list, And?: list, Not?: record, Dimensions?: record, Tags?: record, CostCategories?: record}
-]: any -> record<SubscriptionArn: string> {
+]: any -> oneof<record<SubscriptionArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2080,7 +2049,6 @@ export def "update-anomaly-subscription" [
 #
 # POST /
 # operationId: UpdateCostAllocationTagsStatus
-# --CostAllocationTagsStatus item shape: {TagKey: string, Status: "Active"|"Inactive"}
 export def "update-cost-allocation-tags-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2100,7 +2068,7 @@ export def "update-cost-allocation-tags-status" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-35 # required
   cost_allocation_tags_status: list # The list of CostAllocationTagStatusEntry objects that are used to update cost allocation tags status for this request. — item shape: {TagKey: string, Status: "Active"|"Inactive"}
-]: any -> record<Errors: table<TagKey: string, Code: string, Message: string>> {
+]: any -> oneof<record<Errors: table<TagKey: string, Code: string, Message: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2130,8 +2098,6 @@ export def "update-cost-allocation-tags-status" [
 #
 # POST /
 # operationId: UpdateCostCategoryDefinition
-# --Rules item shape: {Value?: string, Rule?: record, InheritedValue?: record, Type?: "REGULAR"|"INHERITED_VALUE"}
-# --SplitChargeRules item shape: {Source: string, Targets: list<string>, Method: "FIXED"|"PROPORTIONAL"|"EVEN", Parameters?: list}
 export def "update-cost-category-definition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2156,7 +2122,7 @@ export def "update-cost-category-definition" [
   rules: list # The Expression object used to categorize costs. For more information, see CostCategoryRule (https://docs.aws.amazon.com/aws-cost-management/latest/APIReference/API_CostCategoryRule.html). — item shape: {Value?: string, Rule?: record, InheritedValue?: record, Type?: "REGULAR"|"INHERITED_VALUE"}
   --default-value: string # The default value for the cost category.
   --split-charge-rules: list # The split charge rules used to allocate your charges between your Cost Category values. — item shape: {Source: string, Targets: list<string>, Method: "FIXED"|"PROPORTIONAL"|"EVEN", Parameters?: list}
-]: any -> record<CostCategoryArn: string, EffectiveStart: string> {
+]: any -> oneof<record<CostCategoryArn: string, EffectiveStart: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

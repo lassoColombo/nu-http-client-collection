@@ -14,27 +14,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "oauth" => { {scheme: $scheme, headers: {"Authorization": $"Oauth ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -42,8 +51,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -54,7 +68,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -89,7 +112,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -146,9 +170,9 @@ def mode-completer [] { ["flight" "normal" "sleep" "transport" "unknown"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-aliases-v2" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-aliases-v2" "get-aliases-v2-health" "get-aliases-v2-tracking-id" "get-aliases-v2-version" "delete-aliases-v2-tracking-id" "get-aliases-v2-tracking-id-1" "put-aliases-v2-tracking-id-batch" "delete-aliases-v2-tracking-id-type" "get-aliases-v2-tracking-id-type" "delete-aliases-v2-tracking-id-type-external-id" "put-aliases-v2-tracking-id-type-external-id" "put-associations-v3-devices-batch-update" "post-associations-v3-devices-tracking-id-batch-create" "post-associations-v3-devices-tracking-id-batch-delete" "get-associations-v3-geofences-geofence-id" "get-associations-v3-health" "get-associations-v3-rules-rule-id" "get-associations-v3-sensors-sensor-rule-id" "get-associations-v3-version" "get-associations-v3-tracking-id-geofences" "delete-associations-v3-tracking-id-geofences-geofence-id" "put-associations-v3-tracking-id-geofences-geofence-id" "get-associations-v3-tracking-id-rules" "delete-associations-v3-tracking-id-rules-rule-id" "put-associations-v3-tracking-id-rules-rule-id" "get-associations-v3-tracking-id-sensors" "delete-associations-v3-tracking-id-sensors-sensor-rule-id" "put-associations-v3-tracking-id-sensors-sensor-rule-id" "get-bulkjobs-v4-device-uploads" "post-bulkjobs-v4-device-uploads" "patch-bulkjobs-v4-device-uploads-job-id" "get-bulkjobs-v4-device-uploads-job-id-results" "get-bulkjobs-v4-device-uploads-job-id-status" "get-bulkjobs-v4-health" "get-bulkjobs-v4-version" "post-c2c-v4-callback" "get-c2c-v4-connectors" "post-c2c-v4-connectors" "get-c2c-v4-connectors-ext-devices-external-device-id" "delete-c2c-v4-connectors-connector-id" "get-c2c-v4-connectors-connector-id" "put-c2c-v4-connectors-connector-id" "get-c2c-v4-connectors-connector-id-ext-devices" "post-c2c-v4-connectors-connector-id-ext-devices" "delete-c2c-v4-connectors-connector-id-ext-devices-batch" "delete-c2c-v4-connectors-connector-id-ext-devices-external-device-id" "get-c2c-v4-drivers" "post-c2c-v4-drivers-driver-id-verify" "get-c2c-v4-health" "get-c2c-v4-version" "get-device-associations-v2-health" "get-device-associations-v2-version" "get-device-associations-v2-tracking-id-geofences" "get-events-v3" "get-events-v3-health" "get-events-v3-statuses" "get-events-v3-statuses-device-counts" "get-events-v3-version" "get-events-v3-tracking-id" "get-geofence-associations-v2-health" "get-geofence-associations-v2-version" "get-geofence-associations-v2-geofence-id-devices" "delete-geofence-associations-v2-geofence-id-tracking-id" "put-geofence-associations-v2-geofence-id-tracking-id" "delete-geofences-v2" "get-geofences-v2" "post-geofences-v2" "get-geofences-v2-health" "post-geofences-v2-training-test" "get-geofences-v2-version" "delete-geofences-v2-geofence-id" "get-geofences-v2-geofence-id" "put-geofences-v2-geofence-id" "post-geofences-v2-geofence-id-poi-training" "get-labels-v4-health" "get-labels-v4-version" "get-labels-v4-resource-type" "get-labels-v4-resource-type-keys" "get-labels-v4-resource-type-keys-key-values" "delete-labels-v4-resource-type-resource-id" "get-labels-v4-resource-type-resource-id" "put-labels-v4-resource-type-resource-id-batch" "delete-labels-v4-resource-type-resource-id-key" "delete-labels-v4-resource-type-resource-id-key-value" "put-labels-v4-resource-type-resource-id-key-value" "post-largedata-v4" "get-largedata-v4-devices-tracking-id-metadata" "get-largedata-v4-health" "get-largedata-v4-version" "delete-largedata-v4-data-id" "post-largedata-v4-data-id" "get-largedata-v4-data-id-data" "get-largedata-v4-data-id-metadata" "get-largedata-v4-data-id-parts" "put-largedata-v4-data-id-parts-part-number" "delete-locations-v4" "get-locations-v4" "post-locations-v4" "get-locations-v4-health" "get-locations-v4-version" "delete-locations-v4-location-id" "get-locations-v4-location-id" "put-locations-v4-location-id" "post-metadata-v2-devices-batch" "delete-metadata-v2-devices-tracking-id" "get-metadata-v2-devices-tracking-id" "put-metadata-v2-devices-tracking-id" "post-metadata-v2-geofences-batch" "delete-metadata-v2-geofences-geofence-id" "get-metadata-v2-geofences-geofence-id" "put-metadata-v2-geofences-geofence-id" "get-metadata-v2-health" "post-metadata-v2-sensor-rules-batch" "delete-metadata-v2-sensor-rules-sensor-rule-id" "get-metadata-v2-sensor-rules-sensor-rule-id" "put-metadata-v2-sensor-rules-sensor-rule-id" "get-metadata-v2-version" "get-notifications-v3-health" "delete-notifications-v3-registration-channel-id" "get-notifications-v3-registration-channel-id" "put-notifications-v3-registration-channel-id" "delete-notifications-v3-registrations" "get-notifications-v3-registrations" "post-notifications-v3-registrations" "get-notifications-v3-version" "delete-registry-v2-devices-device-or-external-id" "get-registry-v2-devices-device-or-external-id" "put-registry-v2-devices-device-or-external-id" "get-registry-v2-health" "get-registry-v2-licenses" "get-registry-v2-version" "get-registry-v2-app-id-devices" "post-registry-v2-app-id-devices" "get-registry-v2-app-id-license-count" "post-registry-v2-app-id-one-device" "get-registry-v2-job-id-results" "get-registry-v2-job-id-status" "delete-registry-v2-tracking-id" "get-registry-v2-tracking-id" "post-registry-v4-resources-resource-type-find" "post-reports-v4" "get-reports-v4-health" "get-reports-v4-version" "get-reports-v4-report-id" "delete-rules-v4" "get-rules-v4" "post-rules-v4" "get-rules-v4-health" "get-rules-v4-version" "delete-rules-v4-rule-id" "get-rules-v4-rule-id" "put-rules-v4-rule-id" "delete-sensors-v3" "get-sensors-v3" "post-sensors-v3" "get-sensors-v3-health" "get-sensors-v3-version" "delete-sensors-v3-sensor-rule-id" "get-sensors-v3-sensor-rule-id" "put-sensors-v3-sensor-rule-id" "post-shadows-v2-batch" "get-shadows-v2-health" "get-shadows-v2-version" "delete-shadows-v2-tracking-id" "get-shadows-v2-tracking-id" "put-shadows-v2-tracking-id" "get-shadows-v2-tracking-id-state" "get-shadows-v2-tracking-id-state-selector" "get-shadows-v4" "post-shipment-reports-v4" "get-shipment-reports-v4-health" "get-shipment-reports-v4-version" "get-shipment-reports-v4-shipment-report-id-status" "get-shipment-reports-v4-shipment-report-id-summary" "get-shipment-reports-v4-shipment-report-id-metric" "delete-shipments-v4" "get-shipments-v4" "post-shipments-v4" "get-shipments-v4-health" "delete-shipments-v4-plans" "get-shipments-v4-plans" "post-shipments-v4-plans" "delete-shipments-v4-plans-shipment-plan-id" "get-shipments-v4-plans-shipment-plan-id" "patch-shipments-v4-plans-shipment-plan-id" "get-shipments-v4-plans-shipment-plan-id-segment-plan-id" "patch-shipments-v4-plans-shipment-plan-id-segment-plan-id" "get-shipments-v4-version" "delete-shipments-v4-shipment-id" "get-shipments-v4-shipment-id" "patch-shipments-v4-shipment-id" "get-shipments-v4-shipment-id-segment-id" "patch-shipments-v4-shipment-id-segment-id" "get-shipments-v4-tracking-id-segments" "get-traces-v2-health" "get-traces-v2-version" "delete-traces-v2-tracking-id" "get-traces-v2-tracking-id" "get-transitions-v2-devices-tracking-id" "get-transitions-v2-health" "get-transitions-v2-version" "get-users-v2-devices" "get-users-v2-health" "post-users-v2-login" "post-users-v2-refresh" "post-users-v2-token-exchange" "get-users-v2-version" "post-v2" "get-v2-health" "get-v2-timestamp" "post-v2-token" "get-v2-version" "post-v3" "post-v3-batch" "get-v3-health" "get-v3-version" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -186,7 +210,7 @@ export def "get-aliases-v2" [
   --after: float # Milliseconds elapsed since 1 January 1970 00:00:00 UTC. The accepted range is from 0 to the current time.
   --project-id: string
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
-]: nothing -> record<count: int, pageToken: string, data: table<aliases: record, trackingId: string>> {
+]: nothing -> oneof<record<count: int, pageToken: string, data: table<aliases: record, trackingId: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "externalId" $external_id "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "after" $after "scalar") (serialize-qp "projectId" $project_id "scalar")] | flatten | str join "&"
@@ -222,7 +246,7 @@ export def "get-aliases-v2-health" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<message: string> {
+]: nothing -> oneof<record<message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/aliases/v2/health" $auth.query)
@@ -259,7 +283,7 @@ export def "get-aliases-v2-tracking-id" [
   --external-id: string # An external ID. An externalId and type pair uniquely identifies an alias. (required)
   --project-id: string
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
-]: nothing -> record<appId: string, externalId: string, trackingId: string> {
+]: nothing -> oneof<record<appId: string, externalId: string, trackingId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($type == null) { error make --unspanned { msg: "required query parameter 'type' missing: pass --type" } }
@@ -378,7 +402,7 @@ export def "get-aliases-v2-tracking-id-1" [
   --count: int # The number of items to return per page. (default: 100)
   --type: string # An alias type
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
-]: nothing -> record<count: int, pageToken: string, data: record> {
+]: nothing -> oneof<record<count: int, pageToken: string, data: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tracking_id | is-empty) { error make --unspanned { msg: "path parameter 'trackingId' must be non-empty" } }
@@ -509,7 +533,7 @@ export def "get-aliases-v2-tracking-id-type" [
   --page-token: string # A token from the previously returned response to retrieve the specified page.
   --count: int # The number of items to return per page. (default: 100)
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
-]: nothing -> record<count: int, pageToken: string, data: record> {
+]: nothing -> oneof<record<count: int, pageToken: string, data: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tracking_id | is-empty) { error make --unspanned { msg: "path parameter 'trackingId' must be non-empty" } }
@@ -625,8 +649,6 @@ export def "put-aliases-v2-tracking-id-type-external-id" [
 # Updates rules associations for devices
 #
 # PUT /associations/v3/devices/batchUpdate
-# --newRules shape: {geofenceIds: list<string>, ruleIds: list<string>}
-# --oldRules shape: {geofenceIds: list<string>, ruleIds: list<string>}
 export def "put-associations-v3-devices-batch-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -775,7 +797,7 @@ export def "get-associations-v3-geofences-geofence-id" [
   --page-token: string # A token from the previously returned response to retrieve the specified page.
   --count: int # The number of items to return per page. (default: 100)
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
-]: nothing -> record<count: int, pageToken: string, data: table<appId: string, externalId: string, trackingId: string>> {
+]: nothing -> oneof<record<count: int, pageToken: string, data: table<appId: string, externalId: string, trackingId: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($geofence_id | is-empty) { error make --unspanned { msg: "path parameter 'geofenceId' must be non-empty" } }
@@ -812,7 +834,7 @@ export def "get-associations-v3-health" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<message: string> {
+]: nothing -> oneof<record<message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/associations/v3/health" $auth.query)
@@ -849,7 +871,7 @@ export def "get-associations-v3-rules-rule-id" [
   --page-token: string # A token from the previously returned response to retrieve the specified page.
   --count: int # The number of items to return per page. (default: 100)
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
-]: nothing -> record<count: int, pageToken: string, data: table<appId: string, externalId: string, trackingId: string>> {
+]: nothing -> oneof<record<count: int, pageToken: string, data: table<appId: string, externalId: string, trackingId: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rule_id | is-empty) { error make --unspanned { msg: "path parameter 'ruleId' must be non-empty" } }
@@ -890,7 +912,7 @@ export def "get-associations-v3-sensors-sensor-rule-id" [
   --page-token: string # A token from the previously returned response to retrieve the specified page.
   --count: int # The number of items to return per page. (default: 100)
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
-]: nothing -> record<count: int, pageToken: string, data: table<appId: string, externalId: string, trackingId: string>> {
+]: nothing -> oneof<record<count: int, pageToken: string, data: table<appId: string, externalId: string, trackingId: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($sensor_rule_id | is-empty) { error make --unspanned { msg: "path parameter 'sensorRuleId' must be non-empty" } }
@@ -967,7 +989,7 @@ export def "get-associations-v3-tracking-id-geofences" [
   --count: int # The number of items to return per page. (default: 100)
   --type: list<string> # Type of a geofence
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
-]: nothing -> record<count: int, pageToken: string, data: table<geofence: any, id: string>> {
+]: nothing -> oneof<record<count: int, pageToken: string, data: table<geofence: any, id: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tracking_id | is-empty) { error make --unspanned { msg: "path parameter 'trackingId' must be non-empty" } }
@@ -1093,7 +1115,7 @@ export def "get-associations-v3-tracking-id-rules" [
   --page-token: string # A token from the previously returned response to retrieve the specified page.
   --count: int # The number of items to return per page. (default: 100)
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
-]: nothing -> record<count: int, pageToken: string, data: table<rule: any, ruleId: string>> {
+]: nothing -> oneof<record<count: int, pageToken: string, data: table<rule: any, ruleId: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tracking_id | is-empty) { error make --unspanned { msg: "path parameter 'trackingId' must be non-empty" } }
@@ -1219,7 +1241,7 @@ export def "get-associations-v3-tracking-id-sensors" [
   --page-token: string # A token from the previously returned response to retrieve the specified page.
   --count: int # The number of items to return per page. (default: 100)
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
-]: nothing -> record<count: int, pageToken: string, data: table<description: string, id: string, name: string, range: record, threshold: record, type: string>> {
+]: nothing -> oneof<record<count: int, pageToken: string, data: table<description: string, id: string, name: string, range: record, threshold: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tracking_id | is-empty) { error make --unspanned { msg: "path parameter 'trackingId' must be non-empty" } }
@@ -1346,7 +1368,7 @@ export def "get-bulkjobs-v4-device-uploads" [
   --type: string@type-completer
   --status: string
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
-]: nothing -> record<count: int, items: table<jobId: string, status: string, type: string>, limit: int, nextPageToken: string> {
+]: nothing -> oneof<record<count: int, items: table<jobId: string, status: string, type: string>, limit: int, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "projectId" $project_id "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "status" $status "scalar")] | flatten | str join "&"
@@ -1386,7 +1408,7 @@ export def "post-bulkjobs-v4-device-uploads" [
   --file-name: string
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
   --body: record
-]: any -> record<jobId: string> {
+]: any -> oneof<record<jobId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1429,7 +1451,7 @@ export def "patch-bulkjobs-v4-device-uploads-job-id" [
   --project-id: string
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
   action: string@action-completer
-]: any -> record<status: string> {
+]: any -> oneof<record<status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1474,7 +1496,7 @@ export def "get-bulkjobs-v4-device-uploads-job-id-results" [
   --page-token: string # A token from the previously returned response to retrieve the specified page.
   --limit: int # The number of items to return per page (default: 100)
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
-]: nothing -> record<count: int, items: table<connectorId: string, deviceId: string, deviceSecret: string, errors: list, externalDeviceId: string, externalId: string, name: string, trackingId: string>, limit: int, nextPageToken: string, status: string, type: string> {
+]: nothing -> oneof<record<count: int, items: table<connectorId: string, deviceId: string, deviceSecret: string, errors: list, externalDeviceId: string, externalId: string, name: string, trackingId: string>, limit: int, nextPageToken: string, status: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
@@ -1514,7 +1536,7 @@ export def "get-bulkjobs-v4-device-uploads-job-id-status" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --project-id: string
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
-]: nothing -> record<failed: int, fileName: string, partiallySucceeded: int, pending: int, progress: float, status: string, succeeded: int, total: int, type: string> {
+]: nothing -> oneof<record<failed: int, fileName: string, partiallySucceeded: int, pending: int, progress: float, status: string, succeeded: int, total: int, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
@@ -1551,7 +1573,7 @@ export def "get-bulkjobs-v4-health" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<message: string> {
+]: nothing -> oneof<record<message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/bulkjobs/v4/health" $auth.query)
@@ -1661,7 +1683,7 @@ export def "get-c2c-v4-connectors" [
   --page-token: string # A token from the previously returned response to retrieve the specified page.
   --limit: int # The number of items to return per page (default: 100)
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
-]: nothing -> record<count: int, items: table<connectorId: string, projectId: string, description: string, driverId: string, enabled: bool, externalCloudInfo: record, name: string, refreshIntervalS: int, lastExecTs: string, totalAddedDevices: int, createdAt: string>, limit: int, nextPageToken: string> {
+]: nothing -> oneof<record<count: int, items: table<connectorId: string, projectId: string, description: string, driverId: string, enabled: bool, externalCloudInfo: record, name: string, refreshIntervalS: int, lastExecTs: string, totalAddedDevices: int, createdAt: string>, limit: int, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "projectId" $project_id "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
@@ -1705,7 +1727,7 @@ export def "post-c2c-v4-connectors" [
   external_cloud_info: record # An external cloud-specific object that the driver will use to login to the external cloud. The structure of this object varies per driver implementation. It is recommended to have dedicated credentials for logging in to the external cloud in order not to violate possible concurrent users policies of the external cloud. In case of the HERE Tracking loopback driver, the maximum allowed concurrent user account tokens is 3 per account, therefore it is recommended to create a separate HERE account and grant it the required privilege to update the connector's project, and use that account in externalCloudInfo.
   name: string # Name of the connector.
   --refresh-interval-s: int # This is the interval (in seconds) to execute the sync process between the connector's external cloud and HERE Tracking project. The maximum and at the same time default value for callback-type connectors is 900 seconds. The default value for other type of connectors is 3600 seconds and there is no maximum value set.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1748,7 +1770,7 @@ export def "get-c2c-v4-connectors-ext-devices-external-device-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --project-id: string
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
-]: nothing -> record<items: table<connectorId: string>> {
+]: nothing -> oneof<record<items: table<connectorId: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($external_device_id | is-empty) { error make --unspanned { msg: "path parameter 'externalDeviceId' must be non-empty" } }
@@ -1823,7 +1845,7 @@ export def "get-c2c-v4-connectors-connector-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<connectorId: string, projectId: string, description: string, driverId: string, enabled: bool, externalCloudInfo: record, name: string, refreshIntervalS: int, lastExecTs: string, totalAddedDevices: int, createdAt: string> {
+]: nothing -> oneof<record<connectorId: string, projectId: string, description: string, driverId: string, enabled: bool, externalCloudInfo: record, name: string, refreshIntervalS: int, lastExecTs: string, totalAddedDevices: int, createdAt: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($connector_id | is-empty) { error make --unspanned { msg: "path parameter 'connectorId' must be non-empty" } }
@@ -1864,7 +1886,7 @@ export def "put-c2c-v4-connectors-connector-id" [
   external_cloud_info: record # An external cloud-specific object that the driver will use to login to the external cloud. The structure of this object varies per driver implementation. It is recommended to have dedicated credentials for logging in to the external cloud in order not to violate possible concurrent users policies of the external cloud. In case of the HERE Tracking loopback driver, the maximum allowed concurrent user account tokens is 3 per account, therefore it is recommended to create a separate HERE account and grant it the required privilege to update the connector's project, and use that account in externalCloudInfo.
   name: string # Name of the connector.
   --refresh-interval-s: int # This is the interval (in seconds) to execute the sync process between the connector's external cloud and HERE Tracking project. The maximum and at the same time default value for callback-type connectors is 900 seconds. The default value for other type of connectors is 3600 seconds and there is no maximum value set.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1906,7 +1928,7 @@ export def "get-c2c-v4-connectors-connector-id-ext-devices" [
   --page-token: string # A token from the previously returned response to retrieve the specified page.
   --limit: int # The number of items to return per page (default: 100)
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
-]: nothing -> record<count: int, items: table<enabled: bool, externalDeviceId: string, externalDeviceInfo: record, info: record, localDeviceId: string, provisioning: string>, limit: int, nextPageToken: string> {
+]: nothing -> oneof<record<count: int, items: table<enabled: bool, externalDeviceId: string, externalDeviceInfo: record, info: record, localDeviceId: string, provisioning: string>, limit: int, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($connector_id | is-empty) { error make --unspanned { msg: "path parameter 'connectorId' must be non-empty" } }
@@ -2070,7 +2092,7 @@ export def "get-c2c-v4-drivers" [
   --page-token: string # A token from the previously returned response to retrieve the specified page.
   --limit: int # The number of items to return per page (default: 100)
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
-]: nothing -> record<count: int, items: table<autoProvisionCallbackDevices: bool, driverId: string, driverSyncMethod: string, driverType: string, externalCloudInfoSchema: list, provider: string, strategy: record, version: int>, limit: int, nextPageToken: string> {
+]: nothing -> oneof<record<count: int, items: table<autoProvisionCallbackDevices: bool, driverId: string, driverSyncMethod: string, driverType: string, externalCloudInfoSchema: list, provider: string, strategy: record, version: int>, limit: int, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageToken" $page_token "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
@@ -2145,7 +2167,7 @@ export def "get-c2c-v4-health" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<message: string> {
+]: nothing -> oneof<record<message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/c2c/v4/health" $auth.query)
@@ -2213,7 +2235,7 @@ export def "get-device-associations-v2-health" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<message: string> {
+]: nothing -> oneof<record<message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/device-associations/v2/health" $auth.query)
@@ -2289,7 +2311,7 @@ export def "get-device-associations-v2-tracking-id-geofences" [
   --count: int # The number of items to return per page. (default: 100)
   --app-id: string # Application identifier. Used together with an external ID to identify a virtual device.
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
-]: nothing -> record<count: int, pageToken: string, data: table<geofence: any, id: string>> {
+]: nothing -> oneof<record<count: int, pageToken: string, data: table<geofence: any, id: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tracking_id | is-empty) { error make --unspanned { msg: "path parameter 'trackingId' must be non-empty" } }
@@ -2337,7 +2359,7 @@ export def "get-events-v3" [
   --count: int # The number of items to return per page. (default: 1000)
   --app-id: string # Application identifier. Used together with an external ID to identify a virtual device.
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
-]: nothing -> record<count: int, pageToken: string, data: list<any>> {
+]: nothing -> oneof<record<count: int, pageToken: string, data: list<any>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "projectId" $project_id "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "after" $after "scalar") (serialize-qp "eventSource" $event_source "scalar") (serialize-qp "eventType" $event_type "scalar") (serialize-qp "ruleId" $rule_id "scalar") (serialize-qp "initialState" $initial_state "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "appId" $app_id "scalar")] | flatten | str join "&"
@@ -2373,7 +2395,7 @@ export def "get-events-v3-health" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<message: string> {
+]: nothing -> oneof<record<message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/events/v3/health" $auth.query)
@@ -2419,7 +2441,7 @@ export def "get-events-v3-statuses" [
   --count: int # The number of items to return per page. (default: 1000)
   --app-id: string # Application identifier. Used together with an external ID to identify a virtual device.
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
-]: nothing -> record<count: int, pageToken: string, data: list<any>> {
+]: nothing -> oneof<record<count: int, pageToken: string, data: list<any>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "projectId" $project_id "scalar") (serialize-qp "eventSource" $event_source "scalar") (serialize-qp "eventType" $event_type "scalar") (serialize-qp "trackingId" $tracking_id "scalar") (serialize-qp "ruleId" $rule_id "scalar") (serialize-qp "geofenceId" $geofence_id "scalar") (serialize-qp "shipments" $shipments "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "after" $after "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "appId" $app_id "scalar")] | flatten | str join "&"
@@ -2466,7 +2488,7 @@ export def "get-events-v3-statuses-device-counts" [
   --count: int # The number of items to return per page. (default: 1000)
   --app-id: string # Application identifier. Used together with an external ID to identify a virtual device.
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
-]: nothing -> record<count: int, pageToken: string, data: list<any>> {
+]: nothing -> oneof<record<count: int, pageToken: string, data: list<any>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "projectId" $project_id "scalar") (serialize-qp "groupBy" $group_by "scalar") (serialize-qp "eventSource" $event_source "scalar") (serialize-qp "trackingId" $tracking_id "scalar") (serialize-qp "ruleId" $rule_id "scalar") (serialize-qp "geofenceId" $geofence_id "scalar") (serialize-qp "shipments" $shipments "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "appId" $app_id "scalar")] | flatten | str join "&"
@@ -2546,7 +2568,7 @@ export def "get-events-v3-tracking-id" [
   --count: int # The number of items to return per page. (default: 1000)
   --app-id: string # Application identifier. Used together with an external ID to identify a virtual device.
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
-]: nothing -> record<count: int, pageToken: string, data: list<any>> {
+]: nothing -> oneof<record<count: int, pageToken: string, data: list<any>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tracking_id | is-empty) { error make --unspanned { msg: "path parameter 'trackingId' must be non-empty" } }
@@ -2585,7 +2607,7 @@ export def "get-geofence-associations-v2-health" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<message: string> {
+]: nothing -> oneof<record<message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/geofence-associations/v2/health" $auth.query)
@@ -2659,7 +2681,7 @@ export def "get-geofence-associations-v2-geofence-id-devices" [
   --page-token: string # A token from the previously returned response to retrieve the specified page.
   --count: int # The number of items to return per page. (default: 100)
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
-]: nothing -> record<count: int, pageToken: string, data: table<appId: string, externalId: string, trackingId: string>> {
+]: nothing -> oneof<record<count: int, pageToken: string, data: table<appId: string, externalId: string, trackingId: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($geofence_id | is-empty) { error make --unspanned { msg: "path parameter 'geofenceId' must be non-empty" } }
@@ -2833,7 +2855,7 @@ export def "get-geofences-v2" [
   --bbox: list<float> # Limit search to geofences intersecting the given bounding box.
   --fields: list<string> # Field names to filter a result object.
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
-]: nothing -> record<count: int, pageToken: string, data: table<geofence: any, id: string>> {
+]: nothing -> oneof<record<count: int, pageToken: string, data: table<geofence: any, id: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "projectId" $project_id "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "floor" $floor "deepObject") (serialize-qp "type" $type "multi") (serialize-qp "bbox" $bbox "multi") (serialize-qp "fields" $fields "csv")] | flatten | str join "&"
@@ -2859,7 +2881,6 @@ export def "get-geofences-v2" [
 # Creates a geofence
 #
 # POST /geofences/v2
-# --definition shape: {center: record, floor?: record, radius: float}
 export def "post-geofences-v2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2875,8 +2896,8 @@ export def "post-geofences-v2" [
   --definition: record # An object that defines the area of a circular geofence — shape: {center: record, floor?: record, radius: float}
   --description: string # A description of the area that the geofence encloses and the purpose of the geofence.
   --name: string # A human-readable name of the geofence.
-  --type: string@type-completer-1 # The geofence type.
-]: any -> record<id: string, message: string> {
+  type: string@type-completer-1 # The geofence type.
+]: any -> oneof<record<id: string, message: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2915,7 +2936,7 @@ export def "get-geofences-v2-health" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<message: string> {
+]: nothing -> oneof<record<message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/geofences/v2/health" $auth.query)
@@ -2938,7 +2959,6 @@ export def "get-geofences-v2-health" [
 # Checks if a POI geofence training is possible with the given parameters
 #
 # POST /geofences/v2/trainingTest
-# --wlan item shape: {band?: "2.4"|"3.65"|"5", mac: string, powrx: int, timestamp?: string}
 export def "post-geofences-v2-training-test" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2954,7 +2974,7 @@ export def "post-geofences-v2-training-test" [
   --before: int # Milliseconds elapsed since 1 January 1970 00:00:00 UTC. The value must not be greater than current timestamp
   --id: string # This is a unique ID associated with the device data in HERE Tracking. For physical devices the `trackingId` gets assigned to a device when the device is claimed by a user, and for virtual devices it is an external device ID along with the device project `appId`.
   --wlan: list # WLAN access points — item shape: {band?: "2.4"|"3.65"|"5", mac: string, powrx: int, timestamp?: string}
-]: any -> record<metadata: record<coordinate: record<lat: float, lng: float>, timestamp: int, trackingId: string, usedWlanApCount: float>, reason: string, success: bool> {
+]: any -> oneof<record<metadata: record<coordinate: record<lat: float, lng: float>, timestamp: int, trackingId: string, usedWlanApCount: float>, reason: string, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3067,7 +3087,7 @@ export def "get-geofences-v2-geofence-id" [
   --accept: string@accept-completer # Response content type
   --fields: list<string> # Field names to filter a result object.
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
-]: nothing -> record<geofence: any, id: string> {
+]: nothing -> oneof<record<geofence: any, id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($geofence_id | is-empty) { error make --unspanned { msg: "path parameter 'geofenceId' must be non-empty" } }
@@ -3094,7 +3114,6 @@ export def "get-geofences-v2-geofence-id" [
 # Updates a single geofence
 #
 # PUT /geofences/v2/{geofenceId}
-# --definition shape: {center: record, floor?: record, radius: float}
 export def "put-geofences-v2-geofence-id" [
   geofence_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3111,8 +3130,8 @@ export def "put-geofences-v2-geofence-id" [
   --definition: record # An object that defines the area of a circular geofence — shape: {center: record, floor?: record, radius: float}
   --description: string # A description of the area that the geofence encloses and the purpose of the geofence.
   --name: string # A human-readable name of the geofence.
-  --type: string@type-completer-1 # The geofence type.
-]: any -> record<geofence: any, id: string> {
+  type: string@type-completer-1 # The geofence type.
+]: any -> oneof<record<geofence: any, id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3141,7 +3160,6 @@ export def "put-geofences-v2-geofence-id" [
 # Trains a POI geofence
 #
 # POST /geofences/v2/{geofenceId}/poiTraining
-# --wlan item shape: {band?: "2.4"|"3.65"|"5", mac: string, powrx: int, timestamp?: string}
 export def "post-geofences-v2-geofence-id-poi-training" [
   geofence_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3158,7 +3176,7 @@ export def "post-geofences-v2-geofence-id-poi-training" [
   --before: int # Milliseconds elapsed since 1 January 1970 00:00:00 UTC. The value must not be greater than current timestamp
   --id: string # This is a unique ID associated with the device data in HERE Tracking. For physical devices the `trackingId` gets assigned to a device when the device is claimed by a user, and for virtual devices it is an external device ID along with the device project `appId`.
   --wlan: list # WLAN access points — item shape: {band?: "2.4"|"3.65"|"5", mac: string, powrx: int, timestamp?: string}
-]: any -> record<trainingStatus: record<metadata: record<coordinate: record, timestamp: int, trackingId: string, usedWlanApCount: float>, trained: bool>> {
+]: any -> oneof<record<trainingStatus: record<metadata: record<coordinate: record, timestamp: int, trackingId: string, usedWlanApCount: float>, trained: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3197,7 +3215,7 @@ export def "get-labels-v4-health" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<message: string> {
+]: nothing -> oneof<record<message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/labels/v4/health" $auth.query)
@@ -3270,7 +3288,7 @@ export def "get-labels-v4-resource-type" [
   --limit: int # The number of items to return per page (default: 100)
   --fields: list<string> # Field names to filter a result object.
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
-]: nothing -> record<count: int, items: table<labels: record, resourceId: string, resourceType: string>, limit: int, nextPageToken: string> {
+]: nothing -> oneof<record<count: int, items: table<labels: record, resourceId: string, resourceType: string>, limit: int, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_type | is-empty) { error make --unspanned { msg: "path parameter 'resourceType' must be non-empty" } }
@@ -3310,7 +3328,7 @@ export def "get-labels-v4-resource-type-keys" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --project-id: string
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
-]: nothing -> record<keys: list<string>> {
+]: nothing -> oneof<record<keys: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_type | is-empty) { error make --unspanned { msg: "path parameter 'resourceType' must be non-empty" } }
@@ -3351,7 +3369,7 @@ export def "get-labels-v4-resource-type-keys-key-values" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --project-id: string
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
-]: nothing -> record<values: list<string>> {
+]: nothing -> oneof<record<values: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_type | is-empty) { error make --unspanned { msg: "path parameter 'resourceType' must be non-empty" } }
@@ -3436,7 +3454,7 @@ export def "get-labels-v4-resource-type-resource-id" [
   --app-id: string # Application identifier. Used together with an external ID to identify a virtual device.
   --fields: list<string> # Field names to filter a result object.
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
-]: nothing -> record<labels: record, resourceId: string, resourceType: string> {
+]: nothing -> oneof<record<labels: record, resourceId: string, resourceType: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_type | is-empty) { error make --unspanned { msg: "path parameter 'resourceType' must be non-empty" } }
@@ -3479,7 +3497,7 @@ export def "put-labels-v4-resource-type-resource-id-batch" [
   --app-id: string # Application identifier. Used together with an external ID to identify a virtual device.
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
   labels: record # A map of key-value pairs where the key is the label key and the value is an array of label values.
-]: any -> record<labels: record, resourceId: string, resourceType: string> {
+]: any -> oneof<record<labels: record, resourceId: string, resourceType: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3616,7 +3634,7 @@ export def "put-labels-v4-resource-type-resource-id-key-value" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --app-id: string # Application identifier. Used together with an external ID to identify a virtual device.
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
-]: nothing -> record<labels: record, resourceId: string, resourceType: string> {
+]: nothing -> oneof<record<labels: record, resourceId: string, resourceType: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_type | is-empty) { error make --unspanned { msg: "path parameter 'resourceType' must be non-empty" } }
@@ -3659,7 +3677,7 @@ export def "post-largedata-v4" [
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
   --description: string # Large data object description
   --name: string # Large data object name
-]: any -> record<dataId: string> {
+]: any -> oneof<record<dataId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3701,7 +3719,7 @@ export def "get-largedata-v4-devices-tracking-id-metadata" [
   --page-token: string # A token from the previously returned response to retrieve the specified page.
   --limit: int # The number of items to return per page (default: 100)
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
-]: nothing -> record<count: int, items: table<completedAt: string, createdAt: string, dataId: string, description: string, name: string, numberOfParts: int, size: int, status: string, trackingId: string>, limit: int, nextPageToken: string> {
+]: nothing -> oneof<record<count: int, items: table<completedAt: string, createdAt: string, dataId: string, description: string, name: string, numberOfParts: int, size: int, status: string, trackingId: string>, limit: int, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tracking_id | is-empty) { error make --unspanned { msg: "path parameter 'trackingId' must be non-empty" } }
@@ -3738,7 +3756,7 @@ export def "get-largedata-v4-health" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<message: string> {
+]: nothing -> oneof<record<message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/largedata/v4/health" $auth.query)
@@ -3925,7 +3943,7 @@ export def "get-largedata-v4-data-id-metadata" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
-]: nothing -> record<completedAt: string, createdAt: string, dataId: string, description: string, name: string, numberOfParts: int, size: int, status: string, trackingId: string> {
+]: nothing -> oneof<record<completedAt: string, createdAt: string, dataId: string, description: string, name: string, numberOfParts: int, size: int, status: string, trackingId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($data_id | is-empty) { error make --unspanned { msg: "path parameter 'dataId' must be non-empty" } }
@@ -3965,7 +3983,7 @@ export def "get-largedata-v4-data-id-parts" [
   --page-token: string # A token from the previously returned response to retrieve the specified page.
   --limit: int # The number of items to return per page (default: 100)
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
-]: nothing -> record<count: int, items: table<md5: string, partNumber: int, size: int, status: string>, limit: int, nextPageToken: string> {
+]: nothing -> oneof<record<count: int, items: table<md5: string, partNumber: int, size: int, status: string>, limit: int, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($data_id | is-empty) { error make --unspanned { msg: "path parameter 'dataId' must be non-empty" } }
@@ -4102,7 +4120,7 @@ export def "get-locations-v4" [
   --sort: string # A paramater to specify field to sort by and order. The following format can be used: 'name:asc' sort by name in ascending order, 'steet:desc' sort by street in descending order. Allowed fields to sort by: locationId, name, street, city, postalCode, state, country. (e.g. name:asc)
   --external-location-id: string # Filter locations by external location id
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
-]: nothing -> record<count: int, items: table<address: record, description: string, externalLocationId: string, geofenceId: string, location: record, locationId: string, name: string>, limit: int, nextPageToken: string, total: int> {
+]: nothing -> oneof<record<count: int, items: table<address: record, description: string, externalLocationId: string, geofenceId: string, location: record, locationId: string, name: string>, limit: int, nextPageToken: string, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "projectId" $project_id "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "geofenceId" $geofence_id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "street" $street "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "postalCode" $postal_code "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "locationId" $location_id "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "externalLocationId" $external_location_id "scalar")] | flatten | str join "&"
@@ -4128,8 +4146,6 @@ export def "get-locations-v4" [
 # Creates a location
 #
 # POST /locations/v4
-# --address shape: {city?: string, country?: string, postalCode?: string, state?: string, street?: string}
-# --location shape: {lat: float, lng: float}
 export def "post-locations-v4" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4148,7 +4164,7 @@ export def "post-locations-v4" [
   --geofence-id: string # Optional geofence ID associated with the location. A geofence with the specified ID must exist. (format: uuid)
   --location: record # Location coordinates. — shape: {lat: float, lng: float}
   --name: string # Name of the location.
-]: any -> record<locationId: string> {
+]: any -> oneof<record<locationId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4187,7 +4203,7 @@ export def "get-locations-v4-health" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<message: string> {
+]: nothing -> oneof<record<message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/locations/v4/health" $auth.query)
@@ -4289,7 +4305,7 @@ export def "get-locations-v4-location-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<address: record<city: string, country: string, postalCode: string, state: string, street: string>, description: string, externalLocationId: string, geofenceId: string, location: record<lat: float, lng: float>, locationId: string, name: string> {
+]: nothing -> oneof<record<address: record<city: string, country: string, postalCode: string, state: string, street: string>, description: string, externalLocationId: string, geofenceId: string, location: record<lat: float, lng: float>, locationId: string, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($location_id | is-empty) { error make --unspanned { msg: "path parameter 'locationId' must be non-empty" } }
@@ -4313,8 +4329,6 @@ export def "get-locations-v4-location-id" [
 # Updates a location details
 #
 # PUT /locations/v4/{locationId}
-# --address shape: {city?: string, country?: string, postalCode?: string, state?: string, street?: string}
-# --location shape: {lat: float, lng: float}
 export def "put-locations-v4-location-id" [
   location_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4332,7 +4346,7 @@ export def "put-locations-v4-location-id" [
   --geofence-id: string # Optional geofence ID associated with the location. A geofence with the specified ID must exist. (format: uuid)
   --location: record # Location coordinates. — shape: {lat: float, lng: float}
   --name: string # Name of the location.
-]: any -> record<address: record<city: string, country: string, postalCode: string, state: string, street: string>, description: string, externalLocationId: string, geofenceId: string, location: record<lat: float, lng: float>, locationId: string, name: string> {
+]: any -> oneof<record<address: record<city: string, country: string, postalCode: string, state: string, street: string>, description: string, externalLocationId: string, geofenceId: string, location: record<lat: float, lng: float>, locationId: string, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4373,7 +4387,7 @@ export def "post-metadata-v2-devices-batch" [
   --count: int # The number of items to return per page. (default: 100)
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
   --body: list
-]: any -> record<count: int, pageToken: string, data: table<data: record, id: string>> {
+]: any -> oneof<record<count: int, pageToken: string, data: table<data: record, id: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4455,7 +4469,7 @@ export def "get-metadata-v2-devices-tracking-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --app-id: string # Application identifier. Used together with an external ID to identify a virtual device.
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
-]: nothing -> record<data: record, id: string> {
+]: nothing -> oneof<record<data: record, id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tracking_id | is-empty) { error make --unspanned { msg: "path parameter 'trackingId' must be non-empty" } }
@@ -4496,7 +4510,7 @@ export def "put-metadata-v2-devices-tracking-id" [
   --app-id: string # Application identifier. Used together with an external ID to identify a virtual device.
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
   --body: record
-]: any -> record<data: record, id: string> {
+]: any -> oneof<record<data: record, id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4540,7 +4554,7 @@ export def "post-metadata-v2-geofences-batch" [
   --count: int # The number of items to return per page. (default: 100)
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
   --body: list
-]: any -> record<count: int, pageToken: string, data: table<data: record, id: string>> {
+]: any -> oneof<record<count: int, pageToken: string, data: table<data: record, id: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4619,7 +4633,7 @@ export def "get-metadata-v2-geofences-geofence-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
-]: nothing -> record<data: record, id: string> {
+]: nothing -> oneof<record<data: record, id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($geofence_id | is-empty) { error make --unspanned { msg: "path parameter 'geofenceId' must be non-empty" } }
@@ -4658,7 +4672,7 @@ export def "put-metadata-v2-geofences-geofence-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
   --body: record
-]: any -> record<data: record, id: string> {
+]: any -> oneof<record<data: record, id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4697,7 +4711,7 @@ export def "get-metadata-v2-health" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<message: string> {
+]: nothing -> oneof<record<message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/metadata/v2/health" $auth.query)
@@ -4734,7 +4748,7 @@ export def "post-metadata-v2-sensor-rules-batch" [
   --count: int # The number of items to return per page. (default: 100)
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
   --body: list
-]: any -> record<count: int, pageToken: string, data: table<data: record, id: string>> {
+]: any -> oneof<record<count: int, pageToken: string, data: table<data: record, id: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4813,7 +4827,7 @@ export def "get-metadata-v2-sensor-rules-sensor-rule-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
-]: nothing -> record<data: record, id: string> {
+]: nothing -> oneof<record<data: record, id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($sensor_rule_id | is-empty) { error make --unspanned { msg: "path parameter 'sensorRuleId' must be non-empty" } }
@@ -4852,7 +4866,7 @@ export def "put-metadata-v2-sensor-rules-sensor-rule-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
   --body: record
-]: any -> record<data: record, id: string> {
+]: any -> oneof<record<data: record, id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4924,7 +4938,7 @@ export def "get-notifications-v3-health" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<message: string> {
+]: nothing -> oneof<record<message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/notifications/v3/health" $auth.query)
@@ -4997,7 +5011,7 @@ export def "get-notifications-v3-registration-channel-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
-]: nothing -> record<registration: any> {
+]: nothing -> oneof<record<registration: any>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channelId' must be non-empty" } }
@@ -5041,7 +5055,7 @@ export def "put-notifications-v3-registration-channel-id" [
   --initial-state: oneof<nothing, bool> # Events with the `initialState` property set as `true` are generated when the rule is evaluated for the first time. It indicates the fact that this is the initial evaluation state, which would serve as a starting point for the subsequent rule evaluations. The rest of the rule events would represent a transition of a device or a shipment or a geofence from one state to another and their `initialState` property will be set to `false`.
   --rule-id: string # Must be a valid UUIDv4. (format: uuid)
   --url: string # A webhook URL that will receive notifications POST requests.
-]: any -> record<registration: any> {
+]: any -> oneof<record<registration: any>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5127,7 +5141,7 @@ export def "get-notifications-v3-registrations" [
   --user-id: string # User ID. Can be used by the project admin to filter email and browser pull notification channels by subscriber.
   --email-bounce: oneof<nothing, bool> # Filters by `emailBounce` property. When set to `true`, returns the email channels which are not active anymore due to email bounce. When set to `false`, returns all the channels which are active (and not only email channels).
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
-]: nothing -> record<count: int, pageToken: string, data: list<any>> {
+]: nothing -> oneof<record<count: int, pageToken: string, data: list<any>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageToken" $page_token "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "projectId" $project_id "scalar") (serialize-qp "channelType" $channel_type "multi") (serialize-qp "userId" $user_id "scalar") (serialize-qp "emailBounce" $email_bounce "scalar")] | flatten | str join "&"
@@ -5172,7 +5186,7 @@ export def "post-notifications-v3-registrations" [
   --initial-state: oneof<nothing, bool> # Events with the `initialState` property set as `true` are generated when the rule is evaluated for the first time. It indicates the fact that this is the initial evaluation state, which would serve as a starting point for the subsequent rule evaluations. The rest of the rule events would represent a transition of a device or a shipment or a geofence from one state to another and their `initialState` property will be set to `false`.
   --rule-id: string # Must be a valid UUIDv4. (format: uuid)
   --url: string # A webhook URL that will receive notifications POST requests.
-]: any -> record<registration: any> {
+]: any -> oneof<record<registration: any>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5287,7 +5301,7 @@ export def "get-registry-v2-devices-device-or-external-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --app-id: string # Application identifier. Used together with an external ID to identify a virtual device.
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
-]: nothing -> record<trackingId: string> {
+]: nothing -> oneof<record<trackingId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($device_or_external_id | is-empty) { error make --unspanned { msg: "path parameter 'deviceOrExternalId' must be non-empty" } }
@@ -5329,7 +5343,7 @@ export def "put-registry-v2-devices-device-or-external-id" [
   --project-id: string
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
   --owner-app-id: string # (Deprecated) Application identifier which specifies device owner's application to which the device is associated with.
-]: any -> record<trackingId: string> {
+]: any -> oneof<record<trackingId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5369,7 +5383,7 @@ export def "get-registry-v2-health" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<message: string> {
+]: nothing -> oneof<record<message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/registry/v2/health" $auth.query)
@@ -5407,7 +5421,7 @@ export def "get-registry-v2-licenses" [
   --project-ids: string
   --project-types: string
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
-]: nothing -> record<end: int, licenses: table<appId: string, expired: bool, expiryDate: string, features: list, projectDescription: string, projectHrn: string, projectId: string, projectName: string, quota: record, realm: string, type: string>, start: int, total: int> {
+]: nothing -> oneof<record<end: int, licenses: table<appId: string, expired: bool, expiryDate: string, features: list, projectDescription: string, projectHrn: string, projectId: string, projectName: string, quota: record, realm: string, type: string>, start: int, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "startIndex" $start_index "scalar") (serialize-qp "endIndex" $end_index "scalar") (serialize-qp "projectIds" $project_ids "scalar") (serialize-qp "projectTypes" $project_types "scalar")] | flatten | str join "&"
@@ -5480,7 +5494,7 @@ export def "get-registry-v2-app-id-devices" [
   --page-token: string # A token from the previously returned response to retrieve the specified page.
   --count: int # The number of items to return per page. (default: 100)
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
-]: nothing -> record<count: int, pageToken: string, data: table<appId: string, deviceId: string, externalId: string, timestamp: int>> {
+]: nothing -> oneof<record<count: int, pageToken: string, data: table<appId: string, deviceId: string, externalId: string, timestamp: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
@@ -5507,7 +5521,6 @@ export def "get-registry-v2-app-id-devices" [
 # Creates licenses for multiple devices
 #
 # POST /registry/v2/{appId}/devices
-# --devices item shape: {id?: string}
 export def "post-registry-v2-app-id-devices" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5523,7 +5536,7 @@ export def "post-registry-v2-app-id-devices" [
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
   --count: int # Number of device credentials requested
   --devices: list # item shape: {id?: string}
-]: any -> record<jobId: string> {
+]: any -> oneof<record<jobId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5565,7 +5578,7 @@ export def "get-registry-v2-app-id-license-count" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
-]: nothing -> record<count: float, updatedAt: string> {
+]: nothing -> oneof<record<count: float, updatedAt: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
@@ -5604,7 +5617,7 @@ export def "post-registry-v2-app-id-one-device" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --autoclaim: oneof<nothing, bool> # If set to `true`, the device license is created and the device is immediately claimed by the same user. (default: false)
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
-]: nothing -> record<deviceId: string, deviceSecret: string, trackingId: string> {
+]: nothing -> oneof<record<deviceId: string, deviceSecret: string, trackingId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
@@ -5645,7 +5658,7 @@ export def "get-registry-v2-job-id-results" [
   --page-token: string # A token from the previously returned response to retrieve the specified page.
   --count: int # The number of items to return per page. (default: 100)
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
-]: nothing -> record<count: int, pageToken: string, data: table<deviceId: string, deviceSecret: string, externalId: string, trackingId: string>, errors: table<error: record, id: string>> {
+]: nothing -> oneof<record<count: int, pageToken: string, data: table<deviceId: string, deviceSecret: string, externalId: string, trackingId: string>, errors: table<error: record, id: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
@@ -5684,7 +5697,7 @@ export def "get-registry-v2-job-id-status" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
-]: nothing -> record<percent: float, status: string> {
+]: nothing -> oneof<record<percent: float, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
@@ -5763,7 +5776,7 @@ export def "get-registry-v2-tracking-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --app-id: string # Application identifier. Used together with an external ID to identify a virtual device.
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
-]: nothing -> record<deviceId: string> {
+]: nothing -> oneof<record<deviceId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tracking_id | is-empty) { error make --unspanned { msg: "path parameter 'trackingId' must be non-empty" } }
@@ -5806,7 +5819,7 @@ export def "post-registry-v4-resources-resource-type-find" [
   --project-id: string
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
   filters: list
-]: any -> record<count: int, items: table<resourceId: string>, limit: int, nextPageToken: string, total: int> {
+]: any -> oneof<record<count: int, items: table<resourceId: string>, limit: int, nextPageToken: string, total: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5851,7 +5864,7 @@ export def "post-reports-v4" [
   end: string # End date of the report period. The end date should be greater than the start date. (format: date-time)
   rule_id: string # Rule ID of a dwelling or detention rule. (format: uuid)
   start: string # Start date and time of the report period. When getting reports per interval, this timestamp defines the start of the interval day, week or month. For example, to make the report week start on Monday midnight 1st March 2021 in timezone UTC+1:00, set the `start` parameter to be `2021-02-28T23:00:00.000Z` (GMT). Now when getting interval reports, the first week would contain data between `2021-02-28T23:00:00.000Z` and `2021-03-07T23:00:00.000Z` (GMT). (format: date-time)
-]: any -> record<reportId: string> {
+]: any -> oneof<record<reportId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5890,7 +5903,7 @@ export def "get-reports-v4-health" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<message: string> {
+]: nothing -> oneof<record<message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/reports/v4/health" $auth.query)
@@ -5968,7 +5981,7 @@ export def "get-reports-v4-report-id" [
   --method: string@method-completer # Defines the calculation method. The parameter `method` can only be provided along with `interval`. The parameter value can be `percentage` only when `measure` is 'asset'. For example, to get a report on percentage of all assets that were in use during each week, create a request specifying the following: * `reportId`: ID of a report created for a utilization rule * `interval`: 'week' * `method`: 'percentage' * `measure`: 'asset' When `method` is set to 'cumulative' or 'average' and `measure` is set to 'duration' or 'occurrence', the `groupBy` parameter needs to be provided also. For example, to get a report on how long all assets dwelled in total in the specified geofence during each week, create a request specifying the following: * `reportId`: ID of a report created for a dwelling rule * `geofenceId`: ID of a geofence * `interval`: 'week' * `method`: 'cumulative' * `measure`: 'duration' * `groupBy`: 'asset' When `method` is set to 'cumulative' or 'average' and `measure` is set to 'day', the `groupBy` parameter is automatically set to 'asset'. For example, to get a report on how many days on average assets were in use during each month, create a request specifying the following: * `reportId`: ID of a report created for a utilization rule * `interval`: 'month' * `method`: 'average' * `measure`: 'day' * `groupBy`: 'asset'
   --sort: string # Defines how the items are sorted. * If `interval` is provided, the default is `sort`=`timestamp:asc` * If `interval` is not provided, the default is `sort`=`value:desc` (e.g. timestamp:asc)
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
-]: nothing -> record<count: int, items: list<any>, limit: int, nextPageToken: string, status: string> {
+]: nothing -> oneof<record<count: int, items: list<any>, limit: int, nextPageToken: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($report_id | is-empty) { error make --unspanned { msg: "path parameter 'reportId' must be non-empty" } }
@@ -6049,7 +6062,7 @@ export def "get-rules-v4" [
   --page-token: string # A token from the previously returned response to retrieve the specified page.
   --limit: int # The number of items to return per page (default: 100)
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
-]: nothing -> record<count: int, items: table<rule: any, ruleId: string>, limit: int, nextPageToken: string> {
+]: nothing -> oneof<record<count: int, items: table<rule: any, ruleId: string>, limit: int, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "projectId" $project_id "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
@@ -6075,7 +6088,6 @@ export def "get-rules-v4" [
 # Creates a rule
 #
 # POST /rules/v4
-# --threshold shape: {durationS: int}
 export def "post-rules-v4" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6091,9 +6103,9 @@ export def "post-rules-v4" [
   --description: string # Rule description
   --name: string # Rule name
   --threshold: record # Utilization event is triggered when the asset starts moving indicating that the asset is utilized, and also when the asset stops moving and has been stationary for longer than the threshold duration indicating that the asset is unutilized. — shape: {durationS: int}
-  --type: string@type-completer-2 # The rule type
+  type: string@type-completer-2 # The rule type
   --geofence-id: string # Geofence ID (format: uuid)
-]: any -> record<ruleId: string> {
+]: any -> oneof<record<ruleId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6132,7 +6144,7 @@ export def "get-rules-v4-health" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<message: string> {
+]: nothing -> oneof<record<message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rules/v4/health" $auth.query)
@@ -6238,7 +6250,7 @@ export def "get-rules-v4-rule-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
-]: nothing -> record<rule: any, ruleId: string> {
+]: nothing -> oneof<record<rule: any, ruleId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rule_id | is-empty) { error make --unspanned { msg: "path parameter 'ruleId' must be non-empty" } }
@@ -6264,7 +6276,6 @@ export def "get-rules-v4-rule-id" [
 # Updates a single rule
 #
 # PUT /rules/v4/{ruleId}
-# --threshold shape: {durationS: int}
 export def "put-rules-v4-rule-id" [
   rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6280,9 +6291,9 @@ export def "put-rules-v4-rule-id" [
   --description: string # Rule description
   --name: string # Rule name
   --threshold: record # Utilization event is triggered when the asset starts moving indicating that the asset is utilized, and also when the asset stops moving and has been stationary for longer than the threshold duration indicating that the asset is unutilized. — shape: {durationS: int}
-  --type: string@type-completer-2 # The rule type
+  type: string@type-completer-2 # The rule type
   --geofence-id: string # Geofence ID (format: uuid)
-]: any -> record<rule: any, ruleId: string> {
+]: any -> oneof<record<rule: any, ruleId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6365,7 +6376,7 @@ export def "get-sensors-v3" [
   --page-token: string # A token from the previously returned response to retrieve the specified page.
   --count: int # The number of items to return per page. (default: 100)
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
-]: nothing -> record<count: int, pageToken: string, data: table<description: string, id: string, name: string, range: record, threshold: record, type: string>> {
+]: nothing -> oneof<record<count: int, pageToken: string, data: table<description: string, id: string, name: string, range: record, threshold: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "projectId" $project_id "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
@@ -6391,8 +6402,6 @@ export def "get-sensors-v3" [
 # Creates a sensor rule
 #
 # POST /sensors/v3
-# --range shape: {begin: float, end: float}
-# --threshold shape: {value: float}
 export def "post-sensors-v3" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6408,9 +6417,9 @@ export def "post-sensors-v3" [
   --description: string # Sensor rule description
   --name: string # Sensor rule name
   --range: record # shape: {begin: float, end: float}
-  --type: string@type-completer-3 # The sensor type.
+  type: string@type-completer-3 # The sensor type.
   --threshold: record # shape: {value: float}
-]: any -> record<id: string, message: string> {
+]: any -> oneof<record<id: string, message: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6449,7 +6458,7 @@ export def "get-sensors-v3-health" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<message: string> {
+]: nothing -> oneof<record<message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sensors/v3/health" $auth.query)
@@ -6555,7 +6564,7 @@ export def "get-sensors-v3-sensor-rule-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
-]: nothing -> record<description: string, id: string, name: string, range: record<begin: float, end: float>, threshold: record<value: float>, type: string> {
+]: nothing -> oneof<record<description: string, id: string, name: string, range: record<begin: float, end: float>, threshold: record<value: float>, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($sensor_rule_id | is-empty) { error make --unspanned { msg: "path parameter 'sensorRuleId' must be non-empty" } }
@@ -6581,8 +6590,6 @@ export def "get-sensors-v3-sensor-rule-id" [
 # Updates a single sensor rule
 #
 # PUT /sensors/v3/{sensorRuleId}
-# --range shape: {begin: float, end: float}
-# --threshold shape: {value: float}
 export def "put-sensors-v3-sensor-rule-id" [
   sensor_rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6598,9 +6605,9 @@ export def "put-sensors-v3-sensor-rule-id" [
   --description: string # Sensor rule description
   --name: string # Sensor rule name
   --range: record # shape: {begin: float, end: float}
-  --type: string@type-completer-3 # The sensor type.
+  type: string@type-completer-3 # The sensor type.
   --threshold: record # shape: {value: float}
-]: any -> record<message: string, description: string, id: string, name: string, range: record<begin: float, end: float>, threshold: record<value: float>, type: string> {
+]: any -> oneof<record<message: string, description: string, id: string, name: string, range: record<begin: float, end: float>, threshold: record<value: float>, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6643,7 +6650,7 @@ export def "post-shadows-v2-batch" [
   --app-id: string # Application identifier. Used together with an external ID to identify a virtual device.
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
   --body: list
-]: any -> table<appId: string, body: record<desired: record, reported: record>, externalId: string, statusCode: int, trackingId: string> {
+]: any -> oneof<table<appId: string, body: record<desired: record, reported: record>, externalId: string, statusCode: int, trackingId: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6682,7 +6689,7 @@ export def "get-shadows-v2-health" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<message: string> {
+]: nothing -> oneof<record<message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/shadows/v2/health" $auth.query)
@@ -6793,7 +6800,7 @@ export def "get-shadows-v2-tracking-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --app-id: string # Application identifier. Used together with an external ID to identify a virtual device.
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
-]: nothing -> record<desired: record<payload: record, system: record<detectOutliers: bool, disableTracking: record, lastModifiedGeofenceTimestamp: int, rate: record, sensorAlarmConfig: record, sensorLoggingConfigurations: list, sensorLoggingEnabled: bool, stateVersion: int, syncGeofences: bool, wlanConfigurations: list, wlanConnectivityEnabled: bool>, timestamp: int>, reported: record<payload: record, position: record<accuracy: float, alt: float, altaccuracy: float, confidence: int, floor: record, heading: int, lat: float, lng: float, satellitecount: int, speed: int, timestamp: int, type: string, wlancount: int>, system: record<client: record, computed: record, iccid: string, imsi: string, mode: string, phoneNumber: string, reportedSensorData: record, stateVersion: int>, timestamp: int>> {
+]: nothing -> oneof<record<desired: record<payload: record, system: record<detectOutliers: bool, disableTracking: record, lastModifiedGeofenceTimestamp: int, rate: record, sensorAlarmConfig: record, sensorLoggingConfigurations: list, sensorLoggingEnabled: bool, stateVersion: int, syncGeofences: bool, wlanConfigurations: list, wlanConnectivityEnabled: bool>, timestamp: int>, reported: record<payload: record, position: record<accuracy: float, alt: float, altaccuracy: float, confidence: int, floor: record, heading: int, lat: float, lng: float, satellitecount: int, speed: int, timestamp: int, type: string, wlancount: int>, system: record<client: record, computed: record, iccid: string, imsi: string, mode: string, phoneNumber: string, reportedSensorData: record, stateVersion: int>, timestamp: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tracking_id | is-empty) { error make --unspanned { msg: "path parameter 'trackingId' must be non-empty" } }
@@ -6820,7 +6827,6 @@ export def "get-shadows-v2-tracking-id" [
 # Updates a device shadow
 #
 # PUT /shadows/v2/{trackingId}
-# --desired shape: {payload?: record, system?: record}
 export def "put-shadows-v2-tracking-id" [
   tracking_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6836,7 +6842,7 @@ export def "put-shadows-v2-tracking-id" [
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
   --content-length: float # The size of the shadow in bytes. The size is validated against the maximum limit of 1000 bytes. (required)
   desired: record # The desired shadow of the device. — shape: {payload?: record, system?: record}
-]: any -> record<desired: record<payload: record, system: record<detectOutliers: bool, disableTracking: record, lastModifiedGeofenceTimestamp: int, rate: record, sensorAlarmConfig: record, sensorLoggingConfigurations: list, sensorLoggingEnabled: bool, stateVersion: int, syncGeofences: bool, wlanConfigurations: list, wlanConnectivityEnabled: bool>, timestamp: int>, reported: record<payload: record, position: record<accuracy: float, alt: float, altaccuracy: float, confidence: int, floor: record, heading: int, lat: float, lng: float, satellitecount: int, speed: int, timestamp: int, type: string, wlancount: int>, system: record<client: record, computed: record, iccid: string, imsi: string, mode: string, phoneNumber: string, reportedSensorData: record, stateVersion: int>, timestamp: int>> {
+]: any -> oneof<record<desired: record<payload: record, system: record<detectOutliers: bool, disableTracking: record, lastModifiedGeofenceTimestamp: int, rate: record, sensorAlarmConfig: record, sensorLoggingConfigurations: list, sensorLoggingEnabled: bool, stateVersion: int, syncGeofences: bool, wlanConfigurations: list, wlanConnectivityEnabled: bool>, timestamp: int>, reported: record<payload: record, position: record<accuracy: float, alt: float, altaccuracy: float, confidence: int, floor: record, heading: int, lat: float, lng: float, satellitecount: int, speed: int, timestamp: int, type: string, wlancount: int>, system: record<client: record, computed: record, iccid: string, imsi: string, mode: string, phoneNumber: string, reportedSensorData: record, stateVersion: int>, timestamp: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6971,7 +6977,7 @@ export def "get-shadows-v4" [
   --sort: string # Defines how the items are sorted. The default sort is `sort=trackingId:asc` (e.g. reported.timestamp:desc)
   --bbox: list<float> # Limit search to shadows, whose position intersects the given bounding box. The `bbox` array consist of latitude and longitude of Northwest and Southeast corners. (e.g. 61.494750,23.775189,61.494611,23.774758)
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
-]: nothing -> record<count: int, items: table<appId: string, externalId: string, shadow: record, trackingId: string>, limit: int, nextPageToken: string> {
+]: nothing -> oneof<record<count: int, items: table<appId: string, externalId: string, shadow: record, trackingId: string>, limit: int, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "projectId" $project_id "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "after" $after "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "bbox" $bbox "multi")] | flatten | str join "&"
@@ -7014,7 +7020,7 @@ export def "post-shipment-reports-v4" [
   --shipment-plan-ids: list<string> # Provide array of shipment plan ids to include into the shipment report. If just a single shipment plan id is given, then the shipment report will include only metrics and shipments for the given shipment plan. If none is given, then the shipment report will include all shipment plans.
   --started-after: string # Include successfully completed shipments of each shipment plan into the shipment report generation which started after the provided date. (format: date-time)
   --started-before: string # Include successfully completed shipments of each shipment plan into the shipment report generation which started before the provided date. (format: date-time)
-]: any -> record<shipmentReportId: string> {
+]: any -> oneof<record<shipmentReportId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7053,7 +7059,7 @@ export def "get-shipment-reports-v4-health" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<message: string> {
+]: nothing -> oneof<record<message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/shipment-reports/v4/health" $auth.query)
@@ -7120,7 +7126,7 @@ export def "get-shipment-reports-v4-shipment-report-id-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<error: record<code: int, details: any, error: string, id: string, message: string>, status: string> {
+]: nothing -> oneof<record<error: record<code: int, details: any, error: string, id: string, message: string>, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($shipment_report_id | is-empty) { error make --unspanned { msg: "path parameter 'shipmentReportId' must be non-empty" } }
@@ -7155,7 +7161,7 @@ export def "get-shipment-reports-v4-shipment-report-id-summary" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<completedAt: string, createdAt: string, totalLocationCount: int, totalSegmentPlanCount: int, totalSegmentsCount: int, totalShipmentPlanCount: int, totalShipmentsCount: int> {
+]: nothing -> oneof<record<completedAt: string, createdAt: string, totalLocationCount: int, totalSegmentPlanCount: int, totalSegmentsCount: int, totalShipmentPlanCount: int, totalShipmentsCount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($shipment_report_id | is-empty) { error make --unspanned { msg: "path parameter 'shipmentReportId' must be non-empty" } }
@@ -7194,7 +7200,7 @@ export def "get-shipment-reports-v4-shipment-report-id-metric" [
   --page-token: string # A token from the previously returned response to retrieve the specified page.
   --limit: int # The number of items to return per page (default: 100)
   --sort: string # The response items can be sorted to ascending or descending order by their statistics properties. E.g for `shipmentPlanPunctualityAtOrigin` it could be `avg:desc`. Default is ascending sort order.
-]: nothing -> record<count: int, items: table<ids: record, statistics: record, statisticsCount: int>, limit: int, nextPageToken: string, total: int> {
+]: nothing -> oneof<record<count: int, items: table<ids: record, statistics: record, statisticsCount: int>, limit: int, nextPageToken: string, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($shipment_report_id | is-empty) { error make --unspanned { msg: "path parameter 'shipmentReportId' must be non-empty" } }
@@ -7286,7 +7292,7 @@ export def "get-shipments-v4" [
   --created-after: string # Return only shipments that have been created after specified timestamp (format: date-time)
   --sort: string # A paramater to specify field to sort by and order. The following format can be used: 'name:asc' sort by name in ascending order, 'shipmentId:desc' sort by shipmentId in descending order. Allowed fields to sort by: shipmentId, name, status, startedAt, createdAt, endedAt, providedEtd, providedEta, calculatedEtd. (e.g. name:asc)
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
-]: nothing -> record<count: int, items: table<autoStart: bool, calculatedEta: string, calculatedEtd: string, createdAt: string, description: string, endedAt: string, name: string, providedEta: string, providedEtd: string, ruleIds: list, segments: list, shipmentId: string, shipmentPlanId: string, startedAt: string, status: string, subShipment: bool>, limit: int, nextPageToken: string, total: int> {
+]: nothing -> oneof<record<count: int, items: table<autoStart: bool, calculatedEta: string, calculatedEtd: string, createdAt: string, description: string, endedAt: string, name: string, providedEta: string, providedEtd: string, ruleIds: list, segments: list, shipmentId: string, shipmentPlanId: string, startedAt: string, status: string, subShipment: bool>, limit: int, nextPageToken: string, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "projectId" $project_id "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "startedBefore" $started_before "scalar") (serialize-qp "startedAfter" $started_after "scalar") (serialize-qp "endedBefore" $ended_before "scalar") (serialize-qp "endedAfter" $ended_after "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "shipmentPlanId" $shipment_plan_id "scalar") (serialize-qp "shipmentId" $shipment_id "scalar") (serialize-qp "isSubShipment" $is_sub_shipment "scalar") (serialize-qp "createdBefore" $created_before "scalar") (serialize-qp "createdAfter" $created_after "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
@@ -7312,7 +7318,6 @@ export def "get-shipments-v4" [
 # Creates a shipment
 #
 # POST /shipments/v4
-# --segments item shape: {description?: string, destination: string, name?: string, origin: string, providedEta?: string, providedEtd?: string, trackingId?: string, transportMode: "car"|"truck"|"sea"|"air"|"undefined"}
 export def "post-shipments-v4" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7335,7 +7340,7 @@ export def "post-shipments-v4" [
   --sub-shipment: oneof<nothing, bool> # Flag telling if shipment is a subShipment. (default: false)
   --shipment-departure: string # ETD of the shipment instance. Used to calculate the ETDs and ETAs of all the segments based on the segment durations defined in the plan. (format: date-time)
   --shipment-plan-id: string # Shipment plan ID
-]: any -> record<shipmentId: string> {
+]: any -> oneof<record<shipmentId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7374,7 +7379,7 @@ export def "get-shipments-v4-health" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<message: string> {
+]: nothing -> oneof<record<message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/shipments/v4/health" $auth.query)
@@ -7458,7 +7463,7 @@ export def "get-shipments-v4-plans" [
   --is-sub-shipment: oneof<nothing, bool> # Returns only shipments marked as subShipments
   --sort: string # A paramater to specify field to sort by and order. Allowed fields to sort by: shipmentPlanId, name, createdAt (e.g. name:asc)
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
-]: nothing -> record<count: int, items: table<autoStart: bool, createdAt: string, description: string, name: string, ruleIds: list, segments: list, shipmentPlanId: string, subShipment: bool>, limit: int, nextPageToken: string, total: int> {
+]: nothing -> oneof<record<count: int, items: table<autoStart: bool, createdAt: string, description: string, name: string, ruleIds: list, segments: list, shipmentPlanId: string, subShipment: bool>, limit: int, nextPageToken: string, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "projectId" $project_id "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "shipmentPlanId" $shipment_plan_id "scalar") (serialize-qp "locationId" $location_id "scalar") (serialize-qp "createdBefore" $created_before "scalar") (serialize-qp "createdAfter" $created_after "scalar") (serialize-qp "isSubShipment" $is_sub_shipment "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
@@ -7484,8 +7489,6 @@ export def "get-shipments-v4-plans" [
 # Creates a shipment plan
 #
 # POST /shipments/v4/plans
-# --segments item shape: {description?: string, destination: string, durationS?: int, name?: string, origin: string, trackingId?: string, transportMode: "car"|"truck"|"sea"|"air"|"undefined"}
-# --options shape: {calculateDurationsFrom?: "actuals"|"providedEstimate"|"calculatedEstimate", copyTrackingIds?: bool}
 export def "post-shipments-v4-plans" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7506,7 +7509,7 @@ export def "post-shipments-v4-plans" [
   --sub-shipment: oneof<nothing, bool> # Flag telling if shipment is a subShipment. (default: false)
   --options: record # Optional parameters for plan creation — shape: {calculateDurationsFrom?: "actuals"|"providedEstimate"|"calculatedEstimate", copyTrackingIds?: bool}
   --shipment-id: string # Shipment ID
-]: any -> record<shipmentPlanId: string> {
+]: any -> oneof<record<shipmentPlanId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7581,7 +7584,7 @@ export def "get-shipments-v4-plans-shipment-plan-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<autoStart: bool, createdAt: string, description: string, name: string, ruleIds: list<string>, segments: table<description: string, destination: string, durationS: int, name: string, origin: string, segmentPlanId: string, trackingId: string, transportMode: string>, shipmentPlanId: string, subShipment: bool> {
+]: nothing -> oneof<record<autoStart: bool, createdAt: string, description: string, name: string, ruleIds: list<string>, segments: table<description: string, destination: string, durationS: int, name: string, origin: string, segmentPlanId: string, trackingId: string, transportMode: string>, shipmentPlanId: string, subShipment: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($shipment_plan_id | is-empty) { error make --unspanned { msg: "path parameter 'shipmentPlanId' must be non-empty" } }
@@ -7660,7 +7663,7 @@ export def "get-shipments-v4-plans-shipment-plan-id-segment-plan-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<description: string, destination: string, durationS: int, name: string, origin: string, segmentPlanId: string, trackingId: string, transportMode: string> {
+]: nothing -> oneof<record<description: string, destination: string, durationS: int, name: string, origin: string, segmentPlanId: string, trackingId: string, transportMode: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($shipment_plan_id | is-empty) { error make --unspanned { msg: "path parameter 'shipmentPlanId' must be non-empty" } }
@@ -7809,7 +7812,7 @@ export def "get-shipments-v4-shipment-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<autoStart: bool, calculatedEta: string, calculatedEtd: string, createdAt: string, description: string, endedAt: string, name: string, providedEta: string, providedEtd: string, ruleIds: list<string>, segments: table<calculatedEta: string, calculatedEtd: string, createdAt: string, description: string, destination: string, endedAt: string, name: string, origin: string, providedEta: string, providedEtd: string, segmentId: string, startedAt: string, status: string, trackingId: string, transportMode: string>, shipmentId: string, shipmentPlanId: string, startedAt: string, status: string, subShipment: bool> {
+]: nothing -> oneof<record<autoStart: bool, calculatedEta: string, calculatedEtd: string, createdAt: string, description: string, endedAt: string, name: string, providedEta: string, providedEtd: string, ruleIds: list<string>, segments: table<calculatedEta: string, calculatedEtd: string, createdAt: string, description: string, destination: string, endedAt: string, name: string, origin: string, providedEta: string, providedEtd: string, segmentId: string, startedAt: string, status: string, trackingId: string, transportMode: string>, shipmentId: string, shipmentPlanId: string, startedAt: string, status: string, subShipment: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($shipment_id | is-empty) { error make --unspanned { msg: "path parameter 'shipmentId' must be non-empty" } }
@@ -7833,7 +7836,6 @@ export def "get-shipments-v4-shipment-id" [
 # Updates a shipment details
 #
 # PATCH /shipments/v4/{shipmentId}
-# --segments item shape: {description?: string, destination: string, name?: string, origin: string, providedEta?: string, providedEtd?: string, trackingId?: string, transportMode: "car"|"truck"|"sea"|"air"|"undefined"}
 export def "patch-shipments-v4-shipment-id" [
   shipment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7893,7 +7895,7 @@ export def "get-shipments-v4-shipment-id-segment-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<calculatedEta: string, calculatedEtd: string, createdAt: string, description: string, destination: string, endedAt: string, name: string, origin: string, providedEta: string, providedEtd: string, segmentId: string, startedAt: string, status: string, trackingId: string, transportMode: string> {
+]: nothing -> oneof<record<calculatedEta: string, calculatedEtd: string, createdAt: string, description: string, destination: string, endedAt: string, name: string, origin: string, providedEta: string, providedEtd: string, segmentId: string, startedAt: string, status: string, trackingId: string, transportMode: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($shipment_id | is-empty) { error make --unspanned { msg: "path parameter 'shipmentId' must be non-empty" } }
@@ -7979,7 +7981,7 @@ export def "get-shipments-v4-tracking-id-segments" [
   --page-token: string # A token from the previously returned response to retrieve the specified page.
   --limit: int # The number of items to return per page (default: 100)
   --status: string@status-completer # Filter the results by segment status
-]: nothing -> record<count: int, items: table<calculatedEta: string, calculatedEtd: string, createdAt: string, description: string, destination: string, endedAt: string, name: string, origin: string, providedEta: string, providedEtd: string, segmentId: string, shipmentId: string, startedAt: string, status: string, trackingId: string, transportMode: string>, limit: int, nextPageToken: string> {
+]: nothing -> oneof<record<count: int, items: table<calculatedEta: string, calculatedEtd: string, createdAt: string, description: string, destination: string, endedAt: string, name: string, origin: string, providedEta: string, providedEtd: string, segmentId: string, shipmentId: string, startedAt: string, status: string, trackingId: string, transportMode: string>, limit: int, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tracking_id | is-empty) { error make --unspanned { msg: "path parameter 'trackingId' must be non-empty" } }
@@ -8014,7 +8016,7 @@ export def "get-traces-v2-health" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<message: string> {
+]: nothing -> oneof<record<message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/traces/v2/health" $auth.query)
@@ -8130,7 +8132,7 @@ export def "get-traces-v2-tracking-id" [
   --page-token: string # A token from the previously returned response to retrieve the specified page.
   --count: int # The number of records per page. (default: 1000)
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
-]: nothing -> record<count: int, pageToken: string, data: table<payload: record, position: record, serverTimestamp: int, system: record, timestamp: int, trackingDisabled: list>> {
+]: nothing -> oneof<record<count: int, pageToken: string, data: table<payload: record, position: record, serverTimestamp: int, system: record, timestamp: int, trackingDisabled: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tracking_id | is-empty) { error make --unspanned { msg: "path parameter 'trackingId' must be non-empty" } }
@@ -8176,7 +8178,7 @@ export def "get-transitions-v2-devices-tracking-id" [
   --page-token: string # A token from the previously returned response to retrieve the specified page.
   --count: int # The number of items to return per page. (default: 100)
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
-]: nothing -> record<count: int, pageToken: string, data: table<geofence: any, geofenceId: string, inOut: string, notificationStatus: string, timestamp: int, trackingId: string>> {
+]: nothing -> oneof<record<count: int, pageToken: string, data: table<geofence: any, geofenceId: string, inOut: string, notificationStatus: string, timestamp: int, trackingId: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tracking_id | is-empty) { error make --unspanned { msg: "path parameter 'trackingId' must be non-empty" } }
@@ -8215,7 +8217,7 @@ export def "get-transitions-v2-health" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<message: string> {
+]: nothing -> oneof<record<message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transitions/v2/health" $auth.query)
@@ -8287,7 +8289,7 @@ export def "get-users-v2-devices" [
   --page-token: string # A token from the previously returned response to retrieve the specified page.
   --count: int # The number of items to return per page. (default: 100)
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
-]: nothing -> record<count: int, pageToken: string, data: table<appId: string, externalId: string, shadow: record, trackingId: string>> {
+]: nothing -> oneof<record<count: int, pageToken: string, data: table<appId: string, externalId: string, shadow: record, trackingId: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "projectId" $project_id "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
@@ -8323,7 +8325,7 @@ export def "get-users-v2-health" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<message: string> {
+]: nothing -> oneof<record<message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users/v2/health" $auth.query)
@@ -8360,7 +8362,7 @@ export def "post-users-v2-login" [
   email: string # The email address of the user
   password: string # The password of the user
   --realm: string # A case-insensitive requested realm ID
-]: any -> record<accessToken: string, expiresIn: int, realm: string, refreshToken: string, tokenType: string, userId: string> {
+]: any -> oneof<record<accessToken: string, expiresIn: int, realm: string, refreshToken: string, tokenType: string, userId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8401,7 +8403,7 @@ export def "post-users-v2-refresh" [
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
   access_token: string # The access token obtained in a previous login
   refresh_token: string # The refresh token obtained in a previous login
-]: any -> record<accessToken: string, expiresIn: int, realm: string, refreshToken: string, tokenType: string, userId: string> {
+]: any -> oneof<record<accessToken: string, expiresIn: int, realm: string, refreshToken: string, tokenType: string, userId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8442,7 +8444,7 @@ export def "post-users-v2-token-exchange" [
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
   access_token: string # HERE Account user access token, obtained from login endpoint.
   scope: string # Requested scope of the access token. Must be an HRN identifying a project that the identified user has access to.
-]: any -> record<accessToken: string, expiresIn: int, issuedTokenType: string, scope: string, tokenType: string> {
+]: any -> oneof<record<accessToken: string, expiresIn: int, issuedTokenType: string, scope: string, tokenType: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8517,7 +8519,7 @@ export def "post-v2" [
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
   --authorization: string # required, e.g. Bearer h1.yxPIksZ0ViLq77f1Nh-9cg.NVgGBZVlCU8G7kjV_...
   --body: list
-]: any -> record<payload: record, system: record<detectOutliers: bool, disableTracking: record<periods: list, position: any, sensors: any>, lastModifiedGeofenceTimestamp: int, rate: record<distanceM: float, sampleMs: float, sendMs: float>, sensorAlarmConfig: record<alertAccelerationGMax: float, alertAccelerationGMin: float, alertBatteryLevelPMax: float, alertBatteryLevelPMin: float, alertPressureHpaMax: float, alertPressureHpaMin: float, alertRelativeHumidityMax: float, alertRelativeHumidityMin: float, alertTemperatureCMax: float, alertTemperatureCMin: float, alertTiltDegreeMax: float, alertTiltDegreeMin: float, isAttachAlertEnabled: bool, isTamperAlertEnabled: bool>, sensorLoggingConfigurations: list<record>, sensorLoggingEnabled: bool, stateVersion: int, syncGeofences: bool, wlanConfigurations: list<record>, wlanConnectivityEnabled: bool>, timestamp: int> {
+]: any -> oneof<record<payload: record, system: record<detectOutliers: bool, disableTracking: record<periods: list, position: any, sensors: any>, lastModifiedGeofenceTimestamp: int, rate: record<distanceM: float, sampleMs: float, sendMs: float>, sensorAlarmConfig: record<alertAccelerationGMax: float, alertAccelerationGMin: float, alertBatteryLevelPMax: float, alertBatteryLevelPMin: float, alertPressureHpaMax: float, alertPressureHpaMin: float, alertRelativeHumidityMax: float, alertRelativeHumidityMin: float, alertTemperatureCMax: float, alertTemperatureCMin: float, alertTiltDegreeMax: float, alertTiltDegreeMin: float, isAttachAlertEnabled: bool, isTamperAlertEnabled: bool>, sensorLoggingConfigurations: list<record>, sensorLoggingEnabled: bool, stateVersion: int, syncGeofences: bool, wlanConfigurations: list<record>, wlanConnectivityEnabled: bool>, timestamp: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8557,7 +8559,7 @@ export def "get-v2-health" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<message: string> {
+]: nothing -> oneof<record<message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/health" $auth.query)
@@ -8591,7 +8593,7 @@ export def "get-v2-timestamp" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
-]: nothing -> record<timestamp: int> {
+]: nothing -> oneof<record<timestamp: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/timestamp" $auth.query)
@@ -8628,7 +8630,7 @@ export def "post-v2-token" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4. (format: uuid)
   --authorization: string # Signed OAuth 1.0 header (required, e.g. OAuth oauth_consumer_key='{deviceId}',oauth_signature_method='HMAC_SHA256',oauth_timestamp='{nowS}',oauth_nonce='{nonce}',oauth_signature='{signature}')
-]: nothing -> record<accessToken: string, expiresIn: int> {
+]: nothing -> oneof<record<accessToken: string, expiresIn: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "oauth"))
   let base = ($base_url | default $BASE_URL)
   if ($authorization == null) { error make --unspanned { msg: "required header parameter 'authorization' missing: pass --authorization" } }
@@ -8687,7 +8689,6 @@ export def "get-v2-version" [
 # Ingests data for a device and receives a shadow
 #
 # POST /v3/
-# --data item shape: {payload?: record, position?: record, scan?: record, system?: record, timestamp: int}
 export def "post-v3" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8704,7 +8705,7 @@ export def "post-v3" [
   --app-id: string # The user's project appId. Used together with an external ID to identify the virtual device.
   data: list # item shape: {payload?: record, position?: record, scan?: record, system?: record, timestamp: int}
   --id: string # Tracking ID or application specific external ID, needed only if ingesting on behalf of another device.
-]: any -> record<payload: record, system: record<detectOutliers: bool, disableTracking: record<periods: list, position: any, sensors: any>, lastModifiedGeofenceTimestamp: int, rate: record<distanceM: float, sampleMs: float, sendMs: float>, sensorAlarmConfig: record<alertAccelerationGMax: float, alertAccelerationGMin: float, alertBatteryLevelPMax: float, alertBatteryLevelPMin: float, alertPressureHpaMax: float, alertPressureHpaMin: float, alertRelativeHumidityMax: float, alertRelativeHumidityMin: float, alertTemperatureCMax: float, alertTemperatureCMin: float, alertTiltDegreeMax: float, alertTiltDegreeMin: float, isAttachAlertEnabled: bool, isTamperAlertEnabled: bool>, sensorLoggingConfigurations: list<record>, sensorLoggingEnabled: bool, stateVersion: int, syncGeofences: bool, wlanConfigurations: list<record>, wlanConnectivityEnabled: bool>, timestamp: int> {
+]: any -> oneof<record<payload: record, system: record<detectOutliers: bool, disableTracking: record<periods: list, position: any, sensors: any>, lastModifiedGeofenceTimestamp: int, rate: record<distanceM: float, sampleMs: float, sendMs: float>, sensorAlarmConfig: record<alertAccelerationGMax: float, alertAccelerationGMin: float, alertBatteryLevelPMax: float, alertBatteryLevelPMin: float, alertPressureHpaMax: float, alertPressureHpaMin: float, alertRelativeHumidityMax: float, alertRelativeHumidityMin: float, alertTemperatureCMax: float, alertTemperatureCMin: float, alertTiltDegreeMax: float, alertTiltDegreeMin: float, isAttachAlertEnabled: bool, isTamperAlertEnabled: bool>, sensorLoggingConfigurations: list<record>, sensorLoggingEnabled: bool, stateVersion: int, syncGeofences: bool, wlanConfigurations: list<record>, wlanConnectivityEnabled: bool>, timestamp: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8734,7 +8735,6 @@ export def "post-v3" [
 # Ingests data for multiple devices
 #
 # POST /v3/batch
-# --data item shape: {payload?: record, position?: record, scan?: record, system?: record, timestamp: int, id?: string}
 export def "post-v3-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8788,7 +8788,7 @@ export def "get-v3-health" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<message: string> {
+]: nothing -> oneof<record<message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/health" $auth.query)

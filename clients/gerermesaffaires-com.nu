@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -152,9 +176,9 @@ def right-completer-1 [] { ["none" "read" "write"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-box-menus" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-box-menus" "get-business-groups" "patch-business-groups" "post-business-groups" "get-business-groups-all" "get-business-groups-id" "get-business-groups-id-spaces" "delete-business-groups-id-spaces-space-id" "post-business-groups-id-spaces-space-id-legal-entities-person-id-customers-folder-id-guest-in-space" "post-business-groups-id-spaces-space-id-legal-entities-person-id-customers-folder-id-spaces" "get-hub-business-groups-id-menus" "post-hub-documents" "get-hub-menus" "get-hub-menus-all" "post-hub-payslips" "post-hub-spaces-space-id-documents" "get-hub-spaces-space-id-menus" "post-hub-spaces-space-id-payslips" "get-menus" "post-menus-menu-id-documents" "get-profile" "patch-profile" "post-profile" "patch-profile-email" "get-profile-id-file" "patch-profile-mobile" "get-registration" "post-registration" "get-session" "get-spaces" "post-spaces" "get-spaces-all" "delete-spaces-id" "get-spaces-id" "patch-spaces-id" "get-spaces-id-accounting-year" "post-spaces-id-accounting-year" "get-spaces-id-collective-decision" "post-spaces-id-collective-decision" "get-spaces-id-company-entities" "post-spaces-id-company-entities" "get-spaces-id-company-entities-all" "get-spaces-id-company-entities-company-id" "patch-spaces-id-company-entities-company-id" "get-spaces-id-company-entities-person-id-details" "post-spaces-id-company-entities-person-id-details" "delete-spaces-id-company-entities-person-id-details-designation" "post-spaces-id-documents-download" "get-spaces-id-folders-folder-id-persons-member-id" "patch-spaces-id-folders-folder-id-persons-member-id" "patch-spaces-id-folders-folder-id-persons-member-id-activeaccess" "patch-spaces-id-folders-folder-id-persons-member-id-unactiveaccess" "post-spaces-id-folders-folder-id-persons-person-id-guest-in-space" "get-spaces-id-groups" "post-spaces-id-groups" "get-spaces-id-groups-all" "get-spaces-id-groups-group-id" "patch-spaces-id-groups-group-id" "delete-spaces-id-groups-group-id-folders-folder-id" "patch-spaces-id-groups-group-id-folders-folder-id" "delete-spaces-id-groups-group-id-persons-member-id" "patch-spaces-id-groups-group-id-persons-member-id" "get-spaces-id-legal" "patch-spaces-id-legal" "get-spaces-id-logo" "get-spaces-id-persons" "post-spaces-id-persons" "get-spaces-id-persons-all" "patch-spaces-id-persons-member-id-player" "delete-spaces-id-persons-person-id" "get-spaces-id-persons-person-id" "patch-spaces-id-persons-person-id" "get-spaces-id-persons-person-id-details" "post-spaces-id-persons-person-id-details" "delete-spaces-id-persons-person-id-details-designation" "get-spaces-id-persons-person-id-folders" "get-spaces-id-persons-person-id-groups" "get-spaces-id-persons-person-id-portfolios" "post-spaces-id-persons-person-id-portfolios" "patch-spaces-id-portfolios-portfolio-id-persons-member-id" "get-spaces-id-professional-vehicles" "post-spaces-id-professional-vehicles" "get-spaces-id-settings-nf203-logs" "post-spaces-id-settings-nf203-logs" "get-spaces-id-status" "post-spaces-id-status" "delete-spaces-id-status-code" "get-spaces-id-tax-contracts" "post-spaces-id-tax-contracts" "get-spaces-id-triggers" "delete-spaces-id-triggers-name" "post-spaces-id-triggers-name" "delete-spaces-space-id-common-folders-id" "patch-spaces-space-id-common-folders-id" "get-spaces-space-id-company-entities-id-follow-ups" "get-spaces-space-id-customers" "get-spaces-space-id-customers-all" "get-spaces-space-id-documents" "patch-spaces-space-id-documents-document-id" "get-spaces-space-id-documents-document-id-extend" "post-spaces-space-id-documents-document-id-extend" "get-spaces-space-id-documents-document-id-folders" "post-spaces-space-id-documents-document-id-mailing" "get-spaces-space-id-documents-document-id-mailingprice" "get-spaces-space-id-documents-document-id-versions" "post-spaces-space-id-documents-document-id-versions" "get-spaces-space-id-documents-document-id-versions-current" "get-spaces-space-id-documents-id-access" "get-spaces-space-id-documents-id-accounting" "get-spaces-space-id-documents-id-download" "get-spaces-space-id-employees" "get-spaces-space-id-employees-all" "get-spaces-space-id-employers" "get-spaces-space-id-employers-all" "get-spaces-space-id-extend" "post-spaces-space-id-extend" "get-spaces-space-id-folders" "get-spaces-space-id-folders-all" "delete-spaces-space-id-folders-folder-id-bank-statements-document-id" "patch-spaces-space-id-folders-folder-id-bank-statements-document-id" "delete-spaces-space-id-folders-folder-id-contractual-documents-document-id" "patch-spaces-space-id-folders-folder-id-contractual-documents-document-id" "delete-spaces-space-id-folders-folder-id-corporate-tax-declarations-document-id" "patch-spaces-space-id-folders-folder-id-corporate-tax-declarations-document-id" "delete-spaces-space-id-folders-folder-id-expense-proofs-document-id" "patch-spaces-space-id-folders-folder-id-expense-proofs-document-id" "delete-spaces-space-id-folders-folder-id-expense-reports-document-id" "patch-spaces-space-id-folders-folder-id-expense-reports-document-id" "delete-spaces-space-id-folders-folder-id-invoices-document-id" "patch-spaces-space-id-folders-folder-id-invoices-document-id" "get-spaces-space-id-folders-folder-id-nominative-social-declarations-document-id" "delete-spaces-space-id-folders-folder-id-other-taxes-document-id" "patch-spaces-space-id-folders-folder-id-other-taxes-document-id" "delete-spaces-space-id-folders-folder-id-payrolls-document-id" "patch-spaces-space-id-folders-folder-id-payrolls-document-id" "post-spaces-space-id-folders-folder-id-payrolls-document-id-refresh" "delete-spaces-space-id-folders-folder-id-payslips-document-id" "patch-spaces-space-id-folders-folder-id-payslips-document-id" "delete-spaces-space-id-folders-folder-id-social-contracts-document-id" "patch-spaces-space-id-folders-folder-id-social-contracts-document-id" "delete-spaces-space-id-folders-folder-id-social-declarations-document-id" "patch-spaces-space-id-folders-folder-id-social-declarations-document-id" "delete-spaces-space-id-folders-folder-id-vat-declarations-document-id" "patch-spaces-space-id-folders-folder-id-vat-declarations-document-id" "get-spaces-space-id-folders-id" "patch-spaces-space-id-folders-id" "delete-spaces-space-id-folders-id-accounting-year" "patch-spaces-space-id-folders-id-accounting-year" "get-spaces-space-id-folders-id-accountings" "get-spaces-space-id-folders-id-accountings-journal" "delete-spaces-space-id-folders-id-bank" "get-spaces-space-id-folders-id-bank" "patch-spaces-space-id-folders-id-bank" "get-spaces-space-id-folders-id-bank-statements" "post-spaces-space-id-folders-id-bank-statements" "patch-spaces-space-id-folders-id-collective-decision" "get-spaces-space-id-folders-id-common-folders" "post-spaces-space-id-folders-id-common-folders" "get-spaces-space-id-folders-id-common-folders-all" "get-spaces-space-id-folders-id-contracting-partner" "get-spaces-space-id-folders-id-contracting-partner-space" "get-spaces-space-id-folders-id-contractual-documents" "post-spaces-space-id-folders-id-contractual-documents" "get-spaces-space-id-folders-id-contractual-relationship" "get-spaces-space-id-folders-id-coporate-tax-declarations" "post-spaces-space-id-folders-id-coporate-tax-declarations" "delete-spaces-space-id-folders-id-customer" "get-spaces-space-id-folders-id-customer" "patch-spaces-space-id-folders-id-customer" "get-spaces-space-id-folders-id-deliveries-journal" "get-spaces-space-id-folders-id-documents" "post-spaces-space-id-folders-id-documents" "patch-spaces-space-id-folders-id-documents-document-id-detach" "delete-spaces-space-id-folders-id-employee" "get-spaces-space-id-folders-id-employee" "patch-spaces-space-id-folders-id-employee" "get-spaces-space-id-folders-id-expense-proofs" "post-spaces-space-id-folders-id-expense-proofs" "get-spaces-space-id-folders-id-expense-reports" "post-spaces-space-id-folders-id-expense-reports" "get-spaces-space-id-folders-id-expense-reports-expense-report-id-expense-proofs" "delete-spaces-space-id-folders-id-insurance" "get-spaces-space-id-folders-id-insurance" "patch-spaces-space-id-folders-id-insurance" "get-spaces-space-id-folders-id-invoices" "post-spaces-space-id-folders-id-invoices" "get-spaces-space-id-folders-id-legal-entity" "delete-spaces-space-id-folders-id-loan" "get-spaces-space-id-folders-id-loan" "patch-spaces-space-id-folders-id-loan" "get-spaces-space-id-folders-id-messages" "post-spaces-space-id-folders-id-messages" "get-spaces-space-id-folders-id-messages-message-id" "patch-spaces-space-id-folders-id-messages-message-id" "get-spaces-space-id-folders-id-nominative-social-declarations" "get-spaces-space-id-folders-id-other-taxes" "post-spaces-space-id-folders-id-other-taxes" "get-spaces-space-id-folders-id-passwords" "post-spaces-space-id-folders-id-passwords" "delete-spaces-space-id-folders-id-passwords-password-id" "get-spaces-space-id-folders-id-passwords-password-id" "patch-spaces-space-id-folders-id-passwords-password-id" "get-spaces-space-id-folders-id-payrolls" "post-spaces-space-id-folders-id-payrolls" "delete-spaces-space-id-folders-id-payrolls-payroll-id-nominative-social-declaration" "post-spaces-space-id-folders-id-payrolls-payroll-id-nominative-social-declaration" "get-spaces-space-id-folders-id-payslips" "post-spaces-space-id-folders-id-payslips" "delete-spaces-space-id-folders-id-portfolio-portfolio-id" "delete-spaces-space-id-folders-id-professional-vehicle" "patch-spaces-space-id-folders-id-professional-vehicle" "delete-spaces-space-id-folders-id-provider" "get-spaces-space-id-folders-id-provider" "patch-spaces-space-id-folders-id-provider" "get-spaces-space-id-folders-id-required-documents" "patch-spaces-space-id-folders-id-required-documents-requireddocumentid" "post-spaces-space-id-folders-id-required-documents-requireddocumentid" "delete-spaces-space-id-folders-id-required-documents-requireddocumentid-documents-document-id" "get-spaces-space-id-folders-id-sections" "get-spaces-space-id-folders-id-social-contracts" "post-spaces-space-id-folders-id-social-contracts" "get-spaces-space-id-folders-id-social-declarations" "post-spaces-space-id-folders-id-social-declarations" "delete-spaces-space-id-folders-id-social-regimes" "get-spaces-space-id-folders-id-social-regimes" "patch-spaces-space-id-folders-id-social-regimes" "get-spaces-space-id-folders-id-sum-invoices" "delete-spaces-space-id-folders-id-tax-contract" "patch-spaces-space-id-folders-id-tax-contract" "get-spaces-space-id-folders-id-vat-declarations" "post-spaces-space-id-folders-id-vat-declarations" "delete-spaces-space-id-folders-id-document-class" "get-spaces-space-id-folders-id-document-class" "post-spaces-space-id-folders-id-document-class" "get-spaces-space-id-legal-entities-id-banks" "post-spaces-space-id-legal-entities-id-banks" "get-spaces-space-id-legal-entities-id-banks-all" "get-spaces-space-id-legal-entities-id-contracts" "get-spaces-space-id-legal-entities-id-contractual-relationships" "get-spaces-space-id-legal-entities-id-contractual-relationships-all" "get-spaces-space-id-legal-entities-id-customers" "post-spaces-space-id-legal-entities-id-customers" "get-spaces-space-id-legal-entities-id-customers-all" "get-spaces-space-id-legal-entities-id-insurances" "post-spaces-space-id-legal-entities-id-insurances" "get-spaces-space-id-legal-entities-id-insurances-all" "get-spaces-space-id-legal-entities-id-loans" "post-spaces-space-id-legal-entities-id-loans" "get-spaces-space-id-legal-entities-id-loans-all" "get-spaces-space-id-legal-entities-id-providers" "post-spaces-space-id-legal-entities-id-providers" "get-spaces-space-id-legal-entities-id-providers-all" "get-spaces-space-id-legal-entities-id-social-regimes" "post-spaces-space-id-legal-entities-id-social-regimes" "get-spaces-space-id-legal-entities-id-social-regimes-all" "get-spaces-space-id-loans" "get-spaces-space-id-loans-all" "patch-spaces-space-id-persons-id-call-for-document" "post-spaces-space-id-persons-id-call-for-document" "get-spaces-space-id-persons-id-employees" "post-spaces-space-id-persons-id-employees" "get-spaces-space-id-persons-id-employees-all" "get-spaces-space-id-persons-id-exchange" "get-spaces-space-id-persons-id-follow-ups" "delete-spaces-space-id-persons-id-guest-in-space" "patch-spaces-space-id-persons-id-guest-in-space" "post-spaces-space-id-persons-id-guest-in-space" "delete-spaces-space-id-persons-id-invitation" "get-spaces-space-id-persons-id-invitation" "patch-spaces-space-id-persons-id-invitation" "post-spaces-space-id-persons-id-invitation" "post-spaces-space-id-persons-id-invitation-invitation-id-send" "get-spaces-space-id-persons-member-id-folders-id" "patch-spaces-space-id-persons-member-id-folders-id" "get-spaces-space-id-providers" "get-spaces-space-id-providers-all" "get-spaces-space-id-search" "get-spaces-space-id-social-regimes" "get-spaces-space-id-social-regimes-all" "get-spaces-space-id-spaces-invoicings" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -185,7 +209,7 @@ export def "get-box-menus" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<Menus: table<Class: string, Id: string, Name: string>, SpaceId: string, SpaceName: string> {
+]: nothing -> oneof<record<Menus: table<Class: string, Id: string, Name: string>, SpaceId: string, SpaceName: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/box/menus" $auth.query)
@@ -219,7 +243,7 @@ export def "get-business-groups" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Name of the group (e.g. Dupond)
-]: nothing -> table<Id: string, ModificationDate: string, Name: string> {
+]: nothing -> oneof<table<Id: string, ModificationDate: string, Name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Name" $name "scalar")] | flatten | str join "&"
@@ -291,7 +315,7 @@ export def "post-business-groups" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   name: string # e.g. Client Durand
-]: any -> record<Id: string> {
+]: any -> oneof<record<Id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -328,7 +352,7 @@ export def "get-business-groups-all" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Name of the group
-]: nothing -> table<Id: string, ModificationDate: string, Name: string> {
+]: nothing -> oneof<table<Id: string, ModificationDate: string, Name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Name" $name "scalar")] | flatten | str join "&"
@@ -363,7 +387,7 @@ export def "get-business-groups-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<Id: string, ModificationDate: string, Name: string> {
+]: nothing -> oneof<record<Id: string, ModificationDate: string, Name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -401,7 +425,7 @@ export def "get-business-groups-id-spaces" [
   --name: string # Name of the space (e.g. Mon Entreprise)
   --type: string@type-completer # Type of the space (e.g. private)
   --registration-number: string # registration number of the space (e.g. 12345)
-]: nothing -> table<Id: string, ModificationDate: string, Name: string, RegistrationNumber: string, Type: string> {
+]: nothing -> oneof<table<Id: string, ModificationDate: string, Name: string, RegistrationNumber: string, Type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -479,7 +503,7 @@ export def "post-business-groups-id-spaces-space-id-legal-entities-person-id-cus
   --dry-run(-n) # Return the request that would be sent without executing it
   --groups: list<string>@groups-completer # e.g. [tax, legal]
   role: string@role-completer # e.g. collaborator
-]: any -> record<Id: string> {
+]: any -> oneof<record<Id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -509,7 +533,6 @@ export def "post-business-groups-id-spaces-space-id-legal-entities-person-id-cus
 # Add a Space in a group
 #
 # POST /business-groups/{id}/spaces/{spaceId}/legal-entities/{personId}/customers/{folderId}/spaces
-# --Logo shape: {Content64Encoded?: string, Name?: string}
 export def "post-business-groups-id-spaces-space-id-legal-entities-person-id-customers-folder-id-spaces" [
   id: string
   space_id: string
@@ -528,7 +551,7 @@ export def "post-business-groups-id-spaces-space-id-legal-entities-person-id-cus
   --name: string # e.g. Mon Entreprise
   --template-space-id: string # e.g. PKOJOFOFKAOKF
   type: string@type-completer-1 # e.g. company
-]: any -> record<Id: string> {
+]: any -> oneof<record<Id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -569,7 +592,7 @@ export def "get-hub-business-groups-id-menus" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<Menus: table<Class: string, Id: string, Name: string>, SpaceId: string, SpaceName: string> {
+]: nothing -> oneof<record<Menus: table<Class: string, Id: string, Name: string>, SpaceId: string, SpaceName: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -593,8 +616,6 @@ export def "get-hub-business-groups-id-menus" [
 # Add a document (this document is analyzed to be saved in the correct folder and correct space)
 #
 # POST /hub/documents
-# --Accounting shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
-# --File shape: {Content64Encoded?: string, Name?: string}
 export def "post-hub-documents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -612,7 +633,7 @@ export def "post-hub-documents" [
   --date: string # e.g. 20161203
   file: record # shape: {Content64Encoded?: string, Name?: string}
   title: string # e.g. Facture décembre
-]: any -> record<Id: string> {
+]: any -> oneof<record<Id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -648,7 +669,7 @@ export def "get-hub-menus" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<Menus: table<Class: string, Id: string, Name: string>, SpaceId: string, SpaceName: string> {
+]: nothing -> oneof<record<Menus: table<Class: string, Id: string, Name: string>, SpaceId: string, SpaceName: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/hub/menus" $auth.query)
@@ -681,7 +702,7 @@ export def "get-hub-menus-all" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<BusinessGroup: record<Id: string, Name: string>, Menus: table<Class: string, Id: string, Name: string>, SpaceId: string, SpaceName: string> {
+]: nothing -> oneof<record<BusinessGroup: record<Id: string, Name: string>, Menus: table<Class: string, Id: string, Name: string>, SpaceId: string, SpaceName: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/hub/menus/all" $auth.query)
@@ -704,8 +725,6 @@ export def "get-hub-menus-all" [
 # Add a payslip (this document is analyzed to be saved in the correct folder and correct space)
 #
 # POST /hub/payslips
-# --Accounting shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
-# --File shape: {Content64Encoded?: string, Name?: string}
 export def "post-hub-payslips" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -723,7 +742,7 @@ export def "post-hub-payslips" [
   --date: string # e.g. 20161203
   file: record # shape: {Content64Encoded?: string, Name?: string}
   title: string # e.g. Facture décembre
-]: any -> record<Id: string> {
+]: any -> oneof<record<Id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -749,8 +768,6 @@ export def "post-hub-payslips" [
 # Add a document in a space (this document is analyzed to be saved in the correct folder)
 #
 # POST /hub/spaces/{spaceId}/documents
-# --Accounting shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
-# --File shape: {Content64Encoded?: string, Name?: string}
 export def "post-hub-spaces-space-id-documents" [
   space_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -769,7 +786,7 @@ export def "post-hub-spaces-space-id-documents" [
   --date: string # e.g. 20161203
   file: record # shape: {Content64Encoded?: string, Name?: string}
   title: string # e.g. Facture décembre
-]: any -> record<Id: string> {
+]: any -> oneof<record<Id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -807,7 +824,7 @@ export def "get-hub-spaces-space-id-menus" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<Folders: table<Id: string, Name: string>, Workbooks: list<string>> {
+]: nothing -> oneof<record<Folders: table<Id: string, Name: string>, Workbooks: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -831,8 +848,6 @@ export def "get-hub-spaces-space-id-menus" [
 # Add a payslip in a space (this document is analyzed to be saved in the correct folder)
 #
 # POST /hub/spaces/{spaceId}/payslips
-# --Accounting shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
-# --File shape: {Content64Encoded?: string, Name?: string}
 export def "post-hub-spaces-space-id-payslips" [
   space_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -851,7 +866,7 @@ export def "post-hub-spaces-space-id-payslips" [
   --date: string # e.g. 20161203
   file: record # shape: {Content64Encoded?: string, Name?: string}
   title: string # e.g. Facture décembre
-]: any -> record<Id: string> {
+]: any -> oneof<record<Id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -888,7 +903,7 @@ export def "get-menus" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<Label: string, MenuId: string, Pictogram: string, SubMenus: table<Label: string, MenuId: string, Pictogram: string>> {
+]: nothing -> oneof<record<Label: string, MenuId: string, Pictogram: string, SubMenus: table<Label: string, MenuId: string, Pictogram: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/menus" $auth.query)
@@ -911,7 +926,6 @@ export def "get-menus" [
 # add a document to the target menuId
 #
 # POST /menus/{menuId}/documents
-# --File shape: {Content64Encoded?: string, Name?: string}
 export def "post-menus-menu-id-documents" [
   menu_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -928,7 +942,7 @@ export def "post-menus-menu-id-documents" [
   --date: string # e.g. 20161203
   file: record # shape: {Content64Encoded?: string, Name?: string}
   title: string # e.g. Facture décembre
-]: any -> record<Report: record> {
+]: any -> oneof<record<Report: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -966,7 +980,7 @@ export def "get-profile" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --contract: string # to get a contract (if not signed error 404 + html contract) (e.g. member)
-]: nothing -> record<Birth: record<City: string, Country: string, Date: string, ZipCode: string>, BirthName: string, FirstName: string, Name: string, PrivateSpaceId: string, Sex: string, Status: string> {
+]: nothing -> oneof<record<Birth: record<City: string, Country: string, Date: string, ZipCode: string>, BirthName: string, FirstName: string, Name: string, PrivateSpaceId: string, Sex: string, Status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Contract" $contract "scalar")] | flatten | str join "&"
@@ -990,8 +1004,6 @@ export def "get-profile" [
 # modify infos of profile
 #
 # PATCH /profile
-# --Birth shape: {City?: string, Country?: string, Date?: string, ZipCode?: string}
-# --IDFile shape: {Content64Encoded?: string, Name?: string}
 export def "patch-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1035,8 +1047,6 @@ export def "patch-profile" [
 # create infos of profile
 #
 # POST /profile
-# --Birth shape: {City?: string, Country?: string, Date?: string, ZipCode?: string}
-# --IDFile shape: {Content64Encoded?: string, Name?: string}
 export def "post-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1131,7 +1141,7 @@ export def "get-profile-id-file" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --contract: string # to get a contract (if not signed error 404 + html contract) (e.g. member)
-]: nothing -> record<Birth: record<City: string, Country: string, Date: string, ZipCode: string>, BirthName: string, FirstName: string, IDFile: record<Content64Encoded: string>, Name: string, PrivateSpaceId: string, Sex: string, Status: string> {
+]: nothing -> oneof<record<Birth: record<City: string, Country: string, Date: string, ZipCode: string>, BirthName: string, FirstName: string, IDFile: record<Content64Encoded: string>, Name: string, PrivateSpaceId: string, Sex: string, Status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Contract" $contract "scalar")] | flatten | str join "&"
@@ -1242,7 +1252,7 @@ export def "post-registration" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --code: string # e.g. OJFOA
   --secret: string # e.g. 123456
-]: any -> record<Private: record<FolderId: string, SpaceId: string>> {
+]: any -> oneof<record<Private: record<FolderId: string, SpaceId: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1278,7 +1288,7 @@ export def "get-session" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<MemberId: string, Scope: string> {
+]: nothing -> oneof<record<MemberId: string, Scope: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/session" $auth.query)
@@ -1314,7 +1324,7 @@ export def "get-spaces" [
   --name: string # Name of the space (e.g. Mon Entreprise)
   --type: string@type-completer # Type of the space (e.g. private)
   --registration-number: string # registration number of the space (e.g. 12345)
-]: nothing -> table<Id: string, ModificationDate: string, Name: string, RegistrationNumber: string, Type: string> {
+]: nothing -> oneof<table<Id: string, ModificationDate: string, Name: string, RegistrationNumber: string, Type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Name" $name "scalar") (serialize-qp "Type" $type "scalar") (serialize-qp "RegistrationNumber" $registration_number "scalar")] | flatten | str join "&"
@@ -1338,7 +1348,6 @@ export def "get-spaces" [
 # Add a Space in my group
 #
 # POST /spaces
-# --Logo shape: {Content64Encoded?: string, Name?: string}
 export def "post-spaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1355,7 +1364,7 @@ export def "post-spaces" [
   --registration-number: string # e.g. 5146486846
   --template-space-id: string # e.g. PKOJOFOFKAOKF
   type: string@type-completer-1 # e.g. company
-]: any -> record<Id: string> {
+]: any -> oneof<record<Id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1393,7 +1402,7 @@ export def "get-spaces-all" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Name of the space (e.g. Mon Entreprise)
   --type: string@type-completer # Type of the space (e.g. private)
-]: nothing -> table<Id: string, ModificationDate: string, Name: string, RegistrationNumber: string, Type: string> {
+]: nothing -> oneof<table<Id: string, ModificationDate: string, Name: string, RegistrationNumber: string, Type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Name" $name "scalar") (serialize-qp "Type" $type "scalar")] | flatten | str join "&"
@@ -1463,7 +1472,7 @@ export def "get-spaces-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<Id: string, ModificationDate: string, Name: string, Type: string> {
+]: nothing -> oneof<record<Id: string, ModificationDate: string, Name: string, Type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1487,7 +1496,6 @@ export def "get-spaces-id" [
 # Modify a Space (except private)
 #
 # PATCH /spaces/{id}
-# --Logo shape: {Content64Encoded?: string, Name?: string}
 export def "patch-spaces-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1542,7 +1550,7 @@ export def "get-spaces-id-accounting-year" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --end: string # End date of the accounting year (YYYYMM or YYYYMMDD) (range not available) (e.g. 201603)
   --effective-date: string # Effective date inside the accounting year (range not available) (e.g. 20160301)
-]: nothing -> table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, NetIncome: float, NetPosition: float, Start: string, Tax: float, TaxableIncome: float, Turnover: float> {
+]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, NetIncome: float, NetPosition: float, Start: string, Tax: float, TaxableIncome: float, Turnover: float>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1590,7 +1598,7 @@ export def "post-spaces-id-accounting-year" [
   --tax: float # e.g. 45698.36
   --taxable-income: float # e.g. 869523.36
   --turnover: float # e.g. 1025.36
-]: any -> record<Id: string> {
+]: any -> oneof<record<Id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1635,7 +1643,7 @@ export def "get-spaces-id-collective-decision" [
   --has-status: string@has-status-completer # If true returns only invoices with a Status (e.g. true)
   --has-sirene-register: string@has-sirene-register-completer # If true returns only invoices with a SireneRegister (e.g. true)
   --has-minutes: string@has-minutes-completer # If true returns only invoices with Minutes (e.g. true)
-]: nothing -> table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, Date: string, DividendDistributions: float, DividendDistributionsDate: string, Event: string> {
+]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, Date: string, DividendDistributions: float, DividendDistributionsDate: string, Event: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1680,7 +1688,7 @@ export def "post-spaces-id-collective-decision" [
   --home: oneof<nothing, bool> # e.g. yes
   --keywords: list<string> # e.g. [paris, comptabilité]
   --level: string@level-completer # e.g. confidential
-]: any -> record<Id: string> {
+]: any -> oneof<record<Id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1721,7 +1729,7 @@ export def "get-spaces-id-company-entities" [
   --name: string # Name of the company entity (e.g. Source de France)
   --legal-name: string # Legal name of the company entity (e.g. Source de France SAS)
   --registration-number: string # registration number of the company entity (e.g. 12356213854)
-]: nothing -> table<ArchivalDate: string, Comment: string, Id: string, ModificationDate: string, Name: string, ApeCode: string, LegalName: string, LegalStatut: string, RegistrationNumber: string, Type: string, VatNumber: string> {
+]: nothing -> oneof<table<ArchivalDate: string, Comment: string, Id: string, ModificationDate: string, Name: string, ApeCode: string, LegalName: string, LegalStatut: string, RegistrationNumber: string, Type: string, VatNumber: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1766,7 +1774,7 @@ export def "post-spaces-id-company-entities" [
   --registration-number: string # e.g. 236542158
   --type: string # e.g. EPT
   --vat-number: string # e.g. 46546847864
-]: any -> record<Id: string> {
+]: any -> oneof<record<Id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1806,7 +1814,7 @@ export def "get-spaces-id-company-entities-all" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Name of the company entity (e.g. Source de France)
   --registration-number: string # registration number of the company entity (e.g. 12356213854)
-]: nothing -> table<ArchivalDate: string, Comment: string, Id: string, ModificationDate: string, Name: string, ApeCode: string, LegalName: string, LegalStatut: string, RegistrationNumber: string, Type: string, VatNumber: string> {
+]: nothing -> oneof<table<ArchivalDate: string, Comment: string, Id: string, ModificationDate: string, Name: string, ApeCode: string, LegalName: string, LegalStatut: string, RegistrationNumber: string, Type: string, VatNumber: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1843,7 +1851,7 @@ export def "get-spaces-id-company-entities-company-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<ArchivalDate: string, Comment: string, Id: string, ModificationDate: string, Name: string, ApeCode: string, LegalName: string, LegalStatut: string, RegistrationNumber: string, Type: string, VatNumber: string> {
+]: nothing -> oneof<record<ArchivalDate: string, Comment: string, Id: string, ModificationDate: string, Name: string, ApeCode: string, LegalName: string, LegalStatut: string, RegistrationNumber: string, Type: string, VatNumber: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1929,7 +1937,7 @@ export def "get-spaces-id-company-entities-person-id-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<Address: record<City: string, Complement: string, Country: string, Street: string, ZipCode: string>, Designation: string, Email: list<string>, Phone: list<string>> {
+]: nothing -> oneof<table<Address: record<City: string, Complement: string, Country: string, Street: string, ZipCode: string>, Designation: string, Email: list<string>, Phone: list<string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1954,7 +1962,6 @@ export def "get-spaces-id-company-entities-person-id-details" [
 # Replace or Add a contact detail for a person
 #
 # POST /spaces/{id}/company-entities/{personId}/details
-# --Address shape: {City?: string, Complement?: string, Country?: string, Street?: string, ZipCode?: string}
 export def "post-spaces-id-company-entities-person-id-details" [
   id: string
   person_id: string
@@ -2051,7 +2058,7 @@ export def "post-spaces-id-documents-download" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   document_id: list<string>
-]: any -> record<ZipFile: string> {
+]: any -> oneof<record<ZipFile: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2091,7 +2098,7 @@ export def "get-spaces-id-folders-folder-id-persons-member-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<Active: string, IsAdmin: string, MemberId: string, Name: string, Role: string> {
+]: nothing -> oneof<table<Active: string, IsAdmin: string, MemberId: string, Name: string, Role: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2295,7 +2302,7 @@ export def "get-spaces-id-groups" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Name of the groups (e.g. RH)
-]: nothing -> table<EndDate: string, Id: string, Name: string> {
+]: nothing -> oneof<table<EndDate: string, Id: string, Name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2333,7 +2340,7 @@ export def "post-spaces-id-groups" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --end-date: string # e.g. 20160203
   name: string # e.g. RH
-]: any -> record<Id: string> {
+]: any -> oneof<record<Id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2372,7 +2379,7 @@ export def "get-spaces-id-groups-all" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Name of the group (e.g. RH)
-]: nothing -> table<EndDate: string, Id: string, Name: string> {
+]: nothing -> oneof<table<EndDate: string, Id: string, Name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2409,7 +2416,7 @@ export def "get-spaces-id-groups-group-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<EndDate: string, Id: string, Name: string, Accesses: record<Id: string, Name: string, Right: string>, Persons: record<MemberId: string>> {
+]: nothing -> oneof<record<EndDate: string, Id: string, Name: string, Accesses: record<Id: string, Name: string, Right: string>, Persons: record<MemberId: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2647,7 +2654,7 @@ export def "get-spaces-id-legal" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<IdentificationNumber: string, RegistrationDate: string, RegistrationNumber: string, VATNumber: string> {
+]: nothing -> oneof<record<IdentificationNumber: string, RegistrationDate: string, RegistrationNumber: string, VATNumber: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2725,7 +2732,7 @@ export def "get-spaces-id-logo" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<Id: string, Logo: record<Content64Encoded: string, Extension: string>, ModificationDate: string, Name: string, Type: string> {
+]: nothing -> oneof<record<Id: string, Logo: record<Content64Encoded: string, Extension: string>, ModificationDate: string, Name: string, Type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2765,7 +2772,7 @@ export def "get-spaces-id-persons" [
   --name: string # Name of the person (e.g. Germain)
   --validated: string@validated-completer # Status of the person (e.g. true)
   --email: string # Email of the person (e.g. maxgermain@maxgermain.com)
-]: nothing -> table<ArchivalDate: string, Comment: string, Id: string, ModificationDate: string, Name: string, Address: record<City: string, Complement: string, Country: string, Street: string, ZipCode: string>, Birth: record<Date: int, Place: string>, Email: string, FirstName: string, Function: list<string>, MemberId: string, Mobile: string, Sex: string, Validated: string> {
+]: nothing -> oneof<table<ArchivalDate: string, Comment: string, Id: string, ModificationDate: string, Name: string, Address: record<City: string, Complement: string, Country: string, Street: string, ZipCode: string>, Birth: record<Date: int, Place: string>, Email: string, FirstName: string, Function: list<string>, MemberId: string, Mobile: string, Sex: string, Validated: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2790,8 +2797,6 @@ export def "get-spaces-id-persons" [
 # Add a Person in a Space
 #
 # POST /spaces/{id}/persons
-# --Address shape: {City?: string, Complement?: string, Country?: string, Street?: string, ZipCode?: string}
-# --Birth shape: {Date?: int, Place?: string}
 export def "post-spaces-id-persons" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2812,7 +2817,7 @@ export def "post-spaces-id-persons" [
   --mobile: string # e.g. +33606060606
   name: string # e.g. Dupond
   sex: string@sex-completer # e.g. male
-]: any -> record<Id: string> {
+]: any -> oneof<record<Id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2855,7 +2860,7 @@ export def "get-spaces-id-persons-all" [
   --range: string # index range of the results (e.g. 10-19)
   --validated: string@validated-completer # Status of the person (e.g. true)
   --email: string # Email of the person (e.g. maxgermain@maxgermain.com)
-]: nothing -> table<ArchivalDate: string, Comment: string, Id: string, ModificationDate: string, Name: string, Address: record<City: string, Complement: string, Country: string, Street: string, ZipCode: string>, Birth: record<Date: int, Place: string>, Email: string, FirstName: string, Function: list<string>, MemberId: string, Mobile: string, Sex: string, Validated: string> {
+]: nothing -> oneof<table<ArchivalDate: string, Comment: string, Id: string, ModificationDate: string, Name: string, Address: record<City: string, Complement: string, Country: string, Street: string, ZipCode: string>, Birth: record<Date: int, Place: string>, Email: string, FirstName: string, Function: list<string>, MemberId: string, Mobile: string, Sex: string, Validated: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2973,7 +2978,7 @@ export def "get-spaces-id-persons-person-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<ArchivalDate: string, Comment: string, Id: string, ModificationDate: string, Name: string, Address: record<City: string, Complement: string, Country: string, Street: string, ZipCode: string>, Birth: record<Date: int, Place: string>, Email: string, FirstName: string, Function: list<string>, MemberId: string, Mobile: string, Sex: string, Validated: string> {
+]: nothing -> oneof<record<ArchivalDate: string, Comment: string, Id: string, ModificationDate: string, Name: string, Address: record<City: string, Complement: string, Country: string, Street: string, ZipCode: string>, Birth: record<Date: int, Place: string>, Email: string, FirstName: string, Function: list<string>, MemberId: string, Mobile: string, Sex: string, Validated: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2998,8 +3003,6 @@ export def "get-spaces-id-persons-person-id" [
 # Modify a person
 #
 # PATCH /spaces/{id}/persons/{personId}
-# --Address shape: {City?: string, Complement?: string, Country?: string, Street?: string, ZipCode?: string}
-# --Birth shape: {Date?: int, Place?: string}
 export def "patch-spaces-id-persons-person-id" [
   id: string
   person_id: string
@@ -3061,7 +3064,7 @@ export def "get-spaces-id-persons-person-id-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<Address: record<City: string, Complement: string, Country: string, Street: string, ZipCode: string>, Designation: string, Email: list<string>, Phone: list<string>> {
+]: nothing -> oneof<table<Address: record<City: string, Complement: string, Country: string, Street: string, ZipCode: string>, Designation: string, Email: list<string>, Phone: list<string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3086,7 +3089,6 @@ export def "get-spaces-id-persons-person-id-details" [
 # Replace or Add a contact detail for a person
 #
 # POST /spaces/{id}/persons/{personId}/details
-# --Address shape: {City?: string, Complement?: string, Country?: string, Street?: string, ZipCode?: string}
 export def "post-spaces-id-persons-person-id-details" [
   id: string
   person_id: string
@@ -3183,7 +3185,7 @@ export def "get-spaces-id-persons-person-id-folders" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --range: string # index range of the results (e.g. 10-19)
-]: nothing -> table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string> {
+]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3221,7 +3223,7 @@ export def "get-spaces-id-persons-person-id-groups" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<EndDate: string, Id: string, Name: string> {
+]: nothing -> oneof<table<EndDate: string, Id: string, Name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3258,7 +3260,7 @@ export def "get-spaces-id-persons-person-id-portfolios" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Designation: string> {
+]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Designation: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3302,7 +3304,7 @@ export def "post-spaces-id-persons-person-id-portfolios" [
   --keywords: list<string> # e.g. [paris, comptabilité]
   --level: string@level-completer # e.g. confidential
   --name: string # e.g. Dupond
-]: any -> record<Id: string> {
+]: any -> oneof<record<Id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3388,7 +3390,7 @@ export def "get-spaces-id-professional-vehicles" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --designation: string # designation of the vehicle (e.g. peugeot)
-]: nothing -> table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, DateIn: string, DateOut: string, Designation: string, Value: float, Brand: string, CompanyTax: bool, Model: string, RegistrationDate: string, RegistrationNumber: string, Type: string> {
+]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, DateIn: string, DateOut: string, Designation: string, Value: float, Brand: string, CompanyTax: bool, Model: string, RegistrationDate: string, RegistrationNumber: string, Type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3439,7 +3441,7 @@ export def "post-spaces-id-professional-vehicles" [
   --registration-number: string # e.g. AA001AA
   --type: string # e.g. car
   --value: float # e.g. 1500.23
-]: any -> record<Id: string> {
+]: any -> oneof<record<Id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3477,7 +3479,7 @@ export def "get-spaces-id-settings-nf203-logs" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<Enabled: bool> {
+]: nothing -> oneof<record<Enabled: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3551,7 +3553,7 @@ export def "get-spaces-id-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<Code: string, Comment: string, Label: string> {
+]: nothing -> oneof<table<Code: string, Comment: string, Label: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3664,7 +3666,7 @@ export def "get-spaces-id-tax-contracts" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, Designation: string, End: string, Start: string> {
+]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, Designation: string, End: string, Start: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3707,7 +3709,7 @@ export def "post-spaces-id-tax-contracts" [
   --keywords: list<string> # e.g. [paris, comptabilité]
   --level: string@level-completer # e.g. confidential
   --start: string # e.g. 20180101
-]: any -> record<Id: string> {
+]: any -> oneof<record<Id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3745,7 +3747,7 @@ export def "get-spaces-id-triggers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<Date: string, Event: string> {
+]: nothing -> oneof<table<Date: string, Event: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3938,7 +3940,7 @@ export def "get-spaces-space-id-company-entities-id-follow-ups" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string> {
+]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -3976,7 +3978,7 @@ export def "get-spaces-space-id-customers" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --customer-number: string # CustomerNumber of the customer
   --with-contracting-partner: string # if present returns infos of the ContractingPartner too
-]: nothing -> table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, CustomerNumber: string, Designation: string> {
+]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, CustomerNumber: string, Designation: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -4014,7 +4016,7 @@ export def "get-spaces-space-id-customers-all" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --customer-number: string # CustomerNumber of the employee
   --with-contracting-partner: string # if present returns infos of the ContractingPartner too
-]: nothing -> table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, CustomerNumber: string, Designation: string> {
+]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, CustomerNumber: string, Designation: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -4053,7 +4055,7 @@ export def "get-spaces-space-id-documents" [
   --full-text: string # Text to find (e.g. durand)
   --range: string # index range of the results (e.g. 10-19)
   --class: string # class of the document to find (e.g. payslip)
-]: nothing -> table<Author: string, Code: string, Comment: string, Date: string, Extension: string, Folders: list<record>, Id: string, Title: string> {
+]: nothing -> oneof<table<Author: string, Code: string, Comment: string, Date: string, Extension: string, Folders: list<record>, Id: string, Title: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -4078,7 +4080,6 @@ export def "get-spaces-space-id-documents" [
 # modify a doc
 #
 # PATCH /spaces/{spaceId}/documents/{documentId}
-# --Accounting shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
 export def "patch-spaces-space-id-documents-document-id" [
   space_id: string
   document_id: string
@@ -4137,7 +4138,7 @@ export def "get-spaces-space-id-documents-document-id-extend" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, Extend: record> {
+]: nothing -> oneof<table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, Extend: record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -4175,7 +4176,7 @@ export def "post-spaces-space-id-documents-document-id-extend" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
-]: any -> record<Id: string> {
+]: any -> oneof<record<Id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4215,7 +4216,7 @@ export def "get-spaces-space-id-documents-document-id-folders" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Folders: table<Id: string, Name: string>, Id: string, Title: string> {
+]: nothing -> oneof<record<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Folders: table<Id: string, Name: string>, Id: string, Title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -4240,7 +4241,6 @@ export def "get-spaces-space-id-documents-document-id-folders" [
 # send by mail a document
 #
 # POST /spaces/{spaceId}/documents/{documentId}/mailing
-# --Address shape: {City?: string, Complement?: string, Country?: string, Street?: string, ZipCode?: string}
 export def "post-spaces-space-id-documents-document-id-mailing" [
   space_id: string
   document_id: string
@@ -4255,7 +4255,7 @@ export def "post-spaces-space-id-documents-document-id-mailing" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --address: record # shape: {City?: string, Complement?: string, Country?: string, Street?: string, ZipCode?: string}
   --name: string # e.g. Société Dupond
-]: any -> record<PageNb: float, Price: string> {
+]: any -> oneof<record<PageNb: float, Price: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4295,7 +4295,7 @@ export def "get-spaces-space-id-documents-document-id-mailingprice" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<PageNb: float, Price: string> {
+]: nothing -> oneof<record<PageNb: float, Price: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -4332,7 +4332,7 @@ export def "get-spaces-space-id-documents-document-id-versions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string> {
+]: nothing -> oneof<table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -4357,7 +4357,6 @@ export def "get-spaces-space-id-documents-document-id-versions" [
 # Add a version to a document and set it as current
 #
 # POST /spaces/{spaceId}/documents/{documentId}/versions
-# --File shape: {Content64Encoded?: string, Name?: string}
 export def "post-spaces-space-id-documents-document-id-versions" [
   space_id: string
   document_id: string
@@ -4376,7 +4375,7 @@ export def "post-spaces-space-id-documents-document-id-versions" [
   --date: string # e.g. 20161203
   file: record # shape: {Content64Encoded?: string, Name?: string}
   title: string # e.g. Facture décembre
-]: any -> record<Id: string> {
+]: any -> oneof<record<Id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4416,7 +4415,7 @@ export def "get-spaces-space-id-documents-document-id-versions-current" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, Id: string, Title: string> {
+]: nothing -> oneof<record<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, Id: string, Title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -4453,7 +4452,7 @@ export def "get-spaces-space-id-documents-id-access" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<Access: table<DownloadedOn: string, FirstName: string, Name: string, SeenOn: string>, Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, Id: string, Title: string> {
+]: nothing -> oneof<record<Access: table<DownloadedOn: string, FirstName: string, Name: string, SeenOn: string>, Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, Id: string, Title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -4490,7 +4489,7 @@ export def "get-spaces-space-id-documents-id-accounting" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<Accounting: record<AccountedOn: string, Workbook: string, YearMonth: string>, Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, Id: string, Title: string> {
+]: nothing -> oneof<record<Accounting: record<AccountedOn: string, Workbook: string, YearMonth: string>, Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, Id: string, Title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -4528,7 +4527,7 @@ export def "get-spaces-space-id-documents-id-download" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-]: nothing -> record<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, File: record<Content64Encoded: string>, Id: string, Title: string> {
+]: nothing -> oneof<record<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, File: record<Content64Encoded: string>, Id: string, Title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -4567,7 +4566,7 @@ export def "get-spaces-space-id-employees" [
   --ss-number: string # SSNumber of the employee
   --employee-number: string # EmployeeNumber of the employee
   --with-contracting-partner: string # if present returns infos of the ContractingPartner too
-]: nothing -> table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, ContractType: string, EmployeeNumber: string, Function: string, PostalMail: bool, SSNumber: string> {
+]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, ContractType: string, EmployeeNumber: string, Function: string, PostalMail: bool, SSNumber: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -4606,7 +4605,7 @@ export def "get-spaces-space-id-employees-all" [
   --ss-number: string # SSNumber of the employee
   --employee-number: string # EmployeeNumber of the employee
   --with-contracting-partner: string # if present returns infos of the ContractingPartner too
-]: nothing -> table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, ContractType: string, EmployeeNumber: string, Function: string, PostalMail: bool, SSNumber: string> {
+]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, ContractType: string, EmployeeNumber: string, Function: string, PostalMail: bool, SSNumber: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -4644,7 +4643,7 @@ export def "get-spaces-space-id-employers" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --employee-number: string # EmployeeNumber of the employer contract
   --with-contracting-partner: string # if present returns infos of the ContractingPartner too
-]: nothing -> table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, ContractType: string, EmployeeNumber: string, Function: string, PostalMail: bool, SSNumber: string> {
+]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, ContractType: string, EmployeeNumber: string, Function: string, PostalMail: bool, SSNumber: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -4682,7 +4681,7 @@ export def "get-spaces-space-id-employers-all" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --employee-number: string # EmployeeNumber of the employer contract
   --with-contracting-partner: string # if present returns infos of the ContractingPartner too
-]: nothing -> table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, ContractType: string, EmployeeNumber: string, Function: string, PostalMail: bool, SSNumber: string> {
+]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, ContractType: string, EmployeeNumber: string, Function: string, PostalMail: bool, SSNumber: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -4718,7 +4717,7 @@ export def "get-spaces-space-id-extend" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<Extend: record, Id: string, ModificationDate: string, Name: string, Type: string> {
+]: nothing -> oneof<record<Extend: record, Id: string, ModificationDate: string, Name: string, Type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -4754,7 +4753,7 @@ export def "post-spaces-space-id-extend" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
-]: any -> record<Id: string> {
+]: any -> oneof<record<Id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4797,7 +4796,7 @@ export def "get-spaces-space-id-folders" [
   --root-folders: string@root-folders-completer # only root folders (e.g. all)
   --range: string # index range of the results (e.g. 10-19)
   --class: string # class of the folder (e.g. social)
-]: nothing -> table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string> {
+]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -4837,7 +4836,7 @@ export def "get-spaces-space-id-folders-all" [
   --range: string # index range of the results (e.g. 10-19)
   --keywords: string # keywords attached to the folder (e.g. juridique)
   --class: string # class of the folder (e.g. social)
-]: nothing -> table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string> {
+]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -5396,7 +5395,7 @@ export def "get-spaces-space-id-folders-folder-id-nominative-social-declarations
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, Begin: string, EmployeeContributions: float, EmployerContributions: float, End: string, NetAmount: float, TotalGrossAmount: float, PayrollId: string> {
+]: nothing -> oneof<record<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, Begin: string, EmployeeContributions: float, EmployerContributions: float, End: string, NetAmount: float, TotalGrossAmount: float, PayrollId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -5606,7 +5605,7 @@ export def "post-spaces-space-id-folders-folder-id-payrolls-document-id-refresh"
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<Id: string> {
+]: nothing -> oneof<record<Id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -5993,7 +5992,7 @@ export def "get-spaces-space-id-folders-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string> {
+]: nothing -> oneof<record<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -6171,7 +6170,7 @@ export def "get-spaces-space-id-folders-id-accountings" [
   --accounted-on: string # accountedon of the accounting (boolean available) (e.g. 20180201,null)
   --with-folders: string # if present, the folders containing the documents are returned (e.g. yes)
   --range: string # index range of the results (e.g. 10-19)
-]: nothing -> table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, Accounting: record<AccountedOn: string, Workbook: string, YearMonth: string>> {
+]: nothing -> oneof<table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, Accounting: record<AccountedOn: string, Workbook: string, YearMonth: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -6217,7 +6216,7 @@ export def "get-spaces-space-id-folders-id-accountings-journal" [
   --class: string # class of the document (e.g. invoice)
   --code: string # code of the document (e.g. delivered)
   --target-folder-name: string # Name of the target folder of the document (e.g. Exercice*)
-]: nothing -> table<AccountingDate: string, AccountingDocumentId: string, Class: string, Code: string, DeliveryDate: string, Id: string, Number: int, TargetFolder: record<Id: string, Name: string>, Workbook: string, YearMonth: string> {
+]: nothing -> oneof<table<AccountingDate: string, AccountingDocumentId: string, Class: string, Code: string, DeliveryDate: string, Id: string, Number: int, TargetFolder: record<Id: string, Name: string>, Workbook: string, YearMonth: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -6292,7 +6291,7 @@ export def "get-spaces-space-id-folders-id-bank" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, ContractReference: string, Designation: string> {
+]: nothing -> oneof<record<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, ContractReference: string, Designation: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -6381,7 +6380,7 @@ export def "get-spaces-space-id-folders-id-bank-statements" [
   --date: string # range date of the documents (e.g. 20160321, null)
   --number: string # Number of the bank statement (e.g. 201603)
   --range: string # index range of the results (e.g. 10-19)
-]: nothing -> table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, AccountedOn: string, Balance: float, Number: float, StatementDate: string> {
+]: nothing -> oneof<table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, AccountedOn: string, Balance: float, Number: float, StatementDate: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -6407,8 +6406,6 @@ export def "get-spaces-space-id-folders-id-bank-statements" [
 # Add a bank statement in a folder bank
 #
 # POST /spaces/{spaceId}/folders/{id}/bank-statements
-# --Accounting shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
-# --File shape: {Content64Encoded?: string, Name?: string}
 export def "post-spaces-space-id-folders-id-bank-statements" [
   space_id: string
   id: string
@@ -6432,7 +6429,7 @@ export def "post-spaces-space-id-folders-id-bank-statements" [
   --date: string # e.g. 20161203
   file: record # shape: {Content64Encoded?: string, Name?: string}
   title: string # e.g. Facture décembre
-]: any -> record<Id: string> {
+]: any -> oneof<record<Id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6523,7 +6520,7 @@ export def "get-spaces-space-id-folders-id-common-folders" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Name of the folder (e.g. Folder one)
   --keywords: string # keywords attached to the folder (e.g. juridique)
-]: nothing -> table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string> {
+]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -6568,7 +6565,7 @@ export def "post-spaces-space-id-folders-id-common-folders" [
   --level: string@level-completer # e.g. confidential
   name: string # e.g. Dupond
   --rights: oneof<nothing, bool> # e.g. true
-]: any -> record<Id: string> {
+]: any -> oneof<record<Id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6610,7 +6607,7 @@ export def "get-spaces-space-id-folders-id-common-folders-all" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Name of the folder (e.g. Folder one)
   --keywords: string # keywords attached to the folder (e.g. juridique)
-]: nothing -> table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string> {
+]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -6648,7 +6645,7 @@ export def "get-spaces-space-id-folders-id-contracting-partner" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<Class: string, Id: string, Role: string> {
+]: nothing -> oneof<table<Class: string, Id: string, Role: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -6685,7 +6682,7 @@ export def "get-spaces-space-id-folders-id-contracting-partner-space" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<Class: string, Id: string, Role: string> {
+]: nothing -> oneof<table<Class: string, Id: string, Role: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -6726,7 +6723,7 @@ export def "get-spaces-space-id-folders-id-contractual-documents" [
   --folder-date: string # date range of attachment (e.g. 20180306,null)
   --type: string@type-completer-2 # Type of the document (e.g. amendment)
   --range: string # index range of the results (e.g. 10-19)
-]: nothing -> table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, Amount: string, Designation: string, Reference: string, StartDate: string, Type: string> {
+]: nothing -> oneof<table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, Amount: string, Designation: string, Reference: string, StartDate: string, Type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -6752,8 +6749,6 @@ export def "get-spaces-space-id-folders-id-contractual-documents" [
 # Add a document in a folder
 #
 # POST /spaces/{spaceId}/folders/{id}/contractual-documents
-# --Accounting shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
-# --File shape: {Content64Encoded?: string, Name?: string}
 export def "post-spaces-space-id-folders-id-contractual-documents" [
   space_id: string
   id: string
@@ -6779,7 +6774,7 @@ export def "post-spaces-space-id-folders-id-contractual-documents" [
   --date: string # e.g. 20161203
   file: any # shape: {Content64Encoded?: string, Name?: string}
   title: string # e.g. Facture décembre
-]: any -> record<Id: string> {
+]: any -> oneof<record<Id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6819,7 +6814,7 @@ export def "get-spaces-space-id-folders-id-contractual-relationship" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, ContractReference: string, Designation: string> {
+]: nothing -> oneof<record<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, ContractReference: string, Designation: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -6858,7 +6853,7 @@ export def "get-spaces-space-id-folders-id-coporate-tax-declarations" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --date: string # range date of the documents (e.g. 20160321, null)
   --range: string # index range of the results (e.g. 10-19)
-]: nothing -> table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, Amount: float, DeclarationDate: string, Order: string, Rate: float, TaxBase: float> {
+]: nothing -> oneof<table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, Amount: float, DeclarationDate: string, Order: string, Rate: float, TaxBase: float>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -6884,8 +6879,6 @@ export def "get-spaces-space-id-folders-id-coporate-tax-declarations" [
 # Add a corporate tax declaration
 #
 # POST /spaces/{spaceId}/folders/{id}/coporate-tax-declarations
-# --Accounting shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
-# --File shape: {Content64Encoded?: string, Name?: string}
 export def "post-spaces-space-id-folders-id-coporate-tax-declarations" [
   space_id: string
   id: string
@@ -6911,7 +6904,7 @@ export def "post-spaces-space-id-folders-id-coporate-tax-declarations" [
   --date: string # e.g. 20161203
   file: record # shape: {Content64Encoded?: string, Name?: string}
   title: string # e.g. Facture décembre
-]: any -> record<Id: string> {
+]: any -> oneof<record<Id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6988,7 +6981,7 @@ export def "get-spaces-space-id-folders-id-customer" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, CustomerNumber: string, Designation: string, Actors: table<Active: string, IsAdmin: string, MemberId: string, Name: string, Role: string>, ClientSpaceId: string, PortfolioId: string, SecondaryPortfolioIds: list<string>> {
+]: nothing -> oneof<record<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, CustomerNumber: string, Designation: string, Actors: table<Active: string, IsAdmin: string, MemberId: string, Name: string, Role: string>, ClientSpaceId: string, PortfolioId: string, SecondaryPortfolioIds: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -7082,7 +7075,7 @@ export def "get-spaces-space-id-folders-id-deliveries-journal" [
   --number: int # numbers of the document (e.g. 12,17)
   --class: string # class of the document (e.g. invoice)
   --target-folder-name: string # Name of the target folder of the document (e.g. Exercice*)
-]: nothing -> table<Author: string, Class: string, DeleteDate: string, DeliveryDate: string, Id: string, Number: int, TargetFolder: record<Id: string, Name: string>> {
+]: nothing -> oneof<table<Author: string, Class: string, DeleteDate: string, DeliveryDate: string, Id: string, Number: int, TargetFolder: record<Id: string, Name: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -7125,7 +7118,7 @@ export def "get-spaces-space-id-folders-id-documents" [
   --folder-date: string # date range of attachment (e.g. 20180306,null)
   --class: string # Class of document (e.g. Contract)
   --range: string # index range of the results (e.g. 10-19)
-]: nothing -> table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string> {
+]: nothing -> oneof<table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -7151,8 +7144,6 @@ export def "get-spaces-space-id-folders-id-documents" [
 # Add a document in a folder
 #
 # POST /spaces/{spaceId}/folders/{id}/documents
-# --Accounting shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
-# --File shape: {Content64Encoded?: string, Name?: string}
 export def "post-spaces-space-id-folders-id-documents" [
   space_id: string
   id: string
@@ -7173,7 +7164,7 @@ export def "post-spaces-space-id-folders-id-documents" [
   --date: string # e.g. 20161203
   file: record # shape: {Content64Encoded?: string, Name?: string}
   title: string # e.g. Facture décembre
-]: any -> record<Id: string> {
+]: any -> oneof<record<Id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7289,7 +7280,7 @@ export def "get-spaces-space-id-folders-id-employee" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, ContractType: string, EmployeeNumber: string, Function: string, PostalMail: bool, SSNumber: string> {
+]: nothing -> oneof<record<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, ContractType: string, EmployeeNumber: string, Function: string, PostalMail: bool, SSNumber: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -7383,7 +7374,7 @@ export def "get-spaces-space-id-folders-id-expense-proofs" [
   --status: string@status-completer # Status of the expense proof (e.g. R)
   --no-expense-report: oneof<nothing, bool> # To return expense proofs not attached to an expense report (e.g. 1)
   --range: string # index range of the results (e.g. 10-19)
-]: nothing -> table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, Account: string, ArchivalDate: string, ExpenseDate: string, InclVAT: float, Provider: string, Reason: string, Status: string, VAT: float> {
+]: nothing -> oneof<table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, Account: string, ArchivalDate: string, ExpenseDate: string, InclVAT: float, Provider: string, Reason: string, Status: string, VAT: float>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -7409,8 +7400,6 @@ export def "get-spaces-space-id-folders-id-expense-proofs" [
 # Add a expense proof in a folder followup or exchange
 #
 # POST /spaces/{spaceId}/folders/{id}/expense-proofs
-# --Accounting shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
-# --File shape: {Content64Encoded?: string, Name?: string}
 export def "post-spaces-space-id-folders-id-expense-proofs" [
   space_id: string
   id: string
@@ -7440,7 +7429,7 @@ export def "post-spaces-space-id-folders-id-expense-proofs" [
   --date: string # e.g. 20161203
   file: record # shape: {Content64Encoded?: string, Name?: string}
   title: string # e.g. Facture décembre
-]: any -> record<Id: string> {
+]: any -> oneof<record<Id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7488,7 +7477,7 @@ export def "get-spaces-space-id-folders-id-expense-reports" [
   --expense-date: string # range of ExpenseDate (valid available) (e.g. 20180526,null)
   --sort-order: string@sort-order-completer # order of sort (if absent default is asc) (e.g. asc)
   --sort-name: string@sort-name-completer # name of value for sort (e.g. ExpenseDate)
-]: nothing -> table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, BeforeVAT: float, ExpenseDate: string, InclVAT: float, ProcessingDate: string, VAT: float> {
+]: nothing -> oneof<table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, BeforeVAT: float, ExpenseDate: string, InclVAT: float, ProcessingDate: string, VAT: float>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -7514,8 +7503,6 @@ export def "get-spaces-space-id-folders-id-expense-reports" [
 # Add a expense report in a folder followup
 #
 # POST /spaces/{spaceId}/folders/{id}/expense-reports
-# --Accounting shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
-# --File shape: {Content64Encoded?: string, Name?: string}
 export def "post-spaces-space-id-folders-id-expense-reports" [
   space_id: string
   id: string
@@ -7541,7 +7528,7 @@ export def "post-spaces-space-id-folders-id-expense-reports" [
   --comment: string # e.g. my document
   file: record # shape: {Content64Encoded?: string, Name?: string}
   title: string # e.g. Facture décembre
-]: any -> record<Id: string> {
+]: any -> oneof<record<Id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7585,7 +7572,7 @@ export def "get-spaces-space-id-folders-id-expense-reports-expense-report-id-exp
   --date: string # Date of the documents (YYYY or YYYYMM or YYYYMMDD) (e.g. 20160321)
   --status: string@status-completer # Status of the expense proof (e.g. R)
   --folder-date: string # Date of upload of the document (YYYY or YYYYMM or YYYYMMDD) (e.g. 20180202000000)
-]: nothing -> table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, Account: string, ArchivalDate: string, ExpenseDate: string, InclVAT: float, Provider: string, Reason: string, Status: string, VAT: float> {
+]: nothing -> oneof<table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, Account: string, ArchivalDate: string, ExpenseDate: string, InclVAT: float, Provider: string, Reason: string, Status: string, VAT: float>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -7661,7 +7648,7 @@ export def "get-spaces-space-id-folders-id-insurance" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, CustomerNumber: string, Designation: string, PolicyNumber: string> {
+]: nothing -> oneof<record<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, CustomerNumber: string, Designation: string, PolicyNumber: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -7763,7 +7750,7 @@ export def "get-spaces-space-id-folders-id-invoices" [
   --range: string # index range of the results (e.g. 10-19)
   --sort-order: string@sort-order-completer # order of sort (if absent default is asc) (e.g. asc)
   --sort-name: string@sort-name-completer-1 # name of value for sort (e.g. PaymentDate)
-]: nothing -> table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, AccountedOn: string, BeforeVAT: float, DueDate: string, InclVAT: float, InvoiceDate: string, Number: string, PaymentDate: string, Type: string, VAT: float> {
+]: nothing -> oneof<table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, AccountedOn: string, BeforeVAT: float, DueDate: string, InclVAT: float, InvoiceDate: string, Number: string, PaymentDate: string, Type: string, VAT: float>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -7789,8 +7776,6 @@ export def "get-spaces-space-id-folders-id-invoices" [
 # Add a invoice in a folder of a customer or a provider
 #
 # POST /spaces/{spaceId}/folders/{id}/invoices
-# --Accounting shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
-# --File shape: {Content64Encoded?: string, Name?: string}
 export def "post-spaces-space-id-folders-id-invoices" [
   space_id: string
   id: string
@@ -7819,7 +7804,7 @@ export def "post-spaces-space-id-folders-id-invoices" [
   --comment: string # e.g. my document
   file: record # shape: {Content64Encoded?: string, Name?: string}
   title: string # e.g. Facture décembre
-]: any -> record<Id: string> {
+]: any -> oneof<record<Id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7859,7 +7844,7 @@ export def "get-spaces-space-id-folders-id-legal-entity" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<Class: string, Id: string> {
+]: nothing -> oneof<record<Class: string, Id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -7933,7 +7918,7 @@ export def "get-spaces-space-id-folders-id-loan" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Amount: float, Category: string, Designation: string, DueAmount: float, MonthsNumber: float, Rate: float, TotalCost: float> {
+]: nothing -> oneof<record<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Amount: float, Category: string, Designation: string, DueAmount: float, MonthsNumber: float, Rate: float, TotalCost: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -8027,7 +8012,7 @@ export def "get-spaces-space-id-folders-id-messages" [
   --text: string # Name of the message (e.g. *welcom*)
   --range: string # index range of the results (e.g. 10-19)
   --message-date: string # date of the message (e.g. 20190202)
-]: nothing -> table<Author: string, Id: string, Level: string, MessageDate: string, ModificationAuthor: string, ModificationDate: string, Text: string> {
+]: nothing -> oneof<table<Author: string, Id: string, Level: string, MessageDate: string, ModificationAuthor: string, ModificationDate: string, Text: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -8053,7 +8038,6 @@ export def "get-spaces-space-id-folders-id-messages" [
 # Write a message in the journal of a folder
 #
 # POST /spaces/{spaceId}/folders/{id}/messages
-# --Notify shape: {How?: "std"|"mail"|"sms", MemberIds?: list<string>}
 export def "post-spaces-space-id-folders-id-messages" [
   space_id: string
   id: string
@@ -8111,7 +8095,7 @@ export def "get-spaces-space-id-folders-id-messages-message-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<Author: string, Id: string, Level: string, MessageDate: string, ModificationAuthor: string, ModificationDate: string, Text: string> {
+]: nothing -> oneof<record<Author: string, Id: string, Level: string, MessageDate: string, ModificationAuthor: string, ModificationDate: string, Text: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -8137,7 +8121,6 @@ export def "get-spaces-space-id-folders-id-messages-message-id" [
 # Modify a Message
 #
 # PATCH /spaces/{spaceId}/folders/{id}/messages/{messageId}
-# --Notify shape: {How?: "std"|"mail"|"sms", MemberIds?: list<string>}
 export def "patch-spaces-space-id-folders-id-messages-message-id" [
   space_id: string
   id: string
@@ -8198,7 +8181,7 @@ export def "get-spaces-space-id-folders-id-nominative-social-declarations" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --date: string # range date of the documents (e.g. 20160321, null)
   --range: string # index range of the results (e.g. 10-19)
-]: nothing -> table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, Begin: string, EmployeeContributions: float, EmployerContributions: float, End: string, NetAmount: float, TotalGrossAmount: float, PayrollId: string> {
+]: nothing -> oneof<table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, Begin: string, EmployeeContributions: float, EmployerContributions: float, End: string, NetAmount: float, TotalGrossAmount: float, PayrollId: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -8238,7 +8221,7 @@ export def "get-spaces-space-id-folders-id-other-taxes" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --date: string # range date of the documents (e.g. 20160321, null)
   --range: string # index range of the results (e.g. 10-19)
-]: nothing -> table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, Amount: float, DeclarationDate: string, Reference: string> {
+]: nothing -> oneof<table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, Amount: float, DeclarationDate: string, Reference: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -8264,8 +8247,6 @@ export def "get-spaces-space-id-folders-id-other-taxes" [
 # Add a tax declaration
 #
 # POST /spaces/{spaceId}/folders/{id}/other-taxes
-# --Accounting shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
-# --File shape: {Content64Encoded?: string, Name?: string}
 export def "post-spaces-space-id-folders-id-other-taxes" [
   space_id: string
   id: string
@@ -8289,7 +8270,7 @@ export def "post-spaces-space-id-folders-id-other-taxes" [
   --date: string # e.g. 20161203
   file: record # shape: {Content64Encoded?: string, Name?: string}
   title: string # e.g. Facture décembre
-]: any -> record<Id: string> {
+]: any -> oneof<record<Id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8329,7 +8310,7 @@ export def "get-spaces-space-id-folders-id-passwords" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<Comment: string, Designation: string, Ident: string, Link: string, Password: string, Id: string> {
+]: nothing -> oneof<table<Comment: string, Designation: string, Ident: string, Link: string, Password: string, Id: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -8451,7 +8432,7 @@ export def "get-spaces-space-id-folders-id-passwords-password-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<Comment: string, Designation: string, Ident: string, Link: string, Password: string, Id: string> {
+]: nothing -> oneof<record<Comment: string, Designation: string, Ident: string, Link: string, Password: string, Id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -8540,7 +8521,7 @@ export def "get-spaces-space-id-folders-id-payrolls" [
   --begin: string # begin date of the payrolls (e.g. 20160321,null)
   --end: string # end date of the payrolls (e.g. 20160321,null)
   --range: string # index range of the results (e.g. 10-19)
-]: nothing -> table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, Begin: string, EmployeeContributions: float, EmployerContributions: float, End: string, NetAmount: float, TotalGrossAmount: float> {
+]: nothing -> oneof<table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, Begin: string, EmployeeContributions: float, EmployerContributions: float, End: string, NetAmount: float, TotalGrossAmount: float>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -8566,8 +8547,6 @@ export def "get-spaces-space-id-folders-id-payrolls" [
 # Add a payroll in a folder social
 #
 # POST /spaces/{spaceId}/folders/{id}/payrolls
-# --Accounting shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
-# --File shape: {Content64Encoded?: string, Name?: string}
 export def "post-spaces-space-id-folders-id-payrolls" [
   space_id: string
   id: string
@@ -8594,7 +8573,7 @@ export def "post-spaces-space-id-folders-id-payrolls" [
   --date: string # e.g. 20161203
   file: record # shape: {Content64Encoded?: string, Name?: string}
   title: string # e.g. Facture décembre
-]: any -> record<Id: string> {
+]: any -> oneof<record<Id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8661,8 +8640,6 @@ export def "delete-spaces-space-id-folders-id-payrolls-payroll-id-nominative-soc
 # Add a nominative social declaration in a folder social
 #
 # POST /spaces/{spaceId}/folders/{id}/payrolls/{payrollId}/nominative-social-declaration
-# --Accounting shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
-# --File shape: {Content64Encoded?: string, Name?: string}
 export def "post-spaces-space-id-folders-id-payrolls-payroll-id-nominative-social-declaration" [
   space_id: string
   id: string
@@ -8684,7 +8661,7 @@ export def "post-spaces-space-id-folders-id-payrolls-payroll-id-nominative-socia
   --date: string # e.g. 20161203
   file: record # shape: {Content64Encoded?: string, Name?: string}
   title: string # e.g. Facture décembre
-]: any -> record<Id: string> {
+]: any -> oneof<record<Id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8727,7 +8704,7 @@ export def "get-spaces-space-id-folders-id-payslips" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --date: string # range date of the documents (e.g. 20160321, null)
   --range: string # index range of the results (e.g. 10-19)
-]: nothing -> table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, Begin: string, EmployeeContributions: float, EmployerContributions: float, End: string, FixedGrossAmount: float, NetAmount: float, TotalGrossAmount: float, Vacation: float, VariableGrossAmount: float> {
+]: nothing -> oneof<table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, Begin: string, EmployeeContributions: float, EmployerContributions: float, End: string, FixedGrossAmount: float, NetAmount: float, TotalGrossAmount: float, Vacation: float, VariableGrossAmount: float>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -8753,8 +8730,6 @@ export def "get-spaces-space-id-folders-id-payslips" [
 # Add a payslip in a folder employee
 #
 # POST /spaces/{spaceId}/folders/{id}/payslips
-# --Accounting shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
-# --File shape: {Content64Encoded?: string, Name?: string}
 export def "post-spaces-space-id-folders-id-payslips" [
   space_id: string
   id: string
@@ -8784,7 +8759,7 @@ export def "post-spaces-space-id-folders-id-payslips" [
   --date: string # e.g. 20161203
   file: record # shape: {Content64Encoded?: string, Name?: string}
   title: string # e.g. Facture décembre
-]: any -> record<Id: string> {
+]: any -> oneof<record<Id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8992,7 +8967,7 @@ export def "get-spaces-space-id-folders-id-provider" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Designation: string, ProviderNumber: string> {
+]: nothing -> oneof<record<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Designation: string, ProviderNumber: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -9078,7 +9053,7 @@ export def "get-spaces-space-id-folders-id-required-documents" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<Comment: string, Date: string, DocIds: list<string>, Id: string, Name: string, Status: string> {
+]: nothing -> oneof<table<Comment: string, Date: string, DocIds: list<string>, Id: string, Name: string, Status: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -9146,7 +9121,6 @@ export def "patch-spaces-space-id-folders-id-required-documents-requireddocument
 # Add a required document to a line
 #
 # POST /spaces/{spaceId}/folders/{id}/required-documents/{requireddocumentid}
-# --File shape: {Content64Encoded?: string, Name?: string}
 export def "post-spaces-space-id-folders-id-required-documents-requireddocumentid" [
   space_id: string
   id: string
@@ -9161,7 +9135,7 @@ export def "post-spaces-space-id-folders-id-required-documents-requireddocumenti
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   file: record # shape: {Content64Encoded?: string, Name?: string}
-]: any -> record<Id: string> {
+]: any -> oneof<record<Id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9243,7 +9217,7 @@ export def "get-spaces-space-id-folders-id-sections" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<Keywords: list<string>, Name: string, State: string, Type: string> {
+]: nothing -> oneof<table<Keywords: list<string>, Name: string, State: string, Type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -9282,7 +9256,7 @@ export def "get-spaces-space-id-folders-id-social-contracts" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --date: string # range date of the documents (e.g. 20160321, null)
   --range: string # index range of the results (e.g. 10-19)
-]: nothing -> table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, ContractDate: string, ContractDuration: string, ContractualChange: string, Position: string, WageDevelopments: float> {
+]: nothing -> oneof<table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, ContractDate: string, ContractDuration: string, ContractualChange: string, Position: string, WageDevelopments: float>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -9308,8 +9282,6 @@ export def "get-spaces-space-id-folders-id-social-contracts" [
 # Add a social contract in a folder employee
 #
 # POST /spaces/{spaceId}/folders/{id}/social-contracts
-# --Accounting shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
-# --File shape: {Content64Encoded?: string, Name?: string}
 export def "post-spaces-space-id-folders-id-social-contracts" [
   space_id: string
   id: string
@@ -9335,7 +9307,7 @@ export def "post-spaces-space-id-folders-id-social-contracts" [
   --date: string # e.g. 20161203
   file: record # shape: {Content64Encoded?: string, Name?: string}
   title: string # e.g. Facture décembre
-]: any -> record<Id: string> {
+]: any -> oneof<record<Id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9377,7 +9349,7 @@ export def "get-spaces-space-id-folders-id-social-declarations" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --date: string # range date of the documents (e.g. 20160321, null)
   --range: string # index range of the results (e.g. 10-19)
-]: nothing -> table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, Amount: float, DeclarationDate: string> {
+]: nothing -> oneof<table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, Amount: float, DeclarationDate: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -9403,8 +9375,6 @@ export def "get-spaces-space-id-folders-id-social-declarations" [
 # Add a social declaration
 #
 # POST /spaces/{spaceId}/folders/{id}/social-declarations
-# --Accounting shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
-# --File shape: {Content64Encoded?: string, Name?: string}
 export def "post-spaces-space-id-folders-id-social-declarations" [
   space_id: string
   id: string
@@ -9427,7 +9397,7 @@ export def "post-spaces-space-id-folders-id-social-declarations" [
   --date: string # e.g. 20161203
   file: record # shape: {Content64Encoded?: string, Name?: string}
   title: string # e.g. Facture décembre
-]: any -> record<Id: string> {
+]: any -> oneof<record<Id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9504,7 +9474,7 @@ export def "get-spaces-space-id-folders-id-social-regimes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Designation: string, Periodicity: string, Type: string> {
+]: nothing -> oneof<record<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Designation: string, Periodicity: string, Type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -9597,7 +9567,7 @@ export def "get-spaces-space-id-folders-id-sum-invoices" [
   --due-date: string # range date due payment (e.g. 20201231)
   --payment-date: string # range date of payment (e.g. 20201201,null)
   --invoice-date: string # range date of invoice (e.g. 20201201,null)
-]: nothing -> record<BeforeVAT: float, InclVAT: float, VAT: float> {
+]: nothing -> oneof<record<BeforeVAT: float, InclVAT: float, VAT: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -9723,7 +9693,7 @@ export def "get-spaces-space-id-folders-id-vat-declarations" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --date: string # range date of the documents (e.g. 20160321, null)
   --range: string # index range of the results (e.g. 10-19)
-]: nothing -> table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, Begin: string, CollectedVAT: float, CreditVAT: float, DeductibleVAT: float, End: string, ExemptTurnover: float, Number: string, PayableVAT: float, TaxableTurnover: float> {
+]: nothing -> oneof<table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, Begin: string, CollectedVAT: float, CreditVAT: float, DeductibleVAT: float, End: string, ExemptTurnover: float, Number: string, PayableVAT: float, TaxableTurnover: float>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -9749,8 +9719,6 @@ export def "get-spaces-space-id-folders-id-vat-declarations" [
 # Add a vat declaration
 #
 # POST /spaces/{spaceId}/folders/{id}/vat-declarations
-# --Accounting shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
-# --File shape: {Content64Encoded?: string, Name?: string}
 export def "post-spaces-space-id-folders-id-vat-declarations" [
   space_id: string
   id: string
@@ -9780,7 +9748,7 @@ export def "post-spaces-space-id-folders-id-vat-declarations" [
   --date: string # e.g. 20161203
   file: record # shape: {Content64Encoded?: string, Name?: string}
   title: string # e.g. Facture décembre
-]: any -> record<Id: string> {
+]: any -> oneof<record<Id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9860,7 +9828,7 @@ export def "get-spaces-space-id-folders-id-document-class" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string> {
+]: nothing -> oneof<table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -9886,8 +9854,6 @@ export def "get-spaces-space-id-folders-id-document-class" [
 # Add a document in a folder
 #
 # POST /spaces/{spaceId}/folders/{id}/{documentClass}
-# --Accounting shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
-# --File shape: {Content64Encoded?: string, Name?: string}
 export def "post-spaces-space-id-folders-id-document-class" [
   space_id: string
   id: string
@@ -9909,7 +9875,7 @@ export def "post-spaces-space-id-folders-id-document-class" [
   --date: string # e.g. 20161203
   file: record # shape: {Content64Encoded?: string, Name?: string}
   title: string # e.g. Facture décembre
-]: any -> record<Id: string> {
+]: any -> oneof<record<Id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9950,7 +9916,7 @@ export def "get-spaces-space-id-legal-entities-id-banks" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, ContractReference: string, Designation: string> {
+]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, ContractReference: string, Designation: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -9996,7 +9962,7 @@ export def "post-spaces-space-id-legal-entities-id-banks" [
   --keywords: list<string> # e.g. [paris, comptabilité]
   --level: string@level-completer # e.g. confidential
   --start: string # e.g. 20180630
-]: any -> record<Id: string> {
+]: any -> oneof<record<Id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10036,7 +10002,7 @@ export def "get-spaces-space-id-legal-entities-id-banks-all" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, ContractReference: string, Designation: string> {
+]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, ContractReference: string, Designation: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -10073,7 +10039,7 @@ export def "get-spaces-space-id-legal-entities-id-contracts" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string> {
+]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -10110,7 +10076,7 @@ export def "get-spaces-space-id-legal-entities-id-contractual-relationships" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, ContractReference: string, Designation: string> {
+]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, ContractReference: string, Designation: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -10147,7 +10113,7 @@ export def "get-spaces-space-id-legal-entities-id-contractual-relationships-all"
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, ContractReference: string, Designation: string> {
+]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, ContractReference: string, Designation: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -10184,7 +10150,7 @@ export def "get-spaces-space-id-legal-entities-id-customers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, CustomerNumber: string, Designation: string> {
+]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, CustomerNumber: string, Designation: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -10231,7 +10197,7 @@ export def "post-spaces-space-id-legal-entities-id-customers" [
   --level: string@level-completer # e.g. confidential
   --portfolio-id: string # e.g. T1OJFOAZ7449420F
   --start: string # e.g. 20180630
-]: any -> record<Id: string> {
+]: any -> oneof<record<Id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10271,7 +10237,7 @@ export def "get-spaces-space-id-legal-entities-id-customers-all" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, CustomerNumber: string, Designation: string> {
+]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, CustomerNumber: string, Designation: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -10308,7 +10274,7 @@ export def "get-spaces-space-id-legal-entities-id-insurances" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, CustomerNumber: string, Designation: string, PolicyNumber: string> {
+]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, CustomerNumber: string, Designation: string, PolicyNumber: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -10355,7 +10321,7 @@ export def "post-spaces-space-id-legal-entities-id-insurances" [
   --level: string@level-completer # e.g. confidential
   --policy-number: string # e.g. 1358
   --start: string # e.g. 20180630
-]: any -> record<Id: string> {
+]: any -> oneof<record<Id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10395,7 +10361,7 @@ export def "get-spaces-space-id-legal-entities-id-insurances-all" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, CustomerNumber: string, Designation: string, PolicyNumber: string> {
+]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, CustomerNumber: string, Designation: string, PolicyNumber: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -10432,7 +10398,7 @@ export def "get-spaces-space-id-legal-entities-id-loans" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Amount: float, Category: string, Designation: string, DueAmount: float, MonthsNumber: float, Rate: float, TotalCost: float> {
+]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Amount: float, Category: string, Designation: string, DueAmount: float, MonthsNumber: float, Rate: float, TotalCost: float>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -10483,7 +10449,7 @@ export def "post-spaces-space-id-legal-entities-id-loans" [
   --rate: float # format: float, e.g. 2.5
   --start: string # e.g. 20180630
   --total-cost: float # format: float, e.g. 10200
-]: any -> record<Id: string> {
+]: any -> oneof<record<Id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10523,7 +10489,7 @@ export def "get-spaces-space-id-legal-entities-id-loans-all" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Amount: float, Category: string, Designation: string, DueAmount: float, MonthsNumber: float, Rate: float, TotalCost: float> {
+]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Amount: float, Category: string, Designation: string, DueAmount: float, MonthsNumber: float, Rate: float, TotalCost: float>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -10560,7 +10526,7 @@ export def "get-spaces-space-id-legal-entities-id-providers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Designation: string, ProviderNumber: string> {
+]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Designation: string, ProviderNumber: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -10606,7 +10572,7 @@ export def "post-spaces-space-id-legal-entities-id-providers" [
   --level: string@level-completer # e.g. confidential
   --provider-number: string # e.g. 13587449420F
   --start: string # e.g. 20180630
-]: any -> record<Id: string> {
+]: any -> oneof<record<Id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10646,7 +10612,7 @@ export def "get-spaces-space-id-legal-entities-id-providers-all" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Designation: string, ProviderNumber: string> {
+]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Designation: string, ProviderNumber: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -10683,7 +10649,7 @@ export def "get-spaces-space-id-legal-entities-id-social-regimes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Designation: string, Periodicity: string, Type: string> {
+]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Designation: string, Periodicity: string, Type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -10730,7 +10696,7 @@ export def "post-spaces-space-id-legal-entities-id-social-regimes" [
   --periodicity: string@periodicity-completer # e.g. monthly
   --start: string # e.g. 20180630
   --type: string@type-completer-4 # e.g. mandatory
-]: any -> record<Id: string> {
+]: any -> oneof<record<Id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10770,7 +10736,7 @@ export def "get-spaces-space-id-legal-entities-id-social-regimes-all" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Designation: string, Periodicity: string, Type: string> {
+]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Designation: string, Periodicity: string, Type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -10806,7 +10772,7 @@ export def "get-spaces-space-id-loans" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Amount: float, Category: string, Designation: string, DueAmount: float, MonthsNumber: float, Rate: float, TotalCost: float> {
+]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Amount: float, Category: string, Designation: string, DueAmount: float, MonthsNumber: float, Rate: float, TotalCost: float>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -10841,7 +10807,7 @@ export def "get-spaces-space-id-loans-all" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Amount: float, Category: string, Designation: string, DueAmount: float, MonthsNumber: float, Rate: float, TotalCost: float> {
+]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Amount: float, Category: string, Designation: string, DueAmount: float, MonthsNumber: float, Rate: float, TotalCost: float>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -10932,7 +10898,7 @@ export def "post-spaces-space-id-persons-id-call-for-document" [
   --player-end: string # e.g. 20190601
   --signature: string # e.g. cordialement
   --subject: string # e.g. invitation sur le coffre
-]: any -> record<Id: string> {
+]: any -> oneof<record<Id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10972,7 +10938,7 @@ export def "get-spaces-space-id-persons-id-employees" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, ContractType: string, EmployeeNumber: string, Function: string, PostalMail: bool, SSNumber: string> {
+]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, ContractType: string, EmployeeNumber: string, Function: string, PostalMail: bool, SSNumber: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -11021,7 +10987,7 @@ export def "post-spaces-space-id-persons-id-employees" [
   --postal-mail: oneof<nothing, bool> # e.g. true
   --ss-number: string # e.g. 1542012365985215
   --start: string # e.g. 20180630
-]: any -> record<Id: string> {
+]: any -> oneof<record<Id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11061,7 +11027,7 @@ export def "get-spaces-space-id-persons-id-employees-all" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, ContractType: string, EmployeeNumber: string, Function: string, PostalMail: bool, SSNumber: string> {
+]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, ContractType: string, EmployeeNumber: string, Function: string, PostalMail: bool, SSNumber: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -11098,7 +11064,7 @@ export def "get-spaces-space-id-persons-id-exchange" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string> {
+]: nothing -> oneof<record<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -11135,7 +11101,7 @@ export def "get-spaces-space-id-persons-id-follow-ups" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, ClientManagement: string, Invitation: record<Comment: string, PlayerEnd: string, Status: string>, Player: string> {
+]: nothing -> oneof<record<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, ClientManagement: string, Invitation: record<Comment: string, PlayerEnd: string, Status: string>, Player: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -11197,7 +11163,6 @@ export def "delete-spaces-space-id-persons-id-guest-in-space" [
 # invite a person in a space
 #
 # PATCH /spaces/{spaceId}/persons/{id}/guest-in-space
-# --Folders item shape: {Id?: string, Right?: "read"|"write"}
 export def "patch-spaces-space-id-persons-id-guest-in-space" [
   space_id: string
   id: string
@@ -11244,7 +11209,6 @@ export def "patch-spaces-space-id-persons-id-guest-in-space" [
 # invite a person in a space
 #
 # POST /spaces/{spaceId}/persons/{id}/guest-in-space
-# --Folders item shape: {Id?: string, Right?: "read"|"write"}
 export def "post-spaces-space-id-persons-id-guest-in-space" [
   space_id: string
   id: string
@@ -11346,7 +11310,7 @@ export def "get-spaces-space-id-persons-id-invitation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<ClientManagement: string, CodeMethod: any, EmployeeAccess: bool, Folders: table<Id: string, Name: string, Right: string>, GroupIds: list<string>, Groups: table<EndDate: string, Id: string, Name: string>, IsAdmin: bool, LinkMethod: record<Type: string>, Player: string, PlayerEnd: string, Status: string> {
+]: nothing -> oneof<record<ClientManagement: string, CodeMethod: any, EmployeeAccess: bool, Folders: table<Id: string, Name: string, Right: string>, GroupIds: list<string>, Groups: table<EndDate: string, Id: string, Name: string>, IsAdmin: bool, LinkMethod: record<Type: string>, Player: string, PlayerEnd: string, Status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -11371,7 +11335,6 @@ export def "get-spaces-space-id-persons-id-invitation" [
 # modify an invitation
 #
 # PATCH /spaces/{spaceId}/persons/{id}/invitation
-# --Folders item shape: {Id?: string, Right?: "read"|"write"}
 export def "patch-spaces-space-id-persons-id-invitation" [
   space_id: string
   id: string
@@ -11419,7 +11382,6 @@ export def "patch-spaces-space-id-persons-id-invitation" [
 # create an invitation in a space for a person
 #
 # POST /spaces/{spaceId}/persons/{id}/invitation
-# --Folders item shape: {Id?: string, Right?: "read"|"write"}
 export def "post-spaces-space-id-persons-id-invitation" [
   space_id: string
   id: string
@@ -11439,7 +11401,7 @@ export def "post-spaces-space-id-persons-id-invitation" [
   --is-admin: oneof<nothing, bool> # e.g. true
   --player: string@player-completer # e.g. guest
   --player-end: string # e.g. 20190601
-]: any -> record<Id: string> {
+]: any -> oneof<record<Id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11484,7 +11446,7 @@ export def "post-spaces-space-id-persons-id-invitation-invitation-id-send" [
   --message: string # e.g. <p> Bienvenue dans l'espace de l'envtreprise SOCIETE </p>
   --signature: string # e.g. cordialement
   --subject: string # e.g. invitation sur le coffre
-]: any -> record<Id: string> {
+]: any -> oneof<record<Id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11526,7 +11488,7 @@ export def "get-spaces-space-id-persons-member-id-folders-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<Id: string, Right: string, About: string, ArchivalDate: string, Class: string, Home: bool, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string> {
+]: nothing -> oneof<record<Id: string, Right: string, About: string, ArchivalDate: string, Class: string, Home: bool, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -11611,7 +11573,7 @@ export def "get-spaces-space-id-providers" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --with-contracting-partner: string # if present returns infos of the ContractingPartner too
-]: nothing -> table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Designation: string, ProviderNumber: string> {
+]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Designation: string, ProviderNumber: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -11648,7 +11610,7 @@ export def "get-spaces-space-id-providers-all" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --with-contracting-partner: string # if present returns infos of the ContractingPartner too
-]: nothing -> table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Designation: string, ProviderNumber: string> {
+]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Designation: string, ProviderNumber: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -11687,7 +11649,7 @@ export def "get-spaces-space-id-search" [
   --query: string # Text to find (e.g. durand)
   --range: string # index range of the results (e.g. 10-19)
   --query-context: record # context of research
-]: nothing -> record<Count: table<Class: string, Count: int>, Results: table<Class: string, Extract: record, Id: string, Label: string, Location: list, Score: float, Specific: record>, TotalCount: int> {
+]: nothing -> oneof<record<Count: table<Class: string, Count: int>, Results: table<Class: string, Extract: record, Id: string, Label: string, Location: list, Score: float, Specific: record>, TotalCount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -11724,7 +11686,7 @@ export def "get-spaces-space-id-social-regimes" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --with-contracting-partner: string # if present returns infos of the ContractingPartner too
-]: nothing -> table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Designation: string, Periodicity: string, Type: string> {
+]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Designation: string, Periodicity: string, Type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -11761,7 +11723,7 @@ export def "get-spaces-space-id-social-regimes-all" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --with-contracting-partner: string # if present returns infos of the ContractingPartner too
-]: nothing -> table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Designation: string, Periodicity: string, Type: string> {
+]: nothing -> oneof<table<About: string, ArchivalDate: string, Class: string, Home: bool, Id: string, Keywords: list<string>, Level: string, ModificationDate: string, Name: string, Parent: string, Comment: string, End: string, Start: string, Designation: string, Periodicity: string, Type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
@@ -11798,7 +11760,7 @@ export def "get-spaces-space-id-spaces-invoicings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --date: string # date range of the documents (e.g. 20160321,null)
-]: nothing -> table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, InvoiceNumber: string> {
+]: nothing -> oneof<table<Author: string, Class: list<string>, Code: string, Comment: string, Date: string, Extension: string, FolderDate: string, Id: string, Title: string, InvoiceNumber: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }

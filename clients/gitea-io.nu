@@ -13,34 +13,43 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "query-access_token" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "access_token")=(encode-path-segment $token_val)", location: "query"} }
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
-    "sudo" => { {scheme: $scheme, headers: {Sudo: $token_val}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
+    "sudo" => { {scheme: $scheme, headers: {"Sudo": $token_val}, query: "", location: "header"} }
     "query-sudo" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "sudo")=(encode-path-segment $token_val)", location: "query"} }
-    "x-gitea-otp" => { {scheme: $scheme, headers: {X-GITEA-OTP: $token_val}, query: "", location: "header"} }
+    "x-gitea-otp" => { {scheme: $scheme, headers: {"X-GITEA-OTP": $token_val}, query: "", location: "header"} }
     "query-token" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "token")=(encode-path-segment $token_val)", location: "query"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -48,8 +57,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -60,7 +74,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -95,7 +118,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -154,6 +178,7 @@ def base-url-completer [] { ["http://localhost/api/v1"] }
 def auth-scheme-completer [] { ["query-access_token" "bearer" "basic" "sudo" "query-sudo" "x-gitea-otp" "query-token" "basic-credentials"] }
 
 # Completers for enum parameters
+def accept-completer [] { ["application/json" "text/html"] }
 def type-completer [] { ["dingtalk" "discord" "feishu" "gitea" "gogs" "msteams" "packagist" "slack" "telegram" "wechatwork"] }
 def visibility-completer [] { ["limited" "private" "public"] }
 def trust-model-completer [] { ["collaborator" "collaboratorcommitter" "committer" "default"] }
@@ -162,6 +187,7 @@ def type-completer-1 [] { ["cargo" "chef" "composer" "conan" "conda" "container"
 def service-completer [] { ["git" "gitea" "github" "gitlab"] }
 def sort-completer [] { ["highestindex" "leastindex" "leastupdate" "oldest" "recentupdate"] }
 def state-completer [] { ["error" "failure" "pending" "success" "warning"] }
+def diff-type-completer [] { ["diff" "patch"] }
 def state-completer-1 [] { ["all" "closed" "open"] }
 def type-completer-2 [] { ["issues" "pulls"] }
 def state-completer-2 [] { ["closed" "open"] }
@@ -173,9 +199,9 @@ def style-completer [] { ["merge" "rebase"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "activitypub-person" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["activitypub-person" "activitypub-person-inbox" "admin-cron-list" "admin-cron-run" "admin-list-hooks" "admin-create-hook" "admin-get-hook" "admin-edit-hook" "admin-get-all-orgs" "admin-unadopted-list" "admin-delete-unadopted-repository" "admin-adopt-repository" "admin-get-all-users" "admin-create-user" "admin-delete-user" "admin-edit-user" "admin-create-public-key" "admin-delete-user-public-key" "admin-create-org" "admin-create-repo" "admin-delete-hook" "render-markdown" "render-markdown-raw" "get-node-info" "notify-get-list" "notify-read-list" "notify-new-available" "notify-get-thread" "notify-read-thread" "create-org-repo-deprecated" "org-get-all" "org-create" "org-delete" "org-get" "org-edit" "org-list-hooks" "org-create-hook" "org-delete-hook" "org-get-hook" "org-edit-hook" "org-list-labels" "org-create-label" "org-delete-label" "org-get-label" "org-edit-label" "org-list-members" "org-delete-member" "org-is-member" "org-list-public-members" "org-conceal-member" "org-is-public-member" "org-publicize-member" "org-list-repos" "create-org-repo" "org-list-teams" "org-create-team" "team-search" "list-packages" "delete-package" "get-package" "list-package-files" "issue-search-issues" "repo-migrate" "repo-search" "repo-delete" "repo-get" "repo-edit" "repo-get-archive" "repo-get-assignees" "repo-list-branch-protection" "repo-create-branch-protection" "repo-delete-branch-protection" "repo-get-branch-protection" "repo-edit-branch-protection" "repo-list-branches" "repo-create-branch" "repo-delete-branch" "repo-get-branch" "repo-list-collaborators" "repo-delete-collaborator" "repo-check-collaborator" "repo-add-collaborator" "repo-get-repo-permissions" "repo-get-all-commits" "repo-get-combined-status-by-ref" "repo-list-statuses-by-ref" "repo-get-contents-list" "repo-delete-file" "repo-get-contents" "repo-create-file" "repo-update-file" "repo-apply-diff-patch" "repo-get-editor-config" "list-forks" "create-fork" "get-blob" "repo-get-single-commit" "repo-download-commit-diff-or-patch" "repo-get-note" "repo-list-all-git-refs" "repo-list-git-refs" "get-annotated-tag" "get-tree" "repo-list-hooks" "repo-create-hook" "repo-list-git-hooks" "repo-delete-git-hook" "repo-get-git-hook" "repo-edit-git-hook" "repo-delete-hook" "repo-get-hook" "repo-edit-hook" "repo-test-hook" "repo-get-issue-templates" "issue-list-issues" "issue-create-issue" "issue-get-repo-comments" "issue-delete-comment" "issue-get-comment" "issue-edit-comment" "issue-list-issue-comment-attachments" "issue-create-issue-comment-attachment" "issue-delete-issue-comment-attachment" "issue-get-issue-comment-attachment" "issue-edit-issue-comment-attachment" "issue-delete-comment-reaction" "issue-get-comment-reactions" "issue-post-comment-reaction" "issue-delete" "issue-get-issue" "issue-edit-issue" "issue-list-issue-attachments" "issue-create-issue-attachment" "issue-delete-issue-attachment" "issue-get-issue-attachment" "issue-edit-issue-attachment" "issue-get-comments" "issue-create-comment" "issue-delete-comment-deprecated" "issue-edit-comment-deprecated" "issue-edit-issue-deadline" "issue-clear-labels" "issue-get-labels" "issue-add-label" "issue-replace-labels" "issue-remove-label" "issue-delete-issue-reaction" "issue-get-issue-reactions" "issue-post-issue-reaction" "issue-delete-stop-watch" "issue-start-stop-watch" "issue-stop-stop-watch" "issue-subscriptions" "issue-check-subscription" "issue-delete-subscription" "issue-add-subscription" "issue-get-comments-and-timeline" "issue-reset-time" "issue-tracked-times" "issue-add-time" "issue-delete-time" "repo-list-keys" "repo-create-key" "repo-delete-key" "repo-get-key" "issue-list-labels" "issue-create-label" "issue-delete-label" "issue-get-label" "issue-edit-label" "repo-get-languages" "repo-get-raw-file-or-lfs" "issue-get-milestones-list" "issue-create-milestone" "issue-delete-milestone" "issue-get-milestone" "issue-edit-milestone" "repo-mirror-sync" "notify-get-repo-list" "notify-read-repo-list" "repo-list-pull-requests" "repo-create-pull-request" "repo-get-pull-request" "repo-edit-pull-request" "repo-download-pull-diff-or-patch" "repo-get-pull-request-commits" "repo-get-pull-request-files" "repo-cancel-scheduled-auto-merge" "repo-pull-request-is-merged" "repo-merge-pull-request" "repo-delete-pull-review-requests" "repo-create-pull-review-requests" "repo-list-pull-reviews" "repo-create-pull-review" "repo-delete-pull-review" "repo-get-pull-review" "repo-submit-pull-review" "repo-get-pull-review-comments" "repo-dismiss-pull-review" "repo-un-dismiss-pull-review" "repo-update-pull-request" "repo-list-push-mirrors" "repo-add-push-mirror" "repo-push-mirror-sync" "repo-delete-push-mirror" "repo-get-push-mirror-by-remote-name" "repo-get-raw-file" "repo-list-releases" "repo-create-release" "repo-get-latest-release" "repo-delete-release-by-tag" "repo-get-release-by-tag" "repo-delete-release" "repo-get-release" "repo-edit-release" "repo-list-release-attachments" "repo-create-release-attachment" "repo-delete-release-attachment" "repo-get-release-attachment" "repo-edit-release-attachment" "repo-get-reviewers" "repo-signing-key" "repo-list-stargazers" "repo-list-statuses" "repo-create-status" "repo-list-subscribers" "user-current-delete-subscription" "user-current-check-subscription" "user-current-put-subscription" "repo-list-tags" "repo-create-tag" "repo-delete-tag" "repo-get-tag" "repo-list-teams" "repo-delete-team" "repo-check-team" "repo-add-team" "repo-tracked-times" "user-tracked-times" "repo-list-topics" "repo-update-topics" "repo-delete-topic" "repo-add-topic" "repo-transfer" "accept-repo-transfer" "reject-repo-transfer" "repo-create-wiki-page" "repo-delete-wiki-page" "repo-get-wiki-page" "repo-edit-wiki-page" "repo-get-wiki-pages" "repo-get-wiki-page-revisions" "generate-repo" "repo-get-by-id" "get-general-api-settings" "get-general-attachment-settings" "get-general-repository-settings" "get-general-ui-settings" "get-signing-key" "org-delete-team" "org-get-team" "org-edit-team" "org-list-team-members" "org-remove-team-member" "org-list-team-member" "org-add-team-member" "org-list-team-repos" "org-remove-team-repository" "org-list-team-repo" "org-add-team-repository" "topic-search" "user-get-current" "user-get-oauth2-application" "user-create-o-auth2-application" "user-delete-o-auth2-application" "user-get-o-auth2-application" "user-update-o-auth2-application" "user-delete-email" "user-list-emails" "user-add-email" "user-current-list-followers" "user-current-list-following" "user-current-delete-follow" "user-current-check-following" "user-current-put-follow" "get-verification-token" "user-verify-gpg-key" "user-current-list-gpg-keys" "user-current-post-gpg-key" "user-current-delete-gpg-key" "user-current-get-gpg-key" "user-current-list-keys" "user-current-post-key" "user-current-delete-key" "user-current-get-key" "org-list-current-user-orgs" "user-current-list-repos" "create-current-user-repo" "get-user-settings" "update-user-settings" "user-current-list-starred" "user-current-delete-star" "user-current-check-starring" "user-current-put-star" "user-get-stop-watches" "user-current-list-subscriptions" "user-list-teams" "user-current-tracked-times" "user-search" "user-get" "user-list-followers" "user-list-following" "user-check-following" "user-list-gpg-keys" "user-get-heatmap-data" "user-list-keys" "org-list-user-orgs" "org-get-user-permissions" "user-list-repos" "user-list-starred" "user-list-subscriptions" "user-get-tokens" "user-create-token" "user-delete-access-token" "get-version" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -208,12 +234,13 @@ export def "activitypub-person" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<record<_context: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/activitypub/user/{username}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -279,14 +306,15 @@ export def "admin-cron-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
-]: nothing -> any {
+]: nothing -> oneof<table<exec_times: int, name: string, next: string, prev: string, schedule: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin/cron" $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -352,14 +380,15 @@ export def "admin-list-hooks" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
-]: nothing -> any {
+]: nothing -> oneof<table<active: bool, authorization_header: string, config: record, created_at: string, events: list<string>, id: int, type: string, updated_at: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin/hooks" $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -389,20 +418,21 @@ export def "admin-create-hook" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --active: oneof<nothing, bool> # default: false
   --authorization-header: string
   --branch-filter: string
   config: record # CreateHookOptionConfig has all config options in it required are "content_type" and "url" Required
   --events: list<string>
   type: string@type-completer
-]: any -> any {
+]: any -> oneof<record<active: bool, authorization_header: string, config: record, created_at: string, events: list<string>, id: int, type: string, updated_at: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/hooks" $auth.query)
   let req_body = {"active": $active, "authorization_header": $authorization_header, "branch_filter": $branch_filter, "config": $config, "events": $events, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -433,12 +463,13 @@ export def "admin-get-hook" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<record<active: bool, authorization_header: string, config: record, created_at: string, events: list<string>, id: int, type: string, updated_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/admin/hooks/{id}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -469,12 +500,13 @@ export def "admin-edit-hook" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --active: oneof<nothing, bool>
   --authorization-header: string
   --branch-filter: string
   --config: record
   --events: list<string>
-]: any -> any {
+]: any -> oneof<record<active: bool, authorization_header: string, config: record, created_at: string, events: list<string>, id: int, type: string, updated_at: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -482,7 +514,7 @@ export def "admin-edit-hook" [
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/admin/hooks/{id}") $auth.query)
   let req_body = {"active": $active, "authorization_header": $authorization_header, "branch_filter": $branch_filter, "config": $config, "events": $events} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "patch"
@@ -512,14 +544,15 @@ export def "admin-get-all-orgs" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
-]: nothing -> any {
+]: nothing -> oneof<table<avatar_url: string, description: string, full_name: string, id: int, location: string, name: string, repo_admin_change_team_access: bool, username: string, visibility: string, website: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin/orgs" $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -549,15 +582,16 @@ export def "admin-unadopted-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
   --pattern: string # pattern of repositories to search for
-]: nothing -> any {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "pattern" $pattern "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin/unadopted" $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -663,14 +697,15 @@ export def "admin-get-all-users" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
-]: nothing -> any {
+]: nothing -> oneof<table<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin/users" $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -700,6 +735,7 @@ export def "admin-create-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --created-at: string # For explicitly setting the user creation timestamp. Useful when users are migrated from other systems. When omitted, the user's creation timestamp will be set to "now". (format: date-time)
   email: string # format: email
   --full-name: string
@@ -711,14 +747,14 @@ export def "admin-create-user" [
   --source-id: int # format: int64
   username: string
   --visibility: string
-]: any -> any {
+]: any -> oneof<record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/users" $auth.query)
   let req_body = {"created_at": $created_at, "email": $email, "full_name": $full_name, "login_name": $login_name, "must_change_password": $must_change_password, "password": $password, "restricted": $restricted, "send_notify": $send_notify, "source_id": $source_id, "username": $username, "visibility": $visibility} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -785,6 +821,7 @@ export def "admin-edit-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --active: oneof<nothing, bool>
   --admin: oneof<nothing, bool>
   --allow-create-organization: oneof<nothing, bool>
@@ -803,7 +840,7 @@ export def "admin-edit-user" [
   source_id: int # format: int64
   --visibility: string
   --website: string
-]: any -> any {
+]: any -> oneof<record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -811,7 +848,7 @@ export def "admin-edit-user" [
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/admin/users/{username}") $auth.query)
   let req_body = {"active": $active, "admin": $admin, "allow_create_organization": $allow_create_organization, "allow_git_hook": $allow_git_hook, "allow_import_local": $allow_import_local, "description": $description, "email": $email, "full_name": $full_name, "location": $location, "login_name": $login_name, "max_repo_creation": $max_repo_creation, "must_change_password": $must_change_password, "password": $password, "prohibit_login": $prohibit_login, "restricted": $restricted, "source_id": $source_id, "visibility": $visibility, "website": $website} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "patch"
@@ -842,10 +879,11 @@ export def "admin-create-public-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   key: string # An armored SSH key to add
   --read-only: oneof<nothing, bool> # Describe if the key has only read access or read/write
   title: string # Title of the key to add
-]: any -> any {
+]: any -> oneof<record<created_at: string, fingerprint: string, id: int, key: string, key_type: string, read_only: bool, title: string, url: string, user: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -853,7 +891,7 @@ export def "admin-create-public-key" [
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/admin/users/{username}/keys") $auth.query)
   let req_body = {"key": $key, "read_only": $read_only, "title": $title} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -922,6 +960,7 @@ export def "admin-create-org" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --description: string
   --full-name: string
   --location: string
@@ -929,7 +968,7 @@ export def "admin-create-org" [
   --body-username: string
   --visibility: string@visibility-completer # possible values are `public` (default), `limited` or `private`
   --website: string
-]: any -> any {
+]: any -> oneof<record<avatar_url: string, description: string, full_name: string, id: int, location: string, name: string, repo_admin_change_team_access: bool, username: string, visibility: string, website: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -937,7 +976,8 @@ export def "admin-create-org" [
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/admin/users/{username}/orgs") $auth.query)
   let req_body = {"description": $description, "full_name": $full_name, "location": $location, "repo_admin_change_team_access": $repo_admin_change_team_access, "username": $body_username, "visibility": $visibility, "website": $website} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  if (($req_body | get -o "username") == null) { error make --unspanned { msg: "required body field 'username' missing: pass --body-username or pipe a record" } }
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -968,6 +1008,7 @@ export def "admin-create-repo" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --auto-init: oneof<nothing, bool> # Whether the repository should be auto-initialized?
   --default-branch: string # DefaultBranch of the repository (used when initializes and in template)
   --description: string # Description of the repository to create
@@ -979,7 +1020,7 @@ export def "admin-create-repo" [
   --readme: string # Readme of the repository to create
   --template: oneof<nothing, bool> # Whether the repository is template
   --trust-model: string@trust-model-completer # TrustModel of the repository
-]: any -> any {
+]: any -> oneof<record<allow_merge_commits: bool, allow_rebase: bool, allow_rebase_explicit: bool, allow_rebase_update: bool, allow_squash_merge: bool, archived: bool, avatar_url: string, clone_url: string, created_at: string, default_allow_maintainer_edit: bool, default_branch: string, default_delete_branch_after_merge: bool, default_merge_style: string, description: string, empty: bool, external_tracker: record<external_tracker_format: string, external_tracker_regexp_pattern: string, external_tracker_style: string, external_tracker_url: string>, external_wiki: record<external_wiki_url: string>, fork: bool, forks_count: int, full_name: string, has_issues: bool, has_projects: bool, has_pull_requests: bool, has_wiki: bool, html_url: string, id: int, ignore_whitespace_conflicts: bool, internal: bool, internal_tracker: record<allow_only_contributors_to_track_time: bool, enable_issue_dependencies: bool, enable_time_tracker: bool>, language: string, languages_url: string, link: string, mirror: bool, mirror_interval: string, mirror_updated: string, name: string, open_issues_count: int, open_pr_counter: int, original_url: string, owner: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, parent: any, permissions: record<admin: bool, pull: bool, push: bool>, private: bool, release_counter: int, repo_transfer: record<doer: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, recipient: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, teams: list<record>>, size: int, ssh_url: string, stars_count: int, template: bool, updated_at: string, watchers_count: int, website: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -987,7 +1028,7 @@ export def "admin-create-repo" [
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/admin/users/{username}/repos") $auth.query)
   let req_body = {"auto_init": $auto_init, "default_branch": $default_branch, "description": $description, "gitignores": $gitignores, "issue_labels": $issue_labels, "license": $license, "name": $name, "private": $private, "readme": $readme, "template": $template, "trust_model": $trust_model} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -1053,18 +1094,19 @@ export def "render-markdown" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --context: string # Context to render in: body
   --mode: string # Mode to render in: body
   --text: string # Text markdown to render in: body
   --wiki: oneof<nothing, bool> # Is it a wiki page ? in: body
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/markdown" $auth.query)
   let req_body = {"Context": $context, "Mode": $mode, "Text": $text, "Wiki": $wiki} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -1094,15 +1136,16 @@ export def "render-markdown-raw" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --body: string
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/markdown/raw" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -1132,11 +1175,12 @@ export def "get-node-info" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<record<metadata: record, openRegistrations: bool, protocols: list<string>, services: record<inbound: list<string>, outbound: list<string>>, software: record<homepage: string, name: string, repository: string, version: string>, usage: record<localComments: int, localPosts: int, users: record<activeHalfyear: int, activeMonth: int, total: int>>, version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/nodeinfo" $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -1166,6 +1210,7 @@ export def "notify-get-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --all: oneof<nothing, bool> # If true, show notifications marked as read. Default value is false
   --status-types: list<string> # Show notifications with the provided status types. Options are: unread, read and/or pinned. Defaults to unread & pinned.
   --subject-type: list<string> # filter notifications by subject type
@@ -1173,12 +1218,12 @@ export def "notify-get-list" [
   --before: string # Only show notifications updated before the given time. This is a timestamp in RFC 3339 format (format: date-time)
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
-]: nothing -> any {
+]: nothing -> oneof<table<id: int, pinned: bool, repository: record<allow_merge_commits: bool, allow_rebase: bool, allow_rebase_explicit: bool, allow_rebase_update: bool, allow_squash_merge: bool, archived: bool, avatar_url: string, clone_url: string, created_at: string, default_allow_maintainer_edit: bool, default_branch: string, default_delete_branch_after_merge: bool, default_merge_style: string, description: string, empty: bool, external_tracker: record, external_wiki: record, fork: bool, forks_count: int, full_name: string, has_issues: bool, has_projects: bool, has_pull_requests: bool, has_wiki: bool, html_url: string, id: int, ignore_whitespace_conflicts: bool, internal: bool, internal_tracker: record, language: string, languages_url: string, link: string, mirror: bool, mirror_interval: string, mirror_updated: string, name: string, open_issues_count: int, open_pr_counter: int, original_url: string, owner: record, parent: any, permissions: record, private: bool, release_counter: int, repo_transfer: record, size: int, ssh_url: string, stars_count: int, template: bool, updated_at: string, watchers_count: int, website: string>, subject: record<html_url: string, latest_comment_html_url: string, latest_comment_url: string, state: string, title: string, type: string, url: string>, unread: bool, updated_at: string, url: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "all" $all "scalar") (serialize-qp "status-types" $status_types "multi") (serialize-qp "subject-type" $subject_type "multi") (serialize-qp "since" $since "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/notifications" $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -1208,16 +1253,17 @@ export def "notify-read-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --last-read-at: string # Describes the last point that notifications were checked. Anything updated since this time will not be updated. (format: date-time)
   --all: string # If true, mark all notifications on this repo. Default value is false
   --status-types: list<string> # Mark notifications with the provided status types. Options are: unread, read and/or pinned. Defaults to unread.
   --to-status: string # Status to mark notifications as, Defaults to read.
-]: nothing -> any {
+]: nothing -> oneof<table<id: int, pinned: bool, repository: record<allow_merge_commits: bool, allow_rebase: bool, allow_rebase_explicit: bool, allow_rebase_update: bool, allow_squash_merge: bool, archived: bool, avatar_url: string, clone_url: string, created_at: string, default_allow_maintainer_edit: bool, default_branch: string, default_delete_branch_after_merge: bool, default_merge_style: string, description: string, empty: bool, external_tracker: record, external_wiki: record, fork: bool, forks_count: int, full_name: string, has_issues: bool, has_projects: bool, has_pull_requests: bool, has_wiki: bool, html_url: string, id: int, ignore_whitespace_conflicts: bool, internal: bool, internal_tracker: record, language: string, languages_url: string, link: string, mirror: bool, mirror_interval: string, mirror_updated: string, name: string, open_issues_count: int, open_pr_counter: int, original_url: string, owner: record, parent: any, permissions: record, private: bool, release_counter: int, repo_transfer: record, size: int, ssh_url: string, stars_count: int, template: bool, updated_at: string, watchers_count: int, website: string>, subject: record<html_url: string, latest_comment_html_url: string, latest_comment_url: string, state: string, title: string, type: string, url: string>, unread: bool, updated_at: string, url: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "last_read_at" $last_read_at "scalar") (serialize-qp "all" $all "scalar") (serialize-qp "status-types" $status_types "multi") (serialize-qp "to-status" $to_status "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/notifications" $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "put"
@@ -1247,11 +1293,12 @@ export def "notify-new-available" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<record<new: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/notifications/new" $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -1282,12 +1329,13 @@ export def "notify-get-thread" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<record<id: int, pinned: bool, repository: record<allow_merge_commits: bool, allow_rebase: bool, allow_rebase_explicit: bool, allow_rebase_update: bool, allow_squash_merge: bool, archived: bool, avatar_url: string, clone_url: string, created_at: string, default_allow_maintainer_edit: bool, default_branch: string, default_delete_branch_after_merge: bool, default_merge_style: string, description: string, empty: bool, external_tracker: record<external_tracker_format: string, external_tracker_regexp_pattern: string, external_tracker_style: string, external_tracker_url: string>, external_wiki: record<external_wiki_url: string>, fork: bool, forks_count: int, full_name: string, has_issues: bool, has_projects: bool, has_pull_requests: bool, has_wiki: bool, html_url: string, id: int, ignore_whitespace_conflicts: bool, internal: bool, internal_tracker: record<allow_only_contributors_to_track_time: bool, enable_issue_dependencies: bool, enable_time_tracker: bool>, language: string, languages_url: string, link: string, mirror: bool, mirror_interval: string, mirror_updated: string, name: string, open_issues_count: int, open_pr_counter: int, original_url: string, owner: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, parent: any, permissions: record<admin: bool, pull: bool, push: bool>, private: bool, release_counter: int, repo_transfer: record<doer: record, recipient: record, teams: list>, size: int, ssh_url: string, stars_count: int, template: bool, updated_at: string, watchers_count: int, website: string>, subject: record<html_url: string, latest_comment_html_url: string, latest_comment_url: string, state: string, title: string, type: string, url: string>, unread: bool, updated_at: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/notifications/threads/{id}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -1318,14 +1366,15 @@ export def "notify-read-thread" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --to-status: string # Status to mark notifications as (default: read)
-]: nothing -> any {
+]: nothing -> oneof<record<id: int, pinned: bool, repository: record<allow_merge_commits: bool, allow_rebase: bool, allow_rebase_explicit: bool, allow_rebase_update: bool, allow_squash_merge: bool, archived: bool, avatar_url: string, clone_url: string, created_at: string, default_allow_maintainer_edit: bool, default_branch: string, default_delete_branch_after_merge: bool, default_merge_style: string, description: string, empty: bool, external_tracker: record<external_tracker_format: string, external_tracker_regexp_pattern: string, external_tracker_style: string, external_tracker_url: string>, external_wiki: record<external_wiki_url: string>, fork: bool, forks_count: int, full_name: string, has_issues: bool, has_projects: bool, has_pull_requests: bool, has_wiki: bool, html_url: string, id: int, ignore_whitespace_conflicts: bool, internal: bool, internal_tracker: record<allow_only_contributors_to_track_time: bool, enable_issue_dependencies: bool, enable_time_tracker: bool>, language: string, languages_url: string, link: string, mirror: bool, mirror_interval: string, mirror_updated: string, name: string, open_issues_count: int, open_pr_counter: int, original_url: string, owner: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, parent: any, permissions: record<admin: bool, pull: bool, push: bool>, private: bool, release_counter: int, repo_transfer: record<doer: record, recipient: record, teams: list>, size: int, ssh_url: string, stars_count: int, template: bool, updated_at: string, watchers_count: int, website: string>, subject: record<html_url: string, latest_comment_html_url: string, latest_comment_url: string, state: string, title: string, type: string, url: string>, unread: bool, updated_at: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "to-status" $to_status "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/notifications/threads/{id}") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "patch"
@@ -1358,6 +1407,7 @@ export def "create-org-repo-deprecated" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --auto-init: oneof<nothing, bool> # Whether the repository should be auto-initialized?
   --default-branch: string # DefaultBranch of the repository (used when initializes and in template)
   --description: string # Description of the repository to create
@@ -1369,7 +1419,7 @@ export def "create-org-repo-deprecated" [
   --readme: string # Readme of the repository to create
   --template: oneof<nothing, bool> # Whether the repository is template
   --trust-model: string@trust-model-completer # TrustModel of the repository
-]: any -> any {
+]: any -> oneof<record<allow_merge_commits: bool, allow_rebase: bool, allow_rebase_explicit: bool, allow_rebase_update: bool, allow_squash_merge: bool, archived: bool, avatar_url: string, clone_url: string, created_at: string, default_allow_maintainer_edit: bool, default_branch: string, default_delete_branch_after_merge: bool, default_merge_style: string, description: string, empty: bool, external_tracker: record<external_tracker_format: string, external_tracker_regexp_pattern: string, external_tracker_style: string, external_tracker_url: string>, external_wiki: record<external_wiki_url: string>, fork: bool, forks_count: int, full_name: string, has_issues: bool, has_projects: bool, has_pull_requests: bool, has_wiki: bool, html_url: string, id: int, ignore_whitespace_conflicts: bool, internal: bool, internal_tracker: record<allow_only_contributors_to_track_time: bool, enable_issue_dependencies: bool, enable_time_tracker: bool>, language: string, languages_url: string, link: string, mirror: bool, mirror_interval: string, mirror_updated: string, name: string, open_issues_count: int, open_pr_counter: int, original_url: string, owner: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, parent: any, permissions: record<admin: bool, pull: bool, push: bool>, private: bool, release_counter: int, repo_transfer: record<doer: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, recipient: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, teams: list<record>>, size: int, ssh_url: string, stars_count: int, template: bool, updated_at: string, watchers_count: int, website: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1377,7 +1427,7 @@ export def "create-org-repo-deprecated" [
   let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/org/{org}/repos") $auth.query)
   let req_body = {"auto_init": $auto_init, "default_branch": $default_branch, "description": $description, "gitignores": $gitignores, "issue_labels": $issue_labels, "license": $license, "name": $name, "private": $private, "readme": $readme, "template": $template, "trust_model": $trust_model} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -1407,14 +1457,15 @@ export def "org-get-all" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
-]: nothing -> any {
+]: nothing -> oneof<table<avatar_url: string, description: string, full_name: string, id: int, location: string, name: string, repo_admin_change_team_access: bool, username: string, visibility: string, website: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/orgs" $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -1444,6 +1495,7 @@ export def "org-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --description: string
   --full-name: string
   --location: string
@@ -1451,14 +1503,14 @@ export def "org-create" [
   username: string
   --visibility: string@visibility-completer # possible values are `public` (default), `limited` or `private`
   --website: string
-]: any -> any {
+]: any -> oneof<record<avatar_url: string, description: string, full_name: string, id: int, location: string, name: string, repo_admin_change_team_access: bool, username: string, visibility: string, website: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/orgs" $auth.query)
   let req_body = {"description": $description, "full_name": $full_name, "location": $location, "repo_admin_change_team_access": $repo_admin_change_team_access, "username": $username, "visibility": $visibility, "website": $website} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -1525,12 +1577,13 @@ export def "org-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<record<avatar_url: string, description: string, full_name: string, id: int, location: string, name: string, repo_admin_change_team_access: bool, username: string, visibility: string, website: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/orgs/{org}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -1561,13 +1614,14 @@ export def "org-edit" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --description: string
   --full-name: string
   --location: string
   --repo-admin-change-team-access: oneof<nothing, bool>
   --visibility: string@visibility-completer # possible values are `public`, `limited` or `private`
   --website: string
-]: any -> any {
+]: any -> oneof<record<avatar_url: string, description: string, full_name: string, id: int, location: string, name: string, repo_admin_change_team_access: bool, username: string, visibility: string, website: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1575,7 +1629,7 @@ export def "org-edit" [
   let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/orgs/{org}") $auth.query)
   let req_body = {"description": $description, "full_name": $full_name, "location": $location, "repo_admin_change_team_access": $repo_admin_change_team_access, "visibility": $visibility, "website": $website} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "patch"
@@ -1606,15 +1660,16 @@ export def "org-list-hooks" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
-]: nothing -> any {
+]: nothing -> oneof<table<active: bool, authorization_header: string, config: record, created_at: string, events: list<string>, id: int, type: string, updated_at: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/orgs/{org}/hooks") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -1645,13 +1700,14 @@ export def "org-create-hook" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --active: oneof<nothing, bool> # default: false
   --authorization-header: string
   --branch-filter: string
   config: record # CreateHookOptionConfig has all config options in it required are "content_type" and "url" Required
   --events: list<string>
   type: string@type-completer
-]: any -> any {
+]: any -> oneof<record<active: bool, authorization_header: string, config: record, created_at: string, events: list<string>, id: int, type: string, updated_at: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1659,7 +1715,7 @@ export def "org-create-hook" [
   let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/orgs/{org}/hooks") $auth.query)
   let req_body = {"active": $active, "authorization_header": $authorization_header, "branch_filter": $branch_filter, "config": $config, "events": $events, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -1729,13 +1785,14 @@ export def "org-get-hook" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<record<active: bool, authorization_header: string, config: record, created_at: string, events: list<string>, id: int, type: string, updated_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org), id: (encode-path-segment $id)} | format pattern "/orgs/{org}/hooks/{id}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -1767,12 +1824,13 @@ export def "org-edit-hook" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --active: oneof<nothing, bool>
   --authorization-header: string
   --branch-filter: string
   --config: record
   --events: list<string>
-]: any -> any {
+]: any -> oneof<record<active: bool, authorization_header: string, config: record, created_at: string, events: list<string>, id: int, type: string, updated_at: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1781,7 +1839,7 @@ export def "org-edit-hook" [
   let full_url = (build-url $base ({org: (encode-path-segment $org), id: (encode-path-segment $id)} | format pattern "/orgs/{org}/hooks/{id}") $auth.query)
   let req_body = {"active": $active, "authorization_header": $authorization_header, "branch_filter": $branch_filter, "config": $config, "events": $events} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "patch"
@@ -1812,15 +1870,16 @@ export def "org-list-labels" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
-]: nothing -> any {
+]: nothing -> oneof<table<color: string, description: string, exclusive: bool, id: int, name: string, url: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/orgs/{org}/labels") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -1851,11 +1910,12 @@ export def "org-create-label" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   color: string # e.g. #00aabb
   --description: string
   --exclusive: oneof<nothing, bool> # e.g. false
   name: string
-]: any -> any {
+]: any -> oneof<record<color: string, description: string, exclusive: bool, id: int, name: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1863,7 +1923,7 @@ export def "org-create-label" [
   let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/orgs/{org}/labels") $auth.query)
   let req_body = {"color": $color, "description": $description, "exclusive": $exclusive, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -1933,13 +1993,14 @@ export def "org-get-label" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<record<color: string, description: string, exclusive: bool, id: int, name: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org), id: (encode-path-segment $id)} | format pattern "/orgs/{org}/labels/{id}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -1971,11 +2032,12 @@ export def "org-edit-label" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --color: string # e.g. #00aabb
   --description: string
   --exclusive: oneof<nothing, bool> # e.g. false
   --name: string
-]: any -> any {
+]: any -> oneof<record<color: string, description: string, exclusive: bool, id: int, name: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1984,7 +2046,7 @@ export def "org-edit-label" [
   let full_url = (build-url $base ({org: (encode-path-segment $org), id: (encode-path-segment $id)} | format pattern "/orgs/{org}/labels/{id}") $auth.query)
   let req_body = {"color": $color, "description": $description, "exclusive": $exclusive, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "patch"
@@ -2015,15 +2077,16 @@ export def "org-list-members" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
-]: nothing -> any {
+]: nothing -> oneof<table<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/orgs/{org}/members") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -2130,15 +2193,16 @@ export def "org-list-public-members" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
-]: nothing -> any {
+]: nothing -> oneof<table<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/orgs/{org}/public_members") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -2283,15 +2347,16 @@ export def "org-list-repos" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
-]: nothing -> any {
+]: nothing -> oneof<table<allow_merge_commits: bool, allow_rebase: bool, allow_rebase_explicit: bool, allow_rebase_update: bool, allow_squash_merge: bool, archived: bool, avatar_url: string, clone_url: string, created_at: string, default_allow_maintainer_edit: bool, default_branch: string, default_delete_branch_after_merge: bool, default_merge_style: string, description: string, empty: bool, external_tracker: record<external_tracker_format: string, external_tracker_regexp_pattern: string, external_tracker_style: string, external_tracker_url: string>, external_wiki: record<external_wiki_url: string>, fork: bool, forks_count: int, full_name: string, has_issues: bool, has_projects: bool, has_pull_requests: bool, has_wiki: bool, html_url: string, id: int, ignore_whitespace_conflicts: bool, internal: bool, internal_tracker: record<allow_only_contributors_to_track_time: bool, enable_issue_dependencies: bool, enable_time_tracker: bool>, language: string, languages_url: string, link: string, mirror: bool, mirror_interval: string, mirror_updated: string, name: string, open_issues_count: int, open_pr_counter: int, original_url: string, owner: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, parent: any, permissions: record<admin: bool, pull: bool, push: bool>, private: bool, release_counter: int, repo_transfer: record<doer: record, recipient: record, teams: list>, size: int, ssh_url: string, stars_count: int, template: bool, updated_at: string, watchers_count: int, website: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/orgs/{org}/repos") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -2322,6 +2387,7 @@ export def "create-org-repo" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --auto-init: oneof<nothing, bool> # Whether the repository should be auto-initialized?
   --default-branch: string # DefaultBranch of the repository (used when initializes and in template)
   --description: string # Description of the repository to create
@@ -2333,7 +2399,7 @@ export def "create-org-repo" [
   --readme: string # Readme of the repository to create
   --template: oneof<nothing, bool> # Whether the repository is template
   --trust-model: string@trust-model-completer # TrustModel of the repository
-]: any -> any {
+]: any -> oneof<record<allow_merge_commits: bool, allow_rebase: bool, allow_rebase_explicit: bool, allow_rebase_update: bool, allow_squash_merge: bool, archived: bool, avatar_url: string, clone_url: string, created_at: string, default_allow_maintainer_edit: bool, default_branch: string, default_delete_branch_after_merge: bool, default_merge_style: string, description: string, empty: bool, external_tracker: record<external_tracker_format: string, external_tracker_regexp_pattern: string, external_tracker_style: string, external_tracker_url: string>, external_wiki: record<external_wiki_url: string>, fork: bool, forks_count: int, full_name: string, has_issues: bool, has_projects: bool, has_pull_requests: bool, has_wiki: bool, html_url: string, id: int, ignore_whitespace_conflicts: bool, internal: bool, internal_tracker: record<allow_only_contributors_to_track_time: bool, enable_issue_dependencies: bool, enable_time_tracker: bool>, language: string, languages_url: string, link: string, mirror: bool, mirror_interval: string, mirror_updated: string, name: string, open_issues_count: int, open_pr_counter: int, original_url: string, owner: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, parent: any, permissions: record<admin: bool, pull: bool, push: bool>, private: bool, release_counter: int, repo_transfer: record<doer: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, recipient: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, teams: list<record>>, size: int, ssh_url: string, stars_count: int, template: bool, updated_at: string, watchers_count: int, website: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2341,7 +2407,7 @@ export def "create-org-repo" [
   let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/orgs/{org}/repos") $auth.query)
   let req_body = {"auto_init": $auto_init, "default_branch": $default_branch, "description": $description, "gitignores": $gitignores, "issue_labels": $issue_labels, "license": $license, "name": $name, "private": $private, "readme": $readme, "template": $template, "trust_model": $trust_model} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -2372,15 +2438,16 @@ export def "org-list-teams" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
-]: nothing -> any {
+]: nothing -> oneof<table<can_create_org_repo: bool, description: string, id: int, includes_all_repositories: bool, name: string, organization: record<avatar_url: string, description: string, full_name: string, id: int, location: string, name: string, repo_admin_change_team_access: bool, username: string, visibility: string, website: string>, permission: string, units: list<string>, units_map: record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/orgs/{org}/teams") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -2411,6 +2478,7 @@ export def "org-create-team" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --can-create-org-repo: oneof<nothing, bool>
   --description: string
   --includes-all-repositories: oneof<nothing, bool>
@@ -2418,7 +2486,7 @@ export def "org-create-team" [
   --permission: string@permission-completer
   --units: list<string> # e.g. [repo.code, repo.issues, repo.ext_issues, repo.wiki, repo.pulls, repo.releases, repo.projects, repo.ext_wiki]
   --units-map: record # e.g. {repo.code: read, repo.ext_issues: none, repo.ext_wiki: none, repo.issues: write, repo.projects: none, repo.pulls: owner, repo.releases: none, repo.wiki: admin}
-]: any -> any {
+]: any -> oneof<record<can_create_org_repo: bool, description: string, id: int, includes_all_repositories: bool, name: string, organization: record<avatar_url: string, description: string, full_name: string, id: int, location: string, name: string, repo_admin_change_team_access: bool, username: string, visibility: string, website: string>, permission: string, units: list<string>, units_map: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2426,7 +2494,7 @@ export def "org-create-team" [
   let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/orgs/{org}/teams") $auth.query)
   let req_body = {"can_create_org_repo": $can_create_org_repo, "description": $description, "includes_all_repositories": $includes_all_repositories, "name": $name, "permission": $permission, "units": $units, "units_map": $units_map} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -2461,7 +2529,7 @@ export def "team-search" [
   --include-desc: oneof<nothing, bool> # include search within team description (defaults to true)
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
-]: nothing -> record<data: table<can_create_org_repo: bool, description: string, id: int, includes_all_repositories: bool, name: string, organization: record, permission: string, units: list, units_map: record>, ok: bool> {
+]: nothing -> oneof<record<data: table<can_create_org_repo: bool, description: string, id: int, includes_all_repositories: bool, name: string, organization: record, permission: string, units: list, units_map: record>, ok: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
@@ -2498,17 +2566,18 @@ export def "list-packages" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
   --type: string@type-completer-1 # package type filter
   --q: string # name filter
-]: nothing -> any {
+]: nothing -> oneof<table<created_at: string, creator: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, id: int, name: string, owner: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, repository: record<allow_merge_commits: bool, allow_rebase: bool, allow_rebase_explicit: bool, allow_rebase_update: bool, allow_squash_merge: bool, archived: bool, avatar_url: string, clone_url: string, created_at: string, default_allow_maintainer_edit: bool, default_branch: string, default_delete_branch_after_merge: bool, default_merge_style: string, description: string, empty: bool, external_tracker: record, external_wiki: record, fork: bool, forks_count: int, full_name: string, has_issues: bool, has_projects: bool, has_pull_requests: bool, has_wiki: bool, html_url: string, id: int, ignore_whitespace_conflicts: bool, internal: bool, internal_tracker: record, language: string, languages_url: string, link: string, mirror: bool, mirror_interval: string, mirror_updated: string, name: string, open_issues_count: int, open_pr_counter: int, original_url: string, owner: record, parent: any, permissions: record, private: bool, release_counter: int, repo_transfer: record, size: int, ssh_url: string, stars_count: int, template: bool, updated_at: string, watchers_count: int, website: string>, type: string, version: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner)} | format pattern "/packages/{owner}") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -2584,7 +2653,8 @@ export def "get-package" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<record<created_at: string, creator: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, id: int, name: string, owner: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, repository: record<allow_merge_commits: bool, allow_rebase: bool, allow_rebase_explicit: bool, allow_rebase_update: bool, allow_squash_merge: bool, archived: bool, avatar_url: string, clone_url: string, created_at: string, default_allow_maintainer_edit: bool, default_branch: string, default_delete_branch_after_merge: bool, default_merge_style: string, description: string, empty: bool, external_tracker: record<external_tracker_format: string, external_tracker_regexp_pattern: string, external_tracker_style: string, external_tracker_url: string>, external_wiki: record<external_wiki_url: string>, fork: bool, forks_count: int, full_name: string, has_issues: bool, has_projects: bool, has_pull_requests: bool, has_wiki: bool, html_url: string, id: int, ignore_whitespace_conflicts: bool, internal: bool, internal_tracker: record<allow_only_contributors_to_track_time: bool, enable_issue_dependencies: bool, enable_time_tracker: bool>, language: string, languages_url: string, link: string, mirror: bool, mirror_interval: string, mirror_updated: string, name: string, open_issues_count: int, open_pr_counter: int, original_url: string, owner: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, parent: any, permissions: record<admin: bool, pull: bool, push: bool>, private: bool, release_counter: int, repo_transfer: record<doer: record, recipient: record, teams: list>, size: int, ssh_url: string, stars_count: int, template: bool, updated_at: string, watchers_count: int, website: string>, type: string, version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
@@ -2592,7 +2662,7 @@ export def "get-package" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), type: (encode-path-segment $type), name: (encode-path-segment $name), version: (encode-path-segment $version)} | format pattern "/packages/{owner}/{type}/{name}/{version}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -2626,7 +2696,8 @@ export def "list-package-files" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<table<Size: int, id: int, md5: string, name: string, sha1: string, sha256: string, sha512: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
@@ -2634,7 +2705,7 @@ export def "list-package-files" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), type: (encode-path-segment $type), name: (encode-path-segment $name), version: (encode-path-segment $version)} | format pattern "/packages/{owner}/{type}/{name}/{version}/files") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -2664,6 +2735,7 @@ export def "issue-search-issues" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --state: string # whether issue is open or closed
   --labels: string # comma separated list of labels. Fetch only issues that have any of this labels. Non existent labels are discarded
   --milestones: string # comma separated list of milestone names. Fetch only issues that have any of this milestones. Non existent are discarded
@@ -2681,12 +2753,12 @@ export def "issue-search-issues" [
   --team: string # filter by team (requires organization owner parameter to be provided)
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
-]: nothing -> any {
+]: nothing -> oneof<table<assets: list<record>, assignee: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, assignees: list<record>, body: string, closed_at: string, comments: int, created_at: string, due_date: string, html_url: string, id: int, is_locked: bool, labels: list<record>, milestone: record<closed_at: string, closed_issues: int, created_at: string, description: string, due_on: string, id: int, open_issues: int, state: string, title: string, updated_at: string>, number: int, original_author: string, original_author_id: int, pull_request: record<merged: bool, merged_at: string>, ref: string, repository: record<full_name: string, id: int, name: string, owner: string>, state: string, title: string, updated_at: string, url: string, user: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "labels" $labels "scalar") (serialize-qp "milestones" $milestones "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "priority_repo_id" $priority_repo_id "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "assigned" $assigned "scalar") (serialize-qp "created" $created "scalar") (serialize-qp "mentioned" $mentioned "scalar") (serialize-qp "review_requested" $review_requested "scalar") (serialize-qp "reviewed" $reviewed "scalar") (serialize-qp "owner" $owner "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repos/issues/search" $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -2716,6 +2788,7 @@ export def "repo-migrate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --auth-password: string
   --auth-token: string
   --auth-username: string
@@ -2736,14 +2809,14 @@ export def "repo-migrate" [
   --service: string@service-completer
   --uid: int # deprecated (only for backwards compatibility) (format: int64)
   --wiki: oneof<nothing, bool>
-]: any -> any {
+]: any -> oneof<record<allow_merge_commits: bool, allow_rebase: bool, allow_rebase_explicit: bool, allow_rebase_update: bool, allow_squash_merge: bool, archived: bool, avatar_url: string, clone_url: string, created_at: string, default_allow_maintainer_edit: bool, default_branch: string, default_delete_branch_after_merge: bool, default_merge_style: string, description: string, empty: bool, external_tracker: record<external_tracker_format: string, external_tracker_regexp_pattern: string, external_tracker_style: string, external_tracker_url: string>, external_wiki: record<external_wiki_url: string>, fork: bool, forks_count: int, full_name: string, has_issues: bool, has_projects: bool, has_pull_requests: bool, has_wiki: bool, html_url: string, id: int, ignore_whitespace_conflicts: bool, internal: bool, internal_tracker: record<allow_only_contributors_to_track_time: bool, enable_issue_dependencies: bool, enable_time_tracker: bool>, language: string, languages_url: string, link: string, mirror: bool, mirror_interval: string, mirror_updated: string, name: string, open_issues_count: int, open_pr_counter: int, original_url: string, owner: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, parent: any, permissions: record<admin: bool, pull: bool, push: bool>, private: bool, release_counter: int, repo_transfer: record<doer: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, recipient: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, teams: list<record>>, size: int, ssh_url: string, stars_count: int, template: bool, updated_at: string, watchers_count: int, website: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/repos/migrate" $auth.query)
   let req_body = {"auth_password": $auth_password, "auth_token": $auth_token, "auth_username": $auth_username, "clone_addr": $clone_addr, "description": $description, "issues": $issues, "labels": $labels, "lfs": $lfs, "lfs_endpoint": $lfs_endpoint, "milestones": $milestones, "mirror": $mirror, "mirror_interval": $mirror_interval, "private": $private, "pull_requests": $pull_requests, "releases": $releases, "repo_name": $repo_name, "repo_owner": $repo_owner, "service": $service, "uid": $uid, "wiki": $wiki} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -2773,6 +2846,7 @@ export def "repo-search" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --q: string # keyword
   --topic: oneof<nothing, bool> # Limit search to repositories with keyword as topic
   --include-desc: oneof<nothing, bool> # include search of keyword within repository description
@@ -2786,21 +2860,21 @@ export def "repo-search" [
   --archived: oneof<nothing, bool> # show only archived, non-archived or all repositories (defaults to all)
   --mode: string # type of repository to search for. Supported values are "fork", "source", "mirror" and "collaborative"
   --exclusive: oneof<nothing, bool> # if `uid` is given, search only for repos that the user owns
-  --qp-sort: string # sort repos by attribute. Supported values are "alpha", "created", "updated", "size", and "id". Default is "alpha"
+  --sort: string # sort repos by attribute. Supported values are "alpha", "created", "updated", "size", and "id". Default is "alpha"
   --order: string # sort order, either "asc" (ascending) or "desc" (descending). Default is "asc", ignored if "sort" is not specified.
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
-]: nothing -> any {
+]: nothing -> oneof<record<data: table<allow_merge_commits: bool, allow_rebase: bool, allow_rebase_explicit: bool, allow_rebase_update: bool, allow_squash_merge: bool, archived: bool, avatar_url: string, clone_url: string, created_at: string, default_allow_maintainer_edit: bool, default_branch: string, default_delete_branch_after_merge: bool, default_merge_style: string, description: string, empty: bool, external_tracker: record, external_wiki: record, fork: bool, forks_count: int, full_name: string, has_issues: bool, has_projects: bool, has_pull_requests: bool, has_wiki: bool, html_url: string, id: int, ignore_whitespace_conflicts: bool, internal: bool, internal_tracker: record, language: string, languages_url: string, link: string, mirror: bool, mirror_interval: string, mirror_updated: string, name: string, open_issues_count: int, open_pr_counter: int, original_url: string, owner: record, parent: any, permissions: record, private: bool, release_counter: int, repo_transfer: record, size: int, ssh_url: string, stars_count: int, template: bool, updated_at: string, watchers_count: int, website: string>, ok: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "topic" $topic "scalar") (serialize-qp "includeDesc" $include_desc "scalar") (serialize-qp "uid" $uid "scalar") (serialize-qp "priority_owner_id" $priority_owner_id "scalar") (serialize-qp "team_id" $team_id "scalar") (serialize-qp "starredBy" $starred_by "scalar") (serialize-qp "private" $private "scalar") (serialize-qp "is_private" $is_private "scalar") (serialize-qp "template" $template "scalar") (serialize-qp "archived" $archived "scalar") (serialize-qp "mode" $mode "scalar") (serialize-qp "exclusive" $exclusive "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "topic" $topic "scalar") (serialize-qp "includeDesc" $include_desc "scalar") (serialize-qp "uid" $uid "scalar") (serialize-qp "priority_owner_id" $priority_owner_id "scalar") (serialize-qp "team_id" $team_id "scalar") (serialize-qp "starredBy" $starred_by "scalar") (serialize-qp "private" $private "scalar") (serialize-qp "is_private" $is_private "scalar") (serialize-qp "template" $template "scalar") (serialize-qp "archived" $archived "scalar") (serialize-qp "mode" $mode "scalar") (serialize-qp "exclusive" $exclusive "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repos/search" $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"q": $q, "topic": $topic, "includeDesc": $include_desc, "uid": $uid, "priority_owner_id": $priority_owner_id, "team_id": $team_id, "starredBy": $starred_by, "private": $private, "is_private": $is_private, "template": $template, "archived": $archived, "mode": $mode, "exclusive": $exclusive, "sort": $qp_sort, "order": $order, "page": $page, "limit": $limit} | compact)
+    query: ({"q": $q, "topic": $topic, "includeDesc": $include_desc, "uid": $uid, "priority_owner_id": $priority_owner_id, "team_id": $team_id, "starredBy": $starred_by, "private": $private, "is_private": $is_private, "template": $template, "archived": $archived, "mode": $mode, "exclusive": $exclusive, "sort": $sort, "order": $order, "page": $page, "limit": $limit} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2865,13 +2939,14 @@ export def "repo-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<record<allow_merge_commits: bool, allow_rebase: bool, allow_rebase_explicit: bool, allow_rebase_update: bool, allow_squash_merge: bool, archived: bool, avatar_url: string, clone_url: string, created_at: string, default_allow_maintainer_edit: bool, default_branch: string, default_delete_branch_after_merge: bool, default_merge_style: string, description: string, empty: bool, external_tracker: record<external_tracker_format: string, external_tracker_regexp_pattern: string, external_tracker_style: string, external_tracker_url: string>, external_wiki: record<external_wiki_url: string>, fork: bool, forks_count: int, full_name: string, has_issues: bool, has_projects: bool, has_pull_requests: bool, has_wiki: bool, html_url: string, id: int, ignore_whitespace_conflicts: bool, internal: bool, internal_tracker: record<allow_only_contributors_to_track_time: bool, enable_issue_dependencies: bool, enable_time_tracker: bool>, language: string, languages_url: string, link: string, mirror: bool, mirror_interval: string, mirror_updated: string, name: string, open_issues_count: int, open_pr_counter: int, original_url: string, owner: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, parent: any, permissions: record<admin: bool, pull: bool, push: bool>, private: bool, release_counter: int, repo_transfer: record<doer: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, recipient: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, teams: list<record>>, size: int, ssh_url: string, stars_count: int, template: bool, updated_at: string, watchers_count: int, website: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -2891,9 +2966,6 @@ export def "repo-get" [
 #
 # PATCH /repos/{owner}/{repo}
 # operationId: repoEdit
-# --external_tracker shape: {external_tracker_format?: string, external_tracker_regexp_pattern?: string, external_tracker_style?: string, external_tracker_url?: string}
-# --external_wiki shape: {external_wiki_url?: string}
-# --internal_tracker shape: {allow_only_contributors_to_track_time?: bool, enable_issue_dependencies?: bool, enable_time_tracker?: bool}
 export def "repo-edit" [
   owner: string
   repo: string
@@ -2906,6 +2978,7 @@ export def "repo-edit" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --allow-manual-merge: oneof<nothing, bool> # either `true` to allow mark pr as merged manually, or `false` to prevent it.
   --allow-merge-commits: oneof<nothing, bool> # either `true` to allow merging pull requests with a merge commit, or `false` to prevent merging pull requests with merge commits.
   --allow-rebase: oneof<nothing, bool> # either `true` to allow rebase-merging pull requests, or `false` to prevent rebase-merging.
@@ -2933,7 +3006,7 @@ export def "repo-edit" [
   --private: oneof<nothing, bool> # either `true` to make the repository private or `false` to make it public. Note: you will get a 422 error if the organization restricts changing repository visibility to organization owners and a non-owner tries to change the value of private.
   --template: oneof<nothing, bool> # either `true` to make this repository a template or `false` to make it a normal repository
   --website: string # a URL with more information about the repository.
-]: any -> any {
+]: any -> oneof<record<allow_merge_commits: bool, allow_rebase: bool, allow_rebase_explicit: bool, allow_rebase_update: bool, allow_squash_merge: bool, archived: bool, avatar_url: string, clone_url: string, created_at: string, default_allow_maintainer_edit: bool, default_branch: string, default_delete_branch_after_merge: bool, default_merge_style: string, description: string, empty: bool, external_tracker: record<external_tracker_format: string, external_tracker_regexp_pattern: string, external_tracker_style: string, external_tracker_url: string>, external_wiki: record<external_wiki_url: string>, fork: bool, forks_count: int, full_name: string, has_issues: bool, has_projects: bool, has_pull_requests: bool, has_wiki: bool, html_url: string, id: int, ignore_whitespace_conflicts: bool, internal: bool, internal_tracker: record<allow_only_contributors_to_track_time: bool, enable_issue_dependencies: bool, enable_time_tracker: bool>, language: string, languages_url: string, link: string, mirror: bool, mirror_interval: string, mirror_updated: string, name: string, open_issues_count: int, open_pr_counter: int, original_url: string, owner: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, parent: any, permissions: record<admin: bool, pull: bool, push: bool>, private: bool, release_counter: int, repo_transfer: record<doer: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, recipient: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, teams: list<record>>, size: int, ssh_url: string, stars_count: int, template: bool, updated_at: string, watchers_count: int, website: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2942,7 +3015,7 @@ export def "repo-edit" [
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}") $auth.query)
   let req_body = {"allow_manual_merge": $allow_manual_merge, "allow_merge_commits": $allow_merge_commits, "allow_rebase": $allow_rebase, "allow_rebase_explicit": $allow_rebase_explicit, "allow_rebase_update": $allow_rebase_update, "allow_squash_merge": $allow_squash_merge, "archived": $archived, "autodetect_manual_merge": $autodetect_manual_merge, "default_allow_maintainer_edit": $default_allow_maintainer_edit, "default_branch": $default_branch, "default_delete_branch_after_merge": $default_delete_branch_after_merge, "default_merge_style": $default_merge_style, "description": $description, "enable_prune": $enable_prune, "external_tracker": $external_tracker, "external_wiki": $external_wiki, "has_issues": $has_issues, "has_projects": $has_projects, "has_pull_requests": $has_pull_requests, "has_wiki": $has_wiki, "ignore_whitespace_conflicts": $ignore_whitespace_conflicts, "internal_tracker": $internal_tracker, "mirror_interval": $mirror_interval, "name": $name, "private": $private, "template": $template, "website": $website} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "patch"
@@ -3014,13 +3087,14 @@ export def "repo-get-assignees" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<table<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/assignees") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -3052,13 +3126,14 @@ export def "repo-list-branch-protection" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<table<approvals_whitelist_teams: list<string>, approvals_whitelist_username: list<string>, block_on_official_review_requests: bool, block_on_outdated_branch: bool, block_on_rejected_reviews: bool, branch_name: string, created_at: string, dismiss_stale_approvals: bool, enable_approvals_whitelist: bool, enable_merge_whitelist: bool, enable_push: bool, enable_push_whitelist: bool, enable_status_check: bool, merge_whitelist_teams: list<string>, merge_whitelist_usernames: list<string>, protected_file_patterns: string, push_whitelist_deploy_keys: bool, push_whitelist_teams: list<string>, push_whitelist_usernames: list<string>, require_signed_commits: bool, required_approvals: int, rule_name: string, status_check_contexts: list<string>, unprotected_file_patterns: string, updated_at: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/branch_protections") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -3090,6 +3165,7 @@ export def "repo-create-branch-protection" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --approvals-whitelist-teams: list<string>
   --approvals-whitelist-username: list<string>
   --block-on-official-review-requests: oneof<nothing, bool>
@@ -3113,7 +3189,7 @@ export def "repo-create-branch-protection" [
   --rule-name: string
   --status-check-contexts: list<string>
   --unprotected-file-patterns: string
-]: any -> any {
+]: any -> oneof<record<approvals_whitelist_teams: list<string>, approvals_whitelist_username: list<string>, block_on_official_review_requests: bool, block_on_outdated_branch: bool, block_on_rejected_reviews: bool, branch_name: string, created_at: string, dismiss_stale_approvals: bool, enable_approvals_whitelist: bool, enable_merge_whitelist: bool, enable_push: bool, enable_push_whitelist: bool, enable_status_check: bool, merge_whitelist_teams: list<string>, merge_whitelist_usernames: list<string>, protected_file_patterns: string, push_whitelist_deploy_keys: bool, push_whitelist_teams: list<string>, push_whitelist_usernames: list<string>, require_signed_commits: bool, required_approvals: int, rule_name: string, status_check_contexts: list<string>, unprotected_file_patterns: string, updated_at: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3122,7 +3198,7 @@ export def "repo-create-branch-protection" [
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/branch_protections") $auth.query)
   let req_body = {"approvals_whitelist_teams": $approvals_whitelist_teams, "approvals_whitelist_username": $approvals_whitelist_username, "block_on_official_review_requests": $block_on_official_review_requests, "block_on_outdated_branch": $block_on_outdated_branch, "block_on_rejected_reviews": $block_on_rejected_reviews, "branch_name": $branch_name, "dismiss_stale_approvals": $dismiss_stale_approvals, "enable_approvals_whitelist": $enable_approvals_whitelist, "enable_merge_whitelist": $enable_merge_whitelist, "enable_push": $enable_push, "enable_push_whitelist": $enable_push_whitelist, "enable_status_check": $enable_status_check, "merge_whitelist_teams": $merge_whitelist_teams, "merge_whitelist_usernames": $merge_whitelist_usernames, "protected_file_patterns": $protected_file_patterns, "push_whitelist_deploy_keys": $push_whitelist_deploy_keys, "push_whitelist_teams": $push_whitelist_teams, "push_whitelist_usernames": $push_whitelist_usernames, "require_signed_commits": $require_signed_commits, "required_approvals": $required_approvals, "rule_name": $rule_name, "status_check_contexts": $status_check_contexts, "unprotected_file_patterns": $unprotected_file_patterns} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -3195,14 +3271,15 @@ export def "repo-get-branch-protection" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<record<approvals_whitelist_teams: list<string>, approvals_whitelist_username: list<string>, block_on_official_review_requests: bool, block_on_outdated_branch: bool, block_on_rejected_reviews: bool, branch_name: string, created_at: string, dismiss_stale_approvals: bool, enable_approvals_whitelist: bool, enable_merge_whitelist: bool, enable_push: bool, enable_push_whitelist: bool, enable_status_check: bool, merge_whitelist_teams: list<string>, merge_whitelist_usernames: list<string>, protected_file_patterns: string, push_whitelist_deploy_keys: bool, push_whitelist_teams: list<string>, push_whitelist_usernames: list<string>, require_signed_commits: bool, required_approvals: int, rule_name: string, status_check_contexts: list<string>, unprotected_file_patterns: string, updated_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), name: (encode-path-segment $name)} | format pattern "/repos/{owner}/{repo}/branch_protections/{name}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -3235,6 +3312,7 @@ export def "repo-edit-branch-protection" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --approvals-whitelist-teams: list<string>
   --approvals-whitelist-username: list<string>
   --block-on-official-review-requests: oneof<nothing, bool>
@@ -3256,7 +3334,7 @@ export def "repo-edit-branch-protection" [
   --required-approvals: int # format: int64
   --status-check-contexts: list<string>
   --unprotected-file-patterns: string
-]: any -> any {
+]: any -> oneof<record<approvals_whitelist_teams: list<string>, approvals_whitelist_username: list<string>, block_on_official_review_requests: bool, block_on_outdated_branch: bool, block_on_rejected_reviews: bool, branch_name: string, created_at: string, dismiss_stale_approvals: bool, enable_approvals_whitelist: bool, enable_merge_whitelist: bool, enable_push: bool, enable_push_whitelist: bool, enable_status_check: bool, merge_whitelist_teams: list<string>, merge_whitelist_usernames: list<string>, protected_file_patterns: string, push_whitelist_deploy_keys: bool, push_whitelist_teams: list<string>, push_whitelist_usernames: list<string>, require_signed_commits: bool, required_approvals: int, rule_name: string, status_check_contexts: list<string>, unprotected_file_patterns: string, updated_at: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3266,7 +3344,7 @@ export def "repo-edit-branch-protection" [
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), name: (encode-path-segment $name)} | format pattern "/repos/{owner}/{repo}/branch_protections/{name}") $auth.query)
   let req_body = {"approvals_whitelist_teams": $approvals_whitelist_teams, "approvals_whitelist_username": $approvals_whitelist_username, "block_on_official_review_requests": $block_on_official_review_requests, "block_on_outdated_branch": $block_on_outdated_branch, "block_on_rejected_reviews": $block_on_rejected_reviews, "dismiss_stale_approvals": $dismiss_stale_approvals, "enable_approvals_whitelist": $enable_approvals_whitelist, "enable_merge_whitelist": $enable_merge_whitelist, "enable_push": $enable_push, "enable_push_whitelist": $enable_push_whitelist, "enable_status_check": $enable_status_check, "merge_whitelist_teams": $merge_whitelist_teams, "merge_whitelist_usernames": $merge_whitelist_usernames, "protected_file_patterns": $protected_file_patterns, "push_whitelist_deploy_keys": $push_whitelist_deploy_keys, "push_whitelist_teams": $push_whitelist_teams, "push_whitelist_usernames": $push_whitelist_usernames, "require_signed_commits": $require_signed_commits, "required_approvals": $required_approvals, "status_check_contexts": $status_check_contexts, "unprotected_file_patterns": $unprotected_file_patterns} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "patch"
@@ -3298,16 +3376,17 @@ export def "repo-list-branches" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
-]: nothing -> any {
+]: nothing -> oneof<table<commit: record<added: list, author: record, committer: record, id: string, message: string, modified: list, removed: list, timestamp: string, url: string, verification: record>, effective_branch_protection_name: string, enable_status_check: bool, name: string, protected: bool, required_approvals: int, status_check_contexts: list<string>, user_can_merge: bool, user_can_push: bool>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/branches") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -3339,9 +3418,10 @@ export def "repo-create-branch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   new_branch_name: string # Name of the branch to create
   --old-branch-name: string # Name of the old branch to create from
-]: any -> any {
+]: any -> oneof<record<commit: record<added: list<string>, author: record<email: string, name: string, username: string>, committer: record<email: string, name: string, username: string>, id: string, message: string, modified: list<string>, removed: list<string>, timestamp: string, url: string, verification: record<payload: string, reason: string, signature: string, signer: record, verified: bool>>, effective_branch_protection_name: string, enable_status_check: bool, name: string, protected: bool, required_approvals: int, status_check_contexts: list<string>, user_can_merge: bool, user_can_push: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3350,7 +3430,7 @@ export def "repo-create-branch" [
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/branches") $auth.query)
   let req_body = {"new_branch_name": $new_branch_name, "old_branch_name": $old_branch_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -3423,14 +3503,15 @@ export def "repo-get-branch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<record<commit: record<added: list<string>, author: record<email: string, name: string, username: string>, committer: record<email: string, name: string, username: string>, id: string, message: string, modified: list<string>, removed: list<string>, timestamp: string, url: string, verification: record<payload: string, reason: string, signature: string, signer: record, verified: bool>>, effective_branch_protection_name: string, enable_status_check: bool, name: string, protected: bool, required_approvals: int, status_check_contexts: list<string>, user_can_merge: bool, user_can_push: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   if ($branch | is-empty) { error make --unspanned { msg: "path parameter 'branch' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), branch: (encode-path-segment $branch)} | format pattern "/repos/{owner}/{repo}/branches/{branch}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -3462,16 +3543,17 @@ export def "repo-list-collaborators" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
-]: nothing -> any {
+]: nothing -> oneof<table<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/collaborators") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -3628,14 +3710,15 @@ export def "repo-get-repo-permissions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<record<permission: string, role_name: string, user: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   if ($collaborator | is-empty) { error make --unspanned { msg: "path parameter 'collaborator' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), collaborator: (encode-path-segment $collaborator)} | format pattern "/repos/{owner}/{repo}/collaborators/{collaborator}/permission") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -3667,19 +3750,20 @@ export def "repo-get-all-commits" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --sha: string # SHA or branch to start listing commits from (usually 'master')
   --path: string # filepath of a file/dir
   --stat: oneof<nothing, bool> # include diff stats for every commit (disable for speedup, default 'true')
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results (ignored if used with 'path')
-]: nothing -> any {
+]: nothing -> oneof<table<author: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, commit: record<author: record, committer: record, message: string, tree: record, url: string, verification: record>, committer: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, created: string, files: list<record>, html_url: string, parents: list<record>, sha: string, stats: record<additions: int, deletions: int, total: int>, url: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let qp = [(serialize-qp "sha" $sha "scalar") (serialize-qp "path" $path "scalar") (serialize-qp "stat" $stat "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/commits") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -3712,9 +3796,10 @@ export def "repo-get-combined-status-by-ref" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
-]: nothing -> any {
+]: nothing -> oneof<record<commit_url: string, repository: record<allow_merge_commits: bool, allow_rebase: bool, allow_rebase_explicit: bool, allow_rebase_update: bool, allow_squash_merge: bool, archived: bool, avatar_url: string, clone_url: string, created_at: string, default_allow_maintainer_edit: bool, default_branch: string, default_delete_branch_after_merge: bool, default_merge_style: string, description: string, empty: bool, external_tracker: record<external_tracker_format: string, external_tracker_regexp_pattern: string, external_tracker_style: string, external_tracker_url: string>, external_wiki: record<external_wiki_url: string>, fork: bool, forks_count: int, full_name: string, has_issues: bool, has_projects: bool, has_pull_requests: bool, has_wiki: bool, html_url: string, id: int, ignore_whitespace_conflicts: bool, internal: bool, internal_tracker: record<allow_only_contributors_to_track_time: bool, enable_issue_dependencies: bool, enable_time_tracker: bool>, language: string, languages_url: string, link: string, mirror: bool, mirror_interval: string, mirror_updated: string, name: string, open_issues_count: int, open_pr_counter: int, original_url: string, owner: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, parent: any, permissions: record<admin: bool, pull: bool, push: bool>, private: bool, release_counter: int, repo_transfer: record<doer: record, recipient: record, teams: list>, size: int, ssh_url: string, stars_count: int, template: bool, updated_at: string, watchers_count: int, website: string>, sha: string, state: string, statuses: table<context: string, created_at: string, creator: record, description: string, id: int, status: string, target_url: string, updated_at: string, url: string>, total_count: int, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
@@ -3722,7 +3807,7 @@ export def "repo-get-combined-status-by-ref" [
   if ($ref | is-empty) { error make --unspanned { msg: "path parameter 'ref' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), ref: (encode-path-segment $ref)} | format pattern "/repos/{owner}/{repo}/commits/{ref}/status") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -3755,24 +3840,25 @@ export def "repo-list-statuses-by-ref" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-sort: string@sort-completer # type of sort
+  --accept: string@accept-completer # Response content type
+  --sort: string@sort-completer # type of sort
   --state: string@state-completer # type of state
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
-]: nothing -> any {
+]: nothing -> oneof<table<context: string, created_at: string, creator: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, description: string, id: int, status: string, target_url: string, updated_at: string, url: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   if ($ref | is-empty) { error make --unspanned { msg: "path parameter 'ref' must be non-empty" } }
-  let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "sort" $sort "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), ref: (encode-path-segment $ref)} | format pattern "/repos/{owner}/{repo}/commits/{ref}/statuses") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"sort": $qp_sort, "state": $state, "page": $page, "limit": $limit} | compact)
+    query: ({"sort": $sort, "state": $state, "page": $page, "limit": $limit} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3799,15 +3885,16 @@ export def "repo-get-contents-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --ref: string # The name of the commit/branch/tag. Default the repository’s default branch (usually master)
-]: nothing -> any {
+]: nothing -> oneof<table<_links: record<git: string, html: string, self: string>, content: string, download_url: string, encoding: string, git_url: string, html_url: string, last_commit_sha: string, name: string, path: string, sha: string, size: int, submodule_git_url: string, target: string, type: string, url: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let qp = [(serialize-qp "ref" $ref "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/contents") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -3827,9 +3914,6 @@ export def "repo-get-contents-list" [
 #
 # DELETE /repos/{owner}/{repo}/contents/{filepath}
 # operationId: repoDeleteFile
-# --author shape: {email?: string, name?: string}
-# --committer shape: {email?: string, name?: string}
-# --dates shape: {author?: string, committer?: string}
 export def "repo-delete-file" [
   owner: string
   repo: string
@@ -3843,6 +3927,7 @@ export def "repo-delete-file" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --author: record # Identity for a person's identity like an author or committer — shape: {email?: string, name?: string}
   --branch: string # branch (optional) to base this file from. if not given, the default branch is used
   --committer: record # Identity for a person's identity like an author or committer — shape: {email?: string, name?: string}
@@ -3851,7 +3936,7 @@ export def "repo-delete-file" [
   --new-branch: string # new_branch (optional) will make a new branch from `branch` before creating the file
   sha: string # sha is the SHA for the file that already exists
   --signoff: oneof<nothing, bool> # Add a Signed-off-by trailer by the committer at the end of the commit log message.
-]: any -> any {
+]: any -> oneof<record<commit: record<author: record<date: string, email: string, name: string>, committer: record<date: string, email: string, name: string>, created: string, html_url: string, message: string, parents: list<record>, sha: string, tree: record<created: string, sha: string, url: string>, url: string>, content: any, verification: record<payload: string, reason: string, signature: string, signer: record<email: string, name: string, username: string>, verified: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3861,7 +3946,7 @@ export def "repo-delete-file" [
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), filepath: (encode-path-segment $filepath)} | format pattern "/repos/{owner}/{repo}/contents/{filepath}") $auth.query)
   let req_body = {"author": $author, "branch": $branch, "committer": $committer, "dates": $dates, "message": $message, "new_branch": $new_branch, "sha": $sha, "signoff": $signoff} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "delete"
@@ -3894,8 +3979,9 @@ export def "repo-get-contents" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --ref: string # The name of the commit/branch/tag. Default the repository’s default branch (usually master)
-]: nothing -> any {
+]: nothing -> oneof<record<_links: record<git: string, html: string, self: string>, content: string, download_url: string, encoding: string, git_url: string, html_url: string, last_commit_sha: string, name: string, path: string, sha: string, size: int, submodule_git_url: string, target: string, type: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
@@ -3903,7 +3989,7 @@ export def "repo-get-contents" [
   if ($filepath | is-empty) { error make --unspanned { msg: "path parameter 'filepath' must be non-empty" } }
   let qp = [(serialize-qp "ref" $ref "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), filepath: (encode-path-segment $filepath)} | format pattern "/repos/{owner}/{repo}/contents/{filepath}") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -3923,9 +4009,6 @@ export def "repo-get-contents" [
 #
 # POST /repos/{owner}/{repo}/contents/{filepath}
 # operationId: repoCreateFile
-# --author shape: {email?: string, name?: string}
-# --committer shape: {email?: string, name?: string}
-# --dates shape: {author?: string, committer?: string}
 export def "repo-create-file" [
   owner: string
   repo: string
@@ -3939,6 +4022,7 @@ export def "repo-create-file" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --author: record # Identity for a person's identity like an author or committer — shape: {email?: string, name?: string}
   --branch: string # branch (optional) to base this file from. if not given, the default branch is used
   --committer: record # Identity for a person's identity like an author or committer — shape: {email?: string, name?: string}
@@ -3947,7 +4031,7 @@ export def "repo-create-file" [
   --message: string # message (optional) for the commit of this file. if not supplied, a default message will be used
   --new-branch: string # new_branch (optional) will make a new branch from `branch` before creating the file
   --signoff: oneof<nothing, bool> # Add a Signed-off-by trailer by the committer at the end of the commit log message.
-]: any -> any {
+]: any -> oneof<record<commit: record<author: record<date: string, email: string, name: string>, committer: record<date: string, email: string, name: string>, created: string, html_url: string, message: string, parents: list<record>, sha: string, tree: record<created: string, sha: string, url: string>, url: string>, content: record<_links: record<git: string, html: string, self: string>, content: string, download_url: string, encoding: string, git_url: string, html_url: string, last_commit_sha: string, name: string, path: string, sha: string, size: int, submodule_git_url: string, target: string, type: string, url: string>, verification: record<payload: string, reason: string, signature: string, signer: record<email: string, name: string, username: string>, verified: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3957,7 +4041,7 @@ export def "repo-create-file" [
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), filepath: (encode-path-segment $filepath)} | format pattern "/repos/{owner}/{repo}/contents/{filepath}") $auth.query)
   let req_body = {"author": $author, "branch": $branch, "committer": $committer, "content": $content, "dates": $dates, "message": $message, "new_branch": $new_branch, "signoff": $signoff} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -3977,9 +4061,6 @@ export def "repo-create-file" [
 #
 # PUT /repos/{owner}/{repo}/contents/{filepath}
 # operationId: repoUpdateFile
-# --author shape: {email?: string, name?: string}
-# --committer shape: {email?: string, name?: string}
-# --dates shape: {author?: string, committer?: string}
 export def "repo-update-file" [
   owner: string
   repo: string
@@ -3993,6 +4074,7 @@ export def "repo-update-file" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --author: record # Identity for a person's identity like an author or committer — shape: {email?: string, name?: string}
   --branch: string # branch (optional) to base this file from. if not given, the default branch is used
   --committer: record # Identity for a person's identity like an author or committer — shape: {email?: string, name?: string}
@@ -4003,7 +4085,7 @@ export def "repo-update-file" [
   --new-branch: string # new_branch (optional) will make a new branch from `branch` before creating the file
   sha: string # sha is the SHA for the file that already exists
   --signoff: oneof<nothing, bool> # Add a Signed-off-by trailer by the committer at the end of the commit log message.
-]: any -> any {
+]: any -> oneof<record<commit: record<author: record<date: string, email: string, name: string>, committer: record<date: string, email: string, name: string>, created: string, html_url: string, message: string, parents: list<record>, sha: string, tree: record<created: string, sha: string, url: string>, url: string>, content: record<_links: record<git: string, html: string, self: string>, content: string, download_url: string, encoding: string, git_url: string, html_url: string, last_commit_sha: string, name: string, path: string, sha: string, size: int, submodule_git_url: string, target: string, type: string, url: string>, verification: record<payload: string, reason: string, signature: string, signer: record<email: string, name: string, username: string>, verified: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -4013,7 +4095,7 @@ export def "repo-update-file" [
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), filepath: (encode-path-segment $filepath)} | format pattern "/repos/{owner}/{repo}/contents/{filepath}") $auth.query)
   let req_body = {"author": $author, "branch": $branch, "committer": $committer, "content": $content, "dates": $dates, "from_path": $from_path, "message": $message, "new_branch": $new_branch, "sha": $sha, "signoff": $signoff} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "put"
@@ -4033,9 +4115,6 @@ export def "repo-update-file" [
 #
 # POST /repos/{owner}/{repo}/diffpatch
 # operationId: repoApplyDiffPatch
-# --author shape: {email?: string, name?: string}
-# --committer shape: {email?: string, name?: string}
-# --dates shape: {author?: string, committer?: string}
 export def "repo-apply-diff-patch" [
   owner: string
   repo: string
@@ -4048,6 +4127,7 @@ export def "repo-apply-diff-patch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --author: record # Identity for a person's identity like an author or committer — shape: {email?: string, name?: string}
   --branch: string # branch (optional) to base this file from. if not given, the default branch is used
   --committer: record # Identity for a person's identity like an author or committer — shape: {email?: string, name?: string}
@@ -4058,7 +4138,7 @@ export def "repo-apply-diff-patch" [
   --new-branch: string # new_branch (optional) will make a new branch from `branch` before creating the file
   sha: string # sha is the SHA for the file that already exists
   --signoff: oneof<nothing, bool> # Add a Signed-off-by trailer by the committer at the end of the commit log message.
-]: any -> any {
+]: any -> oneof<record<commit: record<author: record<date: string, email: string, name: string>, committer: record<date: string, email: string, name: string>, created: string, html_url: string, message: string, parents: list<record>, sha: string, tree: record<created: string, sha: string, url: string>, url: string>, content: record<_links: record<git: string, html: string, self: string>, content: string, download_url: string, encoding: string, git_url: string, html_url: string, last_commit_sha: string, name: string, path: string, sha: string, size: int, submodule_git_url: string, target: string, type: string, url: string>, verification: record<payload: string, reason: string, signature: string, signer: record<email: string, name: string, username: string>, verified: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -4067,7 +4147,7 @@ export def "repo-apply-diff-patch" [
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/diffpatch") $auth.query)
   let req_body = {"author": $author, "branch": $branch, "committer": $committer, "content": $content, "dates": $dates, "from_path": $from_path, "message": $message, "new_branch": $new_branch, "sha": $sha, "signoff": $signoff} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -4141,16 +4221,17 @@ export def "list-forks" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
-]: nothing -> any {
+]: nothing -> oneof<table<allow_merge_commits: bool, allow_rebase: bool, allow_rebase_explicit: bool, allow_rebase_update: bool, allow_squash_merge: bool, archived: bool, avatar_url: string, clone_url: string, created_at: string, default_allow_maintainer_edit: bool, default_branch: string, default_delete_branch_after_merge: bool, default_merge_style: string, description: string, empty: bool, external_tracker: record<external_tracker_format: string, external_tracker_regexp_pattern: string, external_tracker_style: string, external_tracker_url: string>, external_wiki: record<external_wiki_url: string>, fork: bool, forks_count: int, full_name: string, has_issues: bool, has_projects: bool, has_pull_requests: bool, has_wiki: bool, html_url: string, id: int, ignore_whitespace_conflicts: bool, internal: bool, internal_tracker: record<allow_only_contributors_to_track_time: bool, enable_issue_dependencies: bool, enable_time_tracker: bool>, language: string, languages_url: string, link: string, mirror: bool, mirror_interval: string, mirror_updated: string, name: string, open_issues_count: int, open_pr_counter: int, original_url: string, owner: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, parent: any, permissions: record<admin: bool, pull: bool, push: bool>, private: bool, release_counter: int, repo_transfer: record<doer: record, recipient: record, teams: list>, size: int, ssh_url: string, stars_count: int, template: bool, updated_at: string, watchers_count: int, website: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/forks") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -4182,9 +4263,10 @@ export def "create-fork" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --name: string # name of the forked repository
   --organization: string # organization name, if forking into an organization
-]: any -> any {
+]: any -> oneof<record<allow_merge_commits: bool, allow_rebase: bool, allow_rebase_explicit: bool, allow_rebase_update: bool, allow_squash_merge: bool, archived: bool, avatar_url: string, clone_url: string, created_at: string, default_allow_maintainer_edit: bool, default_branch: string, default_delete_branch_after_merge: bool, default_merge_style: string, description: string, empty: bool, external_tracker: record<external_tracker_format: string, external_tracker_regexp_pattern: string, external_tracker_style: string, external_tracker_url: string>, external_wiki: record<external_wiki_url: string>, fork: bool, forks_count: int, full_name: string, has_issues: bool, has_projects: bool, has_pull_requests: bool, has_wiki: bool, html_url: string, id: int, ignore_whitespace_conflicts: bool, internal: bool, internal_tracker: record<allow_only_contributors_to_track_time: bool, enable_issue_dependencies: bool, enable_time_tracker: bool>, language: string, languages_url: string, link: string, mirror: bool, mirror_interval: string, mirror_updated: string, name: string, open_issues_count: int, open_pr_counter: int, original_url: string, owner: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, parent: any, permissions: record<admin: bool, pull: bool, push: bool>, private: bool, release_counter: int, repo_transfer: record<doer: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, recipient: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, teams: list<record>>, size: int, ssh_url: string, stars_count: int, template: bool, updated_at: string, watchers_count: int, website: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -4193,7 +4275,7 @@ export def "create-fork" [
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/forks") $auth.query)
   let req_body = {"name": $name, "organization": $organization} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -4226,14 +4308,15 @@ export def "get-blob" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<record<content: string, encoding: string, sha: string, size: int, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   if ($sha | is-empty) { error make --unspanned { msg: "path parameter 'sha' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), sha: (encode-path-segment $sha)} | format pattern "/repos/{owner}/{repo}/git/blobs/{sha}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -4266,14 +4349,15 @@ export def "repo-get-single-commit" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<record<author: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, commit: record<author: record<date: string, email: string, name: string>, committer: record<date: string, email: string, name: string>, message: string, tree: record<created: string, sha: string, url: string>, url: string, verification: record<payload: string, reason: string, signature: string, signer: record, verified: bool>>, committer: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, created: string, files: table<filename: string>, html_url: string, parents: table<created: string, sha: string, url: string>, sha: string, stats: record<additions: int, deletions: int, total: int>, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   if ($sha | is-empty) { error make --unspanned { msg: "path parameter 'sha' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), sha: (encode-path-segment $sha)} | format pattern "/repos/{owner}/{repo}/git/commits/{sha}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -4297,7 +4381,7 @@ export def "repo-download-commit-diff-or-patch" [
   owner: string
   repo: string
   sha: string
-  diff_type: string
+  diff_type: string@diff-type-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4307,7 +4391,8 @@ export def "repo-download-commit-diff-or-patch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
@@ -4315,7 +4400,7 @@ export def "repo-download-commit-diff-or-patch" [
   if ($sha | is-empty) { error make --unspanned { msg: "path parameter 'sha' must be non-empty" } }
   if ($diff_type | is-empty) { error make --unspanned { msg: "path parameter 'diffType' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), sha: (encode-path-segment $sha), diff_type: (encode-path-segment $diff_type)} | format pattern "/repos/{owner}/{repo}/git/commits/{sha}.{diff_type}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -4348,14 +4433,15 @@ export def "repo-get-note" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<record<commit: record<author: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, commit: record<author: record, committer: record, message: string, tree: record, url: string, verification: record>, committer: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, created: string, files: list<record>, html_url: string, parents: list<record>, sha: string, stats: record<additions: int, deletions: int, total: int>, url: string>, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   if ($sha | is-empty) { error make --unspanned { msg: "path parameter 'sha' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), sha: (encode-path-segment $sha)} | format pattern "/repos/{owner}/{repo}/git/notes/{sha}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -4387,13 +4473,14 @@ export def "repo-list-all-git-refs" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<table<object: record<sha: string, type: string, url: string>, ref: string, url: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/git/refs") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -4426,14 +4513,15 @@ export def "repo-list-git-refs" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<table<object: record<sha: string, type: string, url: string>, ref: string, url: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   if ($ref | is-empty) { error make --unspanned { msg: "path parameter 'ref' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), ref: (encode-path-segment $ref)} | format pattern "/repos/{owner}/{repo}/git/refs/{ref}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -4466,14 +4554,15 @@ export def "get-annotated-tag" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<record<message: string, object: record<sha: string, type: string, url: string>, sha: string, tag: string, tagger: record<date: string, email: string, name: string>, url: string, verification: record<payload: string, reason: string, signature: string, signer: record<email: string, name: string, username: string>, verified: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   if ($sha | is-empty) { error make --unspanned { msg: "path parameter 'sha' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), sha: (encode-path-segment $sha)} | format pattern "/repos/{owner}/{repo}/git/tags/{sha}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -4506,10 +4595,11 @@ export def "get-tree" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --recursive: oneof<nothing, bool> # show all directories and files
   --page: int # page number; the 'truncated' field in the response will be true if there are still more items after this page, false if the last page
   --per-page: int # number of items per page
-]: nothing -> any {
+]: nothing -> oneof<record<page: int, sha: string, total_count: int, tree: table<mode: string, path: string, sha: string, size: int, type: string, url: string>, truncated: bool, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
@@ -4517,7 +4607,7 @@ export def "get-tree" [
   if ($sha | is-empty) { error make --unspanned { msg: "path parameter 'sha' must be non-empty" } }
   let qp = [(serialize-qp "recursive" $recursive "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), sha: (encode-path-segment $sha)} | format pattern "/repos/{owner}/{repo}/git/trees/{sha}") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -4549,16 +4639,17 @@ export def "repo-list-hooks" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
-]: nothing -> any {
+]: nothing -> oneof<table<active: bool, authorization_header: string, config: record, created_at: string, events: list<string>, id: int, type: string, updated_at: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/hooks") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -4590,13 +4681,14 @@ export def "repo-create-hook" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --active: oneof<nothing, bool> # default: false
   --authorization-header: string
   --branch-filter: string
   config: record # CreateHookOptionConfig has all config options in it required are "content_type" and "url" Required
   --events: list<string>
   type: string@type-completer
-]: any -> any {
+]: any -> oneof<record<active: bool, authorization_header: string, config: record, created_at: string, events: list<string>, id: int, type: string, updated_at: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -4605,7 +4697,7 @@ export def "repo-create-hook" [
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/hooks") $auth.query)
   let req_body = {"active": $active, "authorization_header": $authorization_header, "branch_filter": $branch_filter, "config": $config, "events": $events, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -4637,13 +4729,14 @@ export def "repo-list-git-hooks" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<table<content: string, is_active: bool, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/hooks/git") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -4716,14 +4809,15 @@ export def "repo-get-git-hook" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<record<content: string, is_active: bool, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), id: (encode-path-segment $id)} | format pattern "/repos/{owner}/{repo}/hooks/git/{id}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -4756,8 +4850,9 @@ export def "repo-edit-git-hook" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --content: string
-]: any -> any {
+]: any -> oneof<record<content: string, is_active: bool, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -4767,7 +4862,7 @@ export def "repo-edit-git-hook" [
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), id: (encode-path-segment $id)} | format pattern "/repos/{owner}/{repo}/hooks/git/{id}") $auth.query)
   let req_body = {"content": $content} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "patch"
@@ -4840,14 +4935,15 @@ export def "repo-get-hook" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<record<active: bool, authorization_header: string, config: record, created_at: string, events: list<string>, id: int, type: string, updated_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), id: (encode-path-segment $id)} | format pattern "/repos/{owner}/{repo}/hooks/{id}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -4880,12 +4976,13 @@ export def "repo-edit-hook" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --active: oneof<nothing, bool>
   --authorization-header: string
   --branch-filter: string
   --config: record
   --events: list<string>
-]: any -> any {
+]: any -> oneof<record<active: bool, authorization_header: string, config: record, created_at: string, events: list<string>, id: int, type: string, updated_at: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -4895,7 +4992,7 @@ export def "repo-edit-hook" [
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), id: (encode-path-segment $id)} | format pattern "/repos/{owner}/{repo}/hooks/{id}") $auth.query)
   let req_body = {"active": $active, "authorization_header": $authorization_header, "branch_filter": $branch_filter, "config": $config, "events": $events} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "patch"
@@ -4969,13 +5066,14 @@ export def "repo-get-issue-templates" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<table<about: string, body: list<record>, content: string, file_name: string, labels: list<string>, name: string, ref: string, title: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/issue_templates") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -5007,6 +5105,7 @@ export def "issue-list-issues" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --state: string@state-completer-1 # whether issue is open or closed
   --labels: string # comma separated list of labels. Fetch only issues that have any of this labels. Non existent labels are discarded
   --q: string # search string
@@ -5019,14 +5118,14 @@ export def "issue-list-issues" [
   --mentioned-by: string # Only show items in which the given user was mentioned
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
-]: nothing -> any {
+]: nothing -> oneof<table<assets: list<record>, assignee: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, assignees: list<record>, body: string, closed_at: string, comments: int, created_at: string, due_date: string, html_url: string, id: int, is_locked: bool, labels: list<record>, milestone: record<closed_at: string, closed_issues: int, created_at: string, description: string, due_on: string, id: int, open_issues: int, state: string, title: string, updated_at: string>, number: int, original_author: string, original_author_id: int, pull_request: record<merged: bool, merged_at: string>, ref: string, repository: record<full_name: string, id: int, name: string, owner: string>, state: string, title: string, updated_at: string, url: string, user: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "labels" $labels "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "milestones" $milestones "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "created_by" $created_by "scalar") (serialize-qp "assigned_by" $assigned_by "scalar") (serialize-qp "mentioned_by" $mentioned_by "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/issues") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -5058,6 +5157,7 @@ export def "issue-create-issue" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --assignee: string # deprecated
   --assignees: list<string>
   --body: string
@@ -5067,7 +5167,7 @@ export def "issue-create-issue" [
   --milestone: int # milestone id (format: int64)
   --ref: string
   title: string
-]: any -> any {
+]: any -> oneof<record<assets: table<browser_download_url: string, created_at: string, download_count: int, id: int, name: string, size: int, uuid: string>, assignee: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, assignees: table<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, body: string, closed_at: string, comments: int, created_at: string, due_date: string, html_url: string, id: int, is_locked: bool, labels: table<color: string, description: string, exclusive: bool, id: int, name: string, url: string>, milestone: record<closed_at: string, closed_issues: int, created_at: string, description: string, due_on: string, id: int, open_issues: int, state: string, title: string, updated_at: string>, number: int, original_author: string, original_author_id: int, pull_request: record<merged: bool, merged_at: string>, ref: string, repository: record<full_name: string, id: int, name: string, owner: string>, state: string, title: string, updated_at: string, url: string, user: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -5076,7 +5176,7 @@ export def "issue-create-issue" [
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/issues") $auth.query)
   let req_body = {"assignee": $assignee, "assignees": $assignees, "body": $body, "closed": $closed, "due_date": $due_date, "labels": $labels, "milestone": $milestone, "ref": $ref, "title": $title} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -5108,18 +5208,19 @@ export def "issue-get-repo-comments" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --since: string # if provided, only comments updated since the provided time are returned. (format: date-time)
   --before: string # if provided, only comments updated before the provided time are returned. (format: date-time)
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
-]: nothing -> any {
+]: nothing -> oneof<table<assets: list<record>, body: string, created_at: string, html_url: string, id: int, issue_url: string, original_author: string, original_author_id: int, pull_request_url: string, updated_at: string, user: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/issues/comments") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -5192,14 +5293,15 @@ export def "issue-get-comment" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<record<assets: table<browser_download_url: string, created_at: string, download_count: int, id: int, name: string, size: int, uuid: string>, body: string, created_at: string, html_url: string, id: int, issue_url: string, original_author: string, original_author_id: int, pull_request_url: string, updated_at: string, user: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), id: (encode-path-segment $id)} | format pattern "/repos/{owner}/{repo}/issues/comments/{id}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -5232,8 +5334,9 @@ export def "issue-edit-comment" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   body: string
-]: any -> any {
+]: any -> oneof<record<assets: table<browser_download_url: string, created_at: string, download_count: int, id: int, name: string, size: int, uuid: string>, body: string, created_at: string, html_url: string, id: int, issue_url: string, original_author: string, original_author_id: int, pull_request_url: string, updated_at: string, user: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -5243,7 +5346,7 @@ export def "issue-edit-comment" [
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), id: (encode-path-segment $id)} | format pattern "/repos/{owner}/{repo}/issues/comments/{id}") $auth.query)
   let req_body = {"body": $body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "patch"
@@ -5276,14 +5379,15 @@ export def "issue-list-issue-comment-attachments" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<table<browser_download_url: string, created_at: string, download_count: int, id: int, name: string, size: int, uuid: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), id: (encode-path-segment $id)} | format pattern "/repos/{owner}/{repo}/issues/comments/{id}/assets") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -5316,9 +5420,10 @@ export def "issue-create-issue-comment-attachment" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --name: string # name of the attachment
   attachment: string # attachment to upload (format: binary)
-]: any -> any {
+]: any -> oneof<record<browser_download_url: string, created_at: string, download_count: int, id: int, name: string, size: int, uuid: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -5329,10 +5434,10 @@ export def "issue-create-issue-comment-attachment" [
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), id: (encode-path-segment $id)} | format pattern "/repos/{owner}/{repo}/issues/comments/{id}/assets") $qp $auth.query)
   let req_body = {"attachment": $attachment} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["attachment"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["attachment"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -5407,7 +5512,8 @@ export def "issue-get-issue-comment-attachment" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<record<browser_download_url: string, created_at: string, download_count: int, id: int, name: string, size: int, uuid: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
@@ -5415,7 +5521,7 @@ export def "issue-get-issue-comment-attachment" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'attachment_id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), id: (encode-path-segment $id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/repos/{owner}/{repo}/issues/comments/{id}/assets/{attachment_id}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -5449,8 +5555,9 @@ export def "issue-edit-issue-comment-attachment" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --name: string
-]: any -> any {
+]: any -> oneof<record<browser_download_url: string, created_at: string, download_count: int, id: int, name: string, size: int, uuid: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -5461,7 +5568,7 @@ export def "issue-edit-issue-comment-attachment" [
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), id: (encode-path-segment $id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/repos/{owner}/{repo}/issues/comments/{id}/assets/{attachment_id}") $auth.query)
   let req_body = {"name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "patch"
@@ -5538,14 +5645,15 @@ export def "issue-get-comment-reactions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<table<content: string, created_at: string, user: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), id: (encode-path-segment $id)} | format pattern "/repos/{owner}/{repo}/issues/comments/{id}/reactions") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -5578,8 +5686,9 @@ export def "issue-post-comment-reaction" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --content: string
-]: any -> any {
+]: any -> oneof<record<content: string, created_at: string, user: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -5589,7 +5698,7 @@ export def "issue-post-comment-reaction" [
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), id: (encode-path-segment $id)} | format pattern "/repos/{owner}/{repo}/issues/comments/{id}/reactions") $auth.query)
   let req_body = {"content": $content} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -5662,14 +5771,15 @@ export def "issue-get-issue" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<record<assets: table<browser_download_url: string, created_at: string, download_count: int, id: int, name: string, size: int, uuid: string>, assignee: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, assignees: table<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, body: string, closed_at: string, comments: int, created_at: string, due_date: string, html_url: string, id: int, is_locked: bool, labels: table<color: string, description: string, exclusive: bool, id: int, name: string, url: string>, milestone: record<closed_at: string, closed_issues: int, created_at: string, description: string, due_on: string, id: int, open_issues: int, state: string, title: string, updated_at: string>, number: int, original_author: string, original_author_id: int, pull_request: record<merged: bool, merged_at: string>, ref: string, repository: record<full_name: string, id: int, name: string, owner: string>, state: string, title: string, updated_at: string, url: string, user: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index)} | format pattern "/repos/{owner}/{repo}/issues/{index}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -5702,6 +5812,7 @@ export def "issue-edit-issue" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --assignee: string # deprecated
   --assignees: list<string>
   --body: string
@@ -5711,7 +5822,7 @@ export def "issue-edit-issue" [
   --state: string
   --title: string
   --unset-due-date: oneof<nothing, bool>
-]: any -> any {
+]: any -> oneof<record<assets: table<browser_download_url: string, created_at: string, download_count: int, id: int, name: string, size: int, uuid: string>, assignee: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, assignees: table<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, body: string, closed_at: string, comments: int, created_at: string, due_date: string, html_url: string, id: int, is_locked: bool, labels: table<color: string, description: string, exclusive: bool, id: int, name: string, url: string>, milestone: record<closed_at: string, closed_issues: int, created_at: string, description: string, due_on: string, id: int, open_issues: int, state: string, title: string, updated_at: string>, number: int, original_author: string, original_author_id: int, pull_request: record<merged: bool, merged_at: string>, ref: string, repository: record<full_name: string, id: int, name: string, owner: string>, state: string, title: string, updated_at: string, url: string, user: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -5721,7 +5832,7 @@ export def "issue-edit-issue" [
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index)} | format pattern "/repos/{owner}/{repo}/issues/{index}") $auth.query)
   let req_body = {"assignee": $assignee, "assignees": $assignees, "body": $body, "due_date": $due_date, "milestone": $milestone, "ref": $ref, "state": $state, "title": $title, "unset_due_date": $unset_due_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "patch"
@@ -5754,14 +5865,15 @@ export def "issue-list-issue-attachments" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<table<browser_download_url: string, created_at: string, download_count: int, id: int, name: string, size: int, uuid: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index)} | format pattern "/repos/{owner}/{repo}/issues/{index}/assets") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -5794,9 +5906,10 @@ export def "issue-create-issue-attachment" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --name: string # name of the attachment
   attachment: string # attachment to upload (format: binary)
-]: any -> any {
+]: any -> oneof<record<browser_download_url: string, created_at: string, download_count: int, id: int, name: string, size: int, uuid: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -5807,10 +5920,10 @@ export def "issue-create-issue-attachment" [
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index)} | format pattern "/repos/{owner}/{repo}/issues/{index}/assets") $qp $auth.query)
   let req_body = {"attachment": $attachment} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["attachment"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["attachment"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -5885,7 +5998,8 @@ export def "issue-get-issue-attachment" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<record<browser_download_url: string, created_at: string, download_count: int, id: int, name: string, size: int, uuid: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
@@ -5893,7 +6007,7 @@ export def "issue-get-issue-attachment" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'attachment_id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/repos/{owner}/{repo}/issues/{index}/assets/{attachment_id}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -5927,8 +6041,9 @@ export def "issue-edit-issue-attachment" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --name: string
-]: any -> any {
+]: any -> oneof<record<browser_download_url: string, created_at: string, download_count: int, id: int, name: string, size: int, uuid: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -5939,7 +6054,7 @@ export def "issue-edit-issue-attachment" [
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/repos/{owner}/{repo}/issues/{index}/assets/{attachment_id}") $auth.query)
   let req_body = {"name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "patch"
@@ -5972,9 +6087,10 @@ export def "issue-get-comments" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --since: string # if provided, only comments updated since the specified time are returned. (format: date-time)
   --before: string # if provided, only comments updated before the provided time are returned. (format: date-time)
-]: nothing -> any {
+]: nothing -> oneof<table<assets: list<record>, body: string, created_at: string, html_url: string, id: int, issue_url: string, original_author: string, original_author_id: int, pull_request_url: string, updated_at: string, user: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
@@ -5982,7 +6098,7 @@ export def "issue-get-comments" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "before" $before "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index)} | format pattern "/repos/{owner}/{repo}/issues/{index}/comments") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -6015,8 +6131,9 @@ export def "issue-create-comment" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   body: string
-]: any -> any {
+]: any -> oneof<record<assets: table<browser_download_url: string, created_at: string, download_count: int, id: int, name: string, size: int, uuid: string>, body: string, created_at: string, html_url: string, id: int, issue_url: string, original_author: string, original_author_id: int, pull_request_url: string, updated_at: string, user: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -6026,7 +6143,7 @@ export def "issue-create-comment" [
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index)} | format pattern "/repos/{owner}/{repo}/issues/{index}/comments") $auth.query)
   let req_body = {"body": $body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -6106,8 +6223,9 @@ export def "issue-edit-comment-deprecated" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   body: string
-]: any -> any {
+]: any -> oneof<record<assets: table<browser_download_url: string, created_at: string, download_count: int, id: int, name: string, size: int, uuid: string>, body: string, created_at: string, html_url: string, id: int, issue_url: string, original_author: string, original_author_id: int, pull_request_url: string, updated_at: string, user: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -6118,7 +6236,7 @@ export def "issue-edit-comment-deprecated" [
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index), id: (encode-path-segment $id)} | format pattern "/repos/{owner}/{repo}/issues/{index}/comments/{id}") $auth.query)
   let req_body = {"body": $body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "patch"
@@ -6151,8 +6269,9 @@ export def "issue-edit-issue-deadline" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   due_date: string # format: date-time
-]: any -> any {
+]: any -> oneof<record<due_date: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -6162,7 +6281,7 @@ export def "issue-edit-issue-deadline" [
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index)} | format pattern "/repos/{owner}/{repo}/issues/{index}/deadline") $auth.query)
   let req_body = {"due_date": $due_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -6235,14 +6354,15 @@ export def "issue-get-labels" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<table<color: string, description: string, exclusive: bool, id: int, name: string, url: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index)} | format pattern "/repos/{owner}/{repo}/issues/{index}/labels") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -6275,8 +6395,9 @@ export def "issue-add-label" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --labels: list<int> # list of label IDs
-]: any -> any {
+]: any -> oneof<table<color: string, description: string, exclusive: bool, id: int, name: string, url: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -6286,7 +6407,7 @@ export def "issue-add-label" [
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index)} | format pattern "/repos/{owner}/{repo}/issues/{index}/labels") $auth.query)
   let req_body = {"labels": $labels} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -6319,8 +6440,9 @@ export def "issue-replace-labels" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --labels: list<int> # list of label IDs
-]: any -> any {
+]: any -> oneof<table<color: string, description: string, exclusive: bool, id: int, name: string, url: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -6330,7 +6452,7 @@ export def "issue-replace-labels" [
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index)} | format pattern "/repos/{owner}/{repo}/issues/{index}/labels") $auth.query)
   let req_body = {"labels": $labels} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "put"
@@ -6449,9 +6571,10 @@ export def "issue-get-issue-reactions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
-]: nothing -> any {
+]: nothing -> oneof<table<content: string, created_at: string, user: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
@@ -6459,7 +6582,7 @@ export def "issue-get-issue-reactions" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index)} | format pattern "/repos/{owner}/{repo}/issues/{index}/reactions") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -6492,8 +6615,9 @@ export def "issue-post-issue-reaction" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --content: string
-]: any -> any {
+]: any -> oneof<record<content: string, created_at: string, user: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -6503,7 +6627,7 @@ export def "issue-post-issue-reaction" [
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index)} | format pattern "/repos/{owner}/{repo}/issues/{index}/reactions") $auth.query)
   let req_body = {"content": $content} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -6656,9 +6780,10 @@ export def "issue-subscriptions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
-]: nothing -> any {
+]: nothing -> oneof<table<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
@@ -6666,7 +6791,7 @@ export def "issue-subscriptions" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index)} | format pattern "/repos/{owner}/{repo}/issues/{index}/subscriptions") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -6699,14 +6824,15 @@ export def "issue-check-subscription" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<record<created_at: string, ignored: bool, reason: any, repository_url: string, subscribed: bool, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index)} | format pattern "/repos/{owner}/{repo}/issues/{index}/subscriptions/check") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -6823,11 +6949,12 @@ export def "issue-get-comments-and-timeline" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --since: string # if provided, only comments updated since the specified time are returned. (format: date-time)
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
   --before: string # if provided, only comments updated before the provided time are returned. (format: date-time)
-]: nothing -> any {
+]: nothing -> oneof<table<assignee: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, assignee_team: record<can_create_org_repo: bool, description: string, id: int, includes_all_repositories: bool, name: string, organization: record, permission: string, units: list, units_map: record>, body: string, created_at: string, dependent_issue: record<assets: list, assignee: record, assignees: list, body: string, closed_at: string, comments: int, created_at: string, due_date: string, html_url: string, id: int, is_locked: bool, labels: list, milestone: record, number: int, original_author: string, original_author_id: int, pull_request: record, ref: string, repository: record, state: string, title: string, updated_at: string, url: string, user: record>, html_url: string, id: int, issue_url: string, label: record<color: string, description: string, exclusive: bool, id: int, name: string, url: string>, milestone: record<closed_at: string, closed_issues: int, created_at: string, description: string, due_on: string, id: int, open_issues: int, state: string, title: string, updated_at: string>, new_ref: string, new_title: string, old_milestone: record<closed_at: string, closed_issues: int, created_at: string, description: string, due_on: string, id: int, open_issues: int, state: string, title: string, updated_at: string>, old_project_id: int, old_ref: string, old_title: string, project_id: int, pull_request_url: string, ref_action: string, ref_comment: record<assets: list, body: string, created_at: string, html_url: string, id: int, issue_url: string, original_author: string, original_author_id: int, pull_request_url: string, updated_at: string, user: record>, ref_commit_sha: string, ref_issue: record<assets: list, assignee: record, assignees: list, body: string, closed_at: string, comments: int, created_at: string, due_date: string, html_url: string, id: int, is_locked: bool, labels: list, milestone: record, number: int, original_author: string, original_author_id: int, pull_request: record, ref: string, repository: record, state: string, title: string, updated_at: string, url: string, user: record>, removed_assignee: bool, resolve_doer: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, review_id: int, tracked_time: record<created: string, id: int, issue: record, issue_id: int, time: int, user_id: int, user_name: string>, type: string, updated_at: string, user: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
@@ -6835,7 +6962,7 @@ export def "issue-get-comments-and-timeline" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "before" $before "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index)} | format pattern "/repos/{owner}/{repo}/issues/{index}/timeline") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -6908,12 +7035,13 @@ export def "issue-tracked-times" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --user: string # optional filter by user (available for issue managers)
   --since: string # Only show times updated after the given time. This is a timestamp in RFC 3339 format (format: date-time)
   --before: string # Only show times updated before the given time. This is a timestamp in RFC 3339 format (format: date-time)
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
-]: nothing -> any {
+]: nothing -> oneof<table<created: string, id: int, issue: record<assets: list, assignee: record, assignees: list, body: string, closed_at: string, comments: int, created_at: string, due_date: string, html_url: string, id: int, is_locked: bool, labels: list, milestone: record, number: int, original_author: string, original_author_id: int, pull_request: record, ref: string, repository: record, state: string, title: string, updated_at: string, url: string, user: record>, issue_id: int, time: int, user_id: int, user_name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
@@ -6921,7 +7049,7 @@ export def "issue-tracked-times" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let qp = [(serialize-qp "user" $user "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index)} | format pattern "/repos/{owner}/{repo}/issues/{index}/times") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -6954,10 +7082,11 @@ export def "issue-add-time" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --created: string # format: date-time
   time: int # time in seconds (format: int64)
   --user-name: string # User who spent the time (optional)
-]: any -> any {
+]: any -> oneof<record<created: string, id: int, issue: record<assets: list<record>, assignee: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, assignees: list<record>, body: string, closed_at: string, comments: int, created_at: string, due_date: string, html_url: string, id: int, is_locked: bool, labels: list<record>, milestone: record<closed_at: string, closed_issues: int, created_at: string, description: string, due_on: string, id: int, open_issues: int, state: string, title: string, updated_at: string>, number: int, original_author: string, original_author_id: int, pull_request: record<merged: bool, merged_at: string>, ref: string, repository: record<full_name: string, id: int, name: string, owner: string>, state: string, title: string, updated_at: string, url: string, user: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>>, issue_id: int, time: int, user_id: int, user_name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -6967,7 +7096,7 @@ export def "issue-add-time" [
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index)} | format pattern "/repos/{owner}/{repo}/issues/{index}/times") $auth.query)
   let req_body = {"created": $created, "time": $time, "user_name": $user_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -7041,18 +7170,19 @@ export def "repo-list-keys" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --key-id: int # the key_id to search for
   --fingerprint: string # fingerprint of the key
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
-]: nothing -> any {
+]: nothing -> oneof<table<created_at: string, fingerprint: string, id: int, key: string, key_id: int, read_only: bool, repository: record<allow_merge_commits: bool, allow_rebase: bool, allow_rebase_explicit: bool, allow_rebase_update: bool, allow_squash_merge: bool, archived: bool, avatar_url: string, clone_url: string, created_at: string, default_allow_maintainer_edit: bool, default_branch: string, default_delete_branch_after_merge: bool, default_merge_style: string, description: string, empty: bool, external_tracker: record, external_wiki: record, fork: bool, forks_count: int, full_name: string, has_issues: bool, has_projects: bool, has_pull_requests: bool, has_wiki: bool, html_url: string, id: int, ignore_whitespace_conflicts: bool, internal: bool, internal_tracker: record, language: string, languages_url: string, link: string, mirror: bool, mirror_interval: string, mirror_updated: string, name: string, open_issues_count: int, open_pr_counter: int, original_url: string, owner: record, parent: any, permissions: record, private: bool, release_counter: int, repo_transfer: record, size: int, ssh_url: string, stars_count: int, template: bool, updated_at: string, watchers_count: int, website: string>, title: string, url: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let qp = [(serialize-qp "key_id" $key_id "scalar") (serialize-qp "fingerprint" $fingerprint "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/keys") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -7084,10 +7214,11 @@ export def "repo-create-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   key: string # An armored SSH key to add
   --read-only: oneof<nothing, bool> # Describe if the key has only read access or read/write
   title: string # Title of the key to add
-]: any -> any {
+]: any -> oneof<record<created_at: string, fingerprint: string, id: int, key: string, key_id: int, read_only: bool, repository: record<allow_merge_commits: bool, allow_rebase: bool, allow_rebase_explicit: bool, allow_rebase_update: bool, allow_squash_merge: bool, archived: bool, avatar_url: string, clone_url: string, created_at: string, default_allow_maintainer_edit: bool, default_branch: string, default_delete_branch_after_merge: bool, default_merge_style: string, description: string, empty: bool, external_tracker: record<external_tracker_format: string, external_tracker_regexp_pattern: string, external_tracker_style: string, external_tracker_url: string>, external_wiki: record<external_wiki_url: string>, fork: bool, forks_count: int, full_name: string, has_issues: bool, has_projects: bool, has_pull_requests: bool, has_wiki: bool, html_url: string, id: int, ignore_whitespace_conflicts: bool, internal: bool, internal_tracker: record<allow_only_contributors_to_track_time: bool, enable_issue_dependencies: bool, enable_time_tracker: bool>, language: string, languages_url: string, link: string, mirror: bool, mirror_interval: string, mirror_updated: string, name: string, open_issues_count: int, open_pr_counter: int, original_url: string, owner: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, parent: any, permissions: record<admin: bool, pull: bool, push: bool>, private: bool, release_counter: int, repo_transfer: record<doer: record, recipient: record, teams: list>, size: int, ssh_url: string, stars_count: int, template: bool, updated_at: string, watchers_count: int, website: string>, title: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -7096,7 +7227,7 @@ export def "repo-create-key" [
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/keys") $auth.query)
   let req_body = {"key": $key, "read_only": $read_only, "title": $title} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -7169,14 +7300,15 @@ export def "repo-get-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<record<created_at: string, fingerprint: string, id: int, key: string, key_id: int, read_only: bool, repository: record<allow_merge_commits: bool, allow_rebase: bool, allow_rebase_explicit: bool, allow_rebase_update: bool, allow_squash_merge: bool, archived: bool, avatar_url: string, clone_url: string, created_at: string, default_allow_maintainer_edit: bool, default_branch: string, default_delete_branch_after_merge: bool, default_merge_style: string, description: string, empty: bool, external_tracker: record<external_tracker_format: string, external_tracker_regexp_pattern: string, external_tracker_style: string, external_tracker_url: string>, external_wiki: record<external_wiki_url: string>, fork: bool, forks_count: int, full_name: string, has_issues: bool, has_projects: bool, has_pull_requests: bool, has_wiki: bool, html_url: string, id: int, ignore_whitespace_conflicts: bool, internal: bool, internal_tracker: record<allow_only_contributors_to_track_time: bool, enable_issue_dependencies: bool, enable_time_tracker: bool>, language: string, languages_url: string, link: string, mirror: bool, mirror_interval: string, mirror_updated: string, name: string, open_issues_count: int, open_pr_counter: int, original_url: string, owner: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, parent: any, permissions: record<admin: bool, pull: bool, push: bool>, private: bool, release_counter: int, repo_transfer: record<doer: record, recipient: record, teams: list>, size: int, ssh_url: string, stars_count: int, template: bool, updated_at: string, watchers_count: int, website: string>, title: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), id: (encode-path-segment $id)} | format pattern "/repos/{owner}/{repo}/keys/{id}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -7208,16 +7340,17 @@ export def "issue-list-labels" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
-]: nothing -> any {
+]: nothing -> oneof<table<color: string, description: string, exclusive: bool, id: int, name: string, url: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/labels") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -7249,11 +7382,12 @@ export def "issue-create-label" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   color: string # e.g. #00aabb
   --description: string
   --exclusive: oneof<nothing, bool> # e.g. false
   name: string
-]: any -> any {
+]: any -> oneof<record<color: string, description: string, exclusive: bool, id: int, name: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -7262,7 +7396,7 @@ export def "issue-create-label" [
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/labels") $auth.query)
   let req_body = {"color": $color, "description": $description, "exclusive": $exclusive, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -7335,14 +7469,15 @@ export def "issue-get-label" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<record<color: string, description: string, exclusive: bool, id: int, name: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), id: (encode-path-segment $id)} | format pattern "/repos/{owner}/{repo}/labels/{id}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -7375,11 +7510,12 @@ export def "issue-edit-label" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --color: string # e.g. #00aabb
   --description: string
   --exclusive: oneof<nothing, bool> # e.g. false
   --name: string
-]: any -> any {
+]: any -> oneof<record<color: string, description: string, exclusive: bool, id: int, name: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -7389,7 +7525,7 @@ export def "issue-edit-label" [
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), id: (encode-path-segment $id)} | format pattern "/repos/{owner}/{repo}/labels/{id}") $auth.query)
   let req_body = {"color": $color, "description": $description, "exclusive": $exclusive, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "patch"
@@ -7421,13 +7557,14 @@ export def "repo-get-languages" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/languages") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -7501,18 +7638,19 @@ export def "issue-get-milestones-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --state: string # Milestone state, Recognized values are open, closed and all. Defaults to "open"
   --name: string # filter by milestone name
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
-]: nothing -> any {
+]: nothing -> oneof<table<closed_at: string, closed_issues: int, created_at: string, description: string, due_on: string, id: int, open_issues: int, state: string, title: string, updated_at: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/milestones") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -7544,11 +7682,12 @@ export def "issue-create-milestone" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --description: string
   --due-on: string # format: date-time
   --state: string@state-completer-2
   --title: string
-]: any -> any {
+]: any -> oneof<record<closed_at: string, closed_issues: int, created_at: string, description: string, due_on: string, id: int, open_issues: int, state: string, title: string, updated_at: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -7557,7 +7696,7 @@ export def "issue-create-milestone" [
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/milestones") $auth.query)
   let req_body = {"description": $description, "due_on": $due_on, "state": $state, "title": $title} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -7630,14 +7769,15 @@ export def "issue-get-milestone" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<record<closed_at: string, closed_issues: int, created_at: string, description: string, due_on: string, id: int, open_issues: int, state: string, title: string, updated_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), id: (encode-path-segment $id)} | format pattern "/repos/{owner}/{repo}/milestones/{id}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -7670,11 +7810,12 @@ export def "issue-edit-milestone" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --description: string
   --due-on: string # format: date-time
   --state: string
   --title: string
-]: any -> any {
+]: any -> oneof<record<closed_at: string, closed_issues: int, created_at: string, description: string, due_on: string, id: int, open_issues: int, state: string, title: string, updated_at: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -7684,7 +7825,7 @@ export def "issue-edit-milestone" [
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), id: (encode-path-segment $id)} | format pattern "/repos/{owner}/{repo}/milestones/{id}") $auth.query)
   let req_body = {"description": $description, "due_on": $due_on, "state": $state, "title": $title} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "patch"
@@ -7754,6 +7895,7 @@ export def "notify-get-repo-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --all: oneof<nothing, bool> # If true, show notifications marked as read. Default value is false
   --status-types: list<string> # Show notifications with the provided status types. Options are: unread, read and/or pinned. Defaults to unread & pinned
   --subject-type: list<string> # filter notifications by subject type
@@ -7761,14 +7903,14 @@ export def "notify-get-repo-list" [
   --before: string # Only show notifications updated before the given time. This is a timestamp in RFC 3339 format (format: date-time)
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
-]: nothing -> any {
+]: nothing -> oneof<table<id: int, pinned: bool, repository: record<allow_merge_commits: bool, allow_rebase: bool, allow_rebase_explicit: bool, allow_rebase_update: bool, allow_squash_merge: bool, archived: bool, avatar_url: string, clone_url: string, created_at: string, default_allow_maintainer_edit: bool, default_branch: string, default_delete_branch_after_merge: bool, default_merge_style: string, description: string, empty: bool, external_tracker: record, external_wiki: record, fork: bool, forks_count: int, full_name: string, has_issues: bool, has_projects: bool, has_pull_requests: bool, has_wiki: bool, html_url: string, id: int, ignore_whitespace_conflicts: bool, internal: bool, internal_tracker: record, language: string, languages_url: string, link: string, mirror: bool, mirror_interval: string, mirror_updated: string, name: string, open_issues_count: int, open_pr_counter: int, original_url: string, owner: record, parent: any, permissions: record, private: bool, release_counter: int, repo_transfer: record, size: int, ssh_url: string, stars_count: int, template: bool, updated_at: string, watchers_count: int, website: string>, subject: record<html_url: string, latest_comment_html_url: string, latest_comment_url: string, state: string, title: string, type: string, url: string>, unread: bool, updated_at: string, url: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let qp = [(serialize-qp "all" $all "scalar") (serialize-qp "status-types" $status_types "multi") (serialize-qp "subject-type" $subject_type "multi") (serialize-qp "since" $since "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/notifications") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -7800,18 +7942,19 @@ export def "notify-read-repo-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --all: string # If true, mark all notifications on this repo. Default value is false
   --status-types: list<string> # Mark notifications with the provided status types. Options are: unread, read and/or pinned. Defaults to unread.
   --to-status: string # Status to mark notifications as. Defaults to read.
   --last-read-at: string # Describes the last point that notifications were checked. Anything updated since this time will not be updated. (format: date-time)
-]: nothing -> any {
+]: nothing -> oneof<table<id: int, pinned: bool, repository: record<allow_merge_commits: bool, allow_rebase: bool, allow_rebase_explicit: bool, allow_rebase_update: bool, allow_squash_merge: bool, archived: bool, avatar_url: string, clone_url: string, created_at: string, default_allow_maintainer_edit: bool, default_branch: string, default_delete_branch_after_merge: bool, default_merge_style: string, description: string, empty: bool, external_tracker: record, external_wiki: record, fork: bool, forks_count: int, full_name: string, has_issues: bool, has_projects: bool, has_pull_requests: bool, has_wiki: bool, html_url: string, id: int, ignore_whitespace_conflicts: bool, internal: bool, internal_tracker: record, language: string, languages_url: string, link: string, mirror: bool, mirror_interval: string, mirror_updated: string, name: string, open_issues_count: int, open_pr_counter: int, original_url: string, owner: record, parent: any, permissions: record, private: bool, release_counter: int, repo_transfer: record, size: int, ssh_url: string, stars_count: int, template: bool, updated_at: string, watchers_count: int, website: string>, subject: record<html_url: string, latest_comment_html_url: string, latest_comment_url: string, state: string, title: string, type: string, url: string>, unread: bool, updated_at: string, url: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let qp = [(serialize-qp "all" $all "scalar") (serialize-qp "status-types" $status_types "multi") (serialize-qp "to-status" $to_status "scalar") (serialize-qp "last_read_at" $last_read_at "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/notifications") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "put"
@@ -7843,25 +7986,26 @@ export def "repo-list-pull-requests" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --state: string@state-completer-1 # State of pull request: open or closed (optional)
-  --qp-sort: string@sort-completer-1 # Type of sort
+  --sort: string@sort-completer-1 # Type of sort
   --milestone: int # ID of the milestone (format: int64)
   --labels: list<int> # Label IDs
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
-]: nothing -> any {
+]: nothing -> oneof<table<allow_maintainer_edit: bool, assignee: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, assignees: list<record>, base: record<label: string, ref: string, repo: record, repo_id: int, sha: string>, body: string, closed_at: string, comments: int, created_at: string, diff_url: string, due_date: string, head: record<label: string, ref: string, repo: record, repo_id: int, sha: string>, html_url: string, id: int, is_locked: bool, labels: list<record>, merge_base: string, merge_commit_sha: string, mergeable: bool, merged: bool, merged_at: string, merged_by: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, milestone: record<closed_at: string, closed_issues: int, created_at: string, description: string, due_on: string, id: int, open_issues: int, state: string, title: string, updated_at: string>, number: int, patch_url: string, state: string, title: string, updated_at: string, url: string, user: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
-  let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "milestone" $milestone "scalar") (serialize-qp "labels" $labels "multi") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "milestone" $milestone "scalar") (serialize-qp "labels" $labels "multi") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/pulls") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"state": $state, "sort": $qp_sort, "milestone": $milestone, "labels": $labels, "page": $page, "limit": $limit} | compact)
+    query: ({"state": $state, "sort": $sort, "milestone": $milestone, "labels": $labels, "page": $page, "limit": $limit} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -7888,6 +8032,7 @@ export def "repo-create-pull-request" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --assignee: string
   --assignees: list<string>
   --body-base: string
@@ -7897,7 +8042,7 @@ export def "repo-create-pull-request" [
   --labels: list<int>
   --milestone: int # format: int64
   --title: string
-]: any -> any {
+]: any -> oneof<record<allow_maintainer_edit: bool, assignee: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, assignees: table<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, base: record<label: string, ref: string, repo: record<allow_merge_commits: bool, allow_rebase: bool, allow_rebase_explicit: bool, allow_rebase_update: bool, allow_squash_merge: bool, archived: bool, avatar_url: string, clone_url: string, created_at: string, default_allow_maintainer_edit: bool, default_branch: string, default_delete_branch_after_merge: bool, default_merge_style: string, description: string, empty: bool, external_tracker: record, external_wiki: record, fork: bool, forks_count: int, full_name: string, has_issues: bool, has_projects: bool, has_pull_requests: bool, has_wiki: bool, html_url: string, id: int, ignore_whitespace_conflicts: bool, internal: bool, internal_tracker: record, language: string, languages_url: string, link: string, mirror: bool, mirror_interval: string, mirror_updated: string, name: string, open_issues_count: int, open_pr_counter: int, original_url: string, owner: record, parent: any, permissions: record, private: bool, release_counter: int, repo_transfer: record, size: int, ssh_url: string, stars_count: int, template: bool, updated_at: string, watchers_count: int, website: string>, repo_id: int, sha: string>, body: string, closed_at: string, comments: int, created_at: string, diff_url: string, due_date: string, head: record<label: string, ref: string, repo: record<allow_merge_commits: bool, allow_rebase: bool, allow_rebase_explicit: bool, allow_rebase_update: bool, allow_squash_merge: bool, archived: bool, avatar_url: string, clone_url: string, created_at: string, default_allow_maintainer_edit: bool, default_branch: string, default_delete_branch_after_merge: bool, default_merge_style: string, description: string, empty: bool, external_tracker: record, external_wiki: record, fork: bool, forks_count: int, full_name: string, has_issues: bool, has_projects: bool, has_pull_requests: bool, has_wiki: bool, html_url: string, id: int, ignore_whitespace_conflicts: bool, internal: bool, internal_tracker: record, language: string, languages_url: string, link: string, mirror: bool, mirror_interval: string, mirror_updated: string, name: string, open_issues_count: int, open_pr_counter: int, original_url: string, owner: record, parent: any, permissions: record, private: bool, release_counter: int, repo_transfer: record, size: int, ssh_url: string, stars_count: int, template: bool, updated_at: string, watchers_count: int, website: string>, repo_id: int, sha: string>, html_url: string, id: int, is_locked: bool, labels: table<color: string, description: string, exclusive: bool, id: int, name: string, url: string>, merge_base: string, merge_commit_sha: string, mergeable: bool, merged: bool, merged_at: string, merged_by: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, milestone: record<closed_at: string, closed_issues: int, created_at: string, description: string, due_on: string, id: int, open_issues: int, state: string, title: string, updated_at: string>, number: int, patch_url: string, state: string, title: string, updated_at: string, url: string, user: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -7906,7 +8051,7 @@ export def "repo-create-pull-request" [
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/pulls") $auth.query)
   let req_body = {"assignee": $assignee, "assignees": $assignees, "base": $body_base, "body": $body, "due_date": $due_date, "head": $head, "labels": $labels, "milestone": $milestone, "title": $title} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -7939,14 +8084,15 @@ export def "repo-get-pull-request" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<record<allow_maintainer_edit: bool, assignee: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, assignees: table<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, base: record<label: string, ref: string, repo: record<allow_merge_commits: bool, allow_rebase: bool, allow_rebase_explicit: bool, allow_rebase_update: bool, allow_squash_merge: bool, archived: bool, avatar_url: string, clone_url: string, created_at: string, default_allow_maintainer_edit: bool, default_branch: string, default_delete_branch_after_merge: bool, default_merge_style: string, description: string, empty: bool, external_tracker: record, external_wiki: record, fork: bool, forks_count: int, full_name: string, has_issues: bool, has_projects: bool, has_pull_requests: bool, has_wiki: bool, html_url: string, id: int, ignore_whitespace_conflicts: bool, internal: bool, internal_tracker: record, language: string, languages_url: string, link: string, mirror: bool, mirror_interval: string, mirror_updated: string, name: string, open_issues_count: int, open_pr_counter: int, original_url: string, owner: record, parent: any, permissions: record, private: bool, release_counter: int, repo_transfer: record, size: int, ssh_url: string, stars_count: int, template: bool, updated_at: string, watchers_count: int, website: string>, repo_id: int, sha: string>, body: string, closed_at: string, comments: int, created_at: string, diff_url: string, due_date: string, head: record<label: string, ref: string, repo: record<allow_merge_commits: bool, allow_rebase: bool, allow_rebase_explicit: bool, allow_rebase_update: bool, allow_squash_merge: bool, archived: bool, avatar_url: string, clone_url: string, created_at: string, default_allow_maintainer_edit: bool, default_branch: string, default_delete_branch_after_merge: bool, default_merge_style: string, description: string, empty: bool, external_tracker: record, external_wiki: record, fork: bool, forks_count: int, full_name: string, has_issues: bool, has_projects: bool, has_pull_requests: bool, has_wiki: bool, html_url: string, id: int, ignore_whitespace_conflicts: bool, internal: bool, internal_tracker: record, language: string, languages_url: string, link: string, mirror: bool, mirror_interval: string, mirror_updated: string, name: string, open_issues_count: int, open_pr_counter: int, original_url: string, owner: record, parent: any, permissions: record, private: bool, release_counter: int, repo_transfer: record, size: int, ssh_url: string, stars_count: int, template: bool, updated_at: string, watchers_count: int, website: string>, repo_id: int, sha: string>, html_url: string, id: int, is_locked: bool, labels: table<color: string, description: string, exclusive: bool, id: int, name: string, url: string>, merge_base: string, merge_commit_sha: string, mergeable: bool, merged: bool, merged_at: string, merged_by: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, milestone: record<closed_at: string, closed_issues: int, created_at: string, description: string, due_on: string, id: int, open_issues: int, state: string, title: string, updated_at: string>, number: int, patch_url: string, state: string, title: string, updated_at: string, url: string, user: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index)} | format pattern "/repos/{owner}/{repo}/pulls/{index}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -7979,6 +8125,7 @@ export def "repo-edit-pull-request" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --allow-maintainer-edit: oneof<nothing, bool>
   --assignee: string
   --assignees: list<string>
@@ -7990,7 +8137,7 @@ export def "repo-edit-pull-request" [
   --state: string
   --title: string
   --unset-due-date: oneof<nothing, bool>
-]: any -> any {
+]: any -> oneof<record<allow_maintainer_edit: bool, assignee: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, assignees: table<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, base: record<label: string, ref: string, repo: record<allow_merge_commits: bool, allow_rebase: bool, allow_rebase_explicit: bool, allow_rebase_update: bool, allow_squash_merge: bool, archived: bool, avatar_url: string, clone_url: string, created_at: string, default_allow_maintainer_edit: bool, default_branch: string, default_delete_branch_after_merge: bool, default_merge_style: string, description: string, empty: bool, external_tracker: record, external_wiki: record, fork: bool, forks_count: int, full_name: string, has_issues: bool, has_projects: bool, has_pull_requests: bool, has_wiki: bool, html_url: string, id: int, ignore_whitespace_conflicts: bool, internal: bool, internal_tracker: record, language: string, languages_url: string, link: string, mirror: bool, mirror_interval: string, mirror_updated: string, name: string, open_issues_count: int, open_pr_counter: int, original_url: string, owner: record, parent: any, permissions: record, private: bool, release_counter: int, repo_transfer: record, size: int, ssh_url: string, stars_count: int, template: bool, updated_at: string, watchers_count: int, website: string>, repo_id: int, sha: string>, body: string, closed_at: string, comments: int, created_at: string, diff_url: string, due_date: string, head: record<label: string, ref: string, repo: record<allow_merge_commits: bool, allow_rebase: bool, allow_rebase_explicit: bool, allow_rebase_update: bool, allow_squash_merge: bool, archived: bool, avatar_url: string, clone_url: string, created_at: string, default_allow_maintainer_edit: bool, default_branch: string, default_delete_branch_after_merge: bool, default_merge_style: string, description: string, empty: bool, external_tracker: record, external_wiki: record, fork: bool, forks_count: int, full_name: string, has_issues: bool, has_projects: bool, has_pull_requests: bool, has_wiki: bool, html_url: string, id: int, ignore_whitespace_conflicts: bool, internal: bool, internal_tracker: record, language: string, languages_url: string, link: string, mirror: bool, mirror_interval: string, mirror_updated: string, name: string, open_issues_count: int, open_pr_counter: int, original_url: string, owner: record, parent: any, permissions: record, private: bool, release_counter: int, repo_transfer: record, size: int, ssh_url: string, stars_count: int, template: bool, updated_at: string, watchers_count: int, website: string>, repo_id: int, sha: string>, html_url: string, id: int, is_locked: bool, labels: table<color: string, description: string, exclusive: bool, id: int, name: string, url: string>, merge_base: string, merge_commit_sha: string, mergeable: bool, merged: bool, merged_at: string, merged_by: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, milestone: record<closed_at: string, closed_issues: int, created_at: string, description: string, due_on: string, id: int, open_issues: int, state: string, title: string, updated_at: string>, number: int, patch_url: string, state: string, title: string, updated_at: string, url: string, user: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -8000,7 +8147,7 @@ export def "repo-edit-pull-request" [
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index)} | format pattern "/repos/{owner}/{repo}/pulls/{index}") $auth.query)
   let req_body = {"allow_maintainer_edit": $allow_maintainer_edit, "assignee": $assignee, "assignees": $assignees, "base": $body_base, "body": $body, "due_date": $due_date, "labels": $labels, "milestone": $milestone, "state": $state, "title": $title, "unset_due_date": $unset_due_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "patch"
@@ -8024,7 +8171,7 @@ export def "repo-download-pull-diff-or-patch" [
   owner: string
   repo: string
   index: int
-  diff_type: string
+  diff_type: string@diff-type-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8034,8 +8181,9 @@ export def "repo-download-pull-diff-or-patch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --binary: oneof<nothing, bool> # whether to include binary file changes. if true, the diff is applicable with `git apply`
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
@@ -8044,7 +8192,7 @@ export def "repo-download-pull-diff-or-patch" [
   if ($diff_type | is-empty) { error make --unspanned { msg: "path parameter 'diffType' must be non-empty" } }
   let qp = [(serialize-qp "binary" $binary "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index), diff_type: (encode-path-segment $diff_type)} | format pattern "/repos/{owner}/{repo}/pulls/{index}.{diff_type}") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -8077,9 +8225,10 @@ export def "repo-get-pull-request-commits" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
-]: nothing -> any {
+]: nothing -> oneof<table<author: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, commit: record<author: record, committer: record, message: string, tree: record, url: string, verification: record>, committer: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, created: string, files: list<record>, html_url: string, parents: list<record>, sha: string, stats: record<additions: int, deletions: int, total: int>, url: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
@@ -8087,7 +8236,7 @@ export def "repo-get-pull-request-commits" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index)} | format pattern "/repos/{owner}/{repo}/pulls/{index}/commits") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -8120,11 +8269,12 @@ export def "repo-get-pull-request-files" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --skip-to: string # skip to given file
   --whitespace: string@whitespace-completer # whitespace behavior
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
-]: nothing -> any {
+]: nothing -> oneof<table<additions: int, changes: int, contents_url: string, deletions: int, filename: string, html_url: string, previous_filename: string, raw_url: string, status: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
@@ -8132,7 +8282,7 @@ export def "repo-get-pull-request-files" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let qp = [(serialize-qp "skip-to" $skip_to "scalar") (serialize-qp "whitespace" $whitespace "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index)} | format pattern "/repos/{owner}/{repo}/pulls/{index}/files") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -8245,7 +8395,7 @@ export def "repo-merge-pull-request" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-do: string@do-completer
+  do: string@do-completer
   --merge-commit-id: string
   --merge-message-field: string
   --merge-title-field: string
@@ -8261,7 +8411,7 @@ export def "repo-merge-pull-request" [
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index)} | format pattern "/repos/{owner}/{repo}/pulls/{index}/merge") $auth.query)
-  let req_body = {"Do": $body_do, "MergeCommitID": $merge_commit_id, "MergeMessageField": $merge_message_field, "MergeTitleField": $merge_title_field, "delete_branch_after_merge": $delete_branch_after_merge, "force_merge": $force_merge, "head_commit_id": $head_commit_id, "merge_when_checks_succeed": $merge_when_checks_succeed} | compact
+  let req_body = {"Do": $do, "MergeCommitID": $merge_commit_id, "MergeMessageField": $merge_message_field, "MergeTitleField": $merge_title_field, "delete_branch_after_merge": $delete_branch_after_merge, "force_merge": $force_merge, "head_commit_id": $head_commit_id, "merge_when_checks_succeed": $merge_when_checks_succeed} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8341,9 +8491,10 @@ export def "repo-create-pull-review-requests" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --reviewers: list<string>
   --team-reviewers: list<string>
-]: any -> any {
+]: any -> oneof<table<body: string, comments_count: int, commit_id: string, dismissed: bool, html_url: string, id: int, official: bool, pull_request_url: string, stale: bool, state: string, submitted_at: string, team: record<can_create_org_repo: bool, description: string, id: int, includes_all_repositories: bool, name: string, organization: record, permission: string, units: list, units_map: record>, updated_at: string, user: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -8353,7 +8504,7 @@ export def "repo-create-pull-review-requests" [
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index)} | format pattern "/repos/{owner}/{repo}/pulls/{index}/requested_reviewers") $auth.query)
   let req_body = {"reviewers": $reviewers, "team_reviewers": $team_reviewers} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -8386,9 +8537,10 @@ export def "repo-list-pull-reviews" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
-]: nothing -> any {
+]: nothing -> oneof<table<body: string, comments_count: int, commit_id: string, dismissed: bool, html_url: string, id: int, official: bool, pull_request_url: string, stale: bool, state: string, submitted_at: string, team: record<can_create_org_repo: bool, description: string, id: int, includes_all_repositories: bool, name: string, organization: record, permission: string, units: list, units_map: record>, updated_at: string, user: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
@@ -8396,7 +8548,7 @@ export def "repo-list-pull-reviews" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index)} | format pattern "/repos/{owner}/{repo}/pulls/{index}/reviews") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -8416,7 +8568,6 @@ export def "repo-list-pull-reviews" [
 #
 # POST /repos/{owner}/{repo}/pulls/{index}/reviews
 # operationId: repoCreatePullReview
-# --comments item shape: {body?: string, new_position?: int, old_position?: int, path?: string}
 export def "repo-create-pull-review" [
   owner: string
   repo: string
@@ -8430,11 +8581,12 @@ export def "repo-create-pull-review" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --body: string
   --comments: list # item shape: {body?: string, new_position?: int, old_position?: int, path?: string}
   --commit-id: string
   --event: string # ReviewStateType review state type
-]: any -> any {
+]: any -> oneof<record<body: string, comments_count: int, commit_id: string, dismissed: bool, html_url: string, id: int, official: bool, pull_request_url: string, stale: bool, state: string, submitted_at: string, team: record<can_create_org_repo: bool, description: string, id: int, includes_all_repositories: bool, name: string, organization: record<avatar_url: string, description: string, full_name: string, id: int, location: string, name: string, repo_admin_change_team_access: bool, username: string, visibility: string, website: string>, permission: string, units: list<string>, units_map: record>, updated_at: string, user: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -8444,7 +8596,7 @@ export def "repo-create-pull-review" [
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index)} | format pattern "/repos/{owner}/{repo}/pulls/{index}/reviews") $auth.query)
   let req_body = {"body": $body, "comments": $comments, "commit_id": $commit_id, "event": $event} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -8520,7 +8672,8 @@ export def "repo-get-pull-review" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<record<body: string, comments_count: int, commit_id: string, dismissed: bool, html_url: string, id: int, official: bool, pull_request_url: string, stale: bool, state: string, submitted_at: string, team: record<can_create_org_repo: bool, description: string, id: int, includes_all_repositories: bool, name: string, organization: record<avatar_url: string, description: string, full_name: string, id: int, location: string, name: string, repo_admin_change_team_access: bool, username: string, visibility: string, website: string>, permission: string, units: list<string>, units_map: record>, updated_at: string, user: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
@@ -8528,7 +8681,7 @@ export def "repo-get-pull-review" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index), id: (encode-path-segment $id)} | format pattern "/repos/{owner}/{repo}/pulls/{index}/reviews/{id}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -8562,9 +8715,10 @@ export def "repo-submit-pull-review" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --body: string
   --event: string # ReviewStateType review state type
-]: any -> any {
+]: any -> oneof<record<body: string, comments_count: int, commit_id: string, dismissed: bool, html_url: string, id: int, official: bool, pull_request_url: string, stale: bool, state: string, submitted_at: string, team: record<can_create_org_repo: bool, description: string, id: int, includes_all_repositories: bool, name: string, organization: record<avatar_url: string, description: string, full_name: string, id: int, location: string, name: string, repo_admin_change_team_access: bool, username: string, visibility: string, website: string>, permission: string, units: list<string>, units_map: record>, updated_at: string, user: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -8575,7 +8729,7 @@ export def "repo-submit-pull-review" [
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index), id: (encode-path-segment $id)} | format pattern "/repos/{owner}/{repo}/pulls/{index}/reviews/{id}") $auth.query)
   let req_body = {"body": $body, "event": $event} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -8609,7 +8763,8 @@ export def "repo-get-pull-review-comments" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<table<body: string, commit_id: string, created_at: string, diff_hunk: string, html_url: string, id: int, original_commit_id: string, original_position: int, path: string, position: int, pull_request_review_id: int, pull_request_url: string, resolver: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, updated_at: string, user: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
@@ -8617,7 +8772,7 @@ export def "repo-get-pull-review-comments" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index), id: (encode-path-segment $id)} | format pattern "/repos/{owner}/{repo}/pulls/{index}/reviews/{id}/comments") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -8651,9 +8806,10 @@ export def "repo-dismiss-pull-review" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --message: string
   --priors: oneof<nothing, bool>
-]: any -> any {
+]: any -> oneof<record<body: string, comments_count: int, commit_id: string, dismissed: bool, html_url: string, id: int, official: bool, pull_request_url: string, stale: bool, state: string, submitted_at: string, team: record<can_create_org_repo: bool, description: string, id: int, includes_all_repositories: bool, name: string, organization: record<avatar_url: string, description: string, full_name: string, id: int, location: string, name: string, repo_admin_change_team_access: bool, username: string, visibility: string, website: string>, permission: string, units: list<string>, units_map: record>, updated_at: string, user: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -8664,7 +8820,7 @@ export def "repo-dismiss-pull-review" [
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index), id: (encode-path-segment $id)} | format pattern "/repos/{owner}/{repo}/pulls/{index}/reviews/{id}/dismissals") $auth.query)
   let req_body = {"message": $message, "priors": $priors} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -8698,7 +8854,8 @@ export def "repo-un-dismiss-pull-review" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<record<body: string, comments_count: int, commit_id: string, dismissed: bool, html_url: string, id: int, official: bool, pull_request_url: string, stale: bool, state: string, submitted_at: string, team: record<can_create_org_repo: bool, description: string, id: int, includes_all_repositories: bool, name: string, organization: record<avatar_url: string, description: string, full_name: string, id: int, location: string, name: string, repo_admin_change_team_access: bool, username: string, visibility: string, website: string>, permission: string, units: list<string>, units_map: record>, updated_at: string, user: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
@@ -8706,7 +8863,7 @@ export def "repo-un-dismiss-pull-review" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index), id: (encode-path-segment $id)} | format pattern "/repos/{owner}/{repo}/pulls/{index}/reviews/{id}/undismissals") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -8780,16 +8937,17 @@ export def "repo-list-push-mirrors" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
-]: nothing -> any {
+]: nothing -> oneof<table<created: string, interval: string, last_error: string, last_update: string, remote_address: string, remote_name: string, repo_name: string, sync_on_commit: bool>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/push_mirrors") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -8821,12 +8979,13 @@ export def "repo-add-push-mirror" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --interval: string
   --remote-address: string
   --remote-password: string
   --remote-username: string
   --sync-on-commit: oneof<nothing, bool>
-]: any -> any {
+]: any -> oneof<record<created: string, interval: string, last_error: string, last_update: string, remote_address: string, remote_name: string, repo_name: string, sync_on_commit: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -8835,7 +8994,7 @@ export def "repo-add-push-mirror" [
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/push_mirrors") $auth.query)
   let req_body = {"interval": $interval, "remote_address": $remote_address, "remote_password": $remote_password, "remote_username": $remote_username, "sync_on_commit": $sync_on_commit} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -8946,14 +9105,15 @@ export def "repo-get-push-mirror-by-remote-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<record<created: string, interval: string, last_error: string, last_update: string, remote_address: string, remote_name: string, repo_name: string, sync_on_commit: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), name: (encode-path-segment $name)} | format pattern "/repos/{owner}/{repo}/push_mirrors/{name}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -9027,19 +9187,20 @@ export def "repo-list-releases" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --draft: oneof<nothing, bool> # filter (exclude / include) drafts, if you dont have repo write access none will show
   --pre-release: oneof<nothing, bool> # filter (exclude / include) pre-releases
   --per-page: int # page size of results, deprecated - use limit
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
-]: nothing -> any {
+]: nothing -> oneof<table<assets: list<record>, author: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, body: string, created_at: string, draft: bool, html_url: string, id: int, name: string, prerelease: bool, published_at: string, tag_name: string, tarball_url: string, target_commitish: string, url: string, zipball_url: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let qp = [(serialize-qp "draft" $draft "scalar") (serialize-qp "pre-release" $pre_release "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/releases") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -9071,13 +9232,14 @@ export def "repo-create-release" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --body: string
   --draft: oneof<nothing, bool>
   --name: string
   --prerelease: oneof<nothing, bool>
   tag_name: string
   --target-commitish: string
-]: any -> any {
+]: any -> oneof<record<assets: table<browser_download_url: string, created_at: string, download_count: int, id: int, name: string, size: int, uuid: string>, author: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, body: string, created_at: string, draft: bool, html_url: string, id: int, name: string, prerelease: bool, published_at: string, tag_name: string, tarball_url: string, target_commitish: string, url: string, zipball_url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -9086,7 +9248,7 @@ export def "repo-create-release" [
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/releases") $auth.query)
   let req_body = {"body": $body, "draft": $draft, "name": $name, "prerelease": $prerelease, "tag_name": $tag_name, "target_commitish": $target_commitish} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -9118,13 +9280,14 @@ export def "repo-get-latest-release" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<record<assets: table<browser_download_url: string, created_at: string, download_count: int, id: int, name: string, size: int, uuid: string>, author: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, body: string, created_at: string, draft: bool, html_url: string, id: int, name: string, prerelease: bool, published_at: string, tag_name: string, tarball_url: string, target_commitish: string, url: string, zipball_url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/releases/latest") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -9197,14 +9360,15 @@ export def "repo-get-release-by-tag" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<record<assets: table<browser_download_url: string, created_at: string, download_count: int, id: int, name: string, size: int, uuid: string>, author: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, body: string, created_at: string, draft: bool, html_url: string, id: int, name: string, prerelease: bool, published_at: string, tag_name: string, tarball_url: string, target_commitish: string, url: string, zipball_url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   if ($tag | is-empty) { error make --unspanned { msg: "path parameter 'tag' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), tag: (encode-path-segment $tag)} | format pattern "/repos/{owner}/{repo}/releases/tags/{tag}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -9277,14 +9441,15 @@ export def "repo-get-release" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<record<assets: table<browser_download_url: string, created_at: string, download_count: int, id: int, name: string, size: int, uuid: string>, author: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, body: string, created_at: string, draft: bool, html_url: string, id: int, name: string, prerelease: bool, published_at: string, tag_name: string, tarball_url: string, target_commitish: string, url: string, zipball_url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), id: (encode-path-segment $id)} | format pattern "/repos/{owner}/{repo}/releases/{id}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -9317,13 +9482,14 @@ export def "repo-edit-release" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --body: string
   --draft: oneof<nothing, bool>
   --name: string
   --prerelease: oneof<nothing, bool>
   --tag-name: string
   --target-commitish: string
-]: any -> any {
+]: any -> oneof<record<assets: table<browser_download_url: string, created_at: string, download_count: int, id: int, name: string, size: int, uuid: string>, author: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, body: string, created_at: string, draft: bool, html_url: string, id: int, name: string, prerelease: bool, published_at: string, tag_name: string, tarball_url: string, target_commitish: string, url: string, zipball_url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -9333,7 +9499,7 @@ export def "repo-edit-release" [
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), id: (encode-path-segment $id)} | format pattern "/repos/{owner}/{repo}/releases/{id}") $auth.query)
   let req_body = {"body": $body, "draft": $draft, "name": $name, "prerelease": $prerelease, "tag_name": $tag_name, "target_commitish": $target_commitish} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "patch"
@@ -9366,14 +9532,15 @@ export def "repo-list-release-attachments" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<table<browser_download_url: string, created_at: string, download_count: int, id: int, name: string, size: int, uuid: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), id: (encode-path-segment $id)} | format pattern "/repos/{owner}/{repo}/releases/{id}/assets") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -9406,9 +9573,10 @@ export def "repo-create-release-attachment" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --name: string # name of the attachment
   attachment: string # attachment to upload (format: binary)
-]: any -> any {
+]: any -> oneof<record<browser_download_url: string, created_at: string, download_count: int, id: int, name: string, size: int, uuid: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -9419,10 +9587,10 @@ export def "repo-create-release-attachment" [
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), id: (encode-path-segment $id)} | format pattern "/repos/{owner}/{repo}/releases/{id}/assets") $qp $auth.query)
   let req_body = {"attachment": $attachment} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["attachment"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["attachment"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -9497,7 +9665,8 @@ export def "repo-get-release-attachment" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<record<browser_download_url: string, created_at: string, download_count: int, id: int, name: string, size: int, uuid: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
@@ -9505,7 +9674,7 @@ export def "repo-get-release-attachment" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'attachment_id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), id: (encode-path-segment $id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/repos/{owner}/{repo}/releases/{id}/assets/{attachment_id}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -9539,8 +9708,9 @@ export def "repo-edit-release-attachment" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --name: string
-]: any -> any {
+]: any -> oneof<record<browser_download_url: string, created_at: string, download_count: int, id: int, name: string, size: int, uuid: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -9551,7 +9721,7 @@ export def "repo-edit-release-attachment" [
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), id: (encode-path-segment $id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/repos/{owner}/{repo}/releases/{id}/assets/{attachment_id}") $auth.query)
   let req_body = {"name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "patch"
@@ -9583,13 +9753,14 @@ export def "repo-get-reviewers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<table<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/reviewers") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -9659,16 +9830,17 @@ export def "repo-list-stargazers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
-]: nothing -> any {
+]: nothing -> oneof<table<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/stargazers") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -9701,24 +9873,25 @@ export def "repo-list-statuses" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-sort: string@sort-completer # type of sort
+  --accept: string@accept-completer # Response content type
+  --sort: string@sort-completer # type of sort
   --state: string@state-completer # type of state
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
-]: nothing -> any {
+]: nothing -> oneof<table<context: string, created_at: string, creator: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, description: string, id: int, status: string, target_url: string, updated_at: string, url: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   if ($sha | is-empty) { error make --unspanned { msg: "path parameter 'sha' must be non-empty" } }
-  let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "sort" $sort "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), sha: (encode-path-segment $sha)} | format pattern "/repos/{owner}/{repo}/statuses/{sha}") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"sort": $qp_sort, "state": $state, "page": $page, "limit": $limit} | compact)
+    query: ({"sort": $sort, "state": $state, "page": $page, "limit": $limit} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -9746,11 +9919,12 @@ export def "repo-create-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --context: string
   --description: string
   --state: string # CommitStatusState holds the state of a CommitStatus It can be "pending", "success", "error", "failure", and "warning"
   --target-url: string
-]: any -> any {
+]: any -> oneof<record<context: string, created_at: string, creator: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, description: string, id: int, status: string, target_url: string, updated_at: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -9760,7 +9934,7 @@ export def "repo-create-status" [
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), sha: (encode-path-segment $sha)} | format pattern "/repos/{owner}/{repo}/statuses/{sha}") $auth.query)
   let req_body = {"context": $context, "description": $description, "state": $state, "target_url": $target_url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -9792,16 +9966,17 @@ export def "repo-list-subscribers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
-]: nothing -> any {
+]: nothing -> oneof<table<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/subscribers") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -9871,13 +10046,14 @@ export def "user-current-check-subscription" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<record<created_at: string, ignored: bool, reason: any, repository_url: string, subscribed: bool, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/subscription") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -9909,13 +10085,14 @@ export def "user-current-put-subscription" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<record<created_at: string, ignored: bool, reason: any, repository_url: string, subscribed: bool, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/subscription") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "put"
@@ -9947,16 +10124,17 @@ export def "repo-list-tags" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results, default maximum page size is 50
-]: nothing -> any {
+]: nothing -> oneof<table<commit: record<created: string, sha: string, url: string>, id: string, message: string, name: string, tarball_url: string, zipball_url: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/tags") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -9988,10 +10166,11 @@ export def "repo-create-tag" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --message: string
   tag_name: string
   --target: string
-]: any -> any {
+]: any -> oneof<record<commit: record<created: string, sha: string, url: string>, id: string, message: string, name: string, tarball_url: string, zipball_url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -10000,7 +10179,7 @@ export def "repo-create-tag" [
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/tags") $auth.query)
   let req_body = {"message": $message, "tag_name": $tag_name, "target": $target} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -10073,14 +10252,15 @@ export def "repo-get-tag" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<record<commit: record<created: string, sha: string, url: string>, id: string, message: string, name: string, tarball_url: string, zipball_url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   if ($tag | is-empty) { error make --unspanned { msg: "path parameter 'tag' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), tag: (encode-path-segment $tag)} | format pattern "/repos/{owner}/{repo}/tags/{tag}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -10112,13 +10292,14 @@ export def "repo-list-teams" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<table<can_create_org_repo: bool, description: string, id: int, includes_all_repositories: bool, name: string, organization: record<avatar_url: string, description: string, full_name: string, id: int, location: string, name: string, repo_admin_change_team_access: bool, username: string, visibility: string, website: string>, permission: string, units: list<string>, units_map: record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/teams") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -10191,14 +10372,15 @@ export def "repo-check-team" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<record<can_create_org_repo: bool, description: string, id: int, includes_all_repositories: bool, name: string, organization: record<avatar_url: string, description: string, full_name: string, id: int, location: string, name: string, repo_admin_change_team_access: bool, username: string, visibility: string, website: string>, permission: string, units: list<string>, units_map: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   if ($team | is-empty) { error make --unspanned { msg: "path parameter 'team' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), team: (encode-path-segment $team)} | format pattern "/repos/{owner}/{repo}/teams/{team}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -10270,19 +10452,20 @@ export def "repo-tracked-times" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --user: string # optional filter by user (available for issue managers)
   --since: string # Only show times updated after the given time. This is a timestamp in RFC 3339 format (format: date-time)
   --before: string # Only show times updated before the given time. This is a timestamp in RFC 3339 format (format: date-time)
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
-]: nothing -> any {
+]: nothing -> oneof<table<created: string, id: int, issue: record<assets: list, assignee: record, assignees: list, body: string, closed_at: string, comments: int, created_at: string, due_date: string, html_url: string, id: int, is_locked: bool, labels: list, milestone: record, number: int, original_author: string, original_author_id: int, pull_request: record, ref: string, repository: record, state: string, title: string, updated_at: string, url: string, user: record>, issue_id: int, time: int, user_id: int, user_name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let qp = [(serialize-qp "user" $user "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/times") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -10317,14 +10500,15 @@ export def "user-tracked-times" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<table<created: string, id: int, issue: record<assets: list, assignee: record, assignees: list, body: string, closed_at: string, comments: int, created_at: string, due_date: string, html_url: string, id: int, is_locked: bool, labels: list, milestone: record, number: int, original_author: string, original_author_id: int, pull_request: record, ref: string, repository: record, state: string, title: string, updated_at: string, url: string, user: record>, issue_id: int, time: int, user_id: int, user_name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), user: (encode-path-segment $user)} | format pattern "/repos/{owner}/{repo}/times/{user}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -10356,16 +10540,17 @@ export def "repo-list-topics" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
-]: nothing -> any {
+]: nothing -> oneof<record<topics: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/topics") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -10519,9 +10704,10 @@ export def "repo-transfer" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   new_owner: string
   --team-ids: list<int> # ID of the team or teams to add to the repository. Teams can only be added to organization-owned repositories.
-]: any -> any {
+]: any -> oneof<record<allow_merge_commits: bool, allow_rebase: bool, allow_rebase_explicit: bool, allow_rebase_update: bool, allow_squash_merge: bool, archived: bool, avatar_url: string, clone_url: string, created_at: string, default_allow_maintainer_edit: bool, default_branch: string, default_delete_branch_after_merge: bool, default_merge_style: string, description: string, empty: bool, external_tracker: record<external_tracker_format: string, external_tracker_regexp_pattern: string, external_tracker_style: string, external_tracker_url: string>, external_wiki: record<external_wiki_url: string>, fork: bool, forks_count: int, full_name: string, has_issues: bool, has_projects: bool, has_pull_requests: bool, has_wiki: bool, html_url: string, id: int, ignore_whitespace_conflicts: bool, internal: bool, internal_tracker: record<allow_only_contributors_to_track_time: bool, enable_issue_dependencies: bool, enable_time_tracker: bool>, language: string, languages_url: string, link: string, mirror: bool, mirror_interval: string, mirror_updated: string, name: string, open_issues_count: int, open_pr_counter: int, original_url: string, owner: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, parent: any, permissions: record<admin: bool, pull: bool, push: bool>, private: bool, release_counter: int, repo_transfer: record<doer: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, recipient: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, teams: list<record>>, size: int, ssh_url: string, stars_count: int, template: bool, updated_at: string, watchers_count: int, website: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -10530,7 +10716,7 @@ export def "repo-transfer" [
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/transfer") $auth.query)
   let req_body = {"new_owner": $new_owner, "team_ids": $team_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -10562,13 +10748,14 @@ export def "accept-repo-transfer" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<record<allow_merge_commits: bool, allow_rebase: bool, allow_rebase_explicit: bool, allow_rebase_update: bool, allow_squash_merge: bool, archived: bool, avatar_url: string, clone_url: string, created_at: string, default_allow_maintainer_edit: bool, default_branch: string, default_delete_branch_after_merge: bool, default_merge_style: string, description: string, empty: bool, external_tracker: record<external_tracker_format: string, external_tracker_regexp_pattern: string, external_tracker_style: string, external_tracker_url: string>, external_wiki: record<external_wiki_url: string>, fork: bool, forks_count: int, full_name: string, has_issues: bool, has_projects: bool, has_pull_requests: bool, has_wiki: bool, html_url: string, id: int, ignore_whitespace_conflicts: bool, internal: bool, internal_tracker: record<allow_only_contributors_to_track_time: bool, enable_issue_dependencies: bool, enable_time_tracker: bool>, language: string, languages_url: string, link: string, mirror: bool, mirror_interval: string, mirror_updated: string, name: string, open_issues_count: int, open_pr_counter: int, original_url: string, owner: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, parent: any, permissions: record<admin: bool, pull: bool, push: bool>, private: bool, release_counter: int, repo_transfer: record<doer: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, recipient: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, teams: list<record>>, size: int, ssh_url: string, stars_count: int, template: bool, updated_at: string, watchers_count: int, website: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/transfer/accept") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -10600,13 +10787,14 @@ export def "reject-repo-transfer" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<record<allow_merge_commits: bool, allow_rebase: bool, allow_rebase_explicit: bool, allow_rebase_update: bool, allow_squash_merge: bool, archived: bool, avatar_url: string, clone_url: string, created_at: string, default_allow_maintainer_edit: bool, default_branch: string, default_delete_branch_after_merge: bool, default_merge_style: string, description: string, empty: bool, external_tracker: record<external_tracker_format: string, external_tracker_regexp_pattern: string, external_tracker_style: string, external_tracker_url: string>, external_wiki: record<external_wiki_url: string>, fork: bool, forks_count: int, full_name: string, has_issues: bool, has_projects: bool, has_pull_requests: bool, has_wiki: bool, html_url: string, id: int, ignore_whitespace_conflicts: bool, internal: bool, internal_tracker: record<allow_only_contributors_to_track_time: bool, enable_issue_dependencies: bool, enable_time_tracker: bool>, language: string, languages_url: string, link: string, mirror: bool, mirror_interval: string, mirror_updated: string, name: string, open_issues_count: int, open_pr_counter: int, original_url: string, owner: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, parent: any, permissions: record<admin: bool, pull: bool, push: bool>, private: bool, release_counter: int, repo_transfer: record<doer: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, recipient: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, teams: list<record>>, size: int, ssh_url: string, stars_count: int, template: bool, updated_at: string, watchers_count: int, website: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/transfer/reject") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -10638,10 +10826,11 @@ export def "repo-create-wiki-page" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --content-base64: string # content must be base64 encoded
   --message: string # optional commit message summarizing the change
   --title: string # page title. leave empty to keep unchanged
-]: any -> any {
+]: any -> oneof<record<commit_count: int, content_base64: string, footer: string, html_url: string, last_commit: record<author: record<date: string, email: string, name: string>, commiter: record<date: string, email: string, name: string>, message: string, sha: string>, sidebar: string, sub_url: string, title: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -10650,7 +10839,7 @@ export def "repo-create-wiki-page" [
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/wiki/new") $auth.query)
   let req_body = {"content_base64": $content_base64, "message": $message, "title": $title} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -10723,14 +10912,15 @@ export def "repo-get-wiki-page" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<record<commit_count: int, content_base64: string, footer: string, html_url: string, last_commit: record<author: record<date: string, email: string, name: string>, commiter: record<date: string, email: string, name: string>, message: string, sha: string>, sidebar: string, sub_url: string, title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   if ($page_name | is-empty) { error make --unspanned { msg: "path parameter 'pageName' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), page_name: (encode-path-segment $page_name)} | format pattern "/repos/{owner}/{repo}/wiki/page/{page_name}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -10763,10 +10953,11 @@ export def "repo-edit-wiki-page" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --content-base64: string # content must be base64 encoded
   --message: string # optional commit message summarizing the change
   --title: string # page title. leave empty to keep unchanged
-]: any -> any {
+]: any -> oneof<record<commit_count: int, content_base64: string, footer: string, html_url: string, last_commit: record<author: record<date: string, email: string, name: string>, commiter: record<date: string, email: string, name: string>, message: string, sha: string>, sidebar: string, sub_url: string, title: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -10776,7 +10967,7 @@ export def "repo-edit-wiki-page" [
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), page_name: (encode-path-segment $page_name)} | format pattern "/repos/{owner}/{repo}/wiki/page/{page_name}") $auth.query)
   let req_body = {"content_base64": $content_base64, "message": $message, "title": $title} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "patch"
@@ -10808,16 +10999,17 @@ export def "repo-get-wiki-pages" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
-]: nothing -> any {
+]: nothing -> oneof<table<html_url: string, last_commit: record<author: record, commiter: record, message: string, sha: string>, sub_url: string, title: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/wiki/pages") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -10850,8 +11042,9 @@ export def "repo-get-wiki-page-revisions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --page: int # page number of results to return (1-based)
-]: nothing -> any {
+]: nothing -> oneof<record<commits: table<author: record, commiter: record, message: string, sha: string>, count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
@@ -10859,7 +11052,7 @@ export def "repo-get-wiki-page-revisions" [
   if ($page_name | is-empty) { error make --unspanned { msg: "path parameter 'pageName' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), page_name: (encode-path-segment $page_name)} | format pattern "/repos/{owner}/{repo}/wiki/revisions/{page_name}") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -10891,6 +11084,7 @@ export def "generate-repo" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --avatar: oneof<nothing, bool> # include avatar of the template repo
   --default-branch: string # Default branch of the new repository
   --description: string # Description of the repository to create
@@ -10902,7 +11096,7 @@ export def "generate-repo" [
   --private: oneof<nothing, bool> # Whether the repository is private
   --topics: oneof<nothing, bool> # include topics in template repo
   --webhooks: oneof<nothing, bool> # include webhooks in template repo
-]: any -> any {
+]: any -> oneof<record<allow_merge_commits: bool, allow_rebase: bool, allow_rebase_explicit: bool, allow_rebase_update: bool, allow_squash_merge: bool, archived: bool, avatar_url: string, clone_url: string, created_at: string, default_allow_maintainer_edit: bool, default_branch: string, default_delete_branch_after_merge: bool, default_merge_style: string, description: string, empty: bool, external_tracker: record<external_tracker_format: string, external_tracker_regexp_pattern: string, external_tracker_style: string, external_tracker_url: string>, external_wiki: record<external_wiki_url: string>, fork: bool, forks_count: int, full_name: string, has_issues: bool, has_projects: bool, has_pull_requests: bool, has_wiki: bool, html_url: string, id: int, ignore_whitespace_conflicts: bool, internal: bool, internal_tracker: record<allow_only_contributors_to_track_time: bool, enable_issue_dependencies: bool, enable_time_tracker: bool>, language: string, languages_url: string, link: string, mirror: bool, mirror_interval: string, mirror_updated: string, name: string, open_issues_count: int, open_pr_counter: int, original_url: string, owner: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, parent: any, permissions: record<admin: bool, pull: bool, push: bool>, private: bool, release_counter: int, repo_transfer: record<doer: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, recipient: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, teams: list<record>>, size: int, ssh_url: string, stars_count: int, template: bool, updated_at: string, watchers_count: int, website: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -10911,7 +11105,7 @@ export def "generate-repo" [
   let full_url = (build-url $base ({template_owner: (encode-path-segment $template_owner), template_repo: (encode-path-segment $template_repo)} | format pattern "/repos/{template_owner}/{template_repo}/generate") $auth.query)
   let req_body = {"avatar": $avatar, "default_branch": $default_branch, "description": $description, "git_content": $git_content, "git_hooks": $git_hooks, "labels": $labels, "name": $name, "owner": $owner, "private": $private, "topics": $topics, "webhooks": $webhooks} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -10942,12 +11136,13 @@ export def "repo-get-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<record<allow_merge_commits: bool, allow_rebase: bool, allow_rebase_explicit: bool, allow_rebase_update: bool, allow_squash_merge: bool, archived: bool, avatar_url: string, clone_url: string, created_at: string, default_allow_maintainer_edit: bool, default_branch: string, default_delete_branch_after_merge: bool, default_merge_style: string, description: string, empty: bool, external_tracker: record<external_tracker_format: string, external_tracker_regexp_pattern: string, external_tracker_style: string, external_tracker_url: string>, external_wiki: record<external_wiki_url: string>, fork: bool, forks_count: int, full_name: string, has_issues: bool, has_projects: bool, has_pull_requests: bool, has_wiki: bool, html_url: string, id: int, ignore_whitespace_conflicts: bool, internal: bool, internal_tracker: record<allow_only_contributors_to_track_time: bool, enable_issue_dependencies: bool, enable_time_tracker: bool>, language: string, languages_url: string, link: string, mirror: bool, mirror_interval: string, mirror_updated: string, name: string, open_issues_count: int, open_pr_counter: int, original_url: string, owner: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, parent: any, permissions: record<admin: bool, pull: bool, push: bool>, private: bool, release_counter: int, repo_transfer: record<doer: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, recipient: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, teams: list<record>>, size: int, ssh_url: string, stars_count: int, template: bool, updated_at: string, watchers_count: int, website: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/repositories/{id}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -10977,11 +11172,12 @@ export def "get-general-api-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<record<default_git_trees_per_page: int, default_max_blob_size: int, default_paging_num: int, max_response_items: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/settings/api" $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -11011,11 +11207,12 @@ export def "get-general-attachment-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<record<allowed_types: string, enabled: bool, max_files: int, max_size: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/settings/attachment" $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -11045,11 +11242,12 @@ export def "get-general-repository-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<record<http_git_disabled: bool, lfs_disabled: bool, migrations_disabled: bool, mirrors_disabled: bool, stars_disabled: bool, time_tracking_disabled: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/settings/repository" $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -11079,11 +11277,12 @@ export def "get-general-ui-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<record<allowed_reactions: list<string>, custom_emojis: list<string>, default_theme: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/settings/ui" $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -11184,12 +11383,13 @@ export def "org-get-team" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<record<can_create_org_repo: bool, description: string, id: int, includes_all_repositories: bool, name: string, organization: record<avatar_url: string, description: string, full_name: string, id: int, location: string, name: string, repo_admin_change_team_access: bool, username: string, visibility: string, website: string>, permission: string, units: list<string>, units_map: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/teams/{id}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -11220,6 +11420,7 @@ export def "org-edit-team" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --can-create-org-repo: oneof<nothing, bool>
   --description: string
   --includes-all-repositories: oneof<nothing, bool>
@@ -11227,7 +11428,7 @@ export def "org-edit-team" [
   --permission: string@permission-completer
   --units: list<string> # e.g. [repo.code, repo.issues, repo.ext_issues, repo.wiki, repo.pulls, repo.releases, repo.projects, repo.ext_wiki]
   --units-map: record # e.g. {repo.code: read, repo.ext_issues: none, repo.ext_wiki: none, repo.issues: write, repo.projects: none, repo.pulls: owner, repo.releases: none, repo.wiki: admin}
-]: any -> any {
+]: any -> oneof<record<can_create_org_repo: bool, description: string, id: int, includes_all_repositories: bool, name: string, organization: record<avatar_url: string, description: string, full_name: string, id: int, location: string, name: string, repo_admin_change_team_access: bool, username: string, visibility: string, website: string>, permission: string, units: list<string>, units_map: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -11235,7 +11436,7 @@ export def "org-edit-team" [
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/teams/{id}") $auth.query)
   let req_body = {"can_create_org_repo": $can_create_org_repo, "description": $description, "includes_all_repositories": $includes_all_repositories, "name": $name, "permission": $permission, "units": $units, "units_map": $units_map} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "patch"
@@ -11266,15 +11467,16 @@ export def "org-list-team-members" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
-]: nothing -> any {
+]: nothing -> oneof<table<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/teams/{id}/members") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -11344,13 +11546,14 @@ export def "org-list-team-member" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), username: (encode-path-segment $username)} | format pattern "/teams/{id}/members/{username}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -11419,15 +11622,16 @@ export def "org-list-team-repos" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
-]: nothing -> any {
+]: nothing -> oneof<table<allow_merge_commits: bool, allow_rebase: bool, allow_rebase_explicit: bool, allow_rebase_update: bool, allow_squash_merge: bool, archived: bool, avatar_url: string, clone_url: string, created_at: string, default_allow_maintainer_edit: bool, default_branch: string, default_delete_branch_after_merge: bool, default_merge_style: string, description: string, empty: bool, external_tracker: record<external_tracker_format: string, external_tracker_regexp_pattern: string, external_tracker_style: string, external_tracker_url: string>, external_wiki: record<external_wiki_url: string>, fork: bool, forks_count: int, full_name: string, has_issues: bool, has_projects: bool, has_pull_requests: bool, has_wiki: bool, html_url: string, id: int, ignore_whitespace_conflicts: bool, internal: bool, internal_tracker: record<allow_only_contributors_to_track_time: bool, enable_issue_dependencies: bool, enable_time_tracker: bool>, language: string, languages_url: string, link: string, mirror: bool, mirror_interval: string, mirror_updated: string, name: string, open_issues_count: int, open_pr_counter: int, original_url: string, owner: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, parent: any, permissions: record<admin: bool, pull: bool, push: bool>, private: bool, release_counter: int, repo_transfer: record<doer: record, recipient: record, teams: list>, size: int, ssh_url: string, stars_count: int, template: bool, updated_at: string, watchers_count: int, website: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/teams/{id}/repos") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -11500,14 +11704,15 @@ export def "org-list-team-repo" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<record<allow_merge_commits: bool, allow_rebase: bool, allow_rebase_explicit: bool, allow_rebase_update: bool, allow_squash_merge: bool, archived: bool, avatar_url: string, clone_url: string, created_at: string, default_allow_maintainer_edit: bool, default_branch: string, default_delete_branch_after_merge: bool, default_merge_style: string, description: string, empty: bool, external_tracker: record<external_tracker_format: string, external_tracker_regexp_pattern: string, external_tracker_style: string, external_tracker_url: string>, external_wiki: record<external_wiki_url: string>, fork: bool, forks_count: int, full_name: string, has_issues: bool, has_projects: bool, has_pull_requests: bool, has_wiki: bool, html_url: string, id: int, ignore_whitespace_conflicts: bool, internal: bool, internal_tracker: record<allow_only_contributors_to_track_time: bool, enable_issue_dependencies: bool, enable_time_tracker: bool>, language: string, languages_url: string, link: string, mirror: bool, mirror_interval: string, mirror_updated: string, name: string, open_issues_count: int, open_pr_counter: int, original_url: string, owner: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, parent: any, permissions: record<admin: bool, pull: bool, push: bool>, private: bool, release_counter: int, repo_transfer: record<doer: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, recipient: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, teams: list<record>>, size: int, ssh_url: string, stars_count: int, template: bool, updated_at: string, watchers_count: int, website: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), org: (encode-path-segment $org), repo: (encode-path-segment $repo)} | format pattern "/teams/{id}/repos/{org}/{repo}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -11577,15 +11782,17 @@ export def "topic-search" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --q: string # keywords to search
+  --accept: string@accept-completer # Response content type
+  --q: string # keywords to search (required)
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
-]: nothing -> any {
+]: nothing -> oneof<table<created: string, id: int, repo_count: int, topic_name: string, updated: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($q == null) { error make --unspanned { msg: "required query parameter 'q' missing: pass --q" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/topics/search" $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -11615,11 +11822,12 @@ export def "user-get-current" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user" $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -11649,14 +11857,15 @@ export def "user-get-oauth2-application" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
-]: nothing -> any {
+]: nothing -> oneof<table<client_id: string, client_secret: string, confidential_client: bool, created: string, id: int, name: string, redirect_uris: list<string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/user/applications/oauth2" $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -11686,17 +11895,18 @@ export def "user-create-o-auth2-application" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --confidential-client: oneof<nothing, bool>
   --name: string
   --redirect-uris: list<string>
-]: any -> any {
+]: any -> oneof<record<client_id: string, client_secret: string, confidential_client: bool, created: string, id: int, name: string, redirect_uris: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/applications/oauth2" $auth.query)
   let req_body = {"confidential_client": $confidential_client, "name": $name, "redirect_uris": $redirect_uris} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -11763,12 +11973,13 @@ export def "user-get-o-auth2-application" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<record<client_id: string, client_secret: string, confidential_client: bool, created: string, id: int, name: string, redirect_uris: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/user/applications/oauth2/{id}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -11799,10 +12010,11 @@ export def "user-update-o-auth2-application" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --confidential-client: oneof<nothing, bool>
   --name: string
   --redirect-uris: list<string>
-]: any -> any {
+]: any -> oneof<record<client_id: string, client_secret: string, confidential_client: bool, created: string, id: int, name: string, redirect_uris: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -11810,7 +12022,7 @@ export def "user-update-o-auth2-application" [
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/user/applications/oauth2/{id}") $auth.query)
   let req_body = {"confidential_client": $confidential_client, "name": $name, "redirect_uris": $redirect_uris} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "patch"
@@ -11878,11 +12090,12 @@ export def "user-list-emails" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<table<email: string, primary: bool, verified: bool>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/emails" $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -11912,15 +12125,16 @@ export def "user-add-email" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --emails: list<string> # email addresses to add
-]: any -> any {
+]: any -> oneof<table<email: string, primary: bool, verified: bool>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/emails" $auth.query)
   let req_body = {"emails": $emails} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -11950,14 +12164,15 @@ export def "user-current-list-followers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
-]: nothing -> any {
+]: nothing -> oneof<table<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/user/followers" $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -11987,14 +12202,15 @@ export def "user-current-list-following" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
-]: nothing -> any {
+]: nothing -> oneof<table<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/user/following" $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -12132,11 +12348,12 @@ export def "get-verification-token" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/gpg_key_token" $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -12166,11 +12383,12 @@ export def "user-verify-gpg-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<record<can_certify: bool, can_encrypt_comms: bool, can_encrypt_storage: bool, can_sign: bool, created_at: string, emails: table<email: string, verified: bool>, expires_at: string, id: int, key_id: string, primary_key_id: string, public_key: string, subkeys: list<any>, verified: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/gpg_key_verify" $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -12200,14 +12418,15 @@ export def "user-current-list-gpg-keys" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
-]: nothing -> any {
+]: nothing -> oneof<table<can_certify: bool, can_encrypt_comms: bool, can_encrypt_storage: bool, can_sign: bool, created_at: string, emails: list<record>, expires_at: string, id: int, key_id: string, primary_key_id: string, public_key: string, subkeys: list<any>, verified: bool>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/user/gpg_keys" $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -12237,16 +12456,17 @@ export def "user-current-post-gpg-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   armored_public_key: string # An armored GPG key to add
   --armored-signature: string
-]: any -> any {
+]: any -> oneof<record<can_certify: bool, can_encrypt_comms: bool, can_encrypt_storage: bool, can_sign: bool, created_at: string, emails: table<email: string, verified: bool>, expires_at: string, id: int, key_id: string, primary_key_id: string, public_key: string, subkeys: list<any>, verified: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/gpg_keys" $auth.query)
   let req_body = {"armored_public_key": $armored_public_key, "armored_signature": $armored_signature} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -12313,12 +12533,13 @@ export def "user-current-get-gpg-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<record<can_certify: bool, can_encrypt_comms: bool, can_encrypt_storage: bool, can_sign: bool, created_at: string, emails: table<email: string, verified: bool>, expires_at: string, id: int, key_id: string, primary_key_id: string, public_key: string, subkeys: list<any>, verified: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/user/gpg_keys/{id}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -12348,15 +12569,16 @@ export def "user-current-list-keys" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --fingerprint: string # fingerprint of the key
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
-]: nothing -> any {
+]: nothing -> oneof<table<created_at: string, fingerprint: string, id: int, key: string, key_type: string, read_only: bool, title: string, url: string, user: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fingerprint" $fingerprint "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/user/keys" $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -12386,17 +12608,18 @@ export def "user-current-post-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   key: string # An armored SSH key to add
   --read-only: oneof<nothing, bool> # Describe if the key has only read access or read/write
   title: string # Title of the key to add
-]: any -> any {
+]: any -> oneof<record<created_at: string, fingerprint: string, id: int, key: string, key_type: string, read_only: bool, title: string, url: string, user: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/keys" $auth.query)
   let req_body = {"key": $key, "read_only": $read_only, "title": $title} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -12463,12 +12686,13 @@ export def "user-current-get-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<record<created_at: string, fingerprint: string, id: int, key: string, key_type: string, read_only: bool, title: string, url: string, user: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/user/keys/{id}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -12498,14 +12722,15 @@ export def "org-list-current-user-orgs" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
-]: nothing -> any {
+]: nothing -> oneof<table<avatar_url: string, description: string, full_name: string, id: int, location: string, name: string, repo_admin_change_team_access: bool, username: string, visibility: string, website: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/user/orgs" $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -12535,14 +12760,15 @@ export def "user-current-list-repos" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
-]: nothing -> any {
+]: nothing -> oneof<table<allow_merge_commits: bool, allow_rebase: bool, allow_rebase_explicit: bool, allow_rebase_update: bool, allow_squash_merge: bool, archived: bool, avatar_url: string, clone_url: string, created_at: string, default_allow_maintainer_edit: bool, default_branch: string, default_delete_branch_after_merge: bool, default_merge_style: string, description: string, empty: bool, external_tracker: record<external_tracker_format: string, external_tracker_regexp_pattern: string, external_tracker_style: string, external_tracker_url: string>, external_wiki: record<external_wiki_url: string>, fork: bool, forks_count: int, full_name: string, has_issues: bool, has_projects: bool, has_pull_requests: bool, has_wiki: bool, html_url: string, id: int, ignore_whitespace_conflicts: bool, internal: bool, internal_tracker: record<allow_only_contributors_to_track_time: bool, enable_issue_dependencies: bool, enable_time_tracker: bool>, language: string, languages_url: string, link: string, mirror: bool, mirror_interval: string, mirror_updated: string, name: string, open_issues_count: int, open_pr_counter: int, original_url: string, owner: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, parent: any, permissions: record<admin: bool, pull: bool, push: bool>, private: bool, release_counter: int, repo_transfer: record<doer: record, recipient: record, teams: list>, size: int, ssh_url: string, stars_count: int, template: bool, updated_at: string, watchers_count: int, website: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/user/repos" $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -12572,6 +12798,7 @@ export def "create-current-user-repo" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --auto-init: oneof<nothing, bool> # Whether the repository should be auto-initialized?
   --default-branch: string # DefaultBranch of the repository (used when initializes and in template)
   --description: string # Description of the repository to create
@@ -12583,14 +12810,14 @@ export def "create-current-user-repo" [
   --readme: string # Readme of the repository to create
   --template: oneof<nothing, bool> # Whether the repository is template
   --trust-model: string@trust-model-completer # TrustModel of the repository
-]: any -> any {
+]: any -> oneof<record<allow_merge_commits: bool, allow_rebase: bool, allow_rebase_explicit: bool, allow_rebase_update: bool, allow_squash_merge: bool, archived: bool, avatar_url: string, clone_url: string, created_at: string, default_allow_maintainer_edit: bool, default_branch: string, default_delete_branch_after_merge: bool, default_merge_style: string, description: string, empty: bool, external_tracker: record<external_tracker_format: string, external_tracker_regexp_pattern: string, external_tracker_style: string, external_tracker_url: string>, external_wiki: record<external_wiki_url: string>, fork: bool, forks_count: int, full_name: string, has_issues: bool, has_projects: bool, has_pull_requests: bool, has_wiki: bool, html_url: string, id: int, ignore_whitespace_conflicts: bool, internal: bool, internal_tracker: record<allow_only_contributors_to_track_time: bool, enable_issue_dependencies: bool, enable_time_tracker: bool>, language: string, languages_url: string, link: string, mirror: bool, mirror_interval: string, mirror_updated: string, name: string, open_issues_count: int, open_pr_counter: int, original_url: string, owner: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, parent: any, permissions: record<admin: bool, pull: bool, push: bool>, private: bool, release_counter: int, repo_transfer: record<doer: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, recipient: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, teams: list<record>>, size: int, ssh_url: string, stars_count: int, template: bool, updated_at: string, watchers_count: int, website: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/repos" $auth.query)
   let req_body = {"auto_init": $auto_init, "default_branch": $default_branch, "description": $description, "gitignores": $gitignores, "issue_labels": $issue_labels, "license": $license, "name": $name, "private": $private, "readme": $readme, "template": $template, "trust_model": $trust_model} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -12620,11 +12847,12 @@ export def "get-user-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<table<description: string, diff_view_style: string, full_name: string, hide_activity: bool, hide_email: bool, language: string, location: string, theme: string, website: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/settings" $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -12654,6 +12882,7 @@ export def "update-user-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --description: string
   --diff-view-style: string
   --full-name: string
@@ -12663,14 +12892,14 @@ export def "update-user-settings" [
   --location: string
   --theme: string
   --website: string
-]: any -> any {
+]: any -> oneof<table<description: string, diff_view_style: string, full_name: string, hide_activity: bool, hide_email: bool, language: string, location: string, theme: string, website: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/settings" $auth.query)
   let req_body = {"description": $description, "diff_view_style": $diff_view_style, "full_name": $full_name, "hide_activity": $hide_activity, "hide_email": $hide_email, "language": $language, "location": $location, "theme": $theme, "website": $website} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "patch"
@@ -12700,14 +12929,15 @@ export def "user-current-list-starred" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
-]: nothing -> any {
+]: nothing -> oneof<table<allow_merge_commits: bool, allow_rebase: bool, allow_rebase_explicit: bool, allow_rebase_update: bool, allow_squash_merge: bool, archived: bool, avatar_url: string, clone_url: string, created_at: string, default_allow_maintainer_edit: bool, default_branch: string, default_delete_branch_after_merge: bool, default_merge_style: string, description: string, empty: bool, external_tracker: record<external_tracker_format: string, external_tracker_regexp_pattern: string, external_tracker_style: string, external_tracker_url: string>, external_wiki: record<external_wiki_url: string>, fork: bool, forks_count: int, full_name: string, has_issues: bool, has_projects: bool, has_pull_requests: bool, has_wiki: bool, html_url: string, id: int, ignore_whitespace_conflicts: bool, internal: bool, internal_tracker: record<allow_only_contributors_to_track_time: bool, enable_issue_dependencies: bool, enable_time_tracker: bool>, language: string, languages_url: string, link: string, mirror: bool, mirror_interval: string, mirror_updated: string, name: string, open_issues_count: int, open_pr_counter: int, original_url: string, owner: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, parent: any, permissions: record<admin: bool, pull: bool, push: bool>, private: bool, release_counter: int, repo_transfer: record<doer: record, recipient: record, teams: list>, size: int, ssh_url: string, stars_count: int, template: bool, updated_at: string, watchers_count: int, website: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/user/starred" $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -12851,14 +13081,15 @@ export def "user-get-stop-watches" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
-]: nothing -> any {
+]: nothing -> oneof<table<created: string, duration: string, issue_index: int, issue_title: string, repo_name: string, repo_owner_name: string, seconds: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/user/stopwatches" $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -12888,14 +13119,15 @@ export def "user-current-list-subscriptions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
-]: nothing -> any {
+]: nothing -> oneof<table<allow_merge_commits: bool, allow_rebase: bool, allow_rebase_explicit: bool, allow_rebase_update: bool, allow_squash_merge: bool, archived: bool, avatar_url: string, clone_url: string, created_at: string, default_allow_maintainer_edit: bool, default_branch: string, default_delete_branch_after_merge: bool, default_merge_style: string, description: string, empty: bool, external_tracker: record<external_tracker_format: string, external_tracker_regexp_pattern: string, external_tracker_style: string, external_tracker_url: string>, external_wiki: record<external_wiki_url: string>, fork: bool, forks_count: int, full_name: string, has_issues: bool, has_projects: bool, has_pull_requests: bool, has_wiki: bool, html_url: string, id: int, ignore_whitespace_conflicts: bool, internal: bool, internal_tracker: record<allow_only_contributors_to_track_time: bool, enable_issue_dependencies: bool, enable_time_tracker: bool>, language: string, languages_url: string, link: string, mirror: bool, mirror_interval: string, mirror_updated: string, name: string, open_issues_count: int, open_pr_counter: int, original_url: string, owner: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, parent: any, permissions: record<admin: bool, pull: bool, push: bool>, private: bool, release_counter: int, repo_transfer: record<doer: record, recipient: record, teams: list>, size: int, ssh_url: string, stars_count: int, template: bool, updated_at: string, watchers_count: int, website: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/user/subscriptions" $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -12925,14 +13157,15 @@ export def "user-list-teams" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
-]: nothing -> any {
+]: nothing -> oneof<table<can_create_org_repo: bool, description: string, id: int, includes_all_repositories: bool, name: string, organization: record<avatar_url: string, description: string, full_name: string, id: int, location: string, name: string, repo_admin_change_team_access: bool, username: string, visibility: string, website: string>, permission: string, units: list<string>, units_map: record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/user/teams" $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -12962,16 +13195,17 @@ export def "user-current-tracked-times" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
   --since: string # Only show times updated after the given time. This is a timestamp in RFC 3339 format (format: date-time)
   --before: string # Only show times updated before the given time. This is a timestamp in RFC 3339 format (format: date-time)
-]: nothing -> any {
+]: nothing -> oneof<table<created: string, id: int, issue: record<assets: list, assignee: record, assignees: list, body: string, closed_at: string, comments: int, created_at: string, due_date: string, html_url: string, id: int, is_locked: bool, labels: list, milestone: record, number: int, original_author: string, original_author_id: int, pull_request: record, ref: string, repository: record, state: string, title: string, updated_at: string, url: string, user: record>, issue_id: int, time: int, user_id: int, user_name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "before" $before "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/user/times" $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -13005,7 +13239,7 @@ export def "user-search" [
   --uid: int # ID of the user to search for (format: int64)
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
-]: nothing -> record<data: table<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, ok: bool> {
+]: nothing -> oneof<record<data: table<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, ok: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "uid" $uid "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
@@ -13041,12 +13275,13 @@ export def "user-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/users/{username}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -13077,15 +13312,16 @@ export def "user-list-followers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
-]: nothing -> any {
+]: nothing -> oneof<table<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/users/{username}/followers") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -13116,15 +13352,16 @@ export def "user-list-following" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
-]: nothing -> any {
+]: nothing -> oneof<table<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/users/{username}/following") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -13193,15 +13430,16 @@ export def "user-list-gpg-keys" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
-]: nothing -> any {
+]: nothing -> oneof<table<can_certify: bool, can_encrypt_comms: bool, can_encrypt_storage: bool, can_sign: bool, created_at: string, emails: list<record>, expires_at: string, id: int, key_id: string, primary_key_id: string, public_key: string, subkeys: list<any>, verified: bool>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/users/{username}/gpg_keys") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -13232,12 +13470,13 @@ export def "user-get-heatmap-data" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<table<contributions: int, timestamp: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/users/{username}/heatmap") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -13268,16 +13507,17 @@ export def "user-list-keys" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --fingerprint: string # fingerprint of the key
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
-]: nothing -> any {
+]: nothing -> oneof<table<created_at: string, fingerprint: string, id: int, key: string, key_type: string, read_only: bool, title: string, url: string, user: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let qp = [(serialize-qp "fingerprint" $fingerprint "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/users/{username}/keys") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -13308,15 +13548,16 @@ export def "org-list-user-orgs" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
-]: nothing -> any {
+]: nothing -> oneof<table<avatar_url: string, description: string, full_name: string, id: int, location: string, name: string, repo_admin_change_team_access: bool, username: string, visibility: string, website: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/users/{username}/orgs") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -13348,13 +13589,14 @@ export def "org-get-user-permissions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<record<can_create_repository: bool, can_read: bool, can_write: bool, is_admin: bool, is_owner: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username), org: (encode-path-segment $org)} | format pattern "/users/{username}/orgs/{org}/permissions") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -13385,15 +13627,16 @@ export def "user-list-repos" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
-]: nothing -> any {
+]: nothing -> oneof<table<allow_merge_commits: bool, allow_rebase: bool, allow_rebase_explicit: bool, allow_rebase_update: bool, allow_squash_merge: bool, archived: bool, avatar_url: string, clone_url: string, created_at: string, default_allow_maintainer_edit: bool, default_branch: string, default_delete_branch_after_merge: bool, default_merge_style: string, description: string, empty: bool, external_tracker: record<external_tracker_format: string, external_tracker_regexp_pattern: string, external_tracker_style: string, external_tracker_url: string>, external_wiki: record<external_wiki_url: string>, fork: bool, forks_count: int, full_name: string, has_issues: bool, has_projects: bool, has_pull_requests: bool, has_wiki: bool, html_url: string, id: int, ignore_whitespace_conflicts: bool, internal: bool, internal_tracker: record<allow_only_contributors_to_track_time: bool, enable_issue_dependencies: bool, enable_time_tracker: bool>, language: string, languages_url: string, link: string, mirror: bool, mirror_interval: string, mirror_updated: string, name: string, open_issues_count: int, open_pr_counter: int, original_url: string, owner: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, parent: any, permissions: record<admin: bool, pull: bool, push: bool>, private: bool, release_counter: int, repo_transfer: record<doer: record, recipient: record, teams: list>, size: int, ssh_url: string, stars_count: int, template: bool, updated_at: string, watchers_count: int, website: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/users/{username}/repos") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -13424,15 +13667,16 @@ export def "user-list-starred" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
-]: nothing -> any {
+]: nothing -> oneof<table<allow_merge_commits: bool, allow_rebase: bool, allow_rebase_explicit: bool, allow_rebase_update: bool, allow_squash_merge: bool, archived: bool, avatar_url: string, clone_url: string, created_at: string, default_allow_maintainer_edit: bool, default_branch: string, default_delete_branch_after_merge: bool, default_merge_style: string, description: string, empty: bool, external_tracker: record<external_tracker_format: string, external_tracker_regexp_pattern: string, external_tracker_style: string, external_tracker_url: string>, external_wiki: record<external_wiki_url: string>, fork: bool, forks_count: int, full_name: string, has_issues: bool, has_projects: bool, has_pull_requests: bool, has_wiki: bool, html_url: string, id: int, ignore_whitespace_conflicts: bool, internal: bool, internal_tracker: record<allow_only_contributors_to_track_time: bool, enable_issue_dependencies: bool, enable_time_tracker: bool>, language: string, languages_url: string, link: string, mirror: bool, mirror_interval: string, mirror_updated: string, name: string, open_issues_count: int, open_pr_counter: int, original_url: string, owner: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, parent: any, permissions: record<admin: bool, pull: bool, push: bool>, private: bool, release_counter: int, repo_transfer: record<doer: record, recipient: record, teams: list>, size: int, ssh_url: string, stars_count: int, template: bool, updated_at: string, watchers_count: int, website: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/users/{username}/starred") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -13463,15 +13707,16 @@ export def "user-list-subscriptions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
-]: nothing -> any {
+]: nothing -> oneof<table<allow_merge_commits: bool, allow_rebase: bool, allow_rebase_explicit: bool, allow_rebase_update: bool, allow_squash_merge: bool, archived: bool, avatar_url: string, clone_url: string, created_at: string, default_allow_maintainer_edit: bool, default_branch: string, default_delete_branch_after_merge: bool, default_merge_style: string, description: string, empty: bool, external_tracker: record<external_tracker_format: string, external_tracker_regexp_pattern: string, external_tracker_style: string, external_tracker_url: string>, external_wiki: record<external_wiki_url: string>, fork: bool, forks_count: int, full_name: string, has_issues: bool, has_projects: bool, has_pull_requests: bool, has_wiki: bool, html_url: string, id: int, ignore_whitespace_conflicts: bool, internal: bool, internal_tracker: record<allow_only_contributors_to_track_time: bool, enable_issue_dependencies: bool, enable_time_tracker: bool>, language: string, languages_url: string, link: string, mirror: bool, mirror_interval: string, mirror_updated: string, name: string, open_issues_count: int, open_pr_counter: int, original_url: string, owner: record<active: bool, avatar_url: string, created: string, description: string, email: string, followers_count: int, following_count: int, full_name: string, id: int, is_admin: bool, language: string, last_login: string, location: string, login: string, login_name: string, prohibit_login: bool, restricted: bool, starred_repos_count: int, visibility: string, website: string>, parent: any, permissions: record<admin: bool, pull: bool, push: bool>, private: bool, release_counter: int, repo_transfer: record<doer: record, recipient: record, teams: list>, size: int, ssh_url: string, stars_count: int, template: bool, updated_at: string, watchers_count: int, website: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/users/{username}/subscriptions") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -13502,15 +13747,16 @@ export def "user-get-tokens" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
-]: nothing -> any {
+]: nothing -> oneof<table<id: int, name: string, scopes: list<string>, sha1: string, token_last_eight: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/users/{username}/tokens") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -13541,9 +13787,10 @@ export def "user-create-token" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   name: string
   --scopes: list<string>
-]: any -> any {
+]: any -> oneof<record<id: int, name: string, scopes: list<string>, sha1: string, token_last_eight: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -13551,7 +13798,7 @@ export def "user-create-token" [
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/users/{username}/tokens") $auth.query)
   let req_body = {"name": $name, "scopes": $scopes} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -13619,11 +13866,12 @@ export def "get-version" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> oneof<record<version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/version" $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"

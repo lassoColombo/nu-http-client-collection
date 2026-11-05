@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -126,9 +150,9 @@ def action-completer-19 [] { ["UntagQueue"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-add-permission" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-add-permission" "post-add-permission" "get-change-message-visibility" "post-change-message-visibility" "get-change-message-visibility-batch" "post-change-message-visibility-batch" "get-create-queue" "post-create-queue" "get-delete-message" "post-delete-message" "get-delete-message-batch" "post-delete-message-batch" "get-delete-queue" "post-delete-queue" "get-get-queue-attributes" "post-get-queue-attributes" "get-get-queue-url" "post-get-queue-url" "get-list-dead-letter-source-queues" "post-list-dead-letter-source-queues" "get-list-queue-tags" "post-list-queue-tags" "get-list-queues" "post-list-queues" "get-purge-queue" "post-purge-queue" "get-receive-message" "post-receive-message" "get-remove-permission" "post-remove-permission" "get-send-message" "post-send-message" "get-send-message-batch" "post-send-message-batch" "get-set-queue-attributes" "post-set-queue-attributes" "get-tag-queue" "post-tag-queue" "get-untag-queue" "post-untag-queue" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -390,7 +414,7 @@ export def "get-change-message-visibility-batch" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Successful: table<Id: string>, Failed: table<Id: string, SenderFault: bool, Code: string, Message: string>> {
+]: nothing -> oneof<record<Successful: table<Id: string>, Failed: table<Id: string, SenderFault: bool, Code: string, Message: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_number | is-empty) { error make --unspanned { msg: "path parameter 'AccountNumber' must be non-empty" } }
@@ -442,7 +466,7 @@ export def "post-change-message-visibility-batch" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Successful: table<Id: string>, Failed: table<Id: string, SenderFault: bool, Code: string, Message: string>> {
+]: any -> oneof<record<Successful: table<Id: string>, Failed: table<Id: string, SenderFault: bool, Code: string, Message: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -496,7 +520,7 @@ export def "get-create-queue" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<QueueUrl: string> {
+]: nothing -> oneof<record<QueueUrl: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($queue_name == null) { error make --unspanned { msg: "required query parameter 'QueueName' missing: pass --queue-name" } }
@@ -546,7 +570,7 @@ export def "post-create-queue" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<QueueUrl: string> {
+]: any -> oneof<record<QueueUrl: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -706,7 +730,7 @@ export def "get-delete-message-batch" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Successful: table<Id: string>, Failed: table<Id: string, SenderFault: bool, Code: string, Message: string>> {
+]: nothing -> oneof<record<Successful: table<Id: string>, Failed: table<Id: string, SenderFault: bool, Code: string, Message: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_number | is-empty) { error make --unspanned { msg: "path parameter 'AccountNumber' must be non-empty" } }
@@ -758,7 +782,7 @@ export def "post-delete-message-batch" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Successful: table<Id: string>, Failed: table<Id: string, SenderFault: bool, Code: string, Message: string>> {
+]: any -> oneof<record<Successful: table<Id: string>, Failed: table<Id: string, SenderFault: bool, Code: string, Message: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -916,7 +940,7 @@ export def "get-get-queue-attributes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Attributes: record> {
+]: nothing -> oneof<record<Attributes: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_number | is-empty) { error make --unspanned { msg: "path parameter 'AccountNumber' must be non-empty" } }
@@ -967,7 +991,7 @@ export def "post-get-queue-attributes" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Attributes: record> {
+]: any -> oneof<record<Attributes: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1020,7 +1044,7 @@ export def "get-get-queue-url" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<QueueUrl: string> {
+]: nothing -> oneof<record<QueueUrl: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($queue_name == null) { error make --unspanned { msg: "required query parameter 'QueueName' missing: pass --queue-name" } }
@@ -1070,7 +1094,7 @@ export def "post-get-queue-url" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<QueueUrl: string> {
+]: any -> oneof<record<QueueUrl: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1125,7 +1149,7 @@ export def "get-list-dead-letter-source-queues" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<queueUrls: list<string>, NextToken: string> {
+]: nothing -> oneof<record<queueUrls: list<string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_number | is-empty) { error make --unspanned { msg: "path parameter 'AccountNumber' must be non-empty" } }
@@ -1178,7 +1202,7 @@ export def "post-list-dead-letter-source-queues" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<queueUrls: list<string>, NextToken: string> {
+]: any -> oneof<record<queueUrls: list<string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1231,7 +1255,7 @@ export def "get-list-queue-tags" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Tags: record> {
+]: nothing -> oneof<record<Tags: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_number | is-empty) { error make --unspanned { msg: "path parameter 'AccountNumber' must be non-empty" } }
@@ -1282,7 +1306,7 @@ export def "post-list-queue-tags" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Tags: record> {
+]: any -> oneof<record<Tags: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1336,7 +1360,7 @@ export def "get-list-queues" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<QueueUrls: list<string>, NextToken: string> {
+]: nothing -> oneof<record<QueueUrls: list<string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "ListQueues")
@@ -1387,7 +1411,7 @@ export def "post-list-queues" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<QueueUrls: list<string>, NextToken: string> {
+]: any -> oneof<record<QueueUrls: list<string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1550,7 +1574,7 @@ export def "get-receive-message" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Messages: table<MessageId: string, ReceiptHandle: string, MD5OfBody: string, Body: string, Attributes: record, MD5OfMessageAttributes: string, MessageAttributes: record>> {
+]: nothing -> oneof<record<Messages: table<MessageId: string, ReceiptHandle: string, MD5OfBody: string, Body: string, Attributes: record, MD5OfMessageAttributes: string, MessageAttributes: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_number | is-empty) { error make --unspanned { msg: "path parameter 'AccountNumber' must be non-empty" } }
@@ -1601,7 +1625,7 @@ export def "post-receive-message" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Messages: table<MessageId: string, ReceiptHandle: string, MD5OfBody: string, Body: string, Attributes: record, MD5OfMessageAttributes: string, MessageAttributes: record>> {
+]: any -> oneof<record<Messages: table<MessageId: string, ReceiptHandle: string, MD5OfBody: string, Body: string, Attributes: record, MD5OfMessageAttributes: string, MessageAttributes: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1766,7 +1790,7 @@ export def "get-send-message" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<MD5OfMessageBody: string, MD5OfMessageAttributes: string, MD5OfMessageSystemAttributes: string, MessageId: string, SequenceNumber: string> {
+]: nothing -> oneof<record<MD5OfMessageBody: string, MD5OfMessageAttributes: string, MD5OfMessageSystemAttributes: string, MessageId: string, SequenceNumber: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_number | is-empty) { error make --unspanned { msg: "path parameter 'AccountNumber' must be non-empty" } }
@@ -1818,7 +1842,7 @@ export def "post-send-message" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<MD5OfMessageBody: string, MD5OfMessageAttributes: string, MD5OfMessageSystemAttributes: string, MessageId: string, SequenceNumber: string> {
+]: any -> oneof<record<MD5OfMessageBody: string, MD5OfMessageAttributes: string, MD5OfMessageSystemAttributes: string, MessageId: string, SequenceNumber: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1872,7 +1896,7 @@ export def "get-send-message-batch" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Successful: table<Id: string, MessageId: string, MD5OfMessageBody: string, MD5OfMessageAttributes: string, MD5OfMessageSystemAttributes: string, SequenceNumber: string>, Failed: table<Id: string, SenderFault: bool, Code: string, Message: string>> {
+]: nothing -> oneof<record<Successful: table<Id: string, MessageId: string, MD5OfMessageBody: string, MD5OfMessageAttributes: string, MD5OfMessageSystemAttributes: string, SequenceNumber: string>, Failed: table<Id: string, SenderFault: bool, Code: string, Message: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_number | is-empty) { error make --unspanned { msg: "path parameter 'AccountNumber' must be non-empty" } }
@@ -1924,7 +1948,7 @@ export def "post-send-message-batch" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Successful: table<Id: string, MessageId: string, MD5OfMessageBody: string, MD5OfMessageAttributes: string, MD5OfMessageSystemAttributes: string, SequenceNumber: string>, Failed: table<Id: string, SenderFault: bool, Code: string, Message: string>> {
+]: any -> oneof<record<Successful: table<Id: string, MessageId: string, MD5OfMessageBody: string, MD5OfMessageAttributes: string, MD5OfMessageSystemAttributes: string, SequenceNumber: string>, Failed: table<Id: string, SenderFault: bool, Code: string, Message: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

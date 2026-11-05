@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -119,9 +143,9 @@ def processor-architecture-completer [] { ["Amd64" "X86"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "application-gateways-list-all" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["application-gateways-list-all" "express-route-circuits-list-all" "express-route-service-providers-list" "load-balancers-list-all" "check-dns-name-availability" "usages-list" "network-interfaces-list-all" "network-security-groups-list-all" "public-ip-addresses-list-all" "route-tables-list-all" "virtual-networks-list-all" "application-gateways-list" "application-gateways-delete" "application-gateways-get" "application-gateways-create-or-update" "application-gateways-start" "application-gateways-stop" "virtual-network-gateway-connections-list" "virtual-network-gateway-connections-delete" "virtual-network-gateway-connections-get" "virtual-network-gateway-connections-create-or-update" "virtual-network-gateway-connections-get-shared-key" "virtual-network-gateway-connections-set-shared-key" "virtual-network-gateway-connections-reset-shared-key" "express-route-circuits-list" "express-route-circuits-delete" "express-route-circuits-get" "express-route-circuits-create-or-update" "express-route-circuit-authorizations-list" "express-route-circuit-authorizations-delete" "express-route-circuit-authorizations-get" "express-route-circuit-authorizations-create-or-update" "express-route-circuit-peerings-list" "express-route-circuit-peerings-delete" "express-route-circuit-peerings-get" "express-route-circuit-peerings-create-or-update" "express-route-circuits-list-arp-table" "express-route-circuits-list-routes-table" "express-route-circuits-list-routes-table-summary" "express-route-circuits-get-peering-stats" "express-route-circuits-get-stats" "load-balancers-list" "load-balancers-delete" "load-balancers-get" "load-balancers-create-or-update" "local-network-gateways-list" "local-network-gateways-delete" "local-network-gateways-get" "local-network-gateways-create-or-update" "network-interfaces-list" "network-interfaces-delete" "network-interfaces-get" "network-interfaces-create-or-update" "network-interfaces-list-effective-network-security-groups" "network-interfaces-get-effective-route-table" "network-security-groups-list" "network-security-groups-delete" "network-security-groups-get" "network-security-groups-create-or-update" "security-rules-list" "security-rules-delete" "security-rules-get" "security-rules-create-or-update" "public-ip-addresses-list" "public-ip-addresses-delete" "public-ip-addresses-get" "public-ip-addresses-create-or-update" "route-tables-list" "route-tables-delete" "route-tables-get" "route-tables-create-or-update" "routes-list" "routes-delete" "routes-get" "routes-create-or-update" "virtual-network-gateways-list" "virtual-network-gateways-delete" "virtual-network-gateways-get" "virtual-network-gateways-create-or-update" "virtual-network-gateways-generatevpnclientpackage" "virtual-network-gateways-reset" "virtual-networks-list" "virtual-networks-delete" "virtual-networks-get" "virtual-networks-create-or-update" "virtual-networks-check-ip-address-availability" "subnets-list" "subnets-delete" "subnets-get" "subnets-create-or-update" "virtual-network-peerings-list" "virtual-network-peerings-delete" "virtual-network-peerings-get" "virtual-network-peerings-create-or-update" "network-interfaces-list-virtual-machine-scale-set-network-interfaces" "network-interfaces-list-virtual-machine-scale-set-vm-network-interfaces" "network-interfaces-get-virtual-machine-scale-set-network-interface" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -156,7 +180,7 @@ export def "application-gateways-list-all" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -196,7 +220,7 @@ export def "express-route-circuits-list-all" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, sku: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<etag: string, properties: record, sku: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -236,7 +260,7 @@ export def "express-route-service-providers-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -276,7 +300,7 @@ export def "load-balancers-list-all" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -318,7 +342,7 @@ export def "check-dns-name-availability" [
   --accept: string@accept-completer # Response content type
   --domain-name-label: string # The domain name to be verified. It must conform to the following regular expression: ^[a-z][a-z0-9-]{1,61}[a-z0-9]$.
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<available: bool> {
+]: nothing -> oneof<record<available: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -360,7 +384,7 @@ export def "usages-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<nextLink: string, value: table<currentValue: int, limit: int, name: record, unit: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<currentValue: int, limit: int, name: record, unit: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -401,7 +425,7 @@ export def "network-interfaces-list-all" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -441,7 +465,7 @@ export def "network-security-groups-list-all" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -481,7 +505,7 @@ export def "public-ip-addresses-list-all" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -521,7 +545,7 @@ export def "route-tables-list-all" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -561,7 +585,7 @@ export def "virtual-networks-list-all" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -602,7 +626,7 @@ export def "application-gateways-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -689,7 +713,7 @@ export def "application-gateways-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<etag: string, properties: record<authenticationCertificates: list<record>, backendAddressPools: list<record>, backendHttpSettingsCollection: list<record>, frontendIPConfigurations: list<record>, frontendPorts: list<record>, gatewayIPConfigurations: list<record>, httpListeners: list<record>, operationalState: string, probes: list<record>, provisioningState: string, requestRoutingRules: list<record>, resourceGuid: string, sku: record<capacity: int, name: string, tier: string>, sslCertificates: list<record>, sslPolicy: record<disabledSslProtocols: list>, urlPathMaps: list<record>>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<etag: string, properties: record<authenticationCertificates: list<record>, backendAddressPools: list<record>, backendHttpSettingsCollection: list<record>, frontendIPConfigurations: list<record>, frontendPorts: list<record>, gatewayIPConfigurations: list<record>, httpListeners: list<record>, operationalState: string, probes: list<record>, provisioningState: string, requestRoutingRules: list<record>, resourceGuid: string, sku: record<capacity: int, name: string, tier: string>, sslCertificates: list<record>, sslPolicy: record<disabledSslProtocols: list>, urlPathMaps: list<record>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -718,7 +742,6 @@ export def "application-gateways-get" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/applicationGateways/{applicationGatewayName}
 # operationId: ApplicationGateways_CreateOrUpdate
-# --properties shape: {authenticationCertificates?: list, backendAddressPools?: list, backendHttpSettingsCollection?: list, frontendIPConfigurations?: list, frontendPorts?: list, gatewayIPConfigurations?: list, httpListeners?: list, probes?: list, provisioningState?: string, requestRoutingRules?: list, resourceGuid?: string, sku?: any, sslCertificates?: list, sslPolicy?: any, urlPathMaps?: list}
 export def "application-gateways-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -739,7 +762,7 @@ export def "application-gateways-create-or-update" [
   --id: string # Resource Id
   --location: string # Resource location
   --tags: record # Resource tags
-]: any -> record<etag: string, properties: record<authenticationCertificates: list<record>, backendAddressPools: list<record>, backendHttpSettingsCollection: list<record>, frontendIPConfigurations: list<record>, frontendPorts: list<record>, gatewayIPConfigurations: list<record>, httpListeners: list<record>, operationalState: string, probes: list<record>, provisioningState: string, requestRoutingRules: list<record>, resourceGuid: string, sku: record<capacity: int, name: string, tier: string>, sslCertificates: list<record>, sslPolicy: record<disabledSslProtocols: list>, urlPathMaps: list<record>>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<etag: string, properties: record<authenticationCertificates: list<record>, backendAddressPools: list<record>, backendHttpSettingsCollection: list<record>, frontendIPConfigurations: list<record>, frontendPorts: list<record>, gatewayIPConfigurations: list<record>, httpListeners: list<record>, operationalState: string, probes: list<record>, provisioningState: string, requestRoutingRules: list<record>, resourceGuid: string, sku: record<capacity: int, name: string, tier: string>, sslCertificates: list<record>, sslPolicy: record<disabledSslProtocols: list>, urlPathMaps: list<record>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -873,7 +896,7 @@ export def "virtual-network-gateway-connections-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -960,7 +983,7 @@ export def "virtual-network-gateway-connections-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<etag: string, properties: record<authorizationKey: string, connectionStatus: string, connectionType: string, egressBytesTransferred: int, enableBgp: bool, ingressBytesTransferred: int, localNetworkGateway2: record<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>, peer: record<id: string>, provisioningState: string, resourceGuid: string, routingWeight: int, sharedKey: string, virtualNetworkGateway1: record<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>, virtualNetworkGateway2: record<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<etag: string, properties: record<authorizationKey: string, connectionStatus: string, connectionType: string, egressBytesTransferred: int, enableBgp: bool, ingressBytesTransferred: int, localNetworkGateway2: record<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>, peer: record<id: string>, provisioningState: string, resourceGuid: string, routingWeight: int, sharedKey: string, virtualNetworkGateway1: record<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>, virtualNetworkGateway2: record<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -989,7 +1012,6 @@ export def "virtual-network-gateway-connections-get" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/connections/{virtualNetworkGatewayConnectionName}
 # operationId: VirtualNetworkGatewayConnections_CreateOrUpdate
-# --properties shape: {authorizationKey?: string, connectionStatus?: "Unknown"|"Connecting"|"Connected"|"NotConnected", connectionType?: "IPsec"|"Vnet2Vnet"|"ExpressRoute"|"VPNClient", egressBytesTransferred?: int, enableBgp?: bool, ingressBytesTransferred?: int, localNetworkGateway2?: any, peer?: any, provisioningState?: string, resourceGuid?: string, routingWeight?: int, sharedKey?: string, virtualNetworkGateway1?: any, virtualNetworkGateway2?: any}
 export def "virtual-network-gateway-connections-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -1010,7 +1032,7 @@ export def "virtual-network-gateway-connections-create-or-update" [
   --id: string # Resource Id
   --location: string # Resource location
   --tags: record # Resource tags
-]: any -> record<etag: string, properties: record<authorizationKey: string, connectionStatus: string, connectionType: string, egressBytesTransferred: int, enableBgp: bool, ingressBytesTransferred: int, localNetworkGateway2: record<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>, peer: record<id: string>, provisioningState: string, resourceGuid: string, routingWeight: int, sharedKey: string, virtualNetworkGateway1: record<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>, virtualNetworkGateway2: record<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<etag: string, properties: record<authorizationKey: string, connectionStatus: string, connectionType: string, egressBytesTransferred: int, enableBgp: bool, ingressBytesTransferred: int, localNetworkGateway2: record<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>, peer: record<id: string>, provisioningState: string, resourceGuid: string, routingWeight: int, sharedKey: string, virtualNetworkGateway1: record<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>, virtualNetworkGateway2: record<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1057,7 +1079,7 @@ export def "virtual-network-gateway-connections-get-shared-key" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<value: string> {
+]: nothing -> oneof<record<value: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1102,7 +1124,7 @@ export def "virtual-network-gateway-connections-set-shared-key" [
   --accept: string@accept-completer # Response content type
   --api-version: string # Client Api Version. (required)
   --value: string # The virtual network connection shared key value
-]: any -> record<value: string> {
+]: any -> oneof<record<value: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1150,7 +1172,7 @@ export def "virtual-network-gateway-connections-reset-shared-key" [
   --accept: string@accept-completer # Response content type
   --api-version: string # Client Api Version. (required)
   --key-length: int # The virtual network connection reset shared key length (format: int64)
-]: any -> record<keyLength: int> {
+]: any -> oneof<record<keyLength: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1196,7 +1218,7 @@ export def "express-route-circuits-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, sku: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<etag: string, properties: record, sku: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1283,7 +1305,7 @@ export def "express-route-circuits-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<etag: string, properties: record<allowClassicOperations: bool, authorizations: list<record>, circuitProvisioningState: string, gatewayManagerEtag: string, peerings: list<record>, provisioningState: string, serviceKey: string, serviceProviderNotes: string, serviceProviderProperties: record<bandwidthInMbps: int, peeringLocation: string, serviceProviderName: string>, serviceProviderProvisioningState: string>, sku: record<family: string, name: string, tier: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<etag: string, properties: record<allowClassicOperations: bool, authorizations: list<record>, circuitProvisioningState: string, gatewayManagerEtag: string, peerings: list<record>, provisioningState: string, serviceKey: string, serviceProviderNotes: string, serviceProviderProperties: record<bandwidthInMbps: int, peeringLocation: string, serviceProviderName: string>, serviceProviderProvisioningState: string>, sku: record<family: string, name: string, tier: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1312,8 +1334,6 @@ export def "express-route-circuits-get" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteCircuits/{circuitName}
 # operationId: ExpressRouteCircuits_CreateOrUpdate
-# --properties shape: {allowClassicOperations?: bool, authorizations?: list, circuitProvisioningState?: string, gatewayManagerEtag?: string, peerings?: list, provisioningState?: string, serviceKey?: string, serviceProviderNotes?: string, serviceProviderProperties?: any, serviceProviderProvisioningState?: "NotProvisioned"|"Provisioning"|"Provisioned"|"Deprovisioning"}
-# --sku shape: {family?: "UnlimitedData"|"MeteredData", name?: string, tier?: "Standard"|"Premium"}
 export def "express-route-circuits-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -1335,7 +1355,7 @@ export def "express-route-circuits-create-or-update" [
   --id: string # Resource Id
   --location: string # Resource location
   --tags: record # Resource tags
-]: any -> record<etag: string, properties: record<allowClassicOperations: bool, authorizations: list<record>, circuitProvisioningState: string, gatewayManagerEtag: string, peerings: list<record>, provisioningState: string, serviceKey: string, serviceProviderNotes: string, serviceProviderProperties: record<bandwidthInMbps: int, peeringLocation: string, serviceProviderName: string>, serviceProviderProvisioningState: string>, sku: record<family: string, name: string, tier: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<etag: string, properties: record<allowClassicOperations: bool, authorizations: list<record>, circuitProvisioningState: string, gatewayManagerEtag: string, peerings: list<record>, provisioningState: string, serviceKey: string, serviceProviderNotes: string, serviceProviderProperties: record<bandwidthInMbps: int, peeringLocation: string, serviceProviderName: string>, serviceProviderProvisioningState: string>, sku: record<family: string, name: string, tier: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1382,7 +1402,7 @@ export def "express-route-circuit-authorizations-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<nextLink: string, value: table<etag: string, name: string, properties: record, id: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<etag: string, name: string, properties: record, id: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1473,7 +1493,7 @@ export def "express-route-circuit-authorizations-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<etag: string, name: string, properties: record<authorizationKey: string, authorizationUseStatus: string, provisioningState: string>, id: string> {
+]: nothing -> oneof<record<etag: string, name: string, properties: record<authorizationKey: string, authorizationUseStatus: string, provisioningState: string>, id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1503,7 +1523,6 @@ export def "express-route-circuit-authorizations-get" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteCircuits/{circuitName}/authorizations/{authorizationName}
 # operationId: ExpressRouteCircuitAuthorizations_CreateOrUpdate
-# --properties shape: {authorizationKey?: string, authorizationUseStatus?: "Available"|"InUse", provisioningState?: string}
 export def "express-route-circuit-authorizations-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -1524,7 +1543,7 @@ export def "express-route-circuit-authorizations-create-or-update" [
   --name: string # Gets name of the resource that is unique within a resource group. This name can be used to access the resource
   --properties: any # shape: {authorizationKey?: string, authorizationUseStatus?: "Available"|"InUse", provisioningState?: string}
   --id: string # Resource Id
-]: any -> record<etag: string, name: string, properties: record<authorizationKey: string, authorizationUseStatus: string, provisioningState: string>, id: string> {
+]: any -> oneof<record<etag: string, name: string, properties: record<authorizationKey: string, authorizationUseStatus: string, provisioningState: string>, id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1572,7 +1591,7 @@ export def "express-route-circuit-peerings-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<nextLink: string, value: table<etag: string, name: string, properties: record, id: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<etag: string, name: string, properties: record, id: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1663,7 +1682,7 @@ export def "express-route-circuit-peerings-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<etag: string, name: string, properties: record<azureASN: int, gatewayManagerEtag: string, lastModifiedBy: string, microsoftPeeringConfig: record<advertisedPublicPrefixes: list, advertisedPublicPrefixesState: string, customerASN: int, routingRegistryName: string>, peerASN: int, peeringType: string, primaryAzurePort: string, primaryPeerAddressPrefix: string, provisioningState: string, secondaryAzurePort: string, secondaryPeerAddressPrefix: string, sharedKey: string, state: string, stats: record<primarybytesIn: int, primarybytesOut: int, secondarybytesIn: int, secondarybytesOut: int>, vlanId: int>, id: string> {
+]: nothing -> oneof<record<etag: string, name: string, properties: record<azureASN: int, gatewayManagerEtag: string, lastModifiedBy: string, microsoftPeeringConfig: record<advertisedPublicPrefixes: list, advertisedPublicPrefixesState: string, customerASN: int, routingRegistryName: string>, peerASN: int, peeringType: string, primaryAzurePort: string, primaryPeerAddressPrefix: string, provisioningState: string, secondaryAzurePort: string, secondaryPeerAddressPrefix: string, sharedKey: string, state: string, stats: record<primarybytesIn: int, primarybytesOut: int, secondarybytesIn: int, secondarybytesOut: int>, vlanId: int>, id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1693,7 +1712,6 @@ export def "express-route-circuit-peerings-get" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteCircuits/{circuitName}/peerings/{peeringName}
 # operationId: ExpressRouteCircuitPeerings_CreateOrUpdate
-# --properties shape: {azureASN?: int, gatewayManagerEtag?: string, lastModifiedBy?: string, microsoftPeeringConfig?: any, peerASN?: int, peeringType?: "AzurePublicPeering"|"AzurePrivatePeering"|"MicrosoftPeering", primaryAzurePort?: string, primaryPeerAddressPrefix?: string, provisioningState?: string, secondaryAzurePort?: string, secondaryPeerAddressPrefix?: string, sharedKey?: string, state?: "Disabled"|"Enabled", stats?: any, vlanId?: int}
 export def "express-route-circuit-peerings-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -1714,7 +1732,7 @@ export def "express-route-circuit-peerings-create-or-update" [
   --name: string # Gets name of the resource that is unique within a resource group. This name can be used to access the resource
   --properties: any # shape: {azureASN?: int, gatewayManagerEtag?: string, lastModifiedBy?: string, microsoftPeeringConfig?: any, peerASN?: int, peeringType?: "AzurePublicPeering"|"AzurePrivatePeering"|"MicrosoftPeering", primaryAzurePort?: string, primaryPeerAddressPrefix?: string, provisioningState?: string, secondaryAzurePort?: string, secondaryPeerAddressPrefix?: string, sharedKey?: string, state?: "Disabled"|"Enabled", stats?: any, vlanId?: int}
   --id: string # Resource Id
-]: any -> record<etag: string, name: string, properties: record<azureASN: int, gatewayManagerEtag: string, lastModifiedBy: string, microsoftPeeringConfig: record<advertisedPublicPrefixes: list, advertisedPublicPrefixesState: string, customerASN: int, routingRegistryName: string>, peerASN: int, peeringType: string, primaryAzurePort: string, primaryPeerAddressPrefix: string, provisioningState: string, secondaryAzurePort: string, secondaryPeerAddressPrefix: string, sharedKey: string, state: string, stats: record<primarybytesIn: int, primarybytesOut: int, secondarybytesIn: int, secondarybytesOut: int>, vlanId: int>, id: string> {
+]: any -> oneof<record<etag: string, name: string, properties: record<azureASN: int, gatewayManagerEtag: string, lastModifiedBy: string, microsoftPeeringConfig: record<advertisedPublicPrefixes: list, advertisedPublicPrefixesState: string, customerASN: int, routingRegistryName: string>, peerASN: int, peeringType: string, primaryAzurePort: string, primaryPeerAddressPrefix: string, provisioningState: string, secondaryAzurePort: string, secondaryPeerAddressPrefix: string, sharedKey: string, state: string, stats: record<primarybytesIn: int, primarybytesOut: int, secondarybytesIn: int, secondarybytesOut: int>, vlanId: int>, id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1764,7 +1782,7 @@ export def "express-route-circuits-list-arp-table" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<nextLink: string, value: table<age: int, interface: string, ipAddress: string, macAddress: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<age: int, interface: string, ipAddress: string, macAddress: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1812,7 +1830,7 @@ export def "express-route-circuits-list-routes-table" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<nextLink: string, value: table<locPrf: string, network: string, nextHop: string, path: string, weight: int>> {
+]: nothing -> oneof<record<nextLink: string, value: table<locPrf: string, network: string, nextHop: string, path: string, weight: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1860,7 +1878,7 @@ export def "express-route-circuits-list-routes-table-summary" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<nextLink: string, value: table<as: int, neighbor: string, statePfxRcd: string, upDown: string, v: int>> {
+]: nothing -> oneof<record<nextLink: string, value: table<as: int, neighbor: string, statePfxRcd: string, upDown: string, v: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1907,7 +1925,7 @@ export def "express-route-circuits-get-peering-stats" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<primarybytesIn: int, primarybytesOut: int, secondarybytesIn: int, secondarybytesOut: int> {
+]: nothing -> oneof<record<primarybytesIn: int, primarybytesOut: int, secondarybytesIn: int, secondarybytesOut: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1952,7 +1970,7 @@ export def "express-route-circuits-get-stats" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<primarybytesIn: int, primarybytesOut: int, secondarybytesIn: int, secondarybytesOut: int> {
+]: nothing -> oneof<record<primarybytesIn: int, primarybytesOut: int, secondarybytesIn: int, secondarybytesOut: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1995,7 +2013,7 @@ export def "load-balancers-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2083,7 +2101,7 @@ export def "load-balancers-get" [
   --accept: string@accept-completer # Response content type
   --api-version: string # Client Api Version. (required)
   --expand: string # expand references resources.
-]: nothing -> record<etag: string, properties: record<backendAddressPools: list<record>, frontendIPConfigurations: list<record>, inboundNatPools: list<record>, inboundNatRules: list<record>, loadBalancingRules: list<record>, outboundNatRules: list<record>, probes: list<record>, provisioningState: string, resourceGuid: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<etag: string, properties: record<backendAddressPools: list<record>, frontendIPConfigurations: list<record>, inboundNatPools: list<record>, inboundNatRules: list<record>, loadBalancingRules: list<record>, outboundNatRules: list<record>, probes: list<record>, provisioningState: string, resourceGuid: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2112,7 +2130,6 @@ export def "load-balancers-get" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/loadBalancers/{loadBalancerName}
 # operationId: LoadBalancers_CreateOrUpdate
-# --properties shape: {backendAddressPools?: list, frontendIPConfigurations?: list, inboundNatPools?: list, inboundNatRules?: list, loadBalancingRules?: list, outboundNatRules?: list, probes?: list, provisioningState?: string, resourceGuid?: string}
 export def "load-balancers-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -2133,7 +2150,7 @@ export def "load-balancers-create-or-update" [
   --id: string # Resource Id
   --location: string # Resource location
   --tags: record # Resource tags
-]: any -> record<etag: string, properties: record<backendAddressPools: list<record>, frontendIPConfigurations: list<record>, inboundNatPools: list<record>, inboundNatRules: list<record>, loadBalancingRules: list<record>, outboundNatRules: list<record>, probes: list<record>, provisioningState: string, resourceGuid: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<etag: string, properties: record<backendAddressPools: list<record>, frontendIPConfigurations: list<record>, inboundNatPools: list<record>, inboundNatRules: list<record>, loadBalancingRules: list<record>, outboundNatRules: list<record>, probes: list<record>, provisioningState: string, resourceGuid: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2179,7 +2196,7 @@ export def "local-network-gateways-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2266,7 +2283,7 @@ export def "local-network-gateways-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<etag: string, properties: record<bgpSettings: record<asn: int, bgpPeeringAddress: string, peerWeight: int>, gatewayIpAddress: string, localNetworkAddressSpace: record<addressPrefixes: list>, provisioningState: string, resourceGuid: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<etag: string, properties: record<bgpSettings: record<asn: int, bgpPeeringAddress: string, peerWeight: int>, gatewayIpAddress: string, localNetworkAddressSpace: record<addressPrefixes: list>, provisioningState: string, resourceGuid: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2295,7 +2312,6 @@ export def "local-network-gateways-get" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/localNetworkGateways/{localNetworkGatewayName}
 # operationId: LocalNetworkGateways_CreateOrUpdate
-# --properties shape: {bgpSettings?: any, gatewayIpAddress?: string, localNetworkAddressSpace?: any, provisioningState?: string, resourceGuid?: string}
 export def "local-network-gateways-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -2316,7 +2332,7 @@ export def "local-network-gateways-create-or-update" [
   --id: string # Resource Id
   --location: string # Resource location
   --tags: record # Resource tags
-]: any -> record<etag: string, properties: record<bgpSettings: record<asn: int, bgpPeeringAddress: string, peerWeight: int>, gatewayIpAddress: string, localNetworkAddressSpace: record<addressPrefixes: list>, provisioningState: string, resourceGuid: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<etag: string, properties: record<bgpSettings: record<asn: int, bgpPeeringAddress: string, peerWeight: int>, gatewayIpAddress: string, localNetworkAddressSpace: record<addressPrefixes: list>, provisioningState: string, resourceGuid: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2362,7 +2378,7 @@ export def "network-interfaces-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2450,7 +2466,7 @@ export def "network-interfaces-get" [
   --accept: string@accept-completer # Response content type
   --api-version: string # Client Api Version. (required)
   --expand: string # expand references resources.
-]: nothing -> record<etag: string, properties: record<dnsSettings: record<appliedDnsServers: list, dnsServers: list, internalDnsNameLabel: string, internalDomainNameSuffix: string, internalFqdn: string>, enableIPForwarding: bool, ipConfigurations: list<record>, macAddress: string, networkSecurityGroup: record<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>, primary: bool, provisioningState: string, resourceGuid: string, virtualMachine: record<id: string>>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<etag: string, properties: record<dnsSettings: record<appliedDnsServers: list, dnsServers: list, internalDnsNameLabel: string, internalDomainNameSuffix: string, internalFqdn: string>, enableIPForwarding: bool, ipConfigurations: list<record>, macAddress: string, networkSecurityGroup: record<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>, primary: bool, provisioningState: string, resourceGuid: string, virtualMachine: record<id: string>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2479,7 +2495,6 @@ export def "network-interfaces-get" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkInterfaces/{networkInterfaceName}
 # operationId: NetworkInterfaces_CreateOrUpdate
-# --properties shape: {dnsSettings?: any, enableIPForwarding?: bool, ipConfigurations?: list, macAddress?: string, networkSecurityGroup?: any, primary?: bool, provisioningState?: string, resourceGuid?: string, virtualMachine?: any}
 export def "network-interfaces-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -2500,7 +2515,7 @@ export def "network-interfaces-create-or-update" [
   --id: string # Resource Id
   --location: string # Resource location
   --tags: record # Resource tags
-]: any -> record<etag: string, properties: record<dnsSettings: record<appliedDnsServers: list, dnsServers: list, internalDnsNameLabel: string, internalDomainNameSuffix: string, internalFqdn: string>, enableIPForwarding: bool, ipConfigurations: list<record>, macAddress: string, networkSecurityGroup: record<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>, primary: bool, provisioningState: string, resourceGuid: string, virtualMachine: record<id: string>>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<etag: string, properties: record<dnsSettings: record<appliedDnsServers: list, dnsServers: list, internalDnsNameLabel: string, internalDomainNameSuffix: string, internalFqdn: string>, enableIPForwarding: bool, ipConfigurations: list<record>, macAddress: string, networkSecurityGroup: record<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>, primary: bool, provisioningState: string, resourceGuid: string, virtualMachine: record<id: string>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2547,7 +2562,7 @@ export def "network-interfaces-list-effective-network-security-groups" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<nextLink: string, value: table<association: record, effectiveSecurityRules: list, networkSecurityGroup: record>> {
+]: nothing -> oneof<record<nextLink: string, value: table<association: record, effectiveSecurityRules: list, networkSecurityGroup: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2591,7 +2606,7 @@ export def "network-interfaces-get-effective-route-table" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<nextLink: string, value: table<addressPrefix: list, name: string, nextHopIpAddress: list, nextHopType: string, source: string, state: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<addressPrefix: list, name: string, nextHopIpAddress: list, nextHopType: string, source: string, state: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2634,7 +2649,7 @@ export def "network-security-groups-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2722,7 +2737,7 @@ export def "network-security-groups-get" [
   --accept: string@accept-completer # Response content type
   --api-version: string # Client Api Version. (required)
   --expand: string # expand references resources.
-]: nothing -> record<etag: string, properties: record<defaultSecurityRules: list<record>, networkInterfaces: list<record>, provisioningState: string, resourceGuid: string, securityRules: list<record>, subnets: list<record>>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<etag: string, properties: record<defaultSecurityRules: list<record>, networkInterfaces: list<record>, provisioningState: string, resourceGuid: string, securityRules: list<record>, subnets: list<record>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2751,7 +2766,6 @@ export def "network-security-groups-get" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkSecurityGroups/{networkSecurityGroupName}
 # operationId: NetworkSecurityGroups_CreateOrUpdate
-# --properties shape: {defaultSecurityRules?: list, provisioningState?: string, resourceGuid?: string, securityRules?: list}
 export def "network-security-groups-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -2772,7 +2786,7 @@ export def "network-security-groups-create-or-update" [
   --id: string # Resource Id
   --location: string # Resource location
   --tags: record # Resource tags
-]: any -> record<etag: string, properties: record<defaultSecurityRules: list<record>, networkInterfaces: list<record>, provisioningState: string, resourceGuid: string, securityRules: list<record>, subnets: list<record>>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<etag: string, properties: record<defaultSecurityRules: list<record>, networkInterfaces: list<record>, provisioningState: string, resourceGuid: string, securityRules: list<record>, subnets: list<record>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2819,7 +2833,7 @@ export def "security-rules-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<nextLink: string, value: table<etag: string, name: string, properties: record, id: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<etag: string, name: string, properties: record, id: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2910,7 +2924,7 @@ export def "security-rules-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<etag: string, name: string, properties: record<access: string, description: string, destinationAddressPrefix: string, destinationPortRange: string, direction: string, priority: int, protocol: string, provisioningState: string, sourceAddressPrefix: string, sourcePortRange: string>, id: string> {
+]: nothing -> oneof<record<etag: string, name: string, properties: record<access: string, description: string, destinationAddressPrefix: string, destinationPortRange: string, direction: string, priority: int, protocol: string, provisioningState: string, sourceAddressPrefix: string, sourcePortRange: string>, id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2940,7 +2954,6 @@ export def "security-rules-get" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkSecurityGroups/{networkSecurityGroupName}/securityRules/{securityRuleName}
 # operationId: SecurityRules_CreateOrUpdate
-# --properties shape: {access: "Allow"|"Deny", description?: string, destinationAddressPrefix: string, destinationPortRange?: string, direction: "Inbound"|"Outbound", priority?: int, protocol: "Tcp"|"Udp"|"*", provisioningState?: string, sourceAddressPrefix: string, sourcePortRange?: string}
 export def "security-rules-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -2961,7 +2974,7 @@ export def "security-rules-create-or-update" [
   --name: string # Gets name of the resource that is unique within a resource group. This name can be used to access the resource
   --properties: any # shape: {access: "Allow"|"Deny", description?: string, destinationAddressPrefix: string, destinationPortRange?: string, direction: "Inbound"|"Outbound", priority?: int, protocol: "Tcp"|"Udp"|"*", provisioningState?: string, sourceAddressPrefix: string, sourcePortRange?: string}
   --id: string # Resource Id
-]: any -> record<etag: string, name: string, properties: record<access: string, description: string, destinationAddressPrefix: string, destinationPortRange: string, direction: string, priority: int, protocol: string, provisioningState: string, sourceAddressPrefix: string, sourcePortRange: string>, id: string> {
+]: any -> oneof<record<etag: string, name: string, properties: record<access: string, description: string, destinationAddressPrefix: string, destinationPortRange: string, direction: string, priority: int, protocol: string, provisioningState: string, sourceAddressPrefix: string, sourcePortRange: string>, id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3008,7 +3021,7 @@ export def "public-ip-addresses-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3096,7 +3109,7 @@ export def "public-ip-addresses-get" [
   --accept: string@accept-completer # Response content type
   --api-version: string # Client Api Version. (required)
   --expand: string # expand references resources.
-]: nothing -> record<etag: string, properties: record<dnsSettings: record<domainNameLabel: string, fqdn: string, reverseFqdn: string>, idleTimeoutInMinutes: int, ipAddress: string, ipConfiguration: record<etag: string, name: string, properties: record, id: string>, provisioningState: string, publicIPAddressVersion: string, publicIPAllocationMethod: string, resourceGuid: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<etag: string, properties: record<dnsSettings: record<domainNameLabel: string, fqdn: string, reverseFqdn: string>, idleTimeoutInMinutes: int, ipAddress: string, ipConfiguration: record<etag: string, name: string, properties: record, id: string>, provisioningState: string, publicIPAddressVersion: string, publicIPAllocationMethod: string, resourceGuid: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3125,7 +3138,6 @@ export def "public-ip-addresses-get" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/publicIPAddresses/{publicIpAddressName}
 # operationId: PublicIPAddresses_CreateOrUpdate
-# --properties shape: {dnsSettings?: any, idleTimeoutInMinutes?: int, ipAddress?: string, ipConfiguration?: any, provisioningState?: string, publicIPAddressVersion?: "IPv4"|"IPv6", publicIPAllocationMethod?: "Static"|"Dynamic", resourceGuid?: string}
 export def "public-ip-addresses-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -3146,7 +3158,7 @@ export def "public-ip-addresses-create-or-update" [
   --id: string # Resource Id
   --location: string # Resource location
   --tags: record # Resource tags
-]: any -> record<etag: string, properties: record<dnsSettings: record<domainNameLabel: string, fqdn: string, reverseFqdn: string>, idleTimeoutInMinutes: int, ipAddress: string, ipConfiguration: record<etag: string, name: string, properties: record, id: string>, provisioningState: string, publicIPAddressVersion: string, publicIPAllocationMethod: string, resourceGuid: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<etag: string, properties: record<dnsSettings: record<domainNameLabel: string, fqdn: string, reverseFqdn: string>, idleTimeoutInMinutes: int, ipAddress: string, ipConfiguration: record<etag: string, name: string, properties: record, id: string>, provisioningState: string, publicIPAddressVersion: string, publicIPAllocationMethod: string, resourceGuid: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3192,7 +3204,7 @@ export def "route-tables-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3280,7 +3292,7 @@ export def "route-tables-get" [
   --accept: string@accept-completer # Response content type
   --api-version: string # Client Api Version. (required)
   --expand: string # expand references resources.
-]: nothing -> record<etag: string, properties: record<provisioningState: string, routes: list<record>, subnets: list<record>>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<etag: string, properties: record<provisioningState: string, routes: list<record>, subnets: list<record>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3309,7 +3321,6 @@ export def "route-tables-get" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/routeTables/{routeTableName}
 # operationId: RouteTables_CreateOrUpdate
-# --properties shape: {provisioningState?: string, routes?: list}
 export def "route-tables-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -3330,7 +3341,7 @@ export def "route-tables-create-or-update" [
   --id: string # Resource Id
   --location: string # Resource location
   --tags: record # Resource tags
-]: any -> record<etag: string, properties: record<provisioningState: string, routes: list<record>, subnets: list<record>>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<etag: string, properties: record<provisioningState: string, routes: list<record>, subnets: list<record>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3377,7 +3388,7 @@ export def "routes-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<nextLink: string, value: table<etag: string, name: string, properties: record, id: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<etag: string, name: string, properties: record, id: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3468,7 +3479,7 @@ export def "routes-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<etag: string, name: string, properties: record<addressPrefix: string, nextHopIpAddress: string, nextHopType: string, provisioningState: string>, id: string> {
+]: nothing -> oneof<record<etag: string, name: string, properties: record<addressPrefix: string, nextHopIpAddress: string, nextHopType: string, provisioningState: string>, id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3498,7 +3509,6 @@ export def "routes-get" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/routeTables/{routeTableName}/routes/{routeName}
 # operationId: Routes_CreateOrUpdate
-# --properties shape: {addressPrefix?: string, nextHopIpAddress?: string, nextHopType: "VirtualNetworkGateway"|"VnetLocal"|"Internet"|"VirtualAppliance"|"None", provisioningState?: string}
 export def "routes-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -3519,7 +3529,7 @@ export def "routes-create-or-update" [
   --name: string # Gets name of the resource that is unique within a resource group. This name can be used to access the resource
   --properties: any # Route resource — shape: {addressPrefix?: string, nextHopIpAddress?: string, nextHopType: "VirtualNetworkGateway"|"VnetLocal"|"Internet"|"VirtualAppliance"|"None", provisioningState?: string}
   --id: string # Resource Id
-]: any -> record<etag: string, name: string, properties: record<addressPrefix: string, nextHopIpAddress: string, nextHopType: string, provisioningState: string>, id: string> {
+]: any -> oneof<record<etag: string, name: string, properties: record<addressPrefix: string, nextHopIpAddress: string, nextHopType: string, provisioningState: string>, id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3566,7 +3576,7 @@ export def "virtual-network-gateways-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3653,7 +3663,7 @@ export def "virtual-network-gateways-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<etag: string, properties: record<activeActive: bool, bgpSettings: record<asn: int, bgpPeeringAddress: string, peerWeight: int>, enableBgp: bool, gatewayDefaultSite: record<id: string>, gatewayType: string, ipConfigurations: list<record>, provisioningState: string, resourceGuid: string, sku: record<capacity: int, name: string, tier: string>, vpnClientConfiguration: record<vpnClientAddressPool: record, vpnClientRevokedCertificates: list, vpnClientRootCertificates: list>, vpnType: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<etag: string, properties: record<activeActive: bool, bgpSettings: record<asn: int, bgpPeeringAddress: string, peerWeight: int>, enableBgp: bool, gatewayDefaultSite: record<id: string>, gatewayType: string, ipConfigurations: list<record>, provisioningState: string, resourceGuid: string, sku: record<capacity: int, name: string, tier: string>, vpnClientConfiguration: record<vpnClientAddressPool: record, vpnClientRevokedCertificates: list, vpnClientRootCertificates: list>, vpnType: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3682,7 +3692,6 @@ export def "virtual-network-gateways-get" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworkGateways/{virtualNetworkGatewayName}
 # operationId: VirtualNetworkGateways_CreateOrUpdate
-# --properties shape: {activeActive?: bool, bgpSettings?: any, enableBgp?: bool, gatewayDefaultSite?: any, gatewayType?: "Vpn"|"ExpressRoute", ipConfigurations?: list, provisioningState?: string, resourceGuid?: string, sku?: any, vpnClientConfiguration?: any, vpnType?: "PolicyBased"|"RouteBased"}
 export def "virtual-network-gateways-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -3703,7 +3712,7 @@ export def "virtual-network-gateways-create-or-update" [
   --id: string # Resource Id
   --location: string # Resource location
   --tags: record # Resource tags
-]: any -> record<etag: string, properties: record<activeActive: bool, bgpSettings: record<asn: int, bgpPeeringAddress: string, peerWeight: int>, enableBgp: bool, gatewayDefaultSite: record<id: string>, gatewayType: string, ipConfigurations: list<record>, provisioningState: string, resourceGuid: string, sku: record<capacity: int, name: string, tier: string>, vpnClientConfiguration: record<vpnClientAddressPool: record, vpnClientRevokedCertificates: list, vpnClientRootCertificates: list>, vpnType: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<etag: string, properties: record<activeActive: bool, bgpSettings: record<asn: int, bgpPeeringAddress: string, peerWeight: int>, enableBgp: bool, gatewayDefaultSite: record<id: string>, gatewayType: string, ipConfigurations: list<record>, provisioningState: string, resourceGuid: string, sku: record<capacity: int, name: string, tier: string>, vpnClientConfiguration: record<vpnClientAddressPool: record, vpnClientRevokedCertificates: list, vpnClientRootCertificates: list>, vpnType: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3783,7 +3792,6 @@ export def "virtual-network-gateways-generatevpnclientpackage" [
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworkGateways/{virtualNetworkGatewayName}/reset
 # operationId: VirtualNetworkGateways_Reset
-# --properties shape: {activeActive?: bool, bgpSettings?: any, enableBgp?: bool, gatewayDefaultSite?: any, gatewayType?: "Vpn"|"ExpressRoute", ipConfigurations?: list, provisioningState?: string, resourceGuid?: string, sku?: any, vpnClientConfiguration?: any, vpnType?: "PolicyBased"|"RouteBased"}
 export def "virtual-network-gateways-reset" [
   subscription_id: string
   resource_group_name: string
@@ -3804,7 +3812,7 @@ export def "virtual-network-gateways-reset" [
   --id: string # Resource Id
   --location: string # Resource location
   --tags: record # Resource tags
-]: any -> record<etag: string, properties: record<activeActive: bool, bgpSettings: record<asn: int, bgpPeeringAddress: string, peerWeight: int>, enableBgp: bool, gatewayDefaultSite: record<id: string>, gatewayType: string, ipConfigurations: list<record>, provisioningState: string, resourceGuid: string, sku: record<capacity: int, name: string, tier: string>, vpnClientConfiguration: record<vpnClientAddressPool: record, vpnClientRevokedCertificates: list, vpnClientRootCertificates: list>, vpnType: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<etag: string, properties: record<activeActive: bool, bgpSettings: record<asn: int, bgpPeeringAddress: string, peerWeight: int>, enableBgp: bool, gatewayDefaultSite: record<id: string>, gatewayType: string, ipConfigurations: list<record>, provisioningState: string, resourceGuid: string, sku: record<capacity: int, name: string, tier: string>, vpnClientConfiguration: record<vpnClientAddressPool: record, vpnClientRevokedCertificates: list, vpnClientRootCertificates: list>, vpnType: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3850,7 +3858,7 @@ export def "virtual-networks-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3938,7 +3946,7 @@ export def "virtual-networks-get" [
   --accept: string@accept-completer # Response content type
   --api-version: string # Client Api Version. (required)
   --expand: string # expand references resources.
-]: nothing -> record<etag: string, properties: record<VirtualNetworkPeerings: list<record>, addressSpace: record<addressPrefixes: list>, dhcpOptions: record<dnsServers: list>, provisioningState: string, resourceGuid: string, subnets: list<record>>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<etag: string, properties: record<VirtualNetworkPeerings: list<record>, addressSpace: record<addressPrefixes: list>, dhcpOptions: record<dnsServers: list>, provisioningState: string, resourceGuid: string, subnets: list<record>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3967,7 +3975,6 @@ export def "virtual-networks-get" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworks/{virtualNetworkName}
 # operationId: VirtualNetworks_CreateOrUpdate
-# --properties shape: {VirtualNetworkPeerings?: list, addressSpace?: any, dhcpOptions?: any, provisioningState?: string, resourceGuid?: string, subnets?: list}
 export def "virtual-networks-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -3988,7 +3995,7 @@ export def "virtual-networks-create-or-update" [
   --id: string # Resource Id
   --location: string # Resource location
   --tags: record # Resource tags
-]: any -> record<etag: string, properties: record<VirtualNetworkPeerings: list<record>, addressSpace: record<addressPrefixes: list>, dhcpOptions: record<dnsServers: list>, provisioningState: string, resourceGuid: string, subnets: list<record>>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<etag: string, properties: record<VirtualNetworkPeerings: list<record>, addressSpace: record<addressPrefixes: list>, dhcpOptions: record<dnsServers: list>, provisioningState: string, resourceGuid: string, subnets: list<record>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4036,7 +4043,7 @@ export def "virtual-networks-check-ip-address-availability" [
   --accept: string@accept-completer # Response content type
   --ip-address: string # The private IP address to be verified.
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<available: bool, availableIPAddresses: list<string>> {
+]: nothing -> oneof<record<available: bool, availableIPAddresses: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -4080,7 +4087,7 @@ export def "subnets-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<nextLink: string, value: table<etag: string, name: string, properties: record, id: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<etag: string, name: string, properties: record, id: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -4172,7 +4179,7 @@ export def "subnets-get" [
   --accept: string@accept-completer # Response content type
   --api-version: string # Client Api Version. (required)
   --expand: string # expand references resources.
-]: nothing -> record<etag: string, name: string, properties: record<addressPrefix: string, ipConfigurations: list<record>, networkSecurityGroup: record<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>, provisioningState: string, resourceNavigationLinks: list<record>, routeTable: record<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>>, id: string> {
+]: nothing -> oneof<record<etag: string, name: string, properties: record<addressPrefix: string, ipConfigurations: list<record>, networkSecurityGroup: record<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>, provisioningState: string, resourceNavigationLinks: list<record>, routeTable: record<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>>, id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -4202,7 +4209,6 @@ export def "subnets-get" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworks/{virtualNetworkName}/subnets/{subnetName}
 # operationId: Subnets_CreateOrUpdate
-# --properties shape: {addressPrefix?: string, networkSecurityGroup?: any, provisioningState?: string, resourceNavigationLinks?: list, routeTable?: any}
 export def "subnets-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -4223,7 +4229,7 @@ export def "subnets-create-or-update" [
   --name: string # Gets or sets the name of the resource that is unique within a resource group. This name can be used to access the resource
   --properties: any # shape: {addressPrefix?: string, networkSecurityGroup?: any, provisioningState?: string, resourceNavigationLinks?: list, routeTable?: any}
   --id: string # Resource Id
-]: any -> record<etag: string, name: string, properties: record<addressPrefix: string, ipConfigurations: list<record>, networkSecurityGroup: record<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>, provisioningState: string, resourceNavigationLinks: list<record>, routeTable: record<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>>, id: string> {
+]: any -> oneof<record<etag: string, name: string, properties: record<addressPrefix: string, ipConfigurations: list<record>, networkSecurityGroup: record<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>, provisioningState: string, resourceNavigationLinks: list<record>, routeTable: record<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>>, id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4271,7 +4277,7 @@ export def "virtual-network-peerings-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<nextLink: string, value: table<etag: string, name: string, properties: record, id: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<etag: string, name: string, properties: record, id: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -4362,7 +4368,7 @@ export def "virtual-network-peerings-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<etag: string, name: string, properties: record<allowForwardedTraffic: bool, allowGatewayTransit: bool, allowVirtualNetworkAccess: bool, peeringState: string, provisioningState: string, remoteVirtualNetwork: record<id: string>, useRemoteGateways: bool>, id: string> {
+]: nothing -> oneof<record<etag: string, name: string, properties: record<allowForwardedTraffic: bool, allowGatewayTransit: bool, allowVirtualNetworkAccess: bool, peeringState: string, provisioningState: string, remoteVirtualNetwork: record<id: string>, useRemoteGateways: bool>, id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -4392,7 +4398,6 @@ export def "virtual-network-peerings-get" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworks/{virtualNetworkName}/virtualNetworkPeerings/{virtualNetworkPeeringName}
 # operationId: VirtualNetworkPeerings_CreateOrUpdate
-# --properties shape: {allowForwardedTraffic?: bool, allowGatewayTransit?: bool, allowVirtualNetworkAccess?: bool, peeringState?: "Initiated"|"Connected"|"Disconnected", provisioningState?: string, remoteVirtualNetwork?: any, useRemoteGateways?: bool}
 export def "virtual-network-peerings-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -4413,7 +4418,7 @@ export def "virtual-network-peerings-create-or-update" [
   --name: string # Gets or sets the name of the resource that is unique within a resource group. This name can be used to access the resource
   --properties: any # shape: {allowForwardedTraffic?: bool, allowGatewayTransit?: bool, allowVirtualNetworkAccess?: bool, peeringState?: "Initiated"|"Connected"|"Disconnected", provisioningState?: string, remoteVirtualNetwork?: any, useRemoteGateways?: bool}
   --id: string # Resource Id
-]: any -> record<etag: string, name: string, properties: record<allowForwardedTraffic: bool, allowGatewayTransit: bool, allowVirtualNetworkAccess: bool, peeringState: string, provisioningState: string, remoteVirtualNetwork: record<id: string>, useRemoteGateways: bool>, id: string> {
+]: any -> oneof<record<etag: string, name: string, properties: record<allowForwardedTraffic: bool, allowGatewayTransit: bool, allowVirtualNetworkAccess: bool, peeringState: string, provisioningState: string, remoteVirtualNetwork: record<id: string>, useRemoteGateways: bool>, id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4461,7 +4466,7 @@ export def "network-interfaces-list-virtual-machine-scale-set-network-interfaces
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -4506,7 +4511,7 @@ export def "network-interfaces-list-virtual-machine-scale-set-vm-network-interfa
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # Client Api Version. (required)
-]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -4554,7 +4559,7 @@ export def "network-interfaces-get-virtual-machine-scale-set-network-interface" 
   --accept: string@accept-completer # Response content type
   --api-version: string # Client Api Version. (required)
   --expand: string # expand references resources.
-]: nothing -> record<etag: string, properties: record<dnsSettings: record<appliedDnsServers: list, dnsServers: list, internalDnsNameLabel: string, internalDomainNameSuffix: string, internalFqdn: string>, enableIPForwarding: bool, ipConfigurations: list<record>, macAddress: string, networkSecurityGroup: record<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>, primary: bool, provisioningState: string, resourceGuid: string, virtualMachine: record<id: string>>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<etag: string, properties: record<dnsSettings: record<appliedDnsServers: list, dnsServers: list, internalDnsNameLabel: string, internalDomainNameSuffix: string, internalFqdn: string>, enableIPForwarding: bool, ipConfigurations: list<record>, macAddress: string, networkSecurityGroup: record<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>, primary: bool, provisioningState: string, resourceGuid: string, virtualMachine: record<id: string>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }

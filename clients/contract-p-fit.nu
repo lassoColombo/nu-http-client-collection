@@ -15,27 +15,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
     "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -43,8 +52,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -55,7 +69,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -90,7 +113,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -157,9 +181,9 @@ def type-completer-3 [] { ["oauth" "saml"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-release-notes" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-release-notes" "get-version" "post-auth" "get-api-keys-resource" "post-api-keys-resource" "get-api-keys-inbox-resource" "post-api-keys-inbox-resource" "delete-api-key-resource" "get-api-key-resource" "patch-api-key-resource" "post-ephemeral-token-resource" "post-get-jwt-resource" "post-reset-password" "post-token-resource" "get-connections-resource" "post-connections-resource" "delete-connection-resource" "get-connection-resource" "patch-connection-resource" "get-data-retention-resource" "delete-data-retention-resource" "get-data-retention-settings-level-id" "patch-data-retention-resource" "post-simple-documents-resource" "post-document-custom-output-resource" "post-enrichment-resource" "post-document-data-resource" "post-document-query" "delete-document-delete-resource" "get-document-delete-resource" "post-document-compare-versions-resource" "get-document-transform-resource" "post-document-submit-eval-resource" "get-document-last-version-resource" "get-document-original-file-resource" "get-document-page-image-resource" "get-document-page-image-thumbnail-resource" "post-document-process-table-annotation" "post-reprocess-document-resource" "get-document-reverse-resource" "post-document-status-data-resource" "get-document-text-resource" "get-document-workflow-resource" "post-documents-resource" "patch-document-copy-resource" "patch-document-move-resource" "get-formats-resource" "post-formats-resource" "get-formats-doc-types-resource" "delete-format-resource" "get-format-resource" "patch-format-resource" "get-format-tag-fields-resource" "get-inboxes-resource" "post-inboxes-resource" "delete-inbox-resource" "get-inbox-resource" "patch-inbox-resource" "get-inbox-document-versions-resource" "delete-inbox-document-resource" "get-inbox-document-resource" "get-inbox-paginated-resource" "post-inbox-reprocess-resource" "get-integration-resources" "post-integration-resources" "delete-integration-resource" "get-integration-resource" "patch-integration-resource" "get-email-integration-activation-resource" "get-predictor-settings-resource" "delete-predictor-setting-resource" "get-predictor-setting-resource" "patch-predictor-setting-resource" "get-projects-resource" "post-projects-resource" "delete-project-resource" "get-project-resource" "patch-project-resource" "get-reports-resource" "post-reports-resource" "post-generate-report-resource" "delete-report-resource" "get-report-resource" "patch-report-resource" "post-generate-report-id-resource" "get-roles-resource" "post-roles-resource" "delete-role-resource" "get-role-resource" "patch-role-resource" "get-rule-configs-resource" "post-debug-rule-entity-resource" "post-debug-rule-entity-document-resource" "post-debug-where-to-search" "delete-rule-config-resource" "get-rule-config-resource" "patch-rule-config-resource" "get-setting-samplings-resource" "delete-setting-sampling-resource" "get-setting-sampling-resource" "patch-setting-sampling-resource" "get-dashboard-settings-atomic-resource" "patch-dashboard-settings-atomic-resource" "get-review-settings-atomic-resource" "patch-review-settings-atomic-resource" "get-sso-config-resources" "post-sso-config-resources" "delete-sso-config-resources" "post-oauth-login-resource" "get-usage-stats-resource" "get-stats-resource" "get-automation-blockers-stats" "post-blue-dots-resource" "get-evaluated-versions" "get-processing-stats" "get-volume-stats" "get-accuracy-resource" "get-stp-resource" "get-style-sheet-resource" "post-style-sheet-resource" "get-style-logo-resource" "post-style-logo-resource" "delete-tenant-resource" "patch-activate-tenant-resource" "get-settings-threshold-resource" "delete-setting-threshold-resource" "get-setting-threshold-resource" "patch-setting-threshold-resource" "get-users-resource" "post-users-resource" "get-me" "post-change-password" "delete-user-resource" "get-user-resource" "patch-user-resource" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -260,7 +284,7 @@ export def "post-auth" [
   --x-fields: string # An optional fields mask (format: mask)
   password: string # the user password
   username: string # the user username
-]: any -> record<authentication_token: string> {
+]: any -> oneof<record<authentication_token: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -300,7 +324,7 @@ export def "get-api-keys-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> table<active: bool, expire_at: string, roles: list<record>, token: string, user: string> {
+]: nothing -> oneof<table<active: bool, expire_at: string, roles: list<record>, token: string, user: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/auth/api-key" $auth.query)
@@ -326,7 +350,6 @@ export def "get-api-keys-resource" [
 #
 # POST /auth/api-key
 # operationId: post_api_keys_resource
-# --roles item shape: {document_id?: string, inbox?: string, role: string}
 export def "post-api-keys-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -342,7 +365,7 @@ export def "post-api-keys-resource" [
   --expire-at: string # Expiration date (format: date-time)
   roles: list # Roles to grant to this token bearer — item shape: {document_id?: string, inbox?: string, role: string}
   user: string # User to give to the bearer
-]: any -> record<active: bool, expire_at: string, roles: table<document_id: string, inbox: string, role: string>, token: string, user: string> {
+]: any -> oneof<record<active: bool, expire_at: string, roles: table<document_id: string, inbox: string, role: string>, token: string, user: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -383,7 +406,7 @@ export def "get-api-keys-inbox-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> table<active: bool, expire_at: string, roles: list<record>, token: string, user: string> {
+]: nothing -> oneof<table<active: bool, expire_at: string, roles: list<record>, token: string, user: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($inbox_id | is-empty) { error make --unspanned { msg: "path parameter 'inbox_id' must be non-empty" } }
@@ -410,7 +433,6 @@ export def "get-api-keys-inbox-resource" [
 #
 # POST /auth/api-key/inbox/{inbox_id}
 # operationId: post_api_keys_inbox_resource
-# --roles item shape: {document_id?: string, inbox?: string, role: string}
 export def "post-api-keys-inbox-resource" [
   inbox_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -427,7 +449,7 @@ export def "post-api-keys-inbox-resource" [
   --expire-at: string # Expiration date (format: date-time)
   roles: list # Roles to grant to this token bearer — item shape: {document_id?: string, inbox?: string, role: string}
   user: string # User to give to the bearer
-]: any -> record<active: bool, expire_at: string, roles: table<document_id: string, inbox: string, role: string>, token: string, user: string> {
+]: any -> oneof<record<active: bool, expire_at: string, roles: table<document_id: string, inbox: string, role: string>, token: string, user: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -505,7 +527,7 @@ export def "get-api-key-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> record<active: bool, expire_at: string, roles: table<document_id: string, inbox: string, role: string>, token: string, user: string> {
+]: nothing -> oneof<record<active: bool, expire_at: string, roles: table<document_id: string, inbox: string, role: string>, token: string, user: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
@@ -544,7 +566,7 @@ export def "patch-api-key-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> record<active: bool, expire_at: string, roles: table<document_id: string, inbox: string, role: string>, token: string, user: string> {
+]: nothing -> oneof<record<active: bool, expire_at: string, roles: table<document_id: string, inbox: string, role: string>, token: string, user: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
@@ -582,7 +604,7 @@ export def "post-ephemeral-token-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> record<authentication_token: string> {
+]: nothing -> oneof<record<authentication_token: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/auth/ephemeral" $auth.query)
@@ -609,7 +631,6 @@ export def "post-ephemeral-token-resource" [
 # POST /auth/get_JWT
 # DEPRECATED
 # operationId: post_get_jwt_resource
-# --roles item shape: {document_id?: string, inbox?: string, role: string}
 @deprecated
 export def "post-get-jwt-resource" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -624,7 +645,7 @@ export def "post-get-jwt-resource" [
   --x-fields: string # An optional fields mask (format: mask)
   --roles: list # the user roles — item shape: {document_id?: string, inbox?: string, role: string}
   username: string # the user username
-]: any -> record<authentication_token: string> {
+]: any -> oneof<record<authentication_token: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -693,7 +714,6 @@ export def "post-reset-password" [
 #
 # POST /auth/token
 # operationId: post_token_resource
-# --roles item shape: {document_id?: string, inbox?: string, role: string}
 export def "post-token-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -707,7 +727,7 @@ export def "post-token-resource" [
   --x-fields: string # An optional fields mask (format: mask)
   --roles: list # the user roles — item shape: {document_id?: string, inbox?: string, role: string}
   username: string # the user username
-]: any -> record<authentication_token: string> {
+]: any -> oneof<record<authentication_token: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -747,7 +767,7 @@ export def "get-connections-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> table<event: string, integration: string, routing: list<record>, scope: string, what: string, id: string> {
+]: nothing -> oneof<table<event: string, integration: string, routing: list<record>, scope: string, what: string, id: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/connections" $auth.query)
@@ -773,7 +793,6 @@ export def "get-connections-resource" [
 #
 # POST /connections
 # operationId: post_connections_resource
-# --routing item shape: {and_conditions?: record, target?: string}
 export def "post-connections-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -790,7 +809,7 @@ export def "post-connections-resource" [
   --routing: list # item shape: {and_conditions?: record, target?: string}
   --scope: string # e.g. abcdef123456789abcdef123
   what: string@what-completer # e.g. original
-]: any -> record<event: string, integration: string, routing: table<and_conditions: record, target: string>, scope: string, what: string, id: string> {
+]: any -> oneof<record<event: string, integration: string, routing: table<and_conditions: record, target: string>, scope: string, what: string, id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -867,7 +886,7 @@ export def "get-connection-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> record<event: string, integration: string, routing: table<and_conditions: record, target: string>, scope: string, what: string, id: string> {
+]: nothing -> oneof<record<event: string, integration: string, routing: table<and_conditions: record, target: string>, scope: string, what: string, id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connection_id' must be non-empty" } }
@@ -894,7 +913,6 @@ export def "get-connection-resource" [
 #
 # PATCH /connections/{connection_id}
 # operationId: patch_connection_resource
-# --routing item shape: {and_conditions?: record, target?: string}
 export def "patch-connection-resource" [
   connection_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -912,7 +930,7 @@ export def "patch-connection-resource" [
   --routing: list # item shape: {and_conditions?: record, target?: string}
   --scope: string # e.g. abcdef123456789abcdef123
   what: string@what-completer # e.g. original
-]: any -> record<event: string, integration: string, routing: table<and_conditions: record, target: string>, scope: string, what: string, id: string> {
+]: any -> oneof<record<event: string, integration: string, routing: table<and_conditions: record, target: string>, scope: string, what: string, id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -953,7 +971,7 @@ export def "get-data-retention-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> table<scope: record<id: string, level: string>, settings: list<record>> {
+]: nothing -> oneof<table<scope: record<id: string, level: string>, settings: list<record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/data_retention_settings" $auth.query)
@@ -1029,7 +1047,7 @@ export def "get-data-retention-settings-level-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> record<scope: record<id: string, level: string>, settings: table<age: int, how: string, what: string>> {
+]: nothing -> oneof<record<scope: record<id: string, level: string>, settings: table<age: int, how: string, what: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($level | is-empty) { error make --unspanned { msg: "path parameter 'level' must be non-empty" } }
@@ -1057,7 +1075,6 @@ export def "get-data-retention-settings-level-id" [
 #
 # PATCH /data_retention_settings/{level}/{id}
 # operationId: patch_data_retention_resource
-# --settings item shape: {age?: int, how?: "FULL"|"SOURCE_FILES", what?: "ALL"|"DONE"}
 export def "patch-data-retention-resource" [
   level: string
   id: string
@@ -1072,7 +1089,7 @@ export def "patch-data-retention-resource" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-fields: string # An optional fields mask (format: mask)
   --settings: list # item shape: {age?: int, how?: "FULL"|"SOURCE_FILES", what?: "ALL"|"DONE"}
-]: any -> record<scope: record<id: string, level: string>, settings: table<age: int, how: string, what: string>> {
+]: any -> oneof<record<scope: record<id: string, level: string>, settings: table<age: int, how: string, what: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1146,8 +1163,6 @@ export def "post-simple-documents-resource" [
 #
 # POST /documents/custom_output
 # operationId: post_document_custom_output_resource
-# --excel shape: {add_automation_blockers?: bool, add_confidence?: bool, add_text?: bool, enable_key_value: bool, multiple_value_separator?: string}
-# --filter shape: {end_date?: string, list?: list<string>, start_date?: string, type: "project"|"inbox"|"document"}
 export def "post-document-custom-output-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1263,7 +1278,6 @@ export def "post-document-data-resource" [
 # POST /documents/query/{query_type}
 #
 # operationId: post_document_query
-# --filter shape: {_id?: record, inbox?: record, timing_fields?: record, timings?: record}
 export def "post-document-query" [
   query_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1456,9 +1470,6 @@ export def "get-document-transform-resource" [
 #
 # POST /documents/{document_id}/feedback
 # operationId: post_document_submit_eval_resource
-# --annotations shape: {string?: list}
-# --lines shape: {string?: list}
-# --sections item shape: {confidence?: int, document_type?: string, format?: string, page: int}
 export def "post-document-submit-eval-resource" [
   document_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1654,7 +1665,6 @@ export def "get-document-page-image-thumbnail-resource" [
 #
 # POST /documents/{document_id}/process_table_annotation
 # operationId: post_document_process_table_annotation
-# --columns item shape: {field_name?: string, x_bounds?: list<int>}
 export def "post-document-process-table-annotation" [
   document_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1714,7 +1724,7 @@ export def "post-reprocess-document-resource" [
   --name: string # default: reprocessed
   --reviewer: string@reviewer-completer # If human repcrocessing is triggered, the last version will become the passed version. No processing is done. (default: Machine)
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> record<escalate: record<by: string, since: string, value: bool>, feedback: record, files: table<embedded_attachment: bool, filehash: string, filename: string, leaf: bool, page: int, page_count: int>, flag_for_review: bool, id: string, inbox: string, last_version: string, lock: record<by: string, since: string, value: bool>, meta_information: record, opened_by: table<by: string, since: string, value: bool>, original_filename: string, page_count: int, prediction: record, reject: record<by: string, since: string, value: bool>, status_data: record<archived: bool, data: bool, escalate: bool, feedback: bool, lock: bool, ready_accepted: bool, ready_attempts: int, reject: bool, reject_accepted: bool, reject_attempts: int, sampling: bool, submit_accepted: bool, submit_attempts: int, success: bool>, submitted: record<by: string, since: string, value: bool>, timings: record<done_time: string, feedback_time: string, processing_period: float, receive_time: string, start_time: string, submit_time: string>, usage_data: record, versions: list<record>> {
+]: nothing -> oneof<record<escalate: record<by: string, since: string, value: bool>, feedback: record, files: table<embedded_attachment: bool, filehash: string, filename: string, leaf: bool, page: int, page_count: int>, flag_for_review: bool, id: string, inbox: string, last_version: string, lock: record<by: string, since: string, value: bool>, meta_information: record, opened_by: table<by: string, since: string, value: bool>, original_filename: string, page_count: int, prediction: record, reject: record<by: string, since: string, value: bool>, status_data: record<archived: bool, data: bool, escalate: bool, feedback: bool, lock: bool, ready_accepted: bool, ready_attempts: int, reject: bool, reject_accepted: bool, reject_attempts: int, sampling: bool, submit_accepted: bool, submit_attempts: int, success: bool>, submitted: record<by: string, since: string, value: bool>, timings: record<done_time: string, feedback_time: string, processing_period: float, receive_time: string, start_time: string, submit_time: string>, usage_data: record, versions: list<record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'document_id' must be non-empty" } }
@@ -1779,13 +1789,6 @@ export def "get-document-reverse-resource" [
 #
 # POST /documents/{document_id}/status_data
 # operationId: post_document_status_data_resource
-# --escalate shape: {by?: string, since?: string, value?: bool}
-# --lock shape: {by?: string, since?: string, value?: bool}
-# --opened_by shape: {by?: string, since?: string, value?: bool}
-# --reject shape: {by?: string, since?: string, value?: bool}
-# --status_data shape: {archived?: bool, data?: bool, escalate?: bool, feedback?: bool, lock?: bool, ready_accepted?: bool, ready_attempts?: int, reject?: bool, reject_accepted?: bool, reject_attempts?: int, sampling?: bool, submit_accepted?: bool, submit_attempts?: int, success?: bool}
-# --submitted shape: {by?: string, since?: string, value?: bool}
-# --timings shape: {done_time?: string, feedback_time?: string, processing_period?: float, receive_time?: string, start_time?: string, submit_time?: string}
 export def "post-document-status-data-resource" [
   document_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1806,7 +1809,7 @@ export def "post-document-status-data-resource" [
   --status-data: record # shape: {archived?: bool, data?: bool, escalate?: bool, feedback?: bool, lock?: bool, ready_accepted?: bool, ready_attempts?: int, reject?: bool, reject_accepted?: bool, reject_attempts?: int, sampling?: bool, submit_accepted?: bool, submit_attempts?: int, success?: bool}
   --submitted: record # shape: {by?: string, since?: string, value?: bool}
   --timings: record # shape: {done_time?: string, feedback_time?: string, processing_period?: float, receive_time?: string, start_time?: string, submit_time?: string}
-]: any -> record<escalate: record<by: string, since: string, value: bool>, feedback: record, files: table<embedded_attachment: bool, filehash: string, filename: string, leaf: bool, page: int, page_count: int>, flag_for_review: bool, id: string, inbox: string, last_version: string, lock: record<by: string, since: string, value: bool>, meta_information: record, opened_by: table<by: string, since: string, value: bool>, original_filename: string, page_count: int, prediction: record, reject: record<by: string, since: string, value: bool>, status_data: record<archived: bool, data: bool, escalate: bool, feedback: bool, lock: bool, ready_accepted: bool, ready_attempts: int, reject: bool, reject_accepted: bool, reject_attempts: int, sampling: bool, submit_accepted: bool, submit_attempts: int, success: bool>, submitted: record<by: string, since: string, value: bool>, timings: record<done_time: string, feedback_time: string, processing_period: float, receive_time: string, start_time: string, submit_time: string>, usage_data: record, versions: list<record>> {
+]: any -> oneof<record<escalate: record<by: string, since: string, value: bool>, feedback: record, files: table<embedded_attachment: bool, filehash: string, filename: string, leaf: bool, page: int, page_count: int>, flag_for_review: bool, id: string, inbox: string, last_version: string, lock: record<by: string, since: string, value: bool>, meta_information: record, opened_by: table<by: string, since: string, value: bool>, original_filename: string, page_count: int, prediction: record, reject: record<by: string, since: string, value: bool>, status_data: record<archived: bool, data: bool, escalate: bool, feedback: bool, lock: bool, ready_accepted: bool, ready_attempts: int, reject: bool, reject_accepted: bool, reject_attempts: int, sampling: bool, submit_accepted: bool, submit_attempts: int, success: bool>, submitted: record<by: string, since: string, value: bool>, timings: record<done_time: string, feedback_time: string, processing_period: float, receive_time: string, start_time: string, submit_time: string>, usage_data: record, versions: list<record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1884,7 +1887,7 @@ export def "get-document-workflow-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> record<graph: record, links: record, nodes: record> {
+]: nothing -> oneof<record<graph: record, links: record, nodes: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'document_id' must be non-empty" } }
@@ -2070,10 +2073,6 @@ export def "get-formats-resource" [
 #
 # POST /formats
 # operationId: post_formats_resource
-# --document_types item shape: {display_name?: string, field_name: string}
-# --labels item shape: {category?: "annotation"|"tag"|"separator"|"computed", count_in_evaluation?: bool, description?: string, display_name?: string, field_name: string, formula?: string, initialized?: bool, is_library?: bool, mandatory?: bool, mandatory_if?: record, multiple?: bool, options?: list, scope?: "document"|"page"|"section", type?: "string"|"date"|"integer"|"float"|"currency"|"alphanumeric"|"national_identification_number_be"|"boolean"|"datetime"|"address", visible?: bool, visible_if?: record}
-# --separators item shape: {name: string, page: int}
-# --table_types item shape: {collapsed?: bool, columns?: list, contains_line_items?: bool, initialized?: bool, label?: string, scope?: "document"|"page"|"section"}
 export def "post-formats-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2128,7 +2127,7 @@ export def "get-formats-doc-types-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> record<document_types: table<display_name: string, field_name: string>> {
+]: nothing -> oneof<record<document_types: table<display_name: string, field_name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/formats/document_types" $auth.query)
@@ -2226,10 +2225,6 @@ export def "get-format-resource" [
 #
 # PATCH /formats/{format_id}
 # operationId: patch_format_resource
-# --document_types item shape: {display_name?: string, field_name: string}
-# --labels item shape: {category?: "annotation"|"tag"|"separator"|"computed", count_in_evaluation?: bool, description?: string, display_name?: string, field_name: string, formula?: string, initialized?: bool, is_library?: bool, mandatory?: bool, mandatory_if?: record, multiple?: bool, options?: list, scope?: "document"|"page"|"section", type?: "string"|"date"|"integer"|"float"|"currency"|"alphanumeric"|"national_identification_number_be"|"boolean"|"datetime"|"address", visible?: bool, visible_if?: record}
-# --separators item shape: {name: string, page: int}
-# --table_types item shape: {collapsed?: bool, columns?: list, contains_line_items?: bool, initialized?: bool, label?: string, scope?: "document"|"page"|"section"}
 export def "patch-format-resource" [
   format_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2248,7 +2243,7 @@ export def "patch-format-resource" [
   --name: string
   --separators: list # default: [] — item shape: {name: string, page: int}
   --table-types: list # item shape: {collapsed?: bool, columns?: list, contains_line_items?: bool, initialized?: bool, label?: string, scope?: "document"|"page"|"section"}
-]: any -> record<document_types: table<display_name: string, field_name: string>, id: string, labels: table<category: string, count_in_evaluation: bool, description: string, display_name: string, field_name: string, formula: string, initialized: bool, is_library: bool, mandatory: bool, mandatory_if: record, multiple: bool, options: list, scope: string, type: string, visible: bool, visible_if: record>, name: string, separators: table<name: string, page: int>, table_types: table<collapsed: bool, columns: list, contains_line_items: bool, initialized: bool, label: string, scope: string>> {
+]: any -> oneof<record<document_types: table<display_name: string, field_name: string>, id: string, labels: table<category: string, count_in_evaluation: bool, description: string, display_name: string, field_name: string, formula: string, initialized: bool, is_library: bool, mandatory: bool, mandatory_if: record, multiple: bool, options: list, scope: string, type: string, visible: bool, visible_if: record>, name: string, separators: table<name: string, page: int>, table_types: table<collapsed: bool, columns: list, contains_line_items: bool, initialized: bool, label: string, scope: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2290,7 +2285,7 @@ export def "get-format-tag-fields-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> record<tag_fields: record> {
+]: nothing -> oneof<record<tag_fields: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
@@ -2328,7 +2323,7 @@ export def "get-inboxes-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> table<name: string, project: string, id: string> {
+]: nothing -> oneof<table<name: string, project: string, id: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/inboxes" $auth.query)
@@ -2367,7 +2362,7 @@ export def "post-inboxes-resource" [
   --x-fields: string # An optional fields mask (format: mask)
   name: string
   project: string # e.g. abcdef123456789abcdef123
-]: any -> record<name: string, project: string, id: string> {
+]: any -> oneof<record<name: string, project: string, id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2444,7 +2439,7 @@ export def "get-inbox-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> record<name: string, project: string, id: string> {
+]: nothing -> oneof<record<name: string, project: string, id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($inbox_id | is-empty) { error make --unspanned { msg: "path parameter 'inbox_id' must be non-empty" } }
@@ -2485,7 +2480,7 @@ export def "patch-inbox-resource" [
   --x-fields: string # An optional fields mask (format: mask)
   --name: string
   --project: string # e.g. abcdef123456789abcdef123
-]: any -> record<name: string, project: string, id: string> {
+]: any -> oneof<record<name: string, project: string, id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2603,7 +2598,7 @@ export def "get-inbox-document-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> table<escalate: record<by: string, since: string, value: bool>, feedback: record, files: list<record>, flag_for_review: bool, id: string, inbox: string, last_version: string, lock: record<by: string, since: string, value: bool>, meta_information: record, opened_by: list<record>, original_filename: string, page_count: int, prediction: record, reject: record<by: string, since: string, value: bool>, status_data: record<archived: bool, data: bool, escalate: bool, feedback: bool, lock: bool, ready_accepted: bool, ready_attempts: int, reject: bool, reject_accepted: bool, reject_attempts: int, sampling: bool, submit_accepted: bool, submit_attempts: int, success: bool>, submitted: record<by: string, since: string, value: bool>, timings: record<done_time: string, feedback_time: string, processing_period: float, receive_time: string, start_time: string, submit_time: string>, usage_data: record, versions: list<record>> {
+]: nothing -> oneof<table<escalate: record<by: string, since: string, value: bool>, feedback: record, files: list<record>, flag_for_review: bool, id: string, inbox: string, last_version: string, lock: record<by: string, since: string, value: bool>, meta_information: record, opened_by: list<record>, original_filename: string, page_count: int, prediction: record, reject: record<by: string, since: string, value: bool>, status_data: record<archived: bool, data: bool, escalate: bool, feedback: bool, lock: bool, ready_accepted: bool, ready_attempts: int, reject: bool, reject_accepted: bool, reject_attempts: int, sampling: bool, submit_accepted: bool, submit_attempts: int, success: bool>, submitted: record<by: string, since: string, value: bool>, timings: record<done_time: string, feedback_time: string, processing_period: float, receive_time: string, start_time: string, submit_time: string>, usage_data: record, versions: list<record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($inbox_id | is-empty) { error make --unspanned { msg: "path parameter 'inbox_id' must be non-empty" } }
@@ -2647,7 +2642,7 @@ export def "get-inbox-paginated-resource" [
   --end-receive-date: string # format: date-time
   --order-by: string # comma seperated list of fields to order by
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> table<page: int, per_page: int, results: list<record>, total: int> {
+]: nothing -> oneof<table<page: int, per_page: int, results: list<record>, total: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($inbox_id | is-empty) { error make --unspanned { msg: "path parameter 'inbox_id' must be non-empty" } }
@@ -2953,7 +2948,7 @@ export def "get-predictor-settings-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> table<blacklist: record, expected_values: record, fallback: record, key_value_pairs: record<classification_cutoff: int, rule_config: record, splitting_cutoff: int, uer_pre_config: record>, table_extraction_settings: record<field_settings: record>, whitelist: record, scope: string> {
+]: nothing -> oneof<table<blacklist: record, expected_values: record, fallback: record, key_value_pairs: record<classification_cutoff: int, rule_config: record, splitting_cutoff: int, uer_pre_config: record>, table_extraction_settings: record<field_settings: record>, whitelist: record, scope: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/predictor_settings" $auth.query)
@@ -3027,7 +3022,7 @@ export def "get-predictor-setting-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> record<blacklist: record, expected_values: record, fallback: record, key_value_pairs: record<classification_cutoff: int, rule_config: record, splitting_cutoff: int, uer_pre_config: record>, table_extraction_settings: record<field_settings: record<_: record>>, whitelist: record, scope: string> {
+]: nothing -> oneof<record<blacklist: record, expected_values: record, fallback: record, key_value_pairs: record<classification_cutoff: int, rule_config: record, splitting_cutoff: int, uer_pre_config: record>, table_extraction_settings: record<field_settings: record<_: record>>, whitelist: record, scope: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
@@ -3054,8 +3049,6 @@ export def "get-predictor-setting-resource" [
 #
 # PATCH /predictor_settings/{scope}
 # operationId: patch_predictor_setting_resource
-# --key_value_pairs shape: {classification_cutoff?: int, rule_config?: record, splitting_cutoff?: int, uer_pre_config?: record}
-# --table_extraction_settings shape: {field_settings?: record}
 export def "patch-predictor-setting-resource" [
   scope: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3074,7 +3067,7 @@ export def "patch-predictor-setting-resource" [
   --key-value-pairs: record # shape: {classification_cutoff?: int, rule_config?: record, splitting_cutoff?: int, uer_pre_config?: record}
   --table-extraction-settings: record # shape: {field_settings?: record}
   --whitelist: record
-]: any -> record<blacklist: record, expected_values: record, fallback: record, key_value_pairs: record<classification_cutoff: int, rule_config: record, splitting_cutoff: int, uer_pre_config: record>, table_extraction_settings: record<field_settings: record<_: record>>, whitelist: record, scope: string> {
+]: any -> oneof<record<blacklist: record, expected_values: record, fallback: record, key_value_pairs: record<classification_cutoff: int, rule_config: record, splitting_cutoff: int, uer_pre_config: record>, table_extraction_settings: record<field_settings: record<_: record>>, whitelist: record, scope: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3313,7 +3306,7 @@ export def "get-reports-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> table<annotations: record<add_text: bool, include: bool>, automation_blockers: record<include: bool>, automation_score: record<include: bool>, automation_what_if: record<include: bool>, cover: record<include: bool>, documents: list<string>, elapse_time: record<include: bool>, evaluations: record<additional_column: string, include: bool>, field_automation: record<include: bool>, inboxes: list<string>, lines: record<include: bool>, metadata: record<columns: list, fields: record, include: bool, rename: record>, name: string, page_classification: record<include: bool>, projects: list<string>, sections: record<include: bool>, separator: string, sources: list<string>, text: record<include: bool>, version_name: string, id: string> {
+]: nothing -> oneof<table<annotations: record<add_text: bool, include: bool>, automation_blockers: record<include: bool>, automation_score: record<include: bool>, automation_what_if: record<include: bool>, cover: record<include: bool>, documents: list<string>, elapse_time: record<include: bool>, evaluations: record<additional_column: string, include: bool>, field_automation: record<include: bool>, inboxes: list<string>, lines: record<include: bool>, metadata: record<columns: list, fields: record, include: bool, rename: record>, name: string, page_classification: record<include: bool>, projects: list<string>, sections: record<include: bool>, separator: string, sources: list<string>, text: record<include: bool>, version_name: string, id: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/reports" $auth.query)
@@ -3339,19 +3332,6 @@ export def "get-reports-resource" [
 #
 # POST /reports
 # operationId: post_reports_resource
-# --annotations shape: {add_text?: bool, include?: bool}
-# --automation_blockers shape: {include?: bool}
-# --automation_score shape: {include?: bool}
-# --automation_what_if shape: {include?: bool}
-# --cover shape: {include?: bool}
-# --elapse_time shape: {include?: bool}
-# --evaluations shape: {additional_column?: string, include?: bool}
-# --field_automation shape: {include?: bool}
-# --lines shape: {include?: bool}
-# --metadata shape: {columns?: list<string>, fields?: record, include?: bool, rename?: record}
-# --page_classification shape: {include?: bool}
-# --sections shape: {include?: bool}
-# --text shape: {include?: bool}
 export def "post-reports-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3383,7 +3363,7 @@ export def "post-reports-resource" [
   --sources: list<string> # default: [human, machine]
   --text: record # shape: {include?: bool}
   --version-name: string
-]: any -> record<annotations: record<add_text: bool, include: bool>, automation_blockers: record<include: bool>, automation_score: record<include: bool>, automation_what_if: record<include: bool>, cover: record<include: bool>, documents: list<string>, elapse_time: record<include: bool>, evaluations: record<additional_column: string, include: bool>, field_automation: record<include: bool>, inboxes: list<string>, lines: record<include: bool>, metadata: record<columns: list<string>, fields: record<annotations: list, lines: list, meta_information: list>, include: bool, rename: record>, name: string, page_classification: record<include: bool>, projects: list<string>, sections: record<include: bool>, separator: string, sources: list<string>, text: record<include: bool>, version_name: string, id: string> {
+]: any -> oneof<record<annotations: record<add_text: bool, include: bool>, automation_blockers: record<include: bool>, automation_score: record<include: bool>, automation_what_if: record<include: bool>, cover: record<include: bool>, documents: list<string>, elapse_time: record<include: bool>, evaluations: record<additional_column: string, include: bool>, field_automation: record<include: bool>, inboxes: list<string>, lines: record<include: bool>, metadata: record<columns: list<string>, fields: record<annotations: list, lines: list, meta_information: list>, include: bool, rename: record>, name: string, page_classification: record<include: bool>, projects: list<string>, sections: record<include: bool>, separator: string, sources: list<string>, text: record<include: bool>, version_name: string, id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3412,19 +3392,6 @@ export def "post-reports-resource" [
 #
 # POST /reports/generate
 # operationId: post_generate_report_resource
-# --annotations shape: {add_text?: bool, include?: bool}
-# --automation_blockers shape: {include?: bool}
-# --automation_score shape: {include?: bool}
-# --automation_what_if shape: {include?: bool}
-# --cover shape: {include?: bool}
-# --elapse_time shape: {include?: bool}
-# --evaluations shape: {additional_column?: string, include?: bool}
-# --field_automation shape: {include?: bool}
-# --lines shape: {include?: bool}
-# --metadata shape: {columns?: list<string>, fields?: record, include?: bool, rename?: record}
-# --page_classification shape: {include?: bool}
-# --sections shape: {include?: bool}
-# --text shape: {include?: bool}
 export def "post-generate-report-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3534,7 +3501,7 @@ export def "get-report-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> record<annotations: record<add_text: bool, include: bool>, automation_blockers: record<include: bool>, automation_score: record<include: bool>, automation_what_if: record<include: bool>, cover: record<include: bool>, documents: list<string>, elapse_time: record<include: bool>, evaluations: record<additional_column: string, include: bool>, field_automation: record<include: bool>, inboxes: list<string>, lines: record<include: bool>, metadata: record<columns: list<string>, fields: record<annotations: list, lines: list, meta_information: list>, include: bool, rename: record>, name: string, page_classification: record<include: bool>, projects: list<string>, sections: record<include: bool>, separator: string, sources: list<string>, text: record<include: bool>, version_name: string, id: string> {
+]: nothing -> oneof<record<annotations: record<add_text: bool, include: bool>, automation_blockers: record<include: bool>, automation_score: record<include: bool>, automation_what_if: record<include: bool>, cover: record<include: bool>, documents: list<string>, elapse_time: record<include: bool>, evaluations: record<additional_column: string, include: bool>, field_automation: record<include: bool>, inboxes: list<string>, lines: record<include: bool>, metadata: record<columns: list<string>, fields: record<annotations: list, lines: list, meta_information: list>, include: bool, rename: record>, name: string, page_classification: record<include: bool>, projects: list<string>, sections: record<include: bool>, separator: string, sources: list<string>, text: record<include: bool>, version_name: string, id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($report_id | is-empty) { error make --unspanned { msg: "path parameter 'report_id' must be non-empty" } }
@@ -3561,19 +3528,6 @@ export def "get-report-resource" [
 #
 # PATCH /reports/{report_id}
 # operationId: patch_report_resource
-# --annotations shape: {add_text?: bool, include?: bool}
-# --automation_blockers shape: {include?: bool}
-# --automation_score shape: {include?: bool}
-# --automation_what_if shape: {include?: bool}
-# --cover shape: {include?: bool}
-# --elapse_time shape: {include?: bool}
-# --evaluations shape: {additional_column?: string, include?: bool}
-# --field_automation shape: {include?: bool}
-# --lines shape: {include?: bool}
-# --metadata shape: {columns?: list<string>, fields?: record, include?: bool, rename?: record}
-# --page_classification shape: {include?: bool}
-# --sections shape: {include?: bool}
-# --text shape: {include?: bool}
 export def "patch-report-resource" [
   report_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3606,7 +3560,7 @@ export def "patch-report-resource" [
   --sources: list<string> # default: [human, machine]
   --text: record # shape: {include?: bool}
   --version-name: string
-]: any -> record<annotations: record<add_text: bool, include: bool>, automation_blockers: record<include: bool>, automation_score: record<include: bool>, automation_what_if: record<include: bool>, cover: record<include: bool>, documents: list<string>, elapse_time: record<include: bool>, evaluations: record<additional_column: string, include: bool>, field_automation: record<include: bool>, inboxes: list<string>, lines: record<include: bool>, metadata: record<columns: list<string>, fields: record<annotations: list, lines: list, meta_information: list>, include: bool, rename: record>, name: string, page_classification: record<include: bool>, projects: list<string>, sections: record<include: bool>, separator: string, sources: list<string>, text: record<include: bool>, version_name: string> {
+]: any -> oneof<record<annotations: record<add_text: bool, include: bool>, automation_blockers: record<include: bool>, automation_score: record<include: bool>, automation_what_if: record<include: bool>, cover: record<include: bool>, documents: list<string>, elapse_time: record<include: bool>, evaluations: record<additional_column: string, include: bool>, field_automation: record<include: bool>, inboxes: list<string>, lines: record<include: bool>, metadata: record<columns: list<string>, fields: record<annotations: list, lines: list, meta_information: list>, include: bool, rename: record>, name: string, page_classification: record<include: bool>, projects: list<string>, sections: record<include: bool>, separator: string, sources: list<string>, text: record<include: bool>, version_name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3689,7 +3643,7 @@ export def "get-roles-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> table<name: string, permissions: record<create_dropbox_user: bool, create_inbox: bool, create_webhook: bool, de_escalate_document: bool, delete_tenant: bool, delete_webhook: bool, edit_backend_settings: bool, edit_beats: bool, edit_dashboard_settings: bool, edit_data_retention_settings: bool, edit_flow_settings: bool, edit_format_settings: bool, edit_integration_settings: bool, edit_integrations: bool, edit_predictor_settings: bool, edit_reports: bool, edit_retention_settings: bool, edit_review_settings: bool, edit_roles: bool, edit_sampling_settings: bool, edit_security_settings: bool, edit_templates: bool, edit_thresholds_settings: bool, edit_translations: bool, edit_users: bool, escalate_document: bool, never_twice: bool, pick_next_escalated: bool, read_beats: bool, read_data_retention_settings: bool, read_feedback: bool, read_integrations: bool, read_release_notes: bool, read_reports: bool, read_thresholds_settings: bool, read_webhook: bool, reject_document: bool, release_lock: bool, review: bool, submit: bool, update_webhook: bool, upload: bool, versions: bool, view_api_keys: bool, view_list: bool, view_projects: bool, view_statistics: bool, view_templates: bool, write_feedback: bool, write_release_notes: bool>, id: string> {
+]: nothing -> oneof<table<name: string, permissions: record<create_dropbox_user: bool, create_inbox: bool, create_webhook: bool, de_escalate_document: bool, delete_tenant: bool, delete_webhook: bool, edit_backend_settings: bool, edit_beats: bool, edit_dashboard_settings: bool, edit_data_retention_settings: bool, edit_flow_settings: bool, edit_format_settings: bool, edit_integration_settings: bool, edit_integrations: bool, edit_predictor_settings: bool, edit_reports: bool, edit_retention_settings: bool, edit_review_settings: bool, edit_roles: bool, edit_sampling_settings: bool, edit_security_settings: bool, edit_templates: bool, edit_thresholds_settings: bool, edit_translations: bool, edit_users: bool, escalate_document: bool, never_twice: bool, pick_next_escalated: bool, read_beats: bool, read_data_retention_settings: bool, read_feedback: bool, read_integrations: bool, read_release_notes: bool, read_reports: bool, read_thresholds_settings: bool, read_webhook: bool, reject_document: bool, release_lock: bool, review: bool, submit: bool, update_webhook: bool, upload: bool, versions: bool, view_api_keys: bool, view_list: bool, view_projects: bool, view_statistics: bool, view_templates: bool, write_feedback: bool, write_release_notes: bool>, id: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/roles" $auth.query)
@@ -3715,7 +3669,6 @@ export def "get-roles-resource" [
 #
 # POST /roles
 # operationId: post_roles_resource
-# --permissions shape: {create_dropbox_user?: bool, create_inbox?: bool, create_webhook?: bool, de_escalate_document?: bool, delete_tenant?: bool, delete_webhook?: bool, edit_backend_settings?: bool, edit_beats?: bool, edit_dashboard_settings?: bool, edit_data_retention_settings?: bool, edit_flow_settings?: bool, edit_format_settings?: bool, edit_integration_settings?: bool, edit_integrations?: bool, edit_predictor_settings?: bool, edit_reports?: bool, edit_retention_settings?: bool, edit_review_settings?: bool, ... (32 more fields)}
 export def "post-roles-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3729,7 +3682,7 @@ export def "post-roles-resource" [
   --x-fields: string # An optional fields mask (format: mask)
   name: string
   permissions: record # shape: {create_dropbox_user?: bool, create_inbox?: bool, create_webhook?: bool, de_escalate_document?: bool, delete_tenant?: bool, delete_webhook?: bool, edit_backend_settings?: bool, edit_beats?: bool, edit_dashboard_settings?: bool, edit_data_retention_settings?: bool, edit_flow_settings?: bool, edit_format_settings?: bool, edit_integration_settings?: bool, edit_integrations?: bool, edit_predictor_settings?: bool, edit_reports?: bool, edit_retention_settings?: bool, edit_review_settings?: bool, ... (32 more fields)}
-]: any -> record<name: string, permissions: record<create_dropbox_user: bool, create_inbox: bool, create_webhook: bool, de_escalate_document: bool, delete_tenant: bool, delete_webhook: bool, edit_backend_settings: bool, edit_beats: bool, edit_dashboard_settings: bool, edit_data_retention_settings: bool, edit_flow_settings: bool, edit_format_settings: bool, edit_integration_settings: bool, edit_integrations: bool, edit_predictor_settings: bool, edit_reports: bool, edit_retention_settings: bool, edit_review_settings: bool, edit_roles: bool, edit_sampling_settings: bool, edit_security_settings: bool, edit_templates: bool, edit_thresholds_settings: bool, edit_translations: bool, edit_users: bool, escalate_document: bool, never_twice: bool, pick_next_escalated: bool, read_beats: bool, read_data_retention_settings: bool, read_feedback: bool, read_integrations: bool, read_release_notes: bool, read_reports: bool, read_thresholds_settings: bool, read_webhook: bool, reject_document: bool, release_lock: bool, review: bool, submit: bool, update_webhook: bool, upload: bool, versions: bool, view_api_keys: bool, view_list: bool, view_projects: bool, view_statistics: bool, view_templates: bool, write_feedback: bool, write_release_notes: bool>, id: string> {
+]: any -> oneof<record<name: string, permissions: record<create_dropbox_user: bool, create_inbox: bool, create_webhook: bool, de_escalate_document: bool, delete_tenant: bool, delete_webhook: bool, edit_backend_settings: bool, edit_beats: bool, edit_dashboard_settings: bool, edit_data_retention_settings: bool, edit_flow_settings: bool, edit_format_settings: bool, edit_integration_settings: bool, edit_integrations: bool, edit_predictor_settings: bool, edit_reports: bool, edit_retention_settings: bool, edit_review_settings: bool, edit_roles: bool, edit_sampling_settings: bool, edit_security_settings: bool, edit_templates: bool, edit_thresholds_settings: bool, edit_translations: bool, edit_users: bool, escalate_document: bool, never_twice: bool, pick_next_escalated: bool, read_beats: bool, read_data_retention_settings: bool, read_feedback: bool, read_integrations: bool, read_release_notes: bool, read_reports: bool, read_thresholds_settings: bool, read_webhook: bool, reject_document: bool, release_lock: bool, review: bool, submit: bool, update_webhook: bool, upload: bool, versions: bool, view_api_keys: bool, view_list: bool, view_projects: bool, view_statistics: bool, view_templates: bool, write_feedback: bool, write_release_notes: bool>, id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3806,7 +3759,7 @@ export def "get-role-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> record<name: string, permissions: record<create_dropbox_user: bool, create_inbox: bool, create_webhook: bool, de_escalate_document: bool, delete_tenant: bool, delete_webhook: bool, edit_backend_settings: bool, edit_beats: bool, edit_dashboard_settings: bool, edit_data_retention_settings: bool, edit_flow_settings: bool, edit_format_settings: bool, edit_integration_settings: bool, edit_integrations: bool, edit_predictor_settings: bool, edit_reports: bool, edit_retention_settings: bool, edit_review_settings: bool, edit_roles: bool, edit_sampling_settings: bool, edit_security_settings: bool, edit_templates: bool, edit_thresholds_settings: bool, edit_translations: bool, edit_users: bool, escalate_document: bool, never_twice: bool, pick_next_escalated: bool, read_beats: bool, read_data_retention_settings: bool, read_feedback: bool, read_integrations: bool, read_release_notes: bool, read_reports: bool, read_thresholds_settings: bool, read_webhook: bool, reject_document: bool, release_lock: bool, review: bool, submit: bool, update_webhook: bool, upload: bool, versions: bool, view_api_keys: bool, view_list: bool, view_projects: bool, view_statistics: bool, view_templates: bool, write_feedback: bool, write_release_notes: bool>, id: string> {
+]: nothing -> oneof<record<name: string, permissions: record<create_dropbox_user: bool, create_inbox: bool, create_webhook: bool, de_escalate_document: bool, delete_tenant: bool, delete_webhook: bool, edit_backend_settings: bool, edit_beats: bool, edit_dashboard_settings: bool, edit_data_retention_settings: bool, edit_flow_settings: bool, edit_format_settings: bool, edit_integration_settings: bool, edit_integrations: bool, edit_predictor_settings: bool, edit_reports: bool, edit_retention_settings: bool, edit_review_settings: bool, edit_roles: bool, edit_sampling_settings: bool, edit_security_settings: bool, edit_templates: bool, edit_thresholds_settings: bool, edit_translations: bool, edit_users: bool, escalate_document: bool, never_twice: bool, pick_next_escalated: bool, read_beats: bool, read_data_retention_settings: bool, read_feedback: bool, read_integrations: bool, read_release_notes: bool, read_reports: bool, read_thresholds_settings: bool, read_webhook: bool, reject_document: bool, release_lock: bool, review: bool, submit: bool, update_webhook: bool, upload: bool, versions: bool, view_api_keys: bool, view_list: bool, view_projects: bool, view_statistics: bool, view_templates: bool, write_feedback: bool, write_release_notes: bool>, id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($role_id | is-empty) { error make --unspanned { msg: "path parameter 'role_id' must be non-empty" } }
@@ -3833,7 +3786,6 @@ export def "get-role-resource" [
 #
 # PATCH /roles/{role_id}
 # operationId: patch_role_resource
-# --permissions shape: {create_dropbox_user?: bool, create_inbox?: bool, create_webhook?: bool, de_escalate_document?: bool, delete_tenant?: bool, delete_webhook?: bool, edit_backend_settings?: bool, edit_beats?: bool, edit_dashboard_settings?: bool, edit_data_retention_settings?: bool, edit_flow_settings?: bool, edit_format_settings?: bool, edit_integration_settings?: bool, edit_integrations?: bool, edit_predictor_settings?: bool, edit_reports?: bool, edit_retention_settings?: bool, edit_review_settings?: bool, ... (32 more fields)}
 export def "patch-role-resource" [
   role_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3848,7 +3800,7 @@ export def "patch-role-resource" [
   --x-fields: string # An optional fields mask (format: mask)
   --name: string
   --permissions: record # shape: {create_dropbox_user?: bool, create_inbox?: bool, create_webhook?: bool, de_escalate_document?: bool, delete_tenant?: bool, delete_webhook?: bool, edit_backend_settings?: bool, edit_beats?: bool, edit_dashboard_settings?: bool, edit_data_retention_settings?: bool, edit_flow_settings?: bool, edit_format_settings?: bool, edit_integration_settings?: bool, edit_integrations?: bool, edit_predictor_settings?: bool, edit_reports?: bool, edit_retention_settings?: bool, edit_review_settings?: bool, ... (32 more fields)}
-]: any -> record<name: string, permissions: record<create_dropbox_user: bool, create_inbox: bool, create_webhook: bool, de_escalate_document: bool, delete_tenant: bool, delete_webhook: bool, edit_backend_settings: bool, edit_beats: bool, edit_dashboard_settings: bool, edit_data_retention_settings: bool, edit_flow_settings: bool, edit_format_settings: bool, edit_integration_settings: bool, edit_integrations: bool, edit_predictor_settings: bool, edit_reports: bool, edit_retention_settings: bool, edit_review_settings: bool, edit_roles: bool, edit_sampling_settings: bool, edit_security_settings: bool, edit_templates: bool, edit_thresholds_settings: bool, edit_translations: bool, edit_users: bool, escalate_document: bool, never_twice: bool, pick_next_escalated: bool, read_beats: bool, read_data_retention_settings: bool, read_feedback: bool, read_integrations: bool, read_release_notes: bool, read_reports: bool, read_thresholds_settings: bool, read_webhook: bool, reject_document: bool, release_lock: bool, review: bool, submit: bool, update_webhook: bool, upload: bool, versions: bool, view_api_keys: bool, view_list: bool, view_projects: bool, view_statistics: bool, view_templates: bool, write_feedback: bool, write_release_notes: bool>, id: string> {
+]: any -> oneof<record<name: string, permissions: record<create_dropbox_user: bool, create_inbox: bool, create_webhook: bool, de_escalate_document: bool, delete_tenant: bool, delete_webhook: bool, edit_backend_settings: bool, edit_beats: bool, edit_dashboard_settings: bool, edit_data_retention_settings: bool, edit_flow_settings: bool, edit_format_settings: bool, edit_integration_settings: bool, edit_integrations: bool, edit_predictor_settings: bool, edit_reports: bool, edit_retention_settings: bool, edit_review_settings: bool, edit_roles: bool, edit_sampling_settings: bool, edit_security_settings: bool, edit_templates: bool, edit_thresholds_settings: bool, edit_translations: bool, edit_users: bool, escalate_document: bool, never_twice: bool, pick_next_escalated: bool, read_beats: bool, read_data_retention_settings: bool, read_feedback: bool, read_integrations: bool, read_release_notes: bool, read_reports: bool, read_thresholds_settings: bool, read_webhook: bool, reject_document: bool, release_lock: bool, review: bool, submit: bool, update_webhook: bool, upload: bool, versions: bool, view_api_keys: bool, view_list: bool, view_projects: bool, view_statistics: bool, view_templates: bool, write_feedback: bool, write_release_notes: bool>, id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3889,7 +3841,7 @@ export def "get-rule-configs-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> table<rule_config: record, scope: string> {
+]: nothing -> oneof<table<rule_config: record, scope: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rule_config" $auth.query)
@@ -4081,7 +4033,7 @@ export def "get-rule-config-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> record<rule_config: record, scope: string> {
+]: nothing -> oneof<record<rule_config: record, scope: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
@@ -4121,7 +4073,7 @@ export def "patch-rule-config-resource" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-fields: string # An optional fields mask (format: mask)
   --rule-config: record
-]: any -> record<rule_config: record, scope: string> {
+]: any -> oneof<record<rule_config: record, scope: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -4162,7 +4114,7 @@ export def "get-setting-samplings-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> table<auto_reject_FFR: int, auto_submit_FFR: int, second_pass_FFR: int, second_pass_STP: int, scope: string> {
+]: nothing -> oneof<table<auto_reject_FFR: int, auto_submit_FFR: int, second_pass_FFR: int, second_pass_STP: int, scope: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sampling_settings" $auth.query)
@@ -4236,7 +4188,7 @@ export def "get-setting-sampling-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> record<auto_reject_FFR: int, auto_submit_FFR: int, second_pass_FFR: int, second_pass_STP: int, scope: string> {
+]: nothing -> oneof<record<auto_reject_FFR: int, auto_submit_FFR: int, second_pass_FFR: int, second_pass_STP: int, scope: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
@@ -4279,7 +4231,7 @@ export def "patch-setting-sampling-resource" [
   --auto-submit-ffr: int
   --second-pass-ffr: int
   --second-pass-stp: int
-]: any -> record<auto_reject_FFR: int, auto_submit_FFR: int, second_pass_FFR: int, second_pass_STP: int, scope: string> {
+]: any -> oneof<record<auto_reject_FFR: int, auto_submit_FFR: int, second_pass_FFR: int, second_pass_STP: int, scope: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -4322,7 +4274,7 @@ export def "get-dashboard-settings-atomic-resource" [
   --scope: string
   --qp-full: oneof<nothing, bool> # default: false
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> record<autolearning: bool, dashboard_timeout: int, default_date_range: record, default_inbox_size: record, default_inbox_sorting: record, flexible_filters: list<record>, navigation_menu: record, process_unreadable: bool, sequence_columns_of_inbox: record<columns_headers: list<record>, inline_headers: list<record>>, show_digital_annotations: bool, show_filters: record, show_inbox_actions: record, studio_format_options: record, upload_options: record, welcome_counters: bool, welcome_counters_options: record> {
+]: nothing -> oneof<record<autolearning: bool, dashboard_timeout: int, default_date_range: record, default_inbox_size: record, default_inbox_sorting: record, flexible_filters: list<record>, navigation_menu: record, process_unreadable: bool, sequence_columns_of_inbox: record<columns_headers: list<record>, inline_headers: list<record>>, show_digital_annotations: bool, show_filters: record, show_inbox_actions: record, studio_format_options: record, upload_options: record, welcome_counters: bool, welcome_counters_options: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "scope" $scope "scalar") (serialize-qp "full" $qp_full "scalar")] | flatten | str join "&"
@@ -4349,7 +4301,6 @@ export def "get-dashboard-settings-atomic-resource" [
 #
 # PATCH /settings/dashboard
 # operationId: patch_dashboard_settings_atomic_resource
-# --settings shape: {autolearning?: bool, dashboard_timeout?: int, default_date_range?: record, default_inbox_size?: record, default_inbox_sorting?: record, flexible_filters?: list, navigation_menu?: record, process_unreadable?: bool, sequence_columns_of_inbox?: record, show_digital_annotations?: bool, show_filters?: record, show_inbox_actions?: record, studio_format_options?: record, upload_options?: record, welcome_counters?: bool, welcome_counters_options?: record}
 export def "patch-dashboard-settings-atomic-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4363,7 +4314,7 @@ export def "patch-dashboard-settings-atomic-resource" [
   --x-fields: string # An optional fields mask (format: mask)
   --scope: string
   --settings: record # shape: {autolearning?: bool, dashboard_timeout?: int, default_date_range?: record, default_inbox_size?: record, default_inbox_sorting?: record, flexible_filters?: list, navigation_menu?: record, process_unreadable?: bool, sequence_columns_of_inbox?: record, show_digital_annotations?: bool, show_filters?: record, show_inbox_actions?: record, studio_format_options?: record, upload_options?: record, welcome_counters?: bool, welcome_counters_options?: record}
-]: any -> record<autolearning: bool, dashboard_timeout: int, default_date_range: record, default_inbox_size: record, default_inbox_sorting: record, flexible_filters: list<record>, navigation_menu: record, process_unreadable: bool, sequence_columns_of_inbox: record<columns_headers: list<record>, inline_headers: list<record>>, show_digital_annotations: bool, show_filters: record, show_inbox_actions: record, studio_format_options: record, upload_options: record, welcome_counters: bool, welcome_counters_options: record> {
+]: any -> oneof<record<autolearning: bool, dashboard_timeout: int, default_date_range: record, default_inbox_size: record, default_inbox_sorting: record, flexible_filters: list<record>, navigation_menu: record, process_unreadable: bool, sequence_columns_of_inbox: record<columns_headers: list<record>, inline_headers: list<record>>, show_digital_annotations: bool, show_filters: record, show_inbox_actions: record, studio_format_options: record, upload_options: record, welcome_counters: bool, welcome_counters_options: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -4405,7 +4356,7 @@ export def "get-review-settings-atomic-resource" [
   --scope: string
   --qp-full: oneof<nothing, bool> # default: false
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> record<default_zoom: record, first_toolbar: record, lock_expiry: record, review_options: record, second_toolbar: record> {
+]: nothing -> oneof<record<default_zoom: record, first_toolbar: record, lock_expiry: record, review_options: record, second_toolbar: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "scope" $scope "scalar") (serialize-qp "full" $qp_full "scalar")] | flatten | str join "&"
@@ -4432,7 +4383,6 @@ export def "get-review-settings-atomic-resource" [
 #
 # PATCH /settings/review
 # operationId: patch_review_settings_atomic_resource
-# --settings shape: {default_zoom?: record, first_toolbar?: record, lock_expiry?: record, review_options?: record, second_toolbar?: record}
 export def "patch-review-settings-atomic-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4446,7 +4396,7 @@ export def "patch-review-settings-atomic-resource" [
   --x-fields: string # An optional fields mask (format: mask)
   --scope: string
   --settings: record # shape: {default_zoom?: record, first_toolbar?: record, lock_expiry?: record, review_options?: record, second_toolbar?: record}
-]: any -> record<default_zoom: record, first_toolbar: record, lock_expiry: record, review_options: record, second_toolbar: record> {
+]: any -> oneof<record<default_zoom: record, first_toolbar: record, lock_expiry: record, review_options: record, second_toolbar: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -4485,7 +4435,7 @@ export def "get-sso-config-resources" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> record<extra: record<entity_id: string, specification_url: string>, id: string, provider: string, type: string, url: string> {
+]: nothing -> oneof<record<extra: record<entity_id: string, specification_url: string>, id: string, provider: string, type: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sso/config" $auth.query)
@@ -4510,7 +4460,6 @@ export def "get-sso-config-resources" [
 # POST /sso/config
 #
 # operationId: post_sso_config_resources
-# --extra shape: {entity_id?: string, specification_url?: string}
 export def "post-sso-config-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5198,7 +5147,7 @@ export def "patch-activate-tenant-resource" [
   --x-fields: string # An optional fields mask (format: mask)
   --code: int
   --email: string
-]: any -> record<id: string> {
+]: any -> oneof<record<id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -5238,7 +5187,7 @@ export def "get-settings-threshold-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> table<thresholds: record<annotations: record, lines: record, sections: record>, scope: string> {
+]: nothing -> oneof<table<thresholds: record<annotations: record, lines: record, sections: record>, scope: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/threshold_settings" $auth.query)
@@ -5313,7 +5262,7 @@ export def "get-setting-threshold-resource" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --default: oneof<nothing, bool> # default: false
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> record<thresholds: record<annotations: record, lines: record, sections: record>, scope: string> {
+]: nothing -> oneof<record<thresholds: record<annotations: record, lines: record, sections: record>, scope: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
@@ -5341,7 +5290,6 @@ export def "get-setting-threshold-resource" [
 #
 # PATCH /threshold_settings/{scope}
 # operationId: patch_setting_threshold_resource
-# --thresholds shape: {annotations?: record, lines?: record, sections?: record}
 export def "patch-setting-threshold-resource" [
   scope: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5355,7 +5303,7 @@ export def "patch-setting-threshold-resource" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-fields: string # An optional fields mask (format: mask)
   --thresholds: record # shape: {annotations?: record, lines?: record, sections?: record}
-]: any -> record<thresholds: record<annotations: record, lines: record, sections: record>, scope: string> {
+]: any -> oneof<record<thresholds: record<annotations: record, lines: record, sections: record>, scope: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -5396,7 +5344,7 @@ export def "get-users-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> table<active: bool, confirmed_at: string, id: string, roles: list<record>, username: string> {
+]: nothing -> oneof<table<active: bool, confirmed_at: string, id: string, roles: list<record>, username: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users" $auth.query)
@@ -5422,7 +5370,6 @@ export def "get-users-resource" [
 #
 # POST /users
 # operationId: post_users_resource
-# --roles item shape: {document_id?: string, inbox?: string, role: string}
 export def "post-users-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5438,7 +5385,7 @@ export def "post-users-resource" [
   --password: string # the user password
   roles: list # the user roles — item shape: {document_id?: string, inbox?: string, role: string}
   username: string # the user username
-]: any -> record<active: bool, confirmed_at: string, id: string, roles: table<document_id: string, inbox: string, role: string>, username: string> {
+]: any -> oneof<record<active: bool, confirmed_at: string, id: string, roles: table<document_id: string, inbox: string, role: string>, username: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -5479,7 +5426,7 @@ export def "get-me" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> record<active: bool, confirmed_at: string, id: string, roles: table<document_id: string, inbox: string, role: string>, username: string> {
+]: nothing -> oneof<record<active: bool, confirmed_at: string, id: string, roles: table<document_id: string, inbox: string, role: string>, username: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users/me" $auth.query)
@@ -5592,7 +5539,7 @@ export def "get-user-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-fields: string # An optional fields mask (format: mask)
-]: nothing -> record<active: bool, confirmed_at: string, id: string, roles: table<document_id: string, inbox: string, role: string>, username: string> {
+]: nothing -> oneof<record<active: bool, confirmed_at: string, id: string, roles: table<document_id: string, inbox: string, role: string>, username: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -5619,7 +5566,6 @@ export def "get-user-resource" [
 #
 # PATCH /users/{user_id}
 # operationId: patch_user_resource
-# --roles item shape: {inbox?: string, role?: string}
 export def "patch-user-resource" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5634,7 +5580,7 @@ export def "patch-user-resource" [
   --x-fields: string # An optional fields mask (format: mask)
   --roles: list # the user roles — item shape: {inbox?: string, role?: string}
   --username: string # the user username
-]: any -> record<active: bool, confirmed_at: string, id: string, roles: table<document_id: string, inbox: string, role: string>, username: string> {
+]: any -> oneof<record<active: bool, confirmed_at: string, id: string, roles: table<document_id: string, inbox: string, role: string>, username: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)

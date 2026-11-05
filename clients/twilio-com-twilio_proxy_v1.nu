@@ -14,27 +14,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -42,8 +51,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -54,7 +68,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -89,7 +112,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -116,9 +140,9 @@ def status-completer [] { ["closed" "failed" "in-progress" "open" "unknown"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-service" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["list-service" "create-service" "list-phone-number" "create-phone-number" "delete-phone-number" "fetch-phone-number" "update-phone-number" "list-session" "create-session" "list-interaction" "delete-interaction" "fetch-interaction" "list-participant" "create-participant" "list-message-interaction" "create-message-interaction" "fetch-message-interaction" "delete-participant" "fetch-participant" "delete-session" "fetch-session" "update-session" "list-short-code" "create-short-code" "delete-short-code" "fetch-short-code" "update-short-code" "delete-service" "fetch-service" "update-service" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -153,7 +177,7 @@ export def "list-service" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, services: table<account_sid: string, callback_url: string, chat_instance_sid: string, date_created: string, date_updated: string, default_ttl: int, geo_match_level: string, intercept_callback_url: string, links: record, number_selection_behavior: string, out_of_session_callback_url: string, sid: string, unique_name: string, url: string>> {
+]: nothing -> oneof<record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, services: table<account_sid: string, callback_url: string, chat_instance_sid: string, date_created: string, date_updated: string, default_ttl: int, geo_match_level: string, intercept_callback_url: string, links: record, number_selection_behavior: string, out_of_session_callback_url: string, sid: string, unique_name: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://proxy.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
@@ -196,7 +220,7 @@ export def "create-service" [
   --number-selection-behavior: string@number-selection-behavior-completer
   --out-of-session-callback-url: string # The URL we should call when an inbound call or SMS action occurs on a closed or non-existent Session. If your server (or a Twilio [function](https://www.twilio.com/functions)) responds with valid [TwiML](https://www.twilio.com/docs/voice/twiml), we will process it. This means it is possible, for example, to play a message for a call, send an automated text message response, or redirect a call to another Phone Number. See [Out-of-Session Callback Response Guide](https://www.twilio.com/docs/proxy/out-session-callback-response-guide) for more information. (format: uri)
   unique_name: string # An application-defined string that uniquely identifies the resource. This value must be 191 characters or fewer in length and be unique. **This value should not have PII.**
-]: any -> record<account_sid: string, callback_url: string, chat_instance_sid: string, date_created: string, date_updated: string, default_ttl: int, geo_match_level: string, intercept_callback_url: string, links: record, number_selection_behavior: string, out_of_session_callback_url: string, sid: string, unique_name: string, url: string> {
+]: any -> oneof<record<account_sid: string, callback_url: string, chat_instance_sid: string, date_created: string, date_updated: string, default_ttl: int, geo_match_level: string, intercept_callback_url: string, links: record, number_selection_behavior: string, out_of_session_callback_url: string, sid: string, unique_name: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://proxy.twilio.com")
@@ -205,7 +229,7 @@ export def "create-service" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -238,7 +262,7 @@ export def "list-phone-number" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, phone_numbers: table<account_sid: string, capabilities: record, date_created: string, date_updated: string, friendly_name: string, in_use: int, is_reserved: bool, iso_country: string, phone_number: string, service_sid: string, sid: string, url: string>> {
+]: nothing -> oneof<record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, phone_numbers: table<account_sid: string, capabilities: record, date_created: string, date_updated: string, friendly_name: string, in_use: int, is_reserved: bool, iso_country: string, phone_number: string, service_sid: string, sid: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://proxy.twilio.com")
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
@@ -278,7 +302,7 @@ export def "create-phone-number" [
   --is-reserved: oneof<nothing, bool> # Whether the new phone number should be reserved and not be assigned to a participant using proxy pool logic. See [Reserved Phone Numbers](https://www.twilio.com/docs/proxy/reserved-phone-numbers) for more information.
   --phone-number: string # The phone number in [E.164](https://www.twilio.com/docs/glossary/what-e164) format. E.164 phone numbers consist of a + followed by the country code and subscriber number without punctuation characters. For example, +14155551234. (format: phone-number)
   --sid: string # The SID of a Twilio [IncomingPhoneNumber](https://www.twilio.com/docs/phone-numbers/api/incomingphonenumber-resource) resource that represents the Twilio Number you would like to assign to your Proxy Service.
-]: any -> record<account_sid: string, capabilities: record<fax: bool, mms: bool, sms: bool, voice: bool>, date_created: string, date_updated: string, friendly_name: string, in_use: int, is_reserved: bool, iso_country: string, phone_number: string, service_sid: string, sid: string, url: string> {
+]: any -> oneof<record<account_sid: string, capabilities: record<fax: bool, mms: bool, sms: bool, voice: bool>, date_created: string, date_updated: string, friendly_name: string, in_use: int, is_reserved: bool, iso_country: string, phone_number: string, service_sid: string, sid: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://proxy.twilio.com")
@@ -288,7 +312,7 @@ export def "create-phone-number" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -357,7 +381,7 @@ export def "fetch-phone-number" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account_sid: string, capabilities: record<fax: bool, mms: bool, sms: bool, voice: bool>, date_created: string, date_updated: string, friendly_name: string, in_use: int, is_reserved: bool, iso_country: string, phone_number: string, service_sid: string, sid: string, url: string> {
+]: nothing -> oneof<record<account_sid: string, capabilities: record<fax: bool, mms: bool, sms: bool, voice: bool>, date_created: string, date_updated: string, friendly_name: string, in_use: int, is_reserved: bool, iso_country: string, phone_number: string, service_sid: string, sid: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://proxy.twilio.com")
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
@@ -396,7 +420,7 @@ export def "update-phone-number" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --is-reserved: oneof<nothing, bool> # Whether the phone number should be reserved and not be assigned to a participant using proxy pool logic. See [Reserved Phone Numbers](https://www.twilio.com/docs/proxy/reserved-phone-numbers) for more information.
-]: any -> record<account_sid: string, capabilities: record<fax: bool, mms: bool, sms: bool, voice: bool>, date_created: string, date_updated: string, friendly_name: string, in_use: int, is_reserved: bool, iso_country: string, phone_number: string, service_sid: string, sid: string, url: string> {
+]: any -> oneof<record<account_sid: string, capabilities: record<fax: bool, mms: bool, sms: bool, voice: bool>, date_created: string, date_updated: string, friendly_name: string, in_use: int, is_reserved: bool, iso_country: string, phone_number: string, service_sid: string, sid: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://proxy.twilio.com")
@@ -407,7 +431,7 @@ export def "update-phone-number" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -440,7 +464,7 @@ export def "list-session" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, sessions: table<account_sid: string, closed_reason: string, date_created: string, date_ended: string, date_expiry: string, date_last_interaction: string, date_started: string, date_updated: string, links: record, mode: string, service_sid: string, sid: string, status: string, ttl: int, unique_name: string, url: string>> {
+]: nothing -> oneof<record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, sessions: table<account_sid: string, closed_reason: string, date_created: string, date_ended: string, date_expiry: string, date_last_interaction: string, date_started: string, date_updated: string, links: record, mode: string, service_sid: string, sid: string, status: string, ttl: int, unique_name: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://proxy.twilio.com")
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
@@ -483,7 +507,7 @@ export def "create-session" [
   --status: string@status-completer
   --ttl: int # The time, in seconds, when the session will expire. The time is measured from the last Session create or the Session's last Interaction.
   --unique-name: string # An application-defined string that uniquely identifies the resource. This value must be 191 characters or fewer in length and be unique. **This value should not have PII.**
-]: any -> record<account_sid: string, closed_reason: string, date_created: string, date_ended: string, date_expiry: string, date_last_interaction: string, date_started: string, date_updated: string, links: record, mode: string, service_sid: string, sid: string, status: string, ttl: int, unique_name: string, url: string> {
+]: any -> oneof<record<account_sid: string, closed_reason: string, date_created: string, date_ended: string, date_expiry: string, date_last_interaction: string, date_started: string, date_updated: string, links: record, mode: string, service_sid: string, sid: string, status: string, ttl: int, unique_name: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://proxy.twilio.com")
@@ -493,7 +517,7 @@ export def "create-session" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -527,7 +551,7 @@ export def "list-interaction" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> record<interactions: table<account_sid: string, data: string, date_created: string, date_updated: string, inbound_participant_sid: string, inbound_resource_sid: string, inbound_resource_status: string, inbound_resource_type: string, inbound_resource_url: string, outbound_participant_sid: string, outbound_resource_sid: string, outbound_resource_status: string, outbound_resource_type: string, outbound_resource_url: string, service_sid: string, session_sid: string, sid: string, type: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
+]: nothing -> oneof<record<interactions: table<account_sid: string, data: string, date_created: string, date_updated: string, inbound_participant_sid: string, inbound_resource_sid: string, inbound_resource_status: string, inbound_resource_type: string, inbound_resource_url: string, outbound_participant_sid: string, outbound_resource_sid: string, outbound_resource_status: string, outbound_resource_type: string, outbound_resource_url: string, service_sid: string, session_sid: string, sid: string, type: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://proxy.twilio.com")
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
@@ -607,7 +631,7 @@ export def "fetch-interaction" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account_sid: string, data: string, date_created: string, date_updated: string, inbound_participant_sid: string, inbound_resource_sid: string, inbound_resource_status: string, inbound_resource_type: string, inbound_resource_url: string, outbound_participant_sid: string, outbound_resource_sid: string, outbound_resource_status: string, outbound_resource_type: string, outbound_resource_url: string, service_sid: string, session_sid: string, sid: string, type: string, url: string> {
+]: nothing -> oneof<record<account_sid: string, data: string, date_created: string, date_updated: string, inbound_participant_sid: string, inbound_resource_sid: string, inbound_resource_status: string, inbound_resource_type: string, inbound_resource_url: string, outbound_participant_sid: string, outbound_resource_sid: string, outbound_resource_status: string, outbound_resource_type: string, outbound_resource_url: string, service_sid: string, session_sid: string, sid: string, type: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://proxy.twilio.com")
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
@@ -649,7 +673,7 @@ export def "list-participant" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, participants: table<account_sid: string, date_created: string, date_deleted: string, date_updated: string, friendly_name: string, identifier: string, links: record, proxy_identifier: string, proxy_identifier_sid: string, service_sid: string, session_sid: string, sid: string, url: string>> {
+]: nothing -> oneof<record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, participants: table<account_sid: string, date_created: string, date_deleted: string, date_updated: string, friendly_name: string, identifier: string, links: record, proxy_identifier: string, proxy_identifier_sid: string, service_sid: string, session_sid: string, sid: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://proxy.twilio.com")
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
@@ -692,7 +716,7 @@ export def "create-participant" [
   identifier: string # The phone number of the Participant.
   --proxy-identifier: string # The proxy phone number to use for the Participant. If not specified, Proxy will select a number from the pool.
   --proxy-identifier-sid: string # The SID of the Proxy Identifier to assign to the Participant.
-]: any -> record<account_sid: string, date_created: string, date_deleted: string, date_updated: string, friendly_name: string, identifier: string, links: record, proxy_identifier: string, proxy_identifier_sid: string, service_sid: string, session_sid: string, sid: string, url: string> {
+]: any -> oneof<record<account_sid: string, date_created: string, date_deleted: string, date_updated: string, friendly_name: string, identifier: string, links: record, proxy_identifier: string, proxy_identifier_sid: string, service_sid: string, session_sid: string, sid: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://proxy.twilio.com")
@@ -703,7 +727,7 @@ export def "create-participant" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -737,7 +761,7 @@ export def "list-message-interaction" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> record<interactions: table<account_sid: string, data: string, date_created: string, date_updated: string, inbound_participant_sid: string, inbound_resource_sid: string, inbound_resource_status: string, inbound_resource_type: string, inbound_resource_url: string, outbound_participant_sid: string, outbound_resource_sid: string, outbound_resource_status: string, outbound_resource_type: string, outbound_resource_url: string, participant_sid: string, service_sid: string, session_sid: string, sid: string, type: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
+]: nothing -> oneof<record<interactions: table<account_sid: string, data: string, date_created: string, date_updated: string, inbound_participant_sid: string, inbound_resource_sid: string, inbound_resource_status: string, inbound_resource_type: string, inbound_resource_url: string, outbound_participant_sid: string, outbound_resource_sid: string, outbound_resource_status: string, outbound_resource_type: string, outbound_resource_url: string, participant_sid: string, service_sid: string, session_sid: string, sid: string, type: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://proxy.twilio.com")
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
@@ -780,7 +804,7 @@ export def "create-message-interaction" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: string # The message to send to the participant
   --media-url: list<string> # Reserved. Not currently supported.
-]: any -> record<account_sid: string, data: string, date_created: string, date_updated: string, inbound_participant_sid: string, inbound_resource_sid: string, inbound_resource_status: string, inbound_resource_type: string, inbound_resource_url: string, outbound_participant_sid: string, outbound_resource_sid: string, outbound_resource_status: string, outbound_resource_type: string, outbound_resource_url: string, participant_sid: string, service_sid: string, session_sid: string, sid: string, type: string, url: string> {
+]: any -> oneof<record<account_sid: string, data: string, date_created: string, date_updated: string, inbound_participant_sid: string, inbound_resource_sid: string, inbound_resource_status: string, inbound_resource_type: string, inbound_resource_url: string, outbound_participant_sid: string, outbound_resource_sid: string, outbound_resource_status: string, outbound_resource_type: string, outbound_resource_url: string, participant_sid: string, service_sid: string, session_sid: string, sid: string, type: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://proxy.twilio.com")
@@ -792,7 +816,7 @@ export def "create-message-interaction" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -824,7 +848,7 @@ export def "fetch-message-interaction" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account_sid: string, data: string, date_created: string, date_updated: string, inbound_participant_sid: string, inbound_resource_sid: string, inbound_resource_status: string, inbound_resource_type: string, inbound_resource_url: string, outbound_participant_sid: string, outbound_resource_sid: string, outbound_resource_status: string, outbound_resource_type: string, outbound_resource_url: string, participant_sid: string, service_sid: string, session_sid: string, sid: string, type: string, url: string> {
+]: nothing -> oneof<record<account_sid: string, data: string, date_created: string, date_updated: string, inbound_participant_sid: string, inbound_resource_sid: string, inbound_resource_status: string, inbound_resource_type: string, inbound_resource_url: string, outbound_participant_sid: string, outbound_resource_sid: string, outbound_resource_status: string, outbound_resource_type: string, outbound_resource_url: string, participant_sid: string, service_sid: string, session_sid: string, sid: string, type: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://proxy.twilio.com")
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
@@ -905,7 +929,7 @@ export def "fetch-participant" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account_sid: string, date_created: string, date_deleted: string, date_updated: string, friendly_name: string, identifier: string, links: record, proxy_identifier: string, proxy_identifier_sid: string, service_sid: string, session_sid: string, sid: string, url: string> {
+]: nothing -> oneof<record<account_sid: string, date_created: string, date_deleted: string, date_updated: string, friendly_name: string, identifier: string, links: record, proxy_identifier: string, proxy_identifier_sid: string, service_sid: string, session_sid: string, sid: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://proxy.twilio.com")
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
@@ -982,7 +1006,7 @@ export def "fetch-session" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account_sid: string, closed_reason: string, date_created: string, date_ended: string, date_expiry: string, date_last_interaction: string, date_started: string, date_updated: string, links: record, mode: string, service_sid: string, sid: string, status: string, ttl: int, unique_name: string, url: string> {
+]: nothing -> oneof<record<account_sid: string, closed_reason: string, date_created: string, date_ended: string, date_expiry: string, date_last_interaction: string, date_started: string, date_updated: string, links: record, mode: string, service_sid: string, sid: string, status: string, ttl: int, unique_name: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://proxy.twilio.com")
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
@@ -1023,7 +1047,7 @@ export def "update-session" [
   --date-expiry: string # The [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) date when the Session should expire. If this is value is present, it overrides the `ttl` value. (format: date-time)
   --status: string@status-completer
   --ttl: int # The time, in seconds, when the session will expire. The time is measured from the last Session create or the Session's last Interaction.
-]: any -> record<account_sid: string, closed_reason: string, date_created: string, date_ended: string, date_expiry: string, date_last_interaction: string, date_started: string, date_updated: string, links: record, mode: string, service_sid: string, sid: string, status: string, ttl: int, unique_name: string, url: string> {
+]: any -> oneof<record<account_sid: string, closed_reason: string, date_created: string, date_ended: string, date_expiry: string, date_last_interaction: string, date_started: string, date_updated: string, links: record, mode: string, service_sid: string, sid: string, status: string, ttl: int, unique_name: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://proxy.twilio.com")
@@ -1034,7 +1058,7 @@ export def "update-session" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1067,7 +1091,7 @@ export def "list-short-code" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, short_codes: table<account_sid: string, capabilities: record, date_created: string, date_updated: string, is_reserved: bool, iso_country: string, service_sid: string, short_code: string, sid: string, url: string>> {
+]: nothing -> oneof<record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, short_codes: table<account_sid: string, capabilities: record, date_created: string, date_updated: string, is_reserved: bool, iso_country: string, service_sid: string, short_code: string, sid: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://proxy.twilio.com")
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
@@ -1105,7 +1129,7 @@ export def "create-short-code" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   sid: string # The SID of a Twilio [ShortCode](https://www.twilio.com/docs/sms/api/short-code) resource that represents the short code you would like to assign to your Proxy Service.
-]: any -> record<account_sid: string, capabilities: record<fax: bool, mms: bool, sms: bool, voice: bool>, date_created: string, date_updated: string, is_reserved: bool, iso_country: string, service_sid: string, short_code: string, sid: string, url: string> {
+]: any -> oneof<record<account_sid: string, capabilities: record<fax: bool, mms: bool, sms: bool, voice: bool>, date_created: string, date_updated: string, is_reserved: bool, iso_country: string, service_sid: string, short_code: string, sid: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://proxy.twilio.com")
@@ -1115,7 +1139,7 @@ export def "create-short-code" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1184,7 +1208,7 @@ export def "fetch-short-code" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account_sid: string, capabilities: record<fax: bool, mms: bool, sms: bool, voice: bool>, date_created: string, date_updated: string, is_reserved: bool, iso_country: string, service_sid: string, short_code: string, sid: string, url: string> {
+]: nothing -> oneof<record<account_sid: string, capabilities: record<fax: bool, mms: bool, sms: bool, voice: bool>, date_created: string, date_updated: string, is_reserved: bool, iso_country: string, service_sid: string, short_code: string, sid: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://proxy.twilio.com")
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
@@ -1223,7 +1247,7 @@ export def "update-short-code" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --is-reserved: oneof<nothing, bool> # Whether the short code should be reserved and not be assigned to a participant using proxy pool logic. See [Reserved Phone Numbers](https://www.twilio.com/docs/proxy/reserved-phone-numbers) for more information.
-]: any -> record<account_sid: string, capabilities: record<fax: bool, mms: bool, sms: bool, voice: bool>, date_created: string, date_updated: string, is_reserved: bool, iso_country: string, service_sid: string, short_code: string, sid: string, url: string> {
+]: any -> oneof<record<account_sid: string, capabilities: record<fax: bool, mms: bool, sms: bool, voice: bool>, date_created: string, date_updated: string, is_reserved: bool, iso_country: string, service_sid: string, short_code: string, sid: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://proxy.twilio.com")
@@ -1234,7 +1258,7 @@ export def "update-short-code" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1300,7 +1324,7 @@ export def "fetch-service" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account_sid: string, callback_url: string, chat_instance_sid: string, date_created: string, date_updated: string, default_ttl: int, geo_match_level: string, intercept_callback_url: string, links: record, number_selection_behavior: string, out_of_session_callback_url: string, sid: string, unique_name: string, url: string> {
+]: nothing -> oneof<record<account_sid: string, callback_url: string, chat_instance_sid: string, date_created: string, date_updated: string, default_ttl: int, geo_match_level: string, intercept_callback_url: string, links: record, number_selection_behavior: string, out_of_session_callback_url: string, sid: string, unique_name: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://proxy.twilio.com")
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
@@ -1344,7 +1368,7 @@ export def "update-service" [
   --number-selection-behavior: string@number-selection-behavior-completer
   --out-of-session-callback-url: string # The URL we should call when an inbound call or SMS action occurs on a closed or non-existent Session. If your server (or a Twilio [function](https://www.twilio.com/functions)) responds with valid [TwiML](https://www.twilio.com/docs/voice/twiml), we will process it. This means it is possible, for example, to play a message for a call, send an automated text message response, or redirect a call to another Phone Number. See [Out-of-Session Callback Response Guide](https://www.twilio.com/docs/proxy/out-session-callback-response-guide) for more information. (format: uri)
   --unique-name: string # An application-defined string that uniquely identifies the resource. This value must be 191 characters or fewer in length and be unique. **This value should not have PII.**
-]: any -> record<account_sid: string, callback_url: string, chat_instance_sid: string, date_created: string, date_updated: string, default_ttl: int, geo_match_level: string, intercept_callback_url: string, links: record, number_selection_behavior: string, out_of_session_callback_url: string, sid: string, unique_name: string, url: string> {
+]: any -> oneof<record<account_sid: string, callback_url: string, chat_instance_sid: string, date_created: string, date_updated: string, default_ttl: int, geo_match_level: string, intercept_callback_url: string, links: record, number_selection_behavior: string, out_of_session_callback_url: string, sid: string, unique_name: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://proxy.twilio.com")
@@ -1354,7 +1378,7 @@ export def "update-service" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url

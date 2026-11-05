@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -123,9 +147,9 @@ def vote-completer [] { ["NO" "YES"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-accessor" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["create-accessor" "list-accessors" "create-member" "list-members" "create-network" "list-networks" "create-node" "list-nodes" "create-proposal" "list-proposals" "delete-accessor" "get-accessor" "delete-member" "get-member" "update-member" "delete-node" "get-node" "update-node" "get-network" "get-proposal" "list-invitations" "list-proposal-votes" "vote-on-proposal" "list-tags-for-resource" "tag-resource" "reject-invitation" "untag-resource" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -167,7 +191,7 @@ export def "create-accessor" [
   client_request_token: string # This is a unique, case-sensitive identifier that you provide to ensure the idempotency of the operation. An idempotent operation completes no more than once. This identifier is required only if you make a service request directly using an HTTP client. It is generated automatically if you use an Amazon Web Services SDK or the Amazon Web Services CLI.
   accessor_type: string@accessor-type-completer # The type of accessor. Currently, accessor type is restricted to BILLING_TOKEN.
   --tags: record # Tags to assign to the Accessor. Each tag consists of a key and an optional value. You can specify multiple key-value pairs in a single request with an overall maximum of 50 tags allowed per resource. For more information about tags, see Tagging Resources (https://docs.aws.amazon.com/managed-blockchain/latest/ethereum-dev/tagging-resources.html) in the Amazon Managed Blockchain Ethereum Developer Guide, or Tagging Resources (https://docs.aws.amazon.com/managed-blockchain/latest/hyperledger-fabric-dev/tagging-resources.html) in the Amazon Managed Blockchain Hyperledger Fabric Developer Guide.
-]: any -> record<AccessorId: string, BillingToken: string> {
+]: any -> oneof<record<AccessorId: string, BillingToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -217,7 +241,7 @@ export def "list-accessors" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Accessors: table<Id: string, Type: string, Status: string, CreationDate: string, Arn: string>, NextToken: string> {
+]: nothing -> oneof<record<Accessors: table<Id: string, Type: string, Status: string, CreationDate: string, Arn: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -244,7 +268,6 @@ export def "list-accessors" [
 #
 # POST /networks/{networkId}/members
 # operationId: CreateMember
-# --MemberConfiguration shape: {Name?: string, Description?: string, FrameworkConfiguration?: record, LogPublishingConfiguration?: record, Tags?: record, KmsKeyArn?: string}
 export def "create-member" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -266,7 +289,7 @@ export def "create-member" [
   client_request_token: string # A unique, case-sensitive identifier that you provide to ensure the idempotency of the operation. An idempotent operation completes no more than one time. This identifier is required only if you make a service request directly using an HTTP client. It is generated automatically if you use an Amazon Web Services SDK or the CLI.
   invitation_id: string # The unique identifier of the invitation that is sent to the member to join the network.
   member_configuration: record # Configuration properties of the member. Applies only to Hyperledger Fabric. — shape: {Name?: string, Description?: string, FrameworkConfiguration?: record, LogPublishingConfiguration?: record, Tags?: record, KmsKeyArn?: string}
-]: any -> record<MemberId: string> {
+]: any -> oneof<record<MemberId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -321,7 +344,7 @@ export def "list-members" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Members: table<Id: string, Name: string, Description: string, Status: string, CreationDate: string, IsOwned: bool, Arn: string>, NextToken: string> {
+]: nothing -> oneof<record<Members: table<Id: string, Name: string, Description: string, Status: string, CreationDate: string, IsOwned: bool, Arn: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -349,9 +372,6 @@ export def "list-members" [
 #
 # POST /networks
 # operationId: CreateNetwork
-# --FrameworkConfiguration shape: {Fabric?: record}
-# --VotingPolicy shape: {ApprovalThresholdPolicy?: record}
-# --MemberConfiguration shape: {Name?: string, Description?: string, FrameworkConfiguration?: record, LogPublishingConfiguration?: record, Tags?: record, KmsKeyArn?: string}
 export def "create-network" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -378,7 +398,7 @@ export def "create-network" [
   voting_policy: record # The voting rules for the network to decide if a proposal is accepted Applies only to Hyperledger Fabric. — shape: {ApprovalThresholdPolicy?: record}
   member_configuration: record # Configuration properties of the member. Applies only to Hyperledger Fabric. — shape: {Name?: string, Description?: string, FrameworkConfiguration?: record, LogPublishingConfiguration?: record, Tags?: record, KmsKeyArn?: string}
   --tags: record # Tags to assign to the network. Each tag consists of a key and an optional value. You can specify multiple key-value pairs in a single request with an overall maximum of 50 tags allowed per resource. For more information about tags, see Tagging Resources (https://docs.aws.amazon.com/managed-blockchain/latest/ethereum-dev/tagging-resources.html) in the Amazon Managed Blockchain Ethereum Developer Guide, or Tagging Resources (https://docs.aws.amazon.com/managed-blockchain/latest/hyperledger-fabric-dev/tagging-resources.html) in the Amazon Managed Blockchain Hyperledger Fabric Developer Guide.
-]: any -> record<NetworkId: string, MemberId: string> {
+]: any -> oneof<record<NetworkId: string, MemberId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -431,7 +451,7 @@ export def "list-networks" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Networks: table<Id: string, Name: string, Description: string, Framework: string, FrameworkVersion: string, Status: string, CreationDate: string, Arn: string>, NextToken: string> {
+]: nothing -> oneof<record<Networks: table<Id: string, Name: string, Description: string, Framework: string, FrameworkVersion: string, Status: string, CreationDate: string, Arn: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "framework" $framework "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -458,7 +478,6 @@ export def "list-networks" [
 #
 # POST /networks/{networkId}/nodes
 # operationId: CreateNode
-# --NodeConfiguration shape: {InstanceType?: string, AvailabilityZone?: string, LogPublishingConfiguration?: record, StateDB?: "LevelDB"|"CouchDB"}
 export def "create-node" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -481,7 +500,7 @@ export def "create-node" [
   --member-id: string # The unique identifier of the member that owns this node. Applies only to Hyperledger Fabric.
   node_configuration: record # Configuration properties of a node. — shape: {InstanceType?: string, AvailabilityZone?: string, LogPublishingConfiguration?: record, StateDB?: "LevelDB"|"CouchDB"}
   --tags: record # Tags to assign to the node. Each tag consists of a key and an optional value. You can specify multiple key-value pairs in a single request with an overall maximum of 50 tags allowed per resource. For more information about tags, see Tagging Resources (https://docs.aws.amazon.com/managed-blockchain/latest/ethereum-dev/tagging-resources.html) in the Amazon Managed Blockchain Ethereum Developer Guide, or Tagging Resources (https://docs.aws.amazon.com/managed-blockchain/latest/hyperledger-fabric-dev/tagging-resources.html) in the Amazon Managed Blockchain Hyperledger Fabric Developer Guide.
-]: any -> record<NodeId: string> {
+]: any -> oneof<record<NodeId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -535,7 +554,7 @@ export def "list-nodes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Nodes: table<Id: string, Status: string, CreationDate: string, AvailabilityZone: string, InstanceType: string, Arn: string>, NextToken: string> {
+]: nothing -> oneof<record<Nodes: table<Id: string, Status: string, CreationDate: string, AvailabilityZone: string, InstanceType: string, Arn: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -563,7 +582,6 @@ export def "list-nodes" [
 #
 # POST /networks/{networkId}/proposals
 # operationId: CreateProposal
-# --Actions shape: {Invitations?: list, Removals?: list}
 export def "create-proposal" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -587,7 +605,7 @@ export def "create-proposal" [
   actions: record # The actions to carry out if a proposal is APPROVED. Applies only to Hyperledger Fabric. — shape: {Invitations?: list, Removals?: list}
   --description: string # A description for the proposal that is visible to voting members, for example, "Proposal to add Example Corp. as member."
   --tags: record # Tags to assign to the proposal. Each tag consists of a key and an optional value. You can specify multiple key-value pairs in a single request with an overall maximum of 50 tags allowed per resource. For more information about tags, see Tagging Resources (https://docs.aws.amazon.com/managed-blockchain/latest/ethereum-dev/tagging-resources.html) in the Amazon Managed Blockchain Ethereum Developer Guide, or Tagging Resources (https://docs.aws.amazon.com/managed-blockchain/latest/hyperledger-fabric-dev/tagging-resources.html) in the Amazon Managed Blockchain Hyperledger Fabric Developer Guide.
-]: any -> record<ProposalId: string> {
+]: any -> oneof<record<ProposalId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -639,7 +657,7 @@ export def "list-proposals" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Proposals: table<ProposalId: string, Description: string, ProposedByMemberId: string, ProposedByMemberName: string, Status: string, CreationDate: string, ExpirationDate: string, Arn: string>, NextToken: string> {
+]: nothing -> oneof<record<Proposals: table<ProposalId: string, Description: string, ProposedByMemberId: string, ProposedByMemberName: string, Status: string, CreationDate: string, ExpirationDate: string, Arn: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -685,7 +703,7 @@ export def "delete-accessor" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($accessor_id | is-empty) { error make --unspanned { msg: "path parameter 'AccessorId' must be non-empty" } }
@@ -730,7 +748,7 @@ export def "get-accessor" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Accessor: record<Id: string, Type: string, BillingToken: string, Status: string, CreationDate: string, Arn: string, Tags: record>> {
+]: nothing -> oneof<record<Accessor: record<Id: string, Type: string, BillingToken: string, Status: string, CreationDate: string, Arn: string, Tags: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($accessor_id | is-empty) { error make --unspanned { msg: "path parameter 'AccessorId' must be non-empty" } }
@@ -776,7 +794,7 @@ export def "delete-member" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -823,7 +841,7 @@ export def "get-member" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Member: record<NetworkId: string, Id: string, Name: string, Description: string, FrameworkAttributes: record<Fabric: record>, LogPublishingConfiguration: record<Fabric: record>, Status: string, CreationDate: string, Tags: record, Arn: string, KmsKeyArn: string>> {
+]: nothing -> oneof<record<Member: record<NetworkId: string, Id: string, Name: string, Description: string, FrameworkAttributes: record<Fabric: record>, LogPublishingConfiguration: record<Fabric: record>, Status: string, CreationDate: string, Tags: record, Arn: string, KmsKeyArn: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -851,7 +869,6 @@ export def "get-member" [
 #
 # PATCH /networks/{networkId}/members/{memberId}
 # operationId: UpdateMember
-# --LogPublishingConfiguration shape: {Fabric?: record}
 export def "update-member" [
   network_id: string
   member_id: string
@@ -872,7 +889,7 @@ export def "update-member" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --log-publishing-configuration: record # Configuration properties for logging events associated with a member of a Managed Blockchain network. — shape: {Fabric?: record}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -923,7 +940,7 @@ export def "delete-node" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -972,7 +989,7 @@ export def "get-node" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Node: record<NetworkId: string, MemberId: string, Id: string, InstanceType: string, AvailabilityZone: string, FrameworkAttributes: record<Fabric: record, Ethereum: record>, LogPublishingConfiguration: record<Fabric: record>, StateDB: string, Status: string, CreationDate: string, Tags: record, Arn: string, KmsKeyArn: string>> {
+]: nothing -> oneof<record<Node: record<NetworkId: string, MemberId: string, Id: string, InstanceType: string, AvailabilityZone: string, FrameworkAttributes: record<Fabric: record, Ethereum: record>, LogPublishingConfiguration: record<Fabric: record>, StateDB: string, Status: string, CreationDate: string, Tags: record, Arn: string, KmsKeyArn: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -1001,7 +1018,6 @@ export def "get-node" [
 #
 # PATCH /networks/{networkId}/nodes/{nodeId}
 # operationId: UpdateNode
-# --LogPublishingConfiguration shape: {Fabric?: record}
 export def "update-node" [
   network_id: string
   node_id: string
@@ -1023,7 +1039,7 @@ export def "update-node" [
   --x-amz-signed-headers: string
   --member-id: string # The unique identifier of the member that owns the node. Applies only to Hyperledger Fabric.
   --log-publishing-configuration: record # Configuration properties for logging events associated with a peer node on a Hyperledger Fabric network on Managed Blockchain. — shape: {Fabric?: record}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1072,7 +1088,7 @@ export def "get-network" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Network: record<Id: string, Name: string, Description: string, Framework: string, FrameworkVersion: string, FrameworkAttributes: record<Fabric: record, Ethereum: record>, VpcEndpointServiceName: string, VotingPolicy: record<ApprovalThresholdPolicy: record>, Status: string, CreationDate: string, Tags: record, Arn: string>> {
+]: nothing -> oneof<record<Network: record<Id: string, Name: string, Description: string, Framework: string, FrameworkVersion: string, FrameworkAttributes: record<Fabric: record, Ethereum: record>, VpcEndpointServiceName: string, VotingPolicy: record<ApprovalThresholdPolicy: record>, Status: string, CreationDate: string, Tags: record, Arn: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -1118,7 +1134,7 @@ export def "get-proposal" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Proposal: record<ProposalId: string, NetworkId: string, Description: string, Actions: record<Invitations: list, Removals: list>, ProposedByMemberId: string, ProposedByMemberName: string, Status: string, CreationDate: string, ExpirationDate: string, YesVoteCount: int, NoVoteCount: int, OutstandingVoteCount: int, Tags: record, Arn: string>> {
+]: nothing -> oneof<record<Proposal: record<ProposalId: string, NetworkId: string, Description: string, Actions: record<Invitations: list, Removals: list>, ProposedByMemberId: string, ProposedByMemberName: string, Status: string, CreationDate: string, ExpirationDate: string, YesVoteCount: int, NoVoteCount: int, OutstandingVoteCount: int, Tags: record, Arn: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -1167,7 +1183,7 @@ export def "list-invitations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Invitations: table<InvitationId: string, CreationDate: string, ExpirationDate: string, Status: string, NetworkSummary: record, Arn: string>, NextToken: string> {
+]: nothing -> oneof<record<Invitations: table<InvitationId: string, CreationDate: string, ExpirationDate: string, Status: string, NetworkSummary: record, Arn: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -1217,7 +1233,7 @@ export def "list-proposal-votes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ProposalVotes: table<Vote: string, MemberName: string, MemberId: string>, NextToken: string> {
+]: nothing -> oneof<record<ProposalVotes: table<Vote: string, MemberName: string, MemberId: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -1267,7 +1283,7 @@ export def "vote-on-proposal" [
   --x-amz-signed-headers: string
   voter_member_id: string # The unique identifier of the member casting the vote.
   vote: string@vote-completer # The value of the vote.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1316,7 +1332,7 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Tags: record> {
+]: nothing -> oneof<record<Tags: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
@@ -1362,7 +1378,7 @@ export def "tag-resource" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   tags: record # The tags to assign to the specified resource. Tag values can be empty, for example, "MyTagKey" : "". You can specify multiple key-value pairs in a single request, with an overall maximum of 50 tags added to each resource.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1410,7 +1426,7 @@ export def "reject-invitation" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($invitation_id | is-empty) { error make --unspanned { msg: "path parameter 'invitationId' must be non-empty" } }
@@ -1456,7 +1472,7 @@ export def "untag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }

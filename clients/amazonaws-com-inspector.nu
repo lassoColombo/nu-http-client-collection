@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -142,9 +165,9 @@ def x-amz-target-completer-36 [] { ["InspectorService.UpdateAssessmentTarget"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "add-attributes-to-findings" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["add-attributes-to-findings" "create-assessment-target" "create-assessment-template" "create-exclusions-preview" "create-resource-group" "delete-assessment-run" "delete-assessment-target" "delete-assessment-template" "describe-assessment-runs" "describe-assessment-targets" "describe-assessment-templates" "describe-cross-account-access-role" "describe-exclusions" "describe-findings" "describe-resource-groups" "describe-rules-packages" "get-assessment-report" "get-exclusions-preview" "get-telemetry-metadata" "list-assessment-run-agents" "list-assessment-runs" "list-assessment-targets" "list-assessment-templates" "list-event-subscriptions" "list-exclusions" "list-findings" "list-rules-packages" "list-tags-for-resource" "preview-agents" "register-cross-account-access-role" "remove-attributes-from-findings" "set-tags-for-resource" "start-assessment-run" "stop-assessment-run" "subscribe-to-event" "unsubscribe-from-event" "update-assessment-target" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -166,7 +189,6 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AddAttributesToFindings
-# --attributes item shape: {key: string, value?: string}
 export def "add-attributes-to-findings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -187,7 +209,7 @@ export def "add-attributes-to-findings" [
   --x-amz-target: string@x-amz-target-completer # required
   finding_arns: list<string> # The ARNs that specify the findings that you want to assign attributes to.
   attributes: list # The array of attributes that you want to assign to specified findings. — item shape: {key: string, value?: string}
-]: any -> record<failedItems: record> {
+]: any -> oneof<record<failedItems: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -237,7 +259,7 @@ export def "create-assessment-target" [
   --x-amz-target: string@x-amz-target-completer-1 # required
   assessment_target_name: string # The user-defined name that identifies the assessment target that you want to create. The name must be unique within the AWS account.
   --resource-group-arn: string # The ARN that specifies the resource group that is used to create the assessment target. If resourceGroupArn is not specified, all EC2 instances in the current AWS account and region are included in the assessment target.
-]: any -> record<assessmentTargetArn: string> {
+]: any -> oneof<record<assessmentTargetArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -267,7 +289,6 @@ export def "create-assessment-target" [
 #
 # POST /
 # operationId: CreateAssessmentTemplate
-# --userAttributesForFindings item shape: {key: string, value?: string}
 export def "create-assessment-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -291,7 +312,7 @@ export def "create-assessment-template" [
   duration_in_seconds: int # The duration of the assessment run in seconds.
   rules_package_arns: list<string> # The ARNs that specify the rules packages that you want to attach to the assessment template.
   --user-attributes-for-findings: list # The user-defined attributes that are assigned to every finding that is generated by the assessment run that uses this assessment template. An attribute is a key and value pair (an Attribute object). Within an assessment template, each key must be unique. — item shape: {key: string, value?: string}
-]: any -> record<assessmentTemplateArn: string> {
+]: any -> oneof<record<assessmentTemplateArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -340,7 +361,7 @@ export def "create-exclusions-preview" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-3 # required
   assessment_template_arn: string # The ARN that specifies the assessment template for which you want to create an exclusions preview.
-]: any -> record<previewToken: string> {
+]: any -> oneof<record<previewToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -370,7 +391,6 @@ export def "create-exclusions-preview" [
 #
 # POST /
 # operationId: CreateResourceGroup
-# --resourceGroupTags item shape: {key: string, value?: string}
 export def "create-resource-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -390,7 +410,7 @@ export def "create-resource-group" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-4 # required
   resource_group_tags: list # A collection of keys and an array of possible values, '[{"key":"key1","values":["Value1","Value2"]},{"key":"Key2","values":["Value3"]}]'. For example,'[{"key":"Name","values":["TestEC2Instance"]}]'. — item shape: {key: string, value?: string}
-]: any -> record<resourceGroupArn: string> {
+]: any -> oneof<record<resourceGroupArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -586,7 +606,7 @@ export def "describe-assessment-runs" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-8 # required
   assessment_run_arns: list<string> # The ARN that specifies the assessment run that you want to describe.
-]: any -> record<assessmentRuns: table<arn: string, name: string, assessmentTemplateArn: string, state: string, durationInSeconds: int, rulesPackageArns: list, userAttributesForFindings: list, createdAt: string, startedAt: string, completedAt: string, stateChangedAt: string, dataCollected: bool, stateChanges: list, notifications: list, findingCounts: record>, failedItems: record> {
+]: any -> oneof<record<assessmentRuns: table<arn: string, name: string, assessmentTemplateArn: string, state: string, durationInSeconds: int, rulesPackageArns: list, userAttributesForFindings: list, createdAt: string, startedAt: string, completedAt: string, stateChangedAt: string, dataCollected: bool, stateChanges: list, notifications: list, findingCounts: record>, failedItems: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -635,7 +655,7 @@ export def "describe-assessment-targets" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-9 # required
   assessment_target_arns: list<string> # The ARNs that specifies the assessment targets that you want to describe.
-]: any -> record<assessmentTargets: table<arn: string, name: string, resourceGroupArn: string, createdAt: string, updatedAt: string>, failedItems: record> {
+]: any -> oneof<record<assessmentTargets: table<arn: string, name: string, resourceGroupArn: string, createdAt: string, updatedAt: string>, failedItems: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -684,7 +704,7 @@ export def "describe-assessment-templates" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-10 # required
   assessment_template_arns: list<string>
-]: any -> record<assessmentTemplates: table<arn: string, name: string, assessmentTargetArn: string, durationInSeconds: int, rulesPackageArns: list, userAttributesForFindings: list, lastAssessmentRunArn: string, assessmentRunCount: int, createdAt: string>, failedItems: record> {
+]: any -> oneof<record<assessmentTemplates: table<arn: string, name: string, assessmentTargetArn: string, durationInSeconds: int, rulesPackageArns: list, userAttributesForFindings: list, lastAssessmentRunArn: string, assessmentRunCount: int, createdAt: string>, failedItems: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -732,7 +752,7 @@ export def "describe-cross-account-access-role" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-11 # required
-]: nothing -> record<roleArn: string, valid: bool, registeredAt: string> {
+]: nothing -> oneof<record<roleArn: string, valid: bool, registeredAt: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let x_amz_target = ($x_amz_target | default "InspectorService.DescribeCrossAccountAccessRole")
@@ -779,7 +799,7 @@ export def "describe-exclusions" [
   --x-amz-target: string@x-amz-target-completer-12 # required
   exclusion_arns: list<string> # The list of ARNs that specify the exclusions that you want to describe.
   --locale: string@locale-completer # The locale into which you want to translate the exclusion's title, description, and recommendation.
-]: any -> record<exclusions: record, failedItems: record> {
+]: any -> oneof<record<exclusions: record, failedItems: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -829,7 +849,7 @@ export def "describe-findings" [
   --x-amz-target: string@x-amz-target-completer-13 # required
   finding_arns: list<string> # The ARN that specifies the finding that you want to describe.
   --locale: string@locale-completer # The locale into which you want to translate a finding description, recommendation, and the short description that identifies the finding.
-]: any -> record<findings: table<arn: string, schemaVersion: int, service: string, serviceAttributes: record, assetType: string, assetAttributes: record, id: string, title: string, description: string, recommendation: string, severity: string, numericSeverity: float, confidence: int, indicatorOfCompromise: bool, attributes: list, userAttributes: list, createdAt: string, updatedAt: string>, failedItems: record> {
+]: any -> oneof<record<findings: table<arn: string, schemaVersion: int, service: string, serviceAttributes: record, assetType: string, assetAttributes: record, id: string, title: string, description: string, recommendation: string, severity: string, numericSeverity: float, confidence: int, indicatorOfCompromise: bool, attributes: list, userAttributes: list, createdAt: string, updatedAt: string>, failedItems: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -878,7 +898,7 @@ export def "describe-resource-groups" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-14 # required
   resource_group_arns: list<string> # The ARN that specifies the resource group that you want to describe.
-]: any -> record<resourceGroups: table<arn: string, tags: list, createdAt: string>, failedItems: record> {
+]: any -> oneof<record<resourceGroups: table<arn: string, tags: list, createdAt: string>, failedItems: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -928,7 +948,7 @@ export def "describe-rules-packages" [
   --x-amz-target: string@x-amz-target-completer-15 # required
   rules_package_arns: list<string> # The ARN that specifies the rules package that you want to describe.
   --locale: string@locale-completer # The locale that you want to translate a rules package description into.
-]: any -> record<rulesPackages: table<arn: string, name: string, version: string, provider: string, description: string>, failedItems: record> {
+]: any -> oneof<record<rulesPackages: table<arn: string, name: string, version: string, provider: string, description: string>, failedItems: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -979,7 +999,7 @@ export def "get-assessment-report" [
   assessment_run_arn: string # The ARN that specifies the assessment run for which you want to generate a report.
   report_file_format: string@report-file-format-completer # Specifies the file format (html or pdf) of the assessment report that you want to generate.
   report_type: string@report-type-completer # Specifies the type of the assessment report that you want to generate. There are two types of assessment reports: a finding report and a full report. For more information, see Assessment Reports (https://docs.aws.amazon.com/inspector/latest/userguide/inspector_reports.html).
-]: any -> record<status: string, url: string> {
+]: any -> oneof<record<status: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1034,7 +1054,7 @@ export def "get-exclusions-preview" [
   --next-token-body: string # You can use this parameter when paginating results. Set the value of this parameter to null on your first call to the GetExclusionsPreviewRequest action. Subsequent calls to the action fill nextToken in the request with the value of nextToken from the previous response to continue listing data. (body field)
   --max-results-body: int # You can use this parameter to indicate the maximum number of items you want in the response. The default value is 100. The maximum value is 500. (body field)
   --locale: string@locale-completer # The locale into which you want to translate the exclusion's title, description, and recommendation.
-]: any -> record<previewStatus: string, exclusionPreviews: table<title: string, description: string, recommendation: string, scopes: list, attributes: list>, nextToken: string> {
+]: any -> oneof<record<previewStatus: string, exclusionPreviews: table<title: string, description: string, recommendation: string, scopes: list, attributes: list>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1084,7 +1104,7 @@ export def "get-telemetry-metadata" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-18 # required
   assessment_run_arn: string # The ARN that specifies the assessment run that has the telemetry data that you want to obtain.
-]: any -> record<telemetryMetadata: table<messageType: string, count: int, dataSize: int>> {
+]: any -> oneof<record<telemetryMetadata: table<messageType: string, count: int, dataSize: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1114,7 +1134,6 @@ export def "get-telemetry-metadata" [
 #
 # POST /
 # operationId: ListAssessmentRunAgents
-# --filter shape: {agentHealths: list<string>, agentHealthCodes: list<string>}
 export def "list-assessment-run-agents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1139,7 +1158,7 @@ export def "list-assessment-run-agents" [
   --filter: record # Contains information about an Amazon Inspector agent. This data type is used as a request parameter in the ListAssessmentRunAgents action. — shape: {agentHealths: list<string>, agentHealthCodes: list<string>}
   --next-token-body: string # You can use this parameter when paginating results. Set the value of this parameter to null on your first call to the ListAssessmentRunAgents action. Subsequent calls to the action fill nextToken in the request with the value of NextToken from the previous response to continue listing data. (body field)
   --max-results-body: int # You can use this parameter to indicate the maximum number of items that you want in the response. The default value is 10. The maximum value is 500. (body field)
-]: any -> record<assessmentRunAgents: table<agentId: string, assessmentRunArn: string, agentHealth: string, agentHealthCode: string, agentHealthDetails: string, autoScalingGroup: string, telemetryMetadata: list>, nextToken: string> {
+]: any -> oneof<record<assessmentRunAgents: table<agentId: string, assessmentRunArn: string, agentHealth: string, agentHealthCode: string, agentHealthDetails: string, autoScalingGroup: string, telemetryMetadata: list>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1170,7 +1189,6 @@ export def "list-assessment-run-agents" [
 #
 # POST /
 # operationId: ListAssessmentRuns
-# --filter shape: {namePattern?: string, states?: list<string>, durationRange?: record, rulesPackageArns?: list<string>, startTimeRange?: record, completionTimeRange?: record, stateChangeTimeRange?: record}
 export def "list-assessment-runs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1195,7 +1213,7 @@ export def "list-assessment-runs" [
   --filter: record # Used as the request parameter in the ListAssessmentRuns action. — shape: {namePattern?: string, states?: list<string>, durationRange?: record, rulesPackageArns?: list<string>, startTimeRange?: record, completionTimeRange?: record, stateChangeTimeRange?: record}
   --next-token-body: string # You can use this parameter when paginating results. Set the value of this parameter to null on your first call to the ListAssessmentRuns action. Subsequent calls to the action fill nextToken in the request with the value of NextToken from the previous response to continue listing data. (body field)
   --max-results-body: int # You can use this parameter to indicate the maximum number of items that you want in the response. The default value is 10. The maximum value is 500. (body field)
-]: any -> record<assessmentRunArns: list<string>, nextToken: string> {
+]: any -> oneof<record<assessmentRunArns: list<string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1226,7 +1244,6 @@ export def "list-assessment-runs" [
 #
 # POST /
 # operationId: ListAssessmentTargets
-# --filter shape: {assessmentTargetNamePattern?: string}
 export def "list-assessment-targets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1250,7 +1267,7 @@ export def "list-assessment-targets" [
   --filter: record # Used as the request parameter in the ListAssessmentTargets action. — shape: {assessmentTargetNamePattern?: string}
   --next-token-body: string # You can use this parameter when paginating results. Set the value of this parameter to null on your first call to the ListAssessmentTargets action. Subsequent calls to the action fill nextToken in the request with the value of NextToken from the previous response to continue listing data. (body field)
   --max-results-body: int # You can use this parameter to indicate the maximum number of items you want in the response. The default value is 10. The maximum value is 500. (body field)
-]: any -> record<assessmentTargetArns: list<string>, nextToken: string> {
+]: any -> oneof<record<assessmentTargetArns: list<string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1281,7 +1298,6 @@ export def "list-assessment-targets" [
 #
 # POST /
 # operationId: ListAssessmentTemplates
-# --filter shape: {namePattern?: string, durationRange?: record, rulesPackageArns?: list<string>}
 export def "list-assessment-templates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1306,7 +1322,7 @@ export def "list-assessment-templates" [
   --filter: record # Used as the request parameter in the ListAssessmentTemplates action. — shape: {namePattern?: string, durationRange?: record, rulesPackageArns?: list<string>}
   --next-token-body: string # You can use this parameter when paginating results. Set the value of this parameter to null on your first call to the ListAssessmentTemplates action. Subsequent calls to the action fill nextToken in the request with the value of NextToken from the previous response to continue listing data. (body field)
   --max-results-body: int # You can use this parameter to indicate the maximum number of items you want in the response. The default value is 10. The maximum value is 500. (body field)
-]: any -> record<assessmentTemplateArns: list<string>, nextToken: string> {
+]: any -> oneof<record<assessmentTemplateArns: list<string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1360,7 +1376,7 @@ export def "list-event-subscriptions" [
   --resource-arn: string # The ARN of the assessment template for which you want to list the existing event subscriptions.
   --next-token-body: string # You can use this parameter when paginating results. Set the value of this parameter to null on your first call to the ListEventSubscriptions action. Subsequent calls to the action fill nextToken in the request with the value of NextToken from the previous response to continue listing data. (body field)
   --max-results-body: int # You can use this parameter to indicate the maximum number of items you want in the response. The default value is 10. The maximum value is 500. (body field)
-]: any -> record<subscriptions: table<resourceArn: string, topicArn: string, eventSubscriptions: list>, nextToken: string> {
+]: any -> oneof<record<subscriptions: table<resourceArn: string, topicArn: string, eventSubscriptions: list>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1414,7 +1430,7 @@ export def "list-exclusions" [
   assessment_run_arn: string # The ARN of the assessment run that generated the exclusions that you want to list.
   --next-token-body: string # You can use this parameter when paginating results. Set the value of this parameter to null on your first call to the ListExclusionsRequest action. Subsequent calls to the action fill nextToken in the request with the value of nextToken from the previous response to continue listing data. (body field)
   --max-results-body: int # You can use this parameter to indicate the maximum number of items you want in the response. The default value is 100. The maximum value is 500. (body field)
-]: any -> record<exclusionArns: list<string>, nextToken: string> {
+]: any -> oneof<record<exclusionArns: list<string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1445,7 +1461,6 @@ export def "list-exclusions" [
 #
 # POST /
 # operationId: ListFindings
-# --filter shape: {agentIds?: list<string>, autoScalingGroups?: list<string>, ruleNames?: list<string>, severities?: list<string>, rulesPackageArns?: list<string>, attributes?: list, userAttributes?: list, creationTimeRange?: record}
 export def "list-findings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1470,7 +1485,7 @@ export def "list-findings" [
   --filter: record # This data type is used as a request parameter in the ListFindings action. — shape: {agentIds?: list<string>, autoScalingGroups?: list<string>, ruleNames?: list<string>, severities?: list<string>, rulesPackageArns?: list<string>, attributes?: list, userAttributes?: list, creationTimeRange?: record}
   --next-token-body: string # You can use this parameter when paginating results. Set the value of this parameter to null on your first call to the ListFindings action. Subsequent calls to the action fill nextToken in the request with the value of NextToken from the previous response to continue listing data. (body field)
   --max-results-body: int # You can use this parameter to indicate the maximum number of items you want in the response. The default value is 10. The maximum value is 500. (body field)
-]: any -> record<findingArns: list<string>, nextToken: string> {
+]: any -> oneof<record<findingArns: list<string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1523,7 +1538,7 @@ export def "list-rules-packages" [
   --x-amz-target: string@x-amz-target-completer-26 # required
   --next-token-body: string # You can use this parameter when paginating results. Set the value of this parameter to null on your first call to the ListRulesPackages action. Subsequent calls to the action fill nextToken in the request with the value of NextToken from the previous response to continue listing data. (body field)
   --max-results-body: int # You can use this parameter to indicate the maximum number of items you want in the response. The default value is 10. The maximum value is 500. (body field)
-]: any -> record<rulesPackageArns: list<string>, nextToken: string> {
+]: any -> oneof<record<rulesPackageArns: list<string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1573,7 +1588,7 @@ export def "list-tags-for-resource" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-27 # required
   resource_arn: string # The ARN that specifies the assessment template whose tags you want to list.
-]: any -> record<tags: table<key: string, value: string>> {
+]: any -> oneof<record<tags: table<key: string, value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1626,7 +1641,7 @@ export def "preview-agents" [
   preview_agents_arn: string # The ARN of the assessment target whose agents you want to preview.
   --next-token-body: string # You can use this parameter when paginating results. Set the value of this parameter to null on your first call to the PreviewAgents action. Subsequent calls to the action fill nextToken in the request with the value of NextToken from the previous response to continue listing data. (body field)
   --max-results-body: int # You can use this parameter to indicate the maximum number of items you want in the response. The default value is 10. The maximum value is 500. (body field)
-]: any -> record<agentPreviews: table<hostname: string, agentId: string, autoScalingGroup: string, agentHealth: string, agentVersion: string, operatingSystem: string, kernelVersion: string, ipv4Address: string>, nextToken: string> {
+]: any -> oneof<record<agentPreviews: table<hostname: string, agentId: string, autoScalingGroup: string, agentHealth: string, agentVersion: string, operatingSystem: string, kernelVersion: string, ipv4Address: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1726,7 +1741,7 @@ export def "remove-attributes-from-findings" [
   --x-amz-target: string@x-amz-target-completer-30 # required
   finding_arns: list<string> # The ARNs that specify the findings that you want to remove attributes from.
   attribute_keys: list<string> # The array of attribute keys that you want to remove from specified findings.
-]: any -> record<failedItems: record> {
+]: any -> oneof<record<failedItems: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1756,7 +1771,6 @@ export def "remove-attributes-from-findings" [
 #
 # POST /
 # operationId: SetTagsForResource
-# --tags item shape: {key: string, value?: string}
 export def "set-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1827,7 +1841,7 @@ export def "start-assessment-run" [
   --x-amz-target: string@x-amz-target-completer-32 # required
   assessment_template_arn: string # The ARN of the assessment template of the assessment run that you want to start.
   --assessment-run-name: string # You can specify the name for the assessment run. The name must be unique for the assessment template whose ARN is used to start the assessment run.
-]: any -> record<assessmentRunArn: string> {
+]: any -> oneof<record<assessmentRunArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

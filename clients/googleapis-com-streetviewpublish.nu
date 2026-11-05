@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -122,9 +146,9 @@ def gps-source-completer [] { ["CAMERA_MOTION_METADATA_TRACK" "PHOTO_SEQUENCE"] 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "streetviewpublish-photo-create" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["streetviewpublish-photo-create" "streetviewpublish-photo-update" "streetviewpublish-photo-delete" "streetviewpublish-photo-get" "streetviewpublish-photo-start-upload" "streetviewpublish-photo-sequence-create" "streetviewpublish-photo-sequence-delete" "streetviewpublish-photo-sequence-get" "streetviewpublish-photo-sequence-start-upload" "streetviewpublish-photo-sequences-list" "streetviewpublish-photos-list" "streetviewpublish-photos-batch-delete" "streetviewpublish-photos-batch-get" "streetviewpublish-photos-batch-update" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -146,11 +170,6 @@ export def commands []: nothing -> table {
 #
 # POST /v1/photo
 # operationId: streetviewpublish.photo.create
-# --connections item shape: {target?: record}
-# --photoId shape: {id?: string}
-# --places item shape: {placeId?: string}
-# --pose shape: {accuracyMeters?: float, altitude?: float, gpsRecordTimestampUnixEpoch?: string, heading?: float, latLngPair?: record, level?: record, pitch?: float, roll?: float}
-# --uploadReference shape: {uploadUrl?: string}
 export def "streetviewpublish-photo-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -178,7 +197,7 @@ export def "streetviewpublish-photo-create" [
   --places: list # Optional. Places where this photo belongs. — item shape: {placeId?: string}
   --pose: record # Raw pose measurement for an entity. — shape: {accuracyMeters?: float, altitude?: float, gpsRecordTimestampUnixEpoch?: string, heading?: float, latLngPair?: record, level?: record, pitch?: float, roll?: float}
   --upload-reference: record # Upload reference for media files. — shape: {uploadUrl?: string}
-]: any -> record<captureTime: string, connections: table<target: record>, downloadUrl: string, mapsPublishStatus: string, photoId: record<id: string>, places: table<languageCode: string, name: string, placeId: string>, pose: record<accuracyMeters: float, altitude: float, gpsRecordTimestampUnixEpoch: string, heading: float, latLngPair: record<latitude: float, longitude: float>, level: record<name: string, number: float>, pitch: float, roll: float>, shareLink: string, thumbnailUrl: string, transferStatus: string, uploadReference: record<uploadUrl: string>, uploadTime: string, viewCount: string> {
+]: any -> oneof<record<captureTime: string, connections: table<target: record>, downloadUrl: string, mapsPublishStatus: string, photoId: record<id: string>, places: table<languageCode: string, name: string, placeId: string>, pose: record<accuracyMeters: float, altitude: float, gpsRecordTimestampUnixEpoch: string, heading: float, latLngPair: record<latitude: float, longitude: float>, level: record<name: string, number: float>, pitch: float, roll: float>, shareLink: string, thumbnailUrl: string, transferStatus: string, uploadReference: record<uploadUrl: string>, uploadTime: string, viewCount: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -206,11 +225,6 @@ export def "streetviewpublish-photo-create" [
 #
 # PUT /v1/photo/{id}
 # operationId: streetviewpublish.photo.update
-# --connections item shape: {target?: record}
-# --photoId shape: {id?: string}
-# --places item shape: {placeId?: string}
-# --pose shape: {accuracyMeters?: float, altitude?: float, gpsRecordTimestampUnixEpoch?: string, heading?: float, latLngPair?: record, level?: record, pitch?: float, roll?: float}
-# --uploadReference shape: {uploadUrl?: string}
 export def "streetviewpublish-photo-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -240,7 +254,7 @@ export def "streetviewpublish-photo-update" [
   --places: list # Optional. Places where this photo belongs. — item shape: {placeId?: string}
   --pose: record # Raw pose measurement for an entity. — shape: {accuracyMeters?: float, altitude?: float, gpsRecordTimestampUnixEpoch?: string, heading?: float, latLngPair?: record, level?: record, pitch?: float, roll?: float}
   --upload-reference: record # Upload reference for media files. — shape: {uploadUrl?: string}
-]: any -> record<captureTime: string, connections: table<target: record>, downloadUrl: string, mapsPublishStatus: string, photoId: record<id: string>, places: table<languageCode: string, name: string, placeId: string>, pose: record<accuracyMeters: float, altitude: float, gpsRecordTimestampUnixEpoch: string, heading: float, latLngPair: record<latitude: float, longitude: float>, level: record<name: string, number: float>, pitch: float, roll: float>, shareLink: string, thumbnailUrl: string, transferStatus: string, uploadReference: record<uploadUrl: string>, uploadTime: string, viewCount: string> {
+]: any -> oneof<record<captureTime: string, connections: table<target: record>, downloadUrl: string, mapsPublishStatus: string, photoId: record<id: string>, places: table<languageCode: string, name: string, placeId: string>, pose: record<accuracyMeters: float, altitude: float, gpsRecordTimestampUnixEpoch: string, heading: float, latLngPair: record<latitude: float, longitude: float>, level: record<name: string, number: float>, pitch: float, roll: float>, shareLink: string, thumbnailUrl: string, transferStatus: string, uploadReference: record<uploadUrl: string>, uploadTime: string, viewCount: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -291,7 +305,7 @@ export def "streetviewpublish-photo-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($photo_id | is-empty) { error make --unspanned { msg: "path parameter 'photoId' must be non-empty" } }
@@ -341,7 +355,7 @@ export def "streetviewpublish-photo-get" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --language-code: string # The BCP-47 language code, such as "en-US" or "sr-Latn". For more information, see http://www.unicode.org/reports/tr35/#Unicode_locale_identifier. If language_code is unspecified, the user's language preference for Google services is used.
   --view: string@view-completer # Required. Specifies if a download URL for the photo bytes should be returned in the Photo response.
-]: nothing -> record<captureTime: string, connections: table<target: record>, downloadUrl: string, mapsPublishStatus: string, photoId: record<id: string>, places: table<languageCode: string, name: string, placeId: string>, pose: record<accuracyMeters: float, altitude: float, gpsRecordTimestampUnixEpoch: string, heading: float, latLngPair: record<latitude: float, longitude: float>, level: record<name: string, number: float>, pitch: float, roll: float>, shareLink: string, thumbnailUrl: string, transferStatus: string, uploadReference: record<uploadUrl: string>, uploadTime: string, viewCount: string> {
+]: nothing -> oneof<record<captureTime: string, connections: table<target: record>, downloadUrl: string, mapsPublishStatus: string, photoId: record<id: string>, places: table<languageCode: string, name: string, placeId: string>, pose: record<accuracyMeters: float, altitude: float, gpsRecordTimestampUnixEpoch: string, heading: float, latLngPair: record<latitude: float, longitude: float>, level: record<name: string, number: float>, pitch: float, roll: float>, shareLink: string, thumbnailUrl: string, transferStatus: string, uploadReference: record<uploadUrl: string>, uploadTime: string, viewCount: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($photo_id | is-empty) { error make --unspanned { msg: "path parameter 'photoId' must be non-empty" } }
@@ -389,7 +403,7 @@ export def "streetviewpublish-photo-start-upload" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record<uploadUrl: string> {
+]: any -> oneof<record<uploadUrl: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -417,12 +431,6 @@ export def "streetviewpublish-photo-start-upload" [
 #
 # POST /v1/photoSequence
 # operationId: streetviewpublish.photoSequence.create
-# --failureDetails shape: {gpsDataGapDetails?: record, imuDataGapDetails?: record, insufficientGpsDetails?: record, noOverlapGpsDetails?: record, notOutdoorsDetails?: record}
-# --imu shape: {accelMpsps?: list, gyroRps?: list, magUt?: list}
-# --photos item shape: {captureTime?: string, connections?: list, photoId?: record, places?: list, pose?: record, uploadReference?: record}
-# --rawGpsTimeline item shape: {accuracyMeters?: float, altitude?: float, gpsRecordTimestampUnixEpoch?: string, heading?: float, latLngPair?: record, level?: record, pitch?: float, roll?: float}
-# --sequenceBounds shape: {northeast?: record, southwest?: record}
-# --uploadReference shape: {uploadUrl?: string}
 export def "streetviewpublish-photo-sequence-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -452,7 +460,7 @@ export def "streetviewpublish-photo-sequence-create" [
   --raw-gps-timeline: list # Input only. Raw GPS measurements with increasing timestamps from the device that aren't time synced with each photo. These raw measurements will be used to infer the pose of each frame. Required in input when InputType is VIDEO and raw GPS measurements are not in Camera Motion Metadata Track (CAMM). User can indicate which takes precedence using gps_source if raw GPS measurements are provided in both raw_gps_timeline and Camera Motion Metadata Track (CAMM). — item shape: {accuracyMeters?: float, altitude?: float, gpsRecordTimestampUnixEpoch?: string, heading?: float, latLngPair?: record, level?: record, pitch?: float, roll?: float}
   --sequence-bounds: record # A rectangle in geographical coordinates. — shape: {northeast?: record, southwest?: record}
   --upload-reference: record # Upload reference for media files. — shape: {uploadUrl?: string}
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -502,7 +510,7 @@ export def "streetviewpublish-photo-sequence-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($sequence_id | is-empty) { error make --unspanned { msg: "path parameter 'sequenceId' must be non-empty" } }
@@ -552,7 +560,7 @@ export def "streetviewpublish-photo-sequence-get" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --filter: string # Optional. The filter expression. For example: `published_status=PUBLISHED`. The filters supported are: `published_status`. See https://google.aip.dev/160 for more information.
   --view: string@view-completer # Specifies if a download URL for the photo sequence should be returned in `download_url` of individual photos in the PhotoSequence response. > Note: Currently not implemented.
-]: nothing -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: nothing -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($sequence_id | is-empty) { error make --unspanned { msg: "path parameter 'sequenceId' must be non-empty" } }
@@ -600,7 +608,7 @@ export def "streetviewpublish-photo-sequence-start-upload" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record<uploadUrl: string> {
+]: any -> oneof<record<uploadUrl: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -652,7 +660,7 @@ export def "streetviewpublish-photo-sequences-list" [
   --filter: string # Optional. The filter expression. For example: `imagery_type=SPHERICAL`. The filters supported are: `imagery_type`, `processing_state`, `min_latitude`, `max_latitude`, `min_longitude`, `max_longitude`, and `filename_query`. See https://google.aip.dev/160 for more information. Filename queries should sent as a Phrase in order to support multple words and special characters by adding escaped quotes. Ex: filename_query="example of a phrase.mp4"
   --page-size: int # Optional. The maximum number of photo sequences to return. `pageSize` must be non-negative. If `pageSize` is zero or is not provided, the default page size of 100 is used. The number of photo sequences returned in the response may be less than `pageSize` if the number of matches is less than `pageSize`. This is currently unimplemented but is in process.
   --page-token: string # Optional. The nextPageToken value returned from a previous ListPhotoSequences request, if any.
-]: nothing -> record<nextPageToken: string, photoSequences: table<done: bool, error: record, metadata: record, name: string, response: record>> {
+]: nothing -> oneof<record<nextPageToken: string, photoSequences: table<done: bool, error: record, metadata: record, name: string, response: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -703,7 +711,7 @@ export def "streetviewpublish-photos-list" [
   --page-size: int # Optional. The maximum number of photos to return. `pageSize` must be non-negative. If `pageSize` is zero or is not provided, the default page size of 100 is used. The number of photos returned in the response may be less than `pageSize` if the number of photos that belong to the user is less than `pageSize`.
   --page-token: string # Optional. The nextPageToken value returned from a previous ListPhotos request, if any.
   --view: string@view-completer # Required. Specifies if a download URL for the photos bytes should be returned in the Photos response.
-]: nothing -> record<nextPageToken: string, photos: table<captureTime: string, connections: list, downloadUrl: string, mapsPublishStatus: string, photoId: record, places: list, pose: record, shareLink: string, thumbnailUrl: string, transferStatus: string, uploadReference: record, uploadTime: string, viewCount: string>> {
+]: nothing -> oneof<record<nextPageToken: string, photos: table<captureTime: string, connections: list, downloadUrl: string, mapsPublishStatus: string, photoId: record, places: list, pose: record, shareLink: string, thumbnailUrl: string, transferStatus: string, uploadReference: record, uploadTime: string, viewCount: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
@@ -750,7 +758,7 @@ export def "streetviewpublish-photos-batch-delete" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --photo-ids: list<string> # Required. IDs of the Photos. HTTP GET requests require the following syntax for the URL query parameter: `photoIds=&photoIds=&...`.
-]: any -> record<status: table<code: int, details: list, message: string>> {
+]: any -> oneof<record<status: table<code: int, details: list, message: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -802,7 +810,7 @@ export def "streetviewpublish-photos-batch-get" [
   --language-code: string # Optional. The BCP-47 language code, such as "en-US" or "sr-Latn". For more information, see http://www.unicode.org/reports/tr35/#Unicode_locale_identifier. If language_code is unspecified, the user's language preference for Google services is used.
   --photo-ids: list<string> # Required. IDs of the Photos. For HTTP GET requests, the URL query parameter should be `photoIds=&photoIds=&...`.
   --view: string@view-completer # Required. Specifies if a download URL for the photo bytes should be returned in the Photo response.
-]: nothing -> record<results: table<photo: record, status: record>> {
+]: nothing -> oneof<record<results: table<photo: record, status: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "photoIds" $photo_ids "multi") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
@@ -827,7 +835,6 @@ export def "streetviewpublish-photos-batch-get" [
 #
 # POST /v1/photos:batchUpdate
 # operationId: streetviewpublish.photos.batchUpdate
-# --updatePhotoRequests item shape: {photo?: record, updateMask?: string}
 export def "streetviewpublish-photos-batch-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -850,7 +857,7 @@ export def "streetviewpublish-photos-batch-update" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --update-photo-requests: list # Required. List of UpdatePhotoRequests. — item shape: {photo?: record, updateMask?: string}
-]: any -> record<results: table<photo: record, status: record>> {
+]: any -> oneof<record<results: table<photo: record, status: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

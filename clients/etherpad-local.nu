@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "query-apikey" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "apikey")=(encode-path-segment $token_val)", location: "query"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -104,9 +128,9 @@ def auth-scheme-completer [] { ["query-apikey"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "append-chat-message-using-get" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["append-chat-message-using-get" "append-chat-message-using-post" "append-text-using-get" "append-text-using-post" "check-token-using-get" "check-token-using-post" "copy-pad-using-get" "copy-pad-using-post" "copy-pad-without-history-using-get" "copy-pad-without-history-using-post" "create-author-using-get" "create-author-using-post" "create-author-if-not-exists-for-using-get" "create-author-if-not-exists-for-using-post" "create-diff-html-using-get" "create-diff-html-using-post" "create-group-using-get" "create-group-using-post" "create-group-if-not-exists-for-using-get" "create-group-if-not-exists-for-using-post" "create-group-pad-using-get" "create-group-pad-using-post" "create-pad-using-get" "create-pad-using-post" "create-session-using-get" "create-session-using-post" "delete-group-using-get" "delete-group-using-post" "delete-pad-using-get" "delete-pad-using-post" "delete-session-using-get" "delete-session-using-post" "get-attribute-pool-using-get" "get-attribute-pool-using-post" "get-author-name-using-get" "get-author-name-using-post" "get-chat-head-using-get" "get-chat-head-using-post" "get-chat-history-using-get" "get-chat-history-using-post" "get-html-using-get" "get-html-using-post" "get-last-edited-using-get" "get-last-edited-using-post" "get-pad-id-using-get" "get-pad-id-using-post" "get-public-status-using-get" "get-public-status-using-post" "get-read-only-id-using-get" "get-read-only-id-using-post" "get-revision-changeset-using-get" "get-revision-changeset-using-post" "get-revisions-count-using-get" "get-revisions-count-using-post" "get-saved-revisions-count-using-get" "get-saved-revisions-count-using-post" "get-session-info-using-get" "get-session-info-using-post" "get-stats-using-get" "get-stats-using-post" "get-text-using-get" "get-text-using-post" "list-all-groups-using-get" "list-all-groups-using-post" "list-all-pads-using-get" "list-all-pads-using-post" "list-authors-of-pad-using-get" "list-authors-of-pad-using-post" "list-pads-using-get" "list-pads-using-post" "list-pads-of-author-using-get" "list-pads-of-author-using-post" "list-saved-revisions-using-get" "list-saved-revisions-using-post" "list-sessions-of-author-using-get" "list-sessions-of-author-using-post" "list-sessions-of-group-using-get" "list-sessions-of-group-using-post" "move-pad-using-get" "move-pad-using-post" "pad-users-using-get" "pad-users-using-post" "pad-users-count-using-get" "pad-users-count-using-post" "restore-revision-using-get" "restore-revision-using-post" "save-revision-using-get" "save-revision-using-post" "send-clients-message-using-get" "send-clients-message-using-post" "set-html-using-get" "set-html-using-post" "set-public-status-using-get" "set-public-status-using-post" "set-text-using-get" "set-text-using-post" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -142,7 +166,7 @@ export def "append-chat-message-using-get" [
   --text: string
   --author-id: string
   --time: string
-]: nothing -> record<code: int, data: record, message: string> {
+]: nothing -> oneof<record<code: int, data: record, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "authorID" $author_id "scalar") (serialize-qp "time" $time "scalar")] | flatten | str join "&"
@@ -181,7 +205,7 @@ export def "append-chat-message-using-post" [
   --text: string
   --author-id: string
   --time: string
-]: nothing -> record<code: int, data: record, message: string> {
+]: nothing -> oneof<record<code: int, data: record, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "authorID" $author_id "scalar") (serialize-qp "time" $time "scalar")] | flatten | str join "&"
@@ -217,7 +241,7 @@ export def "append-text-using-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --pad-id: string
   --text: string
-]: nothing -> record<code: int, data: record, message: string> {
+]: nothing -> oneof<record<code: int, data: record, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "text" $text "scalar")] | flatten | str join "&"
@@ -253,7 +277,7 @@ export def "append-text-using-post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --pad-id: string
   --text: string
-]: nothing -> record<code: int, data: record, message: string> {
+]: nothing -> oneof<record<code: int, data: record, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "text" $text "scalar")] | flatten | str join "&"
@@ -288,7 +312,7 @@ export def "check-token-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: int, data: record, message: string> {
+]: nothing -> oneof<record<code: int, data: record, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/checkToken" $auth.query)
@@ -322,7 +346,7 @@ export def "check-token-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: int, data: record, message: string> {
+]: nothing -> oneof<record<code: int, data: record, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/checkToken" $auth.query)
@@ -358,7 +382,7 @@ export def "copy-pad-using-get" [
   --source-id: string
   --destination-id: string
   --force: string
-]: nothing -> record<code: int, data: record, message: string> {
+]: nothing -> oneof<record<code: int, data: record, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sourceID" $source_id "scalar") (serialize-qp "destinationID" $destination_id "scalar") (serialize-qp "force" $force "scalar")] | flatten | str join "&"
@@ -395,7 +419,7 @@ export def "copy-pad-using-post" [
   --source-id: string
   --destination-id: string
   --force: string
-]: nothing -> record<code: int, data: record, message: string> {
+]: nothing -> oneof<record<code: int, data: record, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sourceID" $source_id "scalar") (serialize-qp "destinationID" $destination_id "scalar") (serialize-qp "force" $force "scalar")] | flatten | str join "&"
@@ -432,7 +456,7 @@ export def "copy-pad-without-history-using-get" [
   --source-id: string
   --destination-id: string
   --force: string
-]: nothing -> record<code: int, data: record, message: string> {
+]: nothing -> oneof<record<code: int, data: record, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sourceID" $source_id "scalar") (serialize-qp "destinationID" $destination_id "scalar") (serialize-qp "force" $force "scalar")] | flatten | str join "&"
@@ -469,7 +493,7 @@ export def "copy-pad-without-history-using-post" [
   --source-id: string
   --destination-id: string
   --force: string
-]: nothing -> record<code: int, data: record, message: string> {
+]: nothing -> oneof<record<code: int, data: record, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sourceID" $source_id "scalar") (serialize-qp "destinationID" $destination_id "scalar") (serialize-qp "force" $force "scalar")] | flatten | str join "&"
@@ -505,7 +529,7 @@ export def "create-author-using-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string
-]: nothing -> record<code: int, data: record<authorID: string>, message: string> {
+]: nothing -> oneof<record<code: int, data: record<authorID: string>, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar")] | flatten | str join "&"
@@ -541,7 +565,7 @@ export def "create-author-using-post" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string
-]: nothing -> record<code: int, data: record<authorID: string>, message: string> {
+]: nothing -> oneof<record<code: int, data: record<authorID: string>, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar")] | flatten | str join "&"
@@ -578,7 +602,7 @@ export def "create-author-if-not-exists-for-using-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --author-mapper: string
   --name: string
-]: nothing -> record<code: int, data: record<authorID: string>, message: string> {
+]: nothing -> oneof<record<code: int, data: record<authorID: string>, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "authorMapper" $author_mapper "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
@@ -615,7 +639,7 @@ export def "create-author-if-not-exists-for-using-post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --author-mapper: string
   --name: string
-]: nothing -> record<code: int, data: record<authorID: string>, message: string> {
+]: nothing -> oneof<record<code: int, data: record<authorID: string>, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "authorMapper" $author_mapper "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
@@ -652,7 +676,7 @@ export def "create-diff-html-using-get" [
   --pad-id: string
   --start-rev: string
   --end-rev: string
-]: nothing -> record<code: int, data: record, message: string> {
+]: nothing -> oneof<record<code: int, data: record, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "startRev" $start_rev "scalar") (serialize-qp "endRev" $end_rev "scalar")] | flatten | str join "&"
@@ -689,7 +713,7 @@ export def "create-diff-html-using-post" [
   --pad-id: string
   --start-rev: string
   --end-rev: string
-]: nothing -> record<code: int, data: record, message: string> {
+]: nothing -> oneof<record<code: int, data: record, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "startRev" $start_rev "scalar") (serialize-qp "endRev" $end_rev "scalar")] | flatten | str join "&"
@@ -724,7 +748,7 @@ export def "create-group-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: int, data: record<groupID: string>, message: string> {
+]: nothing -> oneof<record<code: int, data: record<groupID: string>, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/createGroup" $auth.query)
@@ -758,7 +782,7 @@ export def "create-group-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: int, data: record<groupID: string>, message: string> {
+]: nothing -> oneof<record<code: int, data: record<groupID: string>, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/createGroup" $auth.query)
@@ -793,7 +817,7 @@ export def "create-group-if-not-exists-for-using-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --group-mapper: string
-]: nothing -> record<code: int, data: record<groupID: string>, message: string> {
+]: nothing -> oneof<record<code: int, data: record<groupID: string>, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "groupMapper" $group_mapper "scalar")] | flatten | str join "&"
@@ -829,7 +853,7 @@ export def "create-group-if-not-exists-for-using-post" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --group-mapper: string
-]: nothing -> record<code: int, data: record<groupID: string>, message: string> {
+]: nothing -> oneof<record<code: int, data: record<groupID: string>, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "groupMapper" $group_mapper "scalar")] | flatten | str join "&"
@@ -867,7 +891,7 @@ export def "create-group-pad-using-get" [
   --group-id: string
   --pad-name: string
   --text: string
-]: nothing -> record<code: int, data: record, message: string> {
+]: nothing -> oneof<record<code: int, data: record, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "groupID" $group_id "scalar") (serialize-qp "padName" $pad_name "scalar") (serialize-qp "text" $text "scalar")] | flatten | str join "&"
@@ -905,7 +929,7 @@ export def "create-group-pad-using-post" [
   --group-id: string
   --pad-name: string
   --text: string
-]: nothing -> record<code: int, data: record, message: string> {
+]: nothing -> oneof<record<code: int, data: record, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "groupID" $group_id "scalar") (serialize-qp "padName" $pad_name "scalar") (serialize-qp "text" $text "scalar")] | flatten | str join "&"
@@ -942,7 +966,7 @@ export def "create-pad-using-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --pad-id: string
   --text: string
-]: nothing -> record<code: int, data: record, message: string> {
+]: nothing -> oneof<record<code: int, data: record, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "text" $text "scalar")] | flatten | str join "&"
@@ -979,7 +1003,7 @@ export def "create-pad-using-post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --pad-id: string
   --text: string
-]: nothing -> record<code: int, data: record, message: string> {
+]: nothing -> oneof<record<code: int, data: record, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "text" $text "scalar")] | flatten | str join "&"
@@ -1017,7 +1041,7 @@ export def "create-session-using-get" [
   --group-id: string
   --author-id: string
   --valid-until: string
-]: nothing -> record<code: int, data: record<sessionID: string>, message: string> {
+]: nothing -> oneof<record<code: int, data: record<sessionID: string>, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "groupID" $group_id "scalar") (serialize-qp "authorID" $author_id "scalar") (serialize-qp "validUntil" $valid_until "scalar")] | flatten | str join "&"
@@ -1055,7 +1079,7 @@ export def "create-session-using-post" [
   --group-id: string
   --author-id: string
   --valid-until: string
-]: nothing -> record<code: int, data: record<sessionID: string>, message: string> {
+]: nothing -> oneof<record<code: int, data: record<sessionID: string>, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "groupID" $group_id "scalar") (serialize-qp "authorID" $author_id "scalar") (serialize-qp "validUntil" $valid_until "scalar")] | flatten | str join "&"
@@ -1091,7 +1115,7 @@ export def "delete-group-using-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --group-id: string
-]: nothing -> record<code: int, data: record, message: string> {
+]: nothing -> oneof<record<code: int, data: record, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "groupID" $group_id "scalar")] | flatten | str join "&"
@@ -1127,7 +1151,7 @@ export def "delete-group-using-post" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --group-id: string
-]: nothing -> record<code: int, data: record, message: string> {
+]: nothing -> oneof<record<code: int, data: record, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "groupID" $group_id "scalar")] | flatten | str join "&"
@@ -1163,7 +1187,7 @@ export def "delete-pad-using-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --pad-id: string
-]: nothing -> record<code: int, data: record, message: string> {
+]: nothing -> oneof<record<code: int, data: record, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
@@ -1199,7 +1223,7 @@ export def "delete-pad-using-post" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --pad-id: string
-]: nothing -> record<code: int, data: record, message: string> {
+]: nothing -> oneof<record<code: int, data: record, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
@@ -1235,7 +1259,7 @@ export def "delete-session-using-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --session-id: string
-]: nothing -> record<code: int, data: record, message: string> {
+]: nothing -> oneof<record<code: int, data: record, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sessionID" $session_id "scalar")] | flatten | str join "&"
@@ -1271,7 +1295,7 @@ export def "delete-session-using-post" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --session-id: string
-]: nothing -> record<code: int, data: record, message: string> {
+]: nothing -> oneof<record<code: int, data: record, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sessionID" $session_id "scalar")] | flatten | str join "&"
@@ -1306,7 +1330,7 @@ export def "get-attribute-pool-using-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --pad-id: string
-]: nothing -> record<code: int, data: record, message: string> {
+]: nothing -> oneof<record<code: int, data: record, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
@@ -1341,7 +1365,7 @@ export def "get-attribute-pool-using-post" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --pad-id: string
-]: nothing -> record<code: int, data: record, message: string> {
+]: nothing -> oneof<record<code: int, data: record, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
@@ -1377,7 +1401,7 @@ export def "get-author-name-using-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --author-id: string
-]: nothing -> record<code: int, data: record<info: record<colorId: string, id: string, name: string, timestamp: int>>, message: string> {
+]: nothing -> oneof<record<code: int, data: record<info: record<colorId: string, id: string, name: string, timestamp: int>>, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "authorID" $author_id "scalar")] | flatten | str join "&"
@@ -1413,7 +1437,7 @@ export def "get-author-name-using-post" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --author-id: string
-]: nothing -> record<code: int, data: record<info: record<colorId: string, id: string, name: string, timestamp: int>>, message: string> {
+]: nothing -> oneof<record<code: int, data: record<info: record<colorId: string, id: string, name: string, timestamp: int>>, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "authorID" $author_id "scalar")] | flatten | str join "&"
@@ -1449,7 +1473,7 @@ export def "get-chat-head-using-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --pad-id: string
-]: nothing -> record<code: int, data: record<chatHead: record<text: string, time: int, userId: string, userName: string>>, message: string> {
+]: nothing -> oneof<record<code: int, data: record<chatHead: record<text: string, time: int, userId: string, userName: string>>, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
@@ -1485,7 +1509,7 @@ export def "get-chat-head-using-post" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --pad-id: string
-]: nothing -> record<code: int, data: record<chatHead: record<text: string, time: int, userId: string, userName: string>>, message: string> {
+]: nothing -> oneof<record<code: int, data: record<chatHead: record<text: string, time: int, userId: string, userName: string>>, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
@@ -1523,7 +1547,7 @@ export def "get-chat-history-using-get" [
   --pad-id: string
   --start: string
   --end: string
-]: nothing -> record<code: int, data: record<messages: list<record>>, message: string> {
+]: nothing -> oneof<record<code: int, data: record<messages: list<record>>, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar")] | flatten | str join "&"
@@ -1561,7 +1585,7 @@ export def "get-chat-history-using-post" [
   --pad-id: string
   --start: string
   --end: string
-]: nothing -> record<code: int, data: record<messages: list<record>>, message: string> {
+]: nothing -> oneof<record<code: int, data: record<messages: list<record>>, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar")] | flatten | str join "&"
@@ -1598,7 +1622,7 @@ export def "get-html-using-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --pad-id: string
   --rev: string
-]: nothing -> record<code: int, data: record<html: string>, message: string> {
+]: nothing -> oneof<record<code: int, data: record<html: string>, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "rev" $rev "scalar")] | flatten | str join "&"
@@ -1635,7 +1659,7 @@ export def "get-html-using-post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --pad-id: string
   --rev: string
-]: nothing -> record<code: int, data: record<html: string>, message: string> {
+]: nothing -> oneof<record<code: int, data: record<html: string>, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "rev" $rev "scalar")] | flatten | str join "&"
@@ -1671,7 +1695,7 @@ export def "get-last-edited-using-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --pad-id: string
-]: nothing -> record<code: int, data: record<lastEdited: int>, message: string> {
+]: nothing -> oneof<record<code: int, data: record<lastEdited: int>, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
@@ -1707,7 +1731,7 @@ export def "get-last-edited-using-post" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --pad-id: string
-]: nothing -> record<code: int, data: record<lastEdited: int>, message: string> {
+]: nothing -> oneof<record<code: int, data: record<lastEdited: int>, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
@@ -1742,7 +1766,7 @@ export def "get-pad-id-using-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --ro-id: string
-]: nothing -> record<code: int, data: record, message: string> {
+]: nothing -> oneof<record<code: int, data: record, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "roID" $ro_id "scalar")] | flatten | str join "&"
@@ -1777,7 +1801,7 @@ export def "get-pad-id-using-post" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --ro-id: string
-]: nothing -> record<code: int, data: record, message: string> {
+]: nothing -> oneof<record<code: int, data: record, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "roID" $ro_id "scalar")] | flatten | str join "&"
@@ -1813,7 +1837,7 @@ export def "get-public-status-using-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --pad-id: string
-]: nothing -> record<code: int, data: record<publicStatus: bool>, message: string> {
+]: nothing -> oneof<record<code: int, data: record<publicStatus: bool>, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
@@ -1849,7 +1873,7 @@ export def "get-public-status-using-post" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --pad-id: string
-]: nothing -> record<code: int, data: record<publicStatus: bool>, message: string> {
+]: nothing -> oneof<record<code: int, data: record<publicStatus: bool>, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
@@ -1885,7 +1909,7 @@ export def "get-read-only-id-using-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --pad-id: string
-]: nothing -> record<code: int, data: record<readOnlyID: string>, message: string> {
+]: nothing -> oneof<record<code: int, data: record<readOnlyID: string>, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
@@ -1921,7 +1945,7 @@ export def "get-read-only-id-using-post" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --pad-id: string
-]: nothing -> record<code: int, data: record<readOnlyID: string>, message: string> {
+]: nothing -> oneof<record<code: int, data: record<readOnlyID: string>, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
@@ -1957,7 +1981,7 @@ export def "get-revision-changeset-using-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --pad-id: string
   --rev: string
-]: nothing -> record<code: int, data: record, message: string> {
+]: nothing -> oneof<record<code: int, data: record, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "rev" $rev "scalar")] | flatten | str join "&"
@@ -1993,7 +2017,7 @@ export def "get-revision-changeset-using-post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --pad-id: string
   --rev: string
-]: nothing -> record<code: int, data: record, message: string> {
+]: nothing -> oneof<record<code: int, data: record, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "rev" $rev "scalar")] | flatten | str join "&"
@@ -2029,7 +2053,7 @@ export def "get-revisions-count-using-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --pad-id: string
-]: nothing -> record<code: int, data: record<revisions: int>, message: string> {
+]: nothing -> oneof<record<code: int, data: record<revisions: int>, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
@@ -2065,7 +2089,7 @@ export def "get-revisions-count-using-post" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --pad-id: string
-]: nothing -> record<code: int, data: record<revisions: int>, message: string> {
+]: nothing -> oneof<record<code: int, data: record<revisions: int>, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
@@ -2100,7 +2124,7 @@ export def "get-saved-revisions-count-using-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --pad-id: string
-]: nothing -> record<code: int, data: record, message: string> {
+]: nothing -> oneof<record<code: int, data: record, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
@@ -2135,7 +2159,7 @@ export def "get-saved-revisions-count-using-post" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --pad-id: string
-]: nothing -> record<code: int, data: record, message: string> {
+]: nothing -> oneof<record<code: int, data: record, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
@@ -2171,7 +2195,7 @@ export def "get-session-info-using-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --session-id: string
-]: nothing -> record<code: int, data: record<info: record<authorID: string, groupID: string, id: string, validUntil: int>>, message: string> {
+]: nothing -> oneof<record<code: int, data: record<info: record<authorID: string, groupID: string, id: string, validUntil: int>>, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sessionID" $session_id "scalar")] | flatten | str join "&"
@@ -2207,7 +2231,7 @@ export def "get-session-info-using-post" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --session-id: string
-]: nothing -> record<code: int, data: record<info: record<authorID: string, groupID: string, id: string, validUntil: int>>, message: string> {
+]: nothing -> oneof<record<code: int, data: record<info: record<authorID: string, groupID: string, id: string, validUntil: int>>, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sessionID" $session_id "scalar")] | flatten | str join "&"
@@ -2241,7 +2265,7 @@ export def "get-stats-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: int, data: record, message: string> {
+]: nothing -> oneof<record<code: int, data: record, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/getStats" $auth.query)
@@ -2274,7 +2298,7 @@ export def "get-stats-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: int, data: record, message: string> {
+]: nothing -> oneof<record<code: int, data: record, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/getStats" $auth.query)
@@ -2310,7 +2334,7 @@ export def "get-text-using-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --pad-id: string
   --rev: string
-]: nothing -> record<code: int, data: record<text: string>, message: string> {
+]: nothing -> oneof<record<code: int, data: record<text: string>, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "rev" $rev "scalar")] | flatten | str join "&"
@@ -2347,7 +2371,7 @@ export def "get-text-using-post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --pad-id: string
   --rev: string
-]: nothing -> record<code: int, data: record<text: string>, message: string> {
+]: nothing -> oneof<record<code: int, data: record<text: string>, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "rev" $rev "scalar")] | flatten | str join "&"
@@ -2381,7 +2405,7 @@ export def "list-all-groups-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: int, data: record<groupIDs: list<string>>, message: string> {
+]: nothing -> oneof<record<code: int, data: record<groupIDs: list<string>>, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/listAllGroups" $auth.query)
@@ -2414,7 +2438,7 @@ export def "list-all-groups-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: int, data: record<groupIDs: list<string>>, message: string> {
+]: nothing -> oneof<record<code: int, data: record<groupIDs: list<string>>, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/listAllGroups" $auth.query)
@@ -2448,7 +2472,7 @@ export def "list-all-pads-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: int, data: record<padIDs: list<string>>, message: string> {
+]: nothing -> oneof<record<code: int, data: record<padIDs: list<string>>, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/listAllPads" $auth.query)
@@ -2482,7 +2506,7 @@ export def "list-all-pads-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: int, data: record<padIDs: list<string>>, message: string> {
+]: nothing -> oneof<record<code: int, data: record<padIDs: list<string>>, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/listAllPads" $auth.query)
@@ -2517,7 +2541,7 @@ export def "list-authors-of-pad-using-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --pad-id: string
-]: nothing -> record<code: int, data: record<authorIDs: list<string>>, message: string> {
+]: nothing -> oneof<record<code: int, data: record<authorIDs: list<string>>, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
@@ -2553,7 +2577,7 @@ export def "list-authors-of-pad-using-post" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --pad-id: string
-]: nothing -> record<code: int, data: record<authorIDs: list<string>>, message: string> {
+]: nothing -> oneof<record<code: int, data: record<authorIDs: list<string>>, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
@@ -2589,7 +2613,7 @@ export def "list-pads-using-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --group-id: string
-]: nothing -> record<code: int, data: record<padIDs: list<string>>, message: string> {
+]: nothing -> oneof<record<code: int, data: record<padIDs: list<string>>, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "groupID" $group_id "scalar")] | flatten | str join "&"
@@ -2625,7 +2649,7 @@ export def "list-pads-using-post" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --group-id: string
-]: nothing -> record<code: int, data: record<padIDs: list<string>>, message: string> {
+]: nothing -> oneof<record<code: int, data: record<padIDs: list<string>>, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "groupID" $group_id "scalar")] | flatten | str join "&"
@@ -2661,7 +2685,7 @@ export def "list-pads-of-author-using-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --author-id: string
-]: nothing -> record<code: int, data: record<padIDs: list<string>>, message: string> {
+]: nothing -> oneof<record<code: int, data: record<padIDs: list<string>>, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "authorID" $author_id "scalar")] | flatten | str join "&"
@@ -2697,7 +2721,7 @@ export def "list-pads-of-author-using-post" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --author-id: string
-]: nothing -> record<code: int, data: record<padIDs: list<string>>, message: string> {
+]: nothing -> oneof<record<code: int, data: record<padIDs: list<string>>, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "authorID" $author_id "scalar")] | flatten | str join "&"
@@ -2732,7 +2756,7 @@ export def "list-saved-revisions-using-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --pad-id: string
-]: nothing -> record<code: int, data: record, message: string> {
+]: nothing -> oneof<record<code: int, data: record, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
@@ -2767,7 +2791,7 @@ export def "list-saved-revisions-using-post" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --pad-id: string
-]: nothing -> record<code: int, data: record, message: string> {
+]: nothing -> oneof<record<code: int, data: record, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
@@ -2803,7 +2827,7 @@ export def "list-sessions-of-author-using-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --author-id: string
-]: nothing -> record<code: int, data: record<sessions: list<record>>, message: string> {
+]: nothing -> oneof<record<code: int, data: record<sessions: list<record>>, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "authorID" $author_id "scalar")] | flatten | str join "&"
@@ -2839,7 +2863,7 @@ export def "list-sessions-of-author-using-post" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --author-id: string
-]: nothing -> record<code: int, data: record<sessions: list<record>>, message: string> {
+]: nothing -> oneof<record<code: int, data: record<sessions: list<record>>, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "authorID" $author_id "scalar")] | flatten | str join "&"
@@ -2874,7 +2898,7 @@ export def "list-sessions-of-group-using-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --group-id: string
-]: nothing -> record<code: int, data: record<sessions: list<record>>, message: string> {
+]: nothing -> oneof<record<code: int, data: record<sessions: list<record>>, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "groupID" $group_id "scalar")] | flatten | str join "&"
@@ -2909,7 +2933,7 @@ export def "list-sessions-of-group-using-post" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --group-id: string
-]: nothing -> record<code: int, data: record<sessions: list<record>>, message: string> {
+]: nothing -> oneof<record<code: int, data: record<sessions: list<record>>, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "groupID" $group_id "scalar")] | flatten | str join "&"
@@ -2946,7 +2970,7 @@ export def "move-pad-using-get" [
   --source-id: string
   --destination-id: string
   --force: string
-]: nothing -> record<code: int, data: record, message: string> {
+]: nothing -> oneof<record<code: int, data: record, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sourceID" $source_id "scalar") (serialize-qp "destinationID" $destination_id "scalar") (serialize-qp "force" $force "scalar")] | flatten | str join "&"
@@ -2983,7 +3007,7 @@ export def "move-pad-using-post" [
   --source-id: string
   --destination-id: string
   --force: string
-]: nothing -> record<code: int, data: record, message: string> {
+]: nothing -> oneof<record<code: int, data: record, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sourceID" $source_id "scalar") (serialize-qp "destinationID" $destination_id "scalar") (serialize-qp "force" $force "scalar")] | flatten | str join "&"
@@ -3019,7 +3043,7 @@ export def "pad-users-using-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --pad-id: string
-]: nothing -> record<code: int, data: record<padUsers: list<record>>, message: string> {
+]: nothing -> oneof<record<code: int, data: record<padUsers: list<record>>, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
@@ -3055,7 +3079,7 @@ export def "pad-users-using-post" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --pad-id: string
-]: nothing -> record<code: int, data: record<padUsers: list<record>>, message: string> {
+]: nothing -> oneof<record<code: int, data: record<padUsers: list<record>>, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
@@ -3091,7 +3115,7 @@ export def "pad-users-count-using-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --pad-id: string
-]: nothing -> record<code: int, data: record<padUsersCount: int>, message: string> {
+]: nothing -> oneof<record<code: int, data: record<padUsersCount: int>, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
@@ -3127,7 +3151,7 @@ export def "pad-users-count-using-post" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --pad-id: string
-]: nothing -> record<code: int, data: record<padUsersCount: int>, message: string> {
+]: nothing -> oneof<record<code: int, data: record<padUsersCount: int>, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
@@ -3163,7 +3187,7 @@ export def "restore-revision-using-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --pad-id: string
   --rev: string
-]: nothing -> record<code: int, data: record, message: string> {
+]: nothing -> oneof<record<code: int, data: record, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "rev" $rev "scalar")] | flatten | str join "&"
@@ -3199,7 +3223,7 @@ export def "restore-revision-using-post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --pad-id: string
   --rev: string
-]: nothing -> record<code: int, data: record, message: string> {
+]: nothing -> oneof<record<code: int, data: record, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "rev" $rev "scalar")] | flatten | str join "&"
@@ -3235,7 +3259,7 @@ export def "save-revision-using-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --pad-id: string
   --rev: string
-]: nothing -> record<code: int, data: record, message: string> {
+]: nothing -> oneof<record<code: int, data: record, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "rev" $rev "scalar")] | flatten | str join "&"
@@ -3271,7 +3295,7 @@ export def "save-revision-using-post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --pad-id: string
   --rev: string
-]: nothing -> record<code: int, data: record, message: string> {
+]: nothing -> oneof<record<code: int, data: record, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "rev" $rev "scalar")] | flatten | str join "&"
@@ -3308,7 +3332,7 @@ export def "send-clients-message-using-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --pad-id: string
   --msg: string
-]: nothing -> record<code: int, data: record, message: string> {
+]: nothing -> oneof<record<code: int, data: record, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "msg" $msg "scalar")] | flatten | str join "&"
@@ -3345,7 +3369,7 @@ export def "send-clients-message-using-post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --pad-id: string
   --msg: string
-]: nothing -> record<code: int, data: record, message: string> {
+]: nothing -> oneof<record<code: int, data: record, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "msg" $msg "scalar")] | flatten | str join "&"
@@ -3382,7 +3406,7 @@ export def "set-html-using-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --pad-id: string
   --html: string
-]: nothing -> record<code: int, data: record, message: string> {
+]: nothing -> oneof<record<code: int, data: record, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "html" $html "scalar")] | flatten | str join "&"
@@ -3419,7 +3443,7 @@ export def "set-html-using-post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --pad-id: string
   --html: string
-]: nothing -> record<code: int, data: record, message: string> {
+]: nothing -> oneof<record<code: int, data: record, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "html" $html "scalar")] | flatten | str join "&"
@@ -3456,7 +3480,7 @@ export def "set-public-status-using-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --pad-id: string
   --public-status: string
-]: nothing -> record<code: int, data: record, message: string> {
+]: nothing -> oneof<record<code: int, data: record, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "publicStatus" $public_status "scalar")] | flatten | str join "&"
@@ -3493,7 +3517,7 @@ export def "set-public-status-using-post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --pad-id: string
   --public-status: string
-]: nothing -> record<code: int, data: record, message: string> {
+]: nothing -> oneof<record<code: int, data: record, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "publicStatus" $public_status "scalar")] | flatten | str join "&"
@@ -3530,7 +3554,7 @@ export def "set-text-using-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --pad-id: string
   --text: string
-]: nothing -> record<code: int, data: record, message: string> {
+]: nothing -> oneof<record<code: int, data: record, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "text" $text "scalar")] | flatten | str join "&"
@@ -3567,7 +3591,7 @@ export def "set-text-using-post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --pad-id: string
   --text: string
-]: nothing -> record<code: int, data: record, message: string> {
+]: nothing -> oneof<record<code: int, data: record, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "text" $text "scalar")] | flatten | str join "&"

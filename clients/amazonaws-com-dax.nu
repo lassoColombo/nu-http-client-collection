@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -123,9 +146,9 @@ def x-amz-target-completer-20 [] { ["AmazonDAXV3.UpdateSubnetGroup"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-cluster" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["create-cluster" "create-parameter-group" "create-subnet-group" "decrease-replication-factor" "delete-cluster" "delete-parameter-group" "delete-subnet-group" "describe-clusters" "describe-default-parameters" "describe-events" "describe-parameter-groups" "describe-parameters" "describe-subnet-groups" "increase-replication-factor" "list-tags" "reboot-node" "tag-resource" "untag-resource" "update-cluster" "update-parameter-group" "update-subnet-group" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -147,8 +170,6 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: CreateCluster
-# --Tags item shape: {Key?: string, Value?: string}
-# --SSESpecification shape: {Enabled: bool}
 export def "create-cluster" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -181,7 +202,7 @@ export def "create-cluster" [
   --tags: list # A set of tags to associate with the DAX cluster. — item shape: {Key?: string, Value?: string}
   --sse-specification: record # Represents the settings used to enable server-side encryption. — shape: {Enabled: bool}
   --cluster-endpoint-encryption-type: string@cluster-endpoint-encryption-type-completer # The type of encryption the cluster's endpoint should support. Values are: NONE for no encryption TLS for Transport Layer Security
-]: any -> record<Cluster: record<ClusterName: string, Description: string, ClusterArn: string, TotalNodes: int, ActiveNodes: int, NodeType: string, Status: string, ClusterDiscoveryEndpoint: record<Address: string, Port: int, URL: string>, NodeIdsToRemove: list<string>, Nodes: list<record>, PreferredMaintenanceWindow: string, NotificationConfiguration: record<TopicArn: string, TopicStatus: string>, SubnetGroup: string, SecurityGroups: list<record>, IamRoleArn: string, ParameterGroup: record<ParameterGroupName: string, ParameterApplyStatus: string, NodeIdsToReboot: list>, SSEDescription: record<Status: string>, ClusterEndpointEncryptionType: string>> {
+]: any -> oneof<record<Cluster: record<ClusterName: string, Description: string, ClusterArn: string, TotalNodes: int, ActiveNodes: int, NodeType: string, Status: string, ClusterDiscoveryEndpoint: record<Address: string, Port: int, URL: string>, NodeIdsToRemove: list<string>, Nodes: list<record>, PreferredMaintenanceWindow: string, NotificationConfiguration: record<TopicArn: string, TopicStatus: string>, SubnetGroup: string, SecurityGroups: list<record>, IamRoleArn: string, ParameterGroup: record<ParameterGroupName: string, ParameterApplyStatus: string, NodeIdsToReboot: list>, SSEDescription: record<Status: string>, ClusterEndpointEncryptionType: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -231,7 +252,7 @@ export def "create-parameter-group" [
   --x-amz-target: string@x-amz-target-completer-1 # required
   parameter_group_name: string # The name of the parameter group to apply to all of the clusters in this replication group.
   --description: string # A description of the parameter group.
-]: any -> record<ParameterGroup: record<ParameterGroupName: string, Description: string>> {
+]: any -> oneof<record<ParameterGroup: record<ParameterGroupName: string, Description: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -282,7 +303,7 @@ export def "create-subnet-group" [
   subnet_group_name: string # A name for the subnet group. This value is stored as a lowercase string.
   --description: string # A description for the subnet group
   subnet_ids: list<string> # A list of VPC subnet IDs for the subnet group.
-]: any -> record<SubnetGroup: record<SubnetGroupName: string, Description: string, VpcId: string, Subnets: list<record>>> {
+]: any -> oneof<record<SubnetGroup: record<SubnetGroupName: string, Description: string, VpcId: string, Subnets: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -334,7 +355,7 @@ export def "decrease-replication-factor" [
   new_replication_factor: int # The new number of nodes for the DAX cluster.
   --availability-zones: list<string> # The Availability Zone(s) from which to remove nodes.
   --node-ids-to-remove: list<string> # The unique identifiers of the nodes to be removed from the cluster.
-]: any -> record<Cluster: record<ClusterName: string, Description: string, ClusterArn: string, TotalNodes: int, ActiveNodes: int, NodeType: string, Status: string, ClusterDiscoveryEndpoint: record<Address: string, Port: int, URL: string>, NodeIdsToRemove: list<string>, Nodes: list<record>, PreferredMaintenanceWindow: string, NotificationConfiguration: record<TopicArn: string, TopicStatus: string>, SubnetGroup: string, SecurityGroups: list<record>, IamRoleArn: string, ParameterGroup: record<ParameterGroupName: string, ParameterApplyStatus: string, NodeIdsToReboot: list>, SSEDescription: record<Status: string>, ClusterEndpointEncryptionType: string>> {
+]: any -> oneof<record<Cluster: record<ClusterName: string, Description: string, ClusterArn: string, TotalNodes: int, ActiveNodes: int, NodeType: string, Status: string, ClusterDiscoveryEndpoint: record<Address: string, Port: int, URL: string>, NodeIdsToRemove: list<string>, Nodes: list<record>, PreferredMaintenanceWindow: string, NotificationConfiguration: record<TopicArn: string, TopicStatus: string>, SubnetGroup: string, SecurityGroups: list<record>, IamRoleArn: string, ParameterGroup: record<ParameterGroupName: string, ParameterApplyStatus: string, NodeIdsToReboot: list>, SSEDescription: record<Status: string>, ClusterEndpointEncryptionType: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -383,7 +404,7 @@ export def "delete-cluster" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-4 # required
   cluster_name: string # The name of the cluster to be deleted.
-]: any -> record<Cluster: record<ClusterName: string, Description: string, ClusterArn: string, TotalNodes: int, ActiveNodes: int, NodeType: string, Status: string, ClusterDiscoveryEndpoint: record<Address: string, Port: int, URL: string>, NodeIdsToRemove: list<string>, Nodes: list<record>, PreferredMaintenanceWindow: string, NotificationConfiguration: record<TopicArn: string, TopicStatus: string>, SubnetGroup: string, SecurityGroups: list<record>, IamRoleArn: string, ParameterGroup: record<ParameterGroupName: string, ParameterApplyStatus: string, NodeIdsToReboot: list>, SSEDescription: record<Status: string>, ClusterEndpointEncryptionType: string>> {
+]: any -> oneof<record<Cluster: record<ClusterName: string, Description: string, ClusterArn: string, TotalNodes: int, ActiveNodes: int, NodeType: string, Status: string, ClusterDiscoveryEndpoint: record<Address: string, Port: int, URL: string>, NodeIdsToRemove: list<string>, Nodes: list<record>, PreferredMaintenanceWindow: string, NotificationConfiguration: record<TopicArn: string, TopicStatus: string>, SubnetGroup: string, SecurityGroups: list<record>, IamRoleArn: string, ParameterGroup: record<ParameterGroupName: string, ParameterApplyStatus: string, NodeIdsToReboot: list>, SSEDescription: record<Status: string>, ClusterEndpointEncryptionType: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -432,7 +453,7 @@ export def "delete-parameter-group" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-5 # required
   parameter_group_name: string # The name of the parameter group to delete.
-]: any -> record<DeletionMessage: string> {
+]: any -> oneof<record<DeletionMessage: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -481,7 +502,7 @@ export def "delete-subnet-group" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-6 # required
   subnet_group_name: string # The name of the subnet group to delete.
-]: any -> record<DeletionMessage: string> {
+]: any -> oneof<record<DeletionMessage: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -532,7 +553,7 @@ export def "describe-clusters" [
   --cluster-names: list<string> # The names of the DAX clusters being described.
   --max-results: int # The maximum number of results to include in the response. If more results exist than the specified MaxResults value, a token is included in the response so that the remaining results can be retrieved. The value for MaxResults must be between 20 and 100.
   --next-token: string # An optional token returned from a prior request. Use this token for pagination of results from this action. If this parameter is specified, the response includes only results beyond the token, up to the value specified by MaxResults.
-]: any -> record<NextToken: string, Clusters: table<ClusterName: string, Description: string, ClusterArn: string, TotalNodes: int, ActiveNodes: int, NodeType: string, Status: string, ClusterDiscoveryEndpoint: record, NodeIdsToRemove: list, Nodes: list, PreferredMaintenanceWindow: string, NotificationConfiguration: record, SubnetGroup: string, SecurityGroups: list, IamRoleArn: string, ParameterGroup: record, SSEDescription: record, ClusterEndpointEncryptionType: string>> {
+]: any -> oneof<record<NextToken: string, Clusters: table<ClusterName: string, Description: string, ClusterArn: string, TotalNodes: int, ActiveNodes: int, NodeType: string, Status: string, ClusterDiscoveryEndpoint: record, NodeIdsToRemove: list, Nodes: list, PreferredMaintenanceWindow: string, NotificationConfiguration: record, SubnetGroup: string, SecurityGroups: list, IamRoleArn: string, ParameterGroup: record, SSEDescription: record, ClusterEndpointEncryptionType: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -582,7 +603,7 @@ export def "describe-default-parameters" [
   --x-amz-target: string@x-amz-target-completer-8 # required
   --max-results: int # The maximum number of results to include in the response. If more results exist than the specified MaxResults value, a token is included in the response so that the remaining results can be retrieved. The value for MaxResults must be between 20 and 100.
   --next-token: string # An optional token returned from a prior request. Use this token for pagination of results from this action. If this parameter is specified, the response includes only results beyond the token, up to the value specified by MaxResults.
-]: any -> record<NextToken: string, Parameters: table<ParameterName: string, ParameterType: string, ParameterValue: string, NodeTypeSpecificValues: list, Description: string, Source: string, DataType: string, AllowedValues: string, IsModifiable: string, ChangeType: string>> {
+]: any -> oneof<record<NextToken: string, Parameters: table<ParameterName: string, ParameterType: string, ParameterValue: string, NodeTypeSpecificValues: list, Description: string, Source: string, DataType: string, AllowedValues: string, IsModifiable: string, ChangeType: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -637,7 +658,7 @@ export def "describe-events" [
   --duration: int # The number of minutes' worth of events to retrieve.
   --max-results: int # The maximum number of results to include in the response. If more results exist than the specified MaxResults value, a token is included in the response so that the remaining results can be retrieved. The value for MaxResults must be between 20 and 100.
   --next-token: string # An optional token returned from a prior request. Use this token for pagination of results from this action. If this parameter is specified, the response includes only results beyond the token, up to the value specified by MaxResults.
-]: any -> record<NextToken: string, Events: table<SourceName: string, SourceType: string, Message: string, Date: string>> {
+]: any -> oneof<record<NextToken: string, Events: table<SourceName: string, SourceType: string, Message: string, Date: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -688,7 +709,7 @@ export def "describe-parameter-groups" [
   --parameter-group-names: list<string> # The names of the parameter groups.
   --max-results: int # The maximum number of results to include in the response. If more results exist than the specified MaxResults value, a token is included in the response so that the remaining results can be retrieved. The value for MaxResults must be between 20 and 100.
   --next-token: string # An optional token returned from a prior request. Use this token for pagination of results from this action. If this parameter is specified, the response includes only results beyond the token, up to the value specified by MaxResults.
-]: any -> record<NextToken: string, ParameterGroups: table<ParameterGroupName: string, Description: string>> {
+]: any -> oneof<record<NextToken: string, ParameterGroups: table<ParameterGroupName: string, Description: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -740,7 +761,7 @@ export def "describe-parameters" [
   --source: string # How the parameter is defined. For example, system denotes a system-defined parameter.
   --max-results: int # The maximum number of results to include in the response. If more results exist than the specified MaxResults value, a token is included in the response so that the remaining results can be retrieved. The value for MaxResults must be between 20 and 100.
   --next-token: string # An optional token returned from a prior request. Use this token for pagination of results from this action. If this parameter is specified, the response includes only results beyond the token, up to the value specified by MaxResults.
-]: any -> record<NextToken: string, Parameters: table<ParameterName: string, ParameterType: string, ParameterValue: string, NodeTypeSpecificValues: list, Description: string, Source: string, DataType: string, AllowedValues: string, IsModifiable: string, ChangeType: string>> {
+]: any -> oneof<record<NextToken: string, Parameters: table<ParameterName: string, ParameterType: string, ParameterValue: string, NodeTypeSpecificValues: list, Description: string, Source: string, DataType: string, AllowedValues: string, IsModifiable: string, ChangeType: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -791,7 +812,7 @@ export def "describe-subnet-groups" [
   --subnet-group-names: list<string> # The name of the subnet group.
   --max-results: int # The maximum number of results to include in the response. If more results exist than the specified MaxResults value, a token is included in the response so that the remaining results can be retrieved. The value for MaxResults must be between 20 and 100.
   --next-token: string # An optional token returned from a prior request. Use this token for pagination of results from this action. If this parameter is specified, the response includes only results beyond the token, up to the value specified by MaxResults.
-]: any -> record<NextToken: string, SubnetGroups: table<SubnetGroupName: string, Description: string, VpcId: string, Subnets: list>> {
+]: any -> oneof<record<NextToken: string, SubnetGroups: table<SubnetGroupName: string, Description: string, VpcId: string, Subnets: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -842,7 +863,7 @@ export def "increase-replication-factor" [
   cluster_name: string # The name of the DAX cluster that will receive additional nodes.
   new_replication_factor: int # The new number of nodes for the DAX cluster.
   --availability-zones: list<string> # The Availability Zones (AZs) in which the cluster nodes will be created. All nodes belonging to the cluster are placed in these Availability Zones. Use this parameter if you want to distribute the nodes across multiple AZs.
-]: any -> record<Cluster: record<ClusterName: string, Description: string, ClusterArn: string, TotalNodes: int, ActiveNodes: int, NodeType: string, Status: string, ClusterDiscoveryEndpoint: record<Address: string, Port: int, URL: string>, NodeIdsToRemove: list<string>, Nodes: list<record>, PreferredMaintenanceWindow: string, NotificationConfiguration: record<TopicArn: string, TopicStatus: string>, SubnetGroup: string, SecurityGroups: list<record>, IamRoleArn: string, ParameterGroup: record<ParameterGroupName: string, ParameterApplyStatus: string, NodeIdsToReboot: list>, SSEDescription: record<Status: string>, ClusterEndpointEncryptionType: string>> {
+]: any -> oneof<record<Cluster: record<ClusterName: string, Description: string, ClusterArn: string, TotalNodes: int, ActiveNodes: int, NodeType: string, Status: string, ClusterDiscoveryEndpoint: record<Address: string, Port: int, URL: string>, NodeIdsToRemove: list<string>, Nodes: list<record>, PreferredMaintenanceWindow: string, NotificationConfiguration: record<TopicArn: string, TopicStatus: string>, SubnetGroup: string, SecurityGroups: list<record>, IamRoleArn: string, ParameterGroup: record<ParameterGroupName: string, ParameterApplyStatus: string, NodeIdsToReboot: list>, SSEDescription: record<Status: string>, ClusterEndpointEncryptionType: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -892,7 +913,7 @@ export def "list-tags" [
   --x-amz-target: string@x-amz-target-completer-14 # required
   resource_name: string # The name of the DAX resource to which the tags belong.
   --next-token: string # An optional token returned from a prior request. Use this token for pagination of results from this action. If this parameter is specified, the response includes only results beyond the token.
-]: any -> record<Tags: table<Key: string, Value: string>, NextToken: string> {
+]: any -> oneof<record<Tags: table<Key: string, Value: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -942,7 +963,7 @@ export def "reboot-node" [
   --x-amz-target: string@x-amz-target-completer-15 # required
   cluster_name: string # The name of the DAX cluster containing the node to be rebooted.
   node_id: string # The system-assigned ID of the node to be rebooted.
-]: any -> record<Cluster: record<ClusterName: string, Description: string, ClusterArn: string, TotalNodes: int, ActiveNodes: int, NodeType: string, Status: string, ClusterDiscoveryEndpoint: record<Address: string, Port: int, URL: string>, NodeIdsToRemove: list<string>, Nodes: list<record>, PreferredMaintenanceWindow: string, NotificationConfiguration: record<TopicArn: string, TopicStatus: string>, SubnetGroup: string, SecurityGroups: list<record>, IamRoleArn: string, ParameterGroup: record<ParameterGroupName: string, ParameterApplyStatus: string, NodeIdsToReboot: list>, SSEDescription: record<Status: string>, ClusterEndpointEncryptionType: string>> {
+]: any -> oneof<record<Cluster: record<ClusterName: string, Description: string, ClusterArn: string, TotalNodes: int, ActiveNodes: int, NodeType: string, Status: string, ClusterDiscoveryEndpoint: record<Address: string, Port: int, URL: string>, NodeIdsToRemove: list<string>, Nodes: list<record>, PreferredMaintenanceWindow: string, NotificationConfiguration: record<TopicArn: string, TopicStatus: string>, SubnetGroup: string, SecurityGroups: list<record>, IamRoleArn: string, ParameterGroup: record<ParameterGroupName: string, ParameterApplyStatus: string, NodeIdsToReboot: list>, SSEDescription: record<Status: string>, ClusterEndpointEncryptionType: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -972,7 +993,6 @@ export def "reboot-node" [
 #
 # POST /
 # operationId: TagResource
-# --Tags item shape: {Key?: string, Value?: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -993,7 +1013,7 @@ export def "tag-resource" [
   --x-amz-target: string@x-amz-target-completer-16 # required
   resource_name: string # The name of the DAX resource to which tags should be added.
   tags: list # The tags to be assigned to the DAX resource. — item shape: {Key?: string, Value?: string}
-]: any -> record<Tags: table<Key: string, Value: string>> {
+]: any -> oneof<record<Tags: table<Key: string, Value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1043,7 +1063,7 @@ export def "untag-resource" [
   --x-amz-target: string@x-amz-target-completer-17 # required
   resource_name: string # The name of the DAX resource from which the tags should be removed.
   tag_keys: list<string> # A list of tag keys. If the DAX cluster has any tags with these keys, then the tags are removed from the cluster.
-]: any -> record<Tags: table<Key: string, Value: string>> {
+]: any -> oneof<record<Tags: table<Key: string, Value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1098,7 +1118,7 @@ export def "update-cluster" [
   --notification-topic-status: string # The current state of the topic. A value of “active” means that notifications will be sent to the topic. A value of “inactive” means that notifications will not be sent to the topic.
   --parameter-group-name: string # The name of a parameter group for this cluster.
   --security-group-ids: list<string> # A list of user-specified security group IDs to be assigned to each node in the DAX cluster. If this parameter is not specified, DAX assigns the default VPC security group to each node.
-]: any -> record<Cluster: record<ClusterName: string, Description: string, ClusterArn: string, TotalNodes: int, ActiveNodes: int, NodeType: string, Status: string, ClusterDiscoveryEndpoint: record<Address: string, Port: int, URL: string>, NodeIdsToRemove: list<string>, Nodes: list<record>, PreferredMaintenanceWindow: string, NotificationConfiguration: record<TopicArn: string, TopicStatus: string>, SubnetGroup: string, SecurityGroups: list<record>, IamRoleArn: string, ParameterGroup: record<ParameterGroupName: string, ParameterApplyStatus: string, NodeIdsToReboot: list>, SSEDescription: record<Status: string>, ClusterEndpointEncryptionType: string>> {
+]: any -> oneof<record<Cluster: record<ClusterName: string, Description: string, ClusterArn: string, TotalNodes: int, ActiveNodes: int, NodeType: string, Status: string, ClusterDiscoveryEndpoint: record<Address: string, Port: int, URL: string>, NodeIdsToRemove: list<string>, Nodes: list<record>, PreferredMaintenanceWindow: string, NotificationConfiguration: record<TopicArn: string, TopicStatus: string>, SubnetGroup: string, SecurityGroups: list<record>, IamRoleArn: string, ParameterGroup: record<ParameterGroupName: string, ParameterApplyStatus: string, NodeIdsToReboot: list>, SSEDescription: record<Status: string>, ClusterEndpointEncryptionType: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1128,7 +1148,6 @@ export def "update-cluster" [
 #
 # POST /
 # operationId: UpdateParameterGroup
-# --ParameterNameValues item shape: {ParameterName?: string, ParameterValue?: string}
 export def "update-parameter-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1149,7 +1168,7 @@ export def "update-parameter-group" [
   --x-amz-target: string@x-amz-target-completer-19 # required
   parameter_group_name: string # The name of the parameter group.
   parameter_name_values: list # An array of name-value pairs for the parameters in the group. Each element in the array represents a single parameter. record-ttl-millis and query-ttl-millis are the only supported parameter names. For more details, see Configuring TTL Settings (https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DAX.cluster-management.html#DAX.cluster-management.custom-settings.ttl). — item shape: {ParameterName?: string, ParameterValue?: string}
-]: any -> record<ParameterGroup: record<ParameterGroupName: string, Description: string>> {
+]: any -> oneof<record<ParameterGroup: record<ParameterGroupName: string, Description: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1200,7 +1219,7 @@ export def "update-subnet-group" [
   subnet_group_name: string # The name of the subnet group.
   --description: string # A description of the subnet group.
   --subnet-ids: list<string> # A list of subnet IDs in the subnet group.
-]: any -> record<SubnetGroup: record<SubnetGroupName: string, Description: string, VpcId: string, Subnets: list<record>>> {
+]: any -> oneof<record<SubnetGroup: record<SubnetGroupName: string, Description: string, VpcId: string, Subnets: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -124,9 +148,9 @@ def resource-type-completer [] { ["CFN_STACK" "RESOURCE_TAG_VALUE"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "associate-attribute-group" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["associate-attribute-group" "disassociate-attribute-group" "associate-resource" "disassociate-resource" "get-associated-resource" "create-application" "list-applications" "create-attribute-group" "list-attribute-groups" "delete-application" "get-application" "update-application" "delete-attribute-group" "get-attribute-group" "update-attribute-group" "get-configuration" "put-configuration" "list-associated-attribute-groups" "list-associated-resources" "list-attribute-groups-for-application" "list-tags-for-resource" "tag-resource" "sync-resource" "untag-resource" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -167,7 +191,7 @@ export def "associate-attribute-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<applicationArn: string, attributeGroupArn: string> {
+]: nothing -> oneof<record<applicationArn: string, attributeGroupArn: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($application | is-empty) { error make --unspanned { msg: "path parameter 'application' must be non-empty" } }
@@ -214,7 +238,7 @@ export def "disassociate-attribute-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<applicationArn: string, attributeGroupArn: string> {
+]: nothing -> oneof<record<applicationArn: string, attributeGroupArn: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($application | is-empty) { error make --unspanned { msg: "path parameter 'application' must be non-empty" } }
@@ -262,7 +286,7 @@ export def "associate-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<applicationArn: string, resourceArn: string> {
+]: nothing -> oneof<record<applicationArn: string, resourceArn: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($application | is-empty) { error make --unspanned { msg: "path parameter 'application' must be non-empty" } }
@@ -311,7 +335,7 @@ export def "disassociate-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<applicationArn: string, resourceArn: string> {
+]: nothing -> oneof<record<applicationArn: string, resourceArn: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($application | is-empty) { error make --unspanned { msg: "path parameter 'application' must be non-empty" } }
@@ -360,7 +384,7 @@ export def "get-associated-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<resource: record<name: string, arn: string, associationTime: string, integrations: record<resourceGroup: record>>> {
+]: nothing -> oneof<record<resource: record<name: string, arn: string, associationTime: string, integrations: record<resourceGroup: record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($application | is-empty) { error make --unspanned { msg: "path parameter 'application' must be non-empty" } }
@@ -410,7 +434,7 @@ export def "create-application" [
   --description: string # The description of the application.
   --tags: record # Key-value pairs you can use to associate with the application.
   client_token: string # A unique identifier that you provide to ensure idempotency. If you retry a request that completed successfully using the same client token and the same parameters, the retry succeeds without performing any further actions. If you retry a successful request using the same client token, but one or more of the parameters are different, the retry fails.
-]: any -> record<application: record<id: string, arn: string, name: string, description: string, creationTime: string, lastUpdateTime: string, tags: record>> {
+]: any -> oneof<record<application: record<id: string, arn: string, name: string, description: string, creationTime: string, lastUpdateTime: string, tags: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -458,7 +482,7 @@ export def "list-applications" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<applications: table<id: string, arn: string, name: string, description: string, creationTime: string, lastUpdateTime: string>, nextToken: string> {
+]: nothing -> oneof<record<applications: table<id: string, arn: string, name: string, description: string, creationTime: string, lastUpdateTime: string>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
@@ -507,7 +531,7 @@ export def "create-attribute-group" [
   attributes: string # A JSON string in the form of nested key-value pairs that represent the attributes in the group and describes an application and its components.
   --tags: record # Key-value pairs you can use to associate with the attribute group.
   client_token: string # A unique identifier that you provide to ensure idempotency. If you retry a request that completed successfully using the same client token and the same parameters, the retry succeeds without performing any further actions. If you retry a successful request using the same client token, but one or more of the parameters are different, the retry fails.
-]: any -> record<attributeGroup: record<id: string, arn: string, name: string, description: string, creationTime: string, lastUpdateTime: string, tags: record>> {
+]: any -> oneof<record<attributeGroup: record<id: string, arn: string, name: string, description: string, creationTime: string, lastUpdateTime: string, tags: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -555,7 +579,7 @@ export def "list-attribute-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<attributeGroups: table<id: string, arn: string, name: string, description: string, creationTime: string, lastUpdateTime: string, createdBy: string>, nextToken: string> {
+]: nothing -> oneof<record<attributeGroups: table<id: string, arn: string, name: string, description: string, creationTime: string, lastUpdateTime: string, createdBy: string>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
@@ -600,7 +624,7 @@ export def "delete-application" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<application: record<id: string, arn: string, name: string, description: string, creationTime: string, lastUpdateTime: string>> {
+]: nothing -> oneof<record<application: record<id: string, arn: string, name: string, description: string, creationTime: string, lastUpdateTime: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($application | is-empty) { error make --unspanned { msg: "path parameter 'application' must be non-empty" } }
@@ -645,7 +669,7 @@ export def "get-application" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<id: string, arn: string, name: string, description: string, creationTime: string, lastUpdateTime: string, associatedResourceCount: int, tags: record, integrations: record<resourceGroup: record<state: string, arn: string, errorMessage: string>>> {
+]: nothing -> oneof<record<id: string, arn: string, name: string, description: string, creationTime: string, lastUpdateTime: string, associatedResourceCount: int, tags: record, integrations: record<resourceGroup: record<state: string, arn: string, errorMessage: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($application | is-empty) { error make --unspanned { msg: "path parameter 'application' must be non-empty" } }
@@ -692,7 +716,7 @@ export def "update-application" [
   --x-amz-signed-headers: string
   --name: string # Deprecated: The new name of the application. The name must be unique in the region in which you are updating the application. Please do not use this field as we have stopped supporting name updates.
   --description: string # The new description of the application.
-]: any -> record<application: record<id: string, arn: string, name: string, description: string, creationTime: string, lastUpdateTime: string, tags: record>> {
+]: any -> oneof<record<application: record<id: string, arn: string, name: string, description: string, creationTime: string, lastUpdateTime: string, tags: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -740,7 +764,7 @@ export def "delete-attribute-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<attributeGroup: record<id: string, arn: string, name: string, description: string, creationTime: string, lastUpdateTime: string, createdBy: string>> {
+]: nothing -> oneof<record<attributeGroup: record<id: string, arn: string, name: string, description: string, creationTime: string, lastUpdateTime: string, createdBy: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($attribute_group | is-empty) { error make --unspanned { msg: "path parameter 'attributeGroup' must be non-empty" } }
@@ -785,7 +809,7 @@ export def "get-attribute-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<id: string, arn: string, name: string, description: string, attributes: string, creationTime: string, lastUpdateTime: string, tags: record, createdBy: string> {
+]: nothing -> oneof<record<id: string, arn: string, name: string, description: string, attributes: string, creationTime: string, lastUpdateTime: string, tags: record, createdBy: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($attribute_group | is-empty) { error make --unspanned { msg: "path parameter 'attributeGroup' must be non-empty" } }
@@ -833,7 +857,7 @@ export def "update-attribute-group" [
   --name: string # Deprecated: The new name of the attribute group. The name must be unique in the region in which you are updating the attribute group. Please do not use this field as we have stopped supporting name updates.
   --description: string # The description of the attribute group that the user provides.
   --attributes: string # A JSON string in the form of nested key-value pairs that represent the attributes in the group and describes an application and its components.
-]: any -> record<attributeGroup: record<id: string, arn: string, name: string, description: string, creationTime: string, lastUpdateTime: string, tags: record>> {
+]: any -> oneof<record<attributeGroup: record<id: string, arn: string, name: string, description: string, creationTime: string, lastUpdateTime: string, tags: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -880,7 +904,7 @@ export def "get-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<configuration: record<tagQueryConfiguration: record<tagKey: string>>> {
+]: nothing -> oneof<record<configuration: record<tagQueryConfiguration: record<tagKey: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/configuration" $auth.query)
@@ -906,7 +930,6 @@ export def "get-configuration" [
 #
 # PUT /configuration
 # operationId: PutConfiguration
-# --configuration shape: {tagQueryConfiguration?: record}
 export def "put-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -974,7 +997,7 @@ export def "list-associated-attribute-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<attributeGroups: list<string>, nextToken: string> {
+]: nothing -> oneof<record<attributeGroups: list<string>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($application | is-empty) { error make --unspanned { msg: "path parameter 'application' must be non-empty" } }
@@ -1022,7 +1045,7 @@ export def "list-associated-resources" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<resources: table<name: string, arn: string, resourceType: string, resourceDetails: record>, nextToken: string> {
+]: nothing -> oneof<record<resources: table<name: string, arn: string, resourceType: string, resourceDetails: record>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($application | is-empty) { error make --unspanned { msg: "path parameter 'application' must be non-empty" } }
@@ -1070,7 +1093,7 @@ export def "list-attribute-groups-for-application" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<attributeGroupsDetails: table<id: string, arn: string, name: string, createdBy: string>, nextToken: string> {
+]: nothing -> oneof<record<attributeGroupsDetails: table<id: string, arn: string, name: string, createdBy: string>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($application | is-empty) { error make --unspanned { msg: "path parameter 'application' must be non-empty" } }
@@ -1116,7 +1139,7 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<tags: record> {
+]: nothing -> oneof<record<tags: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
@@ -1162,7 +1185,7 @@ export def "tag-resource" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   tags: record # The new or modified tags for the resource.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1211,7 +1234,7 @@ export def "sync-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<applicationArn: string, resourceArn: string, actionTaken: string> {
+]: nothing -> oneof<record<applicationArn: string, resourceArn: string, actionTaken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_type | is-empty) { error make --unspanned { msg: "path parameter 'resourceType' must be non-empty" } }
@@ -1258,7 +1281,7 @@ export def "untag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }

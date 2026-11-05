@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -178,9 +201,9 @@ def x-amz-target-completer-76 [] { ["AWSWAF_20150824.UpdateXssMatchSet"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-byte-match-set" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["create-byte-match-set" "create-geo-match-set" "create-ip-set" "create-rate-based-rule" "create-regex-match-set" "create-regex-pattern-set" "create-rule" "create-rule-group" "create-size-constraint-set" "create-sql-injection-match-set" "create-web-acl" "create-web-acl-migration-stack" "create-xss-match-set" "delete-byte-match-set" "delete-geo-match-set" "delete-ip-set" "delete-logging-configuration" "delete-permission-policy" "delete-rate-based-rule" "delete-regex-match-set" "delete-regex-pattern-set" "delete-rule" "delete-rule-group" "delete-size-constraint-set" "delete-sql-injection-match-set" "delete-web-acl" "delete-xss-match-set" "get-byte-match-set" "get-change-token" "get-change-token-status" "get-geo-match-set" "get-ip-set" "get-logging-configuration" "get-permission-policy" "get-rate-based-rule" "get-rate-based-rule-managed-keys" "get-regex-match-set" "get-regex-pattern-set" "get-rule" "get-rule-group" "get-sampled-requests" "get-size-constraint-set" "get-sql-injection-match-set" "get-web-acl" "get-xss-match-set" "list-activated-rules-in-rule-group" "list-byte-match-sets" "list-geo-match-sets" "list-ip-sets" "list-logging-configurations" "list-rate-based-rules" "list-regex-match-sets" "list-regex-pattern-sets" "list-rule-groups" "list-rules" "list-size-constraint-sets" "list-sql-injection-match-sets" "list-subscribed-rule-groups" "list-tags-for-resource" "list-web-ac-ls" "list-xss-match-sets" "put-logging-configuration" "put-permission-policy" "tag-resource" "untag-resource" "update-byte-match-set" "update-geo-match-set" "update-ip-set" "update-rate-based-rule" "update-regex-match-set" "update-regex-pattern-set" "update-rule" "update-rule-group" "update-size-constraint-set" "update-sql-injection-match-set" "update-web-acl" "update-xss-match-set" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -222,7 +245,7 @@ export def "create-byte-match-set" [
   --x-amz-target: string@x-amz-target-completer # required
   name: string # A friendly name or description of the ByteMatchSet. You can't change Name after you create a ByteMatchSet.
   change_token: string # The value returned by the most recent call to GetChangeToken.
-]: any -> record<ByteMatchSet: record<ByteMatchSetId: string, Name: string, ByteMatchTuples: list<record>>, ChangeToken: string> {
+]: any -> oneof<record<ByteMatchSet: record<ByteMatchSetId: string, Name: string, ByteMatchTuples: list<record>>, ChangeToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -272,7 +295,7 @@ export def "create-geo-match-set" [
   --x-amz-target: string@x-amz-target-completer-1 # required
   name: string # A friendly name or description of the GeoMatchSet. You can't change Name after you create the GeoMatchSet.
   change_token: string # The value returned by the most recent call to GetChangeToken.
-]: any -> record<GeoMatchSet: record<GeoMatchSetId: string, Name: string, GeoMatchConstraints: list<record>>, ChangeToken: string> {
+]: any -> oneof<record<GeoMatchSet: record<GeoMatchSetId: string, Name: string, GeoMatchConstraints: list<record>>, ChangeToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -322,7 +345,7 @@ export def "create-ip-set" [
   --x-amz-target: string@x-amz-target-completer-2 # required
   name: string # A friendly name or description of the IPSet. You can't change Name after you create the IPSet.
   change_token: string # The value returned by the most recent call to GetChangeToken.
-]: any -> record<IPSet: record<IPSetId: string, Name: string, IPSetDescriptors: list<record>>, ChangeToken: string> {
+]: any -> oneof<record<IPSet: record<IPSetId: string, Name: string, IPSetDescriptors: list<record>>, ChangeToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -352,7 +375,6 @@ export def "create-ip-set" [
 #
 # POST /
 # operationId: CreateRateBasedRule
-# --Tags item shape: {Key: string, Value: string}
 export def "create-rate-based-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -377,7 +399,7 @@ export def "create-rate-based-rule" [
   rate_limit: int # The maximum number of requests, which have an identical value in the field that is specified by RateKey, allowed in a five-minute period. If the number of requests exceeds the RateLimit and the other predicates specified in the rule are also met, AWS WAF triggers the action that is specified for this rule.
   change_token: string # The ChangeToken that you used to submit the CreateRateBasedRule request. You can also use this value to query the status of the request. For more information, see GetChangeTokenStatus.
   --tags: list # item shape: {Key: string, Value: string}
-]: any -> record<Rule: record<RuleId: string, Name: string, MetricName: string, MatchPredicates: list<record>, RateKey: string, RateLimit: int>, ChangeToken: string> {
+]: any -> oneof<record<Rule: record<RuleId: string, Name: string, MetricName: string, MatchPredicates: list<record>, RateKey: string, RateLimit: int>, ChangeToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -427,7 +449,7 @@ export def "create-regex-match-set" [
   --x-amz-target: string@x-amz-target-completer-4 # required
   name: string # A friendly name or description of the RegexMatchSet. You can't change Name after you create a RegexMatchSet.
   change_token: string # The value returned by the most recent call to GetChangeToken.
-]: any -> record<RegexMatchSet: record<RegexMatchSetId: string, Name: string, RegexMatchTuples: list<record>>, ChangeToken: string> {
+]: any -> oneof<record<RegexMatchSet: record<RegexMatchSetId: string, Name: string, RegexMatchTuples: list<record>>, ChangeToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -477,7 +499,7 @@ export def "create-regex-pattern-set" [
   --x-amz-target: string@x-amz-target-completer-5 # required
   name: string # A friendly name or description of the RegexPatternSet. You can't change Name after you create a RegexPatternSet.
   change_token: string # The value returned by the most recent call to GetChangeToken.
-]: any -> record<RegexPatternSet: record<RegexPatternSetId: string, Name: string, RegexPatternStrings: list<string>>, ChangeToken: string> {
+]: any -> oneof<record<RegexPatternSet: record<RegexPatternSetId: string, Name: string, RegexPatternStrings: list<string>>, ChangeToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -507,7 +529,6 @@ export def "create-regex-pattern-set" [
 #
 # POST /
 # operationId: CreateRule
-# --Tags item shape: {Key: string, Value: string}
 export def "create-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -530,7 +551,7 @@ export def "create-rule" [
   metric_name: string # A friendly name or description for the metrics for this Rule. The name can contain only alphanumeric characters (A-Z, a-z, 0-9), with maximum length 128 and minimum length one. It can't contain whitespace or metric names reserved for AWS WAF, including "All" and "Default_Action." You can't change the name of the metric after you create the Rule.
   change_token: string # The value returned by the most recent call to GetChangeToken.
   --tags: list # item shape: {Key: string, Value: string}
-]: any -> record<Rule: record<RuleId: string, Name: string, MetricName: string, Predicates: list<record>>, ChangeToken: string> {
+]: any -> oneof<record<Rule: record<RuleId: string, Name: string, MetricName: string, Predicates: list<record>>, ChangeToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -560,7 +581,6 @@ export def "create-rule" [
 #
 # POST /
 # operationId: CreateRuleGroup
-# --Tags item shape: {Key: string, Value: string}
 export def "create-rule-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -583,7 +603,7 @@ export def "create-rule-group" [
   metric_name: string # A friendly name or description for the metrics for this RuleGroup. The name can contain only alphanumeric characters (A-Z, a-z, 0-9), with maximum length 128 and minimum length one. It can't contain whitespace or metric names reserved for AWS WAF, including "All" and "Default_Action." You can't change the name of the metric after you create the RuleGroup.
   change_token: string # The value returned by the most recent call to GetChangeToken.
   --tags: list # item shape: {Key: string, Value: string}
-]: any -> record<RuleGroup: record<RuleGroupId: string, Name: string, MetricName: string>, ChangeToken: string> {
+]: any -> oneof<record<RuleGroup: record<RuleGroupId: string, Name: string, MetricName: string>, ChangeToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -633,7 +653,7 @@ export def "create-size-constraint-set" [
   --x-amz-target: string@x-amz-target-completer-8 # required
   name: string # A friendly name or description of the SizeConstraintSet. You can't change Name after you create a SizeConstraintSet.
   change_token: string # The value returned by the most recent call to GetChangeToken.
-]: any -> record<SizeConstraintSet: record<SizeConstraintSetId: string, Name: string, SizeConstraints: list<record>>, ChangeToken: string> {
+]: any -> oneof<record<SizeConstraintSet: record<SizeConstraintSetId: string, Name: string, SizeConstraints: list<record>>, ChangeToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -683,7 +703,7 @@ export def "create-sql-injection-match-set" [
   --x-amz-target: string@x-amz-target-completer-9 # required
   name: string # A friendly name or description for the SqlInjectionMatchSet that you're creating. You can't change Name after you create the SqlInjectionMatchSet.
   change_token: string # The value returned by the most recent call to GetChangeToken.
-]: any -> record<SqlInjectionMatchSet: record<SqlInjectionMatchSetId: string, Name: string, SqlInjectionMatchTuples: list<record>>, ChangeToken: string> {
+]: any -> oneof<record<SqlInjectionMatchSet: record<SqlInjectionMatchSetId: string, Name: string, SqlInjectionMatchTuples: list<record>>, ChangeToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -713,8 +733,6 @@ export def "create-sql-injection-match-set" [
 #
 # POST /
 # operationId: CreateWebACL
-# --DefaultAction shape: {Type: "BLOCK"|"ALLOW"|"COUNT"}
-# --Tags item shape: {Key: string, Value: string}
 export def "create-web-acl" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -738,7 +756,7 @@ export def "create-web-acl" [
   default_action: record # This is AWS WAF Classic documentation. For more information, see AWS WAF Classic (https://docs.aws.amazon.com/waf/latest/developerguide/classic-waf-chapter.html) in the developer guide. For the latest version of AWS WAF, use the AWS WAFV2 API and see the AWS WAF Developer Guide (https://docs.aws.amazon.com/waf/latest/developerguide/waf-chapter.html). With the latest version, AWS WAF has a single set of endpoints for regional and global use. For the action that is associated with a rule in a WebACL, specifies the action that you want AWS WAF to perform when a web request matches all of the conditions in a rule. For the default action in a WebACL, specifies the action that you want AWS WAF to take when a web request doesn't match all of the conditions in any of the rules in a WebACL. — shape: {Type: "BLOCK"|"ALLOW"|"COUNT"}
   change_token: string # The value returned by the most recent call to GetChangeToken.
   --tags: list # item shape: {Key: string, Value: string}
-]: any -> record<WebACL: record<WebACLId: string, Name: string, MetricName: string, DefaultAction: record<Type: string>, Rules: list<record>, WebACLArn: string>, ChangeToken: string> {
+]: any -> oneof<record<WebACL: record<WebACLId: string, Name: string, MetricName: string, DefaultAction: record<Type: string>, Rules: list<record>, WebACLArn: string>, ChangeToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -789,7 +807,7 @@ export def "create-web-acl-migration-stack" [
   web_acl_id: string # The UUID of the WAF Classic web ACL that you want to migrate to WAF v2.
   s3_bucket_name: string # The name of the Amazon S3 bucket to store the CloudFormation template in. The S3 bucket must be configured as follows for the migration: The bucket name must start with aws-waf-migration-. For example, aws-waf-migration-my-web-acl. The bucket must be in the Region where you are deploying the template. For example, for a web ACL in us-west-2, you must use an Amazon S3 bucket in us-west-2 and you must deploy the template stack to us-west-2. The bucket policies must permit the migration process to write data. For listings of the bucket policies, see the Examples section.
   --ignore-unsupported-type: oneof<nothing, bool> # Indicates whether to exclude entities that can't be migrated or to stop the migration. Set this to true to ignore unsupported entities in the web ACL during the migration. Otherwise, if AWS WAF encounters unsupported entities, it stops the process and throws an exception.
-]: any -> record<S3ObjectUrl: string> {
+]: any -> oneof<record<S3ObjectUrl: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -840,7 +858,7 @@ export def "create-xss-match-set" [
   --x-amz-target: string@x-amz-target-completer-12 # required
   name: string # A friendly name or description for the XssMatchSet that you're creating. You can't change Name after you create the XssMatchSet.
   change_token: string # The value returned by the most recent call to GetChangeToken.
-]: any -> record<XssMatchSet: record<XssMatchSetId: string, Name: string, XssMatchTuples: list<record>>, ChangeToken: string> {
+]: any -> oneof<record<XssMatchSet: record<XssMatchSetId: string, Name: string, XssMatchTuples: list<record>>, ChangeToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -890,7 +908,7 @@ export def "delete-byte-match-set" [
   --x-amz-target: string@x-amz-target-completer-13 # required
   byte_match_set_id: string # The ByteMatchSetId of the ByteMatchSet that you want to delete. ByteMatchSetId is returned by CreateByteMatchSet and by ListByteMatchSets.
   change_token: string # The value returned by the most recent call to GetChangeToken.
-]: any -> record<ChangeToken: string> {
+]: any -> oneof<record<ChangeToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -940,7 +958,7 @@ export def "delete-geo-match-set" [
   --x-amz-target: string@x-amz-target-completer-14 # required
   geo_match_set_id: string # The GeoMatchSetID of the GeoMatchSet that you want to delete. GeoMatchSetId is returned by CreateGeoMatchSet and by ListGeoMatchSets.
   change_token: string # The value returned by the most recent call to GetChangeToken.
-]: any -> record<ChangeToken: string> {
+]: any -> oneof<record<ChangeToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -990,7 +1008,7 @@ export def "delete-ip-set" [
   --x-amz-target: string@x-amz-target-completer-15 # required
   ip_set_id: string # The IPSetId of the IPSet that you want to delete. IPSetId is returned by CreateIPSet and by ListIPSets.
   change_token: string # The value returned by the most recent call to GetChangeToken.
-]: any -> record<ChangeToken: string> {
+]: any -> oneof<record<ChangeToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1039,7 +1057,7 @@ export def "delete-logging-configuration" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-16 # required
   resource_arn: string # The Amazon Resource Name (ARN) of the web ACL from which you want to delete the LoggingConfiguration.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1088,7 +1106,7 @@ export def "delete-permission-policy" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-17 # required
   resource_arn: string # The Amazon Resource Name (ARN) of the RuleGroup from which you want to delete the policy. The user making the request must be the owner of the RuleGroup.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1138,7 +1156,7 @@ export def "delete-rate-based-rule" [
   --x-amz-target: string@x-amz-target-completer-18 # required
   rule_id: string # The RuleId of the RateBasedRule that you want to delete. RuleId is returned by CreateRateBasedRule and by ListRateBasedRules.
   change_token: string # The value returned by the most recent call to GetChangeToken.
-]: any -> record<ChangeToken: string> {
+]: any -> oneof<record<ChangeToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1188,7 +1206,7 @@ export def "delete-regex-match-set" [
   --x-amz-target: string@x-amz-target-completer-19 # required
   regex_match_set_id: string # The RegexMatchSetId of the RegexMatchSet that you want to delete. RegexMatchSetId is returned by CreateRegexMatchSet and by ListRegexMatchSets.
   change_token: string # The value returned by the most recent call to GetChangeToken.
-]: any -> record<ChangeToken: string> {
+]: any -> oneof<record<ChangeToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1238,7 +1256,7 @@ export def "delete-regex-pattern-set" [
   --x-amz-target: string@x-amz-target-completer-20 # required
   regex_pattern_set_id: string # The RegexPatternSetId of the RegexPatternSet that you want to delete. RegexPatternSetId is returned by CreateRegexPatternSet and by ListRegexPatternSets.
   change_token: string # The value returned by the most recent call to GetChangeToken.
-]: any -> record<ChangeToken: string> {
+]: any -> oneof<record<ChangeToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1288,7 +1306,7 @@ export def "delete-rule" [
   --x-amz-target: string@x-amz-target-completer-21 # required
   rule_id: string # The RuleId of the Rule that you want to delete. RuleId is returned by CreateRule and by ListRules.
   change_token: string # The value returned by the most recent call to GetChangeToken.
-]: any -> record<ChangeToken: string> {
+]: any -> oneof<record<ChangeToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1338,7 +1356,7 @@ export def "delete-rule-group" [
   --x-amz-target: string@x-amz-target-completer-22 # required
   rule_group_id: string # The RuleGroupId of the RuleGroup that you want to delete. RuleGroupId is returned by CreateRuleGroup and by ListRuleGroups.
   change_token: string # The value returned by the most recent call to GetChangeToken.
-]: any -> record<ChangeToken: string> {
+]: any -> oneof<record<ChangeToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1388,7 +1406,7 @@ export def "delete-size-constraint-set" [
   --x-amz-target: string@x-amz-target-completer-23 # required
   size_constraint_set_id: string # The SizeConstraintSetId of the SizeConstraintSet that you want to delete. SizeConstraintSetId is returned by CreateSizeConstraintSet and by ListSizeConstraintSets.
   change_token: string # The value returned by the most recent call to GetChangeToken.
-]: any -> record<ChangeToken: string> {
+]: any -> oneof<record<ChangeToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1438,7 +1456,7 @@ export def "delete-sql-injection-match-set" [
   --x-amz-target: string@x-amz-target-completer-24 # required
   sql_injection_match_set_id: string # The SqlInjectionMatchSetId of the SqlInjectionMatchSet that you want to delete. SqlInjectionMatchSetId is returned by CreateSqlInjectionMatchSet and by ListSqlInjectionMatchSets.
   change_token: string # The value returned by the most recent call to GetChangeToken.
-]: any -> record<ChangeToken: string> {
+]: any -> oneof<record<ChangeToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1488,7 +1506,7 @@ export def "delete-web-acl" [
   --x-amz-target: string@x-amz-target-completer-25 # required
   web_acl_id: string # The WebACLId of the WebACL that you want to delete. WebACLId is returned by CreateWebACL and by ListWebACLs.
   change_token: string # The value returned by the most recent call to GetChangeToken.
-]: any -> record<ChangeToken: string> {
+]: any -> oneof<record<ChangeToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1538,7 +1556,7 @@ export def "delete-xss-match-set" [
   --x-amz-target: string@x-amz-target-completer-26 # required
   xss_match_set_id: string # The XssMatchSetId of the XssMatchSet that you want to delete. XssMatchSetId is returned by CreateXssMatchSet and by ListXssMatchSets.
   change_token: string # The value returned by the most recent call to GetChangeToken.
-]: any -> record<ChangeToken: string> {
+]: any -> oneof<record<ChangeToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1587,7 +1605,7 @@ export def "get-byte-match-set" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-27 # required
   byte_match_set_id: string # The ByteMatchSetId of the ByteMatchSet that you want to get. ByteMatchSetId is returned by CreateByteMatchSet and by ListByteMatchSets.
-]: any -> record<ByteMatchSet: record<ByteMatchSetId: string, Name: string, ByteMatchTuples: list<record>>> {
+]: any -> oneof<record<ByteMatchSet: record<ByteMatchSetId: string, Name: string, ByteMatchTuples: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1636,7 +1654,7 @@ export def "get-change-token" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-28 # required
   --body: record
-]: any -> record<ChangeToken: string> {
+]: any -> oneof<record<ChangeToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1685,7 +1703,7 @@ export def "get-change-token-status" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-29 # required
   change_token: string # The change token for which you want to get the status. This change token was previously returned in the GetChangeToken response.
-]: any -> record<ChangeTokenStatus: string> {
+]: any -> oneof<record<ChangeTokenStatus: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1734,7 +1752,7 @@ export def "get-geo-match-set" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-30 # required
   geo_match_set_id: string # The GeoMatchSetId of the GeoMatchSet that you want to get. GeoMatchSetId is returned by CreateGeoMatchSet and by ListGeoMatchSets.
-]: any -> record<GeoMatchSet: record<GeoMatchSetId: string, Name: string, GeoMatchConstraints: list<record>>> {
+]: any -> oneof<record<GeoMatchSet: record<GeoMatchSetId: string, Name: string, GeoMatchConstraints: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1783,7 +1801,7 @@ export def "get-ip-set" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-31 # required
   ip_set_id: string # The IPSetId of the IPSet that you want to get. IPSetId is returned by CreateIPSet and by ListIPSets.
-]: any -> record<IPSet: record<IPSetId: string, Name: string, IPSetDescriptors: list<record>>> {
+]: any -> oneof<record<IPSet: record<IPSetId: string, Name: string, IPSetDescriptors: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1832,7 +1850,7 @@ export def "get-logging-configuration" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-32 # required
   resource_arn: string # The Amazon Resource Name (ARN) of the web ACL for which you want to get the LoggingConfiguration.
-]: any -> record<LoggingConfiguration: record<ResourceArn: string, LogDestinationConfigs: list<string>, RedactedFields: list<record>>> {
+]: any -> oneof<record<LoggingConfiguration: record<ResourceArn: string, LogDestinationConfigs: list<string>, RedactedFields: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1881,7 +1899,7 @@ export def "get-permission-policy" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-33 # required
   resource_arn: string # The Amazon Resource Name (ARN) of the RuleGroup for which you want to get the policy.
-]: any -> record<Policy: string> {
+]: any -> oneof<record<Policy: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1930,7 +1948,7 @@ export def "get-rate-based-rule" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-34 # required
   rule_id: string # The RuleId of the RateBasedRule that you want to get. RuleId is returned by CreateRateBasedRule and by ListRateBasedRules.
-]: any -> record<Rule: record<RuleId: string, Name: string, MetricName: string, MatchPredicates: list<record>, RateKey: string, RateLimit: int>> {
+]: any -> oneof<record<Rule: record<RuleId: string, Name: string, MetricName: string, MatchPredicates: list<record>, RateKey: string, RateLimit: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1980,7 +1998,7 @@ export def "get-rate-based-rule-managed-keys" [
   --x-amz-target: string@x-amz-target-completer-35 # required
   rule_id: string # The RuleId of the RateBasedRule for which you want to get a list of ManagedKeys. RuleId is returned by CreateRateBasedRule and by ListRateBasedRules.
   --next-marker: string # A null value and not currently used. Do not include this in your request.
-]: any -> record<ManagedKeys: list<string>, NextMarker: string> {
+]: any -> oneof<record<ManagedKeys: list<string>, NextMarker: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2029,7 +2047,7 @@ export def "get-regex-match-set" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-36 # required
   regex_match_set_id: string # The RegexMatchSetId of the RegexMatchSet that you want to get. RegexMatchSetId is returned by CreateRegexMatchSet and by ListRegexMatchSets.
-]: any -> record<RegexMatchSet: record<RegexMatchSetId: string, Name: string, RegexMatchTuples: list<record>>> {
+]: any -> oneof<record<RegexMatchSet: record<RegexMatchSetId: string, Name: string, RegexMatchTuples: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2078,7 +2096,7 @@ export def "get-regex-pattern-set" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-37 # required
   regex_pattern_set_id: string # The RegexPatternSetId of the RegexPatternSet that you want to get. RegexPatternSetId is returned by CreateRegexPatternSet and by ListRegexPatternSets.
-]: any -> record<RegexPatternSet: record<RegexPatternSetId: string, Name: string, RegexPatternStrings: list<string>>> {
+]: any -> oneof<record<RegexPatternSet: record<RegexPatternSetId: string, Name: string, RegexPatternStrings: list<string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2127,7 +2145,7 @@ export def "get-rule" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-38 # required
   rule_id: string # The RuleId of the Rule that you want to get. RuleId is returned by CreateRule and by ListRules.
-]: any -> record<Rule: record<RuleId: string, Name: string, MetricName: string, Predicates: list<record>>> {
+]: any -> oneof<record<Rule: record<RuleId: string, Name: string, MetricName: string, Predicates: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2176,7 +2194,7 @@ export def "get-rule-group" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-39 # required
   rule_group_id: string # The RuleGroupId of the RuleGroup that you want to get. RuleGroupId is returned by CreateRuleGroup and by ListRuleGroups.
-]: any -> record<RuleGroup: record<RuleGroupId: string, Name: string, MetricName: string>> {
+]: any -> oneof<record<RuleGroup: record<RuleGroupId: string, Name: string, MetricName: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2206,7 +2224,6 @@ export def "get-rule-group" [
 #
 # POST /
 # operationId: GetSampledRequests
-# --TimeWindow shape: {StartTime: string, EndTime: string}
 export def "get-sampled-requests" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2229,7 +2246,7 @@ export def "get-sampled-requests" [
   rule_id: string # RuleId is one of three values: The RuleId of the Rule or the RuleGroupId of the RuleGroup for which you want GetSampledRequests to return a sample of requests. Default_Action, which causes GetSampledRequests to return a sample of the requests that didn't match any of the rules in the specified WebACL.
   time_window: record # This is AWS WAF Classic documentation. For more information, see AWS WAF Classic (https://docs.aws.amazon.com/waf/latest/developerguide/classic-waf-chapter.html) in the developer guide. For the latest version of AWS WAF, use the AWS WAFV2 API and see the AWS WAF Developer Guide (https://docs.aws.amazon.com/waf/latest/developerguide/waf-chapter.html). With the latest version, AWS WAF has a single set of endpoints for regional and global use. In a GetSampledRequests request, the StartTime and EndTime objects specify the time range for which you want AWS WAF to return a sample of web requests. You must specify the times in Coordinated Universal Time (UTC) format. UTC format includes the special designator, Z. For example, "2016-09-27T14:50Z". In a GetSampledRequests response, the StartTime and EndTime objects specify the time range for which AWS WAF actually returned a sample of web requests. AWS WAF gets the specified number of requests from among the first 5,000 requests that your AWS resource receives during the specified time period. If your resource receives more than 5,000 requests during that period, AWS WAF stops sampling after the 5,000th request. In that case, EndTime is the time that AWS WAF received the 5,000th request. — shape: {StartTime: string, EndTime: string}
   max_items: int # The number of requests that you want AWS WAF to return from among the first 5,000 requests that your AWS resource received during the time range. If your resource received fewer requests than the value of MaxItems, GetSampledRequests returns information about all of them.
-]: any -> record<SampledRequests: table<Request: record, Weight: int, Timestamp: string, Action: string, RuleWithinRuleGroup: string>, PopulationSize: int, TimeWindow: record<StartTime: string, EndTime: string>> {
+]: any -> oneof<record<SampledRequests: table<Request: record, Weight: int, Timestamp: string, Action: string, RuleWithinRuleGroup: string>, PopulationSize: int, TimeWindow: record<StartTime: string, EndTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2278,7 +2295,7 @@ export def "get-size-constraint-set" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-41 # required
   size_constraint_set_id: string # The SizeConstraintSetId of the SizeConstraintSet that you want to get. SizeConstraintSetId is returned by CreateSizeConstraintSet and by ListSizeConstraintSets.
-]: any -> record<SizeConstraintSet: record<SizeConstraintSetId: string, Name: string, SizeConstraints: list<record>>> {
+]: any -> oneof<record<SizeConstraintSet: record<SizeConstraintSetId: string, Name: string, SizeConstraints: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2327,7 +2344,7 @@ export def "get-sql-injection-match-set" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-42 # required
   sql_injection_match_set_id: string # The SqlInjectionMatchSetId of the SqlInjectionMatchSet that you want to get. SqlInjectionMatchSetId is returned by CreateSqlInjectionMatchSet and by ListSqlInjectionMatchSets.
-]: any -> record<SqlInjectionMatchSet: record<SqlInjectionMatchSetId: string, Name: string, SqlInjectionMatchTuples: list<record>>> {
+]: any -> oneof<record<SqlInjectionMatchSet: record<SqlInjectionMatchSetId: string, Name: string, SqlInjectionMatchTuples: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2376,7 +2393,7 @@ export def "get-web-acl" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-43 # required
   web_acl_id: string # The WebACLId of the WebACL that you want to get. WebACLId is returned by CreateWebACL and by ListWebACLs.
-]: any -> record<WebACL: record<WebACLId: string, Name: string, MetricName: string, DefaultAction: record<Type: string>, Rules: list<record>, WebACLArn: string>> {
+]: any -> oneof<record<WebACL: record<WebACLId: string, Name: string, MetricName: string, DefaultAction: record<Type: string>, Rules: list<record>, WebACLArn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2425,7 +2442,7 @@ export def "get-xss-match-set" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-44 # required
   xss_match_set_id: string # The XssMatchSetId of the XssMatchSet that you want to get. XssMatchSetId is returned by CreateXssMatchSet and by ListXssMatchSets.
-]: any -> record<XssMatchSet: record<XssMatchSetId: string, Name: string, XssMatchTuples: list<record>>> {
+]: any -> oneof<record<XssMatchSet: record<XssMatchSetId: string, Name: string, XssMatchTuples: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2476,7 +2493,7 @@ export def "list-activated-rules-in-rule-group" [
   --rule-group-id: string # The RuleGroupId of the RuleGroup for which you want to get a list of ActivatedRule objects.
   --next-marker: string # If you specify a value for Limit and you have more ActivatedRules than the value of Limit, AWS WAF returns a NextMarker value in the response that allows you to list another group of ActivatedRules. For the second and subsequent ListActivatedRulesInRuleGroup requests, specify the value of NextMarker from the previous response to get information about another batch of ActivatedRules.
   --limit: int # Specifies the number of ActivatedRules that you want AWS WAF to return for this request. If you have more ActivatedRules than the number that you specify for Limit, the response includes a NextMarker value that you can use to get another batch of ActivatedRules.
-]: any -> record<NextMarker: string, ActivatedRules: table<Priority: int, RuleId: string, Action: record, OverrideAction: record, Type: string, ExcludedRules: list>> {
+]: any -> oneof<record<NextMarker: string, ActivatedRules: table<Priority: int, RuleId: string, Action: record, OverrideAction: record, Type: string, ExcludedRules: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2526,7 +2543,7 @@ export def "list-byte-match-sets" [
   --x-amz-target: string@x-amz-target-completer-46 # required
   --next-marker: string # If you specify a value for Limit and you have more ByteMatchSets than the value of Limit, AWS WAF returns a NextMarker value in the response that allows you to list another group of ByteMatchSets. For the second and subsequent ListByteMatchSets requests, specify the value of NextMarker from the previous response to get information about another batch of ByteMatchSets.
   --limit: int # Specifies the number of ByteMatchSet objects that you want AWS WAF to return for this request. If you have more ByteMatchSets objects than the number you specify for Limit, the response includes a NextMarker value that you can use to get another batch of ByteMatchSet objects.
-]: any -> record<NextMarker: string, ByteMatchSets: table<ByteMatchSetId: string, Name: string>> {
+]: any -> oneof<record<NextMarker: string, ByteMatchSets: table<ByteMatchSetId: string, Name: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2576,7 +2593,7 @@ export def "list-geo-match-sets" [
   --x-amz-target: string@x-amz-target-completer-47 # required
   --next-marker: string # If you specify a value for Limit and you have more GeoMatchSets than the value of Limit, AWS WAF returns a NextMarker value in the response that allows you to list another group of GeoMatchSet objects. For the second and subsequent ListGeoMatchSets requests, specify the value of NextMarker from the previous response to get information about another batch of GeoMatchSet objects.
   --limit: int # Specifies the number of GeoMatchSet objects that you want AWS WAF to return for this request. If you have more GeoMatchSet objects than the number you specify for Limit, the response includes a NextMarker value that you can use to get another batch of GeoMatchSet objects.
-]: any -> record<NextMarker: string, GeoMatchSets: table<GeoMatchSetId: string, Name: string>> {
+]: any -> oneof<record<NextMarker: string, GeoMatchSets: table<GeoMatchSetId: string, Name: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2626,7 +2643,7 @@ export def "list-ip-sets" [
   --x-amz-target: string@x-amz-target-completer-48 # required
   --next-marker: string # AWS WAF returns a NextMarker value in the response that allows you to list another group of IPSets. For the second and subsequent ListIPSets requests, specify the value of NextMarker from the previous response to get information about another batch of IPSets.
   --limit: int # Specifies the number of IPSet objects that you want AWS WAF to return for this request. If you have more IPSet objects than the number you specify for Limit, the response includes a NextMarker value that you can use to get another batch of IPSet objects.
-]: any -> record<NextMarker: string, IPSets: table<IPSetId: string, Name: string>> {
+]: any -> oneof<record<NextMarker: string, IPSets: table<IPSetId: string, Name: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2676,7 +2693,7 @@ export def "list-logging-configurations" [
   --x-amz-target: string@x-amz-target-completer-49 # required
   --next-marker: string # If you specify a value for Limit and you have more LoggingConfigurations than the value of Limit, AWS WAF returns a NextMarker value in the response that allows you to list another group of LoggingConfigurations. For the second and subsequent ListLoggingConfigurations requests, specify the value of NextMarker from the previous response to get information about another batch of ListLoggingConfigurations.
   --limit: int # Specifies the number of LoggingConfigurations that you want AWS WAF to return for this request. If you have more LoggingConfigurations than the number that you specify for Limit, the response includes a NextMarker value that you can use to get another batch of LoggingConfigurations.
-]: any -> record<LoggingConfigurations: table<ResourceArn: string, LogDestinationConfigs: list, RedactedFields: list>, NextMarker: string> {
+]: any -> oneof<record<LoggingConfigurations: table<ResourceArn: string, LogDestinationConfigs: list, RedactedFields: list>, NextMarker: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2726,7 +2743,7 @@ export def "list-rate-based-rules" [
   --x-amz-target: string@x-amz-target-completer-50 # required
   --next-marker: string # If you specify a value for Limit and you have more Rules than the value of Limit, AWS WAF returns a NextMarker value in the response that allows you to list another group of Rules. For the second and subsequent ListRateBasedRules requests, specify the value of NextMarker from the previous response to get information about another batch of Rules.
   --limit: int # Specifies the number of Rules that you want AWS WAF to return for this request. If you have more Rules than the number that you specify for Limit, the response includes a NextMarker value that you can use to get another batch of Rules.
-]: any -> record<NextMarker: string, Rules: table<RuleId: string, Name: string>> {
+]: any -> oneof<record<NextMarker: string, Rules: table<RuleId: string, Name: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2776,7 +2793,7 @@ export def "list-regex-match-sets" [
   --x-amz-target: string@x-amz-target-completer-51 # required
   --next-marker: string # If you specify a value for Limit and you have more RegexMatchSet objects than the value of Limit, AWS WAF returns a NextMarker value in the response that allows you to list another group of ByteMatchSets. For the second and subsequent ListRegexMatchSets requests, specify the value of NextMarker from the previous response to get information about another batch of RegexMatchSet objects.
   --limit: int # Specifies the number of RegexMatchSet objects that you want AWS WAF to return for this request. If you have more RegexMatchSet objects than the number you specify for Limit, the response includes a NextMarker value that you can use to get another batch of RegexMatchSet objects.
-]: any -> record<NextMarker: string, RegexMatchSets: table<RegexMatchSetId: string, Name: string>> {
+]: any -> oneof<record<NextMarker: string, RegexMatchSets: table<RegexMatchSetId: string, Name: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2826,7 +2843,7 @@ export def "list-regex-pattern-sets" [
   --x-amz-target: string@x-amz-target-completer-52 # required
   --next-marker: string # If you specify a value for Limit and you have more RegexPatternSet objects than the value of Limit, AWS WAF returns a NextMarker value in the response that allows you to list another group of RegexPatternSet objects. For the second and subsequent ListRegexPatternSets requests, specify the value of NextMarker from the previous response to get information about another batch of RegexPatternSet objects.
   --limit: int # Specifies the number of RegexPatternSet objects that you want AWS WAF to return for this request. If you have more RegexPatternSet objects than the number you specify for Limit, the response includes a NextMarker value that you can use to get another batch of RegexPatternSet objects.
-]: any -> record<NextMarker: string, RegexPatternSets: table<RegexPatternSetId: string, Name: string>> {
+]: any -> oneof<record<NextMarker: string, RegexPatternSets: table<RegexPatternSetId: string, Name: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2876,7 +2893,7 @@ export def "list-rule-groups" [
   --x-amz-target: string@x-amz-target-completer-53 # required
   --next-marker: string # If you specify a value for Limit and you have more RuleGroups than the value of Limit, AWS WAF returns a NextMarker value in the response that allows you to list another group of RuleGroups. For the second and subsequent ListRuleGroups requests, specify the value of NextMarker from the previous response to get information about another batch of RuleGroups.
   --limit: int # Specifies the number of RuleGroups that you want AWS WAF to return for this request. If you have more RuleGroups than the number that you specify for Limit, the response includes a NextMarker value that you can use to get another batch of RuleGroups.
-]: any -> record<NextMarker: string, RuleGroups: table<RuleGroupId: string, Name: string>> {
+]: any -> oneof<record<NextMarker: string, RuleGroups: table<RuleGroupId: string, Name: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2926,7 +2943,7 @@ export def "list-rules" [
   --x-amz-target: string@x-amz-target-completer-54 # required
   --next-marker: string # If you specify a value for Limit and you have more Rules than the value of Limit, AWS WAF returns a NextMarker value in the response that allows you to list another group of Rules. For the second and subsequent ListRules requests, specify the value of NextMarker from the previous response to get information about another batch of Rules.
   --limit: int # Specifies the number of Rules that you want AWS WAF to return for this request. If you have more Rules than the number that you specify for Limit, the response includes a NextMarker value that you can use to get another batch of Rules.
-]: any -> record<NextMarker: string, Rules: table<RuleId: string, Name: string>> {
+]: any -> oneof<record<NextMarker: string, Rules: table<RuleId: string, Name: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2976,7 +2993,7 @@ export def "list-size-constraint-sets" [
   --x-amz-target: string@x-amz-target-completer-55 # required
   --next-marker: string # If you specify a value for Limit and you have more SizeConstraintSets than the value of Limit, AWS WAF returns a NextMarker value in the response that allows you to list another group of SizeConstraintSets. For the second and subsequent ListSizeConstraintSets requests, specify the value of NextMarker from the previous response to get information about another batch of SizeConstraintSets.
   --limit: int # Specifies the number of SizeConstraintSet objects that you want AWS WAF to return for this request. If you have more SizeConstraintSets objects than the number you specify for Limit, the response includes a NextMarker value that you can use to get another batch of SizeConstraintSet objects.
-]: any -> record<NextMarker: string, SizeConstraintSets: table<SizeConstraintSetId: string, Name: string>> {
+]: any -> oneof<record<NextMarker: string, SizeConstraintSets: table<SizeConstraintSetId: string, Name: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3026,7 +3043,7 @@ export def "list-sql-injection-match-sets" [
   --x-amz-target: string@x-amz-target-completer-56 # required
   --next-marker: string # If you specify a value for Limit and you have more SqlInjectionMatchSet objects than the value of Limit, AWS WAF returns a NextMarker value in the response that allows you to list another group of SqlInjectionMatchSets. For the second and subsequent ListSqlInjectionMatchSets requests, specify the value of NextMarker from the previous response to get information about another batch of SqlInjectionMatchSets.
   --limit: int # Specifies the number of SqlInjectionMatchSet objects that you want AWS WAF to return for this request. If you have more SqlInjectionMatchSet objects than the number you specify for Limit, the response includes a NextMarker value that you can use to get another batch of Rules.
-]: any -> record<NextMarker: string, SqlInjectionMatchSets: table<SqlInjectionMatchSetId: string, Name: string>> {
+]: any -> oneof<record<NextMarker: string, SqlInjectionMatchSets: table<SqlInjectionMatchSetId: string, Name: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3076,7 +3093,7 @@ export def "list-subscribed-rule-groups" [
   --x-amz-target: string@x-amz-target-completer-57 # required
   --next-marker: string # If you specify a value for Limit and you have more ByteMatchSetssubscribed rule groups than the value of Limit, AWS WAF returns a NextMarker value in the response that allows you to list another group of subscribed rule groups. For the second and subsequent ListSubscribedRuleGroupsRequest requests, specify the value of NextMarker from the previous response to get information about another batch of subscribed rule groups.
   --limit: int # Specifies the number of subscribed rule groups that you want AWS WAF to return for this request. If you have more objects than the number you specify for Limit, the response includes a NextMarker value that you can use to get another batch of objects.
-]: any -> record<NextMarker: string, RuleGroups: table<RuleGroupId: string, Name: string, MetricName: string>> {
+]: any -> oneof<record<NextMarker: string, RuleGroups: table<RuleGroupId: string, Name: string, MetricName: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3127,7 +3144,7 @@ export def "list-tags-for-resource" [
   --next-marker: string
   --limit: int
   resource_arn: string
-]: any -> record<NextMarker: string, TagInfoForResource: record<ResourceARN: string, TagList: list<record>>> {
+]: any -> oneof<record<NextMarker: string, TagInfoForResource: record<ResourceARN: string, TagList: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3177,7 +3194,7 @@ export def "list-web-ac-ls" [
   --x-amz-target: string@x-amz-target-completer-59 # required
   --next-marker: string # If you specify a value for Limit and you have more WebACL objects than the number that you specify for Limit, AWS WAF returns a NextMarker value in the response that allows you to list another group of WebACL objects. For the second and subsequent ListWebACLs requests, specify the value of NextMarker from the previous response to get information about another batch of WebACL objects.
   --limit: int # Specifies the number of WebACL objects that you want AWS WAF to return for this request. If you have more WebACL objects than the number that you specify for Limit, the response includes a NextMarker value that you can use to get another batch of WebACL objects.
-]: any -> record<NextMarker: string, WebACLs: table<WebACLId: string, Name: string>> {
+]: any -> oneof<record<NextMarker: string, WebACLs: table<WebACLId: string, Name: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3227,7 +3244,7 @@ export def "list-xss-match-sets" [
   --x-amz-target: string@x-amz-target-completer-60 # required
   --next-marker: string # If you specify a value for Limit and you have more XssMatchSet objects than the value of Limit, AWS WAF returns a NextMarker value in the response that allows you to list another group of XssMatchSets. For the second and subsequent ListXssMatchSets requests, specify the value of NextMarker from the previous response to get information about another batch of XssMatchSets.
   --limit: int # Specifies the number of XssMatchSet objects that you want AWS WAF to return for this request. If you have more XssMatchSet objects than the number you specify for Limit, the response includes a NextMarker value that you can use to get another batch of Rules.
-]: any -> record<NextMarker: string, XssMatchSets: table<XssMatchSetId: string, Name: string>> {
+]: any -> oneof<record<NextMarker: string, XssMatchSets: table<XssMatchSetId: string, Name: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3257,7 +3274,6 @@ export def "list-xss-match-sets" [
 #
 # POST /
 # operationId: PutLoggingConfiguration
-# --LoggingConfiguration shape: {ResourceArn: string, LogDestinationConfigs: list<string>, RedactedFields?: list}
 export def "put-logging-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3277,7 +3293,7 @@ export def "put-logging-configuration" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-61 # required
   logging_configuration: record # This is AWS WAF Classic documentation. For more information, see AWS WAF Classic (https://docs.aws.amazon.com/waf/latest/developerguide/classic-waf-chapter.html) in the developer guide. For the latest version of AWS WAF, use the AWS WAFV2 API and see the AWS WAF Developer Guide (https://docs.aws.amazon.com/waf/latest/developerguide/waf-chapter.html). With the latest version, AWS WAF has a single set of endpoints for regional and global use. The Amazon Kinesis Data Firehose, RedactedFields information, and the web ACL Amazon Resource Name (ARN). — shape: {ResourceArn: string, LogDestinationConfigs: list<string>, RedactedFields?: list}
-]: any -> record<LoggingConfiguration: record<ResourceArn: string, LogDestinationConfigs: list<string>, RedactedFields: list<record>>> {
+]: any -> oneof<record<LoggingConfiguration: record<ResourceArn: string, LogDestinationConfigs: list<string>, RedactedFields: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3327,7 +3343,7 @@ export def "put-permission-policy" [
   --x-amz-target: string@x-amz-target-completer-62 # required
   resource_arn: string # The Amazon Resource Name (ARN) of the RuleGroup to which you want to attach the policy.
   policy: string # The policy to attach to the specified RuleGroup.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3357,7 +3373,6 @@ export def "put-permission-policy" [
 #
 # POST /
 # operationId: TagResource
-# --Tags item shape: {Key: string, Value: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3378,7 +3393,7 @@ export def "tag-resource" [
   --x-amz-target: string@x-amz-target-completer-63 # required
   resource_arn: string
   tags: list # item shape: {Key: string, Value: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3428,7 +3443,7 @@ export def "untag-resource" [
   --x-amz-target: string@x-amz-target-completer-64 # required
   resource_arn: string
   tag_keys: list<string>
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3458,7 +3473,6 @@ export def "untag-resource" [
 #
 # POST /
 # operationId: UpdateByteMatchSet
-# --Updates item shape: {Action: "INSERT"|"DELETE", ByteMatchTuple: record}
 export def "update-byte-match-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3480,7 +3494,7 @@ export def "update-byte-match-set" [
   byte_match_set_id: string # The ByteMatchSetId of the ByteMatchSet that you want to update. ByteMatchSetId is returned by CreateByteMatchSet and by ListByteMatchSets.
   change_token: string # The value returned by the most recent call to GetChangeToken.
   updates: list # An array of ByteMatchSetUpdate objects that you want to insert into or delete from a ByteMatchSet. For more information, see the applicable data types: ByteMatchSetUpdate: Contains Action and ByteMatchTuple ByteMatchTuple: Contains FieldToMatch, PositionalConstraint, TargetString, and TextTransformation FieldToMatch: Contains Data and Type — item shape: {Action: "INSERT"|"DELETE", ByteMatchTuple: record}
-]: any -> record<ChangeToken: string> {
+]: any -> oneof<record<ChangeToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3510,7 +3524,6 @@ export def "update-byte-match-set" [
 #
 # POST /
 # operationId: UpdateGeoMatchSet
-# --Updates item shape: {Action: "INSERT"|"DELETE", GeoMatchConstraint: record}
 export def "update-geo-match-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3532,7 +3545,7 @@ export def "update-geo-match-set" [
   geo_match_set_id: string # The GeoMatchSetId of the GeoMatchSet that you want to update. GeoMatchSetId is returned by CreateGeoMatchSet and by ListGeoMatchSets.
   change_token: string # The value returned by the most recent call to GetChangeToken.
   updates: list # An array of GeoMatchSetUpdate objects that you want to insert into or delete from an GeoMatchSet. For more information, see the applicable data types: GeoMatchSetUpdate: Contains Action and GeoMatchConstraint GeoMatchConstraint: Contains Type and Value You can have only one Type and Value per GeoMatchConstraint. To add multiple countries, include multiple GeoMatchSetUpdate objects in your request. — item shape: {Action: "INSERT"|"DELETE", GeoMatchConstraint: record}
-]: any -> record<ChangeToken: string> {
+]: any -> oneof<record<ChangeToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3562,7 +3575,6 @@ export def "update-geo-match-set" [
 #
 # POST /
 # operationId: UpdateIPSet
-# --Updates item shape: {Action: "INSERT"|"DELETE", IPSetDescriptor: record}
 export def "update-ip-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3584,7 +3596,7 @@ export def "update-ip-set" [
   ip_set_id: string # The IPSetId of the IPSet that you want to update. IPSetId is returned by CreateIPSet and by ListIPSets.
   change_token: string # The value returned by the most recent call to GetChangeToken.
   updates: list # An array of IPSetUpdate objects that you want to insert into or delete from an IPSet. For more information, see the applicable data types: IPSetUpdate: Contains Action and IPSetDescriptor IPSetDescriptor: Contains Type and Value You can insert a maximum of 1000 addresses in a single request. — item shape: {Action: "INSERT"|"DELETE", IPSetDescriptor: record}
-]: any -> record<ChangeToken: string> {
+]: any -> oneof<record<ChangeToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3614,7 +3626,6 @@ export def "update-ip-set" [
 #
 # POST /
 # operationId: UpdateRateBasedRule
-# --Updates item shape: {Action: "INSERT"|"DELETE", Predicate: record}
 export def "update-rate-based-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3637,7 +3648,7 @@ export def "update-rate-based-rule" [
   change_token: string # The value returned by the most recent call to GetChangeToken.
   updates: list # An array of RuleUpdate objects that you want to insert into or delete from a RateBasedRule. — item shape: {Action: "INSERT"|"DELETE", Predicate: record}
   rate_limit: int # The maximum number of requests, which have an identical value in the field specified by the RateKey, allowed in a five-minute period. If the number of requests exceeds the RateLimit and the other predicates specified in the rule are also met, AWS WAF triggers the action that is specified for this rule.
-]: any -> record<ChangeToken: string> {
+]: any -> oneof<record<ChangeToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3667,7 +3678,6 @@ export def "update-rate-based-rule" [
 #
 # POST /
 # operationId: UpdateRegexMatchSet
-# --Updates item shape: {Action: "INSERT"|"DELETE", RegexMatchTuple: record}
 export def "update-regex-match-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3689,7 +3699,7 @@ export def "update-regex-match-set" [
   regex_match_set_id: string # The RegexMatchSetId of the RegexMatchSet that you want to update. RegexMatchSetId is returned by CreateRegexMatchSet and by ListRegexMatchSets.
   updates: list # An array of RegexMatchSetUpdate objects that you want to insert into or delete from a RegexMatchSet. For more information, see RegexMatchTuple. — item shape: {Action: "INSERT"|"DELETE", RegexMatchTuple: record}
   change_token: string # The value returned by the most recent call to GetChangeToken.
-]: any -> record<ChangeToken: string> {
+]: any -> oneof<record<ChangeToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3719,7 +3729,6 @@ export def "update-regex-match-set" [
 #
 # POST /
 # operationId: UpdateRegexPatternSet
-# --Updates item shape: {Action: "INSERT"|"DELETE", RegexPatternString: string}
 export def "update-regex-pattern-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3741,7 +3750,7 @@ export def "update-regex-pattern-set" [
   regex_pattern_set_id: string # The RegexPatternSetId of the RegexPatternSet that you want to update. RegexPatternSetId is returned by CreateRegexPatternSet and by ListRegexPatternSets.
   updates: list # An array of RegexPatternSetUpdate objects that you want to insert into or delete from a RegexPatternSet. — item shape: {Action: "INSERT"|"DELETE", RegexPatternString: string}
   change_token: string # The value returned by the most recent call to GetChangeToken.
-]: any -> record<ChangeToken: string> {
+]: any -> oneof<record<ChangeToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3771,7 +3780,6 @@ export def "update-regex-pattern-set" [
 #
 # POST /
 # operationId: UpdateRule
-# --Updates item shape: {Action: "INSERT"|"DELETE", Predicate: record}
 export def "update-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3793,7 +3801,7 @@ export def "update-rule" [
   rule_id: string # The RuleId of the Rule that you want to update. RuleId is returned by CreateRule and by ListRules.
   change_token: string # The value returned by the most recent call to GetChangeToken.
   updates: list # An array of RuleUpdate objects that you want to insert into or delete from a Rule. For more information, see the applicable data types: RuleUpdate: Contains Action and Predicate Predicate: Contains DataId, Negated, and Type FieldToMatch: Contains Data and Type — item shape: {Action: "INSERT"|"DELETE", Predicate: record}
-]: any -> record<ChangeToken: string> {
+]: any -> oneof<record<ChangeToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3823,7 +3831,6 @@ export def "update-rule" [
 #
 # POST /
 # operationId: UpdateRuleGroup
-# --Updates item shape: {Action: "INSERT"|"DELETE", ActivatedRule: record}
 export def "update-rule-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3845,7 +3852,7 @@ export def "update-rule-group" [
   rule_group_id: string # The RuleGroupId of the RuleGroup that you want to update. RuleGroupId is returned by CreateRuleGroup and by ListRuleGroups.
   updates: list # An array of RuleGroupUpdate objects that you want to insert into or delete from a RuleGroup. You can only insert REGULAR rules into a rule group. ActivatedRule|OverrideAction applies only when updating or adding a RuleGroup to a WebACL. In this case you do not use ActivatedRule|Action. For all other update requests, ActivatedRule|Action is used instead of ActivatedRule|OverrideAction. — item shape: {Action: "INSERT"|"DELETE", ActivatedRule: record}
   change_token: string # The value returned by the most recent call to GetChangeToken.
-]: any -> record<ChangeToken: string> {
+]: any -> oneof<record<ChangeToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3875,7 +3882,6 @@ export def "update-rule-group" [
 #
 # POST /
 # operationId: UpdateSizeConstraintSet
-# --Updates item shape: {Action: "INSERT"|"DELETE", SizeConstraint: record}
 export def "update-size-constraint-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3897,7 +3903,7 @@ export def "update-size-constraint-set" [
   size_constraint_set_id: string # The SizeConstraintSetId of the SizeConstraintSet that you want to update. SizeConstraintSetId is returned by CreateSizeConstraintSet and by ListSizeConstraintSets.
   change_token: string # The value returned by the most recent call to GetChangeToken.
   updates: list # An array of SizeConstraintSetUpdate objects that you want to insert into or delete from a SizeConstraintSet. For more information, see the applicable data types: SizeConstraintSetUpdate: Contains Action and SizeConstraint SizeConstraint: Contains FieldToMatch, TextTransformation, ComparisonOperator, and Size FieldToMatch: Contains Data and Type — item shape: {Action: "INSERT"|"DELETE", SizeConstraint: record}
-]: any -> record<ChangeToken: string> {
+]: any -> oneof<record<ChangeToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3927,7 +3933,6 @@ export def "update-size-constraint-set" [
 #
 # POST /
 # operationId: UpdateSqlInjectionMatchSet
-# --Updates item shape: {Action: "INSERT"|"DELETE", SqlInjectionMatchTuple: record}
 export def "update-sql-injection-match-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3949,7 +3954,7 @@ export def "update-sql-injection-match-set" [
   sql_injection_match_set_id: string # The SqlInjectionMatchSetId of the SqlInjectionMatchSet that you want to update. SqlInjectionMatchSetId is returned by CreateSqlInjectionMatchSet and by ListSqlInjectionMatchSets.
   change_token: string # The value returned by the most recent call to GetChangeToken.
   updates: list # An array of SqlInjectionMatchSetUpdate objects that you want to insert into or delete from a SqlInjectionMatchSet. For more information, see the applicable data types: SqlInjectionMatchSetUpdate: Contains Action and SqlInjectionMatchTuple SqlInjectionMatchTuple: Contains FieldToMatch and TextTransformation FieldToMatch: Contains Data and Type — item shape: {Action: "INSERT"|"DELETE", SqlInjectionMatchTuple: record}
-]: any -> record<ChangeToken: string> {
+]: any -> oneof<record<ChangeToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3979,8 +3984,6 @@ export def "update-sql-injection-match-set" [
 #
 # POST /
 # operationId: UpdateWebACL
-# --Updates item shape: {Action: "INSERT"|"DELETE", ActivatedRule: record}
-# --DefaultAction shape: {Type: "BLOCK"|"ALLOW"|"COUNT"}
 export def "update-web-acl" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4003,7 +4006,7 @@ export def "update-web-acl" [
   change_token: string # The value returned by the most recent call to GetChangeToken.
   --updates: list # An array of updates to make to the WebACL. An array of WebACLUpdate objects that you want to insert into or delete from a WebACL. For more information, see the applicable data types: WebACLUpdate: Contains Action and ActivatedRule ActivatedRule: Contains Action, OverrideAction, Priority, RuleId, and Type. ActivatedRule|OverrideAction applies only when updating or adding a RuleGroup to a WebACL. In this case, you do not use ActivatedRule|Action. For all other update requests, ActivatedRule|Action is used instead of ActivatedRule|OverrideAction. WafAction: Contains Type — item shape: {Action: "INSERT"|"DELETE", ActivatedRule: record}
   --default-action: record # This is AWS WAF Classic documentation. For more information, see AWS WAF Classic (https://docs.aws.amazon.com/waf/latest/developerguide/classic-waf-chapter.html) in the developer guide. For the latest version of AWS WAF, use the AWS WAFV2 API and see the AWS WAF Developer Guide (https://docs.aws.amazon.com/waf/latest/developerguide/waf-chapter.html). With the latest version, AWS WAF has a single set of endpoints for regional and global use. For the action that is associated with a rule in a WebACL, specifies the action that you want AWS WAF to perform when a web request matches all of the conditions in a rule. For the default action in a WebACL, specifies the action that you want AWS WAF to take when a web request doesn't match all of the conditions in any of the rules in a WebACL. — shape: {Type: "BLOCK"|"ALLOW"|"COUNT"}
-]: any -> record<ChangeToken: string> {
+]: any -> oneof<record<ChangeToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4033,7 +4036,6 @@ export def "update-web-acl" [
 #
 # POST /
 # operationId: UpdateXssMatchSet
-# --Updates item shape: {Action: "INSERT"|"DELETE", XssMatchTuple: record}
 export def "update-xss-match-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4055,7 +4057,7 @@ export def "update-xss-match-set" [
   xss_match_set_id: string # The XssMatchSetId of the XssMatchSet that you want to update. XssMatchSetId is returned by CreateXssMatchSet and by ListXssMatchSets.
   change_token: string # The value returned by the most recent call to GetChangeToken.
   updates: list # An array of XssMatchSetUpdate objects that you want to insert into or delete from an XssMatchSet. For more information, see the applicable data types: XssMatchSetUpdate: Contains Action and XssMatchTuple XssMatchTuple: Contains FieldToMatch and TextTransformation FieldToMatch: Contains Data and Type — item shape: {Action: "INSERT"|"DELETE", XssMatchTuple: record}
-]: any -> record<ChangeToken: string> {
+]: any -> oneof<record<ChangeToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

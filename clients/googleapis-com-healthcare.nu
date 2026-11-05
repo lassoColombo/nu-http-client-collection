@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -132,9 +156,9 @@ def version-completer [] { ["DSTU2" "R4" "STU3" "VERSION_UNSPECIFIED"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "healthcare-projects-locations-datasets-consent-stores-check-data-access" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["healthcare-projects-locations-datasets-consent-stores-check-data-access" "healthcare-projects-locations-datasets-consent-stores-evaluate-user-consents" "healthcare-projects-locations-datasets-consent-stores-query-accessible-data" "healthcare-projects-locations-datasets-hl7-v2-stores-messages-delete" "healthcare-projects-locations-datasets-operations-get" "healthcare-projects-locations-datasets-hl7-v2-stores-messages-patch" "healthcare-projects-locations-datasets-fhir-stores-fhir-update" "healthcare-projects-locations-datasets-fhir-stores-fhir-patient-everything" "healthcare-projects-locations-datasets-fhir-stores-fhir-resource-purge" "healthcare-projects-locations-datasets-fhir-stores-fhir-concept-map-translate" "healthcare-projects-locations-datasets-fhir-stores-fhir-history" "healthcare-projects-locations-datasets-fhir-stores-fhir-capabilities" "healthcare-projects-locations-list" "healthcare-projects-locations-datasets-operations-list" "healthcare-projects-locations-datasets-consent-stores-consents-activate" "healthcare-projects-locations-datasets-consent-stores-user-data-mappings-archive" "healthcare-projects-locations-datasets-operations-cancel" "healthcare-projects-locations-datasets-fhir-stores-configure-search" "healthcare-projects-locations-datasets-consent-stores-consents-delete-revision" "healthcare-projects-locations-datasets-annotation-stores-evaluate" "healthcare-projects-locations-datasets-hl7-v2-stores-export" "healthcare-projects-locations-datasets-fhir-stores-get-fhir-store-metrics" "healthcare-projects-locations-datasets-hl7-v2-stores-import" "healthcare-projects-locations-datasets-consent-stores-consents-list-revisions" "healthcare-projects-locations-datasets-consent-stores-consents-reject" "healthcare-projects-locations-datasets-consent-stores-consents-revoke" "healthcare-projects-locations-services-nlp-analyze-entities" "healthcare-projects-locations-datasets-annotation-stores-list" "healthcare-projects-locations-datasets-annotation-stores-create" "healthcare-projects-locations-datasets-annotation-stores-annotations-list" "healthcare-projects-locations-datasets-annotation-stores-annotations-create" "healthcare-projects-locations-datasets-consent-stores-attribute-definitions-list" "healthcare-projects-locations-datasets-consent-stores-attribute-definitions-create" "healthcare-projects-locations-datasets-consent-stores-consent-artifacts-list" "healthcare-projects-locations-datasets-consent-stores-consent-artifacts-create" "healthcare-projects-locations-datasets-consent-stores-list" "healthcare-projects-locations-datasets-consent-stores-create" "healthcare-projects-locations-datasets-consent-stores-consents-list" "healthcare-projects-locations-datasets-consent-stores-consents-create" "healthcare-projects-locations-datasets-list" "healthcare-projects-locations-datasets-create" "healthcare-projects-locations-datasets-dicom-stores-list" "healthcare-projects-locations-datasets-dicom-stores-create" "healthcare-projects-locations-datasets-dicom-stores-studies-series-instances-delete" "healthcare-projects-locations-datasets-dicom-stores-studies-series-instances-frames-retrieve-rendered" "healthcare-projects-locations-datasets-dicom-stores-studies-store-instances" "healthcare-projects-locations-datasets-fhir-stores-fhir-execute-bundle" "healthcare-projects-locations-datasets-fhir-stores-fhir-resource-incoming-references" "healthcare-projects-locations-datasets-fhir-stores-fhir-concept-map-search-translate" "healthcare-projects-locations-datasets-fhir-stores-fhir-observation-lastn" "healthcare-projects-locations-datasets-fhir-stores-fhir-search" "healthcare-projects-locations-datasets-fhir-stores-fhir-search-type" "healthcare-projects-locations-datasets-fhir-stores-fhir-conditional-delete" "healthcare-projects-locations-datasets-fhir-stores-fhir-conditional-patch" "healthcare-projects-locations-datasets-fhir-stores-fhir-create" "healthcare-projects-locations-datasets-fhir-stores-fhir-conditional-update" "healthcare-projects-locations-datasets-fhir-stores-fhir-resource-validate" "healthcare-projects-locations-datasets-fhir-stores-list" "healthcare-projects-locations-datasets-fhir-stores-create" "healthcare-projects-locations-datasets-hl7-v2-stores-list" "healthcare-projects-locations-datasets-hl7-v2-stores-create" "healthcare-projects-locations-datasets-hl7-v2-stores-messages-list" "healthcare-projects-locations-datasets-hl7-v2-stores-messages-create" "healthcare-projects-locations-datasets-hl7-v2-stores-messages-batch-get" "healthcare-projects-locations-datasets-hl7-v2-stores-messages-ingest" "healthcare-projects-locations-datasets-consent-stores-user-data-mappings-list" "healthcare-projects-locations-datasets-consent-stores-user-data-mappings-create" "healthcare-projects-locations-datasets-hl7-v2-stores-get-iam-policy" "healthcare-projects-locations-datasets-hl7-v2-stores-set-iam-policy" "healthcare-projects-locations-datasets-hl7-v2-stores-test-iam-permissions" "healthcare-projects-locations-datasets-deidentify" "healthcare-projects-locations-datasets-fhir-stores-deidentify" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -156,7 +180,6 @@ export def commands []: nothing -> table {
 #
 # POST /v1beta1/{consentStore}:checkDataAccess
 # operationId: healthcare.projects.locations.datasets.consentStores.checkDataAccess
-# --consentList shape: {consents?: list<string>}
 export def "healthcare-projects-locations-datasets-consent-stores-check-data-access" [
   consent_store: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -183,7 +206,7 @@ export def "healthcare-projects-locations-datasets-consent-stores-check-data-acc
   --data-id: string # Required. The unique identifier of the resource to check access for. This identifier must correspond to a User data mapping in the given consent store.
   --request-attributes: record # The values of request attributes associated with this access request.
   --response-view: string@response-view-completer # Optional. The view for CheckDataAccessResponse. If unspecified, defaults to `BASIC` and returns `consented` as `TRUE` or `FALSE`.
-]: any -> record<consentDetails: record, consented: bool> {
+]: any -> oneof<record<consentDetails: record, consented: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -212,7 +235,6 @@ export def "healthcare-projects-locations-datasets-consent-stores-check-data-acc
 #
 # POST /v1beta1/{consentStore}:evaluateUserConsents
 # operationId: healthcare.projects.locations.datasets.consentStores.evaluateUserConsents
-# --consentList shape: {consents?: list<string>}
 export def "healthcare-projects-locations-datasets-consent-stores-evaluate-user-consents" [
   consent_store: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -242,7 +264,7 @@ export def "healthcare-projects-locations-datasets-consent-stores-evaluate-user-
   --resource-attributes: record # Optional. The values of resource attributes associated with the resources being requested. If no values are specified, then all resources are queried.
   --response-view: string@response-view-completer # Optional. The view for EvaluateUserConsentsResponse. If unspecified, defaults to `BASIC` and returns `consented` as `TRUE` or `FALSE`.
   --user-id: string # Required. User ID to evaluate consents for.
-]: any -> record<nextPageToken: string, results: table<consentDetails: record, consented: bool, dataId: string>> {
+]: any -> oneof<record<nextPageToken: string, results: table<consentDetails: record, consented: bool, dataId: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -271,7 +293,6 @@ export def "healthcare-projects-locations-datasets-consent-stores-evaluate-user-
 #
 # POST /v1beta1/{consentStore}:queryAccessibleData
 # operationId: healthcare.projects.locations.datasets.consentStores.queryAccessibleData
-# --gcsDestination shape: {uriPrefix?: string}
 export def "healthcare-projects-locations-datasets-consent-stores-query-accessible-data" [
   consent_store: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -297,7 +318,7 @@ export def "healthcare-projects-locations-datasets-consent-stores-query-accessib
   --gcs-destination: record # The Cloud Storage location for export. — shape: {uriPrefix?: string}
   --request-attributes: record # The values of request attributes associated with this access request.
   --resource-attributes: record # Optional. The values of resource attributes associated with the type of resources being requested. If no values are specified, then all resource types are included in the output.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -348,7 +369,7 @@ export def "healthcare-projects-locations-datasets-hl7-v2-stores-messages-delete
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -397,7 +418,7 @@ export def "healthcare-projects-locations-datasets-operations-get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --view: string@view-completer # Specifies which parts of the Message resource to return in the response. When unspecified, equivalent to FULL.
-]: nothing -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: nothing -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -423,9 +444,6 @@ export def "healthcare-projects-locations-datasets-operations-get" [
 #
 # PATCH /v1beta1/{name}
 # operationId: healthcare.projects.locations.datasets.hl7V2Stores.messages.patch
-# --parsedData shape: {segments?: list}
-# --patientIds item shape: {type?: string, value?: string}
-# --schematizedData shape: {data?: string, error?: string}
 export def "healthcare-projects-locations-datasets-hl7-v2-stores-messages-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -458,7 +476,7 @@ export def "healthcare-projects-locations-datasets-hl7-v2-stores-messages-patch"
   --schematized-data: record # The content of an HL7v2 message in a structured format as specified by a schema. — shape: {data?: string, error?: string}
   --send-facility: string # The hospital that this message came from. MSH-4.
   --send-time: string # The datetime the sending application sent this message. MSH-7. (format: google-datetime)
-]: any -> record<createTime: string, data: string, labels: record, messageType: string, name: string, parsedData: record<segments: list<record>>, patientIds: table<type: string, value: string>, schematizedData: record<data: string, error: string>, sendFacility: string, sendTime: string> {
+]: any -> oneof<record<createTime: string, data: string, labels: record, messageType: string, name: string, parsedData: record<segments: list<record>>, patientIds: table<type: string, value: string>, schematizedData: record<data: string, error: string>, sendFacility: string, sendTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -512,7 +530,7 @@ export def "healthcare-projects-locations-datasets-fhir-stores-fhir-update" [
   --content-type: string # The HTTP Content-Type header value specifying the content type of the body.
   --data: string # The HTTP request/response body as raw binary. (format: byte)
   --extensions: list # Application specific response metadata. Must be set in the first response for streaming APIs.
-]: any -> record<contentType: string, data: string, extensions: list<record>> {
+]: any -> oneof<record<contentType: string, data: string, extensions: list<record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -569,7 +587,7 @@ export def "healthcare-projects-locations-datasets-fhir-stores-fhir-patient-ever
   --type: string # String of comma-delimited FHIR resource types. If provided, only resources of the specified resource type(s) are returned. Specifying multiple `_type` parameters isn't supported. For example, the result of `_type=Observation&_type=Encounter` is undefined. Use `_type=Observation,Encounter` instead.
   --end: string # The response includes records prior to the end date. The date uses the format YYYY-MM-DD. If no end date is provided, all records subsequent to the start date are in scope.
   --start: string # The response includes records subsequent to the start date. The date uses the format YYYY-MM-DD. If no start date is provided, all records prior to the end date are in scope.
-]: nothing -> record<contentType: string, data: string, extensions: list<record>> {
+]: nothing -> oneof<record<contentType: string, data: string, extensions: list<record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -617,7 +635,7 @@ export def "healthcare-projects-locations-datasets-fhir-stores-fhir-resource-pur
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -668,7 +686,7 @@ export def "healthcare-projects-locations-datasets-fhir-stores-fhir-concept-map-
   --code: string # The code to translate.
   --concept-map-version: string # The version of the concept map to use. If unset, the most current version is used.
   --system: string # The system for the code to be translated.
-]: nothing -> record<contentType: string, data: string, extensions: list<record>> {
+]: nothing -> oneof<record<contentType: string, data: string, extensions: list<record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -720,7 +738,7 @@ export def "healthcare-projects-locations-datasets-fhir-stores-fhir-history" [
   --count: int # The maximum number of search results on a page. If not specified, 100 is used. May not be larger than 1000.
   --page-token: string # Used to retrieve the first, previous, next, or last page of resource versions when using pagination. Value should be set to the value of `_page_token` set in next or previous page links' URLs. Next and previous page are returned in the response bundle's links field, where `link.relation` is "previous" or "next". Omit `_page_token` if no previous request has been made.
   --since: string # Only include resource versions that were created at or after the given instant in time. The instant in time uses the format YYYY-MM-DDThh:mm:ss.sss+zz:zz (for example 2015-02-07T13:28:17.239+02:00 or 2017-01-01T00:00:00Z). The time must be specified to the second and include a time zone.
-]: nothing -> record<contentType: string, data: string, extensions: list<record>> {
+]: nothing -> oneof<record<contentType: string, data: string, extensions: list<record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -768,7 +786,7 @@ export def "healthcare-projects-locations-datasets-fhir-stores-fhir-capabilities
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<contentType: string, data: string, extensions: list<record>> {
+]: nothing -> oneof<record<contentType: string, data: string, extensions: list<record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -819,7 +837,7 @@ export def "healthcare-projects-locations-list" [
   --filter: string # A filter to narrow down results to a preferred subset. The filtering language accepts strings like `"displayName=tokyo"`, and is documented in more detail in [AIP-160](https://google.aip.dev/160).
   --page-size: int # The maximum number of results to return. If not set, the service selects a default.
   --page-token: string # A page token received from the `next_page_token` field in the response. Send that page token to receive the subsequent page.
-]: nothing -> record<locations: table<displayName: string, labels: record, locationId: string, metadata: record, name: string>, nextPageToken: string> {
+]: nothing -> oneof<record<locations: table<displayName: string, labels: record, locationId: string, metadata: record, name: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -870,7 +888,7 @@ export def "healthcare-projects-locations-datasets-operations-list" [
   --filter: string # The standard list filter.
   --page-size: int # The standard list page size.
   --page-token: string # The standard list page token.
-]: nothing -> record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>> {
+]: nothing -> oneof<record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -921,7 +939,7 @@ export def "healthcare-projects-locations-datasets-consent-stores-consents-activ
   --consent-artifact: string # Required. The resource name of the Consent artifact that contains documentation of the user's consent, of the form `projects/{project_id}/locations/{location_id}/datasets/{dataset_id}/consentStores/{consent_store_id}/consentArtifacts/{consent_artifact_id}`. If the draft Consent had a Consent artifact, this Consent artifact overwrites it.
   --expire-time: string # Timestamp in UTC of when this Consent is considered expired. (format: google-datetime)
   --ttl: string # The time to live for this Consent from when it is marked as active. (format: google-duration)
-]: any -> record<consentArtifact: string, expireTime: string, metadata: record, name: string, policies: table<authorizationRule: record, resourceAttributes: list>, revisionCreateTime: string, revisionId: string, state: string, ttl: string, userId: string> {
+]: any -> oneof<record<consentArtifact: string, expireTime: string, metadata: record, name: string, policies: table<authorizationRule: record, resourceAttributes: list>, revisionCreateTime: string, revisionId: string, state: string, ttl: string, userId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -973,7 +991,7 @@ export def "healthcare-projects-locations-datasets-consent-stores-user-data-mapp
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1025,7 +1043,7 @@ export def "healthcare-projects-locations-datasets-operations-cancel" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1078,7 +1096,7 @@ export def "healthcare-projects-locations-datasets-fhir-stores-configure-search"
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --canonical-urls: list<string> # The canonical URLs of the search parameters that are intended to be used for the FHIR store. See https://www.hl7.org/fhir/references.html#canonical for explanation on FHIR canonical urls
   --validate-only: oneof<nothing, bool> # If `validate_only` is set to true, the method will compile all the search parameters without actually setting the search config for the store and triggering the reindex.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1129,7 +1147,7 @@ export def "healthcare-projects-locations-datasets-consent-stores-consents-delet
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -1155,8 +1173,6 @@ export def "healthcare-projects-locations-datasets-consent-stores-consents-delet
 #
 # POST /v1beta1/{name}:evaluate
 # operationId: healthcare.projects.locations.datasets.annotationStores.evaluate
-# --bigqueryDestination shape: {force?: bool, schemaType?: "SCHEMA_TYPE_UNSPECIFIED"|"SIMPLE", tableUri?: string, writeDisposition?: "WRITE_DISPOSITION_UNSPECIFIED"|"WRITE_EMPTY"|"WRITE_TRUNCATE"|"WRITE_APPEND"}
-# --infoTypeConfig shape: {evaluateList?: record, ignoreList?: record, strictMatching?: bool}
 export def "healthcare-projects-locations-datasets-annotation-stores-evaluate" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1184,7 +1200,7 @@ export def "healthcare-projects-locations-datasets-annotation-stores-evaluate" [
   --golden-info-type-mapping: record # Optional. Similar to `eval_info_type_mapping`, infoType mapping for `golden_store`.
   --golden-store: string # The Annotation store to use as ground truth, in the format of `projects/{project_id}/locations/{location_id}/datasets/{dataset_id}/annotationStores/{annotation_store_id}`.
   --info-type-config: record # Specifies how to use infoTypes for evaluation. For example, a user might only want to evaluate `PERSON`, `LOCATION`, and `AGE`. — shape: {evaluateList?: record, ignoreList?: record, strictMatching?: bool}
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1213,7 +1229,6 @@ export def "healthcare-projects-locations-datasets-annotation-stores-evaluate" [
 #
 # POST /v1beta1/{name}:export
 # operationId: healthcare.projects.locations.datasets.hl7V2Stores.export
-# --gcsDestination shape: {contentStructure?: "CONTENT_STRUCTURE_UNSPECIFIED"|"MESSAGE_JSON", messageView?: "MESSAGE_VIEW_UNSPECIFIED"|"RAW_ONLY"|"PARSED_ONLY"|"FULL"|"SCHEMATIZED_ONLY"|"BASIC", uriPrefix?: string}
 export def "healthcare-projects-locations-datasets-hl7-v2-stores-export" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1239,7 +1254,7 @@ export def "healthcare-projects-locations-datasets-hl7-v2-stores-export" [
   --end-time: string # The end of the range in `send_time` (MSH.7, https://www.hl7.org/documentcenter/public_temp_2E58C1F9-1C23-BA17-0C6126475344DA9D/wg/conf/HL7MSH.htm) to process. If not specified, the time when the export is scheduled is used. This value has to come after the `start_time` defined below. Only messages whose `send_time` lies in the range `start_time` (inclusive) to `end_time` (exclusive) are exported. (format: google-datetime)
   --gcs-destination: record # The Cloud Storage output destination. The Cloud Healthcare Service Agent requires the `roles/storage.objectAdmin` Cloud IAM roles on the Cloud Storage location. — shape: {contentStructure?: "CONTENT_STRUCTURE_UNSPECIFIED"|"MESSAGE_JSON", messageView?: "MESSAGE_VIEW_UNSPECIFIED"|"RAW_ONLY"|"PARSED_ONLY"|"FULL"|"SCHEMATIZED_ONLY"|"BASIC", uriPrefix?: string}
   --start-time: string # The start of the range in `send_time` (MSH.7, https://www.hl7.org/documentcenter/public_temp_2E58C1F9-1C23-BA17-0C6126475344DA9D/wg/conf/HL7MSH.htm) to process. If not specified, the UNIX epoch (1970-01-01T00:00:00Z) is used. This value has to come before the `end_time` defined below. Only messages whose `send_time` lies in the range `start_time` (inclusive) to `end_time` (exclusive) are exported. (format: google-datetime)
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1290,7 +1305,7 @@ export def "healthcare-projects-locations-datasets-fhir-stores-get-fhir-store-me
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<metrics: table<count: string, resourceType: string, structuredStorageSizeBytes: string>, name: string> {
+]: nothing -> oneof<record<metrics: table<count: string, resourceType: string, structuredStorageSizeBytes: string>, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -1316,7 +1331,6 @@ export def "healthcare-projects-locations-datasets-fhir-stores-get-fhir-store-me
 #
 # POST /v1beta1/{name}:import
 # operationId: healthcare.projects.locations.datasets.hl7V2Stores.import
-# --gcsSource shape: {uri?: string}
 export def "healthcare-projects-locations-datasets-hl7-v2-stores-import" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1340,7 +1354,7 @@ export def "healthcare-projects-locations-datasets-hl7-v2-stores-import" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --gcs-source: record # Specifies the configuration for importing data from Cloud Storage. — shape: {uri?: string}
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1394,7 +1408,7 @@ export def "healthcare-projects-locations-datasets-consent-stores-consents-list-
   --filter: string # Optional. Restricts the revisions returned to those matching a filter. The following syntax is available: * A string field value can be written as text inside quotation marks, for example `"query text"`. The only valid relational operation for text fields is equality (`=`), where text is searched within the field, rather than having the field be equal to the text. For example, `"Comment = great"` returns messages with `great` in the comment field. * A number field value can be written as an integer, a decimal, or an exponential. The valid relational operators for number fields are the equality operator (`=`), along with the less than/greater than operators (`<`, `<=`, `>`, `>=`). Note that there is no inequality (`!=`) operator. You can prepend the `NOT` operator to an expression to negate it. * A date field value must be written in `yyyy-mm-dd` form. Fields with date and time use the RFC3339 time format. Leading zeros are required for one-digit months and days. The valid relational operators for date fields are the equality operator (`=`) , along with the less than/greater than operators (`<`, `<=`, `>`, `>=`). Note that there is no inequality (`!=`) operator. You can prepend the `NOT` operator to an expression to negate it. * Multiple field query expressions can be combined in one query by adding `AND` or `OR` operators between the expressions. If a boolean operator appears within a quoted string, it is not treated as special, it's just another part of the character string to be matched. You can prepend the `NOT` operator to an expression to negate it. Fields/functions available for filtering are: - user_id. For example, `filter='user_id="user123"'`. - consent_artifact - state - revision_create_time - metadata. For example, `filter=Metadata(\"testkey\")=\"value\"` or `filter=HasMetadata(\"testkey\")`.
   --page-size: int # Optional. Limit on the number of revisions to return in a single response. If not specified, 100 is used. May not be larger than 1000.
   --page-token: string # Optional. Token to retrieve the next page of results or empty if there are no more results in the list.
-]: nothing -> record<consents: table<consentArtifact: string, expireTime: string, metadata: record, name: string, policies: list, revisionCreateTime: string, revisionId: string, state: string, ttl: string, userId: string>, nextPageToken: string> {
+]: nothing -> oneof<record<consents: table<consentArtifact: string, expireTime: string, metadata: record, name: string, policies: list, revisionCreateTime: string, revisionId: string, state: string, ttl: string, userId: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -1443,7 +1457,7 @@ export def "healthcare-projects-locations-datasets-consent-stores-consents-rejec
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --consent-artifact: string # Optional. The resource name of the Consent artifact that contains documentation of the user's rejection of the draft Consent, of the form `projects/{project_id}/locations/{location_id}/datasets/{dataset_id}/consentStores/{consent_store_id}/consentArtifacts/{consent_artifact_id}`. If the draft Consent had a Consent artifact, this Consent artifact overwrites it.
-]: any -> record<consentArtifact: string, expireTime: string, metadata: record, name: string, policies: table<authorizationRule: record, resourceAttributes: list>, revisionCreateTime: string, revisionId: string, state: string, ttl: string, userId: string> {
+]: any -> oneof<record<consentArtifact: string, expireTime: string, metadata: record, name: string, policies: table<authorizationRule: record, resourceAttributes: list>, revisionCreateTime: string, revisionId: string, state: string, ttl: string, userId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1495,7 +1509,7 @@ export def "healthcare-projects-locations-datasets-consent-stores-consents-revok
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --consent-artifact: string # Optional. The resource name of the Consent artifact that contains proof of the user's revocation of the Consent, of the form `projects/{project_id}/locations/{location_id}/datasets/{dataset_id}/consentStores/{consent_store_id}/consentArtifacts/{consent_artifact_id}`.
-]: any -> record<consentArtifact: string, expireTime: string, metadata: record, name: string, policies: table<authorizationRule: record, resourceAttributes: list>, revisionCreateTime: string, revisionId: string, state: string, ttl: string, userId: string> {
+]: any -> oneof<record<consentArtifact: string, expireTime: string, metadata: record, name: string, policies: table<authorizationRule: record, resourceAttributes: list>, revisionCreateTime: string, revisionId: string, state: string, ttl: string, userId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1548,7 +1562,7 @@ export def "healthcare-projects-locations-services-nlp-analyze-entities" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --document-content: string # document_content is a document to be annotated.
   --licensed-vocabularies: list<string> # A list of licensed vocabularies to use in the request, in addition to the default unlicensed vocabularies.
-]: any -> record<entities: table<entityId: string, preferredTerm: string, vocabularyCodes: list>, entityMentions: table<certaintyAssessment: record, confidence: float, linkedEntities: list, mentionId: string, subject: record, temporalAssessment: record, text: record, type: string>, relationships: table<confidence: float, objectId: string, subjectId: string>> {
+]: any -> oneof<record<entities: table<entityId: string, preferredTerm: string, vocabularyCodes: list>, entityMentions: table<certaintyAssessment: record, confidence: float, linkedEntities: list, mentionId: string, subject: record, temporalAssessment: record, text: record, type: string>, relationships: table<confidence: float, objectId: string, subjectId: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1602,7 +1616,7 @@ export def "healthcare-projects-locations-datasets-annotation-stores-list" [
   --filter: string # Restricts stores returned to those matching a filter. The following syntax is available: * A string field value can be written as text inside quotation marks, for example `"query text"`. The only valid relational operation for text fields is equality (`=`), where text is searched within the field, rather than having the field be equal to the text. For example, `"Comment = great"` returns messages with `great` in the comment field. * A number field value can be written as an integer, a decimal, or an exponential. The valid relational operators for number fields are the equality operator (`=`), along with the less than/greater than operators (`<`, `<=`, `>`, `>=`). Note that there is no inequality (`!=`) operator. You can prepend the `NOT` operator to an expression to negate it. * A date field value must be written in `yyyy-mm-dd` form. Fields with date and time use the RFC3339 time format. Leading zeros are required for one-digit months and days. The valid relational operators for date fields are the equality operator (`=`) , along with the less than/greater than operators (`<`, `<=`, `>`, `>=`). Note that there is no inequality (`!=`) operator. You can prepend the `NOT` operator to an expression to negate it. * Multiple field query expressions can be combined in one query by adding `AND` or `OR` operators between the expressions. If a boolean operator appears within a quoted string, it is not treated as special, it's just another part of the character string to be matched. You can prepend the `NOT` operator to an expression to negate it. Only filtering on labels is supported, for example `labels.key=value`.
   --page-size: int # Limit on the number of Annotation stores to return in a single response. If not specified, 100 is used. May not be larger than 1000.
   --page-token: string # The next_page_token value returned from the previous List request, if any.
-]: nothing -> record<annotationStores: table<labels: record, name: string>, nextPageToken: string> {
+]: nothing -> oneof<record<annotationStores: table<labels: record, name: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1653,7 +1667,7 @@ export def "healthcare-projects-locations-datasets-annotation-stores-create" [
   --annotation-store-id: string # The ID of the Annotation store that is being created. The string must match the following regex: `[\p{L}\p{N}_\-\.]{1,256}`.
   --labels: record # Optional. User-supplied key-value pairs used to organize Annotation stores. Label keys must be between 1 and 63 characters long, have a UTF-8 encoding of maximum 128 bytes, and must conform to the following PCRE regular expression: \p{Ll}\p{Lo}{0,62} Label values must be between 1 and 63 characters long, have a UTF-8 encoding of maximum 128 bytes, and must conform to the following PCRE regular expression: [\p{Ll}\p{Lo}\p{N}_-]{0,63} No more than 64 labels can be associated with a given store.
   --name: string # Resource name of the Annotation store, of the form `projects/{project_id}/locations/{location_id}/datasets/{dataset_id}/annotationStores/{annotation_store_id}`.
-]: any -> record<labels: record, name: string> {
+]: any -> oneof<record<labels: record, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1708,7 +1722,7 @@ export def "healthcare-projects-locations-datasets-annotation-stores-annotations
   --page-size: int # Limit on the number of Annotations to return in a single response. If not specified, 100 is used. May not be larger than 1000.
   --page-token: string # The next_page_token value returned from the previous List request, if any.
   --view: string@view-completer-1 # Controls which fields are populated in the response.
-]: nothing -> record<annotations: table<annotationSource: record, customData: record, imageAnnotation: record, name: string, resourceAnnotation: record, textAnnotation: record>, nextPageToken: string> {
+]: nothing -> oneof<record<annotations: table<annotationSource: record, customData: record, imageAnnotation: record, name: string, resourceAnnotation: record, textAnnotation: record>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1734,10 +1748,6 @@ export def "healthcare-projects-locations-datasets-annotation-stores-annotations
 #
 # POST /v1beta1/{parent}/annotations
 # operationId: healthcare.projects.locations.datasets.annotationStores.annotations.create
-# --annotationSource shape: {cloudHealthcareSource?: record}
-# --imageAnnotation shape: {boundingPolys?: list, frameIndex?: int}
-# --resourceAnnotation shape: {label?: string}
-# --textAnnotation shape: {details?: record}
 export def "healthcare-projects-locations-datasets-annotation-stores-annotations-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1766,7 +1776,7 @@ export def "healthcare-projects-locations-datasets-annotation-stores-annotations
   --name: string # Resource name of the Annotation, of the form `projects/{project_id}/locations/{location_id}/datasets/{dataset_id}/annotationStores/{annotation_store_id}/annotations/{annotation_id}`.
   --resource-annotation: record # Resource level annotation. — shape: {label?: string}
   --text-annotation: record # A TextAnnotation specifies a text range that includes sensitive information. — shape: {details?: record}
-]: any -> record<annotationSource: record<cloudHealthcareSource: record<name: string>>, customData: record, imageAnnotation: record<boundingPolys: list<record>, frameIndex: int>, name: string, resourceAnnotation: record<label: string>, textAnnotation: record<details: record>> {
+]: any -> oneof<record<annotationSource: record<cloudHealthcareSource: record<name: string>>, customData: record, imageAnnotation: record<boundingPolys: list<record>, frameIndex: int>, name: string, resourceAnnotation: record<label: string>, textAnnotation: record<details: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1820,7 +1830,7 @@ export def "healthcare-projects-locations-datasets-consent-stores-attribute-defi
   --filter: string # Optional. Restricts the attributes returned to those matching a filter. The following syntax is available: * A string field value can be written as text inside quotation marks, for example `"query text"`. The only valid relational operation for text fields is equality (`=`), where text is searched within the field, rather than having the field be equal to the text. For example, `"Comment = great"` returns messages with `great` in the comment field. * A number field value can be written as an integer, a decimal, or an exponential. The valid relational operators for number fields are the equality operator (`=`), along with the less than/greater than operators (`<`, `<=`, `>`, `>=`). Note that there is no inequality (`!=`) operator. You can prepend the `NOT` operator to an expression to negate it. * A date field value must be written in `yyyy-mm-dd` form. Fields with date and time use the RFC3339 time format. Leading zeros are required for one-digit months and days. The valid relational operators for date fields are the equality operator (`=`) , along with the less than/greater than operators (`<`, `<=`, `>`, `>=`). Note that there is no inequality (`!=`) operator. You can prepend the `NOT` operator to an expression to negate it. * Multiple field query expressions can be combined in one query by adding `AND` or `OR` operators between the expressions. If a boolean operator appears within a quoted string, it is not treated as special, it's just another part of the character string to be matched. You can prepend the `NOT` operator to an expression to negate it. The only field available for filtering is `category`. For example, `filter=category=\"REQUEST\"`.
   --page-size: int # Optional. Limit on the number of Attribute definitions to return in a single response. If not specified, 100 is used. May not be larger than 1000.
   --page-token: string # Optional. Token to retrieve the next page of results or empty to get the first page.
-]: nothing -> record<attributeDefinitions: table<allowedValues: list, category: string, consentDefaultValues: list, dataMappingDefaultValue: string, description: string, name: string>, nextPageToken: string> {
+]: nothing -> oneof<record<attributeDefinitions: table<allowedValues: list, category: string, consentDefaultValues: list, dataMappingDefaultValue: string, description: string, name: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1875,7 +1885,7 @@ export def "healthcare-projects-locations-datasets-consent-stores-attribute-defi
   --data-mapping-default-value: string # Optional. Default value of the attribute in User data mappings. If no default value is specified, it defaults to an empty value. This field is only applicable to attributes of the category `RESOURCE`.
   --description: string # Optional. A description of the attribute.
   --name: string # Resource name of the Attribute definition, of the form `projects/{project_id}/locations/{location_id}/datasets/{dataset_id}/consentStores/{consent_store_id}/attributeDefinitions/{attribute_definition_id}`. Cannot be changed after creation.
-]: any -> record<allowedValues: list<string>, category: string, consentDefaultValues: list<string>, dataMappingDefaultValue: string, description: string, name: string> {
+]: any -> oneof<record<allowedValues: list<string>, category: string, consentDefaultValues: list<string>, dataMappingDefaultValue: string, description: string, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1929,7 +1939,7 @@ export def "healthcare-projects-locations-datasets-consent-stores-consent-artifa
   --filter: string # Optional. Restricts the artifacts returned to those matching a filter. The following syntax is available: * A string field value can be written as text inside quotation marks, for example `"query text"`. The only valid relational operation for text fields is equality (`=`), where text is searched within the field, rather than having the field be equal to the text. For example, `"Comment = great"` returns messages with `great` in the comment field. * A number field value can be written as an integer, a decimal, or an exponential. The valid relational operators for number fields are the equality operator (`=`), along with the less than/greater than operators (`<`, `<=`, `>`, `>=`). Note that there is no inequality (`!=`) operator. You can prepend the `NOT` operator to an expression to negate it. * A date field value must be written in `yyyy-mm-dd` form. Fields with date and time use the RFC3339 time format. Leading zeros are required for one-digit months and days. The valid relational operators for date fields are the equality operator (`=`) , along with the less than/greater than operators (`<`, `<=`, `>`, `>=`). Note that there is no inequality (`!=`) operator. You can prepend the `NOT` operator to an expression to negate it. * Multiple field query expressions can be combined in one query by adding `AND` or `OR` operators between the expressions. If a boolean operator appears within a quoted string, it is not treated as special, it's just another part of the character string to be matched. You can prepend the `NOT` operator to an expression to negate it. The fields available for filtering are: - user_id. For example, `filter=user_id=\"user123\"`. - consent_content_version - metadata. For example, `filter=Metadata(\"testkey\")=\"value\"` or `filter=HasMetadata(\"testkey\")`.
   --page-size: int # Optional. Limit on the number of consent artifacts to return in a single response. If not specified, 100 is used. May not be larger than 1000.
   --page-token: string # Optional. The next_page_token value returned from the previous List request, if any.
-]: nothing -> record<consentArtifacts: table<consentContentScreenshots: list, consentContentVersion: string, guardianSignature: record, metadata: record, name: string, userId: string, userSignature: record, witnessSignature: record>, nextPageToken: string> {
+]: nothing -> oneof<record<consentArtifacts: table<consentContentScreenshots: list, consentContentVersion: string, guardianSignature: record, metadata: record, name: string, userId: string, userSignature: record, witnessSignature: record>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1955,10 +1965,6 @@ export def "healthcare-projects-locations-datasets-consent-stores-consent-artifa
 #
 # POST /v1beta1/{parent}/consentArtifacts
 # operationId: healthcare.projects.locations.datasets.consentStores.consentArtifacts.create
-# --consentContentScreenshots item shape: {gcsUri?: string, rawBytes?: string}
-# --guardianSignature shape: {image?: record, metadata?: record, signatureTime?: string, userId?: string}
-# --userSignature shape: {image?: record, metadata?: record, signatureTime?: string, userId?: string}
-# --witnessSignature shape: {image?: record, metadata?: record, signatureTime?: string, userId?: string}
 export def "healthcare-projects-locations-datasets-consent-stores-consent-artifacts-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1989,7 +1995,7 @@ export def "healthcare-projects-locations-datasets-consent-stores-consent-artifa
   --user-id: string # Required. User's UUID provided by the client.
   --user-signature: record # User signature. — shape: {image?: record, metadata?: record, signatureTime?: string, userId?: string}
   --witness-signature: record # User signature. — shape: {image?: record, metadata?: record, signatureTime?: string, userId?: string}
-]: any -> record<consentContentScreenshots: table<gcsUri: string, rawBytes: string>, consentContentVersion: string, guardianSignature: record<image: record<gcsUri: string, rawBytes: string>, metadata: record, signatureTime: string, userId: string>, metadata: record, name: string, userId: string, userSignature: record<image: record<gcsUri: string, rawBytes: string>, metadata: record, signatureTime: string, userId: string>, witnessSignature: record<image: record<gcsUri: string, rawBytes: string>, metadata: record, signatureTime: string, userId: string>> {
+]: any -> oneof<record<consentContentScreenshots: table<gcsUri: string, rawBytes: string>, consentContentVersion: string, guardianSignature: record<image: record<gcsUri: string, rawBytes: string>, metadata: record, signatureTime: string, userId: string>, metadata: record, name: string, userId: string, userSignature: record<image: record<gcsUri: string, rawBytes: string>, metadata: record, signatureTime: string, userId: string>, witnessSignature: record<image: record<gcsUri: string, rawBytes: string>, metadata: record, signatureTime: string, userId: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2043,7 +2049,7 @@ export def "healthcare-projects-locations-datasets-consent-stores-list" [
   --filter: string # Optional. Restricts the stores returned to those matching a filter. The following syntax is available: * A string field value can be written as text inside quotation marks, for example `"query text"`. The only valid relational operation for text fields is equality (`=`), where text is searched within the field, rather than having the field be equal to the text. For example, `"Comment = great"` returns messages with `great` in the comment field. * A number field value can be written as an integer, a decimal, or an exponential. The valid relational operators for number fields are the equality operator (`=`), along with the less than/greater than operators (`<`, `<=`, `>`, `>=`). Note that there is no inequality (`!=`) operator. You can prepend the `NOT` operator to an expression to negate it. * A date field value must be written in `yyyy-mm-dd` form. Fields with date and time use the RFC3339 time format. Leading zeros are required for one-digit months and days. The valid relational operators for date fields are the equality operator (`=`) , along with the less than/greater than operators (`<`, `<=`, `>`, `>=`). Note that there is no inequality (`!=`) operator. You can prepend the `NOT` operator to an expression to negate it. * Multiple field query expressions can be combined in one query by adding `AND` or `OR` operators between the expressions. If a boolean operator appears within a quoted string, it is not treated as special, it's just another part of the character string to be matched. You can prepend the `NOT` operator to an expression to negate it. Only filtering on labels is supported. For example, `filter=labels.key=value`.
   --page-size: int # Optional. Limit on the number of consent stores to return in a single response. If not specified, 100 is used. May not be larger than 1000.
   --page-token: string # Optional. Token to retrieve the next page of results, or empty to get the first page.
-]: nothing -> record<consentStores: table<defaultConsentTtl: string, enableConsentCreateOnUpdate: bool, labels: record, name: string>, nextPageToken: string> {
+]: nothing -> oneof<record<consentStores: table<defaultConsentTtl: string, enableConsentCreateOnUpdate: bool, labels: record, name: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -2096,7 +2102,7 @@ export def "healthcare-projects-locations-datasets-consent-stores-create" [
   --enable-consent-create-on-update: oneof<nothing, bool> # Optional. If `true`, UpdateConsent creates the Consent if it does not already exist. If unspecified, defaults to `false`.
   --labels: record # Optional. User-supplied key-value pairs used to organize consent stores. Label keys must be between 1 and 63 characters long, have a UTF-8 encoding of maximum 128 bytes, and must conform to the following PCRE regular expression: \p{Ll}\p{Lo}{0,62}. Label values must be between 1 and 63 characters long, have a UTF-8 encoding of maximum 128 bytes, and must conform to the following PCRE regular expression: [\p{Ll}\p{Lo}\p{N}_-]{0,63}. No more than 64 labels can be associated with a given store. For more information: https://cloud.google.com/healthcare/docs/how-tos/labeling-resources
   --name: string # Resource name of the consent store, of the form `projects/{project_id}/locations/{location_id}/datasets/{dataset_id}/consentStores/{consent_store_id}`. Cannot be changed after creation.
-]: any -> record<defaultConsentTtl: string, enableConsentCreateOnUpdate: bool, labels: record, name: string> {
+]: any -> oneof<record<defaultConsentTtl: string, enableConsentCreateOnUpdate: bool, labels: record, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2150,7 +2156,7 @@ export def "healthcare-projects-locations-datasets-consent-stores-consents-list"
   --filter: string # Optional. Restricts the consents returned to those matching a filter. The following syntax is available: * A string field value can be written as text inside quotation marks, for example `"query text"`. The only valid relational operation for text fields is equality (`=`), where text is searched within the field, rather than having the field be equal to the text. For example, `"Comment = great"` returns messages with `great` in the comment field. * A number field value can be written as an integer, a decimal, or an exponential. The valid relational operators for number fields are the equality operator (`=`), along with the less than/greater than operators (`<`, `<=`, `>`, `>=`). Note that there is no inequality (`!=`) operator. You can prepend the `NOT` operator to an expression to negate it. * A date field value must be written in `yyyy-mm-dd` form. Fields with date and time use the RFC3339 time format. Leading zeros are required for one-digit months and days. The valid relational operators for date fields are the equality operator (`=`) , along with the less than/greater than operators (`<`, `<=`, `>`, `>=`). Note that there is no inequality (`!=`) operator. You can prepend the `NOT` operator to an expression to negate it. * Multiple field query expressions can be combined in one query by adding `AND` or `OR` operators between the expressions. If a boolean operator appears within a quoted string, it is not treated as special, it's just another part of the character string to be matched. You can prepend the `NOT` operator to an expression to negate it. The fields available for filtering are: - user_id. For example, `filter='user_id="user123"'`. - consent_artifact - state - revision_create_time - metadata. For example, `filter=Metadata(\"testkey\")=\"value\"` or `filter=HasMetadata(\"testkey\")`.
   --page-size: int # Optional. Limit on the number of Consents to return in a single response. If not specified, 100 is used. May not be larger than 1000.
   --page-token: string # Optional. The next_page_token value returned from the previous List request, if any.
-]: nothing -> record<consents: table<consentArtifact: string, expireTime: string, metadata: record, name: string, policies: list, revisionCreateTime: string, revisionId: string, state: string, ttl: string, userId: string>, nextPageToken: string> {
+]: nothing -> oneof<record<consents: table<consentArtifact: string, expireTime: string, metadata: record, name: string, policies: list, revisionCreateTime: string, revisionId: string, state: string, ttl: string, userId: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -2176,7 +2182,6 @@ export def "healthcare-projects-locations-datasets-consent-stores-consents-list"
 #
 # POST /v1beta1/{parent}/consents
 # operationId: healthcare.projects.locations.datasets.consentStores.consents.create
-# --policies item shape: {authorizationRule?: record, resourceAttributes?: list}
 export def "healthcare-projects-locations-datasets-consent-stores-consents-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2207,7 +2212,7 @@ export def "healthcare-projects-locations-datasets-consent-stores-consents-creat
   --state: string@state-completer # Required. Indicates the current state of this Consent.
   --ttl: string # Input only. The time to live for this Consent from when it is created. (format: google-duration)
   --user-id: string # Required. User's UUID provided by the client.
-]: any -> record<consentArtifact: string, expireTime: string, metadata: record, name: string, policies: table<authorizationRule: record, resourceAttributes: list>, revisionCreateTime: string, revisionId: string, state: string, ttl: string, userId: string> {
+]: any -> oneof<record<consentArtifact: string, expireTime: string, metadata: record, name: string, policies: table<authorizationRule: record, resourceAttributes: list>, revisionCreateTime: string, revisionId: string, state: string, ttl: string, userId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2260,7 +2265,7 @@ export def "healthcare-projects-locations-datasets-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # The maximum number of items to return. If not specified, 100 is used. May not be larger than 1000.
   --page-token: string # The next_page_token value returned from a previous List request, if any.
-]: nothing -> record<datasets: table<name: string, timeZone: string>, nextPageToken: string> {
+]: nothing -> oneof<record<datasets: table<name: string, timeZone: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -2311,7 +2316,7 @@ export def "healthcare-projects-locations-datasets-create" [
   --dataset-id: string # The ID of the dataset that is being created. The string must match the following regex: `[\p{L}\p{N}_\-\.]{1,256}`.
   --name: string # Resource name of the dataset, of the form `projects/{project_id}/locations/{location_id}/datasets/{dataset_id}`.
   --time-zone: string # The default timezone used by this dataset. Must be a either a valid IANA time zone name such as "America/New_York" or empty, which defaults to UTC. This is used for parsing times in resources, such as HL7 messages, where no explicit timezone is specified.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2365,7 +2370,7 @@ export def "healthcare-projects-locations-datasets-dicom-stores-list" [
   --filter: string # Restricts stores returned to those matching a filter. The following syntax is available: * A string field value can be written as text inside quotation marks, for example `"query text"`. The only valid relational operation for text fields is equality (`=`), where text is searched within the field, rather than having the field be equal to the text. For example, `"Comment = great"` returns messages with `great` in the comment field. * A number field value can be written as an integer, a decimal, or an exponential. The valid relational operators for number fields are the equality operator (`=`), along with the less than/greater than operators (`<`, `<=`, `>`, `>=`). Note that there is no inequality (`!=`) operator. You can prepend the `NOT` operator to an expression to negate it. * A date field value must be written in `yyyy-mm-dd` form. Fields with date and time use the RFC3339 time format. Leading zeros are required for one-digit months and days. The valid relational operators for date fields are the equality operator (`=`) , along with the less than/greater than operators (`<`, `<=`, `>`, `>=`). Note that there is no inequality (`!=`) operator. You can prepend the `NOT` operator to an expression to negate it. * Multiple field query expressions can be combined in one query by adding `AND` or `OR` operators between the expressions. If a boolean operator appears within a quoted string, it is not treated as special, it's just another part of the character string to be matched. You can prepend the `NOT` operator to an expression to negate it. Only filtering on labels is supported. For example, `labels.key=value`.
   --page-size: int # Limit on the number of DICOM stores to return in a single response. If not specified, 100 is used. May not be larger than 1000.
   --page-token: string # The next_page_token value returned from the previous List request, if any.
-]: nothing -> record<dicomStores: table<labels: record, name: string, notificationConfig: record, streamConfigs: list>, nextPageToken: string> {
+]: nothing -> oneof<record<dicomStores: table<labels: record, name: string, notificationConfig: record, streamConfigs: list>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -2391,8 +2396,6 @@ export def "healthcare-projects-locations-datasets-dicom-stores-list" [
 #
 # POST /v1beta1/{parent}/dicomStores
 # operationId: healthcare.projects.locations.datasets.dicomStores.create
-# --notificationConfig shape: {pubsubTopic?: string, sendForBulkImport?: bool}
-# --streamConfigs item shape: {bigqueryDestination?: record}
 export def "healthcare-projects-locations-datasets-dicom-stores-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2420,7 +2423,7 @@ export def "healthcare-projects-locations-datasets-dicom-stores-create" [
   --name: string # Resource name of the DICOM store, of the form `projects/{project_id}/locations/{location_id}/datasets/{dataset_id}/dicomStores/{dicom_store_id}`.
   --notification-config: record # Specifies where to send notifications upon changes to a data store. — shape: {pubsubTopic?: string, sendForBulkImport?: bool}
   --stream-configs: list # A list of streaming configs used to configure the destination of streaming exports for every DICOM instance insertion in this DICOM store. After a new config is added to `stream_configs`, DICOM instance insertions are streamed to the new destination. When a config is removed from `stream_configs`, the server stops streaming to that destination. Each config must contain a unique destination. — item shape: {bigqueryDestination?: record}
-]: any -> record<labels: record, name: string, notificationConfig: record<pubsubTopic: string, sendForBulkImport: bool>, streamConfigs: table<bigqueryDestination: record>> {
+]: any -> oneof<record<labels: record, name: string, notificationConfig: record<pubsubTopic: string, sendForBulkImport: bool>, streamConfigs: table<bigqueryDestination: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2472,7 +2475,7 @@ export def "healthcare-projects-locations-datasets-dicom-stores-studies-series-i
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -2522,7 +2525,7 @@ export def "healthcare-projects-locations-datasets-dicom-stores-studies-series-i
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<contentType: string, data: string, extensions: list<record>> {
+]: nothing -> oneof<record<contentType: string, data: string, extensions: list<record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -2575,7 +2578,7 @@ export def "healthcare-projects-locations-datasets-dicom-stores-studies-store-in
   --content-type: string # The HTTP Content-Type header value specifying the content type of the body.
   --data: string # The HTTP request/response body as raw binary. (format: byte)
   --extensions: list # Application specific response metadata. Must be set in the first response for streaming APIs.
-]: any -> record<contentType: string, data: string, extensions: list<record>> {
+]: any -> oneof<record<contentType: string, data: string, extensions: list<record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2630,7 +2633,7 @@ export def "healthcare-projects-locations-datasets-fhir-stores-fhir-execute-bund
   --content-type: string # The HTTP Content-Type header value specifying the content type of the body.
   --data: string # The HTTP request/response body as raw binary. (format: byte)
   --extensions: list # Application specific response metadata. Must be set in the first response for streaming APIs.
-]: any -> record<contentType: string, data: string, extensions: list<record>> {
+]: any -> oneof<record<contentType: string, data: string, extensions: list<record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2686,7 +2689,7 @@ export def "healthcare-projects-locations-datasets-fhir-stores-fhir-resource-inc
   --summary: string # Used to simplify the representation of the returned resources. `_summary=text` returns only the `text`, `id`, and `meta` top-level fields. `_summary=data` removes the `text` field and returns all other fields. `_summary=false` returns all parts of the resource(s). Either not providing this parameter or providing an empty value to this parameter also returns all parts of the resource(s).
   --type: string # String of comma-delimited FHIR resource types. If provided, only resources of the specified resource type(s) are returned. If not provided or an empty value is provided, no filter on the returned resource type(s) is applied.
   --target: string # Required. The target whose incoming references are requested. This param is required and must not be empty. It uses the format "ResourceType/ResourceID", for example, target=ResourceType/ResourceID.
-]: nothing -> record<contentType: string, data: string, extensions: list<record>> {
+]: nothing -> oneof<record<contentType: string, data: string, extensions: list<record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -2740,7 +2743,7 @@ export def "healthcare-projects-locations-datasets-fhir-stores-fhir-concept-map-
   --system: string # The system for the code to be translated.
   --target: string # The target value set of the concept map to be used. If unset, source is used to search for concept maps.
   --url: string # The canonical url of the concept map to use. If unset, the source and target is used to search for concept maps.
-]: nothing -> record<contentType: string, data: string, extensions: list<record>> {
+]: nothing -> oneof<record<contentType: string, data: string, extensions: list<record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -2788,7 +2791,7 @@ export def "healthcare-projects-locations-datasets-fhir-stores-fhir-observation-
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<contentType: string, data: string, extensions: list<record>> {
+]: nothing -> oneof<record<contentType: string, data: string, extensions: list<record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -2837,7 +2840,7 @@ export def "healthcare-projects-locations-datasets-fhir-stores-fhir-search" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --resource-type: string # The FHIR resource type to search, such as Patient or Observation. For a complete list, see the FHIR Resource Index ([DSTU2](https://hl7.org/implement/standards/fhir/DSTU2/resourcelist.html), [STU3](https://hl7.org/implement/standards/fhir/STU3/resourcelist.html), [R4](https://hl7.org/implement/standards/fhir/R4/resourcelist.html)).
-]: any -> record<contentType: string, data: string, extensions: list<record>> {
+]: any -> oneof<record<contentType: string, data: string, extensions: list<record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2890,7 +2893,7 @@ export def "healthcare-projects-locations-datasets-fhir-stores-fhir-search-type"
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body-resource-type: string # The FHIR resource type to search, such as Patient or Observation. For a complete list, see the FHIR Resource Index ([DSTU2](https://hl7.org/implement/standards/fhir/DSTU2/resourcelist.html), [STU3](https://hl7.org/implement/standards/fhir/STU3/resourcelist.html), [R4](https://hl7.org/implement/standards/fhir/R4/resourcelist.html)).
-]: any -> record<contentType: string, data: string, extensions: list<record>> {
+]: any -> oneof<record<contentType: string, data: string, extensions: list<record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2943,7 +2946,7 @@ export def "healthcare-projects-locations-datasets-fhir-stores-fhir-conditional-
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -2996,7 +2999,7 @@ export def "healthcare-projects-locations-datasets-fhir-stores-fhir-conditional-
   --content-type: string # The HTTP Content-Type header value specifying the content type of the body.
   --data: string # The HTTP request/response body as raw binary. (format: byte)
   --extensions: list # Application specific response metadata. Must be set in the first response for streaming APIs.
-]: any -> record<contentType: string, data: string, extensions: list<record>> {
+]: any -> oneof<record<contentType: string, data: string, extensions: list<record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3052,7 +3055,7 @@ export def "healthcare-projects-locations-datasets-fhir-stores-fhir-create" [
   --content-type: string # The HTTP Content-Type header value specifying the content type of the body.
   --data: string # The HTTP request/response body as raw binary. (format: byte)
   --extensions: list # Application specific response metadata. Must be set in the first response for streaming APIs.
-]: any -> record<contentType: string, data: string, extensions: list<record>> {
+]: any -> oneof<record<contentType: string, data: string, extensions: list<record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3108,7 +3111,7 @@ export def "healthcare-projects-locations-datasets-fhir-stores-fhir-conditional-
   --content-type: string # The HTTP Content-Type header value specifying the content type of the body.
   --data: string # The HTTP request/response body as raw binary. (format: byte)
   --extensions: list # Application specific response metadata. Must be set in the first response for streaming APIs.
-]: any -> record<contentType: string, data: string, extensions: list<record>> {
+]: any -> oneof<record<contentType: string, data: string, extensions: list<record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3165,7 +3168,7 @@ export def "healthcare-projects-locations-datasets-fhir-stores-fhir-resource-val
   --content-type: string # The HTTP Content-Type header value specifying the content type of the body.
   --data: string # The HTTP request/response body as raw binary. (format: byte)
   --extensions: list # Application specific response metadata. Must be set in the first response for streaming APIs.
-]: any -> record<contentType: string, data: string, extensions: list<record>> {
+]: any -> oneof<record<contentType: string, data: string, extensions: list<record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3220,7 +3223,7 @@ export def "healthcare-projects-locations-datasets-fhir-stores-list" [
   --filter: string # Restricts stores returned to those matching a filter. The following syntax is available: * A string field value can be written as text inside quotation marks, for example `"query text"`. The only valid relational operation for text fields is equality (`=`), where text is searched within the field, rather than having the field be equal to the text. For example, `"Comment = great"` returns messages with `great` in the comment field. * A number field value can be written as an integer, a decimal, or an exponential. The valid relational operators for number fields are the equality operator (`=`), along with the less than/greater than operators (`<`, `<=`, `>`, `>=`). Note that there is no inequality (`!=`) operator. You can prepend the `NOT` operator to an expression to negate it. * A date field value must be written in `yyyy-mm-dd` form. Fields with date and time use the RFC3339 time format. Leading zeros are required for one-digit months and days. The valid relational operators for date fields are the equality operator (`=`) , along with the less than/greater than operators (`<`, `<=`, `>`, `>=`). Note that there is no inequality (`!=`) operator. You can prepend the `NOT` operator to an expression to negate it. * Multiple field query expressions can be combined in one query by adding `AND` or `OR` operators between the expressions. If a boolean operator appears within a quoted string, it is not treated as special, it's just another part of the character string to be matched. You can prepend the `NOT` operator to an expression to negate it. Only filtering on labels is supported, for example `labels.key=value`.
   --page-size: int # Limit on the number of FHIR stores to return in a single response. If not specified, 100 is used. May not be larger than 1000.
   --page-token: string # The next_page_token value returned from the previous List request, if any.
-]: nothing -> record<fhirStores: table<complexDataTypeReferenceParsing: string, defaultSearchHandlingStrict: bool, disableReferentialIntegrity: bool, disableResourceVersioning: bool, enableUpdateCreate: bool, labels: record, name: string, notificationConfig: record, notificationConfigs: list, searchConfig: record, streamConfigs: list, validationConfig: record, version: string>, nextPageToken: string> {
+]: nothing -> oneof<record<fhirStores: table<complexDataTypeReferenceParsing: string, defaultSearchHandlingStrict: bool, disableReferentialIntegrity: bool, disableResourceVersioning: bool, enableUpdateCreate: bool, labels: record, name: string, notificationConfig: record, notificationConfigs: list, searchConfig: record, streamConfigs: list, validationConfig: record, version: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -3246,11 +3249,6 @@ export def "healthcare-projects-locations-datasets-fhir-stores-list" [
 #
 # POST /v1beta1/{parent}/fhirStores
 # operationId: healthcare.projects.locations.datasets.fhirStores.create
-# --notificationConfig shape: {pubsubTopic?: string, sendForBulkImport?: bool}
-# --notificationConfigs item shape: {pubsubTopic?: string, sendFullResource?: bool}
-# --searchConfig shape: {searchParameters?: list}
-# --streamConfigs item shape: {bigqueryDestination?: record, deidentifiedStoreDestination?: record, resourceTypes?: list<string>}
-# --validationConfig shape: {disableFhirpathValidation?: bool, disableProfileValidation?: bool, disableReferenceTypeValidation?: bool, disableRequiredFieldValidation?: bool, enabledImplementationGuides?: list<string>}
 export def "healthcare-projects-locations-datasets-fhir-stores-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3287,7 +3285,7 @@ export def "healthcare-projects-locations-datasets-fhir-stores-create" [
   --stream-configs: list # A list of streaming configs that configure the destinations of streaming export for every resource mutation in this FHIR store. Each store is allowed to have up to 10 streaming configs. After a new config is added, the next resource mutation is streamed to the new location in addition to the existing ones. When a location is removed from the list, the server stops streaming to that location. Before adding a new config, you must add the required [`bigquery.dataEditor`](https://cloud.google.com/bigquery/docs/access-control#bigquery.dataEditor) role to your project's **Cloud Healthcare Service Agent** [service account](https://cloud.google.com/iam/docs/service-accounts). Some lag (typically on the order of dozens of seconds) is expected before the results show up in the streaming destination. — item shape: {bigqueryDestination?: record, deidentifiedStoreDestination?: record, resourceTypes?: list<string>}
   --validation-config: record # Contains the configuration for FHIR profiles and validation. — shape: {disableFhirpathValidation?: bool, disableProfileValidation?: bool, disableReferenceTypeValidation?: bool, disableRequiredFieldValidation?: bool, enabledImplementationGuides?: list<string>}
   --version: string@version-completer # Immutable. The FHIR specification version that this FHIR store supports natively. This field is immutable after store creation. Requests are rejected if they contain FHIR resources of a different version. Version is required for every FHIR store.
-]: any -> record<complexDataTypeReferenceParsing: string, defaultSearchHandlingStrict: bool, disableReferentialIntegrity: bool, disableResourceVersioning: bool, enableUpdateCreate: bool, labels: record, name: string, notificationConfig: record<pubsubTopic: string, sendForBulkImport: bool>, notificationConfigs: table<pubsubTopic: string, sendFullResource: bool>, searchConfig: record<searchParameters: list<record>>, streamConfigs: table<bigqueryDestination: record, deidentifiedStoreDestination: record, resourceTypes: list>, validationConfig: record<disableFhirpathValidation: bool, disableProfileValidation: bool, disableReferenceTypeValidation: bool, disableRequiredFieldValidation: bool, enabledImplementationGuides: list<string>>, version: string> {
+]: any -> oneof<record<complexDataTypeReferenceParsing: string, defaultSearchHandlingStrict: bool, disableReferentialIntegrity: bool, disableResourceVersioning: bool, enableUpdateCreate: bool, labels: record, name: string, notificationConfig: record<pubsubTopic: string, sendForBulkImport: bool>, notificationConfigs: table<pubsubTopic: string, sendFullResource: bool>, searchConfig: record<searchParameters: list<record>>, streamConfigs: table<bigqueryDestination: record, deidentifiedStoreDestination: record, resourceTypes: list>, validationConfig: record<disableFhirpathValidation: bool, disableProfileValidation: bool, disableReferenceTypeValidation: bool, disableRequiredFieldValidation: bool, enabledImplementationGuides: list<string>>, version: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3341,7 +3339,7 @@ export def "healthcare-projects-locations-datasets-hl7-v2-stores-list" [
   --filter: string # Restricts stores returned to those matching a filter. The following syntax is available: * A string field value can be written as text inside quotation marks, for example `"query text"`. The only valid relational operation for text fields is equality (`=`), where text is searched within the field, rather than having the field be equal to the text. For example, `"Comment = great"` returns messages with `great` in the comment field. * A number field value can be written as an integer, a decimal, or an exponential. The valid relational operators for number fields are the equality operator (`=`), along with the less than/greater than operators (`<`, `<=`, `>`, `>=`). Note that there is no inequality (`!=`) operator. You can prepend the `NOT` operator to an expression to negate it. * A date field value must be written in `yyyy-mm-dd` form. Fields with date and time use the RFC3339 time format. Leading zeros are required for one-digit months and days. The valid relational operators for date fields are the equality operator (`=`) , along with the less than/greater than operators (`<`, `<=`, `>`, `>=`). Note that there is no inequality (`!=`) operator. You can prepend the `NOT` operator to an expression to negate it. * Multiple field query expressions can be combined in one query by adding `AND` or `OR` operators between the expressions. If a boolean operator appears within a quoted string, it is not treated as special, it's just another part of the character string to be matched. You can prepend the `NOT` operator to an expression to negate it. Only filtering on labels is supported. For example, `labels.key=value`.
   --page-size: int # Limit on the number of HL7v2 stores to return in a single response. If not specified, 100 is used. May not be larger than 1000.
   --page-token: string # The next_page_token value returned from the previous List request, if any.
-]: nothing -> record<hl7V2Stores: table<labels: record, name: string, notificationConfig: record, notificationConfigs: list, parserConfig: record, rejectDuplicateMessage: bool>, nextPageToken: string> {
+]: nothing -> oneof<record<hl7V2Stores: table<labels: record, name: string, notificationConfig: record, notificationConfigs: list, parserConfig: record, rejectDuplicateMessage: bool>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -3367,9 +3365,6 @@ export def "healthcare-projects-locations-datasets-hl7-v2-stores-list" [
 #
 # POST /v1beta1/{parent}/hl7V2Stores
 # operationId: healthcare.projects.locations.datasets.hl7V2Stores.create
-# --notificationConfig shape: {pubsubTopic?: string, sendForBulkImport?: bool}
-# --notificationConfigs item shape: {filter?: string, pubsubTopic?: string}
-# --parserConfig shape: {allowNullHeader?: bool, schema?: record, segmentTerminator?: string, version?: "PARSER_VERSION_UNSPECIFIED"|"V1"|"V2"|"V3"}
 export def "healthcare-projects-locations-datasets-hl7-v2-stores-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3399,7 +3394,7 @@ export def "healthcare-projects-locations-datasets-hl7-v2-stores-create" [
   --notification-configs: list # A list of notification configs. Each configuration uses a filter to determine whether to publish a message (both Ingest & Create) on the corresponding notification destination. Only the message name is sent as part of the notification. Supplied by the client. — item shape: {filter?: string, pubsubTopic?: string}
   --parser-config: record # The configuration for the parser. It determines how the server parses the messages. — shape: {allowNullHeader?: bool, schema?: record, segmentTerminator?: string, version?: "PARSER_VERSION_UNSPECIFIED"|"V1"|"V2"|"V3"}
   --reject-duplicate-message: oneof<nothing, bool> # Determines whether to reject duplicate messages. A duplicate message is a message with the same raw bytes as a message that has already been ingested/created in this HL7v2 store. The default value is false, meaning that the store accepts the duplicate messages and it also returns the same ACK message in the IngestMessageResponse as has been returned previously. Note that only one resource is created in the store. When this field is set to true, CreateMessage/IngestMessage requests with a duplicate message will be rejected by the store, and IngestMessageErrorDetail returns a NACK message upon rejection.
-]: any -> record<labels: record, name: string, notificationConfig: record<pubsubTopic: string, sendForBulkImport: bool>, notificationConfigs: table<filter: string, pubsubTopic: string>, parserConfig: record<allowNullHeader: bool, schema: record<ignoreMinOccurs: bool, schemas: list, schematizedParsingType: string, types: list, unexpectedSegmentHandling: string>, segmentTerminator: string, version: string>, rejectDuplicateMessage: bool> {
+]: any -> oneof<record<labels: record, name: string, notificationConfig: record<pubsubTopic: string, sendForBulkImport: bool>, notificationConfigs: table<filter: string, pubsubTopic: string>, parserConfig: record<allowNullHeader: bool, schema: record<ignoreMinOccurs: bool, schemas: list, schematizedParsingType: string, types: list, unexpectedSegmentHandling: string>, segmentTerminator: string, version: string>, rejectDuplicateMessage: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3455,7 +3450,7 @@ export def "healthcare-projects-locations-datasets-hl7-v2-stores-messages-list" 
   --page-size: int # Limit on the number of messages to return in a single response. If not specified, 100 is used. May not be larger than 1000.
   --page-token: string # The next_page_token value returned from the previous List request, if any.
   --view: string@view-completer # Specifies the parts of the Message to return in the response. When unspecified, equivalent to BASIC. Setting this to anything other than BASIC with a `page_size` larger than the default can generate a large response, which impacts the performance of this method.
-]: nothing -> record<hl7V2Messages: table<createTime: string, data: string, labels: record, messageType: string, name: string, parsedData: record, patientIds: list, schematizedData: record, sendFacility: string, sendTime: string>, nextPageToken: string> {
+]: nothing -> oneof<record<hl7V2Messages: table<createTime: string, data: string, labels: record, messageType: string, name: string, parsedData: record, patientIds: list, schematizedData: record, sendFacility: string, sendTime: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -3481,7 +3476,6 @@ export def "healthcare-projects-locations-datasets-hl7-v2-stores-messages-list" 
 #
 # POST /v1beta1/{parent}/messages
 # operationId: healthcare.projects.locations.datasets.hl7V2Stores.messages.create
-# --message shape: {data?: string, labels?: record, messageType?: string, name?: string, parsedData?: record, patientIds?: list, schematizedData?: record, sendFacility?: string, sendTime?: string}
 export def "healthcare-projects-locations-datasets-hl7-v2-stores-messages-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3505,7 +3499,7 @@ export def "healthcare-projects-locations-datasets-hl7-v2-stores-messages-create
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --message: record # A complete HL7v2 message. See [Introduction to HL7 Standards] (https://www.hl7.org/implement/standards/index.cfm?ref=common) for details on the standard. — shape: {data?: string, labels?: record, messageType?: string, name?: string, parsedData?: record, patientIds?: list, schematizedData?: record, sendFacility?: string, sendTime?: string}
-]: any -> record<createTime: string, data: string, labels: record, messageType: string, name: string, parsedData: record<segments: list<record>>, patientIds: table<type: string, value: string>, schematizedData: record<data: string, error: string>, sendFacility: string, sendTime: string> {
+]: any -> oneof<record<createTime: string, data: string, labels: record, messageType: string, name: string, parsedData: record<segments: list<record>>, patientIds: table<type: string, value: string>, schematizedData: record<data: string, error: string>, sendFacility: string, sendTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3558,7 +3552,7 @@ export def "healthcare-projects-locations-datasets-hl7-v2-stores-messages-batch-
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --ids: list<string> # The resource id of the HL7v2 messages to retrieve in the format: `{message_id}`, where the full resource name is `{parent}/messages/{message_id}` A maximum of 100 messages can be retrieved in a batch. All 'ids' have to be under parent.
   --view: string@view-completer # Specifies the parts of the Messages resource to return in the response. When unspecified, equivalent to BASIC.
-]: nothing -> record<messages: table<createTime: string, data: string, labels: record, messageType: string, name: string, parsedData: record, patientIds: list, schematizedData: record, sendFacility: string, sendTime: string>> {
+]: nothing -> oneof<record<messages: table<createTime: string, data: string, labels: record, messageType: string, name: string, parsedData: record, patientIds: list, schematizedData: record, sendFacility: string, sendTime: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -3584,7 +3578,6 @@ export def "healthcare-projects-locations-datasets-hl7-v2-stores-messages-batch-
 #
 # POST /v1beta1/{parent}/messages:ingest
 # operationId: healthcare.projects.locations.datasets.hl7V2Stores.messages.ingest
-# --message shape: {data?: string, labels?: record, messageType?: string, name?: string, parsedData?: record, patientIds?: list, schematizedData?: record, sendFacility?: string, sendTime?: string}
 export def "healthcare-projects-locations-datasets-hl7-v2-stores-messages-ingest" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3608,7 +3601,7 @@ export def "healthcare-projects-locations-datasets-hl7-v2-stores-messages-ingest
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --message: record # A complete HL7v2 message. See [Introduction to HL7 Standards] (https://www.hl7.org/implement/standards/index.cfm?ref=common) for details on the standard. — shape: {data?: string, labels?: record, messageType?: string, name?: string, parsedData?: record, patientIds?: list, schematizedData?: record, sendFacility?: string, sendTime?: string}
-]: any -> record<hl7Ack: string, message: record<createTime: string, data: string, labels: record, messageType: string, name: string, parsedData: record<segments: list>, patientIds: list<record>, schematizedData: record<data: string, error: string>, sendFacility: string, sendTime: string>> {
+]: any -> oneof<record<hl7Ack: string, message: record<createTime: string, data: string, labels: record, messageType: string, name: string, parsedData: record<segments: list>, patientIds: list<record>, schematizedData: record<data: string, error: string>, sendFacility: string, sendTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3662,7 +3655,7 @@ export def "healthcare-projects-locations-datasets-consent-stores-user-data-mapp
   --filter: string # Optional. Restricts the user data mappings returned to those matching a filter. The following syntax is available: * A string field value can be written as text inside quotation marks, for example `"query text"`. The only valid relational operation for text fields is equality (`=`), where text is searched within the field, rather than having the field be equal to the text. For example, `"Comment = great"` returns messages with `great` in the comment field. * A number field value can be written as an integer, a decimal, or an exponential. The valid relational operators for number fields are the equality operator (`=`), along with the less than/greater than operators (`<`, `<=`, `>`, `>=`). Note that there is no inequality (`!=`) operator. You can prepend the `NOT` operator to an expression to negate it. * A date field value must be written in `yyyy-mm-dd` form. Fields with date and time use the RFC3339 time format. Leading zeros are required for one-digit months and days. The valid relational operators for date fields are the equality operator (`=`) , along with the less than/greater than operators (`<`, `<=`, `>`, `>=`). Note that there is no inequality (`!=`) operator. You can prepend the `NOT` operator to an expression to negate it. * Multiple field query expressions can be combined in one query by adding `AND` or `OR` operators between the expressions. If a boolean operator appears within a quoted string, it is not treated as special, it's just another part of the character string to be matched. You can prepend the `NOT` operator to an expression to negate it. The fields available for filtering are: - data_id - user_id. For example, `filter=user_id=\"user123\"`. - archived - archive_time
   --page-size: int # Optional. Limit on the number of User data mappings to return in a single response. If not specified, 100 is used. May not be larger than 1000.
   --page-token: string # Optional. Token to retrieve the next page of results, or empty to get the first page.
-]: nothing -> record<nextPageToken: string, userDataMappings: table<archiveTime: string, archived: bool, dataId: string, name: string, resourceAttributes: list, userId: string>> {
+]: nothing -> oneof<record<nextPageToken: string, userDataMappings: table<archiveTime: string, archived: bool, dataId: string, name: string, resourceAttributes: list, userId: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -3688,7 +3681,6 @@ export def "healthcare-projects-locations-datasets-consent-stores-user-data-mapp
 #
 # POST /v1beta1/{parent}/userDataMappings
 # operationId: healthcare.projects.locations.datasets.consentStores.userDataMappings.create
-# --resourceAttributes item shape: {attributeDefinitionId?: string, values?: list<string>}
 export def "healthcare-projects-locations-datasets-consent-stores-user-data-mappings-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3715,7 +3707,7 @@ export def "healthcare-projects-locations-datasets-consent-stores-user-data-mapp
   --name: string # Resource name of the User data mapping, of the form `projects/{project_id}/locations/{location_id}/datasets/{dataset_id}/consentStores/{consent_store_id}/userDataMappings/{user_data_mapping_id}`.
   --resource-attributes: list # Attributes of the resource. Only explicitly set attributes are displayed here. Attribute definitions with defaults set implicitly apply to these User data mappings. Attributes listed here must be single valued, that is, exactly one value is specified for the field "values" in each Attribute. — item shape: {attributeDefinitionId?: string, values?: list<string>}
   --user-id: string # Required. User's UUID provided by the client.
-]: any -> record<archiveTime: string, archived: bool, dataId: string, name: string, resourceAttributes: table<attributeDefinitionId: string, values: list>, userId: string> {
+]: any -> oneof<record<archiveTime: string, archived: bool, dataId: string, name: string, resourceAttributes: table<attributeDefinitionId: string, values: list>, userId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3767,7 +3759,7 @@ export def "healthcare-projects-locations-datasets-hl7-v2-stores-get-iam-policy"
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --options-requested-policy-version: int # Optional. The maximum policy version that will be used to format the policy. Valid values are 0, 1, and 3. Requests specifying an invalid value will be rejected. Requests for policies with any conditional role bindings must specify version 3. Policies with no conditional role bindings may specify any valid value or leave the field unset. The policy in the response might use the policy version that you specified, or it might use a lower policy version. For example, if you specify version 3, but the policy has no conditional role bindings, the response uses version 1. To learn which resources support conditions in their IAM policies, see the [IAM documentation](https://cloud.google.com/iam/help/conditions/resource-policies).
-]: nothing -> record<auditConfigs: table<auditLogConfigs: list, service: string>, bindings: table<condition: record, members: list, role: string>, etag: string, version: int> {
+]: nothing -> oneof<record<auditConfigs: table<auditLogConfigs: list, service: string>, bindings: table<condition: record, members: list, role: string>, etag: string, version: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource | is-empty) { error make --unspanned { msg: "path parameter 'resource' must be non-empty" } }
@@ -3793,7 +3785,6 @@ export def "healthcare-projects-locations-datasets-hl7-v2-stores-get-iam-policy"
 #
 # POST /v1beta1/{resource}:setIamPolicy
 # operationId: healthcare.projects.locations.datasets.hl7V2Stores.setIamPolicy
-# --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
 export def "healthcare-projects-locations-datasets-hl7-v2-stores-set-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3818,7 +3809,7 @@ export def "healthcare-projects-locations-datasets-hl7-v2-stores-set-iam-policy"
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --policy: record # An Identity and Access Management (IAM) policy, which specifies access controls for Google Cloud resources. A `Policy` is a collection of `bindings`. A `binding` binds one or more `members`, or principals, to a single `role`. Principals can be user accounts, service accounts, Google groups, and domains (such as G Suite). A `role` is a named list of permissions; each `role` can be an IAM predefined role or a user-created custom role. For some types of Google Cloud resources, a `binding` can also specify a `condition`, which is a logical expression that allows access to a resource only if the expression evaluates to `true`. A condition can add constraints based on attributes of the request, the resource, or both. To learn which resources support conditions in their IAM policies, see the [IAM documentation](https://cloud.google.com/iam/help/conditions/resource-policies). **JSON example:** { "bindings": [ { "role": "roles/resourcemanager.organizationAdmin", "members": [ "user:mike@example.com", "group:admins@example.com", "domain:google.com", "serviceAccount:my-project-id@appspot.gserviceaccount.com" ] }, { "role": "roles/resourcemanager.organizationViewer", "members": [ "user:eve@example.com" ], "condition": { "title": "expirable access", "description": "Does not grant access after Sep 2020", "expression": "request.time < timestamp('2020-10-01T00:00:00.000Z')", } } ], "etag": "BwWWja0YfJA=", "version": 3 } **YAML example:** bindings: - members: - user:mike@example.com - group:admins@example.com - domain:google.com - serviceAccount:my-project-id@appspot.gserviceaccount.com role: roles/resourcemanager.organizationAdmin - members: - user:eve@example.com role: roles/resourcemanager.organizationViewer condition: title: expirable access description: Does not grant access after Sep 2020 expression: request.time < timestamp('2020-10-01T00:00:00.000Z') etag: BwWWja0YfJA= version: 3 For a description of IAM and its features, see the [IAM documentation](https://cloud.google.com/iam/docs/). — shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
   --update-mask: string # OPTIONAL: A FieldMask specifying which fields of the policy to modify. Only the fields in the mask will be modified. If no mask is provided, the following default mask is used: `paths: "bindings, etag"` (format: google-fieldmask)
-]: any -> record<auditConfigs: table<auditLogConfigs: list, service: string>, bindings: table<condition: record, members: list, role: string>, etag: string, version: int> {
+]: any -> oneof<record<auditConfigs: table<auditLogConfigs: list, service: string>, bindings: table<condition: record, members: list, role: string>, etag: string, version: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3870,7 +3861,7 @@ export def "healthcare-projects-locations-datasets-hl7-v2-stores-test-iam-permis
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --permissions: list<string> # The set of permissions to check for the `resource`. Permissions with wildcards (such as `*` or `storage.*`) are not allowed. For more information see [IAM Overview](https://cloud.google.com/iam/docs/overview#permissions).
-]: any -> record<permissions: list<string>> {
+]: any -> oneof<record<permissions: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3899,7 +3890,6 @@ export def "healthcare-projects-locations-datasets-hl7-v2-stores-test-iam-permis
 #
 # POST /v1beta1/{sourceDataset}:deidentify
 # operationId: healthcare.projects.locations.datasets.deidentify
-# --config shape: {annotation?: record, dicom?: record, dicomTagConfig?: record, fhir?: record, fhirFieldConfig?: record, image?: record, operationMetadata?: record, text?: record}
 export def "healthcare-projects-locations-datasets-deidentify" [
   source_dataset: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3925,7 +3915,7 @@ export def "healthcare-projects-locations-datasets-deidentify" [
   --config: record # Configures de-id options specific to different types of content. Each submessage customizes the handling of an https://tools.ietf.org/html/rfc6838 media type or subtype. Configs are applied in a nested manner at runtime. — shape: {annotation?: record, dicom?: record, dicomTagConfig?: record, fhir?: record, fhirFieldConfig?: record, image?: record, operationMetadata?: record, text?: record}
   --destination-dataset: string # The name of the dataset resource to create and write the redacted data to. * The destination dataset must not exist. * The destination dataset must be in the same location as the source dataset. De-identifying data across multiple locations is not supported.
   --gcs-config-uri: string # Cloud Storage location to read the JSON cloud.healthcare.deidentify.DeidentifyConfig from, overriding the default config. Must be of the form `gs://{bucket_id}/path/to/object`. The Cloud Storage location must grant the Cloud IAM role `roles/storage.objectViewer` to the project's Cloud Healthcare Service Agent service account. Only one of `config` and `gcs_config_uri` can be specified.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3954,8 +3944,6 @@ export def "healthcare-projects-locations-datasets-deidentify" [
 #
 # POST /v1beta1/{sourceStore}:deidentify
 # operationId: healthcare.projects.locations.datasets.fhirStores.deidentify
-# --config shape: {annotation?: record, dicom?: record, dicomTagConfig?: record, fhir?: record, fhirFieldConfig?: record, image?: record, operationMetadata?: record, text?: record}
-# --resourceFilter shape: {resources?: record}
 export def "healthcare-projects-locations-datasets-fhir-stores-deidentify" [
   source_store: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3983,7 +3971,7 @@ export def "healthcare-projects-locations-datasets-fhir-stores-deidentify" [
   --gcs-config-uri: string # Cloud Storage location to read the JSON cloud.healthcare.deidentify.DeidentifyConfig from, overriding the default config. Must be of the form `gs://{bucket_id}/path/to/object`. The Cloud Storage location must grant the Cloud IAM role `roles/storage.objectViewer` to the project's Cloud Healthcare Service Agent service account. Only one of `config` and `gcs_config_uri` can be specified.
   --resource-filter: record # Filter configuration. — shape: {resources?: record}
   --skip-modified-resources: oneof<nothing, bool> # If true, skips resources that are created or modified after the de-identify operation is created.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

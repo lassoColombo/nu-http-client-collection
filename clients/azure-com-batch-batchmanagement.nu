@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -125,9 +149,9 @@ def key-name-completer [] { ["Primary" "Secondary"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["operations-list" "batch-account-list" "location-check-name-availability" "location-get-quotas" "batch-account-list-by-resource-group" "batch-account-delete" "batch-account-get" "batch-account-update" "batch-account-create" "application-list" "application-delete" "application-get" "application-update" "application-create" "application-package-list" "application-package-delete" "application-package-get" "application-package-create" "application-package-activate" "certificate-list-by-batch-account" "certificate-delete" "certificate-get" "certificate-update" "certificate-create" "certificate-cancel-deletion" "batch-account-get-keys" "pool-list-by-batch-account" "pool-delete" "pool-get" "pool-update" "pool-create" "pool-disable-auto-scale" "pool-stop-resize" "batch-account-regenerate-key" "batch-account-synchronize-auto-storage-keys" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -160,7 +184,7 @@ export def "operations-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to be used with the HTTP request. (required)
-]: nothing -> record<nextLink: string, value: table<display: record, name: string, origin: string, properties: record>> {
+]: nothing -> oneof<record<nextLink: string, value: table<display: record, name: string, origin: string, properties: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
@@ -198,7 +222,7 @@ export def "batch-account-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to be used with the HTTP request. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -240,7 +264,7 @@ export def "location-check-name-availability" [
   --api-version: string # The API version to be used with the HTTP request. (required)
   name: string # The name to check for availability
   type: string@type-completer # The resource type. Must be set to Microsoft.Batch/batchAccounts
-]: any -> record<message: string, nameAvailable: bool, reason: string> {
+]: any -> oneof<record<message: string, nameAvailable: bool, reason: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -284,7 +308,7 @@ export def "location-get-quotas" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to be used with the HTTP request. (required)
-]: nothing -> record<accountQuota: int> {
+]: nothing -> oneof<record<accountQuota: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -325,7 +349,7 @@ export def "batch-account-list-by-resource-group" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to be used with the HTTP request. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -410,7 +434,7 @@ export def "batch-account-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to be used with the HTTP request. (required)
-]: nothing -> record<properties: record<accountEndpoint: string, activeJobAndJobScheduleQuota: int, autoStorage: record<lastKeySync: string, storageAccountId: string>, dedicatedCoreQuota: int, dedicatedCoreQuotaPerVMFamily: list<record>, dedicatedCoreQuotaPerVMFamilyEnforced: bool, keyVaultReference: record<id: string, url: string>, lowPriorityCoreQuota: int, poolAllocationMode: string, poolQuota: int, provisioningState: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<properties: record<accountEndpoint: string, activeJobAndJobScheduleQuota: int, autoStorage: record<lastKeySync: string, storageAccountId: string>, dedicatedCoreQuota: int, dedicatedCoreQuotaPerVMFamily: list<record>, dedicatedCoreQuotaPerVMFamilyEnforced: bool, keyVaultReference: record<id: string, url: string>, lowPriorityCoreQuota: int, poolAllocationMode: string, poolQuota: int, provisioningState: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -439,7 +463,6 @@ export def "batch-account-get" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts/{accountName}
 # operationId: BatchAccount_Update
-# --properties shape: {autoStorage?: any}
 export def "batch-account-update" [
   subscription_id: string
   resource_group_name: string
@@ -456,7 +479,7 @@ export def "batch-account-update" [
   --api-version: string # The API version to be used with the HTTP request. (required)
   --properties: any # The properties of a Batch account. — shape: {autoStorage?: any}
   --tags: record # The user-specified tags associated with the account.
-]: any -> record<properties: record<accountEndpoint: string, activeJobAndJobScheduleQuota: int, autoStorage: record<lastKeySync: string, storageAccountId: string>, dedicatedCoreQuota: int, dedicatedCoreQuotaPerVMFamily: list<record>, dedicatedCoreQuotaPerVMFamilyEnforced: bool, keyVaultReference: record<id: string, url: string>, lowPriorityCoreQuota: int, poolAllocationMode: string, poolQuota: int, provisioningState: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<accountEndpoint: string, activeJobAndJobScheduleQuota: int, autoStorage: record<lastKeySync: string, storageAccountId: string>, dedicatedCoreQuota: int, dedicatedCoreQuotaPerVMFamily: list<record>, dedicatedCoreQuotaPerVMFamilyEnforced: bool, keyVaultReference: record<id: string, url: string>, lowPriorityCoreQuota: int, poolAllocationMode: string, poolQuota: int, provisioningState: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -488,7 +511,6 @@ export def "batch-account-update" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts/{accountName}
 # operationId: BatchAccount_Create
-# --properties shape: {autoStorage?: any, keyVaultReference?: any, poolAllocationMode?: "BatchService"|"UserSubscription"}
 export def "batch-account-create" [
   subscription_id: string
   resource_group_name: string
@@ -506,7 +528,7 @@ export def "batch-account-create" [
   location: string # The region in which to create the account.
   --properties: any # The properties of a Batch account. — shape: {autoStorage?: any, keyVaultReference?: any, poolAllocationMode?: "BatchService"|"UserSubscription"}
   --tags: record # The user-specified tags associated with the account.
-]: any -> record<properties: record<accountEndpoint: string, activeJobAndJobScheduleQuota: int, autoStorage: record<lastKeySync: string, storageAccountId: string>, dedicatedCoreQuota: int, dedicatedCoreQuotaPerVMFamily: list<record>, dedicatedCoreQuotaPerVMFamilyEnforced: bool, keyVaultReference: record<id: string, url: string>, lowPriorityCoreQuota: int, poolAllocationMode: string, poolQuota: int, provisioningState: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<properties: record<accountEndpoint: string, activeJobAndJobScheduleQuota: int, autoStorage: record<lastKeySync: string, storageAccountId: string>, dedicatedCoreQuota: int, dedicatedCoreQuotaPerVMFamily: list<record>, dedicatedCoreQuotaPerVMFamilyEnforced: bool, keyVaultReference: record<id: string, url: string>, lowPriorityCoreQuota: int, poolAllocationMode: string, poolQuota: int, provisioningState: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -553,7 +575,7 @@ export def "application-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --maxresults: int # The maximum number of items to return in the response. (format: int32)
   --api-version: string # The API version to be used with the HTTP request. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, etag: string, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, etag: string, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -642,7 +664,7 @@ export def "application-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to be used with the HTTP request. (required)
-]: nothing -> record<properties: record<allowUpdates: bool, defaultVersion: string, displayName: string>, etag: string, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<allowUpdates: bool, defaultVersion: string, displayName: string>, etag: string, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -672,7 +694,6 @@ export def "application-get" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts/{accountName}/applications/{applicationName}
 # operationId: Application_Update
-# --properties shape: {allowUpdates?: bool, defaultVersion?: string, displayName?: string}
 export def "application-update" [
   subscription_id: string
   resource_group_name: string
@@ -689,7 +710,7 @@ export def "application-update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to be used with the HTTP request. (required)
   --properties: any # The properties associated with the Application. — shape: {allowUpdates?: bool, defaultVersion?: string, displayName?: string}
-]: any -> record<properties: record<allowUpdates: bool, defaultVersion: string, displayName: string>, etag: string, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<allowUpdates: bool, defaultVersion: string, displayName: string>, etag: string, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -722,7 +743,6 @@ export def "application-update" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts/{accountName}/applications/{applicationName}
 # operationId: Application_Create
-# --properties shape: {allowUpdates?: bool, defaultVersion?: string, displayName?: string}
 export def "application-create" [
   subscription_id: string
   resource_group_name: string
@@ -739,7 +759,7 @@ export def "application-create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to be used with the HTTP request. (required)
   --properties: any # The properties associated with the Application. — shape: {allowUpdates?: bool, defaultVersion?: string, displayName?: string}
-]: any -> record<properties: record<allowUpdates: bool, defaultVersion: string, displayName: string>, etag: string, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<allowUpdates: bool, defaultVersion: string, displayName: string>, etag: string, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -788,7 +808,7 @@ export def "application-package-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --maxresults: int # The maximum number of items to return in the response. (format: int32)
   --api-version: string # The API version to be used with the HTTP request. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, etag: string, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, etag: string, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -881,7 +901,7 @@ export def "application-package-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to be used with the HTTP request. (required)
-]: nothing -> record<properties: record<format: string, lastActivationTime: string, state: string, storageUrl: string, storageUrlExpiry: string>, etag: string, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<format: string, lastActivationTime: string, state: string, storageUrl: string, storageUrlExpiry: string>, etag: string, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -929,7 +949,7 @@ export def "application-package-create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to be used with the HTTP request. (required)
   --properties: any # Properties of an application package
-]: any -> record<properties: record<format: string, lastActivationTime: string, state: string, storageUrl: string, storageUrlExpiry: string>, etag: string, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<format: string, lastActivationTime: string, state: string, storageUrl: string, storageUrlExpiry: string>, etag: string, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -980,7 +1000,7 @@ export def "application-package-activate" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to be used with the HTTP request. (required)
   format: string # The format of the application package binary file.
-]: any -> record<properties: record<format: string, lastActivationTime: string, state: string, storageUrl: string, storageUrlExpiry: string>, etag: string, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<format: string, lastActivationTime: string, state: string, storageUrl: string, storageUrlExpiry: string>, etag: string, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1031,7 +1051,7 @@ export def "certificate-list-by-batch-account" [
   --select: string # Comma separated list of properties that should be returned. e.g. "properties/provisioningState". Only top level properties under properties/ are valid for selection.
   --filter: string # OData filter expression. Valid properties for filtering are "properties/provisioningState", "properties/provisioningStateTransitionTime", "name".
   --api-version: string # The API version to be used with the HTTP request. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, etag: string, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, etag: string, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1120,7 +1140,7 @@ export def "certificate-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to be used with the HTTP request. (required)
-]: nothing -> record<properties: record<deleteCertificateError: record<code: string, details: list, message: string, target: string>, previousProvisioningState: string, previousProvisioningStateTransitionTime: string, provisioningState: string, provisioningStateTransitionTime: string, publicData: string, format: string, thumbprint: string, thumbprintAlgorithm: string>, etag: string, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<deleteCertificateError: record<code: string, details: list, message: string, target: string>, previousProvisioningState: string, previousProvisioningStateTransitionTime: string, provisioningState: string, provisioningStateTransitionTime: string, publicData: string, format: string, thumbprint: string, thumbprintAlgorithm: string>, etag: string, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1150,7 +1170,6 @@ export def "certificate-get" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts/{accountName}/certificates/{certificateName}
 # operationId: Certificate_Update
-# --properties shape: {data: string, password?: string, format?: "Pfx"|"Cer", thumbprint?: string, thumbprintAlgorithm?: string}
 export def "certificate-update" [
   subscription_id: string
   resource_group_name: string
@@ -1168,7 +1187,7 @@ export def "certificate-update" [
   --api-version: string # The API version to be used with the HTTP request. (required)
   --if-match: string # The entity state (ETag) version of the certificate to update. This value can be omitted or set to "*" to apply the operation unconditionally.
   --properties: any # Certificate properties for create operations — shape: {data: string, password?: string, format?: "Pfx"|"Cer", thumbprint?: string, thumbprintAlgorithm?: string}
-]: any -> record<properties: record<deleteCertificateError: record<code: string, details: list, message: string, target: string>, previousProvisioningState: string, previousProvisioningStateTransitionTime: string, provisioningState: string, provisioningStateTransitionTime: string, publicData: string, format: string, thumbprint: string, thumbprintAlgorithm: string>, etag: string, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<deleteCertificateError: record<code: string, details: list, message: string, target: string>, previousProvisioningState: string, previousProvisioningStateTransitionTime: string, provisioningState: string, provisioningStateTransitionTime: string, publicData: string, format: string, thumbprint: string, thumbprintAlgorithm: string>, etag: string, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1203,7 +1222,6 @@ export def "certificate-update" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts/{accountName}/certificates/{certificateName}
 # operationId: Certificate_Create
-# --properties shape: {data: string, password?: string, format?: "Pfx"|"Cer", thumbprint?: string, thumbprintAlgorithm?: string}
 export def "certificate-create" [
   subscription_id: string
   resource_group_name: string
@@ -1222,7 +1240,7 @@ export def "certificate-create" [
   --if-match: string # The entity state (ETag) version of the certificate to update. A value of "*" can be used to apply the operation only if the certificate already exists. If omitted, this operation will always be applied.
   --if-none-match: string # Set to '*' to allow a new certificate to be created, but to prevent updating an existing certificate. Other values will be ignored.
   --properties: any # Certificate properties for create operations — shape: {data: string, password?: string, format?: "Pfx"|"Cer", thumbprint?: string, thumbprintAlgorithm?: string}
-]: any -> record<properties: record<deleteCertificateError: record<code: string, details: list, message: string, target: string>, previousProvisioningState: string, previousProvisioningStateTransitionTime: string, provisioningState: string, provisioningStateTransitionTime: string, publicData: string, format: string, thumbprint: string, thumbprintAlgorithm: string>, etag: string, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<deleteCertificateError: record<code: string, details: list, message: string, target: string>, previousProvisioningState: string, previousProvisioningStateTransitionTime: string, provisioningState: string, provisioningStateTransitionTime: string, publicData: string, format: string, thumbprint: string, thumbprintAlgorithm: string>, etag: string, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1272,7 +1290,7 @@ export def "certificate-cancel-deletion" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to be used with the HTTP request. (required)
-]: nothing -> record<properties: record<deleteCertificateError: record<code: string, details: list, message: string, target: string>, previousProvisioningState: string, previousProvisioningStateTransitionTime: string, provisioningState: string, provisioningStateTransitionTime: string, publicData: string, format: string, thumbprint: string, thumbprintAlgorithm: string>, etag: string, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<deleteCertificateError: record<code: string, details: list, message: string, target: string>, previousProvisioningState: string, previousProvisioningStateTransitionTime: string, provisioningState: string, provisioningStateTransitionTime: string, publicData: string, format: string, thumbprint: string, thumbprintAlgorithm: string>, etag: string, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1316,7 +1334,7 @@ export def "batch-account-get-keys" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to be used with the HTTP request. (required)
-]: nothing -> record<accountName: string, primary: string, secondary: string> {
+]: nothing -> oneof<record<accountName: string, primary: string, secondary: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1362,7 +1380,7 @@ export def "pool-list-by-batch-account" [
   --select: string # Comma separated list of properties that should be returned. e.g. "properties/provisioningState". Only top level properties under properties/ are valid for selection.
   --filter: string # OData filter expression. Valid properties for filtering are: name properties/allocationState properties/allocationStateTransitionTime properties/creationTime properties/provisioningState properties/provisioningStateTransitionTime properties/lastModified properties/vmSize properties/interNodeCommunication properties/scaleSettings/autoScale properties/scaleSettings/fixedScale
   --api-version: string # The API version to be used with the HTTP request. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, etag: string, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, etag: string, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1451,7 +1469,7 @@ export def "pool-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to be used with the HTTP request. (required)
-]: nothing -> record<properties: record<allocationState: string, allocationStateTransitionTime: string, applicationLicenses: list<string>, applicationPackages: list<record>, autoScaleRun: record<error: record, evaluationTime: string, results: string>, certificates: list<record>, creationTime: string, currentDedicatedNodes: int, currentLowPriorityNodes: int, deploymentConfiguration: record<cloudServiceConfiguration: record, virtualMachineConfiguration: record>, displayName: string, interNodeCommunication: string, lastModified: string, maxTasksPerNode: int, metadata: list<record>, mountConfiguration: list<record>, networkConfiguration: record<endpointConfiguration: record, publicIPs: list, subnetId: string>, provisioningState: string, provisioningStateTransitionTime: string, resizeOperationStatus: record<errors: list, nodeDeallocationOption: string, resizeTimeout: string, startTime: string, targetDedicatedNodes: int, targetLowPriorityNodes: int>, scaleSettings: record<autoScale: record, fixedScale: record>, startTask: record<commandLine: string, containerSettings: record, environmentSettings: list, maxTaskRetryCount: int, resourceFiles: list, userIdentity: record, waitForSuccess: bool>, taskSchedulingPolicy: record<nodeFillType: string>, userAccounts: list<record>, vmSize: string>, etag: string, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<allocationState: string, allocationStateTransitionTime: string, applicationLicenses: list<string>, applicationPackages: list<record>, autoScaleRun: record<error: record, evaluationTime: string, results: string>, certificates: list<record>, creationTime: string, currentDedicatedNodes: int, currentLowPriorityNodes: int, deploymentConfiguration: record<cloudServiceConfiguration: record, virtualMachineConfiguration: record>, displayName: string, interNodeCommunication: string, lastModified: string, maxTasksPerNode: int, metadata: list<record>, mountConfiguration: list<record>, networkConfiguration: record<endpointConfiguration: record, publicIPs: list, subnetId: string>, provisioningState: string, provisioningStateTransitionTime: string, resizeOperationStatus: record<errors: list, nodeDeallocationOption: string, resizeTimeout: string, startTime: string, targetDedicatedNodes: int, targetLowPriorityNodes: int>, scaleSettings: record<autoScale: record, fixedScale: record>, startTask: record<commandLine: string, containerSettings: record, environmentSettings: list, maxTaskRetryCount: int, resourceFiles: list, userIdentity: record, waitForSuccess: bool>, taskSchedulingPolicy: record<nodeFillType: string>, userAccounts: list<record>, vmSize: string>, etag: string, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1481,7 +1499,6 @@ export def "pool-get" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts/{accountName}/pools/{poolName}
 # operationId: Pool_Update
-# --properties shape: {applicationLicenses?: list<string>, applicationPackages?: list, autoScaleRun?: any, certificates?: list, deploymentConfiguration?: any, displayName?: string, interNodeCommunication?: "Enabled"|"Disabled", maxTasksPerNode?: int, metadata?: list, mountConfiguration?: list, networkConfiguration?: any, resizeOperationStatus?: any, scaleSettings?: any, startTask?: any, taskSchedulingPolicy?: any, userAccounts?: list, vmSize?: string}
 export def "pool-update" [
   subscription_id: string
   resource_group_name: string
@@ -1499,7 +1516,7 @@ export def "pool-update" [
   --api-version: string # The API version to be used with the HTTP request. (required)
   --if-match: string # The entity state (ETag) version of the pool to update. This value can be omitted or set to "*" to apply the operation unconditionally.
   --properties: any # Pool properties. — shape: {applicationLicenses?: list<string>, applicationPackages?: list, autoScaleRun?: any, certificates?: list, deploymentConfiguration?: any, displayName?: string, interNodeCommunication?: "Enabled"|"Disabled", maxTasksPerNode?: int, metadata?: list, mountConfiguration?: list, networkConfiguration?: any, resizeOperationStatus?: any, scaleSettings?: any, startTask?: any, taskSchedulingPolicy?: any, userAccounts?: list, vmSize?: string}
-]: any -> record<properties: record<allocationState: string, allocationStateTransitionTime: string, applicationLicenses: list<string>, applicationPackages: list<record>, autoScaleRun: record<error: record, evaluationTime: string, results: string>, certificates: list<record>, creationTime: string, currentDedicatedNodes: int, currentLowPriorityNodes: int, deploymentConfiguration: record<cloudServiceConfiguration: record, virtualMachineConfiguration: record>, displayName: string, interNodeCommunication: string, lastModified: string, maxTasksPerNode: int, metadata: list<record>, mountConfiguration: list<record>, networkConfiguration: record<endpointConfiguration: record, publicIPs: list, subnetId: string>, provisioningState: string, provisioningStateTransitionTime: string, resizeOperationStatus: record<errors: list, nodeDeallocationOption: string, resizeTimeout: string, startTime: string, targetDedicatedNodes: int, targetLowPriorityNodes: int>, scaleSettings: record<autoScale: record, fixedScale: record>, startTask: record<commandLine: string, containerSettings: record, environmentSettings: list, maxTaskRetryCount: int, resourceFiles: list, userIdentity: record, waitForSuccess: bool>, taskSchedulingPolicy: record<nodeFillType: string>, userAccounts: list<record>, vmSize: string>, etag: string, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<allocationState: string, allocationStateTransitionTime: string, applicationLicenses: list<string>, applicationPackages: list<record>, autoScaleRun: record<error: record, evaluationTime: string, results: string>, certificates: list<record>, creationTime: string, currentDedicatedNodes: int, currentLowPriorityNodes: int, deploymentConfiguration: record<cloudServiceConfiguration: record, virtualMachineConfiguration: record>, displayName: string, interNodeCommunication: string, lastModified: string, maxTasksPerNode: int, metadata: list<record>, mountConfiguration: list<record>, networkConfiguration: record<endpointConfiguration: record, publicIPs: list, subnetId: string>, provisioningState: string, provisioningStateTransitionTime: string, resizeOperationStatus: record<errors: list, nodeDeallocationOption: string, resizeTimeout: string, startTime: string, targetDedicatedNodes: int, targetLowPriorityNodes: int>, scaleSettings: record<autoScale: record, fixedScale: record>, startTask: record<commandLine: string, containerSettings: record, environmentSettings: list, maxTaskRetryCount: int, resourceFiles: list, userIdentity: record, waitForSuccess: bool>, taskSchedulingPolicy: record<nodeFillType: string>, userAccounts: list<record>, vmSize: string>, etag: string, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1534,7 +1551,6 @@ export def "pool-update" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts/{accountName}/pools/{poolName}
 # operationId: Pool_Create
-# --properties shape: {applicationLicenses?: list<string>, applicationPackages?: list, autoScaleRun?: any, certificates?: list, deploymentConfiguration?: any, displayName?: string, interNodeCommunication?: "Enabled"|"Disabled", maxTasksPerNode?: int, metadata?: list, mountConfiguration?: list, networkConfiguration?: any, resizeOperationStatus?: any, scaleSettings?: any, startTask?: any, taskSchedulingPolicy?: any, userAccounts?: list, vmSize?: string}
 export def "pool-create" [
   subscription_id: string
   resource_group_name: string
@@ -1553,7 +1569,7 @@ export def "pool-create" [
   --if-match: string # The entity state (ETag) version of the pool to update. A value of "*" can be used to apply the operation only if the pool already exists. If omitted, this operation will always be applied.
   --if-none-match: string # Set to '*' to allow a new pool to be created, but to prevent updating an existing pool. Other values will be ignored.
   --properties: any # Pool properties. — shape: {applicationLicenses?: list<string>, applicationPackages?: list, autoScaleRun?: any, certificates?: list, deploymentConfiguration?: any, displayName?: string, interNodeCommunication?: "Enabled"|"Disabled", maxTasksPerNode?: int, metadata?: list, mountConfiguration?: list, networkConfiguration?: any, resizeOperationStatus?: any, scaleSettings?: any, startTask?: any, taskSchedulingPolicy?: any, userAccounts?: list, vmSize?: string}
-]: any -> record<properties: record<allocationState: string, allocationStateTransitionTime: string, applicationLicenses: list<string>, applicationPackages: list<record>, autoScaleRun: record<error: record, evaluationTime: string, results: string>, certificates: list<record>, creationTime: string, currentDedicatedNodes: int, currentLowPriorityNodes: int, deploymentConfiguration: record<cloudServiceConfiguration: record, virtualMachineConfiguration: record>, displayName: string, interNodeCommunication: string, lastModified: string, maxTasksPerNode: int, metadata: list<record>, mountConfiguration: list<record>, networkConfiguration: record<endpointConfiguration: record, publicIPs: list, subnetId: string>, provisioningState: string, provisioningStateTransitionTime: string, resizeOperationStatus: record<errors: list, nodeDeallocationOption: string, resizeTimeout: string, startTime: string, targetDedicatedNodes: int, targetLowPriorityNodes: int>, scaleSettings: record<autoScale: record, fixedScale: record>, startTask: record<commandLine: string, containerSettings: record, environmentSettings: list, maxTaskRetryCount: int, resourceFiles: list, userIdentity: record, waitForSuccess: bool>, taskSchedulingPolicy: record<nodeFillType: string>, userAccounts: list<record>, vmSize: string>, etag: string, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<allocationState: string, allocationStateTransitionTime: string, applicationLicenses: list<string>, applicationPackages: list<record>, autoScaleRun: record<error: record, evaluationTime: string, results: string>, certificates: list<record>, creationTime: string, currentDedicatedNodes: int, currentLowPriorityNodes: int, deploymentConfiguration: record<cloudServiceConfiguration: record, virtualMachineConfiguration: record>, displayName: string, interNodeCommunication: string, lastModified: string, maxTasksPerNode: int, metadata: list<record>, mountConfiguration: list<record>, networkConfiguration: record<endpointConfiguration: record, publicIPs: list, subnetId: string>, provisioningState: string, provisioningStateTransitionTime: string, resizeOperationStatus: record<errors: list, nodeDeallocationOption: string, resizeTimeout: string, startTime: string, targetDedicatedNodes: int, targetLowPriorityNodes: int>, scaleSettings: record<autoScale: record, fixedScale: record>, startTask: record<commandLine: string, containerSettings: record, environmentSettings: list, maxTaskRetryCount: int, resourceFiles: list, userIdentity: record, waitForSuccess: bool>, taskSchedulingPolicy: record<nodeFillType: string>, userAccounts: list<record>, vmSize: string>, etag: string, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1603,7 +1619,7 @@ export def "pool-disable-auto-scale" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to be used with the HTTP request. (required)
-]: nothing -> record<properties: record<allocationState: string, allocationStateTransitionTime: string, applicationLicenses: list<string>, applicationPackages: list<record>, autoScaleRun: record<error: record, evaluationTime: string, results: string>, certificates: list<record>, creationTime: string, currentDedicatedNodes: int, currentLowPriorityNodes: int, deploymentConfiguration: record<cloudServiceConfiguration: record, virtualMachineConfiguration: record>, displayName: string, interNodeCommunication: string, lastModified: string, maxTasksPerNode: int, metadata: list<record>, mountConfiguration: list<record>, networkConfiguration: record<endpointConfiguration: record, publicIPs: list, subnetId: string>, provisioningState: string, provisioningStateTransitionTime: string, resizeOperationStatus: record<errors: list, nodeDeallocationOption: string, resizeTimeout: string, startTime: string, targetDedicatedNodes: int, targetLowPriorityNodes: int>, scaleSettings: record<autoScale: record, fixedScale: record>, startTask: record<commandLine: string, containerSettings: record, environmentSettings: list, maxTaskRetryCount: int, resourceFiles: list, userIdentity: record, waitForSuccess: bool>, taskSchedulingPolicy: record<nodeFillType: string>, userAccounts: list<record>, vmSize: string>, etag: string, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<allocationState: string, allocationStateTransitionTime: string, applicationLicenses: list<string>, applicationPackages: list<record>, autoScaleRun: record<error: record, evaluationTime: string, results: string>, certificates: list<record>, creationTime: string, currentDedicatedNodes: int, currentLowPriorityNodes: int, deploymentConfiguration: record<cloudServiceConfiguration: record, virtualMachineConfiguration: record>, displayName: string, interNodeCommunication: string, lastModified: string, maxTasksPerNode: int, metadata: list<record>, mountConfiguration: list<record>, networkConfiguration: record<endpointConfiguration: record, publicIPs: list, subnetId: string>, provisioningState: string, provisioningStateTransitionTime: string, resizeOperationStatus: record<errors: list, nodeDeallocationOption: string, resizeTimeout: string, startTime: string, targetDedicatedNodes: int, targetLowPriorityNodes: int>, scaleSettings: record<autoScale: record, fixedScale: record>, startTask: record<commandLine: string, containerSettings: record, environmentSettings: list, maxTaskRetryCount: int, resourceFiles: list, userIdentity: record, waitForSuccess: bool>, taskSchedulingPolicy: record<nodeFillType: string>, userAccounts: list<record>, vmSize: string>, etag: string, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1648,7 +1664,7 @@ export def "pool-stop-resize" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to be used with the HTTP request. (required)
-]: nothing -> record<properties: record<allocationState: string, allocationStateTransitionTime: string, applicationLicenses: list<string>, applicationPackages: list<record>, autoScaleRun: record<error: record, evaluationTime: string, results: string>, certificates: list<record>, creationTime: string, currentDedicatedNodes: int, currentLowPriorityNodes: int, deploymentConfiguration: record<cloudServiceConfiguration: record, virtualMachineConfiguration: record>, displayName: string, interNodeCommunication: string, lastModified: string, maxTasksPerNode: int, metadata: list<record>, mountConfiguration: list<record>, networkConfiguration: record<endpointConfiguration: record, publicIPs: list, subnetId: string>, provisioningState: string, provisioningStateTransitionTime: string, resizeOperationStatus: record<errors: list, nodeDeallocationOption: string, resizeTimeout: string, startTime: string, targetDedicatedNodes: int, targetLowPriorityNodes: int>, scaleSettings: record<autoScale: record, fixedScale: record>, startTask: record<commandLine: string, containerSettings: record, environmentSettings: list, maxTaskRetryCount: int, resourceFiles: list, userIdentity: record, waitForSuccess: bool>, taskSchedulingPolicy: record<nodeFillType: string>, userAccounts: list<record>, vmSize: string>, etag: string, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<allocationState: string, allocationStateTransitionTime: string, applicationLicenses: list<string>, applicationPackages: list<record>, autoScaleRun: record<error: record, evaluationTime: string, results: string>, certificates: list<record>, creationTime: string, currentDedicatedNodes: int, currentLowPriorityNodes: int, deploymentConfiguration: record<cloudServiceConfiguration: record, virtualMachineConfiguration: record>, displayName: string, interNodeCommunication: string, lastModified: string, maxTasksPerNode: int, metadata: list<record>, mountConfiguration: list<record>, networkConfiguration: record<endpointConfiguration: record, publicIPs: list, subnetId: string>, provisioningState: string, provisioningStateTransitionTime: string, resizeOperationStatus: record<errors: list, nodeDeallocationOption: string, resizeTimeout: string, startTime: string, targetDedicatedNodes: int, targetLowPriorityNodes: int>, scaleSettings: record<autoScale: record, fixedScale: record>, startTask: record<commandLine: string, containerSettings: record, environmentSettings: list, maxTaskRetryCount: int, resourceFiles: list, userIdentity: record, waitForSuccess: bool>, taskSchedulingPolicy: record<nodeFillType: string>, userAccounts: list<record>, vmSize: string>, etag: string, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1693,7 +1709,7 @@ export def "batch-account-regenerate-key" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to be used with the HTTP request. (required)
   key_name: string@key-name-completer # The type of account key to regenerate.
-]: any -> record<accountName: string, primary: string, secondary: string> {
+]: any -> oneof<record<accountName: string, primary: string, secondary: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

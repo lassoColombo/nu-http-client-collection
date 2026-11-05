@@ -14,27 +14,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "access-token" => { {scheme: $scheme, headers: {"Access-Token": $token_val}, query: "", location: "header"} }
     "query-token" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "token")=(encode-path-segment $token_val)", location: "query"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -42,8 +51,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -54,7 +68,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -89,7 +112,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -125,9 +149,9 @@ def span-completer [] { ["D" "H" "M" "Wmo" "Wsu" "Y"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account-change-password" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["account-change-password" "account-places" "account-new-place" "account-tokens" "account-revoke-token" "account-users" "account-new-user" "account-delete-user" "account-get-user" "account-patch-user" "user-get-metadata" "user-patch-metadata" "auth-account-login" "auth-refresh-token" "auth-reset-password" "auth-revoke-token" "devices-get" "devices-patch" "device-add-functionality" "device-get-metadata" "device-patch-metadata" "device-run" "device-get-tags" "device-patch-tags" "functionalities-get" "functionality-patch" "functionality-values" "functionality-value" "functionality-set" "functionality-get-metadata" "functionality-patch-metadata" "functionality-run" "functionality-get-tags" "functionality-patch-tags" "me-get" "me-patch" "notification-delete" "notifications-get" "notification-patch" "notification-get-metadata" "notification-patch-metadata" "me-places" "places-get" "place-patch" "place-buses" "place-pairing" "place-open-pairing" "place-devices" "place-electricity-autonomy" "place-electricity-get-flows" "place-electricity-get-flows-setup" "place-electricity-self-consumption" "place-functionalities" "place-get-metadata" "place-patch-metadata" "place-notifications" "place-new-notification" "place-programs" "place-new-program" "place-run" "program-delete" "programs-get" "program-patch" "program-log" "program-get-metadata" "program-patch-metadata" "program-run" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -198,7 +222,7 @@ export def "account-places" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<id: string, name: string> {
+]: nothing -> oneof<table<id: string, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/places" $auth.query)
@@ -237,7 +261,7 @@ export def "account-new-place" [
   name: string # e.g. ⌂ Home
   time_zone: string # A time zone name from the Time Zone Database at https://www.iana.org/time-zones (e.g. Europe/Paris)
   zip_code: string # Postal code
-]: any -> record<code: int, message: string, resource: record<entity: string, href: string, id: string>> {
+]: any -> oneof<record<code: int, message: string, resource: record<entity: string, href: string, id: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
@@ -274,7 +298,7 @@ export def "account-tokens" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<appName: string, id: string, lastUse: string, places: list<record>, refreshTokenExpires: string, self: bool, user: record<canLogin: bool, email: string, id: string, locale: string, metadata: record, name: string, phoneNumber: string>> {
+]: nothing -> oneof<table<appName: string, id: string, lastUse: string, places: list<record>, refreshTokenExpires: string, self: bool, user: record<canLogin: bool, email: string, id: string, locale: string, metadata: record, name: string, phoneNumber: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/tokens" $auth.query)
@@ -345,7 +369,7 @@ export def "account-users" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --embed-metadata: list<string> # Request to include the given keys of metadata in the response. If a key doesn't exist on the resource it is ignored. **Note:** This only applies to the top level resources.
-]: nothing -> table<canLogin: bool, email: string, id: string, locale: string, metadata: record, name: string, phoneNumber: string> {
+]: nothing -> oneof<table<canLogin: bool, email: string, id: string, locale: string, metadata: record, name: string, phoneNumber: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "embed-metadata" $embed_metadata "csv")] | flatten | str join "&"
@@ -385,7 +409,7 @@ export def "account-new-user" [
   --metadata: record # Keys are limited to the same format as tags (up to 21 characters, [a-z0-9], starting with [a-z]). Values can be any JSON value.
   name: string
   --phone-number: string # Phone number of the *User* in international format, for SMS notifications. (e.g. +33177494646)
-]: any -> record<code: int, message: string, resource: record<entity: string, href: string, id: string>> {
+]: any -> oneof<record<code: int, message: string, resource: record<entity: string, href: string, id: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
@@ -459,7 +483,7 @@ export def "account-get-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account: string, canLogin: bool, email: string, locale: string, metadata: record, name: string, phoneNumber: string> {
+]: nothing -> oneof<record<account: string, canLogin: bool, email: string, locale: string, metadata: record, name: string, phoneNumber: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -538,7 +562,7 @@ export def "user-get-metadata" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -576,7 +600,7 @@ export def "user-patch-metadata" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --add: record # list of pairs key/value to add/replace
   --remove: list<string> # list of keys to remove
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
@@ -618,7 +642,7 @@ export def "auth-account-login" [
   login: string
   password: string # format: password
   --ttl: int # Desired maximum life-time in seconds for the refresh token (e.g. 1800)
-]: any -> record<accessToken: string, accessTokenExpires: string, refreshToken: string, refreshTokenExpires: string> {
+]: any -> oneof<record<accessToken: string, accessTokenExpires: string, refreshToken: string, refreshTokenExpires: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
@@ -657,7 +681,7 @@ export def "auth-refresh-token" [
   --dry-run(-n) # Return the request that would be sent without executing it
   app_id: string
   refresh_token: string
-]: any -> record<accessToken: string, accessTokenExpires: string, refreshToken: string, refreshTokenExpires: string> {
+]: any -> oneof<record<accessToken: string, accessTokenExpires: string, refreshToken: string, refreshTokenExpires: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
@@ -769,7 +793,7 @@ export def "devices-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<address: string, attributes: record, class: string, functionalities: table<class: string, device: string, endpoint: int, id: string, metadata: record, name: string, tags: list>, isOnline: bool, manufacturer: string, metadata: record, model: string, name: string, place: string, protocol: string, tags: list<string>> {
+]: nothing -> oneof<record<address: string, attributes: record, class: string, functionalities: table<class: string, device: string, endpoint: int, id: string, metadata: record, name: string, tags: list>, isOnline: bool, manufacturer: string, metadata: record, model: string, name: string, place: string, protocol: string, tags: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
   if ($device_id | is-empty) { error make --unspanned { msg: "path parameter 'deviceId' must be non-empty" } }
@@ -848,7 +872,7 @@ export def "device-add-functionality" [
   --metadata: record # Keys are limited to the same format as tags (up to 21 characters, [a-z0-9], starting with [a-z]). Values can be any JSON value.
   --name: string # Free functionality name
   --tags: list<string>
-]: any -> record<code: int, message: string, resource: record<entity: string, href: string, id: string>> {
+]: any -> oneof<record<code: int, message: string, resource: record<entity: string, href: string, id: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
@@ -887,7 +911,7 @@ export def "device-get-metadata" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
   if ($device_id | is-empty) { error make --unspanned { msg: "path parameter 'deviceId' must be non-empty" } }
@@ -925,7 +949,7 @@ export def "device-patch-metadata" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --add: record # list of pairs key/value to add/replace
   --remove: list<string> # list of keys to remove
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
@@ -967,7 +991,7 @@ export def "device-run" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --functionalities: string # Functionality selector: Functionality tags or functionality class (optionally, '@' followed by a endpoint in decimal) or '*' for all. Multiple values are separated by '|' and are interpreted as « OR ». (required)
   --body: list
-]: any -> table<functionality: string, result: list<any>, status: int> {
+]: any -> oneof<table<functionality: string, result: list<any>, status: int>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
@@ -1009,7 +1033,7 @@ export def "device-get-tags" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
   if ($device_id | is-empty) { error make --unspanned { msg: "path parameter 'deviceId' must be non-empty" } }
@@ -1047,7 +1071,7 @@ export def "device-patch-tags" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --add: list<string> # list of tags to add
   --remove: list<string> # list of tags to remove
-]: any -> list<string> {
+]: any -> oneof<list<string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
@@ -1086,7 +1110,7 @@ export def "functionalities-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<actions: list<string>, attributes: list<string>, class: string, device: string, endpoint: int, metadata: record, name: string, tags: list<string>> {
+]: nothing -> oneof<record<actions: list<string>, attributes: list<string>, class: string, device: string, endpoint: int, metadata: record, name: string, tags: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
   if ($functionality_id | is-empty) { error make --unspanned { msg: "path parameter 'functionalityId' must be non-empty" } }
@@ -1166,7 +1190,7 @@ export def "functionality-values" [
   --from: string # Beginning of the time interval. (format: date-time)
   --to: string # End of the interval. Default: now. (format: date-time)
   --surround: oneof<nothing, bool> # If true, return also one value before from and one value after to
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
   if ($functionality_id | is-empty) { error make --unspanned { msg: "path parameter 'functionalityId' must be non-empty" } }
@@ -1204,7 +1228,7 @@ export def "functionality-value" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<value: any, when: string> {
+]: nothing -> oneof<record<value: any, when: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
   if ($functionality_id | is-empty) { error make --unspanned { msg: "path parameter 'functionalityId' must be non-empty" } }
@@ -1283,7 +1307,7 @@ export def "functionality-get-metadata" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
   if ($functionality_id | is-empty) { error make --unspanned { msg: "path parameter 'functionalityId' must be non-empty" } }
@@ -1321,7 +1345,7 @@ export def "functionality-patch-metadata" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --add: record # list of pairs key/value to add/replace
   --remove: list<string> # list of keys to remove
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
@@ -1362,7 +1386,7 @@ export def "functionality-run" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> record<functionality: string, result: list<any>, status: int> {
+]: any -> oneof<record<functionality: string, result: list<any>, status: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
@@ -1402,7 +1426,7 @@ export def "functionality-get-tags" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
   if ($functionality_id | is-empty) { error make --unspanned { msg: "path parameter 'functionalityId' must be non-empty" } }
@@ -1440,7 +1464,7 @@ export def "functionality-patch-tags" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --add: list<string> # list of tags to add
   --remove: list<string> # list of tags to remove
-]: any -> list<string> {
+]: any -> oneof<list<string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
@@ -1478,7 +1502,7 @@ export def "me-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<email: string, id: string, locale: string, login: string, metadata: record, name: string, phoneNumber: string> {
+]: nothing -> oneof<record<email: string, id: string, locale: string, login: string, metadata: record, name: string, phoneNumber: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/me" $auth.query)
@@ -1587,7 +1611,7 @@ export def "notifications-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record, metadata: record, name: string, place: string, routing: string> {
+]: nothing -> oneof<record<data: record, metadata: record, name: string, place: string, routing: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
   if ($notification_id | is-empty) { error make --unspanned { msg: "path parameter 'notificationId' must be non-empty" } }
@@ -1665,7 +1689,7 @@ export def "notification-get-metadata" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
   if ($notification_id | is-empty) { error make --unspanned { msg: "path parameter 'notificationId' must be non-empty" } }
@@ -1703,7 +1727,7 @@ export def "notification-patch-metadata" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --add: record # list of pairs key/value to add/replace
   --remove: list<string> # list of keys to remove
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
@@ -1742,7 +1766,7 @@ export def "me-places" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --embed-metadata: list<string> # Request to include the given keys of metadata in the response. If a key doesn't exist on the resource it is ignored. **Note:** This only applies to the top level resources.
-]: nothing -> table<id: string, name: string> {
+]: nothing -> oneof<table<id: string, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "embed-metadata" $embed_metadata "csv")] | flatten | str join "&"
@@ -1778,7 +1802,7 @@ export def "places-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account: string, country: string, metadata: record, name: string, timeZone: string, zipCode: string> {
+]: nothing -> oneof<record<account: string, country: string, metadata: record, name: string, timeZone: string, zipCode: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
   if ($place_id | is-empty) { error make --unspanned { msg: "path parameter 'placeId' must be non-empty" } }
@@ -1858,7 +1882,7 @@ export def "place-buses" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --with-pairing: oneof<nothing, bool> # Filter out buses that have no pairing window (default: false)
-]: nothing -> table<functionality: string, id: string, protocol: string> {
+]: nothing -> oneof<table<functionality: string, id: string, protocol: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
   if ($place_id | is-empty) { error make --unspanned { msg: "path parameter 'placeId' must be non-empty" } }
@@ -1896,7 +1920,7 @@ export def "place-pairing" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<duration: int, enabled: bool> {
+]: nothing -> oneof<record<duration: int, enabled: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
   if ($place_id | is-empty) { error make --unspanned { msg: "path parameter 'placeId' must be non-empty" } }
@@ -1936,7 +1960,7 @@ export def "place-open-pairing" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --duration: int # Duration of the pairing window.
   --enabled: oneof<nothing, bool>
-]: any -> record<duration: int, enabled: bool> {
+]: any -> oneof<record<duration: int, enabled: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
@@ -1979,7 +2003,7 @@ export def "place-devices" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --devices: string # Devices selector. Device tags or device classes or device ids or '*' for any. Multiple values are separated by '|' and interpreted as « OR ».
   --embed-metadata: list<string> # Request to include the given keys of metadata in the response. If a key doesn't exist on the resource it is ignored. **Note:** This only applies to the top level resources.
-]: nothing -> table<address: string, class: string, id: string, isOnline: bool, metadata: record, name: string, place: string, tags: list<string>> {
+]: nothing -> oneof<table<address: string, class: string, id: string, isOnline: bool, metadata: record, name: string, place: string, tags: list<string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
   if ($place_id | is-empty) { error make --unspanned { msg: "path parameter 'placeId' must be non-empty" } }
@@ -2018,7 +2042,7 @@ export def "place-electricity-autonomy" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --when: string # A time part of the time span. (required, format: date-time)
   --span: string@span-completer # Timespan: H (hour), D (day), Wmo (week starting on Monday), Wsu (week starting on Sunday), M (month), Y (year) (required)
-]: nothing -> record<autonomy: float, code: int, from: string, message: string, to: string> {
+]: nothing -> oneof<record<autonomy: float, code: int, from: string, message: string, to: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
   if ($place_id | is-empty) { error make --unspanned { msg: "path parameter 'placeId' must be non-empty" } }
@@ -2058,7 +2082,7 @@ export def "place-electricity-get-flows" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --flows: list<string> # Names of the flows requested (required)
-]: nothing -> record<code: int, flows: record<battery_charge: list<record>, battery_discharge: list<record>, battery_grid: list<record>, elec_drawn: list<record>, elec_feed_in: list<record>, elec_from_household: list<record>, elec_local: list<record>, elec_to_pv: list<record>, elec_total_gen: list<record>, elec_total_usage: list<record>, elec_usage: list<record>>, message: string, missing: record<battery_charge: bool, battery_discharge: bool, battery_grid: bool, elec_drawn: bool, elec_feed_in: bool, elec_from_household: bool, elec_local: bool, elec_to_pv: bool, elec_total_gen: bool, elec_total_usage: bool, elec_usage: bool>> {
+]: nothing -> oneof<record<code: int, flows: record<battery_charge: list<record>, battery_discharge: list<record>, battery_grid: list<record>, elec_drawn: list<record>, elec_feed_in: list<record>, elec_from_household: list<record>, elec_local: list<record>, elec_to_pv: list<record>, elec_total_gen: list<record>, elec_total_usage: list<record>, elec_usage: list<record>>, message: string, missing: record<battery_charge: bool, battery_discharge: bool, battery_grid: bool, elec_drawn: bool, elec_feed_in: bool, elec_from_household: bool, elec_local: bool, elec_to_pv: bool, elec_total_gen: bool, elec_total_usage: bool, elec_usage: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
   if ($place_id | is-empty) { error make --unspanned { msg: "path parameter 'placeId' must be non-empty" } }
@@ -2096,7 +2120,7 @@ export def "place-electricity-get-flows-setup" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<battery_charge: table<class: string, id: string>, battery_discharge: table<class: string, id: string>, battery_grid: table<class: string, id: string>, elec_drawn: table<class: string, id: string>, elec_feed_in: table<class: string, id: string>, elec_from_household: table<class: string, id: string>, elec_local: table<class: string, id: string>, elec_to_pv: table<class: string, id: string>, elec_total_gen: table<class: string, id: string>, elec_total_usage: table<class: string, id: string>, elec_usage: table<class: string, id: string>> {
+]: nothing -> oneof<record<battery_charge: table<class: string, id: string>, battery_discharge: table<class: string, id: string>, battery_grid: table<class: string, id: string>, elec_drawn: table<class: string, id: string>, elec_feed_in: table<class: string, id: string>, elec_from_household: table<class: string, id: string>, elec_local: table<class: string, id: string>, elec_to_pv: table<class: string, id: string>, elec_total_gen: table<class: string, id: string>, elec_total_usage: table<class: string, id: string>, elec_usage: table<class: string, id: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
   if ($place_id | is-empty) { error make --unspanned { msg: "path parameter 'placeId' must be non-empty" } }
@@ -2134,7 +2158,7 @@ export def "place-electricity-self-consumption" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --when: string # A time part of the time span. (required, format: date-time)
   --span: string@span-completer # Timespan: H (hour), D (day), Wmo (week starting on Monday), Wsu (week starting on Sunday), M (month), Y (year) (required)
-]: nothing -> record<code: int, from: string, message: string, selfConsumption: float, to: string> {
+]: nothing -> oneof<record<code: int, from: string, message: string, selfConsumption: float, to: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
   if ($place_id | is-empty) { error make --unspanned { msg: "path parameter 'placeId' must be non-empty" } }
@@ -2176,7 +2200,7 @@ export def "place-functionalities" [
   --devices: string # Devices selector. Device tags or device classes or device ids or '*' for any. Multiple values are separated by '|' and interpreted as « OR ».
   --functionalities: string # Functionality selector: Functionality tags or functionality class (optionally, '@' followed by a endpoint in decimal) or '*' for all. Multiple values are separated by '|' and are interpreted as « OR ».
   --embed-metadata: list<string> # Request to include the given keys of metadata in the response. If a key doesn't exist on the resource it is ignored. **Note:** This only applies to the top level resources.
-]: nothing -> table<class: string, device: string, endpoint: int, id: string, metadata: record, name: string, tags: list<string>> {
+]: nothing -> oneof<table<class: string, device: string, endpoint: int, id: string, metadata: record, name: string, tags: list<string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
   if ($place_id | is-empty) { error make --unspanned { msg: "path parameter 'placeId' must be non-empty" } }
@@ -2213,7 +2237,7 @@ export def "place-get-metadata" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
   if ($place_id | is-empty) { error make --unspanned { msg: "path parameter 'placeId' must be non-empty" } }
@@ -2251,7 +2275,7 @@ export def "place-patch-metadata" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --add: record # list of pairs key/value to add/replace
   --remove: list<string> # list of keys to remove
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
@@ -2291,7 +2315,7 @@ export def "place-notifications" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --embed-metadata: list<string> # Request to include the given keys of metadata in the response. If a key doesn't exist on the resource it is ignored. **Note:** This only applies to the top level resources.
-]: nothing -> table<id: string, metadata: record, name: string> {
+]: nothing -> oneof<table<id: string, metadata: record, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
   if ($place_id | is-empty) { error make --unspanned { msg: "path parameter 'placeId' must be non-empty" } }
@@ -2332,7 +2356,7 @@ export def "place-new-notification" [
   --metadata: record # Keys are limited to the same format as tags (up to 21 characters, [a-z0-9], starting with [a-z]). Values can be any JSON value.
   name: string
   --routing: string # format: uri
-]: any -> record<code: int, message: string, resource: record<entity: string, href: string, id: string>> {
+]: any -> oneof<record<code: int, message: string, resource: record<entity: string, href: string, id: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
@@ -2372,7 +2396,7 @@ export def "place-programs" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --embed-metadata: list<string> # Request to include the given keys of metadata in the response. If a key doesn't exist on the resource it is ignored. **Note:** This only applies to the top level resources.
-]: nothing -> table<enabled: bool, id: string, metadata: record, name: string> {
+]: nothing -> oneof<table<enabled: bool, id: string, metadata: record, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
   if ($place_id | is-empty) { error make --unspanned { msg: "path parameter 'placeId' must be non-empty" } }
@@ -2413,7 +2437,7 @@ export def "place-new-program" [
   --enabled: oneof<nothing, bool> # default: true
   --metadata: record # Keys are limited to the same format as tags (up to 21 characters, [a-z0-9], starting with [a-z]). Values can be any JSON value.
   name: string
-]: any -> record<code: int, message: string, resource: record<entity: string, href: string, id: string>> {
+]: any -> oneof<record<code: int, message: string, resource: record<entity: string, href: string, id: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
@@ -2456,7 +2480,7 @@ export def "place-run" [
   --devices: string # Devices selector. Device tags or device classes or device ids or '*' for any. Multiple values are separated by '|' and interpreted as « OR ». (required)
   --functionalities: string # Functionality selector: Functionality tags or functionality class (optionally, '@' followed by a endpoint in decimal) or '*' for all. Multiple values are separated by '|' and are interpreted as « OR ». (required)
   --body: list
-]: any -> table<functionality: string, result: list<any>, status: int> {
+]: any -> oneof<table<functionality: string, result: list<any>, status: int>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
@@ -2535,7 +2559,7 @@ export def "programs-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: any, enabled: bool, metadata: record, name: string, place: string> {
+]: nothing -> oneof<record<code: any, enabled: bool, metadata: record, name: string, place: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
   if ($program_id | is-empty) { error make --unspanned { msg: "path parameter 'programId' must be non-empty" } }
@@ -2615,7 +2639,7 @@ export def "program-log" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --from: string # Beginning of the time interval. (required, format: date-time)
   --to: string # End of the interval. Default: now. (format: date-time)
-]: nothing -> table<actions: list<record>, errors: list<string>, notifications: list<string>, when: string> {
+]: nothing -> oneof<table<actions: list<record>, errors: list<string>, notifications: list<string>, when: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
   if ($program_id | is-empty) { error make --unspanned { msg: "path parameter 'programId' must be non-empty" } }
@@ -2653,7 +2677,7 @@ export def "program-get-metadata" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
   if ($program_id | is-empty) { error make --unspanned { msg: "path parameter 'programId' must be non-empty" } }
@@ -2691,7 +2715,7 @@ export def "program-patch-metadata" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --add: record # list of pairs key/value to add/replace
   --remove: list<string> # list of keys to remove
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)

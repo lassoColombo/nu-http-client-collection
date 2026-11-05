@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -119,9 +143,9 @@ def tier-completer [] { ["BASIC" "STANDARD"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "configure-logs-for-channel" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["configure-logs-for-channel" "configure-logs-for-playback-configuration" "create-channel" "delete-channel" "describe-channel" "update-channel" "create-live-source" "delete-live-source" "describe-live-source" "update-live-source" "create-prefetch-schedule" "delete-prefetch-schedule" "get-prefetch-schedule" "create-program" "delete-program" "describe-program" "update-program" "create-source-location" "delete-source-location" "describe-source-location" "update-source-location" "create-vod-source" "delete-vod-source" "describe-vod-source" "update-vod-source" "delete-channel-policy" "get-channel-policy" "put-channel-policy" "delete-playback-configuration" "get-playback-configuration" "get-channel-schedule" "list-alerts" "list-channels" "list-live-sources" "list-playback-configurations" "list-prefetch-schedules" "list-source-locations" "list-tags-for-resource" "tag-resource" "list-vod-sources" "put-playback-configuration" "start-channel" "stop-channel" "untag-resource" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -162,7 +186,7 @@ export def "configure-logs-for-channel" [
   --x-amz-signed-headers: string
   channel_name: string # The name of the channel.
   log_types: list<string> # The types of logs to collect.
-]: any -> record<ChannelName: string, LogTypes: list<string>> {
+]: any -> oneof<record<ChannelName: string, LogTypes: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -210,7 +234,7 @@ export def "configure-logs-for-playback-configuration" [
   --x-amz-signed-headers: string
   percent_enabled: int # The percentage of session logs that MediaTailor sends to your Cloudwatch Logs account. For example, if your playback configuration has 1000 sessions and percentEnabled is set to 60, MediaTailor sends logs for 600 of the sessions to CloudWatch Logs. MediaTailor decides at random which of the playback configuration sessions to send logs for. If you want to view logs for a specific session, you can use the debug log mode (https://docs.aws.amazon.com/mediatailor/latest/ug/debug-log-mode.html). Valid values: 0 - 100
   playback_configuration_name: string # The name of the playback configuration.
-]: any -> record<PercentEnabled: int, PlaybackConfigurationName: string> {
+]: any -> oneof<record<PercentEnabled: int, PlaybackConfigurationName: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -239,8 +263,6 @@ export def "configure-logs-for-playback-configuration" [
 #
 # POST /channel/{ChannelName}
 # operationId: CreateChannel
-# --FillerSlate shape: {SourceLocationName?: string, VodSourceName?: string}
-# --Outputs item shape: {DashPlaylistSettings?: record, HlsPlaylistSettings?: record, ManifestName: string, SourceGroup: string}
 export def "create-channel" [
   channel_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -264,7 +286,7 @@ export def "create-channel" [
   playback_mode: string@playback-mode-completer # The type of playback mode to use for this channel. LINEAR - The programs in the schedule play once back-to-back in the schedule. LOOP - The programs in the schedule play back-to-back in an endless loop. When the last program in the schedule stops playing, playback loops back to the first program in the schedule.
   --tags: record # The tags to assign to the channel. Tags are key-value pairs that you can associate with Amazon resources to help with organization, access control, and cost tracking. For more information, see Tagging AWS Elemental MediaTailor Resources (https://docs.aws.amazon.com/mediatailor/latest/ug/tagging.html).
   --tier: string@tier-completer # The tier of the channel.
-]: any -> record<Arn: string, ChannelName: string, ChannelState: string, CreationTime: string, FillerSlate: record<SourceLocationName: string, VodSourceName: string>, LastModifiedTime: string, Outputs: table<DashPlaylistSettings: record, HlsPlaylistSettings: record, ManifestName: string, PlaybackUrl: string, SourceGroup: string>, PlaybackMode: string, Tags: record, Tier: string> {
+]: any -> oneof<record<Arn: string, ChannelName: string, ChannelState: string, CreationTime: string, FillerSlate: record<SourceLocationName: string, VodSourceName: string>, LastModifiedTime: string, Outputs: table<DashPlaylistSettings: record, HlsPlaylistSettings: record, ManifestName: string, PlaybackUrl: string, SourceGroup: string>, PlaybackMode: string, Tags: record, Tier: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -312,7 +334,7 @@ export def "delete-channel" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_name | is-empty) { error make --unspanned { msg: "path parameter 'ChannelName' must be non-empty" } }
@@ -357,7 +379,7 @@ export def "describe-channel" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Arn: string, ChannelName: string, ChannelState: string, CreationTime: string, FillerSlate: record<SourceLocationName: string, VodSourceName: string>, LastModifiedTime: string, LogConfiguration: record<LogTypes: list<string>>, Outputs: table<DashPlaylistSettings: record, HlsPlaylistSettings: record, ManifestName: string, PlaybackUrl: string, SourceGroup: string>, PlaybackMode: string, Tags: record, Tier: string> {
+]: nothing -> oneof<record<Arn: string, ChannelName: string, ChannelState: string, CreationTime: string, FillerSlate: record<SourceLocationName: string, VodSourceName: string>, LastModifiedTime: string, LogConfiguration: record<LogTypes: list<string>>, Outputs: table<DashPlaylistSettings: record, HlsPlaylistSettings: record, ManifestName: string, PlaybackUrl: string, SourceGroup: string>, PlaybackMode: string, Tags: record, Tier: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_name | is-empty) { error make --unspanned { msg: "path parameter 'ChannelName' must be non-empty" } }
@@ -384,8 +406,6 @@ export def "describe-channel" [
 #
 # PUT /channel/{ChannelName}
 # operationId: UpdateChannel
-# --FillerSlate shape: {SourceLocationName?: string, VodSourceName?: string}
-# --Outputs item shape: {DashPlaylistSettings?: record, HlsPlaylistSettings?: record, ManifestName: string, SourceGroup: string}
 export def "update-channel" [
   channel_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -406,7 +426,7 @@ export def "update-channel" [
   --x-amz-signed-headers: string
   --filler-slate: record # Slate VOD source configuration. — shape: {SourceLocationName?: string, VodSourceName?: string}
   outputs: list # An object that represents an object in the CreateChannel request. — item shape: {DashPlaylistSettings?: record, HlsPlaylistSettings?: record, ManifestName: string, SourceGroup: string}
-]: any -> record<Arn: string, ChannelName: string, ChannelState: string, CreationTime: string, FillerSlate: record<SourceLocationName: string, VodSourceName: string>, LastModifiedTime: string, Outputs: table<DashPlaylistSettings: record, HlsPlaylistSettings: record, ManifestName: string, PlaybackUrl: string, SourceGroup: string>, PlaybackMode: string, Tags: record, Tier: string> {
+]: any -> oneof<record<Arn: string, ChannelName: string, ChannelState: string, CreationTime: string, FillerSlate: record<SourceLocationName: string, VodSourceName: string>, LastModifiedTime: string, Outputs: table<DashPlaylistSettings: record, HlsPlaylistSettings: record, ManifestName: string, PlaybackUrl: string, SourceGroup: string>, PlaybackMode: string, Tags: record, Tier: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -436,7 +456,6 @@ export def "update-channel" [
 #
 # POST /sourceLocation/{SourceLocationName}/liveSource/{LiveSourceName}
 # operationId: CreateLiveSource
-# --HttpPackageConfigurations item shape: {Path: string, SourceGroup: string, Type: "DASH"|"HLS"}
 export def "create-live-source" [
   source_location_name: string
   live_source_name: string
@@ -458,7 +477,7 @@ export def "create-live-source" [
   --x-amz-signed-headers: string
   http_package_configurations: list # The VOD source's HTTP package configuration settings. — item shape: {Path: string, SourceGroup: string, Type: "DASH"|"HLS"}
   --tags: record # The tags to assign to the live source. Tags are key-value pairs that you can associate with Amazon resources to help with organization, access control, and cost tracking. For more information, see Tagging AWS Elemental MediaTailor Resources (https://docs.aws.amazon.com/mediatailor/latest/ug/tagging.html).
-]: any -> record<Arn: string, CreationTime: string, HttpPackageConfigurations: table<Path: string, SourceGroup: string, Type: string>, LastModifiedTime: string, LiveSourceName: string, SourceLocationName: string, Tags: record> {
+]: any -> oneof<record<Arn: string, CreationTime: string, HttpPackageConfigurations: table<Path: string, SourceGroup: string, Type: string>, LastModifiedTime: string, LiveSourceName: string, SourceLocationName: string, Tags: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -508,7 +527,7 @@ export def "delete-live-source" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($source_location_name | is-empty) { error make --unspanned { msg: "path parameter 'SourceLocationName' must be non-empty" } }
@@ -555,7 +574,7 @@ export def "describe-live-source" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Arn: string, CreationTime: string, HttpPackageConfigurations: table<Path: string, SourceGroup: string, Type: string>, LastModifiedTime: string, LiveSourceName: string, SourceLocationName: string, Tags: record> {
+]: nothing -> oneof<record<Arn: string, CreationTime: string, HttpPackageConfigurations: table<Path: string, SourceGroup: string, Type: string>, LastModifiedTime: string, LiveSourceName: string, SourceLocationName: string, Tags: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($source_location_name | is-empty) { error make --unspanned { msg: "path parameter 'SourceLocationName' must be non-empty" } }
@@ -583,7 +602,6 @@ export def "describe-live-source" [
 #
 # PUT /sourceLocation/{SourceLocationName}/liveSource/{LiveSourceName}
 # operationId: UpdateLiveSource
-# --HttpPackageConfigurations item shape: {Path: string, SourceGroup: string, Type: "DASH"|"HLS"}
 export def "update-live-source" [
   source_location_name: string
   live_source_name: string
@@ -604,7 +622,7 @@ export def "update-live-source" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   http_package_configurations: list # The VOD source's HTTP package configuration settings. — item shape: {Path: string, SourceGroup: string, Type: "DASH"|"HLS"}
-]: any -> record<Arn: string, CreationTime: string, HttpPackageConfigurations: table<Path: string, SourceGroup: string, Type: string>, LastModifiedTime: string, LiveSourceName: string, SourceLocationName: string, Tags: record> {
+]: any -> oneof<record<Arn: string, CreationTime: string, HttpPackageConfigurations: table<Path: string, SourceGroup: string, Type: string>, LastModifiedTime: string, LiveSourceName: string, SourceLocationName: string, Tags: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -635,8 +653,6 @@ export def "update-live-source" [
 #
 # POST /prefetchSchedule/{PlaybackConfigurationName}/{Name}
 # operationId: CreatePrefetchSchedule
-# --Consumption shape: {AvailMatchingCriteria?: list, EndTime?: string, StartTime?: string}
-# --Retrieval shape: {DynamicVariables?: record, EndTime?: string, StartTime?: string}
 export def "create-prefetch-schedule" [
   playback_configuration_name: string
   name: string
@@ -659,7 +675,7 @@ export def "create-prefetch-schedule" [
   consumption: record # A complex type that contains settings that determine how and when that MediaTailor places prefetched ads into upcoming ad breaks. — shape: {AvailMatchingCriteria?: list, EndTime?: string, StartTime?: string}
   retrieval: record # A complex type that contains settings governing when MediaTailor prefetches ads, and which dynamic variables that MediaTailor includes in the request to the ad decision server. — shape: {DynamicVariables?: record, EndTime?: string, StartTime?: string}
   --stream-id: string # An optional stream identifier that MediaTailor uses to prefetch ads for multiple streams that use the same playback configuration. If StreamId is specified, MediaTailor returns all of the prefetch schedules with an exact match on StreamId. If not specified, MediaTailor returns all of the prefetch schedules for the playback configuration, regardless of StreamId.
-]: any -> record<Arn: string, Consumption: record<AvailMatchingCriteria: list<record>, EndTime: string, StartTime: string>, Name: string, PlaybackConfigurationName: string, Retrieval: record<DynamicVariables: record, EndTime: string, StartTime: string>, StreamId: string> {
+]: any -> oneof<record<Arn: string, Consumption: record<AvailMatchingCriteria: list<record>, EndTime: string, StartTime: string>, Name: string, PlaybackConfigurationName: string, Retrieval: record<DynamicVariables: record, EndTime: string, StartTime: string>, StreamId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -709,7 +725,7 @@ export def "delete-prefetch-schedule" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($playback_configuration_name | is-empty) { error make --unspanned { msg: "path parameter 'PlaybackConfigurationName' must be non-empty" } }
@@ -756,7 +772,7 @@ export def "get-prefetch-schedule" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Arn: string, Consumption: record<AvailMatchingCriteria: list<record>, EndTime: string, StartTime: string>, Name: string, PlaybackConfigurationName: string, Retrieval: record<DynamicVariables: record, EndTime: string, StartTime: string>, StreamId: string> {
+]: nothing -> oneof<record<Arn: string, Consumption: record<AvailMatchingCriteria: list<record>, EndTime: string, StartTime: string>, Name: string, PlaybackConfigurationName: string, Retrieval: record<DynamicVariables: record, EndTime: string, StartTime: string>, StreamId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($playback_configuration_name | is-empty) { error make --unspanned { msg: "path parameter 'PlaybackConfigurationName' must be non-empty" } }
@@ -784,8 +800,6 @@ export def "get-prefetch-schedule" [
 #
 # POST /channel/{ChannelName}/program/{ProgramName}
 # operationId: CreateProgram
-# --AdBreaks item shape: {MessageType?: "SPLICE_INSERT"|"TIME_SIGNAL", OffsetMillis?: int, Slate?: record, SpliceInsertMessage?: record, TimeSignalMessage?: record}
-# --ScheduleConfiguration shape: {ClipRange?: record, Transition?: record}
 export def "create-program" [
   channel_name: string
   program_name: string
@@ -810,7 +824,7 @@ export def "create-program" [
   schedule_configuration: record # Schedule configuration parameters. A channel must be stopped before changes can be made to the schedule. — shape: {ClipRange?: record, Transition?: record}
   source_location_name: string # The name of the source location.
   --vod-source-name: string # The name that's used to refer to a VOD source.
-]: any -> record<AdBreaks: table<MessageType: string, OffsetMillis: int, Slate: record, SpliceInsertMessage: record, TimeSignalMessage: record>, Arn: string, ChannelName: string, ClipRange: record<EndOffsetMillis: int>, CreationTime: string, DurationMillis: int, LiveSourceName: string, ProgramName: string, ScheduledStartTime: string, SourceLocationName: string, VodSourceName: string> {
+]: any -> oneof<record<AdBreaks: table<MessageType: string, OffsetMillis: int, Slate: record, SpliceInsertMessage: record, TimeSignalMessage: record>, Arn: string, ChannelName: string, ClipRange: record<EndOffsetMillis: int>, CreationTime: string, DurationMillis: int, LiveSourceName: string, ProgramName: string, ScheduledStartTime: string, SourceLocationName: string, VodSourceName: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -860,7 +874,7 @@ export def "delete-program" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_name | is-empty) { error make --unspanned { msg: "path parameter 'ChannelName' must be non-empty" } }
@@ -907,7 +921,7 @@ export def "describe-program" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<AdBreaks: table<MessageType: string, OffsetMillis: int, Slate: record, SpliceInsertMessage: record, TimeSignalMessage: record>, Arn: string, ChannelName: string, ClipRange: record<EndOffsetMillis: int>, CreationTime: string, DurationMillis: int, LiveSourceName: string, ProgramName: string, ScheduledStartTime: string, SourceLocationName: string, VodSourceName: string> {
+]: nothing -> oneof<record<AdBreaks: table<MessageType: string, OffsetMillis: int, Slate: record, SpliceInsertMessage: record, TimeSignalMessage: record>, Arn: string, ChannelName: string, ClipRange: record<EndOffsetMillis: int>, CreationTime: string, DurationMillis: int, LiveSourceName: string, ProgramName: string, ScheduledStartTime: string, SourceLocationName: string, VodSourceName: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_name | is-empty) { error make --unspanned { msg: "path parameter 'ChannelName' must be non-empty" } }
@@ -935,8 +949,6 @@ export def "describe-program" [
 #
 # PUT /channel/{ChannelName}/program/{ProgramName}
 # operationId: UpdateProgram
-# --AdBreaks item shape: {MessageType?: "SPLICE_INSERT"|"TIME_SIGNAL", OffsetMillis?: int, Slate?: record, SpliceInsertMessage?: record, TimeSignalMessage?: record}
-# --ScheduleConfiguration shape: {ClipRange?: record, Transition?: record}
 export def "update-program" [
   channel_name: string
   program_name: string
@@ -958,7 +970,7 @@ export def "update-program" [
   --x-amz-signed-headers: string
   --ad-breaks: list # The ad break configuration settings. — item shape: {MessageType?: "SPLICE_INSERT"|"TIME_SIGNAL", OffsetMillis?: int, Slate?: record, SpliceInsertMessage?: record, TimeSignalMessage?: record}
   schedule_configuration: record # Schedule configuration parameters. — shape: {ClipRange?: record, Transition?: record}
-]: any -> record<AdBreaks: table<MessageType: string, OffsetMillis: int, Slate: record, SpliceInsertMessage: record, TimeSignalMessage: record>, Arn: string, ChannelName: string, ClipRange: record<EndOffsetMillis: int>, CreationTime: string, DurationMillis: int, LiveSourceName: string, ProgramName: string, ScheduledStartTime: string, SourceLocationName: string, VodSourceName: string> {
+]: any -> oneof<record<AdBreaks: table<MessageType: string, OffsetMillis: int, Slate: record, SpliceInsertMessage: record, TimeSignalMessage: record>, Arn: string, ChannelName: string, ClipRange: record<EndOffsetMillis: int>, CreationTime: string, DurationMillis: int, LiveSourceName: string, ProgramName: string, ScheduledStartTime: string, SourceLocationName: string, VodSourceName: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -989,10 +1001,6 @@ export def "update-program" [
 #
 # POST /sourceLocation/{SourceLocationName}
 # operationId: CreateSourceLocation
-# --AccessConfiguration shape: {AccessType?: "S3_SIGV4"|"SECRETS_MANAGER_ACCESS_TOKEN", SecretsManagerAccessTokenConfiguration?: record}
-# --DefaultSegmentDeliveryConfiguration shape: {BaseUrl?: string}
-# --HttpConfiguration shape: {BaseUrl?: string}
-# --SegmentDeliveryConfigurations item shape: {BaseUrl?: string, Name?: string}
 export def "create-source-location" [
   source_location_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1016,7 +1024,7 @@ export def "create-source-location" [
   http_configuration: record # The HTTP configuration for the source location. — shape: {BaseUrl?: string}
   --segment-delivery-configurations: list # A list of the segment delivery configurations associated with this resource. — item shape: {BaseUrl?: string, Name?: string}
   --tags: record # The tags to assign to the source location. Tags are key-value pairs that you can associate with Amazon resources to help with organization, access control, and cost tracking. For more information, see Tagging AWS Elemental MediaTailor Resources (https://docs.aws.amazon.com/mediatailor/latest/ug/tagging.html).
-]: any -> record<AccessConfiguration: record<AccessType: string, SecretsManagerAccessTokenConfiguration: record<HeaderName: string, SecretArn: string, SecretStringKey: string>>, Arn: string, CreationTime: string, DefaultSegmentDeliveryConfiguration: record<BaseUrl: string>, HttpConfiguration: record<BaseUrl: string>, LastModifiedTime: string, SegmentDeliveryConfigurations: table<BaseUrl: string, Name: string>, SourceLocationName: string, Tags: record> {
+]: any -> oneof<record<AccessConfiguration: record<AccessType: string, SecretsManagerAccessTokenConfiguration: record<HeaderName: string, SecretArn: string, SecretStringKey: string>>, Arn: string, CreationTime: string, DefaultSegmentDeliveryConfiguration: record<BaseUrl: string>, HttpConfiguration: record<BaseUrl: string>, LastModifiedTime: string, SegmentDeliveryConfigurations: table<BaseUrl: string, Name: string>, SourceLocationName: string, Tags: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1064,7 +1072,7 @@ export def "delete-source-location" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($source_location_name | is-empty) { error make --unspanned { msg: "path parameter 'SourceLocationName' must be non-empty" } }
@@ -1109,7 +1117,7 @@ export def "describe-source-location" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<AccessConfiguration: record<AccessType: string, SecretsManagerAccessTokenConfiguration: record<HeaderName: string, SecretArn: string, SecretStringKey: string>>, Arn: string, CreationTime: string, DefaultSegmentDeliveryConfiguration: record<BaseUrl: string>, HttpConfiguration: record<BaseUrl: string>, LastModifiedTime: string, SegmentDeliveryConfigurations: table<BaseUrl: string, Name: string>, SourceLocationName: string, Tags: record> {
+]: nothing -> oneof<record<AccessConfiguration: record<AccessType: string, SecretsManagerAccessTokenConfiguration: record<HeaderName: string, SecretArn: string, SecretStringKey: string>>, Arn: string, CreationTime: string, DefaultSegmentDeliveryConfiguration: record<BaseUrl: string>, HttpConfiguration: record<BaseUrl: string>, LastModifiedTime: string, SegmentDeliveryConfigurations: table<BaseUrl: string, Name: string>, SourceLocationName: string, Tags: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($source_location_name | is-empty) { error make --unspanned { msg: "path parameter 'SourceLocationName' must be non-empty" } }
@@ -1136,10 +1144,6 @@ export def "describe-source-location" [
 #
 # PUT /sourceLocation/{SourceLocationName}
 # operationId: UpdateSourceLocation
-# --AccessConfiguration shape: {AccessType?: "S3_SIGV4"|"SECRETS_MANAGER_ACCESS_TOKEN", SecretsManagerAccessTokenConfiguration?: record}
-# --DefaultSegmentDeliveryConfiguration shape: {BaseUrl?: string}
-# --HttpConfiguration shape: {BaseUrl?: string}
-# --SegmentDeliveryConfigurations item shape: {BaseUrl?: string, Name?: string}
 export def "update-source-location" [
   source_location_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1162,7 +1166,7 @@ export def "update-source-location" [
   --default-segment-delivery-configuration: record # The optional configuration for a server that serves segments. Use this if you want the segment delivery server to be different from the source location server. For example, you can configure your source location server to be an origination server, such as MediaPackage, and the segment delivery server to be a content delivery network (CDN), such as CloudFront. If you don't specify a segment delivery server, then the source location server is used. — shape: {BaseUrl?: string}
   http_configuration: record # The HTTP configuration for the source location. — shape: {BaseUrl?: string}
   --segment-delivery-configurations: list # A list of the segment delivery configurations associated with this resource. — item shape: {BaseUrl?: string, Name?: string}
-]: any -> record<AccessConfiguration: record<AccessType: string, SecretsManagerAccessTokenConfiguration: record<HeaderName: string, SecretArn: string, SecretStringKey: string>>, Arn: string, CreationTime: string, DefaultSegmentDeliveryConfiguration: record<BaseUrl: string>, HttpConfiguration: record<BaseUrl: string>, LastModifiedTime: string, SegmentDeliveryConfigurations: table<BaseUrl: string, Name: string>, SourceLocationName: string, Tags: record> {
+]: any -> oneof<record<AccessConfiguration: record<AccessType: string, SecretsManagerAccessTokenConfiguration: record<HeaderName: string, SecretArn: string, SecretStringKey: string>>, Arn: string, CreationTime: string, DefaultSegmentDeliveryConfiguration: record<BaseUrl: string>, HttpConfiguration: record<BaseUrl: string>, LastModifiedTime: string, SegmentDeliveryConfigurations: table<BaseUrl: string, Name: string>, SourceLocationName: string, Tags: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1192,7 +1196,6 @@ export def "update-source-location" [
 #
 # POST /sourceLocation/{SourceLocationName}/vodSource/{VodSourceName}
 # operationId: CreateVodSource
-# --HttpPackageConfigurations item shape: {Path: string, SourceGroup: string, Type: "DASH"|"HLS"}
 export def "create-vod-source" [
   source_location_name: string
   vod_source_name: string
@@ -1214,7 +1217,7 @@ export def "create-vod-source" [
   --x-amz-signed-headers: string
   http_package_configurations: list # The VOD source's HTTP package configuration settings. — item shape: {Path: string, SourceGroup: string, Type: "DASH"|"HLS"}
   --tags: record # The tags to assign to the VOD source. Tags are key-value pairs that you can associate with Amazon resources to help with organization, access control, and cost tracking. For more information, see Tagging AWS Elemental MediaTailor Resources (https://docs.aws.amazon.com/mediatailor/latest/ug/tagging.html).
-]: any -> record<Arn: string, CreationTime: string, HttpPackageConfigurations: table<Path: string, SourceGroup: string, Type: string>, LastModifiedTime: string, SourceLocationName: string, Tags: record, VodSourceName: string> {
+]: any -> oneof<record<Arn: string, CreationTime: string, HttpPackageConfigurations: table<Path: string, SourceGroup: string, Type: string>, LastModifiedTime: string, SourceLocationName: string, Tags: record, VodSourceName: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1264,7 +1267,7 @@ export def "delete-vod-source" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($source_location_name | is-empty) { error make --unspanned { msg: "path parameter 'SourceLocationName' must be non-empty" } }
@@ -1311,7 +1314,7 @@ export def "describe-vod-source" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Arn: string, CreationTime: string, HttpPackageConfigurations: table<Path: string, SourceGroup: string, Type: string>, LastModifiedTime: string, SourceLocationName: string, Tags: record, VodSourceName: string> {
+]: nothing -> oneof<record<Arn: string, CreationTime: string, HttpPackageConfigurations: table<Path: string, SourceGroup: string, Type: string>, LastModifiedTime: string, SourceLocationName: string, Tags: record, VodSourceName: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($source_location_name | is-empty) { error make --unspanned { msg: "path parameter 'SourceLocationName' must be non-empty" } }
@@ -1339,7 +1342,6 @@ export def "describe-vod-source" [
 #
 # PUT /sourceLocation/{SourceLocationName}/vodSource/{VodSourceName}
 # operationId: UpdateVodSource
-# --HttpPackageConfigurations item shape: {Path: string, SourceGroup: string, Type: "DASH"|"HLS"}
 export def "update-vod-source" [
   source_location_name: string
   vod_source_name: string
@@ -1360,7 +1362,7 @@ export def "update-vod-source" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   http_package_configurations: list # The VOD source's HTTP package configuration settings. — item shape: {Path: string, SourceGroup: string, Type: "DASH"|"HLS"}
-]: any -> record<Arn: string, CreationTime: string, HttpPackageConfigurations: table<Path: string, SourceGroup: string, Type: string>, LastModifiedTime: string, SourceLocationName: string, Tags: record, VodSourceName: string> {
+]: any -> oneof<record<Arn: string, CreationTime: string, HttpPackageConfigurations: table<Path: string, SourceGroup: string, Type: string>, LastModifiedTime: string, SourceLocationName: string, Tags: record, VodSourceName: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1409,7 +1411,7 @@ export def "delete-channel-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_name | is-empty) { error make --unspanned { msg: "path parameter 'ChannelName' must be non-empty" } }
@@ -1454,7 +1456,7 @@ export def "get-channel-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Policy: string> {
+]: nothing -> oneof<record<Policy: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_name | is-empty) { error make --unspanned { msg: "path parameter 'ChannelName' must be non-empty" } }
@@ -1500,7 +1502,7 @@ export def "put-channel-policy" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   policy: string # Adds an IAM role that determines the permissions of your channel.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1548,7 +1550,7 @@ export def "delete-playback-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'Name' must be non-empty" } }
@@ -1593,7 +1595,7 @@ export def "get-playback-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<AdDecisionServerUrl: string, AvailSuppression: record<Mode: string, Value: string>, Bumper: record<EndUrl: string, StartUrl: string>, CdnConfiguration: record<AdSegmentUrlPrefix: string, ContentSegmentUrlPrefix: string>, ConfigurationAliases: record, DashConfiguration: record<ManifestEndpointPrefix: string, MpdLocation: string, OriginManifestType: string>, HlsConfiguration: record<ManifestEndpointPrefix: string>, LivePreRollConfiguration: record<AdDecisionServerUrl: string, MaxDurationSeconds: int>, LogConfiguration: record<PercentEnabled: int>, ManifestProcessingRules: record<AdMarkerPassthrough: record<Enabled: bool>>, Name: string, PersonalizationThresholdSeconds: int, PlaybackConfigurationArn: string, PlaybackEndpointPrefix: string, SessionInitializationEndpointPrefix: string, SlateAdUrl: string, Tags: record, TranscodeProfileName: string, VideoContentSourceUrl: string> {
+]: nothing -> oneof<record<AdDecisionServerUrl: string, AvailSuppression: record<Mode: string, Value: string>, Bumper: record<EndUrl: string, StartUrl: string>, CdnConfiguration: record<AdSegmentUrlPrefix: string, ContentSegmentUrlPrefix: string>, ConfigurationAliases: record, DashConfiguration: record<ManifestEndpointPrefix: string, MpdLocation: string, OriginManifestType: string>, HlsConfiguration: record<ManifestEndpointPrefix: string>, LivePreRollConfiguration: record<AdDecisionServerUrl: string, MaxDurationSeconds: int>, LogConfiguration: record<PercentEnabled: int>, ManifestProcessingRules: record<AdMarkerPassthrough: record<Enabled: bool>>, Name: string, PersonalizationThresholdSeconds: int, PlaybackConfigurationArn: string, PlaybackEndpointPrefix: string, SessionInitializationEndpointPrefix: string, SlateAdUrl: string, Tags: record, TranscodeProfileName: string, VideoContentSourceUrl: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'Name' must be non-empty" } }
@@ -1643,7 +1645,7 @@ export def "get-channel-schedule" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Items: table<ApproximateDurationSeconds: int, ApproximateStartTime: string, Arn: string, ChannelName: string, LiveSourceName: string, ProgramName: string, ScheduleAdBreaks: list, ScheduleEntryType: string, SourceLocationName: string, VodSourceName: string>, NextToken: string> {
+]: nothing -> oneof<record<Items: table<ApproximateDurationSeconds: int, ApproximateStartTime: string, Arn: string, ChannelName: string, LiveSourceName: string, ProgramName: string, ScheduleAdBreaks: list, ScheduleEntryType: string, SourceLocationName: string, VodSourceName: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_name | is-empty) { error make --unspanned { msg: "path parameter 'ChannelName' must be non-empty" } }
@@ -1693,7 +1695,7 @@ export def "list-alerts" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Items: table<AlertCode: string, AlertMessage: string, LastModifiedTime: string, RelatedResourceArns: list, ResourceArn: string>, NextToken: string> {
+]: nothing -> oneof<record<Items: table<AlertCode: string, AlertMessage: string, LastModifiedTime: string, RelatedResourceArns: list, ResourceArn: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn == null) { error make --unspanned { msg: "required query parameter 'resourceArn' missing: pass --resource-arn" } }
@@ -1742,7 +1744,7 @@ export def "list-channels" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Items: table<Arn: string, ChannelName: string, ChannelState: string, CreationTime: string, FillerSlate: record, LastModifiedTime: string, LogConfiguration: record, Outputs: list, PlaybackMode: string, Tags: record, Tier: string>, NextToken: string> {
+]: nothing -> oneof<record<Items: table<Arn: string, ChannelName: string, ChannelState: string, CreationTime: string, FillerSlate: record, LastModifiedTime: string, LogConfiguration: record, Outputs: list, PlaybackMode: string, Tags: record, Tier: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -1791,7 +1793,7 @@ export def "list-live-sources" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Items: table<Arn: string, CreationTime: string, HttpPackageConfigurations: list, LastModifiedTime: string, LiveSourceName: string, SourceLocationName: string, Tags: record>, NextToken: string> {
+]: nothing -> oneof<record<Items: table<Arn: string, CreationTime: string, HttpPackageConfigurations: list, LastModifiedTime: string, LiveSourceName: string, SourceLocationName: string, Tags: record>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($source_location_name | is-empty) { error make --unspanned { msg: "path parameter 'SourceLocationName' must be non-empty" } }
@@ -1838,7 +1840,7 @@ export def "list-playback-configurations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Items: table<AdDecisionServerUrl: string, AvailSuppression: record, Bumper: record, CdnConfiguration: record, ConfigurationAliases: record, DashConfiguration: record, HlsConfiguration: record, LivePreRollConfiguration: record, LogConfiguration: record, ManifestProcessingRules: record, Name: string, PersonalizationThresholdSeconds: int, PlaybackConfigurationArn: string, PlaybackEndpointPrefix: string, SessionInitializationEndpointPrefix: string, SlateAdUrl: string, Tags: record, TranscodeProfileName: string, VideoContentSourceUrl: string>, NextToken: string> {
+]: nothing -> oneof<record<Items: table<AdDecisionServerUrl: string, AvailSuppression: record, Bumper: record, CdnConfiguration: record, ConfigurationAliases: record, DashConfiguration: record, HlsConfiguration: record, LivePreRollConfiguration: record, LogConfiguration: record, ManifestProcessingRules: record, Name: string, PersonalizationThresholdSeconds: int, PlaybackConfigurationArn: string, PlaybackEndpointPrefix: string, SessionInitializationEndpointPrefix: string, SlateAdUrl: string, Tags: record, TranscodeProfileName: string, VideoContentSourceUrl: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
@@ -1888,7 +1890,7 @@ export def "list-prefetch-schedules" [
   --max-results-body: int # The maximum number of prefetch schedules that you want MediaTailor to return in response to the current request. If there are more than MaxResults prefetch schedules, use the value of NextToken in the response to get the next page of results. (body field)
   --next-token-body: string # (Optional) If the playback configuration has more than MaxResults prefetch schedules, use NextToken to get the second and subsequent pages of results. For the first ListPrefetchSchedulesRequest request, omit this value. For the second and subsequent requests, get the value of NextToken from the previous response and specify that value for NextToken in the request. If the previous response didn't include a NextToken element, there are no more prefetch schedules to get. (body field)
   --stream-id: string # An optional filtering parameter whereby MediaTailor filters the prefetch schedules to include only specific streams.
-]: any -> record<Items: table<Arn: string, Consumption: record, Name: string, PlaybackConfigurationName: string, Retrieval: record, StreamId: string>, NextToken: string> {
+]: any -> oneof<record<Items: table<Arn: string, Consumption: record, Name: string, PlaybackConfigurationName: string, Retrieval: record, StreamId: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1940,7 +1942,7 @@ export def "list-source-locations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Items: table<AccessConfiguration: record, Arn: string, CreationTime: string, DefaultSegmentDeliveryConfiguration: record, HttpConfiguration: record, LastModifiedTime: string, SegmentDeliveryConfigurations: list, SourceLocationName: string, Tags: record>, NextToken: string> {
+]: nothing -> oneof<record<Items: table<AccessConfiguration: record, Arn: string, CreationTime: string, DefaultSegmentDeliveryConfiguration: record, HttpConfiguration: record, LastModifiedTime: string, SegmentDeliveryConfigurations: list, SourceLocationName: string, Tags: record>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -1985,7 +1987,7 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Tags: record> {
+]: nothing -> oneof<record<Tags: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'ResourceArn' must be non-empty" } }
@@ -2083,7 +2085,7 @@ export def "list-vod-sources" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Items: table<Arn: string, CreationTime: string, HttpPackageConfigurations: list, LastModifiedTime: string, SourceLocationName: string, Tags: record, VodSourceName: string>, NextToken: string> {
+]: nothing -> oneof<record<Items: table<Arn: string, CreationTime: string, HttpPackageConfigurations: list, LastModifiedTime: string, SourceLocationName: string, Tags: record, VodSourceName: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($source_location_name | is-empty) { error make --unspanned { msg: "path parameter 'SourceLocationName' must be non-empty" } }
@@ -2111,12 +2113,6 @@ export def "list-vod-sources" [
 #
 # PUT /playbackConfiguration
 # operationId: PutPlaybackConfiguration
-# --AvailSuppression shape: {Mode?: "OFF"|"BEHIND_LIVE_EDGE", Value?: string}
-# --Bumper shape: {EndUrl?: string, StartUrl?: string}
-# --CdnConfiguration shape: {AdSegmentUrlPrefix?: string, ContentSegmentUrlPrefix?: string}
-# --DashConfiguration shape: {MpdLocation?: string, OriginManifestType?: "SINGLE_PERIOD"|"MULTI_PERIOD"}
-# --LivePreRollConfiguration shape: {AdDecisionServerUrl?: string, MaxDurationSeconds?: int}
-# --ManifestProcessingRules shape: {AdMarkerPassthrough?: record}
 export def "put-playback-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2148,7 +2144,7 @@ export def "put-playback-configuration" [
   --tags: record # The tags to assign to the playback configuration. Tags are key-value pairs that you can associate with Amazon resources to help with organization, access control, and cost tracking. For more information, see Tagging AWS Elemental MediaTailor Resources (https://docs.aws.amazon.com/mediatailor/latest/ug/tagging.html).
   --transcode-profile-name: string # The name that is used to associate this playback configuration with a custom transcode profile. This overrides the dynamic transcoding defaults of MediaTailor. Use this only if you have already set up custom profiles with the help of AWS Support.
   --video-content-source-url: string # The URL prefix for the parent manifest for the stream, minus the asset ID. The maximum length is 512 characters.
-]: any -> record<AdDecisionServerUrl: string, AvailSuppression: record<Mode: string, Value: string>, Bumper: record<EndUrl: string, StartUrl: string>, CdnConfiguration: record<AdSegmentUrlPrefix: string, ContentSegmentUrlPrefix: string>, ConfigurationAliases: record, DashConfiguration: record<ManifestEndpointPrefix: string, MpdLocation: string, OriginManifestType: string>, HlsConfiguration: record<ManifestEndpointPrefix: string>, LivePreRollConfiguration: record<AdDecisionServerUrl: string, MaxDurationSeconds: int>, LogConfiguration: record<PercentEnabled: int>, ManifestProcessingRules: record<AdMarkerPassthrough: record<Enabled: bool>>, Name: string, PersonalizationThresholdSeconds: int, PlaybackConfigurationArn: string, PlaybackEndpointPrefix: string, SessionInitializationEndpointPrefix: string, SlateAdUrl: string, Tags: record, TranscodeProfileName: string, VideoContentSourceUrl: string> {
+]: any -> oneof<record<AdDecisionServerUrl: string, AvailSuppression: record<Mode: string, Value: string>, Bumper: record<EndUrl: string, StartUrl: string>, CdnConfiguration: record<AdSegmentUrlPrefix: string, ContentSegmentUrlPrefix: string>, ConfigurationAliases: record, DashConfiguration: record<ManifestEndpointPrefix: string, MpdLocation: string, OriginManifestType: string>, HlsConfiguration: record<ManifestEndpointPrefix: string>, LivePreRollConfiguration: record<AdDecisionServerUrl: string, MaxDurationSeconds: int>, LogConfiguration: record<PercentEnabled: int>, ManifestProcessingRules: record<AdMarkerPassthrough: record<Enabled: bool>>, Name: string, PersonalizationThresholdSeconds: int, PlaybackConfigurationArn: string, PlaybackEndpointPrefix: string, SessionInitializationEndpointPrefix: string, SlateAdUrl: string, Tags: record, TranscodeProfileName: string, VideoContentSourceUrl: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2195,7 +2191,7 @@ export def "start-channel" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_name | is-empty) { error make --unspanned { msg: "path parameter 'ChannelName' must be non-empty" } }
@@ -2240,7 +2236,7 @@ export def "stop-channel" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_name | is-empty) { error make --unspanned { msg: "path parameter 'ChannelName' must be non-empty" } }

@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -122,9 +146,9 @@ def desired-state-completer [] { ["ACTIVE" "DELETED" "STANDBY"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "add-bridge-outputs" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["add-bridge-outputs" "add-bridge-sources" "add-flow-media-streams" "add-flow-outputs" "add-flow-sources" "add-flow-vpc-interfaces" "create-bridge" "list-bridges" "create-flow" "list-flows" "create-gateway" "list-gateways" "delete-bridge" "describe-bridge" "update-bridge" "delete-flow" "describe-flow" "update-flow" "delete-gateway" "describe-gateway" "deregister-gateway-instance" "describe-gateway-instance" "update-gateway-instance" "describe-offering" "purchase-offering" "describe-reservation" "grant-flow-entitlements" "list-entitlements" "list-gateway-instances" "list-offerings" "list-reservations" "list-tags-for-resource" "tag-resource" "remove-bridge-output" "update-bridge-output" "remove-bridge-source" "update-bridge-source" "remove-flow-media-stream" "update-flow-media-stream" "remove-flow-output" "update-flow-output" "remove-flow-source" "update-flow-source" "remove-flow-vpc-interface" "revoke-flow-entitlement" "update-flow-entitlement" "start-flow" "stop-flow" "untag-resource" "update-bridge-state" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -146,7 +170,6 @@ export def commands []: nothing -> table {
 #
 # POST /v1/bridges/{bridgeArn}/outputs
 # operationId: AddBridgeOutputs
-# --outputs item shape: {NetworkOutput?: record}
 export def "add-bridge-outputs" [
   bridge_arn: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -166,7 +189,7 @@ export def "add-bridge-outputs" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   outputs: list # The outputs that you want to add to this bridge. — item shape: {NetworkOutput?: record}
-]: any -> record<BridgeArn: string, Outputs: table<FlowOutput: record, NetworkOutput: record>> {
+]: any -> oneof<record<BridgeArn: string, Outputs: table<FlowOutput: record, NetworkOutput: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -196,7 +219,6 @@ export def "add-bridge-outputs" [
 #
 # POST /v1/bridges/{bridgeArn}/sources
 # operationId: AddBridgeSources
-# --sources item shape: {FlowSource?: record, NetworkSource?: record}
 export def "add-bridge-sources" [
   bridge_arn: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -216,7 +238,7 @@ export def "add-bridge-sources" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   sources: list # The sources that you want to add to this bridge. — item shape: {FlowSource?: record, NetworkSource?: record}
-]: any -> record<BridgeArn: string, Sources: table<FlowSource: record, NetworkSource: record>> {
+]: any -> oneof<record<BridgeArn: string, Sources: table<FlowSource: record, NetworkSource: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -246,7 +268,6 @@ export def "add-bridge-sources" [
 #
 # POST /v1/flows/{flowArn}/mediaStreams
 # operationId: AddFlowMediaStreams
-# --mediaStreams item shape: {Attributes?: record, ClockRate?: int, Description?: string, MediaStreamId: int, MediaStreamName: string, MediaStreamType: "video"|"audio"|"ancillary-data", VideoFormat?: string}
 export def "add-flow-media-streams" [
   flow_arn: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -266,7 +287,7 @@ export def "add-flow-media-streams" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   media_streams: list # The media streams that you want to add to the flow. — item shape: {Attributes?: record, ClockRate?: int, Description?: string, MediaStreamId: int, MediaStreamName: string, MediaStreamType: "video"|"audio"|"ancillary-data", VideoFormat?: string}
-]: any -> record<FlowArn: string, MediaStreams: table<Attributes: record, ClockRate: int, Description: string, Fmt: int, MediaStreamId: int, MediaStreamName: string, MediaStreamType: string, VideoFormat: string>> {
+]: any -> oneof<record<FlowArn: string, MediaStreams: table<Attributes: record, ClockRate: int, Description: string, Fmt: int, MediaStreamId: int, MediaStreamName: string, MediaStreamType: string, VideoFormat: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -296,7 +317,6 @@ export def "add-flow-media-streams" [
 #
 # POST /v1/flows/{flowArn}/outputs
 # operationId: AddFlowOutputs
-# --outputs item shape: {CidrAllowList?: list<string>, Description?: string, Destination?: string, Encryption?: record, MaxLatency?: int, MediaStreamOutputConfigurations?: list, MinLatency?: int, Name?: string, Port?: int, Protocol: "zixi-push"|"rtp-fec"|"rtp"|"zixi-pull"|"rist"|"st2110-jpegxs"|"cdi"|"srt-listener"|"srt-caller"|"fujitsu-qos"|"udp", RemoteId?: string, SenderControlPort?: int, SmoothingLatency?: int, StreamId?: string, VpcInterfaceAttachment?: record}
 export def "add-flow-outputs" [
   flow_arn: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -316,7 +336,7 @@ export def "add-flow-outputs" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   outputs: list # A list of outputs that you want to add. — item shape: {CidrAllowList?: list<string>, Description?: string, Destination?: string, Encryption?: record, MaxLatency?: int, MediaStreamOutputConfigurations?: list, MinLatency?: int, Name?: string, Port?: int, Protocol: "zixi-push"|"rtp-fec"|"rtp"|"zixi-pull"|"rist"|"st2110-jpegxs"|"cdi"|"srt-listener"|"srt-caller"|"fujitsu-qos"|"udp", RemoteId?: string, SenderControlPort?: int, SmoothingLatency?: int, StreamId?: string, VpcInterfaceAttachment?: record}
-]: any -> record<FlowArn: string, Outputs: table<DataTransferSubscriberFeePercent: int, Description: string, Destination: string, Encryption: record, EntitlementArn: string, ListenerAddress: string, MediaLiveInputArn: string, MediaStreamOutputConfigurations: list, Name: string, OutputArn: string, Port: int, Transport: record, VpcInterfaceAttachment: record, BridgeArn: string, BridgePorts: list>> {
+]: any -> oneof<record<FlowArn: string, Outputs: table<DataTransferSubscriberFeePercent: int, Description: string, Destination: string, Encryption: record, EntitlementArn: string, ListenerAddress: string, MediaLiveInputArn: string, MediaStreamOutputConfigurations: list, Name: string, OutputArn: string, Port: int, Transport: record, VpcInterfaceAttachment: record, BridgeArn: string, BridgePorts: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -346,7 +366,6 @@ export def "add-flow-outputs" [
 #
 # POST /v1/flows/{flowArn}/source
 # operationId: AddFlowSources
-# --sources item shape: {Decryption?: record, Description?: string, EntitlementArn?: string, IngestPort?: int, MaxBitrate?: int, MaxLatency?: int, MaxSyncBuffer?: int, MediaStreamSourceConfigurations?: list, MinLatency?: int, Name?: string, Protocol?: "zixi-push"|"rtp-fec"|"rtp"|"zixi-pull"|"rist"|"st2110-jpegxs"|"cdi"|"srt-listener"|"srt-caller"|"fujitsu-qos"|"udp", SenderControlPort?: int, SenderIpAddress?: string, SourceListenerAddress?: string, SourceListenerPort?: int, StreamId?: string, VpcInterfaceName?: string, ... (2 more fields)}
 export def "add-flow-sources" [
   flow_arn: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -366,7 +385,7 @@ export def "add-flow-sources" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   sources: list # A list of sources that you want to add. — item shape: {Decryption?: record, Description?: string, EntitlementArn?: string, IngestPort?: int, MaxBitrate?: int, MaxLatency?: int, MaxSyncBuffer?: int, MediaStreamSourceConfigurations?: list, MinLatency?: int, Name?: string, Protocol?: "zixi-push"|"rtp-fec"|"rtp"|"zixi-pull"|"rist"|"st2110-jpegxs"|"cdi"|"srt-listener"|"srt-caller"|"fujitsu-qos"|"udp", SenderControlPort?: int, SenderIpAddress?: string, SourceListenerAddress?: string, SourceListenerPort?: int, StreamId?: string, VpcInterfaceName?: string, ... (2 more fields)}
-]: any -> record<FlowArn: string, Sources: table<DataTransferSubscriberFeePercent: int, Decryption: record, Description: string, EntitlementArn: string, IngestIp: string, IngestPort: int, MediaStreamSourceConfigurations: list, Name: string, SenderControlPort: int, SenderIpAddress: string, SourceArn: string, Transport: record, VpcInterfaceName: string, WhitelistCidr: string, GatewayBridgeSource: record>> {
+]: any -> oneof<record<FlowArn: string, Sources: table<DataTransferSubscriberFeePercent: int, Decryption: record, Description: string, EntitlementArn: string, IngestIp: string, IngestPort: int, MediaStreamSourceConfigurations: list, Name: string, SenderControlPort: int, SenderIpAddress: string, SourceArn: string, Transport: record, VpcInterfaceName: string, WhitelistCidr: string, GatewayBridgeSource: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -396,7 +415,6 @@ export def "add-flow-sources" [
 #
 # POST /v1/flows/{flowArn}/vpcInterfaces
 # operationId: AddFlowVpcInterfaces
-# --vpcInterfaces item shape: {Name: string, NetworkInterfaceType?: "ena"|"efa", RoleArn: string, SecurityGroupIds: list<string>, SubnetId: string}
 export def "add-flow-vpc-interfaces" [
   flow_arn: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -416,7 +434,7 @@ export def "add-flow-vpc-interfaces" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   vpc_interfaces: list # A list of VPC interfaces that you want to add. — item shape: {Name: string, NetworkInterfaceType?: "ena"|"efa", RoleArn: string, SecurityGroupIds: list<string>, SubnetId: string}
-]: any -> record<FlowArn: string, VpcInterfaces: table<Name: string, NetworkInterfaceIds: list, NetworkInterfaceType: string, RoleArn: string, SecurityGroupIds: list, SubnetId: string>> {
+]: any -> oneof<record<FlowArn: string, VpcInterfaces: table<Name: string, NetworkInterfaceIds: list, NetworkInterfaceType: string, RoleArn: string, SecurityGroupIds: list, SubnetId: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -446,11 +464,6 @@ export def "add-flow-vpc-interfaces" [
 #
 # POST /v1/bridges
 # operationId: CreateBridge
-# --egressGatewayBridge shape: {MaxBitrate?: int}
-# --ingressGatewayBridge shape: {MaxBitrate?: int, MaxOutputs?: int}
-# --outputs item shape: {NetworkOutput?: record}
-# --sourceFailoverConfig shape: {FailoverMode?: "MERGE"|"FAILOVER", RecoveryWindow?: int, SourcePriority?: record, State?: "ENABLED"|"DISABLED"}
-# --sources item shape: {FlowSource?: record, NetworkSource?: record}
 export def "create-bridge" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -475,7 +488,7 @@ export def "create-bridge" [
   placement_arn: string # The bridge placement Amazon Resource Number (ARN).
   --source-failover-config: record # The settings for source failover. — shape: {FailoverMode?: "MERGE"|"FAILOVER", RecoveryWindow?: int, SourcePriority?: record, State?: "ENABLED"|"DISABLED"}
   sources: list # The sources that you want to add to this bridge. — item shape: {FlowSource?: record, NetworkSource?: record}
-]: any -> record<Bridge: record<BridgeArn: string, BridgeMessages: list<record>, BridgeState: string, EgressGatewayBridge: record<InstanceId: string, MaxBitrate: int>, IngressGatewayBridge: record<InstanceId: string, MaxBitrate: int, MaxOutputs: int>, Name: string, Outputs: list<record>, PlacementArn: string, SourceFailoverConfig: record<FailoverMode: string, RecoveryWindow: int, SourcePriority: record, State: string>, Sources: list<record>>> {
+]: any -> oneof<record<Bridge: record<BridgeArn: string, BridgeMessages: list<record>, BridgeState: string, EgressGatewayBridge: record<InstanceId: string, MaxBitrate: int>, IngressGatewayBridge: record<InstanceId: string, MaxBitrate: int, MaxOutputs: int>, Name: string, Outputs: list<record>, PlacementArn: string, SourceFailoverConfig: record<FailoverMode: string, RecoveryWindow: int, SourcePriority: record, State: string>, Sources: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -526,7 +539,7 @@ export def "list-bridges" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Bridges: table<BridgeArn: string, BridgeState: string, BridgeType: string, Name: string, PlacementArn: string>, NextToken: string> {
+]: nothing -> oneof<record<Bridges: table<BridgeArn: string, BridgeState: string, BridgeType: string, Name: string, PlacementArn: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filterArn" $filter_arn "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -553,14 +566,6 @@ export def "list-bridges" [
 #
 # POST /v1/flows
 # operationId: CreateFlow
-# --entitlements item shape: {DataTransferSubscriberFeePercent?: int, Description?: string, Encryption?: record, EntitlementStatus?: "ENABLED"|"DISABLED", Name?: string, Subscribers: list<string>}
-# --mediaStreams item shape: {Attributes?: record, ClockRate?: int, Description?: string, MediaStreamId: int, MediaStreamName: string, MediaStreamType: "video"|"audio"|"ancillary-data", VideoFormat?: string}
-# --outputs item shape: {CidrAllowList?: list<string>, Description?: string, Destination?: string, Encryption?: record, MaxLatency?: int, MediaStreamOutputConfigurations?: list, MinLatency?: int, Name?: string, Port?: int, Protocol: "zixi-push"|"rtp-fec"|"rtp"|"zixi-pull"|"rist"|"st2110-jpegxs"|"cdi"|"srt-listener"|"srt-caller"|"fujitsu-qos"|"udp", RemoteId?: string, SenderControlPort?: int, SmoothingLatency?: int, StreamId?: string, VpcInterfaceAttachment?: record}
-# --source shape: {Decryption?: record, Description?: string, EntitlementArn?: string, IngestPort?: int, MaxBitrate?: int, MaxLatency?: int, MaxSyncBuffer?: int, MediaStreamSourceConfigurations?: list, MinLatency?: int, Name?: string, Protocol?: "zixi-push"|"rtp-fec"|"rtp"|"zixi-pull"|"rist"|"st2110-jpegxs"|"cdi"|"srt-listener"|"srt-caller"|"fujitsu-qos"|"udp", SenderControlPort?: int, SenderIpAddress?: string, SourceListenerAddress?: string, SourceListenerPort?: int, StreamId?: string, VpcInterfaceName?: string, ... (2 more fields)}
-# --sourceFailoverConfig shape: {FailoverMode?: "MERGE"|"FAILOVER", RecoveryWindow?: int, SourcePriority?: record, State?: "ENABLED"|"DISABLED"}
-# --sources item shape: {Decryption?: record, Description?: string, EntitlementArn?: string, IngestPort?: int, MaxBitrate?: int, MaxLatency?: int, MaxSyncBuffer?: int, MediaStreamSourceConfigurations?: list, MinLatency?: int, Name?: string, Protocol?: "zixi-push"|"rtp-fec"|"rtp"|"zixi-pull"|"rist"|"st2110-jpegxs"|"cdi"|"srt-listener"|"srt-caller"|"fujitsu-qos"|"udp", SenderControlPort?: int, SenderIpAddress?: string, SourceListenerAddress?: string, SourceListenerPort?: int, StreamId?: string, VpcInterfaceName?: string, ... (2 more fields)}
-# --vpcInterfaces item shape: {Name: string, NetworkInterfaceType?: "ena"|"efa", RoleArn: string, SecurityGroupIds: list<string>, SubnetId: string}
-# --maintenance shape: {MaintenanceDay?: "Monday"|"Tuesday"|"Wednesday"|"Thursday"|"Friday"|"Saturday"|"Sunday", MaintenanceStartHour?: string}
 export def "create-flow" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -588,7 +593,7 @@ export def "create-flow" [
   --sources: list # item shape: {Decryption?: record, Description?: string, EntitlementArn?: string, IngestPort?: int, MaxBitrate?: int, MaxLatency?: int, MaxSyncBuffer?: int, MediaStreamSourceConfigurations?: list, MinLatency?: int, Name?: string, Protocol?: "zixi-push"|"rtp-fec"|"rtp"|"zixi-pull"|"rist"|"st2110-jpegxs"|"cdi"|"srt-listener"|"srt-caller"|"fujitsu-qos"|"udp", SenderControlPort?: int, SenderIpAddress?: string, SourceListenerAddress?: string, SourceListenerPort?: int, StreamId?: string, VpcInterfaceName?: string, ... (2 more fields)}
   --vpc-interfaces: list # The VPC interfaces you want on the flow. — item shape: {Name: string, NetworkInterfaceType?: "ena"|"efa", RoleArn: string, SecurityGroupIds: list<string>, SubnetId: string}
   --maintenance: record # Create maintenance setting for a flow — shape: {MaintenanceDay?: "Monday"|"Tuesday"|"Wednesday"|"Thursday"|"Friday"|"Saturday"|"Sunday", MaintenanceStartHour?: string}
-]: any -> record<Flow: record<AvailabilityZone: string, Description: string, EgressIp: string, Entitlements: list<record>, FlowArn: string, MediaStreams: list<record>, Name: string, Outputs: list<record>, Source: record<DataTransferSubscriberFeePercent: int, Decryption: record, Description: string, EntitlementArn: string, IngestIp: string, IngestPort: int, MediaStreamSourceConfigurations: list, Name: string, SenderControlPort: int, SenderIpAddress: string, SourceArn: string, Transport: record, VpcInterfaceName: string, WhitelistCidr: string, GatewayBridgeSource: record>, SourceFailoverConfig: record<FailoverMode: string, RecoveryWindow: int, SourcePriority: record, State: string>, Sources: list<record>, Status: string, VpcInterfaces: list<record>, Maintenance: record<MaintenanceDay: string, MaintenanceDeadline: string, MaintenanceScheduledDate: string, MaintenanceStartHour: string>>> {
+]: any -> oneof<record<Flow: record<AvailabilityZone: string, Description: string, EgressIp: string, Entitlements: list<record>, FlowArn: string, MediaStreams: list<record>, Name: string, Outputs: list<record>, Source: record<DataTransferSubscriberFeePercent: int, Decryption: record, Description: string, EntitlementArn: string, IngestIp: string, IngestPort: int, MediaStreamSourceConfigurations: list, Name: string, SenderControlPort: int, SenderIpAddress: string, SourceArn: string, Transport: record, VpcInterfaceName: string, WhitelistCidr: string, GatewayBridgeSource: record>, SourceFailoverConfig: record<FailoverMode: string, RecoveryWindow: int, SourcePriority: record, State: string>, Sources: list<record>, Status: string, VpcInterfaces: list<record>, Maintenance: record<MaintenanceDay: string, MaintenanceDeadline: string, MaintenanceScheduledDate: string, MaintenanceStartHour: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -638,7 +643,7 @@ export def "list-flows" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Flows: table<AvailabilityZone: string, Description: string, FlowArn: string, Name: string, SourceType: string, Status: string, Maintenance: record>, NextToken: string> {
+]: nothing -> oneof<record<Flows: table<AvailabilityZone: string, Description: string, FlowArn: string, Name: string, SourceType: string, Status: string, Maintenance: record>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -665,7 +670,6 @@ export def "list-flows" [
 #
 # POST /v1/gateways
 # operationId: CreateGateway
-# --networks item shape: {CidrBlock: string, Name: string}
 export def "create-gateway" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -686,7 +690,7 @@ export def "create-gateway" [
   egress_cidr_blocks: list<string> # The range of IP addresses that are allowed to contribute content or initiate output requests for flows communicating with this gateway. These IP addresses should be in the form of a Classless Inter-Domain Routing (CIDR) block; for example, 10.0.0.0/16.
   name: string # The name of the gateway. This name can not be modified after the gateway is created.
   networks: list # The list of networks that you want to add. — item shape: {CidrBlock: string, Name: string}
-]: any -> record<Gateway: record<EgressCidrBlocks: list<string>, GatewayArn: string, GatewayMessages: list<record>, GatewayState: string, Name: string, Networks: list<record>>> {
+]: any -> oneof<record<Gateway: record<EgressCidrBlocks: list<string>, GatewayArn: string, GatewayMessages: list<record>, GatewayState: string, Name: string, Networks: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -736,7 +740,7 @@ export def "list-gateways" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Gateways: table<GatewayArn: string, GatewayState: string, Name: string>, NextToken: string> {
+]: nothing -> oneof<record<Gateways: table<GatewayArn: string, GatewayState: string, Name: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -781,7 +785,7 @@ export def "delete-bridge" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<BridgeArn: string> {
+]: nothing -> oneof<record<BridgeArn: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bridge_arn | is-empty) { error make --unspanned { msg: "path parameter 'bridgeArn' must be non-empty" } }
@@ -826,7 +830,7 @@ export def "describe-bridge" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Bridge: record<BridgeArn: string, BridgeMessages: list<record>, BridgeState: string, EgressGatewayBridge: record<InstanceId: string, MaxBitrate: int>, IngressGatewayBridge: record<InstanceId: string, MaxBitrate: int, MaxOutputs: int>, Name: string, Outputs: list<record>, PlacementArn: string, SourceFailoverConfig: record<FailoverMode: string, RecoveryWindow: int, SourcePriority: record, State: string>, Sources: list<record>>> {
+]: nothing -> oneof<record<Bridge: record<BridgeArn: string, BridgeMessages: list<record>, BridgeState: string, EgressGatewayBridge: record<InstanceId: string, MaxBitrate: int>, IngressGatewayBridge: record<InstanceId: string, MaxBitrate: int, MaxOutputs: int>, Name: string, Outputs: list<record>, PlacementArn: string, SourceFailoverConfig: record<FailoverMode: string, RecoveryWindow: int, SourcePriority: record, State: string>, Sources: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bridge_arn | is-empty) { error make --unspanned { msg: "path parameter 'bridgeArn' must be non-empty" } }
@@ -853,9 +857,6 @@ export def "describe-bridge" [
 #
 # PUT /v1/bridges/{bridgeArn}
 # operationId: UpdateBridge
-# --egressGatewayBridge shape: {MaxBitrate?: int}
-# --ingressGatewayBridge shape: {MaxBitrate?: int, MaxOutputs?: int}
-# --sourceFailoverConfig shape: {FailoverMode?: "MERGE"|"FAILOVER", RecoveryWindow?: int, SourcePriority?: record, State?: "ENABLED"|"DISABLED"}
 export def "update-bridge" [
   bridge_arn: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -877,7 +878,7 @@ export def "update-bridge" [
   --egress-gateway-bridge: record # shape: {MaxBitrate?: int}
   --ingress-gateway-bridge: record # shape: {MaxBitrate?: int, MaxOutputs?: int}
   --source-failover-config: record # The settings for source failover. — shape: {FailoverMode?: "MERGE"|"FAILOVER", RecoveryWindow?: int, SourcePriority?: record, State?: "ENABLED"|"DISABLED"}
-]: any -> record<Bridge: record<BridgeArn: string, BridgeMessages: list<record>, BridgeState: string, EgressGatewayBridge: record<InstanceId: string, MaxBitrate: int>, IngressGatewayBridge: record<InstanceId: string, MaxBitrate: int, MaxOutputs: int>, Name: string, Outputs: list<record>, PlacementArn: string, SourceFailoverConfig: record<FailoverMode: string, RecoveryWindow: int, SourcePriority: record, State: string>, Sources: list<record>>> {
+]: any -> oneof<record<Bridge: record<BridgeArn: string, BridgeMessages: list<record>, BridgeState: string, EgressGatewayBridge: record<InstanceId: string, MaxBitrate: int>, IngressGatewayBridge: record<InstanceId: string, MaxBitrate: int, MaxOutputs: int>, Name: string, Outputs: list<record>, PlacementArn: string, SourceFailoverConfig: record<FailoverMode: string, RecoveryWindow: int, SourcePriority: record, State: string>, Sources: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -925,7 +926,7 @@ export def "delete-flow" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<FlowArn: string, Status: string> {
+]: nothing -> oneof<record<FlowArn: string, Status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($flow_arn | is-empty) { error make --unspanned { msg: "path parameter 'flowArn' must be non-empty" } }
@@ -970,7 +971,7 @@ export def "describe-flow" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Flow: record<AvailabilityZone: string, Description: string, EgressIp: string, Entitlements: list<record>, FlowArn: string, MediaStreams: list<record>, Name: string, Outputs: list<record>, Source: record<DataTransferSubscriberFeePercent: int, Decryption: record, Description: string, EntitlementArn: string, IngestIp: string, IngestPort: int, MediaStreamSourceConfigurations: list, Name: string, SenderControlPort: int, SenderIpAddress: string, SourceArn: string, Transport: record, VpcInterfaceName: string, WhitelistCidr: string, GatewayBridgeSource: record>, SourceFailoverConfig: record<FailoverMode: string, RecoveryWindow: int, SourcePriority: record, State: string>, Sources: list<record>, Status: string, VpcInterfaces: list<record>, Maintenance: record<MaintenanceDay: string, MaintenanceDeadline: string, MaintenanceScheduledDate: string, MaintenanceStartHour: string>>, Messages: record<Errors: list<string>>> {
+]: nothing -> oneof<record<Flow: record<AvailabilityZone: string, Description: string, EgressIp: string, Entitlements: list<record>, FlowArn: string, MediaStreams: list<record>, Name: string, Outputs: list<record>, Source: record<DataTransferSubscriberFeePercent: int, Decryption: record, Description: string, EntitlementArn: string, IngestIp: string, IngestPort: int, MediaStreamSourceConfigurations: list, Name: string, SenderControlPort: int, SenderIpAddress: string, SourceArn: string, Transport: record, VpcInterfaceName: string, WhitelistCidr: string, GatewayBridgeSource: record>, SourceFailoverConfig: record<FailoverMode: string, RecoveryWindow: int, SourcePriority: record, State: string>, Sources: list<record>, Status: string, VpcInterfaces: list<record>, Maintenance: record<MaintenanceDay: string, MaintenanceDeadline: string, MaintenanceScheduledDate: string, MaintenanceStartHour: string>>, Messages: record<Errors: list<string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($flow_arn | is-empty) { error make --unspanned { msg: "path parameter 'flowArn' must be non-empty" } }
@@ -997,8 +998,6 @@ export def "describe-flow" [
 #
 # PUT /v1/flows/{flowArn}
 # operationId: UpdateFlow
-# --sourceFailoverConfig shape: {FailoverMode?: "MERGE"|"FAILOVER", RecoveryWindow?: int, SourcePriority?: record, State?: "ENABLED"|"DISABLED"}
-# --maintenance shape: {MaintenanceDay?: "Monday"|"Tuesday"|"Wednesday"|"Thursday"|"Friday"|"Saturday"|"Sunday", MaintenanceScheduledDate?: string, MaintenanceStartHour?: string}
 export def "update-flow" [
   flow_arn: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1019,7 +1018,7 @@ export def "update-flow" [
   --x-amz-signed-headers: string
   --source-failover-config: record # The settings for source failover. — shape: {FailoverMode?: "MERGE"|"FAILOVER", RecoveryWindow?: int, SourcePriority?: record, State?: "ENABLED"|"DISABLED"}
   --maintenance: record # Update maintenance setting for a flow — shape: {MaintenanceDay?: "Monday"|"Tuesday"|"Wednesday"|"Thursday"|"Friday"|"Saturday"|"Sunday", MaintenanceScheduledDate?: string, MaintenanceStartHour?: string}
-]: any -> record<Flow: record<AvailabilityZone: string, Description: string, EgressIp: string, Entitlements: list<record>, FlowArn: string, MediaStreams: list<record>, Name: string, Outputs: list<record>, Source: record<DataTransferSubscriberFeePercent: int, Decryption: record, Description: string, EntitlementArn: string, IngestIp: string, IngestPort: int, MediaStreamSourceConfigurations: list, Name: string, SenderControlPort: int, SenderIpAddress: string, SourceArn: string, Transport: record, VpcInterfaceName: string, WhitelistCidr: string, GatewayBridgeSource: record>, SourceFailoverConfig: record<FailoverMode: string, RecoveryWindow: int, SourcePriority: record, State: string>, Sources: list<record>, Status: string, VpcInterfaces: list<record>, Maintenance: record<MaintenanceDay: string, MaintenanceDeadline: string, MaintenanceScheduledDate: string, MaintenanceStartHour: string>>> {
+]: any -> oneof<record<Flow: record<AvailabilityZone: string, Description: string, EgressIp: string, Entitlements: list<record>, FlowArn: string, MediaStreams: list<record>, Name: string, Outputs: list<record>, Source: record<DataTransferSubscriberFeePercent: int, Decryption: record, Description: string, EntitlementArn: string, IngestIp: string, IngestPort: int, MediaStreamSourceConfigurations: list, Name: string, SenderControlPort: int, SenderIpAddress: string, SourceArn: string, Transport: record, VpcInterfaceName: string, WhitelistCidr: string, GatewayBridgeSource: record>, SourceFailoverConfig: record<FailoverMode: string, RecoveryWindow: int, SourcePriority: record, State: string>, Sources: list<record>, Status: string, VpcInterfaces: list<record>, Maintenance: record<MaintenanceDay: string, MaintenanceDeadline: string, MaintenanceScheduledDate: string, MaintenanceStartHour: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1067,7 +1066,7 @@ export def "delete-gateway" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<GatewayArn: string> {
+]: nothing -> oneof<record<GatewayArn: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($gateway_arn | is-empty) { error make --unspanned { msg: "path parameter 'gatewayArn' must be non-empty" } }
@@ -1112,7 +1111,7 @@ export def "describe-gateway" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Gateway: record<EgressCidrBlocks: list<string>, GatewayArn: string, GatewayMessages: list<record>, GatewayState: string, Name: string, Networks: list<record>>> {
+]: nothing -> oneof<record<Gateway: record<EgressCidrBlocks: list<string>, GatewayArn: string, GatewayMessages: list<record>, GatewayState: string, Name: string, Networks: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($gateway_arn | is-empty) { error make --unspanned { msg: "path parameter 'gatewayArn' must be non-empty" } }
@@ -1158,7 +1157,7 @@ export def "deregister-gateway-instance" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<GatewayInstanceArn: string, InstanceState: string> {
+]: nothing -> oneof<record<GatewayInstanceArn: string, InstanceState: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($gateway_instance_arn | is-empty) { error make --unspanned { msg: "path parameter 'gatewayInstanceArn' must be non-empty" } }
@@ -1204,7 +1203,7 @@ export def "describe-gateway-instance" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<GatewayInstance: record<BridgePlacement: string, ConnectionStatus: string, GatewayArn: string, GatewayInstanceArn: string, InstanceId: string, InstanceMessages: list<record>, InstanceState: string, RunningBridgeCount: int>> {
+]: nothing -> oneof<record<GatewayInstance: record<BridgePlacement: string, ConnectionStatus: string, GatewayArn: string, GatewayInstanceArn: string, InstanceId: string, InstanceMessages: list<record>, InstanceState: string, RunningBridgeCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($gateway_instance_arn | is-empty) { error make --unspanned { msg: "path parameter 'gatewayInstanceArn' must be non-empty" } }
@@ -1250,7 +1249,7 @@ export def "update-gateway-instance" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --bridge-placement: string@bridge-placement-completer # The availability of the instance to host new bridges. The bridgePlacement property can be LOCKED or AVAILABLE. If it is LOCKED, no new bridges can be deployed to this instance. If it is AVAILABLE, new bridges can be added to this instance.
-]: any -> record<BridgePlacement: string, GatewayInstanceArn: string> {
+]: any -> oneof<record<BridgePlacement: string, GatewayInstanceArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1298,7 +1297,7 @@ export def "describe-offering" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Offering: record<CurrencyCode: string, Duration: int, DurationUnits: string, OfferingArn: string, OfferingDescription: string, PricePerUnit: string, PriceUnits: string, ResourceSpecification: record<ReservedBitrate: int, ResourceType: string>>> {
+]: nothing -> oneof<record<Offering: record<CurrencyCode: string, Duration: int, DurationUnits: string, OfferingArn: string, OfferingDescription: string, PricePerUnit: string, PriceUnits: string, ResourceSpecification: record<ReservedBitrate: int, ResourceType: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($offering_arn | is-empty) { error make --unspanned { msg: "path parameter 'offeringArn' must be non-empty" } }
@@ -1345,7 +1344,7 @@ export def "purchase-offering" [
   --x-amz-signed-headers: string
   reservation_name: string # The name that you want to use for the reservation.
   start: string # The date and time that you want the reservation to begin, in Coordinated Universal Time (UTC). You can specify any date and time between 12:00am on the first day of the current month to the current time on today's date, inclusive. Specify the start in a 24-hour notation. Use the following format: YYYY-MM-DDTHH:mm:SSZ, where T and Z are literal characters. For example, to specify 11:30pm on March 5, 2020, enter 2020-03-05T23:30:00Z.
-]: any -> record<Reservation: record<CurrencyCode: string, Duration: int, DurationUnits: string, End: string, OfferingArn: string, OfferingDescription: string, PricePerUnit: string, PriceUnits: string, ReservationArn: string, ReservationName: string, ReservationState: string, ResourceSpecification: record<ReservedBitrate: int, ResourceType: string>, Start: string>> {
+]: any -> oneof<record<Reservation: record<CurrencyCode: string, Duration: int, DurationUnits: string, End: string, OfferingArn: string, OfferingDescription: string, PricePerUnit: string, PriceUnits: string, ReservationArn: string, ReservationName: string, ReservationState: string, ResourceSpecification: record<ReservedBitrate: int, ResourceType: string>, Start: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1393,7 +1392,7 @@ export def "describe-reservation" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Reservation: record<CurrencyCode: string, Duration: int, DurationUnits: string, End: string, OfferingArn: string, OfferingDescription: string, PricePerUnit: string, PriceUnits: string, ReservationArn: string, ReservationName: string, ReservationState: string, ResourceSpecification: record<ReservedBitrate: int, ResourceType: string>, Start: string>> {
+]: nothing -> oneof<record<Reservation: record<CurrencyCode: string, Duration: int, DurationUnits: string, End: string, OfferingArn: string, OfferingDescription: string, PricePerUnit: string, PriceUnits: string, ReservationArn: string, ReservationName: string, ReservationState: string, ResourceSpecification: record<ReservedBitrate: int, ResourceType: string>, Start: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($reservation_arn | is-empty) { error make --unspanned { msg: "path parameter 'reservationArn' must be non-empty" } }
@@ -1420,7 +1419,6 @@ export def "describe-reservation" [
 #
 # POST /v1/flows/{flowArn}/entitlements
 # operationId: GrantFlowEntitlements
-# --entitlements item shape: {DataTransferSubscriberFeePercent?: int, Description?: string, Encryption?: record, EntitlementStatus?: "ENABLED"|"DISABLED", Name?: string, Subscribers: list<string>}
 export def "grant-flow-entitlements" [
   flow_arn: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1440,7 +1438,7 @@ export def "grant-flow-entitlements" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   entitlements: list # The list of entitlements that you want to grant. — item shape: {DataTransferSubscriberFeePercent?: int, Description?: string, Encryption?: record, EntitlementStatus?: "ENABLED"|"DISABLED", Name?: string, Subscribers: list<string>}
-]: any -> record<Entitlements: table<DataTransferSubscriberFeePercent: int, Description: string, Encryption: record, EntitlementArn: string, EntitlementStatus: string, Name: string, Subscribers: list>, FlowArn: string> {
+]: any -> oneof<record<Entitlements: table<DataTransferSubscriberFeePercent: int, Description: string, Encryption: record, EntitlementArn: string, EntitlementStatus: string, Name: string, Subscribers: list>, FlowArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1491,7 +1489,7 @@ export def "list-entitlements" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Entitlements: table<DataTransferSubscriberFeePercent: int, EntitlementArn: string, EntitlementName: string>, NextToken: string> {
+]: nothing -> oneof<record<Entitlements: table<DataTransferSubscriberFeePercent: int, EntitlementArn: string, EntitlementName: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -1540,7 +1538,7 @@ export def "list-gateway-instances" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Instances: table<GatewayArn: string, GatewayInstanceArn: string, InstanceId: string, InstanceState: string>, NextToken: string> {
+]: nothing -> oneof<record<Instances: table<GatewayArn: string, GatewayInstanceArn: string, InstanceId: string, InstanceState: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filterArn" $filter_arn "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -1588,7 +1586,7 @@ export def "list-offerings" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextToken: string, Offerings: table<CurrencyCode: string, Duration: int, DurationUnits: string, OfferingArn: string, OfferingDescription: string, PricePerUnit: string, PriceUnits: string, ResourceSpecification: record>> {
+]: nothing -> oneof<record<NextToken: string, Offerings: table<CurrencyCode: string, Duration: int, DurationUnits: string, OfferingArn: string, OfferingDescription: string, PricePerUnit: string, PriceUnits: string, ResourceSpecification: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -1636,7 +1634,7 @@ export def "list-reservations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextToken: string, Reservations: table<CurrencyCode: string, Duration: int, DurationUnits: string, End: string, OfferingArn: string, OfferingDescription: string, PricePerUnit: string, PriceUnits: string, ReservationArn: string, ReservationName: string, ReservationState: string, ResourceSpecification: record, Start: string>> {
+]: nothing -> oneof<record<NextToken: string, Reservations: table<CurrencyCode: string, Duration: int, DurationUnits: string, End: string, OfferingArn: string, OfferingDescription: string, PricePerUnit: string, PriceUnits: string, ReservationArn: string, ReservationName: string, ReservationState: string, ResourceSpecification: record, Start: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -1681,7 +1679,7 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Tags: record> {
+]: nothing -> oneof<record<Tags: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
@@ -1776,7 +1774,7 @@ export def "remove-bridge-output" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<BridgeArn: string, OutputName: string> {
+]: nothing -> oneof<record<BridgeArn: string, OutputName: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bridge_arn | is-empty) { error make --unspanned { msg: "path parameter 'bridgeArn' must be non-empty" } }
@@ -1804,7 +1802,6 @@ export def "remove-bridge-output" [
 #
 # PUT /v1/bridges/{bridgeArn}/outputs/{outputName}
 # operationId: UpdateBridgeOutput
-# --networkOutput shape: {IpAddress?: string, NetworkName?: string, Port?: int, Protocol?: "zixi-push"|"rtp-fec"|"rtp"|"zixi-pull"|"rist"|"st2110-jpegxs"|"cdi"|"srt-listener"|"srt-caller"|"fujitsu-qos"|"udp", Ttl?: int}
 export def "update-bridge-output" [
   bridge_arn: string
   output_name: string
@@ -1825,7 +1822,7 @@ export def "update-bridge-output" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --network-output: record # Update an existing network output. — shape: {IpAddress?: string, NetworkName?: string, Port?: int, Protocol?: "zixi-push"|"rtp-fec"|"rtp"|"zixi-pull"|"rist"|"st2110-jpegxs"|"cdi"|"srt-listener"|"srt-caller"|"fujitsu-qos"|"udp", Ttl?: int}
-]: any -> record<BridgeArn: string, Output: record<FlowOutput: record<FlowArn: string, FlowSourceArn: string, Name: string>, NetworkOutput: record<IpAddress: string, Name: string, NetworkName: string, Port: int, Protocol: string, Ttl: int>>> {
+]: any -> oneof<record<BridgeArn: string, Output: record<FlowOutput: record<FlowArn: string, FlowSourceArn: string, Name: string>, NetworkOutput: record<IpAddress: string, Name: string, NetworkName: string, Port: int, Protocol: string, Ttl: int>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1875,7 +1872,7 @@ export def "remove-bridge-source" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<BridgeArn: string, SourceName: string> {
+]: nothing -> oneof<record<BridgeArn: string, SourceName: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bridge_arn | is-empty) { error make --unspanned { msg: "path parameter 'bridgeArn' must be non-empty" } }
@@ -1903,8 +1900,6 @@ export def "remove-bridge-source" [
 #
 # PUT /v1/bridges/{bridgeArn}/sources/{sourceName}
 # operationId: UpdateBridgeSource
-# --flowSource shape: {FlowArn?: string, FlowVpcInterfaceAttachment?: record}
-# --networkSource shape: {MulticastIp?: string, NetworkName?: string, Port?: int, Protocol?: "zixi-push"|"rtp-fec"|"rtp"|"zixi-pull"|"rist"|"st2110-jpegxs"|"cdi"|"srt-listener"|"srt-caller"|"fujitsu-qos"|"udp"}
 export def "update-bridge-source" [
   bridge_arn: string
   source_name: string
@@ -1926,7 +1921,7 @@ export def "update-bridge-source" [
   --x-amz-signed-headers: string
   --flow-source: record # Update the flow source of the bridge. — shape: {FlowArn?: string, FlowVpcInterfaceAttachment?: record}
   --network-source: record # Update the network source of the bridge. — shape: {MulticastIp?: string, NetworkName?: string, Port?: int, Protocol?: "zixi-push"|"rtp-fec"|"rtp"|"zixi-pull"|"rist"|"st2110-jpegxs"|"cdi"|"srt-listener"|"srt-caller"|"fujitsu-qos"|"udp"}
-]: any -> record<BridgeArn: string, Source: record<FlowSource: record<FlowArn: string, FlowVpcInterfaceAttachment: record, Name: string, OutputArn: string>, NetworkSource: record<MulticastIp: string, Name: string, NetworkName: string, Port: int, Protocol: string>>> {
+]: any -> oneof<record<BridgeArn: string, Source: record<FlowSource: record<FlowArn: string, FlowVpcInterfaceAttachment: record, Name: string, OutputArn: string>, NetworkSource: record<MulticastIp: string, Name: string, NetworkName: string, Port: int, Protocol: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1976,7 +1971,7 @@ export def "remove-flow-media-stream" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<FlowArn: string, MediaStreamName: string> {
+]: nothing -> oneof<record<FlowArn: string, MediaStreamName: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($flow_arn | is-empty) { error make --unspanned { msg: "path parameter 'flowArn' must be non-empty" } }
@@ -2004,7 +1999,6 @@ export def "remove-flow-media-stream" [
 #
 # PUT /v1/flows/{flowArn}/mediaStreams/{mediaStreamName}
 # operationId: UpdateFlowMediaStream
-# --attributes shape: {Fmtp?: record, Lang?: string}
 export def "update-flow-media-stream" [
   flow_arn: string
   media_stream_name: string
@@ -2029,7 +2023,7 @@ export def "update-flow-media-stream" [
   --description: string # Description
   --media-stream-type: string@media-stream-type-completer # The type of media stream.
   --video-format: string # The resolution of the video.
-]: any -> record<FlowArn: string, MediaStream: record<Attributes: record<Fmtp: record, Lang: string>, ClockRate: int, Description: string, Fmt: int, MediaStreamId: int, MediaStreamName: string, MediaStreamType: string, VideoFormat: string>> {
+]: any -> oneof<record<FlowArn: string, MediaStream: record<Attributes: record<Fmtp: record, Lang: string>, ClockRate: int, Description: string, Fmt: int, MediaStreamId: int, MediaStreamName: string, MediaStreamType: string, VideoFormat: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2079,7 +2073,7 @@ export def "remove-flow-output" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<FlowArn: string, OutputArn: string> {
+]: nothing -> oneof<record<FlowArn: string, OutputArn: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($flow_arn | is-empty) { error make --unspanned { msg: "path parameter 'flowArn' must be non-empty" } }
@@ -2107,9 +2101,6 @@ export def "remove-flow-output" [
 #
 # PUT /v1/flows/{flowArn}/outputs/{outputArn}
 # operationId: UpdateFlowOutput
-# --encryption shape: {Algorithm?: "aes128"|"aes192"|"aes256", ConstantInitializationVector?: string, DeviceId?: string, KeyType?: "speke"|"static-key"|"srt-password", Region?: string, ResourceId?: string, RoleArn?: string, SecretArn?: string, Url?: string}
-# --mediaStreamOutputConfigurations item shape: {DestinationConfigurations?: list, EncodingName: "jxsv"|"raw"|"smpte291"|"pcm", EncodingParameters?: record, MediaStreamName: string}
-# --vpcInterfaceAttachment shape: {VpcInterfaceName?: string}
 export def "update-flow-output" [
   flow_arn: string
   output_arn: string
@@ -2144,7 +2135,7 @@ export def "update-flow-output" [
   --smoothing-latency: int # The smoothing latency in milliseconds for RIST, RTP, and RTP-FEC streams.
   --stream-id: string # The stream ID that you want to use for this transport. This parameter applies only to Zixi and SRT caller-based streams.
   --vpc-interface-attachment: record # The settings for attaching a VPC interface to an resource. — shape: {VpcInterfaceName?: string}
-]: any -> record<FlowArn: string, Output: record<DataTransferSubscriberFeePercent: int, Description: string, Destination: string, Encryption: record<Algorithm: string, ConstantInitializationVector: string, DeviceId: string, KeyType: string, Region: string, ResourceId: string, RoleArn: string, SecretArn: string, Url: string>, EntitlementArn: string, ListenerAddress: string, MediaLiveInputArn: string, MediaStreamOutputConfigurations: list<record>, Name: string, OutputArn: string, Port: int, Transport: record<CidrAllowList: list, MaxBitrate: int, MaxLatency: int, MaxSyncBuffer: int, MinLatency: int, Protocol: string, RemoteId: string, SenderControlPort: int, SenderIpAddress: string, SmoothingLatency: int, SourceListenerAddress: string, SourceListenerPort: int, StreamId: string>, VpcInterfaceAttachment: record<VpcInterfaceName: string>, BridgeArn: string, BridgePorts: list<int>>> {
+]: any -> oneof<record<FlowArn: string, Output: record<DataTransferSubscriberFeePercent: int, Description: string, Destination: string, Encryption: record<Algorithm: string, ConstantInitializationVector: string, DeviceId: string, KeyType: string, Region: string, ResourceId: string, RoleArn: string, SecretArn: string, Url: string>, EntitlementArn: string, ListenerAddress: string, MediaLiveInputArn: string, MediaStreamOutputConfigurations: list<record>, Name: string, OutputArn: string, Port: int, Transport: record<CidrAllowList: list, MaxBitrate: int, MaxLatency: int, MaxSyncBuffer: int, MinLatency: int, Protocol: string, RemoteId: string, SenderControlPort: int, SenderIpAddress: string, SmoothingLatency: int, SourceListenerAddress: string, SourceListenerPort: int, StreamId: string>, VpcInterfaceAttachment: record<VpcInterfaceName: string>, BridgeArn: string, BridgePorts: list<int>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2194,7 +2185,7 @@ export def "remove-flow-source" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<FlowArn: string, SourceArn: string> {
+]: nothing -> oneof<record<FlowArn: string, SourceArn: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($flow_arn | is-empty) { error make --unspanned { msg: "path parameter 'flowArn' must be non-empty" } }
@@ -2222,9 +2213,6 @@ export def "remove-flow-source" [
 #
 # PUT /v1/flows/{flowArn}/source/{sourceArn}
 # operationId: UpdateFlowSource
-# --decryption shape: {Algorithm?: "aes128"|"aes192"|"aes256", ConstantInitializationVector?: string, DeviceId?: string, KeyType?: "speke"|"static-key"|"srt-password", Region?: string, ResourceId?: string, RoleArn?: string, SecretArn?: string, Url?: string}
-# --mediaStreamSourceConfigurations item shape: {EncodingName: "jxsv"|"raw"|"smpte291"|"pcm", InputConfigurations?: list, MediaStreamName: string}
-# --gatewayBridgeSource shape: {BridgeArn?: string, VpcInterfaceAttachment?: record}
 export def "update-flow-source" [
   flow_arn: string
   source_arn: string
@@ -2262,7 +2250,7 @@ export def "update-flow-source" [
   --vpc-interface-name: string # The name of the VPC interface to use for this source.
   --whitelist-cidr: string # The range of IP addresses that should be allowed to contribute content to your source. These IP addresses should be in the form of a Classless Inter-Domain Routing (CIDR) block; for example, 10.0.0.0/16.
   --gateway-bridge-source: record # The source configuration for cloud flows receiving a stream from a bridge. — shape: {BridgeArn?: string, VpcInterfaceAttachment?: record}
-]: any -> record<FlowArn: string, Source: record<DataTransferSubscriberFeePercent: int, Decryption: record<Algorithm: string, ConstantInitializationVector: string, DeviceId: string, KeyType: string, Region: string, ResourceId: string, RoleArn: string, SecretArn: string, Url: string>, Description: string, EntitlementArn: string, IngestIp: string, IngestPort: int, MediaStreamSourceConfigurations: list<record>, Name: string, SenderControlPort: int, SenderIpAddress: string, SourceArn: string, Transport: record<CidrAllowList: list, MaxBitrate: int, MaxLatency: int, MaxSyncBuffer: int, MinLatency: int, Protocol: string, RemoteId: string, SenderControlPort: int, SenderIpAddress: string, SmoothingLatency: int, SourceListenerAddress: string, SourceListenerPort: int, StreamId: string>, VpcInterfaceName: string, WhitelistCidr: string, GatewayBridgeSource: record<BridgeArn: string, VpcInterfaceAttachment: record>>> {
+]: any -> oneof<record<FlowArn: string, Source: record<DataTransferSubscriberFeePercent: int, Decryption: record<Algorithm: string, ConstantInitializationVector: string, DeviceId: string, KeyType: string, Region: string, ResourceId: string, RoleArn: string, SecretArn: string, Url: string>, Description: string, EntitlementArn: string, IngestIp: string, IngestPort: int, MediaStreamSourceConfigurations: list<record>, Name: string, SenderControlPort: int, SenderIpAddress: string, SourceArn: string, Transport: record<CidrAllowList: list, MaxBitrate: int, MaxLatency: int, MaxSyncBuffer: int, MinLatency: int, Protocol: string, RemoteId: string, SenderControlPort: int, SenderIpAddress: string, SmoothingLatency: int, SourceListenerAddress: string, SourceListenerPort: int, StreamId: string>, VpcInterfaceName: string, WhitelistCidr: string, GatewayBridgeSource: record<BridgeArn: string, VpcInterfaceAttachment: record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2312,7 +2300,7 @@ export def "remove-flow-vpc-interface" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<FlowArn: string, NonDeletedNetworkInterfaceIds: list<string>, VpcInterfaceName: string> {
+]: nothing -> oneof<record<FlowArn: string, NonDeletedNetworkInterfaceIds: list<string>, VpcInterfaceName: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($flow_arn | is-empty) { error make --unspanned { msg: "path parameter 'flowArn' must be non-empty" } }
@@ -2359,7 +2347,7 @@ export def "revoke-flow-entitlement" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<EntitlementArn: string, FlowArn: string> {
+]: nothing -> oneof<record<EntitlementArn: string, FlowArn: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($flow_arn | is-empty) { error make --unspanned { msg: "path parameter 'flowArn' must be non-empty" } }
@@ -2387,7 +2375,6 @@ export def "revoke-flow-entitlement" [
 #
 # PUT /v1/flows/{flowArn}/entitlements/{entitlementArn}
 # operationId: UpdateFlowEntitlement
-# --encryption shape: {Algorithm?: "aes128"|"aes192"|"aes256", ConstantInitializationVector?: string, DeviceId?: string, KeyType?: "speke"|"static-key"|"srt-password", Region?: string, ResourceId?: string, RoleArn?: string, SecretArn?: string, Url?: string}
 export def "update-flow-entitlement" [
   flow_arn: string
   entitlement_arn: string
@@ -2411,7 +2398,7 @@ export def "update-flow-entitlement" [
   --encryption: record # Information about the encryption of the flow. — shape: {Algorithm?: "aes128"|"aes192"|"aes256", ConstantInitializationVector?: string, DeviceId?: string, KeyType?: "speke"|"static-key"|"srt-password", Region?: string, ResourceId?: string, RoleArn?: string, SecretArn?: string, Url?: string}
   --entitlement-status: string@entitlement-status-completer # An indication of whether you want to enable the entitlement to allow access, or disable it to stop streaming content to the subscriber’s flow temporarily. If you don’t specify the entitlementStatus field in your request, MediaConnect leaves the value unchanged.
   --subscribers: list<string> # The AWS account IDs that you want to share your content with. The receiving accounts (subscribers) will be allowed to create their own flow using your content as the source.
-]: any -> record<Entitlement: record<DataTransferSubscriberFeePercent: int, Description: string, Encryption: record<Algorithm: string, ConstantInitializationVector: string, DeviceId: string, KeyType: string, Region: string, ResourceId: string, RoleArn: string, SecretArn: string, Url: string>, EntitlementArn: string, EntitlementStatus: string, Name: string, Subscribers: list<string>>, FlowArn: string> {
+]: any -> oneof<record<Entitlement: record<DataTransferSubscriberFeePercent: int, Description: string, Encryption: record<Algorithm: string, ConstantInitializationVector: string, DeviceId: string, KeyType: string, Region: string, ResourceId: string, RoleArn: string, SecretArn: string, Url: string>, EntitlementArn: string, EntitlementStatus: string, Name: string, Subscribers: list<string>>, FlowArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2460,7 +2447,7 @@ export def "start-flow" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<FlowArn: string, Status: string> {
+]: nothing -> oneof<record<FlowArn: string, Status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($flow_arn | is-empty) { error make --unspanned { msg: "path parameter 'flowArn' must be non-empty" } }
@@ -2505,7 +2492,7 @@ export def "stop-flow" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<FlowArn: string, Status: string> {
+]: nothing -> oneof<record<FlowArn: string, Status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($flow_arn | is-empty) { error make --unspanned { msg: "path parameter 'flowArn' must be non-empty" } }
@@ -2599,7 +2586,7 @@ export def "update-bridge-state" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   desired_state: string@desired-state-completer
-]: any -> record<BridgeArn: string, DesiredState: string> {
+]: any -> oneof<record<BridgeArn: string, DesiredState: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

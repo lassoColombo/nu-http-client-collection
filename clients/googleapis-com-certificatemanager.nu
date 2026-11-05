@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -122,9 +146,9 @@ def scope-completer [] { ["DEFAULT" "EDGE_CACHE"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "certificatemanager-projects-locations-trust-configs-delete" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["certificatemanager-projects-locations-trust-configs-delete" "certificatemanager-projects-locations-trust-configs-get" "certificatemanager-projects-locations-trust-configs-patch" "certificatemanager-projects-locations-list" "certificatemanager-projects-locations-operations-list" "certificatemanager-projects-locations-operations-cancel" "certificatemanager-projects-locations-certificate-issuance-configs-list" "certificatemanager-projects-locations-certificate-issuance-configs-create" "certificatemanager-projects-locations-certificate-maps-certificate-map-entries-list" "certificatemanager-projects-locations-certificate-maps-certificate-map-entries-create" "certificatemanager-projects-locations-certificate-maps-list" "certificatemanager-projects-locations-certificate-maps-create" "certificatemanager-projects-locations-certificates-list" "certificatemanager-projects-locations-certificates-create" "certificatemanager-projects-locations-dns-authorizations-list" "certificatemanager-projects-locations-dns-authorizations-create" "certificatemanager-projects-locations-trust-configs-list" "certificatemanager-projects-locations-trust-configs-create" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -169,7 +193,7 @@ export def "certificatemanager-projects-locations-trust-configs-delete" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --etag: string # The current etag of the TrustConfig. If an etag is provided and does not match the current etag of the resource, deletion will be blocked and an ABORTED error will be returned.
-]: nothing -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: nothing -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -217,7 +241,7 @@ export def "certificatemanager-projects-locations-trust-configs-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<createTime: string, description: string, etag: string, labels: record, name: string, trustStores: table<intermediateCas: list, trustAnchors: list>, updateTime: string> {
+]: nothing -> oneof<record<createTime: string, description: string, etag: string, labels: record, name: string, trustStores: table<intermediateCas: list, trustAnchors: list>, updateTime: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -243,7 +267,6 @@ export def "certificatemanager-projects-locations-trust-configs-get" [
 #
 # PATCH /v1/{name}
 # operationId: certificatemanager.projects.locations.trustConfigs.patch
-# --trustStores item shape: {intermediateCas?: list, trustAnchors?: list}
 export def "certificatemanager-projects-locations-trust-configs-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -272,7 +295,7 @@ export def "certificatemanager-projects-locations-trust-configs-patch" [
   --labels: record # Set of labels associated with a TrustConfig.
   --body-name: string # A user-defined name of the trust config. TrustConfig names must be unique globally and match pattern `projects/*/locations/*/trustConfigs/*`.
   --trust-stores: list # Set of trust stores to perform validation against. This field is supported when TrustConfig is configured with Load Balancers, currently not supported for SPIFFE certificate validation. Only one TrustStore specified is currently allowed. — item shape: {intermediateCas?: list, trustAnchors?: list}
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -326,7 +349,7 @@ export def "certificatemanager-projects-locations-list" [
   --filter: string # A filter to narrow down results to a preferred subset. The filtering language accepts strings like `"displayName=tokyo"`, and is documented in more detail in [AIP-160](https://google.aip.dev/160).
   --page-size: int # The maximum number of results to return. If not set, the service selects a default.
   --page-token: string # A page token received from the `next_page_token` field in the response. Send that page token to receive the subsequent page.
-]: nothing -> record<locations: table<displayName: string, labels: record, locationId: string, metadata: record, name: string>, nextPageToken: string> {
+]: nothing -> oneof<record<locations: table<displayName: string, labels: record, locationId: string, metadata: record, name: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -377,7 +400,7 @@ export def "certificatemanager-projects-locations-operations-list" [
   --filter: string # The standard list filter.
   --page-size: int # The standard list page size.
   --page-token: string # The standard list page token.
-]: nothing -> record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>> {
+]: nothing -> oneof<record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -426,7 +449,7 @@ export def "certificatemanager-projects-locations-operations-cancel" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -481,7 +504,7 @@ export def "certificatemanager-projects-locations-certificate-issuance-configs-l
   --order-by: string # A list of Certificate Config field names used to specify the order of the returned results. The default sorting order is ascending. To specify descending order for a field, add a suffix " desc".
   --page-size: int # Maximum number of certificate configs to return per call.
   --page-token: string # The value returned by the last `ListCertificateIssuanceConfigsResponse`. Indicates that this is a continuation of a prior `ListCertificateIssuanceConfigs` call, and that the system should return the next page of data.
-]: nothing -> record<certificateIssuanceConfigs: table<certificateAuthorityConfig: record, createTime: string, description: string, keyAlgorithm: string, labels: record, lifetime: string, name: string, rotationWindowPercentage: int, updateTime: string>, nextPageToken: string, unreachable: list<string>> {
+]: nothing -> oneof<record<certificateIssuanceConfigs: table<certificateAuthorityConfig: record, createTime: string, description: string, keyAlgorithm: string, labels: record, lifetime: string, name: string, rotationWindowPercentage: int, updateTime: string>, nextPageToken: string, unreachable: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -507,7 +530,6 @@ export def "certificatemanager-projects-locations-certificate-issuance-configs-l
 #
 # POST /v1/{parent}/certificateIssuanceConfigs
 # operationId: certificatemanager.projects.locations.certificateIssuanceConfigs.create
-# --certificateAuthorityConfig shape: {certificateAuthorityServiceConfig?: record}
 export def "certificatemanager-projects-locations-certificate-issuance-configs-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -538,7 +560,7 @@ export def "certificatemanager-projects-locations-certificate-issuance-configs-c
   --lifetime: string # Required. Workload certificate lifetime requested. (format: google-duration)
   --name: string # A user-defined name of the certificate issuance config. CertificateIssuanceConfig names must be unique globally and match pattern `projects/*/locations/*/certificateIssuanceConfigs/*`.
   --rotation-window-percentage: int # Required. Specifies the percentage of elapsed time of the certificate lifetime to wait before renewing the certificate. Must be a number between 1-99, inclusive. (format: int32)
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -593,7 +615,7 @@ export def "certificatemanager-projects-locations-certificate-maps-certificate-m
   --order-by: string # A list of Certificate Map Entry field names used to specify the order of the returned results. The default sorting order is ascending. To specify descending order for a field, add a suffix " desc".
   --page-size: int # Maximum number of certificate map entries to return. The service may return fewer than this value. If unspecified, at most 50 certificate map entries will be returned. The maximum value is 1000; values above 1000 will be coerced to 1000.
   --page-token: string # The value returned by the last `ListCertificateMapEntriesResponse`. Indicates that this is a continuation of a prior `ListCertificateMapEntries` call, and that the system should return the next page of data.
-]: nothing -> record<certificateMapEntries: table<certificates: list, createTime: string, description: string, hostname: string, labels: record, matcher: string, name: string, state: string, updateTime: string>, nextPageToken: string, unreachable: list<string>> {
+]: nothing -> oneof<record<certificateMapEntries: table<certificates: list, createTime: string, description: string, hostname: string, labels: record, matcher: string, name: string, state: string, updateTime: string>, nextPageToken: string, unreachable: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -648,7 +670,7 @@ export def "certificatemanager-projects-locations-certificate-maps-certificate-m
   --labels: record # Set of labels associated with a Certificate Map Entry.
   --matcher: string@matcher-completer # A predefined matcher for particular cases, other than SNI selection.
   --name: string # A user-defined name of the Certificate Map Entry. Certificate Map Entry names must be unique globally and match pattern `projects/*/locations/*/certificateMaps/*/certificateMapEntries/*`.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -703,7 +725,7 @@ export def "certificatemanager-projects-locations-certificate-maps-list" [
   --order-by: string # A list of Certificate Map field names used to specify the order of the returned results. The default sorting order is ascending. To specify descending order for a field, add a suffix " desc".
   --page-size: int # Maximum number of certificate maps to return per call.
   --page-token: string # The value returned by the last `ListCertificateMapsResponse`. Indicates that this is a continuation of a prior `ListCertificateMaps` call, and that the system should return the next page of data.
-]: nothing -> record<certificateMaps: table<createTime: string, description: string, gclbTargets: list, labels: record, name: string, updateTime: string>, nextPageToken: string, unreachable: list<string>> {
+]: nothing -> oneof<record<certificateMaps: table<createTime: string, description: string, gclbTargets: list, labels: record, name: string, updateTime: string>, nextPageToken: string, unreachable: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -755,7 +777,7 @@ export def "certificatemanager-projects-locations-certificate-maps-create" [
   --description: string # One or more paragraphs of text description of a certificate map.
   --labels: record # Set of labels associated with a Certificate Map.
   --name: string # A user-defined name of the Certificate Map. Certificate Map names must be unique globally and match pattern `projects/*/locations/*/certificateMaps/*`.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -810,7 +832,7 @@ export def "certificatemanager-projects-locations-certificates-list" [
   --order-by: string # A list of Certificate field names used to specify the order of the returned results. The default sorting order is ascending. To specify descending order for a field, add a suffix " desc".
   --page-size: int # Maximum number of certificates to return per call.
   --page-token: string # The value returned by the last `ListCertificatesResponse`. Indicates that this is a continuation of a prior `ListCertificates` call, and that the system should return the next page of data.
-]: nothing -> record<certificates: table<createTime: string, description: string, expireTime: string, labels: record, managed: record, name: string, pemCertificate: string, sanDnsnames: list, scope: string, selfManaged: record, updateTime: string>, nextPageToken: string, unreachable: list<string>> {
+]: nothing -> oneof<record<certificates: table<createTime: string, description: string, expireTime: string, labels: record, managed: record, name: string, pemCertificate: string, sanDnsnames: list, scope: string, selfManaged: record, updateTime: string>, nextPageToken: string, unreachable: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -836,8 +858,6 @@ export def "certificatemanager-projects-locations-certificates-list" [
 #
 # POST /v1/{parent}/certificates
 # operationId: certificatemanager.projects.locations.certificates.create
-# --managed shape: {dnsAuthorizations?: list<string>, domains?: list<string>, issuanceConfig?: string, provisioningIssue?: record}
-# --selfManaged shape: {pemCertificate?: string, pemPrivateKey?: string}
 export def "certificatemanager-projects-locations-certificates-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -867,7 +887,7 @@ export def "certificatemanager-projects-locations-certificates-create" [
   --name: string # A user-defined name of the certificate. Certificate names must be unique globally and match pattern `projects/*/locations/*/certificates/*`.
   --scope: string@scope-completer # Immutable. The scope of the certificate.
   --self-managed: record # Certificate data for a SelfManaged Certificate. SelfManaged Certificates are uploaded by the user. Updating such certificates before they expire remains the user's responsibility. — shape: {pemCertificate?: string, pemPrivateKey?: string}
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -922,7 +942,7 @@ export def "certificatemanager-projects-locations-dns-authorizations-list" [
   --order-by: string # A list of Dns Authorization field names used to specify the order of the returned results. The default sorting order is ascending. To specify descending order for a field, add a suffix " desc".
   --page-size: int # Maximum number of dns authorizations to return per call.
   --page-token: string # The value returned by the last `ListDnsAuthorizationsResponse`. Indicates that this is a continuation of a prior `ListDnsAuthorizations` call, and that the system should return the next page of data.
-]: nothing -> record<dnsAuthorizations: table<createTime: string, description: string, dnsResourceRecord: record, domain: string, labels: record, name: string, updateTime: string>, nextPageToken: string, unreachable: list<string>> {
+]: nothing -> oneof<record<dnsAuthorizations: table<createTime: string, description: string, dnsResourceRecord: record, domain: string, labels: record, name: string, updateTime: string>, nextPageToken: string, unreachable: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -976,7 +996,7 @@ export def "certificatemanager-projects-locations-dns-authorizations-create" [
   --domain: string # Required. Immutable. A domain that is being authorized. A DnsAuthorization resource covers a single domain and its wildcard, e.g. authorization for `example.com` can be used to issue certificates for `example.com` and `*.example.com`.
   --labels: record # Set of labels associated with a DnsAuthorization.
   --name: string # A user-defined name of the dns authorization. DnsAuthorization names must be unique globally and match pattern `projects/*/locations/*/dnsAuthorizations/*`.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1031,7 +1051,7 @@ export def "certificatemanager-projects-locations-trust-configs-list" [
   --order-by: string # A list of TrustConfig field names used to specify the order of the returned results. The default sorting order is ascending. To specify descending order for a field, add a suffix " desc".
   --page-size: int # Maximum number of TrustConfigs to return per call.
   --page-token: string # The value returned by the last `ListTrustConfigsResponse`. Indicates that this is a continuation of a prior `ListTrustConfigs` call, and that the system should return the next page of data.
-]: nothing -> record<nextPageToken: string, trustConfigs: table<createTime: string, description: string, etag: string, labels: record, name: string, trustStores: list, updateTime: string>, unreachable: list<string>> {
+]: nothing -> oneof<record<nextPageToken: string, trustConfigs: table<createTime: string, description: string, etag: string, labels: record, name: string, trustStores: list, updateTime: string>, unreachable: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1057,7 +1077,6 @@ export def "certificatemanager-projects-locations-trust-configs-list" [
 #
 # POST /v1/{parent}/trustConfigs
 # operationId: certificatemanager.projects.locations.trustConfigs.create
-# --trustStores item shape: {intermediateCas?: list, trustAnchors?: list}
 export def "certificatemanager-projects-locations-trust-configs-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1086,7 +1105,7 @@ export def "certificatemanager-projects-locations-trust-configs-create" [
   --labels: record # Set of labels associated with a TrustConfig.
   --name: string # A user-defined name of the trust config. TrustConfig names must be unique globally and match pattern `projects/*/locations/*/trustConfigs/*`.
   --trust-stores: list # Set of trust stores to perform validation against. This field is supported when TrustConfig is configured with Load Balancers, currently not supported for SPIFFE certificate validation. Only one TrustStore specified is currently allowed. — item shape: {intermediateCas?: list, trustAnchors?: list}
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

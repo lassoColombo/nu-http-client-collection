@@ -14,27 +14,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "x-rapidapi-host" => { {scheme: $scheme, headers: {"x-rapidapi-host": $token_val}, query: "", location: "header"} }
     "x-rapidapi-key" => { {scheme: $scheme, headers: {"x-rapidapi-key": $token_val}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -42,8 +51,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -54,7 +68,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -89,7 +112,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["https://medium2.p.rapidapi.com"] }
@@ -99,9 +123,9 @@ def auth-scheme-completer [] { ["x-rapidapi-host" "x-rapidapi-key"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-op" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-op" "get-article-article-id" "get-article-article-id-content" "get-article-article-id-fans" "get-article-article-id-markdown" "get-article-article-id-related" "get-article-article-id-responses" "get-latestposts-topic-slug" "get-list-list-id" "get-list-list-id-articles" "get-list-list-id-responses" "get-publication-id-for-publication-slug" "get-publication-publication-id" "get-publication-publication-id-articles" "get-publication-publication-id-newsletter" "get-related-tags-tag" "get-search-articles-query-query" "get-search-lists-query-query" "get-search-publications-query-query" "get-search-tags-query-query" "get-search-users-query-query" "get-top-writer-topic-slug" "get-topfeeds-tag-mode" "get-user-id-for-username" "get-user-user-id" "get-user-user-id-articles" "get-user-user-id-followers" "get-user-user-id-following" "get-user-user-id-interests" "get-user-user-id-lists" "get-user-user-id-publications" "get-user-user-id-top-articles" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -132,7 +156,7 @@ export def "get-op" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<developer: string, documentation: string, email: string, linkedin: string, name: string, twitter: string, website: string> {
+]: nothing -> oneof<record<developer: string, documentation: string, email: string, linkedin: string, name: string, twitter: string, website: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/" $auth.query)
@@ -166,7 +190,7 @@ export def "get-article-article-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<author: string, claps: int, id: string, image_url: string, is_locked: bool, is_series: bool, lang: string, last_modified_at: string, publication_id: string, published_at: string, reading_time: float, responses_count: int, subtitle: string, tags: list<string>, title: string, topics: list<string>, url: string, voters: int, word_count: int> {
+]: nothing -> oneof<record<author: string, claps: int, id: string, image_url: string, is_locked: bool, is_series: bool, lang: string, last_modified_at: string, publication_id: string, published_at: string, reading_time: float, responses_count: int, subtitle: string, tags: list<string>, title: string, topics: list<string>, url: string, voters: int, word_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
@@ -201,7 +225,7 @@ export def "get-article-article-id-content" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<content: string> {
+]: nothing -> oneof<record<content: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
@@ -236,7 +260,7 @@ export def "get-article-article-id-fans" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<article_id: string, count: int, voters: list<string>> {
+]: nothing -> oneof<record<article_id: string, count: int, voters: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
@@ -271,7 +295,7 @@ export def "get-article-article-id-markdown" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<markdown: string> {
+]: nothing -> oneof<record<markdown: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
@@ -306,7 +330,7 @@ export def "get-article-article-id-related" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<id: string, related_articles: list<string>> {
+]: nothing -> oneof<record<id: string, related_articles: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
@@ -341,7 +365,7 @@ export def "get-article-article-id-responses" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<id: string, responses: list<string>> {
+]: nothing -> oneof<record<id: string, responses: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
@@ -376,7 +400,7 @@ export def "get-latestposts-topic-slug" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<latestposts: list<string>> {
+]: nothing -> oneof<record<latestposts: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
   if ($topic_slug | is-empty) { error make --unspanned { msg: "path parameter 'topic_slug' must be non-empty" } }
@@ -411,7 +435,7 @@ export def "get-list-list-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<author: string, claps: int, count: int, created_at: string, description: string, id: string, last_item_inserted_at: string, name: string, responses_count: int, thumbnail: string, voters: int> {
+]: nothing -> oneof<record<author: string, claps: int, count: int, created_at: string, description: string, id: string, last_item_inserted_at: string, name: string, responses_count: int, thumbnail: string, voters: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
   if ($list_id | is-empty) { error make --unspanned { msg: "path parameter 'list_id' must be non-empty" } }
@@ -446,7 +470,7 @@ export def "get-list-list-id-articles" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<id: string, list_articles: list<string>> {
+]: nothing -> oneof<record<id: string, list_articles: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
   if ($list_id | is-empty) { error make --unspanned { msg: "path parameter 'list_id' must be non-empty" } }
@@ -481,7 +505,7 @@ export def "get-list-list-id-responses" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<id: string, responses: list<string>> {
+]: nothing -> oneof<record<id: string, responses: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
   if ($list_id | is-empty) { error make --unspanned { msg: "path parameter 'list_id' must be non-empty" } }
@@ -516,7 +540,7 @@ export def "get-publication-id-for-publication-slug" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<publication_id: string, publication_slug: string> {
+]: nothing -> oneof<record<publication_id: string, publication_slug: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
   if ($publication_slug | is-empty) { error make --unspanned { msg: "path parameter 'publication_slug' must be non-empty" } }
@@ -551,7 +575,7 @@ export def "get-publication-publication-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<creator: string, description: string, editors: list<string>, facebook_pagename: string, followers: int, id: string, instagram_username: string, name: string, slug: string, tagline: string, tags: list<string>, twitter_username: string, url: string> {
+]: nothing -> oneof<record<creator: string, description: string, editors: list<string>, facebook_pagename: string, followers: int, id: string, instagram_username: string, name: string, slug: string, tagline: string, tags: list<string>, twitter_username: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
   if ($publication_id | is-empty) { error make --unspanned { msg: "path parameter 'publication_id' must be non-empty" } }
@@ -587,7 +611,7 @@ export def "get-publication-publication-id-articles" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --from: string # To get the articles before specified date and time. (e.g. 2023-01-31T13:10:00)
-]: nothing -> record<publication_articles: list<string>> {
+]: nothing -> oneof<record<publication_articles: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
   if ($publication_id | is-empty) { error make --unspanned { msg: "path parameter 'publication_id' must be non-empty" } }
@@ -623,7 +647,7 @@ export def "get-publication-publication-id-newsletter" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<creator_id: string, description: string, id: string, image: string, name: string, slug: string, subscribers: int> {
+]: nothing -> oneof<record<creator_id: string, description: string, id: string, image: string, name: string, slug: string, subscribers: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
   if ($publication_id | is-empty) { error make --unspanned { msg: "path parameter 'publication_id' must be non-empty" } }
@@ -658,7 +682,7 @@ export def "get-related-tags-tag" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<given_tag: string, related_tags: list<string>> {
+]: nothing -> oneof<record<given_tag: string, related_tags: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
   if ($tag | is-empty) { error make --unspanned { msg: "path parameter 'tag' must be non-empty" } }
@@ -693,7 +717,7 @@ export def "get-search-articles-query-query" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # Search query (required, e.g. startup)
-]: nothing -> record<articles: list<string>, search_query: string> {
+]: nothing -> oneof<record<articles: list<string>, search_query: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
   if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
@@ -729,7 +753,7 @@ export def "get-search-lists-query-query" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # Search query (required, e.g. artificial intelligence)
-]: nothing -> record<lists: list<string>, search_query: string> {
+]: nothing -> oneof<record<lists: list<string>, search_query: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
   if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
@@ -765,7 +789,7 @@ export def "get-search-publications-query-query" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # Search query (required, e.g. mental health)
-]: nothing -> record<publications: list<string>, search_query: string> {
+]: nothing -> oneof<record<publications: list<string>, search_query: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
   if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
@@ -801,7 +825,7 @@ export def "get-search-tags-query-query" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # Search query (required, e.g. blockchain)
-]: nothing -> record<search_query: string, tags: list<string>> {
+]: nothing -> oneof<record<search_query: string, tags: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
   if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
@@ -837,7 +861,7 @@ export def "get-search-users-query-query" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # Search query (required, e.g. data engineer)
-]: nothing -> record<search_query: string, users: list<string>> {
+]: nothing -> oneof<record<search_query: string, users: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
   if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
@@ -874,7 +898,7 @@ export def "get-top-writer-topic-slug" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --count: int # Limits the number of `article_ids` in the result. (e.g. 10)
-]: nothing -> record<top_writers: list<string>> {
+]: nothing -> oneof<record<top_writers: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
   if ($topic_slug | is-empty) { error make --unspanned { msg: "path parameter 'topic_slug' must be non-empty" } }
@@ -913,7 +937,7 @@ export def "get-topfeeds-tag-mode" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --after: int # To get the subsequent top feeds. (`after` < 250) (default: 0, e.g. 10)
   --count: int # To limit the number of top feeds. (`count` < 25) (default: 25, e.g. 20)
-]: nothing -> record<topfeeds: list<string>> {
+]: nothing -> oneof<record<topfeeds: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
   if ($tag | is-empty) { error make --unspanned { msg: "path parameter 'tag' must be non-empty" } }
@@ -950,7 +974,7 @@ export def "get-user-id-for-username" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<id: string> {
+]: nothing -> oneof<record<id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
@@ -985,7 +1009,7 @@ export def "get-user-user-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<allow_notes: bool, bio: string, followers_count: int, following_count: int, fullname: string, has_list: bool, id: string, image_url: string, is_book_author: bool, is_suspended: bool, is_writer_program_enrolled: bool, medium_member_at: string, top_writer_in: list<string>, twitter_username: string, username: string> {
+]: nothing -> oneof<record<allow_notes: bool, bio: string, followers_count: int, following_count: int, fullname: string, has_list: bool, id: string, image_url: string, is_book_author: bool, is_suspended: bool, is_writer_program_enrolled: bool, medium_member_at: string, top_writer_in: list<string>, twitter_username: string, username: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -1020,7 +1044,7 @@ export def "get-user-user-id-articles" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<associated_articles: list<string>> {
+]: nothing -> oneof<record<associated_articles: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -1056,7 +1080,7 @@ export def "get-user-user-id-followers" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --count: int # To limit the number of results. (count < 1500) (e.g. 10)
-]: nothing -> record<followers: list<string>, id: string> {
+]: nothing -> oneof<record<followers: list<string>, id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -1093,7 +1117,7 @@ export def "get-user-user-id-following" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --count: int # To limit the number of results. (count < 1500) (e.g. 10)
-]: nothing -> record<following: list<string>, id: string> {
+]: nothing -> oneof<record<following: list<string>, id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -1129,7 +1153,7 @@ export def "get-user-user-id-interests" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<tags_followed: list<string>> {
+]: nothing -> oneof<record<tags_followed: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -1164,7 +1188,7 @@ export def "get-user-user-id-lists" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<lists: list<string>, user_id: string> {
+]: nothing -> oneof<record<lists: list<string>, user_id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -1199,7 +1223,7 @@ export def "get-user-user-id-publications" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<publications: list<string>, user_id: string> {
+]: nothing -> oneof<record<publications: list<string>, user_id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -1234,7 +1258,7 @@ export def "get-user-user-id-top-articles" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<associated_articles: list<string>> {
+]: nothing -> oneof<record<associated_articles: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }

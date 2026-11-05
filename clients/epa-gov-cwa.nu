@@ -12,27 +12,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -40,8 +49,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -52,7 +66,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -87,7 +110,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -159,9 +183,9 @@ def descending-completer [] { ["N" "Y"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-cwa-rest-services-get-download" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-cwa-rest-services-get-download" "post-cwa-rest-services-get-download" "get-cwa-rest-services-get-facilities" "post-cwa-rest-services-get-facilities" "get-cwa-rest-services-get-facility-info" "post-cwa-rest-services-get-facility-info" "get-cwa-rest-services-get-geojson" "post-cwa-rest-services-get-geojson" "get-cwa-rest-services-get-info-clusters" "post-cwa-rest-services-get-info-clusters" "get-cwa-rest-services-get-map" "post-cwa-rest-services-get-map" "get-cwa-rest-services-get-qid" "post-cwa-rest-services-get-qid" "get-cwa-rest-services-metadata" "post-cwa-rest-services-metadata" "get-rest-lookups-bp-tribes" "post-rest-lookups-bp-tribes" "get-rest-lookups-cwa-parameters" "post-rest-lookups-cwa-parameters" "get-rest-lookups-cwa-pollutants" "post-rest-lookups-cwa-pollutants" "get-rest-lookups-federal-agencies" "post-rest-lookups-federal-agencies" "get-rest-lookups-icis-inspection-types" "post-rest-lookups-icis-inspection-types" "get-rest-lookups-icis-law-sections" "post-rest-lookups-icis-law-sections" "get-rest-lookups-naics-codes" "post-rest-lookups-naics-codes" "get-rest-lookups-npdes-parameters" "post-rest-lookups-npdes-parameters" "get-rest-lookups-wbd-code-lu" "post-rest-lookups-wbd-code-lu" "get-rest-lookups-wbd-name-lu" "post-rest-lookups-wbd-name-lu" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -246,7 +270,7 @@ export def "post-cwa-rest-services-get-download" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -423,7 +447,7 @@ export def "get-cwa-rest-services-get-facilities" [
   --p-e90-count: float # Number of E90 Exceedances. Identifies water permits with a number of E90 (Effluient Exceedances) >= the value provided for the last number of years provided by the p_e90_years value.
   --p-e90-years: float # Number of years for the p_e90_count search. Identified the past number of years to be used for the p_e90_count search.
   --p-psc: string # Point Source Category.
-]: nothing -> record<Results: record<BadSystemIDs: string, BioCVRows: string, BioV3Rows: string, CVRows: string, FEARows: string, Facilities: list<record>, INSPRows: string, IndianCountryRows: string, InfFEARows: string, MapOutput: record<IconBaseURL: string, MapData: list, PopUpBaseURL: string, QueryID: string>, Message: string, PageNo: string, QueryID: string, QueryRows: string, SVRows: string, TotalPenalties: string, V3Rows: string, Version: string, VioLast4QRows: string>> {
+]: nothing -> oneof<record<Results: record<BadSystemIDs: string, BioCVRows: string, BioV3Rows: string, CVRows: string, FEARows: string, Facilities: list<record>, INSPRows: string, IndianCountryRows: string, InfFEARows: string, MapOutput: record<IconBaseURL: string, MapData: list, PopUpBaseURL: string, QueryID: string>, Message: string, PageNo: string, QueryID: string, QueryRows: string, SVRows: string, TotalPenalties: string, V3Rows: string, Version: string, VioLast4QRows: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_fn" $p_fn "scalar") (serialize-qp "p_sa" $p_sa "scalar") (serialize-qp "p_sa1" $p_sa1 "scalar") (serialize-qp "p_ct" $p_ct "scalar") (serialize-qp "p_co" $p_co "scalar") (serialize-qp "p_fips" $p_fips "scalar") (serialize-qp "p_st" $p_st "scalar") (serialize-qp "p_zip" $p_zip "scalar") (serialize-qp "p_frs" $p_frs "scalar") (serialize-qp "p_reg" $p_reg "scalar") (serialize-qp "p_sic" $p_sic "scalar") (serialize-qp "p_ncs" $p_ncs "scalar") (serialize-qp "p_pen" $p_pen "scalar") (serialize-qp "p_c1lat" $p_c1lat "scalar") (serialize-qp "p_c1lon" $p_c1lon "scalar") (serialize-qp "p_c2lat" $p_c2lat "scalar") (serialize-qp "p_c2lon" $p_c2lon "scalar") (serialize-qp "p_usmex" $p_usmex "scalar") (serialize-qp "p_sic2" $p_sic2 "scalar") (serialize-qp "p_sic4" $p_sic4 "scalar") (serialize-qp "p_fa" $p_fa "scalar") (serialize-qp "p_ff" $p_ff "scalar") (serialize-qp "p_act" $p_act "scalar") (serialize-qp "p_maj" $p_maj "scalar") (serialize-qp "p_mact" $p_mact "scalar") (serialize-qp "p_fea" $p_fea "scalar") (serialize-qp "p_feay" $p_feay "scalar") (serialize-qp "p_feaa" $p_feaa "scalar") (serialize-qp "p_iea" $p_iea "scalar") (serialize-qp "p_ieay" $p_ieay "scalar") (serialize-qp "p_ieaa" $p_ieaa "scalar") (serialize-qp "p_qiv" $p_qiv "scalar") (serialize-qp "p_iv" $p_iv "scalar") (serialize-qp "p_impw" $p_impw "scalar") (serialize-qp "p_imp_cau_grp" $p_imp_cau_grp "scalar") (serialize-qp "p_imp_pol" $p_imp_pol "scalar") (serialize-qp "p_trep" $p_trep "scalar") (serialize-qp "p_pm" $p_pm "scalar") (serialize-qp "p_pd" $p_pd "scalar") (serialize-qp "p_ico" $p_ico "scalar") (serialize-qp "p_huc" $p_huc "scalar") (serialize-qp "p_pid" $p_pid "scalar") (serialize-qp "p_med" $p_med "scalar") (serialize-qp "p_ysl" $p_ysl "scalar") (serialize-qp "p_ysly" $p_ysly "scalar") (serialize-qp "p_ysla" $p_ysla "scalar") (serialize-qp "p_qs" $p_qs "scalar") (serialize-qp "p_sfs" $p_sfs "scalar") (serialize-qp "p_tribeid" $p_tribeid "scalar") (serialize-qp "p_tribename" $p_tribename "scalar") (serialize-qp "p_tribedist" $p_tribedist "scalar") (serialize-qp "p_pstat" $p_pstat "scalar") (serialize-qp "p_ptype" $p_ptype "scalar") (serialize-qp "p_pcomp" $p_pcomp "scalar") (serialize-qp "p_plimits" $p_plimits "scalar") (serialize-qp "p_pcss" $p_pcss "scalar") (serialize-qp "p_pexp" $p_pexp "scalar") (serialize-qp "p_owop" $p_owop "scalar") (serialize-qp "p_ipfti" $p_ipfti "scalar") (serialize-qp "p_agoo" $p_agoo "scalar") (serialize-qp "p_idt1" $p_idt1 "scalar") (serialize-qp "p_idt2" $p_idt2 "scalar") (serialize-qp "p_pityp" $p_pityp "scalar") (serialize-qp "p_pfead1" $p_pfead1 "scalar") (serialize-qp "p_pfead2" $p_pfead2 "scalar") (serialize-qp "p_pfeat" $p_pfeat "scalar") (serialize-qp "p_pccs" $p_pccs "scalar") (serialize-qp "p_pexcd" $p_pexcd "scalar") (serialize-qp "p_psncq" $p_psncq "scalar") (serialize-qp "p_pctrack" $p_pctrack "scalar") (serialize-qp "p_dwd" $p_dwd "scalar") (serialize-qp "p_pt" $p_pt "scalar") (serialize-qp "p_pdwdist" $p_pdwdist "scalar") (serialize-qp "p_pswdpc" $p_pswdpc "scalar") (serialize-qp "p_pswdmp" $p_pswdmp "scalar") (serialize-qp "p_pswpol" $p_pswpol "scalar") (serialize-qp "p_pswcas" $p_pswcas "scalar") (serialize-qp "p_pswparam" $p_pswparam "scalar") (serialize-qp "p_pswvio" $p_pswvio "scalar") (serialize-qp "p_wbd" $p_wbd "scalar") (serialize-qp "p_radwbd" $p_radwbd "scalar") (serialize-qp "p_frswbd" $p_frswbd "scalar") (serialize-qp "p_fntype" $p_fntype "scalar") (serialize-qp "p_pidall" $p_pidall "scalar") (serialize-qp "p_months_last_dmr" $p_months_last_dmr "scalar") (serialize-qp "p_last_dmr_within" $p_last_dmr_within "scalar") (serialize-qp "p_indsw" $p_indsw "scalar") (serialize-qp "p_msgp_ptype" $p_msgp_ptype "scalar") (serialize-qp "p_mon_type" $p_mon_type "scalar") (serialize-qp "p_iagency" $p_iagency "scalar") (serialize-qp "p_permitting_agency" $p_permitting_agency "scalar") (serialize-qp "p_isws" $p_isws "scalar") (serialize-qp "p_iswss" $p_iswss "scalar") (serialize-qp "p_iswssID" $p_iswss_id "scalar") (serialize-qp "p_ds1" $p_ds1 "scalar") (serialize-qp "p_ds2" $p_ds2 "scalar") (serialize-qp "p_da1" $p_da1 "scalar") (serialize-qp "p_da2" $p_da2 "scalar") (serialize-qp "p_MS4" $p_ms4 "scalar") (serialize-qp "p_ooFN" $p_oo_fn "scalar") (serialize-qp "p_ooFNtype" $p_oo_f_ntype "scalar") (serialize-qp "p_ooSA" $p_oo_sa "scalar") (serialize-qp "p_ooSA1" $p_oo_sa1 "scalar") (serialize-qp "p_ooCt" $p_oo_ct "scalar") (serialize-qp "p_ooSt" $p_oo_st "scalar") (serialize-qp "p_ooZip" $p_oo_zip "scalar") (serialize-qp "p_fac_ico" $p_fac_ico "scalar") (serialize-qp "p_icoo" $p_icoo "scalar") (serialize-qp "p_fac_icos" $p_fac_icos "scalar") (serialize-qp "p_ejscreen" $p_ejscreen "scalar") (serialize-qp "p_alrexceed" $p_alrexceed "scalar") (serialize-qp "p_limit_addr" $p_limit_addr "scalar") (serialize-qp "p_lat" $p_lat "scalar") (serialize-qp "p_long" $p_long "scalar") (serialize-qp "p_radius" $p_radius "scalar") (serialize-qp "p_ejscreen_over80cnt" $p_ejscreen_over80cnt "scalar") (serialize-qp "p_bio_flag" $p_bio_flag "scalar") (serialize-qp "p_bio_fac_type" $p_bio_fac_type "scalar") (serialize-qp "p_bio_trtmnt_procs" $p_bio_trtmnt_procs "scalar") (serialize-qp "p_bio_analy_method_catgry" $p_bio_analy_method_catgry "scalar") (serialize-qp "p_bio_total_volume_amt" $p_bio_total_volume_amt "scalar") (serialize-qp "p_bio_mgmt_prctce_type" $p_bio_mgmt_prctce_type "scalar") (serialize-qp "p_bio_mgmt_prctce_stype" $p_bio_mgmt_prctce_stype "scalar") (serialize-qp "p_bio_mgmt_prctce_handler" $p_bio_mgmt_prctce_handler "scalar") (serialize-qp "p_bio_mgmt_container" $p_bio_mgmt_container "scalar") (serialize-qp "p_bio_mgmt_pathogen" $p_bio_mgmt_pathogen "scalar") (serialize-qp "p_bio_mgmt_pathred" $p_bio_mgmt_pathred "scalar") (serialize-qp "p_bio_mgmt_vector" $p_bio_mgmt_vector "scalar") (serialize-qp "p_bio_mgmt_def_category" $p_bio_mgmt_def_category "scalar") (serialize-qp "p_bio_mgmt_deficiencies" $p_bio_mgmt_deficiencies "scalar") (serialize-qp "p_bio_vio_code" $p_bio_vio_code "scalar") (serialize-qp "p_bio_current_vio" $p_bio_current_vio "scalar") (serialize-qp "p_bio_qtrs_in_vio" $p_bio_qtrs_in_vio "scalar") (serialize-qp "p_bio_rpt_year" $p_bio_rpt_year "scalar") (serialize-qp "p_bio_vio_last_year" $p_bio_vio_last_year "scalar") (serialize-qp "p_msgp_rpt_year" $p_msgp_rpt_year "scalar") (serialize-qp "p_vio_last_year" $p_vio_last_year "scalar") (serialize-qp "queryset" $queryset "scalar") (serialize-qp "responseset" $responseset "scalar") (serialize-qp "tablelist" $tablelist "scalar") (serialize-qp "maplist" $maplist "scalar") (serialize-qp "summarylist" $summarylist "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "qcolumns" $qcolumns "scalar") (serialize-qp "p_e90_count" $p_e90_count "scalar") (serialize-qp "p_e90_years" $p_e90_years "scalar") (serialize-qp "p_psc" $p_psc "scalar")] | flatten | str join "&"
@@ -606,7 +630,7 @@ export def "post-cwa-rest-services-get-facilities" [
   --p-e90-count: float # Number of E90 Exceedances. Identifies water permits with a number of E90 (Effluient Exceedances) >= the value provided for the last number of years provided by the p_e90_years value.
   --p-e90-years: float # Number of years for the p_e90_count search. Identified the past number of years to be used for the p_e90_count search.
   --p-psc: string # Point Source Category.
-]: any -> record<Results: record<BadSystemIDs: string, BioCVRows: string, BioV3Rows: string, CVRows: string, FEARows: string, Facilities: list<record>, INSPRows: string, IndianCountryRows: string, InfFEARows: string, MapOutput: record<IconBaseURL: string, MapData: list, PopUpBaseURL: string, QueryID: string>, Message: string, PageNo: string, QueryID: string, QueryRows: string, SVRows: string, TotalPenalties: string, V3Rows: string, Version: string, VioLast4QRows: string>> {
+]: any -> oneof<record<Results: record<BadSystemIDs: string, BioCVRows: string, BioV3Rows: string, CVRows: string, FEARows: string, Facilities: list<record>, INSPRows: string, IndianCountryRows: string, InfFEARows: string, MapOutput: record<IconBaseURL: string, MapData: list, PopUpBaseURL: string, QueryID: string>, Message: string, PageNo: string, QueryID: string, QueryRows: string, SVRows: string, TotalPenalties: string, V3Rows: string, Version: string, VioLast4QRows: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -615,7 +639,7 @@ export def "post-cwa-rest-services-get-facilities" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -789,7 +813,7 @@ export def "get-cwa-rest-services-get-facility-info" [
   --p-e90-count: float # Number of E90 Exceedances. Identifies water permits with a number of E90 (Effluient Exceedances) >= the value provided for the last number of years provided by the p_e90_years value.
   --p-e90-years: float # Number of years for the p_e90_count search. Identified the past number of years to be used for the p_e90_count search.
   --p-psc: string # Point Source Category.
-]: nothing -> record<Results: record<BadSystemIDs: string, BioCVRows: string, BioV3Rows: string, CVRows: string, ClusterOutput: record<ClusterData: list>, ClusterRecords: string, FEARows: string, Facilities: list<record>, INSPRows: string, IconBaseURL: string, IndianCountryRows: string, InfFEARows: string, Message: string, PopUpBaseURL: string, QueryID: string, QueryParameters: list<record>, QueryRows: string, SVRows: string, ServiceBaseURL: string, TotalPenalties: string, V3Rows: string, VioLast4QRows: string>> {
+]: nothing -> oneof<record<Results: record<BadSystemIDs: string, BioCVRows: string, BioV3Rows: string, CVRows: string, ClusterOutput: record<ClusterData: list>, ClusterRecords: string, FEARows: string, Facilities: list<record>, INSPRows: string, IconBaseURL: string, IndianCountryRows: string, InfFEARows: string, Message: string, PopUpBaseURL: string, QueryID: string, QueryParameters: list<record>, QueryRows: string, SVRows: string, ServiceBaseURL: string, TotalPenalties: string, V3Rows: string, VioLast4QRows: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_fn" $p_fn "scalar") (serialize-qp "p_sa" $p_sa "scalar") (serialize-qp "p_sa1" $p_sa1 "scalar") (serialize-qp "p_ct" $p_ct "scalar") (serialize-qp "p_co" $p_co "scalar") (serialize-qp "p_fips" $p_fips "scalar") (serialize-qp "p_st" $p_st "scalar") (serialize-qp "p_zip" $p_zip "scalar") (serialize-qp "p_frs" $p_frs "scalar") (serialize-qp "p_reg" $p_reg "scalar") (serialize-qp "p_sic" $p_sic "scalar") (serialize-qp "p_ncs" $p_ncs "scalar") (serialize-qp "p_pen" $p_pen "scalar") (serialize-qp "xmin" $xmin "scalar") (serialize-qp "ymin" $ymin "scalar") (serialize-qp "xmax" $xmax "scalar") (serialize-qp "ymax" $ymax "scalar") (serialize-qp "p_usmex" $p_usmex "scalar") (serialize-qp "p_sic2" $p_sic2 "scalar") (serialize-qp "p_sic4" $p_sic4 "scalar") (serialize-qp "p_fa" $p_fa "scalar") (serialize-qp "p_ff" $p_ff "scalar") (serialize-qp "p_act" $p_act "scalar") (serialize-qp "p_maj" $p_maj "scalar") (serialize-qp "p_mact" $p_mact "scalar") (serialize-qp "p_fea" $p_fea "scalar") (serialize-qp "p_feay" $p_feay "scalar") (serialize-qp "p_feaa" $p_feaa "scalar") (serialize-qp "p_iea" $p_iea "scalar") (serialize-qp "p_ieay" $p_ieay "scalar") (serialize-qp "p_ieaa" $p_ieaa "scalar") (serialize-qp "p_qiv" $p_qiv "scalar") (serialize-qp "p_iv" $p_iv "scalar") (serialize-qp "p_impw" $p_impw "scalar") (serialize-qp "p_imp_pol" $p_imp_pol "scalar") (serialize-qp "p_imp_cau_grp" $p_imp_cau_grp "scalar") (serialize-qp "p_trep" $p_trep "scalar") (serialize-qp "p_pm" $p_pm "scalar") (serialize-qp "p_pd" $p_pd "scalar") (serialize-qp "p_ico" $p_ico "scalar") (serialize-qp "p_huc" $p_huc "scalar") (serialize-qp "p_pid" $p_pid "scalar") (serialize-qp "p_med" $p_med "scalar") (serialize-qp "p_ysl" $p_ysl "scalar") (serialize-qp "p_ysly" $p_ysly "scalar") (serialize-qp "p_ysla" $p_ysla "scalar") (serialize-qp "p_qs" $p_qs "scalar") (serialize-qp "p_sfs" $p_sfs "scalar") (serialize-qp "p_tribeid" $p_tribeid "scalar") (serialize-qp "p_tribename" $p_tribename "scalar") (serialize-qp "p_tribedist" $p_tribedist "scalar") (serialize-qp "p_pstat" $p_pstat "scalar") (serialize-qp "p_ptype" $p_ptype "scalar") (serialize-qp "p_pcomp" $p_pcomp "scalar") (serialize-qp "p_plimits" $p_plimits "scalar") (serialize-qp "p_pcss" $p_pcss "scalar") (serialize-qp "p_pexp" $p_pexp "scalar") (serialize-qp "p_owop" $p_owop "scalar") (serialize-qp "p_ipfti" $p_ipfti "scalar") (serialize-qp "p_agoo" $p_agoo "scalar") (serialize-qp "p_idt1" $p_idt1 "scalar") (serialize-qp "p_idt2" $p_idt2 "scalar") (serialize-qp "p_pityp" $p_pityp "scalar") (serialize-qp "p_pfead1" $p_pfead1 "scalar") (serialize-qp "p_pfead2" $p_pfead2 "scalar") (serialize-qp "p_pfeat" $p_pfeat "scalar") (serialize-qp "p_pccs" $p_pccs "scalar") (serialize-qp "p_pexcd" $p_pexcd "scalar") (serialize-qp "p_psncq" $p_psncq "scalar") (serialize-qp "p_pctrack" $p_pctrack "scalar") (serialize-qp "p_dwd" $p_dwd "scalar") (serialize-qp "p_pt" $p_pt "scalar") (serialize-qp "p_pdwdist" $p_pdwdist "scalar") (serialize-qp "p_pswdpc" $p_pswdpc "scalar") (serialize-qp "p_pswdmp" $p_pswdmp "scalar") (serialize-qp "p_pswpol" $p_pswpol "scalar") (serialize-qp "p_pswcas" $p_pswcas "scalar") (serialize-qp "p_pswparam" $p_pswparam "scalar") (serialize-qp "p_pswvio" $p_pswvio "scalar") (serialize-qp "p_wbd" $p_wbd "scalar") (serialize-qp "p_radwbd" $p_radwbd "scalar") (serialize-qp "p_frswbd" $p_frswbd "scalar") (serialize-qp "p_fntype" $p_fntype "scalar") (serialize-qp "p_pidall" $p_pidall "scalar") (serialize-qp "p_months_last_dmr" $p_months_last_dmr "scalar") (serialize-qp "p_last_dmr_within" $p_last_dmr_within "scalar") (serialize-qp "p_indsw" $p_indsw "scalar") (serialize-qp "p_msgp_ptype" $p_msgp_ptype "scalar") (serialize-qp "p_mon_type" $p_mon_type "scalar") (serialize-qp "p_iagency" $p_iagency "scalar") (serialize-qp "p_permitting_agency" $p_permitting_agency "scalar") (serialize-qp "p_isws" $p_isws "scalar") (serialize-qp "p_iswss" $p_iswss "scalar") (serialize-qp "p_iswssID" $p_iswss_id "scalar") (serialize-qp "p_ds1" $p_ds1 "scalar") (serialize-qp "p_ds2" $p_ds2 "scalar") (serialize-qp "p_da1" $p_da1 "scalar") (serialize-qp "p_da2" $p_da2 "scalar") (serialize-qp "p_MS4" $p_ms4 "scalar") (serialize-qp "p_ooFN" $p_oo_fn "scalar") (serialize-qp "p_ooFNtype" $p_oo_f_ntype "scalar") (serialize-qp "p_ooSA" $p_oo_sa "scalar") (serialize-qp "p_ooSA1" $p_oo_sa1 "scalar") (serialize-qp "p_ooCt" $p_oo_ct "scalar") (serialize-qp "p_ooSt" $p_oo_st "scalar") (serialize-qp "p_ooZip" $p_oo_zip "scalar") (serialize-qp "p_fac_ico" $p_fac_ico "scalar") (serialize-qp "p_icoo" $p_icoo "scalar") (serialize-qp "p_fac_icos" $p_fac_icos "scalar") (serialize-qp "p_ejscreen" $p_ejscreen "scalar") (serialize-qp "p_alrexceed" $p_alrexceed "scalar") (serialize-qp "p_limit_addr" $p_limit_addr "scalar") (serialize-qp "p_lat" $p_lat "scalar") (serialize-qp "p_long" $p_long "scalar") (serialize-qp "p_radius" $p_radius "scalar") (serialize-qp "p_ejscreen_over80cnt" $p_ejscreen_over80cnt "scalar") (serialize-qp "p_bio_flag" $p_bio_flag "scalar") (serialize-qp "p_bio_fac_type" $p_bio_fac_type "scalar") (serialize-qp "p_bio_trtmnt_procs" $p_bio_trtmnt_procs "scalar") (serialize-qp "p_bio_analy_method_catgry" $p_bio_analy_method_catgry "scalar") (serialize-qp "p_bio_total_volume_amt" $p_bio_total_volume_amt "scalar") (serialize-qp "p_bio_mgmt_prctce_type" $p_bio_mgmt_prctce_type "scalar") (serialize-qp "p_bio_mgmt_prctce_stype" $p_bio_mgmt_prctce_stype "scalar") (serialize-qp "p_bio_mgmt_prctce_handler" $p_bio_mgmt_prctce_handler "scalar") (serialize-qp "p_bio_mgmt_container" $p_bio_mgmt_container "scalar") (serialize-qp "p_bio_mgmt_pathogen" $p_bio_mgmt_pathogen "scalar") (serialize-qp "p_bio_mgmt_pathred" $p_bio_mgmt_pathred "scalar") (serialize-qp "p_bio_mgmt_vector" $p_bio_mgmt_vector "scalar") (serialize-qp "p_bio_mgmt_def_category" $p_bio_mgmt_def_category "scalar") (serialize-qp "p_bio_mgmt_deficiencies" $p_bio_mgmt_deficiencies "scalar") (serialize-qp "p_bio_vio_code" $p_bio_vio_code "scalar") (serialize-qp "p_bio_current_vio" $p_bio_current_vio "scalar") (serialize-qp "p_bio_qtrs_in_vio" $p_bio_qtrs_in_vio "scalar") (serialize-qp "p_bio_rpt_year" $p_bio_rpt_year "scalar") (serialize-qp "p_bio_vio_last_year" $p_bio_vio_last_year "scalar") (serialize-qp "p_msgp_rpt_year" $p_msgp_rpt_year "scalar") (serialize-qp "p_vio_last_year" $p_vio_last_year "scalar") (serialize-qp "responseset" $responseset "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "qcolumns" $qcolumns "scalar") (serialize-qp "p_pretty_print" $p_pretty_print "scalar") (serialize-qp "p_e90_count" $p_e90_count "scalar") (serialize-qp "p_e90_years" $p_e90_years "scalar") (serialize-qp "p_psc" $p_psc "scalar")] | flatten | str join "&"
@@ -969,7 +993,7 @@ export def "post-cwa-rest-services-get-facility-info" [
   --p-e90-count: float # Number of E90 Exceedances. Identifies water permits with a number of E90 (Effluient Exceedances) >= the value provided for the last number of years provided by the p_e90_years value.
   --p-e90-years: float # Number of years for the p_e90_count search. Identified the past number of years to be used for the p_e90_count search.
   --p-psc: string # Point Source Category.
-]: any -> record<Results: record<BadSystemIDs: string, BioCVRows: string, BioV3Rows: string, CVRows: string, ClusterOutput: record<ClusterData: list>, ClusterRecords: string, FEARows: string, Facilities: list<record>, INSPRows: string, IconBaseURL: string, IndianCountryRows: string, InfFEARows: string, Message: string, PopUpBaseURL: string, QueryID: string, QueryParameters: list<record>, QueryRows: string, SVRows: string, ServiceBaseURL: string, TotalPenalties: string, V3Rows: string, VioLast4QRows: string>> {
+]: any -> oneof<record<Results: record<BadSystemIDs: string, BioCVRows: string, BioV3Rows: string, CVRows: string, ClusterOutput: record<ClusterData: list>, ClusterRecords: string, FEARows: string, Facilities: list<record>, INSPRows: string, IconBaseURL: string, IndianCountryRows: string, InfFEARows: string, Message: string, PopUpBaseURL: string, QueryID: string, QueryParameters: list<record>, QueryRows: string, SVRows: string, ServiceBaseURL: string, TotalPenalties: string, V3Rows: string, VioLast4QRows: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -978,7 +1002,7 @@ export def "post-cwa-rest-services-get-facility-info" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1014,7 +1038,7 @@ export def "get-cwa-rest-services-get-geojson" [
   --descending: string@descending-completer # Output Sort Column Descending Flag. Enter Y to column identified in the newsort parameter descending. Enter N to use ascending sort order. Used only when newsort parameter is populated.
   --qcolumns: string # Used to customize service output. A list of comma-separated column IDs of output objects that will be returned in the service query object or download. Use the metadata service endpoint for a complete list of Ids and definitions.
   --p-pretty-print: float # Optional flag to request GeoJSON formatted results to be pretty printed. Only provide a numeric value when the output needs to be human readable as pretty printing has a performance cost.
-]: nothing -> record<features: table<geometry: record, properties: record, type: string>, type: string> {
+]: nothing -> oneof<record<features: table<geometry: record, properties: record, type: string>, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($qid == null) { error make --unspanned { msg: "required query parameter 'qid' missing: pass --qid" } }
@@ -1057,7 +1081,7 @@ export def "post-cwa-rest-services-get-geojson" [
   --descending: string@descending-completer # Output Sort Column Descending Flag. Enter Y to column identified in the newsort parameter descending. Enter N to use ascending sort order. Used only when newsort parameter is populated.
   --qcolumns: string # Used to customize service output. A list of comma-separated column IDs of output objects that will be returned in the service query object or download. Use the metadata service endpoint for a complete list of Ids and definitions.
   --p-pretty-print: float # Optional flag to request GeoJSON formatted results to be pretty printed. Only provide a numeric value when the output needs to be human readable as pretty printing has a performance cost.
-]: any -> record<features: table<geometry: record, properties: record, type: string>, type: string> {
+]: any -> oneof<record<features: table<geometry: record, properties: record, type: string>, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1066,7 +1090,7 @@ export def "post-cwa-rest-services-get-geojson" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1146,7 +1170,7 @@ export def "post-cwa-rest-services-get-info-clusters" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1184,7 +1208,7 @@ export def "get-cwa-rest-services-get-map" [
   --c2-lat: float # Latitude of 2nd corner of box that bounds the resulting facilities. The latitude and longitude of both corners of the bounding box must be provided.
   --c2-long: float # Longitude of 2nd corner of box that bounds the resulting facilities. The latitude and longitude of both corners of the bounding box must be provided.
   --p-id: string # Nine-character code used to uniquely identify a permitted NPDES facility. The NPDES permit program regulates the direct discharge of pollutants into US waters. (required)
-]: nothing -> record<MapOutput: record<IconBaseURL: string, MapData: list<record>, PopUpBaseURL: string, QueryID: string>> {
+]: nothing -> oneof<record<MapOutput: record<IconBaseURL: string, MapData: list<record>, PopUpBaseURL: string, QueryID: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($qid == null) { error make --unspanned { msg: "required query parameter 'qid' missing: pass --qid" } }
@@ -1230,7 +1254,7 @@ export def "post-cwa-rest-services-get-map" [
   --c2-lat: float # Latitude of 2nd corner of box that bounds the resulting facilities. The latitude and longitude of both corners of the bounding box must be provided.
   --c2-long: float # Longitude of 2nd corner of box that bounds the resulting facilities. The latitude and longitude of both corners of the bounding box must be provided.
   p_id: string # Nine-character code used to uniquely identify a permitted NPDES facility. The NPDES permit program regulates the direct discharge of pollutants into US waters.
-]: any -> record<MapOutput: record<IconBaseURL: string, MapData: list<record>, PopUpBaseURL: string, QueryID: string>> {
+]: any -> oneof<record<MapOutput: record<IconBaseURL: string, MapData: list<record>, PopUpBaseURL: string, QueryID: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1239,7 +1263,7 @@ export def "post-cwa-rest-services-get-map" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1275,7 +1299,7 @@ export def "get-cwa-rest-services-get-qid" [
   --newsort: float # Output Sort Column. Enter the number of the column on which the data will be sorted. If unpopulated results will sort on the first column.
   --descending: string@descending-completer # Output Sort Column Descending Flag. Enter Y to column identified in the newsort parameter descending. Enter N to use ascending sort order. Used only when newsort parameter is populated.
   --qcolumns: string # Used to customize service output. A list of comma-separated column IDs of output objects that will be returned in the service query object or download. Use the metadata service endpoint for a complete list of Ids and definitions.
-]: nothing -> record<Results: record<Facilities: list<record>, Message: string, PageNo: string, QueryID: string, QueryRows: string>> {
+]: nothing -> oneof<record<Results: record<Facilities: list<record>, Message: string, PageNo: string, QueryID: string, QueryRows: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($qid == null) { error make --unspanned { msg: "required query parameter 'qid' missing: pass --qid" } }
@@ -1318,7 +1342,7 @@ export def "post-cwa-rest-services-get-qid" [
   --newsort: float # Output Sort Column. Enter the number of the column on which the data will be sorted. If unpopulated results will sort on the first column.
   --descending: string@descending-completer # Output Sort Column Descending Flag. Enter Y to column identified in the newsort parameter descending. Enter N to use ascending sort order. Used only when newsort parameter is populated.
   --qcolumns: string # Used to customize service output. A list of comma-separated column IDs of output objects that will be returned in the service query object or download. Use the metadata service endpoint for a complete list of Ids and definitions.
-]: any -> record<Results: record<Facilities: list<record>, Message: string, PageNo: string, QueryID: string, QueryRows: string>> {
+]: any -> oneof<record<Results: record<Facilities: list<record>, Message: string, PageNo: string, QueryID: string, QueryRows: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1327,7 +1351,7 @@ export def "post-cwa-rest-services-get-qid" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1358,7 +1382,7 @@ export def "get-cwa-rest-services-metadata" [
   --accept: string@accept-completer # Response content type
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: nothing -> record<Results: record<Message: string, ResultColumns: list<record>>> {
+]: nothing -> oneof<record<Results: record<Message: string, ResultColumns: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
@@ -1395,7 +1419,7 @@ export def "post-cwa-rest-services-metadata" [
   --accept: string@accept-completer # Response content type
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: any -> record<Results: record<Message: string, ResultColumns: list<record>>> {
+]: any -> oneof<record<Results: record<Message: string, ResultColumns: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1404,7 +1428,7 @@ export def "post-cwa-rest-services-metadata" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1437,7 +1461,7 @@ export def "get-rest-lookups-bp-tribes" [
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
   --search-term: string # Enter a partial or complete search phrase or word.
   --search-code: string # Enter a partial or complete code value.
-]: nothing -> record<Results: record<LuValues: list<record>, Message: string>> {
+]: nothing -> oneof<record<Results: record<LuValues: list<record>, Message: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "search_term" $search_term "scalar") (serialize-qp "search_code" $search_code "scalar")] | flatten | str join "&"
@@ -1476,7 +1500,7 @@ export def "post-rest-lookups-bp-tribes" [
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
   --search-term: string # Enter a partial or complete search phrase or word.
   --search-code: string # Enter a partial or complete code value.
-]: any -> record<Results: record<LuValues: list<record>, Message: string>> {
+]: any -> oneof<record<Results: record<LuValues: list<record>, Message: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1485,7 +1509,7 @@ export def "post-rest-lookups-bp-tribes" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1518,7 +1542,7 @@ export def "get-rest-lookups-cwa-parameters" [
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
   --search-term: string # Enter a partial or complete search phrase or word.
   --search-code: string # Enter a partial or complete code value.
-]: nothing -> record<Results: record<LuValues: list<record>, Message: string>> {
+]: nothing -> oneof<record<Results: record<LuValues: list<record>, Message: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "search_term" $search_term "scalar") (serialize-qp "search_code" $search_code "scalar")] | flatten | str join "&"
@@ -1557,7 +1581,7 @@ export def "post-rest-lookups-cwa-parameters" [
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
   --search-term: string # Enter a partial or complete search phrase or word.
   --search-code: string # Enter a partial or complete code value.
-]: any -> record<Results: record<LuValues: list<record>, Message: string>> {
+]: any -> oneof<record<Results: record<LuValues: list<record>, Message: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1566,7 +1590,7 @@ export def "post-rest-lookups-cwa-parameters" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1599,7 +1623,7 @@ export def "get-rest-lookups-cwa-pollutants" [
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
   --search-term: string # Enter a partial or complete search phrase or word.
   --search-code: string # Enter a partial or complete code value.
-]: nothing -> record<Results: record<LuValues: list<record>, Message: string>> {
+]: nothing -> oneof<record<Results: record<LuValues: list<record>, Message: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "search_term" $search_term "scalar") (serialize-qp "search_code" $search_code "scalar")] | flatten | str join "&"
@@ -1638,7 +1662,7 @@ export def "post-rest-lookups-cwa-pollutants" [
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
   --search-term: string # Enter a partial or complete search phrase or word.
   --search-code: string # Enter a partial or complete code value.
-]: any -> record<Results: record<LuValues: list<record>, Message: string>> {
+]: any -> oneof<record<Results: record<LuValues: list<record>, Message: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1647,7 +1671,7 @@ export def "post-rest-lookups-cwa-pollutants" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1680,7 +1704,7 @@ export def "get-rest-lookups-federal-agencies" [
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
   --search-term: string # Enter a partial or complete search phrase or word.
   --search-code: string # Enter a partial or complete code value.
-]: nothing -> record<Results: record<LuValues: list<record>, Message: string>> {
+]: nothing -> oneof<record<Results: record<LuValues: list<record>, Message: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "search_term" $search_term "scalar") (serialize-qp "search_code" $search_code "scalar")] | flatten | str join "&"
@@ -1719,7 +1743,7 @@ export def "post-rest-lookups-federal-agencies" [
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
   --search-term: string # Enter a partial or complete search phrase or word.
   --search-code: string # Enter a partial or complete code value.
-]: any -> record<Results: record<LuValues: list<record>, Message: string>> {
+]: any -> oneof<record<Results: record<LuValues: list<record>, Message: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1728,7 +1752,7 @@ export def "post-rest-lookups-federal-agencies" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1761,7 +1785,7 @@ export def "get-rest-lookups-icis-inspection-types" [
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
   --search-term: string # Enter a partial or complete search phrase or word.
   --search-code: string # Enter a partial or complete code value.
-]: nothing -> record<Results: record<LuValues: list<record>, Message: string>> {
+]: nothing -> oneof<record<Results: record<LuValues: list<record>, Message: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "search_term" $search_term "scalar") (serialize-qp "search_code" $search_code "scalar")] | flatten | str join "&"
@@ -1800,7 +1824,7 @@ export def "post-rest-lookups-icis-inspection-types" [
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
   --search-term: string # Enter a partial or complete search phrase or word.
   --search-code: string # Enter a partial or complete code value.
-]: any -> record<Results: record<LuValues: list<record>, Message: string>> {
+]: any -> oneof<record<Results: record<LuValues: list<record>, Message: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1809,7 +1833,7 @@ export def "post-rest-lookups-icis-inspection-types" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1845,7 +1869,7 @@ export def "get-rest-lookups-icis-law-sections" [
   --search-term: string # Enter a partial or complete search phrase or word.
   --search-code: string # Enter a partial or complete code value.
   --sort-order: float
-]: nothing -> record<Results: record<LuValues: list<record>, Message: string>> {
+]: nothing -> oneof<record<Results: record<LuValues: list<record>, Message: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "statute_code" $statute_code "scalar") (serialize-qp "status_flag" $status_flag "scalar") (serialize-qp "search_term" $search_term "scalar") (serialize-qp "search_code" $search_code "scalar") (serialize-qp "sort_order" $sort_order "scalar")] | flatten | str join "&"
@@ -1887,7 +1911,7 @@ export def "post-rest-lookups-icis-law-sections" [
   --search-term: string # Enter a partial or complete search phrase or word.
   --search-code: string # Enter a partial or complete code value.
   --sort-order: float
-]: any -> record<Results: record<LuValues: list<record>, Message: string>> {
+]: any -> oneof<record<Results: record<LuValues: list<record>, Message: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1896,7 +1920,7 @@ export def "post-rest-lookups-icis-law-sections" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1929,7 +1953,7 @@ export def "get-rest-lookups-naics-codes" [
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
   --search-term: string # Enter a partial or complete search phrase or word.
   --search-code: string # Enter a partial or complete code value.
-]: nothing -> record<Results: record<LuValues: list<record>, Message: string>> {
+]: nothing -> oneof<record<Results: record<LuValues: list<record>, Message: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "search_term" $search_term "scalar") (serialize-qp "search_code" $search_code "scalar")] | flatten | str join "&"
@@ -1968,7 +1992,7 @@ export def "post-rest-lookups-naics-codes" [
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
   --search-term: string # Enter a partial or complete search phrase or word.
   --search-code: string # Enter a partial or complete code value.
-]: any -> record<Results: record<LuValues: list<record>, Message: string>> {
+]: any -> oneof<record<Results: record<LuValues: list<record>, Message: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1977,7 +2001,7 @@ export def "post-rest-lookups-naics-codes" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -2009,7 +2033,7 @@ export def "get-rest-lookups-npdes-parameters" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
   --search-term: string # Enter a partial or complete search phrase or word.
-]: nothing -> record<Results: record<LuValues: list<record>, Message: string>> {
+]: nothing -> oneof<record<Results: record<LuValues: list<record>, Message: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "search_term" $search_term "scalar")] | flatten | str join "&"
@@ -2047,7 +2071,7 @@ export def "post-rest-lookups-npdes-parameters" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
   --search-term: string # Enter a partial or complete search phrase or word.
-]: any -> record<Results: record<LuValues: list<record>, Message: string>> {
+]: any -> oneof<record<Results: record<LuValues: list<record>, Message: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2056,7 +2080,7 @@ export def "post-rest-lookups-npdes-parameters" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -2089,7 +2113,7 @@ export def "get-rest-lookups-wbd-code-lu" [
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
   --wbd-code: string # Two-digit watershed code [Hydrologic Unit Code (HUC)].
   --wbd-level: string # The number of digits of the watershed code [Hydrologic Unit Code (HUC)] returned in the ValueCode. Must be an even number between 4 and 12.
-]: nothing -> record<Results: record<LuValues: list<record>, Message: string>> {
+]: nothing -> oneof<record<Results: record<LuValues: list<record>, Message: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "wbd_code" $wbd_code "scalar") (serialize-qp "wbd_level" $wbd_level "scalar")] | flatten | str join "&"
@@ -2128,7 +2152,7 @@ export def "post-rest-lookups-wbd-code-lu" [
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
   --wbd-code: string # Two-digit watershed code [Hydrologic Unit Code (HUC)].
   --wbd-level: string # The number of digits of the watershed code [Hydrologic Unit Code (HUC)] returned in the ValueCode. Must be an even number between 4 and 12.
-]: any -> record<Results: record<LuValues: list<record>, Message: string>> {
+]: any -> oneof<record<Results: record<LuValues: list<record>, Message: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2137,7 +2161,7 @@ export def "post-rest-lookups-wbd-code-lu" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -2170,7 +2194,7 @@ export def "get-rest-lookups-wbd-name-lu" [
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
   --wbd-name: string # Watershed Name Filter. (required)
   --wbd-level: string # The number of digits of the watershed code [Hydrologic Unit Code (HUC)] returned in the ValueCode. Must be an even number between 4 and 12.
-]: nothing -> record<Results: record<LuValues: list<record>, Message: string>> {
+]: nothing -> oneof<record<Results: record<LuValues: list<record>, Message: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($wbd_name == null) { error make --unspanned { msg: "required query parameter 'wbd_name' missing: pass --wbd-name" } }
@@ -2210,7 +2234,7 @@ export def "post-rest-lookups-wbd-name-lu" [
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
   wbd_name: string # Watershed Name Filter.
   --wbd-level: string # The number of digits of the watershed code [Hydrologic Unit Code (HUC)] returned in the ValueCode. Must be an even number between 4 and 12.
-]: any -> record<Results: record<LuValues: list<record>, Message: string>> {
+]: any -> oneof<record<Results: record<LuValues: list<record>, Message: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2219,7 +2243,7 @@ export def "post-rest-lookups-wbd-name-lu" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url

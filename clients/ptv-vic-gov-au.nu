@@ -12,27 +12,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -40,8 +49,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -52,7 +66,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -87,7 +110,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["http://timetableapi.ptv.vic.gov.au" "https://timetableapi.ptv.vic.gov.au"] }
@@ -101,9 +125,9 @@ def disruption-status-completer [] { ["current" "planned"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "departures-get-for-stop" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["departures-get-for-stop" "departures-get-for-stop-and-route" "directions-for-route" "directions-for-direction" "directions-for-direction-and-type" "disruptions-get-all-disruptions" "disruptions-get-disruption-modes" "disruptions-get-disruptions-by-route" "disruptions-get-disruptions-by-route-and-stop" "disruptions-get-disruptions-by-stop" "disruptions-get-disruption-by-id" "fare-estimate-get-fare-estimate-by-zone" "outlets-get-all-outlets" "outlets-get-outlets-by-geolocation" "patterns-get-pattern-by-run" "route-types-get-route-types" "routes-one-or-more-routes" "routes-route-from-id" "runs-for-route" "runs-for-route-and-route-type" "runs-for-run" "runs-for-run-and-route-type" "search-search" "stops-stops-by-geolocation" "stops-stops-for-route" "stops-stop-details" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -150,7 +174,7 @@ export def "departures-get-for-stop" [
   --qp-token: string # Please ignore
   --devid: string # Your developer id
   --signature: string # Authentication signature for request
-]: nothing -> record<departures: table<at_platform: bool, departure_sequence: int, direction_id: int, disruption_ids: list, estimated_departure_utc: string, flags: string, platform_number: string, route_id: int, run_id: int, run_ref: string, scheduled_departure_utc: string, stop_id: int>, directions: record, disruptions: record, routes: record, runs: record, status: record<health: int, version: string>, stops: record> {
+]: nothing -> oneof<record<departures: table<at_platform: bool, departure_sequence: int, direction_id: int, disruption_ids: list, estimated_departure_utc: string, flags: string, platform_number: string, route_id: int, run_id: int, run_ref: string, scheduled_departure_utc: string, stop_id: int>, directions: record, disruptions: record, routes: record, runs: record, status: record<health: int, version: string>, stops: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($route_type | is-empty) { error make --unspanned { msg: "path parameter 'route_type' must be non-empty" } }
@@ -202,7 +226,7 @@ export def "departures-get-for-stop-and-route" [
   --qp-token: string # Please ignore
   --devid: string # Your developer id
   --signature: string # Authentication signature for request
-]: nothing -> record<departures: table<at_platform: bool, departure_sequence: int, direction_id: int, disruption_ids: list, estimated_departure_utc: string, flags: string, platform_number: string, route_id: int, run_id: int, run_ref: string, scheduled_departure_utc: string, stop_id: int>, directions: record, disruptions: record, routes: record, runs: record, status: record<health: int, version: string>, stops: record> {
+]: nothing -> oneof<record<departures: table<at_platform: bool, departure_sequence: int, direction_id: int, disruption_ids: list, estimated_departure_utc: string, flags: string, platform_number: string, route_id: int, run_id: int, run_ref: string, scheduled_departure_utc: string, stop_id: int>, directions: record, disruptions: record, routes: record, runs: record, status: record<health: int, version: string>, stops: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($route_type | is-empty) { error make --unspanned { msg: "path parameter 'route_type' must be non-empty" } }
@@ -245,7 +269,7 @@ export def "directions-for-route" [
   --qp-token: string # Please ignore
   --devid: string # Your developer id
   --signature: string # Authentication signature for request
-]: nothing -> record<directions: table<direction_id: int, direction_name: string, route_direction_description: string, route_id: int, route_type: int>, status: record<health: int, version: string>> {
+]: nothing -> oneof<record<directions: table<direction_id: int, direction_name: string, route_direction_description: string, route_id: int, route_type: int>, status: record<health: int, version: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($route_id | is-empty) { error make --unspanned { msg: "path parameter 'route_id' must be non-empty" } }
@@ -286,7 +310,7 @@ export def "directions-for-direction" [
   --qp-token: string # Please ignore
   --devid: string # Your developer id
   --signature: string # Authentication signature for request
-]: nothing -> record<directions: table<direction_id: int, direction_name: string, route_direction_description: string, route_id: int, route_type: int>, status: record<health: int, version: string>> {
+]: nothing -> oneof<record<directions: table<direction_id: int, direction_name: string, route_direction_description: string, route_id: int, route_type: int>, status: record<health: int, version: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($direction_id | is-empty) { error make --unspanned { msg: "path parameter 'direction_id' must be non-empty" } }
@@ -328,7 +352,7 @@ export def "directions-for-direction-and-type" [
   --qp-token: string # Please ignore
   --devid: string # Your developer id
   --signature: string # Authentication signature for request
-]: nothing -> record<directions: table<direction_id: int, direction_name: string, route_direction_description: string, route_id: int, route_type: int>, status: record<health: int, version: string>> {
+]: nothing -> oneof<record<directions: table<direction_id: int, direction_name: string, route_direction_description: string, route_id: int, route_type: int>, status: record<health: int, version: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($direction_id | is-empty) { error make --unspanned { msg: "path parameter 'direction_id' must be non-empty" } }
@@ -372,7 +396,7 @@ export def "disruptions-get-all-disruptions" [
   --qp-token: string # Please ignore
   --devid: string # Your developer id
   --signature: string # Authentication signature for request
-]: nothing -> record<disruptions: record<ferry: list<record>, general: list<record>, interstate_train: list<record>, metro_bus: list<record>, metro_train: list<record>, metro_tram: list<record>, night_bus: list<record>, regional_bus: list<record>, regional_coach: list<record>, regional_train: list<record>, school_bus: list<record>, skybus: list<record>, taxi: list<record>, telebus: list<record>>, status: record<health: int, version: string>> {
+]: nothing -> oneof<record<disruptions: record<ferry: list<record>, general: list<record>, interstate_train: list<record>, metro_bus: list<record>, metro_train: list<record>, metro_tram: list<record>, night_bus: list<record>, regional_bus: list<record>, regional_coach: list<record>, regional_train: list<record>, school_bus: list<record>, skybus: list<record>, taxi: list<record>, telebus: list<record>>, status: record<health: int, version: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "route_types" $route_types "multi") (serialize-qp "disruption_modes" $disruption_modes "multi") (serialize-qp "disruption_status" $disruption_status "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
@@ -411,7 +435,7 @@ export def "disruptions-get-disruption-modes" [
   --qp-token: string # Please ignore
   --devid: string # Your developer id
   --signature: string # Authentication signature for request
-]: nothing -> record<disruption_modes: table<disruption_mode: int, disruption_mode_name: string>, status: record<health: int, version: string>> {
+]: nothing -> oneof<record<disruption_modes: table<disruption_mode: int, disruption_mode_name: string>, status: record<health: int, version: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
@@ -452,7 +476,7 @@ export def "disruptions-get-disruptions-by-route" [
   --qp-token: string # Please ignore
   --devid: string # Your developer id
   --signature: string # Authentication signature for request
-]: nothing -> record<disruptions: record<ferry: list<record>, general: list<record>, interstate_train: list<record>, metro_bus: list<record>, metro_train: list<record>, metro_tram: list<record>, night_bus: list<record>, regional_bus: list<record>, regional_coach: list<record>, regional_train: list<record>, school_bus: list<record>, skybus: list<record>, taxi: list<record>, telebus: list<record>>, status: record<health: int, version: string>> {
+]: nothing -> oneof<record<disruptions: record<ferry: list<record>, general: list<record>, interstate_train: list<record>, metro_bus: list<record>, metro_train: list<record>, metro_tram: list<record>, night_bus: list<record>, regional_bus: list<record>, regional_coach: list<record>, regional_train: list<record>, school_bus: list<record>, skybus: list<record>, taxi: list<record>, telebus: list<record>>, status: record<health: int, version: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($route_id | is-empty) { error make --unspanned { msg: "path parameter 'route_id' must be non-empty" } }
@@ -495,7 +519,7 @@ export def "disruptions-get-disruptions-by-route-and-stop" [
   --qp-token: string # Please ignore
   --devid: string # Your developer id
   --signature: string # Authentication signature for request
-]: nothing -> record<disruptions: record<ferry: list<record>, general: list<record>, interstate_train: list<record>, metro_bus: list<record>, metro_train: list<record>, metro_tram: list<record>, night_bus: list<record>, regional_bus: list<record>, regional_coach: list<record>, regional_train: list<record>, school_bus: list<record>, skybus: list<record>, taxi: list<record>, telebus: list<record>>, status: record<health: int, version: string>> {
+]: nothing -> oneof<record<disruptions: record<ferry: list<record>, general: list<record>, interstate_train: list<record>, metro_bus: list<record>, metro_train: list<record>, metro_tram: list<record>, night_bus: list<record>, regional_bus: list<record>, regional_coach: list<record>, regional_train: list<record>, school_bus: list<record>, skybus: list<record>, taxi: list<record>, telebus: list<record>>, status: record<health: int, version: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($route_id | is-empty) { error make --unspanned { msg: "path parameter 'route_id' must be non-empty" } }
@@ -538,7 +562,7 @@ export def "disruptions-get-disruptions-by-stop" [
   --qp-token: string # Please ignore
   --devid: string # Your developer id
   --signature: string # Authentication signature for request
-]: nothing -> record<disruptions: record<ferry: list<record>, general: list<record>, interstate_train: list<record>, metro_bus: list<record>, metro_train: list<record>, metro_tram: list<record>, night_bus: list<record>, regional_bus: list<record>, regional_coach: list<record>, regional_train: list<record>, school_bus: list<record>, skybus: list<record>, taxi: list<record>, telebus: list<record>>, status: record<health: int, version: string>> {
+]: nothing -> oneof<record<disruptions: record<ferry: list<record>, general: list<record>, interstate_train: list<record>, metro_bus: list<record>, metro_train: list<record>, metro_tram: list<record>, night_bus: list<record>, regional_bus: list<record>, regional_coach: list<record>, regional_train: list<record>, school_bus: list<record>, skybus: list<record>, taxi: list<record>, telebus: list<record>>, status: record<health: int, version: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($stop_id | is-empty) { error make --unspanned { msg: "path parameter 'stop_id' must be non-empty" } }
@@ -579,7 +603,7 @@ export def "disruptions-get-disruption-by-id" [
   --qp-token: string # Please ignore
   --devid: string # Your developer id
   --signature: string # Authentication signature for request
-]: nothing -> record<disruption: record<colour: string, description: string, display_on_board: bool, display_status: bool, disruption_id: int, disruption_status: string, disruption_type: string, from_date: string, last_updated: string, published_on: string, routes: list<record>, stops: list<record>, title: string, to_date: string, url: string>, status: record<health: int, version: string>> {
+]: nothing -> oneof<record<disruption: record<colour: string, description: string, display_on_board: bool, display_status: bool, disruption_id: int, disruption_status: string, disruption_type: string, from_date: string, last_updated: string, published_on: string, routes: list<record>, stops: list<record>, title: string, to_date: string, url: string>, status: record<health: int, version: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($disruption_id | is-empty) { error make --unspanned { msg: "path parameter 'disruption_id' must be non-empty" } }
@@ -667,7 +691,7 @@ export def "outlets-get-all-outlets" [
   --qp-token: string # Please ignore
   --devid: string # Your developer id
   --signature: string # Authentication signature for request
-]: nothing -> record<outlets: table<outlet_business: string, outlet_business_hour_fri: string, outlet_business_hour_mon: string, outlet_business_hour_sat: string, outlet_business_hour_sun: string, outlet_business_hour_thur: string, outlet_business_hour_tue: string, outlet_business_hour_wed: string, outlet_latitude: float, outlet_longitude: float, outlet_name: string, outlet_notes: string, outlet_postcode: int, outlet_slid_spid: string, outlet_suburb: string>, status: record<health: int, version: string>> {
+]: nothing -> oneof<record<outlets: table<outlet_business: string, outlet_business_hour_fri: string, outlet_business_hour_mon: string, outlet_business_hour_sat: string, outlet_business_hour_sun: string, outlet_business_hour_thur: string, outlet_business_hour_tue: string, outlet_business_hour_wed: string, outlet_latitude: float, outlet_longitude: float, outlet_name: string, outlet_notes: string, outlet_postcode: int, outlet_slid_spid: string, outlet_suburb: string>, status: record<health: int, version: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
@@ -710,7 +734,7 @@ export def "outlets-get-outlets-by-geolocation" [
   --qp-token: string # Please ignore
   --devid: string # Your developer id
   --signature: string # Authentication signature for request
-]: nothing -> record<outlets: table<outlet_business: string, outlet_business_hour_fri: string, outlet_business_hour_mon: string, outlet_business_hour_sat: string, outlet_business_hour_sun: string, outlet_business_hour_thur: string, outlet_business_hour_tue: string, outlet_business_hour_wed: string, outlet_distance: float, outlet_latitude: float, outlet_longitude: float, outlet_name: string, outlet_notes: string, outlet_postcode: int, outlet_slid_spid: string, outlet_suburb: string>, status: record<health: int, version: string>> {
+]: nothing -> oneof<record<outlets: table<outlet_business: string, outlet_business_hour_fri: string, outlet_business_hour_mon: string, outlet_business_hour_sat: string, outlet_business_hour_sun: string, outlet_business_hour_thur: string, outlet_business_hour_tue: string, outlet_business_hour_wed: string, outlet_distance: float, outlet_latitude: float, outlet_longitude: float, outlet_name: string, outlet_notes: string, outlet_postcode: int, outlet_slid_spid: string, outlet_suburb: string>, status: record<health: int, version: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($latitude | is-empty) { error make --unspanned { msg: "path parameter 'latitude' must be non-empty" } }
@@ -758,7 +782,7 @@ export def "patterns-get-pattern-by-run" [
   --qp-token: string # Please ignore
   --devid: string # Your developer id
   --signature: string # Authentication signature for request
-]: nothing -> record<departures: table<at_platform: bool, departure_sequence: int, direction_id: int, disruption_ids: list, estimated_departure_utc: string, flags: string, platform_number: string, route_id: int, run_id: int, run_ref: string, scheduled_departure_utc: string, skipped_stops: list, stop_id: int>, directions: record, disruptions: table<colour: string, description: string, display_on_board: bool, display_status: bool, disruption_id: int, disruption_status: string, disruption_type: string, from_date: string, last_updated: string, published_on: string, routes: list, stops: list, title: string, to_date: string, url: string>, routes: record, runs: record, status: record<health: int, version: string>, stops: record> {
+]: nothing -> oneof<record<departures: table<at_platform: bool, departure_sequence: int, direction_id: int, disruption_ids: list, estimated_departure_utc: string, flags: string, platform_number: string, route_id: int, run_id: int, run_ref: string, scheduled_departure_utc: string, skipped_stops: list, stop_id: int>, directions: record, disruptions: table<colour: string, description: string, display_on_board: bool, display_status: bool, disruption_id: int, disruption_status: string, disruption_type: string, from_date: string, last_updated: string, published_on: string, routes: list, stops: list, title: string, to_date: string, url: string>, routes: record, runs: record, status: record<health: int, version: string>, stops: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($run_ref | is-empty) { error make --unspanned { msg: "path parameter 'run_ref' must be non-empty" } }
@@ -800,7 +824,7 @@ export def "route-types-get-route-types" [
   --qp-token: string # Please ignore
   --devid: string # Your developer id
   --signature: string # Authentication signature for request
-]: nothing -> record<route_types: table<route_type: int, route_type_name: string>, status: record<health: int, version: string>> {
+]: nothing -> oneof<record<route_types: table<route_type: int, route_type_name: string>, status: record<health: int, version: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
@@ -841,7 +865,7 @@ export def "routes-one-or-more-routes" [
   --qp-token: string # Please ignore
   --devid: string # Your developer id
   --signature: string # Authentication signature for request
-]: nothing -> record<route: record, status: record<health: int, version: string>> {
+]: nothing -> oneof<record<route: record, status: record<health: int, version: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "route_types" $route_types "multi") (serialize-qp "route_name" $route_name "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
@@ -883,7 +907,7 @@ export def "routes-route-from-id" [
   --qp-token: string # Please ignore
   --devid: string # Your developer id
   --signature: string # Authentication signature for request
-]: nothing -> record<route: record, status: record<health: int, version: string>> {
+]: nothing -> oneof<record<route: record, status: record<health: int, version: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($route_id | is-empty) { error make --unspanned { msg: "path parameter 'route_id' must be non-empty" } }
@@ -926,7 +950,7 @@ export def "runs-for-route" [
   --qp-token: string # Please ignore
   --devid: string # Your developer id
   --signature: string # Authentication signature for request
-]: nothing -> record<runs: table<destination_name: string, direction_id: int, express_stop_count: int, final_stop_id: int, geopath: list, route_id: int, route_type: int, run_id: int, run_ref: string, run_sequence: int, status: string, vehicle_descriptor: record, vehicle_position: record>, status: record<health: int, version: string>> {
+]: nothing -> oneof<record<runs: table<destination_name: string, direction_id: int, express_stop_count: int, final_stop_id: int, geopath: list, route_id: int, route_type: int, run_id: int, run_ref: string, run_sequence: int, status: string, vehicle_descriptor: record, vehicle_position: record>, status: record<health: int, version: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($route_id | is-empty) { error make --unspanned { msg: "path parameter 'route_id' must be non-empty" } }
@@ -970,7 +994,7 @@ export def "runs-for-route-and-route-type" [
   --qp-token: string # Please ignore
   --devid: string # Your developer id
   --signature: string # Authentication signature for request
-]: nothing -> record<runs: table<destination_name: string, direction_id: int, express_stop_count: int, final_stop_id: int, geopath: list, route_id: int, route_type: int, run_id: int, run_ref: string, run_sequence: int, status: string, vehicle_descriptor: record, vehicle_position: record>, status: record<health: int, version: string>> {
+]: nothing -> oneof<record<runs: table<destination_name: string, direction_id: int, express_stop_count: int, final_stop_id: int, geopath: list, route_id: int, route_type: int, run_id: int, run_ref: string, run_sequence: int, status: string, vehicle_descriptor: record, vehicle_position: record>, status: record<health: int, version: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($route_id | is-empty) { error make --unspanned { msg: "path parameter 'route_id' must be non-empty" } }
@@ -1016,7 +1040,7 @@ export def "runs-for-run" [
   --qp-token: string # Please ignore
   --devid: string # Your developer id
   --signature: string # Authentication signature for request
-]: nothing -> record<runs: table<destination_name: string, direction_id: int, express_stop_count: int, final_stop_id: int, geopath: list, route_id: int, route_type: int, run_id: int, run_ref: string, run_sequence: int, status: string, vehicle_descriptor: record, vehicle_position: record>, status: record<health: int, version: string>> {
+]: nothing -> oneof<record<runs: table<destination_name: string, direction_id: int, express_stop_count: int, final_stop_id: int, geopath: list, route_id: int, route_type: int, run_id: int, run_ref: string, run_sequence: int, status: string, vehicle_descriptor: record, vehicle_position: record>, status: record<health: int, version: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($run_ref | is-empty) { error make --unspanned { msg: "path parameter 'run_ref' must be non-empty" } }
@@ -1062,7 +1086,7 @@ export def "runs-for-run-and-route-type" [
   --qp-token: string # Please ignore
   --devid: string # Your developer id
   --signature: string # Authentication signature for request
-]: nothing -> record<run: record<destination_name: string, direction_id: int, express_stop_count: int, final_stop_id: int, geopath: list<record>, route_id: int, route_type: int, run_id: int, run_ref: string, run_sequence: int, status: string, vehicle_descriptor: record<air_conditioned: bool, description: string, id: string, length: string, low_floor: bool, operator: string, supplier: string>, vehicle_position: record<bearing: float, datetime_utc: string, direction: string, easting: float, expiry_time: string, latitude: float, longitude: float, northing: float, supplier: string>>, status: record<health: int, version: string>> {
+]: nothing -> oneof<record<run: record<destination_name: string, direction_id: int, express_stop_count: int, final_stop_id: int, geopath: list<record>, route_id: int, route_type: int, run_id: int, run_ref: string, run_sequence: int, status: string, vehicle_descriptor: record<air_conditioned: bool, description: string, id: string, length: string, low_floor: bool, operator: string, supplier: string>, vehicle_position: record<bearing: float, datetime_utc: string, direction: string, easting: float, expiry_time: string, latitude: float, longitude: float, northing: float, supplier: string>>, status: record<health: int, version: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($run_ref | is-empty) { error make --unspanned { msg: "path parameter 'run_ref' must be non-empty" } }
@@ -1114,7 +1138,7 @@ export def "search-search" [
   --qp-token: string # Please ignore
   --devid: string # Your developer id
   --signature: string # Authentication signature for request
-]: nothing -> record<outlets: table<outlet_business: string, outlet_business_hour_fri: string, outlet_business_hour_mon: string, outlet_business_hour_sat: string, outlet_business_hour_sun: string, outlet_business_hour_thur: string, outlet_business_hour_tue: string, outlet_business_hour_wed: string, outlet_distance: float, outlet_latitude: float, outlet_longitude: float, outlet_name: string, outlet_notes: string, outlet_postcode: int, outlet_slid_spid: string, outlet_suburb: string>, routes: table<route_gtfs_id: string, route_id: int, route_name: string, route_number: string, route_service_status: record, route_type: int>, status: record<health: int, version: string>, stops: table<route_type: int, routes: list, stop_distance: float, stop_id: int, stop_landmark: string, stop_latitude: float, stop_longitude: float, stop_name: string, stop_sequence: int, stop_suburb: string>> {
+]: nothing -> oneof<record<outlets: table<outlet_business: string, outlet_business_hour_fri: string, outlet_business_hour_mon: string, outlet_business_hour_sat: string, outlet_business_hour_sun: string, outlet_business_hour_thur: string, outlet_business_hour_tue: string, outlet_business_hour_wed: string, outlet_distance: float, outlet_latitude: float, outlet_longitude: float, outlet_name: string, outlet_notes: string, outlet_postcode: int, outlet_slid_spid: string, outlet_suburb: string>, routes: table<route_gtfs_id: string, route_id: int, route_name: string, route_number: string, route_service_status: record, route_type: int>, status: record<health: int, version: string>, stops: table<route_type: int, routes: list, stop_distance: float, stop_id: int, stop_landmark: string, stop_latitude: float, stop_longitude: float, stop_name: string, stop_sequence: int, stop_suburb: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($search_term | is-empty) { error make --unspanned { msg: "path parameter 'search_term' must be non-empty" } }
@@ -1160,7 +1184,7 @@ export def "stops-stops-by-geolocation" [
   --qp-token: string # Please ignore
   --devid: string # Your developer id
   --signature: string # Authentication signature for request
-]: nothing -> record<disruptions: record, status: record<health: int, version: string>, stops: table<disruption_ids: list, route_type: int, routes: list, stop_distance: float, stop_id: int, stop_landmark: string, stop_latitude: float, stop_longitude: float, stop_name: string, stop_sequence: int, stop_suburb: string>> {
+]: nothing -> oneof<record<disruptions: record, status: record<health: int, version: string>, stops: table<disruption_ids: list, route_type: int, routes: list, stop_distance: float, stop_id: int, stop_landmark: string, stop_latitude: float, stop_longitude: float, stop_name: string, stop_sequence: int, stop_suburb: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($latitude | is-empty) { error make --unspanned { msg: "path parameter 'latitude' must be non-empty" } }
@@ -1207,7 +1231,7 @@ export def "stops-stops-for-route" [
   --qp-token: string # Please ignore
   --devid: string # Your developer id
   --signature: string # Authentication signature for request
-]: nothing -> record<disruptions: record, geopath: list<record>, status: record<health: int, version: string>, stops: table<disruption_ids: list, route_type: int, stop_id: int, stop_landmark: string, stop_latitude: float, stop_longitude: float, stop_name: string, stop_sequence: int, stop_suburb: string, stop_ticket: record>> {
+]: nothing -> oneof<record<disruptions: record, geopath: list<record>, status: record<health: int, version: string>, stops: table<disruption_ids: list, route_type: int, stop_id: int, stop_landmark: string, stop_latitude: float, stop_longitude: float, stop_name: string, stop_sequence: int, stop_suburb: string, stop_ticket: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($route_id | is-empty) { error make --unspanned { msg: "path parameter 'route_id' must be non-empty" } }
@@ -1258,7 +1282,7 @@ export def "stops-stop-details" [
   --qp-token: string # Please ignore
   --devid: string # Your developer id
   --signature: string # Authentication signature for request
-]: nothing -> record<disruptions: record, status: record<health: int, version: string>, stop: record<disruption_ids: list<int>, route_type: int, routes: list<record>, station_description: string, station_type: string, stop_accessibility: record<audio_customer_information: bool, escalator: bool, hearing_loop: bool, lift: bool, lighting: bool, platform_number: int, stairs: bool, stop_accessible: bool, tactile_ground_surface_indicator: bool, waiting_room: bool, wheelchair: record>, stop_amenities: record<car_parking: string, cctv: bool, taxi_rank: bool, toilet: bool>, stop_id: int, stop_landmark: string, stop_location: record<gps: record>, stop_name: string, stop_staffing: record<fri_am_from: string, fri_am_to: string, fri_pm_from: string, fri_pm_to: string, mon_am_from: string, mon_am_to: string, mon_pm_from: string, mon_pm_to: string, ph_additional_text: string, ph_from: string, ph_to: string, sat_am_from: string, sat_am_to: string, sat_pm_from: string, sat_pm_to: string, sun_am_from: string, sun_am_to: string, sun_pm_from: string, sun_pm_to: string, thu_am_from: string, thu_am_to: string, thu_pm_from: string, thu_pm_to: string, tue_am_from: string, tue_am_to: string, tue_pm_from: string, tue_pm_to: string, wed_am_from: string, wed_am_to: string, wed_pm_To: string, wed_pm_from: string>>> {
+]: nothing -> oneof<record<disruptions: record, status: record<health: int, version: string>, stop: record<disruption_ids: list<int>, route_type: int, routes: list<record>, station_description: string, station_type: string, stop_accessibility: record<audio_customer_information: bool, escalator: bool, hearing_loop: bool, lift: bool, lighting: bool, platform_number: int, stairs: bool, stop_accessible: bool, tactile_ground_surface_indicator: bool, waiting_room: bool, wheelchair: record>, stop_amenities: record<car_parking: string, cctv: bool, taxi_rank: bool, toilet: bool>, stop_id: int, stop_landmark: string, stop_location: record<gps: record>, stop_name: string, stop_staffing: record<fri_am_from: string, fri_am_to: string, fri_pm_from: string, fri_pm_to: string, mon_am_from: string, mon_am_to: string, mon_pm_from: string, mon_pm_to: string, ph_additional_text: string, ph_from: string, ph_to: string, sat_am_from: string, sat_am_to: string, sat_pm_from: string, sat_pm_to: string, sun_am_from: string, sun_am_to: string, sun_pm_from: string, sun_pm_to: string, thu_am_from: string, thu_am_to: string, thu_pm_from: string, thu_pm_to: string, tue_am_from: string, tue_am_to: string, tue_pm_from: string, tue_pm_to: string, wed_am_from: string, wed_am_to: string, wed_pm_To: string, wed_pm_from: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($stop_id | is-empty) { error make --unspanned { msg: "path parameter 'stop_id' must be non-empty" } }

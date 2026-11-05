@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -185,9 +208,9 @@ def x-amz-target-completer-72 [] { ["AWSHawksNestServiceFacade.UpdateVariable"] 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "batch-create-variable" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["batch-create-variable" "batch-get-variable" "cancel-batch-import-job" "cancel-batch-prediction-job" "create-batch-import-job" "create-batch-prediction-job" "create-detector-version" "create-list" "create-model" "create-model-version" "create-rule" "create-variable" "delete-batch-import-job" "delete-batch-prediction-job" "delete-detector" "delete-detector-version" "delete-entity-type" "delete-event" "delete-event-type" "delete-events-by-event-type" "delete-external-model" "delete-label" "delete-list" "delete-model" "delete-model-version" "delete-outcome" "delete-rule" "delete-variable" "describe-detector" "describe-model-versions" "get-batch-import-jobs" "get-batch-prediction-jobs" "get-delete-events-by-event-type-status" "get-detector-version" "get-detectors" "get-entity-types" "get-event" "get-event-prediction" "get-event-prediction-metadata" "get-event-types" "get-external-models" "get-kms-encryption-key" "get-labels" "get-list-elements" "get-lists-metadata" "get-model-version" "get-models" "get-outcomes" "get-rules" "get-variables" "list-event-predictions" "list-tags-for-resource" "put-detector" "put-entity-type" "put-event-type" "put-external-model" "put-kms-encryption-key" "put-label" "put-outcome" "send-event" "tag-resource" "untag-resource" "update-detector-version" "update-detector-version-metadata" "update-detector-version-status" "update-event-label" "update-list" "update-model" "update-model-version" "update-model-version-status" "update-rule-metadata" "update-rule-version" "update-variable" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -209,8 +232,6 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: BatchCreateVariable
-# --variableEntries item shape: {name?: string, dataType?: string, dataSource?: string, defaultValue?: string, description?: string, variableType?: string}
-# --tags item shape: {key: string, value: string}
 export def "batch-create-variable" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -231,7 +252,7 @@ export def "batch-create-variable" [
   --x-amz-target: string@x-amz-target-completer # required
   variable_entries: list # The list of variables for the batch create variable request. — item shape: {name?: string, dataType?: string, dataSource?: string, defaultValue?: string, description?: string, variableType?: string}
   --tags: list # A collection of key and value pairs. — item shape: {key: string, value: string}
-]: any -> record<errors: table<name: string, code: int, message: string>> {
+]: any -> oneof<record<errors: table<name: string, code: int, message: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -280,7 +301,7 @@ export def "batch-get-variable" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-1 # required
   names: list<string> # The list of variable names to get.
-]: any -> record<variables: table<name: string, dataType: string, dataSource: string, defaultValue: string, description: string, variableType: string, lastUpdatedTime: string, createdTime: string, arn: string>, errors: table<name: string, code: int, message: string>> {
+]: any -> oneof<record<variables: table<name: string, dataType: string, dataSource: string, defaultValue: string, description: string, variableType: string, lastUpdatedTime: string, createdTime: string, arn: string>, errors: table<name: string, code: int, message: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -329,7 +350,7 @@ export def "cancel-batch-import-job" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-2 # required
   job_id: string # The ID of an in-progress batch import job to cancel. Amazon Fraud Detector will throw an error if the batch import job is in FAILED, CANCELED, or COMPLETED state.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -378,7 +399,7 @@ export def "cancel-batch-prediction-job" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-3 # required
   job_id: string # The ID of the batch prediction job to cancel.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -408,7 +429,6 @@ export def "cancel-batch-prediction-job" [
 #
 # POST /
 # operationId: CreateBatchImportJob
-# --tags item shape: {key: string, value: string}
 export def "create-batch-import-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -433,7 +453,7 @@ export def "create-batch-import-job" [
   event_type_name: string # The name of the event type.
   iam_role_arn: string # The ARN of the IAM role created for Amazon S3 bucket that holds your data file. The IAM role must have read permissions to your input S3 bucket and write permissions to your output S3 bucket. For more information about bucket permissions, see User policy examples (https://docs.aws.amazon.com/AmazonS3/latest/userguide/example-policies-s3.html) in the Amazon S3 User Guide.
   --tags: list # A collection of key-value pairs associated with this request. — item shape: {key: string, value: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -463,7 +483,6 @@ export def "create-batch-import-job" [
 #
 # POST /
 # operationId: CreateBatchPredictionJob
-# --tags item shape: {key: string, value: string}
 export def "create-batch-prediction-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -490,7 +509,7 @@ export def "create-batch-prediction-job" [
   --detector-version: string # The detector version.
   iam_role_arn: string # The ARN of the IAM role to use for this job request. The IAM Role must have read permissions to your input S3 bucket and write permissions to your output S3 bucket. For more information about bucket permissions, see User policy examples (https://docs.aws.amazon.com/AmazonS3/latest/userguide/example-policies-s3.html) in the Amazon S3 User Guide.
   --tags: list # A collection of key and value pairs. — item shape: {key: string, value: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -520,9 +539,6 @@ export def "create-batch-prediction-job" [
 #
 # POST /
 # operationId: CreateDetectorVersion
-# --rules item shape: {detectorId: string, ruleId: string, ruleVersion: string}
-# --modelVersions item shape: {modelId: string, modelType: "ONLINE_FRAUD_INSIGHTS"|"TRANSACTION_FRAUD_INSIGHTS"|"ACCOUNT_TAKEOVER_INSIGHTS", modelVersionNumber: string, arn?: string}
-# --tags item shape: {key: string, value: string}
 export def "create-detector-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -548,7 +564,7 @@ export def "create-detector-version" [
   --model-versions: list # The model versions to include in the detector version. — item shape: {modelId: string, modelType: "ONLINE_FRAUD_INSIGHTS"|"TRANSACTION_FRAUD_INSIGHTS"|"ACCOUNT_TAKEOVER_INSIGHTS", modelVersionNumber: string, arn?: string}
   --rule-execution-mode: string@rule-execution-mode-completer # The rule execution mode for the rules included in the detector version. You can define and edit the rule mode at the detector version level, when it is in draft status. If you specify FIRST_MATCHED, Amazon Fraud Detector evaluates rules sequentially, first to last, stopping at the first matched rule. Amazon Fraud dectector then provides the outcomes for that single rule. If you specifiy ALL_MATCHED, Amazon Fraud Detector evaluates all rules and returns the outcomes for all matched rules. The default behavior is FIRST_MATCHED.
   --tags: list # A collection of key and value pairs. — item shape: {key: string, value: string}
-]: any -> record<detectorId: string, detectorVersionId: string, status: string> {
+]: any -> oneof<record<detectorId: string, detectorVersionId: string, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -578,7 +594,6 @@ export def "create-detector-version" [
 #
 # POST /
 # operationId: CreateList
-# --tags item shape: {key: string, value: string}
 export def "create-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -602,7 +617,7 @@ export def "create-list" [
   --variable-type: string # The variable type of the list. You can only assign the variable type with String data type. For more information, see Variable types (https://docs.aws.amazon.com/frauddetector/latest/ug/create-a-variable.html#variable-types).
   --description: string # The description of the list.
   --tags: list # A collection of the key and value pairs. — item shape: {key: string, value: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -632,7 +647,6 @@ export def "create-list" [
 #
 # POST /
 # operationId: CreateModel
-# --tags item shape: {key: string, value: string}
 export def "create-model" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -656,7 +670,7 @@ export def "create-model" [
   --description: string # The model description.
   event_type_name: string # The name of the event type.
   --tags: list # A collection of key and value pairs. — item shape: {key: string, value: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -686,10 +700,6 @@ export def "create-model" [
 #
 # POST /
 # operationId: CreateModelVersion
-# --trainingDataSchema shape: {modelVariables: list<string>, labelSchema?: record}
-# --externalEventsDetail shape: {dataLocation: string, dataAccessRoleArn: string}
-# --ingestedEventsDetail shape: {ingestedEventsTimeWindow: record}
-# --tags item shape: {key: string, value: string}
 export def "create-model-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -715,7 +725,7 @@ export def "create-model-version" [
   --external-events-detail: record # Details for the external events data used for model version training. — shape: {dataLocation: string, dataAccessRoleArn: string}
   --ingested-events-detail: record # The details of the ingested event. — shape: {ingestedEventsTimeWindow: record}
   --tags: list # A collection of key and value pairs. — item shape: {key: string, value: string}
-]: any -> record<modelId: string, modelType: string, modelVersionNumber: string, status: string> {
+]: any -> oneof<record<modelId: string, modelType: string, modelVersionNumber: string, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -745,7 +755,6 @@ export def "create-model-version" [
 #
 # POST /
 # operationId: CreateRule
-# --tags item shape: {key: string, value: string}
 export def "create-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -771,7 +780,7 @@ export def "create-rule" [
   language: string@language-completer # The language of the rule.
   outcomes: list<string> # The outcome or outcomes returned when the rule expression matches.
   --tags: list # A collection of key and value pairs. — item shape: {key: string, value: string}
-]: any -> record<rule: record<detectorId: string, ruleId: string, ruleVersion: string>> {
+]: any -> oneof<record<rule: record<detectorId: string, ruleId: string, ruleVersion: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -801,7 +810,6 @@ export def "create-rule" [
 #
 # POST /
 # operationId: CreateVariable
-# --tags item shape: {key: string, value: string}
 export def "create-variable" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -827,7 +835,7 @@ export def "create-variable" [
   --description: string # The description.
   --variable-type: string # The variable type. For more information see Variable types (https://docs.aws.amazon.com/frauddetector/latest/ug/create-a-variable.html#variable-types). Valid Values: AUTH_CODE | AVS | BILLING_ADDRESS_L1 | BILLING_ADDRESS_L2 | BILLING_CITY | BILLING_COUNTRY | BILLING_NAME | BILLING_PHONE | BILLING_STATE | BILLING_ZIP | CARD_BIN | CATEGORICAL | CURRENCY_CODE | EMAIL_ADDRESS | FINGERPRINT | FRAUD_LABEL | FREE_FORM_TEXT | IP_ADDRESS | NUMERIC | ORDER_ID | PAYMENT_TYPE | PHONE_NUMBER | PRICE | PRODUCT_CATEGORY | SHIPPING_ADDRESS_L1 | SHIPPING_ADDRESS_L2 | SHIPPING_CITY | SHIPPING_COUNTRY | SHIPPING_NAME | SHIPPING_PHONE | SHIPPING_STATE | SHIPPING_ZIP | USERAGENT
   --tags: list # A collection of key and value pairs. — item shape: {key: string, value: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -876,7 +884,7 @@ export def "delete-batch-import-job" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-12 # required
   job_id: string # The ID of the batch import job to delete.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -925,7 +933,7 @@ export def "delete-batch-prediction-job" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-13 # required
   job_id: string # The ID of the batch prediction job to delete.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -974,7 +982,7 @@ export def "delete-detector" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-14 # required
   detector_id: string # The ID of the detector to delete.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1024,7 +1032,7 @@ export def "delete-detector-version" [
   --x-amz-target: string@x-amz-target-completer-15 # required
   detector_id: string # The ID of the parent detector for the detector version to delete.
   detector_version_id: string # The ID of the detector version to delete.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1073,7 +1081,7 @@ export def "delete-entity-type" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-16 # required
   name: string # The name of the entity type to delete.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1124,7 +1132,7 @@ export def "delete-event" [
   event_id: string # The ID of the event to delete.
   event_type_name: string # The name of the event type.
   --delete-audit-history: oneof<nothing, bool> # Specifies whether or not to delete any predictions associated with the event.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1173,7 +1181,7 @@ export def "delete-event-type" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-18 # required
   name: string # The name of the event type to delete.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1222,7 +1230,7 @@ export def "delete-events-by-event-type" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-19 # required
   event_type_name: string # The name of the event type.
-]: any -> record<eventTypeName: string, eventsDeletionStatus: string> {
+]: any -> oneof<record<eventTypeName: string, eventsDeletionStatus: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1271,7 +1279,7 @@ export def "delete-external-model" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-20 # required
   model_endpoint: string # The endpoint of the Amazon Sagemaker model to delete.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1320,7 +1328,7 @@ export def "delete-label" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-21 # required
   name: string # The name of the label to delete.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1369,7 +1377,7 @@ export def "delete-list" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-22 # required
   name: string # The name of the list to delete.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1419,7 +1427,7 @@ export def "delete-model" [
   --x-amz-target: string@x-amz-target-completer-23 # required
   model_id: string # The model ID of the model to delete.
   model_type: string@model-type-completer # The model type of the model to delete.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1470,7 +1478,7 @@ export def "delete-model-version" [
   model_id: string # The model ID of the model version to delete.
   model_type: string@model-type-completer # The model type of the model version to delete.
   model_version_number: string # The model version number of the model version to delete.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1519,7 +1527,7 @@ export def "delete-outcome" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-25 # required
   name: string # The name of the outcome to delete.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1549,7 +1557,6 @@ export def "delete-outcome" [
 #
 # POST /
 # operationId: DeleteRule
-# --rule shape: {detectorId: string, ruleId: string, ruleVersion: string}
 export def "delete-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1569,7 +1576,7 @@ export def "delete-rule" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-26 # required
   rule: record # A rule. — shape: {detectorId: string, ruleId: string, ruleVersion: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1618,7 +1625,7 @@ export def "delete-variable" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-27 # required
   name: string # The name of the variable to delete.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1669,7 +1676,7 @@ export def "describe-detector" [
   detector_id: string # The detector ID.
   --next-token: string # The next token from the previous response.
   --max-results: int # The maximum number of results to return for the request.
-]: any -> record<detectorId: string, detectorVersionSummaries: table<detectorVersionId: string, status: string, description: string, lastUpdatedTime: string>, nextToken: string, arn: string> {
+]: any -> oneof<record<detectorId: string, detectorVersionSummaries: table<detectorVersionId: string, status: string, description: string, lastUpdatedTime: string>, nextToken: string, arn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1724,7 +1731,7 @@ export def "describe-model-versions" [
   --model-type: string@model-type-completer # The model type.
   --next-token-body: string # The next token from the previous results. (body field)
   --max-results-body: int # The maximum number of results to return. (body field)
-]: any -> record<modelVersionDetails: table<modelId: string, modelType: string, modelVersionNumber: string, status: string, trainingDataSource: string, trainingDataSchema: record, externalEventsDetail: record, ingestedEventsDetail: record, trainingResult: record, lastUpdatedTime: string, createdTime: string, arn: string, trainingResultV2: record>, nextToken: string> {
+]: any -> oneof<record<modelVersionDetails: table<modelId: string, modelType: string, modelVersionNumber: string, status: string, trainingDataSource: string, trainingDataSchema: record, externalEventsDetail: record, ingestedEventsDetail: record, trainingResult: record, lastUpdatedTime: string, createdTime: string, arn: string, trainingResultV2: record>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1778,7 +1785,7 @@ export def "get-batch-import-jobs" [
   --job-id: string # The ID of the batch import job to get.
   --max-results-body: int # The maximum number of objects to return for request. (body field)
   --next-token-body: string # The next token from the previous request. (body field)
-]: any -> record<batchImports: table<jobId: string, status: string, failureReason: string, startTime: string, completionTime: string, inputPath: string, outputPath: string, eventTypeName: string, iamRoleArn: string, arn: string, processedRecordsCount: int, failedRecordsCount: int, totalRecordsCount: int>, nextToken: string> {
+]: any -> oneof<record<batchImports: table<jobId: string, status: string, failureReason: string, startTime: string, completionTime: string, inputPath: string, outputPath: string, eventTypeName: string, iamRoleArn: string, arn: string, processedRecordsCount: int, failedRecordsCount: int, totalRecordsCount: int>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1832,7 +1839,7 @@ export def "get-batch-prediction-jobs" [
   --job-id: string # The batch prediction job for which to get the details.
   --max-results-body: int # The maximum number of objects to return for the request. (body field)
   --next-token-body: string # The next token from the previous request. (body field)
-]: any -> record<batchPredictions: table<jobId: string, status: string, failureReason: string, startTime: string, completionTime: string, lastHeartbeatTime: string, inputPath: string, outputPath: string, eventTypeName: string, detectorName: string, detectorVersion: string, iamRoleArn: string, arn: string, processedRecordsCount: int, totalRecordsCount: int>, nextToken: string> {
+]: any -> oneof<record<batchPredictions: table<jobId: string, status: string, failureReason: string, startTime: string, completionTime: string, lastHeartbeatTime: string, inputPath: string, outputPath: string, eventTypeName: string, detectorName: string, detectorVersion: string, iamRoleArn: string, arn: string, processedRecordsCount: int, totalRecordsCount: int>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1882,7 +1889,7 @@ export def "get-delete-events-by-event-type-status" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-32 # required
   event_type_name: string # Name of event type for which to get the deletion status.
-]: any -> record<eventTypeName: string, eventsDeletionStatus: string> {
+]: any -> oneof<record<eventTypeName: string, eventsDeletionStatus: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1932,7 +1939,7 @@ export def "get-detector-version" [
   --x-amz-target: string@x-amz-target-completer-33 # required
   detector_id: string # The detector ID.
   detector_version_id: string # The detector version ID.
-]: any -> record<detectorId: string, detectorVersionId: string, description: string, externalModelEndpoints: list<string>, modelVersions: table<modelId: string, modelType: string, modelVersionNumber: string, arn: string>, rules: table<detectorId: string, ruleId: string, ruleVersion: string>, status: string, lastUpdatedTime: string, createdTime: string, ruleExecutionMode: string, arn: string> {
+]: any -> oneof<record<detectorId: string, detectorVersionId: string, description: string, externalModelEndpoints: list<string>, modelVersions: table<modelId: string, modelType: string, modelVersionNumber: string, arn: string>, rules: table<detectorId: string, ruleId: string, ruleVersion: string>, status: string, lastUpdatedTime: string, createdTime: string, ruleExecutionMode: string, arn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1985,7 +1992,7 @@ export def "get-detectors" [
   --detector-id: string # The detector ID.
   --next-token-body: string # The next token for the subsequent request. (body field)
   --max-results-body: int # The maximum number of objects to return for the request. (body field)
-]: any -> record<detectors: table<detectorId: string, description: string, eventTypeName: string, lastUpdatedTime: string, createdTime: string, arn: string>, nextToken: string> {
+]: any -> oneof<record<detectors: table<detectorId: string, description: string, eventTypeName: string, lastUpdatedTime: string, createdTime: string, arn: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2039,7 +2046,7 @@ export def "get-entity-types" [
   --name: string # The name.
   --next-token-body: string # The next token for the subsequent request. (body field)
   --max-results-body: int # The maximum number of objects to return for the request. (body field)
-]: any -> record<entityTypes: table<name: string, description: string, lastUpdatedTime: string, createdTime: string, arn: string>, nextToken: string> {
+]: any -> oneof<record<entityTypes: table<name: string, description: string, lastUpdatedTime: string, createdTime: string, arn: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2090,7 +2097,7 @@ export def "get-event" [
   --x-amz-target: string@x-amz-target-completer-36 # required
   event_id: string # The ID of the event to retrieve.
   event_type_name: string # The event type of the event to retrieve.
-]: any -> record<event: record<eventId: string, eventTypeName: string, eventTimestamp: string, eventVariables: record, currentLabel: string, labelTimestamp: string, entities: list<record>>> {
+]: any -> oneof<record<event: record<eventId: string, eventTypeName: string, eventTimestamp: string, eventVariables: record, currentLabel: string, labelTimestamp: string, entities: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2120,7 +2127,6 @@ export def "get-event" [
 #
 # POST /
 # operationId: GetEventPrediction
-# --entities item shape: {entityType: string, entityId: string}
 export def "get-event-prediction" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2147,7 +2153,7 @@ export def "get-event-prediction" [
   event_timestamp: string # Timestamp that defines when the event under evaluation occurred. The timestamp must be specified using ISO 8601 standard in UTC.
   event_variables: record # Names of the event type's variables you defined in Amazon Fraud Detector to represent data elements and their corresponding values for the event you are sending for evaluation. You must provide at least one eventVariable To ensure most accurate fraud prediction and to simplify your data preparation, Amazon Fraud Detector will replace all missing variables or values as follows: For Amazon Fraud Detector trained models: If a null value is provided explicitly for a variable or if a variable is missing, model will replace the null value or the missing variable (no variable name in the eventVariables map) with calculated default mean/medians for numeric variables and with special values for categorical variables. For imported SageMaker models: If a null value is provided explicitly for a variable, the model and rules will use “null” as the value. If a variable is not provided (no variable name in the eventVariables map), model and rules will use the default value that is provided for the variable.
   --external-model-endpoint-data-blobs: record # The Amazon SageMaker model endpoint input data blobs.
-]: any -> record<modelScores: table<modelVersion: record, scores: record>, ruleResults: table<ruleId: string, outcomes: list>, externalModelOutputs: table<externalModel: record, outputs: record>> {
+]: any -> oneof<record<modelScores: table<modelVersion: record, scores: record>, ruleResults: table<ruleId: string, outcomes: list>, externalModelOutputs: table<externalModel: record, outputs: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2200,7 +2206,7 @@ export def "get-event-prediction-metadata" [
   detector_id: string # The detector ID.
   detector_version_id: string # The detector version ID.
   prediction_timestamp: string # The timestamp that defines when the prediction was generated. The timestamp must be specified using ISO 8601 standard in UTC. We recommend calling ListEventPredictions (https://docs.aws.amazon.com/frauddetector/latest/api/API_ListEventPredictions.html) first, and using the predictionTimestamp value in the response to provide an accurate prediction timestamp value.
-]: any -> record<eventId: string, eventTypeName: string, entityId: string, entityType: string, eventTimestamp: string, detectorId: string, detectorVersionId: string, detectorVersionStatus: string, eventVariables: table<name: string, value: string, source: string>, rules: table<ruleId: string, ruleVersion: string, expression: string, expressionWithValues: string, outcomes: list, evaluated: bool, matched: bool>, ruleExecutionMode: string, outcomes: list<string>, evaluatedModelVersions: table<modelId: string, modelVersion: string, modelType: string, evaluations: list>, evaluatedExternalModels: table<modelEndpoint: string, useEventVariables: bool, inputVariables: record, outputVariables: record>, predictionTimestamp: string> {
+]: any -> oneof<record<eventId: string, eventTypeName: string, entityId: string, entityType: string, eventTimestamp: string, detectorId: string, detectorVersionId: string, detectorVersionStatus: string, eventVariables: table<name: string, value: string, source: string>, rules: table<ruleId: string, ruleVersion: string, expression: string, expressionWithValues: string, outcomes: list, evaluated: bool, matched: bool>, ruleExecutionMode: string, outcomes: list<string>, evaluatedModelVersions: table<modelId: string, modelVersion: string, modelType: string, evaluations: list>, evaluatedExternalModels: table<modelEndpoint: string, useEventVariables: bool, inputVariables: record, outputVariables: record>, predictionTimestamp: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2253,7 +2259,7 @@ export def "get-event-types" [
   --name: string # The name.
   --next-token-body: string # The next token for the subsequent request. (body field)
   --max-results-body: int # The maximum number of objects to return for the request. (body field)
-]: any -> record<eventTypes: table<name: string, description: string, eventVariables: list, labels: list, entityTypes: list, eventIngestion: string, ingestedEventStatistics: record, lastUpdatedTime: string, createdTime: string, arn: string>, nextToken: string> {
+]: any -> oneof<record<eventTypes: table<name: string, description: string, eventVariables: list, labels: list, entityTypes: list, eventIngestion: string, ingestedEventStatistics: record, lastUpdatedTime: string, createdTime: string, arn: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2307,7 +2313,7 @@ export def "get-external-models" [
   --model-endpoint: string # The Amazon SageMaker model endpoint.
   --next-token-body: string # The next page token for the request. (body field)
   --max-results-body: int # The maximum number of objects to return for the request. (body field)
-]: any -> record<externalModels: table<modelEndpoint: string, modelSource: string, invokeModelEndpointRoleArn: string, inputConfiguration: record, outputConfiguration: record, modelEndpointStatus: string, lastUpdatedTime: string, createdTime: string, arn: string>, nextToken: string> {
+]: any -> oneof<record<externalModels: table<modelEndpoint: string, modelSource: string, invokeModelEndpointRoleArn: string, inputConfiguration: record, outputConfiguration: record, modelEndpointStatus: string, lastUpdatedTime: string, createdTime: string, arn: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2356,7 +2362,7 @@ export def "get-kms-encryption-key" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-41 # required
-]: nothing -> record<kmsKey: record<kmsEncryptionKeyArn: string>> {
+]: nothing -> oneof<record<kmsKey: record<kmsEncryptionKeyArn: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.GetKMSEncryptionKey")
@@ -2406,7 +2412,7 @@ export def "get-labels" [
   --name: string # The name of the label or labels to get.
   --next-token-body: string # The next token for the subsequent request. (body field)
   --max-results-body: int # The maximum number of objects to return for the request. (body field)
-]: any -> record<labels: table<name: string, description: string, lastUpdatedTime: string, createdTime: string, arn: string>, nextToken: string> {
+]: any -> oneof<record<labels: table<name: string, description: string, lastUpdatedTime: string, createdTime: string, arn: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2460,7 +2466,7 @@ export def "get-list-elements" [
   name: string # The name of the list.
   --next-token-body: string # The next token for the subsequent request. (body field)
   --max-results-body: int # The maximum number of objects to return for the request. (body field)
-]: any -> record<elements: list<string>, nextToken: string> {
+]: any -> oneof<record<elements: list<string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2514,7 +2520,7 @@ export def "get-lists-metadata" [
   --name: string # The name of the list.
   --next-token-body: string # The next token for the subsequent request. (body field)
   --max-results-body: int # The maximum number of objects to return for the request. (body field)
-]: any -> record<lists: table<name: string, description: string, variableType: string, createdTime: string, updatedTime: string, arn: string>, nextToken: string> {
+]: any -> oneof<record<lists: table<name: string, description: string, variableType: string, createdTime: string, updatedTime: string, arn: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2566,7 +2572,7 @@ export def "get-model-version" [
   model_id: string # The model ID.
   model_type: string@model-type-completer # The model type.
   model_version_number: string # The model version number.
-]: any -> record<modelId: string, modelType: string, modelVersionNumber: string, trainingDataSource: string, trainingDataSchema: record<modelVariables: list<string>, labelSchema: record<labelMapper: record, unlabeledEventsTreatment: string>>, externalEventsDetail: record<dataLocation: string, dataAccessRoleArn: string>, ingestedEventsDetail: record<ingestedEventsTimeWindow: record<startTime: string, endTime: string>>, status: string, arn: string> {
+]: any -> oneof<record<modelId: string, modelType: string, modelVersionNumber: string, trainingDataSource: string, trainingDataSchema: record<modelVariables: list<string>, labelSchema: record<labelMapper: record, unlabeledEventsTreatment: string>>, externalEventsDetail: record<dataLocation: string, dataAccessRoleArn: string>, ingestedEventsDetail: record<ingestedEventsTimeWindow: record<startTime: string, endTime: string>>, status: string, arn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2620,7 +2626,7 @@ export def "get-models" [
   --model-type: string@model-type-completer # The model type.
   --next-token-body: string # The next token for the subsequent request. (body field)
   --max-results-body: int # The maximum number of objects to return for the request. (body field)
-]: any -> record<nextToken: string, models: table<modelId: string, modelType: string, description: string, eventTypeName: string, createdTime: string, lastUpdatedTime: string, arn: string>> {
+]: any -> oneof<record<nextToken: string, models: table<modelId: string, modelType: string, description: string, eventTypeName: string, createdTime: string, lastUpdatedTime: string, arn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2674,7 +2680,7 @@ export def "get-outcomes" [
   --name: string # The name of the outcome or outcomes to get.
   --next-token-body: string # The next page token for the request. (body field)
   --max-results-body: int # The maximum number of objects to return for the request. (body field)
-]: any -> record<outcomes: table<name: string, description: string, lastUpdatedTime: string, createdTime: string, arn: string>, nextToken: string> {
+]: any -> oneof<record<outcomes: table<name: string, description: string, lastUpdatedTime: string, createdTime: string, arn: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2730,7 +2736,7 @@ export def "get-rules" [
   --rule-version: string # The rule version.
   --next-token-body: string # The next page token. (body field)
   --max-results-body: int # The maximum number of rules to return for the request. (body field)
-]: any -> record<ruleDetails: table<ruleId: string, description: string, detectorId: string, ruleVersion: string, expression: string, language: string, outcomes: list, lastUpdatedTime: string, createdTime: string, arn: string>, nextToken: string> {
+]: any -> oneof<record<ruleDetails: table<ruleId: string, description: string, detectorId: string, ruleVersion: string, expression: string, language: string, outcomes: list, lastUpdatedTime: string, createdTime: string, arn: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2784,7 +2790,7 @@ export def "get-variables" [
   --name: string # The name of the variable.
   --next-token-body: string # The next page token of the get variable request. (body field)
   --max-results-body: int # The max size per page determined for the get variable request. (body field)
-]: any -> record<variables: table<name: string, dataType: string, dataSource: string, defaultValue: string, description: string, variableType: string, lastUpdatedTime: string, createdTime: string, arn: string>, nextToken: string> {
+]: any -> oneof<record<variables: table<name: string, dataType: string, dataSource: string, defaultValue: string, description: string, variableType: string, lastUpdatedTime: string, createdTime: string, arn: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2815,11 +2821,6 @@ export def "get-variables" [
 #
 # POST /
 # operationId: ListEventPredictions
-# --eventId shape: {value?: string}
-# --eventType shape: {value?: string}
-# --detectorId shape: {value?: string}
-# --detectorVersionId shape: {value?: string}
-# --predictionTimeRange shape: {startTime: string, endTime: string}
 export def "list-event-predictions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2847,7 +2848,7 @@ export def "list-event-predictions" [
   --prediction-time-range: record # The time period for when the predictions were generated. — shape: {startTime: string, endTime: string}
   --next-token-body: string # Identifies the next page of results to return. Use the token to make the call again to retrieve the next page. Keep all other arguments unchanged. Each pagination token expires after 24 hours. (body field)
   --max-results-body: int # The maximum number of predictions to return for the request. (body field)
-]: any -> record<eventPredictionSummaries: table<eventId: string, eventTypeName: string, eventTimestamp: string, predictionTimestamp: string, detectorId: string, detectorVersionId: string>, nextToken: string> {
+]: any -> oneof<record<eventPredictionSummaries: table<eventId: string, eventTypeName: string, eventTimestamp: string, predictionTimestamp: string, detectorId: string, detectorVersionId: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2901,7 +2902,7 @@ export def "list-tags-for-resource" [
   resource_arn: string # The ARN that specifies the resource whose tags you want to list.
   --next-token-body: string # The next token from the previous results. (body field)
   --max-results-body: int # The maximum number of objects to return for the request. (body field)
-]: any -> record<tags: table<key: string, value: string>, nextToken: string> {
+]: any -> oneof<record<tags: table<key: string, value: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2932,7 +2933,6 @@ export def "list-tags-for-resource" [
 #
 # POST /
 # operationId: PutDetector
-# --tags item shape: {key: string, value: string}
 export def "put-detector" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2955,7 +2955,7 @@ export def "put-detector" [
   --description: string # The description of the detector.
   event_type_name: string # The name of the event type.
   --tags: list # A collection of key and value pairs. — item shape: {key: string, value: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2985,7 +2985,6 @@ export def "put-detector" [
 #
 # POST /
 # operationId: PutEntityType
-# --tags item shape: {key: string, value: string}
 export def "put-entity-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3007,7 +3006,7 @@ export def "put-entity-type" [
   name: string # The name of the entity type.
   --description: string # The description.
   --tags: list # A collection of key and value pairs. — item shape: {key: string, value: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3037,7 +3036,6 @@ export def "put-entity-type" [
 #
 # POST /
 # operationId: PutEventType
-# --tags item shape: {key: string, value: string}
 export def "put-event-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3063,7 +3061,7 @@ export def "put-event-type" [
   entity_types: list<string> # The entity type for the event type. Example entity types: customer, merchant, account.
   --event-ingestion: string@event-ingestion-completer # Specifies if ingenstion is enabled or disabled.
   --tags: list # A collection of key and value pairs. — item shape: {key: string, value: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3093,9 +3091,6 @@ export def "put-event-type" [
 #
 # POST /
 # operationId: PutExternalModel
-# --inputConfiguration shape: {eventTypeName?: string, format?: "TEXT_CSV"|"APPLICATION_JSON", useEventVariables: bool, jsonInputTemplate?: string, csvInputTemplate?: string}
-# --outputConfiguration shape: {format: "TEXT_CSV"|"APPLICATION_JSONLINES", jsonKeyToVariableMap?: record, csvIndexToVariableMap?: record}
-# --tags item shape: {key: string, value: string}
 export def "put-external-model" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3121,7 +3116,7 @@ export def "put-external-model" [
   output_configuration: record # Provides the Amazon Sagemaker model output configuration. — shape: {format: "TEXT_CSV"|"APPLICATION_JSONLINES", jsonKeyToVariableMap?: record, csvIndexToVariableMap?: record}
   model_endpoint_status: string@model-endpoint-status-completer # The model endpoint’s status in Amazon Fraud Detector.
   --tags: list # A collection of key and value pairs. — item shape: {key: string, value: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3170,7 +3165,7 @@ export def "put-kms-encryption-key" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-56 # required
   kms_encryption_key_arn: string # The KMS encryption key ARN. The KMS key must be single-Region key. Amazon Fraud Detector does not support multi-Region KMS key.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3200,7 +3195,6 @@ export def "put-kms-encryption-key" [
 #
 # POST /
 # operationId: PutLabel
-# --tags item shape: {key: string, value: string}
 export def "put-label" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3222,7 +3216,7 @@ export def "put-label" [
   name: string # The label name.
   --description: string # The label description.
   --tags: list # item shape: {key: string, value: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3252,7 +3246,6 @@ export def "put-label" [
 #
 # POST /
 # operationId: PutOutcome
-# --tags item shape: {key: string, value: string}
 export def "put-outcome" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3274,7 +3267,7 @@ export def "put-outcome" [
   name: string # The name of the outcome.
   --description: string # The outcome description.
   --tags: list # A collection of key and value pairs. — item shape: {key: string, value: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3304,7 +3297,6 @@ export def "put-outcome" [
 #
 # POST /
 # operationId: SendEvent
-# --entities item shape: {entityType: string, entityId: string}
 export def "send-event" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3330,7 +3322,7 @@ export def "send-event" [
   --assigned-label: string # The label to associate with the event. Required if specifying labelTimestamp.
   --label-timestamp: string # The timestamp associated with the label. Required if specifying assignedLabel.
   entities: list # An array of entities. — item shape: {entityType: string, entityId: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3360,7 +3352,6 @@ export def "send-event" [
 #
 # POST /
 # operationId: TagResource
-# --tags item shape: {key: string, value: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3381,7 +3372,7 @@ export def "tag-resource" [
   --x-amz-target: string@x-amz-target-completer-60 # required
   resource_arn: string # The resource ARN.
   tags: list # The tags to assign to the resource. — item shape: {key: string, value: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3431,7 +3422,7 @@ export def "untag-resource" [
   --x-amz-target: string@x-amz-target-completer-61 # required
   resource_arn: string # The ARN of the resource from which to remove the tag.
   tag_keys: list<string> # The resource ARN.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3461,8 +3452,6 @@ export def "untag-resource" [
 #
 # POST /
 # operationId: UpdateDetectorVersion
-# --rules item shape: {detectorId: string, ruleId: string, ruleVersion: string}
-# --modelVersions item shape: {modelId: string, modelType: "ONLINE_FRAUD_INSIGHTS"|"TRANSACTION_FRAUD_INSIGHTS"|"ACCOUNT_TAKEOVER_INSIGHTS", modelVersionNumber: string, arn?: string}
 export def "update-detector-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3488,7 +3477,7 @@ export def "update-detector-version" [
   --description: string # The detector version description.
   --model-versions: list # The model versions to include in the detector version. — item shape: {modelId: string, modelType: "ONLINE_FRAUD_INSIGHTS"|"TRANSACTION_FRAUD_INSIGHTS"|"ACCOUNT_TAKEOVER_INSIGHTS", modelVersionNumber: string, arn?: string}
   --rule-execution-mode: string@rule-execution-mode-completer # The rule execution mode to add to the detector. If you specify FIRST_MATCHED, Amazon Fraud Detector evaluates rules sequentially, first to last, stopping at the first matched rule. Amazon Fraud dectector then provides the outcomes for that single rule. If you specifiy ALL_MATCHED, Amazon Fraud Detector evaluates all rules and returns the outcomes for all matched rules. You can define and edit the rule mode at the detector version level, when it is in draft status. The default behavior is FIRST_MATCHED.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3539,7 +3528,7 @@ export def "update-detector-version-metadata" [
   detector_id: string # The detector ID.
   detector_version_id: string # The detector version ID.
   description: string # The description.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3590,7 +3579,7 @@ export def "update-detector-version-status" [
   detector_id: string # The detector ID.
   detector_version_id: string # The detector version ID.
   status: string@status-completer # The new status. The only supported values are ACTIVE and INACTIVE
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3642,7 +3631,7 @@ export def "update-event-label" [
   event_type_name: string # The event type of the event associated with the label to update.
   assigned_label: string # The new label to assign to the event.
   label_timestamp: string # The timestamp associated with the label. The timestamp must be specified using ISO 8601 standard in UTC.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3695,7 +3684,7 @@ export def "update-list" [
   --description: string # The new description.
   --update-mode: string@update-mode-completer # The update mode (type). Use APPEND if you are adding elements to the list. Use REPLACE if you replacing existing elements in the list. Use REMOVE if you are removing elements from the list.
   --variable-type: string # The variable type you want to assign to the list. You cannot update a variable type of a list that already has a variable type assigned to it. You can assign a variable type to a list only if the list does not already have a variable type.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3746,7 +3735,7 @@ export def "update-model" [
   model_id: string # The model ID.
   model_type: string@model-type-completer # The model type.
   --description: string # The new model description.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3776,9 +3765,6 @@ export def "update-model" [
 #
 # POST /
 # operationId: UpdateModelVersion
-# --externalEventsDetail shape: {dataLocation: string, dataAccessRoleArn: string}
-# --ingestedEventsDetail shape: {ingestedEventsTimeWindow: record}
-# --tags item shape: {key: string, value: string}
 export def "update-model-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3803,7 +3789,7 @@ export def "update-model-version" [
   --external-events-detail: record # Details for the external events data used for model version training. — shape: {dataLocation: string, dataAccessRoleArn: string}
   --ingested-events-detail: record # The details of the ingested event. — shape: {ingestedEventsTimeWindow: record}
   --tags: list # A collection of key and value pairs. — item shape: {key: string, value: string}
-]: any -> record<modelId: string, modelType: string, modelVersionNumber: string, status: string> {
+]: any -> oneof<record<modelId: string, modelType: string, modelVersionNumber: string, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3855,7 +3841,7 @@ export def "update-model-version-status" [
   model_type: string@model-type-completer # The model type.
   model_version_number: string # The model version number.
   status: string@status-completer-1 # The model version status.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3885,7 +3871,6 @@ export def "update-model-version-status" [
 #
 # POST /
 # operationId: UpdateRuleMetadata
-# --rule shape: {detectorId: string, ruleId: string, ruleVersion: string}
 export def "update-rule-metadata" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3906,7 +3891,7 @@ export def "update-rule-metadata" [
   --x-amz-target: string@x-amz-target-completer-70 # required
   rule: record # A rule. — shape: {detectorId: string, ruleId: string, ruleVersion: string}
   description: string # The rule description.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3936,8 +3921,6 @@ export def "update-rule-metadata" [
 #
 # POST /
 # operationId: UpdateRuleVersion
-# --rule shape: {detectorId: string, ruleId: string, ruleVersion: string}
-# --tags item shape: {key: string, value: string}
 export def "update-rule-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3962,7 +3945,7 @@ export def "update-rule-version" [
   language: string@language-completer # The language.
   outcomes: list<string> # The outcomes.
   --tags: list # The tags to assign to the rule version. — item shape: {key: string, value: string}
-]: any -> record<rule: record<detectorId: string, ruleId: string, ruleVersion: string>> {
+]: any -> oneof<record<rule: record<detectorId: string, ruleId: string, ruleVersion: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4014,7 +3997,7 @@ export def "update-variable" [
   --default-value: string # The new default value of the variable.
   --description: string # The new description.
   --variable-type: string # The variable type. For more information see Variable types (https://docs.aws.amazon.com/frauddetector/latest/ug/create-a-variable.html#variable-types).
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

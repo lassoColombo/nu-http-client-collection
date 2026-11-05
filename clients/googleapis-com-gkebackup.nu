@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -119,9 +143,9 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "gkebackup-projects-locations-restore-plans-restores-delete" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["gkebackup-projects-locations-restore-plans-restores-delete" "gkebackup-projects-locations-restore-plans-restores-volume-restores-get" "gkebackup-projects-locations-restore-plans-restores-patch" "gkebackup-projects-locations-list" "gkebackup-projects-locations-delete-operations" "gkebackup-projects-locations-operations-list" "gkebackup-projects-locations-operations-cancel" "gkebackup-projects-locations-backup-plans-list" "gkebackup-projects-locations-backup-plans-create" "gkebackup-projects-locations-backup-plans-backups-list" "gkebackup-projects-locations-backup-plans-backups-create" "gkebackup-projects-locations-restore-plans-list" "gkebackup-projects-locations-restore-plans-create" "gkebackup-projects-locations-restore-plans-restores-list" "gkebackup-projects-locations-restore-plans-restores-create" "gkebackup-projects-locations-backup-plans-backups-volume-backups-list" "gkebackup-projects-locations-restore-plans-restores-volume-restores-list" "gkebackup-projects-locations-restore-plans-restores-volume-restores-get-iam-policy" "gkebackup-projects-locations-restore-plans-restores-volume-restores-set-iam-policy" "gkebackup-projects-locations-restore-plans-restores-volume-restores-test-iam-permissions" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -167,7 +191,7 @@ export def "gkebackup-projects-locations-restore-plans-restores-delete" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --etag: string # If provided, this value must match the current value of the target Restore's etag field or the request is rejected.
   --force: oneof<nothing, bool> # If set to true, any VolumeRestores below this restore will also be deleted. Otherwise, the request will only succeed if the restore has no VolumeRestores.
-]: nothing -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: nothing -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -215,7 +239,7 @@ export def "gkebackup-projects-locations-restore-plans-restores-volume-restores-
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<completeTime: string, createTime: string, etag: string, name: string, state: string, stateMessage: string, targetPvc: record<name: string, namespace: string>, uid: string, updateTime: string, volumeBackup: string, volumeHandle: string, volumeType: string> {
+]: nothing -> oneof<record<completeTime: string, createTime: string, etag: string, name: string, state: string, stateMessage: string, targetPvc: record<name: string, namespace: string>, uid: string, updateTime: string, volumeBackup: string, volumeHandle: string, volumeType: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -241,7 +265,6 @@ export def "gkebackup-projects-locations-restore-plans-restores-volume-restores-
 #
 # PATCH /v1/{name}
 # operationId: gkebackup.projects.locations.restorePlans.restores.patch
-# --restoreConfig shape: {allNamespaces?: bool, clusterResourceConflictPolicy?: "CLUSTER_RESOURCE_CONFLICT_POLICY_UNSPECIFIED"|"USE_EXISTING_VERSION"|"USE_BACKUP_VERSION", clusterResourceRestoreScope?: record, namespacedResourceRestoreMode?: "NAMESPACED_RESOURCE_RESTORE_MODE_UNSPECIFIED"|"DELETE_AND_RESTORE"|"FAIL_ON_CONFLICT", selectedApplications?: record, selectedNamespaces?: record, substitutionRules?: list, ... (1 more fields)}
 export def "gkebackup-projects-locations-restore-plans-restores-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -269,7 +292,7 @@ export def "gkebackup-projects-locations-restore-plans-restores-patch" [
   --description: string # User specified descriptive string for this Restore.
   --labels: record # A set of custom labels supplied by user.
   --restore-config: record # Configuration of a restore. Next id: 12 — shape: {allNamespaces?: bool, clusterResourceConflictPolicy?: "CLUSTER_RESOURCE_CONFLICT_POLICY_UNSPECIFIED"|"USE_EXISTING_VERSION"|"USE_BACKUP_VERSION", clusterResourceRestoreScope?: record, namespacedResourceRestoreMode?: "NAMESPACED_RESOURCE_RESTORE_MODE_UNSPECIFIED"|"DELETE_AND_RESTORE"|"FAIL_ON_CONFLICT", selectedApplications?: record, selectedNamespaces?: record, substitutionRules?: list, ... (1 more fields)}
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -323,7 +346,7 @@ export def "gkebackup-projects-locations-list" [
   --filter: string # A filter to narrow down results to a preferred subset. The filtering language accepts strings like `"displayName=tokyo"`, and is documented in more detail in [AIP-160](https://google.aip.dev/160).
   --page-size: int # The maximum number of results to return. If not set, the service selects a default.
   --page-token: string # A page token received from the `next_page_token` field in the response. Send that page token to receive the subsequent page.
-]: nothing -> record<locations: table<displayName: string, labels: record, locationId: string, metadata: record, name: string>, nextPageToken: string> {
+]: nothing -> oneof<record<locations: table<displayName: string, labels: record, locationId: string, metadata: record, name: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -371,7 +394,7 @@ export def "gkebackup-projects-locations-delete-operations" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -422,7 +445,7 @@ export def "gkebackup-projects-locations-operations-list" [
   --filter: string # The standard list filter.
   --page-size: int # The standard list page size.
   --page-token: string # The standard list page token.
-]: nothing -> record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>> {
+]: nothing -> oneof<record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -471,7 +494,7 @@ export def "gkebackup-projects-locations-operations-cancel" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -526,7 +549,7 @@ export def "gkebackup-projects-locations-backup-plans-list" [
   --order-by: string # Field by which to sort the results.
   --page-size: int # The target number of results to return in a single response. If not specified, a default value will be chosen by the service. Note that the response may inclue a partial list and a caller should only rely on the response's next_page_token to determine if there are more instances left to be queried.
   --page-token: string # The value of next_page_token received from a previous `ListBackupPlans` call. Provide this to retrieve the subsequent page in a multi-page list of results. When paginating, all other parameters provided to `ListBackupPlans` must match the call that provided the page token.
-]: nothing -> record<backupPlans: table<backupConfig: record, backupSchedule: record, cluster: string, createTime: string, deactivated: bool, description: string, etag: string, labels: record, name: string, protectedPodCount: int, retentionPolicy: record, uid: string, updateTime: string>, nextPageToken: string, unreachable: list<string>> {
+]: nothing -> oneof<record<backupPlans: table<backupConfig: record, backupSchedule: record, cluster: string, createTime: string, deactivated: bool, description: string, etag: string, labels: record, name: string, protectedPodCount: int, retentionPolicy: record, uid: string, updateTime: string>, nextPageToken: string, unreachable: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -552,9 +575,6 @@ export def "gkebackup-projects-locations-backup-plans-list" [
 #
 # POST /v1/{parent}/backupPlans
 # operationId: gkebackup.projects.locations.backupPlans.create
-# --backupConfig shape: {allNamespaces?: bool, encryptionKey?: record, includeSecrets?: bool, includeVolumeData?: bool, selectedApplications?: record, selectedNamespaces?: record}
-# --backupSchedule shape: {cronSchedule?: string, paused?: bool}
-# --retentionPolicy shape: {backupDeleteLockDays?: int, backupRetainDays?: int, locked?: bool}
 export def "gkebackup-projects-locations-backup-plans-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -585,7 +605,7 @@ export def "gkebackup-projects-locations-backup-plans-create" [
   --description: string # User specified descriptive string for this BackupPlan.
   --labels: record # A set of custom labels supplied by user.
   --retention-policy: record # RetentionPolicy defines a Backup retention policy for a BackupPlan. — shape: {backupDeleteLockDays?: int, backupRetainDays?: int, locked?: bool}
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -640,7 +660,7 @@ export def "gkebackup-projects-locations-backup-plans-backups-list" [
   --order-by: string # Field by which to sort the results.
   --page-size: int # The target number of results to return in a single response. If not specified, a default value will be chosen by the service. Note that the response may inclue a partial list and a caller should only rely on the response's next_page_token to determine if there are more instances left to be queried.
   --page-token: string # The value of next_page_token received from a previous `ListBackups` call. Provide this to retrieve the subsequent page in a multi-page list of results. When paginating, all other parameters provided to `ListBackups` must match the call that provided the page token.
-]: nothing -> record<backups: table<allNamespaces: bool, clusterMetadata: record, completeTime: string, configBackupSizeBytes: string, containsSecrets: bool, containsVolumeData: bool, createTime: string, deleteLockDays: int, deleteLockExpireTime: string, description: string, encryptionKey: record, etag: string, labels: record, manual: bool, name: string, podCount: int, resourceCount: int, retainDays: int, retainExpireTime: string, selectedApplications: record, selectedNamespaces: record, sizeBytes: string, state: string, stateReason: string, uid: string, updateTime: string, volumeCount: int>, nextPageToken: string> {
+]: nothing -> oneof<record<backups: table<allNamespaces: bool, clusterMetadata: record, completeTime: string, configBackupSizeBytes: string, containsSecrets: bool, containsVolumeData: bool, createTime: string, deleteLockDays: int, deleteLockExpireTime: string, description: string, encryptionKey: record, etag: string, labels: record, manual: bool, name: string, podCount: int, resourceCount: int, retainDays: int, retainExpireTime: string, selectedApplications: record, selectedNamespaces: record, sizeBytes: string, state: string, stateReason: string, uid: string, updateTime: string, volumeCount: int>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -666,10 +686,6 @@ export def "gkebackup-projects-locations-backup-plans-backups-list" [
 #
 # POST /v1/{parent}/backups
 # operationId: gkebackup.projects.locations.backupPlans.backups.create
-# --clusterMetadata shape: {anthosVersion?: string, backupCrdVersions?: record, cluster?: string, gkeVersion?: string, k8sVersion?: string}
-# --encryptionKey shape: {gcpKmsEncryptionKey?: string}
-# --selectedApplications shape: {namespacedNames?: list}
-# --selectedNamespaces shape: {namespaces?: list<string>}
 export def "gkebackup-projects-locations-backup-plans-backups-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -701,7 +717,7 @@ export def "gkebackup-projects-locations-backup-plans-backups-create" [
   --retain-days: int # The age (in days) after which this Backup will be automatically deleted. Must be an integer value >= 0: - If 0, no automatic deletion will occur for this Backup. - If not 0, this must be >= delete_lock_days and <= 365. Once a Backup is created, this value may only be increased. Defaults to the parent BackupPlan's backup_retain_days value. (format: int32)
   --selected-applications: record # A list of namespaced Kubernetes resources. — shape: {namespacedNames?: list}
   --selected-namespaces: record # A list of Kubernetes Namespaces — shape: {namespaces?: list<string>}
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -756,7 +772,7 @@ export def "gkebackup-projects-locations-restore-plans-list" [
   --order-by: string # Field by which to sort the results.
   --page-size: int # The target number of results to return in a single response. If not specified, a default value will be chosen by the service. Note that the response may inclue a partial list and a caller should only rely on the response's next_page_token to determine if there are more instances left to be queried.
   --page-token: string # The value of next_page_token received from a previous `ListRestorePlans` call. Provide this to retrieve the subsequent page in a multi-page list of results. When paginating, all other parameters provided to `ListRestorePlans` must match the call that provided the page token.
-]: nothing -> record<nextPageToken: string, restorePlans: table<backupPlan: string, cluster: string, createTime: string, description: string, etag: string, labels: record, name: string, restoreConfig: record, uid: string, updateTime: string>, unreachable: list<string>> {
+]: nothing -> oneof<record<nextPageToken: string, restorePlans: table<backupPlan: string, cluster: string, createTime: string, description: string, etag: string, labels: record, name: string, restoreConfig: record, uid: string, updateTime: string>, unreachable: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -782,7 +798,6 @@ export def "gkebackup-projects-locations-restore-plans-list" [
 #
 # POST /v1/{parent}/restorePlans
 # operationId: gkebackup.projects.locations.restorePlans.create
-# --restoreConfig shape: {allNamespaces?: bool, clusterResourceConflictPolicy?: "CLUSTER_RESOURCE_CONFLICT_POLICY_UNSPECIFIED"|"USE_EXISTING_VERSION"|"USE_BACKUP_VERSION", clusterResourceRestoreScope?: record, namespacedResourceRestoreMode?: "NAMESPACED_RESOURCE_RESTORE_MODE_UNSPECIFIED"|"DELETE_AND_RESTORE"|"FAIL_ON_CONFLICT", selectedApplications?: record, selectedNamespaces?: record, substitutionRules?: list, ... (1 more fields)}
 export def "gkebackup-projects-locations-restore-plans-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -811,7 +826,7 @@ export def "gkebackup-projects-locations-restore-plans-create" [
   --description: string # User specified descriptive string for this RestorePlan.
   --labels: record # A set of custom labels supplied by user.
   --restore-config: record # Configuration of a restore. Next id: 12 — shape: {allNamespaces?: bool, clusterResourceConflictPolicy?: "CLUSTER_RESOURCE_CONFLICT_POLICY_UNSPECIFIED"|"USE_EXISTING_VERSION"|"USE_BACKUP_VERSION", clusterResourceRestoreScope?: record, namespacedResourceRestoreMode?: "NAMESPACED_RESOURCE_RESTORE_MODE_UNSPECIFIED"|"DELETE_AND_RESTORE"|"FAIL_ON_CONFLICT", selectedApplications?: record, selectedNamespaces?: record, substitutionRules?: list, ... (1 more fields)}
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -866,7 +881,7 @@ export def "gkebackup-projects-locations-restore-plans-restores-list" [
   --order-by: string # Field by which to sort the results.
   --page-size: int # The target number of results to return in a single response. If not specified, a default value will be chosen by the service. Note that the response may inclue a partial list and a caller should only rely on the response's next_page_token to determine if there are more instances left to be queried.
   --page-token: string # The value of next_page_token received from a previous `ListRestores` call. Provide this to retrieve the subsequent page in a multi-page list of results. When paginating, all other parameters provided to `ListRestores` must match the call that provided the page token.
-]: nothing -> record<nextPageToken: string, restores: table<backup: string, cluster: string, completeTime: string, createTime: string, description: string, etag: string, labels: record, name: string, resourcesExcludedCount: int, resourcesFailedCount: int, resourcesRestoredCount: int, restoreConfig: record, state: string, stateReason: string, uid: string, updateTime: string, volumesRestoredCount: int>, unreachable: list<string>> {
+]: nothing -> oneof<record<nextPageToken: string, restores: table<backup: string, cluster: string, completeTime: string, createTime: string, description: string, etag: string, labels: record, name: string, resourcesExcludedCount: int, resourcesFailedCount: int, resourcesRestoredCount: int, restoreConfig: record, state: string, stateReason: string, uid: string, updateTime: string, volumesRestoredCount: int>, unreachable: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -892,7 +907,6 @@ export def "gkebackup-projects-locations-restore-plans-restores-list" [
 #
 # POST /v1/{parent}/restores
 # operationId: gkebackup.projects.locations.restorePlans.restores.create
-# --restoreConfig shape: {allNamespaces?: bool, clusterResourceConflictPolicy?: "CLUSTER_RESOURCE_CONFLICT_POLICY_UNSPECIFIED"|"USE_EXISTING_VERSION"|"USE_BACKUP_VERSION", clusterResourceRestoreScope?: record, namespacedResourceRestoreMode?: "NAMESPACED_RESOURCE_RESTORE_MODE_UNSPECIFIED"|"DELETE_AND_RESTORE"|"FAIL_ON_CONFLICT", selectedApplications?: record, selectedNamespaces?: record, substitutionRules?: list, ... (1 more fields)}
 export def "gkebackup-projects-locations-restore-plans-restores-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -920,7 +934,7 @@ export def "gkebackup-projects-locations-restore-plans-restores-create" [
   --description: string # User specified descriptive string for this Restore.
   --labels: record # A set of custom labels supplied by user.
   --restore-config: record # Configuration of a restore. Next id: 12 — shape: {allNamespaces?: bool, clusterResourceConflictPolicy?: "CLUSTER_RESOURCE_CONFLICT_POLICY_UNSPECIFIED"|"USE_EXISTING_VERSION"|"USE_BACKUP_VERSION", clusterResourceRestoreScope?: record, namespacedResourceRestoreMode?: "NAMESPACED_RESOURCE_RESTORE_MODE_UNSPECIFIED"|"DELETE_AND_RESTORE"|"FAIL_ON_CONFLICT", selectedApplications?: record, selectedNamespaces?: record, substitutionRules?: list, ... (1 more fields)}
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -975,7 +989,7 @@ export def "gkebackup-projects-locations-backup-plans-backups-volume-backups-lis
   --order-by: string # Field by which to sort the results.
   --page-size: int # The target number of results to return in a single response. If not specified, a default value will be chosen by the service. Note that the response may inclue a partial list and a caller should only rely on the response's next_page_token to determine if there are more instances left to be queried.
   --page-token: string # The value of next_page_token received from a previous `ListVolumeBackups` call. Provide this to retrieve the subsequent page in a multi-page list of results. When paginating, all other parameters provided to `ListVolumeBackups` must match the call that provided the page token.
-]: nothing -> record<nextPageToken: string, volumeBackups: table<completeTime: string, createTime: string, diskSizeBytes: string, etag: string, format: string, name: string, sourcePvc: record, state: string, stateMessage: string, storageBytes: string, uid: string, updateTime: string, volumeBackupHandle: string>> {
+]: nothing -> oneof<record<nextPageToken: string, volumeBackups: table<completeTime: string, createTime: string, diskSizeBytes: string, etag: string, format: string, name: string, sourcePvc: record, state: string, stateMessage: string, storageBytes: string, uid: string, updateTime: string, volumeBackupHandle: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1027,7 +1041,7 @@ export def "gkebackup-projects-locations-restore-plans-restores-volume-restores-
   --order-by: string # Field by which to sort the results.
   --page-size: int # The target number of results to return in a single response. If not specified, a default value will be chosen by the service. Note that the response may inclue a partial list and a caller should only rely on the response's next_page_token to determine if there are more instances left to be queried.
   --page-token: string # The value of next_page_token received from a previous `ListVolumeRestores` call. Provide this to retrieve the subsequent page in a multi-page list of results. When paginating, all other parameters provided to `ListVolumeRestores` must match the call that provided the page token.
-]: nothing -> record<nextPageToken: string, volumeRestores: table<completeTime: string, createTime: string, etag: string, name: string, state: string, stateMessage: string, targetPvc: record, uid: string, updateTime: string, volumeBackup: string, volumeHandle: string, volumeType: string>> {
+]: nothing -> oneof<record<nextPageToken: string, volumeRestores: table<completeTime: string, createTime: string, etag: string, name: string, state: string, stateMessage: string, targetPvc: record, uid: string, updateTime: string, volumeBackup: string, volumeHandle: string, volumeType: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1076,7 +1090,7 @@ export def "gkebackup-projects-locations-restore-plans-restores-volume-restores-
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --options-requested-policy-version: int # Optional. The maximum policy version that will be used to format the policy. Valid values are 0, 1, and 3. Requests specifying an invalid value will be rejected. Requests for policies with any conditional role bindings must specify version 3. Policies with no conditional role bindings may specify any valid value or leave the field unset. The policy in the response might use the policy version that you specified, or it might use a lower policy version. For example, if you specify version 3, but the policy has no conditional role bindings, the response uses version 1. To learn which resources support conditions in their IAM policies, see the [IAM documentation](https://cloud.google.com/iam/help/conditions/resource-policies).
-]: nothing -> record<auditConfigs: table<auditLogConfigs: list, service: string>, bindings: table<condition: record, members: list, role: string>, etag: string, version: int> {
+]: nothing -> oneof<record<auditConfigs: table<auditLogConfigs: list, service: string>, bindings: table<condition: record, members: list, role: string>, etag: string, version: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource | is-empty) { error make --unspanned { msg: "path parameter 'resource' must be non-empty" } }
@@ -1102,7 +1116,6 @@ export def "gkebackup-projects-locations-restore-plans-restores-volume-restores-
 #
 # POST /v1/{resource}:setIamPolicy
 # operationId: gkebackup.projects.locations.restorePlans.restores.volumeRestores.setIamPolicy
-# --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
 export def "gkebackup-projects-locations-restore-plans-restores-volume-restores-set-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1127,7 +1140,7 @@ export def "gkebackup-projects-locations-restore-plans-restores-volume-restores-
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --policy: record # An Identity and Access Management (IAM) policy, which specifies access controls for Google Cloud resources. A `Policy` is a collection of `bindings`. A `binding` binds one or more `members`, or principals, to a single `role`. Principals can be user accounts, service accounts, Google groups, and domains (such as G Suite). A `role` is a named list of permissions; each `role` can be an IAM predefined role or a user-created custom role. For some types of Google Cloud resources, a `binding` can also specify a `condition`, which is a logical expression that allows access to a resource only if the expression evaluates to `true`. A condition can add constraints based on attributes of the request, the resource, or both. To learn which resources support conditions in their IAM policies, see the [IAM documentation](https://cloud.google.com/iam/help/conditions/resource-policies). **JSON example:** { "bindings": [ { "role": "roles/resourcemanager.organizationAdmin", "members": [ "user:mike@example.com", "group:admins@example.com", "domain:google.com", "serviceAccount:my-project-id@appspot.gserviceaccount.com" ] }, { "role": "roles/resourcemanager.organizationViewer", "members": [ "user:eve@example.com" ], "condition": { "title": "expirable access", "description": "Does not grant access after Sep 2020", "expression": "request.time < timestamp('2020-10-01T00:00:00.000Z')", } } ], "etag": "BwWWja0YfJA=", "version": 3 } **YAML example:** bindings: - members: - user:mike@example.com - group:admins@example.com - domain:google.com - serviceAccount:my-project-id@appspot.gserviceaccount.com role: roles/resourcemanager.organizationAdmin - members: - user:eve@example.com role: roles/resourcemanager.organizationViewer condition: title: expirable access description: Does not grant access after Sep 2020 expression: request.time < timestamp('2020-10-01T00:00:00.000Z') etag: BwWWja0YfJA= version: 3 For a description of IAM and its features, see the [IAM documentation](https://cloud.google.com/iam/docs/). — shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
   --update-mask: string # OPTIONAL: A FieldMask specifying which fields of the policy to modify. Only the fields in the mask will be modified. If no mask is provided, the following default mask is used: `paths: "bindings, etag"` (format: google-fieldmask)
-]: any -> record<auditConfigs: table<auditLogConfigs: list, service: string>, bindings: table<condition: record, members: list, role: string>, etag: string, version: int> {
+]: any -> oneof<record<auditConfigs: table<auditLogConfigs: list, service: string>, bindings: table<condition: record, members: list, role: string>, etag: string, version: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1179,7 +1192,7 @@ export def "gkebackup-projects-locations-restore-plans-restores-volume-restores-
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --permissions: list<string> # The set of permissions to check for the `resource`. Permissions with wildcards (such as `*` or `storage.*`) are not allowed. For more information see [IAM Overview](https://cloud.google.com/iam/docs/overview#permissions).
-]: any -> record<permissions: list<string>> {
+]: any -> oneof<record<permissions: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

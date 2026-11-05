@@ -14,27 +14,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "x-hip-id" => { {scheme: $scheme, headers: {"X-HIP-ID": $token_val}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -42,8 +51,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -54,7 +68,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -89,7 +112,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -116,9 +140,9 @@ def benefit-doc-type-completer [] { ["ADOPTION_CERTIFICATE" "BIRTH_CERTIFICATE" 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "generatere-kyc-aadhar-otp-using-post" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["generatere-kyc-aadhar-otp-using-post" "verify-aadhar-otp-only-using-post-1" "get-benefits-using-get" "change-password-via-aadhar-using-post" "change-password-via-mobile-using-post" "generate-aadhar-otp-using-get" "generate-mobile-otp-using-get" "change-password-via-using-post" "generate-card-using-get" "generate-png-card-using-get" "generate-svg-card-using-get" "delete-account-using-delete" "get-account-information-using-get" "update-account-information-using-post" "get-qr-code-using-get" "validate-token-using-post" "authenticate-with-password-using-post" "authenticate-user-using-post" "auth-with-mobile-token-using-post" "cert-using-get" "confirm-with-aadhaar-bio-using-post" "confirm-with-aadhaar-otp-using-post" "confirm-with-demographics-using-post" "confirm-with-mobile-using-post" "auth-account-password-request-using-post" "initiate-auth-using-post" "resend-auth-mobile-otp-using-post" "retrieval-health-id-by-aadhar-using-post" "generate-aadhar-otp-using-post-1" "retrieval-health-id-by-mobile-using-post" "generate-mobile-otp-using-post" "get-districts-in-state-using-get" "get-states-using-get" "delete-tag-using-delete" "get-tags-using-get" "add-tag-using-post" "authenticate-health-facility-using-post" "change-password-using-post" "create-aadhaar-account-using-post-1" "generate-password-using-post" "generate-facility-otp-using-post" "generate-svg-card-using-get-1" "reset-password-using-post" "generate-aadhar-otp-using-post-2" "verify-aadhar-otp-using-post" "verify-bio-using-post" "create-health-id-by-demo-auth-using-post" "delink-hid-benefit-using-post" "link-hid-benefit-using-post" "create-health-id-by-mobile-using-post" "generate-mobile-otp-using-post-1" "notify-benefit-using-post" "find-by-aadhar-using-post" "find-by-health-id-using-post" "update-mobile-information-using-post" "update-account-information-using-post-1" "update-status-using-post" "verify-aadhar-otp-using-post-1" "create-aadhaar-account-using-post" "generate-mobile-otp-for-txn-using-post" "generate-aadhar-otp-using-post" "resend-aadhar-otp-using-post" "get-health-id-numbers-by-aadhar-using-post" "verify-aadhar-bio-using-post" "verify-mobile-otp-for-txn-using-post" "verify-aadhar-otp-only-using-post" "verify-user-via-mobile-using-post" "generate-mobile-otp-using-post-1-1" "resent-otp-using-post" "verify-mobile-otp-using-post" "search-user-by-userid-using-post" "search-user-by-account-using-post" "search-user-by-mobile-using-post" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -152,7 +176,7 @@ export def "generatere-kyc-aadhar-otp-using-post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string # default: en-US
   --x-token: string # Auth Token (required, e.g. Bearer X-Token)
-]: nothing -> record<txnId: string> {
+]: nothing -> oneof<record<txnId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_token == null) { error make --unspanned { msg: "required header parameter 'X-Token' missing: pass --x-token" } }
@@ -236,7 +260,7 @@ export def "get-benefits-using-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string # default: en-US
   --x-token: string # Auth Token (required, e.g. Bearer XToken)
-]: nothing -> record<address: string, authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, subDistrictCode: string, subdistrictName: string, tags: record, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string> {
+]: nothing -> oneof<record<address: string, authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, subDistrictCode: string, subdistrictName: string, tags: record, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_token == null) { error make --unspanned { msg: "required header parameter 'X-Token' missing: pass --x-token" } }
@@ -487,7 +511,7 @@ export def "generate-card-using-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string # default: en-US
   --x-token: string # Auth Token (required, e.g. Bearer X-Token)
-]: nothing -> record<address: string, authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, subDistrictCode: string, subdistrictName: string, tags: record, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string> {
+]: nothing -> oneof<record<address: string, authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, subDistrictCode: string, subdistrictName: string, tags: record, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_token == null) { error make --unspanned { msg: "required header parameter 'X-Token' missing: pass --x-token" } }
@@ -526,7 +550,7 @@ export def "generate-png-card-using-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string # default: en-US
   --x-token: string # Auth Token (required, e.g. Bearer X-Token)
-]: nothing -> record<address: string, authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, subDistrictCode: string, subdistrictName: string, tags: record, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string> {
+]: nothing -> oneof<record<address: string, authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, subDistrictCode: string, subdistrictName: string, tags: record, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_token == null) { error make --unspanned { msg: "required header parameter 'X-Token' missing: pass --x-token" } }
@@ -565,7 +589,7 @@ export def "generate-svg-card-using-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string # default: en-US
   --x-token: string # Auth Token (required, e.g. Bearer X-Token)
-]: nothing -> record<address: string, authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, subDistrictCode: string, subdistrictName: string, tags: record, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string> {
+]: nothing -> oneof<record<address: string, authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, subDistrictCode: string, subdistrictName: string, tags: record, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_token == null) { error make --unspanned { msg: "required header parameter 'X-Token' missing: pass --x-token" } }
@@ -643,7 +667,7 @@ export def "get-account-information-using-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string # default: en-US
   --x-token: string # Auth Token (required, e.g. Bearer XToken)
-]: nothing -> record<address: string, authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, subDistrictCode: string, subdistrictName: string, tags: record, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string> {
+]: nothing -> oneof<record<address: string, authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, subDistrictCode: string, subdistrictName: string, tags: record, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_token == null) { error make --unspanned { msg: "required header parameter 'X-Token' missing: pass --x-token" } }
@@ -700,7 +724,7 @@ export def "update-account-information-using-post" [
   --village-code: string
   --ward-code: string
   --year-of-birth: string
-]: any -> record<address: string, authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, subDistrictCode: string, subdistrictName: string, tags: record, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string> {
+]: any -> oneof<record<address: string, authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, subDistrictCode: string, subdistrictName: string, tags: record, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -824,7 +848,7 @@ export def "authenticate-with-password-using-post" [
   --accept-language: string # default: en-US
   --health-id: string
   --password: string
-]: any -> record<token: string> {
+]: any -> oneof<record<token: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -865,7 +889,7 @@ export def "authenticate-user-using-post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string # default: en-US
   --healthid: string
-]: any -> record<txnId: string> {
+]: any -> oneof<record<txnId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -911,7 +935,7 @@ export def "auth-with-mobile-token-using-post" [
   --body-token: string
   txn_id: string
   --year-of-birth: string
-]: any -> record<token: string> {
+]: any -> oneof<record<token: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -992,7 +1016,7 @@ export def "confirm-with-aadhaar-bio-using-post" [
   --bio-type: string
   --pid: string
   --txn-id: string # format: uuid
-]: any -> record<token: string> {
+]: any -> oneof<record<token: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1034,7 +1058,7 @@ export def "confirm-with-aadhaar-otp-using-post" [
   --accept-language: string # default: en-US
   otp: string
   txn_id: string # format: uuid
-]: any -> record<token: string> {
+]: any -> oneof<record<token: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1120,7 +1144,7 @@ export def "confirm-with-mobile-using-post" [
   --accept-language: string # default: en-US
   --otp: string
   --txn-id: string
-]: any -> record<token: string> {
+]: any -> oneof<record<token: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1162,7 +1186,7 @@ export def "auth-account-password-request-using-post" [
   --accept-language: string # default: en-US
   password: string
   txn_id: string # format: uuid
-]: any -> record<token: string> {
+]: any -> oneof<record<token: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1204,7 +1228,7 @@ export def "initiate-auth-using-post" [
   --accept-language: string # default: en-US
   auth_method: string@auth-method-completer
   --healthid: string
-]: any -> record<txnId: string> {
+]: any -> oneof<record<txnId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1287,7 +1311,7 @@ export def "retrieval-health-id-by-aadhar-using-post" [
   --accept-language: string # default: en-US
   otp: string
   txn_id: string # format: uuid
-]: any -> record<healthId: string, healthIdNumber: string> {
+]: any -> oneof<record<healthId: string, healthIdNumber: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1328,7 +1352,7 @@ export def "generate-aadhar-otp-using-post-1" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string # default: en-US
   --aadhaar: string
-]: any -> record<txnId: string> {
+]: any -> oneof<record<txnId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1378,7 +1402,7 @@ export def "retrieval-health-id-by-mobile-using-post" [
   --otp: string
   txn_id: string
   --year-of-birth: string
-]: any -> record<healthId: string, healthIdNumber: string> {
+]: any -> oneof<record<healthId: string, healthIdNumber: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1419,7 +1443,7 @@ export def "generate-mobile-otp-using-post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string # default: en-US
   --mobile: string
-]: any -> record<txnId: string> {
+]: any -> oneof<record<txnId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1460,7 +1484,7 @@ export def "get-districts-in-state-using-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --state-code: string # stateCode (required)
   --accept-language: string # default: en-US
-]: nothing -> table<code: string, name: string> {
+]: nothing -> oneof<table<code: string, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($state_code == null) { error make --unspanned { msg: "required query parameter 'stateCode' missing: pass --state-code" } }
@@ -1499,7 +1523,7 @@ export def "get-states-using-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string # default: en-US
-]: nothing -> table<code: string, districts: list<record>, name: string> {
+]: nothing -> oneof<table<code: string, districts: list<record>, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/ha/lgd/states" $auth.query)
@@ -1538,7 +1562,7 @@ export def "delete-tag-using-delete" [
   --accept-language: string # default: en-US
   --health-id: string
   --tags: record
-]: any -> table<healthId: string, tags: record> {
+]: any -> oneof<table<healthId: string, tags: record>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1579,7 +1603,7 @@ export def "get-tags-using-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string # default: en-US
   --x-token: string # Auth Token (required, e.g. Bearer X-Token)
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_token == null) { error make --unspanned { msg: "required header parameter 'X-Token' missing: pass --x-token" } }
@@ -1619,7 +1643,7 @@ export def "add-tag-using-post" [
   --accept-language: string # default: en-US
   --health-id: string
   --tags: record
-]: any -> table<healthId: string, tags: record> {
+]: any -> oneof<table<healthId: string, tags: record>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1752,7 +1776,7 @@ export def "create-aadhaar-account-using-post-1" [
   --password: string
   --profile-photo: string
   --txn-id: string
-]: any -> record<authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, stateCode: string, stateName: string, tags: record, token: string, yearOfBirth: string> {
+]: any -> oneof<record<authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, stateCode: string, stateName: string, tags: record, token: string, yearOfBirth: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1835,7 +1859,7 @@ export def "generate-facility-otp-using-post" [
   --accept-language: string # default: en-US
   --x-token: string # Auth Token (required, e.g. Bearer XToken)
   --aadhaar: string
-]: any -> record<txnId: string> {
+]: any -> oneof<record<txnId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1959,7 +1983,7 @@ export def "generate-aadhar-otp-using-post-2" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string # default: en-US
   --aadhaar: string
-]: any -> record<txnId: string> {
+]: any -> oneof<record<txnId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2007,7 +2031,7 @@ export def "verify-aadhar-otp-using-post" [
   --otp: string
   --txn-id: string
   --validity: string
-]: any -> record<address: string, authMethods: list<string>, benefitId: string, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, status: string, subDistrictCode: string, subdistrictName: string, tags: record, token: string, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string> {
+]: any -> oneof<record<address: string, authMethods: list<string>, benefitId: string, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, status: string, subDistrictCode: string, subdistrictName: string, tags: record, token: string, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2056,7 +2080,7 @@ export def "verify-bio-using-post" [
   --mobile-number: string
   --pid: string
   --validity: string
-]: any -> record<address: string, authMethods: list<string>, benefitId: string, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, status: string, subDistrictCode: string, subdistrictName: string, tags: record, token: string, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string> {
+]: any -> oneof<record<address: string, authMethods: list<string>, benefitId: string, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, status: string, subDistrictCode: string, subdistrictName: string, tags: record, token: string, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2106,7 +2130,7 @@ export def "create-health-id-by-demo-auth-using-post" [
   --mobile-number: string
   --name: string
   --validity: string
-]: any -> record<address: string, authMethods: list<string>, benefitId: string, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, status: string, subDistrictCode: string, subdistrictName: string, tags: record, token: string, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string> {
+]: any -> oneof<record<address: string, authMethods: list<string>, benefitId: string, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, status: string, subDistrictCode: string, subdistrictName: string, tags: record, token: string, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2148,7 +2172,7 @@ export def "delink-hid-benefit-using-post" [
   --accept-language: string # default: en-US
   --benefit-name: string
   --uid-token: string
-]: any -> record<benefitName: string, healthId: string, status: string> {
+]: any -> oneof<record<benefitName: string, healthId: string, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2193,7 +2217,7 @@ export def "link-hid-benefit-using-post" [
   --state-code: string
   --uid-token: string
   --validity: string
-]: any -> record<benefitName: string, healthId: string, status: string> {
+]: any -> oneof<record<benefitName: string, healthId: string, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2247,7 +2271,7 @@ export def "create-health-id-by-mobile-using-post" [
   --txn-id: string
   --uploaded-doc: string
   --validity: string
-]: any -> record<txnId: string> {
+]: any -> oneof<record<txnId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2288,7 +2312,7 @@ export def "generate-mobile-otp-using-post-1" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string # default: en-US
   --mobile: string
-]: any -> record<txnId: string> {
+]: any -> oneof<record<txnId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2339,7 +2363,7 @@ export def "notify-benefit-using-post" [
   --name: string
   --state-code: string
   --validity: string
-]: any -> record<address: string, authMethods: list<string>, benefitId: string, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, status: string, subDistrictCode: string, subdistrictName: string, tags: record, token: string, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string> {
+]: any -> oneof<record<address: string, authMethods: list<string>, benefitId: string, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, status: string, subDistrictCode: string, subdistrictName: string, tags: record, token: string, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2380,7 +2404,7 @@ export def "find-by-aadhar-using-post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string # default: en-US
   --aadhaar: string
-]: any -> list<record> {
+]: any -> oneof<list<record>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2422,7 +2446,7 @@ export def "find-by-health-id-using-post" [
   --accept-language: string # default: en-US
   --benefit-id: string
   --health-id: string
-]: any -> table<benefitId: string, benefitName: string, healthIdNumber: string, stateCode: string> {
+]: any -> oneof<table<benefitId: string, benefitName: string, healthIdNumber: string, stateCode: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2464,7 +2488,7 @@ export def "update-mobile-information-using-post" [
   --accept-language: string # default: en-US
   --health-id-number: string
   --mobile: string
-]: any -> record<address: string, authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, subDistrictCode: string, subdistrictName: string, tags: record, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string> {
+]: any -> oneof<record<address: string, authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, subDistrictCode: string, subdistrictName: string, tags: record, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2523,7 +2547,7 @@ export def "update-account-information-using-post-1" [
   --village-code: string
   --ward-code: string
   --year-of-birth: string
-]: any -> record<address: string, authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, subDistrictCode: string, subdistrictName: string, tags: record, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string> {
+]: any -> oneof<record<address: string, authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, subDistrictCode: string, subdistrictName: string, tags: record, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2615,7 +2639,7 @@ export def "verify-aadhar-otp-using-post-1" [
   --restrictions: string
   --txn-id: string
   --username: string
-]: any -> record<authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, stateCode: string, stateName: string, tags: record, token: string, yearOfBirth: string> {
+]: any -> oneof<record<authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, stateCode: string, stateName: string, tags: record, token: string, yearOfBirth: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2663,7 +2687,7 @@ export def "create-aadhaar-account-using-post" [
   --password: string
   --profile-photo: string
   --txn-id: string
-]: any -> record<authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, stateCode: string, stateName: string, tags: record, token: string, yearOfBirth: string> {
+]: any -> oneof<record<authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, stateCode: string, stateName: string, tags: record, token: string, yearOfBirth: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2705,7 +2729,7 @@ export def "generate-mobile-otp-for-txn-using-post" [
   --accept-language: string # default: en-US
   --mobile: string
   --txn-id: string
-]: any -> record<txnId: string> {
+]: any -> oneof<record<txnId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2746,7 +2770,7 @@ export def "generate-aadhar-otp-using-post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string # default: en-US
   --aadhaar: string
-]: any -> record<txnId: string> {
+]: any -> oneof<record<txnId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2787,7 +2811,7 @@ export def "resend-aadhar-otp-using-post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string # default: en-US
   txn_id: string
-]: any -> record<authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, stateCode: string, stateName: string, tags: record, token: string, yearOfBirth: string> {
+]: any -> oneof<record<authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, stateCode: string, stateName: string, tags: record, token: string, yearOfBirth: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2828,7 +2852,7 @@ export def "get-health-id-numbers-by-aadhar-using-post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string # default: en-US
   --aadhaar: string
-]: any -> list<record> {
+]: any -> oneof<list<record>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2872,7 +2896,7 @@ export def "verify-aadhar-bio-using-post" [
   --bio-type: string
   --pid: string
   --restrictions: string
-]: any -> record<txnId: string> {
+]: any -> oneof<record<txnId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2914,7 +2938,7 @@ export def "verify-mobile-otp-for-txn-using-post" [
   --accept-language: string # default: en-US
   --otp: string
   --txn-id: string
-]: any -> record<txnId: string> {
+]: any -> oneof<record<txnId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2957,7 +2981,7 @@ export def "verify-aadhar-otp-only-using-post" [
   --otp: string
   --restrictions: string
   --txn-id: string
-]: any -> record<txnId: string> {
+]: any -> oneof<record<txnId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3020,7 +3044,7 @@ export def "verify-user-via-mobile-using-post" [
   --village-code: string
   --ward-code: string
   --year-of-birth: string
-]: any -> record<authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, stateCode: string, stateName: string, tags: record, token: string, yearOfBirth: string> {
+]: any -> oneof<record<authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, stateCode: string, stateName: string, tags: record, token: string, yearOfBirth: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3061,7 +3085,7 @@ export def "generate-mobile-otp-using-post-1-1" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string # default: en-US
   --mobile: string
-]: any -> record<txnId: string> {
+]: any -> oneof<record<txnId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3144,7 +3168,7 @@ export def "verify-mobile-otp-using-post" [
   --accept-language: string # default: en-US
   --otp: string
   --txn-id: string
-]: any -> record<token: string> {
+]: any -> oneof<record<token: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3185,7 +3209,7 @@ export def "search-user-by-userid-using-post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string # default: en-US
   --health-id: string
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3226,7 +3250,7 @@ export def "search-user-by-account-using-post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string # default: en-US
   --health-id: string
-]: any -> record<authMethods: list<string>, healthId: string, healthIdNumber: string, name: string, tags: record> {
+]: any -> oneof<record<authMethods: list<string>, healthId: string, healthIdNumber: string, name: string, tags: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3270,7 +3294,7 @@ export def "search-user-by-mobile-using-post" [
   --mobile: string
   --name: string
   --year-of-birth: string
-]: any -> record<authMethods: list<string>, healthId: string, healthIdNumber: string, name: string, tags: record> {
+]: any -> oneof<record<authMethods: list<string>, healthId: string, healthIdNumber: string, name: string, tags: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -116,9 +140,9 @@ def include-rank-type-completer [] { ["ALL" "FRIENDS" "INCLUDE_RANK_TYPE_UNSPECI
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "games-achievement-definitions-list" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["games-achievement-definitions-list" "games-achievements-update-multiple" "games-achievements-increment" "games-achievements-reveal" "games-achievements-set-steps-at-least" "games-achievements-unlock" "games-applications-get-end-point" "games-applications-played" "games-applications-get" "games-applications-verify" "games-events-list-definitions" "games-events-list-by-player" "games-events-record" "games-leaderboards-list" "games-scores-submit-multiple" "games-leaderboards-get" "games-scores-submit" "games-scores-list" "games-scores-list-window" "games-metagame-get-metagame-config" "games-players-get-multiple-application-player-ids" "games-players-list" "games-players-get-scoped-player-ids" "games-players-get" "games-achievements-list" "games-metagame-list-categories-by-player" "games-scores-get" "games-snapshots-list" "games-revisions-check" "games-snapshots-get" "games-stats-get" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -164,7 +188,7 @@ export def "games-achievement-definitions-list" [
   --language: string # The preferred language to use for strings returned by this method.
   --max-results: int # The maximum number of achievement resources to return in the response, used for paging. For any response, the actual number of achievement resources returned may be less than the specified `maxResults`.
   --page-token: string # The token returned by the previous request.
-]: nothing -> record<items: table<achievementType: string, description: string, experiencePoints: string, formattedTotalSteps: string, id: string, initialState: string, isRevealedIconUrlDefault: bool, isUnlockedIconUrlDefault: bool, kind: string, name: string, revealedIconUrl: string, totalSteps: int, unlockedIconUrl: string>, kind: string, nextPageToken: string> {
+]: nothing -> oneof<record<items: table<achievementType: string, description: string, experiencePoints: string, formattedTotalSteps: string, id: string, initialState: string, isRevealedIconUrlDefault: bool, isUnlockedIconUrlDefault: bool, kind: string, name: string, revealedIconUrl: string, totalSteps: int, unlockedIconUrl: string>, kind: string, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -189,7 +213,6 @@ export def "games-achievement-definitions-list" [
 #
 # POST /games/v1/achievements/updateMultiple
 # operationId: games.achievements.updateMultiple
-# --updates item shape: {achievementId?: string, incrementPayload?: record, kind?: string, setStepsAtLeastPayload?: record, updateType?: "ACHIEVEMENT_UPDATE_TYPE_UNSPECIFIED"|"REVEAL"|"UNLOCK"|"INCREMENT"|"SET_STEPS_AT_LEAST"}
 export def "games-achievements-update-multiple" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -213,7 +236,7 @@ export def "games-achievements-update-multiple" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --kind: string # Uniquely identifies the type of this resource. Value is always the fixed string `games#achievementUpdateMultipleRequest`.
   --updates: list # The individual achievement update requests. — item shape: {achievementId?: string, incrementPayload?: record, kind?: string, setStepsAtLeastPayload?: record, updateType?: "ACHIEVEMENT_UPDATE_TYPE_UNSPECIFIED"|"REVEAL"|"UNLOCK"|"INCREMENT"|"SET_STEPS_AT_LEAST"}
-]: any -> record<kind: string, updatedAchievements: table<achievementId: string, currentState: string, currentSteps: int, kind: string, newlyUnlocked: bool, updateOccurred: bool>> {
+]: any -> oneof<record<kind: string, updatedAchievements: table<achievementId: string, currentState: string, currentSteps: int, kind: string, newlyUnlocked: bool, updateOccurred: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -265,7 +288,7 @@ export def "games-achievements-increment" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --steps-to-increment: int # The number of steps to increment. (required)
   --request-id: string # A randomly generated numeric ID for each request specified by the caller. This number is used at the server to ensure that the request is handled correctly across retries.
-]: nothing -> record<currentSteps: int, kind: string, newlyUnlocked: bool> {
+]: nothing -> oneof<record<currentSteps: int, kind: string, newlyUnlocked: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($achievement_id | is-empty) { error make --unspanned { msg: "path parameter 'achievementId' must be non-empty" } }
@@ -314,7 +337,7 @@ export def "games-achievements-reveal" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<currentState: string, kind: string> {
+]: nothing -> oneof<record<currentState: string, kind: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($achievement_id | is-empty) { error make --unspanned { msg: "path parameter 'achievementId' must be non-empty" } }
@@ -363,7 +386,7 @@ export def "games-achievements-set-steps-at-least" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --steps: int # The minimum value to set the steps to. (required)
-]: nothing -> record<currentSteps: int, kind: string, newlyUnlocked: bool> {
+]: nothing -> oneof<record<currentSteps: int, kind: string, newlyUnlocked: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($achievement_id | is-empty) { error make --unspanned { msg: "path parameter 'achievementId' must be non-empty" } }
@@ -412,7 +435,7 @@ export def "games-achievements-unlock" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<kind: string, newlyUnlocked: bool> {
+]: nothing -> oneof<record<kind: string, newlyUnlocked: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($achievement_id | is-empty) { error make --unspanned { msg: "path parameter 'achievementId' must be non-empty" } }
@@ -461,7 +484,7 @@ export def "games-applications-get-end-point" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --application-id: string # The application ID from the Google Play developer console.
   --end-point-type: string@end-point-type-completer # Type of endpoint being requested.
-]: nothing -> record<url: string> {
+]: nothing -> oneof<record<url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "applicationId" $application_id "scalar") (serialize-qp "endPointType" $end_point_type "scalar")] | flatten | str join "&"
@@ -556,7 +579,7 @@ export def "games-applications-get" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --language: string # The preferred language to use for strings returned by this method.
   --platform-type: string@platform-type-completer # Restrict application details returned to the specific platform.
-]: nothing -> record<achievement_count: int, assets: table<height: int, kind: string, name: string, url: string, width: int>, author: string, category: record<kind: string, primary: string, secondary: string>, description: string, enabledFeatures: list<string>, id: string, instances: table<acquisitionUri: string, androidInstance: record, iosInstance: record, kind: string, name: string, platformType: string, realtimePlay: bool, turnBasedPlay: bool, webInstance: record>, kind: string, lastUpdatedTimestamp: string, leaderboard_count: int, name: string, themeColor: string> {
+]: nothing -> oneof<record<achievement_count: int, assets: table<height: int, kind: string, name: string, url: string, width: int>, author: string, category: record<kind: string, primary: string, secondary: string>, description: string, enabledFeatures: list<string>, id: string, instances: table<acquisitionUri: string, androidInstance: record, iosInstance: record, kind: string, name: string, platformType: string, realtimePlay: bool, turnBasedPlay: bool, webInstance: record>, kind: string, lastUpdatedTimestamp: string, leaderboard_count: int, name: string, themeColor: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationId' must be non-empty" } }
@@ -604,7 +627,7 @@ export def "games-applications-verify" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<alternate_player_id: string, kind: string, player_id: string> {
+]: nothing -> oneof<record<alternate_player_id: string, kind: string, player_id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationId' must be non-empty" } }
@@ -654,7 +677,7 @@ export def "games-events-list-definitions" [
   --language: string # The preferred language to use for strings returned by this method.
   --max-results: int # The maximum number of event definitions to return in the response, used for paging. For any response, the actual number of event definitions to return may be less than the specified `maxResults`.
   --page-token: string # The token returned by the previous request.
-]: nothing -> record<items: table<childEvents: list, description: string, displayName: string, id: string, imageUrl: string, isDefaultImageUrl: bool, kind: string, visibility: string>, kind: string, nextPageToken: string> {
+]: nothing -> oneof<record<items: table<childEvents: list, description: string, displayName: string, id: string, imageUrl: string, isDefaultImageUrl: bool, kind: string, visibility: string>, kind: string, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -703,7 +726,7 @@ export def "games-events-list-by-player" [
   --language: string # The preferred language to use for strings returned by this method.
   --max-results: int # The maximum number of events to return in the response, used for paging. For any response, the actual number of events to return may be less than the specified maxResults.
   --page-token: string # The token returned by the previous request.
-]: nothing -> record<items: table<definitionId: string, formattedNumEvents: string, kind: string, numEvents: string, playerId: string>, kind: string, nextPageToken: string> {
+]: nothing -> oneof<record<items: table<definitionId: string, formattedNumEvents: string, kind: string, numEvents: string, playerId: string>, kind: string, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -728,7 +751,6 @@ export def "games-events-list-by-player" [
 #
 # POST /games/v1/events
 # operationId: games.events.record
-# --timePeriods item shape: {kind?: string, timePeriod?: record, updates?: list}
 export def "games-events-record" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -755,7 +777,7 @@ export def "games-events-record" [
   --kind: string # Uniquely identifies the type of this resource. Value is always the fixed string `games#eventRecordRequest`.
   --request-id: string # The request ID used to identify this attempt to record events. (format: int64)
   --time-periods: list # A list of the time period updates being made in this request. — item shape: {kind?: string, timePeriod?: record, updates?: list}
-]: any -> record<batchFailures: table<failureCause: string, kind: string, range: record>, eventFailures: table<eventId: string, failureCause: string, kind: string>, kind: string, playerEvents: table<definitionId: string, formattedNumEvents: string, kind: string, numEvents: string, playerId: string>> {
+]: any -> oneof<record<batchFailures: table<failureCause: string, kind: string, range: record>, eventFailures: table<eventId: string, failureCause: string, kind: string>, kind: string, playerEvents: table<definitionId: string, formattedNumEvents: string, kind: string, numEvents: string, playerId: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -807,7 +829,7 @@ export def "games-leaderboards-list" [
   --language: string # The preferred language to use for strings returned by this method.
   --max-results: int # The maximum number of leaderboards to return in the response. For any response, the actual number of leaderboards returned may be less than the specified `maxResults`.
   --page-token: string # The token returned by the previous request.
-]: nothing -> record<items: table<iconUrl: string, id: string, isIconUrlDefault: bool, kind: string, name: string, order: string>, kind: string, nextPageToken: string> {
+]: nothing -> oneof<record<items: table<iconUrl: string, id: string, isIconUrlDefault: bool, kind: string, name: string, order: string>, kind: string, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -832,7 +854,6 @@ export def "games-leaderboards-list" [
 #
 # POST /games/v1/leaderboards/scores
 # operationId: games.scores.submitMultiple
-# --scores item shape: {kind?: string, leaderboardId?: string, score?: string, scoreTag?: string, signature?: string}
 export def "games-scores-submit-multiple" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -857,7 +878,7 @@ export def "games-scores-submit-multiple" [
   --language: string # The preferred language to use for strings returned by this method.
   --kind: string # Uniquely identifies the type of this resource. Value is always the fixed string `games#playerScoreSubmissionList`.
   --scores: list # The score submissions. — item shape: {kind?: string, leaderboardId?: string, score?: string, scoreTag?: string, signature?: string}
-]: any -> record<kind: string, submittedScores: table<beatenScoreTimeSpans: list, formattedScore: string, kind: string, leaderboardId: string, scoreTag: string, unbeatenScores: list>> {
+]: any -> oneof<record<kind: string, submittedScores: table<beatenScoreTimeSpans: list, formattedScore: string, kind: string, leaderboardId: string, scoreTag: string, unbeatenScores: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -908,7 +929,7 @@ export def "games-leaderboards-get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --language: string # The preferred language to use for strings returned by this method.
-]: nothing -> record<iconUrl: string, id: string, isIconUrlDefault: bool, kind: string, name: string, order: string> {
+]: nothing -> oneof<record<iconUrl: string, id: string, isIconUrlDefault: bool, kind: string, name: string, order: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($leaderboard_id | is-empty) { error make --unspanned { msg: "path parameter 'leaderboardId' must be non-empty" } }
@@ -959,7 +980,7 @@ export def "games-scores-submit" [
   --score: string # The score you're submitting. The submitted score is ignored if it is worse than a previously submitted score, where worse depends on the leaderboard sort order. The meaning of the score value depends on the leaderboard format type. For fixed-point, the score represents the raw value. For time, the score represents elapsed time in milliseconds. For currency, the score represents a value in micro units. (required)
   --language: string # The preferred language to use for strings returned by this method.
   --score-tag: string # Additional information about the score you're submitting. Values must contain no more than 64 URI-safe characters as defined by section 2.3 of RFC 3986.
-]: nothing -> record<beatenScoreTimeSpans: list<string>, formattedScore: string, kind: string, leaderboardId: string, scoreTag: string, unbeatenScores: table<formattedScore: string, kind: string, score: string, scoreTag: string, timeSpan: string>> {
+]: nothing -> oneof<record<beatenScoreTimeSpans: list<string>, formattedScore: string, kind: string, leaderboardId: string, scoreTag: string, unbeatenScores: table<formattedScore: string, kind: string, score: string, scoreTag: string, timeSpan: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($leaderboard_id | is-empty) { error make --unspanned { msg: "path parameter 'leaderboardId' must be non-empty" } }
@@ -1013,7 +1034,7 @@ export def "games-scores-list" [
   --language: string # The preferred language to use for strings returned by this method.
   --max-results: int # The maximum number of leaderboard scores to return in the response. For any response, the actual number of leaderboard scores returned may be less than the specified `maxResults`.
   --page-token: string # The token returned by the previous request.
-]: nothing -> record<items: table<formattedScore: string, formattedScoreRank: string, kind: string, player: record, scoreRank: string, scoreTag: string, scoreValue: string, timeSpan: string, writeTimestampMillis: string>, kind: string, nextPageToken: string, numScores: string, playerScore: record<formattedScore: string, formattedScoreRank: string, kind: string, player: record<avatarImageUrl: string, bannerUrlLandscape: string, bannerUrlPortrait: string, displayName: string, experienceInfo: record, friendStatus: string, gamePlayerId: string, kind: string, name: record, originalPlayerId: string, playerId: string, profileSettings: record, title: string>, scoreRank: string, scoreTag: string, scoreValue: string, timeSpan: string, writeTimestampMillis: string>, prevPageToken: string> {
+]: nothing -> oneof<record<items: table<formattedScore: string, formattedScoreRank: string, kind: string, player: record, scoreRank: string, scoreTag: string, scoreValue: string, timeSpan: string, writeTimestampMillis: string>, kind: string, nextPageToken: string, numScores: string, playerScore: record<formattedScore: string, formattedScoreRank: string, kind: string, player: record<avatarImageUrl: string, bannerUrlLandscape: string, bannerUrlPortrait: string, displayName: string, experienceInfo: record, friendStatus: string, gamePlayerId: string, kind: string, name: record, originalPlayerId: string, playerId: string, profileSettings: record, title: string>, scoreRank: string, scoreTag: string, scoreValue: string, timeSpan: string, writeTimestampMillis: string>, prevPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($leaderboard_id | is-empty) { error make --unspanned { msg: "path parameter 'leaderboardId' must be non-empty" } }
@@ -1070,7 +1091,7 @@ export def "games-scores-list-window" [
   --page-token: string # The token returned by the previous request.
   --results-above: int # The preferred number of scores to return above the player's score. More scores may be returned if the player is at the bottom of the leaderboard; fewer may be returned if the player is at the top. Must be less than or equal to maxResults.
   --return-top-if-absent: oneof<nothing, bool> # True if the top scores should be returned when the player is not in the leaderboard. Defaults to true.
-]: nothing -> record<items: table<formattedScore: string, formattedScoreRank: string, kind: string, player: record, scoreRank: string, scoreTag: string, scoreValue: string, timeSpan: string, writeTimestampMillis: string>, kind: string, nextPageToken: string, numScores: string, playerScore: record<formattedScore: string, formattedScoreRank: string, kind: string, player: record<avatarImageUrl: string, bannerUrlLandscape: string, bannerUrlPortrait: string, displayName: string, experienceInfo: record, friendStatus: string, gamePlayerId: string, kind: string, name: record, originalPlayerId: string, playerId: string, profileSettings: record, title: string>, scoreRank: string, scoreTag: string, scoreValue: string, timeSpan: string, writeTimestampMillis: string>, prevPageToken: string> {
+]: nothing -> oneof<record<items: table<formattedScore: string, formattedScoreRank: string, kind: string, player: record, scoreRank: string, scoreTag: string, scoreValue: string, timeSpan: string, writeTimestampMillis: string>, kind: string, nextPageToken: string, numScores: string, playerScore: record<formattedScore: string, formattedScoreRank: string, kind: string, player: record<avatarImageUrl: string, bannerUrlLandscape: string, bannerUrlPortrait: string, displayName: string, experienceInfo: record, friendStatus: string, gamePlayerId: string, kind: string, name: record, originalPlayerId: string, playerId: string, profileSettings: record, title: string>, scoreRank: string, scoreTag: string, scoreValue: string, timeSpan: string, writeTimestampMillis: string>, prevPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($leaderboard_id | is-empty) { error make --unspanned { msg: "path parameter 'leaderboardId' must be non-empty" } }
@@ -1119,7 +1140,7 @@ export def "games-metagame-get-metagame-config" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<currentVersion: int, kind: string, playerLevels: table<kind: string, level: int, maxExperiencePoints: string, minExperiencePoints: string>> {
+]: nothing -> oneof<record<currentVersion: int, kind: string, playerLevels: table<kind: string, level: int, maxExperiencePoints: string, minExperiencePoints: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -1166,7 +1187,7 @@ export def "games-players-get-multiple-application-player-ids" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --application-ids: list<string> # Required. The application IDs from the Google Play developer console for the games to return scoped ids for.
-]: nothing -> record<playerIds: table<applicationId: string, playerId: string>> {
+]: nothing -> oneof<record<playerIds: table<applicationId: string, playerId: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "applicationIds" $application_ids "multi")] | flatten | str join "&"
@@ -1216,7 +1237,7 @@ export def "games-players-list" [
   --language: string # The preferred language to use for strings returned by this method.
   --max-results: int # The maximum number of player resources to return in the response, used for paging. For any response, the actual number of player resources returned may be less than the specified `maxResults`.
   --page-token: string # The token returned by the previous request.
-]: nothing -> record<items: table<avatarImageUrl: string, bannerUrlLandscape: string, bannerUrlPortrait: string, displayName: string, experienceInfo: record, friendStatus: string, gamePlayerId: string, kind: string, name: record, originalPlayerId: string, playerId: string, profileSettings: record, title: string>, kind: string, nextPageToken: string> {
+]: nothing -> oneof<record<items: table<avatarImageUrl: string, bannerUrlLandscape: string, bannerUrlPortrait: string, displayName: string, experienceInfo: record, friendStatus: string, gamePlayerId: string, kind: string, name: record, originalPlayerId: string, playerId: string, profileSettings: record, title: string>, kind: string, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($collection | is-empty) { error make --unspanned { msg: "path parameter 'collection' must be non-empty" } }
@@ -1263,7 +1284,7 @@ export def "games-players-get-scoped-player-ids" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<developerPlayerKey: string, gamePlayerId: string> {
+]: nothing -> oneof<record<developerPlayerKey: string, gamePlayerId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -1312,7 +1333,7 @@ export def "games-players-get" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --language: string # The preferred language to use for strings returned by this method.
   --player-id-consistency-token: string # Consistency token of the player id. The call returns a 'not found' result when the token is present and invalid. Empty value is ignored. See also GlobalPlayerIdConsistencyTokenProto
-]: nothing -> record<avatarImageUrl: string, bannerUrlLandscape: string, bannerUrlPortrait: string, displayName: string, experienceInfo: record<currentExperiencePoints: string, currentLevel: record<kind: string, level: int, maxExperiencePoints: string, minExperiencePoints: string>, kind: string, lastLevelUpTimestampMillis: string, nextLevel: record<kind: string, level: int, maxExperiencePoints: string, minExperiencePoints: string>>, friendStatus: string, gamePlayerId: string, kind: string, name: record<familyName: string, givenName: string>, originalPlayerId: string, playerId: string, profileSettings: record<friendsListVisibility: string, kind: string, profileVisible: bool>, title: string> {
+]: nothing -> oneof<record<avatarImageUrl: string, bannerUrlLandscape: string, bannerUrlPortrait: string, displayName: string, experienceInfo: record<currentExperiencePoints: string, currentLevel: record<kind: string, level: int, maxExperiencePoints: string, minExperiencePoints: string>, kind: string, lastLevelUpTimestampMillis: string, nextLevel: record<kind: string, level: int, maxExperiencePoints: string, minExperiencePoints: string>>, friendStatus: string, gamePlayerId: string, kind: string, name: record<familyName: string, givenName: string>, originalPlayerId: string, playerId: string, profileSettings: record<friendsListVisibility: string, kind: string, profileVisible: bool>, title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($player_id | is-empty) { error make --unspanned { msg: "path parameter 'playerId' must be non-empty" } }
@@ -1364,7 +1385,7 @@ export def "games-achievements-list" [
   --max-results: int # The maximum number of achievement resources to return in the response, used for paging. For any response, the actual number of achievement resources returned may be less than the specified `maxResults`.
   --page-token: string # The token returned by the previous request.
   --state: string@state-completer # Tells the server to return only achievements with the specified state. If this parameter isn't specified, all achievements are returned.
-]: nothing -> record<items: table<achievementState: string, currentSteps: int, experiencePoints: string, formattedCurrentStepsString: string, id: string, kind: string, lastUpdatedTimestamp: string>, kind: string, nextPageToken: string> {
+]: nothing -> oneof<record<items: table<achievementState: string, currentSteps: int, experiencePoints: string, formattedCurrentStepsString: string, id: string, kind: string, lastUpdatedTimestamp: string>, kind: string, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($player_id | is-empty) { error make --unspanned { msg: "path parameter 'playerId' must be non-empty" } }
@@ -1416,7 +1437,7 @@ export def "games-metagame-list-categories-by-player" [
   --language: string # The preferred language to use for strings returned by this method.
   --max-results: int # The maximum number of category resources to return in the response, used for paging. For any response, the actual number of category resources returned may be less than the specified `maxResults`.
   --page-token: string # The token returned by the previous request.
-]: nothing -> record<items: table<category: string, experiencePoints: string, kind: string>, kind: string, nextPageToken: string> {
+]: nothing -> oneof<record<items: table<category: string, experiencePoints: string, kind: string>, kind: string, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($player_id | is-empty) { error make --unspanned { msg: "path parameter 'playerId' must be non-empty" } }
@@ -1471,7 +1492,7 @@ export def "games-scores-get" [
   --language: string # The preferred language to use for strings returned by this method.
   --max-results: int # The maximum number of leaderboard scores to return in the response. For any response, the actual number of leaderboard scores returned may be less than the specified `maxResults`.
   --page-token: string # The token returned by the previous request.
-]: nothing -> record<items: table<friendsRank: record, kind: string, leaderboard_id: string, publicRank: record, scoreString: string, scoreTag: string, scoreValue: string, socialRank: record, timeSpan: string, writeTimestamp: string>, kind: string, nextPageToken: string, player: record<avatarImageUrl: string, bannerUrlLandscape: string, bannerUrlPortrait: string, displayName: string, experienceInfo: record<currentExperiencePoints: string, currentLevel: record, kind: string, lastLevelUpTimestampMillis: string, nextLevel: record>, friendStatus: string, gamePlayerId: string, kind: string, name: record<familyName: string, givenName: string>, originalPlayerId: string, playerId: string, profileSettings: record<friendsListVisibility: string, kind: string, profileVisible: bool>, title: string>> {
+]: nothing -> oneof<record<items: table<friendsRank: record, kind: string, leaderboard_id: string, publicRank: record, scoreString: string, scoreTag: string, scoreValue: string, socialRank: record, timeSpan: string, writeTimestamp: string>, kind: string, nextPageToken: string, player: record<avatarImageUrl: string, bannerUrlLandscape: string, bannerUrlPortrait: string, displayName: string, experienceInfo: record<currentExperiencePoints: string, currentLevel: record, kind: string, lastLevelUpTimestampMillis: string, nextLevel: record>, friendStatus: string, gamePlayerId: string, kind: string, name: record<familyName: string, givenName: string>, originalPlayerId: string, playerId: string, profileSettings: record<friendsListVisibility: string, kind: string, profileVisible: bool>, title: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($player_id | is-empty) { error make --unspanned { msg: "path parameter 'playerId' must be non-empty" } }
@@ -1524,7 +1545,7 @@ export def "games-snapshots-list" [
   --language: string # The preferred language to use for strings returned by this method.
   --max-results: int # The maximum number of snapshot resources to return in the response, used for paging. For any response, the actual number of snapshot resources returned may be less than the specified `maxResults`.
   --page-token: string # The token returned by the previous request.
-]: nothing -> record<items: table<coverImage: record, description: string, driveId: string, durationMillis: string, id: string, kind: string, lastModifiedMillis: string, progressValue: string, title: string, type: string, uniqueName: string>, kind: string, nextPageToken: string> {
+]: nothing -> oneof<record<items: table<coverImage: record, description: string, driveId: string, durationMillis: string, id: string, kind: string, lastModifiedMillis: string, progressValue: string, title: string, type: string, uniqueName: string>, kind: string, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($player_id | is-empty) { error make --unspanned { msg: "path parameter 'playerId' must be non-empty" } }
@@ -1572,7 +1593,7 @@ export def "games-revisions-check" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --client-revision: string # The revision of the client SDK used by your application. Format: `[PLATFORM_TYPE]:[VERSION_NUMBER]`. Possible values of `PLATFORM_TYPE` are: * `ANDROID` - Client is running the Android SDK. * `IOS` - Client is running the iOS SDK. * `WEB_APP` - Client is running as a Web App. (required)
-]: nothing -> record<apiVersion: string, kind: string, revisionStatus: string> {
+]: nothing -> oneof<record<apiVersion: string, kind: string, revisionStatus: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($client_revision == null) { error make --unspanned { msg: "required query parameter 'clientRevision' missing: pass --client-revision" } }
@@ -1621,7 +1642,7 @@ export def "games-snapshots-get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --language: string # The preferred language to use for strings returned by this method.
-]: nothing -> record<coverImage: record<height: int, kind: string, mime_type: string, url: string, width: int>, description: string, driveId: string, durationMillis: string, id: string, kind: string, lastModifiedMillis: string, progressValue: string, title: string, type: string, uniqueName: string> {
+]: nothing -> oneof<record<coverImage: record<height: int, kind: string, mime_type: string, url: string, width: int>, description: string, driveId: string, durationMillis: string, id: string, kind: string, lastModifiedMillis: string, progressValue: string, title: string, type: string, uniqueName: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($snapshot_id | is-empty) { error make --unspanned { msg: "path parameter 'snapshotId' must be non-empty" } }
@@ -1668,7 +1689,7 @@ export def "games-stats-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<avg_session_length_minutes: float, churn_probability: float, days_since_last_played: int, high_spender_probability: float, kind: string, num_purchases: int, num_sessions: int, num_sessions_percentile: float, spend_percentile: float, spend_probability: float, total_spend_next_28_days: float> {
+]: nothing -> oneof<record<avg_session_length_minutes: float, churn_probability: float, days_since_last_played: int, high_spender_probability: float, kind: string, num_purchases: int, num_sessions: int, num_sessions_percentile: float, spend_percentile: float, spend_probability: float, total_spend_next_28_days: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"

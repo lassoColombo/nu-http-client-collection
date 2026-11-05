@@ -12,27 +12,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -40,8 +49,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -52,7 +66,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -87,7 +110,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -119,9 +143,9 @@ def accept-completer-2 [] { ["application/json" "application/zip"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "delete-changes" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["delete-changes" "get-changes" "delete-exports" "get-exports" "get-instances" "post-instances" "delete-instances-id" "get-instances-id" "post-instances-id-anonymize" "get-instances-id-attachments" "delete-instances-id-attachments-name" "get-instances-id-attachments-name" "put-instances-id-attachments-name" "post-instances-id-attachments-name-compress" "get-instances-id-attachments-name-compressed-data" "get-instances-id-attachments-name-compressed-md5" "get-instances-id-attachments-name-compressed-size" "get-instances-id-attachments-name-data" "get-instances-id-attachments-name-info" "get-instances-id-attachments-name-is-compressed" "get-instances-id-attachments-name-md5" "get-instances-id-attachments-name-size" "post-instances-id-attachments-name-uncompress" "post-instances-id-attachments-name-verify-md5" "get-instances-id-content" "post-instances-id-export" "get-instances-id-file" "get-instances-id-frames" "get-instances-id-frames-frame" "get-instances-id-frames-frame-image-int16" "get-instances-id-frames-frame-image-uint16" "get-instances-id-frames-frame-image-uint8" "get-instances-id-frames-frame-matlab" "get-instances-id-frames-frame-numpy" "get-instances-id-frames-frame-preview" "get-instances-id-frames-frame-raw" "get-instances-id-frames-frame-raw-gz" "get-instances-id-frames-frame-rendered" "get-instances-id-header" "get-instances-id-image-int16" "get-instances-id-image-uint16" "get-instances-id-image-uint8" "get-instances-id-matlab" "get-instances-id-metadata" "delete-instances-id-metadata-name" "get-instances-id-metadata-name" "put-instances-id-metadata-name" "post-instances-id-modify" "get-instances-id-module" "get-instances-id-numpy" "get-instances-id-patient" "get-instances-id-pdf" "get-instances-id-preview" "post-instances-id-reconstruct" "get-instances-id-rendered" "get-instances-id-series" "get-instances-id-simplified-tags" "get-instances-id-statistics" "get-instances-id-study" "get-instances-id-tags" "get-jobs" "get-jobs-id" "post-jobs-id-cancel" "post-jobs-id-pause" "post-jobs-id-resubmit" "post-jobs-id-resume" "get-jobs-id-key" "get-modalities" "delete-modalities-id" "get-modalities-id" "put-modalities-id" "get-modalities-id-configuration" "post-modalities-id-echo" "post-modalities-id-find" "post-modalities-id-find-instance" "post-modalities-id-find-patient" "post-modalities-id-find-series" "post-modalities-id-find-study" "post-modalities-id-find-worklist" "post-modalities-id-move" "post-modalities-id-query" "post-modalities-id-storage-commitment" "post-modalities-id-store" "post-modalities-id-store-straight" "get-patients" "delete-patients-id" "get-patients-id" "post-patients-id-anonymize" "get-patients-id-archive" "post-patients-id-archive" "get-patients-id-attachments" "delete-patients-id-attachments-name" "get-patients-id-attachments-name" "put-patients-id-attachments-name" "post-patients-id-attachments-name-compress" "get-patients-id-attachments-name-compressed-data" "get-patients-id-attachments-name-compressed-md5" "get-patients-id-attachments-name-compressed-size" "get-patients-id-attachments-name-data" "get-patients-id-attachments-name-info" "get-patients-id-attachments-name-is-compressed" "get-patients-id-attachments-name-md5" "get-patients-id-attachments-name-size" "post-patients-id-attachments-name-uncompress" "post-patients-id-attachments-name-verify-md5" "get-patients-id-instances" "get-patients-id-instances-tags" "get-patients-id-media" "post-patients-id-media" "get-patients-id-metadata" "delete-patients-id-metadata-name" "get-patients-id-metadata-name" "put-patients-id-metadata-name" "post-patients-id-modify" "get-patients-id-module" "get-patients-id-protected" "put-patients-id-protected" "post-patients-id-reconstruct" "get-patients-id-series" "get-patients-id-shared-tags" "get-patients-id-statistics" "get-patients-id-studies" "get-peers" "delete-peers-id" "get-peers-id" "put-peers-id" "get-peers-id-configuration" "post-peers-id-store" "post-peers-id-store-straight" "get-peers-id-system" "get-plugins" "get-plugins-explorer-js" "get-plugins-id" "get-queries" "delete-queries-id" "get-queries-id" "get-queries-id-answers" "get-queries-id-answers-index" "get-queries-id-answers-index-content" "post-queries-id-answers-index-query-instances" "post-queries-id-answers-index-query-series" "post-queries-id-answers-index-query-studies" "post-queries-id-answers-index-retrieve" "get-queries-id-level" "get-queries-id-modality" "get-queries-id-query" "post-queries-id-retrieve" "get-series" "delete-series-id" "get-series-id" "post-series-id-anonymize" "get-series-id-archive" "post-series-id-archive" "get-series-id-attachments" "delete-series-id-attachments-name" "get-series-id-attachments-name" "put-series-id-attachments-name" "post-series-id-attachments-name-compress" "get-series-id-attachments-name-compressed-data" "get-series-id-attachments-name-compressed-md5" "get-series-id-attachments-name-compressed-size" "get-series-id-attachments-name-data" "get-series-id-attachments-name-info" "get-series-id-attachments-name-is-compressed" "get-series-id-attachments-name-md5" "get-series-id-attachments-name-size" "post-series-id-attachments-name-uncompress" "post-series-id-attachments-name-verify-md5" "get-series-id-instances" "get-series-id-instances-tags" "get-series-id-media" "post-series-id-media" "get-series-id-metadata" "delete-series-id-metadata-name" "get-series-id-metadata-name" "put-series-id-metadata-name" "post-series-id-modify" "get-series-id-module" "get-series-id-numpy" "get-series-id-ordered-slices" "get-series-id-patient" "post-series-id-reconstruct" "get-series-id-shared-tags" "get-series-id-statistics" "get-series-id-study" "get-statistics" "get-storage-commitment-id" "post-storage-commitment-id-remove" "get-studies" "delete-studies-id" "get-studies-id" "post-studies-id-anonymize" "get-studies-id-archive" "post-studies-id-archive" "get-studies-id-attachments" "delete-studies-id-attachments-name" "get-studies-id-attachments-name" "put-studies-id-attachments-name" "post-studies-id-attachments-name-compress" "get-studies-id-attachments-name-compressed-data" "get-studies-id-attachments-name-compressed-md5" "get-studies-id-attachments-name-compressed-size" "get-studies-id-attachments-name-data" "get-studies-id-attachments-name-info" "get-studies-id-attachments-name-is-compressed" "get-studies-id-attachments-name-md5" "get-studies-id-attachments-name-size" "post-studies-id-attachments-name-uncompress" "post-studies-id-attachments-name-verify-md5" "get-studies-id-instances" "get-studies-id-instances-tags" "get-studies-id-media" "post-studies-id-media" "post-studies-id-merge" "get-studies-id-metadata" "delete-studies-id-metadata-name" "get-studies-id-metadata-name" "put-studies-id-metadata-name" "post-studies-id-modify" "get-studies-id-module" "get-studies-id-module-patient" "get-studies-id-patient" "post-studies-id-reconstruct" "get-studies-id-series" "get-studies-id-shared-tags" "post-studies-id-split" "get-studies-id-statistics" "get-system" "get-tools" "get-tools-accepted-transfer-syntaxes" "put-tools-accepted-transfer-syntaxes" "post-tools-bulk-anonymize" "post-tools-bulk-content" "post-tools-bulk-delete" "post-tools-bulk-modify" "post-tools-create-archive" "post-tools-create-dicom" "post-tools-create-media" "post-tools-create-media-extended" "get-tools-default-encoding" "put-tools-default-encoding" "get-tools-dicom-conformance" "post-tools-dicom-echo" "post-tools-execute-script" "post-tools-find" "get-tools-generate-uid" "post-tools-invalidate-tags" "get-tools-log-level" "put-tools-log-level" "get-tools-log-level-dicom" "put-tools-log-level-dicom" "get-tools-log-level-generic" "put-tools-log-level-generic" "get-tools-log-level-http" "put-tools-log-level-http" "get-tools-log-level-jobs" "put-tools-log-level-jobs" "get-tools-log-level-lua" "put-tools-log-level-lua" "get-tools-log-level-plugins" "put-tools-log-level-plugins" "get-tools-log-level-sqlite" "put-tools-log-level-sqlite" "post-tools-lookup" "get-tools-metrics" "put-tools-metrics" "get-tools-metrics-prometheus" "get-tools-now" "get-tools-now-local" "post-tools-reconstruct" "post-tools-reset" "post-tools-shutdown" "get-tools-unknown-sop-class-accepted" "put-tools-unknown-sop-class-accepted" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -187,7 +211,7 @@ export def "get-changes" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: float # Limit the number of results
   --since: float # Show only the resources since the provided index
-]: nothing -> record<Changes: list<record>, Done: bool, Last: float> {
+]: nothing -> oneof<record<Changes: list<record>, Done: bool, Last: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "since" $since "scalar")] | flatten | str join "&"
@@ -331,7 +355,7 @@ export def "post-instances" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> record<ID: string, ParentPatient: string, ParentSeries: string, ParentStudy: string, Path: string, Status: string> {
+]: any -> oneof<record<ID: string, ParentPatient: string, ParentSeries: string, ParentStudy: string, Path: string, Status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2406,7 +2430,7 @@ export def "get-instances-id-statistics" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<DicomDiskSize: string, DicomDiskSizeMB: float, DicomUncompressedSize: string, DicomUncompressedSizeMB: float, DiskSize: string, DiskSizeMB: float, UncompressedSize: string, UncompressedSizeMB: float> {
+]: nothing -> oneof<record<DicomDiskSize: string, DicomDiskSizeMB: float, DicomUncompressedSize: string, DicomUncompressedSizeMB: float, DiskSize: string, DiskSizeMB: float, UncompressedSize: string, UncompressedSizeMB: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3252,7 +3276,7 @@ export def "post-modalities-id-move" [
   --synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
   --target-aet: string # Target AET that will be used by the remote DICOM modality as a target for its C-STORE SCU commands, defaults to `DicomAet` configuration option in order to do a simple query/retrieve
   --timeout: float # Timeout for the C-MOVE command, in seconds
-]: any -> record<ID: string, Path: string> {
+]: any -> oneof<record<ID: string, Path: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3295,7 +3319,7 @@ export def "post-modalities-id-query" [
   --normalize: oneof<nothing, bool> # Whether to normalize the query, i.e. whether to wipe out from the query, the DICOM tags that are not applicable for the query-retrieve level of interest
   --query: record # Associative array containing the filter on the values of the DICOM tags
   --timeout: float # Timeout for the C-FIND command and subsequent C-MOVE retrievals, in seconds (new in Orthanc 1.9.1)
-]: any -> record<ID: record, Path: record> {
+]: any -> oneof<record<ID: record, Path: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3336,7 +3360,7 @@ export def "post-modalities-id-storage-commitment" [
   --dicom-instances: list # List of DICOM resources that are not necessarily stored within Orthanc, but that must be checked by storage commitment. This is a list of JSON objects that must contain the `SOPClassUID` and `SOPInstanceUID` fields.
   --resources: list<string> # List of the Orthanc identifiers of the DICOM resources to be checked by storage commitment
   --timeout: float # Timeout for the storage commitment command (new in Orthanc 1.9.1)
-]: any -> record<ID: record, Path: record> {
+]: any -> oneof<record<ID: record, Path: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3387,7 +3411,7 @@ export def "post-modalities-id-store" [
   --storage-commitment: oneof<nothing, bool> # Whether to chain C-STORE with DICOM storage commitment to validate the success of the transmission: https://book.orthanc-server.com/users/storage-commitment.html#chaining-c-store-with-storage-commitment
   --synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
   --timeout: float # Timeout for the C-STORE command, in seconds
-]: any -> record<ID: string, Path: string> {
+]: any -> oneof<record<ID: string, Path: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3426,7 +3450,7 @@ export def "post-modalities-id-store-straight" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> record<SOPClassUID: string, SOPInstanceUID: string> {
+]: any -> oneof<record<SOPClassUID: string, SOPInstanceUID: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3591,7 +3615,7 @@ export def "post-patients-id-anonymize" [
   --replace: record # Associative array to change the value of some DICOM tags in the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
   --synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
   --transcode: string # Transcode the DICOM instances to the provided DICOM transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
-]: any -> record<ID: string, Path: string> {
+]: any -> oneof<record<ID: string, Path: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3672,7 +3696,7 @@ export def "post-patients-id-archive" [
   --priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
   --synchronous: oneof<nothing, bool> # If `true`, create the archive in synchronous mode, which means that the HTTP answer will directly contain the ZIP file. This is the default, easy behavior. However, if global configuration option "SynchronousZipStream" is set to "false", asynchronous transfers should be preferred for large amount of data, as the creation of the temporary file might lead to network timeouts.
   --transcode: string # If present, the DICOM files in the archive will be transcoded to the provided transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
-]: any -> record<ID: string, Path: string> {
+]: any -> oneof<record<ID: string, Path: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4425,7 +4449,7 @@ export def "post-patients-id-media" [
   --priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
   --synchronous: oneof<nothing, bool> # If `true`, create the archive in synchronous mode, which means that the HTTP answer will directly contain the ZIP file. This is the default, easy behavior. However, if global configuration option "SynchronousZipStream" is set to "false", asynchronous transfers should be preferred for large amount of data, as the creation of the temporary file might lead to network timeouts.
   --transcode: string # If present, the DICOM files in the archive will be transcoded to the provided transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
-]: any -> record<ID: string, Path: string> {
+]: any -> oneof<record<ID: string, Path: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4636,7 +4660,7 @@ export def "post-patients-id-modify" [
   --replace: record # Associative array to change the value of some DICOM tags in the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
   --synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
   --transcode: string # Transcode the DICOM instances to the provided DICOM transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
-]: any -> record<ID: string, Path: string> {
+]: any -> oneof<record<ID: string, Path: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4899,7 +4923,7 @@ export def "get-patients-id-statistics" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<CountInstances: float, CountSeries: float, CountStudies: float, DicomDiskSize: string, DicomDiskSizeMB: float, DicomUncompressedSize: string, DicomUncompressedSizeMB: float, DiskSize: string, DiskSizeMB: float, UncompressedSize: string, UncompressedSizeMB: float> {
+]: nothing -> oneof<record<CountInstances: float, CountSeries: float, CountStudies: float, DicomDiskSize: string, DicomDiskSizeMB: float, DicomUncompressedSize: string, DicomUncompressedSizeMB: float, DiskSize: string, DiskSizeMB: float, UncompressedSize: string, UncompressedSizeMB: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5165,7 +5189,7 @@ export def "post-peers-id-store" [
   --resources: list<string> # List of the Orthanc identifiers of all the DICOM resources to be sent
   --synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
   --transcode: string # Transcode to the provided DICOM transfer syntax before the actual sending
-]: any -> record<ID: string, Path: string> {
+]: any -> oneof<record<ID: string, Path: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5204,7 +5228,7 @@ export def "post-peers-id-store-straight" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> record<ID: string, ParentPatient: string, ParentSeries: string, ParentStudy: string, Path: string, Status: string> {
+]: any -> oneof<record<ID: string, ParentPatient: string, ParentSeries: string, ParentStudy: string, Path: string, Status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5600,7 +5624,7 @@ export def "post-queries-id-answers-index-query-instances" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: record # Associative array containing the filter on the values of the DICOM tags
   --timeout: float # Timeout for the C-FIND command, in seconds (new in Orthanc 1.9.1)
-]: any -> record<ID: record, Path: record> {
+]: any -> oneof<record<ID: record, Path: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5642,7 +5666,7 @@ export def "post-queries-id-answers-index-query-series" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: record # Associative array containing the filter on the values of the DICOM tags
   --timeout: float # Timeout for the C-FIND command, in seconds (new in Orthanc 1.9.1)
-]: any -> record<ID: record, Path: record> {
+]: any -> oneof<record<ID: record, Path: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5684,7 +5708,7 @@ export def "post-queries-id-answers-index-query-studies" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: record # Associative array containing the filter on the values of the DICOM tags
   --timeout: float # Timeout for the C-FIND command, in seconds (new in Orthanc 1.9.1)
-]: any -> record<ID: record, Path: record> {
+]: any -> oneof<record<ID: record, Path: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5732,7 +5756,7 @@ export def "post-queries-id-answers-index-retrieve" [
   --synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
   --target-aet: string # AET of the target modality. By default, the AET of Orthanc is used, as defined in the `DicomAet` configuration option.
   --timeout: float # Timeout for the C-MOVE command, in seconds
-]: any -> record<ID: string, Path: string> {
+]: any -> oneof<record<ID: string, Path: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5887,7 +5911,7 @@ export def "post-queries-id-retrieve" [
   --synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
   --target-aet: string # AET of the target modality. By default, the AET of Orthanc is used, as defined in the `DicomAet` configuration option.
   --timeout: float # Timeout for the C-MOVE command, in seconds
-]: any -> record<ID: string, Path: string> {
+]: any -> oneof<record<ID: string, Path: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6052,7 +6076,7 @@ export def "post-series-id-anonymize" [
   --replace: record # Associative array to change the value of some DICOM tags in the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
   --synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
   --transcode: string # Transcode the DICOM instances to the provided DICOM transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
-]: any -> record<ID: string, Path: string> {
+]: any -> oneof<record<ID: string, Path: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6133,7 +6157,7 @@ export def "post-series-id-archive" [
   --priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
   --synchronous: oneof<nothing, bool> # If `true`, create the archive in synchronous mode, which means that the HTTP answer will directly contain the ZIP file. This is the default, easy behavior. However, if global configuration option "SynchronousZipStream" is set to "false", asynchronous transfers should be preferred for large amount of data, as the creation of the temporary file might lead to network timeouts.
   --transcode: string # If present, the DICOM files in the archive will be transcoded to the provided transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
-]: any -> record<ID: string, Path: string> {
+]: any -> oneof<record<ID: string, Path: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6886,7 +6910,7 @@ export def "post-series-id-media" [
   --priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
   --synchronous: oneof<nothing, bool> # If `true`, create the archive in synchronous mode, which means that the HTTP answer will directly contain the ZIP file. This is the default, easy behavior. However, if global configuration option "SynchronousZipStream" is set to "false", asynchronous transfers should be preferred for large amount of data, as the creation of the temporary file might lead to network timeouts.
   --transcode: string # If present, the DICOM files in the archive will be transcoded to the provided transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
-]: any -> record<ID: string, Path: string> {
+]: any -> oneof<record<ID: string, Path: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7097,7 +7121,7 @@ export def "post-series-id-modify" [
   --replace: record # Associative array to change the value of some DICOM tags in the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
   --synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
   --transcode: string # Transcode the DICOM instances to the provided DICOM transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
-]: any -> record<ID: string, Path: string> {
+]: any -> oneof<record<ID: string, Path: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7214,7 +7238,7 @@ export def "get-series-id-ordered-slices" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<Dicom: list<string>, Slices: list<string>, SlicesShort: list<record>, Type: string> {
+]: nothing -> oneof<record<Dicom: list<string>, Slices: list<string>, SlicesShort: list<record>, Type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7365,7 +7389,7 @@ export def "get-series-id-statistics" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<CountInstances: float, DicomDiskSize: string, DicomDiskSizeMB: float, DicomUncompressedSize: string, DicomUncompressedSizeMB: float, DiskSize: string, DiskSizeMB: float, UncompressedSize: string, UncompressedSizeMB: float> {
+]: nothing -> oneof<record<CountInstances: float, DicomDiskSize: string, DicomDiskSizeMB: float, DicomUncompressedSize: string, DicomUncompressedSizeMB: float, DiskSize: string, DiskSizeMB: float, UncompressedSize: string, UncompressedSizeMB: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7438,7 +7462,7 @@ export def "get-statistics" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<CountInstances: float, CountPatients: float, CountSeries: float, CountStudies: float, TotalDiskSize: string, TotalDiskSizeMB: float, TotalUncompressedSize: string, TotalUncompressedSizeMB: float> {
+]: nothing -> oneof<record<CountInstances: float, CountPatients: float, CountSeries: float, CountStudies: float, TotalDiskSize: string, TotalDiskSizeMB: float, TotalUncompressedSize: string, TotalUncompressedSizeMB: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/statistics" $auth.query)
@@ -7472,7 +7496,7 @@ export def "get-storage-commitment-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<Failures: list<record>, RemoteAET: string, Status: string, Success: list<record>> {
+]: nothing -> oneof<record<Failures: list<record>, RemoteAET: string, Status: string, Success: list<record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7669,7 +7693,7 @@ export def "post-studies-id-anonymize" [
   --replace: record # Associative array to change the value of some DICOM tags in the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
   --synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
   --transcode: string # Transcode the DICOM instances to the provided DICOM transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
-]: any -> record<ID: string, Path: string> {
+]: any -> oneof<record<ID: string, Path: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7750,7 +7774,7 @@ export def "post-studies-id-archive" [
   --priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
   --synchronous: oneof<nothing, bool> # If `true`, create the archive in synchronous mode, which means that the HTTP answer will directly contain the ZIP file. This is the default, easy behavior. However, if global configuration option "SynchronousZipStream" is set to "false", asynchronous transfers should be preferred for large amount of data, as the creation of the temporary file might lead to network timeouts.
   --transcode: string # If present, the DICOM files in the archive will be transcoded to the provided transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
-]: any -> record<ID: string, Path: string> {
+]: any -> oneof<record<ID: string, Path: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8503,7 +8527,7 @@ export def "post-studies-id-media" [
   --priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
   --synchronous: oneof<nothing, bool> # If `true`, create the archive in synchronous mode, which means that the HTTP answer will directly contain the ZIP file. This is the default, easy behavior. However, if global configuration option "SynchronousZipStream" is set to "false", asynchronous transfers should be preferred for large amount of data, as the creation of the temporary file might lead to network timeouts.
   --transcode: string # If present, the DICOM files in the archive will be transcoded to the provided transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
-]: any -> record<ID: string, Path: string> {
+]: any -> oneof<record<ID: string, Path: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8547,7 +8571,7 @@ export def "post-studies-id-merge" [
   --priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
   --resources: list<string> # The list of DICOM resources (studies, series, and/or instances) to be merged into the study of interest (mandatory option)
   --synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
-]: any -> record<ID: string, Path: string> {
+]: any -> oneof<record<ID: string, Path: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8758,7 +8782,7 @@ export def "post-studies-id-modify" [
   --replace: record # Associative array to change the value of some DICOM tags in the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
   --synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
   --transcode: string # Transcode the DICOM instances to the provided DICOM transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
-]: any -> record<ID: string, Path: string> {
+]: any -> oneof<record<ID: string, Path: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9038,7 +9062,7 @@ export def "post-studies-id-split" [
   --replace: record # Associative array to change the value of some DICOM tags in the new study. These tags must be part of the "Patient Module Attributes" or the "General Study Module Attributes", as specified by the DICOM 2011 standard in Tables C.7-1 and C.7-3.
   --series: list<string> # The list of series to be separated from the parent study. These series must all be children of the same source study, that is specified in the URI.
   --synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
-]: any -> record<ID: string, Path: string> {
+]: any -> oneof<record<ID: string, Path: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9076,7 +9100,7 @@ export def "get-studies-id-statistics" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<CountInstances: float, CountSeries: float, DicomDiskSize: string, DicomDiskSizeMB: float, DicomUncompressedSize: string, DicomUncompressedSizeMB: float, DiskSize: string, DiskSizeMB: float, UncompressedSize: string, UncompressedSizeMB: float> {
+]: nothing -> oneof<record<CountInstances: float, CountSeries: float, DicomDiskSize: string, DicomDiskSizeMB: float, DicomUncompressedSize: string, DicomUncompressedSizeMB: float, DiskSize: string, DiskSizeMB: float, UncompressedSize: string, UncompressedSizeMB: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -9110,7 +9134,7 @@ export def "get-system" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<ApiVersion: float, CheckRevisions: bool, DatabaseBackendPlugin: string, DatabaseServerIdentifier: string, DatabaseVersion: float, DicomAet: string, DicomPort: float, HttpPort: float, IngestTranscoding: string, IsHttpServerSecure: bool, MainDicomTags: record, MaximumStorageMode: string, MaximumStorageSize: float, Name: string, OverwriteInstances: bool, PluginsEnabled: bool, StorageAreaPlugin: string, StorageCompression: bool, Version: string> {
+]: nothing -> oneof<record<ApiVersion: float, CheckRevisions: bool, DatabaseBackendPlugin: string, DatabaseServerIdentifier: string, DatabaseVersion: float, DicomAet: string, DicomPort: float, HttpPort: float, IngestTranscoding: string, IsHttpServerSecure: bool, MainDicomTags: record, MaximumStorageMode: string, MaximumStorageSize: float, Name: string, OverwriteInstances: bool, PluginsEnabled: bool, StorageAreaPlugin: string, StorageCompression: bool, Version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/system" $auth.query)
@@ -9260,7 +9284,7 @@ export def "post-tools-bulk-anonymize" [
   --resources: list<string> # List of the Orthanc identifiers of the patients/studies/series/instances of interest.
   --synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
   --transcode: string # Transcode the DICOM instances to the provided DICOM transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
-]: any -> record<ID: string, Path: string> {
+]: any -> oneof<record<ID: string, Path: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9388,7 +9412,7 @@ export def "post-tools-bulk-modify" [
   --resources: list<string> # List of the Orthanc identifiers of the patients/studies/series/instances of interest.
   --synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
   --transcode: string # Transcode the DICOM instances to the provided DICOM transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
-]: any -> record<ID: string, Path: string> {
+]: any -> oneof<record<ID: string, Path: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9430,7 +9454,7 @@ export def "post-tools-create-archive" [
   --resources: list<string> # The list of Orthanc identifiers of interest.
   --synchronous: oneof<nothing, bool> # If `true`, create the archive in synchronous mode, which means that the HTTP answer will directly contain the ZIP file. This is the default, easy behavior. However, if global configuration option "SynchronousZipStream" is set to "false", asynchronous transfers should be preferred for large amount of data, as the creation of the temporary file might lead to network timeouts.
   --transcode: string # If present, the DICOM files in the archive will be transcoded to the provided transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
-]: any -> record<ID: string, Path: string> {
+]: any -> oneof<record<ID: string, Path: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9472,7 +9496,7 @@ export def "post-tools-create-dicom" [
   --parent: string # If present, the newly created instance will be attached to the parent DICOM resource whose Orthanc identifier is contained in this field. The DICOM tags of the parent modules in the DICOM hierarchy will be automatically copied to the newly created instance.
   --private-creator: string # The private creator to be used for private tags in `Tags`
   --tags: record # Associative array containing the tags of the new instance to be created
-]: any -> record<ID: string, Path: string> {
+]: any -> oneof<record<ID: string, Path: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9515,7 +9539,7 @@ export def "post-tools-create-media" [
   --resources: list<string> # The list of Orthanc identifiers of interest.
   --synchronous: oneof<nothing, bool> # If `true`, create the archive in synchronous mode, which means that the HTTP answer will directly contain the ZIP file. This is the default, easy behavior. However, if global configuration option "SynchronousZipStream" is set to "false", asynchronous transfers should be preferred for large amount of data, as the creation of the temporary file might lead to network timeouts.
   --transcode: string # If present, the DICOM files in the archive will be transcoded to the provided transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
-]: any -> record<ID: string, Path: string> {
+]: any -> oneof<record<ID: string, Path: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9558,7 +9582,7 @@ export def "post-tools-create-media-extended" [
   --resources: list<string> # The list of Orthanc identifiers of interest.
   --synchronous: oneof<nothing, bool> # If `true`, create the archive in synchronous mode, which means that the HTTP answer will directly contain the ZIP file. This is the default, easy behavior. However, if global configuration option "SynchronousZipStream" is set to "false", asynchronous transfers should be preferred for large amount of data, as the creation of the temporary file might lead to network timeouts.
   --transcode: string # If present, the DICOM files in the archive will be transcoded to the provided transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
-]: any -> record<ID: string, Path: string> {
+]: any -> oneof<record<ID: string, Path: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

@@ -14,27 +14,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "exp-api-key" => { {scheme: $scheme, headers: {"exp-api-key": $token_val}, query: "", location: "header"} }
     "query-apiKey" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "apiKey")=(encode-path-segment $token_val)", location: "query"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -42,8 +51,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -54,7 +68,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -89,7 +112,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -110,9 +134,9 @@ def sort-order-completer-2 [] { ["SEO_ALPHABETICAL" "SEO_PUBLISHED_DATE_A" "SEO_
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "available-products" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["available-products" "booking-availability" "booking-availability-dates" "booking-availability-tourgrades" "booking-availability-tourgrades-pricingmatrix" "booking-book" "booking-calculateprice" "booking-hotels" "booking-mybookings" "booking-pastbooking" "booking-pricingmatrix" "booking-status" "booking-status-items" "booking-voucher" "cancellation-reasons" "cancel-booking" "cancel-booking-quote" "health-check" "merchant-cancellation" "product" "product-photos" "product-reviews" "search-freetext" "search-products" "search-products-codes" "taxonomy-attractions" "taxonomy-categories" "taxonomy-destinations" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -150,7 +174,7 @@ export def "available-products" [
   --num-adults: int # **number of adult travelers** who wish to participate - default: `1`
   --product-codes: list<string> # **array of unique alphanumeric product identifiers** specifying which products to find the availability of - maximum: `50` (e.g. [5010SYDNEY, 2280SUN, 9169P50])
   --start-date: string # **start date** of the date range to search within (must be in the future)
-]: any -> record<dateStamp: string, errorCodes: list<string>, errorMessage: list<any>, errorMessageText: string, errorName: string, errorReference: string, errorType: string, extraInfo: record, extraObject: record, success: bool, totalCount: int, vmid: string, data: table<admission: string, available: bool, bookingEngineId: string, catIds: list, code: string, currencyCode: string, duration: string, essential: string, merchantCancellable: bool, merchantNetPriceFrom: float, merchantNetPriceFromFormatted: string, onRequestPeriod: int, onSale: bool, panoramaCount: int, pas: record, photoCount: int, price: float, priceFormatted: string, primaryDestinationId: int, primaryDestinationName: string, primaryDestinationUrlName: string, primaryGroupId: string, productUrlName: string, rating: float, reviewCount: int, rrp: int, rrpFormatted: string, savingAmount: string, savingAmountFormated: string, shortDescription: string, shortTitle: string, sortOrder: int, specialOfferAvailable: bool, specialReservation: bool, specialReservationDetails: string, sslSupported: bool, subCatIds: list, supplierCode: string, supplierName: string, thumbnailHiResURL: string, thumbnailURL: string, title: string, translationLevel: int, uniqueShortDescription: string, videoCount: int, webURL: string>> {
+]: any -> oneof<record<dateStamp: string, errorCodes: list<string>, errorMessage: list<any>, errorMessageText: string, errorName: string, errorReference: string, errorType: string, extraInfo: record, extraObject: record, success: bool, totalCount: int, vmid: string, data: table<admission: string, available: bool, bookingEngineId: string, catIds: list, code: string, currencyCode: string, duration: string, essential: string, merchantCancellable: bool, merchantNetPriceFrom: float, merchantNetPriceFromFormatted: string, onRequestPeriod: int, onSale: bool, panoramaCount: int, pas: record, photoCount: int, price: float, priceFormatted: string, primaryDestinationId: int, primaryDestinationName: string, primaryDestinationUrlName: string, primaryGroupId: string, productUrlName: string, rating: float, reviewCount: int, rrp: int, rrpFormatted: string, savingAmount: string, savingAmountFormated: string, shortDescription: string, shortTitle: string, sortOrder: int, specialOfferAvailable: bool, specialReservation: bool, specialReservationDetails: string, sslSupported: bool, subCatIds: list, supplierCode: string, supplierName: string, thumbnailHiResURL: string, thumbnailURL: string, title: string, translationLevel: int, uniqueShortDescription: string, videoCount: int, webURL: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -180,7 +204,6 @@ export def "available-products" [
 #
 # POST /booking/availability
 # operationId: bookingAvailability
-# --ageBands item shape: {bandId?: int, count?: int}
 export def "booking-availability" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -197,7 +220,7 @@ export def "booking-availability" [
   --month: string # **month component** (text format) of the start of the date range for which to retrieve tour grade availability information (must be in the future)
   --product-code: string # **unique alphanumeric identifier** of the product for which you wish to retrieve tour grade availability information
   --year: string # **year component** (text format) of the start of the date range for which to retrieve tour grade availability information (must be in the future)
-]: any -> record<dateStamp: string, errorCodes: list<string>, errorMessage: list<any>, errorMessageText: string, errorName: string, errorReference: string, errorType: string, extraInfo: record, extraObject: record, success: bool, totalCount: int, vmid: string, data: record<availability: list<record>, firstAvailableDate: string, lastAvailableDate: string, productCode: string>> {
+]: any -> oneof<record<dateStamp: string, errorCodes: list<string>, errorMessage: list<any>, errorMessageText: string, errorName: string, errorReference: string, errorType: string, extraInfo: record, extraObject: record, success: bool, totalCount: int, vmid: string, data: record<availability: list<record>, firstAvailableDate: string, lastAvailableDate: string, productCode: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -239,7 +262,7 @@ export def "booking-availability-dates" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --product-code: string # **unique alphanumeric identifier** of the product (e.g. 2280AAHT)
   --accept-language: string # Specifies the language into which the natural-language fields in the response from this service will be translated (see [Accept-Language header](#section/Appendices/Accept-Language-header) for available langage codes) (required, e.g. en-US)
-]: nothing -> record<dateStamp: string, errorCodes: list<string>, errorMessage: list<any>, errorMessageText: string, errorName: string, errorReference: string, errorType: string, extraInfo: record, extraObject: record, success: bool, totalCount: int, vmid: string, data: record> {
+]: nothing -> oneof<record<dateStamp: string, errorCodes: list<string>, errorMessage: list<any>, errorMessageText: string, errorName: string, errorReference: string, errorType: string, extraInfo: record, extraObject: record, success: bool, totalCount: int, vmid: string, data: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($accept_language == null) { error make --unspanned { msg: "required header parameter 'Accept-Language' missing: pass --accept-language" } }
@@ -267,7 +290,6 @@ export def "booking-availability-dates" [
 #
 # POST /booking/availability/tourgrades
 # operationId: bookingAvailabilityTourgrades
-# --ageBands item shape: {bandId?: int, count?: int}
 export def "booking-availability-tourgrades" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -283,7 +305,7 @@ export def "booking-availability-tourgrades" [
   --booking-date: string # **date** to enquire about available tour grades for *this* product (must be in the future)
   --currency-code: string # **currency code** for the currency in which to display pricing information
   --product-code: string
-]: any -> record<dateStamp: string, errorCodes: list<string>, errorMessage: list<any>, errorMessageText: string, errorName: string, errorReference: string, errorType: string, extraInfo: record, extraObject: record, success: bool, totalCount: int, vmid: string, data: table<ageBands: list, ageBandsRequired: list, available: bool, bookingDate: string, currencyCode: string, defaultLanguageCode: string, gradeCode: string, gradeDepartureTime: string, gradeDescription: string, gradeTitle: string, langServices: record, merchantNetPrice: float, merchantNetPriceFormatted: string, retailPrice: float, retailPriceFormatted: string, sortOrder: int, unavailableReason: string>> {
+]: any -> oneof<record<dateStamp: string, errorCodes: list<string>, errorMessage: list<any>, errorMessageText: string, errorName: string, errorReference: string, errorType: string, extraInfo: record, extraObject: record, success: bool, totalCount: int, vmid: string, data: table<ageBands: list, ageBandsRequired: list, available: bool, bookingDate: string, currencyCode: string, defaultLanguageCode: string, gradeCode: string, gradeDepartureTime: string, gradeDescription: string, gradeTitle: string, langServices: record, merchantNetPrice: float, merchantNetPriceFormatted: string, retailPrice: float, retailPriceFormatted: string, sortOrder: int, unavailableReason: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -328,7 +350,7 @@ export def "booking-availability-tourgrades-pricingmatrix" [
   --month: string # **month of year** (as text) by which to filter results (must be in the future)
   --product-code: string # **alphanumeric identifier** of product about which to retrieve tour grade and pricing information
   --year: string # **year** (as text) by which to filter results (must be in the future)
-]: any -> record<dateStamp: string, errorCodes: list<string>, errorMessage: list<any>, errorMessageText: string, errorName: string, errorReference: string, errorType: string, extraInfo: record, extraObject: record, success: bool, totalCount: int, vmid: string, data: record<bookingMonth: string, dates: list<record>, pricingUnit: string>> {
+]: any -> oneof<record<dateStamp: string, errorCodes: list<string>, errorMessage: list<any>, errorMessageText: string, errorName: string, errorReference: string, errorType: string, extraInfo: record, extraObject: record, success: bool, totalCount: int, vmid: string, data: record<bookingMonth: string, dates: list<record>, pricingUnit: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -358,9 +380,6 @@ export def "booking-availability-tourgrades-pricingmatrix" [
 #
 # POST /booking/book
 # operationId: bookingBook
-# --booker shape: {cellPhone?: string, cellPhoneCountryCode?: string, email?: string, firstname: string, homePhone?: string, surname: string, title?: string}
-# --items item shape: {bookingQuestionAnswers?: list, hotelId?: string, languageOptionCode?: string, partnerItemDetail?: record, pickupPoint?: string, productCode?: string, specialRequirements?: string, tourGradeCode?: string, travelDate?: string, travellers?: list}
-# --partnerDetail shape: {distributorRef?: string}
 export def "booking-book" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -377,7 +396,7 @@ export def "booking-book" [
   --demo: oneof<nothing, bool> # **specifier**: `true` if this is a *demo* booking only (demos do not send any notifications, are automatically confirmed and OnRequest products become freesale products. Default value is true. Production must have `demo` set to `false`.
   --items: list # **array** of items to be booked — item shape: {bookingQuestionAnswers?: list, hotelId?: string, languageOptionCode?: string, partnerItemDetail?: record, pickupPoint?: string, productCode?: string, specialRequirements?: string, tourGradeCode?: string, travelDate?: string, travellers?: list}
   --partner-detail: record # Applicable only for extra partner detail for either partner or merchant partner for sending partner specific information — shape: {distributorRef?: string}
-]: any -> record<dateStamp: string, errorCodes: list<string>, errorMessage: list<any>, errorMessageText: string, errorName: string, errorReference: string, errorType: string, extraInfo: record, extraObject: record, success: bool, totalCount: int, vmid: string, data: record<bookerEmail: string, bookingDate: string, bookingStatus: record<amended: bool, cancelled: bool, confirmed: bool, failed: bool, level: string, pending: bool, status: int, text: string, type: string>, currencyCode: string, distributorRef: string, exchangeRate: int, hasVoucher: bool, itemSummaries: list<record>, itineraryId: int, omniPreRuleList: string, paypalRedirectURL: string, rulesApplied: string, securityToken: string, sortOrder: int, totalPrice: float, totalPriceFormatted: string, totalPriceUSD: float, userId: string, voucherKey: string, voucherURL: string>> {
+]: any -> oneof<record<dateStamp: string, errorCodes: list<string>, errorMessage: list<any>, errorMessageText: string, errorName: string, errorReference: string, errorType: string, extraInfo: record, extraObject: record, success: bool, totalCount: int, vmid: string, data: record<bookerEmail: string, bookingDate: string, bookingStatus: record<amended: bool, cancelled: bool, confirmed: bool, failed: bool, level: string, pending: bool, status: int, text: string, type: string>, currencyCode: string, distributorRef: string, exchangeRate: int, hasVoucher: bool, itemSummaries: list<record>, itineraryId: int, omniPreRuleList: string, paypalRedirectURL: string, rulesApplied: string, securityToken: string, sortOrder: int, totalPrice: float, totalPriceFormatted: string, totalPriceUSD: float, userId: string, voucherKey: string, voucherURL: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -407,7 +426,6 @@ export def "booking-book" [
 #
 # POST /booking/calculateprice
 # operationId: bookingCalculateprice
-# --items item shape: {productCode?: string, tourGradeCode?: string, travelDate?: string, travellers?: list}
 export def "booking-calculateprice" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -421,7 +439,7 @@ export def "booking-calculateprice" [
   --accept-language: string # Specifies the language into which the natural-language fields in the response from this service will be translated (see [Accept-Language header](#section/Appendices/Accept-Language-header) for available langage codes) (required, e.g. en-US)
   --currency-code: string # **currency code** for the currency in which to display pricing details
   --items: list # **array** of travel detail objects — item shape: {productCode?: string, tourGradeCode?: string, travelDate?: string, travellers?: list}
-]: any -> record<dateStamp: string, errorCodes: list<string>, errorMessage: list<any>, errorMessageText: string, errorName: string, errorReference: string, errorType: string, extraInfo: record, extraObject: record, success: bool, totalCount: int, vmid: string, data: record<currencyCode: string, hasPromoCode: bool, itinerary: record<bookerEmail: string, bookingDate: string, bookingStatus: record, currencyCode: string, distributorRef: string, exchangeRate: int, hasVoucher: bool, itemSummaries: list, itineraryId: int, omniPreRuleList: int, paypalRedirectURL: string, rulesApplied: list, securityToken: string, sortOrder: int, totalPrice: float, totalPriceFormatted: string, totalPriceUSD: float, userId: int, voucherKey: string, voucherURL: string>, itineraryFromPrice: float, itineraryFromPriceFormatted: string, itineraryNewPrice: float, itineraryNewPriceFormatted: string, itinerarySaving: int, itinerarySavingFormatted: string, paymentGatewayInfo: string, promoCode: string, promoCodeExpired: bool, promoCodeValid: bool, rulesApplied: list<string>>> {
+]: any -> oneof<record<dateStamp: string, errorCodes: list<string>, errorMessage: list<any>, errorMessageText: string, errorName: string, errorReference: string, errorType: string, extraInfo: record, extraObject: record, success: bool, totalCount: int, vmid: string, data: record<currencyCode: string, hasPromoCode: bool, itinerary: record<bookerEmail: string, bookingDate: string, bookingStatus: record, currencyCode: string, distributorRef: string, exchangeRate: int, hasVoucher: bool, itemSummaries: list, itineraryId: int, omniPreRuleList: int, paypalRedirectURL: string, rulesApplied: list, securityToken: string, sortOrder: int, totalPrice: float, totalPriceFormatted: string, totalPriceUSD: float, userId: int, voucherKey: string, voucherURL: string>, itineraryFromPrice: float, itineraryFromPriceFormatted: string, itineraryNewPrice: float, itineraryNewPriceFormatted: string, itinerarySaving: int, itinerarySavingFormatted: string, paymentGatewayInfo: string, promoCode: string, promoCodeExpired: bool, promoCodeValid: bool, rulesApplied: list<string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -464,7 +482,7 @@ export def "booking-hotels" [
   --product-code: string # **unique alphanumeric identifier** of the product (e.g. 2280AAHT)
   --dest-id: int # **unique numeric identifier** of the destination (e.g. 123)
   --accept-language: string # Specifies the language into which the natural-language fields in the response from this service will be translated (see [Accept-Language header](#section/Appendices/Accept-Language-header) for available langage codes) (required, e.g. en-US)
-]: nothing -> record<dateStamp: string, errorCodes: list<string>, errorMessage: list<any>, errorMessageText: string, errorName: string, errorReference: string, errorType: string, extraInfo: record, extraObject: record, success: bool, totalCount: int, vmid: string, data: table<address: string, brand: string, city: string, destinationId: int, hotelString: string, id: string, latitude: float, longitude: float, name: string, notes: string, phone: string, postcode: string, productCodes: list, sortOrder: int>> {
+]: nothing -> oneof<record<dateStamp: string, errorCodes: list<string>, errorMessage: list<any>, errorMessageText: string, errorName: string, errorReference: string, errorType: string, extraInfo: record, extraObject: record, success: bool, totalCount: int, vmid: string, data: table<address: string, brand: string, city: string, destinationId: int, hotelString: string, id: string, latitude: float, longitude: float, name: string, notes: string, phone: string, postcode: string, productCodes: list, sortOrder: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($accept_language == null) { error make --unspanned { msg: "required header parameter 'Accept-Language' missing: pass --accept-language" } }
@@ -506,7 +524,7 @@ export def "booking-mybookings" [
   --email: string # **email address** of the booker for the booking (e.g. apitest@viator.com)
   --itinerary-or-item-id: string # The booking reference number of the item - **Note**: For more information, see [Booking references](#section/Key-concepts/Booking-references) (e.g. 700179574)
   --accept-language: string # Specifies the language into which the natural-language fields in the response from this service will be translated (see [Accept-Language header](#section/Appendices/Accept-Language-header) for available langage codes) (required, e.g. en-US)
-]: nothing -> record<dateStamp: string, errorCodes: list<string>, errorMessage: list<any>, errorMessageText: string, errorName: string, errorReference: string, errorType: string, extraInfo: record, extraObject: record, success: bool, totalCount: int, vmid: string, data: record<bookerEmail: string, bookingDate: string, bookingStatus: record<amended: bool, cancelled: bool, confirmed: bool, failed: bool, level: string, pending: bool, status: int, text: string, type: string>, currencyCode: string, distributorRef: string, exchangeRate: int, hasVoucher: bool, itemSummaries: list<record>, itineraryId: int, rulesApplied: string, sortOrder: int, totalPrice: float, totalPriceFormatted: string, totalPriceUSD: float, userId: string, voucherKey: string, voucherURL: string>> {
+]: nothing -> oneof<record<dateStamp: string, errorCodes: list<string>, errorMessage: list<any>, errorMessageText: string, errorName: string, errorReference: string, errorType: string, extraInfo: record, extraObject: record, success: bool, totalCount: int, vmid: string, data: record<bookerEmail: string, bookingDate: string, bookingStatus: record<amended: bool, cancelled: bool, confirmed: bool, failed: bool, level: string, pending: bool, status: int, text: string, type: string>, currencyCode: string, distributorRef: string, exchangeRate: int, hasVoucher: bool, itemSummaries: list<record>, itineraryId: int, rulesApplied: string, sortOrder: int, totalPrice: float, totalPriceFormatted: string, totalPriceUSD: float, userId: string, voucherKey: string, voucherURL: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($accept_language == null) { error make --unspanned { msg: "required header parameter 'Accept-Language' missing: pass --accept-language" } }
@@ -548,7 +566,7 @@ export def "booking-pastbooking" [
   --email: string # **email address** by which to search for past bookings (e.g. apitest@viator.com)
   --item-id: string # Search for a booking with this **unique booking-reference number**. See [Booking references](#section/Key-concepts/Booking-references) for more information. (e.g. 580669678)
   --accept-language: string # Specifies the language into which the natural-language fields in the response from this service will be translated (see [Accept-Language header](#section/Appendices/Accept-Language-header) for available langage codes) (required, e.g. en-US)
-]: nothing -> record<dateStamp: string, errorCodes: list<string>, errorMessage: list<any>, errorMessageText: string, errorName: string, errorReference: string, errorType: string, extraInfo: record, extraObject: record, success: bool, totalCount: int, vmid: string, data: record<bookerEmail: string, bookingDate: string, bookingStatus: record<amended: bool, cancelled: bool, confirmed: bool, failed: bool, level: string, pending: bool, status: int, text: string, type: string>, currencyCode: string, distributorRef: string, exchangeRate: int, hasVoucher: bool, itemSummaries: list<record>, itineraryId: int, rulesApplied: string, sortOrder: int, totalPrice: float, totalPriceFormatted: string, totalPriceUSD: float, userId: string, voucherKey: string, voucherURL: string>> {
+]: nothing -> oneof<record<dateStamp: string, errorCodes: list<string>, errorMessage: list<any>, errorMessageText: string, errorName: string, errorReference: string, errorType: string, extraInfo: record, extraObject: record, success: bool, totalCount: int, vmid: string, data: record<bookerEmail: string, bookingDate: string, bookingStatus: record<amended: bool, cancelled: bool, confirmed: bool, failed: bool, level: string, pending: bool, status: int, text: string, type: string>, currencyCode: string, distributorRef: string, exchangeRate: int, hasVoucher: bool, itemSummaries: list<record>, itineraryId: int, rulesApplied: string, sortOrder: int, totalPrice: float, totalPriceFormatted: string, totalPriceUSD: float, userId: string, voucherKey: string, voucherURL: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($accept_language == null) { error make --unspanned { msg: "required header parameter 'Accept-Language' missing: pass --accept-language" } }
@@ -591,7 +609,7 @@ export def "booking-pricingmatrix" [
   --currency-code: string # **currency code** of the currency in which to display pricing information
   --product-code: string # **unique alphanumeric identifier** of the product for which to retrieve the pricing matrix
   --tour-grade-code: string # **alphanumeric identifier** of the product tour grade for which to retrieve the pricing matrix
-]: any -> record<dateStamp: string, errorCodes: list<string>, errorMessage: list<any>, errorMessageText: string, errorName: string, errorReference: string, errorType: string, extraInfo: record, extraObject: record, success: bool, totalCount: int, vmid: string, data: table<ageBandPrices: list, bookingDate: string, pricingUnit: string, sortOrder: int>> {
+]: any -> oneof<record<dateStamp: string, errorCodes: list<string>, errorMessage: list<any>, errorMessageText: string, errorName: string, errorReference: string, errorType: string, extraInfo: record, extraObject: record, success: bool, totalCount: int, vmid: string, data: table<ageBandPrices: list, bookingDate: string, pricingUnit: string, sortOrder: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -640,7 +658,7 @@ export def "booking-status" [
   --lead-first-name: string # **first name** of the lead traveler
   --lead-surname: string # **surname** of the lead traveler
   --test: oneof<nothing, bool> # **specifier**: - `true`: bypass the poll limit in the prelive environment only (recommended for testing) - `false`: (default)
-]: any -> record<dateStamp: string, errorCodes: list<string>, errorMessage: list<any>, errorMessageText: string, errorName: string, errorReference: string, errorType: string, extraInfo: record, extraObject: record, success: bool, totalCount: int, vmid: string, data: record<bookingDate: string, bookingStatus: record<amended: bool, cancelled: bool, confirmed: bool, failed: bool, level: string, pending: bool, status: int, text: string, type: string>, distributorRef: string, itemSummaries: list<record>, itineraryId: int, sortOrder: int>> {
+]: any -> oneof<record<dateStamp: string, errorCodes: list<string>, errorMessage: list<any>, errorMessageText: string, errorName: string, errorReference: string, errorType: string, extraInfo: record, extraObject: record, success: bool, totalCount: int, vmid: string, data: record<bookingDate: string, bookingStatus: record<amended: bool, cancelled: bool, confirmed: bool, failed: bool, level: string, pending: bool, status: int, text: string, type: string>, distributorRef: string, itemSummaries: list<record>, itineraryId: int, sortOrder: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -689,7 +707,7 @@ export def "booking-status-items" [
   --lead-first-name: string # **first name** of the lead traveler
   --lead-surname: string # **surname** of the lead traveler
   --test: oneof<nothing, bool> # **specifier**: - `true`: bypass the poll limit in the prelive environment only - `false`: (default) make a *real* booking, not a test
-]: any -> record<dateStamp: string, errorCodes: list<string>, errorMessage: list<any>, errorMessageText: string, errorName: string, errorReference: string, errorType: string, extraInfo: record, extraObject: record, success: bool, totalCount: int, vmid: string, data: table<bookingStatus: record, distributorItemRef: string, itemId: int>> {
+]: any -> oneof<record<dateStamp: string, errorCodes: list<string>, errorMessage: list<any>, errorMessageText: string, errorName: string, errorReference: string, errorType: string, extraInfo: record, extraObject: record, success: bool, totalCount: int, vmid: string, data: table<bookingStatus: record, distributorItemRef: string, itemId: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -736,7 +754,7 @@ export def "booking-voucher" [
   --full-html: oneof<nothing, bool> # **specifier**: - set to `true` if you wish to retrieve the full HTML-formatted voucher - set to `false` if you want the div fragment (optional) (e.g. true)
   --mobile-voucher: oneof<nothing, bool> # **specifier**: - if set to `true`, the service returns the mobile (cut down) HTML-formatted voucher - if `false` the full voucher HTML is returned (ignoring `fullHTML`) - default: `true` - this field should only be enabled for products that have a `voucherOption` of `'VOUCHER_E'` - do not enable `mobileVouchers` for paper vouchers (`voucherOption` of `'VOUCHER_PAPER_ONLY'`) as no barcode is returned - the voucher information is available in the response from [/product](#operation/product), [/booking/book](#operation/bookingBook), [/booking/pastbooking](#operation/bookingPastbooking), [/booking/mybookings](#operation/bookingMybookings) (it is also displayed under the 'Redemption Info' heading in this service) (e.g. true)
   --accept-language: string # Specifies the language into which the natural-language fields in the response from this service will be translated (see [Accept-Language header](#section/Appendices/Accept-Language-header) for available langage codes) (required, e.g. en-US)
-]: nothing -> record<dateStamp: string, errorCodes: list<string>, errorMessage: list<any>, errorMessageText: string, errorName: string, errorReference: string, errorType: string, extraInfo: record, extraObject: record, success: bool, totalCount: int, vmid: string, data: string> {
+]: nothing -> oneof<record<dateStamp: string, errorCodes: list<string>, errorMessage: list<any>, errorMessageText: string, errorName: string, errorReference: string, errorType: string, extraInfo: record, extraObject: record, success: bool, totalCount: int, vmid: string, data: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($accept_language == null) { error make --unspanned { msg: "required header parameter 'Accept-Language' missing: pass --accept-language" } }
@@ -775,7 +793,7 @@ export def "cancellation-reasons" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string # Specifies the language into which the natural-language fields in the response from this service will be translated (see [Accept-Language header](#section/Appendices/Accept-Language-header) for available langage codes) (required, e.g. en-US)
-]: nothing -> table<reasons: list<record>> {
+]: nothing -> oneof<table<reasons: list<record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default "https://api.sandbox.viator.com/partner")
   if ($accept_language == null) { error make --unspanned { msg: "required header parameter 'Accept-Language' missing: pass --accept-language" } }
@@ -815,7 +833,7 @@ export def "cancel-booking" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string # Specifies the language into which the natural-language fields in the response from this service will be translated (see [Accept-Language header](#section/Appendices/Accept-Language-header) for available langage codes) (required, e.g. en-US)
   --reason-code: string # Machine-interpretable identification code for this cancellation reason, retrieved from [cancellationReasons](#operation/cancellationReasons) (e.g. Customer_Service.I_canceled_my_entire_trip)
-]: any -> record<bookingId: string, reason: string, status: string> {
+]: any -> oneof<record<bookingId: string, reason: string, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default "https://api.sandbox.viator.com/partner")
@@ -857,7 +875,7 @@ export def "cancel-booking-quote" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<bookingId: string, refundDetails: record<currencyCode: string, itemPrice: float, refundAmount: float, refundPercentage: float>, status: string> {
+]: nothing -> oneof<record<bookingId: string, refundDetails: record<currencyCode: string, itemPrice: float, refundAmount: float, refundPercentage: float>, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default "https://api.sandbox.viator.com/partner")
   if ($booking_reference | is-empty) { error make --unspanned { msg: "path parameter 'booking-reference' must be non-empty" } }
@@ -893,7 +911,7 @@ export def "health-check" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string # Specifies the language into which the natural-language fields in the response from this service will be translated (see [Accept-Language header](#section/Appendices/Accept-Language-header) for available langage codes) (required, e.g. en-US)
-]: nothing -> record<allGood: bool, capiOk: bool, dbOk: bool, memcachedOk: bool, message: string> {
+]: nothing -> oneof<record<allGood: bool, capiOk: bool, dbOk: bool, memcachedOk: bool, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($accept_language == null) { error make --unspanned { msg: "required header parameter 'Accept-Language' missing: pass --accept-language" } }
@@ -921,7 +939,6 @@ export def "health-check" [
 # POST /merchant/cancellation
 # DEPRECATED
 # operationId: merchantCancellation
-# --cancelItems item shape: {cancelCode?: string, cancelDescription?: string, distributorItemRef?: string, itemId?: int}
 @deprecated
 export def "merchant-cancellation" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -937,7 +954,7 @@ export def "merchant-cancellation" [
   --cancel-items: list # **array** of objects detailing itinerary items to cancel — item shape: {cancelCode?: string, cancelDescription?: string, distributorItemRef?: string, itemId?: int}
   --distributor-ref: string # **itinerary reference identifier** (partner defined) for the booking to cancel (e.g. Jdp122)
   --itinerary-id: int # **numeric identifier** for the itinerary (e.g. 1234655)
-]: any -> record<dateStamp: string, errorCodes: list<string>, errorMessage: list<any>, errorMessageText: string, errorName: string, errorReference: string, errorType: string, extraInfo: record, extraObject: record, success: bool, totalCount: int, vmid: string, data: record<cancelItems: list<record>, distributorRef: string, itineraryId: int>> {
+]: any -> oneof<record<dateStamp: string, errorCodes: list<string>, errorMessage: list<any>, errorMessageText: string, errorName: string, errorReference: string, errorType: string, extraInfo: record, extraObject: record, success: bool, totalCount: int, vmid: string, data: record<cancelItems: list<record>, distributorRef: string, itineraryId: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -984,7 +1001,7 @@ export def "product" [
   --show-unavailable: oneof<nothing, bool> # **specifier** as to whether or not to show 'unavailable' products: - `true`: return *both* available and unavailable products - `false`: return *only* available products (default) (e.g. false)
   --exclude-tour-grade-availability: oneof<nothing, bool> # **specifier:** - `true`: return **all** tour grades, including those that are not available - `false`: only display tour grades that *are* available
   --accept-language: string # Specifies the language into which the natural-language fields in the response from this service will be translated (see [Accept-Language header](#section/Appendices/Accept-Language-header) for available langage codes) (required, e.g. en-US)
-]: nothing -> record<dateStamp: string, errorCodes: list<string>, errorMessage: list<any>, errorMessageText: string, errorName: string, errorReference: string, errorType: string, extraInfo: record, extraObject: record, success: bool, totalCount: int, vmid: string, data: record<additionalInfo: list<string>, admission: string, ageBands: list<record>, allTravellerNamesRequired: bool, applePassSupported: bool, available: bool, bookingEngineId: string, bookingQuestions: list<record>, catIds: list<int>, city: string, code: string, country: string, currencyCode: string, departurePoint: string, departureTime: string, departureTimeComments: string, description: string, destinationId: int, duration: string, essential: string, exclusions: list<string>, highlights: int, hotelPickup: bool, inclusions: list<string>, itinerary: string, location: string, mapURL: string, maxTravellerCount: int, merchantCancellable: bool, merchantNetPriceFrom: float, merchantNetPriceFromFormatted: string, merchantTermsAndConditions: record<amountRefundable: int, cancellationFromTourDate: list, merchantTermsAndConditionsType: int, termsAndConditions: string>, onRequestPeriod: int, onSale: bool, operates: string, panoramaCount: int, pas: record, passengerAttributes: list<record>, photoCount: int, price: float, priceFormatted: string, primaryDestinationId: int, primaryDestinationName: string, primaryDestinationUrlName: string, primaryGroupId: string, productPhotos: list<record>, productUrlName: string, rating: float, ratingCounts: record<1: float, 2: float, 3: float, 4: float, 5: float>, region: string, returnDetails: string, reviewCount: int, reviews: list<record>, rrp: int, rrpFormatted: string, salesPoints: list<string>, savingAmount: string, savingAmountFormated: string, shortDescription: string, shortTitle: string, specialOffer: string, specialOfferAvailable: bool, specialReservation: bool, specialReservationDetails: string, sslSupported: bool, subCatIds: list<int>, supplierCode: string, supplierName: string, thumbnailHiResURL: string, thumbnailURL: string, title: string, tourGrades: list<record>, tourGradesAvailable: bool, translationLevel: int, userPhotos: list<record>, videoCount: int, videos: string, voucherOption: string, voucherRequirements: any, webURL: string>> {
+]: nothing -> oneof<record<dateStamp: string, errorCodes: list<string>, errorMessage: list<any>, errorMessageText: string, errorName: string, errorReference: string, errorType: string, extraInfo: record, extraObject: record, success: bool, totalCount: int, vmid: string, data: record<additionalInfo: list<string>, admission: string, ageBands: list<record>, allTravellerNamesRequired: bool, applePassSupported: bool, available: bool, bookingEngineId: string, bookingQuestions: list<record>, catIds: list<int>, city: string, code: string, country: string, currencyCode: string, departurePoint: string, departureTime: string, departureTimeComments: string, description: string, destinationId: int, duration: string, essential: string, exclusions: list<string>, highlights: int, hotelPickup: bool, inclusions: list<string>, itinerary: string, location: string, mapURL: string, maxTravellerCount: int, merchantCancellable: bool, merchantNetPriceFrom: float, merchantNetPriceFromFormatted: string, merchantTermsAndConditions: record<amountRefundable: int, cancellationFromTourDate: list, merchantTermsAndConditionsType: int, termsAndConditions: string>, onRequestPeriod: int, onSale: bool, operates: string, panoramaCount: int, pas: record, passengerAttributes: list<record>, photoCount: int, price: float, priceFormatted: string, primaryDestinationId: int, primaryDestinationName: string, primaryDestinationUrlName: string, primaryGroupId: string, productPhotos: list<record>, productUrlName: string, rating: float, ratingCounts: record<1: float, 2: float, 3: float, 4: float, 5: float>, region: string, returnDetails: string, reviewCount: int, reviews: list<record>, rrp: int, rrpFormatted: string, salesPoints: list<string>, savingAmount: string, savingAmountFormated: string, shortDescription: string, shortTitle: string, specialOffer: string, specialOfferAvailable: bool, specialReservation: bool, specialReservationDetails: string, sslSupported: bool, subCatIds: list<int>, supplierCode: string, supplierName: string, thumbnailHiResURL: string, thumbnailURL: string, title: string, tourGrades: list<record>, tourGradesAvailable: bool, translationLevel: int, userPhotos: list<record>, videoCount: int, videos: string, voucherOption: string, voucherRequirements: any, webURL: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($accept_language == null) { error make --unspanned { msg: "required header parameter 'Accept-Language' missing: pass --accept-language" } }
@@ -1026,7 +1043,7 @@ export def "product-photos" [
   --code: string # **unique alphanumeric identifier** of the product (e.g. 5010SYDNEY)
   --show-unavailable: oneof<nothing, bool> # **specifier** as to whether or not to show 'unavailable' products: - `true`: return *both* available and unavailable products - `false`: return *only* available products (default) (e.g. false)
   --accept-language: string # Specifies the language into which the natural-language fields in the response from this service will be translated (see [Accept-Language header](#section/Appendices/Accept-Language-header) for available langage codes) (required, e.g. en-US)
-]: nothing -> record<dateStamp: string, errorCodes: list<string>, errorMessage: list<any>, errorMessageText: string, errorName: string, errorReference: string, errorType: string, extraInfo: record, extraObject: record, success: bool, totalCount: int, vmid: string, data: table<caption: string, editorsPick: bool, ownerAvatarURL: string, ownerCountry: string, ownerId: int, ownerName: string, photoHiResURL: string, photoId: int, photoMediumResURL: string, photoURL: string, productCode: string, productTitle: string, productUrlName: string, sortOrder: int, sslSupported: bool, thumbnailURL: string, timeUploaded: string, title: string>> {
+]: nothing -> oneof<record<dateStamp: string, errorCodes: list<string>, errorMessage: list<any>, errorMessageText: string, errorName: string, errorReference: string, errorType: string, extraInfo: record, extraObject: record, success: bool, totalCount: int, vmid: string, data: table<caption: string, editorsPick: bool, ownerAvatarURL: string, ownerCountry: string, ownerId: int, ownerName: string, photoHiResURL: string, photoId: int, photoMediumResURL: string, photoURL: string, productCode: string, productTitle: string, productUrlName: string, sortOrder: int, sslSupported: bool, thumbnailURL: string, timeUploaded: string, title: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($accept_language == null) { error make --unspanned { msg: "required header parameter 'Accept-Language' missing: pass --accept-language" } }
@@ -1069,7 +1086,7 @@ export def "product-reviews" [
   --code: string # **unique alphanumeric identifier** of the product (e.g. 5010SYDNEY)
   --show-unavailable: oneof<nothing, bool> # **specifier** as to whether or not to show 'unavailable' products: - `true`: return *both* available and unavailable products - `false`: return *only* available products (default) (e.g. false)
   --accept-language: string # Specifies the language into which the natural-language fields in the response from this service will be translated (see [Accept-Language header](#section/Appendices/Accept-Language-header) for available langage codes) (required, e.g. en-US)
-]: nothing -> record<dateStamp: string, errorCodes: list<string>, errorMessage: list<any>, errorMessageText: string, errorName: string, errorReference: string, errorType: string, extraInfo: record, extraObject: record, success: bool, totalCount: int, vmid: string, data: table<ownerAvatarURL: string, ownerCountry: string, ownerId: int, ownerName: string, productCode: string, productTitle: string, productUrlName: string, publishedDate: string, rating: int, review: string, reviewId: int, sortOrder: int, sslSupported: bool, submissionDate: string, viatorFeedback: string, viatorNotes: string>> {
+]: nothing -> oneof<record<dateStamp: string, errorCodes: list<string>, errorMessage: list<any>, errorMessageText: string, errorName: string, errorReference: string, errorType: string, extraInfo: record, extraObject: record, success: bool, totalCount: int, vmid: string, data: table<ownerAvatarURL: string, ownerCountry: string, ownerId: int, ownerName: string, productCode: string, productTitle: string, productUrlName: string, publishedDate: string, rating: int, review: string, reviewId: int, sortOrder: int, sslSupported: bool, submissionDate: string, viatorFeedback: string, viatorNotes: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($accept_language == null) { error make --unspanned { msg: "required header parameter 'Accept-Language' missing: pass --accept-language" } }
@@ -1114,7 +1131,7 @@ export def "search-freetext" [
   --sort-order: string@sort-order-completer-1 # **sort order** in which to return the results that is *one of*: - `'TOP_SELLERS'`: the top sellers - `'REVIEW_AVG_RATING_A'`: ascending by average traveler rating (low -> high) - `'REVIEW_AVG_RATING_D'`: descending by average traveler rating (high -> low) - `'PRICE_FROM_A'`: ascending by price (low -> high) - `'PRICE_FROM_D'`: descending by price (high -> low)
   --text: string # **text** to search for
   --top-x: string # **start and end rows** to return in the format {start}-{end} - e.g. `'1-10'`, `'11-20'` **Note**: - the maximum number of rows per request is 100; therefore, `'100-400'` will return the same as `'100-200'` - if `topX` is not specified, the default is `'1-100'`
-]: any -> record<dateStamp: string, errorCodes: list<string>, errorMessage: list<any>, errorMessageText: string, errorName: string, errorReference: string, errorType: string, extraInfo: record, extraObject: record, success: bool, totalCount: int, vmid: string, data: table<searchType: string, sortOrder: int>> {
+]: any -> oneof<record<dateStamp: string, errorCodes: list<string>, errorMessage: list<any>, errorMessageText: string, errorName: string, errorReference: string, errorType: string, extraInfo: record, extraObject: record, success: bool, totalCount: int, vmid: string, data: table<searchType: string, sortOrder: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1164,7 +1181,7 @@ export def "search-products" [
   --start-date: string # **start date delimiter** for the search (must be in the future) - e.g., `'2018-10-21'`
   --sub-cat-id: int # **unique numeric identifier** of *this* product subcategory to search within - `subcategoryId` can be retrieved from the [/taxonomy/categories](#operation/taxonomyCategories) service - at present, it is not possible to use `subCatId` in conjunction with `seoId`
   --top-x: string # **start and end rows** to return in the format {start}-{end} - e.g. `'1-10'`, `'11-20'` **Note**: - the maximum number of rows per request is 100; therefore, `'100-400'` will return the same as `'100-200'` - if `topX` is not specified, the default is `'1-100'`
-]: any -> record<dateStamp: string, errorCodes: list<string>, errorMessage: list<any>, errorMessageText: string, errorName: string, errorReference: string, errorType: string, extraInfo: record, extraObject: record, success: bool, totalCount: int, vmid: string, data: table<admission: string, available: bool, bookingEngineId: string, catIds: list, code: string, currencyCode: string, duration: string, essential: string, merchantCancellable: bool, merchantNetPriceFrom: float, merchantNetPriceFromFormatted: string, onRequestPeriod: int, onSale: bool, panoramaCount: int, pas: record, photoCount: int, price: float, priceFormatted: string, primaryDestinationId: int, primaryDestinationName: string, primaryDestinationUrlName: string, primaryGroupId: int, productUrlName: string, rating: float, reviewCount: int, rrp: int, rrpformatted: string, savingAmount: string, savingAmountFormated: string, shortDescription: string, shortTitle: string, sortOrder: int, specialOfferAvailable: bool, specialReservation: bool, specialReservationDetails: string, sslSupported: any, subCatIds: list, supplierCode: string, supplierName: string, thumbnailHiResURL: string, thumbnailURL: string, title: string, translationLevel: int, uniqueShortDescription: string, videoCount: int, webURL: string>> {
+]: any -> oneof<record<dateStamp: string, errorCodes: list<string>, errorMessage: list<any>, errorMessageText: string, errorName: string, errorReference: string, errorType: string, extraInfo: record, extraObject: record, success: bool, totalCount: int, vmid: string, data: table<admission: string, available: bool, bookingEngineId: string, catIds: list, code: string, currencyCode: string, duration: string, essential: string, merchantCancellable: bool, merchantNetPriceFrom: float, merchantNetPriceFromFormatted: string, onRequestPeriod: int, onSale: bool, panoramaCount: int, pas: record, photoCount: int, price: float, priceFormatted: string, primaryDestinationId: int, primaryDestinationName: string, primaryDestinationUrlName: string, primaryGroupId: int, productUrlName: string, rating: float, reviewCount: int, rrp: int, rrpformatted: string, savingAmount: string, savingAmountFormated: string, shortDescription: string, shortTitle: string, sortOrder: int, specialOfferAvailable: bool, specialReservation: bool, specialReservationDetails: string, sslSupported: any, subCatIds: list, supplierCode: string, supplierName: string, thumbnailHiResURL: string, thumbnailURL: string, title: string, translationLevel: int, uniqueShortDescription: string, videoCount: int, webURL: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1207,7 +1224,7 @@ export def "search-products-codes" [
   --accept-language: string # Specifies the language into which the natural-language fields in the response from this service will be translated (see [Accept-Language header](#section/Appendices/Accept-Language-header) for available langage codes) (required, e.g. en-US)
   --currency-code: string # **currency code** for the currency in which to display product pricing
   --product-codes: list<string> # **array** of product codes to search for
-]: any -> record<dateStamp: string, errorCodes: list<string>, errorMessage: list<any>, errorMessageText: string, errorName: string, errorReference: string, errorType: string, extraInfo: record, extraObject: record, success: bool, totalCount: int, vmid: string, data: table<admission: string, bookingEngineId: string, catIds: list, code: string, currencyCode: string, duration: string, essential: string, merchantCancellable: bool, merchantNetPriceFrom: float, merchantNetPriceFromFormatted: string, onRequestPeriod: int, onSale: bool, panoramaCount: int, pas: record, photoCount: int, price: float, priceFormatted: string, primaryDestinationId: int, primaryDestinationName: string, primaryGroupId: string, rating: float, reviewCount: int, rrp: int, rrpformatted: string, savingAmount: string, savingAmountFormated: string, shortDescription: string, shortTitle: string, sortOrder: int, specialOfferAvailable: bool, specialReservation: bool, specialReservationDetails: string, subCatIds: list, supplierCode: string, supplierName: string, thumbnailHiResURL: string, thumbnailURL: string, title: string, translationLevel: int, uniqueShortDescription: string, videoCount: int, webURL: string>> {
+]: any -> oneof<record<dateStamp: string, errorCodes: list<string>, errorMessage: list<any>, errorMessageText: string, errorName: string, errorReference: string, errorType: string, extraInfo: record, extraObject: record, success: bool, totalCount: int, vmid: string, data: table<admission: string, bookingEngineId: string, catIds: list, code: string, currencyCode: string, duration: string, essential: string, merchantCancellable: bool, merchantNetPriceFrom: float, merchantNetPriceFromFormatted: string, onRequestPeriod: int, onSale: bool, panoramaCount: int, pas: record, photoCount: int, price: float, priceFormatted: string, primaryDestinationId: int, primaryDestinationName: string, primaryGroupId: string, rating: float, reviewCount: int, rrp: int, rrpformatted: string, savingAmount: string, savingAmountFormated: string, shortDescription: string, shortTitle: string, sortOrder: int, specialOfferAvailable: bool, specialReservation: bool, specialReservationDetails: string, subCatIds: list, supplierCode: string, supplierName: string, thumbnailHiResURL: string, thumbnailURL: string, title: string, translationLevel: int, uniqueShortDescription: string, videoCount: int, webURL: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1251,7 +1268,7 @@ export def "taxonomy-attractions" [
   --dest-id: int # **unique numeric identifier** of the destination in which to search for attractions
   --sort-order: string@sort-order-completer-2 # **sort order** in which to return the results that is *one of*: * `"SEO_PUBLISHED_DATE_D"`: publish date (descending) * `"SEO_PUBLISHED_DATE_A"`: publish date (ascending) * `"SEO_REVIEW_AVG_RATING_D"`: traveler rating (high→low) * `"SEO_REVIEW_AVG_RATING_A"`: traveler rating (low→high) * `"SEO_ALPHABETICAL"`: alphabetical (A→Z)
   --top-x: string # **start and end rows** to return in the format {start}-{end} - e.g. `'1-10'`, `'11-20'` **Note**: - the maximum number of rows per request is 100; therefore, `'100-400'` will return the same as `'100-200'` - if `topX` is not specified, the default is `'1-100'`
-]: any -> record<dateStamp: string, errorCodes: list<string>, errorMessage: list<any>, errorMessageText: string, errorName: string, errorReference: string, errorType: string, extraInfo: record, extraObject: record, success: bool, totalCount: int, vmid: string, data: table<attractionCity: string, attractionLatitude: float, attractionLongitude: float, attractionState: string, attractionStreetAddress: string, destinationId: int, pageUrlName: string, photoCount: int, primaryDestinationId: int, primaryDestinationName: string, primaryDestinationUrlName: string, productCount: int, publishedDate: string, rating: float, seoId: int, sortOrder: int, thumbnailHiResURL: string, thumbnailURL: string, title: string, webURL: string>> {
+]: any -> oneof<record<dateStamp: string, errorCodes: list<string>, errorMessage: list<any>, errorMessageText: string, errorName: string, errorReference: string, errorType: string, extraInfo: record, extraObject: record, success: bool, totalCount: int, vmid: string, data: table<attractionCity: string, attractionLatitude: float, attractionLongitude: float, attractionState: string, attractionStreetAddress: string, destinationId: int, pageUrlName: string, photoCount: int, primaryDestinationId: int, primaryDestinationName: string, primaryDestinationUrlName: string, productCount: int, publishedDate: string, rating: float, seoId: int, sortOrder: int, thumbnailHiResURL: string, thumbnailURL: string, title: string, webURL: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1293,7 +1310,7 @@ export def "taxonomy-categories" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --dest-id: int # **unique numeric identifier** of the destination to enquire about (optional) - `destinationId` is returned by [/taxonomy/destinations](#operation/taxonomyDestinations) (e.g. 684)
   --accept-language: string # Specifies the language into which the natural-language fields in the response from this service will be translated (see [Accept-Language header](#section/Appendices/Accept-Language-header) for available langage codes) (required, e.g. en-US)
-]: nothing -> record<dateStamp: string, errorCodes: list<string>, errorMessage: list<any>, errorMessageText: string, errorName: string, errorReference: string, errorType: string, extraInfo: record, extraObject: record, success: bool, totalCount: int, vmid: string, data: table<groupName: string, groupUrlName: string, id: int, productCount: int, subcategories: list, thumbnailURL: string>> {
+]: nothing -> oneof<record<dateStamp: string, errorCodes: list<string>, errorMessage: list<any>, errorMessageText: string, errorName: string, errorReference: string, errorType: string, extraInfo: record, extraObject: record, success: bool, totalCount: int, vmid: string, data: table<groupName: string, groupUrlName: string, id: int, productCount: int, subcategories: list, thumbnailURL: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($accept_language == null) { error make --unspanned { msg: "required header parameter 'Accept-Language' missing: pass --accept-language" } }
@@ -1332,7 +1349,7 @@ export def "taxonomy-destinations" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string # Specifies the language into which the natural-language fields in the response from this service will be translated (see [Accept-Language header](#section/Appendices/Accept-Language-header) for available langage codes) (required, e.g. en-US)
-]: nothing -> record<dateStamp: string, errorCodes: list<string>, errorMessage: list<any>, errorMessageText: string, errorName: string, errorReference: string, errorType: string, extraInfo: record, extraObject: record, success: bool, totalCount: int, vmid: string, data: table<defaultCurrencyCode: string, destinationId: int, destinationName: string, destinationType: string, destinationUrlName: string, iataCode: string, latitude: float, longitude: float, lookupId: string, parentId: int, selectable: bool, sortOrder: int, timeZone: string>> {
+]: nothing -> oneof<record<dateStamp: string, errorCodes: list<string>, errorMessage: list<any>, errorMessageText: string, errorName: string, errorReference: string, errorType: string, extraInfo: record, extraObject: record, success: bool, totalCount: int, vmid: string, data: table<defaultCurrencyCode: string, destinationId: int, destinationName: string, destinationType: string, destinationUrlName: string, iataCode: string, latitude: float, longitude: float, lookupId: string, parentId: int, selectable: bool, sortOrder: int, timeZone: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($accept_language == null) { error make --unspanned { msg: "required header parameter 'Accept-Language' missing: pass --accept-language" } }

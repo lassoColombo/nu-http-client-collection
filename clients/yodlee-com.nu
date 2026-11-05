@@ -12,27 +12,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -40,8 +49,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -52,7 +66,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -87,7 +110,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -121,9 +145,9 @@ def container-completer [] { ["bank" "creditCard" "insurance" "investment" "loan
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-all-accounts" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-all-accounts" "create-manual-account" "evaluate-address" "get-historical-balances" "delete-account" "get-account" "update-account" "get-api-keys" "generate-api-key" "delete-api-key" "delete-token" "generate-access-token" "get-subscribed-events" "delete-subscribed-event" "create-subscription-event" "update-subscribed-event" "cobrand-login" "cobrand-logout" "get-public-key" "get-subscribed-notification-events" "delete-subscribed-notification-event" "create-subscription-notification-event" "update-subscribed-notification-event" "get-public-encryption-key" "get-data-extracts-events" "get-data-extracts-user-data" "get-holding-summary" "get-networth" "get-transaction-summary" "get-documents" "delete-document" "download-document" "get-holdings" "get-asset-classification-list" "get-holding-type-list" "get-securities" "get-all-provider-accounts" "edit-credentials-or-refresh-provider-account" "get-provider-account-profiles" "delete-provider-account" "get-provider-account" "update-preferences" "get-all-providers" "get-providers-count" "get-provider" "get-statements" "get-transactions" "get-transaction-categories" "create-transaction-category" "update-transaction-category" "get-transaction-categorization-rules-deprecated" "create-or-run-transaction-categorization-rules" "delete-transaction-categorization-rule" "run-transaction-categorization-rule" "update-transaction-categorization-rule" "get-transaction-categorization-rules" "delete-transaction-category" "get-transactions-count" "update-transaction" "get-user" "update-user" "get-access-tokens" "user-logout" "register-user" "saml-login" "unregister" "get-verification-status" "initiate-matching-or-challenge-deposite-verification" "verify-challenge-deposit" "initiate-account-verification" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -161,7 +185,7 @@ export def "get-all-accounts" [
   --provider-account-id: string # Comma separated providerAccountIds.
   --request-id: string # The unique identifier that returns contextual data
   --status: string # ACTIVE,INACTIVE,TO_BE_CLOSED,CLOSED
-]: nothing -> record<account: table<401kLoan: record, CONTAINER: string, accountName: string, accountNumber: string, accountStatus: string, accountType: string, address: record, aggregationSource: string, amountDue: record, annualPercentageYield: float, annuityBalance: record, apr: float, associatedProviderAccountId: list, autoRefresh: record, availableBalance: record, availableCash: record, availableCredit: record, balance: record, bankTransferCode: list, cash: record, cashApr: float, cashValue: record, classification: string, collateral: string, coverage: list, createdDate: string, currentBalance: record, currentLevel: string, dataset: list, deathBenefit: record, derivedApr: float, displayedName: string, dueDate: string, enrollmentDate: string, escrowBalance: record, estimatedDate: string, expirationDate: string, faceAmount: record, frequency: string, fullAccountNumber: string, fullAccountNumberList: record, guarantor: string, holder: list, homeInsuranceType: string, homeValue: record, id: int, includeInNetWorth: bool, interestPaidLastYear: record, interestPaidYTD: record, interestRate: float, interestRateType: string, isAsset: bool, isManual: bool, lastEmployeeContributionAmount: record, lastEmployeeContributionDate: string, lastPayment: record, lastPaymentAmount: record, lastPaymentDate: string, lastUpdated: string, lender: string, lifeInsuranceType: string, loanPayByDate: string, loanPayoffAmount: record, loanPayoffDetails: record, marginBalance: record, maturityAmount: record, maturityDate: string, memo: string, minimumAmountDue: record, moneyMarketBalance: record, nextLevel: string, nickname: string, oauthMigrationStatus: string, originalLoanAmount: record, originationDate: string, overDraftLimit: record, paymentProfile: record, policyEffectiveDate: string, policyFromDate: string, policyStatus: string, policyTerm: string, policyToDate: string, premium: record, premiumPaymentTerm: string, primaryRewardUnit: string, principalBalance: record, profile: record, providerAccountId: int, providerId: string, providerName: string, recurringPayment: record, remainingBalance: record, repaymentPlanType: string, rewardBalance: list, runningBalance: record, shortBalance: record, sourceAccountStatus: string, sourceId: string, term: string, totalCashLimit: record, totalCreditLimit: record, totalCreditLine: record, totalUnvestedBalance: record, totalVestedBalance: record, userClassification: string, valuationType: string>> {
+]: nothing -> oneof<record<account: table<401kLoan: record, CONTAINER: string, accountName: string, accountNumber: string, accountStatus: string, accountType: string, address: record, aggregationSource: string, amountDue: record, annualPercentageYield: float, annuityBalance: record, apr: float, associatedProviderAccountId: list, autoRefresh: record, availableBalance: record, availableCash: record, availableCredit: record, balance: record, bankTransferCode: list, cash: record, cashApr: float, cashValue: record, classification: string, collateral: string, coverage: list, createdDate: string, currentBalance: record, currentLevel: string, dataset: list, deathBenefit: record, derivedApr: float, displayedName: string, dueDate: string, enrollmentDate: string, escrowBalance: record, estimatedDate: string, expirationDate: string, faceAmount: record, frequency: string, fullAccountNumber: string, fullAccountNumberList: record, guarantor: string, holder: list, homeInsuranceType: string, homeValue: record, id: int, includeInNetWorth: bool, interestPaidLastYear: record, interestPaidYTD: record, interestRate: float, interestRateType: string, isAsset: bool, isManual: bool, lastEmployeeContributionAmount: record, lastEmployeeContributionDate: string, lastPayment: record, lastPaymentAmount: record, lastPaymentDate: string, lastUpdated: string, lender: string, lifeInsuranceType: string, loanPayByDate: string, loanPayoffAmount: record, loanPayoffDetails: record, marginBalance: record, maturityAmount: record, maturityDate: string, memo: string, minimumAmountDue: record, moneyMarketBalance: record, nextLevel: string, nickname: string, oauthMigrationStatus: string, originalLoanAmount: record, originationDate: string, overDraftLimit: record, paymentProfile: record, policyEffectiveDate: string, policyFromDate: string, policyStatus: string, policyTerm: string, policyToDate: string, premium: record, premiumPaymentTerm: string, primaryRewardUnit: string, principalBalance: record, profile: record, providerAccountId: int, providerId: string, providerName: string, recurringPayment: record, remainingBalance: record, repaymentPlanType: string, rewardBalance: list, runningBalance: record, shortBalance: record, sourceAccountStatus: string, sourceId: string, term: string, totalCashLimit: record, totalCreditLimit: record, totalCreditLine: record, totalUnvestedBalance: record, totalVestedBalance: record, userClassification: string, valuationType: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accountId" $account_id "scalar") (serialize-qp "container" $container "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "providerAccountId" $provider_account_id "scalar") (serialize-qp "requestId" $request_id "scalar") (serialize-qp "status" $status "scalar")] | flatten | str join "&"
@@ -186,7 +210,6 @@ export def "get-all-accounts" [
 #
 # POST /accounts
 # operationId: createManualAccount
-# --account shape: {accountName: string, accountNumber?: string, accountType: string, address?: record, amountDue?: record, balance?: record, dueDate?: string, frequency?: "DAILY"|"ONE_TIME"|"WEEKLY"|"EVERY_2_WEEKS"|"SEMI_MONTHLY"|"MONTHLY"|"QUARTERLY"|"SEMI_ANNUALLY"|"ANNUALLY"|"EVERY_2_MONTHS"|"EBILL"|"FIRST_DAY_MONTHLY"|"LAST_DAY_MONTHLY"|"EVERY_4_WEEKS"|"UNKNOWN"|"OTHER", homeValue?: record, includeInNetWorth?: string, memo?: string, nickname?: string, valuationType?: "SYSTEM"|"MANUAL"}
 export def "create-manual-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -198,7 +221,7 @@ export def "create-manual-account" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   account: record # shape: {accountName: string, accountNumber?: string, accountType: string, address?: record, amountDue?: record, balance?: record, dueDate?: string, frequency?: "DAILY"|"ONE_TIME"|"WEEKLY"|"EVERY_2_WEEKS"|"SEMI_MONTHLY"|"MONTHLY"|"QUARTERLY"|"SEMI_ANNUALLY"|"ANNUALLY"|"EVERY_2_MONTHS"|"EBILL"|"FIRST_DAY_MONTHLY"|"LAST_DAY_MONTHLY"|"EVERY_4_WEEKS"|"UNKNOWN"|"OTHER", homeValue?: record, includeInNetWorth?: string, memo?: string, nickname?: string, valuationType?: "SYSTEM"|"MANUAL"}
-]: any -> record<account: table<accountName: string, accountNumber: string, id: int>> {
+]: any -> oneof<record<account: table<accountName: string, accountNumber: string, id: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -225,7 +248,6 @@ export def "create-manual-account" [
 #
 # POST /accounts/evaluateAddress
 # operationId: evaluateAddress
-# --address shape: {address1?: string, address2?: string, address3?: string, city?: string, country?: string, sourceType?: string, state?: string, street: string, type?: "HOME"|"BUSINESS"|"POBOX"|"RETAIL"|"OFFICE"|"SMALL_BUSINESS"|"COMMUNICATION"|"PERMANENT"|"STATEMENT_ADDRESS"|"PAYMENT"|"PAYOFF"|"UNKNOWN", zip?: string}
 export def "evaluate-address" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -237,7 +259,7 @@ export def "evaluate-address" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   address: record # shape: {address1?: string, address2?: string, address3?: string, city?: string, country?: string, sourceType?: string, state?: string, street: string, type?: "HOME"|"BUSINESS"|"POBOX"|"RETAIL"|"OFFICE"|"SMALL_BUSINESS"|"COMMUNICATION"|"PERMANENT"|"STATEMENT_ADDRESS"|"PAYMENT"|"PAYOFF"|"UNKNOWN", zip?: string}
-]: any -> record<address: table<address1: string, address2: string, address3: string, city: string, country: string, sourceType: string, state: string, street: string, type: string, zip: string>, isValidAddress: bool> {
+]: any -> oneof<record<address: table<address1: string, address2: string, address3: string, city: string, country: string, sourceType: string, state: string, street: string, type: string, zip: string>, isValidAddress: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -281,7 +303,7 @@ export def "get-historical-balances" [
   --skip: int # skip (Min 0) (format: int32)
   --to-date: string # toDate for balance retrieval (YYYY-MM-DD)
   --top: int # top (Max 500) (format: int32)
-]: nothing -> record<account: table<historicalBalances: list, id: int>> {
+]: nothing -> oneof<record<account: table<historicalBalances: list, id: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accountId" $account_id "scalar") (serialize-qp "fromDate" $from_date "scalar") (serialize-qp "includeCF" $include_cf "scalar") (serialize-qp "interval" $interval "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "toDate" $to_date "scalar") (serialize-qp "top" $top "scalar")] | flatten | str join "&"
@@ -354,7 +376,7 @@ export def "get-account" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --include: string # profile, holder, fullAccountNumber, fullAccountNumberList, paymentProfile, autoRefreshNote:fullAccountNumber is deprecated and is replaced with fullAccountNumberList in include parameter and response.
-]: nothing -> record<account: table<401kLoan: record, CONTAINER: string, accountName: string, accountNumber: string, accountStatus: string, accountType: string, address: record, aggregationSource: string, amountDue: record, annualPercentageYield: float, annuityBalance: record, apr: float, associatedProviderAccountId: list, autoRefresh: record, availableBalance: record, availableCash: record, availableCredit: record, balance: record, bankTransferCode: list, cash: record, cashApr: float, cashValue: record, classification: string, collateral: string, coverage: list, createdDate: string, currentBalance: record, currentLevel: string, dataset: list, deathBenefit: record, derivedApr: float, displayedName: string, dueDate: string, enrollmentDate: string, escrowBalance: record, estimatedDate: string, expirationDate: string, faceAmount: record, frequency: string, fullAccountNumber: string, fullAccountNumberList: record, guarantor: string, holder: list, homeInsuranceType: string, homeValue: record, id: int, includeInNetWorth: bool, interestPaidLastYear: record, interestPaidYTD: record, interestRate: float, interestRateType: string, isAsset: bool, isManual: bool, lastEmployeeContributionAmount: record, lastEmployeeContributionDate: string, lastPayment: record, lastPaymentAmount: record, lastPaymentDate: string, lastUpdated: string, lender: string, lifeInsuranceType: string, loanPayByDate: string, loanPayoffAmount: record, loanPayoffDetails: record, marginBalance: record, maturityAmount: record, maturityDate: string, memo: string, minimumAmountDue: record, moneyMarketBalance: record, nextLevel: string, nickname: string, oauthMigrationStatus: string, originalLoanAmount: record, originationDate: string, overDraftLimit: record, paymentProfile: record, policyEffectiveDate: string, policyFromDate: string, policyStatus: string, policyTerm: string, policyToDate: string, premium: record, premiumPaymentTerm: string, primaryRewardUnit: string, principalBalance: record, profile: record, providerAccountId: int, providerId: string, providerName: string, recurringPayment: record, remainingBalance: record, repaymentPlanType: string, rewardBalance: list, runningBalance: record, shortBalance: record, sourceAccountStatus: string, sourceId: string, term: string, totalCashLimit: record, totalCreditLimit: record, totalCreditLine: record, totalUnvestedBalance: record, totalVestedBalance: record, userClassification: string, valuationType: string>> {
+]: nothing -> oneof<record<account: table<401kLoan: record, CONTAINER: string, accountName: string, accountNumber: string, accountStatus: string, accountType: string, address: record, aggregationSource: string, amountDue: record, annualPercentageYield: float, annuityBalance: record, apr: float, associatedProviderAccountId: list, autoRefresh: record, availableBalance: record, availableCash: record, availableCredit: record, balance: record, bankTransferCode: list, cash: record, cashApr: float, cashValue: record, classification: string, collateral: string, coverage: list, createdDate: string, currentBalance: record, currentLevel: string, dataset: list, deathBenefit: record, derivedApr: float, displayedName: string, dueDate: string, enrollmentDate: string, escrowBalance: record, estimatedDate: string, expirationDate: string, faceAmount: record, frequency: string, fullAccountNumber: string, fullAccountNumberList: record, guarantor: string, holder: list, homeInsuranceType: string, homeValue: record, id: int, includeInNetWorth: bool, interestPaidLastYear: record, interestPaidYTD: record, interestRate: float, interestRateType: string, isAsset: bool, isManual: bool, lastEmployeeContributionAmount: record, lastEmployeeContributionDate: string, lastPayment: record, lastPaymentAmount: record, lastPaymentDate: string, lastUpdated: string, lender: string, lifeInsuranceType: string, loanPayByDate: string, loanPayoffAmount: record, loanPayoffDetails: record, marginBalance: record, maturityAmount: record, maturityDate: string, memo: string, minimumAmountDue: record, moneyMarketBalance: record, nextLevel: string, nickname: string, oauthMigrationStatus: string, originalLoanAmount: record, originationDate: string, overDraftLimit: record, paymentProfile: record, policyEffectiveDate: string, policyFromDate: string, policyStatus: string, policyTerm: string, policyToDate: string, premium: record, premiumPaymentTerm: string, primaryRewardUnit: string, principalBalance: record, profile: record, providerAccountId: int, providerId: string, providerName: string, recurringPayment: record, remainingBalance: record, repaymentPlanType: string, rewardBalance: list, runningBalance: record, shortBalance: record, sourceAccountStatus: string, sourceId: string, term: string, totalCashLimit: record, totalCreditLimit: record, totalCreditLine: record, totalUnvestedBalance: record, totalVestedBalance: record, userClassification: string, valuationType: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
@@ -380,7 +402,6 @@ export def "get-account" [
 #
 # PUT /accounts/{accountId}
 # operationId: updateAccount
-# --account shape: {accountName?: string, accountNumber?: string, accountStatus?: "ACTIVE"|"INACTIVE"|"TO_BE_CLOSED"|"CLOSED"|"DELETED", address?: record, amountDue?: record, balance?: record, container?: "bank"|"creditCard"|"investment"|"insurance"|"loan"|"reward"|"realEstate"|"otherAssets"|"otherLiabilities", dueDate?: string, ... (6 more fields)}
 export def "update-account" [
   account_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -431,7 +452,7 @@ export def "get-api-keys" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<apiKey: table<createdDate: string, expiresIn: int, key: string, publicKey: string>> {
+]: nothing -> oneof<record<apiKey: table<createdDate: string, expiresIn: int, key: string, publicKey: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/auth/apiKey" $auth.query)
@@ -466,7 +487,7 @@ export def "generate-api-key" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --public-key: string # Public key uploaded by the customer while generating ApiKey.Endpoints:GET /auth/apiKeyPOST /auth/apiKey
-]: any -> record<apiKey: table<createdDate: string, expiresIn: int, key: string, publicKey: string>> {
+]: any -> oneof<record<apiKey: table<createdDate: string, expiresIn: int, key: string, publicKey: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -573,7 +594,7 @@ export def "generate-access-token" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<token: record<accessToken: string, expiresIn: int, issuedAt: string>> {
+]: nothing -> oneof<record<token: record<accessToken: string, expiresIn: int, issuedAt: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/auth/token" $auth.query)
@@ -610,7 +631,7 @@ export def "get-subscribed-events" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --event-name: string@event-name-completer # eventName
-]: nothing -> record<event: table<callbackUrl: string, name: string>> {
+]: nothing -> oneof<record<event: table<callbackUrl: string, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "eventName" $event_name "scalar")] | flatten | str join "&"
@@ -674,7 +695,6 @@ export def "delete-subscribed-event" [
 # POST /cobrand/config/notifications/events/{eventName}
 # DEPRECATED
 # operationId: createSubscriptionEvent
-# --event shape: {callbackUrl?: string}
 @deprecated
 export def "create-subscription-event" [
   event_name: string@event-name-completer
@@ -717,7 +737,6 @@ export def "create-subscription-event" [
 # PUT /cobrand/config/notifications/events/{eventName}
 # DEPRECATED
 # operationId: updateSubscribedEvent
-# --event shape: {callbackUrl?: string}
 @deprecated
 export def "update-subscribed-event" [
   event_name: string@event-name-completer
@@ -759,7 +778,6 @@ export def "update-subscribed-event" [
 #
 # POST /cobrand/login
 # operationId: cobrandLogin
-# --cobrand shape: {cobrandLogin: string, cobrandPassword: string, locale?: string}
 export def "cobrand-login" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -771,7 +789,7 @@ export def "cobrand-login" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   cobrand: record # shape: {cobrandLogin: string, cobrandPassword: string, locale?: string}
-]: any -> record<applicationId: string, cobrandId: int, locale: string, session: record<cobSession: string>> {
+]: any -> oneof<record<applicationId: string, cobrandId: int, locale: string, session: record<cobSession: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -844,7 +862,7 @@ export def "get-public-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<keyAlias: string, keyAsPemString: string> {
+]: nothing -> oneof<record<keyAlias: string, keyAsPemString: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cobrand/publicKey" $auth.query)
@@ -879,7 +897,7 @@ export def "get-subscribed-notification-events" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --event-name: string@event-name-completer # eventName
-]: nothing -> record<event: table<callbackUrl: string, name: string>> {
+]: nothing -> oneof<record<event: table<callbackUrl: string, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "eventName" $event_name "scalar")] | flatten | str join "&"
@@ -940,7 +958,6 @@ export def "delete-subscribed-notification-event" [
 #
 # POST /configs/notifications/events/{eventName}
 # operationId: createSubscriptionNotificationEvent
-# --event shape: {callbackUrl?: string}
 export def "create-subscription-notification-event" [
   event_name: string@event-name-completer
   --base-url(-b): string@base-url-completer # API base URL
@@ -981,7 +998,6 @@ export def "create-subscription-notification-event" [
 #
 # PUT /configs/notifications/events/{eventName}
 # operationId: updateSubscribedNotificationEvent
-# --event shape: {callbackUrl?: string}
 export def "update-subscribed-notification-event" [
   event_name: string@event-name-completer
   --base-url(-b): string@base-url-completer # API base URL
@@ -1032,7 +1048,7 @@ export def "get-public-encryption-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<publicKey: record<alias: string, key: string>> {
+]: nothing -> oneof<record<publicKey: record<alias: string, key: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/configs/publicKey" $auth.query)
@@ -1069,7 +1085,7 @@ export def "get-data-extracts-events" [
   --event-name: string # Event Name (required)
   --from-date: string # From DateTime (YYYY-MM-DDThh:mm:ssZ) (required)
   --to-date: string # To DateTime (YYYY-MM-DDThh:mm:ssZ) (required)
-]: nothing -> record<event: record<data: record<fromDate: string, toDate: string, userCount: int, userData: list>, info: string>> {
+]: nothing -> oneof<record<event: record<data: record<fromDate: string, toDate: string, userCount: int, userData: list>, info: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($event_name == null) { error make --unspanned { msg: "required query parameter 'eventName' missing: pass --event-name" } }
@@ -1110,7 +1126,7 @@ export def "get-data-extracts-user-data" [
   --from-date: string # From DateTime (YYYY-MM-DDThh:mm:ssZ) (required)
   --login-name: string # Login Name (required)
   --to-date: string # To DateTime (YYYY-MM-DDThh:mm:ssZ) (required)
-]: nothing -> record<userData: table<account: list, holding: list, providerAccount: list, totalTransactionsCount: int, transaction: list, user: record>> {
+]: nothing -> oneof<record<userData: table<account: list, holding: list, providerAccount: list, totalTransactionsCount: int, transaction: list, user: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($from_date == null) { error make --unspanned { msg: "required query parameter 'fromDate' missing: pass --from-date" } }
@@ -1151,7 +1167,7 @@ export def "get-holding-summary" [
   --account-ids: string # Comma separated accountIds
   --classification-type: string # e.g. Country, Sector, etc.
   --include: string # details
-]: nothing -> record<holdingSummary: table<account: list, classificationType: string, classificationValue: string, holding: list, value: record>, link: record<holdings: string>> {
+]: nothing -> oneof<record<holdingSummary: table<account: list, classificationType: string, classificationValue: string, holding: list, value: record>, link: record<holdings: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accountIds" $account_ids "scalar") (serialize-qp "classificationType" $classification_type "scalar") (serialize-qp "include" $include "scalar")] | flatten | str join "&"
@@ -1194,7 +1210,7 @@ export def "get-networth" [
   --skip: int # skip (Min 0) (format: int32)
   --to-date: string # toDate for balance retrieval (YYYY-MM-DD)
   --top: int # top (Max 500) (format: int32)
-]: nothing -> record<networth: table<asset: record, date: string, historicalBalances: list, liability: record, networth: record>> {
+]: nothing -> oneof<record<networth: table<asset: record, date: string, historicalBalances: list, liability: record, networth: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accountIds" $account_ids "scalar") (serialize-qp "container" $container "scalar") (serialize-qp "fromDate" $from_date "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "interval" $interval "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "toDate" $to_date "scalar") (serialize-qp "top" $top "scalar")] | flatten | str join "&"
@@ -1238,7 +1254,7 @@ export def "get-transaction-summary" [
   --include-user-category: oneof<nothing, bool> # TRUE/FALSE
   --interval: string # D-daily, W-weekly, M-mothly or Y-yearly
   --to-date: string # YYYY-MM-DD format
-]: nothing -> record<links: record<transactions: string>, transactionSummary: table<categorySummary: list, categoryType: string, creditTotal: record, debitTotal: record, links: record>> {
+]: nothing -> oneof<record<links: record<transactions: string>, transactionSummary: table<categorySummary: list, categoryType: string, creditTotal: record, debitTotal: record, links: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_by == null) { error make --unspanned { msg: "required query parameter 'groupBy' missing: pass --group-by" } }
@@ -1279,7 +1295,7 @@ export def "get-documents" [
   --doc-type: string # Accepts only one of the following valid document types: STMT, TAX, and EBILL.
   --from-date: string # The date from which documents have to be retrieved.
   --to-date: string # The date to which documents have to be retrieved.
-]: nothing -> record<document: table<accountID: int, docType: string, formType: string, id: string, lastUpdated: string, name: string, source: string, status: string>> {
+]: nothing -> oneof<record<document: table<accountID: int, docType: string, formType: string, id: string, lastUpdated: string, name: string, source: string, status: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Keyword" $keyword "scalar") (serialize-qp "accountId" $account_id "scalar") (serialize-qp "docType" $doc_type "scalar") (serialize-qp "fromDate" $from_date "scalar") (serialize-qp "toDate" $to_date "scalar")] | flatten | str join "&"
@@ -1351,7 +1367,7 @@ export def "download-document" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<document: table<docContent: string, id: string>> {
+]: nothing -> oneof<record<document: table<docContent: string, id: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
@@ -1391,7 +1407,7 @@ export def "get-holdings" [
   --classification-value: string # e.g. US
   --include: string # assetClassification
   --provider-account-id: string # providerAccountId
-]: nothing -> record<holding: table<accountId: int, accruedIncome: record, accruedInterest: record, assetClassification: list, contractQuantity: float, costBasis: record, couponRate: float, createdDate: string, cusipNumber: string, description: string, enrichedDescription: string, exercisedQuantity: float, expirationDate: string, grantDate: string, holdingType: string, id: int, interestRate: float, isShort: bool, isin: string, lastUpdated: string, matchStatus: string, maturityDate: string, optionType: string, price: record, providerAccountId: int, quantity: float, securityStyle: string, securityType: string, sedol: string, spread: record, strikePrice: record, symbol: string, term: string, unvestedQuantity: float, unvestedValue: record, value: record, vestedQuantity: float, vestedSharesExercisable: float, vestedValue: record, vestingDate: string>> {
+]: nothing -> oneof<record<holding: table<accountId: int, accruedIncome: record, accruedInterest: record, assetClassification: list, contractQuantity: float, costBasis: record, couponRate: float, createdDate: string, cusipNumber: string, description: string, enrichedDescription: string, exercisedQuantity: float, expirationDate: string, grantDate: string, holdingType: string, id: int, interestRate: float, isShort: bool, isin: string, lastUpdated: string, matchStatus: string, maturityDate: string, optionType: string, price: record, providerAccountId: int, quantity: float, securityStyle: string, securityType: string, sedol: string, spread: record, strikePrice: record, symbol: string, term: string, unvestedQuantity: float, unvestedValue: record, value: record, vestedQuantity: float, vestedSharesExercisable: float, vestedValue: record, vestingDate: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accountId" $account_id "scalar") (serialize-qp "assetClassification.classificationType" $asset_classification_classification_type "scalar") (serialize-qp "classificationValue" $classification_value "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "providerAccountId" $provider_account_id "scalar")] | flatten | str join "&"
@@ -1426,7 +1442,7 @@ export def "get-asset-classification-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<assetClassificationList: table<classificationType: string, classificationValue: list>> {
+]: nothing -> oneof<record<assetClassificationList: table<classificationType: string, classificationValue: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/holdings/assetClassificationList" $auth.query)
@@ -1460,7 +1476,7 @@ export def "get-holding-type-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<holdingType: list<string>> {
+]: nothing -> oneof<record<holdingType: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/holdings/holdingTypeList" $auth.query)
@@ -1495,7 +1511,7 @@ export def "get-securities" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --holding-id: string # Comma separated holdingId
-]: nothing -> record<holding: table<id: string, security: record>> {
+]: nothing -> oneof<record<holding: table<id: string, security: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "holdingId" $holding_id "scalar")] | flatten | str join "&"
@@ -1532,7 +1548,7 @@ export def "get-all-provider-accounts" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --include: string # include
   --provider-ids: string # Comma separated providerIds.
-]: nothing -> record<providerAccount: table<aggregationSource: string, consentId: int, createdDate: string, dataset: list, id: int, isManual: bool, lastUpdated: string, oauthMigrationStatus: string, preferences: record, providerId: int, requestId: string, status: string>> {
+]: nothing -> oneof<record<providerAccount: table<aggregationSource: string, consentId: int, createdDate: string, dataset: list, id: int, isManual: bool, lastUpdated: string, oauthMigrationStatus: string, preferences: record, providerId: int, requestId: string, status: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include" $include "scalar") (serialize-qp "providerIds" $provider_ids "scalar")] | flatten | str join "&"
@@ -1557,9 +1573,6 @@ export def "get-all-provider-accounts" [
 #
 # PUT /providerAccounts
 # operationId: editCredentialsOrRefreshProviderAccount
-# --dataset item shape: {attribute?: list, name?: "BASIC_AGG_DATA"|"ADVANCE_AGG_DATA"|"ACCT_PROFILE"|"DOCUMENT"}
-# --field item shape: {id?: string, image?: string, value?: string}
-# --preferences shape: {isAutoRefreshEnabled?: bool, isDataExtractsEnabled?: bool, linkedProviderAccountId?: int}
 export def "edit-credentials-or-refresh-provider-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1577,7 +1590,7 @@ export def "edit-credentials-or-refresh-provider-account" [
   --dataset-name: list<string>
   field: list # item shape: {id?: string, image?: string, value?: string}
   --preferences: record # shape: {isAutoRefreshEnabled?: bool, isDataExtractsEnabled?: bool, linkedProviderAccountId?: int}
-]: any -> record<providerAccount: table<aggregationSource: string, createdDate: string, dataset: list, id: int, isManual: bool, lastUpdated: string, loginForm: list, oauthMigrationStatus: string, providerId: int, requestId: string, status: string>> {
+]: any -> oneof<record<providerAccount: table<aggregationSource: string, createdDate: string, dataset: list, id: int, isManual: bool, lastUpdated: string, loginForm: list, oauthMigrationStatus: string, providerId: int, requestId: string, status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1617,7 +1630,7 @@ export def "get-provider-account-profiles" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --provider-account-id: string # Comma separated providerAccountIds.
-]: nothing -> record<providerAccount: table<id: int, profile: list>> {
+]: nothing -> oneof<record<providerAccount: table<id: int, profile: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "providerAccountId" $provider_account_id "scalar")] | flatten | str join "&"
@@ -1691,7 +1704,7 @@ export def "get-provider-account" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --include: string # include credentials,questions
   --request-id: string # The unique identifier for the request that returns contextual data
-]: nothing -> record<providerAccount: table<aggregationSource: string, consentId: int, createdDate: string, dataset: list, id: int, isManual: bool, lastUpdated: string, loginForm: list, oauthMigrationStatus: string, preferences: record, providerId: int, requestId: string, status: string>> {
+]: nothing -> oneof<record<providerAccount: table<aggregationSource: string, consentId: int, createdDate: string, dataset: list, id: int, isManual: bool, lastUpdated: string, loginForm: list, oauthMigrationStatus: string, preferences: record, providerId: int, requestId: string, status: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($provider_account_id | is-empty) { error make --unspanned { msg: "path parameter 'providerAccountId' must be non-empty" } }
@@ -1717,7 +1730,6 @@ export def "get-provider-account" [
 #
 # PUT /providerAccounts/{providerAccountId}/preferences
 # operationId: updatePreferences
-# --preferences shape: {isAutoRefreshEnabled?: bool, isDataExtractsEnabled?: bool, linkedProviderAccountId?: int}
 export def "update-preferences" [
   provider_account_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1777,7 +1789,7 @@ export def "get-all-providers" [
   --provider-id: string # Max 5 Comma seperated Provider Ids
   --skip: int # skip (Min 0) - This is not applicable along with 'name' parameter. (format: int32)
   --top: int # top (Max 500) - This is not applicable along with 'name' parameter. (format: int32)
-]: nothing -> record<provider: table<PRIORITY: string, accountType: list, associatedProviderIds: list, authParameter: list, authType: string, baseUrl: string, capability: list, countryISOCode: string, dataset: list, favicon: string, forgetPasswordUrl: string, help: string, id: int, isAddedByUser: string, isAutoRefreshEnabled: bool, isConsentRequired: bool, languageISOCode: string, lastModified: string, loginHelp: string, loginUrl: string, logo: string, name: string, primaryLanguageISOCode: string, status: string>> {
+]: nothing -> oneof<record<provider: table<PRIORITY: string, accountType: list, associatedProviderIds: list, authParameter: list, authType: string, baseUrl: string, capability: list, countryISOCode: string, dataset: list, favicon: string, forgetPasswordUrl: string, help: string, id: int, isAddedByUser: string, isAutoRefreshEnabled: bool, isConsentRequired: bool, languageISOCode: string, lastModified: string, loginHelp: string, loginUrl: string, logo: string, name: string, primaryLanguageISOCode: string, status: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "capability" $capability "scalar") (serialize-qp "dataset$filter" $dataset_filter "scalar") (serialize-qp "fullAccountNumberFields" $full_account_number_fields "scalar") (serialize-qp "institutionId" $institution_id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "priority" $priority "scalar") (serialize-qp "providerId" $provider_id "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "top" $top "scalar")] | flatten | str join "&"
@@ -1817,7 +1829,7 @@ export def "get-providers-count" [
   --full-account-number-fields: string # Specify to filter the providers with values paymentAccountNumber,unmaskedAccountNumber.
   --name: string # Name in minimum 1 character or routing number.
   --priority: string # Search priority
-]: nothing -> record<provider: record<TOTAL: record<count: int>>> {
+]: nothing -> oneof<record<provider: record<TOTAL: record<count: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "capability" $capability "scalar") (serialize-qp "dataset$filter" $dataset_filter "scalar") (serialize-qp "fullAccountNumberFields" $full_account_number_fields "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "priority" $priority "scalar")] | flatten | str join "&"
@@ -1853,7 +1865,7 @@ export def "get-provider" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<provider: table<PRIORITY: string, accountType: list, associatedProviderIds: list, authParameter: list, authType: string, baseUrl: string, capability: list, countryISOCode: string, dataset: list, favicon: string, help: string, id: int, isAddedByUser: string, isAutoRefreshEnabled: bool, isConsentRequired: bool, languageISOCode: string, lastModified: string, loginForm: list, loginUrl: string, logo: string, name: string, primaryLanguageISOCode: string, status: string>> {
+]: nothing -> oneof<record<provider: table<PRIORITY: string, accountType: list, associatedProviderIds: list, authParameter: list, authType: string, baseUrl: string, capability: list, countryISOCode: string, dataset: list, favicon: string, help: string, id: int, isAddedByUser: string, isAutoRefreshEnabled: bool, isConsentRequired: bool, languageISOCode: string, lastModified: string, loginForm: list, loginUrl: string, logo: string, name: string, primaryLanguageISOCode: string, status: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($provider_id | is-empty) { error make --unspanned { msg: "path parameter 'providerId' must be non-empty" } }
@@ -1893,7 +1905,7 @@ export def "get-statements" [
   --from-date: string # from date for statement retrieval (YYYY-MM-DD)
   --is-latest: string # isLatest (true/false)
   --status: string # ACTIVE,TO_BE_CLOSED,CLOSED
-]: nothing -> record<statement: table<accountId: int, amountDue: record, apr: float, billingPeriodEnd: string, billingPeriodStart: string, cashAdvance: record, cashApr: float, dueDate: string, id: int, interestAmount: record, isLatest: bool, lastPaymentAmount: record, lastPaymentDate: string, lastUpdated: string, loanBalance: record, minimumPayment: record, newCharges: record, principalAmount: record, statementDate: string>> {
+]: nothing -> oneof<record<statement: table<accountId: int, amountDue: record, apr: float, billingPeriodEnd: string, billingPeriodStart: string, cashAdvance: record, cashApr: float, dueDate: string, id: int, interestAmount: record, isLatest: bool, lastPaymentAmount: record, lastPaymentDate: string, lastUpdated: string, loanBalance: record, minimumPayment: record, newCharges: record, principalAmount: record, statementDate: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accountId" $account_id "scalar") (serialize-qp "container" $container "scalar") (serialize-qp "fromDate" $from_date "scalar") (serialize-qp "isLatest" $is_latest "scalar") (serialize-qp "status" $status "scalar")] | flatten | str join "&"
@@ -1941,7 +1953,7 @@ export def "get-transactions" [
   --to-date: string # Transaction end date (YYYY-MM-DD)
   --top: int # top (Max 500) (format: int32)
   --type: string # Transaction Type(SELL,SWEEP, etc.) for bank/creditCard/investment
-]: nothing -> record<transaction: table<CONTAINER: string, accountId: int, amount: record, baseType: string, category: string, categoryId: int, categorySource: string, categoryType: string, checkNumber: string, commission: record, createdDate: string, cusipNumber: string, date: string, description: record, detailCategoryId: int, highLevelCategoryId: int, holdingDescription: string, id: int, interest: record, isManual: bool, isin: string, lastUpdated: string, memo: string, merchant: record, parentCategoryId: int, postDate: string, price: record, principal: record, quantity: float, runningBalance: record, sedol: string, settleDate: string, sourceId: string, sourceType: string, status: string, subType: string, symbol: string, transactionDate: string, type: string, valoren: string>> {
+]: nothing -> oneof<record<transaction: table<CONTAINER: string, accountId: int, amount: record, baseType: string, category: string, categoryId: int, categorySource: string, categoryType: string, checkNumber: string, commission: record, createdDate: string, cusipNumber: string, date: string, description: record, detailCategoryId: int, highLevelCategoryId: int, holdingDescription: string, id: int, interest: record, isManual: bool, isin: string, lastUpdated: string, memo: string, merchant: record, parentCategoryId: int, postDate: string, price: record, principal: record, quantity: float, runningBalance: record, sedol: string, settleDate: string, sourceId: string, sourceType: string, status: string, subType: string, symbol: string, transactionDate: string, type: string, valoren: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accountId" $account_id "scalar") (serialize-qp "baseType" $base_type "scalar") (serialize-qp "categoryId" $category_id "scalar") (serialize-qp "categoryType" $category_type "scalar") (serialize-qp "container" $container "scalar") (serialize-qp "detailCategoryId" $detail_category_id "scalar") (serialize-qp "fromDate" $from_date "scalar") (serialize-qp "highLevelCategoryId" $high_level_category_id "scalar") (serialize-qp "keyword" $keyword "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "toDate" $to_date "scalar") (serialize-qp "top" $top "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
@@ -1976,7 +1988,7 @@ export def "get-transaction-categories" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<transactionCategory: table<category: string, classification: string, defaultCategoryName: string, defaultHighLevelCategoryName: string, detailCategory: list, highLevelCategoryId: int, highLevelCategoryName: string, id: int, source: string, type: string>> {
+]: nothing -> oneof<record<transactionCategory: table<category: string, classification: string, defaultCategoryName: string, defaultHighLevelCategoryName: string, detailCategory: list, highLevelCategoryId: int, highLevelCategoryName: string, id: int, source: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transactions/categories" $auth.query)
@@ -2092,7 +2104,7 @@ export def "get-transaction-categorization-rules-deprecated" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<categoryLevelId: int, memId: int, ruleClauses: list<record>, rulePriority: int, transactionCategorisationId: int, userDefinedRuleId: int> {
+]: nothing -> oneof<table<categoryLevelId: int, memId: int, ruleClauses: list<record>, rulePriority: int, transactionCategorisationId: int, userDefinedRuleId: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transactions/categories/rules" $auth.query)
@@ -2228,7 +2240,6 @@ export def "run-transaction-categorization-rule" [
 #
 # PUT /transactions/categories/rules/{ruleId}
 # operationId: updateTransactionCategorizationRule
-# --rule shape: {categoryId: int, priority?: int, ruleClause: list, source?: "SYSTEM"|"USER"}
 export def "update-transaction-categorization-rule" [
   rule_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2279,7 +2290,7 @@ export def "get-transaction-categorization-rules" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<txnRules: table<categoryLevelId: int, memId: int, ruleClauses: list, rulePriority: int, transactionCategorisationId: int, userDefinedRuleId: int>> {
+]: nothing -> oneof<record<txnRules: table<categoryLevelId: int, memId: int, ruleClauses: list, rulePriority: int, transactionCategorisationId: int, userDefinedRuleId: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transactions/categories/txnRules" $auth.query)
@@ -2360,7 +2371,7 @@ export def "get-transactions-count" [
   --keyword: string # Transaction search text
   --to-date: string # Transaction end date (YYYY-MM-DD)
   --type: string # Transaction Type(SELL,SWEEP, etc.)
-]: nothing -> record<transaction: record<TOTAL: record<count: int>>> {
+]: nothing -> oneof<record<transaction: record<TOTAL: record<count: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accountId" $account_id "scalar") (serialize-qp "baseType" $base_type "scalar") (serialize-qp "categoryId" $category_id "scalar") (serialize-qp "categoryType" $category_type "scalar") (serialize-qp "container" $container "scalar") (serialize-qp "detailCategoryId" $detail_category_id "scalar") (serialize-qp "fromDate" $from_date "scalar") (serialize-qp "highLevelCategoryId" $high_level_category_id "scalar") (serialize-qp "keyword" $keyword "scalar") (serialize-qp "toDate" $to_date "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
@@ -2385,7 +2396,6 @@ export def "get-transactions-count" [
 #
 # PUT /transactions/{transactionId}
 # operationId: updateTransaction
-# --transaction shape: {categoryId: int, categorySource: "SYSTEM"|"USER", container: "bank"|"creditCard"|"investment"|"insurance"|"loan"|"reward"|"realEstate"|"otherAssets"|"otherLiabilities", description?: record, memo?: string}
 export def "update-transaction" [
   transaction_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2436,7 +2446,7 @@ export def "get-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<user: record<address: record<address1: string, address2: string, address3: string, city: string, country: string, state: string, zip: string>, email: string, id: int, loginName: string, name: record<first: string, fullName: string, last: string, middle: string>, preferences: record<currency: string, dateFormat: string, locale: string, timeZone: string>, roleType: string, segmentName: string>> {
+]: nothing -> oneof<record<user: record<address: record<address1: string, address2: string, address3: string, city: string, country: string, state: string, zip: string>, email: string, id: int, loginName: string, name: record<first: string, fullName: string, last: string, middle: string>, preferences: record<currency: string, dateFormat: string, locale: string, timeZone: string>, roleType: string, segmentName: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user" $auth.query)
@@ -2460,7 +2470,6 @@ export def "get-user" [
 #
 # PUT /user
 # operationId: updateUser
-# --user shape: {address?: record, email?: string, name?: record, preferences?: record, segmentName?: string}
 export def "update-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2510,7 +2519,7 @@ export def "get-access-tokens" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --app-ids: string # appIds (required)
-]: nothing -> record<user: record<accessTokens: list<record>>> {
+]: nothing -> oneof<record<user: record<accessTokens: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_ids == null) { error make --unspanned { msg: "required query parameter 'appIds' missing: pass --app-ids" } }
@@ -2570,7 +2579,6 @@ export def "user-logout" [
 #
 # POST /user/register
 # operationId: registerUser
-# --user shape: {address?: record, email?: string, loginName: string, name?: record, preferences?: record, segmentName?: string}
 export def "register-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2582,7 +2590,7 @@ export def "register-user" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   user: record # shape: {address?: record, email?: string, loginName: string, name?: record, preferences?: record, segmentName?: string}
-]: any -> record<user: record<id: int, loginName: string, name: record<first: string, fullName: string, last: string, middle: string>, preferences: record<currency: string, dateFormat: string, locale: string, timeZone: string>, roleType: string, session: record<userSession: string>>> {
+]: any -> oneof<record<user: record<id: int, loginName: string, name: record<first: string, fullName: string, last: string, middle: string>, preferences: record<currency: string, dateFormat: string, locale: string, timeZone: string>, roleType: string, session: record<userSession: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2622,7 +2630,7 @@ export def "saml-login" [
   --issuer: string # issuer (required)
   --saml-response: string # samlResponse (required)
   --source: string # source
-]: nothing -> record<user: record<id: int, loginName: string, name: record<first: string, fullName: string, last: string, middle: string>, preferences: record<currency: string, dateFormat: string, locale: string, timeZone: string>, roleType: string, session: record<userSession: string>>> {
+]: nothing -> oneof<record<user: record<id: int, loginName: string, name: record<first: string, fullName: string, last: string, middle: string>, preferences: record<currency: string, dateFormat: string, locale: string, timeZone: string>, roleType: string, session: record<userSession: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($issuer == null) { error make --unspanned { msg: "required query parameter 'issuer' missing: pass --issuer" } }
@@ -2696,7 +2704,7 @@ export def "get-verification-status" [
   --account-id: string # Comma separated accountId
   --provider-account-id: string # Comma separated providerAccountId
   --verification-type: string # verificationType
-]: nothing -> record<verification: table<account: record, accountId: int, providerAccountId: int, reason: string, remainingAttempts: int, verificationDate: string, verificationId: int, verificationStatus: string, verificationType: string>> {
+]: nothing -> oneof<record<verification: table<account: record, accountId: int, providerAccountId: int, reason: string, remainingAttempts: int, verificationDate: string, verificationId: int, verificationStatus: string, verificationType: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accountId" $account_id "scalar") (serialize-qp "providerAccountId" $provider_account_id "scalar") (serialize-qp "verificationType" $verification_type "scalar")] | flatten | str join "&"
@@ -2721,7 +2729,6 @@ export def "get-verification-status" [
 #
 # POST /verification
 # operationId: initiateMatchingOrChallengeDepositeVerification
-# --verification shape: {account?: record, accountId?: int, providerAccountId?: int, verificationType?: "MATCHING"|"CHALLENGE_DEPOSIT"}
 export def "initiate-matching-or-challenge-deposite-verification" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2733,7 +2740,7 @@ export def "initiate-matching-or-challenge-deposite-verification" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   verification: record # shape: {account?: record, accountId?: int, providerAccountId?: int, verificationType?: "MATCHING"|"CHALLENGE_DEPOSIT"}
-]: any -> record<verification: table<account: record, accountId: int, providerAccountId: int, reason: string, verificationDate: string, verificationId: int, verificationStatus: string, verificationType: string>> {
+]: any -> oneof<record<verification: table<account: record, accountId: int, providerAccountId: int, reason: string, verificationDate: string, verificationId: int, verificationStatus: string, verificationType: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2760,7 +2767,6 @@ export def "initiate-matching-or-challenge-deposite-verification" [
 #
 # PUT /verification
 # operationId: verifyChallengeDeposit
-# --verification shape: {account?: record, accountId?: int, providerAccountId?: int, transaction: list, verificationType?: "MATCHING"|"CHALLENGE_DEPOSIT"}
 export def "verify-challenge-deposit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2772,7 +2778,7 @@ export def "verify-challenge-deposit" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --verification: record # shape: {account?: record, accountId?: int, providerAccountId?: int, transaction: list, verificationType?: "MATCHING"|"CHALLENGE_DEPOSIT"}
-]: any -> record<verification: table<account: record, accountId: int, providerAccountId: int, reason: string, verificationDate: string, verificationId: int, verificationStatus: string, verificationType: string>> {
+]: any -> oneof<record<verification: table<account: record, accountId: int, providerAccountId: int, reason: string, verificationDate: string, verificationId: int, verificationStatus: string, verificationType: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2799,7 +2805,6 @@ export def "verify-challenge-deposit" [
 #
 # POST /verifyAccount/{providerAccountId}
 # operationId: initiateAccountVerification
-# --transactionCriteria item shape: {amount: float, baseType?: "CREDIT"|"DEBIT", date: string, dateVariance?: string, keyword?: string}
 export def "initiate-account-verification" [
   provider_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2814,7 +2819,7 @@ export def "initiate-account-verification" [
   --account-id: int # format: int64
   --container: string@container-completer
   transaction_criteria: list # item shape: {amount: float, baseType?: "CREDIT"|"DEBIT", date: string, dateVariance?: string, keyword?: string}
-]: any -> record<verifyAccount: record<account: list<record>, transactionCriteria: list<record>>> {
+]: any -> oneof<record<verifyAccount: record<account: list<record>, transactionCriteria: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

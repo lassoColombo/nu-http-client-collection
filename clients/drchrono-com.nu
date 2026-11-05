@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -122,9 +146,9 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "allergies-list" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["allergies-list" "allergies-create" "allergies-read" "allergies-partial-update" "allergies-update" "amendments-list" "amendments-create" "amendments-delete" "amendments-read" "amendments-partial-update" "amendments-update" "appointment-profiles-list" "appointment-profiles-create" "appointment-profiles-delete" "appointment-profiles-read" "appointment-profiles-partial-update" "appointment-profiles-update" "appointment-templates-list" "appointment-templates-create" "appointment-templates-delete" "appointment-templates-read" "appointment-templates-partial-update" "appointment-templates-update" "appointments-list" "appointments-create" "appointments-delete" "appointments-read" "appointments-partial-update" "appointments-update" "billing-profiles-list" "billing-profiles-read" "care-plans-list" "care-plans-read" "care-team-members-list" "care-team-members-read" "claim-billing-notes-list" "claim-billing-notes-create" "claim-billing-notes-read" "clinical-note-field-types-list" "clinical-note-field-types-read" "clinical-note-field-values-list" "clinical-note-field-values-create" "clinical-note-field-values-read" "clinical-note-field-values-partial-update" "clinical-note-field-values-update" "clinical-note-templates-list" "clinical-note-templates-read" "clinical-notes-list" "clinical-notes-read" "comm-logs-list" "comm-logs-create" "comm-logs-read" "comm-logs-partial-update" "comm-logs-update" "consent-forms-list" "consent-forms-create" "consent-forms-read" "consent-forms-partial-update" "consent-forms-update" "consent-forms-apply-to-appointment" "consent-forms-unapply-from-appointment" "custom-appointment-fields-list" "custom-appointment-fields-create" "custom-appointment-fields-read" "custom-appointment-fields-partial-update" "custom-appointment-fields-update" "custom-demographics-list" "custom-demographics-create" "custom-demographics-read" "custom-demographics-partial-update" "custom-demographics-update" "custom-insurance-plan-names-list" "custom-insurance-plan-names-read" "custom-vitals-list" "custom-vitals-read" "doctors-list" "doctors-read" "documents-list" "documents-create" "documents-delete" "documents-read" "documents-partial-update" "documents-update" "eligibility-checks-list" "eligibility-checks-read" "eobs-list" "eobs-create" "eobs-read" "fee-schedules-list" "fee-schedules-read" "implantable-devices-list" "implantable-devices-read" "insurances-list" "insurances-read" "inventory-categories-list" "inventory-categories-read" "inventory-vaccines-list" "inventory-vaccines-create" "inventory-vaccines-read" "lab-documents-list" "lab-documents-create" "lab-documents-delete" "lab-documents-read" "lab-documents-partial-update" "lab-documents-update" "lab-orders-list" "lab-orders-create" "lab-orders-delete" "lab-orders-read" "lab-orders-partial-update" "lab-orders-update" "lab-orders-summary-list" "lab-orders-summary-read" "lab-results-list" "lab-results-create" "lab-results-delete" "lab-results-read" "lab-results-partial-update" "lab-results-update" "lab-tests-list" "lab-tests-create" "lab-tests-delete" "lab-tests-read" "lab-tests-partial-update" "lab-tests-update" "line-items-list" "line-items-create" "line-items-delete" "line-items-read" "line-items-partial-update" "line-items-update" "medications-list" "medications-create" "medications-read" "medications-partial-update" "medications-update" "medications-append-to-pharmacy-note" "messages-list" "messages-create" "messages-delete" "messages-read" "messages-partial-update" "messages-update" "offices-list" "offices-read" "offices-partial-update" "offices-update" "offices-add-exam-room" "patient-communications-list" "patient-communications-create" "patient-communications-read" "patient-communications-partial-update" "patient-communications-update" "patient-flag-types-list" "patient-flag-types-create" "patient-flag-types-read" "patient-flag-types-partial-update" "patient-flag-types-update" "patient-interventions-list" "patient-interventions-create" "patient-interventions-read" "patient-interventions-partial-update" "patient-interventions-update" "patient-lab-results-list" "patient-lab-results-create" "patient-lab-results-delete" "patient-lab-results-read" "patient-lab-results-partial-update" "patient-lab-results-update" "patient-messages-list" "patient-messages-create" "patient-messages-read" "patient-messages-partial-update" "patient-messages-update" "patient-payment-log-list" "patient-payment-log-read" "patient-payments-list" "patient-payments-create" "patient-payments-read" "patient-physical-exams-list" "patient-physical-exams-create" "patient-physical-exams-read" "patient-physical-exams-partial-update" "patient-physical-exams-update" "patient-risk-assessments-list" "patient-risk-assessments-create" "patient-risk-assessments-read" "patient-risk-assessments-partial-update" "patient-risk-assessments-update" "patient-vaccine-records-list" "patient-vaccine-records-create" "patient-vaccine-records-read" "patient-vaccine-records-partial-update" "patient-vaccine-records-update" "patients-list" "patients-create" "patients-delete" "patients-read" "patients-partial-update" "patients-update" "patients-ccda" "patients-onpatient-access-delete" "patients-onpatient-access-read" "patients-onpatient-access-create" "patients-qrda1" "patients-summary-list" "patients-summary-create" "patients-summary-delete" "patients-summary-read" "patients-summary-partial-update" "patients-summary-update" "prescription-messages-list" "prescription-messages-read" "problems-list" "problems-create" "problems-read" "problems-partial-update" "problems-update" "procedures-list" "procedures-read" "reminder-profiles-list" "reminder-profiles-create" "reminder-profiles-delete" "reminder-profiles-read" "reminder-profiles-partial-update" "reminder-profiles-update" "sublabs-list" "sublabs-create" "sublabs-delete" "sublabs-read" "sublabs-partial-update" "sublabs-update" "task-categories-list" "task-categories-create" "task-categories-read" "task-categories-partial-update" "task-categories-update" "task-notes-list" "task-notes-create" "task-notes-read" "task-notes-partial-update" "task-notes-update" "task-statuses-list" "task-statuses-create" "task-statuses-read" "task-statuses-partial-update" "task-statuses-update" "task-templates-list" "task-templates-create" "task-templates-read" "task-templates-partial-update" "task-templates-update" "tasks-list" "tasks-create" "tasks-read" "tasks-partial-update" "tasks-update" "transactions-list" "transactions-read" "user-groups-list" "user-groups-read" "users-list" "users-read" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -160,7 +184,7 @@ export def "allergies-list" [
   --page-size: int
   --patient: int
   --doctor: int
-]: nothing -> record<data: table<description: string, doctor: int, id: int, notes: string, patient: int, reaction: string, rxnorm: string, snomed_reaction: string, status: string>, next: string, previous: string> {
+]: nothing -> oneof<record<data: table<description: string, doctor: int, id: int, notes: string, patient: int, reaction: string, rxnorm: string, snomed_reaction: string, status: string>, next: string, previous: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -197,7 +221,7 @@ export def "allergies-create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --patient: int
   --doctor: int
-]: nothing -> record<description: string, doctor: int, id: int, notes: string, patient: int, reaction: string, rxnorm: string, snomed_reaction: string, status: string> {
+]: nothing -> oneof<record<description: string, doctor: int, id: int, notes: string, patient: int, reaction: string, rxnorm: string, snomed_reaction: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -235,7 +259,7 @@ export def "allergies-read" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --patient: int
   --doctor: int
-]: nothing -> record<description: string, doctor: int, id: int, notes: string, patient: int, reaction: string, rxnorm: string, snomed_reaction: string, status: string> {
+]: nothing -> oneof<record<description: string, doctor: int, id: int, notes: string, patient: int, reaction: string, rxnorm: string, snomed_reaction: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -354,7 +378,7 @@ export def "amendments-list" [
   --appointment: int
   --patient: int
   --doctor: int
-]: nothing -> record<data: table<amendment_file: string, amendment_name: string, appointment: int, comments: string, doctor: int, id: int, patient: int>, next: string, previous: string> {
+]: nothing -> oneof<record<data: table<amendment_file: string, amendment_name: string, appointment: int, comments: string, doctor: int, id: int, patient: int>, next: string, previous: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "appointment" $appointment "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -392,7 +416,7 @@ export def "amendments-create" [
   --appointment: int
   --patient: int
   --doctor: int
-]: nothing -> record<amendment_file: string, amendment_name: string, appointment: int, comments: string, doctor: int, id: int, patient: int> {
+]: nothing -> oneof<record<amendment_file: string, amendment_name: string, appointment: int, comments: string, doctor: int, id: int, patient: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "appointment" $appointment "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -471,7 +495,7 @@ export def "amendments-read" [
   --appointment: int
   --patient: int
   --doctor: int
-]: nothing -> record<amendment_file: string, amendment_name: string, appointment: int, comments: string, doctor: int, id: int, patient: int> {
+]: nothing -> oneof<record<amendment_file: string, amendment_name: string, appointment: int, comments: string, doctor: int, id: int, patient: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -590,7 +614,7 @@ export def "appointment-profiles-list" [
   --cursor: string
   --page-size: int
   --doctor: int
-]: nothing -> record<data: table<archived: bool, color: string, doctor: int, duration: int, id: int, name: string, online_scheduling: bool, reason: string, sort_order: int>, next: string, previous: string> {
+]: nothing -> oneof<record<data: table<archived: bool, color: string, doctor: int, duration: int, id: int, name: string, online_scheduling: bool, reason: string, sort_order: int>, next: string, previous: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -626,7 +650,7 @@ export def "appointment-profiles-create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --doctor: int
-]: nothing -> record<archived: bool, color: string, doctor: int, duration: int, id: int, name: string, online_scheduling: bool, reason: string, sort_order: int> {
+]: nothing -> oneof<record<archived: bool, color: string, doctor: int, duration: int, id: int, name: string, online_scheduling: bool, reason: string, sort_order: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -701,7 +725,7 @@ export def "appointment-profiles-read" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --doctor: int
-]: nothing -> record<archived: bool, color: string, doctor: int, duration: int, id: int, name: string, online_scheduling: bool, reason: string, sort_order: int> {
+]: nothing -> oneof<record<archived: bool, color: string, doctor: int, duration: int, id: int, name: string, online_scheduling: bool, reason: string, sort_order: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -818,7 +842,7 @@ export def "appointment-templates-list" [
   --profile: int
   --office: int
   --doctor: int
-]: nothing -> record<data: table<archived: bool, date_end: string, date_start: string, duration: int, exam_room: int, id: int, office: int, open_slots: list, profile: int, scheduled_time: string, week_days: list>, next: string, previous: string> {
+]: nothing -> oneof<record<data: table<archived: bool, date_end: string, date_start: string, duration: int, exam_room: int, id: int, office: int, open_slots: list, profile: int, scheduled_time: string, week_days: list>, next: string, previous: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "profile" $profile "scalar") (serialize-qp "office" $office "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -856,7 +880,7 @@ export def "appointment-templates-create" [
   --profile: int
   --office: int
   --doctor: int
-]: nothing -> record<archived: bool, date_end: string, date_start: string, duration: int, exam_room: int, id: int, office: int, open_slots: table<end: string, start: string>, profile: int, scheduled_time: string, week_days: list<int>> {
+]: nothing -> oneof<record<archived: bool, date_end: string, date_start: string, duration: int, exam_room: int, id: int, office: int, open_slots: table<end: string, start: string>, profile: int, scheduled_time: string, week_days: list<int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "profile" $profile "scalar") (serialize-qp "office" $office "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -935,7 +959,7 @@ export def "appointment-templates-read" [
   --profile: int
   --office: int
   --doctor: int
-]: nothing -> record<archived: bool, date_end: string, date_start: string, duration: int, exam_room: int, id: int, office: int, open_slots: table<end: string, start: string>, profile: int, scheduled_time: string, week_days: list<int>> {
+]: nothing -> oneof<record<archived: bool, date_end: string, date_start: string, duration: int, exam_room: int, id: int, office: int, open_slots: table<end: string, start: string>, profile: int, scheduled_time: string, week_days: list<int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1060,7 +1084,7 @@ export def "appointments-list" [
   --since: string
   --date-range: string
   --date: string
-]: nothing -> record<data: table<allow_overlapping: bool, appt_is_break: bool, base_recurring_appointment: string, billing_notes: list, billing_provider: string, billing_status: string, clinical_note: record, cloned_from: int, color: string, created_at: string, custom_fields: list, custom_vitals: list, deleted_flag: bool, doctor: int, duration: int, exam_room: int, extended_updated_at: string, first_billed_date: string, icd10_codes: list, icd9_codes: list, id: string, ins1_status: string, ins2_status: string, is_virtual_base: bool, is_walk_in: bool, last_billed_date: string, notes: string, office: int, patient: int, primary_insurance_id_number: string, primary_insurer_name: string, primary_insurer_payer_id: string, profile: int, reason: string, recurring_appointment: bool, reminder_profile: string, reminders: list, scheduled_time: string, secondary_insurance_id_number: string, secondary_insurer_name: string, secondary_insurer_payer_id: string, status: string, status_transitions: list, supervising_provider: string, updated_at: string, vitals: record>, next: string, previous: string> {
+]: nothing -> oneof<record<data: table<allow_overlapping: bool, appt_is_break: bool, base_recurring_appointment: string, billing_notes: list, billing_provider: string, billing_status: string, clinical_note: record, cloned_from: int, color: string, created_at: string, custom_fields: list, custom_vitals: list, deleted_flag: bool, doctor: int, duration: int, exam_room: int, extended_updated_at: string, first_billed_date: string, icd10_codes: list, icd9_codes: list, id: string, ins1_status: string, ins2_status: string, is_virtual_base: bool, is_walk_in: bool, last_billed_date: string, notes: string, office: int, patient: int, primary_insurance_id_number: string, primary_insurer_name: string, primary_insurer_payer_id: string, profile: int, reason: string, recurring_appointment: bool, reminder_profile: string, reminders: list, scheduled_time: string, secondary_insurance_id_number: string, secondary_insurer_name: string, secondary_insurer_payer_id: string, status: string, status_transitions: list, supervising_provider: string, updated_at: string, vitals: record>, next: string, previous: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "office" $office "scalar") (serialize-qp "doctor" $doctor "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "date_range" $date_range "scalar") (serialize-qp "date" $date "scalar")] | flatten | str join "&"
@@ -1102,7 +1126,7 @@ export def "appointments-create" [
   --since: string
   --date-range: string
   --date: string
-]: nothing -> record<allow_overlapping: bool, appt_is_break: bool, base_recurring_appointment: string, billing_notes: table<appointment: int, created_at: string, created_by: string, id: int, text: string>, billing_provider: string, billing_status: string, clinical_note: record<locked: bool, pdf: string, updated_at: string>, cloned_from: int, color: string, created_at: string, custom_fields: table<created_at: string, field_type: int, field_value: string, updated_at: string>, custom_vitals: table<value: string, vital_type: int>, deleted_flag: bool, doctor: int, duration: int, exam_room: int, extended_updated_at: string, first_billed_date: string, icd10_codes: list<string>, icd9_codes: list<string>, id: string, ins1_status: string, ins2_status: string, is_virtual_base: bool, is_walk_in: bool, last_billed_date: string, notes: string, office: int, patient: int, primary_insurance_id_number: string, primary_insurer_name: string, primary_insurer_payer_id: string, profile: int, reason: string, recurring_appointment: bool, reminder_profile: string, reminders: table<id: int, scheduled_time: string, type: string>, scheduled_time: string, secondary_insurance_id_number: string, secondary_insurer_name: string, secondary_insurer_payer_id: string, status: string, status_transitions: table<appointment: string, datetime: string, from_status: string, to_status: string>, supervising_provider: string, updated_at: string, vitals: record<blood_pressure_1: int, blood_pressure_2: int, bmi: string, head_circumference: float, head_circumference_units: string, height: float, height_units: string, oxygen_saturation: float, pain: string, pulse: int, respiratory_rate: int, smoking_status: string, temperature: float, temperature_units: string, weight: float, weight_units: string>> {
+]: nothing -> oneof<record<allow_overlapping: bool, appt_is_break: bool, base_recurring_appointment: string, billing_notes: table<appointment: int, created_at: string, created_by: string, id: int, text: string>, billing_provider: string, billing_status: string, clinical_note: record<locked: bool, pdf: string, updated_at: string>, cloned_from: int, color: string, created_at: string, custom_fields: table<created_at: string, field_type: int, field_value: string, updated_at: string>, custom_vitals: table<value: string, vital_type: int>, deleted_flag: bool, doctor: int, duration: int, exam_room: int, extended_updated_at: string, first_billed_date: string, icd10_codes: list<string>, icd9_codes: list<string>, id: string, ins1_status: string, ins2_status: string, is_virtual_base: bool, is_walk_in: bool, last_billed_date: string, notes: string, office: int, patient: int, primary_insurance_id_number: string, primary_insurer_name: string, primary_insurer_payer_id: string, profile: int, reason: string, recurring_appointment: bool, reminder_profile: string, reminders: table<id: int, scheduled_time: string, type: string>, scheduled_time: string, secondary_insurance_id_number: string, secondary_insurer_name: string, secondary_insurer_payer_id: string, status: string, status_transitions: table<appointment: string, datetime: string, from_status: string, to_status: string>, supervising_provider: string, updated_at: string, vitals: record<blood_pressure_1: int, blood_pressure_2: int, bmi: string, head_circumference: float, head_circumference_units: string, height: float, height_units: string, oxygen_saturation: float, pain: string, pulse: int, respiratory_rate: int, smoking_status: string, temperature: float, temperature_units: string, weight: float, weight_units: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "office" $office "scalar") (serialize-qp "doctor" $doctor "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "date_range" $date_range "scalar") (serialize-qp "date" $date "scalar")] | flatten | str join "&"
@@ -1189,7 +1213,7 @@ export def "appointments-read" [
   --since: string
   --date-range: string
   --date: string
-]: nothing -> record<allow_overlapping: bool, appt_is_break: bool, base_recurring_appointment: string, billing_notes: table<appointment: int, created_at: string, created_by: string, id: int, text: string>, billing_provider: string, billing_status: string, clinical_note: record<locked: bool, pdf: string, updated_at: string>, cloned_from: int, color: string, created_at: string, custom_fields: table<created_at: string, field_type: int, field_value: string, updated_at: string>, custom_vitals: table<value: string, vital_type: int>, deleted_flag: bool, doctor: int, duration: int, exam_room: int, extended_updated_at: string, first_billed_date: string, icd10_codes: list<string>, icd9_codes: list<string>, id: string, ins1_status: string, ins2_status: string, is_virtual_base: bool, is_walk_in: bool, last_billed_date: string, notes: string, office: int, patient: int, primary_insurance_id_number: string, primary_insurer_name: string, primary_insurer_payer_id: string, profile: int, reason: string, recurring_appointment: bool, reminder_profile: string, reminders: table<id: int, scheduled_time: string, type: string>, scheduled_time: string, secondary_insurance_id_number: string, secondary_insurer_name: string, secondary_insurer_payer_id: string, status: string, status_transitions: table<appointment: string, datetime: string, from_status: string, to_status: string>, supervising_provider: string, updated_at: string, vitals: record<blood_pressure_1: int, blood_pressure_2: int, bmi: string, head_circumference: float, head_circumference_units: string, height: float, height_units: string, oxygen_saturation: float, pain: string, pulse: int, respiratory_rate: int, smoking_status: string, temperature: float, temperature_units: string, weight: float, weight_units: string>> {
+]: nothing -> oneof<record<allow_overlapping: bool, appt_is_break: bool, base_recurring_appointment: string, billing_notes: table<appointment: int, created_at: string, created_by: string, id: int, text: string>, billing_provider: string, billing_status: string, clinical_note: record<locked: bool, pdf: string, updated_at: string>, cloned_from: int, color: string, created_at: string, custom_fields: table<created_at: string, field_type: int, field_value: string, updated_at: string>, custom_vitals: table<value: string, vital_type: int>, deleted_flag: bool, doctor: int, duration: int, exam_room: int, extended_updated_at: string, first_billed_date: string, icd10_codes: list<string>, icd9_codes: list<string>, id: string, ins1_status: string, ins2_status: string, is_virtual_base: bool, is_walk_in: bool, last_billed_date: string, notes: string, office: int, patient: int, primary_insurance_id_number: string, primary_insurer_name: string, primary_insurer_payer_id: string, profile: int, reason: string, recurring_appointment: bool, reminder_profile: string, reminders: table<id: int, scheduled_time: string, type: string>, scheduled_time: string, secondary_insurance_id_number: string, secondary_insurer_name: string, secondary_insurer_payer_id: string, status: string, status_transitions: table<appointment: string, datetime: string, from_status: string, to_status: string>, supervising_provider: string, updated_at: string, vitals: record<blood_pressure_1: int, blood_pressure_2: int, bmi: string, head_circumference: float, head_circumference_units: string, height: float, height_units: string, oxygen_saturation: float, pain: string, pulse: int, respiratory_rate: int, smoking_status: string, temperature: float, temperature_units: string, weight: float, weight_units: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1316,7 +1340,7 @@ export def "billing-profiles-list" [
   --cursor: string
   --page-size: int
   --doctor: int
-]: nothing -> record<data: table<archived: bool, cpt_codes: list, created_at: string, custom_procedure_codes: list, doctor: string, hcpcs_codes: list, icd10_codes: list, icd9_codes: list, id: int, name: string, updated_at: string>, next: string, previous: string> {
+]: nothing -> oneof<record<data: table<archived: bool, cpt_codes: list, created_at: string, custom_procedure_codes: list, doctor: string, hcpcs_codes: list, icd10_codes: list, icd9_codes: list, id: int, name: string, updated_at: string>, next: string, previous: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -1353,7 +1377,7 @@ export def "billing-profiles-read" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --doctor: int
-]: nothing -> record<archived: bool, cpt_codes: table<code: string, diagnosis_pointers_icd10: list, diagnosis_pointers_icd9: list, modifiers: list, ndc_code: list, price: string, quantity: string>, created_at: string, custom_procedure_codes: table<code: string, price: string, quantity: string>, doctor: string, hcpcs_codes: table<code: string, diagnosis_pointers_icd10: list, diagnosis_pointers_icd9: list, modifiers: list, ndc_code: list, price: string, quantity: string>, icd10_codes: list<string>, icd9_codes: list<string>, id: int, name: string, updated_at: string> {
+]: nothing -> oneof<record<archived: bool, cpt_codes: table<code: string, diagnosis_pointers_icd10: list, diagnosis_pointers_icd9: list, modifiers: list, ndc_code: list, price: string, quantity: string>, created_at: string, custom_procedure_codes: table<code: string, price: string, quantity: string>, doctor: string, hcpcs_codes: table<code: string, diagnosis_pointers_icd10: list, diagnosis_pointers_icd9: list, modifiers: list, ndc_code: list, price: string, quantity: string>, icd10_codes: list<string>, icd9_codes: list<string>, id: int, name: string, updated_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1394,7 +1418,7 @@ export def "care-plans-list" [
   --patient: int
   --plan-type: int
   --doctor: int
-]: nothing -> record<data: table<appointment: string, code: string, code_system: string, created_at: string, description: string, id: int, instructions: string, patient: string, plan_type: string, scheduled_date: string, title: string, updated_at: string>, next: string, previous: string> {
+]: nothing -> oneof<record<data: table<appointment: string, code: string, code_system: string, created_at: string, description: string, id: int, instructions: string, patient: string, plan_type: string, scheduled_date: string, title: string, updated_at: string>, next: string, previous: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "plan_type" $plan_type "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -1433,7 +1457,7 @@ export def "care-plans-read" [
   --patient: int
   --plan-type: int
   --doctor: int
-]: nothing -> record<appointment: string, code: string, code_system: string, created_at: string, description: string, id: int, instructions: string, patient: string, plan_type: string, scheduled_date: string, title: string, updated_at: string> {
+]: nothing -> oneof<record<appointment: string, code: string, code_system: string, created_at: string, description: string, id: int, instructions: string, patient: string, plan_type: string, scheduled_date: string, title: string, updated_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1473,7 +1497,7 @@ export def "care-team-members-list" [
   --patient: int
   --appointment: int
   --doctor: int
-]: nothing -> record<data: table<appointment: string, created_at: string, id: int, patient: string, user: string>, next: string, previous: string> {
+]: nothing -> oneof<record<data: table<appointment: string, created_at: string, id: int, patient: string, user: string>, next: string, previous: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "appointment" $appointment "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -1511,7 +1535,7 @@ export def "care-team-members-read" [
   --patient: int
   --appointment: int
   --doctor: int
-]: nothing -> record<appointment: string, created_at: string, id: int, patient: string, user: string> {
+]: nothing -> oneof<record<appointment: string, created_at: string, id: int, patient: string, user: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1551,7 +1575,7 @@ export def "claim-billing-notes-list" [
   --page-size: int
   --appointment: int
   --doctor: int
-]: nothing -> record<data: table<appointment: int, created_at: string, created_by: string, id: int, text: string>, next: string, previous: string> {
+]: nothing -> oneof<record<data: table<appointment: int, created_at: string, created_by: string, id: int, text: string>, next: string, previous: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "appointment" $appointment "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -1588,7 +1612,7 @@ export def "claim-billing-notes-create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --appointment: int
   --doctor: int
-]: nothing -> record<appointment: int, created_at: string, created_by: string, id: int, text: string> {
+]: nothing -> oneof<record<appointment: int, created_at: string, created_by: string, id: int, text: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "appointment" $appointment "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -1626,7 +1650,7 @@ export def "claim-billing-notes-read" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --appointment: int
   --doctor: int
-]: nothing -> record<appointment: int, created_at: string, created_by: string, id: int, text: string> {
+]: nothing -> oneof<record<appointment: int, created_at: string, created_by: string, id: int, text: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1666,7 +1690,7 @@ export def "clinical-note-field-types-list" [
   --page-size: int
   --clinical-note-template: int
   --doctor: int
-]: nothing -> record<data: table<allowed_values: list, archived: bool, clinical_note_template: string, comment: string, data_type: string, id: int, name: string, required: bool>, next: string, previous: string> {
+]: nothing -> oneof<record<data: table<allowed_values: list, archived: bool, clinical_note_template: string, comment: string, data_type: string, id: int, name: string, required: bool>, next: string, previous: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "clinical_note_template" $clinical_note_template "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -1704,7 +1728,7 @@ export def "clinical-note-field-types-read" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --clinical-note-template: int
   --doctor: int
-]: nothing -> record<allowed_values: list<string>, archived: bool, clinical_note_template: string, comment: string, data_type: string, id: int, name: string, required: bool> {
+]: nothing -> oneof<record<allowed_values: list<string>, archived: bool, clinical_note_template: string, comment: string, data_type: string, id: int, name: string, required: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1747,7 +1771,7 @@ export def "clinical-note-field-values-list" [
   --appointment: int
   --clinical-note-template: int
   --doctor: int
-]: nothing -> record<data: table<appointment: int, clinical_note_field: int, created_at: string, id: int, updated_at: string, value: string>, next: string, previous: string> {
+]: nothing -> oneof<record<data: table<appointment: int, clinical_note_field: int, created_at: string, id: int, updated_at: string, value: string>, next: string, previous: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "clinical_note_field" $clinical_note_field "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "appointment" $appointment "scalar") (serialize-qp "clinical_note_template" $clinical_note_template "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -1787,7 +1811,7 @@ export def "clinical-note-field-values-create" [
   --appointment: int
   --clinical-note-template: int
   --doctor: int
-]: nothing -> record<appointment: int, clinical_note_field: int, created_at: string, id: int, updated_at: string, value: string> {
+]: nothing -> oneof<record<appointment: int, clinical_note_field: int, created_at: string, id: int, updated_at: string, value: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "clinical_note_field" $clinical_note_field "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "appointment" $appointment "scalar") (serialize-qp "clinical_note_template" $clinical_note_template "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -1828,7 +1852,7 @@ export def "clinical-note-field-values-read" [
   --appointment: int
   --clinical-note-template: int
   --doctor: int
-]: nothing -> record<appointment: int, clinical_note_field: int, created_at: string, id: int, updated_at: string, value: string> {
+]: nothing -> oneof<record<appointment: int, clinical_note_field: int, created_at: string, id: int, updated_at: string, value: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1951,7 +1975,7 @@ export def "clinical-note-templates-list" [
   --cursor: string
   --page-size: int
   --doctor: int
-]: nothing -> record<data: table<archived: bool, clinical_note_fields: list, doctor: string, id: int, is_onpatient: bool, is_persistent: bool, name: string, order: record, updated_at: string>, next: string, previous: string> {
+]: nothing -> oneof<record<data: table<archived: bool, clinical_note_fields: list, doctor: string, id: int, is_onpatient: bool, is_persistent: bool, name: string, order: record, updated_at: string>, next: string, previous: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -1988,7 +2012,7 @@ export def "clinical-note-templates-read" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --doctor: int
-]: nothing -> record<archived: bool, clinical_note_fields: table<allowed_values: list, archived: bool, clinical_note_template: int, data_type: string, name: string, required: bool>, doctor: string, id: int, is_onpatient: bool, is_persistent: bool, name: string, order: record<on_complete_note: int, on_ipad: int>, updated_at: string> {
+]: nothing -> oneof<record<archived: bool, clinical_note_fields: table<allowed_values: list, archived: bool, clinical_note_template: int, data_type: string, name: string, required: bool>, doctor: string, id: int, is_onpatient: bool, is_persistent: bool, name: string, order: record<on_complete_note: int, on_ipad: int>, updated_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2031,7 +2055,7 @@ export def "clinical-notes-list" [
   --since: string
   --date-range: string
   --date: string
-]: nothing -> record<data: table<appointment: string, archived: bool, clinical_note_sections: list, patient: string>, next: string, previous: string> {
+]: nothing -> oneof<record<data: table<appointment: string, archived: bool, clinical_note_sections: list, patient: string>, next: string, previous: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "office" $office "scalar") (serialize-qp "doctor" $doctor "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "date_range" $date_range "scalar") (serialize-qp "date" $date "scalar")] | flatten | str join "&"
@@ -2072,7 +2096,7 @@ export def "clinical-notes-read" [
   --since: string
   --date-range: string
   --date: string
-]: nothing -> record<appointment: string, archived: bool, clinical_note_sections: table<clinical_note_template: int, name: string, values: list>, patient: string> {
+]: nothing -> oneof<record<appointment: string, archived: bool, clinical_note_sections: table<clinical_note_template: int, name: string, values: list>, patient: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2113,7 +2137,7 @@ export def "comm-logs-list" [
   --since: string
   --patient: int
   --doctor: int
-]: nothing -> record<data: table<appointment: int, archived: bool, author: string, cash_charged: float, created_at: string, doctor: int, duration: int, id: int, message: string, patient: int, scheduled_time: string, title: string, type: string, updated_at: string>, next: string, previous: string> {
+]: nothing -> oneof<record<data: table<appointment: int, archived: bool, author: string, cash_charged: float, created_at: string, doctor: int, duration: int, id: int, message: string, patient: int, scheduled_time: string, title: string, type: string, updated_at: string>, next: string, previous: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -2151,7 +2175,7 @@ export def "comm-logs-create" [
   --since: string
   --patient: int
   --doctor: int
-]: nothing -> record<appointment: int, archived: bool, author: string, cash_charged: float, created_at: string, doctor: int, duration: int, id: int, message: string, patient: int, scheduled_time: string, title: string, type: string, updated_at: string> {
+]: nothing -> oneof<record<appointment: int, archived: bool, author: string, cash_charged: float, created_at: string, doctor: int, duration: int, id: int, message: string, patient: int, scheduled_time: string, title: string, type: string, updated_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -2190,7 +2214,7 @@ export def "comm-logs-read" [
   --since: string
   --patient: int
   --doctor: int
-]: nothing -> record<appointment: int, archived: bool, author: string, cash_charged: float, created_at: string, doctor: int, duration: int, id: int, message: string, patient: int, scheduled_time: string, title: string, type: string, updated_at: string> {
+]: nothing -> oneof<record<appointment: int, archived: bool, author: string, cash_charged: float, created_at: string, doctor: int, duration: int, id: int, message: string, patient: int, scheduled_time: string, title: string, type: string, updated_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2309,7 +2333,7 @@ export def "consent-forms-list" [
   --cursor: string
   --page-size: int
   --doctor: int
-]: nothing -> record<data: table<archived: bool, assign_by_default: bool, created_at: string, doctor: int, id: int, is_mandatory: bool, order: int, title: string, updated_at: string, uri: string>, next: string, previous: string> {
+]: nothing -> oneof<record<data: table<archived: bool, assign_by_default: bool, created_at: string, doctor: int, id: int, is_mandatory: bool, order: int, title: string, updated_at: string, uri: string>, next: string, previous: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -2345,7 +2369,7 @@ export def "consent-forms-create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --doctor: int
-]: nothing -> record<archived: bool, assign_by_default: bool, created_at: string, doctor: int, id: int, is_mandatory: bool, order: int, title: string, updated_at: string, uri: string> {
+]: nothing -> oneof<record<archived: bool, assign_by_default: bool, created_at: string, doctor: int, id: int, is_mandatory: bool, order: int, title: string, updated_at: string, uri: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -2382,7 +2406,7 @@ export def "consent-forms-read" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --doctor: int
-]: nothing -> record<archived: bool, assign_by_default: bool, created_at: string, doctor: int, id: int, is_mandatory: bool, order: int, title: string, updated_at: string, uri: string> {
+]: nothing -> oneof<record<archived: bool, assign_by_default: bool, created_at: string, doctor: int, id: int, is_mandatory: bool, order: int, title: string, updated_at: string, uri: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2573,7 +2597,7 @@ export def "custom-appointment-fields-list" [
   --cursor: string
   --page-size: int
   --doctor: int
-]: nothing -> record<data: table<archived: bool, created_at: string, doctor: string, field_desc: string, field_name: string, id: int, order: int, updated_at: string>, next: string, previous: string> {
+]: nothing -> oneof<record<data: table<archived: bool, created_at: string, doctor: string, field_desc: string, field_name: string, id: int, order: int, updated_at: string>, next: string, previous: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -2609,7 +2633,7 @@ export def "custom-appointment-fields-create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --doctor: int
-]: nothing -> record<archived: bool, created_at: string, doctor: string, field_desc: string, field_name: string, id: int, order: int, updated_at: string> {
+]: nothing -> oneof<record<archived: bool, created_at: string, doctor: string, field_desc: string, field_name: string, id: int, order: int, updated_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -2646,7 +2670,7 @@ export def "custom-appointment-fields-read" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --doctor: int
-]: nothing -> record<archived: bool, created_at: string, doctor: string, field_desc: string, field_name: string, id: int, order: int, updated_at: string> {
+]: nothing -> oneof<record<archived: bool, created_at: string, doctor: string, field_desc: string, field_name: string, id: int, order: int, updated_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2761,7 +2785,7 @@ export def "custom-demographics-list" [
   --cursor: string
   --page-size: int
   --doctor: int
-]: nothing -> record<data: table<allowed_values: string, archived: bool, description: string, doctor: int, id: int, name: string, template_name: string>, next: string, previous: string> {
+]: nothing -> oneof<record<data: table<allowed_values: string, archived: bool, description: string, doctor: int, id: int, name: string, template_name: string>, next: string, previous: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -2797,7 +2821,7 @@ export def "custom-demographics-create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --doctor: int
-]: nothing -> record<allowed_values: string, archived: bool, description: string, doctor: int, id: int, name: string, template_name: string> {
+]: nothing -> oneof<record<allowed_values: string, archived: bool, description: string, doctor: int, id: int, name: string, template_name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -2834,7 +2858,7 @@ export def "custom-demographics-read" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --doctor: int
-]: nothing -> record<allowed_values: string, archived: bool, description: string, doctor: int, id: int, name: string, template_name: string> {
+]: nothing -> oneof<record<allowed_values: string, archived: bool, description: string, doctor: int, id: int, name: string, template_name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2952,7 +2976,7 @@ export def "custom-insurance-plan-names-list" [
   --user: int
   --name: string
   --doctor: int
-]: nothing -> record<data: table<archived: bool, created_at: string, doctor: string, id: int, insurance_plan_name: string, updated_at: string, user: string>, next: string, previous: string> {
+]: nothing -> oneof<record<data: table<archived: bool, created_at: string, doctor: string, id: int, insurance_plan_name: string, updated_at: string, user: string>, next: string, previous: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "user" $user "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -2992,7 +3016,7 @@ export def "custom-insurance-plan-names-read" [
   --user: int
   --name: string
   --doctor: int
-]: nothing -> record<archived: bool, created_at: string, doctor: string, id: int, insurance_plan_name: string, updated_at: string, user: string> {
+]: nothing -> oneof<record<archived: bool, created_at: string, doctor: string, id: int, insurance_plan_name: string, updated_at: string, user: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3031,7 +3055,7 @@ export def "custom-vitals-list" [
   --cursor: string
   --page-size: int
   --doctor: int
-]: nothing -> record<data: table<allowed_values: list, archived: bool, data_type: string, description: string, doctor: string, fraction_delimiter: string, id: int, is_fraction_field: bool, name: string, unit: string>, next: string, previous: string> {
+]: nothing -> oneof<record<data: table<allowed_values: list, archived: bool, data_type: string, description: string, doctor: string, fraction_delimiter: string, id: int, is_fraction_field: bool, name: string, unit: string>, next: string, previous: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -3068,7 +3092,7 @@ export def "custom-vitals-read" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --doctor: int
-]: nothing -> record<allowed_values: list<string>, archived: bool, data_type: string, description: string, doctor: string, fraction_delimiter: string, id: int, is_fraction_field: bool, name: string, unit: string> {
+]: nothing -> oneof<record<allowed_values: list<string>, archived: bool, data_type: string, description: string, doctor: string, fraction_delimiter: string, id: int, is_fraction_field: bool, name: string, unit: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3107,7 +3131,7 @@ export def "doctors-list" [
   --cursor: string
   --page-size: int
   --doctor: int
-]: nothing -> record<data: table<cell_phone: string, country: string, email: string, first_name: string, group_npi_number: string, home_phone: string, id: int, is_account_suspended: bool, job_title: string, last_name: string, npi_number: string, office_phone: string, practice_group: string, practice_group_name: string, profile_picture: string, specialty: string, suffix: string, timezone: string, website: string>, next: string, previous: string> {
+]: nothing -> oneof<record<data: table<cell_phone: string, country: string, email: string, first_name: string, group_npi_number: string, home_phone: string, id: int, is_account_suspended: bool, job_title: string, last_name: string, npi_number: string, office_phone: string, practice_group: string, practice_group_name: string, profile_picture: string, specialty: string, suffix: string, timezone: string, website: string>, next: string, previous: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -3144,7 +3168,7 @@ export def "doctors-read" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --doctor: int
-]: nothing -> record<cell_phone: string, country: string, email: string, first_name: string, group_npi_number: string, home_phone: string, id: int, is_account_suspended: bool, job_title: string, last_name: string, npi_number: string, office_phone: string, practice_group: string, practice_group_name: string, profile_picture: string, specialty: string, suffix: string, timezone: string, website: string> {
+]: nothing -> oneof<record<cell_phone: string, country: string, email: string, first_name: string, group_npi_number: string, home_phone: string, id: int, is_account_suspended: bool, job_title: string, last_name: string, npi_number: string, office_phone: string, practice_group: string, practice_group_name: string, profile_picture: string, specialty: string, suffix: string, timezone: string, website: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3185,7 +3209,7 @@ export def "documents-list" [
   --since: string
   --patient: int
   --doctor: int
-]: nothing -> record<data: table<archived: bool, date: string, description: string, doctor: int, document: string, id: int, metatags: string, patient: int, updated_at: string>, next: string, previous: string> {
+]: nothing -> oneof<record<data: table<archived: bool, date: string, description: string, doctor: int, document: string, id: int, metatags: string, patient: int, updated_at: string>, next: string, previous: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -3223,7 +3247,7 @@ export def "documents-create" [
   --since: string
   --patient: int
   --doctor: int
-]: nothing -> record<archived: bool, date: string, description: string, doctor: int, document: string, id: int, metatags: string, patient: int, updated_at: string> {
+]: nothing -> oneof<record<archived: bool, date: string, description: string, doctor: int, document: string, id: int, metatags: string, patient: int, updated_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -3302,7 +3326,7 @@ export def "documents-read" [
   --since: string
   --patient: int
   --doctor: int
-]: nothing -> record<archived: bool, date: string, description: string, doctor: int, document: string, id: int, metatags: string, patient: int, updated_at: string> {
+]: nothing -> oneof<record<archived: bool, date: string, description: string, doctor: int, document: string, id: int, metatags: string, patient: int, updated_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3427,7 +3451,7 @@ export def "eligibility-checks-list" [
   --appointment-date-range: string
   --query-date: string
   --patient: int
-]: nothing -> record<data: table<appointment: string, cob_level: string, coverage_details: string, coverage_subscriber: string, eligibility: string, patient: string, payer_name: string, query_date: string, request_service_type: string, service_type_description: string>, next: string, previous: string> {
+]: nothing -> oneof<record<data: table<appointment: string, cob_level: string, coverage_details: string, coverage_subscriber: string, eligibility: string, patient: string, payer_name: string, query_date: string, request_service_type: string, service_type_description: string>, next: string, previous: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "appointment" $appointment "scalar") (serialize-qp "appointment_date" $appointment_date "scalar") (serialize-qp "doctor" $doctor "scalar") (serialize-qp "query_date_range" $query_date_range "scalar") (serialize-qp "appointment_date_range" $appointment_date_range "scalar") (serialize-qp "query_date" $query_date "scalar") (serialize-qp "patient" $patient "scalar")] | flatten | str join "&"
@@ -3470,7 +3494,7 @@ export def "eligibility-checks-read" [
   --appointment-date-range: string
   --query-date: string
   --patient: int
-]: nothing -> record<appointment: string, cob_level: string, coverage_details: string, coverage_subscriber: string, eligibility: string, patient: string, payer_name: string, query_date: string, request_service_type: string, service_type_description: string> {
+]: nothing -> oneof<record<appointment: string, cob_level: string, coverage_details: string, coverage_subscriber: string, eligibility: string, patient: string, payer_name: string, query_date: string, request_service_type: string, service_type_description: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3509,7 +3533,7 @@ export def "eobs-list" [
   --cursor: string
   --page-size: int
   --doctor: int
-]: nothing -> record<data: table<check_date: string, deposit_date: string, doctor: int, id: int, insurance_payer_id: string, insurance_payer_name: string, insurance_payer_trace_number: string, payment_method: string, posted_date: string, scanned_eob: string, total_paid: float, updated_at: string>, next: string, previous: string> {
+]: nothing -> oneof<record<data: table<check_date: string, deposit_date: string, doctor: int, id: int, insurance_payer_id: string, insurance_payer_name: string, insurance_payer_trace_number: string, payment_method: string, posted_date: string, scanned_eob: string, total_paid: float, updated_at: string>, next: string, previous: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -3545,7 +3569,7 @@ export def "eobs-create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --doctor: int
-]: nothing -> record<check_date: string, deposit_date: string, doctor: int, id: int, insurance_payer_id: string, insurance_payer_name: string, insurance_payer_trace_number: string, payment_method: string, posted_date: string, scanned_eob: string, total_paid: float, updated_at: string> {
+]: nothing -> oneof<record<check_date: string, deposit_date: string, doctor: int, id: int, insurance_payer_id: string, insurance_payer_name: string, insurance_payer_trace_number: string, payment_method: string, posted_date: string, scanned_eob: string, total_paid: float, updated_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -3582,7 +3606,7 @@ export def "eobs-read" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --doctor: int
-]: nothing -> record<check_date: string, deposit_date: string, doctor: int, id: int, insurance_payer_id: string, insurance_payer_name: string, insurance_payer_trace_number: string, payment_method: string, posted_date: string, scanned_eob: string, total_paid: float, updated_at: string> {
+]: nothing -> oneof<record<check_date: string, deposit_date: string, doctor: int, id: int, insurance_payer_id: string, insurance_payer_name: string, insurance_payer_trace_number: string, payment_method: string, posted_date: string, scanned_eob: string, total_paid: float, updated_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3624,7 +3648,7 @@ export def "fee-schedules-list" [
   --since: string
   --payer-id: string
   --doctor: int
-]: nothing -> record<data: table<allowed_amount: float, base_price: float, billing_description: string, cash_price: float, code: string, code_type: string, cpt_hcpcs_modifier1: string, cpt_hcpcs_modifier2: string, cpt_hcpcs_modifier3: string, cpt_hcpcs_modifier4: string, created_at: string, description: string, doctor: int, id: int, insured_out_of_network_price: float, insured_price: float, ndc_code: string, ndc_quantity: float, ndc_units: string, office: int, payer_id: string, picklist_category: string, plan_name: string, updated_at: string>, next: string, previous: string> {
+]: nothing -> oneof<record<data: table<allowed_amount: float, base_price: float, billing_description: string, cash_price: float, code: string, code_type: string, cpt_hcpcs_modifier1: string, cpt_hcpcs_modifier2: string, cpt_hcpcs_modifier3: string, cpt_hcpcs_modifier4: string, created_at: string, description: string, doctor: int, id: int, insured_out_of_network_price: float, insured_price: float, ndc_code: string, ndc_quantity: float, ndc_units: string, office: int, payer_id: string, picklist_category: string, plan_name: string, updated_at: string>, next: string, previous: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "code" $code "scalar") (serialize-qp "code_type" $code_type "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "payer_id" $payer_id "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -3664,7 +3688,7 @@ export def "fee-schedules-read" [
   --since: string
   --payer-id: string
   --doctor: int
-]: nothing -> record<allowed_amount: float, base_price: float, billing_description: string, cash_price: float, code: string, code_type: string, cpt_hcpcs_modifier1: string, cpt_hcpcs_modifier2: string, cpt_hcpcs_modifier3: string, cpt_hcpcs_modifier4: string, created_at: string, description: string, doctor: int, id: int, insured_out_of_network_price: float, insured_price: float, ndc_code: string, ndc_quantity: float, ndc_units: string, office: int, payer_id: string, picklist_category: string, plan_name: string, updated_at: string> {
+]: nothing -> oneof<record<allowed_amount: float, base_price: float, billing_description: string, cash_price: float, code: string, code_type: string, cpt_hcpcs_modifier1: string, cpt_hcpcs_modifier2: string, cpt_hcpcs_modifier3: string, cpt_hcpcs_modifier4: string, created_at: string, description: string, doctor: int, id: int, insured_out_of_network_price: float, insured_price: float, ndc_code: string, ndc_quantity: float, ndc_units: string, office: int, payer_id: string, picklist_category: string, plan_name: string, updated_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3706,7 +3730,7 @@ export def "implantable-devices-list" [
   --patient: int
   --mu-date-range: string
   --doctor: int
-]: nothing -> record<data: table<archived: bool, brand_name: string, company_name: string, created_at: string, expiration_date: string, gmdn_pt_name: string, id: int, manufacturing_date: string, patient: string, procedure: string, serial_number: string, status: string, udi: string, updated_at: string, version_or_model: string>, next: string, previous: string> {
+]: nothing -> oneof<record<data: table<archived: bool, brand_name: string, company_name: string, created_at: string, expiration_date: string, gmdn_pt_name: string, id: int, manufacturing_date: string, patient: string, procedure: string, serial_number: string, status: string, udi: string, updated_at: string, version_or_model: string>, next: string, previous: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "mu_date" $mu_date "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "mu_date_range" $mu_date_range "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -3746,7 +3770,7 @@ export def "implantable-devices-read" [
   --patient: int
   --mu-date-range: string
   --doctor: int
-]: nothing -> record<archived: bool, brand_name: string, company_name: string, created_at: string, expiration_date: string, gmdn_pt_name: string, id: int, manufacturing_date: string, patient: string, procedure: string, serial_number: string, status: string, udi: string, updated_at: string, version_or_model: string> {
+]: nothing -> oneof<record<archived: bool, brand_name: string, company_name: string, created_at: string, expiration_date: string, gmdn_pt_name: string, id: int, manufacturing_date: string, patient: string, procedure: string, serial_number: string, status: string, udi: string, updated_at: string, version_or_model: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3785,7 +3809,7 @@ export def "insurances-list" [
   --page-size: int
   --payer-type: string # One of `"emdeon"`, `"gateway"`, `"ihcfa"` (required)
   --term: string # Search term, which can be either a partial name, partial ID or the state.
-]: nothing -> record<data: table<payer_id: string, payer_name: string, state: string>, next: string, previous: string> {
+]: nothing -> oneof<record<data: table<payer_id: string, payer_name: string, state: string>, next: string, previous: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payer_type == null) { error make --unspanned { msg: "required query parameter 'payer_type' missing: pass --payer-type" } }
@@ -3823,7 +3847,7 @@ export def "insurances-read" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --payer-type: string # One of `"emdeon"`, `"gateway"`, `"ihcfa"` (required)
   --term: string # Search term, which can be either a partial name, partial ID or the state.
-]: nothing -> record<payer_id: string, payer_name: string, state: string> {
+]: nothing -> oneof<record<payer_id: string, payer_name: string, state: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3864,7 +3888,7 @@ export def "inventory-categories-list" [
   --page-size: int
   --since: string
   --doctor: int
-]: nothing -> record<data: table<archived: bool, category_type: string, created_at: string, doctor: string, id: int, name: string, updated_at: string>, next: string, previous: string> {
+]: nothing -> oneof<record<data: table<archived: bool, category_type: string, created_at: string, doctor: string, id: int, name: string, updated_at: string>, next: string, previous: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -3902,7 +3926,7 @@ export def "inventory-categories-read" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --since: string
   --doctor: int
-]: nothing -> record<archived: bool, category_type: string, created_at: string, doctor: string, id: int, name: string, updated_at: string> {
+]: nothing -> oneof<record<archived: bool, category_type: string, created_at: string, doctor: string, id: int, name: string, updated_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3944,7 +3968,7 @@ export def "inventory-vaccines-list" [
   --cvx-code: string
   --since: string
   --doctor: int
-]: nothing -> record<data: table<category: int, cost: float, created_at: string, current_quantity: int, cvx_code: string, doctor: int, expiry: string, id: int, lot_number: string, manufacturer: string, manufacturer_code: string, name: string, note: string, original_quantity: int, price: float, price_with_tax: float, sales_tax_applicable: bool, status: string, updated_at: string, vaccination_type: string>, next: string, previous: string> {
+]: nothing -> oneof<record<data: table<category: int, cost: float, created_at: string, current_quantity: int, cvx_code: string, doctor: int, expiry: string, id: int, lot_number: string, manufacturer: string, manufacturer_code: string, name: string, note: string, original_quantity: int, price: float, price_with_tax: float, sales_tax_applicable: bool, status: string, updated_at: string, vaccination_type: string>, next: string, previous: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "cvx_code" $cvx_code "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -3983,7 +4007,7 @@ export def "inventory-vaccines-create" [
   --cvx-code: string
   --since: string
   --doctor: int
-]: nothing -> record<category: int, cost: float, created_at: string, current_quantity: int, cvx_code: string, doctor: int, expiry: string, id: int, lot_number: string, manufacturer: string, manufacturer_code: string, name: string, note: string, original_quantity: int, price: float, price_with_tax: float, sales_tax_applicable: bool, status: string, updated_at: string, vaccination_type: string> {
+]: nothing -> oneof<record<category: int, cost: float, created_at: string, current_quantity: int, cvx_code: string, doctor: int, expiry: string, id: int, lot_number: string, manufacturer: string, manufacturer_code: string, name: string, note: string, original_quantity: int, price: float, price_with_tax: float, sales_tax_applicable: bool, status: string, updated_at: string, vaccination_type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "cvx_code" $cvx_code "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -4023,7 +4047,7 @@ export def "inventory-vaccines-read" [
   --cvx-code: string
   --since: string
   --doctor: int
-]: nothing -> record<category: int, cost: float, created_at: string, current_quantity: int, cvx_code: string, doctor: int, expiry: string, id: int, lot_number: string, manufacturer: string, manufacturer_code: string, name: string, note: string, original_quantity: int, price: float, price_with_tax: float, sales_tax_applicable: bool, status: string, updated_at: string, vaccination_type: string> {
+]: nothing -> oneof<record<category: int, cost: float, created_at: string, current_quantity: int, cvx_code: string, doctor: int, expiry: string, id: int, lot_number: string, manufacturer: string, manufacturer_code: string, name: string, note: string, original_quantity: int, price: float, price_with_tax: float, sales_tax_applicable: bool, status: string, updated_at: string, vaccination_type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4063,7 +4087,7 @@ export def "lab-documents-list" [
   --page-size: int
   --since: string
   --doctor: int
-]: nothing -> record<data: table<document: string, id: int, lab_order: int, timestamp: string, type: string>, next: string, previous: string> {
+]: nothing -> oneof<record<data: table<document: string, id: int, lab_order: int, timestamp: string, type: string>, next: string, previous: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -4100,7 +4124,7 @@ export def "lab-documents-create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --since: string
   --doctor: int
-]: nothing -> record<document: string, id: int, lab_order: int, timestamp: string, type: string> {
+]: nothing -> oneof<record<document: string, id: int, lab_order: int, timestamp: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -4177,7 +4201,7 @@ export def "lab-documents-read" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --since: string
   --doctor: int
-]: nothing -> record<document: string, id: int, lab_order: int, timestamp: string, type: string> {
+]: nothing -> oneof<record<document: string, id: int, lab_order: int, timestamp: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4295,7 +4319,7 @@ export def "lab-orders-list" [
   --page-size: int
   --since: string
   --doctor: int
-]: nothing -> record<data: table<accession_number: string, doctor: int, documents: list, icd10_codes: list, id: int, notes: string, patient: int, priority: string, requisition_id: string, status: string, sublab: int, timestamp: string>, next: string, previous: string> {
+]: nothing -> oneof<record<data: table<accession_number: string, doctor: int, documents: list, icd10_codes: list, id: int, notes: string, patient: int, priority: string, requisition_id: string, status: string, sublab: int, timestamp: string>, next: string, previous: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -4332,7 +4356,7 @@ export def "lab-orders-create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --since: string
   --doctor: int
-]: nothing -> record<accession_number: string, doctor: int, documents: list<string>, icd10_codes: table<code: string, description: string>, id: int, notes: string, patient: int, priority: string, requisition_id: string, status: string, sublab: int, timestamp: string> {
+]: nothing -> oneof<record<accession_number: string, doctor: int, documents: list<string>, icd10_codes: table<code: string, description: string>, id: int, notes: string, patient: int, priority: string, requisition_id: string, status: string, sublab: int, timestamp: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -4409,7 +4433,7 @@ export def "lab-orders-read" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --since: string
   --doctor: int
-]: nothing -> record<accession_number: string, doctor: int, documents: list<string>, icd10_codes: table<code: string, description: string>, id: int, notes: string, patient: int, priority: string, requisition_id: string, status: string, sublab: int, timestamp: string> {
+]: nothing -> oneof<record<accession_number: string, doctor: int, documents: list<string>, icd10_codes: table<code: string, description: string>, id: int, notes: string, patient: int, priority: string, requisition_id: string, status: string, sublab: int, timestamp: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4527,7 +4551,7 @@ export def "lab-orders-summary-list" [
   --since: string
   --patient: int
   --doctor: int
-]: nothing -> record<data: table<accession_number: string, doctor: int, documents: list, icd10_codes: list, id: int, notes: string, patient: int, priority: string, requisition_id: string, status: string, sublab: int, timestamp: string>, next: string, previous: string> {
+]: nothing -> oneof<record<data: table<accession_number: string, doctor: int, documents: list, icd10_codes: list, id: int, notes: string, patient: int, priority: string, requisition_id: string, status: string, sublab: int, timestamp: string>, next: string, previous: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -4565,7 +4589,7 @@ export def "lab-orders-summary-read" [
   --since: string
   --patient: int
   --doctor: int
-]: nothing -> record<accession_number: string, doctor: int, documents: list<string>, icd10_codes: table<code: string, description: string>, id: int, notes: string, patient: int, priority: string, requisition_id: string, status: string, sublab: int, timestamp: string> {
+]: nothing -> oneof<record<accession_number: string, doctor: int, documents: list<string>, icd10_codes: table<code: string, description: string>, id: int, notes: string, patient: int, priority: string, requisition_id: string, status: string, sublab: int, timestamp: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4605,7 +4629,7 @@ export def "lab-results-list" [
   --page-size: int
   --order: int
   --doctor: int
-]: nothing -> record<data: table<abnormal_status: string, comments: string, document: int, group_code: string, id: int, is_abnormal: string, lab_order: string, lab_test: int, normal_range: string, observation_code: string, observation_description: string, specimen_received: string, status: string, test_performed: string, unit: string, value: string, value_is_numeric: bool>, next: string, previous: string> {
+]: nothing -> oneof<record<data: table<abnormal_status: string, comments: string, document: int, group_code: string, id: int, is_abnormal: string, lab_order: string, lab_test: int, normal_range: string, observation_code: string, observation_description: string, specimen_received: string, status: string, test_performed: string, unit: string, value: string, value_is_numeric: bool>, next: string, previous: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -4642,7 +4666,7 @@ export def "lab-results-create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --order: int
   --doctor: int
-]: nothing -> record<abnormal_status: string, comments: string, document: int, group_code: string, id: int, is_abnormal: string, lab_order: string, lab_test: int, normal_range: string, observation_code: string, observation_description: string, specimen_received: string, status: string, test_performed: string, unit: string, value: string, value_is_numeric: bool> {
+]: nothing -> oneof<record<abnormal_status: string, comments: string, document: int, group_code: string, id: int, is_abnormal: string, lab_order: string, lab_test: int, normal_range: string, observation_code: string, observation_description: string, specimen_received: string, status: string, test_performed: string, unit: string, value: string, value_is_numeric: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -4719,7 +4743,7 @@ export def "lab-results-read" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --order: int
   --doctor: int
-]: nothing -> record<abnormal_status: string, comments: string, document: int, group_code: string, id: int, is_abnormal: string, lab_order: string, lab_test: int, normal_range: string, observation_code: string, observation_description: string, specimen_received: string, status: string, test_performed: string, unit: string, value: string, value_is_numeric: bool> {
+]: nothing -> oneof<record<abnormal_status: string, comments: string, document: int, group_code: string, id: int, is_abnormal: string, lab_order: string, lab_test: int, normal_range: string, observation_code: string, observation_description: string, specimen_received: string, status: string, test_performed: string, unit: string, value: string, value_is_numeric: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4837,7 +4861,7 @@ export def "lab-tests-list" [
   --page-size: int
   --order: int
   --doctor: int
-]: nothing -> record<data: table<code: string, collection_date: string, description: string, id: int, internal_notes: string, lab_order: int, name: string, report_notes: string, specimen_condition: string, specimen_source: string, specimen_total_volume: float, status: string>, next: string, previous: string> {
+]: nothing -> oneof<record<data: table<code: string, collection_date: string, description: string, id: int, internal_notes: string, lab_order: int, name: string, report_notes: string, specimen_condition: string, specimen_source: string, specimen_total_volume: float, status: string>, next: string, previous: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -4874,7 +4898,7 @@ export def "lab-tests-create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --order: int
   --doctor: int
-]: nothing -> record<code: string, collection_date: string, description: string, id: int, internal_notes: string, lab_order: int, name: string, report_notes: string, specimen_condition: string, specimen_source: string, specimen_total_volume: float, status: string> {
+]: nothing -> oneof<record<code: string, collection_date: string, description: string, id: int, internal_notes: string, lab_order: int, name: string, report_notes: string, specimen_condition: string, specimen_source: string, specimen_total_volume: float, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -4951,7 +4975,7 @@ export def "lab-tests-read" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --order: int
   --doctor: int
-]: nothing -> record<code: string, collection_date: string, description: string, id: int, internal_notes: string, lab_order: int, name: string, report_notes: string, specimen_condition: string, specimen_source: string, specimen_total_volume: float, status: string> {
+]: nothing -> oneof<record<code: string, collection_date: string, description: string, id: int, internal_notes: string, lab_order: int, name: string, report_notes: string, specimen_condition: string, specimen_source: string, specimen_total_volume: float, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5074,7 +5098,7 @@ export def "line-items-list" [
   --since: string
   --appointment: int
   --service-date: string
-]: nothing -> record<data: table<adjustment: float, allowed: float, appointment: int, balance_ins: float, balance_pt: float, balance_total: string, billed: float, billing_status: string, code: string, denied_flag: bool, description: string, diagnosis_pointers: list, doctor: string, expected_reimbursement: float, id: int, ins1_paid: float, ins2_paid: float, ins3_paid: float, ins_total: string, insurance_status: string, modifiers: list, paid_total: string, patient: string, posted_date: string, price: float, procedure_type: string, pt_paid: float, quantity: float, service_date: string, units: string, updated_at: string>, next: string, previous: string> {
+]: nothing -> oneof<record<data: table<adjustment: float, allowed: float, appointment: int, balance_ins: float, balance_pt: float, balance_total: string, billed: float, billing_status: string, code: string, denied_flag: bool, description: string, diagnosis_pointers: list, doctor: string, expected_reimbursement: float, id: int, ins1_paid: float, ins2_paid: float, ins3_paid: float, ins_total: string, insurance_status: string, modifiers: list, paid_total: string, patient: string, posted_date: string, price: float, procedure_type: string, pt_paid: float, quantity: float, service_date: string, units: string, updated_at: string>, next: string, previous: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "posted_date" $posted_date "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "office" $office "scalar") (serialize-qp "doctor" $doctor "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "appointment" $appointment "scalar") (serialize-qp "service_date" $service_date "scalar")] | flatten | str join "&"
@@ -5116,7 +5140,7 @@ export def "line-items-create" [
   --since: string
   --appointment: int
   --service-date: string
-]: nothing -> record<adjustment: float, allowed: float, appointment: int, balance_ins: float, balance_pt: float, balance_total: string, billed: float, billing_status: string, code: string, denied_flag: bool, description: string, diagnosis_pointers: list<string>, doctor: string, expected_reimbursement: float, id: int, ins1_paid: float, ins2_paid: float, ins3_paid: float, ins_total: string, insurance_status: string, modifiers: list<string>, paid_total: string, patient: string, posted_date: string, price: float, procedure_type: string, pt_paid: float, quantity: float, service_date: string, units: string, updated_at: string> {
+]: nothing -> oneof<record<adjustment: float, allowed: float, appointment: int, balance_ins: float, balance_pt: float, balance_total: string, billed: float, billing_status: string, code: string, denied_flag: bool, description: string, diagnosis_pointers: list<string>, doctor: string, expected_reimbursement: float, id: int, ins1_paid: float, ins2_paid: float, ins3_paid: float, ins_total: string, insurance_status: string, modifiers: list<string>, paid_total: string, patient: string, posted_date: string, price: float, procedure_type: string, pt_paid: float, quantity: float, service_date: string, units: string, updated_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "posted_date" $posted_date "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "office" $office "scalar") (serialize-qp "doctor" $doctor "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "appointment" $appointment "scalar") (serialize-qp "service_date" $service_date "scalar")] | flatten | str join "&"
@@ -5202,7 +5226,7 @@ export def "line-items-read" [
   --since: string
   --appointment: int
   --service-date: string
-]: nothing -> record<adjustment: float, allowed: float, appointment: int, balance_ins: float, balance_pt: float, balance_total: string, billed: float, billing_status: string, code: string, denied_flag: bool, description: string, diagnosis_pointers: list<string>, doctor: string, expected_reimbursement: float, id: int, ins1_paid: float, ins2_paid: float, ins3_paid: float, ins_total: string, insurance_status: string, modifiers: list<string>, paid_total: string, patient: string, posted_date: string, price: float, procedure_type: string, pt_paid: float, quantity: float, service_date: string, units: string, updated_at: string> {
+]: nothing -> oneof<record<adjustment: float, allowed: float, appointment: int, balance_ins: float, balance_pt: float, balance_total: string, billed: float, billing_status: string, code: string, denied_flag: bool, description: string, diagnosis_pointers: list<string>, doctor: string, expected_reimbursement: float, id: int, ins1_paid: float, ins2_paid: float, ins3_paid: float, ins_total: string, insurance_status: string, modifiers: list<string>, paid_total: string, patient: string, posted_date: string, price: float, procedure_type: string, pt_paid: float, quantity: float, service_date: string, units: string, updated_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5328,7 +5352,7 @@ export def "medications-list" [
   --page-size: int
   --patient: int
   --doctor: int
-]: nothing -> record<data: table<appointment: int, date_prescribed: string, date_started_taking: string, date_stopped_taking: string, daw: bool, dispense_quantity: float, doctor: int, dosage_quantity: string, dosage_units: string, frequency: string, id: int, indication: string, name: string, ndc: string, notes: string, number_refills: int, order_status: string, patient: int, pharmacy_note: string, prn: bool, route: string, rxnorm: string, signature_note: string, status: string>, next: string, previous: string> {
+]: nothing -> oneof<record<data: table<appointment: int, date_prescribed: string, date_started_taking: string, date_stopped_taking: string, daw: bool, dispense_quantity: float, doctor: int, dosage_quantity: string, dosage_units: string, frequency: string, id: int, indication: string, name: string, ndc: string, notes: string, number_refills: int, order_status: string, patient: int, pharmacy_note: string, prn: bool, route: string, rxnorm: string, signature_note: string, status: string>, next: string, previous: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -5365,7 +5389,7 @@ export def "medications-create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --patient: int
   --doctor: int
-]: nothing -> record<appointment: int, date_prescribed: string, date_started_taking: string, date_stopped_taking: string, daw: bool, dispense_quantity: float, doctor: int, dosage_quantity: string, dosage_units: string, frequency: string, id: int, indication: string, name: string, ndc: string, notes: string, number_refills: int, order_status: string, patient: int, pharmacy_note: string, prn: bool, route: string, rxnorm: string, signature_note: string, status: string> {
+]: nothing -> oneof<record<appointment: int, date_prescribed: string, date_started_taking: string, date_stopped_taking: string, daw: bool, dispense_quantity: float, doctor: int, dosage_quantity: string, dosage_units: string, frequency: string, id: int, indication: string, name: string, ndc: string, notes: string, number_refills: int, order_status: string, patient: int, pharmacy_note: string, prn: bool, route: string, rxnorm: string, signature_note: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -5403,7 +5427,7 @@ export def "medications-read" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --patient: int
   --doctor: int
-]: nothing -> record<appointment: int, date_prescribed: string, date_started_taking: string, date_stopped_taking: string, daw: bool, dispense_quantity: float, doctor: int, dosage_quantity: string, dosage_units: string, frequency: string, id: int, indication: string, name: string, ndc: string, notes: string, number_refills: int, order_status: string, patient: int, pharmacy_note: string, prn: bool, route: string, rxnorm: string, signature_note: string, status: string> {
+]: nothing -> oneof<record<appointment: int, date_prescribed: string, date_started_taking: string, date_stopped_taking: string, daw: bool, dispense_quantity: float, doctor: int, dosage_quantity: string, dosage_units: string, frequency: string, id: int, indication: string, name: string, ndc: string, notes: string, number_refills: int, order_status: string, patient: int, pharmacy_note: string, prn: bool, route: string, rxnorm: string, signature_note: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5565,7 +5589,7 @@ export def "messages-list" [
   --received-since: string
   --owner: int
   --type: string
-]: nothing -> record<data: table<archived: bool, attachment: string, doctor: int, id: int, message_notes: list, owner: string, patient: int, read: bool, received_at: string, responsible_user: string, starred: bool, title: string, type: string, updated_at: string, workflow_step: string>, next: string, previous: string> {
+]: nothing -> oneof<record<data: table<archived: bool, attachment: string, doctor: int, id: int, message_notes: list, owner: string, patient: int, read: bool, received_at: string, responsible_user: string, starred: bool, title: string, type: string, updated_at: string, workflow_step: string>, next: string, previous: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar") (serialize-qp "responsible_user" $responsible_user "scalar") (serialize-qp "updated_since" $updated_since "scalar") (serialize-qp "received_since" $received_since "scalar") (serialize-qp "owner" $owner "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
@@ -5607,7 +5631,7 @@ export def "messages-create" [
   --received-since: string
   --owner: int
   --type: string
-]: nothing -> record<archived: bool, attachment: string, doctor: int, id: int, message_notes: table<created_at: string, created_by: string, text: string>, owner: string, patient: int, read: bool, received_at: string, responsible_user: string, starred: bool, title: string, type: string, updated_at: string, workflow_step: string> {
+]: nothing -> oneof<record<archived: bool, attachment: string, doctor: int, id: int, message_notes: table<created_at: string, created_by: string, text: string>, owner: string, patient: int, read: bool, received_at: string, responsible_user: string, starred: bool, title: string, type: string, updated_at: string, workflow_step: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar") (serialize-qp "responsible_user" $responsible_user "scalar") (serialize-qp "updated_since" $updated_since "scalar") (serialize-qp "received_since" $received_since "scalar") (serialize-qp "owner" $owner "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
@@ -5694,7 +5718,7 @@ export def "messages-read" [
   --received-since: string
   --owner: int
   --type: string
-]: nothing -> record<archived: bool, attachment: string, doctor: int, id: int, message_notes: table<created_at: string, created_by: string, text: string>, owner: string, patient: int, read: bool, received_at: string, responsible_user: string, starred: bool, title: string, type: string, updated_at: string, workflow_step: string> {
+]: nothing -> oneof<record<archived: bool, attachment: string, doctor: int, id: int, message_notes: table<created_at: string, created_by: string, text: string>, owner: string, patient: int, read: bool, received_at: string, responsible_user: string, starred: bool, title: string, type: string, updated_at: string, workflow_step: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5821,7 +5845,7 @@ export def "offices-list" [
   --cursor: string
   --page-size: int
   --doctor: int
-]: nothing -> record<data: table<address: string, archived: bool, city: string, country: string, doctor: string, end_time: string, exam_rooms: string, fax_number: string, id: int, name: string, online_scheduling: bool, online_timeslots: list, phone_number: string, start_time: string, state: string, tax_id_number_professional: string, zip_code: string>, next: string, previous: string> {
+]: nothing -> oneof<record<data: table<address: string, archived: bool, city: string, country: string, doctor: string, end_time: string, exam_rooms: string, fax_number: string, id: int, name: string, online_scheduling: bool, online_timeslots: list, phone_number: string, start_time: string, state: string, tax_id_number_professional: string, zip_code: string>, next: string, previous: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -5858,7 +5882,7 @@ export def "offices-read" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --doctor: int
-]: nothing -> record<address: string, archived: bool, city: string, country: string, doctor: string, end_time: string, exam_rooms: string, fax_number: string, id: int, name: string, online_scheduling: bool, online_timeslots: table<day: int, hour: int, minute: int>, phone_number: string, start_time: string, state: string, tax_id_number_professional: string, zip_code: string> {
+]: nothing -> oneof<record<address: string, archived: bool, city: string, country: string, doctor: string, end_time: string, exam_rooms: string, fax_number: string, id: int, name: string, online_scheduling: bool, online_timeslots: table<day: int, hour: int, minute: int>, phone_number: string, start_time: string, state: string, tax_id_number_professional: string, zip_code: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5972,7 +5996,7 @@ export def "offices-add-exam-room" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --doctor: int
-]: nothing -> record<address: string, archived: bool, city: string, country: string, doctor: string, end_time: string, exam_rooms: string, fax_number: string, id: int, name: string, online_scheduling: bool, online_timeslots: table<day: int, hour: int, minute: int>, phone_number: string, start_time: string, state: string, tax_id_number_professional: string, zip_code: string> {
+]: nothing -> oneof<record<address: string, archived: bool, city: string, country: string, doctor: string, end_time: string, exam_rooms: string, fax_number: string, id: int, name: string, online_scheduling: bool, online_timeslots: table<day: int, hour: int, minute: int>, phone_number: string, start_time: string, state: string, tax_id_number_professional: string, zip_code: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6012,7 +6036,7 @@ export def "patient-communications-list" [
   --page-size: int
   --patient: int
   --doctor: int
-]: nothing -> record<data: table<code: string, code_system: string, created_at: string, doctor: int, effective_time: string, id: int, name: string, patient: int, value_code: string, value_code_system: string, value_name: string>, next: string, previous: string> {
+]: nothing -> oneof<record<data: table<code: string, code_system: string, created_at: string, doctor: int, effective_time: string, id: int, name: string, patient: int, value_code: string, value_code_system: string, value_name: string>, next: string, previous: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -6049,7 +6073,7 @@ export def "patient-communications-create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --patient: int
   --doctor: int
-]: nothing -> record<code: string, code_system: string, created_at: string, doctor: int, effective_time: string, id: int, name: string, patient: int, value_code: string, value_code_system: string, value_name: string> {
+]: nothing -> oneof<record<code: string, code_system: string, created_at: string, doctor: int, effective_time: string, id: int, name: string, patient: int, value_code: string, value_code_system: string, value_name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -6087,7 +6111,7 @@ export def "patient-communications-read" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --patient: int
   --doctor: int
-]: nothing -> record<code: string, code_system: string, created_at: string, doctor: int, effective_time: string, id: int, name: string, patient: int, value_code: string, value_code_system: string, value_name: string> {
+]: nothing -> oneof<record<code: string, code_system: string, created_at: string, doctor: int, effective_time: string, id: int, name: string, patient: int, value_code: string, value_code_system: string, value_name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6204,7 +6228,7 @@ export def "patient-flag-types-list" [
   --cursor: string
   --page-size: int
   --doctor: int
-]: nothing -> record<data: table<archived: bool, color: string, created_at: string, doctor: int, id: int, name: string, priority: int, updated_at: string>, next: string, previous: string> {
+]: nothing -> oneof<record<data: table<archived: bool, color: string, created_at: string, doctor: int, id: int, name: string, priority: int, updated_at: string>, next: string, previous: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -6240,7 +6264,7 @@ export def "patient-flag-types-create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --doctor: int
-]: nothing -> record<archived: bool, color: string, created_at: string, doctor: int, id: int, name: string, priority: int, updated_at: string> {
+]: nothing -> oneof<record<archived: bool, color: string, created_at: string, doctor: int, id: int, name: string, priority: int, updated_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -6277,7 +6301,7 @@ export def "patient-flag-types-read" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --doctor: int
-]: nothing -> record<archived: bool, color: string, created_at: string, doctor: int, id: int, name: string, priority: int, updated_at: string> {
+]: nothing -> oneof<record<archived: bool, color: string, created_at: string, doctor: int, id: int, name: string, priority: int, updated_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6393,7 +6417,7 @@ export def "patient-interventions-list" [
   --page-size: int
   --patient: int
   --doctor: int
-]: nothing -> record<data: table<code: string, code_system: string, created_at: string, doctor: int, effective_time: string, id: int, name: string, patient: int, value_code: string, value_code_system: string, value_name: string>, next: string, previous: string> {
+]: nothing -> oneof<record<data: table<code: string, code_system: string, created_at: string, doctor: int, effective_time: string, id: int, name: string, patient: int, value_code: string, value_code_system: string, value_name: string>, next: string, previous: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -6430,7 +6454,7 @@ export def "patient-interventions-create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --patient: int
   --doctor: int
-]: nothing -> record<code: string, code_system: string, created_at: string, doctor: int, effective_time: string, id: int, name: string, patient: int, value_code: string, value_code_system: string, value_name: string> {
+]: nothing -> oneof<record<code: string, code_system: string, created_at: string, doctor: int, effective_time: string, id: int, name: string, patient: int, value_code: string, value_code_system: string, value_name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -6468,7 +6492,7 @@ export def "patient-interventions-read" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --patient: int
   --doctor: int
-]: nothing -> record<code: string, code_system: string, created_at: string, doctor: int, effective_time: string, id: int, name: string, patient: int, value_code: string, value_code_system: string, value_name: string> {
+]: nothing -> oneof<record<code: string, code_system: string, created_at: string, doctor: int, effective_time: string, id: int, name: string, patient: int, value_code: string, value_code_system: string, value_name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6587,7 +6611,7 @@ export def "patient-lab-results-list" [
   --since: string
   --patient: int
   --doctor: int
-]: nothing -> record<data: table<created_at: string, date_test_performed: string, doctor_comments: string, doctor_signoff: bool, id: int, lab_abnormal_flag: string, lab_imported_from_ccr: string, lab_normal_range: string, lab_normal_range_units: string, lab_order_status: string, lab_result_value: string, lab_result_value_as_float: float, lab_result_value_units: string, loinc_code: string, ordering_doctor: int, patient: int, scanned_in_result: string, title: string, updated_at: string>, next: string, previous: string> {
+]: nothing -> oneof<record<data: table<created_at: string, date_test_performed: string, doctor_comments: string, doctor_signoff: bool, id: int, lab_abnormal_flag: string, lab_imported_from_ccr: string, lab_normal_range: string, lab_normal_range_units: string, lab_order_status: string, lab_result_value: string, lab_result_value_as_float: float, lab_result_value_units: string, loinc_code: string, ordering_doctor: int, patient: int, scanned_in_result: string, title: string, updated_at: string>, next: string, previous: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "ordering_doctor" $ordering_doctor "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -6625,7 +6649,7 @@ export def "patient-lab-results-create" [
   --since: string
   --patient: int
   --doctor: int
-]: nothing -> record<created_at: string, date_test_performed: string, doctor_comments: string, doctor_signoff: bool, id: int, lab_abnormal_flag: string, lab_imported_from_ccr: string, lab_normal_range: string, lab_normal_range_units: string, lab_order_status: string, lab_result_value: string, lab_result_value_as_float: float, lab_result_value_units: string, loinc_code: string, ordering_doctor: int, patient: int, scanned_in_result: string, title: string, updated_at: string> {
+]: nothing -> oneof<record<created_at: string, date_test_performed: string, doctor_comments: string, doctor_signoff: bool, id: int, lab_abnormal_flag: string, lab_imported_from_ccr: string, lab_normal_range: string, lab_normal_range_units: string, lab_order_status: string, lab_result_value: string, lab_result_value_as_float: float, lab_result_value_units: string, loinc_code: string, ordering_doctor: int, patient: int, scanned_in_result: string, title: string, updated_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ordering_doctor" $ordering_doctor "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -6704,7 +6728,7 @@ export def "patient-lab-results-read" [
   --since: string
   --patient: int
   --doctor: int
-]: nothing -> record<created_at: string, date_test_performed: string, doctor_comments: string, doctor_signoff: bool, id: int, lab_abnormal_flag: string, lab_imported_from_ccr: string, lab_normal_range: string, lab_normal_range_units: string, lab_order_status: string, lab_result_value: string, lab_result_value_as_float: float, lab_result_value_units: string, loinc_code: string, ordering_doctor: int, patient: int, scanned_in_result: string, title: string, updated_at: string> {
+]: nothing -> oneof<record<created_at: string, date_test_performed: string, doctor_comments: string, doctor_signoff: bool, id: int, lab_abnormal_flag: string, lab_imported_from_ccr: string, lab_normal_range: string, lab_normal_range_units: string, lab_order_status: string, lab_result_value: string, lab_result_value_as_float: float, lab_result_value_units: string, loinc_code: string, ordering_doctor: int, patient: int, scanned_in_result: string, title: string, updated_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6824,7 +6848,7 @@ export def "patient-messages-list" [
   --since: string
   --patient: int
   --doctor: int
-]: nothing -> record<data: table<attachments: list, body: string, created_at: string, doctor: int, id: int, message: string, patient: int, subject: string, updated_at: string>, next: string, previous: string> {
+]: nothing -> oneof<record<data: table<attachments: list, body: string, created_at: string, doctor: int, id: int, message: string, patient: int, subject: string, updated_at: string>, next: string, previous: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -6861,7 +6885,7 @@ export def "patient-messages-create" [
   --since: string
   --patient: int
   --doctor: int
-]: nothing -> record<attachments: table<attachment: string, created_at: string, doctor: int, updated_at: string>, body: string, created_at: string, doctor: int, id: int, message: string, patient: int, subject: string, updated_at: string> {
+]: nothing -> oneof<record<attachments: table<attachment: string, created_at: string, doctor: int, updated_at: string>, body: string, created_at: string, doctor: int, id: int, message: string, patient: int, subject: string, updated_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -6899,7 +6923,7 @@ export def "patient-messages-read" [
   --since: string
   --patient: int
   --doctor: int
-]: nothing -> record<attachments: table<attachment: string, created_at: string, doctor: int, updated_at: string>, body: string, created_at: string, doctor: int, id: int, message: string, patient: int, subject: string, updated_at: string> {
+]: nothing -> oneof<record<attachments: table<attachment: string, created_at: string, doctor: int, updated_at: string>, body: string, created_at: string, doctor: int, id: int, message: string, patient: int, subject: string, updated_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7018,7 +7042,7 @@ export def "patient-payment-log-list" [
   --since: string
   --office: int
   --doctor: int
-]: nothing -> record<data: table<action: string, amount: float, appointment: string, created_by: string, doctor: string, id: int, patient: string, payment_method: string, source: string, updated_at: string>, next: string, previous: string> {
+]: nothing -> oneof<record<data: table<action: string, amount: float, appointment: string, created_by: string, doctor: string, id: int, patient: string, payment_method: string, source: string, updated_at: string>, next: string, previous: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "office" $office "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -7057,7 +7081,7 @@ export def "patient-payment-log-read" [
   --since: string
   --office: int
   --doctor: int
-]: nothing -> record<action: string, amount: float, appointment: string, created_by: string, doctor: string, id: int, patient: string, payment_method: string, source: string, updated_at: string> {
+]: nothing -> oneof<record<action: string, amount: float, appointment: string, created_by: string, doctor: string, id: int, patient: string, payment_method: string, source: string, updated_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7098,7 +7122,7 @@ export def "patient-payments-list" [
   --since: string
   --patient: int
   --doctor: int
-]: nothing -> record<data: table<amount: float, appointment: int, created_at: string, created_by: string, doctor: int, id: int, line_item: int, notes: string, patient: int, payment_method: string, payment_transaction_type: string, posted_date: string, received_date: string, trace_number: string, updated_at: string>, next: string, previous: string> {
+]: nothing -> oneof<record<data: table<amount: float, appointment: int, created_at: string, created_by: string, doctor: int, id: int, line_item: int, notes: string, patient: int, payment_method: string, payment_transaction_type: string, posted_date: string, received_date: string, trace_number: string, updated_at: string>, next: string, previous: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -7136,7 +7160,7 @@ export def "patient-payments-create" [
   --since: string
   --patient: int
   --doctor: int
-]: nothing -> record<amount: float, appointment: int, created_at: string, created_by: string, doctor: int, id: int, line_item: int, notes: string, patient: int, payment_method: string, payment_transaction_type: string, posted_date: string, received_date: string, trace_number: string, updated_at: string> {
+]: nothing -> oneof<record<amount: float, appointment: int, created_at: string, created_by: string, doctor: int, id: int, line_item: int, notes: string, patient: int, payment_method: string, payment_transaction_type: string, posted_date: string, received_date: string, trace_number: string, updated_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -7175,7 +7199,7 @@ export def "patient-payments-read" [
   --since: string
   --patient: int
   --doctor: int
-]: nothing -> record<amount: float, appointment: int, created_at: string, created_by: string, doctor: int, id: int, line_item: int, notes: string, patient: int, payment_method: string, payment_transaction_type: string, posted_date: string, received_date: string, trace_number: string, updated_at: string> {
+]: nothing -> oneof<record<amount: float, appointment: int, created_at: string, created_by: string, doctor: int, id: int, line_item: int, notes: string, patient: int, payment_method: string, payment_transaction_type: string, posted_date: string, received_date: string, trace_number: string, updated_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7215,7 +7239,7 @@ export def "patient-physical-exams-list" [
   --page-size: int
   --patient: int
   --doctor: int
-]: nothing -> record<data: table<code: string, code_system: string, created_at: string, doctor: int, effective_time: string, id: int, name: string, patient: int, value_code: string, value_code_system: string, value_name: string>, next: string, previous: string> {
+]: nothing -> oneof<record<data: table<code: string, code_system: string, created_at: string, doctor: int, effective_time: string, id: int, name: string, patient: int, value_code: string, value_code_system: string, value_name: string>, next: string, previous: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -7252,7 +7276,7 @@ export def "patient-physical-exams-create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --patient: int
   --doctor: int
-]: nothing -> record<code: string, code_system: string, created_at: string, doctor: int, effective_time: string, id: int, name: string, patient: int, value_code: string, value_code_system: string, value_name: string> {
+]: nothing -> oneof<record<code: string, code_system: string, created_at: string, doctor: int, effective_time: string, id: int, name: string, patient: int, value_code: string, value_code_system: string, value_name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -7290,7 +7314,7 @@ export def "patient-physical-exams-read" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --patient: int
   --doctor: int
-]: nothing -> record<code: string, code_system: string, created_at: string, doctor: int, effective_time: string, id: int, name: string, patient: int, value_code: string, value_code_system: string, value_name: string> {
+]: nothing -> oneof<record<code: string, code_system: string, created_at: string, doctor: int, effective_time: string, id: int, name: string, patient: int, value_code: string, value_code_system: string, value_name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7407,7 +7431,7 @@ export def "patient-risk-assessments-list" [
   --page-size: int
   --patient: int
   --doctor: int
-]: nothing -> record<data: table<code: string, code_system: string, created_at: string, doctor: int, effective_time: string, id: int, name: string, patient: int, value_code: string, value_code_system: string, value_name: string>, next: string, previous: string> {
+]: nothing -> oneof<record<data: table<code: string, code_system: string, created_at: string, doctor: int, effective_time: string, id: int, name: string, patient: int, value_code: string, value_code_system: string, value_name: string>, next: string, previous: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -7443,7 +7467,7 @@ export def "patient-risk-assessments-create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --patient: int
   --doctor: int
-]: nothing -> record<code: string, code_system: string, created_at: string, doctor: int, effective_time: string, id: int, name: string, patient: int, value_code: string, value_code_system: string, value_name: string> {
+]: nothing -> oneof<record<code: string, code_system: string, created_at: string, doctor: int, effective_time: string, id: int, name: string, patient: int, value_code: string, value_code_system: string, value_name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -7480,7 +7504,7 @@ export def "patient-risk-assessments-read" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --patient: int
   --doctor: int
-]: nothing -> record<code: string, code_system: string, created_at: string, doctor: int, effective_time: string, id: int, name: string, patient: int, value_code: string, value_code_system: string, value_name: string> {
+]: nothing -> oneof<record<code: string, code_system: string, created_at: string, doctor: int, effective_time: string, id: int, name: string, patient: int, value_code: string, value_code_system: string, value_name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7598,7 +7622,7 @@ export def "patient-vaccine-records-list" [
   --patient: int
   --since: string
   --doctor: int
-]: nothing -> record<data: table<administered_at: int, administered_by: string, administration_start: string, amount: float, comments: string, completion_status: string, consent_form: int, cpt_code: string, created_at: string, cvx_code: string, doses: list, entered_by: string, funding_eligibility: string, id: int, name: string, next_dose_date: string, observed_immunity: string, ordering_doctor: int, patient: int, record_source: string, route: string, site: string, units: string, updated_at: string, vaccine_inventory: int, vis: string>, next: string, previous: string> {
+]: nothing -> oneof<record<data: table<administered_at: int, administered_by: string, administration_start: string, amount: float, comments: string, completion_status: string, consent_form: int, cpt_code: string, created_at: string, cvx_code: string, doses: list, entered_by: string, funding_eligibility: string, id: int, name: string, next_dose_date: string, observed_immunity: string, ordering_doctor: int, patient: int, record_source: string, route: string, site: string, units: string, updated_at: string, vaccine_inventory: int, vis: string>, next: string, previous: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "cvx_code" $cvx_code "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -7637,7 +7661,7 @@ export def "patient-vaccine-records-create" [
   --patient: int
   --since: string
   --doctor: int
-]: nothing -> record<administered_at: int, administered_by: string, administration_start: string, amount: float, comments: string, completion_status: string, consent_form: int, cpt_code: string, created_at: string, cvx_code: string, doses: table<id: int, max_age_months: int, min_age_months: int, title: string>, entered_by: string, funding_eligibility: string, id: int, name: string, next_dose_date: string, observed_immunity: string, ordering_doctor: int, patient: int, record_source: string, route: string, site: string, units: string, updated_at: string, vaccine_inventory: int, vis: string> {
+]: nothing -> oneof<record<administered_at: int, administered_by: string, administration_start: string, amount: float, comments: string, completion_status: string, consent_form: int, cpt_code: string, created_at: string, cvx_code: string, doses: table<id: int, max_age_months: int, min_age_months: int, title: string>, entered_by: string, funding_eligibility: string, id: int, name: string, next_dose_date: string, observed_immunity: string, ordering_doctor: int, patient: int, record_source: string, route: string, site: string, units: string, updated_at: string, vaccine_inventory: int, vis: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cvx_code" $cvx_code "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -7677,7 +7701,7 @@ export def "patient-vaccine-records-read" [
   --patient: int
   --since: string
   --doctor: int
-]: nothing -> record<administered_at: int, administered_by: string, administration_start: string, amount: float, comments: string, completion_status: string, consent_form: int, cpt_code: string, created_at: string, cvx_code: string, doses: table<id: int, max_age_months: int, min_age_months: int, title: string>, entered_by: string, funding_eligibility: string, id: int, name: string, next_dose_date: string, observed_immunity: string, ordering_doctor: int, patient: int, record_source: string, route: string, site: string, units: string, updated_at: string, vaccine_inventory: int, vis: string> {
+]: nothing -> oneof<record<administered_at: int, administered_by: string, administration_start: string, amount: float, comments: string, completion_status: string, consent_form: int, cpt_code: string, created_at: string, cvx_code: string, doses: table<id: int, max_age_months: int, min_age_months: int, title: string>, entered_by: string, funding_eligibility: string, id: int, name: string, next_dose_date: string, observed_immunity: string, ordering_doctor: int, patient: int, record_source: string, route: string, site: string, units: string, updated_at: string, vaccine_inventory: int, vis: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7808,7 +7832,7 @@ export def "patients-list" [
   --chart-id: string
   --email: string
   --ethnicity: string
-]: nothing -> record<data: table<address: string, auto_accident_insurance: record, cell_phone: string, chart_id: string, city: string, copay: string, custom_demographics: list, date_of_birth: string, date_of_first_appointment: string, date_of_last_appointment: string, default_pharmacy: string, disable_sms_messages: bool, doctor: int, email: string, emergency_contact_name: string, emergency_contact_phone: string, emergency_contact_relation: string, employer: string, employer_address: string, employer_city: string, employer_state: string, employer_zip_code: string, ethnicity: string, first_name: string, gender: string, home_phone: string, id: int, last_name: string, middle_name: string, nick_name: string, office_phone: string, offices: list, patient_flags: list, patient_flags_attached: list, patient_payment_profile: string, patient_photo: string, patient_photo_date: string, patient_status: string, preferred_language: string, primary_care_physician: string, primary_insurance: record, race: string, referring_doctor: record, referring_source: string, responsible_party_email: string, responsible_party_name: string, responsible_party_phone: string, responsible_party_relation: string, secondary_insurance: record, social_security_number: string, state: string, tertiary_insurance: record, updated_at: string, workers_comp_insurance: record, zip_code: string>, next: string, previous: string> {
+]: nothing -> oneof<record<data: table<address: string, auto_accident_insurance: record, cell_phone: string, chart_id: string, city: string, copay: string, custom_demographics: list, date_of_birth: string, date_of_first_appointment: string, date_of_last_appointment: string, default_pharmacy: string, disable_sms_messages: bool, doctor: int, email: string, emergency_contact_name: string, emergency_contact_phone: string, emergency_contact_relation: string, employer: string, employer_address: string, employer_city: string, employer_state: string, employer_zip_code: string, ethnicity: string, first_name: string, gender: string, home_phone: string, id: int, last_name: string, middle_name: string, nick_name: string, office_phone: string, offices: list, patient_flags: list, patient_flags_attached: list, patient_payment_profile: string, patient_photo: string, patient_photo_date: string, patient_status: string, preferred_language: string, primary_care_physician: string, primary_insurance: record, race: string, referring_doctor: record, referring_source: string, responsible_party_email: string, responsible_party_name: string, responsible_party_phone: string, responsible_party_relation: string, secondary_insurance: record, social_security_number: string, state: string, tertiary_insurance: record, updated_at: string, workers_comp_insurance: record, zip_code: string>, next: string, previous: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "first_name" $first_name "scalar") (serialize-qp "last_name" $last_name "scalar") (serialize-qp "preferred_language" $preferred_language "scalar") (serialize-qp "doctor" $doctor "scalar") (serialize-qp "gender" $gender "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "date_of_birth" $date_of_birth "scalar") (serialize-qp "race" $race "scalar") (serialize-qp "chart_id" $chart_id "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "ethnicity" $ethnicity "scalar")] | flatten | str join "&"
@@ -7854,7 +7878,7 @@ export def "patients-create" [
   --chart-id: string
   --email: string
   --ethnicity: string
-]: nothing -> record<address: string, auto_accident_insurance: record<auto_accident_case_number: string, auto_accident_claim_rep_address: string, auto_accident_claim_rep_city: string, auto_accident_claim_rep_is_insurer: bool, auto_accident_claim_rep_name: string, auto_accident_claim_rep_state: string, auto_accident_claim_rep_zip: string, auto_accident_company: string, auto_accident_date_of_accident: string, auto_accident_disabled_from_date: string, auto_accident_disabled_to_date: string, auto_accident_had_similar_condition: bool, auto_accident_is_subscriber_the_patient: bool, auto_accident_notes: string, auto_accident_patient_relationship_to_subscriber: string, auto_accident_payer_address: string, auto_accident_payer_city: string, auto_accident_payer_id: string, auto_accident_payer_state: string, auto_accident_payer_zip: string, auto_accident_policy_number: string, auto_accident_return_to_work_date: string, auto_accident_significant_injury: string, auto_accident_significant_injury_notes: string, auto_accident_similar_condition_date: string, auto_accident_similar_condition_notes: string, auto_accident_state_of_occurrence: string, auto_accident_still_under_care: bool, auto_accident_subscriber_address: string, auto_accident_subscriber_city: string, auto_accident_subscriber_date_of_birth: string, auto_accident_subscriber_first_name: string, auto_accident_subscriber_last_name: string, auto_accident_subscriber_middle_name: string, auto_accident_subscriber_phone_number: string, auto_accident_subscriber_social_security: string, auto_accident_subscriber_state: string, auto_accident_subscriber_suffix: string, auto_accident_subscriber_zip_code: string, auto_accident_treatment_duration: string, auto_accident_will_require_therapy: bool, auto_accident_will_require_therapy_rec: string>, cell_phone: string, chart_id: string, city: string, copay: string, custom_demographics: table<field_type: int, updated_at: string, value: string>, date_of_birth: string, date_of_first_appointment: string, date_of_last_appointment: string, default_pharmacy: string, disable_sms_messages: bool, doctor: int, email: string, emergency_contact_name: string, emergency_contact_phone: string, emergency_contact_relation: string, employer: string, employer_address: string, employer_city: string, employer_state: string, employer_zip_code: string, ethnicity: string, first_name: string, gender: string, home_phone: string, id: int, last_name: string, middle_name: string, nick_name: string, office_phone: string, offices: list<int>, patient_flags: table<archived: bool, color: string, created_at: string, doctor: int, id: int, name: string, priority: int, updated_at: string>, patient_flags_attached: table<archived: bool, created_at: string, flag_text: string, flag_type: int, id: int, updated_at: string>, patient_payment_profile: string, patient_photo: string, patient_photo_date: string, patient_status: string, preferred_language: string, primary_care_physician: string, primary_insurance: record<insurance_claim_office_number: string, insurance_company: string, insurance_group_name: string, insurance_group_number: string, insurance_id_number: string, insurance_payer_id: string, insurance_plan_name: string, insurance_plan_type: string, is_subscriber_the_patient: bool, patient_relationship_to_subscriber: string, photo_back: string, photo_front: string, subscriber_address: string, subscriber_city: string, subscriber_country: string, subscriber_date_of_birth: string, subscriber_first_name: string, subscriber_gender: string, subscriber_last_name: string, subscriber_middle_name: string, subscriber_social_security: string, subscriber_state: string, subscriber_suffix: string, subscriber_zip_code: string>, race: string, referring_doctor: record<address: string, email: string, fax: string, first_name: string, last_name: string, middle_name: string, npi: string, phone: string, provider_number: string, provider_qualifier: string, specialty: string, suffix: string>, referring_source: string, responsible_party_email: string, responsible_party_name: string, responsible_party_phone: string, responsible_party_relation: string, secondary_insurance: record<insurance_claim_office_number: string, insurance_company: string, insurance_group_name: string, insurance_group_number: string, insurance_id_number: string, insurance_payer_id: string, insurance_plan_name: string, insurance_plan_type: string, is_subscriber_the_patient: bool, patient_relationship_to_subscriber: string, photo_back: string, photo_front: string, subscriber_address: string, subscriber_city: string, subscriber_country: string, subscriber_date_of_birth: string, subscriber_first_name: string, subscriber_gender: string, subscriber_last_name: string, subscriber_middle_name: string, subscriber_social_security: string, subscriber_state: string, subscriber_suffix: string, subscriber_zip_code: string>, social_security_number: string, state: string, tertiary_insurance: record<insurance_claim_office_number: string, insurance_company: string, insurance_group_name: string, insurance_group_number: string, insurance_id_number: string, insurance_payer_id: string, insurance_plan_name: string, insurance_plan_type: string, is_subscriber_the_patient: bool, patient_relationship_to_subscriber: string, photo_back: string, photo_front: string, subscriber_address: string, subscriber_city: string, subscriber_country: string, subscriber_date_of_birth: string, subscriber_first_name: string, subscriber_gender: string, subscriber_last_name: string, subscriber_middle_name: string, subscriber_social_security: string, subscriber_state: string, subscriber_suffix: string, subscriber_zip_code: string>, updated_at: string, workers_comp_insurance: record<property_and_casualty_agency_claim_number: string, workers_comp_carrier_code: string, workers_comp_case_number: string, workers_comp_company: string, workers_comp_date_of_accident: string, workers_comp_group_name: string, workers_comp_group_number: string, workers_comp_notes: string, workers_comp_payer_address: string, workers_comp_payer_city: string, workers_comp_payer_id: string, workers_comp_payer_state: string, workers_comp_payer_zip: string, workers_comp_state_of_occurrence: string, workers_comp_wcb: string, workers_comp_wcb_rating_code: string>, zip_code: string> {
+]: nothing -> oneof<record<address: string, auto_accident_insurance: record<auto_accident_case_number: string, auto_accident_claim_rep_address: string, auto_accident_claim_rep_city: string, auto_accident_claim_rep_is_insurer: bool, auto_accident_claim_rep_name: string, auto_accident_claim_rep_state: string, auto_accident_claim_rep_zip: string, auto_accident_company: string, auto_accident_date_of_accident: string, auto_accident_disabled_from_date: string, auto_accident_disabled_to_date: string, auto_accident_had_similar_condition: bool, auto_accident_is_subscriber_the_patient: bool, auto_accident_notes: string, auto_accident_patient_relationship_to_subscriber: string, auto_accident_payer_address: string, auto_accident_payer_city: string, auto_accident_payer_id: string, auto_accident_payer_state: string, auto_accident_payer_zip: string, auto_accident_policy_number: string, auto_accident_return_to_work_date: string, auto_accident_significant_injury: string, auto_accident_significant_injury_notes: string, auto_accident_similar_condition_date: string, auto_accident_similar_condition_notes: string, auto_accident_state_of_occurrence: string, auto_accident_still_under_care: bool, auto_accident_subscriber_address: string, auto_accident_subscriber_city: string, auto_accident_subscriber_date_of_birth: string, auto_accident_subscriber_first_name: string, auto_accident_subscriber_last_name: string, auto_accident_subscriber_middle_name: string, auto_accident_subscriber_phone_number: string, auto_accident_subscriber_social_security: string, auto_accident_subscriber_state: string, auto_accident_subscriber_suffix: string, auto_accident_subscriber_zip_code: string, auto_accident_treatment_duration: string, auto_accident_will_require_therapy: bool, auto_accident_will_require_therapy_rec: string>, cell_phone: string, chart_id: string, city: string, copay: string, custom_demographics: table<field_type: int, updated_at: string, value: string>, date_of_birth: string, date_of_first_appointment: string, date_of_last_appointment: string, default_pharmacy: string, disable_sms_messages: bool, doctor: int, email: string, emergency_contact_name: string, emergency_contact_phone: string, emergency_contact_relation: string, employer: string, employer_address: string, employer_city: string, employer_state: string, employer_zip_code: string, ethnicity: string, first_name: string, gender: string, home_phone: string, id: int, last_name: string, middle_name: string, nick_name: string, office_phone: string, offices: list<int>, patient_flags: table<archived: bool, color: string, created_at: string, doctor: int, id: int, name: string, priority: int, updated_at: string>, patient_flags_attached: table<archived: bool, created_at: string, flag_text: string, flag_type: int, id: int, updated_at: string>, patient_payment_profile: string, patient_photo: string, patient_photo_date: string, patient_status: string, preferred_language: string, primary_care_physician: string, primary_insurance: record<insurance_claim_office_number: string, insurance_company: string, insurance_group_name: string, insurance_group_number: string, insurance_id_number: string, insurance_payer_id: string, insurance_plan_name: string, insurance_plan_type: string, is_subscriber_the_patient: bool, patient_relationship_to_subscriber: string, photo_back: string, photo_front: string, subscriber_address: string, subscriber_city: string, subscriber_country: string, subscriber_date_of_birth: string, subscriber_first_name: string, subscriber_gender: string, subscriber_last_name: string, subscriber_middle_name: string, subscriber_social_security: string, subscriber_state: string, subscriber_suffix: string, subscriber_zip_code: string>, race: string, referring_doctor: record<address: string, email: string, fax: string, first_name: string, last_name: string, middle_name: string, npi: string, phone: string, provider_number: string, provider_qualifier: string, specialty: string, suffix: string>, referring_source: string, responsible_party_email: string, responsible_party_name: string, responsible_party_phone: string, responsible_party_relation: string, secondary_insurance: record<insurance_claim_office_number: string, insurance_company: string, insurance_group_name: string, insurance_group_number: string, insurance_id_number: string, insurance_payer_id: string, insurance_plan_name: string, insurance_plan_type: string, is_subscriber_the_patient: bool, patient_relationship_to_subscriber: string, photo_back: string, photo_front: string, subscriber_address: string, subscriber_city: string, subscriber_country: string, subscriber_date_of_birth: string, subscriber_first_name: string, subscriber_gender: string, subscriber_last_name: string, subscriber_middle_name: string, subscriber_social_security: string, subscriber_state: string, subscriber_suffix: string, subscriber_zip_code: string>, social_security_number: string, state: string, tertiary_insurance: record<insurance_claim_office_number: string, insurance_company: string, insurance_group_name: string, insurance_group_number: string, insurance_id_number: string, insurance_payer_id: string, insurance_plan_name: string, insurance_plan_type: string, is_subscriber_the_patient: bool, patient_relationship_to_subscriber: string, photo_back: string, photo_front: string, subscriber_address: string, subscriber_city: string, subscriber_country: string, subscriber_date_of_birth: string, subscriber_first_name: string, subscriber_gender: string, subscriber_last_name: string, subscriber_middle_name: string, subscriber_social_security: string, subscriber_state: string, subscriber_suffix: string, subscriber_zip_code: string>, updated_at: string, workers_comp_insurance: record<property_and_casualty_agency_claim_number: string, workers_comp_carrier_code: string, workers_comp_case_number: string, workers_comp_company: string, workers_comp_date_of_accident: string, workers_comp_group_name: string, workers_comp_group_number: string, workers_comp_notes: string, workers_comp_payer_address: string, workers_comp_payer_city: string, workers_comp_payer_id: string, workers_comp_payer_state: string, workers_comp_payer_zip: string, workers_comp_state_of_occurrence: string, workers_comp_wcb: string, workers_comp_wcb_rating_code: string>, zip_code: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "first_name" $first_name "scalar") (serialize-qp "last_name" $last_name "scalar") (serialize-qp "preferred_language" $preferred_language "scalar") (serialize-qp "doctor" $doctor "scalar") (serialize-qp "gender" $gender "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "date_of_birth" $date_of_birth "scalar") (serialize-qp "race" $race "scalar") (serialize-qp "chart_id" $chart_id "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "ethnicity" $ethnicity "scalar")] | flatten | str join "&"
@@ -7949,7 +7973,7 @@ export def "patients-read" [
   --chart-id: string
   --email: string
   --ethnicity: string
-]: nothing -> record<address: string, auto_accident_insurance: record<auto_accident_case_number: string, auto_accident_claim_rep_address: string, auto_accident_claim_rep_city: string, auto_accident_claim_rep_is_insurer: bool, auto_accident_claim_rep_name: string, auto_accident_claim_rep_state: string, auto_accident_claim_rep_zip: string, auto_accident_company: string, auto_accident_date_of_accident: string, auto_accident_disabled_from_date: string, auto_accident_disabled_to_date: string, auto_accident_had_similar_condition: bool, auto_accident_is_subscriber_the_patient: bool, auto_accident_notes: string, auto_accident_patient_relationship_to_subscriber: string, auto_accident_payer_address: string, auto_accident_payer_city: string, auto_accident_payer_id: string, auto_accident_payer_state: string, auto_accident_payer_zip: string, auto_accident_policy_number: string, auto_accident_return_to_work_date: string, auto_accident_significant_injury: string, auto_accident_significant_injury_notes: string, auto_accident_similar_condition_date: string, auto_accident_similar_condition_notes: string, auto_accident_state_of_occurrence: string, auto_accident_still_under_care: bool, auto_accident_subscriber_address: string, auto_accident_subscriber_city: string, auto_accident_subscriber_date_of_birth: string, auto_accident_subscriber_first_name: string, auto_accident_subscriber_last_name: string, auto_accident_subscriber_middle_name: string, auto_accident_subscriber_phone_number: string, auto_accident_subscriber_social_security: string, auto_accident_subscriber_state: string, auto_accident_subscriber_suffix: string, auto_accident_subscriber_zip_code: string, auto_accident_treatment_duration: string, auto_accident_will_require_therapy: bool, auto_accident_will_require_therapy_rec: string>, cell_phone: string, chart_id: string, city: string, copay: string, custom_demographics: table<field_type: int, updated_at: string, value: string>, date_of_birth: string, date_of_first_appointment: string, date_of_last_appointment: string, default_pharmacy: string, disable_sms_messages: bool, doctor: int, email: string, emergency_contact_name: string, emergency_contact_phone: string, emergency_contact_relation: string, employer: string, employer_address: string, employer_city: string, employer_state: string, employer_zip_code: string, ethnicity: string, first_name: string, gender: string, home_phone: string, id: int, last_name: string, middle_name: string, nick_name: string, office_phone: string, offices: list<int>, patient_flags: table<archived: bool, color: string, created_at: string, doctor: int, id: int, name: string, priority: int, updated_at: string>, patient_flags_attached: table<archived: bool, created_at: string, flag_text: string, flag_type: int, id: int, updated_at: string>, patient_payment_profile: string, patient_photo: string, patient_photo_date: string, patient_status: string, preferred_language: string, primary_care_physician: string, primary_insurance: record<insurance_claim_office_number: string, insurance_company: string, insurance_group_name: string, insurance_group_number: string, insurance_id_number: string, insurance_payer_id: string, insurance_plan_name: string, insurance_plan_type: string, is_subscriber_the_patient: bool, patient_relationship_to_subscriber: string, photo_back: string, photo_front: string, subscriber_address: string, subscriber_city: string, subscriber_country: string, subscriber_date_of_birth: string, subscriber_first_name: string, subscriber_gender: string, subscriber_last_name: string, subscriber_middle_name: string, subscriber_social_security: string, subscriber_state: string, subscriber_suffix: string, subscriber_zip_code: string>, race: string, referring_doctor: record<address: string, email: string, fax: string, first_name: string, last_name: string, middle_name: string, npi: string, phone: string, provider_number: string, provider_qualifier: string, specialty: string, suffix: string>, referring_source: string, responsible_party_email: string, responsible_party_name: string, responsible_party_phone: string, responsible_party_relation: string, secondary_insurance: record<insurance_claim_office_number: string, insurance_company: string, insurance_group_name: string, insurance_group_number: string, insurance_id_number: string, insurance_payer_id: string, insurance_plan_name: string, insurance_plan_type: string, is_subscriber_the_patient: bool, patient_relationship_to_subscriber: string, photo_back: string, photo_front: string, subscriber_address: string, subscriber_city: string, subscriber_country: string, subscriber_date_of_birth: string, subscriber_first_name: string, subscriber_gender: string, subscriber_last_name: string, subscriber_middle_name: string, subscriber_social_security: string, subscriber_state: string, subscriber_suffix: string, subscriber_zip_code: string>, social_security_number: string, state: string, tertiary_insurance: record<insurance_claim_office_number: string, insurance_company: string, insurance_group_name: string, insurance_group_number: string, insurance_id_number: string, insurance_payer_id: string, insurance_plan_name: string, insurance_plan_type: string, is_subscriber_the_patient: bool, patient_relationship_to_subscriber: string, photo_back: string, photo_front: string, subscriber_address: string, subscriber_city: string, subscriber_country: string, subscriber_date_of_birth: string, subscriber_first_name: string, subscriber_gender: string, subscriber_last_name: string, subscriber_middle_name: string, subscriber_social_security: string, subscriber_state: string, subscriber_suffix: string, subscriber_zip_code: string>, updated_at: string, workers_comp_insurance: record<property_and_casualty_agency_claim_number: string, workers_comp_carrier_code: string, workers_comp_case_number: string, workers_comp_company: string, workers_comp_date_of_accident: string, workers_comp_group_name: string, workers_comp_group_number: string, workers_comp_notes: string, workers_comp_payer_address: string, workers_comp_payer_city: string, workers_comp_payer_id: string, workers_comp_payer_state: string, workers_comp_payer_zip: string, workers_comp_state_of_occurrence: string, workers_comp_wcb: string, workers_comp_wcb_rating_code: string>, zip_code: string> {
+]: nothing -> oneof<record<address: string, auto_accident_insurance: record<auto_accident_case_number: string, auto_accident_claim_rep_address: string, auto_accident_claim_rep_city: string, auto_accident_claim_rep_is_insurer: bool, auto_accident_claim_rep_name: string, auto_accident_claim_rep_state: string, auto_accident_claim_rep_zip: string, auto_accident_company: string, auto_accident_date_of_accident: string, auto_accident_disabled_from_date: string, auto_accident_disabled_to_date: string, auto_accident_had_similar_condition: bool, auto_accident_is_subscriber_the_patient: bool, auto_accident_notes: string, auto_accident_patient_relationship_to_subscriber: string, auto_accident_payer_address: string, auto_accident_payer_city: string, auto_accident_payer_id: string, auto_accident_payer_state: string, auto_accident_payer_zip: string, auto_accident_policy_number: string, auto_accident_return_to_work_date: string, auto_accident_significant_injury: string, auto_accident_significant_injury_notes: string, auto_accident_similar_condition_date: string, auto_accident_similar_condition_notes: string, auto_accident_state_of_occurrence: string, auto_accident_still_under_care: bool, auto_accident_subscriber_address: string, auto_accident_subscriber_city: string, auto_accident_subscriber_date_of_birth: string, auto_accident_subscriber_first_name: string, auto_accident_subscriber_last_name: string, auto_accident_subscriber_middle_name: string, auto_accident_subscriber_phone_number: string, auto_accident_subscriber_social_security: string, auto_accident_subscriber_state: string, auto_accident_subscriber_suffix: string, auto_accident_subscriber_zip_code: string, auto_accident_treatment_duration: string, auto_accident_will_require_therapy: bool, auto_accident_will_require_therapy_rec: string>, cell_phone: string, chart_id: string, city: string, copay: string, custom_demographics: table<field_type: int, updated_at: string, value: string>, date_of_birth: string, date_of_first_appointment: string, date_of_last_appointment: string, default_pharmacy: string, disable_sms_messages: bool, doctor: int, email: string, emergency_contact_name: string, emergency_contact_phone: string, emergency_contact_relation: string, employer: string, employer_address: string, employer_city: string, employer_state: string, employer_zip_code: string, ethnicity: string, first_name: string, gender: string, home_phone: string, id: int, last_name: string, middle_name: string, nick_name: string, office_phone: string, offices: list<int>, patient_flags: table<archived: bool, color: string, created_at: string, doctor: int, id: int, name: string, priority: int, updated_at: string>, patient_flags_attached: table<archived: bool, created_at: string, flag_text: string, flag_type: int, id: int, updated_at: string>, patient_payment_profile: string, patient_photo: string, patient_photo_date: string, patient_status: string, preferred_language: string, primary_care_physician: string, primary_insurance: record<insurance_claim_office_number: string, insurance_company: string, insurance_group_name: string, insurance_group_number: string, insurance_id_number: string, insurance_payer_id: string, insurance_plan_name: string, insurance_plan_type: string, is_subscriber_the_patient: bool, patient_relationship_to_subscriber: string, photo_back: string, photo_front: string, subscriber_address: string, subscriber_city: string, subscriber_country: string, subscriber_date_of_birth: string, subscriber_first_name: string, subscriber_gender: string, subscriber_last_name: string, subscriber_middle_name: string, subscriber_social_security: string, subscriber_state: string, subscriber_suffix: string, subscriber_zip_code: string>, race: string, referring_doctor: record<address: string, email: string, fax: string, first_name: string, last_name: string, middle_name: string, npi: string, phone: string, provider_number: string, provider_qualifier: string, specialty: string, suffix: string>, referring_source: string, responsible_party_email: string, responsible_party_name: string, responsible_party_phone: string, responsible_party_relation: string, secondary_insurance: record<insurance_claim_office_number: string, insurance_company: string, insurance_group_name: string, insurance_group_number: string, insurance_id_number: string, insurance_payer_id: string, insurance_plan_name: string, insurance_plan_type: string, is_subscriber_the_patient: bool, patient_relationship_to_subscriber: string, photo_back: string, photo_front: string, subscriber_address: string, subscriber_city: string, subscriber_country: string, subscriber_date_of_birth: string, subscriber_first_name: string, subscriber_gender: string, subscriber_last_name: string, subscriber_middle_name: string, subscriber_social_security: string, subscriber_state: string, subscriber_suffix: string, subscriber_zip_code: string>, social_security_number: string, state: string, tertiary_insurance: record<insurance_claim_office_number: string, insurance_company: string, insurance_group_name: string, insurance_group_number: string, insurance_id_number: string, insurance_payer_id: string, insurance_plan_name: string, insurance_plan_type: string, is_subscriber_the_patient: bool, patient_relationship_to_subscriber: string, photo_back: string, photo_front: string, subscriber_address: string, subscriber_city: string, subscriber_country: string, subscriber_date_of_birth: string, subscriber_first_name: string, subscriber_gender: string, subscriber_last_name: string, subscriber_middle_name: string, subscriber_social_security: string, subscriber_state: string, subscriber_suffix: string, subscriber_zip_code: string>, updated_at: string, workers_comp_insurance: record<property_and_casualty_agency_claim_number: string, workers_comp_carrier_code: string, workers_comp_case_number: string, workers_comp_company: string, workers_comp_date_of_accident: string, workers_comp_group_name: string, workers_comp_group_number: string, workers_comp_notes: string, workers_comp_payer_address: string, workers_comp_payer_city: string, workers_comp_payer_id: string, workers_comp_payer_state: string, workers_comp_payer_zip: string, workers_comp_state_of_occurrence: string, workers_comp_wcb: string, workers_comp_wcb_rating_code: string>, zip_code: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -8093,7 +8117,7 @@ export def "patients-ccda" [
   --chart-id: string
   --email: string
   --ethnicity: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -8189,7 +8213,7 @@ export def "patients-onpatient-access-read" [
   --chart-id: string
   --email: string
   --ethnicity: string
-]: nothing -> record<address: string, auto_accident_insurance: record<auto_accident_case_number: string, auto_accident_claim_rep_address: string, auto_accident_claim_rep_city: string, auto_accident_claim_rep_is_insurer: bool, auto_accident_claim_rep_name: string, auto_accident_claim_rep_state: string, auto_accident_claim_rep_zip: string, auto_accident_company: string, auto_accident_date_of_accident: string, auto_accident_disabled_from_date: string, auto_accident_disabled_to_date: string, auto_accident_had_similar_condition: bool, auto_accident_is_subscriber_the_patient: bool, auto_accident_notes: string, auto_accident_patient_relationship_to_subscriber: string, auto_accident_payer_address: string, auto_accident_payer_city: string, auto_accident_payer_id: string, auto_accident_payer_state: string, auto_accident_payer_zip: string, auto_accident_policy_number: string, auto_accident_return_to_work_date: string, auto_accident_significant_injury: string, auto_accident_significant_injury_notes: string, auto_accident_similar_condition_date: string, auto_accident_similar_condition_notes: string, auto_accident_state_of_occurrence: string, auto_accident_still_under_care: bool, auto_accident_subscriber_address: string, auto_accident_subscriber_city: string, auto_accident_subscriber_date_of_birth: string, auto_accident_subscriber_first_name: string, auto_accident_subscriber_last_name: string, auto_accident_subscriber_middle_name: string, auto_accident_subscriber_phone_number: string, auto_accident_subscriber_social_security: string, auto_accident_subscriber_state: string, auto_accident_subscriber_suffix: string, auto_accident_subscriber_zip_code: string, auto_accident_treatment_duration: string, auto_accident_will_require_therapy: bool, auto_accident_will_require_therapy_rec: string>, cell_phone: string, chart_id: string, city: string, copay: string, custom_demographics: table<field_type: int, updated_at: string, value: string>, date_of_birth: string, date_of_first_appointment: string, date_of_last_appointment: string, default_pharmacy: string, disable_sms_messages: bool, doctor: int, email: string, emergency_contact_name: string, emergency_contact_phone: string, emergency_contact_relation: string, employer: string, employer_address: string, employer_city: string, employer_state: string, employer_zip_code: string, ethnicity: string, first_name: string, gender: string, home_phone: string, id: int, last_name: string, middle_name: string, nick_name: string, office_phone: string, offices: list<int>, patient_flags: table<archived: bool, color: string, created_at: string, doctor: int, id: int, name: string, priority: int, updated_at: string>, patient_flags_attached: table<archived: bool, created_at: string, flag_text: string, flag_type: int, id: int, updated_at: string>, patient_payment_profile: string, patient_photo: string, patient_photo_date: string, patient_status: string, preferred_language: string, primary_care_physician: string, primary_insurance: record<insurance_claim_office_number: string, insurance_company: string, insurance_group_name: string, insurance_group_number: string, insurance_id_number: string, insurance_payer_id: string, insurance_plan_name: string, insurance_plan_type: string, is_subscriber_the_patient: bool, patient_relationship_to_subscriber: string, photo_back: string, photo_front: string, subscriber_address: string, subscriber_city: string, subscriber_country: string, subscriber_date_of_birth: string, subscriber_first_name: string, subscriber_gender: string, subscriber_last_name: string, subscriber_middle_name: string, subscriber_social_security: string, subscriber_state: string, subscriber_suffix: string, subscriber_zip_code: string>, race: string, referring_doctor: record<address: string, email: string, fax: string, first_name: string, last_name: string, middle_name: string, npi: string, phone: string, provider_number: string, provider_qualifier: string, specialty: string, suffix: string>, referring_source: string, responsible_party_email: string, responsible_party_name: string, responsible_party_phone: string, responsible_party_relation: string, secondary_insurance: record<insurance_claim_office_number: string, insurance_company: string, insurance_group_name: string, insurance_group_number: string, insurance_id_number: string, insurance_payer_id: string, insurance_plan_name: string, insurance_plan_type: string, is_subscriber_the_patient: bool, patient_relationship_to_subscriber: string, photo_back: string, photo_front: string, subscriber_address: string, subscriber_city: string, subscriber_country: string, subscriber_date_of_birth: string, subscriber_first_name: string, subscriber_gender: string, subscriber_last_name: string, subscriber_middle_name: string, subscriber_social_security: string, subscriber_state: string, subscriber_suffix: string, subscriber_zip_code: string>, social_security_number: string, state: string, tertiary_insurance: record<insurance_claim_office_number: string, insurance_company: string, insurance_group_name: string, insurance_group_number: string, insurance_id_number: string, insurance_payer_id: string, insurance_plan_name: string, insurance_plan_type: string, is_subscriber_the_patient: bool, patient_relationship_to_subscriber: string, photo_back: string, photo_front: string, subscriber_address: string, subscriber_city: string, subscriber_country: string, subscriber_date_of_birth: string, subscriber_first_name: string, subscriber_gender: string, subscriber_last_name: string, subscriber_middle_name: string, subscriber_social_security: string, subscriber_state: string, subscriber_suffix: string, subscriber_zip_code: string>, updated_at: string, workers_comp_insurance: record<property_and_casualty_agency_claim_number: string, workers_comp_carrier_code: string, workers_comp_case_number: string, workers_comp_company: string, workers_comp_date_of_accident: string, workers_comp_group_name: string, workers_comp_group_number: string, workers_comp_notes: string, workers_comp_payer_address: string, workers_comp_payer_city: string, workers_comp_payer_id: string, workers_comp_payer_state: string, workers_comp_payer_zip: string, workers_comp_state_of_occurrence: string, workers_comp_wcb: string, workers_comp_wcb_rating_code: string>, zip_code: string> {
+]: nothing -> oneof<record<address: string, auto_accident_insurance: record<auto_accident_case_number: string, auto_accident_claim_rep_address: string, auto_accident_claim_rep_city: string, auto_accident_claim_rep_is_insurer: bool, auto_accident_claim_rep_name: string, auto_accident_claim_rep_state: string, auto_accident_claim_rep_zip: string, auto_accident_company: string, auto_accident_date_of_accident: string, auto_accident_disabled_from_date: string, auto_accident_disabled_to_date: string, auto_accident_had_similar_condition: bool, auto_accident_is_subscriber_the_patient: bool, auto_accident_notes: string, auto_accident_patient_relationship_to_subscriber: string, auto_accident_payer_address: string, auto_accident_payer_city: string, auto_accident_payer_id: string, auto_accident_payer_state: string, auto_accident_payer_zip: string, auto_accident_policy_number: string, auto_accident_return_to_work_date: string, auto_accident_significant_injury: string, auto_accident_significant_injury_notes: string, auto_accident_similar_condition_date: string, auto_accident_similar_condition_notes: string, auto_accident_state_of_occurrence: string, auto_accident_still_under_care: bool, auto_accident_subscriber_address: string, auto_accident_subscriber_city: string, auto_accident_subscriber_date_of_birth: string, auto_accident_subscriber_first_name: string, auto_accident_subscriber_last_name: string, auto_accident_subscriber_middle_name: string, auto_accident_subscriber_phone_number: string, auto_accident_subscriber_social_security: string, auto_accident_subscriber_state: string, auto_accident_subscriber_suffix: string, auto_accident_subscriber_zip_code: string, auto_accident_treatment_duration: string, auto_accident_will_require_therapy: bool, auto_accident_will_require_therapy_rec: string>, cell_phone: string, chart_id: string, city: string, copay: string, custom_demographics: table<field_type: int, updated_at: string, value: string>, date_of_birth: string, date_of_first_appointment: string, date_of_last_appointment: string, default_pharmacy: string, disable_sms_messages: bool, doctor: int, email: string, emergency_contact_name: string, emergency_contact_phone: string, emergency_contact_relation: string, employer: string, employer_address: string, employer_city: string, employer_state: string, employer_zip_code: string, ethnicity: string, first_name: string, gender: string, home_phone: string, id: int, last_name: string, middle_name: string, nick_name: string, office_phone: string, offices: list<int>, patient_flags: table<archived: bool, color: string, created_at: string, doctor: int, id: int, name: string, priority: int, updated_at: string>, patient_flags_attached: table<archived: bool, created_at: string, flag_text: string, flag_type: int, id: int, updated_at: string>, patient_payment_profile: string, patient_photo: string, patient_photo_date: string, patient_status: string, preferred_language: string, primary_care_physician: string, primary_insurance: record<insurance_claim_office_number: string, insurance_company: string, insurance_group_name: string, insurance_group_number: string, insurance_id_number: string, insurance_payer_id: string, insurance_plan_name: string, insurance_plan_type: string, is_subscriber_the_patient: bool, patient_relationship_to_subscriber: string, photo_back: string, photo_front: string, subscriber_address: string, subscriber_city: string, subscriber_country: string, subscriber_date_of_birth: string, subscriber_first_name: string, subscriber_gender: string, subscriber_last_name: string, subscriber_middle_name: string, subscriber_social_security: string, subscriber_state: string, subscriber_suffix: string, subscriber_zip_code: string>, race: string, referring_doctor: record<address: string, email: string, fax: string, first_name: string, last_name: string, middle_name: string, npi: string, phone: string, provider_number: string, provider_qualifier: string, specialty: string, suffix: string>, referring_source: string, responsible_party_email: string, responsible_party_name: string, responsible_party_phone: string, responsible_party_relation: string, secondary_insurance: record<insurance_claim_office_number: string, insurance_company: string, insurance_group_name: string, insurance_group_number: string, insurance_id_number: string, insurance_payer_id: string, insurance_plan_name: string, insurance_plan_type: string, is_subscriber_the_patient: bool, patient_relationship_to_subscriber: string, photo_back: string, photo_front: string, subscriber_address: string, subscriber_city: string, subscriber_country: string, subscriber_date_of_birth: string, subscriber_first_name: string, subscriber_gender: string, subscriber_last_name: string, subscriber_middle_name: string, subscriber_social_security: string, subscriber_state: string, subscriber_suffix: string, subscriber_zip_code: string>, social_security_number: string, state: string, tertiary_insurance: record<insurance_claim_office_number: string, insurance_company: string, insurance_group_name: string, insurance_group_number: string, insurance_id_number: string, insurance_payer_id: string, insurance_plan_name: string, insurance_plan_type: string, is_subscriber_the_patient: bool, patient_relationship_to_subscriber: string, photo_back: string, photo_front: string, subscriber_address: string, subscriber_city: string, subscriber_country: string, subscriber_date_of_birth: string, subscriber_first_name: string, subscriber_gender: string, subscriber_last_name: string, subscriber_middle_name: string, subscriber_social_security: string, subscriber_state: string, subscriber_suffix: string, subscriber_zip_code: string>, updated_at: string, workers_comp_insurance: record<property_and_casualty_agency_claim_number: string, workers_comp_carrier_code: string, workers_comp_case_number: string, workers_comp_company: string, workers_comp_date_of_accident: string, workers_comp_group_name: string, workers_comp_group_number: string, workers_comp_notes: string, workers_comp_payer_address: string, workers_comp_payer_city: string, workers_comp_payer_id: string, workers_comp_payer_state: string, workers_comp_payer_zip: string, workers_comp_state_of_occurrence: string, workers_comp_wcb: string, workers_comp_wcb_rating_code: string>, zip_code: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -8237,7 +8261,7 @@ export def "patients-onpatient-access-create" [
   --chart-id: string
   --email: string
   --ethnicity: string
-]: nothing -> record<address: string, auto_accident_insurance: record<auto_accident_case_number: string, auto_accident_claim_rep_address: string, auto_accident_claim_rep_city: string, auto_accident_claim_rep_is_insurer: bool, auto_accident_claim_rep_name: string, auto_accident_claim_rep_state: string, auto_accident_claim_rep_zip: string, auto_accident_company: string, auto_accident_date_of_accident: string, auto_accident_disabled_from_date: string, auto_accident_disabled_to_date: string, auto_accident_had_similar_condition: bool, auto_accident_is_subscriber_the_patient: bool, auto_accident_notes: string, auto_accident_patient_relationship_to_subscriber: string, auto_accident_payer_address: string, auto_accident_payer_city: string, auto_accident_payer_id: string, auto_accident_payer_state: string, auto_accident_payer_zip: string, auto_accident_policy_number: string, auto_accident_return_to_work_date: string, auto_accident_significant_injury: string, auto_accident_significant_injury_notes: string, auto_accident_similar_condition_date: string, auto_accident_similar_condition_notes: string, auto_accident_state_of_occurrence: string, auto_accident_still_under_care: bool, auto_accident_subscriber_address: string, auto_accident_subscriber_city: string, auto_accident_subscriber_date_of_birth: string, auto_accident_subscriber_first_name: string, auto_accident_subscriber_last_name: string, auto_accident_subscriber_middle_name: string, auto_accident_subscriber_phone_number: string, auto_accident_subscriber_social_security: string, auto_accident_subscriber_state: string, auto_accident_subscriber_suffix: string, auto_accident_subscriber_zip_code: string, auto_accident_treatment_duration: string, auto_accident_will_require_therapy: bool, auto_accident_will_require_therapy_rec: string>, cell_phone: string, chart_id: string, city: string, copay: string, custom_demographics: table<field_type: int, updated_at: string, value: string>, date_of_birth: string, date_of_first_appointment: string, date_of_last_appointment: string, default_pharmacy: string, disable_sms_messages: bool, doctor: int, email: string, emergency_contact_name: string, emergency_contact_phone: string, emergency_contact_relation: string, employer: string, employer_address: string, employer_city: string, employer_state: string, employer_zip_code: string, ethnicity: string, first_name: string, gender: string, home_phone: string, id: int, last_name: string, middle_name: string, nick_name: string, office_phone: string, offices: list<int>, patient_flags: table<archived: bool, color: string, created_at: string, doctor: int, id: int, name: string, priority: int, updated_at: string>, patient_flags_attached: table<archived: bool, created_at: string, flag_text: string, flag_type: int, id: int, updated_at: string>, patient_payment_profile: string, patient_photo: string, patient_photo_date: string, patient_status: string, preferred_language: string, primary_care_physician: string, primary_insurance: record<insurance_claim_office_number: string, insurance_company: string, insurance_group_name: string, insurance_group_number: string, insurance_id_number: string, insurance_payer_id: string, insurance_plan_name: string, insurance_plan_type: string, is_subscriber_the_patient: bool, patient_relationship_to_subscriber: string, photo_back: string, photo_front: string, subscriber_address: string, subscriber_city: string, subscriber_country: string, subscriber_date_of_birth: string, subscriber_first_name: string, subscriber_gender: string, subscriber_last_name: string, subscriber_middle_name: string, subscriber_social_security: string, subscriber_state: string, subscriber_suffix: string, subscriber_zip_code: string>, race: string, referring_doctor: record<address: string, email: string, fax: string, first_name: string, last_name: string, middle_name: string, npi: string, phone: string, provider_number: string, provider_qualifier: string, specialty: string, suffix: string>, referring_source: string, responsible_party_email: string, responsible_party_name: string, responsible_party_phone: string, responsible_party_relation: string, secondary_insurance: record<insurance_claim_office_number: string, insurance_company: string, insurance_group_name: string, insurance_group_number: string, insurance_id_number: string, insurance_payer_id: string, insurance_plan_name: string, insurance_plan_type: string, is_subscriber_the_patient: bool, patient_relationship_to_subscriber: string, photo_back: string, photo_front: string, subscriber_address: string, subscriber_city: string, subscriber_country: string, subscriber_date_of_birth: string, subscriber_first_name: string, subscriber_gender: string, subscriber_last_name: string, subscriber_middle_name: string, subscriber_social_security: string, subscriber_state: string, subscriber_suffix: string, subscriber_zip_code: string>, social_security_number: string, state: string, tertiary_insurance: record<insurance_claim_office_number: string, insurance_company: string, insurance_group_name: string, insurance_group_number: string, insurance_id_number: string, insurance_payer_id: string, insurance_plan_name: string, insurance_plan_type: string, is_subscriber_the_patient: bool, patient_relationship_to_subscriber: string, photo_back: string, photo_front: string, subscriber_address: string, subscriber_city: string, subscriber_country: string, subscriber_date_of_birth: string, subscriber_first_name: string, subscriber_gender: string, subscriber_last_name: string, subscriber_middle_name: string, subscriber_social_security: string, subscriber_state: string, subscriber_suffix: string, subscriber_zip_code: string>, updated_at: string, workers_comp_insurance: record<property_and_casualty_agency_claim_number: string, workers_comp_carrier_code: string, workers_comp_case_number: string, workers_comp_company: string, workers_comp_date_of_accident: string, workers_comp_group_name: string, workers_comp_group_number: string, workers_comp_notes: string, workers_comp_payer_address: string, workers_comp_payer_city: string, workers_comp_payer_id: string, workers_comp_payer_state: string, workers_comp_payer_zip: string, workers_comp_state_of_occurrence: string, workers_comp_wcb: string, workers_comp_wcb_rating_code: string>, zip_code: string> {
+]: nothing -> oneof<record<address: string, auto_accident_insurance: record<auto_accident_case_number: string, auto_accident_claim_rep_address: string, auto_accident_claim_rep_city: string, auto_accident_claim_rep_is_insurer: bool, auto_accident_claim_rep_name: string, auto_accident_claim_rep_state: string, auto_accident_claim_rep_zip: string, auto_accident_company: string, auto_accident_date_of_accident: string, auto_accident_disabled_from_date: string, auto_accident_disabled_to_date: string, auto_accident_had_similar_condition: bool, auto_accident_is_subscriber_the_patient: bool, auto_accident_notes: string, auto_accident_patient_relationship_to_subscriber: string, auto_accident_payer_address: string, auto_accident_payer_city: string, auto_accident_payer_id: string, auto_accident_payer_state: string, auto_accident_payer_zip: string, auto_accident_policy_number: string, auto_accident_return_to_work_date: string, auto_accident_significant_injury: string, auto_accident_significant_injury_notes: string, auto_accident_similar_condition_date: string, auto_accident_similar_condition_notes: string, auto_accident_state_of_occurrence: string, auto_accident_still_under_care: bool, auto_accident_subscriber_address: string, auto_accident_subscriber_city: string, auto_accident_subscriber_date_of_birth: string, auto_accident_subscriber_first_name: string, auto_accident_subscriber_last_name: string, auto_accident_subscriber_middle_name: string, auto_accident_subscriber_phone_number: string, auto_accident_subscriber_social_security: string, auto_accident_subscriber_state: string, auto_accident_subscriber_suffix: string, auto_accident_subscriber_zip_code: string, auto_accident_treatment_duration: string, auto_accident_will_require_therapy: bool, auto_accident_will_require_therapy_rec: string>, cell_phone: string, chart_id: string, city: string, copay: string, custom_demographics: table<field_type: int, updated_at: string, value: string>, date_of_birth: string, date_of_first_appointment: string, date_of_last_appointment: string, default_pharmacy: string, disable_sms_messages: bool, doctor: int, email: string, emergency_contact_name: string, emergency_contact_phone: string, emergency_contact_relation: string, employer: string, employer_address: string, employer_city: string, employer_state: string, employer_zip_code: string, ethnicity: string, first_name: string, gender: string, home_phone: string, id: int, last_name: string, middle_name: string, nick_name: string, office_phone: string, offices: list<int>, patient_flags: table<archived: bool, color: string, created_at: string, doctor: int, id: int, name: string, priority: int, updated_at: string>, patient_flags_attached: table<archived: bool, created_at: string, flag_text: string, flag_type: int, id: int, updated_at: string>, patient_payment_profile: string, patient_photo: string, patient_photo_date: string, patient_status: string, preferred_language: string, primary_care_physician: string, primary_insurance: record<insurance_claim_office_number: string, insurance_company: string, insurance_group_name: string, insurance_group_number: string, insurance_id_number: string, insurance_payer_id: string, insurance_plan_name: string, insurance_plan_type: string, is_subscriber_the_patient: bool, patient_relationship_to_subscriber: string, photo_back: string, photo_front: string, subscriber_address: string, subscriber_city: string, subscriber_country: string, subscriber_date_of_birth: string, subscriber_first_name: string, subscriber_gender: string, subscriber_last_name: string, subscriber_middle_name: string, subscriber_social_security: string, subscriber_state: string, subscriber_suffix: string, subscriber_zip_code: string>, race: string, referring_doctor: record<address: string, email: string, fax: string, first_name: string, last_name: string, middle_name: string, npi: string, phone: string, provider_number: string, provider_qualifier: string, specialty: string, suffix: string>, referring_source: string, responsible_party_email: string, responsible_party_name: string, responsible_party_phone: string, responsible_party_relation: string, secondary_insurance: record<insurance_claim_office_number: string, insurance_company: string, insurance_group_name: string, insurance_group_number: string, insurance_id_number: string, insurance_payer_id: string, insurance_plan_name: string, insurance_plan_type: string, is_subscriber_the_patient: bool, patient_relationship_to_subscriber: string, photo_back: string, photo_front: string, subscriber_address: string, subscriber_city: string, subscriber_country: string, subscriber_date_of_birth: string, subscriber_first_name: string, subscriber_gender: string, subscriber_last_name: string, subscriber_middle_name: string, subscriber_social_security: string, subscriber_state: string, subscriber_suffix: string, subscriber_zip_code: string>, social_security_number: string, state: string, tertiary_insurance: record<insurance_claim_office_number: string, insurance_company: string, insurance_group_name: string, insurance_group_number: string, insurance_id_number: string, insurance_payer_id: string, insurance_plan_name: string, insurance_plan_type: string, is_subscriber_the_patient: bool, patient_relationship_to_subscriber: string, photo_back: string, photo_front: string, subscriber_address: string, subscriber_city: string, subscriber_country: string, subscriber_date_of_birth: string, subscriber_first_name: string, subscriber_gender: string, subscriber_last_name: string, subscriber_middle_name: string, subscriber_social_security: string, subscriber_state: string, subscriber_suffix: string, subscriber_zip_code: string>, updated_at: string, workers_comp_insurance: record<property_and_casualty_agency_claim_number: string, workers_comp_carrier_code: string, workers_comp_case_number: string, workers_comp_company: string, workers_comp_date_of_accident: string, workers_comp_group_name: string, workers_comp_group_number: string, workers_comp_notes: string, workers_comp_payer_address: string, workers_comp_payer_city: string, workers_comp_payer_id: string, workers_comp_payer_state: string, workers_comp_payer_zip: string, workers_comp_state_of_occurrence: string, workers_comp_wcb: string, workers_comp_wcb_rating_code: string>, zip_code: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -8285,7 +8309,7 @@ export def "patients-qrda1" [
   --chart-id: string
   --email: string
   --ethnicity: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -8328,7 +8352,7 @@ export def "patients-summary-list" [
   --gender: string
   --since: string
   --date-of-birth: string
-]: nothing -> record<data: table<address: string, auto_accident_insurance: record, cell_phone: string, chart_id: string, city: string, copay: string, custom_demographics: list, date_of_birth: string, date_of_first_appointment: string, date_of_last_appointment: string, default_pharmacy: string, disable_sms_messages: bool, doctor: int, email: string, emergency_contact_name: string, emergency_contact_phone: string, emergency_contact_relation: string, employer: string, employer_address: string, employer_city: string, employer_state: string, employer_zip_code: string, ethnicity: string, first_name: string, gender: string, home_phone: string, id: int, last_name: string, middle_name: string, nick_name: string, office_phone: string, offices: list, patient_flags: list, patient_flags_attached: list, patient_payment_profile: string, patient_photo: string, patient_photo_date: string, patient_status: string, preferred_language: string, primary_care_physician: string, primary_insurance: record, race: string, referring_doctor: record, referring_source: string, responsible_party_email: string, responsible_party_name: string, responsible_party_phone: string, responsible_party_relation: string, secondary_insurance: record, social_security_number: string, state: string, tertiary_insurance: record, updated_at: string, workers_comp_insurance: record, zip_code: string>, next: string, previous: string> {
+]: nothing -> oneof<record<data: table<address: string, auto_accident_insurance: record, cell_phone: string, chart_id: string, city: string, copay: string, custom_demographics: list, date_of_birth: string, date_of_first_appointment: string, date_of_last_appointment: string, default_pharmacy: string, disable_sms_messages: bool, doctor: int, email: string, emergency_contact_name: string, emergency_contact_phone: string, emergency_contact_relation: string, employer: string, employer_address: string, employer_city: string, employer_state: string, employer_zip_code: string, ethnicity: string, first_name: string, gender: string, home_phone: string, id: int, last_name: string, middle_name: string, nick_name: string, office_phone: string, offices: list, patient_flags: list, patient_flags_attached: list, patient_payment_profile: string, patient_photo: string, patient_photo_date: string, patient_status: string, preferred_language: string, primary_care_physician: string, primary_insurance: record, race: string, referring_doctor: record, referring_source: string, responsible_party_email: string, responsible_party_name: string, responsible_party_phone: string, responsible_party_relation: string, secondary_insurance: record, social_security_number: string, state: string, tertiary_insurance: record, updated_at: string, workers_comp_insurance: record, zip_code: string>, next: string, previous: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "first_name" $first_name "scalar") (serialize-qp "last_name" $last_name "scalar") (serialize-qp "doctor" $doctor "scalar") (serialize-qp "gender" $gender "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "date_of_birth" $date_of_birth "scalar")] | flatten | str join "&"
@@ -8368,7 +8392,7 @@ export def "patients-summary-create" [
   --gender: string
   --since: string
   --date-of-birth: string
-]: nothing -> record<address: string, auto_accident_insurance: record<auto_accident_case_number: string, auto_accident_claim_rep_address: string, auto_accident_claim_rep_city: string, auto_accident_claim_rep_is_insurer: bool, auto_accident_claim_rep_name: string, auto_accident_claim_rep_state: string, auto_accident_claim_rep_zip: string, auto_accident_company: string, auto_accident_date_of_accident: string, auto_accident_disabled_from_date: string, auto_accident_disabled_to_date: string, auto_accident_had_similar_condition: bool, auto_accident_is_subscriber_the_patient: bool, auto_accident_notes: string, auto_accident_patient_relationship_to_subscriber: string, auto_accident_payer_address: string, auto_accident_payer_city: string, auto_accident_payer_id: string, auto_accident_payer_state: string, auto_accident_payer_zip: string, auto_accident_policy_number: string, auto_accident_return_to_work_date: string, auto_accident_significant_injury: string, auto_accident_significant_injury_notes: string, auto_accident_similar_condition_date: string, auto_accident_similar_condition_notes: string, auto_accident_state_of_occurrence: string, auto_accident_still_under_care: bool, auto_accident_subscriber_address: string, auto_accident_subscriber_city: string, auto_accident_subscriber_date_of_birth: string, auto_accident_subscriber_first_name: string, auto_accident_subscriber_last_name: string, auto_accident_subscriber_middle_name: string, auto_accident_subscriber_phone_number: string, auto_accident_subscriber_social_security: string, auto_accident_subscriber_state: string, auto_accident_subscriber_suffix: string, auto_accident_subscriber_zip_code: string, auto_accident_treatment_duration: string, auto_accident_will_require_therapy: bool, auto_accident_will_require_therapy_rec: string>, cell_phone: string, chart_id: string, city: string, copay: string, custom_demographics: table<field_type: int, updated_at: string, value: string>, date_of_birth: string, date_of_first_appointment: string, date_of_last_appointment: string, default_pharmacy: string, disable_sms_messages: bool, doctor: int, email: string, emergency_contact_name: string, emergency_contact_phone: string, emergency_contact_relation: string, employer: string, employer_address: string, employer_city: string, employer_state: string, employer_zip_code: string, ethnicity: string, first_name: string, gender: string, home_phone: string, id: int, last_name: string, middle_name: string, nick_name: string, office_phone: string, offices: list<int>, patient_flags: table<archived: bool, color: string, created_at: string, doctor: int, id: int, name: string, priority: int, updated_at: string>, patient_flags_attached: table<archived: bool, created_at: string, flag_text: string, flag_type: int, id: int, updated_at: string>, patient_payment_profile: string, patient_photo: string, patient_photo_date: string, patient_status: string, preferred_language: string, primary_care_physician: string, primary_insurance: record<insurance_claim_office_number: string, insurance_company: string, insurance_group_name: string, insurance_group_number: string, insurance_id_number: string, insurance_payer_id: string, insurance_plan_name: string, insurance_plan_type: string, is_subscriber_the_patient: bool, patient_relationship_to_subscriber: string, photo_back: string, photo_front: string, subscriber_address: string, subscriber_city: string, subscriber_country: string, subscriber_date_of_birth: string, subscriber_first_name: string, subscriber_gender: string, subscriber_last_name: string, subscriber_middle_name: string, subscriber_social_security: string, subscriber_state: string, subscriber_suffix: string, subscriber_zip_code: string>, race: string, referring_doctor: record<address: string, email: string, fax: string, first_name: string, last_name: string, middle_name: string, npi: string, phone: string, provider_number: string, provider_qualifier: string, specialty: string, suffix: string>, referring_source: string, responsible_party_email: string, responsible_party_name: string, responsible_party_phone: string, responsible_party_relation: string, secondary_insurance: record<insurance_claim_office_number: string, insurance_company: string, insurance_group_name: string, insurance_group_number: string, insurance_id_number: string, insurance_payer_id: string, insurance_plan_name: string, insurance_plan_type: string, is_subscriber_the_patient: bool, patient_relationship_to_subscriber: string, photo_back: string, photo_front: string, subscriber_address: string, subscriber_city: string, subscriber_country: string, subscriber_date_of_birth: string, subscriber_first_name: string, subscriber_gender: string, subscriber_last_name: string, subscriber_middle_name: string, subscriber_social_security: string, subscriber_state: string, subscriber_suffix: string, subscriber_zip_code: string>, social_security_number: string, state: string, tertiary_insurance: record<insurance_claim_office_number: string, insurance_company: string, insurance_group_name: string, insurance_group_number: string, insurance_id_number: string, insurance_payer_id: string, insurance_plan_name: string, insurance_plan_type: string, is_subscriber_the_patient: bool, patient_relationship_to_subscriber: string, photo_back: string, photo_front: string, subscriber_address: string, subscriber_city: string, subscriber_country: string, subscriber_date_of_birth: string, subscriber_first_name: string, subscriber_gender: string, subscriber_last_name: string, subscriber_middle_name: string, subscriber_social_security: string, subscriber_state: string, subscriber_suffix: string, subscriber_zip_code: string>, updated_at: string, workers_comp_insurance: record<property_and_casualty_agency_claim_number: string, workers_comp_carrier_code: string, workers_comp_case_number: string, workers_comp_company: string, workers_comp_date_of_accident: string, workers_comp_group_name: string, workers_comp_group_number: string, workers_comp_notes: string, workers_comp_payer_address: string, workers_comp_payer_city: string, workers_comp_payer_id: string, workers_comp_payer_state: string, workers_comp_payer_zip: string, workers_comp_state_of_occurrence: string, workers_comp_wcb: string, workers_comp_wcb_rating_code: string>, zip_code: string> {
+]: nothing -> oneof<record<address: string, auto_accident_insurance: record<auto_accident_case_number: string, auto_accident_claim_rep_address: string, auto_accident_claim_rep_city: string, auto_accident_claim_rep_is_insurer: bool, auto_accident_claim_rep_name: string, auto_accident_claim_rep_state: string, auto_accident_claim_rep_zip: string, auto_accident_company: string, auto_accident_date_of_accident: string, auto_accident_disabled_from_date: string, auto_accident_disabled_to_date: string, auto_accident_had_similar_condition: bool, auto_accident_is_subscriber_the_patient: bool, auto_accident_notes: string, auto_accident_patient_relationship_to_subscriber: string, auto_accident_payer_address: string, auto_accident_payer_city: string, auto_accident_payer_id: string, auto_accident_payer_state: string, auto_accident_payer_zip: string, auto_accident_policy_number: string, auto_accident_return_to_work_date: string, auto_accident_significant_injury: string, auto_accident_significant_injury_notes: string, auto_accident_similar_condition_date: string, auto_accident_similar_condition_notes: string, auto_accident_state_of_occurrence: string, auto_accident_still_under_care: bool, auto_accident_subscriber_address: string, auto_accident_subscriber_city: string, auto_accident_subscriber_date_of_birth: string, auto_accident_subscriber_first_name: string, auto_accident_subscriber_last_name: string, auto_accident_subscriber_middle_name: string, auto_accident_subscriber_phone_number: string, auto_accident_subscriber_social_security: string, auto_accident_subscriber_state: string, auto_accident_subscriber_suffix: string, auto_accident_subscriber_zip_code: string, auto_accident_treatment_duration: string, auto_accident_will_require_therapy: bool, auto_accident_will_require_therapy_rec: string>, cell_phone: string, chart_id: string, city: string, copay: string, custom_demographics: table<field_type: int, updated_at: string, value: string>, date_of_birth: string, date_of_first_appointment: string, date_of_last_appointment: string, default_pharmacy: string, disable_sms_messages: bool, doctor: int, email: string, emergency_contact_name: string, emergency_contact_phone: string, emergency_contact_relation: string, employer: string, employer_address: string, employer_city: string, employer_state: string, employer_zip_code: string, ethnicity: string, first_name: string, gender: string, home_phone: string, id: int, last_name: string, middle_name: string, nick_name: string, office_phone: string, offices: list<int>, patient_flags: table<archived: bool, color: string, created_at: string, doctor: int, id: int, name: string, priority: int, updated_at: string>, patient_flags_attached: table<archived: bool, created_at: string, flag_text: string, flag_type: int, id: int, updated_at: string>, patient_payment_profile: string, patient_photo: string, patient_photo_date: string, patient_status: string, preferred_language: string, primary_care_physician: string, primary_insurance: record<insurance_claim_office_number: string, insurance_company: string, insurance_group_name: string, insurance_group_number: string, insurance_id_number: string, insurance_payer_id: string, insurance_plan_name: string, insurance_plan_type: string, is_subscriber_the_patient: bool, patient_relationship_to_subscriber: string, photo_back: string, photo_front: string, subscriber_address: string, subscriber_city: string, subscriber_country: string, subscriber_date_of_birth: string, subscriber_first_name: string, subscriber_gender: string, subscriber_last_name: string, subscriber_middle_name: string, subscriber_social_security: string, subscriber_state: string, subscriber_suffix: string, subscriber_zip_code: string>, race: string, referring_doctor: record<address: string, email: string, fax: string, first_name: string, last_name: string, middle_name: string, npi: string, phone: string, provider_number: string, provider_qualifier: string, specialty: string, suffix: string>, referring_source: string, responsible_party_email: string, responsible_party_name: string, responsible_party_phone: string, responsible_party_relation: string, secondary_insurance: record<insurance_claim_office_number: string, insurance_company: string, insurance_group_name: string, insurance_group_number: string, insurance_id_number: string, insurance_payer_id: string, insurance_plan_name: string, insurance_plan_type: string, is_subscriber_the_patient: bool, patient_relationship_to_subscriber: string, photo_back: string, photo_front: string, subscriber_address: string, subscriber_city: string, subscriber_country: string, subscriber_date_of_birth: string, subscriber_first_name: string, subscriber_gender: string, subscriber_last_name: string, subscriber_middle_name: string, subscriber_social_security: string, subscriber_state: string, subscriber_suffix: string, subscriber_zip_code: string>, social_security_number: string, state: string, tertiary_insurance: record<insurance_claim_office_number: string, insurance_company: string, insurance_group_name: string, insurance_group_number: string, insurance_id_number: string, insurance_payer_id: string, insurance_plan_name: string, insurance_plan_type: string, is_subscriber_the_patient: bool, patient_relationship_to_subscriber: string, photo_back: string, photo_front: string, subscriber_address: string, subscriber_city: string, subscriber_country: string, subscriber_date_of_birth: string, subscriber_first_name: string, subscriber_gender: string, subscriber_last_name: string, subscriber_middle_name: string, subscriber_social_security: string, subscriber_state: string, subscriber_suffix: string, subscriber_zip_code: string>, updated_at: string, workers_comp_insurance: record<property_and_casualty_agency_claim_number: string, workers_comp_carrier_code: string, workers_comp_case_number: string, workers_comp_company: string, workers_comp_date_of_accident: string, workers_comp_group_name: string, workers_comp_group_number: string, workers_comp_notes: string, workers_comp_payer_address: string, workers_comp_payer_city: string, workers_comp_payer_id: string, workers_comp_payer_state: string, workers_comp_payer_zip: string, workers_comp_state_of_occurrence: string, workers_comp_wcb: string, workers_comp_wcb_rating_code: string>, zip_code: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "first_name" $first_name "scalar") (serialize-qp "last_name" $last_name "scalar") (serialize-qp "doctor" $doctor "scalar") (serialize-qp "gender" $gender "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "date_of_birth" $date_of_birth "scalar")] | flatten | str join "&"
@@ -8451,7 +8475,7 @@ export def "patients-summary-read" [
   --gender: string
   --since: string
   --date-of-birth: string
-]: nothing -> record<address: string, auto_accident_insurance: record<auto_accident_case_number: string, auto_accident_claim_rep_address: string, auto_accident_claim_rep_city: string, auto_accident_claim_rep_is_insurer: bool, auto_accident_claim_rep_name: string, auto_accident_claim_rep_state: string, auto_accident_claim_rep_zip: string, auto_accident_company: string, auto_accident_date_of_accident: string, auto_accident_disabled_from_date: string, auto_accident_disabled_to_date: string, auto_accident_had_similar_condition: bool, auto_accident_is_subscriber_the_patient: bool, auto_accident_notes: string, auto_accident_patient_relationship_to_subscriber: string, auto_accident_payer_address: string, auto_accident_payer_city: string, auto_accident_payer_id: string, auto_accident_payer_state: string, auto_accident_payer_zip: string, auto_accident_policy_number: string, auto_accident_return_to_work_date: string, auto_accident_significant_injury: string, auto_accident_significant_injury_notes: string, auto_accident_similar_condition_date: string, auto_accident_similar_condition_notes: string, auto_accident_state_of_occurrence: string, auto_accident_still_under_care: bool, auto_accident_subscriber_address: string, auto_accident_subscriber_city: string, auto_accident_subscriber_date_of_birth: string, auto_accident_subscriber_first_name: string, auto_accident_subscriber_last_name: string, auto_accident_subscriber_middle_name: string, auto_accident_subscriber_phone_number: string, auto_accident_subscriber_social_security: string, auto_accident_subscriber_state: string, auto_accident_subscriber_suffix: string, auto_accident_subscriber_zip_code: string, auto_accident_treatment_duration: string, auto_accident_will_require_therapy: bool, auto_accident_will_require_therapy_rec: string>, cell_phone: string, chart_id: string, city: string, copay: string, custom_demographics: table<field_type: int, updated_at: string, value: string>, date_of_birth: string, date_of_first_appointment: string, date_of_last_appointment: string, default_pharmacy: string, disable_sms_messages: bool, doctor: int, email: string, emergency_contact_name: string, emergency_contact_phone: string, emergency_contact_relation: string, employer: string, employer_address: string, employer_city: string, employer_state: string, employer_zip_code: string, ethnicity: string, first_name: string, gender: string, home_phone: string, id: int, last_name: string, middle_name: string, nick_name: string, office_phone: string, offices: list<int>, patient_flags: table<archived: bool, color: string, created_at: string, doctor: int, id: int, name: string, priority: int, updated_at: string>, patient_flags_attached: table<archived: bool, created_at: string, flag_text: string, flag_type: int, id: int, updated_at: string>, patient_payment_profile: string, patient_photo: string, patient_photo_date: string, patient_status: string, preferred_language: string, primary_care_physician: string, primary_insurance: record<insurance_claim_office_number: string, insurance_company: string, insurance_group_name: string, insurance_group_number: string, insurance_id_number: string, insurance_payer_id: string, insurance_plan_name: string, insurance_plan_type: string, is_subscriber_the_patient: bool, patient_relationship_to_subscriber: string, photo_back: string, photo_front: string, subscriber_address: string, subscriber_city: string, subscriber_country: string, subscriber_date_of_birth: string, subscriber_first_name: string, subscriber_gender: string, subscriber_last_name: string, subscriber_middle_name: string, subscriber_social_security: string, subscriber_state: string, subscriber_suffix: string, subscriber_zip_code: string>, race: string, referring_doctor: record<address: string, email: string, fax: string, first_name: string, last_name: string, middle_name: string, npi: string, phone: string, provider_number: string, provider_qualifier: string, specialty: string, suffix: string>, referring_source: string, responsible_party_email: string, responsible_party_name: string, responsible_party_phone: string, responsible_party_relation: string, secondary_insurance: record<insurance_claim_office_number: string, insurance_company: string, insurance_group_name: string, insurance_group_number: string, insurance_id_number: string, insurance_payer_id: string, insurance_plan_name: string, insurance_plan_type: string, is_subscriber_the_patient: bool, patient_relationship_to_subscriber: string, photo_back: string, photo_front: string, subscriber_address: string, subscriber_city: string, subscriber_country: string, subscriber_date_of_birth: string, subscriber_first_name: string, subscriber_gender: string, subscriber_last_name: string, subscriber_middle_name: string, subscriber_social_security: string, subscriber_state: string, subscriber_suffix: string, subscriber_zip_code: string>, social_security_number: string, state: string, tertiary_insurance: record<insurance_claim_office_number: string, insurance_company: string, insurance_group_name: string, insurance_group_number: string, insurance_id_number: string, insurance_payer_id: string, insurance_plan_name: string, insurance_plan_type: string, is_subscriber_the_patient: bool, patient_relationship_to_subscriber: string, photo_back: string, photo_front: string, subscriber_address: string, subscriber_city: string, subscriber_country: string, subscriber_date_of_birth: string, subscriber_first_name: string, subscriber_gender: string, subscriber_last_name: string, subscriber_middle_name: string, subscriber_social_security: string, subscriber_state: string, subscriber_suffix: string, subscriber_zip_code: string>, updated_at: string, workers_comp_insurance: record<property_and_casualty_agency_claim_number: string, workers_comp_carrier_code: string, workers_comp_case_number: string, workers_comp_company: string, workers_comp_date_of_accident: string, workers_comp_group_name: string, workers_comp_group_number: string, workers_comp_notes: string, workers_comp_payer_address: string, workers_comp_payer_city: string, workers_comp_payer_id: string, workers_comp_payer_state: string, workers_comp_payer_zip: string, workers_comp_state_of_occurrence: string, workers_comp_wcb: string, workers_comp_wcb_rating_code: string>, zip_code: string> {
+]: nothing -> oneof<record<address: string, auto_accident_insurance: record<auto_accident_case_number: string, auto_accident_claim_rep_address: string, auto_accident_claim_rep_city: string, auto_accident_claim_rep_is_insurer: bool, auto_accident_claim_rep_name: string, auto_accident_claim_rep_state: string, auto_accident_claim_rep_zip: string, auto_accident_company: string, auto_accident_date_of_accident: string, auto_accident_disabled_from_date: string, auto_accident_disabled_to_date: string, auto_accident_had_similar_condition: bool, auto_accident_is_subscriber_the_patient: bool, auto_accident_notes: string, auto_accident_patient_relationship_to_subscriber: string, auto_accident_payer_address: string, auto_accident_payer_city: string, auto_accident_payer_id: string, auto_accident_payer_state: string, auto_accident_payer_zip: string, auto_accident_policy_number: string, auto_accident_return_to_work_date: string, auto_accident_significant_injury: string, auto_accident_significant_injury_notes: string, auto_accident_similar_condition_date: string, auto_accident_similar_condition_notes: string, auto_accident_state_of_occurrence: string, auto_accident_still_under_care: bool, auto_accident_subscriber_address: string, auto_accident_subscriber_city: string, auto_accident_subscriber_date_of_birth: string, auto_accident_subscriber_first_name: string, auto_accident_subscriber_last_name: string, auto_accident_subscriber_middle_name: string, auto_accident_subscriber_phone_number: string, auto_accident_subscriber_social_security: string, auto_accident_subscriber_state: string, auto_accident_subscriber_suffix: string, auto_accident_subscriber_zip_code: string, auto_accident_treatment_duration: string, auto_accident_will_require_therapy: bool, auto_accident_will_require_therapy_rec: string>, cell_phone: string, chart_id: string, city: string, copay: string, custom_demographics: table<field_type: int, updated_at: string, value: string>, date_of_birth: string, date_of_first_appointment: string, date_of_last_appointment: string, default_pharmacy: string, disable_sms_messages: bool, doctor: int, email: string, emergency_contact_name: string, emergency_contact_phone: string, emergency_contact_relation: string, employer: string, employer_address: string, employer_city: string, employer_state: string, employer_zip_code: string, ethnicity: string, first_name: string, gender: string, home_phone: string, id: int, last_name: string, middle_name: string, nick_name: string, office_phone: string, offices: list<int>, patient_flags: table<archived: bool, color: string, created_at: string, doctor: int, id: int, name: string, priority: int, updated_at: string>, patient_flags_attached: table<archived: bool, created_at: string, flag_text: string, flag_type: int, id: int, updated_at: string>, patient_payment_profile: string, patient_photo: string, patient_photo_date: string, patient_status: string, preferred_language: string, primary_care_physician: string, primary_insurance: record<insurance_claim_office_number: string, insurance_company: string, insurance_group_name: string, insurance_group_number: string, insurance_id_number: string, insurance_payer_id: string, insurance_plan_name: string, insurance_plan_type: string, is_subscriber_the_patient: bool, patient_relationship_to_subscriber: string, photo_back: string, photo_front: string, subscriber_address: string, subscriber_city: string, subscriber_country: string, subscriber_date_of_birth: string, subscriber_first_name: string, subscriber_gender: string, subscriber_last_name: string, subscriber_middle_name: string, subscriber_social_security: string, subscriber_state: string, subscriber_suffix: string, subscriber_zip_code: string>, race: string, referring_doctor: record<address: string, email: string, fax: string, first_name: string, last_name: string, middle_name: string, npi: string, phone: string, provider_number: string, provider_qualifier: string, specialty: string, suffix: string>, referring_source: string, responsible_party_email: string, responsible_party_name: string, responsible_party_phone: string, responsible_party_relation: string, secondary_insurance: record<insurance_claim_office_number: string, insurance_company: string, insurance_group_name: string, insurance_group_number: string, insurance_id_number: string, insurance_payer_id: string, insurance_plan_name: string, insurance_plan_type: string, is_subscriber_the_patient: bool, patient_relationship_to_subscriber: string, photo_back: string, photo_front: string, subscriber_address: string, subscriber_city: string, subscriber_country: string, subscriber_date_of_birth: string, subscriber_first_name: string, subscriber_gender: string, subscriber_last_name: string, subscriber_middle_name: string, subscriber_social_security: string, subscriber_state: string, subscriber_suffix: string, subscriber_zip_code: string>, social_security_number: string, state: string, tertiary_insurance: record<insurance_claim_office_number: string, insurance_company: string, insurance_group_name: string, insurance_group_number: string, insurance_id_number: string, insurance_payer_id: string, insurance_plan_name: string, insurance_plan_type: string, is_subscriber_the_patient: bool, patient_relationship_to_subscriber: string, photo_back: string, photo_front: string, subscriber_address: string, subscriber_city: string, subscriber_country: string, subscriber_date_of_birth: string, subscriber_first_name: string, subscriber_gender: string, subscriber_last_name: string, subscriber_middle_name: string, subscriber_social_security: string, subscriber_state: string, subscriber_suffix: string, subscriber_zip_code: string>, updated_at: string, workers_comp_insurance: record<property_and_casualty_agency_claim_number: string, workers_comp_carrier_code: string, workers_comp_case_number: string, workers_comp_company: string, workers_comp_date_of_accident: string, workers_comp_group_name: string, workers_comp_group_number: string, workers_comp_notes: string, workers_comp_payer_address: string, workers_comp_payer_city: string, workers_comp_payer_id: string, workers_comp_payer_state: string, workers_comp_payer_zip: string, workers_comp_state_of_occurrence: string, workers_comp_wcb: string, workers_comp_wcb_rating_code: string>, zip_code: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -8577,7 +8601,7 @@ export def "prescription-messages-list" [
   --since: string
   --patient: int
   --doctor: int
-]: nothing -> record<data: table<created_at: string, doctor: int, id: int, json_data: string, message_direction: string, message_status: string, message_type: string, parent_message: string, patient: int, pharmacy: string>, next: string, previous: string> {
+]: nothing -> oneof<record<data: table<created_at: string, doctor: int, id: int, json_data: string, message_direction: string, message_status: string, message_type: string, parent_message: string, patient: int, pharmacy: string>, next: string, previous: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "parent_message" $parent_message "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -8617,7 +8641,7 @@ export def "prescription-messages-read" [
   --since: string
   --patient: int
   --doctor: int
-]: nothing -> record<created_at: string, doctor: int, id: int, json_data: string, message_direction: string, message_status: string, message_type: string, parent_message: string, patient: int, pharmacy: string> {
+]: nothing -> oneof<record<created_at: string, doctor: int, id: int, json_data: string, message_direction: string, message_status: string, message_type: string, parent_message: string, patient: int, pharmacy: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -8657,7 +8681,7 @@ export def "problems-list" [
   --page-size: int
   --patient: int
   --doctor: int
-]: nothing -> record<data: table<date_changed: string, date_diagnosis: string, date_onset: string, description: string, doctor: int, icd_code: string, icd_version: string, id: int, info_url: string, name: string, notes: string, patient: int, snomed_ct_code: string, status: string>, next: string, previous: string> {
+]: nothing -> oneof<record<data: table<date_changed: string, date_diagnosis: string, date_onset: string, description: string, doctor: int, icd_code: string, icd_version: string, id: int, info_url: string, name: string, notes: string, patient: int, snomed_ct_code: string, status: string>, next: string, previous: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -8694,7 +8718,7 @@ export def "problems-create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --patient: int
   --doctor: int
-]: nothing -> record<date_changed: string, date_diagnosis: string, date_onset: string, description: string, doctor: int, icd_code: string, icd_version: string, id: int, info_url: string, name: string, notes: string, patient: int, snomed_ct_code: string, status: string> {
+]: nothing -> oneof<record<date_changed: string, date_diagnosis: string, date_onset: string, description: string, doctor: int, icd_code: string, icd_version: string, id: int, info_url: string, name: string, notes: string, patient: int, snomed_ct_code: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -8732,7 +8756,7 @@ export def "problems-read" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --patient: int
   --doctor: int
-]: nothing -> record<date_changed: string, date_diagnosis: string, date_onset: string, description: string, doctor: int, icd_code: string, icd_version: string, id: int, info_url: string, name: string, notes: string, patient: int, snomed_ct_code: string, status: string> {
+]: nothing -> oneof<record<date_changed: string, date_diagnosis: string, date_onset: string, description: string, doctor: int, icd_code: string, icd_version: string, id: int, info_url: string, name: string, notes: string, patient: int, snomed_ct_code: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -8853,7 +8877,7 @@ export def "procedures-list" [
   --mu-date-range: string
   --appointment: int
   --service-date: string
-]: nothing -> record<data: table<adjustment: float, allowed: float, appointment: int, balance_ins: float, balance_pt: float, balance_total: string, billed: float, billing_status: string, code: string, denied_flag: bool, description: string, diagnosis_pointers: list, doctor: string, expected_reimbursement: float, id: int, ins1_paid: float, ins2_paid: float, ins3_paid: float, ins_total: string, insurance_status: string, modifiers: list, paid_total: string, patient: string, posted_date: string, price: float, procedure_type: string, pt_paid: float, quantity: float, service_date: string, units: string, updated_at: string>, next: string, previous: string> {
+]: nothing -> oneof<record<data: table<adjustment: float, allowed: float, appointment: int, balance_ins: float, balance_pt: float, balance_total: string, billed: float, billing_status: string, code: string, denied_flag: bool, description: string, diagnosis_pointers: list, doctor: string, expected_reimbursement: float, id: int, ins1_paid: float, ins2_paid: float, ins3_paid: float, ins_total: string, insurance_status: string, modifiers: list, paid_total: string, patient: string, posted_date: string, price: float, procedure_type: string, pt_paid: float, quantity: float, service_date: string, units: string, updated_at: string>, next: string, previous: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "mu_date" $mu_date "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar") (serialize-qp "mu_date_range" $mu_date_range "scalar") (serialize-qp "appointment" $appointment "scalar") (serialize-qp "service_date" $service_date "scalar")] | flatten | str join "&"
@@ -8894,7 +8918,7 @@ export def "procedures-read" [
   --mu-date-range: string
   --appointment: int
   --service-date: string
-]: nothing -> record<adjustment: float, allowed: float, appointment: int, balance_ins: float, balance_pt: float, balance_total: string, billed: float, billing_status: string, code: string, denied_flag: bool, description: string, diagnosis_pointers: list<string>, doctor: string, expected_reimbursement: float, id: int, ins1_paid: float, ins2_paid: float, ins3_paid: float, ins_total: string, insurance_status: string, modifiers: list<string>, paid_total: string, patient: string, posted_date: string, price: float, procedure_type: string, pt_paid: float, quantity: float, service_date: string, units: string, updated_at: string> {
+]: nothing -> oneof<record<adjustment: float, allowed: float, appointment: int, balance_ins: float, balance_pt: float, balance_total: string, billed: float, billing_status: string, code: string, denied_flag: bool, description: string, diagnosis_pointers: list<string>, doctor: string, expected_reimbursement: float, id: int, ins1_paid: float, ins2_paid: float, ins3_paid: float, ins_total: string, insurance_status: string, modifiers: list<string>, paid_total: string, patient: string, posted_date: string, price: float, procedure_type: string, pt_paid: float, quantity: float, service_date: string, units: string, updated_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -8933,7 +8957,7 @@ export def "reminder-profiles-list" [
   --cursor: string
   --page-size: int
   --doctor: int
-]: nothing -> record<data: table<doctor: int, id: int, name: string, reminders: list>, next: string, previous: string> {
+]: nothing -> oneof<record<data: table<doctor: int, id: int, name: string, reminders: list>, next: string, previous: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -8969,7 +8993,7 @@ export def "reminder-profiles-create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --doctor: int
-]: nothing -> record<doctor: int, id: int, name: string, reminders: table<amount: int, type: string, unit: string>> {
+]: nothing -> oneof<record<doctor: int, id: int, name: string, reminders: table<amount: int, type: string, unit: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -9044,7 +9068,7 @@ export def "reminder-profiles-read" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --doctor: int
-]: nothing -> record<doctor: int, id: int, name: string, reminders: table<amount: int, type: string, unit: string>> {
+]: nothing -> oneof<record<doctor: int, id: int, name: string, reminders: table<amount: int, type: string, unit: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -9158,7 +9182,7 @@ export def "sublabs-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string
   --page-size: int
-]: nothing -> record<data: table<facility_code: string, id: int, name: string, vendor_name: string>, next: string, previous: string> {
+]: nothing -> oneof<record<data: table<facility_code: string, id: int, name: string, vendor_name: string>, next: string, previous: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
@@ -9193,7 +9217,7 @@ export def "sublabs-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<facility_code: string, id: int, name: string, vendor_name: string> {
+]: nothing -> oneof<record<facility_code: string, id: int, name: string, vendor_name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/sublabs" $auth.query)
@@ -9264,7 +9288,7 @@ export def "sublabs-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<facility_code: string, id: int, name: string, vendor_name: string> {
+]: nothing -> oneof<record<facility_code: string, id: int, name: string, vendor_name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -9374,7 +9398,7 @@ export def "task-categories-list" [
   --cursor: string
   --page-size: int
   --since: string
-]: nothing -> record<data: table<archived: bool, created_at: string, id: int, is_global: string, name: string, practice_group: int, updated_at: string>, next: string, previous: string> {
+]: nothing -> oneof<record<data: table<archived: bool, created_at: string, id: int, is_global: string, name: string, practice_group: int, updated_at: string>, next: string, previous: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "since" $since "scalar")] | flatten | str join "&"
@@ -9410,7 +9434,7 @@ export def "task-categories-create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --since: string
-]: nothing -> record<archived: bool, created_at: string, id: int, is_global: string, name: string, practice_group: int, updated_at: string> {
+]: nothing -> oneof<record<archived: bool, created_at: string, id: int, is_global: string, name: string, practice_group: int, updated_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "since" $since "scalar")] | flatten | str join "&"
@@ -9447,7 +9471,7 @@ export def "task-categories-read" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --since: string
-]: nothing -> record<archived: bool, created_at: string, id: int, is_global: string, name: string, practice_group: int, updated_at: string> {
+]: nothing -> oneof<record<archived: bool, created_at: string, id: int, is_global: string, name: string, practice_group: int, updated_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -9563,7 +9587,7 @@ export def "task-notes-list" [
   --page-size: int
   --task: int
   --since: string
-]: nothing -> record<data: table<archived: bool, created_at: string, created_by: string, id: int, task: int, text: string, updated_at: string>, next: string, previous: string> {
+]: nothing -> oneof<record<data: table<archived: bool, created_at: string, created_by: string, id: int, task: int, text: string, updated_at: string>, next: string, previous: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "task" $task "scalar") (serialize-qp "since" $since "scalar")] | flatten | str join "&"
@@ -9600,7 +9624,7 @@ export def "task-notes-create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --task: int
   --since: string
-]: nothing -> record<archived: bool, created_at: string, created_by: string, id: int, task: int, text: string, updated_at: string> {
+]: nothing -> oneof<record<archived: bool, created_at: string, created_by: string, id: int, task: int, text: string, updated_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "task" $task "scalar") (serialize-qp "since" $since "scalar")] | flatten | str join "&"
@@ -9638,7 +9662,7 @@ export def "task-notes-read" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --task: int
   --since: string
-]: nothing -> record<archived: bool, created_at: string, created_by: string, id: int, task: int, text: string, updated_at: string> {
+]: nothing -> oneof<record<archived: bool, created_at: string, created_by: string, id: int, task: int, text: string, updated_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -9755,7 +9779,7 @@ export def "task-statuses-list" [
   --cursor: string
   --page-size: int
   --since: string
-]: nothing -> record<data: table<archived: bool, created_at: string, id: int, name: string, practice_group: int, status_category: string, task_category: int, updated_at: string>, next: string, previous: string> {
+]: nothing -> oneof<record<data: table<archived: bool, created_at: string, id: int, name: string, practice_group: int, status_category: string, task_category: int, updated_at: string>, next: string, previous: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "since" $since "scalar")] | flatten | str join "&"
@@ -9791,7 +9815,7 @@ export def "task-statuses-create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --since: string
-]: nothing -> record<archived: bool, created_at: string, id: int, name: string, practice_group: int, status_category: string, task_category: int, updated_at: string> {
+]: nothing -> oneof<record<archived: bool, created_at: string, id: int, name: string, practice_group: int, status_category: string, task_category: int, updated_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "since" $since "scalar")] | flatten | str join "&"
@@ -9828,7 +9852,7 @@ export def "task-statuses-read" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --since: string
-]: nothing -> record<archived: bool, created_at: string, id: int, name: string, practice_group: int, status_category: string, task_category: int, updated_at: string> {
+]: nothing -> oneof<record<archived: bool, created_at: string, id: int, name: string, practice_group: int, status_category: string, task_category: int, updated_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -9947,7 +9971,7 @@ export def "task-templates-list" [
   --assignee-group: int
   --since: string
   --category: int
-]: nothing -> record<data: table<archived: bool, created_at: string, default_assignee_group: int, default_assignee_user: string, default_category: int, default_due_date_offset: string, default_note: string, default_priority: string, default_status: int, default_title: string, id: int, name: string, practice_group: string, updated_at: string>, next: string, previous: string> {
+]: nothing -> oneof<record<data: table<archived: bool, created_at: string, default_assignee_group: int, default_assignee_user: string, default_category: int, default_due_date_offset: string, default_note: string, default_priority: string, default_status: int, default_title: string, id: int, name: string, practice_group: string, updated_at: string>, next: string, previous: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "assignee_user" $assignee_user "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "assignee_group" $assignee_group "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "category" $category "scalar")] | flatten | str join "&"
@@ -9987,7 +10011,7 @@ export def "task-templates-create" [
   --assignee-group: int
   --since: string
   --category: int
-]: nothing -> record<archived: bool, created_at: string, default_assignee_group: int, default_assignee_user: string, default_category: int, default_due_date_offset: string, default_note: string, default_priority: string, default_status: int, default_title: string, id: int, name: string, practice_group: string, updated_at: string> {
+]: nothing -> oneof<record<archived: bool, created_at: string, default_assignee_group: int, default_assignee_user: string, default_category: int, default_due_date_offset: string, default_note: string, default_priority: string, default_status: int, default_title: string, id: int, name: string, practice_group: string, updated_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "assignee_user" $assignee_user "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "assignee_group" $assignee_group "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "category" $category "scalar")] | flatten | str join "&"
@@ -10028,7 +10052,7 @@ export def "task-templates-read" [
   --assignee-group: int
   --since: string
   --category: int
-]: nothing -> record<archived: bool, created_at: string, default_assignee_group: int, default_assignee_user: string, default_category: int, default_due_date_offset: string, default_note: string, default_priority: string, default_status: int, default_title: string, id: int, name: string, practice_group: string, updated_at: string> {
+]: nothing -> oneof<record<archived: bool, created_at: string, default_assignee_group: int, default_assignee_user: string, default_category: int, default_due_date_offset: string, default_note: string, default_priority: string, default_status: int, default_title: string, id: int, name: string, practice_group: string, updated_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -10159,7 +10183,7 @@ export def "tasks-list" [
   --assignee-user: int
   --assignee-group: int
   --due-at-range: string
-]: nothing -> record<data: table<archived: bool, assigned_by: string, assignee_group: int, assignee_user: string, associated_items: list, category: int, created_at: string, created_by: string, due_date: record, id: int, notes: list, priority: string, status: int, title: string, updated_at: string>, next: string, previous: string> {
+]: nothing -> oneof<record<data: table<archived: bool, assigned_by: string, assignee_group: int, assignee_user: string, associated_items: list, category: int, created_at: string, created_by: string, due_date: record, id: int, notes: list, priority: string, status: int, title: string, updated_at: string>, next: string, previous: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "due_at_date" $due_at_date "scalar") (serialize-qp "due_at_unknown" $due_at_unknown "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "due_at_since" $due_at_since "scalar") (serialize-qp "assignee_user" $assignee_user "scalar") (serialize-qp "assignee_group" $assignee_group "scalar") (serialize-qp "due_at_range" $due_at_range "scalar")] | flatten | str join "&"
@@ -10203,7 +10227,7 @@ export def "tasks-create" [
   --assignee-user: int
   --assignee-group: int
   --due-at-range: string
-]: nothing -> record<archived: bool, assigned_by: string, assignee_group: int, assignee_user: string, associated_items: table<task: int, type: string, value: int>, category: int, created_at: string, created_by: string, due_date: record<time: string>, id: int, notes: table<archived: bool, created_at: string, created_by: string, id: int, task: int, text: string, updated_at: string>, priority: string, status: int, title: string, updated_at: string> {
+]: nothing -> oneof<record<archived: bool, assigned_by: string, assignee_group: int, assignee_user: string, associated_items: table<task: int, type: string, value: int>, category: int, created_at: string, created_by: string, due_date: record<time: string>, id: int, notes: table<archived: bool, created_at: string, created_by: string, id: int, task: int, text: string, updated_at: string>, priority: string, status: int, title: string, updated_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "due_at_date" $due_at_date "scalar") (serialize-qp "due_at_unknown" $due_at_unknown "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "due_at_since" $due_at_since "scalar") (serialize-qp "assignee_user" $assignee_user "scalar") (serialize-qp "assignee_group" $assignee_group "scalar") (serialize-qp "due_at_range" $due_at_range "scalar")] | flatten | str join "&"
@@ -10248,7 +10272,7 @@ export def "tasks-read" [
   --assignee-user: int
   --assignee-group: int
   --due-at-range: string
-]: nothing -> record<archived: bool, assigned_by: string, assignee_group: int, assignee_user: string, associated_items: table<task: int, type: string, value: int>, category: int, created_at: string, created_by: string, due_date: record<time: string>, id: int, notes: table<archived: bool, created_at: string, created_by: string, id: int, task: int, text: string, updated_at: string>, priority: string, status: int, title: string, updated_at: string> {
+]: nothing -> oneof<record<archived: bool, assigned_by: string, assignee_group: int, assignee_user: string, associated_items: table<task: int, type: string, value: int>, category: int, created_at: string, created_by: string, due_date: record<time: string>, id: int, notes: table<archived: bool, created_at: string, created_by: string, id: int, task: int, text: string, updated_at: string>, priority: string, status: int, title: string, updated_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -10383,7 +10407,7 @@ export def "transactions-list" [
   --appointment: int
   --since: string
   --doctor: int
-]: nothing -> record<data: table<adjustment: float, adjustment_group_code: string, adjustment_reason: string, appointment: int, check_date: string, claim_status: string, created_at: string, doctor: int, id: int, ins_name: int, ins_paid: float, line_item: int, patient: int, posted_date: string, trace_number: string, updated_at: string>, next: string, previous: string> {
+]: nothing -> oneof<record<data: table<adjustment: float, adjustment_group_code: string, adjustment_reason: string, appointment: int, check_date: string, claim_status: string, created_at: string, doctor: int, id: int, ins_name: int, ins_paid: float, line_item: int, patient: int, posted_date: string, trace_number: string, updated_at: string>, next: string, previous: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "line_item" $line_item "scalar") (serialize-qp "posted_date" $posted_date "scalar") (serialize-qp "appointment" $appointment "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -10424,7 +10448,7 @@ export def "transactions-read" [
   --appointment: int
   --since: string
   --doctor: int
-]: nothing -> record<adjustment: float, adjustment_group_code: string, adjustment_reason: string, appointment: int, check_date: string, claim_status: string, created_at: string, doctor: int, id: int, ins_name: int, ins_paid: float, line_item: int, patient: int, posted_date: string, trace_number: string, updated_at: string> {
+]: nothing -> oneof<record<adjustment: float, adjustment_group_code: string, adjustment_reason: string, appointment: int, check_date: string, claim_status: string, created_at: string, doctor: int, id: int, ins_name: int, ins_paid: float, line_item: int, patient: int, posted_date: string, trace_number: string, updated_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -10463,7 +10487,7 @@ export def "user-groups-list" [
   --cursor: string
   --page-size: int
   --doctor: int
-]: nothing -> record<data: table<archived: bool, created_at: string, id: int, members: list, name: string, practice_group: string, updated_at: string>, next: string, previous: string> {
+]: nothing -> oneof<record<data: table<archived: bool, created_at: string, id: int, members: list, name: string, practice_group: string, updated_at: string>, next: string, previous: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -10500,7 +10524,7 @@ export def "user-groups-read" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --doctor: int
-]: nothing -> record<archived: bool, created_at: string, id: int, members: list<string>, name: string, practice_group: string, updated_at: string> {
+]: nothing -> oneof<record<archived: bool, created_at: string, id: int, members: list<string>, name: string, practice_group: string, updated_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -10539,7 +10563,7 @@ export def "users-list" [
   --cursor: string
   --page-size: int
   --doctor: int
-]: nothing -> record<data: table<doctor: string, id: string, is_doctor: string, is_staff: string, permissions: string, practice_group: string, username: string>, next: string, previous: string> {
+]: nothing -> oneof<record<data: table<doctor: string, id: string, is_doctor: string, is_staff: string, permissions: string, practice_group: string, username: string>, next: string, previous: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
@@ -10576,7 +10600,7 @@ export def "users-read" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --doctor: int
-]: nothing -> record<doctor: string, id: string, is_doctor: string, is_staff: string, permissions: string, practice_group: string, username: string> {
+]: nothing -> oneof<record<doctor: string, id: string, is_doctor: string, is_staff: string, permissions: string, practice_group: string, username: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }

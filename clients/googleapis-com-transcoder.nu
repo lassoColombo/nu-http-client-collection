@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -114,9 +138,9 @@ def mode-completer [] { ["PROCESSING_MODE_BATCH" "PROCESSING_MODE_INTERACTIVE" "
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "transcoder-projects-locations-job-templates-delete" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["transcoder-projects-locations-job-templates-delete" "transcoder-projects-locations-job-templates-get" "transcoder-projects-locations-job-templates-list" "transcoder-projects-locations-job-templates-create" "transcoder-projects-locations-jobs-list" "transcoder-projects-locations-jobs-create" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -161,7 +185,7 @@ export def "transcoder-projects-locations-job-templates-delete" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --allow-missing: oneof<nothing, bool> # If set to true, and the job template is not found, the request will succeed but no action will be taken on the server.
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -209,7 +233,7 @@ export def "transcoder-projects-locations-job-templates-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<config: record<adBreaks: list<record>, editList: list<record>, elementaryStreams: list<record>, inputs: list<record>, manifests: list<record>, muxStreams: list<record>, output: record<uri: string>, overlays: list<record>, pubsubDestination: record<topic: string>, spriteSheets: list<record>>, labels: record, name: string> {
+]: nothing -> oneof<record<config: record<adBreaks: list<record>, editList: list<record>, elementaryStreams: list<record>, inputs: list<record>, manifests: list<record>, muxStreams: list<record>, output: record<uri: string>, overlays: list<record>, pubsubDestination: record<topic: string>, spriteSheets: list<record>>, labels: record, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -261,7 +285,7 @@ export def "transcoder-projects-locations-job-templates-list" [
   --order-by: string # One or more fields to compare and use to sort the output. See https://google.aip.dev/132#ordering.
   --page-size: int # The maximum number of items to return.
   --page-token: string # The `next_page_token` value returned from a previous List request, if any.
-]: nothing -> record<jobTemplates: table<config: record, labels: record, name: string>, nextPageToken: string, unreachable: list<string>> {
+]: nothing -> oneof<record<jobTemplates: table<config: record, labels: record, name: string>, nextPageToken: string, unreachable: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -287,7 +311,6 @@ export def "transcoder-projects-locations-job-templates-list" [
 #
 # POST /v1/{parent}/jobTemplates
 # operationId: transcoder.projects.locations.jobTemplates.create
-# --config shape: {adBreaks?: list, editList?: list, elementaryStreams?: list, inputs?: list, manifests?: list, muxStreams?: list, output?: record, overlays?: list, pubsubDestination?: record, spriteSheets?: list}
 export def "transcoder-projects-locations-job-templates-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -314,7 +337,7 @@ export def "transcoder-projects-locations-job-templates-create" [
   --config: record # Job configuration — shape: {adBreaks?: list, editList?: list, elementaryStreams?: list, inputs?: list, manifests?: list, muxStreams?: list, output?: record, overlays?: list, pubsubDestination?: record, spriteSheets?: list}
   --labels: record # The labels associated with this job template. You can use these to organize and group your job templates.
   --name: string # The resource name of the job template. Format: `projects/{project_number}/locations/{location}/jobTemplates/{job_template}`
-]: any -> record<config: record<adBreaks: list<record>, editList: list<record>, elementaryStreams: list<record>, inputs: list<record>, manifests: list<record>, muxStreams: list<record>, output: record<uri: string>, overlays: list<record>, pubsubDestination: record<topic: string>, spriteSheets: list<record>>, labels: record, name: string> {
+]: any -> oneof<record<config: record<adBreaks: list<record>, editList: list<record>, elementaryStreams: list<record>, inputs: list<record>, manifests: list<record>, muxStreams: list<record>, output: record<uri: string>, overlays: list<record>, pubsubDestination: record<topic: string>, spriteSheets: list<record>>, labels: record, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -369,7 +392,7 @@ export def "transcoder-projects-locations-jobs-list" [
   --order-by: string # One or more fields to compare and use to sort the output. See https://google.aip.dev/132#ordering.
   --page-size: int # The maximum number of items to return.
   --page-token: string # The `next_page_token` value returned from a previous List request, if any.
-]: nothing -> record<jobs: table<config: record, createTime: string, endTime: string, error: record, inputUri: string, labels: record, mode: string, name: string, outputUri: string, startTime: string, state: string, templateId: string, ttlAfterCompletionDays: int>, nextPageToken: string, unreachable: list<string>> {
+]: nothing -> oneof<record<jobs: table<config: record, createTime: string, endTime: string, error: record, inputUri: string, labels: record, mode: string, name: string, outputUri: string, startTime: string, state: string, templateId: string, ttlAfterCompletionDays: int>, nextPageToken: string, unreachable: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -395,8 +418,6 @@ export def "transcoder-projects-locations-jobs-list" [
 #
 # POST /v1/{parent}/jobs
 # operationId: transcoder.projects.locations.jobs.create
-# --config shape: {adBreaks?: list, editList?: list, elementaryStreams?: list, inputs?: list, manifests?: list, muxStreams?: list, output?: record, overlays?: list, pubsubDestination?: record, spriteSheets?: list}
-# --error shape: {code?: int, details?: list, message?: string}
 export def "transcoder-projects-locations-jobs-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -428,7 +449,7 @@ export def "transcoder-projects-locations-jobs-create" [
   --output-uri: string # Input only. Specify the `output_uri` to populate an empty `Job.config.output.uri` or `JobTemplate.config.output.uri` when using template. URI for the output file(s). For example, `gs://my-bucket/outputs/`. See [Supported input and output formats](https://cloud.google.com/transcoder/docs/concepts/supported-input-and-output-formats).
   --template-id: string # Input only. Specify the `template_id` to use for populating `Job.config`. The default is `preset/web-hd`, which is the only supported preset. User defined JobTemplate: `{job_template_id}`
   --ttl-after-completion-days: int # Job time to live value in days, which will be effective after job completion. Job should be deleted automatically after the given TTL. Enter a value between 1 and 90. The default is 30. (format: int32)
-]: any -> record<config: record<adBreaks: list<record>, editList: list<record>, elementaryStreams: list<record>, inputs: list<record>, manifests: list<record>, muxStreams: list<record>, output: record<uri: string>, overlays: list<record>, pubsubDestination: record<topic: string>, spriteSheets: list<record>>, createTime: string, endTime: string, error: record<code: int, details: list<record>, message: string>, inputUri: string, labels: record, mode: string, name: string, outputUri: string, startTime: string, state: string, templateId: string, ttlAfterCompletionDays: int> {
+]: any -> oneof<record<config: record<adBreaks: list<record>, editList: list<record>, elementaryStreams: list<record>, inputs: list<record>, manifests: list<record>, muxStreams: list<record>, output: record<uri: string>, overlays: list<record>, pubsubDestination: record<topic: string>, spriteSheets: list<record>>, createTime: string, endTime: string, error: record<code: int, details: list<record>, message: string>, inputUri: string, labels: record, mode: string, name: string, outputUri: string, startTime: string, state: string, templateId: string, ttlAfterCompletionDays: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "x-clickmeter-authkey" => { {scheme: $scheme, headers: {"X-Clickmeter-AuthKey": $token_val}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -139,9 +163,9 @@ def type-completer-6 [] { ["dp" "gr" "tl" "tp"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account-get" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["account-get" "account-post" "account-get-domain-whitelist" "account-put-domain-whitelist" "account-delete-domain-whitelist" "account-get-guests" "account-put-guest" "account-get-guests-count" "account-delete-guest" "account-get-guest" "account-post-guest" "account-get-permissions" "account-get-permissions-count" "post-account-guests-guest-id-type-permissions-patch" "account-patch-permissions" "account-get-ip-blacklist" "account-put-ip-blacklist" "account-delete-ip-blacklist" "account-get-plan" "aggregated-get-statistics-single" "aggregated-get-statistics-list" "aggregated-get-conversions-summary" "aggregated-get-datapoints-summary" "aggregated-get-groups-summary" "click-stream-get" "conversions-get" "conversions-put" "conversions-get-statistics-all-list" "conversions-count" "conversions-delete" "get-conversions-conversion-id" "conversions-post" "conversions-get-statistics-single" "conversions-get-statistics-list" "conversions-get-datapoints" "put-conversions-conversion-id-datapoints-batch-patch" "conversions-get-datapoints-count" "conversions-patch" "conversions-get-hits" "conversions-patch-notes" "data-points-get" "data-points-put" "data-points-get-statistics-aggregated-single" "data-points-get-statistics-all-list" "data-points-batch-delete" "data-points-batch-post" "data-points-batch-put" "data-points-count" "data-points-delete" "get-datapoints-id" "data-points-post" "data-points-get-statistics-single" "data-points-get-statistics-list" "data-points-patch-favourite" "data-points-get-hits" "data-points-patch-notes" "domains-get" "domains-put" "domains-count" "domains-delete" "get-domains-id" "domains-update" "groups-get" "groups-put" "groups-get-statistics-aggregated-single" "groups-get-statistics-all-list" "groups-count" "groups-delete" "get-groups-id" "groups-post" "groups-get-statistics-single" "groups-get-statistics-list" "groups-get-datapoints-summary" "groups-get-datapoints" "groups-put-datapoint" "groups-get-datapoints-count" "groups-patch-favourite" "groups-get-hits" "groups-patch-notes" "hits-get-hits" "me-get-me" "me-get-me-plan" "retargeting-get" "retargeting-put" "retargeting-count" "retargeting-delete" "get-retargeting-id" "retargeting-post" "retargeting-get-datapoints" "retargeting-get-datapoints-count" "tags-get" "tags-put" "tags-count" "tags-delete" "get-tags-tag-id" "tags-delete-related-datapoints" "tags-get-datapoints" "tags-get-datapoints-count" "tags-patch-data-point" "tags-delete-related-groups" "tags-get-groups" "tags-get-groups-count" "tags-patch-group" "tags-patch-tag-name" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -174,7 +198,7 @@ export def "account-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<boGoVal: string, bonusClicks: int, companyName: string, companyRole: string, email: string, firstName: string, lastName: string, phone: string, redirectOnly: bool, registrationDate: string, timeframeMinDate: string, timezone: int, timezonename: string> {
+]: nothing -> oneof<record<boGoVal: string, bonusClicks: int, companyName: string, companyRole: string, email: string, firstName: string, lastName: string, phone: string, redirectOnly: bool, registrationDate: string, timeframeMinDate: string, timezone: int, timezonename: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account" $auth.query)
@@ -222,7 +246,7 @@ export def "account-post" [
   --timeframe-min-date: string # (A date in "YmdHis" format) (e.g. 20120203120530)
   --timezone: int # format: int32
   --timezonename: string
-]: any -> record<boGoVal: string, bonusClicks: int, companyName: string, companyRole: string, email: string, firstName: string, lastName: string, phone: string, redirectOnly: bool, registrationDate: string, timeframeMinDate: string, timezone: int, timezonename: string> {
+]: any -> oneof<record<boGoVal: string, bonusClicks: int, companyName: string, companyRole: string, email: string, firstName: string, lastName: string, phone: string, redirectOnly: bool, registrationDate: string, timeframeMinDate: string, timezone: int, timezonename: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
@@ -262,7 +286,7 @@ export def "account-get-domain-whitelist" [
   --accept: string@accept-completer-1 # Response content type
   --offset: int # Offset where to start from (format: int32)
   --limit: int # Limit results to this number (format: int32)
-]: nothing -> record<entities: table<id: string, name: string>> {
+]: nothing -> oneof<record<entities: table<id: string, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
@@ -300,7 +324,7 @@ export def "account-put-domain-whitelist" [
   --accept: string@accept-completer # Response content type
   --id: string
   --name: string
-]: any -> record<id: string, name: string> {
+]: any -> oneof<record<id: string, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
@@ -339,7 +363,7 @@ export def "account-delete-domain-whitelist" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<id: string, name: string> {
+]: nothing -> oneof<record<id: string, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($whitelist_id | is-empty) { error make --unspanned { msg: "path parameter 'whitelistId' must be non-empty" } }
@@ -380,7 +404,7 @@ export def "account-get-guests" [
   --sort-by: string # Field to sort by
   --sort-direction: string@sort-direction-completer # Direction of sort "asc" or "desc"
   --text-search: string # Filter fields by this pattern
-]: nothing -> record<entities: table<id: int, uri: string>> {
+]: nothing -> oneof<record<entities: table<id: int, uri: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "sortDirection" $sort_direction "scalar") (serialize-qp "textSearch" $text_search "scalar")] | flatten | str join "&"
@@ -405,10 +429,6 @@ export def "account-get-guests" [
 #
 # POST /account/guests
 # operationId: Account_PutGuest
-# --conversionOptions shape: {hideComCost?: bool, hideCost?: bool, hideCount?: bool, hideParams?: bool, hideValue?: bool, percentCommission?: int, percentValue?: int}
-# --currentGrant shape: {DatapointType?: string, Entity?: record, EntityName?: string, EntityType?: string, Type?: string}
-# --extendedGrants shape: {allowAllGrants?: bool, allowGroupCreation?: bool}
-# --hitOptions shape: {hideReferrer?: bool}
 export def "account-put-guest" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -445,7 +465,7 @@ export def "account-put-guest" [
   --tl-grants: int # format: int64
   --tp-grants: int # format: int64
   --user-name: string
-]: any -> record<apiKey: string, conversionOptions: record<hideComCost: bool, hideCost: bool, hideCount: bool, hideParams: bool, hideValue: bool, percentCommission: int, percentValue: int>, creationDate: string, currentGrant: record<DatapointType: string, Entity: record<id: int, uri: string>, EntityName: string, EntityType: string, Type: string>, dateFormat: string, decimalSeparator: string, email: string, extendedGrants: record<allowAllGrants: bool, allowGroupCreation: bool>, groupGrants: int, hitOptions: record<hideReferrer: bool>, id: int, key: string, language: string, loginCount: int, name: string, notes: string, numberGroupSeparator: string, password: string, timeFormat: string, timeZone: int, timeframeMinDate: string, timezonename: string, tlGrants: int, tpGrants: int, userName: string> {
+]: any -> oneof<record<apiKey: string, conversionOptions: record<hideComCost: bool, hideCost: bool, hideCount: bool, hideParams: bool, hideValue: bool, percentCommission: int, percentValue: int>, creationDate: string, currentGrant: record<DatapointType: string, Entity: record<id: int, uri: string>, EntityName: string, EntityType: string, Type: string>, dateFormat: string, decimalSeparator: string, email: string, extendedGrants: record<allowAllGrants: bool, allowGroupCreation: bool>, groupGrants: int, hitOptions: record<hideReferrer: bool>, id: int, key: string, language: string, loginCount: int, name: string, notes: string, numberGroupSeparator: string, password: string, timeFormat: string, timeZone: int, timeframeMinDate: string, timezonename: string, tlGrants: int, tpGrants: int, userName: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
@@ -484,7 +504,7 @@ export def "account-get-guests-count" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --text-search: string # Filter fields by this pattern
-]: nothing -> record<count: int> {
+]: nothing -> oneof<record<count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "textSearch" $text_search "scalar")] | flatten | str join "&"
@@ -521,7 +541,7 @@ export def "account-delete-guest" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<id: int, uri: string> {
+]: nothing -> oneof<record<id: int, uri: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($guest_id | is-empty) { error make --unspanned { msg: "path parameter 'guestId' must be non-empty" } }
@@ -558,7 +578,7 @@ export def "account-get-guest" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<apiKey: string, conversionOptions: record<hideComCost: bool, hideCost: bool, hideCount: bool, hideParams: bool, hideValue: bool, percentCommission: int, percentValue: int>, creationDate: string, currentGrant: record<DatapointType: string, Entity: record<id: int, uri: string>, EntityName: string, EntityType: string, Type: string>, dateFormat: string, decimalSeparator: string, email: string, extendedGrants: record<allowAllGrants: bool, allowGroupCreation: bool>, groupGrants: int, hitOptions: record<hideReferrer: bool>, id: int, key: string, language: string, loginCount: int, name: string, notes: string, numberGroupSeparator: string, password: string, timeFormat: string, timeZone: int, timeframeMinDate: string, timezonename: string, tlGrants: int, tpGrants: int, userName: string> {
+]: nothing -> oneof<record<apiKey: string, conversionOptions: record<hideComCost: bool, hideCost: bool, hideCount: bool, hideParams: bool, hideValue: bool, percentCommission: int, percentValue: int>, creationDate: string, currentGrant: record<DatapointType: string, Entity: record<id: int, uri: string>, EntityName: string, EntityType: string, Type: string>, dateFormat: string, decimalSeparator: string, email: string, extendedGrants: record<allowAllGrants: bool, allowGroupCreation: bool>, groupGrants: int, hitOptions: record<hideReferrer: bool>, id: int, key: string, language: string, loginCount: int, name: string, notes: string, numberGroupSeparator: string, password: string, timeFormat: string, timeZone: int, timeframeMinDate: string, timezonename: string, tlGrants: int, tpGrants: int, userName: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($guest_id | is-empty) { error make --unspanned { msg: "path parameter 'guestId' must be non-empty" } }
@@ -583,10 +603,6 @@ export def "account-get-guest" [
 #
 # POST /account/guests/{guestId}
 # operationId: Account_PostGuest
-# --conversionOptions shape: {hideComCost?: bool, hideCost?: bool, hideCount?: bool, hideParams?: bool, hideValue?: bool, percentCommission?: int, percentValue?: int}
-# --currentGrant shape: {DatapointType?: string, Entity?: record, EntityName?: string, EntityType?: string, Type?: string}
-# --extendedGrants shape: {allowAllGrants?: bool, allowGroupCreation?: bool}
-# --hitOptions shape: {hideReferrer?: bool}
 export def "account-post-guest" [
   guest_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -624,7 +640,7 @@ export def "account-post-guest" [
   --tl-grants: int # format: int64
   --tp-grants: int # format: int64
   --user-name: string
-]: any -> record<apiKey: string, conversionOptions: record<hideComCost: bool, hideCost: bool, hideCount: bool, hideParams: bool, hideValue: bool, percentCommission: int, percentValue: int>, creationDate: string, currentGrant: record<DatapointType: string, Entity: record<id: int, uri: string>, EntityName: string, EntityType: string, Type: string>, dateFormat: string, decimalSeparator: string, email: string, extendedGrants: record<allowAllGrants: bool, allowGroupCreation: bool>, groupGrants: int, hitOptions: record<hideReferrer: bool>, id: int, key: string, language: string, loginCount: int, name: string, notes: string, numberGroupSeparator: string, password: string, timeFormat: string, timeZone: int, timeframeMinDate: string, timezonename: string, tlGrants: int, tpGrants: int, userName: string> {
+]: any -> oneof<record<apiKey: string, conversionOptions: record<hideComCost: bool, hideCost: bool, hideCount: bool, hideParams: bool, hideValue: bool, percentCommission: int, percentValue: int>, creationDate: string, currentGrant: record<DatapointType: string, Entity: record<id: int, uri: string>, EntityName: string, EntityType: string, Type: string>, dateFormat: string, decimalSeparator: string, email: string, extendedGrants: record<allowAllGrants: bool, allowGroupCreation: bool>, groupGrants: int, hitOptions: record<hideReferrer: bool>, id: int, key: string, language: string, loginCount: int, name: string, notes: string, numberGroupSeparator: string, password: string, timeFormat: string, timeZone: int, timeframeMinDate: string, timezonename: string, tlGrants: int, tpGrants: int, userName: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
@@ -669,7 +685,7 @@ export def "account-get-permissions" [
   --limit: int # Limit results to this number (format: int32)
   --type: string@type-completer # Can be "w" or "r"
   --entity-id: int # Optional id of the datapoint/group entity to filter by (format: int64)
-]: nothing -> record<entities: table<DatapointType: string, Entity: record, EntityName: string, EntityType: string, Type: string>> {
+]: nothing -> oneof<record<entities: table<DatapointType: string, Entity: record, EntityName: string, EntityType: string, Type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($guest_id | is-empty) { error make --unspanned { msg: "path parameter 'guestId' must be non-empty" } }
@@ -710,7 +726,7 @@ export def "account-get-permissions-count" [
   --entity-type: string@entity-type-completer # Can be "datapoint" or "group"
   --type: string@type-completer # Can be "w" or "r"
   --entity-id: int # Optional id of the datapoint/group entity to filter by (format: int64)
-]: nothing -> record<count: int> {
+]: nothing -> oneof<record<count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($guest_id | is-empty) { error make --unspanned { msg: "path parameter 'guestId' must be non-empty" } }
@@ -751,7 +767,7 @@ export def "post-account-guests-guest-id-type-permissions-patch" [
   --action: string
   --id: int # format: int64
   --verb: string
-]: any -> record<id: int, uri: string> {
+]: any -> oneof<record<id: int, uri: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
@@ -796,7 +812,7 @@ export def "account-patch-permissions" [
   --action: string
   --id: int # format: int64
   --verb: string
-]: any -> record<id: int, uri: string> {
+]: any -> oneof<record<id: int, uri: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
@@ -838,7 +854,7 @@ export def "account-get-ip-blacklist" [
   --accept: string@accept-completer-1 # Response content type
   --offset: int # Offset where to start from (format: int32)
   --limit: int # Limit results to this number (format: int32)
-]: nothing -> record<entities: table<id: string, ip: string>> {
+]: nothing -> oneof<record<entities: table<id: string, ip: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
@@ -876,7 +892,7 @@ export def "account-put-ip-blacklist" [
   --accept: string@accept-completer # Response content type
   --id: string
   --ip: string
-]: any -> record<id: string, ip: string> {
+]: any -> oneof<record<id: string, ip: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
@@ -915,7 +931,7 @@ export def "account-delete-ip-blacklist" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<id: string, ip: string> {
+]: nothing -> oneof<record<id: string, ip: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($blacklist_id | is-empty) { error make --unspanned { msg: "path parameter 'blacklistId' must be non-empty" } }
@@ -951,7 +967,7 @@ export def "account-get-plan" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<allowedPersonalDomains: int, allowedPersonalUrls: int, billingPeriodEnd: string, billingPeriodStart: string, bonusMonthlyEvents: int, maximumDatapoints: int, maximumGuests: int, monthlyEvents: int, name: string, price: float, profileId: int, recurring: bool, recurringPeriod: int, usedDatapoints: int, usedMonthlyEvents: int> {
+]: nothing -> oneof<record<allowedPersonalDomains: int, allowedPersonalUrls: int, billingPeriodEnd: string, billingPeriodStart: string, bonusMonthlyEvents: int, maximumDatapoints: int, maximumGuests: int, monthlyEvents: int, name: string, price: float, profileId: int, recurring: bool, recurringPeriod: int, usedDatapoints: int, usedMonthlyEvents: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/plan" $auth.query)
@@ -991,7 +1007,7 @@ export def "aggregated-get-statistics-single" [
   --to-day: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
   --hourly: oneof<nothing, bool> # If using "yesterday" or "today" timeframe you can ask for the hourly detail
   --only-favorites: string
-]: nothing -> record<activityDay: string, commissionsCost: float, conversionsCost: float, conversionsValue: float, convertedClicks: int, entityData: record, entityId: string, fromDay: string, hourlyBreakDown: record, lastHitDate: string, spiderHitsCount: int, toDay: string, totalClicks: int, totalViews: int, uniqueClicks: int, uniqueConversions: int, uniqueViews: int> {
+]: nothing -> oneof<record<activityDay: string, commissionsCost: float, conversionsCost: float, conversionsValue: float, convertedClicks: int, entityData: record, entityId: string, fromDay: string, hourlyBreakDown: record, lastHitDate: string, spiderHitsCount: int, toDay: string, totalClicks: int, totalViews: int, uniqueClicks: int, uniqueConversions: int, uniqueViews: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($time_frame == null) { error make --unspanned { msg: "required query parameter 'timeFrame' missing: pass --time-frame" } }
@@ -1032,7 +1048,7 @@ export def "aggregated-get-statistics-list" [
   --from-day: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
   --to-day: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
   --group-by: string@group-by-completer # The temporal entity you want to group by ("week"/"month"). If unspecified is "day".
-]: nothing -> record<entities: table<activityDay: string, commissionsCost: float, conversionsCost: float, conversionsValue: float, convertedClicks: int, entityData: record, entityId: string, fromDay: string, hourlyBreakDown: record, lastHitDate: string, spiderHitsCount: int, toDay: string, totalClicks: int, totalViews: int, uniqueClicks: int, uniqueConversions: int, uniqueViews: int>> {
+]: nothing -> oneof<record<entities: table<activityDay: string, commissionsCost: float, conversionsCost: float, conversionsValue: float, convertedClicks: int, entityData: record, entityId: string, fromDay: string, hourlyBreakDown: record, lastHitDate: string, spiderHitsCount: int, toDay: string, totalClicks: int, totalViews: int, uniqueClicks: int, uniqueConversions: int, uniqueViews: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($time_frame == null) { error make --unspanned { msg: "required query parameter 'timeFrame' missing: pass --time-frame" } }
@@ -1078,7 +1094,7 @@ export def "aggregated-get-conversions-summary" [
   --offset: int # Offset where to start from (format: int32)
   --limit: int # Limit results to this number (format: int32)
   --text-search: string # Filter fields by this pattern
-]: nothing -> record<count: int, limit: int, offset: int, result: table<activityDay: string, commissionsCost: float, conversionsCost: float, conversionsValue: float, convertedClicks: int, entityData: record, entityId: string, fromDay: string, hourlyBreakDown: record, lastHitDate: string, spiderHitsCount: int, toDay: string, totalClicks: int, totalViews: int, uniqueClicks: int, uniqueConversions: int, uniqueViews: int>> {
+]: nothing -> oneof<record<count: int, limit: int, offset: int, result: table<activityDay: string, commissionsCost: float, conversionsCost: float, conversionsValue: float, convertedClicks: int, entityData: record, entityId: string, fromDay: string, hourlyBreakDown: record, lastHitDate: string, spiderHitsCount: int, toDay: string, totalClicks: int, totalViews: int, uniqueClicks: int, uniqueConversions: int, uniqueViews: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($time_frame == null) { error make --unspanned { msg: "required query parameter 'timeFrame' missing: pass --time-frame" } }
@@ -1128,7 +1144,7 @@ export def "aggregated-get-datapoints-summary" [
   --limit: int # Limit results to this number (format: int32)
   --group-id: int # Filter by this group id (format: int64)
   --text-search: string # Filter fields by this pattern
-]: nothing -> record<count: int, limit: int, offset: int, result: table<activityDay: string, commissionsCost: float, conversionsCost: float, conversionsValue: float, convertedClicks: int, entityData: record, entityId: string, fromDay: string, hourlyBreakDown: record, lastHitDate: string, spiderHitsCount: int, toDay: string, totalClicks: int, totalViews: int, uniqueClicks: int, uniqueConversions: int, uniqueViews: int>> {
+]: nothing -> oneof<record<count: int, limit: int, offset: int, result: table<activityDay: string, commissionsCost: float, conversionsCost: float, conversionsValue: float, convertedClicks: int, entityData: record, entityId: string, fromDay: string, hourlyBreakDown: record, lastHitDate: string, spiderHitsCount: int, toDay: string, totalClicks: int, totalViews: int, uniqueClicks: int, uniqueConversions: int, uniqueViews: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($time_frame == null) { error make --unspanned { msg: "required query parameter 'timeFrame' missing: pass --time-frame" } }
@@ -1177,7 +1193,7 @@ export def "aggregated-get-groups-summary" [
   --offset: int # Offset where to start from (format: int32)
   --limit: int # Limit results to this number (format: int32)
   --text-search: string # Filter fields by this pattern
-]: nothing -> record<count: int, limit: int, offset: int, result: table<activityDay: string, commissionsCost: float, conversionsCost: float, conversionsValue: float, convertedClicks: int, entityData: record, entityId: string, fromDay: string, hourlyBreakDown: record, lastHitDate: string, spiderHitsCount: int, toDay: string, totalClicks: int, totalViews: int, uniqueClicks: int, uniqueConversions: int, uniqueViews: int>> {
+]: nothing -> oneof<record<count: int, limit: int, offset: int, result: table<activityDay: string, commissionsCost: float, conversionsCost: float, conversionsValue: float, convertedClicks: int, entityData: record, entityId: string, fromDay: string, hourlyBreakDown: record, lastHitDate: string, spiderHitsCount: int, toDay: string, totalClicks: int, totalViews: int, uniqueClicks: int, uniqueConversions: int, uniqueViews: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($time_frame == null) { error make --unspanned { msg: "required query parameter 'timeFrame' missing: pass --time-frame" } }
@@ -1219,7 +1235,7 @@ export def "click-stream-get" [
   --conversion: int # Filter by this conversion id (mutually exclusive with "datapoint" and "group") (format: int64)
   --page-size: int # Limit results to this number (format: int32, default: 50)
   --filter: string@filter-completer # Filter event type ("spiders"/"uniques"/"nonuniques"/"conversions")
-]: nothing -> record<entities: table<accessTime: string, browser: record, clientLanguage: string, conversion1: record, conversion2: record, conversion3: record, conversion4: record, conversion5: record, conversions: list, entity: record, ip: string, isProxy: string, isSpider: string, isUnique: string, location: record, org: string, os: record, queryParams: string, realDestinationUrl: string, referer: string, source: record, type: string>> {
+]: nothing -> oneof<record<entities: table<accessTime: string, browser: record, clientLanguage: string, conversion1: record, conversion2: record, conversion3: record, conversion4: record, conversion5: record, conversions: list, entity: record, ip: string, isProxy: string, isSpider: string, isUnique: string, location: record, org: string, os: record, queryParams: string, realDestinationUrl: string, referer: string, source: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "group" $group "scalar") (serialize-qp "datapoint" $datapoint "scalar") (serialize-qp "conversion" $conversion "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
@@ -1261,7 +1277,7 @@ export def "conversions-get" [
   --text-search: string # Filter fields by this pattern
   --created-after: string # Exclude conversions created before this date (YYYYMMDD)
   --created-before: string # Exclude conversions created after this date (YYYYMMDD)
-]: nothing -> record<entities: table<id: int, uri: string>> {
+]: nothing -> oneof<record<entities: table<id: int, uri: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "textSearch" $text_search "scalar") (serialize-qp "createdAfter" $created_after "scalar") (serialize-qp "createdBefore" $created_before "scalar")] | flatten | str join "&"
@@ -1305,7 +1321,7 @@ export def "conversions-put" [
   --name: string
   --protocol: string@protocol-completer
   --value: float # format: double
-]: any -> record<id: int, uri: string> {
+]: any -> oneof<record<id: int, uri: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
@@ -1348,7 +1364,7 @@ export def "conversions-get-statistics-all-list" [
   --to-day: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
   --status: string@status-completer # Status of conversion ("deleted"/"active")
   --group-by: string@group-by-completer # The temporal entity you want to group by ("week"/"month"). If unspecified is "day".
-]: nothing -> record<entities: table<activityDay: string, commissionsCost: float, conversionsCost: float, conversionsValue: float, convertedClicks: int, entityData: record, entityId: string, fromDay: string, hourlyBreakDown: record, lastHitDate: string, spiderHitsCount: int, toDay: string, totalClicks: int, totalViews: int, uniqueClicks: int, uniqueConversions: int, uniqueViews: int>> {
+]: nothing -> oneof<record<entities: table<activityDay: string, commissionsCost: float, conversionsCost: float, conversionsValue: float, convertedClicks: int, entityData: record, entityId: string, fromDay: string, hourlyBreakDown: record, lastHitDate: string, spiderHitsCount: int, toDay: string, totalClicks: int, totalViews: int, uniqueClicks: int, uniqueConversions: int, uniqueViews: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($time_frame == null) { error make --unspanned { msg: "required query parameter 'timeFrame' missing: pass --time-frame" } }
@@ -1389,7 +1405,7 @@ export def "conversions-count" [
   --text-search: string # Filter fields by this pattern
   --created-after: string # Exclude conversions created before this date (YYYYMMDD)
   --created-before: string # Exclude conversions created after this date (YYYYMMDD)
-]: nothing -> record<count: int> {
+]: nothing -> oneof<record<count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "textSearch" $text_search "scalar") (serialize-qp "createdAfter" $created_after "scalar") (serialize-qp "createdBefore" $created_before "scalar")] | flatten | str join "&"
@@ -1426,7 +1442,7 @@ export def "conversions-delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<id: int, uri: string> {
+]: nothing -> oneof<record<id: int, uri: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($conversion_id | is-empty) { error make --unspanned { msg: "path parameter 'conversionId' must be non-empty" } }
@@ -1462,7 +1478,7 @@ export def "get-conversions-conversion-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<code: string, creationDate: string, deleted: bool, description: string, id: int, name: string, protocol: string, value: float> {
+]: nothing -> oneof<record<code: string, creationDate: string, deleted: bool, description: string, id: int, name: string, protocol: string, value: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($conversion_id | is-empty) { error make --unspanned { msg: "path parameter 'conversionId' must be non-empty" } }
@@ -1507,7 +1523,7 @@ export def "conversions-post" [
   --name: string
   --protocol: string@protocol-completer
   --value: float # format: double
-]: any -> record<id: int, uri: string> {
+]: any -> oneof<record<id: int, uri: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
@@ -1553,7 +1569,7 @@ export def "conversions-get-statistics-single" [
   --tag: string # Filter by this tag name
   --favourite: oneof<nothing, bool> # Is the datapoint marked as favourite
   --hourly: oneof<nothing, bool> # If using "yesterday" or "today" timeframe you can ask for the hourly detail
-]: nothing -> record<activityDay: string, commissionsCost: float, conversionsCost: float, conversionsValue: float, convertedClicks: int, entityData: record, entityId: string, fromDay: string, hourlyBreakDown: record, lastHitDate: string, spiderHitsCount: int, toDay: string, totalClicks: int, totalViews: int, uniqueClicks: int, uniqueConversions: int, uniqueViews: int> {
+]: nothing -> oneof<record<activityDay: string, commissionsCost: float, conversionsCost: float, conversionsValue: float, convertedClicks: int, entityData: record, entityId: string, fromDay: string, hourlyBreakDown: record, lastHitDate: string, spiderHitsCount: int, toDay: string, totalClicks: int, totalViews: int, uniqueClicks: int, uniqueConversions: int, uniqueViews: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($conversion_id | is-empty) { error make --unspanned { msg: "path parameter 'conversionId' must be non-empty" } }
@@ -1596,7 +1612,7 @@ export def "conversions-get-statistics-list" [
   --from-day: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
   --to-day: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
   --group-by: string@group-by-completer # The temporal entity you want to group by ("week"/"month"). If unspecified is "day".
-]: nothing -> record<entities: table<activityDay: string, commissionsCost: float, conversionsCost: float, conversionsValue: float, convertedClicks: int, entityData: record, entityId: string, fromDay: string, hourlyBreakDown: record, lastHitDate: string, spiderHitsCount: int, toDay: string, totalClicks: int, totalViews: int, uniqueClicks: int, uniqueConversions: int, uniqueViews: int>> {
+]: nothing -> oneof<record<entities: table<activityDay: string, commissionsCost: float, conversionsCost: float, conversionsValue: float, convertedClicks: int, entityData: record, entityId: string, fromDay: string, hourlyBreakDown: record, lastHitDate: string, spiderHitsCount: int, toDay: string, totalClicks: int, totalViews: int, uniqueClicks: int, uniqueConversions: int, uniqueViews: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($conversion_id | is-empty) { error make --unspanned { msg: "path parameter 'conversionId' must be non-empty" } }
@@ -1643,7 +1659,7 @@ export def "conversions-get-datapoints" [
   --text-search: string # Filter fields by this pattern
   --created-after: string # Exclude datapoints created before this date (YYYYMMDD)
   --created-before: string # Exclude datapoints created after this date (YYYYMMDD)
-]: nothing -> record<entities: table<id: int, uri: string>> {
+]: nothing -> oneof<record<entities: table<id: int, uri: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($conversion_id | is-empty) { error make --unspanned { msg: "path parameter 'conversionId' must be non-empty" } }
@@ -1668,7 +1684,6 @@ export def "conversions-get-datapoints" [
 # Modify the association between a conversion and multiple datapoints
 #
 # PUT /conversions/{conversionId}/datapoints/batch/patch
-# --PatchRequests item shape: {Action?: string, Id?: int}
 export def "put-conversions-conversion-id-datapoints-batch-patch" [
   conversion_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1682,7 +1697,7 @@ export def "put-conversions-conversion-id-datapoints-batch-patch" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --patch-requests: list # item shape: {Action?: string, Id?: int}
-]: any -> record<id: int, uri: string> {
+]: any -> oneof<record<id: int, uri: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
@@ -1728,7 +1743,7 @@ export def "conversions-get-datapoints-count" [
   --text-search: string # Filter fields by this pattern
   --created-after: string # Exclude datapoints created before this date (YYYYMMDD)
   --created-before: string # Exclude datapoints created after this date (YYYYMMDD)
-]: nothing -> record<count: int> {
+]: nothing -> oneof<record<count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($conversion_id | is-empty) { error make --unspanned { msg: "path parameter 'conversionId' must be non-empty" } }
@@ -1769,7 +1784,7 @@ export def "conversions-patch" [
   --action: string
   --id: int # format: int64
   --replace-id: int # format: int64
-]: any -> record<id: int, uri: string> {
+]: any -> oneof<record<id: int, uri: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
@@ -1815,7 +1830,7 @@ export def "conversions-get-hits" [
   --from-day: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
   --to-day: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
   --filter: string@filter-completer-1 # Filter event type ("spiders"/"uniques"/"nonuniques"/"conversions")
-]: nothing -> record<hits: table<accessTime: string, browser: record, clientLanguage: string, conversion1: record, conversion2: record, conversion3: record, conversion4: record, conversion5: record, conversions: list, entity: record, ip: string, isProxy: string, isSpider: string, isUnique: string, location: record, org: string, os: record, queryParams: string, realDestinationUrl: string, referer: string, source: record, type: string>, lastKey: string> {
+]: nothing -> oneof<record<hits: table<accessTime: string, browser: record, clientLanguage: string, conversion1: record, conversion2: record, conversion3: record, conversion4: record, conversion5: record, conversions: list, entity: record, ip: string, isProxy: string, isSpider: string, isUnique: string, location: record, org: string, os: record, queryParams: string, realDestinationUrl: string, referer: string, source: record, type: string>, lastKey: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($conversion_id | is-empty) { error make --unspanned { msg: "path parameter 'conversionId' must be non-empty" } }
@@ -1855,7 +1870,7 @@ export def "conversions-patch-notes" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --text: string
-]: any -> record<id: int, uri: string> {
+]: any -> oneof<record<id: int, uri: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
@@ -1905,7 +1920,7 @@ export def "data-points-get" [
   --sort-direction: string@sort-direction-completer # Direction of sort "asc" or "desc"
   --created-after: string # Exclude datapoints created before this date (YYYYMMDD)
   --created-before: string # Exclude datapoints created after this date (YYYYMMDD)
-]: nothing -> record<entities: table<id: int, uri: string>> {
+]: nothing -> oneof<record<entities: table<id: int, uri: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "textSearch" $text_search "scalar") (serialize-qp "onlyFavorites" $only_favorites "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "sortDirection" $sort_direction "scalar") (serialize-qp "createdAfter" $created_after "scalar") (serialize-qp "createdBefore" $created_before "scalar")] | flatten | str join "&"
@@ -1930,9 +1945,6 @@ export def "data-points-get" [
 #
 # POST /datapoints
 # operationId: DataPoints_Put
-# --tags item shape: {datapoints?: list<int>, groups?: list<int>, id?: int, name?: string}
-# --typeTL shape: {appendQuery?: bool, browserDestinationItem?: record, destinationMode?: "Simple"|"RandomDestination"|"DestinationByLanguage"|"SpilloverDestination"|"DynamicUrl"|"BrowserDestination"|"DestinationByNation"|"UniqueDestination"|"SequentialDestination"|"WeightedDestination", domainId?: int, encodeUrl?: bool, expirationClicks?: int, expirationDate?: string, firstUrl?: string, goDomainId?: int, hideUrl?: bool, hideUrlTitle?: string, isABTest?: bool, password?: string, pauseAfterClicksExpiration?: bool, ... (14 more fields)}
-# --typeTP shape: {parameterNote?: string}
 export def "data-points-put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1974,7 +1986,7 @@ export def "data-points-put" [
   --type-tl: record # shape: {appendQuery?: bool, browserDestinationItem?: record, destinationMode?: "Simple"|"RandomDestination"|"DestinationByLanguage"|"SpilloverDestination"|"DynamicUrl"|"BrowserDestination"|"DestinationByNation"|"UniqueDestination"|"SequentialDestination"|"WeightedDestination", domainId?: int, encodeUrl?: bool, expirationClicks?: int, expirationDate?: string, firstUrl?: string, goDomainId?: int, hideUrl?: bool, hideUrlTitle?: string, isABTest?: bool, password?: string, pauseAfterClicksExpiration?: bool, ... (14 more fields)}
   --type-tp: record # shape: {parameterNote?: string}
   --write-permited: oneof<nothing, bool>
-]: any -> record<id: int, uri: string> {
+]: any -> oneof<record<id: int, uri: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
@@ -2020,7 +2032,7 @@ export def "data-points-get-statistics-aggregated-single" [
   --status: string@status-completer-1 # Status of datapoint ("deleted"/"active"/"paused"/"spam")
   --tag: string # A comma separated list of tags you want to filter with.
   --favourite: oneof<nothing, bool> # Is the datapoint is marked as favourite
-]: nothing -> record<activityDay: string, commissionsCost: float, conversionsCost: float, conversionsValue: float, convertedClicks: int, entityData: record, entityId: string, fromDay: string, hourlyBreakDown: record, lastHitDate: string, spiderHitsCount: int, toDay: string, totalClicks: int, totalViews: int, uniqueClicks: int, uniqueConversions: int, uniqueViews: int> {
+]: nothing -> oneof<record<activityDay: string, commissionsCost: float, conversionsCost: float, conversionsValue: float, convertedClicks: int, entityData: record, entityId: string, fromDay: string, hourlyBreakDown: record, lastHitDate: string, spiderHitsCount: int, toDay: string, totalClicks: int, totalViews: int, uniqueClicks: int, uniqueConversions: int, uniqueViews: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($time_frame == null) { error make --unspanned { msg: "required query parameter 'timeFrame' missing: pass --time-frame" } }
@@ -2065,7 +2077,7 @@ export def "data-points-get-statistics-all-list" [
   --tag: string # A comma separated list of tags you want to filter with.
   --favourite: oneof<nothing, bool> # Is the datapoint is marked as favourite
   --group-by: string@group-by-completer # The temporal entity you want to group by ("week"/"month"). If unspecified is "day".
-]: nothing -> record<entities: table<activityDay: string, commissionsCost: float, conversionsCost: float, conversionsValue: float, convertedClicks: int, entityData: record, entityId: string, fromDay: string, hourlyBreakDown: record, lastHitDate: string, spiderHitsCount: int, toDay: string, totalClicks: int, totalViews: int, uniqueClicks: int, uniqueConversions: int, uniqueViews: int>> {
+]: nothing -> oneof<record<entities: table<activityDay: string, commissionsCost: float, conversionsCost: float, conversionsValue: float, convertedClicks: int, entityData: record, entityId: string, fromDay: string, hourlyBreakDown: record, lastHitDate: string, spiderHitsCount: int, toDay: string, totalClicks: int, totalViews: int, uniqueClicks: int, uniqueConversions: int, uniqueViews: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($type == null) { error make --unspanned { msg: "required query parameter 'type' missing: pass --type" } }
@@ -2092,7 +2104,6 @@ export def "data-points-get-statistics-all-list" [
 #
 # DELETE /datapoints/batch
 # operationId: DataPoints_BatchDelete
-# --Entities item shape: {id?: int, uri?: string}
 export def "data-points-batch-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2105,7 +2116,7 @@ export def "data-points-batch-delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --entities: list # item shape: {id?: int, uri?: string}
-]: any -> record<entityData: record<creationDate: string, encodeIp: bool, fifthConversionId: int, fifthConversionName: string, firstConversionId: int, firstConversionName: string, fourthConversionId: int, fourthConversionName: string, groupId: int, groupName: string, id: int, isPublic: bool, isSecured: bool, lightTracking: bool, name: string, notes: string, preferred: bool, redirectOnly: bool, secondConversionId: int, secondConversionName: string, status: string, tags: list<record>, thirdConversionId: int, thirdConversionName: string, title: string, trackingCode: string, type: string, typeTL: record<appendQuery: bool, browserDestinationItem: record, destinationMode: string, domainId: int, encodeUrl: bool, expirationClicks: int, expirationDate: string, firstUrl: string, goDomainId: int, hideUrl: bool, hideUrlTitle: string, isABTest: bool, password: string, pauseAfterClicksExpiration: bool, pauseAfterDateExpiration: bool, randomDestinationItems: list, redirectType: string, referrerClean: string, scripts: list, sequentialDestinationItems: list, spilloverDestinationItems: list, uniqueDestinationItem: record, url: string, urlAfterClicksExpiration: string, urlAfterDateExpiration: string, urlsByLanguage: list, urlsByNation: list, weightedDestinationItems: list>, typeTP: record<parameterNote: string>, writePermited: bool>, errors: table<code: record, errorMessage: string, errorValue: record, property: string>, result: record<id: int, uri: string>, status: string> {
+]: any -> oneof<record<entityData: record<creationDate: string, encodeIp: bool, fifthConversionId: int, fifthConversionName: string, firstConversionId: int, firstConversionName: string, fourthConversionId: int, fourthConversionName: string, groupId: int, groupName: string, id: int, isPublic: bool, isSecured: bool, lightTracking: bool, name: string, notes: string, preferred: bool, redirectOnly: bool, secondConversionId: int, secondConversionName: string, status: string, tags: list<record>, thirdConversionId: int, thirdConversionName: string, title: string, trackingCode: string, type: string, typeTL: record<appendQuery: bool, browserDestinationItem: record, destinationMode: string, domainId: int, encodeUrl: bool, expirationClicks: int, expirationDate: string, firstUrl: string, goDomainId: int, hideUrl: bool, hideUrlTitle: string, isABTest: bool, password: string, pauseAfterClicksExpiration: bool, pauseAfterDateExpiration: bool, randomDestinationItems: list, redirectType: string, referrerClean: string, scripts: list, sequentialDestinationItems: list, spilloverDestinationItems: list, uniqueDestinationItem: record, url: string, urlAfterClicksExpiration: string, urlAfterDateExpiration: string, urlsByLanguage: list, urlsByNation: list, weightedDestinationItems: list>, typeTP: record<parameterNote: string>, writePermited: bool>, errors: table<code: record, errorMessage: string, errorValue: record, property: string>, result: record<id: int, uri: string>, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
@@ -2132,7 +2143,6 @@ export def "data-points-batch-delete" [
 #
 # POST /datapoints/batch
 # operationId: DataPoints_BatchPost
-# --List item shape: {creationDate?: string, encodeIp?: bool, fifthConversionId?: int, fifthConversionName?: string, firstConversionId?: int, firstConversionName?: string, fourthConversionId?: int, fourthConversionName?: string, groupId?: int, groupName?: string, id?: int, isPublic?: bool, isSecured?: bool, lightTracking?: bool, name?: string, notes?: string, preferred?: bool, redirectOnly?: bool, secondConversionId?: int, secondConversionName?: string, status?: "Active"|"Paused"|"Abuse"|"Deleted", tags?: list, ... (8 more fields)}
 export def "data-points-batch-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2145,7 +2155,7 @@ export def "data-points-batch-post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --list: list # item shape: {creationDate?: string, encodeIp?: bool, fifthConversionId?: int, fifthConversionName?: string, firstConversionId?: int, firstConversionName?: string, fourthConversionId?: int, fourthConversionName?: string, groupId?: int, groupName?: string, id?: int, isPublic?: bool, isSecured?: bool, lightTracking?: bool, name?: string, notes?: string, preferred?: bool, redirectOnly?: bool, secondConversionId?: int, secondConversionName?: string, status?: "Active"|"Paused"|"Abuse"|"Deleted", tags?: list, ... (8 more fields)}
-]: any -> record<entityData: record<creationDate: string, encodeIp: bool, fifthConversionId: int, fifthConversionName: string, firstConversionId: int, firstConversionName: string, fourthConversionId: int, fourthConversionName: string, groupId: int, groupName: string, id: int, isPublic: bool, isSecured: bool, lightTracking: bool, name: string, notes: string, preferred: bool, redirectOnly: bool, secondConversionId: int, secondConversionName: string, status: string, tags: list<record>, thirdConversionId: int, thirdConversionName: string, title: string, trackingCode: string, type: string, typeTL: record<appendQuery: bool, browserDestinationItem: record, destinationMode: string, domainId: int, encodeUrl: bool, expirationClicks: int, expirationDate: string, firstUrl: string, goDomainId: int, hideUrl: bool, hideUrlTitle: string, isABTest: bool, password: string, pauseAfterClicksExpiration: bool, pauseAfterDateExpiration: bool, randomDestinationItems: list, redirectType: string, referrerClean: string, scripts: list, sequentialDestinationItems: list, spilloverDestinationItems: list, uniqueDestinationItem: record, url: string, urlAfterClicksExpiration: string, urlAfterDateExpiration: string, urlsByLanguage: list, urlsByNation: list, weightedDestinationItems: list>, typeTP: record<parameterNote: string>, writePermited: bool>, errors: table<code: record, errorMessage: string, errorValue: record, property: string>, result: record<id: int, uri: string>, status: string> {
+]: any -> oneof<record<entityData: record<creationDate: string, encodeIp: bool, fifthConversionId: int, fifthConversionName: string, firstConversionId: int, firstConversionName: string, fourthConversionId: int, fourthConversionName: string, groupId: int, groupName: string, id: int, isPublic: bool, isSecured: bool, lightTracking: bool, name: string, notes: string, preferred: bool, redirectOnly: bool, secondConversionId: int, secondConversionName: string, status: string, tags: list<record>, thirdConversionId: int, thirdConversionName: string, title: string, trackingCode: string, type: string, typeTL: record<appendQuery: bool, browserDestinationItem: record, destinationMode: string, domainId: int, encodeUrl: bool, expirationClicks: int, expirationDate: string, firstUrl: string, goDomainId: int, hideUrl: bool, hideUrlTitle: string, isABTest: bool, password: string, pauseAfterClicksExpiration: bool, pauseAfterDateExpiration: bool, randomDestinationItems: list, redirectType: string, referrerClean: string, scripts: list, sequentialDestinationItems: list, spilloverDestinationItems: list, uniqueDestinationItem: record, url: string, urlAfterClicksExpiration: string, urlAfterDateExpiration: string, urlsByLanguage: list, urlsByNation: list, weightedDestinationItems: list>, typeTP: record<parameterNote: string>, writePermited: bool>, errors: table<code: record, errorMessage: string, errorValue: record, property: string>, result: record<id: int, uri: string>, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
@@ -2172,7 +2182,6 @@ export def "data-points-batch-post" [
 #
 # PUT /datapoints/batch
 # operationId: DataPoints_BatchPut
-# --List item shape: {creationDate?: string, encodeIp?: bool, fifthConversionId?: int, fifthConversionName?: string, firstConversionId?: int, firstConversionName?: string, fourthConversionId?: int, fourthConversionName?: string, groupId?: int, groupName?: string, id?: int, isPublic?: bool, isSecured?: bool, lightTracking?: bool, name?: string, notes?: string, preferred?: bool, redirectOnly?: bool, secondConversionId?: int, secondConversionName?: string, status?: "Active"|"Paused"|"Abuse"|"Deleted", tags?: list, ... (8 more fields)}
 export def "data-points-batch-put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2185,7 +2194,7 @@ export def "data-points-batch-put" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --list: list # item shape: {creationDate?: string, encodeIp?: bool, fifthConversionId?: int, fifthConversionName?: string, firstConversionId?: int, firstConversionName?: string, fourthConversionId?: int, fourthConversionName?: string, groupId?: int, groupName?: string, id?: int, isPublic?: bool, isSecured?: bool, lightTracking?: bool, name?: string, notes?: string, preferred?: bool, redirectOnly?: bool, secondConversionId?: int, secondConversionName?: string, status?: "Active"|"Paused"|"Abuse"|"Deleted", tags?: list, ... (8 more fields)}
-]: any -> record<entityData: record<creationDate: string, encodeIp: bool, fifthConversionId: int, fifthConversionName: string, firstConversionId: int, firstConversionName: string, fourthConversionId: int, fourthConversionName: string, groupId: int, groupName: string, id: int, isPublic: bool, isSecured: bool, lightTracking: bool, name: string, notes: string, preferred: bool, redirectOnly: bool, secondConversionId: int, secondConversionName: string, status: string, tags: list<record>, thirdConversionId: int, thirdConversionName: string, title: string, trackingCode: string, type: string, typeTL: record<appendQuery: bool, browserDestinationItem: record, destinationMode: string, domainId: int, encodeUrl: bool, expirationClicks: int, expirationDate: string, firstUrl: string, goDomainId: int, hideUrl: bool, hideUrlTitle: string, isABTest: bool, password: string, pauseAfterClicksExpiration: bool, pauseAfterDateExpiration: bool, randomDestinationItems: list, redirectType: string, referrerClean: string, scripts: list, sequentialDestinationItems: list, spilloverDestinationItems: list, uniqueDestinationItem: record, url: string, urlAfterClicksExpiration: string, urlAfterDateExpiration: string, urlsByLanguage: list, urlsByNation: list, weightedDestinationItems: list>, typeTP: record<parameterNote: string>, writePermited: bool>, errors: table<code: record, errorMessage: string, errorValue: record, property: string>, result: record<id: int, uri: string>, status: string> {
+]: any -> oneof<record<entityData: record<creationDate: string, encodeIp: bool, fifthConversionId: int, fifthConversionName: string, firstConversionId: int, firstConversionName: string, fourthConversionId: int, fourthConversionName: string, groupId: int, groupName: string, id: int, isPublic: bool, isSecured: bool, lightTracking: bool, name: string, notes: string, preferred: bool, redirectOnly: bool, secondConversionId: int, secondConversionName: string, status: string, tags: list<record>, thirdConversionId: int, thirdConversionName: string, title: string, trackingCode: string, type: string, typeTL: record<appendQuery: bool, browserDestinationItem: record, destinationMode: string, domainId: int, encodeUrl: bool, expirationClicks: int, expirationDate: string, firstUrl: string, goDomainId: int, hideUrl: bool, hideUrlTitle: string, isABTest: bool, password: string, pauseAfterClicksExpiration: bool, pauseAfterDateExpiration: bool, randomDestinationItems: list, redirectType: string, referrerClean: string, scripts: list, sequentialDestinationItems: list, spilloverDestinationItems: list, uniqueDestinationItem: record, url: string, urlAfterClicksExpiration: string, urlAfterDateExpiration: string, urlsByLanguage: list, urlsByNation: list, weightedDestinationItems: list>, typeTP: record<parameterNote: string>, writePermited: bool>, errors: table<code: record, errorMessage: string, errorValue: record, property: string>, result: record<id: int, uri: string>, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
@@ -2230,7 +2239,7 @@ export def "data-points-count" [
   --only-favorites: oneof<nothing, bool> # Filter fields by favourite status
   --created-after: string # Exclude datapoints created before this date (YYYYMMDD)
   --created-before: string # Exclude datapoints created after this date (YYYYMMDD)
-]: nothing -> record<count: int> {
+]: nothing -> oneof<record<count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "textSearch" $text_search "scalar") (serialize-qp "onlyFavorites" $only_favorites "scalar") (serialize-qp "createdAfter" $created_after "scalar") (serialize-qp "createdBefore" $created_before "scalar")] | flatten | str join "&"
@@ -2267,7 +2276,7 @@ export def "data-points-delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<id: int, uri: string> {
+]: nothing -> oneof<record<id: int, uri: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2303,7 +2312,7 @@ export def "get-datapoints-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-]: nothing -> record<creationDate: string, encodeIp: bool, fifthConversionId: int, fifthConversionName: string, firstConversionId: int, firstConversionName: string, fourthConversionId: int, fourthConversionName: string, groupId: int, groupName: string, id: int, isPublic: bool, isSecured: bool, lightTracking: bool, name: string, notes: string, preferred: bool, redirectOnly: bool, secondConversionId: int, secondConversionName: string, status: string, tags: table<datapoints: list, groups: list, id: int, name: string>, thirdConversionId: int, thirdConversionName: string, title: string, trackingCode: string, type: string, typeTL: record<appendQuery: bool, browserDestinationItem: record<emailDestinationUrl: string, mobileDestinationUrl: string, spidersDestinationUrl: string>, destinationMode: string, domainId: int, encodeUrl: bool, expirationClicks: int, expirationDate: string, firstUrl: string, goDomainId: int, hideUrl: bool, hideUrlTitle: string, isABTest: bool, password: string, pauseAfterClicksExpiration: bool, pauseAfterDateExpiration: bool, randomDestinationItems: list<record>, redirectType: string, referrerClean: string, scripts: list<record>, sequentialDestinationItems: list<record>, spilloverDestinationItems: list<record>, uniqueDestinationItem: record<firstDestinationUrl: string>, url: string, urlAfterClicksExpiration: string, urlAfterDateExpiration: string, urlsByLanguage: list<record>, urlsByNation: list<record>, weightedDestinationItems: list<record>>, typeTP: record<parameterNote: string>, writePermited: bool> {
+]: nothing -> oneof<record<creationDate: string, encodeIp: bool, fifthConversionId: int, fifthConversionName: string, firstConversionId: int, firstConversionName: string, fourthConversionId: int, fourthConversionName: string, groupId: int, groupName: string, id: int, isPublic: bool, isSecured: bool, lightTracking: bool, name: string, notes: string, preferred: bool, redirectOnly: bool, secondConversionId: int, secondConversionName: string, status: string, tags: table<datapoints: list, groups: list, id: int, name: string>, thirdConversionId: int, thirdConversionName: string, title: string, trackingCode: string, type: string, typeTL: record<appendQuery: bool, browserDestinationItem: record<emailDestinationUrl: string, mobileDestinationUrl: string, spidersDestinationUrl: string>, destinationMode: string, domainId: int, encodeUrl: bool, expirationClicks: int, expirationDate: string, firstUrl: string, goDomainId: int, hideUrl: bool, hideUrlTitle: string, isABTest: bool, password: string, pauseAfterClicksExpiration: bool, pauseAfterDateExpiration: bool, randomDestinationItems: list<record>, redirectType: string, referrerClean: string, scripts: list<record>, sequentialDestinationItems: list<record>, spilloverDestinationItems: list<record>, uniqueDestinationItem: record<firstDestinationUrl: string>, url: string, urlAfterClicksExpiration: string, urlAfterDateExpiration: string, urlsByLanguage: list<record>, urlsByNation: list<record>, weightedDestinationItems: list<record>>, typeTP: record<parameterNote: string>, writePermited: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2328,9 +2337,6 @@ export def "get-datapoints-id" [
 #
 # POST /datapoints/{id}
 # operationId: DataPoints_Post
-# --tags item shape: {datapoints?: list<int>, groups?: list<int>, id?: int, name?: string}
-# --typeTL shape: {appendQuery?: bool, browserDestinationItem?: record, destinationMode?: "Simple"|"RandomDestination"|"DestinationByLanguage"|"SpilloverDestination"|"DynamicUrl"|"BrowserDestination"|"DestinationByNation"|"UniqueDestination"|"SequentialDestination"|"WeightedDestination", domainId?: int, encodeUrl?: bool, expirationClicks?: int, expirationDate?: string, firstUrl?: string, goDomainId?: int, hideUrl?: bool, hideUrlTitle?: string, isABTest?: bool, password?: string, pauseAfterClicksExpiration?: bool, ... (14 more fields)}
-# --typeTP shape: {parameterNote?: string}
 export def "data-points-post" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2373,7 +2379,7 @@ export def "data-points-post" [
   --type-tl: record # shape: {appendQuery?: bool, browserDestinationItem?: record, destinationMode?: "Simple"|"RandomDestination"|"DestinationByLanguage"|"SpilloverDestination"|"DynamicUrl"|"BrowserDestination"|"DestinationByNation"|"UniqueDestination"|"SequentialDestination"|"WeightedDestination", domainId?: int, encodeUrl?: bool, expirationClicks?: int, expirationDate?: string, firstUrl?: string, goDomainId?: int, hideUrl?: bool, hideUrlTitle?: string, isABTest?: bool, password?: string, pauseAfterClicksExpiration?: bool, ... (14 more fields)}
   --type-tp: record # shape: {parameterNote?: string}
   --write-permited: oneof<nothing, bool>
-]: any -> record<id: int, uri: string> {
+]: any -> oneof<record<id: int, uri: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
@@ -2417,7 +2423,7 @@ export def "data-points-get-statistics-single" [
   --from-day: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
   --to-day: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
   --hourly: oneof<nothing, bool> # If using "yesterday" or "today" timeframe you can ask for the hourly detail
-]: nothing -> record<activityDay: string, commissionsCost: float, conversionsCost: float, conversionsValue: float, convertedClicks: int, entityData: record, entityId: string, fromDay: string, hourlyBreakDown: record, lastHitDate: string, spiderHitsCount: int, toDay: string, totalClicks: int, totalViews: int, uniqueClicks: int, uniqueConversions: int, uniqueViews: int> {
+]: nothing -> oneof<record<activityDay: string, commissionsCost: float, conversionsCost: float, conversionsValue: float, convertedClicks: int, entityData: record, entityId: string, fromDay: string, hourlyBreakDown: record, lastHitDate: string, spiderHitsCount: int, toDay: string, totalClicks: int, totalViews: int, uniqueClicks: int, uniqueConversions: int, uniqueViews: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2460,7 +2466,7 @@ export def "data-points-get-statistics-list" [
   --from-day: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
   --to-day: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
   --group-by: string@group-by-completer # The temporal entity you want to group by ("week"/"month"). If unspecified is "day".
-]: nothing -> record<entities: table<activityDay: string, commissionsCost: float, conversionsCost: float, conversionsValue: float, convertedClicks: int, entityData: record, entityId: string, fromDay: string, hourlyBreakDown: record, lastHitDate: string, spiderHitsCount: int, toDay: string, totalClicks: int, totalViews: int, uniqueClicks: int, uniqueConversions: int, uniqueViews: int>> {
+]: nothing -> oneof<record<entities: table<activityDay: string, commissionsCost: float, conversionsCost: float, conversionsValue: float, convertedClicks: int, entityData: record, entityId: string, fromDay: string, hourlyBreakDown: record, lastHitDate: string, spiderHitsCount: int, toDay: string, totalClicks: int, totalViews: int, uniqueClicks: int, uniqueConversions: int, uniqueViews: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2499,7 +2505,7 @@ export def "data-points-patch-favourite" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<id: int, uri: string> {
+]: nothing -> oneof<record<id: int, uri: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2542,7 +2548,7 @@ export def "data-points-get-hits" [
   --from-day: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
   --to-day: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
   --filter: string@filter-completer-1 # Filter event type ("spiders"/"uniques"/"nonuniques"/"conversions")
-]: nothing -> record<hits: table<accessTime: string, browser: record, clientLanguage: string, conversion1: record, conversion2: record, conversion3: record, conversion4: record, conversion5: record, conversions: list, entity: record, ip: string, isProxy: string, isSpider: string, isUnique: string, location: record, org: string, os: record, queryParams: string, realDestinationUrl: string, referer: string, source: record, type: string>, lastKey: string> {
+]: nothing -> oneof<record<hits: table<accessTime: string, browser: record, clientLanguage: string, conversion1: record, conversion2: record, conversion3: record, conversion4: record, conversion5: record, conversions: list, entity: record, ip: string, isProxy: string, isSpider: string, isUnique: string, location: record, org: string, os: record, queryParams: string, realDestinationUrl: string, referer: string, source: record, type: string>, lastKey: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2582,7 +2588,7 @@ export def "data-points-patch-notes" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --text: string
-]: any -> record<id: int, uri: string> {
+]: any -> oneof<record<id: int, uri: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
@@ -2625,7 +2631,7 @@ export def "domains-get" [
   --limit: int # Limit results to this number (format: int32)
   --type: string@type-completer-4 # Type of domain ("system"/"go"/"personal"/"dedicated"). If not specified default is "system" (default: system)
   --name: string # Filter domains with this anmen
-]: nothing -> record<entities: table<id: int, uri: string>> {
+]: nothing -> oneof<record<entities: table<id: int, uri: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
@@ -2666,7 +2672,7 @@ export def "domains-put" [
   --id: int # format: int64
   --name: string
   --type: string@type-completer-5
-]: any -> record<id: int, uri: string> {
+]: any -> oneof<record<id: int, uri: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
@@ -2706,7 +2712,7 @@ export def "domains-count" [
   --accept: string@accept-completer # Response content type
   --type: string@type-completer-4 # Type of domain ("system"/"go"/"personal"/"dedicated"). If not specified default is "system" (default: system)
   --name: string # Filter domains with this anmen
-]: nothing -> record<count: int> {
+]: nothing -> oneof<record<count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
@@ -2743,7 +2749,7 @@ export def "domains-delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<id: int, uri: string> {
+]: nothing -> oneof<record<id: int, uri: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2779,7 +2785,7 @@ export def "get-domains-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<custom404: string, customHomepage: string, id: int, name: string, type: string> {
+]: nothing -> oneof<record<custom404: string, customHomepage: string, id: int, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2821,7 +2827,7 @@ export def "domains-update" [
   --body-id: int # format: int64
   --name: string
   --type: string@type-completer-5
-]: any -> record<id: int, uri: string> {
+]: any -> oneof<record<id: int, uri: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
@@ -2868,7 +2874,7 @@ export def "groups-get" [
   --created-after: string # Exclude groups created before this date (YYYYMMDD)
   --created-before: string # Exclude groups created after this date (YYYYMMDD)
   --write: oneof<nothing, bool> # Write permission
-]: nothing -> record<entities: table<id: int, uri: string>> {
+]: nothing -> oneof<record<entities: table<id: int, uri: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "textSearch" $text_search "scalar") (serialize-qp "createdAfter" $created_after "scalar") (serialize-qp "createdBefore" $created_before "scalar") (serialize-qp "write" $write "scalar")] | flatten | str join "&"
@@ -2893,7 +2899,6 @@ export def "groups-get" [
 #
 # POST /groups
 # operationId: Groups_Put
-# --tags item shape: {datapoints?: list<int>, groups?: list<int>, id?: int, name?: string}
 export def "groups-put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2915,7 +2920,7 @@ export def "groups-put" [
   --redirect-only: oneof<nothing, bool>
   --tags: list # item shape: {datapoints?: list<int>, groups?: list<int>, id?: int, name?: string}
   --write-permited: oneof<nothing, bool>
-]: any -> record<id: int, uri: string> {
+]: any -> oneof<record<id: int, uri: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
@@ -2960,7 +2965,7 @@ export def "groups-get-statistics-aggregated-single" [
   --status: string@status-completer # Status of group ("deleted"/"active")
   --tag: string # A comma separated list of tags you want to filter with.
   --favourite: oneof<nothing, bool> # Is the group is marked as favourite
-]: nothing -> record<activityDay: string, commissionsCost: float, conversionsCost: float, conversionsValue: float, convertedClicks: int, entityData: record, entityId: string, fromDay: string, hourlyBreakDown: record, lastHitDate: string, spiderHitsCount: int, toDay: string, totalClicks: int, totalViews: int, uniqueClicks: int, uniqueConversions: int, uniqueViews: int> {
+]: nothing -> oneof<record<activityDay: string, commissionsCost: float, conversionsCost: float, conversionsValue: float, convertedClicks: int, entityData: record, entityId: string, fromDay: string, hourlyBreakDown: record, lastHitDate: string, spiderHitsCount: int, toDay: string, totalClicks: int, totalViews: int, uniqueClicks: int, uniqueConversions: int, uniqueViews: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($time_frame == null) { error make --unspanned { msg: "required query parameter 'timeFrame' missing: pass --time-frame" } }
@@ -3004,7 +3009,7 @@ export def "groups-get-statistics-all-list" [
   --tag: string # A comma separated list of tags you want to filter with.
   --favourite: oneof<nothing, bool> # Is the group is marked as favourite
   --group-by: string@group-by-completer-1 # The temporal entity you want to group by ("week"/"month"). If unspecified is "day".
-]: nothing -> record<entities: table<activityDay: string, commissionsCost: float, conversionsCost: float, conversionsValue: float, convertedClicks: int, entityData: record, entityId: string, fromDay: string, hourlyBreakDown: record, lastHitDate: string, spiderHitsCount: int, toDay: string, totalClicks: int, totalViews: int, uniqueClicks: int, uniqueConversions: int, uniqueViews: int>> {
+]: nothing -> oneof<record<entities: table<activityDay: string, commissionsCost: float, conversionsCost: float, conversionsValue: float, convertedClicks: int, entityData: record, entityId: string, fromDay: string, hourlyBreakDown: record, lastHitDate: string, spiderHitsCount: int, toDay: string, totalClicks: int, totalViews: int, uniqueClicks: int, uniqueConversions: int, uniqueViews: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($time_frame == null) { error make --unspanned { msg: "required query parameter 'timeFrame' missing: pass --time-frame" } }
@@ -3047,7 +3052,7 @@ export def "groups-count" [
   --created-after: string # Exclude groups created before this date (YYYYMMDD)
   --created-before: string # Exclude groups created after this date (YYYYMMDD)
   --write: oneof<nothing, bool> # Write permission
-]: nothing -> record<count: int> {
+]: nothing -> oneof<record<count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "textSearch" $text_search "scalar") (serialize-qp "createdAfter" $created_after "scalar") (serialize-qp "createdBefore" $created_before "scalar") (serialize-qp "write" $write "scalar")] | flatten | str join "&"
@@ -3084,7 +3089,7 @@ export def "groups-delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<id: int, uri: string> {
+]: nothing -> oneof<record<id: int, uri: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3120,7 +3125,7 @@ export def "get-groups-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-]: nothing -> record<creationDate: string, deleted: bool, id: int, isPublic: bool, name: string, notes: string, preferred: bool, redirectOnly: bool, tags: table<datapoints: list, groups: list, id: int, name: string>, writePermited: bool> {
+]: nothing -> oneof<record<creationDate: string, deleted: bool, id: int, isPublic: bool, name: string, notes: string, preferred: bool, redirectOnly: bool, tags: table<datapoints: list, groups: list, id: int, name: string>, writePermited: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3145,7 +3150,6 @@ export def "get-groups-id" [
 #
 # POST /groups/{id}
 # operationId: Groups_Post
-# --tags item shape: {datapoints?: list<int>, groups?: list<int>, id?: int, name?: string}
 export def "groups-post" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3168,7 +3172,7 @@ export def "groups-post" [
   --redirect-only: oneof<nothing, bool>
   --tags: list # item shape: {datapoints?: list<int>, groups?: list<int>, id?: int, name?: string}
   --write-permited: oneof<nothing, bool>
-]: any -> record<id: int, uri: string> {
+]: any -> oneof<record<id: int, uri: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
@@ -3212,7 +3216,7 @@ export def "groups-get-statistics-single" [
   --from-day: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
   --to-day: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
   --hourly: oneof<nothing, bool> # If using "yesterday" or "today" timeframe you can ask for the hourly detail
-]: nothing -> record<activityDay: string, commissionsCost: float, conversionsCost: float, conversionsValue: float, convertedClicks: int, entityData: record, entityId: string, fromDay: string, hourlyBreakDown: record, lastHitDate: string, spiderHitsCount: int, toDay: string, totalClicks: int, totalViews: int, uniqueClicks: int, uniqueConversions: int, uniqueViews: int> {
+]: nothing -> oneof<record<activityDay: string, commissionsCost: float, conversionsCost: float, conversionsValue: float, convertedClicks: int, entityData: record, entityId: string, fromDay: string, hourlyBreakDown: record, lastHitDate: string, spiderHitsCount: int, toDay: string, totalClicks: int, totalViews: int, uniqueClicks: int, uniqueConversions: int, uniqueViews: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3255,7 +3259,7 @@ export def "groups-get-statistics-list" [
   --from-day: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
   --to-day: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
   --group-by: string@group-by-completer # The temporal entity you want to group by ("week"/"month"). If unspecified is "day".
-]: nothing -> record<entities: table<activityDay: string, commissionsCost: float, conversionsCost: float, conversionsValue: float, convertedClicks: int, entityData: record, entityId: string, fromDay: string, hourlyBreakDown: record, lastHitDate: string, spiderHitsCount: int, toDay: string, totalClicks: int, totalViews: int, uniqueClicks: int, uniqueConversions: int, uniqueViews: int>> {
+]: nothing -> oneof<record<entities: table<activityDay: string, commissionsCost: float, conversionsCost: float, conversionsValue: float, convertedClicks: int, entityData: record, entityId: string, fromDay: string, hourlyBreakDown: record, lastHitDate: string, spiderHitsCount: int, toDay: string, totalClicks: int, totalViews: int, uniqueClicks: int, uniqueConversions: int, uniqueViews: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3306,7 +3310,7 @@ export def "groups-get-datapoints-summary" [
   --offset: int # Offset where to start from (format: int32, default: 0)
   --limit: int # Limit results to this number (format: int32, default: 20)
   --text-search: string # Filter fields by this pattern
-]: nothing -> record<count: int, limit: int, offset: int, result: table<activityDay: string, commissionsCost: float, conversionsCost: float, conversionsValue: float, convertedClicks: int, entityData: record, entityId: string, fromDay: string, hourlyBreakDown: record, lastHitDate: string, spiderHitsCount: int, toDay: string, totalClicks: int, totalViews: int, uniqueClicks: int, uniqueConversions: int, uniqueViews: int>> {
+]: nothing -> oneof<record<count: int, limit: int, offset: int, result: table<activityDay: string, commissionsCost: float, conversionsCost: float, conversionsValue: float, convertedClicks: int, entityData: record, entityId: string, fromDay: string, hourlyBreakDown: record, lastHitDate: string, spiderHitsCount: int, toDay: string, totalClicks: int, totalViews: int, uniqueClicks: int, uniqueConversions: int, uniqueViews: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3356,7 +3360,7 @@ export def "groups-get-datapoints" [
   --sort-direction: string@sort-direction-completer # Direction of sort "asc" or "desc"
   --created-after: string # Exclude datapoints created before this date (YYYYMMDD)
   --created-before: string # Exclude datapoints created after this date (YYYYMMDD)
-]: nothing -> record<entities: table<id: int, uri: string>> {
+]: nothing -> oneof<record<entities: table<id: int, uri: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3382,9 +3386,6 @@ export def "groups-get-datapoints" [
 #
 # POST /groups/{id}/datapoints
 # operationId: Groups_PutDatapoint
-# --tags item shape: {datapoints?: list<int>, groups?: list<int>, id?: int, name?: string}
-# --typeTL shape: {appendQuery?: bool, browserDestinationItem?: record, destinationMode?: "Simple"|"RandomDestination"|"DestinationByLanguage"|"SpilloverDestination"|"DynamicUrl"|"BrowserDestination"|"DestinationByNation"|"UniqueDestination"|"SequentialDestination"|"WeightedDestination", domainId?: int, encodeUrl?: bool, expirationClicks?: int, expirationDate?: string, firstUrl?: string, goDomainId?: int, hideUrl?: bool, hideUrlTitle?: string, isABTest?: bool, password?: string, pauseAfterClicksExpiration?: bool, ... (14 more fields)}
-# --typeTP shape: {parameterNote?: string}
 export def "groups-put-datapoint" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3427,7 +3428,7 @@ export def "groups-put-datapoint" [
   --type-tl: record # shape: {appendQuery?: bool, browserDestinationItem?: record, destinationMode?: "Simple"|"RandomDestination"|"DestinationByLanguage"|"SpilloverDestination"|"DynamicUrl"|"BrowserDestination"|"DestinationByNation"|"UniqueDestination"|"SequentialDestination"|"WeightedDestination", domainId?: int, encodeUrl?: bool, expirationClicks?: int, expirationDate?: string, firstUrl?: string, goDomainId?: int, hideUrl?: bool, hideUrlTitle?: string, isABTest?: bool, password?: string, pauseAfterClicksExpiration?: bool, ... (14 more fields)}
   --type-tp: record # shape: {parameterNote?: string}
   --write-permited: oneof<nothing, bool>
-]: any -> record<id: int, uri: string> {
+]: any -> oneof<record<id: int, uri: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
@@ -3474,7 +3475,7 @@ export def "groups-get-datapoints-count" [
   --only-favorites: oneof<nothing, bool> # Filter fields by favourite status
   --created-after: string # Exclude datapoints created before this date (YYYYMMDD)
   --created-before: string # Exclude datapoints created after this date (YYYYMMDD)
-]: nothing -> record<count: int> {
+]: nothing -> oneof<record<count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3512,7 +3513,7 @@ export def "groups-patch-favourite" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<id: int, uri: string> {
+]: nothing -> oneof<record<id: int, uri: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3555,7 +3556,7 @@ export def "groups-get-hits" [
   --from-day: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
   --to-day: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
   --filter: string@filter-completer-1 # Filter event type ("spiders"/"uniques"/"nonuniques"/"conversions")
-]: nothing -> record<hits: table<accessTime: string, browser: record, clientLanguage: string, conversion1: record, conversion2: record, conversion3: record, conversion4: record, conversion5: record, conversions: list, entity: record, ip: string, isProxy: string, isSpider: string, isUnique: string, location: record, org: string, os: record, queryParams: string, realDestinationUrl: string, referer: string, source: record, type: string>, lastKey: string> {
+]: nothing -> oneof<record<hits: table<accessTime: string, browser: record, clientLanguage: string, conversion1: record, conversion2: record, conversion3: record, conversion4: record, conversion5: record, conversions: list, entity: record, ip: string, isProxy: string, isSpider: string, isUnique: string, location: record, org: string, os: record, queryParams: string, realDestinationUrl: string, referer: string, source: record, type: string>, lastKey: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3595,7 +3596,7 @@ export def "groups-patch-notes" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --text: string
-]: any -> record<id: int, uri: string> {
+]: any -> oneof<record<id: int, uri: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
@@ -3640,7 +3641,7 @@ export def "hits-get-hits" [
   --from-day: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
   --to-day: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
   --filter: string@filter-completer-1 # Filter event type ("spiders"/"uniques"/"nonuniques"/"conversions")
-]: nothing -> record<hits: table<accessTime: string, browser: record, clientLanguage: string, conversion1: record, conversion2: record, conversion3: record, conversion4: record, conversion5: record, conversions: list, entity: record, ip: string, isProxy: string, isSpider: string, isUnique: string, location: record, org: string, os: record, queryParams: string, realDestinationUrl: string, referer: string, source: record, type: string>, lastKey: string> {
+]: nothing -> oneof<record<hits: table<accessTime: string, browser: record, clientLanguage: string, conversion1: record, conversion2: record, conversion3: record, conversion4: record, conversion5: record, conversions: list, entity: record, ip: string, isProxy: string, isSpider: string, isUnique: string, location: record, org: string, os: record, queryParams: string, realDestinationUrl: string, referer: string, source: record, type: string>, lastKey: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($timeframe == null) { error make --unspanned { msg: "required query parameter 'timeframe' missing: pass --timeframe" } }
@@ -3677,7 +3678,7 @@ export def "me-get-me" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<boGoVal: string, bonusClicks: int, companyName: string, companyRole: string, email: string, firstName: string, lastName: string, phone: string, redirectOnly: bool, registrationDate: string, timeframeMinDate: string, timezone: int, timezonename: string> {
+]: nothing -> oneof<record<boGoVal: string, bonusClicks: int, companyName: string, companyRole: string, email: string, firstName: string, lastName: string, phone: string, redirectOnly: bool, registrationDate: string, timeframeMinDate: string, timezone: int, timezonename: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/me" $auth.query)
@@ -3712,7 +3713,7 @@ export def "me-get-me-plan" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<allowedPersonalDomains: int, allowedPersonalUrls: int, billingPeriodEnd: string, billingPeriodStart: string, bonusMonthlyEvents: int, maximumDatapoints: int, maximumGuests: int, monthlyEvents: int, name: string, price: float, profileId: int, recurring: bool, recurringPeriod: int, usedDatapoints: int, usedMonthlyEvents: int> {
+]: nothing -> oneof<record<allowedPersonalDomains: int, allowedPersonalUrls: int, billingPeriodEnd: string, billingPeriodStart: string, bonusMonthlyEvents: int, maximumDatapoints: int, maximumGuests: int, monthlyEvents: int, name: string, price: float, profileId: int, recurring: bool, recurringPeriod: int, usedDatapoints: int, usedMonthlyEvents: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/me/plan" $auth.query)
@@ -3749,7 +3750,7 @@ export def "retargeting-get" [
   --accept: string@accept-completer-1 # Response content type
   --offset: int # Where to start when retrieving elements. Default is 0 if not specified. (format: int32, default: 0)
   --limit: int # Maximum elements to retrieve. Default to 20 if not specified. (format: int32, default: 20)
-]: nothing -> record<entities: table<id: int, uri: string>> {
+]: nothing -> oneof<record<entities: table<id: int, uri: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
@@ -3788,7 +3789,7 @@ export def "retargeting-put" [
   --id: int # format: int64
   --name: string
   --script: string
-]: any -> record<id: int, uri: string> {
+]: any -> oneof<record<id: int, uri: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
@@ -3826,7 +3827,7 @@ export def "retargeting-count" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<count: int> {
+]: nothing -> oneof<record<count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/retargeting/count" $auth.query)
@@ -3862,7 +3863,7 @@ export def "retargeting-delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<id: int, uri: string> {
+]: nothing -> oneof<record<id: int, uri: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3898,7 +3899,7 @@ export def "get-retargeting-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<id: int, name: string, script: string> {
+]: nothing -> oneof<record<id: int, name: string, script: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3938,7 +3939,7 @@ export def "retargeting-post" [
   --body-id: int # format: int64
   --name: string
   --script: string
-]: any -> record<id: int, uri: string> {
+]: any -> oneof<record<id: int, uri: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
@@ -3988,7 +3989,7 @@ export def "retargeting-get-datapoints" [
   --sort-direction: string@sort-direction-completer # Direction of sort "asc" or "desc"
   --created-after: string # Exclude datapoints created before this date (YYYYMMDD)
   --created-before: string # Exclude datapoints created after this date (YYYYMMDD)
-]: nothing -> record<entities: table<id: int, uri: string>> {
+]: nothing -> oneof<record<entities: table<id: int, uri: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4032,7 +4033,7 @@ export def "retargeting-get-datapoints-count" [
   --only-favorites: oneof<nothing, bool> # Filter fields by favourite status
   --created-after: string # Exclude datapoints created before this date (YYYYMMDD)
   --created-before: string # Exclude datapoints created after this date (YYYYMMDD)
-]: nothing -> record<count: int> {
+]: nothing -> oneof<record<count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4075,7 +4076,7 @@ export def "tags-get" [
   --datapoints: string # Comma separated list of datapoints id to filter by
   --groups: string # Comma separated list of groups id to filter by
   --type: string@type-completer-6 # Type of entity related to the tag
-]: nothing -> record<entities: table<id: int, uri: string>> {
+]: nothing -> oneof<record<entities: table<id: int, uri: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "datapoints" $datapoints "scalar") (serialize-qp "groups" $groups "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
@@ -4115,7 +4116,7 @@ export def "tags-put" [
   --groups: list<int>
   --id: int # format: int64
   --name: string
-]: any -> record<id: int, uri: string> {
+]: any -> oneof<record<id: int, uri: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
@@ -4157,7 +4158,7 @@ export def "tags-count" [
   --datapoints: string # Comma separated list of datapoints id to filter by
   --groups: string # Comma separated list of groups id to filter by
   --type: string@type-completer-6 # Type of entity related to the tag
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "datapoints" $datapoints "scalar") (serialize-qp "groups" $groups "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
@@ -4194,7 +4195,7 @@ export def "tags-delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($tag_id | is-empty) { error make --unspanned { msg: "path parameter 'tagId' must be non-empty" } }
@@ -4230,7 +4231,7 @@ export def "get-tags-tag-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-]: nothing -> record<datapoints: list<int>, groups: list<int>, id: int, name: string> {
+]: nothing -> oneof<record<datapoints: list<int>, groups: list<int>, id: int, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($tag_id | is-empty) { error make --unspanned { msg: "path parameter 'tagId' must be non-empty" } }
@@ -4267,7 +4268,7 @@ export def "tags-delete-related-datapoints" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<id: int, uri: string> {
+]: nothing -> oneof<record<id: int, uri: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($tag_id | is-empty) { error make --unspanned { msg: "path parameter 'tagId' must be non-empty" } }
@@ -4311,7 +4312,7 @@ export def "tags-get-datapoints" [
   --text-search: string # Filter fields by this pattern
   --created-after: string # Exclude datapoints created before this date (YYYYMMDD)
   --created-before: string # Exclude datapoints created after this date (YYYYMMDD)
-]: nothing -> record<entities: table<id: int, uri: string>> {
+]: nothing -> oneof<record<entities: table<id: int, uri: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($tag_id | is-empty) { error make --unspanned { msg: "path parameter 'tagId' must be non-empty" } }
@@ -4354,7 +4355,7 @@ export def "tags-get-datapoints-count" [
   --text-search: string # Filter fields by this pattern
   --created-after: string # Exclude datapoints created before this date (YYYYMMDD)
   --created-before: string # Exclude datapoints created after this date (YYYYMMDD)
-]: nothing -> record<count: int> {
+]: nothing -> oneof<record<count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($tag_id | is-empty) { error make --unspanned { msg: "path parameter 'tagId' must be non-empty" } }
@@ -4394,7 +4395,7 @@ export def "tags-patch-data-point" [
   --accept: string@accept-completer # Response content type
   --action: string
   --id: int # format: int64
-]: any -> record<id: int, uri: string> {
+]: any -> oneof<record<id: int, uri: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
@@ -4434,7 +4435,7 @@ export def "tags-delete-related-groups" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<id: int, uri: string> {
+]: nothing -> oneof<record<id: int, uri: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($tag_id | is-empty) { error make --unspanned { msg: "path parameter 'tagId' must be non-empty" } }
@@ -4477,7 +4478,7 @@ export def "tags-get-groups" [
   --text-search: string # Filter fields by this pattern
   --created-after: string # Exclude groups created before this date (YYYYMMDD)
   --created-before: string # Exclude groups created after this date (YYYYMMDD)
-]: nothing -> record<entities: table<id: int, uri: string>> {
+]: nothing -> oneof<record<entities: table<id: int, uri: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($tag_id | is-empty) { error make --unspanned { msg: "path parameter 'tagId' must be non-empty" } }
@@ -4519,7 +4520,7 @@ export def "tags-get-groups-count" [
   --text-search: string # Filter fields by this pattern
   --created-after: string # Exclude groups created before this date (YYYYMMDD)
   --created-before: string # Exclude groups created after this date (YYYYMMDD)
-]: nothing -> record<count: int> {
+]: nothing -> oneof<record<count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($tag_id | is-empty) { error make --unspanned { msg: "path parameter 'tagId' must be non-empty" } }
@@ -4559,7 +4560,7 @@ export def "tags-patch-group" [
   --accept: string@accept-completer # Response content type
   --action: string
   --id: int # format: int64
-]: any -> record<id: int, uri: string> {
+]: any -> oneof<record<id: int, uri: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
@@ -4600,7 +4601,7 @@ export def "tags-patch-tag-name" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --text: string
-]: any -> record<id: int, uri: string> {
+]: any -> oneof<record<id: int, uri: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)

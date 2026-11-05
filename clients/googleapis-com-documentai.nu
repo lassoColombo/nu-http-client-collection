@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -114,9 +138,9 @@ def priority-completer [] { ["DEFAULT" "URGENT"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "documentai-projects-locations-processors-human-review-config-review-document" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["documentai-projects-locations-processors-human-review-config-review-document" "documentai-projects-locations-processors-processor-versions-delete" "documentai-projects-locations-processor-types-get" "documentai-projects-locations-list" "documentai-projects-locations-processors-processor-versions-batch-process" "documentai-projects-locations-operations-cancel" "documentai-projects-locations-processors-processor-versions-deploy" "documentai-projects-locations-processors-disable" "documentai-projects-locations-processors-enable" "documentai-projects-locations-processors-processor-versions-process" "documentai-projects-locations-processors-processor-versions-undeploy" "documentai-projects-locations-processors-processor-versions-evaluations-list" "documentai-projects-locations-processor-types-list" "documentai-projects-locations-processors-processor-versions-list" "documentai-projects-locations-processors-processor-versions-import-processor-version" "documentai-projects-locations-processors-processor-versions-train" "documentai-projects-locations-processors-list" "documentai-projects-locations-processors-create" "documentai-projects-locations-fetch-processor-types" "documentai-projects-locations-processors-processor-versions-evaluate-processor-version" "documentai-projects-locations-processors-set-default-processor-version" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -138,9 +162,6 @@ export def commands []: nothing -> table {
 #
 # POST /v1beta3/{humanReviewConfig}:reviewDocument
 # operationId: documentai.projects.locations.processors.humanReviewConfig.reviewDocument
-# --document shape: {content?: string, entities?: list, entityRelations?: list, error?: record, mimeType?: string, pages?: list, revisions?: list, shardInfo?: record, text?: string, textChanges?: list, textStyles?: list, uri?: string}
-# --documentSchema shape: {description?: string, displayName?: string, entityTypes?: list, metadata?: record}
-# --inlineDocument shape: {content?: string, entities?: list, entityRelations?: list, error?: record, mimeType?: string, pages?: list, revisions?: list, shardInfo?: record, text?: string, textChanges?: list, textStyles?: list, uri?: string}
 export def "documentai-projects-locations-processors-human-review-config-review-document" [
   human_review_config: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -168,7 +189,7 @@ export def "documentai-projects-locations-processors-human-review-config-review-
   --enable-schema-validation: oneof<nothing, bool> # Whether the validation should be performed on the ad-hoc review request.
   --inline-document: record # Document represents the canonical document resource in Document AI. It is an interchange format that provides insights into documents and allows for collaboration between users and Document AI to iterate and optimize for quality. — shape: {content?: string, entities?: list, entityRelations?: list, error?: record, mimeType?: string, pages?: list, revisions?: list, shardInfo?: record, text?: string, textChanges?: list, textStyles?: list, uri?: string}
   --priority: string@priority-completer # The priority of the human review task.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -219,7 +240,7 @@ export def "documentai-projects-locations-processors-processor-versions-delete" 
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: nothing -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -270,7 +291,7 @@ export def "documentai-projects-locations-processor-types-get" [
   --filter: string # The standard list filter.
   --page-size: int # The standard list page size.
   --page-token: string # The standard list page token.
-]: nothing -> record<allowCreation: bool, availableLocations: table<locationId: string>, category: string, launchStage: string, name: string, sampleDocumentUris: list<string>, type: string> {
+]: nothing -> oneof<record<allowCreation: bool, availableLocations: table<locationId: string>, category: string, launchStage: string, name: string, sampleDocumentUris: list<string>, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -321,7 +342,7 @@ export def "documentai-projects-locations-list" [
   --filter: string # A filter to narrow down results to a preferred subset. The filtering language accepts strings like `"displayName=tokyo"`, and is documented in more detail in [AIP-160](https://google.aip.dev/160).
   --page-size: int # The maximum number of results to return. If not set, the service selects a default.
   --page-token: string # A page token received from the `next_page_token` field in the response. Send that page token to receive the subsequent page.
-]: nothing -> record<locations: table<displayName: string, labels: record, locationId: string, metadata: record, name: string>, nextPageToken: string> {
+]: nothing -> oneof<record<locations: table<displayName: string, labels: record, locationId: string, metadata: record, name: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -347,11 +368,6 @@ export def "documentai-projects-locations-list" [
 #
 # POST /v1beta3/{name}:batchProcess
 # operationId: documentai.projects.locations.processors.processorVersions.batchProcess
-# --documentOutputConfig shape: {gcsOutputConfig?: record}
-# --inputConfigs item shape: {gcsSource?: string, mimeType?: string}
-# --inputDocuments shape: {gcsDocuments?: record, gcsPrefix?: record}
-# --outputConfig shape: {gcsDestination?: string}
-# --processOptions shape: {ocrConfig?: record}
 export def "documentai-projects-locations-processors-processor-versions-batch-process" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -380,7 +396,7 @@ export def "documentai-projects-locations-processors-processor-versions-batch-pr
   --output-config: record # The message for output config in batch process. — shape: {gcsDestination?: string}
   --process-options: record # Options for Process API — shape: {ocrConfig?: record}
   --skip-human-review: oneof<nothing, bool> # Whether Human Review feature should be skipped for this request. Default to false.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -431,7 +447,7 @@ export def "documentai-projects-locations-operations-cancel" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -480,7 +496,7 @@ export def "documentai-projects-locations-processors-processor-versions-deploy" 
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -532,7 +548,7 @@ export def "documentai-projects-locations-processors-disable" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -584,7 +600,7 @@ export def "documentai-projects-locations-processors-enable" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -613,10 +629,6 @@ export def "documentai-projects-locations-processors-enable" [
 #
 # POST /v1beta3/{name}:process
 # operationId: documentai.projects.locations.processors.processorVersions.process
-# --document shape: {content?: string, entities?: list, entityRelations?: list, error?: record, mimeType?: string, pages?: list, revisions?: list, shardInfo?: record, text?: string, textChanges?: list, textStyles?: list, uri?: string}
-# --inlineDocument shape: {content?: string, entities?: list, entityRelations?: list, error?: record, mimeType?: string, pages?: list, revisions?: list, shardInfo?: record, text?: string, textChanges?: list, textStyles?: list, uri?: string}
-# --processOptions shape: {ocrConfig?: record}
-# --rawDocument shape: {content?: string, mimeType?: string}
 export def "documentai-projects-locations-processors-processor-versions-process" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -645,7 +657,7 @@ export def "documentai-projects-locations-processors-processor-versions-process"
   --process-options: record # Options for Process API — shape: {ocrConfig?: record}
   --raw-document: record # Payload message of raw document content (bytes). — shape: {content?: string, mimeType?: string}
   --skip-human-review: oneof<nothing, bool> # Whether Human Review feature should be skipped for this request. Default to false.
-]: any -> record<document: record<content: string, entities: list<record>, entityRelations: list<record>, error: record<code: int, details: list, message: string>, mimeType: string, pages: list<record>, revisions: list<record>, shardInfo: record<shardCount: string, shardIndex: string, textOffset: string>, text: string, textChanges: list<record>, textStyles: list<record>, uri: string>, humanReviewOperation: string, humanReviewStatus: record<humanReviewOperation: string, state: string, stateMessage: string>> {
+]: any -> oneof<record<document: record<content: string, entities: list<record>, entityRelations: list<record>, error: record<code: int, details: list, message: string>, mimeType: string, pages: list<record>, revisions: list<record>, shardInfo: record<shardCount: string, shardIndex: string, textOffset: string>, text: string, textChanges: list<record>, textStyles: list<record>, uri: string>, humanReviewOperation: string, humanReviewStatus: record<humanReviewOperation: string, state: string, stateMessage: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -697,7 +709,7 @@ export def "documentai-projects-locations-processors-processor-versions-undeploy
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -750,7 +762,7 @@ export def "documentai-projects-locations-processors-processor-versions-evaluati
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # The standard list page size. If unspecified, at most 5 evaluations will be returned. The maximum value is 100; values above 100 will be coerced to 100.
   --page-token: string # A page token, received from a previous `ListEvaluations` call. Provide this to retrieve the subsequent page.
-]: nothing -> record<evaluations: table<allEntitiesMetrics: record, createTime: string, documentCounters: record, entityMetrics: record, kmsKeyName: string, kmsKeyVersionName: string, name: string>, nextPageToken: string> {
+]: nothing -> oneof<record<evaluations: table<allEntitiesMetrics: record, createTime: string, documentCounters: record, entityMetrics: record, kmsKeyName: string, kmsKeyVersionName: string, name: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -800,7 +812,7 @@ export def "documentai-projects-locations-processor-types-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # The maximum number of processor types to return. If unspecified, at most 100 processor types will be returned. The maximum value is 500; values above 500 will be coerced to 500.
   --page-token: string # Used to retrieve the next page of results, empty if at the end of the list.
-]: nothing -> record<nextPageToken: string, processorTypes: table<allowCreation: bool, availableLocations: list, category: string, launchStage: string, name: string, sampleDocumentUris: list, type: string>> {
+]: nothing -> oneof<record<nextPageToken: string, processorTypes: table<allowCreation: bool, availableLocations: list, category: string, launchStage: string, name: string, sampleDocumentUris: list, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -850,7 +862,7 @@ export def "documentai-projects-locations-processors-processor-versions-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # The maximum number of processor versions to return. If unspecified, at most 10 processor versions will be returned. The maximum value is 20; values above 20 will be coerced to 20.
   --page-token: string # We will return the processor versions sorted by creation time. The page token will point to the next processor version.
-]: nothing -> record<nextPageToken: string, processorVersions: table<createTime: string, deprecationInfo: record, displayName: string, documentSchema: record, googleManaged: bool, kmsKeyName: string, kmsKeyVersionName: string, latestEvaluation: record, name: string, state: string>> {
+]: nothing -> oneof<record<nextPageToken: string, processorVersions: table<createTime: string, deprecationInfo: record, displayName: string, documentSchema: record, googleManaged: bool, kmsKeyName: string, kmsKeyVersionName: string, latestEvaluation: record, name: string, state: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -899,7 +911,7 @@ export def "documentai-projects-locations-processors-processor-versions-import-p
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --processor-version-source: string # The source processor version to import from.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -928,9 +940,6 @@ export def "documentai-projects-locations-processors-processor-versions-import-p
 #
 # POST /v1beta3/{parent}/processorVersions:train
 # operationId: documentai.projects.locations.processors.processorVersions.train
-# --documentSchema shape: {description?: string, displayName?: string, entityTypes?: list, metadata?: record}
-# --inputData shape: {testDocuments?: record, trainingDocuments?: record}
-# --processorVersion shape: {createTime?: string, deprecationInfo?: record, displayName?: string, documentSchema?: record, googleManaged?: bool, kmsKeyName?: string, kmsKeyVersionName?: string, latestEvaluation?: record, name?: string, state?: "STATE_UNSPECIFIED"|"DEPLOYED"|"DEPLOYING"|"UNDEPLOYED"|"UNDEPLOYING"|"CREATING"|"DELETING"|"FAILED"|"IMPORTING"}
 export def "documentai-projects-locations-processors-processor-versions-train" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -957,7 +966,7 @@ export def "documentai-projects-locations-processors-processor-versions-train" [
   --document-schema: record # The schema defines the output of the processed document by a processor. — shape: {description?: string, displayName?: string, entityTypes?: list, metadata?: record}
   --input-data: record # The input data used to train a new `ProcessorVersion`. — shape: {testDocuments?: record, trainingDocuments?: record}
   --processor-version: record # A processor version is an implementation of a processor. Each processor can have multiple versions, pre-trained by Google internally or up-trained by the customer. At a time, a processor can only have one default version version. So the processor's behavior (when processing documents) is defined by a default version — shape: {createTime?: string, deprecationInfo?: record, displayName?: string, documentSchema?: record, googleManaged?: bool, kmsKeyName?: string, kmsKeyVersionName?: string, latestEvaluation?: record, name?: string, state?: "STATE_UNSPECIFIED"|"DEPLOYED"|"DEPLOYING"|"UNDEPLOYED"|"UNDEPLOYING"|"CREATING"|"DELETING"|"FAILED"|"IMPORTING"}
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1010,7 +1019,7 @@ export def "documentai-projects-locations-processors-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # The maximum number of processors to return. If unspecified, at most 50 processors will be returned. The maximum value is 100; values above 100 will be coerced to 100.
   --page-token: string # We will return the processors sorted by creation time. The page token will point to the next processor.
-]: nothing -> record<nextPageToken: string, processors: table<createTime: string, defaultProcessorVersion: string, displayName: string, kmsKeyName: string, name: string, processEndpoint: string, state: string, type: string>> {
+]: nothing -> oneof<record<nextPageToken: string, processors: table<createTime: string, defaultProcessorVersion: string, displayName: string, kmsKeyName: string, name: string, processEndpoint: string, state: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1063,7 +1072,7 @@ export def "documentai-projects-locations-processors-create" [
   --display-name: string # The display name of the processor.
   --kms-key-name: string # The KMS key used for encryption/decryption in CMEK scenarios. See https://cloud.google.com/security-key-management.
   --type: string # The processor type, e.g., `OCR_PROCESSOR`, `INVOICE_PROCESSOR`, etc. To get a list of processors types, see FetchProcessorTypes.
-]: any -> record<createTime: string, defaultProcessorVersion: string, displayName: string, kmsKeyName: string, name: string, processEndpoint: string, state: string, type: string> {
+]: any -> oneof<record<createTime: string, defaultProcessorVersion: string, displayName: string, kmsKeyName: string, name: string, processEndpoint: string, state: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1114,7 +1123,7 @@ export def "documentai-projects-locations-fetch-processor-types" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<processorTypes: table<allowCreation: bool, availableLocations: list, category: string, launchStage: string, name: string, sampleDocumentUris: list, type: string>> {
+]: nothing -> oneof<record<processorTypes: table<allowCreation: bool, availableLocations: list, category: string, launchStage: string, name: string, sampleDocumentUris: list, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1140,7 +1149,6 @@ export def "documentai-projects-locations-fetch-processor-types" [
 #
 # POST /v1beta3/{processorVersion}:evaluateProcessorVersion
 # operationId: documentai.projects.locations.processors.processorVersions.evaluateProcessorVersion
-# --evaluationDocuments shape: {gcsDocuments?: record, gcsPrefix?: record}
 export def "documentai-projects-locations-processors-processor-versions-evaluate-processor-version" [
   processor_version: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1164,7 +1172,7 @@ export def "documentai-projects-locations-processors-processor-versions-evaluate
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --evaluation-documents: record # The common config to specify a set of documents used as input. — shape: {gcsDocuments?: record, gcsPrefix?: record}
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1216,7 +1224,7 @@ export def "documentai-projects-locations-processors-set-default-processor-versi
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --default-processor-version: string # Required. The resource name of child ProcessorVersion to use as default. Format: `projects/{project}/locations/{location}/processors/{processor}/processorVersions/{version}`
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -125,9 +149,9 @@ def storage-mode-completer [] { ["LOCAL" "TIERED"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "batch-associate-scram-secret" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["batch-associate-scram-secret" "batch-disassociate-scram-secret" "list-scram-secrets" "create-cluster" "list-clusters" "create-cluster-v2" "list-clusters-v2" "create-configuration" "list-configurations" "delete-cluster" "describe-cluster" "delete-configuration" "describe-configuration" "update-configuration" "describe-cluster-v2" "describe-cluster-operation" "describe-configuration-revision" "get-bootstrap-brokers" "get-compatible-kafka-versions" "list-cluster-operations" "list-configuration-revisions" "list-kafka-versions" "list-nodes" "list-tags-for-resource" "tag-resource" "reboot-broker" "untag-resource" "update-broker-count" "update-broker-type" "update-broker-storage" "update-connectivity" "update-cluster-configuration" "update-cluster-kafka-version" "update-monitoring" "update-security" "update-storage" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -168,7 +192,7 @@ export def "batch-associate-scram-secret" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   secret_arn_list: list<string> # List of AWS Secrets Manager secret ARNs.
-]: any -> record<ClusterArn: string, UnprocessedScramSecrets: table<ErrorCode: string, ErrorMessage: string, SecretArn: string>> {
+]: any -> oneof<record<ClusterArn: string, UnprocessedScramSecrets: table<ErrorCode: string, ErrorMessage: string, SecretArn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -217,7 +241,7 @@ export def "batch-disassociate-scram-secret" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   secret_arn_list: list<string> # List of AWS Secrets Manager secret ARNs.
-]: any -> record<ClusterArn: string, UnprocessedScramSecrets: table<ErrorCode: string, ErrorMessage: string, SecretArn: string>> {
+]: any -> oneof<record<ClusterArn: string, UnprocessedScramSecrets: table<ErrorCode: string, ErrorMessage: string, SecretArn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -269,7 +293,7 @@ export def "list-scram-secrets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextToken: string, SecretArnList: list<string>> {
+]: nothing -> oneof<record<NextToken: string, SecretArnList: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($cluster_arn | is-empty) { error make --unspanned { msg: "path parameter 'clusterArn' must be non-empty" } }
@@ -297,12 +321,6 @@ export def "list-scram-secrets" [
 #
 # POST /v1/clusters
 # operationId: CreateCluster
-# --brokerNodeGroupInfo shape: {BrokerAZDistribution?: "DEFAULT", ClientSubnets?: list<string>, InstanceType?: string, SecurityGroups?: list<string>, StorageInfo?: record, ConnectivityInfo?: record}
-# --clientAuthentication shape: {Sasl?: record, Tls?: record, Unauthenticated?: record}
-# --configurationInfo shape: {Arn?: string, Revision?: int}
-# --encryptionInfo shape: {EncryptionAtRest?: record, EncryptionInTransit?: record}
-# --openMonitoring shape: {Prometheus?: record}
-# --loggingInfo shape: {BrokerLogs?: record}
 export def "create-cluster" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -332,7 +350,7 @@ export def "create-cluster" [
   number_of_broker_nodes: int # The number of broker nodes in the cluster.
   --tags: record # Create tags when creating the cluster.
   --storage-mode: string@storage-mode-completer # Controls storage mode for various supported storage tiers.
-]: any -> record<ClusterArn: string, ClusterName: string, State: string> {
+]: any -> oneof<record<ClusterArn: string, ClusterName: string, State: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -383,7 +401,7 @@ export def "list-clusters" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ClusterInfoList: table<ActiveOperationArn: string, BrokerNodeGroupInfo: record, ClientAuthentication: record, ClusterArn: string, ClusterName: string, CreationTime: string, CurrentBrokerSoftwareInfo: record, CurrentVersion: string, EncryptionInfo: record, EnhancedMonitoring: string, OpenMonitoring: record, LoggingInfo: record, NumberOfBrokerNodes: int, State: string, StateInfo: record, Tags: record, ZookeeperConnectString: string, ZookeeperConnectStringTls: string, StorageMode: string>, NextToken: string> {
+]: nothing -> oneof<record<ClusterInfoList: table<ActiveOperationArn: string, BrokerNodeGroupInfo: record, ClientAuthentication: record, ClusterArn: string, ClusterName: string, CreationTime: string, CurrentBrokerSoftwareInfo: record, CurrentVersion: string, EncryptionInfo: record, EnhancedMonitoring: string, OpenMonitoring: record, LoggingInfo: record, NumberOfBrokerNodes: int, State: string, StateInfo: record, Tags: record, ZookeeperConnectString: string, ZookeeperConnectStringTls: string, StorageMode: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "clusterNameFilter" $cluster_name_filter "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -410,8 +428,6 @@ export def "list-clusters" [
 #
 # POST /api/v2/clusters
 # operationId: CreateClusterV2
-# --provisioned shape: {BrokerNodeGroupInfo?: record, ClientAuthentication?: record, ConfigurationInfo?: record, EncryptionInfo?: record, EnhancedMonitoring?: "DEFAULT"|"PER_BROKER"|"PER_TOPIC_PER_BROKER"|"PER_TOPIC_PER_PARTITION", OpenMonitoring?: record, KafkaVersion?: string, LoggingInfo?: record, NumberOfBrokerNodes?: int, StorageMode?: "LOCAL"|"TIERED"}
-# --serverless shape: {VpcConfigs?: list, ClientAuthentication?: record}
 export def "create-cluster-v2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -433,7 +449,7 @@ export def "create-cluster-v2" [
   --tags: record # A map of tags that you want the cluster to have.
   --provisioned: record # Provisioned cluster request. — shape: {BrokerNodeGroupInfo?: record, ClientAuthentication?: record, ConfigurationInfo?: record, EncryptionInfo?: record, EnhancedMonitoring?: "DEFAULT"|"PER_BROKER"|"PER_TOPIC_PER_BROKER"|"PER_TOPIC_PER_PARTITION", OpenMonitoring?: record, KafkaVersion?: string, LoggingInfo?: record, NumberOfBrokerNodes?: int, StorageMode?: "LOCAL"|"TIERED"}
   --serverless: record # Serverless cluster request. — shape: {VpcConfigs?: list, ClientAuthentication?: record}
-]: any -> record<ClusterArn: string, ClusterName: string, State: string, ClusterType: string> {
+]: any -> oneof<record<ClusterArn: string, ClusterName: string, State: string, ClusterType: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -485,7 +501,7 @@ export def "list-clusters-v2" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ClusterInfoList: table<ActiveOperationArn: string, ClusterType: string, ClusterArn: string, ClusterName: string, CreationTime: string, CurrentVersion: string, State: string, StateInfo: record, Tags: record, Provisioned: record, Serverless: record>, NextToken: string> {
+]: nothing -> oneof<record<ClusterInfoList: table<ActiveOperationArn: string, ClusterType: string, ClusterArn: string, ClusterName: string, CreationTime: string, CurrentVersion: string, State: string, StateInfo: record, Tags: record, Provisioned: record, Serverless: record>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "clusterNameFilter" $cluster_name_filter "scalar") (serialize-qp "clusterTypeFilter" $cluster_type_filter "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -533,7 +549,7 @@ export def "create-configuration" [
   --kafka-versions: list<string> # The versions of Apache Kafka with which you can use this MSK configuration.
   name: string # The name of the configuration.
   server_properties: string # Contents of the server.properties file. When using the API, you must ensure that the contents of the file are base64 encoded. When using the AWS Management Console, the SDK, or the AWS CLI, the contents of server.properties can be in plaintext.
-]: any -> record<Arn: string, CreationTime: string, LatestRevision: record<CreationTime: string, Description: string, Revision: int>, Name: string, State: string> {
+]: any -> oneof<record<Arn: string, CreationTime: string, LatestRevision: record<CreationTime: string, Description: string, Revision: int>, Name: string, State: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -583,7 +599,7 @@ export def "list-configurations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Configurations: table<Arn: string, CreationTime: string, Description: string, KafkaVersions: list, LatestRevision: record, Name: string, State: string>, NextToken: string> {
+]: nothing -> oneof<record<Configurations: table<Arn: string, CreationTime: string, Description: string, KafkaVersions: list, LatestRevision: record, Name: string, State: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -629,7 +645,7 @@ export def "delete-cluster" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ClusterArn: string, State: string> {
+]: nothing -> oneof<record<ClusterArn: string, State: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($cluster_arn | is-empty) { error make --unspanned { msg: "path parameter 'clusterArn' must be non-empty" } }
@@ -675,7 +691,7 @@ export def "describe-cluster" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ClusterInfo: record<ActiveOperationArn: string, BrokerNodeGroupInfo: record<BrokerAZDistribution: string, ClientSubnets: list, InstanceType: string, SecurityGroups: list, StorageInfo: record, ConnectivityInfo: record>, ClientAuthentication: record<Sasl: record, Tls: record, Unauthenticated: record>, ClusterArn: string, ClusterName: string, CreationTime: string, CurrentBrokerSoftwareInfo: record<ConfigurationArn: string, ConfigurationRevision: int, KafkaVersion: string>, CurrentVersion: string, EncryptionInfo: record<EncryptionAtRest: record, EncryptionInTransit: record>, EnhancedMonitoring: string, OpenMonitoring: record<Prometheus: record>, LoggingInfo: record<BrokerLogs: record>, NumberOfBrokerNodes: int, State: string, StateInfo: record<Code: string, Message: string>, Tags: record, ZookeeperConnectString: string, ZookeeperConnectStringTls: string, StorageMode: string>> {
+]: nothing -> oneof<record<ClusterInfo: record<ActiveOperationArn: string, BrokerNodeGroupInfo: record<BrokerAZDistribution: string, ClientSubnets: list, InstanceType: string, SecurityGroups: list, StorageInfo: record, ConnectivityInfo: record>, ClientAuthentication: record<Sasl: record, Tls: record, Unauthenticated: record>, ClusterArn: string, ClusterName: string, CreationTime: string, CurrentBrokerSoftwareInfo: record<ConfigurationArn: string, ConfigurationRevision: int, KafkaVersion: string>, CurrentVersion: string, EncryptionInfo: record<EncryptionAtRest: record, EncryptionInTransit: record>, EnhancedMonitoring: string, OpenMonitoring: record<Prometheus: record>, LoggingInfo: record<BrokerLogs: record>, NumberOfBrokerNodes: int, State: string, StateInfo: record<Code: string, Message: string>, Tags: record, ZookeeperConnectString: string, ZookeeperConnectStringTls: string, StorageMode: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($cluster_arn | is-empty) { error make --unspanned { msg: "path parameter 'clusterArn' must be non-empty" } }
@@ -720,7 +736,7 @@ export def "delete-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Arn: string, State: string> {
+]: nothing -> oneof<record<Arn: string, State: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($arn | is-empty) { error make --unspanned { msg: "path parameter 'arn' must be non-empty" } }
@@ -765,7 +781,7 @@ export def "describe-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Arn: string, CreationTime: string, Description: string, KafkaVersions: list<string>, LatestRevision: record<CreationTime: string, Description: string, Revision: int>, Name: string, State: string> {
+]: nothing -> oneof<record<Arn: string, CreationTime: string, Description: string, KafkaVersions: list<string>, LatestRevision: record<CreationTime: string, Description: string, Revision: int>, Name: string, State: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($arn | is-empty) { error make --unspanned { msg: "path parameter 'arn' must be non-empty" } }
@@ -812,7 +828,7 @@ export def "update-configuration" [
   --x-amz-signed-headers: string
   --description: string # The description of the configuration revision.
   server_properties: string # Contents of the server.properties file. When using the API, you must ensure that the contents of the file are base64 encoded. When using the AWS Management Console, the SDK, or the AWS CLI, the contents of server.properties can be in plaintext.
-]: any -> record<Arn: string, LatestRevision: record<CreationTime: string, Description: string, Revision: int>> {
+]: any -> oneof<record<Arn: string, LatestRevision: record<CreationTime: string, Description: string, Revision: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -860,7 +876,7 @@ export def "describe-cluster-v2" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ClusterInfo: record<ActiveOperationArn: string, ClusterType: string, ClusterArn: string, ClusterName: string, CreationTime: string, CurrentVersion: string, State: string, StateInfo: record<Code: string, Message: string>, Tags: record, Provisioned: record<BrokerNodeGroupInfo: record, CurrentBrokerSoftwareInfo: record, ClientAuthentication: record, EncryptionInfo: record, EnhancedMonitoring: string, OpenMonitoring: record, LoggingInfo: record, NumberOfBrokerNodes: int, ZookeeperConnectString: string, ZookeeperConnectStringTls: string, StorageMode: string>, Serverless: record<VpcConfigs: list, ClientAuthentication: record>>> {
+]: nothing -> oneof<record<ClusterInfo: record<ActiveOperationArn: string, ClusterType: string, ClusterArn: string, ClusterName: string, CreationTime: string, CurrentVersion: string, State: string, StateInfo: record<Code: string, Message: string>, Tags: record, Provisioned: record<BrokerNodeGroupInfo: record, CurrentBrokerSoftwareInfo: record, ClientAuthentication: record, EncryptionInfo: record, EnhancedMonitoring: string, OpenMonitoring: record, LoggingInfo: record, NumberOfBrokerNodes: int, ZookeeperConnectString: string, ZookeeperConnectStringTls: string, StorageMode: string>, Serverless: record<VpcConfigs: list, ClientAuthentication: record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($cluster_arn | is-empty) { error make --unspanned { msg: "path parameter 'clusterArn' must be non-empty" } }
@@ -905,7 +921,7 @@ export def "describe-cluster-operation" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ClusterOperationInfo: record<ClientRequestId: string, ClusterArn: string, CreationTime: string, EndTime: string, ErrorInfo: record<ErrorCode: string, ErrorString: string>, OperationArn: string, OperationState: string, OperationSteps: list<record>, OperationType: string, SourceClusterInfo: record<BrokerEBSVolumeInfo: list, ConfigurationInfo: record, NumberOfBrokerNodes: int, EnhancedMonitoring: string, OpenMonitoring: record, KafkaVersion: string, LoggingInfo: record, InstanceType: string, ClientAuthentication: record, EncryptionInfo: record, ConnectivityInfo: record, StorageMode: string>, TargetClusterInfo: record<BrokerEBSVolumeInfo: list, ConfigurationInfo: record, NumberOfBrokerNodes: int, EnhancedMonitoring: string, OpenMonitoring: record, KafkaVersion: string, LoggingInfo: record, InstanceType: string, ClientAuthentication: record, EncryptionInfo: record, ConnectivityInfo: record, StorageMode: string>>> {
+]: nothing -> oneof<record<ClusterOperationInfo: record<ClientRequestId: string, ClusterArn: string, CreationTime: string, EndTime: string, ErrorInfo: record<ErrorCode: string, ErrorString: string>, OperationArn: string, OperationState: string, OperationSteps: list<record>, OperationType: string, SourceClusterInfo: record<BrokerEBSVolumeInfo: list, ConfigurationInfo: record, NumberOfBrokerNodes: int, EnhancedMonitoring: string, OpenMonitoring: record, KafkaVersion: string, LoggingInfo: record, InstanceType: string, ClientAuthentication: record, EncryptionInfo: record, ConnectivityInfo: record, StorageMode: string>, TargetClusterInfo: record<BrokerEBSVolumeInfo: list, ConfigurationInfo: record, NumberOfBrokerNodes: int, EnhancedMonitoring: string, OpenMonitoring: record, KafkaVersion: string, LoggingInfo: record, InstanceType: string, ClientAuthentication: record, EncryptionInfo: record, ConnectivityInfo: record, StorageMode: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($cluster_operation_arn | is-empty) { error make --unspanned { msg: "path parameter 'clusterOperationArn' must be non-empty" } }
@@ -951,7 +967,7 @@ export def "describe-configuration-revision" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Arn: string, CreationTime: string, Description: string, Revision: int, ServerProperties: string> {
+]: nothing -> oneof<record<Arn: string, CreationTime: string, Description: string, Revision: int, ServerProperties: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($arn | is-empty) { error make --unspanned { msg: "path parameter 'arn' must be non-empty" } }
@@ -997,7 +1013,7 @@ export def "get-bootstrap-brokers" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<BootstrapBrokerString: string, BootstrapBrokerStringTls: string, BootstrapBrokerStringSaslScram: string, BootstrapBrokerStringSaslIam: string, BootstrapBrokerStringPublicTls: string, BootstrapBrokerStringPublicSaslScram: string, BootstrapBrokerStringPublicSaslIam: string> {
+]: nothing -> oneof<record<BootstrapBrokerString: string, BootstrapBrokerStringTls: string, BootstrapBrokerStringSaslScram: string, BootstrapBrokerStringSaslIam: string, BootstrapBrokerStringPublicTls: string, BootstrapBrokerStringPublicSaslScram: string, BootstrapBrokerStringPublicSaslIam: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($cluster_arn | is-empty) { error make --unspanned { msg: "path parameter 'clusterArn' must be non-empty" } }
@@ -1042,7 +1058,7 @@ export def "get-compatible-kafka-versions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CompatibleKafkaVersions: table<SourceVersion: string, TargetVersions: list>> {
+]: nothing -> oneof<record<CompatibleKafkaVersions: table<SourceVersion: string, TargetVersions: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "clusterArn" $cluster_arn "scalar")] | flatten | str join "&"
@@ -1091,7 +1107,7 @@ export def "list-cluster-operations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ClusterOperationInfoList: table<ClientRequestId: string, ClusterArn: string, CreationTime: string, EndTime: string, ErrorInfo: record, OperationArn: string, OperationState: string, OperationSteps: list, OperationType: string, SourceClusterInfo: record, TargetClusterInfo: record>, NextToken: string> {
+]: nothing -> oneof<record<ClusterOperationInfoList: table<ClientRequestId: string, ClusterArn: string, CreationTime: string, EndTime: string, ErrorInfo: record, OperationArn: string, OperationState: string, OperationSteps: list, OperationType: string, SourceClusterInfo: record, TargetClusterInfo: record>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($cluster_arn | is-empty) { error make --unspanned { msg: "path parameter 'clusterArn' must be non-empty" } }
@@ -1141,7 +1157,7 @@ export def "list-configuration-revisions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextToken: string, Revisions: table<CreationTime: string, Description: string, Revision: int>> {
+]: nothing -> oneof<record<NextToken: string, Revisions: table<CreationTime: string, Description: string, Revision: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($arn | is-empty) { error make --unspanned { msg: "path parameter 'arn' must be non-empty" } }
@@ -1190,7 +1206,7 @@ export def "list-kafka-versions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<KafkaVersions: table<Version: string, Status: string>, NextToken: string> {
+]: nothing -> oneof<record<KafkaVersions: table<Version: string, Status: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -1239,7 +1255,7 @@ export def "list-nodes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextToken: string, NodeInfoList: table<AddedToClusterTime: string, BrokerNodeInfo: record, InstanceType: string, NodeARN: string, NodeType: string, ZookeeperNodeInfo: record>> {
+]: nothing -> oneof<record<NextToken: string, NodeInfoList: table<AddedToClusterTime: string, BrokerNodeInfo: record, InstanceType: string, NodeARN: string, NodeType: string, ZookeeperNodeInfo: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($cluster_arn | is-empty) { error make --unspanned { msg: "path parameter 'clusterArn' must be non-empty" } }
@@ -1285,7 +1301,7 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Tags: record> {
+]: nothing -> oneof<record<Tags: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
@@ -1380,7 +1396,7 @@ export def "reboot-broker" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   broker_ids: list<string> # The list of broker IDs to be rebooted. The reboot-broker operation supports rebooting one broker at a time.
-]: any -> record<ClusterArn: string, ClusterOperationArn: string> {
+]: any -> oneof<record<ClusterArn: string, ClusterOperationArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1478,7 +1494,7 @@ export def "update-broker-count" [
   --x-amz-signed-headers: string
   current_version: string # The version of cluster to update from. A successful operation will then generate a new version.
   target_number_of_broker_nodes: int # The number of broker nodes that you want the cluster to have after this operation completes successfully.
-]: any -> record<ClusterArn: string, ClusterOperationArn: string> {
+]: any -> oneof<record<ClusterArn: string, ClusterOperationArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1528,7 +1544,7 @@ export def "update-broker-type" [
   --x-amz-signed-headers: string
   current_version: string # The cluster version that you want to change. After this operation completes successfully, the cluster will have a new version.
   target_instance_type: string # The Amazon MSK broker type that you want all of the brokers in this cluster to be.
-]: any -> record<ClusterArn: string, ClusterOperationArn: string> {
+]: any -> oneof<record<ClusterArn: string, ClusterOperationArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1558,7 +1574,6 @@ export def "update-broker-type" [
 #
 # PUT /v1/clusters/{clusterArn}/nodes/storage
 # operationId: UpdateBrokerStorage
-# --targetBrokerEBSVolumeInfo item shape: {KafkaBrokerNodeId: string, ProvisionedThroughput?: record, VolumeSizeGB?: int}
 export def "update-broker-storage" [
   cluster_arn: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1579,7 +1594,7 @@ export def "update-broker-storage" [
   --x-amz-signed-headers: string
   current_version: string # The version of cluster to update from. A successful operation will then generate a new version.
   target_broker_ebs_volume_info: list # Describes the target volume size and the ID of the broker to apply the update to. — item shape: {KafkaBrokerNodeId: string, ProvisionedThroughput?: record, VolumeSizeGB?: int}
-]: any -> record<ClusterArn: string, ClusterOperationArn: string> {
+]: any -> oneof<record<ClusterArn: string, ClusterOperationArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1609,7 +1624,6 @@ export def "update-broker-storage" [
 #
 # PUT /v1/clusters/{clusterArn}/connectivity
 # operationId: UpdateConnectivity
-# --connectivityInfo shape: {PublicAccess?: record}
 export def "update-connectivity" [
   cluster_arn: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1630,7 +1644,7 @@ export def "update-connectivity" [
   --x-amz-signed-headers: string
   connectivity_info: record # Information about the broker access configuration. — shape: {PublicAccess?: record}
   current_version: string # The version of the MSK cluster to update. Cluster versions aren't simple numbers. You can describe an MSK cluster to find its version. When this update operation is successful, it generates a new cluster version.
-]: any -> record<ClusterArn: string, ClusterOperationArn: string> {
+]: any -> oneof<record<ClusterArn: string, ClusterOperationArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1660,7 +1674,6 @@ export def "update-connectivity" [
 #
 # PUT /v1/clusters/{clusterArn}/configuration
 # operationId: UpdateClusterConfiguration
-# --configurationInfo shape: {Arn?: string, Revision?: int}
 export def "update-cluster-configuration" [
   cluster_arn: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1681,7 +1694,7 @@ export def "update-cluster-configuration" [
   --x-amz-signed-headers: string
   configuration_info: record # Specifies the configuration to use for the brokers. — shape: {Arn?: string, Revision?: int}
   current_version: string # The version of the cluster that needs to be updated.
-]: any -> record<ClusterArn: string, ClusterOperationArn: string> {
+]: any -> oneof<record<ClusterArn: string, ClusterOperationArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1711,7 +1724,6 @@ export def "update-cluster-configuration" [
 #
 # PUT /v1/clusters/{clusterArn}/version
 # operationId: UpdateClusterKafkaVersion
-# --configurationInfo shape: {Arn?: string, Revision?: int}
 export def "update-cluster-kafka-version" [
   cluster_arn: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1733,7 +1745,7 @@ export def "update-cluster-kafka-version" [
   --configuration-info: record # Specifies the configuration to use for the brokers. — shape: {Arn?: string, Revision?: int}
   current_version: string # Current cluster version.
   target_kafka_version: string # Target Kafka version.
-]: any -> record<ClusterArn: string, ClusterOperationArn: string> {
+]: any -> oneof<record<ClusterArn: string, ClusterOperationArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1763,8 +1775,6 @@ export def "update-cluster-kafka-version" [
 #
 # PUT /v1/clusters/{clusterArn}/monitoring
 # operationId: UpdateMonitoring
-# --openMonitoring shape: {Prometheus?: record}
-# --loggingInfo shape: {BrokerLogs?: record}
 export def "update-monitoring" [
   cluster_arn: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1787,7 +1797,7 @@ export def "update-monitoring" [
   --enhanced-monitoring: string@enhanced-monitoring-completer # Specifies which metrics are gathered for the MSK cluster. This property has the following possible values: DEFAULT, PER_BROKER, PER_TOPIC_PER_BROKER, and PER_TOPIC_PER_PARTITION. For a list of the metrics associated with each of these levels of monitoring, see Monitoring (https://docs.aws.amazon.com/msk/latest/developerguide/monitoring.html).
   --open-monitoring: record # JMX and Node monitoring for the MSK cluster. — shape: {Prometheus?: record}
   --logging-info: record # shape: {BrokerLogs?: record}
-]: any -> record<ClusterArn: string, ClusterOperationArn: string> {
+]: any -> oneof<record<ClusterArn: string, ClusterOperationArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1817,8 +1827,6 @@ export def "update-monitoring" [
 #
 # PATCH /v1/clusters/{clusterArn}/security
 # operationId: UpdateSecurity
-# --clientAuthentication shape: {Sasl?: record, Tls?: record, Unauthenticated?: record}
-# --encryptionInfo shape: {EncryptionAtRest?: record, EncryptionInTransit?: record}
 export def "update-security" [
   cluster_arn: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1840,7 +1848,7 @@ export def "update-security" [
   --client-authentication: record # Includes all client authentication information. — shape: {Sasl?: record, Tls?: record, Unauthenticated?: record}
   current_version: string # The version of the MSK cluster to update. Cluster versions aren't simple numbers. You can describe an MSK cluster to find its version. When this update operation is successful, it generates a new cluster version.
   --encryption-info: record # Includes encryption-related information, such as the AWS KMS key used for encrypting data at rest and whether you want MSK to encrypt your data in transit. — shape: {EncryptionAtRest?: record, EncryptionInTransit?: record}
-]: any -> record<ClusterArn: string, ClusterOperationArn: string> {
+]: any -> oneof<record<ClusterArn: string, ClusterOperationArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1870,7 +1878,6 @@ export def "update-security" [
 #
 # PUT /v1/clusters/{clusterArn}/storage
 # operationId: UpdateStorage
-# --provisionedThroughput shape: {Enabled?: bool, VolumeThroughput?: int}
 export def "update-storage" [
   cluster_arn: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1893,7 +1900,7 @@ export def "update-storage" [
   --provisioned-throughput: record # Contains information about provisioned throughput for EBS storage volumes attached to kafka broker nodes. — shape: {Enabled?: bool, VolumeThroughput?: int}
   --storage-mode: string@storage-mode-completer # Controls storage mode for various supported storage tiers.
   --volume-size-gb: int # size of the EBS volume to update.
-]: any -> record<ClusterArn: string, ClusterOperationArn: string> {
+]: any -> oneof<record<ClusterArn: string, ClusterOperationArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

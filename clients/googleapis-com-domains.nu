@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -119,9 +143,9 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "domains-projects-locations-registrations-retrieve-importable-domains" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["domains-projects-locations-registrations-retrieve-importable-domains" "domains-projects-locations-registrations-retrieve-register-parameters" "domains-projects-locations-registrations-retrieve-transfer-parameters" "domains-projects-locations-registrations-search-domains" "domains-projects-locations-registrations-delete" "domains-projects-locations-registrations-get" "domains-projects-locations-registrations-patch" "domains-projects-locations-list" "domains-projects-locations-operations-list" "domains-projects-locations-registrations-export" "domains-projects-locations-registrations-list" "domains-projects-locations-registrations-import" "domains-projects-locations-registrations-register" "domains-projects-locations-registrations-transfer" "domains-projects-locations-registrations-configure-contact-settings" "domains-projects-locations-registrations-configure-dns-settings" "domains-projects-locations-registrations-configure-management-settings" "domains-projects-locations-registrations-reset-authorization-code" "domains-projects-locations-registrations-retrieve-authorization-code" "domains-projects-locations-registrations-get-iam-policy" "domains-projects-locations-registrations-set-iam-policy" "domains-projects-locations-registrations-test-iam-permissions" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -167,7 +191,7 @@ export def "domains-projects-locations-registrations-retrieve-importable-domains
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # Maximum number of results to return.
   --page-token: string # When set to the `next_page_token` from a prior response, provides the next page of results.
-]: nothing -> record<domains: table<domainName: string, resourceState: string, yearlyPrice: record>, nextPageToken: string> {
+]: nothing -> oneof<record<domains: table<domainName: string, resourceState: string, yearlyPrice: record>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
@@ -216,7 +240,7 @@ export def "domains-projects-locations-registrations-retrieve-register-parameter
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --domain-name: string # Required. The domain name. Unicode domain names must be expressed in Punycode format.
-]: nothing -> record<registerParameters: record<availability: string, domainName: string, domainNotices: list<string>, supportedPrivacy: list<string>, yearlyPrice: record<currencyCode: string, nanos: int, units: string>>> {
+]: nothing -> oneof<record<registerParameters: record<availability: string, domainName: string, domainNotices: list<string>, supportedPrivacy: list<string>, yearlyPrice: record<currencyCode: string, nanos: int, units: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
@@ -265,7 +289,7 @@ export def "domains-projects-locations-registrations-retrieve-transfer-parameter
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --domain-name: string # Required. The domain name. Unicode domain names must be expressed in Punycode format.
-]: nothing -> record<transferParameters: record<currentRegistrar: string, currentRegistrarUri: string, domainName: string, nameServers: list<string>, supportedPrivacy: list<string>, transferLockState: string, yearlyPrice: record<currencyCode: string, nanos: int, units: string>>> {
+]: nothing -> oneof<record<transferParameters: record<currentRegistrar: string, currentRegistrarUri: string, domainName: string, nameServers: list<string>, supportedPrivacy: list<string>, transferLockState: string, yearlyPrice: record<currencyCode: string, nanos: int, units: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
@@ -314,7 +338,7 @@ export def "domains-projects-locations-registrations-search-domains" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --query: string # Required. String used to search for available domain names.
-]: nothing -> record<registerParameters: table<availability: string, domainName: string, domainNotices: list, supportedPrivacy: list, yearlyPrice: record>> {
+]: nothing -> oneof<record<registerParameters: table<availability: string, domainName: string, domainNotices: list, supportedPrivacy: list, yearlyPrice: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
@@ -362,7 +386,7 @@ export def "domains-projects-locations-registrations-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: nothing -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -410,7 +434,7 @@ export def "domains-projects-locations-registrations-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<contactSettings: record<adminContact: record<email: string, faxNumber: string, phoneNumber: string, postalAddress: record>, privacy: string, registrantContact: record<email: string, faxNumber: string, phoneNumber: string, postalAddress: record>, technicalContact: record<email: string, faxNumber: string, phoneNumber: string, postalAddress: record>>, createTime: string, dnsSettings: record<customDns: record<dsRecords: list, nameServers: list>, glueRecords: list<record>, googleDomainsDns: record<dsRecords: list, dsState: string, nameServers: list>>, domainName: string, expireTime: string, issues: list<string>, labels: record, managementSettings: record<renewalMethod: string, transferLockState: string>, name: string, pendingContactSettings: record<adminContact: record<email: string, faxNumber: string, phoneNumber: string, postalAddress: record>, privacy: string, registrantContact: record<email: string, faxNumber: string, phoneNumber: string, postalAddress: record>, technicalContact: record<email: string, faxNumber: string, phoneNumber: string, postalAddress: record>>, registerFailureReason: string, state: string, supportedPrivacy: list<string>, transferFailureReason: string> {
+]: nothing -> oneof<record<contactSettings: record<adminContact: record<email: string, faxNumber: string, phoneNumber: string, postalAddress: record>, privacy: string, registrantContact: record<email: string, faxNumber: string, phoneNumber: string, postalAddress: record>, technicalContact: record<email: string, faxNumber: string, phoneNumber: string, postalAddress: record>>, createTime: string, dnsSettings: record<customDns: record<dsRecords: list, nameServers: list>, glueRecords: list<record>, googleDomainsDns: record<dsRecords: list, dsState: string, nameServers: list>>, domainName: string, expireTime: string, issues: list<string>, labels: record, managementSettings: record<renewalMethod: string, transferLockState: string>, name: string, pendingContactSettings: record<adminContact: record<email: string, faxNumber: string, phoneNumber: string, postalAddress: record>, privacy: string, registrantContact: record<email: string, faxNumber: string, phoneNumber: string, postalAddress: record>, technicalContact: record<email: string, faxNumber: string, phoneNumber: string, postalAddress: record>>, registerFailureReason: string, state: string, supportedPrivacy: list<string>, transferFailureReason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -436,10 +460,6 @@ export def "domains-projects-locations-registrations-get" [
 #
 # PATCH /v1beta1/{name}
 # operationId: domains.projects.locations.registrations.patch
-# --contactSettings shape: {adminContact?: record, privacy?: "CONTACT_PRIVACY_UNSPECIFIED"|"PUBLIC_CONTACT_DATA"|"PRIVATE_CONTACT_DATA"|"REDACTED_CONTACT_DATA", registrantContact?: record, technicalContact?: record}
-# --dnsSettings shape: {customDns?: record, glueRecords?: list, googleDomainsDns?: record}
-# --managementSettings shape: {transferLockState?: "TRANSFER_LOCK_STATE_UNSPECIFIED"|"UNLOCKED"|"LOCKED"}
-# --pendingContactSettings shape: {adminContact?: record, privacy?: "CONTACT_PRIVACY_UNSPECIFIED"|"PUBLIC_CONTACT_DATA"|"PRIVATE_CONTACT_DATA"|"REDACTED_CONTACT_DATA", registrantContact?: record, technicalContact?: record}
 export def "domains-projects-locations-registrations-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -469,7 +489,7 @@ export def "domains-projects-locations-registrations-patch" [
   --labels: record # Set of labels associated with the `Registration`.
   --management-settings: record # Defines renewal, billing, and transfer settings for a `Registration`. — shape: {transferLockState?: "TRANSFER_LOCK_STATE_UNSPECIFIED"|"UNLOCKED"|"LOCKED"}
   --pending-contact-settings: record # Defines the contact information associated with a `Registration`. [ICANN](https://icann.org/) requires all domain names to have associated contact information. The `registrant_contact` is considered the domain's legal owner, and often the other contacts are identical. — shape: {adminContact?: record, privacy?: "CONTACT_PRIVACY_UNSPECIFIED"|"PUBLIC_CONTACT_DATA"|"PRIVATE_CONTACT_DATA"|"REDACTED_CONTACT_DATA", registrantContact?: record, technicalContact?: record}
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -523,7 +543,7 @@ export def "domains-projects-locations-list" [
   --filter: string # A filter to narrow down results to a preferred subset. The filtering language accepts strings like `"displayName=tokyo"`, and is documented in more detail in [AIP-160](https://google.aip.dev/160).
   --page-size: int # The maximum number of results to return. If not set, the service selects a default.
   --page-token: string # A page token received from the `next_page_token` field in the response. Send that page token to receive the subsequent page.
-]: nothing -> record<locations: table<displayName: string, labels: record, locationId: string, metadata: record, name: string>, nextPageToken: string> {
+]: nothing -> oneof<record<locations: table<displayName: string, labels: record, locationId: string, metadata: record, name: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -574,7 +594,7 @@ export def "domains-projects-locations-operations-list" [
   --filter: string # The standard list filter.
   --page-size: int # The standard list page size.
   --page-token: string # The standard list page token.
-]: nothing -> record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>> {
+]: nothing -> oneof<record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -623,7 +643,7 @@ export def "domains-projects-locations-registrations-export" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -677,7 +697,7 @@ export def "domains-projects-locations-registrations-list" [
   --filter: string # Filter expression to restrict the `Registration`s returned. The expression must specify the field name, a comparison operator, and the value that you want to use for filtering. The value must be a string, a number, a boolean, or an enum value. The comparison operator should be one of =, !=, >, <, >=, <=, or : for prefix or wildcard matches. For example, to filter to a specific domain name, use an expression like `domainName="example.com"`. You can also check for the existence of a field; for example, to find domains using custom DNS settings, use an expression like `dnsSettings.customDns:*`. You can also create compound filters by combining expressions with the `AND` and `OR` operators. For example, to find domains that are suspended or have specific issues flagged, use an expression like `(state=SUSPENDED) OR (issue:*)`.
   --page-size: int # Maximum number of results to return.
   --page-token: string # When set to the `next_page_token` from a prior response, provides the next page of results.
-]: nothing -> record<nextPageToken: string, registrations: table<contactSettings: record, createTime: string, dnsSettings: record, domainName: string, expireTime: string, issues: list, labels: record, managementSettings: record, name: string, pendingContactSettings: record, registerFailureReason: string, state: string, supportedPrivacy: list, transferFailureReason: string>> {
+]: nothing -> oneof<record<nextPageToken: string, registrations: table<contactSettings: record, createTime: string, dnsSettings: record, domainName: string, expireTime: string, issues: list, labels: record, managementSettings: record, name: string, pendingContactSettings: record, registerFailureReason: string, state: string, supportedPrivacy: list, transferFailureReason: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -727,7 +747,7 @@ export def "domains-projects-locations-registrations-import" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --domain-name: string # Required. The domain name. Unicode domain names must be expressed in Punycode format.
   --labels: record # Set of labels associated with the `Registration`.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -756,8 +776,6 @@ export def "domains-projects-locations-registrations-import" [
 #
 # POST /v1beta1/{parent}/registrations:register
 # operationId: domains.projects.locations.registrations.register
-# --registration shape: {contactSettings?: record, dnsSettings?: record, domainName?: string, labels?: record, managementSettings?: record, pendingContactSettings?: record}
-# --yearlyPrice shape: {currencyCode?: string, nanos?: int, units?: string}
 export def "domains-projects-locations-registrations-register" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -785,7 +803,7 @@ export def "domains-projects-locations-registrations-register" [
   --registration: record # The `Registration` resource facilitates managing and configuring domain name registrations. There are several ways to create a new `Registration` resource: To create a new `Registration` resource, find a suitable domain name by calling the `SearchDomains` method with a query to see available domain name options. After choosing a name, call `RetrieveRegisterParameters` to ensure availability and obtain information like pricing, which is needed to build a call to `RegisterDomain`. Another way to create a new `Registration` is to transfer an existing domain from another registrar. First, go to the current registrar to unlock the domain for transfer and retrieve the domain's transfer authorization code. Then call `RetrieveTransferParameters` to confirm that the domain is unlocked and to get values needed to build a call to `TransferDomain`. Finally, you can create a new `Registration` by importing an existing domain managed with [Google Domains](https://domains.google/). First, call `RetrieveImportableDomains` to list domains to which the calling user has sufficient access. Then call `ImportDomain` on any domain names you want to use with Cloud Domains. — shape: {contactSettings?: record, dnsSettings?: record, domainName?: string, labels?: record, managementSettings?: record, pendingContactSettings?: record}
   --validate-only: oneof<nothing, bool> # When true, only validation is performed, without actually registering the domain. Follows: https://cloud.google.com/apis/design/design_patterns#request_validation
   --yearly-price: record # Represents an amount of money with its currency type. — shape: {currencyCode?: string, nanos?: int, units?: string}
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -814,9 +832,6 @@ export def "domains-projects-locations-registrations-register" [
 #
 # POST /v1beta1/{parent}/registrations:transfer
 # operationId: domains.projects.locations.registrations.transfer
-# --authorizationCode shape: {code?: string}
-# --registration shape: {contactSettings?: record, dnsSettings?: record, domainName?: string, labels?: record, managementSettings?: record, pendingContactSettings?: record}
-# --yearlyPrice shape: {currencyCode?: string, nanos?: int, units?: string}
 export def "domains-projects-locations-registrations-transfer" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -844,7 +859,7 @@ export def "domains-projects-locations-registrations-transfer" [
   --registration: record # The `Registration` resource facilitates managing and configuring domain name registrations. There are several ways to create a new `Registration` resource: To create a new `Registration` resource, find a suitable domain name by calling the `SearchDomains` method with a query to see available domain name options. After choosing a name, call `RetrieveRegisterParameters` to ensure availability and obtain information like pricing, which is needed to build a call to `RegisterDomain`. Another way to create a new `Registration` is to transfer an existing domain from another registrar. First, go to the current registrar to unlock the domain for transfer and retrieve the domain's transfer authorization code. Then call `RetrieveTransferParameters` to confirm that the domain is unlocked and to get values needed to build a call to `TransferDomain`. Finally, you can create a new `Registration` by importing an existing domain managed with [Google Domains](https://domains.google/). First, call `RetrieveImportableDomains` to list domains to which the calling user has sufficient access. Then call `ImportDomain` on any domain names you want to use with Cloud Domains. — shape: {contactSettings?: record, dnsSettings?: record, domainName?: string, labels?: record, managementSettings?: record, pendingContactSettings?: record}
   --validate-only: oneof<nothing, bool> # Validate the request without actually transferring the domain.
   --yearly-price: record # Represents an amount of money with its currency type. — shape: {currencyCode?: string, nanos?: int, units?: string}
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -873,7 +888,6 @@ export def "domains-projects-locations-registrations-transfer" [
 #
 # POST /v1beta1/{registration}:configureContactSettings
 # operationId: domains.projects.locations.registrations.configureContactSettings
-# --contactSettings shape: {adminContact?: record, privacy?: "CONTACT_PRIVACY_UNSPECIFIED"|"PUBLIC_CONTACT_DATA"|"PRIVATE_CONTACT_DATA"|"REDACTED_CONTACT_DATA", registrantContact?: record, technicalContact?: record}
 export def "domains-projects-locations-registrations-configure-contact-settings" [
   registration: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -900,7 +914,7 @@ export def "domains-projects-locations-registrations-configure-contact-settings"
   --contact-settings: record # Defines the contact information associated with a `Registration`. [ICANN](https://icann.org/) requires all domain names to have associated contact information. The `registrant_contact` is considered the domain's legal owner, and often the other contacts are identical. — shape: {adminContact?: record, privacy?: "CONTACT_PRIVACY_UNSPECIFIED"|"PUBLIC_CONTACT_DATA"|"PRIVATE_CONTACT_DATA"|"REDACTED_CONTACT_DATA", registrantContact?: record, technicalContact?: record}
   --update-mask: string # Required. The field mask describing which fields to update as a comma-separated list. For example, if only the registrant contact is being updated, the `update_mask` is `"registrant_contact"`. (format: google-fieldmask)
   --validate-only: oneof<nothing, bool> # Validate the request without actually updating the contact settings.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -929,7 +943,6 @@ export def "domains-projects-locations-registrations-configure-contact-settings"
 #
 # POST /v1beta1/{registration}:configureDnsSettings
 # operationId: domains.projects.locations.registrations.configureDnsSettings
-# --dnsSettings shape: {customDns?: record, glueRecords?: list, googleDomainsDns?: record}
 export def "domains-projects-locations-registrations-configure-dns-settings" [
   registration: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -955,7 +968,7 @@ export def "domains-projects-locations-registrations-configure-dns-settings" [
   --dns-settings: record # Defines the DNS configuration of a `Registration`, including name servers, DNSSEC, and glue records. — shape: {customDns?: record, glueRecords?: list, googleDomainsDns?: record}
   --update-mask: string # Required. The field mask describing which fields to update as a comma-separated list. For example, if only the name servers are being updated for an existing Custom DNS configuration, the `update_mask` is `"custom_dns.name_servers"`. When changing the DNS provider from one type to another, pass the new provider's field name as part of the field mask. For example, when changing from a Google Domains DNS configuration to a Custom DNS configuration, the `update_mask` is `"custom_dns"`. // (format: google-fieldmask)
   --validate-only: oneof<nothing, bool> # Validate the request without actually updating the DNS settings.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -984,7 +997,6 @@ export def "domains-projects-locations-registrations-configure-dns-settings" [
 #
 # POST /v1beta1/{registration}:configureManagementSettings
 # operationId: domains.projects.locations.registrations.configureManagementSettings
-# --managementSettings shape: {transferLockState?: "TRANSFER_LOCK_STATE_UNSPECIFIED"|"UNLOCKED"|"LOCKED"}
 export def "domains-projects-locations-registrations-configure-management-settings" [
   registration: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1009,7 +1021,7 @@ export def "domains-projects-locations-registrations-configure-management-settin
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --management-settings: record # Defines renewal, billing, and transfer settings for a `Registration`. — shape: {transferLockState?: "TRANSFER_LOCK_STATE_UNSPECIFIED"|"UNLOCKED"|"LOCKED"}
   --update-mask: string # Required. The field mask describing which fields to update as a comma-separated list. For example, if only the transfer lock is being updated, the `update_mask` is `"transfer_lock_state"`. (format: google-fieldmask)
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1061,7 +1073,7 @@ export def "domains-projects-locations-registrations-reset-authorization-code" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record<code: string> {
+]: any -> oneof<record<code: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1112,7 +1124,7 @@ export def "domains-projects-locations-registrations-retrieve-authorization-code
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<code: string> {
+]: nothing -> oneof<record<code: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($registration | is-empty) { error make --unspanned { msg: "path parameter 'registration' must be non-empty" } }
@@ -1161,7 +1173,7 @@ export def "domains-projects-locations-registrations-get-iam-policy" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --options-requested-policy-version: int # Optional. The maximum policy version that will be used to format the policy. Valid values are 0, 1, and 3. Requests specifying an invalid value will be rejected. Requests for policies with any conditional role bindings must specify version 3. Policies with no conditional role bindings may specify any valid value or leave the field unset. The policy in the response might use the policy version that you specified, or it might use a lower policy version. For example, if you specify version 3, but the policy has no conditional role bindings, the response uses version 1. To learn which resources support conditions in their IAM policies, see the [IAM documentation](https://cloud.google.com/iam/help/conditions/resource-policies).
-]: nothing -> record<auditConfigs: table<auditLogConfigs: list, service: string>, bindings: table<condition: record, members: list, role: string>, etag: string, version: int> {
+]: nothing -> oneof<record<auditConfigs: table<auditLogConfigs: list, service: string>, bindings: table<condition: record, members: list, role: string>, etag: string, version: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource | is-empty) { error make --unspanned { msg: "path parameter 'resource' must be non-empty" } }
@@ -1187,7 +1199,6 @@ export def "domains-projects-locations-registrations-get-iam-policy" [
 #
 # POST /v1beta1/{resource}:setIamPolicy
 # operationId: domains.projects.locations.registrations.setIamPolicy
-# --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
 export def "domains-projects-locations-registrations-set-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1212,7 +1223,7 @@ export def "domains-projects-locations-registrations-set-iam-policy" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --policy: record # An Identity and Access Management (IAM) policy, which specifies access controls for Google Cloud resources. A `Policy` is a collection of `bindings`. A `binding` binds one or more `members`, or principals, to a single `role`. Principals can be user accounts, service accounts, Google groups, and domains (such as G Suite). A `role` is a named list of permissions; each `role` can be an IAM predefined role or a user-created custom role. For some types of Google Cloud resources, a `binding` can also specify a `condition`, which is a logical expression that allows access to a resource only if the expression evaluates to `true`. A condition can add constraints based on attributes of the request, the resource, or both. To learn which resources support conditions in their IAM policies, see the [IAM documentation](https://cloud.google.com/iam/help/conditions/resource-policies). **JSON example:** { "bindings": [ { "role": "roles/resourcemanager.organizationAdmin", "members": [ "user:mike@example.com", "group:admins@example.com", "domain:google.com", "serviceAccount:my-project-id@appspot.gserviceaccount.com" ] }, { "role": "roles/resourcemanager.organizationViewer", "members": [ "user:eve@example.com" ], "condition": { "title": "expirable access", "description": "Does not grant access after Sep 2020", "expression": "request.time < timestamp('2020-10-01T00:00:00.000Z')", } } ], "etag": "BwWWja0YfJA=", "version": 3 } **YAML example:** bindings: - members: - user:mike@example.com - group:admins@example.com - domain:google.com - serviceAccount:my-project-id@appspot.gserviceaccount.com role: roles/resourcemanager.organizationAdmin - members: - user:eve@example.com role: roles/resourcemanager.organizationViewer condition: title: expirable access description: Does not grant access after Sep 2020 expression: request.time < timestamp('2020-10-01T00:00:00.000Z') etag: BwWWja0YfJA= version: 3 For a description of IAM and its features, see the [IAM documentation](https://cloud.google.com/iam/docs/). — shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
   --update-mask: string # OPTIONAL: A FieldMask specifying which fields of the policy to modify. Only the fields in the mask will be modified. If no mask is provided, the following default mask is used: `paths: "bindings, etag"` (format: google-fieldmask)
-]: any -> record<auditConfigs: table<auditLogConfigs: list, service: string>, bindings: table<condition: record, members: list, role: string>, etag: string, version: int> {
+]: any -> oneof<record<auditConfigs: table<auditLogConfigs: list, service: string>, bindings: table<condition: record, members: list, role: string>, etag: string, version: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1264,7 +1275,7 @@ export def "domains-projects-locations-registrations-test-iam-permissions" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --permissions: list<string> # The set of permissions to check for the `resource`. Permissions with wildcards (such as `*` or `storage.*`) are not allowed. For more information see [IAM Overview](https://cloud.google.com/iam/docs/overview#permissions).
-]: any -> record<permissions: list<string>> {
+]: any -> oneof<record<permissions: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

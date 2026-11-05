@@ -12,27 +12,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -40,8 +49,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -52,7 +66,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -87,7 +110,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -115,9 +139,9 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-api-2-application-properties" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-api-2-application-properties" "get-advanced-settings" "set-property-via-restful-table" "get-all" "put-bulk" "get-api-2-applicationrole-key" "put" "get-attachment-meta" "remove-attachment" "get-attachment" "expand-for-humans" "expand-for-machines" "get-records" "add-record" "get-all-system-avatars" "store-temporary-avatar" "post-api-2-avatar-type-temporary-crop" "approve-upgrade" "cancel-upgrade" "acknowledge-errors" "set-ready-to-upgrade" "get-state" "get-api-2-comment-comment-id-properties" "delete-api-2-comment-comment-id-properties-property-key" "get-api-2-comment-comment-id-properties-property-key" "put-api-2-comment-comment-id-properties-property-key" "create-component" "delete-api-2-component-id" "get-component" "update-component" "get-component-related-issues" "get-configuration" "get-custom-field-option" "list" "get-api-2-dashboard-dashboard-id-items-item-id-properties" "delete-api-2-dashboard-dashboard-id-items-item-id-properties-property-key" "get-api-2-dashboard-dashboard-id-items-item-id-properties-property-key" "put-api-2-dashboard-dashboard-id-items-item-id-properties-property-key" "get-dashboard" "get-fields" "create-custom-field" "create-filter" "get-default-share-scope" "set-default-share-scope" "get-favourite-filters" "delete-filter" "get-filter" "edit-filter" "delete-api-2-filter-id-columns" "get-api-2-filter-id-columns" "put-api-2-filter-id-columns" "get-share-permissions" "add-share-permission" "delete-share-permission" "get-share-permission" "remove-group" "get-group" "create-group" "get-users-from-group" "remove-user-from-group" "add-user-to-group" "find-groups" "find-users-and-groups" "get-index-summary" "create-issue" "create-issues" "get-create-issue-meta" "get-issue-picker-resource" "delete-issue" "get-issue" "edit-issue" "assign" "add-attachment" "get-comments" "add-comment" "delete-comment" "get-comment" "update-comment" "get-edit-issue-meta" "notify" "get-api-2-issue-issue-id-or-key-properties" "delete-api-2-issue-issue-id-or-key-properties-property-key" "get-api-2-issue-issue-id-or-key-properties-property-key" "put-api-2-issue-issue-id-or-key-properties-property-key" "delete-remote-issue-link-by-global-id" "get-remote-issue-links" "create-or-update-remote-issue-link" "delete-remote-issue-link-by-id" "get-remote-issue-link-by-id" "update-remote-issue-link" "get-sub-tasks" "can-move-sub-task" "move-sub-tasks" "get-transitions" "do-transition" "remove-vote" "get-votes" "add-vote" "remove-watcher" "get-issue-watchers" "add-watcher" "get-issue-worklog" "add-worklog" "delete-worklog" "get-worklog" "update-worklog" "link-issues" "delete-issue-link" "get-issue-link" "get-issue-link-types" "create-issue-link-type" "delete-issue-link-type" "get-issue-link-type" "update-issue-link-type" "get-issue-security-schemes" "get-api-2-issuesecurityschemes-id" "get-issue-all-types" "create-issue-type" "delete-api-2-issuetype-id" "get-api-2-issuetype-id" "update-issue-type" "get-alternative-issue-types" "post-api-2-issuetype-id-avatar" "post-api-2-issuetype-id-avatar-temporary" "get-property-keys" "delete-api-2-issuetype-issue-type-id-properties-property-key" "get-api-2-issuetype-issue-type-id-properties-property-key" "put-api-2-issuetype-issue-type-id-properties-property-key" "get-auto-complete" "get-field-auto-complete-for-query-string" "validate" "are-metrics-exposed" "get-available-metrics" "get-api-2-monitoring-jmx-start-exposing" "stop" "get-permissions" "remove-preference" "get-preference" "set-preference" "get-api-2-myself" "put-api-2-myself" "change-my-password" "get-notification-schemes" "get-api-2-notificationscheme-id" "get-password-policy" "policy-check-create-user" "policy-check-update-user" "get-all-permissions" "get-permission-schemes" "create-permission-scheme" "get-scheme-attribute" "set-scheme-attribute" "delete-permission-scheme" "get-permission-scheme" "update-permission-scheme" "get-permission-scheme-grants" "create-permission-grant" "delete-permission-scheme-entity" "get-permission-scheme-grant" "get-priorities" "get-priority" "get-all-projects" "create-project" "get-all-project-types" "get-project-type-by-key" "get-accessible-project-type-by-key" "delete-project" "get-api-2-project-project-id-or-key" "update-project" "post-api-2-project-project-id-or-key-avatar" "put-api-2-project-project-id-or-key-avatar" "post-api-2-project-project-id-or-key-avatar-temporary" "delete-api-2-project-project-id-or-key-avatar-id" "get-api-2-project-project-id-or-key-avatars" "get-project-components" "get-api-2-project-project-id-or-key-properties" "delete-api-2-project-project-id-or-key-properties-property-key" "get-api-2-project-project-id-or-key-properties-property-key" "put-api-2-project-project-id-or-key-properties-property-key" "get-api-2-project-project-id-or-key-role" "delete-actor" "get-project-role" "add-actor-users" "set-actors" "get-all-statuses" "update-project-type" "get-project-versions-paginated" "get-project-versions" "get-api-2-project-project-key-or-id-issuesecuritylevelscheme" "get-api-2-project-project-key-or-id-notificationscheme" "get-assigned-permission-scheme" "assign-permission-scheme" "get-security-levels-for-project" "get-all-project-categories" "create-project-category" "remove-project-category" "get-project-category-by-id" "update-project-category" "get-api-2-projectvalidate-key" "get-reindex-info" "reindex" "reindex-issues" "get-reindex-progress" "process-requests" "get-progress-bulk" "get-progress" "get-resolutions" "get-resolution" "get-api-2-role" "create-project-role" "delete-project-role" "get-project-roles-by-id" "partial-update-project-role" "fully-update-project-role" "delete-project-role-actors-from-role" "get-project-role-actors-for-role" "add-project-role-actors-to-role" "add-field-to-default-screen" "get-fields-to-add" "get-all-tabs" "add-tab" "delete-tab" "rename-tab" "get-all-fields" "add-field" "remove-field" "move-field" "move-tab" "search" "search-using-search-request" "get-issuesecuritylevel" "get-server-info" "set-base-url" "get-issue-navigator-default-columns" "set-issue-navigator-default-columns" "get-statuses" "get-status" "get-status-categories" "get-status-category" "get-avatars" "post-api-2-universal-avatar-type-type-owner-owning-object-id-avatar" "delete-api-2-universal-avatar-type-type-owner-owning-object-id-avatar-id" "post-api-2-universal-avatar-type-type-owner-owning-object-id-temp" "get-upgrade-result" "run-upgrades-now" "remove-user" "get-api-2-user" "create-user" "put-api-2-user" "remove-user-from-application" "add-user-to-application" "find-bulk-assignable-users" "find-assignable-users" "post-api-2-user-avatar" "put-api-2-user-avatar" "post-api-2-user-avatar-temporary" "delete-api-2-user-avatar-id" "get-api-2-user-avatars" "delete-api-2-user-columns" "get-api-2-user-columns" "put-api-2-user-columns" "change-user-password" "find-users-with-all-permissions" "find-users-for-picker" "get-api-2-user-properties" "delete-api-2-user-properties-property-key" "get-api-2-user-properties-property-key" "put-api-2-user-properties-property-key" "find-users" "find-users-with-browse-permission" "create-version" "get-remote-version-links" "delete-api-2-version-id" "get-version" "update-version" "put-api-2-version-id-mergeto-move-issues-to" "move-version" "get-version-related-issues" "post-api-2-version-id-remove-and-swap" "get-version-unresolved-issues" "delete-remote-version-links-by-version-id" "get-remote-version-links-by-version-id" "post-api-2-version-version-id-remotelink" "delete-remote-version-link" "get-remote-version-link" "post-api-2-version-version-id-remotelink-global-id" "get-all-workflows" "delete-api-2-workflow-api-2-transitions-id-properties" "get-properties" "create-property" "update-property" "create-scheme" "delete-scheme" "get-by-id" "put-api-2-workflowscheme-id" "create-draft-for-parent" "delete-default" "get-default" "update-default" "delete-draft-by-id" "get-draft-by-id" "update-draft" "delete-draft-default" "get-draft-default" "update-draft-default" "delete-draft-issue-type" "get-draft-issue-type" "set-draft-issue-type" "delete-draft-workflow-mapping" "get-draft-workflow" "update-draft-workflow-mapping" "delete-api-2-workflowscheme-id-issuetype-issue-type" "get-api-2-workflowscheme-id-issuetype-issue-type" "set-issue-type" "delete-workflow-mapping" "get-workflow" "update-workflow-mapping" "get-ids-of-worklogs-deleted-since" "get-worklogs-for-ids" "get-ids-of-worklogs-modified-since" "logout" "current-user" "login" "release" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig

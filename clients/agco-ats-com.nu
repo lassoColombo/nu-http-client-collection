@@ -12,27 +12,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -40,8 +49,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -52,7 +66,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -87,7 +110,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -136,9 +160,9 @@ def status-completer-2 [] { ["Cancelled" "Failed" "InProgress" "Ready" "Succeede
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "aftermarket-services-get-certs" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["aftermarket-services-get-certs" "aftermarket-services-put-ecu" "aftermarket-services-get-engine-iqa-codes" "aftermarket-services-put-iqa-codes" "aftermarket-services-get-production-data" "aftermarket-services-get-connection-status" "aftermarket-services-get-user-status" "aftermarket-services-update-user-status" "authentication-put-manage-tokens" "authentication-default" "authentication-is-alive" "authentication-request-password-reset" "authentication-reset-pasword" "authorization-categories-get" "authorization-categories-post" "authorization-categories-get-users" "authorization-categories-delete" "authorization-categories-put" "authorization-categories-remove-user" "authorization-categories-add-user" "authorization-code-definitions-get-authorization-code-definition" "authorization-code-definitions-post-authorization-code-definition" "authorization-code-definitions-remove-category-from-definition" "authorization-code-definitions-add-category-to-definition" "authorization-code-definitions-delete-authorization-code-definition" "get-api-v2-authorization-code-definitions-id" "authorization-code-definitions-put-authorization-code-definition" "authorization-codes-get-authorization-codes" "authorization-codes-post-authorization-code" "authorization-codes-delete-authorization-code" "authorization-codes-get-authorization-code" "authorization-codes-put-authorization-code" "authorization-codes-get-contact-information" "authorization-codes-validate-authorization-code" "authorization-contact-information-get" "authorization-contact-information-post" "brands-brands" "bundles-get-bundles" "bundles-post-bundle" "bundles-delete-bundle" "bundles-get-bundle" "bundles-put-bundle" "clients-get" "update-system-get-cached-files" "package-reports-default" "put-api-v2-clients-client-id-package-reports" "package-reports-batch" "get-api-v2-clients-id" "clients-put" "clients-get-available-subscriptions" "clients-get-subscriptions" "content-definitions-put-content-definition-attributes" "content-definitions-delete-content-definition-attribute" "content-definitions-put-content-definition-attribute-async" "content-definitions-get-content-definitions" "content-definitions-post-content-definition" "content-definitions-delete-content-definition" "content-definitions-get-content-definition" "content-definitions-put-content-definition" "content-definitions-get-content-definition-attributes" "content-definitions-post-content-definition-attribute" "content-definitions-post-content-definition-attributes" "content-release-get-content-release-version" "content-release-post-content-release" "content-release-delete-content-release-versionn" "get-api-v2-content-releases-content-release-id" "content-release-put-content-definition" "content-submissions-put-content-submission-attributes" "content-submissions-delete-content-submission-attribute" "content-submissions-put-content-submission-attribute-async" "content-submission-types-get-content-submission-types" "content-submission-types-post-content-submission-type" "content-submission-types-delete-content-submission-type" "content-submission-types-get-content-submission-type" "content-submission-types-put-content-submission-type" "content-submissions-get-content-submissions" "content-submissions-post-content-submission" "content-submissions-delete-content-submission" "content-submissions-get-content-submission" "content-submissions-put-content-submission" "content-submissions-get-content-submission-attributes" "content-submissions-post-content-submission-attribute" "content-submissions-post-content-submission-attributes" "content-submissions-get-content-submission-status" "dealer-by-country-get-countries" "dealers-get-dealers" "dealers-get-dealerby-dealer-code" "files-get-files" "files-post-file" "files-delete-file" "files-get-file" "files-put-file" "files-get-file-contents" "files-put-file-contents" "global-image-categories-get-files" "global-image-categories-post-file" "global-image-categories-get-file" "global-images-get-global-images" "global-images-post-global-image" "global-images-delete-file" "global-images-get-global-image" "global-images-put-global-image" "global-images-get-global-image-contents" "global-images-put-global-image-contents" "languages-get-languages" "languages-create-language" "languages-delete-language" "languages-get-language" "languages-update-language" "license-activations-post" "license-activations-post-register-edt-lite" "license-activations-put" "license-activations-put-confirm" "licenses-get" "get-api-v2-licenses-id" "logs-get-logs" "logs-post-log" "logs-get-log" "notifications-post-mail" "package-types-get" "package-types-post" "package-types-delete" "get-api-v2-package-types-id" "package-types-put" "package-types-remove-package-type-user" "package-types-add-package-type-user" "package-typeto-bundles-delete" "package-typeto-bundles-get" "package-typeto-bundles-post" "package-typeto-bundles-put" "packages-get-packages" "packages-post-package" "packages-delete-package" "packages-get-package" "packages-put-package" "permissions-get-permissions" "permissions-post-permission" "permissions-delete-permission" "permissions-get-permission" "permissions-put-permission" "priority-packages-get-priority-packages" "priority-packages-post-priority-packages" "priority-packages-delete-priority-packages" "priority-packages-get-priority-package" "release-get-releases" "release-post-release" "release-get-release" "release-delete-release-bundle" "release-post-release-bundle" "release-put-content-definition" "reporting-bundle-status-summary" "reporting-bundles-in-update-group" "reporting-client-info" "reporting-current-packages-in-update-group" "reporting-get-client" "reporting-get-subscriptions" "reporting-package-status-summary" "reporting-registered-clients" "reporting-update-groups" "reporting-update-metrics" "roles-get-roles" "roles-post-role" "roles-delete-role" "roles-get-role" "roles-put-role" "roles-get-role-permissions" "roles-put-role-permissions" "user-permissions-get-users" "put-api-v2-roles-id-users" "string-definitions-get-definitions" "string-definitions-post-definition" "string-definitions-update-definitions" "string-definitions-get-definition" "string-translations-get-translations" "string-translations-update-translations" "string-translations-get-translation" "string-translations-update-translation" "translation-keys-get" "translation-keys-create-translation-key" "translation-keys-get-translation-key" "translation-keys-update-translation-key" "translation-requests-get-translation-requests" "translation-requests-create-translation-request" "translation-requests-get-translation-request" "translation-requests-update-translation-request" "translation-requests-update-translation-request-strings" "translation-sets-update-translation-set-attributes" "translation-sets-delete-translation-set-attribute" "translation-sets-update-translation-set-attribute" "translation-sets-get-translation-sets" "translation-sets-get-translation-set" "translation-sets-update-translation-set" "translation-sets-get-translation-set-attributes" "translation-sets-post-translation-set-attribute" "translation-sets-post-translation-set-attributes" "translation-sets-get-source-strings" "translation-sets-get-statistics" "translation-sets-get-translation-set-strings" "translation-sets-update-translation-set-strings" "update-group-client-relationships-get-subscriptions" "update-group-client-relationships-post-subscription" "update-group-client-relationships-put-subscription-by-client-id-update-group-id" "update-group-client-relationships-get-subscription" "update-group-client-relationships-put-subscription" "update-group-subscriptions-get-update-group-subscriptions" "update-group-subscriptions-post-update-group-subscription" "update-group-subscriptions-post-update-group-subscriptions" "update-group-subscriptions-put-update-group-subscriptions" "update-group-subscriptions-delete-update-group-subscription" "update-group-subscriptions-get-update-group-subscription" "update-group-subscriptions-put-update-group-subscription" "update-groups-get" "update-groups-post" "update-groups-delete" "get-api-v2-update-groups-id" "update-groups-put" "update-groups-get-update-group-bundles" "update-groups-remove-update-group-user" "update-groups-add-update-group-user" "update-system-get-checkin" "user-content-definitions-get-user-content-definitions" "user-content-definitions-post-user-content-definition" "user-content-definitions-delete-user-content-definition" "user-content-definitions-get-user-content-definition" "users-get" "users-post" "users-get-current-user" "users-put-current-user" "get-api-v2-users-current-permissions" "user-permissions-get-current-user-roles" "users-delete" "get-api-v2-users-id" "users-put" "user-permissions-get-permissions" "user-permissions-get-roles" "user-permissions-put" "voucher-history-get-voucher-history" "vouchers-get" "vouchers-post" "vouchers-delete" "get-api-v2-vouchers-voucher-code" "vouchers-put" "vouchers-get-voucher-history" "activities-get-activities" "activities-post-activity" "activities-delete-activity" "activities-get-activity" "activities-put-activity" "activity-runs-get-activity-runs" "activity-runs-get-activity-run" "activity-runs-put-activity-run" "activity-runs-get-activity-run-status" "activity-runs-put-activity-run-status" "agents-get-agents" "agents-post-agent" "agents-get-current-agent-async" "agents-get-current-agent-activity-run" "agents-delete-agent" "agents-get-agent-async" "agents-put-agent" "agents-get-agent-activity-run" "agents-put-agent-activity-run" "agents-put-agent-status" "job-runs-get-job-runs" "job-runs-post-job-run" "job-runs-delete-job-run" "job-runs-get-job-run" "job-runs-put-job-run" "jobs-get-jobs" "jobs-post-job" "jobs-delete-job" "jobs-get-job" "jobs-put-job" "steps-get-steps" "steps-post-step" "steps-get-step" "steps-put-step" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -171,7 +195,7 @@ export def "aftermarket-services-get-certs" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v2/AftermarketServices/Certificates" $auth.query)
@@ -214,7 +238,7 @@ export def "aftermarket-services-put-ecu" [
   --replaces-ecu-serial-number: string # The serial number of the ECU that this ECU replaces. Required if activating an ECU..
   --body-serial-number: string # The serial number of the ECU
   state: string@state-completer # The state of the ECU
-]: any -> record<ActivationCode: string, DamagedDescription: string, EngineSerialNumber: string, ReplacesECUSerialNumber: string, SerialNumber: string, State: string> {
+]: any -> oneof<record<ActivationCode: string, DamagedDescription: string, EngineSerialNumber: string, ReplacesECUSerialNumber: string, SerialNumber: string, State: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -258,7 +282,7 @@ export def "aftermarket-services-get-engine-iqa-codes" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --edt-instance-id: string # The EDT Instance Id of the kit calling this method. (required)
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($serial_number | is-empty) { error make --unspanned { msg: "path parameter 'serialNumber' must be non-empty" } }
@@ -342,7 +366,7 @@ export def "aftermarket-services-get-production-data" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --edt-instance-id: string # The EDT Instance Id of the kit calling this method. (required)
-]: nothing -> table<DataType: string, DataValues: string> {
+]: nothing -> oneof<table<DataType: string, DataValues: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($serial_number | is-empty) { error make --unspanned { msg: "path parameter 'serialNumber' must be non-empty" } }
@@ -417,7 +441,7 @@ export def "aftermarket-services-get-user-status" [
   --accept: string@accept-completer # Response content type
   --voucher-code: string # required
   --dealer-code: string # required
-]: nothing -> record<DealerCode: string, State: string, VoucherCode: string> {
+]: nothing -> oneof<record<DealerCode: string, State: string, VoucherCode: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($voucher_code == null) { error make --unspanned { msg: "required query parameter 'voucherCode' missing: pass --voucher-code" } }
@@ -541,7 +565,7 @@ export def "authentication-default" [
   --mac-action: string@mac-action-completer # The action to perform on the MAC token. Optional. Defaults to ‘None’.
   password: string # A secret word or phrase that must be used to gain admission
   username: string # A unique ID a user needs to login with
-]: any -> record<Email: string, MACId: string, MACToken: string, Name: string, Token: string, UserID: int, Username: string> {
+]: any -> oneof<record<Email: string, MACId: string, MACToken: string, Name: string, Token: string, UserID: int, Username: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -697,7 +721,7 @@ export def "authorization-categories-get" [
   --offset: int # Optional. The page offset. If not specified, the default page offset is 0. (format: int32)
   --user-id: int # Optional. Filter by categories visible to the provided user with the provided userID. (format: int32)
   --definition-id: string # Optional. Filter by categories containing a definition with the provided ID.
-]: nothing -> record<Entities: table<Description: string, ID: string, Name: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>> {
+]: nothing -> oneof<record<Entities: table<Description: string, ID: string, Name: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "userID" $user_id "scalar") (serialize-qp "definitionID" $definition_id "scalar")] | flatten | str join "&"
@@ -781,7 +805,7 @@ export def "authorization-categories-get-users" [
   --include-categories: oneof<nothing, bool> # If true, include full Authorization Category detail. Defaults to false.
   --include-users: oneof<nothing, bool> # If true, include full User detail. Defaults to false.
   --user-search: string # Optional. Includes only users with a Name, Username, or Email containing the provided value.
-]: nothing -> record<Entities: table<Categories: list, User: record>, Metadata: record<Limit: int, Offset: int, TotalCount: int>> {
+]: nothing -> oneof<record<Entities: table<Categories: list, User: record>, Metadata: record<Limit: int, Offset: int, TotalCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "userIDs" $user_i_ds "scalar") (serialize-qp "categoryIDs" $category_i_ds "scalar") (serialize-qp "includeCategories" $include_categories "scalar") (serialize-qp "includeUsers" $include_users "scalar") (serialize-qp "userSearch" $user_search "scalar")] | flatten | str join "&"
@@ -978,7 +1002,7 @@ export def "authorization-code-definitions-get-authorization-code-definition" [
   --deleted-by-user-id: int # Optional. If specified, filters definitions to those deleted by the given User ID. (format: int32)
   --include-deleted: oneof<nothing, bool> # Optional. Whether to include deleted definitions. 'False' by default.
   --category-id: string # Optional. If specified, filters definitions with the designated categoryID.
-]: nothing -> record<Entities: table<AuthorizationID: string, CreatedByUserID: int, CreatedDate: string, DataFields: list, DeletedByUserID: int, DeletedDate: string, Description: string, DurationAccuracy: int, DurationAmount: int, DurationUnits: string, HashLength: int, ID: string, IsDeleted: bool, Name: string, RandomLength: int, ValidationFields: list>, Metadata: record<Limit: int, Offset: int, TotalCount: int>> {
+]: nothing -> oneof<record<Entities: table<AuthorizationID: string, CreatedByUserID: int, CreatedDate: string, DataFields: list, DeletedByUserID: int, DeletedDate: string, Description: string, DurationAccuracy: int, DurationAmount: int, DurationUnits: string, HashLength: int, ID: string, IsDeleted: bool, Name: string, RandomLength: int, ValidationFields: list>, Metadata: record<Limit: int, Offset: int, TotalCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "createdByUserID" $created_by_user_id "scalar") (serialize-qp "deletedByUserID" $deleted_by_user_id "scalar") (serialize-qp "includeDeleted" $include_deleted "scalar") (serialize-qp "categoryID" $category_id "scalar")] | flatten | str join "&"
@@ -1003,8 +1027,6 @@ export def "authorization-code-definitions-get-authorization-code-definition" [
 #
 # POST /api/v2/AuthorizationCodeDefinitions
 # operationId: AuthorizationCodeDefinitions_PostAuthorizationCodeDefinition
-# --DataFields item shape: {DigitsPrecision?: int, MaxExponent?: int, MaxValue?: float, MinExponent?: int, MinValue?: float, Name: string, ScaleFactor?: float, Signed?: bool, Type: "Boolean"|"Decimal"|"Float"|"VariableLengthByteArray"}
-# --ValidationFields item shape: {Name: string, Type: "Boolean"|"Float"|"Int"|"StringCaseInsensitive"|"StringCaseSensitive"}
 export def "authorization-code-definitions-post-authorization-code-definition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1182,7 +1204,7 @@ export def "get-api-v2-authorization-code-definitions-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<AuthorizationID: string, CreatedByUserID: int, CreatedDate: string, DataFields: table<DigitsPrecision: int, MaxExponent: int, MaxValue: float, MinExponent: int, MinValue: float, Name: string, ScaleFactor: float, Signed: bool, Type: string>, DeletedByUserID: int, DeletedDate: string, Description: string, DurationAccuracy: int, DurationAmount: int, DurationUnits: string, HashLength: int, ID: string, IsDeleted: bool, Name: string, RandomLength: int, ValidationFields: table<Name: string, Type: string>> {
+]: nothing -> oneof<record<AuthorizationID: string, CreatedByUserID: int, CreatedDate: string, DataFields: table<DigitsPrecision: int, MaxExponent: int, MaxValue: float, MinExponent: int, MinValue: float, Name: string, ScaleFactor: float, Signed: bool, Type: string>, DeletedByUserID: int, DeletedDate: string, Description: string, DurationAccuracy: int, DurationAmount: int, DurationUnits: string, HashLength: int, ID: string, IsDeleted: bool, Name: string, RandomLength: int, ValidationFields: table<Name: string, Type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1207,8 +1229,6 @@ export def "get-api-v2-authorization-code-definitions-id" [
 #
 # PUT /api/v2/AuthorizationCodeDefinitions/{id}
 # operationId: AuthorizationCodeDefinitions_PutAuthorizationCodeDefinition
-# --DataFields item shape: {DigitsPrecision?: int, MaxExponent?: int, MaxValue?: float, MinExponent?: int, MinValue?: float, Name: string, ScaleFactor?: float, Signed?: bool, Type: "Boolean"|"Decimal"|"Float"|"VariableLengthByteArray"}
-# --ValidationFields item shape: {Name: string, Type: "Boolean"|"Float"|"Int"|"StringCaseInsensitive"|"StringCaseSensitive"}
 export def "authorization-code-definitions-put-authorization-code-definition" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1282,7 +1302,7 @@ export def "authorization-codes-get-authorization-codes" [
   --created-by-user-id: int # Optional. If specified, filters codes to those created by the given User ID. (format: int32)
   --deleted-by-user-id: int # Optional. If specified, filters codes to those deleted by the given User ID. (format: int32)
   --include-deleted: oneof<nothing, bool> # Optional. Whether to include deleted codes. 'False' by default.
-]: nothing -> record<Entities: table<Code: string, CreatedByUserID: int, CreatedDate: string, DataParameters: list, DefinitionID: string, DeletedByUserID: int, DeletedDate: string, EffectiveDate: string, ID: int, IsDeleted: bool, ValidationParameters: list>, Metadata: record<Limit: int, Offset: int, TotalCount: int>> {
+]: nothing -> oneof<record<Entities: table<Code: string, CreatedByUserID: int, CreatedDate: string, DataParameters: list, DefinitionID: string, DeletedByUserID: int, DeletedDate: string, EffectiveDate: string, ID: int, IsDeleted: bool, ValidationParameters: list>, Metadata: record<Limit: int, Offset: int, TotalCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "code" $code "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "definitionID" $definition_id "scalar") (serialize-qp "createdByUserID" $created_by_user_id "scalar") (serialize-qp "deletedByUserID" $deleted_by_user_id "scalar") (serialize-qp "includeDeleted" $include_deleted "scalar")] | flatten | str join "&"
@@ -1307,8 +1327,6 @@ export def "authorization-codes-get-authorization-codes" [
 #
 # POST /api/v2/AuthorizationCodes
 # operationId: AuthorizationCodes_PostAuthorizationCode
-# --DataParameters item shape: {Name: string, Value: string}
-# --ValidationParameters item shape: {Name: string, Value: string}
 export def "authorization-codes-post-authorization-code" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1406,7 +1424,7 @@ export def "authorization-codes-get-authorization-code" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<Code: string, CreatedByUserID: int, CreatedDate: string, DataParameters: table<Name: string, Value: string>, DefinitionID: string, DeletedByUserID: int, DeletedDate: string, EffectiveDate: string, ID: int, IsDeleted: bool, ValidationParameters: table<Name: string, Value: string>> {
+]: nothing -> oneof<record<Code: string, CreatedByUserID: int, CreatedDate: string, DataParameters: table<Name: string, Value: string>, DefinitionID: string, DeletedByUserID: int, DeletedDate: string, EffectiveDate: string, ID: int, IsDeleted: bool, ValidationParameters: table<Name: string, Value: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1431,8 +1449,6 @@ export def "authorization-codes-get-authorization-code" [
 #
 # PUT /api/v2/AuthorizationCodes/{id}
 # operationId: AuthorizationCodes_PutAuthorizationCode
-# --DataParameters item shape: {Name: string, Value: string}
-# --ValidationParameters item shape: {Name: string, Value: string}
 export def "authorization-codes-put-authorization-code" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1495,7 +1511,7 @@ export def "authorization-codes-get-contact-information" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<AuthorizationCodeID: int, Code: string, Contact: string, CreatedBy: string, CreatedDate: string, DealerCode: string, Dealership: string, DefinitionName: string, Email: string, ID: int, Notes: string, Phone: string> {
+]: nothing -> oneof<record<AuthorizationCodeID: int, Code: string, Contact: string, CreatedBy: string, CreatedDate: string, DealerCode: string, Dealership: string, DefinitionName: string, Email: string, ID: int, Notes: string, Phone: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1532,7 +1548,7 @@ export def "authorization-codes-validate-authorization-code" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<ExpirationDate: string, IsValid: bool> {
+]: nothing -> oneof<record<ExpirationDate: string, IsValid: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1574,7 +1590,7 @@ export def "authorization-contact-information-get" [
   --after-date: string # Optional. Include only data for authorization codes created after a provided date. (format: date-time)
   --before-date: string # Optional. Include only data for authorization codes created before a provided date. (format: date-time)
   --dealer-code: string # Optional. Search by dealer code.
-]: nothing -> record<Entities: table<AuthorizationCodeID: int, Code: string, Contact: string, CreatedBy: string, CreatedDate: string, DealerCode: string, Dealership: string, DefinitionName: string, Email: string, ID: int, Notes: string, Phone: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>> {
+]: nothing -> oneof<record<Entities: table<AuthorizationCodeID: int, Code: string, Contact: string, CreatedBy: string, CreatedDate: string, DealerCode: string, Dealership: string, DefinitionName: string, Email: string, ID: int, Notes: string, Phone: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "authorizationCode" $authorization_code "scalar") (serialize-qp "afterDate" $after_date "scalar") (serialize-qp "beforeDate" $before_date "scalar") (serialize-qp "dealerCode" $dealer_code "scalar")] | flatten | str join "&"
@@ -1660,7 +1676,7 @@ export def "brands-brands" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v2/Brands" $auth.query)
@@ -1700,7 +1716,7 @@ export def "bundles-get-bundles" [
   --limit: int # Optional. The page limit. The default page limit is 10. (format: int32)
   --offset: int # Optional. The page offset. The default page offset is 0. (format: int32)
   --bundle-number: int # Optional. If provided, filters by BundleNumber. (format: int32)
-]: nothing -> record<Entities: table<Active: bool, BundleID: string, BundleNumber: int, Description: string, UpdateGroupID: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>> {
+]: nothing -> oneof<record<Entities: table<Active: bool, BundleID: string, BundleNumber: int, Description: string, UpdateGroupID: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "UpdateGroupID" $update_group_id "scalar") (serialize-qp "Active" $active "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "BundleNumber" $bundle_number "scalar")] | flatten | str join "&"
@@ -1816,7 +1832,7 @@ export def "bundles-get-bundle" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<Active: bool, BundleID: string, BundleNumber: int, Description: string, UpdateGroupID: string> {
+]: nothing -> oneof<record<Active: bool, BundleID: string, BundleNumber: int, Description: string, UpdateGroupID: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'ID' must be non-empty" } }
@@ -1899,7 +1915,7 @@ export def "clients-get" [
   --tag: string # Optional. Filter clients by Tag. Wildcards are supported (*).
   --limit: int # Optional. The page limit. The default page limit is 10. (format: int32)
   --offset: int # Optional. The page offset. The default page offset is 0. (format: int32)
-]: nothing -> record<Entities: table<ClientID: string, LastCheckin: string, Tag: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>> {
+]: nothing -> oneof<record<Entities: table<ClientID: string, LastCheckin: string, Tag: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Tag" $tag "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -1937,7 +1953,7 @@ export def "update-system-get-cached-files" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --expired: oneof<nothing, bool> # Only Expired Files (true|false) (required)
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($client_id | is-empty) { error make --unspanned { msg: "path parameter 'ClientID' must be non-empty" } }
@@ -1976,7 +1992,7 @@ export def "package-reports-default" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<Categories: list<record>, PackageDescription: string, PackageID: string> {
+]: nothing -> oneof<table<Categories: list<record>, PackageDescription: string, PackageID: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($client_id | is-empty) { error make --unspanned { msg: "path parameter 'ClientID' must be non-empty" } }
@@ -2000,7 +2016,6 @@ export def "package-reports-default" [
 # Submit a package report
 #
 # PUT /api/v2/Clients/{ClientID}/PackageReports
-# --Categories item shape: {Values?: list, category: string}
 export def "put-api-v2-clients-client-id-package-reports" [
   client_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2094,7 +2109,7 @@ export def "get-api-v2-clients-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<ClientID: string, LastCheckin: string, Tag: string> {
+]: nothing -> oneof<record<ClientID: string, LastCheckin: string, Tag: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'ID' must be non-empty" } }
@@ -2176,7 +2191,7 @@ export def "clients-get-available-subscriptions" [
   --update-group-id: string # Optional. Filter by Update Group.
   --limit: int # Optional. The page limit. The default page limit is 10. (format: int32)
   --offset: int # Optional. The page offset. The default page offset is 0. (format: int32)
-]: nothing -> record<Entities: table<AvailableSubscriptions: list, UpdateGroup: record>, Metadata: record<Limit: int, Offset: int, TotalCount: int>> {
+]: nothing -> oneof<record<Entities: table<AvailableSubscriptions: list, UpdateGroup: record>, Metadata: record<Limit: int, Offset: int, TotalCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'ID' must be non-empty" } }
@@ -2217,7 +2232,7 @@ export def "clients-get-subscriptions" [
   --update-group-id: string # Optional. Filter by Update Group.
   --limit: int # Optional. The page limit. The default page limit is 10. (format: int32)
   --offset: int # Optional. The page offset. The default page offset is 0. (format: int32)
-]: nothing -> record<Entities: table<ClientID: string, Include: bool, PackageTypeID: string, UpdateGroupID: string, UpdateGroupSubscriptionID: int>, Metadata: record<Limit: int, Offset: int, TotalCount: int>> {
+]: nothing -> oneof<record<Entities: table<ClientID: string, Include: bool, PackageTypeID: string, UpdateGroupID: string, UpdateGroupSubscriptionID: int>, Metadata: record<Limit: int, Offset: int, TotalCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'ID' must be non-empty" } }
@@ -2378,7 +2393,7 @@ export def "content-definitions-get-content-definitions" [
   --name: string # Optional. Filter by Name. Supports beginning and ending wildcard (*).
   --type-id: int # Optional. Filter by TypeID. (format: int32)
   --package-type-id: string # Optional. Filter by PackageTypeID.
-]: nothing -> record<Entities: table<Attributes: list, ContentDefinitionID: int, Description: string, Name: string, PackageTypeID: string, TypeID: int>, Metadata: record<Limit: int, Offset: int, TotalCount: int>> {
+]: nothing -> oneof<record<Entities: table<Attributes: list, ContentDefinitionID: int, Description: string, Name: string, PackageTypeID: string, TypeID: int>, Metadata: record<Limit: int, Offset: int, TotalCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "userID" $user_id "scalar") (serialize-qp "includeAttributes" $include_attributes "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "typeID" $type_id "scalar") (serialize-qp "packageTypeID" $package_type_id "scalar")] | flatten | str join "&"
@@ -2403,7 +2418,6 @@ export def "content-definitions-get-content-definitions" [
 #
 # POST /api/v2/ContentDefinitions
 # operationId: ContentDefinitions_PostContentDefinition
-# --Attributes item shape: {ContentDefinitionID?: int, ID?: int, Name: string, Value?: string}
 export def "content-definitions-post-content-definition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2497,7 +2511,7 @@ export def "content-definitions-get-content-definition" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --include-attributes: string # Names of Attributes to include when retrieving this definition. This should be a comma-separated list. If not provided, Attributes are not included. If '*', all Attributes are included.
-]: nothing -> record<Attributes: table<ContentDefinitionID: int, ID: int, Name: string, Value: string>, ContentDefinitionID: int, Description: string, Name: string, PackageTypeID: string, TypeID: int> {
+]: nothing -> oneof<record<Attributes: table<ContentDefinitionID: int, ID: int, Name: string, Value: string>, ContentDefinitionID: int, Description: string, Name: string, PackageTypeID: string, TypeID: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($content_definition_id | is-empty) { error make --unspanned { msg: "path parameter 'contentDefinitionID' must be non-empty" } }
@@ -2523,7 +2537,6 @@ export def "content-definitions-get-content-definition" [
 #
 # PUT /api/v2/ContentDefinitions/{contentDefinitionID}
 # operationId: ContentDefinitions_PutContentDefinition
-# --Attributes item shape: {ContentDefinitionID?: int, ID?: int, Name: string, Value?: string}
 export def "content-definitions-put-content-definition" [
   content_definition_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2584,7 +2597,7 @@ export def "content-definitions-get-content-definition-attributes" [
   --limit: int # Optional. The page limit. If not specified, the default page limit is 10. (format: int32)
   --offset: int # Optional. The page offset. If not specified, the default page offset is 0. (format: int32)
   --name: string # Optional. Filter the attributes by Name.
-]: nothing -> record<Entities: table<ContentDefinitionID: int, ID: int, Name: string, Value: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>> {
+]: nothing -> oneof<record<Entities: table<ContentDefinitionID: int, ID: int, Name: string, Value: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($content_definition_id | is-empty) { error make --unspanned { msg: "path parameter 'contentDefinitionID' must be non-empty" } }
@@ -2712,7 +2725,7 @@ export def "content-release-get-content-release-version" [
   --user-id: int # Optional. Filter by UserID. (format: int32)
   --content-definition-id: int # Optional. Filter by ContentDefinitionID. (format: int32)
   --version: int # Optional. Filter by Version. (format: int32)
-]: nothing -> record<Entities: table<ContentDefinitionID: int, ContentReleaseID: int, Deleted: bool, PublisherUserID: int, ReleaseID: int, TestReportUrl: string, UpdatedDate: string, Version: int>, Metadata: record<Limit: int, Offset: int, TotalCount: int>> {
+]: nothing -> oneof<record<Entities: table<ContentDefinitionID: int, ContentReleaseID: int, Deleted: bool, PublisherUserID: int, ReleaseID: int, TestReportUrl: string, UpdatedDate: string, Version: int>, Metadata: record<Limit: int, Offset: int, TotalCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "deleted" $deleted "scalar") (serialize-qp "releaseID" $release_id "scalar") (serialize-qp "userId" $user_id "scalar") (serialize-qp "contentDefinitionID" $content_definition_id "scalar") (serialize-qp "version" $version "scalar")] | flatten | str join "&"
@@ -2830,7 +2843,7 @@ export def "get-api-v2-content-releases-content-release-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<ContentDefinitionID: int, ContentReleaseID: int, Deleted: bool, PublisherUserID: int, ReleaseID: int, TestReportUrl: string, UpdatedDate: string, Version: int> {
+]: nothing -> oneof<record<ContentDefinitionID: int, ContentReleaseID: int, Deleted: bool, PublisherUserID: int, ReleaseID: int, TestReportUrl: string, UpdatedDate: string, Version: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($content_release_id | is-empty) { error make --unspanned { msg: "path parameter 'ContentReleaseId' must be non-empty" } }
@@ -3031,7 +3044,7 @@ export def "content-submission-types-get-content-submission-types" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --enabled: oneof<nothing, bool>
-]: nothing -> table<AttributeTemplate: string, BuildDefinitionID: int, CategoryTemplate: string, Description: string, Enabled: bool, ID: int, InventoryPackageID: string, JobID: int, Name: string, ReleaseNotesDescription: string> {
+]: nothing -> oneof<table<AttributeTemplate: string, BuildDefinitionID: int, CategoryTemplate: string, Description: string, Enabled: bool, ID: int, InventoryPackageID: string, JobID: int, Name: string, ReleaseNotesDescription: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "enabled" $enabled "scalar")] | flatten | str join "&"
@@ -3152,7 +3165,7 @@ export def "content-submission-types-get-content-submission-type" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<AttributeTemplate: string, BuildDefinitionID: int, CategoryTemplate: string, Description: string, Enabled: bool, ID: int, InventoryPackageID: string, JobID: int, Name: string, ReleaseNotesDescription: string> {
+]: nothing -> oneof<record<AttributeTemplate: string, BuildDefinitionID: int, CategoryTemplate: string, Description: string, Enabled: bool, ID: int, InventoryPackageID: string, JobID: int, Name: string, ReleaseNotesDescription: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3246,7 +3259,7 @@ export def "content-submissions-get-content-submissions" [
   --type-id: int # Optional. Filter submissions by their ContentDefinition's Type ID. (format: int32)
   --version: int # Optional. Filter submissions by their Version. (format: int32)
   --include-definition: oneof<nothing, bool> # Optional. If true, includes the ContentDefinition for each submission.
-]: nothing -> record<Entities: table<Attributes: list, BuildID: int, ContentDefinitionID: int, ContentSubmissionID: int, Definition: record, JobRunID: int, PackageID: string, ReleaseNotes: string, Repository: string, Revision: int, SubmissionDate: string, UserID: int, Version: int>, Metadata: record<Limit: int, Offset: int, TotalCount: int>> {
+]: nothing -> oneof<record<Entities: table<Attributes: list, BuildID: int, ContentDefinitionID: int, ContentSubmissionID: int, Definition: record, JobRunID: int, PackageID: string, ReleaseNotes: string, Repository: string, Revision: int, SubmissionDate: string, UserID: int, Version: int>, Metadata: record<Limit: int, Offset: int, TotalCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "userID" $user_id "scalar") (serialize-qp "contentDefinitionID" $content_definition_id "scalar") (serialize-qp "includeAttributes" $include_attributes "scalar") (serialize-qp "releaseID" $release_id "scalar") (serialize-qp "typeID" $type_id "scalar") (serialize-qp "version" $version "scalar") (serialize-qp "includeDefinition" $include_definition "scalar")] | flatten | str join "&"
@@ -3271,8 +3284,6 @@ export def "content-submissions-get-content-submissions" [
 #
 # POST /api/v2/ContentSubmissions
 # operationId: ContentSubmissions_PostContentSubmission
-# --Attributes item shape: {ContentSubmissionID?: int, ID?: int, Name: string, Value?: string}
-# --Definition shape: {Attributes?: list, ContentDefinitionID?: int, Description: string, Name?: string, PackageTypeID?: string, TypeID?: int}
 export def "content-submissions-post-content-submission" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3373,7 +3384,7 @@ export def "content-submissions-get-content-submission" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --include-attributes: string # Names of Attributes to include when retrieving this submission. This should be a comma-separated list.
-]: nothing -> record<Attributes: table<ContentSubmissionID: int, ID: int, Name: string, Value: string>, BuildID: int, ContentDefinitionID: int, ContentSubmissionID: int, Definition: record<Attributes: list<record>, ContentDefinitionID: int, Description: string, Name: string, PackageTypeID: string, TypeID: int>, JobRunID: int, PackageID: string, ReleaseNotes: string, Repository: string, Revision: int, SubmissionDate: string, UserID: int, Version: int> {
+]: nothing -> oneof<record<Attributes: table<ContentSubmissionID: int, ID: int, Name: string, Value: string>, BuildID: int, ContentDefinitionID: int, ContentSubmissionID: int, Definition: record<Attributes: list<record>, ContentDefinitionID: int, Description: string, Name: string, PackageTypeID: string, TypeID: int>, JobRunID: int, PackageID: string, ReleaseNotes: string, Repository: string, Revision: int, SubmissionDate: string, UserID: int, Version: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($content_submission_id | is-empty) { error make --unspanned { msg: "path parameter 'contentSubmissionID' must be non-empty" } }
@@ -3399,8 +3410,6 @@ export def "content-submissions-get-content-submission" [
 #
 # PUT /api/v2/ContentSubmissions/{contentSubmissionID}
 # operationId: ContentSubmissions_PutContentSubmission
-# --Attributes item shape: {ContentSubmissionID?: int, ID?: int, Name: string, Value?: string}
-# --Definition shape: {Attributes?: list, ContentDefinitionID?: int, Description: string, Name?: string, PackageTypeID?: string, TypeID?: int}
 export def "content-submissions-put-content-submission" [
   content_submission_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3468,7 +3477,7 @@ export def "content-submissions-get-content-submission-attributes" [
   --limit: int # Optional. The page limit. If not specified, the default page limit is 10. (format: int32)
   --offset: int # Optional. The page offset. If not specified, the default page offset is 0. (format: int32)
   --name: string # Optional. Filter the attributes by Name.
-]: nothing -> record<Entities: table<ContentSubmissionID: int, ID: int, Name: string, Value: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>> {
+]: nothing -> oneof<record<Entities: table<ContentSubmissionID: int, ID: int, Name: string, Value: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($content_submission_id | is-empty) { error make --unspanned { msg: "path parameter 'contentSubmissionID' must be non-empty" } }
@@ -3591,7 +3600,7 @@ export def "content-submissions-get-content-submission-status" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --include-activity-run-details: oneof<nothing, bool> # True to include all status details if JobRun. Defaults to false
-]: nothing -> record<ActivityRuns: table<ActivityRunID: int, EndDate: string, JobActivityID: int, JobRunID: int, Parameters: list, StartDate: string, Status: record, Steps: list>, EndDate: string, JobID: int, JobRunID: int, Parameters: table<Direction: string, Name: string, Value: string>, StartDate: string, Status: string> {
+]: nothing -> oneof<record<ActivityRuns: table<ActivityRunID: int, EndDate: string, JobActivityID: int, JobRunID: int, Parameters: list, StartDate: string, Status: record, Steps: list>, EndDate: string, JobID: int, JobRunID: int, Parameters: table<Direction: string, Name: string, Value: string>, StartDate: string, Status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($content_submission_id | is-empty) { error make --unspanned { msg: "path parameter 'contentSubmissionID' must be non-empty" } }
@@ -3630,7 +3639,7 @@ export def "dealer-by-country-get-countries" [
   --accept: string@accept-completer-1 # Response content type
   --limit: int # Optional. The page limit. The default page limit is 10. (format: int32)
   --offset: int # Optional. The page offset. The default page offset is 0. (format: int32)
-]: nothing -> record<Entities: table<Count: int, Country: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>> {
+]: nothing -> oneof<record<Entities: table<Count: int, Country: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -3671,7 +3680,7 @@ export def "dealers-get-dealers" [
   --dealer-name: string # The partial Dealer Name to filter by. Wildcard supported (*).
   --limit: int # Optional. The page limit. The default page limit is 10. (format: int32)
   --offset: int # Optional. The page offset. The default page offset is 0. (format: int32)
-]: nothing -> record<Entities: table<BillingAddress: string, BillingAddress2: string, BillingAddress3: string, BillingAddress4: string, BillingCity: string, BillingCountry: string, BillingCountryCode: string, BillingState: string, BillingZip: string, Brands: list, DealerCode: string, DealerName: string, DealerStatus: string, DealerStatusUpdateDate: string, Filler: string, IsValid: bool, LanguagePreference: string, Region1: string, Region2: string, RegionMapping: string, RoleBrand: string, ShippingAddress2: string, ShippingAddress3: string, ShippingAddress4: string, ShippingCity: string, ShippingCountry: string, ShippingState: string, ShippingStreet: string, ShippingZip: string, Telephone: string, VATCode: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>> {
+]: nothing -> oneof<record<Entities: table<BillingAddress: string, BillingAddress2: string, BillingAddress3: string, BillingAddress4: string, BillingCity: string, BillingCountry: string, BillingCountryCode: string, BillingState: string, BillingZip: string, Brands: list, DealerCode: string, DealerName: string, DealerStatus: string, DealerStatusUpdateDate: string, Filler: string, IsValid: bool, LanguagePreference: string, Region1: string, Region2: string, RegionMapping: string, RoleBrand: string, ShippingAddress2: string, ShippingAddress3: string, ShippingAddress4: string, ShippingCity: string, ShippingCountry: string, ShippingState: string, ShippingStreet: string, ShippingZip: string, Telephone: string, VATCode: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Brand" $brand "scalar") (serialize-qp "ShippingCountry" $shipping_country "scalar") (serialize-qp "DealerName" $dealer_name "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -3708,7 +3717,7 @@ export def "dealers-get-dealerby-dealer-code" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<BillingAddress: string, BillingAddress2: string, BillingAddress3: string, BillingAddress4: string, BillingCity: string, BillingCountry: string, BillingCountryCode: string, BillingState: string, BillingZip: string, Brands: list<string>, DealerCode: string, DealerName: string, DealerStatus: string, DealerStatusUpdateDate: string, Filler: string, IsValid: bool, LanguagePreference: string, Region1: string, Region2: string, RegionMapping: string, RoleBrand: string, ShippingAddress2: string, ShippingAddress3: string, ShippingAddress4: string, ShippingCity: string, ShippingCountry: string, ShippingState: string, ShippingStreet: string, ShippingZip: string, Telephone: string, VATCode: string> {
+]: nothing -> oneof<record<BillingAddress: string, BillingAddress2: string, BillingAddress3: string, BillingAddress4: string, BillingCity: string, BillingCountry: string, BillingCountryCode: string, BillingState: string, BillingZip: string, Brands: list<string>, DealerCode: string, DealerName: string, DealerStatus: string, DealerStatusUpdateDate: string, Filler: string, IsValid: bool, LanguagePreference: string, Region1: string, Region2: string, RegionMapping: string, RoleBrand: string, ShippingAddress2: string, ShippingAddress3: string, ShippingAddress4: string, ShippingCity: string, ShippingCountry: string, ShippingState: string, ShippingStreet: string, ShippingZip: string, Telephone: string, VATCode: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($dealer_code | is-empty) { error make --unspanned { msg: "path parameter 'DealerCode' must be non-empty" } }
@@ -3747,7 +3756,7 @@ export def "files-get-files" [
   --include-deleted: oneof<nothing, bool> # Indicates whether to include files marked as removed.
   --limit: int # Optional. The page limit. The default page limit is 10. (format: int32)
   --offset: int # Optional. The page offset. The default page offset is 0. (format: int32)
-]: nothing -> record<Entities: table<CRC: string, ContentType: string, Description: string, Id: string, IsPublic: bool, Name: string, Path: string, Size: int, State: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>> {
+]: nothing -> oneof<record<Entities: table<CRC: string, ContentType: string, Description: string, Id: string, IsPublic: bool, Name: string, Path: string, Size: int, State: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "includeDeleted" $include_deleted "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -3868,7 +3877,7 @@ export def "files-get-file" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<CRC: string, ContentType: string, Description: string, Id: string, IsPublic: bool, Name: string, Path: string, Size: int, State: string> {
+]: nothing -> oneof<record<CRC: string, ContentType: string, Description: string, Id: string, IsPublic: bool, Name: string, Path: string, Size: int, State: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'ID' must be non-empty" } }
@@ -3954,7 +3963,7 @@ export def "files-get-file-contents" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'ID' must be non-empty" } }
@@ -3991,7 +4000,7 @@ export def "files-put-file-contents" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'ID' must be non-empty" } }
@@ -4029,7 +4038,7 @@ export def "global-image-categories-get-files" [
   --accept: string@accept-completer # Response content type
   --limit: int # Optional. The page limit. The default page limit is 10. (format: int32)
   --offset: int # Optional. The page offset. The default page offset is 0. (format: int32)
-]: nothing -> record<Entities: table<Id: string, Name: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>> {
+]: nothing -> oneof<record<Entities: table<Id: string, Name: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -4106,7 +4115,7 @@ export def "global-image-categories-get-file" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<Id: string, Name: string> {
+]: nothing -> oneof<record<Id: string, Name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'ID' must be non-empty" } }
@@ -4148,7 +4157,7 @@ export def "global-images-get-global-images" [
   --include-deleted: oneof<nothing, bool> # Indicates whether to include GlobalImages marked as removed.
   --limit: int # Optional. The page limit. The default page limit is 10. (format: int32)
   --offset: int # Optional. The page offset. The default page offset is 0. (format: int32)
-]: nothing -> record<Entities: table<CRC: string, Categories: list, Date: string, Description: string, Height: int, Id: string, Name: string, Publisher: string, Size: int, State: string, ThumbnailCRC: string, ThumbnailSize: int, Width: int>, Metadata: record<Limit: int, Offset: int, TotalCount: int>> {
+]: nothing -> oneof<record<Entities: table<CRC: string, Categories: list, Date: string, Description: string, Height: int, Id: string, Name: string, Publisher: string, Size: int, State: string, ThumbnailCRC: string, ThumbnailSize: int, Width: int>, Metadata: record<Limit: int, Offset: int, TotalCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "categoryId" $category_id "scalar") (serialize-qp "publisher" $publisher "scalar") (serialize-qp "includeDeleted" $include_deleted "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -4173,7 +4182,6 @@ export def "global-images-get-global-images" [
 #
 # POST /api/v2/GlobalImages
 # operationId: GlobalImages_PostGlobalImage
-# --Categories item shape: {Id?: string, Name: string}
 export def "global-images-post-global-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4275,7 +4283,7 @@ export def "global-images-get-global-image" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<CRC: string, Categories: table<Id: string, Name: string>, Date: string, Description: string, Height: int, Id: string, Name: string, Publisher: string, Size: int, State: string, ThumbnailCRC: string, ThumbnailSize: int, Width: int> {
+]: nothing -> oneof<record<CRC: string, Categories: table<Id: string, Name: string>, Date: string, Description: string, Height: int, Id: string, Name: string, Publisher: string, Size: int, State: string, ThumbnailCRC: string, ThumbnailSize: int, Width: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'ID' must be non-empty" } }
@@ -4300,7 +4308,6 @@ export def "global-images-get-global-image" [
 #
 # PUT /api/v2/GlobalImages/{ID}
 # operationId: GlobalImages_PutGlobalImage
-# --Categories item shape: {Id?: string, Name: string}
 export def "global-images-put-global-image" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4368,7 +4375,7 @@ export def "global-images-get-global-image-contents" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --is-full-image: oneof<nothing, bool> # Indicated whether to download the full image or the thumbnail. Defaults to 'true'.
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'ID' must be non-empty" } }
@@ -4407,7 +4414,7 @@ export def "global-images-put-global-image-contents" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --is-full-image: oneof<nothing, bool> # Indicated whether this is the full image or the thumbnail. Defaults to 'true'.
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'ID' must be non-empty" } }
@@ -4447,7 +4454,7 @@ export def "languages-get-languages" [
   --limit: int # limit the number of Language objects returned. Optional (defaults to 10). (format: int32)
   --offset: int # the number of Language objects to skip. Optional (defaults to 0). (format: int32)
   --include-deleted: oneof<nothing, bool> # whether to include languages marked as deleted. Defaults to false
-]: nothing -> record<Entities: table<Description: string, IsDeleted: bool, LocaleId: int>, Metadata: record<Limit: int, Offset: int, TotalCount: int>> {
+]: nothing -> oneof<record<Entities: table<Description: string, IsDeleted: bool, LocaleId: int>, Metadata: record<Limit: int, Offset: int, TotalCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "includeDeleted" $include_deleted "scalar")] | flatten | str join "&"
@@ -4561,7 +4568,7 @@ export def "languages-get-language" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<Description: string, IsDeleted: bool, LocaleId: int> {
+]: nothing -> oneof<record<Description: string, IsDeleted: bool, LocaleId: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($locale_id | is-empty) { error make --unspanned { msg: "path parameter 'LocaleID' must be non-empty" } }
@@ -4645,7 +4652,7 @@ export def "license-activations-post" [
   postal_code: string # The dealer's postal code (zip code)
   system_info: string # Information about the system being activated
   voucher_code: string # The Voucher Code to use for activation
-]: any -> record<Key: string, LicenseData: string> {
+]: any -> oneof<record<Key: string, LicenseData: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4728,7 +4735,7 @@ export def "license-activations-put" [
   --accept: string@accept-completer # Response content type
   license_version: string # The license version to update
   --system-info: string # Information about the system being activated
-]: any -> record<Key: string, LicenseData: string> {
+]: any -> oneof<record<Key: string, LicenseData: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4812,7 +4819,7 @@ export def "licenses-get" [
   --status: string@status-completer # Optional. Filter by Status. By default only active licenses will be returned.
   --limit: int # Optional. The page limit. The default page limit is 10. (format: int32)
   --offset: int # Optional. The page offset. The default page offset is 0. (format: int32)
-]: nothing -> record<Entities: table<Active: bool, CreatedDate: string, DeactivatedDate: string, LicenseActivationType: string, LicenseID: string, LicenseVersion: string, RefreshDate: string, SystemInfo: string, UpdatedLicenseVersion: string, VoucherCode: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>> {
+]: nothing -> oneof<record<Entities: table<Active: bool, CreatedDate: string, DeactivatedDate: string, LicenseActivationType: string, LicenseID: string, LicenseVersion: string, RefreshDate: string, SystemInfo: string, UpdatedLicenseVersion: string, VoucherCode: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "VoucherCode" $voucher_code "scalar") (serialize-qp "DealerCode" $dealer_code "scalar") (serialize-qp "Status" $status "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -4848,7 +4855,7 @@ export def "get-api-v2-licenses-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<Active: bool, CreatedDate: string, DeactivatedDate: string, LicenseActivationType: string, LicenseID: string, LicenseVersion: string, RefreshDate: string, SystemInfo: string, UpdatedLicenseVersion: string, VoucherCode: string> {
+]: nothing -> oneof<record<Active: bool, CreatedDate: string, DeactivatedDate: string, LicenseActivationType: string, LicenseID: string, LicenseVersion: string, RefreshDate: string, SystemInfo: string, UpdatedLicenseVersion: string, VoucherCode: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'ID' must be non-empty" } }
@@ -4886,7 +4893,7 @@ export def "logs-get-logs" [
   --accept: string@accept-completer-1 # Response content type
   --limit: int # Optional. The page limit. The default page limit is 10. (format: int32)
   --offset: int # Optional. The page offset. The default page offset is 0. (format: int32)
-]: nothing -> record<Entities: table<ID: string, Message: string, TimeStamp: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>> {
+]: nothing -> oneof<record<Entities: table<ID: string, Message: string, TimeStamp: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -4961,7 +4968,7 @@ export def "logs-get-log" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<ID: string, Message: string, TimeStamp: string> {
+]: nothing -> oneof<record<ID: string, Message: string, TimeStamp: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'ID' must be non-empty" } }
@@ -5043,7 +5050,7 @@ export def "package-types-get" [
   --limit: int # Optional. The page limit. The default page limit is 10. (format: int32)
   --offset: int # Optional. The page offset. The default page offset is 0. (format: int32)
   --user-id: int # Optional. The user ID to sort packageTypes by the user's access (format: int32)
-]: nothing -> record<Entities: table<Attribute: string, Category: string, Description: string, Icon: string, InventoryFrequency: int, InventoryPackage: string, LocalizedDescription: string, LocalizedName: string, MaxDeltaPackages: int, PackageTypeID: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>> {
+]: nothing -> oneof<record<Entities: table<Attribute: string, Category: string, Description: string, Icon: string, InventoryFrequency: int, InventoryPackage: string, LocalizedDescription: string, LocalizedName: string, MaxDeltaPackages: int, PackageTypeID: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "userID" $user_id "scalar")] | flatten | str join "&"
@@ -5163,7 +5170,7 @@ export def "get-api-v2-package-types-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<Attribute: string, Category: string, Description: string, Icon: string, InventoryFrequency: int, InventoryPackage: string, LocalizedDescription: string, LocalizedName: string, MaxDeltaPackages: int, PackageTypeID: string> {
+]: nothing -> oneof<record<Attribute: string, Category: string, Description: string, Icon: string, InventoryFrequency: int, InventoryPackage: string, LocalizedDescription: string, LocalizedName: string, MaxDeltaPackages: int, PackageTypeID: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'ID' must be non-empty" } }
@@ -5366,7 +5373,7 @@ export def "package-typeto-bundles-get" [
   --bundle-id: string # Optional. Filter by BundleID.
   --limit: int # Optional. The page limit. The default page limit is 10. (format: int32)
   --offset: int # Optional. The page offset. The default page offset is 0. (format: int32)
-]: nothing -> record<Entities: table<BundleID: string, PackageTypeID: string, PackageVersion: int, Priority: int, SubscriptionType: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>> {
+]: nothing -> oneof<record<Entities: table<BundleID: string, PackageTypeID: string, PackageVersion: int, Priority: int, SubscriptionType: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "BundleID" $bundle_id "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -5491,7 +5498,7 @@ export def "packages-get-packages" [
   --package-type-id: string # Optional. If provided, filters by PackageTypeID.
   --version: int # Optional. If provided, filters by Version. (format: int32)
   --released: oneof<nothing, bool> # Optional. If provided, filters by Released.
-]: nothing -> record<Entities: table<Autorun: bool, CRC: string, Description: string, LocalizedName: string, Notes: string, PackageID: string, PackageTypeID: string, PreviousVersion: int, ReleaseDate: string, Released: bool, RemoveOnSuccess: bool, Size: int, Switches: string, Url: string, Version: int>, Metadata: record<Limit: int, Offset: int, TotalCount: int>> {
+]: nothing -> oneof<record<Entities: table<Autorun: bool, CRC: string, Description: string, LocalizedName: string, Notes: string, PackageID: string, PackageTypeID: string, PreviousVersion: int, ReleaseDate: string, Released: bool, RemoveOnSuccess: bool, Size: int, Switches: string, Url: string, Version: int>, Metadata: record<Limit: int, Offset: int, TotalCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "PackageTypeID" $package_type_id "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Released" $released "scalar")] | flatten | str join "&"
@@ -5617,7 +5624,7 @@ export def "packages-get-package" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<Autorun: bool, CRC: string, Description: string, LocalizedName: string, Notes: string, PackageID: string, PackageTypeID: string, PreviousVersion: int, ReleaseDate: string, Released: bool, RemoveOnSuccess: bool, Size: int, Switches: string, Url: string, Version: int> {
+]: nothing -> oneof<record<Autorun: bool, CRC: string, Description: string, LocalizedName: string, Notes: string, PackageID: string, PackageTypeID: string, PreviousVersion: int, ReleaseDate: string, Released: bool, RemoveOnSuccess: bool, Size: int, Switches: string, Url: string, Version: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'ID' must be non-empty" } }
@@ -5710,7 +5717,7 @@ export def "permissions-get-permissions" [
   --limit: int # Optional. The page limit. The default page limit is 10. (format: int32)
   --offset: int # Optional. The page offset. The default page offset is 0. (format: int32)
   --name: string # Filter by permission name. Supports ending wildcard (*). Optional.
-]: nothing -> record<Entities: table<DataDescription: string, DataRequired: string, Description: string, Id: int, Name: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>> {
+]: nothing -> oneof<record<Entities: table<DataDescription: string, DataRequired: string, Description: string, Id: int, Name: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
@@ -5826,7 +5833,7 @@ export def "permissions-get-permission" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<DataDescription: string, DataRequired: string, Description: string, Id: int, Name: string> {
+]: nothing -> oneof<record<DataDescription: string, DataRequired: string, Description: string, Id: int, Name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5910,7 +5917,7 @@ export def "priority-packages-get-priority-packages" [
   --status: string@status-completer-1 # Optional. Filter returned packages by status. By default only active packages will be returned.
   --limit: int # Optional. The page limit. The default page limit is 10. (format: int32)
   --offset: int # Optional. The page offset. The default page offset is 0. (format: int32)
-]: nothing -> record<Entities: table<Autorun: bool, CRC: string, ClientID: string, Description: string, Notes: string, PackageID: string, PackageTypeID: string, PreviousVersion: int, PriorityPackageID: string, ReleaseDate: string, Released: bool, RemoveOnSuccess: bool, Size: int, Switches: string, TimeStamp: string, Url: string, Version: int>, Metadata: record<Limit: int, Offset: int, TotalCount: int>> {
+]: nothing -> oneof<record<Entities: table<Autorun: bool, CRC: string, ClientID: string, Description: string, Notes: string, PackageID: string, PackageTypeID: string, PreviousVersion: int, PriorityPackageID: string, ReleaseDate: string, Released: bool, RemoveOnSuccess: bool, Size: int, Switches: string, TimeStamp: string, Url: string, Version: int>, Metadata: record<Limit: int, Offset: int, TotalCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ClientID" $client_id "scalar") (serialize-qp "Status" $status "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -6038,7 +6045,7 @@ export def "priority-packages-get-priority-package" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<Autorun: bool, CRC: string, ClientID: string, Description: string, Notes: string, PackageID: string, PackageTypeID: string, PreviousVersion: int, PriorityPackageID: string, ReleaseDate: string, Released: bool, RemoveOnSuccess: bool, Size: int, Switches: string, TimeStamp: string, Url: string, Version: int> {
+]: nothing -> oneof<record<Autorun: bool, CRC: string, ClientID: string, Description: string, Notes: string, PackageID: string, PackageTypeID: string, PreviousVersion: int, PriorityPackageID: string, ReleaseDate: string, Released: bool, RemoveOnSuccess: bool, Size: int, Switches: string, TimeStamp: string, Url: string, Version: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'ID' must be non-empty" } }
@@ -6078,7 +6085,7 @@ export def "release-get-releases" [
   --offset: int # Optional. The page offset. If not specified, the default page offset is 0. (format: int32)
   --visible: oneof<nothing, bool> # Optional. Filter by visible.
   --bundle-id: string # Optional. Filter by BundleID.
-]: nothing -> record<Entities: table<BuildDate: string, BundleIDs: list, ReleaseDate: string, ReleaseID: int, ReleaseNumber: string, Visible: bool>, Metadata: record<Limit: int, Offset: int, TotalCount: int>> {
+]: nothing -> oneof<record<Entities: table<BuildDate: string, BundleIDs: list, ReleaseDate: string, ReleaseID: int, ReleaseNumber: string, Visible: bool>, Metadata: record<Limit: int, Offset: int, TotalCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "visible" $visible "scalar") (serialize-qp "bundleID" $bundle_id "scalar")] | flatten | str join "&"
@@ -6159,7 +6166,7 @@ export def "release-get-release" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<BuildDate: string, BundleIDs: list<string>, ReleaseDate: string, ReleaseID: int, ReleaseNumber: string, Visible: bool> {
+]: nothing -> oneof<record<BuildDate: string, BundleIDs: list<string>, ReleaseDate: string, ReleaseID: int, ReleaseNumber: string, Visible: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($release_id | is-empty) { error make --unspanned { msg: "path parameter 'ReleaseId' must be non-empty" } }
@@ -6319,7 +6326,7 @@ export def "reporting-bundle-status-summary" [
   --bundle-id: string # The BundleID (required)
   --limit: int # Optional. The page limit. The default page limit is 10. (format: int32)
   --offset: int # Optional. The page offset. The default page offset is 0. (format: int32)
-]: nothing -> record<Entities: table<AverageDownloadTime: string, AverageInstallTime: string, Downloaded: int, Error: int, Installed: int, Package: string, PackageID: string, PackageStatusItems: list>, Metadata: record<Limit: int, Offset: int, TotalCount: int>> {
+]: nothing -> oneof<record<Entities: table<AverageDownloadTime: string, AverageInstallTime: string, Downloaded: int, Error: int, Installed: int, Package: string, PackageID: string, PackageStatusItems: list>, Metadata: record<Limit: int, Offset: int, TotalCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bundle_id == null) { error make --unspanned { msg: "required query parameter 'BundleID' missing: pass --bundle-id" } }
@@ -6360,7 +6367,7 @@ export def "reporting-bundles-in-update-group" [
   --include-inactive: oneof<nothing, bool> # Include Inactive Bundles (true|false) (required)
   --limit: int # Optional. The page limit. The default page limit is 10. (format: int32)
   --offset: int # Optional. The page offset. The default page offset is 0. (format: int32)
-]: nothing -> record<Entities: table<Active: bool, BundleID: string, BundleNumber: int, Description: string, UpdateGroupID: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>> {
+]: nothing -> oneof<record<Entities: table<Active: bool, BundleID: string, BundleNumber: int, Description: string, UpdateGroupID: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id == null) { error make --unspanned { msg: "required query parameter 'ID' missing: pass --id" } }
@@ -6399,7 +6406,7 @@ export def "reporting-client-info" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --client-id: string # The Client ID (required)
-]: nothing -> record<ClientID: string, Package: table<Categories: list, PackageDescription: string, PackageID: string>> {
+]: nothing -> oneof<record<ClientID: string, Package: table<Categories: list, PackageDescription: string, PackageID: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($client_id == null) { error make --unspanned { msg: "required query parameter 'ClientID' missing: pass --client-id" } }
@@ -6438,7 +6445,7 @@ export def "reporting-current-packages-in-update-group" [
   --accept: string@accept-completer # Response content type
   --id: string # The UpdateGroupID (required)
   --subscription-type-filter: string@subscription-type-filter-completer # Optional. The subscription type filter to use. By default the Default packages (Required and IncludeByDefault) will be returned.
-]: nothing -> table<Autorun: bool, CRC: string, Description: string, LocalizedName: string, Notes: string, PackageID: string, PackageTypeID: string, PreviousVersion: int, ReleaseDate: string, Released: bool, RemoveOnSuccess: bool, Size: int, Switches: string, Url: string, Version: int> {
+]: nothing -> oneof<table<Autorun: bool, CRC: string, Description: string, LocalizedName: string, Notes: string, PackageID: string, PackageTypeID: string, PreviousVersion: int, ReleaseDate: string, Released: bool, RemoveOnSuccess: bool, Size: int, Switches: string, Url: string, Version: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id == null) { error make --unspanned { msg: "required query parameter 'ID' missing: pass --id" } }
@@ -6476,7 +6483,7 @@ export def "reporting-get-client" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --id: string # The Client ID (required)
-]: nothing -> record<ClientID: string, LastCheckin: string, Tag: string> {
+]: nothing -> oneof<record<ClientID: string, LastCheckin: string, Tag: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id == null) { error make --unspanned { msg: "required query parameter 'ID' missing: pass --id" } }
@@ -6517,7 +6524,7 @@ export def "reporting-get-subscriptions" [
   --update-group-id: string # Optional. Filter by Update Group ID
   --limit: int # Optional. The page limit. The default page limit is 10. (format: int32)
   --offset: int # Optional. The page offset. The default page offset is 0. (format: int32)
-]: nothing -> record<Entities: table<Active: bool, ClientID: string, LastCheckin: string, RelationshipID: string, UpdateGroupID: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>> {
+]: nothing -> oneof<record<Entities: table<Active: bool, ClientID: string, LastCheckin: string, RelationshipID: string, UpdateGroupID: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ClientID" $client_id "scalar") (serialize-qp "UpdateGroupID" $update_group_id "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -6554,7 +6561,7 @@ export def "reporting-package-status-summary" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --package-id: string # The Package ID (required)
-]: nothing -> record<AverageDownloadTime: string, AverageInstallTime: string, Downloaded: int, Error: int, Installed: int, Package: string, PackageID: string, PackageStatusItems: table<ClientID: string, ClientKey: string, DownloadTime: string, Downloaded: string, InstallCompleted: string, InstallResult: string, InstallStarted: string, InstallTime: string, Percentage: string, Size: string, Timestamp: string>> {
+]: nothing -> oneof<record<AverageDownloadTime: string, AverageInstallTime: string, Downloaded: int, Error: int, Installed: int, Package: string, PackageID: string, PackageStatusItems: table<ClientID: string, ClientKey: string, DownloadTime: string, Downloaded: string, InstallCompleted: string, InstallResult: string, InstallStarted: string, InstallTime: string, Percentage: string, Size: string, Timestamp: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($package_id == null) { error make --unspanned { msg: "required query parameter 'PackageID' missing: pass --package-id" } }
@@ -6602,7 +6609,7 @@ export def "reporting-registered-clients" [
   --order-by: string # Optional. Specify the order in which results should be returned. Use this format: [FieldName] [ASC|ASCENDING|DESC|DESCENDING],... If sort direction is not provided for a field, it will be sorted ascending.
   --limit: int # Optional. The page limit. The default page limit is 10. (format: int32)
   --offset: int # Optional. The page offset. The default page offset is 0. (format: int32)
-]: nothing -> record<Entities: table<ClientID: string, LastCheckin: string, MinutesElapsed: int, ReportResult: string, ReportResultIsValid: bool, ReportValue: string, Tag: string>, Metadata: record<Limit: int, Offset: int, ReportResultExpected: string, ReportResultLabel: string, ReportValueLabel: string, TotalCount: int>> {
+]: nothing -> oneof<record<Entities: table<ClientID: string, LastCheckin: string, MinutesElapsed: int, ReportResult: string, ReportResultIsValid: bool, ReportValue: string, Tag: string>, Metadata: record<Limit: int, Offset: int, ReportResultExpected: string, ReportResultLabel: string, ReportValueLabel: string, TotalCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "UpdateGroupID" $update_group_id "scalar") (serialize-qp "ClientID" $client_id "scalar") (serialize-qp "Tag" $tag "scalar") (serialize-qp "ReportResult" $report_result "scalar") (serialize-qp "ReportResultIsValid" $report_result_is_valid "scalar") (serialize-qp "ReportValue" $report_value "scalar") (serialize-qp "LastCheckInBefore" $last_check_in_before "scalar") (serialize-qp "LastCheckInAfter" $last_check_in_after "scalar") (serialize-qp "OrderBy" $order_by "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -6640,7 +6647,7 @@ export def "reporting-update-groups" [
   --accept: string@accept-completer-1 # Response content type
   --limit: int # Optional. The page limit. The default page limit is 10. (format: int32)
   --offset: int # Optional. The page offset. The default page offset is 0. (format: int32)
-]: nothing -> record<Entities: table<Description: string, ID: string, InventoryFrequency: int, InventoryPackage: string, LocalizedDescription: string, LocalizedName: string, Priority: int, ReportField: string, UpdateType: string, ValidatingField: string, ValueToValidate: string, Version: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>> {
+]: nothing -> oneof<record<Entities: table<Description: string, ID: string, InventoryFrequency: int, InventoryPackage: string, LocalizedDescription: string, LocalizedName: string, Priority: int, ReportField: string, UpdateType: string, ValidatingField: string, ValueToValidate: string, Version: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -6678,7 +6685,7 @@ export def "reporting-update-metrics" [
   --accept: string@accept-completer # Response content type
   --update-group-id: string # The UpdateType in which clients must be for the report to include them. (required)
   --bundle-number: int # Optional. Tells us which chart to show based upon filter. (format: int32)
-]: nothing -> record<ActiveVersion: string, ActiveVersionByClient: table<BundleNumber: int, ClientCount: int, ReleaseName: string>, CurrentStateByClient: table<ClientCount: int, State: string>, CutOffDate: string, DataRefreshed: string, FilteredClientCount: int, PackageErrors: table<ClientCount: int, ErrorCode: string, LongDescription: string, ShortDescription: string>, TotalClientCount: int> {
+]: nothing -> oneof<record<ActiveVersion: string, ActiveVersionByClient: table<BundleNumber: int, ClientCount: int, ReleaseName: string>, CurrentStateByClient: table<ClientCount: int, State: string>, CutOffDate: string, DataRefreshed: string, FilteredClientCount: int, PackageErrors: table<ClientCount: int, ErrorCode: string, LongDescription: string, ShortDescription: string>, TotalClientCount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($update_group_id == null) { error make --unspanned { msg: "required query parameter 'UpdateGroupID' missing: pass --update-group-id" } }
@@ -6720,7 +6727,7 @@ export def "roles-get-roles" [
   --name: string # Optional. Finds a role with the given name.
   --permission-id: int # format: int32
   --permission-name: string # Optional. Filters roles by whether they contain the provided permission.
-]: nothing -> record<Entities: table<Description: string, Id: int, Name: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>> {
+]: nothing -> oneof<record<Entities: table<Description: string, Id: int, Name: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "permissionID" $permission_id "scalar") (serialize-qp "permissionName" $permission_name "scalar")] | flatten | str join "&"
@@ -6834,7 +6841,7 @@ export def "roles-get-role" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<Description: string, Id: int, Name: string> {
+]: nothing -> oneof<record<Description: string, Id: int, Name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6916,7 +6923,7 @@ export def "roles-get-role-permissions" [
   --name: string # Filter by permission name. Optional.
   --limit: int # Optional. The page limit. The default page limit is 10. (format: int32)
   --offset: int # Optional. The page offset. The default page offset is 0. (format: int32)
-]: nothing -> record<Entities: table<DataDescription: string, DataRequired: string, Description: string, Id: int, Name: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>> {
+]: nothing -> oneof<record<Entities: table<DataDescription: string, DataRequired: string, Description: string, Id: int, Name: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6996,7 +7003,7 @@ export def "user-permissions-get-users" [
   --accept: string@accept-completer-1 # Response content type
   --limit: int # The page limit. The default page limit is 10. (format: int32)
   --offset: int # The page offset. The default page offset is 0. (format: int32)
-]: nothing -> record<Entities: table<ChangePassword: string, Email: string, Name: string, Password: string, UserID: int, Username: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>> {
+]: nothing -> oneof<record<Entities: table<ChangePassword: string, Email: string, Name: string, Password: string, UserID: int, Username: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7082,7 +7089,7 @@ export def "string-definitions-get-definitions" [
   --language-ids: string # Optional. A comma-delimited list of language ids. Only StringTranslation objects with a matching language id will be returned. Optional. By default all locales are returned. includeTranslations must be true. The StringDefinition is still returned even if the filtered translations list is empty.
   --string-ids: string # Optional. A comma-delimited list of string ids. Up to 40 string IDs may be provided. May not be used with 'modifiedAfterTimestamp', 'stringText', 'descriptionText', or 'useFullText'.
   --matching-translations-only: oneof<nothing, bool> # Optional. If false, all translations for returned String Definitions are included. Must be used with 'stringText' provided and 'includeTranslations' = true.
-]: nothing -> record<Entities: table<DescriptionForTranslator: string, DoNotTranslate: bool, Id: string, ParameterCount: int, Timestamp: string, Translations: list>, Metadata: record<Limit: int, Offset: int, TotalCount: int>> {
+]: nothing -> oneof<record<Entities: table<DescriptionForTranslator: string, DoNotTranslate: bool, Id: string, ParameterCount: int, Timestamp: string, Translations: list>, Metadata: record<Limit: int, Offset: int, TotalCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "modifiedAfterTimestamp" $modified_after_timestamp "scalar") (serialize-qp "includeTranslations" $include_translations "scalar") (serialize-qp "stringText" $string_text "scalar") (serialize-qp "descriptionText" $description_text "scalar") (serialize-qp "useFullText" $use_full_text "scalar") (serialize-qp "includeDeletedLanguages" $include_deleted_languages "scalar") (serialize-qp "languageIds" $language_ids "scalar") (serialize-qp "stringIds" $string_ids "scalar") (serialize-qp "matchingTranslationsOnly" $matching_translations_only "scalar")] | flatten | str join "&"
@@ -7198,7 +7205,7 @@ export def "string-definitions-get-definition" [
   --include-translations: oneof<nothing, bool> # Optional. Indicates whether to include the StringTranslations for the StringDefinition. Defaults to false.
   --include-deleted-languages: oneof<nothing, bool> # Optional. Indicates whether to include languages marked as deleted. includeTranslations must be true. Defaults to false.
   --language-ids: string # Optional. A comma-delimited list of language ids. Only StringTranslation objects with a matching language id will be returned. Optional. By default all locales are returned. includeTranslations must be true. The StringDefinition is still returned even if the filtered translations list is empty.
-]: nothing -> record<DescriptionForTranslator: string, DoNotTranslate: bool, Id: string, ParameterCount: int, Timestamp: string, Translations: table<AuthorId: int, LanguageId: int, State: string, StringId: string, StringValue: string, Timestamp: string>> {
+]: nothing -> oneof<record<DescriptionForTranslator: string, DoNotTranslate: bool, Id: string, ParameterCount: int, Timestamp: string, Translations: table<AuthorId: int, LanguageId: int, State: string, StringId: string, StringValue: string, Timestamp: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'ID' must be non-empty" } }
@@ -7237,7 +7244,7 @@ export def "string-translations-get-translations" [
   --accept: string@accept-completer # Response content type
   --limit: int # Optional. The page limit. The default page limit is 10. (format: int32)
   --modified-after-timestamp: string # Optional. Return only the StringDefinition objects that have a Timestamp value greater than that provided. This will be an encoded byte array.
-]: nothing -> record<Entities: table<AuthorId: int, LanguageId: int, State: string, StringId: string, StringValue: string, Timestamp: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>> {
+]: nothing -> oneof<record<Entities: table<AuthorId: int, LanguageId: int, State: string, StringId: string, StringValue: string, Timestamp: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "modifiedAfterTimestamp" $modified_after_timestamp "scalar")] | flatten | str join "&"
@@ -7313,7 +7320,7 @@ export def "string-translations-get-translation" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<AuthorId: int, LanguageId: int, State: string, StringId: string, StringValue: string, Timestamp: string> {
+]: nothing -> oneof<record<AuthorId: int, LanguageId: int, State: string, StringId: string, StringValue: string, Timestamp: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($string_id | is-empty) { error make --unspanned { msg: "path parameter 'stringId' must be non-empty" } }
@@ -7400,7 +7407,7 @@ export def "translation-keys-get" [
   --limit: int # format: int32
   --offset: int # format: int32
   --key-names: string # Can filter by keyNames, a comma deliminated list.
-]: nothing -> record<Entities: table<ID: int, KeyName: string, StringID: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>> {
+]: nothing -> oneof<record<Entities: table<ID: int, KeyName: string, StringID: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "keyNames" $key_names "scalar")] | flatten | str join "&"
@@ -7478,7 +7485,7 @@ export def "translation-keys-get-translation-key" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<ID: int, KeyName: string, StringID: string> {
+]: nothing -> oneof<record<ID: int, KeyName: string, StringID: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'ID' must be non-empty" } }
@@ -7558,7 +7565,7 @@ export def "translation-requests-get-translation-requests" [
   --accept: string@accept-completer # Response content type
   --limit: int # format: int32
   --offset: int # format: int32
-]: nothing -> record<Entities: table<ApprovalUserId: int, CCEmailAddresses: list, ChargeToAccount: string, Deadline: string, Id: int, LocaleIds: list, Notes: string, QuestionsUserId: int, State: string, SubmittedBy: int, TranslatorEmail: string, TranslatorName: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>> {
+]: nothing -> oneof<record<Entities: table<ApprovalUserId: int, CCEmailAddresses: list, ChargeToAccount: string, Deadline: string, Id: int, LocaleIds: list, Notes: string, QuestionsUserId: int, State: string, SubmittedBy: int, TranslatorEmail: string, TranslatorName: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -7645,7 +7652,7 @@ export def "translation-requests-get-translation-request" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<ApprovalUserId: int, CCEmailAddresses: list<string>, ChargeToAccount: string, Deadline: string, Id: int, LocaleIds: list<int>, Notes: string, QuestionsUserId: int, State: string, SubmittedBy: int, TranslatorEmail: string, TranslatorName: string> {
+]: nothing -> oneof<record<ApprovalUserId: int, CCEmailAddresses: list<string>, ChargeToAccount: string, Deadline: string, Id: int, LocaleIds: list<int>, Notes: string, QuestionsUserId: int, State: string, SubmittedBy: int, TranslatorEmail: string, TranslatorName: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -7898,7 +7905,7 @@ export def "translation-sets-get-translation-sets" [
   --string-id: string
   --language-id: int # format: int32
   --include-attributes: string # Names of Attributes to include when retrieving this submission. This should be a comma-separated list. If not provided, Attributes are not included. If '*', all Attributes are included.
-]: nothing -> record<Entities: table<Attributes: list, FileIDs: list, Id: int, InDate: string, Notes: string, OutDate: string, State: string, TranslationRequestID: int>, Metadata: record<Limit: int, Offset: int, TotalCount: int>> {
+]: nothing -> oneof<record<Entities: table<Attributes: list, FileIDs: list, Id: int, InDate: string, Notes: string, OutDate: string, State: string, TranslationRequestID: int>, Metadata: record<Limit: int, Offset: int, TotalCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "translationRequestID" $translation_request_id "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "stringId" $string_id "scalar") (serialize-qp "languageId" $language_id "scalar") (serialize-qp "includeAttributes" $include_attributes "scalar")] | flatten | str join "&"
@@ -7936,7 +7943,7 @@ export def "translation-sets-get-translation-set" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --include-attributes: string # Names of Attributes to include when retrieving this Translation set. This should be a comma-separated list. If not provided, Attributes are not included. If '*', all Attributes are included.
-]: nothing -> record<Attributes: table<ID: int, Name: string, TranslationSetID: int, Value: string>, FileIDs: list<string>, Id: int, InDate: string, Notes: string, OutDate: string, State: string, TranslationRequestID: int> {
+]: nothing -> oneof<record<Attributes: table<ID: int, Name: string, TranslationSetID: int, Value: string>, FileIDs: list<string>, Id: int, InDate: string, Notes: string, OutDate: string, State: string, TranslationRequestID: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'ID' must be non-empty" } }
@@ -7962,7 +7969,6 @@ export def "translation-sets-get-translation-set" [
 #
 # PUT /api/v2/TranslationSets/{ID}
 # operationId: TranslationSets_UpdateTranslationSet
-# --Attributes item shape: {ID?: int, Name: string, TranslationSetID?: int, Value?: string}
 export def "translation-sets-update-translation-set" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -8025,7 +8031,7 @@ export def "translation-sets-get-translation-set-attributes" [
   --limit: int # format: int32
   --offset: int # format: int32
   --name: string
-]: nothing -> record<Entities: table<ID: int, Name: string, TranslationSetID: int, Value: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>> {
+]: nothing -> oneof<record<Entities: table<ID: int, Name: string, TranslationSetID: int, Value: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'ID' must be non-empty" } }
@@ -8149,7 +8155,7 @@ export def "translation-sets-get-source-strings" [
   --accept: string@accept-completer # Response content type
   --limit: int # format: int32
   --offset: int # format: int32
-]: nothing -> record<Entities: table<DescriptionForTranslator: string, LanguageID: int, StringID: string, StringValue: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>> {
+]: nothing -> oneof<record<Entities: table<DescriptionForTranslator: string, LanguageID: int, StringID: string, StringValue: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'ID' must be non-empty" } }
@@ -8187,7 +8193,7 @@ export def "translation-sets-get-statistics" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<LanguageIDs: list<int>, StringCount: int> {
+]: nothing -> oneof<record<LanguageIDs: list<int>, StringCount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'ID' must be non-empty" } }
@@ -8226,7 +8232,7 @@ export def "translation-sets-get-translation-set-strings" [
   --accept: string@accept-completer # Response content type
   --limit: int # format: int32
   --offset: int # format: int32
-]: nothing -> record<Entities: table<LanguageID: int, StringID: string, StringValue: string, TranslationSetId: int>, Metadata: record<Limit: int, Offset: int, TotalCount: int>> {
+]: nothing -> oneof<record<Entities: table<LanguageID: int, StringID: string, StringValue: string, TranslationSetId: int>, Metadata: record<Limit: int, Offset: int, TotalCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'ID' must be non-empty" } }
@@ -8308,7 +8314,7 @@ export def "update-group-client-relationships-get-subscriptions" [
   --limit: int # Optional. The page limit. The default page limit is 10. (format: int32)
   --offset: int # Optional. The page offset. The default page offset is 0. (format: int32)
   --active: oneof<nothing, bool> # Optional. Filter by Active
-]: nothing -> record<Entities: table<Active: bool, ClientID: string, LastCheckin: string, RelationshipID: string, UpdateGroupID: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>> {
+]: nothing -> oneof<record<Entities: table<Active: bool, ClientID: string, LastCheckin: string, RelationshipID: string, UpdateGroupID: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ClientID" $client_id "scalar") (serialize-qp "UpdateGroupID" $update_group_id "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "Active" $active "scalar")] | flatten | str join "&"
@@ -8429,7 +8435,7 @@ export def "update-group-client-relationships-get-subscription" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<Active: bool, ClientID: string, LastCheckin: string, RelationshipID: string, UpdateGroupID: string> {
+]: nothing -> oneof<record<Active: bool, ClientID: string, LastCheckin: string, RelationshipID: string, UpdateGroupID: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($relationship_id | is-empty) { error make --unspanned { msg: "path parameter 'RelationshipID' must be non-empty" } }
@@ -8514,7 +8520,7 @@ export def "update-group-subscriptions-get-update-group-subscriptions" [
   --client-id: string # Optional. Filter by Client ID.
   --limit: int # Optional. The page limit. The default page limit is 10. (format: int32)
   --offset: int # Optional. The page offset. The default page offset is 0. (format: int32)
-]: nothing -> record<Entities: table<ClientID: string, Include: bool, PackageTypeID: string, UpdateGroupID: string, UpdateGroupSubscriptionID: int>, Metadata: record<Limit: int, Offset: int, TotalCount: int>> {
+]: nothing -> oneof<record<Entities: table<ClientID: string, Include: bool, PackageTypeID: string, UpdateGroupID: string, UpdateGroupSubscriptionID: int>, Metadata: record<Limit: int, Offset: int, TotalCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "UpdateGroupID" $update_group_id "scalar") (serialize-qp "PackageTypeID" $package_type_id "scalar") (serialize-qp "ClientID" $client_id "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -8707,7 +8713,7 @@ export def "update-group-subscriptions-get-update-group-subscription" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<ClientID: string, Include: bool, PackageTypeID: string, UpdateGroupID: string, UpdateGroupSubscriptionID: int> {
+]: nothing -> oneof<record<ClientID: string, Include: bool, PackageTypeID: string, UpdateGroupID: string, UpdateGroupSubscriptionID: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($update_group_subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'UpdateGroupSubscriptionID' must be non-empty" } }
@@ -8791,7 +8797,7 @@ export def "update-groups-get" [
   --limit: int # Optional. The page limit. The default page limit is 10. (format: int32)
   --offset: int # Optional. The page offset. The default page offset is 0. (format: int32)
   --user-id: int # Optional. The user ID to sort update groups by the user's access (format: int32)
-]: nothing -> record<Entities: table<Description: string, ID: string, InventoryFrequency: int, InventoryPackage: string, LocalizedDescription: string, LocalizedName: string, Priority: int, ReportField: string, UpdateType: string, ValidatingField: string, ValueToValidate: string, Version: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>> {
+]: nothing -> oneof<record<Entities: table<Description: string, ID: string, InventoryFrequency: int, InventoryPackage: string, LocalizedDescription: string, LocalizedName: string, Priority: int, ReportField: string, UpdateType: string, ValidatingField: string, ValueToValidate: string, Version: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "userID" $user_id "scalar")] | flatten | str join "&"
@@ -8913,7 +8919,7 @@ export def "get-api-v2-update-groups-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<Description: string, ID: string, InventoryFrequency: int, InventoryPackage: string, LocalizedDescription: string, LocalizedName: string, Priority: int, ReportField: string, UpdateType: string, ValidatingField: string, ValueToValidate: string, Version: string> {
+]: nothing -> oneof<record<Description: string, ID: string, InventoryFrequency: int, InventoryPackage: string, LocalizedDescription: string, LocalizedName: string, Priority: int, ReportField: string, UpdateType: string, ValidatingField: string, ValueToValidate: string, Version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'ID' must be non-empty" } }
@@ -9004,7 +9010,7 @@ export def "update-groups-get-update-group-bundles" [
   --include-inactive: oneof<nothing, bool> # Include Inactive Bundles (true|false) (required)
   --limit: int # Optional. The page limit. The default page limit is 10. (format: int32)
   --offset: int # Optional. The page offset. The default page offset is 0. (format: int32)
-]: nothing -> record<Entities: table<Active: bool, BundleID: string, BundleNumber: int, Description: string, UpdateGroupID: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>> {
+]: nothing -> oneof<record<Entities: table<Active: bool, BundleID: string, BundleNumber: int, Description: string, UpdateGroupID: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'ID' must be non-empty" } }
@@ -9121,7 +9127,7 @@ export def "update-system-get-checkin" [
   --client-id: string # The Client ID to check-in. If this is a new client ID it will be added to Clients. (required)
   --preview: oneof<nothing, bool> # Get Pkgs w\o updating Datetimes(true|false) (required)
   --run-all-inventories: oneof<nothing, bool> # Force return inventories. Defaults to false.
-]: nothing -> record<Packages: table<Autorun: bool, CRC: string, Description: string, LocalizedName: string, Notes: string, PackageID: string, PackageTypeID: string, PreviousVersion: int, ReleaseDate: string, Released: bool, RemoveOnSuccess: bool, Size: int, Switches: string, Url: string, Version: int>, RemovePackages: list<string>> {
+]: nothing -> oneof<record<Packages: table<Autorun: bool, CRC: string, Description: string, LocalizedName: string, Notes: string, PackageID: string, PackageTypeID: string, PreviousVersion: int, ReleaseDate: string, Released: bool, RemoveOnSuccess: bool, Size: int, Switches: string, Url: string, Version: int>, RemovePackages: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($client_id == null) { error make --unspanned { msg: "required query parameter 'ClientID' missing: pass --client-id" } }
@@ -9163,7 +9169,7 @@ export def "user-content-definitions-get-user-content-definitions" [
   --offset: int # Optional. The page offset. If not specified, the default page offset is 0. (format: int32)
   --user-id: int # Optional. Filter by UserID. (format: int32)
   --content-definition-id: int # Optional. Filter by ContentDefinitionID (format: int32)
-]: nothing -> record<Entities: table<ContentDefinitionID: int, UserContentDefinitionID: int, UserID: int>, Metadata: record<Limit: int, Offset: int, TotalCount: int>> {
+]: nothing -> oneof<record<Entities: table<ContentDefinitionID: int, UserContentDefinitionID: int, UserID: int>, Metadata: record<Limit: int, Offset: int, TotalCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "userID" $user_id "scalar") (serialize-qp "contentDefinitionID" $content_definition_id "scalar")] | flatten | str join "&"
@@ -9277,7 +9283,7 @@ export def "user-content-definitions-get-user-content-definition" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<ContentDefinitionID: int, UserContentDefinitionID: int, UserID: int> {
+]: nothing -> oneof<record<ContentDefinitionID: int, UserContentDefinitionID: int, UserID: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_content_definition_id | is-empty) { error make --unspanned { msg: "path parameter 'userContentDefinitionID' must be non-empty" } }
@@ -9319,7 +9325,7 @@ export def "users-get" [
   --has-role: string # Optional. Return only users having the provided role name.
   --limit: int # Optional. The page limit. The default page limit is 10. (format: int32)
   --offset: int # Optional. The page offset. The default page offset is 0. (format: int32)
-]: nothing -> record<Entities: table<ChangePassword: string, Email: string, Name: string, Password: string, UserID: int, Username: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>> {
+]: nothing -> oneof<record<Entities: table<ChangePassword: string, Email: string, Name: string, Password: string, UserID: int, Username: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "hasRole" $has_role "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -9361,7 +9367,7 @@ export def "users-post" [
   --password: string # Never Returned. Required when creating a new user or updating a user. When changing a user's password this field must contain the current password.
   --user-id: int # The user ID (format: int32)
   --username: string # The username used for authentication
-]: any -> record<ChangePassword: string, Email: string, Name: string, Password: string, UserID: int, Username: string> {
+]: any -> oneof<record<ChangePassword: string, Email: string, Name: string, Password: string, UserID: int, Username: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9399,7 +9405,7 @@ export def "users-get-current-user" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<ChangePassword: string, Email: string, Name: string, Password: string, UserID: int, Username: string> {
+]: nothing -> oneof<record<ChangePassword: string, Email: string, Name: string, Password: string, UserID: int, Username: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v2/Users/Current" $auth.query)
@@ -9479,7 +9485,7 @@ export def "get-api-v2-users-current-permissions" [
   --permission: string # Filter by permission name. Supports ending wildcard (*). Optional.
   --limit: int # The page limit. The default page limit is 10. (format: int32)
   --offset: int # The page offset. The default page offset is 0. (format: int32)
-]: nothing -> record<Entities: table<PermissionId: int, PermissionName: string, UserID: int>, Metadata: record<Limit: int, Offset: int, TotalCount: int>> {
+]: nothing -> oneof<record<Entities: table<PermissionId: int, PermissionName: string, UserID: int>, Metadata: record<Limit: int, Offset: int, TotalCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Permission" $permission "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -9518,7 +9524,7 @@ export def "user-permissions-get-current-user-roles" [
   --role: string # Filter by role name. Supports ending wildcard (*). Optional.
   --limit: int # The page limit. The default page limit is 10. (format: int32)
   --offset: int # The page offset. The default page offset is 0. (format: int32)
-]: nothing -> record<Entities: table<Description: string, Id: int, Name: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>> {
+]: nothing -> oneof<record<Entities: table<Description: string, Id: int, Name: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Role" $role "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -9590,7 +9596,7 @@ export def "get-api-v2-users-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<ChangePassword: string, Email: string, Name: string, Password: string, UserID: int, Username: string> {
+]: nothing -> oneof<record<ChangePassword: string, Email: string, Name: string, Password: string, UserID: int, Username: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -9675,7 +9681,7 @@ export def "user-permissions-get-permissions" [
   --permission: string # Filter by permission name. Supports ending wildcard (*). Optional.
   --limit: int # The page limit. The default page limit is 10. (format: int32)
   --offset: int # The page offset. The default page offset is 0. (format: int32)
-]: nothing -> record<Entities: table<PermissionId: int, PermissionName: string, UserID: int>, Metadata: record<Limit: int, Offset: int, TotalCount: int>> {
+]: nothing -> oneof<record<Entities: table<PermissionId: int, PermissionName: string, UserID: int>, Metadata: record<Limit: int, Offset: int, TotalCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -9716,7 +9722,7 @@ export def "user-permissions-get-roles" [
   --role: string # Filter by role name. Supports ending wildcard (*). Optional.
   --limit: int # The page limit. The default page limit is 10. (format: int32)
   --offset: int # The page offset. The default page offset is 0. (format: int32)
-]: nothing -> record<Entities: table<Description: string, Id: int, Name: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>> {
+]: nothing -> oneof<record<Entities: table<Description: string, Id: int, Name: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -9798,7 +9804,7 @@ export def "voucher-history-get-voucher-history" [
   --changed-after: string # Optional. Filter history data where changes occured after provided date. (format: date-time)
   --limit: int # Optional. The page limit. The default page limit is 10. (format: int32)
   --offset: int # Optional. The page offset. The default page offset is 0. (format: int32)
-]: nothing -> record<Entities: table<ChangedDate: string, CreatedDate: string, DealerCode: string, Deleted: bool, Email: string, ExpirationDate: string, ID: int, LicenseTo: string, ModifiedBy: string, OrderNumber: string, Punched: bool, PunchedDate: string, Purpose: string, Type: string, VoucherCode: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>> {
+]: nothing -> oneof<record<Entities: table<ChangedDate: string, CreatedDate: string, DealerCode: string, Deleted: bool, Email: string, ExpirationDate: string, ID: int, LicenseTo: string, ModifiedBy: string, OrderNumber: string, Punched: bool, PunchedDate: string, Purpose: string, Type: string, VoucherCode: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "VoucherCode" $voucher_code "scalar") (serialize-qp "ChangedBefore" $changed_before "scalar") (serialize-qp "ChangedAfter" $changed_after "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -9851,7 +9857,7 @@ export def "vouchers-get" [
   --deleted: string@deleted-completer # Optional. Filter vouchers by Deleted state. By default only vouchers that are not deleted are returned.
   --limit: int # Optional. The page limit. The default page limit is 10. (format: int32)
   --offset: int # Optional. The page offset. The default page offset is 0. (format: int32)
-]: nothing -> record<Entities: table<CreatedDate: string, DealerCode: string, Deleted: bool, Email: string, ExpirationDate: string, LicenseTo: string, ModifiedBy: string, OrderNumber: string, Punched: bool, PunchedDate: string, Purpose: string, Type: string, VoucherCode: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>> {
+]: nothing -> oneof<record<Entities: table<CreatedDate: string, DealerCode: string, Deleted: bool, Email: string, ExpirationDate: string, LicenseTo: string, ModifiedBy: string, OrderNumber: string, Punched: bool, PunchedDate: string, Purpose: string, Type: string, VoucherCode: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Type" $type "scalar") (serialize-qp "DealerCode" $dealer_code "scalar") (serialize-qp "LicenseTo" $license_to "scalar") (serialize-qp "Purpose" $purpose "scalar") (serialize-qp "OrderNumber" $order_number "scalar") (serialize-qp "Email" $email "scalar") (serialize-qp "ModifiedBy" $modified_by "scalar") (serialize-qp "CreatedAfter" $created_after "scalar") (serialize-qp "CreatedBefore" $created_before "scalar") (serialize-qp "PunchedAfter" $punched_after "scalar") (serialize-qp "PunchedBefore" $punched_before "scalar") (serialize-qp "Punched" $punched "scalar") (serialize-qp "ExpirationAfter" $expiration_after "scalar") (serialize-qp "ExpirationBefore" $expiration_before "scalar") (serialize-qp "Deleted" $deleted "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -9975,7 +9981,7 @@ export def "get-api-v2-vouchers-voucher-code" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --deleted: string@deleted-completer # Optional. Filter vouchers by Deleted state. By default only vouchers that are not deleted are returned.
-]: nothing -> record<CreatedDate: string, DealerCode: string, Deleted: bool, Email: string, ExpirationDate: string, LicenseTo: string, ModifiedBy: string, OrderNumber: string, Punched: bool, PunchedDate: string, Purpose: string, Type: string, VoucherCode: string> {
+]: nothing -> oneof<record<CreatedDate: string, DealerCode: string, Deleted: bool, Email: string, ExpirationDate: string, LicenseTo: string, ModifiedBy: string, OrderNumber: string, Punched: bool, PunchedDate: string, Purpose: string, Type: string, VoucherCode: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($voucher_code | is-empty) { error make --unspanned { msg: "path parameter 'VoucherCode' must be non-empty" } }
@@ -10067,7 +10073,7 @@ export def "vouchers-get-voucher-history" [
   --accept: string@accept-completer-1 # Response content type
   --limit: int # Optional. The page limit. The default page limit is 10. (format: int32)
   --offset: int # Optional. The page offset. The default page offset is 0. (format: int32)
-]: nothing -> record<Entities: table<ChangedDate: string, CreatedDate: string, DealerCode: string, Deleted: bool, Email: string, ExpirationDate: string, ID: int, LicenseTo: string, ModifiedBy: string, OrderNumber: string, Punched: bool, PunchedDate: string, Purpose: string, Type: string, VoucherCode: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>> {
+]: nothing -> oneof<record<Entities: table<ChangedDate: string, CreatedDate: string, DealerCode: string, Deleted: bool, Email: string, ExpirationDate: string, ID: int, LicenseTo: string, ModifiedBy: string, OrderNumber: string, Punched: bool, PunchedDate: string, Purpose: string, Type: string, VoucherCode: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($voucher_code | is-empty) { error make --unspanned { msg: "path parameter 'VoucherCode' must be non-empty" } }
@@ -10107,7 +10113,7 @@ export def "activities-get-activities" [
   --limit: int # Optional. The page limit. If not specified, the default page limit is 10. (format: int32)
   --offset: int # Optional. The page offset. If not specified, the default page offset is 0. (format: int32)
   --is-include-deleted: oneof<nothing, bool> # Does it include deleted activity, or not
-]: nothing -> record<Entities: table<ActivityID: int, Deleted: bool, Name: string, Parameters: list, Steps: list>, Metadata: record<Limit: int, Offset: int, TotalCount: int>> {
+]: nothing -> oneof<record<Entities: table<ActivityID: int, Deleted: bool, Name: string, Parameters: list, Steps: list>, Metadata: record<Limit: int, Offset: int, TotalCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "isIncludeDeleted" $is_include_deleted "scalar")] | flatten | str join "&"
@@ -10132,8 +10138,6 @@ export def "activities-get-activities" [
 #
 # POST /api/v2/activities
 # operationId: Activities_PostActivity
-# --Parameters item shape: {Direction?: "Input"|"Output", Name?: string, Type?: "String"|"Boolean"|"Integer"|"Float"|"StringDictionary"}
-# --Steps item shape: {ActivityID?: int, ActivityStepID?: int, ImplementationID?: string, RunOrder?: int, StepID?: int, StepName?: string, UseConfig?: string}
 export def "activities-post-activity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10224,7 +10228,7 @@ export def "activities-get-activity" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --is-include-deleted: oneof<nothing, bool> # Does it include deleted activity, or not
-]: nothing -> record<ActivityID: int, Deleted: bool, Name: string, Parameters: table<Direction: string, Name: string, Type: string>, Steps: table<ActivityID: int, ActivityStepID: int, ImplementationID: string, ParameterMappings: list, RunOrder: int, StepID: int, StepName: string, UseConfig: string>> {
+]: nothing -> oneof<record<ActivityID: int, Deleted: bool, Name: string, Parameters: table<Direction: string, Name: string, Type: string>, Steps: table<ActivityID: int, ActivityStepID: int, ImplementationID: string, ParameterMappings: list, RunOrder: int, StepID: int, StepName: string, UseConfig: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($activity_id | is-empty) { error make --unspanned { msg: "path parameter 'activityID' must be non-empty" } }
@@ -10250,8 +10254,6 @@ export def "activities-get-activity" [
 #
 # PUT /api/v2/activities/{activityID}
 # operationId: Activities_PutActivity
-# --Parameters item shape: {Direction?: "Input"|"Output", Name?: string, Type?: "String"|"Boolean"|"Integer"|"Float"|"StringDictionary"}
-# --Steps item shape: {ActivityID?: int, ActivityStepID?: int, ImplementationID?: string, RunOrder?: int, StepID?: int, StepName?: string, UseConfig?: string}
 export def "activities-put-activity" [
   activity_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -10308,7 +10310,7 @@ export def "activity-runs-get-activity-runs" [
   --limit: int # Optional. The page limit. If not specified, the default page limit is 10. (format: int32)
   --offset: int # Optional. The page offset. If not specified, the default page offset is 0. (format: int32)
   --status: string@status-completer-2 # Optional. Filter activity runs by status. Value should be a comma separated list of status to include. If not specified, the default status filter is “InProgress”.
-]: nothing -> record<Entities: table<ActivityRunID: int, EndDate: string, JobActivityID: int, JobRunID: int, Parameters: list, StartDate: string, Status: record, Steps: list>, Metadata: record<Limit: int, Offset: int, TotalCount: int>> {
+]: nothing -> oneof<record<Entities: table<ActivityRunID: int, EndDate: string, JobActivityID: int, JobRunID: int, Parameters: list, StartDate: string, Status: record, Steps: list>, Metadata: record<Limit: int, Offset: int, TotalCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "status" $status "scalar")] | flatten | str join "&"
@@ -10345,7 +10347,7 @@ export def "activity-runs-get-activity-run" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<ActivityRunID: int, EndDate: string, JobActivityID: int, JobRunID: int, Parameters: table<Direction: string, Name: string, Value: string>, StartDate: string, Status: record<CurrentStep: int, Status: string, StepProgress: int, StepStatus: string>, Steps: table<ActivityID: int, ActivityStepID: int, ImplementationID: string, ParameterMappings: list, RunOrder: int, StepID: int, StepName: string, UseConfig: string>> {
+]: nothing -> oneof<record<ActivityRunID: int, EndDate: string, JobActivityID: int, JobRunID: int, Parameters: table<Direction: string, Name: string, Value: string>, StartDate: string, Status: record<CurrentStep: int, Status: string, StepProgress: int, StepStatus: string>, Steps: table<ActivityID: int, ActivityStepID: int, ImplementationID: string, ParameterMappings: list, RunOrder: int, StepID: int, StepName: string, UseConfig: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($activity_run_id | is-empty) { error make --unspanned { msg: "path parameter 'activityRunID' must be non-empty" } }
@@ -10370,9 +10372,6 @@ export def "activity-runs-get-activity-run" [
 #
 # PUT /api/v2/activityRuns/{activityRunID}
 # operationId: ActivityRuns_PutActivityRun
-# --Parameters item shape: {Direction?: "Input"|"Output", Name?: string, Value?: string}
-# --Status shape: {CurrentStep?: int, Status?: "Ready"|"InProgress"|"Succeeded"|"Cancelled"|"Failed", StepProgress?: int, StepStatus?: string}
-# --Steps item shape: {ActivityID?: int, ActivityStepID?: int, ImplementationID?: string, RunOrder?: int, StepID?: int, StepName?: string, UseConfig?: string}
 export def "activity-runs-put-activity-run" [
   activity_run_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -10430,7 +10429,7 @@ export def "activity-runs-get-activity-run-status" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<CurrentStep: int, Status: string, StepProgress: int, StepStatus: string> {
+]: nothing -> oneof<record<CurrentStep: int, Status: string, StepProgress: int, StepStatus: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($activity_run_id | is-empty) { error make --unspanned { msg: "path parameter 'activityRunID' must be non-empty" } }
@@ -10511,7 +10510,7 @@ export def "agents-get-agents" [
   --accept: string@accept-completer-1 # Response content type
   --limit: int # Optional. The page limit. If not specified, the default page limit is 10. (format: int32)
   --offset: int # Optional. The page offset. If not specified, the default page offset is 0. (format: int32)
-]: nothing -> record<Entities: table<AgentID: int, KeepAliveInterval: int, MachineName: string, Status: record, StepConfigurations: list, UserID: int>, Metadata: record<Limit: int, Offset: int, TotalCount: int>> {
+]: nothing -> oneof<record<Entities: table<AgentID: int, KeepAliveInterval: int, MachineName: string, Status: record, StepConfigurations: list, UserID: int>, Metadata: record<Limit: int, Offset: int, TotalCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -10536,8 +10535,6 @@ export def "agents-get-agents" [
 #
 # POST /api/v2/agents
 # operationId: Agents_PostAgent
-# --Status shape: {LastStatusUpdate?: string, Online: bool}
-# --StepConfigurations item shape: {Configurations?: list<string>, StepImplementationID: string}
 export def "agents-post-agent" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10592,7 +10589,7 @@ export def "agents-get-current-agent-async" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<AgentID: int, KeepAliveInterval: int, MachineName: string, Status: record<LastStatusUpdate: string, Online: bool>, StepConfigurations: table<Configurations: list, StepImplementationID: string>, UserID: int> {
+]: nothing -> oneof<record<AgentID: int, KeepAliveInterval: int, MachineName: string, Status: record<LastStatusUpdate: string, Online: bool>, StepConfigurations: table<Configurations: list, StepImplementationID: string>, UserID: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v2/agents/Current" $auth.query)
@@ -10627,7 +10624,7 @@ export def "agents-get-current-agent-activity-run" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<ActivityRunID: int, EndDate: string, JobActivityID: int, JobRunID: int, Parameters: table<Direction: string, Name: string, Value: string>, StartDate: string, Status: record<CurrentStep: int, Status: string, StepProgress: int, StepStatus: string>, Steps: table<ActivityID: int, ActivityStepID: int, ImplementationID: string, ParameterMappings: list, RunOrder: int, StepID: int, StepName: string, UseConfig: string>> {
+]: nothing -> oneof<record<ActivityRunID: int, EndDate: string, JobActivityID: int, JobRunID: int, Parameters: table<Direction: string, Name: string, Value: string>, StartDate: string, Status: record<CurrentStep: int, Status: string, StepProgress: int, StepStatus: string>, Steps: table<ActivityID: int, ActivityStepID: int, ImplementationID: string, ParameterMappings: list, RunOrder: int, StepID: int, StepName: string, UseConfig: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v2/agents/Current/ActivityRun" $auth.query)
@@ -10699,7 +10696,7 @@ export def "agents-get-agent-async" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<AgentID: int, KeepAliveInterval: int, MachineName: string, Status: record<LastStatusUpdate: string, Online: bool>, StepConfigurations: table<Configurations: list, StepImplementationID: string>, UserID: int> {
+]: nothing -> oneof<record<AgentID: int, KeepAliveInterval: int, MachineName: string, Status: record<LastStatusUpdate: string, Online: bool>, StepConfigurations: table<Configurations: list, StepImplementationID: string>, UserID: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_id | is-empty) { error make --unspanned { msg: "path parameter 'agentID' must be non-empty" } }
@@ -10724,8 +10721,6 @@ export def "agents-get-agent-async" [
 #
 # PUT /api/v2/agents/{agentID}
 # operationId: Agents_PutAgent
-# --Status shape: {LastStatusUpdate?: string, Online: bool}
-# --StepConfigurations item shape: {Configurations?: list<string>, StepImplementationID: string}
 export def "agents-put-agent" [
   agent_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -10782,7 +10777,7 @@ export def "agents-get-agent-activity-run" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<ActivityRunID: int, EndDate: string, JobActivityID: int, JobRunID: int, Parameters: table<Direction: string, Name: string, Value: string>, StartDate: string, Status: record<CurrentStep: int, Status: string, StepProgress: int, StepStatus: string>, Steps: table<ActivityID: int, ActivityStepID: int, ImplementationID: string, ParameterMappings: list, RunOrder: int, StepID: int, StepName: string, UseConfig: string>> {
+]: nothing -> oneof<record<ActivityRunID: int, EndDate: string, JobActivityID: int, JobRunID: int, Parameters: table<Direction: string, Name: string, Value: string>, StartDate: string, Status: record<CurrentStep: int, Status: string, StepProgress: int, StepStatus: string>, Steps: table<ActivityID: int, ActivityStepID: int, ImplementationID: string, ParameterMappings: list, RunOrder: int, StepID: int, StepName: string, UseConfig: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_id | is-empty) { error make --unspanned { msg: "path parameter 'agentID' must be non-empty" } }
@@ -10807,9 +10802,6 @@ export def "agents-get-agent-activity-run" [
 #
 # PUT /api/v2/agents/{agentID}/ActivityRun
 # operationId: Agents_PutAgentActivityRun
-# --Parameters item shape: {Direction?: "Input"|"Output", Name?: string, Value?: string}
-# --Status shape: {CurrentStep?: int, Status?: "Ready"|"InProgress"|"Succeeded"|"Cancelled"|"Failed", StepProgress?: int, StepStatus?: string}
-# --Steps item shape: {ActivityID?: int, ActivityStepID?: int, ImplementationID?: string, RunOrder?: int, StepID?: int, StepName?: string, UseConfig?: string}
 export def "agents-put-agent-activity-run" [
   agent_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -10911,7 +10903,7 @@ export def "job-runs-get-job-runs" [
   --limit: int # Optional. The page limit. If not specified, the default page limit is 10. (format: int32)
   --offset: int # Optional. The page offset. If not specified, the default page offset is 0. (format: int32)
   --include-activity-run-details: oneof<nothing, bool> # Optional. Indicates whether to include ActivityRun details. Defaults to false.
-]: nothing -> record<Entities: table<ActivityRuns: list, EndDate: string, JobID: int, JobRunID: int, Parameters: list, StartDate: string, Status: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>> {
+]: nothing -> oneof<record<Entities: table<ActivityRuns: list, EndDate: string, JobID: int, JobRunID: int, Parameters: list, StartDate: string, Status: string>, Metadata: record<Limit: int, Offset: int, TotalCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "includeActivityRunDetails" $include_activity_run_details "scalar")] | flatten | str join "&"
@@ -10936,8 +10928,6 @@ export def "job-runs-get-job-runs" [
 #
 # POST /api/v2/jobRuns
 # operationId: JobRuns_PostJobRun
-# --ActivityRuns item shape: {ActivityRunID?: int, EndDate?: string, JobActivityID?: int, JobRunID?: int, StartDate?: string, Status: record}
-# --Parameters item shape: {Direction?: "Input"|"Output", Name?: string, Value?: string}
 export def "job-runs-post-job-run" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11030,7 +11020,7 @@ export def "job-runs-get-job-run" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --include-activity-run-details: oneof<nothing, bool> # Optional. Indicates whether to include ActivityRun details. Defaults to false.
-]: nothing -> record<ActivityRuns: table<ActivityRunID: int, EndDate: string, JobActivityID: int, JobRunID: int, Parameters: list, StartDate: string, Status: record, Steps: list>, EndDate: string, JobID: int, JobRunID: int, Parameters: table<Direction: string, Name: string, Value: string>, StartDate: string, Status: string> {
+]: nothing -> oneof<record<ActivityRuns: table<ActivityRunID: int, EndDate: string, JobActivityID: int, JobRunID: int, Parameters: list, StartDate: string, Status: record, Steps: list>, EndDate: string, JobID: int, JobRunID: int, Parameters: table<Direction: string, Name: string, Value: string>, StartDate: string, Status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_run_id | is-empty) { error make --unspanned { msg: "path parameter 'jobRunID' must be non-empty" } }
@@ -11056,8 +11046,6 @@ export def "job-runs-get-job-run" [
 #
 # PUT /api/v2/jobRuns/{jobRunID}
 # operationId: JobRuns_PutJobRun
-# --ActivityRuns item shape: {ActivityRunID?: int, EndDate?: string, JobActivityID?: int, JobRunID?: int, StartDate?: string, Status: record}
-# --Parameters item shape: {Direction?: "Input"|"Output", Name?: string, Value?: string}
 export def "job-runs-put-job-run" [
   job_run_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -11116,7 +11104,7 @@ export def "jobs-get-jobs" [
   --limit: int # Optional. The page limit. If not specified, the default page limit is 10. (format: int32)
   --offset: int # Optional. The page offset. If not specified, the default page offset is 0. (format: int32)
   --is-include-deleted: oneof<nothing, bool> # Does it include deleted job, or not
-]: nothing -> record<Entities: table<Activities: list, Deleted: bool, JobID: int, Name: string, Parameters: list>, Metadata: record<Limit: int, Offset: int, TotalCount: int>> {
+]: nothing -> oneof<record<Entities: table<Activities: list, Deleted: bool, JobID: int, Name: string, Parameters: list>, Metadata: record<Limit: int, Offset: int, TotalCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "isIncludeDeleted" $is_include_deleted "scalar")] | flatten | str join "&"
@@ -11141,8 +11129,6 @@ export def "jobs-get-jobs" [
 #
 # POST /api/v2/jobs
 # operationId: Jobs_PostJob
-# --Activities item shape: {ActivityID?: int, JobActivityID?: int, JobID?: int, RunOrder?: int}
-# --Parameters item shape: {Direction?: "Input"|"Output", Name?: string, Type?: "String"|"Boolean"|"Integer"|"Float"|"StringDictionary"}
 export def "jobs-post-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11233,7 +11219,7 @@ export def "jobs-get-job" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --is-include-deleted: oneof<nothing, bool> # Does it include deleted job, or not
-]: nothing -> record<Activities: table<ActivityID: int, JobActivityID: int, JobID: int, ParameterMappings: list, RunOrder: int>, Deleted: bool, JobID: int, Name: string, Parameters: table<Direction: string, Name: string, Type: string>> {
+]: nothing -> oneof<record<Activities: table<ActivityID: int, JobActivityID: int, JobID: int, ParameterMappings: list, RunOrder: int>, Deleted: bool, JobID: int, Name: string, Parameters: table<Direction: string, Name: string, Type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobID' must be non-empty" } }
@@ -11259,8 +11245,6 @@ export def "jobs-get-job" [
 #
 # PUT /api/v2/jobs/{jobID}
 # operationId: Jobs_PutJob
-# --Activities item shape: {ActivityID?: int, JobActivityID?: int, JobID?: int, RunOrder?: int}
-# --Parameters item shape: {Direction?: "Input"|"Output", Name?: string, Type?: "String"|"Boolean"|"Integer"|"Float"|"StringDictionary"}
 export def "jobs-put-job" [
   job_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -11317,7 +11301,7 @@ export def "steps-get-steps" [
   --limit: int # Optional. The page limit. If not specified, the default page limit is 10. (format: int32)
   --offset: int # Optional. The page offset. If not specified, the default page offset is 0. (format: int32)
   --include-deleted: oneof<nothing, bool> # Does it include deleted step, or not
-]: nothing -> record<Entities: table<ConfigRequired: bool, Deleted: bool, Description: string, ImplementationID: string, Name: string, Parameters: list, StepID: int>, Metadata: record<Limit: int, Offset: int, TotalCount: int>> {
+]: nothing -> oneof<record<Entities: table<ConfigRequired: bool, Deleted: bool, Description: string, ImplementationID: string, Name: string, Parameters: list, StepID: int>, Metadata: record<Limit: int, Offset: int, TotalCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "includeDeleted" $include_deleted "scalar")] | flatten | str join "&"
@@ -11342,7 +11326,6 @@ export def "steps-get-steps" [
 #
 # POST /api/v2/steps
 # operationId: Steps_PostStep
-# --Parameters item shape: {Direction?: "Input"|"Output", Name?: string, Type?: "String"|"Boolean"|"Integer"|"Float"|"StringDictionary"}
 export def "steps-post-step" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11401,7 +11384,7 @@ export def "steps-get-step" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --is-include-deleted: oneof<nothing, bool> # Does it include deleted step, or not
-]: nothing -> record<ConfigRequired: bool, Deleted: bool, Description: string, ImplementationID: string, Name: string, Parameters: table<Direction: string, Name: string, Type: string>, StepID: int> {
+]: nothing -> oneof<record<ConfigRequired: bool, Deleted: bool, Description: string, ImplementationID: string, Name: string, Parameters: table<Direction: string, Name: string, Type: string>, StepID: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($step_id | is-empty) { error make --unspanned { msg: "path parameter 'stepID' must be non-empty" } }
@@ -11427,7 +11410,6 @@ export def "steps-get-step" [
 #
 # PUT /api/v2/steps/{stepID}
 # operationId: Steps_PutStep
-# --Parameters item shape: {Direction?: "Input"|"Output", Name?: string, Type?: "String"|"Boolean"|"Integer"|"Float"|"StringDictionary"}
 export def "steps-put-step" [
   step_id: int
   --base-url(-b): string@base-url-completer # API base URL

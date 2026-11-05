@@ -12,27 +12,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -40,8 +49,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -52,7 +66,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -87,7 +110,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -115,9 +139,9 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "delete-admin-mappings" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["delete-admin-mappings" "get-admin-mappings" "post-admin-mappings" "post-admin-mappings-find-by-metadata" "post-admin-mappings-import" "post-admin-mappings-remove-by-metadata" "post-admin-mappings-reset" "post-admin-mappings-save" "delete-admin-mappings-stub-mapping-id" "get-admin-mappings-stub-mapping-id" "put-admin-mappings-stub-mapping-id" "post-admin-near-misses-request" "post-admin-near-misses-request-pattern" "post-admin-recordings-snapshot" "post-admin-recordings-start" "get-admin-recordings-status" "post-admin-recordings-stop" "delete-admin-requests" "get-admin-requests" "post-admin-requests-count" "post-admin-requests-find" "post-admin-requests-remove" "post-admin-requests-remove-by-metadata" "post-admin-requests-reset" "get-admin-requests-unmatched" "get-admin-requests-unmatched-near-misses" "delete-admin-requests-request-id" "get-admin-requests-request-id" "post-admin-reset" "get-admin-scenarios" "post-admin-scenarios-reset" "post-admin-settings" "post-admin-shutdown" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -183,7 +207,7 @@ export def "get-admin-mappings" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The maximum number of results to return (e.g. 10)
   --offset: int # The start index of the results to return (e.g. 0)
-]: nothing -> record<mappings: table<id: string, metadata: record, name: string, newScenarioState: string, persistent: bool, postServeActions: record, priority: int, request: record, requiredScenarioState: string, response: record, scenarioName: string, uuid: string>, meta: record<total: int>> {
+]: nothing -> oneof<record<mappings: table<id: string, metadata: record, name: string, newScenarioState: string, persistent: bool, postServeActions: record, priority: int, request: record, requiredScenarioState: string, response: record, scenarioName: string, uuid: string>, meta: record<total: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -207,8 +231,6 @@ export def "get-admin-mappings" [
 # Create a new stub mapping
 #
 # POST /__admin/mappings
-# --request shape: {basicAuthCredentials?: record, bodyPatterns?: list, cookies?: record, headers?: record, method?: string, queryParameters?: record, url?: string, urlPath?: string, urlPathPattern?: string, urlPattern?: string}
-# --response shape: {additionalProxyRequestHeaders?: record, base64Body?: string, body?: string, bodyFileName?: string, delayDistribution?: any, fault?: "CONNECTION_RESET_BY_PEER"|"EMPTY_RESPONSE"|"MALFORMED_RESPONSE_CHUNK"|"RANDOM_DATA_THEN_CLOSE", fixedDelayMilliseconds?: int, fromConfiguredStub?: bool, headers?: record, jsonBody?: record, proxyBaseUrl?: string, status?: int, statusMessage?: string, transformerParameters?: record, transformers?: list<string>}
 export def "post-admin-mappings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -231,7 +253,7 @@ export def "post-admin-mappings" [
   --response: record # shape: {additionalProxyRequestHeaders?: record, base64Body?: string, body?: string, bodyFileName?: string, delayDistribution?: any, fault?: "CONNECTION_RESET_BY_PEER"|"EMPTY_RESPONSE"|"MALFORMED_RESPONSE_CHUNK"|"RANDOM_DATA_THEN_CLOSE", fixedDelayMilliseconds?: int, fromConfiguredStub?: bool, headers?: record, jsonBody?: record, proxyBaseUrl?: string, status?: int, statusMessage?: string, transformerParameters?: record, transformers?: list<string>}
   --scenario-name: string # The name of the scenario that this stub mapping is part of
   --uuid: string # Alias for the id
-]: any -> record<id: string, metadata: record, name: string, newScenarioState: string, persistent: bool, postServeActions: record, priority: int, request: record<basicAuthCredentials: record<password: string, username: string>, bodyPatterns: list<record>, cookies: record, headers: record, method: string, queryParameters: record, url: string, urlPath: string, urlPathPattern: string, urlPattern: string>, requiredScenarioState: string, response: record<additionalProxyRequestHeaders: record, base64Body: string, body: string, bodyFileName: string, delayDistribution: any, fault: string, fixedDelayMilliseconds: int, fromConfiguredStub: bool, headers: record, jsonBody: record, proxyBaseUrl: string, status: int, statusMessage: string, transformerParameters: record, transformers: list<string>>, scenarioName: string, uuid: string> {
+]: any -> oneof<record<id: string, metadata: record, name: string, newScenarioState: string, persistent: bool, postServeActions: record, priority: int, request: record<basicAuthCredentials: record<password: string, username: string>, bodyPatterns: list<record>, cookies: record, headers: record, method: string, queryParameters: record, url: string, urlPath: string, urlPathPattern: string, urlPattern: string>, requiredScenarioState: string, response: record<additionalProxyRequestHeaders: record, base64Body: string, body: string, bodyFileName: string, delayDistribution: any, fault: string, fixedDelayMilliseconds: int, fromConfiguredStub: bool, headers: record, jsonBody: record, proxyBaseUrl: string, status: int, statusMessage: string, transformerParameters: record, transformers: list<string>>, scenarioName: string, uuid: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -280,7 +302,7 @@ export def "post-admin-mappings-find-by-metadata" [
   --matches-xpath: string
   --namespaces: record
   --value-pattern: record
-]: any -> record<mappings: table<id: string, metadata: record, name: string, newScenarioState: string, persistent: bool, postServeActions: record, priority: int, request: record, requiredScenarioState: string, response: record, scenarioName: string, uuid: string>, meta: record<total: int>> {
+]: any -> oneof<record<mappings: table<id: string, metadata: record, name: string, newScenarioState: string, persistent: bool, postServeActions: record, priority: int, request: record, requiredScenarioState: string, response: record, scenarioName: string, uuid: string>, meta: record<total: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -500,7 +522,7 @@ export def "get-admin-mappings-stub-mapping-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<id: string, metadata: record, name: string, newScenarioState: string, persistent: bool, postServeActions: record, priority: int, request: record<basicAuthCredentials: record<password: string, username: string>, bodyPatterns: list<record>, cookies: record, headers: record, method: string, queryParameters: record, url: string, urlPath: string, urlPathPattern: string, urlPattern: string>, requiredScenarioState: string, response: record<additionalProxyRequestHeaders: record, base64Body: string, body: string, bodyFileName: string, delayDistribution: any, fault: string, fixedDelayMilliseconds: int, fromConfiguredStub: bool, headers: record, jsonBody: record, proxyBaseUrl: string, status: int, statusMessage: string, transformerParameters: record, transformers: list<string>>, scenarioName: string, uuid: string> {
+]: nothing -> oneof<record<id: string, metadata: record, name: string, newScenarioState: string, persistent: bool, postServeActions: record, priority: int, request: record<basicAuthCredentials: record<password: string, username: string>, bodyPatterns: list<record>, cookies: record, headers: record, method: string, queryParameters: record, url: string, urlPath: string, urlPathPattern: string, urlPattern: string>, requiredScenarioState: string, response: record<additionalProxyRequestHeaders: record, base64Body: string, body: string, bodyFileName: string, delayDistribution: any, fault: string, fixedDelayMilliseconds: int, fromConfiguredStub: bool, headers: record, jsonBody: record, proxyBaseUrl: string, status: int, statusMessage: string, transformerParameters: record, transformers: list<string>>, scenarioName: string, uuid: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($stub_mapping_id | is-empty) { error make --unspanned { msg: "path parameter 'stubMappingId' must be non-empty" } }
@@ -524,8 +546,6 @@ export def "get-admin-mappings-stub-mapping-id" [
 # Update a stub mapping
 #
 # PUT /__admin/mappings/{stubMappingId}
-# --request shape: {basicAuthCredentials?: record, bodyPatterns?: list, cookies?: record, headers?: record, method?: string, queryParameters?: record, url?: string, urlPath?: string, urlPathPattern?: string, urlPattern?: string}
-# --response shape: {additionalProxyRequestHeaders?: record, base64Body?: string, body?: string, bodyFileName?: string, delayDistribution?: any, fault?: "CONNECTION_RESET_BY_PEER"|"EMPTY_RESPONSE"|"MALFORMED_RESPONSE_CHUNK"|"RANDOM_DATA_THEN_CLOSE", fixedDelayMilliseconds?: int, fromConfiguredStub?: bool, headers?: record, jsonBody?: record, proxyBaseUrl?: string, status?: int, statusMessage?: string, transformerParameters?: record, transformers?: list<string>}
 export def "put-admin-mappings-stub-mapping-id" [
   stub_mapping_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -549,7 +569,7 @@ export def "put-admin-mappings-stub-mapping-id" [
   --response: record # shape: {additionalProxyRequestHeaders?: record, base64Body?: string, body?: string, bodyFileName?: string, delayDistribution?: any, fault?: "CONNECTION_RESET_BY_PEER"|"EMPTY_RESPONSE"|"MALFORMED_RESPONSE_CHUNK"|"RANDOM_DATA_THEN_CLOSE", fixedDelayMilliseconds?: int, fromConfiguredStub?: bool, headers?: record, jsonBody?: record, proxyBaseUrl?: string, status?: int, statusMessage?: string, transformerParameters?: record, transformers?: list<string>}
   --scenario-name: string # The name of the scenario that this stub mapping is part of
   --uuid: string # Alias for the id
-]: any -> record<id: string, metadata: record, name: string, newScenarioState: string, persistent: bool, postServeActions: record, priority: int, request: record<basicAuthCredentials: record<password: string, username: string>, bodyPatterns: list<record>, cookies: record, headers: record, method: string, queryParameters: record, url: string, urlPath: string, urlPathPattern: string, urlPattern: string>, requiredScenarioState: string, response: record<additionalProxyRequestHeaders: record, base64Body: string, body: string, bodyFileName: string, delayDistribution: any, fault: string, fixedDelayMilliseconds: int, fromConfiguredStub: bool, headers: record, jsonBody: record, proxyBaseUrl: string, status: int, statusMessage: string, transformerParameters: record, transformers: list<string>>, scenarioName: string, uuid: string> {
+]: any -> oneof<record<id: string, metadata: record, name: string, newScenarioState: string, persistent: bool, postServeActions: record, priority: int, request: record<basicAuthCredentials: record<password: string, username: string>, bodyPatterns: list<record>, cookies: record, headers: record, method: string, queryParameters: record, url: string, urlPath: string, urlPathPattern: string, urlPattern: string>, requiredScenarioState: string, response: record<additionalProxyRequestHeaders: record, base64Body: string, body: string, bodyFileName: string, delayDistribution: any, fault: string, fixedDelayMilliseconds: int, fromConfiguredStub: bool, headers: record, jsonBody: record, proxyBaseUrl: string, status: int, statusMessage: string, transformerParameters: record, transformers: list<string>>, scenarioName: string, uuid: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -592,7 +612,7 @@ export def "post-admin-near-misses-request" [
   --headers: record # Header patterns to match against in the : { "": "" } form (e.g. {Connection: keep-alive, Host: localhost:56738, User-Agent: Apache-HttpClient/4.5.1 (Java/1.7.0_51)})
   --method: string # The HTTP request method (e.g. GET)
   --url: string # The path and query to match exactly against (e.g. /received-request/2)
-]: any -> record<nearMisses: table<absoluteUrl: string, body: string, cookies: record, headers: record, method: string, url: string>> {
+]: any -> oneof<record<nearMisses: table<absoluteUrl: string, body: string, cookies: record, headers: record, method: string, url: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -618,7 +638,6 @@ export def "post-admin-near-misses-request" [
 # Find near misses matching request pattern
 #
 # POST /__admin/near-misses/request-pattern
-# --basicAuthCredentials shape: {password: string, username: string}
 export def "post-admin-near-misses-request-pattern" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -639,7 +658,7 @@ export def "post-admin-near-misses-request-pattern" [
   --url-path: string # The path to match exactly against. Only one of url, urlPattern, urlPath or urlPathPattern may be specified.
   --url-path-pattern: string # The path regex to match against. Only one of url, urlPattern, urlPath or urlPathPattern may be specified.
   --url-pattern: string # The path and query regex to match against. Only one of url, urlPattern, urlPath or urlPathPattern may be specified.
-]: any -> record<nearMisses: table<absoluteUrl: string, body: string, cookies: record, headers: record, method: string, url: string>> {
+]: any -> oneof<record<nearMisses: table<absoluteUrl: string, body: string, cookies: record, headers: record, method: string, url: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -665,9 +684,6 @@ export def "post-admin-near-misses-request-pattern" [
 # Take a snapshot recording
 #
 # POST /__admin/recordings/snapshot
-# --extractBodyCriteria shape: {binarySizeThreshold?: string, textSizeThreshold?: string}
-# --requestBodyPattern shape: {caseInsensitive?: bool, ignoreArrayOrder?: bool, ignoreExtraElements?: bool, matcher?: "auto"}
-# --filters shape: {ids?: list<string>, basicAuthCredentials?: record, bodyPatterns?: list, cookies?: record, headers?: record, method?: string, queryParameters?: record, url?: string, urlPath?: string, urlPathPattern?: string, urlPattern?: string}
 export def "post-admin-recordings-snapshot" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -686,7 +702,7 @@ export def "post-admin-recordings-snapshot" [
   --transformer-parameters: record # List of names of stub mappings transformers to apply to generated stubs
   --transformers: list<string> # Parameters to pass to stub mapping transformers
   --filters: record # Filter requests for which to create stub mapping — shape: {ids?: list<string>, basicAuthCredentials?: record, bodyPatterns?: list, cookies?: record, headers?: record, method?: string, queryParameters?: record, url?: string, urlPath?: string, urlPathPattern?: string, urlPattern?: string}
-]: any -> record<mappings: table<id: string, metadata: record, name: string, newScenarioState: string, persistent: bool, postServeActions: record, priority: int, request: record, requiredScenarioState: string, response: record, scenarioName: string, uuid: string>, meta: record<total: int>> {
+]: any -> oneof<record<mappings: table<id: string, metadata: record, name: string, newScenarioState: string, persistent: bool, postServeActions: record, priority: int, request: record, requiredScenarioState: string, response: record, scenarioName: string, uuid: string>, meta: record<total: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -712,9 +728,6 @@ export def "post-admin-recordings-snapshot" [
 # Start recording
 #
 # POST /__admin/recordings/start
-# --extractBodyCriteria shape: {binarySizeThreshold?: string, textSizeThreshold?: string}
-# --requestBodyPattern shape: {caseInsensitive?: bool, ignoreArrayOrder?: bool, ignoreExtraElements?: bool, matcher?: "auto"}
-# --filters shape: {basicAuthCredentials?: record, bodyPatterns?: list, cookies?: record, headers?: record, method?: string, queryParameters?: record, url?: string, urlPath?: string, urlPathPattern?: string, urlPattern?: string}
 export def "post-admin-recordings-start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -770,7 +783,7 @@ export def "get-admin-recordings-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<status: string> {
+]: nothing -> oneof<record<status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/__admin/recordings/status" $auth.query)
@@ -803,7 +816,7 @@ export def "post-admin-recordings-stop" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<mappings: table<id: string, metadata: record, name: string, newScenarioState: string, persistent: bool, postServeActions: record, priority: int, request: record, requiredScenarioState: string, response: record, scenarioName: string, uuid: string>, meta: record<total: int>> {
+]: nothing -> oneof<record<mappings: table<id: string, metadata: record, name: string, newScenarioState: string, persistent: bool, postServeActions: record, priority: int, request: record, requiredScenarioState: string, response: record, scenarioName: string, uuid: string>, meta: record<total: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/__admin/recordings/stop" $auth.query)
@@ -895,7 +908,6 @@ export def "get-admin-requests" [
 # Count requests by criteria
 #
 # POST /__admin/requests/count
-# --basicAuthCredentials shape: {password: string, username: string}
 export def "post-admin-requests-count" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -916,7 +928,7 @@ export def "post-admin-requests-count" [
   --url-path: string # The path to match exactly against. Only one of url, urlPattern, urlPath or urlPathPattern may be specified.
   --url-path-pattern: string # The path regex to match against. Only one of url, urlPattern, urlPath or urlPathPattern may be specified.
   --url-pattern: string # The path and query regex to match against. Only one of url, urlPattern, urlPath or urlPathPattern may be specified.
-]: any -> record<count: int> {
+]: any -> oneof<record<count: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -942,7 +954,6 @@ export def "post-admin-requests-count" [
 # Find requests by criteria
 #
 # POST /__admin/requests/find
-# --basicAuthCredentials shape: {password: string, username: string}
 export def "post-admin-requests-find" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -989,7 +1000,6 @@ export def "post-admin-requests-find" [
 # Remove requests by criteria
 #
 # POST /__admin/requests/remove
-# --basicAuthCredentials shape: {password: string, username: string}
 export def "post-admin-requests-remove" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1163,7 +1173,7 @@ export def "get-admin-requests-unmatched-near-misses" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<nearMisses: table<absoluteUrl: string, body: string, cookies: record, headers: record, method: string, url: string>> {
+]: nothing -> oneof<record<nearMisses: table<absoluteUrl: string, body: string, cookies: record, headers: record, method: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/__admin/requests/unmatched/near-misses" $auth.query)
@@ -1299,7 +1309,7 @@ export def "get-admin-scenarios" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<scenarios: table<id: string, name: string, possibleStates: list, state: string>> {
+]: nothing -> oneof<record<scenarios: table<id: string, name: string, possibleStates: list, state: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/__admin/scenarios" $auth.query)

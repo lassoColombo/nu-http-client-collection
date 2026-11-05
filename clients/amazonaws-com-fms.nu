@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -143,9 +166,9 @@ def x-amz-target-completer-41 [] { ["AWSFMS_20180101.UntagResource"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "associate-admin-account" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["associate-admin-account" "associate-third-party-firewall" "batch-associate-resource" "batch-disassociate-resource" "delete-apps-list" "delete-notification-channel" "delete-policy" "delete-protocols-list" "delete-resource-set" "disassociate-admin-account" "disassociate-third-party-firewall" "get-admin-account" "get-admin-scope" "get-apps-list" "get-compliance-detail" "get-notification-channel" "get-policy" "get-protection-status" "get-protocols-list" "get-resource-set" "get-third-party-firewall-association-status" "get-violation-details" "list-admin-accounts-for-organization" "list-admins-managing-account" "list-apps-lists" "list-compliance-status" "list-discovered-resources" "list-member-accounts" "list-policies" "list-protocols-lists" "list-resource-set-resources" "list-resource-sets" "list-tags-for-resource" "list-third-party-firewall-firewall-policies" "put-admin-account" "put-apps-list" "put-notification-channel" "put-policy" "put-protocols-list" "put-resource-set" "tag-resource" "untag-resource" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -235,7 +258,7 @@ export def "associate-third-party-firewall" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-1 # required
   third_party_firewall: string@third-party-firewall-completer # The name of the third-party firewall vendor.
-]: any -> record<ThirdPartyFirewallStatus: string> {
+]: any -> oneof<record<ThirdPartyFirewallStatus: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -285,7 +308,7 @@ export def "batch-associate-resource" [
   --x-amz-target: string@x-amz-target-completer-2 # required
   resource_set_identifier: string # A unique identifier for the resource set, used in a request to refer to the resource set.
   items: list<string> # The uniform resource identifiers (URIs) of resources that should be associated to the resource set. The URIs must be Amazon Resource Names (ARNs).
-]: any -> record<ResourceSetIdentifier: string, FailedItems: table<URI: string, Reason: string>> {
+]: any -> oneof<record<ResourceSetIdentifier: string, FailedItems: table<URI: string, Reason: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -335,7 +358,7 @@ export def "batch-disassociate-resource" [
   --x-amz-target: string@x-amz-target-completer-3 # required
   resource_set_identifier: string # A unique identifier for the resource set, used in a request to refer to the resource set.
   items: list<string> # The uniform resource identifiers (URI) of resources that should be disassociated from the resource set. The URIs must be Amazon Resource Names (ARNs).
-]: any -> record<ResourceSetIdentifier: string, FailedItems: table<URI: string, Reason: string>> {
+]: any -> oneof<record<ResourceSetIdentifier: string, FailedItems: table<URI: string, Reason: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -679,7 +702,7 @@ export def "disassociate-third-party-firewall" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-10 # required
   third_party_firewall: string@third-party-firewall-completer # The name of the third-party firewall vendor.
-]: any -> record<ThirdPartyFirewallStatus: string> {
+]: any -> oneof<record<ThirdPartyFirewallStatus: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -728,7 +751,7 @@ export def "get-admin-account" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-11 # required
   --body: record
-]: any -> record<AdminAccount: string, RoleStatus: string> {
+]: any -> oneof<record<AdminAccount: string, RoleStatus: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -777,7 +800,7 @@ export def "get-admin-scope" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-12 # required
   admin_account: string # The administator account that you want to get the details for.
-]: any -> record<AdminScope: record<AccountScope: record<Accounts: list, AllAccountsEnabled: bool, ExcludeSpecifiedAccounts: bool>, OrganizationalUnitScope: record<OrganizationalUnits: list, AllOrganizationalUnitsEnabled: bool, ExcludeSpecifiedOrganizationalUnits: bool>, RegionScope: record<Regions: list, AllRegionsEnabled: bool>, PolicyTypeScope: record<PolicyTypes: list, AllPolicyTypesEnabled: bool>>, Status: string> {
+]: any -> oneof<record<AdminScope: record<AccountScope: record<Accounts: list, AllAccountsEnabled: bool, ExcludeSpecifiedAccounts: bool>, OrganizationalUnitScope: record<OrganizationalUnits: list, AllOrganizationalUnitsEnabled: bool, ExcludeSpecifiedOrganizationalUnits: bool>, RegionScope: record<Regions: list, AllRegionsEnabled: bool>, PolicyTypeScope: record<PolicyTypes: list, AllPolicyTypesEnabled: bool>>, Status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -827,7 +850,7 @@ export def "get-apps-list" [
   --x-amz-target: string@x-amz-target-completer-13 # required
   list_id: string # The ID of the Firewall Manager applications list that you want the details for.
   --default-list: oneof<nothing, bool> # Specifies whether the list to retrieve is a default list owned by Firewall Manager.
-]: any -> record<AppsList: record<ListId: string, ListName: string, ListUpdateToken: string, CreateTime: string, LastUpdateTime: string, AppsList: list<record>, PreviousAppsList: record>, AppsListArn: string> {
+]: any -> oneof<record<AppsList: record<ListId: string, ListName: string, ListUpdateToken: string, CreateTime: string, LastUpdateTime: string, AppsList: list<record>, PreviousAppsList: record>, AppsListArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -877,7 +900,7 @@ export def "get-compliance-detail" [
   --x-amz-target: string@x-amz-target-completer-14 # required
   policy_id: string # The ID of the policy that you want to get the details for. PolicyId is returned by PutPolicy and by ListPolicies.
   member_account: string # The Amazon Web Services account that owns the resources that you want to get the details for.
-]: any -> record<PolicyComplianceDetail: record<PolicyOwner: string, PolicyId: string, MemberAccount: string, Violators: list<record>, EvaluationLimitExceeded: bool, ExpiredAt: string, IssueInfoMap: record>> {
+]: any -> oneof<record<PolicyComplianceDetail: record<PolicyOwner: string, PolicyId: string, MemberAccount: string, Violators: list<record>, EvaluationLimitExceeded: bool, ExpiredAt: string, IssueInfoMap: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -926,7 +949,7 @@ export def "get-notification-channel" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-15 # required
   --body: record
-]: any -> record<SnsTopicArn: string, SnsRoleName: string> {
+]: any -> oneof<record<SnsTopicArn: string, SnsRoleName: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -975,7 +998,7 @@ export def "get-policy" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-16 # required
   policy_id: string # The ID of the Firewall Manager policy that you want the details for.
-]: any -> record<Policy: record<PolicyId: string, PolicyName: string, PolicyUpdateToken: string, SecurityServicePolicyData: record<Type: string, ManagedServiceData: string, PolicyOption: record>, ResourceType: string, ResourceTypeList: list<string>, ResourceTags: list<record>, ExcludeResourceTags: bool, RemediationEnabled: bool, DeleteUnusedFMManagedResources: bool, IncludeMap: record, ExcludeMap: record, ResourceSetIds: list<string>, PolicyDescription: string, PolicyStatus: string>, PolicyArn: string> {
+]: any -> oneof<record<Policy: record<PolicyId: string, PolicyName: string, PolicyUpdateToken: string, SecurityServicePolicyData: record<Type: string, ManagedServiceData: string, PolicyOption: record>, ResourceType: string, ResourceTypeList: list<string>, ResourceTags: list<record>, ExcludeResourceTags: bool, RemediationEnabled: bool, DeleteUnusedFMManagedResources: bool, IncludeMap: record, ExcludeMap: record, ResourceSetIds: list<string>, PolicyDescription: string, PolicyStatus: string>, PolicyArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1029,7 +1052,7 @@ export def "get-protection-status" [
   --end-time: string # The end of the time period to query for the attacks. This is a timestamp type. The request syntax listing indicates a number type because the default used by Firewall Manager is Unix time in seconds. However, any valid timestamp format is allowed. (format: date-time)
   --next-token: string # If you specify a value for MaxResults and you have more objects than the number that you specify for MaxResults, Firewall Manager returns a NextToken value in the response, which you can use to retrieve another group of objects. For the second and subsequent GetProtectionStatus requests, specify the value of NextToken from the previous response to get information about another batch of objects.
   --max-results: int # Specifies the number of objects that you want Firewall Manager to return for this request. If you have more objects than the number that you specify for MaxResults, the response includes a NextToken value that you can use to get another batch of objects.
-]: any -> record<AdminAccountId: string, ServiceType: string, Data: string, NextToken: string> {
+]: any -> oneof<record<AdminAccountId: string, ServiceType: string, Data: string, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1079,7 +1102,7 @@ export def "get-protocols-list" [
   --x-amz-target: string@x-amz-target-completer-18 # required
   list_id: string # The ID of the Firewall Manager protocols list that you want the details for.
   --default-list: oneof<nothing, bool> # Specifies whether the list to retrieve is a default list owned by Firewall Manager.
-]: any -> record<ProtocolsList: record<ListId: string, ListName: string, ListUpdateToken: string, CreateTime: string, LastUpdateTime: string, ProtocolsList: list<string>, PreviousProtocolsList: record>, ProtocolsListArn: string> {
+]: any -> oneof<record<ProtocolsList: record<ListId: string, ListName: string, ListUpdateToken: string, CreateTime: string, LastUpdateTime: string, ProtocolsList: list<string>, PreviousProtocolsList: record>, ProtocolsListArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1128,7 +1151,7 @@ export def "get-resource-set" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-19 # required
   identifier: string # A unique identifier for the resource set, used in a request to refer to the resource set.
-]: any -> record<ResourceSet: record<Id: string, Name: string, Description: string, UpdateToken: string, ResourceTypeList: list<string>, LastUpdateTime: string, ResourceSetStatus: string>, ResourceSetArn: string> {
+]: any -> oneof<record<ResourceSet: record<Id: string, Name: string, Description: string, UpdateToken: string, ResourceTypeList: list<string>, LastUpdateTime: string, ResourceSetStatus: string>, ResourceSetArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1177,7 +1200,7 @@ export def "get-third-party-firewall-association-status" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-20 # required
   third_party_firewall: string@third-party-firewall-completer # The name of the third-party firewall vendor.
-]: any -> record<ThirdPartyFirewallStatus: string, MarketplaceOnboardingStatus: string> {
+]: any -> oneof<record<ThirdPartyFirewallStatus: string, MarketplaceOnboardingStatus: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1229,7 +1252,7 @@ export def "get-violation-details" [
   member_account: string # The Amazon Web Services account ID that you want the details for.
   resource_id: string # The ID of the resource that has violations.
   resource_type: string # The resource type. This is in the format shown in the Amazon Web Services Resource Types Reference (https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-template-resource-type-ref.html). Supported resource types are: AWS::EC2::Instance, AWS::EC2::NetworkInterface, AWS::EC2::SecurityGroup, AWS::NetworkFirewall::FirewallPolicy, and AWS::EC2::Subnet.
-]: any -> record<ViolationDetail: record<PolicyId: string, MemberAccount: string, ResourceId: string, ResourceType: string, ResourceViolations: list<record>, ResourceTags: list<record>, ResourceDescription: string>> {
+]: any -> oneof<record<ViolationDetail: record<PolicyId: string, MemberAccount: string, ResourceId: string, ResourceType: string, ResourceViolations: list<record>, ResourceTags: list<record>, ResourceDescription: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1281,7 +1304,7 @@ export def "list-admin-accounts-for-organization" [
   --x-amz-target: string@x-amz-target-completer-22 # required
   --next-token-body: string # When you request a list of objects with a MaxResults setting, if the number of objects that are still available for retrieval exceeds the maximum you requested, Firewall Manager returns a NextToken value in the response. To retrieve the next batch of objects, use the token returned from the prior request in your next request. (body field)
   --max-results-body: int # The maximum number of objects that you want Firewall Manager to return for this request. If more objects are available, in the response, Firewall Manager provides a NextToken value that you can use in a subsequent call to get the next batch of objects. (body field)
-]: any -> record<AdminAccounts: table<AdminAccount: string, DefaultAdmin: bool, Status: string>, NextToken: string> {
+]: any -> oneof<record<AdminAccounts: table<AdminAccount: string, DefaultAdmin: bool, Status: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1334,7 +1357,7 @@ export def "list-admins-managing-account" [
   --x-amz-target: string@x-amz-target-completer-23 # required
   --next-token-body: string # When you request a list of objects with a MaxResults setting, if the number of objects that are still available for retrieval exceeds the maximum you requested, Firewall Manager returns a NextToken value in the response. To retrieve the next batch of objects, use the token returned from the prior request in your next request. (body field)
   --max-results-body: int # The maximum number of objects that you want Firewall Manager to return for this request. If more objects are available, in the response, Firewall Manager provides a NextToken value that you can use in a subsequent call to get the next batch of objects. (body field)
-]: any -> record<AdminAccounts: list<string>, NextToken: string> {
+]: any -> oneof<record<AdminAccounts: list<string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1388,7 +1411,7 @@ export def "list-apps-lists" [
   --default-lists: oneof<nothing, bool> # Specifies whether the lists to retrieve are default lists owned by Firewall Manager.
   --next-token-body: string # If you specify a value for MaxResults in your list request, and you have more objects than the maximum, Firewall Manager returns this token in the response. For all but the first request, you provide the token returned by the prior request in the request parameters, to retrieve the next batch of objects. (body field)
   --max-results-body: int # The maximum number of objects that you want Firewall Manager to return for this request. If more objects are available, in the response, Firewall Manager provides a NextToken value that you can use in a subsequent call to get the next batch of objects. If you don't specify this, Firewall Manager returns all available objects. (body field)
-]: any -> record<AppsLists: table<ListArn: string, ListId: string, ListName: string, AppsList: list>, NextToken: string> {
+]: any -> oneof<record<AppsLists: table<ListArn: string, ListId: string, ListName: string, AppsList: list>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1443,7 +1466,7 @@ export def "list-compliance-status" [
   policy_id: string # The ID of the Firewall Manager policy that you want the details for.
   --next-token-body: string # If you specify a value for MaxResults and you have more PolicyComplianceStatus objects than the number that you specify for MaxResults, Firewall Manager returns a NextToken value in the response that allows you to list another group of PolicyComplianceStatus objects. For the second and subsequent ListComplianceStatus requests, specify the value of NextToken from the previous response to get information about another batch of PolicyComplianceStatus objects. (body field)
   --max-results-body: int # Specifies the number of PolicyComplianceStatus objects that you want Firewall Manager to return for this request. If you have more PolicyComplianceStatus objects than the number that you specify for MaxResults, the response includes a NextToken value that you can use to get another batch of PolicyComplianceStatus objects. (body field)
-]: any -> record<PolicyComplianceStatusList: table<PolicyOwner: string, PolicyId: string, PolicyName: string, MemberAccount: string, EvaluationResults: list, LastUpdated: string, IssueInfoMap: record>, NextToken: string> {
+]: any -> oneof<record<PolicyComplianceStatusList: table<PolicyOwner: string, PolicyId: string, PolicyName: string, MemberAccount: string, EvaluationResults: list, LastUpdated: string, IssueInfoMap: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1496,7 +1519,7 @@ export def "list-discovered-resources" [
   resource_type: string # The type of resources to discover.
   --max-results: int # The maximum number of objects that you want Firewall Manager to return for this request. If more objects are available, in the response, Firewall Manager provides a NextToken value that you can use in a subsequent call to get the next batch of objects.
   --next-token: string # When you request a list of objects with a MaxResults setting, if the number of objects that are still available for retrieval exceeds the maximum you requested, Firewall Manager returns a NextToken value in the response. To retrieve the next batch of objects, use the token returned from the prior request in your next request.
-]: any -> record<Items: table<URI: string, AccountId: string, Type: string, Name: string>, NextToken: string> {
+]: any -> oneof<record<Items: table<URI: string, AccountId: string, Type: string, Name: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1548,7 +1571,7 @@ export def "list-member-accounts" [
   --x-amz-target: string@x-amz-target-completer-27 # required
   --next-token-body: string # If you specify a value for MaxResults and you have more account IDs than the number that you specify for MaxResults, Firewall Manager returns a NextToken value in the response that allows you to list another group of IDs. For the second and subsequent ListMemberAccountsRequest requests, specify the value of NextToken from the previous response to get information about another batch of member account IDs. (body field)
   --max-results-body: int # Specifies the number of member account IDs that you want Firewall Manager to return for this request. If you have more IDs than the number that you specify for MaxResults, the response includes a NextToken value that you can use to get another batch of member account IDs. (body field)
-]: any -> record<MemberAccounts: list<string>, NextToken: string> {
+]: any -> oneof<record<MemberAccounts: list<string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1601,7 +1624,7 @@ export def "list-policies" [
   --x-amz-target: string@x-amz-target-completer-28 # required
   --next-token-body: string # If you specify a value for MaxResults and you have more PolicySummary objects than the number that you specify for MaxResults, Firewall Manager returns a NextToken value in the response that allows you to list another group of PolicySummary objects. For the second and subsequent ListPolicies requests, specify the value of NextToken from the previous response to get information about another batch of PolicySummary objects. (body field)
   --max-results-body: int # Specifies the number of PolicySummary objects that you want Firewall Manager to return for this request. If you have more PolicySummary objects than the number that you specify for MaxResults, the response includes a NextToken value that you can use to get another batch of PolicySummary objects. (body field)
-]: any -> record<PolicyList: table<PolicyArn: string, PolicyId: string, PolicyName: string, ResourceType: string, SecurityServiceType: string, RemediationEnabled: bool, DeleteUnusedFMManagedResources: bool, PolicyStatus: string>, NextToken: string> {
+]: any -> oneof<record<PolicyList: table<PolicyArn: string, PolicyId: string, PolicyName: string, ResourceType: string, SecurityServiceType: string, RemediationEnabled: bool, DeleteUnusedFMManagedResources: bool, PolicyStatus: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1655,7 +1678,7 @@ export def "list-protocols-lists" [
   --default-lists: oneof<nothing, bool> # Specifies whether the lists to retrieve are default lists owned by Firewall Manager.
   --next-token-body: string # If you specify a value for MaxResults in your list request, and you have more objects than the maximum, Firewall Manager returns this token in the response. For all but the first request, you provide the token returned by the prior request in the request parameters, to retrieve the next batch of objects. (body field)
   --max-results-body: int # The maximum number of objects that you want Firewall Manager to return for this request. If more objects are available, in the response, Firewall Manager provides a NextToken value that you can use in a subsequent call to get the next batch of objects. If you don't specify this, Firewall Manager returns all available objects. (body field)
-]: any -> record<ProtocolsLists: table<ListArn: string, ListId: string, ListName: string, ProtocolsList: list>, NextToken: string> {
+]: any -> oneof<record<ProtocolsLists: table<ListArn: string, ListId: string, ListName: string, ProtocolsList: list>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1708,7 +1731,7 @@ export def "list-resource-set-resources" [
   identifier: string # A unique identifier for the resource set, used in a request to refer to the resource set.
   --max-results: int # The maximum number of objects that you want Firewall Manager to return for this request. If more objects are available, in the response, Firewall Manager provides a NextToken value that you can use in a subsequent call to get the next batch of objects.
   --next-token: string # When you request a list of objects with a MaxResults setting, if the number of objects that are still available for retrieval exceeds the maximum you requested, Firewall Manager returns a NextToken value in the response. To retrieve the next batch of objects, use the token returned from the prior request in your next request.
-]: any -> record<Items: table<URI: string, AccountId: string>, NextToken: string> {
+]: any -> oneof<record<Items: table<URI: string, AccountId: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1758,7 +1781,7 @@ export def "list-resource-sets" [
   --x-amz-target: string@x-amz-target-completer-31 # required
   --next-token: string # When you request a list of objects with a MaxResults setting, if the number of objects that are still available for retrieval exceeds the maximum you requested, Firewall Manager returns a NextToken value in the response. To retrieve the next batch of objects, use the token returned from the prior request in your next request.
   --max-results: int # The maximum number of objects that you want Firewall Manager to return for this request. If more objects are available, in the response, Firewall Manager provides a NextToken value that you can use in a subsequent call to get the next batch of objects.
-]: any -> record<ResourceSets: table<Id: string, Name: string, Description: string, LastUpdateTime: string, ResourceSetStatus: string>, NextToken: string> {
+]: any -> oneof<record<ResourceSets: table<Id: string, Name: string, Description: string, LastUpdateTime: string, ResourceSetStatus: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1807,7 +1830,7 @@ export def "list-tags-for-resource" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-32 # required
   resource_arn: string # The Amazon Resource Name (ARN) of the resource to return tags for. The Firewall Manager resources that support tagging are policies, applications lists, and protocols lists.
-]: any -> record<TagList: table<Key: string, Value: string>> {
+]: any -> oneof<record<TagList: table<Key: string, Value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1860,7 +1883,7 @@ export def "list-third-party-firewall-firewall-policies" [
   third_party_firewall: string@third-party-firewall-completer # The name of the third-party firewall vendor.
   --next-token-body: string # If the previous response included a NextToken element, the specified third-party firewall vendor is associated with more third-party firewall policies. To get more third-party firewall policies, submit another ListThirdPartyFirewallFirewallPoliciesRequest request. For the value of NextToken, specify the value of NextToken from the previous response. If the previous response didn't include a NextToken element, there are no more third-party firewall policies to get. (body field)
   --max-results-body: int # The maximum number of third-party firewall policies that you want Firewall Manager to return. If the specified third-party firewall vendor is associated with more than MaxResults firewall policies, the response includes a NextToken element. NextToken contains an encrypted token that identifies the first third-party firewall policies that Firewall Manager will return if you submit another request. (body field)
-]: any -> record<ThirdPartyFirewallFirewallPolicies: table<FirewallPolicyId: string, FirewallPolicyName: string>, NextToken: string> {
+]: any -> oneof<record<ThirdPartyFirewallFirewallPolicies: table<FirewallPolicyId: string, FirewallPolicyName: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1892,7 +1915,6 @@ export def "list-third-party-firewall-firewall-policies" [
 #
 # POST /
 # operationId: PutAdminAccount
-# --AdminScope shape: {AccountScope?: record, OrganizationalUnitScope?: record, RegionScope?: record, PolicyTypeScope?: record}
 export def "put-admin-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1943,8 +1965,6 @@ export def "put-admin-account" [
 #
 # POST /
 # operationId: PutAppsList
-# --AppsList shape: {ListId?: string, ListName: string, ListUpdateToken?: string, CreateTime?: string, LastUpdateTime?: string, AppsList: list, PreviousAppsList?: record}
-# --TagList item shape: {Key: string, Value: string}
 export def "put-apps-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1965,7 +1985,7 @@ export def "put-apps-list" [
   --x-amz-target: string@x-amz-target-completer-35 # required
   apps_list: record # An Firewall Manager applications list. — shape: {ListId?: string, ListName: string, ListUpdateToken?: string, CreateTime?: string, LastUpdateTime?: string, AppsList: list, PreviousAppsList?: record}
   --tag-list: list # The tags associated with the resource. — item shape: {Key: string, Value: string}
-]: any -> record<AppsList: record<ListId: string, ListName: string, ListUpdateToken: string, CreateTime: string, LastUpdateTime: string, AppsList: list<record>, PreviousAppsList: record>, AppsListArn: string> {
+]: any -> oneof<record<AppsList: record<ListId: string, ListName: string, ListUpdateToken: string, CreateTime: string, LastUpdateTime: string, AppsList: list<record>, PreviousAppsList: record>, AppsListArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2045,8 +2065,6 @@ export def "put-notification-channel" [
 #
 # POST /
 # operationId: PutPolicy
-# --Policy shape: {PolicyId?: string, PolicyName: string, PolicyUpdateToken?: string, SecurityServicePolicyData: record, ResourceType: string, ResourceTypeList?: list<string>, ResourceTags?: list, ExcludeResourceTags: bool, RemediationEnabled: bool, DeleteUnusedFMManagedResources?: bool, IncludeMap?: record, ExcludeMap?: record, ResourceSetIds?: list<string>, PolicyDescription?: string, PolicyStatus?: "ACTIVE"|"OUT_OF_ADMIN_SCOPE"}
-# --TagList item shape: {Key: string, Value: string}
 export def "put-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2067,7 +2085,7 @@ export def "put-policy" [
   --x-amz-target: string@x-amz-target-completer-37 # required
   policy: record # An Firewall Manager policy. — shape: {PolicyId?: string, PolicyName: string, PolicyUpdateToken?: string, SecurityServicePolicyData: record, ResourceType: string, ResourceTypeList?: list<string>, ResourceTags?: list, ExcludeResourceTags: bool, RemediationEnabled: bool, DeleteUnusedFMManagedResources?: bool, IncludeMap?: record, ExcludeMap?: record, ResourceSetIds?: list<string>, PolicyDescription?: string, PolicyStatus?: "ACTIVE"|"OUT_OF_ADMIN_SCOPE"}
   --tag-list: list # The tags to add to the Amazon Web Services resource. — item shape: {Key: string, Value: string}
-]: any -> record<Policy: record<PolicyId: string, PolicyName: string, PolicyUpdateToken: string, SecurityServicePolicyData: record<Type: string, ManagedServiceData: string, PolicyOption: record>, ResourceType: string, ResourceTypeList: list<string>, ResourceTags: list<record>, ExcludeResourceTags: bool, RemediationEnabled: bool, DeleteUnusedFMManagedResources: bool, IncludeMap: record, ExcludeMap: record, ResourceSetIds: list<string>, PolicyDescription: string, PolicyStatus: string>, PolicyArn: string> {
+]: any -> oneof<record<Policy: record<PolicyId: string, PolicyName: string, PolicyUpdateToken: string, SecurityServicePolicyData: record<Type: string, ManagedServiceData: string, PolicyOption: record>, ResourceType: string, ResourceTypeList: list<string>, ResourceTags: list<record>, ExcludeResourceTags: bool, RemediationEnabled: bool, DeleteUnusedFMManagedResources: bool, IncludeMap: record, ExcludeMap: record, ResourceSetIds: list<string>, PolicyDescription: string, PolicyStatus: string>, PolicyArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2097,8 +2115,6 @@ export def "put-policy" [
 #
 # POST /
 # operationId: PutProtocolsList
-# --ProtocolsList shape: {ListId?: string, ListName: string, ListUpdateToken?: string, CreateTime?: string, LastUpdateTime?: string, ProtocolsList: list<string>, PreviousProtocolsList?: record}
-# --TagList item shape: {Key: string, Value: string}
 export def "put-protocols-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2119,7 +2135,7 @@ export def "put-protocols-list" [
   --x-amz-target: string@x-amz-target-completer-38 # required
   protocols_list: record # An Firewall Manager protocols list. — shape: {ListId?: string, ListName: string, ListUpdateToken?: string, CreateTime?: string, LastUpdateTime?: string, ProtocolsList: list<string>, PreviousProtocolsList?: record}
   --tag-list: list # The tags associated with the resource. — item shape: {Key: string, Value: string}
-]: any -> record<ProtocolsList: record<ListId: string, ListName: string, ListUpdateToken: string, CreateTime: string, LastUpdateTime: string, ProtocolsList: list<string>, PreviousProtocolsList: record>, ProtocolsListArn: string> {
+]: any -> oneof<record<ProtocolsList: record<ListId: string, ListName: string, ListUpdateToken: string, CreateTime: string, LastUpdateTime: string, ProtocolsList: list<string>, PreviousProtocolsList: record>, ProtocolsListArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2149,8 +2165,6 @@ export def "put-protocols-list" [
 #
 # POST /
 # operationId: PutResourceSet
-# --ResourceSet shape: {Id?: string, Name: string, Description?: string, UpdateToken?: string, ResourceTypeList: list<string>, LastUpdateTime?: string, ResourceSetStatus?: "ACTIVE"|"OUT_OF_ADMIN_SCOPE"}
-# --TagList item shape: {Key: string, Value: string}
 export def "put-resource-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2171,7 +2185,7 @@ export def "put-resource-set" [
   --x-amz-target: string@x-amz-target-completer-39 # required
   resource_set: record # A set of resources to include in a policy. — shape: {Id?: string, Name: string, Description?: string, UpdateToken?: string, ResourceTypeList: list<string>, LastUpdateTime?: string, ResourceSetStatus?: "ACTIVE"|"OUT_OF_ADMIN_SCOPE"}
   --tag-list: list # Retrieves the tags associated with the specified resource set. Tags are key:value pairs that you can use to categorize and manage your resources, for purposes like billing. For example, you might set the tag key to "customer" and the value to the customer name or ID. You can specify one or more tags to add to each Amazon Web Services resource, up to 50 tags for a resource. — item shape: {Key: string, Value: string}
-]: any -> record<ResourceSet: record<Id: string, Name: string, Description: string, UpdateToken: string, ResourceTypeList: list<string>, LastUpdateTime: string, ResourceSetStatus: string>, ResourceSetArn: string> {
+]: any -> oneof<record<ResourceSet: record<Id: string, Name: string, Description: string, UpdateToken: string, ResourceTypeList: list<string>, LastUpdateTime: string, ResourceSetStatus: string>, ResourceSetArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2201,7 +2215,6 @@ export def "put-resource-set" [
 #
 # POST /
 # operationId: TagResource
-# --TagList item shape: {Key: string, Value: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2222,7 +2235,7 @@ export def "tag-resource" [
   --x-amz-target: string@x-amz-target-completer-40 # required
   resource_arn: string # The Amazon Resource Name (ARN) of the resource to return tags for. The Firewall Manager resources that support tagging are policies, applications lists, and protocols lists.
   tag_list: list # The tags to add to the resource. — item shape: {Key: string, Value: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2272,7 +2285,7 @@ export def "untag-resource" [
   --x-amz-target: string@x-amz-target-completer-41 # required
   resource_arn: string # The Amazon Resource Name (ARN) of the resource to return tags for. The Firewall Manager resources that support tagging are policies, applications lists, and protocols lists.
   tag_keys: list<string> # The keys of the tags to remove from the resource.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

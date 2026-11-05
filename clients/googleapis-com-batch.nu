@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -113,9 +137,9 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "batch-projects-locations-operations-delete" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["batch-projects-locations-operations-delete" "batch-projects-locations-operations-get" "batch-projects-locations-list" "batch-projects-locations-operations-list" "batch-projects-locations-operations-cancel" "batch-projects-locations-jobs-list" "batch-projects-locations-jobs-create" "batch-projects-locations-state-report" "batch-projects-locations-jobs-task-groups-tasks-list" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -161,7 +185,7 @@ export def "batch-projects-locations-operations-delete" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --reason: string # Optional. Reason for this deletion.
   --request-id: string # Optional. An optional request ID to identify requests. Specify a unique request ID so that if you must retry your request, the server will know to ignore the request if it has already been completed. The server will guarantee that for at least 60 minutes after the first request. For example, consider a situation where you make an initial request and the request times out. If you make the request again with the same request ID, the server can check if original operation with the same request ID was received, and if so, will ignore the second request. This prevents clients from accidentally creating duplicate commitments. The request ID must be a valid UUID with the exception that zero UUID is not supported (00000000-0000-0000-0000-000000000000).
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -209,7 +233,7 @@ export def "batch-projects-locations-operations-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: nothing -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -260,7 +284,7 @@ export def "batch-projects-locations-list" [
   --filter: string # A filter to narrow down results to a preferred subset. The filtering language accepts strings like `"displayName=tokyo"`, and is documented in more detail in [AIP-160](https://google.aip.dev/160).
   --page-size: int # The maximum number of results to return. If not set, the service selects a default.
   --page-token: string # A page token received from the `next_page_token` field in the response. Send that page token to receive the subsequent page.
-]: nothing -> record<locations: table<displayName: string, labels: record, locationId: string, metadata: record, name: string>, nextPageToken: string> {
+]: nothing -> oneof<record<locations: table<displayName: string, labels: record, locationId: string, metadata: record, name: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -311,7 +335,7 @@ export def "batch-projects-locations-operations-list" [
   --filter: string # The standard list filter.
   --page-size: int # The standard list page size.
   --page-token: string # The standard list page token.
-]: nothing -> record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>> {
+]: nothing -> oneof<record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -360,7 +384,7 @@ export def "batch-projects-locations-operations-cancel" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -414,7 +438,7 @@ export def "batch-projects-locations-jobs-list" [
   --filter: string # List filter.
   --page-size: int # Page size.
   --page-token: string # Page token.
-]: nothing -> record<jobs: table<allocationPolicy: record, createTime: string, labels: record, logsPolicy: record, name: string, notifications: list, priority: string, status: record, taskGroups: list, uid: string, updateTime: string>, nextPageToken: string, unreachable: list<string>> {
+]: nothing -> oneof<record<jobs: table<allocationPolicy: record, createTime: string, labels: record, logsPolicy: record, name: string, notifications: list, priority: string, status: record, taskGroups: list, uid: string, updateTime: string>, nextPageToken: string, unreachable: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -440,11 +464,6 @@ export def "batch-projects-locations-jobs-list" [
 #
 # POST /v1/{parent}/jobs
 # operationId: batch.projects.locations.jobs.create
-# --allocationPolicy shape: {instances?: list, labels?: record, location?: record, network?: record, placement?: record, serviceAccount?: record}
-# --logsPolicy shape: {destination?: "DESTINATION_UNSPECIFIED"|"CLOUD_LOGGING"|"PATH", logsPath?: string}
-# --notifications item shape: {message?: record, pubsubTopic?: string}
-# --status shape: {runDuration?: string, state?: "STATE_UNSPECIFIED"|"QUEUED"|"SCHEDULED"|"RUNNING"|"SUCCEEDED"|"FAILED"|"DELETION_IN_PROGRESS", statusEvents?: list, taskGroups?: record}
-# --taskGroups item shape: {parallelism?: string, permissiveSsh?: bool, requireHostsFile?: bool, taskCount?: string, taskCountPerNode?: string, taskEnvironments?: list, taskSpec?: record}
 export def "batch-projects-locations-jobs-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -476,7 +495,7 @@ export def "batch-projects-locations-jobs-create" [
   --priority: string # Priority of the Job. The valid value range is [0, 100). Default value is 0. Higher value indicates higher priority. A job with higher priority value is more likely to run earlier if all other requirements are satisfied. (format: int64)
   --status: record # Job status. — shape: {runDuration?: string, state?: "STATE_UNSPECIFIED"|"QUEUED"|"SCHEDULED"|"RUNNING"|"SUCCEEDED"|"FAILED"|"DELETION_IN_PROGRESS", statusEvents?: list, taskGroups?: record}
   --task-groups: list # Required. TaskGroups in the Job. Only one TaskGroup is supported now. — item shape: {parallelism?: string, permissiveSsh?: bool, requireHostsFile?: bool, taskCount?: string, taskCountPerNode?: string, taskEnvironments?: list, taskSpec?: record}
-]: any -> record<allocationPolicy: record<instances: list<record>, labels: record, location: record<allowedLocations: list>, network: record<networkInterfaces: list>, placement: record<collocation: string, maxDistance: string>, serviceAccount: record<email: string, scopes: list>>, createTime: string, labels: record, logsPolicy: record<destination: string, logsPath: string>, name: string, notifications: table<message: record, pubsubTopic: string>, priority: string, status: record<runDuration: string, state: string, statusEvents: list<record>, taskGroups: record>, taskGroups: table<name: string, parallelism: string, permissiveSsh: bool, requireHostsFile: bool, taskCount: string, taskCountPerNode: string, taskEnvironments: list, taskSpec: record>, uid: string, updateTime: string> {
+]: any -> oneof<record<allocationPolicy: record<instances: list<record>, labels: record, location: record<allowedLocations: list>, network: record<networkInterfaces: list>, placement: record<collocation: string, maxDistance: string>, serviceAccount: record<email: string, scopes: list>>, createTime: string, labels: record, logsPolicy: record<destination: string, logsPath: string>, name: string, notifications: table<message: record, pubsubTopic: string>, priority: string, status: record<runDuration: string, state: string, statusEvents: list<record>, taskGroups: record>, taskGroups: table<name: string, parallelism: string, permissiveSsh: bool, requireHostsFile: bool, taskCount: string, taskCountPerNode: string, taskEnvironments: list, taskSpec: record>, uid: string, updateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -505,9 +524,6 @@ export def "batch-projects-locations-jobs-create" [
 #
 # POST /v1/{parent}/state:report
 # operationId: batch.projects.locations.state.report
-# --agentInfo shape: {jobId?: string, reportTime?: string, state?: "AGENT_STATE_UNSPECIFIED"|"AGENT_STARTING"|"AGENT_RUNNING"|"AGENT_STOPPED", taskGroupId?: string, tasks?: list}
-# --agentTimingInfo shape: {agentStartupTime?: string, bootTime?: string, scriptStartupTime?: string}
-# --metadata shape: {creationTime?: string, creator?: string, imageVersion?: string, instance?: string, instanceId?: string, instancePreemptionNoticeReceived?: bool, osRelease?: record, version?: string, zone?: string}
 export def "batch-projects-locations-state-report" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -533,7 +549,7 @@ export def "batch-projects-locations-state-report" [
   --agent-info: record # VM Agent Info. — shape: {jobId?: string, reportTime?: string, state?: "AGENT_STATE_UNSPECIFIED"|"AGENT_STARTING"|"AGENT_RUNNING"|"AGENT_STOPPED", taskGroupId?: string, tasks?: list}
   --agent-timing-info: record # VM timing information — shape: {agentStartupTime?: string, bootTime?: string, scriptStartupTime?: string}
   --metadata: record # VM Agent Metadata. — shape: {creationTime?: string, creator?: string, imageVersion?: string, instance?: string, instanceId?: string, instancePreemptionNoticeReceived?: bool, osRelease?: record, version?: string, zone?: string}
-]: any -> record<defaultReportInterval: string, minReportInterval: string, tasks: table<intendedState: string, reachedBarrier: string, spec: record, status: record, task: string, taskSource: string>> {
+]: any -> oneof<record<defaultReportInterval: string, minReportInterval: string, tasks: table<intendedState: string, reachedBarrier: string, spec: record, status: record, task: string, taskSource: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -587,7 +603,7 @@ export def "batch-projects-locations-jobs-task-groups-tasks-list" [
   --filter: string # Task filter, null filter matches all Tasks. Filter string should be of the format State=TaskStatus.State e.g. State=RUNNING
   --page-size: int # Page size.
   --page-token: string # Page token.
-]: nothing -> record<nextPageToken: string, tasks: table<name: string, status: record>, unreachable: list<string>> {
+]: nothing -> oneof<record<nextPageToken: string, tasks: table<name: string, status: record>, unreachable: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }

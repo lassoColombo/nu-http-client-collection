@@ -16,7 +16,6 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "x-api-key" => { {scheme: $scheme, headers: {"x-api-key": $token_val}, query: "", location: "header"} }
     "x-store-key" => { {scheme: $scheme, headers: {"x-store-key": $token_val}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
@@ -31,22 +30,32 @@ def merge-auth [parts: list]: nothing -> record {
   {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -54,8 +63,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -66,7 +80,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -101,7 +124,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -142,9 +166,9 @@ def type-completer-3 [] { ["option_type_checkbox" "option_type_date" "option_typ
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "token-apikey" "token-storekey"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account-cart-add" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["account-cart-add" "account-cart-list" "account-config-update" "account-failed-webhooks" "account-supported-platforms" "attribute-add" "attribute-assign-group" "attribute-assign-set" "attribute-attributeset-list" "attribute-count" "attribute-delete" "attribute-group-list" "attribute-info" "attribute-list" "attribute-type-list" "attribute-unassign-group" "attribute-unassign-set" "attribute-update" "basket-info" "basket-item-add" "basket-live-shipping-service-create" "basket-live-shipping-service-delete" "basket-live-shipping-service-list" "bridge-delete" "bridge-download" "bridge-update" "cart-bridge" "cart-catalog-price-rules-count" "cart-catalog-price-rules-list" "cart-clear-cache" "cart-config" "cart-config-update" "cart-coupon-add" "cart-coupon-condition-add" "cart-coupon-count" "cart-coupon-delete" "cart-coupon-list" "cart-create" "cart-delete" "cart-disconnect" "cart-giftcard-add" "cart-giftcard-count" "cart-giftcard-list" "cart-info" "cart-list" "cart-meta-data-list" "cart-meta-data-set" "cart-meta-data-unset" "cart-methods" "cart-plugin-list" "cart-script-add" "cart-script-delete" "cart-script-list" "cart-shipping-zones-list" "cart-validate" "category-add" "category-assign" "category-count" "category-delete" "category-find" "category-image-add" "category-image-delete" "category-info" "category-list" "category-unassign" "category-update" "customer-add" "customer-attribute-list" "customer-count" "customer-find" "customer-group-add" "customer-group-list" "customer-info" "customer-list" "customer-update" "order-abandoned-list" "order-add" "order-count" "order-financial-status-list" "order-find" "order-fulfillment-status-list" "order-info" "order-list" "order-preestimate-shipping-list" "order-refund-add" "order-shipment-add" "order-shipment-delete" "order-shipment-info" "order-shipment-list" "order-shipment-tracking-add" "order-shipment-update" "order-status-list" "order-transaction-list" "order-update" "product-add" "product-attribute-list" "product-attribute-value-set" "product-attribute-value-unset" "product-brand-list" "product-child-item-find" "product-child-item-info" "product-child-item-list" "product-count" "product-currency-add" "product-currency-list" "product-delete" "product-fields" "product-find" "product-image-add" "product-image-delete" "product-image-update" "product-info" "product-list" "product-manufacturer-add" "product-option-add" "product-option-assign" "product-option-list" "product-option-value-add" "product-option-value-assign" "product-option-value-update" "product-price-add" "product-price-delete" "product-price-update" "product-review-list" "product-store-assign" "product-tax-add" "product-update" "product-variant-add" "product-variant-count" "product-variant-delete" "product-variant-image-add" "product-variant-image-delete" "product-variant-info" "product-variant-list" "product-variant-price-add" "product-variant-price-delete" "product-variant-price-update" "product-variant-update" "subscriber-list" "tax-class-info" "webhook-count" "webhook-create" "webhook-delete" "webhook-events" "webhook-list" "webhook-update" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -166,7 +190,6 @@ export def commands []: nothing -> table {
 #
 # POST /account.cart.add.json
 # operationId: AccountCartAdd
-# --hybris_websites item shape: {storeIds: list<string>, uid: string, url: string}
 export def "account-cart-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -276,7 +299,7 @@ export def "account-cart-add" [
   --zid-client-id: int # Zid Client ID
   --zid-client-secret: string # Zid Client Secret
   --zid-refresh-token: string # Zid refresh token
-]: any -> record<result: record<store_key: string>, return_code: int, return_message: string> {
+]: any -> oneof<record<result: record<store_key: string>, return_code: int, return_message: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -319,7 +342,7 @@ export def "account-cart-list" [
   --request-to-date: string # Retrieve entities to their creation date
   --store-url: string # A web address of a store
   --store-key: string # Find store by store key
-]: nothing -> record<result: record<carts: list<record>, carts_count: int>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<carts: list<record>, carts_count: int>, return_code: int, return_message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "params" $params "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "request_from_date" $request_from_date "scalar") (serialize-qp "request_to_date" $request_to_date "scalar") (serialize-qp "store_url" $store_url "scalar") (serialize-qp "store_key" $store_key "scalar")] | flatten | str join "&"
@@ -444,7 +467,7 @@ export def "account-config-update" [
   --zid-access-token: string # Zid Access Token
   --zid-authorization: string # Zid Authorization
   --zid-refresh-token: string # Zid refresh token
-]: nothing -> record<result: record<updated_items: int>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<updated_items: int>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "new_store_key" $new_store_key "scalar") (serialize-qp "bridge_url" $bridge_url "scalar") (serialize-qp "store_root" $store_root "scalar") (serialize-qp "db_tables_prefix" $db_tables_prefix "scalar") (serialize-qp "3dcart_private_key" $3dcart_private_key "scalar") (serialize-qp "3dcart_access_token" $3dcart_access_token "scalar") (serialize-qp "3dcartapi_api_key" $3dcartapi_api_key "scalar") (serialize-qp "amazon_sp_client_id" $amazon_sp_client_id "scalar") (serialize-qp "amazon_sp_client_secret" $amazon_sp_client_secret "scalar") (serialize-qp "amazon_sp_aws_user_key_id" $amazon_sp_aws_user_key_id "scalar") (serialize-qp "amazon_sp_aws_user_secret" $amazon_sp_aws_user_secret "scalar") (serialize-qp "amazon_sp_aws_region" $amazon_sp_aws_region "scalar") (serialize-qp "amazon_sp_aws_role_arn" $amazon_sp_aws_role_arn "scalar") (serialize-qp "amazon_sp_refresh_token" $amazon_sp_refresh_token "scalar") (serialize-qp "amazon_sp_api_environment" $amazon_sp_api_environment "scalar") (serialize-qp "amazon_access_token" $amazon_access_token "scalar") (serialize-qp "amazon_seller_id" $amazon_seller_id "scalar") (serialize-qp "amazon_marketplaces_ids" $amazon_marketplaces_ids "scalar") (serialize-qp "amazon_secret_key" $amazon_secret_key "scalar") (serialize-qp "amazon_access_key_id" $amazon_access_key_id "scalar") (serialize-qp "aspdotnetstorefront_api_user" $aspdotnetstorefront_api_user "scalar") (serialize-qp "aspdotnetstorefront_api_pass" $aspdotnetstorefront_api_pass "scalar") (serialize-qp "bigcommerceapi_admin_account" $bigcommerceapi_admin_account "scalar") (serialize-qp "bigcommerceapi_api_path" $bigcommerceapi_api_path "scalar") (serialize-qp "bigcommerceapi_api_key" $bigcommerceapi_api_key "scalar") (serialize-qp "bigcommerceapi_client_id" $bigcommerceapi_client_id "scalar") (serialize-qp "bigcommerceapi_access_token" $bigcommerceapi_access_token "scalar") (serialize-qp "bigcommerceapi_context" $bigcommerceapi_context "scalar") (serialize-qp "demandware_client_id" $demandware_client_id "scalar") (serialize-qp "demandware_api_password" $demandware_api_password "scalar") (serialize-qp "demandware_user_name" $demandware_user_name "scalar") (serialize-qp "demandware_user_password" $demandware_user_password "scalar") (serialize-qp "ebay_client_id" $ebay_client_id "scalar") (serialize-qp "ebay_client_secret" $ebay_client_secret "scalar") (serialize-qp "ebay_runame" $ebay_runame "scalar") (serialize-qp "ebay_access_token" $ebay_access_token "scalar") (serialize-qp "ebay_refresh_token" $ebay_refresh_token "scalar") (serialize-qp "ebay_environment" $ebay_environment "scalar") (serialize-qp "ebay_site_id" $ebay_site_id "scalar") (serialize-qp "ecwid_acess_token" $ecwid_acess_token "scalar") (serialize-qp "ecwid_store_id" $ecwid_store_id "scalar") (serialize-qp "etsy_keystring" $etsy_keystring "scalar") (serialize-qp "etsy_shared_secret" $etsy_shared_secret "scalar") (serialize-qp "etsy_access_token" $etsy_access_token "scalar") (serialize-qp "etsy_token_secret" $etsy_token_secret "scalar") (serialize-qp "etsy_client_id" $etsy_client_id "scalar") (serialize-qp "etsy_refresh_token" $etsy_refresh_token "scalar") (serialize-qp "neto_api_key" $neto_api_key "scalar") (serialize-qp "neto_api_username" $neto_api_username "scalar") (serialize-qp "shopify_api_key" $shopify_api_key "scalar") (serialize-qp "shopify_api_password" $shopify_api_password "scalar") (serialize-qp "shopify_shared_secret" $shopify_shared_secret "scalar") (serialize-qp "shopify_access_token" $shopify_access_token "scalar") (serialize-qp "shopware_access_key" $shopware_access_key "scalar") (serialize-qp "shopware_api_key" $shopware_api_key "scalar") (serialize-qp "shopware_api_secret" $shopware_api_secret "scalar") (serialize-qp "volusion_login" $volusion_login "scalar") (serialize-qp "volusion_password" $volusion_password "scalar") (serialize-qp "walmart_client_id" $walmart_client_id "scalar") (serialize-qp "walmart_client_secret" $walmart_client_secret "scalar") (serialize-qp "walmart_environment" $walmart_environment "scalar") (serialize-qp "walmart_channel_type" $walmart_channel_type "scalar") (serialize-qp "squarespace_api_key" $squarespace_api_key "scalar") (serialize-qp "hybris_client_id" $hybris_client_id "scalar") (serialize-qp "hybris_client_secret" $hybris_client_secret "scalar") (serialize-qp "hybris_username" $hybris_username "scalar") (serialize-qp "hybris_password" $hybris_password "scalar") (serialize-qp "hybris_websites" $hybris_websites "csv") (serialize-qp "lightspeed_api_key" $lightspeed_api_key "scalar") (serialize-qp "lightspeed_api_secret" $lightspeed_api_secret "scalar") (serialize-qp "commercehq_api_key" $commercehq_api_key "scalar") (serialize-qp "commercehq_api_password" $commercehq_api_password "scalar") (serialize-qp "wc_consumer_key" $wc_consumer_key "scalar") (serialize-qp "wc_consumer_secret" $wc_consumer_secret "scalar") (serialize-qp "magento_consumer_key" $magento_consumer_key "scalar") (serialize-qp "magento_consumer_secret" $magento_consumer_secret "scalar") (serialize-qp "magento_access_token" $magento_access_token "scalar") (serialize-qp "magento_token_secret" $magento_token_secret "scalar") (serialize-qp "prestashop_webservice_key" $prestashop_webservice_key "scalar") (serialize-qp "wix_app_id" $wix_app_id "scalar") (serialize-qp "wix_app_secret_key" $wix_app_secret_key "scalar") (serialize-qp "wix_refresh_token" $wix_refresh_token "scalar") (serialize-qp "mercado_libre_app_id" $mercado_libre_app_id "scalar") (serialize-qp "mercado_libre_app_secret_key" $mercado_libre_app_secret_key "scalar") (serialize-qp "mercado_libre_refresh_token" $mercado_libre_refresh_token "scalar") (serialize-qp "zid_client_id" $zid_client_id "scalar") (serialize-qp "zid_client_secret" $zid_client_secret "scalar") (serialize-qp "zid_access_token" $zid_access_token "scalar") (serialize-qp "zid_authorization" $zid_authorization "scalar") (serialize-qp "zid_refresh_token" $zid_refresh_token "scalar")] | flatten | str join "&"
@@ -482,7 +505,7 @@ export def "account-failed-webhooks" [
   --count: int # This parameter sets the entity amount that has to be retrieved. Max allowed count=250 (default: 10)
   --start: int # This parameter sets the number from which you want to get entities (default: 0)
   --ids: string # List of сomma-separated webhook ids
-]: nothing -> record<result: record<all_failed_webhook: string, webhook: list<record>>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<all_failed_webhook: string, webhook: list<record>>, return_code: int, return_message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "count" $count "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "ids" $ids "scalar")] | flatten | str join "&"
@@ -517,7 +540,7 @@ export def "account-supported-platforms" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<result: record<supported_platforms: list<record>>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<supported_platforms: list<record>>, return_code: int, return_message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account.supported_platforms.json" $auth.query)
@@ -572,7 +595,7 @@ export def "attribute-add" [
   --used-in-product-listing: oneof<nothing, bool> # Used in Product Listing (default: false)
   --used-for-sort-by: oneof<nothing, bool> # Used for Sorting in Product Listing (default: false)
   --apply-to: string # Types of products which can have this attribute (default: all_types)
-]: nothing -> record<result: record<id: string>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<id: string>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($type == null) { error make --unspanned { msg: "required query parameter 'type' missing: pass --type" } }
@@ -612,7 +635,7 @@ export def "attribute-assign-group" [
   --id: string # Entity id (required)
   --group-id: string # Attribute group_id (required)
   --attribute-set-id: string # Attribute set id
-]: nothing -> record<result: record<assigned: string>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<assigned: string>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
@@ -652,7 +675,7 @@ export def "attribute-assign-set" [
   --id: string # Entity id (required)
   --group-id: string # Attribute group_id
   --attribute-set-id: string # Attribute set id (required)
-]: nothing -> record<result: record<assigned: string>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<assigned: string>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
@@ -694,7 +717,7 @@ export def "attribute-attributeset-list" [
   --params: string # Set this parameter in order to choose which entity fields you want to retrieve (default: id,name)
   --exclude: string # Set this parameter in order to choose which entity fields you want to ignore. Works only if parameter `params` equal force_all
   --response-fields: string # Set this parameter in order to choose which entity fields you want to retrieve
-]: nothing -> record<result: table<additional_fields: record, assigned_attribute_ids: list, attribute_set_id: string, custom_fields: record, id: string, name: string, position: int>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: table<additional_fields: record, assigned_attribute_ids: list, attribute_set_id: string, custom_fields: record, id: string, name: string, position: int>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "response_fields" $response_fields "scalar")] | flatten | str join "&"
@@ -735,7 +758,7 @@ export def "attribute-count" [
   --visible: oneof<nothing, bool> # Filter items by visibility status
   --required: oneof<nothing, bool> # Defines if the option is required
   --system: oneof<nothing, bool> # True if attribute is system
-]: nothing -> record<result: record<attributes_count: int>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<attributes_count: int>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "visible" $visible "scalar") (serialize-qp "required" $required "scalar") (serialize-qp "system" $system "scalar")] | flatten | str join "&"
@@ -772,7 +795,7 @@ export def "attribute-delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --store-id: string # Store Id
   --id: string # Entity id (required)
-]: nothing -> record<result: record<deleted: string>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<deleted: string>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
@@ -815,7 +838,7 @@ export def "attribute-group-list" [
   --exclude: string # Set this parameter in order to choose which entity fields you want to ignore. Works only if parameter `params` equal force_all
   --response-fields: string # Set this parameter in order to choose which entity fields you want to retrieve
   --attribute-set-id: string # Attribute set id
-]: nothing -> record<result: table<additional_fields: record, assigned_attribute_ids: list, attribute_set_id: string, custom_fields: record, id: string, name: string, position: int>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: table<additional_fields: record, assigned_attribute_ids: list, attribute_set_id: string, custom_fields: record, id: string, name: string, position: int>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "attribute_set_id" $attribute_set_id "scalar")] | flatten | str join "&"
@@ -856,7 +879,7 @@ export def "attribute-info" [
   --params: string # Set this parameter in order to choose which entity fields you want to retrieve (default: force_all)
   --exclude: string # Set this parameter in order to choose which entity fields you want to ignore. Works only if parameter `params` equal force_all
   --response-fields: string # Set this parameter in order to choose which entity fields you want to retrieve
-]: nothing -> record<result: record<additional_fields: record, code: string, custom_fields: record, default_values: list<string>, id: string, lang_id: string, name: string, position: int, required: bool, store_id: string, system: bool, type: string, values: list<string>, visible: bool>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<additional_fields: record, code: string, custom_fields: record, default_values: list<string>, id: string, lang_id: string, name: string, position: int, required: bool, store_id: string, system: bool, type: string, values: list<string>, visible: bool>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
@@ -904,7 +927,7 @@ export def "attribute-list" [
   --visible: oneof<nothing, bool> # Filter items by visibility status
   --required: oneof<nothing, bool> # Defines if the option is required
   --system: oneof<nothing, bool> # True if attribute is system
-]: nothing -> record<additional_fields: record, custom_fields: record, pagination: record<additional_fields: record, custom_fields: record, next: string, previous: string>, result: record<additional_fields: record, attribute: list<record>, attributes_count: int, custom_fields: record>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<additional_fields: record, custom_fields: record, pagination: record<additional_fields: record, custom_fields: record, next: string, previous: string>, result: record<additional_fields: record, attribute: list<record>, attributes_count: int, custom_fields: record>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "attribute_ids" $attribute_ids "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "visible" $visible "scalar") (serialize-qp "required" $required "scalar") (serialize-qp "system" $system "scalar")] | flatten | str join "&"
@@ -939,7 +962,7 @@ export def "attribute-type-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<result: record<attribute_type: list<string>>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<attribute_type: list<string>>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/attribute.type.list.json" $auth.query)
@@ -975,7 +998,7 @@ export def "attribute-unassign-group" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # Entity id (required)
   --group-id: string # Customer group_id (required)
-]: nothing -> record<result: record<unassigned: string>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<unassigned: string>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
@@ -1014,7 +1037,7 @@ export def "attribute-unassign-set" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # Entity id (required)
   --attribute-set-id: string # Attribute set id (required)
-]: nothing -> record<result: record<unassigned: string>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<unassigned: string>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
@@ -1055,7 +1078,7 @@ export def "attribute-update" [
   --name: string # Defines new attributes's name (required)
   --store-id: string # Store Id
   --lang-id: string # Language id
-]: nothing -> record<result: record<updated: bool>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<updated: bool>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
@@ -1097,7 +1120,7 @@ export def "basket-info" [
   --params: string # Set this parameter in order to choose which entity fields you want to retrieve (default: force_all)
   --exclude: string # Set this parameter in order to choose which entity fields you want to ignore. Works only if parameter `params` equal force_all
   --response-fields: string # Set this parameter in order to choose which entity fields you want to retrieve
-]: nothing -> record<result: record<additional_fields: record, basket_products: list<record>, basket_url: string, created_at: record<additional_fields: record, custom_fields: record, format: string, value: string>, currency: record<additional_fields: record, avail: bool, custom_fields: record, default: bool, id: string, iso3: string, name: string, rate: float, symbol_left: string, symbol_right: string>, custom_fields: record, customer: record<additional_fields: record, custom_fields: record, email: string, first_name: string, id: string, last_name: string, phone: string>, id: string, modified_at: record<additional_fields: record, custom_fields: record, format: string, value: string>>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<additional_fields: record, basket_products: list<record>, basket_url: string, created_at: record<additional_fields: record, custom_fields: record, format: string, value: string>, currency: record<additional_fields: record, avail: bool, custom_fields: record, default: bool, id: string, iso3: string, name: string, rate: float, symbol_left: string, symbol_right: string>, custom_fields: record, customer: record<additional_fields: record, custom_fields: record, email: string, first_name: string, id: string, last_name: string, phone: string>, id: string, modified_at: record<additional_fields: record, custom_fields: record, format: string, value: string>>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
@@ -1138,7 +1161,7 @@ export def "basket-item-add" [
   --variant-id: string # Defines product's variants specified by variant id
   --quantity: float # Defines new items quantity (default: 0)
   --store-id: string # Store Id
-]: nothing -> record<result: record<added: bool>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<added: bool>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($customer_id == null) { error make --unspanned { msg: "required query parameter 'customer_id' missing: pass --customer-id" } }
@@ -1178,7 +1201,7 @@ export def "basket-live-shipping-service-create" [
   --store-id: string # Store Id
   --name: string # Shipping Service Name (required)
   --callback: string # Callback url that returns shipping rates. It should be able to accept POST requests with json data. (required)
-]: nothing -> record<result: record<id: int>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<id: int>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($name == null) { error make --unspanned { msg: "required query parameter 'name' missing: pass --name" } }
@@ -1216,7 +1239,7 @@ export def "basket-live-shipping-service-delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: int # Entity id (required)
-]: nothing -> record<result: record<status: bool>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<status: bool>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
@@ -1255,7 +1278,7 @@ export def "basket-live-shipping-service-list" [
   --store-id: string # Store Id
   --start: int # This parameter sets the number from which you want to get entities (default: 0)
   --count: int # This parameter sets the entity amount that has to be retrieved. Max allowed count=250 (default: 10)
-]: nothing -> record<result: record<live_shipping_services: list<record>>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<live_shipping_services: list<record>>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "store_id" $store_id "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
@@ -1290,7 +1313,7 @@ export def "bridge-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<result: record<deleted: bool>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<deleted: bool>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/bridge.delete.json" $auth.query)
@@ -1360,7 +1383,7 @@ export def "bridge-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<result: record<updated: bool>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<updated: bool>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/bridge.update.json" $auth.query)
@@ -1394,7 +1417,7 @@ export def "cart-bridge" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<result: record<bridge: string, store_key: string>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<bridge: string, store_key: string>, return_code: int, return_message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cart.bridge.json" $auth.query)
@@ -1428,7 +1451,7 @@ export def "cart-catalog-price-rules-count" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<result: record<catalog_price_rules_count: string>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<catalog_price_rules_count: string>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cart.catalog_price_rules.count.json" $auth.query)
@@ -1469,7 +1492,7 @@ export def "cart-catalog-price-rules-list" [
   --params: string # Set this parameter in order to choose which entity fields you want to retrieve (default: id,name,description)
   --response-fields: string # Set this parameter in order to choose which entity fields you want to retrieve
   --exclude: string # Set this parameter in order to choose which entity fields you want to ignore. Works only if parameter `params` equal force_all
-]: nothing -> record<additional_fields: record, custom_fields: record, pagination: record<additional_fields: record, custom_fields: record, next: string, previous: string>, result: record<additional_fields: record, catalog_price_rules: list<record>, catalog_price_rules_count: int, custom_fields: record>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<additional_fields: record, custom_fields: record, pagination: record<additional_fields: record, custom_fields: record, next: string, previous: string>, result: record<additional_fields: record, catalog_price_rules: list<record>, catalog_price_rules_count: int, custom_fields: record>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_cursor" $page_cursor "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "ids" $ids "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "exclude" $exclude "scalar")] | flatten | str join "&"
@@ -1505,7 +1528,7 @@ export def "cart-clear-cache" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --cache-type: string # Defines which cache should be cleared. (required)
-]: nothing -> record<result: record<cache_cleared: string>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<cache_cleared: string>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($cache_type == null) { error make --unspanned { msg: "required query parameter 'cache_type' missing: pass --cache-type" } }
@@ -1543,7 +1566,7 @@ export def "cart-config" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --params: string # Set this parameter in order to choose which entity fields you want to retrieve (default: store_name,store_url,db_prefix)
   --exclude: string # Set this parameter in order to choose which entity fields you want to ignore. Works only if parameter `params` equal force_all
-]: nothing -> record<result: record<db_prefix: string, store_name: string, store_url: string>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<db_prefix: string, store_name: string, store_url: string>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "params" $params "scalar") (serialize-qp "exclude" $exclude "scalar")] | flatten | str join "&"
@@ -1583,7 +1606,7 @@ export def "cart-config-update" [
   --custom-fields: record # This parameter sets the list of params to the shopping cart.
   --db-tables-prefix: string # This parameter is deprecated for this method. Please, use this parameter in method account.config.update
   --store-id: string # Store Id
-]: any -> record<result: record, return_code: int, return_message: string> {
+]: any -> oneof<record<result: record, return_code: int, return_message: string>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
@@ -1636,7 +1659,7 @@ export def "cart-coupon-add" [
   --store-id: string # Store Id
   --usage-limit: int # Usage limit for coupon.
   --usage-limit-per-customer: int # Usage limit per customer.
-]: any -> record<result: record<coupon_id: string>, return_code: int, return_message: string> {
+]: any -> oneof<record<result: record<coupon_id: string>, return_code: int, return_message: string>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
@@ -1680,7 +1703,7 @@ export def "cart-coupon-condition-add" [
   --key: string@key-completer # Defines condition entity attribute key (required)
   --operator: string@operator-completer # Defines condition operator (required)
   --value: string # Defines condition value, can be comma separated according to the operator. (required)
-]: nothing -> record<result: record<status: bool>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<status: bool>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($coupon_id == null) { error make --unspanned { msg: "required query parameter 'coupon_id' missing: pass --coupon-id" } }
@@ -1726,7 +1749,7 @@ export def "cart-coupon-count" [
   --date-end-from: string # Filter entity by date_end (greater or equal)
   --date-end-to: string # Filter entity by date_end (less or equal)
   --avail: oneof<nothing, bool> # Defines category's visibility status (default: true)
-]: nothing -> record<result: record<coupons_count: string>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<coupons_count: string>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "store_id" $store_id "scalar") (serialize-qp "date_start_from" $date_start_from "scalar") (serialize-qp "date_start_to" $date_start_to "scalar") (serialize-qp "date_end_from" $date_end_from "scalar") (serialize-qp "date_end_to" $date_end_to "scalar") (serialize-qp "avail" $avail "scalar")] | flatten | str join "&"
@@ -1763,7 +1786,7 @@ export def "cart-coupon-delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # Entity id (required)
   --store-id: string # Store Id
-]: nothing -> record<result: record<deleted: string>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<deleted: string>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
@@ -1813,7 +1836,7 @@ export def "cart-coupon-list" [
   --params: string # Set this parameter in order to choose which entity fields you want to retrieve (default: id,code,name,description)
   --response-fields: string # Set this parameter in order to choose which entity fields you want to retrieve
   --exclude: string # Set this parameter in order to choose which entity fields you want to ignore. Works only if parameter `params` equal force_all
-]: nothing -> record<additional_fields: record, custom_fields: record, pagination: record<additional_fields: record, custom_fields: record, next: string, previous: string>, result: record<additional_fields: record, coupon: list<record>, coupon_count: int, custom_fields: record>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<additional_fields: record, custom_fields: record, pagination: record<additional_fields: record, custom_fields: record, next: string, previous: string>, result: record<additional_fields: record, coupon: list<record>, coupon_count: int, custom_fields: record>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_cursor" $page_cursor "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "coupons_ids" $coupons_ids "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "date_start_from" $date_start_from "scalar") (serialize-qp "date_start_to" $date_start_to "scalar") (serialize-qp "date_end_from" $date_end_from "scalar") (serialize-qp "date_end_to" $date_end_to "scalar") (serialize-qp "avail" $avail "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "exclude" $exclude "scalar")] | flatten | str join "&"
@@ -1944,7 +1967,7 @@ export def "cart-create" [
   --zid-access-token: string # Zid Access Token
   --zid-authorization: string # Zid Authorization
   --zid-refresh-token: string # Zid refresh token
-]: nothing -> record<result: record<store_key: string>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<store_key: string>, return_code: int, return_message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($cart_id == null) { error make --unspanned { msg: "required query parameter 'cart_id' missing: pass --cart-id" } }
@@ -1985,7 +2008,7 @@ export def "cart-delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --delete-bridge: oneof<nothing, bool> # Identifies if there is a necessity to delete bridge (default: true)
-]: nothing -> record<result: record<store: string>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<store: string>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "delete_bridge" $delete_bridge "scalar")] | flatten | str join "&"
@@ -2023,7 +2046,7 @@ export def "cart-disconnect" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --delete-bridge: oneof<nothing, bool> # Identifies if there is a necessity to delete bridge (default: false)
-]: nothing -> record<result: record<connection: string>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<connection: string>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "delete_bridge" $delete_bridge "scalar")] | flatten | str join "&"
@@ -2062,7 +2085,7 @@ export def "cart-giftcard-add" [
   --code: string # Gift card code
   --owner-email: string # Gift card owner email
   --recipient-email: string # Gift card recipient email
-]: nothing -> record<result: record<code: string, id: string>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<code: string, id: string>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($amount == null) { error make --unspanned { msg: "required query parameter 'amount' missing: pass --amount" } }
@@ -2099,7 +2122,7 @@ export def "cart-giftcard-count" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --store-id: string # Store Id
-]: nothing -> record<result: record<gift_cards_count: string>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<gift_cards_count: string>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
@@ -2141,7 +2164,7 @@ export def "cart-giftcard-list" [
   --params: string # Set this parameter in order to choose which entity fields you want to retrieve (default: id,code,name)
   --response-fields: string # Set this parameter in order to choose which entity fields you want to retrieve
   --exclude: string # Set this parameter in order to choose which entity fields you want to ignore. Works only if parameter `params` equal force_all
-]: nothing -> record<additional_fields: record, custom_fields: record, pagination: record<additional_fields: record, custom_fields: record, next: string, previous: string>, result: record<additional_fields: record, custom_fields: record, gift_card: list<record>>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<additional_fields: record, custom_fields: record, pagination: record<additional_fields: record, custom_fields: record, next: string, previous: string>, result: record<additional_fields: record, custom_fields: record, gift_card: list<record>>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_cursor" $page_cursor "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "exclude" $exclude "scalar")] | flatten | str join "&"
@@ -2180,7 +2203,7 @@ export def "cart-info" [
   --response-fields: string # Set this parameter in order to choose which entity fields you want to retrieve
   --exclude: string # Set this parameter in order to choose which entity fields you want to ignore. Works only if parameter `params` equal force_all
   --store-id: string # Store Id
-]: nothing -> record<result: record<additional_fields: record, custom_fields: record, db_prefix: string, name: string, shipping_zones: list<record>, stores_info: list<record>, url: string, version: string, warehouses: list<record>>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<additional_fields: record, custom_fields: record, db_prefix: string, name: string, shipping_zones: list<record>, stores_info: list<record>, url: string, version: string, warehouses: list<record>>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "params" $params "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
@@ -2217,7 +2240,7 @@ export def "cart-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<result: record<supported_carts: list<record>>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<supported_carts: list<record>>, return_code: int, return_message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cart.list.json" $auth.query)
@@ -2260,7 +2283,7 @@ export def "cart-meta-data-list" [
   --params: string # Set this parameter in order to choose which entity fields you want to retrieve (default: key,value)
   --response-fields: string # Set this parameter in order to choose which entity fields you want to retrieve
   --exclude: string # Set this parameter in order to choose which entity fields you want to ignore. Works only if parameter `params` equal force_all
-]: nothing -> record<additional_fields: record, custom_fields: record, pagination: record<additional_fields: record, custom_fields: record, next: string, previous: string>, result: record<additional_fields: record, custom_fields: record, items: list<record>, total_count: int>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<additional_fields: record, custom_fields: record, pagination: record<additional_fields: record, custom_fields: record, next: string, previous: string>, result: record<additional_fields: record, custom_fields: record, items: list<record>, total_count: int>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($entity_id == null) { error make --unspanned { msg: "required query parameter 'entity_id' missing: pass --entity-id" } }
@@ -2302,7 +2325,7 @@ export def "cart-meta-data-set" [
   --key: string # Key (required)
   --value: string # Value (required)
   --namespace: string # Metafield namespace (required)
-]: nothing -> record<result: record<id: string>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<id: string>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($entity_id == null) { error make --unspanned { msg: "required query parameter 'entity_id' missing: pass --entity-id" } }
@@ -2346,7 +2369,7 @@ export def "cart-meta-data-unset" [
   --store-id: string # Store Id
   --key: string # Key (required)
   --id: string # Entity id (required)
-]: nothing -> record<result: record<status: bool>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<status: bool>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($entity_id == null) { error make --unspanned { msg: "required query parameter 'entity_id' missing: pass --entity-id" } }
@@ -2384,7 +2407,7 @@ export def "cart-methods" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<result: record<method: list<string>>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<method: list<string>>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cart.methods.json" $auth.query)
@@ -2422,7 +2445,7 @@ export def "cart-plugin-list" [
   --store-id: string # Store Id
   --start: int # This parameter sets the number from which you want to get entities (default: 0)
   --count: int # This parameter sets the entity amount that has to be retrieved. Max allowed count=250 (default: 10)
-]: nothing -> record<result: record<all_plugins: int, plugins: list<record>>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<all_plugins: int, plugins: list<record>>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "store_key" $store_key "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
@@ -2464,7 +2487,7 @@ export def "cart-script-add" [
   --load-method: string # The load method to use for the script
   --scope: string # The page or pages on the online store where the script should be included (default: storefront)
   --store-id: string # Store Id
-]: nothing -> record<result: record<script_id: string>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<script_id: string>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "html" $html "scalar") (serialize-qp "src" $src "scalar") (serialize-qp "load_method" $load_method "scalar") (serialize-qp "scope" $scope "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
@@ -2501,7 +2524,7 @@ export def "cart-script-delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # Entity id (required)
   --store-id: string # Store Id
-]: nothing -> record<result: record<deleted: bool>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<deleted: bool>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
@@ -2549,7 +2572,7 @@ export def "cart-script-list" [
   --params: string # Set this parameter in order to choose which entity fields you want to retrieve (default: id,name,description)
   --response-fields: string # Set this parameter in order to choose which entity fields you want to retrieve
   --exclude: string # Set this parameter in order to choose which entity fields you want to ignore. Works only if parameter `params` equal force_all
-]: nothing -> record<additional_fields: record, custom_fields: record, pagination: record<additional_fields: record, custom_fields: record, next: string, previous: string>, result: record<additional_fields: record, custom_fields: record, scripts: list<record>, total_count: int>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<additional_fields: record, custom_fields: record, pagination: record<additional_fields: record, custom_fields: record, next: string, previous: string>, result: record<additional_fields: record, custom_fields: record, scripts: list<record>, total_count: int>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_cursor" $page_cursor "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "created_from" $created_from "scalar") (serialize-qp "created_to" $created_to "scalar") (serialize-qp "modified_from" $modified_from "scalar") (serialize-qp "modified_to" $modified_to "scalar") (serialize-qp "script_ids" $script_ids "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "exclude" $exclude "scalar")] | flatten | str join "&"
@@ -2590,7 +2613,7 @@ export def "cart-shipping-zones-list" [
   --params: string # Set this parameter in order to choose which entity fields you want to retrieve (default: id,name,enabled)
   --response-fields: string # Set this parameter in order to choose which entity fields you want to retrieve
   --exclude: string # Set this parameter in order to choose which entity fields you want to ignore. Works only if parameter `params` equal force_all
-]: nothing -> record<result: record<additional_fields: record, code: string, country: string, country_iso2_codes: list<string>, custom_fields: record, id: string, name: string>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<additional_fields: record, code: string, country: string, country_iso2_codes: list<string>, custom_fields: record, id: string, name: string>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "store_id" $store_id "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "exclude" $exclude "scalar")] | flatten | str join "&"
@@ -2626,7 +2649,7 @@ export def "cart-validate" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --validate-version: oneof<nothing, bool> # Specify if api2cart should validate cart version (default: false)
-]: nothing -> record<result: record<status: string>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<status: string>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "validate_version" $validate_version "scalar")] | flatten | str join "&"
@@ -2675,7 +2698,7 @@ export def "category-add" [
   --meta-description: string # Defines unique meta description of a entity
   --meta-keywords: string # Defines unique meta keywords for each entity
   --seo-url: string # Defines unique category's URL for SEO
-]: nothing -> record<result: record<category_id: string>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<category_id: string>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($name == null) { error make --unspanned { msg: "required query parameter 'name' missing: pass --name" } }
@@ -2714,7 +2737,7 @@ export def "category-assign" [
   --product-id: string # Defines category assign to the product, specified by product id (required)
   --category-id: string # Defines category assign, specified by category id (required)
   --store-id: string # Store Id
-]: nothing -> record<result: record, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($product_id == null) { error make --unspanned { msg: "required query parameter 'product_id' missing: pass --product-id" } }
@@ -2759,7 +2782,7 @@ export def "category-count" [
   --modified-from: string # Retrieve entities from their modification date
   --modified-to: string # Retrieve entities to their modification date
   --avail: oneof<nothing, bool> # Defines category's visibility status (default: true)
-]: nothing -> record<result: record<categories_count: int>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<categories_count: int>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "parent_id" $parent_id "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "created_from" $created_from "scalar") (serialize-qp "created_to" $created_to "scalar") (serialize-qp "modified_from" $modified_from "scalar") (serialize-qp "modified_to" $modified_to "scalar") (serialize-qp "avail" $avail "scalar")] | flatten | str join "&"
@@ -2795,7 +2818,7 @@ export def "category-delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # Defines category removal, specified by category id (required)
-]: nothing -> record<result: record<deleted: bool>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<deleted: bool>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
@@ -2836,7 +2859,7 @@ export def "category-find" [
   --find-params: string # Entity search that is specified by comma-separated parameters (default: whole_words)
   --store-id: string # Store Id
   --lang-id: string # Language id
-]: nothing -> record<result: record<category: list<record>>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<category: list<record>>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($find_value == null) { error make --unspanned { msg: "required query parameter 'find_value' missing: pass --find-value" } }
@@ -2880,7 +2903,7 @@ export def "category-image-add" [
   --type: string@type-completer-1 # Defines image's types that are specified by comma-separated list (required)
   --position: int # Defines image’s position in the list (default: 0)
   --store-id: string # Store Id
-]: nothing -> record<result: record<image_path: string>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<image_path: string>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($category_id == null) { error make --unspanned { msg: "required query parameter 'category_id' missing: pass --category-id" } }
@@ -2922,7 +2945,7 @@ export def "category-image-delete" [
   --category-id: string # Defines category id where the image should be deleted (required)
   --image-id: string # Define image id (required)
   --store-id: string # Store Id
-]: nothing -> record<result: record<deleted: string>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<deleted: string>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($category_id == null) { error make --unspanned { msg: "required query parameter 'category_id' missing: pass --category-id" } }
@@ -2965,7 +2988,7 @@ export def "category-info" [
   --exclude: string # Set this parameter in order to choose which entity fields you want to ignore. Works only if parameter `params` equal force_all
   --store-id: string # Retrieves category info specified by store id
   --lang-id: string # Retrieves category info specified by language id
-]: nothing -> record<result: record<additional_fields: record, avail: bool, created_at: record<additional_fields: record, custom_fields: record, format: string, value: string>, custom_fields: record, description: string, id: string, images: list<record>, keywords: string, meta_description: string, meta_title: string, modified_at: record<additional_fields: record, custom_fields: record, format: string, value: string>, name: string, parent_id: string, path: string, seo_url: string, short_description: string, sort_order: int, stores_ids: list<string>>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<additional_fields: record, avail: bool, created_at: record<additional_fields: record, custom_fields: record, format: string, value: string>, custom_fields: record, description: string, id: string, images: list<record>, keywords: string, meta_description: string, meta_title: string, modified_at: record<additional_fields: record, custom_fields: record, format: string, value: string>, name: string, parent_id: string, path: string, seo_url: string, short_description: string, sort_order: int, stores_ids: list<string>>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
@@ -3015,7 +3038,7 @@ export def "category-list" [
   --modified-from: string # Retrieve entities from their modification date
   --modified-to: string # Retrieve entities to their modification date
   --avail: oneof<nothing, bool> # Defines category's visibility status (default: true)
-]: nothing -> record<additional_fields: record, custom_fields: record, pagination: record<additional_fields: record, custom_fields: record, next: string, previous: string>, result: record<additional_fields: record, categories_count: int, category: list<record>, custom_fields: record>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<additional_fields: record, custom_fields: record, pagination: record<additional_fields: record, custom_fields: record, next: string, previous: string>, result: record<additional_fields: record, categories_count: int, category: list<record>, custom_fields: record>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "page_cursor" $page_cursor "scalar") (serialize-qp "parent_id" $parent_id "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "created_from" $created_from "scalar") (serialize-qp "created_to" $created_to "scalar") (serialize-qp "modified_from" $modified_from "scalar") (serialize-qp "modified_to" $modified_to "scalar") (serialize-qp "avail" $avail "scalar")] | flatten | str join "&"
@@ -3053,7 +3076,7 @@ export def "category-unassign" [
   --category-id: string # Defines category unassign, specified by category id (required)
   --product-id: string # Defines category unassign to the product, specified by product id (required)
   --store-id: string # Store Id
-]: nothing -> record<result: record, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($category_id == null) { error make --unspanned { msg: "required query parameter 'category_id' missing: pass --category-id" } }
@@ -3104,7 +3127,7 @@ export def "category-update" [
   --seo-url: string # Defines unique category's URL for SEO
   --lang-id: string # Language id
   --store-id: string # Store Id
-]: nothing -> record<result: record<updated_items: int>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<updated_items: int>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
@@ -3130,7 +3153,6 @@ export def "category-update" [
 #
 # POST /customer.add.json
 # operationId: CustomerAdd
-# --address item shape: {address_book_address1?: string, address_book_address2?: string, address_book_city?: string, address_book_company?: string, address_book_country?: string, address_book_default?: bool, address_book_fax?: string, address_book_first_name?: string, address_book_gender?: string, address_book_last_name?: string, address_book_phone?: string, address_book_postcode?: string, address_book_region?: string, address_book_state?: string, address_book_type?: string, address_book_website?: string}
 export def "customer-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
@@ -3160,7 +3182,7 @@ export def "customer-add" [
   --status: string # Defines customer's status (default: enabled)
   --store-id: string # Store Id
   --website: string # Link to customer website
-]: any -> record<result: record<customer_id: string>, return_code: int, return_message: string> {
+]: any -> oneof<record<result: record<customer_id: string>, return_code: int, return_message: string>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
@@ -3205,7 +3227,7 @@ export def "customer-attribute-list" [
   --params: string # Set this parameter in order to choose which entity fields you want to retrieve (default: force_all)
   --exclude: string # Set this parameter in order to choose which entity fields you want to ignore. Works only if parameter `params` equal force_all
   --response-fields: string # Set this parameter in order to choose which entity fields you want to retrieve
-]: nothing -> record<additional_fields: record, custom_fields: record, pagination: record<additional_fields: record, custom_fields: record, next: string, previous: string>, result: record<additional_fields: record, custom_fields: record, items: list<record>, total_count: int>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<additional_fields: record, custom_fields: record, pagination: record<additional_fields: record, custom_fields: record, next: string, previous: string>, result: record<additional_fields: record, custom_fields: record, items: list<record>, total_count: int>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($customer_id == null) { error make --unspanned { msg: "required query parameter 'customer_id' missing: pass --customer-id" } }
@@ -3249,7 +3271,7 @@ export def "customer-count" [
   --store-id: string # Counts customer specified by store id
   --customer-list-id: string # The numeric ID of the customer list in Demandware.
   --avail: oneof<nothing, bool> # Defines category's visibility status (default: true)
-]: nothing -> record<result: record<customers_count: int>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<customers_count: int>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "group_id" $group_id "scalar") (serialize-qp "created_from" $created_from "scalar") (serialize-qp "created_to" $created_to "scalar") (serialize-qp "modified_from" $modified_from "scalar") (serialize-qp "modified_to" $modified_to "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "customer_list_id" $customer_list_id "scalar") (serialize-qp "avail" $avail "scalar")] | flatten | str join "&"
@@ -3288,7 +3310,7 @@ export def "customer-find" [
   --find-where: string # Entity search that is specified by the comma-separated unique fields (default: email)
   --find-params: string # Entity search that is specified by comma-separated parameters (default: whole_words)
   --store-id: string # Store Id
-]: nothing -> record<result: record<email: string, first_name: string, id: string, last_name: string>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<email: string, first_name: string, id: string, last_name: string>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($find_value == null) { error make --unspanned { msg: "required query parameter 'find_value' missing: pass --find-value" } }
@@ -3327,7 +3349,7 @@ export def "customer-group-add" [
   --name: string # Customer group name (required)
   --store-id: string # Store Id
   --stores-ids: string # Assign customer group to the stores that is specified by comma-separated stores' id
-]: nothing -> record<result: record, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($name == null) { error make --unspanned { msg: "required query parameter 'name' missing: pass --name" } }
@@ -3372,7 +3394,7 @@ export def "customer-group-list" [
   --params: string # Set this parameter in order to choose which entity fields you want to retrieve (default: id,name,additional_fields)
   --exclude: string # Set this parameter in order to choose which entity fields you want to ignore. Works only if parameter `params` equal force_all
   --response-fields: string # Set this parameter in order to choose which entity fields you want to retrieve
-]: nothing -> record<additional_fields: record, custom_fields: record, pagination: record<additional_fields: record, custom_fields: record, next: string, previous: string>, result: record<additional_fields: record, custom_fields: record, group: list<record>, group_count: int>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<additional_fields: record, custom_fields: record, pagination: record<additional_fields: record, custom_fields: record, next: string, previous: string>, result: record<additional_fields: record, custom_fields: record, group: list<record>, group_count: int>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_cursor" $page_cursor "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "group_ids" $group_ids "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "response_fields" $response_fields "scalar")] | flatten | str join "&"
@@ -3412,7 +3434,7 @@ export def "customer-info" [
   --response-fields: string # Set this parameter in order to choose which entity fields you want to retrieve
   --exclude: string # Set this parameter in order to choose which entity fields you want to ignore. Works only if parameter `params` equal force_all
   --store-id: string # Retrieves customer info specified by store id
-]: nothing -> record<result: record<additional_fields: record, address_book: list<record>, birth_day: record<additional_fields: record, custom_fields: record, format: string, value: string>, company: string, created_time: record<additional_fields: record, custom_fields: record, format: string, value: string>, custom_fields: record, email: string, fax: string, first_name: string, gender: string, group: list<record>, id: string, ip_address: string, last_login: record<additional_fields: record, custom_fields: record, format: string, value: string>, last_name: string, last_order_id: string, login: string, modified_time: record<additional_fields: record, custom_fields: record, format: string, value: string>, news_letter_subscription: bool, orders_count: int, phone: string, status: string, stores_ids: list<string>, website: string>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<additional_fields: record, address_book: list<record>, birth_day: record<additional_fields: record, custom_fields: record, format: string, value: string>, company: string, created_time: record<additional_fields: record, custom_fields: record, format: string, value: string>, custom_fields: record, email: string, fax: string, first_name: string, gender: string, group: list<record>, id: string, ip_address: string, last_login: record<additional_fields: record, custom_fields: record, format: string, value: string>, last_name: string, last_order_id: string, login: string, modified_time: record<additional_fields: record, custom_fields: record, format: string, value: string>, news_letter_subscription: bool, orders_count: int, phone: string, status: string, stores_ids: list<string>, website: string>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
@@ -3462,7 +3484,7 @@ export def "customer-list" [
   --store-id: string # Retrieves customers specified by store id
   --customer-list-id: string # The numeric ID of the customer list in Demandware.
   --avail: oneof<nothing, bool> # Defines category's visibility status (default: true)
-]: nothing -> record<additional_fields: record, custom_fields: record, pagination: record<additional_fields: record, custom_fields: record, next: string, previous: string>, result: record<additional_fields: record, custom_fields: record, customer: list<record>, customers_count: int>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<additional_fields: record, custom_fields: record, pagination: record<additional_fields: record, custom_fields: record, next: string, previous: string>, result: record<additional_fields: record, custom_fields: record, customer: list<record>, customers_count: int>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_cursor" $page_cursor "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "created_from" $created_from "scalar") (serialize-qp "created_to" $created_to "scalar") (serialize-qp "modified_from" $modified_from "scalar") (serialize-qp "modified_to" $modified_to "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "group_id" $group_id "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "customer_list_id" $customer_list_id "scalar") (serialize-qp "avail" $avail "scalar")] | flatten | str join "&"
@@ -3515,7 +3537,7 @@ export def "customer-update" [
   --address-book-country-x: string # ISO code or name of country
   --address-book-state-x: string # ISO code or name of state.
   --address-book-postcode-x: string # Specifies customer's postcode
-]: nothing -> record<result: record<updated: string>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<updated: string>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
@@ -3565,7 +3587,7 @@ export def "order-abandoned-list" [
   --params: string # Set this parameter in order to choose which entity fields you want to retrieve (default: customer,totals,items)
   --response-fields: string # Set this parameter in order to choose which entity fields you want to retrieve
   --exclude: string # Set this parameter in order to choose which entity fields you want to ignore. Works only if parameter `params` equal force_all
-]: nothing -> record<additional_fields: record, custom_fields: record, pagination: record<additional_fields: record, custom_fields: record, next: string, previous: string>, result: record<additional_fields: record, custom_fields: record, order: list<record>>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<additional_fields: record, custom_fields: record, pagination: record<additional_fields: record, custom_fields: record, next: string, previous: string>, result: record<additional_fields: record, custom_fields: record, order: list<record>>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "customer_id" $customer_id "scalar") (serialize-qp "customer_email" $customer_email "scalar") (serialize-qp "created_to" $created_to "scalar") (serialize-qp "created_from" $created_from "scalar") (serialize-qp "modified_to" $modified_to "scalar") (serialize-qp "modified_from" $modified_from "scalar") (serialize-qp "skip_empty_email" $skip_empty_email "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "page_cursor" $page_cursor "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "exclude" $exclude "scalar")] | flatten | str join "&"
@@ -3590,8 +3612,6 @@ export def "order-abandoned-list" [
 #
 # POST /order.add.json
 # operationId: OrderAdd
-# --note_attributes item shape: {name?: string, value?: string}
-# --order_item item shape: {order_item_allow_refund_items_separately?: bool, order_item_allow_ship_items_separately?: bool, order_item_id: string, order_item_model?: string, order_item_name: string, order_item_option?: list, order_item_parent?: int, order_item_parent_option_name?: string, order_item_price: float, order_item_price_includes_tax?: bool, order_item_property?: list, order_item_quantity: int, order_item_tax?: float, order_item_variant_id?: string, order_item_weight?: float}
 export def "order-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
@@ -3668,7 +3688,7 @@ export def "order-add" [
   --total-price: float # Defines order's total price
   --total-weight: int # Defines the sum of all line item weights in grams for the order
   --transaction-id: string # Payment transaction id
-]: any -> record<result: record<order_id: string>, return_code: int, return_message: string> {
+]: any -> oneof<record<result: record<order_id: string>, return_code: int, return_message: string>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
@@ -3722,7 +3742,7 @@ export def "order-count" [
   --shipping-method: string # Retrieve entities according to shipping method
   --delivery-method: string # Retrieves order with delivery method
   --ship-node-type: string # Retrieves order with ship node type
-]: nothing -> record<result: record<orders_count: int>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<orders_count: int>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "customer_id" $customer_id "scalar") (serialize-qp "customer_email" $customer_email "scalar") (serialize-qp "order_status" $order_status "scalar") (serialize-qp "order_status_ids" $order_status_ids "csv") (serialize-qp "created_to" $created_to "scalar") (serialize-qp "created_from" $created_from "scalar") (serialize-qp "modified_to" $modified_to "scalar") (serialize-qp "modified_from" $modified_from "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "ids" $ids "scalar") (serialize-qp "order_ids" $order_ids "scalar") (serialize-qp "ebay_order_status" $ebay_order_status "scalar") (serialize-qp "financial_status" $financial_status "scalar") (serialize-qp "fulfillment_status" $fulfillment_status "scalar") (serialize-qp "shipping_method" $shipping_method "scalar") (serialize-qp "delivery_method" $delivery_method "scalar") (serialize-qp "ship_node_type" $ship_node_type "scalar")] | flatten | str join "&"
@@ -3757,7 +3777,7 @@ export def "order-financial-status-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<result: record<order_financial_statuses: list<record>>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<order_financial_statuses: list<record>>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/order.financial_status.list.json" $auth.query)
@@ -3805,7 +3825,7 @@ export def "order-find" [
   --modified-to: string # Retrieve entities to their modification date
   --modified-from: string # Retrieve entities from their modification date
   --financial-status: string # Retrieves orders specified by financial status
-]: nothing -> record<result: record<order: list<record>>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<order: list<record>>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "customer_id" $customer_id "scalar") (serialize-qp "customer_email" $customer_email "scalar") (serialize-qp "order_status" $order_status "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "created_to" $created_to "scalar") (serialize-qp "created_from" $created_from "scalar") (serialize-qp "modified_to" $modified_to "scalar") (serialize-qp "modified_from" $modified_from "scalar") (serialize-qp "financial_status" $financial_status "scalar")] | flatten | str join "&"
@@ -3840,7 +3860,7 @@ export def "order-fulfillment-status-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<result: record<order_fulfillment_statuses: list<record>>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<order_fulfillment_statuses: list<record>>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/order.fulfillment_status.list.json" $auth.query)
@@ -3881,7 +3901,7 @@ export def "order-info" [
   --exclude: string # Set this parameter in order to choose which entity fields you want to ignore. Works only if parameter `params` equal force_all
   --store-id: string # Defines store id where the order should be found
   --enable-cache: oneof<nothing, bool> # If the value is 'true' and order exist in our cache, we will return order.info response from cache (default: false)
-]: nothing -> record<result: record<additional_fields: record, basket_id: string, billing_address: record<additional_fields: record, address1: string, address2: string, city: string, company: string, country: record, custom_fields: record, default: bool, fax: string, first_name: string, gender: string, id: string, last_name: string, phone: string, postcode: string, region: string, state: record, type: string, website: string>, bundles: list<record>, channel_id: string, comment: string, create_at: record<additional_fields: record, custom_fields: record, format: string, value: string>, currency: record<additional_fields: record, avail: bool, custom_fields: record, default: bool, id: string, iso3: string, name: string, rate: float, symbol_left: string, symbol_right: string>, custom_fields: record, customer: record<additional_fields: record, custom_fields: record, email: string, first_name: string, id: string, last_name: string, phone: string>, discounts: list<record>, finished_time: record<additional_fields: record, custom_fields: record, format: string, value: string>, gift_message: string, id: string, modified_at: record<additional_fields: record, custom_fields: record, format: string, value: string>, order_details_url: string, order_id: string, order_products: list<record>, payment_method: record<additional_fields: record, custom_fields: record, name: string>, refunds: list<record>, shipping_address: record<additional_fields: record, address1: string, address2: string, city: string, company: string, country: record, custom_fields: record, default: bool, fax: string, first_name: string, gender: string, id: string, last_name: string, phone: string, postcode: string, region: string, state: record, type: string, website: string>, shipping_method: record<additional_fields: record, custom_fields: record, name: string>, shipping_methods: list<record>, status: record<additional_fields: record, custom_fields: record, history: list, id: string, name: string, refund_info: record>, store_id: string, total: record<additional_fields: record, custom_fields: record, shipping_ex_tax: float, subtotal_ex_tax: float, total: float, total_discount: float, total_paid: float, total_tax: float, wrapping_ex_tax: float>, totals: record<additional_fields: record, custom_fields: record, discount: float, shipping: float, subtotal: float, tax: float, total: float>, warehouses_ids: list<string>>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<additional_fields: record, basket_id: string, billing_address: record<additional_fields: record, address1: string, address2: string, city: string, company: string, country: record, custom_fields: record, default: bool, fax: string, first_name: string, gender: string, id: string, last_name: string, phone: string, postcode: string, region: string, state: record, type: string, website: string>, bundles: list<record>, channel_id: string, comment: string, create_at: record<additional_fields: record, custom_fields: record, format: string, value: string>, currency: record<additional_fields: record, avail: bool, custom_fields: record, default: bool, id: string, iso3: string, name: string, rate: float, symbol_left: string, symbol_right: string>, custom_fields: record, customer: record<additional_fields: record, custom_fields: record, email: string, first_name: string, id: string, last_name: string, phone: string>, discounts: list<record>, finished_time: record<additional_fields: record, custom_fields: record, format: string, value: string>, gift_message: string, id: string, modified_at: record<additional_fields: record, custom_fields: record, format: string, value: string>, order_details_url: string, order_id: string, order_products: list<record>, payment_method: record<additional_fields: record, custom_fields: record, name: string>, refunds: list<record>, shipping_address: record<additional_fields: record, address1: string, address2: string, city: string, company: string, country: record, custom_fields: record, default: bool, fax: string, first_name: string, gender: string, id: string, last_name: string, phone: string, postcode: string, region: string, state: record, type: string, website: string>, shipping_method: record<additional_fields: record, custom_fields: record, name: string>, shipping_methods: list<record>, status: record<additional_fields: record, custom_fields: record, history: list, id: string, name: string, refund_info: record>, store_id: string, total: record<additional_fields: record, custom_fields: record, shipping_ex_tax: float, subtotal_ex_tax: float, total: float, total_discount: float, total_paid: float, total_tax: float, wrapping_ex_tax: float>, totals: record<additional_fields: record, custom_fields: record, discount: float, shipping: float, subtotal: float, tax: float, total: float>, warehouses_ids: list<string>>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "order_id" $order_id "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "enable_cache" $enable_cache "scalar")] | flatten | str join "&"
@@ -3949,7 +3969,7 @@ export def "order-list" [
   --delivery-method: string # Retrieves order with delivery method
   --ship-node-type: string # Retrieves order with ship node type
   --currency-id: string # Currency Id
-]: nothing -> record<additional_fields: record, custom_fields: record, pagination: record<additional_fields: record, custom_fields: record, next: string, previous: string>, result: record<additional_fields: record, custom_fields: record, order: list<record>, orders_count: int>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<additional_fields: record, custom_fields: record, pagination: record<additional_fields: record, custom_fields: record, next: string, previous: string>, result: record<additional_fields: record, custom_fields: record, order: list<record>, orders_count: int>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "customer_id" $customer_id "scalar") (serialize-qp "customer_email" $customer_email "scalar") (serialize-qp "phone" $phone "scalar") (serialize-qp "order_status" $order_status "scalar") (serialize-qp "order_status_ids" $order_status_ids "csv") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "page_cursor" $page_cursor "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "created_to" $created_to "scalar") (serialize-qp "created_from" $created_from "scalar") (serialize-qp "modified_to" $modified_to "scalar") (serialize-qp "modified_from" $modified_from "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "ids" $ids "scalar") (serialize-qp "order_ids" $order_ids "scalar") (serialize-qp "ebay_order_status" $ebay_order_status "scalar") (serialize-qp "basket_id" $basket_id "scalar") (serialize-qp "financial_status" $financial_status "scalar") (serialize-qp "fulfillment_status" $fulfillment_status "scalar") (serialize-qp "shipping_method" $shipping_method "scalar") (serialize-qp "skip_order_ids" $skip_order_ids "scalar") (serialize-qp "since_id" $since_id "scalar") (serialize-qp "is_deleted" $is_deleted "scalar") (serialize-qp "shipping_country_iso3" $shipping_country_iso3 "scalar") (serialize-qp "enable_cache" $enable_cache "scalar") (serialize-qp "delivery_method" $delivery_method "scalar") (serialize-qp "ship_node_type" $ship_node_type "scalar") (serialize-qp "currency_id" $currency_id "scalar")] | flatten | str join "&"
@@ -3974,7 +3994,6 @@ export def "order-list" [
 #
 # POST /order.preestimate_shipping.list.json
 # operationId: OrderPreestimateShippingList
-# --order_item item shape: {order_item_id: string, order_item_model?: string, order_item_option?: list, order_item_quantity: int, order_item_variant_id?: string, order_item_weight?: float}
 export def "order-preestimate-shipping-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
@@ -3997,7 +4016,7 @@ export def "order-preestimate-shipping-list" [
   --shipp-state: string # Specifies shipping state code
   --store-id: string # Store Id
   --warehouse-id: string # This parameter is used for selecting a warehouse where you need to set/modify a product quantity.
-]: any -> record<additional_fields: record, custom_fields: record, pagination: record<additional_fields: record, custom_fields: record, next: string, previous: string>, result: record<additional_fields: record, custom_fields: record, preestimate_shippings: list<record>, preestimate_shippings_count: int>, return_code: int, return_message: string> {
+]: any -> oneof<record<additional_fields: record, custom_fields: record, pagination: record<additional_fields: record, custom_fields: record, next: string, previous: string>, result: record<additional_fields: record, custom_fields: record, preestimate_shippings: list<record>, preestimate_shippings_count: int>, return_code: int, return_message: string>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
@@ -4024,7 +4043,6 @@ export def "order-preestimate-shipping-list" [
 #
 # POST /order.refund.add.json
 # operationId: OrderRefundAdd
-# --items item shape: {order_product_id?: string, price?: float, quantity?: int}
 export def "order-refund-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
@@ -4045,7 +4063,7 @@ export def "order-refund-add" [
   --send-notifications: oneof<nothing, bool> # Send notifications to customer after refund was created (default: false)
   --shipping-price: float # Defines refund shipping amount.
   --total-price: float # Defines order refund amount.
-]: any -> record<result: record<refund_id: string>, return_code: int, return_message: string> {
+]: any -> oneof<record<result: record<refund_id: string>, return_code: int, return_message: string>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
@@ -4072,8 +4090,6 @@ export def "order-refund-add" [
 #
 # POST /order.shipment.add.json
 # operationId: OrderShipmentAdd
-# --items item shape: {order_product_id?: string, quantity?: float}
-# --tracking_numbers item shape: {carrier_id?: string, tracking_number?: string}
 export def "order-shipment-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
@@ -4096,7 +4112,7 @@ export def "order-shipment-add" [
   --tracking-link: string # Defines custom tracking link
   --tracking-numbers: list # Defines shipment's tracking numbers that have to be added How set tracking numbers to appropriate carrier:tracking_numbers[]=a2c.demo1,a2c.demo2 - set default carriertracking_numbers[carrier_id]=a2c.demo - set appropriate carrierTo get the list of carriers IDs that are available in your store, use the cart.info method — item shape: {carrier_id?: string, tracking_number?: string}
   --warehouse-id: string # This parameter is used for selecting a warehouse where you need to set/modify a product quantity.
-]: any -> record<result: record<shipment_id: string>, return_code: int, return_message: string> {
+]: any -> oneof<record<result: record<shipment_id: string>, return_code: int, return_message: string>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
@@ -4136,7 +4152,7 @@ export def "order-shipment-delete" [
   --shipment-id: string # Shipment id indicates the number of delivery (required)
   --order-id: string # Defines the order for which the shipment will be deleted (required)
   --store-id: string # Store Id
-]: nothing -> record<result: record<status: int>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<status: int>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($shipment_id == null) { error make --unspanned { msg: "required query parameter 'shipment_id' missing: pass --shipment-id" } }
@@ -4180,7 +4196,7 @@ export def "order-shipment-info" [
   --response-fields: string # Set this parameter in order to choose which entity fields you want to retrieve
   --exclude: string # Set this parameter in order to choose which entity fields you want to ignore. Works only if parameter `params` equal force_all
   --store-id: string # Store Id
-]: nothing -> record<additional_fields: record, custom_fields: record, pagination: record<additional_fields: record, custom_fields: record, next: string, previous: string>, result: record<additional_fields: record, custom_fields: record, shipment: list<record>, shipment_count: int>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<additional_fields: record, custom_fields: record, pagination: record<additional_fields: record, custom_fields: record, next: string, previous: string>, result: record<additional_fields: record, custom_fields: record, shipment: list<record>, shipment_count: int>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
@@ -4229,7 +4245,7 @@ export def "order-shipment-list" [
   --modified-from: string # Retrieve entities from their modification date
   --modified-to: string # Retrieve entities to their modification date
   --store-id: string # Store Id
-]: nothing -> record<additional_fields: record, custom_fields: record, pagination: record<additional_fields: record, custom_fields: record, next: string, previous: string>, result: record<additional_fields: record, custom_fields: record, shipment: list<record>, shipment_count: int>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<additional_fields: record, custom_fields: record, pagination: record<additional_fields: record, custom_fields: record, next: string, previous: string>, result: record<additional_fields: record, custom_fields: record, shipment: list<record>, shipment_count: int>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($order_id == null) { error make --unspanned { msg: "required query parameter 'order_id' missing: pass --order-id" } }
@@ -4273,7 +4289,7 @@ export def "order-shipment-tracking-add" [
   --tracking-link: string # Defines custom tracking link
   tracking_number: string # Defines tracking number
   --tracking-provider: string # Defines name of the company which provides shipment tracking
-]: any -> record<result: record<tracking_id: string>, return_code: int, return_message: string> {
+]: any -> oneof<record<result: record<tracking_id: string>, return_code: int, return_message: string>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
@@ -4300,7 +4316,6 @@ export def "order-shipment-tracking-add" [
 #
 # PUT /order.shipment.update.json
 # operationId: OrderShipmentUpdate
-# --tracking_numbers item shape: {carrier_id?: string, tracking_number?: string}
 export def "order-shipment-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
@@ -4318,7 +4333,7 @@ export def "order-shipment-update" [
   --store-id: string # Store Id
   --tracking-link: string # Defines custom tracking link
   --tracking-numbers: list # Defines shipment's tracking numbers that have to be added How set tracking numbers to appropriate carrier:tracking_numbers[]=a2c.demo1,a2c.demo2 - set default carriertracking_numbers[carrier_id]=a2c.demo - set appropriate carrierTo get the list of carriers IDs that are available in your store, use the cart.info method — item shape: {carrier_id?: string, tracking_number?: string}
-]: any -> record<result: record<updated_items: int>, return_code: int, return_message: string> {
+]: any -> oneof<record<result: record<updated_items: int>, return_code: int, return_message: string>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
@@ -4356,7 +4371,7 @@ export def "order-status-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --store-id: string # Store Id
-]: nothing -> record<result: record<cart_order_statuses: list<record>>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<cart_order_statuses: list<record>>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
@@ -4398,7 +4413,7 @@ export def "order-transaction-list" [
   --response-fields: string # Set this parameter in order to choose which entity fields you want to retrieve
   --exclude: string # Set this parameter in order to choose which entity fields you want to ignore. Works only if parameter `params` equal force_all
   --page-cursor: string # Used to retrieve entities via cursor-based pagination (it can't be used with any other filtering parameter)
-]: nothing -> record<additional_fields: record, custom_fields: record, pagination: record<additional_fields: record, custom_fields: record, next: string, previous: string>, result: record<additional_fields: record, custom_fields: record, transactions: list<record>, transactions_count: int>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<additional_fields: record, custom_fields: record, pagination: record<additional_fields: record, custom_fields: record, next: string, previous: string>, result: record<additional_fields: record, custom_fields: record, transactions: list<record>, transactions_count: int>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($order_ids == null) { error make --unspanned { msg: "required query parameter 'order_ids' missing: pass --order-ids" } }
@@ -4446,7 +4461,7 @@ export def "order-update" [
   --fulfillment-status: string # Create order with fulfillment status
   --order-payment-method: string # Defines order payment method.Setting order_payment_method on Shopify will also change financial_status field value to 'paid'
   --send-notifications: oneof<nothing, bool> # Send notifications to customer after order was created (default: false)
-]: nothing -> record<result: record<updated_items: int>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<updated_items: int>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($order_id == null) { error make --unspanned { msg: "required query parameter 'order_id' missing: pass --order-id" } }
@@ -4472,11 +4487,6 @@ export def "order-update" [
 #
 # POST /product.add.json
 # operationId: ProductAdd
-# --files item shape: {name: string, url: string}
-# --group_prices item shape: {group_id?: string, price?: float}
-# --seller_profiles shape: {payment_profile_id?: string, return_profile_id?: string, shipping_profile_id?: string}
-# --shipping_details item shape: {shipping_cost?: float, shipping_service?: string, shipping_type?: string}
-# --tier_prices item shape: {price?: float, quantity?: float}
 export def "product-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
@@ -4566,7 +4576,7 @@ export def "product-add" [
   --weight-unit: string # Weight Unit
   --wholesale-price: float # Defines product's sale price
   --width: float # Defines product's width
-]: any -> record<result: record<product_id: string>, return_code: int, return_message: string> {
+]: any -> oneof<record<result: record<product_id: string>, return_code: int, return_message: string>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
@@ -4618,7 +4628,7 @@ export def "product-attribute-list" [
   --params: string # Set this parameter in order to choose which entity fields you want to retrieve (default: attribute_id,name)
   --response-fields: string # Set this parameter in order to choose which entity fields you want to retrieve
   --exclude: string # Set this parameter in order to choose which entity fields you want to ignore. Works only if parameter `params` equal force_all
-]: nothing -> record<additional_fields: record, custom_fields: record, pagination: record<additional_fields: record, custom_fields: record, next: string, previous: string>, result: record<additional_fields: record, attribute: list<record>, custom_fields: record>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<additional_fields: record, custom_fields: record, pagination: record<additional_fields: record, custom_fields: record, next: string, previous: string>, result: record<additional_fields: record, attribute: list<record>, custom_fields: record>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($product_id == null) { error make --unspanned { msg: "required query parameter 'product_id' missing: pass --product-id" } }
@@ -4662,7 +4672,7 @@ export def "product-attribute-value-set" [
   --value-id: int # Define attribute value id
   --lang-id: string # Language id
   --store-id: string # Store Id
-]: nothing -> record<result: record<attribute_id: string, product_id: string, value_id: string>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<attribute_id: string, product_id: string, value_id: string>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($product_id == null) { error make --unspanned { msg: "required query parameter 'product_id' missing: pass --product-id" } }
@@ -4704,7 +4714,7 @@ export def "product-attribute-value-unset" [
   --include-default: oneof<nothing, bool> # Boolean, whether or not to unset default value of the attribute, if applicable (default: false)
   --reindex: oneof<nothing, bool> # Is reindex required (default: true)
   --clear-cache: oneof<nothing, bool> # Is cache clear required (default: true)
-]: nothing -> record<result: record<success: string>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<success: string>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($product_id == null) { error make --unspanned { msg: "required query parameter 'product_id' missing: pass --product-id" } }
@@ -4753,7 +4763,7 @@ export def "product-brand-list" [
   --modified-from: string # Retrieve entities from their modification date
   --modified-to: string # Retrieve entities to their modification date
   --response-fields: string # Set this parameter in order to choose which entity fields you want to retrieve
-]: nothing -> record<result: record<product: list<record>>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<product: list<record>>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "brand_ids" $brand_ids "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "created_from" $created_from "scalar") (serialize-qp "created_to" $created_to "scalar") (serialize-qp "modified_from" $modified_from "scalar") (serialize-qp "modified_to" $modified_to "scalar") (serialize-qp "response_fields" $response_fields "scalar")] | flatten | str join "&"
@@ -4792,7 +4802,7 @@ export def "product-child-item-find" [
   --find-where: string # Entity search that is specified by the comma-separated unique fields (default: name)
   --find-params: string # Entity search that is specified by comma-separated parameters (default: whole_words)
   --store-id: string # Store Id
-]: nothing -> record<result: record<children: list<record>>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<children: list<record>>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($find_value == null) { error make --unspanned { msg: "required query parameter 'find_value' missing: pass --find-value" } }
@@ -4836,7 +4846,7 @@ export def "product-child-item-info" [
   --store-id: string # Store Id
   --lang-id: string # Language id
   --currency-id: string # Currency Id
-]: nothing -> record<result: record<additional_fields: record, advanced_price: list<record>, allow_backorders: bool, avail_for_sale: bool, combination: list<record>, cost_price: float, created_time: record<additional_fields: record, custom_fields: record, format: string, value: string>, custom_fields: record, default_price: float, default_qty_in_pack: float, dimensions_unit: string, ean: string, full_description: string, gtin: string, height: float, id: string, images: list<record>, in_stock: bool, inventory: list<record>, inventory_level: float, is_qty_in_pack_fixed: bool, isbn: string, length: float, list_price: float, manage_stock: bool, meta_description: string, meta_keywords: string, meta_title: string, min_quantity: float, modified_time: record<additional_fields: record, custom_fields: record, format: string, value: string>, mpn: string, name: string, parent_id: string, short_description: string, sku: string, sort_order: int, tax_class_id: string, upc: string, weight: float, weight_unit: string, wholesale_price: float, width: float>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<additional_fields: record, advanced_price: list<record>, allow_backorders: bool, avail_for_sale: bool, combination: list<record>, cost_price: float, created_time: record<additional_fields: record, custom_fields: record, format: string, value: string>, custom_fields: record, default_price: float, default_qty_in_pack: float, dimensions_unit: string, ean: string, full_description: string, gtin: string, height: float, id: string, images: list<record>, in_stock: bool, inventory: list<record>, inventory_level: float, is_qty_in_pack_fixed: bool, isbn: string, length: float, list_price: float, manage_stock: bool, meta_description: string, meta_keywords: string, meta_title: string, min_quantity: float, modified_time: record<additional_fields: record, custom_fields: record, format: string, value: string>, mpn: string, name: string, parent_id: string, short_description: string, sku: string, sort_order: int, tax_class_id: string, upc: string, weight: float, weight_unit: string, wholesale_price: float, width: float>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($product_id == null) { error make --unspanned { msg: "required query parameter 'product_id' missing: pass --product-id" } }
@@ -4891,7 +4901,7 @@ export def "product-child-item-list" [
   --avail-sale: oneof<nothing, bool> # Specifies the set of available/not available products for sale
   --report-request-id: string # Report request id
   --disable-report-cache: oneof<nothing, bool> # Disable report cache for current request (default: false)
-]: nothing -> record<additional_fields: record, custom_fields: record, pagination: record<additional_fields: record, custom_fields: record, next: string, previous: string>, result: record<additional_fields: record, children: list<record>, custom_fields: record, total_count: int>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<additional_fields: record, custom_fields: record, pagination: record<additional_fields: record, custom_fields: record, next: string, previous: string>, result: record<additional_fields: record, children: list<record>, custom_fields: record, total_count: int>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_cursor" $page_cursor "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "created_from" $created_from "scalar") (serialize-qp "created_to" $created_to "scalar") (serialize-qp "modified_from" $modified_from "scalar") (serialize-qp "modified_to" $modified_to "scalar") (serialize-qp "product_id" $product_id "scalar") (serialize-qp "product_ids" $product_ids "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "currency_id" $currency_id "scalar") (serialize-qp "avail_sale" $avail_sale "scalar") (serialize-qp "report_request_id" $report_request_id "scalar") (serialize-qp "disable_report_cache" $disable_report_cache "scalar")] | flatten | str join "&"
@@ -4942,7 +4952,7 @@ export def "product-count" [
   --product-attributes: list<string> # Defines product attributes
   --status: string # Defines product's status
   --type: string # Defines products's type
-]: nothing -> record<result: record<products_count: int>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<products_count: int>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "category_id" $category_id "scalar") (serialize-qp "created_from" $created_from "scalar") (serialize-qp "created_to" $created_to "scalar") (serialize-qp "modified_from" $modified_from "scalar") (serialize-qp "modified_to" $modified_to "scalar") (serialize-qp "avail_view" $avail_view "scalar") (serialize-qp "avail_sale" $avail_sale "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "product_ids" $product_ids "scalar") (serialize-qp "report_request_id" $report_request_id "scalar") (serialize-qp "disable_report_cache" $disable_report_cache "scalar") (serialize-qp "brand_name" $brand_name "scalar") (serialize-qp "product_attributes" $product_attributes "csv") (serialize-qp "status" $status "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
@@ -4984,7 +4994,7 @@ export def "product-currency-add" [
   --symbol-left: string # Defines the symbol that is located before the currency
   --symbol-right: string # Defines the symbol that is located after the currency
   --default: oneof<nothing, bool> # Specifies currency's default meaning (default: false)
-]: nothing -> record<result: record<currency_id: string>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<currency_id: string>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($iso3 == null) { error make --unspanned { msg: "required query parameter 'iso3' missing: pass --iso3" } }
@@ -5029,7 +5039,7 @@ export def "product-currency-list" [
   --response-fields: string # Set this parameter in order to choose which entity fields you want to retrieve
   --default: oneof<nothing, bool> # Specifies the set of default/not default currencies
   --avail: oneof<nothing, bool> # Specifies the set of available/not available currencies
-]: nothing -> record<result: record<currency: list<record>>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<currency: list<record>>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "page_cursor" $page_cursor "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "default" $default "scalar") (serialize-qp "avail" $avail "scalar")] | flatten | str join "&"
@@ -5065,7 +5075,7 @@ export def "product-delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # Product id that will be removed (required)
-]: nothing -> record<result: record<delete_items: int>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<delete_items: int>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
@@ -5101,7 +5111,7 @@ export def "product-fields" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<result: record, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/product.fields.json" $auth.query)
@@ -5141,7 +5151,7 @@ export def "product-find" [
   --find-what: string # Parameter's value specifies the entity that has to be found (default: product)
   --lang-id: string # Search products specified by language id
   --store-id: string # Store Id
-]: nothing -> record<result: record<product: list<record>>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<product: list<record>>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($find_value == null) { error make --unspanned { msg: "required query parameter 'find_value' missing: pass --find-value" } }
@@ -5189,7 +5199,7 @@ export def "product-image-add" [
   type: string@type-completer-2 # Defines image's types that are specified by comma-separated list
   --url: string # Defines URL of the image that has to be added
   --variant-ids: string # Defines product's variants ids
-]: any -> record<result: record<id: string, image_path: string>, return_code: int, return_message: string> {
+]: any -> oneof<record<result: record<id: string, image_path: string>, return_code: int, return_message: string>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
@@ -5229,7 +5239,7 @@ export def "product-image-delete" [
   --product-id: string # Defines product id where the image should be deleted (required)
   --id: string # Entity id (required)
   --store-id: string # Store Id
-]: nothing -> record<result: record<deleted: string>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<deleted: string>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($product_id == null) { error make --unspanned { msg: "required query parameter 'product_id' missing: pass --product-id" } }
@@ -5275,7 +5285,7 @@ export def "product-image-update" [
   --store-id: string # Store Id
   --lang-id: string # Language id
   --hidden: oneof<nothing, bool> # Define is hide image
-]: nothing -> record<result: record<updated: string>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<updated: string>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($product_id == null) { error make --unspanned { msg: "required query parameter 'product_id' missing: pass --product-id" } }
@@ -5321,7 +5331,7 @@ export def "product-info" [
   --currency-id: string # Currency Id
   --report-request-id: string # Report request id
   --disable-report-cache: oneof<nothing, bool> # Disable report cache for current request (default: false)
-]: nothing -> record<result: record<additional_fields: record, advanced_price: list<record>, avail_sale: bool, avail_view: bool, backorders: string, categories_ids: list<string>, cost_price: float, create_at: record<additional_fields: record, custom_fields: record, format: string, value: string>, custom_fields: record, description: string, dimensions_unit: string, group_items: list<record>, group_price: list<record>, height: float, id: string, images: list<record>, inventory: list<record>, is_downloadable: bool, is_stock_managed: bool, is_virtual: bool, length: float, manage_stock: string, meta_description: string, meta_keywords: string, meta_title: string, modified_at: record<additional_fields: record, custom_fields: record, format: string, value: string>, name: string, price: float, product_options: list<record>, quantity: float, related_products_ids: list<string>, seo_url: string, short_description: string, sort_order: int, special_price: record<additional_fields: record, avail: bool, created_at: record, custom_fields: record, expired_at: record, modified_at: record, value: float>, stores_ids: list<string>, tax_class_id: string, tier_price: list<record>, type: string, u_brand: string, u_brand_id: string, u_model: string, u_mpn: string, u_sku: string, u_upc: string, url: string, weight: float, weight_unit: string, width: float>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<additional_fields: record, advanced_price: list<record>, avail_sale: bool, avail_view: bool, backorders: string, categories_ids: list<string>, cost_price: float, create_at: record<additional_fields: record, custom_fields: record, format: string, value: string>, custom_fields: record, description: string, dimensions_unit: string, group_items: list<record>, group_price: list<record>, height: float, id: string, images: list<record>, inventory: list<record>, is_downloadable: bool, is_stock_managed: bool, is_virtual: bool, length: float, manage_stock: string, meta_description: string, meta_keywords: string, meta_title: string, modified_at: record<additional_fields: record, custom_fields: record, format: string, value: string>, name: string, price: float, product_options: list<record>, quantity: float, related_products_ids: list<string>, seo_url: string, short_description: string, sort_order: int, special_price: record<additional_fields: record, avail: bool, created_at: record, custom_fields: record, expired_at: record, modified_at: record, value: float>, stores_ids: list<string>, tax_class_id: string, tier_price: list<record>, type: string, u_brand: string, u_brand_id: string, u_model: string, u_mpn: string, u_sku: string, u_upc: string, url: string, weight: float, weight_unit: string, width: float>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
@@ -5385,7 +5395,7 @@ export def "product-list" [
   --product-attributes: list<string> # Defines product attributes
   --status: string # Defines product's status
   --type: string # Defines products's type
-]: nothing -> record<additional_fields: record, custom_fields: record, pagination: record<additional_fields: record, custom_fields: record, next: string, previous: string>, result: record<additional_fields: record, custom_fields: record, product: list<record>, products_count: int>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<additional_fields: record, custom_fields: record, pagination: record<additional_fields: record, custom_fields: record, next: string, previous: string>, result: record<additional_fields: record, custom_fields: record, product: list<record>, products_count: int>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_cursor" $page_cursor "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "category_id" $category_id "scalar") (serialize-qp "created_from" $created_from "scalar") (serialize-qp "created_to" $created_to "scalar") (serialize-qp "modified_from" $modified_from "scalar") (serialize-qp "modified_to" $modified_to "scalar") (serialize-qp "avail_view" $avail_view "scalar") (serialize-qp "avail_sale" $avail_sale "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "currency_id" $currency_id "scalar") (serialize-qp "product_ids" $product_ids "scalar") (serialize-qp "since_id" $since_id "scalar") (serialize-qp "report_request_id" $report_request_id "scalar") (serialize-qp "disable_report_cache" $disable_report_cache "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "sku" $sku "scalar") (serialize-qp "disable_cache" $disable_cache "scalar") (serialize-qp "brand_name" $brand_name "scalar") (serialize-qp "product_attributes" $product_attributes "csv") (serialize-qp "status" $status "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
@@ -5422,7 +5432,7 @@ export def "product-manufacturer-add" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --product-id: string # Defines products specified by product id (required)
   --manufacturer: string # Defines product’s manufacturer's name (required)
-]: nothing -> record<result: record<manufacturer_id: string>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<manufacturer_id: string>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($product_id == null) { error make --unspanned { msg: "required query parameter 'product_id' missing: pass --product-id" } }
@@ -5469,7 +5479,7 @@ export def "product-option-add" [
   --sort-order: int # Sort number in the list (default: 0)
   --required: oneof<nothing, bool> # Defines if the option is required (default: false)
   --clear-cache: oneof<nothing, bool> # Is cache clear required (default: true)
-]: nothing -> record<result: record<option_id: string, product_option_id: string>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<option_id: string, product_option_id: string>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($name == null) { error make --unspanned { msg: "required query parameter 'name' missing: pass --name" } }
@@ -5512,7 +5522,7 @@ export def "product-option-assign" [
   --sort-order: int # Sort number in the list (default: 0)
   --option-values: string # Defines option values that has to be assigned
   --clear-cache: oneof<nothing, bool> # Is cache clear required (default: true)
-]: nothing -> record<result: record<product_option_id: string>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<product_option_id: string>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($product_id == null) { error make --unspanned { msg: "required query parameter 'product_id' missing: pass --product-id" } }
@@ -5557,7 +5567,7 @@ export def "product-option-list" [
   --product-id: string # Retrieves products' options specified by product id
   --lang-id: string # Language id
   --store-id: string # Store Id
-]: nothing -> record<result: record<option: list<record>>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<option: list<record>>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "product_id" $product_id "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
@@ -5597,7 +5607,7 @@ export def "product-option-value-add" [
   --option-value: string # Defines option value that has to be added (required)
   --sort-order: int # Sort number in the list (default: 0)
   --clear-cache: oneof<nothing, bool> # Is cache clear required (default: true)
-]: nothing -> record<result: record<option_value_id: string>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<option_value_id: string>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($product_id == null) { error make --unspanned { msg: "required query parameter 'product_id' missing: pass --product-id" } }
@@ -5638,7 +5648,7 @@ export def "product-option-value-assign" [
   --product-option-id: int # Defines product's option id where the value has to be assigned (required)
   --option-value-id: int # Defines value id that has to be assigned (required)
   --clear-cache: oneof<nothing, bool> # Is cache clear required (default: true)
-]: nothing -> record<result: record<product_option_value_id: string>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<product_option_value_id: string>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($product_option_id == null) { error make --unspanned { msg: "required query parameter 'product_option_id' missing: pass --product-option-id" } }
@@ -5682,7 +5692,7 @@ export def "product-option-value-update" [
   --price: float # Defines new product option price
   --quantity: float # Defines new products' options quantity
   --clear-cache: oneof<nothing, bool> # Is cache clear required (default: true)
-]: nothing -> record<result: record<updated_items: int>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<updated_items: int>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($product_id == null) { error make --unspanned { msg: "required query parameter 'product_id' missing: pass --product-id" } }
@@ -5711,7 +5721,6 @@ export def "product-option-value-update" [
 #
 # POST /product.price.add.json
 # operationId: ProductPriceAdd
-# --group_prices item shape: {group_id?: string, price?: float}
 export def "product-price-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
@@ -5724,7 +5733,7 @@ export def "product-price-add" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --group-prices: list # Defines product's group prices — item shape: {group_id?: string, price?: float}
   --product-id: string # Defines the product to which the price has to be added
-]: any -> record<result: record<status: string>, return_code: int, return_message: string> {
+]: any -> oneof<record<result: record<status: string>, return_code: int, return_message: string>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
@@ -5763,7 +5772,7 @@ export def "product-price-delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --product-id: string # Defines the product where the price has to be deleted (required)
   --group-prices: string # Defines product's group prices
-]: nothing -> record<result: record<deleted: string>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<deleted: string>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($product_id == null) { error make --unspanned { msg: "required query parameter 'product_id' missing: pass --product-id" } }
@@ -5789,7 +5798,6 @@ export def "product-price-delete" [
 #
 # PUT /product.price.update.json
 # operationId: ProductPriceUpdate
-# --group_prices item shape: {group_id?: string, id?: int, price?: float}
 export def "product-price-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
@@ -5802,7 +5810,7 @@ export def "product-price-update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --group-prices: list # Defines product's group prices — item shape: {group_id?: string, id?: int, price?: float}
   --product-id: string # Defines the product where the price has to be updated
-]: any -> record<result: record<updated_items: int>, return_code: int, return_message: string> {
+]: any -> oneof<record<result: record<updated_items: int>, return_code: int, return_message: string>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
@@ -5849,7 +5857,7 @@ export def "product-review-list" [
   --params: string # Set this parameter in order to choose which entity fields you want to retrieve (default: id,customer_id,email,message,status,product_id,nick_name,summary,rating,ratings,status,created_time)
   --exclude: string # Set this parameter in order to choose which entity fields you want to ignore. Works only if parameter `params` equal force_all
   --response-fields: string # Set this parameter in order to choose which entity fields you want to retrieve
-]: nothing -> record<result: record<reviews: list<record>, total_count: int>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<reviews: list<record>, total_count: int>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($product_id == null) { error make --unspanned { msg: "required query parameter 'product_id' missing: pass --product-id" } }
@@ -5887,7 +5895,7 @@ export def "product-store-assign" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --product-id: string # Defines id of the product which should be assigned to a store (required)
   --store-id: string # Defines id of the store product should be assigned to (required)
-]: nothing -> record<result: record<updated_items: int>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<updated_items: int>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($product_id == null) { error make --unspanned { msg: "required query parameter 'product_id' missing: pass --product-id" } }
@@ -5914,7 +5922,6 @@ export def "product-store-assign" [
 #
 # POST /product.tax.add.json
 # operationId: ProductTaxAdd
-# --tax_rates item shape: {name?: string, type?: string, value?: float}
 export def "product-tax-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
@@ -5928,7 +5935,7 @@ export def "product-tax-add" [
   name: string # Defines tax class name where tax has to be added
   --product-id: string # Defines products specified by product id
   tax_rates: list # Defines tax rates of specified tax classes — item shape: {name?: string, type?: string, value?: float}
-]: any -> record<result: record<tax_class_id: string>, return_code: int, return_message: string> {
+]: any -> oneof<record<result: record<tax_class_id: string>, return_code: int, return_message: string>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
@@ -6013,7 +6020,7 @@ export def "product-update" [
   --country-of-origin: string # The country where the inventory item was made
   --search-keywords: string # Defines unique search keywords
   --barcode: string # A barcode is a unique code composed of numbers used as a product identifier.
-]: nothing -> record<result: record<updated_items: int>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<updated_items: int>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
@@ -6039,7 +6046,6 @@ export def "product-update" [
 #
 # POST /product.variant.add.json
 # operationId: ProductVariantAdd
-# --attributes item shape: {attribute_name?: string, attribute_price?: float, attribute_value?: string}
 export def "product-variant-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
@@ -6087,7 +6093,7 @@ export def "product-variant-add" [
   --weight: float # Weight (default: 0)
   --weight-unit: string # Weight Unit
   --width: float # Defines product's width
-]: any -> record<result: record<product_variant_id: string>, return_code: int, return_message: string> {
+]: any -> oneof<record<result: record<product_variant_id: string>, return_code: int, return_message: string>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
@@ -6131,7 +6137,7 @@ export def "product-variant-count" [
   --category-id: string # Counts products’ variants specified by category id
   --product-id: string # Retrieves products' variants specified by product id (required)
   --store-id: string # Retrieves variants specified by store id
-]: nothing -> record<result: record<variants_count: string>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<variants_count: string>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($product_id == null) { error make --unspanned { msg: "required query parameter 'product_id' missing: pass --product-id" } }
@@ -6169,7 +6175,7 @@ export def "product-variant-delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # Defines variant removal, specified by variant id (required)
   --product-id: string # Defines product's id where the variant has to be deleted (required)
-]: nothing -> record<result: record<deleted: string>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<deleted: string>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
@@ -6217,7 +6223,7 @@ export def "product-variant-image-add" [
   --store-id: string # Store Id
   type: string@type-completer-2 # Defines image's types that are specified by comma-separated list (default: base)
   --url: string # Defines URL of the image that has to be added
-]: any -> record<result: record<id: string, image_path: string>, return_code: int, return_message: string> {
+]: any -> oneof<record<result: record<id: string, image_path: string>, return_code: int, return_message: string>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
@@ -6258,7 +6264,7 @@ export def "product-variant-image-delete" [
   --product-variant-id: int # Defines product's variants specified by variant id (required)
   --id: string # Entity id (required)
   --store-id: string # Store Id
-]: nothing -> record<result: record<deleted: string>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<deleted: string>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($product_id == null) { error make --unspanned { msg: "required query parameter 'product_id' missing: pass --product-id" } }
@@ -6300,7 +6306,7 @@ export def "product-variant-info" [
   --exclude: string # Set this parameter in order to choose which entity fields you want to ignore. Works only if parameter `params` equal force_all
   --id: string # Retrieves variant's info specified by variant id (required)
   --store-id: string # Retrieves variant info specified by store id
-]: nothing -> record<result: record<additional_fields: record, advanced_price: list<record>, avail_sale: bool, avail_view: bool, backorders: string, categories_ids: list<string>, cost_price: float, create_at: record<additional_fields: record, custom_fields: record, format: string, value: string>, custom_fields: record, description: string, dimensions_unit: string, group_items: list<record>, group_price: list<record>, height: float, id: string, images: list<record>, inventory: list<record>, is_downloadable: bool, is_stock_managed: bool, is_virtual: bool, length: float, manage_stock: string, meta_description: string, meta_keywords: string, meta_title: string, modified_at: record<additional_fields: record, custom_fields: record, format: string, value: string>, name: string, price: float, product_options: list<record>, quantity: float, related_products_ids: list<string>, seo_url: string, short_description: string, sort_order: int, special_price: record<additional_fields: record, avail: bool, created_at: record, custom_fields: record, expired_at: record, modified_at: record, value: float>, stores_ids: list<string>, tax_class_id: string, tier_price: list<record>, type: string, u_brand: string, u_brand_id: string, u_model: string, u_mpn: string, u_sku: string, u_upc: string, url: string, weight: float, weight_unit: string, width: float>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<additional_fields: record, advanced_price: list<record>, avail_sale: bool, avail_view: bool, backorders: string, categories_ids: list<string>, cost_price: float, create_at: record<additional_fields: record, custom_fields: record, format: string, value: string>, custom_fields: record, description: string, dimensions_unit: string, group_items: list<record>, group_price: list<record>, height: float, id: string, images: list<record>, inventory: list<record>, is_downloadable: bool, is_stock_managed: bool, is_virtual: bool, length: float, manage_stock: string, meta_description: string, meta_keywords: string, meta_title: string, modified_at: record<additional_fields: record, custom_fields: record, format: string, value: string>, name: string, price: float, product_options: list<record>, quantity: float, related_products_ids: list<string>, seo_url: string, short_description: string, sort_order: int, special_price: record<additional_fields: record, avail: bool, created_at: record, custom_fields: record, expired_at: record, modified_at: record, value: float>, stores_ids: list<string>, tax_class_id: string, tier_price: list<record>, type: string, u_brand: string, u_brand_id: string, u_model: string, u_mpn: string, u_sku: string, u_upc: string, url: string, weight: float, weight_unit: string, width: float>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
@@ -6347,7 +6353,7 @@ export def "product-variant-list" [
   --category-id: string # Retrieves products’ variants specified by category id
   --product-id: string # Retrieves products' variants specified by product id
   --store-id: string # Retrieves variants specified by store id
-]: nothing -> record<result: record<variant: list<record>>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<variant: list<record>>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "created_from" $created_from "scalar") (serialize-qp "created_to" $created_to "scalar") (serialize-qp "modified_from" $modified_from "scalar") (serialize-qp "modified_to" $modified_to "scalar") (serialize-qp "category_id" $category_id "scalar") (serialize-qp "product_id" $product_id "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
@@ -6372,7 +6378,6 @@ export def "product-variant-list" [
 #
 # POST /product.variant.price.add.json
 # operationId: ProductVariantPriceAdd
-# --group_prices item shape: {group_id?: string, price?: float}
 export def "product-variant-price-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
@@ -6385,7 +6390,7 @@ export def "product-variant-price-add" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --group-prices: list # Defines variants's group prices — item shape: {group_id?: string, price?: float}
   --id: string # Defines the variant to which the price has to be added
-]: any -> record<result: record<status: string>, return_code: int, return_message: string> {
+]: any -> oneof<record<result: record<status: string>, return_code: int, return_message: string>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
@@ -6424,7 +6429,7 @@ export def "product-variant-price-delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # Defines the variant where the price has to be deleted (required)
   --group-prices: string # Defines variants's group prices
-]: nothing -> record<result: record<deleted: string>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<deleted: string>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
@@ -6450,7 +6455,6 @@ export def "product-variant-price-delete" [
 #
 # PUT /product.variant.price.update.json
 # operationId: ProductVariantPriceUpdate
-# --group_prices item shape: {group_id?: string, id?: int, price?: float}
 export def "product-variant-price-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
@@ -6463,7 +6467,7 @@ export def "product-variant-price-update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --group-prices: list # Defines variants's group prices — item shape: {group_id?: string, id?: int, price?: float}
   --id: string # Defines the variant where the price has to be updated
-]: any -> record<result: record<updated_items: int>, return_code: int, return_message: string> {
+]: any -> oneof<record<result: record<updated_items: int>, return_code: int, return_message: string>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
@@ -6542,7 +6546,7 @@ export def "product-variant-update" [
   --lang-id: string # Language id
   --model: string # Specifies variant's model that has to be added
   --available-for-sale: oneof<nothing, bool> # Specifies the set of visible/invisible product's variants for sale (default: true)
-]: nothing -> record<result: record<updated_items: int>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<updated_items: int>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
@@ -6592,7 +6596,7 @@ export def "subscriber-list" [
   --modified-to: string # Retrieve entities to their modification date
   --page-cursor: string # Used to retrieve entities via cursor-based pagination (it can't be used with any other filtering parameter)
   --response-fields: string # Set this parameter in order to choose which entity fields you want to retrieve
-]: nothing -> record<result: record<subscribers: list<record>, total_count: int>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<subscribers: list<record>, total_count: int>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "subscribed" $subscribed "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "created_from" $created_from "scalar") (serialize-qp "created_to" $created_to "scalar") (serialize-qp "modified_from" $modified_from "scalar") (serialize-qp "modified_to" $modified_to "scalar") (serialize-qp "page_cursor" $page_cursor "scalar") (serialize-qp "response_fields" $response_fields "scalar")] | flatten | str join "&"
@@ -6633,7 +6637,7 @@ export def "tax-class-info" [
   --params: string # Set this parameter in order to choose which entity fields you want to retrieve (default: tax_class_id,name,avail)
   --response-fields: string # Set this parameter in order to choose which entity fields you want to retrieve
   --exclude: string # Set this parameter in order to choose which entity fields you want to ignore. Works only if parameter `params` equal force_all
-]: nothing -> record<result: record<additional_fields: record, avail: bool, custom_fields: record, id: string, name: string, tax: float, tax_rates: list<record>, tax_type: int>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<additional_fields: record, avail: bool, custom_fields: record, id: string, name: string, tax: float, tax_rates: list<record>, tax_type: int>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($tax_class_id == null) { error make --unspanned { msg: "required query parameter 'tax_class_id' missing: pass --tax-class-id" } }
@@ -6672,7 +6676,7 @@ export def "webhook-count" [
   --entity: string # The entity you want to filter webhooks by (e.g. order or product)
   --action: string # The action you want to filter webhooks by (e.g. order or product)
   --active: oneof<nothing, bool> # The webhook status you want to filter webhooks by
-]: nothing -> record<result: record<webhook_count: int>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<webhook_count: int>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "entity" $entity "scalar") (serialize-qp "action" $action "scalar") (serialize-qp "active" $active "scalar")] | flatten | str join "&"
@@ -6714,7 +6718,7 @@ export def "webhook-create" [
   --fields: string # Fields the webhook should send (default: force_all)
   --active: oneof<nothing, bool> # Webhook status (default: true)
   --store-id: string # Defines store id where the webhook should be assigned
-]: nothing -> record<result: record<id: string>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<id: string>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($entity == null) { error make --unspanned { msg: "required query parameter 'entity' missing: pass --entity" } }
@@ -6752,7 +6756,7 @@ export def "webhook-delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # Webhook id (required)
-]: nothing -> record<result: record<deleted: string>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<deleted: string>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
@@ -6788,7 +6792,7 @@ export def "webhook-events" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<result: record<events: list<record>>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<events: list<record>>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/webhook.events.json" $auth.query)
@@ -6829,7 +6833,7 @@ export def "webhook-list" [
   --action: string # The action you want to filter webhooks by (e.g. add, update, or delete)
   --active: oneof<nothing, bool> # The webhook status you want to filter webhooks by
   --ids: string # List of сomma-separated webhook ids
-]: nothing -> record<result: record<webhook: list<record>>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<webhook: list<record>>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "params" $params "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "entity" $entity "scalar") (serialize-qp "action" $action "scalar") (serialize-qp "active" $active "scalar") (serialize-qp "ids" $ids "scalar")] | flatten | str join "&"
@@ -6869,7 +6873,7 @@ export def "webhook-update" [
   --label: string # The name you give to the webhook
   --fields: string # Fields the webhook should send
   --active: oneof<nothing, bool> # Webhook status
-]: nothing -> record<result: record<updated: string>, return_code: int, return_message: string> {
+]: nothing -> oneof<record<result: record<updated: string>, return_code: int, return_message: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }

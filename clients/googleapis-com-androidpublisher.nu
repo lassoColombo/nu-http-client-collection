@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -130,9 +154,9 @@ def status-completer [] { ["active" "inactive" "statusUnspecified"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "androidpublisher-internalappsharingartifacts-uploadapk" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["androidpublisher-internalappsharingartifacts-uploadapk" "androidpublisher-internalappsharingartifacts-uploadbundle" "androidpublisher-applications-device-tier-configs-list" "androidpublisher-applications-device-tier-configs-create" "androidpublisher-applications-device-tier-configs-get" "androidpublisher-edits-insert" "androidpublisher-edits-delete" "androidpublisher-edits-get" "androidpublisher-edits-apks-list" "androidpublisher-edits-apks-upload" "androidpublisher-edits-apks-addexternallyhosted" "androidpublisher-edits-deobfuscationfiles-upload" "androidpublisher-edits-expansionfiles-get" "androidpublisher-edits-expansionfiles-patch" "androidpublisher-edits-expansionfiles-upload" "androidpublisher-edits-expansionfiles-update" "androidpublisher-edits-bundles-list" "androidpublisher-edits-bundles-upload" "androidpublisher-edits-countryavailability-get" "androidpublisher-edits-details-get" "androidpublisher-edits-details-patch" "androidpublisher-edits-details-update" "androidpublisher-edits-listings-deleteall" "androidpublisher-edits-listings-list" "androidpublisher-edits-listings-delete" "androidpublisher-edits-listings-get" "androidpublisher-edits-listings-patch" "androidpublisher-edits-listings-update" "androidpublisher-edits-images-deleteall" "androidpublisher-edits-images-list" "androidpublisher-edits-images-upload" "androidpublisher-edits-images-delete" "androidpublisher-edits-testers-get" "androidpublisher-edits-testers-patch" "androidpublisher-edits-testers-update" "androidpublisher-edits-tracks-list" "androidpublisher-edits-tracks-get" "androidpublisher-edits-tracks-patch" "androidpublisher-edits-tracks-update" "androidpublisher-edits-commit" "androidpublisher-edits-validate" "androidpublisher-generatedapks-list" "androidpublisher-generatedapks-download" "androidpublisher-inappproducts-list" "androidpublisher-inappproducts-insert" "androidpublisher-inappproducts-delete" "androidpublisher-inappproducts-get" "androidpublisher-inappproducts-patch" "androidpublisher-inappproducts-update" "androidpublisher-orders-refund" "androidpublisher-monetization-convert-region-prices" "androidpublisher-purchases-products-get" "androidpublisher-purchases-products-acknowledge" "androidpublisher-purchases-products-consume" "androidpublisher-purchases-subscriptions-get" "androidpublisher-purchases-subscriptions-acknowledge" "androidpublisher-purchases-subscriptions-cancel" "androidpublisher-purchases-subscriptions-defer" "androidpublisher-purchases-subscriptions-refund" "androidpublisher-purchases-subscriptions-revoke" "androidpublisher-purchases-subscriptionsv2-get" "androidpublisher-purchases-voidedpurchases-list" "androidpublisher-reviews-list" "androidpublisher-reviews-get" "androidpublisher-reviews-reply" "androidpublisher-monetization-subscriptions-list" "androidpublisher-monetization-subscriptions-create" "androidpublisher-monetization-subscriptions-delete" "androidpublisher-monetization-subscriptions-get" "androidpublisher-monetization-subscriptions-patch" "androidpublisher-monetization-subscriptions-base-plans-delete" "androidpublisher-monetization-subscriptions-base-plans-offers-list" "androidpublisher-monetization-subscriptions-base-plans-offers-create" "androidpublisher-monetization-subscriptions-base-plans-offers-delete" "androidpublisher-monetization-subscriptions-base-plans-offers-get" "androidpublisher-monetization-subscriptions-base-plans-offers-patch" "androidpublisher-monetization-subscriptions-base-plans-offers-activate" "androidpublisher-monetization-subscriptions-base-plans-offers-deactivate" "androidpublisher-monetization-subscriptions-base-plans-activate" "androidpublisher-monetization-subscriptions-base-plans-deactivate" "androidpublisher-monetization-subscriptions-base-plans-migrate-prices" "androidpublisher-monetization-subscriptions-archive" "androidpublisher-systemapks-variants-list" "androidpublisher-systemapks-variants-create" "androidpublisher-systemapks-variants-get" "androidpublisher-systemapks-variants-download" "androidpublisher-users-delete" "androidpublisher-externaltransactions-getexternaltransaction" "androidpublisher-users-patch" "androidpublisher-externaltransactions-refundexternaltransaction" "androidpublisher-externaltransactions-createexternaltransaction" "androidpublisher-grants-create" "androidpublisher-users-list" "androidpublisher-users-create" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -176,7 +200,7 @@ export def "androidpublisher-internalappsharingartifacts-uploadapk" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<certificateFingerprint: string, downloadUrl: string, sha256: string> {
+]: nothing -> oneof<record<certificateFingerprint: string, downloadUrl: string, sha256: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
@@ -224,7 +248,7 @@ export def "androidpublisher-internalappsharingartifacts-uploadbundle" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<certificateFingerprint: string, downloadUrl: string, sha256: string> {
+]: nothing -> oneof<record<certificateFingerprint: string, downloadUrl: string, sha256: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
@@ -274,7 +298,7 @@ export def "androidpublisher-applications-device-tier-configs-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # The maximum number of device tier configs to return. The service may return fewer than this value. If unspecified, at most 10 device tier configs will be returned. The maximum value for this field is 100; values above 100 will be coerced to 100. Device tier configs will be ordered by descending creation time.
   --page-token: string # A page token, received from a previous `ListDeviceTierConfigs` call. Provide this to retrieve the subsequent page.
-]: nothing -> record<deviceTierConfigs: table<deviceGroups: list, deviceTierConfigId: string, deviceTierSet: record, userCountrySets: list>, nextPageToken: string> {
+]: nothing -> oneof<record<deviceTierConfigs: table<deviceGroups: list, deviceTierConfigId: string, deviceTierSet: record, userCountrySets: list>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
@@ -300,9 +324,6 @@ export def "androidpublisher-applications-device-tier-configs-list" [
 #
 # POST /androidpublisher/v3/applications/{packageName}/deviceTierConfigs
 # operationId: androidpublisher.applications.deviceTierConfigs.create
-# --deviceGroups item shape: {deviceSelectors?: list, name?: string}
-# --deviceTierSet shape: {deviceTiers?: list}
-# --userCountrySets item shape: {countryCodes?: list<string>, name?: string}
 export def "androidpublisher-applications-device-tier-configs-create" [
   package_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -329,7 +350,7 @@ export def "androidpublisher-applications-device-tier-configs-create" [
   --device-groups: list # Definition of device groups for the app. — item shape: {deviceSelectors?: list, name?: string}
   --device-tier-set: record # A set of device tiers. A tier set determines what variation of app content gets served to a specific device, for device-targeted content. You should assign a priority level to each tier, which determines the ordering by which they are evaluated by Play. See the documentation of DeviceTier.level for more details. — shape: {deviceTiers?: list}
   --user-country-sets: list # Definition of user country sets for the app. — item shape: {countryCodes?: list<string>, name?: string}
-]: any -> record<deviceGroups: table<deviceSelectors: list, name: string>, deviceTierConfigId: string, deviceTierSet: record<deviceTiers: list<record>>, userCountrySets: table<countryCodes: list, name: string>> {
+]: any -> oneof<record<deviceGroups: table<deviceSelectors: list, name: string>, deviceTierConfigId: string, deviceTierSet: record<deviceTiers: list<record>>, userCountrySets: table<countryCodes: list, name: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -381,7 +402,7 @@ export def "androidpublisher-applications-device-tier-configs-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<deviceGroups: table<deviceSelectors: list, name: string>, deviceTierConfigId: string, deviceTierSet: record<deviceTiers: list<record>>, userCountrySets: table<countryCodes: list, name: string>> {
+]: nothing -> oneof<record<deviceGroups: table<deviceSelectors: list, name: string>, deviceTierConfigId: string, deviceTierSet: record<deviceTiers: list<record>>, userCountrySets: table<countryCodes: list, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
@@ -431,7 +452,7 @@ export def "androidpublisher-edits-insert" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record<expiryTimeSeconds: string, id: string> {
+]: any -> oneof<record<expiryTimeSeconds: string, id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -533,7 +554,7 @@ export def "androidpublisher-edits-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<expiryTimeSeconds: string, id: string> {
+]: nothing -> oneof<record<expiryTimeSeconds: string, id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
@@ -583,7 +604,7 @@ export def "androidpublisher-edits-apks-list" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<apks: table<binary: record, versionCode: int>, kind: string> {
+]: nothing -> oneof<record<apks: table<binary: record, versionCode: int>, kind: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
@@ -633,7 +654,7 @@ export def "androidpublisher-edits-apks-upload" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<binary: record<sha1: string, sha256: string>, versionCode: int> {
+]: nothing -> oneof<record<binary: record<sha1: string, sha256: string>, versionCode: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
@@ -660,7 +681,6 @@ export def "androidpublisher-edits-apks-upload" [
 #
 # POST /androidpublisher/v3/applications/{packageName}/edits/{editId}/apks/externallyHosted
 # operationId: androidpublisher.edits.apks.addexternallyhosted
-# --externallyHostedApk shape: {applicationLabel?: string, certificateBase64s?: list<string>, externallyHostedUrl?: string, fileSha1Base64?: string, fileSha256Base64?: string, fileSize?: string, iconBase64?: string, maximumSdk?: int, minimumSdk?: int, nativeCodes?: list<string>, packageName?: string, usesFeatures?: list<string>, usesPermissions?: list, versionCode?: int, versionName?: string}
 export def "androidpublisher-edits-apks-addexternallyhosted" [
   package_name: string
   edit_id: string
@@ -685,7 +705,7 @@ export def "androidpublisher-edits-apks-addexternallyhosted" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --externally-hosted-apk: record # Defines an APK available for this application that is hosted externally and not uploaded to Google Play. This function is only available to organizations using Managed Play whose application is configured to restrict distribution to the organizations. — shape: {applicationLabel?: string, certificateBase64s?: list<string>, externallyHostedUrl?: string, fileSha1Base64?: string, fileSha256Base64?: string, fileSize?: string, iconBase64?: string, maximumSdk?: int, minimumSdk?: int, nativeCodes?: list<string>, packageName?: string, usesFeatures?: list<string>, usesPermissions?: list, versionCode?: int, versionName?: string}
-]: any -> record<externallyHostedApk: record<applicationLabel: string, certificateBase64s: list<string>, externallyHostedUrl: string, fileSha1Base64: string, fileSha256Base64: string, fileSize: string, iconBase64: string, maximumSdk: int, minimumSdk: int, nativeCodes: list<string>, packageName: string, usesFeatures: list<string>, usesPermissions: list<record>, versionCode: int, versionName: string>> {
+]: any -> oneof<record<externallyHostedApk: record<applicationLabel: string, certificateBase64s: list<string>, externallyHostedUrl: string, fileSha1Base64: string, fileSha256Base64: string, fileSize: string, iconBase64: string, maximumSdk: int, minimumSdk: int, nativeCodes: list<string>, packageName: string, usesFeatures: list<string>, usesPermissions: list<record>, versionCode: int, versionName: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -740,7 +760,7 @@ export def "androidpublisher-edits-deobfuscationfiles-upload" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<deobfuscationFile: record<symbolType: string>> {
+]: nothing -> oneof<record<deobfuscationFile: record<symbolType: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
@@ -794,7 +814,7 @@ export def "androidpublisher-edits-expansionfiles-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<fileSize: string, referencesVersion: int> {
+]: nothing -> oneof<record<fileSize: string, referencesVersion: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
@@ -850,7 +870,7 @@ export def "androidpublisher-edits-expansionfiles-patch" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --file-size: string # If set, this field indicates that this APK has an expansion file uploaded to it: this APK does not reference another APK's expansion file. The field's value is the size of the uploaded expansion file in bytes. (format: int64)
   --references-version: int # If set, this APK's expansion file references another APK's expansion file. The file_size field will not be set. (format: int32)
-]: any -> record<fileSize: string, referencesVersion: int> {
+]: any -> oneof<record<fileSize: string, referencesVersion: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -907,7 +927,7 @@ export def "androidpublisher-edits-expansionfiles-upload" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<expansionFile: record<fileSize: string, referencesVersion: int>> {
+]: nothing -> oneof<record<expansionFile: record<fileSize: string, referencesVersion: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
@@ -963,7 +983,7 @@ export def "androidpublisher-edits-expansionfiles-update" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --file-size: string # If set, this field indicates that this APK has an expansion file uploaded to it: this APK does not reference another APK's expansion file. The field's value is the size of the uploaded expansion file in bytes. (format: int64)
   --references-version: int # If set, this APK's expansion file references another APK's expansion file. The file_size field will not be set. (format: int32)
-]: any -> record<fileSize: string, referencesVersion: int> {
+]: any -> oneof<record<fileSize: string, referencesVersion: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1018,7 +1038,7 @@ export def "androidpublisher-edits-bundles-list" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<bundles: table<sha1: string, sha256: string, versionCode: int>, kind: string> {
+]: nothing -> oneof<record<bundles: table<sha1: string, sha256: string, versionCode: int>, kind: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
@@ -1070,7 +1090,7 @@ export def "androidpublisher-edits-bundles-upload" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --ack-bundle-installation-warning: oneof<nothing, bool> # Must be set to true if the app bundle installation may trigger a warning on user devices (for example, if installation size may be over a threshold, typically 100 MB).
   --device-tier-config-id: string # Device tier config (DTC) to be used for generating deliverables (APKs). Contains id of the DTC or "LATEST" for last uploaded DTC.
-]: nothing -> record<sha1: string, sha256: string, versionCode: int> {
+]: nothing -> oneof<record<sha1: string, sha256: string, versionCode: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
@@ -1121,7 +1141,7 @@ export def "androidpublisher-edits-countryavailability-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<countries: table<countryCode: string>, restOfWorld: bool, syncWithProduction: bool> {
+]: nothing -> oneof<record<countries: table<countryCode: string>, restOfWorld: bool, syncWithProduction: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
@@ -1172,7 +1192,7 @@ export def "androidpublisher-edits-details-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<contactEmail: string, contactPhone: string, contactWebsite: string, defaultLanguage: string> {
+]: nothing -> oneof<record<contactEmail: string, contactPhone: string, contactWebsite: string, defaultLanguage: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
@@ -1226,7 +1246,7 @@ export def "androidpublisher-edits-details-patch" [
   --contact-phone: string # The user-visible support telephone number for this app.
   --contact-website: string # The user-visible website for this app.
   --default-language: string # Default language code, in BCP 47 format (eg "en-US").
-]: any -> record<contactEmail: string, contactPhone: string, contactWebsite: string, defaultLanguage: string> {
+]: any -> oneof<record<contactEmail: string, contactPhone: string, contactWebsite: string, defaultLanguage: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1283,7 +1303,7 @@ export def "androidpublisher-edits-details-update" [
   --contact-phone: string # The user-visible support telephone number for this app.
   --contact-website: string # The user-visible website for this app.
   --default-language: string # Default language code, in BCP 47 format (eg "en-US").
-]: any -> record<contactEmail: string, contactPhone: string, contactWebsite: string, defaultLanguage: string> {
+]: any -> oneof<record<contactEmail: string, contactPhone: string, contactWebsite: string, defaultLanguage: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1386,7 +1406,7 @@ export def "androidpublisher-edits-listings-list" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<kind: string, listings: table<fullDescription: string, language: string, shortDescription: string, title: string, video: string>> {
+]: nothing -> oneof<record<kind: string, listings: table<fullDescription: string, language: string, shortDescription: string, title: string, video: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
@@ -1489,7 +1509,7 @@ export def "androidpublisher-edits-listings-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<fullDescription: string, language: string, shortDescription: string, title: string, video: string> {
+]: nothing -> oneof<record<fullDescription: string, language: string, shortDescription: string, title: string, video: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
@@ -1546,7 +1566,7 @@ export def "androidpublisher-edits-listings-patch" [
   --short-description: string # Short description of the app.
   --title: string # Localized title of the app.
   --video: string # URL of a promotional YouTube video for the app.
-]: any -> record<fullDescription: string, language: string, shortDescription: string, title: string, video: string> {
+]: any -> oneof<record<fullDescription: string, language: string, shortDescription: string, title: string, video: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1606,7 +1626,7 @@ export def "androidpublisher-edits-listings-update" [
   --short-description: string # Short description of the app.
   --title: string # Localized title of the app.
   --video: string # URL of a promotional YouTube video for the app.
-]: any -> record<fullDescription: string, language: string, shortDescription: string, title: string, video: string> {
+]: any -> oneof<record<fullDescription: string, language: string, shortDescription: string, title: string, video: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1662,7 +1682,7 @@ export def "androidpublisher-edits-images-deleteall" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<deleted: table<id: string, sha1: string, sha256: string, url: string>> {
+]: nothing -> oneof<record<deleted: table<id: string, sha1: string, sha256: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
@@ -1716,7 +1736,7 @@ export def "androidpublisher-edits-images-list" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<images: table<id: string, sha1: string, sha256: string, url: string>> {
+]: nothing -> oneof<record<images: table<id: string, sha1: string, sha256: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
@@ -1770,7 +1790,7 @@ export def "androidpublisher-edits-images-upload" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<image: record<id: string, sha1: string, sha256: string, url: string>> {
+]: nothing -> oneof<record<image: record<id: string, sha1: string, sha256: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
@@ -1879,7 +1899,7 @@ export def "androidpublisher-edits-testers-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<googleGroups: list<string>> {
+]: nothing -> oneof<record<googleGroups: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
@@ -1932,7 +1952,7 @@ export def "androidpublisher-edits-testers-patch" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --google-groups: list<string> # All testing Google Groups, as email addresses.
-]: any -> record<googleGroups: list<string>> {
+]: any -> oneof<record<googleGroups: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1988,7 +2008,7 @@ export def "androidpublisher-edits-testers-update" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --google-groups: list<string> # All testing Google Groups, as email addresses.
-]: any -> record<googleGroups: list<string>> {
+]: any -> oneof<record<googleGroups: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2042,7 +2062,7 @@ export def "androidpublisher-edits-tracks-list" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<kind: string, tracks: table<releases: list, track: string>> {
+]: nothing -> oneof<record<kind: string, tracks: table<releases: list, track: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
@@ -2093,7 +2113,7 @@ export def "androidpublisher-edits-tracks-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<releases: table<countryTargeting: record, inAppUpdatePriority: int, name: string, releaseNotes: list, status: string, userFraction: float, versionCodes: list>, track: string> {
+]: nothing -> oneof<record<releases: table<countryTargeting: record, inAppUpdatePriority: int, name: string, releaseNotes: list, status: string, userFraction: float, versionCodes: list>, track: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
@@ -2121,7 +2141,6 @@ export def "androidpublisher-edits-tracks-get" [
 #
 # PATCH /androidpublisher/v3/applications/{packageName}/edits/{editId}/tracks/{track}
 # operationId: androidpublisher.edits.tracks.patch
-# --releases item shape: {countryTargeting?: record, inAppUpdatePriority?: int, name?: string, releaseNotes?: list, status?: "statusUnspecified"|"draft"|"inProgress"|"halted"|"completed", userFraction?: float, versionCodes?: list<string>}
 export def "androidpublisher-edits-tracks-patch" [
   package_name: string
   edit_id: string
@@ -2148,7 +2167,7 @@ export def "androidpublisher-edits-tracks-patch" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --releases: list # In a read request, represents all active releases in the track. In an update request, represents desired changes. — item shape: {countryTargeting?: record, inAppUpdatePriority?: int, name?: string, releaseNotes?: list, status?: "statusUnspecified"|"draft"|"inProgress"|"halted"|"completed", userFraction?: float, versionCodes?: list<string>}
   --body-track: string # Identifier of the track. Form factor tracks have a special prefix as an identifier, for example `wear:production`, `automotive:production`. [More on track name](https://developers.google.com/android-publisher/tracks#ff-track-name)
-]: any -> record<releases: table<countryTargeting: record, inAppUpdatePriority: int, name: string, releaseNotes: list, status: string, userFraction: float, versionCodes: list>, track: string> {
+]: any -> oneof<record<releases: table<countryTargeting: record, inAppUpdatePriority: int, name: string, releaseNotes: list, status: string, userFraction: float, versionCodes: list>, track: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2179,7 +2198,6 @@ export def "androidpublisher-edits-tracks-patch" [
 #
 # PUT /androidpublisher/v3/applications/{packageName}/edits/{editId}/tracks/{track}
 # operationId: androidpublisher.edits.tracks.update
-# --releases item shape: {countryTargeting?: record, inAppUpdatePriority?: int, name?: string, releaseNotes?: list, status?: "statusUnspecified"|"draft"|"inProgress"|"halted"|"completed", userFraction?: float, versionCodes?: list<string>}
 export def "androidpublisher-edits-tracks-update" [
   package_name: string
   edit_id: string
@@ -2206,7 +2224,7 @@ export def "androidpublisher-edits-tracks-update" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --releases: list # In a read request, represents all active releases in the track. In an update request, represents desired changes. — item shape: {countryTargeting?: record, inAppUpdatePriority?: int, name?: string, releaseNotes?: list, status?: "statusUnspecified"|"draft"|"inProgress"|"halted"|"completed", userFraction?: float, versionCodes?: list<string>}
   --body-track: string # Identifier of the track. Form factor tracks have a special prefix as an identifier, for example `wear:production`, `automotive:production`. [More on track name](https://developers.google.com/android-publisher/tracks#ff-track-name)
-]: any -> record<releases: table<countryTargeting: record, inAppUpdatePriority: int, name: string, releaseNotes: list, status: string, userFraction: float, versionCodes: list>, track: string> {
+]: any -> oneof<record<releases: table<countryTargeting: record, inAppUpdatePriority: int, name: string, releaseNotes: list, status: string, userFraction: float, versionCodes: list>, track: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2261,7 +2279,7 @@ export def "androidpublisher-edits-commit" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --changes-not-sent-for-review: oneof<nothing, bool> # Indicates that the changes in this edit will not be reviewed until they are explicitly sent for review from the Google Play Console UI. These changes will be added to any other changes that are not yet sent for review.
-]: nothing -> record<expiryTimeSeconds: string, id: string> {
+]: nothing -> oneof<record<expiryTimeSeconds: string, id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
@@ -2311,7 +2329,7 @@ export def "androidpublisher-edits-validate" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<expiryTimeSeconds: string, id: string> {
+]: nothing -> oneof<record<expiryTimeSeconds: string, id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
@@ -2361,7 +2379,7 @@ export def "androidpublisher-generatedapks-list" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<generatedApks: table<certificateSha256Hash: string, generatedAssetPackSlices: list, generatedSplitApks: list, generatedStandaloneApks: list, generatedUniversalApk: record>> {
+]: nothing -> oneof<record<generatedApks: table<certificateSha256Hash: string, generatedAssetPackSlices: list, generatedSplitApks: list, generatedStandaloneApks: list, generatedUniversalApk: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
@@ -2465,7 +2483,7 @@ export def "androidpublisher-inappproducts-list" [
   --max-results: int # Deprecated and ignored. The page size is determined by the server.
   --start-index: int # Deprecated and ignored. Set the `token` parameter to retrieve the next page.
   --qp-token: string # Pagination token. If empty, list starts at the first product.
-]: nothing -> record<inappproduct: table<defaultLanguage: string, defaultPrice: record, gracePeriod: string, listings: record, managedProductTaxesAndComplianceSettings: record, packageName: string, prices: record, purchaseType: string, sku: string, status: string, subscriptionPeriod: string, subscriptionTaxesAndComplianceSettings: record, trialPeriod: string>, kind: string, pageInfo: record<resultPerPage: int, startIndex: int, totalResults: int>, tokenPagination: record<nextPageToken: string, previousPageToken: string>> {
+]: nothing -> oneof<record<inappproduct: table<defaultLanguage: string, defaultPrice: record, gracePeriod: string, listings: record, managedProductTaxesAndComplianceSettings: record, packageName: string, prices: record, purchaseType: string, sku: string, status: string, subscriptionPeriod: string, subscriptionTaxesAndComplianceSettings: record, trialPeriod: string>, kind: string, pageInfo: record<resultPerPage: int, startIndex: int, totalResults: int>, tokenPagination: record<nextPageToken: string, previousPageToken: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
@@ -2491,9 +2509,6 @@ export def "androidpublisher-inappproducts-list" [
 #
 # POST /androidpublisher/v3/applications/{packageName}/inappproducts
 # operationId: androidpublisher.inappproducts.insert
-# --defaultPrice shape: {currency?: string, priceMicros?: string}
-# --managedProductTaxesAndComplianceSettings shape: {eeaWithdrawalRightType?: "WITHDRAWAL_RIGHT_TYPE_UNSPECIFIED"|"WITHDRAWAL_RIGHT_DIGITAL_CONTENT"|"WITHDRAWAL_RIGHT_SERVICE", taxRateInfoByRegionCode?: record}
-# --subscriptionTaxesAndComplianceSettings shape: {eeaWithdrawalRightType?: "WITHDRAWAL_RIGHT_TYPE_UNSPECIFIED"|"WITHDRAWAL_RIGHT_DIGITAL_CONTENT"|"WITHDRAWAL_RIGHT_SERVICE", taxRateInfoByRegionCode?: record}
 export def "androidpublisher-inappproducts-insert" [
   package_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2530,7 +2545,7 @@ export def "androidpublisher-inappproducts-insert" [
   --subscription-period: string # Subscription period, specified in ISO 8601 format. Acceptable values are P1W (one week), P1M (one month), P3M (three months), P6M (six months), and P1Y (one year).
   --subscription-taxes-and-compliance-settings: record # Details about taxation, Google Play policy and legal compliance for subscription products. — shape: {eeaWithdrawalRightType?: "WITHDRAWAL_RIGHT_TYPE_UNSPECIFIED"|"WITHDRAWAL_RIGHT_DIGITAL_CONTENT"|"WITHDRAWAL_RIGHT_SERVICE", taxRateInfoByRegionCode?: record}
   --trial-period: string # Trial period, specified in ISO 8601 format. Acceptable values are anything between P7D (seven days) and P999D (999 days).
-]: any -> record<defaultLanguage: string, defaultPrice: record<currency: string, priceMicros: string>, gracePeriod: string, listings: record, managedProductTaxesAndComplianceSettings: record<eeaWithdrawalRightType: string, taxRateInfoByRegionCode: record>, packageName: string, prices: record, purchaseType: string, sku: string, status: string, subscriptionPeriod: string, subscriptionTaxesAndComplianceSettings: record<eeaWithdrawalRightType: string, taxRateInfoByRegionCode: record>, trialPeriod: string> {
+]: any -> oneof<record<defaultLanguage: string, defaultPrice: record<currency: string, priceMicros: string>, gracePeriod: string, listings: record, managedProductTaxesAndComplianceSettings: record<eeaWithdrawalRightType: string, taxRateInfoByRegionCode: record>, packageName: string, prices: record, purchaseType: string, sku: string, status: string, subscriptionPeriod: string, subscriptionTaxesAndComplianceSettings: record<eeaWithdrawalRightType: string, taxRateInfoByRegionCode: record>, trialPeriod: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2632,7 +2647,7 @@ export def "androidpublisher-inappproducts-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<defaultLanguage: string, defaultPrice: record<currency: string, priceMicros: string>, gracePeriod: string, listings: record, managedProductTaxesAndComplianceSettings: record<eeaWithdrawalRightType: string, taxRateInfoByRegionCode: record>, packageName: string, prices: record, purchaseType: string, sku: string, status: string, subscriptionPeriod: string, subscriptionTaxesAndComplianceSettings: record<eeaWithdrawalRightType: string, taxRateInfoByRegionCode: record>, trialPeriod: string> {
+]: nothing -> oneof<record<defaultLanguage: string, defaultPrice: record<currency: string, priceMicros: string>, gracePeriod: string, listings: record, managedProductTaxesAndComplianceSettings: record<eeaWithdrawalRightType: string, taxRateInfoByRegionCode: record>, packageName: string, prices: record, purchaseType: string, sku: string, status: string, subscriptionPeriod: string, subscriptionTaxesAndComplianceSettings: record<eeaWithdrawalRightType: string, taxRateInfoByRegionCode: record>, trialPeriod: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
@@ -2659,9 +2674,6 @@ export def "androidpublisher-inappproducts-get" [
 #
 # PATCH /androidpublisher/v3/applications/{packageName}/inappproducts/{sku}
 # operationId: androidpublisher.inappproducts.patch
-# --defaultPrice shape: {currency?: string, priceMicros?: string}
-# --managedProductTaxesAndComplianceSettings shape: {eeaWithdrawalRightType?: "WITHDRAWAL_RIGHT_TYPE_UNSPECIFIED"|"WITHDRAWAL_RIGHT_DIGITAL_CONTENT"|"WITHDRAWAL_RIGHT_SERVICE", taxRateInfoByRegionCode?: record}
-# --subscriptionTaxesAndComplianceSettings shape: {eeaWithdrawalRightType?: "WITHDRAWAL_RIGHT_TYPE_UNSPECIFIED"|"WITHDRAWAL_RIGHT_DIGITAL_CONTENT"|"WITHDRAWAL_RIGHT_SERVICE", taxRateInfoByRegionCode?: record}
 export def "androidpublisher-inappproducts-patch" [
   package_name: string
   sku: string
@@ -2699,7 +2711,7 @@ export def "androidpublisher-inappproducts-patch" [
   --subscription-period: string # Subscription period, specified in ISO 8601 format. Acceptable values are P1W (one week), P1M (one month), P3M (three months), P6M (six months), and P1Y (one year).
   --subscription-taxes-and-compliance-settings: record # Details about taxation, Google Play policy and legal compliance for subscription products. — shape: {eeaWithdrawalRightType?: "WITHDRAWAL_RIGHT_TYPE_UNSPECIFIED"|"WITHDRAWAL_RIGHT_DIGITAL_CONTENT"|"WITHDRAWAL_RIGHT_SERVICE", taxRateInfoByRegionCode?: record}
   --trial-period: string # Trial period, specified in ISO 8601 format. Acceptable values are anything between P7D (seven days) and P999D (999 days).
-]: any -> record<defaultLanguage: string, defaultPrice: record<currency: string, priceMicros: string>, gracePeriod: string, listings: record, managedProductTaxesAndComplianceSettings: record<eeaWithdrawalRightType: string, taxRateInfoByRegionCode: record>, packageName: string, prices: record, purchaseType: string, sku: string, status: string, subscriptionPeriod: string, subscriptionTaxesAndComplianceSettings: record<eeaWithdrawalRightType: string, taxRateInfoByRegionCode: record>, trialPeriod: string> {
+]: any -> oneof<record<defaultLanguage: string, defaultPrice: record<currency: string, priceMicros: string>, gracePeriod: string, listings: record, managedProductTaxesAndComplianceSettings: record<eeaWithdrawalRightType: string, taxRateInfoByRegionCode: record>, packageName: string, prices: record, purchaseType: string, sku: string, status: string, subscriptionPeriod: string, subscriptionTaxesAndComplianceSettings: record<eeaWithdrawalRightType: string, taxRateInfoByRegionCode: record>, trialPeriod: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2729,9 +2741,6 @@ export def "androidpublisher-inappproducts-patch" [
 #
 # PUT /androidpublisher/v3/applications/{packageName}/inappproducts/{sku}
 # operationId: androidpublisher.inappproducts.update
-# --defaultPrice shape: {currency?: string, priceMicros?: string}
-# --managedProductTaxesAndComplianceSettings shape: {eeaWithdrawalRightType?: "WITHDRAWAL_RIGHT_TYPE_UNSPECIFIED"|"WITHDRAWAL_RIGHT_DIGITAL_CONTENT"|"WITHDRAWAL_RIGHT_SERVICE", taxRateInfoByRegionCode?: record}
-# --subscriptionTaxesAndComplianceSettings shape: {eeaWithdrawalRightType?: "WITHDRAWAL_RIGHT_TYPE_UNSPECIFIED"|"WITHDRAWAL_RIGHT_DIGITAL_CONTENT"|"WITHDRAWAL_RIGHT_SERVICE", taxRateInfoByRegionCode?: record}
 export def "androidpublisher-inappproducts-update" [
   package_name: string
   sku: string
@@ -2770,7 +2779,7 @@ export def "androidpublisher-inappproducts-update" [
   --subscription-period: string # Subscription period, specified in ISO 8601 format. Acceptable values are P1W (one week), P1M (one month), P3M (three months), P6M (six months), and P1Y (one year).
   --subscription-taxes-and-compliance-settings: record # Details about taxation, Google Play policy and legal compliance for subscription products. — shape: {eeaWithdrawalRightType?: "WITHDRAWAL_RIGHT_TYPE_UNSPECIFIED"|"WITHDRAWAL_RIGHT_DIGITAL_CONTENT"|"WITHDRAWAL_RIGHT_SERVICE", taxRateInfoByRegionCode?: record}
   --trial-period: string # Trial period, specified in ISO 8601 format. Acceptable values are anything between P7D (seven days) and P999D (999 days).
-]: any -> record<defaultLanguage: string, defaultPrice: record<currency: string, priceMicros: string>, gracePeriod: string, listings: record, managedProductTaxesAndComplianceSettings: record<eeaWithdrawalRightType: string, taxRateInfoByRegionCode: record>, packageName: string, prices: record, purchaseType: string, sku: string, status: string, subscriptionPeriod: string, subscriptionTaxesAndComplianceSettings: record<eeaWithdrawalRightType: string, taxRateInfoByRegionCode: record>, trialPeriod: string> {
+]: any -> oneof<record<defaultLanguage: string, defaultPrice: record<currency: string, priceMicros: string>, gracePeriod: string, listings: record, managedProductTaxesAndComplianceSettings: record<eeaWithdrawalRightType: string, taxRateInfoByRegionCode: record>, packageName: string, prices: record, purchaseType: string, sku: string, status: string, subscriptionPeriod: string, subscriptionTaxesAndComplianceSettings: record<eeaWithdrawalRightType: string, taxRateInfoByRegionCode: record>, trialPeriod: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2851,7 +2860,6 @@ export def "androidpublisher-orders-refund" [
 #
 # POST /androidpublisher/v3/applications/{packageName}/pricing:convertRegionPrices
 # operationId: androidpublisher.monetization.convertRegionPrices
-# --price shape: {currencyCode?: string, nanos?: int, units?: string}
 export def "androidpublisher-monetization-convert-region-prices" [
   package_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2875,7 +2883,7 @@ export def "androidpublisher-monetization-convert-region-prices" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --price: record # Represents an amount of money with its currency type. — shape: {currencyCode?: string, nanos?: int, units?: string}
-]: any -> record<convertedOtherRegionsPrice: record<eurPrice: record<currencyCode: string, nanos: int, units: string>, usdPrice: record<currencyCode: string, nanos: int, units: string>>, convertedRegionPrices: record> {
+]: any -> oneof<record<convertedOtherRegionsPrice: record<eurPrice: record<currencyCode: string, nanos: int, units: string>, usdPrice: record<currencyCode: string, nanos: int, units: string>>, convertedRegionPrices: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2928,7 +2936,7 @@ export def "androidpublisher-purchases-products-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<acknowledgementState: int, consumptionState: int, developerPayload: string, kind: string, obfuscatedExternalAccountId: string, obfuscatedExternalProfileId: string, orderId: string, productId: string, purchaseState: int, purchaseTimeMillis: string, purchaseToken: string, purchaseType: int, quantity: int, regionCode: string> {
+]: nothing -> oneof<record<acknowledgementState: int, consumptionState: int, developerPayload: string, kind: string, obfuscatedExternalAccountId: string, obfuscatedExternalProfileId: string, orderId: string, productId: string, purchaseState: int, purchaseTimeMillis: string, purchaseToken: string, purchaseType: int, quantity: int, regionCode: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
@@ -3088,7 +3096,7 @@ export def "androidpublisher-purchases-subscriptions-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<acknowledgementState: int, autoRenewing: bool, autoResumeTimeMillis: string, cancelReason: int, cancelSurveyResult: record<cancelSurveyReason: int, userInputCancelReason: string>, countryCode: string, developerPayload: string, emailAddress: string, expiryTimeMillis: string, externalAccountId: string, familyName: string, givenName: string, introductoryPriceInfo: record<introductoryPriceAmountMicros: string, introductoryPriceCurrencyCode: string, introductoryPriceCycles: int, introductoryPricePeriod: string>, kind: string, linkedPurchaseToken: string, obfuscatedExternalAccountId: string, obfuscatedExternalProfileId: string, orderId: string, paymentState: int, priceAmountMicros: string, priceChange: record<newPrice: record<currency: string, priceMicros: string>, state: int>, priceCurrencyCode: string, profileId: string, profileName: string, promotionCode: string, promotionType: int, purchaseType: int, startTimeMillis: string, userCancellationTimeMillis: string> {
+]: nothing -> oneof<record<acknowledgementState: int, autoRenewing: bool, autoResumeTimeMillis: string, cancelReason: int, cancelSurveyResult: record<cancelSurveyReason: int, userInputCancelReason: string>, countryCode: string, developerPayload: string, emailAddress: string, expiryTimeMillis: string, externalAccountId: string, familyName: string, givenName: string, introductoryPriceInfo: record<introductoryPriceAmountMicros: string, introductoryPriceCurrencyCode: string, introductoryPriceCycles: int, introductoryPricePeriod: string>, kind: string, linkedPurchaseToken: string, obfuscatedExternalAccountId: string, obfuscatedExternalProfileId: string, orderId: string, paymentState: int, priceAmountMicros: string, priceChange: record<newPrice: record<currency: string, priceMicros: string>, state: int>, priceCurrencyCode: string, profileId: string, profileName: string, promotionCode: string, promotionType: int, purchaseType: int, startTimeMillis: string, userCancellationTimeMillis: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
@@ -3224,7 +3232,6 @@ export def "androidpublisher-purchases-subscriptions-cancel" [
 #
 # POST /androidpublisher/v3/applications/{packageName}/purchases/subscriptions/{subscriptionId}/tokens/{token}:defer
 # operationId: androidpublisher.purchases.subscriptions.defer
-# --deferralInfo shape: {desiredExpiryTimeMillis?: string, expectedExpiryTimeMillis?: string}
 export def "androidpublisher-purchases-subscriptions-defer" [
   package_name: string
   subscription_id: string
@@ -3250,7 +3257,7 @@ export def "androidpublisher-purchases-subscriptions-defer" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --deferral-info: record # A SubscriptionDeferralInfo contains the data needed to defer a subscription purchase to a future expiry time. — shape: {desiredExpiryTimeMillis?: string, expectedExpiryTimeMillis?: string}
-]: any -> record<newExpiryTimeMillis: string> {
+]: any -> oneof<record<newExpiryTimeMillis: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3408,7 +3415,7 @@ export def "androidpublisher-purchases-subscriptionsv2-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<acknowledgementState: string, canceledStateContext: record<developerInitiatedCancellation: record, replacementCancellation: record, systemInitiatedCancellation: record, userInitiatedCancellation: record<cancelSurveyResult: record, cancelTime: string>>, externalAccountIdentifiers: record<externalAccountId: string, obfuscatedExternalAccountId: string, obfuscatedExternalProfileId: string>, kind: string, latestOrderId: string, lineItems: table<autoRenewingPlan: record, expiryTime: string, offerDetails: record, prepaidPlan: record, productId: string>, linkedPurchaseToken: string, pausedStateContext: record<autoResumeTime: string>, regionCode: string, startTime: string, subscribeWithGoogleInfo: record<emailAddress: string, familyName: string, givenName: string, profileId: string, profileName: string>, subscriptionState: string, testPurchase: record> {
+]: nothing -> oneof<record<acknowledgementState: string, canceledStateContext: record<developerInitiatedCancellation: record, replacementCancellation: record, systemInitiatedCancellation: record, userInitiatedCancellation: record<cancelSurveyResult: record, cancelTime: string>>, externalAccountIdentifiers: record<externalAccountId: string, obfuscatedExternalAccountId: string, obfuscatedExternalProfileId: string>, kind: string, latestOrderId: string, lineItems: table<autoRenewingPlan: record, expiryTime: string, offerDetails: record, prepaidPlan: record, productId: string>, linkedPurchaseToken: string, pausedStateContext: record<autoResumeTime: string>, regionCode: string, startTime: string, subscribeWithGoogleInfo: record<emailAddress: string, familyName: string, givenName: string, profileId: string, profileName: string>, subscriptionState: string, testPurchase: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
@@ -3463,7 +3470,7 @@ export def "androidpublisher-purchases-voidedpurchases-list" [
   --start-time: string # The time, in milliseconds since the Epoch, of the oldest voided purchase that you want to see in the response. The value of this parameter cannot be older than 30 days and is ignored if a pagination token is set. Default value is current time minus 30 days. Note: This filter is applied on the time at which the record is seen as voided by our systems and not the actual voided time returned in the response.
   --qp-token: string # Defines the token of the page to return, usually taken from TokenPagination. This can only be used if token paging is enabled.
   --type: int # The type of voided purchases that you want to see in the response. Possible values are: 0. Only voided in-app product purchases will be returned in the response. This is the default value. 1. Both voided in-app purchases and voided subscription purchases will be returned in the response. Note: Before requesting to receive voided subscription purchases, you must switch to use orderId in the response which uniquely identifies one-time purchases and subscriptions. Otherwise, you will receive multiple subscription orders with the same PurchaseToken, because subscription renewal orders share the same PurchaseToken.
-]: nothing -> record<pageInfo: record<resultPerPage: int, startIndex: int, totalResults: int>, tokenPagination: record<nextPageToken: string, previousPageToken: string>, voidedPurchases: table<kind: string, orderId: string, purchaseTimeMillis: string, purchaseToken: string, voidedReason: int, voidedSource: int, voidedTimeMillis: string>> {
+]: nothing -> oneof<record<pageInfo: record<resultPerPage: int, startIndex: int, totalResults: int>, tokenPagination: record<nextPageToken: string, previousPageToken: string>, voidedPurchases: table<kind: string, orderId: string, purchaseTimeMillis: string, purchaseToken: string, voidedReason: int, voidedSource: int, voidedTimeMillis: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
@@ -3515,7 +3522,7 @@ export def "androidpublisher-reviews-list" [
   --start-index: int # The index of the first element to return.
   --qp-token: string # Pagination token. If empty, list starts at the first review.
   --translation-language: string # Language localization code.
-]: nothing -> record<pageInfo: record<resultPerPage: int, startIndex: int, totalResults: int>, reviews: table<authorName: string, comments: list, reviewId: string>, tokenPagination: record<nextPageToken: string, previousPageToken: string>> {
+]: nothing -> oneof<record<pageInfo: record<resultPerPage: int, startIndex: int, totalResults: int>, reviews: table<authorName: string, comments: list, reviewId: string>, tokenPagination: record<nextPageToken: string, previousPageToken: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
@@ -3565,7 +3572,7 @@ export def "androidpublisher-reviews-get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --translation-language: string # Language localization code.
-]: nothing -> record<authorName: string, comments: table<developerComment: record, userComment: record>, reviewId: string> {
+]: nothing -> oneof<record<authorName: string, comments: table<developerComment: record, userComment: record>, reviewId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
@@ -3616,7 +3623,7 @@ export def "androidpublisher-reviews-reply" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --reply-text: string # The text to set as the reply. Replies of more than approximately 350 characters will be rejected. HTML tags will be stripped.
-]: any -> record<result: record<lastEdited: record<nanos: int, seconds: string>, replyText: string>> {
+]: any -> oneof<record<result: record<lastEdited: record<nanos: int, seconds: string>, replyText: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3671,7 +3678,7 @@ export def "androidpublisher-monetization-subscriptions-list" [
   --page-size: int # The maximum number of subscriptions to return. The service may return fewer than this value. If unspecified, at most 50 subscriptions will be returned. The maximum value is 1000; values above 1000 will be coerced to 1000.
   --page-token: string # A page token, received from a previous `ListSubscriptions` call. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to `ListSubscriptions` must match the call that provided the page token.
   --show-archived: oneof<nothing, bool> # Whether archived subscriptions should be included in the response. Defaults to false.
-]: nothing -> record<nextPageToken: string, subscriptions: table<archived: bool, basePlans: list, listings: list, packageName: string, productId: string, taxAndComplianceSettings: record>> {
+]: nothing -> oneof<record<nextPageToken: string, subscriptions: table<archived: bool, basePlans: list, listings: list, packageName: string, productId: string, taxAndComplianceSettings: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
@@ -3697,9 +3704,6 @@ export def "androidpublisher-monetization-subscriptions-list" [
 #
 # POST /androidpublisher/v3/applications/{packageName}/subscriptions
 # operationId: androidpublisher.monetization.subscriptions.create
-# --basePlans item shape: {autoRenewingBasePlanType?: record, basePlanId?: string, offerTags?: list, otherRegionsConfig?: record, prepaidBasePlanType?: record, regionalConfigs?: list}
-# --listings item shape: {benefits?: list<string>, description?: string, languageCode?: string, title?: string}
-# --taxAndComplianceSettings shape: {eeaWithdrawalRightType?: "WITHDRAWAL_RIGHT_TYPE_UNSPECIFIED"|"WITHDRAWAL_RIGHT_DIGITAL_CONTENT"|"WITHDRAWAL_RIGHT_SERVICE", taxRateInfoByRegionCode?: record}
 export def "androidpublisher-monetization-subscriptions-create" [
   package_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3729,7 +3733,7 @@ export def "androidpublisher-monetization-subscriptions-create" [
   --body-package-name: string # Immutable. Package name of the parent app.
   --product-id-body: string # Immutable. Unique product ID of the product. Unique within the parent app. Product IDs must be composed of lower-case letters (a-z), numbers (0-9), underscores (_) and dots (.). It must start with a lower-case letter or number, and be between 1 and 40 (inclusive) characters in length. (body field)
   --tax-and-compliance-settings: record # Details about taxation, Google Play policy and legal compliance for subscription products. — shape: {eeaWithdrawalRightType?: "WITHDRAWAL_RIGHT_TYPE_UNSPECIFIED"|"WITHDRAWAL_RIGHT_DIGITAL_CONTENT"|"WITHDRAWAL_RIGHT_SERVICE", taxRateInfoByRegionCode?: record}
-]: any -> record<archived: bool, basePlans: table<autoRenewingBasePlanType: record, basePlanId: string, offerTags: list, otherRegionsConfig: record, prepaidBasePlanType: record, regionalConfigs: list, state: string>, listings: table<benefits: list, description: string, languageCode: string, title: string>, packageName: string, productId: string, taxAndComplianceSettings: record<eeaWithdrawalRightType: string, taxRateInfoByRegionCode: record>> {
+]: any -> oneof<record<archived: bool, basePlans: table<autoRenewingBasePlanType: record, basePlanId: string, offerTags: list, otherRegionsConfig: record, prepaidBasePlanType: record, regionalConfigs: list, state: string>, listings: table<benefits: list, description: string, languageCode: string, title: string>, packageName: string, productId: string, taxAndComplianceSettings: record<eeaWithdrawalRightType: string, taxRateInfoByRegionCode: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3831,7 +3835,7 @@ export def "androidpublisher-monetization-subscriptions-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<archived: bool, basePlans: table<autoRenewingBasePlanType: record, basePlanId: string, offerTags: list, otherRegionsConfig: record, prepaidBasePlanType: record, regionalConfigs: list, state: string>, listings: table<benefits: list, description: string, languageCode: string, title: string>, packageName: string, productId: string, taxAndComplianceSettings: record<eeaWithdrawalRightType: string, taxRateInfoByRegionCode: record>> {
+]: nothing -> oneof<record<archived: bool, basePlans: table<autoRenewingBasePlanType: record, basePlanId: string, offerTags: list, otherRegionsConfig: record, prepaidBasePlanType: record, regionalConfigs: list, state: string>, listings: table<benefits: list, description: string, languageCode: string, title: string>, packageName: string, productId: string, taxAndComplianceSettings: record<eeaWithdrawalRightType: string, taxRateInfoByRegionCode: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
@@ -3858,9 +3862,6 @@ export def "androidpublisher-monetization-subscriptions-get" [
 #
 # PATCH /androidpublisher/v3/applications/{packageName}/subscriptions/{productId}
 # operationId: androidpublisher.monetization.subscriptions.patch
-# --basePlans item shape: {autoRenewingBasePlanType?: record, basePlanId?: string, offerTags?: list, otherRegionsConfig?: record, prepaidBasePlanType?: record, regionalConfigs?: list}
-# --listings item shape: {benefits?: list<string>, description?: string, languageCode?: string, title?: string}
-# --taxAndComplianceSettings shape: {eeaWithdrawalRightType?: "WITHDRAWAL_RIGHT_TYPE_UNSPECIFIED"|"WITHDRAWAL_RIGHT_DIGITAL_CONTENT"|"WITHDRAWAL_RIGHT_SERVICE", taxRateInfoByRegionCode?: record}
 export def "androidpublisher-monetization-subscriptions-patch" [
   package_name: string
   product_id: string
@@ -3891,7 +3892,7 @@ export def "androidpublisher-monetization-subscriptions-patch" [
   --body-package-name: string # Immutable. Package name of the parent app.
   --body-product-id: string # Immutable. Unique product ID of the product. Unique within the parent app. Product IDs must be composed of lower-case letters (a-z), numbers (0-9), underscores (_) and dots (.). It must start with a lower-case letter or number, and be between 1 and 40 (inclusive) characters in length.
   --tax-and-compliance-settings: record # Details about taxation, Google Play policy and legal compliance for subscription products. — shape: {eeaWithdrawalRightType?: "WITHDRAWAL_RIGHT_TYPE_UNSPECIFIED"|"WITHDRAWAL_RIGHT_DIGITAL_CONTENT"|"WITHDRAWAL_RIGHT_SERVICE", taxRateInfoByRegionCode?: record}
-]: any -> record<archived: bool, basePlans: table<autoRenewingBasePlanType: record, basePlanId: string, offerTags: list, otherRegionsConfig: record, prepaidBasePlanType: record, regionalConfigs: list, state: string>, listings: table<benefits: list, description: string, languageCode: string, title: string>, packageName: string, productId: string, taxAndComplianceSettings: record<eeaWithdrawalRightType: string, taxRateInfoByRegionCode: record>> {
+]: any -> oneof<record<archived: bool, basePlans: table<autoRenewingBasePlanType: record, basePlanId: string, offerTags: list, otherRegionsConfig: record, prepaidBasePlanType: record, regionalConfigs: list, state: string>, listings: table<benefits: list, description: string, languageCode: string, title: string>, packageName: string, productId: string, taxAndComplianceSettings: record<eeaWithdrawalRightType: string, taxRateInfoByRegionCode: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3999,7 +4000,7 @@ export def "androidpublisher-monetization-subscriptions-base-plans-offers-list" 
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # The maximum number of subscriptions to return. The service may return fewer than this value. If unspecified, at most 50 subscriptions will be returned. The maximum value is 1000; values above 1000 will be coerced to 1000.
   --page-token: string # A page token, received from a previous `ListSubscriptionsOffers` call. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to `ListSubscriptionOffers` must match the call that provided the page token.
-]: nothing -> record<nextPageToken: string, subscriptionOffers: table<basePlanId: string, offerId: string, offerTags: list, otherRegionsConfig: record, packageName: string, phases: list, productId: string, regionalConfigs: list, state: string, targeting: record>> {
+]: nothing -> oneof<record<nextPageToken: string, subscriptionOffers: table<basePlanId: string, offerId: string, offerTags: list, otherRegionsConfig: record, packageName: string, phases: list, productId: string, regionalConfigs: list, state: string, targeting: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
@@ -4027,11 +4028,6 @@ export def "androidpublisher-monetization-subscriptions-base-plans-offers-list" 
 #
 # POST /androidpublisher/v3/applications/{packageName}/subscriptions/{productId}/basePlans/{basePlanId}/offers
 # operationId: androidpublisher.monetization.subscriptions.basePlans.offers.create
-# --offerTags item shape: {tag?: string}
-# --otherRegionsConfig shape: {otherRegionsNewSubscriberAvailability?: bool}
-# --phases item shape: {duration?: string, otherRegionsConfig?: record, recurrenceCount?: int, regionalConfigs?: list}
-# --regionalConfigs item shape: {newSubscriberAvailability?: bool, regionCode?: string}
-# --targeting shape: {acquisitionRule?: record, upgradeRule?: record}
 export def "androidpublisher-monetization-subscriptions-base-plans-offers-create" [
   package_name: string
   product_id: string
@@ -4067,7 +4063,7 @@ export def "androidpublisher-monetization-subscriptions-base-plans-offers-create
   --body-product-id: string # Required. Immutable. The ID of the parent subscription this offer belongs to.
   --regional-configs: list # Required. The region-specific configuration of this offer. Must contain at least one entry. — item shape: {newSubscriberAvailability?: bool, regionCode?: string}
   --targeting: record # Defines the rule a user needs to satisfy to receive this offer. — shape: {acquisitionRule?: record, upgradeRule?: record}
-]: any -> record<basePlanId: string, offerId: string, offerTags: table<tag: string>, otherRegionsConfig: record<otherRegionsNewSubscriberAvailability: bool>, packageName: string, phases: table<duration: string, otherRegionsConfig: record, recurrenceCount: int, regionalConfigs: list>, productId: string, regionalConfigs: table<newSubscriberAvailability: bool, regionCode: string>, state: string, targeting: record<acquisitionRule: record<scope: record>, upgradeRule: record<billingPeriodDuration: string, oncePerUser: bool, scope: record>>> {
+]: any -> oneof<record<basePlanId: string, offerId: string, offerTags: table<tag: string>, otherRegionsConfig: record<otherRegionsNewSubscriberAvailability: bool>, packageName: string, phases: table<duration: string, otherRegionsConfig: record, recurrenceCount: int, regionalConfigs: list>, productId: string, regionalConfigs: table<newSubscriberAvailability: bool, regionCode: string>, state: string, targeting: record<acquisitionRule: record<scope: record>, upgradeRule: record<billingPeriodDuration: string, oncePerUser: bool, scope: record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4177,7 +4173,7 @@ export def "androidpublisher-monetization-subscriptions-base-plans-offers-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<basePlanId: string, offerId: string, offerTags: table<tag: string>, otherRegionsConfig: record<otherRegionsNewSubscriberAvailability: bool>, packageName: string, phases: table<duration: string, otherRegionsConfig: record, recurrenceCount: int, regionalConfigs: list>, productId: string, regionalConfigs: table<newSubscriberAvailability: bool, regionCode: string>, state: string, targeting: record<acquisitionRule: record<scope: record>, upgradeRule: record<billingPeriodDuration: string, oncePerUser: bool, scope: record>>> {
+]: nothing -> oneof<record<basePlanId: string, offerId: string, offerTags: table<tag: string>, otherRegionsConfig: record<otherRegionsNewSubscriberAvailability: bool>, packageName: string, phases: table<duration: string, otherRegionsConfig: record, recurrenceCount: int, regionalConfigs: list>, productId: string, regionalConfigs: table<newSubscriberAvailability: bool, regionCode: string>, state: string, targeting: record<acquisitionRule: record<scope: record>, upgradeRule: record<billingPeriodDuration: string, oncePerUser: bool, scope: record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
@@ -4206,11 +4202,6 @@ export def "androidpublisher-monetization-subscriptions-base-plans-offers-get" [
 #
 # PATCH /androidpublisher/v3/applications/{packageName}/subscriptions/{productId}/basePlans/{basePlanId}/offers/{offerId}
 # operationId: androidpublisher.monetization.subscriptions.basePlans.offers.patch
-# --offerTags item shape: {tag?: string}
-# --otherRegionsConfig shape: {otherRegionsNewSubscriberAvailability?: bool}
-# --phases item shape: {duration?: string, otherRegionsConfig?: record, recurrenceCount?: int, regionalConfigs?: list}
-# --regionalConfigs item shape: {newSubscriberAvailability?: bool, regionCode?: string}
-# --targeting shape: {acquisitionRule?: record, upgradeRule?: record}
 export def "androidpublisher-monetization-subscriptions-base-plans-offers-patch" [
   package_name: string
   product_id: string
@@ -4247,7 +4238,7 @@ export def "androidpublisher-monetization-subscriptions-base-plans-offers-patch"
   --body-product-id: string # Required. Immutable. The ID of the parent subscription this offer belongs to.
   --regional-configs: list # Required. The region-specific configuration of this offer. Must contain at least one entry. — item shape: {newSubscriberAvailability?: bool, regionCode?: string}
   --targeting: record # Defines the rule a user needs to satisfy to receive this offer. — shape: {acquisitionRule?: record, upgradeRule?: record}
-]: any -> record<basePlanId: string, offerId: string, offerTags: table<tag: string>, otherRegionsConfig: record<otherRegionsNewSubscriberAvailability: bool>, packageName: string, phases: table<duration: string, otherRegionsConfig: record, recurrenceCount: int, regionalConfigs: list>, productId: string, regionalConfigs: table<newSubscriberAvailability: bool, regionCode: string>, state: string, targeting: record<acquisitionRule: record<scope: record>, upgradeRule: record<billingPeriodDuration: string, oncePerUser: bool, scope: record>>> {
+]: any -> oneof<record<basePlanId: string, offerId: string, offerTags: table<tag: string>, otherRegionsConfig: record<otherRegionsNewSubscriberAvailability: bool>, packageName: string, phases: table<duration: string, otherRegionsConfig: record, recurrenceCount: int, regionalConfigs: list>, productId: string, regionalConfigs: table<newSubscriberAvailability: bool, regionCode: string>, state: string, targeting: record<acquisitionRule: record<scope: record>, upgradeRule: record<billingPeriodDuration: string, oncePerUser: bool, scope: record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4305,7 +4296,7 @@ export def "androidpublisher-monetization-subscriptions-base-plans-offers-activa
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record<basePlanId: string, offerId: string, offerTags: table<tag: string>, otherRegionsConfig: record<otherRegionsNewSubscriberAvailability: bool>, packageName: string, phases: table<duration: string, otherRegionsConfig: record, recurrenceCount: int, regionalConfigs: list>, productId: string, regionalConfigs: table<newSubscriberAvailability: bool, regionCode: string>, state: string, targeting: record<acquisitionRule: record<scope: record>, upgradeRule: record<billingPeriodDuration: string, oncePerUser: bool, scope: record>>> {
+]: any -> oneof<record<basePlanId: string, offerId: string, offerTags: table<tag: string>, otherRegionsConfig: record<otherRegionsNewSubscriberAvailability: bool>, packageName: string, phases: table<duration: string, otherRegionsConfig: record, recurrenceCount: int, regionalConfigs: list>, productId: string, regionalConfigs: table<newSubscriberAvailability: bool, regionCode: string>, state: string, targeting: record<acquisitionRule: record<scope: record>, upgradeRule: record<billingPeriodDuration: string, oncePerUser: bool, scope: record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4363,7 +4354,7 @@ export def "androidpublisher-monetization-subscriptions-base-plans-offers-deacti
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record<basePlanId: string, offerId: string, offerTags: table<tag: string>, otherRegionsConfig: record<otherRegionsNewSubscriberAvailability: bool>, packageName: string, phases: table<duration: string, otherRegionsConfig: record, recurrenceCount: int, regionalConfigs: list>, productId: string, regionalConfigs: table<newSubscriberAvailability: bool, regionCode: string>, state: string, targeting: record<acquisitionRule: record<scope: record>, upgradeRule: record<billingPeriodDuration: string, oncePerUser: bool, scope: record>>> {
+]: any -> oneof<record<basePlanId: string, offerId: string, offerTags: table<tag: string>, otherRegionsConfig: record<otherRegionsNewSubscriberAvailability: bool>, packageName: string, phases: table<duration: string, otherRegionsConfig: record, recurrenceCount: int, regionalConfigs: list>, productId: string, regionalConfigs: table<newSubscriberAvailability: bool, regionCode: string>, state: string, targeting: record<acquisitionRule: record<scope: record>, upgradeRule: record<billingPeriodDuration: string, oncePerUser: bool, scope: record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4420,7 +4411,7 @@ export def "androidpublisher-monetization-subscriptions-base-plans-activate" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record<archived: bool, basePlans: table<autoRenewingBasePlanType: record, basePlanId: string, offerTags: list, otherRegionsConfig: record, prepaidBasePlanType: record, regionalConfigs: list, state: string>, listings: table<benefits: list, description: string, languageCode: string, title: string>, packageName: string, productId: string, taxAndComplianceSettings: record<eeaWithdrawalRightType: string, taxRateInfoByRegionCode: record>> {
+]: any -> oneof<record<archived: bool, basePlans: table<autoRenewingBasePlanType: record, basePlanId: string, offerTags: list, otherRegionsConfig: record, prepaidBasePlanType: record, regionalConfigs: list, state: string>, listings: table<benefits: list, description: string, languageCode: string, title: string>, packageName: string, productId: string, taxAndComplianceSettings: record<eeaWithdrawalRightType: string, taxRateInfoByRegionCode: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4476,7 +4467,7 @@ export def "androidpublisher-monetization-subscriptions-base-plans-deactivate" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record<archived: bool, basePlans: table<autoRenewingBasePlanType: record, basePlanId: string, offerTags: list, otherRegionsConfig: record, prepaidBasePlanType: record, regionalConfigs: list, state: string>, listings: table<benefits: list, description: string, languageCode: string, title: string>, packageName: string, productId: string, taxAndComplianceSettings: record<eeaWithdrawalRightType: string, taxRateInfoByRegionCode: record>> {
+]: any -> oneof<record<archived: bool, basePlans: table<autoRenewingBasePlanType: record, basePlanId: string, offerTags: list, otherRegionsConfig: record, prepaidBasePlanType: record, regionalConfigs: list, state: string>, listings: table<benefits: list, description: string, languageCode: string, title: string>, packageName: string, productId: string, taxAndComplianceSettings: record<eeaWithdrawalRightType: string, taxRateInfoByRegionCode: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4507,8 +4498,6 @@ export def "androidpublisher-monetization-subscriptions-base-plans-deactivate" [
 #
 # POST /androidpublisher/v3/applications/{packageName}/subscriptions/{productId}/basePlans/{basePlanId}:migratePrices
 # operationId: androidpublisher.monetization.subscriptions.basePlans.migratePrices
-# --regionalPriceMigrations item shape: {oldestAllowedPriceVersionTime?: string, regionCode?: string}
-# --regionsVersion shape: {version?: string}
 export def "androidpublisher-monetization-subscriptions-base-plans-migrate-prices" [
   package_name: string
   product_id: string
@@ -4535,7 +4524,7 @@ export def "androidpublisher-monetization-subscriptions-base-plans-migrate-price
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --regional-price-migrations: list # Required. The regional prices to update. — item shape: {oldestAllowedPriceVersionTime?: string, regionCode?: string}
   --regions-version: record # The version of the available regions being used for the specified resource. — shape: {version?: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4590,7 +4579,7 @@ export def "androidpublisher-monetization-subscriptions-archive" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record<archived: bool, basePlans: table<autoRenewingBasePlanType: record, basePlanId: string, offerTags: list, otherRegionsConfig: record, prepaidBasePlanType: record, regionalConfigs: list, state: string>, listings: table<benefits: list, description: string, languageCode: string, title: string>, packageName: string, productId: string, taxAndComplianceSettings: record<eeaWithdrawalRightType: string, taxRateInfoByRegionCode: record>> {
+]: any -> oneof<record<archived: bool, basePlans: table<autoRenewingBasePlanType: record, basePlanId: string, offerTags: list, otherRegionsConfig: record, prepaidBasePlanType: record, regionalConfigs: list, state: string>, listings: table<benefits: list, description: string, languageCode: string, title: string>, packageName: string, productId: string, taxAndComplianceSettings: record<eeaWithdrawalRightType: string, taxRateInfoByRegionCode: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4643,7 +4632,7 @@ export def "androidpublisher-systemapks-variants-list" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<variants: table<deviceSpec: record, variantId: int>> {
+]: nothing -> oneof<record<variants: table<deviceSpec: record, variantId: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
@@ -4670,7 +4659,6 @@ export def "androidpublisher-systemapks-variants-list" [
 #
 # POST /androidpublisher/v3/applications/{packageName}/systemApks/{versionCode}/variants
 # operationId: androidpublisher.systemapks.variants.create
-# --deviceSpec shape: {screenDensity?: int, supportedAbis?: list<string>, supportedLocales?: list<string>}
 export def "androidpublisher-systemapks-variants-create" [
   package_name: string
   version_code: string
@@ -4695,7 +4683,7 @@ export def "androidpublisher-systemapks-variants-create" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --device-spec: record # The device spec used to generate a system APK. — shape: {screenDensity?: int, supportedAbis?: list<string>, supportedLocales?: list<string>}
-]: any -> record<deviceSpec: record<screenDensity: int, supportedAbis: list<string>, supportedLocales: list<string>>, variantId: int> {
+]: any -> oneof<record<deviceSpec: record<screenDensity: int, supportedAbis: list<string>, supportedLocales: list<string>>, variantId: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4749,7 +4737,7 @@ export def "androidpublisher-systemapks-variants-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<deviceSpec: record<screenDensity: int, supportedAbis: list<string>, supportedLocales: list<string>>, variantId: int> {
+]: nothing -> oneof<record<deviceSpec: record<screenDensity: int, supportedAbis: list<string>, supportedLocales: list<string>>, variantId: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
@@ -4899,7 +4887,7 @@ export def "androidpublisher-externaltransactions-getexternaltransaction" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<createTime: string, currentPreTaxAmount: record<currency: string, priceMicros: string>, currentTaxAmount: record<currency: string, priceMicros: string>, externalTransactionId: string, oneTimeTransaction: record<externalTransactionToken: string>, originalPreTaxAmount: record<currency: string, priceMicros: string>, originalTaxAmount: record<currency: string, priceMicros: string>, packageName: string, recurringTransaction: record<externalSubscription: record<subscriptionType: string>, externalTransactionToken: string, initialExternalTransactionId: string>, testPurchase: record, transactionState: string, transactionTime: string, userTaxAddress: record<regionCode: string>> {
+]: nothing -> oneof<record<createTime: string, currentPreTaxAmount: record<currency: string, priceMicros: string>, currentTaxAmount: record<currency: string, priceMicros: string>, externalTransactionId: string, oneTimeTransaction: record<externalTransactionToken: string>, originalPreTaxAmount: record<currency: string, priceMicros: string>, originalTaxAmount: record<currency: string, priceMicros: string>, packageName: string, recurringTransaction: record<externalSubscription: record<subscriptionType: string>, externalTransactionToken: string, initialExternalTransactionId: string>, testPurchase: record, transactionState: string, transactionTime: string, userTaxAddress: record<regionCode: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -4925,7 +4913,6 @@ export def "androidpublisher-externaltransactions-getexternaltransaction" [
 #
 # PATCH /androidpublisher/v3/{name}
 # operationId: androidpublisher.users.patch
-# --grants item shape: {appLevelPermissions?: list<string>, name?: string, packageName?: string}
 export def "androidpublisher-users-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4953,7 +4940,7 @@ export def "androidpublisher-users-patch" [
   --email: string # Immutable. The user's email address.
   --expiration-time: string # The time at which the user's access expires, if set. When setting this value, it must always be in the future. (format: google-datetime)
   --body-name: string # Required. Resource name for this user, following the pattern "developers/{developer}/users/{email}".
-]: any -> record<accessState: string, developerAccountPermissions: list<string>, email: string, expirationTime: string, grants: table<appLevelPermissions: list, name: string, packageName: string>, name: string, partial: bool> {
+]: any -> oneof<record<accessState: string, developerAccountPermissions: list<string>, email: string, expirationTime: string, grants: table<appLevelPermissions: list, name: string, packageName: string>, name: string, partial: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4982,7 +4969,6 @@ export def "androidpublisher-users-patch" [
 #
 # POST /androidpublisher/v3/{name}:refund
 # operationId: androidpublisher.externaltransactions.refundexternaltransaction
-# --partialRefund shape: {refundId?: string, refundPreTaxAmount?: record}
 export def "androidpublisher-externaltransactions-refundexternaltransaction" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5008,7 +4994,7 @@ export def "androidpublisher-externaltransactions-refundexternaltransaction" [
   --full-refund: record # A full refund of the remaining amount of a transaction.
   --partial-refund: record # A partial refund of a transaction. — shape: {refundId?: string, refundPreTaxAmount?: record}
   --refund-time: string # Required. The time that the transaction was refunded. (format: google-datetime)
-]: any -> record<createTime: string, currentPreTaxAmount: record<currency: string, priceMicros: string>, currentTaxAmount: record<currency: string, priceMicros: string>, externalTransactionId: string, oneTimeTransaction: record<externalTransactionToken: string>, originalPreTaxAmount: record<currency: string, priceMicros: string>, originalTaxAmount: record<currency: string, priceMicros: string>, packageName: string, recurringTransaction: record<externalSubscription: record<subscriptionType: string>, externalTransactionToken: string, initialExternalTransactionId: string>, testPurchase: record, transactionState: string, transactionTime: string, userTaxAddress: record<regionCode: string>> {
+]: any -> oneof<record<createTime: string, currentPreTaxAmount: record<currency: string, priceMicros: string>, currentTaxAmount: record<currency: string, priceMicros: string>, externalTransactionId: string, oneTimeTransaction: record<externalTransactionToken: string>, originalPreTaxAmount: record<currency: string, priceMicros: string>, originalTaxAmount: record<currency: string, priceMicros: string>, packageName: string, recurringTransaction: record<externalSubscription: record<subscriptionType: string>, externalTransactionToken: string, initialExternalTransactionId: string>, testPurchase: record, transactionState: string, transactionTime: string, userTaxAddress: record<regionCode: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5037,13 +5023,6 @@ export def "androidpublisher-externaltransactions-refundexternaltransaction" [
 #
 # POST /androidpublisher/v3/{parent}/externalTransactions
 # operationId: androidpublisher.externaltransactions.createexternaltransaction
-# --currentPreTaxAmount shape: {currency?: string, priceMicros?: string}
-# --currentTaxAmount shape: {currency?: string, priceMicros?: string}
-# --oneTimeTransaction shape: {externalTransactionToken?: string}
-# --originalPreTaxAmount shape: {currency?: string, priceMicros?: string}
-# --originalTaxAmount shape: {currency?: string, priceMicros?: string}
-# --recurringTransaction shape: {externalSubscription?: record, externalTransactionToken?: string, initialExternalTransactionId?: string}
-# --userTaxAddress shape: {regionCode?: string}
 export def "androidpublisher-externaltransactions-createexternaltransaction" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5076,7 +5055,7 @@ export def "androidpublisher-externaltransactions-createexternaltransaction" [
   --test-purchase: record # Represents a transaction performed using a test account. These transactions will not be charged by Google.
   --transaction-time: string # Required. The time when the transaction was completed. (format: google-datetime)
   --user-tax-address: record # User's address for the external transaction. — shape: {regionCode?: string}
-]: any -> record<createTime: string, currentPreTaxAmount: record<currency: string, priceMicros: string>, currentTaxAmount: record<currency: string, priceMicros: string>, externalTransactionId: string, oneTimeTransaction: record<externalTransactionToken: string>, originalPreTaxAmount: record<currency: string, priceMicros: string>, originalTaxAmount: record<currency: string, priceMicros: string>, packageName: string, recurringTransaction: record<externalSubscription: record<subscriptionType: string>, externalTransactionToken: string, initialExternalTransactionId: string>, testPurchase: record, transactionState: string, transactionTime: string, userTaxAddress: record<regionCode: string>> {
+]: any -> oneof<record<createTime: string, currentPreTaxAmount: record<currency: string, priceMicros: string>, currentTaxAmount: record<currency: string, priceMicros: string>, externalTransactionId: string, oneTimeTransaction: record<externalTransactionToken: string>, originalPreTaxAmount: record<currency: string, priceMicros: string>, originalTaxAmount: record<currency: string, priceMicros: string>, packageName: string, recurringTransaction: record<externalSubscription: record<subscriptionType: string>, externalTransactionToken: string, initialExternalTransactionId: string>, testPurchase: record, transactionState: string, transactionTime: string, userTaxAddress: record<regionCode: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5130,7 +5109,7 @@ export def "androidpublisher-grants-create" [
   --app-level-permissions: list<string> # The permissions granted to the user for this app.
   --name: string # Required. Resource name for this grant, following the pattern "developers/{developer}/users/{email}/grants/{package_name}". If this grant is for a draft app, the app ID will be used in this resource name instead of the package name.
   --package-name: string # Immutable. The package name of the app. This will be empty for draft apps.
-]: any -> record<appLevelPermissions: list<string>, name: string, packageName: string> {
+]: any -> oneof<record<appLevelPermissions: list<string>, name: string, packageName: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5183,7 +5162,7 @@ export def "androidpublisher-users-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # The maximum number of results to return. This must be set to -1 to disable pagination.
   --page-token: string # A token received from a previous call to this method, in order to retrieve further results.
-]: nothing -> record<nextPageToken: string, users: table<accessState: string, developerAccountPermissions: list, email: string, expirationTime: string, grants: list, name: string, partial: bool>> {
+]: nothing -> oneof<record<nextPageToken: string, users: table<accessState: string, developerAccountPermissions: list, email: string, expirationTime: string, grants: list, name: string, partial: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -5209,7 +5188,6 @@ export def "androidpublisher-users-list" [
 #
 # POST /androidpublisher/v3/{parent}/users
 # operationId: androidpublisher.users.create
-# --grants item shape: {appLevelPermissions?: list<string>, name?: string, packageName?: string}
 export def "androidpublisher-users-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5236,7 +5214,7 @@ export def "androidpublisher-users-create" [
   --email: string # Immutable. The user's email address.
   --expiration-time: string # The time at which the user's access expires, if set. When setting this value, it must always be in the future. (format: google-datetime)
   --name: string # Required. Resource name for this user, following the pattern "developers/{developer}/users/{email}".
-]: any -> record<accessState: string, developerAccountPermissions: list<string>, email: string, expirationTime: string, grants: table<appLevelPermissions: list, name: string, packageName: string>, name: string, partial: bool> {
+]: any -> oneof<record<accessState: string, developerAccountPermissions: list<string>, email: string, expirationTime: string, grants: table<appLevelPermissions: list, name: string, packageName: string>, name: string, partial: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -131,9 +154,9 @@ def x-amz-target-completer-22 [] { ["ACMPrivateCA.UpdateCertificateAuthority"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-certificate-authority" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["create-certificate-authority" "create-certificate-authority-audit-report" "create-permission" "delete-certificate-authority" "delete-permission" "delete-policy" "describe-certificate-authority" "describe-certificate-authority-audit-report" "get-certificate" "get-certificate-authority-certificate" "get-certificate-authority-csr" "get-policy" "import-certificate-authority-certificate" "issue-certificate" "list-certificate-authorities" "list-permissions" "list-tags" "put-policy" "restore-certificate-authority" "revoke-certificate" "tag-certificate-authority" "untag-certificate-authority" "update-certificate-authority" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -155,9 +178,6 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: CreateCertificateAuthority
-# --CertificateAuthorityConfiguration shape: {KeyAlgorithm: "RSA_2048"|"RSA_4096"|"EC_prime256v1"|"EC_secp384r1", SigningAlgorithm: "SHA256WITHECDSA"|"SHA384WITHECDSA"|"SHA512WITHECDSA"|"SHA256WITHRSA"|"SHA384WITHRSA"|"SHA512WITHRSA", Subject: record, CsrExtensions?: record}
-# --RevocationConfiguration shape: {CrlConfiguration?: record, OcspConfiguration?: record}
-# --Tags item shape: {Key: string, Value?: string}
 export def "create-certificate-authority" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -183,7 +203,7 @@ export def "create-certificate-authority" [
   --key-storage-security-standard: string@key-storage-security-standard-completer # Specifies a cryptographic key management compliance standard used for handling CA keys. Default: FIPS_140_2_LEVEL_3_OR_HIGHER Note: FIPS_140_2_LEVEL_3_OR_HIGHER is not supported in the following Regions: ap-northeast-3 ap-southeast-3 When creating a CA in these Regions, you must provide FIPS_140_2_LEVEL_2_OR_HIGHER as the argument for KeyStorageSecurityStandard. Failure to do this results in an InvalidArgsException with the message, "A certificate authority cannot be created in this region with the specified security standard."
   --tags: list # Key-value pairs that will be attached to the new private CA. You can associate up to 50 tags with a private CA. For information using tags with IAM to manage permissions, see Controlling Access Using IAM Tags (https://docs.aws.amazon.com/IAM/latest/UserGuide/access_iam-tags.html). — item shape: {Key: string, Value?: string}
   --usage-mode: string@usage-mode-completer # Specifies whether the CA issues general-purpose certificates that typically require a revocation mechanism, or short-lived certificates that may optionally omit revocation because they expire quickly. Short-lived certificate validity is limited to seven days. The default value is GENERAL_PURPOSE.
-]: any -> record<CertificateAuthorityArn: string> {
+]: any -> oneof<record<CertificateAuthorityArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -234,7 +254,7 @@ export def "create-certificate-authority-audit-report" [
   certificate_authority_arn: string # The Amazon Resource Name (ARN) of the CA to be audited. This is of the form: arn:aws:acm-pca:region:account:certificate-authority/12345678-1234-1234-1234-123456789012 .
   s3_bucket_name: string # The name of the S3 bucket that will contain the audit report.
   audit_report_response_format: string@audit-report-response-format-completer # The format in which to create the report. This can be either JSON or CSV.
-]: any -> record<AuditReportId: string, S3Key: string> {
+]: any -> oneof<record<AuditReportId: string, S3Key: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -485,7 +505,7 @@ export def "describe-certificate-authority" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-6 # required
   certificate_authority_arn: string # The Amazon Resource Name (ARN) that was returned when you called CreateCertificateAuthority (https://docs.aws.amazon.com/privateca/latest/APIReference/API_CreateCertificateAuthority.html). This must be of the form: arn:aws:acm-pca:region:account:certificate-authority/12345678-1234-1234-1234-123456789012 .
-]: any -> record<CertificateAuthority: record<Arn: string, OwnerAccount: string, CreatedAt: string, LastStateChangeAt: string, Type: string, Serial: string, Status: string, NotBefore: string, NotAfter: string, FailureReason: string, CertificateAuthorityConfiguration: record<KeyAlgorithm: string, SigningAlgorithm: string, Subject: record, CsrExtensions: record>, RevocationConfiguration: record<CrlConfiguration: record, OcspConfiguration: record>, RestorableUntil: string, KeyStorageSecurityStandard: string, UsageMode: string>> {
+]: any -> oneof<record<CertificateAuthority: record<Arn: string, OwnerAccount: string, CreatedAt: string, LastStateChangeAt: string, Type: string, Serial: string, Status: string, NotBefore: string, NotAfter: string, FailureReason: string, CertificateAuthorityConfiguration: record<KeyAlgorithm: string, SigningAlgorithm: string, Subject: record, CsrExtensions: record>, RevocationConfiguration: record<CrlConfiguration: record, OcspConfiguration: record>, RestorableUntil: string, KeyStorageSecurityStandard: string, UsageMode: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -535,7 +555,7 @@ export def "describe-certificate-authority-audit-report" [
   --x-amz-target: string@x-amz-target-completer-7 # required
   certificate_authority_arn: string # The Amazon Resource Name (ARN) of the private CA. This must be of the form: arn:aws:acm-pca:region:account:certificate-authority/12345678-1234-1234-1234-123456789012 .
   audit_report_id: string # The report ID returned by calling the CreateCertificateAuthorityAuditReport (https://docs.aws.amazon.com/privateca/latest/APIReference/API_CreateCertificateAuthorityAuditReport.html) action.
-]: any -> record<AuditReportStatus: string, S3BucketName: string, S3Key: string, CreatedAt: string> {
+]: any -> oneof<record<AuditReportStatus: string, S3BucketName: string, S3Key: string, CreatedAt: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -585,7 +605,7 @@ export def "get-certificate" [
   --x-amz-target: string@x-amz-target-completer-8 # required
   certificate_authority_arn: string # The Amazon Resource Name (ARN) that was returned when you called CreateCertificateAuthority (https://docs.aws.amazon.com/privateca/latest/APIReference/API_CreateCertificateAuthority.html). This must be of the form: arn:aws:acm-pca:region:account:certificate-authority/12345678-1234-1234-1234-123456789012 .
   certificate_arn: string # The ARN of the issued certificate. The ARN contains the certificate serial number and must be in the following form: arn:aws:acm-pca:region:account:certificate-authority/12345678-1234-1234-1234-123456789012/certificate/286535153982981100925020015808220737245
-]: any -> record<Certificate: string, CertificateChain: string> {
+]: any -> oneof<record<Certificate: string, CertificateChain: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -634,7 +654,7 @@ export def "get-certificate-authority-certificate" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-9 # required
   certificate_authority_arn: string # The Amazon Resource Name (ARN) of your private CA. This is of the form: arn:aws:acm-pca:region:account:certificate-authority/12345678-1234-1234-1234-123456789012 .
-]: any -> record<Certificate: string, CertificateChain: string> {
+]: any -> oneof<record<Certificate: string, CertificateChain: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -683,7 +703,7 @@ export def "get-certificate-authority-csr" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-10 # required
   certificate_authority_arn: string # The Amazon Resource Name (ARN) that was returned when you called the CreateCertificateAuthority (https://docs.aws.amazon.com/privateca/latest/APIReference/API_CreateCertificateAuthority.html) action. This must be of the form: arn:aws:acm-pca:region:account:certificate-authority/12345678-1234-1234-1234-123456789012
-]: any -> record<Csr: string> {
+]: any -> oneof<record<Csr: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -732,7 +752,7 @@ export def "get-policy" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-11 # required
   resource_arn: string # The Amazon Resource Number (ARN) of the private CA that will have its policy retrieved. You can find the CA's ARN by calling the ListCertificateAuthorities action.
-]: any -> record<Policy: string> {
+]: any -> oneof<record<Policy: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -813,9 +833,6 @@ export def "import-certificate-authority-certificate" [
 #
 # POST /
 # operationId: IssueCertificate
-# --ApiPassthrough shape: {Extensions?: record, Subject?: record}
-# --Validity shape: {Value: int, Type: "END_DATE"|"ABSOLUTE"|"DAYS"|"MONTHS"|"YEARS"}
-# --ValidityNotBefore shape: {Value: int, Type: "END_DATE"|"ABSOLUTE"|"DAYS"|"MONTHS"|"YEARS"}
 export def "issue-certificate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -842,7 +859,7 @@ export def "issue-certificate" [
   validity: record # Validity specifies the period of time during which a certificate is valid. Validity can be expressed as an explicit date and time when the validity of a certificate starts or expires, or as a span of time after issuance, stated in days, months, or years. For more information, see Validity (https://tools.ietf.org/html/rfc5280#section-4.1.2.5) in RFC 5280. Amazon Web Services Private CA API consumes the Validity data type differently in two distinct parameters of the IssueCertificate action. The required parameter IssueCertificate:Validity specifies the end of a certificate's validity period. The optional parameter IssueCertificate:ValidityNotBefore specifies a customized starting time for the validity period. — shape: {Value: int, Type: "END_DATE"|"ABSOLUTE"|"DAYS"|"MONTHS"|"YEARS"}
   --validity-not-before: record # Validity specifies the period of time during which a certificate is valid. Validity can be expressed as an explicit date and time when the validity of a certificate starts or expires, or as a span of time after issuance, stated in days, months, or years. For more information, see Validity (https://tools.ietf.org/html/rfc5280#section-4.1.2.5) in RFC 5280. Amazon Web Services Private CA API consumes the Validity data type differently in two distinct parameters of the IssueCertificate action. The required parameter IssueCertificate:Validity specifies the end of a certificate's validity period. The optional parameter IssueCertificate:ValidityNotBefore specifies a customized starting time for the validity period. — shape: {Value: int, Type: "END_DATE"|"ABSOLUTE"|"DAYS"|"MONTHS"|"YEARS"}
   --idempotency-token: string # Alphanumeric string that can be used to distinguish between calls to the IssueCertificate action. Idempotency tokens for IssueCertificate time out after one minute. Therefore, if you call IssueCertificate multiple times with the same idempotency token within one minute, Amazon Web Services Private CA recognizes that you are requesting only one certificate and will issue only one. If you change the idempotency token for each call, Amazon Web Services Private CA recognizes that you are requesting multiple certificates.
-]: any -> record<CertificateArn: string> {
+]: any -> oneof<record<CertificateArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -895,7 +912,7 @@ export def "list-certificate-authorities" [
   --next-token-body: string # Use this parameter when paginating results in a subsequent request after you receive a response with truncated results. Set it to the value of the NextToken parameter from the response you just received. (body field)
   --max-results-body: int # Use this parameter when paginating results to specify the maximum number of items to return in the response on each page. If additional items exist beyond the number you specify, the NextToken element is sent in the response. Use this NextToken value in a subsequent request to retrieve additional items. (body field)
   --resource-owner: string@resource-owner-completer # Use this parameter to filter the returned set of certificate authorities based on their owner. The default is SELF.
-]: any -> record<CertificateAuthorities: table<Arn: string, OwnerAccount: string, CreatedAt: string, LastStateChangeAt: string, Type: string, Serial: string, Status: string, NotBefore: string, NotAfter: string, FailureReason: string, CertificateAuthorityConfiguration: record, RevocationConfiguration: record, RestorableUntil: string, KeyStorageSecurityStandard: string, UsageMode: string>, NextToken: string> {
+]: any -> oneof<record<CertificateAuthorities: table<Arn: string, OwnerAccount: string, CreatedAt: string, LastStateChangeAt: string, Type: string, Serial: string, Status: string, NotBefore: string, NotAfter: string, FailureReason: string, CertificateAuthorityConfiguration: record, RevocationConfiguration: record, RestorableUntil: string, KeyStorageSecurityStandard: string, UsageMode: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -949,7 +966,7 @@ export def "list-permissions" [
   certificate_authority_arn: string # The Amazon Resource Number (ARN) of the private CA to inspect. You can find the ARN by calling the ListCertificateAuthorities (https://docs.aws.amazon.com/privateca/latest/APIReference/API_ListCertificateAuthorities.html) action. This must be of the form: arn:aws:acm-pca:region:account:certificate-authority/12345678-1234-1234-1234-123456789012 You can get a private CA's ARN by running the ListCertificateAuthorities (https://docs.aws.amazon.com/privateca/latest/APIReference/API_ListCertificateAuthorities.html) action.
   --next-token-body: string # When paginating results, use this parameter in a subsequent request after you receive a response with truncated results. Set it to the value of NextToken from the response you just received. (body field)
   --max-results-body: int # When paginating results, use this parameter to specify the maximum number of items to return in the response. If additional items exist beyond the number you specify, the NextToken element is sent in the response. Use this NextToken value in a subsequent request to retrieve additional items. (body field)
-]: any -> record<Permissions: table<CertificateAuthorityArn: string, CreatedAt: string, Principal: string, SourceAccount: string, Actions: list, Policy: string>, NextToken: string> {
+]: any -> oneof<record<Permissions: table<CertificateAuthorityArn: string, CreatedAt: string, Principal: string, SourceAccount: string, Actions: list, Policy: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1003,7 +1020,7 @@ export def "list-tags" [
   certificate_authority_arn: string # The Amazon Resource Name (ARN) that was returned when you called the CreateCertificateAuthority (https://docs.aws.amazon.com/privateca/latest/APIReference/API_CreateCertificateAuthority.html) action. This must be of the form: arn:aws:acm-pca:region:account:certificate-authority/12345678-1234-1234-1234-123456789012
   --next-token-body: string # Use this parameter when paginating results in a subsequent request after you receive a response with truncated results. Set it to the value of NextToken from the response you just received. (body field)
   --max-results-body: int # Use this parameter when paginating results to specify the maximum number of items to return in the response. If additional items exist beyond the number you specify, the NextToken element is sent in the response. Use this NextToken value in a subsequent request to retrieve additional items. (body field)
-]: any -> record<Tags: table<Key: string, Value: string>, NextToken: string> {
+]: any -> oneof<record<Tags: table<Key: string, Value: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1184,7 +1201,6 @@ export def "revoke-certificate" [
 #
 # POST /
 # operationId: TagCertificateAuthority
-# --Tags item shape: {Key: string, Value?: string}
 export def "tag-certificate-authority" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1235,7 +1251,6 @@ export def "tag-certificate-authority" [
 #
 # POST /
 # operationId: UntagCertificateAuthority
-# --Tags item shape: {Key: string, Value?: string}
 export def "untag-certificate-authority" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1286,7 +1301,6 @@ export def "untag-certificate-authority" [
 #
 # POST /
 # operationId: UpdateCertificateAuthority
-# --RevocationConfiguration shape: {CrlConfiguration?: record, OcspConfiguration?: record}
 export def "update-certificate-authority" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

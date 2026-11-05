@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -148,9 +172,9 @@ def action-completer-33 [] { ["SetSubnets"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-add-listener-certificates" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-add-listener-certificates" "post-add-listener-certificates" "get-add-tags" "post-add-tags" "get-create-listener" "post-create-listener" "get-create-load-balancer" "post-create-load-balancer" "get-create-rule" "post-create-rule" "get-create-target-group" "post-create-target-group" "get-delete-listener" "post-delete-listener" "get-delete-load-balancer" "post-delete-load-balancer" "get-delete-rule" "post-delete-rule" "get-delete-target-group" "post-delete-target-group" "get-deregister-targets" "post-deregister-targets" "get-describe-account-limits" "post-describe-account-limits" "get-describe-listener-certificates" "post-describe-listener-certificates" "get-describe-listeners" "post-describe-listeners" "get-describe-load-balancer-attributes" "post-describe-load-balancer-attributes" "get-describe-load-balancers" "post-describe-load-balancers" "get-describe-rules" "post-describe-rules" "get-describe-ssl-policies" "post-describe-ssl-policies" "get-describe-tags" "post-describe-tags" "get-describe-target-group-attributes" "post-describe-target-group-attributes" "get-describe-target-groups" "post-describe-target-groups" "get-describe-target-health" "post-describe-target-health" "get-modify-listener" "post-modify-listener" "get-modify-load-balancer-attributes" "post-modify-load-balancer-attributes" "get-modify-rule" "post-modify-rule" "get-modify-target-group" "post-modify-target-group" "get-modify-target-group-attributes" "post-modify-target-group-attributes" "get-register-targets" "post-register-targets" "get-remove-listener-certificates" "post-remove-listener-certificates" "get-remove-tags" "post-remove-tags" "get-set-ip-address-type" "post-set-ip-address-type" "get-set-rule-priorities" "post-set-rule-priorities" "get-set-security-groups" "post-set-security-groups" "get-set-subnets" "post-set-subnets" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -193,7 +217,7 @@ export def "get-add-listener-certificates" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Certificates: table<CertificateArn: string, IsDefault: bool>> {
+]: nothing -> oneof<record<Certificates: table<CertificateArn: string, IsDefault: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($listener_arn == null) { error make --unspanned { msg: "required query parameter 'ListenerArn' missing: pass --listener-arn" } }
@@ -244,7 +268,7 @@ export def "post-add-listener-certificates" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Certificates: table<CertificateArn: string, IsDefault: bool>> {
+]: any -> oneof<record<Certificates: table<CertificateArn: string, IsDefault: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -297,7 +321,7 @@ export def "get-add-tags" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arns == null) { error make --unspanned { msg: "required query parameter 'ResourceArns' missing: pass --resource-arns" } }
@@ -348,7 +372,7 @@ export def "post-add-tags" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -407,7 +431,7 @@ export def "get-create-listener" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Listeners: table<ListenerArn: string, LoadBalancerArn: string, Port: int, Protocol: string, Certificates: list, SslPolicy: string, DefaultActions: list, AlpnPolicy: list>> {
+]: nothing -> oneof<record<Listeners: table<ListenerArn: string, LoadBalancerArn: string, Port: int, Protocol: string, Certificates: list, SslPolicy: string, DefaultActions: list, AlpnPolicy: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($load_balancer_arn == null) { error make --unspanned { msg: "required query parameter 'LoadBalancerArn' missing: pass --load-balancer-arn" } }
@@ -458,7 +482,7 @@ export def "post-create-listener" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Listeners: table<ListenerArn: string, LoadBalancerArn: string, Port: int, Protocol: string, Certificates: list, SslPolicy: string, DefaultActions: list, AlpnPolicy: list>> {
+]: any -> oneof<record<Listeners: table<ListenerArn: string, LoadBalancerArn: string, Port: int, Protocol: string, Certificates: list, SslPolicy: string, DefaultActions: list, AlpnPolicy: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -518,7 +542,7 @@ export def "get-create-load-balancer" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<LoadBalancers: table<LoadBalancerArn: string, DNSName: string, CanonicalHostedZoneId: string, CreatedTime: string, LoadBalancerName: string, Scheme: string, VpcId: string, State: record, Type: string, AvailabilityZones: list, SecurityGroups: list, IpAddressType: string, CustomerOwnedIpv4Pool: string>> {
+]: nothing -> oneof<record<LoadBalancers: table<LoadBalancerArn: string, DNSName: string, CanonicalHostedZoneId: string, CreatedTime: string, LoadBalancerName: string, Scheme: string, VpcId: string, State: record, Type: string, AvailabilityZones: list, SecurityGroups: list, IpAddressType: string, CustomerOwnedIpv4Pool: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name == null) { error make --unspanned { msg: "required query parameter 'Name' missing: pass --name" } }
@@ -568,7 +592,7 @@ export def "post-create-load-balancer" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<LoadBalancers: table<LoadBalancerArn: string, DNSName: string, CanonicalHostedZoneId: string, CreatedTime: string, LoadBalancerName: string, Scheme: string, VpcId: string, State: record, Type: string, AvailabilityZones: list, SecurityGroups: list, IpAddressType: string, CustomerOwnedIpv4Pool: string>> {
+]: any -> oneof<record<LoadBalancers: table<LoadBalancerArn: string, DNSName: string, CanonicalHostedZoneId: string, CreatedTime: string, LoadBalancerName: string, Scheme: string, VpcId: string, State: record, Type: string, AvailabilityZones: list, SecurityGroups: list, IpAddressType: string, CustomerOwnedIpv4Pool: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -624,7 +648,7 @@ export def "get-create-rule" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Rules: table<RuleArn: string, Priority: string, Conditions: list, Actions: list, IsDefault: bool>> {
+]: nothing -> oneof<record<Rules: table<RuleArn: string, Priority: string, Conditions: list, Actions: list, IsDefault: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($listener_arn == null) { error make --unspanned { msg: "required query parameter 'ListenerArn' missing: pass --listener-arn" } }
@@ -677,7 +701,7 @@ export def "post-create-rule" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Rules: table<RuleArn: string, Priority: string, Conditions: list, Actions: list, IsDefault: bool>> {
+]: any -> oneof<record<Rules: table<RuleArn: string, Priority: string, Conditions: list, Actions: list, IsDefault: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -745,7 +769,7 @@ export def "get-create-target-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<TargetGroups: table<TargetGroupArn: string, TargetGroupName: string, Protocol: string, Port: int, VpcId: string, HealthCheckProtocol: string, HealthCheckPort: string, HealthCheckEnabled: bool, HealthCheckIntervalSeconds: int, HealthCheckTimeoutSeconds: int, HealthyThresholdCount: int, UnhealthyThresholdCount: int, HealthCheckPath: string, Matcher: record, LoadBalancerArns: list, TargetType: string, ProtocolVersion: string, IpAddressType: string>> {
+]: nothing -> oneof<record<TargetGroups: table<TargetGroupArn: string, TargetGroupName: string, Protocol: string, Port: int, VpcId: string, HealthCheckProtocol: string, HealthCheckPort: string, HealthCheckEnabled: bool, HealthCheckIntervalSeconds: int, HealthCheckTimeoutSeconds: int, HealthyThresholdCount: int, UnhealthyThresholdCount: int, HealthCheckPath: string, Matcher: record, LoadBalancerArns: list, TargetType: string, ProtocolVersion: string, IpAddressType: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name == null) { error make --unspanned { msg: "required query parameter 'Name' missing: pass --name" } }
@@ -795,7 +819,7 @@ export def "post-create-target-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<TargetGroups: table<TargetGroupArn: string, TargetGroupName: string, Protocol: string, Port: int, VpcId: string, HealthCheckProtocol: string, HealthCheckPort: string, HealthCheckEnabled: bool, HealthCheckIntervalSeconds: int, HealthCheckTimeoutSeconds: int, HealthyThresholdCount: int, UnhealthyThresholdCount: int, HealthCheckPath: string, Matcher: record, LoadBalancerArns: list, TargetType: string, ProtocolVersion: string, IpAddressType: string>> {
+]: any -> oneof<record<TargetGroups: table<TargetGroupArn: string, TargetGroupName: string, Protocol: string, Port: int, VpcId: string, HealthCheckProtocol: string, HealthCheckPort: string, HealthCheckEnabled: bool, HealthCheckIntervalSeconds: int, HealthCheckTimeoutSeconds: int, HealthyThresholdCount: int, UnhealthyThresholdCount: int, HealthCheckPath: string, Matcher: record, LoadBalancerArns: list, TargetType: string, ProtocolVersion: string, IpAddressType: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -847,7 +871,7 @@ export def "get-delete-listener" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($listener_arn == null) { error make --unspanned { msg: "required query parameter 'ListenerArn' missing: pass --listener-arn" } }
@@ -897,7 +921,7 @@ export def "post-delete-listener" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -949,7 +973,7 @@ export def "get-delete-load-balancer" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($load_balancer_arn == null) { error make --unspanned { msg: "required query parameter 'LoadBalancerArn' missing: pass --load-balancer-arn" } }
@@ -999,7 +1023,7 @@ export def "post-delete-load-balancer" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1051,7 +1075,7 @@ export def "get-delete-rule" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rule_arn == null) { error make --unspanned { msg: "required query parameter 'RuleArn' missing: pass --rule-arn" } }
@@ -1101,7 +1125,7 @@ export def "post-delete-rule" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1153,7 +1177,7 @@ export def "get-delete-target-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($target_group_arn == null) { error make --unspanned { msg: "required query parameter 'TargetGroupArn' missing: pass --target-group-arn" } }
@@ -1203,7 +1227,7 @@ export def "post-delete-target-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1256,7 +1280,7 @@ export def "get-deregister-targets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($target_group_arn == null) { error make --unspanned { msg: "required query parameter 'TargetGroupArn' missing: pass --target-group-arn" } }
@@ -1307,7 +1331,7 @@ export def "post-deregister-targets" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1360,7 +1384,7 @@ export def "get-describe-account-limits" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Limits: table<Name: string, Max: string>, NextMarker: string> {
+]: nothing -> oneof<record<Limits: table<Name: string, Max: string>, NextMarker: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DescribeAccountLimits")
@@ -1409,7 +1433,7 @@ export def "post-describe-account-limits" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Limits: table<Name: string, Max: string>, NextMarker: string> {
+]: any -> oneof<record<Limits: table<Name: string, Max: string>, NextMarker: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1463,7 +1487,7 @@ export def "get-describe-listener-certificates" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Certificates: table<CertificateArn: string, IsDefault: bool>, NextMarker: string> {
+]: nothing -> oneof<record<Certificates: table<CertificateArn: string, IsDefault: bool>, NextMarker: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($listener_arn == null) { error make --unspanned { msg: "required query parameter 'ListenerArn' missing: pass --listener-arn" } }
@@ -1513,7 +1537,7 @@ export def "post-describe-listener-certificates" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Certificates: table<CertificateArn: string, IsDefault: bool>, NextMarker: string> {
+]: any -> oneof<record<Certificates: table<CertificateArn: string, IsDefault: bool>, NextMarker: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1568,7 +1592,7 @@ export def "get-describe-listeners" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Listeners: table<ListenerArn: string, LoadBalancerArn: string, Port: int, Protocol: string, Certificates: list, SslPolicy: string, DefaultActions: list, AlpnPolicy: list>, NextMarker: string> {
+]: nothing -> oneof<record<Listeners: table<ListenerArn: string, LoadBalancerArn: string, Port: int, Protocol: string, Certificates: list, SslPolicy: string, DefaultActions: list, AlpnPolicy: list>, NextMarker: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DescribeListeners")
@@ -1618,7 +1642,7 @@ export def "post-describe-listeners" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Listeners: table<ListenerArn: string, LoadBalancerArn: string, Port: int, Protocol: string, Certificates: list, SslPolicy: string, DefaultActions: list, AlpnPolicy: list>, NextMarker: string> {
+]: any -> oneof<record<Listeners: table<ListenerArn: string, LoadBalancerArn: string, Port: int, Protocol: string, Certificates: list, SslPolicy: string, DefaultActions: list, AlpnPolicy: list>, NextMarker: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1670,7 +1694,7 @@ export def "get-describe-load-balancer-attributes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Attributes: table<Key: string, Value: string>> {
+]: nothing -> oneof<record<Attributes: table<Key: string, Value: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($load_balancer_arn == null) { error make --unspanned { msg: "required query parameter 'LoadBalancerArn' missing: pass --load-balancer-arn" } }
@@ -1720,7 +1744,7 @@ export def "post-describe-load-balancer-attributes" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Attributes: table<Key: string, Value: string>> {
+]: any -> oneof<record<Attributes: table<Key: string, Value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1775,7 +1799,7 @@ export def "get-describe-load-balancers" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<LoadBalancers: table<LoadBalancerArn: string, DNSName: string, CanonicalHostedZoneId: string, CreatedTime: string, LoadBalancerName: string, Scheme: string, VpcId: string, State: record, Type: string, AvailabilityZones: list, SecurityGroups: list, IpAddressType: string, CustomerOwnedIpv4Pool: string>, NextMarker: string> {
+]: nothing -> oneof<record<LoadBalancers: table<LoadBalancerArn: string, DNSName: string, CanonicalHostedZoneId: string, CreatedTime: string, LoadBalancerName: string, Scheme: string, VpcId: string, State: record, Type: string, AvailabilityZones: list, SecurityGroups: list, IpAddressType: string, CustomerOwnedIpv4Pool: string>, NextMarker: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DescribeLoadBalancers")
@@ -1825,7 +1849,7 @@ export def "post-describe-load-balancers" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<LoadBalancers: table<LoadBalancerArn: string, DNSName: string, CanonicalHostedZoneId: string, CreatedTime: string, LoadBalancerName: string, Scheme: string, VpcId: string, State: record, Type: string, AvailabilityZones: list, SecurityGroups: list, IpAddressType: string, CustomerOwnedIpv4Pool: string>, NextMarker: string> {
+]: any -> oneof<record<LoadBalancers: table<LoadBalancerArn: string, DNSName: string, CanonicalHostedZoneId: string, CreatedTime: string, LoadBalancerName: string, Scheme: string, VpcId: string, State: record, Type: string, AvailabilityZones: list, SecurityGroups: list, IpAddressType: string, CustomerOwnedIpv4Pool: string>, NextMarker: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1880,7 +1904,7 @@ export def "get-describe-rules" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Rules: table<RuleArn: string, Priority: string, Conditions: list, Actions: list, IsDefault: bool>, NextMarker: string> {
+]: nothing -> oneof<record<Rules: table<RuleArn: string, Priority: string, Conditions: list, Actions: list, IsDefault: bool>, NextMarker: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DescribeRules")
@@ -1929,7 +1953,7 @@ export def "post-describe-rules" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Rules: table<RuleArn: string, Priority: string, Conditions: list, Actions: list, IsDefault: bool>, NextMarker: string> {
+]: any -> oneof<record<Rules: table<RuleArn: string, Priority: string, Conditions: list, Actions: list, IsDefault: bool>, NextMarker: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1984,7 +2008,7 @@ export def "get-describe-ssl-policies" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<SslPolicies: table<SslProtocols: list, Ciphers: list, Name: string, SupportedLoadBalancerTypes: list>, NextMarker: string> {
+]: nothing -> oneof<record<SslPolicies: table<SslProtocols: list, Ciphers: list, Name: string, SupportedLoadBalancerTypes: list>, NextMarker: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DescribeSSLPolicies")
@@ -2033,7 +2057,7 @@ export def "post-describe-ssl-policies" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<SslPolicies: table<SslProtocols: list, Ciphers: list, Name: string, SupportedLoadBalancerTypes: list>, NextMarker: string> {
+]: any -> oneof<record<SslPolicies: table<SslProtocols: list, Ciphers: list, Name: string, SupportedLoadBalancerTypes: list>, NextMarker: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2085,7 +2109,7 @@ export def "get-describe-tags" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<TagDescriptions: table<ResourceArn: string, Tags: list>> {
+]: nothing -> oneof<record<TagDescriptions: table<ResourceArn: string, Tags: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arns == null) { error make --unspanned { msg: "required query parameter 'ResourceArns' missing: pass --resource-arns" } }
@@ -2135,7 +2159,7 @@ export def "post-describe-tags" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<TagDescriptions: table<ResourceArn: string, Tags: list>> {
+]: any -> oneof<record<TagDescriptions: table<ResourceArn: string, Tags: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2187,7 +2211,7 @@ export def "get-describe-target-group-attributes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Attributes: table<Key: string, Value: string>> {
+]: nothing -> oneof<record<Attributes: table<Key: string, Value: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($target_group_arn == null) { error make --unspanned { msg: "required query parameter 'TargetGroupArn' missing: pass --target-group-arn" } }
@@ -2237,7 +2261,7 @@ export def "post-describe-target-group-attributes" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Attributes: table<Key: string, Value: string>> {
+]: any -> oneof<record<Attributes: table<Key: string, Value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2293,7 +2317,7 @@ export def "get-describe-target-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<TargetGroups: table<TargetGroupArn: string, TargetGroupName: string, Protocol: string, Port: int, VpcId: string, HealthCheckProtocol: string, HealthCheckPort: string, HealthCheckEnabled: bool, HealthCheckIntervalSeconds: int, HealthCheckTimeoutSeconds: int, HealthyThresholdCount: int, UnhealthyThresholdCount: int, HealthCheckPath: string, Matcher: record, LoadBalancerArns: list, TargetType: string, ProtocolVersion: string, IpAddressType: string>, NextMarker: string> {
+]: nothing -> oneof<record<TargetGroups: table<TargetGroupArn: string, TargetGroupName: string, Protocol: string, Port: int, VpcId: string, HealthCheckProtocol: string, HealthCheckPort: string, HealthCheckEnabled: bool, HealthCheckIntervalSeconds: int, HealthCheckTimeoutSeconds: int, HealthyThresholdCount: int, UnhealthyThresholdCount: int, HealthCheckPath: string, Matcher: record, LoadBalancerArns: list, TargetType: string, ProtocolVersion: string, IpAddressType: string>, NextMarker: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DescribeTargetGroups")
@@ -2343,7 +2367,7 @@ export def "post-describe-target-groups" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<TargetGroups: table<TargetGroupArn: string, TargetGroupName: string, Protocol: string, Port: int, VpcId: string, HealthCheckProtocol: string, HealthCheckPort: string, HealthCheckEnabled: bool, HealthCheckIntervalSeconds: int, HealthCheckTimeoutSeconds: int, HealthyThresholdCount: int, UnhealthyThresholdCount: int, HealthCheckPath: string, Matcher: record, LoadBalancerArns: list, TargetType: string, ProtocolVersion: string, IpAddressType: string>, NextMarker: string> {
+]: any -> oneof<record<TargetGroups: table<TargetGroupArn: string, TargetGroupName: string, Protocol: string, Port: int, VpcId: string, HealthCheckProtocol: string, HealthCheckPort: string, HealthCheckEnabled: bool, HealthCheckIntervalSeconds: int, HealthCheckTimeoutSeconds: int, HealthyThresholdCount: int, UnhealthyThresholdCount: int, HealthCheckPath: string, Matcher: record, LoadBalancerArns: list, TargetType: string, ProtocolVersion: string, IpAddressType: string>, NextMarker: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2396,7 +2420,7 @@ export def "get-describe-target-health" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<TargetHealthDescriptions: table<Target: record, HealthCheckPort: string, TargetHealth: record>> {
+]: nothing -> oneof<record<TargetHealthDescriptions: table<Target: record, HealthCheckPort: string, TargetHealth: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($target_group_arn == null) { error make --unspanned { msg: "required query parameter 'TargetGroupArn' missing: pass --target-group-arn" } }
@@ -2446,7 +2470,7 @@ export def "post-describe-target-health" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<TargetHealthDescriptions: table<Target: record, HealthCheckPort: string, TargetHealth: record>> {
+]: any -> oneof<record<TargetHealthDescriptions: table<Target: record, HealthCheckPort: string, TargetHealth: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2504,7 +2528,7 @@ export def "get-modify-listener" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Listeners: table<ListenerArn: string, LoadBalancerArn: string, Port: int, Protocol: string, Certificates: list, SslPolicy: string, DefaultActions: list, AlpnPolicy: list>> {
+]: nothing -> oneof<record<Listeners: table<ListenerArn: string, LoadBalancerArn: string, Port: int, Protocol: string, Certificates: list, SslPolicy: string, DefaultActions: list, AlpnPolicy: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($listener_arn == null) { error make --unspanned { msg: "required query parameter 'ListenerArn' missing: pass --listener-arn" } }
@@ -2554,7 +2578,7 @@ export def "post-modify-listener" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Listeners: table<ListenerArn: string, LoadBalancerArn: string, Port: int, Protocol: string, Certificates: list, SslPolicy: string, DefaultActions: list, AlpnPolicy: list>> {
+]: any -> oneof<record<Listeners: table<ListenerArn: string, LoadBalancerArn: string, Port: int, Protocol: string, Certificates: list, SslPolicy: string, DefaultActions: list, AlpnPolicy: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2607,7 +2631,7 @@ export def "get-modify-load-balancer-attributes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Attributes: table<Key: string, Value: string>> {
+]: nothing -> oneof<record<Attributes: table<Key: string, Value: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($load_balancer_arn == null) { error make --unspanned { msg: "required query parameter 'LoadBalancerArn' missing: pass --load-balancer-arn" } }
@@ -2658,7 +2682,7 @@ export def "post-modify-load-balancer-attributes" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Attributes: table<Key: string, Value: string>> {
+]: any -> oneof<record<Attributes: table<Key: string, Value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2712,7 +2736,7 @@ export def "get-modify-rule" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Rules: table<RuleArn: string, Priority: string, Conditions: list, Actions: list, IsDefault: bool>> {
+]: nothing -> oneof<record<Rules: table<RuleArn: string, Priority: string, Conditions: list, Actions: list, IsDefault: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rule_arn == null) { error make --unspanned { msg: "required query parameter 'RuleArn' missing: pass --rule-arn" } }
@@ -2762,7 +2786,7 @@ export def "post-modify-rule" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Rules: table<RuleArn: string, Priority: string, Conditions: list, Actions: list, IsDefault: bool>> {
+]: any -> oneof<record<Rules: table<RuleArn: string, Priority: string, Conditions: list, Actions: list, IsDefault: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2823,7 +2847,7 @@ export def "get-modify-target-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<TargetGroups: table<TargetGroupArn: string, TargetGroupName: string, Protocol: string, Port: int, VpcId: string, HealthCheckProtocol: string, HealthCheckPort: string, HealthCheckEnabled: bool, HealthCheckIntervalSeconds: int, HealthCheckTimeoutSeconds: int, HealthyThresholdCount: int, UnhealthyThresholdCount: int, HealthCheckPath: string, Matcher: record, LoadBalancerArns: list, TargetType: string, ProtocolVersion: string, IpAddressType: string>> {
+]: nothing -> oneof<record<TargetGroups: table<TargetGroupArn: string, TargetGroupName: string, Protocol: string, Port: int, VpcId: string, HealthCheckProtocol: string, HealthCheckPort: string, HealthCheckEnabled: bool, HealthCheckIntervalSeconds: int, HealthCheckTimeoutSeconds: int, HealthyThresholdCount: int, UnhealthyThresholdCount: int, HealthCheckPath: string, Matcher: record, LoadBalancerArns: list, TargetType: string, ProtocolVersion: string, IpAddressType: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($target_group_arn == null) { error make --unspanned { msg: "required query parameter 'TargetGroupArn' missing: pass --target-group-arn" } }
@@ -2873,7 +2897,7 @@ export def "post-modify-target-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<TargetGroups: table<TargetGroupArn: string, TargetGroupName: string, Protocol: string, Port: int, VpcId: string, HealthCheckProtocol: string, HealthCheckPort: string, HealthCheckEnabled: bool, HealthCheckIntervalSeconds: int, HealthCheckTimeoutSeconds: int, HealthyThresholdCount: int, UnhealthyThresholdCount: int, HealthCheckPath: string, Matcher: record, LoadBalancerArns: list, TargetType: string, ProtocolVersion: string, IpAddressType: string>> {
+]: any -> oneof<record<TargetGroups: table<TargetGroupArn: string, TargetGroupName: string, Protocol: string, Port: int, VpcId: string, HealthCheckProtocol: string, HealthCheckPort: string, HealthCheckEnabled: bool, HealthCheckIntervalSeconds: int, HealthCheckTimeoutSeconds: int, HealthyThresholdCount: int, UnhealthyThresholdCount: int, HealthCheckPath: string, Matcher: record, LoadBalancerArns: list, TargetType: string, ProtocolVersion: string, IpAddressType: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2926,7 +2950,7 @@ export def "get-modify-target-group-attributes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Attributes: table<Key: string, Value: string>> {
+]: nothing -> oneof<record<Attributes: table<Key: string, Value: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($target_group_arn == null) { error make --unspanned { msg: "required query parameter 'TargetGroupArn' missing: pass --target-group-arn" } }
@@ -2977,7 +3001,7 @@ export def "post-modify-target-group-attributes" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Attributes: table<Key: string, Value: string>> {
+]: any -> oneof<record<Attributes: table<Key: string, Value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3030,7 +3054,7 @@ export def "get-register-targets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($target_group_arn == null) { error make --unspanned { msg: "required query parameter 'TargetGroupArn' missing: pass --target-group-arn" } }
@@ -3081,7 +3105,7 @@ export def "post-register-targets" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3134,7 +3158,7 @@ export def "get-remove-listener-certificates" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($listener_arn == null) { error make --unspanned { msg: "required query parameter 'ListenerArn' missing: pass --listener-arn" } }
@@ -3185,7 +3209,7 @@ export def "post-remove-listener-certificates" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3238,7 +3262,7 @@ export def "get-remove-tags" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arns == null) { error make --unspanned { msg: "required query parameter 'ResourceArns' missing: pass --resource-arns" } }
@@ -3289,7 +3313,7 @@ export def "post-remove-tags" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3342,7 +3366,7 @@ export def "get-set-ip-address-type" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<IpAddressType: string> {
+]: nothing -> oneof<record<IpAddressType: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($load_balancer_arn == null) { error make --unspanned { msg: "required query parameter 'LoadBalancerArn' missing: pass --load-balancer-arn" } }
@@ -3393,7 +3417,7 @@ export def "post-set-ip-address-type" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<IpAddressType: string> {
+]: any -> oneof<record<IpAddressType: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3445,7 +3469,7 @@ export def "get-set-rule-priorities" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Rules: table<RuleArn: string, Priority: string, Conditions: list, Actions: list, IsDefault: bool>> {
+]: nothing -> oneof<record<Rules: table<RuleArn: string, Priority: string, Conditions: list, Actions: list, IsDefault: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rule_priorities == null) { error make --unspanned { msg: "required query parameter 'RulePriorities' missing: pass --rule-priorities" } }
@@ -3495,7 +3519,7 @@ export def "post-set-rule-priorities" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Rules: table<RuleArn: string, Priority: string, Conditions: list, Actions: list, IsDefault: bool>> {
+]: any -> oneof<record<Rules: table<RuleArn: string, Priority: string, Conditions: list, Actions: list, IsDefault: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3548,7 +3572,7 @@ export def "get-set-security-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<SecurityGroupIds: list<string>> {
+]: nothing -> oneof<record<SecurityGroupIds: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($load_balancer_arn == null) { error make --unspanned { msg: "required query parameter 'LoadBalancerArn' missing: pass --load-balancer-arn" } }
@@ -3599,7 +3623,7 @@ export def "post-set-security-groups" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<SecurityGroupIds: list<string>> {
+]: any -> oneof<record<SecurityGroupIds: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3654,7 +3678,7 @@ export def "get-set-subnets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<AvailabilityZones: table<ZoneName: string, SubnetId: string, OutpostId: string, LoadBalancerAddresses: list>, IpAddressType: string> {
+]: nothing -> oneof<record<AvailabilityZones: table<ZoneName: string, SubnetId: string, OutpostId: string, LoadBalancerAddresses: list>, IpAddressType: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($load_balancer_arn == null) { error make --unspanned { msg: "required query parameter 'LoadBalancerArn' missing: pass --load-balancer-arn" } }
@@ -3704,7 +3728,7 @@ export def "post-set-subnets" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<AvailabilityZones: table<ZoneName: string, SubnetId: string, OutpostId: string, LoadBalancerAddresses: list>, IpAddressType: string> {
+]: any -> oneof<record<AvailabilityZones: table<ZoneName: string, SubnetId: string, OutpostId: string, LoadBalancerAddresses: list>, IpAddressType: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

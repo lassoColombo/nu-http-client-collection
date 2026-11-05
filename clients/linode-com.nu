@@ -12,28 +12,37 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -141,8 +165,10 @@ def base-url-completer [] { ["https://api.linode.com/v4" "https://api.linode.com
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
+def accept-completer [] { ["application/json" "image/png"] }
 def type-completer [] { ["credit_card"] }
 def target-completer [] { ["primary" "secondary"] }
+def cluster-size-completer [] { ["1" "3"] }
 def replication-type-completer [] { ["asynch" "none" "semi_synch"] }
 def replication-commit-type-completer [] { ["local" "off" "on" "remote_apply" "remote_write"] }
 def status-completer [] { ["active" "disabled"] }
@@ -174,9 +200,9 @@ def lish-auth-method-completer [] { ["disabled" "keys_only" "password_keys"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-account" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-account" "update-account" "cancel-account" "create-credit-card" "get-entity-transfers" "create-entity-transfer" "delete-entity-transfer" "get-entity-transfer" "accept-entity-transfer" "get-events" "get-event" "event-read" "event-seen" "get-invoices" "get-invoice" "get-invoice-items" "get-account-logins" "get-account-login" "get-maintenance" "get-notifications" "get-clients" "create-client" "delete-client" "get-client" "update-client" "reset-client-secret" "get-client-thumbnail" "set-client-thumbnail" "get-payment-methods" "create-payment-method" "delete-payment-method" "get-payment-method" "make-payment-method-default" "get-payments" "create-payment" "create-pay-pal-payment" "execute-pay-pal-payment" "get-payment" "create-promo-credit" "get-service-transfers" "create-service-transfer" "delete-service-transfer" "get-service-transfer" "accept-service-transfer" "get-account-settings" "update-account-settings" "enable-account-managed" "get-transfer" "get-users" "create-user" "delete-user" "get-user" "update-user" "get-user-grants" "update-user-grants" "get-databases-engines" "get-databases-engine" "get-databases-instances" "get-databases-mongo-db-instances" "delete-databases-mongo-db-instance" "get-databases-mongo-db-instance" "put-databases-mongo-db-instance" "get-databases-mongo-db-instance-backups" "post-databases-mongo-db-instance-backup" "delete-database-mongo-db-instance-backup" "get-databases-mongo-db-instance-backup" "post-databases-mongo-db-instance-backup-restore" "get-databases-mongo-db-instance-credentials" "post-databases-mongo-db-instance-credentials-reset" "post-databases-mongo-db-instance-patch" "get-databases-mongo-db-instance-ssl" "get-databases-my-sql-instances" "post-databases-my-sql-instances" "delete-databases-my-sql-instance" "get-databases-my-sql-instance" "put-databases-my-sql-instance" "get-databases-my-sql-instance-backups" "post-databases-my-sql-instance-backup" "delete-database-my-sql-instance-backup" "get-databases-my-sql-instance-backup" "post-databases-my-sql-instance-backup-restore" "get-databases-my-sql-instance-credentials" "post-databases-my-sql-instance-credentials-reset" "post-databases-my-sql-instance-patch" "get-databases-my-sql-instance-ssl" "get-databases-postgre-sql-instances" "post-databases-postgre-sql-instances" "delete-databases-postgre-sql-instance" "get-databases-postgre-sql-instance" "put-databases-postgre-sql-instance" "get-databases-postgre-sql-instance-backups" "post-databases-postgre-sql-instance-backup" "delete-database-postgre-sql-instance-backup" "get-databases-postgre-sql-instance-backup" "post-databases-postgre-sql-instance-backup-restore" "get-databases-postgre-sql-instance-credentials" "post-databases-postgre-sql-instance-credentials-reset" "post-databases-postgre-sql-instance-patch" "get-databases-postgre-sql-instance-ssl" "get-databases-types" "get-databases-type" "get-domains" "create-domain" "import-domain" "delete-domain" "get-domain" "update-domain" "clone-domain" "get-domain-records" "create-domain-record" "delete-domain-record" "get-domain-record" "update-domain-record" "get-domain-zone" "get-images" "create-image" "post-images-upload" "delete-image" "get-image" "update-image" "get-linode-instances" "create-linode-instance" "delete-linode-instance" "get-linode-instance" "update-linode-instance" "get-backups" "create-snapshot" "cancel-backups" "enable-backups" "get-backup" "restore-backup" "boot-linode-instance" "clone-linode-instance" "get-linode-configs" "add-linode-config" "delete-linode-config" "get-linode-config" "update-linode-config" "get-linode-disks" "add-linode-disk" "delete-disk" "get-linode-disk" "update-disk" "clone-linode-disk" "reset-disk-password" "resize-disk" "get-linode-firewalls" "get-linode-i-ps" "add-linode-ip" "remove-linode-ip" "get-linode-ip" "update-linode-ip" "migrate-linode-instance" "mutate-linode-instance" "get-linode-node-balancers" "reset-linode-password" "reboot-linode-instance" "rebuild-linode-instance" "rescue-linode-instance" "resize-linode-instance" "shutdown-linode-instance" "get-linode-stats" "get-linode-stats-by-year-month" "get-linode-transfer" "get-linode-transfer-by-year-month" "get-linode-volumes" "get-kernels" "get-kernel" "get-stack-scripts" "add-stack-script" "delete-stack-script" "get-stack-script" "update-stack-script" "get-linode-types" "get-linode-type" "get-lke-clusters" "create-lke-cluster" "delete-lke-cluster" "get-lke-cluster" "put-lke-cluster" "get-lke-cluster-api-endpoints" "get-lke-cluster-dashboard" "delete-lke-cluster-kubeconfig" "get-lke-cluster-kubeconfig" "delete-lke-cluster-node" "get-lke-cluster-node" "post-lke-cluster-node-recycle" "get-lke-cluster-pools" "post-lke-cluster-pools" "delete-lke-node-pool" "get-lke-node-pool" "put-lke-node-pool" "post-lke-cluster-pool-recycle" "post-lke-cluster-recycle" "post-lke-cluster-regenerate" "post-lkec-service-token-delete" "get-lke-versions" "get-lke-version" "get-longview-clients" "create-longview-client" "delete-longview-client" "get-longview-client" "update-longview-client" "get-longview-plan" "update-longview-plan" "get-longview-subscriptions" "get-longview-subscription" "get-managed-contacts" "create-managed-contact" "delete-managed-contact" "get-managed-contact" "update-managed-contact" "get-managed-credentials" "create-managed-credential" "view-managed-ssh-key" "get-managed-credential" "update-managed-credential" "delete-managed-credential" "update-managed-credential-username-password" "get-managed-issues" "get-managed-issue" "get-managed-linode-settings" "get-managed-linode-setting" "update-managed-linode-setting" "get-managed-services" "create-managed-service" "delete-managed-service" "get-managed-service" "update-managed-service" "disable-managed-service" "enable-managed-service" "get-managed-stats" "get-firewalls" "create-firewalls" "delete-firewall" "get-firewall" "update-firewall" "get-firewall-devices" "create-firewall-device" "delete-firewall-device" "get-firewall-device" "get-firewall-rules" "update-firewall-rules" "get-i-ps" "allocate-ip" "assign-i-ps" "share-i-ps" "get-ip" "update-ip" "assign-i-pv4s" "share-i-pv4s" "get-i-pv6-pools" "get-i-pv6-ranges" "post-i-pv6-range" "delete-i-pv6-range" "get-i-pv6-range" "get-vla-ns" "get-node-balancers" "create-node-balancer" "delete-node-balancer" "get-node-balancer" "update-node-balancer" "get-node-balancer-configs" "create-node-balancer-config" "delete-node-balancer-config" "get-node-balancer-config" "update-node-balancer-config" "get-node-balancer-config-nodes" "create-node-balancer-node" "delete-node-balancer-config-node" "get-node-balancer-node" "update-node-balancer-node" "rebuild-node-balancer-config" "get-nodebalancers-node-balancer-id-stats" "get-object-storage-buckets" "create-object-storage-bucket" "get-object-storage-bucketin-cluster" "delete-object-storage-bucket" "get-object-storage-bucket" "modify-object-storage-bucket-access" "update-object-storage-bucket-access" "view-object-storage-bucket-acl" "update-object-storage-bucket-acl" "get-object-storage-bucket-content" "create-object-storage-object-url" "delete-object-storage-ssl" "get-object-storage-ssl" "create-object-storage-ssl" "cancel-object-storage" "get-object-storage-clusters" "get-object-storage-cluster" "get-object-storage-keys" "create-object-storage-keys" "delete-object-storage-key" "get-object-storage-key" "update-object-storage-key" "get-object-storage-transfer" "get-profile" "update-profile" "get-profile-apps" "delete-profile-app" "get-profile-app" "get-devices" "revoke-trusted-device" "get-trusted-device" "get-profile-grants" "get-profile-logins" "get-profile-login" "delete-profile-phone-number" "post-profile-phone-number" "post-profile-phone-number-verify" "get-user-preferences" "update-user-preferences" "get-security-questions" "post-security-questions" "get-ssh-keys" "add-ssh-key" "delete-ssh-key" "get-ssh-key" "update-ssh-key" "tfa-disable" "tfa-enable" "tfa-confirm" "get-personal-access-tokens" "create-personal-access-token" "delete-personal-access-token" "get-personal-access-token" "update-personal-access-token" "get-regions" "get-region" "get-tickets" "create-ticket" "get-ticket" "create-ticket-attachment" "close-ticket" "get-ticket-replies" "create-ticket-reply" "get-tags" "create-tag" "delete-tag" "get-tagged-objects" "get-volumes" "create-volume" "delete-volume" "get-volume" "update-volume" "attach-volume" "clone-volume" "detach-volume" "resize-volume" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -208,7 +234,7 @@ export def "get-account" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<active_promotions: table<credit_monthly_cap: string, credit_remaining: string, description: string, expire_dt: string, image_url: string, service_type: string, summary: string, this_month_credit_remaining: string>, active_since: string, address_1: string, address_2: string, balance: float, balance_uninvoiced: float, billing_source: string, capabilities: list<string>, city: string, company: string, country: string, credit_card: record<expiry: string, last_four: string>, email: string, euuid: string, first_name: string, last_name: string, phone: string, state: string, tax_id: string, zip: string> {
+]: nothing -> oneof<record<active_promotions: table<credit_monthly_cap: string, credit_remaining: string, description: string, expire_dt: string, image_url: string, service_type: string, summary: string, this_month_credit_remaining: string>, active_since: string, address_1: string, address_2: string, balance: float, balance_uninvoiced: float, billing_source: string, capabilities: list<string>, city: string, company: string, country: string, credit_card: record<expiry: string, last_four: string>, email: string, euuid: string, first_name: string, last_name: string, phone: string, state: string, tax_id: string, zip: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account" $auth.query)
@@ -232,8 +258,6 @@ export def "get-account" [
 #
 # PUT /account
 # operationId: updateAccount
-# --active_promotions item shape: {credit_monthly_cap?: string, credit_remaining?: string, description?: string, expire_dt?: string, image_url?: string, service_type?: "all"|"backup"|"blockstorage"|"db_mysql"|"ip_v4"|"linode"|"linode_disk"|"linode_memory"|"longview"|"managed"|"nodebalancer"|"objectstorage"|"transfer_tx", summary?: string, this_month_credit_remaining?: string}
-# --credit_card shape: {expiry?: string, last_four?: string}
 export def "update-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -256,7 +280,7 @@ export def "update-account" [
   --state: string # If billing address is in the United States (US) or Canada (CA), only the two-letter ISO 3166 State or Province code are accepted. If entering a US military address, state abbreviations (AA, AE, AP) should be entered. If the address is outside the US or CA, this is the Province associated with the Account's billing address. (e.g. PA)
   --tax-id: string # The tax identification number associated with this Account, for tax calculations in some countries. If you do not live in a country that collects tax, this should be an empty string (`""`). (e.g. ATU99999999)
   --zip: string # The zip code of this Account's billing address. The following restrictions apply: - May only consist of letters, numbers, spaces, and hyphens. - Must not contain more than 9 letter or number characters. (e.g. 19102-1234)
-]: any -> record<active_promotions: table<credit_monthly_cap: string, credit_remaining: string, description: string, expire_dt: string, image_url: string, service_type: string, summary: string, this_month_credit_remaining: string>, active_since: string, address_1: string, address_2: string, balance: float, balance_uninvoiced: float, billing_source: string, capabilities: list<string>, city: string, company: string, country: string, credit_card: record<expiry: string, last_four: string>, email: string, euuid: string, first_name: string, last_name: string, phone: string, state: string, tax_id: string, zip: string> {
+]: any -> oneof<record<active_promotions: table<credit_monthly_cap: string, credit_remaining: string, description: string, expire_dt: string, image_url: string, service_type: string, summary: string, this_month_credit_remaining: string>, active_since: string, address_1: string, address_2: string, balance: float, balance_uninvoiced: float, billing_source: string, capabilities: list<string>, city: string, company: string, country: string, credit_card: record<expiry: string, last_four: string>, email: string, euuid: string, first_name: string, last_name: string, phone: string, state: string, tax_id: string, zip: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -294,7 +318,7 @@ export def "cancel-account" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --comments: string # Any reason for cancelling the account, and any other comments you might have about your Linode service. (e.g. I'm consolidating multiple accounts into one.)
-]: any -> record<survey_link: string> {
+]: any -> oneof<record<survey_link: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -337,7 +361,7 @@ export def "create-credit-card" [
   cvv: string # CVV (Card Verification Value) of the credit card, typically found on the back of the card. (format: digits, e.g. 123)
   expiry_month: int # A value from 1-12 representing the expiration month of your credit card. * 1 = January * 2 = February * 3 = March * Etc. (e.g. 12)
   expiry_year: int # A four-digit integer representing the expiration year of your credit card. The combination of `expiry_month` and `expiry_year` must result in a month/year combination of the current month or in the future. An expiration date set in the past is invalid. (e.g. 2020)
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -378,7 +402,7 @@ export def "get-entity-transfers" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page of a collection to return. (default: 1)
   --page-size: int # The number of items to return per page. (default: 100)
-]: nothing -> record<page: int, pages: int, results: int, data: table<created: string, entities: record, expiry: string, is_sender: bool, status: string, token: string, updated: string>> {
+]: nothing -> oneof<record<page: int, pages: int, results: int, data: table<created: string, entities: record, expiry: string, is_sender: bool, status: string, token: string, updated: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
@@ -404,7 +428,6 @@ export def "get-entity-transfers" [
 # POST /account/entity-transfers
 # DEPRECATED
 # operationId: createEntityTransfer
-# --entities shape: {linodes?: list<int>}
 @deprecated
 export def "create-entity-transfer" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -417,7 +440,7 @@ export def "create-entity-transfer" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   entities: record # A collection of the entities to include in this transfer request, separated by type. — shape: {linodes?: list<int>}
-]: any -> record<created: string, entities: record<linodes: list<int>>, expiry: string, is_sender: bool, status: string, token: string, updated: string> {
+]: any -> oneof<record<created: string, entities: record<linodes: list<int>>, expiry: string, is_sender: bool, status: string, token: string, updated: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -457,7 +480,7 @@ export def "delete-entity-transfer" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
@@ -495,7 +518,7 @@ export def "get-entity-transfer" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created: string, entities: record<linodes: list<int>>, expiry: string, is_sender: bool, status: string, token: string, updated: string> {
+]: nothing -> oneof<record<created: string, entities: record<linodes: list<int>>, expiry: string, is_sender: bool, status: string, token: string, updated: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
@@ -533,7 +556,7 @@ export def "accept-entity-transfer" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
@@ -570,7 +593,7 @@ export def "get-events" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page of a collection to return. (default: 1)
   --page-size: int # The number of items to return per page. (default: 100)
-]: nothing -> record<data: table<action: string, created: string, duration: float, entity: record, id: int, message: string, percent_complete: int, rate: string, read: bool, secondary_entity: record, seen: bool, status: string, time_remaining: string, username: string>, page: int, pages: int, results: int> {
+]: nothing -> oneof<record<data: table<action: string, created: string, duration: float, entity: record, id: int, message: string, percent_complete: int, rate: string, read: bool, secondary_entity: record, seen: bool, status: string, time_remaining: string, username: string>, page: int, pages: int, results: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
@@ -606,7 +629,7 @@ export def "get-event" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, created: string, duration: float, entity: record<id: int, label: string, type: string, url: string>, id: int, message: string, percent_complete: int, rate: string, read: bool, secondary_entity: record<id: string, label: string, type: string, url: string>, seen: bool, status: string, time_remaining: string, username: string> {
+]: nothing -> oneof<record<action: string, created: string, duration: float, entity: record<id: int, label: string, type: string, url: string>, id: int, message: string, percent_complete: int, rate: string, read: bool, secondary_entity: record<id: string, label: string, type: string, url: string>, seen: bool, status: string, time_remaining: string, username: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($event_id | is-empty) { error make --unspanned { msg: "path parameter 'eventId' must be non-empty" } }
@@ -642,7 +665,7 @@ export def "event-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($event_id | is-empty) { error make --unspanned { msg: "path parameter 'eventId' must be non-empty" } }
@@ -678,7 +701,7 @@ export def "event-seen" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($event_id | is-empty) { error make --unspanned { msg: "path parameter 'eventId' must be non-empty" } }
@@ -715,7 +738,7 @@ export def "get-invoices" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page of a collection to return. (default: 1)
   --page-size: int # The number of items to return per page. (default: 100)
-]: nothing -> record<data: table<date: string, id: int, label: string, subtotal: float, tax: float, tax_summary: list, total: float>, page: int, pages: int, results: int> {
+]: nothing -> oneof<record<data: table<date: string, id: int, label: string, subtotal: float, tax: float, tax_summary: list, total: float>, page: int, pages: int, results: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
@@ -751,7 +774,7 @@ export def "get-invoice" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<date: string, id: int, label: string, subtotal: float, tax: float, tax_summary: table<name: string, tax: float>, total: float> {
+]: nothing -> oneof<record<date: string, id: int, label: string, subtotal: float, tax: float, tax_summary: table<name: string, tax: float>, total: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceId' must be non-empty" } }
@@ -789,7 +812,7 @@ export def "get-invoice-items" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page of a collection to return. (default: 1)
   --page-size: int # The number of items to return per page. (default: 100)
-]: nothing -> record<data: table<amount: float, from: string, label: string, quantity: int, tax: float, to: string, total: float, type: string, unit_price: string>, page: int, pages: int, results: int> {
+]: nothing -> oneof<record<data: table<amount: float, from: string, label: string, quantity: int, tax: float, to: string, total: float, type: string, unit_price: string>, page: int, pages: int, results: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceId' must be non-empty" } }
@@ -825,7 +848,7 @@ export def "get-account-logins" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<datetime: string, id: int, ip: string, restricted: bool, username: string>, page: int, pages: int, results: int> {
+]: nothing -> oneof<record<data: table<datetime: string, id: int, ip: string, restricted: bool, username: string>, page: int, pages: int, results: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/logins" $auth.query)
@@ -860,7 +883,7 @@ export def "get-account-login" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<datetime: string, id: int, ip: string, restricted: bool, username: string> {
+]: nothing -> oneof<record<datetime: string, id: int, ip: string, restricted: bool, username: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($login_id | is-empty) { error make --unspanned { msg: "path parameter 'loginId' must be non-empty" } }
@@ -895,7 +918,7 @@ export def "get-maintenance" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<entity: record, reason: string, status: string, type: string, when: string>, page: int, pages: int, results: int> {
+]: nothing -> oneof<record<data: table<entity: record, reason: string, status: string, type: string, when: string>, page: int, pages: int, results: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   let full_url = (build-url $base "/account/maintenance" $auth.query)
@@ -929,7 +952,7 @@ export def "get-notifications" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<body: string, entity: record, label: string, message: string, severity: string, type: string, until: string, when: string>, page: int, pages: int, results: int> {
+]: nothing -> oneof<record<data: table<body: string, entity: record, label: string, message: string, severity: string, type: string, until: string, when: string>, page: int, pages: int, results: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/notifications" $auth.query)
@@ -965,7 +988,7 @@ export def "get-clients" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page of a collection to return. (default: 1)
   --page-size: int # The number of items to return per page. (default: 100)
-]: nothing -> record<data: table<id: string, label: string, public: bool, redirect_uri: string, secret: string, status: string, thumbnail_url: string>, page: int, pages: int, results: int> {
+]: nothing -> oneof<record<data: table<id: string, label: string, public: bool, redirect_uri: string, secret: string, status: string, thumbnail_url: string>, page: int, pages: int, results: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
@@ -1003,7 +1026,7 @@ export def "create-client" [
   label: string # The name of this application. This will be presented to users when they are asked to grant it access to their Account. (e.g. Test_Client_1)
   --public: oneof<nothing, bool> # If this is a public or private OAuth Client. Public clients have a slightly different authentication workflow than private clients. See the OAuth spec (https://oauth.net/2/) for more details. (default: false, e.g. false)
   redirect_uri: string # The location a successful log in from https://login.linode.com (https://login.linode.com) should be redirected to for this client. The receiver of this redirect should be ready to accept an OAuth exchange code and finish the OAuth exchange. (format: url, e.g. https://example.org/oauth/callback)
-]: any -> record<id: string, label: string, public: bool, redirect_uri: string, secret: string, status: string, thumbnail_url: string> {
+]: any -> oneof<record<id: string, label: string, public: bool, redirect_uri: string, secret: string, status: string, thumbnail_url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1041,7 +1064,7 @@ export def "delete-client" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($client_id | is-empty) { error make --unspanned { msg: "path parameter 'clientId' must be non-empty" } }
@@ -1077,7 +1100,7 @@ export def "get-client" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<id: string, label: string, public: bool, redirect_uri: string, secret: string, status: string, thumbnail_url: string> {
+]: nothing -> oneof<record<id: string, label: string, public: bool, redirect_uri: string, secret: string, status: string, thumbnail_url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($client_id | is-empty) { error make --unspanned { msg: "path parameter 'clientId' must be non-empty" } }
@@ -1116,7 +1139,7 @@ export def "update-client" [
   --label: string # The name of this application. This will be presented to users when they are asked to grant it access to their Account. (e.g. Test_Client_1)
   --public: oneof<nothing, bool> # If this is a public or private OAuth Client. Public clients have a slightly different authentication workflow than private clients. See the OAuth spec (https://oauth.net/2/) for more details. (default: false, e.g. false)
   --redirect-uri: string # The location a successful log in from https://login.linode.com (https://login.linode.com) should be redirected to for this client. The receiver of this redirect should be ready to accept an OAuth exchange code and finish the OAuth exchange. (format: url, e.g. https://example.org/oauth/callback)
-]: any -> record<id: string, label: string, public: bool, redirect_uri: string, secret: string, status: string, thumbnail_url: string> {
+]: any -> oneof<record<id: string, label: string, public: bool, redirect_uri: string, secret: string, status: string, thumbnail_url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1155,7 +1178,7 @@ export def "reset-client-secret" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<id: string, label: string, public: bool, redirect_uri: string, secret: string, status: string, thumbnail_url: string> {
+]: nothing -> oneof<record<id: string, label: string, public: bool, redirect_uri: string, secret: string, status: string, thumbnail_url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($client_id | is-empty) { error make --unspanned { msg: "path parameter 'clientId' must be non-empty" } }
@@ -1191,12 +1214,13 @@ export def "get-client-thumbnail" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($client_id | is-empty) { error make --unspanned { msg: "path parameter 'clientId' must be non-empty" } }
   let full_url = (build-url $base ({client_id: (encode-path-segment $client_id)} | format pattern "/account/oauth-clients/{client_id}/thumbnail") $auth.query)
-  let accept_val = "image/png"
+  let accept_val = ($accept | default "image/png")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -1228,7 +1252,7 @@ export def "set-client-thumbnail" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: string
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1268,7 +1292,7 @@ export def "get-payment-methods" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page of a collection to return. (default: 1)
   --page-size: int # The number of items to return per page. (default: 100)
-]: nothing -> record<data: table<created: string, data: any, id: int, is_default: bool, type: string>, page: int, pages: int, results: int> {
+]: nothing -> oneof<record<data: table<created: string, data: any, id: int, is_default: bool, type: string>, page: int, pages: int, results: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
@@ -1293,7 +1317,6 @@ export def "get-payment-methods" [
 #
 # POST /account/payment-methods
 # operationId: createPaymentMethod
-# --data shape: {card_number: string, cvv: string, expiry_month: int, expiry_year: int}
 export def "create-payment-method" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1307,13 +1330,14 @@ export def "create-payment-method" [
   data: record # An object representing the credit card information you have on file with Linode to make Payments against your Account. — shape: {card_number: string, cvv: string, expiry_month: int, expiry_year: int}
   --is-default: oneof<nothing, bool> # Whether this Payment Method is the default method for automatically processing service charges. (e.g. true)
   type: string@type-completer # The type of Payment Method. Alternative Payment Methods including Google Pay and PayPal can be added using the Cloud Manager. See the [Manage Payment Methods](/docs/products/platform/billing/guides/payment-methods/) guide for details and instructions. (e.g. credit_card)
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   let full_url = (build-url $base "/account/payment-methods" $auth.query)
   let req_body = {"data": $data, "is_default": $is_default, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "is_default") == null) { error make --unspanned { msg: "required body field 'is_default' missing: pass --is-default or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1345,7 +1369,7 @@ export def "delete-payment-method" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_method_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentMethodId' must be non-empty" } }
@@ -1381,7 +1405,7 @@ export def "get-payment-method" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created: string, data: any, id: int, is_default: bool, type: string> {
+]: nothing -> oneof<record<created: string, data: any, id: int, is_default: bool, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   if ($payment_method_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentMethodId' must be non-empty" } }
@@ -1417,7 +1441,7 @@ export def "make-payment-method-default" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   if ($payment_method_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentMethodId' must be non-empty" } }
@@ -1454,7 +1478,7 @@ export def "get-payments" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page of a collection to return. (default: 1)
   --page-size: int # The number of items to return per page. (default: 100)
-]: nothing -> record<data: table<date: string, id: int, usd: int>, page: int, pages: int, results: int> {
+]: nothing -> oneof<record<data: table<date: string, id: int, usd: int>, page: int, pages: int, results: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
@@ -1492,7 +1516,7 @@ export def "create-payment" [
   --cvv: string # CVV (Card Verification Value) of the credit card to be used for the Payment. Required if paying by credit card. (e.g. 123)
   --payment-method-id: int # The ID of the Payment Method to apply to the Payment. (e.g. 123)
   usd: string # The amount in US Dollars of the Payment. * Can begin with or without `$`. * Commas (`,`) are not accepted. * Must end with a decimal expression, such as `.00` or `.99`. * Minimum: `$5.00` or the Account balance, whichever is lower. * Maximum: `$2000.00` or the Account balance up to `$50000.00`, whichever is greater. (e.g. $120.50)
-]: any -> record<date: string, id: int, usd: int> {
+]: any -> oneof<record<date: string, id: int, usd: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1534,7 +1558,7 @@ export def "create-pay-pal-payment" [
   cancel_url: string # The URL to have PayPal redirect to when Payment is cancelled. (e.g. https://example.org)
   redirect_url: string # The URL to have PayPal redirect to when Payment is approved. (e.g. https://example.org)
   usd: string # The payment amount in USD. Minimum accepted value of $5 USD. Maximum accepted value of $500 USD or credit card payment limit; whichever value is highest. PayPal's maximum transaction limit is $10,000 USD. (e.g. 120.50)
-]: any -> record<checkout_token: string, payment_id: string> {
+]: any -> oneof<record<checkout_token: string, payment_id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1575,7 +1599,7 @@ export def "execute-pay-pal-payment" [
   --dry-run(-n) # Return the request that would be sent without executing it
   payer_id: string # The PayerID returned by PayPal during the transaction authorization process. (e.g. ABCDEFGHIJKLM)
   payment_id: string # The PaymentID returned from [POST /account/payments/paypal](/docs/api/account/#paypal-payment-stage) that has been approved with PayPal. (e.g. PAY-1234567890ABCDEFGHIJKLMN)
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1613,7 +1637,7 @@ export def "get-payment" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<date: string, id: int, usd: int> {
+]: nothing -> oneof<record<date: string, id: int, usd: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentId' must be non-empty" } }
@@ -1649,7 +1673,7 @@ export def "create-promo-credit" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   promo_code: string # The Promo Code.
-]: any -> record<credit_monthly_cap: string, credit_remaining: string, description: string, expire_dt: string, image_url: string, service_type: string, summary: string, this_month_credit_remaining: string> {
+]: any -> oneof<record<credit_monthly_cap: string, credit_remaining: string, description: string, expire_dt: string, image_url: string, service_type: string, summary: string, this_month_credit_remaining: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1688,7 +1712,7 @@ export def "get-service-transfers" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page of a collection to return. (default: 1)
   --page-size: int # The number of items to return per page. (default: 100)
-]: nothing -> record<data: table<created: string, entities: record, expiry: string, is_sender: bool, status: string, token: string, updated: string>, page: int, pages: int, results: int> {
+]: nothing -> oneof<record<data: table<created: string, entities: record, expiry: string, is_sender: bool, status: string, token: string, updated: string>, page: int, pages: int, results: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
@@ -1713,7 +1737,6 @@ export def "get-service-transfers" [
 #
 # POST /account/service-transfers
 # operationId: createServiceTransfer
-# --entities shape: {linodes?: list<int>}
 export def "create-service-transfer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1725,7 +1748,7 @@ export def "create-service-transfer" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   entities: record # A collection of the services to include in this transfer request, separated by type. — shape: {linodes?: list<int>}
-]: any -> record<created: string, entities: record<linodes: list<int>>, expiry: string, is_sender: bool, status: string, token: string, updated: string> {
+]: any -> oneof<record<created: string, entities: record<linodes: list<int>>, expiry: string, is_sender: bool, status: string, token: string, updated: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1763,7 +1786,7 @@ export def "delete-service-transfer" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
@@ -1799,7 +1822,7 @@ export def "get-service-transfer" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created: string, entities: record<linodes: list<int>>, expiry: string, is_sender: bool, status: string, token: string, updated: string> {
+]: nothing -> oneof<record<created: string, entities: record<linodes: list<int>>, expiry: string, is_sender: bool, status: string, token: string, updated: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
@@ -1835,7 +1858,7 @@ export def "accept-service-transfer" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
@@ -1870,7 +1893,7 @@ export def "get-account-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<backups_enabled: bool, longview_subscription: string, managed: bool, network_helper: bool, object_storage: string> {
+]: nothing -> oneof<record<backups_enabled: bool, longview_subscription: string, managed: bool, network_helper: bool, object_storage: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/settings" $auth.query)
@@ -1906,7 +1929,7 @@ export def "update-account-settings" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --backups-enabled: oneof<nothing, bool> # Account-wide backups default. If `true`, all Linodes created will automatically be enrolled in the Backups service. If `false`, Linodes will not be enrolled by default, but may still be enrolled on creation or later. (e.g. true)
   --network-helper: oneof<nothing, bool> # Enables network helper across all users by default for new Linodes and Linode Configs. (e.g. false)
-]: any -> record<backups_enabled: bool, longview_subscription: string, managed: bool, network_helper: bool, object_storage: string> {
+]: any -> oneof<record<backups_enabled: bool, longview_subscription: string, managed: bool, network_helper: bool, object_storage: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1943,7 +1966,7 @@ export def "enable-account-managed" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/settings/managed-enable" $auth.query)
@@ -1977,7 +2000,7 @@ export def "get-transfer" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<billable: int, quota: int, used: int> {
+]: nothing -> oneof<record<billable: int, quota: int, used: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/transfer" $auth.query)
@@ -2013,7 +2036,7 @@ export def "get-users" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page of a collection to return. (default: 1)
   --page-size: int # The number of items to return per page. (default: 100)
-]: nothing -> record<data: table<email: string, restricted: bool, ssh_keys: list, tfa_enabled: bool, username: string>, page: int, pages: int, results: int> {
+]: nothing -> oneof<record<data: table<email: string, restricted: bool, ssh_keys: list, tfa_enabled: bool, username: string>, page: int, pages: int, results: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
@@ -2051,7 +2074,7 @@ export def "create-user" [
   email: string # The email address for the User. Linode sends emails to this address for account management communications. May be used for other communications as configured. (format: email, e.g. example_user@linode.com)
   --restricted: oneof<nothing, bool> # If true, the User must be granted access to perform actions or access entities on this Account. See User Grants View ([GET /account/users/{username}/grants](/docs/api/account/#users-grants-view)) for details on how to configure grants for a restricted User. (e.g. true)
   username: string # The User's username. This is used for logging in, and may also be displayed alongside actions the User performs (for example, in Events or public StackScripts). (e.g. example_user)
-]: any -> record<email: string, restricted: bool, ssh_keys: list<string>, tfa_enabled: bool, username: string> {
+]: any -> oneof<record<email: string, restricted: bool, ssh_keys: list<string>, tfa_enabled: bool, username: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2089,7 +2112,7 @@ export def "delete-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
@@ -2125,7 +2148,7 @@ export def "get-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<email: string, restricted: bool, ssh_keys: list<string>, tfa_enabled: bool, username: string> {
+]: nothing -> oneof<record<email: string, restricted: bool, ssh_keys: list<string>, tfa_enabled: bool, username: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
@@ -2164,7 +2187,7 @@ export def "update-user" [
   --email: string # The email address for the User. Linode sends emails to this address for account management communications. May be used for other communications as configured. (format: email, e.g. example_user@linode.com)
   --restricted: oneof<nothing, bool> # If true, the User must be granted access to perform actions or access entities on this Account. See User Grants View ([GET /account/users/{username}/grants](/docs/api/account/#users-grants-view)) for details on how to configure grants for a restricted User. (e.g. true)
   --body-username: string # The User's username. This is used for logging in, and may also be displayed alongside actions the User performs (for example, in Events or public StackScripts). (e.g. example_user)
-]: any -> record<email: string, restricted: bool, ssh_keys: list<string>, tfa_enabled: bool, username: string> {
+]: any -> oneof<record<email: string, restricted: bool, ssh_keys: list<string>, tfa_enabled: bool, username: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2203,7 +2226,7 @@ export def "get-user-grants" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<database: table<id: int, label: string, permissions: string>, domain: table<id: int, label: string, permissions: string>, global: record<account_access: string, add_databases: bool, add_domains: bool, add_firewalls: bool, add_images: bool, add_linodes: bool, add_longview: bool, add_nodebalancers: bool, add_stackscripts: bool, add_volumes: bool, cancel_account: bool, longview_subscription: bool>, image: table<id: int, label: string, permissions: string>, linode: table<id: int, label: string, permissions: string>, longview: table<id: int, label: string, permissions: string>, nodebalancer: table<id: int, label: string, permissions: string>, stackscript: table<id: int, label: string, permissions: string>, volume: table<id: int, label: string, permissions: string>> {
+]: nothing -> oneof<record<database: table<id: int, label: string, permissions: string>, domain: table<id: int, label: string, permissions: string>, global: record<account_access: string, add_databases: bool, add_domains: bool, add_firewalls: bool, add_images: bool, add_linodes: bool, add_longview: bool, add_nodebalancers: bool, add_stackscripts: bool, add_volumes: bool, cancel_account: bool, longview_subscription: bool>, image: table<id: int, label: string, permissions: string>, linode: table<id: int, label: string, permissions: string>, longview: table<id: int, label: string, permissions: string>, nodebalancer: table<id: int, label: string, permissions: string>, stackscript: table<id: int, label: string, permissions: string>, volume: table<id: int, label: string, permissions: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
@@ -2228,15 +2251,6 @@ export def "get-user-grants" [
 #
 # PUT /account/users/{username}/grants
 # operationId: updateUserGrants
-# --database item shape: {id?: int, permissions?: "read_only"|"read_write"}
-# --domain item shape: {id?: int, permissions?: "read_only"|"read_write"}
-# --global shape: {account_access?: "read_only"|"read_write", add_databases?: bool, add_domains?: bool, add_firewalls?: bool, add_images?: bool, add_linodes?: bool, add_longview?: bool, add_nodebalancers?: bool, add_stackscripts?: bool, add_volumes?: bool, cancel_account?: bool, longview_subscription?: bool}
-# --image item shape: {id?: int, permissions?: "read_only"|"read_write"}
-# --linode item shape: {id?: int, permissions?: "read_only"|"read_write"}
-# --longview item shape: {id?: int, permissions?: "read_only"|"read_write"}
-# --nodebalancer item shape: {id?: int, permissions?: "read_only"|"read_write"}
-# --stackscript item shape: {id?: int, permissions?: "read_only"|"read_write"}
-# --volume item shape: {id?: int, permissions?: "read_only"|"read_write"}
 export def "update-user-grants" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2257,7 +2271,7 @@ export def "update-user-grants" [
   --nodebalancer: list # The grants this User has for each NodeBalancer that is owned by this Account. — item shape: {id?: int, permissions?: "read_only"|"read_write"}
   --stackscript: list # The grants this User has for each StackScript that is owned by this Account. — item shape: {id?: int, permissions?: "read_only"|"read_write"}
   --volume: list # The grants this User has for each Block Storage Volume that is owned by this Account. — item shape: {id?: int, permissions?: "read_only"|"read_write"}
-]: any -> record<database: table<id: int, label: string, permissions: string>, domain: table<id: int, label: string, permissions: string>, global: record<account_access: string, add_databases: bool, add_domains: bool, add_firewalls: bool, add_images: bool, add_linodes: bool, add_longview: bool, add_nodebalancers: bool, add_stackscripts: bool, add_volumes: bool, cancel_account: bool, longview_subscription: bool>, image: table<id: int, label: string, permissions: string>, linode: table<id: int, label: string, permissions: string>, longview: table<id: int, label: string, permissions: string>, nodebalancer: table<id: int, label: string, permissions: string>, stackscript: table<id: int, label: string, permissions: string>, volume: table<id: int, label: string, permissions: string>> {
+]: any -> oneof<record<database: table<id: int, label: string, permissions: string>, domain: table<id: int, label: string, permissions: string>, global: record<account_access: string, add_databases: bool, add_domains: bool, add_firewalls: bool, add_images: bool, add_linodes: bool, add_longview: bool, add_nodebalancers: bool, add_stackscripts: bool, add_volumes: bool, cancel_account: bool, longview_subscription: bool>, image: table<id: int, label: string, permissions: string>, linode: table<id: int, label: string, permissions: string>, longview: table<id: int, label: string, permissions: string>, nodebalancer: table<id: int, label: string, permissions: string>, stackscript: table<id: int, label: string, permissions: string>, volume: table<id: int, label: string, permissions: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2297,7 +2311,7 @@ export def "get-databases-engines" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page of a collection to return. (default: 1)
   --page-size: int # The number of items to return per page. (default: 100)
-]: nothing -> record<page: int, pages: int, results: int, data: table<engine: string, id: string, version: string>> {
+]: nothing -> oneof<record<page: int, pages: int, results: int, data: table<engine: string, id: string, version: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
@@ -2335,7 +2349,7 @@ export def "get-databases-engine" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page of a collection to return. (default: 1)
   --page-size: int # The number of items to return per page. (default: 100)
-]: nothing -> record<engine: string, id: string, version: string> {
+]: nothing -> oneof<record<engine: string, id: string, version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   if ($engine_id | is-empty) { error make --unspanned { msg: "path parameter 'engineId' must be non-empty" } }
@@ -2373,7 +2387,7 @@ export def "get-databases-instances" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page of a collection to return. (default: 1)
   --page-size: int # The number of items to return per page. (default: 100)
-]: nothing -> record<page: int, pages: int, results: int, data: table<allow_list: list, cluster_size: int, created: string, encrypted: bool, engine: string, hosts: record, id: int, instance_uri: string, label: string, region: string, status: string, type: string, updated: string, updates: record, version: string>> {
+]: nothing -> oneof<record<page: int, pages: int, results: int, data: table<allow_list: list, cluster_size: int, created: string, encrypted: bool, engine: string, hosts: record, id: int, instance_uri: string, label: string, region: string, status: string, type: string, updated: string, updates: record, version: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
@@ -2410,7 +2424,7 @@ export def "get-databases-mongo-db-instances" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page of a collection to return. (default: 1)
   --page-size: int # The number of items to return per page. (default: 100)
-]: nothing -> record<page: int, pages: int, results: int, data: table<allow_list: list, cluster_size: int, compression_type: string, created: string, encrypted: bool, engine: string, hosts: record, id: int, label: string, peers: list, port: int, region: string, replica_set: string, ssl_connection: bool, status: string, storage_engine: string, type: string, updated: string, updates: record, version: string>> {
+]: nothing -> oneof<record<page: int, pages: int, results: int, data: table<allow_list: list, cluster_size: int, compression_type: string, created: string, encrypted: bool, engine: string, hosts: record, id: int, label: string, peers: list, port: int, region: string, replica_set: string, ssl_connection: bool, status: string, storage_engine: string, type: string, updated: string, updates: record, version: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
@@ -2446,7 +2460,7 @@ export def "delete-databases-mongo-db-instance" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
@@ -2482,7 +2496,7 @@ export def "get-databases-mongo-db-instance" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<allow_list: list<string>, cluster_size: int, compression_type: string, created: string, encrypted: bool, engine: string, hosts: record<primary: string, secondary: string>, id: int, label: string, peers: list<string>, port: int, region: string, replica_set: string, ssl_connection: bool, status: string, storage_engine: string, type: string, updated: string, updates: record<day_of_week: int, duration: int, frequency: string, hour_of_day: int, week_of_month: int>, version: string> {
+]: nothing -> oneof<record<allow_list: list<string>, cluster_size: int, compression_type: string, created: string, encrypted: bool, engine: string, hosts: record<primary: string, secondary: string>, id: int, label: string, peers: list<string>, port: int, region: string, replica_set: string, ssl_connection: bool, status: string, storage_engine: string, type: string, updated: string, updates: record<day_of_week: int, duration: int, frequency: string, hour_of_day: int, week_of_month: int>, version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
@@ -2518,10 +2532,10 @@ export def "put-databases-mongo-db-instance" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --allow-list: any
-  --label: any
-  --updates: any
-]: any -> record<allow_list: list<string>, cluster_size: int, compression_type: string, created: string, encrypted: bool, engine: string, hosts: record<primary: string, secondary: string>, id: int, label: string, peers: list<string>, port: int, region: string, replica_set: string, ssl_connection: bool, status: string, storage_engine: string, type: string, updated: string, updates: record<day_of_week: int, duration: int, frequency: string, hour_of_day: int, week_of_month: int>, version: string> {
+  --allow-list: list<string> # A list of IP addresses that can access the Managed Database. Each item can be a single IP address or a range in CIDR format. By default, this is an empty array (`[]`), which blocks all connections (both public and private) to the Managed Database. If `0.0.0.0/0` is a value in this list, then all IP addresses can access the Managed Database. (e.g. [203.0.113.1/32, 192.0.1.0/24])
+  --label: string # A unique, user-defined string referring to the Managed Database. (e.g. example-db)
+  --updates: record # Configuration settings for automated patch update maintenance for the Managed Database. — shape: {day_of_week?: int, duration?: int, frequency?: "weekly"|"monthly", hour_of_day?: int, week_of_month?: int}
+]: any -> oneof<record<allow_list: list<string>, cluster_size: int, compression_type: string, created: string, encrypted: bool, engine: string, hosts: record<primary: string, secondary: string>, id: int, label: string, peers: list<string>, port: int, region: string, replica_set: string, ssl_connection: bool, status: string, storage_engine: string, type: string, updated: string, updates: record<day_of_week: int, duration: int, frequency: string, hour_of_day: int, week_of_month: int>, version: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
@@ -2562,7 +2576,7 @@ export def "get-databases-mongo-db-instance-backups" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page of a collection to return. (default: 1)
   --page-size: int # The number of items to return per page. (default: 100)
-]: nothing -> record<page: int, pages: int, results: int, data: table<created: string, id: int, label: string, type: string>> {
+]: nothing -> oneof<record<page: int, pages: int, results: int, data: table<created: string, id: int, label: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
@@ -2601,7 +2615,7 @@ export def "post-databases-mongo-db-instance-backup" [
   --dry-run(-n) # Return the request that would be sent without executing it
   label: string # The label for the Database snapshot backup. * Must include only ASCII letters or numbers. * Must be unique among other backup labels for this Database. (e.g. db-snapshot)
   --target: string@target-completer # The Database cluster target. If the Database is a high availability cluster, choosing `secondary` creates a snapshot backup of a replica node. (default: primary, e.g. primary)
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
@@ -2641,7 +2655,7 @@ export def "delete-database-mongo-db-instance-backup" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
@@ -2679,7 +2693,7 @@ export def "get-databases-mongo-db-instance-backup" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created: string, id: int, label: string, type: string> {
+]: nothing -> oneof<record<created: string, id: int, label: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
@@ -2717,7 +2731,7 @@ export def "post-databases-mongo-db-instance-backup-restore" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
@@ -2754,7 +2768,7 @@ export def "get-databases-mongo-db-instance-credentials" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<password: string, username: string> {
+]: nothing -> oneof<record<password: string, username: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
@@ -2790,7 +2804,7 @@ export def "post-databases-mongo-db-instance-credentials-reset" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
@@ -2826,7 +2840,7 @@ export def "post-databases-mongo-db-instance-patch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
@@ -2862,7 +2876,7 @@ export def "get-databases-mongo-db-instance-ssl" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<ca_certificate: string> {
+]: nothing -> oneof<record<ca_certificate: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
@@ -2899,7 +2913,7 @@ export def "get-databases-my-sql-instances" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page of a collection to return. (default: 1)
   --page-size: int # The number of items to return per page. (default: 100)
-]: nothing -> record<page: int, pages: int, results: int, data: table<allow_list: list, cluster_size: int, created: string, encrypted: bool, engine: string, hosts: record, id: int, label: string, port: int, region: string, replication_type: string, ssl_connection: bool, status: string, type: string, updated: string, updates: record, version: string>> {
+]: nothing -> oneof<record<page: int, pages: int, results: int, data: table<allow_list: list, cluster_size: int, created: string, encrypted: bool, engine: string, hosts: record, id: int, label: string, port: int, region: string, replication_type: string, ssl_connection: bool, status: string, type: string, updated: string, updates: record, version: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
@@ -2934,16 +2948,16 @@ export def "post-databases-my-sql-instances" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --allow-list: any
-  --cluster-size: any
-  --encrypted: any
+  --allow-list: list<string> # A list of IP addresses that can access the Managed Database. Each item can be a single IP address or a range in CIDR format. By default, this is an empty array (`[]`), which blocks all connections (both public and private) to the Managed Database. If `0.0.0.0/0` is a value in this list, then all IP addresses can access the Managed Database. (e.g. [203.0.113.1/32, 192.0.1.0/24])
+  --cluster-size: int@cluster-size-completer # The number of Linode Instance nodes deployed to the Managed Database. Choosing 3 nodes creates a high availability cluster consisting of 1 primary node and 2 replica nodes. (default: 1, e.g. 3)
+  --encrypted: oneof<nothing, bool> # Whether the Managed Databases is encrypted. (default: false, e.g. false)
   engine: string # The Managed Database engine in engine/version format. (e.g. mysql/8.0.26)
-  label: any
-  region: any
+  label: string # A unique, user-defined string referring to the Managed Database. (e.g. example-db)
+  region: string # The [Region](/docs/api/regions/) ID for the Managed Database. (e.g. us-east)
   --replication-type: string@replication-type-completer # The replication method used for the Managed Database. Defaults to `none` for a single cluster and `semi_synch` for a high availability cluster. Must be `none` for a single node cluster. Must be `asynch` or `semi_synch` for a high availability cluster. (e.g. semi_synch)
   --ssl-connection: oneof<nothing, bool> # Whether to require SSL credentials to establish a connection to the Managed Database. Use the **Managed MySQL Database Credentials View** ([GET /databases/mysql/instances/{instanceId}/credentials](/docs/api/databases/#managed-mysql-database-credentials-view)) command for access information. (default: true, e.g. true)
-  type: any
-]: any -> record<allow_list: list<string>, cluster_size: int, created: string, encrypted: bool, engine: string, hosts: record<primary: string, secondary: string>, id: int, label: string, port: int, region: string, replication_type: string, ssl_connection: bool, status: string, type: string, updated: string, updates: record<day_of_week: int, duration: int, frequency: string, hour_of_day: int, week_of_month: int>, version: string> {
+  type: string # The Linode Instance type used by the Managed Database for its nodes. (e.g. g6-dedicated-2)
+]: any -> oneof<record<allow_list: list<string>, cluster_size: int, created: string, encrypted: bool, engine: string, hosts: record<primary: string, secondary: string>, id: int, label: string, port: int, region: string, replication_type: string, ssl_connection: bool, status: string, type: string, updated: string, updates: record<day_of_week: int, duration: int, frequency: string, hour_of_day: int, week_of_month: int>, version: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
@@ -2981,7 +2995,7 @@ export def "delete-databases-my-sql-instance" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
@@ -3017,7 +3031,7 @@ export def "get-databases-my-sql-instance" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<allow_list: list<string>, cluster_size: int, created: string, encrypted: bool, engine: string, hosts: record<primary: string, secondary: string>, id: int, label: string, port: int, region: string, replication_type: string, ssl_connection: bool, status: string, type: string, updated: string, updates: record<day_of_week: int, duration: int, frequency: string, hour_of_day: int, week_of_month: int>, version: string> {
+]: nothing -> oneof<record<allow_list: list<string>, cluster_size: int, created: string, encrypted: bool, engine: string, hosts: record<primary: string, secondary: string>, id: int, label: string, port: int, region: string, replication_type: string, ssl_connection: bool, status: string, type: string, updated: string, updates: record<day_of_week: int, duration: int, frequency: string, hour_of_day: int, week_of_month: int>, version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
@@ -3053,10 +3067,10 @@ export def "put-databases-my-sql-instance" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --allow-list: any
-  --label: any
-  --updates: any
-]: any -> record<allow_list: list<string>, cluster_size: int, created: string, encrypted: bool, engine: string, hosts: record<primary: string, secondary: string>, id: int, label: string, port: int, region: string, replication_type: string, ssl_connection: bool, status: string, type: string, updated: string, updates: record<day_of_week: int, duration: int, frequency: string, hour_of_day: int, week_of_month: int>, version: string> {
+  --allow-list: list<string> # A list of IP addresses that can access the Managed Database. Each item can be a single IP address or a range in CIDR format. By default, this is an empty array (`[]`), which blocks all connections (both public and private) to the Managed Database. If `0.0.0.0/0` is a value in this list, then all IP addresses can access the Managed Database. (e.g. [203.0.113.1/32, 192.0.1.0/24])
+  --label: string # A unique, user-defined string referring to the Managed Database. (e.g. example-db)
+  --updates: record # Configuration settings for automated patch update maintenance for the Managed Database. — shape: {day_of_week?: int, duration?: int, frequency?: "weekly"|"monthly", hour_of_day?: int, week_of_month?: int}
+]: any -> oneof<record<allow_list: list<string>, cluster_size: int, created: string, encrypted: bool, engine: string, hosts: record<primary: string, secondary: string>, id: int, label: string, port: int, region: string, replication_type: string, ssl_connection: bool, status: string, type: string, updated: string, updates: record<day_of_week: int, duration: int, frequency: string, hour_of_day: int, week_of_month: int>, version: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
@@ -3097,7 +3111,7 @@ export def "get-databases-my-sql-instance-backups" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page of a collection to return. (default: 1)
   --page-size: int # The number of items to return per page. (default: 100)
-]: nothing -> record<page: int, pages: int, results: int, data: table<created: string, id: int, label: string, type: string>> {
+]: nothing -> oneof<record<page: int, pages: int, results: int, data: table<created: string, id: int, label: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
@@ -3136,7 +3150,7 @@ export def "post-databases-my-sql-instance-backup" [
   --dry-run(-n) # Return the request that would be sent without executing it
   label: string # The label for the Database snapshot backup. * Must include only ASCII letters or numbers. * Must be unique among other backup labels for this Database. (e.g. db-snapshot)
   --target: string@target-completer # The Database cluster target. If the Database is a high availability cluster, choosing `secondary` creates a snapshot backup of a replica node. (default: primary, e.g. primary)
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
@@ -3176,7 +3190,7 @@ export def "delete-database-my-sql-instance-backup" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
@@ -3214,7 +3228,7 @@ export def "get-databases-my-sql-instance-backup" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created: string, id: int, label: string, type: string> {
+]: nothing -> oneof<record<created: string, id: int, label: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
@@ -3252,7 +3266,7 @@ export def "post-databases-my-sql-instance-backup-restore" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
@@ -3289,7 +3303,7 @@ export def "get-databases-my-sql-instance-credentials" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<password: string, username: string> {
+]: nothing -> oneof<record<password: string, username: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
@@ -3325,7 +3339,7 @@ export def "post-databases-my-sql-instance-credentials-reset" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
@@ -3361,7 +3375,7 @@ export def "post-databases-my-sql-instance-patch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
@@ -3397,7 +3411,7 @@ export def "get-databases-my-sql-instance-ssl" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<ca_certificate: string> {
+]: nothing -> oneof<record<ca_certificate: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
@@ -3434,7 +3448,7 @@ export def "get-databases-postgre-sql-instances" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page of a collection to return. (default: 1)
   --page-size: int # The number of items to return per page. (default: 100)
-]: nothing -> record<page: int, pages: int, results: int, data: table<allow_list: list, cluster_size: int, created: string, encrypted: bool, engine: string, hosts: record, id: int, label: string, port: int, region: string, replication_commit_type: string, replication_type: string, ssl_connection: bool, status: string, type: string, updated: string, updates: record, version: string>> {
+]: nothing -> oneof<record<page: int, pages: int, results: int, data: table<allow_list: list, cluster_size: int, created: string, encrypted: bool, engine: string, hosts: record, id: int, label: string, port: int, region: string, replication_commit_type: string, replication_type: string, ssl_connection: bool, status: string, type: string, updated: string, updates: record, version: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
@@ -3469,17 +3483,17 @@ export def "post-databases-postgre-sql-instances" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --allow-list: any
-  --cluster-size: any
-  --encrypted: any
+  --allow-list: list<string> # A list of IP addresses that can access the Managed Database. Each item can be a single IP address or a range in CIDR format. By default, this is an empty array (`[]`), which blocks all connections (both public and private) to the Managed Database. If `0.0.0.0/0` is a value in this list, then all IP addresses can access the Managed Database. (e.g. [203.0.113.1/32, 192.0.1.0/24])
+  --cluster-size: int@cluster-size-completer # The number of Linode Instance nodes deployed to the Managed Database. Choosing 3 nodes creates a high availability cluster consisting of 1 primary node and 2 replica nodes. (default: 1, e.g. 3)
+  --encrypted: oneof<nothing, bool> # Whether the Managed Databases is encrypted. (default: false, e.g. false)
   engine: string # The Managed Database engine in engine/version format. (e.g. postgresql/13.2)
-  label: any
-  region: any
+  label: string # A unique, user-defined string referring to the Managed Database. (e.g. example-db)
+  region: string # The [Region](/docs/api/regions/) ID for the Managed Database. (e.g. us-east)
   --replication-commit-type: string@replication-commit-type-completer # The synchronization level of the replicating server. Must be `local` or `off` for the `asynch` replication type. Must be `on`, `remote_write`, or `remote_apply` for the `semi_synch` replication type. (default: local, e.g. local)
   --replication-type: string@replication-type-completer # The replication method used for the Managed Database. Defaults to `none` for a single cluster and `semi_synch` for a high availability cluster. Must be `none` for a single node cluster. Must be `asynch` or `semi_synch` for a high availability cluster. (e.g. semi_synch)
   --ssl-connection: oneof<nothing, bool> # Whether to require SSL credentials to establish a connection to the Managed Database. Use the **Managed PostgreSQL Database Credentials View** ([GET /databases/postgresql/instances/{instanceId}/credentials](/docs/api/databases/#managed-postgresql-database-credentials-view)) command for access information. (default: true, e.g. true)
-  type: any
-]: any -> record<allow_list: list<string>, cluster_size: int, created: string, encrypted: bool, engine: string, hosts: record<primary: string, secondary: string>, id: int, label: string, port: int, region: string, replication_commit_type: string, replication_type: string, ssl_connection: bool, status: string, type: string, updated: string, updates: record<day_of_week: int, duration: int, frequency: string, hour_of_day: int, week_of_month: int>, version: string> {
+  type: string # The Linode Instance type used by the Managed Database for its nodes. (e.g. g6-dedicated-2)
+]: any -> oneof<record<allow_list: list<string>, cluster_size: int, created: string, encrypted: bool, engine: string, hosts: record<primary: string, secondary: string>, id: int, label: string, port: int, region: string, replication_commit_type: string, replication_type: string, ssl_connection: bool, status: string, type: string, updated: string, updates: record<day_of_week: int, duration: int, frequency: string, hour_of_day: int, week_of_month: int>, version: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
@@ -3517,7 +3531,7 @@ export def "delete-databases-postgre-sql-instance" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
@@ -3553,7 +3567,7 @@ export def "get-databases-postgre-sql-instance" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<allow_list: list<string>, cluster_size: int, created: string, encrypted: bool, engine: string, hosts: record<primary: string, secondary: string>, id: int, label: string, port: int, region: string, replication_commit_type: string, replication_type: string, ssl_connection: bool, status: string, type: string, updated: string, updates: record<day_of_week: int, duration: int, frequency: string, hour_of_day: int, week_of_month: int>, version: string> {
+]: nothing -> oneof<record<allow_list: list<string>, cluster_size: int, created: string, encrypted: bool, engine: string, hosts: record<primary: string, secondary: string>, id: int, label: string, port: int, region: string, replication_commit_type: string, replication_type: string, ssl_connection: bool, status: string, type: string, updated: string, updates: record<day_of_week: int, duration: int, frequency: string, hour_of_day: int, week_of_month: int>, version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
@@ -3589,10 +3603,10 @@ export def "put-databases-postgre-sql-instance" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --allow-list: any
-  --label: any
-  --updates: any
-]: any -> record<allow_list: list<string>, cluster_size: int, created: string, encrypted: bool, engine: string, hosts: record<primary: string, secondary: string>, id: int, label: string, port: int, region: string, replication_commit_type: string, replication_type: string, ssl_connection: bool, status: string, type: string, updated: string, updates: record<day_of_week: int, duration: int, frequency: string, hour_of_day: int, week_of_month: int>, version: string> {
+  --allow-list: list<string> # A list of IP addresses that can access the Managed Database. Each item can be a single IP address or a range in CIDR format. By default, this is an empty array (`[]`), which blocks all connections (both public and private) to the Managed Database. If `0.0.0.0/0` is a value in this list, then all IP addresses can access the Managed Database. (e.g. [203.0.113.1/32, 192.0.1.0/24])
+  --label: string # A unique, user-defined string referring to the Managed Database. (e.g. example-db)
+  --updates: record # Configuration settings for automated patch update maintenance for the Managed Database. — shape: {day_of_week?: int, duration?: int, frequency?: "weekly"|"monthly", hour_of_day?: int, week_of_month?: int}
+]: any -> oneof<record<allow_list: list<string>, cluster_size: int, created: string, encrypted: bool, engine: string, hosts: record<primary: string, secondary: string>, id: int, label: string, port: int, region: string, replication_commit_type: string, replication_type: string, ssl_connection: bool, status: string, type: string, updated: string, updates: record<day_of_week: int, duration: int, frequency: string, hour_of_day: int, week_of_month: int>, version: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
@@ -3633,7 +3647,7 @@ export def "get-databases-postgre-sql-instance-backups" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page of a collection to return. (default: 1)
   --page-size: int # The number of items to return per page. (default: 100)
-]: nothing -> record<page: int, pages: int, results: int, data: table<created: string, id: int, label: string, type: string>> {
+]: nothing -> oneof<record<page: int, pages: int, results: int, data: table<created: string, id: int, label: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
@@ -3672,7 +3686,7 @@ export def "post-databases-postgre-sql-instance-backup" [
   --dry-run(-n) # Return the request that would be sent without executing it
   label: string # The label for the Database snapshot backup. * Must include only ASCII letters or numbers. * Must be unique among other backup labels for this Database. (e.g. db-snapshot)
   --target: string@target-completer # The Database cluster target. If the Database is a high availability cluster, choosing `secondary` creates a snapshot backup of a replica node. (default: primary, e.g. primary)
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
@@ -3712,7 +3726,7 @@ export def "delete-database-postgre-sql-instance-backup" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
@@ -3750,7 +3764,7 @@ export def "get-databases-postgre-sql-instance-backup" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created: string, id: int, label: string, type: string> {
+]: nothing -> oneof<record<created: string, id: int, label: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
@@ -3788,7 +3802,7 @@ export def "post-databases-postgre-sql-instance-backup-restore" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
@@ -3825,7 +3839,7 @@ export def "get-databases-postgre-sql-instance-credentials" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<password: string, username: string> {
+]: nothing -> oneof<record<password: string, username: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
@@ -3861,7 +3875,7 @@ export def "post-databases-postgre-sql-instance-credentials-reset" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
@@ -3897,7 +3911,7 @@ export def "post-databases-postgre-sql-instance-patch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
@@ -3933,7 +3947,7 @@ export def "get-databases-postgre-sql-instance-ssl" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<ca_certificate: string> {
+]: nothing -> oneof<record<ca_certificate: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
@@ -3970,7 +3984,7 @@ export def "get-databases-types" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page of a collection to return. (default: 1)
   --page-size: int # The number of items to return per page. (default: 100)
-]: nothing -> record<page: int, pages: int, results: int, data: table<class: string, deprecated: bool, disk: int, engines: record, id: string, label: string, memory: int, vcpus: int>> {
+]: nothing -> oneof<record<page: int, pages: int, results: int, data: table<class: string, deprecated: bool, disk: int, engines: record, id: string, label: string, memory: int, vcpus: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
@@ -4008,7 +4022,7 @@ export def "get-databases-type" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page of a collection to return. (default: 1)
   --page-size: int # The number of items to return per page. (default: 100)
-]: nothing -> record<class: string, deprecated: bool, disk: int, engines: record<mongodb: list<record>, mysql: list<record>, postgresql: list<record>>, id: string, label: string, memory: int, vcpus: int> {
+]: nothing -> oneof<record<class: string, deprecated: bool, disk: int, engines: record<mongodb: list<record>, mysql: list<record>, postgresql: list<record>>, id: string, label: string, memory: int, vcpus: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   if ($type_id | is-empty) { error make --unspanned { msg: "path parameter 'typeId' must be non-empty" } }
@@ -4046,7 +4060,7 @@ export def "get-domains" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page of a collection to return. (default: 1)
   --page-size: int # The number of items to return per page. (default: 100)
-]: nothing -> record<data: table<axfr_ips: list, description: string, domain: string, expire_sec: int, group: string, id: int, master_ips: list, refresh_sec: int, retry_sec: int, soa_email: string, status: string, tags: list, ttl_sec: int, type: string>, page: int, pages: int, results: int> {
+]: nothing -> oneof<record<data: table<axfr_ips: list, description: string, domain: string, expire_sec: int, group: string, id: int, master_ips: list, refresh_sec: int, retry_sec: int, soa_email: string, status: string, tags: list, ttl_sec: int, type: string>, page: int, pages: int, results: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
@@ -4095,7 +4109,7 @@ export def "create-domain" [
   --tags: list<string> # An array of tags applied to this object. Tags are for organizational purposes only. (e.g. [example tag, another example])
   --ttl-sec: int # "Time to Live" - the amount of time in seconds that this Domain's records may be cached by resolvers or other domain servers. * Valid values are 0, 300, 3600, 7200, 14400, 28800, 57600, 86400, 172800, 345600, 604800, 1209600, and 2419200. * Any other value is rounded up to the nearest valid value. * A value of 0 is equivalent to the default value of 86400. (default: 0, e.g. 300)
   type: string@type-completer-1 # Whether this Domain represents the authoritative source of information for the domain it describes ("master"), or whether it is a read-only copy of a master ("slave"). (e.g. master)
-]: any -> record<axfr_ips: list<string>, description: string, domain: string, expire_sec: int, group: string, id: int, master_ips: list<string>, refresh_sec: int, retry_sec: int, soa_email: string, status: string, tags: list<string>, ttl_sec: int, type: string> {
+]: any -> oneof<record<axfr_ips: list<string>, description: string, domain: string, expire_sec: int, group: string, id: int, master_ips: list<string>, refresh_sec: int, retry_sec: int, soa_email: string, status: string, tags: list<string>, ttl_sec: int, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4134,7 +4148,7 @@ export def "import-domain" [
   --dry-run(-n) # Return the request that would be sent without executing it
   domain: string # The domain to import. (e.g. example.com)
   remote_nameserver: string # The remote nameserver that allows zone transfers (AXFR). (e.g. examplenameserver.com)
-]: any -> record<axfr_ips: list<string>, description: string, domain: string, expire_sec: int, group: string, id: int, master_ips: list<string>, refresh_sec: int, retry_sec: int, soa_email: string, status: string, tags: list<string>, ttl_sec: int, type: string> {
+]: any -> oneof<record<axfr_ips: list<string>, description: string, domain: string, expire_sec: int, group: string, id: int, master_ips: list<string>, refresh_sec: int, retry_sec: int, soa_email: string, status: string, tags: list<string>, ttl_sec: int, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4172,7 +4186,7 @@ export def "delete-domain" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_id | is-empty) { error make --unspanned { msg: "path parameter 'domainId' must be non-empty" } }
@@ -4208,7 +4222,7 @@ export def "get-domain" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<axfr_ips: list<string>, description: string, domain: string, expire_sec: int, group: string, id: int, master_ips: list<string>, refresh_sec: int, retry_sec: int, soa_email: string, status: string, tags: list<string>, ttl_sec: int, type: string> {
+]: nothing -> oneof<record<axfr_ips: list<string>, description: string, domain: string, expire_sec: int, group: string, id: int, master_ips: list<string>, refresh_sec: int, retry_sec: int, soa_email: string, status: string, tags: list<string>, ttl_sec: int, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_id | is-empty) { error make --unspanned { msg: "path parameter 'domainId' must be non-empty" } }
@@ -4258,7 +4272,7 @@ export def "update-domain" [
   --tags: list<string> # An array of tags applied to this object. Tags are for organizational purposes only. (e.g. [example tag, another example])
   --ttl-sec: int # "Time to Live" - the amount of time in seconds that this Domain's records may be cached by resolvers or other domain servers. * Valid values are 0, 300, 3600, 7200, 14400, 28800, 57600, 86400, 172800, 345600, 604800, 1209600, and 2419200. * Any other value is rounded up to the nearest valid value. * A value of 0 is equivalent to the default value of 86400. (default: 0, e.g. 300)
   --type: string@type-completer-1 # Whether this Domain represents the authoritative source of information for the domain it describes ("master"), or whether it is a read-only copy of a master ("slave"). (e.g. master)
-]: any -> record<axfr_ips: list<string>, description: string, domain: string, expire_sec: int, group: string, id: int, master_ips: list<string>, refresh_sec: int, retry_sec: int, soa_email: string, status: string, tags: list<string>, ttl_sec: int, type: string> {
+]: any -> oneof<record<axfr_ips: list<string>, description: string, domain: string, expire_sec: int, group: string, id: int, master_ips: list<string>, refresh_sec: int, retry_sec: int, soa_email: string, status: string, tags: list<string>, ttl_sec: int, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4298,7 +4312,7 @@ export def "clone-domain" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   domain: string # The new domain for the clone. Domain labels cannot be longer than 63 characters and must conform to [RFC1035](https://tools.ietf.org/html/rfc1035). Domains must be unique on Linode's platform, including across different Linode accounts; there cannot be two Domains representing the same domain. (e.g. example.org)
-]: any -> record<axfr_ips: list<string>, description: string, domain: string, expire_sec: int, group: string, id: int, master_ips: list<string>, refresh_sec: int, retry_sec: int, soa_email: string, status: string, tags: list<string>, ttl_sec: int, type: string> {
+]: any -> oneof<record<axfr_ips: list<string>, description: string, domain: string, expire_sec: int, group: string, id: int, master_ips: list<string>, refresh_sec: int, retry_sec: int, soa_email: string, status: string, tags: list<string>, ttl_sec: int, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4339,7 +4353,7 @@ export def "get-domain-records" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page of a collection to return. (default: 1)
   --page-size: int # The number of items to return per page. (default: 100)
-]: nothing -> record<data: table<created: string, id: int, name: string, port: int, priority: int, protocol: string, service: string, tag: string, target: string, ttl_sec: int, type: string, updated: string, weight: int>, page: int, pages: int, results: int> {
+]: nothing -> oneof<record<data: table<created: string, id: int, name: string, port: int, priority: int, protocol: string, service: string, tag: string, target: string, ttl_sec: int, type: string, updated: string, weight: int>, page: int, pages: int, results: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_id | is-empty) { error make --unspanned { msg: "path parameter 'domainId' must be non-empty" } }
@@ -4386,7 +4400,7 @@ export def "create-domain-record" [
   --ttl-sec: int # "Time to Live" - the amount of time in seconds that this Domain's records may be cached by resolvers or other domain servers. Valid values are 300, 3600, 7200, 14400, 28800, 57600, 86400, 172800, 345600, 604800, 1209600, and 2419200 - any other value will be rounded to the nearest valid value. (e.g. 604800)
   type: string@type-completer-2 # The type of Record this is in the DNS system. For example, A records associate a domain name with an IPv4 address, and AAAA records associate a domain name with an IPv6 address. For more information, see the guides on [DNS Record Types](/docs/products/networking/dns-manager/guides/#dns-record-types). (e.g. A)
   --weight: int # The relative weight of this Record used in the case of identical priority. Higher values are preferred. Only valid and required for SRV record requests. (e.g. 50)
-]: any -> record<created: string, id: int, name: string, port: int, priority: int, protocol: string, service: string, tag: string, target: string, ttl_sec: int, type: string, updated: string, weight: int> {
+]: any -> oneof<record<created: string, id: int, name: string, port: int, priority: int, protocol: string, service: string, tag: string, target: string, ttl_sec: int, type: string, updated: string, weight: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4426,7 +4440,7 @@ export def "delete-domain-record" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_id | is-empty) { error make --unspanned { msg: "path parameter 'domainId' must be non-empty" } }
@@ -4464,7 +4478,7 @@ export def "get-domain-record" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created: string, id: int, name: string, port: int, priority: int, protocol: string, service: string, tag: string, target: string, ttl_sec: int, type: string, updated: string, weight: int> {
+]: nothing -> oneof<record<created: string, id: int, name: string, port: int, priority: int, protocol: string, service: string, tag: string, target: string, ttl_sec: int, type: string, updated: string, weight: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_id | is-empty) { error make --unspanned { msg: "path parameter 'domainId' must be non-empty" } }
@@ -4511,7 +4525,7 @@ export def "update-domain-record" [
   --target: string # The target for this Record. For requests, this property's actual usage and whether it is required depends on the type of record this represents: `A` and `AAAA`: The IP address. Use `[remote_addr]` to submit the IPv4 address of the request. Required. `NS`: The name server. Must be a valid domain. Required. `MX`: The mail server. Must be a valid domain unless creating a Null MX Record. To create a [Null MX Record](https://datatracker.ietf.org/doc/html/rfc7505), first [remove](/docs/api/domains/#domain-record-delete) any additional MX records, create an MX record with empty strings (`""`) for the `target` and `name`. If a Domain has a Null MX record, new MX records cannot be created. Required. `CNAME`: The alias. Must be a valid domain. Required. `TXT`: The value. Required. `SRV`: The target domain or subdomain. If a subdomain is entered, it is automatically used with the Domain. To configure for a different domain, enter a valid FQDN. For example, the value `www` with a Domain for `example.com` results in a target set to `www.example.com`, whereas the value `sample.com` results in a target set to `sample.com`. Required. `CAA`: The value. For `issue` or `issuewild` tags, the domain of your certificate issuer. For the `iodef` tag, a contact or submission URL (domain, http, https, or mailto). Requirements depend on the tag for this record: * `issue`: The domain of your certificate issuer. Must be a valid domain. * `issuewild`: Must begin with `*`. * `iodef`: Must be either (1) a valid domain, (2) a valid domain prepended with `http://` or `https://`, or (3) a valid email address prepended with `mailto:`. `PTR`: Required. See our guide on how to [Configure Your Linode for Reverse DNS (rDNS)](/docs/guides/configure-rdns/). With the exception of A, AAAA, and CAA records, this field accepts a trailing period. (e.g. 192.0.2.0)
   --ttl-sec: int # "Time to Live" - the amount of time in seconds that this Domain's records may be cached by resolvers or other domain servers. Valid values are 300, 3600, 7200, 14400, 28800, 57600, 86400, 172800, 345600, 604800, 1209600, and 2419200 - any other value will be rounded to the nearest valid value. (e.g. 604800)
   --weight: int # The relative weight of this Record used in the case of identical priority. Higher values are preferred. Only valid and required for SRV record requests. (e.g. 50)
-]: any -> record<created: string, id: int, name: string, port: int, priority: int, protocol: string, service: string, tag: string, target: string, ttl_sec: int, type: string, updated: string, weight: int> {
+]: any -> oneof<record<created: string, id: int, name: string, port: int, priority: int, protocol: string, service: string, tag: string, target: string, ttl_sec: int, type: string, updated: string, weight: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4551,7 +4565,7 @@ export def "get-domain-zone" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<zone_file: list<string>> {
+]: nothing -> oneof<record<zone_file: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_id | is-empty) { error make --unspanned { msg: "path parameter 'domainId' must be non-empty" } }
@@ -4588,7 +4602,7 @@ export def "get-images" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page of a collection to return. (default: 1)
   --page-size: int # The number of items to return per page. (default: 100)
-]: nothing -> record<data: table<created: string, created_by: string, deprecated: bool, description: string, eol: string, expiry: string, id: string, is_public: bool, label: string, size: int, status: string, type: string, updated: string, vendor: string>, page: int, pages: int, results: int> {
+]: nothing -> oneof<record<data: table<created: string, created_by: string, deprecated: bool, description: string, eol: string, expiry: string, id: string, is_public: bool, label: string, size: int, status: string, type: string, updated: string, vendor: string>, page: int, pages: int, results: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
@@ -4626,7 +4640,7 @@ export def "create-image" [
   --description: string # A detailed description of this Image.
   disk_id: int # The ID of the Linode Disk that this Image will be created from. (e.g. 42)
   --label: string # A short title of this Image. Defaults to the label of the Disk it is being created from if not provided.
-]: any -> record<created: string, created_by: string, deprecated: bool, description: string, eol: string, expiry: string, id: string, is_public: bool, label: string, size: int, status: string, type: string, updated: string, vendor: string> {
+]: any -> oneof<record<created: string, created_by: string, deprecated: bool, description: string, eol: string, expiry: string, id: string, is_public: bool, label: string, size: int, status: string, type: string, updated: string, vendor: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4665,7 +4679,7 @@ export def "post-images-upload" [
   --description: string # Description for the uploaded Image. (e.g. This is an example image in the docs.)
   label: string # Label for the uploaded Image. (e.g. my-image-label)
   region: string # The region to upload to. Once uploaded, the Image can be used in any region. (e.g. eu-central)
-]: any -> record<image: record<created: string, created_by: string, deprecated: bool, description: string, eol: string, expiry: string, id: string, is_public: bool, label: string, size: int, status: string, type: string, updated: string, vendor: string>, upload_to: string> {
+]: any -> oneof<record<image: record<created: string, created_by: string, deprecated: bool, description: string, eol: string, expiry: string, id: string, is_public: bool, label: string, size: int, status: string, type: string, updated: string, vendor: string>, upload_to: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
@@ -4703,7 +4717,7 @@ export def "delete-image" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($image_id | is-empty) { error make --unspanned { msg: "path parameter 'imageId' must be non-empty" } }
@@ -4739,7 +4753,7 @@ export def "get-image" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created: string, created_by: string, deprecated: bool, description: string, eol: string, expiry: string, id: string, is_public: bool, label: string, size: int, status: string, type: string, updated: string, vendor: string> {
+]: nothing -> oneof<record<created: string, created_by: string, deprecated: bool, description: string, eol: string, expiry: string, id: string, is_public: bool, label: string, size: int, status: string, type: string, updated: string, vendor: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($image_id | is-empty) { error make --unspanned { msg: "path parameter 'imageId' must be non-empty" } }
@@ -4777,7 +4791,7 @@ export def "update-image" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # A detailed description of this Image. (nullable, e.g. Example Image description.)
   --label: string # A short description of the Image. (e.g. Debian 11)
-]: any -> record<created: string, created_by: string, deprecated: bool, description: string, eol: string, expiry: string, id: string, is_public: bool, label: string, size: int, status: string, type: string, updated: string, vendor: string> {
+]: any -> oneof<record<created: string, created_by: string, deprecated: bool, description: string, eol: string, expiry: string, id: string, is_public: bool, label: string, size: int, status: string, type: string, updated: string, vendor: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4817,7 +4831,7 @@ export def "get-linode-instances" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page of a collection to return. (default: 1)
   --page-size: int # The number of items to return per page. (default: 100)
-]: nothing -> record<data: table<alerts: record, backups: record, created: string, group: string, host_uuid: string, hypervisor: string, id: int, image: record, ipv4: list, ipv6: string, label: string, region: string, specs: record, status: string, tags: list, type: string, updated: string, watchdog_enabled: bool>, page: int, pages: int, results: int> {
+]: nothing -> oneof<record<data: table<alerts: record, backups: record, created: string, group: string, host_uuid: string, hypervisor: string, id: int, image: string, ipv4: list, ipv6: string, label: string, region: string, specs: record, status: string, tags: list, type: string, updated: string, watchdog_enabled: bool>, page: int, pages: int, results: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
@@ -4842,7 +4856,6 @@ export def "get-linode-instances" [
 #
 # POST /linode/instances
 # operationId: createLinodeInstance
-# --interfaces item shape: {ipam_address?: string, label?: string, purpose?: "public"|"vlan"}
 @deprecated --flag group
 export def "create-linode-instance" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -4871,7 +4884,7 @@ export def "create-linode-instance" [
   --swap-size: int # When deploying from an Image, this field is optional, otherwise it is ignored. This is used to set the swap disk size for the newly-created Linode. (default: 512, e.g. 512)
   --tags: list<string> # An array of tags applied to this object. Tags are for organizational purposes only. (e.g. [example tag, another example])
   type: string # The [Linode Type](/docs/api/linode-types/#types-list) of the Linode you are creating. (e.g. g6-standard-2)
-]: any -> record<alerts: record<cpu: int, io: int, network_in: int, network_out: int, transfer_quota: int>, backups: record<available: bool, enabled: bool, last_successful: string, schedule: record<day: string, window: string>>, created: string, group: string, host_uuid: string, hypervisor: string, id: int, image: record, ipv4: list<string>, ipv6: string, label: string, region: string, specs: record<disk: int, memory: int, transfer: int, vcpus: int>, status: string, tags: list<string>, type: string, updated: string, watchdog_enabled: bool> {
+]: any -> oneof<record<alerts: record<cpu: int, io: int, network_in: int, network_out: int, transfer_quota: int>, backups: record<available: bool, enabled: bool, last_successful: string, schedule: record<day: string, window: string>>, created: string, group: string, host_uuid: string, hypervisor: string, id: int, image: string, ipv4: list<string>, ipv6: string, label: string, region: string, specs: record<disk: int, memory: int, transfer: int, vcpus: int>, status: string, tags: list<string>, type: string, updated: string, watchdog_enabled: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4909,7 +4922,7 @@ export def "delete-linode-instance" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
@@ -4945,7 +4958,7 @@ export def "get-linode-instance" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<alerts: record<cpu: int, io: int, network_in: int, network_out: int, transfer_quota: int>, backups: record<available: bool, enabled: bool, last_successful: string, schedule: record<day: string, window: string>>, created: string, group: string, host_uuid: string, hypervisor: string, id: int, image: record, ipv4: list<string>, ipv6: string, label: string, region: string, specs: record<disk: int, memory: int, transfer: int, vcpus: int>, status: string, tags: list<string>, type: string, updated: string, watchdog_enabled: bool> {
+]: nothing -> oneof<record<alerts: record<cpu: int, io: int, network_in: int, network_out: int, transfer_quota: int>, backups: record<available: bool, enabled: bool, last_successful: string, schedule: record<day: string, window: string>>, created: string, group: string, host_uuid: string, hypervisor: string, id: int, image: string, ipv4: list<string>, ipv6: string, label: string, region: string, specs: record<disk: int, memory: int, transfer: int, vcpus: int>, status: string, tags: list<string>, type: string, updated: string, watchdog_enabled: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
@@ -4970,8 +4983,6 @@ export def "get-linode-instance" [
 #
 # PUT /linode/instances/{linodeId}
 # operationId: updateLinodeInstance
-# --alerts shape: {cpu?: int, io?: int, network_in?: int, network_out?: int, transfer_quota?: int}
-# --backups shape: {schedule?: record}
 @deprecated --flag group
 export def "update-linode-instance" [
   linode_id: int
@@ -4990,7 +5001,7 @@ export def "update-linode-instance" [
   --label: string # The Linode's label is for display purposes only. If no label is provided for a Linode, a default will be assigned. Linode labels have the following constraints: * Must begin and end with an alphanumeric character. * May only consist of alphanumeric characters, dashes (`-`), underscores (`_`) or periods (`.`). * Cannot have two dashes (`--`), underscores (`__`) or periods (`..`) in a row. (e.g. linode123)
   --tags: list<string> # An array of tags applied to this object. Tags are for organizational purposes only. (e.g. [example tag, another example])
   --watchdog-enabled: oneof<nothing, bool> # The watchdog, named Lassie, is a Shutdown Watchdog that monitors your Linode and will reboot it if it powers off unexpectedly. It works by issuing a boot job when your Linode powers off without a shutdown job being responsible. To prevent a loop, Lassie will give up if there have been more than 5 boot jobs issued within 15 minutes. (e.g. true)
-]: any -> record<alerts: record<cpu: int, io: int, network_in: int, network_out: int, transfer_quota: int>, backups: record<available: bool, enabled: bool, last_successful: string, schedule: record<day: string, window: string>>, created: string, group: string, host_uuid: string, hypervisor: string, id: int, image: record, ipv4: list<string>, ipv6: string, label: string, region: string, specs: record<disk: int, memory: int, transfer: int, vcpus: int>, status: string, tags: list<string>, type: string, updated: string, watchdog_enabled: bool> {
+]: any -> oneof<record<alerts: record<cpu: int, io: int, network_in: int, network_out: int, transfer_quota: int>, backups: record<available: bool, enabled: bool, last_successful: string, schedule: record<day: string, window: string>>, created: string, group: string, host_uuid: string, hypervisor: string, id: int, image: string, ipv4: list<string>, ipv6: string, label: string, region: string, specs: record<disk: int, memory: int, transfer: int, vcpus: int>, status: string, tags: list<string>, type: string, updated: string, watchdog_enabled: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5029,7 +5040,7 @@ export def "get-backups" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<automatic: table<available: bool, configs: list, created: string, disks: list, finished: string, id: int, label: string, status: string, type: string, updated: string>, snapshot: record<current: record<available: bool, configs: list, created: string, disks: list, finished: string, id: int, label: string, status: string, type: string, updated: string>, in_progress: record<available: bool, configs: list, created: string, disks: list, finished: string, id: int, label: string, status: string, type: string, updated: string>>> {
+]: nothing -> oneof<record<automatic: table<available: bool, configs: list, created: string, disks: list, finished: string, id: int, label: string, status: string, type: string, updated: string>, snapshot: record<current: record<available: bool, configs: list, created: string, disks: list, finished: string, id: int, label: string, status: string, type: string, updated: string>, in_progress: record<available: bool, configs: list, created: string, disks: list, finished: string, id: int, label: string, status: string, type: string, updated: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
@@ -5066,7 +5077,7 @@ export def "create-snapshot" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   label: string # The label for the new snapshot. (e.g. SnapshotLabel)
-]: any -> record<available: bool, configs: list<string>, created: string, disks: table<filesystem: string, label: string, size: int>, finished: string, id: int, label: string, status: string, type: string, updated: string> {
+]: any -> oneof<record<available: bool, configs: list<string>, created: string, disks: table<filesystem: string, label: string, size: int>, finished: string, id: int, label: string, status: string, type: string, updated: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5105,7 +5116,7 @@ export def "cancel-backups" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
@@ -5141,7 +5152,7 @@ export def "enable-backups" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
@@ -5178,7 +5189,7 @@ export def "get-backup" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<available: bool, configs: list<string>, created: string, disks: table<filesystem: string, label: string, size: int>, finished: string, id: int, label: string, status: string, type: string, updated: string> {
+]: nothing -> oneof<record<available: bool, configs: list<string>, created: string, disks: table<filesystem: string, label: string, size: int>, finished: string, id: int, label: string, status: string, type: string, updated: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
@@ -5218,7 +5229,7 @@ export def "restore-backup" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --body-linode-id: int # The ID of the Linode to restore a Backup to. (e.g. 234)
   --overwrite: oneof<nothing, bool> # If True, deletes all Disks and Configs on the target Linode before restoring. If False, and the Disk image size is larger than the available space on the Linode, an error message indicating insufficient space is returned. (e.g. true)
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5227,6 +5238,7 @@ export def "restore-backup" [
   let full_url = (build-url $base ({linode_id: (encode-path-segment $linode_id), backup_id: (encode-path-segment $backup_id)} | format pattern "/linode/instances/{linode_id}/backups/{backup_id}/restore") $auth.query)
   let req_body = {"linode_id": $body_linode_id, "overwrite": $overwrite} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "linode_id") == null) { error make --unspanned { msg: "required body field 'linode_id' missing: pass --body-linode-id or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -5259,7 +5271,7 @@ export def "boot-linode-instance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --config-id: int # The Linode Config ID to boot into.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5308,7 +5320,7 @@ export def "clone-linode-instance" [
   --private-ip: oneof<nothing, bool> # If true, the created Linode will have private networking enabled and assigned a private IPv4 address. * Can only be provided when cloning to a new Linode. (e.g. true)
   --region: string # This is the Region where the Linode will be deployed. To view all available Regions you can deploy to see [/regions](/docs/api/regions/#regions-list). * Region can only be provided and is required when cloning to a new Linode. (e.g. us-east)
   --type: string # A Linode's Type determines what resources are available to it, including disk space, memory, and virtual cpus. The amounts available to a specific Linode are returned as `specs` on the Linode object. To view all available Linode Types you can deploy with see [/linode/types](/docs/api/linode-types/#types-list). * Type can only be provided and is required when cloning to a new Linode. (e.g. g6-standard-2)
-]: any -> record<alerts: record<cpu: int, io: int, network_in: int, network_out: int, transfer_quota: int>, backups: record<available: bool, enabled: bool, last_successful: string, schedule: record<day: string, window: string>>, created: string, group: string, host_uuid: string, hypervisor: string, id: int, image: record, ipv4: list<string>, ipv6: string, label: string, region: string, specs: record<disk: int, memory: int, transfer: int, vcpus: int>, status: string, tags: list<string>, type: string, updated: string, watchdog_enabled: bool> {
+]: any -> oneof<record<alerts: record<cpu: int, io: int, network_in: int, network_out: int, transfer_quota: int>, backups: record<available: bool, enabled: bool, last_successful: string, schedule: record<day: string, window: string>>, created: string, group: string, host_uuid: string, hypervisor: string, id: int, image: string, ipv4: list<string>, ipv6: string, label: string, region: string, specs: record<disk: int, memory: int, transfer: int, vcpus: int>, status: string, tags: list<string>, type: string, updated: string, watchdog_enabled: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5349,7 +5361,7 @@ export def "get-linode-configs" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page of a collection to return. (default: 1)
   --page-size: int # The number of items to return per page. (default: 100)
-]: nothing -> record<data: table<comments: string, devices: record, helpers: record, id: int, interfaces: list, kernel: string, label: string, memory_limit: int, root_device: string, run_level: string, virt_mode: string>, page: int, pages: int, results: int> {
+]: nothing -> oneof<record<data: table<comments: string, devices: record, helpers: record, id: int, interfaces: list, kernel: string, label: string, memory_limit: int, root_device: string, run_level: string, virt_mode: string>, page: int, pages: int, results: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
@@ -5375,9 +5387,6 @@ export def "get-linode-configs" [
 #
 # POST /linode/instances/{linodeId}/configs
 # operationId: addLinodeConfig
-# --devices shape: {sda?: record, sdb?: record, sdc?: record, sdd?: record, sde?: record, sdf?: record, sdg?: record, sdh?: record}
-# --helpers shape: {devtmpfs_automount?: bool, distro?: bool, modules_dep?: bool, network?: bool, updatedb_disabled?: bool}
-# --interfaces item shape: {ipam_address?: string, label?: string, purpose?: "public"|"vlan"}
 export def "add-linode-config" [
   linode_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5399,7 +5408,7 @@ export def "add-linode-config" [
   --root-device: string # The root device to boot. * If no value or an invalid value is provided, root device will default to `/dev/sda`. * If the device specified at the root device location is not mounted, the Linode will not boot until a device is mounted. (e.g. /dev/sda)
   --run-level: string@run-level-completer # Defines the state of your Linode after booting. Defaults to `default`. (e.g. default)
   --virt-mode: string@virt-mode-completer # Controls the virtualization mode. Defaults to `paravirt`. * `paravirt` is suitable for most cases. Linodes running in paravirt mode share some qualities with the host, ultimately making it run faster since there is less transition between it and the host. * `fullvirt` affords more customization, but is slower because 100% of the VM is virtualized. (e.g. paravirt)
-]: any -> record<comments: string, devices: record<sda: record<disk_id: int, volume_id: int>, sdb: record<disk_id: int, volume_id: int>, sdc: record<disk_id: int, volume_id: int>, sdd: record<disk_id: int, volume_id: int>, sde: record<disk_id: int, volume_id: int>, sdf: record<disk_id: int, volume_id: int>, sdg: record<disk_id: int, volume_id: int>, sdh: record<disk_id: int, volume_id: int>>, helpers: record<devtmpfs_automount: bool, distro: bool, modules_dep: bool, network: bool, updatedb_disabled: bool>, id: int, interfaces: table<ipam_address: string, label: string, purpose: string>, kernel: string, label: string, memory_limit: int, root_device: string, run_level: string, virt_mode: string> {
+]: any -> oneof<record<comments: string, devices: record<sda: record<disk_id: int, volume_id: int>, sdb: record<disk_id: int, volume_id: int>, sdc: record<disk_id: int, volume_id: int>, sdd: record<disk_id: int, volume_id: int>, sde: record<disk_id: int, volume_id: int>, sdf: record<disk_id: int, volume_id: int>, sdg: record<disk_id: int, volume_id: int>, sdh: record<disk_id: int, volume_id: int>>, helpers: record<devtmpfs_automount: bool, distro: bool, modules_dep: bool, network: bool, updatedb_disabled: bool>, id: int, interfaces: table<ipam_address: string, label: string, purpose: string>, kernel: string, label: string, memory_limit: int, root_device: string, run_level: string, virt_mode: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5439,7 +5448,7 @@ export def "delete-linode-config" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
@@ -5477,7 +5486,7 @@ export def "get-linode-config" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<comments: string, devices: record<sda: record<disk_id: int, volume_id: int>, sdb: record<disk_id: int, volume_id: int>, sdc: record<disk_id: int, volume_id: int>, sdd: record<disk_id: int, volume_id: int>, sde: record<disk_id: int, volume_id: int>, sdf: record<disk_id: int, volume_id: int>, sdg: record<disk_id: int, volume_id: int>, sdh: record<disk_id: int, volume_id: int>>, helpers: record<devtmpfs_automount: bool, distro: bool, modules_dep: bool, network: bool, updatedb_disabled: bool>, id: int, interfaces: table<ipam_address: string, label: string, purpose: string>, kernel: string, label: string, memory_limit: int, root_device: string, run_level: string, virt_mode: string> {
+]: nothing -> oneof<record<comments: string, devices: record<sda: record<disk_id: int, volume_id: int>, sdb: record<disk_id: int, volume_id: int>, sdc: record<disk_id: int, volume_id: int>, sdd: record<disk_id: int, volume_id: int>, sde: record<disk_id: int, volume_id: int>, sdf: record<disk_id: int, volume_id: int>, sdg: record<disk_id: int, volume_id: int>, sdh: record<disk_id: int, volume_id: int>>, helpers: record<devtmpfs_automount: bool, distro: bool, modules_dep: bool, network: bool, updatedb_disabled: bool>, id: int, interfaces: table<ipam_address: string, label: string, purpose: string>, kernel: string, label: string, memory_limit: int, root_device: string, run_level: string, virt_mode: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
@@ -5503,9 +5512,6 @@ export def "get-linode-config" [
 #
 # PUT /linode/instances/{linodeId}/configs/{configId}
 # operationId: updateLinodeConfig
-# --devices shape: {sda?: record, sdb?: record, sdc?: record, sdd?: record, sde?: record, sdf?: record, sdg?: record, sdh?: record}
-# --helpers shape: {devtmpfs_automount?: bool, distro?: bool, modules_dep?: bool, network?: bool, updatedb_disabled?: bool}
-# --interfaces item shape: {ipam_address?: string, label?: string, purpose?: "public"|"vlan"}
 export def "update-linode-config" [
   linode_id: int
   config_id: int
@@ -5528,7 +5534,7 @@ export def "update-linode-config" [
   --root-device: string # The root device to boot. * If no value or an invalid value is provided, root device will default to `/dev/sda`. * If the device specified at the root device location is not mounted, the Linode will not boot until a device is mounted. (e.g. /dev/sda)
   --run-level: string@run-level-completer # Defines the state of your Linode after booting. Defaults to `default`. (e.g. default)
   --virt-mode: string@virt-mode-completer # Controls the virtualization mode. Defaults to `paravirt`. * `paravirt` is suitable for most cases. Linodes running in paravirt mode share some qualities with the host, ultimately making it run faster since there is less transition between it and the host. * `fullvirt` affords more customization, but is slower because 100% of the VM is virtualized. (e.g. paravirt)
-]: any -> record<comments: string, devices: record<sda: record<disk_id: int, volume_id: int>, sdb: record<disk_id: int, volume_id: int>, sdc: record<disk_id: int, volume_id: int>, sdd: record<disk_id: int, volume_id: int>, sde: record<disk_id: int, volume_id: int>, sdf: record<disk_id: int, volume_id: int>, sdg: record<disk_id: int, volume_id: int>, sdh: record<disk_id: int, volume_id: int>>, helpers: record<devtmpfs_automount: bool, distro: bool, modules_dep: bool, network: bool, updatedb_disabled: bool>, id: int, interfaces: table<ipam_address: string, label: string, purpose: string>, kernel: string, label: string, memory_limit: int, root_device: string, run_level: string, virt_mode: string> {
+]: any -> oneof<record<comments: string, devices: record<sda: record<disk_id: int, volume_id: int>, sdb: record<disk_id: int, volume_id: int>, sdc: record<disk_id: int, volume_id: int>, sdd: record<disk_id: int, volume_id: int>, sde: record<disk_id: int, volume_id: int>, sdf: record<disk_id: int, volume_id: int>, sdg: record<disk_id: int, volume_id: int>, sdh: record<disk_id: int, volume_id: int>>, helpers: record<devtmpfs_automount: bool, distro: bool, modules_dep: bool, network: bool, updatedb_disabled: bool>, id: int, interfaces: table<ipam_address: string, label: string, purpose: string>, kernel: string, label: string, memory_limit: int, root_device: string, run_level: string, virt_mode: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5570,7 +5576,7 @@ export def "get-linode-disks" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page of a collection to return. (default: 1)
   --page-size: int # The number of items to return per page. (default: 100)
-]: nothing -> record<data: table<created: string, filesystem: string, id: int, label: string, size: int, status: string, updated: string>, page: int, pages: int, results: int> {
+]: nothing -> oneof<record<data: table<created: string, filesystem: string, id: int, label: string, size: int, status: string, updated: string>, page: int, pages: int, results: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
@@ -5616,7 +5622,7 @@ export def "add-linode-disk" [
   size: int # The size of the Disk in MB. Images require a minimum size. Access the Image View ([GET /images/{imageID}](/docs/api/images/#image-view)) endpoint to view its size. (e.g. 48640)
   --stackscript-data: record # This field is required only if the StackScript being deployed requires input data from the User for successful completion. See [User Defined Fields (UDFs)](/docs/guides/writing-scripts-for-use-with-linode-stackscripts-a-tutorial/#user-defined-fields-udfs) for more details. This field is required to be valid JSON. Total length cannot exceed 65,535 characters. (e.g. {gh_username: linode})
   --stackscript-id: int # A StackScript ID that will cause the referenced StackScript to be run during deployment of this Linode. A compatible `image` is required to use a StackScript. To get a list of available StackScript and their permitted Images see [/stackscripts](/docs/api/stackscripts/#stackscripts-list). This field cannot be used when deploying from a Backup or a Private Image. (e.g. 10079)
-]: any -> record<created: string, filesystem: string, id: int, label: string, size: int, status: string, updated: string> {
+]: any -> oneof<record<created: string, filesystem: string, id: int, label: string, size: int, status: string, updated: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5656,7 +5662,7 @@ export def "delete-disk" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
@@ -5694,7 +5700,7 @@ export def "get-linode-disk" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created: string, filesystem: string, id: int, label: string, size: int, status: string, updated: string> {
+]: nothing -> oneof<record<created: string, filesystem: string, id: int, label: string, size: int, status: string, updated: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
@@ -5735,7 +5741,7 @@ export def "update-disk" [
   --filesystem: string@filesystem-completer # The Disk filesystem can be one of: * raw - No filesystem, just a raw binary stream. * swap - Linux swap area. * ext3 - The ext3 journaling filesystem for Linux. * ext4 - The ext4 journaling filesystem for Linux. * initrd - initrd (uncompressed initrd, ext2, max 32 MB). (e.g. ext4)
   --label: string # The Disk's label is for display purposes only. (e.g. Debian 9 Disk)
   --size: int # The size of the Disk in MB. (e.g. 48640)
-]: any -> record<created: string, filesystem: string, id: int, label: string, size: int, status: string, updated: string> {
+]: any -> oneof<record<created: string, filesystem: string, id: int, label: string, size: int, status: string, updated: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5776,7 +5782,7 @@ export def "clone-linode-disk" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created: string, filesystem: string, id: int, label: string, size: int, status: string, updated: string> {
+]: nothing -> oneof<record<created: string, filesystem: string, id: int, label: string, size: int, status: string, updated: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
@@ -5815,7 +5821,7 @@ export def "reset-disk-password" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   password: string # The new root password for the OS installed on this Disk. The password must meet the complexity strength validation requirements for a strong password. (e.g. another@complex^Password123)
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5857,7 +5863,7 @@ export def "resize-disk" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   size: int # The desired size, in MB, of the disk. (e.g. 2048)
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5899,7 +5905,7 @@ export def "get-linode-firewalls" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page of a collection to return. (default: 1)
   --page-size: int # The number of items to return per page. (default: 100)
-]: nothing -> record<data: table<created: string, id: int, label: string, rules: record, status: string, tags: list, updated: string>, page: int, pages: int, results: int> {
+]: nothing -> oneof<record<data: table<created: string, id: int, label: string, rules: record, status: string, tags: list, updated: string>, page: int, pages: int, results: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
@@ -5936,7 +5942,7 @@ export def "get-linode-i-ps" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<ipv4: record<private: list<record>, public: list<record>, reserved: list<record>, shared: list<record>>, ipv6: record<global: record<prefix: int, range: string, region: string, route_target: string>, link_local: record<address: string, gateway: string, linode_id: int, prefix: int, public: bool, rdns: string, region: string, subnet_mask: string, type: string>, slaac: record<address: string, gateway: string, linode_id: int, prefix: int, public: bool, rdns: string, region: string, subnet_mask: string, type: string>>> {
+]: nothing -> oneof<record<ipv4: record<private: list<record>, public: list<record>, reserved: list<record>, shared: list<record>>, ipv6: record<global: record<prefix: int, range: string, region: string, route_target: string>, link_local: record<address: string, gateway: string, linode_id: int, prefix: int, public: bool, rdns: string, region: string, subnet_mask: string, type: string>, slaac: record<address: string, gateway: string, linode_id: int, prefix: int, public: bool, rdns: string, region: string, subnet_mask: string, type: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
@@ -5974,7 +5980,7 @@ export def "add-linode-ip" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --public: oneof<nothing, bool> # Whether to create a public or private IPv4 address. (e.g. true)
   type: string@type-completer-3 # The type of address you are allocating. Only IPv4 addresses may be allocated through this endpoint. (e.g. ipv4)
-]: any -> record<address: string, gateway: string, linode_id: int, prefix: int, public: bool, rdns: string, region: string, subnet_mask: string, type: string> {
+]: any -> oneof<record<address: string, gateway: string, linode_id: int, prefix: int, public: bool, rdns: string, region: string, subnet_mask: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5982,6 +5988,7 @@ export def "add-linode-ip" [
   let full_url = (build-url $base ({linode_id: (encode-path-segment $linode_id)} | format pattern "/linode/instances/{linode_id}/ips") $auth.query)
   let req_body = {"public": $public, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "public") == null) { error make --unspanned { msg: "required body field 'public' missing: pass --public or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -6014,7 +6021,7 @@ export def "remove-linode-ip" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
@@ -6052,7 +6059,7 @@ export def "get-linode-ip" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<address: string, gateway: string, linode_id: int, prefix: int, public: bool, rdns: string, region: string, subnet_mask: string, type: string> {
+]: nothing -> oneof<record<address: string, gateway: string, linode_id: int, prefix: int, public: bool, rdns: string, region: string, subnet_mask: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
@@ -6091,7 +6098,7 @@ export def "update-linode-ip" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --rdns: string # The reverse DNS assigned to this address. For public IPv4 addresses, this will be set to a default value provided by Linode if not explicitly set. (nullable, e.g. test.example.org)
-]: any -> record<address: string, gateway: string, linode_id: int, prefix: int, public: bool, rdns: string, region: string, subnet_mask: string, type: string> {
+]: any -> oneof<record<address: string, gateway: string, linode_id: int, prefix: int, public: bool, rdns: string, region: string, subnet_mask: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6133,7 +6140,7 @@ export def "migrate-linode-instance" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # The region to which the Linode will be migrated. Must be a valid region slug. A list of regions can be viewed by using the [GET /regions](/docs/api/regions/#regions-list) endpoint. A cross data center migration will cancel a pending migration that has not yet been initiated. A cross data center migration will initiate a `linode_migrate_datacenter_create` event. (e.g. us-east)
   --upgrade: oneof<nothing, bool> # When initiating a cross DC migration, setting this value to true will also ensure that the Linode is upgraded to the latest generation of hardware that corresponds to your Linode's Type, if any free upgrades are available for it. If no free upgrades are available, and this value is set to true, then the endpoint will return a 400 error code and the migration will not be performed. If the data center set in the `region` field does not allow upgrades, then the endpoint will return a 400 error code and the migration will not be performed. (default: false, e.g. false)
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6173,7 +6180,7 @@ export def "mutate-linode-instance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --allow-auto-disk-resize: oneof<nothing, bool> # Automatically resize disks when resizing a Linode. When resizing down to a smaller plan your Linode's data must fit within the smaller disk size. (default: true, e.g. true)
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6212,7 +6219,7 @@ export def "get-linode-node-balancers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<client_conn_throttle: int, created: string, hostname: string, id: int, ipv4: string, ipv6: string, label: string, region: string, tags: list, transfer: record, updated: string>, page: int, pages: int, results: int> {
+]: nothing -> oneof<record<data: table<client_conn_throttle: int, created: string, hostname: string, id: int, ipv4: string, ipv6: string, label: string, region: string, tags: list, transfer: record, updated: string>, page: int, pages: int, results: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
@@ -6249,7 +6256,7 @@ export def "reset-linode-password" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   root_pass: string # The root user's password on this Linode. Linode passwords must meet a password strength score requirement that is calculated internally by the API. If the strength requirement is not met, you will receive a Password does not meet strength requirement error. (e.g. a$eCure4assw0rd!43v51)
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6289,7 +6296,7 @@ export def "reboot-linode-instance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --config-id: int # The Linode Config ID to reboot into. If null or omitted, the last booted config will be used. If there was no last booted config and this Linode only has one config, it will be used. If a config cannot be determined, an error will be returned.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6335,7 +6342,7 @@ export def "rebuild-linode-instance" [
   root_pass: string # This sets the root user's password on a newly-created Linode Disk when deploying from an Image. * **Required** when creating a Linode Disk from an Image, including when using a StackScript. * Must meet a password strength score requirement that is calculated internally by the API. If the strength requirement is not met, you will receive a `Password does not meet strength requirement` error. (format: password, e.g. aComplexP@ssword)
   --stackscript-data: record # This field is required only if the StackScript being deployed requires input data from the User for successful completion. See [User Defined Fields (UDFs)](/docs/guides/writing-scripts-for-use-with-linode-stackscripts-a-tutorial/#user-defined-fields-udfs) for more details. This field is required to be valid JSON. Total length cannot exceed 65,535 characters. (e.g. {gh_username: linode})
   --stackscript-id: int # A StackScript ID that will cause the referenced StackScript to be run during deployment of this Linode. A compatible `image` is required to use a StackScript. To get a list of available StackScript and their permitted Images see [/stackscripts](/docs/api/stackscripts/#stackscripts-list). This field cannot be used when deploying from a Backup or a Private Image. (e.g. 10079)
-]: any -> record<alerts: record<cpu: int, io: int, network_in: int, network_out: int, transfer_quota: int>, backups: record<available: bool, enabled: bool, last_successful: string, schedule: record<day: string, window: string>>, created: string, group: string, host_uuid: string, hypervisor: string, id: int, image: record, ipv4: list<string>, ipv6: string, label: string, region: string, specs: record<disk: int, memory: int, transfer: int, vcpus: int>, status: string, tags: list<string>, type: string, updated: string, watchdog_enabled: bool> {
+]: any -> oneof<record<alerts: record<cpu: int, io: int, network_in: int, network_out: int, transfer_quota: int>, backups: record<available: bool, enabled: bool, last_successful: string, schedule: record<day: string, window: string>>, created: string, group: string, host_uuid: string, hypervisor: string, id: int, image: string, ipv4: list<string>, ipv6: string, label: string, region: string, specs: record<disk: int, memory: int, transfer: int, vcpus: int>, status: string, tags: list<string>, type: string, updated: string, watchdog_enabled: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6363,7 +6370,6 @@ export def "rebuild-linode-instance" [
 #
 # POST /linode/instances/{linodeId}/rescue
 # operationId: rescueLinodeInstance
-# --devices shape: {sda?: record, sdb?: record, sdc?: record, sdd?: record, sde?: record, sdf?: record, sdg?: record}
 export def "rescue-linode-instance" [
   linode_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6376,7 +6382,7 @@ export def "rescue-linode-instance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --devices: record # shape: {sda?: record, sdb?: record, sdc?: record, sdd?: record, sde?: record, sdf?: record, sdg?: record}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6417,7 +6423,7 @@ export def "resize-linode-instance" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --allow-auto-disk-resize: oneof<nothing, bool> # Automatically resize disks when resizing a Linode. When resizing down to a smaller plan your Linode's data must fit within the smaller disk size. (default: true, e.g. true)
   type: string # The ID representing the Linode Type. (e.g. g6-standard-2)
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6456,7 +6462,7 @@ export def "shutdown-linode-instance" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
@@ -6492,7 +6498,7 @@ export def "get-linode-stats" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<cpu: list<list<float>>, io: record<io: list<list>, swap: list<list>>, netv4: record<in: list<list>, out: list<list>, private_in: list<list>, private_out: list<list>>, netv6: record<in: list<list>, out: list<list>, private_in: list<list>, private_out: list<list>>, title: string> {
+]: nothing -> oneof<record<cpu: list<list<float>>, io: record<io: list<list>, swap: list<list>>, netv4: record<in: list<list>, out: list<list>, private_in: list<list>, private_out: list<list>>, netv6: record<in: list<list>, out: list<list>, private_in: list<list>, private_out: list<list>>, title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
@@ -6530,7 +6536,7 @@ export def "get-linode-stats-by-year-month" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<cpu: list<list<float>>, io: record<io: list<list>, swap: list<list>>, netv4: record<in: list<list>, out: list<list>, private_in: list<list>, private_out: list<list>>, netv6: record<in: list<list>, out: list<list>, private_in: list<list>, private_out: list<list>>, title: string> {
+]: nothing -> oneof<record<cpu: list<list<float>>, io: record<io: list<list>, swap: list<list>>, netv4: record<in: list<list>, out: list<list>, private_in: list<list>, private_out: list<list>>, netv6: record<in: list<list>, out: list<list>, private_in: list<list>, private_out: list<list>>, title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
@@ -6568,7 +6574,7 @@ export def "get-linode-transfer" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<billable: int, quota: int, used: int> {
+]: nothing -> oneof<record<billable: int, quota: int, used: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
@@ -6606,7 +6612,7 @@ export def "get-linode-transfer-by-year-month" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<bytes_in: int, bytes_out: int, bytes_total: int> {
+]: nothing -> oneof<record<bytes_in: int, bytes_out: int, bytes_total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
@@ -6646,7 +6652,7 @@ export def "get-linode-volumes" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page of a collection to return. (default: 1)
   --page-size: int # The number of items to return per page. (default: 100)
-]: nothing -> record<data: table<created: string, filesystem_path: string, hardware_type: string, id: int, label: string, linode_id: int, linode_label: string, region: string, size: int, status: string, tags: list, updated: string>, page: int, pages: int, results: int> {
+]: nothing -> oneof<record<data: table<created: string, filesystem_path: string, hardware_type: string, id: int, label: string, linode_id: int, linode_label: string, region: string, size: int, status: string, tags: list, updated: string>, page: int, pages: int, results: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
@@ -6684,7 +6690,7 @@ export def "get-kernels" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page of a collection to return. (default: 1)
   --page-size: int # The number of items to return per page. (default: 100)
-]: nothing -> record<data: table<architecture: string, built: string, deprecated: bool, id: string, kvm: bool, label: string, pvops: bool, version: string, xen: bool>, page: int, pages: int, results: int> {
+]: nothing -> oneof<record<data: table<architecture: string, built: string, deprecated: bool, id: string, kvm: bool, label: string, pvops: bool, version: string, xen: bool>, page: int, pages: int, results: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
@@ -6720,7 +6726,7 @@ export def "get-kernel" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<architecture: string, built: string, deprecated: bool, id: string, kvm: bool, label: string, pvops: bool, version: string, xen: bool> {
+]: nothing -> oneof<record<architecture: string, built: string, deprecated: bool, id: string, kvm: bool, label: string, pvops: bool, version: string, xen: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($kernel_id | is-empty) { error make --unspanned { msg: "path parameter 'kernelId' must be non-empty" } }
@@ -6757,7 +6763,7 @@ export def "get-stack-scripts" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page of a collection to return. (default: 1)
   --page-size: int # The number of items to return per page. (default: 100)
-]: nothing -> record<data: table<created: string, deployments_active: int, deployments_total: int, description: string, id: int, images: list, is_public: bool, label: string, mine: bool, rev_note: string, script: string, updated: string, user_defined_fields: list, user_gravatar_id: string, username: string>, page: int, pages: int, results: int> {
+]: nothing -> oneof<record<data: table<created: string, deployments_active: int, deployments_total: int, description: string, id: int, images: list, is_public: bool, label: string, mine: bool, rev_note: string, script: string, updated: string, user_defined_fields: list, user_gravatar_id: string, username: string>, page: int, pages: int, results: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
@@ -6798,7 +6804,7 @@ export def "add-stack-script" [
   label: string # The StackScript's label is for display purposes only. (e.g. a-stackscript)
   --rev-note: string # This field allows you to add notes for the set of revisions made to this StackScript. (e.g. Set up MySQL)
   script: string # The script to execute when provisioning a new Linode with this StackScript. (e.g. "#!/bin/bash" )
-]: any -> record<created: string, deployments_active: int, deployments_total: int, description: string, id: int, images: list<string>, is_public: bool, label: string, mine: bool, rev_note: string, script: string, updated: string, user_defined_fields: table<default: string, example: string, label: string, manyOf: string, name: string, oneOf: string>, user_gravatar_id: string, username: string> {
+]: any -> oneof<record<created: string, deployments_active: int, deployments_total: int, description: string, id: int, images: list<string>, is_public: bool, label: string, mine: bool, rev_note: string, script: string, updated: string, user_defined_fields: table<default: string, example: string, label: string, manyOf: string, name: string, oneOf: string>, user_gravatar_id: string, username: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6836,7 +6842,7 @@ export def "delete-stack-script" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($stackscript_id | is-empty) { error make --unspanned { msg: "path parameter 'stackscriptId' must be non-empty" } }
@@ -6872,7 +6878,7 @@ export def "get-stack-script" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created: string, deployments_active: int, deployments_total: int, description: string, id: int, images: list<string>, is_public: bool, label: string, mine: bool, rev_note: string, script: string, updated: string, user_defined_fields: table<default: string, example: string, label: string, manyOf: string, name: string, oneOf: string>, user_gravatar_id: string, username: string> {
+]: nothing -> oneof<record<created: string, deployments_active: int, deployments_total: int, description: string, id: int, images: list<string>, is_public: bool, label: string, mine: bool, rev_note: string, script: string, updated: string, user_defined_fields: table<default: string, example: string, label: string, manyOf: string, name: string, oneOf: string>, user_gravatar_id: string, username: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($stackscript_id | is-empty) { error make --unspanned { msg: "path parameter 'stackscriptId' must be non-empty" } }
@@ -6914,7 +6920,7 @@ export def "update-stack-script" [
   --label: string # The StackScript's label is for display purposes only. (e.g. a-stackscript)
   --rev-note: string # This field allows you to add notes for the set of revisions made to this StackScript. (e.g. Set up MySQL)
   --script: string # The script to execute when provisioning a new Linode with this StackScript. (e.g. "#!/bin/bash" )
-]: any -> record<created: string, deployments_active: int, deployments_total: int, description: string, id: int, images: list<string>, is_public: bool, label: string, mine: bool, rev_note: string, script: string, updated: string, user_defined_fields: table<default: string, example: string, label: string, manyOf: string, name: string, oneOf: string>, user_gravatar_id: string, username: string> {
+]: any -> oneof<record<created: string, deployments_active: int, deployments_total: int, description: string, id: int, images: list<string>, is_public: bool, label: string, mine: bool, rev_note: string, script: string, updated: string, user_defined_fields: table<default: string, example: string, label: string, manyOf: string, name: string, oneOf: string>, user_gravatar_id: string, username: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6952,7 +6958,7 @@ export def "get-linode-types" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<addons: record, class: string, disk: int, gpus: int, id: string, label: string, memory: int, network_out: int, price: record, successor: string, transfer: int, vcpus: int>, page: int, pages: int, results: int> {
+]: nothing -> oneof<record<data: table<addons: record, class: string, disk: int, gpus: int, id: string, label: string, memory: int, network_out: int, price: record, successor: string, transfer: int, vcpus: int>, page: int, pages: int, results: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/linode/types" $auth.query)
@@ -6987,7 +6993,7 @@ export def "get-linode-type" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<addons: record<backups: record<price: record>>, class: string, disk: int, gpus: int, id: string, label: string, memory: int, network_out: int, price: record<hourly: int, monthly: int>, successor: string, transfer: int, vcpus: int> {
+]: nothing -> oneof<record<addons: record<backups: record<price: record>>, class: string, disk: int, gpus: int, id: string, label: string, memory: int, network_out: int, price: record<hourly: int, monthly: int>, successor: string, transfer: int, vcpus: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($type_id | is-empty) { error make --unspanned { msg: "path parameter 'typeId' must be non-empty" } }
@@ -7022,7 +7028,7 @@ export def "get-lke-clusters" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<control_plane: record, created: string, id: int, k8s_version: string, label: string, region: string, tags: list, updated: string>, page: int, pages: int, results: int> {
+]: nothing -> oneof<record<data: table<control_plane: record, created: string, id: int, k8s_version: string, label: string, region: string, tags: list, updated: string>, page: int, pages: int, results: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/lke/clusters" $auth.query)
@@ -7046,8 +7052,6 @@ export def "get-lke-clusters" [
 #
 # POST /lke/clusters
 # operationId: createLKECluster
-# --control_plane shape: {high_availability?: bool}
-# --node_pools item shape: {autoscaler?: record, count?: int, disks?: list, tags?: list<string>, type?: string}
 export def "create-lke-cluster" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7064,7 +7068,7 @@ export def "create-lke-cluster" [
   node_pools: list # item shape: {autoscaler?: record, count?: int, disks?: list, tags?: list<string>, type?: string}
   region: string # This Kubernetes cluster's location. (e.g. us-central)
   --tags: list<string> # An array of tags applied to the Kubernetes cluster. Tags are for organizational purposes only. (e.g. [ecomm, blogs])
-]: any -> record<control_plane: record<high_availability: bool>, created: string, id: int, k8s_version: string, label: string, region: string, tags: list<string>, updated: string> {
+]: any -> oneof<record<control_plane: record<high_availability: bool>, created: string, id: int, k8s_version: string, label: string, region: string, tags: list<string>, updated: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7102,7 +7106,7 @@ export def "delete-lke-cluster" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($cluster_id | is-empty) { error make --unspanned { msg: "path parameter 'clusterId' must be non-empty" } }
@@ -7138,7 +7142,7 @@ export def "get-lke-cluster" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<control_plane: record<high_availability: bool>, created: string, id: int, k8s_version: string, label: string, region: string, tags: list<string>, updated: string> {
+]: nothing -> oneof<record<control_plane: record<high_availability: bool>, created: string, id: int, k8s_version: string, label: string, region: string, tags: list<string>, updated: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($cluster_id | is-empty) { error make --unspanned { msg: "path parameter 'clusterId' must be non-empty" } }
@@ -7163,7 +7167,6 @@ export def "get-lke-cluster" [
 #
 # PUT /lke/clusters/{clusterId}
 # operationId: putLKECluster
-# --control_plane shape: {high_availability?: bool}
 export def "put-lke-cluster" [
   cluster_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -7179,7 +7182,7 @@ export def "put-lke-cluster" [
   --k8s-version: string # The desired Kubernetes version for this Kubernetes cluster in the format of <major>.<minor>. New and recycled Nodes in this cluster will be installed with the latest available patch for the Cluster's Kubernetes version. When upgrading the Kubernetes version, only the next latest minor version following the current version can be deployed. For example, a cluster with Kubernetes version 1.19 can be upgraded to version 1.20, but not directly to 1.21. The Kubernetes version of a cluster can not be downgraded.
   --label: string # This Kubernetes cluster's unique label for display purposes only. Labels have the following constraints: * UTF-8 characters will be returned by the API using escape sequences of their Unicode code points. For example, the Japanese character *か* is 3 bytes in UTF-8 (`0xE382AB`). Its Unicode code point is 2 bytes (`0x30AB`). APIv4 supports this character and the API will return it as the escape sequence using six 1 byte characters which represent 2 bytes of Unicode code point (`"\u30ab"`). * 4 byte UTF-8 characters are not supported. * If the label is entirely composed of UTF-8 characters, the API response will return the code points using up to 193 1 byte characters. (e.g. lkecluster12345)
   --tags: list<string> # An array of tags applied to the Kubernetes cluster. Tags are for organizational purposes only. To delete a tag, exclude it from your `tags` array. (e.g. [prod, monitoring, ecomm, blog])
-]: any -> record<created: string, k8s_version: string, label: string, region: string, tags: list<string>, updated: string> {
+]: any -> oneof<record<created: string, k8s_version: string, label: string, region: string, tags: list<string>, updated: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7218,7 +7221,7 @@ export def "get-lke-cluster-api-endpoints" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<endpoint: string>, page: int, pages: int, results: int> {
+]: nothing -> oneof<record<data: table<endpoint: string>, page: int, pages: int, results: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($cluster_id | is-empty) { error make --unspanned { msg: "path parameter 'clusterId' must be non-empty" } }
@@ -7254,7 +7257,7 @@ export def "get-lke-cluster-dashboard" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<url: string> {
+]: nothing -> oneof<record<url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($cluster_id | is-empty) { error make --unspanned { msg: "path parameter 'clusterId' must be non-empty" } }
@@ -7290,7 +7293,7 @@ export def "delete-lke-cluster-kubeconfig" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($cluster_id | is-empty) { error make --unspanned { msg: "path parameter 'clusterId' must be non-empty" } }
@@ -7326,7 +7329,7 @@ export def "get-lke-cluster-kubeconfig" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<kubeconfig: string> {
+]: nothing -> oneof<record<kubeconfig: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($cluster_id | is-empty) { error make --unspanned { msg: "path parameter 'clusterId' must be non-empty" } }
@@ -7363,7 +7366,7 @@ export def "delete-lke-cluster-node" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($cluster_id | is-empty) { error make --unspanned { msg: "path parameter 'clusterId' must be non-empty" } }
@@ -7401,7 +7404,7 @@ export def "get-lke-cluster-node" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<id: string, instance_id: int, status: string> {
+]: nothing -> oneof<record<id: string, instance_id: int, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($cluster_id | is-empty) { error make --unspanned { msg: "path parameter 'clusterId' must be non-empty" } }
@@ -7439,7 +7442,7 @@ export def "post-lke-cluster-node-recycle" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($cluster_id | is-empty) { error make --unspanned { msg: "path parameter 'clusterId' must be non-empty" } }
@@ -7476,7 +7479,7 @@ export def "get-lke-cluster-pools" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<autoscaler: record, count: int, disks: list, id: int, nodes: list, tags: list, type: string>, page: int, pages: int, results: int> {
+]: nothing -> oneof<record<data: table<autoscaler: record, count: int, disks: list, id: int, nodes: list, tags: list, type: string>, page: int, pages: int, results: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($cluster_id | is-empty) { error make --unspanned { msg: "path parameter 'clusterId' must be non-empty" } }
@@ -7501,8 +7504,6 @@ export def "get-lke-cluster-pools" [
 #
 # POST /lke/clusters/{clusterId}/pools
 # operationId: postLKEClusterPools
-# --autoscaler shape: {enabled?: bool, max?: int, min?: int}
-# --disks item shape: {size?: int, type?: "raw"|"ext4"}
 export def "post-lke-cluster-pools" [
   cluster_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -7519,7 +7520,7 @@ export def "post-lke-cluster-pools" [
   --disks: list # **Note**: This field should be omitted except for special use cases. The disks specified here are partitions in *addition* to the primary partition and reduce the size of the primary partition, which can lead to stability problems for the Node. This Node Pool's custom disk layout. Each item in this array will create a new disk partition for each node in this Node Pool. * The custom disk layout is applied to each node in this Node Pool. * The maximum number of custom disk partitions that can be configured is 7. * Once the requested disk paritions are allocated, the remaining disk space is allocated to the node's boot disk. * A Node Pool's custom disk layout is immutable over the lifetime of the Node Pool. — item shape: {size?: int, type?: "raw"|"ext4"}
   --tags: list<string> # An array of tags applied to this object. Tags are for organizational purposes only. (e.g. [example tag, another example])
   type: string # The Linode Type for all of the nodes in the Node Pool. (e.g. g6-standard-4)
-]: any -> record<autoscaler: record<enabled: bool, max: int, min: int>, count: int, disks: table<size: int, type: string>, id: int, nodes: table<id: string, instance_id: string, status: string>, tags: list<string>, type: string> {
+]: any -> oneof<record<autoscaler: record<enabled: bool, max: int, min: int>, count: int, disks: table<size: int, type: string>, id: int, nodes: table<id: string, instance_id: string, status: string>, tags: list<string>, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7559,7 +7560,7 @@ export def "delete-lke-node-pool" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($cluster_id | is-empty) { error make --unspanned { msg: "path parameter 'clusterId' must be non-empty" } }
@@ -7597,7 +7598,7 @@ export def "get-lke-node-pool" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<autoscaler: record<enabled: bool, max: int, min: int>, count: int, disks: table<size: int, type: string>, id: int, nodes: table<id: string, instance_id: string, status: string>, tags: list<string>, type: string> {
+]: nothing -> oneof<record<autoscaler: record<enabled: bool, max: int, min: int>, count: int, disks: table<size: int, type: string>, id: int, nodes: table<id: string, instance_id: string, status: string>, tags: list<string>, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($cluster_id | is-empty) { error make --unspanned { msg: "path parameter 'clusterId' must be non-empty" } }
@@ -7623,7 +7624,6 @@ export def "get-lke-node-pool" [
 #
 # PUT /lke/clusters/{clusterId}/pools/{poolId}
 # operationId: putLKENodePool
-# --autoscaler shape: {enabled?: bool, max?: int, min?: int}
 export def "put-lke-node-pool" [
   cluster_id: int
   pool_id: int
@@ -7637,8 +7637,8 @@ export def "put-lke-node-pool" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --autoscaler: record # When enabled, the number of nodes autoscales within the defined minimum and maximum values. When making a request, `max` and `min` require each other. — shape: {enabled?: bool, max?: int, min?: int}
-  --count: any
-]: any -> record<autoscaler: record<enabled: bool, max: int, min: int>, count: int, disks: table<size: int, type: string>, id: int, nodes: table<id: string, instance_id: string, status: string>, tags: list<string>, type: string> {
+  --count: int # The number of nodes in the Node Pool. (e.g. 6)
+]: any -> oneof<record<autoscaler: record<enabled: bool, max: int, min: int>, count: int, disks: table<size: int, type: string>, id: int, nodes: table<id: string, instance_id: string, status: string>, tags: list<string>, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7679,7 +7679,7 @@ export def "post-lke-cluster-pool-recycle" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($cluster_id | is-empty) { error make --unspanned { msg: "path parameter 'clusterId' must be non-empty" } }
@@ -7716,7 +7716,7 @@ export def "post-lke-cluster-recycle" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($cluster_id | is-empty) { error make --unspanned { msg: "path parameter 'clusterId' must be non-empty" } }
@@ -7754,7 +7754,7 @@ export def "post-lke-cluster-regenerate" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --kubeconfig: oneof<nothing, bool> # Whether to delete and regenerate the Kubeconfig file for this Cluster. (default: false, e.g. true)
   --servicetoken: oneof<nothing, bool> # Whether to delete and regenerate the service access token for this Cluster. (default: false, e.g. true)
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7793,7 +7793,7 @@ export def "post-lkec-service-token-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($cluster_id | is-empty) { error make --unspanned { msg: "path parameter 'clusterId' must be non-empty" } }
@@ -7828,7 +7828,7 @@ export def "get-lke-versions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<id: string>, page: int, pages: int, results: int> {
+]: nothing -> oneof<record<data: table<id: string>, page: int, pages: int, results: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/lke/versions" $auth.query)
@@ -7863,7 +7863,7 @@ export def "get-lke-version" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<id: string> {
+]: nothing -> oneof<record<id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
@@ -7900,7 +7900,7 @@ export def "get-longview-clients" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page of a collection to return. (default: 1)
   --page-size: int # The number of items to return per page. (default: 100)
-]: nothing -> record<data: table<api_key: string, apps: record, created: string, id: int, install_code: string, label: string, updated: string>, page: int, pages: int, results: int> {
+]: nothing -> oneof<record<data: table<api_key: string, apps: record, created: string, id: int, install_code: string, label: string, updated: string>, page: int, pages: int, results: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
@@ -7936,7 +7936,7 @@ export def "create-longview-client" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --label: string # This Client's unique label. This is for display purposes only. (e.g. client789)
-]: any -> record<api_key: string, apps: record<apache: bool, mysql: bool, nginx: bool>, created: string, id: int, install_code: string, label: string, updated: string> {
+]: any -> oneof<record<api_key: string, apps: record<apache: bool, mysql: bool, nginx: bool>, created: string, id: int, install_code: string, label: string, updated: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7974,7 +7974,7 @@ export def "delete-longview-client" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($client_id | is-empty) { error make --unspanned { msg: "path parameter 'clientId' must be non-empty" } }
@@ -8010,7 +8010,7 @@ export def "get-longview-client" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<api_key: string, apps: record<apache: bool, mysql: bool, nginx: bool>, created: string, id: int, install_code: string, label: string, updated: string> {
+]: nothing -> oneof<record<api_key: string, apps: record<apache: bool, mysql: bool, nginx: bool>, created: string, id: int, install_code: string, label: string, updated: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($client_id | is-empty) { error make --unspanned { msg: "path parameter 'clientId' must be non-empty" } }
@@ -8047,7 +8047,7 @@ export def "update-longview-client" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --label: string # This Client's unique label. This is for display purposes only. (e.g. client789)
-]: any -> record<api_key: string, apps: record<apache: bool, mysql: bool, nginx: bool>, created: string, id: int, install_code: string, label: string, updated: string> {
+]: any -> oneof<record<api_key: string, apps: record<apache: bool, mysql: bool, nginx: bool>, created: string, id: int, install_code: string, label: string, updated: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8085,7 +8085,7 @@ export def "get-longview-plan" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<clients_included: int, id: string, label: string, price: record<hourly: float, monthly: float>> {
+]: nothing -> oneof<record<clients_included: int, id: string, label: string, price: record<hourly: float, monthly: float>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/longview/plan" $auth.query)
@@ -8120,7 +8120,7 @@ export def "update-longview-plan" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --longview-subscription: string@longview-subscription-completer # The subscription ID for a particular Longview plan. A value of `null` corresponds to Longview Free. You can send a request to the [List Longview Subscriptions](/docs/api/longview/#longview-subscriptions-list) endpoint to receive the details of each plan. (nullable, e.g. longview-10)
-]: any -> record<clients_included: int, id: string, label: string, price: record<hourly: float, monthly: float>> {
+]: any -> oneof<record<clients_included: int, id: string, label: string, price: record<hourly: float, monthly: float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8159,7 +8159,7 @@ export def "get-longview-subscriptions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page of a collection to return. (default: 1)
   --page-size: int # The number of items to return per page. (default: 100)
-]: nothing -> record<data: table<clients_included: int, id: string, label: string, price: record>, page: int, pages: int, results: int> {
+]: nothing -> oneof<record<data: table<clients_included: int, id: string, label: string, price: record>, page: int, pages: int, results: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
@@ -8195,7 +8195,7 @@ export def "get-longview-subscription" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<clients_included: int, id: string, label: string, price: record<hourly: float, monthly: float>> {
+]: nothing -> oneof<record<clients_included: int, id: string, label: string, price: record<hourly: float, monthly: float>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -8232,7 +8232,7 @@ export def "get-managed-contacts" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page of a collection to return. (default: 1)
   --page-size: int # The number of items to return per page. (default: 100)
-]: nothing -> record<data: table<email: string, group: string, id: int, name: string, phone: record, updated: string>, page: int, pages: int, results: int> {
+]: nothing -> oneof<record<data: table<email: string, group: string, id: int, name: string, phone: record, updated: string>, page: int, pages: int, results: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
@@ -8257,7 +8257,6 @@ export def "get-managed-contacts" [
 #
 # POST /managed/contacts
 # operationId: createManagedContact
-# --phone shape: {primary?: string, secondary?: string}
 export def "create-managed-contact" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8272,7 +8271,7 @@ export def "create-managed-contact" [
   --group: string # A grouping for this Contact. This is for display purposes only. (nullable, e.g. on-call)
   --name: string # The name of this Contact. (e.g. John Doe)
   --phone: record # Information about how to reach this Contact by phone. — shape: {primary?: string, secondary?: string}
-]: any -> record<email: string, group: string, id: int, name: string, phone: record<primary: string, secondary: string>, updated: string> {
+]: any -> oneof<record<email: string, group: string, id: int, name: string, phone: record<primary: string, secondary: string>, updated: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8310,7 +8309,7 @@ export def "delete-managed-contact" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($contact_id | is-empty) { error make --unspanned { msg: "path parameter 'contactId' must be non-empty" } }
@@ -8346,7 +8345,7 @@ export def "get-managed-contact" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<email: string, group: string, id: int, name: string, phone: record<primary: string, secondary: string>, updated: string> {
+]: nothing -> oneof<record<email: string, group: string, id: int, name: string, phone: record<primary: string, secondary: string>, updated: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($contact_id | is-empty) { error make --unspanned { msg: "path parameter 'contactId' must be non-empty" } }
@@ -8371,7 +8370,6 @@ export def "get-managed-contact" [
 #
 # PUT /managed/contacts/{contactId}
 # operationId: updateManagedContact
-# --phone shape: {primary?: string, secondary?: string}
 export def "update-managed-contact" [
   contact_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -8387,7 +8385,7 @@ export def "update-managed-contact" [
   --group: string # A grouping for this Contact. This is for display purposes only. (nullable, e.g. on-call)
   --name: string # The name of this Contact. (e.g. John Doe)
   --phone: record # Information about how to reach this Contact by phone. — shape: {primary?: string, secondary?: string}
-]: any -> record<email: string, group: string, id: int, name: string, phone: record<primary: string, secondary: string>, updated: string> {
+]: any -> oneof<record<email: string, group: string, id: int, name: string, phone: record<primary: string, secondary: string>, updated: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8427,7 +8425,7 @@ export def "get-managed-credentials" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page of a collection to return. (default: 1)
   --page-size: int # The number of items to return per page. (default: 100)
-]: nothing -> record<data: table<id: int, label: string, last_decrypted: string>, page: int, pages: int, results: int> {
+]: nothing -> oneof<record<data: table<id: int, label: string, last_decrypted: string>, page: int, pages: int, results: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
@@ -8465,7 +8463,7 @@ export def "create-managed-credential" [
   label: string # The unique label for this Credential. This is for display purposes only. (e.g. prod-password-1)
   password: string # The password to use when accessing the Managed Service. (e.g. s3cur3P@ssw0rd)
   --username: string # The username to use when accessing the Managed Service. (e.g. johndoe)
-]: any -> record<id: int, label: string, last_decrypted: string> {
+]: any -> oneof<record<id: int, label: string, last_decrypted: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8502,7 +8500,7 @@ export def "view-managed-ssh-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<ssh_key: string> {
+]: nothing -> oneof<record<ssh_key: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/managed/credentials/sshkey" $auth.query)
@@ -8537,7 +8535,7 @@ export def "get-managed-credential" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<id: int, label: string, last_decrypted: string> {
+]: nothing -> oneof<record<id: int, label: string, last_decrypted: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($credential_id | is-empty) { error make --unspanned { msg: "path parameter 'credentialId' must be non-empty" } }
@@ -8574,7 +8572,7 @@ export def "update-managed-credential" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --label: string # The unique label for this Credential. This is for display purposes only. (e.g. prod-password-1)
-]: any -> record<id: int, label: string, last_decrypted: string> {
+]: any -> oneof<record<id: int, label: string, last_decrypted: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8613,7 +8611,7 @@ export def "delete-managed-credential" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($credential_id | is-empty) { error make --unspanned { msg: "path parameter 'credentialId' must be non-empty" } }
@@ -8651,7 +8649,7 @@ export def "update-managed-credential-username-password" [
   --dry-run(-n) # Return the request that would be sent without executing it
   password: string # The password to use when accessing the Managed Service. (e.g. s3cur3P@ssw0rd)
   --username: string # The username to use when accessing the Managed Service. (e.g. johndoe)
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8691,7 +8689,7 @@ export def "get-managed-issues" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page of a collection to return. (default: 1)
   --page-size: int # The number of items to return per page. (default: 100)
-]: nothing -> record<data: table<created: string, entity: record, id: int, services: list>, page: int, pages: int, results: int> {
+]: nothing -> oneof<record<data: table<created: string, entity: record, id: int, services: list>, page: int, pages: int, results: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
@@ -8727,7 +8725,7 @@ export def "get-managed-issue" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created: string, entity: record<id: int, label: string, type: string, url: string>, id: int, services: list<int>> {
+]: nothing -> oneof<record<created: string, entity: record<id: int, label: string, type: string, url: string>, id: int, services: list<int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($issue_id | is-empty) { error make --unspanned { msg: "path parameter 'issueId' must be non-empty" } }
@@ -8764,7 +8762,7 @@ export def "get-managed-linode-settings" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page of a collection to return. (default: 1)
   --page-size: int # The number of items to return per page. (default: 100)
-]: nothing -> record<data: table<group: string, id: int, label: string, ssh: record>, page: int, pages: int, results: int> {
+]: nothing -> oneof<record<data: table<group: string, id: int, label: string, ssh: record>, page: int, pages: int, results: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
@@ -8800,7 +8798,7 @@ export def "get-managed-linode-setting" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<group: string, id: int, label: string, ssh: record<access: bool, ip: string, port: int, user: string>> {
+]: nothing -> oneof<record<group: string, id: int, label: string, ssh: record<access: bool, ip: string, port: int, user: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
@@ -8825,7 +8823,6 @@ export def "get-managed-linode-setting" [
 #
 # PUT /managed/linode-settings/{linodeId}
 # operationId: updateManagedLinodeSetting
-# --ssh shape: {access?: bool, ip?: string, port?: int, user?: string}
 export def "update-managed-linode-setting" [
   linode_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -8838,7 +8835,7 @@ export def "update-managed-linode-setting" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --ssh: record # The SSH settings for this Linode. — shape: {access?: bool, ip?: string, port?: int, user?: string}
-]: any -> record<group: string, id: int, label: string, ssh: record<access: bool, ip: string, port: int, user: string>> {
+]: any -> oneof<record<group: string, id: int, label: string, ssh: record<access: bool, ip: string, port: int, user: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8876,7 +8873,7 @@ export def "get-managed-services" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<address: string, body: string, consultation_group: string, created: string, credentials: list, id: int, label: string, notes: string, region: string, service_type: string, status: string, timeout: int, updated: string>, page: int, pages: int, results: int> {
+]: nothing -> oneof<record<data: table<address: string, body: string, consultation_group: string, created: string, credentials: list, id: int, label: string, notes: string, region: string, service_type: string, status: string, timeout: int, updated: string>, page: int, pages: int, results: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/managed/services" $auth.query)
@@ -8919,7 +8916,7 @@ export def "create-managed-service" [
   --region: string # The Region in which this Service is located. This is required if address is a private IP, and may not be set otherwise.
   service_type: string@service-type-completer # How this Service is monitored. (e.g. url)
   timeout: int # How long to wait, in seconds, for a response before considering the Service to be down. (e.g. 30)
-]: any -> record<address: string, body: string, consultation_group: string, created: string, credentials: list<int>, id: int, label: string, notes: string, region: string, service_type: string, status: string, timeout: int, updated: string> {
+]: any -> oneof<record<address: string, body: string, consultation_group: string, created: string, credentials: list<int>, id: int, label: string, notes: string, region: string, service_type: string, status: string, timeout: int, updated: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8957,7 +8954,7 @@ export def "delete-managed-service" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($service_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceId' must be non-empty" } }
@@ -8993,7 +8990,7 @@ export def "get-managed-service" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<address: string, body: string, consultation_group: string, created: string, credentials: list<int>, id: int, label: string, notes: string, region: string, service_type: string, status: string, timeout: int, updated: string> {
+]: nothing -> oneof<record<address: string, body: string, consultation_group: string, created: string, credentials: list<int>, id: int, label: string, notes: string, region: string, service_type: string, status: string, timeout: int, updated: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($service_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceId' must be non-empty" } }
@@ -9038,7 +9035,7 @@ export def "update-managed-service" [
   --region: string # The Region in which this Service is located. This is required if address is a private IP, and may not be set otherwise.
   --service-type: string@service-type-completer # How this Service is monitored. (e.g. url)
   --timeout: int # How long to wait, in seconds, for a response before considering the Service to be down. (e.g. 30)
-]: any -> record<address: string, body: string, consultation_group: string, created: string, credentials: list<int>, id: int, label: string, notes: string, region: string, service_type: string, status: string, timeout: int, updated: string> {
+]: any -> oneof<record<address: string, body: string, consultation_group: string, created: string, credentials: list<int>, id: int, label: string, notes: string, region: string, service_type: string, status: string, timeout: int, updated: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9077,7 +9074,7 @@ export def "disable-managed-service" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<address: string, body: string, consultation_group: string, created: string, credentials: list<int>, id: int, label: string, notes: string, region: string, service_type: string, status: string, timeout: int, updated: string> {
+]: nothing -> oneof<record<address: string, body: string, consultation_group: string, created: string, credentials: list<int>, id: int, label: string, notes: string, region: string, service_type: string, status: string, timeout: int, updated: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($service_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceId' must be non-empty" } }
@@ -9113,7 +9110,7 @@ export def "enable-managed-service" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<address: string, body: string, consultation_group: string, created: string, credentials: list<int>, id: int, label: string, notes: string, region: string, service_type: string, status: string, timeout: int, updated: string> {
+]: nothing -> oneof<record<address: string, body: string, consultation_group: string, created: string, credentials: list<int>, id: int, label: string, notes: string, region: string, service_type: string, status: string, timeout: int, updated: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($service_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceId' must be non-empty" } }
@@ -9148,7 +9145,7 @@ export def "get-managed-stats" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record> {
+]: nothing -> oneof<record<data: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/managed/stats" $auth.query)
@@ -9184,7 +9181,7 @@ export def "get-firewalls" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page of a collection to return. (default: 1)
   --page-size: int # The number of items to return per page. (default: 100)
-]: nothing -> record<data: table<created: string, id: int, label: string, rules: record, status: string, tags: list, updated: string>, page: int, pages: int, results: int> {
+]: nothing -> oneof<record<data: table<created: string, id: int, label: string, rules: record, status: string, tags: list, updated: string>, page: int, pages: int, results: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
@@ -9209,8 +9206,6 @@ export def "get-firewalls" [
 #
 # POST /networking/firewalls
 # operationId: createFirewalls
-# --devices shape: {linodes?: list<int>}
-# --rules shape: {inbound?: list, inbound_policy?: "ACCEPT"|"DROP", outbound?: list, outbound_policy?: "ACCEPT"|"DROP"}
 export def "create-firewalls" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9225,7 +9220,7 @@ export def "create-firewalls" [
   rules: record # The inbound and outbound access rules to apply to the Firewall. A Firewall may have up to 25 rules across its inbound and outbound rulesets. — shape: {inbound?: list, inbound_policy?: "ACCEPT"|"DROP", outbound?: list, outbound_policy?: "ACCEPT"|"DROP"}
   label: string # The Firewall's label, for display purposes only. Firewall labels have the following constraints: * Must begin and end with an alphanumeric character. * May only consist of alphanumeric characters, dashes (`-`), underscores (`_`) or periods (`.`). * Cannot have two dashes (`--`), underscores (`__`) or periods (`..`) in a row. * Must be between 3 and 32 characters. * Must be unique. (e.g. firewall123)
   --tags: list<string> # An array of tags applied to this object. Tags are for organizational purposes only. (e.g. [example tag, another example])
-]: any -> record<created: string, id: int, label: string, rules: record<inbound: list<record>, inbound_policy: string, outbound: list<record>, outbound_policy: string>, status: string, tags: list<string>, updated: string> {
+]: any -> oneof<record<created: string, id: int, label: string, rules: record<inbound: list<record>, inbound_policy: string, outbound: list<record>, outbound_policy: string>, status: string, tags: list<string>, updated: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
@@ -9263,7 +9258,7 @@ export def "delete-firewall" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   if ($firewall_id | is-empty) { error make --unspanned { msg: "path parameter 'firewallId' must be non-empty" } }
@@ -9299,7 +9294,7 @@ export def "get-firewall" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created: string, id: int, label: string, rules: record<inbound: list<record>, inbound_policy: string, outbound: list<record>, outbound_policy: string>, status: string, tags: list<string>, updated: string> {
+]: nothing -> oneof<record<created: string, id: int, label: string, rules: record<inbound: list<record>, inbound_policy: string, outbound: list<record>, outbound_policy: string>, status: string, tags: list<string>, updated: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   if ($firewall_id | is-empty) { error make --unspanned { msg: "path parameter 'firewallId' must be non-empty" } }
@@ -9338,7 +9333,7 @@ export def "update-firewall" [
   --label: string # The Firewall's label, for display purposes only. Firewall labels have the following constraints: * Must begin and end with an alphanumeric character. * May only consist of alphanumeric characters, dashes (`-`), underscores (`_`) or periods (`.`). * Cannot have two dashes (`--`), underscores (`__`) or periods (`..`) in a row. * Must be between 3 and 32 characters. * Must be unique. (e.g. firewall123)
   --status: string@status-completer-1 # The status to be applied to this Firewall. * When a Firewall is first created its status is `enabled`. * Use the [Delete Firewall](/docs/api/networking/#firewall-delete) endpoint to delete a Firewall. (e.g. enabled)
   --tags: list<string> # An array of tags applied to this object. Tags are for organizational purposes only. (e.g. [example tag, another example])
-]: any -> record<created: string, id: int, label: string, rules: record<inbound: list<record>, inbound_policy: string, outbound: list<record>, outbound_policy: string>, status: string, tags: list<string>, updated: string> {
+]: any -> oneof<record<created: string, id: int, label: string, rules: record<inbound: list<record>, inbound_policy: string, outbound: list<record>, outbound_policy: string>, status: string, tags: list<string>, updated: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
@@ -9379,7 +9374,7 @@ export def "get-firewall-devices" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page of a collection to return. (default: 1)
   --page-size: int # The number of items to return per page. (default: 100)
-]: nothing -> record<data: table<created: string, entity: record, id: int, updated: string>, page: int, pages: int, results: int> {
+]: nothing -> oneof<record<data: table<created: string, entity: record, id: int, updated: string>, page: int, pages: int, results: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   if ($firewall_id | is-empty) { error make --unspanned { msg: "path parameter 'firewallId' must be non-empty" } }
@@ -9418,7 +9413,7 @@ export def "create-firewall-device" [
   --dry-run(-n) # Return the request that would be sent without executing it
   id: int # The entity's ID (e.g. 123)
   type: string@type-completer-4 # The entity's type. (e.g. linode)
-]: any -> record<created: string, entity: record<id: int, label: string, type: string, url: string>, id: int, updated: string> {
+]: any -> oneof<record<created: string, entity: record<id: int, label: string, type: string, url: string>, id: int, updated: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
@@ -9458,7 +9453,7 @@ export def "delete-firewall-device" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   if ($firewall_id | is-empty) { error make --unspanned { msg: "path parameter 'firewallId' must be non-empty" } }
@@ -9496,7 +9491,7 @@ export def "get-firewall-device" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created: string, entity: record<id: int, label: string, type: string, url: string>, id: int, updated: string> {
+]: nothing -> oneof<record<created: string, entity: record<id: int, label: string, type: string, url: string>, id: int, updated: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   if ($firewall_id | is-empty) { error make --unspanned { msg: "path parameter 'firewallId' must be non-empty" } }
@@ -9533,7 +9528,7 @@ export def "get-firewall-rules" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<inbound: table<action: string, addresses: record, description: string, label: string, ports: string, protocol: string>, inbound_policy: string, outbound: table<action: string, addresses: record, description: string, label: string, ports: string, protocol: string>, outbound_policy: string> {
+]: nothing -> oneof<record<inbound: table<action: string, addresses: record, description: string, label: string, ports: string, protocol: string>, inbound_policy: string, outbound: table<action: string, addresses: record, description: string, label: string, ports: string, protocol: string>, outbound_policy: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   if ($firewall_id | is-empty) { error make --unspanned { msg: "path parameter 'firewallId' must be non-empty" } }
@@ -9558,8 +9553,6 @@ export def "get-firewall-rules" [
 #
 # PUT /networking/firewalls/{firewallId}/rules
 # operationId: updateFirewallRules
-# --inbound item shape: {action?: "ACCEPT"|"DROP", addresses?: record, description?: string, label?: string, ports?: string, protocol?: "TCP"|"UDP"|"ICMP"|"IPENCAP"}
-# --outbound item shape: {action?: "ACCEPT"|"DROP", addresses?: record, description?: string, label?: string, ports?: string, protocol?: "TCP"|"UDP"|"ICMP"|"IPENCAP"}
 export def "update-firewall-rules" [
   firewall_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -9575,7 +9568,7 @@ export def "update-firewall-rules" [
   --outbound: list # The outbound rules for the firewall, as a JSON array. — item shape: {action?: "ACCEPT"|"DROP", addresses?: record, description?: string, label?: string, ports?: string, protocol?: "TCP"|"UDP"|"ICMP"|"IPENCAP"}
   --inbound-policy: string@inbound-policy-completer # The default behavior for inbound traffic. This setting can be overridden by [updating](/docs/api/networking/#firewall-rules-update) the `inbound.action` property of the Firewall Rule. (e.g. DROP)
   --outbound-policy: string@outbound-policy-completer # The default behavior for outbound traffic. This setting can be overridden by [updating](/docs/api/networking/#firewall-rules-update) the `outbound.action` property of the Firewall Rule. (e.g. DROP)
-]: any -> record<inbound: table<action: string, addresses: record, description: string, label: string, ports: string, protocol: string>, inbound_policy: string, outbound: table<action: string, addresses: record, description: string, label: string, ports: string, protocol: string>, outbound_policy: string> {
+]: any -> oneof<record<inbound: table<action: string, addresses: record, description: string, label: string, ports: string, protocol: string>, inbound_policy: string, outbound: table<action: string, addresses: record, description: string, label: string, ports: string, protocol: string>, outbound_policy: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
@@ -9613,7 +9606,7 @@ export def "get-i-ps" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<address: string, gateway: string, linode_id: int, prefix: int, public: bool, rdns: string, region: string, subnet_mask: string, type: string>, page: int, pages: int, results: int> {
+]: nothing -> oneof<record<data: table<address: string, gateway: string, linode_id: int, prefix: int, public: bool, rdns: string, region: string, subnet_mask: string, type: string>, page: int, pages: int, results: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/networking/ips" $auth.query)
@@ -9650,13 +9643,14 @@ export def "allocate-ip" [
   linode_id: int # The ID of a Linode you you have access to that this address will be allocated to. (e.g. 123)
   --public: oneof<nothing, bool> # Whether to create a public or private IPv4 address. (e.g. true)
   type: string@type-completer-3 # The type of address you are requesting. Only IPv4 addresses may be allocated through this endpoint. (e.g. ipv4)
-]: any -> record<address: string, gateway: string, linode_id: int, prefix: int, public: bool, rdns: string, region: string, subnet_mask: string, type: string> {
+]: any -> oneof<record<address: string, gateway: string, linode_id: int, prefix: int, public: bool, rdns: string, region: string, subnet_mask: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/networking/ips" $auth.query)
   let req_body = {"linode_id": $linode_id, "public": $public, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "public") == null) { error make --unspanned { msg: "required body field 'public' missing: pass --public or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -9677,7 +9671,6 @@ export def "allocate-ip" [
 #
 # POST /networking/ips/assign
 # operationId: assignIPs
-# --assignments item shape: {address?: string, linode_id?: int}
 export def "assign-i-ps" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9690,7 +9683,7 @@ export def "assign-i-ps" [
   --dry-run(-n) # Return the request that would be sent without executing it
   assignments: list # The list of assignments to make. You must have read_write access to all IPs being assigned and all Linodes being assigned to in order for the assignments to succeed. — item shape: {address?: string, linode_id?: int}
   region: string # The ID of the Region in which these assignments are to take place. All IPs and Linodes must exist in this Region. (e.g. us-east)
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9729,7 +9722,7 @@ export def "share-i-ps" [
   --dry-run(-n) # Return the request that would be sent without executing it
   ips: list<string> # A list of secondary Linode IPs to share with the primary Linode. * Can include both IPv4 addresses and IPv6 ranges (omit /56 and /64 prefix lengths) * Can include both private and public IPv4 addresses. * You must have access to all of these addresses and they must be in the same Region as the primary Linode. * Enter an empty array to remove all shared IP addresses. (e.g. [192.0.2.1, 2001:db8:3c4d:15::])
   linode_id: int # The ID of the primary Linode that the addresses will be shared with. (e.g. 123)
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4beta")
@@ -9767,7 +9760,7 @@ export def "get-ip" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<address: string, gateway: string, linode_id: int, prefix: int, public: bool, rdns: string, region: string, subnet_mask: string, type: string> {
+]: nothing -> oneof<record<address: string, gateway: string, linode_id: int, prefix: int, public: bool, rdns: string, region: string, subnet_mask: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($address | is-empty) { error make --unspanned { msg: "path parameter 'address' must be non-empty" } }
@@ -9804,7 +9797,7 @@ export def "update-ip" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --rdns: string # The reverse DNS assigned to this address. For public IPv4 addresses, this will be set to a default value provided by Linode if not explicitly set. (nullable, e.g. test.example.org)
-]: any -> record<address: string, gateway: string, linode_id: int, prefix: int, public: bool, rdns: string, region: string, subnet_mask: string, type: string> {
+]: any -> oneof<record<address: string, gateway: string, linode_id: int, prefix: int, public: bool, rdns: string, region: string, subnet_mask: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9832,7 +9825,6 @@ export def "update-ip" [
 #
 # POST /networking/ipv4/assign
 # operationId: assignIPv4s
-# --assignments item shape: {address?: string, linode_id?: int}
 export def "assign-i-pv4s" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9845,7 +9837,7 @@ export def "assign-i-pv4s" [
   --dry-run(-n) # Return the request that would be sent without executing it
   assignments: list # The list of assignments to make. You must have read_write access to all IPs being assigned and all Linodes being assigned to in order for the assignments to succeed. — item shape: {address?: string, linode_id?: int}
   region: string # The ID of the Region in which these assignments are to take place. All IPs and Linodes must exist in this Region. (e.g. us-east)
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9884,7 +9876,7 @@ export def "share-i-pv4s" [
   --dry-run(-n) # Return the request that would be sent without executing it
   ips: list<string> # A list of secondary Linode IPs to share with the primary Linode. * Can include both IPv4 addresses and IPv6 ranges (omit /56 and /64 prefix lengths) * Can include both private and public IPv4 addresses. * You must have access to all of these addresses and they must be in the same Region as the primary Linode. * Enter an empty array to remove all shared IP addresses. (e.g. [192.0.2.1, 2001:db8:3c4d:15::])
   linode_id: int # The ID of the primary Linode that the addresses will be shared with. (e.g. 123)
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9923,7 +9915,7 @@ export def "get-i-pv6-pools" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page of a collection to return. (default: 1)
   --page-size: int # The number of items to return per page. (default: 100)
-]: nothing -> record<data: table<prefix: int, range: string, region: string, route_target: string>, page: int, pages: int, results: int> {
+]: nothing -> oneof<record<data: table<prefix: int, range: string, region: string, route_target: string>, page: int, pages: int, results: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
@@ -9960,7 +9952,7 @@ export def "get-i-pv6-ranges" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page of a collection to return. (default: 1)
   --page-size: int # The number of items to return per page. (default: 100)
-]: nothing -> record<data: table<prefix: int, range: string, region: string, route_target: string>, page: int, pages: int, results: int> {
+]: nothing -> oneof<record<data: table<prefix: int, range: string, region: string, route_target: string>, page: int, pages: int, results: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
@@ -9998,7 +9990,7 @@ export def "post-i-pv6-range" [
   --linode-id: int # The ID of the Linode to assign this range to. The SLAAC address for the provided Linode is used as the range's `route_target`. * **Required** if `route_target` is omitted from the request. * Mutually exclusive with `route_target`. Submitting values for both properties in a request results in an error. (e.g. 123)
   prefix_length: int@prefix-length-completer # The prefix length of the IPv6 range.
   --route-target: string # The IPv6 SLAAC address to assign this range to. * **Required** if `linode_id` is omitted from the request. * Mutually exclusive with `linode_id`. Submitting values for both properties in a request results in an error. * **Note**: Omit the `/128` prefix length of the SLAAC address when using this property. (format: ipv6, e.g. 2001:0db8::1)
-]: any -> record<range: string, route_target: string> {
+]: any -> oneof<record<range: string, route_target: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10036,7 +10028,7 @@ export def "delete-i-pv6-range" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($range | is-empty) { error make --unspanned { msg: "path parameter 'range' must be non-empty" } }
@@ -10072,7 +10064,7 @@ export def "get-i-pv6-range" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<is_bgp: bool, linodes: list<int>, prefix: int, range: string, region: string> {
+]: nothing -> oneof<record<is_bgp: bool, linodes: list<int>, prefix: int, range: string, region: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($range | is-empty) { error make --unspanned { msg: "path parameter 'range' must be non-empty" } }
@@ -10109,7 +10101,7 @@ export def "get-vla-ns" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page of a collection to return. (default: 1)
   --page-size: int # The number of items to return per page. (default: 100)
-]: nothing -> record<data: table<created: string, label: string, linodes: list, region: string>, page: int, pages: int, results: int> {
+]: nothing -> oneof<record<data: table<created: string, label: string, linodes: list, region: string>, page: int, pages: int, results: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4beta")
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
@@ -10146,7 +10138,7 @@ export def "get-node-balancers" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page of a collection to return. (default: 1)
   --page-size: int # The number of items to return per page. (default: 100)
-]: nothing -> record<data: table<client_conn_throttle: int, created: string, hostname: string, id: int, ipv4: string, ipv6: string, label: string, region: string, tags: list, transfer: record, updated: string>, page: int, pages: int, results: int> {
+]: nothing -> oneof<record<data: table<client_conn_throttle: int, created: string, hostname: string, id: int, ipv4: string, ipv6: string, label: string, region: string, tags: list, transfer: record, updated: string>, page: int, pages: int, results: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
@@ -10171,7 +10163,6 @@ export def "get-node-balancers" [
 #
 # POST /nodebalancers
 # operationId: createNodeBalancer
-# --configs item shape: {algorithm?: "roundrobin"|"leastconn"|"source", check?: "none"|"connection"|"http"|"http_body", check_attempts?: int, check_body?: string, check_interval?: int, check_passive?: bool, check_path?: string, check_timeout?: int, cipher_suite?: "recommended"|"legacy", nodes?: list, port?: int, protocol?: "http"|"https"|"tcp", proxy_protocol?: "none"|"v1"|"v2", ssl_cert?: string, ssl_key?: string, stickiness?: "none"|"table"|"http_cookie"}
 export def "create-node-balancer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10186,7 +10177,7 @@ export def "create-node-balancer" [
   --configs: list # The port Config(s) to create for this NodeBalancer. Each Config must have a unique port and at least one Node. — item shape: {algorithm?: "roundrobin"|"leastconn"|"source", check?: "none"|"connection"|"http"|"http_body", check_attempts?: int, check_body?: string, check_interval?: int, check_passive?: bool, check_path?: string, check_timeout?: int, cipher_suite?: "recommended"|"legacy", nodes?: list, port?: int, protocol?: "http"|"https"|"tcp", proxy_protocol?: "none"|"v1"|"v2", ssl_cert?: string, ssl_key?: string, stickiness?: "none"|"table"|"http_cookie"}
   --label: string # This NodeBalancer's label. These must be unique on your Account. (e.g. balancer12345)
   region: string # The ID of the Region to create this NodeBalancer in. (e.g. us-east)
-]: any -> record<client_conn_throttle: int, created: string, hostname: string, id: int, ipv4: string, ipv6: string, label: string, region: string, tags: list<string>, transfer: record<in: float, out: float, total: float>, updated: string> {
+]: any -> oneof<record<client_conn_throttle: int, created: string, hostname: string, id: int, ipv4: string, ipv6: string, label: string, region: string, tags: list<string>, transfer: record<in: float, out: float, total: float>, updated: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10224,7 +10215,7 @@ export def "delete-node-balancer" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($node_balancer_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeBalancerId' must be non-empty" } }
@@ -10260,7 +10251,7 @@ export def "get-node-balancer" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<client_conn_throttle: int, created: string, hostname: string, id: int, ipv4: string, ipv6: string, label: string, region: string, tags: list<string>, transfer: record<in: float, out: float, total: float>, updated: string> {
+]: nothing -> oneof<record<client_conn_throttle: int, created: string, hostname: string, id: int, ipv4: string, ipv6: string, label: string, region: string, tags: list<string>, transfer: record<in: float, out: float, total: float>, updated: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($node_balancer_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeBalancerId' must be non-empty" } }
@@ -10299,7 +10290,7 @@ export def "update-node-balancer" [
   --client-conn-throttle: int # Throttle connections per second. Set to 0 (zero) to disable throttling. (e.g. 0)
   --label: string # This NodeBalancer's label. These must be unique on your Account. (e.g. balancer12345)
   --tags: list<string> # An array of Tags applied to this object. Tags are for organizational purposes only. (e.g. [example tag, another example])
-]: any -> record<client_conn_throttle: int, created: string, hostname: string, id: int, ipv4: string, ipv6: string, label: string, region: string, tags: list<string>, transfer: record<in: float, out: float, total: float>, updated: string> {
+]: any -> oneof<record<client_conn_throttle: int, created: string, hostname: string, id: int, ipv4: string, ipv6: string, label: string, region: string, tags: list<string>, transfer: record<in: float, out: float, total: float>, updated: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10340,7 +10331,7 @@ export def "get-node-balancer-configs" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page of a collection to return. (default: 1)
   --page-size: int # The number of items to return per page. (default: 100)
-]: nothing -> record<data: table<algorithm: string, check: string, check_attempts: int, check_body: string, check_interval: int, check_passive: bool, check_path: string, check_timeout: int, cipher_suite: string, id: int, nodebalancer_id: int, nodes_status: record, port: int, protocol: string, proxy_protocol: string, ssl_cert: string, ssl_commonname: string, ssl_fingerprint: string, ssl_key: string, stickiness: string>, page: int, pages: int, results: int> {
+]: nothing -> oneof<record<data: table<algorithm: string, check: string, check_attempts: int, check_body: string, check_interval: int, check_passive: bool, check_path: string, check_timeout: int, cipher_suite: string, id: int, nodebalancer_id: int, nodes_status: record, port: int, protocol: string, proxy_protocol: string, ssl_cert: string, ssl_commonname: string, ssl_fingerprint: string, ssl_key: string, stickiness: string>, page: int, pages: int, results: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($node_balancer_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeBalancerId' must be non-empty" } }
@@ -10392,7 +10383,7 @@ export def "create-node-balancer-config" [
   --ssl-cert: string # The PEM-formatted public SSL certificate (or the combined PEM-formatted SSL certificate and Certificate Authority chain) that should be served on this NodeBalancerConfig's port. Line breaks must be represented as "\n" in the string for requests (but not when using the Linode CLI). [Diffie-Hellman Parameters](/docs/products/networking/nodebalancers/guides/ssl-termination/#diffie-hellman-parameters) can be included in this value to enable forward secrecy. The contents of this field will not be shown in any responses that display the NodeBalancerConfig. Instead, `` will be printed where the field appears. The read-only `ssl_commonname` and `ssl_fingerprint` fields in a NodeBalancerConfig response are automatically derived from your certificate. Please refer to these fields to verify that the appropriate certificate was assigned to your NodeBalancerConfig. (nullable, format: ssl-cert, e.g. <REDACTED>)
   --ssl-key: string # The PEM-formatted private key for the SSL certificate set in the `ssl_cert` field. Line breaks must be represented as "\n" in the string for requests (but not when using the Linode CLI). The contents of this field will not be shown in any responses that display the NodeBalancerConfig. Instead, `` will be printed where the field appears. The read-only `ssl_commonname` and `ssl_fingerprint` fields in a NodeBalancerConfig response are automatically derived from your certificate. Please refer to these fields to verify that the appropriate certificate was assigned to your NodeBalancerConfig. (nullable, format: ssl-key, e.g. <REDACTED>)
   --stickiness: string@stickiness-completer # Controls how session stickiness is handled on this port. * If set to `none` connections will always be assigned a backend based on the algorithm configured. * If set to `table` sessions from the same remote address will be routed to the same backend. * For HTTP or HTTPS clients, `http_cookie` allows sessions to be routed to the same backend based on a cookie set by the NodeBalancer. (default: none, e.g. http_cookie)
-]: any -> record<algorithm: string, check: string, check_attempts: int, check_body: string, check_interval: int, check_passive: bool, check_path: string, check_timeout: int, cipher_suite: string, id: int, nodebalancer_id: int, nodes_status: record<down: int, up: int>, port: int, protocol: string, proxy_protocol: string, ssl_cert: string, ssl_commonname: string, ssl_fingerprint: string, ssl_key: string, stickiness: string> {
+]: any -> oneof<record<algorithm: string, check: string, check_attempts: int, check_body: string, check_interval: int, check_passive: bool, check_path: string, check_timeout: int, cipher_suite: string, id: int, nodebalancer_id: int, nodes_status: record<down: int, up: int>, port: int, protocol: string, proxy_protocol: string, ssl_cert: string, ssl_commonname: string, ssl_fingerprint: string, ssl_key: string, stickiness: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10432,7 +10423,7 @@ export def "delete-node-balancer-config" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($node_balancer_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeBalancerId' must be non-empty" } }
@@ -10470,7 +10461,7 @@ export def "get-node-balancer-config" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<algorithm: string, check: string, check_attempts: int, check_body: string, check_interval: int, check_passive: bool, check_path: string, check_timeout: int, cipher_suite: string, id: int, nodebalancer_id: int, nodes_status: record<down: int, up: int>, port: int, protocol: string, proxy_protocol: string, ssl_cert: string, ssl_commonname: string, ssl_fingerprint: string, ssl_key: string, stickiness: string> {
+]: nothing -> oneof<record<algorithm: string, check: string, check_attempts: int, check_body: string, check_interval: int, check_passive: bool, check_path: string, check_timeout: int, cipher_suite: string, id: int, nodebalancer_id: int, nodes_status: record<down: int, up: int>, port: int, protocol: string, proxy_protocol: string, ssl_cert: string, ssl_commonname: string, ssl_fingerprint: string, ssl_key: string, stickiness: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($node_balancer_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeBalancerId' must be non-empty" } }
@@ -10523,7 +10514,7 @@ export def "update-node-balancer-config" [
   --ssl-cert: string # The PEM-formatted public SSL certificate (or the combined PEM-formatted SSL certificate and Certificate Authority chain) that should be served on this NodeBalancerConfig's port. Line breaks must be represented as "\n" in the string for requests (but not when using the Linode CLI). [Diffie-Hellman Parameters](/docs/products/networking/nodebalancers/guides/ssl-termination/#diffie-hellman-parameters) can be included in this value to enable forward secrecy. The contents of this field will not be shown in any responses that display the NodeBalancerConfig. Instead, `` will be printed where the field appears. The read-only `ssl_commonname` and `ssl_fingerprint` fields in a NodeBalancerConfig response are automatically derived from your certificate. Please refer to these fields to verify that the appropriate certificate was assigned to your NodeBalancerConfig. (nullable, format: ssl-cert, e.g. <REDACTED>)
   --ssl-key: string # The PEM-formatted private key for the SSL certificate set in the `ssl_cert` field. Line breaks must be represented as "\n" in the string for requests (but not when using the Linode CLI). The contents of this field will not be shown in any responses that display the NodeBalancerConfig. Instead, `` will be printed where the field appears. The read-only `ssl_commonname` and `ssl_fingerprint` fields in a NodeBalancerConfig response are automatically derived from your certificate. Please refer to these fields to verify that the appropriate certificate was assigned to your NodeBalancerConfig. (nullable, format: ssl-key, e.g. <REDACTED>)
   --stickiness: string@stickiness-completer # Controls how session stickiness is handled on this port. * If set to `none` connections will always be assigned a backend based on the algorithm configured. * If set to `table` sessions from the same remote address will be routed to the same backend. * For HTTP or HTTPS clients, `http_cookie` allows sessions to be routed to the same backend based on a cookie set by the NodeBalancer. (default: none, e.g. http_cookie)
-]: any -> record<algorithm: string, check: string, check_attempts: int, check_body: string, check_interval: int, check_passive: bool, check_path: string, check_timeout: int, cipher_suite: string, id: int, nodebalancer_id: int, nodes_status: record<down: int, up: int>, port: int, protocol: string, proxy_protocol: string, ssl_cert: string, ssl_commonname: string, ssl_fingerprint: string, ssl_key: string, stickiness: string> {
+]: any -> oneof<record<algorithm: string, check: string, check_attempts: int, check_body: string, check_interval: int, check_passive: bool, check_path: string, check_timeout: int, cipher_suite: string, id: int, nodebalancer_id: int, nodes_status: record<down: int, up: int>, port: int, protocol: string, proxy_protocol: string, ssl_cert: string, ssl_commonname: string, ssl_fingerprint: string, ssl_key: string, stickiness: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10566,7 +10557,7 @@ export def "get-node-balancer-config-nodes" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page of a collection to return. (default: 1)
   --page-size: int # The number of items to return per page. (default: 100)
-]: nothing -> record<data: table<address: string, config_id: int, id: int, label: string, mode: string, nodebalancer_id: int, status: string, weight: int>, page: int, pages: int, results: int> {
+]: nothing -> oneof<record<data: table<address: string, config_id: int, id: int, label: string, mode: string, nodebalancer_id: int, status: string, weight: int>, page: int, pages: int, results: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($node_balancer_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeBalancerId' must be non-empty" } }
@@ -10609,7 +10600,7 @@ export def "create-node-balancer-node" [
   label: string # The label for this node. This is for display purposes only. (e.g. node54321)
   --mode: string@mode-completer # The mode this NodeBalancer should use when sending traffic to this backend. * If set to `accept` this backend is accepting traffic. * If set to `reject` this backend will not receive traffic. * If set to `drain` this backend will not receive _new_ traffic, but connections already pinned to it will continue to be routed to it. * If set to `backup`, this backend will only receive traffic if all `accept` nodes are down. (e.g. accept)
   --weight: int # Used when picking a backend to serve a request and is not pinned to a single backend yet. Nodes with a higher weight will receive more traffic. (e.g. 50)
-]: any -> record<address: string, config_id: int, id: int, label: string, mode: string, nodebalancer_id: int, status: string, weight: int> {
+]: any -> oneof<record<address: string, config_id: int, id: int, label: string, mode: string, nodebalancer_id: int, status: string, weight: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10651,7 +10642,7 @@ export def "delete-node-balancer-config-node" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($node_balancer_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeBalancerId' must be non-empty" } }
@@ -10691,7 +10682,7 @@ export def "get-node-balancer-node" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<address: string, config_id: int, id: int, label: string, mode: string, nodebalancer_id: int, status: string, weight: int> {
+]: nothing -> oneof<record<address: string, config_id: int, id: int, label: string, mode: string, nodebalancer_id: int, status: string, weight: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($node_balancer_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeBalancerId' must be non-empty" } }
@@ -10735,7 +10726,7 @@ export def "update-node-balancer-node" [
   --label: string # The label for this node. This is for display purposes only. (e.g. node54321)
   --mode: string@mode-completer # The mode this NodeBalancer should use when sending traffic to this backend. * If set to `accept` this backend is accepting traffic. * If set to `reject` this backend will not receive traffic. * If set to `drain` this backend will not receive _new_ traffic, but connections already pinned to it will continue to be routed to it. * If set to `backup`, this backend will only receive traffic if all `accept` nodes are down. (e.g. accept)
   --weight: int # Used when picking a backend to serve a request and is not pinned to a single backend yet. Nodes with a higher weight will receive more traffic. (e.g. 50)
-]: any -> record<address: string, config_id: int, id: int, label: string, mode: string, nodebalancer_id: int, status: string, weight: int> {
+]: any -> oneof<record<address: string, config_id: int, id: int, label: string, mode: string, nodebalancer_id: int, status: string, weight: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10765,7 +10756,6 @@ export def "update-node-balancer-node" [
 #
 # POST /nodebalancers/{nodeBalancerId}/configs/{configId}/rebuild
 # operationId: rebuildNodeBalancerConfig
-# --nodes item shape: {address?: string, id?: int, label?: string, mode?: "accept"|"reject"|"drain"|"backup", weight?: int}
 export def "rebuild-node-balancer-config" [
   node_balancer_id: int
   config_id: int
@@ -10794,7 +10784,7 @@ export def "rebuild-node-balancer-config" [
   --ssl-key: string # The PEM-formatted private key for the SSL certificate set in the `ssl_cert` field. Line breaks must be represented as "\n" in the string for requests (but not when using the Linode CLI). The contents of this field will not be shown in any responses that display the NodeBalancerConfig. Instead, `` will be printed where the field appears. The read-only `ssl_commonname` and `ssl_fingerprint` fields in a NodeBalancerConfig response are automatically derived from your certificate. Please refer to these fields to verify that the appropriate certificate was assigned to your NodeBalancerConfig. (nullable, format: ssl-key, e.g. <REDACTED>)
   --stickiness: string@stickiness-completer # Controls how session stickiness is handled on this port. * If set to `none` connections will always be assigned a backend based on the algorithm configured. * If set to `table` sessions from the same remote address will be routed to the same backend. * For HTTP or HTTPS clients, `http_cookie` allows sessions to be routed to the same backend based on a cookie set by the NodeBalancer. (default: none, e.g. http_cookie)
   nodes: list # The NodeBalancer Node(s) that serve this Config. Some considerations for Nodes when rebuilding a config: * Current Nodes excluded from the request body will be deleted from the Config. * Current Nodes (identified by their Node ID) will be updated. * New Nodes (included without a Node ID) will be created. — item shape: {address?: string, id?: int, label?: string, mode?: "accept"|"reject"|"drain"|"backup", weight?: int}
-]: any -> record<algorithm: string, check: string, check_attempts: int, check_body: string, check_interval: int, check_passive: bool, check_path: string, check_timeout: int, cipher_suite: string, id: int, nodebalancer_id: int, nodes_status: record<down: int, up: int>, port: int, protocol: string, proxy_protocol: string, ssl_cert: string, ssl_commonname: string, ssl_fingerprint: string, ssl_key: string, stickiness: string> {
+]: any -> oneof<record<algorithm: string, check: string, check_attempts: int, check_body: string, check_interval: int, check_passive: bool, check_path: string, check_timeout: int, cipher_suite: string, id: int, nodebalancer_id: int, nodes_status: record<down: int, up: int>, port: int, protocol: string, proxy_protocol: string, ssl_cert: string, ssl_commonname: string, ssl_fingerprint: string, ssl_key: string, stickiness: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10833,7 +10823,7 @@ export def "get-nodebalancers-node-balancer-id-stats" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<connections: list<float>, traffic: record<in: list, out: list>>, title: string> {
+]: nothing -> oneof<record<data: record<connections: list<float>, traffic: record<in: list, out: list>>, title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($node_balancer_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeBalancerId' must be non-empty" } }
@@ -10868,7 +10858,7 @@ export def "get-object-storage-buckets" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<cluster: string, created: string, hostname: string, label: string, objects: int, size: int>, page: int, pages: int, results: int> {
+]: nothing -> oneof<record<data: table<cluster: string, created: string, hostname: string, label: string, objects: int, size: int>, page: int, pages: int, results: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   let full_url = (build-url $base "/object-storage/buckets" $auth.query)
@@ -10906,7 +10896,7 @@ export def "create-object-storage-bucket" [
   cluster: string # The ID of the Object Storage Cluster where this bucket should be created. (e.g. us-east-1)
   --cors-enabled: oneof<nothing, bool> # If true, the bucket will be created with CORS enabled for all origins. For more fine-grained controls of CORS, use the S3 API directly. (default: false, e.g. true)
   label: string # The name for this bucket. Must be unique in the cluster you are creating the bucket in, or an error will be returned. Labels will be reserved only for the cluster that active buckets are created and stored in. If you want to reserve this bucket's label in another cluster, you must create a new bucket with the same label in the new cluster. (e.g. example-bucket)
-]: any -> record<cluster: string, created: string, hostname: string, label: string, objects: int, size: int> {
+]: any -> oneof<record<cluster: string, created: string, hostname: string, label: string, objects: int, size: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
@@ -10944,7 +10934,7 @@ export def "get-object-storage-bucketin-cluster" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<cluster: string, created: string, hostname: string, label: string, objects: int, size: int>, page: int, pages: int, results: int> {
+]: nothing -> oneof<record<data: table<cluster: string, created: string, hostname: string, label: string, objects: int, size: int>, page: int, pages: int, results: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   if ($cluster_id | is-empty) { error make --unspanned { msg: "path parameter 'clusterId' must be non-empty" } }
@@ -10981,7 +10971,7 @@ export def "delete-object-storage-bucket" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   if ($cluster_id | is-empty) { error make --unspanned { msg: "path parameter 'clusterId' must be non-empty" } }
@@ -11019,7 +11009,7 @@ export def "get-object-storage-bucket" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<cluster: string, created: string, hostname: string, label: string, objects: int, size: int> {
+]: nothing -> oneof<record<cluster: string, created: string, hostname: string, label: string, objects: int, size: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   if ($cluster_id | is-empty) { error make --unspanned { msg: "path parameter 'clusterId' must be non-empty" } }
@@ -11059,7 +11049,7 @@ export def "modify-object-storage-bucket-access" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --acl: string@acl-completer-1 # The Access Control Level of the bucket, as a canned ACL string. For more fine-grained control of ACLs, use the S3 API directly. (e.g. private)
   --cors-enabled: oneof<nothing, bool> # If true, the bucket will be created with CORS enabled for all origins. For more fine-grained controls of CORS, use the S3 API directly. (e.g. true)
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
@@ -11102,7 +11092,7 @@ export def "update-object-storage-bucket-access" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --acl: string@acl-completer-1 # The Access Control Level of the bucket, as a canned ACL string. For more fine-grained control of ACLs, use the S3 API directly. (e.g. private)
   --cors-enabled: oneof<nothing, bool> # If true, the bucket will be created with CORS enabled for all origins. For more fine-grained controls of CORS, use the S3 API directly. (e.g. true)
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
@@ -11143,12 +11133,13 @@ export def "view-object-storage-bucket-acl" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --name: string # The `name` of the object for which to retrieve its Access Control List (ACL). Use the [Object Storage Bucket Contents List](/docs/api/object-storage/#object-storage-bucket-contents-list) endpoint to access all object names in a bucket.
-]: nothing -> record<acl: string, acl_xml: string> {
+  --name: string # The `name` of the object for which to retrieve its Access Control List (ACL). Use the [Object Storage Bucket Contents List](/docs/api/object-storage/#object-storage-bucket-contents-list) endpoint to access all object names in a bucket. (required)
+]: nothing -> oneof<record<acl: string, acl_xml: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   if ($cluster_id | is-empty) { error make --unspanned { msg: "path parameter 'clusterId' must be non-empty" } }
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
+  if ($name == null) { error make --unspanned { msg: "required query parameter 'name' missing: pass --name" } }
   let qp = [(serialize-qp "name" $name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({cluster_id: (encode-path-segment $cluster_id), bucket: (encode-path-segment $bucket)} | format pattern "/object-storage/buckets/{cluster_id}/{bucket}/object-acl") $qp $auth.query)
   let accept_val = "application/json"
@@ -11185,7 +11176,7 @@ export def "update-object-storage-bucket-acl" [
   --dry-run(-n) # Return the request that would be sent without executing it
   acl: string@acl-completer-1 # The Access Control Level of the bucket, as a canned ACL string. For more fine-grained control of ACLs, use the S3 API directly. (e.g. public-read)
   name: string # The `name` of the object for which to update its Access Control List (ACL). Use the [Object Storage Bucket Contents List](/docs/api/object-storage/#object-storage-bucket-contents-list) endpoint to access all object names in a bucket.
-]: any -> record<acl: string, acl_xml: string> {
+]: any -> oneof<record<acl: string, acl_xml: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
@@ -11230,7 +11221,7 @@ export def "get-object-storage-bucket-content" [
   --delimiter: string # The delimiter for object names; if given, object names will be returned up to the first occurrence of this character. This is most commonly used with the `/` character to allow bucket transversal in a manner similar to a filesystem, however any delimiter may be used. Use in conjunction with `prefix` to see object names past the first occurrence of the delimiter.
   --prefix: string # Filters objects returned to only those whose name start with the given prefix. Commonly used in conjunction with `delimiter` to allow transversal of bucket contents in a manner similar to a filesystem.
   --page-size: int # The number of items to return per page. (default: 100)
-]: nothing -> record<data: table<etag: string, is_truncated: bool, last_modified: string, name: string, next_marker: string, owner: string, size: int>> {
+]: nothing -> oneof<record<data: table<etag: string, is_truncated: bool, last_modified: string, name: string, next_marker: string, owner: string, size: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   if ($cluster_id | is-empty) { error make --unspanned { msg: "path parameter 'clusterId' must be non-empty" } }
@@ -11273,7 +11264,7 @@ export def "create-object-storage-object-url" [
   --expires-in: int # How long this signed URL will be valid for, in seconds. If omitted, the URL will be valid for 3600 seconds (1 hour). (default: 3600)
   method: string # The HTTP method allowed to be used with the pre-signed URL. (default: GET, e.g. GET)
   name: string # The name of the object that will be accessed with the pre-signed URL. This object need not exist, and no error will be returned if it doesn't. This behavior is useful for generating pre-signed URLs to upload new objects to by setting the `method` to "PUT". (e.g. example)
-]: any -> record<url: string> {
+]: any -> oneof<record<url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
@@ -11314,7 +11305,7 @@ export def "delete-object-storage-ssl" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   if ($cluster_id | is-empty) { error make --unspanned { msg: "path parameter 'clusterId' must be non-empty" } }
@@ -11352,7 +11343,7 @@ export def "get-object-storage-ssl" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<ssl: bool> {
+]: nothing -> oneof<record<ssl: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   if ($cluster_id | is-empty) { error make --unspanned { msg: "path parameter 'clusterId' must be non-empty" } }
@@ -11392,7 +11383,7 @@ export def "create-object-storage-ssl" [
   --dry-run(-n) # Return the request that would be sent without executing it
   certificate: string # Your Base64 encoded and PEM formatted SSL certificate. Line breaks must be represented as "\n" in the string for requests (but not when using the Linode CLI) (e.g. -----BEGIN CERTIFICATE----- CERTIFICATE_INFORMATION -----END CERTIFICATE-----)
   private_key: string # The private key associated with this TLS/SSL certificate. Line breaks must be represented as "\n" in the string for requests (but not when using the Linode CLI) (e.g. -----BEGIN PRIVATE KEY----- PRIVATE_KEY_INFORMATION -----END PRIVATE KEY-----)
-]: any -> record<ssl: bool> {
+]: any -> oneof<record<ssl: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
@@ -11431,7 +11422,7 @@ export def "cancel-object-storage" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   let full_url = (build-url $base "/object-storage/cancel" $auth.query)
@@ -11465,7 +11456,7 @@ export def "get-object-storage-clusters" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<domain: string, id: string, region: string, static_site_domain: string, status: string>, page: int, pages: int, results: int> {
+]: nothing -> oneof<record<data: table<domain: string, id: string, region: string, static_site_domain: string, status: string>, page: int, pages: int, results: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   let full_url = (build-url $base "/object-storage/clusters" $auth.query)
@@ -11500,7 +11491,7 @@ export def "get-object-storage-cluster" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<domain: string, id: string, region: string, static_site_domain: string, status: string> {
+]: nothing -> oneof<record<domain: string, id: string, region: string, static_site_domain: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   if ($cluster_id | is-empty) { error make --unspanned { msg: "path parameter 'clusterId' must be non-empty" } }
@@ -11535,7 +11526,7 @@ export def "get-object-storage-keys" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<access_key: string, bucket_access: list, id: int, label: string, limited: bool, secret_key: string>, page: int, pages: int, results: int> {
+]: nothing -> oneof<record<data: table<access_key: string, bucket_access: list, id: int, label: string, limited: bool, secret_key: string>, page: int, pages: int, results: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   let full_url = (build-url $base "/object-storage/keys" $auth.query)
@@ -11559,7 +11550,6 @@ export def "get-object-storage-keys" [
 #
 # POST /object-storage/keys
 # operationId: createObjectStorageKeys
-# --bucket_access item shape: {bucket_name?: string, cluster?: string, permissions?: "read_write"|"read_only"}
 export def "create-object-storage-keys" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11572,7 +11562,7 @@ export def "create-object-storage-keys" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --bucket-access: list # Defines this key as a Limited Access Key. Limited Access Keys restrict this Object Storage key's access to only the bucket(s) declared in this array and define their bucket-level permissions. Limited Access Keys can: * [list all buckets](/docs/api/object-storage/#object-storage-buckets-list) available on this Account, but cannot perform any actions on a bucket unless it has access to the bucket. * [create new buckets](/docs/api/object-storage/#object-storage-bucket-create), but do not have any access to the buckets it creates, unless explicitly given access to them. **Note:** You can create an Object Storage Limited Access Key without access to any buckets. This is achieved by sending a request with an empty `bucket_access` array. **Note:** If this field is omitted, a regular unlimited access key is issued. — item shape: {bucket_name?: string, cluster?: string, permissions?: "read_write"|"read_only"}
   --label: string # The label given to this key. For display purposes only. (e.g. my-key)
-]: any -> record<access_key: string, bucket_access: table<bucket_name: string, cluster: string, permissions: string>, id: int, label: string, limited: bool, secret_key: string> {
+]: any -> oneof<record<access_key: string, bucket_access: table<bucket_name: string, cluster: string, permissions: string>, id: int, label: string, limited: bool, secret_key: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
@@ -11610,7 +11600,7 @@ export def "delete-object-storage-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   if ($key_id | is-empty) { error make --unspanned { msg: "path parameter 'keyId' must be non-empty" } }
@@ -11646,7 +11636,7 @@ export def "get-object-storage-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<access_key: string, bucket_access: table<bucket_name: string, cluster: string, permissions: string>, id: int, label: string, limited: bool, secret_key: string> {
+]: nothing -> oneof<record<access_key: string, bucket_access: table<bucket_name: string, cluster: string, permissions: string>, id: int, label: string, limited: bool, secret_key: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   if ($key_id | is-empty) { error make --unspanned { msg: "path parameter 'keyId' must be non-empty" } }
@@ -11683,7 +11673,7 @@ export def "update-object-storage-key" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --label: string # The label for this keypair, for display purposes only. (e.g. my-key)
-]: any -> record<access_key: string, bucket_access: table<bucket_name: string, cluster: string, permissions: string>, id: int, label: string, limited: bool, secret_key: string> {
+]: any -> oneof<record<access_key: string, bucket_access: table<bucket_name: string, cluster: string, permissions: string>, id: int, label: string, limited: bool, secret_key: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
@@ -11721,7 +11711,7 @@ export def "get-object-storage-transfer" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<used: int> {
+]: nothing -> oneof<record<used: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   let full_url = (build-url $base "/object-storage/transfer" $auth.query)
@@ -11755,7 +11745,7 @@ export def "get-profile" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<authentication_type: string, authorized_keys: list<string>, email: string, email_notifications: bool, ip_whitelist_enabled: bool, lish_auth_method: string, referrals: record<code: string, completed: int, credit: int, pending: int, total: int, url: string>, restricted: bool, timezone: string, two_factor_auth: bool, uid: int, username: string, verified_phone_number: string> {
+]: nothing -> oneof<record<authentication_type: string, authorized_keys: list<string>, email: string, email_notifications: bool, ip_whitelist_enabled: bool, lish_auth_method: string, referrals: record<code: string, completed: int, credit: int, pending: int, total: int, url: string>, restricted: bool, timezone: string, two_factor_auth: bool, uid: int, username: string, verified_phone_number: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/profile" $auth.query)
@@ -11798,7 +11788,7 @@ export def "update-profile" [
   --restricted: oneof<nothing, bool> # If true, your User has restrictions on what can be accessed on your Account. To get details on what entities/actions you can access/perform, see [/profile/grants](/docs/api/profile/#grants-list). (e.g. false)
   --timezone: string # The timezone you prefer to see times in. This is not used by the API directly. It is provided for the benefit of clients such as the Linode Cloud Manager and other clients built on the API. All times returned by the API are in UTC. (e.g. US/Eastern)
   --two-factor-auth: oneof<nothing, bool> # If true, logins from untrusted computers will require Two Factor Authentication. See [/profile/tfa-enable](/docs/api/profile/#two-factor-secret-create) to enable Two Factor Authentication. (e.g. true)
-]: any -> record<authentication_type: string, authorized_keys: list<string>, email: string, email_notifications: bool, ip_whitelist_enabled: bool, lish_auth_method: string, referrals: record<code: string, completed: int, credit: int, pending: int, total: int, url: string>, restricted: bool, timezone: string, two_factor_auth: bool, uid: int, username: string, verified_phone_number: string> {
+]: any -> oneof<record<authentication_type: string, authorized_keys: list<string>, email: string, email_notifications: bool, ip_whitelist_enabled: bool, lish_auth_method: string, referrals: record<code: string, completed: int, credit: int, pending: int, total: int, url: string>, restricted: bool, timezone: string, two_factor_auth: bool, uid: int, username: string, verified_phone_number: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11837,7 +11827,7 @@ export def "get-profile-apps" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page of a collection to return. (default: 1)
   --page-size: int # The number of items to return per page. (default: 100)
-]: nothing -> record<data: table<created: string, expiry: string, id: int, label: string, scopes: string, thumbnail_url: string, website: string>, page: int, pages: int, results: int> {
+]: nothing -> oneof<record<data: table<created: string, expiry: string, id: int, label: string, scopes: string, thumbnail_url: string, website: string>, page: int, pages: int, results: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
@@ -11873,7 +11863,7 @@ export def "delete-profile-app" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
@@ -11909,7 +11899,7 @@ export def "get-profile-app" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created: string, expiry: string, id: int, label: string, scopes: string, thumbnail_url: string, website: string> {
+]: nothing -> oneof<record<created: string, expiry: string, id: int, label: string, scopes: string, thumbnail_url: string, website: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
@@ -11944,7 +11934,7 @@ export def "get-devices" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<created: string, expiry: string, id: int, last_authenticated: string, last_remote_addr: string, user_agent: string>, page: int, pages: int, results: int> {
+]: nothing -> oneof<record<data: table<created: string, expiry: string, id: int, last_authenticated: string, last_remote_addr: string, user_agent: string>, page: int, pages: int, results: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/profile/devices" $auth.query)
@@ -11979,7 +11969,7 @@ export def "revoke-trusted-device" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($device_id | is-empty) { error make --unspanned { msg: "path parameter 'deviceId' must be non-empty" } }
@@ -12015,7 +12005,7 @@ export def "get-trusted-device" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created: string, expiry: string, id: int, last_authenticated: string, last_remote_addr: string, user_agent: string> {
+]: nothing -> oneof<record<created: string, expiry: string, id: int, last_authenticated: string, last_remote_addr: string, user_agent: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($device_id | is-empty) { error make --unspanned { msg: "path parameter 'deviceId' must be non-empty" } }
@@ -12050,7 +12040,7 @@ export def "get-profile-grants" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<database: table<id: int, label: string, permissions: string>, domain: table<id: int, label: string, permissions: string>, global: record<account_access: string, add_databases: bool, add_domains: bool, add_firewalls: bool, add_images: bool, add_linodes: bool, add_longview: bool, add_nodebalancers: bool, add_stackscripts: bool, add_volumes: bool, cancel_account: bool, longview_subscription: bool>, image: table<id: int, label: string, permissions: string>, linode: table<id: int, label: string, permissions: string>, longview: table<id: int, label: string, permissions: string>, nodebalancer: table<id: int, label: string, permissions: string>, stackscript: table<id: int, label: string, permissions: string>, volume: table<id: int, label: string, permissions: string>> {
+]: nothing -> oneof<record<database: table<id: int, label: string, permissions: string>, domain: table<id: int, label: string, permissions: string>, global: record<account_access: string, add_databases: bool, add_domains: bool, add_firewalls: bool, add_images: bool, add_linodes: bool, add_longview: bool, add_nodebalancers: bool, add_stackscripts: bool, add_volumes: bool, cancel_account: bool, longview_subscription: bool>, image: table<id: int, label: string, permissions: string>, linode: table<id: int, label: string, permissions: string>, longview: table<id: int, label: string, permissions: string>, nodebalancer: table<id: int, label: string, permissions: string>, stackscript: table<id: int, label: string, permissions: string>, volume: table<id: int, label: string, permissions: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/profile/grants" $auth.query)
@@ -12084,7 +12074,7 @@ export def "get-profile-logins" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<datetime: string, id: int, ip: string, restricted: bool, username: string>, page: int, pages: int, results: int> {
+]: nothing -> oneof<record<data: table<datetime: string, id: int, ip: string, restricted: bool, username: string>, page: int, pages: int, results: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/profile/logins" $auth.query)
@@ -12119,7 +12109,7 @@ export def "get-profile-login" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<datetime: string, id: int, ip: string, restricted: bool, username: string> {
+]: nothing -> oneof<record<datetime: string, id: int, ip: string, restricted: bool, username: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($login_id | is-empty) { error make --unspanned { msg: "path parameter 'loginId' must be non-empty" } }
@@ -12154,7 +12144,7 @@ export def "delete-profile-phone-number" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/profile/phone-number" $auth.query)
@@ -12190,7 +12180,7 @@ export def "post-profile-phone-number" [
   --dry-run(-n) # Return the request that would be sent without executing it
   iso_code: string # The two-letter ISO 3166 country code associated with the phone number. (e.g. US)
   phone_number: string # A valid phone number. (format: phone, e.g. 555-555-5555)
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12228,7 +12218,7 @@ export def "post-profile-phone-number-verify" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   otp_code: string # The one-time code received via SMS message after accessing the **Phone Verification Code Send** ([POST /profile/phone-number](/docs/api/profile/#phone-number-verification-code-send)) command. (e.g. US)
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12265,7 +12255,7 @@ export def "get-user-preferences" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/profile/preferences" $auth.query)
@@ -12300,7 +12290,7 @@ export def "update-user-preferences" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12337,7 +12327,7 @@ export def "get-security-questions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<security_questions: table<id: int, question: string, response: string>> {
+]: nothing -> oneof<record<security_questions: table<id: int, question: string, response: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   let full_url = (build-url $base "/profile/security-questions" $auth.query)
@@ -12361,7 +12351,6 @@ export def "get-security-questions" [
 #
 # POST /profile/security-questions
 # operationId: postSecurityQuestions
-# --security_questions item shape: {question_id?: int, response?: string}
 export def "post-security-questions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12373,7 +12362,7 @@ export def "post-security-questions" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --security-questions: list # item shape: {question_id?: int, response?: string}
-]: any -> record<security_questions: table<question_id: int, response: string, security_question: string>> {
+]: any -> oneof<record<security_questions: table<question_id: int, response: string, security_question: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12412,7 +12401,7 @@ export def "get-ssh-keys" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page of a collection to return. (default: 1)
   --page-size: int # The number of items to return per page. (default: 100)
-]: nothing -> record<data: table<created: string, id: int, label: string, ssh_key: string>, page: int, pages: int, results: int> {
+]: nothing -> oneof<record<data: table<created: string, id: int, label: string, ssh_key: string>, page: int, pages: int, results: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
@@ -12449,7 +12438,7 @@ export def "add-ssh-key" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --label: string # A label for the SSH Key. (e.g. My SSH Key)
   --ssh-key: string # The public SSH Key, which is used to authenticate to the root user of the Linodes you deploy. Accepted formats: * ssh-dss * ssh-rsa * ecdsa-sha2-nistp * ssh-ed25519 * sk-ecdsa-sha2-nistp256 (Akamai-specific) (format: ssh-key, e.g. ssh-rsa AAAA_valid_public_ssh_key_123456785== user@their-computer)
-]: any -> record<created: string, id: int, label: string, ssh_key: string> {
+]: any -> oneof<record<created: string, id: int, label: string, ssh_key: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12487,7 +12476,7 @@ export def "delete-ssh-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ssh_key_id | is-empty) { error make --unspanned { msg: "path parameter 'sshKeyId' must be non-empty" } }
@@ -12523,7 +12512,7 @@ export def "get-ssh-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created: string, id: int, label: string, ssh_key: string> {
+]: nothing -> oneof<record<created: string, id: int, label: string, ssh_key: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ssh_key_id | is-empty) { error make --unspanned { msg: "path parameter 'sshKeyId' must be non-empty" } }
@@ -12560,7 +12549,7 @@ export def "update-ssh-key" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --label: string # A label for the SSH Key. (e.g. My SSH Key)
-]: any -> record<created: string, id: int, label: string, ssh_key: string> {
+]: any -> oneof<record<created: string, id: int, label: string, ssh_key: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12598,7 +12587,7 @@ export def "tfa-disable" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/profile/tfa-disable" $auth.query)
@@ -12632,7 +12621,7 @@ export def "tfa-enable" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<expiry: string, secret: string> {
+]: nothing -> oneof<record<expiry: string, secret: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/profile/tfa-enable" $auth.query)
@@ -12667,7 +12656,7 @@ export def "tfa-confirm" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --tfa-code: string # The Two Factor code you generated with your Two Factor secret. These codes are time-based, so be sure it is current. (e.g. 213456)
-]: any -> record<scratch: string> {
+]: any -> oneof<record<scratch: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12704,7 +12693,7 @@ export def "get-personal-access-tokens" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<created: string, expiry: string, id: int, label: string, scopes: string, token: string>, page: int, pages: int, results: int> {
+]: nothing -> oneof<record<data: table<created: string, expiry: string, id: int, label: string, scopes: string, token: string>, page: int, pages: int, results: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/profile/tokens" $auth.query)
@@ -12741,7 +12730,7 @@ export def "create-personal-access-token" [
   --expiry: string # When this token should be valid until. If omitted, the new token will be valid until it is manually revoked. (format: date-time)
   --label: string # This token's label. This is for display purposes only, but can be used to more easily track what you're using each token for. (e.g. linode-cli)
   --scopes: string # The scopes to create the token with. These cannot be changed after creation, and may not exceed the scopes of the acting token. If omitted, the new token will have the same scopes as the acting token. (format: oauth-scope, e.g. *)
-]: any -> record<created: string, expiry: string, id: int, label: string, scopes: string, token: string> {
+]: any -> oneof<record<created: string, expiry: string, id: int, label: string, scopes: string, token: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12779,7 +12768,7 @@ export def "delete-personal-access-token" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($token_id | is-empty) { error make --unspanned { msg: "path parameter 'tokenId' must be non-empty" } }
@@ -12815,7 +12804,7 @@ export def "get-personal-access-token" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created: string, expiry: string, id: int, label: string, scopes: string, token: string> {
+]: nothing -> oneof<record<created: string, expiry: string, id: int, label: string, scopes: string, token: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($token_id | is-empty) { error make --unspanned { msg: "path parameter 'tokenId' must be non-empty" } }
@@ -12852,7 +12841,7 @@ export def "update-personal-access-token" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --label: string # This token's label. This is for display purposes only, but can be used to more easily track what you're using each token for. (e.g. linode-cli)
-]: any -> record<created: string, expiry: string, id: int, label: string, scopes: string, token: string> {
+]: any -> oneof<record<created: string, expiry: string, id: int, label: string, scopes: string, token: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12890,7 +12879,7 @@ export def "get-regions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<capabilities: list, country: string, id: string, label: string, resolvers: record, status: string>, page: int, pages: int, results: int> {
+]: nothing -> oneof<record<data: table<capabilities: list, country: string, id: string, label: string, resolvers: record, status: string>, page: int, pages: int, results: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/regions" $auth.query)
@@ -12925,7 +12914,7 @@ export def "get-region" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<capabilities: list<string>, country: string, id: string, label: string, resolvers: record<ipv4: string, ipv6: string>, status: string> {
+]: nothing -> oneof<record<capabilities: list<string>, country: string, id: string, label: string, resolvers: record<ipv4: string, ipv6: string>, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($region_id | is-empty) { error make --unspanned { msg: "path parameter 'regionId' must be non-empty" } }
@@ -12962,7 +12951,7 @@ export def "get-tickets" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page of a collection to return. (default: 1)
   --page-size: int # The number of items to return per page. (default: 100)
-]: nothing -> record<data: table<attachments: list, closable: bool, closed: string, description: string, entity: record, gravatar_id: string, id: int, opened: string, opened_by: string, status: string, summary: string, updated: string, updated_by: string>, page: int, pages: int, results: int> {
+]: nothing -> oneof<record<data: table<attachments: list, closable: bool, closed: string, description: string, entity: record, gravatar_id: string, id: int, opened: string, opened_by: string, status: string, summary: string, updated: string, updated_by: string>, page: int, pages: int, results: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
@@ -13010,7 +12999,7 @@ export def "create-ticket" [
   summary: string # The summary or title for this SupportTicket. (e.g. Having trouble resetting root password on my Linode )
   --vlan: string # The label of the VLAN this ticket is regarding, if relevant. To view your VLANs, use the VLANs List ([GET /networking/vlans](/docs/api/networking/#vlans-list)) endpoint. Requires a specified `region` to identify the VLAN.
   --volume-id: int # The ID of the Volume this ticket is regarding, if relevant.
-]: any -> record<attachments: list<string>, closable: bool, closed: string, description: string, entity: record<id: int, label: string, type: string, url: string>, gravatar_id: string, id: int, opened: string, opened_by: string, status: string, summary: string, updated: string, updated_by: string> {
+]: any -> oneof<record<attachments: list<string>, closable: bool, closed: string, description: string, entity: record<id: int, label: string, type: string, url: string>, gravatar_id: string, id: int, opened: string, opened_by: string, status: string, summary: string, updated: string, updated_by: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13048,7 +13037,7 @@ export def "get-ticket" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<attachments: list<string>, closable: bool, closed: string, description: string, entity: record<id: int, label: string, type: string, url: string>, gravatar_id: string, id: int, opened: string, opened_by: string, status: string, summary: string, updated: string, updated_by: string> {
+]: nothing -> oneof<record<attachments: list<string>, closable: bool, closed: string, description: string, entity: record<id: int, label: string, type: string, url: string>, gravatar_id: string, id: int, opened: string, opened_by: string, status: string, summary: string, updated: string, updated_by: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ticket_id | is-empty) { error make --unspanned { msg: "path parameter 'ticketId' must be non-empty" } }
@@ -13085,7 +13074,7 @@ export def "create-ticket-attachment" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   file: string # The local, absolute path to the file you want to attach to your Support Ticket. (e.g. /Users/LinodeGuy/pictures/screen_shot.jpg)
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13095,8 +13084,8 @@ export def "create-ticket-attachment" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body [] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -13126,7 +13115,7 @@ export def "close-ticket" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ticket_id | is-empty) { error make --unspanned { msg: "path parameter 'ticketId' must be non-empty" } }
@@ -13164,7 +13153,7 @@ export def "get-ticket-replies" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page of a collection to return. (default: 1)
   --page-size: int # The number of items to return per page. (default: 100)
-]: nothing -> record<data: table<created: string, created_by: string, description: string, from_linode: bool, gravatar_id: string, id: int>, page: int, pages: int, results: int> {
+]: nothing -> oneof<record<data: table<created: string, created_by: string, description: string, from_linode: bool, gravatar_id: string, id: int>, page: int, pages: int, results: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ticket_id | is-empty) { error make --unspanned { msg: "path parameter 'ticketId' must be non-empty" } }
@@ -13202,7 +13191,7 @@ export def "create-ticket-reply" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   description: string # The content of your reply. (e.g. Thank you for your help. I was able to figure out what the problem was and I successfully reset my password. You guys are the best! )
-]: any -> record<created: string, created_by: string, description: string, from_linode: bool, gravatar_id: string, id: int> {
+]: any -> oneof<record<created: string, created_by: string, description: string, from_linode: bool, gravatar_id: string, id: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13242,7 +13231,7 @@ export def "get-tags" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page of a collection to return. (default: 1)
   --page-size: int # The number of items to return per page. (default: 100)
-]: nothing -> record<data: table<label: string>, page: int, pages: int, results: int> {
+]: nothing -> oneof<record<data: table<label: string>, page: int, pages: int, results: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
@@ -13282,7 +13271,7 @@ export def "create-tag" [
   --linodes: list<int> # A list of Linode IDs to apply the new Tag to. You must be allowed to `read_write` all of the requested Linodes, or the Tag will not be created and an error will be returned. (e.g. [123, 456])
   --nodebalancers: list<int> # A list of NodeBalancer IDs to apply the new Tag to. You must be allowed to `read_write` all of the requested NodeBalancers, or the Tag will not be created and an error will be returned. (e.g. [10301, 10501])
   --volumes: list<int> # A list of Volume IDs to apply the new Tag to. You must be allowed to `read_write` all of the requested Volumes, or the Tag will not be created and an error will be returned. (e.g. [9082, 10003])
-]: any -> record<label: string> {
+]: any -> oneof<record<label: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13320,7 +13309,7 @@ export def "delete-tag" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($label | is-empty) { error make --unspanned { msg: "path parameter 'label' must be non-empty" } }
@@ -13358,7 +13347,7 @@ export def "get-tagged-objects" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page of a collection to return. (default: 1)
   --page-size: int # The number of items to return per page. (default: 100)
-]: nothing -> record<data: table<data: any, type: string>, page: int, pages: int, results: int> {
+]: nothing -> oneof<record<data: table<data: any, type: string>, page: int, pages: int, results: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($label | is-empty) { error make --unspanned { msg: "path parameter 'label' must be non-empty" } }
@@ -13396,7 +13385,7 @@ export def "get-volumes" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page of a collection to return. (default: 1)
   --page-size: int # The number of items to return per page. (default: 100)
-]: nothing -> record<data: table<created: string, filesystem_path: string, hardware_type: string, id: int, label: string, linode_id: int, linode_label: string, region: string, size: int, status: string, tags: list, updated: string>, page: int, pages: int, results: int> {
+]: nothing -> oneof<record<data: table<created: string, filesystem_path: string, hardware_type: string, id: int, label: string, linode_id: int, linode_label: string, region: string, size: int, status: string, tags: list, updated: string>, page: int, pages: int, results: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
@@ -13437,7 +13426,7 @@ export def "create-volume" [
   --region: string # The Region to deploy this Volume in. This is only required if a linode_id is not given.
   --size: int # The initial size of this volume, in GB. Be aware that volumes may only be resized up after creation. (default: 20, e.g. 20)
   --tags: list<string> # An array of Tags applied to this object. Tags are for organizational purposes only. (e.g. [example tag, another example])
-]: any -> record<created: string, filesystem_path: string, hardware_type: string, id: int, label: string, linode_id: int, linode_label: string, region: string, size: int, status: string, tags: list<string>, updated: string> {
+]: any -> oneof<record<created: string, filesystem_path: string, hardware_type: string, id: int, label: string, linode_id: int, linode_label: string, region: string, size: int, status: string, tags: list<string>, updated: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13475,7 +13464,7 @@ export def "delete-volume" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($volume_id | is-empty) { error make --unspanned { msg: "path parameter 'volumeId' must be non-empty" } }
@@ -13513,7 +13502,7 @@ export def "get-volume" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page of a collection to return. (default: 1)
   --page-size: int # The number of items to return per page. (default: 100)
-]: nothing -> record<created: string, filesystem_path: string, hardware_type: string, id: int, label: string, linode_id: int, linode_label: string, region: string, size: int, status: string, tags: list<string>, updated: string> {
+]: nothing -> oneof<record<created: string, filesystem_path: string, hardware_type: string, id: int, label: string, linode_id: int, linode_label: string, region: string, size: int, status: string, tags: list<string>, updated: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($volume_id | is-empty) { error make --unspanned { msg: "path parameter 'volumeId' must be non-empty" } }
@@ -13552,7 +13541,7 @@ export def "update-volume" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --label: string # The Volume's label is for display purposes only. (e.g. my-volume)
   --tags: list<string> # An array of Tags applied to this object. Tags are for organizational purposes only. (e.g. [example tag, another example])
-]: any -> record<created: string, filesystem_path: string, hardware_type: string, id: int, label: string, linode_id: int, linode_label: string, region: string, size: int, status: string, tags: list<string>, updated: string> {
+]: any -> oneof<record<created: string, filesystem_path: string, hardware_type: string, id: int, label: string, linode_id: int, linode_label: string, region: string, size: int, status: string, tags: list<string>, updated: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13594,7 +13583,7 @@ export def "attach-volume" [
   --config-id: int # The ID of the Linode Config to include this Volume in. Must belong to the Linode referenced by `linode_id`. If not given, the last booted Config will be chosen. (e.g. 23456)
   linode_id: int # The ID of the Linode to attach the volume to.
   --persist-across-boots: oneof<nothing, bool> # Defaults to true, if false is provided, the Volume will not be attached to the Linode Config. In this case more than 8 Volumes may be attached to a Linode if a Linode has 16GB of RAM or more. The number of volumes that can be attached is equal to the number of GB of RAM that the Linode has, up to a maximum of 64. `config_id` should not be passed if this is set to false and linode_id must be passed. The Linode must be running.
-]: any -> record<created: string, filesystem_path: string, hardware_type: string, id: int, label: string, linode_id: int, linode_label: string, region: string, size: int, status: string, tags: list<string>, updated: string> {
+]: any -> oneof<record<created: string, filesystem_path: string, hardware_type: string, id: int, label: string, linode_id: int, linode_label: string, region: string, size: int, status: string, tags: list<string>, updated: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13634,7 +13623,7 @@ export def "clone-volume" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   label: string # The Volume's label is for display purposes only. (e.g. my-volume)
-]: any -> record<created: string, filesystem_path: string, hardware_type: string, id: int, label: string, linode_id: int, linode_label: string, region: string, size: int, status: string, tags: list<string>, updated: string> {
+]: any -> oneof<record<created: string, filesystem_path: string, hardware_type: string, id: int, label: string, linode_id: int, linode_label: string, region: string, size: int, status: string, tags: list<string>, updated: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13673,7 +13662,7 @@ export def "detach-volume" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($volume_id | is-empty) { error make --unspanned { msg: "path parameter 'volumeId' must be non-empty" } }
@@ -13710,7 +13699,7 @@ export def "resize-volume" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   size: int # The Volume's size, in GiB. (e.g. 30)
-]: any -> record<created: string, filesystem_path: string, hardware_type: string, id: int, label: string, linode_id: int, linode_label: string, region: string, size: int, status: string, tags: list<string>, updated: string> {
+]: any -> oneof<record<created: string, filesystem_path: string, hardware_type: string, id: int, label: string, linode_id: int, linode_label: string, region: string, size: int, status: string, tags: list<string>, updated: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

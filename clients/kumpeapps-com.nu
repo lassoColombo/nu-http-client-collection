@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "x-auth" => { {scheme: $scheme, headers: {"X-Auth": $token_val}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -135,9 +159,9 @@ def scope4-completer [] { ["Chores" "ChoresAdmin" "WishList" "WishListAdmin"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "appkey-patch" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["appkey-patch" "appkey-post" "appkey-put" "auth-appkey-patch" "auth-appkey-post" "auth-appkey-put" "auth-authkey-get" "auth-authkey-patch" "auth-authkey-post" "auth-authkey-put" "auth-verifyotp-get" "authkey-get" "authkey-patch" "authkey-post" "authkey-put" "kkid-allowance-get" "kkid-allowance-post" "kkid-apns-post" "kkid-chorelist-delete" "kkid-chorelist-get" "kkid-chorelist-post" "kkid-chorelist-put" "kkid-masteruser-post" "kkid-share-get" "kkid-user-get" "kkid-userlist-delete" "kkid-userlist-get" "kkid-userlist-post" "kkid-userlist-put" "kkid-wishlist-delete" "kkid-wishlist-get" "kkid-wishlist-post" "kkid-wishlist-put" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -173,7 +197,7 @@ export def "appkey-patch" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --app-key: string # compromised app key (required)
   --comments: string # Comments (like how was this compromised)
-]: nothing -> record<success: bool> {
+]: nothing -> oneof<record<success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_key == null) { error make --unspanned { msg: "required query parameter 'app_key' missing: pass --app-key" } }
@@ -214,7 +238,7 @@ export def "appkey-post" [
   --username: string # Username assigned to your app (required)
   --password: string # Password assigned to your app (required, format: password)
   --supports-yubikey: oneof<nothing, bool> # App supports YubiKey OTP (required)
-]: nothing -> record<app_key: string, success: bool> {
+]: nothing -> oneof<record<app_key: string, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($username == null) { error make --unspanned { msg: "required query parameter 'username' missing: pass --username" } }
@@ -255,7 +279,7 @@ export def "appkey-put" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --app-key: string # app key to deactivate (required)
-]: nothing -> record<success: bool> {
+]: nothing -> oneof<record<success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth"))
   let base = ($base_url | default $BASE_URL)
   if ($app_key == null) { error make --unspanned { msg: "required query parameter 'app_key' missing: pass --app-key" } }
@@ -293,7 +317,7 @@ export def "auth-appkey-patch" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --app-key: string # compromised app key (required)
   --comments: string # Comments (like how was this compromised)
-]: nothing -> record<success: bool> {
+]: nothing -> oneof<record<success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_key == null) { error make --unspanned { msg: "required query parameter 'app_key' missing: pass --app-key" } }
@@ -332,7 +356,7 @@ export def "auth-appkey-post" [
   --username: string # Username assigned to your app (required)
   --password: string # Password assigned to your app (required, format: password)
   --supports-yubikey: oneof<nothing, bool> # App supports YubiKey OTP (required)
-]: nothing -> record<app_key: string, success: bool> {
+]: nothing -> oneof<record<app_key: string, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($username == null) { error make --unspanned { msg: "required query parameter 'username' missing: pass --username" } }
@@ -371,7 +395,7 @@ export def "auth-appkey-put" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --app-key: string # app key to deactivate (required)
-]: nothing -> record<success: bool> {
+]: nothing -> oneof<record<success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth"))
   let base = ($base_url | default $BASE_URL)
   if ($app_key == null) { error make --unspanned { msg: "required query parameter 'app_key' missing: pass --app-key" } }
@@ -412,7 +436,7 @@ export def "auth-authkey-get" [
   --otp: string # YubiKey OTP (if configured for user) (format: password)
   --device-name: string # User's device name
   --identifier-for-vendor: string # identifierForVendor for User's Device (if app is iOS)
-]: nothing -> record<auth_key: string, success: bool> {
+]: nothing -> oneof<record<auth_key: string, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth"))
   let base = ($base_url | default $BASE_URL)
   if ($username == null) { error make --unspanned { msg: "required query parameter 'username' missing: pass --username" } }
@@ -451,7 +475,7 @@ export def "auth-authkey-patch" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --auth-key: string # auth key to mark as compromised (required, format: password)
   --comments: string # Comments (like how was this compromised)
-]: nothing -> record<success: bool> {
+]: nothing -> oneof<record<success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($auth_key == null) { error make --unspanned { msg: "required query parameter 'auth_key' missing: pass --auth-key" } }
@@ -490,7 +514,7 @@ export def "auth-authkey-post" [
   --username: string # Authenticated username (required)
   --password: string # Authenticated password (required, format: password)
   --otp: string # YubiKey OTP (if configured for user) (format: password)
-]: nothing -> record<auth_key: string, success: bool> {
+]: nothing -> oneof<record<auth_key: string, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth"))
   let base = ($base_url | default $BASE_URL)
   if ($username == null) { error make --unspanned { msg: "required query parameter 'username' missing: pass --username" } }
@@ -528,7 +552,7 @@ export def "auth-authkey-put" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --auth-key: string # auth key to logout (required, format: password)
-]: nothing -> record<success: bool> {
+]: nothing -> oneof<record<success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth"))
   let base = ($base_url | default $BASE_URL)
   if ($auth_key == null) { error make --unspanned { msg: "required query parameter 'auth_key' missing: pass --auth-key" } }
@@ -606,7 +630,7 @@ export def "authkey-get" [
   --username: string # Authenticated username (required)
   --password: string # Authenticated password (required, format: password)
   --otp: string # YubiKey OTP (if configured for user) (format: password)
-]: nothing -> record<auth_key: string, success: bool> {
+]: nothing -> oneof<record<auth_key: string, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth"))
   let base = ($base_url | default $BASE_URL)
   if ($username == null) { error make --unspanned { msg: "required query parameter 'username' missing: pass --username" } }
@@ -647,7 +671,7 @@ export def "authkey-patch" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --auth-key: string # auth key to mark as compromised (required, format: password)
   --comments: string # Comments (like how was this compromised)
-]: nothing -> record<success: bool> {
+]: nothing -> oneof<record<success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($auth_key == null) { error make --unspanned { msg: "required query parameter 'auth_key' missing: pass --auth-key" } }
@@ -688,7 +712,7 @@ export def "authkey-post" [
   --username: string # Authenticated username (required)
   --password: string # Authenticated password (required, format: password)
   --otp: string # YubiKey OTP (if configured for user) (format: password)
-]: nothing -> record<auth_key: string, success: bool> {
+]: nothing -> oneof<record<auth_key: string, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth"))
   let base = ($base_url | default $BASE_URL)
   if ($username == null) { error make --unspanned { msg: "required query parameter 'username' missing: pass --username" } }
@@ -728,7 +752,7 @@ export def "authkey-put" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --auth-key: string # auth key to logout (required, format: password)
-]: nothing -> record<success: bool> {
+]: nothing -> oneof<record<success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth"))
   let base = ($base_url | default $BASE_URL)
   if ($auth_key == null) { error make --unspanned { msg: "required query parameter 'auth_key' missing: pass --auth-key" } }
@@ -766,7 +790,7 @@ export def "kkid-allowance-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --kid-user-id: int # userID of the kid (required)
   --transaction-days: int # number of days you wish to search allowance transactions (default is 90 days)
-]: nothing -> record<allowanceTransaction: table<amount: int, date: string, transactionDescription: string, transactionId: int, transactionType: string, userId: int>, balance: int, id: int, lastUpdated: string, success: int> {
+]: nothing -> oneof<record<allowanceTransaction: table<amount: int, date: string, transactionDescription: string, transactionId: int, transactionType: string, userId: int>, balance: int, id: int, lastUpdated: string, success: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth"))
   let base = ($base_url | default $BASE_URL)
   if ($kid_user_id == null) { error make --unspanned { msg: "required query parameter 'kidUserId' missing: pass --kid-user-id" } }
@@ -806,7 +830,7 @@ export def "kkid-allowance-post" [
   --amount: float # amount you wish to Add/Subtract (subtract value should be a negative value) (required)
   --description: string # Description (reason) of allowance transaction (required)
   --transaction-type: string@transaction-type-completer # Transaction Type (Add/Subtract) (required)
-]: nothing -> record<message: string, success: bool> {
+]: nothing -> oneof<record<message: string, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth"))
   let base = ($base_url | default $BASE_URL)
   if ($kid_user_id == null) { error make --unspanned { msg: "required query parameter 'kidUserId' missing: pass --kid-user-id" } }
@@ -855,7 +879,7 @@ export def "kkid-apns-post" [
   --sound: string # Name of sound file to play for send notification (optional for send)
   --section: string@section-completer # Notification section name (required for send/subscribe/unsubscribe)
   --priority: string@priority-completer # Notification section name (optional for send, default is active)
-]: nothing -> record<message: string, success: bool> {
+]: nothing -> oneof<record<message: string, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth"))
   let base = ($base_url | default $BASE_URL)
   if ($kid_user_id == null) { error make --unspanned { msg: "required query parameter 'kidUserId' missing: pass --kid-user-id" } }
@@ -893,7 +917,7 @@ export def "kkid-chorelist-delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id-chore-list: int # id of the chore you wish to delete (required)
-]: nothing -> record<message: string, success: bool> {
+]: nothing -> oneof<record<message: string, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth"))
   let base = ($base_url | default $BASE_URL)
   if ($id_chore_list == null) { error make --unspanned { msg: "required query parameter 'idChoreList' missing: pass --id-chore-list" } }
@@ -936,7 +960,7 @@ export def "kkid-chorelist-get" [
   --optional: oneof<nothing, bool> # Filter results by optional parameter
   --can-steal: oneof<nothing, bool> # Filter results by canSteal parameter
   --include-calendar: oneof<nothing, bool> # include calendar notations (default is false)
-]: nothing -> record<chore: table<aiIcon: string, altitude: int, blockDash: bool, choreDescription: string, choreName: string, choreNumber: int, day: string, extraAllowance: int, idChoreList: int, isCalendar: bool, kid: string, latitude: int, longitude: int, nfcTag: string, notes: string, oneTime: bool, optional: bool, reassignable: bool, reassigned: bool, requireObjectDetection: string, startDate: string, status: string, stolen: bool, stolenBy: string, updated: string, updatedBy: string>, success: int> {
+]: nothing -> oneof<record<chore: table<aiIcon: string, altitude: int, blockDash: bool, choreDescription: string, choreName: string, choreNumber: int, day: string, extraAllowance: int, idChoreList: int, isCalendar: bool, kid: string, latitude: int, longitude: int, nfcTag: string, notes: string, oneTime: bool, optional: bool, reassignable: bool, reassigned: bool, requireObjectDetection: string, startDate: string, status: string, stolen: bool, stolenBy: string, updated: string, updatedBy: string>, success: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "kidUsername" $kid_username "scalar") (serialize-qp "day" $day "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "blockDash" $block_dash "scalar") (serialize-qp "optional" $optional "scalar") (serialize-qp "canSteal" $can_steal "scalar") (serialize-qp "includeCalendar" $include_calendar "scalar")] | flatten | str join "&"
@@ -991,7 +1015,7 @@ export def "kkid-chorelist-post" [
   --updated-by-automation: oneof<nothing, bool> # true if chore updated via API from an Automation System
   --ai-icon: string # Notes if AI Icons should be used (n for no, y for yes, e for yes- error)
   --is-calendar: oneof<nothing, bool> # True if this is a calendar note instead of a chore.
-]: nothing -> record<message: string, success: bool> {
+]: nothing -> oneof<record<message: string, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth"))
   let base = ($base_url | default $BASE_URL)
   if ($kid_username == null) { error make --unspanned { msg: "required query parameter 'kidUsername' missing: pass --kid-username" } }
@@ -1041,7 +1065,7 @@ export def "kkid-chorelist-put" [
   --where-day: string@where-day-completer # Where day equals...
   --where-status: string # Where status equals...
   --where-name: string # Where chore name equals...
-]: nothing -> record<message: string, success: bool> {
+]: nothing -> oneof<record<message: string, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth"))
   let base = ($base_url | default $BASE_URL)
   if ($id_chore_list == null) { error make --unspanned { msg: "required query parameter 'idChoreList' missing: pass --id-chore-list" } }
@@ -1082,7 +1106,7 @@ export def "kkid-masteruser-post" [
   --email: string # email address of user to create (required)
   --first-name: string # First Name of user to create (required)
   --last-name: string # Last Name of user to create (required)
-]: nothing -> record<added: string, aff_added: string, aff_id: string, aff_payout_type: string, avatar: string, city: string, comment: string, country: string, disable_lock_until: string, email: string, i_agree: string, is_affiliate: string, is_locked: string, lang: string, last_login: string, login: string, name_f: string, name_l: string, pass: string, pass_dattm: string, phone: string, pin: string, plain_password: string, remember_key: string, remote_addr: string, require_consent: string, reseller_id: string, saved_form_id: string, state: string, status: string, street: string, street2: string, subusers_parent_id: string, tax_id: string, unsubscribed: string, user_agent: string, user_id: int, zip: string> {
+]: nothing -> oneof<record<added: string, aff_added: string, aff_id: string, aff_payout_type: string, avatar: string, city: string, comment: string, country: string, disable_lock_until: string, email: string, i_agree: string, is_affiliate: string, is_locked: string, lang: string, last_login: string, login: string, name_f: string, name_l: string, pass: string, pass_dattm: string, phone: string, pin: string, plain_password: string, remember_key: string, remote_addr: string, require_consent: string, reseller_id: string, saved_form_id: string, state: string, status: string, street: string, street2: string, subusers_parent_id: string, tax_id: string, unsubscribed: string, user_agent: string, user_id: int, zip: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth"))
   let base = ($base_url | default $BASE_URL)
   if ($username == null) { error make --unspanned { msg: "required query parameter 'username' missing: pass --username" } }
@@ -1128,7 +1152,7 @@ export def "kkid-share-get" [
   --scope2: string@scope2-completer # Authentication scope for link
   --scope3: string@scope3-completer # Authentication scope for link
   --scope4: string@scope4-completer # Authentication scope for link
-]: nothing -> record<auth_link: string, success: bool> {
+]: nothing -> oneof<record<auth_link: string, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth"))
   let base = ($base_url | default $BASE_URL)
   if ($link_user_id == null) { error make --unspanned { msg: "required query parameter 'linkUserId' missing: pass --link-user-id" } }
@@ -1167,7 +1191,7 @@ export def "kkid-user-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --enable-bool: oneof<nothing, bool> # Use bool values instead of Int 0/1
-]: nothing -> record<success: bool, user: table<email: string, emoji: string, enableAllowance: bool, enableBehaviorChart: bool, enableChores: bool, enableNoAds: bool, enableObjectDetection: bool, enableTmdb: bool, firstName: string, homeId: int, isActive: bool, isAdmin: bool, isBanned: bool, isChild: bool, isDisabled: bool, isLocked: bool, isMaster: bool, lastName: string, masterId: int, pushAllowance: bool, pushAllowanceNew: bool, pushChores: bool, pushChoresNew: bool, pushChoresReminders: bool, tmdbKey: string, userId: int, username: string, weeklyAllowance: int>> {
+]: nothing -> oneof<record<success: bool, user: table<email: string, emoji: string, enableAllowance: bool, enableBehaviorChart: bool, enableChores: bool, enableNoAds: bool, enableObjectDetection: bool, enableTmdb: bool, firstName: string, homeId: int, isActive: bool, isAdmin: bool, isBanned: bool, isChild: bool, isDisabled: bool, isLocked: bool, isMaster: bool, lastName: string, masterId: int, pushAllowance: bool, pushAllowanceNew: bool, pushChores: bool, pushChoresNew: bool, pushChoresReminders: bool, tmdbKey: string, userId: int, username: string, weeklyAllowance: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "enableBool" $enable_bool "scalar")] | flatten | str join "&"
@@ -1247,7 +1271,7 @@ export def "kkid-userlist-get" [
   --user-id: int # userID of user to search
   --username: string # Username of user to search
   --email: string # Email address of user to search
-]: nothing -> record<success: bool, user: table<email: string, emoji: string, enableAllowance: bool, enableBehaviorChart: bool, enableChores: bool, enableNoAds: bool, enableObjectDetection: bool, enableTmdb: bool, firstName: string, homeId: int, isActive: bool, isAdmin: bool, isBanned: bool, isChild: bool, isDisabled: bool, isLocked: bool, isMaster: bool, lastName: string, masterId: int, pushAllowance: bool, pushAllowanceNew: bool, pushChores: bool, pushChoresNew: bool, pushChoresReminders: bool, tmdbKey: string, userId: int, username: string, weeklyAllowance: int>> {
+]: nothing -> oneof<record<success: bool, user: table<email: string, emoji: string, enableAllowance: bool, enableBehaviorChart: bool, enableChores: bool, enableNoAds: bool, enableObjectDetection: bool, enableTmdb: bool, firstName: string, homeId: int, isActive: bool, isAdmin: bool, isBanned: bool, isChild: bool, isDisabled: bool, isLocked: bool, isMaster: bool, lastName: string, masterId: int, pushAllowance: bool, pushAllowanceNew: bool, pushChores: bool, pushChoresNew: bool, pushChoresReminders: bool, tmdbKey: string, userId: int, username: string, weeklyAllowance: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "isChild" $is_child "scalar") (serialize-qp "isActive" $is_active "scalar") (serialize-qp "isAdmin" $is_admin "scalar") (serialize-qp "enableAllowance" $enable_allowance "scalar") (serialize-qp "enableChores" $enable_chores "scalar") (serialize-qp "userID" $user_id "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "email" $email "scalar")] | flatten | str join "&"
@@ -1287,7 +1311,7 @@ export def "kkid-userlist-post" [
   --email: string # email address of user to create (required)
   --first-name: string # First Name of user to create (required)
   --last-name: string # Last Name of user to create (required)
-]: nothing -> record<added: string, aff_added: string, aff_id: string, aff_payout_type: string, avatar: string, city: string, comment: string, country: string, disable_lock_until: string, email: string, i_agree: string, is_affiliate: string, is_locked: string, lang: string, last_login: string, login: string, name_f: string, name_l: string, pass: string, pass_dattm: string, phone: string, pin: string, plain_password: string, remember_key: string, remote_addr: string, require_consent: string, reseller_id: string, saved_form_id: string, state: string, status: string, street: string, street2: string, subusers_parent_id: string, tax_id: string, unsubscribed: string, user_agent: string, user_id: int, zip: string> {
+]: nothing -> oneof<record<added: string, aff_added: string, aff_id: string, aff_payout_type: string, avatar: string, city: string, comment: string, country: string, disable_lock_until: string, email: string, i_agree: string, is_affiliate: string, is_locked: string, lang: string, last_login: string, login: string, name_f: string, name_l: string, pass: string, pass_dattm: string, phone: string, pin: string, plain_password: string, remember_key: string, remote_addr: string, require_consent: string, reseller_id: string, saved_form_id: string, state: string, status: string, street: string, street2: string, subusers_parent_id: string, tax_id: string, unsubscribed: string, user_agent: string, user_id: int, zip: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth"))
   let base = ($base_url | default $BASE_URL)
   if ($username == null) { error make --unspanned { msg: "required query parameter 'username' missing: pass --username" } }
@@ -1340,7 +1364,7 @@ export def "kkid-userlist-put" [
   --enable-admin: oneof<nothing, bool> # set status of isAdmin
   --enable-tmdb: oneof<nothing, bool> # set status of enableTmdb (movie and tv search)
   --enable-object-detection: oneof<nothing, bool> # set status of enableObjectDetection
-]: nothing -> record<added: string, aff_added: string, aff_id: string, aff_payout_type: string, avatar: string, city: string, comment: string, country: string, disable_lock_until: string, email: string, i_agree: string, is_affiliate: string, is_locked: string, lang: string, last_login: string, login: string, name_f: string, name_l: string, pass: string, pass_dattm: string, phone: string, pin: string, plain_password: string, remember_key: string, remote_addr: string, require_consent: string, reseller_id: string, saved_form_id: string, state: string, status: string, street: string, street2: string, subusers_parent_id: string, tax_id: string, unsubscribed: string, user_agent: string, user_id: int, zip: string> {
+]: nothing -> oneof<record<added: string, aff_added: string, aff_id: string, aff_payout_type: string, avatar: string, city: string, comment: string, country: string, disable_lock_until: string, email: string, i_agree: string, is_affiliate: string, is_locked: string, lang: string, last_login: string, login: string, name_f: string, name_l: string, pass: string, pass_dattm: string, phone: string, pin: string, plain_password: string, remember_key: string, remote_addr: string, require_consent: string, reseller_id: string, saved_form_id: string, state: string, status: string, street: string, street2: string, subusers_parent_id: string, tax_id: string, unsubscribed: string, user_agent: string, user_id: int, zip: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id == null) { error make --unspanned { msg: "required query parameter 'userID' missing: pass --user-id" } }
@@ -1381,7 +1405,7 @@ export def "kkid-wishlist-delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --wish-id: int # ID of wishlist item to delete (required)
-]: nothing -> record<message: string, success: bool> {
+]: nothing -> oneof<record<message: string, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth"))
   let base = ($base_url | default $BASE_URL)
   if ($wish_id == null) { error make --unspanned { msg: "required query parameter 'wishId' missing: pass --wish-id" } }
@@ -1418,7 +1442,7 @@ export def "kkid-wishlist-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --kid-user-id: int # userID of the kid
-]: nothing -> record<success: bool, wish: table<description: string, id: int, link: string, master_id: int, priority: int, title: string, user_id: int>> {
+]: nothing -> oneof<record<success: bool, wish: table<description: string, id: int, link: string, master_id: int, priority: int, title: string, user_id: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "kidUserId" $kid_user_id "scalar")] | flatten | str join "&"
@@ -1458,7 +1482,7 @@ export def "kkid-wishlist-post" [
   --description: string # Item Description
   --priority: int # Item Priority
   --link: string # URL Link to item
-]: nothing -> record<message: string, success: bool> {
+]: nothing -> oneof<record<message: string, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth"))
   let base = ($base_url | default $BASE_URL)
   if ($kid_user_id == null) { error make --unspanned { msg: "required query parameter 'kidUserId' missing: pass --kid-user-id" } }
@@ -1500,7 +1524,7 @@ export def "kkid-wishlist-put" [
   --description: string # Item Description
   --priority: int # Item Priority
   --link: string # URL Link to item
-]: nothing -> record<message: string, success: bool> {
+]: nothing -> oneof<record<message: string, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth"))
   let base = ($base_url | default $BASE_URL)
   if ($wish_id == null) { error make --unspanned { msg: "required query parameter 'wishId' missing: pass --wish-id" } }

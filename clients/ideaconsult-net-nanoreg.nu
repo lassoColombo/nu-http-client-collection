@@ -12,27 +12,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -40,8 +49,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -52,7 +66,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -87,7 +110,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -114,9 +138,9 @@ def accept-completer-1 [] { ["application/json" "application/xml"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-investigation-results" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-investigation-results" "search-by-identifier" "search-by-similarity" "search-by-smarts" "get-endpoint-summary" "get-substances" "get-substance-by-uuid" "get-substance-composition" "get-substance-structures" "get-substance-study" "get-substance-study-summary" "solrquery-get" "solrquery-post" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -156,7 +180,7 @@ export def "get-investigation-results" [
   --id: string # Search parameter, chemical structure or substance identifier(s), comma delimited
   --page: int # Starting page (e.g. 0)
   --pagesize: int # Page size (e.g. 10)
-]: nothing -> record<_childDocuments_: record, assay: string, document_uuid: string, effectendpoint: string, endpoint: string, endpointcategory: string, err: float, errQualifier: string, guidance: string, investigation: string, loQualifier: string, loValue: float, name: string, owner_name: string, publicname: string, reference: string, reference_owner: string, reference_year: string, resulttype: string, s_uuid: string, studyResultType: string, substanceType: string, textValue: string, topcategory: string, type_s: string, unit: string, upQualifier: string, upValue: float, updated: string> {
+]: nothing -> oneof<record<_childDocuments_: record, assay: string, document_uuid: string, effectendpoint: string, endpoint: string, endpointcategory: string, err: float, errQualifier: string, guidance: string, investigation: string, loQualifier: string, loValue: float, name: string, owner_name: string, publicname: string, reference: string, reference_owner: string, reference_year: string, resulttype: string, s_uuid: string, studyResultType: string, substanceType: string, textValue: string, topcategory: string, type_s: string, unit: string, upQualifier: string, upValue: float, updated: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($db | is-empty) { error make --unspanned { msg: "path parameter 'db' must be non-empty" } }
@@ -205,7 +229,7 @@ export def "search-by-identifier" [
   --sameas: string # Ontology URI to define groups of columns
   --page: int # Starting page (e.g. 0)
   --pagesize: int # Page size (e.g. 10)
-]: nothing -> record<dataEntry: record, feature: record, model_uri: string, query: record> {
+]: nothing -> oneof<record<dataEntry: record, feature: record, model_uri: string, query: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($db | is-empty) { error make --unspanned { msg: "path parameter 'db' must be non-empty" } }
@@ -256,7 +280,7 @@ export def "search-by-similarity" [
   --mol: oneof<nothing, bool> # Only for application/json; to include mol as JSON field
   --page: int # Starting page (e.g. 0)
   --pagesize: int # Page size (e.g. 10)
-]: nothing -> record<dataEntry: record, feature: record, model_uri: string, query: record> {
+]: nothing -> oneof<record<dataEntry: record, feature: record, model_uri: string, query: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($db | is-empty) { error make --unspanned { msg: "path parameter 'db' must be non-empty" } }
@@ -304,7 +328,7 @@ export def "search-by-smarts" [
   --mol: oneof<nothing, bool> # Only for application/json; to include mol as JSON field
   --page: int # Starting page (e.g. 0)
   --pagesize: int # Page size (e.g. 10)
-]: nothing -> record<dataEntry: record, feature: record, model_uri: string, query: record> {
+]: nothing -> oneof<record<dataEntry: record, feature: record, model_uri: string, query: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($db | is-empty) { error make --unspanned { msg: "path parameter 'db' must be non-empty" } }
@@ -343,7 +367,7 @@ export def "get-endpoint-summary" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --top: string@top-completer # Top endpoint category
   --category: string # Endpoint category (The value in the protocol.category.code field)
-]: nothing -> record<facet: record> {
+]: nothing -> oneof<record<facet: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($db | is-empty) { error make --unspanned { msg: "path parameter 'db' must be non-empty" } }
@@ -388,7 +412,7 @@ export def "get-substances" [
   --studysummary: oneof<nothing, bool> # If true retrieves study summary for each substance
   --page: int # Starting page (e.g. 0)
   --pagesize: int # Page size (e.g. 10)
-]: nothing -> record<substance: record> {
+]: nothing -> oneof<record<substance: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($db | is-empty) { error make --unspanned { msg: "path parameter 'db' must be non-empty" } }
@@ -429,7 +453,7 @@ export def "get-substance-by-uuid" [
   --property-uris: string # Property URIs
   --page: int # Starting page (e.g. 0)
   --pagesize: int # Page size (e.g. 10)
-]: nothing -> record<substance: record> {
+]: nothing -> oneof<record<substance: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($db | is-empty) { error make --unspanned { msg: "path parameter 'db' must be non-empty" } }
@@ -471,7 +495,7 @@ export def "get-substance-composition" [
   --all: oneof<nothing, bool> # true (Show all compositions) false (do not show hidden compositions)
   --page: int # Starting page (e.g. 0)
   --pagesize: int # Page size (e.g. 10)
-]: nothing -> record<composition: record, feature: record> {
+]: nothing -> oneof<record<composition: record, feature: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($db | is-empty) { error make --unspanned { msg: "path parameter 'db' must be non-empty" } }
@@ -512,7 +536,7 @@ export def "get-substance-structures" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Starting page (e.g. 0)
   --pagesize: int # Page size (e.g. 10)
-]: nothing -> record<dataEntry: record, feature: record, model_uri: string, query: record> {
+]: nothing -> oneof<record<dataEntry: record, feature: record, model_uri: string, query: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($db | is-empty) { error make --unspanned { msg: "path parameter 'db' must be non-empty" } }
@@ -558,7 +582,7 @@ export def "get-substance-study" [
   --investigation-uuid: string # Investigation UUID, a code to link different studies
   --page: int # Starting page (e.g. 0)
   --pagesize: int # Page size (e.g. 10)
-]: nothing -> record<study: record> {
+]: nothing -> oneof<record<study: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($db | is-empty) { error make --unspanned { msg: "path parameter 'db' must be non-empty" } }
@@ -604,7 +628,7 @@ export def "get-substance-study-summary" [
   --result: oneof<nothing, bool> # If true will group by topcategory,endpointcategory,interpretation result
   --page: int # Starting page (e.g. 0)
   --pagesize: int # Page size (e.g. 10)
-]: nothing -> record<facet: record> {
+]: nothing -> oneof<record<facet: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($db | is-empty) { error make --unspanned { msg: "path parameter 'db' must be non-empty" } }
@@ -646,7 +670,7 @@ export def "solrquery-get" [
   --start: int # Starting page (e.g. 0)
   --rows: int # Page size (e.g. 10)
   --wt: string@wt-completer # Response format (default: xml, e.g. json)
-]: nothing -> record<response: record<docs: list<record>, maxScore: float, numFound: int, start: int>, responseHeader: record<QTime: int, params: record, status: int, zkConnected: bool>> {
+]: nothing -> oneof<record<response: record<docs: list<record>, maxScore: float, numFound: int, start: int>, responseHeader: record<QTime: int, params: record, status: int, zkConnected: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "rows" $rows "scalar") (serialize-qp "wt" $wt "scalar")] | flatten | str join "&"
@@ -671,7 +695,6 @@ export def "solrquery-get" [
 #
 # POST /select
 # operationId: solrquery_post
-# --params shape: {fl?: list<string>, rows?: int}
 export def "solrquery-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -686,7 +709,7 @@ export def "solrquery-post" [
   --wt: string@wt-completer # Response format (default: xml, e.g. json)
   --facet: record
   --params: record # shape: {fl?: list<string>, rows?: int}
-]: any -> record<response: record<docs: list<record>, maxScore: float, numFound: int, start: int>, responseHeader: record<QTime: int, params: record, status: int, zkConnected: bool>> {
+]: any -> oneof<record<response: record<docs: list<record>, maxScore: float, numFound: int, start: int>, responseHeader: record<QTime: int, params: record, status: int, zkConnected: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

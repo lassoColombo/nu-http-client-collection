@@ -12,27 +12,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -40,8 +49,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -52,7 +66,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -87,7 +110,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -105,9 +129,9 @@ def accept-completer [] { ["application/json" "application/xml" "text/json" "tex
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "actor-get" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["actor-get" "add-actor-post" "add-tv-show-post" "aliases-by-id-get" "aliases-get" "awardsby-winner-get" "awards-get" "schedule-by-date-get" "calendar-countries-get" "calendar-networks-get" "calendar-show-seasons-get" "calendarby-showname-season-get" "calendar-by-show-name-get" "calendar-today-get" "actor-in-shows-get" "cast-by-actor-get" "actors-in-tv-show-get" "crew-by-id-get" "crew-by-person-get" "crewby-showname-get" "crew-get" "episodes-by-id-get" "episodes-by-season-get" "episodes-get" "episodes-last-available-seasonby-name-get" "episodes-last-available-season-get" "episodes-season-count-get" "get-imd-bid-get-async" "images-get" "image-search-get" "magnets-by-date-get-async" "magnets-byimdb-id-get-async" "magnets-movie-by-id-get-async" "tv-showsearch-get" "movie-id-get" "movie-search-get-async" "music-album-art-get" "music-cd-covers-get" "music-by-music-brainz-get" "music-albums-get" "music-cover-art-get" "music-cover-art-by-name-get" "music-artist-extended-get" "music-get" "music-lyricsby-album-id-get" "music-lyrics-get" "music-lyrics-by-song-get" "music-tracks-get" "musi-videos-get" "rating-get" "rating-by-name-get" "show-status-get" "tv-show-id-get" "tv-show-by-name-get" "trailersby-id-get" "trailer-count-by-id-get" "trailer-count-by-name-get" "trailer-search-get" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -142,7 +166,7 @@ export def "actor-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<Bio: string, BirthYear: string, DeathYear: string, Gender: string, Name: string, PopularityIndex: string, ProfileImage: string> {
+]: nothing -> oneof<table<Bio: string, BirthYear: string, DeathYear: string, Gender: string, Name: string, PopularityIndex: string, ProfileImage: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($accesstoken | is-empty) { error make --unspanned { msg: "path parameter 'accesstoken' must be non-empty" } }
@@ -187,7 +211,7 @@ export def "add-actor-post" [
   --name: string
   --popularity-index: string
   --profile-image: string
-]: any -> record<Status: string> {
+]: any -> oneof<record<Status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -236,7 +260,7 @@ export def "add-tv-show-post" [
   --show-status: string
   --synopsis: string
   --title: string
-]: any -> record<Status: string> {
+]: any -> oneof<record<Status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -276,7 +300,7 @@ export def "aliases-by-id-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<Aka: string, ExternalIDs: list<record>, Name: string, OriginalName: string> {
+]: nothing -> oneof<table<Aka: string, ExternalIDs: list<record>, Name: string, OriginalName: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
@@ -315,7 +339,7 @@ export def "aliases-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<Aka: string, ExternalIDs: list<record>, Name: string, OriginalName: string> {
+]: nothing -> oneof<table<Aka: string, ExternalIDs: list<record>, Name: string, OriginalName: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
@@ -354,7 +378,7 @@ export def "awardsby-winner-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<Category: string, Nominee: string, Type: string, Winner: string, Year: string> {
+]: nothing -> oneof<table<Category: string, Nominee: string, Type: string, Winner: string, Year: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
@@ -392,7 +416,7 @@ export def "awards-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<Category: string, Nominee: string, Type: string, Winner: string, Year: string> {
+]: nothing -> oneof<table<Category: string, Nominee: string, Type: string, Winner: string, Year: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($year | is-empty) { error make --unspanned { msg: "path parameter 'Year' must be non-empty" } }
@@ -431,7 +455,7 @@ export def "schedule-by-date-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<AirDate: string, AirTime: string, Country: string, DaysOn: string, Episode: string, ID: string, Image: string, Network: string, PremiereDate: string, Runtime: string, Season: string, ShowName: string, Summary: string, Title: string> {
+]: nothing -> oneof<table<AirDate: string, AirTime: string, Country: string, DaysOn: string, Episode: string, ID: string, Image: string, Network: string, PremiereDate: string, Runtime: string, Season: string, ShowName: string, Summary: string, Title: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
@@ -470,7 +494,7 @@ export def "calendar-countries-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<Name: string> {
+]: nothing -> oneof<table<Name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
@@ -507,7 +531,7 @@ export def "calendar-networks-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<Country: string, Network: string> {
+]: nothing -> oneof<table<Country: string, Network: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
@@ -545,7 +569,7 @@ export def "calendar-show-seasons-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<Year: string> {
+]: nothing -> oneof<table<Year: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
@@ -585,7 +609,7 @@ export def "calendarby-showname-season-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<AirDate: string, AirTime: string, Country: string, DaysOn: string, Episode: string, ID: string, Image: string, Network: string, PremiereDate: string, Runtime: string, Season: string, ShowName: string, Summary: string, Title: string> {
+]: nothing -> oneof<table<AirDate: string, AirTime: string, Country: string, DaysOn: string, Episode: string, ID: string, Image: string, Network: string, PremiereDate: string, Runtime: string, Season: string, ShowName: string, Summary: string, Title: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
@@ -626,7 +650,7 @@ export def "calendar-by-show-name-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<AirDate: string, AirTime: string, Country: string, DaysOn: string, Episode: string, ID: string, Image: string, Network: string, PremiereDate: string, Runtime: string, Season: string, ShowName: string, Summary: string, Title: string> {
+]: nothing -> oneof<table<AirDate: string, AirTime: string, Country: string, DaysOn: string, Episode: string, ID: string, Image: string, Network: string, PremiereDate: string, Runtime: string, Season: string, ShowName: string, Summary: string, Title: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
@@ -665,7 +689,7 @@ export def "calendar-today-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<AirDate: string, AirTime: string, Country: string, DaysOn: string, Episode: string, ID: string, Image: string, Network: string, PremiereDate: string, Runtime: string, Season: string, ShowName: string, Summary: string, Title: string> {
+]: nothing -> oneof<table<AirDate: string, AirTime: string, Country: string, DaysOn: string, Episode: string, ID: string, Image: string, Network: string, PremiereDate: string, Runtime: string, Season: string, ShowName: string, Summary: string, Title: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
@@ -703,7 +727,7 @@ export def "actor-in-shows-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<Externals: list<record>, Image: string, Name: string, Role: string, ShowName: string> {
+]: nothing -> oneof<table<Externals: list<record>, Image: string, Name: string, Role: string, ShowName: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
@@ -742,7 +766,7 @@ export def "cast-by-actor-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<Externals: list<record>, Image: string, Name: string, Role: string, ShowName: string> {
+]: nothing -> oneof<table<Externals: list<record>, Image: string, Name: string, Role: string, ShowName: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
@@ -781,7 +805,7 @@ export def "actors-in-tv-show-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<Externals: list<record>, Image: string, Name: string, Role: string, ShowName: string> {
+]: nothing -> oneof<table<Externals: list<record>, Image: string, Name: string, Role: string, ShowName: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($accesstoken | is-empty) { error make --unspanned { msg: "path parameter 'accesstoken' must be non-empty" } }
@@ -820,7 +844,7 @@ export def "crew-by-id-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<Externals: list<record>, Image: string, Name: string, ShowName: string, Type: string> {
+]: nothing -> oneof<table<Externals: list<record>, Image: string, Name: string, ShowName: string, Type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
@@ -859,7 +883,7 @@ export def "crew-by-person-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<Externals: list<record>, Image: string, Name: string, ShowName: string, Type: string> {
+]: nothing -> oneof<table<Externals: list<record>, Image: string, Name: string, ShowName: string, Type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
@@ -898,7 +922,7 @@ export def "crewby-showname-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<Externals: list<record>, Image: string, Name: string, ShowName: string, Type: string> {
+]: nothing -> oneof<table<Externals: list<record>, Image: string, Name: string, ShowName: string, Type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
@@ -937,7 +961,7 @@ export def "crew-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<Externals: list<record>, Image: string, Name: string, ShowName: string, Type: string> {
+]: nothing -> oneof<table<Externals: list<record>, Image: string, Name: string, ShowName: string, Type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
@@ -976,7 +1000,7 @@ export def "episodes-by-id-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<Airdate: string, Airtime: string, EpisodeNo: string, Externals: list<record>, Image: string, Season: string, Synopsis: string, Title: string> {
+]: nothing -> oneof<table<Airdate: string, Airtime: string, EpisodeNo: string, Externals: list<record>, Image: string, Season: string, Synopsis: string, Title: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
@@ -1016,7 +1040,7 @@ export def "episodes-by-season-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<Airdate: string, Airtime: string, EpisodeNo: string, Externals: list<record>, Image: string, Season: string, Synopsis: string, Title: string> {
+]: nothing -> oneof<table<Airdate: string, Airtime: string, EpisodeNo: string, Externals: list<record>, Image: string, Season: string, Synopsis: string, Title: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
@@ -1056,7 +1080,7 @@ export def "episodes-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<Airdate: string, Airtime: string, EpisodeNo: string, Externals: list<record>, Image: string, Season: string, Synopsis: string, Title: string> {
+]: nothing -> oneof<table<Airdate: string, Airtime: string, EpisodeNo: string, Externals: list<record>, Image: string, Season: string, Synopsis: string, Title: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
@@ -1095,7 +1119,7 @@ export def "episodes-last-available-seasonby-name-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<Season: string> {
+]: nothing -> oneof<record<Season: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
@@ -1134,7 +1158,7 @@ export def "episodes-last-available-season-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<Season: string> {
+]: nothing -> oneof<record<Season: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
@@ -1173,7 +1197,7 @@ export def "episodes-season-count-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<Episodes: string, Externals: table<ID: string, Name: string>, Seasons: string, Showname: string> {
+]: nothing -> oneof<record<Episodes: string, Externals: table<ID: string, Name: string>, Seasons: string, Showname: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
@@ -1212,7 +1236,7 @@ export def "get-imd-bid-get-async" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<ID: string, ShinobiID: string, Title: string, Type: string> {
+]: nothing -> oneof<table<ID: string, ShinobiID: string, Title: string, Type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
@@ -1251,7 +1275,7 @@ export def "images-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<Backdrops: list<string>, Posters: list<string>, Type: string, imdbID: string> {
+]: nothing -> oneof<table<Backdrops: list<string>, Posters: list<string>, Type: string, imdbID: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
@@ -1291,7 +1315,7 @@ export def "image-search-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --strictmatch: oneof<nothing, bool>
-]: nothing -> table<Backdrops: list<string>, Posters: list<string>, Type: string, imdbID: string> {
+]: nothing -> oneof<table<Backdrops: list<string>, Posters: list<string>, Type: string, imdbID: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($accesstoken | is-empty) { error make --unspanned { msg: "path parameter 'Accesstoken' must be non-empty" } }
@@ -1331,7 +1355,7 @@ export def "magnets-by-date-get-async" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<Externals: list<record>, FirstSeenDate: string, Hash: string, Image: string, Name: string, Peers: string, Seeds: string, Size: string, Title: string, Type: string> {
+]: nothing -> oneof<table<Externals: list<record>, FirstSeenDate: string, Hash: string, Image: string, Name: string, Peers: string, Seeds: string, Size: string, Title: string, Type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
@@ -1370,7 +1394,7 @@ export def "magnets-byimdb-id-get-async" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<Externals: list<record>, FirstSeenDate: string, Hash: string, Image: string, Name: string, Peers: string, Seeds: string, Size: string, Title: string, Type: string> {
+]: nothing -> oneof<table<Externals: list<record>, FirstSeenDate: string, Hash: string, Image: string, Name: string, Peers: string, Seeds: string, Size: string, Title: string, Type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
@@ -1409,7 +1433,7 @@ export def "magnets-movie-by-id-get-async" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<Externals: list<record>, FirstSeenDate: string, Hash: string, Image: string, Name: string, Peers: string, Seeds: string, Size: string, Title: string, Type: string> {
+]: nothing -> oneof<table<Externals: list<record>, FirstSeenDate: string, Hash: string, Image: string, Name: string, Peers: string, Seeds: string, Size: string, Title: string, Type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
@@ -1448,7 +1472,7 @@ export def "tv-showsearch-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<Externals: list<record>, FirstSeenDate: string, Hash: string, Image: string, Name: string, Peers: string, Seeds: string, Size: string, Title: string, Type: string> {
+]: nothing -> oneof<table<Externals: list<record>, FirstSeenDate: string, Hash: string, Image: string, Name: string, Peers: string, Seeds: string, Size: string, Title: string, Type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
@@ -1486,7 +1510,7 @@ export def "movie-id-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<ID: string, ImdbID: string, ReleaseYear: string, Runtime: string, Synopsis: string, Title: string> {
+]: nothing -> oneof<record<ID: string, ImdbID: string, ReleaseYear: string, Runtime: string, Synopsis: string, Title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($accesstoken | is-empty) { error make --unspanned { msg: "path parameter 'accesstoken' must be non-empty" } }
@@ -1525,7 +1549,7 @@ export def "movie-search-get-async" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<ID: string, ImdbID: string, ReleaseYear: string, Runtime: string, Synopsis: string, Title: string> {
+]: nothing -> oneof<table<ID: string, ImdbID: string, ReleaseYear: string, Runtime: string, Synopsis: string, Title: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
@@ -1564,7 +1588,7 @@ export def "music-album-art-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<AlbumID: string, Albumname: string, Art: string> {
+]: nothing -> oneof<record<AlbumID: string, Albumname: string, Art: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
@@ -1603,7 +1627,7 @@ export def "music-cd-covers-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<CoverImage: string, CoverThumbMedium: string, CoverThumbSmall: string, CoverType: string, MusicBrainzID: string> {
+]: nothing -> oneof<table<CoverImage: string, CoverThumbMedium: string, CoverThumbSmall: string, CoverType: string, MusicBrainzID: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
@@ -1642,7 +1666,7 @@ export def "music-by-music-brainz-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<ArtistID: string, Banner: string, Biography: string, DisbandedYear: string, FormationYear: string, Genre: string, Logo: string, Members: string, MusicBrainzID: string, Name: string, SocialMedia: string, WebSite: string> {
+]: nothing -> oneof<table<ArtistID: string, Banner: string, Biography: string, DisbandedYear: string, FormationYear: string, Genre: string, Logo: string, Members: string, MusicBrainzID: string, Name: string, SocialMedia: string, WebSite: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
@@ -1681,7 +1705,7 @@ export def "music-albums-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<AlbumArt: string, AlbumID: string, ArtistID: string, Bibliography: string, Label: string, Name: string, Releaseyear: string> {
+]: nothing -> oneof<table<AlbumArt: string, AlbumID: string, ArtistID: string, Bibliography: string, Label: string, Name: string, Releaseyear: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
@@ -1720,7 +1744,7 @@ export def "music-cover-art-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<ArtistID: string, Banner: string, Logo: string, Name: string> {
+]: nothing -> oneof<record<ArtistID: string, Banner: string, Logo: string, Name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
@@ -1759,7 +1783,7 @@ export def "music-cover-art-by-name-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<ArtistID: string, Banner: string, Logo: string, Name: string> {
+]: nothing -> oneof<record<ArtistID: string, Banner: string, Logo: string, Name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
@@ -1798,7 +1822,7 @@ export def "music-artist-extended-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<Albums: list<record>, ArtistID: string, Banner: string, Biography: string, DisbandedYear: string, FormationYear: string, Genre: string, Logo: string, Members: string, MusicBrainzID: string, Name: string, SocialMedia: string, Videos: list<record>, WebSite: string> {
+]: nothing -> oneof<table<Albums: list<record>, ArtistID: string, Banner: string, Biography: string, DisbandedYear: string, FormationYear: string, Genre: string, Logo: string, Members: string, MusicBrainzID: string, Name: string, SocialMedia: string, Videos: list<record>, WebSite: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
@@ -1837,7 +1861,7 @@ export def "music-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<ArtistID: string, Banner: string, Biography: string, DisbandedYear: string, FormationYear: string, Genre: string, Logo: string, Members: string, MusicBrainzID: string, Name: string, SocialMedia: string, WebSite: string> {
+]: nothing -> oneof<table<ArtistID: string, Banner: string, Biography: string, DisbandedYear: string, FormationYear: string, Genre: string, Logo: string, Members: string, MusicBrainzID: string, Name: string, SocialMedia: string, WebSite: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
@@ -1876,7 +1900,7 @@ export def "music-lyricsby-album-id-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<AlbumID: string, Artist: string, Lyrics: string, Song: string> {
+]: nothing -> oneof<table<AlbumID: string, Artist: string, Lyrics: string, Song: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
@@ -1915,7 +1939,7 @@ export def "music-lyrics-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<AlbumID: string, Artist: string, Lyrics: string, Song: string> {
+]: nothing -> oneof<table<AlbumID: string, Artist: string, Lyrics: string, Song: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
@@ -1954,7 +1978,7 @@ export def "music-lyrics-by-song-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<AlbumID: string, Artist: string, Lyrics: string, Song: string> {
+]: nothing -> oneof<table<AlbumID: string, Artist: string, Lyrics: string, Song: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
@@ -1993,7 +2017,7 @@ export def "music-tracks-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<AlbumID: string, ArtistID: string, Length: string, TrackName: string, TrackNo: string> {
+]: nothing -> oneof<table<AlbumID: string, ArtistID: string, Length: string, TrackName: string, TrackNo: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
@@ -2032,7 +2056,7 @@ export def "musi-videos-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<AlbumID: string, ArtistID: string, Decription: string, Video: string> {
+]: nothing -> oneof<table<AlbumID: string, ArtistID: string, Decription: string, Video: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
@@ -2071,7 +2095,7 @@ export def "rating-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<EpisoDate: string, IMDB: string, MetaCritics: string, Name: string, RottenTomatoes: string, RottenTomatoesAudienceScore: string, TVDB: string, TVMaze: string, Trakt: string, imdbID: string> {
+]: nothing -> oneof<record<EpisoDate: string, IMDB: string, MetaCritics: string, Name: string, RottenTomatoes: string, RottenTomatoesAudienceScore: string, TVDB: string, TVMaze: string, Trakt: string, imdbID: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
@@ -2109,7 +2133,7 @@ export def "rating-by-name-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<EpisoDate: string, IMDB: string, MetaCritics: string, Name: string, RottenTomatoes: string, RottenTomatoesAudienceScore: string, TVDB: string, TVMaze: string, Trakt: string, imdbID: string> {
+]: nothing -> oneof<table<EpisoDate: string, IMDB: string, MetaCritics: string, Name: string, RottenTomatoes: string, RottenTomatoesAudienceScore: string, TVDB: string, TVMaze: string, Trakt: string, imdbID: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
@@ -2148,7 +2172,7 @@ export def "show-status-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<Enddate: string, ID: string, Title: string, YearsOn: string, imdbID: string, status: string, tvdbID: string> {
+]: nothing -> oneof<table<Enddate: string, ID: string, Title: string, YearsOn: string, imdbID: string, status: string, tvdbID: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
@@ -2188,7 +2212,7 @@ export def "tv-show-id-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --id: string # imdbID of show you want info on (required)
-]: nothing -> record<EpisodeCount: string, EpisodeRuntime: string, Externals: table<ID: string, Name: string>, ID: string, ReleaseYear: string, Seasons: string, ShowImage: string, ShowStatus: string, Synopsis: string, Title: string> {
+]: nothing -> oneof<record<EpisodeCount: string, EpisodeRuntime: string, Externals: table<ID: string, Name: string>, ID: string, ReleaseYear: string, Seasons: string, ShowImage: string, ShowStatus: string, Synopsis: string, Title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($accesstoken | is-empty) { error make --unspanned { msg: "path parameter 'accesstoken' must be non-empty" } }
@@ -2229,7 +2253,7 @@ export def "tv-show-by-name-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<EpisodeCount: string, EpisodeRuntime: string, Externals: list<record>, ID: string, ReleaseYear: string, Seasons: string, ShowImage: string, ShowStatus: string, Synopsis: string, Title: string> {
+]: nothing -> oneof<table<EpisodeCount: string, EpisodeRuntime: string, Externals: list<record>, ID: string, ReleaseYear: string, Seasons: string, ShowImage: string, ShowStatus: string, Synopsis: string, Title: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
@@ -2268,7 +2292,7 @@ export def "trailersby-id-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<Episode: string, Key: string, MediaType: string, Season: string, Site: string, TrailerName: string, TrailerSize: string, TrailerType: string, YouTubeEmbeddedCode: string, YouTubeURL: string> {
+]: nothing -> oneof<table<Episode: string, Key: string, MediaType: string, Season: string, Site: string, TrailerName: string, TrailerSize: string, TrailerType: string, YouTubeEmbeddedCode: string, YouTubeURL: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
@@ -2307,7 +2331,7 @@ export def "trailer-count-by-id-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<Count: int> {
+]: nothing -> oneof<record<Count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
@@ -2346,7 +2370,7 @@ export def "trailer-count-by-name-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<Count: int> {
+]: nothing -> oneof<record<Count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
@@ -2385,7 +2409,7 @@ export def "trailer-search-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<Episode: string, Key: string, MediaType: string, Season: string, Site: string, TrailerName: string, TrailerSize: string, TrailerType: string, YouTubeEmbeddedCode: string, YouTubeURL: string> {
+]: nothing -> oneof<table<Episode: string, Key: string, MediaType: string, Season: string, Site: string, TrailerName: string, TrailerSize: string, TrailerType: string, YouTubeEmbeddedCode: string, YouTubeURL: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }

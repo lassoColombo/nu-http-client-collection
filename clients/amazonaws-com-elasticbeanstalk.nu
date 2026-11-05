@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -156,9 +180,9 @@ def action-completer-46 [] { ["ValidateConfigurationSettings"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-abort-environment-update" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-abort-environment-update" "post-abort-environment-update" "get-apply-environment-managed-action" "post-apply-environment-managed-action" "get-associate-environment-operations-role" "post-associate-environment-operations-role" "get-check-dns-availability" "post-check-dns-availability" "get-compose-environments" "post-compose-environments" "get-create-application" "post-create-application" "get-create-application-version" "post-create-application-version" "get-create-configuration-template" "post-create-configuration-template" "get-create-environment" "post-create-environment" "get-create-platform-version" "post-create-platform-version" "get-create-storage-location" "post-create-storage-location" "get-delete-application" "post-delete-application" "get-delete-application-version" "post-delete-application-version" "get-delete-configuration-template" "post-delete-configuration-template" "get-delete-environment-configuration" "post-delete-environment-configuration" "get-delete-platform-version" "post-delete-platform-version" "get-describe-account-attributes" "post-describe-account-attributes" "get-describe-application-versions" "post-describe-application-versions" "get-describe-applications" "post-describe-applications" "get-describe-configuration-options" "post-describe-configuration-options" "get-describe-configuration-settings" "post-describe-configuration-settings" "get-describe-environment-health" "post-describe-environment-health" "get-describe-environment-managed-action-history" "post-describe-environment-managed-action-history" "get-describe-environment-managed-actions" "post-describe-environment-managed-actions" "get-describe-environment-resources" "post-describe-environment-resources" "get-describe-environments" "post-describe-environments" "get-describe-events" "post-describe-events" "get-describe-instances-health" "post-describe-instances-health" "get-describe-platform-version" "post-describe-platform-version" "get-disassociate-environment-operations-role" "post-disassociate-environment-operations-role" "get-list-available-solution-stacks" "post-list-available-solution-stacks" "get-list-platform-branches" "post-list-platform-branches" "get-list-platform-versions" "post-list-platform-versions" "get-list-tags-for-resource" "post-list-tags-for-resource" "get-rebuild-environment" "post-rebuild-environment" "get-request-environment-info" "post-request-environment-info" "get-restart-app-server" "post-restart-app-server" "get-retrieve-environment-info" "post-retrieve-environment-info" "get-swap-environment-cnam-es" "post-swap-environment-cnam-es" "get-terminate-environment" "post-terminate-environment" "get-update-application" "post-update-application" "get-update-application-resource-lifecycle" "post-update-application-resource-lifecycle" "get-update-application-version" "post-update-application-version" "get-update-configuration-template" "post-update-configuration-template" "get-update-environment" "post-update-environment" "get-update-tags-for-resource" "post-update-tags-for-resource" "get-validate-configuration-settings" "post-validate-configuration-settings" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -304,7 +328,7 @@ export def "get-apply-environment-managed-action" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ActionId: string, ActionDescription: string, ActionType: string, Status: string> {
+]: nothing -> oneof<record<ActionId: string, ActionDescription: string, ActionType: string, Status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($action_id == null) { error make --unspanned { msg: "required query parameter 'ActionId' missing: pass --action-id" } }
@@ -354,7 +378,7 @@ export def "post-apply-environment-managed-action" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<ActionId: string, ActionDescription: string, ActionType: string, Status: string> {
+]: any -> oneof<record<ActionId: string, ActionDescription: string, ActionType: string, Status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -510,7 +534,7 @@ export def "get-check-dns-availability" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Available: bool, FullyQualifiedCNAME: string> {
+]: nothing -> oneof<record<Available: bool, FullyQualifiedCNAME: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($cname_prefix == null) { error make --unspanned { msg: "required query parameter 'CNAMEPrefix' missing: pass --cname-prefix" } }
@@ -560,7 +584,7 @@ export def "post-check-dns-availability" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Available: bool, FullyQualifiedCNAME: string> {
+]: any -> oneof<record<Available: bool, FullyQualifiedCNAME: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -614,7 +638,7 @@ export def "get-compose-environments" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Environments: table<EnvironmentName: string, EnvironmentId: string, ApplicationName: string, VersionLabel: string, SolutionStackName: string, PlatformArn: string, TemplateName: string, Description: string, EndpointURL: string, CNAME: string, DateCreated: string, DateUpdated: string, Status: string, AbortableOperationInProgress: bool, Health: string, HealthStatus: string, Resources: record, Tier: record, EnvironmentLinks: list, EnvironmentArn: string, OperationsRole: string>, NextToken: string> {
+]: nothing -> oneof<record<Environments: table<EnvironmentName: string, EnvironmentId: string, ApplicationName: string, VersionLabel: string, SolutionStackName: string, PlatformArn: string, TemplateName: string, Description: string, EndpointURL: string, CNAME: string, DateCreated: string, DateUpdated: string, Status: string, AbortableOperationInProgress: bool, Health: string, HealthStatus: string, Resources: record, Tier: record, EnvironmentLinks: list, EnvironmentArn: string, OperationsRole: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "ComposeEnvironments")
@@ -663,7 +687,7 @@ export def "post-compose-environments" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Environments: table<EnvironmentName: string, EnvironmentId: string, ApplicationName: string, VersionLabel: string, SolutionStackName: string, PlatformArn: string, TemplateName: string, Description: string, EndpointURL: string, CNAME: string, DateCreated: string, DateUpdated: string, Status: string, AbortableOperationInProgress: bool, Health: string, HealthStatus: string, Resources: record, Tier: record, EnvironmentLinks: list, EnvironmentArn: string, OperationsRole: string>, NextToken: string> {
+]: any -> oneof<record<Environments: table<EnvironmentName: string, EnvironmentId: string, ApplicationName: string, VersionLabel: string, SolutionStackName: string, PlatformArn: string, TemplateName: string, Description: string, EndpointURL: string, CNAME: string, DateCreated: string, DateUpdated: string, Status: string, AbortableOperationInProgress: bool, Health: string, HealthStatus: string, Resources: record, Tier: record, EnvironmentLinks: list, EnvironmentArn: string, OperationsRole: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -718,7 +742,7 @@ export def "get-create-application" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Application: record<ApplicationArn: string, ApplicationName: string, Description: string, DateCreated: string, DateUpdated: string, Versions: list<string>, ConfigurationTemplates: list<string>, ResourceLifecycleConfig: record<ServiceRole: string, VersionLifecycleConfig: record>>> {
+]: nothing -> oneof<record<Application: record<ApplicationArn: string, ApplicationName: string, Description: string, DateCreated: string, DateUpdated: string, Versions: list<string>, ConfigurationTemplates: list<string>, ResourceLifecycleConfig: record<ServiceRole: string, VersionLifecycleConfig: record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($application_name == null) { error make --unspanned { msg: "required query parameter 'ApplicationName' missing: pass --application-name" } }
@@ -768,7 +792,7 @@ export def "post-create-application" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Application: record<ApplicationArn: string, ApplicationName: string, Description: string, DateCreated: string, DateUpdated: string, Versions: list<string>, ConfigurationTemplates: list<string>, ResourceLifecycleConfig: record<ServiceRole: string, VersionLifecycleConfig: record>>> {
+]: any -> oneof<record<Application: record<ApplicationArn: string, ApplicationName: string, Description: string, DateCreated: string, DateUpdated: string, Versions: list<string>, ConfigurationTemplates: list<string>, ResourceLifecycleConfig: record<ServiceRole: string, VersionLifecycleConfig: record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -828,7 +852,7 @@ export def "get-create-application-version" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ApplicationVersion: record<ApplicationVersionArn: string, ApplicationName: string, Description: string, VersionLabel: string, SourceBuildInformation: record<SourceType: string, SourceRepository: string, SourceLocation: string>, BuildArn: string, SourceBundle: record<S3Bucket: string, S3Key: string>, DateCreated: string, DateUpdated: string, Status: string>> {
+]: nothing -> oneof<record<ApplicationVersion: record<ApplicationVersionArn: string, ApplicationName: string, Description: string, VersionLabel: string, SourceBuildInformation: record<SourceType: string, SourceRepository: string, SourceLocation: string>, BuildArn: string, SourceBundle: record<S3Bucket: string, S3Key: string>, DateCreated: string, DateUpdated: string, Status: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($application_name == null) { error make --unspanned { msg: "required query parameter 'ApplicationName' missing: pass --application-name" } }
@@ -879,7 +903,7 @@ export def "post-create-application-version" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<ApplicationVersion: record<ApplicationVersionArn: string, ApplicationName: string, Description: string, VersionLabel: string, SourceBuildInformation: record<SourceType: string, SourceRepository: string, SourceLocation: string>, BuildArn: string, SourceBundle: record<S3Bucket: string, S3Key: string>, DateCreated: string, DateUpdated: string, Status: string>> {
+]: any -> oneof<record<ApplicationVersion: record<ApplicationVersionArn: string, ApplicationName: string, Description: string, VersionLabel: string, SourceBuildInformation: record<SourceType: string, SourceRepository: string, SourceLocation: string>, BuildArn: string, SourceBundle: record<S3Bucket: string, S3Key: string>, DateCreated: string, DateUpdated: string, Status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -939,7 +963,7 @@ export def "get-create-configuration-template" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<SolutionStackName: string, PlatformArn: string, ApplicationName: string, TemplateName: string, Description: string, EnvironmentName: string, DeploymentStatus: string, DateCreated: string, DateUpdated: string, OptionSettings: table<ResourceName: string, Namespace: string, OptionName: string, Value: string>> {
+]: nothing -> oneof<record<SolutionStackName: string, PlatformArn: string, ApplicationName: string, TemplateName: string, Description: string, EnvironmentName: string, DeploymentStatus: string, DateCreated: string, DateUpdated: string, OptionSettings: table<ResourceName: string, Namespace: string, OptionName: string, Value: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($application_name == null) { error make --unspanned { msg: "required query parameter 'ApplicationName' missing: pass --application-name" } }
@@ -990,7 +1014,7 @@ export def "post-create-configuration-template" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<SolutionStackName: string, PlatformArn: string, ApplicationName: string, TemplateName: string, Description: string, EnvironmentName: string, DeploymentStatus: string, DateCreated: string, DateUpdated: string, OptionSettings: table<ResourceName: string, Namespace: string, OptionName: string, Value: string>> {
+]: any -> oneof<record<SolutionStackName: string, PlatformArn: string, ApplicationName: string, TemplateName: string, Description: string, EnvironmentName: string, DeploymentStatus: string, DateCreated: string, DateUpdated: string, OptionSettings: table<ResourceName: string, Namespace: string, OptionName: string, Value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1055,7 +1079,7 @@ export def "get-create-environment" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<EnvironmentName: string, EnvironmentId: string, ApplicationName: string, VersionLabel: string, SolutionStackName: string, PlatformArn: string, TemplateName: string, Description: string, EndpointURL: string, CNAME: string, DateCreated: string, DateUpdated: string, Status: string, AbortableOperationInProgress: bool, Health: string, HealthStatus: string, Resources: record<LoadBalancer: record<LoadBalancerName: string, Domain: string, Listeners: list>>, Tier: record<Name: string, Type: string, Version: string>, EnvironmentLinks: table<LinkName: string, EnvironmentName: string>, EnvironmentArn: string, OperationsRole: string> {
+]: nothing -> oneof<record<EnvironmentName: string, EnvironmentId: string, ApplicationName: string, VersionLabel: string, SolutionStackName: string, PlatformArn: string, TemplateName: string, Description: string, EndpointURL: string, CNAME: string, DateCreated: string, DateUpdated: string, Status: string, AbortableOperationInProgress: bool, Health: string, HealthStatus: string, Resources: record<LoadBalancer: record<LoadBalancerName: string, Domain: string, Listeners: list>>, Tier: record<Name: string, Type: string, Version: string>, EnvironmentLinks: table<LinkName: string, EnvironmentName: string>, EnvironmentArn: string, OperationsRole: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($application_name == null) { error make --unspanned { msg: "required query parameter 'ApplicationName' missing: pass --application-name" } }
@@ -1105,7 +1129,7 @@ export def "post-create-environment" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<EnvironmentName: string, EnvironmentId: string, ApplicationName: string, VersionLabel: string, SolutionStackName: string, PlatformArn: string, TemplateName: string, Description: string, EndpointURL: string, CNAME: string, DateCreated: string, DateUpdated: string, Status: string, AbortableOperationInProgress: bool, Health: string, HealthStatus: string, Resources: record<LoadBalancer: record<LoadBalancerName: string, Domain: string, Listeners: list>>, Tier: record<Name: string, Type: string, Version: string>, EnvironmentLinks: table<LinkName: string, EnvironmentName: string>, EnvironmentArn: string, OperationsRole: string> {
+]: any -> oneof<record<EnvironmentName: string, EnvironmentId: string, ApplicationName: string, VersionLabel: string, SolutionStackName: string, PlatformArn: string, TemplateName: string, Description: string, EndpointURL: string, CNAME: string, DateCreated: string, DateUpdated: string, Status: string, AbortableOperationInProgress: bool, Health: string, HealthStatus: string, Resources: record<LoadBalancer: record<LoadBalancerName: string, Domain: string, Listeners: list>>, Tier: record<Name: string, Type: string, Version: string>, EnvironmentLinks: table<LinkName: string, EnvironmentName: string>, EnvironmentArn: string, OperationsRole: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1162,7 +1186,7 @@ export def "get-create-platform-version" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<PlatformSummary: record<PlatformArn: string, PlatformOwner: string, PlatformStatus: string, PlatformCategory: string, OperatingSystemName: string, OperatingSystemVersion: string, SupportedTierList: list<string>, SupportedAddonList: list<string>, PlatformLifecycleState: string, PlatformVersion: string, PlatformBranchName: string, PlatformBranchLifecycleState: string>, Builder: record<ARN: string>> {
+]: nothing -> oneof<record<PlatformSummary: record<PlatformArn: string, PlatformOwner: string, PlatformStatus: string, PlatformCategory: string, OperatingSystemName: string, OperatingSystemVersion: string, SupportedTierList: list<string>, SupportedAddonList: list<string>, PlatformLifecycleState: string, PlatformVersion: string, PlatformBranchName: string, PlatformBranchLifecycleState: string>, Builder: record<ARN: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($platform_name == null) { error make --unspanned { msg: "required query parameter 'PlatformName' missing: pass --platform-name" } }
@@ -1214,7 +1238,7 @@ export def "post-create-platform-version" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<PlatformSummary: record<PlatformArn: string, PlatformOwner: string, PlatformStatus: string, PlatformCategory: string, OperatingSystemName: string, OperatingSystemVersion: string, SupportedTierList: list<string>, SupportedAddonList: list<string>, PlatformLifecycleState: string, PlatformVersion: string, PlatformBranchName: string, PlatformBranchLifecycleState: string>, Builder: record<ARN: string>> {
+]: any -> oneof<record<PlatformSummary: record<PlatformArn: string, PlatformOwner: string, PlatformStatus: string, PlatformCategory: string, OperatingSystemName: string, OperatingSystemVersion: string, SupportedTierList: list<string>, SupportedAddonList: list<string>, PlatformLifecycleState: string, PlatformVersion: string, PlatformBranchName: string, PlatformBranchLifecycleState: string>, Builder: record<ARN: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1265,7 +1289,7 @@ export def "get-create-storage-location" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<S3Bucket: string> {
+]: nothing -> oneof<record<S3Bucket: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "CreateStorageLocation")
@@ -1313,7 +1337,7 @@ export def "post-create-storage-location" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<S3Bucket: string> {
+]: nothing -> oneof<record<S3Bucket: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "CreateStorageLocation")
@@ -1778,7 +1802,7 @@ export def "get-delete-platform-version" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<PlatformSummary: record<PlatformArn: string, PlatformOwner: string, PlatformStatus: string, PlatformCategory: string, OperatingSystemName: string, OperatingSystemVersion: string, SupportedTierList: list<string>, SupportedAddonList: list<string>, PlatformLifecycleState: string, PlatformVersion: string, PlatformBranchName: string, PlatformBranchLifecycleState: string>> {
+]: nothing -> oneof<record<PlatformSummary: record<PlatformArn: string, PlatformOwner: string, PlatformStatus: string, PlatformCategory: string, OperatingSystemName: string, OperatingSystemVersion: string, SupportedTierList: list<string>, SupportedAddonList: list<string>, PlatformLifecycleState: string, PlatformVersion: string, PlatformBranchName: string, PlatformBranchLifecycleState: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DeletePlatformVersion")
@@ -1827,7 +1851,7 @@ export def "post-delete-platform-version" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<PlatformSummary: record<PlatformArn: string, PlatformOwner: string, PlatformStatus: string, PlatformCategory: string, OperatingSystemName: string, OperatingSystemVersion: string, SupportedTierList: list<string>, SupportedAddonList: list<string>, PlatformLifecycleState: string, PlatformVersion: string, PlatformBranchName: string, PlatformBranchLifecycleState: string>> {
+]: any -> oneof<record<PlatformSummary: record<PlatformArn: string, PlatformOwner: string, PlatformStatus: string, PlatformCategory: string, OperatingSystemName: string, OperatingSystemVersion: string, SupportedTierList: list<string>, SupportedAddonList: list<string>, PlatformLifecycleState: string, PlatformVersion: string, PlatformBranchName: string, PlatformBranchLifecycleState: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1878,7 +1902,7 @@ export def "get-describe-account-attributes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ResourceQuotas: record<ApplicationQuota: record<Maximum: int>, ApplicationVersionQuota: record<Maximum: int>, EnvironmentQuota: record<Maximum: int>, ConfigurationTemplateQuota: record<Maximum: int>, CustomPlatformQuota: record<Maximum: int>>> {
+]: nothing -> oneof<record<ResourceQuotas: record<ApplicationQuota: record<Maximum: int>, ApplicationVersionQuota: record<Maximum: int>, EnvironmentQuota: record<Maximum: int>, ConfigurationTemplateQuota: record<Maximum: int>, CustomPlatformQuota: record<Maximum: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DescribeAccountAttributes")
@@ -1926,7 +1950,7 @@ export def "post-describe-account-attributes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ResourceQuotas: record<ApplicationQuota: record<Maximum: int>, ApplicationVersionQuota: record<Maximum: int>, EnvironmentQuota: record<Maximum: int>, ConfigurationTemplateQuota: record<Maximum: int>, CustomPlatformQuota: record<Maximum: int>>> {
+]: nothing -> oneof<record<ResourceQuotas: record<ApplicationQuota: record<Maximum: int>, ApplicationVersionQuota: record<Maximum: int>, EnvironmentQuota: record<Maximum: int>, ConfigurationTemplateQuota: record<Maximum: int>, CustomPlatformQuota: record<Maximum: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DescribeAccountAttributes")
@@ -1978,7 +2002,7 @@ export def "get-describe-application-versions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ApplicationVersions: table<ApplicationVersionArn: string, ApplicationName: string, Description: string, VersionLabel: string, SourceBuildInformation: record, BuildArn: string, SourceBundle: record, DateCreated: string, DateUpdated: string, Status: string>, NextToken: string> {
+]: nothing -> oneof<record<ApplicationVersions: table<ApplicationVersionArn: string, ApplicationName: string, Description: string, VersionLabel: string, SourceBuildInformation: record, BuildArn: string, SourceBundle: record, DateCreated: string, DateUpdated: string, Status: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DescribeApplicationVersions")
@@ -2027,7 +2051,7 @@ export def "post-describe-application-versions" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<ApplicationVersions: table<ApplicationVersionArn: string, ApplicationName: string, Description: string, VersionLabel: string, SourceBuildInformation: record, BuildArn: string, SourceBundle: record, DateCreated: string, DateUpdated: string, Status: string>, NextToken: string> {
+]: any -> oneof<record<ApplicationVersions: table<ApplicationVersionArn: string, ApplicationName: string, Description: string, VersionLabel: string, SourceBuildInformation: record, BuildArn: string, SourceBundle: record, DateCreated: string, DateUpdated: string, Status: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2079,7 +2103,7 @@ export def "get-describe-applications" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Applications: table<ApplicationArn: string, ApplicationName: string, Description: string, DateCreated: string, DateUpdated: string, Versions: list, ConfigurationTemplates: list, ResourceLifecycleConfig: record>> {
+]: nothing -> oneof<record<Applications: table<ApplicationArn: string, ApplicationName: string, Description: string, DateCreated: string, DateUpdated: string, Versions: list, ConfigurationTemplates: list, ResourceLifecycleConfig: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DescribeApplications")
@@ -2128,7 +2152,7 @@ export def "post-describe-applications" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Applications: table<ApplicationArn: string, ApplicationName: string, Description: string, DateCreated: string, DateUpdated: string, Versions: list, ConfigurationTemplates: list, ResourceLifecycleConfig: record>> {
+]: any -> oneof<record<Applications: table<ApplicationArn: string, ApplicationName: string, Description: string, DateCreated: string, DateUpdated: string, Versions: list, ConfigurationTemplates: list, ResourceLifecycleConfig: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2185,7 +2209,7 @@ export def "get-describe-configuration-options" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<SolutionStackName: string, PlatformArn: string, Options: table<Namespace: string, Name: string, DefaultValue: string, ChangeSeverity: string, UserDefined: bool, ValueType: string, ValueOptions: list, MinValue: int, MaxValue: int, MaxLength: int, Regex: record>> {
+]: nothing -> oneof<record<SolutionStackName: string, PlatformArn: string, Options: table<Namespace: string, Name: string, DefaultValue: string, ChangeSeverity: string, UserDefined: bool, ValueType: string, ValueOptions: list, MinValue: int, MaxValue: int, MaxLength: int, Regex: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DescribeConfigurationOptions")
@@ -2234,7 +2258,7 @@ export def "post-describe-configuration-options" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<SolutionStackName: string, PlatformArn: string, Options: table<Namespace: string, Name: string, DefaultValue: string, ChangeSeverity: string, UserDefined: bool, ValueType: string, ValueOptions: list, MinValue: int, MaxValue: int, MaxLength: int, Regex: record>> {
+]: any -> oneof<record<SolutionStackName: string, PlatformArn: string, Options: table<Namespace: string, Name: string, DefaultValue: string, ChangeSeverity: string, UserDefined: bool, ValueType: string, ValueOptions: list, MinValue: int, MaxValue: int, MaxLength: int, Regex: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2288,7 +2312,7 @@ export def "get-describe-configuration-settings" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ConfigurationSettings: table<SolutionStackName: string, PlatformArn: string, ApplicationName: string, TemplateName: string, Description: string, EnvironmentName: string, DeploymentStatus: string, DateCreated: string, DateUpdated: string, OptionSettings: list>> {
+]: nothing -> oneof<record<ConfigurationSettings: table<SolutionStackName: string, PlatformArn: string, ApplicationName: string, TemplateName: string, Description: string, EnvironmentName: string, DeploymentStatus: string, DateCreated: string, DateUpdated: string, OptionSettings: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($application_name == null) { error make --unspanned { msg: "required query parameter 'ApplicationName' missing: pass --application-name" } }
@@ -2338,7 +2362,7 @@ export def "post-describe-configuration-settings" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<ConfigurationSettings: table<SolutionStackName: string, PlatformArn: string, ApplicationName: string, TemplateName: string, Description: string, EnvironmentName: string, DeploymentStatus: string, DateCreated: string, DateUpdated: string, OptionSettings: list>> {
+]: any -> oneof<record<ConfigurationSettings: table<SolutionStackName: string, PlatformArn: string, ApplicationName: string, TemplateName: string, Description: string, EnvironmentName: string, DeploymentStatus: string, DateCreated: string, DateUpdated: string, OptionSettings: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2392,7 +2416,7 @@ export def "get-describe-environment-health" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<EnvironmentName: string, HealthStatus: string, Status: string, Color: string, Causes: list<string>, ApplicationMetrics: record<Duration: int, RequestCount: int, StatusCodes: record<Status2xx: int, Status3xx: int, Status4xx: int, Status5xx: int>, Latency: record<P999: float, P99: float, P95: float, P90: float, P85: float, P75: float, P50: float, P10: float>>, InstancesHealth: record<NoData: int, Unknown: int, Pending: int, Ok: int, Info: int, Warning: int, Degraded: int, Severe: int>, RefreshedAt: string> {
+]: nothing -> oneof<record<EnvironmentName: string, HealthStatus: string, Status: string, Color: string, Causes: list<string>, ApplicationMetrics: record<Duration: int, RequestCount: int, StatusCodes: record<Status2xx: int, Status3xx: int, Status4xx: int, Status5xx: int>, Latency: record<P999: float, P99: float, P95: float, P90: float, P85: float, P75: float, P50: float, P10: float>>, InstancesHealth: record<NoData: int, Unknown: int, Pending: int, Ok: int, Info: int, Warning: int, Degraded: int, Severe: int>, RefreshedAt: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DescribeEnvironmentHealth")
@@ -2441,7 +2465,7 @@ export def "post-describe-environment-health" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<EnvironmentName: string, HealthStatus: string, Status: string, Color: string, Causes: list<string>, ApplicationMetrics: record<Duration: int, RequestCount: int, StatusCodes: record<Status2xx: int, Status3xx: int, Status4xx: int, Status5xx: int>, Latency: record<P999: float, P99: float, P95: float, P90: float, P85: float, P75: float, P50: float, P10: float>>, InstancesHealth: record<NoData: int, Unknown: int, Pending: int, Ok: int, Info: int, Warning: int, Degraded: int, Severe: int>, RefreshedAt: string> {
+]: any -> oneof<record<EnvironmentName: string, HealthStatus: string, Status: string, Color: string, Causes: list<string>, ApplicationMetrics: record<Duration: int, RequestCount: int, StatusCodes: record<Status2xx: int, Status3xx: int, Status4xx: int, Status5xx: int>, Latency: record<P999: float, P99: float, P95: float, P90: float, P85: float, P75: float, P50: float, P10: float>>, InstancesHealth: record<NoData: int, Unknown: int, Pending: int, Ok: int, Info: int, Warning: int, Degraded: int, Severe: int>, RefreshedAt: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2496,7 +2520,7 @@ export def "get-describe-environment-managed-action-history" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ManagedActionHistoryItems: table<ActionId: string, ActionType: string, ActionDescription: string, FailureType: string, Status: string, FailureDescription: string, ExecutedTime: string, FinishedTime: string>, NextToken: string> {
+]: nothing -> oneof<record<ManagedActionHistoryItems: table<ActionId: string, ActionType: string, ActionDescription: string, FailureType: string, Status: string, FailureDescription: string, ExecutedTime: string, FinishedTime: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DescribeEnvironmentManagedActionHistory")
@@ -2547,7 +2571,7 @@ export def "post-describe-environment-managed-action-history" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<ManagedActionHistoryItems: table<ActionId: string, ActionType: string, ActionDescription: string, FailureType: string, Status: string, FailureDescription: string, ExecutedTime: string, FinishedTime: string>, NextToken: string> {
+]: any -> oneof<record<ManagedActionHistoryItems: table<ActionId: string, ActionType: string, ActionDescription: string, FailureType: string, Status: string, FailureDescription: string, ExecutedTime: string, FinishedTime: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2601,7 +2625,7 @@ export def "get-describe-environment-managed-actions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ManagedActions: table<ActionId: string, ActionDescription: string, ActionType: string, Status: string, WindowStartTime: string>> {
+]: nothing -> oneof<record<ManagedActions: table<ActionId: string, ActionDescription: string, ActionType: string, Status: string, WindowStartTime: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DescribeEnvironmentManagedActions")
@@ -2650,7 +2674,7 @@ export def "post-describe-environment-managed-actions" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<ManagedActions: table<ActionId: string, ActionDescription: string, ActionType: string, Status: string, WindowStartTime: string>> {
+]: any -> oneof<record<ManagedActions: table<ActionId: string, ActionDescription: string, ActionType: string, Status: string, WindowStartTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2703,7 +2727,7 @@ export def "get-describe-environment-resources" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<EnvironmentResources: record<EnvironmentName: string, AutoScalingGroups: list<record>, Instances: list<record>, LaunchConfigurations: list<record>, LaunchTemplates: list<record>, LoadBalancers: list<record>, Triggers: list<record>, Queues: list<record>>> {
+]: nothing -> oneof<record<EnvironmentResources: record<EnvironmentName: string, AutoScalingGroups: list<record>, Instances: list<record>, LaunchConfigurations: list<record>, LaunchTemplates: list<record>, LoadBalancers: list<record>, Triggers: list<record>, Queues: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DescribeEnvironmentResources")
@@ -2752,7 +2776,7 @@ export def "post-describe-environment-resources" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<EnvironmentResources: record<EnvironmentName: string, AutoScalingGroups: list<record>, Instances: list<record>, LaunchConfigurations: list<record>, LaunchTemplates: list<record>, LoadBalancers: list<record>, Triggers: list<record>, Queues: list<record>>> {
+]: any -> oneof<record<EnvironmentResources: record<EnvironmentName: string, AutoScalingGroups: list<record>, Instances: list<record>, LaunchConfigurations: list<record>, LaunchTemplates: list<record>, LoadBalancers: list<record>, Triggers: list<record>, Queues: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2811,7 +2835,7 @@ export def "get-describe-environments" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Environments: table<EnvironmentName: string, EnvironmentId: string, ApplicationName: string, VersionLabel: string, SolutionStackName: string, PlatformArn: string, TemplateName: string, Description: string, EndpointURL: string, CNAME: string, DateCreated: string, DateUpdated: string, Status: string, AbortableOperationInProgress: bool, Health: string, HealthStatus: string, Resources: record, Tier: record, EnvironmentLinks: list, EnvironmentArn: string, OperationsRole: string>, NextToken: string> {
+]: nothing -> oneof<record<Environments: table<EnvironmentName: string, EnvironmentId: string, ApplicationName: string, VersionLabel: string, SolutionStackName: string, PlatformArn: string, TemplateName: string, Description: string, EndpointURL: string, CNAME: string, DateCreated: string, DateUpdated: string, Status: string, AbortableOperationInProgress: bool, Health: string, HealthStatus: string, Resources: record, Tier: record, EnvironmentLinks: list, EnvironmentArn: string, OperationsRole: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DescribeEnvironments")
@@ -2860,7 +2884,7 @@ export def "post-describe-environments" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Environments: table<EnvironmentName: string, EnvironmentId: string, ApplicationName: string, VersionLabel: string, SolutionStackName: string, PlatformArn: string, TemplateName: string, Description: string, EndpointURL: string, CNAME: string, DateCreated: string, DateUpdated: string, Status: string, AbortableOperationInProgress: bool, Health: string, HealthStatus: string, Resources: record, Tier: record, EnvironmentLinks: list, EnvironmentArn: string, OperationsRole: string>, NextToken: string> {
+]: any -> oneof<record<Environments: table<EnvironmentName: string, EnvironmentId: string, ApplicationName: string, VersionLabel: string, SolutionStackName: string, PlatformArn: string, TemplateName: string, Description: string, EndpointURL: string, CNAME: string, DateCreated: string, DateUpdated: string, Status: string, AbortableOperationInProgress: bool, Health: string, HealthStatus: string, Resources: record, Tier: record, EnvironmentLinks: list, EnvironmentArn: string, OperationsRole: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2923,7 +2947,7 @@ export def "get-describe-events" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Events: table<EventDate: string, Message: string, ApplicationName: string, VersionLabel: string, TemplateName: string, EnvironmentName: string, PlatformArn: string, RequestId: string, Severity: string>, NextToken: string> {
+]: nothing -> oneof<record<Events: table<EventDate: string, Message: string, ApplicationName: string, VersionLabel: string, TemplateName: string, EnvironmentName: string, PlatformArn: string, RequestId: string, Severity: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DescribeEvents")
@@ -2974,7 +2998,7 @@ export def "post-describe-events" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Events: table<EventDate: string, Message: string, ApplicationName: string, VersionLabel: string, TemplateName: string, EnvironmentName: string, PlatformArn: string, RequestId: string, Severity: string>, NextToken: string> {
+]: any -> oneof<record<Events: table<EventDate: string, Message: string, ApplicationName: string, VersionLabel: string, TemplateName: string, EnvironmentName: string, PlatformArn: string, RequestId: string, Severity: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3029,7 +3053,7 @@ export def "get-describe-instances-health" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<InstanceHealthList: table<InstanceId: string, HealthStatus: string, Color: string, Causes: list, LaunchedAt: string, ApplicationMetrics: record, System: record, Deployment: record, AvailabilityZone: string, InstanceType: string>, RefreshedAt: string, NextToken: string> {
+]: nothing -> oneof<record<InstanceHealthList: table<InstanceId: string, HealthStatus: string, Color: string, Causes: list, LaunchedAt: string, ApplicationMetrics: record, System: record, Deployment: record, AvailabilityZone: string, InstanceType: string>, RefreshedAt: string, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DescribeInstancesHealth")
@@ -3078,7 +3102,7 @@ export def "post-describe-instances-health" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<InstanceHealthList: table<InstanceId: string, HealthStatus: string, Color: string, Causes: list, LaunchedAt: string, ApplicationMetrics: record, System: record, Deployment: record, AvailabilityZone: string, InstanceType: string>, RefreshedAt: string, NextToken: string> {
+]: any -> oneof<record<InstanceHealthList: table<InstanceId: string, HealthStatus: string, Color: string, Causes: list, LaunchedAt: string, ApplicationMetrics: record, System: record, Deployment: record, AvailabilityZone: string, InstanceType: string>, RefreshedAt: string, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3130,7 +3154,7 @@ export def "get-describe-platform-version" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<PlatformDescription: record<PlatformArn: string, PlatformOwner: string, PlatformName: string, PlatformVersion: string, SolutionStackName: string, PlatformStatus: string, DateCreated: string, DateUpdated: string, PlatformCategory: string, Description: string, Maintainer: string, OperatingSystemName: string, OperatingSystemVersion: string, ProgrammingLanguages: list<record>, Frameworks: list<record>, CustomAmiList: list<record>, SupportedTierList: list<string>, SupportedAddonList: list<string>, PlatformLifecycleState: string, PlatformBranchName: string, PlatformBranchLifecycleState: string>> {
+]: nothing -> oneof<record<PlatformDescription: record<PlatformArn: string, PlatformOwner: string, PlatformName: string, PlatformVersion: string, SolutionStackName: string, PlatformStatus: string, DateCreated: string, DateUpdated: string, PlatformCategory: string, Description: string, Maintainer: string, OperatingSystemName: string, OperatingSystemVersion: string, ProgrammingLanguages: list<record>, Frameworks: list<record>, CustomAmiList: list<record>, SupportedTierList: list<string>, SupportedAddonList: list<string>, PlatformLifecycleState: string, PlatformBranchName: string, PlatformBranchLifecycleState: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DescribePlatformVersion")
@@ -3179,7 +3203,7 @@ export def "post-describe-platform-version" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<PlatformDescription: record<PlatformArn: string, PlatformOwner: string, PlatformName: string, PlatformVersion: string, SolutionStackName: string, PlatformStatus: string, DateCreated: string, DateUpdated: string, PlatformCategory: string, Description: string, Maintainer: string, OperatingSystemName: string, OperatingSystemVersion: string, ProgrammingLanguages: list<record>, Frameworks: list<record>, CustomAmiList: list<record>, SupportedTierList: list<string>, SupportedAddonList: list<string>, PlatformLifecycleState: string, PlatformBranchName: string, PlatformBranchLifecycleState: string>> {
+]: any -> oneof<record<PlatformDescription: record<PlatformArn: string, PlatformOwner: string, PlatformName: string, PlatformVersion: string, SolutionStackName: string, PlatformStatus: string, DateCreated: string, DateUpdated: string, PlatformCategory: string, Description: string, Maintainer: string, OperatingSystemName: string, OperatingSystemVersion: string, ProgrammingLanguages: list<record>, Frameworks: list<record>, CustomAmiList: list<record>, SupportedTierList: list<string>, SupportedAddonList: list<string>, PlatformLifecycleState: string, PlatformBranchName: string, PlatformBranchLifecycleState: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3332,7 +3356,7 @@ export def "get-list-available-solution-stacks" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<SolutionStacks: list<string>, SolutionStackDetails: table<SolutionStackName: string, PermittedFileTypes: list>> {
+]: nothing -> oneof<record<SolutionStacks: list<string>, SolutionStackDetails: table<SolutionStackName: string, PermittedFileTypes: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "ListAvailableSolutionStacks")
@@ -3380,7 +3404,7 @@ export def "post-list-available-solution-stacks" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<SolutionStacks: list<string>, SolutionStackDetails: table<SolutionStackName: string, PermittedFileTypes: list>> {
+]: nothing -> oneof<record<SolutionStacks: list<string>, SolutionStackDetails: table<SolutionStackName: string, PermittedFileTypes: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "ListAvailableSolutionStacks")
@@ -3431,7 +3455,7 @@ export def "get-list-platform-branches" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<PlatformBranchSummaryList: table<PlatformName: string, BranchName: string, LifecycleState: string, BranchOrder: int, SupportedTierList: list>, NextToken: string> {
+]: nothing -> oneof<record<PlatformBranchSummaryList: table<PlatformName: string, BranchName: string, LifecycleState: string, BranchOrder: int, SupportedTierList: list>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "ListPlatformBranches")
@@ -3482,7 +3506,7 @@ export def "post-list-platform-branches" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<PlatformBranchSummaryList: table<PlatformName: string, BranchName: string, LifecycleState: string, BranchOrder: int, SupportedTierList: list>, NextToken: string> {
+]: any -> oneof<record<PlatformBranchSummaryList: table<PlatformName: string, BranchName: string, LifecycleState: string, BranchOrder: int, SupportedTierList: list>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3536,7 +3560,7 @@ export def "get-list-platform-versions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<PlatformSummaryList: table<PlatformArn: string, PlatformOwner: string, PlatformStatus: string, PlatformCategory: string, OperatingSystemName: string, OperatingSystemVersion: string, SupportedTierList: list, SupportedAddonList: list, PlatformLifecycleState: string, PlatformVersion: string, PlatformBranchName: string, PlatformBranchLifecycleState: string>, NextToken: string> {
+]: nothing -> oneof<record<PlatformSummaryList: table<PlatformArn: string, PlatformOwner: string, PlatformStatus: string, PlatformCategory: string, OperatingSystemName: string, OperatingSystemVersion: string, SupportedTierList: list, SupportedAddonList: list, PlatformLifecycleState: string, PlatformVersion: string, PlatformBranchName: string, PlatformBranchLifecycleState: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "ListPlatformVersions")
@@ -3587,7 +3611,7 @@ export def "post-list-platform-versions" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<PlatformSummaryList: table<PlatformArn: string, PlatformOwner: string, PlatformStatus: string, PlatformCategory: string, OperatingSystemName: string, OperatingSystemVersion: string, SupportedTierList: list, SupportedAddonList: list, PlatformLifecycleState: string, PlatformVersion: string, PlatformBranchName: string, PlatformBranchLifecycleState: string>, NextToken: string> {
+]: any -> oneof<record<PlatformSummaryList: table<PlatformArn: string, PlatformOwner: string, PlatformStatus: string, PlatformCategory: string, OperatingSystemName: string, OperatingSystemVersion: string, SupportedTierList: list, SupportedAddonList: list, PlatformLifecycleState: string, PlatformVersion: string, PlatformBranchName: string, PlatformBranchLifecycleState: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3639,7 +3663,7 @@ export def "get-list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ResourceArn: string, ResourceTags: table<Key: string, Value: string>> {
+]: nothing -> oneof<record<ResourceArn: string, ResourceTags: table<Key: string, Value: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn == null) { error make --unspanned { msg: "required query parameter 'ResourceArn' missing: pass --resource-arn" } }
@@ -3689,7 +3713,7 @@ export def "post-list-tags-for-resource" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<ResourceArn: string, ResourceTags: table<Key: string, Value: string>> {
+]: any -> oneof<record<ResourceArn: string, ResourceTags: table<Key: string, Value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4051,7 +4075,7 @@ export def "get-retrieve-environment-info" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<EnvironmentInfo: table<InfoType: string, Ec2InstanceId: string, SampleTimestamp: string, Message: string>> {
+]: nothing -> oneof<record<EnvironmentInfo: table<InfoType: string, Ec2InstanceId: string, SampleTimestamp: string, Message: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($info_type == null) { error make --unspanned { msg: "required query parameter 'InfoType' missing: pass --info-type" } }
@@ -4101,7 +4125,7 @@ export def "post-retrieve-environment-info" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<EnvironmentInfo: table<InfoType: string, Ec2InstanceId: string, SampleTimestamp: string, Message: string>> {
+]: any -> oneof<record<EnvironmentInfo: table<InfoType: string, Ec2InstanceId: string, SampleTimestamp: string, Message: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4260,7 +4284,7 @@ export def "get-terminate-environment" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<EnvironmentName: string, EnvironmentId: string, ApplicationName: string, VersionLabel: string, SolutionStackName: string, PlatformArn: string, TemplateName: string, Description: string, EndpointURL: string, CNAME: string, DateCreated: string, DateUpdated: string, Status: string, AbortableOperationInProgress: bool, Health: string, HealthStatus: string, Resources: record<LoadBalancer: record<LoadBalancerName: string, Domain: string, Listeners: list>>, Tier: record<Name: string, Type: string, Version: string>, EnvironmentLinks: table<LinkName: string, EnvironmentName: string>, EnvironmentArn: string, OperationsRole: string> {
+]: nothing -> oneof<record<EnvironmentName: string, EnvironmentId: string, ApplicationName: string, VersionLabel: string, SolutionStackName: string, PlatformArn: string, TemplateName: string, Description: string, EndpointURL: string, CNAME: string, DateCreated: string, DateUpdated: string, Status: string, AbortableOperationInProgress: bool, Health: string, HealthStatus: string, Resources: record<LoadBalancer: record<LoadBalancerName: string, Domain: string, Listeners: list>>, Tier: record<Name: string, Type: string, Version: string>, EnvironmentLinks: table<LinkName: string, EnvironmentName: string>, EnvironmentArn: string, OperationsRole: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "TerminateEnvironment")
@@ -4309,7 +4333,7 @@ export def "post-terminate-environment" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<EnvironmentName: string, EnvironmentId: string, ApplicationName: string, VersionLabel: string, SolutionStackName: string, PlatformArn: string, TemplateName: string, Description: string, EndpointURL: string, CNAME: string, DateCreated: string, DateUpdated: string, Status: string, AbortableOperationInProgress: bool, Health: string, HealthStatus: string, Resources: record<LoadBalancer: record<LoadBalancerName: string, Domain: string, Listeners: list>>, Tier: record<Name: string, Type: string, Version: string>, EnvironmentLinks: table<LinkName: string, EnvironmentName: string>, EnvironmentArn: string, OperationsRole: string> {
+]: any -> oneof<record<EnvironmentName: string, EnvironmentId: string, ApplicationName: string, VersionLabel: string, SolutionStackName: string, PlatformArn: string, TemplateName: string, Description: string, EndpointURL: string, CNAME: string, DateCreated: string, DateUpdated: string, Status: string, AbortableOperationInProgress: bool, Health: string, HealthStatus: string, Resources: record<LoadBalancer: record<LoadBalancerName: string, Domain: string, Listeners: list>>, Tier: record<Name: string, Type: string, Version: string>, EnvironmentLinks: table<LinkName: string, EnvironmentName: string>, EnvironmentArn: string, OperationsRole: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4362,7 +4386,7 @@ export def "get-update-application" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Application: record<ApplicationArn: string, ApplicationName: string, Description: string, DateCreated: string, DateUpdated: string, Versions: list<string>, ConfigurationTemplates: list<string>, ResourceLifecycleConfig: record<ServiceRole: string, VersionLifecycleConfig: record>>> {
+]: nothing -> oneof<record<Application: record<ApplicationArn: string, ApplicationName: string, Description: string, DateCreated: string, DateUpdated: string, Versions: list<string>, ConfigurationTemplates: list<string>, ResourceLifecycleConfig: record<ServiceRole: string, VersionLifecycleConfig: record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($application_name == null) { error make --unspanned { msg: "required query parameter 'ApplicationName' missing: pass --application-name" } }
@@ -4412,7 +4436,7 @@ export def "post-update-application" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Application: record<ApplicationArn: string, ApplicationName: string, Description: string, DateCreated: string, DateUpdated: string, Versions: list<string>, ConfigurationTemplates: list<string>, ResourceLifecycleConfig: record<ServiceRole: string, VersionLifecycleConfig: record>>> {
+]: any -> oneof<record<Application: record<ApplicationArn: string, ApplicationName: string, Description: string, DateCreated: string, DateUpdated: string, Versions: list<string>, ConfigurationTemplates: list<string>, ResourceLifecycleConfig: record<ServiceRole: string, VersionLifecycleConfig: record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4465,7 +4489,7 @@ export def "get-update-application-resource-lifecycle" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ApplicationName: string, ResourceLifecycleConfig: record<ServiceRole: string, VersionLifecycleConfig: record<MaxCountRule: record, MaxAgeRule: record>>> {
+]: nothing -> oneof<record<ApplicationName: string, ResourceLifecycleConfig: record<ServiceRole: string, VersionLifecycleConfig: record<MaxCountRule: record, MaxAgeRule: record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($application_name == null) { error make --unspanned { msg: "required query parameter 'ApplicationName' missing: pass --application-name" } }
@@ -4516,7 +4540,7 @@ export def "post-update-application-resource-lifecycle" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<ApplicationName: string, ResourceLifecycleConfig: record<ServiceRole: string, VersionLifecycleConfig: record<MaxCountRule: record, MaxAgeRule: record>>> {
+]: any -> oneof<record<ApplicationName: string, ResourceLifecycleConfig: record<ServiceRole: string, VersionLifecycleConfig: record<MaxCountRule: record, MaxAgeRule: record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4570,7 +4594,7 @@ export def "get-update-application-version" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ApplicationVersion: record<ApplicationVersionArn: string, ApplicationName: string, Description: string, VersionLabel: string, SourceBuildInformation: record<SourceType: string, SourceRepository: string, SourceLocation: string>, BuildArn: string, SourceBundle: record<S3Bucket: string, S3Key: string>, DateCreated: string, DateUpdated: string, Status: string>> {
+]: nothing -> oneof<record<ApplicationVersion: record<ApplicationVersionArn: string, ApplicationName: string, Description: string, VersionLabel: string, SourceBuildInformation: record<SourceType: string, SourceRepository: string, SourceLocation: string>, BuildArn: string, SourceBundle: record<S3Bucket: string, S3Key: string>, DateCreated: string, DateUpdated: string, Status: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($application_name == null) { error make --unspanned { msg: "required query parameter 'ApplicationName' missing: pass --application-name" } }
@@ -4621,7 +4645,7 @@ export def "post-update-application-version" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<ApplicationVersion: record<ApplicationVersionArn: string, ApplicationName: string, Description: string, VersionLabel: string, SourceBuildInformation: record<SourceType: string, SourceRepository: string, SourceLocation: string>, BuildArn: string, SourceBundle: record<S3Bucket: string, S3Key: string>, DateCreated: string, DateUpdated: string, Status: string>> {
+]: any -> oneof<record<ApplicationVersion: record<ApplicationVersionArn: string, ApplicationName: string, Description: string, VersionLabel: string, SourceBuildInformation: record<SourceType: string, SourceRepository: string, SourceLocation: string>, BuildArn: string, SourceBundle: record<S3Bucket: string, S3Key: string>, DateCreated: string, DateUpdated: string, Status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4677,7 +4701,7 @@ export def "get-update-configuration-template" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<SolutionStackName: string, PlatformArn: string, ApplicationName: string, TemplateName: string, Description: string, EnvironmentName: string, DeploymentStatus: string, DateCreated: string, DateUpdated: string, OptionSettings: table<ResourceName: string, Namespace: string, OptionName: string, Value: string>> {
+]: nothing -> oneof<record<SolutionStackName: string, PlatformArn: string, ApplicationName: string, TemplateName: string, Description: string, EnvironmentName: string, DeploymentStatus: string, DateCreated: string, DateUpdated: string, OptionSettings: table<ResourceName: string, Namespace: string, OptionName: string, Value: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($application_name == null) { error make --unspanned { msg: "required query parameter 'ApplicationName' missing: pass --application-name" } }
@@ -4728,7 +4752,7 @@ export def "post-update-configuration-template" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<SolutionStackName: string, PlatformArn: string, ApplicationName: string, TemplateName: string, Description: string, EnvironmentName: string, DeploymentStatus: string, DateCreated: string, DateUpdated: string, OptionSettings: table<ResourceName: string, Namespace: string, OptionName: string, Value: string>> {
+]: any -> oneof<record<SolutionStackName: string, PlatformArn: string, ApplicationName: string, TemplateName: string, Description: string, EnvironmentName: string, DeploymentStatus: string, DateCreated: string, DateUpdated: string, OptionSettings: table<ResourceName: string, Namespace: string, OptionName: string, Value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4791,7 +4815,7 @@ export def "get-update-environment" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<EnvironmentName: string, EnvironmentId: string, ApplicationName: string, VersionLabel: string, SolutionStackName: string, PlatformArn: string, TemplateName: string, Description: string, EndpointURL: string, CNAME: string, DateCreated: string, DateUpdated: string, Status: string, AbortableOperationInProgress: bool, Health: string, HealthStatus: string, Resources: record<LoadBalancer: record<LoadBalancerName: string, Domain: string, Listeners: list>>, Tier: record<Name: string, Type: string, Version: string>, EnvironmentLinks: table<LinkName: string, EnvironmentName: string>, EnvironmentArn: string, OperationsRole: string> {
+]: nothing -> oneof<record<EnvironmentName: string, EnvironmentId: string, ApplicationName: string, VersionLabel: string, SolutionStackName: string, PlatformArn: string, TemplateName: string, Description: string, EndpointURL: string, CNAME: string, DateCreated: string, DateUpdated: string, Status: string, AbortableOperationInProgress: bool, Health: string, HealthStatus: string, Resources: record<LoadBalancer: record<LoadBalancerName: string, Domain: string, Listeners: list>>, Tier: record<Name: string, Type: string, Version: string>, EnvironmentLinks: table<LinkName: string, EnvironmentName: string>, EnvironmentArn: string, OperationsRole: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "UpdateEnvironment")
@@ -4840,7 +4864,7 @@ export def "post-update-environment" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<EnvironmentName: string, EnvironmentId: string, ApplicationName: string, VersionLabel: string, SolutionStackName: string, PlatformArn: string, TemplateName: string, Description: string, EndpointURL: string, CNAME: string, DateCreated: string, DateUpdated: string, Status: string, AbortableOperationInProgress: bool, Health: string, HealthStatus: string, Resources: record<LoadBalancer: record<LoadBalancerName: string, Domain: string, Listeners: list>>, Tier: record<Name: string, Type: string, Version: string>, EnvironmentLinks: table<LinkName: string, EnvironmentName: string>, EnvironmentArn: string, OperationsRole: string> {
+]: any -> oneof<record<EnvironmentName: string, EnvironmentId: string, ApplicationName: string, VersionLabel: string, SolutionStackName: string, PlatformArn: string, TemplateName: string, Description: string, EndpointURL: string, CNAME: string, DateCreated: string, DateUpdated: string, Status: string, AbortableOperationInProgress: bool, Health: string, HealthStatus: string, Resources: record<LoadBalancer: record<LoadBalancerName: string, Domain: string, Listeners: list>>, Tier: record<Name: string, Type: string, Version: string>, EnvironmentLinks: table<LinkName: string, EnvironmentName: string>, EnvironmentArn: string, OperationsRole: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4999,7 +5023,7 @@ export def "get-validate-configuration-settings" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Messages: table<Message: string, Severity: string, Namespace: string, OptionName: string>> {
+]: nothing -> oneof<record<Messages: table<Message: string, Severity: string, Namespace: string, OptionName: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($application_name == null) { error make --unspanned { msg: "required query parameter 'ApplicationName' missing: pass --application-name" } }
@@ -5050,7 +5074,7 @@ export def "post-validate-configuration-settings" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Messages: table<Message: string, Severity: string, Namespace: string, OptionName: string>> {
+]: any -> oneof<record<Messages: table<Message: string, Severity: string, Namespace: string, OptionName: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

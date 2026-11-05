@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -125,9 +149,9 @@ def type-completer [] { ["ANDROID_APP_DATA_STREAM" "DATA_STREAM_TYPE_UNSPECIFIED
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "analyticsadmin-account-summaries-list" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["analyticsadmin-account-summaries-list" "analyticsadmin-accounts-list" "analyticsadmin-accounts-provision-account-ticket" "analyticsadmin-properties-list" "analyticsadmin-properties-create" "analyticsadmin-accounts-search-change-history-events" "analyticsadmin-properties-run-access-report" "analyticsadmin-properties-google-ads-links-delete" "analyticsadmin-properties-data-streams-measurement-protocol-secrets-get" "analyticsadmin-properties-google-ads-links-patch" "analyticsadmin-properties-custom-metrics-archive" "analyticsadmin-properties-conversion-events-list" "analyticsadmin-properties-conversion-events-create" "analyticsadmin-properties-custom-dimensions-list" "analyticsadmin-properties-custom-dimensions-create" "analyticsadmin-properties-custom-metrics-list" "analyticsadmin-properties-custom-metrics-create" "analyticsadmin-properties-data-streams-list" "analyticsadmin-properties-data-streams-create" "analyticsadmin-properties-firebase-links-list" "analyticsadmin-properties-firebase-links-create" "analyticsadmin-properties-google-ads-links-list" "analyticsadmin-properties-google-ads-links-create" "analyticsadmin-properties-data-streams-measurement-protocol-secrets-list" "analyticsadmin-properties-data-streams-measurement-protocol-secrets-create" "analyticsadmin-properties-acknowledge-user-data-collection" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -172,7 +196,7 @@ export def "analyticsadmin-account-summaries-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # The maximum number of AccountSummary resources to return. The service may return fewer than this value, even if there are additional pages. If unspecified, at most 50 resources will be returned. The maximum value is 200; (higher values will be coerced to the maximum)
   --page-token: string # A page token, received from a previous `ListAccountSummaries` call. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to `ListAccountSummaries` must match the call that provided the page token.
-]: nothing -> record<accountSummaries: table<account: string, displayName: string, name: string, propertySummaries: list>, nextPageToken: string> {
+]: nothing -> oneof<record<accountSummaries: table<account: string, displayName: string, name: string, propertySummaries: list>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -221,7 +245,7 @@ export def "analyticsadmin-accounts-list" [
   --page-size: int # The maximum number of resources to return. The service may return fewer than this value, even if there are additional pages. If unspecified, at most 50 resources will be returned. The maximum value is 200; (higher values will be coerced to the maximum)
   --page-token: string # A page token, received from a previous `ListAccounts` call. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to `ListAccounts` must match the call that provided the page token.
   --show-deleted: oneof<nothing, bool> # Whether to include soft-deleted (ie: "trashed") Accounts in the results. Accounts can be inspected to determine whether they are deleted or not.
-]: nothing -> record<accounts: table<createTime: string, deleted: bool, displayName: string, name: string, regionCode: string, updateTime: string>, nextPageToken: string> {
+]: nothing -> oneof<record<accounts: table<createTime: string, deleted: bool, displayName: string, name: string, regionCode: string, updateTime: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "showDeleted" $show_deleted "scalar")] | flatten | str join "&"
@@ -246,7 +270,6 @@ export def "analyticsadmin-accounts-list" [
 #
 # POST /v1beta/accounts:provisionAccountTicket
 # operationId: analyticsadmin.accounts.provisionAccountTicket
-# --account shape: {displayName?: string, regionCode?: string}
 export def "analyticsadmin-accounts-provision-account-ticket" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -270,7 +293,7 @@ export def "analyticsadmin-accounts-provision-account-ticket" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --account: record # A resource message representing a Google Analytics account. — shape: {displayName?: string, regionCode?: string}
   --redirect-uri: string # Redirect URI where the user will be sent after accepting Terms of Service. Must be configured in Cloud Console as a Redirect URI.
-]: any -> record<accountTicketId: string> {
+]: any -> oneof<record<accountTicketId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -323,7 +346,7 @@ export def "analyticsadmin-properties-list" [
   --page-size: int # The maximum number of resources to return. The service may return fewer than this value, even if there are additional pages. If unspecified, at most 50 resources will be returned. The maximum value is 200; (higher values will be coerced to the maximum)
   --page-token: string # A page token, received from a previous `ListProperties` call. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to `ListProperties` must match the call that provided the page token.
   --show-deleted: oneof<nothing, bool> # Whether to include soft-deleted (ie: "trashed") Properties in the results. Properties can be inspected to determine whether they are deleted or not.
-]: nothing -> record<nextPageToken: string, properties: table<account: string, createTime: string, currencyCode: string, deleteTime: string, displayName: string, expireTime: string, industryCategory: string, name: string, parent: string, propertyType: string, serviceLevel: string, timeZone: string, updateTime: string>> {
+]: nothing -> oneof<record<nextPageToken: string, properties: table<account: string, createTime: string, currencyCode: string, deleteTime: string, displayName: string, expireTime: string, industryCategory: string, name: string, parent: string, propertyType: string, serviceLevel: string, timeZone: string, updateTime: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "showDeleted" $show_deleted "scalar")] | flatten | str join "&"
@@ -376,7 +399,7 @@ export def "analyticsadmin-properties-create" [
   --parent: string # Immutable. Resource name of this property's logical parent. Note: The Property-Moving UI can be used to change the parent. Format: accounts/{account}, properties/{property} Example: "accounts/100", "properties/101"
   --property-type: string@property-type-completer # Immutable. The property type for this Property resource. When creating a property, if the type is "PROPERTY_TYPE_UNSPECIFIED", then "ORDINARY_PROPERTY" will be implied. "SUBPROPERTY" and "ROLLUP_PROPERTY" types cannot yet be created with the Google Analytics Admin API.
   --time-zone: string # Required. Reporting Time Zone, used as the day boundary for reports, regardless of where the data originates. If the time zone honors DST, Analytics will automatically adjust for the changes. NOTE: Changing the time zone only affects data going forward, and is not applied retroactively. Format: https://www.iana.org/time-zones Example: "America/Los_Angeles"
-]: any -> record<account: string, createTime: string, currencyCode: string, deleteTime: string, displayName: string, expireTime: string, industryCategory: string, name: string, parent: string, propertyType: string, serviceLevel: string, timeZone: string, updateTime: string> {
+]: any -> oneof<record<account: string, createTime: string, currencyCode: string, deleteTime: string, displayName: string, expireTime: string, industryCategory: string, name: string, parent: string, propertyType: string, serviceLevel: string, timeZone: string, updateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -434,7 +457,7 @@ export def "analyticsadmin-accounts-search-change-history-events" [
   --page-token: string # Optional. A page token, received from a previous `SearchChangeHistoryEvents` call. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to `SearchChangeHistoryEvents` must match the call that provided the page token.
   --property: string # Optional. Resource name for a child property. If set, only return changes made to this property or its child resources.
   --resource-type: list<string> # Optional. If set, only return changes if they are for a resource that matches at least one of these types.
-]: any -> record<changeHistoryEvents: table<actorType: string, changeTime: string, changes: list, changesFiltered: bool, id: string, userActorEmail: string>, nextPageToken: string> {
+]: any -> oneof<record<changeHistoryEvents: table<actorType: string, changeTime: string, changes: list, changesFiltered: bool, id: string, userActorEmail: string>, nextPageToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -463,12 +486,6 @@ export def "analyticsadmin-accounts-search-change-history-events" [
 #
 # POST /v1beta/{entity}:runAccessReport
 # operationId: analyticsadmin.properties.runAccessReport
-# --dateRanges item shape: {endDate?: string, startDate?: string}
-# --dimensionFilter shape: {accessFilter?: record, andGroup?: record, notExpression?: record, orGroup?: record}
-# --dimensions item shape: {dimensionName?: string}
-# --metricFilter shape: {accessFilter?: record, andGroup?: record, notExpression?: record, orGroup?: record}
-# --metrics item shape: {metricName?: string}
-# --orderBys item shape: {desc?: bool, dimension?: record, metric?: record}
 export def "analyticsadmin-properties-run-access-report" [
   entity: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -501,7 +518,7 @@ export def "analyticsadmin-properties-run-access-report" [
   --order-bys: list # Specifies how rows are ordered in the response. — item shape: {desc?: bool, dimension?: record, metric?: record}
   --return-entity-quota: oneof<nothing, bool> # Toggles whether to return the current state of this Analytics Property's quota. Quota is returned in [AccessQuota](#AccessQuota). For account-level requests, this field must be false.
   --time-zone: string # This request's time zone if specified. If unspecified, the property's time zone is used. The request's time zone is used to interpret the start & end dates of the report. Formatted as strings from the IANA Time Zone database (https://www.iana.org/time-zones); for example "America/New_York" or "Asia/Tokyo".
-]: any -> record<dimensionHeaders: table<dimensionName: string>, metricHeaders: table<metricName: string>, quota: record<concurrentRequests: record<consumed: int, remaining: int>, serverErrorsPerProjectPerHour: record<consumed: int, remaining: int>, tokensPerDay: record<consumed: int, remaining: int>, tokensPerHour: record<consumed: int, remaining: int>, tokensPerProjectPerHour: record<consumed: int, remaining: int>>, rowCount: int, rows: table<dimensionValues: list, metricValues: list>> {
+]: any -> oneof<record<dimensionHeaders: table<dimensionName: string>, metricHeaders: table<metricName: string>, quota: record<concurrentRequests: record<consumed: int, remaining: int>, serverErrorsPerProjectPerHour: record<consumed: int, remaining: int>, tokensPerDay: record<consumed: int, remaining: int>, tokensPerHour: record<consumed: int, remaining: int>, tokensPerProjectPerHour: record<consumed: int, remaining: int>>, rowCount: int, rows: table<dimensionValues: list, metricValues: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -552,7 +569,7 @@ export def "analyticsadmin-properties-google-ads-links-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -600,7 +617,7 @@ export def "analyticsadmin-properties-data-streams-measurement-protocol-secrets-
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<displayName: string, name: string, secretValue: string> {
+]: nothing -> oneof<record<displayName: string, name: string, secretValue: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -651,7 +668,7 @@ export def "analyticsadmin-properties-google-ads-links-patch" [
   --update-mask: string # Required. The list of fields to be updated. Field names must be in snake case (e.g., "field_to_update"). Omitted fields will not be updated. To replace the entire entity, use one path with the string "*" to match all fields.
   --ads-personalization-enabled: oneof<nothing, bool> # Enable personalized advertising features with this integration. Automatically publish my Google Analytics audience lists and Google Analytics remarketing events/parameters to the linked Google Ads account. If this field is not set on create/update, it will be defaulted to true.
   --customer-id: string # Immutable. Google Ads customer ID.
-]: any -> record<adsPersonalizationEnabled: bool, canManageClients: bool, createTime: string, creatorEmailAddress: string, customerId: string, name: string, updateTime: string> {
+]: any -> oneof<record<adsPersonalizationEnabled: bool, canManageClients: bool, createTime: string, creatorEmailAddress: string, customerId: string, name: string, updateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -703,7 +720,7 @@ export def "analyticsadmin-properties-custom-metrics-archive" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -756,7 +773,7 @@ export def "analyticsadmin-properties-conversion-events-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # The maximum number of resources to return. If unspecified, at most 50 resources will be returned. The maximum value is 200; (higher values will be coerced to the maximum)
   --page-token: string # A page token, received from a previous `ListConversionEvents` call. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to `ListConversionEvents` must match the call that provided the page token.
-]: nothing -> record<conversionEvents: table<createTime: string, custom: bool, deletable: bool, eventName: string, name: string>, nextPageToken: string> {
+]: nothing -> oneof<record<conversionEvents: table<createTime: string, custom: bool, deletable: bool, eventName: string, name: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -805,7 +822,7 @@ export def "analyticsadmin-properties-conversion-events-create" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --event-name: string # Immutable. The event name for this conversion event. Examples: 'click', 'purchase'
-]: any -> record<createTime: string, custom: bool, deletable: bool, eventName: string, name: string> {
+]: any -> oneof<record<createTime: string, custom: bool, deletable: bool, eventName: string, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -858,7 +875,7 @@ export def "analyticsadmin-properties-custom-dimensions-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # The maximum number of resources to return. If unspecified, at most 50 resources will be returned. The maximum value is 200 (higher values will be coerced to the maximum).
   --page-token: string # A page token, received from a previous `ListCustomDimensions` call. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to `ListCustomDimensions` must match the call that provided the page token.
-]: nothing -> record<customDimensions: table<description: string, disallowAdsPersonalization: bool, displayName: string, name: string, parameterName: string, scope: string>, nextPageToken: string> {
+]: nothing -> oneof<record<customDimensions: table<description: string, disallowAdsPersonalization: bool, displayName: string, name: string, parameterName: string, scope: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -911,7 +928,7 @@ export def "analyticsadmin-properties-custom-dimensions-create" [
   --display-name: string # Required. Display name for this custom dimension as shown in the Analytics UI. Max length of 82 characters, alphanumeric plus space and underscore starting with a letter. Legacy system-generated display names may contain square brackets, but updates to this field will never permit square brackets.
   --parameter-name: string # Required. Immutable. Tagging parameter name for this custom dimension. If this is a user-scoped dimension, then this is the user property name. If this is an event-scoped dimension, then this is the event parameter name. If this is an item-scoped dimension, then this is the parameter name found in the eCommerce items array. May only contain alphanumeric and underscore characters, starting with a letter. Max length of 24 characters for user-scoped dimensions, 40 characters for event-scoped dimensions.
   --scope: string@scope-completer # Required. Immutable. The scope of this dimension.
-]: any -> record<description: string, disallowAdsPersonalization: bool, displayName: string, name: string, parameterName: string, scope: string> {
+]: any -> oneof<record<description: string, disallowAdsPersonalization: bool, displayName: string, name: string, parameterName: string, scope: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -964,7 +981,7 @@ export def "analyticsadmin-properties-custom-metrics-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # The maximum number of resources to return. If unspecified, at most 50 resources will be returned. The maximum value is 200 (higher values will be coerced to the maximum).
   --page-token: string # A page token, received from a previous `ListCustomMetrics` call. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to `ListCustomMetrics` must match the call that provided the page token.
-]: nothing -> record<customMetrics: table<description: string, displayName: string, measurementUnit: string, name: string, parameterName: string, restrictedMetricType: list, scope: string>, nextPageToken: string> {
+]: nothing -> oneof<record<customMetrics: table<description: string, displayName: string, measurementUnit: string, name: string, parameterName: string, restrictedMetricType: list, scope: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1018,7 +1035,7 @@ export def "analyticsadmin-properties-custom-metrics-create" [
   --parameter-name: string # Required. Immutable. Tagging name for this custom metric. If this is an event-scoped metric, then this is the event parameter name. May only contain alphanumeric and underscore charactes, starting with a letter. Max length of 40 characters for event-scoped metrics.
   --restricted-metric-type: list<string> # Optional. Types of restricted data that this metric may contain. Required for metrics with CURRENCY measurement unit. Must be empty for metrics with a non-CURRENCY measurement unit.
   --scope: string@scope-completer-1 # Required. Immutable. The scope of this custom metric.
-]: any -> record<description: string, displayName: string, measurementUnit: string, name: string, parameterName: string, restrictedMetricType: list<string>, scope: string> {
+]: any -> oneof<record<description: string, displayName: string, measurementUnit: string, name: string, parameterName: string, restrictedMetricType: list<string>, scope: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1071,7 +1088,7 @@ export def "analyticsadmin-properties-data-streams-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # The maximum number of resources to return. If unspecified, at most 50 resources will be returned. The maximum value is 200 (higher values will be coerced to the maximum).
   --page-token: string # A page token, received from a previous `ListDataStreams` call. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to `ListDataStreams` must match the call that provided the page token.
-]: nothing -> record<dataStreams: table<androidAppStreamData: record, createTime: string, displayName: string, iosAppStreamData: record, name: string, type: string, updateTime: string, webStreamData: record>, nextPageToken: string> {
+]: nothing -> oneof<record<dataStreams: table<androidAppStreamData: record, createTime: string, displayName: string, iosAppStreamData: record, name: string, type: string, updateTime: string, webStreamData: record>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1097,9 +1114,6 @@ export def "analyticsadmin-properties-data-streams-list" [
 #
 # POST /v1beta/{parent}/dataStreams
 # operationId: analyticsadmin.properties.dataStreams.create
-# --androidAppStreamData shape: {packageName?: string}
-# --iosAppStreamData shape: {bundleId?: string}
-# --webStreamData shape: {defaultUri?: string}
 export def "analyticsadmin-properties-data-streams-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1127,7 +1141,7 @@ export def "analyticsadmin-properties-data-streams-create" [
   --ios-app-stream-data: record # Data specific to iOS app streams. — shape: {bundleId?: string}
   --type: string@type-completer # Required. Immutable. The type of this DataStream resource.
   --web-stream-data: record # Data specific to web streams. — shape: {defaultUri?: string}
-]: any -> record<androidAppStreamData: record<firebaseAppId: string, packageName: string>, createTime: string, displayName: string, iosAppStreamData: record<bundleId: string, firebaseAppId: string>, name: string, type: string, updateTime: string, webStreamData: record<defaultUri: string, firebaseAppId: string, measurementId: string>> {
+]: any -> oneof<record<androidAppStreamData: record<firebaseAppId: string, packageName: string>, createTime: string, displayName: string, iosAppStreamData: record<bundleId: string, firebaseAppId: string>, name: string, type: string, updateTime: string, webStreamData: record<defaultUri: string, firebaseAppId: string, measurementId: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1180,7 +1194,7 @@ export def "analyticsadmin-properties-firebase-links-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # The maximum number of resources to return. The service may return fewer than this value, even if there are additional pages. If unspecified, at most 50 resources will be returned. The maximum value is 200; (higher values will be coerced to the maximum)
   --page-token: string # A page token, received from a previous `ListFirebaseLinks` call. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to `ListFirebaseLinks` must match the call that provided the page token.
-]: nothing -> record<firebaseLinks: table<createTime: string, name: string, project: string>, nextPageToken: string> {
+]: nothing -> oneof<record<firebaseLinks: table<createTime: string, name: string, project: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1229,7 +1243,7 @@ export def "analyticsadmin-properties-firebase-links-create" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --project: string # Immutable. Firebase project resource name. When creating a FirebaseLink, you may provide this resource name using either a project number or project ID. Once this resource has been created, returned FirebaseLinks will always have a project_name that contains a project number. Format: 'projects/{project number}' Example: 'projects/1234'
-]: any -> record<createTime: string, name: string, project: string> {
+]: any -> oneof<record<createTime: string, name: string, project: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1282,7 +1296,7 @@ export def "analyticsadmin-properties-google-ads-links-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # The maximum number of resources to return. If unspecified, at most 50 resources will be returned. The maximum value is 200 (higher values will be coerced to the maximum).
   --page-token: string # A page token, received from a previous `ListGoogleAdsLinks` call. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to `ListGoogleAdsLinks` must match the call that provided the page token.
-]: nothing -> record<googleAdsLinks: table<adsPersonalizationEnabled: bool, canManageClients: bool, createTime: string, creatorEmailAddress: string, customerId: string, name: string, updateTime: string>, nextPageToken: string> {
+]: nothing -> oneof<record<googleAdsLinks: table<adsPersonalizationEnabled: bool, canManageClients: bool, createTime: string, creatorEmailAddress: string, customerId: string, name: string, updateTime: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1332,7 +1346,7 @@ export def "analyticsadmin-properties-google-ads-links-create" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --ads-personalization-enabled: oneof<nothing, bool> # Enable personalized advertising features with this integration. Automatically publish my Google Analytics audience lists and Google Analytics remarketing events/parameters to the linked Google Ads account. If this field is not set on create/update, it will be defaulted to true.
   --customer-id: string # Immutable. Google Ads customer ID.
-]: any -> record<adsPersonalizationEnabled: bool, canManageClients: bool, createTime: string, creatorEmailAddress: string, customerId: string, name: string, updateTime: string> {
+]: any -> oneof<record<adsPersonalizationEnabled: bool, canManageClients: bool, createTime: string, creatorEmailAddress: string, customerId: string, name: string, updateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1385,7 +1399,7 @@ export def "analyticsadmin-properties-data-streams-measurement-protocol-secrets-
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # The maximum number of resources to return. If unspecified, at most 10 resources will be returned. The maximum value is 10. Higher values will be coerced to the maximum.
   --page-token: string # A page token, received from a previous `ListMeasurementProtocolSecrets` call. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to `ListMeasurementProtocolSecrets` must match the call that provided the page token.
-]: nothing -> record<measurementProtocolSecrets: table<displayName: string, name: string, secretValue: string>, nextPageToken: string> {
+]: nothing -> oneof<record<measurementProtocolSecrets: table<displayName: string, name: string, secretValue: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1434,7 +1448,7 @@ export def "analyticsadmin-properties-data-streams-measurement-protocol-secrets-
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --display-name: string # Required. Human-readable display name for this secret.
-]: any -> record<displayName: string, name: string, secretValue: string> {
+]: any -> oneof<record<displayName: string, name: string, secretValue: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1486,7 +1500,7 @@ export def "analyticsadmin-properties-acknowledge-user-data-collection" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --acknowledgement: string # Required. An acknowledgement that the caller of this method understands the terms of user data collection. This field must contain the exact value: "I acknowledge that I have the necessary privacy disclosures and rights from my end users for the collection and processing of their data, including the association of such data with the visitation information Google Analytics collects from my site and/or app property."
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

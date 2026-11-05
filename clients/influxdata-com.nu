@@ -14,27 +14,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -42,8 +51,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -54,7 +68,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -89,7 +112,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -141,9 +165,9 @@ def accept-completer-3 [] { ["application/json"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-routes" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-routes" "get-authorizations" "post-authorizations" "delete-authorizations-id" "get-authorizations-id" "patch-authorizations-id" "get-buckets" "post-buckets" "delete-buckets-id" "get-buckets-id" "patch-buckets-id" "get-buckets-id-labels" "post-buckets-id-labels" "delete-buckets-id-labels-id" "get-buckets-id-members" "post-buckets-id-members" "delete-buckets-id-members-id" "get-buckets-id-owners" "post-buckets-id-owners" "delete-buckets-id-owners-id" "get-checks" "create-check" "delete-checks-id" "get-checks-id" "patch-checks-id" "put-checks-id" "get-checks-id-labels" "post-checks-id-labels" "delete-checks-id-labels-id" "get-checks-id-query" "get-dashboards" "post-dashboards" "delete-dashboards-id" "get-dashboards-id" "patch-dashboards-id" "post-dashboards-id-cells" "put-dashboards-id-cells" "delete-dashboards-id-cells-id" "patch-dashboards-id-cells-id" "get-dashboards-id-cells-id-view" "patch-dashboards-id-cells-id-view" "get-dashboards-id-labels" "post-dashboards-id-labels" "delete-dashboards-id-labels-id" "get-dashboards-id-members" "post-dashboards-id-members" "delete-dashboards-id-members-id" "get-dashboards-id-owners" "post-dashboards-id-owners" "delete-dashboards-id-owners-id" "get-dbr-ps" "post-dbrp" "delete-dbrpid" "get-dbr-ps-id" "patch-dbrpid" "post-delete" "get-documents-templates" "post-documents-templates" "delete-documents-templates-id" "get-documents-templates-id" "put-documents-templates-id" "get-documents-templates-id-labels" "post-documents-templates-id-labels" "delete-documents-templates-id-labels-id" "get-flags" "get-health" "get-labels" "post-labels" "delete-labels-id" "get-labels-id" "patch-labels-id" "get-me" "put-me-password" "get-notification-endpoints" "create-notification-endpoint" "delete-notification-endpoints-id" "get-notification-endpoints-id" "patch-notification-endpoints-id" "put-notification-endpoints-id" "get-notification-endpoints-id-labels" "post-notification-endpoint-id-labels" "delete-notification-endpoints-id-labels-id" "get-notification-rules" "create-notification-rule" "delete-notification-rules-id" "get-notification-rules-id" "patch-notification-rules-id" "put-notification-rules-id" "get-notification-rules-id-labels" "post-notification-rule-id-labels" "delete-notification-rules-id-labels-id" "get-notification-rules-id-query" "get-orgs" "post-orgs" "delete-orgs-id" "get-orgs-id" "patch-orgs-id" "get-orgs-id-members" "post-orgs-id-members" "delete-orgs-id-members-id" "get-orgs-id-owners" "post-orgs-id-owners" "delete-orgs-id-owners-id" "get-orgs-id-secrets" "patch-orgs-id-secrets" "post-orgs-id-secrets" "post-query" "post-query-analyze" "post-query-ast" "get-query-suggestions" "get-query-suggestions-name" "get-ready" "get-scrapers" "post-scrapers" "delete-scrapers-id" "get-scrapers-id" "patch-scrapers-id" "get-scrapers-id-labels" "post-scrapers-id-labels" "delete-scrapers-id-labels-id" "get-scrapers-id-members" "post-scrapers-id-members" "delete-scrapers-id-members-id" "get-scrapers-id-owners" "post-scrapers-id-owners" "delete-scrapers-id-owners-id" "get-setup" "post-setup" "post-signin" "post-signout" "get-sources" "post-sources" "delete-sources-id" "get-sources-id" "patch-sources-id" "get-sources-id-buckets" "get-sources-id-health" "list-stacks" "create-stack" "delete-stack" "read-stack" "update-stack" "uninstall-stack" "get-tasks" "post-tasks" "delete-tasks-id" "get-tasks-id" "patch-tasks-id" "get-tasks-id-labels" "post-tasks-id-labels" "delete-tasks-id-labels-id" "get-tasks-id-logs" "get-tasks-id-members" "post-tasks-id-members" "delete-tasks-id-members-id" "get-tasks-id-owners" "post-tasks-id-owners" "delete-tasks-id-owners-id" "get-tasks-id-runs" "post-tasks-id-runs" "delete-tasks-id-runs-id" "get-tasks-id-runs-id" "get-tasks-id-runs-id-logs" "post-tasks-id-runs-id-retry" "get-telegraf-plugins" "get-telegrafs" "post-telegrafs" "delete-telegrafs-id" "get-telegrafs-id" "put-telegrafs-id" "get-telegrafs-id-labels" "post-telegrafs-id-labels" "delete-telegrafs-id-labels-id" "get-telegrafs-id-members" "post-telegrafs-id-members" "delete-telegrafs-id-members-id" "get-telegrafs-id-owners" "post-telegrafs-id-owners" "delete-telegrafs-id-owners-id" "apply-template" "export-template" "get-users" "post-users" "delete-users-id" "get-users-id" "patch-users-id" "post-users-id-password" "get-variables" "post-variables" "delete-variables-id" "get-variables-id" "patch-variables-id" "put-variables-id" "get-variables-id-labels" "post-variables-id-labels" "delete-variables-id-labels-id" "post-write" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -176,7 +200,7 @@ export def "get-routes" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<authorizations: string, buckets: string, dashboards: string, external: record<statusFeed: string>, flags: string, me: string, orgs: string, query: record<analyze: string, ast: string, self: string, suggestions: string>, setup: string, signin: string, signout: string, sources: string, system: record<debug: string, health: string, metrics: string>, tasks: string, telegrafs: string, users: string, variables: string, write: string> {
+]: nothing -> oneof<record<authorizations: string, buckets: string, dashboards: string, external: record<statusFeed: string>, flags: string, me: string, orgs: string, query: record<analyze: string, ast: string, self: string, suggestions: string>, setup: string, signin: string, signout: string, sources: string, system: record<debug: string, health: string, metrics: string>, tasks: string, telegrafs: string, users: string, variables: string, write: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/" $auth.query)
@@ -217,7 +241,7 @@ export def "get-authorizations" [
   --org-id: string # Only show authorizations that belong to an organization ID.
   --org: string # Only show authorizations that belong to a organization name.
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<authorizations: table<description: string, status: string, createdAt: string, id: string, links: record, org: string, orgID: string, permissions: list, token: string, updatedAt: string, user: string, userID: string>, links: record<next: string, prev: string, self: string>> {
+]: nothing -> oneof<record<authorizations: table<description: string, status: string, createdAt: string, id: string, links: record, org: string, orgID: string, permissions: list, token: string, updatedAt: string, user: string, userID: string>, links: record<next: string, prev: string, self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "userID" $user_id "scalar") (serialize-qp "user" $user "scalar") (serialize-qp "orgID" $org_id "scalar") (serialize-qp "org" $org "scalar")] | flatten | str join "&"
@@ -244,7 +268,6 @@ export def "get-authorizations" [
 #
 # POST /authorizations
 # operationId: PostAuthorizations
-# --permissions item shape: {action: "read"|"write", resource: record}
 export def "post-authorizations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -261,7 +284,7 @@ export def "post-authorizations" [
   org_id: string # ID of org that authorization is scoped to.
   permissions: list # List of permissions for an auth. An auth must have at least one Permission. — item shape: {action: "read"|"write", resource: record}
   --user-id: string # ID of user that authorization is scoped to.
-]: any -> record<description: string, status: string, createdAt: string, id: string, links: record<self: string, user: string>, org: string, orgID: string, permissions: table<action: string, resource: record>, token: string, updatedAt: string, user: string, userID: string> {
+]: any -> oneof<record<description: string, status: string, createdAt: string, id: string, links: record<self: string, user: string>, org: string, orgID: string, permissions: table<action: string, resource: record>, token: string, updatedAt: string, user: string, userID: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -341,7 +364,7 @@ export def "get-authorizations-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<description: string, status: string, createdAt: string, id: string, links: record<self: string, user: string>, org: string, orgID: string, permissions: table<action: string, resource: record>, token: string, updatedAt: string, user: string, userID: string> {
+]: nothing -> oneof<record<description: string, status: string, createdAt: string, id: string, links: record<self: string, user: string>, org: string, orgID: string, permissions: table<action: string, resource: record>, token: string, updatedAt: string, user: string, userID: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($auth_id | is-empty) { error make --unspanned { msg: "path parameter 'authID' must be non-empty" } }
@@ -382,7 +405,7 @@ export def "patch-authorizations-id" [
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   --description: string # A description of the token.
   --status: string@status-completer # If inactive the token is inactive and requests using the token will be rejected. (default: active)
-]: any -> record<description: string, status: string, createdAt: string, id: string, links: record<self: string, user: string>, org: string, orgID: string, permissions: table<action: string, resource: record>, token: string, updatedAt: string, user: string, userID: string> {
+]: any -> oneof<record<description: string, status: string, createdAt: string, id: string, links: record<self: string, user: string>, org: string, orgID: string, permissions: table<action: string, resource: record>, token: string, updatedAt: string, user: string, userID: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -430,7 +453,7 @@ export def "get-buckets" [
   --name: string # Only returns buckets with a specific name.
   --id: string # Only returns buckets with a specific ID.
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<buckets: table<createdAt: string, description: string, id: string, labels: list, links: record, name: string, orgID: string, retentionRules: list, rp: string, schemaType: string, type: string, updatedAt: string>, links: record<next: string, prev: string, self: string>> {
+]: nothing -> oneof<record<buckets: table<createdAt: string, description: string, id: string, labels: list, links: record, name: string, orgID: string, retentionRules: list, rp: string, schemaType: string, type: string, updatedAt: string>, links: record<next: string, prev: string, self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "after" $after "scalar") (serialize-qp "org" $org "scalar") (serialize-qp "orgID" $org_id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
@@ -457,7 +480,6 @@ export def "get-buckets" [
 #
 # POST /buckets
 # operationId: PostBuckets
-# --retentionRules item shape: {everySeconds: int, shardGroupDurationSeconds?: int, type: "expire"}
 export def "post-buckets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -475,7 +497,7 @@ export def "post-buckets" [
   retention_rules: list # Rules to expire or retain data. No rules means data never expires. — item shape: {everySeconds: int, shardGroupDurationSeconds?: int, type: "expire"}
   --rp: string
   --schema-type: string@schema-type-completer
-]: any -> record<createdAt: string, description: string, id: string, labels: table<id: string, name: string, orgID: string, properties: record>, links: record<labels: string, members: string, org: string, owners: string, self: string, write: string>, name: string, orgID: string, retentionRules: table<everySeconds: int, shardGroupDurationSeconds: int, type: string>, rp: string, schemaType: string, type: string, updatedAt: string> {
+]: any -> oneof<record<createdAt: string, description: string, id: string, labels: table<id: string, name: string, orgID: string, properties: record>, links: record<labels: string, members: string, org: string, owners: string, self: string, write: string>, name: string, orgID: string, retentionRules: table<everySeconds: int, shardGroupDurationSeconds: int, type: string>, rp: string, schemaType: string, type: string, updatedAt: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -555,7 +577,7 @@ export def "get-buckets-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<createdAt: string, description: string, id: string, labels: table<id: string, name: string, orgID: string, properties: record>, links: record<labels: string, members: string, org: string, owners: string, self: string, write: string>, name: string, orgID: string, retentionRules: table<everySeconds: int, shardGroupDurationSeconds: int, type: string>, rp: string, schemaType: string, type: string, updatedAt: string> {
+]: nothing -> oneof<record<createdAt: string, description: string, id: string, labels: table<id: string, name: string, orgID: string, properties: record>, links: record<labels: string, members: string, org: string, owners: string, self: string, write: string>, name: string, orgID: string, retentionRules: table<everySeconds: int, shardGroupDurationSeconds: int, type: string>, rp: string, schemaType: string, type: string, updatedAt: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket_id | is-empty) { error make --unspanned { msg: "path parameter 'bucketID' must be non-empty" } }
@@ -582,7 +604,6 @@ export def "get-buckets-id" [
 #
 # PATCH /buckets/{bucketID}
 # operationId: PatchBucketsID
-# --retentionRules item shape: {everySeconds?: int, shardGroupDurationSeconds?: int, type: "expire"}
 export def "patch-buckets-id" [
   bucket_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -598,7 +619,7 @@ export def "patch-buckets-id" [
   --description: string
   --name: string
   --retention-rules: list # Updates to rules to expire or retain data. No rules means no updates. — item shape: {everySeconds?: int, shardGroupDurationSeconds?: int, type: "expire"}
-]: any -> record<createdAt: string, description: string, id: string, labels: table<id: string, name: string, orgID: string, properties: record>, links: record<labels: string, members: string, org: string, owners: string, self: string, write: string>, name: string, orgID: string, retentionRules: table<everySeconds: int, shardGroupDurationSeconds: int, type: string>, rp: string, schemaType: string, type: string, updatedAt: string> {
+]: any -> oneof<record<createdAt: string, description: string, id: string, labels: table<id: string, name: string, orgID: string, properties: record>, links: record<labels: string, members: string, org: string, owners: string, self: string, write: string>, name: string, orgID: string, retentionRules: table<everySeconds: int, shardGroupDurationSeconds: int, type: string>, rp: string, schemaType: string, type: string, updatedAt: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -640,7 +661,7 @@ export def "get-buckets-id-labels" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<labels: table<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>> {
+]: nothing -> oneof<record<labels: table<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket_id | is-empty) { error make --unspanned { msg: "path parameter 'bucketID' must be non-empty" } }
@@ -680,7 +701,7 @@ export def "post-buckets-id-labels" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   --label-id: string
-]: any -> record<label: record<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>> {
+]: any -> oneof<record<label: record<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -763,7 +784,7 @@ export def "get-buckets-id-members" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<links: record<self: string>, users: table<id: string, links: record, name: string, oauthID: string, status: string, role: string>> {
+]: nothing -> oneof<record<links: record<self: string>, users: table<id: string, links: record, name: string, oauthID: string, status: string, role: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket_id | is-empty) { error make --unspanned { msg: "path parameter 'bucketID' must be non-empty" } }
@@ -804,7 +825,7 @@ export def "post-buckets-id-members" [
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   id: string
   --name: string
-]: any -> record<id: string, links: record<self: string>, name: string, oauthID: string, status: string, role: string> {
+]: any -> oneof<record<id: string, links: record<self: string>, name: string, oauthID: string, status: string, role: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -887,7 +908,7 @@ export def "get-buckets-id-owners" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<links: record<self: string>, users: table<id: string, links: record, name: string, oauthID: string, status: string, role: string>> {
+]: nothing -> oneof<record<links: record<self: string>, users: table<id: string, links: record, name: string, oauthID: string, status: string, role: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket_id | is-empty) { error make --unspanned { msg: "path parameter 'bucketID' must be non-empty" } }
@@ -928,7 +949,7 @@ export def "post-buckets-id-owners" [
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   id: string
   --name: string
-]: any -> record<id: string, links: record<self: string>, name: string, oauthID: string, status: string, role: string> {
+]: any -> oneof<record<id: string, links: record<self: string>, name: string, oauthID: string, status: string, role: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1013,7 +1034,7 @@ export def "get-checks" [
   --limit: int # default: 20
   --org-id: string # Only show checks that belong to a specific organization ID. (required)
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<checks: list<record>, links: record<next: string, prev: string, self: string>> {
+]: nothing -> oneof<record<checks: list<record>, links: record<next: string, prev: string, self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($org_id == null) { error make --unspanned { msg: "required query parameter 'orgID' missing: pass --org-id" } }
@@ -1052,7 +1073,7 @@ export def "create-check" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1130,7 +1151,7 @@ export def "get-checks-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($check_id | is-empty) { error make --unspanned { msg: "path parameter 'checkID' must be non-empty" } }
@@ -1172,7 +1193,7 @@ export def "patch-checks-id" [
   --description: string
   --name: string
   --status: string@status-completer
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1215,7 +1236,7 @@ export def "put-checks-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   --body: record
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1257,7 +1278,7 @@ export def "get-checks-id-labels" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<labels: table<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>> {
+]: nothing -> oneof<record<labels: table<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($check_id | is-empty) { error make --unspanned { msg: "path parameter 'checkID' must be non-empty" } }
@@ -1297,7 +1318,7 @@ export def "post-checks-id-labels" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   --label-id: string
-]: any -> record<label: record<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>> {
+]: any -> oneof<record<label: record<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1380,7 +1401,7 @@ export def "get-checks-id-query" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<flux: string> {
+]: nothing -> oneof<record<flux: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($check_id | is-empty) { error make --unspanned { msg: "path parameter 'checkID' must be non-empty" } }
@@ -1426,7 +1447,7 @@ export def "get-dashboards" [
   --org-id: string # The identifier of the organization.
   --org: string # The name of the organization.
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<dashboards: table<description: string, name: string, orgID: string, cells: list, id: string, labels: list, links: record, meta: record>, links: record<next: string, prev: string, self: string>> {
+]: nothing -> oneof<record<dashboards: table<description: string, name: string, orgID: string, cells: list, id: string, labels: list, links: record, meta: record>, links: record<next: string, prev: string, self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "descending" $descending "scalar") (serialize-qp "owner" $owner "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "id" $id "multi") (serialize-qp "orgID" $org_id "scalar") (serialize-qp "org" $org "scalar")] | flatten | str join "&"
@@ -1576,7 +1597,6 @@ export def "get-dashboards-id" [
 #
 # PATCH /dashboards/{dashboardID}
 # operationId: PatchDashboardsID
-# --cells shape: {h?: int, id?: string, links?: record, viewID?: string, w?: int, x?: int, y?: int, name?: string, properties?: any}
 export def "patch-dashboards-id" [
   dashboard_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1592,7 +1612,7 @@ export def "patch-dashboards-id" [
   --cells: record # shape: {h?: int, id?: string, links?: record, viewID?: string, w?: int, x?: int, y?: int, name?: string, properties?: any}
   --description: string # optional, when provided will replace the description
   --name: string # optional, when provided will replace the name
-]: any -> record<description: string, name: string, orgID: string, cells: table<h: int, id: string, links: record, viewID: string, w: int, x: int, y: int>, id: string, labels: table<id: string, name: string, orgID: string, properties: record>, links: record<cells: string, labels: string, members: string, org: string, owners: string, self: string>, meta: record<createdAt: string, updatedAt: string>> {
+]: any -> oneof<record<description: string, name: string, orgID: string, cells: table<h: int, id: string, links: record, viewID: string, w: int, x: int, y: int>, id: string, labels: table<id: string, name: string, orgID: string, properties: record>, links: record<cells: string, labels: string, members: string, org: string, owners: string, self: string>, meta: record<createdAt: string, updatedAt: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1640,7 +1660,7 @@ export def "post-dashboards-id-cells" [
   --w: int # format: int32
   --x: int # format: int32
   --y: int # format: int32
-]: any -> record<h: int, id: string, links: record<self: string, view: string>, viewID: string, w: int, x: int, y: int> {
+]: any -> oneof<record<h: int, id: string, links: record<self: string, view: string>, viewID: string, w: int, x: int, y: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1683,7 +1703,7 @@ export def "put-dashboards-id-cells" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   --body: list
-]: any -> record<description: string, name: string, orgID: string, cells: table<h: int, id: string, links: record, viewID: string, w: int, x: int, y: int>, id: string, labels: table<id: string, name: string, orgID: string, properties: record>, links: record<cells: string, labels: string, members: string, org: string, owners: string, self: string>, meta: record<createdAt: string, updatedAt: string>> {
+]: any -> oneof<record<description: string, name: string, orgID: string, cells: table<h: int, id: string, links: record, viewID: string, w: int, x: int, y: int>, id: string, labels: table<id: string, name: string, orgID: string, properties: record>, links: record<cells: string, labels: string, members: string, org: string, owners: string, self: string>, meta: record<createdAt: string, updatedAt: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1771,7 +1791,7 @@ export def "patch-dashboards-id-cells-id" [
   --w: int # format: int32
   --x: int # format: int32
   --y: int # format: int32
-]: any -> record<h: int, id: string, links: record<self: string, view: string>, viewID: string, w: int, x: int, y: int> {
+]: any -> oneof<record<h: int, id: string, links: record<self: string, view: string>, viewID: string, w: int, x: int, y: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1815,7 +1835,7 @@ export def "get-dashboards-id-cells-id-view" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<id: string, links: record<self: string>, name: string, properties: any> {
+]: nothing -> oneof<record<id: string, links: record<self: string>, name: string, properties: any>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($dashboard_id | is-empty) { error make --unspanned { msg: "path parameter 'dashboardID' must be non-empty" } }
@@ -1843,7 +1863,6 @@ export def "get-dashboards-id-cells-id-view" [
 #
 # PATCH /dashboards/{dashboardID}/cells/{cellID}/view
 # operationId: PatchDashboardsIDCellsIDView
-# --links shape: {self?: string}
 export def "patch-dashboards-id-cells-id-view" [
   dashboard_id: string
   cell_id: string
@@ -1859,7 +1878,7 @@ export def "patch-dashboards-id-cells-id-view" [
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   name: string
   properties: any
-]: any -> record<id: string, links: record<self: string>, name: string, properties: any> {
+]: any -> oneof<record<id: string, links: record<self: string>, name: string, properties: any>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1902,7 +1921,7 @@ export def "get-dashboards-id-labels" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<labels: table<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>> {
+]: nothing -> oneof<record<labels: table<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($dashboard_id | is-empty) { error make --unspanned { msg: "path parameter 'dashboardID' must be non-empty" } }
@@ -1942,7 +1961,7 @@ export def "post-dashboards-id-labels" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   --label-id: string
-]: any -> record<label: record<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>> {
+]: any -> oneof<record<label: record<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2025,7 +2044,7 @@ export def "get-dashboards-id-members" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<links: record<self: string>, users: table<id: string, links: record, name: string, oauthID: string, status: string, role: string>> {
+]: nothing -> oneof<record<links: record<self: string>, users: table<id: string, links: record, name: string, oauthID: string, status: string, role: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($dashboard_id | is-empty) { error make --unspanned { msg: "path parameter 'dashboardID' must be non-empty" } }
@@ -2066,7 +2085,7 @@ export def "post-dashboards-id-members" [
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   id: string
   --name: string
-]: any -> record<id: string, links: record<self: string>, name: string, oauthID: string, status: string, role: string> {
+]: any -> oneof<record<id: string, links: record<self: string>, name: string, oauthID: string, status: string, role: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2149,7 +2168,7 @@ export def "get-dashboards-id-owners" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<links: record<self: string>, users: table<id: string, links: record, name: string, oauthID: string, status: string, role: string>> {
+]: nothing -> oneof<record<links: record<self: string>, users: table<id: string, links: record, name: string, oauthID: string, status: string, role: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($dashboard_id | is-empty) { error make --unspanned { msg: "path parameter 'dashboardID' must be non-empty" } }
@@ -2190,7 +2209,7 @@ export def "post-dashboards-id-owners" [
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   id: string
   --name: string
-]: any -> record<id: string, links: record<self: string>, name: string, oauthID: string, status: string, role: string> {
+]: any -> oneof<record<id: string, links: record<self: string>, name: string, oauthID: string, status: string, role: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2278,7 +2297,7 @@ export def "get-dbr-ps" [
   --db: string # Specifies the database to filter on
   --rp: string # Specifies the retention policy to filter on
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<content: table<bucketID: string, database: string, default: bool, id: string, links: record, org: string, orgID: string, retention_policy: string>> {
+]: nothing -> oneof<record<content: table<bucketID: string, database: string, default: bool, id: string, links: record, org: string, orgID: string, retention_policy: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($org_id == null) { error make --unspanned { msg: "required query parameter 'orgID' missing: pass --org-id" } }
@@ -2317,14 +2336,14 @@ export def "post-dbrp" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-  --bucket-id: string # the bucket ID used as target for the translation.
-  --database: string # InfluxDB v1 database
+  bucket_id: string # the bucket ID used as target for the translation.
+  database: string # InfluxDB v1 database
   --default: oneof<nothing, bool> # Specify if this mapping represents the default retention policy for the database specificed.
   --links: record
   --org: string # the organization that owns this mapping.
   --org-id: string # the organization ID that owns this mapping.
-  --retention-policy: string # InfluxDB v1 retention policy
-]: any -> record<bucketID: string, database: string, default: bool, id: string, links: record<next: string, prev: string, self: string>, org: string, orgID: string, retention_policy: string> {
+  retention_policy: string # InfluxDB v1 retention policy
+]: any -> oneof<record<bucketID: string, database: string, default: bool, id: string, links: record<next: string, prev: string, self: string>, org: string, orgID: string, retention_policy: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2408,7 +2427,7 @@ export def "get-dbr-ps-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --org-id: string # Specifies the organization ID of the mapping (required)
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<bucketID: string, database: string, default: bool, id: string, links: record<next: string, prev: string, self: string>, org: string, orgID: string, retention_policy: string> {
+]: nothing -> oneof<record<bucketID: string, database: string, default: bool, id: string, links: record<next: string, prev: string, self: string>, org: string, orgID: string, retention_policy: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($dbrp_id | is-empty) { error make --unspanned { msg: "path parameter 'dbrpID' must be non-empty" } }
@@ -2454,7 +2473,7 @@ export def "patch-dbrpid" [
   --default: oneof<nothing, bool>
   --links: record
   --retention-policy: string # InfluxDB v1 retention policy
-]: any -> record<bucketID: string, database: string, default: bool, id: string, links: record<next: string, prev: string, self: string>, org: string, orgID: string, retention_policy: string> {
+]: any -> oneof<record<bucketID: string, database: string, default: bool, id: string, links: record<next: string, prev: string, self: string>, org: string, orgID: string, retention_policy: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2547,7 +2566,7 @@ export def "get-documents-templates" [
   --org: string # Specifies the name of the organization of the template.
   --org-id: string # Specifies the organization ID of the template.
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<documents: table<id: string, labels: list, links: record, meta: record>> {
+]: nothing -> oneof<record<documents: table<id: string, labels: list, links: record, meta: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "org" $org "scalar") (serialize-qp "orgID" $org_id "scalar")] | flatten | str join "&"
@@ -2574,7 +2593,6 @@ export def "get-documents-templates" [
 #
 # POST /documents/templates
 # operationId: PostDocumentsTemplates
-# --meta shape: {description?: string, name: string, templateID?: string, type?: string, version: string}
 export def "post-documents-templates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2591,7 +2609,7 @@ export def "post-documents-templates" [
   meta: record # shape: {description?: string, name: string, templateID?: string, type?: string, version: string}
   --org: string # The organization Name. Specify either `orgID` or `org`.
   --org-id: string # The organization Name. Specify either `orgID` or `org`.
-]: any -> record<content: record, id: string, labels: table<id: string, name: string, orgID: string, properties: record>, links: record<self: string>, meta: record<createdAt: string, description: string, name: string, templateID: string, type: string, updatedAt: string, version: string>> {
+]: any -> oneof<record<content: record, id: string, labels: table<id: string, name: string, orgID: string, properties: record>, links: record<self: string>, meta: record<createdAt: string, description: string, name: string, templateID: string, type: string, updatedAt: string, version: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2671,7 +2689,7 @@ export def "get-documents-templates-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<content: record, id: string, labels: table<id: string, name: string, orgID: string, properties: record>, links: record<self: string>, meta: record<createdAt: string, description: string, name: string, templateID: string, type: string, updatedAt: string, version: string>> {
+]: nothing -> oneof<record<content: record, id: string, labels: table<id: string, name: string, orgID: string, properties: record>, links: record<self: string>, meta: record<createdAt: string, description: string, name: string, templateID: string, type: string, updatedAt: string, version: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateID' must be non-empty" } }
@@ -2698,7 +2716,6 @@ export def "get-documents-templates-id" [
 #
 # PUT /documents/templates/{templateID}
 # operationId: PutDocumentsTemplatesID
-# --meta shape: {description?: string, name: string, templateID?: string, type?: string, version: string}
 export def "put-documents-templates-id" [
   template_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2713,7 +2730,7 @@ export def "put-documents-templates-id" [
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   --content: record
   --meta: record # shape: {description?: string, name: string, templateID?: string, type?: string, version: string}
-]: any -> record<content: record, id: string, labels: table<id: string, name: string, orgID: string, properties: record>, links: record<self: string>, meta: record<createdAt: string, description: string, name: string, templateID: string, type: string, updatedAt: string, version: string>> {
+]: any -> oneof<record<content: record, id: string, labels: table<id: string, name: string, orgID: string, properties: record>, links: record<self: string>, meta: record<createdAt: string, description: string, name: string, templateID: string, type: string, updatedAt: string, version: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2755,7 +2772,7 @@ export def "get-documents-templates-id-labels" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<labels: table<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>> {
+]: nothing -> oneof<record<labels: table<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateID' must be non-empty" } }
@@ -2795,7 +2812,7 @@ export def "post-documents-templates-id-labels" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   --label-id: string
-]: any -> record<label: record<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>> {
+]: any -> oneof<record<label: record<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2877,7 +2894,7 @@ export def "get-flags" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/flags" $auth.query)
@@ -2914,7 +2931,7 @@ export def "get-health" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<checks: list<any>, commit: string, message: string, name: string, status: string, version: string> {
+]: nothing -> oneof<record<checks: list<any>, commit: string, message: string, name: string, status: string, version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/health" $auth.query)
@@ -2952,7 +2969,7 @@ export def "get-labels" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --org-id: string # The organization ID.
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<labels: table<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>> {
+]: nothing -> oneof<record<labels: table<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "orgID" $org_id "scalar")] | flatten | str join "&"
@@ -2992,7 +3009,7 @@ export def "post-labels" [
   name: string
   org_id: string
   --properties: record # Key/Value pairs associated with this label. Keys can be removed by sending an update with an empty value. (e.g. {color: ffb3b3, description: this is a description})
-]: any -> record<label: record<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>> {
+]: any -> oneof<record<label: record<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3070,7 +3087,7 @@ export def "get-labels-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<label: record<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>> {
+]: nothing -> oneof<record<label: record<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($label_id | is-empty) { error make --unspanned { msg: "path parameter 'labelID' must be non-empty" } }
@@ -3111,7 +3128,7 @@ export def "patch-labels-id" [
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   --name: string
   --properties: record # Key/Value pairs associated with this label. Keys can be removed by sending an update with an empty value. (e.g. {color: ffb3b3, description: this is a description})
-]: any -> record<label: record<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>> {
+]: any -> oneof<record<label: record<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3152,7 +3169,7 @@ export def "get-me" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<id: string, links: record<self: string>, name: string, oauthID: string, status: string> {
+]: nothing -> oneof<record<id: string, links: record<self: string>, name: string, oauthID: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/me" $auth.query)
@@ -3233,7 +3250,7 @@ export def "get-notification-endpoints" [
   --limit: int # default: 20
   --org-id: string # Only show notification endpoints that belong to specific organization ID. (required)
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<links: record<next: string, prev: string, self: string>, notificationEndpoints: list<record>> {
+]: nothing -> oneof<record<links: record<next: string, prev: string, self: string>, notificationEndpoints: list<record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($org_id == null) { error make --unspanned { msg: "required query parameter 'orgID' missing: pass --org-id" } }
@@ -3272,7 +3289,7 @@ export def "create-notification-endpoint" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3350,7 +3367,7 @@ export def "get-notification-endpoints-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($endpoint_id | is-empty) { error make --unspanned { msg: "path parameter 'endpointID' must be non-empty" } }
@@ -3392,7 +3409,7 @@ export def "patch-notification-endpoints-id" [
   --description: string
   --name: string
   --status: string@status-completer
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3435,7 +3452,7 @@ export def "put-notification-endpoints-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   --body: record
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3477,7 +3494,7 @@ export def "get-notification-endpoints-id-labels" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<labels: table<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>> {
+]: nothing -> oneof<record<labels: table<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($endpoint_id | is-empty) { error make --unspanned { msg: "path parameter 'endpointID' must be non-empty" } }
@@ -3517,7 +3534,7 @@ export def "post-notification-endpoint-id-labels" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   --label-id: string
-]: any -> record<label: record<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>> {
+]: any -> oneof<record<label: record<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3604,7 +3621,7 @@ export def "get-notification-rules" [
   --check-id: string # Only show notifications that belong to the specific check ID.
   --tag: string # Only return notification rules that "would match" statuses which contain the tag key value pairs provided. (e.g. env:prod)
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<links: record<next: string, prev: string, self: string>, notificationRules: list<record>> {
+]: nothing -> oneof<record<links: record<next: string, prev: string, self: string>, notificationRules: list<record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($org_id == null) { error make --unspanned { msg: "required query parameter 'orgID' missing: pass --org-id" } }
@@ -3643,7 +3660,7 @@ export def "create-notification-rule" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3721,7 +3738,7 @@ export def "get-notification-rules-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($rule_id | is-empty) { error make --unspanned { msg: "path parameter 'ruleID' must be non-empty" } }
@@ -3763,7 +3780,7 @@ export def "patch-notification-rules-id" [
   --description: string
   --name: string
   --status: string@status-completer
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3806,7 +3823,7 @@ export def "put-notification-rules-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   --body: record
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3848,7 +3865,7 @@ export def "get-notification-rules-id-labels" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<labels: table<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>> {
+]: nothing -> oneof<record<labels: table<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($rule_id | is-empty) { error make --unspanned { msg: "path parameter 'ruleID' must be non-empty" } }
@@ -3888,7 +3905,7 @@ export def "post-notification-rule-id-labels" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   --label-id: string
-]: any -> record<label: record<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>> {
+]: any -> oneof<record<label: record<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3971,7 +3988,7 @@ export def "get-notification-rules-id-query" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<flux: string> {
+]: nothing -> oneof<record<flux: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($rule_id | is-empty) { error make --unspanned { msg: "path parameter 'ruleID' must be non-empty" } }
@@ -4015,7 +4032,7 @@ export def "get-orgs" [
   --org-id: string # Filter organizations to a specific organization ID.
   --user-id: string # Filter organizations to a specific user ID.
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<links: record<next: string, prev: string, self: string>, orgs: table<createdAt: string, description: string, id: string, links: record, name: string, status: string, updatedAt: string>> {
+]: nothing -> oneof<record<links: record<next: string, prev: string, self: string>, orgs: table<createdAt: string, description: string, id: string, links: record, name: string, status: string, updatedAt: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "descending" $descending "scalar") (serialize-qp "org" $org "scalar") (serialize-qp "orgID" $org_id "scalar") (serialize-qp "userID" $user_id "scalar")] | flatten | str join "&"
@@ -4055,7 +4072,7 @@ export def "post-orgs" [
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   --description: string
   name: string
-]: any -> record<createdAt: string, description: string, id: string, links: record<buckets: string, dashboards: string, labels: string, members: string, owners: string, secrets: string, self: string, tasks: string>, name: string, status: string, updatedAt: string> {
+]: any -> oneof<record<createdAt: string, description: string, id: string, links: record<buckets: string, dashboards: string, labels: string, members: string, owners: string, secrets: string, self: string, tasks: string>, name: string, status: string, updatedAt: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -4135,7 +4152,7 @@ export def "get-orgs-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<createdAt: string, description: string, id: string, links: record<buckets: string, dashboards: string, labels: string, members: string, owners: string, secrets: string, self: string, tasks: string>, name: string, status: string, updatedAt: string> {
+]: nothing -> oneof<record<createdAt: string, description: string, id: string, links: record<buckets: string, dashboards: string, labels: string, members: string, owners: string, secrets: string, self: string, tasks: string>, name: string, status: string, updatedAt: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($org_id | is-empty) { error make --unspanned { msg: "path parameter 'orgID' must be non-empty" } }
@@ -4176,7 +4193,7 @@ export def "patch-orgs-id" [
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   --description: string # New description to set on the organization
   --name: string # New name to set on the organization
-]: any -> record<createdAt: string, description: string, id: string, links: record<buckets: string, dashboards: string, labels: string, members: string, owners: string, secrets: string, self: string, tasks: string>, name: string, status: string, updatedAt: string> {
+]: any -> oneof<record<createdAt: string, description: string, id: string, links: record<buckets: string, dashboards: string, labels: string, members: string, owners: string, secrets: string, self: string, tasks: string>, name: string, status: string, updatedAt: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -4218,7 +4235,7 @@ export def "get-orgs-id-members" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<links: record<self: string>, users: table<id: string, links: record, name: string, oauthID: string, status: string, role: string>> {
+]: nothing -> oneof<record<links: record<self: string>, users: table<id: string, links: record, name: string, oauthID: string, status: string, role: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($org_id | is-empty) { error make --unspanned { msg: "path parameter 'orgID' must be non-empty" } }
@@ -4259,7 +4276,7 @@ export def "post-orgs-id-members" [
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   id: string
   --name: string
-]: any -> record<id: string, links: record<self: string>, name: string, oauthID: string, status: string, role: string> {
+]: any -> oneof<record<id: string, links: record<self: string>, name: string, oauthID: string, status: string, role: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -4342,7 +4359,7 @@ export def "get-orgs-id-owners" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<links: record<self: string>, users: table<id: string, links: record, name: string, oauthID: string, status: string, role: string>> {
+]: nothing -> oneof<record<links: record<self: string>, users: table<id: string, links: record, name: string, oauthID: string, status: string, role: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($org_id | is-empty) { error make --unspanned { msg: "path parameter 'orgID' must be non-empty" } }
@@ -4383,7 +4400,7 @@ export def "post-orgs-id-owners" [
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   id: string
   --name: string
-]: any -> record<id: string, links: record<self: string>, name: string, oauthID: string, status: string, role: string> {
+]: any -> oneof<record<id: string, links: record<self: string>, name: string, oauthID: string, status: string, role: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -4466,7 +4483,7 @@ export def "get-orgs-id-secrets" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<secrets: list<string>, links: record<org: string, self: string>> {
+]: nothing -> oneof<record<secrets: list<string>, links: record<org: string, self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($org_id | is-empty) { error make --unspanned { msg: "path parameter 'orgID' must be non-empty" } }
@@ -4579,8 +4596,6 @@ export def "post-orgs-id-secrets" [
 #
 # POST /query
 # operationId: PostQuery
-# --dialect shape: {annotations?: list<string>, commentPrefix?: string, dateTimeFormat?: "RFC3339"|"RFC3339Nano", delimiter?: string, header?: bool}
-# --extern shape: {body?: list, imports?: list, name?: string, package?: record, type?: string}
 export def "post-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4601,7 +4616,7 @@ export def "post-query" [
   --extern: record # Represents a source from a single file — shape: {body?: list, imports?: list, name?: string, package?: record, type?: string}
   --now: string # Specifies the time that should be reported as "now" in the query. Default is the server's now time. (format: date-time)
   --params: record # Enumeration of key/value pairs that respresent parameters to be injected into query (can only specify either this field or extern and not both)
-  --query: string # Query script to execute.
+  query: string # Query script to execute.
   --type: string@type-completer # The type of query. Must be "flux".
   --bucket: string # Bucket is to be used instead of the database and retention policy specified in the InfluxQL query.
 ]: any -> oneof<string, record, nothing> {
@@ -4617,7 +4632,7 @@ export def "post-query" [
   let extra_headers = {"Zap-Trace-Span": $zap_trace_span, "Accept-Encoding": $accept_encoding, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -4636,8 +4651,6 @@ export def "post-query" [
 #
 # POST /query/analyze
 # operationId: PostQueryAnalyze
-# --dialect shape: {annotations?: list<string>, commentPrefix?: string, dateTimeFormat?: "RFC3339"|"RFC3339Nano", delimiter?: string, header?: bool}
-# --extern shape: {body?: list, imports?: list, name?: string, package?: record, type?: string}
 export def "post-query-analyze" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4656,7 +4669,7 @@ export def "post-query-analyze" [
   --params: record # Enumeration of key/value pairs that respresent parameters to be injected into query (can only specify either this field or extern and not both)
   query: string # Query script to execute.
   --type: string@type-completer # The type of query. Must be "flux".
-]: any -> record<errors: table<character: int, column: int, line: int, message: string>> {
+]: any -> oneof<record<errors: table<character: int, column: int, line: int, message: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -4668,7 +4681,7 @@ export def "post-query-analyze" [
   let extra_headers = {"Zap-Trace-Span": $zap_trace_span, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -4700,7 +4713,7 @@ export def "post-query-ast" [
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   --content-type: string@content-type-completer-1
   query: string # Flux query script to be analyzed
-]: any -> record<ast: record<files: list<record>, package: string, path: string, type: string>> {
+]: any -> oneof<record<ast: record<files: list<record>, package: string, path: string, type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -4712,7 +4725,7 @@ export def "post-query-ast" [
   let extra_headers = {"Zap-Trace-Span": $zap_trace_span, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -4742,7 +4755,7 @@ export def "get-query-suggestions" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<funcs: table<name: string, params: record>> {
+]: nothing -> oneof<record<funcs: table<name: string, params: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/query/suggestions" $auth.query)
@@ -4780,7 +4793,7 @@ export def "get-query-suggestions-name" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<name: string, params: record> {
+]: nothing -> oneof<record<name: string, params: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -4818,7 +4831,7 @@ export def "get-ready" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<started: string, status: string, up: string> {
+]: nothing -> oneof<record<started: string, status: string, up: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ready" $auth.query)
@@ -4859,7 +4872,7 @@ export def "get-scrapers" [
   --org-id: string # Specifies the organization ID of the scraper target.
   --org: string # Specifies the organization name of the scraper target.
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<configurations: table<allowInsecure: bool, bucketID: string, name: string, orgID: string, type: string, url: string, bucket: string, id: string, links: record, org: string>> {
+]: nothing -> oneof<record<configurations: table<allowInsecure: bool, bucketID: string, name: string, orgID: string, type: string, url: string, bucket: string, id: string, links: record, org: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "id" $id "multi") (serialize-qp "orgID" $org_id "scalar") (serialize-qp "org" $org "scalar")] | flatten | str join "&"
@@ -4903,7 +4916,7 @@ export def "post-scrapers" [
   --org-id: string # The organization ID.
   --type: string@type-completer-1 # The type of the metrics to be parsed.
   --url: string # The URL of the metrics endpoint. (e.g. http://localhost:9090/metrics)
-]: any -> record<allowInsecure: bool, bucketID: string, name: string, orgID: string, type: string, url: string, bucket: string, id: string, links: record<bucket: string, members: string, organization: string, owners: string, self: string>, org: string> {
+]: any -> oneof<record<allowInsecure: bool, bucketID: string, name: string, orgID: string, type: string, url: string, bucket: string, id: string, links: record<bucket: string, members: string, organization: string, owners: string, self: string>, org: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -4983,7 +4996,7 @@ export def "get-scrapers-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<allowInsecure: bool, bucketID: string, name: string, orgID: string, type: string, url: string, bucket: string, id: string, links: record<bucket: string, members: string, organization: string, owners: string, self: string>, org: string> {
+]: nothing -> oneof<record<allowInsecure: bool, bucketID: string, name: string, orgID: string, type: string, url: string, bucket: string, id: string, links: record<bucket: string, members: string, organization: string, owners: string, self: string>, org: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($scraper_target_id | is-empty) { error make --unspanned { msg: "path parameter 'scraperTargetID' must be non-empty" } }
@@ -5028,7 +5041,7 @@ export def "patch-scrapers-id" [
   --org-id: string # The organization ID.
   --type: string@type-completer-1 # The type of the metrics to be parsed.
   --url: string # The URL of the metrics endpoint. (e.g. http://localhost:9090/metrics)
-]: any -> record<allowInsecure: bool, bucketID: string, name: string, orgID: string, type: string, url: string, bucket: string, id: string, links: record<bucket: string, members: string, organization: string, owners: string, self: string>, org: string> {
+]: any -> oneof<record<allowInsecure: bool, bucketID: string, name: string, orgID: string, type: string, url: string, bucket: string, id: string, links: record<bucket: string, members: string, organization: string, owners: string, self: string>, org: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -5070,7 +5083,7 @@ export def "get-scrapers-id-labels" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<labels: table<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>> {
+]: nothing -> oneof<record<labels: table<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($scraper_target_id | is-empty) { error make --unspanned { msg: "path parameter 'scraperTargetID' must be non-empty" } }
@@ -5110,7 +5123,7 @@ export def "post-scrapers-id-labels" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   --label-id: string
-]: any -> record<label: record<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>> {
+]: any -> oneof<record<label: record<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -5193,7 +5206,7 @@ export def "get-scrapers-id-members" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<links: record<self: string>, users: table<id: string, links: record, name: string, oauthID: string, status: string, role: string>> {
+]: nothing -> oneof<record<links: record<self: string>, users: table<id: string, links: record, name: string, oauthID: string, status: string, role: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($scraper_target_id | is-empty) { error make --unspanned { msg: "path parameter 'scraperTargetID' must be non-empty" } }
@@ -5234,7 +5247,7 @@ export def "post-scrapers-id-members" [
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   id: string
   --name: string
-]: any -> record<id: string, links: record<self: string>, name: string, oauthID: string, status: string, role: string> {
+]: any -> oneof<record<id: string, links: record<self: string>, name: string, oauthID: string, status: string, role: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -5317,7 +5330,7 @@ export def "get-scrapers-id-owners" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<links: record<self: string>, users: table<id: string, links: record, name: string, oauthID: string, status: string, role: string>> {
+]: nothing -> oneof<record<links: record<self: string>, users: table<id: string, links: record, name: string, oauthID: string, status: string, role: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($scraper_target_id | is-empty) { error make --unspanned { msg: "path parameter 'scraperTargetID' must be non-empty" } }
@@ -5358,7 +5371,7 @@ export def "post-scrapers-id-owners" [
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   id: string
   --name: string
-]: any -> record<id: string, links: record<self: string>, name: string, oauthID: string, status: string, role: string> {
+]: any -> oneof<record<id: string, links: record<self: string>, name: string, oauthID: string, status: string, role: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -5440,7 +5453,7 @@ export def "get-setup" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<allowed: bool> {
+]: nothing -> oneof<record<allowed: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setup" $auth.query)
@@ -5485,7 +5498,7 @@ export def "post-setup" [
   --retention-period-seconds: int # format: int64
   --body-token: string # Authentication token to set on the initial user. If not specified, the server will generate a token.
   username: string
-]: any -> record<auth: record<description: string, status: string, createdAt: string, id: string, links: record<self: string, user: string>, org: string, orgID: string, permissions: list<record>, token: string, updatedAt: string, user: string, userID: string>, bucket: record<createdAt: string, description: string, id: string, labels: list<record>, links: record<labels: string, members: string, org: string, owners: string, self: string, write: string>, name: string, orgID: string, retentionRules: list<record>, rp: string, schemaType: string, type: string, updatedAt: string>, org: record<createdAt: string, description: string, id: string, links: record<buckets: string, dashboards: string, labels: string, members: string, owners: string, secrets: string, self: string, tasks: string>, name: string, status: string, updatedAt: string>, user: record<id: string, links: record<self: string>, name: string, oauthID: string, status: string>> {
+]: any -> oneof<record<auth: record<description: string, status: string, createdAt: string, id: string, links: record<self: string, user: string>, org: string, orgID: string, permissions: list<record>, token: string, updatedAt: string, user: string, userID: string>, bucket: record<createdAt: string, description: string, id: string, labels: list<record>, links: record<labels: string, members: string, org: string, owners: string, self: string, write: string>, name: string, orgID: string, retentionRules: list<record>, rp: string, schemaType: string, type: string, updatedAt: string>, org: record<createdAt: string, description: string, id: string, links: record<buckets: string, dashboards: string, labels: string, members: string, owners: string, secrets: string, self: string, tasks: string>, name: string, status: string, updatedAt: string>, user: record<id: string, links: record<self: string>, name: string, oauthID: string, status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -5600,7 +5613,7 @@ export def "get-sources" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --org: string # The name of the organization.
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<links: record<self: string>, sources: table<default: bool, defaultRP: string, id: string, insecureSkipVerify: bool, languages: list, links: record, metaUrl: string, name: string, orgID: string, password: string, sharedSecret: string, telegraf: string, token: string, type: string, url: string, username: string>> {
+]: nothing -> oneof<record<links: record<self: string>, sources: table<default: bool, defaultRP: string, id: string, insecureSkipVerify: bool, languages: list, links: record, metaUrl: string, name: string, orgID: string, password: string, sharedSecret: string, telegraf: string, token: string, type: string, url: string, username: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "org" $org "scalar")] | flatten | str join "&"
@@ -5627,7 +5640,6 @@ export def "get-sources" [
 #
 # POST /sources
 # operationId: PostSources
-# --links shape: {buckets?: string, health?: string, query?: string, self?: string}
 export def "post-sources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5654,7 +5666,7 @@ export def "post-sources" [
   --type: string@type-completer-2
   --url: string # format: uri
   --username: string
-]: any -> record<default: bool, defaultRP: string, id: string, insecureSkipVerify: bool, languages: list<string>, links: record<buckets: string, health: string, query: string, self: string>, metaUrl: string, name: string, orgID: string, password: string, sharedSecret: string, telegraf: string, token: string, type: string, url: string, username: string> {
+]: any -> oneof<record<default: bool, defaultRP: string, id: string, insecureSkipVerify: bool, languages: list<string>, links: record<buckets: string, health: string, query: string, self: string>, metaUrl: string, name: string, orgID: string, password: string, sharedSecret: string, telegraf: string, token: string, type: string, url: string, username: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -5734,7 +5746,7 @@ export def "get-sources-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<default: bool, defaultRP: string, id: string, insecureSkipVerify: bool, languages: list<string>, links: record<buckets: string, health: string, query: string, self: string>, metaUrl: string, name: string, orgID: string, password: string, sharedSecret: string, telegraf: string, token: string, type: string, url: string, username: string> {
+]: nothing -> oneof<record<default: bool, defaultRP: string, id: string, insecureSkipVerify: bool, languages: list<string>, links: record<buckets: string, health: string, query: string, self: string>, metaUrl: string, name: string, orgID: string, password: string, sharedSecret: string, telegraf: string, token: string, type: string, url: string, username: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($source_id | is-empty) { error make --unspanned { msg: "path parameter 'sourceID' must be non-empty" } }
@@ -5761,7 +5773,6 @@ export def "get-sources-id" [
 #
 # PATCH /sources/{sourceID}
 # operationId: PatchSourcesID
-# --links shape: {buckets?: string, health?: string, query?: string, self?: string}
 export def "patch-sources-id" [
   source_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5789,7 +5800,7 @@ export def "patch-sources-id" [
   --type: string@type-completer-2
   --url: string # format: uri
   --username: string
-]: any -> record<default: bool, defaultRP: string, id: string, insecureSkipVerify: bool, languages: list<string>, links: record<buckets: string, health: string, query: string, self: string>, metaUrl: string, name: string, orgID: string, password: string, sharedSecret: string, telegraf: string, token: string, type: string, url: string, username: string> {
+]: any -> oneof<record<default: bool, defaultRP: string, id: string, insecureSkipVerify: bool, languages: list<string>, links: record<buckets: string, health: string, query: string, self: string>, metaUrl: string, name: string, orgID: string, password: string, sharedSecret: string, telegraf: string, token: string, type: string, url: string, username: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -5832,7 +5843,7 @@ export def "get-sources-id-buckets" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --org: string # The name of the organization.
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<buckets: table<createdAt: string, description: string, id: string, labels: list, links: record, name: string, orgID: string, retentionRules: list, rp: string, schemaType: string, type: string, updatedAt: string>, links: record<next: string, prev: string, self: string>> {
+]: nothing -> oneof<record<buckets: table<createdAt: string, description: string, id: string, labels: list, links: record, name: string, orgID: string, retentionRules: list, rp: string, schemaType: string, type: string, updatedAt: string>, links: record<next: string, prev: string, self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($source_id | is-empty) { error make --unspanned { msg: "path parameter 'sourceID' must be non-empty" } }
@@ -5872,7 +5883,7 @@ export def "get-sources-id-health" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<checks: list<any>, commit: string, message: string, name: string, status: string, version: string> {
+]: nothing -> oneof<record<checks: list<any>, commit: string, message: string, name: string, status: string, version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($source_id | is-empty) { error make --unspanned { msg: "path parameter 'sourceID' must be non-empty" } }
@@ -5912,7 +5923,7 @@ export def "list-stacks" [
   --org-id: string # The organization id of the stacks (required)
   --name: string # A collection of names to filter the list by.
   --stack-id: string # A collection of stackIDs to filter the list by.
-]: nothing -> record<stacks: table<createdAt: string, events: list, id: string, orgID: string>> {
+]: nothing -> oneof<record<stacks: table<createdAt: string, events: list, id: string, orgID: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($org_id == null) { error make --unspanned { msg: "required query parameter 'orgID' missing: pass --org-id" } }
@@ -5952,7 +5963,7 @@ export def "create-stack" [
   --name: string
   --org-id: string
   --urls: list<string>
-]: any -> record<createdAt: string, events: table<description: string, eventType: string, name: string, resources: list, sources: list, updatedAt: string, urls: list>, id: string, orgID: string> {
+]: any -> oneof<record<createdAt: string, events: table<description: string, eventType: string, name: string, resources: list, sources: list, updatedAt: string, urls: list>, id: string, orgID: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -6029,7 +6040,7 @@ export def "read-stack" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<createdAt: string, events: table<description: string, eventType: string, name: string, resources: list, sources: list, updatedAt: string, urls: list>, id: string, orgID: string> {
+]: nothing -> oneof<record<createdAt: string, events: table<description: string, eventType: string, name: string, resources: list, sources: list, updatedAt: string, urls: list>, id: string, orgID: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($stack_id | is-empty) { error make --unspanned { msg: "path parameter 'stack_id' must be non-empty" } }
@@ -6054,7 +6065,6 @@ export def "read-stack" [
 #
 # PATCH /stacks/{stack_id}
 # operationId: UpdateStack
-# --additionalResources item shape: {kind: string, resourceID: string, templateMetaName?: string}
 export def "update-stack" [
   stack_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6070,7 +6080,7 @@ export def "update-stack" [
   --description: string # nullable
   --name: string # nullable
   --template-ur-ls: list<string> # nullable
-]: any -> record<createdAt: string, events: table<description: string, eventType: string, name: string, resources: list, sources: list, updatedAt: string, urls: list>, id: string, orgID: string> {
+]: any -> oneof<record<createdAt: string, events: table<description: string, eventType: string, name: string, resources: list, sources: list, updatedAt: string, urls: list>, id: string, orgID: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -6109,7 +6119,7 @@ export def "uninstall-stack" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<createdAt: string, events: table<description: string, eventType: string, name: string, resources: list, sources: list, updatedAt: string, urls: list>, id: string, orgID: string> {
+]: nothing -> oneof<record<createdAt: string, events: table<description: string, eventType: string, name: string, resources: list, sources: list, updatedAt: string, urls: list>, id: string, orgID: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($stack_id | is-empty) { error make --unspanned { msg: "path parameter 'stack_id' must be non-empty" } }
@@ -6152,7 +6162,7 @@ export def "get-tasks" [
   --status: string@status-completer # Filter tasks by a status--"inactive" or "active".
   --limit: int # The number of tasks to return (default: 100)
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<links: record<next: string, prev: string, self: string>, tasks: table<authorizationID: string, createdAt: string, cron: string, description: string, every: string, flux: string, id: string, labels: list, lastRunError: string, lastRunStatus: string, latestCompleted: string, links: record, name: string, offset: string, org: string, orgID: string, status: string, type: string, updatedAt: string>> {
+]: nothing -> oneof<record<links: record<next: string, prev: string, self: string>, tasks: table<authorizationID: string, createdAt: string, cron: string, description: string, every: string, flux: string, id: string, labels: list, lastRunError: string, lastRunStatus: string, latestCompleted: string, links: record, name: string, offset: string, org: string, orgID: string, status: string, type: string, updatedAt: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "after" $after "scalar") (serialize-qp "user" $user "scalar") (serialize-qp "org" $org "scalar") (serialize-qp "orgID" $org_id "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
@@ -6195,7 +6205,7 @@ export def "post-tasks" [
   --org: string # The name of the organization that owns this Task.
   --org-id: string # The ID of the organization that owns this Task.
   --status: string@status-completer
-]: any -> record<authorizationID: string, createdAt: string, cron: string, description: string, every: string, flux: string, id: string, labels: table<id: string, name: string, orgID: string, properties: record>, lastRunError: string, lastRunStatus: string, latestCompleted: string, links: record<labels: string, logs: string, members: string, owners: string, runs: string, self: string>, name: string, offset: string, org: string, orgID: string, status: string, type: string, updatedAt: string> {
+]: any -> oneof<record<authorizationID: string, createdAt: string, cron: string, description: string, every: string, flux: string, id: string, labels: table<id: string, name: string, orgID: string, properties: record>, lastRunError: string, lastRunStatus: string, latestCompleted: string, links: record<labels: string, logs: string, members: string, owners: string, runs: string, self: string>, name: string, offset: string, org: string, orgID: string, status: string, type: string, updatedAt: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -6275,7 +6285,7 @@ export def "get-tasks-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<authorizationID: string, createdAt: string, cron: string, description: string, every: string, flux: string, id: string, labels: table<id: string, name: string, orgID: string, properties: record>, lastRunError: string, lastRunStatus: string, latestCompleted: string, links: record<labels: string, logs: string, members: string, owners: string, runs: string, self: string>, name: string, offset: string, org: string, orgID: string, status: string, type: string, updatedAt: string> {
+]: nothing -> oneof<record<authorizationID: string, createdAt: string, cron: string, description: string, every: string, flux: string, id: string, labels: table<id: string, name: string, orgID: string, properties: record>, lastRunError: string, lastRunStatus: string, latestCompleted: string, links: record<labels: string, logs: string, members: string, owners: string, runs: string, self: string>, name: string, offset: string, org: string, orgID: string, status: string, type: string, updatedAt: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'taskID' must be non-empty" } }
@@ -6321,7 +6331,7 @@ export def "patch-tasks-id" [
   --name: string # Override the 'name' option in the flux script.
   --offset: string # Override the 'offset' option in the flux script.
   --status: string@status-completer
-]: any -> record<authorizationID: string, createdAt: string, cron: string, description: string, every: string, flux: string, id: string, labels: table<id: string, name: string, orgID: string, properties: record>, lastRunError: string, lastRunStatus: string, latestCompleted: string, links: record<labels: string, logs: string, members: string, owners: string, runs: string, self: string>, name: string, offset: string, org: string, orgID: string, status: string, type: string, updatedAt: string> {
+]: any -> oneof<record<authorizationID: string, createdAt: string, cron: string, description: string, every: string, flux: string, id: string, labels: table<id: string, name: string, orgID: string, properties: record>, lastRunError: string, lastRunStatus: string, latestCompleted: string, links: record<labels: string, logs: string, members: string, owners: string, runs: string, self: string>, name: string, offset: string, org: string, orgID: string, status: string, type: string, updatedAt: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -6363,7 +6373,7 @@ export def "get-tasks-id-labels" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<labels: table<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>> {
+]: nothing -> oneof<record<labels: table<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'taskID' must be non-empty" } }
@@ -6403,7 +6413,7 @@ export def "post-tasks-id-labels" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   --label-id: string
-]: any -> record<label: record<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>> {
+]: any -> oneof<record<label: record<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -6486,7 +6496,7 @@ export def "get-tasks-id-logs" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<events: table<message: string, runID: string, time: string>> {
+]: nothing -> oneof<record<events: table<message: string, runID: string, time: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'taskID' must be non-empty" } }
@@ -6525,7 +6535,7 @@ export def "get-tasks-id-members" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<links: record<self: string>, users: table<id: string, links: record, name: string, oauthID: string, status: string, role: string>> {
+]: nothing -> oneof<record<links: record<self: string>, users: table<id: string, links: record, name: string, oauthID: string, status: string, role: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'taskID' must be non-empty" } }
@@ -6566,7 +6576,7 @@ export def "post-tasks-id-members" [
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   id: string
   --name: string
-]: any -> record<id: string, links: record<self: string>, name: string, oauthID: string, status: string, role: string> {
+]: any -> oneof<record<id: string, links: record<self: string>, name: string, oauthID: string, status: string, role: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -6649,7 +6659,7 @@ export def "get-tasks-id-owners" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<links: record<self: string>, users: table<id: string, links: record, name: string, oauthID: string, status: string, role: string>> {
+]: nothing -> oneof<record<links: record<self: string>, users: table<id: string, links: record, name: string, oauthID: string, status: string, role: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'taskID' must be non-empty" } }
@@ -6690,7 +6700,7 @@ export def "post-tasks-id-owners" [
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   id: string
   --name: string
-]: any -> record<id: string, links: record<self: string>, name: string, oauthID: string, status: string, role: string> {
+]: any -> oneof<record<id: string, links: record<self: string>, name: string, oauthID: string, status: string, role: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -6777,7 +6787,7 @@ export def "get-tasks-id-runs" [
   --after-time: string # Filter runs to those scheduled after this time, RFC3339 (format: date-time)
   --before-time: string # Filter runs to those scheduled before this time, RFC3339 (format: date-time)
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<links: record<next: string, prev: string, self: string>, runs: table<finishedAt: string, id: string, links: record, log: list, requestedAt: string, scheduledFor: string, startedAt: string, status: string, taskID: string>> {
+]: nothing -> oneof<record<links: record<next: string, prev: string, self: string>, runs: table<finishedAt: string, id: string, links: record, log: list, requestedAt: string, scheduledFor: string, startedAt: string, status: string, taskID: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'taskID' must be non-empty" } }
@@ -6818,7 +6828,7 @@ export def "post-tasks-id-runs" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   --scheduled-for: string # Time used for run's "now" option, RFC3339. Default is the server's now time. (nullable, format: date-time)
-]: any -> record<finishedAt: string, id: string, links: record<retry: string, self: string, task: string>, log: table<message: string, runID: string, time: string>, requestedAt: string, scheduledFor: string, startedAt: string, status: string, taskID: string> {
+]: any -> oneof<record<finishedAt: string, id: string, links: record<retry: string, self: string, task: string>, log: table<message: string, runID: string, time: string>, requestedAt: string, scheduledFor: string, startedAt: string, status: string, taskID: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -6902,7 +6912,7 @@ export def "get-tasks-id-runs-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<finishedAt: string, id: string, links: record<retry: string, self: string, task: string>, log: table<message: string, runID: string, time: string>, requestedAt: string, scheduledFor: string, startedAt: string, status: string, taskID: string> {
+]: nothing -> oneof<record<finishedAt: string, id: string, links: record<retry: string, self: string, task: string>, log: table<message: string, runID: string, time: string>, requestedAt: string, scheduledFor: string, startedAt: string, status: string, taskID: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'taskID' must be non-empty" } }
@@ -6943,7 +6953,7 @@ export def "get-tasks-id-runs-id-logs" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<events: table<message: string, runID: string, time: string>> {
+]: nothing -> oneof<record<events: table<message: string, runID: string, time: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'taskID' must be non-empty" } }
@@ -6985,7 +6995,7 @@ export def "post-tasks-id-runs-id-retry" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   --body: record
-]: any -> record<finishedAt: string, id: string, links: record<retry: string, self: string, task: string>, log: table<message: string, runID: string, time: string>, requestedAt: string, scheduledFor: string, startedAt: string, status: string, taskID: string> {
+]: any -> oneof<record<finishedAt: string, id: string, links: record<retry: string, self: string, task: string>, log: table<message: string, runID: string, time: string>, requestedAt: string, scheduledFor: string, startedAt: string, status: string, taskID: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -7028,7 +7038,7 @@ export def "get-telegraf-plugins" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --type: string # The type of plugin desired.
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<os: string, plugins: table<config: string, description: string, name: string, type: string>, version: string> {
+]: nothing -> oneof<record<os: string, plugins: table<config: string, description: string, name: string, type: string>, version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar")] | flatten | str join "&"
@@ -7067,7 +7077,7 @@ export def "get-telegrafs" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --org-id: string # The organization ID the Telegraf config belongs to.
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<configurations: table<config: string, description: string, metadata: record, name: string, orgID: string, id: string, labels: list, links: record>> {
+]: nothing -> oneof<record<configurations: table<config: string, description: string, metadata: record, name: string, orgID: string, id: string, labels: list, links: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "orgID" $org_id "scalar")] | flatten | str join "&"
@@ -7094,7 +7104,6 @@ export def "get-telegrafs" [
 #
 # POST /telegrafs
 # operationId: PostTelegrafs
-# --metadata shape: {buckets?: list<string>}
 export def "post-telegrafs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7111,7 +7120,7 @@ export def "post-telegrafs" [
   --metadata: record # shape: {buckets?: list<string>}
   --name: string
   --org-id: string
-]: any -> record<config: string, description: string, metadata: record<buckets: list<string>>, name: string, orgID: string, id: string, labels: table<id: string, name: string, orgID: string, properties: record>, links: record<labels: string, members: string, owners: string, self: string>> {
+]: any -> oneof<record<config: string, description: string, metadata: record<buckets: list<string>>, name: string, orgID: string, id: string, labels: table<id: string, name: string, orgID: string, properties: record>, links: record<labels: string, members: string, owners: string, self: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -7193,7 +7202,7 @@ export def "get-telegrafs-id" [
   --accept: string@accept-completer-1 # Response content type
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   --hdr-accept: string@accept-completer-1 # default: application/toml
-]: nothing -> record<config: string, description: string, metadata: record<buckets: list<string>>, name: string, orgID: string, id: string, labels: table<id: string, name: string, orgID: string, properties: record>, links: record<labels: string, members: string, owners: string, self: string>> {
+]: nothing -> oneof<record<config: string, description: string, metadata: record<buckets: list<string>>, name: string, orgID: string, id: string, labels: table<id: string, name: string, orgID: string, properties: record>, links: record<labels: string, members: string, owners: string, self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($telegraf_id | is-empty) { error make --unspanned { msg: "path parameter 'telegrafID' must be non-empty" } }
@@ -7220,7 +7229,6 @@ export def "get-telegrafs-id" [
 #
 # PUT /telegrafs/{telegrafID}
 # operationId: PutTelegrafsID
-# --metadata shape: {buckets?: list<string>}
 export def "put-telegrafs-id" [
   telegraf_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7238,7 +7246,7 @@ export def "put-telegrafs-id" [
   --metadata: record # shape: {buckets?: list<string>}
   --name: string
   --org-id: string
-]: any -> record<config: string, description: string, metadata: record<buckets: list<string>>, name: string, orgID: string, id: string, labels: table<id: string, name: string, orgID: string, properties: record>, links: record<labels: string, members: string, owners: string, self: string>> {
+]: any -> oneof<record<config: string, description: string, metadata: record<buckets: list<string>>, name: string, orgID: string, id: string, labels: table<id: string, name: string, orgID: string, properties: record>, links: record<labels: string, members: string, owners: string, self: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -7280,7 +7288,7 @@ export def "get-telegrafs-id-labels" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<labels: table<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>> {
+]: nothing -> oneof<record<labels: table<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($telegraf_id | is-empty) { error make --unspanned { msg: "path parameter 'telegrafID' must be non-empty" } }
@@ -7320,7 +7328,7 @@ export def "post-telegrafs-id-labels" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   --label-id: string
-]: any -> record<label: record<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>> {
+]: any -> oneof<record<label: record<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -7403,7 +7411,7 @@ export def "get-telegrafs-id-members" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<links: record<self: string>, users: table<id: string, links: record, name: string, oauthID: string, status: string, role: string>> {
+]: nothing -> oneof<record<links: record<self: string>, users: table<id: string, links: record, name: string, oauthID: string, status: string, role: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($telegraf_id | is-empty) { error make --unspanned { msg: "path parameter 'telegrafID' must be non-empty" } }
@@ -7444,7 +7452,7 @@ export def "post-telegrafs-id-members" [
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   id: string
   --name: string
-]: any -> record<id: string, links: record<self: string>, name: string, oauthID: string, status: string, role: string> {
+]: any -> oneof<record<id: string, links: record<self: string>, name: string, oauthID: string, status: string, role: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -7527,7 +7535,7 @@ export def "get-telegrafs-id-owners" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<links: record<self: string>, users: table<id: string, links: record, name: string, oauthID: string, status: string, role: string>> {
+]: nothing -> oneof<record<links: record<self: string>, users: table<id: string, links: record, name: string, oauthID: string, status: string, role: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($telegraf_id | is-empty) { error make --unspanned { msg: "path parameter 'telegrafID' must be non-empty" } }
@@ -7568,7 +7576,7 @@ export def "post-telegrafs-id-owners" [
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   id: string
   --name: string
-]: any -> record<id: string, links: record<self: string>, name: string, oauthID: string, status: string, role: string> {
+]: any -> oneof<record<id: string, links: record<self: string>, name: string, oauthID: string, status: string, role: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -7639,9 +7647,6 @@ export def "delete-telegrafs-id-owners-id" [
 #
 # POST /templates/apply
 # operationId: ApplyTemplate
-# --remotes item shape: {contentType?: string, url: string}
-# --template shape: {contentType?: string, contents?: list, sources?: list<string>}
-# --templates item shape: {contentType?: string, contents?: list, sources?: list<string>}
 export def "apply-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7661,7 +7666,7 @@ export def "apply-template" [
   --stack-id: string
   --template: record # shape: {contentType?: string, contents?: list, sources?: list<string>}
   --templates: list # item shape: {contentType?: string, contents?: list, sources?: list<string>}
-]: any -> record<diff: record<buckets: list<record>, checks: list<record>, dashboards: list<record>, labelMappings: list<record>, labels: list<record>, notificationEndpoints: list<record>, notificationRules: list<record>, tasks: list<record>, telegrafConfigs: list<record>, variables: list<record>>, errors: table<fields: list, indexes: list, kind: string, reason: string>, sources: list<string>, stackID: string, summary: record<buckets: list<record>, checks: list<record>, dashboards: list<record>, labelMappings: list<record>, labels: list<record>, missingEnvRefs: list<string>, missingSecrets: list<string>, notificationEndpoints: list<record>, notificationRules: list<record>, tasks: list<record>, telegrafConfigs: list<record>, variables: list<record>>> {
+]: any -> oneof<record<diff: record<buckets: list<record>, checks: list<record>, dashboards: list<record>, labelMappings: list<record>, labels: list<record>, notificationEndpoints: list<record>, notificationRules: list<record>, tasks: list<record>, telegrafConfigs: list<record>, variables: list<record>>, errors: table<fields: list, indexes: list, kind: string, reason: string>, sources: list<string>, stackID: string, summary: record<buckets: list<record>, checks: list<record>, dashboards: list<record>, labelMappings: list<record>, labels: list<record>, missingEnvRefs: list<string>, missingSecrets: list<string>, notificationEndpoints: list<record>, notificationRules: list<record>, tasks: list<record>, telegrafConfigs: list<record>, variables: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -7688,8 +7693,6 @@ export def "apply-template" [
 #
 # POST /templates/export
 # operationId: ExportTemplate
-# --orgIDs item shape: {orgID?: string, resourceFilters?: record}
-# --resources shape: {id: string, kind: "Bucket"|"Check"|"CheckDeadman"|"CheckThreshold"|"Dashboard"|"Label"|"NotificationEndpoint"|"NotificationEndpointHTTP"|"NotificationEndpointPagerDuty"|"NotificationEndpointSlack"|"NotificationRule"|"Task"|"Telegraf"|"Variable", name?: string}
 export def "export-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7704,7 +7707,7 @@ export def "export-template" [
   --org-i-ds: list # item shape: {orgID?: string, resourceFilters?: record}
   --resources: record # shape: {id: string, kind: "Bucket"|"Check"|"CheckDeadman"|"CheckThreshold"|"Dashboard"|"Label"|"NotificationEndpoint"|"NotificationEndpointHTTP"|"NotificationEndpointPagerDuty"|"NotificationEndpointSlack"|"NotificationRule"|"Task"|"Telegraf"|"Variable", name?: string}
   --stack-id: string
-]: any -> table<apiVersion: string, kind: string, meta: record<name: string>, spec: record> {
+]: any -> oneof<table<apiVersion: string, kind: string, meta: record<name: string>, spec: record>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -7747,7 +7750,7 @@ export def "get-users" [
   --name: string
   --id: string
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<links: record<self: string>, users: table<id: string, links: record, name: string, oauthID: string, status: string>> {
+]: nothing -> oneof<record<links: record<self: string>, users: table<id: string, links: record, name: string, oauthID: string, status: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "after" $after "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
@@ -7788,7 +7791,7 @@ export def "post-users" [
   name: string
   --oauth-id: string
   --status: string@status-completer # If inactive the user is inactive. (default: active)
-]: any -> record<id: string, links: record<self: string>, name: string, oauthID: string, status: string> {
+]: any -> oneof<record<id: string, links: record<self: string>, name: string, oauthID: string, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -7868,7 +7871,7 @@ export def "get-users-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<id: string, links: record<self: string>, name: string, oauthID: string, status: string> {
+]: nothing -> oneof<record<id: string, links: record<self: string>, name: string, oauthID: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userID' must be non-empty" } }
@@ -7910,7 +7913,7 @@ export def "patch-users-id" [
   name: string
   --oauth-id: string
   --status: string@status-completer # If inactive the user is inactive. (default: active)
-]: any -> record<id: string, links: record<self: string>, name: string, oauthID: string, status: string> {
+]: any -> oneof<record<id: string, links: record<self: string>, name: string, oauthID: string, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -7996,7 +7999,7 @@ export def "get-variables" [
   --org: string # The name of the organization.
   --org-id: string # The organization ID.
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<variables: table<arguments: record, createdAt: string, description: string, id: string, labels: list, links: record, name: string, orgID: string, selected: list, updatedAt: string>> {
+]: nothing -> oneof<record<variables: table<arguments: record, createdAt: string, description: string, id: string, labels: list, links: record, name: string, orgID: string, selected: list, updatedAt: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "org" $org "scalar") (serialize-qp "orgID" $org_id "scalar")] | flatten | str join "&"
@@ -8023,9 +8026,6 @@ export def "get-variables" [
 #
 # POST /variables
 # operationId: PostVariables
-# --arguments shape: {type?: "query", values?: record}
-# --labels item shape: {name?: string, properties?: record}
-# --links shape: {labels?: string, org?: string, self?: string}
 export def "post-variables" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8045,7 +8045,7 @@ export def "post-variables" [
   org_id: string
   --selected: list<string>
   --updated-at: string # format: date-time
-]: any -> record<arguments: record, createdAt: string, description: string, id: string, labels: table<id: string, name: string, orgID: string, properties: record>, links: record<labels: string, org: string, self: string>, name: string, orgID: string, selected: list<string>, updatedAt: string> {
+]: any -> oneof<record<arguments: record, createdAt: string, description: string, id: string, labels: table<id: string, name: string, orgID: string, properties: record>, links: record<labels: string, org: string, self: string>, name: string, orgID: string, selected: list<string>, updatedAt: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -8125,7 +8125,7 @@ export def "get-variables-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<arguments: record, createdAt: string, description: string, id: string, labels: table<id: string, name: string, orgID: string, properties: record>, links: record<labels: string, org: string, self: string>, name: string, orgID: string, selected: list<string>, updatedAt: string> {
+]: nothing -> oneof<record<arguments: record, createdAt: string, description: string, id: string, labels: table<id: string, name: string, orgID: string, properties: record>, links: record<labels: string, org: string, self: string>, name: string, orgID: string, selected: list<string>, updatedAt: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($variable_id | is-empty) { error make --unspanned { msg: "path parameter 'variableID' must be non-empty" } }
@@ -8152,9 +8152,6 @@ export def "get-variables-id" [
 #
 # PATCH /variables/{variableID}
 # operationId: PatchVariablesID
-# --arguments shape: {type?: "query", values?: record}
-# --labels item shape: {name?: string, properties?: record}
-# --links shape: {labels?: string, org?: string, self?: string}
 export def "patch-variables-id" [
   variable_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8175,7 +8172,7 @@ export def "patch-variables-id" [
   org_id: string
   --selected: list<string>
   --updated-at: string # format: date-time
-]: any -> record<arguments: record, createdAt: string, description: string, id: string, labels: table<id: string, name: string, orgID: string, properties: record>, links: record<labels: string, org: string, self: string>, name: string, orgID: string, selected: list<string>, updatedAt: string> {
+]: any -> oneof<record<arguments: record, createdAt: string, description: string, id: string, labels: table<id: string, name: string, orgID: string, properties: record>, links: record<labels: string, org: string, self: string>, name: string, orgID: string, selected: list<string>, updatedAt: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -8205,9 +8202,6 @@ export def "patch-variables-id" [
 #
 # PUT /variables/{variableID}
 # operationId: PutVariablesID
-# --arguments shape: {type?: "query", values?: record}
-# --labels item shape: {name?: string, properties?: record}
-# --links shape: {labels?: string, org?: string, self?: string}
 export def "put-variables-id" [
   variable_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8228,7 +8222,7 @@ export def "put-variables-id" [
   org_id: string
   --selected: list<string>
   --updated-at: string # format: date-time
-]: any -> record<arguments: record, createdAt: string, description: string, id: string, labels: table<id: string, name: string, orgID: string, properties: record>, links: record<labels: string, org: string, self: string>, name: string, orgID: string, selected: list<string>, updatedAt: string> {
+]: any -> oneof<record<arguments: record, createdAt: string, description: string, id: string, labels: table<id: string, name: string, orgID: string, properties: record>, links: record<labels: string, org: string, self: string>, name: string, orgID: string, selected: list<string>, updatedAt: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -8270,7 +8264,7 @@ export def "get-variables-id-labels" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<labels: table<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>> {
+]: nothing -> oneof<record<labels: table<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($variable_id | is-empty) { error make --unspanned { msg: "path parameter 'variableID' must be non-empty" } }
@@ -8310,7 +8304,7 @@ export def "post-variables-id-labels" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   --label-id: string
-]: any -> record<label: record<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>> {
+]: any -> oneof<record<label: record<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -8416,7 +8410,7 @@ export def "post-write" [
   let extra_headers = {"Zap-Trace-Span": $zap_trace_span, "Content-Encoding": $content_encoding, "Content-Type": $content_type, "Content-Length": $content_length, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "text/plain")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url

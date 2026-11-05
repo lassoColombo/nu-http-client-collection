@@ -12,27 +12,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -40,8 +49,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -52,7 +66,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -87,7 +110,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -154,9 +178,9 @@ def method-completer [] { ["INGESTION_ENDPOINT" "WEBRTC_PULL" "WEBRTC_PUSH"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-account-by-access-key-using-get" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-account-by-access-key-using-get" "get-billing-per-account-using-get" "change-password-using-post" "login-with-email-using-post" "compare-faces-using-get" "perform-analysis-using-post" "retrive-latest-using-get" "perform-recognition-using-post" "retrieve-analysis-using-get" "counter-using-post" "presence-timeseries-using-post" "presence-total-using-post" "remove-classifer-using-delete" "get-classifer-full-using-get" "add-svm-classifier-using-post" "get-classifer-status-using-get" "get-all-collections-using-get" "add-collection-using-post" "get-all-collections2-using-get" "delete-collection2-using-delete" "get-collection2-using-get" "add-collection2-using-post" "export-csv-using-get" "repurpose-collection-using-put" "delete-collection-using-delete" "get-collection-using-get" "update-collection-using-patch" "update-collection2-using-post" "get-all-collection-profiles-using-get" "remove-classification-attributes-from-profile-using-delete" "get-classification-attributes-from-profile-using-get" "map-classification-attributes-to-profile-using-put" "get-profile-enrollment-status-using-get" "remove-faces-from-profile-using-delete" "get-faces-from-profile-using-get" "map-faces-to-profile-using-post" "delete-profile2-using-delete" "add-profile-using-post" "delete-profile-using-delete" "get-profile-using-get" "update-profile-using-patch" "streams-by-account-using-get" "get-last-n-attedance-using-get" "cleanup-stream-using-patch" "get-frame-image-using-get" "get-last-n-frames-using-get" "start-stream-using-patch" "stop-stream-using-patch" "add-stream-using-post" "remove-stream-using-delete" "get-stream-using-get" "update-stream-using-patch" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -190,7 +214,7 @@ export def "get-account-by-access-key-using-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --access-key: string # accessKey (required)
   --secret-key: string # secretKey (required)
-]: nothing -> record<message: string, payload: record, status: string> {
+]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
@@ -232,7 +256,7 @@ export def "get-billing-per-account-using-get" [
   --start-date-time: string # startDateTime (format: date-time)
   --end-date-time: string # endDateTime (format: date-time)
   --date-template: string # dateTemplate
-]: nothing -> record<message: string, payload: record, status: string> {
+]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
@@ -272,7 +296,7 @@ export def "change-password-using-post" [
   --email: string # email (required)
   --old-password: string # oldPassword (required)
   --new-password: string # newPassword (required)
-]: nothing -> record<message: string, payload: record, status: string> {
+]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($email == null) { error make --unspanned { msg: "required query parameter 'email' missing: pass --email" } }
@@ -312,7 +336,7 @@ export def "login-with-email-using-post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # email (required)
   --password: string # password (required)
-]: nothing -> record<message: string, payload: record, status: string> {
+]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($email == null) { error make --unspanned { msg: "required query parameter 'email' missing: pass --email" } }
@@ -353,7 +377,7 @@ export def "compare-faces-using-get" [
   --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud (required)
   --face-hashes: list<string> # The IDs of the faces which you want compared, comma-separated (required)
   --show-details: oneof<nothing, bool> # Show details (default: false)
-]: nothing -> record<message: string, payload: record, status: string> {
+]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
@@ -405,7 +429,7 @@ export def "perform-analysis-using-post" [
   --filters: list<string> # [For advanced users only] Change feature filters for robustness of feature extraction. Tweaking this parameter may affect per
   --options: string # [For advanced users only] Options for preprocessing of image.
   --picture: string # The multipart/form-data version of the image, in case a direct upload is used. At least one of picture or pictureURL must be present
-]: any -> record<message: string, payload: record, status: string> {
+]: any -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -450,7 +474,7 @@ export def "retrive-latest-using-get" [
   --access-key: string # The accessKey provided by VisageCloud (required)
   --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud (required)
   --count: int # How many records to retrieve at a time (format: int32, default: 100)
-]: nothing -> record<message: string, payload: record, status: string> {
+]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
@@ -504,7 +528,7 @@ export def "perform-recognition-using-post" [
   --filters: list<string> # [For advanced users only] Change feature filters for robustness of feature extraction. Tweaking this parameter may affect per
   --options: string # [For advanced users only] Options for preprocessing of image.
   --picture: string # The picture itself
-]: any -> record<message: string, payload: record, status: string> {
+]: any -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -550,7 +574,7 @@ export def "retrieve-analysis-using-get" [
   --access-key: string # The accessKey provided by VisageCloud (required)
   --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud (required)
   --analysis-id: string # The ID of the analysis for which the data will be retrieved (required)
-]: nothing -> record<message: string, payload: record, status: string> {
+]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
@@ -600,7 +624,7 @@ export def "counter-using-post" [
   --min-neighbors-merged-per-iteration: int # minNeighborsMergedPerIteration (format: int32, default: 5)
   --merging-step: float # mergingStep (format: double, default: 1)
   --shuffling: oneof<nothing, bool> # shuffling (default: false)
-]: nothing -> record<message: string, payload: record, status: string> {
+]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
@@ -644,7 +668,7 @@ export def "presence-timeseries-using-post" [
   --end-date-time: string # endDateTime (format: date-time)
   --step: int # step (format: int64, default: 3600)
   --attributes: list<string> # attributes (required)
-]: nothing -> record<message: string, payload: record, status: string> {
+]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
@@ -688,7 +712,7 @@ export def "presence-total-using-post" [
   --start-date-time: string # startDateTime (format: date-time)
   --end-date-time: string # endDateTime (format: date-time)
   --attributes: list<string> # attributes (required)
-]: nothing -> record<message: string, payload: record, status: string> {
+]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
@@ -730,7 +754,7 @@ export def "remove-classifer-using-delete" [
   --access-key: string # The accessKey provided by VisageCloud (required)
   --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud (required)
   --id: string # The id of the classifier that will be removed (required)
-]: nothing -> record<message: string, payload: record, status: string> {
+]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
@@ -771,7 +795,7 @@ export def "get-classifer-full-using-get" [
   --access-key: string # The accessKey provided by VisageCloud (required)
   --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud (required)
   --id: string # The id of the classifier that you want the status for (required)
-]: nothing -> record<message: string, payload: record, status: string> {
+]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
@@ -826,7 +850,7 @@ export def "add-svm-classifier-using-post" [
   --kernel-type-parameter: int # Kernel type parameter (format: int32, default: 0)
   --cache-size-parameter: float # Cache size parameter (format: double, default: 500)
   --eps-parameter: float # Eps parameter (format: double, default: 0.001)
-]: nothing -> record<message: string, payload: record, status: string> {
+]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
@@ -869,7 +893,7 @@ export def "get-classifer-status-using-get" [
   --access-key: string # The accessKey provided by VisageCloud (required)
   --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud (required)
   --id: string # The id of the classifier that you want the status for (required)
-]: nothing -> record<message: string, payload: record, status: string> {
+]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
@@ -909,7 +933,7 @@ export def "get-all-collections-using-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --access-key: string # The accessKey provided by VisageCloud (required)
   --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud (required)
-]: nothing -> record<message: string, payload: record, status: string> {
+]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
@@ -952,7 +976,7 @@ export def "add-collection-using-post" [
   --preload: oneof<nothing, bool> # Defined whether to preload collection
   --evictable: oneof<nothing, bool> # Defined whether the collection can be evicted
   --purposes: list<string>@purposes-completer # The newly declared purposes of the collection
-]: any -> record<message: string, payload: record, status: string> {
+]: any -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -961,7 +985,7 @@ export def "add-collection-using-post" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -994,7 +1018,7 @@ export def "get-all-collections2-using-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --access-key: string # The accessKey provided by VisageCloud (required)
   --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud (required)
-]: nothing -> record<message: string, payload: record, status: string> {
+]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
@@ -1036,7 +1060,7 @@ export def "delete-collection2-using-delete" [
   --access-key: string # The accessKey provided by VisageCloud (required)
   --secret-key: string # The secretKey provided by VisageCloud (required)
   --collection-id: string # The id of the collection that will be removed (required)
-]: nothing -> record<message: string, payload: record, status: string> {
+]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
@@ -1079,7 +1103,7 @@ export def "get-collection2-using-get" [
   --access-key: string # The accessKey provided by VisageCloud (required)
   --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud (required)
   --collection-id: string # The id of the collection for which the data will be retrieved (required)
-]: nothing -> record<message: string, payload: record, status: string> {
+]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
@@ -1125,7 +1149,7 @@ export def "add-collection2-using-post" [
   --preload: oneof<nothing, bool> # Defined whether to preload collection (default: false)
   --evictable: oneof<nothing, bool> # Defined whether the collection can be evicted (default: true)
   --purposes: list<string>@purposes-completer # The newly declared purposes of the collection
-]: nothing -> record<message: string, payload: record, status: string> {
+]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
@@ -1166,7 +1190,7 @@ export def "export-csv-using-get" [
   --access-key: string # The accessKey provided by VisageCloud (required)
   --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud (required)
   --collection-id: string # The id of the collection for which the data will be retrieved (required)
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
@@ -1210,7 +1234,7 @@ export def "repurpose-collection-using-put" [
   --secret-key: string # The secretKey provided by VisageCloud (required)
   --collection-id: string # The id of the collection for which the data will be retrieved (required)
   --purposes: list<string>@purposes-completer # The newly declared purposes of the collection (required)
-]: nothing -> record<message: string, payload: record, status: string> {
+]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
@@ -1252,7 +1276,7 @@ export def "delete-collection-using-delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --access-key: string # The accessKey provided by VisageCloud (required)
   --secret-key: string # The secretKey provided by VisageCloud (required)
-]: nothing -> record<message: string, payload: record, status: string> {
+]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1293,7 +1317,7 @@ export def "get-collection-using-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --access-key: string # The accessKey provided by VisageCloud (required)
   --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud (required)
-]: nothing -> record<message: string, payload: record, status: string> {
+]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1336,7 +1360,7 @@ export def "update-collection-using-patch" [
   --secret-key: string # The secretKey provided by VisageCloud (required)
   --name: string # The name of the collection that will be updated
   --purposes: list<string>@purposes-completer # The newly declared purposes of the collection
-]: nothing -> record<message: string, payload: record, status: string> {
+]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1381,7 +1405,7 @@ export def "update-collection2-using-post" [
   --secret-key: string # The secretKey provided by VisageCloud (required)
   --name: string # The name of the collection that will be updated
   --purposes: list<string>@purposes-completer # The newly declared purposes of the collection
-]: nothing -> record<message: string, payload: record, status: string> {
+]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1422,7 +1446,7 @@ export def "get-all-collection-profiles-using-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --access-key: string # The accessKey provided by VisageCloud (required)
   --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud (required)
-]: nothing -> record<message: string, payload: record, status: string> {
+]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1466,7 +1490,7 @@ export def "remove-classification-attributes-from-profile-using-delete" [
   --secret-key: string # The secretKey provided by VisageCloud (required)
   --profile-id: string # The profile associated with the classification attributes (required)
   --collection-id: string # The collection that contains the profile (required)
-]: nothing -> record<message: string, payload: record, status: string> {
+]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
@@ -1511,7 +1535,7 @@ export def "get-classification-attributes-from-profile-using-get" [
   --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud (required)
   --profile-id: string # The profile associated with the classification attributes (required)
   --collection-id: string # The collection that contains the profile (required)
-]: nothing -> record<message: string, payload: record, status: string> {
+]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
@@ -1557,7 +1581,7 @@ export def "map-classification-attributes-to-profile-using-put" [
   --profile-id: string # The profile associated with the classification attributes (required)
   --collection-id: string # The collection that contains the profile (required)
   --classification-attributes: string # Comma separated key:value classification attributes (required)
-]: nothing -> record<message: string, payload: record, status: string> {
+]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
@@ -1601,7 +1625,7 @@ export def "get-profile-enrollment-status-using-get" [
   --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud (required)
   --profile-id: string # The profile that contains the faces (required)
   --collection-id: string # The collection that contains the profile (required)
-]: nothing -> record<message: string, payload: record, status: string> {
+]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
@@ -1645,7 +1669,7 @@ export def "remove-faces-from-profile-using-delete" [
   --face-hashes: string # Comma separated face hashes, that will be removed from a profile (required)
   --profile-id: string # The profile that contains the face (required)
   --collection-id: string # The collection that contains the profile (required)
-]: nothing -> record<message: string, payload: record, status: string> {
+]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
@@ -1689,7 +1713,7 @@ export def "get-faces-from-profile-using-get" [
   --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud (required)
   --profile-id: string # The profile that contains the faces (required)
   --collection-id: string # The collection that contains the profile (required)
-]: nothing -> record<message: string, payload: record, status: string> {
+]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
@@ -1733,7 +1757,7 @@ export def "map-faces-to-profile-using-post" [
   --face-hashes: string # Comma separated face hashes, that will be associated to a profile (required)
   --profile-id: string # The profile that will store the face (required)
   --collection-id: string # The collection that contains the profile (required)
-]: nothing -> record<message: string, payload: record, status: string> {
+]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
@@ -1779,7 +1803,7 @@ export def "delete-profile2-using-delete" [
   --secret-key: string # The secretKey provided by VisageCloud (required)
   --collection-id: string # Uniquely identified collection that can store multiple profiles (required)
   --profile-id: string # The profile id (provide this if you don't have the externalId (required)
-]: nothing -> record<message: string, payload: record, status: string> {
+]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
@@ -1826,7 +1850,7 @@ export def "add-profile-using-post" [
   --labels: list<string> # Allows you to do finer filtering in face recognition
   --classification-attributes: string # Comma separated key:value classification attributes
   --details: string # Comma separated key:value details of profile
-]: nothing -> record<message: string, payload: record, status: string> {
+]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
@@ -1868,7 +1892,7 @@ export def "delete-profile-using-delete" [
   --access-key: string # The accessKey provided by VisageCloud (required)
   --secret-key: string # The secretKey provided by VisageCloud (required)
   --collection-id: string # Uniquely identified collection that can store multiple profiles (required)
-]: nothing -> record<message: string, payload: record, status: string> {
+]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1912,7 +1936,7 @@ export def "get-profile-using-get" [
   --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud (required)
   --collection-id: string # Uniquely identified collection that can store multiple profiles (required)
   --with-faces: string # Retrieves the profile with all its associated faces (default: false)
-]: nothing -> record<message: string, payload: record, status: string> {
+]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1960,7 +1984,7 @@ export def "update-profile-using-patch" [
   --labels: list<string> # Allows you to do finer filtering in face recognition
   --classification-attributes: string # Comma separated key:value classification attributes
   --details: string # Comma separated key:value details of profile
-]: nothing -> record<message: string, payload: record, status: string> {
+]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2001,7 +2025,7 @@ export def "streams-by-account-using-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --access-key: string # The accessKey provided by VisageCloud (required)
   --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud (required)
-]: nothing -> record<message: string, payload: record, status: string> {
+]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
@@ -2042,7 +2066,7 @@ export def "get-last-n-attedance-using-get" [
   --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud (required)
   --stream-ids: list<string> # The id of the stream for which the frames will be retrieved
   --count: int # How many frames to retrieve at a time (format: int32, default: 10)
-]: nothing -> record<message: string, payload: record, status: string> {
+]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
@@ -2083,7 +2107,7 @@ export def "cleanup-stream-using-patch" [
   --secret-key: string # The secretKey provided by VisageCloud (required)
   --stream-id: string # The id of the stream that will be stopped (required)
   --interval: int # Frames older than interval (seconds) will be cleaned up (required, format: int32)
-]: nothing -> record<message: string, payload: record, status: string> {
+]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
@@ -2126,7 +2150,7 @@ export def "get-frame-image-using-get" [
   --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud (required)
   --stream-id: string # The id of the stream for which the frames will be retrieved (required)
   --timestamp: int # Timestamp of frame to retrieve (required, format: int64)
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
@@ -2172,7 +2196,7 @@ export def "get-last-n-frames-using-get" [
   --collection-id: string # The collection id you want to run recognition against
   --labels: list<string> # Labels associated with the given picture or picture URL
   --attribute-filters: list<string>@attribute-filters-completer # Filters that will be applied on the recognition operation
-]: nothing -> record<message: string, payload: record, status: string> {
+]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
@@ -2213,7 +2237,7 @@ export def "start-stream-using-patch" [
   --access-key: string # The accessKey provided by VisageCloud (required)
   --secret-key: string # The secretKey provided by VisageCloud (required)
   --stream-id: string # The id of the stream that will be started (required)
-]: nothing -> record<message: string, payload: record, status: string> {
+]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
@@ -2254,7 +2278,7 @@ export def "stop-stream-using-patch" [
   --access-key: string # The accessKey provided by VisageCloud (required)
   --secret-key: string # The secretKey provided by VisageCloud (required)
   --stream-id: string # The id of the stream that will be stopped (required)
-]: nothing -> record<message: string, payload: record, status: string> {
+]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
@@ -2307,7 +2331,7 @@ export def "add-stream-using-post" [
   --is-active: oneof<nothing, bool> # Boolean value indicating whether the stream is currently active or not (default: false)
   --associated-collections: list<string> # List of collection ids which will be used to measure attendance
   --attributes: string # Attributes of the stream
-]: nothing -> record<message: string, payload: record, status: string> {
+]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
@@ -2349,7 +2373,7 @@ export def "remove-stream-using-delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --access-key: string # The accessKey provided by VisageCloud (required)
   --secret-key: string # The secretKey provided by VisageCloud (required)
-]: nothing -> record<message: string, payload: record, status: string> {
+]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2390,7 +2414,7 @@ export def "get-stream-using-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --access-key: string # The accessKey provided by VisageCloud (required)
   --secret-key: string # The secretKey provided by VisageCloud (required)
-]: nothing -> record<message: string, payload: record, status: string> {
+]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($stream_id | is-empty) { error make --unspanned { msg: "path parameter 'streamId' must be non-empty" } }
@@ -2444,7 +2468,7 @@ export def "update-stream-using-patch" [
   --is-active: oneof<nothing, bool> # Boolean value indicating whether the stream is currently active or not
   --associated-collections: list<string> # List of collection ids which will be used to measure attendance
   --attributes: string # Attributes of the stream
-]: nothing -> record<message: string, payload: record, status: string> {
+]: nothing -> oneof<record<message: string, payload: record, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($stream_id | is-empty) { error make --unspanned { msg: "path parameter 'streamId' must be non-empty" } }

@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -118,9 +142,9 @@ def api-version-completer [] { ["2018-09-01-preview"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["operations-list" "application-list-by-subscription" "gateway-list-by-subscription" "network-list-by-subscription" "secret-list-by-subscription" "volume-list-by-subscription" "application-list-by-resource-group" "application-delete" "application-get" "application-create" "service-list" "service-get" "service-replica-list" "service-replica-get" "code-package-get-container-logs" "gateway-list-by-resource-group" "gateway-delete" "gateway-get" "gateway-create" "network-list-by-resource-group" "network-delete" "network-get" "network-create" "secret-list-by-resource-group" "secret-delete" "secret-get" "secret-create" "secret-value-list" "secret-value-delete" "secret-value-get" "secret-value-create" "secret-value-list-value" "volume-list-by-resource-group" "volume-delete" "volume-get" "volume-create" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -153,7 +177,7 @@ export def "operations-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the API. This parameter is required and its value must be `2018-09-01-preview`. (required, default: 2018-09-01-preview)
-]: nothing -> record<nextLink: string, value: table<display: record, name: string, nextLink: string, origin: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<display: record, name: string, nextLink: string, origin: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let api_version = ($api_version | default "2018-09-01-preview")
@@ -191,7 +215,7 @@ export def "application-list-by-subscription" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the API. This parameter is required and its value must be `2018-09-01-preview`. (required, default: 2018-09-01-preview)
-]: nothing -> record<nextLink: string, value: table<properties: record, location: string, tags: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, location: string, tags: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -230,7 +254,7 @@ export def "gateway-list-by-subscription" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the API. This parameter is required and its value must be `2018-09-01-preview`. (required, default: 2018-09-01-preview)
-]: nothing -> record<nextLink: string, value: table<properties: record, location: string, tags: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, location: string, tags: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -269,7 +293,7 @@ export def "network-list-by-subscription" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the API. This parameter is required and its value must be `2018-09-01-preview`. (required, default: 2018-09-01-preview)
-]: nothing -> record<nextLink: string, value: table<properties: record, location: string, tags: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, location: string, tags: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -308,7 +332,7 @@ export def "secret-list-by-subscription" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the API. This parameter is required and its value must be `2018-09-01-preview`. (required, default: 2018-09-01-preview)
-]: nothing -> record<nextLink: string, value: table<properties: record, location: string, tags: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, location: string, tags: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -347,7 +371,7 @@ export def "volume-list-by-subscription" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the API. This parameter is required and its value must be `2018-09-01-preview`. (required, default: 2018-09-01-preview)
-]: nothing -> record<nextLink: string, value: table<properties: record, location: string, tags: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, location: string, tags: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -387,7 +411,7 @@ export def "application-list-by-resource-group" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the API. This parameter is required and its value must be `2018-09-01-preview`. (required, default: 2018-09-01-preview)
-]: nothing -> record<nextLink: string, value: table<properties: record, location: string, tags: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, location: string, tags: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -472,7 +496,7 @@ export def "application-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the API. This parameter is required and its value must be `2018-09-01-preview`. (required, default: 2018-09-01-preview)
-]: nothing -> record<properties: record<provisioningState: string, debugParams: string, description: string, diagnostics: record<defaultSinkRefs: list, enabled: bool, sinks: list>, healthState: string, serviceNames: list<string>, services: list<record>, status: string, statusDetails: string, unhealthyEvaluation: string>, location: string, tags: record, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<provisioningState: string, debugParams: string, description: string, diagnostics: record<defaultSinkRefs: list, enabled: bool, sinks: list>, healthState: string, serviceNames: list<string>, services: list<record>, status: string, statusDetails: string, unhealthyEvaluation: string>, location: string, tags: record, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -501,7 +525,6 @@ export def "application-get" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabricMesh/applications/{applicationResourceName}
 # operationId: Application_Create
-# --properties shape: {debugParams?: string, description?: string, diagnostics?: any, healthState?: "Invalid"|"Ok"|"Warning"|"Error"|"Unknown", services?: list, status?: "Unknown"|"Ready"|"Upgrading"|"Creating"|"Deleting"|"Failed"}
 export def "application-create" [
   subscription_id: string
   resource_group_name: string
@@ -519,7 +542,7 @@ export def "application-create" [
   properties: any # This type describes properties of an application resource. — shape: {debugParams?: string, description?: string, diagnostics?: any, healthState?: "Invalid"|"Ok"|"Warning"|"Error"|"Unknown", services?: list, status?: "Unknown"|"Ready"|"Upgrading"|"Creating"|"Deleting"|"Failed"}
   location: string # The geo-location where the resource lives
   --tags: record # Resource tags.
-]: any -> record<properties: record<provisioningState: string, debugParams: string, description: string, diagnostics: record<defaultSinkRefs: list, enabled: bool, sinks: list>, healthState: string, serviceNames: list<string>, services: list<record>, status: string, statusDetails: string, unhealthyEvaluation: string>, location: string, tags: record, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<provisioningState: string, debugParams: string, description: string, diagnostics: record<defaultSinkRefs: list, enabled: bool, sinks: list>, healthState: string, serviceNames: list<string>, services: list<record>, status: string, statusDetails: string, unhealthyEvaluation: string>, location: string, tags: record, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -565,7 +588,7 @@ export def "service-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the API. This parameter is required and its value must be `2018-09-01-preview`. (required, default: 2018-09-01-preview)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -609,7 +632,7 @@ export def "service-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the API. This parameter is required and its value must be `2018-09-01-preview`. (required, default: 2018-09-01-preview)
-]: nothing -> record<properties: record<provisioningState: string, codePackages: list<record>, diagnostics: record<enabled: bool, sinkRefs: list>, networkRefs: list<record>, osType: string, autoScalingPolicies: list<record>, description: string, healthState: string, replicaCount: int, status: string, statusDetails: string, unhealthyEvaluation: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<provisioningState: string, codePackages: list<record>, diagnostics: record<enabled: bool, sinkRefs: list>, networkRefs: list<record>, osType: string, autoScalingPolicies: list<record>, description: string, healthState: string, replicaCount: int, status: string, statusDetails: string, unhealthyEvaluation: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -654,7 +677,7 @@ export def "service-replica-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the API. This parameter is required and its value must be `2018-09-01-preview`. (required, default: 2018-09-01-preview)
-]: nothing -> record<nextLink: string, value: table<replicaName: string, codePackages: list, diagnostics: record, networkRefs: list, osType: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<replicaName: string, codePackages: list, diagnostics: record, networkRefs: list, osType: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -700,7 +723,7 @@ export def "service-replica-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the API. This parameter is required and its value must be `2018-09-01-preview`. (required, default: 2018-09-01-preview)
-]: nothing -> record<replicaName: string, codePackages: table<commands: list, diagnostics: record, endpoints: list, entrypoint: string, environmentVariables: list, image: string, imageRegistryCredential: record, instanceView: record, labels: list, name: string, reliableCollectionsRefs: list, resources: record, settings: list, volumeRefs: list, volumes: list>, diagnostics: record<enabled: bool, sinkRefs: list<string>>, networkRefs: table<endpointRefs: list, name: string>, osType: string> {
+]: nothing -> oneof<record<replicaName: string, codePackages: table<commands: list, diagnostics: record, endpoints: list, entrypoint: string, environmentVariables: list, image: string, imageRegistryCredential: record, instanceView: record, labels: list, name: string, reliableCollectionsRefs: list, resources: record, settings: list, volumeRefs: list, volumes: list>, diagnostics: record<enabled: bool, sinkRefs: list<string>>, networkRefs: table<endpointRefs: list, name: string>, osType: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -749,7 +772,7 @@ export def "code-package-get-container-logs" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the API. This parameter is required and its value must be `2018-09-01-preview`. (required, default: 2018-09-01-preview)
   --tail: int # Number of lines to show from the end of the logs. Default is 100.
-]: nothing -> record<content: string> {
+]: nothing -> oneof<record<content: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -794,7 +817,7 @@ export def "gateway-list-by-resource-group" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the API. This parameter is required and its value must be `2018-09-01-preview`. (required, default: 2018-09-01-preview)
-]: nothing -> record<nextLink: string, value: table<properties: record, location: string, tags: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, location: string, tags: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -879,7 +902,7 @@ export def "gateway-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the API. This parameter is required and its value must be `2018-09-01-preview`. (required, default: 2018-09-01-preview)
-]: nothing -> record<properties: record<provisioningState: string, description: string, destinationNetwork: record<endpointRefs: list, name: string>, http: list<record>, ipAddress: string, sourceNetwork: record<endpointRefs: list, name: string>, status: string, statusDetails: string, tcp: list<record>>, location: string, tags: record, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<provisioningState: string, description: string, destinationNetwork: record<endpointRefs: list, name: string>, http: list<record>, ipAddress: string, sourceNetwork: record<endpointRefs: list, name: string>, status: string, statusDetails: string, tcp: list<record>>, location: string, tags: record, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -908,7 +931,6 @@ export def "gateway-get" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabricMesh/gateways/{gatewayResourceName}
 # operationId: Gateway_Create
-# --properties shape: {description?: string, destinationNetwork: any, http?: list, sourceNetwork: any, status?: "Unknown"|"Ready"|"Upgrading"|"Creating"|"Deleting"|"Failed", tcp?: list}
 export def "gateway-create" [
   subscription_id: string
   resource_group_name: string
@@ -926,7 +948,7 @@ export def "gateway-create" [
   properties: any # This type describes properties of a gateway resource. — shape: {description?: string, destinationNetwork: any, http?: list, sourceNetwork: any, status?: "Unknown"|"Ready"|"Upgrading"|"Creating"|"Deleting"|"Failed", tcp?: list}
   location: string # The geo-location where the resource lives
   --tags: record # Resource tags.
-]: any -> record<properties: record<provisioningState: string, description: string, destinationNetwork: record<endpointRefs: list, name: string>, http: list<record>, ipAddress: string, sourceNetwork: record<endpointRefs: list, name: string>, status: string, statusDetails: string, tcp: list<record>>, location: string, tags: record, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<provisioningState: string, description: string, destinationNetwork: record<endpointRefs: list, name: string>, http: list<record>, ipAddress: string, sourceNetwork: record<endpointRefs: list, name: string>, status: string, statusDetails: string, tcp: list<record>>, location: string, tags: record, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -971,7 +993,7 @@ export def "network-list-by-resource-group" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the API. This parameter is required and its value must be `2018-09-01-preview`. (required, default: 2018-09-01-preview)
-]: nothing -> record<nextLink: string, value: table<properties: record, location: string, tags: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, location: string, tags: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1056,7 +1078,7 @@ export def "network-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the API. This parameter is required and its value must be `2018-09-01-preview`. (required, default: 2018-09-01-preview)
-]: nothing -> record<properties: record<description: string, status: string, statusDetails: string, kind: string, provisioningState: string>, location: string, tags: record, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<description: string, status: string, statusDetails: string, kind: string, provisioningState: string>, location: string, tags: record, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1085,7 +1107,6 @@ export def "network-get" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabricMesh/networks/{networkResourceName}
 # operationId: Network_Create
-# --properties shape: {description?: string, status?: "Unknown"|"Ready"|"Upgrading"|"Creating"|"Deleting"|"Failed", kind: "Local"}
 export def "network-create" [
   subscription_id: string
   resource_group_name: string
@@ -1103,7 +1124,7 @@ export def "network-create" [
   properties: record # Describes properties of a network resource. — shape: {description?: string, status?: "Unknown"|"Ready"|"Upgrading"|"Creating"|"Deleting"|"Failed", kind: "Local"}
   location: string # The geo-location where the resource lives
   --tags: record # Resource tags.
-]: any -> record<properties: record<description: string, status: string, statusDetails: string, kind: string, provisioningState: string>, location: string, tags: record, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<description: string, status: string, statusDetails: string, kind: string, provisioningState: string>, location: string, tags: record, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1148,7 +1169,7 @@ export def "secret-list-by-resource-group" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the API. This parameter is required and its value must be `2018-09-01-preview`. (required, default: 2018-09-01-preview)
-]: nothing -> record<nextLink: string, value: table<properties: record, location: string, tags: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, location: string, tags: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1233,7 +1254,7 @@ export def "secret-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the API. This parameter is required and its value must be `2018-09-01-preview`. (required, default: 2018-09-01-preview)
-]: nothing -> record<properties: record<contentType: string, description: string, status: string, statusDetails: string, kind: string, provisioningState: string>, location: string, tags: record, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<contentType: string, description: string, status: string, statusDetails: string, kind: string, provisioningState: string>, location: string, tags: record, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1262,7 +1283,6 @@ export def "secret-get" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabricMesh/secrets/{secretResourceName}
 # operationId: Secret_Create
-# --properties shape: {contentType?: string, description?: string, status?: "Unknown"|"Ready"|"Upgrading"|"Creating"|"Deleting"|"Failed", kind: "inlinedValue"}
 export def "secret-create" [
   subscription_id: string
   resource_group_name: string
@@ -1280,7 +1300,7 @@ export def "secret-create" [
   properties: record # Describes the properties of a secret resource. — shape: {contentType?: string, description?: string, status?: "Unknown"|"Ready"|"Upgrading"|"Creating"|"Deleting"|"Failed", kind: "inlinedValue"}
   location: string # The geo-location where the resource lives
   --tags: record # Resource tags.
-]: any -> record<properties: record<contentType: string, description: string, status: string, statusDetails: string, kind: string, provisioningState: string>, location: string, tags: record, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<contentType: string, description: string, status: string, statusDetails: string, kind: string, provisioningState: string>, location: string, tags: record, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1326,7 +1346,7 @@ export def "secret-value-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the API. This parameter is required and its value must be `2018-09-01-preview`. (required, default: 2018-09-01-preview)
-]: nothing -> record<nextLink: string, value: table<properties: record, location: string, tags: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, location: string, tags: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1415,7 +1435,7 @@ export def "secret-value-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the API. This parameter is required and its value must be `2018-09-01-preview`. (required, default: 2018-09-01-preview)
-]: nothing -> record<properties: record<provisioningState: string, value: string>, location: string, tags: record, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<provisioningState: string, value: string>, location: string, tags: record, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1445,7 +1465,6 @@ export def "secret-value-get" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabricMesh/secrets/{secretResourceName}/values/{secretValueResourceName}
 # operationId: SecretValue_Create
-# --properties shape: {value?: string}
 export def "secret-value-create" [
   subscription_id: string
   resource_group_name: string
@@ -1464,7 +1483,7 @@ export def "secret-value-create" [
   properties: record # This type describes properties of a secret value resource. — shape: {value?: string}
   location: string # The geo-location where the resource lives
   --tags: record # Resource tags.
-]: any -> record<properties: record<provisioningState: string, value: string>, location: string, tags: record, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<provisioningState: string, value: string>, location: string, tags: record, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1512,7 +1531,7 @@ export def "secret-value-list-value" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the API. This parameter is required and its value must be `2018-09-01-preview`. (required, default: 2018-09-01-preview)
-]: nothing -> record<value: string> {
+]: nothing -> oneof<record<value: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1555,7 +1574,7 @@ export def "volume-list-by-resource-group" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the API. This parameter is required and its value must be `2018-09-01-preview`. (required, default: 2018-09-01-preview)
-]: nothing -> record<nextLink: string, value: table<properties: record, location: string, tags: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, location: string, tags: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1640,7 +1659,7 @@ export def "volume-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the API. This parameter is required and its value must be `2018-09-01-preview`. (required, default: 2018-09-01-preview)
-]: nothing -> record<properties: record<provisioningState: string, azureFileParameters: record<accountKey: string, accountName: string, shareName: string>, description: string, provider: string, status: string, statusDetails: string>, location: string, tags: record, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<provisioningState: string, azureFileParameters: record<accountKey: string, accountName: string, shareName: string>, description: string, provider: string, status: string, statusDetails: string>, location: string, tags: record, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1669,7 +1688,6 @@ export def "volume-get" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabricMesh/volumes/{volumeResourceName}
 # operationId: Volume_Create
-# --properties shape: {azureFileParameters?: any, description?: string, provider: "SFAzureFile", status?: "Unknown"|"Ready"|"Upgrading"|"Creating"|"Deleting"|"Failed"}
 export def "volume-create" [
   subscription_id: string
   resource_group_name: string
@@ -1687,7 +1705,7 @@ export def "volume-create" [
   properties: any # This type describes properties of a volume resource. — shape: {azureFileParameters?: any, description?: string, provider: "SFAzureFile", status?: "Unknown"|"Ready"|"Upgrading"|"Creating"|"Deleting"|"Failed"}
   location: string # The geo-location where the resource lives
   --tags: record # Resource tags.
-]: any -> record<properties: record<provisioningState: string, azureFileParameters: record<accountKey: string, accountName: string, shareName: string>, description: string, provider: string, status: string, statusDetails: string>, location: string, tags: record, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<provisioningState: string, azureFileParameters: record<accountKey: string, accountName: string, shareName: string>, description: string, provider: string, status: string, statusDetails: string>, location: string, tags: record, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

@@ -17,7 +17,6 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
     "jwt" => { {scheme: $scheme, headers: {"Authorization": $"JWT ($token_val)"}, query: "", location: "header"} }
     "query-api_key" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "api_key")=(encode-path-segment $token_val)", location: "query"} }
     "stream-auth-type" => { {scheme: $scheme, headers: {"Stream-Auth-Type": $token_val}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
@@ -32,22 +31,32 @@ def merge-auth [parts: list]: nothing -> record {
   {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -55,8 +64,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -67,7 +81,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -102,7 +125,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -179,9 +203,9 @@ def user-completer [] { ["hard" "pruning" "soft"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "token-jwt" "token-apikey" "token-streamauthtype"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-app" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-app" "update-app" "list-block-lists" "create-block-list" "delete-block-list" "get-block-list" "update-block-list" "get-call-token-1" "get-call-token-call-id-0" "query-campaigns" "create-campaign" "delete-campaign" "update-campaign" "resume-campaign" "schedule-campaign" "stop-campaign" "test-campaign" "query-channels" "delete-channels" "mark-channels-read" "get-or-create-channel-type-1" "delete-channel" "update-channel-partial" "update-channel" "create-call" "send-event" "delete-file" "upload-file" "hide-channel" "delete-image" "upload-image" "send-message" "get-many-messages" "get-or-create-channel-type-id-0" "mark-read" "show-channel" "stop-watching-channel" "truncate-channel" "mark-unread" "list-channel-types" "create-channel-type" "delete-channel-type" "get-channel-type" "update-channel-type" "check-push" "check-sqs" "list-commands" "create-command" "delete-command" "get-command" "update-command" "connect" "delete-device" "list-devices" "create-device" "export-user" "export-channels" "get-export-channels-status" "create-guest" "create-import-url" "list-imports" "create-import" "get-import" "long-poll" "query-members" "delete-message" "get-message" "update-message" "update-message-partial" "run-message-action" "commit-message" "send-reaction" "delete-reaction" "get-reactions" "translate-message" "get-replies" "unban" "ban" "flag" "query-message-flags" "mute-user" "mute-channel" "unflag" "unmute-user" "unmute-channel" "get-og" "list-permissions" "get-permission" "list-push-providers" "upsert-push-provider" "delete-push-provider" "query-banned-users" "get-rate-limits" "query-recipients" "list-roles" "create-role" "delete-role" "search" "query-segments" "create-segment" "delete-segment" "update-segment" "sync" "get-task" "query-users" "update-users-partial" "update-users" "deactivate-users" "delete-users" "reactivate-users" "restore-users" "delete-user" "deactivate-user" "send-user-custom-event" "get-users-user-id-export" "reactivate-user" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -214,7 +238,7 @@ export def "get-app" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<app: record<agora_options: record<app_certificate: string, app_id: string, default_role: string, role_map: record>, async_url_enrich_enabled: bool, auto_translation_enabled: bool, before_message_send_hook_url: string, campaign_enabled: bool, cdn_expiration_seconds: float, channel_configs: record, custom_action_handler_url: string, disable_auth_checks: bool, disable_permissions_checks: bool, enforce_unique_usernames: string, file_upload_config: record<allowed_file_extensions: list, allowed_mime_types: list, blocked_file_extensions: list, blocked_mime_types: list>, grants: record, hms_options: record<app_certificate: string, app_id: string, default_role: string, role_map: record>, image_moderation_enabled: bool, image_moderation_labels: list<string>, image_upload_config: record<allowed_file_extensions: list, allowed_mime_types: list, blocked_file_extensions: list, blocked_mime_types: list>, multi_tenant_enabled: bool, name: string, organization: string, permission_version: string, policies: record, push_notifications: record<apn: record, firebase: record, huawei: record, offline_only: bool, providers: list, version: string, xiaomi: record>, reminders_interval: float, revoke_tokens_issued_before: string, search_backend: string, sqs_key: string, sqs_secret: string, sqs_url: string, suspended: bool, suspended_explanation: string, user_search_disallowed_roles: list<string>, video_provider: string, webhook_events: list<string>, webhook_url: string>, duration: string> {
+]: nothing -> oneof<record<app: record<agora_options: record<app_certificate: string, app_id: string, default_role: string, role_map: record>, async_url_enrich_enabled: bool, auto_translation_enabled: bool, before_message_send_hook_url: string, campaign_enabled: bool, cdn_expiration_seconds: float, channel_configs: record, custom_action_handler_url: string, disable_auth_checks: bool, disable_permissions_checks: bool, enforce_unique_usernames: string, file_upload_config: record<allowed_file_extensions: list, allowed_mime_types: list, blocked_file_extensions: list, blocked_mime_types: list>, grants: record, hms_options: record<app_certificate: string, app_id: string, default_role: string, role_map: record>, image_moderation_enabled: bool, image_moderation_labels: list<string>, image_upload_config: record<allowed_file_extensions: list, allowed_mime_types: list, blocked_file_extensions: list, blocked_mime_types: list>, multi_tenant_enabled: bool, name: string, organization: string, permission_version: string, policies: record, push_notifications: record<apn: record, firebase: record, huawei: record, offline_only: bool, providers: list, version: string, xiaomi: record>, reminders_interval: float, revoke_tokens_issued_before: string, search_backend: string, sqs_key: string, sqs_secret: string, sqs_url: string, suspended: bool, suspended_explanation: string, user_search_disallowed_roles: list<string>, video_provider: string, webhook_events: list<string>, webhook_url: string>, duration: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/app" $auth.query)
@@ -238,16 +262,6 @@ export def "get-app" [
 #
 # PATCH /app
 # operationId: UpdateApp
-# --agora_options shape: {app_certificate: string, app_id: string, default_role?: "attendee"|"publisher"|"subscriber"|"admin", role_map?: record}
-# --apn_config shape: {Disabled?: bool, auth_key?: string, auth_type?: "certificate"|"token", bundle_id?: string, development?: bool, host?: string, key_id?: string, notification_template?: string, p12_cert?: string, team_id?: string}
-# --async_moderation_config shape: {callback?: record, timeout_ms?: float}
-# --file_upload_config shape: {allowed_file_extensions?: list<string>, allowed_mime_types?: list<string>, blocked_file_extensions?: list<string>, blocked_mime_types?: list<string>}
-# --firebase_config shape: {Disabled?: bool, apn_template?: string, credentials_json?: string, data_template?: string, notification_template?: string, server_key?: string}
-# --hms_options shape: {app_certificate: string, app_id: string, default_role?: "attendee"|"publisher"|"subscriber"|"admin", role_map?: record}
-# --huawei_config shape: {Disabled?: bool, id?: string, secret?: string}
-# --image_upload_config shape: {allowed_file_extensions?: list<string>, allowed_mime_types?: list<string>, blocked_file_extensions?: list<string>, blocked_mime_types?: list<string>}
-# --push_config shape: {offline_only?: bool, version?: "v1"|"v2"}
-# --xiaomi_config shape: {Disabled?: bool, package_name?: string, secret?: string}
 export def "update-app" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
@@ -294,7 +308,7 @@ export def "update-app" [
   --webhook-events: list<string>
   --webhook-url: string
   --xiaomi-config: record # shape: {Disabled?: bool, package_name?: string, secret?: string}
-]: any -> record<duration: string> {
+]: any -> oneof<record<duration: string>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
@@ -332,7 +346,7 @@ export def "list-block-lists" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<blocklists: table<created_at: string, name: string, updated_at: string, words: list>, duration: string> {
+]: nothing -> oneof<record<blocklists: table<created_at: string, name: string, updated_at: string, words: list>, duration: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/blocklists" $auth.query)
@@ -369,7 +383,7 @@ export def "create-block-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   name: string # Block list name
   words: list<string> # List of words to block
-]: any -> record<duration: string> {
+]: any -> oneof<record<duration: string>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
@@ -408,7 +422,7 @@ export def "delete-block-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<duration: string> {
+]: nothing -> oneof<record<duration: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -445,7 +459,7 @@ export def "get-block-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<blocklist: record<created_at: string, name: string, updated_at: string, words: list<string>>, duration: string> {
+]: nothing -> oneof<record<blocklist: record<created_at: string, name: string, updated_at: string, words: list<string>>, duration: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -484,7 +498,7 @@ export def "update-block-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --body-name: string
   --words: list<string>
-]: any -> record<duration: string> {
+]: any -> oneof<record<duration: string>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
@@ -512,7 +526,6 @@ export def "update-block-list" [
 #
 # POST /calls/
 # operationId: GetCallToken__1
-# --user shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
 export def "get-call-token-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
@@ -526,7 +539,7 @@ export def "get-call-token-1" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --user: record # Represents chat user — shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
   --user-id: string # **Server-side only**. User ID which server acts upon
-]: any -> record<agora_app_id: string, agora_uid: float, duration: string, token: string> {
+]: any -> oneof<record<agora_app_id: string, agora_uid: float, duration: string, token: string>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
@@ -553,7 +566,6 @@ export def "get-call-token-1" [
 #
 # POST /calls/{call_id}
 # operationId: GetCallToken_call_id_0
-# --user shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
 export def "get-call-token-call-id-0" [
   call_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -568,7 +580,7 @@ export def "get-call-token-call-id-0" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --user: record # Represents chat user — shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
   --user-id: string # **Server-side only**. User ID which server acts upon
-]: any -> record<agora_app_id: string, agora_uid: float, duration: string, token: string> {
+]: any -> oneof<record<agora_app_id: string, agora_uid: float, duration: string, token: string>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
@@ -608,7 +620,7 @@ export def "query-campaigns" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --payload: string
-]: nothing -> record<campaigns: table<attachments: list, channel_type: string, completed_at: string, created_at: string, defaults: record, description: string, details: string, errored_messages: float, failed_at: string, id: string, name: string, resumed_at: string, scheduled_at: string, scheduled_for: string, segment_id: string, sender_id: string, sent_messages: float, status: string, stopped_at: string, task_id: string, text: string, updated_at: string>, channels: record, duration: string, segments: record, users: record> {
+]: nothing -> oneof<record<campaigns: table<attachments: list, channel_type: string, completed_at: string, created_at: string, defaults: record, description: string, details: string, errored_messages: float, failed_at: string, id: string, name: string, resumed_at: string, scheduled_at: string, scheduled_for: string, segment_id: string, sender_id: string, sent_messages: float, status: string, stopped_at: string, task_id: string, text: string, updated_at: string>, channels: record, duration: string, segments: record, users: record>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "payload" $payload "scalar")] | flatten | str join "&"
@@ -633,7 +645,6 @@ export def "query-campaigns" [
 #
 # POST /campaigns
 # operationId: CreateCampaign
-# --campaign shape: {attachments?: list, channel_type?: string, defaults?: record, description?: string, name: string, segment_id: string, sender_id: string, text: string}
 export def "create-campaign" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
@@ -646,7 +657,7 @@ export def "create-campaign" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   campaign: record # shape: {attachments?: list, channel_type?: string, defaults?: record, description?: string, name: string, segment_id: string, sender_id: string, text: string}
-]: any -> record<campaign: record<attachments: list<record>, channel_type: string, completed_at: string, created_at: string, defaults: record, description: string, details: string, errored_messages: float, failed_at: string, id: string, name: string, resumed_at: string, scheduled_at: string, scheduled_for: string, segment_id: string, sender_id: string, sent_messages: float, status: string, stopped_at: string, task_id: string, text: string, updated_at: string>, duration: string> {
+]: any -> oneof<record<campaign: record<attachments: list<record>, channel_type: string, completed_at: string, created_at: string, defaults: record, description: string, details: string, errored_messages: float, failed_at: string, id: string, name: string, resumed_at: string, scheduled_at: string, scheduled_for: string, segment_id: string, sender_id: string, sent_messages: float, status: string, stopped_at: string, task_id: string, text: string, updated_at: string>, duration: string>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
@@ -686,7 +697,7 @@ export def "delete-campaign" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --recipients: string
-]: nothing -> record<duration: string> {
+]: nothing -> oneof<record<duration: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -712,7 +723,6 @@ export def "delete-campaign" [
 #
 # PUT /campaigns/{id}
 # operationId: UpdateCampaign
-# --campaign shape: {attachments?: list, channel_type?: string, defaults?: record, description?: string, name?: string, segment_id?: string, sender_id?: string, text?: string}
 export def "update-campaign" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -726,7 +736,7 @@ export def "update-campaign" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   campaign: record # shape: {attachments?: list, channel_type?: string, defaults?: record, description?: string, name?: string, segment_id?: string, sender_id?: string, text?: string}
-]: any -> record<campaign: record<attachments: list<record>, channel_type: string, completed_at: string, created_at: string, defaults: record, description: string, details: string, errored_messages: float, failed_at: string, id: string, name: string, resumed_at: string, scheduled_at: string, scheduled_for: string, segment_id: string, sender_id: string, sent_messages: float, status: string, stopped_at: string, task_id: string, text: string, updated_at: string>, duration: string> {
+]: any -> oneof<record<campaign: record<attachments: list<record>, channel_type: string, completed_at: string, created_at: string, defaults: record, description: string, details: string, errored_messages: float, failed_at: string, id: string, name: string, resumed_at: string, scheduled_at: string, scheduled_for: string, segment_id: string, sender_id: string, sent_messages: float, status: string, stopped_at: string, task_id: string, text: string, updated_at: string>, duration: string>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
@@ -766,7 +776,7 @@ export def "resume-campaign" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<campaign: record<attachments: list<record>, channel_type: string, completed_at: string, created_at: string, defaults: record, description: string, details: string, errored_messages: float, failed_at: string, id: string, name: string, resumed_at: string, scheduled_at: string, scheduled_for: string, segment_id: string, sender_id: string, sent_messages: float, status: string, stopped_at: string, task_id: string, text: string, updated_at: string>, duration: string> {
+]: nothing -> oneof<record<campaign: record<attachments: list<record>, channel_type: string, completed_at: string, created_at: string, defaults: record, description: string, details: string, errored_messages: float, failed_at: string, id: string, name: string, resumed_at: string, scheduled_at: string, scheduled_for: string, segment_id: string, sender_id: string, sent_messages: float, status: string, stopped_at: string, task_id: string, text: string, updated_at: string>, duration: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -804,7 +814,7 @@ export def "schedule-campaign" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --scheduled-for: float
-]: any -> record<campaign: record<attachments: list<record>, channel_type: string, completed_at: string, created_at: string, defaults: record, description: string, details: string, errored_messages: float, failed_at: string, id: string, name: string, resumed_at: string, scheduled_at: string, scheduled_for: string, segment_id: string, sender_id: string, sent_messages: float, status: string, stopped_at: string, task_id: string, text: string, updated_at: string>, duration: string> {
+]: any -> oneof<record<campaign: record<attachments: list<record>, channel_type: string, completed_at: string, created_at: string, defaults: record, description: string, details: string, errored_messages: float, failed_at: string, id: string, name: string, resumed_at: string, scheduled_at: string, scheduled_for: string, segment_id: string, sender_id: string, sent_messages: float, status: string, stopped_at: string, task_id: string, text: string, updated_at: string>, duration: string>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
@@ -844,7 +854,7 @@ export def "stop-campaign" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<campaign: record<attachments: list<record>, channel_type: string, completed_at: string, created_at: string, defaults: record, description: string, details: string, errored_messages: float, failed_at: string, id: string, name: string, resumed_at: string, scheduled_at: string, scheduled_for: string, segment_id: string, sender_id: string, sent_messages: float, status: string, stopped_at: string, task_id: string, text: string, updated_at: string>, duration: string> {
+]: nothing -> oneof<record<campaign: record<attachments: list<record>, channel_type: string, completed_at: string, created_at: string, defaults: record, description: string, details: string, errored_messages: float, failed_at: string, id: string, name: string, resumed_at: string, scheduled_at: string, scheduled_for: string, segment_id: string, sender_id: string, sent_messages: float, status: string, stopped_at: string, task_id: string, text: string, updated_at: string>, duration: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -882,7 +892,7 @@ export def "test-campaign" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   users: list<string>
-]: any -> record<details: string, duration: string, results: record, status: string> {
+]: any -> oneof<record<details: string, duration: string, results: record, status: string>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
@@ -910,8 +920,6 @@ export def "test-campaign" [
 #
 # POST /channels
 # operationId: QueryChannels
-# --sort item shape: {direction?: float, field?: string}
-# --user shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
 export def "query-channels" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
@@ -938,7 +946,7 @@ export def "query-channels" [
   --user: record # Represents chat user — shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
   --user-id: string
   --watch: oneof<nothing, bool> # Whether to start watching found channels or not
-]: any -> record<channels: table<channel: record, hidden: bool, hide_messages_before: string, members: list, membership: record, messages: list, pending_messages: list, pinned_messages: list, read: list, watcher_count: float, watchers: list>, duration: string> {
+]: any -> oneof<record<channels: table<channel: record, hidden: bool, hide_messages_before: string, members: list, membership: record, messages: list, pending_messages: list, pinned_messages: list, read: list, watcher_count: float, watchers: list>, duration: string>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
@@ -979,7 +987,7 @@ export def "delete-channels" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --cids: list<string> # All channels that should be deleted
   --hard-delete: oneof<nothing, bool> # Specify if channels and all ressources should be hard deleted
-]: any -> record<duration: string, result: record, task_id: string> {
+]: any -> oneof<record<duration: string, result: record, task_id: string>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
@@ -1006,7 +1014,6 @@ export def "delete-channels" [
 #
 # POST /channels/read
 # operationId: MarkChannelsRead
-# --user shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
 export def "mark-channels-read" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
@@ -1020,7 +1027,7 @@ export def "mark-channels-read" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --user: record # Represents chat user — shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
   --user-id: string
-]: any -> record<duration: string, event: record<automoderation: bool, automoderation_scores: record<action: string, explicit: float, spam: float, toxic: float>, channel: record<auto_translation_enabled: bool, auto_translation_language: string, cid: string, config: record, cooldown: float, created_at: string, created_by: record, deleted_at: string, disabled: bool, frozen: bool, hidden: bool, hide_messages_before: string, id: string, last_message_at: string, member_count: float, members: list, mute_expires_at: string, muted: bool, own_capabilities: list, team: string, truncated_at: string, truncated_by: record, type: string, updated_at: string>, channel_id: string, channel_type: string, cid: string, connection_id: string, created_at: string, created_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, me: record<banned: bool, channel_mutes: list, created_at: string, deactivated_at: string, deleted_at: string, devices: list, id: string, invisible: bool, language: string, last_active: string, latest_hidden_channels: list, mutes: list, online: bool, push_notifications: record, role: string, teams: list, total_unread_count: float, unread_channels: float, unread_count: float, updated_at: string>, member: record<ban_expires: string, banned: bool, channel_role: string, created_at: string, deleted_at: string, invite_accepted_at: string, invite_rejected_at: string, invited: bool, is_moderator: bool, role: string, shadow_banned: bool, updated_at: string, user: record, user_id: string>, message: record<attachments: list, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list, mentioned_users: list, mml: string, own_reactions: list, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list, type: string, updated_at: string, user: record>, parent_id: string, reaction: record<created_at: string, message_id: string, score: float, type: string, updated_at: string, user: record, user_id: string>, reason: string, team: string, type: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, user_id: string, watcher_count: float>> {
+]: any -> oneof<record<duration: string, event: record<automoderation: bool, automoderation_scores: record<action: string, explicit: float, spam: float, toxic: float>, channel: record<auto_translation_enabled: bool, auto_translation_language: string, cid: string, config: record, cooldown: float, created_at: string, created_by: record, deleted_at: string, disabled: bool, frozen: bool, hidden: bool, hide_messages_before: string, id: string, last_message_at: string, member_count: float, members: list, mute_expires_at: string, muted: bool, own_capabilities: list, team: string, truncated_at: string, truncated_by: record, type: string, updated_at: string>, channel_id: string, channel_type: string, cid: string, connection_id: string, created_at: string, created_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, me: record<banned: bool, channel_mutes: list, created_at: string, deactivated_at: string, deleted_at: string, devices: list, id: string, invisible: bool, language: string, last_active: string, latest_hidden_channels: list, mutes: list, online: bool, push_notifications: record, role: string, teams: list, total_unread_count: float, unread_channels: float, unread_count: float, updated_at: string>, member: record<ban_expires: string, banned: bool, channel_role: string, created_at: string, deleted_at: string, invite_accepted_at: string, invite_rejected_at: string, invited: bool, is_moderator: bool, role: string, shadow_banned: bool, updated_at: string, user: record, user_id: string>, message: record<attachments: list, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list, mentioned_users: list, mml: string, own_reactions: list, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list, type: string, updated_at: string, user: record>, parent_id: string, reaction: record<created_at: string, message_id: string, score: float, type: string, updated_at: string, user: record, user_id: string>, reason: string, team: string, type: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, user_id: string, watcher_count: float>>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
@@ -1047,10 +1054,6 @@ export def "mark-channels-read" [
 #
 # POST /channels/{type}/query
 # operationId: GetOrCreateChannel_type_1
-# --data shape: {auto_translation_enabled?: bool, auto_translation_language?: string, config_overrides?: record, created_by?: record, disabled?: bool, frozen?: bool, members?: list, own_capabilities?: list<float>, team?: string, truncated_at?: list<float>, truncated_by?: list<float>, truncated_by_id?: string}
-# --members shape: {id_gt?: float, id_gte?: float, id_lt?: float, id_lte?: float, limit?: float, offset?: float}
-# --messages shape: {created_at_after?: string, created_at_after_or_equal?: string, created_at_around?: string, created_at_before?: string, created_at_before_or_equal?: string, id_around?: string, id_gt?: string, id_gte?: string, id_lt?: string, id_lte?: string, limit?: float, offset?: float}
-# --watchers shape: {id_gt?: float, id_gte?: float, id_lt?: float, id_lte?: float, limit?: float, offset?: float}
 export def "get-or-create-channel-type-1" [
   type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1074,7 +1077,7 @@ export def "get-or-create-channel-type-1" [
   --state: oneof<nothing, bool> # Refresh channel state
   --watch: oneof<nothing, bool> # Start watching the channel
   --watchers: record # shape: {id_gt?: float, id_gte?: float, id_lt?: float, id_lte?: float, limit?: float, offset?: float}
-]: any -> record<channel: record<auto_translation_enabled: bool, auto_translation_language: string, cid: string, config: record<automod: string, automod_behavior: string, automod_thresholds: record, blocklist: string, blocklist_behavior: string, commands: list, connect_events: bool, created_at: string, custom_events: bool, grants: record, max_message_length: float, message_retention: string, mutes: bool, name: string, push_notifications: bool, quotes: bool, reactions: bool, read_events: bool, reminders: bool, replies: bool, search: bool, typing_events: bool, updated_at: string, uploads: bool, url_enrichment: bool>, cooldown: float, created_at: string, created_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, deleted_at: string, disabled: bool, frozen: bool, hidden: bool, hide_messages_before: string, id: string, last_message_at: string, member_count: float, members: list<record>, mute_expires_at: string, muted: bool, own_capabilities: list<string>, team: string, truncated_at: string, truncated_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, type: string, updated_at: string>, duration: string, hidden: bool, hide_messages_before: string, members: table<ban_expires: string, banned: bool, channel_role: string, created_at: string, deleted_at: string, invite_accepted_at: string, invite_rejected_at: string, invited: bool, is_moderator: bool, role: string, shadow_banned: bool, updated_at: string, user: record, user_id: string>, membership: record<ban_expires: string, banned: bool, channel_role: string, created_at: string, deleted_at: string, invite_accepted_at: string, invite_rejected_at: string, invited: bool, is_moderator: bool, role: string, shadow_banned: bool, updated_at: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, user_id: string>, messages: table<attachments: list, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list, mentioned_users: list, mml: string, own_reactions: list, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list, type: string, updated_at: string, user: record>, pending_messages: table<channel: record, message: record, metadata: record, user: record>, pinned_messages: table<attachments: list, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list, mentioned_users: list, mml: string, own_reactions: list, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list, type: string, updated_at: string, user: record>, read: table<last_read: string, unread_messages: float, user: record>, watcher_count: float, watchers: table<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>> {
+]: any -> oneof<record<channel: record<auto_translation_enabled: bool, auto_translation_language: string, cid: string, config: record<automod: string, automod_behavior: string, automod_thresholds: record, blocklist: string, blocklist_behavior: string, commands: list, connect_events: bool, created_at: string, custom_events: bool, grants: record, max_message_length: float, message_retention: string, mutes: bool, name: string, push_notifications: bool, quotes: bool, reactions: bool, read_events: bool, reminders: bool, replies: bool, search: bool, typing_events: bool, updated_at: string, uploads: bool, url_enrichment: bool>, cooldown: float, created_at: string, created_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, deleted_at: string, disabled: bool, frozen: bool, hidden: bool, hide_messages_before: string, id: string, last_message_at: string, member_count: float, members: list<record>, mute_expires_at: string, muted: bool, own_capabilities: list<string>, team: string, truncated_at: string, truncated_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, type: string, updated_at: string>, duration: string, hidden: bool, hide_messages_before: string, members: table<ban_expires: string, banned: bool, channel_role: string, created_at: string, deleted_at: string, invite_accepted_at: string, invite_rejected_at: string, invited: bool, is_moderator: bool, role: string, shadow_banned: bool, updated_at: string, user: record, user_id: string>, membership: record<ban_expires: string, banned: bool, channel_role: string, created_at: string, deleted_at: string, invite_accepted_at: string, invite_rejected_at: string, invited: bool, is_moderator: bool, role: string, shadow_banned: bool, updated_at: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, user_id: string>, messages: table<attachments: list, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list, mentioned_users: list, mml: string, own_reactions: list, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list, type: string, updated_at: string, user: record>, pending_messages: table<channel: record, message: record, metadata: record, user: record>, pinned_messages: table<attachments: list, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list, mentioned_users: list, mml: string, own_reactions: list, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list, type: string, updated_at: string, user: record>, read: table<last_read: string, unread_messages: float, user: record>, watcher_count: float, watchers: table<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
@@ -1117,7 +1120,7 @@ export def "delete-channel" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hard-delete: string
-]: nothing -> record<channel: record<auto_translation_enabled: bool, auto_translation_language: string, cid: string, config: record<automod: string, automod_behavior: string, automod_thresholds: record, blocklist: string, blocklist_behavior: string, commands: list, connect_events: bool, created_at: string, custom_events: bool, grants: record, max_message_length: float, message_retention: string, mutes: bool, name: string, push_notifications: bool, quotes: bool, reactions: bool, read_events: bool, reminders: bool, replies: bool, search: bool, typing_events: bool, updated_at: string, uploads: bool, url_enrichment: bool>, cooldown: float, created_at: string, created_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, deleted_at: string, disabled: bool, frozen: bool, hidden: bool, hide_messages_before: string, id: string, last_message_at: string, member_count: float, members: list<record>, mute_expires_at: string, muted: bool, own_capabilities: list<string>, team: string, truncated_at: string, truncated_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, type: string, updated_at: string>, duration: string> {
+]: nothing -> oneof<record<channel: record<auto_translation_enabled: bool, auto_translation_language: string, cid: string, config: record<automod: string, automod_behavior: string, automod_thresholds: record, blocklist: string, blocklist_behavior: string, commands: list, connect_events: bool, created_at: string, custom_events: bool, grants: record, max_message_length: float, message_retention: string, mutes: bool, name: string, push_notifications: bool, quotes: bool, reactions: bool, read_events: bool, reminders: bool, replies: bool, search: bool, typing_events: bool, updated_at: string, uploads: bool, url_enrichment: bool>, cooldown: float, created_at: string, created_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, deleted_at: string, disabled: bool, frozen: bool, hidden: bool, hide_messages_before: string, id: string, last_message_at: string, member_count: float, members: list<record>, mute_expires_at: string, muted: bool, own_capabilities: list<string>, team: string, truncated_at: string, truncated_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, type: string, updated_at: string>, duration: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
@@ -1144,7 +1147,6 @@ export def "delete-channel" [
 #
 # PATCH /channels/{type}/{id}
 # operationId: UpdateChannelPartial
-# --user shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
 export def "update-channel-partial" [
   type: string
   id: string
@@ -1162,7 +1164,7 @@ export def "update-channel-partial" [
   unset: list<string>
   --user: record # Represents chat user — shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
   --user-id: string
-]: any -> record<channel: record<auto_translation_enabled: bool, auto_translation_language: string, cid: string, config: record<automod: string, automod_behavior: string, automod_thresholds: record, blocklist: string, blocklist_behavior: string, commands: list, connect_events: bool, created_at: string, custom_events: bool, grants: record, max_message_length: float, message_retention: string, mutes: bool, name: string, push_notifications: bool, quotes: bool, reactions: bool, read_events: bool, reminders: bool, replies: bool, search: bool, typing_events: bool, updated_at: string, uploads: bool, url_enrichment: bool>, cooldown: float, created_at: string, created_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, deleted_at: string, disabled: bool, frozen: bool, hidden: bool, hide_messages_before: string, id: string, last_message_at: string, member_count: float, members: list<record>, mute_expires_at: string, muted: bool, own_capabilities: list<string>, team: string, truncated_at: string, truncated_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, type: string, updated_at: string>, duration: string, members: table<ban_expires: string, banned: bool, channel_role: string, created_at: string, deleted_at: string, invite_accepted_at: string, invite_rejected_at: string, invited: bool, is_moderator: bool, role: string, shadow_banned: bool, updated_at: string, user: record, user_id: string>> {
+]: any -> oneof<record<channel: record<auto_translation_enabled: bool, auto_translation_language: string, cid: string, config: record<automod: string, automod_behavior: string, automod_thresholds: record, blocklist: string, blocklist_behavior: string, commands: list, connect_events: bool, created_at: string, custom_events: bool, grants: record, max_message_length: float, message_retention: string, mutes: bool, name: string, push_notifications: bool, quotes: bool, reactions: bool, read_events: bool, reminders: bool, replies: bool, search: bool, typing_events: bool, updated_at: string, uploads: bool, url_enrichment: bool>, cooldown: float, created_at: string, created_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, deleted_at: string, disabled: bool, frozen: bool, hidden: bool, hide_messages_before: string, id: string, last_message_at: string, member_count: float, members: list<record>, mute_expires_at: string, muted: bool, own_capabilities: list<string>, team: string, truncated_at: string, truncated_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, type: string, updated_at: string>, duration: string, members: table<ban_expires: string, banned: bool, channel_role: string, created_at: string, deleted_at: string, invite_accepted_at: string, invite_rejected_at: string, invited: bool, is_moderator: bool, role: string, shadow_banned: bool, updated_at: string, user: record, user_id: string>>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
@@ -1191,12 +1193,6 @@ export def "update-channel-partial" [
 #
 # POST /channels/{type}/{id}
 # operationId: UpdateChannel
-# --add_members item shape: {ban_expires?: string, banned?: bool, channel_role?: string, created_at?: string, deleted_at?: string, invite_accepted_at?: string, invite_rejected_at?: string, invited?: bool, is_moderator?: bool, role?: "member"|"moderator"|"admin"|"owner", shadow_banned?: bool, updated_at?: string, user?: record, user_id?: string}
-# --assign_roles item shape: {ban_expires?: string, banned?: bool, channel_role?: string, created_at?: string, deleted_at?: string, invite_accepted_at?: string, invite_rejected_at?: string, invited?: bool, is_moderator?: bool, role?: "member"|"moderator"|"admin"|"owner", shadow_banned?: bool, updated_at?: string, user?: record, user_id?: string}
-# --data shape: {auto_translation_enabled?: bool, auto_translation_language?: string, config_overrides?: record, created_by?: record, disabled?: bool, frozen?: bool, members?: list, own_capabilities?: list<float>, team?: string, truncated_at?: list<float>, truncated_by?: list<float>, truncated_by_id?: string}
-# --invites item shape: {ban_expires?: string, banned?: bool, channel_role?: string, created_at?: string, deleted_at?: string, invite_accepted_at?: string, invite_rejected_at?: string, invited?: bool, is_moderator?: bool, role?: "member"|"moderator"|"admin"|"owner", shadow_banned?: bool, updated_at?: string, user?: record, user_id?: string}
-# --message shape: {attachments: list, cid?: list<float>, html?: string, id?: string, mentioned_users?: list<string>, mml?: string, parent?: list<float>, parent_id?: string, pin_expires?: string, pinned?: bool, pinned_at?: string, pinned_by?: list<float>, quoted_message_id?: string, reaction_scores?: list<float>, show_in_channel?: bool, silent?: bool, text?: string, user?: record, user_id?: string}
-# --user shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
 export def "update-channel" [
   type: string
   id: string
@@ -1225,7 +1221,7 @@ export def "update-channel" [
   --skip-push: oneof<nothing, bool> # When `message` is set disables all push notifications for it
   --user: record # Represents chat user — shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
   --user-id: string
-]: any -> record<channel: record<auto_translation_enabled: bool, auto_translation_language: string, cid: string, config: record<automod: string, automod_behavior: string, automod_thresholds: record, blocklist: string, blocklist_behavior: string, commands: list, connect_events: bool, created_at: string, custom_events: bool, grants: record, max_message_length: float, message_retention: string, mutes: bool, name: string, push_notifications: bool, quotes: bool, reactions: bool, read_events: bool, reminders: bool, replies: bool, search: bool, typing_events: bool, updated_at: string, uploads: bool, url_enrichment: bool>, cooldown: float, created_at: string, created_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, deleted_at: string, disabled: bool, frozen: bool, hidden: bool, hide_messages_before: string, id: string, last_message_at: string, member_count: float, members: list<record>, mute_expires_at: string, muted: bool, own_capabilities: list<string>, team: string, truncated_at: string, truncated_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, type: string, updated_at: string>, duration: string, members: table<ban_expires: string, banned: bool, channel_role: string, created_at: string, deleted_at: string, invite_accepted_at: string, invite_rejected_at: string, invited: bool, is_moderator: bool, role: string, shadow_banned: bool, updated_at: string, user: record, user_id: string>, message: record<attachments: list<record>, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list<record>, mentioned_users: list<record>, mml: string, own_reactions: list<record>, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list<record>, type: string, updated_at: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>>> {
+]: any -> oneof<record<channel: record<auto_translation_enabled: bool, auto_translation_language: string, cid: string, config: record<automod: string, automod_behavior: string, automod_thresholds: record, blocklist: string, blocklist_behavior: string, commands: list, connect_events: bool, created_at: string, custom_events: bool, grants: record, max_message_length: float, message_retention: string, mutes: bool, name: string, push_notifications: bool, quotes: bool, reactions: bool, read_events: bool, reminders: bool, replies: bool, search: bool, typing_events: bool, updated_at: string, uploads: bool, url_enrichment: bool>, cooldown: float, created_at: string, created_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, deleted_at: string, disabled: bool, frozen: bool, hidden: bool, hide_messages_before: string, id: string, last_message_at: string, member_count: float, members: list<record>, mute_expires_at: string, muted: bool, own_capabilities: list<string>, team: string, truncated_at: string, truncated_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, type: string, updated_at: string>, duration: string, members: table<ban_expires: string, banned: bool, channel_role: string, created_at: string, deleted_at: string, invite_accepted_at: string, invite_rejected_at: string, invited: bool, is_moderator: bool, role: string, shadow_banned: bool, updated_at: string, user: record, user_id: string>, message: record<attachments: list<record>, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list<record>, mentioned_users: list<record>, mml: string, own_reactions: list<record>, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list<record>, type: string, updated_at: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>>>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
@@ -1254,7 +1250,6 @@ export def "update-channel" [
 #
 # POST /channels/{type}/{id}/call
 # operationId: CreateCall
-# --user shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
 export def "create-call" [
   type: string
   id: string
@@ -1273,7 +1268,7 @@ export def "create-call" [
   --body-type: string@type-completer
   --user: record # Represents chat user — shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
   --user-id: string # **Server-side only**. User ID which server acts upon
-]: any -> record<agora_app_id: string, agora_uid: float, call: record<agora: record<channel: string>, hms: record<room_id: string, room_name: string>, id: string, provider: string, type: string>, duration: string, token: string> {
+]: any -> oneof<record<agora_app_id: string, agora_uid: float, call: record<agora: record<channel: string>, hms: record<room_id: string, room_name: string>, id: string, provider: string, type: string>, duration: string, token: string>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
@@ -1304,7 +1299,6 @@ export def "create-call" [
 #
 # POST /channels/{type}/{id}/event
 # operationId: SendEvent
-# --event shape: {automoderation?: bool, automoderation_scores?: record, channel?: record, channel_id?: string, channel_type?: string, cid?: string, connection_id?: string, created_at?: string, created_by?: record, me?: record, member?: record, message?: record, parent_id?: string, reaction?: record, reason?: string, team?: string, type: string, user?: record, user_id?: string, watcher_count?: float}
 export def "send-event" [
   type: string
   id: string
@@ -1319,7 +1313,7 @@ export def "send-event" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   event: record # Represents an BaseEvent that happened in Stream Chat — shape: {automoderation?: bool, automoderation_scores?: record, channel?: record, channel_id?: string, channel_type?: string, cid?: string, connection_id?: string, created_at?: string, created_by?: record, me?: record, member?: record, message?: record, parent_id?: string, reaction?: record, reason?: string, team?: string, type: string, user?: record, user_id?: string, watcher_count?: float}
-]: any -> record<duration: string, event: record<automoderation: bool, automoderation_scores: record<action: string, explicit: float, spam: float, toxic: float>, channel: record<auto_translation_enabled: bool, auto_translation_language: string, cid: string, config: record, cooldown: float, created_at: string, created_by: record, deleted_at: string, disabled: bool, frozen: bool, hidden: bool, hide_messages_before: string, id: string, last_message_at: string, member_count: float, members: list, mute_expires_at: string, muted: bool, own_capabilities: list, team: string, truncated_at: string, truncated_by: record, type: string, updated_at: string>, channel_id: string, channel_type: string, cid: string, connection_id: string, created_at: string, created_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, me: record<banned: bool, channel_mutes: list, created_at: string, deactivated_at: string, deleted_at: string, devices: list, id: string, invisible: bool, language: string, last_active: string, latest_hidden_channels: list, mutes: list, online: bool, push_notifications: record, role: string, teams: list, total_unread_count: float, unread_channels: float, unread_count: float, updated_at: string>, member: record<ban_expires: string, banned: bool, channel_role: string, created_at: string, deleted_at: string, invite_accepted_at: string, invite_rejected_at: string, invited: bool, is_moderator: bool, role: string, shadow_banned: bool, updated_at: string, user: record, user_id: string>, message: record<attachments: list, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list, mentioned_users: list, mml: string, own_reactions: list, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list, type: string, updated_at: string, user: record>, parent_id: string, reaction: record<created_at: string, message_id: string, score: float, type: string, updated_at: string, user: record, user_id: string>, reason: string, team: string, type: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, user_id: string, watcher_count: float>> {
+]: any -> oneof<record<duration: string, event: record<automoderation: bool, automoderation_scores: record<action: string, explicit: float, spam: float, toxic: float>, channel: record<auto_translation_enabled: bool, auto_translation_language: string, cid: string, config: record, cooldown: float, created_at: string, created_by: record, deleted_at: string, disabled: bool, frozen: bool, hidden: bool, hide_messages_before: string, id: string, last_message_at: string, member_count: float, members: list, mute_expires_at: string, muted: bool, own_capabilities: list, team: string, truncated_at: string, truncated_by: record, type: string, updated_at: string>, channel_id: string, channel_type: string, cid: string, connection_id: string, created_at: string, created_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, me: record<banned: bool, channel_mutes: list, created_at: string, deactivated_at: string, deleted_at: string, devices: list, id: string, invisible: bool, language: string, last_active: string, latest_hidden_channels: list, mutes: list, online: bool, push_notifications: record, role: string, teams: list, total_unread_count: float, unread_channels: float, unread_count: float, updated_at: string>, member: record<ban_expires: string, banned: bool, channel_role: string, created_at: string, deleted_at: string, invite_accepted_at: string, invite_rejected_at: string, invited: bool, is_moderator: bool, role: string, shadow_banned: bool, updated_at: string, user: record, user_id: string>, message: record<attachments: list, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list, mentioned_users: list, mml: string, own_reactions: list, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list, type: string, updated_at: string, user: record>, parent_id: string, reaction: record<created_at: string, message_id: string, score: float, type: string, updated_at: string, user: record, user_id: string>, reason: string, team: string, type: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, user_id: string, watcher_count: float>>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
@@ -1362,7 +1356,7 @@ export def "delete-file" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --url: string
-]: nothing -> record<duration: string> {
+]: nothing -> oneof<record<duration: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
@@ -1389,7 +1383,6 @@ export def "delete-file" [
 #
 # POST /channels/{type}/{id}/file
 # operationId: UploadFile
-# --user shape: {id: string}
 export def "upload-file" [
   type: string
   id: string
@@ -1405,7 +1398,7 @@ export def "upload-file" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --file: string # file field
   --user: record # shape: {id: string}
-]: any -> record<duration: string, file: string, thumb_url: string> {
+]: any -> oneof<record<duration: string, file: string, thumb_url: string>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
@@ -1436,7 +1429,6 @@ export def "upload-file" [
 #
 # POST /channels/{type}/{id}/hide
 # operationId: HideChannel
-# --user shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
 export def "hide-channel" [
   type: string
   id: string
@@ -1453,7 +1445,7 @@ export def "hide-channel" [
   --clear-history: oneof<nothing, bool> # Whether to clear message history of the channel or not
   --user: record # Represents chat user — shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
   --user-id: string
-]: any -> record<duration: string> {
+]: any -> oneof<record<duration: string>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
@@ -1496,7 +1488,7 @@ export def "delete-image" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --url: string
-]: nothing -> record<duration: string> {
+]: nothing -> oneof<record<duration: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
@@ -1523,8 +1515,6 @@ export def "delete-image" [
 #
 # POST /channels/{type}/{id}/image
 # operationId: UploadImage
-# --upload_sizes item shape: {crop?: "top"|"bottom"|"left"|"right"|"center", height?: float, resize?: "clip"|"crop"|"scale"|"fill", width?: float}
-# --user shape: {id: string}
 export def "upload-image" [
   type: string
   id: string
@@ -1541,7 +1531,7 @@ export def "upload-image" [
   --file: string
   --upload-sizes: list # field with JSON-encoded array of image size configurations — item shape: {crop?: "top"|"bottom"|"left"|"right"|"center", height?: float, resize?: "clip"|"crop"|"scale"|"fill", width?: float}
   --user: record # shape: {id: string}
-]: any -> record<duration: string, file: string, thumb_url: string, upload_sizes: table<crop: string, height: float, resize: string, width: float>> {
+]: any -> oneof<record<duration: string, file: string, thumb_url: string, upload_sizes: table<crop: string, height: float, resize: string, width: float>>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
@@ -1572,7 +1562,6 @@ export def "upload-image" [
 #
 # POST /channels/{type}/{id}/message
 # operationId: SendMessage
-# --message shape: {attachments: list, cid?: list<float>, html?: string, id?: string, mentioned_users?: list<string>, mml?: string, parent?: list<float>, parent_id?: string, pin_expires?: string, pinned?: bool, pinned_at?: string, pinned_by?: list<float>, quoted_message_id?: string, reaction_scores?: list<float>, show_in_channel?: bool, silent?: bool, text?: string, user?: record, user_id?: string}
 export def "send-message" [
   type: string
   id: string
@@ -1592,7 +1581,7 @@ export def "send-message" [
   --pending-message-metadata: record
   --skip-enrich-url: oneof<nothing, bool> # Do not try to enrich the links within message
   --skip-push: oneof<nothing, bool> # Disables all push notifications for this message
-]: any -> record<duration: string, message: record<attachments: list<record>, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list<record>, mentioned_users: list<record>, mml: string, own_reactions: list<record>, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list<record>, type: string, updated_at: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>>, pending_message_metadata: record> {
+]: any -> oneof<record<duration: string, message: record<attachments: list<record>, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list<record>, mentioned_users: list<record>, mml: string, own_reactions: list<record>, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list<record>, type: string, updated_at: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>>, pending_message_metadata: record>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
@@ -1635,7 +1624,7 @@ export def "get-many-messages" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --ids: string
-]: nothing -> record<duration: string, messages: table<attachments: list, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list, mentioned_users: list, mml: string, own_reactions: list, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list, type: string, updated_at: string, user: record>> {
+]: nothing -> oneof<record<duration: string, messages: table<attachments: list, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list, mentioned_users: list, mml: string, own_reactions: list, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list, type: string, updated_at: string, user: record>>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
@@ -1662,10 +1651,6 @@ export def "get-many-messages" [
 #
 # POST /channels/{type}/{id}/query
 # operationId: GetOrCreateChannel_type_id_0
-# --data shape: {auto_translation_enabled?: bool, auto_translation_language?: string, config_overrides?: record, created_by?: record, disabled?: bool, frozen?: bool, members?: list, own_capabilities?: list<float>, team?: string, truncated_at?: list<float>, truncated_by?: list<float>, truncated_by_id?: string}
-# --members shape: {id_gt?: float, id_gte?: float, id_lt?: float, id_lte?: float, limit?: float, offset?: float}
-# --messages shape: {created_at_after?: string, created_at_after_or_equal?: string, created_at_around?: string, created_at_before?: string, created_at_before_or_equal?: string, id_around?: string, id_gt?: string, id_gte?: string, id_lt?: string, id_lte?: string, limit?: float, offset?: float}
-# --watchers shape: {id_gt?: float, id_gte?: float, id_lt?: float, id_lte?: float, limit?: float, offset?: float}
 export def "get-or-create-channel-type-id-0" [
   type: string
   id: string
@@ -1690,7 +1675,7 @@ export def "get-or-create-channel-type-id-0" [
   --state: oneof<nothing, bool> # Refresh channel state
   --watch: oneof<nothing, bool> # Start watching the channel
   --watchers: record # shape: {id_gt?: float, id_gte?: float, id_lt?: float, id_lte?: float, limit?: float, offset?: float}
-]: any -> record<channel: record<auto_translation_enabled: bool, auto_translation_language: string, cid: string, config: record<automod: string, automod_behavior: string, automod_thresholds: record, blocklist: string, blocklist_behavior: string, commands: list, connect_events: bool, created_at: string, custom_events: bool, grants: record, max_message_length: float, message_retention: string, mutes: bool, name: string, push_notifications: bool, quotes: bool, reactions: bool, read_events: bool, reminders: bool, replies: bool, search: bool, typing_events: bool, updated_at: string, uploads: bool, url_enrichment: bool>, cooldown: float, created_at: string, created_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, deleted_at: string, disabled: bool, frozen: bool, hidden: bool, hide_messages_before: string, id: string, last_message_at: string, member_count: float, members: list<record>, mute_expires_at: string, muted: bool, own_capabilities: list<string>, team: string, truncated_at: string, truncated_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, type: string, updated_at: string>, duration: string, hidden: bool, hide_messages_before: string, members: table<ban_expires: string, banned: bool, channel_role: string, created_at: string, deleted_at: string, invite_accepted_at: string, invite_rejected_at: string, invited: bool, is_moderator: bool, role: string, shadow_banned: bool, updated_at: string, user: record, user_id: string>, membership: record<ban_expires: string, banned: bool, channel_role: string, created_at: string, deleted_at: string, invite_accepted_at: string, invite_rejected_at: string, invited: bool, is_moderator: bool, role: string, shadow_banned: bool, updated_at: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, user_id: string>, messages: table<attachments: list, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list, mentioned_users: list, mml: string, own_reactions: list, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list, type: string, updated_at: string, user: record>, pending_messages: table<channel: record, message: record, metadata: record, user: record>, pinned_messages: table<attachments: list, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list, mentioned_users: list, mml: string, own_reactions: list, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list, type: string, updated_at: string, user: record>, read: table<last_read: string, unread_messages: float, user: record>, watcher_count: float, watchers: table<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>> {
+]: any -> oneof<record<channel: record<auto_translation_enabled: bool, auto_translation_language: string, cid: string, config: record<automod: string, automod_behavior: string, automod_thresholds: record, blocklist: string, blocklist_behavior: string, commands: list, connect_events: bool, created_at: string, custom_events: bool, grants: record, max_message_length: float, message_retention: string, mutes: bool, name: string, push_notifications: bool, quotes: bool, reactions: bool, read_events: bool, reminders: bool, replies: bool, search: bool, typing_events: bool, updated_at: string, uploads: bool, url_enrichment: bool>, cooldown: float, created_at: string, created_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, deleted_at: string, disabled: bool, frozen: bool, hidden: bool, hide_messages_before: string, id: string, last_message_at: string, member_count: float, members: list<record>, mute_expires_at: string, muted: bool, own_capabilities: list<string>, team: string, truncated_at: string, truncated_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, type: string, updated_at: string>, duration: string, hidden: bool, hide_messages_before: string, members: table<ban_expires: string, banned: bool, channel_role: string, created_at: string, deleted_at: string, invite_accepted_at: string, invite_rejected_at: string, invited: bool, is_moderator: bool, role: string, shadow_banned: bool, updated_at: string, user: record, user_id: string>, membership: record<ban_expires: string, banned: bool, channel_role: string, created_at: string, deleted_at: string, invite_accepted_at: string, invite_rejected_at: string, invited: bool, is_moderator: bool, role: string, shadow_banned: bool, updated_at: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, user_id: string>, messages: table<attachments: list, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list, mentioned_users: list, mml: string, own_reactions: list, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list, type: string, updated_at: string, user: record>, pending_messages: table<channel: record, message: record, metadata: record, user: record>, pinned_messages: table<attachments: list, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list, mentioned_users: list, mml: string, own_reactions: list, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list, type: string, updated_at: string, user: record>, read: table<last_read: string, unread_messages: float, user: record>, watcher_count: float, watchers: table<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
@@ -1720,7 +1705,6 @@ export def "get-or-create-channel-type-id-0" [
 #
 # POST /channels/{type}/{id}/read
 # operationId: MarkRead
-# --user shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
 export def "mark-read" [
   type: string
   id: string
@@ -1737,7 +1721,7 @@ export def "mark-read" [
   --message-id: string # ID of the message that is considered last read by client
   --user: record # Represents chat user — shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
   --user-id: string
-]: any -> record<duration: string, event: record<automoderation: bool, automoderation_scores: record<action: string, explicit: float, spam: float, toxic: float>, channel: record<auto_translation_enabled: bool, auto_translation_language: string, cid: string, config: record, cooldown: float, created_at: string, created_by: record, deleted_at: string, disabled: bool, frozen: bool, hidden: bool, hide_messages_before: string, id: string, last_message_at: string, member_count: float, members: list, mute_expires_at: string, muted: bool, own_capabilities: list, team: string, truncated_at: string, truncated_by: record, type: string, updated_at: string>, channel_id: string, channel_type: string, cid: string, connection_id: string, created_at: string, created_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, me: record<banned: bool, channel_mutes: list, created_at: string, deactivated_at: string, deleted_at: string, devices: list, id: string, invisible: bool, language: string, last_active: string, latest_hidden_channels: list, mutes: list, online: bool, push_notifications: record, role: string, teams: list, total_unread_count: float, unread_channels: float, unread_count: float, updated_at: string>, member: record<ban_expires: string, banned: bool, channel_role: string, created_at: string, deleted_at: string, invite_accepted_at: string, invite_rejected_at: string, invited: bool, is_moderator: bool, role: string, shadow_banned: bool, updated_at: string, user: record, user_id: string>, message: record<attachments: list, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list, mentioned_users: list, mml: string, own_reactions: list, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list, type: string, updated_at: string, user: record>, parent_id: string, reaction: record<created_at: string, message_id: string, score: float, type: string, updated_at: string, user: record, user_id: string>, reason: string, team: string, type: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, user_id: string, watcher_count: float>> {
+]: any -> oneof<record<duration: string, event: record<automoderation: bool, automoderation_scores: record<action: string, explicit: float, spam: float, toxic: float>, channel: record<auto_translation_enabled: bool, auto_translation_language: string, cid: string, config: record, cooldown: float, created_at: string, created_by: record, deleted_at: string, disabled: bool, frozen: bool, hidden: bool, hide_messages_before: string, id: string, last_message_at: string, member_count: float, members: list, mute_expires_at: string, muted: bool, own_capabilities: list, team: string, truncated_at: string, truncated_by: record, type: string, updated_at: string>, channel_id: string, channel_type: string, cid: string, connection_id: string, created_at: string, created_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, me: record<banned: bool, channel_mutes: list, created_at: string, deactivated_at: string, deleted_at: string, devices: list, id: string, invisible: bool, language: string, last_active: string, latest_hidden_channels: list, mutes: list, online: bool, push_notifications: record, role: string, teams: list, total_unread_count: float, unread_channels: float, unread_count: float, updated_at: string>, member: record<ban_expires: string, banned: bool, channel_role: string, created_at: string, deleted_at: string, invite_accepted_at: string, invite_rejected_at: string, invited: bool, is_moderator: bool, role: string, shadow_banned: bool, updated_at: string, user: record, user_id: string>, message: record<attachments: list, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list, mentioned_users: list, mml: string, own_reactions: list, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list, type: string, updated_at: string, user: record>, parent_id: string, reaction: record<created_at: string, message_id: string, score: float, type: string, updated_at: string, user: record, user_id: string>, reason: string, team: string, type: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, user_id: string, watcher_count: float>>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
@@ -1766,7 +1750,6 @@ export def "mark-read" [
 #
 # POST /channels/{type}/{id}/show
 # operationId: ShowChannel
-# --user shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
 export def "show-channel" [
   type: string
   id: string
@@ -1782,7 +1765,7 @@ export def "show-channel" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --user: record # Represents chat user — shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
   --user-id: string
-]: any -> record<duration: string> {
+]: any -> oneof<record<duration: string>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
@@ -1828,7 +1811,7 @@ export def "stop-watching-channel" [
   --connection-id: string
   --client-id-body: string # (body field)
   --connection-id-body: string # (body field)
-]: any -> record<duration: string> {
+]: any -> oneof<record<duration: string>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
@@ -1858,8 +1841,6 @@ export def "stop-watching-channel" [
 #
 # POST /channels/{type}/{id}/truncate
 # operationId: TruncateChannel
-# --message shape: {attachments: list, cid?: list<float>, html?: string, id?: string, mentioned_users?: list<string>, mml?: string, parent?: list<float>, parent_id?: string, pin_expires?: string, pinned?: bool, pinned_at?: string, pinned_by?: list<float>, quoted_message_id?: string, reaction_scores?: list<float>, show_in_channel?: bool, silent?: bool, text?: string, user?: record, user_id?: string}
-# --user shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
 export def "truncate-channel" [
   type: string
   id: string
@@ -1879,7 +1860,7 @@ export def "truncate-channel" [
   --truncated-at: string # Truncate channel data up to `truncated_at`. The system message (if provided) creation time is always greater than `truncated_at` (format: date-time)
   --user: record # Represents chat user — shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
   --user-id: string
-]: any -> record<channel: record<auto_translation_enabled: bool, auto_translation_language: string, cid: string, config: record<automod: string, automod_behavior: string, automod_thresholds: record, blocklist: string, blocklist_behavior: string, commands: list, connect_events: bool, created_at: string, custom_events: bool, grants: record, max_message_length: float, message_retention: string, mutes: bool, name: string, push_notifications: bool, quotes: bool, reactions: bool, read_events: bool, reminders: bool, replies: bool, search: bool, typing_events: bool, updated_at: string, uploads: bool, url_enrichment: bool>, cooldown: float, created_at: string, created_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, deleted_at: string, disabled: bool, frozen: bool, hidden: bool, hide_messages_before: string, id: string, last_message_at: string, member_count: float, members: list<record>, mute_expires_at: string, muted: bool, own_capabilities: list<string>, team: string, truncated_at: string, truncated_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, type: string, updated_at: string>, duration: string, message: record<attachments: list<record>, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list<record>, mentioned_users: list<record>, mml: string, own_reactions: list<record>, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list<record>, type: string, updated_at: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>>> {
+]: any -> oneof<record<channel: record<auto_translation_enabled: bool, auto_translation_language: string, cid: string, config: record<automod: string, automod_behavior: string, automod_thresholds: record, blocklist: string, blocklist_behavior: string, commands: list, connect_events: bool, created_at: string, custom_events: bool, grants: record, max_message_length: float, message_retention: string, mutes: bool, name: string, push_notifications: bool, quotes: bool, reactions: bool, read_events: bool, reminders: bool, replies: bool, search: bool, typing_events: bool, updated_at: string, uploads: bool, url_enrichment: bool>, cooldown: float, created_at: string, created_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, deleted_at: string, disabled: bool, frozen: bool, hidden: bool, hide_messages_before: string, id: string, last_message_at: string, member_count: float, members: list<record>, mute_expires_at: string, muted: bool, own_capabilities: list<string>, team: string, truncated_at: string, truncated_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, type: string, updated_at: string>, duration: string, message: record<attachments: list<record>, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list<record>, mentioned_users: list<record>, mml: string, own_reactions: list<record>, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list<record>, type: string, updated_at: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>>>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
@@ -1908,7 +1889,6 @@ export def "truncate-channel" [
 #
 # POST /channels/{type}/{id}/unread
 # operationId: MarkUnread
-# --user shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
 export def "mark-unread" [
   type: string
   id: string
@@ -1925,7 +1905,7 @@ export def "mark-unread" [
   message_id: string # ID of the message from where the channel is marked unread
   --user: record # Represents chat user — shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
   --user-id: string
-]: any -> record<duration: string> {
+]: any -> oneof<record<duration: string>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
@@ -1965,7 +1945,7 @@ export def "list-channel-types" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<channel_types: record, duration: string> {
+]: nothing -> oneof<record<channel_types: record, duration: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/channeltypes" $auth.query)
@@ -1989,7 +1969,6 @@ export def "list-channel-types" [
 #
 # POST /channeltypes
 # operationId: CreateChannelType
-# --permissions item shape: {action?: "Deny"|"Allow", name: string, owner?: bool, priority: float, resources?: list<string>, roles?: list<string>}
 export def "create-channel-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
@@ -2022,7 +2001,7 @@ export def "create-channel-type" [
   --typing-events: oneof<nothing, bool> # Typing events support
   --uploads: oneof<nothing, bool> # Enables file uploads
   --url-enrichment: oneof<nothing, bool> # Enables URL enrichment
-]: any -> record<automod: string, automod_behavior: string, automod_thresholds: record<explicit: record<block: float, flag: float>, spam: record<block: float, flag: float>, toxic: record<block: float, flag: float>>, blocklist: string, blocklist_behavior: string, commands: list<string>, connect_events: bool, created_at: string, custom_events: bool, duration: string, grants: record, max_message_length: float, message_retention: string, mutes: bool, name: string, permissions: table<action: string, name: string, owner: bool, priority: float, resources: list, roles: list>, push_notifications: bool, quotes: bool, reactions: bool, read_events: bool, reminders: bool, replies: bool, search: bool, typing_events: bool, updated_at: string, uploads: bool, url_enrichment: bool> {
+]: any -> oneof<record<automod: string, automod_behavior: string, automod_thresholds: record<explicit: record<block: float, flag: float>, spam: record<block: float, flag: float>, toxic: record<block: float, flag: float>>, blocklist: string, blocklist_behavior: string, commands: list<string>, connect_events: bool, created_at: string, custom_events: bool, duration: string, grants: record, max_message_length: float, message_retention: string, mutes: bool, name: string, permissions: table<action: string, name: string, owner: bool, priority: float, resources: list, roles: list>, push_notifications: bool, quotes: bool, reactions: bool, read_events: bool, reminders: bool, replies: bool, search: bool, typing_events: bool, updated_at: string, uploads: bool, url_enrichment: bool>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
@@ -2061,7 +2040,7 @@ export def "delete-channel-type" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<duration: string> {
+]: nothing -> oneof<record<duration: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -2098,7 +2077,7 @@ export def "get-channel-type" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<duration: string> {
+]: nothing -> oneof<record<duration: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -2123,8 +2102,6 @@ export def "get-channel-type" [
 #
 # PUT /channeltypes/{name}
 # operationId: UpdateChannelType
-# --automod_thresholds shape: {explicit?: record, spam?: record, toxic?: record}
-# --permissions item shape: {action?: "Deny"|"Allow", name: string, owner?: bool, priority: float, resources?: list<string>, roles?: list<string>}
 export def "update-channel-type" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2161,7 +2138,7 @@ export def "update-channel-type" [
   --typing-events: oneof<nothing, bool>
   --uploads: oneof<nothing, bool>
   --url-enrichment: oneof<nothing, bool>
-]: any -> record<automod: string, automod_behavior: string, automod_thresholds: record<explicit: record<block: float, flag: float>, spam: record<block: float, flag: float>, toxic: record<block: float, flag: float>>, blocklist: string, blocklist_behavior: string, commands: list<string>, connect_events: bool, created_at: string, custom_events: bool, duration: string, grants: record, max_message_length: float, message_retention: string, mutes: bool, name: string, permissions: table<action: string, name: string, owner: bool, priority: float, resources: list, roles: list>, push_notifications: bool, quotes: bool, reactions: bool, read_events: bool, reminders: bool, replies: bool, search: bool, typing_events: bool, updated_at: string, uploads: bool, url_enrichment: bool> {
+]: any -> oneof<record<automod: string, automod_behavior: string, automod_thresholds: record<explicit: record<block: float, flag: float>, spam: record<block: float, flag: float>, toxic: record<block: float, flag: float>>, blocklist: string, blocklist_behavior: string, commands: list<string>, connect_events: bool, created_at: string, custom_events: bool, duration: string, grants: record, max_message_length: float, message_retention: string, mutes: bool, name: string, permissions: table<action: string, name: string, owner: bool, priority: float, resources: list, roles: list>, push_notifications: bool, quotes: bool, reactions: bool, read_events: bool, reminders: bool, replies: bool, search: bool, typing_events: bool, updated_at: string, uploads: bool, url_enrichment: bool>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
@@ -2189,7 +2166,6 @@ export def "update-channel-type" [
 #
 # POST /check_push
 # operationId: CheckPush
-# --user shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
 export def "check-push" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
@@ -2210,7 +2186,7 @@ export def "check-push" [
   --skip-devices: oneof<nothing, bool> # Don't require existing devices to render templates
   --user: record # Represents chat user — shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
   --user-id: string
-]: any -> record<device_errors: record, duration: string, general_errors: list<string>, rendered_apn_template: string, rendered_firebase_template: string, rendered_message: record, skip_devices: bool> {
+]: any -> oneof<record<device_errors: record, duration: string, general_errors: list<string>, rendered_apn_template: string, rendered_firebase_template: string, rendered_message: record, skip_devices: bool>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
@@ -2251,7 +2227,7 @@ export def "check-sqs" [
   --sqs-key: string # AWS SQS access key
   --sqs-secret: string # AWS SQS key secret
   --sqs-url: string # AWS SQS endpoint URL
-]: any -> record<data: record, duration: string, error: string, status: string> {
+]: any -> oneof<record<data: record, duration: string, error: string, status: string>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
@@ -2289,7 +2265,7 @@ export def "list-commands" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<commands: table<args: string, created_at: string, description: string, name: string, set: string, updated_at: string>, duration: string> {
+]: nothing -> oneof<record<commands: table<args: string, created_at: string, description: string, name: string, set: string, updated_at: string>, duration: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/commands" $auth.query)
@@ -2328,7 +2304,7 @@ export def "create-command" [
   description: string # Description, shown in commands auto-completion
   name: string # Unique command name
   --set: string # Set name used for grouping commands
-]: any -> record<command: record<args: string, created_at: string, description: string, name: string, set: string, updated_at: string>, duration: string> {
+]: any -> oneof<record<command: record<args: string, created_at: string, description: string, name: string, set: string, updated_at: string>, duration: string>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
@@ -2367,7 +2343,7 @@ export def "delete-command" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<duration: string, name: string> {
+]: nothing -> oneof<record<duration: string, name: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -2404,7 +2380,7 @@ export def "get-command" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<args: string, created_at: string, description: string, duration: string, name: string, set: string, updated_at: string> {
+]: nothing -> oneof<record<args: string, created_at: string, description: string, duration: string, name: string, set: string, updated_at: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -2445,7 +2421,7 @@ export def "update-command" [
   --args: string # Arguments help text, shown in commands auto-completion
   description: string # Description, shown in commands auto-completion
   --set: string # Set name used for grouping commands
-]: any -> record<command: record<args: string, created_at: string, description: string, name: string, set: string, updated_at: string>, duration: string> {
+]: any -> oneof<record<command: record<args: string, created_at: string, description: string, name: string, set: string, updated_at: string>, duration: string>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
@@ -2523,7 +2499,7 @@ export def "delete-device" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: string
   --user-id: string
-]: nothing -> record<duration: string> {
+]: nothing -> oneof<record<duration: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "user_id" $user_id "scalar")] | flatten | str join "&"
@@ -2560,7 +2536,7 @@ export def "list-devices" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --user-id: string
-]: nothing -> record<devices: table<created_at: string, disabled: bool, disabled_reason: string, id: string, push_provider: string, push_provider_name: string, user_id: string>, duration: string> {
+]: nothing -> oneof<record<devices: table<created_at: string, disabled: bool, disabled_reason: string, id: string, push_provider: string, push_provider_name: string, user_id: string>, duration: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "user_id" $user_id "scalar")] | flatten | str join "&"
@@ -2585,7 +2561,6 @@ export def "list-devices" [
 #
 # POST /devices
 # operationId: CreateDevice
-# --user shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
 export def "create-device" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
@@ -2602,7 +2577,7 @@ export def "create-device" [
   --push-provider-name: string
   --user: record # Represents chat user — shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
   --user-id: string # **Server-side only**. User ID which server acts upon
-]: any -> record<duration: string> {
+]: any -> oneof<record<duration: string>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
@@ -2641,7 +2616,7 @@ export def "export-user" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   user_ids: list<string>
-]: any -> record<duration: string, task_id: string> {
+]: any -> oneof<record<duration: string, task_id: string>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
@@ -2668,7 +2643,6 @@ export def "export-user" [
 #
 # POST /export_channels
 # operationId: ExportChannels
-# --channels item shape: {cid?: string, id?: string, messages_since?: string, messages_until?: string, type?: string}
 export def "export-channels" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
@@ -2685,7 +2659,7 @@ export def "export-channels" [
   --export-users: oneof<nothing, bool>
   --include-truncated-messages: oneof<nothing, bool> # Set if you want to include truncated messages
   --version: string
-]: any -> record<duration: string, task_id: string> {
+]: any -> oneof<record<duration: string, task_id: string>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
@@ -2724,7 +2698,7 @@ export def "get-export-channels-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created_at: string, duration: string, error: record<description: any, stacktrace: string, type: string, version: string>, result: record<path: string, s3_bucket_name: string, url: string>, status: string, task_id: string, updated_at: string> {
+]: nothing -> oneof<record<created_at: string, duration: string, error: record<description: any, stacktrace: string, type: string, version: string>, result: record<path: string, s3_bucket_name: string, url: string>, status: string, task_id: string, updated_at: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2749,7 +2723,6 @@ export def "get-export-channels-status" [
 #
 # POST /guest
 # operationId: CreateGuest
-# --user shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
 export def "create-guest" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
@@ -2762,7 +2735,7 @@ export def "create-guest" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   user: record # Represents chat user — shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
-]: any -> record<access_token: string, duration: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record<disabled: bool, disabled_until: string>, revoke_tokens_issued_before: string, role: string, teams: list<string>, updated_at: string>> {
+]: any -> oneof<record<access_token: string, duration: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record<disabled: bool, disabled_until: string>, revoke_tokens_issued_before: string, role: string, teams: list<string>, updated_at: string>>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
@@ -2801,7 +2774,7 @@ export def "create-import-url" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --filename: string
-]: any -> record<duration: string, path: string, upload_url: string> {
+]: any -> oneof<record<duration: string, path: string, upload_url: string>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
@@ -2839,7 +2812,7 @@ export def "list-imports" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<duration: string, import_tasks: table<created_at: string, history: list, id: string, mode: string, path: string, result: any, size: float, state: string, updated_at: string>> {
+]: nothing -> oneof<record<duration: string, import_tasks: table<created_at: string, history: list, id: string, mode: string, path: string, result: any, size: float, state: string, updated_at: string>>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/imports" $auth.query)
@@ -2876,7 +2849,7 @@ export def "create-import" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --mode: string@mode-completer
   path: string
-]: any -> record<duration: string, import_task: record<created_at: string, history: list<record>, id: string, mode: string, path: string, result: any, size: float, state: string, updated_at: string>> {
+]: any -> oneof<record<duration: string, import_task: record<created_at: string, history: list<record>, id: string, mode: string, path: string, result: any, size: float, state: string, updated_at: string>>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
@@ -2915,7 +2888,7 @@ export def "get-import" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<duration: string, import_task: record<created_at: string, history: list<record>, id: string, mode: string, path: string, result: any, size: float, state: string, updated_at: string>> {
+]: nothing -> oneof<record<duration: string, import_task: record<created_at: string, history: list<record>, id: string, mode: string, path: string, result: any, size: float, state: string, updated_at: string>>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2990,7 +2963,7 @@ export def "query-members" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --payload: string
-]: nothing -> record<duration: string, members: table<ban_expires: string, banned: bool, channel_role: string, created_at: string, deleted_at: string, invite_accepted_at: string, invite_rejected_at: string, invited: bool, is_moderator: bool, role: string, shadow_banned: bool, updated_at: string, user: record, user_id: string>> {
+]: nothing -> oneof<record<duration: string, members: table<ban_expires: string, banned: bool, channel_role: string, created_at: string, deleted_at: string, invite_accepted_at: string, invite_rejected_at: string, invited: bool, is_moderator: bool, role: string, shadow_banned: bool, updated_at: string, user: record, user_id: string>>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "payload" $payload "scalar")] | flatten | str join "&"
@@ -3028,7 +3001,7 @@ export def "delete-message" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hard: string
-]: nothing -> record<duration: string, message: record<attachments: list<record>, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list<record>, mentioned_users: list<record>, mml: string, own_reactions: list<record>, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list<record>, type: string, updated_at: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>>> {
+]: nothing -> oneof<record<duration: string, message: record<attachments: list<record>, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list<record>, mentioned_users: list<record>, mml: string, own_reactions: list<record>, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list<record>, type: string, updated_at: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>>>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3066,7 +3039,7 @@ export def "get-message" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<duration: string, message: record<attachments: list<record>, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list<record>, mentioned_users: list<record>, mml: string, own_reactions: list<record>, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list<record>, type: string, updated_at: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>>, pending_message_metadata: record> {
+]: nothing -> oneof<record<duration: string, message: record<attachments: list<record>, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list<record>, mentioned_users: list<record>, mml: string, own_reactions: list<record>, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list<record>, type: string, updated_at: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>>, pending_message_metadata: record>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3091,7 +3064,6 @@ export def "get-message" [
 #
 # POST /messages/{id}
 # operationId: UpdateMessage
-# --message shape: {attachments: list, cid?: list<float>, html?: string, id?: string, mentioned_users?: list<string>, mml?: string, parent?: list<float>, parent_id?: string, pin_expires?: string, pinned?: bool, pinned_at?: string, pinned_by?: list<float>, quoted_message_id?: string, reaction_scores?: list<float>, show_in_channel?: bool, silent?: bool, text?: string, user?: record, user_id?: string}
 export def "update-message" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3107,7 +3079,7 @@ export def "update-message" [
   message: record # Represents any chat message — shape: {attachments: list, cid?: list<float>, html?: string, id?: string, mentioned_users?: list<string>, mml?: string, parent?: list<float>, parent_id?: string, pin_expires?: string, pinned?: bool, pinned_at?: string, pinned_by?: list<float>, quoted_message_id?: string, reaction_scores?: list<float>, show_in_channel?: bool, silent?: bool, text?: string, user?: record, user_id?: string}
   --pending-message-metadata: record
   --skip-enrich-url: oneof<nothing, bool> # Do not try to enrich the links within message
-]: any -> record<duration: string, message: record<attachments: list<record>, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list<record>, mentioned_users: list<record>, mml: string, own_reactions: list<record>, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list<record>, type: string, updated_at: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>>> {
+]: any -> oneof<record<duration: string, message: record<attachments: list<record>, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list<record>, mentioned_users: list<record>, mml: string, own_reactions: list<record>, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list<record>, type: string, updated_at: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>>>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
@@ -3135,7 +3107,6 @@ export def "update-message" [
 #
 # PUT /messages/{id}
 # operationId: UpdateMessagePartial
-# --user shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
 export def "update-message-partial" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3153,7 +3124,7 @@ export def "update-message-partial" [
   unset: list<string> # Array of field names to unset
   --user: record # Represents chat user — shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
   --user-id: string
-]: any -> record<duration: string, message: record<attachments: list<record>, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list<record>, mentioned_users: list<record>, mml: string, own_reactions: list<record>, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list<record>, type: string, updated_at: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>>> {
+]: any -> oneof<record<duration: string, message: record<attachments: list<record>, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list<record>, mentioned_users: list<record>, mml: string, own_reactions: list<record>, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list<record>, type: string, updated_at: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>>>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
@@ -3181,7 +3152,6 @@ export def "update-message-partial" [
 #
 # POST /messages/{id}/action
 # operationId: RunMessageAction
-# --user shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
 export def "run-message-action" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3198,7 +3168,7 @@ export def "run-message-action" [
   form_data: record # Data to execute command with
   --user: record # Represents chat user — shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
   --user-id: string
-]: any -> record<duration: string, message: record<attachments: list<record>, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list<record>, mentioned_users: list<record>, mml: string, own_reactions: list<record>, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list<record>, type: string, updated_at: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>>> {
+]: any -> oneof<record<duration: string, message: record<attachments: list<record>, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list<record>, mentioned_users: list<record>, mml: string, own_reactions: list<record>, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list<record>, type: string, updated_at: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>>>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
@@ -3238,7 +3208,7 @@ export def "commit-message" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<duration: string, message: record<attachments: list<record>, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list<record>, mentioned_users: list<record>, mml: string, own_reactions: list<record>, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list<record>, type: string, updated_at: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>>> {
+]: nothing -> oneof<record<duration: string, message: record<attachments: list<record>, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list<record>, mentioned_users: list<record>, mml: string, own_reactions: list<record>, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list<record>, type: string, updated_at: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>>>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3263,7 +3233,6 @@ export def "commit-message" [
 #
 # POST /messages/{id}/reaction
 # operationId: SendReaction
-# --reaction shape: {message_id?: string, score?: float, type: string, user?: record, user_id?: string}
 export def "send-reaction" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3280,7 +3249,7 @@ export def "send-reaction" [
   --enforce-unique: oneof<nothing, bool> # Whether to replace all existing user reactions
   --reaction: record # Represents user reaction to a message (nullable) — shape: {message_id?: string, score?: float, type: string, user?: record, user_id?: string}
   --skip-push: oneof<nothing, bool> # Skips any mobile push notifications
-]: any -> record<duration: string, message: record<attachments: list<record>, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list<record>, mentioned_users: list<record>, mml: string, own_reactions: list<record>, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list<record>, type: string, updated_at: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>>, reaction: record<created_at: string, message_id: string, score: float, type: string, updated_at: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, user_id: string>> {
+]: any -> oneof<record<duration: string, message: record<attachments: list<record>, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list<record>, mentioned_users: list<record>, mml: string, own_reactions: list<record>, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list<record>, type: string, updated_at: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>>, reaction: record<created_at: string, message_id: string, score: float, type: string, updated_at: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, user_id: string>>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
@@ -3322,7 +3291,7 @@ export def "delete-reaction" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --user-id: string
-]: nothing -> record<duration: string, message: record<attachments: list<record>, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list<record>, mentioned_users: list<record>, mml: string, own_reactions: list<record>, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list<record>, type: string, updated_at: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>>, reaction: record<created_at: string, message_id: string, score: float, type: string, updated_at: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, user_id: string>> {
+]: nothing -> oneof<record<duration: string, message: record<attachments: list<record>, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list<record>, mentioned_users: list<record>, mml: string, own_reactions: list<record>, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list<record>, type: string, updated_at: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>>, reaction: record<created_at: string, message_id: string, score: float, type: string, updated_at: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, user_id: string>>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3363,7 +3332,7 @@ export def "get-reactions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: string
   --offset: string
-]: nothing -> record<duration: string, reactions: table<created_at: string, message_id: string, score: float, type: string, updated_at: string, user: record, user_id: string>> {
+]: nothing -> oneof<record<duration: string, reactions: table<created_at: string, message_id: string, score: float, type: string, updated_at: string, user: record, user_id: string>>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3402,7 +3371,7 @@ export def "translate-message" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   language: string@language-completer # Language to translate message to
-]: any -> record<duration: string, message: record<attachments: list<record>, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list<record>, mentioned_users: list<record>, mml: string, own_reactions: list<record>, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list<record>, type: string, updated_at: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>>> {
+]: any -> oneof<record<duration: string, message: record<attachments: list<record>, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list<record>, mentioned_users: list<record>, mml: string, own_reactions: list<record>, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list<record>, type: string, updated_at: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>>>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
@@ -3452,7 +3421,7 @@ export def "get-replies" [
   --created-at-before: string
   --id-around: string
   --created-at-around: string
-]: nothing -> record<duration: string, messages: table<attachments: list, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list, mentioned_users: list, mml: string, own_reactions: list, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list, type: string, updated_at: string, user: record>> {
+]: nothing -> oneof<record<duration: string, messages: table<attachments: list, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list, mentioned_users: list, mml: string, own_reactions: list, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list, type: string, updated_at: string, user: record>>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($parent_id | is-empty) { error make --unspanned { msg: "path parameter 'parent_id' must be non-empty" } }
@@ -3492,7 +3461,7 @@ export def "unban" [
   --target-user-id: string
   --type: string
   --id: string
-]: nothing -> record<duration: string> {
+]: nothing -> oneof<record<duration: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "target_user_id" $target_user_id "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
@@ -3517,8 +3486,6 @@ export def "unban" [
 #
 # POST /moderation/ban
 # operationId: Ban
-# --banned_by shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
-# --user shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
 export def "ban" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
@@ -3541,7 +3508,7 @@ export def "ban" [
   --type: string # Channel type to ban user in
   --user: record # Represents chat user — shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
   --user-id: string
-]: any -> record<duration: string> {
+]: any -> oneof<record<duration: string>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
@@ -3568,7 +3535,6 @@ export def "ban" [
 #
 # POST /moderation/flag
 # operationId: Flag
-# --user shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
 export def "flag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
@@ -3584,7 +3550,7 @@ export def "flag" [
   --target-user-id: string # ID of the user when reporting a user
   --user: record # Represents chat user — shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
   --user-id: string
-]: any -> record<duration: string, flag: record<approved_at: string, created_at: string, created_by_automod: bool, details: record<automod: record>, rejected_at: string, reviewed_at: string, target_message: record<attachments: list, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list, mentioned_users: list, mml: string, own_reactions: list, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list, type: string, updated_at: string, user: record>, target_message_id: string, target_user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, updated_at: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>>> {
+]: any -> oneof<record<duration: string, flag: record<approved_at: string, created_at: string, created_by_automod: bool, details: record<automod: record>, rejected_at: string, reviewed_at: string, target_message: record<attachments: list, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list, mentioned_users: list, mml: string, own_reactions: list, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list, type: string, updated_at: string, user: record>, target_message_id: string, target_user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, updated_at: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>>>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
@@ -3623,7 +3589,7 @@ export def "query-message-flags" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --payload: string
-]: nothing -> record<duration: string, flags: table<approved_at: string, created_at: string, created_by_automod: bool, message: record, moderation_result: record, rejected_at: string, reviewed_at: string, reviewed_by: record, updated_at: string, user: record>> {
+]: nothing -> oneof<record<duration: string, flags: table<approved_at: string, created_at: string, created_by_automod: bool, message: record, moderation_result: record, rejected_at: string, reviewed_at: string, reviewed_by: record, updated_at: string, user: record>>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "payload" $payload "scalar")] | flatten | str join "&"
@@ -3648,7 +3614,6 @@ export def "query-message-flags" [
 #
 # POST /moderation/mute
 # operationId: MuteUser
-# --user shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
 export def "mute-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
@@ -3664,7 +3629,7 @@ export def "mute-user" [
   --timeout: float # Duration of mute in minutes
   --user: record # Represents chat user — shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
   --user-id: string
-]: any -> record<duration: string, mute: record<created_at: string, expires: string, target: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, updated_at: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>>, mutes: table<created_at: string, expires: string, target: record, updated_at: string, user: record>, own_user: record<banned: bool, channel_mutes: list<record>, created_at: string, deactivated_at: string, deleted_at: string, devices: list<record>, id: string, invisible: bool, language: string, last_active: string, latest_hidden_channels: list<string>, mutes: list<record>, online: bool, push_notifications: record<disabled: bool, disabled_until: string>, role: string, teams: list<string>, total_unread_count: float, unread_channels: float, unread_count: float, updated_at: string>> {
+]: any -> oneof<record<duration: string, mute: record<created_at: string, expires: string, target: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, updated_at: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>>, mutes: table<created_at: string, expires: string, target: record, updated_at: string, user: record>, own_user: record<banned: bool, channel_mutes: list<record>, created_at: string, deactivated_at: string, deleted_at: string, devices: list<record>, id: string, invisible: bool, language: string, last_active: string, latest_hidden_channels: list<string>, mutes: list<record>, online: bool, push_notifications: record<disabled: bool, disabled_until: string>, role: string, teams: list<string>, total_unread_count: float, unread_channels: float, unread_count: float, updated_at: string>>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
@@ -3691,7 +3656,6 @@ export def "mute-user" [
 #
 # POST /moderation/mute/channel
 # operationId: MuteChannel
-# --user shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
 export def "mute-channel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
@@ -3707,7 +3671,7 @@ export def "mute-channel" [
   --expiration: float # Duration of mute in milliseconds
   --user: record # Represents chat user — shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
   --user-id: string
-]: any -> record<channel_mute: record<channel: record<auto_translation_enabled: bool, auto_translation_language: string, cid: string, config: record, cooldown: float, created_at: string, created_by: record, deleted_at: string, disabled: bool, frozen: bool, hidden: bool, hide_messages_before: string, id: string, last_message_at: string, member_count: float, members: list, mute_expires_at: string, muted: bool, own_capabilities: list, team: string, truncated_at: string, truncated_by: record, type: string, updated_at: string>, created_at: string, expires: string, updated_at: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>>, channel_mutes: table<channel: record, created_at: string, expires: string, updated_at: string, user: record>, duration: string, own_user: record<banned: bool, channel_mutes: list<record>, created_at: string, deactivated_at: string, deleted_at: string, devices: list<record>, id: string, invisible: bool, language: string, last_active: string, latest_hidden_channels: list<string>, mutes: list<record>, online: bool, push_notifications: record<disabled: bool, disabled_until: string>, role: string, teams: list<string>, total_unread_count: float, unread_channels: float, unread_count: float, updated_at: string>> {
+]: any -> oneof<record<channel_mute: record<channel: record<auto_translation_enabled: bool, auto_translation_language: string, cid: string, config: record, cooldown: float, created_at: string, created_by: record, deleted_at: string, disabled: bool, frozen: bool, hidden: bool, hide_messages_before: string, id: string, last_message_at: string, member_count: float, members: list, mute_expires_at: string, muted: bool, own_capabilities: list, team: string, truncated_at: string, truncated_by: record, type: string, updated_at: string>, created_at: string, expires: string, updated_at: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>>, channel_mutes: table<channel: record, created_at: string, expires: string, updated_at: string, user: record>, duration: string, own_user: record<banned: bool, channel_mutes: list<record>, created_at: string, deactivated_at: string, deleted_at: string, devices: list<record>, id: string, invisible: bool, language: string, last_active: string, latest_hidden_channels: list<string>, mutes: list<record>, online: bool, push_notifications: record<disabled: bool, disabled_until: string>, role: string, teams: list<string>, total_unread_count: float, unread_channels: float, unread_count: float, updated_at: string>>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
@@ -3734,7 +3698,6 @@ export def "mute-channel" [
 #
 # POST /moderation/unflag
 # operationId: Unflag
-# --user shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
 export def "unflag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
@@ -3750,7 +3713,7 @@ export def "unflag" [
   --target-user-id: string # ID of the user when reporting a user
   --user: record # Represents chat user — shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
   --user-id: string
-]: any -> record<duration: string, flag: record<approved_at: string, created_at: string, created_by_automod: bool, details: record<automod: record>, rejected_at: string, reviewed_at: string, target_message: record<attachments: list, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list, mentioned_users: list, mml: string, own_reactions: list, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list, type: string, updated_at: string, user: record>, target_message_id: string, target_user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, updated_at: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>>> {
+]: any -> oneof<record<duration: string, flag: record<approved_at: string, created_at: string, created_by_automod: bool, details: record<automod: record>, rejected_at: string, reviewed_at: string, target_message: record<attachments: list, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list, mentioned_users: list, mml: string, own_reactions: list, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list, type: string, updated_at: string, user: record>, target_message_id: string, target_user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, updated_at: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>>>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
@@ -3777,7 +3740,6 @@ export def "unflag" [
 #
 # POST /moderation/unmute
 # operationId: UnmuteUser
-# --user shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
 export def "unmute-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
@@ -3794,7 +3756,7 @@ export def "unmute-user" [
   --timeout: float
   --user: record # Represents chat user — shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
   --user-id: string
-]: any -> record<duration: string> {
+]: any -> oneof<record<duration: string>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
@@ -3821,7 +3783,6 @@ export def "unmute-user" [
 #
 # POST /moderation/unmute/channel
 # operationId: UnmuteChannel
-# --user shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
 export def "unmute-channel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
@@ -3838,7 +3799,7 @@ export def "unmute-channel" [
   --expiration: float
   --user: record # Represents chat user — shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
   --user-id: string
-]: any -> record<duration: string> {
+]: any -> oneof<record<duration: string>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
@@ -3877,7 +3838,7 @@ export def "get-og" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --url: string
-]: nothing -> record<actions: table<name: string, style: string, text: string, type: string, value: string>, asset_url: string, author_icon: string, author_link: string, author_name: string, color: string, duration: string, fallback: string, fields: table<short: bool, title: string, value: string>, footer: string, footer_icon: string, giphy: record<fixed_height: record<frames: string, height: string, size: string, url: string, width: string>, fixed_height_downsampled: record<frames: string, height: string, size: string, url: string, width: string>, fixed_height_still: record<frames: string, height: string, size: string, url: string, width: string>, fixed_width: record<frames: string, height: string, size: string, url: string, width: string>, fixed_width_downsampled: record<frames: string, height: string, size: string, url: string, width: string>, fixed_width_still: record<frames: string, height: string, size: string, url: string, width: string>, original: record<frames: string, height: string, size: string, url: string, width: string>>, image_url: string, og_scrape_url: string, original_height: float, original_width: float, pretext: string, text: string, thumb_url: string, title: string, title_link: string, type: string> {
+]: nothing -> oneof<record<actions: table<name: string, style: string, text: string, type: string, value: string>, asset_url: string, author_icon: string, author_link: string, author_name: string, color: string, duration: string, fallback: string, fields: table<short: bool, title: string, value: string>, footer: string, footer_icon: string, giphy: record<fixed_height: record<frames: string, height: string, size: string, url: string, width: string>, fixed_height_downsampled: record<frames: string, height: string, size: string, url: string, width: string>, fixed_height_still: record<frames: string, height: string, size: string, url: string, width: string>, fixed_width: record<frames: string, height: string, size: string, url: string, width: string>, fixed_width_downsampled: record<frames: string, height: string, size: string, url: string, width: string>, fixed_width_still: record<frames: string, height: string, size: string, url: string, width: string>, original: record<frames: string, height: string, size: string, url: string, width: string>>, image_url: string, og_scrape_url: string, original_height: float, original_width: float, pretext: string, text: string, thumb_url: string, title: string, title_link: string, type: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "url" $url "scalar")] | flatten | str join "&"
@@ -3913,7 +3874,7 @@ export def "list-permissions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<duration: string, permissions: table<action: string, condition: record, custom: bool, description: string, id: string, level: string, name: string, owner: bool, same_team: bool, tags: list>> {
+]: nothing -> oneof<record<duration: string, permissions: table<action: string, condition: record, custom: bool, description: string, id: string, level: string, name: string, owner: bool, same_team: bool, tags: list>>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/permissions" $auth.query)
@@ -3949,7 +3910,7 @@ export def "get-permission" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<duration: string, permission: record<action: string, condition: record, custom: bool, description: string, id: string, level: string, name: string, owner: bool, same_team: bool, tags: list<string>>> {
+]: nothing -> oneof<record<duration: string, permission: record<action: string, condition: record, custom: bool, description: string, id: string, level: string, name: string, owner: bool, same_team: bool, tags: list<string>>>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3985,7 +3946,7 @@ export def "list-push-providers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<duration: string, push_providers: table<apn_auth_key: string, apn_auth_type: string, apn_development: bool, apn_host: string, apn_key_id: string, apn_notification_template: string, apn_p12_cert: string, apn_team_id: string, apn_topic: string, created_at: string, description: string, disabled_at: string, disabled_reason: string, firebase_apn_template: string, firebase_credentials: string, firebase_data_template: string, firebase_notification_template: string, firebase_server_key: string, huawei_app_id: string, huawei_app_secret: string, name: string, type: float, updated_at: string, xiaomi_app_secret: string, xiaomi_package_name: string>> {
+]: nothing -> oneof<record<duration: string, push_providers: table<apn_auth_key: string, apn_auth_type: string, apn_development: bool, apn_host: string, apn_key_id: string, apn_notification_template: string, apn_p12_cert: string, apn_team_id: string, apn_topic: string, created_at: string, description: string, disabled_at: string, disabled_reason: string, firebase_apn_template: string, firebase_credentials: string, firebase_data_template: string, firebase_notification_template: string, firebase_server_key: string, huawei_app_id: string, huawei_app_secret: string, name: string, type: float, updated_at: string, xiaomi_app_secret: string, xiaomi_package_name: string>>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/push_providers" $auth.query)
@@ -4009,7 +3970,6 @@ export def "list-push-providers" [
 #
 # POST /push_providers
 # operationId: UpsertPushProvider
-# --push_provider shape: {apn_auth_key?: string, apn_auth_type?: string, apn_development?: bool, apn_host?: string, apn_key_id?: string, apn_notification_template?: string, apn_p12_cert?: string, apn_team_id?: string, apn_topic?: string, created_at?: string, description?: string, disabled_at?: string, disabled_reason?: string, firebase_apn_template?: string, firebase_credentials?: string, firebase_data_template?: string, firebase_notification_template?: string, firebase_server_key?: string, huawei_app_id?: string, ... (6 more fields)}
 export def "upsert-push-provider" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
@@ -4022,7 +3982,7 @@ export def "upsert-push-provider" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --push-provider: record # shape: {apn_auth_key?: string, apn_auth_type?: string, apn_development?: bool, apn_host?: string, apn_key_id?: string, apn_notification_template?: string, apn_p12_cert?: string, apn_team_id?: string, apn_topic?: string, created_at?: string, description?: string, disabled_at?: string, disabled_reason?: string, firebase_apn_template?: string, firebase_credentials?: string, firebase_data_template?: string, firebase_notification_template?: string, firebase_server_key?: string, huawei_app_id?: string, ... (6 more fields)}
-]: any -> record<duration: string, push_provider: record<apn_auth_key: string, apn_auth_type: string, apn_development: bool, apn_host: string, apn_key_id: string, apn_notification_template: string, apn_p12_cert: string, apn_team_id: string, apn_topic: string, created_at: string, description: string, disabled_at: string, disabled_reason: string, firebase_apn_template: string, firebase_credentials: string, firebase_data_template: string, firebase_notification_template: string, firebase_server_key: string, huawei_app_id: string, huawei_app_secret: string, name: string, type: float, updated_at: string, xiaomi_app_secret: string, xiaomi_package_name: string>> {
+]: any -> oneof<record<duration: string, push_provider: record<apn_auth_key: string, apn_auth_type: string, apn_development: bool, apn_host: string, apn_key_id: string, apn_notification_template: string, apn_p12_cert: string, apn_team_id: string, apn_topic: string, created_at: string, description: string, disabled_at: string, disabled_reason: string, firebase_apn_template: string, firebase_credentials: string, firebase_data_template: string, firebase_notification_template: string, firebase_server_key: string, huawei_app_id: string, huawei_app_secret: string, name: string, type: float, updated_at: string, xiaomi_app_secret: string, xiaomi_package_name: string>>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
@@ -4062,7 +4022,7 @@ export def "delete-push-provider" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<duration: string> {
+]: nothing -> oneof<record<duration: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
@@ -4100,7 +4060,7 @@ export def "query-banned-users" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --payload: string
-]: nothing -> record<bans: table<banned_by: record, channel: record, created_at: string, expires: string, reason: string, shadow: bool, user: record>, duration: string> {
+]: nothing -> oneof<record<bans: table<banned_by: record, channel: record, created_at: string, expires: string, reason: string, shadow: bool, user: record>, duration: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "payload" $payload "scalar")] | flatten | str join "&"
@@ -4141,7 +4101,7 @@ export def "get-rate-limits" [
   --ios: string
   --web: string
   --endpoints: string
-]: nothing -> record<android: record, duration: string, ios: record, server_side: record, web: record> {
+]: nothing -> oneof<record<android: record, duration: string, ios: record, server_side: record, web: record>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "server_side" $server_side "scalar") (serialize-qp "android" $android "scalar") (serialize-qp "ios" $ios "scalar") (serialize-qp "web" $web "scalar") (serialize-qp "endpoints" $endpoints "scalar")] | flatten | str join "&"
@@ -4178,7 +4138,7 @@ export def "query-recipients" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --payload: string
-]: nothing -> record<campaigns: record, channels: record, duration: string, recipients: table<campaign_id: string, channel_cid: string, created_at: string, details: string, message_id: string, receiver_id: string, status: string, updated_at: string>, segments: record, users: record> {
+]: nothing -> oneof<record<campaigns: record, channels: record, duration: string, recipients: table<campaign_id: string, channel_cid: string, created_at: string, details: string, message_id: string, receiver_id: string, status: string, updated_at: string>, segments: record, users: record>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "payload" $payload "scalar")] | flatten | str join "&"
@@ -4214,7 +4174,7 @@ export def "list-roles" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<duration: string, roles: table<created_at: string, custom: bool, name: string, scopes: list, updated_at: string>> {
+]: nothing -> oneof<record<duration: string, roles: table<created_at: string, custom: bool, name: string, scopes: list, updated_at: string>>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/roles" $auth.query)
@@ -4250,7 +4210,7 @@ export def "create-role" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   name: string # Role name
-]: any -> record<duration: string, role: record<created_at: string, custom: bool, name: string, scopes: list<string>, updated_at: string>> {
+]: any -> oneof<record<duration: string, role: record<created_at: string, custom: bool, name: string, scopes: list<string>, updated_at: string>>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
@@ -4289,7 +4249,7 @@ export def "delete-role" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<duration: string> {
+]: nothing -> oneof<record<duration: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -4326,7 +4286,7 @@ export def "search" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --payload: string
-]: nothing -> record<duration: string, next: string, previous: string, results: table<message: record>, results_warning: record<channel_search_cids: list<string>, channel_search_count: float, warning_code: float, warning_description: string>> {
+]: nothing -> oneof<record<duration: string, next: string, previous: string, results: table<message: record>, results_warning: record<channel_search_cids: list<string>, channel_search_count: float, warning_code: float, warning_description: string>>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "payload" $payload "scalar")] | flatten | str join "&"
@@ -4363,7 +4323,7 @@ export def "query-segments" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --payload: string
-]: nothing -> record<duration: string, segments: table<created_at: string, description: string, filter: record, id: string, in_use: bool, name: string, size: float, status: string, type: string, updated_at: string>> {
+]: nothing -> oneof<record<duration: string, segments: table<created_at: string, description: string, filter: record, id: string, in_use: bool, name: string, size: float, status: string, type: string, updated_at: string>>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "payload" $payload "scalar")] | flatten | str join "&"
@@ -4388,7 +4348,6 @@ export def "query-segments" [
 #
 # POST /segments
 # operationId: CreateSegment
-# --segment shape: {description?: string, filter: record, name: string, type: "user"|"channel"}
 export def "create-segment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
@@ -4401,7 +4360,7 @@ export def "create-segment" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   segment: record # shape: {description?: string, filter: record, name: string, type: "user"|"channel"}
-]: any -> record<duration: string, segment: record<created_at: string, description: string, filter: record, id: string, in_use: bool, name: string, size: float, status: string, type: string, updated_at: string>> {
+]: any -> oneof<record<duration: string, segment: record<created_at: string, description: string, filter: record, id: string, in_use: bool, name: string, size: float, status: string, type: string, updated_at: string>>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
@@ -4440,7 +4399,7 @@ export def "delete-segment" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<duration: string> {
+]: nothing -> oneof<record<duration: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4465,7 +4424,6 @@ export def "delete-segment" [
 #
 # PUT /segments/{id}
 # operationId: UpdateSegment
-# --segment shape: {description?: string, filter?: record, name?: string, type?: "user"|"channel"}
 export def "update-segment" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4479,7 +4437,7 @@ export def "update-segment" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   segment: record # shape: {description?: string, filter?: record, name?: string, type?: "user"|"channel"}
-]: any -> record<duration: string, segment: record<created_at: string, description: string, filter: record, id: string, in_use: bool, name: string, size: float, status: string, type: string, updated_at: string>> {
+]: any -> oneof<record<duration: string, segment: record<created_at: string, description: string, filter: record, id: string, in_use: bool, name: string, size: float, status: string, type: string, updated_at: string>>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
@@ -4507,7 +4465,6 @@ export def "update-segment" [
 #
 # POST /sync
 # operationId: Sync
-# --user shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
 export def "sync" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
@@ -4531,7 +4488,7 @@ export def "sync" [
   --user-id: string
   --watch-body: oneof<nothing, bool> # If set to true this will start watching requested and newly added channels that user has access to. If error occurred with this option enabled and it is not an input error - channels will still be watched. (body field)
   --with-inaccessible-cids-body: oneof<nothing, bool> # If set to true this will add 'inaccessible_cids' to response type (body field)
-]: any -> record<duration: string, events: table<automoderation: bool, automoderation_scores: record, channel: record, channel_id: string, channel_type: string, cid: string, connection_id: string, created_at: string, created_by: record, me: record, member: record, message: record, parent_id: string, reaction: record, reason: string, team: string, type: string, user: record, user_id: string, watcher_count: float>, inaccessible_cids: list<string>> {
+]: any -> oneof<record<duration: string, events: table<automoderation: bool, automoderation_scores: record, channel: record, channel_id: string, channel_type: string, cid: string, connection_id: string, created_at: string, created_by: record, me: record, member: record, message: record, parent_id: string, reaction: record, reason: string, team: string, type: string, user: record, user_id: string, watcher_count: float>, inaccessible_cids: list<string>>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
@@ -4571,7 +4528,7 @@ export def "get-task" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created_at: string, duration: string, error: record<description: any, stacktrace: string, type: string, version: string>, result: record, status: string, task_id: string, updated_at: string> {
+]: nothing -> oneof<record<created_at: string, duration: string, error: record<description: any, stacktrace: string, type: string, version: string>, result: record, status: string, task_id: string, updated_at: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4608,7 +4565,7 @@ export def "query-users" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --payload: string
-]: nothing -> record<duration: string, users: table<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, shadow_banned: bool, teams: list, updated_at: string>> {
+]: nothing -> oneof<record<duration: string, users: table<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, shadow_banned: bool, teams: list, updated_at: string>>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "payload" $payload "scalar")] | flatten | str join "&"
@@ -4647,7 +4604,7 @@ export def "update-users-partial" [
   id: string # User ID to update
   set: record
   unset: list<string>
-]: any -> record<duration: string, users: record> {
+]: any -> oneof<record<duration: string, users: record>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
@@ -4686,7 +4643,7 @@ export def "update-users" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   users: record # Object containing users
-]: any -> record<duration: string, users: record> {
+]: any -> oneof<record<duration: string, users: record>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
@@ -4727,7 +4684,7 @@ export def "deactivate-users" [
   --created-by-id: string # ID of the user who deactivated the users
   --mark-messages-deleted: oneof<nothing, bool> # Makes messages appear to be deleted
   user_ids: list<string> # User IDs to deactivate
-]: any -> record<duration: string, task_id: string> {
+]: any -> oneof<record<duration: string, task_id: string>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
@@ -4770,7 +4727,7 @@ export def "delete-users" [
   --new-channel-owner-id: string
   --user: string@user-completer # User delete mode. * soft - marks user as deleted and retains all user data * pruning - marks user as deleted and nullifies user information * hard - deletes user completely. Requires 'hard' option for messages and conversations as well
   user_ids: list<string> # IDs of users to delete
-]: any -> record<duration: string, task_id: string> {
+]: any -> oneof<record<duration: string, task_id: string>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
@@ -4811,7 +4768,7 @@ export def "reactivate-users" [
   --created-by-id: string # ID of the user who's reactivating the users
   --restore-messages: oneof<nothing, bool> # Restore previously deleted messages
   user_ids: list<string> # User IDs to reactivate
-]: any -> record<duration: string, task_id: string> {
+]: any -> oneof<record<duration: string, task_id: string>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
@@ -4850,7 +4807,7 @@ export def "restore-users" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   user_ids: list<string>
-]: any -> record<duration: string> {
+]: any -> oneof<record<duration: string>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
@@ -4892,7 +4849,7 @@ export def "delete-user" [
   --mark-messages-deleted: string
   --hard-delete: string
   --delete-conversation-channels: string
-]: nothing -> record<duration: string, task_id: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record<disabled: bool, disabled_until: string>, revoke_tokens_issued_before: string, role: string, teams: list<string>, updated_at: string>> {
+]: nothing -> oneof<record<duration: string, task_id: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record<disabled: bool, disabled_until: string>, revoke_tokens_issued_before: string, role: string, teams: list<string>, updated_at: string>>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -4933,7 +4890,7 @@ export def "deactivate-user" [
   --created-by-id: string # ID of the user who deactivated the user
   --mark-messages-deleted: oneof<nothing, bool> # Makes messages appear to be deleted
   --body-user-id: string
-]: any -> record<duration: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record<disabled: bool, disabled_until: string>, revoke_tokens_issued_before: string, role: string, teams: list<string>, updated_at: string>> {
+]: any -> oneof<record<duration: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record<disabled: bool, disabled_until: string>, revoke_tokens_issued_before: string, role: string, teams: list<string>, updated_at: string>>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
@@ -4962,7 +4919,6 @@ export def "deactivate-user" [
 #
 # POST /users/{user_id}/event
 # operationId: SendUserCustomEvent
-# --event shape: {created_at?: string, type: string}
 export def "send-user-custom-event" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4976,7 +4932,7 @@ export def "send-user-custom-event" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   event: record # shape: {created_at?: string, type: string}
-]: any -> record<duration: string> {
+]: any -> oneof<record<duration: string>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
@@ -5015,7 +4971,7 @@ export def "get-users-user-id-export" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<duration: string, messages: table<attachments: list, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list, mentioned_users: list, mml: string, own_reactions: list, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list, type: string, updated_at: string, user: record>, reactions: table<created_at: string, message_id: string, score: float, type: string, updated_at: string, user: record, user_id: string>, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record<disabled: bool, disabled_until: string>, revoke_tokens_issued_before: string, role: string, teams: list<string>, updated_at: string>> {
+]: nothing -> oneof<record<duration: string, messages: table<attachments: list, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list, mentioned_users: list, mml: string, own_reactions: list, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list, type: string, updated_at: string, user: record>, reactions: table<created_at: string, message_id: string, score: float, type: string, updated_at: string, user: record, user_id: string>, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record<disabled: bool, disabled_until: string>, revoke_tokens_issued_before: string, role: string, teams: list<string>, updated_at: string>>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -5056,7 +5012,7 @@ export def "reactivate-user" [
   --name: string # Set this field to put new name for the user
   --restore-messages: oneof<nothing, bool> # Restore previously deleted messages
   --body-user-id: string
-]: any -> record<duration: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record<disabled: bool, disabled_until: string>, revoke_tokens_issued_before: string, role: string, teams: list<string>, updated_at: string>> {
+]: any -> oneof<record<duration: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record<disabled: bool, disabled_until: string>, revoke_tokens_issued_before: string, role: string, teams: list<string>, updated_at: string>>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)

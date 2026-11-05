@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -172,9 +195,9 @@ def x-amz-target-completer-64 [] { ["PhotonAdminProxyService.UpdateStack"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "associate-application-fleet" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["associate-application-fleet" "associate-application-to-entitlement" "associate-fleet" "batch-associate-user-stack" "batch-disassociate-user-stack" "copy-image" "create-app-block" "create-application" "create-directory-config" "create-entitlement" "create-fleet" "create-image-builder" "create-image-builder-streaming-url" "create-stack" "create-streaming-url" "create-updated-image" "create-usage-report-subscription" "create-user" "delete-app-block" "delete-application" "delete-directory-config" "delete-entitlement" "delete-fleet" "delete-image" "delete-image-builder" "delete-image-permissions" "delete-stack" "delete-usage-report-subscription" "delete-user" "describe-app-blocks" "describe-application-fleet-associations" "describe-applications" "describe-directory-configs" "describe-entitlements" "describe-fleets" "describe-image-builders" "describe-image-permissions" "describe-images" "describe-sessions" "describe-stacks" "describe-usage-report-subscriptions" "describe-user-stack-associations" "describe-users" "disable-user" "disassociate-application-fleet" "disassociate-application-from-entitlement" "disassociate-fleet" "enable-user" "expire-session" "list-associated-fleets" "list-associated-stacks" "list-entitled-applications" "list-tags-for-resource" "start-fleet" "start-image-builder" "stop-fleet" "stop-image-builder" "tag-resource" "untag-resource" "update-application" "update-directory-config" "update-entitlement" "update-fleet" "update-image-permissions" "update-stack" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -216,7 +239,7 @@ export def "associate-application-fleet" [
   --x-amz-target: string@x-amz-target-completer # required
   fleet_name: string # The name of the fleet.
   application_arn: string # The ARN of the application.
-]: any -> record<ApplicationFleetAssociation: record<FleetName: string, ApplicationArn: string>> {
+]: any -> oneof<record<ApplicationFleetAssociation: record<FleetName: string, ApplicationArn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -267,7 +290,7 @@ export def "associate-application-to-entitlement" [
   stack_name: string # The name of the stack.
   entitlement_name: string # The name of the entitlement.
   application_identifier: string # The identifier of the application.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -317,7 +340,7 @@ export def "associate-fleet" [
   --x-amz-target: string@x-amz-target-completer-2 # required
   fleet_name: string # The name of the fleet.
   stack_name: string # The name of the stack.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -347,7 +370,6 @@ export def "associate-fleet" [
 #
 # POST /
 # operationId: BatchAssociateUserStack
-# --UserStackAssociations item shape: {StackName: string, UserName: string, AuthenticationType: "API"|"SAML"|"USERPOOL"|"AWS_AD", SendEmailNotification?: bool}
 export def "batch-associate-user-stack" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -367,7 +389,7 @@ export def "batch-associate-user-stack" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-3 # required
   user_stack_associations: list # The list of UserStackAssociation objects. — item shape: {StackName: string, UserName: string, AuthenticationType: "API"|"SAML"|"USERPOOL"|"AWS_AD", SendEmailNotification?: bool}
-]: any -> record<errors: table<UserStackAssociation: record, ErrorCode: string, ErrorMessage: string>> {
+]: any -> oneof<record<errors: table<UserStackAssociation: record, ErrorCode: string, ErrorMessage: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -397,7 +419,6 @@ export def "batch-associate-user-stack" [
 #
 # POST /
 # operationId: BatchDisassociateUserStack
-# --UserStackAssociations item shape: {StackName: string, UserName: string, AuthenticationType: "API"|"SAML"|"USERPOOL"|"AWS_AD", SendEmailNotification?: bool}
 export def "batch-disassociate-user-stack" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -417,7 +438,7 @@ export def "batch-disassociate-user-stack" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-4 # required
   user_stack_associations: list # The list of UserStackAssociation objects. — item shape: {StackName: string, UserName: string, AuthenticationType: "API"|"SAML"|"USERPOOL"|"AWS_AD", SendEmailNotification?: bool}
-]: any -> record<errors: table<UserStackAssociation: record, ErrorCode: string, ErrorMessage: string>> {
+]: any -> oneof<record<errors: table<UserStackAssociation: record, ErrorCode: string, ErrorMessage: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -469,7 +490,7 @@ export def "copy-image" [
   destination_image_name: string # The name that the image will have when it is copied to the destination.
   destination_region: string # The destination region to which the image will be copied. This parameter is required, even if you are copying an image within the same region.
   --destination-image-description: string # The description that the image will have when it is copied to the destination.
-]: any -> record<DestinationImageName: string> {
+]: any -> oneof<record<DestinationImageName: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -499,8 +520,6 @@ export def "copy-image" [
 #
 # POST /
 # operationId: CreateAppBlock
-# --SourceS3Location shape: {S3Bucket: string, S3Key: string}
-# --SetupScriptDetails shape: {ScriptS3Location: record, ExecutablePath: string, ExecutableParameters?: string, TimeoutInSeconds: int}
 export def "create-app-block" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -525,7 +544,7 @@ export def "create-app-block" [
   source_s3_location: record # Describes the S3 location. — shape: {S3Bucket: string, S3Key: string}
   setup_script_details: record # Describes the details of the script. — shape: {ScriptS3Location: record, ExecutablePath: string, ExecutableParameters?: string, TimeoutInSeconds: int}
   --tags: record # The tags assigned to the app block.
-]: any -> record<AppBlock: record<Name: string, Arn: string, Description: string, DisplayName: string, SourceS3Location: record<S3Bucket: string, S3Key: string>, SetupScriptDetails: record<ScriptS3Location: record, ExecutablePath: string, ExecutableParameters: string, TimeoutInSeconds: int>, CreatedTime: string>> {
+]: any -> oneof<record<AppBlock: record<Name: string, Arn: string, Description: string, DisplayName: string, SourceS3Location: record<S3Bucket: string, S3Key: string>, SetupScriptDetails: record<ScriptS3Location: record, ExecutablePath: string, ExecutableParameters: string, TimeoutInSeconds: int>, CreatedTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -555,7 +574,6 @@ export def "create-app-block" [
 #
 # POST /
 # operationId: CreateApplication
-# --IconS3Location shape: {S3Bucket: string, S3Key: string}
 export def "create-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -585,7 +603,7 @@ export def "create-application" [
   instance_families: list<string> # The instance families the application supports. Valid values are GENERAL_PURPOSE and GRAPHICS_G4.
   app_block_arn: string # The app block ARN to which the application should be associated
   --tags: record # The tags assigned to the application.
-]: any -> record<Application: record<Name: string, DisplayName: string, IconURL: string, LaunchPath: string, LaunchParameters: string, Enabled: bool, Metadata: record, WorkingDirectory: string, Description: string, Arn: string, AppBlockArn: string, IconS3Location: record<S3Bucket: string, S3Key: string>, Platforms: list<string>, InstanceFamilies: list<string>, CreatedTime: string>> {
+]: any -> oneof<record<Application: record<Name: string, DisplayName: string, IconURL: string, LaunchPath: string, LaunchParameters: string, Enabled: bool, Metadata: record, WorkingDirectory: string, Description: string, Arn: string, AppBlockArn: string, IconS3Location: record<S3Bucket: string, S3Key: string>, Platforms: list<string>, InstanceFamilies: list<string>, CreatedTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -615,8 +633,6 @@ export def "create-application" [
 #
 # POST /
 # operationId: CreateDirectoryConfig
-# --ServiceAccountCredentials shape: {AccountName: string, AccountPassword: string}
-# --CertificateBasedAuthProperties shape: {Status?: "DISABLED"|"ENABLED"|"ENABLED_NO_DIRECTORY_LOGIN_FALLBACK", CertificateAuthorityArn?: string}
 export def "create-directory-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -639,7 +655,7 @@ export def "create-directory-config" [
   organizational_unit_distinguished_names: list<string> # The distinguished names of the organizational units for computer accounts.
   --service-account-credentials: record # Describes the credentials for the service account used by the fleet or image builder to connect to the directory. — shape: {AccountName: string, AccountPassword: string}
   --certificate-based-auth-properties: record # The certificate-based authentication properties used to authenticate SAML 2.0 Identity Provider (IdP) user identities to Active Directory domain-joined streaming instances. Fallback is turned on by default when certificate-based authentication is Enabled . Fallback allows users to log in using their AD domain password if certificate-based authentication is unsuccessful, or to unlock a desktop lock screen. Enabled_no_directory_login_fallback enables certificate-based authentication, but does not allow users to log in using their AD domain password. Users will be disconnected to re-authenticate using certificates. — shape: {Status?: "DISABLED"|"ENABLED"|"ENABLED_NO_DIRECTORY_LOGIN_FALLBACK", CertificateAuthorityArn?: string}
-]: any -> record<DirectoryConfig: record<DirectoryName: string, OrganizationalUnitDistinguishedNames: list<string>, ServiceAccountCredentials: record<AccountName: string, AccountPassword: string>, CreatedTime: string, CertificateBasedAuthProperties: record<Status: string, CertificateAuthorityArn: string>>> {
+]: any -> oneof<record<DirectoryConfig: record<DirectoryName: string, OrganizationalUnitDistinguishedNames: list<string>, ServiceAccountCredentials: record<AccountName: string, AccountPassword: string>, CreatedTime: string, CertificateBasedAuthProperties: record<Status: string, CertificateAuthorityArn: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -669,7 +685,6 @@ export def "create-directory-config" [
 #
 # POST /
 # operationId: CreateEntitlement
-# --Attributes item shape: {Name: string, Value: string}
 export def "create-entitlement" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -693,7 +708,7 @@ export def "create-entitlement" [
   --description: string # The description of the entitlement.
   app_visibility: string@app-visibility-completer # Specifies whether all or selected apps are entitled.
   attributes: list # The attributes of the entitlement. — item shape: {Name: string, Value: string}
-]: any -> record<Entitlement: record<Name: string, StackName: string, Description: string, AppVisibility: string, Attributes: list<record>, CreatedTime: string, LastModifiedTime: string>> {
+]: any -> oneof<record<Entitlement: record<Name: string, StackName: string, Description: string, AppVisibility: string, Attributes: list<record>, CreatedTime: string, LastModifiedTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -723,10 +738,6 @@ export def "create-entitlement" [
 #
 # POST /
 # operationId: CreateFleet
-# --ComputeCapacity shape: {DesiredInstances: int}
-# --VpcConfig shape: {SubnetIds?: list<string>, SecurityGroupIds?: list<string>}
-# --DomainJoinInfo shape: {DirectoryName?: string, OrganizationalUnitDistinguishedName?: string}
-# --SessionScriptS3Location shape: {S3Bucket: string, S3Key: string}
 export def "create-fleet" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -766,7 +777,7 @@ export def "create-fleet" [
   --max-concurrent-sessions: int # The maximum concurrent sessions of the Elastic fleet. This is required for Elastic fleets, and not allowed for other fleet types.
   --usb-device-filter-strings: list<string> # The USB device filter strings that specify which USB devices a user can redirect to the fleet streaming session, when using the Windows native client. This is allowed but not required for Elastic fleets.
   --session-script-s3-location: record # Describes the S3 location. — shape: {S3Bucket: string, S3Key: string}
-]: any -> record<Fleet: record<Arn: string, Name: string, DisplayName: string, Description: string, ImageName: string, ImageArn: string, InstanceType: string, FleetType: string, ComputeCapacityStatus: record<Desired: int, Running: int, InUse: int, Available: int>, MaxUserDurationInSeconds: int, DisconnectTimeoutInSeconds: int, State: string, VpcConfig: record<SubnetIds: list, SecurityGroupIds: list>, CreatedTime: string, FleetErrors: list<record>, EnableDefaultInternetAccess: bool, DomainJoinInfo: record<DirectoryName: string, OrganizationalUnitDistinguishedName: string>, IdleDisconnectTimeoutInSeconds: int, IamRoleArn: string, StreamView: string, Platform: string, MaxConcurrentSessions: int, UsbDeviceFilterStrings: list<string>, SessionScriptS3Location: record<S3Bucket: string, S3Key: string>>> {
+]: any -> oneof<record<Fleet: record<Arn: string, Name: string, DisplayName: string, Description: string, ImageName: string, ImageArn: string, InstanceType: string, FleetType: string, ComputeCapacityStatus: record<Desired: int, Running: int, InUse: int, Available: int>, MaxUserDurationInSeconds: int, DisconnectTimeoutInSeconds: int, State: string, VpcConfig: record<SubnetIds: list, SecurityGroupIds: list>, CreatedTime: string, FleetErrors: list<record>, EnableDefaultInternetAccess: bool, DomainJoinInfo: record<DirectoryName: string, OrganizationalUnitDistinguishedName: string>, IdleDisconnectTimeoutInSeconds: int, IamRoleArn: string, StreamView: string, Platform: string, MaxConcurrentSessions: int, UsbDeviceFilterStrings: list<string>, SessionScriptS3Location: record<S3Bucket: string, S3Key: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -796,9 +807,6 @@ export def "create-fleet" [
 #
 # POST /
 # operationId: CreateImageBuilder
-# --VpcConfig shape: {SubnetIds?: list<string>, SecurityGroupIds?: list<string>}
-# --DomainJoinInfo shape: {DirectoryName?: string, OrganizationalUnitDistinguishedName?: string}
-# --AccessEndpoints item shape: {EndpointType: "STREAMING", VpceId?: string}
 export def "create-image-builder" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -830,7 +838,7 @@ export def "create-image-builder" [
   --appstream-agent-version: string # The version of the AppStream 2.0 agent to use for this image builder. To use the latest version of the AppStream 2.0 agent, specify [LATEST].
   --tags: record # The tags to associate with the image builder. A tag is a key-value pair, and the value is optional. For example, Environment=Test. If you do not specify a value, Environment=. Generally allowed characters are: letters, numbers, and spaces representable in UTF-8, and the following special characters: _ . : / = + \ - @ If you do not specify a value, the value is set to an empty string. For more information about tags, see Tagging Your Resources (https://docs.aws.amazon.com/appstream2/latest/developerguide/tagging-basic.html) in the Amazon AppStream 2.0 Administration Guide.
   --access-endpoints: list # The list of interface VPC endpoint (interface endpoint) objects. Administrators can connect to the image builder only through the specified endpoints. — item shape: {EndpointType: "STREAMING", VpceId?: string}
-]: any -> record<ImageBuilder: record<Name: string, Arn: string, ImageArn: string, Description: string, DisplayName: string, VpcConfig: record<SubnetIds: list, SecurityGroupIds: list>, InstanceType: string, Platform: string, IamRoleArn: string, State: string, StateChangeReason: record<Code: string, Message: string>, CreatedTime: string, EnableDefaultInternetAccess: bool, DomainJoinInfo: record<DirectoryName: string, OrganizationalUnitDistinguishedName: string>, NetworkAccessConfiguration: record<EniPrivateIpAddress: string, EniId: string>, ImageBuilderErrors: list<record>, AppstreamAgentVersion: string, AccessEndpoints: list<record>>> {
+]: any -> oneof<record<ImageBuilder: record<Name: string, Arn: string, ImageArn: string, Description: string, DisplayName: string, VpcConfig: record<SubnetIds: list, SecurityGroupIds: list>, InstanceType: string, Platform: string, IamRoleArn: string, State: string, StateChangeReason: record<Code: string, Message: string>, CreatedTime: string, EnableDefaultInternetAccess: bool, DomainJoinInfo: record<DirectoryName: string, OrganizationalUnitDistinguishedName: string>, NetworkAccessConfiguration: record<EniPrivateIpAddress: string, EniId: string>, ImageBuilderErrors: list<record>, AppstreamAgentVersion: string, AccessEndpoints: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -880,7 +888,7 @@ export def "create-image-builder-streaming-url" [
   --x-amz-target: string@x-amz-target-completer-12 # required
   name: string # The name of the image builder.
   --validity: int # The time that the streaming URL will be valid, in seconds. Specify a value between 1 and 604800 seconds. The default is 3600 seconds.
-]: any -> record<StreamingURL: string, Expires: string> {
+]: any -> oneof<record<StreamingURL: string, Expires: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -910,11 +918,6 @@ export def "create-image-builder-streaming-url" [
 #
 # POST /
 # operationId: CreateStack
-# --StorageConnectors item shape: {ConnectorType: "HOMEFOLDERS"|"GOOGLE_DRIVE"|"ONE_DRIVE", ResourceIdentifier?: string, Domains?: list<string>}
-# --UserSettings item shape: {Action: "CLIPBOARD_COPY_FROM_LOCAL_DEVICE"|"CLIPBOARD_COPY_TO_LOCAL_DEVICE"|"FILE_UPLOAD"|"FILE_DOWNLOAD"|"PRINTING_TO_LOCAL_DEVICE"|"DOMAIN_PASSWORD_SIGNIN"|"DOMAIN_SMART_CARD_SIGNIN", Permission: "ENABLED"|"DISABLED"}
-# --ApplicationSettings shape: {Enabled: bool, SettingsGroup?: string}
-# --AccessEndpoints item shape: {EndpointType: "STREAMING", VpceId?: string}
-# --StreamingExperienceSettings shape: {PreferredProtocol?: "TCP"|"UDP"}
 export def "create-stack" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -945,7 +948,7 @@ export def "create-stack" [
   --access-endpoints: list # The list of interface VPC endpoint (interface endpoint) objects. Users of the stack can connect to AppStream 2.0 only through the specified endpoints. — item shape: {EndpointType: "STREAMING", VpceId?: string}
   --embed-host-domains: list<string> # The domains where AppStream 2.0 streaming sessions can be embedded in an iframe. You must approve the domains that you want to host embedded AppStream 2.0 streaming sessions.
   --streaming-experience-settings: record # The streaming protocol you want your stack to prefer. This can be UDP or TCP. Currently, UDP is only supported in the Windows native client. — shape: {PreferredProtocol?: "TCP"|"UDP"}
-]: any -> record<Stack: record<Arn: string, Name: string, Description: string, DisplayName: string, CreatedTime: string, StorageConnectors: list<record>, RedirectURL: string, FeedbackURL: string, StackErrors: list<record>, UserSettings: list<record>, ApplicationSettings: record<Enabled: bool, SettingsGroup: string, S3BucketName: string>, AccessEndpoints: list<record>, EmbedHostDomains: list<string>, StreamingExperienceSettings: record<PreferredProtocol: string>>> {
+]: any -> oneof<record<Stack: record<Arn: string, Name: string, Description: string, DisplayName: string, CreatedTime: string, StorageConnectors: list<record>, RedirectURL: string, FeedbackURL: string, StackErrors: list<record>, UserSettings: list<record>, ApplicationSettings: record<Enabled: bool, SettingsGroup: string, S3BucketName: string>, AccessEndpoints: list<record>, EmbedHostDomains: list<string>, StreamingExperienceSettings: record<PreferredProtocol: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -999,7 +1002,7 @@ export def "create-streaming-url" [
   --application-id: string # The name of the application to launch after the session starts. This is the name that you specified as Name in the Image Assistant. If your fleet is enabled for the Desktop stream view, you can also choose to launch directly to the operating system desktop. To do so, specify Desktop.
   --validity: int # The time that the streaming URL will be valid, in seconds. Specify a value between 1 and 604800 seconds. The default is 60 seconds.
   --session-context: string # The session context. For more information, see Session Context (https://docs.aws.amazon.com/appstream2/latest/developerguide/managing-stacks-fleets.html#managing-stacks-fleets-parameters) in the Amazon AppStream 2.0 Administration Guide.
-]: any -> record<StreamingURL: string, Expires: string> {
+]: any -> oneof<record<StreamingURL: string, Expires: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1053,7 +1056,7 @@ export def "create-updated-image" [
   --new-image-display-name: string # The name to display for the new image.
   --new-image-tags: record # The tags to associate with the new image. A tag is a key-value pair, and the value is optional. For example, Environment=Test. If you do not specify a value, Environment=. Generally allowed characters are: letters, numbers, and spaces representable in UTF-8, and the following special characters: _ . : / = + \ - @ If you do not specify a value, the value is set to an empty string. For more information about tags, see Tagging Your Resources (https://docs.aws.amazon.com/appstream2/latest/developerguide/tagging-basic.html) in the Amazon AppStream 2.0 Administration Guide.
   --body-dry-run: oneof<nothing, bool> # Indicates whether to display the status of image update availability before AppStream 2.0 initiates the process of creating a new updated image. If this value is set to true, AppStream 2.0 displays whether image updates are available. If this value is set to false, AppStream 2.0 initiates the process of creating a new updated image without displaying whether image updates are available.
-]: any -> record<image: record<Name: string, Arn: string, BaseImageArn: string, DisplayName: string, State: string, Visibility: string, ImageBuilderSupported: bool, ImageBuilderName: string, Platform: string, Description: string, StateChangeReason: record<Code: string, Message: string>, Applications: list<record>, CreatedTime: string, PublicBaseImageReleasedDate: string, AppstreamAgentVersion: string, ImagePermissions: record<allowFleet: bool, allowImageBuilder: bool>, ImageErrors: list<record>>, canUpdateImage: bool> {
+]: any -> oneof<record<image: record<Name: string, Arn: string, BaseImageArn: string, DisplayName: string, State: string, Visibility: string, ImageBuilderSupported: bool, ImageBuilderName: string, Platform: string, Description: string, StateChangeReason: record<Code: string, Message: string>, Applications: list<record>, CreatedTime: string, PublicBaseImageReleasedDate: string, AppstreamAgentVersion: string, ImagePermissions: record<allowFleet: bool, allowImageBuilder: bool>, ImageErrors: list<record>>, canUpdateImage: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1102,7 +1105,7 @@ export def "create-usage-report-subscription" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-16 # required
   --body: record
-]: any -> record<S3BucketName: string, Schedule: string> {
+]: any -> oneof<record<S3BucketName: string, Schedule: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1155,7 +1158,7 @@ export def "create-user" [
   --first-name: string # The first name, or given name, of the user. (format: password)
   --last-name: string # The last name, or surname, of the user. (format: password)
   authentication_type: string@authentication-type-completer # The authentication type for the user. You must specify USERPOOL.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1204,7 +1207,7 @@ export def "delete-app-block" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-18 # required
   name: string # The name of the app block.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1253,7 +1256,7 @@ export def "delete-application" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-19 # required
   name: string # The name of the application.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1302,7 +1305,7 @@ export def "delete-directory-config" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-20 # required
   directory_name: string # The name of the directory configuration.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1352,7 +1355,7 @@ export def "delete-entitlement" [
   --x-amz-target: string@x-amz-target-completer-21 # required
   name: string # The name of the entitlement.
   stack_name: string # The name of the stack with which the entitlement is associated.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1401,7 +1404,7 @@ export def "delete-fleet" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-22 # required
   name: string # The name of the fleet.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1450,7 +1453,7 @@ export def "delete-image" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-23 # required
   name: string # The name of the image.
-]: any -> record<Image: record<Name: string, Arn: string, BaseImageArn: string, DisplayName: string, State: string, Visibility: string, ImageBuilderSupported: bool, ImageBuilderName: string, Platform: string, Description: string, StateChangeReason: record<Code: string, Message: string>, Applications: list<record>, CreatedTime: string, PublicBaseImageReleasedDate: string, AppstreamAgentVersion: string, ImagePermissions: record<allowFleet: bool, allowImageBuilder: bool>, ImageErrors: list<record>>> {
+]: any -> oneof<record<Image: record<Name: string, Arn: string, BaseImageArn: string, DisplayName: string, State: string, Visibility: string, ImageBuilderSupported: bool, ImageBuilderName: string, Platform: string, Description: string, StateChangeReason: record<Code: string, Message: string>, Applications: list<record>, CreatedTime: string, PublicBaseImageReleasedDate: string, AppstreamAgentVersion: string, ImagePermissions: record<allowFleet: bool, allowImageBuilder: bool>, ImageErrors: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1499,7 +1502,7 @@ export def "delete-image-builder" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-24 # required
   name: string # The name of the image builder.
-]: any -> record<ImageBuilder: record<Name: string, Arn: string, ImageArn: string, Description: string, DisplayName: string, VpcConfig: record<SubnetIds: list, SecurityGroupIds: list>, InstanceType: string, Platform: string, IamRoleArn: string, State: string, StateChangeReason: record<Code: string, Message: string>, CreatedTime: string, EnableDefaultInternetAccess: bool, DomainJoinInfo: record<DirectoryName: string, OrganizationalUnitDistinguishedName: string>, NetworkAccessConfiguration: record<EniPrivateIpAddress: string, EniId: string>, ImageBuilderErrors: list<record>, AppstreamAgentVersion: string, AccessEndpoints: list<record>>> {
+]: any -> oneof<record<ImageBuilder: record<Name: string, Arn: string, ImageArn: string, Description: string, DisplayName: string, VpcConfig: record<SubnetIds: list, SecurityGroupIds: list>, InstanceType: string, Platform: string, IamRoleArn: string, State: string, StateChangeReason: record<Code: string, Message: string>, CreatedTime: string, EnableDefaultInternetAccess: bool, DomainJoinInfo: record<DirectoryName: string, OrganizationalUnitDistinguishedName: string>, NetworkAccessConfiguration: record<EniPrivateIpAddress: string, EniId: string>, ImageBuilderErrors: list<record>, AppstreamAgentVersion: string, AccessEndpoints: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1549,7 +1552,7 @@ export def "delete-image-permissions" [
   --x-amz-target: string@x-amz-target-completer-25 # required
   name: string # The name of the private image.
   shared_account_id: string # The 12-digit identifier of the AWS account for which to delete image permissions.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1598,7 +1601,7 @@ export def "delete-stack" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-26 # required
   name: string # The name of the stack.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1647,7 +1650,7 @@ export def "delete-usage-report-subscription" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-27 # required
   --body: record
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1697,7 +1700,7 @@ export def "delete-user" [
   --x-amz-target: string@x-amz-target-completer-28 # required
   user_name: string # The email address of the user. Users' email addresses are case-sensitive. (format: password)
   authentication_type: string@authentication-type-completer # The authentication type for the user. You must specify USERPOOL.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1748,7 +1751,7 @@ export def "describe-app-blocks" [
   --arns: list<string> # The ARNs of the app blocks.
   --next-token: string # The pagination token used to retrieve the next page of results for this operation.
   --max-results: int # The maximum size of each page of results.
-]: any -> record<AppBlocks: table<Name: string, Arn: string, Description: string, DisplayName: string, SourceS3Location: record, SetupScriptDetails: record, CreatedTime: string>, NextToken: string> {
+]: any -> oneof<record<AppBlocks: table<Name: string, Arn: string, Description: string, DisplayName: string, SourceS3Location: record, SetupScriptDetails: record, CreatedTime: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1800,7 +1803,7 @@ export def "describe-application-fleet-associations" [
   --application-arn: string # The ARN of the application.
   --max-results: int # The maximum size of each page of results.
   --next-token: string # The pagination token used to retrieve the next page of results for this operation.
-]: any -> record<ApplicationFleetAssociations: table<FleetName: string, ApplicationArn: string>, NextToken: string> {
+]: any -> oneof<record<ApplicationFleetAssociations: table<FleetName: string, ApplicationArn: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1851,7 +1854,7 @@ export def "describe-applications" [
   --arns: list<string> # The ARNs for the applications.
   --next-token: string # The pagination token used to retrieve the next page of results for this operation.
   --max-results: int # The maximum size of each page of results.
-]: any -> record<Applications: table<Name: string, DisplayName: string, IconURL: string, LaunchPath: string, LaunchParameters: string, Enabled: bool, Metadata: record, WorkingDirectory: string, Description: string, Arn: string, AppBlockArn: string, IconS3Location: record, Platforms: list, InstanceFamilies: list, CreatedTime: string>, NextToken: string> {
+]: any -> oneof<record<Applications: table<Name: string, DisplayName: string, IconURL: string, LaunchPath: string, LaunchParameters: string, Enabled: bool, Metadata: record, WorkingDirectory: string, Description: string, Arn: string, AppBlockArn: string, IconS3Location: record, Platforms: list, InstanceFamilies: list, CreatedTime: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1902,7 +1905,7 @@ export def "describe-directory-configs" [
   --directory-names: list<string> # The directory names.
   --max-results: int # The maximum size of each page of results.
   --next-token: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page.
-]: any -> record<DirectoryConfigs: table<DirectoryName: string, OrganizationalUnitDistinguishedNames: list, ServiceAccountCredentials: record, CreatedTime: string, CertificateBasedAuthProperties: record>, NextToken: string> {
+]: any -> oneof<record<DirectoryConfigs: table<DirectoryName: string, OrganizationalUnitDistinguishedNames: list, ServiceAccountCredentials: record, CreatedTime: string, CertificateBasedAuthProperties: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1954,7 +1957,7 @@ export def "describe-entitlements" [
   stack_name: string # The name of the stack with which the entitlement is associated.
   --next-token: string # The pagination token used to retrieve the next page of results for this operation.
   --max-results: int # The maximum size of each page of results.
-]: any -> record<Entitlements: table<Name: string, StackName: string, Description: string, AppVisibility: string, Attributes: list, CreatedTime: string, LastModifiedTime: string>, NextToken: string> {
+]: any -> oneof<record<Entitlements: table<Name: string, StackName: string, Description: string, AppVisibility: string, Attributes: list, CreatedTime: string, LastModifiedTime: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2004,7 +2007,7 @@ export def "describe-fleets" [
   --x-amz-target: string@x-amz-target-completer-34 # required
   --names: list<string> # The names of the fleets to describe.
   --next-token: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page.
-]: any -> record<Fleets: table<Arn: string, Name: string, DisplayName: string, Description: string, ImageName: string, ImageArn: string, InstanceType: string, FleetType: string, ComputeCapacityStatus: record, MaxUserDurationInSeconds: int, DisconnectTimeoutInSeconds: int, State: string, VpcConfig: record, CreatedTime: string, FleetErrors: list, EnableDefaultInternetAccess: bool, DomainJoinInfo: record, IdleDisconnectTimeoutInSeconds: int, IamRoleArn: string, StreamView: string, Platform: string, MaxConcurrentSessions: int, UsbDeviceFilterStrings: list, SessionScriptS3Location: record>, NextToken: string> {
+]: any -> oneof<record<Fleets: table<Arn: string, Name: string, DisplayName: string, Description: string, ImageName: string, ImageArn: string, InstanceType: string, FleetType: string, ComputeCapacityStatus: record, MaxUserDurationInSeconds: int, DisconnectTimeoutInSeconds: int, State: string, VpcConfig: record, CreatedTime: string, FleetErrors: list, EnableDefaultInternetAccess: bool, DomainJoinInfo: record, IdleDisconnectTimeoutInSeconds: int, IamRoleArn: string, StreamView: string, Platform: string, MaxConcurrentSessions: int, UsbDeviceFilterStrings: list, SessionScriptS3Location: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2055,7 +2058,7 @@ export def "describe-image-builders" [
   --names: list<string> # The names of the image builders to describe.
   --max-results: int # The maximum size of each page of results.
   --next-token: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page.
-]: any -> record<ImageBuilders: table<Name: string, Arn: string, ImageArn: string, Description: string, DisplayName: string, VpcConfig: record, InstanceType: string, Platform: string, IamRoleArn: string, State: string, StateChangeReason: record, CreatedTime: string, EnableDefaultInternetAccess: bool, DomainJoinInfo: record, NetworkAccessConfiguration: record, ImageBuilderErrors: list, AppstreamAgentVersion: string, AccessEndpoints: list>, NextToken: string> {
+]: any -> oneof<record<ImageBuilders: table<Name: string, Arn: string, ImageArn: string, Description: string, DisplayName: string, VpcConfig: record, InstanceType: string, Platform: string, IamRoleArn: string, State: string, StateChangeReason: record, CreatedTime: string, EnableDefaultInternetAccess: bool, DomainJoinInfo: record, NetworkAccessConfiguration: record, ImageBuilderErrors: list, AppstreamAgentVersion: string, AccessEndpoints: list>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2109,7 +2112,7 @@ export def "describe-image-permissions" [
   --max-results-body: int # The maximum size of each page of results. (body field)
   --shared-aws-account-ids: list<string> # The 12-digit identifier of one or more AWS accounts with which the image is shared.
   --next-token-body: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page. (body field)
-]: any -> record<Name: string, SharedImagePermissionsList: table<sharedAccountId: string, imagePermissions: record>, NextToken: string> {
+]: any -> oneof<record<Name: string, SharedImagePermissionsList: table<sharedAccountId: string, imagePermissions: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2165,7 +2168,7 @@ export def "describe-images" [
   --type: string@type-completer # The type of image (public, private, or shared) to describe.
   --next-token-body: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page. (body field)
   --max-results-body: int # The maximum size of each page of results. (body field)
-]: any -> record<Images: table<Name: string, Arn: string, BaseImageArn: string, DisplayName: string, State: string, Visibility: string, ImageBuilderSupported: bool, ImageBuilderName: string, Platform: string, Description: string, StateChangeReason: record, Applications: list, CreatedTime: string, PublicBaseImageReleasedDate: string, AppstreamAgentVersion: string, ImagePermissions: record, ImageErrors: list>, NextToken: string> {
+]: any -> oneof<record<Images: table<Name: string, Arn: string, BaseImageArn: string, DisplayName: string, State: string, Visibility: string, ImageBuilderSupported: bool, ImageBuilderName: string, Platform: string, Description: string, StateChangeReason: record, Applications: list, CreatedTime: string, PublicBaseImageReleasedDate: string, AppstreamAgentVersion: string, ImagePermissions: record, ImageErrors: list>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2220,7 +2223,7 @@ export def "describe-sessions" [
   --next-token: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page.
   --limit: int # The size of each page of results. The default value is 20 and the maximum value is 50.
   --authentication-type: string@authentication-type-completer # The authentication method. Specify API for a user authenticated using a streaming URL or SAML for a SAML federated user. The default is to authenticate users using a streaming URL.
-]: any -> record<Sessions: table<Id: string, UserId: string, StackName: string, FleetName: string, State: string, ConnectionState: string, StartTime: string, MaxExpirationTime: string, AuthenticationType: string, NetworkAccessConfiguration: record>, NextToken: string> {
+]: any -> oneof<record<Sessions: table<Id: string, UserId: string, StackName: string, FleetName: string, State: string, ConnectionState: string, StartTime: string, MaxExpirationTime: string, AuthenticationType: string, NetworkAccessConfiguration: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2270,7 +2273,7 @@ export def "describe-stacks" [
   --x-amz-target: string@x-amz-target-completer-39 # required
   --names: list<string> # The names of the stacks to describe.
   --next-token: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page.
-]: any -> record<Stacks: table<Arn: string, Name: string, Description: string, DisplayName: string, CreatedTime: string, StorageConnectors: list, RedirectURL: string, FeedbackURL: string, StackErrors: list, UserSettings: list, ApplicationSettings: record, AccessEndpoints: list, EmbedHostDomains: list, StreamingExperienceSettings: record>, NextToken: string> {
+]: any -> oneof<record<Stacks: table<Arn: string, Name: string, Description: string, DisplayName: string, CreatedTime: string, StorageConnectors: list, RedirectURL: string, FeedbackURL: string, StackErrors: list, UserSettings: list, ApplicationSettings: record, AccessEndpoints: list, EmbedHostDomains: list, StreamingExperienceSettings: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2320,7 +2323,7 @@ export def "describe-usage-report-subscriptions" [
   --x-amz-target: string@x-amz-target-completer-40 # required
   --max-results: int # The maximum size of each page of results.
   --next-token: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page.
-]: any -> record<UsageReportSubscriptions: table<S3BucketName: string, Schedule: string, LastGeneratedReportDate: string, SubscriptionErrors: list>, NextToken: string> {
+]: any -> oneof<record<UsageReportSubscriptions: table<S3BucketName: string, Schedule: string, LastGeneratedReportDate: string, SubscriptionErrors: list>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2373,7 +2376,7 @@ export def "describe-user-stack-associations" [
   --authentication-type: string@authentication-type-completer # The authentication type for the user who is associated with the stack. You must specify USERPOOL.
   --max-results: int # The maximum size of each page of results.
   --next-token: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page.
-]: any -> record<UserStackAssociations: table<StackName: string, UserName: string, AuthenticationType: string, SendEmailNotification: bool>, NextToken: string> {
+]: any -> oneof<record<UserStackAssociations: table<StackName: string, UserName: string, AuthenticationType: string, SendEmailNotification: bool>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2424,7 +2427,7 @@ export def "describe-users" [
   authentication_type: string@authentication-type-completer # The authentication type for the users in the user pool to describe. You must specify USERPOOL.
   --max-results: int # The maximum size of each page of results.
   --next-token: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page.
-]: any -> record<Users: table<Arn: string, UserName: string, Enabled: bool, Status: string, FirstName: string, LastName: string, CreatedTime: string, AuthenticationType: string>, NextToken: string> {
+]: any -> oneof<record<Users: table<Arn: string, UserName: string, Enabled: bool, Status: string, FirstName: string, LastName: string, CreatedTime: string, AuthenticationType: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2474,7 +2477,7 @@ export def "disable-user" [
   --x-amz-target: string@x-amz-target-completer-43 # required
   user_name: string # The email address of the user. Users' email addresses are case-sensitive. (format: password)
   authentication_type: string@authentication-type-completer # The authentication type for the user. You must specify USERPOOL.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2524,7 +2527,7 @@ export def "disassociate-application-fleet" [
   --x-amz-target: string@x-amz-target-completer-44 # required
   fleet_name: string # The name of the fleet.
   application_arn: string # The ARN of the application.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2575,7 +2578,7 @@ export def "disassociate-application-from-entitlement" [
   stack_name: string # The name of the stack with which the entitlement is associated.
   entitlement_name: string # The name of the entitlement.
   application_identifier: string # The identifier of the application to remove from the entitlement.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2625,7 +2628,7 @@ export def "disassociate-fleet" [
   --x-amz-target: string@x-amz-target-completer-46 # required
   fleet_name: string # The name of the fleet.
   stack_name: string # The name of the stack.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2675,7 +2678,7 @@ export def "enable-user" [
   --x-amz-target: string@x-amz-target-completer-47 # required
   user_name: string # The email address of the user. Users' email addresses are case-sensitive. During login, if they specify an email address that doesn't use the same capitalization as the email address specified when their user pool account was created, a "user does not exist" error message displays. (format: password)
   authentication_type: string@authentication-type-completer # The authentication type for the user. You must specify USERPOOL.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2724,7 +2727,7 @@ export def "expire-session" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-48 # required
   session_id: string # The identifier of the streaming session.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2774,7 +2777,7 @@ export def "list-associated-fleets" [
   --x-amz-target: string@x-amz-target-completer-49 # required
   stack_name: string # The name of the stack.
   --next-token: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page.
-]: any -> record<Names: list<string>, NextToken: string> {
+]: any -> oneof<record<Names: list<string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2824,7 +2827,7 @@ export def "list-associated-stacks" [
   --x-amz-target: string@x-amz-target-completer-50 # required
   fleet_name: string # The name of the fleet.
   --next-token: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page.
-]: any -> record<Names: list<string>, NextToken: string> {
+]: any -> oneof<record<Names: list<string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2876,7 +2879,7 @@ export def "list-entitled-applications" [
   entitlement_name: string # The name of the entitlement.
   --next-token: string # The pagination token used to retrieve the next page of results for this operation.
   --max-results: int # The maximum size of each page of results.
-]: any -> record<EntitledApplications: table<ApplicationIdentifier: string>, NextToken: string> {
+]: any -> oneof<record<EntitledApplications: table<ApplicationIdentifier: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2925,7 +2928,7 @@ export def "list-tags-for-resource" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-52 # required
   resource_arn: string # The Amazon Resource Name (ARN) of the resource.
-]: any -> record<Tags: record> {
+]: any -> oneof<record<Tags: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2974,7 +2977,7 @@ export def "start-fleet" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-53 # required
   name: string # The name of the fleet.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3024,7 +3027,7 @@ export def "start-image-builder" [
   --x-amz-target: string@x-amz-target-completer-54 # required
   name: string # The name of the image builder.
   --appstream-agent-version: string # The version of the AppStream 2.0 agent to use for this image builder. To use the latest version of the AppStream 2.0 agent, specify [LATEST].
-]: any -> record<ImageBuilder: record<Name: string, Arn: string, ImageArn: string, Description: string, DisplayName: string, VpcConfig: record<SubnetIds: list, SecurityGroupIds: list>, InstanceType: string, Platform: string, IamRoleArn: string, State: string, StateChangeReason: record<Code: string, Message: string>, CreatedTime: string, EnableDefaultInternetAccess: bool, DomainJoinInfo: record<DirectoryName: string, OrganizationalUnitDistinguishedName: string>, NetworkAccessConfiguration: record<EniPrivateIpAddress: string, EniId: string>, ImageBuilderErrors: list<record>, AppstreamAgentVersion: string, AccessEndpoints: list<record>>> {
+]: any -> oneof<record<ImageBuilder: record<Name: string, Arn: string, ImageArn: string, Description: string, DisplayName: string, VpcConfig: record<SubnetIds: list, SecurityGroupIds: list>, InstanceType: string, Platform: string, IamRoleArn: string, State: string, StateChangeReason: record<Code: string, Message: string>, CreatedTime: string, EnableDefaultInternetAccess: bool, DomainJoinInfo: record<DirectoryName: string, OrganizationalUnitDistinguishedName: string>, NetworkAccessConfiguration: record<EniPrivateIpAddress: string, EniId: string>, ImageBuilderErrors: list<record>, AppstreamAgentVersion: string, AccessEndpoints: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3073,7 +3076,7 @@ export def "stop-fleet" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-55 # required
   name: string # The name of the fleet.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3122,7 +3125,7 @@ export def "stop-image-builder" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-56 # required
   name: string # The name of the image builder.
-]: any -> record<ImageBuilder: record<Name: string, Arn: string, ImageArn: string, Description: string, DisplayName: string, VpcConfig: record<SubnetIds: list, SecurityGroupIds: list>, InstanceType: string, Platform: string, IamRoleArn: string, State: string, StateChangeReason: record<Code: string, Message: string>, CreatedTime: string, EnableDefaultInternetAccess: bool, DomainJoinInfo: record<DirectoryName: string, OrganizationalUnitDistinguishedName: string>, NetworkAccessConfiguration: record<EniPrivateIpAddress: string, EniId: string>, ImageBuilderErrors: list<record>, AppstreamAgentVersion: string, AccessEndpoints: list<record>>> {
+]: any -> oneof<record<ImageBuilder: record<Name: string, Arn: string, ImageArn: string, Description: string, DisplayName: string, VpcConfig: record<SubnetIds: list, SecurityGroupIds: list>, InstanceType: string, Platform: string, IamRoleArn: string, State: string, StateChangeReason: record<Code: string, Message: string>, CreatedTime: string, EnableDefaultInternetAccess: bool, DomainJoinInfo: record<DirectoryName: string, OrganizationalUnitDistinguishedName: string>, NetworkAccessConfiguration: record<EniPrivateIpAddress: string, EniId: string>, ImageBuilderErrors: list<record>, AppstreamAgentVersion: string, AccessEndpoints: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3172,7 +3175,7 @@ export def "tag-resource" [
   --x-amz-target: string@x-amz-target-completer-57 # required
   resource_arn: string # The Amazon Resource Name (ARN) of the resource.
   tags: record # The tags to associate. A tag is a key-value pair, and the value is optional. For example, Environment=Test. If you do not specify a value, Environment=. If you do not specify a value, the value is set to an empty string. Generally allowed characters are: letters, numbers, and spaces representable in UTF-8, and the following special characters: _ . : / = + \ - @
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3222,7 +3225,7 @@ export def "untag-resource" [
   --x-amz-target: string@x-amz-target-completer-58 # required
   resource_arn: string # The Amazon Resource Name (ARN) of the resource.
   tag_keys: list<string> # The tag keys for the tags to disassociate.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3252,7 +3255,6 @@ export def "untag-resource" [
 #
 # POST /
 # operationId: UpdateApplication
-# --IconS3Location shape: {S3Bucket: string, S3Key: string}
 export def "update-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3280,7 +3282,7 @@ export def "update-application" [
   --launch-parameters: string # The launch parameters of the application.
   --app-block-arn: string # The ARN of the app block.
   --attributes-to-delete: list<string> # The attributes to delete for an application.
-]: any -> record<Application: record<Name: string, DisplayName: string, IconURL: string, LaunchPath: string, LaunchParameters: string, Enabled: bool, Metadata: record, WorkingDirectory: string, Description: string, Arn: string, AppBlockArn: string, IconS3Location: record<S3Bucket: string, S3Key: string>, Platforms: list<string>, InstanceFamilies: list<string>, CreatedTime: string>> {
+]: any -> oneof<record<Application: record<Name: string, DisplayName: string, IconURL: string, LaunchPath: string, LaunchParameters: string, Enabled: bool, Metadata: record, WorkingDirectory: string, Description: string, Arn: string, AppBlockArn: string, IconS3Location: record<S3Bucket: string, S3Key: string>, Platforms: list<string>, InstanceFamilies: list<string>, CreatedTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3310,8 +3312,6 @@ export def "update-application" [
 #
 # POST /
 # operationId: UpdateDirectoryConfig
-# --ServiceAccountCredentials shape: {AccountName: string, AccountPassword: string}
-# --CertificateBasedAuthProperties shape: {Status?: "DISABLED"|"ENABLED"|"ENABLED_NO_DIRECTORY_LOGIN_FALLBACK", CertificateAuthorityArn?: string}
 export def "update-directory-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3334,7 +3334,7 @@ export def "update-directory-config" [
   --organizational-unit-distinguished-names: list<string> # The distinguished names of the organizational units for computer accounts.
   --service-account-credentials: record # Describes the credentials for the service account used by the fleet or image builder to connect to the directory. — shape: {AccountName: string, AccountPassword: string}
   --certificate-based-auth-properties: record # The certificate-based authentication properties used to authenticate SAML 2.0 Identity Provider (IdP) user identities to Active Directory domain-joined streaming instances. Fallback is turned on by default when certificate-based authentication is Enabled . Fallback allows users to log in using their AD domain password if certificate-based authentication is unsuccessful, or to unlock a desktop lock screen. Enabled_no_directory_login_fallback enables certificate-based authentication, but does not allow users to log in using their AD domain password. Users will be disconnected to re-authenticate using certificates. — shape: {Status?: "DISABLED"|"ENABLED"|"ENABLED_NO_DIRECTORY_LOGIN_FALLBACK", CertificateAuthorityArn?: string}
-]: any -> record<DirectoryConfig: record<DirectoryName: string, OrganizationalUnitDistinguishedNames: list<string>, ServiceAccountCredentials: record<AccountName: string, AccountPassword: string>, CreatedTime: string, CertificateBasedAuthProperties: record<Status: string, CertificateAuthorityArn: string>>> {
+]: any -> oneof<record<DirectoryConfig: record<DirectoryName: string, OrganizationalUnitDistinguishedNames: list<string>, ServiceAccountCredentials: record<AccountName: string, AccountPassword: string>, CreatedTime: string, CertificateBasedAuthProperties: record<Status: string, CertificateAuthorityArn: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3364,7 +3364,6 @@ export def "update-directory-config" [
 #
 # POST /
 # operationId: UpdateEntitlement
-# --Attributes item shape: {Name: string, Value: string}
 export def "update-entitlement" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3388,7 +3387,7 @@ export def "update-entitlement" [
   --description: string # The description of the entitlement.
   --app-visibility: string@app-visibility-completer # Specifies whether all or only selected apps are entitled.
   --attributes: list # The attributes of the entitlement. — item shape: {Name: string, Value: string}
-]: any -> record<Entitlement: record<Name: string, StackName: string, Description: string, AppVisibility: string, Attributes: list<record>, CreatedTime: string, LastModifiedTime: string>> {
+]: any -> oneof<record<Entitlement: record<Name: string, StackName: string, Description: string, AppVisibility: string, Attributes: list<record>, CreatedTime: string, LastModifiedTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3418,10 +3417,6 @@ export def "update-entitlement" [
 #
 # POST /
 # operationId: UpdateFleet
-# --ComputeCapacity shape: {DesiredInstances: int}
-# --VpcConfig shape: {SubnetIds?: list<string>, SecurityGroupIds?: list<string>}
-# --DomainJoinInfo shape: {DirectoryName?: string, OrganizationalUnitDistinguishedName?: string}
-# --SessionScriptS3Location shape: {S3Bucket: string, S3Key: string}
 export def "update-fleet" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3461,7 +3456,7 @@ export def "update-fleet" [
   --max-concurrent-sessions: int # The maximum number of concurrent sessions for a fleet.
   --usb-device-filter-strings: list<string> # The USB device filter strings that specify which USB devices a user can redirect to the fleet streaming session, when using the Windows native client. This is allowed but not required for Elastic fleets.
   --session-script-s3-location: record # Describes the S3 location. — shape: {S3Bucket: string, S3Key: string}
-]: any -> record<Fleet: record<Arn: string, Name: string, DisplayName: string, Description: string, ImageName: string, ImageArn: string, InstanceType: string, FleetType: string, ComputeCapacityStatus: record<Desired: int, Running: int, InUse: int, Available: int>, MaxUserDurationInSeconds: int, DisconnectTimeoutInSeconds: int, State: string, VpcConfig: record<SubnetIds: list, SecurityGroupIds: list>, CreatedTime: string, FleetErrors: list<record>, EnableDefaultInternetAccess: bool, DomainJoinInfo: record<DirectoryName: string, OrganizationalUnitDistinguishedName: string>, IdleDisconnectTimeoutInSeconds: int, IamRoleArn: string, StreamView: string, Platform: string, MaxConcurrentSessions: int, UsbDeviceFilterStrings: list<string>, SessionScriptS3Location: record<S3Bucket: string, S3Key: string>>> {
+]: any -> oneof<record<Fleet: record<Arn: string, Name: string, DisplayName: string, Description: string, ImageName: string, ImageArn: string, InstanceType: string, FleetType: string, ComputeCapacityStatus: record<Desired: int, Running: int, InUse: int, Available: int>, MaxUserDurationInSeconds: int, DisconnectTimeoutInSeconds: int, State: string, VpcConfig: record<SubnetIds: list, SecurityGroupIds: list>, CreatedTime: string, FleetErrors: list<record>, EnableDefaultInternetAccess: bool, DomainJoinInfo: record<DirectoryName: string, OrganizationalUnitDistinguishedName: string>, IdleDisconnectTimeoutInSeconds: int, IamRoleArn: string, StreamView: string, Platform: string, MaxConcurrentSessions: int, UsbDeviceFilterStrings: list<string>, SessionScriptS3Location: record<S3Bucket: string, S3Key: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3491,7 +3486,6 @@ export def "update-fleet" [
 #
 # POST /
 # operationId: UpdateImagePermissions
-# --ImagePermissions shape: {allowFleet?: bool, allowImageBuilder?: bool}
 export def "update-image-permissions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3513,7 +3507,7 @@ export def "update-image-permissions" [
   name: string # The name of the private image.
   shared_account_id: string # The 12-digit identifier of the AWS account for which you want add or update image permissions.
   image_permissions: record # Describes the permissions for an image. — shape: {allowFleet?: bool, allowImageBuilder?: bool}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3543,11 +3537,6 @@ export def "update-image-permissions" [
 #
 # POST /
 # operationId: UpdateStack
-# --StorageConnectors item shape: {ConnectorType: "HOMEFOLDERS"|"GOOGLE_DRIVE"|"ONE_DRIVE", ResourceIdentifier?: string, Domains?: list<string>}
-# --UserSettings item shape: {Action: "CLIPBOARD_COPY_FROM_LOCAL_DEVICE"|"CLIPBOARD_COPY_TO_LOCAL_DEVICE"|"FILE_UPLOAD"|"FILE_DOWNLOAD"|"PRINTING_TO_LOCAL_DEVICE"|"DOMAIN_PASSWORD_SIGNIN"|"DOMAIN_SMART_CARD_SIGNIN", Permission: "ENABLED"|"DISABLED"}
-# --ApplicationSettings shape: {Enabled: bool, SettingsGroup?: string}
-# --AccessEndpoints item shape: {EndpointType: "STREAMING", VpceId?: string}
-# --StreamingExperienceSettings shape: {PreferredProtocol?: "TCP"|"UDP"}
 export def "update-stack" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3579,7 +3568,7 @@ export def "update-stack" [
   --access-endpoints: list # The list of interface VPC endpoint (interface endpoint) objects. Users of the stack can connect to AppStream 2.0 only through the specified endpoints. — item shape: {EndpointType: "STREAMING", VpceId?: string}
   --embed-host-domains: list<string> # The domains where AppStream 2.0 streaming sessions can be embedded in an iframe. You must approve the domains that you want to host embedded AppStream 2.0 streaming sessions.
   --streaming-experience-settings: record # The streaming protocol you want your stack to prefer. This can be UDP or TCP. Currently, UDP is only supported in the Windows native client. — shape: {PreferredProtocol?: "TCP"|"UDP"}
-]: any -> record<Stack: record<Arn: string, Name: string, Description: string, DisplayName: string, CreatedTime: string, StorageConnectors: list<record>, RedirectURL: string, FeedbackURL: string, StackErrors: list<record>, UserSettings: list<record>, ApplicationSettings: record<Enabled: bool, SettingsGroup: string, S3BucketName: string>, AccessEndpoints: list<record>, EmbedHostDomains: list<string>, StreamingExperienceSettings: record<PreferredProtocol: string>>> {
+]: any -> oneof<record<Stack: record<Arn: string, Name: string, Description: string, DisplayName: string, CreatedTime: string, StorageConnectors: list<record>, RedirectURL: string, FeedbackURL: string, StackErrors: list<record>, UserSettings: list<record>, ApplicationSettings: record<Enabled: bool, SettingsGroup: string, S3BucketName: string>, AccessEndpoints: list<record>, EmbedHostDomains: list<string>, StreamingExperienceSettings: record<PreferredProtocol: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

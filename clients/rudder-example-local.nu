@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "x-api-token" => { {scheme: $scheme, headers: {"X-API-Token": $token_val}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -155,9 +179,9 @@ def is-pre-hahed-completer [] { ["false" "true"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-change-requests" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["list-change-requests" "get-archives-export" "import" "get-branding-conf" "update-b-randing-conf" "reload-branding-conf" "decline-change-request" "change-request-details" "update-change-request" "accept-change-request" "get-global-compliance" "get-nodes-compliance" "get-node-compliance" "get-rules-compliance" "get-rule-compliance" "get-all-cve" "check-cve" "get-cve-check-configuration" "update-cve-check-configuration" "get-last-cve-check" "get-cve-list" "update-cve" "read-cv-efrom-fs" "get-all-data-sources" "create-data-source" "reload-all-datasources-all-nodes" "reload-one-datasource-all-nodes" "delete-data-source" "get-data-source" "update-data-source" "list-directives" "create-directive" "delete-directive" "directive-details" "update-directive" "check-directive" "list-groups" "create-group" "create-group-category" "delete-group-category" "get-group-category-details" "update-group-category" "get-group-tree" "delete-group" "group-details" "update-group" "reload-group" "api-general-informations" "api-informations" "api-sub-informations" "queue-information" "upload-inventory" "file-watcher-restart" "file-watcher-start" "file-watcher-stop" "methods" "reload-methods" "list-accepted-nodes" "create-nodes" "apply-policy-all-nodes" "list-pending-nodes" "change-pending-node-status" "get-nodes-status" "delete-node" "node-details" "update-node" "apply-node" "reload-all-datasources-one-node" "reload-one-datasource-one-node" "node-inherited-properties" "list-parameters" "create-parameter" "delete-parameter" "parameter-details" "update-parameter" "list-rules" "create-rule" "create-rule-category" "delete-rule-category" "get-rule-category-details" "update-rule-category" "get-rule-tree" "delete-rule" "rule-details" "update-rule" "demote-to-node" "promote-to-relay" "get-all-secrets" "update-secret" "add-secret" "delete-secret" "get-secret" "get-all-settings" "get-allowed-networks" "set-allowed-networks" "modify-allowed-networks" "get-setting" "modify-setting" "none" "list-archives" "create-archive" "restore-archive" "get-zip-archive" "get-healthcheck-result" "get-system-info" "purge-software" "regenerate-policies" "reload-all" "reload-groups" "reload-techniques" "get-status" "update-policies" "list-techniques" "create-technique" "technique-categories" "techniques" "list-techniques-versions" "get-technique-all-version" "list-techniques-directives" "delete-technique" "get-technique-all-version-id" "update-technique" "list-technique-version-directives" "get-techniques-resources" "technique-revisions" "add-user" "get-role" "update-user" "get-user-info" "reload-user-conf" "delete-user" "list-users" "save-workflow-user" "remove-validated-user" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -189,7 +213,7 @@ export def "list-change-requests" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: record<rules: list<record>>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<rules: list<record>>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/changeRequests" $auth.query)
@@ -264,7 +288,7 @@ export def "import" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --archive: string # The ZIP archive file containing policies in a conventional layout and serialization format (format: binary)
-]: any -> record<action: string, data: record<archiveImported: bool>, result: string> {
+]: any -> oneof<record<action: string, data: record<archiveImported: bool>, result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -303,7 +327,7 @@ export def "get-branding-conf" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: record<branding: record<barColor: record, displayBar: bool, displayBarLogin: bool, displayLabel: bool, displayMotd: bool, labelColor: record, labelText: string, motd: string, smallLogo: record, wideLogo: record>>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<branding: record<barColor: record, displayBar: bool, displayBarLogin: bool, displayLabel: bool, displayMotd: bool, labelColor: record, labelText: string, motd: string, smallLogo: record, wideLogo: record>>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/branding" $auth.query)
@@ -327,10 +351,6 @@ export def "get-branding-conf" [
 #
 # POST /branding
 # operationId: updateBRandingConf
-# --barColor shape: {alpha: float, blue: float, green: float, red: float}
-# --labelColor shape: {alpha: float, blue: float, green: float, red: float}
-# --smallLogo shape: {enable: bool}
-# --wideLogo shape: {enable: bool}
 export def "update-b-randing-conf" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -351,7 +371,7 @@ export def "update-b-randing-conf" [
   motd: string # Message of the day in login page (e.g. Welcome, please sign in:)
   small_logo: record # shape: {enable: bool}
   wide_logo: record # shape: {enable: bool}
-]: any -> record<action: string, data: record<branding: record<barColor: record, displayBar: bool, displayBarLogin: bool, displayLabel: bool, displayMotd: bool, labelColor: record, labelText: string, motd: string, smallLogo: record, wideLogo: record>>, result: string> {
+]: any -> oneof<record<action: string, data: record<branding: record<barColor: record, displayBar: bool, displayBarLogin: bool, displayLabel: bool, displayMotd: bool, labelColor: record, labelText: string, motd: string, smallLogo: record, wideLogo: record>>, result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -392,7 +412,7 @@ export def "reload-branding-conf" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: record<branding: record<barColor: record, displayBar: bool, displayBarLogin: bool, displayLabel: bool, displayMotd: bool, labelColor: record, labelText: string, motd: string, smallLogo: record, wideLogo: record>>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<branding: record<barColor: record, displayBar: bool, displayBarLogin: bool, displayLabel: bool, displayMotd: bool, labelColor: record, labelText: string, motd: string, smallLogo: record, wideLogo: record>>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/branding/reload" $auth.query)
@@ -427,7 +447,7 @@ export def "decline-change-request" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: record<rules: list<record>>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<rules: list<record>>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($change_request_id | is-empty) { error make --unspanned { msg: "path parameter 'changeRequestId' must be non-empty" } }
@@ -463,7 +483,7 @@ export def "change-request-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: record<rules: list<record>>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<rules: list<record>>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($change_request_id | is-empty) { error make --unspanned { msg: "path parameter 'changeRequestId' must be non-empty" } }
@@ -501,7 +521,7 @@ export def "update-change-request" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # Change request description
   --name: string # Change request name
-]: any -> record<action: string, data: record<rules: list<record>>, result: string> {
+]: any -> oneof<record<action: string, data: record<rules: list<record>>, result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -541,7 +561,7 @@ export def "accept-change-request" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --status: string@status-completer # New status of the change request (e.g. deployed)
-]: any -> record<action: string, data: record<rules: list<record>>, result: string> {
+]: any -> oneof<record<action: string, data: record<rules: list<record>>, result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -580,7 +600,7 @@ export def "get-global-compliance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --precision: int # Number of digits after comma in compliance percent figures (default: 2, e.g. 0)
-]: nothing -> record<action: string, data: record<globalCompliance: record<compliance: float, complianceDetails: record>>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<globalCompliance: record<compliance: float, complianceDetails: record>>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "precision" $precision "scalar")] | flatten | str join "&"
@@ -617,7 +637,7 @@ export def "get-nodes-compliance" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --level: int # Number of depth level of compliance objects to display (1:rules, 2:directives, 3:components, 4:nodes, 5:values, 6:reports) (default: 10, e.g. 4)
   --precision: int # Number of digits after comma in compliance percent figures (default: 2, e.g. 0)
-]: nothing -> record<action: string, data: record<nodes: list<record>>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<nodes: list<record>>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "level" $level "scalar") (serialize-qp "precision" $precision "scalar")] | flatten | str join "&"
@@ -655,7 +675,7 @@ export def "get-node-compliance" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --level: int # Number of depth level of compliance objects to display (1:rules, 2:directives, 3:components, 4:nodes, 5:values, 6:reports) (default: 10, e.g. 4)
   --precision: int # Number of digits after comma in compliance percent figures (default: 2, e.g. 0)
-]: nothing -> record<action: string, data: record<nodes: list<record>>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<nodes: list<record>>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeId' must be non-empty" } }
@@ -693,7 +713,7 @@ export def "get-rules-compliance" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --level: int # Number of depth level of compliance objects to display (1:rules, 2:directives, 3:components, 4:nodes, 5:values, 6:reports) (default: 10, e.g. 4)
   --precision: int # Number of digits after comma in compliance percent figures (default: 2, e.g. 0)
-]: nothing -> record<action: string, data: record<rules: list<record>>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<rules: list<record>>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "level" $level "scalar") (serialize-qp "precision" $precision "scalar")] | flatten | str join "&"
@@ -731,7 +751,7 @@ export def "get-rule-compliance" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --level: int # Number of depth level of compliance objects to display (1:rules, 2:directives, 3:components, 4:nodes, 5:values, 6:reports) (default: 10, e.g. 4)
   --precision: int # Number of digits after comma in compliance percent figures (default: 2, e.g. 0)
-]: nothing -> record<action: string, data: record<rules: list<record>>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<rules: list<record>>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($rule_id | is-empty) { error make --unspanned { msg: "path parameter 'ruleId' must be non-empty" } }
@@ -767,7 +787,7 @@ export def "get-all-cve" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: record<CVEs: list<record>>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<CVEs: list<record>>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cve" $auth.query)
@@ -801,7 +821,7 @@ export def "check-cve" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: record<cveChecks: list<record>>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<cveChecks: list<record>>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cve/check" $auth.query)
@@ -835,7 +855,7 @@ export def "get-cve-check-configuration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: record<apiKey: string, url: string>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<apiKey: string, url: string>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cve/check/config" $auth.query)
@@ -871,7 +891,7 @@ export def "update-cve-check-configuration" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # Token used by to contact the API to check CVE
   --url: string # Url used to check CVE (e.g. https://api.rudder.io/cve/v1/)
-]: any -> record<action: string, data: record<apiKey: string, url: string>, result: string> {
+]: any -> oneof<record<action: string, data: record<apiKey: string, url: string>, result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -908,7 +928,7 @@ export def "get-last-cve-check" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: record<CVEChecks: list<record>>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<CVEChecks: list<record>>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cve/check/last" $auth.query)
@@ -943,7 +963,7 @@ export def "get-cve-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --cve-ids: list<string>
-]: any -> record<action: string, data: record<CVEs: list<record>>, result: string> {
+]: any -> oneof<record<action: string, data: record<CVEs: list<record>>, result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -982,7 +1002,7 @@ export def "update-cve" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --url: string # Url used to update CVE, will default to one set in config (e.g. https://nvd.nist.gov/feeds/json/cve/1.1)
   --years: list<string>
-]: any -> record<action: string, data: record<CVEs: int>, result: string> {
+]: any -> oneof<record<action: string, data: record<CVEs: int>, result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -1019,7 +1039,7 @@ export def "read-cv-efrom-fs" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: record<CVEs: int>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<CVEs: int>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cve/update/fs" $auth.query)
@@ -1053,7 +1073,7 @@ export def "get-all-data-sources" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: record<datasources: list<record>>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<datasources: list<record>>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/datasources" $auth.query)
@@ -1077,8 +1097,6 @@ export def "get-all-data-sources" [
 #
 # PUT /datasources
 # operationId: createDataSource
-# --runParameters shape: {onGeneration?: bool, onNewNode?: bool, schedule?: record}
-# --type shape: {name?: "HTTP", parameters?: record}
 export def "create-data-source" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1096,7 +1114,7 @@ export def "create-data-source" [
   --run-parameters: record # Parameters to configure when the data source is fetched to update node properties. — shape: {onGeneration?: bool, onNewNode?: bool, schedule?: record}
   --type: record # Define and configure data source type. — shape: {name?: "HTTP", parameters?: record}
   --update-timeout: int # Duration in seconds before aborting data source update. The main goal is to prevent never ending requests. If a periodicity if configured, you should set that timeout at a lower value. (e.g. 30)
-]: any -> record<action: string, data: record<datasources: list<record>>, result: string> {
+]: any -> oneof<record<action: string, data: record<datasources: list<record>>, result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -1133,7 +1151,7 @@ export def "reload-all-datasources-all-nodes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: string, result: string> {
+]: nothing -> oneof<record<action: string, data: string, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/datasources/reload" $auth.query)
@@ -1168,7 +1186,7 @@ export def "reload-one-datasource-all-nodes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: string, result: string> {
+]: nothing -> oneof<record<action: string, data: string, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($datasource_id | is-empty) { error make --unspanned { msg: "path parameter 'datasourceId' must be non-empty" } }
@@ -1204,7 +1222,7 @@ export def "delete-data-source" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: record<datasources: list<record>>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<datasources: list<record>>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($datasource_id | is-empty) { error make --unspanned { msg: "path parameter 'datasourceId' must be non-empty" } }
@@ -1240,7 +1258,7 @@ export def "get-data-source" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: record<datasources: list<record>>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<datasources: list<record>>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($datasource_id | is-empty) { error make --unspanned { msg: "path parameter 'datasourceId' must be non-empty" } }
@@ -1265,8 +1283,6 @@ export def "get-data-source" [
 #
 # POST /datasources/{datasourceId}
 # operationId: updateDataSource
-# --runParameters shape: {onGeneration?: bool, onNewNode?: bool, schedule?: record}
-# --type shape: {name?: "HTTP", parameters?: record}
 export def "update-data-source" [
   datasource_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1285,7 +1301,7 @@ export def "update-data-source" [
   --run-parameters: record # Parameters to configure when the data source is fetched to update node properties. — shape: {onGeneration?: bool, onNewNode?: bool, schedule?: record}
   --type: record # Define and configure data source type. — shape: {name?: "HTTP", parameters?: record}
   --update-timeout: int # Duration in seconds before aborting data source update. The main goal is to prevent never ending requests. If a periodicity if configured, you should set that timeout at a lower value. (e.g. 30)
-]: any -> record<action: string, data: record<datasources: list<record>>, result: string> {
+]: any -> oneof<record<action: string, data: record<datasources: list<record>>, result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -1323,7 +1339,7 @@ export def "list-directives" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: record<directives: list<record>>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<directives: list<record>>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/directives" $auth.query)
@@ -1347,7 +1363,6 @@ export def "list-directives" [
 #
 # PUT /directives
 # operationId: createDirective
-# --tags item shape: {name?: string}
 export def "create-directive" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1370,7 +1385,7 @@ export def "create-directive" [
   --tags: list # item shape: {name?: string}
   --technique-name: string # Directive id (e.g. userManagement)
   --technique-version: string # Directive id (e.g. 8.0)
-]: any -> record<action: string, data: record<directives: list<record>>, result: string> {
+]: any -> oneof<record<action: string, data: record<directives: list<record>>, result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -1408,7 +1423,7 @@ export def "delete-directive" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: record<directives: list<record>>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<directives: list<record>>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($directive_id | is-empty) { error make --unspanned { msg: "path parameter 'directiveId' must be non-empty" } }
@@ -1444,7 +1459,7 @@ export def "directive-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: record<directives: list<record>>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<directives: list<record>>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($directive_id | is-empty) { error make --unspanned { msg: "path parameter 'directiveId' must be non-empty" } }
@@ -1469,7 +1484,6 @@ export def "directive-details" [
 #
 # POST /directives/{directiveId}
 # operationId: updateDirective
-# --tags item shape: {name?: string}
 export def "update-directive" [
   directive_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1493,7 +1507,7 @@ export def "update-directive" [
   --tags: list # item shape: {name?: string}
   --technique-name: string # Directive id (e.g. userManagement)
   --technique-version: string # Directive id (e.g. 8.0)
-]: any -> record<action: string, data: record<directives: list<record>>, result: string> {
+]: any -> oneof<record<action: string, data: record<directives: list<record>>, result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -1521,7 +1535,6 @@ export def "update-directive" [
 #
 # POST /directives/{directiveId}/check
 # operationId: checkDirective
-# --tags item shape: {name?: string}
 export def "check-directive" [
   directive_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1545,7 +1558,7 @@ export def "check-directive" [
   --tags: list # item shape: {name?: string}
   --technique-name: string # Directive id (e.g. userManagement)
   --technique-version: string # Directive id (e.g. 8.0)
-]: any -> record<action: string, data: record<directives: list<record>>, result: string> {
+]: any -> oneof<record<action: string, data: record<directives: list<record>>, result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -1583,7 +1596,7 @@ export def "list-groups" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: record<groups: list<record>>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<groups: list<record>>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/groups" $auth.query)
@@ -1607,8 +1620,6 @@ export def "list-groups" [
 #
 # PUT /groups
 # operationId: createGroup
-# --properties item shape: {name: string, value: any}
-# --query shape: {composition?: "and"|"or", select?: string, where?: list}
 export def "create-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1628,7 +1639,7 @@ export def "create-group" [
   --properties: list # Group properties — item shape: {name: string, value: any}
   --query: record # The criteria defining the group. If not provided, the group will be empty. — shape: {composition?: "and"|"or", select?: string, where?: list}
   --source: string # The id of the group the clone will be based onto. If this parameter if provided, the new group will be a clone of this source. Other value will override values from the source. (format: uuid, e.g. b9f6d98a-28bc-4d80-90f7-d2f14269e215)
-]: any -> record<action: string, data: record<groups: list<record>>, result: string> {
+]: any -> oneof<record<action: string, data: record<groups: list<record>>, result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -1669,7 +1680,7 @@ export def "create-group-category" [
   --id: string # Group category id, only provide it when needed. (format: uuid, default: {autogenerated}, e.g. 32d013f7-b6d8-46c8-99d3-016307fa66c0)
   name: string # Name of the group category (e.g. Hardware groups)
   parent: string # The parent category of the groups (format: uuid, e.g. b9f6d98a-28bc-4d80-90f7-d2f14269e215)
-]: any -> record<action: string, data: record<groupCategories: list<record>>, result: string> {
+]: any -> oneof<record<action: string, data: record<groupCategories: list<record>>, result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -1707,7 +1718,7 @@ export def "delete-group-category" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: record<groupCategories: list<record>>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<groupCategories: list<record>>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($group_category_id | is-empty) { error make --unspanned { msg: "path parameter 'groupCategoryId' must be non-empty" } }
@@ -1743,7 +1754,7 @@ export def "get-group-category-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: record<groupCategories: list<record>>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<groupCategories: list<record>>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($group_category_id | is-empty) { error make --unspanned { msg: "path parameter 'groupCategoryId' must be non-empty" } }
@@ -1782,7 +1793,7 @@ export def "update-group-category" [
   --description: string # Group category description (e.g. Nodes by hardware provider)
   name: string # Name of the group category (e.g. Hardware groups)
   parent: string # The parent category of the groups (format: uuid, e.g. b9f6d98a-28bc-4d80-90f7-d2f14269e215)
-]: any -> record<action: string, data: record<groupCategories: list<record>>, result: string> {
+]: any -> oneof<record<action: string, data: record<groupCategories: list<record>>, result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -1820,7 +1831,7 @@ export def "get-group-tree" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: record<groupCategories: record>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<groupCategories: record>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/groups/tree" $auth.query)
@@ -1855,7 +1866,7 @@ export def "delete-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: record<groups: list<record>>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<groups: list<record>>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
@@ -1891,7 +1902,7 @@ export def "group-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: record<groups: list<record>>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<groups: list<record>>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
@@ -1916,7 +1927,6 @@ export def "group-details" [
 #
 # POST /groups/{groupId}
 # operationId: updateGroup
-# --query shape: {composition?: "and"|"or", select?: string, where?: list}
 export def "update-group" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1934,7 +1944,7 @@ export def "update-group" [
   --dynamic: oneof<nothing, bool> # Should the group be dynamically refreshed (if not, it is a static group) (default: true)
   --enabled: oneof<nothing, bool> # Enable or disable the group (default: true)
   --query: record # The criteria defining the group. If not provided, the group will be empty. — shape: {composition?: "and"|"or", select?: string, where?: list}
-]: any -> record<action: string, data: record<groups: list<record>>, result: string> {
+]: any -> oneof<record<action: string, data: record<groups: list<record>>, result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -1973,7 +1983,7 @@ export def "reload-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: record<groups: list<record>>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<groups: list<record>>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
@@ -2008,7 +2018,7 @@ export def "api-general-informations" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: record<availableVersions: list<record>, documentation: string, endpoints: list<list>>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<availableVersions: list<record>, documentation: string, endpoints: list<list>>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/info" $auth.query)
@@ -2043,7 +2053,7 @@ export def "api-informations" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: record<documentation: string, endpointName: string, endpoints: list<record>>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<documentation: string, endpointName: string, endpoints: list<record>>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($endpoint_name | is-empty) { error make --unspanned { msg: "path parameter 'endpointName' must be non-empty" } }
@@ -2079,7 +2089,7 @@ export def "api-sub-informations" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: record<availableVersions: list<record>, documentation: string, endpoints: list<list>>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<availableVersions: list<record>, documentation: string, endpoints: list<list>>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($section_id | is-empty) { error make --unspanned { msg: "path parameter 'sectionId' must be non-empty" } }
@@ -2114,7 +2124,7 @@ export def "queue-information" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: record<queueMaxSize: int, queueSaturated: bool>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<queueMaxSize: int, queueSaturated: bool>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/inventories/info" $auth.query)
@@ -2150,7 +2160,7 @@ export def "upload-inventory" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --file: string # The inventory file. The original file name is used to check extension, that should be .xml[.gz] or .ocs[.gz] (format: binary)
   --signature: string # The signature file. The original file name is used to check extension, that should be ${originalInventoryFileName}.sign[.gz] (format: binary)
-]: any -> record<action: string, data: string, result: string> {
+]: any -> oneof<record<action: string, data: string, result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -2189,7 +2199,7 @@ export def "file-watcher-restart" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: string, result: string> {
+]: nothing -> oneof<record<action: string, data: string, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/inventories/watcher/restart" $auth.query)
@@ -2223,7 +2233,7 @@ export def "file-watcher-start" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: string, result: string> {
+]: nothing -> oneof<record<action: string, data: string, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/inventories/watcher/start" $auth.query)
@@ -2257,7 +2267,7 @@ export def "file-watcher-stop" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: string, result: string> {
+]: nothing -> oneof<record<action: string, data: string, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/inventories/watcher/stop" $auth.query)
@@ -2291,7 +2301,7 @@ export def "methods" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: record<methods: record<agents: list, category: string, condition: record, deprecated: record, desc: string, documentation: string, id: string, name: string, parameters: list, version: string>>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<methods: record<agents: list, category: string, condition: record, deprecated: record, desc: string, documentation: string, id: string, name: string, parameters: list, version: string>>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/methods" $auth.query)
@@ -2325,7 +2335,7 @@ export def "reload-methods" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: record<methods: record<agents: list, category: string, condition: record, deprecated: record, desc: string, documentation: string, id: string, name: string, parameters: list, version: string>>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<methods: record<agents: list, category: string, condition: record, deprecated: record, desc: string, documentation: string, id: string, name: string, parameters: list, version: string>>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/methods/reload" $auth.query)
@@ -2364,7 +2374,7 @@ export def "list-accepted-nodes" [
   --where: string # The criterion you want to find for your nodes
   --composition: string@composition-completer # Boolean operator to use between each `where` criteria. (default: and, e.g. and)
   --select: string # What kind of data we want to include. Here we can get policy servers/relay by setting `nodeAndPolicyServer`. Only used if `where` is defined. (default: node)
-]: nothing -> record<action: string, data: record<nodes: list<record>>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<nodes: list<record>>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include" $include "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "where" $where "scalar") (serialize-qp "composition" $composition "scalar") (serialize-qp "select" $select "scalar")] | flatten | str join "&"
@@ -2400,7 +2410,7 @@ export def "create-nodes" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> record<action: string, data: record<created: list<string>, failed: list<string>>, result: string> {
+]: any -> oneof<record<action: string, data: record<created: list<string>, failed: list<string>>, result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -2437,7 +2447,7 @@ export def "apply-policy-all-nodes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: table<hostname: string, id: string, result: string>, result: string> {
+]: nothing -> oneof<record<action: string, data: table<hostname: string, id: string, result: string>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/nodes/applyPolicy" $auth.query)
@@ -2476,7 +2486,7 @@ export def "list-pending-nodes" [
   --where: string # The criterion you want to find for your nodes
   --composition: string@composition-completer # Boolean operator to use between each `where` criteria. (default: and, e.g. and)
   --select: string # What kind of data we want to include. Here we can get policy servers/relay by setting `nodeAndPolicyServer`. Only used if `where` is defined. (default: node)
-]: nothing -> record<action: string, data: record<nodes: list<record>>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<nodes: list<record>>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include" $include "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "where" $where "scalar") (serialize-qp "composition" $composition "scalar") (serialize-qp "select" $select "scalar")] | flatten | str join "&"
@@ -2513,7 +2523,7 @@ export def "change-pending-node-status" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --status: string@status-completer-1 # New status of the pending node (e.g. accepted)
-]: any -> record<action: string, data: record<nodes: list<record>>, result: string> {
+]: any -> oneof<record<action: string, data: record<nodes: list<record>>, result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -2552,7 +2562,7 @@ export def "get-nodes-status" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --ids: string # Comma separated list of node Ids (required, format: comma-separated list, default: default, e.g. 8403353b-42c4-46f5-a08d-bc77a1a0bad9,root)
-]: nothing -> record<action: string, data: record<nodes: list<record>>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<nodes: list<record>>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let ids = ($ids | default "default")
@@ -2590,7 +2600,7 @@ export def "delete-node" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --mode: string@mode-completer # Deletion mode to use, either move to trash ('move', default) or erase ('erase') (default: move, e.g. move)
-]: nothing -> record<action: string, data: record<nodes: list<record>>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<nodes: list<record>>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeId' must be non-empty" } }
@@ -2628,7 +2638,7 @@ export def "node-details" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --include: string # Level of information to include from the node inventory. Some base levels are defined (**minimal**, **default**, **full**). You can add fields you want to a base level by adding them to the list, possible values are keys from json answer. If you don't provide a base level, they will be added to `default` level, so if you only want os details, use `minimal,os` as the value for this parameter. * **minimal** includes: `id`, `hostname` and `status` * **default** includes **minimal** plus `architectureDescription`, `description`, `ipAddresses`, `lastRunDate`, `lastInventoryDate`, `machine`, `os`, `managementTechnology`, `policyServerId`, `properties` (be careful! Only node own properties, if you also need inherited properties, look at the dedicated `/nodes/{id}/inheritedProperties` endpoint), `policyMode `, `ram` and `timezone` * **full** includes: **default** plus `accounts`, `bios`, `controllers`, `environmentVariables`, `fileSystems`, `managementTechnologyDetails`, `memories`, `networkInterfaces`, `ports`, `processes`, `processors`, `slots`, `software`, `sound`, `storage`, `videos` and `virtualMachines` (format: comma-separated list, default: default, e.g. minimal)
-]: nothing -> record<action: string, data: record<nodes: list<record>>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<nodes: list<record>>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeId' must be non-empty" } }
@@ -2654,8 +2664,6 @@ export def "node-details" [
 #
 # POST /nodes/{nodeId}
 # operationId: updateNode
-# --agentKey shape: {status?: "certified"|"undefined", value: string}
-# --properties item shape: {name: string, value: any}
 export def "update-node" [
   node_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2671,7 +2679,7 @@ export def "update-node" [
   --policy-mode: string@policy-mode-completer-1 # In which mode the node will apply its configuration policy. Use `default` to use the global mode. (e.g. audit)
   --properties: list # item shape: {name: string, value: any}
   --state: string@state-completer # The node life cycle state. See [dedicated doc](https://docs.rudder.io/reference/current/usage/advanced_node_management.html#node-lifecycle) for more information. (e.g. enabled)
-]: any -> record<action: string, data: record<nodes: list<record>>, result: string> {
+]: any -> oneof<record<action: string, data: record<nodes: list<record>>, result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -2746,7 +2754,7 @@ export def "reload-all-datasources-one-node" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: string, result: string> {
+]: nothing -> oneof<record<action: string, data: string, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeId' must be non-empty" } }
@@ -2783,7 +2791,7 @@ export def "reload-one-datasource-one-node" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: string, result: string> {
+]: nothing -> oneof<record<action: string, data: string, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeId' must be non-empty" } }
@@ -2820,7 +2828,7 @@ export def "node-inherited-properties" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: table<id: string, properties: list>, result: string> {
+]: nothing -> oneof<record<action: string, data: table<id: string, properties: list>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeId' must be non-empty" } }
@@ -2855,7 +2863,7 @@ export def "list-parameters" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: record<parameters: list<record>>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<parameters: list<record>>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/parameters" $auth.query)
@@ -2893,7 +2901,7 @@ export def "create-parameter" [
   id: string # Name of the parameter (e.g. rudder_file_edit_footer)
   --overridable: oneof<nothing, bool> # Is the global parameter overridable by node (e.g. false)
   --value: any # Value of the parameter (format: string or JSON, e.g. ### End of file managed by Rudder ###)
-]: any -> record<action: string, data: record<parameters: list<record>>, id: string, result: string> {
+]: any -> oneof<record<action: string, data: record<parameters: list<record>>, id: string, result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -2931,7 +2939,7 @@ export def "delete-parameter" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: record<parameters: list<record>>, id: string, result: string> {
+]: nothing -> oneof<record<action: string, data: record<parameters: list<record>>, id: string, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($parameter_id | is-empty) { error make --unspanned { msg: "path parameter 'parameterId' must be non-empty" } }
@@ -2967,7 +2975,7 @@ export def "parameter-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: record<parameters: list<record>>, id: string, result: string> {
+]: nothing -> oneof<record<action: string, data: record<parameters: list<record>>, id: string, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($parameter_id | is-empty) { error make --unspanned { msg: "path parameter 'parameterId' must be non-empty" } }
@@ -3003,7 +3011,7 @@ export def "update-parameter" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: record<parameters: list<record>>, id: string, result: string> {
+]: nothing -> oneof<record<action: string, data: record<parameters: list<record>>, id: string, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($parameter_id | is-empty) { error make --unspanned { msg: "path parameter 'parameterId' must be non-empty" } }
@@ -3038,7 +3046,7 @@ export def "list-rules" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: record<rules: list<record>>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<rules: list<record>>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rules" $auth.query)
@@ -3062,8 +3070,6 @@ export def "list-rules" [
 #
 # PUT /rules
 # operationId: createRule
-# --tags item shape: {name?: string}
-# --targets item shape: {exclude: record, include: record}
 export def "create-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3085,7 +3091,7 @@ export def "create-rule" [
   --system: oneof<nothing, bool> # If true it is an internal Rudder rule (e.g. false)
   --tags: list # item shape: {name?: string}
   --targets: list # Node and special groups targeted by that rule — item shape: {exclude: record, include: record}
-]: any -> record<action: string, data: record<rules: list<record>>, result: string> {
+]: any -> oneof<record<action: string, data: record<rules: list<record>>, result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -3126,7 +3132,7 @@ export def "create-rule-category" [
   --id: string # Rule category id, only provide it when needed. (format: uuid, default: {autogenerated}, e.g. 32d013f7-b6d8-46c8-99d3-016307fa66c0)
   name: string # Name of the rule category (e.g. Security policies)
   parent: string # The parent category of the rules (format: uuid, e.g. b9f6d98a-28bc-4d80-90f7-d2f14269e215)
-]: any -> record<action: string, data: record<ruleCategories: list<record>>, result: string> {
+]: any -> oneof<record<action: string, data: record<ruleCategories: list<record>>, result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -3164,7 +3170,7 @@ export def "delete-rule-category" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: record<groupCategories: list<record>>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<groupCategories: list<record>>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($rule_category_id | is-empty) { error make --unspanned { msg: "path parameter 'ruleCategoryId' must be non-empty" } }
@@ -3200,7 +3206,7 @@ export def "get-rule-category-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: record<rulesCategories: list<record>>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<rulesCategories: list<record>>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($rule_category_id | is-empty) { error make --unspanned { msg: "path parameter 'ruleCategoryId' must be non-empty" } }
@@ -3239,7 +3245,7 @@ export def "update-rule-category" [
   --description: string # Rules category description (e.g. Baseline applying CIS guidelines)
   name: string # Name of the rule category (e.g. Security policies)
   parent: string # The parent category of the rules (format: uuid, e.g. b9f6d98a-28bc-4d80-90f7-d2f14269e215)
-]: any -> record<action: string, data: record<ruleCategories: list<record>>, result: string> {
+]: any -> oneof<record<action: string, data: record<ruleCategories: list<record>>, result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -3277,7 +3283,7 @@ export def "get-rule-tree" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: record<ruleCategories: record>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<ruleCategories: record>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rules/tree" $auth.query)
@@ -3312,7 +3318,7 @@ export def "delete-rule" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: record<rules: list<record>>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<rules: list<record>>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($rule_id | is-empty) { error make --unspanned { msg: "path parameter 'ruleId' must be non-empty" } }
@@ -3348,7 +3354,7 @@ export def "rule-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: record<rules: list<record>>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<rules: list<record>>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($rule_id | is-empty) { error make --unspanned { msg: "path parameter 'ruleId' must be non-empty" } }
@@ -3373,8 +3379,6 @@ export def "rule-details" [
 #
 # POST /rules/{ruleId}
 # operationId: updateRule
-# --tags item shape: {name?: string}
-# --targets item shape: {exclude: record, include: record}
 export def "update-rule" [
   rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3396,7 +3400,7 @@ export def "update-rule" [
   --system: oneof<nothing, bool> # If true it is an internal Rudder rule (e.g. false)
   --tags: list # item shape: {name?: string}
   --targets: list # Node and special groups targeted by that rule — item shape: {exclude: record, include: record}
-]: any -> record<action: string, data: record<rules: list<record>>, result: string> {
+]: any -> oneof<record<action: string, data: record<rules: list<record>>, result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -3435,7 +3439,7 @@ export def "demote-to-node" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: string, result: string> {
+]: nothing -> oneof<record<action: string, data: string, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeId' must be non-empty" } }
@@ -3471,7 +3475,7 @@ export def "promote-to-relay" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: string, result: string> {
+]: nothing -> oneof<record<action: string, data: string, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeId' must be non-empty" } }
@@ -3506,7 +3510,7 @@ export def "get-all-secrets" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: record<secrets: list<record>>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<secrets: list<record>>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/secret/" $auth.query)
@@ -3543,7 +3547,7 @@ export def "update-secret" [
   --description: string # The description of the secret to identify it more easily (e.g. Password of my super secret user account)
   --name: string # The name of the secret used as a reference on the value (e.g. secret-password)
   --value: string # The value of the secret it will not be exposed in the interface (e.g. nj-k;EO32!kFWewn2Nk,u)
-]: any -> record<action: string, data: record<secrets: list<record>>, result: string> {
+]: any -> oneof<record<action: string, data: record<secrets: list<record>>, result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -3583,7 +3587,7 @@ export def "add-secret" [
   --description: string # The description of the secret to identify it more easily (e.g. Password of my super secret user account)
   --name: string # The name of the secret used as a reference on the value (e.g. secret-password)
   --value: string # The value of the secret it will not be exposed in the interface (e.g. nj-k;EO32!kFWewn2Nk,u)
-]: any -> record<action: string, data: record<secrets: list<record>>, result: string> {
+]: any -> oneof<record<action: string, data: record<secrets: list<record>>, result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -3621,7 +3625,7 @@ export def "delete-secret" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: record<secrets: list<record>>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<secrets: list<record>>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -3657,7 +3661,7 @@ export def "get-secret" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: record<secrets: list<record>>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<secrets: list<record>>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -3692,7 +3696,7 @@ export def "get-all-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: record<settings: record<allowed_networks: list, change_message_prompt: string, display_recent_changes_graphs: bool, enable_change_message: bool, enable_change_request: bool, enable_javascript_directives: string, enable_self_deployment: bool, enable_self_validation: bool, first_run_hour: int, first_run_minute: int, global_policy_mode: string, global_policy_mode_overridable: bool, heartbeat_frequency: int, mandatory_change_message: bool, modified_file_ttl: int, node_accept_duplicated_hostname: bool, node_onaccept_default_policyMode: string, node_onaccept_default_state: string, output_file_ttl: int, relay_server_synchronization_method: string, relay_server_synchronize_policies: bool, relay_server_synchronize_shared_files: bool, reporting_mode: string, require_time_synchronization: bool, rudder_compute_changes: bool, rudder_compute_dyngroups_max_parallelism: string, rudder_generation_compute_dyngroups: bool, rudder_generation_continue_on_error: bool, rudder_generation_delay: string, rudder_generation_js_timeout: int, rudder_generation_max_parallelism: string, rudder_generation_policy: string, rudder_report_protocol_default: string, rudder_save_db_compliance_details: bool, rudder_save_db_compliance_levels: bool, rudder_verify_certificates: bool, run_frequency: int, send_metrics: string, splay_time: int, unexpected_unbound_var_values: bool>>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<settings: record<allowed_networks: list, change_message_prompt: string, display_recent_changes_graphs: bool, enable_change_message: bool, enable_change_request: bool, enable_javascript_directives: string, enable_self_deployment: bool, enable_self_validation: bool, first_run_hour: int, first_run_minute: int, global_policy_mode: string, global_policy_mode_overridable: bool, heartbeat_frequency: int, mandatory_change_message: bool, modified_file_ttl: int, node_accept_duplicated_hostname: bool, node_onaccept_default_policyMode: string, node_onaccept_default_state: string, output_file_ttl: int, relay_server_synchronization_method: string, relay_server_synchronize_policies: bool, relay_server_synchronize_shared_files: bool, reporting_mode: string, require_time_synchronization: bool, rudder_compute_changes: bool, rudder_compute_dyngroups_max_parallelism: string, rudder_generation_compute_dyngroups: bool, rudder_generation_continue_on_error: bool, rudder_generation_delay: string, rudder_generation_js_timeout: int, rudder_generation_max_parallelism: string, rudder_generation_policy: string, rudder_report_protocol_default: string, rudder_save_db_compliance_details: bool, rudder_save_db_compliance_levels: bool, rudder_verify_certificates: bool, run_frequency: int, send_metrics: string, splay_time: int, unexpected_unbound_var_values: bool>>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/settings" $auth.query)
@@ -3727,7 +3731,7 @@ export def "get-allowed-networks" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: record<settings: record<allowed_networks: list>>, id: string, result: string> {
+]: nothing -> oneof<record<action: string, data: record<settings: record<allowed_networks: list>>, id: string, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeId' must be non-empty" } }
@@ -3764,7 +3768,7 @@ export def "set-allowed-networks" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --value: record # New value of the allowed networks (e.g. enforce)
-]: any -> record<action: string, data: record<allowed_networks: list<any>>, id: string, result: string> {
+]: any -> oneof<record<action: string, data: record<allowed_networks: list<any>>, id: string, result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -3792,7 +3796,6 @@ export def "set-allowed-networks" [
 #
 # POST /settings/allowed_networks/{nodeId}/diff
 # operationId: modifyAllowedNetworks
-# --allowed_networks shape: {add?: list, delete?: list}
 export def "modify-allowed-networks" [
   node_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3805,7 +3808,7 @@ export def "modify-allowed-networks" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --allowed-networks: record # shape: {add?: list, delete?: list}
-]: any -> record<action: string, data: record<allowed_networks: list<any>>, result: string> {
+]: any -> oneof<record<action: string, data: record<allowed_networks: list<any>>, result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -3844,7 +3847,7 @@ export def "get-setting" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: record<settingId: string>, id: string, result: string> {
+]: nothing -> oneof<record<action: string, data: record<settingId: string>, id: string, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($setting_id | is-empty) { error make --unspanned { msg: "path parameter 'settingId' must be non-empty" } }
@@ -3881,7 +3884,7 @@ export def "modify-setting" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --value: string # New value of the setting (e.g. enforce)
-]: any -> record<action: string, data: record<settingId: string>, id: string, result: string> {
+]: any -> oneof<record<action: string, data: record<settingId: string>, id: string, result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -3954,7 +3957,7 @@ export def "list-archives" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: record<full: list<record>>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<full: list<record>>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($archive_kind | is-empty) { error make --unspanned { msg: "path parameter 'archiveKind' must be non-empty" } }
@@ -3990,7 +3993,7 @@ export def "create-archive" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: record<full: record<commiter: string, gitCommit: string, id: string>>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<full: record<commiter: string, gitCommit: string, id: string>>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($archive_kind | is-empty) { error make --unspanned { msg: "path parameter 'archiveKind' must be non-empty" } }
@@ -4027,7 +4030,7 @@ export def "restore-archive" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: record<directive: string, full: string, groups: string, parameters: string, rules: string>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<directive: string, full: string, groups: string, parameters: string, rules: string>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($archive_kind | is-empty) { error make --unspanned { msg: "path parameter 'archiveKind' must be non-empty" } }
@@ -4101,7 +4104,7 @@ export def "get-healthcheck-result" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: table<msg: string, name: string, status: string>, result: string> {
+]: nothing -> oneof<record<action: string, data: table<msg: string, name: string, status: string>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/system/healthcheck" $auth.query)
@@ -4135,7 +4138,7 @@ export def "get-system-info" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: record<rudder: record<build_time: string, full_version: string, major_version: string>>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<rudder: record<build_time: string, full_version: string, major_version: string>>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/system/info" $auth.query)
@@ -4169,7 +4172,7 @@ export def "purge-software" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: list<string>, result: string> {
+]: nothing -> oneof<record<action: string, data: list<string>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/system/maintenance/purgeSoftware" $auth.query)
@@ -4203,7 +4206,7 @@ export def "regenerate-policies" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: record<policies: string>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<policies: string>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/system/regenerate/policies" $auth.query)
@@ -4237,7 +4240,7 @@ export def "reload-all" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: record<groups: string, techniques: string>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<groups: string, techniques: string>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/system/reload" $auth.query)
@@ -4271,7 +4274,7 @@ export def "reload-groups" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: record<groups: string>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<groups: string>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/system/reload/groups" $auth.query)
@@ -4305,7 +4308,7 @@ export def "reload-techniques" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: record<techniques: string>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<techniques: string>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/system/reload/techniques" $auth.query)
@@ -4339,7 +4342,7 @@ export def "get-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: record<global: string>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<global: string>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/system/status" $auth.query)
@@ -4373,7 +4376,7 @@ export def "update-policies" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: record<policies: string>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<policies: string>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/system/update/policies" $auth.query)
@@ -4407,7 +4410,7 @@ export def "list-techniques" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: record<techniques: list<record>>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<techniques: list<record>>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/techniques" $auth.query)
@@ -4442,7 +4445,7 @@ export def "create-technique" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> record<action: string, data: record<techniques: record<technique: record>>, result: string> {
+]: any -> oneof<record<action: string, data: record<techniques: record<technique: record>>, result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -4479,7 +4482,7 @@ export def "technique-categories" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: record<techniqueCategories: record<id: string, name: string, path: string, subcategories: list>>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<techniqueCategories: record<id: string, name: string, path: string, subcategories: list>>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/techniques/categories" $auth.query)
@@ -4513,7 +4516,7 @@ export def "techniques" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: record<techniques: list<record>>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<techniques: list<record>>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/techniques/reload" $auth.query)
@@ -4547,7 +4550,7 @@ export def "list-techniques-versions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: record<techniques: list<record>>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<techniques: list<record>>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/techniques/versions" $auth.query)
@@ -4582,7 +4585,7 @@ export def "get-technique-all-version" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: record<techniques: list<record>>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<techniques: list<record>>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($technique_id | is-empty) { error make --unspanned { msg: "path parameter 'techniqueId' must be non-empty" } }
@@ -4618,7 +4621,7 @@ export def "list-techniques-directives" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: record<directives: list<record>>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<directives: list<record>>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($technique_id | is-empty) { error make --unspanned { msg: "path parameter 'techniqueId' must be non-empty" } }
@@ -4655,7 +4658,7 @@ export def "delete-technique" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: record<techniques: record<id: string, version: string>>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<techniques: record<id: string, version: string>>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($technique_id | is-empty) { error make --unspanned { msg: "path parameter 'techniqueId' must be non-empty" } }
@@ -4693,7 +4696,7 @@ export def "get-technique-all-version-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: record<techniques: list<record>>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<techniques: list<record>>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($technique_id | is-empty) { error make --unspanned { msg: "path parameter 'techniqueId' must be non-empty" } }
@@ -4732,7 +4735,7 @@ export def "update-technique" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> record<action: string, data: record<techniques: record<technique: record>>, result: string> {
+]: any -> oneof<record<action: string, data: record<techniques: record<technique: record>>, result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -4773,7 +4776,7 @@ export def "list-technique-version-directives" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: record<directives: list<record>>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<directives: list<record>>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($technique_id | is-empty) { error make --unspanned { msg: "path parameter 'techniqueId' must be non-empty" } }
@@ -4811,7 +4814,7 @@ export def "get-techniques-resources" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: record<resources: list<record>>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<resources: list<record>>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($technique_id | is-empty) { error make --unspanned { msg: "path parameter 'techniqueId' must be non-empty" } }
@@ -4849,7 +4852,7 @@ export def "technique-revisions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: record<techniques: list<record>>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<techniques: list<record>>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($technique_id | is-empty) { error make --unspanned { msg: "path parameter 'techniqueId' must be non-empty" } }
@@ -4889,7 +4892,7 @@ export def "add-user" [
   --password: string # this password will be hashed for you if the `isPreHashed` is set on false (e.g. passwdWillBeStoredHashed)
   --role: list<string> # Defined user's permissions
   --username: string # e.g. John Doe
-]: any -> record<action: string, data: record<addedUser: record<password: string, role: list, username: string>>, result: string> {
+]: any -> oneof<record<action: string, data: record<addedUser: record<password: string, role: list, username: string>>, result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -4926,7 +4929,7 @@ export def "get-role" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: table<id: string, rights: list>, result: string> {
+]: nothing -> oneof<record<action: string, data: table<id: string, rights: list>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/usermanagement/roles" $auth.query)
@@ -4965,7 +4968,7 @@ export def "update-user" [
   --password: string # this password will be hashed for you if the `isPreHashed` is set on false (e.g. passwdWillBeStoredHashed)
   --role: list<string> # Defined user's permissions
   --body-username: string # e.g. John Doe
-]: any -> record<action: string, data: record<updatedUser: record<password: string, role: list, username: string>>, result: string> {
+]: any -> oneof<record<action: string, data: record<updatedUser: record<password: string, role: list, username: string>>, result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -5003,7 +5006,7 @@ export def "get-user-info" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: record<digest: string, users: list<record>>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<digest: string, users: list<record>>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/usermanagement/users" $auth.query)
@@ -5037,7 +5040,7 @@ export def "reload-user-conf" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: record<reload: record<status: string>>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<reload: record<status: string>>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/usermanagement/users/reload" $auth.query)
@@ -5072,7 +5075,7 @@ export def "delete-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: record<deletedUser: record<username: string>>, result: string> {
+]: nothing -> oneof<record<action: string, data: record<deletedUser: record<username: string>>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
@@ -5107,7 +5110,7 @@ export def "list-users" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: table<isValidated: bool, userExists: bool, username: string>, result: string> {
+]: nothing -> oneof<record<action: string, data: table<isValidated: bool, userExists: bool, username: string>, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users" $auth.query)
@@ -5142,7 +5145,7 @@ export def "save-workflow-user" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   validated_users: list<string> # list of user to put in validated list
-]: any -> record<action: string, data: record<isValidated: bool, userExists: bool, username: string>, result: string> {
+]: any -> oneof<record<action: string, data: record<isValidated: bool, userExists: bool, username: string>, result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -5180,7 +5183,7 @@ export def "remove-validated-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, data: string, result: string> {
+]: nothing -> oneof<record<action: string, data: string, result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }

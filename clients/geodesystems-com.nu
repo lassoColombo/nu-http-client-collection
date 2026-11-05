@@ -14,27 +14,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -42,8 +51,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -54,7 +68,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -89,7 +112,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["https://geodesystems.com:443"] }
@@ -99,9 +123,9 @@ def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "media-tabular-extractsheet" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["media-tabular-extractsheet" "search-2017-boulder-election-expenditures" "search-any" "search-beforeafter" "search-biblio" "search-bio-dicom" "search-bio-dicom-test" "search-bio-fasta" "search-bio-fastq" "search-bio-hmmer-index" "search-bio-ome-tiff" "search-bio-ontology-assay" "search-bio-ontology-cohort" "search-bio-ontology-person" "search-bio-ontology-sample" "search-bio-ontology-series" "search-bio-ontology-study" "search-bio-sam" "search-bio-sf-pdb" "search-bio-sra" "search-bio-stockholm" "search-bio-taxonomy" "search-blogentry" "search-bolder-rental-housing" "search-bookmarks" "search-boston-crime" "search-boulder-2017-election-contributions" "search-boulder-campaign-contributions" "search-boulder-consulting-services" "search-boulder-county-voter-details" "search-boulder-crimes" "search-boulder-emails" "search-boulder-employee-salaries" "search-calendar" "search-campaign-donors" "search-campaign-expenditures" "search-cataloglink" "search-cdm-grid" "search-chatroom" "search-colorado-water-rights" "search-committee-donations" "search-community-datahub" "search-community-resource" "search-construction-permits" "search-contact" "search-db-co-indicators" "search-earth-satellite-landsat" "search-faq" "search-fec-pacs" "search-feccandidates" "search-feed" "search-file" "search-fits-data" "search-ftp" "search-gadgets-countdown" "search-gadgets-stock" "search-gadgets-weather" "search-gazeteer-census-tracts" "search-gazeteer-counties" "search-geo-geojson" "search-geo-geotiff" "search-geo-gpx" "search-geo-hdf5" "search-geo-kml" "search-geo-shapefile" "search-geo-shapefile-fips" "search-glossary" "search-gridaggregation" "search-group" "search-hipchat-group" "search-homepage" "search-incident" "search-jeopardy" "search-latlonimage" "search-lidar-collection" "search-lidar-las" "search-lidar-lvis" "search-link" "search-localfiles" "search-locations" "search-map-googlemap" "search-media-audiofile" "search-media-imageloop" "search-media-photoalbum" "search-media-video-channel" "search-media-video-quicktime" "search-media-youtubevideo" "search-notes" "search-notes-jsonfile" "search-notes-note" "search-notes-notebook" "search-nwsfeed" "search-opendaplink" "search-owl-class" "search-owl-ontology" "search-pasteitentry" "search-point-text" "search-police-stop-data" "search-poll" "search-project-campaign" "search-project-casestudy" "search-project-contribution" "search-project-dataformat" "search-project-dataset" "search-project-deployment" "search-project-experiment" "search-project-fieldnote" "search-project-gps-controlpoints" "search-project-gps-raw" "search-project-gps-rinex" "search-project-instrument" "search-project-learning-resource" "search-project-meeting" "search-project-organization" "search-project-program" "search-project-project" "search-project-service" "search-project-site" "search-project-softwarepackage" "search-project-standard-name" "search-project-surveylocation" "search-project-term" "search-project-visit" "search-project-vocabulary" "search-property-sales" "search-propertydb" "search-python-notebook" "search-slack-team" "search-statusboard" "search-sunrisesunset" "search-tasks" "search-tmdbmovies" "search-todo" "search-trip-event" "search-trip-flight" "search-trip-hotel" "search-trip-report" "search-trip-trip" "search-type-awc-metar" "search-type-biz-stockseries" "search-type-bls-series" "search-type-bls-survey" "search-type-census-acs" "search-type-daymet" "search-type-db-table" "search-type-document-csv" "search-type-document-doc" "search-type-document-html" "search-type-document-pdf" "search-type-document-ppt" "search-type-document-xls" "search-type-drilsdown-casestudy" "search-type-edgar-filing" "search-type-eia-category" "search-type-eia-series" "search-type-esri-featureserver" "search-type-esri-geometryserver" "search-type-esri-gpserver" "search-type-esri-imageserver" "search-type-esri-layer" "search-type-esri-mapserver" "search-type-esri-restfolder" "search-type-esri-restserver" "search-type-esri-restservice" "search-type-extremes" "search-type-fred-category" "search-type-fred-series" "search-type-gtfs-agency" "search-type-gtfs-route" "search-type-gtfs-routes" "search-type-gtfs-stop" "search-type-gtfs-stops" "search-type-gtfs-trip" "search-type-hazarddata" "search-type-hydro-colorado" "search-type-idv-bundle" "search-type-image" "search-type-image-airport" "search-type-image-webcam" "search-type-mb" "search-type-mb-collection" "search-type-mb-point-basic" "search-type-metameta-dictionary" "search-type-metameta-field" "search-type-nasaames" "search-type-ncss" "search-type-nitf" "search-type-point-ameriflux-level2" "search-type-point-amrc-final" "search-type-point-amrc-freewave" "search-type-point-czo" "search-type-point-gcnet" "search-type-point-geomag-iaga2002" "search-type-point-hydro-waterml" "search-type-point-icebridge-atm-icessn" "search-type-point-icebridge-atm-qfit" "search-type-point-icebridge-mccords-irmcr2" "search-type-point-icebridge-mccords-irmcr3" "search-type-point-icebridge-paris" "search-type-point-idv" "search-type-point-inline" "search-type-point-ncdc-climate" "search-type-point-netcdf" "search-type-point-noaa-carbon" "search-type-point-noaa-flask-event" "search-type-point-noaa-flask-month" "search-type-point-noaa-madis" "search-type-point-noaa-tower" "search-type-point-ocean-cnv" "search-type-point-ocean-csv-sado-tts" "search-type-point-ocean-csv-sado-meteo" "search-type-point-ocean-csv-sado-position" "search-type-point-ocean-netcdf-glider" "search-type-point-ocean-netcdf-track" "search-type-point-ocean-ooi-dmgx" "search-type-point-openaq" "search-type-point-pbo-position-time-series" "search-type-point-simple-records" "search-type-point-snotel" "search-type-point-text" "search-type-point-wsbb-ggp" "search-type-psd-monthly-climate-index" "search-type-quandl-series" "search-type-service-group" "search-type-service-link" "search-type-socrata-series" "search-type-sounding-cod" "search-type-sounding-frd" "search-type-sounding-gsd" "search-type-sounding-wyoming" "search-type-tmy" "search-type-tweet" "search-type-usgs-gauge" "search-type-virtual" "search-type-wms-capabilities" "search-type-wms-layer" "search-ufo-sightings" "search-us-places" "search-vote-yesno" "search-weblog" "search-wikipage" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig

@@ -12,27 +12,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -40,8 +49,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -52,7 +66,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -108,9 +131,9 @@ def source-completer [] { ["ticketmaster"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "publish-attraction" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["publish-attraction" "patch-attraction" "publish-attraction-videos" "publish-entitlements" "publish-event" "patch-event" "publish-event-videos" "publish-extension" "publish-venue" "patch-venue" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -132,9 +155,6 @@ export def commands []: nothing -> table {
 #
 # POST /publish/v2/attractions
 # operationId: publishAttraction
-# --classifications item shape: {genre?: record, primary?: bool, segment?: record, subGenre?: record, subType?: record, type?: record}
-# --images item shape: {attribution?: string, domains?: list<string>, fallback?: bool, height?: int, ratio?: "16_9"|"3_2"|"4_3", url?: string, width?: int}
-# --source shape: {id?: string, name?: string}
 export def "publish-attraction" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -160,7 +180,7 @@ export def "publish-attraction" [
   type: string@type-completer # Type of the entity
   --url: string # URL of a web site detail page of the entity
   --version: int # Version of the entity. Version is to avoid updated an entity with an older version (format: int64)
-]: any -> record<id: string, ignoredProperties: record, invalidProperties: record, invalidValues: record, missingProperties: record, status: string, unknownProperties: record> {
+]: any -> oneof<record<id: string, ignoredProperties: record, invalidProperties: record, invalidValues: record, missingProperties: record, status: string, unknownProperties: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -190,7 +210,6 @@ export def "publish-attraction" [
 #
 # PATCH /publish/v2/attractions/{id}
 # operationId: patchAttraction
-# --changes item shape: {from?: string, op: "add"|"remove"|"replace"|"move"|"copy"|"test", path: string, value?: record}
 export def "patch-attraction" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -209,7 +228,7 @@ export def "patch-attraction" [
   --score: float # The confidence (%) level of the accuracy of this augmention data. 100 is the better (format: float)
   source: string # The source where the augementation data came from
   version_number: int # Vesion of this augmentation data. This field is to avoid updating entity with old data. (format: int64)
-]: any -> record<id: string, ignoredProperties: record, invalidProperties: record, invalidValues: record, missingProperties: record, status: string, unknownProperties: record> {
+]: any -> oneof<record<id: string, ignoredProperties: record, invalidProperties: record, invalidValues: record, missingProperties: record, status: string, unknownProperties: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -240,8 +259,6 @@ export def "patch-attraction" [
 #
 # POST /publish/v2/attractions/{id}/videos
 # operationId: publishAttractionVideos
-# --licensingInformation shape: {license: string, regionRestriction?: record}
-# --source shape: {id?: string, name?: string}
 export def "publish-attraction-videos" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -258,7 +275,7 @@ export def "publish-attraction-videos" [
   licensing_information: record # This class defines an entitlement data on the Publish API — shape: {license: string, regionRestriction?: record}
   source: record # Source — shape: {id?: string, name?: string}
   url: string # The url of the video
-]: any -> record<id: string, ignoredProperties: record, invalidProperties: record, invalidValues: record, missingProperties: record, status: string, unknownProperties: record> {
+]: any -> oneof<record<id: string, ignoredProperties: record, invalidProperties: record, invalidValues: record, missingProperties: record, status: string, unknownProperties: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -289,7 +306,6 @@ export def "publish-attraction-videos" [
 #
 # POST /publish/v2/entitlements
 # operationId: publishEntitlements
-# --relatedEntitySource shape: {id?: string, name?: string}
 export def "publish-entitlements" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -307,7 +323,7 @@ export def "publish-entitlements" [
   related_entity_type: string@related-entity-type-completer # The type of the entity to add this entitlement to
   source: string@source-completer # Source of the extension, where it came from
   --version-number: int # Version of the entitlements. Version is to prevent to override an entitlements with an older one (format: int64)
-]: any -> record<id: string, ignoredProperties: record, invalidProperties: record, invalidValues: record, missingProperties: record, status: string, unknownProperties: record> {
+]: any -> oneof<record<id: string, ignoredProperties: record, invalidProperties: record, invalidValues: record, missingProperties: record, status: string, unknownProperties: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -337,18 +353,6 @@ export def "publish-entitlements" [
 #
 # POST /publish/v2/events
 # operationId: publishEvent
-# --attractions item shape: {active?: bool, additionalInfos?: record, classifications?: list, descriptions?: record, discoverable?: bool, images?: list, names?: record, references?: record, relationships?: list, source?: record, test?: bool, type: "event"|"venue"|"attraction", url?: string, version?: int}
-# --classifications item shape: {genre?: record, primary?: bool, segment?: record, subGenre?: record, subType?: record, type?: record}
-# --dates shape: {access?: record, end?: record, start?: record, status?: record, timezone?: string}
-# --images item shape: {attribution?: string, domains?: list<string>, fallback?: bool, height?: int, ratio?: "16_9"|"3_2"|"4_3", url?: string, width?: int}
-# --location shape: {latitude?: float, longitude?: float}
-# --place shape: {address?: record, area?: record, city?: record, country?: record, location?: record, names?: record, postalCode?: string, state?: record}
-# --priceRanges item shape: {currency?: string, max?: float, min?: float, type?: "standard"}
-# --promoter shape: {descriptions?: record, id?: string, names?: record}
-# --publicVisibility shape: {endDateTime?: string, startDateTime?: string, visible?: bool}
-# --sales shape: {presales?: list, public?: record}
-# --source shape: {id?: string, name?: string}
-# --venue shape: {accessibleSeatingDetails?: record, active?: bool, additionalInfos?: record, address?: record, boxOfficeInfo?: record, city?: record, country?: record, currency?: string, descriptions?: record, discoverable?: bool, distance?: float, dma?: list, generalInfo?: record, images?: list, location?: record, markets?: list, names?: record, parkingDetails?: record, postalCode?: string, references?: record, relationships?: list, social?: record, source?: record, state?: record, test?: bool, ... (5 more fields)}
 export def "publish-event" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -387,7 +391,7 @@ export def "publish-event" [
   --url: string # URL of a web site detail page of the entity
   --venue: record # Venue — shape: {accessibleSeatingDetails?: record, active?: bool, additionalInfos?: record, address?: record, boxOfficeInfo?: record, city?: record, country?: record, currency?: string, descriptions?: record, discoverable?: bool, distance?: float, dma?: list, generalInfo?: record, images?: list, location?: record, markets?: list, names?: record, parkingDetails?: record, postalCode?: string, references?: record, relationships?: list, social?: record, source?: record, state?: record, test?: bool, ... (5 more fields)}
   --version: int # Version of the entity. Version is to avoid updated an entity with an older version (format: int64)
-]: any -> record<id: string, ignoredProperties: record, invalidProperties: record, invalidValues: record, missingProperties: record, status: string, unknownProperties: record> {
+]: any -> oneof<record<id: string, ignoredProperties: record, invalidProperties: record, invalidValues: record, missingProperties: record, status: string, unknownProperties: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -417,7 +421,6 @@ export def "publish-event" [
 #
 # PATCH /publish/v2/events/{id}
 # operationId: patchEvent
-# --changes item shape: {from?: string, op: "add"|"remove"|"replace"|"move"|"copy"|"test", path: string, value?: record}
 export def "patch-event" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -436,7 +439,7 @@ export def "patch-event" [
   --score: float # The confidence (%) level of the accuracy of this augmention data. 100 is the better (format: float)
   source: string # The source where the augementation data came from
   version_number: int # Vesion of this augmentation data. This field is to avoid updating entity with old data. (format: int64)
-]: any -> record<id: string, ignoredProperties: record, invalidProperties: record, invalidValues: record, missingProperties: record, status: string, unknownProperties: record> {
+]: any -> oneof<record<id: string, ignoredProperties: record, invalidProperties: record, invalidValues: record, missingProperties: record, status: string, unknownProperties: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -467,8 +470,6 @@ export def "patch-event" [
 #
 # POST /publish/v2/events/{id}/videos
 # operationId: publishEventVideos
-# --licensingInformation shape: {license: string, regionRestriction?: record}
-# --source shape: {id?: string, name?: string}
 export def "publish-event-videos" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -485,7 +486,7 @@ export def "publish-event-videos" [
   licensing_information: record # This class defines an entitlement data on the Publish API — shape: {license: string, regionRestriction?: record}
   source: record # Source — shape: {id?: string, name?: string}
   url: string # The url of the video
-]: any -> record<id: string, ignoredProperties: record, invalidProperties: record, invalidValues: record, missingProperties: record, status: string, unknownProperties: record> {
+]: any -> oneof<record<id: string, ignoredProperties: record, invalidProperties: record, invalidValues: record, missingProperties: record, status: string, unknownProperties: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -516,7 +517,6 @@ export def "publish-event-videos" [
 #
 # POST /publish/v2/extensions
 # operationId: publishExtension
-# --relatedEntitySource shape: {id?: string, name?: string}
 export def "publish-extension" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -535,7 +535,7 @@ export def "publish-extension" [
   source: string # Source of the extension, where it came from
   type: string # The type of the extension. This represent the data sent
   --version-number: int # Version of the extensions. Version is to prevent to override an extension with an older one (format: int64)
-]: any -> record<id: string, ignoredProperties: record, invalidProperties: record, invalidValues: record, missingProperties: record, status: string, unknownProperties: record> {
+]: any -> oneof<record<id: string, ignoredProperties: record, invalidProperties: record, invalidValues: record, missingProperties: record, status: string, unknownProperties: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -565,18 +565,6 @@ export def "publish-extension" [
 #
 # POST /publish/v2/venues
 # operationId: publishVenue
-# --address shape: {line1s?: record, line2s?: record, line3s?: record}
-# --boxOfficeInfo shape: {acceptedPaymentDetails?: record, openHoursDetails?: record, phoneNumberDetails?: record, willCallDetails?: record}
-# --city shape: {names?: record}
-# --country shape: {countryCode?: string, names?: record}
-# --dma item shape: {id?: int}
-# --generalInfo shape: {childRules?: record, generalRules?: record}
-# --images item shape: {attribution?: string, domains?: list<string>, fallback?: bool, height?: int, ratio?: "16_9"|"3_2"|"4_3", url?: string, width?: int}
-# --location shape: {latitude?: float, longitude?: float}
-# --markets item shape: {id?: string}
-# --social shape: {twitter?: record}
-# --source shape: {id?: string, name?: string}
-# --state shape: {names?: record, stateCode?: string}
 export def "publish-venue" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -618,7 +606,7 @@ export def "publish-venue" [
   --units: string
   --url: string # URL of a web site detail page of the entity
   --version: int # Version of the entity. Version is to avoid updated an entity with an older version (format: int64)
-]: any -> record<id: string, ignoredProperties: record, invalidProperties: record, invalidValues: record, missingProperties: record, status: string, unknownProperties: record> {
+]: any -> oneof<record<id: string, ignoredProperties: record, invalidProperties: record, invalidValues: record, missingProperties: record, status: string, unknownProperties: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -648,7 +636,6 @@ export def "publish-venue" [
 #
 # PATCH /publish/v2/venues/{id}
 # operationId: patchVenue
-# --changes item shape: {from?: string, op: "add"|"remove"|"replace"|"move"|"copy"|"test", path: string, value?: record}
 export def "patch-venue" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -667,7 +654,7 @@ export def "patch-venue" [
   --score: float # The confidence (%) level of the accuracy of this augmention data. 100 is the better (format: float)
   source: string # The source where the augementation data came from
   version_number: int # Vesion of this augmentation data. This field is to avoid updating entity with old data. (format: int64)
-]: any -> record<id: string, ignoredProperties: record, invalidProperties: record, invalidValues: record, missingProperties: record, status: string, unknownProperties: record> {
+]: any -> oneof<record<id: string, ignoredProperties: record, invalidProperties: record, invalidValues: record, missingProperties: record, status: string, unknownProperties: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

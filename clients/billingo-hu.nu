@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "x-api-key" => { {scheme: $scheme, headers: {"X-API-KEY": $token_val}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -126,9 +150,9 @@ def vat-completer [] { ["0%" "1%" "10%" "11%" "12%" "13%" "14%" "15%" "16%" "17%
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-bank-account" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["list-bank-account" "create-bank-account" "delete-bank-account" "get-bank-account" "update-bank-account" "get-conversion-rate" "list-document-block" "list-document" "create-document" "get-document" "cancel-document" "create-document-from-proforma" "download-document" "get-online-szamla-status" "delete-payment" "get-payment" "update-payment" "get-public-url" "send-document" "get-organization-data" "list-partner" "create-partner" "delete-partner" "get-partner" "update-partner" "list-product" "create-product" "delete-product" "get-product" "update-product" "get-id" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -162,7 +186,7 @@ export def "list-bank-account" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # default: 1
   --per-page: int # default: 25
-]: nothing -> record<current_page: int, data: table<account_number: string, account_number_iban: string, currency: string, id: int, name: string, need_qr: bool, swift: string>, last_page: int, next_page_url: string, per_page: int, prev_page_url: string, total: int> {
+]: nothing -> oneof<record<current_page: int, data: table<account_number: string, account_number_iban: string, currency: string, id: int, name: string, need_qr: bool, swift: string>, last_page: int, next_page_url: string, per_page: int, prev_page_url: string, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
@@ -203,7 +227,7 @@ export def "create-bank-account" [
   name: string
   --need-qr: oneof<nothing, bool> # default: false
   --swift: string
-]: any -> record<account_number: string, account_number_iban: string, currency: string, id: int, name: string, need_qr: bool, swift: string> {
+]: any -> oneof<record<account_number: string, account_number_iban: string, currency: string, id: int, name: string, need_qr: bool, swift: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -277,7 +301,7 @@ export def "get-bank-account" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account_number: string, account_number_iban: string, currency: string, id: int, name: string, need_qr: bool, swift: string> {
+]: nothing -> oneof<record<account_number: string, account_number_iban: string, currency: string, id: int, name: string, need_qr: bool, swift: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -319,7 +343,7 @@ export def "update-bank-account" [
   name: string
   --need-qr: oneof<nothing, bool> # default: false
   --swift: string
-]: any -> record<account_number: string, account_number_iban: string, currency: string, id: int, name: string, need_qr: bool, swift: string> {
+]: any -> oneof<record<account_number: string, account_number_iban: string, currency: string, id: int, name: string, need_qr: bool, swift: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -359,7 +383,7 @@ export def "get-conversion-rate" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --from: string@from-completer # required
   --to: string@to-completer # required
-]: nothing -> record<conversation_rate: float, from_currency: string, to_currency: string> {
+]: nothing -> oneof<record<conversation_rate: float, from_currency: string, to_currency: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($from == null) { error make --unspanned { msg: "required query parameter 'from' missing: pass --from" } }
@@ -398,7 +422,7 @@ export def "list-document-block" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # default: 1
   --per-page: int # default: 25
-]: nothing -> record<current_page: int, data: table<custom_field1: string, custom_field2: string, id: int, name: string, prefix: string>, last_page: int, next_page_url: string, per_page: int, prev_page_url: string, total: int> {
+]: nothing -> oneof<record<current_page: int, data: table<custom_field1: string, custom_field2: string, id: int, name: string, prefix: string>, last_page: int, next_page_url: string, per_page: int, prev_page_url: string, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
@@ -445,7 +469,7 @@ export def "list-document" [
   --end-number: int # Ending number of the document, should not contain year or any other formatting. Required if `end_year` given (e.g. 10)
   --start-year: int # Year for `start_number` parameter. Required if `start_number` given. (e.g. 2020)
   --end-year: int # Year for `end_number` parameter. Required if `end_number` given. (e.g. 2020)
-]: nothing -> record<current_page: int, data: table<block_id: int, cancelled: bool, comment: string, conversion_rate: float, currency: string, due_date: string, electronic: bool, fulfillment_date: string, gross_total: float, id: int, invoice_date: string, invoice_number: string, items: list, language: string, notification_status: string, organization: record, paid_date: string, partner: record, payment_method: string, payment_status: string, settings: record, summary: record, tags: list, type: string>, last_page: int, next_page_url: string, per_page: int, prev_page_url: string, total: int> {
+]: nothing -> oneof<record<current_page: int, data: table<block_id: int, cancelled: bool, comment: string, conversion_rate: float, currency: string, due_date: string, electronic: bool, fulfillment_date: string, gross_total: float, id: int, invoice_date: string, invoice_number: string, items: list, language: string, notification_status: string, organization: record, paid_date: string, partner: record, payment_method: string, payment_status: string, settings: record, summary: record, tags: list, type: string>, last_page: int, next_page_url: string, per_page: int, prev_page_url: string, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "block_id" $block_id "scalar") (serialize-qp "partner_id" $partner_id "scalar") (serialize-qp "payment_method" $payment_method "scalar") (serialize-qp "payment_status" $payment_status "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "start_number" $start_number "scalar") (serialize-qp "end_number" $end_number "scalar") (serialize-qp "start_year" $start_year "scalar") (serialize-qp "end_year" $end_year "scalar")] | flatten | str join "&"
@@ -470,7 +494,6 @@ export def "list-document" [
 #
 # POST /documents
 # operationId: CreateDocument
-# --settings shape: {mediated_service?: bool, online_payment?: ""|"Barion"|"SimplePay"|"no", place_id?: int, round?: "five"|"none"|"one"|"ten", without_financial_fulfillment?: bool}
 export def "create-document" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -497,7 +520,7 @@ export def "create-document" [
   --settings: record # shape: {mediated_service?: bool, online_payment?: ""|"Barion"|"SimplePay"|"no", place_id?: int, round?: "five"|"none"|"one"|"ten", without_financial_fulfillment?: bool}
   type: string@type-completer
   --vendor-id: string
-]: any -> record<block_id: int, cancelled: bool, comment: string, conversion_rate: float, currency: string, due_date: string, electronic: bool, fulfillment_date: string, gross_total: float, id: int, invoice_date: string, invoice_number: string, items: table<gross_amount: float, name: string, net_amount: float, net_unit_amount: float, product_id: int, quantity: float, vat: string, vat_amount: float>, language: string, notification_status: string, organization: record<address: record<address: string, city: string, country_code: string, post_code: string>, bank_account: record<account_number: string, account_number_iban: string, id: int, name: string, swift: string>, cash_settled: bool, eu_tax_number: string, ev_number: string, name: string, small_taxpayer: bool, tax_number: string>, paid_date: string, partner: record<account_number: string, address: record<address: string, city: string, country_code: string, post_code: string>, emails: list<string>, general_ledger_number: string, iban: string, name: string, phone: string, swift: string, taxcode: string, id: int>, payment_method: string, payment_status: string, settings: record<mediated_service: bool, online_payment: string, place_id: int, round: string, without_financial_fulfillment: bool>, summary: record<gross_amount_local: float, net_amount: float, net_amount_local: float, vat_amount: float, vat_amount_local: float, vat_rate_summary: list<record>>, tags: list<string>, type: string> {
+]: any -> oneof<record<block_id: int, cancelled: bool, comment: string, conversion_rate: float, currency: string, due_date: string, electronic: bool, fulfillment_date: string, gross_total: float, id: int, invoice_date: string, invoice_number: string, items: table<gross_amount: float, name: string, net_amount: float, net_unit_amount: float, product_id: int, quantity: float, vat: string, vat_amount: float>, language: string, notification_status: string, organization: record<address: record<address: string, city: string, country_code: string, post_code: string>, bank_account: record<account_number: string, account_number_iban: string, id: int, name: string, swift: string>, cash_settled: bool, eu_tax_number: string, ev_number: string, name: string, small_taxpayer: bool, tax_number: string>, paid_date: string, partner: record<account_number: string, address: record<address: string, city: string, country_code: string, post_code: string>, emails: list<string>, general_ledger_number: string, iban: string, name: string, phone: string, swift: string, taxcode: string, id: int>, payment_method: string, payment_status: string, settings: record<mediated_service: bool, online_payment: string, place_id: int, round: string, without_financial_fulfillment: bool>, summary: record<gross_amount_local: float, net_amount: float, net_amount_local: float, vat_amount: float, vat_amount_local: float, vat_rate_summary: list<record>>, tags: list<string>, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -535,7 +558,7 @@ export def "get-document" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<block_id: int, cancelled: bool, comment: string, conversion_rate: float, currency: string, due_date: string, electronic: bool, fulfillment_date: string, gross_total: float, id: int, invoice_date: string, invoice_number: string, items: table<gross_amount: float, name: string, net_amount: float, net_unit_amount: float, product_id: int, quantity: float, vat: string, vat_amount: float>, language: string, notification_status: string, organization: record<address: record<address: string, city: string, country_code: string, post_code: string>, bank_account: record<account_number: string, account_number_iban: string, id: int, name: string, swift: string>, cash_settled: bool, eu_tax_number: string, ev_number: string, name: string, small_taxpayer: bool, tax_number: string>, paid_date: string, partner: record<account_number: string, address: record<address: string, city: string, country_code: string, post_code: string>, emails: list<string>, general_ledger_number: string, iban: string, name: string, phone: string, swift: string, taxcode: string, id: int>, payment_method: string, payment_status: string, settings: record<mediated_service: bool, online_payment: string, place_id: int, round: string, without_financial_fulfillment: bool>, summary: record<gross_amount_local: float, net_amount: float, net_amount_local: float, vat_amount: float, vat_amount_local: float, vat_rate_summary: list<record>>, tags: list<string>, type: string> {
+]: nothing -> oneof<record<block_id: int, cancelled: bool, comment: string, conversion_rate: float, currency: string, due_date: string, electronic: bool, fulfillment_date: string, gross_total: float, id: int, invoice_date: string, invoice_number: string, items: table<gross_amount: float, name: string, net_amount: float, net_unit_amount: float, product_id: int, quantity: float, vat: string, vat_amount: float>, language: string, notification_status: string, organization: record<address: record<address: string, city: string, country_code: string, post_code: string>, bank_account: record<account_number: string, account_number_iban: string, id: int, name: string, swift: string>, cash_settled: bool, eu_tax_number: string, ev_number: string, name: string, small_taxpayer: bool, tax_number: string>, paid_date: string, partner: record<account_number: string, address: record<address: string, city: string, country_code: string, post_code: string>, emails: list<string>, general_ledger_number: string, iban: string, name: string, phone: string, swift: string, taxcode: string, id: int>, payment_method: string, payment_status: string, settings: record<mediated_service: bool, online_payment: string, place_id: int, round: string, without_financial_fulfillment: bool>, summary: record<gross_amount_local: float, net_amount: float, net_amount_local: float, vat_amount: float, vat_amount_local: float, vat_rate_summary: list<record>>, tags: list<string>, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -571,7 +594,7 @@ export def "cancel-document" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<block_id: int, cancelled: bool, comment: string, conversion_rate: float, currency: string, due_date: string, electronic: bool, fulfillment_date: string, gross_total: float, id: int, invoice_date: string, invoice_number: string, items: table<gross_amount: float, name: string, net_amount: float, net_unit_amount: float, product_id: int, quantity: float, vat: string, vat_amount: float>, language: string, notification_status: string, organization: record<address: record<address: string, city: string, country_code: string, post_code: string>, bank_account: record<account_number: string, account_number_iban: string, id: int, name: string, swift: string>, cash_settled: bool, eu_tax_number: string, ev_number: string, name: string, small_taxpayer: bool, tax_number: string>, paid_date: string, partner: record<account_number: string, address: record<address: string, city: string, country_code: string, post_code: string>, emails: list<string>, general_ledger_number: string, iban: string, name: string, phone: string, swift: string, taxcode: string, id: int>, payment_method: string, payment_status: string, settings: record<mediated_service: bool, online_payment: string, place_id: int, round: string, without_financial_fulfillment: bool>, summary: record<gross_amount_local: float, net_amount: float, net_amount_local: float, vat_amount: float, vat_amount_local: float, vat_rate_summary: list<record>>, tags: list<string>, type: string> {
+]: nothing -> oneof<record<block_id: int, cancelled: bool, comment: string, conversion_rate: float, currency: string, due_date: string, electronic: bool, fulfillment_date: string, gross_total: float, id: int, invoice_date: string, invoice_number: string, items: table<gross_amount: float, name: string, net_amount: float, net_unit_amount: float, product_id: int, quantity: float, vat: string, vat_amount: float>, language: string, notification_status: string, organization: record<address: record<address: string, city: string, country_code: string, post_code: string>, bank_account: record<account_number: string, account_number_iban: string, id: int, name: string, swift: string>, cash_settled: bool, eu_tax_number: string, ev_number: string, name: string, small_taxpayer: bool, tax_number: string>, paid_date: string, partner: record<account_number: string, address: record<address: string, city: string, country_code: string, post_code: string>, emails: list<string>, general_ledger_number: string, iban: string, name: string, phone: string, swift: string, taxcode: string, id: int>, payment_method: string, payment_status: string, settings: record<mediated_service: bool, online_payment: string, place_id: int, round: string, without_financial_fulfillment: bool>, summary: record<gross_amount_local: float, net_amount: float, net_amount_local: float, vat_amount: float, vat_amount_local: float, vat_rate_summary: list<record>>, tags: list<string>, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -607,7 +630,7 @@ export def "create-document-from-proforma" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<block_id: int, cancelled: bool, comment: string, conversion_rate: float, currency: string, due_date: string, electronic: bool, fulfillment_date: string, gross_total: float, id: int, invoice_date: string, invoice_number: string, items: table<gross_amount: float, name: string, net_amount: float, net_unit_amount: float, product_id: int, quantity: float, vat: string, vat_amount: float>, language: string, notification_status: string, organization: record<address: record<address: string, city: string, country_code: string, post_code: string>, bank_account: record<account_number: string, account_number_iban: string, id: int, name: string, swift: string>, cash_settled: bool, eu_tax_number: string, ev_number: string, name: string, small_taxpayer: bool, tax_number: string>, paid_date: string, partner: record<account_number: string, address: record<address: string, city: string, country_code: string, post_code: string>, emails: list<string>, general_ledger_number: string, iban: string, name: string, phone: string, swift: string, taxcode: string, id: int>, payment_method: string, payment_status: string, settings: record<mediated_service: bool, online_payment: string, place_id: int, round: string, without_financial_fulfillment: bool>, summary: record<gross_amount_local: float, net_amount: float, net_amount_local: float, vat_amount: float, vat_amount_local: float, vat_rate_summary: list<record>>, tags: list<string>, type: string> {
+]: nothing -> oneof<record<block_id: int, cancelled: bool, comment: string, conversion_rate: float, currency: string, due_date: string, electronic: bool, fulfillment_date: string, gross_total: float, id: int, invoice_date: string, invoice_number: string, items: table<gross_amount: float, name: string, net_amount: float, net_unit_amount: float, product_id: int, quantity: float, vat: string, vat_amount: float>, language: string, notification_status: string, organization: record<address: record<address: string, city: string, country_code: string, post_code: string>, bank_account: record<account_number: string, account_number_iban: string, id: int, name: string, swift: string>, cash_settled: bool, eu_tax_number: string, ev_number: string, name: string, small_taxpayer: bool, tax_number: string>, paid_date: string, partner: record<account_number: string, address: record<address: string, city: string, country_code: string, post_code: string>, emails: list<string>, general_ledger_number: string, iban: string, name: string, phone: string, swift: string, taxcode: string, id: int>, payment_method: string, payment_status: string, settings: record<mediated_service: bool, online_payment: string, place_id: int, round: string, without_financial_fulfillment: bool>, summary: record<gross_amount_local: float, net_amount: float, net_amount_local: float, vat_amount: float, vat_amount_local: float, vat_rate_summary: list<record>>, tags: list<string>, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -680,7 +703,7 @@ export def "get-online-szamla-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<messages: table<human_readable_message: string, validation_error_code: string, validation_result_code: string>, status: string, transaction_id: string> {
+]: nothing -> oneof<record<messages: table<human_readable_message: string, validation_error_code: string, validation_result_code: string>, status: string, transaction_id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -716,7 +739,7 @@ export def "delete-payment" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<conversion_rate: float, date: string, payment_method: string, price: float, voucher_number: string> {
+]: nothing -> oneof<table<conversion_rate: float, date: string, payment_method: string, price: float, voucher_number: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -752,7 +775,7 @@ export def "get-payment" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<conversion_rate: float, date: string, payment_method: string, price: float, voucher_number: string> {
+]: nothing -> oneof<table<conversion_rate: float, date: string, payment_method: string, price: float, voucher_number: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -789,7 +812,7 @@ export def "update-payment" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> table<conversion_rate: float, date: string, payment_method: string, price: float, voucher_number: string> {
+]: any -> oneof<table<conversion_rate: float, date: string, payment_method: string, price: float, voucher_number: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -828,7 +851,7 @@ export def "get-public-url" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<public_url: string> {
+]: nothing -> oneof<record<public_url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -865,7 +888,7 @@ export def "send-document" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --emails: list<string>
-]: any -> record<emails: list<string>> {
+]: any -> oneof<record<emails: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -903,7 +926,7 @@ export def "get-organization-data" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<tax_code: string> {
+]: nothing -> oneof<record<tax_code: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/organization" $auth.query)
@@ -939,7 +962,7 @@ export def "list-partner" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # default: 1
   --per-page: int # default: 25
-]: nothing -> record<current_page: int, data: table<account_number: string, address: record, emails: list, general_ledger_number: string, iban: string, name: string, phone: string, swift: string, taxcode: string, id: int>, last_page: int, next_page_url: string, per_page: int, prev_page_url: string, total: int> {
+]: nothing -> oneof<record<current_page: int, data: table<account_number: string, address: record, emails: list, general_ledger_number: string, iban: string, name: string, phone: string, swift: string, taxcode: string, id: int>, last_page: int, next_page_url: string, per_page: int, prev_page_url: string, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
@@ -964,7 +987,6 @@ export def "list-partner" [
 #
 # POST /partners
 # operationId: CreatePartner
-# --address shape: {address: string, city: string, ... (2 more fields)}
 export def "create-partner" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -984,7 +1006,7 @@ export def "create-partner" [
   --phone: string
   --swift: string
   --taxcode: string
-]: any -> record<account_number: string, address: record<address: string, city: string, country_code: string, post_code: string>, emails: list<string>, general_ledger_number: string, iban: string, name: string, phone: string, swift: string, taxcode: string, id: int> {
+]: any -> oneof<record<account_number: string, address: record<address: string, city: string, country_code: string, post_code: string>, emails: list<string>, general_ledger_number: string, iban: string, name: string, phone: string, swift: string, taxcode: string, id: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1058,7 +1080,7 @@ export def "get-partner" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account_number: string, address: record<address: string, city: string, country_code: string, post_code: string>, emails: list<string>, general_ledger_number: string, iban: string, name: string, phone: string, swift: string, taxcode: string, id: int> {
+]: nothing -> oneof<record<account_number: string, address: record<address: string, city: string, country_code: string, post_code: string>, emails: list<string>, general_ledger_number: string, iban: string, name: string, phone: string, swift: string, taxcode: string, id: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1083,7 +1105,6 @@ export def "get-partner" [
 #
 # PUT /partners/{id}
 # operationId: UpdatePartner
-# --address shape: {address: string, city: string, ... (2 more fields)}
 export def "update-partner" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1104,7 +1125,7 @@ export def "update-partner" [
   --phone: string
   --swift: string
   --taxcode: string
-]: any -> record<account_number: string, address: record<address: string, city: string, country_code: string, post_code: string>, emails: list<string>, general_ledger_number: string, iban: string, name: string, phone: string, swift: string, taxcode: string, id: int> {
+]: any -> oneof<record<account_number: string, address: record<address: string, city: string, country_code: string, post_code: string>, emails: list<string>, general_ledger_number: string, iban: string, name: string, phone: string, swift: string, taxcode: string, id: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1144,7 +1165,7 @@ export def "list-product" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # default: 1
   --per-page: int # default: 25
-]: nothing -> record<current_page: int, data: table<comment: string, currency: string, general_ledger_number: string, general_ledger_taxcode: string, id: int, name: string, net_unit_price: float, unit: string, vat: string>, last_page: int, next_page_url: string, per_page: int, prev_page_url: string, total: int> {
+]: nothing -> oneof<record<current_page: int, data: table<comment: string, currency: string, general_ledger_number: string, general_ledger_taxcode: string, id: int, name: string, net_unit_price: float, unit: string, vat: string>, last_page: int, next_page_url: string, per_page: int, prev_page_url: string, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
@@ -1187,7 +1208,7 @@ export def "create-product" [
   --net-unit-price: float # format: float
   unit: string
   vat: string@vat-completer
-]: any -> record<comment: string, currency: string, general_ledger_number: string, general_ledger_taxcode: string, id: int, name: string, net_unit_price: float, unit: string, vat: string> {
+]: any -> oneof<record<comment: string, currency: string, general_ledger_number: string, general_ledger_taxcode: string, id: int, name: string, net_unit_price: float, unit: string, vat: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1261,7 +1282,7 @@ export def "get-product" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<comment: string, currency: string, general_ledger_number: string, general_ledger_taxcode: string, id: int, name: string, net_unit_price: float, unit: string, vat: string> {
+]: nothing -> oneof<record<comment: string, currency: string, general_ledger_number: string, general_ledger_taxcode: string, id: int, name: string, net_unit_price: float, unit: string, vat: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1305,7 +1326,7 @@ export def "update-product" [
   --net-unit-price: float # format: float
   unit: string
   vat: string@vat-completer
-]: any -> record<comment: string, currency: string, general_ledger_number: string, general_ledger_taxcode: string, id: int, name: string, net_unit_price: float, unit: string, vat: string> {
+]: any -> oneof<record<comment: string, currency: string, general_ledger_number: string, general_ledger_taxcode: string, id: int, name: string, net_unit_price: float, unit: string, vat: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1344,7 +1365,7 @@ export def "get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<id: int, legacy_id: int> {
+]: nothing -> oneof<record<id: int, legacy_id: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }

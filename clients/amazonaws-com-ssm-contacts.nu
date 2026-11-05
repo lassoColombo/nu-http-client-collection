@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -143,9 +166,9 @@ def x-amz-target-completer-38 [] { ["SSMContacts.UpdateRotation"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accept-page" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["accept-page" "activate-contact-channel" "create-contact" "create-contact-channel" "create-rotation" "create-rotation-override" "deactivate-contact-channel" "delete-contact" "delete-contact-channel" "delete-rotation" "delete-rotation-override" "describe-engagement" "describe-page" "get-contact" "get-contact-channel" "get-contact-policy" "get-rotation" "get-rotation-override" "list-contact-channels" "list-contacts" "list-engagements" "list-page-receipts" "list-page-resolutions" "list-pages-by-contact" "list-pages-by-engagement" "list-preview-rotation-shifts" "list-rotation-overrides" "list-rotation-shifts" "list-rotations" "list-tags-for-resource" "put-contact-policy" "send-activation-code" "start-engagement" "stop-engagement" "tag-resource" "untag-resource" "update-contact" "update-contact-channel" "update-rotation" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -191,7 +214,7 @@ export def "accept-page" [
   --note: string # Information provided by the user when the user acknowledges the page.
   accept_code: string # A 6-digit code used to acknowledge the page.
   --accept-code-validation: string@accept-code-validation-completer # An optional field that Incident Manager uses to ENFORCE AcceptCode validation when acknowledging an page. Acknowledgement can occur by replying to a page, or when entering the AcceptCode in the console. Enforcing AcceptCode validation causes Incident Manager to verify that the code entered by the user matches the code sent by Incident Manager with the page. Incident Manager can also IGNORE AcceptCode validation. Ignoring AcceptCode validation causes Incident Manager to accept any value entered for the AcceptCode.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -241,7 +264,7 @@ export def "activate-contact-channel" [
   --x-amz-target: string@x-amz-target-completer-1 # required
   contact_channel_id: string # The Amazon Resource Name (ARN) of the contact channel.
   activation_code: string # The code sent to the contact channel when it was created in the contact.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -271,8 +294,6 @@ export def "activate-contact-channel" [
 #
 # POST /
 # operationId: CreateContact
-# --Plan shape: {Stages?: list, RotationIds?: list<string>}
-# --Tags item shape: {Key?: string, Value?: string}
 export def "create-contact" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -297,7 +318,7 @@ export def "create-contact" [
   plan: record # Information about the stages and on-call rotation teams associated with an escalation plan or engagement plan. — shape: {Stages?: list, RotationIds?: list<string>}
   --tags: list # Adds a tag to the target. You can only tag resources created in the first Region of your replication set. — item shape: {Key?: string, Value?: string}
   --idempotency-token: string # A token ensuring that the operation is called only once with the specified details.
-]: any -> record<ContactArn: string> {
+]: any -> oneof<record<ContactArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -327,7 +348,6 @@ export def "create-contact" [
 #
 # POST /
 # operationId: CreateContactChannel
-# --DeliveryAddress shape: {SimpleAddress?: string}
 export def "create-contact-channel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -352,7 +372,7 @@ export def "create-contact-channel" [
   delivery_address: record # The details that Incident Manager uses when trying to engage the contact channel. — shape: {SimpleAddress?: string}
   --defer-activation: oneof<nothing, bool> # If you want to activate the channel at a later time, you can choose to defer activation. Incident Manager can't engage your contact channel until it has been activated.
   --idempotency-token: string # A token ensuring that the operation is called only once with the specified details.
-]: any -> record<ContactChannelArn: string> {
+]: any -> oneof<record<ContactChannelArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -382,8 +402,6 @@ export def "create-contact-channel" [
 #
 # POST /
 # operationId: CreateRotation
-# --Recurrence shape: {MonthlySettings?: list, WeeklySettings?: list, DailySettings?: list, NumberOfOnCalls: int, ShiftCoverages?: record, RecurrenceMultiplier: int}
-# --Tags item shape: {Key?: string, Value?: string}
 export def "create-rotation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -409,7 +427,7 @@ export def "create-rotation" [
   recurrence: record # Information about when an on-call rotation is in effect and how long the rotation period lasts. — shape: {MonthlySettings?: list, WeeklySettings?: list, DailySettings?: list, NumberOfOnCalls: int, ShiftCoverages?: record, RecurrenceMultiplier: int}
   --tags: list # Optional metadata to assign to the rotation. Tags enable you to categorize a resource in different ways, such as by purpose, owner, or environment. For more information, see Tagging Incident Manager resources (https://docs.aws.amazon.com/incident-manager/latest/userguide/tagging.html) in the Incident Manager User Guide. — item shape: {Key?: string, Value?: string}
   --idempotency-token: string # A token that ensures that the operation is called only once with the specified details.
-]: any -> record<RotationArn: string> {
+]: any -> oneof<record<RotationArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -462,7 +480,7 @@ export def "create-rotation-override" [
   start_time: string # The date and time when the override goes into effect. (format: date-time)
   end_time: string # The date and time when the override ends. (format: date-time)
   --idempotency-token: string # A token that ensures that the operation is called only once with the specified details.
-]: any -> record<RotationOverrideId: string> {
+]: any -> oneof<record<RotationOverrideId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -511,7 +529,7 @@ export def "deactivate-contact-channel" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-6 # required
   contact_channel_id: string # The Amazon Resource Name (ARN) of the contact channel you're deactivating.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -560,7 +578,7 @@ export def "delete-contact" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-7 # required
   contact_id: string # The Amazon Resource Name (ARN) of the contact that you're deleting.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -609,7 +627,7 @@ export def "delete-contact-channel" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-8 # required
   contact_channel_id: string # The Amazon Resource Name (ARN) of the contact channel.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -658,7 +676,7 @@ export def "delete-rotation" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-9 # required
   rotation_id: string # The Amazon Resource Name (ARN) of the on-call rotation to delete.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -708,7 +726,7 @@ export def "delete-rotation-override" [
   --x-amz-target: string@x-amz-target-completer-10 # required
   rotation_id: string # The Amazon Resource Name (ARN) of the rotation that was overridden.
   rotation_override_id: string # The Amazon Resource Name (ARN) of the on-call rotation override to delete.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -757,7 +775,7 @@ export def "describe-engagement" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-11 # required
   engagement_id: string # The Amazon Resource Name (ARN) of the engagement you want the details of.
-]: any -> record<ContactArn: string, EngagementArn: string, Sender: string, Subject: string, Content: string, PublicSubject: string, PublicContent: string, IncidentId: string, StartTime: string, StopTime: string> {
+]: any -> oneof<record<ContactArn: string, EngagementArn: string, Sender: string, Subject: string, Content: string, PublicSubject: string, PublicContent: string, IncidentId: string, StartTime: string, StopTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -806,7 +824,7 @@ export def "describe-page" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-12 # required
   page_id: string # The ID of the engagement to a contact channel.
-]: any -> record<PageArn: string, EngagementArn: string, ContactArn: string, Sender: string, Subject: string, Content: string, PublicSubject: string, PublicContent: string, IncidentId: string, SentTime: string, ReadTime: string, DeliveryTime: string> {
+]: any -> oneof<record<PageArn: string, EngagementArn: string, ContactArn: string, Sender: string, Subject: string, Content: string, PublicSubject: string, PublicContent: string, IncidentId: string, SentTime: string, ReadTime: string, DeliveryTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -855,7 +873,7 @@ export def "get-contact" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-13 # required
   contact_id: string # The Amazon Resource Name (ARN) of the contact or escalation plan.
-]: any -> record<ContactArn: string, Alias: string, DisplayName: string, Type: string, Plan: record<Stages: list<record>, RotationIds: list<string>>> {
+]: any -> oneof<record<ContactArn: string, Alias: string, DisplayName: string, Type: string, Plan: record<Stages: list<record>, RotationIds: list<string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -904,7 +922,7 @@ export def "get-contact-channel" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-14 # required
   contact_channel_id: string # The Amazon Resource Name (ARN) of the contact channel you want information about.
-]: any -> record<ContactArn: string, ContactChannelArn: string, Name: string, Type: string, DeliveryAddress: record<SimpleAddress: string>, ActivationStatus: string> {
+]: any -> oneof<record<ContactArn: string, ContactChannelArn: string, Name: string, Type: string, DeliveryAddress: record<SimpleAddress: string>, ActivationStatus: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -953,7 +971,7 @@ export def "get-contact-policy" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-15 # required
   contact_arn: string # The Amazon Resource Name (ARN) of the contact or escalation plan.
-]: any -> record<ContactArn: string, Policy: string> {
+]: any -> oneof<record<ContactArn: string, Policy: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1002,7 +1020,7 @@ export def "get-rotation" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-16 # required
   rotation_id: string # The Amazon Resource Name (ARN) of the on-call rotation to retrieve information about.
-]: any -> record<RotationArn: string, Name: string, ContactIds: list<string>, StartTime: string, TimeZoneId: string, Recurrence: record<MonthlySettings: list<record>, WeeklySettings: list<record>, DailySettings: list<record>, NumberOfOnCalls: int, ShiftCoverages: record, RecurrenceMultiplier: int>> {
+]: any -> oneof<record<RotationArn: string, Name: string, ContactIds: list<string>, StartTime: string, TimeZoneId: string, Recurrence: record<MonthlySettings: list<record>, WeeklySettings: list<record>, DailySettings: list<record>, NumberOfOnCalls: int, ShiftCoverages: record, RecurrenceMultiplier: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1052,7 +1070,7 @@ export def "get-rotation-override" [
   --x-amz-target: string@x-amz-target-completer-17 # required
   rotation_id: string # The Amazon Resource Name (ARN) of the overridden rotation to retrieve information about.
   rotation_override_id: string # The Amazon Resource Name (ARN) of the on-call rotation override to retrieve information about.
-]: any -> record<RotationOverrideId: string, RotationArn: string, NewContactIds: list<string>, StartTime: string, EndTime: string, CreateTime: string> {
+]: any -> oneof<record<RotationOverrideId: string, RotationArn: string, NewContactIds: list<string>, StartTime: string, EndTime: string, CreateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1105,7 +1123,7 @@ export def "list-contact-channels" [
   contact_id: string # The Amazon Resource Name (ARN) of the contact.
   --next-token-body: string # The pagination token to continue to the next page of results. (body field)
   --max-results-body: int # The maximum number of contact channels per page. (body field)
-]: any -> record<NextToken: string, ContactChannels: table<ContactChannelArn: string, ContactArn: string, Name: string, Type: string, DeliveryAddress: record, ActivationStatus: string>> {
+]: any -> oneof<record<NextToken: string, ContactChannels: table<ContactChannelArn: string, ContactArn: string, Name: string, Type: string, DeliveryAddress: record, ActivationStatus: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1160,7 +1178,7 @@ export def "list-contacts" [
   --max-results-body: int # The maximum number of contacts and escalation plans per page of results. (body field)
   --alias-prefix: string # Used to list only contacts who's aliases start with the specified prefix.
   --type: string@type-completer # The type of contact. A contact is type PERSONAL and an escalation plan is type ESCALATION.
-]: any -> record<NextToken: string, Contacts: table<ContactArn: string, Alias: string, DisplayName: string, Type: string>> {
+]: any -> oneof<record<NextToken: string, Contacts: table<ContactArn: string, Alias: string, DisplayName: string, Type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1191,7 +1209,6 @@ export def "list-contacts" [
 #
 # POST /
 # operationId: ListEngagements
-# --TimeRangeValue shape: {StartTime?: string, EndTime?: string}
 export def "list-engagements" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1216,7 +1233,7 @@ export def "list-engagements" [
   --max-results-body: int # The maximum number of engagements per page of results. (body field)
   --incident-id: string # The Amazon Resource Name (ARN) of the incident you're listing engagements for.
   --time-range-value: record # A range of between two set times — shape: {StartTime?: string, EndTime?: string}
-]: any -> record<NextToken: string, Engagements: table<EngagementArn: string, ContactArn: string, Sender: string, IncidentId: string, StartTime: string, StopTime: string>> {
+]: any -> oneof<record<NextToken: string, Engagements: table<EngagementArn: string, ContactArn: string, Sender: string, IncidentId: string, StartTime: string, StopTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1270,7 +1287,7 @@ export def "list-page-receipts" [
   page_id: string # The Amazon Resource Name (ARN) of the engagement to a specific contact channel.
   --next-token-body: string # The pagination token to continue to the next page of results. (body field)
   --max-results-body: int # The maximum number of acknowledgements per page of results. (body field)
-]: any -> record<NextToken: string, Receipts: table<ContactChannelArn: string, ReceiptType: string, ReceiptInfo: string, ReceiptTime: string>> {
+]: any -> oneof<record<NextToken: string, Receipts: table<ContactChannelArn: string, ReceiptType: string, ReceiptInfo: string, ReceiptTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1322,7 +1339,7 @@ export def "list-page-resolutions" [
   --x-amz-target: string@x-amz-target-completer-22 # required
   --next-token-body: string # A token to start the list. Use this token to get the next set of results. (body field)
   page_id: string # The Amazon Resource Name (ARN) of the contact engaged for the incident.
-]: any -> record<NextToken: string, PageResolutions: table<ContactArn: string, Type: string, StageIndex: int>> {
+]: any -> oneof<record<NextToken: string, PageResolutions: table<ContactArn: string, Type: string, StageIndex: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1376,7 +1393,7 @@ export def "list-pages-by-contact" [
   contact_id: string # The Amazon Resource Name (ARN) of the contact you are retrieving engagements for.
   --next-token-body: string # The pagination token to continue to the next page of results. (body field)
   --max-results-body: int # The maximum number of engagements to contact channels to list per page of results. (body field)
-]: any -> record<NextToken: string, Pages: table<PageArn: string, EngagementArn: string, ContactArn: string, Sender: string, IncidentId: string, SentTime: string, DeliveryTime: string, ReadTime: string>> {
+]: any -> oneof<record<NextToken: string, Pages: table<PageArn: string, EngagementArn: string, ContactArn: string, Sender: string, IncidentId: string, SentTime: string, DeliveryTime: string, ReadTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1430,7 +1447,7 @@ export def "list-pages-by-engagement" [
   engagement_id: string # The Amazon Resource Name (ARN) of the engagement.
   --next-token-body: string # The pagination token to continue to the next page of results. (body field)
   --max-results-body: int # The maximum number of engagements to contact channels to list per page of results. (body field)
-]: any -> record<NextToken: string, Pages: table<PageArn: string, EngagementArn: string, ContactArn: string, Sender: string, IncidentId: string, SentTime: string, DeliveryTime: string, ReadTime: string>> {
+]: any -> oneof<record<NextToken: string, Pages: table<PageArn: string, EngagementArn: string, ContactArn: string, Sender: string, IncidentId: string, SentTime: string, DeliveryTime: string, ReadTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1461,8 +1478,6 @@ export def "list-pages-by-engagement" [
 #
 # POST /
 # operationId: ListPreviewRotationShifts
-# --Recurrence shape: {MonthlySettings?: list, WeeklySettings?: list, DailySettings?: list, NumberOfOnCalls: int, ShiftCoverages?: record, RecurrenceMultiplier: int}
-# --Overrides item shape: {NewMembers?: list<string>, StartTime?: string, EndTime?: string}
 export def "list-preview-rotation-shifts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1492,7 +1507,7 @@ export def "list-preview-rotation-shifts" [
   --overrides: list # Information about changes that would be made in a rotation override. — item shape: {NewMembers?: list<string>, StartTime?: string, EndTime?: string}
   --next-token-body: string # A token to start the list. This token is used to get the next set of results. (body field)
   --max-results-body: int # The maximum number of items to return for this call. The call also returns a token that can be specified in a subsequent call to get the next set of results. (body field)
-]: any -> record<RotationShifts: table<ContactIds: list, StartTime: string, EndTime: string, Type: string, ShiftDetails: record>, NextToken: string> {
+]: any -> oneof<record<RotationShifts: table<ContactIds: list, StartTime: string, EndTime: string, Type: string, ShiftDetails: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1548,7 +1563,7 @@ export def "list-rotation-overrides" [
   end_time: string # The date and time for the end of a time range for listing overrides. (format: date-time)
   --next-token-body: string # A token to start the list. Use this token to get the next set of results. (body field)
   --max-results-body: int # The maximum number of items to return for this call. The call also returns a token that you can specify in a subsequent call to get the next set of results. (body field)
-]: any -> record<RotationOverrides: table<RotationOverrideId: string, NewContactIds: list, StartTime: string, EndTime: string, CreateTime: string>, NextToken: string> {
+]: any -> oneof<record<RotationOverrides: table<RotationOverrideId: string, NewContactIds: list, StartTime: string, EndTime: string, CreateTime: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1604,7 +1619,7 @@ export def "list-rotation-shifts" [
   end_time: string # The date and time for the end of the time range to list shifts for. (format: date-time)
   --next-token-body: string # A token to start the list. Use this token to get the next set of results. (body field)
   --max-results-body: int # The maximum number of items to return for this call. The call also returns a token that you can specify in a subsequent call to get the next set of results. (body field)
-]: any -> record<RotationShifts: table<ContactIds: list, StartTime: string, EndTime: string, Type: string, ShiftDetails: record>, NextToken: string> {
+]: any -> oneof<record<RotationShifts: table<ContactIds: list, StartTime: string, EndTime: string, Type: string, ShiftDetails: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1658,7 +1673,7 @@ export def "list-rotations" [
   --rotation-name-prefix: string # A filter to include rotations in list results based on their common prefix. For example, entering prod returns a list of all rotation names that begin with prod, such as production and prod-1.
   --next-token-body: string # A token to start the list. Use this token to get the next set of results. (body field)
   --max-results-body: int # The maximum number of items to return for this call. The call also returns a token that you can specify in a subsequent call to get the next set of results. (body field)
-]: any -> record<NextToken: string, Rotations: table<RotationArn: string, Name: string, ContactIds: list, StartTime: string, TimeZoneId: string, Recurrence: record>> {
+]: any -> oneof<record<NextToken: string, Rotations: table<RotationArn: string, Name: string, ContactIds: list, StartTime: string, TimeZoneId: string, Recurrence: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1708,7 +1723,7 @@ export def "list-tags-for-resource" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-29 # required
   resource_arn: string # The Amazon Resource Name (ARN) of the contact or escalation plan.
-]: any -> record<Tags: table<Key: string, Value: string>> {
+]: any -> oneof<record<Tags: table<Key: string, Value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1758,7 +1773,7 @@ export def "put-contact-policy" [
   --x-amz-target: string@x-amz-target-completer-30 # required
   contact_arn: string # The Amazon Resource Name (ARN) of the contact or escalation plan.
   policy: string # Details of the resource policy.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1807,7 +1822,7 @@ export def "send-activation-code" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-31 # required
   contact_channel_id: string # The Amazon Resource Name (ARN) of the contact channel.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1863,7 +1878,7 @@ export def "start-engagement" [
   --public-content: string # The insecure content of the message that was sent to the contact. Use this field for engagements to SMS.
   --incident-id: string # The ARN of the incident that the engagement is part of.
   --idempotency-token: string # A token ensuring that the operation is called only once with the specified details.
-]: any -> record<EngagementArn: string> {
+]: any -> oneof<record<EngagementArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1913,7 +1928,7 @@ export def "stop-engagement" [
   --x-amz-target: string@x-amz-target-completer-33 # required
   engagement_id: string # The Amazon Resource Name (ARN) of the engagement.
   --reason: string # The reason that you're stopping the engagement.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1943,7 +1958,6 @@ export def "stop-engagement" [
 #
 # POST /
 # operationId: TagResource
-# --Tags item shape: {Key?: string, Value?: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1964,7 +1978,7 @@ export def "tag-resource" [
   --x-amz-target: string@x-amz-target-completer-34 # required
   resource_arn: string # The Amazon Resource Name (ARN) of the contact or escalation plan.
   tags: list # A list of tags that you are adding to the contact or escalation plan. — item shape: {Key?: string, Value?: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2014,7 +2028,7 @@ export def "untag-resource" [
   --x-amz-target: string@x-amz-target-completer-35 # required
   resource_arn: string # The Amazon Resource Name (ARN) of the contact or escalation plan.
   tag_keys: list<string> # The key of the tag that you want to remove.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2044,7 +2058,6 @@ export def "untag-resource" [
 #
 # POST /
 # operationId: UpdateContact
-# --Plan shape: {Stages?: list, RotationIds?: list<string>}
 export def "update-contact" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2066,7 +2079,7 @@ export def "update-contact" [
   contact_id: string # The Amazon Resource Name (ARN) of the contact or escalation plan you're updating.
   --display-name: string # The full name of the contact or escalation plan.
   --plan: record # Information about the stages and on-call rotation teams associated with an escalation plan or engagement plan. — shape: {Stages?: list, RotationIds?: list<string>}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2096,7 +2109,6 @@ export def "update-contact" [
 #
 # POST /
 # operationId: UpdateContactChannel
-# --DeliveryAddress shape: {SimpleAddress?: string}
 export def "update-contact-channel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2118,7 +2130,7 @@ export def "update-contact-channel" [
   contact_channel_id: string # The Amazon Resource Name (ARN) of the contact channel you want to update.
   --name: string # The name of the contact channel.
   --delivery-address: record # The details that Incident Manager uses when trying to engage the contact channel. — shape: {SimpleAddress?: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2148,7 +2160,6 @@ export def "update-contact-channel" [
 #
 # POST /
 # operationId: UpdateRotation
-# --Recurrence shape: {MonthlySettings?: list, WeeklySettings?: list, DailySettings?: list, NumberOfOnCalls: int, ShiftCoverages?: record, RecurrenceMultiplier: int}
 export def "update-rotation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2172,7 +2183,7 @@ export def "update-rotation" [
   --start-time: string # The date and time the rotation goes into effect. (format: date-time)
   --time-zone-id: string # The time zone to base the updated rotation’s activity on, in Internet Assigned Numbers Authority (IANA) format. For example: "America/Los_Angeles", "UTC", or "Asia/Seoul". For more information, see the Time Zone Database (https://www.iana.org/time-zones) on the IANA website. Designators for time zones that don’t support Daylight Savings Time Rules, such as Pacific Standard Time (PST) and Pacific Daylight Time (PDT), aren't supported.
   recurrence: record # Information about when an on-call rotation is in effect and how long the rotation period lasts. — shape: {MonthlySettings?: list, WeeklySettings?: list, DailySettings?: list, NumberOfOnCalls: int, ShiftCoverages?: record, RecurrenceMultiplier: int}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

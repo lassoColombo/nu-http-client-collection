@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "portal" => { {scheme: $scheme, headers: {"portal": $token_val}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -120,9 +144,9 @@ def time-in-force-completer [] { ["0" "1" "2" "3" "7"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-accounts" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-accounts" "post-accounts-account-order-impact" "get-accounts-account-orders" "post-accounts-account-orders" "delete-accounts-account-orders-customer-order-id" "get-accounts-account-orders-customer-order-id" "put-accounts-account-orders-customer-order-id" "get-accounts-account-positions" "get-accounts-account-summary" "get-accounts-account-trades" "get-marketdata-exchange-components" "get-marketdata-snapshot" "post-oauth-access-token" "post-oauth-live-session-token" "post-oauth-request-token" "get-secdef" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -154,7 +178,7 @@ export def "get-accounts" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --account: string # Account Number (required)
-]: nothing -> record<accounts: list<string>> {
+]: nothing -> oneof<record<accounts: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "portal"))
   let base = ($base_url | default $BASE_URL)
   if ($account == null) { error make --unspanned { msg: "required query parameter 'account' missing: pass --account" } }
@@ -202,7 +226,7 @@ export def "post-accounts-account-order-impact" [
   --side: float@side-completer # Buy = '1', Sell = '2'
   --ticker: string # The symbol that identifies the trading product
   --time-in-force: float@time-in-force-completer # Defines order's active lifetime. Day = '0' GTC (Good till Cancel) = '1' IOC (Immediate or Cancel) = '3' Open = '2' Close = '7'
-]: any -> record<Commission: float, CommissionsCurrency: string, EquityWithLoan: float, InitMargin: float, InitMarginBefore: float, MaintMargin: float, MaintMarginBefore: float, MarginCurrency: string, MaxCommissions: float, MinCommissions: float> {
+]: any -> oneof<record<Commission: float, CommissionsCurrency: string, EquityWithLoan: float, InitMargin: float, InitMarginBefore: float, MaintMargin: float, MaintMarginBefore: float, MarginCurrency: string, MaxCommissions: float, MinCommissions: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "portal"))
   let base = ($base_url | default $BASE_URL)
@@ -240,7 +264,7 @@ export def "get-accounts-account-orders" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<ContractId: float, CustomerOrderId: float, FilledQuantity: float, ListingExchange: string, OrderType: float, OutsideRTH: string, Price: float, RemainingQuantity: float, Side: string, Status: string, Ticker: string, TimeInForce: float, TransactionTime: string, Warning: string> {
+]: nothing -> oneof<table<ContractId: float, CustomerOrderId: float, FilledQuantity: float, ListingExchange: string, OrderType: float, OutsideRTH: string, Price: float, RemainingQuantity: float, Side: string, Status: string, Ticker: string, TimeInForce: float, TransactionTime: string, Warning: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "portal"))
   let base = ($base_url | default $BASE_URL)
   if ($account | is-empty) { error make --unspanned { msg: "path parameter 'account' must be non-empty" } }
@@ -294,7 +318,7 @@ export def "post-accounts-account-orders" [
   --side: float@side-completer # Buy = '1', Sell = '2'
   --ticker: string # The symbol that identifies the trading product
   --time-in-force: float@time-in-force-completer # Defines order's active lifetime. Day = '0' GTC (Good till Cancel) = '1' IOC (Immediate or Cancel) = '3' Open = '2' Close = '7'
-]: any -> table<ContractId: float, CustomerOrderId: float, FilledQuantity: float, ListingExchange: string, OrderType: float, OutsideRTH: string, Price: float, RemainingQuantity: float, Side: string, Status: string, Ticker: string, TimeInForce: float, TransactionTime: string, Warning: string> {
+]: any -> oneof<table<ContractId: float, CustomerOrderId: float, FilledQuantity: float, ListingExchange: string, OrderType: float, OutsideRTH: string, Price: float, RemainingQuantity: float, Side: string, Status: string, Ticker: string, TimeInForce: float, TransactionTime: string, Warning: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "portal"))
   let base = ($base_url | default $BASE_URL)
@@ -333,7 +357,7 @@ export def "delete-accounts-account-orders-customer-order-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<CustomerOrderId: string, OrderQty: float, OrderType: float, Price: string, Side: float, Status: string, Symbol: float, Warning: string> {
+]: nothing -> oneof<table<CustomerOrderId: string, OrderQty: float, OrderType: float, Price: string, Side: float, Status: string, Symbol: float, Warning: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "portal"))
   let base = ($base_url | default $BASE_URL)
   if ($account | is-empty) { error make --unspanned { msg: "path parameter 'account' must be non-empty" } }
@@ -370,7 +394,7 @@ export def "get-accounts-account-orders-customer-order-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<ContractId: float, CustomerOrderId: float, FilledQuantity: float, ListingExchange: string, OrderType: float, OutsideRTH: string, Price: float, RemainingQuantity: float, Side: string, Status: string, Ticker: string, TimeInForce: float, TransactionTime: string, Warning: string> {
+]: nothing -> oneof<table<ContractId: float, CustomerOrderId: float, FilledQuantity: float, ListingExchange: string, OrderType: float, OutsideRTH: string, Price: float, RemainingQuantity: float, Side: string, Status: string, Ticker: string, TimeInForce: float, TransactionTime: string, Warning: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "portal"))
   let base = ($base_url | default $BASE_URL)
   if ($account | is-empty) { error make --unspanned { msg: "path parameter 'account' must be non-empty" } }
@@ -421,7 +445,7 @@ export def "put-accounts-account-orders-customer-order-id" [
   --quantity: float # The number of units in the order; contracts or shares
   --side: float@side-completer # Buy = '1', Sell = '2'
   --time-in-force: float@time-in-force-completer # Defines order's active lifetime. Day = '0' GTC (Good till Cancel) = '1' IOC (Immediate or Cancel) = '3' Open = '2' Close = '7'
-]: any -> table<CustomerOrderId: string, OrderQty: float, OrderType: float, Price: string, Side: float, Status: string, Symbol: float, Warning: string> {
+]: any -> oneof<table<CustomerOrderId: string, OrderQty: float, OrderType: float, Price: string, Side: float, Status: string, Symbol: float, Warning: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "portal"))
   let base = ($base_url | default $BASE_URL)
@@ -460,7 +484,7 @@ export def "get-accounts-account-positions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<AverageCost: float, ContractId: float, Position: float> {
+]: nothing -> oneof<table<AverageCost: float, ContractId: float, Position: float>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "portal"))
   let base = ($base_url | default $BASE_URL)
   if ($account | is-empty) { error make --unspanned { msg: "path parameter 'account' must be non-empty" } }
@@ -495,7 +519,7 @@ export def "get-accounts-account-summary" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<Info: record<AccountCode: string, AccountReady: string, AccountType: string, Cushion: string, DayTradesRemaining: string, DayTradesRemainingT: string, DayTradesRemainingT_2: string, DayTradesRemainingT_3: string, DayTradesRemainingT_4: string, HighestSeverity: string, Leverage_S: string, LookAheadNextChange: string, SegmentTitle_C: string, SegmentTitle_S: string, TradingType_S: string, WhatIfPMEnabled: string>, Ledger: table<CashBalance: float, CashBalanceFXSegment: float, CashCumQty: float, ExchangeRate: float, FutureOptionMarketValue: float, FuturePNL: float, NetDividend: float, NetInterest: float, NetLiquidation: float, OptionMarketValue: float, RealizedPNL: float, StockMarketValue: float, TotalCashBalance: float, UnrealizedPNL: float>, Summary: record<AccruedCash: float, AccruedCash_C: float, AccruedCash_S: float, AccruedDividend: float, AccruedDividend_C: float, AccruedDividend_S: float, AvailableFunds: float, AvailableFunds_C: float, AvailableFunds_S: float, Billable: float, Billable_C: float, Billable_S: float, BuyingPower: float, EquityWithLoanValue: float, EquityWithLoanValue_C: float, EquityWithLoanValue_S: float, ExcessLiquidity: float, ExcessLiquidity_C: float, ExcessLiquidity_S: float, FullAvailableFunds: float, FullAvailableFunds_C: float, FullAvailableFunds_S: float, FullExcessLiquidity: float, FullExcessLiquidity_C: float, FullExcessLiquidity_S: float, FullInitMarginReq: float, FullInitMarginReq_C: float, FullInitMarginReq_S: float, FullMaintMarginReq: float, FullMaintMarginReq_C: float, FullMaintMarginReq_S: float, GrossPositionValue: float, GrossPositionValue_C: float, GrossPositionValue_S: float, IndianStockHaircut: float, IndianStockHaircut_C: float, IndianStockHaircut_S: float, InitMarginReq: float, InitMarginReq_C: float, InitMarginReq_S: float, InsuredDeposit: float, InsuredDeposit_C: float, InsuredDeposit_S: float, LookAheadAvailableFunds: float, LookAheadAvailableFunds_C: float, LookAheadAvailableFunds_S: float, LookAheadExcessLiquidity: float, LookAheadExcessLiquidity_C: float, LookAheadExcessLiquidity_S: float, LookAheadInitMarginReq: float, LookAheadInitMarginReq_C: float, LookAheadInitMarginReq_S: float, LookAheadMaintMarginReq: float, LookAheadMaintMarginReq_C: float, LookAheadMaintMarginReq_S: float, MaintMarginReq: float, MaintMarginReq_C: float, MaintMarginReq_S: float, NetLiquidation: float, NetLiquidation_C: float, NetLiquidation_S: float, NetLiquidationUncertainty: float, PASharesValue: float, PASharesValue_C: float, PASharesValue_S: float, PostExpirationExcess: float, PostExpirationExcess_C: float, PostExpirationExcess_S: float, PostExpirationMargin: float, PostExpirationMargin_C: float, PostExpirationMargin_S: float, RegTEquity: float, RegTEquity_S: float, RegTMargin: float, RegTMargin_S: float, SMA: float, SMA_S: float, TotalCashValue: float, TotalCashValue_C: float, TotalCashValue_S: float>> {
+]: nothing -> oneof<record<Info: record<AccountCode: string, AccountReady: string, AccountType: string, Cushion: string, DayTradesRemaining: string, DayTradesRemainingT: string, DayTradesRemainingT_2: string, DayTradesRemainingT_3: string, DayTradesRemainingT_4: string, HighestSeverity: string, Leverage_S: string, LookAheadNextChange: string, SegmentTitle_C: string, SegmentTitle_S: string, TradingType_S: string, WhatIfPMEnabled: string>, Ledger: table<CashBalance: float, CashBalanceFXSegment: float, CashCumQty: float, ExchangeRate: float, FutureOptionMarketValue: float, FuturePNL: float, NetDividend: float, NetInterest: float, NetLiquidation: float, OptionMarketValue: float, RealizedPNL: float, StockMarketValue: float, TotalCashBalance: float, UnrealizedPNL: float>, Summary: record<AccruedCash: float, AccruedCash_C: float, AccruedCash_S: float, AccruedDividend: float, AccruedDividend_C: float, AccruedDividend_S: float, AvailableFunds: float, AvailableFunds_C: float, AvailableFunds_S: float, Billable: float, Billable_C: float, Billable_S: float, BuyingPower: float, EquityWithLoanValue: float, EquityWithLoanValue_C: float, EquityWithLoanValue_S: float, ExcessLiquidity: float, ExcessLiquidity_C: float, ExcessLiquidity_S: float, FullAvailableFunds: float, FullAvailableFunds_C: float, FullAvailableFunds_S: float, FullExcessLiquidity: float, FullExcessLiquidity_C: float, FullExcessLiquidity_S: float, FullInitMarginReq: float, FullInitMarginReq_C: float, FullInitMarginReq_S: float, FullMaintMarginReq: float, FullMaintMarginReq_C: float, FullMaintMarginReq_S: float, GrossPositionValue: float, GrossPositionValue_C: float, GrossPositionValue_S: float, IndianStockHaircut: float, IndianStockHaircut_C: float, IndianStockHaircut_S: float, InitMarginReq: float, InitMarginReq_C: float, InitMarginReq_S: float, InsuredDeposit: float, InsuredDeposit_C: float, InsuredDeposit_S: float, LookAheadAvailableFunds: float, LookAheadAvailableFunds_C: float, LookAheadAvailableFunds_S: float, LookAheadExcessLiquidity: float, LookAheadExcessLiquidity_C: float, LookAheadExcessLiquidity_S: float, LookAheadInitMarginReq: float, LookAheadInitMarginReq_C: float, LookAheadInitMarginReq_S: float, LookAheadMaintMarginReq: float, LookAheadMaintMarginReq_C: float, LookAheadMaintMarginReq_S: float, MaintMarginReq: float, MaintMarginReq_C: float, MaintMarginReq_S: float, NetLiquidation: float, NetLiquidation_C: float, NetLiquidation_S: float, NetLiquidationUncertainty: float, PASharesValue: float, PASharesValue_C: float, PASharesValue_S: float, PostExpirationExcess: float, PostExpirationExcess_C: float, PostExpirationExcess_S: float, PostExpirationMargin: float, PostExpirationMargin_C: float, PostExpirationMargin_S: float, RegTEquity: float, RegTEquity_S: float, RegTMargin: float, RegTMargin_S: float, SMA: float, SMA_S: float, TotalCashValue: float, TotalCashValue_C: float, TotalCashValue_S: float>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "portal"))
   let base = ($base_url | default $BASE_URL)
   if ($account | is-empty) { error make --unspanned { msg: "path parameter 'account' must be non-empty" } }
@@ -530,7 +554,7 @@ export def "get-accounts-account-trades" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<AvgPrice: float, Commission: float, CommissionCurrency: string, ContractId: float, Currency: string, CustomerOrderId: float, ExecId: string, ExecutionTime: string, FilledQuantity: float, LastMarket: string, ListingExchange: string, OrderId: string, OrderType: float, Quantity: float, RemainingQuantity: float, Side: string, Ticker: string, TradePrice: float, TradeSize: float> {
+]: nothing -> oneof<table<AvgPrice: float, Commission: float, CommissionCurrency: string, ContractId: float, Currency: string, CustomerOrderId: float, ExecId: string, ExecutionTime: string, FilledQuantity: float, LastMarket: string, ListingExchange: string, OrderId: string, OrderType: float, Quantity: float, RemainingQuantity: float, Side: string, Ticker: string, TradePrice: float, TradeSize: float>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "portal"))
   let base = ($base_url | default $BASE_URL)
   if ($account | is-empty) { error make --unspanned { msg: "path parameter 'account' must be non-empty" } }
@@ -564,7 +588,7 @@ export def "get-marketdata-exchange-components" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<Complete: bool, ConId: float, mapping: list<record>> {
+]: nothing -> oneof<table<Complete: bool, ConId: float, mapping: list<record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "portal"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/marketdata/exchange_components" $auth.query)
@@ -597,7 +621,7 @@ export def "get-marketdata-snapshot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<Bid: record<market: float, price: float, size: float>, Closing: record<price: float>, Complete: bool, Conid: string, Offer: record<market: float, price: float, size: float>, Temporality: float, Trade: record<market: float, price: float, size: float, time: float>> {
+]: nothing -> oneof<table<Bid: record<market: float, price: float, size: float>, Closing: record<price: float>, Complete: bool, Conid: string, Offer: record<market: float, price: float, size: float>, Temporality: float, Trade: record<market: float, price: float, size: float, time: float>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "portal"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/marketdata/snapshot" $auth.query)
@@ -637,7 +661,7 @@ export def "post-oauth-access-token" [
   --oauth-timestamp: string # Timestamp expressed in seconds since 1/1/1970 00:00:00 GMT. Must be a positive integer and greater than or equal to any timestamp used in previous requests.
   --oauth-token: string # The request token obtained from IB via /request_token.
   --oauth-verifier: string # The verification code received from IB after the user has granted authorization.
-]: any -> record<oauth_token: string, oauth_token_secret: string> {
+]: any -> oneof<record<oauth_token: string, oauth_token_secret: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "portal"))
   let base = ($base_url | default $BASE_URL)
@@ -680,7 +704,7 @@ export def "post-oauth-live-session-token" [
   --oauth-signature-method: string # The signature method used to sign the request. Currently only 'RSA-SHA256' is supported.
   --oauth-timestamp: string # Timestamp expressed in seconds since 1/1/1970 00:00:00 GMT. Must be a positive integer and greater than or equal to any timestamp used in previous requests.
   --oauth-token: string # The request token obtained from IB via /request_token.
-]: any -> record<diffie_hellman_response: string, live_session_token_signature: string> {
+]: any -> oneof<record<diffie_hellman_response: string, live_session_token_signature: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "portal"))
   let base = ($base_url | default $BASE_URL)
@@ -722,7 +746,7 @@ export def "post-oauth-request-token" [
   --oauth-signature: string # The signature for the request generated using the method specified in the oauth_signature_method parameter. See section 9 of the OAuth v1.0a specification for more details on signing requests.
   --oauth-signature-method: string # The signature method used to sign the request. Currently only 'RSA-SHA256' is supported.
   --oauth-timestamp: string # Timestamp expressed in seconds since 1/1/1970 00:00:00 GMT. Must be a positive integer and greater than or equal to any timestamp used in previous requests.
-]: any -> record<oauth_token: string> {
+]: any -> oneof<record<oauth_token: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "portal"))
   let base = ($base_url | default $BASE_URL)
@@ -758,7 +782,7 @@ export def "get-secdef" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<CompanyName: string, ContractId: float, Currency: string, Exchange: string, SecurityType: string, Ticker: string> {
+]: nothing -> oneof<table<CompanyName: string, ContractId: float, Currency: string, Exchange: string, SecurityType: string, Ticker: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "portal"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/secdef" $auth.query)

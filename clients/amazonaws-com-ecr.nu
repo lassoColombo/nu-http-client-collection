@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -143,9 +166,9 @@ def x-amz-target-completer-40 [] { ["AmazonEC2ContainerRegistry_V20150921.Upload
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "batch-check-layer-availability" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["batch-check-layer-availability" "batch-delete-image" "batch-get-image" "batch-get-repository-scanning-configuration" "complete-layer-upload" "create-pull-through-cache-rule" "create-repository" "delete-lifecycle-policy" "delete-pull-through-cache-rule" "delete-registry-policy" "delete-repository" "delete-repository-policy" "describe-image-replication-status" "describe-image-scan-findings" "describe-images" "describe-pull-through-cache-rules" "describe-registry" "describe-repositories" "get-authorization-token" "get-download-url-for-layer" "get-lifecycle-policy" "get-lifecycle-policy-preview" "get-registry-policy" "get-registry-scanning-configuration" "get-repository-policy" "initiate-layer-upload" "list-images" "list-tags-for-resource" "put-image" "put-image-scanning-configuration" "put-image-tag-mutability" "put-lifecycle-policy" "put-registry-policy" "put-registry-scanning-configuration" "put-replication-configuration" "set-repository-policy" "start-image-scan" "start-lifecycle-policy-preview" "tag-resource" "untag-resource" "upload-layer-part" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -188,7 +211,7 @@ export def "batch-check-layer-availability" [
   --registry-id: string # The Amazon Web Services account ID associated with the registry that contains the image layers to check. If you do not specify a registry, the default registry is assumed.
   repository_name: string # The name of the repository that is associated with the image layers to check.
   layer_digests: list<string> # The digests of the image layers to check.
-]: any -> record<layers: table<layerDigest: string, layerAvailability: string, layerSize: int, mediaType: string>, failures: table<layerDigest: string, failureCode: string, failureReason: string>> {
+]: any -> oneof<record<layers: table<layerDigest: string, layerAvailability: string, layerSize: int, mediaType: string>, failures: table<layerDigest: string, failureCode: string, failureReason: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -218,7 +241,6 @@ export def "batch-check-layer-availability" [
 #
 # POST /
 # operationId: BatchDeleteImage
-# --imageIds item shape: {imageDigest?: string, imageTag?: string}
 export def "batch-delete-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -240,7 +262,7 @@ export def "batch-delete-image" [
   --registry-id: string # The Amazon Web Services account ID associated with the registry that contains the image to delete. If you do not specify a registry, the default registry is assumed.
   repository_name: string # The repository that contains the image to delete.
   image_ids: list # A list of image ID references that correspond to images to delete. The format of the imageIds reference is imageTag=tag or imageDigest=digest. — item shape: {imageDigest?: string, imageTag?: string}
-]: any -> record<imageIds: table<imageDigest: string, imageTag: string>, failures: table<imageId: record, failureCode: string, failureReason: string>> {
+]: any -> oneof<record<imageIds: table<imageDigest: string, imageTag: string>, failures: table<imageId: record, failureCode: string, failureReason: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -270,7 +292,6 @@ export def "batch-delete-image" [
 #
 # POST /
 # operationId: BatchGetImage
-# --imageIds item shape: {imageDigest?: string, imageTag?: string}
 export def "batch-get-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -293,7 +314,7 @@ export def "batch-get-image" [
   repository_name: string # The repository that contains the images to describe.
   image_ids: list # A list of image ID references that correspond to images to describe. The format of the imageIds reference is imageTag=tag or imageDigest=digest. — item shape: {imageDigest?: string, imageTag?: string}
   --accepted-media-types: list<string> # The accepted media types for the request. Valid values: application/vnd.docker.distribution.manifest.v1+json | application/vnd.docker.distribution.manifest.v2+json | application/vnd.oci.image.manifest.v1+json
-]: any -> record<images: table<registryId: string, repositoryName: string, imageId: record, imageManifest: string, imageManifestMediaType: string>, failures: table<imageId: record, failureCode: string, failureReason: string>> {
+]: any -> oneof<record<images: table<registryId: string, repositoryName: string, imageId: record, imageManifest: string, imageManifestMediaType: string>, failures: table<imageId: record, failureCode: string, failureReason: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -342,7 +363,7 @@ export def "batch-get-repository-scanning-configuration" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-3 # required
   repository_names: list<string> # One or more repository names to get the scanning configuration for.
-]: any -> record<scanningConfigurations: table<repositoryArn: string, repositoryName: string, scanOnPush: bool, scanFrequency: string, appliedScanFilters: list>, failures: table<repositoryName: string, failureCode: string, failureReason: string>> {
+]: any -> oneof<record<scanningConfigurations: table<repositoryArn: string, repositoryName: string, scanOnPush: bool, scanFrequency: string, appliedScanFilters: list>, failures: table<repositoryName: string, failureCode: string, failureReason: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -394,7 +415,7 @@ export def "complete-layer-upload" [
   repository_name: string # The name of the repository to associate with the image layer.
   upload_id: string # The upload ID from a previous InitiateLayerUpload operation to associate with the image layer.
   layer_digests: list<string> # The sha256 digest of the image layer.
-]: any -> record<registryId: string, repositoryName: string, uploadId: string, layerDigest: string> {
+]: any -> oneof<record<registryId: string, repositoryName: string, uploadId: string, layerDigest: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -445,7 +466,7 @@ export def "create-pull-through-cache-rule" [
   ecr_repository_prefix: string # The repository name prefix to use when caching images from the source registry.
   upstream_registry_url: string # The registry URL of the upstream public registry to use as the source for the pull through cache rule.
   --registry-id: string # The Amazon Web Services account ID associated with the registry to create the pull through cache rule for. If you do not specify a registry, the default registry is assumed.
-]: any -> record<ecrRepositoryPrefix: string, upstreamRegistryUrl: string, createdAt: string, registryId: string> {
+]: any -> oneof<record<ecrRepositoryPrefix: string, upstreamRegistryUrl: string, createdAt: string, registryId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -475,9 +496,6 @@ export def "create-pull-through-cache-rule" [
 #
 # POST /
 # operationId: CreateRepository
-# --tags item shape: {Key?: string, Value?: string}
-# --imageScanningConfiguration shape: {scanOnPush?: bool}
-# --encryptionConfiguration shape: {encryptionType: "AES256"|"KMS", kmsKey?: string}
 export def "create-repository" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -502,7 +520,7 @@ export def "create-repository" [
   --image-tag-mutability: string@image-tag-mutability-completer # The tag mutability setting for the repository. If this parameter is omitted, the default setting of MUTABLE will be used which will allow image tags to be overwritten. If IMMUTABLE is specified, all image tags within the repository will be immutable which will prevent them from being overwritten.
   --image-scanning-configuration: record # The image scanning configuration for a repository. — shape: {scanOnPush?: bool}
   --encryption-configuration: record # The encryption configuration for the repository. This determines how the contents of your repository are encrypted at rest. By default, when no encryption configuration is set or the AES256 encryption type is used, Amazon ECR uses server-side encryption with Amazon S3-managed encryption keys which encrypts your data at rest using an AES-256 encryption algorithm. This does not require any action on your part. For more control over the encryption of the contents of your repository, you can use server-side encryption with Key Management Service key stored in Key Management Service (KMS) to encrypt your images. For more information, see Amazon ECR encryption at rest (https://docs.aws.amazon.com/AmazonECR/latest/userguide/encryption-at-rest.html) in the Amazon Elastic Container Registry User Guide. — shape: {encryptionType: "AES256"|"KMS", kmsKey?: string}
-]: any -> record<repository: record<repositoryArn: string, registryId: string, repositoryName: string, repositoryUri: string, createdAt: string, imageTagMutability: string, imageScanningConfiguration: record<scanOnPush: bool>, encryptionConfiguration: record<encryptionType: string, kmsKey: string>>> {
+]: any -> oneof<record<repository: record<repositoryArn: string, registryId: string, repositoryName: string, repositoryUri: string, createdAt: string, imageTagMutability: string, imageScanningConfiguration: record<scanOnPush: bool>, encryptionConfiguration: record<encryptionType: string, kmsKey: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -552,7 +570,7 @@ export def "delete-lifecycle-policy" [
   --x-amz-target: string@x-amz-target-completer-7 # required
   --registry-id: string # The Amazon Web Services account ID associated with the registry that contains the repository. If you do not specify a registry, the default registry is assumed.
   repository_name: string # The name of the repository.
-]: any -> record<registryId: string, repositoryName: string, lifecyclePolicyText: string, lastEvaluatedAt: string> {
+]: any -> oneof<record<registryId: string, repositoryName: string, lifecyclePolicyText: string, lastEvaluatedAt: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -602,7 +620,7 @@ export def "delete-pull-through-cache-rule" [
   --x-amz-target: string@x-amz-target-completer-8 # required
   ecr_repository_prefix: string # The Amazon ECR repository prefix associated with the pull through cache rule to delete.
   --registry-id: string # The Amazon Web Services account ID associated with the registry that contains the pull through cache rule. If you do not specify a registry, the default registry is assumed.
-]: any -> record<ecrRepositoryPrefix: string, upstreamRegistryUrl: string, createdAt: string, registryId: string> {
+]: any -> oneof<record<ecrRepositoryPrefix: string, upstreamRegistryUrl: string, createdAt: string, registryId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -651,7 +669,7 @@ export def "delete-registry-policy" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-9 # required
   --body: record
-]: any -> record<registryId: string, policyText: string> {
+]: any -> oneof<record<registryId: string, policyText: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -702,7 +720,7 @@ export def "delete-repository" [
   --registry-id: string # The Amazon Web Services account ID associated with the registry that contains the repository to delete. If you do not specify a registry, the default registry is assumed.
   repository_name: string # The name of the repository to delete.
   --force: oneof<nothing, bool> # If a repository contains images, forces the deletion.
-]: any -> record<repository: record<repositoryArn: string, registryId: string, repositoryName: string, repositoryUri: string, createdAt: string, imageTagMutability: string, imageScanningConfiguration: record<scanOnPush: bool>, encryptionConfiguration: record<encryptionType: string, kmsKey: string>>> {
+]: any -> oneof<record<repository: record<repositoryArn: string, registryId: string, repositoryName: string, repositoryUri: string, createdAt: string, imageTagMutability: string, imageScanningConfiguration: record<scanOnPush: bool>, encryptionConfiguration: record<encryptionType: string, kmsKey: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -752,7 +770,7 @@ export def "delete-repository-policy" [
   --x-amz-target: string@x-amz-target-completer-11 # required
   --registry-id: string # The Amazon Web Services account ID associated with the registry that contains the repository policy to delete. If you do not specify a registry, the default registry is assumed.
   repository_name: string # The name of the repository that is associated with the repository policy to delete.
-]: any -> record<registryId: string, repositoryName: string, policyText: string> {
+]: any -> oneof<record<registryId: string, repositoryName: string, policyText: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -782,7 +800,6 @@ export def "delete-repository-policy" [
 #
 # POST /
 # operationId: DescribeImageReplicationStatus
-# --imageId shape: {imageDigest?: string, imageTag?: string}
 export def "describe-image-replication-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -804,7 +821,7 @@ export def "describe-image-replication-status" [
   repository_name: string # The name of the repository that the image is in.
   image_id: record # An object with identifying information for an image in an Amazon ECR repository. — shape: {imageDigest?: string, imageTag?: string}
   --registry-id: string # The Amazon Web Services account ID associated with the registry. If you do not specify a registry, the default registry is assumed.
-]: any -> record<repositoryName: string, imageId: record<imageDigest: string, imageTag: string>, replicationStatuses: table<region: string, registryId: string, status: string, failureCode: string>> {
+]: any -> oneof<record<repositoryName: string, imageId: record<imageDigest: string, imageTag: string>, replicationStatuses: table<region: string, registryId: string, status: string, failureCode: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -834,7 +851,6 @@ export def "describe-image-replication-status" [
 #
 # POST /
 # operationId: DescribeImageScanFindings
-# --imageId shape: {imageDigest?: string, imageTag?: string}
 export def "describe-image-scan-findings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -860,7 +876,7 @@ export def "describe-image-scan-findings" [
   image_id: record # An object with identifying information for an image in an Amazon ECR repository. — shape: {imageDigest?: string, imageTag?: string}
   --next-token-body: string # The nextToken value returned from a previous paginated DescribeImageScanFindings request where maxResults was used and the results exceeded the value of that parameter. Pagination continues from the end of the previous results that returned the nextToken value. This value is null when there are no more results to return. (body field)
   --max-results-body: int # The maximum number of image scan results returned by DescribeImageScanFindings in paginated output. When this parameter is used, DescribeImageScanFindings only returns maxResults results in a single page along with a nextToken response element. The remaining results of the initial request can be seen by sending another DescribeImageScanFindings request with the returned nextToken value. This value can be between 1 and 1000. If this parameter is not used, then DescribeImageScanFindings returns up to 100 results and a nextToken value, if applicable. (body field)
-]: any -> record<registryId: string, repositoryName: string, imageId: record<imageDigest: string, imageTag: string>, imageScanStatus: record<status: string, description: string>, imageScanFindings: record<imageScanCompletedAt: string, vulnerabilitySourceUpdatedAt: string, findingSeverityCounts: record, findings: list<record>, enhancedFindings: list<record>>, nextToken: string> {
+]: any -> oneof<record<registryId: string, repositoryName: string, imageId: record<imageDigest: string, imageTag: string>, imageScanStatus: record<status: string, description: string>, imageScanFindings: record<imageScanCompletedAt: string, vulnerabilitySourceUpdatedAt: string, findingSeverityCounts: record, findings: list<record>, enhancedFindings: list<record>>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -891,8 +907,6 @@ export def "describe-image-scan-findings" [
 #
 # POST /
 # operationId: DescribeImages
-# --imageIds item shape: {imageDigest?: string, imageTag?: string}
-# --filter shape: {tagStatus?: "TAGGED"|"UNTAGGED"|"ANY"}
 export def "describe-images" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -919,7 +933,7 @@ export def "describe-images" [
   --next-token-body: string # The nextToken value returned from a previous paginated DescribeImages request where maxResults was used and the results exceeded the value of that parameter. Pagination continues from the end of the previous results that returned the nextToken value. This value is null when there are no more results to return. This option cannot be used when you specify images with imageIds. (body field)
   --max-results-body: int # The maximum number of repository results returned by DescribeImages in paginated output. When this parameter is used, DescribeImages only returns maxResults results in a single page along with a nextToken response element. The remaining results of the initial request can be seen by sending another DescribeImages request with the returned nextToken value. This value can be between 1 and 1000. If this parameter is not used, then DescribeImages returns up to 100 results and a nextToken value, if applicable. This option cannot be used when you specify images with imageIds. (body field)
   --filter: record # An object representing a filter on a DescribeImages operation. — shape: {tagStatus?: "TAGGED"|"UNTAGGED"|"ANY"}
-]: any -> record<imageDetails: table<registryId: string, repositoryName: string, imageDigest: string, imageTags: list, imageSizeInBytes: int, imagePushedAt: string, imageScanStatus: record, imageScanFindingsSummary: record, imageManifestMediaType: string, artifactMediaType: string, lastRecordedPullTime: string>, nextToken: string> {
+]: any -> oneof<record<imageDetails: table<registryId: string, repositoryName: string, imageDigest: string, imageTags: list, imageSizeInBytes: int, imagePushedAt: string, imageScanStatus: record, imageScanFindingsSummary: record, imageManifestMediaType: string, artifactMediaType: string, lastRecordedPullTime: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -974,7 +988,7 @@ export def "describe-pull-through-cache-rules" [
   --ecr-repository-prefixes: list<string> # The Amazon ECR repository prefixes associated with the pull through cache rules to return. If no repository prefix value is specified, all pull through cache rules are returned.
   --next-token-body: string # The nextToken value returned from a previous paginated DescribePullThroughCacheRulesRequest request where maxResults was used and the results exceeded the value of that parameter. Pagination continues from the end of the previous results that returned the nextToken value. This value is null when there are no more results to return. (body field)
   --max-results-body: int # The maximum number of pull through cache rules returned by DescribePullThroughCacheRulesRequest in paginated output. When this parameter is used, DescribePullThroughCacheRulesRequest only returns maxResults results in a single page along with a nextToken response element. The remaining results of the initial request can be seen by sending another DescribePullThroughCacheRulesRequest request with the returned nextToken value. This value can be between 1 and 1000. If this parameter is not used, then DescribePullThroughCacheRulesRequest returns up to 100 results and a nextToken value, if applicable. (body field)
-]: any -> record<pullThroughCacheRules: table<ecrRepositoryPrefix: string, upstreamRegistryUrl: string, createdAt: string, registryId: string>, nextToken: string> {
+]: any -> oneof<record<pullThroughCacheRules: table<ecrRepositoryPrefix: string, upstreamRegistryUrl: string, createdAt: string, registryId: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1024,7 +1038,7 @@ export def "describe-registry" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-16 # required
   --body: record
-]: any -> record<registryId: string, replicationConfiguration: record<rules: list<record>>> {
+]: any -> oneof<record<registryId: string, replicationConfiguration: record<rules: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1078,7 +1092,7 @@ export def "describe-repositories" [
   --repository-names: list<string> # A list of repositories to describe. If this parameter is omitted, then all repositories in a registry are described.
   --next-token-body: string # The nextToken value returned from a previous paginated DescribeRepositories request where maxResults was used and the results exceeded the value of that parameter. Pagination continues from the end of the previous results that returned the nextToken value. This value is null when there are no more results to return. This option cannot be used when you specify repositories with repositoryNames. This token should be treated as an opaque identifier that is only used to retrieve the next items in a list and not for other programmatic purposes. (body field)
   --max-results-body: int # The maximum number of repository results returned by DescribeRepositories in paginated output. When this parameter is used, DescribeRepositories only returns maxResults results in a single page along with a nextToken response element. The remaining results of the initial request can be seen by sending another DescribeRepositories request with the returned nextToken value. This value can be between 1 and 1000. If this parameter is not used, then DescribeRepositories returns up to 100 results and a nextToken value, if applicable. This option cannot be used when you specify repositories with repositoryNames. (body field)
-]: any -> record<repositories: table<repositoryArn: string, registryId: string, repositoryName: string, repositoryUri: string, createdAt: string, imageTagMutability: string, imageScanningConfiguration: record, encryptionConfiguration: record>, nextToken: string> {
+]: any -> oneof<record<repositories: table<repositoryArn: string, registryId: string, repositoryName: string, repositoryUri: string, createdAt: string, imageTagMutability: string, imageScanningConfiguration: record, encryptionConfiguration: record>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1128,7 +1142,7 @@ export def "get-authorization-token" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-18 # required
   --registry-ids: list<string> # A list of Amazon Web Services account IDs that are associated with the registries for which to get AuthorizationData objects. If you do not specify a registry, the default registry is assumed.This field is deprecated. The returned authorization token can be used to access any Amazon ECR registry that the IAM principal has access to, specifying a registry ID doesn't change the permissions scope of the authorization token.
-]: any -> record<authorizationData: table<authorizationToken: string, expiresAt: string, proxyEndpoint: string>> {
+]: any -> oneof<record<authorizationData: table<authorizationToken: string, expiresAt: string, proxyEndpoint: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1179,7 +1193,7 @@ export def "get-download-url-for-layer" [
   --registry-id: string # The Amazon Web Services account ID associated with the registry that contains the image layer to download. If you do not specify a registry, the default registry is assumed.
   repository_name: string # The name of the repository that is associated with the image layer to download.
   layer_digest: string # The digest of the image layer to download.
-]: any -> record<downloadUrl: string, layerDigest: string> {
+]: any -> oneof<record<downloadUrl: string, layerDigest: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1229,7 +1243,7 @@ export def "get-lifecycle-policy" [
   --x-amz-target: string@x-amz-target-completer-20 # required
   --registry-id: string # The Amazon Web Services account ID associated with the registry that contains the repository. If you do not specify a registry, the default registry is assumed.
   repository_name: string # The name of the repository.
-]: any -> record<registryId: string, repositoryName: string, lifecyclePolicyText: string, lastEvaluatedAt: string> {
+]: any -> oneof<record<registryId: string, repositoryName: string, lifecyclePolicyText: string, lastEvaluatedAt: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1259,8 +1273,6 @@ export def "get-lifecycle-policy" [
 #
 # POST /
 # operationId: GetLifecyclePolicyPreview
-# --imageIds item shape: {imageDigest?: string, imageTag?: string}
-# --filter shape: {tagStatus?: "TAGGED"|"UNTAGGED"|"ANY"}
 export def "get-lifecycle-policy-preview" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1287,7 +1299,7 @@ export def "get-lifecycle-policy-preview" [
   --next-token-body: string # The nextToken value returned from a previous paginated&#x2028; GetLifecyclePolicyPreviewRequest request where maxResults was used and the&#x2028; results exceeded the value of that parameter. Pagination continues from the end of the&#x2028; previous results that returned the nextToken value. This value is&#x2028; null when there are no more results to return. This option cannot be used when you specify images with imageIds. (body field)
   --max-results-body: int # The maximum number of repository results returned by GetLifecyclePolicyPreviewRequest in&#x2028; paginated output. When this parameter is used, GetLifecyclePolicyPreviewRequest only returns&#x2028; maxResults results in a single page along with a nextToken&#x2028; response element. The remaining results of the initial request can be seen by sending&#x2028; another GetLifecyclePolicyPreviewRequest request with the returned nextToken&#x2028; value. This value can be between 1 and 1000. If this&#x2028; parameter is not used, then GetLifecyclePolicyPreviewRequest returns up to&#x2028; 100 results and a nextToken value, if&#x2028; applicable. This option cannot be used when you specify images with imageIds. (body field)
   --filter: record # The filter for the lifecycle policy preview. — shape: {tagStatus?: "TAGGED"|"UNTAGGED"|"ANY"}
-]: any -> record<registryId: string, repositoryName: string, lifecyclePolicyText: string, status: string, nextToken: string, previewResults: table<imageTags: list, imageDigest: string, imagePushedAt: string, action: record, appliedRulePriority: int>, summary: record<expiringImageTotalCount: int>> {
+]: any -> oneof<record<registryId: string, repositoryName: string, lifecyclePolicyText: string, status: string, nextToken: string, previewResults: table<imageTags: list, imageDigest: string, imagePushedAt: string, action: record, appliedRulePriority: int>, summary: record<expiringImageTotalCount: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1337,7 +1349,7 @@ export def "get-registry-policy" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-22 # required
   --body: record
-]: any -> record<registryId: string, policyText: string> {
+]: any -> oneof<record<registryId: string, policyText: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1386,7 +1398,7 @@ export def "get-registry-scanning-configuration" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-23 # required
   --body: record
-]: any -> record<registryId: string, scanningConfiguration: record<scanType: string, rules: list<record>>> {
+]: any -> oneof<record<registryId: string, scanningConfiguration: record<scanType: string, rules: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1436,7 +1448,7 @@ export def "get-repository-policy" [
   --x-amz-target: string@x-amz-target-completer-24 # required
   --registry-id: string # The Amazon Web Services account ID associated with the registry that contains the repository. If you do not specify a registry, the default registry is assumed.
   repository_name: string # The name of the repository with the policy to retrieve.
-]: any -> record<registryId: string, repositoryName: string, policyText: string> {
+]: any -> oneof<record<registryId: string, repositoryName: string, policyText: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1486,7 +1498,7 @@ export def "initiate-layer-upload" [
   --x-amz-target: string@x-amz-target-completer-25 # required
   --registry-id: string # The Amazon Web Services account ID associated with the registry to which you intend to upload layers. If you do not specify a registry, the default registry is assumed.
   repository_name: string # The name of the repository to which you intend to upload layers.
-]: any -> record<uploadId: string, partSize: int> {
+]: any -> oneof<record<uploadId: string, partSize: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1516,7 +1528,6 @@ export def "initiate-layer-upload" [
 #
 # POST /
 # operationId: ListImages
-# --filter shape: {tagStatus?: "TAGGED"|"UNTAGGED"|"ANY"}
 export def "list-images" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1542,7 +1553,7 @@ export def "list-images" [
   --next-token-body: string # The nextToken value returned from a previous paginated ListImages request where maxResults was used and the results exceeded the value of that parameter. Pagination continues from the end of the previous results that returned the nextToken value. This value is null when there are no more results to return. This token should be treated as an opaque identifier that is only used to retrieve the next items in a list and not for other programmatic purposes. (body field)
   --max-results-body: int # The maximum number of image results returned by ListImages in paginated output. When this parameter is used, ListImages only returns maxResults results in a single page along with a nextToken response element. The remaining results of the initial request can be seen by sending another ListImages request with the returned nextToken value. This value can be between 1 and 1000. If this parameter is not used, then ListImages returns up to 100 results and a nextToken value, if applicable. (body field)
   --filter: record # An object representing a filter on a ListImages operation. — shape: {tagStatus?: "TAGGED"|"UNTAGGED"|"ANY"}
-]: any -> record<imageIds: table<imageDigest: string, imageTag: string>, nextToken: string> {
+]: any -> oneof<record<imageIds: table<imageDigest: string, imageTag: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1592,7 +1603,7 @@ export def "list-tags-for-resource" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-27 # required
   resource_arn: string # The Amazon Resource Name (ARN) that identifies the resource for which to list the tags. Currently, the only supported resource is an Amazon ECR repository.
-]: any -> record<tags: table<Key: string, Value: string>> {
+]: any -> oneof<record<tags: table<Key: string, Value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1646,7 +1657,7 @@ export def "put-image" [
   --image-manifest-media-type: string # The media type of the image manifest. If you push an image manifest that does not contain the mediaType field, you must specify the imageManifestMediaType in the request.
   --image-tag: string # The tag to associate with the image. This parameter is required for images that use the Docker Image Manifest V2 Schema 2 or Open Container Initiative (OCI) formats.
   --image-digest: string # The image digest of the image manifest corresponding to the image.
-]: any -> record<image: record<registryId: string, repositoryName: string, imageId: record<imageDigest: string, imageTag: string>, imageManifest: string, imageManifestMediaType: string>> {
+]: any -> oneof<record<image: record<registryId: string, repositoryName: string, imageId: record<imageDigest: string, imageTag: string>, imageManifest: string, imageManifestMediaType: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1676,7 +1687,6 @@ export def "put-image" [
 #
 # POST /
 # operationId: PutImageScanningConfiguration
-# --imageScanningConfiguration shape: {scanOnPush?: bool}
 export def "put-image-scanning-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1698,7 +1708,7 @@ export def "put-image-scanning-configuration" [
   --registry-id: string # The Amazon Web Services account ID associated with the registry that contains the repository in which to update the image scanning configuration setting. If you do not specify a registry, the default registry is assumed.
   repository_name: string # The name of the repository in which to update the image scanning configuration setting.
   image_scanning_configuration: record # The image scanning configuration for a repository. — shape: {scanOnPush?: bool}
-]: any -> record<registryId: string, repositoryName: string, imageScanningConfiguration: record<scanOnPush: bool>> {
+]: any -> oneof<record<registryId: string, repositoryName: string, imageScanningConfiguration: record<scanOnPush: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1749,7 +1759,7 @@ export def "put-image-tag-mutability" [
   --registry-id: string # The Amazon Web Services account ID associated with the registry that contains the repository in which to update the image tag mutability settings. If you do not specify a registry, the default registry is assumed.
   repository_name: string # The name of the repository in which to update the image tag mutability settings.
   image_tag_mutability: string@image-tag-mutability-completer # The tag mutability setting for the repository. If MUTABLE is specified, image tags can be overwritten. If IMMUTABLE is specified, all image tags within the repository will be immutable which will prevent them from being overwritten.
-]: any -> record<registryId: string, repositoryName: string, imageTagMutability: string> {
+]: any -> oneof<record<registryId: string, repositoryName: string, imageTagMutability: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1800,7 +1810,7 @@ export def "put-lifecycle-policy" [
   --registry-id: string # The Amazon Web Services account ID associated with the registry that contains the repository. If you do&#x2028; not specify a registry, the default registry is assumed.
   repository_name: string # The name of the repository to receive the policy.
   lifecycle_policy_text: string # The JSON repository policy text to apply to the repository.
-]: any -> record<registryId: string, repositoryName: string, lifecyclePolicyText: string> {
+]: any -> oneof<record<registryId: string, repositoryName: string, lifecyclePolicyText: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1849,7 +1859,7 @@ export def "put-registry-policy" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-32 # required
   policy_text: string # The JSON policy text to apply to your registry. The policy text follows the same format as IAM policy text. For more information, see Registry permissions (https://docs.aws.amazon.com/AmazonECR/latest/userguide/registry-permissions.html) in the Amazon Elastic Container Registry User Guide.
-]: any -> record<registryId: string, policyText: string> {
+]: any -> oneof<record<registryId: string, policyText: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1879,7 +1889,6 @@ export def "put-registry-policy" [
 #
 # POST /
 # operationId: PutRegistryScanningConfiguration
-# --rules item shape: {scanFrequency: "SCAN_ON_PUSH"|"CONTINUOUS_SCAN"|"MANUAL", repositoryFilters: list}
 export def "put-registry-scanning-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1900,7 +1909,7 @@ export def "put-registry-scanning-configuration" [
   --x-amz-target: string@x-amz-target-completer-33 # required
   --scan-type: string@scan-type-completer # The scanning type to set for the registry. When a registry scanning configuration is not defined, by default the BASIC scan type is used. When basic scanning is used, you may specify filters to determine which individual repositories, or all repositories, are scanned when new images are pushed to those repositories. Alternatively, you can do manual scans of images with basic scanning. When the ENHANCED scan type is set, Amazon Inspector provides automated vulnerability scanning. You may choose between continuous scanning or scan on push and you may specify filters to determine which individual repositories, or all repositories, are scanned.
   --rules: list # The scanning rules to use for the registry. A scanning rule is used to determine which repository filters are used and at what frequency scanning will occur. — item shape: {scanFrequency: "SCAN_ON_PUSH"|"CONTINUOUS_SCAN"|"MANUAL", repositoryFilters: list}
-]: any -> record<registryScanningConfiguration: record<scanType: string, rules: list<record>>> {
+]: any -> oneof<record<registryScanningConfiguration: record<scanType: string, rules: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1930,7 +1939,6 @@ export def "put-registry-scanning-configuration" [
 #
 # POST /
 # operationId: PutReplicationConfiguration
-# --replicationConfiguration shape: {rules: list}
 export def "put-replication-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1950,7 +1958,7 @@ export def "put-replication-configuration" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-34 # required
   replication_configuration: record # The replication configuration for a registry. — shape: {rules: list}
-]: any -> record<replicationConfiguration: record<rules: list<record>>> {
+]: any -> oneof<record<replicationConfiguration: record<rules: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2002,7 +2010,7 @@ export def "set-repository-policy" [
   repository_name: string # The name of the repository to receive the policy.
   policy_text: string # The JSON repository policy text to apply to the repository. For more information, see Amazon ECR repository policies (https://docs.aws.amazon.com/AmazonECR/latest/userguide/repository-policy-examples.html) in the Amazon Elastic Container Registry User Guide.
   --force: oneof<nothing, bool> # If the policy you are attempting to set on a repository policy would prevent you from setting another policy in the future, you must force the SetRepositoryPolicy operation. This is intended to prevent accidental repository lock outs.
-]: any -> record<registryId: string, repositoryName: string, policyText: string> {
+]: any -> oneof<record<registryId: string, repositoryName: string, policyText: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2032,7 +2040,6 @@ export def "set-repository-policy" [
 #
 # POST /
 # operationId: StartImageScan
-# --imageId shape: {imageDigest?: string, imageTag?: string}
 export def "start-image-scan" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2054,7 +2061,7 @@ export def "start-image-scan" [
   --registry-id: string # The Amazon Web Services account ID associated with the registry that contains the repository in which to start an image scan request. If you do not specify a registry, the default registry is assumed.
   repository_name: string # The name of the repository that contains the images to scan.
   image_id: record # An object with identifying information for an image in an Amazon ECR repository. — shape: {imageDigest?: string, imageTag?: string}
-]: any -> record<registryId: string, repositoryName: string, imageId: record<imageDigest: string, imageTag: string>, imageScanStatus: record<status: string, description: string>> {
+]: any -> oneof<record<registryId: string, repositoryName: string, imageId: record<imageDigest: string, imageTag: string>, imageScanStatus: record<status: string, description: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2105,7 +2112,7 @@ export def "start-lifecycle-policy-preview" [
   --registry-id: string # The Amazon Web Services account ID associated with the registry that contains the repository. If you do not specify a registry, the default registry is assumed.
   repository_name: string # The name of the repository to be evaluated.
   --lifecycle-policy-text: string # The policy to be evaluated against. If you do not specify a policy, the current policy for the repository is used.
-]: any -> record<registryId: string, repositoryName: string, lifecyclePolicyText: string, status: string> {
+]: any -> oneof<record<registryId: string, repositoryName: string, lifecyclePolicyText: string, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2135,7 +2142,6 @@ export def "start-lifecycle-policy-preview" [
 #
 # POST /
 # operationId: TagResource
-# --tags item shape: {Key?: string, Value?: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2156,7 +2162,7 @@ export def "tag-resource" [
   --x-amz-target: string@x-amz-target-completer-38 # required
   resource_arn: string # The Amazon Resource Name (ARN) of the the resource to which to add tags. Currently, the only supported resource is an Amazon ECR repository.
   tags: list # The tags to add to the resource. A tag is an array of key-value pairs. Tag keys can have a maximum character length of 128 characters, and tag values can have a maximum length of 256 characters. — item shape: {Key?: string, Value?: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2206,7 +2212,7 @@ export def "untag-resource" [
   --x-amz-target: string@x-amz-target-completer-39 # required
   resource_arn: string # The Amazon Resource Name (ARN) of the resource from which to remove tags. Currently, the only supported resource is an Amazon ECR repository.
   tag_keys: list<string> # The keys of the tags to be removed.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2260,7 +2266,7 @@ export def "upload-layer-part" [
   part_first_byte: int # The position of the first byte of the layer part witin the overall image layer.
   part_last_byte: int # The position of the last byte of the layer part within the overall image layer.
   layer_part_blob: string # The base64-encoded layer part payload.
-]: any -> record<registryId: string, repositoryName: string, uploadId: string, lastByteReceived: int> {
+]: any -> oneof<record<registryId: string, repositoryName: string, uploadId: string, lastByteReceived: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

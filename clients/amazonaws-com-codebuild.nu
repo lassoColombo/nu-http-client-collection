@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -160,9 +183,9 @@ def x-amz-target-completer-44 [] { ["CodeBuild_20161006.UpdateWebhook"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "batch-delete-builds" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["batch-delete-builds" "batch-get-build-batches" "batch-get-builds" "batch-get-projects" "batch-get-report-groups" "batch-get-reports" "create-project" "create-report-group" "create-webhook" "delete-build-batch" "delete-project" "delete-report" "delete-report-group" "delete-resource-policy" "delete-source-credentials" "delete-webhook" "describe-code-coverages" "describe-test-cases" "get-report-group-trend" "get-resource-policy" "import-source-credentials" "invalidate-project-cache" "list-build-batches" "list-build-batches-for-project" "list-builds" "list-builds-for-project" "list-curated-environment-images" "list-projects" "list-report-groups" "list-reports" "list-reports-for-report-group" "list-shared-projects" "list-shared-report-groups" "list-source-credentials" "put-resource-policy" "retry-build" "retry-build-batch" "start-build" "start-build-batch" "stop-build" "stop-build-batch" "update-project" "update-project-visibility" "update-report-group" "update-webhook" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -203,7 +226,7 @@ export def "batch-delete-builds" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer # required
   ids: list<string> # The IDs of the builds to delete.
-]: any -> record<buildsDeleted: list<string>, buildsNotDeleted: table<id: string, statusCode: string>> {
+]: any -> oneof<record<buildsDeleted: list<string>, buildsNotDeleted: table<id: string, statusCode: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -252,7 +275,7 @@ export def "batch-get-build-batches" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-1 # required
   ids: list<string> # An array that contains the batch build identifiers to retrieve.
-]: any -> record<buildBatches: table<id: string, arn: string, startTime: string, endTime: string, currentPhase: string, buildBatchStatus: string, sourceVersion: string, resolvedSourceVersion: string, projectName: string, phases: list, source: record, secondarySources: list, secondarySourceVersions: list, artifacts: record, secondaryArtifacts: list, cache: record, environment: record, serviceRole: string, logConfig: record, buildTimeoutInMinutes: int, queuedTimeoutInMinutes: int, complete: bool, initiator: string, vpcConfig: record, encryptionKey: string, buildBatchNumber: int, fileSystemLocations: list, buildBatchConfig: record, buildGroups: list, debugSessionEnabled: bool>, buildBatchesNotFound: list<string>> {
+]: any -> oneof<record<buildBatches: table<id: string, arn: string, startTime: string, endTime: string, currentPhase: string, buildBatchStatus: string, sourceVersion: string, resolvedSourceVersion: string, projectName: string, phases: list, source: record, secondarySources: list, secondarySourceVersions: list, artifacts: record, secondaryArtifacts: list, cache: record, environment: record, serviceRole: string, logConfig: record, buildTimeoutInMinutes: int, queuedTimeoutInMinutes: int, complete: bool, initiator: string, vpcConfig: record, encryptionKey: string, buildBatchNumber: int, fileSystemLocations: list, buildBatchConfig: record, buildGroups: list, debugSessionEnabled: bool>, buildBatchesNotFound: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -301,7 +324,7 @@ export def "batch-get-builds" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-2 # required
   ids: list<string> # The IDs of the builds.
-]: any -> record<builds: table<id: string, arn: string, buildNumber: int, startTime: string, endTime: string, currentPhase: string, buildStatus: string, sourceVersion: string, resolvedSourceVersion: string, projectName: string, phases: list, source: record, secondarySources: list, secondarySourceVersions: list, artifacts: record, secondaryArtifacts: list, cache: record, environment: record, serviceRole: string, logs: record, timeoutInMinutes: int, queuedTimeoutInMinutes: int, buildComplete: bool, initiator: string, vpcConfig: record, networkInterface: record, encryptionKey: string, exportedEnvironmentVariables: list, reportArns: list, fileSystemLocations: list, debugSession: record, buildBatchArn: string>, buildsNotFound: list<string>> {
+]: any -> oneof<record<builds: table<id: string, arn: string, buildNumber: int, startTime: string, endTime: string, currentPhase: string, buildStatus: string, sourceVersion: string, resolvedSourceVersion: string, projectName: string, phases: list, source: record, secondarySources: list, secondarySourceVersions: list, artifacts: record, secondaryArtifacts: list, cache: record, environment: record, serviceRole: string, logs: record, timeoutInMinutes: int, queuedTimeoutInMinutes: int, buildComplete: bool, initiator: string, vpcConfig: record, networkInterface: record, encryptionKey: string, exportedEnvironmentVariables: list, reportArns: list, fileSystemLocations: list, debugSession: record, buildBatchArn: string>, buildsNotFound: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -350,7 +373,7 @@ export def "batch-get-projects" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-3 # required
   names: list<string> # The names or ARNs of the build projects. To get information about a project shared with your Amazon Web Services account, its ARN must be specified. You cannot specify a shared project using its name.
-]: any -> record<projects: table<name: string, arn: string, description: string, source: record, secondarySources: list, sourceVersion: string, secondarySourceVersions: list, artifacts: record, secondaryArtifacts: list, cache: record, environment: record, serviceRole: string, timeoutInMinutes: int, queuedTimeoutInMinutes: int, encryptionKey: string, tags: list, created: string, lastModified: string, webhook: record, vpcConfig: record, badge: record, logsConfig: record, fileSystemLocations: list, buildBatchConfig: record, concurrentBuildLimit: int, projectVisibility: string, publicProjectAlias: string, resourceAccessRole: string>, projectsNotFound: list<string>> {
+]: any -> oneof<record<projects: table<name: string, arn: string, description: string, source: record, secondarySources: list, sourceVersion: string, secondarySourceVersions: list, artifacts: record, secondaryArtifacts: list, cache: record, environment: record, serviceRole: string, timeoutInMinutes: int, queuedTimeoutInMinutes: int, encryptionKey: string, tags: list, created: string, lastModified: string, webhook: record, vpcConfig: record, badge: record, logsConfig: record, fileSystemLocations: list, buildBatchConfig: record, concurrentBuildLimit: int, projectVisibility: string, publicProjectAlias: string, resourceAccessRole: string>, projectsNotFound: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -399,7 +422,7 @@ export def "batch-get-report-groups" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-4 # required
   report_group_arns: list<string> # An array of report group ARNs that identify the report groups to return.
-]: any -> record<reportGroups: table<arn: string, name: string, type: string, exportConfig: record, created: string, lastModified: string, tags: list, status: string>, reportGroupsNotFound: list<string>> {
+]: any -> oneof<record<reportGroups: table<arn: string, name: string, type: string, exportConfig: record, created: string, lastModified: string, tags: list, status: string>, reportGroupsNotFound: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -448,7 +471,7 @@ export def "batch-get-reports" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-5 # required
   report_arns: list<string> # An array of ARNs that identify the Report objects to return.
-]: any -> record<reports: table<arn: string, type: string, name: string, reportGroupArn: string, executionId: string, status: string, created: string, expired: string, exportConfig: record, truncated: bool, testSummary: record, codeCoverageSummary: record>, reportsNotFound: list<string>> {
+]: any -> oneof<record<reports: table<arn: string, type: string, name: string, reportGroupArn: string, executionId: string, status: string, created: string, expired: string, exportConfig: record, truncated: bool, testSummary: record, codeCoverageSummary: record>, reportsNotFound: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -478,18 +501,6 @@ export def "batch-get-reports" [
 #
 # POST /
 # operationId: CreateProject
-# --source shape: {type: "CODECOMMIT"|"CODEPIPELINE"|"GITHUB"|"S3"|"BITBUCKET"|"GITHUB_ENTERPRISE"|"NO_SOURCE", location?: string, gitCloneDepth?: int, gitSubmodulesConfig?: record, buildspec?: string, auth?: record, reportBuildStatus?: bool, buildStatusConfig?: record, insecureSsl?: bool, sourceIdentifier?: string}
-# --secondarySources item shape: {type: "CODECOMMIT"|"CODEPIPELINE"|"GITHUB"|"S3"|"BITBUCKET"|"GITHUB_ENTERPRISE"|"NO_SOURCE", location?: string, gitCloneDepth?: int, gitSubmodulesConfig?: record, buildspec?: string, auth?: record, reportBuildStatus?: bool, buildStatusConfig?: record, insecureSsl?: bool, sourceIdentifier?: string}
-# --secondarySourceVersions item shape: {sourceIdentifier: string, sourceVersion: string}
-# --artifacts shape: {type: "CODEPIPELINE"|"S3"|"NO_ARTIFACTS", location?: string, path?: string, namespaceType?: "NONE"|"BUILD_ID", name?: string, packaging?: "NONE"|"ZIP", overrideArtifactName?: bool, encryptionDisabled?: bool, artifactIdentifier?: string, bucketOwnerAccess?: "NONE"|"READ_ONLY"|"FULL"}
-# --secondaryArtifacts item shape: {type: "CODEPIPELINE"|"S3"|"NO_ARTIFACTS", location?: string, path?: string, namespaceType?: "NONE"|"BUILD_ID", name?: string, packaging?: "NONE"|"ZIP", overrideArtifactName?: bool, encryptionDisabled?: bool, artifactIdentifier?: string, bucketOwnerAccess?: "NONE"|"READ_ONLY"|"FULL"}
-# --cache shape: {type: "NO_CACHE"|"S3"|"LOCAL", location?: string, modes?: list<string>}
-# --environment shape: {type: "WINDOWS_CONTAINER"|"LINUX_CONTAINER"|"LINUX_GPU_CONTAINER"|"ARM_CONTAINER"|"WINDOWS_SERVER_2019_CONTAINER", image: string, computeType: "BUILD_GENERAL1_SMALL"|"BUILD_GENERAL1_MEDIUM"|"BUILD_GENERAL1_LARGE"|"BUILD_GENERAL1_2XLARGE", environmentVariables?: list, privilegedMode?: bool, certificate?: string, registryCredential?: record, imagePullCredentialsType?: "CODEBUILD"|"SERVICE_ROLE"}
-# --tags item shape: {key?: string, value?: string}
-# --vpcConfig shape: {vpcId?: string, subnets?: list<string>, securityGroupIds?: list<string>}
-# --logsConfig shape: {cloudWatchLogs?: record, s3Logs?: record}
-# --fileSystemLocations item shape: {type?: "EFS", location?: string, mountPoint?: string, identifier?: string, mountOptions?: string}
-# --buildBatchConfig shape: {serviceRole?: string, combineArtifacts?: bool, restrictions?: record, timeoutInMins?: int, batchReportMode?: "REPORT_INDIVIDUAL_BUILDS"|"REPORT_AGGREGATED_BATCH"}
 export def "create-project" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -529,7 +540,7 @@ export def "create-project" [
   --file-system-locations: list # An array of ProjectFileSystemLocation objects for a CodeBuild build project. A ProjectFileSystemLocation object specifies the identifier, location, mountOptions, mountPoint, and type of a file system created using Amazon Elastic File System. — item shape: {type?: "EFS", location?: string, mountPoint?: string, identifier?: string, mountOptions?: string}
   --build-batch-config: record # Contains configuration information about a batch build project. — shape: {serviceRole?: string, combineArtifacts?: bool, restrictions?: record, timeoutInMins?: int, batchReportMode?: "REPORT_INDIVIDUAL_BUILDS"|"REPORT_AGGREGATED_BATCH"}
   --concurrent-build-limit: int # The maximum number of concurrent builds that are allowed for this project. New builds are only started if the current number of builds is less than or equal to this limit. If the current build count meets this limit, new builds are throttled and are not run.
-]: any -> record<project: record<name: string, arn: string, description: string, source: record<type: string, location: string, gitCloneDepth: int, gitSubmodulesConfig: record, buildspec: string, auth: record, reportBuildStatus: bool, buildStatusConfig: record, insecureSsl: bool, sourceIdentifier: string>, secondarySources: list<record>, sourceVersion: string, secondarySourceVersions: list<record>, artifacts: record<type: string, location: string, path: string, namespaceType: string, name: string, packaging: string, overrideArtifactName: bool, encryptionDisabled: bool, artifactIdentifier: string, bucketOwnerAccess: string>, secondaryArtifacts: list<record>, cache: record<type: string, location: string, modes: list>, environment: record<type: string, image: string, computeType: string, environmentVariables: list, privilegedMode: bool, certificate: string, registryCredential: record, imagePullCredentialsType: string>, serviceRole: string, timeoutInMinutes: int, queuedTimeoutInMinutes: int, encryptionKey: string, tags: list<record>, created: string, lastModified: string, webhook: record<url: string, payloadUrl: string, secret: string, branchFilter: string, filterGroups: list, buildType: string, lastModifiedSecret: string>, vpcConfig: record<vpcId: string, subnets: list, securityGroupIds: list>, badge: record<badgeEnabled: bool, badgeRequestUrl: string>, logsConfig: record<cloudWatchLogs: record, s3Logs: record>, fileSystemLocations: list<record>, buildBatchConfig: record<serviceRole: string, combineArtifacts: bool, restrictions: record, timeoutInMins: int, batchReportMode: string>, concurrentBuildLimit: int, projectVisibility: string, publicProjectAlias: string, resourceAccessRole: string>> {
+]: any -> oneof<record<project: record<name: string, arn: string, description: string, source: record<type: string, location: string, gitCloneDepth: int, gitSubmodulesConfig: record, buildspec: string, auth: record, reportBuildStatus: bool, buildStatusConfig: record, insecureSsl: bool, sourceIdentifier: string>, secondarySources: list<record>, sourceVersion: string, secondarySourceVersions: list<record>, artifacts: record<type: string, location: string, path: string, namespaceType: string, name: string, packaging: string, overrideArtifactName: bool, encryptionDisabled: bool, artifactIdentifier: string, bucketOwnerAccess: string>, secondaryArtifacts: list<record>, cache: record<type: string, location: string, modes: list>, environment: record<type: string, image: string, computeType: string, environmentVariables: list, privilegedMode: bool, certificate: string, registryCredential: record, imagePullCredentialsType: string>, serviceRole: string, timeoutInMinutes: int, queuedTimeoutInMinutes: int, encryptionKey: string, tags: list<record>, created: string, lastModified: string, webhook: record<url: string, payloadUrl: string, secret: string, branchFilter: string, filterGroups: list, buildType: string, lastModifiedSecret: string>, vpcConfig: record<vpcId: string, subnets: list, securityGroupIds: list>, badge: record<badgeEnabled: bool, badgeRequestUrl: string>, logsConfig: record<cloudWatchLogs: record, s3Logs: record>, fileSystemLocations: list<record>, buildBatchConfig: record<serviceRole: string, combineArtifacts: bool, restrictions: record, timeoutInMins: int, batchReportMode: string>, concurrentBuildLimit: int, projectVisibility: string, publicProjectAlias: string, resourceAccessRole: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -559,8 +570,6 @@ export def "create-project" [
 #
 # POST /
 # operationId: CreateReportGroup
-# --exportConfig shape: {exportConfigType?: "S3"|"NO_EXPORT", s3Destination?: record}
-# --tags item shape: {key?: string, value?: string}
 export def "create-report-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -583,7 +592,7 @@ export def "create-report-group" [
   type: string@type-completer # The type of report group.
   export_config: record # Information about the location where the run of a report is exported. — shape: {exportConfigType?: "S3"|"NO_EXPORT", s3Destination?: record}
   --tags: list # A list of tag key and value pairs associated with this report group. These tags are available for use by Amazon Web Services services that support CodeBuild report group tags. — item shape: {key?: string, value?: string}
-]: any -> record<reportGroup: record<arn: string, name: string, type: string, exportConfig: record<exportConfigType: string, s3Destination: record>, created: string, lastModified: string, tags: list<record>, status: string>> {
+]: any -> oneof<record<reportGroup: record<arn: string, name: string, type: string, exportConfig: record<exportConfigType: string, s3Destination: record>, created: string, lastModified: string, tags: list<record>, status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -635,7 +644,7 @@ export def "create-webhook" [
   --branch-filter: string # A regular expression used to determine which repository branches are built when a webhook is triggered. If the name of a branch matches the regular expression, then it is built. If branchFilter is empty, then all branches are built. It is recommended that you use filterGroups instead of branchFilter.
   --filter-groups: list # An array of arrays of WebhookFilter objects used to determine which webhooks are triggered. At least one WebhookFilter in the array must specify EVENT as its type. For a build to be triggered, at least one filter group in the filterGroups array must pass. For a filter group to pass, each of its filters must pass.
   --build-type: string@build-type-completer # Specifies the type of build this webhook will trigger.
-]: any -> record<webhook: record<url: string, payloadUrl: string, secret: string, branchFilter: string, filterGroups: list<list>, buildType: string, lastModifiedSecret: string>> {
+]: any -> oneof<record<webhook: record<url: string, payloadUrl: string, secret: string, branchFilter: string, filterGroups: list<list>, buildType: string, lastModifiedSecret: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -684,7 +693,7 @@ export def "delete-build-batch" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-9 # required
   id: string # The identifier of the batch build to delete.
-]: any -> record<statusCode: string, buildsDeleted: list<string>, buildsNotDeleted: table<id: string, statusCode: string>> {
+]: any -> oneof<record<statusCode: string, buildsDeleted: list<string>, buildsNotDeleted: table<id: string, statusCode: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -733,7 +742,7 @@ export def "delete-project" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-10 # required
   name: string # The name of the build project.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -782,7 +791,7 @@ export def "delete-report" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-11 # required
   arn: string # The ARN of the report to delete.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -832,7 +841,7 @@ export def "delete-report-group" [
   --x-amz-target: string@x-amz-target-completer-12 # required
   arn: string # The ARN of the report group to delete.
   --delete-reports: oneof<nothing, bool> # If true, deletes any reports that belong to a report group before deleting the report group. If false, you must delete any reports in the report group. Use ListReportsForReportGroup (https://docs.aws.amazon.com/codebuild/latest/APIReference/API_ListReportsForReportGroup.html) to get the reports in a report group. Use DeleteReport (https://docs.aws.amazon.com/codebuild/latest/APIReference/API_DeleteReport.html) to delete the reports. If you call DeleteReportGroup for a report group that contains one or more reports, an exception is thrown.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -881,7 +890,7 @@ export def "delete-resource-policy" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-13 # required
   resource_arn: string # The ARN of the resource that is associated with the resource policy.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -930,7 +939,7 @@ export def "delete-source-credentials" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-14 # required
   arn: string # The Amazon Resource Name (ARN) of the token.
-]: any -> record<arn: string> {
+]: any -> oneof<record<arn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -979,7 +988,7 @@ export def "delete-webhook" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-15 # required
   project_name: string # The name of the CodeBuild project.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1036,7 +1045,7 @@ export def "describe-code-coverages" [
   --sort-by: string@sort-by-completer # Specifies how the results are sorted. Possible values are: FILE_PATH The results are sorted by file path. LINE_COVERAGE_PERCENTAGE The results are sorted by the percentage of lines that are covered.
   --min-line-coverage-percentage: float # The minimum line coverage percentage to report. (format: double)
   --max-line-coverage-percentage: float # The maximum line coverage percentage to report. (format: double)
-]: any -> record<nextToken: string, codeCoverages: table<id: string, reportARN: string, filePath: string, lineCoveragePercentage: float, linesCovered: int, linesMissed: int, branchCoveragePercentage: float, branchesCovered: int, branchesMissed: int, expired: string>> {
+]: any -> oneof<record<nextToken: string, codeCoverages: table<id: string, reportARN: string, filePath: string, lineCoveragePercentage: float, linesCovered: int, linesMissed: int, branchCoveragePercentage: float, branchesCovered: int, branchesMissed: int, expired: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1067,7 +1076,6 @@ export def "describe-code-coverages" [
 #
 # POST /
 # operationId: DescribeTestCases
-# --filter shape: {status?: string, keyword?: string}
 export def "describe-test-cases" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1092,7 +1100,7 @@ export def "describe-test-cases" [
   --next-token-body: string # During a previous call, the maximum number of items that can be returned is the value specified in maxResults. If there more items in the list, then a unique string called a nextToken is returned. To get the next batch of items in the list, call this operation again, adding the next token to the call. To get all of the items in the list, keep calling this operation with each subsequent next token that is returned, until no more next tokens are returned. (body field)
   --max-results-body: int # The maximum number of paginated test cases returned per response. Use nextToken to iterate pages in the list of returned TestCase objects. The default value is 100. (body field)
   --filter: record # A filter used to return specific types of test cases. In order to pass the filter, the report must meet all of the filter properties. — shape: {status?: string, keyword?: string}
-]: any -> record<nextToken: string, testCases: table<reportArn: string, testRawDataPath: string, prefix: string, name: string, status: string, durationInNanoSeconds: int, message: string, expired: string>> {
+]: any -> oneof<record<nextToken: string, testCases: table<reportArn: string, testRawDataPath: string, prefix: string, name: string, status: string, durationInNanoSeconds: int, message: string, expired: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1144,7 +1152,7 @@ export def "get-report-group-trend" [
   report_group_arn: string # The ARN of the report group that contains the reports to analyze.
   --num-of-reports: int # The number of reports to analyze. This operation always retrieves the most recent reports. If this parameter is omitted, the most recent 100 reports are analyzed.
   trend_field: string@trend-field-completer # The test report value to accumulate. This must be one of the following values: Test reports: DURATION Accumulate the test run times for the specified reports. PASS_RATE Accumulate the percentage of tests that passed for the specified test reports. TOTAL Accumulate the total number of tests for the specified test reports. Code coverage reports: BRANCH_COVERAGE Accumulate the branch coverage percentages for the specified test reports. BRANCHES_COVERED Accumulate the branches covered values for the specified test reports. BRANCHES_MISSED Accumulate the branches missed values for the specified test reports. LINE_COVERAGE Accumulate the line coverage percentages for the specified test reports. LINES_COVERED Accumulate the lines covered values for the specified test reports. LINES_MISSED Accumulate the lines not covered values for the specified test reports.
-]: any -> record<stats: record<average: string, max: string, min: string>, rawData: table<reportArn: string, data: string>> {
+]: any -> oneof<record<stats: record<average: string, max: string, min: string>, rawData: table<reportArn: string, data: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1193,7 +1201,7 @@ export def "get-resource-policy" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-19 # required
   resource_arn: string # The ARN of the resource that is associated with the resource policy.
-]: any -> record<policy: string> {
+]: any -> oneof<record<policy: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1246,7 +1254,7 @@ export def "import-source-credentials" [
   server_type: string@server-type-completer # The source provider used for this project.
   auth_type: string@auth-type-completer # The type of authentication used to connect to a GitHub, GitHub Enterprise, or Bitbucket repository. An OAUTH connection is not supported by the API and must be created using the CodeBuild console.
   --should-overwrite: oneof<nothing, bool> # Set to false to prevent overwriting the repository source credentials. Set to true to overwrite the repository source credentials. The default value is true.
-]: any -> record<arn: string> {
+]: any -> oneof<record<arn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1296,7 +1304,7 @@ export def "invalidate-project-cache" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-21 # required
   project_name: string # The name of the CodeBuild build project that the cache is reset for.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1326,7 +1334,6 @@ export def "invalidate-project-cache" [
 #
 # POST /
 # operationId: ListBuildBatches
-# --filter shape: {status?: "SUCCEEDED"|"FAILED"|"FAULT"|"TIMED_OUT"|"IN_PROGRESS"|"STOPPED"}
 export def "list-build-batches" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1351,7 +1358,7 @@ export def "list-build-batches" [
   --max-results-body: int # The maximum number of results to return. (body field)
   --sort-order: string@sort-order-completer # Specifies the sort order of the returned items. Valid values include: ASCENDING: List the batch build identifiers in ascending order by identifier. DESCENDING: List the batch build identifiers in descending order by identifier.
   --next-token-body: string # The nextToken value returned from a previous call to ListBuildBatches. This specifies the next item to return. To return the beginning of the list, exclude this parameter. (body field)
-]: any -> record<ids: list<string>, nextToken: string> {
+]: any -> oneof<record<ids: list<string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1382,7 +1389,6 @@ export def "list-build-batches" [
 #
 # POST /
 # operationId: ListBuildBatchesForProject
-# --filter shape: {status?: "SUCCEEDED"|"FAILED"|"FAULT"|"TIMED_OUT"|"IN_PROGRESS"|"STOPPED"}
 export def "list-build-batches-for-project" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1408,7 +1414,7 @@ export def "list-build-batches-for-project" [
   --max-results-body: int # The maximum number of results to return. (body field)
   --sort-order: string@sort-order-completer # Specifies the sort order of the returned items. Valid values include: ASCENDING: List the batch build identifiers in ascending order by identifier. DESCENDING: List the batch build identifiers in descending order by identifier.
   --next-token-body: string # The nextToken value returned from a previous call to ListBuildBatchesForProject. This specifies the next item to return. To return the beginning of the list, exclude this parameter. (body field)
-]: any -> record<ids: list<string>, nextToken: string> {
+]: any -> oneof<record<ids: list<string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1460,7 +1466,7 @@ export def "list-builds" [
   --x-amz-target: string@x-amz-target-completer-24 # required
   --sort-order: string@sort-order-completer # The order to list build IDs. Valid values include: ASCENDING: List the build IDs in ascending order by build ID. DESCENDING: List the build IDs in descending order by build ID.
   --next-token-body: string # During a previous call, if there are more than 100 items in the list, only the first 100 items are returned, along with a unique string called a nextToken. To get the next batch of items in the list, call this operation again, adding the next token to the call. To get all of the items in the list, keep calling this operation with each subsequent next token that is returned, until no more next tokens are returned. (body field)
-]: any -> record<ids: list<string>, nextToken: string> {
+]: any -> oneof<record<ids: list<string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1513,7 +1519,7 @@ export def "list-builds-for-project" [
   project_name: string # The name of the CodeBuild project.
   --sort-order: string@sort-order-completer # The order to sort the results in. The results are sorted by build number, not the build identifier. If this is not specified, the results are sorted in descending order. Valid values include: ASCENDING: List the build identifiers in ascending order, by build number. DESCENDING: List the build identifiers in descending order, by build number. If the project has more than 100 builds, setting the sort order will result in an error.
   --next-token-body: string # During a previous call, if there are more than 100 items in the list, only the first 100 items are returned, along with a unique string called a nextToken. To get the next batch of items in the list, call this operation again, adding the next token to the call. To get all of the items in the list, keep calling this operation with each subsequent next token that is returned, until no more next tokens are returned. (body field)
-]: any -> record<ids: list<string>, nextToken: string> {
+]: any -> oneof<record<ids: list<string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1563,7 +1569,7 @@ export def "list-curated-environment-images" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-26 # required
   --body: record
-]: any -> record<platforms: table<platform: string, languages: list>> {
+]: any -> oneof<record<platforms: table<platform: string, languages: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1615,7 +1621,7 @@ export def "list-projects" [
   --sort-by: string@sort-by-completer-1 # The criterion to be used to list build project names. Valid values include: CREATED_TIME: List based on when each build project was created. LAST_MODIFIED_TIME: List based on when information about each build project was last changed. NAME: List based on each build project's name. Use sortOrder to specify in what order to list the build project names based on the preceding criteria.
   --sort-order: string@sort-order-completer # The order in which to list build projects. Valid values include: ASCENDING: List in ascending order. DESCENDING: List in descending order. Use sortBy to specify the criterion to be used to list build project names.
   --next-token-body: string # During a previous call, if there are more than 100 items in the list, only the first 100 items are returned, along with a unique string called a nextToken. To get the next batch of items in the list, call this operation again, adding the next token to the call. To get all of the items in the list, keep calling this operation with each subsequent next token that is returned, until no more next tokens are returned. (body field)
-]: any -> record<nextToken: string, projects: list<string>> {
+]: any -> oneof<record<nextToken: string, projects: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1670,7 +1676,7 @@ export def "list-report-groups" [
   --sort-by: string@sort-by-completer-1 # The criterion to be used to list build report groups. Valid values include: CREATED_TIME: List based on when each report group was created. LAST_MODIFIED_TIME: List based on when each report group was last changed. NAME: List based on each report group's name.
   --next-token-body: string # During a previous call, the maximum number of items that can be returned is the value specified in maxResults. If there more items in the list, then a unique string called a nextToken is returned. To get the next batch of items in the list, call this operation again, adding the next token to the call. To get all of the items in the list, keep calling this operation with each subsequent next token that is returned, until no more next tokens are returned. (body field)
   --max-results-body: int # The maximum number of paginated report groups returned per response. Use nextToken to iterate pages in the list of returned ReportGroup objects. The default value is 100. (body field)
-]: any -> record<nextToken: string, reportGroups: list<string>> {
+]: any -> oneof<record<nextToken: string, reportGroups: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1701,7 +1707,6 @@ export def "list-report-groups" [
 #
 # POST /
 # operationId: ListReports
-# --filter shape: {status?: "GENERATING"|"SUCCEEDED"|"FAILED"|"INCOMPLETE"|"DELETING"}
 export def "list-reports" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1726,7 +1731,7 @@ export def "list-reports" [
   --next-token-body: string # During a previous call, the maximum number of items that can be returned is the value specified in maxResults. If there more items in the list, then a unique string called a nextToken is returned. To get the next batch of items in the list, call this operation again, adding the next token to the call. To get all of the items in the list, keep calling this operation with each subsequent next token that is returned, until no more next tokens are returned. (body field)
   --max-results-body: int # The maximum number of paginated reports returned per response. Use nextToken to iterate pages in the list of returned Report objects. The default value is 100. (body field)
   --filter: record # A filter used to return reports with the status specified by the input status parameter. — shape: {status?: "GENERATING"|"SUCCEEDED"|"FAILED"|"INCOMPLETE"|"DELETING"}
-]: any -> record<nextToken: string, reports: list<string>> {
+]: any -> oneof<record<nextToken: string, reports: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1757,7 +1762,6 @@ export def "list-reports" [
 #
 # POST /
 # operationId: ListReportsForReportGroup
-# --filter shape: {status?: "GENERATING"|"SUCCEEDED"|"FAILED"|"INCOMPLETE"|"DELETING"}
 export def "list-reports-for-report-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1783,7 +1787,7 @@ export def "list-reports-for-report-group" [
   --sort-order: string@sort-order-completer # Use to specify whether the results are returned in ascending or descending order.
   --max-results-body: int # The maximum number of paginated reports in this report group returned per response. Use nextToken to iterate pages in the list of returned Report objects. The default value is 100. (body field)
   --filter: record # A filter used to return reports with the status specified by the input status parameter. — shape: {status?: "GENERATING"|"SUCCEEDED"|"FAILED"|"INCOMPLETE"|"DELETING"}
-]: any -> record<nextToken: string, reports: list<string>> {
+]: any -> oneof<record<nextToken: string, reports: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1838,7 +1842,7 @@ export def "list-shared-projects" [
   --sort-order: string@sort-order-completer # The order in which to list shared build projects. Valid values include: ASCENDING: List in ascending order. DESCENDING: List in descending order.
   --max-results-body: int # The maximum number of paginated shared build projects returned per response. Use nextToken to iterate pages in the list of returned Project objects. The default value is 100. (body field)
   --next-token-body: string # During a previous call, the maximum number of items that can be returned is the value specified in maxResults. If there more items in the list, then a unique string called a nextToken is returned. To get the next batch of items in the list, call this operation again, adding the next token to the call. To get all of the items in the list, keep calling this operation with each subsequent next token that is returned, until no more next tokens are returned. (body field)
-]: any -> record<nextToken: string, projects: list<string>> {
+]: any -> oneof<record<nextToken: string, projects: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1893,7 +1897,7 @@ export def "list-shared-report-groups" [
   --sort-by: string@sort-by-completer-2 # The criterion to be used to list report groups shared with the current Amazon Web Services account or user. Valid values include: ARN: List based on the ARN. MODIFIED_TIME: List based on when information about the shared report group was last changed.
   --next-token-body: string # During a previous call, the maximum number of items that can be returned is the value specified in maxResults. If there more items in the list, then a unique string called a nextToken is returned. To get the next batch of items in the list, call this operation again, adding the next token to the call. To get all of the items in the list, keep calling this operation with each subsequent next token that is returned, until no more next tokens are returned. (body field)
   --max-results-body: int # The maximum number of paginated shared report groups per response. Use nextToken to iterate pages in the list of returned ReportGroup objects. The default value is 100. (body field)
-]: any -> record<nextToken: string, reportGroups: list<string>> {
+]: any -> oneof<record<nextToken: string, reportGroups: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1943,7 +1947,7 @@ export def "list-source-credentials" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-33 # required
   --body: record
-]: any -> record<sourceCredentialsInfos: table<arn: string, serverType: string, authType: string>> {
+]: any -> oneof<record<sourceCredentialsInfos: table<arn: string, serverType: string, authType: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1993,7 +1997,7 @@ export def "put-resource-policy" [
   --x-amz-target: string@x-amz-target-completer-34 # required
   policy: string # A JSON-formatted resource policy. For more information, see Sharing a Project (https://docs.aws.amazon.com/codebuild/latest/userguide/project-sharing.html#project-sharing-share) and Sharing a Report Group (https://docs.aws.amazon.com/codebuild/latest/userguide/report-groups-sharing.html#report-groups-sharing-share) in the CodeBuild User Guide.
   resource_arn: string # The ARN of the Project or ReportGroup resource you want to associate with a resource policy.
-]: any -> record<resourceArn: string> {
+]: any -> oneof<record<resourceArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2042,7 +2046,7 @@ export def "retry-build" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-35 # required
   --id: string # Specifies the identifier of the build to restart.
-]: any -> record<build: record<id: string, arn: string, buildNumber: int, startTime: string, endTime: string, currentPhase: string, buildStatus: string, sourceVersion: string, resolvedSourceVersion: string, projectName: string, phases: list<record>, source: record<type: string, location: string, gitCloneDepth: int, gitSubmodulesConfig: record, buildspec: string, auth: record, reportBuildStatus: bool, buildStatusConfig: record, insecureSsl: bool, sourceIdentifier: string>, secondarySources: list<record>, secondarySourceVersions: list<record>, artifacts: record<location: string, sha256sum: string, md5sum: string, overrideArtifactName: bool, encryptionDisabled: bool, artifactIdentifier: string, bucketOwnerAccess: string>, secondaryArtifacts: list<record>, cache: record<type: string, location: string, modes: list>, environment: record<type: string, image: string, computeType: string, environmentVariables: list, privilegedMode: bool, certificate: string, registryCredential: record, imagePullCredentialsType: string>, serviceRole: string, logs: record<groupName: string, streamName: string, deepLink: string, s3DeepLink: string, cloudWatchLogsArn: string, s3LogsArn: string, cloudWatchLogs: record, s3Logs: record>, timeoutInMinutes: int, queuedTimeoutInMinutes: int, buildComplete: bool, initiator: string, vpcConfig: record<vpcId: string, subnets: list, securityGroupIds: list>, networkInterface: record<subnetId: string, networkInterfaceId: string>, encryptionKey: string, exportedEnvironmentVariables: list<record>, reportArns: list<string>, fileSystemLocations: list<record>, debugSession: record<sessionEnabled: bool, sessionTarget: string>, buildBatchArn: string>> {
+]: any -> oneof<record<build: record<id: string, arn: string, buildNumber: int, startTime: string, endTime: string, currentPhase: string, buildStatus: string, sourceVersion: string, resolvedSourceVersion: string, projectName: string, phases: list<record>, source: record<type: string, location: string, gitCloneDepth: int, gitSubmodulesConfig: record, buildspec: string, auth: record, reportBuildStatus: bool, buildStatusConfig: record, insecureSsl: bool, sourceIdentifier: string>, secondarySources: list<record>, secondarySourceVersions: list<record>, artifacts: record<location: string, sha256sum: string, md5sum: string, overrideArtifactName: bool, encryptionDisabled: bool, artifactIdentifier: string, bucketOwnerAccess: string>, secondaryArtifacts: list<record>, cache: record<type: string, location: string, modes: list>, environment: record<type: string, image: string, computeType: string, environmentVariables: list, privilegedMode: bool, certificate: string, registryCredential: record, imagePullCredentialsType: string>, serviceRole: string, logs: record<groupName: string, streamName: string, deepLink: string, s3DeepLink: string, cloudWatchLogsArn: string, s3LogsArn: string, cloudWatchLogs: record, s3Logs: record>, timeoutInMinutes: int, queuedTimeoutInMinutes: int, buildComplete: bool, initiator: string, vpcConfig: record<vpcId: string, subnets: list, securityGroupIds: list>, networkInterface: record<subnetId: string, networkInterfaceId: string>, encryptionKey: string, exportedEnvironmentVariables: list<record>, reportArns: list<string>, fileSystemLocations: list<record>, debugSession: record<sessionEnabled: bool, sessionTarget: string>, buildBatchArn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2092,7 +2096,7 @@ export def "retry-build-batch" [
   --x-amz-target: string@x-amz-target-completer-36 # required
   --id: string # Specifies the identifier of the batch build to restart.
   --retry-type: string@retry-type-completer # Specifies the type of retry to perform.
-]: any -> record<buildBatch: record<id: string, arn: string, startTime: string, endTime: string, currentPhase: string, buildBatchStatus: string, sourceVersion: string, resolvedSourceVersion: string, projectName: string, phases: list<record>, source: record<type: string, location: string, gitCloneDepth: int, gitSubmodulesConfig: record, buildspec: string, auth: record, reportBuildStatus: bool, buildStatusConfig: record, insecureSsl: bool, sourceIdentifier: string>, secondarySources: list<record>, secondarySourceVersions: list<record>, artifacts: record<location: string, sha256sum: string, md5sum: string, overrideArtifactName: bool, encryptionDisabled: bool, artifactIdentifier: string, bucketOwnerAccess: string>, secondaryArtifacts: list<record>, cache: record<type: string, location: string, modes: list>, environment: record<type: string, image: string, computeType: string, environmentVariables: list, privilegedMode: bool, certificate: string, registryCredential: record, imagePullCredentialsType: string>, serviceRole: string, logConfig: record<cloudWatchLogs: record, s3Logs: record>, buildTimeoutInMinutes: int, queuedTimeoutInMinutes: int, complete: bool, initiator: string, vpcConfig: record<vpcId: string, subnets: list, securityGroupIds: list>, encryptionKey: string, buildBatchNumber: int, fileSystemLocations: list<record>, buildBatchConfig: record<serviceRole: string, combineArtifacts: bool, restrictions: record, timeoutInMins: int, batchReportMode: string>, buildGroups: list<record>, debugSessionEnabled: bool>> {
+]: any -> oneof<record<buildBatch: record<id: string, arn: string, startTime: string, endTime: string, currentPhase: string, buildBatchStatus: string, sourceVersion: string, resolvedSourceVersion: string, projectName: string, phases: list<record>, source: record<type: string, location: string, gitCloneDepth: int, gitSubmodulesConfig: record, buildspec: string, auth: record, reportBuildStatus: bool, buildStatusConfig: record, insecureSsl: bool, sourceIdentifier: string>, secondarySources: list<record>, secondarySourceVersions: list<record>, artifacts: record<location: string, sha256sum: string, md5sum: string, overrideArtifactName: bool, encryptionDisabled: bool, artifactIdentifier: string, bucketOwnerAccess: string>, secondaryArtifacts: list<record>, cache: record<type: string, location: string, modes: list>, environment: record<type: string, image: string, computeType: string, environmentVariables: list, privilegedMode: bool, certificate: string, registryCredential: record, imagePullCredentialsType: string>, serviceRole: string, logConfig: record<cloudWatchLogs: record, s3Logs: record>, buildTimeoutInMinutes: int, queuedTimeoutInMinutes: int, complete: bool, initiator: string, vpcConfig: record<vpcId: string, subnets: list, securityGroupIds: list>, encryptionKey: string, buildBatchNumber: int, fileSystemLocations: list<record>, buildBatchConfig: record<serviceRole: string, combineArtifacts: bool, restrictions: record, timeoutInMins: int, batchReportMode: string>, buildGroups: list<record>, debugSessionEnabled: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2122,17 +2126,6 @@ export def "retry-build-batch" [
 #
 # POST /
 # operationId: StartBuild
-# --secondarySourcesOverride item shape: {type: "CODECOMMIT"|"CODEPIPELINE"|"GITHUB"|"S3"|"BITBUCKET"|"GITHUB_ENTERPRISE"|"NO_SOURCE", location?: string, gitCloneDepth?: int, gitSubmodulesConfig?: record, buildspec?: string, auth?: record, reportBuildStatus?: bool, buildStatusConfig?: record, insecureSsl?: bool, sourceIdentifier?: string}
-# --secondarySourcesVersionOverride item shape: {sourceIdentifier: string, sourceVersion: string}
-# --artifactsOverride shape: {type: "CODEPIPELINE"|"S3"|"NO_ARTIFACTS", location?: string, path?: string, namespaceType?: "NONE"|"BUILD_ID", name?: string, packaging?: "NONE"|"ZIP", overrideArtifactName?: bool, encryptionDisabled?: bool, artifactIdentifier?: string, bucketOwnerAccess?: "NONE"|"READ_ONLY"|"FULL"}
-# --secondaryArtifactsOverride item shape: {type: "CODEPIPELINE"|"S3"|"NO_ARTIFACTS", location?: string, path?: string, namespaceType?: "NONE"|"BUILD_ID", name?: string, packaging?: "NONE"|"ZIP", overrideArtifactName?: bool, encryptionDisabled?: bool, artifactIdentifier?: string, bucketOwnerAccess?: "NONE"|"READ_ONLY"|"FULL"}
-# --environmentVariablesOverride item shape: {name: string, value: string, type?: "PLAINTEXT"|"PARAMETER_STORE"|"SECRETS_MANAGER"}
-# --sourceAuthOverride shape: {type: "OAUTH", resource?: string}
-# --gitSubmodulesConfigOverride shape: {fetchSubmodules: bool}
-# --buildStatusConfigOverride shape: {context?: string, targetUrl?: string}
-# --cacheOverride shape: {type: "NO_CACHE"|"S3"|"LOCAL", location?: string, modes?: list<string>}
-# --logsConfigOverride shape: {cloudWatchLogs?: record, s3Logs?: record}
-# --registryCredentialOverride shape: {credential: string, credentialProvider: "SECRETS_MANAGER"}
 export def "start-build" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2181,7 +2174,7 @@ export def "start-build" [
   --registry-credential-override: record # Information about credentials that provide access to a private Docker registry. When this is set: imagePullCredentialsType must be set to SERVICE_ROLE. images cannot be curated or an Amazon ECR image. For more information, see Private Registry with Secrets Manager Sample for CodeBuild (https://docs.aws.amazon.com/codebuild/latest/userguide/sample-private-registry.html). — shape: {credential: string, credentialProvider: "SECRETS_MANAGER"}
   --image-pull-credentials-type-override: string@image-pull-credentials-type-override-completer # The type of credentials CodeBuild uses to pull images in your build. There are two valid values: CODEBUILD Specifies that CodeBuild uses its own credentials. This requires that you modify your ECR repository policy to trust CodeBuild's service principal. SERVICE_ROLE Specifies that CodeBuild uses your build project's service role. When using a cross-account or private registry image, you must use SERVICE_ROLE credentials. When using an CodeBuild curated image, you must use CODEBUILD credentials.
   --debug-session-enabled: oneof<nothing, bool> # Specifies if session debugging is enabled for this build. For more information, see Viewing a running build in Session Manager (https://docs.aws.amazon.com/codebuild/latest/userguide/session-manager.html).
-]: any -> record<build: record<id: string, arn: string, buildNumber: int, startTime: string, endTime: string, currentPhase: string, buildStatus: string, sourceVersion: string, resolvedSourceVersion: string, projectName: string, phases: list<record>, source: record<type: string, location: string, gitCloneDepth: int, gitSubmodulesConfig: record, buildspec: string, auth: record, reportBuildStatus: bool, buildStatusConfig: record, insecureSsl: bool, sourceIdentifier: string>, secondarySources: list<record>, secondarySourceVersions: list<record>, artifacts: record<location: string, sha256sum: string, md5sum: string, overrideArtifactName: bool, encryptionDisabled: bool, artifactIdentifier: string, bucketOwnerAccess: string>, secondaryArtifacts: list<record>, cache: record<type: string, location: string, modes: list>, environment: record<type: string, image: string, computeType: string, environmentVariables: list, privilegedMode: bool, certificate: string, registryCredential: record, imagePullCredentialsType: string>, serviceRole: string, logs: record<groupName: string, streamName: string, deepLink: string, s3DeepLink: string, cloudWatchLogsArn: string, s3LogsArn: string, cloudWatchLogs: record, s3Logs: record>, timeoutInMinutes: int, queuedTimeoutInMinutes: int, buildComplete: bool, initiator: string, vpcConfig: record<vpcId: string, subnets: list, securityGroupIds: list>, networkInterface: record<subnetId: string, networkInterfaceId: string>, encryptionKey: string, exportedEnvironmentVariables: list<record>, reportArns: list<string>, fileSystemLocations: list<record>, debugSession: record<sessionEnabled: bool, sessionTarget: string>, buildBatchArn: string>> {
+]: any -> oneof<record<build: record<id: string, arn: string, buildNumber: int, startTime: string, endTime: string, currentPhase: string, buildStatus: string, sourceVersion: string, resolvedSourceVersion: string, projectName: string, phases: list<record>, source: record<type: string, location: string, gitCloneDepth: int, gitSubmodulesConfig: record, buildspec: string, auth: record, reportBuildStatus: bool, buildStatusConfig: record, insecureSsl: bool, sourceIdentifier: string>, secondarySources: list<record>, secondarySourceVersions: list<record>, artifacts: record<location: string, sha256sum: string, md5sum: string, overrideArtifactName: bool, encryptionDisabled: bool, artifactIdentifier: string, bucketOwnerAccess: string>, secondaryArtifacts: list<record>, cache: record<type: string, location: string, modes: list>, environment: record<type: string, image: string, computeType: string, environmentVariables: list, privilegedMode: bool, certificate: string, registryCredential: record, imagePullCredentialsType: string>, serviceRole: string, logs: record<groupName: string, streamName: string, deepLink: string, s3DeepLink: string, cloudWatchLogsArn: string, s3LogsArn: string, cloudWatchLogs: record, s3Logs: record>, timeoutInMinutes: int, queuedTimeoutInMinutes: int, buildComplete: bool, initiator: string, vpcConfig: record<vpcId: string, subnets: list, securityGroupIds: list>, networkInterface: record<subnetId: string, networkInterfaceId: string>, encryptionKey: string, exportedEnvironmentVariables: list<record>, reportArns: list<string>, fileSystemLocations: list<record>, debugSession: record<sessionEnabled: bool, sessionTarget: string>, buildBatchArn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2211,17 +2204,6 @@ export def "start-build" [
 #
 # POST /
 # operationId: StartBuildBatch
-# --secondarySourcesOverride item shape: {type: "CODECOMMIT"|"CODEPIPELINE"|"GITHUB"|"S3"|"BITBUCKET"|"GITHUB_ENTERPRISE"|"NO_SOURCE", location?: string, gitCloneDepth?: int, gitSubmodulesConfig?: record, buildspec?: string, auth?: record, reportBuildStatus?: bool, buildStatusConfig?: record, insecureSsl?: bool, sourceIdentifier?: string}
-# --secondarySourcesVersionOverride item shape: {sourceIdentifier: string, sourceVersion: string}
-# --artifactsOverride shape: {type: "CODEPIPELINE"|"S3"|"NO_ARTIFACTS", location?: string, path?: string, namespaceType?: "NONE"|"BUILD_ID", name?: string, packaging?: "NONE"|"ZIP", overrideArtifactName?: bool, encryptionDisabled?: bool, artifactIdentifier?: string, bucketOwnerAccess?: "NONE"|"READ_ONLY"|"FULL"}
-# --secondaryArtifactsOverride item shape: {type: "CODEPIPELINE"|"S3"|"NO_ARTIFACTS", location?: string, path?: string, namespaceType?: "NONE"|"BUILD_ID", name?: string, packaging?: "NONE"|"ZIP", overrideArtifactName?: bool, encryptionDisabled?: bool, artifactIdentifier?: string, bucketOwnerAccess?: "NONE"|"READ_ONLY"|"FULL"}
-# --environmentVariablesOverride item shape: {name: string, value: string, type?: "PLAINTEXT"|"PARAMETER_STORE"|"SECRETS_MANAGER"}
-# --sourceAuthOverride shape: {type: "OAUTH", resource?: string}
-# --gitSubmodulesConfigOverride shape: {fetchSubmodules: bool}
-# --cacheOverride shape: {type: "NO_CACHE"|"S3"|"LOCAL", location?: string, modes?: list<string>}
-# --logsConfigOverride shape: {cloudWatchLogs?: record, s3Logs?: record}
-# --registryCredentialOverride shape: {credential: string, credentialProvider: "SECRETS_MANAGER"}
-# --buildBatchConfigOverride shape: {serviceRole?: string, combineArtifacts?: bool, restrictions?: record, timeoutInMins?: int, batchReportMode?: "REPORT_INDIVIDUAL_BUILDS"|"REPORT_AGGREGATED_BATCH"}
 export def "start-build-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2270,7 +2252,7 @@ export def "start-build-batch" [
   --image-pull-credentials-type-override: string@image-pull-credentials-type-override-completer # The type of credentials CodeBuild uses to pull images in your batch build. There are two valid values: CODEBUILD Specifies that CodeBuild uses its own credentials. This requires that you modify your ECR repository policy to trust CodeBuild's service principal. SERVICE_ROLE Specifies that CodeBuild uses your build project's service role. When using a cross-account or private registry image, you must use SERVICE_ROLE credentials. When using an CodeBuild curated image, you must use CODEBUILD credentials.
   --build-batch-config-override: record # Contains configuration information about a batch build project. — shape: {serviceRole?: string, combineArtifacts?: bool, restrictions?: record, timeoutInMins?: int, batchReportMode?: "REPORT_INDIVIDUAL_BUILDS"|"REPORT_AGGREGATED_BATCH"}
   --debug-session-enabled: oneof<nothing, bool> # Specifies if session debugging is enabled for this batch build. For more information, see Viewing a running build in Session Manager (https://docs.aws.amazon.com/codebuild/latest/userguide/session-manager.html). Batch session debugging is not supported for matrix batch builds.
-]: any -> record<buildBatch: record<id: string, arn: string, startTime: string, endTime: string, currentPhase: string, buildBatchStatus: string, sourceVersion: string, resolvedSourceVersion: string, projectName: string, phases: list<record>, source: record<type: string, location: string, gitCloneDepth: int, gitSubmodulesConfig: record, buildspec: string, auth: record, reportBuildStatus: bool, buildStatusConfig: record, insecureSsl: bool, sourceIdentifier: string>, secondarySources: list<record>, secondarySourceVersions: list<record>, artifacts: record<location: string, sha256sum: string, md5sum: string, overrideArtifactName: bool, encryptionDisabled: bool, artifactIdentifier: string, bucketOwnerAccess: string>, secondaryArtifacts: list<record>, cache: record<type: string, location: string, modes: list>, environment: record<type: string, image: string, computeType: string, environmentVariables: list, privilegedMode: bool, certificate: string, registryCredential: record, imagePullCredentialsType: string>, serviceRole: string, logConfig: record<cloudWatchLogs: record, s3Logs: record>, buildTimeoutInMinutes: int, queuedTimeoutInMinutes: int, complete: bool, initiator: string, vpcConfig: record<vpcId: string, subnets: list, securityGroupIds: list>, encryptionKey: string, buildBatchNumber: int, fileSystemLocations: list<record>, buildBatchConfig: record<serviceRole: string, combineArtifacts: bool, restrictions: record, timeoutInMins: int, batchReportMode: string>, buildGroups: list<record>, debugSessionEnabled: bool>> {
+]: any -> oneof<record<buildBatch: record<id: string, arn: string, startTime: string, endTime: string, currentPhase: string, buildBatchStatus: string, sourceVersion: string, resolvedSourceVersion: string, projectName: string, phases: list<record>, source: record<type: string, location: string, gitCloneDepth: int, gitSubmodulesConfig: record, buildspec: string, auth: record, reportBuildStatus: bool, buildStatusConfig: record, insecureSsl: bool, sourceIdentifier: string>, secondarySources: list<record>, secondarySourceVersions: list<record>, artifacts: record<location: string, sha256sum: string, md5sum: string, overrideArtifactName: bool, encryptionDisabled: bool, artifactIdentifier: string, bucketOwnerAccess: string>, secondaryArtifacts: list<record>, cache: record<type: string, location: string, modes: list>, environment: record<type: string, image: string, computeType: string, environmentVariables: list, privilegedMode: bool, certificate: string, registryCredential: record, imagePullCredentialsType: string>, serviceRole: string, logConfig: record<cloudWatchLogs: record, s3Logs: record>, buildTimeoutInMinutes: int, queuedTimeoutInMinutes: int, complete: bool, initiator: string, vpcConfig: record<vpcId: string, subnets: list, securityGroupIds: list>, encryptionKey: string, buildBatchNumber: int, fileSystemLocations: list<record>, buildBatchConfig: record<serviceRole: string, combineArtifacts: bool, restrictions: record, timeoutInMins: int, batchReportMode: string>, buildGroups: list<record>, debugSessionEnabled: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2319,7 +2301,7 @@ export def "stop-build" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-39 # required
   id: string # The ID of the build.
-]: any -> record<build: record<id: string, arn: string, buildNumber: int, startTime: string, endTime: string, currentPhase: string, buildStatus: string, sourceVersion: string, resolvedSourceVersion: string, projectName: string, phases: list<record>, source: record<type: string, location: string, gitCloneDepth: int, gitSubmodulesConfig: record, buildspec: string, auth: record, reportBuildStatus: bool, buildStatusConfig: record, insecureSsl: bool, sourceIdentifier: string>, secondarySources: list<record>, secondarySourceVersions: list<record>, artifacts: record<location: string, sha256sum: string, md5sum: string, overrideArtifactName: bool, encryptionDisabled: bool, artifactIdentifier: string, bucketOwnerAccess: string>, secondaryArtifacts: list<record>, cache: record<type: string, location: string, modes: list>, environment: record<type: string, image: string, computeType: string, environmentVariables: list, privilegedMode: bool, certificate: string, registryCredential: record, imagePullCredentialsType: string>, serviceRole: string, logs: record<groupName: string, streamName: string, deepLink: string, s3DeepLink: string, cloudWatchLogsArn: string, s3LogsArn: string, cloudWatchLogs: record, s3Logs: record>, timeoutInMinutes: int, queuedTimeoutInMinutes: int, buildComplete: bool, initiator: string, vpcConfig: record<vpcId: string, subnets: list, securityGroupIds: list>, networkInterface: record<subnetId: string, networkInterfaceId: string>, encryptionKey: string, exportedEnvironmentVariables: list<record>, reportArns: list<string>, fileSystemLocations: list<record>, debugSession: record<sessionEnabled: bool, sessionTarget: string>, buildBatchArn: string>> {
+]: any -> oneof<record<build: record<id: string, arn: string, buildNumber: int, startTime: string, endTime: string, currentPhase: string, buildStatus: string, sourceVersion: string, resolvedSourceVersion: string, projectName: string, phases: list<record>, source: record<type: string, location: string, gitCloneDepth: int, gitSubmodulesConfig: record, buildspec: string, auth: record, reportBuildStatus: bool, buildStatusConfig: record, insecureSsl: bool, sourceIdentifier: string>, secondarySources: list<record>, secondarySourceVersions: list<record>, artifacts: record<location: string, sha256sum: string, md5sum: string, overrideArtifactName: bool, encryptionDisabled: bool, artifactIdentifier: string, bucketOwnerAccess: string>, secondaryArtifacts: list<record>, cache: record<type: string, location: string, modes: list>, environment: record<type: string, image: string, computeType: string, environmentVariables: list, privilegedMode: bool, certificate: string, registryCredential: record, imagePullCredentialsType: string>, serviceRole: string, logs: record<groupName: string, streamName: string, deepLink: string, s3DeepLink: string, cloudWatchLogsArn: string, s3LogsArn: string, cloudWatchLogs: record, s3Logs: record>, timeoutInMinutes: int, queuedTimeoutInMinutes: int, buildComplete: bool, initiator: string, vpcConfig: record<vpcId: string, subnets: list, securityGroupIds: list>, networkInterface: record<subnetId: string, networkInterfaceId: string>, encryptionKey: string, exportedEnvironmentVariables: list<record>, reportArns: list<string>, fileSystemLocations: list<record>, debugSession: record<sessionEnabled: bool, sessionTarget: string>, buildBatchArn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2368,7 +2350,7 @@ export def "stop-build-batch" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-40 # required
   id: string # The identifier of the batch build to stop.
-]: any -> record<buildBatch: record<id: string, arn: string, startTime: string, endTime: string, currentPhase: string, buildBatchStatus: string, sourceVersion: string, resolvedSourceVersion: string, projectName: string, phases: list<record>, source: record<type: string, location: string, gitCloneDepth: int, gitSubmodulesConfig: record, buildspec: string, auth: record, reportBuildStatus: bool, buildStatusConfig: record, insecureSsl: bool, sourceIdentifier: string>, secondarySources: list<record>, secondarySourceVersions: list<record>, artifacts: record<location: string, sha256sum: string, md5sum: string, overrideArtifactName: bool, encryptionDisabled: bool, artifactIdentifier: string, bucketOwnerAccess: string>, secondaryArtifacts: list<record>, cache: record<type: string, location: string, modes: list>, environment: record<type: string, image: string, computeType: string, environmentVariables: list, privilegedMode: bool, certificate: string, registryCredential: record, imagePullCredentialsType: string>, serviceRole: string, logConfig: record<cloudWatchLogs: record, s3Logs: record>, buildTimeoutInMinutes: int, queuedTimeoutInMinutes: int, complete: bool, initiator: string, vpcConfig: record<vpcId: string, subnets: list, securityGroupIds: list>, encryptionKey: string, buildBatchNumber: int, fileSystemLocations: list<record>, buildBatchConfig: record<serviceRole: string, combineArtifacts: bool, restrictions: record, timeoutInMins: int, batchReportMode: string>, buildGroups: list<record>, debugSessionEnabled: bool>> {
+]: any -> oneof<record<buildBatch: record<id: string, arn: string, startTime: string, endTime: string, currentPhase: string, buildBatchStatus: string, sourceVersion: string, resolvedSourceVersion: string, projectName: string, phases: list<record>, source: record<type: string, location: string, gitCloneDepth: int, gitSubmodulesConfig: record, buildspec: string, auth: record, reportBuildStatus: bool, buildStatusConfig: record, insecureSsl: bool, sourceIdentifier: string>, secondarySources: list<record>, secondarySourceVersions: list<record>, artifacts: record<location: string, sha256sum: string, md5sum: string, overrideArtifactName: bool, encryptionDisabled: bool, artifactIdentifier: string, bucketOwnerAccess: string>, secondaryArtifacts: list<record>, cache: record<type: string, location: string, modes: list>, environment: record<type: string, image: string, computeType: string, environmentVariables: list, privilegedMode: bool, certificate: string, registryCredential: record, imagePullCredentialsType: string>, serviceRole: string, logConfig: record<cloudWatchLogs: record, s3Logs: record>, buildTimeoutInMinutes: int, queuedTimeoutInMinutes: int, complete: bool, initiator: string, vpcConfig: record<vpcId: string, subnets: list, securityGroupIds: list>, encryptionKey: string, buildBatchNumber: int, fileSystemLocations: list<record>, buildBatchConfig: record<serviceRole: string, combineArtifacts: bool, restrictions: record, timeoutInMins: int, batchReportMode: string>, buildGroups: list<record>, debugSessionEnabled: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2398,18 +2380,6 @@ export def "stop-build-batch" [
 #
 # POST /
 # operationId: UpdateProject
-# --source shape: {type: "CODECOMMIT"|"CODEPIPELINE"|"GITHUB"|"S3"|"BITBUCKET"|"GITHUB_ENTERPRISE"|"NO_SOURCE", location?: string, gitCloneDepth?: int, gitSubmodulesConfig?: record, buildspec?: string, auth?: record, reportBuildStatus?: bool, buildStatusConfig?: record, insecureSsl?: bool, sourceIdentifier?: string}
-# --secondarySources item shape: {type: "CODECOMMIT"|"CODEPIPELINE"|"GITHUB"|"S3"|"BITBUCKET"|"GITHUB_ENTERPRISE"|"NO_SOURCE", location?: string, gitCloneDepth?: int, gitSubmodulesConfig?: record, buildspec?: string, auth?: record, reportBuildStatus?: bool, buildStatusConfig?: record, insecureSsl?: bool, sourceIdentifier?: string}
-# --secondarySourceVersions item shape: {sourceIdentifier: string, sourceVersion: string}
-# --artifacts shape: {type: "CODEPIPELINE"|"S3"|"NO_ARTIFACTS", location?: string, path?: string, namespaceType?: "NONE"|"BUILD_ID", name?: string, packaging?: "NONE"|"ZIP", overrideArtifactName?: bool, encryptionDisabled?: bool, artifactIdentifier?: string, bucketOwnerAccess?: "NONE"|"READ_ONLY"|"FULL"}
-# --secondaryArtifacts item shape: {type: "CODEPIPELINE"|"S3"|"NO_ARTIFACTS", location?: string, path?: string, namespaceType?: "NONE"|"BUILD_ID", name?: string, packaging?: "NONE"|"ZIP", overrideArtifactName?: bool, encryptionDisabled?: bool, artifactIdentifier?: string, bucketOwnerAccess?: "NONE"|"READ_ONLY"|"FULL"}
-# --cache shape: {type: "NO_CACHE"|"S3"|"LOCAL", location?: string, modes?: list<string>}
-# --environment shape: {type: "WINDOWS_CONTAINER"|"LINUX_CONTAINER"|"LINUX_GPU_CONTAINER"|"ARM_CONTAINER"|"WINDOWS_SERVER_2019_CONTAINER", image: string, computeType: "BUILD_GENERAL1_SMALL"|"BUILD_GENERAL1_MEDIUM"|"BUILD_GENERAL1_LARGE"|"BUILD_GENERAL1_2XLARGE", environmentVariables?: list, privilegedMode?: bool, certificate?: string, registryCredential?: record, imagePullCredentialsType?: "CODEBUILD"|"SERVICE_ROLE"}
-# --tags item shape: {key?: string, value?: string}
-# --vpcConfig shape: {vpcId?: string, subnets?: list<string>, securityGroupIds?: list<string>}
-# --logsConfig shape: {cloudWatchLogs?: record, s3Logs?: record}
-# --fileSystemLocations item shape: {type?: "EFS", location?: string, mountPoint?: string, identifier?: string, mountOptions?: string}
-# --buildBatchConfig shape: {serviceRole?: string, combineArtifacts?: bool, restrictions?: record, timeoutInMins?: int, batchReportMode?: "REPORT_INDIVIDUAL_BUILDS"|"REPORT_AGGREGATED_BATCH"}
 export def "update-project" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2449,7 +2419,7 @@ export def "update-project" [
   --file-system-locations: list # An array of ProjectFileSystemLocation objects for a CodeBuild build project. A ProjectFileSystemLocation object specifies the identifier, location, mountOptions, mountPoint, and type of a file system created using Amazon Elastic File System. — item shape: {type?: "EFS", location?: string, mountPoint?: string, identifier?: string, mountOptions?: string}
   --build-batch-config: record # Contains configuration information about a batch build project. — shape: {serviceRole?: string, combineArtifacts?: bool, restrictions?: record, timeoutInMins?: int, batchReportMode?: "REPORT_INDIVIDUAL_BUILDS"|"REPORT_AGGREGATED_BATCH"}
   --concurrent-build-limit: int # The maximum number of concurrent builds that are allowed for this project. New builds are only started if the current number of builds is less than or equal to this limit. If the current build count meets this limit, new builds are throttled and are not run. To remove this limit, set this value to -1.
-]: any -> record<project: record<name: string, arn: string, description: string, source: record<type: string, location: string, gitCloneDepth: int, gitSubmodulesConfig: record, buildspec: string, auth: record, reportBuildStatus: bool, buildStatusConfig: record, insecureSsl: bool, sourceIdentifier: string>, secondarySources: list<record>, sourceVersion: string, secondarySourceVersions: list<record>, artifacts: record<type: string, location: string, path: string, namespaceType: string, name: string, packaging: string, overrideArtifactName: bool, encryptionDisabled: bool, artifactIdentifier: string, bucketOwnerAccess: string>, secondaryArtifacts: list<record>, cache: record<type: string, location: string, modes: list>, environment: record<type: string, image: string, computeType: string, environmentVariables: list, privilegedMode: bool, certificate: string, registryCredential: record, imagePullCredentialsType: string>, serviceRole: string, timeoutInMinutes: int, queuedTimeoutInMinutes: int, encryptionKey: string, tags: list<record>, created: string, lastModified: string, webhook: record<url: string, payloadUrl: string, secret: string, branchFilter: string, filterGroups: list, buildType: string, lastModifiedSecret: string>, vpcConfig: record<vpcId: string, subnets: list, securityGroupIds: list>, badge: record<badgeEnabled: bool, badgeRequestUrl: string>, logsConfig: record<cloudWatchLogs: record, s3Logs: record>, fileSystemLocations: list<record>, buildBatchConfig: record<serviceRole: string, combineArtifacts: bool, restrictions: record, timeoutInMins: int, batchReportMode: string>, concurrentBuildLimit: int, projectVisibility: string, publicProjectAlias: string, resourceAccessRole: string>> {
+]: any -> oneof<record<project: record<name: string, arn: string, description: string, source: record<type: string, location: string, gitCloneDepth: int, gitSubmodulesConfig: record, buildspec: string, auth: record, reportBuildStatus: bool, buildStatusConfig: record, insecureSsl: bool, sourceIdentifier: string>, secondarySources: list<record>, sourceVersion: string, secondarySourceVersions: list<record>, artifacts: record<type: string, location: string, path: string, namespaceType: string, name: string, packaging: string, overrideArtifactName: bool, encryptionDisabled: bool, artifactIdentifier: string, bucketOwnerAccess: string>, secondaryArtifacts: list<record>, cache: record<type: string, location: string, modes: list>, environment: record<type: string, image: string, computeType: string, environmentVariables: list, privilegedMode: bool, certificate: string, registryCredential: record, imagePullCredentialsType: string>, serviceRole: string, timeoutInMinutes: int, queuedTimeoutInMinutes: int, encryptionKey: string, tags: list<record>, created: string, lastModified: string, webhook: record<url: string, payloadUrl: string, secret: string, branchFilter: string, filterGroups: list, buildType: string, lastModifiedSecret: string>, vpcConfig: record<vpcId: string, subnets: list, securityGroupIds: list>, badge: record<badgeEnabled: bool, badgeRequestUrl: string>, logsConfig: record<cloudWatchLogs: record, s3Logs: record>, fileSystemLocations: list<record>, buildBatchConfig: record<serviceRole: string, combineArtifacts: bool, restrictions: record, timeoutInMins: int, batchReportMode: string>, concurrentBuildLimit: int, projectVisibility: string, publicProjectAlias: string, resourceAccessRole: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2500,7 +2470,7 @@ export def "update-project-visibility" [
   project_arn: string # The Amazon Resource Name (ARN) of the build project.
   project_visibility: string@project-visibility-completer # Specifies the visibility of the project's builds. Possible values are: PUBLIC_READ The project builds are visible to the public. PRIVATE The project builds are not visible to the public.
   --resource-access-role: string # The ARN of the IAM role that enables CodeBuild to access the CloudWatch Logs and Amazon S3 artifacts for the project's builds.
-]: any -> record<projectArn: string, publicProjectAlias: string, projectVisibility: string> {
+]: any -> oneof<record<projectArn: string, publicProjectAlias: string, projectVisibility: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2530,8 +2500,6 @@ export def "update-project-visibility" [
 #
 # POST /
 # operationId: UpdateReportGroup
-# --exportConfig shape: {exportConfigType?: "S3"|"NO_EXPORT", s3Destination?: record}
-# --tags item shape: {key?: string, value?: string}
 export def "update-report-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2553,7 +2521,7 @@ export def "update-report-group" [
   arn: string # The ARN of the report group to update.
   --export-config: record # Information about the location where the run of a report is exported. — shape: {exportConfigType?: "S3"|"NO_EXPORT", s3Destination?: record}
   --tags: list # An updated list of tag key and value pairs associated with this report group. These tags are available for use by Amazon Web Services services that support CodeBuild report group tags. — item shape: {key?: string, value?: string}
-]: any -> record<reportGroup: record<arn: string, name: string, type: string, exportConfig: record<exportConfigType: string, s3Destination: record>, created: string, lastModified: string, tags: list<record>, status: string>> {
+]: any -> oneof<record<reportGroup: record<arn: string, name: string, type: string, exportConfig: record<exportConfigType: string, s3Destination: record>, created: string, lastModified: string, tags: list<record>, status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2606,7 +2574,7 @@ export def "update-webhook" [
   --rotate-secret: oneof<nothing, bool> # A boolean value that specifies whether the associated GitHub repository's secret token should be updated. If you use Bitbucket for your repository, rotateSecret is ignored.
   --filter-groups: list # An array of arrays of WebhookFilter objects used to determine if a webhook event can trigger a build. A filter group must contain at least one EVENT WebhookFilter.
   --build-type: string@build-type-completer # Specifies the type of build this webhook will trigger.
-]: any -> record<webhook: record<url: string, payloadUrl: string, secret: string, branchFilter: string, filterGroups: list<list>, buildType: string, lastModifiedSecret: string>> {
+]: any -> oneof<record<webhook: record<url: string, payloadUrl: string, secret: string, branchFilter: string, filterGroups: list<list>, buildType: string, lastModifiedSecret: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

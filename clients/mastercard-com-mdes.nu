@@ -12,27 +12,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -40,8 +49,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -52,7 +66,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -87,7 +110,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -103,9 +127,9 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-accountholdermessaging" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["post-accountholdermessaging" "post-search" "get-systemstatus" "post-token-activate" "post-token-activationmethods" "post-token-comments" "post-token-delete" "post-token-resendactivationcode" "post-token-resetmobilepin" "post-token-statushistory" "post-token-suspend" "post-token-unsuspend" "post-token-update" "post-transactions" "post-updatetokenassurance" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -126,7 +150,6 @@ export def commands []: nothing -> table {
 # Allows issuers to display customized messages per token within the Apple Pay wallet, below the digitized image of the card.
 #
 # POST /accountholdermessaging
-# --AccountHolderMessagingRequest shape: {AuditInfo: any, IssuerApplicationMessageDisplay: string, MessageExpiration: string, MessageIdentifier: string, MessageLanguageCode: string, MessageText: string, TokenUniqueReference: string}
 export def "post-accountholdermessaging" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -138,7 +161,7 @@ export def "post-accountholdermessaging" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --account-holder-messaging-request: any # shape: {AuditInfo: any, IssuerApplicationMessageDisplay: string, MessageExpiration: string, MessageIdentifier: string, MessageLanguageCode: string, MessageText: string, TokenUniqueReference: string}
-]: any -> record<AccountHolderMessagingResponse: record<Token: record<TokenUniqueReference: string>>> {
+]: any -> oneof<record<AccountHolderMessagingResponse: record<Token: record<TokenUniqueReference: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -164,7 +187,6 @@ export def "post-accountholdermessaging" [
 # Provides the ability to search for tokens based on Account PAN, Alternate Account Identifier, Token Unique Reference, Token, Payment App Instance Id or Comment Id. Returns all of the tokens associated with an account according to the scope of the indicated search request criteria. The response includes key state and informational data for each token, including the Token Unique Reference which is needed for subsequent token lifecycle management activities._Notes:_ The Search API request MUST include only one of the available search methods Account PAN, Token Unique Reference, Token, Payment App Instance Id, Comment Id, or Alternate Account Identifier. They cannot be used together in a single request. Moreover, this function only retrieves results if the search criteria matches a current value from the token vault. In other words, if the search criteria is a PAN that has been replaced, the system will not retrieve any data.
 #
 # POST /search
-# --SearchRequest shape: {AccountPan?: string, AlternateAccountIdentifier?: string, AuditInfo: any, CommentId?: string, ExcludeDeletedIndicator?: "true"|"false", PaymentAppInstanceId?: string, Token?: string, TokenUniqueReference?: string}
 export def "post-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -176,7 +198,7 @@ export def "post-search" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --search-request: any # shape: {AccountPan?: string, AlternateAccountIdentifier?: string, AuditInfo: any, CommentId?: string, ExcludeDeletedIndicator?: "true"|"false", PaymentAppInstanceId?: string, Token?: string, TokenUniqueReference?: string}
-]: any -> record<SearchResponse: record<Accounts: record<Account: list>>> {
+]: any -> oneof<record<SearchResponse: record<Accounts: record<Account: list>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -212,7 +234,7 @@ export def "get-systemstatus" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<SystemStatusResponse: record<CommentText: string, LastStatusDateTime: string>> {
+]: nothing -> oneof<record<SystemStatusResponse: record<CommentText: string, LastStatusDateTime: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/systemstatus" $auth.query)
@@ -235,7 +257,6 @@ export def "get-systemstatus" [
 # Used to activate a token for a digitization that has been approved and provisioned, but requires additional cardholder authentication prior to activation. If the provisioning was not completed successfully, activation cannot be accomplished using Customer Service API. It is expected that a cardholder will complete the authentication process using an issuer's call center or using an issuer-supplied mobile application, and only then should the issuer use this API to activate the token.
 #
 # POST /token/activate
-# --TokenActivateRequest shape: {AccountPan?: string, AuditInfo: any, CommentText?: string, PaymentAppInstanceId?: string, ReasonCode: string, TokenUniqueReference?: string}
 export def "post-token-activate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -247,7 +268,7 @@ export def "post-token-activate" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --token-activate-request: any # shape: {AccountPan?: string, AuditInfo: any, CommentText?: string, PaymentAppInstanceId?: string, ReasonCode: string, TokenUniqueReference?: string}
-]: any -> record<TokenActivateResponse: record<Token: record<CommentId: string, TokenUniqueReference: string>>> {
+]: any -> oneof<record<TokenActivateResponse: record<Token: record<CommentId: string, TokenUniqueReference: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -273,7 +294,6 @@ export def "post-token-activate" [
 # Used to retrieve the available Activation Methods for a token that is awaiting activation. Activation Methods are the means by which a cardholder may complete cardholder authentication with the issuer beyond the scope of MDES. It is possible that there are no Activation Methods for a token when an issuer did not provide any cardholder-specific information with the Tokenization Authorization Request (TAR) pre-digitization network message response.
 #
 # POST /token/activationmethods
-# --TokenActivationMethodsRequest shape: {AuditInfo?: any, TokenUniqueReference: string}
 export def "post-token-activationmethods" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -285,7 +305,7 @@ export def "post-token-activationmethods" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --token-activation-methods-request: any # shape: {AuditInfo?: any, TokenUniqueReference: string}
-]: any -> record<TokenActivationMethodsResponse: record<ActivationMethods: record<ActivationMethod: list>>> {
+]: any -> oneof<record<TokenActivationMethodsResponse: record<ActivationMethods: record<ActivationMethod: list>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -311,7 +331,6 @@ export def "post-token-activationmethods" [
 # Used to retrieve all comments associated with a token. Typically the response includes comments created earlier by Issuer Customer Service representatives detailing additional information about a particular inquiry or event. There may also be comments with warnings of potential fraud. These comments are created automatically by the MDES system when a Token requestor indicates a high risk of fraud during digitization.
 #
 # POST /token/comments
-# --TokenCommentsRequest shape: {AuditInfo?: any, TokenUniqueReference: string}
 export def "post-token-comments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -323,7 +342,7 @@ export def "post-token-comments" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --token-comments-request: any # shape: {AuditInfo?: any, TokenUniqueReference: string}
-]: any -> record<TokenCommentsResponse: record<Comments: record<Comment: list>>> {
+]: any -> oneof<record<TokenCommentsResponse: record<Comments: record<Comment: list>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -349,7 +368,6 @@ export def "post-token-comments" [
 # Used to delete a token so that it may not initiate any new transactions. All authorizations for a deleted token will be declined. A deleted token may not be returned to an active state.
 #
 # POST /token/delete
-# --TokenDeleteRequest shape: {AuditInfo: any, CommentText?: string, ReasonCode: string, TokenUniqueReference: string}
 export def "post-token-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -361,7 +379,7 @@ export def "post-token-delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --token-delete-request: any # shape: {AuditInfo: any, CommentText?: string, ReasonCode: string, TokenUniqueReference: string}
-]: any -> record<TokenDeleteResponse: record<Token: record<CommentId: string, TokenUniqueReference: string>>> {
+]: any -> oneof<record<TokenDeleteResponse: record<Token: record<CommentId: string, TokenUniqueReference: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -387,7 +405,6 @@ export def "post-token-delete" [
 # Used to trigger the process of generating and sending a new Activation Code (for a specific token) to the cardholder via the requested Activation Method. When successful, a new Activation Code Expiration Date Time period will begin, and a new Activation Code will be sent to the issuer using the Activation Code Notification (ACN) pre-digitization network message. It can only be used to do this for Activation Methods that involve the external distribution of an Activation Code to the cardholder. For example, via email or SMS. It cannot be used to send a new activation code via the "Mobile Application" activation method, for instance. A new Activation Code can be sent even if the previous code has not expired. A new Activation Code can also be sent even after the previous code has expired; however, it can only be done up to 30 days after the token was created (the number of days is subject to change at the discretion of Mastercard).
 #
 # POST /token/resendactivationcode
-# --TokenResendActivationCodeRequest shape: {ActivationMethodId: string, AuditInfo: any, TokenUniqueReference: string}
 export def "post-token-resendactivationcode" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -399,7 +416,7 @@ export def "post-token-resendactivationcode" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --token-resend-activation-code-request: any # shape: {ActivationMethodId: string, AuditInfo: any, TokenUniqueReference: string}
-]: any -> record<TokenResendActivationCodeResponse: record<Token: record<TokenUniqueReference: string>>> {
+]: any -> oneof<record<TokenResendActivationCodeResponse: record<Token: record<TokenUniqueReference: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -425,7 +442,6 @@ export def "post-token-resendactivationcode" [
 # Used to request that the Mobile PIN for a Mastercard Cloud-Based Payment token in a single issuer wallet is reset. The request is passed to the Credential Management System for processing. When the Mobile PIN is a token-level PIN (as opposed to a wallet-level PIN), the cardholder must choose a new PIN within 10 minutes of a Reset Mobile PIN action. Otherwise, the reset will need to be re-requested.
 #
 # POST /token/resetmobilepin
-# --TokenResetMobilePinRequest shape: {AuditInfo: any, CommentText?: string, ReasonCode: string, TokenUniqueReference: string}
 export def "post-token-resetmobilepin" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -437,7 +453,7 @@ export def "post-token-resetmobilepin" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --token-reset-mobile-pin-request: any # shape: {AuditInfo: any, CommentText?: string, ReasonCode: string, TokenUniqueReference: string}
-]: any -> record<TokenResetMobilePinResponse: record<Token: record<CommentId: string, TokenUniqueReference: string>>> {
+]: any -> oneof<record<TokenResetMobilePinResponse: record<Token: record<CommentId: string, TokenUniqueReference: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -463,7 +479,6 @@ export def "post-token-resetmobilepin" [
 # Used to retrieve the historical statuses and lifecycle events for a token, such as when it was initially activated, subsequently suspended or resumed, and finally deleted.
 #
 # POST /token/statushistory
-# --TokenStatusHistoryRequest shape: {AuditInfo?: any, TokenUniqueReference: string}
 export def "post-token-statushistory" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -475,7 +490,7 @@ export def "post-token-statushistory" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --token-status-history-request: any # shape: {AuditInfo?: any, TokenUniqueReference: string}
-]: any -> record<TokenStatusHistoryResponse: record<Statuses: record<Status: list>>> {
+]: any -> oneof<record<TokenStatusHistoryResponse: record<Statuses: record<Status: list>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -501,7 +516,6 @@ export def "post-token-statushistory" [
 # Used to suspend an active token so that it may not initiate any new transactions. All authorizations for a SUSPENDED token will be declined. Tokens may be suspended by multiple parties (suspenders) concurrently. The token status is updated from ACTIVE to SUSPENDED when the first suspender triggers a suspend action. Additional suspenders can add their suspend action to the list of suspenders. Suspenders can unsuspend only their own suspend action. All suspenders need to perform an unsuspend action to move a token from SUSPENDED to ACTIVE. The token status will only change when the last suspender has unsuspended the token. For CoF tokens, the only two supported suspenders are issuer and token requestor. For Apple Pay tokens, there are some differences in behavior versus the general principles. An issuer may add themselves as a suspender to a token already suspended by a cardholder, as above. However, a cardholder cannot suspend a token already suspended by the issuer. As a special case for Apple Pay, an issuer may unsuspend (override) a token already suspended by a cardholder. However, a cardholder cannot unsuspend a token already suspended by the issuer.
 #
 # POST /token/suspend
-# --TokenSuspendRequest shape: {AuditInfo: any, CommentText?: string, ReasonCode: string, TokenUniqueReference: string}
 export def "post-token-suspend" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -513,7 +527,7 @@ export def "post-token-suspend" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --token-suspend-request: any # shape: {AuditInfo: any, CommentText?: string, ReasonCode: string, TokenUniqueReference: string}
-]: any -> record<TokenSuspendResponse: record<Token: record<CommentId: string, TokenUniqueReference: string>>> {
+]: any -> oneof<record<TokenSuspendResponse: record<Token: record<CommentId: string, TokenUniqueReference: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -539,7 +553,6 @@ export def "post-token-suspend" [
 # Used to unsuspend or resume a suspended token and return it to the active state where it may initiate new transactions. Tokens may be suspended by multiple parties (suspenders) concurrently. The token status is updated from ACTIVE to SUSPENDED when the first suspender triggers a suspend action. Additional suspenders can add their suspend action to the list of suspenders. Suspenders can unsuspend only their own suspend action. All suspenders need to perform an unsuspend action to move a token from SUSPENDED to ACTIVE. The token status will only change when the last suspender has unsuspended the token. For CoF tokens, the only two supported suspenders are issuer and token requestor.For Apple Pay tokens, there are some differences in behavior versus the general principles. An issuer may add themselves as a suspender to a token already suspended by a cardholder, as above. However, a cardholder cannot suspend a token already suspended by the issuer. As a special case for Apple Pay, an issuer may unsuspend (override) a token already suspended by a cardholder. However, a cardholder cannot unsuspend a token already suspended by the issuer.
 #
 # POST /token/unsuspend
-# --TokenUnsuspendRequest shape: {AuditInfo: any, CommentText?: string, ReasonCode: string, TokenUniqueReference: string}
 export def "post-token-unsuspend" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -551,7 +564,7 @@ export def "post-token-unsuspend" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --token-unsuspend-request: any # shape: {AuditInfo: any, CommentText?: string, ReasonCode: string, TokenUniqueReference: string}
-]: any -> record<TokenUnsuspendResponse: record<Token: record<CommentId: string, TokenUniqueReference: string>>> {
+]: any -> oneof<record<TokenUnsuspendResponse: record<Token: record<CommentId: string, TokenUniqueReference: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -577,7 +590,6 @@ export def "post-token-unsuspend" [
 # Used to update Account PAN Mapping Information or Issuer Product Configuration ID associated to a provisioned token. To update a specific token, the API should be requested using the Token Unique Reference. To update all tokens mapped to a specific Account PAN, the API should be requested using the Account PAN. In either case, updates will only be applied to tokens in ACTIVE or SUSPENDED state, not those in IN PROGRESS or DELETED state. When updating Account PAN Mapping Information, the Account PAN, Expiration Date and Sequence Number, may be updated individually or in any combination. Only information provided will be updated. The account mapping will only update an Account PAN for a new Account PAN when they are both in the same Account Range.
 #
 # POST /token/update
-# --TokenUpdateRequest shape: {AccountPanSequenceNumber?: string, AuditInfo: any, CommentText?: string, CurrentAccountPan?: string, ExpirationDate?: string, IssuerProductConfigurationId?: string, NewAccountPan?: string, TokenUniqueReference?: string, UpdateWalletProviderIndicator?: string}
 export def "post-token-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -589,7 +601,7 @@ export def "post-token-update" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --token-update-request: any # shape: {AccountPanSequenceNumber?: string, AuditInfo: any, CommentText?: string, CurrentAccountPan?: string, ExpirationDate?: string, IssuerProductConfigurationId?: string, NewAccountPan?: string, TokenUniqueReference?: string, UpdateWalletProviderIndicator?: string}
-]: any -> record<TokenUpdateResponse: record<Tokens: record<Token: list>>> {
+]: any -> oneof<record<TokenUpdateResponse: record<Tokens: record<Token: list>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -615,7 +627,6 @@ export def "post-token-update" [
 # Used to retrieve transactions performed by a token. It only returns transactions performed within the last 30 days, to help identify a particular token, or to identify a particular recent transaction. It is not intended to provide the full transaction history of a token or Account PAN._Notes:_ The Transaction History API response is not supported for static Card on File (CoF) tokens.If a set of tokens has been re-mapped to a new FPAN, all digital transactions will be made available before or after the FPAN has been updated. MDES does not return the value of the FPAN which was mapped to the particular token at the time of the transaction. However, MDES will return the history of all transactions performed on that particular token in the last 30 days, based on old and/or new FPAN.
 #
 # POST /transactions
-# --TransactionsRequest shape: {AuditInfo: any, TokenUniqueReference: string}
 export def "post-transactions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -627,7 +638,7 @@ export def "post-transactions" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --transactions-request: any # shape: {AuditInfo: any, TokenUniqueReference: string}
-]: any -> record<TransactionsResponse: record<Transactions: record<Transaction: list>>> {
+]: any -> oneof<record<TransactionsResponse: record<Transactions: record<Transaction: list>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -653,7 +664,6 @@ export def "post-transactions" [
 # Used after an issuer has performed additional cardholder authentication to indicate an increased level of token assurance. It will only be applied to tokens that actually have a Token Assurance Level, and those that are in ACTIVE or SUSPENDED state.
 #
 # POST /updatetokenassurance
-# --UpdateTokenAssuranceRequest shape: {AuditInfo: any, CommentText?: string, TokenUniqueReference: string}
 export def "post-updatetokenassurance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -665,7 +675,7 @@ export def "post-updatetokenassurance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --update-token-assurance-request: any # shape: {AuditInfo: any, CommentText?: string, TokenUniqueReference: string}
-]: any -> record<UpdateTokenAssuranceResponse: record<Token: record<CommentId: string, TokenUniqueReference: string>>> {
+]: any -> oneof<record<UpdateTokenAssuranceResponse: record<Token: record<CommentId: string, TokenUniqueReference: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

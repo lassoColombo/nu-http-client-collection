@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -121,9 +145,9 @@ def sortorder-completer [] { ["Asc" "Desc"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "experiments-get-by-id" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["experiments-get-by-id" "experiments-update" "experiments-delete-tags" "experiments-get" "experiments-create" "events-batch-post" "runs-batch-add-or-modify" "run-metrics-get" "run-metrics-get-by-query" "runs-get" "runs-patch" "run-artifacts-list-in-container" "run-artifacts-get-sas-uri" "run-artifacts-batch-create-empty-artifacts" "run-artifacts-get-content-information" "run-artifacts-get-by-id" "run-artifacts-list-in-path" "run-artifacts-list-sas-by-prefix" "run-metrics-batch-post" "runs-get-child" "runs-get-details" "events-post" "run-metrics-post" "runs-delete-tags" "runs-get-by-query" "experiments-get-by-query" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -159,7 +183,7 @@ export def "experiments-get-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<archivedTime: string, createdUtc: string, description: string, experimentId: string, latestCreatedRunCreatedUtc: string, latestCreatedRunId: string, name: string, tags: record> {
+]: nothing -> oneof<record<archivedTime: string, createdUtc: string, description: string, experimentId: string, latestCreatedRunCreatedUtc: string, latestCreatedRunId: string, name: string, tags: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -204,7 +228,7 @@ export def "experiments-update" [
   --archive: oneof<nothing, bool>
   --description: string
   --tags: record
-]: any -> record<archivedTime: string, createdUtc: string, description: string, experimentId: string, latestCreatedRunCreatedUtc: string, latestCreatedRunId: string, name: string, tags: record> {
+]: any -> oneof<record<archivedTime: string, createdUtc: string, description: string, experimentId: string, latestCreatedRunCreatedUtc: string, latestCreatedRunId: string, name: string, tags: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -250,7 +274,7 @@ export def "experiments-delete-tags" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --tags: list<string>
-]: any -> record<archivedTime: string, createdUtc: string, description: string, experimentId: string, latestCreatedRunCreatedUtc: string, latestCreatedRunId: string, name: string, tags: record> {
+]: any -> oneof<record<archivedTime: string, createdUtc: string, description: string, experimentId: string, latestCreatedRunCreatedUtc: string, latestCreatedRunId: string, name: string, tags: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -295,7 +319,7 @@ export def "experiments-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<archivedTime: string, createdUtc: string, description: string, experimentId: string, latestCreatedRunCreatedUtc: string, latestCreatedRunId: string, name: string, tags: record> {
+]: nothing -> oneof<record<archivedTime: string, createdUtc: string, description: string, experimentId: string, latestCreatedRunCreatedUtc: string, latestCreatedRunId: string, name: string, tags: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -337,7 +361,7 @@ export def "experiments-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<archivedTime: string, createdUtc: string, description: string, experimentId: string, latestCreatedRunCreatedUtc: string, latestCreatedRunId: string, name: string, tags: record> {
+]: nothing -> oneof<record<archivedTime: string, createdUtc: string, description: string, experimentId: string, latestCreatedRunCreatedUtc: string, latestCreatedRunId: string, name: string, tags: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -365,7 +389,6 @@ export def "experiments-create" [
 #
 # POST /history/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/experiments/{experimentName}/batch/events
 # operationId: Events_BatchPost
-# --events item shape: {data?: record, name?: string, timestamp?: string}
 export def "events-batch-post" [
   subscription_id: string
   resource_group_name: string
@@ -381,7 +404,7 @@ export def "events-batch-post" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --events: list # item shape: {data?: record, name?: string, timestamp?: string}
-]: any -> record<errors: table<key: record, value: record>> {
+]: any -> oneof<record<errors: table<key: record, value: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -412,7 +435,6 @@ export def "events-batch-post" [
 #
 # PATCH /history/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/experiments/{experimentName}/batch/runs
 # operationId: Runs_BatchAddOrModify
-# --runs item shape: {cancelUri?: string, createdFrom?: record, dataContainerId?: string, description?: string, diagnosticsUri?: string, endTimeUtc?: string, heartbeatEnabled?: bool, hidden?: bool, name?: string, options?: record, parentRunId?: string, properties?: record, runDefinition?: record, runId?: string, runType?: string, scriptName?: string, startTimeUtc?: string, status?: string, tags?: record, target?: string}
 export def "runs-batch-add-or-modify" [
   subscription_id: string
   resource_group_name: string
@@ -428,7 +450,7 @@ export def "runs-batch-add-or-modify" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --runs: list # item shape: {cancelUri?: string, createdFrom?: record, dataContainerId?: string, description?: string, diagnosticsUri?: string, endTimeUtc?: string, heartbeatEnabled?: bool, hidden?: bool, name?: string, options?: record, parentRunId?: string, properties?: record, runDefinition?: record, runId?: string, runType?: string, scriptName?: string, startTimeUtc?: string, status?: string, tags?: record, target?: string}
-]: any -> record<errors: record, runs: record> {
+]: any -> oneof<record<errors: record, runs: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -474,7 +496,7 @@ export def "run-metrics-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<cells: list<record>, createdUtc: string, dataContainerId: string, dataLocation: string, description: string, label: string, metricId: string, metricType: string, name: string, numCells: int, runId: string, schema: record<numProperties: int, properties: list<record>>> {
+]: nothing -> oneof<record<cells: list<record>, createdUtc: string, dataContainerId: string, dataLocation: string, description: string, label: string, metricId: string, metricType: string, name: string, numCells: int, runId: string, schema: record<numProperties: int, properties: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -525,7 +547,7 @@ export def "run-metrics-get-by-query" [
   --filter: string # Allows for filtering the collection of resources. The expression specified is evaluated for each resource in the collection, and only items where the expression evaluates to true are included in the response. See https://docs.microsoft.com/en-us/azure/search/query-odata-filter-orderby-syntax for details on the expression syntax.
   --order-by: string # The comma separated list of resource properties to use for sorting the requested resources. Optionally, can be followed by either 'asc' or 'desc' (e.g. Color, Size desc)
   --top: int # The maximum number of items in the resource collection to be included in the result. If not specified, all items are returned. (format: int32)
-]: any -> record<continuationToken: string, nextLink: string, value: table<cells: list, createdUtc: string, dataContainerId: string, dataLocation: string, description: string, label: string, metricId: string, metricType: string, name: string, numCells: int, runId: string, schema: record>> {
+]: any -> oneof<record<continuationToken: string, nextLink: string, value: table<cells: list, createdUtc: string, dataContainerId: string, dataLocation: string, description: string, label: string, metricId: string, metricType: string, name: string, numCells: int, runId: string, schema: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -572,7 +594,7 @@ export def "runs-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<cancelUri: string, createdBy: record<userName: string, userObjectId: string, userTenantId: string>, createdFrom: record<location: string, locationType: string, type: string>, createdUtc: string, dataContainerId: string, description: string, diagnosticsUri: string, endTimeUtc: string, error: record<correlation: record, environment: string, error: record<code: string, details: list, innerError: record, message: string, target: string>, location: string, time: string>, experimentId: string, heartbeatEnabled: bool, hidden: bool, name: string, options: record<generateDataContainerIdIfNotSpecified: bool>, parentRunId: string, properties: record, revision: int, rootRunId: string, runDefinition: record, runId: string, runNumber: int, runType: string, scriptName: string, startTimeUtc: string, status: string, tags: record, target: string, token: string, tokenExpiryTimeUtc: string, userId: string, warnings: table<message: string, source: string>> {
+]: nothing -> oneof<record<cancelUri: string, createdBy: record<userName: string, userObjectId: string, userTenantId: string>, createdFrom: record<location: string, locationType: string, type: string>, createdUtc: string, dataContainerId: string, description: string, diagnosticsUri: string, endTimeUtc: string, error: record<correlation: record, environment: string, error: record<code: string, details: list, innerError: record, message: string, target: string>, location: string, time: string>, experimentId: string, heartbeatEnabled: bool, hidden: bool, name: string, options: record<generateDataContainerIdIfNotSpecified: bool>, parentRunId: string, properties: record, revision: int, rootRunId: string, runDefinition: record, runId: string, runNumber: int, runType: string, scriptName: string, startTimeUtc: string, status: string, tags: record, target: string, token: string, tokenExpiryTimeUtc: string, userId: string, warnings: table<message: string, source: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -601,8 +623,6 @@ export def "runs-get" [
 #
 # PATCH /history/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/experiments/{experimentName}/runs/{runId}
 # operationId: Runs_Patch
-# --createdFrom shape: {location?: string, locationType?: "ArtifactId", type?: "Notebook"}
-# --options shape: {generateDataContainerIdIfNotSpecified?: bool}
 export def "runs-patch" [
   subscription_id: string
   resource_group_name: string
@@ -638,7 +658,7 @@ export def "runs-patch" [
   --status: string # The status of the run. The Status string value maps to the RunStatus Enum.
   --tags: record
   --target: string
-]: any -> record<cancelUri: string, createdBy: record<userName: string, userObjectId: string, userTenantId: string>, createdFrom: record<location: string, locationType: string, type: string>, createdUtc: string, dataContainerId: string, description: string, diagnosticsUri: string, endTimeUtc: string, error: record<correlation: record, environment: string, error: record<code: string, details: list, innerError: record, message: string, target: string>, location: string, time: string>, experimentId: string, heartbeatEnabled: bool, hidden: bool, name: string, options: record<generateDataContainerIdIfNotSpecified: bool>, parentRunId: string, properties: record, revision: int, rootRunId: string, runDefinition: record, runId: string, runNumber: int, runType: string, scriptName: string, startTimeUtc: string, status: string, tags: record, target: string, token: string, tokenExpiryTimeUtc: string, userId: string, warnings: table<message: string, source: string>> {
+]: any -> oneof<record<cancelUri: string, createdBy: record<userName: string, userObjectId: string, userTenantId: string>, createdFrom: record<location: string, locationType: string, type: string>, createdUtc: string, dataContainerId: string, description: string, diagnosticsUri: string, endTimeUtc: string, error: record<correlation: record, environment: string, error: record<code: string, details: list, innerError: record, message: string, target: string>, location: string, time: string>, experimentId: string, heartbeatEnabled: bool, hidden: bool, name: string, options: record<generateDataContainerIdIfNotSpecified: bool>, parentRunId: string, properties: record, revision: int, rootRunId: string, runDefinition: record, runId: string, runNumber: int, runType: string, scriptName: string, startTimeUtc: string, status: string, tags: record, target: string, token: string, tokenExpiryTimeUtc: string, userId: string, warnings: table<message: string, source: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -686,7 +706,7 @@ export def "run-artifacts-list-in-container" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --continuation-token: string # The Continuation Token.
-]: nothing -> record<continuationToken: string, nextLink: string, value: table<artifactId: string, container: string, createdTime: string, dataPath: record, etag: string, origin: string, path: string>> {
+]: nothing -> oneof<record<continuationToken: string, nextLink: string, value: table<artifactId: string, container: string, createdTime: string, dataPath: record, etag: string, origin: string, path: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -762,7 +782,6 @@ export def "run-artifacts-get-sas-uri" [
 #
 # POST /history/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/experiments/{experimentName}/runs/{runId}/artifacts/batch/metadata
 # operationId: RunArtifacts_BatchCreateEmptyArtifacts
-# --paths item shape: {path: string}
 export def "run-artifacts-batch-create-empty-artifacts" [
   subscription_id: string
   resource_group_name: string
@@ -779,7 +798,7 @@ export def "run-artifacts-batch-create-empty-artifacts" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   paths: list # List of Artifact Paths. — item shape: {path: string}
-]: any -> record<artifactContentInformation: record, artifacts: record, errors: record> {
+]: any -> oneof<record<artifactContentInformation: record, artifacts: record, errors: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -827,7 +846,7 @@ export def "run-artifacts-get-content-information" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --path: string # The Artifact Path.
-]: nothing -> record<container: string, contentUri: string, origin: string, path: string> {
+]: nothing -> oneof<record<container: string, contentUri: string, origin: string, path: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -873,7 +892,7 @@ export def "run-artifacts-get-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --path: string # The Artifact Path.
-]: nothing -> record<artifactId: string, container: string, createdTime: string, dataPath: record<dataStoreName: string, relativePath: string, sqlDataPath: record<sqlQuery: string, sqlStoredProcedureName: string, sqlStoredProcedureParams: list, sqlTableName: string>>, etag: string, origin: string, path: string> {
+]: nothing -> oneof<record<artifactId: string, container: string, createdTime: string, dataPath: record<dataStoreName: string, relativePath: string, sqlDataPath: record<sqlQuery: string, sqlStoredProcedureName: string, sqlStoredProcedureParams: list, sqlTableName: string>>, etag: string, origin: string, path: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -920,7 +939,7 @@ export def "run-artifacts-list-in-path" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --path: string # The Artifact Path.
   --continuation-token: string # The Continuation Token.
-]: nothing -> record<continuationToken: string, nextLink: string, value: table<artifactId: string, container: string, createdTime: string, dataPath: record, etag: string, origin: string, path: string>> {
+]: nothing -> oneof<record<continuationToken: string, nextLink: string, value: table<artifactId: string, container: string, createdTime: string, dataPath: record, etag: string, origin: string, path: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -967,7 +986,7 @@ export def "run-artifacts-list-sas-by-prefix" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --path: string # The Artifact Path.
   --continuation-token: string # The Continuation Token.
-]: nothing -> record<continuationToken: string, nextLink: string, value: table<container: string, contentUri: string, origin: string, path: string>> {
+]: nothing -> oneof<record<continuationToken: string, nextLink: string, value: table<container: string, contentUri: string, origin: string, path: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -997,7 +1016,6 @@ export def "run-artifacts-list-sas-by-prefix" [
 #
 # POST /history/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/experiments/{experimentName}/runs/{runId}/batch/metrics
 # operationId: RunMetrics_BatchPost
-# --values item shape: {cells?: list, createdUtc?: string, dataContainerId?: string, dataLocation?: string, description?: string, label?: string, metricId?: string, metricType?: string, name?: string, numCells?: int, schema?: record}
 export def "run-metrics-batch-post" [
   subscription_id: string
   resource_group_name: string
@@ -1067,7 +1085,7 @@ export def "runs-get-child" [
   --sortorder: string@sortorder-completer # The sort order of the returned resources. Not used, specify asc or desc after each property name in the OrderBy parameter.
   --top: int # The maximum number of items in the resource collection to be included in the result. If not specified, all items are returned. (format: int32)
   --count: oneof<nothing, bool> # Whether to include a count of the matching resources along with the resources returned in the response.
-]: nothing -> record<continuationToken: string, nextLink: string, value: table<cancelUri: string, createdBy: record, createdFrom: record, createdUtc: string, dataContainerId: string, description: string, diagnosticsUri: string, endTimeUtc: string, error: record, experimentId: string, heartbeatEnabled: bool, hidden: bool, name: string, options: record, parentRunId: string, properties: record, revision: int, rootRunId: string, runDefinition: record, runId: string, runNumber: int, runType: string, scriptName: string, startTimeUtc: string, status: string, tags: record, target: string, token: string, tokenExpiryTimeUtc: string, userId: string, warnings: list>> {
+]: nothing -> oneof<record<continuationToken: string, nextLink: string, value: table<cancelUri: string, createdBy: record, createdFrom: record, createdUtc: string, dataContainerId: string, description: string, diagnosticsUri: string, endTimeUtc: string, error: record, experimentId: string, heartbeatEnabled: bool, hidden: bool, name: string, options: record, parentRunId: string, properties: record, revision: int, rootRunId: string, runDefinition: record, runId: string, runNumber: int, runType: string, scriptName: string, startTimeUtc: string, status: string, tags: record, target: string, token: string, tokenExpiryTimeUtc: string, userId: string, warnings: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1112,7 +1130,7 @@ export def "runs-get-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<endTimeUtc: string, error: record<correlation: record, environment: string, error: record<code: string, details: list, innerError: record, message: string, target: string>, location: string, time: string>, logFiles: record, parentRunId: string, properties: record, revision: int, runDefinition: record, runId: string, startTimeUtc: string, status: string, tags: record, target: string, warnings: table<message: string, source: string>> {
+]: nothing -> oneof<record<endTimeUtc: string, error: record<correlation: record, environment: string, error: record<code: string, details: list, innerError: record, message: string, target: string>, location: string, time: string>, logFiles: record, parentRunId: string, properties: record, revision: int, runDefinition: record, runId: string, startTimeUtc: string, status: string, tags: record, target: string, warnings: table<message: string, source: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1191,7 +1209,6 @@ export def "events-post" [
 #
 # POST /history/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/experiments/{experimentName}/runs/{runId}/metrics
 # operationId: RunMetrics_Post
-# --schema shape: {numProperties?: int, properties?: list}
 export def "run-metrics-post" [
   subscription_id: string
   resource_group_name: string
@@ -1266,7 +1283,7 @@ export def "runs-delete-tags" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> record<cancelUri: string, createdBy: record<userName: string, userObjectId: string, userTenantId: string>, createdFrom: record<location: string, locationType: string, type: string>, createdUtc: string, dataContainerId: string, description: string, diagnosticsUri: string, endTimeUtc: string, error: record<correlation: record, environment: string, error: record<code: string, details: list, innerError: record, message: string, target: string>, location: string, time: string>, experimentId: string, heartbeatEnabled: bool, hidden: bool, name: string, options: record<generateDataContainerIdIfNotSpecified: bool>, parentRunId: string, properties: record, revision: int, rootRunId: string, runDefinition: record, runId: string, runNumber: int, runType: string, scriptName: string, startTimeUtc: string, status: string, tags: record, target: string, token: string, tokenExpiryTimeUtc: string, userId: string, warnings: table<message: string, source: string>> {
+]: any -> oneof<record<cancelUri: string, createdBy: record<userName: string, userObjectId: string, userTenantId: string>, createdFrom: record<location: string, locationType: string, type: string>, createdUtc: string, dataContainerId: string, description: string, diagnosticsUri: string, endTimeUtc: string, error: record<correlation: record, environment: string, error: record<code: string, details: list, innerError: record, message: string, target: string>, location: string, time: string>, experimentId: string, heartbeatEnabled: bool, hidden: bool, name: string, options: record<generateDataContainerIdIfNotSpecified: bool>, parentRunId: string, properties: record, revision: int, rootRunId: string, runDefinition: record, runId: string, runNumber: int, runType: string, scriptName: string, startTimeUtc: string, status: string, tags: record, target: string, token: string, tokenExpiryTimeUtc: string, userId: string, warnings: table<message: string, source: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1316,7 +1333,7 @@ export def "runs-get-by-query" [
   --filter: string # Allows for filtering the collection of resources. The expression specified is evaluated for each resource in the collection, and only items where the expression evaluates to true are included in the response. See https://docs.microsoft.com/en-us/azure/search/query-odata-filter-orderby-syntax for details on the expression syntax.
   --order-by: string # The comma separated list of resource properties to use for sorting the requested resources. Optionally, can be followed by either 'asc' or 'desc' (e.g. Color, Size desc)
   --top: int # The maximum number of items in the resource collection to be included in the result. If not specified, all items are returned. (format: int32)
-]: any -> record<continuationToken: string, nextLink: string, value: table<cancelUri: string, createdBy: record, createdFrom: record, createdUtc: string, dataContainerId: string, description: string, diagnosticsUri: string, endTimeUtc: string, error: record, experimentId: string, heartbeatEnabled: bool, hidden: bool, name: string, options: record, parentRunId: string, properties: record, revision: int, rootRunId: string, runDefinition: record, runId: string, runNumber: int, runType: string, scriptName: string, startTimeUtc: string, status: string, tags: record, target: string, token: string, tokenExpiryTimeUtc: string, userId: string, warnings: list>> {
+]: any -> oneof<record<continuationToken: string, nextLink: string, value: table<cancelUri: string, createdBy: record, createdFrom: record, createdUtc: string, dataContainerId: string, description: string, diagnosticsUri: string, endTimeUtc: string, error: record, experimentId: string, heartbeatEnabled: bool, hidden: bool, name: string, options: record, parentRunId: string, properties: record, revision: int, rootRunId: string, runDefinition: record, runId: string, runNumber: int, runType: string, scriptName: string, startTimeUtc: string, status: string, tags: record, target: string, token: string, tokenExpiryTimeUtc: string, userId: string, warnings: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1364,7 +1381,7 @@ export def "experiments-get-by-query" [
   --filter: string # Allows for filtering the collection of resources. The expression specified is evaluated for each resource in the collection, and only items where the expression evaluates to true are included in the response. See https://docs.microsoft.com/en-us/azure/search/query-odata-filter-orderby-syntax for details on the expression syntax.
   --order-by: string # The comma separated list of resource properties to use for sorting the requested resources. Optionally, can be followed by either 'asc' or 'desc' (e.g. Color, Size desc)
   --top: int # The maximum number of items in the resource collection to be included in the result. If not specified, all items are returned. (format: int32)
-]: any -> record<continuationToken: string, nextLink: string, value: table<archivedTime: string, createdUtc: string, description: string, experimentId: string, latestCreatedRunCreatedUtc: string, latestCreatedRunId: string, name: string, tags: record>> {
+]: any -> oneof<record<continuationToken: string, nextLink: string, value: table<archivedTime: string, createdUtc: string, description: string, experimentId: string, latestCreatedRunCreatedUtc: string, latestCreatedRunId: string, name: string, tags: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

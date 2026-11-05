@@ -12,27 +12,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -40,8 +49,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -52,7 +66,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -87,7 +110,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -131,9 +155,9 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "login" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["login" "change-password" "logout" "register" "reset-password-request" "create-custom-card" "simple-list-cards" "list-cards" "upload-custom-logo" "filterable-card-details" "get-countries-list" "fonts-list" "fonts-list-for-customizer" "get-gift-card-details" "gift-card-details" "single-step-order" "user-address" "delete-recipient" "add-recipient-address" "recipients-list" "update-user-address" "update-recipient" "get-template-categories" "get-template-categories-authorized" "create-template" "delete-template" "get-templates" "get-templatess-authorized" "update-template" "get-template-detail" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -167,7 +191,7 @@ export def "login" [
   --dry-run(-n) # Return the request that would be sent without executing it
   login: string # email address (e.g. john@jjf.com)
   password: string # e.g. 8yfqwiuy@!$
-]: any -> record<anet_customer_id: string, free_cards: int, status: string, uid: string, user_id: int> {
+]: any -> oneof<record<anet_customer_id: string, free_cards: int, status: string, uid: string, user_id: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -207,7 +231,7 @@ export def "change-password" [
   --new-password: string # the new password (e.g. myn3wp455w0rd!)
   --old-password: string # the existing password (e.g. myoldpassword1234!)
   --uid: string # the authorized UID of the session (e.g. fhqwfuihuifqwhiuwqfhiqwfh124)
-]: any -> record<status: string> {
+]: any -> oneof<record<status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -245,7 +269,7 @@ export def "logout" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --uid: string # the authorized UID of the session (e.g. fhqwfuihuifqwhiuwqfhiqwfh124)
-]: any -> record<status: string> {
+]: any -> oneof<record<status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -287,7 +311,7 @@ export def "register" [
   lname: string # last name (e.g. Smith)
   login: string # email address (e.g. john@jjf.com)
   password: string # e.g. 8yfqwiuy@!$
-]: any -> record<status: string, user_id: int> {
+]: any -> oneof<record<status: string, user_id: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -325,7 +349,7 @@ export def "reset-password-request" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # the email address of the user (e.g. joe@bloggs.com)
-]: any -> record<status: string> {
+]: any -> oneof<record<status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -379,7 +403,7 @@ export def "create-custom-card" [
   --name: string # the name of the new card (e.g. my custom card design)
   --type: string # Defines the top of the back of the card. Set to either "logo" or "text". (e.g. logo)
   --uid: string # authorized UID of the session. (e.g. fhqwfuihuifqwhiuwqfhiqwfh124)
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -416,7 +440,7 @@ export def "simple-list-cards" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cards/list" $auth.query)
@@ -452,7 +476,7 @@ export def "list-cards" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --category-id: int # optional category id filter (e.g. 14)
   --uid: string # optional authorized UID of the session. By providing this, the card list will include user-specific cards. (e.g. fhqwfuihuifqwhiuwqfhiqwfh124)
-]: any -> table<available_free: int, category_id: int, cover: string, cover_height: string, cover_width: string, id: int, name: string, price: float> {
+]: any -> oneof<table<available_free: int, category_id: int, cover: string, cover_height: string, cover_width: string, id: int, name: string, price: float>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -492,7 +516,7 @@ export def "upload-custom-logo" [
   file: path # upload images for customc cards
   type: string # set to cover or header
   uid: string # uid of the user
-]: any -> record<id: int, status: string> {
+]: any -> oneof<record<id: int, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -533,7 +557,7 @@ export def "filterable-card-details" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --card-id: int # the card id to view (e.g. 14)
   --uid: string # optional authorized UID of the session. By providing this, the card details can provide user-specific cards (e.g. fhqwfuihuifqwhiuwqfhiqwfh124)
-]: any -> record<available_free: int, category_id: int, cover: string, cover_height: string, cover_width: string, id: int, images: table<array: list, name: string>, name: string, orientation: string, price: float> {
+]: any -> oneof<record<available_free: int, category_id: int, cover: string, cover_height: string, cover_width: string, id: int, images: table<array: list, name: string>, name: string, orientation: string, price: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -569,7 +593,7 @@ export def "get-countries-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<aliases: string, delivery_cost: float, id: int, states: list<record>> {
+]: nothing -> oneof<table<aliases: string, delivery_cost: float, id: int, states: list<record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/countries/list" $auth.query)
@@ -603,7 +627,7 @@ export def "fonts-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<id: string, image: string, label: string> {
+]: nothing -> oneof<table<id: string, image: string, label: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/fonts/list" $auth.query)
@@ -637,7 +661,7 @@ export def "fonts-list-for-customizer" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<id: int, label: string> {
+]: nothing -> oneof<table<id: int, label: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/fonts/listForCustomizer" $auth.query)
@@ -671,7 +695,7 @@ export def "get-gift-card-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<denominations: list<record>, id: int, image: string, name: string> {
+]: nothing -> oneof<table<denominations: list<record>, id: int, image: string, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/giftCards/view" $auth.query)
@@ -705,7 +729,7 @@ export def "gift-card-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<denominations: list<record>, id: int, image: string, name: string> {
+]: nothing -> oneof<table<denominations: list<record>, id: int, image: string, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/giftCards/view" $auth.query)
@@ -763,7 +787,7 @@ export def "single-step-order" [
   --sender-state: string # the ABBREVIATED state or province of the sender. This is required for US and Canada addresses and optional for all other countries (e.g. AZ)
   --sender-zip: string # The postal code or zip code of the sender. (e.g. 12345)
   uid: string # The UID of the logged-in user (e.g. fhqwfuihuifqwhiuwqfhiqwfh124)
-]: any -> record<response: record<address_from: record<address1: string, address2: string, business_name: string, city: string, country: string, id: int, name: string, state: string, zip: string>, card: record<available_free: int, category_id: int, cover: string, cover_height: string, cover_width: string, id: int, name: string, price: float>, date_created: string, for_free: bool, id: int, message: string>, status: string> {
+]: any -> oneof<record<response: record<address_from: record<address1: string, address2: string, business_name: string, city: string, country: string, id: int, name: string, state: string, zip: string>, card: record<available_free: int, category_id: int, cover: string, cover_height: string, cover_width: string, id: int, name: string, price: float>, date_created: string, for_free: bool, id: int, message: string>, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -801,7 +825,7 @@ export def "user-address" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --uid: string # authorized UID of the session. By providing this, the card list will include user-specific cards. (e.g. fhqwfuihuifqwhiuwqfhiqwfh124)
-]: any -> record<response: record<address1: string, address2: string, business_name: string, city: string, country: string, id: int, name: string, state: string, zip: string>, status: string> {
+]: any -> oneof<record<response: record<address1: string, address2: string, business_name: string, city: string, country: string, id: int, name: string, state: string, zip: string>, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -840,7 +864,7 @@ export def "delete-recipient" [
   --dry-run(-n) # Return the request that would be sent without executing it
   address_id: int # the id of the address to delete (e.g. 549494)
   uid: string # authorized UID of the session. (e.g. 33ce76fede1a31d5ee823179f78d9882)
-]: any -> record<status: string> {
+]: any -> oneof<record<status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -887,7 +911,7 @@ export def "add-recipient-address" [
   --state: string # the abbreviated state or province of the address (e.g. AZ)
   --uid: string # authorized UID of the session. (e.g. 33ce76fede1a31d5ee823179f78d9882)
   --zip: string # the zip or postal code of the address (e.g. 85014)
-]: any -> record<response: record<address1: string, address2: string, business_name: string, city: string, country: string, id: int, name: string, state: string, zip: string>, status: string> {
+]: any -> oneof<record<response: record<address1: string, address2: string, business_name: string, city: string, country: string, id: int, name: string, state: string, zip: string>, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -925,7 +949,7 @@ export def "recipients-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --uid: string # authorized UID of the session. (e.g. 33ce76fede1a31d5ee823179f78d9882)
-]: any -> table<address1: string, address2: string, business_name: string, city: string, country: string, id: int, name: string, state: string, zip: string> {
+]: any -> oneof<table<address1: string, address2: string, business_name: string, city: string, country: string, id: int, name: string, state: string, zip: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -973,7 +997,7 @@ export def "update-user-address" [
   --state: string # the abbreviated state or province of the address (e.g. AZ)
   uid: string # authorized UID of the session. (e.g. 33ce76fede1a31d5ee823179f78d9882)
   --zip: string # the zip or postal code of the address (e.g. 85014)
-]: any -> record<response: record<address1: string, address2: string, business_name: string, city: string, country: string, id: int, name: string, state: string, zip: string>, status: string> {
+]: any -> oneof<record<response: record<address1: string, address2: string, business_name: string, city: string, country: string, id: int, name: string, state: string, zip: string>, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1021,7 +1045,7 @@ export def "update-recipient" [
   --state: string # the updated abbreviated state or province of the address (e.g. AZ)
   --uid: string # authorized UID of the session. (e.g. 33ce76fede1a31d5ee823179f78d9882)
   --zip: string # the updated zip or postal code of the address (e.g. 85014)
-]: any -> record<response: record<address1: string, address2: string, business_name: string, city: string, country: string, id: int, name: string, state: string, zip: string>, status: string> {
+]: any -> oneof<record<response: record<address1: string, address2: string, business_name: string, city: string, country: string, id: int, name: string, state: string, zip: string>, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1058,7 +1082,7 @@ export def "get-template-categories" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<id: int, name: string, price: float> {
+]: nothing -> oneof<table<id: int, name: string, price: float>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/templateCategories/list" $auth.query)
@@ -1093,7 +1117,7 @@ export def "get-template-categories-authorized" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --uid: string # optional authorized UID of the session. By providing this, the template list will include user-specific template categories (e.g. fhqwfuihuifqwhiuwqfhiqwfh124)
-]: any -> table<id: int, name: string, price: float> {
+]: any -> oneof<table<id: int, name: string, price: float>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1133,7 +1157,7 @@ export def "create-template" [
   --message: string # e.g. How do I love thee?  Let me count the ways
   --name: string # the new name of the template (e.g. My custom template)
   --uid: string # The UID of the logged-in user (e.g. fhqwfuihuifqwhiuwqfhiqwfh124)
-]: any -> table<category_id: int, id: int, message: string, name: string> {
+]: any -> oneof<table<category_id: int, id: int, message: string, name: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1172,7 +1196,7 @@ export def "delete-template" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --template-id: int # the ID of the template to delete (e.g. 12)
   --uid: string # The UID of the logged-in user (e.g. fhqwfuihuifqwhiuwqfhiqwfh124)
-]: any -> record<status: string> {
+]: any -> oneof<record<status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1209,7 +1233,7 @@ export def "get-templates" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<category_id: int, id: int, message: string, name: string> {
+]: nothing -> oneof<table<category_id: int, id: int, message: string, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/templates/list" $auth.query)
@@ -1245,7 +1269,7 @@ export def "get-templatess-authorized" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --category-id: int # optional category to filter the templates (e.g. 12)
   --uid: string # optional authorized UID of the session. By providing this, the template list will include user-specific template categories (e.g. fhqwfuihuifqwhiuwqfhiqwfh124)
-]: any -> table<category_id: int, id: int, message: string, name: string> {
+]: any -> oneof<table<category_id: int, id: int, message: string, name: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1286,7 +1310,7 @@ export def "update-template" [
   --name: string # the new name of the template (e.g. My custom template)
   --template-id: int # the ID of the template to update (e.g. 12)
   --uid: string # The UID of the logged-in user (e.g. fhqwfuihuifqwhiuwqfhiqwfh124)
-]: any -> table<category_id: int, id: int, message: string, name: string> {
+]: any -> oneof<table<category_id: int, id: int, message: string, name: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1325,7 +1349,7 @@ export def "get-template-detail" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --template-id: int # the ID of the template to view (e.g. 12)
   --uid: string # optional authorized UID of the session. By providing this, the user can specify user-sepecific templates (e.g. fhqwfuihuifqwhiuwqfhiqwfh124)
-]: any -> record<category_id: int, id: int, message: string, name: string> {
+]: any -> oneof<record<category_id: int, id: int, message: string, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

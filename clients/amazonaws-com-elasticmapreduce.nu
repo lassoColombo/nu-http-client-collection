@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -160,9 +183,9 @@ def x-amz-target-completer-52 [] { ["ElasticMapReduce.UpdateStudioSessionMapping
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "add-instance-fleet" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["add-instance-fleet" "add-instance-groups" "add-job-flow-steps" "add-tags" "cancel-steps" "create-security-configuration" "create-studio" "create-studio-session-mapping" "delete-security-configuration" "delete-studio" "delete-studio-session-mapping" "describe-cluster" "describe-job-flows" "describe-notebook-execution" "describe-release-label" "describe-security-configuration" "describe-step" "describe-studio" "get-auto-termination-policy" "get-block-public-access-configuration" "get-cluster-session-credentials" "get-managed-scaling-policy" "get-studio-session-mapping" "list-bootstrap-actions" "list-clusters" "list-instance-fleets" "list-instance-groups" "list-instances" "list-notebook-executions" "list-release-labels" "list-security-configurations" "list-steps" "list-studio-session-mappings" "list-studios" "modify-cluster" "modify-instance-fleet" "modify-instance-groups" "put-auto-scaling-policy" "put-auto-termination-policy" "put-block-public-access-configuration" "put-managed-scaling-policy" "remove-auto-scaling-policy" "remove-auto-termination-policy" "remove-managed-scaling-policy" "remove-tags" "run-job-flow" "set-termination-protection" "set-visible-to-all-users" "start-notebook-execution" "stop-notebook-execution" "terminate-job-flows" "update-studio" "update-studio-session-mapping" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -184,7 +207,6 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AddInstanceFleet
-# --InstanceFleet shape: {Name?: string, InstanceFleetType: "MASTER"|"CORE"|"TASK", TargetOnDemandCapacity?: int, TargetSpotCapacity?: int, InstanceTypeConfigs?: list, LaunchSpecifications?: record, ResizeSpecifications?: record}
 export def "add-instance-fleet" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -205,7 +227,7 @@ export def "add-instance-fleet" [
   --x-amz-target: string@x-amz-target-completer # required
   cluster_id: string # The unique identifier of the cluster.
   instance_fleet: record # The configuration that defines an instance fleet. The instance fleet configuration is available only in Amazon EMR versions 4.8.0 and later, excluding 5.0.x versions. — shape: {Name?: string, InstanceFleetType: "MASTER"|"CORE"|"TASK", TargetOnDemandCapacity?: int, TargetSpotCapacity?: int, InstanceTypeConfigs?: list, LaunchSpecifications?: record, ResizeSpecifications?: record}
-]: any -> record<ClusterId: string, InstanceFleetId: string, ClusterArn: string> {
+]: any -> oneof<record<ClusterId: string, InstanceFleetId: string, ClusterArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -235,7 +257,6 @@ export def "add-instance-fleet" [
 #
 # POST /
 # operationId: AddInstanceGroups
-# --InstanceGroups item shape: {Name?: string, Market?: "ON_DEMAND"|"SPOT", InstanceRole: "MASTER"|"CORE"|"TASK", BidPrice?: string, InstanceType: string, InstanceCount: int, Configurations?: list, EbsConfiguration?: record, AutoScalingPolicy?: record, CustomAmiId?: string}
 export def "add-instance-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -256,7 +277,7 @@ export def "add-instance-groups" [
   --x-amz-target: string@x-amz-target-completer-1 # required
   instance_groups: list # Instance groups to add. — item shape: {Name?: string, Market?: "ON_DEMAND"|"SPOT", InstanceRole: "MASTER"|"CORE"|"TASK", BidPrice?: string, InstanceType: string, InstanceCount: int, Configurations?: list, EbsConfiguration?: record, AutoScalingPolicy?: record, CustomAmiId?: string}
   job_flow_id: string # Job flow in which to add the instance groups.
-]: any -> record<JobFlowId: string, InstanceGroupIds: list<string>, ClusterArn: string> {
+]: any -> oneof<record<JobFlowId: string, InstanceGroupIds: list<string>, ClusterArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -286,7 +307,6 @@ export def "add-instance-groups" [
 #
 # POST /
 # operationId: AddJobFlowSteps
-# --Steps item shape: {Name: string, ActionOnFailure?: "TERMINATE_JOB_FLOW"|"TERMINATE_CLUSTER"|"CANCEL_AND_WAIT"|"CONTINUE", HadoopJarStep: record}
 export def "add-job-flow-steps" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -308,7 +328,7 @@ export def "add-job-flow-steps" [
   job_flow_id: string # A string that uniquely identifies the job flow. This identifier is returned by RunJobFlow and can also be obtained from ListClusters.
   steps: list # A list of StepConfig to be executed by the job flow. — item shape: {Name: string, ActionOnFailure?: "TERMINATE_JOB_FLOW"|"TERMINATE_CLUSTER"|"CANCEL_AND_WAIT"|"CONTINUE", HadoopJarStep: record}
   --execution-role-arn: string # The Amazon Resource Name (ARN) of the runtime role for a step on the cluster. The runtime role can be a cross-account IAM role. The runtime role ARN is a combination of account ID, role name, and role type using the following format: arn:partition:service:region:account:resource. For example, arn:aws:iam::1234567890:role/ReadOnly is a correctly formatted runtime role ARN.
-]: any -> record<StepIds: list<string>> {
+]: any -> oneof<record<StepIds: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -338,7 +358,6 @@ export def "add-job-flow-steps" [
 #
 # POST /
 # operationId: AddTags
-# --Tags item shape: {Key?: string, Value?: string}
 export def "add-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -359,7 +378,7 @@ export def "add-tags" [
   --x-amz-target: string@x-amz-target-completer-3 # required
   resource_id: string # The Amazon EMR resource identifier to which tags will be added. For example, a cluster identifier or an Amazon EMR Studio ID.
   tags: list # A list of tags to associate with a resource. Tags are user-defined key-value pairs that consist of a required key string with a maximum of 128 characters, and an optional value string with a maximum of 256 characters. — item shape: {Key?: string, Value?: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -410,7 +429,7 @@ export def "cancel-steps" [
   cluster_id: string # The ClusterID for the specified steps that will be canceled. Use RunJobFlow and ListClusters to get ClusterIDs.
   step_ids: list<string> # The list of StepIDs to cancel. Use ListSteps to get steps and their states for the specified cluster.
   --step-cancellation-option: string@step-cancellation-option-completer # The option to choose to cancel RUNNING steps. By default, the value is SEND_INTERRUPT.
-]: any -> record<CancelStepsInfoList: table<StepId: string, Status: string, Reason: string>> {
+]: any -> oneof<record<CancelStepsInfoList: table<StepId: string, Status: string, Reason: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -460,7 +479,7 @@ export def "create-security-configuration" [
   --x-amz-target: string@x-amz-target-completer-5 # required
   name: string # The name of the security configuration.
   security_configuration: string # The security configuration details in JSON format. For JSON parameters and examples, see Use Security Configurations to Set Up Cluster Security (https://docs.aws.amazon.com/emr/latest/ManagementGuide/emr-security-configurations.html) in the Amazon EMR Management Guide.
-]: any -> record<Name: string, CreationDateTime: string> {
+]: any -> oneof<record<Name: string, CreationDateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -490,7 +509,6 @@ export def "create-security-configuration" [
 #
 # POST /
 # operationId: CreateStudio
-# --Tags item shape: {Key?: string, Value?: string}
 export def "create-studio" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -522,7 +540,7 @@ export def "create-studio" [
   --idp-auth-url: string # The authentication endpoint of your identity provider (IdP). Specify this value when you use IAM authentication and want to let federated users log in to a Studio with the Studio URL and credentials from your IdP. Amazon EMR Studio redirects users to this endpoint to enter credentials.
   --idp-relay-state-parameter-name: string # The name that your identity provider (IdP) uses for its RelayState parameter. For example, RelayState or TargetSource. Specify this value when you use IAM authentication and want to let federated users log in to a Studio using the Studio URL. The RelayState parameter differs by IdP.
   --tags: list # A list of tags to associate with the Amazon EMR Studio. Tags are user-defined key-value pairs that consist of a required key string with a maximum of 128 characters, and an optional value string with a maximum of 256 characters. — item shape: {Key?: string, Value?: string}
-]: any -> record<StudioId: string, Url: string> {
+]: any -> oneof<record<StudioId: string, Url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -624,7 +642,7 @@ export def "delete-security-configuration" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-8 # required
   name: string # The name of the security configuration.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -774,7 +792,7 @@ export def "describe-cluster" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-11 # required
   cluster_id: string # The identifier of the cluster to describe.
-]: any -> record<Cluster: record<Id: string, Name: string, Status: record<State: string, StateChangeReason: record, Timeline: record, ErrorDetails: list>, Ec2InstanceAttributes: record<Ec2KeyName: string, Ec2SubnetId: string, RequestedEc2SubnetIds: list, Ec2AvailabilityZone: string, RequestedEc2AvailabilityZones: list, IamInstanceProfile: string, EmrManagedMasterSecurityGroup: string, EmrManagedSlaveSecurityGroup: string, ServiceAccessSecurityGroup: string, AdditionalMasterSecurityGroups: list, AdditionalSlaveSecurityGroups: list>, InstanceCollectionType: string, LogUri: string, LogEncryptionKmsKeyId: string, RequestedAmiVersion: string, RunningAmiVersion: string, ReleaseLabel: string, AutoTerminate: bool, TerminationProtected: bool, VisibleToAllUsers: bool, Applications: list<record>, Tags: list<record>, ServiceRole: string, NormalizedInstanceHours: int, MasterPublicDnsName: string, Configurations: list<record>, SecurityConfiguration: string, AutoScalingRole: string, ScaleDownBehavior: string, CustomAmiId: string, EbsRootVolumeSize: int, RepoUpgradeOnBoot: string, KerberosAttributes: record<Realm: string, KdcAdminPassword: string, CrossRealmTrustPrincipalPassword: string, ADDomainJoinUser: string, ADDomainJoinPassword: string>, ClusterArn: string, OutpostArn: string, StepConcurrencyLevel: int, PlacementGroups: list<record>, OSReleaseLabel: string>> {
+]: any -> oneof<record<Cluster: record<Id: string, Name: string, Status: record<State: string, StateChangeReason: record, Timeline: record, ErrorDetails: list>, Ec2InstanceAttributes: record<Ec2KeyName: string, Ec2SubnetId: string, RequestedEc2SubnetIds: list, Ec2AvailabilityZone: string, RequestedEc2AvailabilityZones: list, IamInstanceProfile: string, EmrManagedMasterSecurityGroup: string, EmrManagedSlaveSecurityGroup: string, ServiceAccessSecurityGroup: string, AdditionalMasterSecurityGroups: list, AdditionalSlaveSecurityGroups: list>, InstanceCollectionType: string, LogUri: string, LogEncryptionKmsKeyId: string, RequestedAmiVersion: string, RunningAmiVersion: string, ReleaseLabel: string, AutoTerminate: bool, TerminationProtected: bool, VisibleToAllUsers: bool, Applications: list<record>, Tags: list<record>, ServiceRole: string, NormalizedInstanceHours: int, MasterPublicDnsName: string, Configurations: list<record>, SecurityConfiguration: string, AutoScalingRole: string, ScaleDownBehavior: string, CustomAmiId: string, EbsRootVolumeSize: int, RepoUpgradeOnBoot: string, KerberosAttributes: record<Realm: string, KdcAdminPassword: string, CrossRealmTrustPrincipalPassword: string, ADDomainJoinUser: string, ADDomainJoinPassword: string>, ClusterArn: string, OutpostArn: string, StepConcurrencyLevel: int, PlacementGroups: list<record>, OSReleaseLabel: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -828,7 +846,7 @@ export def "describe-job-flows" [
   --created-before: string # Return only job flows created before this date and time. (format: date-time)
   --job-flow-ids: list<string> # Return only job flows whose job flow ID is contained in this list.
   --job-flow-states: list<string> # Return only job flows whose state is contained in this list.
-]: any -> record<JobFlows: table<JobFlowId: string, Name: string, LogUri: string, LogEncryptionKmsKeyId: string, AmiVersion: string, ExecutionStatusDetail: record, Instances: record, Steps: list, BootstrapActions: list, SupportedProducts: list, VisibleToAllUsers: bool, JobFlowRole: string, ServiceRole: string, AutoScalingRole: string, ScaleDownBehavior: string>> {
+]: any -> oneof<record<JobFlows: table<JobFlowId: string, Name: string, LogUri: string, LogEncryptionKmsKeyId: string, AmiVersion: string, ExecutionStatusDetail: record, Instances: record, Steps: list, BootstrapActions: list, SupportedProducts: list, VisibleToAllUsers: bool, JobFlowRole: string, ServiceRole: string, AutoScalingRole: string, ScaleDownBehavior: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -877,7 +895,7 @@ export def "describe-notebook-execution" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-13 # required
   notebook_execution_id: string # The unique identifier of the notebook execution.
-]: any -> record<NotebookExecution: record<NotebookExecutionId: string, EditorId: string, ExecutionEngine: record<Id: string, Type: string, MasterInstanceSecurityGroupId: string>, NotebookExecutionName: string, NotebookParams: string, Status: string, StartTime: string, EndTime: string, Arn: string, OutputNotebookURI: string, LastStateChangeReason: string, NotebookInstanceSecurityGroupId: string, Tags: list<record>>> {
+]: any -> oneof<record<NotebookExecution: record<NotebookExecutionId: string, EditorId: string, ExecutionEngine: record<Id: string, Type: string, MasterInstanceSecurityGroupId: string>, NotebookExecutionName: string, NotebookParams: string, Status: string, StartTime: string, EndTime: string, Arn: string, OutputNotebookURI: string, LastStateChangeReason: string, NotebookInstanceSecurityGroupId: string, Tags: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -928,7 +946,7 @@ export def "describe-release-label" [
   --release-label: string # The target release label to be described.
   --next-token: string # The pagination token. Reserved for future use. Currently set to null.
   --max-results: int # Reserved for future use. Currently set to null.
-]: any -> record<ReleaseLabel: string, Applications: table<Name: string, Version: string>, NextToken: string, AvailableOSReleases: table<Label: string>> {
+]: any -> oneof<record<ReleaseLabel: string, Applications: table<Name: string, Version: string>, NextToken: string, AvailableOSReleases: table<Label: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -977,7 +995,7 @@ export def "describe-security-configuration" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-15 # required
   name: string # The name of the security configuration.
-]: any -> record<Name: string, SecurityConfiguration: string, CreationDateTime: string> {
+]: any -> oneof<record<Name: string, SecurityConfiguration: string, CreationDateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1027,7 +1045,7 @@ export def "describe-step" [
   --x-amz-target: string@x-amz-target-completer-16 # required
   cluster_id: string # The identifier of the cluster with steps to describe.
   step_id: string # The identifier of the step to describe.
-]: any -> record<Step: record<Id: string, Name: string, Config: record<Jar: string, Properties: record, MainClass: string, Args: list>, ActionOnFailure: string, Status: record<State: string, StateChangeReason: record, FailureDetails: record, Timeline: record>, ExecutionRoleArn: string>> {
+]: any -> oneof<record<Step: record<Id: string, Name: string, Config: record<Jar: string, Properties: record, MainClass: string, Args: list>, ActionOnFailure: string, Status: record<State: string, StateChangeReason: record, FailureDetails: record, Timeline: record>, ExecutionRoleArn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1076,7 +1094,7 @@ export def "describe-studio" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-17 # required
   studio_id: string # The Amazon EMR Studio ID.
-]: any -> record<Studio: record<StudioId: string, StudioArn: string, Name: string, Description: string, AuthMode: string, VpcId: string, SubnetIds: list<string>, ServiceRole: string, UserRole: string, WorkspaceSecurityGroupId: string, EngineSecurityGroupId: string, Url: string, CreationTime: string, DefaultS3Location: string, IdpAuthUrl: string, IdpRelayStateParameterName: string, Tags: list<record>>> {
+]: any -> oneof<record<Studio: record<StudioId: string, StudioArn: string, Name: string, Description: string, AuthMode: string, VpcId: string, SubnetIds: list<string>, ServiceRole: string, UserRole: string, WorkspaceSecurityGroupId: string, EngineSecurityGroupId: string, Url: string, CreationTime: string, DefaultS3Location: string, IdpAuthUrl: string, IdpRelayStateParameterName: string, Tags: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1125,7 +1143,7 @@ export def "get-auto-termination-policy" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-18 # required
   cluster_id: string # Specifies the ID of the Amazon EMR cluster for which the auto-termination policy will be fetched.
-]: any -> record<AutoTerminationPolicy: record<IdleTimeout: int>> {
+]: any -> oneof<record<AutoTerminationPolicy: record<IdleTimeout: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1174,7 +1192,7 @@ export def "get-block-public-access-configuration" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-19 # required
   --body: record
-]: any -> record<BlockPublicAccessConfiguration: record<BlockPublicSecurityGroupRules: bool, PermittedPublicSecurityGroupRuleRanges: list<record>>, BlockPublicAccessConfigurationMetadata: record<CreationDateTime: string, CreatedByArn: string>> {
+]: any -> oneof<record<BlockPublicAccessConfiguration: record<BlockPublicSecurityGroupRules: bool, PermittedPublicSecurityGroupRuleRanges: list<record>>, BlockPublicAccessConfigurationMetadata: record<CreationDateTime: string, CreatedByArn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1224,7 +1242,7 @@ export def "get-cluster-session-credentials" [
   --x-amz-target: string@x-amz-target-completer-20 # required
   cluster_id: string # The unique identifier of the cluster.
   execution_role_arn: string # The Amazon Resource Name (ARN) of the runtime role for interactive workload submission on the cluster. The runtime role can be a cross-account IAM role. The runtime role ARN is a combination of account ID, role name, and role type using the following format: arn:partition:service:region:account:resource.
-]: any -> record<Credentials: record<UsernamePassword: record<Username: string, Password: string>>, ExpiresAt: string> {
+]: any -> oneof<record<Credentials: record<UsernamePassword: record<Username: string, Password: string>>, ExpiresAt: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1273,7 +1291,7 @@ export def "get-managed-scaling-policy" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-21 # required
   cluster_id: string # Specifies the ID of the cluster for which the managed scaling policy will be fetched.
-]: any -> record<ManagedScalingPolicy: record<ComputeLimits: record<UnitType: string, MinimumCapacityUnits: int, MaximumCapacityUnits: int, MaximumOnDemandCapacityUnits: int, MaximumCoreCapacityUnits: int>>> {
+]: any -> oneof<record<ManagedScalingPolicy: record<ComputeLimits: record<UnitType: string, MinimumCapacityUnits: int, MaximumCapacityUnits: int, MaximumOnDemandCapacityUnits: int, MaximumCoreCapacityUnits: int>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1325,7 +1343,7 @@ export def "get-studio-session-mapping" [
   --identity-id: string # The globally unique identifier (GUID) of the user or group. For more information, see UserId (https://docs.aws.amazon.com/singlesignon/latest/IdentityStoreAPIReference/API_User.html#singlesignon-Type-User-UserId) and GroupId (https://docs.aws.amazon.com/singlesignon/latest/IdentityStoreAPIReference/API_Group.html#singlesignon-Type-Group-GroupId) in the IAM Identity Center Identity Store API Reference. Either IdentityName or IdentityId must be specified.
   --identity-name: string # The name of the user or group to fetch. For more information, see UserName (https://docs.aws.amazon.com/singlesignon/latest/IdentityStoreAPIReference/API_User.html#singlesignon-Type-User-UserName) and DisplayName (https://docs.aws.amazon.com/singlesignon/latest/IdentityStoreAPIReference/API_Group.html#singlesignon-Type-Group-DisplayName) in the IAM Identity Center Identity Store API Reference. Either IdentityName or IdentityId must be specified.
   identity_type: string@identity-type-completer # Specifies whether the identity to fetch is a user or a group.
-]: any -> record<SessionMapping: record<StudioId: string, IdentityId: string, IdentityName: string, IdentityType: string, SessionPolicyArn: string, CreationTime: string, LastModifiedTime: string>> {
+]: any -> oneof<record<SessionMapping: record<StudioId: string, IdentityId: string, IdentityName: string, IdentityType: string, SessionPolicyArn: string, CreationTime: string, LastModifiedTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1376,7 +1394,7 @@ export def "list-bootstrap-actions" [
   --x-amz-target: string@x-amz-target-completer-23 # required
   cluster_id: string # The cluster identifier for the bootstrap actions to list.
   --marker-body: string # The pagination token that indicates the next set of results to retrieve. (body field)
-]: any -> record<BootstrapActions: table<Name: string, ScriptPath: string, Args: list>, Marker: string> {
+]: any -> oneof<record<BootstrapActions: table<Name: string, ScriptPath: string, Args: list>, Marker: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1430,7 +1448,7 @@ export def "list-clusters" [
   --created-before: string # The creation date and time end value filter for listing clusters. (format: date-time)
   --cluster-states: list<string> # The cluster state filters to apply when listing clusters. Clusters that change state while this action runs may be not be returned as expected in the list of clusters.
   --marker-body: string # The pagination token that indicates the next set of results to retrieve. (body field)
-]: any -> record<Clusters: table<Id: string, Name: string, Status: record, NormalizedInstanceHours: int, ClusterArn: string, OutpostArn: string>, Marker: string> {
+]: any -> oneof<record<Clusters: table<Id: string, Name: string, Status: record, NormalizedInstanceHours: int, ClusterArn: string, OutpostArn: string>, Marker: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1482,7 +1500,7 @@ export def "list-instance-fleets" [
   --x-amz-target: string@x-amz-target-completer-25 # required
   cluster_id: string # The unique identifier of the cluster.
   --marker-body: string # The pagination token that indicates the next set of results to retrieve. (body field)
-]: any -> record<InstanceFleets: table<Id: string, Name: string, Status: record, InstanceFleetType: string, TargetOnDemandCapacity: int, TargetSpotCapacity: int, ProvisionedOnDemandCapacity: int, ProvisionedSpotCapacity: int, InstanceTypeSpecifications: list, LaunchSpecifications: record, ResizeSpecifications: record>, Marker: string> {
+]: any -> oneof<record<InstanceFleets: table<Id: string, Name: string, Status: record, InstanceFleetType: string, TargetOnDemandCapacity: int, TargetSpotCapacity: int, ProvisionedOnDemandCapacity: int, ProvisionedSpotCapacity: int, InstanceTypeSpecifications: list, LaunchSpecifications: record, ResizeSpecifications: record>, Marker: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1534,7 +1552,7 @@ export def "list-instance-groups" [
   --x-amz-target: string@x-amz-target-completer-26 # required
   cluster_id: string # The identifier of the cluster for which to list the instance groups.
   --marker-body: string # The pagination token that indicates the next set of results to retrieve. (body field)
-]: any -> record<InstanceGroups: table<Id: string, Name: string, Market: string, InstanceGroupType: string, BidPrice: string, InstanceType: string, RequestedInstanceCount: int, RunningInstanceCount: int, Status: record, Configurations: list, ConfigurationsVersion: int, LastSuccessfullyAppliedConfigurations: list, LastSuccessfullyAppliedConfigurationsVersion: int, EbsBlockDevices: list, EbsOptimized: bool, ShrinkPolicy: record, AutoScalingPolicy: record, CustomAmiId: string>, Marker: string> {
+]: any -> oneof<record<InstanceGroups: table<Id: string, Name: string, Market: string, InstanceGroupType: string, BidPrice: string, InstanceType: string, RequestedInstanceCount: int, RunningInstanceCount: int, Status: record, Configurations: list, ConfigurationsVersion: int, LastSuccessfullyAppliedConfigurations: list, LastSuccessfullyAppliedConfigurationsVersion: int, EbsBlockDevices: list, EbsOptimized: bool, ShrinkPolicy: record, AutoScalingPolicy: record, CustomAmiId: string>, Marker: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1591,7 +1609,7 @@ export def "list-instances" [
   --instance-fleet-type: string@instance-fleet-type-completer # The node type of the instance fleet. For example MASTER, CORE, or TASK.
   --instance-states: list<string> # A list of instance states that will filter the instances returned with this request.
   --marker-body: string # The pagination token that indicates the next set of results to retrieve. (body field)
-]: any -> record<Instances: table<Id: string, Ec2InstanceId: string, PublicDnsName: string, PublicIpAddress: string, PrivateDnsName: string, PrivateIpAddress: string, Status: record, InstanceGroupId: string, InstanceFleetId: string, Market: string, InstanceType: string, EbsVolumes: list>, Marker: string> {
+]: any -> oneof<record<Instances: table<Id: string, Ec2InstanceId: string, PublicDnsName: string, PublicIpAddress: string, PrivateDnsName: string, PrivateIpAddress: string, Status: record, InstanceGroupId: string, InstanceFleetId: string, Market: string, InstanceType: string, EbsVolumes: list>, Marker: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1646,7 +1664,7 @@ export def "list-notebook-executions" [
   --from: string # The beginning of time range filter for listing notebook executions. The default is the timestamp of 30 days ago. (format: date-time)
   --to: string # The end of time range filter for listing notebook executions. The default is the current timestamp. (format: date-time)
   --marker-body: string # The pagination token, returned by a previous ListNotebookExecutions call, that indicates the start of the list for this ListNotebookExecutions call. (body field)
-]: any -> record<NotebookExecutions: table<NotebookExecutionId: string, EditorId: string, NotebookExecutionName: string, Status: string, StartTime: string, EndTime: string>, Marker: string> {
+]: any -> oneof<record<NotebookExecutions: table<NotebookExecutionId: string, EditorId: string, NotebookExecutionName: string, Status: string, StartTime: string, EndTime: string>, Marker: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1677,7 +1695,6 @@ export def "list-notebook-executions" [
 #
 # POST /
 # operationId: ListReleaseLabels
-# --Filters shape: {Prefix?: string, Application?: string}
 export def "list-release-labels" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1701,7 +1718,7 @@ export def "list-release-labels" [
   --filters: record # The release label filters by application or version prefix. — shape: {Prefix?: string, Application?: string}
   --next-token-body: string # Specifies the next page of results. If NextToken is not specified, which is usually the case for the first request of ListReleaseLabels, the first page of results are determined by other filtering parameters or by the latest version. The ListReleaseLabels request fails if the identity (Amazon Web Services account ID) and all filtering parameters are different from the original request, or if the NextToken is expired or tampered with. (body field)
   --max-results-body: int # Defines the maximum number of release labels to return in a single response. The default is 100. (body field)
-]: any -> record<ReleaseLabels: list<string>, NextToken: string> {
+]: any -> oneof<record<ReleaseLabels: list<string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1752,7 +1769,7 @@ export def "list-security-configurations" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-30 # required
   --marker-body: string # The pagination token that indicates the set of results to retrieve. (body field)
-]: any -> record<SecurityConfigurations: table<Name: string, CreationDateTime: string>, Marker: string> {
+]: any -> oneof<record<SecurityConfigurations: table<Name: string, CreationDateTime: string>, Marker: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1806,7 +1823,7 @@ export def "list-steps" [
   --step-states: list<string> # The filter to limit the step list based on certain states.
   --step-ids: list<string> # The filter to limit the step list based on the identifier of the steps. You can specify a maximum of ten Step IDs. The character constraint applies to the overall length of the array.
   --marker-body: string # The maximum number of steps that a single ListSteps action returns is 50. To return a longer list of steps, use multiple ListSteps actions along with the Marker parameter, which is a pagination token that indicates the next set of results to retrieve. (body field)
-]: any -> record<Steps: table<Id: string, Name: string, Config: record, ActionOnFailure: string, Status: record>, Marker: string> {
+]: any -> oneof<record<Steps: table<Id: string, Name: string, Config: record, ActionOnFailure: string, Status: record>, Marker: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1859,7 +1876,7 @@ export def "list-studio-session-mappings" [
   --studio-id: string # The ID of the Amazon EMR Studio.
   --identity-type: string@identity-type-completer # Specifies whether to return session mappings for users or groups. If not specified, the results include session mapping details for both users and groups.
   --marker-body: string # The pagination token that indicates the set of results to retrieve. (body field)
-]: any -> record<SessionMappings: table<StudioId: string, IdentityId: string, IdentityName: string, IdentityType: string, SessionPolicyArn: string, CreationTime: string>, Marker: string> {
+]: any -> oneof<record<SessionMappings: table<StudioId: string, IdentityId: string, IdentityName: string, IdentityType: string, SessionPolicyArn: string, CreationTime: string>, Marker: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1910,7 +1927,7 @@ export def "list-studios" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-33 # required
   --marker-body: string # The pagination token that indicates the set of results to retrieve. (body field)
-]: any -> record<Studios: table<StudioId: string, Name: string, VpcId: string, Description: string, Url: string, AuthMode: string, CreationTime: string>, Marker: string> {
+]: any -> oneof<record<Studios: table<StudioId: string, Name: string, VpcId: string, Description: string, Url: string, AuthMode: string, CreationTime: string>, Marker: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1961,7 +1978,7 @@ export def "modify-cluster" [
   --x-amz-target: string@x-amz-target-completer-34 # required
   cluster_id: string # The unique identifier of the cluster.
   --step-concurrency-level: int # The number of steps that can be executed concurrently. You can specify a minimum of 1 step and a maximum of 256 steps. We recommend that you do not change this parameter while steps are running or the ActionOnFailure setting may not behave as expected. For more information see Step$ActionOnFailure.
-]: any -> record<StepConcurrencyLevel: int> {
+]: any -> oneof<record<StepConcurrencyLevel: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1991,7 +2008,6 @@ export def "modify-cluster" [
 #
 # POST /
 # operationId: ModifyInstanceFleet
-# --InstanceFleet shape: {InstanceFleetId: string, TargetOnDemandCapacity?: int, TargetSpotCapacity?: int, ResizeSpecifications?: record}
 export def "modify-instance-fleet" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2042,7 +2058,6 @@ export def "modify-instance-fleet" [
 #
 # POST /
 # operationId: ModifyInstanceGroups
-# --InstanceGroups item shape: {InstanceGroupId: string, InstanceCount?: int, EC2InstanceIdsToTerminate?: list<string>, ShrinkPolicy?: record, ReconfigurationType?: "OVERWRITE"|"MERGE", Configurations?: list}
 export def "modify-instance-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2093,7 +2108,6 @@ export def "modify-instance-groups" [
 #
 # POST /
 # operationId: PutAutoScalingPolicy
-# --AutoScalingPolicy shape: {Constraints: record, Rules: list}
 export def "put-auto-scaling-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2115,7 +2129,7 @@ export def "put-auto-scaling-policy" [
   cluster_id: string # Specifies the ID of a cluster. The instance group to which the automatic scaling policy is applied is within this cluster.
   instance_group_id: string # Specifies the ID of the instance group to which the automatic scaling policy is applied.
   auto_scaling_policy: record # An automatic scaling policy for a core instance group or task instance group in an Amazon EMR cluster. An automatic scaling policy defines how an instance group dynamically adds and terminates EC2 instances in response to the value of a CloudWatch metric. See PutAutoScalingPolicy. — shape: {Constraints: record, Rules: list}
-]: any -> record<ClusterId: string, InstanceGroupId: string, AutoScalingPolicy: record<Status: record<State: string, StateChangeReason: record>, Constraints: record<MinCapacity: int, MaxCapacity: int>, Rules: list<record>>, ClusterArn: string> {
+]: any -> oneof<record<ClusterId: string, InstanceGroupId: string, AutoScalingPolicy: record<Status: record<State: string, StateChangeReason: record>, Constraints: record<MinCapacity: int, MaxCapacity: int>, Rules: list<record>>, ClusterArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2145,7 +2159,6 @@ export def "put-auto-scaling-policy" [
 #
 # POST /
 # operationId: PutAutoTerminationPolicy
-# --AutoTerminationPolicy shape: {IdleTimeout?: int}
 export def "put-auto-termination-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2166,7 +2179,7 @@ export def "put-auto-termination-policy" [
   --x-amz-target: string@x-amz-target-completer-38 # required
   cluster_id: string # Specifies the ID of the Amazon EMR cluster to which the auto-termination policy will be attached.
   --auto-termination-policy: record # An auto-termination policy for an Amazon EMR cluster. An auto-termination policy defines the amount of idle time in seconds after which a cluster automatically terminates. For alternative cluster termination options, see Control cluster termination (https://docs.aws.amazon.com/emr/latest/ManagementGuide/emr-plan-termination.html). — shape: {IdleTimeout?: int}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2196,7 +2209,6 @@ export def "put-auto-termination-policy" [
 #
 # POST /
 # operationId: PutBlockPublicAccessConfiguration
-# --BlockPublicAccessConfiguration shape: {BlockPublicSecurityGroupRules: bool, PermittedPublicSecurityGroupRuleRanges?: list}
 export def "put-block-public-access-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2216,7 +2228,7 @@ export def "put-block-public-access-configuration" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-39 # required
   block_public_access_configuration: record # A configuration for Amazon EMR block public access. When BlockPublicSecurityGroupRules is set to true, Amazon EMR prevents cluster creation if one of the cluster's security groups has a rule that allows inbound traffic from 0.0.0.0/0 or ::/0 on a port, unless the port is specified as an exception using PermittedPublicSecurityGroupRuleRanges. — shape: {BlockPublicSecurityGroupRules: bool, PermittedPublicSecurityGroupRuleRanges?: list}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2246,7 +2258,6 @@ export def "put-block-public-access-configuration" [
 #
 # POST /
 # operationId: PutManagedScalingPolicy
-# --ManagedScalingPolicy shape: {ComputeLimits?: record}
 export def "put-managed-scaling-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2267,7 +2278,7 @@ export def "put-managed-scaling-policy" [
   --x-amz-target: string@x-amz-target-completer-40 # required
   cluster_id: string # Specifies the ID of an EMR cluster where the managed scaling policy is attached.
   managed_scaling_policy: record # Managed scaling policy for an Amazon EMR cluster. The policy specifies the limits for resources that can be added or terminated from a cluster. The policy only applies to the core and task nodes. The master node cannot be scaled after initial configuration. — shape: {ComputeLimits?: record}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2317,7 +2328,7 @@ export def "remove-auto-scaling-policy" [
   --x-amz-target: string@x-amz-target-completer-41 # required
   cluster_id: string # Specifies the ID of a cluster. The instance group to which the automatic scaling policy is applied is within this cluster.
   instance_group_id: string # Specifies the ID of the instance group to which the scaling policy is applied.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2366,7 +2377,7 @@ export def "remove-auto-termination-policy" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-42 # required
   cluster_id: string # Specifies the ID of the Amazon EMR cluster from which the auto-termination policy will be removed.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2415,7 +2426,7 @@ export def "remove-managed-scaling-policy" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-43 # required
   cluster_id: string # Specifies the ID of the cluster from which the managed scaling policy will be removed.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2465,7 +2476,7 @@ export def "remove-tags" [
   --x-amz-target: string@x-amz-target-completer-44 # required
   resource_id: string # The Amazon EMR resource identifier from which tags will be removed. For example, a cluster identifier or an Amazon EMR Studio ID.
   tag_keys: list<string> # A list of tag keys to remove from the resource.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2495,17 +2506,6 @@ export def "remove-tags" [
 #
 # POST /
 # operationId: RunJobFlow
-# --Instances shape: {MasterInstanceType?: string, SlaveInstanceType?: string, InstanceCount?: int, InstanceGroups?: list, InstanceFleets?: list, Ec2KeyName?: string, Placement?: record, KeepJobFlowAliveWhenNoSteps?: bool, TerminationProtected?: bool, HadoopVersion?: string, Ec2SubnetId?: string, Ec2SubnetIds?: list<string>, EmrManagedMasterSecurityGroup?: string, EmrManagedSlaveSecurityGroup?: string, ServiceAccessSecurityGroup?: string, AdditionalMasterSecurityGroups?: list<string>, ... (1 more fields)}
-# --Steps item shape: {Name: string, ActionOnFailure?: "TERMINATE_JOB_FLOW"|"TERMINATE_CLUSTER"|"CANCEL_AND_WAIT"|"CONTINUE", HadoopJarStep: record}
-# --BootstrapActions item shape: {Name: string, ScriptBootstrapAction: record}
-# --NewSupportedProducts item shape: {Name?: string, Args?: list<string>}
-# --Applications item shape: {Name?: string, Version?: string, Args?: list<string>, AdditionalInfo?: record}
-# --Configurations item shape: {Classification?: string, Configurations?: list, Properties?: record}
-# --Tags item shape: {Key?: string, Value?: string}
-# --KerberosAttributes shape: {Realm: string, KdcAdminPassword: string, CrossRealmTrustPrincipalPassword?: string, ADDomainJoinUser?: string, ADDomainJoinPassword?: string}
-# --ManagedScalingPolicy shape: {ComputeLimits?: record}
-# --PlacementGroupConfigs item shape: {InstanceRole: "MASTER"|"CORE"|"TASK", PlacementStrategy?: "SPREAD"|"PARTITION"|"CLUSTER"|"NONE"}
-# --AutoTerminationPolicy shape: {IdleTimeout?: int}
 export def "run-job-flow" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2553,7 +2553,7 @@ export def "run-job-flow" [
   --placement-group-configs: list # The specified placement group configuration for an Amazon EMR cluster. — item shape: {InstanceRole: "MASTER"|"CORE"|"TASK", PlacementStrategy?: "SPREAD"|"PARTITION"|"CLUSTER"|"NONE"}
   --auto-termination-policy: record # An auto-termination policy for an Amazon EMR cluster. An auto-termination policy defines the amount of idle time in seconds after which a cluster automatically terminates. For alternative cluster termination options, see Control cluster termination (https://docs.aws.amazon.com/emr/latest/ManagementGuide/emr-plan-termination.html). — shape: {IdleTimeout?: int}
   --os-release-label: string # Specifies a particular Amazon Linux release for all nodes in a cluster launch RunJobFlow request. If a release is not specified, Amazon EMR uses the latest validated Amazon Linux release for cluster launch.
-]: any -> record<JobFlowId: string, ClusterArn: string> {
+]: any -> oneof<record<JobFlowId: string, ClusterArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2685,8 +2685,6 @@ export def "set-visible-to-all-users" [
 #
 # POST /
 # operationId: StartNotebookExecution
-# --ExecutionEngine shape: {Id: string, Type?: "EMR", MasterInstanceSecurityGroupId?: string}
-# --Tags item shape: {Key?: string, Value?: string}
 export def "start-notebook-execution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2713,7 +2711,7 @@ export def "start-notebook-execution" [
   service_role: string # The name or ARN of the IAM role that is used as the service role for Amazon EMR (the EMR role) for the notebook execution.
   --notebook-instance-security-group-id: string # The unique identifier of the Amazon EC2 security group to associate with the EMR Notebook for this notebook execution.
   --tags: list # A list of tags associated with a notebook execution. Tags are user-defined key-value pairs that consist of a required key string with a maximum of 128 characters and an optional value string with a maximum of 256 characters. — item shape: {Key?: string, Value?: string}
-]: any -> record<NotebookExecutionId: string> {
+]: any -> oneof<record<NotebookExecutionId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

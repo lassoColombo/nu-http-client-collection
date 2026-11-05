@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "x-api-key" => { {scheme: $scheme, headers: {"X-API-KEY": $token_val}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -104,9 +128,9 @@ def auth-scheme-completer [] { ["x-api-key"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "anonymize" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["anonymize" "api-key-info" "available-services" "api-status" "api-usage" "api-usage-history" "api-usage-history-aggregate" "castegroup-indian-full" "castegroup-indian-full-batch" "chinese-name-candidates" "chinese-name-candidates-batch" "chinese-name-candidates-gender-batch" "chinese-name-gender-candidates" "chinese-name-match" "chinese-name-match-batch" "corridor" "corridor-batch" "country" "country-batch" "diaspora" "diaspora-batch" "gender" "gender-1" "gender-batch" "gender-chinese-name" "gender-chinese-name-batch" "gender-chinese-name-pinyin" "gender-chinese-name-pinyin-batch" "gender-full" "gender-full-batch" "gender-full-geo" "gender-full-geo-batch" "gender-geo" "gender-geo-batch" "gender-japanese-name-pinyin" "gender-japanese-name-pinyin-batch" "gender-japanese-name-full" "gender-japanese-name-full-batch" "japanese-name-gender-kanji-candidates-batch" "japanese-name-kanji-candidates" "japanese-name-kanji-candidates-1" "japanese-name-kanji-candidates-batch" "japanese-name-latin-candidates" "japanese-name-latin-candidates-batch" "japanese-name-match" "japanese-name-match-batch" "japanese-name-match-feedback-loop" "learnable" "name-type" "name-type-batch" "name-type-geo" "name-type-geo-batch" "origin" "origin-batch" "parse-chinese-name" "parse-chinese-name-batch" "parse-japanese-name" "parse-japanese-name-batch" "parse-name" "parse-name-geo" "parse-name-batch" "parse-name-geo-batch" "phone-code" "phone-code-batch" "phone-code-geo" "phone-code-geo-batch" "phone-code-geo-feedback-loop" "pinyin-chinese-name" "pinyin-chinese-name-batch" "regions" "religion-full" "religion-full-batch" "religion" "religion-indian-full-batch" "software-version" "subclassification" "subclassification-batch" "subclassification-indian" "subclassification-indian-batch" "taxonomy-classes" "us-race-ethnicity" "us-race-ethnicity-batch" "us-race-ethnicity-zip5" "us-zip-race-ethnicity-batch" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -141,7 +165,7 @@ export def "anonymize" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<admin: bool, anonymized: bool, apiKey: string, corporate: bool, disabled: bool, learnable: bool, partner: bool, striped: bool, userId: string, vetted: bool> {
+]: nothing -> oneof<record<admin: bool, anonymized: bool, apiKey: string, corporate: bool, disabled: bool, learnable: bool, partner: bool, striped: bool, userId: string, vetted: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
@@ -178,7 +202,7 @@ export def "api-key-info" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<admin: bool, anonymized: bool, apiKey: string, corporate: bool, disabled: bool, learnable: bool, partner: bool, striped: bool, userId: string, vetted: bool> {
+]: nothing -> oneof<record<admin: bool, anonymized: bool, apiKey: string, corporate: bool, disabled: bool, learnable: bool, partner: bool, striped: bool, userId: string, vetted: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/apiKeyInfo" $auth.query)
@@ -212,7 +236,7 @@ export def "available-services" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<apiServices: table<costInUnits: int, serviceGroup: string, serviceName: string>> {
+]: nothing -> oneof<record<apiServices: table<costInUnits: int, serviceGroup: string, serviceName: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/apiServices" $auth.query)
@@ -246,7 +270,7 @@ export def "api-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<classifiers: table<classifierName: string, learning: bool, probabilityCalibrated: bool, serving: bool, shuttingDown: bool>, softwareVersion: record<softwareNameAndVersion: string, softwareVersion: list<int>>> {
+]: nothing -> oneof<record<classifiers: table<classifierName: string, learning: bool, probabilityCalibrated: bool, serving: bool, shuttingDown: bool>, softwareVersion: record<softwareNameAndVersion: string, softwareVersion: list<int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/apiStatus" $auth.query)
@@ -280,7 +304,7 @@ export def "api-usage" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<billingPeriod: record<apiKey: string, billingStatus: string, hardLimit: int, periodEnded: int, periodStarted: int, softLimit: int, stripeCurrentPeriodEnd: int, stripeCurrentPeriodStart: int, subscriptionStarted: int, usage: int>, overageCurrency: string, overageExclTax: float, overageInclTax: float, overageQuantity: int, subscription: record<apiKey: string, currency: string, currencyFactor: float, planBaseFeesKey: string, planEnded: int, planName: string, planQuota: int, planStarted: int, planStatus: string, price: float, priceOverage: float, priceOverageUSD: float, priceUSD: float, priorPlanStarted: int, stripeCustomerId: string, stripeStatus: string, stripeSubscription: string, taxRate: float, userId: string>> {
+]: nothing -> oneof<record<billingPeriod: record<apiKey: string, billingStatus: string, hardLimit: int, periodEnded: int, periodStarted: int, softLimit: int, stripeCurrentPeriodEnd: int, stripeCurrentPeriodStart: int, subscriptionStarted: int, usage: int>, overageCurrency: string, overageExclTax: float, overageInclTax: float, overageQuantity: int, subscription: record<apiKey: string, currency: string, currencyFactor: float, planBaseFeesKey: string, planEnded: int, planName: string, planQuota: int, planStarted: int, planStatus: string, price: float, priceOverage: float, priceOverageUSD: float, priceUSD: float, priorPlanStarted: int, stripeCustomerId: string, stripeStatus: string, stripeSubscription: string, taxRate: float, userId: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/apiUsage" $auth.query)
@@ -314,7 +338,7 @@ export def "api-usage-history" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<detailedUsage: table<apiKey: record, apiService: string, createdDateTime: int, hostAddress: string, lastFlushedDateTime: int, lastUsedDateTime: int, serviceFeaturesUsage: record, totalUsage: int>> {
+]: nothing -> oneof<record<detailedUsage: table<apiKey: record, apiService: string, createdDateTime: int, hostAddress: string, lastFlushedDateTime: int, lastUsedDateTime: int, serviceFeaturesUsage: record, totalUsage: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/apiUsageHistory" $auth.query)
@@ -348,7 +372,7 @@ export def "api-usage-history-aggregate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<colHeaders: list<string>, data: list<list<int>>, historyTruncated: bool, periodEnd: int, periodStart: int, rowHeaders: list<string>, timeUnit: string, totalUsage: int> {
+]: nothing -> oneof<record<colHeaders: list<string>, data: list<list<int>>, historyTruncated: bool, periodEnd: int, periodStart: int, rowHeaders: list<string>, timeUnit: string, totalUsage: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/apiUsageHistoryAggregate" $auth.query)
@@ -384,7 +408,7 @@ export def "castegroup-indian-full" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<castegroup: string, castegroupAlt: string, castegroupTop: list<string>, id: string, name: string, probabilityAltCalibrated: float, probabilityCalibrated: float, score: float, script: string> {
+]: nothing -> oneof<record<castegroup: string, castegroupAlt: string, castegroupTop: list<string>, id: string, name: string, probabilityAltCalibrated: float, probabilityCalibrated: float, score: float, script: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($sub_division_iso31662 | is-empty) { error make --unspanned { msg: "path parameter 'subDivisionIso31662' must be non-empty" } }
@@ -410,8 +434,6 @@ export def "castegroup-indian-full" [
 #
 # POST /api2/json/castegroupIndianFullBatch
 # operationId: castegroupIndianFullBatch
-# --facts item shape: {id?: string, name?: string}
-# --personalNames item shape: {id?: string, name?: string, subdivisionIso?: string}
 export def "castegroup-indian-full-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -424,7 +446,7 @@ export def "castegroup-indian-full-batch" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --facts: list # item shape: {id?: string, name?: string}
   --personal-names: list # item shape: {id?: string, name?: string, subdivisionIso?: string}
-]: any -> record<personalNames: table<castegroup: string, castegroupAlt: string, castegroupTop: list, id: string, name: string, probabilityAltCalibrated: float, probabilityCalibrated: float, score: float, script: string>> {
+]: any -> oneof<record<personalNames: table<castegroup: string, castegroupAlt: string, castegroupTop: list, id: string, name: string, probabilityAltCalibrated: float, probabilityCalibrated: float, score: float, script: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -463,7 +485,7 @@ export def "chinese-name-candidates" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<firstName: string, id: string, lastName: string, matchCandidates: table<candidateName: string, predScoreFamilyName: float, predScoreGivenName: float, probability: float>, orderOption: string, script: string> {
+]: nothing -> oneof<record<firstName: string, id: string, lastName: string, matchCandidates: table<candidateName: string, predScoreFamilyName: float, predScoreGivenName: float, probability: float>, orderOption: string, script: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($chinese_surname_latin | is-empty) { error make --unspanned { msg: "path parameter 'chineseSurnameLatin' must be non-empty" } }
@@ -489,8 +511,6 @@ export def "chinese-name-candidates" [
 #
 # POST /api2/json/chineseNameCandidatesBatch
 # operationId: chineseNameCandidatesBatch
-# --facts item shape: {id?: string, name?: string}
-# --personalNames item shape: {firstName?: string, id?: string, lastName?: string}
 export def "chinese-name-candidates-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -503,7 +523,7 @@ export def "chinese-name-candidates-batch" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --facts: list # item shape: {id?: string, name?: string}
   --personal-names: list # item shape: {firstName?: string, id?: string, lastName?: string}
-]: any -> record<namesAndMatchCandidates: table<firstName: string, id: string, lastName: string, matchCandidates: list, orderOption: string, script: string>> {
+]: any -> oneof<record<namesAndMatchCandidates: table<firstName: string, id: string, lastName: string, matchCandidates: list, orderOption: string, script: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -530,8 +550,6 @@ export def "chinese-name-candidates-batch" [
 #
 # POST /api2/json/chineseNameCandidatesGenderBatch
 # operationId: chineseNameCandidatesGenderBatch
-# --facts item shape: {id?: string, name?: string}
-# --personalNames item shape: {firstName?: string, gender?: string, id?: string, lastName?: string}
 export def "chinese-name-candidates-gender-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -544,7 +562,7 @@ export def "chinese-name-candidates-gender-batch" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --facts: list # item shape: {id?: string, name?: string}
   --personal-names: list # item shape: {firstName?: string, gender?: string, id?: string, lastName?: string}
-]: any -> record<namesAndMatchCandidates: table<firstName: string, id: string, lastName: string, matchCandidates: list, orderOption: string, script: string>> {
+]: any -> oneof<record<namesAndMatchCandidates: table<firstName: string, id: string, lastName: string, matchCandidates: list, orderOption: string, script: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -584,7 +602,7 @@ export def "chinese-name-gender-candidates" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<firstName: string, id: string, lastName: string, matchCandidates: table<candidateName: string, predScoreFamilyName: float, predScoreGivenName: float, probability: float>, orderOption: string, script: string> {
+]: nothing -> oneof<record<firstName: string, id: string, lastName: string, matchCandidates: table<candidateName: string, predScoreFamilyName: float, predScoreGivenName: float, probability: float>, orderOption: string, script: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($chinese_surname_latin | is-empty) { error make --unspanned { msg: "path parameter 'chineseSurnameLatin' must be non-empty" } }
@@ -624,7 +642,7 @@ export def "chinese-name-match" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<id: string, matchStatus: string, score: float, script: string> {
+]: nothing -> oneof<record<id: string, matchStatus: string, score: float, script: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($chinese_surname_latin | is-empty) { error make --unspanned { msg: "path parameter 'chineseSurnameLatin' must be non-empty" } }
@@ -651,8 +669,6 @@ export def "chinese-name-match" [
 #
 # POST /api2/json/chineseNameMatchBatch
 # operationId: chineseNameMatchBatch
-# --facts item shape: {id?: string, name?: string}
-# --personalNames item shape: {id?: string, name1?: record, name2?: record}
 export def "chinese-name-match-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -665,7 +681,7 @@ export def "chinese-name-match-batch" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --facts: list # item shape: {id?: string, name?: string}
   --personal-names: list # item shape: {id?: string, name1?: record, name2?: record}
-]: any -> record<matchedNames: table<id: string, matchStatus: string, score: float, script: string>> {
+]: any -> oneof<record<matchedNames: table<id: string, matchStatus: string, score: float, script: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -708,7 +724,7 @@ export def "corridor" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<FirstLastNameDiasporaedOut: record<countryIso2: string, ethnicitiesTop: list<string>, ethnicity: string, ethnicityAlt: string, firstName: string, id: string, lastName: string, lifted: bool, probabilityAltCalibrated: float, probabilityCalibrated: float, score: float, script: string>, FirstLastNameGenderedOut: record<firstName: string, genderScale: float, id: string, lastName: string, likelyGender: string, probabilityCalibrated: float, score: float, script: string>, FirstLastNameOriginedOut: record<countriesOriginTop: list<string>, countryOrigin: string, countryOriginAlt: string, firstName: string, id: string, lastName: string, probabilityAltCalibrated: float, probabilityCalibrated: float, regionOrigin: string, score: float, script: string, subRegionOrigin: string, topRegionOrigin: string>, id: string, script: string> {
+]: nothing -> oneof<record<FirstLastNameDiasporaedOut: record<countryIso2: string, ethnicitiesTop: list<string>, ethnicity: string, ethnicityAlt: string, firstName: string, id: string, lastName: string, lifted: bool, probabilityAltCalibrated: float, probabilityCalibrated: float, score: float, script: string>, FirstLastNameGenderedOut: record<firstName: string, genderScale: float, id: string, lastName: string, likelyGender: string, probabilityCalibrated: float, score: float, script: string>, FirstLastNameOriginedOut: record<countriesOriginTop: list<string>, countryOrigin: string, countryOriginAlt: string, firstName: string, id: string, lastName: string, probabilityAltCalibrated: float, probabilityCalibrated: float, regionOrigin: string, score: float, script: string, subRegionOrigin: string, topRegionOrigin: string>, id: string, script: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($country_iso2_from | is-empty) { error make --unspanned { msg: "path parameter 'countryIso2From' must be non-empty" } }
@@ -738,8 +754,6 @@ export def "corridor" [
 #
 # POST /api2/json/corridorBatch
 # operationId: corridorBatch
-# --corridorFromTo item shape: {firstLastNameGeoFrom?: record, firstLastNameGeoTo?: record, id?: string}
-# --facts item shape: {id?: string, name?: string}
 export def "corridor-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -752,7 +766,7 @@ export def "corridor-batch" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --corridor-from-to: list # item shape: {firstLastNameGeoFrom?: record, firstLastNameGeoTo?: record, id?: string}
   --facts: list # item shape: {id?: string, name?: string}
-]: any -> record<corridorFromTo: table<FirstLastNameDiasporaedOut: record, FirstLastNameGenderedOut: record, FirstLastNameOriginedOut: record, id: string, script: string>> {
+]: any -> oneof<record<corridorFromTo: table<FirstLastNameDiasporaedOut: record, FirstLastNameGenderedOut: record, FirstLastNameOriginedOut: record, id: string, script: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -790,7 +804,7 @@ export def "country" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<countriesTop: list<string>, country: string, countryAlt: string, id: string, name: string, probabilityAltCalibrated: float, probabilityCalibrated: float, region: string, score: float, script: string, subRegion: string, topRegion: string> {
+]: nothing -> oneof<record<countriesTop: list<string>, country: string, countryAlt: string, id: string, name: string, probabilityAltCalibrated: float, probabilityCalibrated: float, region: string, score: float, script: string, subRegion: string, topRegion: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($personal_name_full | is-empty) { error make --unspanned { msg: "path parameter 'personalNameFull' must be non-empty" } }
@@ -815,8 +829,6 @@ export def "country" [
 #
 # POST /api2/json/countryBatch
 # operationId: countryBatch
-# --facts item shape: {id?: string, name?: string}
-# --personalNames item shape: {id?: string, name?: string}
 export def "country-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -829,7 +841,7 @@ export def "country-batch" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --facts: list # item shape: {id?: string, name?: string}
   --personal-names: list # item shape: {id?: string, name?: string}
-]: any -> record<personalNames: table<countriesTop: list, country: string, countryAlt: string, id: string, name: string, probabilityAltCalibrated: float, probabilityCalibrated: float, region: string, score: float, script: string, subRegion: string, topRegion: string>> {
+]: any -> oneof<record<personalNames: table<countriesTop: list, country: string, countryAlt: string, id: string, name: string, probabilityAltCalibrated: float, probabilityCalibrated: float, region: string, score: float, script: string, subRegion: string, topRegion: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -869,7 +881,7 @@ export def "diaspora" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<countryIso2: string, ethnicitiesTop: list<string>, ethnicity: string, ethnicityAlt: string, firstName: string, id: string, lastName: string, lifted: bool, probabilityAltCalibrated: float, probabilityCalibrated: float, score: float, script: string> {
+]: nothing -> oneof<record<countryIso2: string, ethnicitiesTop: list<string>, ethnicity: string, ethnicityAlt: string, firstName: string, id: string, lastName: string, lifted: bool, probabilityAltCalibrated: float, probabilityCalibrated: float, score: float, script: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($country_iso2 | is-empty) { error make --unspanned { msg: "path parameter 'countryIso2' must be non-empty" } }
@@ -896,8 +908,6 @@ export def "diaspora" [
 #
 # POST /api2/json/diasporaBatch
 # operationId: diasporaBatch
-# --facts item shape: {id?: string, name?: string}
-# --personalNames item shape: {countryIso2?: string, firstName?: string, id?: string, lastName?: string}
 export def "diaspora-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -910,7 +920,7 @@ export def "diaspora-batch" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --facts: list # item shape: {id?: string, name?: string}
   --personal-names: list # item shape: {countryIso2?: string, firstName?: string, id?: string, lastName?: string}
-]: any -> record<personalNames: table<countryIso2: string, ethnicitiesTop: list, ethnicity: string, ethnicityAlt: string, firstName: string, id: string, lastName: string, lifted: bool, probabilityAltCalibrated: float, probabilityCalibrated: float, score: float, script: string>> {
+]: any -> oneof<record<personalNames: table<countryIso2: string, ethnicitiesTop: list, ethnicity: string, ethnicityAlt: string, firstName: string, id: string, lastName: string, lifted: bool, probabilityAltCalibrated: float, probabilityCalibrated: float, score: float, script: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -948,7 +958,7 @@ export def "gender" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<firstName: string, genderScale: float, id: string, lastName: string, likelyGender: string, probabilityCalibrated: float, score: float, script: string> {
+]: nothing -> oneof<record<firstName: string, genderScale: float, id: string, lastName: string, likelyGender: string, probabilityCalibrated: float, score: float, script: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($first_name | is-empty) { error make --unspanned { msg: "path parameter 'firstName' must be non-empty" } }
@@ -985,7 +995,7 @@ export def "gender-1" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<firstName: string, genderScale: float, id: string, lastName: string, likelyGender: string, probabilityCalibrated: float, score: float, script: string> {
+]: nothing -> oneof<record<firstName: string, genderScale: float, id: string, lastName: string, likelyGender: string, probabilityCalibrated: float, score: float, script: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($first_name | is-empty) { error make --unspanned { msg: "path parameter 'firstName' must be non-empty" } }
@@ -1011,8 +1021,6 @@ export def "gender-1" [
 #
 # POST /api2/json/genderBatch
 # operationId: genderBatch
-# --facts item shape: {id?: string, name?: string}
-# --personalNames item shape: {firstName?: string, id?: string, lastName?: string}
 export def "gender-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1025,7 +1033,7 @@ export def "gender-batch" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --facts: list # item shape: {id?: string, name?: string}
   --personal-names: list # item shape: {firstName?: string, id?: string, lastName?: string}
-]: any -> record<personalNames: table<firstName: string, genderScale: float, id: string, lastName: string, likelyGender: string, probabilityCalibrated: float, score: float, script: string>> {
+]: any -> oneof<record<personalNames: table<firstName: string, genderScale: float, id: string, lastName: string, likelyGender: string, probabilityCalibrated: float, score: float, script: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1063,7 +1071,7 @@ export def "gender-chinese-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<genderScale: float, id: string, likelyGender: string, name: string, probabilityCalibrated: float, score: float, script: string> {
+]: nothing -> oneof<record<genderScale: float, id: string, likelyGender: string, name: string, probabilityCalibrated: float, score: float, script: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($chinese_name | is-empty) { error make --unspanned { msg: "path parameter 'chineseName' must be non-empty" } }
@@ -1088,8 +1096,6 @@ export def "gender-chinese-name" [
 #
 # POST /api2/json/genderChineseNameBatch
 # operationId: genderChineseNameBatch
-# --facts item shape: {id?: string, name?: string}
-# --personalNames item shape: {id?: string, name?: string}
 export def "gender-chinese-name-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1102,7 +1108,7 @@ export def "gender-chinese-name-batch" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --facts: list # item shape: {id?: string, name?: string}
   --personal-names: list # item shape: {id?: string, name?: string}
-]: any -> record<personalNames: table<genderScale: float, id: string, likelyGender: string, name: string, probabilityCalibrated: float, score: float, script: string>> {
+]: any -> oneof<record<personalNames: table<genderScale: float, id: string, likelyGender: string, name: string, probabilityCalibrated: float, score: float, script: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1141,7 +1147,7 @@ export def "gender-chinese-name-pinyin" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<firstName: string, genderScale: float, id: string, lastName: string, likelyGender: string, probabilityCalibrated: float, score: float, script: string> {
+]: nothing -> oneof<record<firstName: string, genderScale: float, id: string, lastName: string, likelyGender: string, probabilityCalibrated: float, score: float, script: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($chinese_surname_latin | is-empty) { error make --unspanned { msg: "path parameter 'chineseSurnameLatin' must be non-empty" } }
@@ -1167,8 +1173,6 @@ export def "gender-chinese-name-pinyin" [
 #
 # POST /api2/json/genderChineseNamePinyinBatch
 # operationId: genderChineseNamePinyinBatch
-# --facts item shape: {id?: string, name?: string}
-# --personalNames item shape: {firstName?: string, id?: string, lastName?: string}
 export def "gender-chinese-name-pinyin-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1181,7 +1185,7 @@ export def "gender-chinese-name-pinyin-batch" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --facts: list # item shape: {id?: string, name?: string}
   --personal-names: list # item shape: {firstName?: string, id?: string, lastName?: string}
-]: any -> record<personalNames: table<firstName: string, genderScale: float, id: string, lastName: string, likelyGender: string, probabilityCalibrated: float, score: float, script: string>> {
+]: any -> oneof<record<personalNames: table<firstName: string, genderScale: float, id: string, lastName: string, likelyGender: string, probabilityCalibrated: float, score: float, script: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1219,7 +1223,7 @@ export def "gender-full" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<genderScale: float, id: string, likelyGender: string, name: string, probabilityCalibrated: float, score: float, script: string> {
+]: nothing -> oneof<record<genderScale: float, id: string, likelyGender: string, name: string, probabilityCalibrated: float, score: float, script: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($full_name | is-empty) { error make --unspanned { msg: "path parameter 'fullName' must be non-empty" } }
@@ -1244,8 +1248,6 @@ export def "gender-full" [
 #
 # POST /api2/json/genderFullBatch
 # operationId: genderFullBatch
-# --facts item shape: {id?: string, name?: string}
-# --personalNames item shape: {id?: string, name?: string}
 export def "gender-full-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1258,7 +1260,7 @@ export def "gender-full-batch" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --facts: list # item shape: {id?: string, name?: string}
   --personal-names: list # item shape: {id?: string, name?: string}
-]: any -> record<personalNames: table<genderScale: float, id: string, likelyGender: string, name: string, probabilityCalibrated: float, score: float, script: string>> {
+]: any -> oneof<record<personalNames: table<genderScale: float, id: string, likelyGender: string, name: string, probabilityCalibrated: float, score: float, script: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1297,7 +1299,7 @@ export def "gender-full-geo" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<genderScale: float, id: string, likelyGender: string, name: string, probabilityCalibrated: float, score: float, script: string> {
+]: nothing -> oneof<record<genderScale: float, id: string, likelyGender: string, name: string, probabilityCalibrated: float, score: float, script: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($full_name | is-empty) { error make --unspanned { msg: "path parameter 'fullName' must be non-empty" } }
@@ -1323,8 +1325,6 @@ export def "gender-full-geo" [
 #
 # POST /api2/json/genderFullGeoBatch
 # operationId: genderFullGeoBatch
-# --facts item shape: {id?: string, name?: string}
-# --personalNames item shape: {countryIso2?: string, id?: string, name?: string}
 export def "gender-full-geo-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1337,7 +1337,7 @@ export def "gender-full-geo-batch" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --facts: list # item shape: {id?: string, name?: string}
   --personal-names: list # item shape: {countryIso2?: string, id?: string, name?: string}
-]: any -> record<personalNames: table<genderScale: float, id: string, likelyGender: string, name: string, probabilityCalibrated: float, score: float, script: string>> {
+]: any -> oneof<record<personalNames: table<genderScale: float, id: string, likelyGender: string, name: string, probabilityCalibrated: float, score: float, script: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1377,7 +1377,7 @@ export def "gender-geo" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<firstName: string, genderScale: float, id: string, lastName: string, likelyGender: string, probabilityCalibrated: float, score: float, script: string> {
+]: nothing -> oneof<record<firstName: string, genderScale: float, id: string, lastName: string, likelyGender: string, probabilityCalibrated: float, score: float, script: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($first_name | is-empty) { error make --unspanned { msg: "path parameter 'firstName' must be non-empty" } }
@@ -1404,8 +1404,6 @@ export def "gender-geo" [
 #
 # POST /api2/json/genderGeoBatch
 # operationId: genderGeoBatch
-# --facts item shape: {id?: string, name?: string}
-# --personalNames item shape: {countryIso2?: string, firstName?: string, id?: string, lastName?: string}
 export def "gender-geo-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1418,7 +1416,7 @@ export def "gender-geo-batch" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --facts: list # item shape: {id?: string, name?: string}
   --personal-names: list # item shape: {countryIso2?: string, firstName?: string, id?: string, lastName?: string}
-]: any -> record<personalNames: table<firstName: string, genderScale: float, id: string, lastName: string, likelyGender: string, probabilityCalibrated: float, score: float, script: string>> {
+]: any -> oneof<record<personalNames: table<firstName: string, genderScale: float, id: string, lastName: string, likelyGender: string, probabilityCalibrated: float, score: float, script: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1457,7 +1455,7 @@ export def "gender-japanese-name-pinyin" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<firstName: string, genderScale: float, id: string, lastName: string, likelyGender: string, probabilityCalibrated: float, score: float, script: string> {
+]: nothing -> oneof<record<firstName: string, genderScale: float, id: string, lastName: string, likelyGender: string, probabilityCalibrated: float, score: float, script: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($japanese_surname | is-empty) { error make --unspanned { msg: "path parameter 'japaneseSurname' must be non-empty" } }
@@ -1483,8 +1481,6 @@ export def "gender-japanese-name-pinyin" [
 #
 # POST /api2/json/genderJapaneseNameBatch
 # operationId: genderJapaneseNamePinyinBatch
-# --facts item shape: {id?: string, name?: string}
-# --personalNames item shape: {firstName?: string, id?: string, lastName?: string}
 export def "gender-japanese-name-pinyin-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1497,7 +1493,7 @@ export def "gender-japanese-name-pinyin-batch" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --facts: list # item shape: {id?: string, name?: string}
   --personal-names: list # item shape: {firstName?: string, id?: string, lastName?: string}
-]: any -> record<personalNames: table<firstName: string, genderScale: float, id: string, lastName: string, likelyGender: string, probabilityCalibrated: float, score: float, script: string>> {
+]: any -> oneof<record<personalNames: table<firstName: string, genderScale: float, id: string, lastName: string, likelyGender: string, probabilityCalibrated: float, score: float, script: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1535,7 +1531,7 @@ export def "gender-japanese-name-full" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<genderScale: float, id: string, likelyGender: string, name: string, probabilityCalibrated: float, score: float, script: string> {
+]: nothing -> oneof<record<genderScale: float, id: string, likelyGender: string, name: string, probabilityCalibrated: float, score: float, script: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($japanese_name | is-empty) { error make --unspanned { msg: "path parameter 'japaneseName' must be non-empty" } }
@@ -1560,8 +1556,6 @@ export def "gender-japanese-name-full" [
 #
 # POST /api2/json/genderJapaneseNameFullBatch
 # operationId: genderJapaneseNameFullBatch
-# --facts item shape: {id?: string, name?: string}
-# --personalNames item shape: {id?: string, name?: string}
 export def "gender-japanese-name-full-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1574,7 +1568,7 @@ export def "gender-japanese-name-full-batch" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --facts: list # item shape: {id?: string, name?: string}
   --personal-names: list # item shape: {id?: string, name?: string}
-]: any -> record<personalNames: table<genderScale: float, id: string, likelyGender: string, name: string, probabilityCalibrated: float, score: float, script: string>> {
+]: any -> oneof<record<personalNames: table<genderScale: float, id: string, likelyGender: string, name: string, probabilityCalibrated: float, score: float, script: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1601,8 +1595,6 @@ export def "gender-japanese-name-full-batch" [
 #
 # POST /api2/json/japaneseNameGenderKanjiCandidatesBatch
 # operationId: japaneseNameGenderKanjiCandidatesBatch
-# --facts item shape: {id?: string, name?: string}
-# --personalNames item shape: {firstName?: string, gender?: string, id?: string, lastName?: string}
 export def "japanese-name-gender-kanji-candidates-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1615,7 +1607,7 @@ export def "japanese-name-gender-kanji-candidates-batch" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --facts: list # item shape: {id?: string, name?: string}
   --personal-names: list # item shape: {firstName?: string, gender?: string, id?: string, lastName?: string}
-]: any -> record<namesAndMatchCandidates: table<firstName: string, id: string, lastName: string, matchCandidates: list, orderOption: string, script: string>> {
+]: any -> oneof<record<namesAndMatchCandidates: table<firstName: string, id: string, lastName: string, matchCandidates: list, orderOption: string, script: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1654,7 +1646,7 @@ export def "japanese-name-kanji-candidates" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<firstName: string, id: string, lastName: string, matchCandidates: table<candidateName: string, predScoreFamilyName: float, predScoreGivenName: float, probability: float>, orderOption: string, script: string> {
+]: nothing -> oneof<record<firstName: string, id: string, lastName: string, matchCandidates: table<candidateName: string, predScoreFamilyName: float, predScoreGivenName: float, probability: float>, orderOption: string, script: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($japanese_surname_latin | is-empty) { error make --unspanned { msg: "path parameter 'japaneseSurnameLatin' must be non-empty" } }
@@ -1693,7 +1685,7 @@ export def "japanese-name-kanji-candidates-1" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<firstName: string, id: string, lastName: string, matchCandidates: table<candidateName: string, predScoreFamilyName: float, predScoreGivenName: float, probability: float>, orderOption: string, script: string> {
+]: nothing -> oneof<record<firstName: string, id: string, lastName: string, matchCandidates: table<candidateName: string, predScoreFamilyName: float, predScoreGivenName: float, probability: float>, orderOption: string, script: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($japanese_surname_latin | is-empty) { error make --unspanned { msg: "path parameter 'japaneseSurnameLatin' must be non-empty" } }
@@ -1720,8 +1712,6 @@ export def "japanese-name-kanji-candidates-1" [
 #
 # POST /api2/json/japaneseNameKanjiCandidatesBatch
 # operationId: japaneseNameKanjiCandidatesBatch
-# --facts item shape: {id?: string, name?: string}
-# --personalNames item shape: {firstName?: string, id?: string, lastName?: string}
 export def "japanese-name-kanji-candidates-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1734,7 +1724,7 @@ export def "japanese-name-kanji-candidates-batch" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --facts: list # item shape: {id?: string, name?: string}
   --personal-names: list # item shape: {firstName?: string, id?: string, lastName?: string}
-]: any -> record<namesAndMatchCandidates: table<firstName: string, id: string, lastName: string, matchCandidates: list, orderOption: string, script: string>> {
+]: any -> oneof<record<namesAndMatchCandidates: table<firstName: string, id: string, lastName: string, matchCandidates: list, orderOption: string, script: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1773,7 +1763,7 @@ export def "japanese-name-latin-candidates" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<firstName: string, id: string, lastName: string, matchCandidates: table<candidateName: string, predScoreFamilyName: float, predScoreGivenName: float, probability: float>, orderOption: string, script: string> {
+]: nothing -> oneof<record<firstName: string, id: string, lastName: string, matchCandidates: table<candidateName: string, predScoreFamilyName: float, predScoreGivenName: float, probability: float>, orderOption: string, script: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($japanese_surname_kanji | is-empty) { error make --unspanned { msg: "path parameter 'japaneseSurnameKanji' must be non-empty" } }
@@ -1799,8 +1789,6 @@ export def "japanese-name-latin-candidates" [
 #
 # POST /api2/json/japaneseNameLatinCandidatesBatch
 # operationId: japaneseNameLatinCandidatesBatch
-# --facts item shape: {id?: string, name?: string}
-# --personalNames item shape: {firstName?: string, id?: string, lastName?: string}
 export def "japanese-name-latin-candidates-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1813,7 +1801,7 @@ export def "japanese-name-latin-candidates-batch" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --facts: list # item shape: {id?: string, name?: string}
   --personal-names: list # item shape: {firstName?: string, id?: string, lastName?: string}
-]: any -> record<namesAndMatchCandidates: table<firstName: string, id: string, lastName: string, matchCandidates: list, orderOption: string, script: string>> {
+]: any -> oneof<record<namesAndMatchCandidates: table<firstName: string, id: string, lastName: string, matchCandidates: list, orderOption: string, script: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1853,7 +1841,7 @@ export def "japanese-name-match" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<id: string, matchStatus: string, score: float, script: string> {
+]: nothing -> oneof<record<id: string, matchStatus: string, score: float, script: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($japanese_surname_latin | is-empty) { error make --unspanned { msg: "path parameter 'japaneseSurnameLatin' must be non-empty" } }
@@ -1880,8 +1868,6 @@ export def "japanese-name-match" [
 #
 # POST /api2/json/japaneseNameMatchBatch
 # operationId: japaneseNameMatchBatch
-# --facts item shape: {id?: string, name?: string}
-# --personalNames item shape: {id?: string, name1?: record, name2?: record}
 export def "japanese-name-match-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1894,7 +1880,7 @@ export def "japanese-name-match-batch" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --facts: list # item shape: {id?: string, name?: string}
   --personal-names: list # item shape: {id?: string, name1?: record, name2?: record}
-]: any -> record<matchedNames: table<id: string, matchStatus: string, score: float, script: string>> {
+]: any -> oneof<record<matchedNames: table<id: string, matchStatus: string, score: float, script: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1934,7 +1920,7 @@ export def "japanese-name-match-feedback-loop" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<feedbackCredits: int> {
+]: nothing -> oneof<record<feedbackCredits: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($japanese_surname_latin | is-empty) { error make --unspanned { msg: "path parameter 'japaneseSurnameLatin' must be non-empty" } }
@@ -1974,7 +1960,7 @@ export def "learnable" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<admin: bool, anonymized: bool, apiKey: string, corporate: bool, disabled: bool, learnable: bool, partner: bool, striped: bool, userId: string, vetted: bool> {
+]: nothing -> oneof<record<admin: bool, anonymized: bool, apiKey: string, corporate: bool, disabled: bool, learnable: bool, partner: bool, striped: bool, userId: string, vetted: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
@@ -2012,7 +1998,7 @@ export def "name-type" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<commonType: string, commonTypeAlt: string, id: string, name: string, score: float, script: string> {
+]: nothing -> oneof<record<commonType: string, commonTypeAlt: string, id: string, name: string, score: float, script: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($proper_noun | is-empty) { error make --unspanned { msg: "path parameter 'properNoun' must be non-empty" } }
@@ -2037,8 +2023,6 @@ export def "name-type" [
 #
 # POST /api2/json/nameTypeBatch
 # operationId: nameTypeBatch
-# --facts item shape: {id?: string, name?: string}
-# --properNouns item shape: {id?: string, name?: string}
 export def "name-type-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2051,7 +2035,7 @@ export def "name-type-batch" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --facts: list # item shape: {id?: string, name?: string}
   --proper-nouns: list # item shape: {id?: string, name?: string}
-]: any -> record<properNouns: table<commonType: string, commonTypeAlt: string, id: string, name: string, score: float, script: string>> {
+]: any -> oneof<record<properNouns: table<commonType: string, commonTypeAlt: string, id: string, name: string, score: float, script: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2090,7 +2074,7 @@ export def "name-type-geo" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<commonType: string, commonTypeAlt: string, id: string, name: string, score: float, script: string> {
+]: nothing -> oneof<record<commonType: string, commonTypeAlt: string, id: string, name: string, score: float, script: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($proper_noun | is-empty) { error make --unspanned { msg: "path parameter 'properNoun' must be non-empty" } }
@@ -2116,8 +2100,6 @@ export def "name-type-geo" [
 #
 # POST /api2/json/nameTypeGeoBatch
 # operationId: nameTypeGeoBatch
-# --facts item shape: {id?: string, name?: string}
-# --properNouns item shape: {countryIso2?: string, id?: string, name?: string}
 export def "name-type-geo-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2130,7 +2112,7 @@ export def "name-type-geo-batch" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --facts: list # item shape: {id?: string, name?: string}
   --proper-nouns: list # item shape: {countryIso2?: string, id?: string, name?: string}
-]: any -> record<properNouns: table<commonType: string, commonTypeAlt: string, id: string, name: string, score: float, script: string>> {
+]: any -> oneof<record<properNouns: table<commonType: string, commonTypeAlt: string, id: string, name: string, score: float, script: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2169,7 +2151,7 @@ export def "origin" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<countriesOriginTop: list<string>, countryOrigin: string, countryOriginAlt: string, firstName: string, id: string, lastName: string, probabilityAltCalibrated: float, probabilityCalibrated: float, regionOrigin: string, score: float, script: string, subRegionOrigin: string, topRegionOrigin: string> {
+]: nothing -> oneof<record<countriesOriginTop: list<string>, countryOrigin: string, countryOriginAlt: string, firstName: string, id: string, lastName: string, probabilityAltCalibrated: float, probabilityCalibrated: float, regionOrigin: string, score: float, script: string, subRegionOrigin: string, topRegionOrigin: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($first_name | is-empty) { error make --unspanned { msg: "path parameter 'firstName' must be non-empty" } }
@@ -2195,8 +2177,6 @@ export def "origin" [
 #
 # POST /api2/json/originBatch
 # operationId: originBatch
-# --facts item shape: {id?: string, name?: string}
-# --personalNames item shape: {firstName?: string, id?: string, lastName?: string}
 export def "origin-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2209,7 +2189,7 @@ export def "origin-batch" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --facts: list # item shape: {id?: string, name?: string}
   --personal-names: list # item shape: {firstName?: string, id?: string, lastName?: string}
-]: any -> record<personalNames: table<countriesOriginTop: list, countryOrigin: string, countryOriginAlt: string, firstName: string, id: string, lastName: string, probabilityAltCalibrated: float, probabilityCalibrated: float, regionOrigin: string, score: float, script: string, subRegionOrigin: string, topRegionOrigin: string>> {
+]: any -> oneof<record<personalNames: table<countriesOriginTop: list, countryOrigin: string, countryOriginAlt: string, firstName: string, id: string, lastName: string, probabilityAltCalibrated: float, probabilityCalibrated: float, regionOrigin: string, score: float, script: string, subRegionOrigin: string, topRegionOrigin: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2247,7 +2227,7 @@ export def "parse-chinese-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<firstLastName: record<firstName: string, id: string, lastName: string, script: string>, id: string, name: string, nameParserType: string, nameParserTypeAlt: string, score: float, script: string> {
+]: nothing -> oneof<record<firstLastName: record<firstName: string, id: string, lastName: string, script: string>, id: string, name: string, nameParserType: string, nameParserTypeAlt: string, score: float, script: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($chinese_name | is-empty) { error make --unspanned { msg: "path parameter 'chineseName' must be non-empty" } }
@@ -2272,8 +2252,6 @@ export def "parse-chinese-name" [
 #
 # POST /api2/json/parseChineseNameBatch
 # operationId: parseChineseNameBatch
-# --facts item shape: {id?: string, name?: string}
-# --personalNames item shape: {id?: string, name?: string}
 export def "parse-chinese-name-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2286,7 +2264,7 @@ export def "parse-chinese-name-batch" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --facts: list # item shape: {id?: string, name?: string}
   --personal-names: list # item shape: {id?: string, name?: string}
-]: any -> record<personalNames: table<firstLastName: record, id: string, name: string, nameParserType: string, nameParserTypeAlt: string, score: float, script: string>> {
+]: any -> oneof<record<personalNames: table<firstLastName: record, id: string, name: string, nameParserType: string, nameParserTypeAlt: string, score: float, script: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2324,7 +2302,7 @@ export def "parse-japanese-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<firstLastName: record<firstName: string, id: string, lastName: string, script: string>, id: string, name: string, nameParserType: string, nameParserTypeAlt: string, score: float, script: string> {
+]: nothing -> oneof<record<firstLastName: record<firstName: string, id: string, lastName: string, script: string>, id: string, name: string, nameParserType: string, nameParserTypeAlt: string, score: float, script: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($japanese_name | is-empty) { error make --unspanned { msg: "path parameter 'japaneseName' must be non-empty" } }
@@ -2349,8 +2327,6 @@ export def "parse-japanese-name" [
 #
 # POST /api2/json/parseJapaneseNameBatch
 # operationId: parseJapaneseNameBatch
-# --facts item shape: {id?: string, name?: string}
-# --personalNames item shape: {id?: string, name?: string}
 export def "parse-japanese-name-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2363,7 +2339,7 @@ export def "parse-japanese-name-batch" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --facts: list # item shape: {id?: string, name?: string}
   --personal-names: list # item shape: {id?: string, name?: string}
-]: any -> record<personalNames: table<firstLastName: record, id: string, name: string, nameParserType: string, nameParserTypeAlt: string, score: float, script: string>> {
+]: any -> oneof<record<personalNames: table<firstLastName: record, id: string, name: string, nameParserType: string, nameParserTypeAlt: string, score: float, script: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2401,7 +2377,7 @@ export def "parse-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<firstLastName: record<firstName: string, id: string, lastName: string, script: string>, id: string, name: string, nameParserType: string, nameParserTypeAlt: string, score: float, script: string> {
+]: nothing -> oneof<record<firstLastName: record<firstName: string, id: string, lastName: string, script: string>, id: string, name: string, nameParserType: string, nameParserTypeAlt: string, score: float, script: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($name_full | is-empty) { error make --unspanned { msg: "path parameter 'nameFull' must be non-empty" } }
@@ -2438,7 +2414,7 @@ export def "parse-name-geo" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<firstLastName: record<firstName: string, id: string, lastName: string, script: string>, id: string, name: string, nameParserType: string, nameParserTypeAlt: string, score: float, script: string> {
+]: nothing -> oneof<record<firstLastName: record<firstName: string, id: string, lastName: string, script: string>, id: string, name: string, nameParserType: string, nameParserTypeAlt: string, score: float, script: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($name_full | is-empty) { error make --unspanned { msg: "path parameter 'nameFull' must be non-empty" } }
@@ -2464,8 +2440,6 @@ export def "parse-name-geo" [
 #
 # POST /api2/json/parseNameBatch
 # operationId: parseNameBatch
-# --facts item shape: {id?: string, name?: string}
-# --personalNames item shape: {id?: string, name?: string}
 export def "parse-name-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2478,7 +2452,7 @@ export def "parse-name-batch" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --facts: list # item shape: {id?: string, name?: string}
   --personal-names: list # item shape: {id?: string, name?: string}
-]: any -> record<personalNames: table<firstLastName: record, id: string, name: string, nameParserType: string, nameParserTypeAlt: string, score: float, script: string>> {
+]: any -> oneof<record<personalNames: table<firstLastName: record, id: string, name: string, nameParserType: string, nameParserTypeAlt: string, score: float, script: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2505,8 +2479,6 @@ export def "parse-name-batch" [
 #
 # POST /api2/json/parseNameGeoBatch
 # operationId: parseNameGeoBatch
-# --facts item shape: {id?: string, name?: string}
-# --personalNames item shape: {countryIso2?: string, id?: string, name?: string}
 export def "parse-name-geo-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2519,7 +2491,7 @@ export def "parse-name-geo-batch" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --facts: list # item shape: {id?: string, name?: string}
   --personal-names: list # item shape: {countryIso2?: string, id?: string, name?: string}
-]: any -> record<personalNames: table<firstLastName: record, id: string, name: string, nameParserType: string, nameParserTypeAlt: string, score: float, script: string>> {
+]: any -> oneof<record<personalNames: table<firstLastName: record, id: string, name: string, nameParserType: string, nameParserTypeAlt: string, score: float, script: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2559,7 +2531,7 @@ export def "phone-code" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<countryIso2: string, firstName: string, id: string, internationalPhoneNumberVerified: string, lastName: string, originCountryIso2: string, originCountryIso2Alt: string, phoneCountryCode: int, phoneCountryCodeAlt: int, phoneCountryIso2: string, phoneCountryIso2Alt: string, phoneCountryIso2Verified: string, phoneNumber: string, score: float, script: string, verified: bool> {
+]: nothing -> oneof<record<countryIso2: string, firstName: string, id: string, internationalPhoneNumberVerified: string, lastName: string, originCountryIso2: string, originCountryIso2Alt: string, phoneCountryCode: int, phoneCountryCodeAlt: int, phoneCountryIso2: string, phoneCountryIso2Alt: string, phoneCountryIso2Verified: string, phoneNumber: string, score: float, script: string, verified: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($first_name | is-empty) { error make --unspanned { msg: "path parameter 'firstName' must be non-empty" } }
@@ -2586,8 +2558,6 @@ export def "phone-code" [
 #
 # POST /api2/json/phoneCodeBatch
 # operationId: phoneCodeBatch
-# --facts item shape: {id?: string, name?: string}
-# --personalNamesWithPhoneNumbers item shape: {firstName?: string, id?: string, lastName?: string, phoneNumber?: string}
 export def "phone-code-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2600,7 +2570,7 @@ export def "phone-code-batch" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --facts: list # item shape: {id?: string, name?: string}
   --personal-names-with-phone-numbers: list # item shape: {firstName?: string, id?: string, lastName?: string, phoneNumber?: string}
-]: any -> record<personalNamesWithPhoneNumbers: table<countryIso2: string, firstName: string, id: string, internationalPhoneNumberVerified: string, lastName: string, originCountryIso2: string, originCountryIso2Alt: string, phoneCountryCode: int, phoneCountryCodeAlt: int, phoneCountryIso2: string, phoneCountryIso2Alt: string, phoneCountryIso2Verified: string, phoneNumber: string, score: float, script: string, verified: bool>> {
+]: any -> oneof<record<personalNamesWithPhoneNumbers: table<countryIso2: string, firstName: string, id: string, internationalPhoneNumberVerified: string, lastName: string, originCountryIso2: string, originCountryIso2Alt: string, phoneCountryCode: int, phoneCountryCodeAlt: int, phoneCountryIso2: string, phoneCountryIso2Alt: string, phoneCountryIso2Verified: string, phoneNumber: string, score: float, script: string, verified: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2641,7 +2611,7 @@ export def "phone-code-geo" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<countryIso2: string, firstName: string, id: string, internationalPhoneNumberVerified: string, lastName: string, originCountryIso2: string, originCountryIso2Alt: string, phoneCountryCode: int, phoneCountryCodeAlt: int, phoneCountryIso2: string, phoneCountryIso2Alt: string, phoneCountryIso2Verified: string, phoneNumber: string, score: float, script: string, verified: bool> {
+]: nothing -> oneof<record<countryIso2: string, firstName: string, id: string, internationalPhoneNumberVerified: string, lastName: string, originCountryIso2: string, originCountryIso2Alt: string, phoneCountryCode: int, phoneCountryCodeAlt: int, phoneCountryIso2: string, phoneCountryIso2Alt: string, phoneCountryIso2Verified: string, phoneNumber: string, score: float, script: string, verified: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($first_name | is-empty) { error make --unspanned { msg: "path parameter 'firstName' must be non-empty" } }
@@ -2669,8 +2639,6 @@ export def "phone-code-geo" [
 #
 # POST /api2/json/phoneCodeGeoBatch
 # operationId: phoneCodeGeoBatch
-# --facts item shape: {id?: string, name?: string}
-# --personalNamesWithPhoneNumbers item shape: {countryIso2?: string, countryIso2Alt?: string, firstName?: string, id?: string, lastName?: string, phoneNumber?: string}
 export def "phone-code-geo-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2683,7 +2651,7 @@ export def "phone-code-geo-batch" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --facts: list # item shape: {id?: string, name?: string}
   --personal-names-with-phone-numbers: list # item shape: {countryIso2?: string, countryIso2Alt?: string, firstName?: string, id?: string, lastName?: string, phoneNumber?: string}
-]: any -> record<personalNamesWithPhoneNumbers: table<countryIso2: string, firstName: string, id: string, internationalPhoneNumberVerified: string, lastName: string, originCountryIso2: string, originCountryIso2Alt: string, phoneCountryCode: int, phoneCountryCodeAlt: int, phoneCountryIso2: string, phoneCountryIso2Alt: string, phoneCountryIso2Verified: string, phoneNumber: string, score: float, script: string, verified: bool>> {
+]: any -> oneof<record<personalNamesWithPhoneNumbers: table<countryIso2: string, firstName: string, id: string, internationalPhoneNumberVerified: string, lastName: string, originCountryIso2: string, originCountryIso2Alt: string, phoneCountryCode: int, phoneCountryCodeAlt: int, phoneCountryIso2: string, phoneCountryIso2Alt: string, phoneCountryIso2Verified: string, phoneNumber: string, score: float, script: string, verified: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2725,7 +2693,7 @@ export def "phone-code-geo-feedback-loop" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<countryIso2: string, firstName: string, id: string, internationalPhoneNumberVerified: string, lastName: string, originCountryIso2: string, originCountryIso2Alt: string, phoneCountryCode: int, phoneCountryCodeAlt: int, phoneCountryIso2: string, phoneCountryIso2Alt: string, phoneCountryIso2Verified: string, phoneNumber: string, score: float, script: string, verified: bool> {
+]: nothing -> oneof<record<countryIso2: string, firstName: string, id: string, internationalPhoneNumberVerified: string, lastName: string, originCountryIso2: string, originCountryIso2Alt: string, phoneCountryCode: int, phoneCountryCodeAlt: int, phoneCountryIso2: string, phoneCountryIso2Alt: string, phoneCountryIso2Verified: string, phoneNumber: string, score: float, script: string, verified: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($first_name | is-empty) { error make --unspanned { msg: "path parameter 'firstName' must be non-empty" } }
@@ -2765,7 +2733,7 @@ export def "pinyin-chinese-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<firstLastName: record<firstName: string, id: string, lastName: string, script: string>, id: string, name: string, nameParserType: string, nameParserTypeAlt: string, score: float, script: string> {
+]: nothing -> oneof<record<firstLastName: record<firstName: string, id: string, lastName: string, script: string>, id: string, name: string, nameParserType: string, nameParserTypeAlt: string, score: float, script: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($chinese_name | is-empty) { error make --unspanned { msg: "path parameter 'chineseName' must be non-empty" } }
@@ -2790,8 +2758,6 @@ export def "pinyin-chinese-name" [
 #
 # POST /api2/json/pinyinChineseNameBatch
 # operationId: pinyinChineseNameBatch
-# --facts item shape: {id?: string, name?: string}
-# --personalNames item shape: {id?: string, name?: string}
 export def "pinyin-chinese-name-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2804,7 +2770,7 @@ export def "pinyin-chinese-name-batch" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --facts: list # item shape: {id?: string, name?: string}
   --personal-names: list # item shape: {id?: string, name?: string}
-]: any -> record<personalNames: table<firstLastName: record, id: string, name: string, nameParserType: string, nameParserTypeAlt: string, score: float, script: string>> {
+]: any -> oneof<record<personalNames: table<firstLastName: record, id: string, name: string, nameParserType: string, nameParserTypeAlt: string, score: float, script: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2841,7 +2807,7 @@ export def "regions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<countriesAndRegions: table<countryFIPS: string, countryISO2: string, countryISO3: string, countryName: string, countryNumCode: string, region: string, subregion: string, topregion: string>> {
+]: nothing -> oneof<record<countriesAndRegions: table<countryFIPS: string, countryISO2: string, countryISO3: string, countryName: string, countryNumCode: string, region: string, subregion: string, topregion: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/regions" $auth.query)
@@ -2878,7 +2844,7 @@ export def "religion-full" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<id: string, name: string, probabilityAltCalibrated: float, probabilityCalibrated: float, religion: string, religionAlt: string, religionsTop: list<string>, score: float, script: string> {
+]: nothing -> oneof<record<id: string, name: string, probabilityAltCalibrated: float, probabilityCalibrated: float, religion: string, religionAlt: string, religionsTop: list<string>, score: float, script: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($country_iso2 | is-empty) { error make --unspanned { msg: "path parameter 'countryIso2' must be non-empty" } }
@@ -2905,8 +2871,6 @@ export def "religion-full" [
 #
 # POST /api2/json/religionFullBatch
 # operationId: religionFullBatch
-# --facts item shape: {id?: string, name?: string}
-# --personalNames item shape: {countryIso2?: string, id?: string, name?: string, subdivisionIso?: string}
 export def "religion-full-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2919,7 +2883,7 @@ export def "religion-full-batch" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --facts: list # item shape: {id?: string, name?: string}
   --personal-names: list # item shape: {countryIso2?: string, id?: string, name?: string, subdivisionIso?: string}
-]: any -> record<personalNames: table<id: string, name: string, probabilityAltCalibrated: float, probabilityCalibrated: float, religion: string, religionAlt: string, religionsTop: list, score: float, script: string>> {
+]: any -> oneof<record<personalNames: table<id: string, name: string, probabilityAltCalibrated: float, probabilityCalibrated: float, religion: string, religionAlt: string, religionsTop: list, score: float, script: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2958,7 +2922,7 @@ export def "religion" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<id: string, name: string, probabilityAltCalibrated: float, probabilityCalibrated: float, religion: string, religionAlt: string, religionsTop: list<string>, score: float, script: string> {
+]: nothing -> oneof<record<id: string, name: string, probabilityAltCalibrated: float, probabilityCalibrated: float, religion: string, religionAlt: string, religionsTop: list<string>, score: float, script: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($sub_division_iso31662 | is-empty) { error make --unspanned { msg: "path parameter 'subDivisionIso31662' must be non-empty" } }
@@ -2984,8 +2948,6 @@ export def "religion" [
 #
 # POST /api2/json/religionIndianFullBatch
 # operationId: religionIndianFullBatch
-# --facts item shape: {id?: string, name?: string}
-# --personalNames item shape: {id?: string, name?: string, subdivisionIso?: string}
 export def "religion-indian-full-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2998,7 +2960,7 @@ export def "religion-indian-full-batch" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --facts: list # item shape: {id?: string, name?: string}
   --personal-names: list # item shape: {id?: string, name?: string, subdivisionIso?: string}
-]: any -> record<personalNames: table<id: string, name: string, probabilityAltCalibrated: float, probabilityCalibrated: float, religion: string, religionAlt: string, religionsTop: list, score: float, script: string>> {
+]: any -> oneof<record<personalNames: table<id: string, name: string, probabilityAltCalibrated: float, probabilityCalibrated: float, religion: string, religionAlt: string, religionsTop: list, score: float, script: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -3035,7 +2997,7 @@ export def "software-version" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<softwareNameAndVersion: string, softwareVersion: list<int>> {
+]: nothing -> oneof<record<softwareNameAndVersion: string, softwareVersion: list<int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/softwareVersion" $auth.query)
@@ -3072,7 +3034,7 @@ export def "subclassification" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<countryIso2: string, firstName: string, id: string, lastName: string, probabilityAltCalibrated: float, probabilityCalibrated: float, score: float, script: string, subClassification: string, subClassificationAlt: string, subclassificationTop: list<string>> {
+]: nothing -> oneof<record<countryIso2: string, firstName: string, id: string, lastName: string, probabilityAltCalibrated: float, probabilityCalibrated: float, score: float, script: string, subClassification: string, subClassificationAlt: string, subclassificationTop: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($country_iso2 | is-empty) { error make --unspanned { msg: "path parameter 'countryIso2' must be non-empty" } }
@@ -3099,8 +3061,6 @@ export def "subclassification" [
 #
 # POST /api2/json/subclassificationBatch
 # operationId: subclassificationBatch
-# --facts item shape: {id?: string, name?: string}
-# --personalNames item shape: {countryIso2?: string, firstName?: string, id?: string, lastName?: string}
 export def "subclassification-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3113,7 +3073,7 @@ export def "subclassification-batch" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --facts: list # item shape: {id?: string, name?: string}
   --personal-names: list # item shape: {countryIso2?: string, firstName?: string, id?: string, lastName?: string}
-]: any -> record<personalNames: table<countryIso2: string, firstName: string, id: string, lastName: string, probabilityAltCalibrated: float, probabilityCalibrated: float, score: float, script: string, subClassification: string, subClassificationAlt: string, subclassificationTop: list>> {
+]: any -> oneof<record<personalNames: table<countryIso2: string, firstName: string, id: string, lastName: string, probabilityAltCalibrated: float, probabilityCalibrated: float, score: float, script: string, subClassification: string, subClassificationAlt: string, subclassificationTop: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -3152,7 +3112,7 @@ export def "subclassification-indian" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<countryIso2: string, firstName: string, id: string, lastName: string, probabilityAltCalibrated: float, probabilityCalibrated: float, score: float, script: string, subClassification: string, subClassificationAlt: string, subclassificationTop: list<string>> {
+]: nothing -> oneof<record<countryIso2: string, firstName: string, id: string, lastName: string, probabilityAltCalibrated: float, probabilityCalibrated: float, score: float, script: string, subClassification: string, subClassificationAlt: string, subclassificationTop: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($first_name | is-empty) { error make --unspanned { msg: "path parameter 'firstName' must be non-empty" } }
@@ -3178,8 +3138,6 @@ export def "subclassification-indian" [
 #
 # POST /api2/json/subclassificationIndianBatch
 # operationId: subclassificationIndianBatch
-# --facts item shape: {id?: string, name?: string}
-# --personalNames item shape: {countryIso2?: string, firstName?: string, id?: string, lastName?: string}
 export def "subclassification-indian-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3192,7 +3150,7 @@ export def "subclassification-indian-batch" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --facts: list # item shape: {id?: string, name?: string}
   --personal-names: list # item shape: {countryIso2?: string, firstName?: string, id?: string, lastName?: string}
-]: any -> record<personalNames: table<countryIso2: string, firstName: string, id: string, lastName: string, probabilityAltCalibrated: float, probabilityCalibrated: float, score: float, script: string, subClassification: string, subClassificationAlt: string, subclassificationTop: list>> {
+]: any -> oneof<record<personalNames: table<countryIso2: string, firstName: string, id: string, lastName: string, probabilityAltCalibrated: float, probabilityCalibrated: float, score: float, script: string, subClassification: string, subClassificationAlt: string, subclassificationTop: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -3230,7 +3188,7 @@ export def "taxonomy-classes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<classifierName: string, classifyingScripts: list<string>, taxonomyClasses: list<string>> {
+]: nothing -> oneof<record<classifierName: string, classifyingScripts: list<string>, taxonomyClasses: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($classifier_name | is-empty) { error make --unspanned { msg: "path parameter 'classifierName' must be non-empty" } }
@@ -3267,7 +3225,7 @@ export def "us-race-ethnicity" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<firstName: string, id: string, lastName: string, probabilityAltCalibrated: float, probabilityCalibrated: float, raceEthnicitiesTop: list<string>, raceEthnicity: string, raceEthnicityAlt: string, score: float, script: string> {
+]: nothing -> oneof<record<firstName: string, id: string, lastName: string, probabilityAltCalibrated: float, probabilityCalibrated: float, raceEthnicitiesTop: list<string>, raceEthnicity: string, raceEthnicityAlt: string, score: float, script: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($first_name | is-empty) { error make --unspanned { msg: "path parameter 'firstName' must be non-empty" } }
@@ -3293,8 +3251,6 @@ export def "us-race-ethnicity" [
 #
 # POST /api2/json/usRaceEthnicityBatch
 # operationId: usRaceEthnicityBatch
-# --facts item shape: {id?: string, name?: string}
-# --personalNames item shape: {countryIso2?: string, firstName?: string, id?: string, lastName?: string}
 export def "us-race-ethnicity-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3307,7 +3263,7 @@ export def "us-race-ethnicity-batch" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --facts: list # item shape: {id?: string, name?: string}
   --personal-names: list # item shape: {countryIso2?: string, firstName?: string, id?: string, lastName?: string}
-]: any -> record<personalNames: table<firstName: string, id: string, lastName: string, probabilityAltCalibrated: float, probabilityCalibrated: float, raceEthnicitiesTop: list, raceEthnicity: string, raceEthnicityAlt: string, score: float, script: string>> {
+]: any -> oneof<record<personalNames: table<firstName: string, id: string, lastName: string, probabilityAltCalibrated: float, probabilityCalibrated: float, raceEthnicitiesTop: list, raceEthnicity: string, raceEthnicityAlt: string, score: float, script: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -3347,7 +3303,7 @@ export def "us-race-ethnicity-zip5" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<firstName: string, id: string, lastName: string, probabilityAltCalibrated: float, probabilityCalibrated: float, raceEthnicitiesTop: list<string>, raceEthnicity: string, raceEthnicityAlt: string, score: float, script: string> {
+]: nothing -> oneof<record<firstName: string, id: string, lastName: string, probabilityAltCalibrated: float, probabilityCalibrated: float, raceEthnicitiesTop: list<string>, raceEthnicity: string, raceEthnicityAlt: string, score: float, script: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($first_name | is-empty) { error make --unspanned { msg: "path parameter 'firstName' must be non-empty" } }
@@ -3374,8 +3330,6 @@ export def "us-race-ethnicity-zip5" [
 #
 # POST /api2/json/usZipRaceEthnicityBatch
 # operationId: usZipRaceEthnicityBatch
-# --facts item shape: {id?: string, name?: string}
-# --personalNames item shape: {countryIso2?: string, firstName?: string, id?: string, lastName?: string, zipCode?: string}
 export def "us-zip-race-ethnicity-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3388,7 +3342,7 @@ export def "us-zip-race-ethnicity-batch" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --facts: list # item shape: {id?: string, name?: string}
   --personal-names: list # item shape: {countryIso2?: string, firstName?: string, id?: string, lastName?: string, zipCode?: string}
-]: any -> record<personalNames: table<firstName: string, id: string, lastName: string, probabilityAltCalibrated: float, probabilityCalibrated: float, raceEthnicitiesTop: list, raceEthnicity: string, raceEthnicityAlt: string, score: float, script: string>> {
+]: any -> oneof<record<personalNames: table<firstName: string, id: string, lastName: string, probabilityAltCalibrated: float, probabilityCalibrated: float, raceEthnicitiesTop: list, raceEthnicity: string, raceEthnicityAlt: string, score: float, script: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)

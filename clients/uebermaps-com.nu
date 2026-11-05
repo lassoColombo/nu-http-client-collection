@@ -12,27 +12,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -40,8 +49,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -52,7 +66,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -87,7 +110,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -119,9 +143,9 @@ def order-completer [] { ["created_at_asc" "created_at_desc" "title_asc" "title_
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "patch-account" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["patch-account" "delete-attachments-id" "post-authentication" "get-collaborator-invitations" "post-collaborator-invitations" "delete-collaborator-invitations-id" "get-collaborator-invitations-id" "patch-collaborator-invitations-id" "delete-comments-id" "patch-comments-id" "get-events" "delete-events-id" "get-events-id" "patch-events-id" "get-maps" "post-maps" "get-maps-search" "delete-maps-id" "get-maps-id" "patch-maps-id" "get-maps-id-attachments" "post-maps-id-attachments" "get-maps-id-collaborators" "delete-maps-id-collaborators-user-id" "patch-maps-id-collaborators-user-id" "get-maps-id-comments" "post-maps-id-comments" "get-maps-id-respots" "get-maps-id-spots" "post-maps-id-spots" "delete-maps-id-subscriptions" "get-maps-id-subscriptions" "get-maps-map-id-spots-id" "delete-maps-map-id-spots-spot-id-respot" "get-respot-maps" "delete-respots-id" "get-respots-id" "get-share-map-id" "get-spots" "get-spots-search" "delete-spots-id" "patch-spots-id" "get-spots-id-attachments" "post-spots-id-attachments" "get-spots-id-comments" "post-spots-id-comments" "get-spots-id-events" "post-spots-id-events" "post-spots-id-respots" "get-subscriptions" "post-subscriptions" "get-trends-latest" "get-trends-recommended" "get-users-search" "get-users-id" "get-users-user-id-maps" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -161,7 +185,7 @@ export def "patch-account" [
   --screen-name: string # e.g. billhicks
   --time-zone: string # e.g. Pacific Time (US & Canada)
   --url: string # e.g. http://www.billhicks.com
-]: any -> record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string> {
+]: any -> oneof<record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -198,7 +222,7 @@ export def "delete-attachments-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<attachable_id: int, attachable_type: string, created_at: string, description: string, file_url: string, id: int, map_id: int, sizes: record, spot: record<counts: record<attachments: int, comments: int, respot: int>, created_at: string, description: string, id: int, lat: float, lon: float, map_id: int, picture_url: string, status: string, time_zone: string, title: string, updated_at: string, user: record<about: string, counts: record, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>>, status: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>> {
+]: nothing -> oneof<record<attachable_id: int, attachable_type: string, created_at: string, description: string, file_url: string, id: int, map_id: int, sizes: record, spot: record<counts: record<attachments: int, comments: int, respot: int>, created_at: string, description: string, id: int, lat: float, lon: float, map_id: int, picture_url: string, status: string, time_zone: string, title: string, updated_at: string, user: record<about: string, counts: record, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>>, status: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -234,7 +258,7 @@ export def "post-authentication" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # e.g. a@b.com
   --password: string # e.g. ••••••••
-]: any -> record<auth_token: string, language: string, time_zone: string, about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string> {
+]: any -> oneof<record<auth_token: string, language: string, time_zone: string, about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -270,7 +294,7 @@ export def "get-collaborator-invitations" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<accepted: bool, created_at: string, email: string, group: string, id: int, invited_by_user: record<about: string, counts: record, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>, map: record<counts: record, created_at: string, description: string, id: int, map_settings: record, owner_id: int, picture_url: string, title: string, updated_at: string, visibility: string>, sent: bool, updated_at: string, user: record<about: string, counts: record, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>> {
+]: nothing -> oneof<table<accepted: bool, created_at: string, email: string, group: string, id: int, invited_by_user: record<about: string, counts: record, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>, map: record<counts: record, created_at: string, description: string, id: int, map_settings: record, owner_id: int, picture_url: string, title: string, updated_at: string, visibility: string>, sent: bool, updated_at: string, user: record<about: string, counts: record, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/collaborator_invitations" $auth.query)
@@ -307,7 +331,7 @@ export def "post-collaborator-invitations" [
   --is-admin: oneof<nothing, bool> # e.g. true
   --map-id: int # e.g. 34925783
   --user-ids: string # e.g. 5839459, 389423, 89494, 686950
-]: any -> record<accepted: bool, created_at: string, email: string, group: string, id: int, invited_by_user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>, map: record<counts: record<attachments: int, comments: int, impressions: int, respots: int, spots: int, subscriptions: int>, created_at: string, description: string, id: int, map_settings: record<editor_access: string, respotting_to_this_map: bool, visitor_access: string>, owner_id: int, picture_url: string, title: string, updated_at: string, visibility: string>, sent: bool, updated_at: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>> {
+]: any -> oneof<record<accepted: bool, created_at: string, email: string, group: string, id: int, invited_by_user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>, map: record<counts: record<attachments: int, comments: int, impressions: int, respots: int, spots: int, subscriptions: int>, created_at: string, description: string, id: int, map_settings: record<editor_access: string, respotting_to_this_map: bool, visitor_access: string>, owner_id: int, picture_url: string, title: string, updated_at: string, visibility: string>, sent: bool, updated_at: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -344,7 +368,7 @@ export def "delete-collaborator-invitations-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<accepted: bool, created_at: string, email: string, group: string, id: int, invited_by_user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>, map: record<counts: record<attachments: int, comments: int, impressions: int, respots: int, spots: int, subscriptions: int>, created_at: string, description: string, id: int, map_settings: record<editor_access: string, respotting_to_this_map: bool, visitor_access: string>, owner_id: int, picture_url: string, title: string, updated_at: string, visibility: string>, sent: bool, updated_at: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>> {
+]: nothing -> oneof<record<accepted: bool, created_at: string, email: string, group: string, id: int, invited_by_user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>, map: record<counts: record<attachments: int, comments: int, impressions: int, respots: int, spots: int, subscriptions: int>, created_at: string, description: string, id: int, map_settings: record<editor_access: string, respotting_to_this_map: bool, visitor_access: string>, owner_id: int, picture_url: string, title: string, updated_at: string, visibility: string>, sent: bool, updated_at: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -379,7 +403,7 @@ export def "get-collaborator-invitations-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<accepted: bool, created_at: string, email: string, group: string, id: int, invited_by_user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>, map: record<counts: record<attachments: int, comments: int, impressions: int, respots: int, spots: int, subscriptions: int>, created_at: string, description: string, id: int, map_settings: record<editor_access: string, respotting_to_this_map: bool, visitor_access: string>, owner_id: int, picture_url: string, title: string, updated_at: string, visibility: string>, sent: bool, updated_at: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>> {
+]: nothing -> oneof<record<accepted: bool, created_at: string, email: string, group: string, id: int, invited_by_user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>, map: record<counts: record<attachments: int, comments: int, impressions: int, respots: int, spots: int, subscriptions: int>, created_at: string, description: string, id: int, map_settings: record<editor_access: string, respotting_to_this_map: bool, visitor_access: string>, owner_id: int, picture_url: string, title: string, updated_at: string, visibility: string>, sent: bool, updated_at: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -414,7 +438,7 @@ export def "patch-collaborator-invitations-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<accepted: bool, created_at: string, email: string, group: string, id: int, invited_by_user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>, map: record<counts: record<attachments: int, comments: int, impressions: int, respots: int, spots: int, subscriptions: int>, created_at: string, description: string, id: int, map_settings: record<editor_access: string, respotting_to_this_map: bool, visitor_access: string>, owner_id: int, picture_url: string, title: string, updated_at: string, visibility: string>, sent: bool, updated_at: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>> {
+]: nothing -> oneof<record<accepted: bool, created_at: string, email: string, group: string, id: int, invited_by_user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>, map: record<counts: record<attachments: int, comments: int, impressions: int, respots: int, spots: int, subscriptions: int>, created_at: string, description: string, id: int, map_settings: record<editor_access: string, respotting_to_this_map: bool, visitor_access: string>, owner_id: int, picture_url: string, title: string, updated_at: string, visibility: string>, sent: bool, updated_at: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -449,7 +473,7 @@ export def "delete-comments-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<body: string, created_at: string, id: int, status: string, updated_at: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>> {
+]: nothing -> oneof<record<body: string, created_at: string, id: int, status: string, updated_at: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -485,7 +509,7 @@ export def "patch-comments-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: string # e.g. Nice photo
-]: any -> record<body: string, created_at: string, id: int, status: string, updated_at: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>> {
+]: any -> oneof<record<body: string, created_at: string, id: int, status: string, updated_at: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -525,7 +549,7 @@ export def "get-events" [
   --timeframe-start: string # Begin of time range of event (ISO 8601 date format).
   --timeframe-end: string # End of time range of event (ISO 8601 date format).
   --bounds: string # To refine your event index request to contain only events within a geographical box pass the followng bounds parameters. F. e. to get events within 'Hamburg, St. Pauli': bounds[sw_lat]=53.54831449741324 bounds[sw_lon]=9.943227767944336 bounds[ne_lat]=53.5571103674878 bounds[ne_lon]=9.9776029586792
-]: nothing -> table<counts: record<attachments: int, comments: int>, created_at: string, description: string, ends_at: string, id: int, lat: float, lon: float, owner_id: int, picture_url: string, spot: record<counts: record, created_at: string, description: string, id: int, lat: float, lon: float, map_id: int, picture_url: string, status: string, time_zone: string, title: string, updated_at: string, user: record>, starts_at: string, time_zone: string, title: string, updated_at: string, user: record<about: string, counts: record, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>> {
+]: nothing -> oneof<table<counts: record<attachments: int, comments: int>, created_at: string, description: string, ends_at: string, id: int, lat: float, lon: float, owner_id: int, picture_url: string, spot: record<counts: record, created_at: string, description: string, id: int, lat: float, lon: float, map_id: int, picture_url: string, status: string, time_zone: string, title: string, updated_at: string, user: record>, starts_at: string, time_zone: string, title: string, updated_at: string, user: record<about: string, counts: record, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "timeframe_start" $timeframe_start "scalar") (serialize-qp "timeframe_end" $timeframe_end "scalar") (serialize-qp "bounds" $bounds "scalar")] | flatten | str join "&"
@@ -560,7 +584,7 @@ export def "delete-events-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<counts: record<attachments: int, comments: int>, created_at: string, description: string, ends_at: string, id: int, lat: float, lon: float, owner_id: int, picture_url: string, spot: record<counts: record<attachments: int, comments: int, respot: int>, created_at: string, description: string, id: int, lat: float, lon: float, map_id: int, picture_url: string, status: string, time_zone: string, title: string, updated_at: string, user: record<about: string, counts: record, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>>, starts_at: string, time_zone: string, title: string, updated_at: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>> {
+]: nothing -> oneof<record<counts: record<attachments: int, comments: int>, created_at: string, description: string, ends_at: string, id: int, lat: float, lon: float, owner_id: int, picture_url: string, spot: record<counts: record<attachments: int, comments: int, respot: int>, created_at: string, description: string, id: int, lat: float, lon: float, map_id: int, picture_url: string, status: string, time_zone: string, title: string, updated_at: string, user: record<about: string, counts: record, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>>, starts_at: string, time_zone: string, title: string, updated_at: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -595,7 +619,7 @@ export def "get-events-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<counts: record<attachments: int, comments: int>, created_at: string, description: string, ends_at: string, id: int, lat: float, lon: float, owner_id: int, picture_url: string, spot: record<counts: record<attachments: int, comments: int, respot: int>, created_at: string, description: string, id: int, lat: float, lon: float, map_id: int, picture_url: string, status: string, time_zone: string, title: string, updated_at: string, user: record<about: string, counts: record, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>>, starts_at: string, time_zone: string, title: string, updated_at: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>> {
+]: nothing -> oneof<record<counts: record<attachments: int, comments: int>, created_at: string, description: string, ends_at: string, id: int, lat: float, lon: float, owner_id: int, picture_url: string, spot: record<counts: record<attachments: int, comments: int, respot: int>, created_at: string, description: string, id: int, lat: float, lon: float, map_id: int, picture_url: string, status: string, time_zone: string, title: string, updated_at: string, user: record<about: string, counts: record, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>>, starts_at: string, time_zone: string, title: string, updated_at: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -639,7 +663,7 @@ export def "patch-events-id" [
   --time-zone: string # e.g. Berlin
   --title: string # e.g. 20th anniversary event
   --user-id: int # e.g. 703943
-]: any -> record<counts: record<attachments: int, comments: int, impressions: int, respots: int, spots: int, subscriptions: int>, created_at: string, description: string, id: int, map_settings: record<editor_access: string, respotting_to_this_map: bool, visitor_access: string>, owner_id: int, picture_url: string, title: string, updated_at: string, visibility: string> {
+]: any -> oneof<record<counts: record<attachments: int, comments: int, impressions: int, respots: int, spots: int, subscriptions: int>, created_at: string, description: string, id: int, map_settings: record<editor_access: string, respotting_to_this_map: bool, visitor_access: string>, owner_id: int, picture_url: string, title: string, updated_at: string, visibility: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -676,7 +700,7 @@ export def "get-maps" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<counts: record<attachments: int, comments: int, impressions: int, respots: int, spots: int, subscriptions: int>, created_at: string, description: string, id: int, map_settings: record<editor_access: string, respotting_to_this_map: bool, visitor_access: string>, owner_id: int, picture_url: string, title: string, updated_at: string, visibility: string> {
+]: nothing -> oneof<table<counts: record<attachments: int, comments: int, impressions: int, respots: int, spots: int, subscriptions: int>, created_at: string, description: string, id: int, map_settings: record<editor_access: string, respotting_to_this_map: bool, visitor_access: string>, owner_id: int, picture_url: string, title: string, updated_at: string, visibility: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/maps" $auth.query)
@@ -699,7 +723,6 @@ export def "get-maps" [
 # Create map
 #
 # POST /maps
-# --map_settings shape: {editor_access?: string, respotting_to_this_map?: bool, visitor_access?: string}
 export def "post-maps" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -715,7 +738,7 @@ export def "post-maps" [
   --picture: string # e.g. <BASE_64_ENCODED_STRING>
   --title: string # e.g. My favourite places in Berlin
   --visibility: string@visibility-completer # e.g. public
-]: any -> record<counts: record<attachments: int, comments: int, impressions: int, respots: int, spots: int, subscriptions: int>, created_at: string, description: string, id: int, map_settings: record<editor_access: string, respotting_to_this_map: bool, visitor_access: string>, owner_id: int, picture_url: string, title: string, updated_at: string, visibility: string> {
+]: any -> oneof<record<counts: record<attachments: int, comments: int, impressions: int, respots: int, spots: int, subscriptions: int>, created_at: string, description: string, id: int, map_settings: record<editor_access: string, respotting_to_this_map: bool, visitor_access: string>, owner_id: int, picture_url: string, title: string, updated_at: string, visibility: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -755,7 +778,7 @@ export def "get-maps-search" [
   --d: int # Distance. Diameter of search radius in meter (default: 2000 meter)
   --lat: float # Latitude for search radius (default distance: 2000 meter)
   --lon: float # Longitude for search radius (default distance: 2000 meter)
-]: nothing -> record<counts: record<attachments: int, comments: int, impressions: int, respots: int, spots: int, subscriptions: int>, created_at: string, description: string, id: int, map_settings: record<editor_access: string, respotting_to_this_map: bool, visitor_access: string>, owner_id: int, picture_url: string, title: string, updated_at: string, visibility: string> {
+]: nothing -> oneof<record<counts: record<attachments: int, comments: int, impressions: int, respots: int, spots: int, subscriptions: int>, created_at: string, description: string, id: int, map_settings: record<editor_access: string, respotting_to_this_map: bool, visitor_access: string>, owner_id: int, picture_url: string, title: string, updated_at: string, visibility: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "d" $d "scalar") (serialize-qp "lat" $lat "scalar") (serialize-qp "lon" $lon "scalar")] | flatten | str join "&"
@@ -790,7 +813,7 @@ export def "delete-maps-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<counts: record<attachments: int, comments: int, impressions: int, respots: int, spots: int, subscriptions: int>, created_at: string, description: string, id: int, map_settings: record<editor_access: string, respotting_to_this_map: bool, visitor_access: string>, owner_id: int, picture_url: string, title: string, updated_at: string, visibility: string> {
+]: nothing -> oneof<record<counts: record<attachments: int, comments: int, impressions: int, respots: int, spots: int, subscriptions: int>, created_at: string, description: string, id: int, map_settings: record<editor_access: string, respotting_to_this_map: bool, visitor_access: string>, owner_id: int, picture_url: string, title: string, updated_at: string, visibility: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -825,7 +848,7 @@ export def "get-maps-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<counts: record<attachments: int, comments: int, impressions: int, respots: int, spots: int, subscriptions: int>, created_at: string, description: string, id: int, map_settings: record<editor_access: string, respotting_to_this_map: bool, visitor_access: string>, owner_id: int, picture_url: string, relation: record<access: string, access_group: string, subscribed: bool>, title: string, updated_at: string, visibility: string> {
+]: nothing -> oneof<record<counts: record<attachments: int, comments: int, impressions: int, respots: int, spots: int, subscriptions: int>, created_at: string, description: string, id: int, map_settings: record<editor_access: string, respotting_to_this_map: bool, visitor_access: string>, owner_id: int, picture_url: string, relation: record<access: string, access_group: string, subscribed: bool>, title: string, updated_at: string, visibility: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -849,7 +872,6 @@ export def "get-maps-id" [
 # Update map
 #
 # PATCH /maps/{id}
-# --map_settings shape: {editor_access?: string, respotting_to_this_map?: bool, visitor_access?: string}
 export def "patch-maps-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -866,7 +888,7 @@ export def "patch-maps-id" [
   --picture: string # e.g. <BASE_64_ENCODED_STRING>
   --title: string # e.g. My favourite places in Berlin
   --visibility: string@visibility-completer # e.g. public
-]: any -> record<counts: record<attachments: int, comments: int, impressions: int, respots: int, spots: int, subscriptions: int>, created_at: string, description: string, id: int, map_settings: record<editor_access: string, respotting_to_this_map: bool, visitor_access: string>, owner_id: int, picture_url: string, title: string, updated_at: string, visibility: string> {
+]: any -> oneof<record<counts: record<attachments: int, comments: int, impressions: int, respots: int, spots: int, subscriptions: int>, created_at: string, description: string, id: int, map_settings: record<editor_access: string, respotting_to_this_map: bool, visitor_access: string>, owner_id: int, picture_url: string, title: string, updated_at: string, visibility: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -904,7 +926,7 @@ export def "get-maps-id-attachments" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<attachable_id: int, attachable_type: string, created_at: string, description: string, file_url: string, id: int, map_id: int, sizes: record, spot: record<counts: record, created_at: string, description: string, id: int, lat: float, lon: float, map_id: int, picture_url: string, status: string, time_zone: string, title: string, updated_at: string, user: record>, status: string, user: record<about: string, counts: record, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>> {
+]: nothing -> oneof<table<attachable_id: int, attachable_type: string, created_at: string, description: string, file_url: string, id: int, map_id: int, sizes: record, spot: record<counts: record, created_at: string, description: string, id: int, lat: float, lon: float, map_id: int, picture_url: string, status: string, time_zone: string, title: string, updated_at: string, user: record>, status: string, user: record<about: string, counts: record, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -940,7 +962,7 @@ export def "post-maps-id-attachments" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: string
-]: any -> record<attachable_id: int, attachable_type: string, created_at: string, description: string, file_url: string, id: int, map_id: int, sizes: record, spot: record<counts: record<attachments: int, comments: int, respot: int>, created_at: string, description: string, id: int, lat: float, lon: float, map_id: int, picture_url: string, status: string, time_zone: string, title: string, updated_at: string, user: record<about: string, counts: record, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>>, status: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>> {
+]: any -> oneof<record<attachable_id: int, attachable_type: string, created_at: string, description: string, file_url: string, id: int, map_id: int, sizes: record, spot: record<counts: record<attachments: int, comments: int, respot: int>, created_at: string, description: string, id: int, lat: float, lon: float, map_id: int, picture_url: string, status: string, time_zone: string, title: string, updated_at: string, user: record<about: string, counts: record, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>>, status: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -978,7 +1000,7 @@ export def "get-maps-id-collaborators" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<created_at: string, group: string, id: int, is_admin: bool, map: record<counts: record, created_at: string, description: string, id: int, map_settings: record, owner_id: int, picture_url: string, title: string, updated_at: string, visibility: string>, map_id: int, updated_at: string, user: record<about: string, counts: record, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>, user_id: int> {
+]: nothing -> oneof<table<created_at: string, group: string, id: int, is_admin: bool, map: record<counts: record, created_at: string, description: string, id: int, map_settings: record, owner_id: int, picture_url: string, title: string, updated_at: string, visibility: string>, map_id: int, updated_at: string, user: record<about: string, counts: record, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>, user_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1014,7 +1036,7 @@ export def "delete-maps-id-collaborators-user-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created_at: string, group: string, id: int, is_admin: bool, map: record<counts: record<attachments: int, comments: int, impressions: int, respots: int, spots: int, subscriptions: int>, created_at: string, description: string, id: int, map_settings: record<editor_access: string, respotting_to_this_map: bool, visitor_access: string>, owner_id: int, picture_url: string, title: string, updated_at: string, visibility: string>, map_id: int, updated_at: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>, user_id: int> {
+]: nothing -> oneof<record<created_at: string, group: string, id: int, is_admin: bool, map: record<counts: record<attachments: int, comments: int, impressions: int, respots: int, spots: int, subscriptions: int>, created_at: string, description: string, id: int, map_settings: record<editor_access: string, respotting_to_this_map: bool, visitor_access: string>, owner_id: int, picture_url: string, title: string, updated_at: string, visibility: string>, map_id: int, updated_at: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>, user_id: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1052,7 +1074,7 @@ export def "patch-maps-id-collaborators-user-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --group: string@group-completer # e.g. editor
-]: any -> record<created_at: string, group: string, id: int, is_admin: bool, map: record<counts: record<attachments: int, comments: int, impressions: int, respots: int, spots: int, subscriptions: int>, created_at: string, description: string, id: int, map_settings: record<editor_access: string, respotting_to_this_map: bool, visitor_access: string>, owner_id: int, picture_url: string, title: string, updated_at: string, visibility: string>, map_id: int, updated_at: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>, user_id: int> {
+]: any -> oneof<record<created_at: string, group: string, id: int, is_admin: bool, map: record<counts: record<attachments: int, comments: int, impressions: int, respots: int, spots: int, subscriptions: int>, created_at: string, description: string, id: int, map_settings: record<editor_access: string, respotting_to_this_map: bool, visitor_access: string>, owner_id: int, picture_url: string, title: string, updated_at: string, visibility: string>, map_id: int, updated_at: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>, user_id: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1091,7 +1113,7 @@ export def "get-maps-id-comments" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<body: string, created_at: string, id: int, status: string, updated_at: string, user: record<about: string, counts: record, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>> {
+]: nothing -> oneof<table<body: string, created_at: string, id: int, status: string, updated_at: string, user: record<about: string, counts: record, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1127,7 +1149,7 @@ export def "post-maps-id-comments" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: string # e.g. Nice photo
-]: any -> record<body: string, created_at: string, id: int, status: string, updated_at: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>> {
+]: any -> oneof<record<body: string, created_at: string, id: int, status: string, updated_at: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1165,7 +1187,7 @@ export def "get-maps-id-respots" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<created_at: string, id: int, map: record<counts: record, created_at: string, description: string, id: int, map_settings: record, owner_id: int, picture_url: string, title: string, updated_at: string, visibility: string>, map_id: int, spot: record<counts: record, created_at: string, description: string, id: int, lat: float, lon: float, map_id: int, picture_url: string, status: string, time_zone: string, title: string, updated_at: string, user: record>, updated_at: string, user: record<about: string, counts: record, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>> {
+]: nothing -> oneof<table<created_at: string, id: int, map: record<counts: record, created_at: string, description: string, id: int, map_settings: record, owner_id: int, picture_url: string, title: string, updated_at: string, visibility: string>, map_id: int, spot: record<counts: record, created_at: string, description: string, id: int, lat: float, lon: float, map_id: int, picture_url: string, status: string, time_zone: string, title: string, updated_at: string, user: record>, updated_at: string, user: record<about: string, counts: record, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1201,7 +1223,7 @@ export def "get-maps-id-spots" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --order: string@order-completer # Order of spots
-]: nothing -> table<counts: record<attachments: int, comments: int, respot: int>, created_at: string, description: string, id: int, lat: float, lon: float, map_id: int, picture_url: string, status: string, time_zone: string, title: string, updated_at: string, user: record<about: string, counts: record, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>> {
+]: nothing -> oneof<table<counts: record<attachments: int, comments: int, respot: int>, created_at: string, description: string, id: int, lat: float, lon: float, map_id: int, picture_url: string, status: string, time_zone: string, title: string, updated_at: string, user: record<about: string, counts: record, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1243,7 +1265,7 @@ export def "post-maps-id-spots" [
   --picture: string # e.g. <BASE_64_ENCODED_STRING>
   --time-zone: string # e.g. Berlin
   --title: string # e.g. Beautiful place out in the country
-]: any -> record<counts: record<attachments: int, comments: int, respot: int>, created_at: string, description: string, id: int, lat: float, lon: float, map_id: int, picture_url: string, status: string, time_zone: string, title: string, updated_at: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>> {
+]: any -> oneof<record<counts: record<attachments: int, comments: int, respot: int>, created_at: string, description: string, id: int, lat: float, lon: float, map_id: int, picture_url: string, status: string, time_zone: string, title: string, updated_at: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1281,7 +1303,7 @@ export def "delete-maps-id-subscriptions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created_at: string, id: int, map: record<counts: record<attachments: int, comments: int, impressions: int, respots: int, spots: int, subscriptions: int>, created_at: string, description: string, id: int, map_settings: record<editor_access: string, respotting_to_this_map: bool, visitor_access: string>, owner_id: int, picture_url: string, title: string, updated_at: string, visibility: string>, updated_at: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>, user_id: int> {
+]: nothing -> oneof<record<created_at: string, id: int, map: record<counts: record<attachments: int, comments: int, impressions: int, respots: int, spots: int, subscriptions: int>, created_at: string, description: string, id: int, map_settings: record<editor_access: string, respotting_to_this_map: bool, visitor_access: string>, owner_id: int, picture_url: string, title: string, updated_at: string, visibility: string>, updated_at: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>, user_id: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1316,7 +1338,7 @@ export def "get-maps-id-subscriptions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<created_at: string, id: int, map: record<counts: record, created_at: string, description: string, id: int, map_settings: record, owner_id: int, picture_url: string, title: string, updated_at: string, visibility: string>, updated_at: string, user: record<about: string, counts: record, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>, user_id: int> {
+]: nothing -> oneof<table<created_at: string, id: int, map: record<counts: record, created_at: string, description: string, id: int, map_settings: record, owner_id: int, picture_url: string, title: string, updated_at: string, visibility: string>, updated_at: string, user: record<about: string, counts: record, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>, user_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1352,7 +1374,7 @@ export def "get-maps-map-id-spots-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<counts: record<attachments: int, comments: int, respot: int>, created_at: string, description: string, id: int, lat: float, lon: float, map_id: int, picture_url: string, status: string, time_zone: string, title: string, updated_at: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>> {
+]: nothing -> oneof<record<counts: record<attachments: int, comments: int, respot: int>, created_at: string, description: string, id: int, lat: float, lon: float, map_id: int, picture_url: string, status: string, time_zone: string, title: string, updated_at: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($map_id | is-empty) { error make --unspanned { msg: "path parameter 'map_id' must be non-empty" } }
@@ -1389,7 +1411,7 @@ export def "delete-maps-map-id-spots-spot-id-respot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created_at: string, id: int, map: record<counts: record<attachments: int, comments: int, impressions: int, respots: int, spots: int, subscriptions: int>, created_at: string, description: string, id: int, map_settings: record<editor_access: string, respotting_to_this_map: bool, visitor_access: string>, owner_id: int, picture_url: string, title: string, updated_at: string, visibility: string>, map_id: int, spot: record<counts: record<attachments: int, comments: int, respot: int>, created_at: string, description: string, id: int, lat: float, lon: float, map_id: int, picture_url: string, status: string, time_zone: string, title: string, updated_at: string, user: record<about: string, counts: record, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>>, updated_at: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>> {
+]: nothing -> oneof<record<created_at: string, id: int, map: record<counts: record<attachments: int, comments: int, impressions: int, respots: int, spots: int, subscriptions: int>, created_at: string, description: string, id: int, map_settings: record<editor_access: string, respotting_to_this_map: bool, visitor_access: string>, owner_id: int, picture_url: string, title: string, updated_at: string, visibility: string>, map_id: int, spot: record<counts: record<attachments: int, comments: int, respot: int>, created_at: string, description: string, id: int, lat: float, lon: float, map_id: int, picture_url: string, status: string, time_zone: string, title: string, updated_at: string, user: record<about: string, counts: record, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>>, updated_at: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($map_id | is-empty) { error make --unspanned { msg: "path parameter 'map_id' must be non-empty" } }
@@ -1424,7 +1446,7 @@ export def "get-respot-maps" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<counts: record<attachments: int, comments: int, impressions: int, respots: int, spots: int, subscriptions: int>, created_at: string, description: string, id: int, map_settings: record<editor_access: string, respotting_to_this_map: bool, visitor_access: string>, owner_id: int, picture_url: string, title: string, updated_at: string, visibility: string> {
+]: nothing -> oneof<table<counts: record<attachments: int, comments: int, impressions: int, respots: int, spots: int, subscriptions: int>, created_at: string, description: string, id: int, map_settings: record<editor_access: string, respotting_to_this_map: bool, visitor_access: string>, owner_id: int, picture_url: string, title: string, updated_at: string, visibility: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/respot_maps" $auth.query)
@@ -1458,7 +1480,7 @@ export def "delete-respots-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created_at: string, id: int, map: record<counts: record<attachments: int, comments: int, impressions: int, respots: int, spots: int, subscriptions: int>, created_at: string, description: string, id: int, map_settings: record<editor_access: string, respotting_to_this_map: bool, visitor_access: string>, owner_id: int, picture_url: string, title: string, updated_at: string, visibility: string>, map_id: int, spot: record<counts: record<attachments: int, comments: int, respot: int>, created_at: string, description: string, id: int, lat: float, lon: float, map_id: int, picture_url: string, status: string, time_zone: string, title: string, updated_at: string, user: record<about: string, counts: record, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>>, updated_at: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>> {
+]: nothing -> oneof<record<created_at: string, id: int, map: record<counts: record<attachments: int, comments: int, impressions: int, respots: int, spots: int, subscriptions: int>, created_at: string, description: string, id: int, map_settings: record<editor_access: string, respotting_to_this_map: bool, visitor_access: string>, owner_id: int, picture_url: string, title: string, updated_at: string, visibility: string>, map_id: int, spot: record<counts: record<attachments: int, comments: int, respot: int>, created_at: string, description: string, id: int, lat: float, lon: float, map_id: int, picture_url: string, status: string, time_zone: string, title: string, updated_at: string, user: record<about: string, counts: record, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>>, updated_at: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1493,7 +1515,7 @@ export def "get-respots-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created_at: string, id: int, map: record<counts: record<attachments: int, comments: int, impressions: int, respots: int, spots: int, subscriptions: int>, created_at: string, description: string, id: int, map_settings: record<editor_access: string, respotting_to_this_map: bool, visitor_access: string>, owner_id: int, picture_url: string, title: string, updated_at: string, visibility: string>, map_id: int, spot: record<counts: record<attachments: int, comments: int, respot: int>, created_at: string, description: string, id: int, lat: float, lon: float, map_id: int, picture_url: string, status: string, time_zone: string, title: string, updated_at: string, user: record<about: string, counts: record, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>>, updated_at: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>> {
+]: nothing -> oneof<record<created_at: string, id: int, map: record<counts: record<attachments: int, comments: int, impressions: int, respots: int, spots: int, subscriptions: int>, created_at: string, description: string, id: int, map_settings: record<editor_access: string, respotting_to_this_map: bool, visitor_access: string>, owner_id: int, picture_url: string, title: string, updated_at: string, visibility: string>, map_id: int, spot: record<counts: record<attachments: int, comments: int, respot: int>, created_at: string, description: string, id: int, lat: float, lon: float, map_id: int, picture_url: string, status: string, time_zone: string, title: string, updated_at: string, user: record<about: string, counts: record, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>>, updated_at: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1528,7 +1550,7 @@ export def "get-share-map-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<counts: record<attachments: int, comments: int, impressions: int, respots: int, spots: int, subscriptions: int>, created_at: string, description: string, id: int, owner_id: int, picture_url: string, title: string, token: string, updated_at: string, visibility: string> {
+]: nothing -> oneof<record<counts: record<attachments: int, comments: int, impressions: int, respots: int, spots: int, subscriptions: int>, created_at: string, description: string, id: int, owner_id: int, picture_url: string, title: string, token: string, updated_at: string, visibility: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1563,7 +1585,7 @@ export def "get-spots" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --order: string@order-completer # Order of spots
-]: nothing -> table<counts: record<attachments: int, comments: int, respot: int>, created_at: string, description: string, id: int, lat: float, lon: float, map_id: int, picture_url: string, status: string, time_zone: string, title: string, updated_at: string, user: record<about: string, counts: record, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>> {
+]: nothing -> oneof<table<counts: record<attachments: int, comments: int, respot: int>, created_at: string, description: string, id: int, lat: float, lon: float, map_id: int, picture_url: string, status: string, time_zone: string, title: string, updated_at: string, user: record<about: string, counts: record, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "order" $order "scalar")] | flatten | str join "&"
@@ -1601,7 +1623,7 @@ export def "get-spots-search" [
   --d: int # Distance. Diameter of search radius in meter (default: 2000 meter)
   --lat: float # Latitude for search radius (2 km)
   --lon: float # Longitude for search radius (2 km)
-]: nothing -> record<counts: record<attachments: int, comments: int, respot: int>, created_at: string, description: string, id: int, lat: float, lon: float, map_id: int, picture_url: string, status: string, time_zone: string, title: string, updated_at: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>> {
+]: nothing -> oneof<record<counts: record<attachments: int, comments: int, respot: int>, created_at: string, description: string, id: int, lat: float, lon: float, map_id: int, picture_url: string, status: string, time_zone: string, title: string, updated_at: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "d" $d "scalar") (serialize-qp "lat" $lat "scalar") (serialize-qp "lon" $lon "scalar")] | flatten | str join "&"
@@ -1636,7 +1658,7 @@ export def "delete-spots-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<counts: record<attachments: int, comments: int, respot: int>, created_at: string, description: string, id: int, lat: float, lon: float, map_id: int, picture_url: string, status: string, time_zone: string, title: string, updated_at: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>> {
+]: nothing -> oneof<record<counts: record<attachments: int, comments: int, respot: int>, created_at: string, description: string, id: int, lat: float, lon: float, map_id: int, picture_url: string, status: string, time_zone: string, title: string, updated_at: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1677,7 +1699,7 @@ export def "patch-spots-id" [
   --picture: string # e.g. <BASE_64_ENCODED_STRING>
   --time-zone: string # e.g. Berlin
   --title: string # e.g. Beautiful place out in the country
-]: any -> record<counts: record<attachments: int, comments: int, respot: int>, created_at: string, description: string, id: int, lat: float, lon: float, map_id: int, picture_url: string, status: string, time_zone: string, title: string, updated_at: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>> {
+]: any -> oneof<record<counts: record<attachments: int, comments: int, respot: int>, created_at: string, description: string, id: int, lat: float, lon: float, map_id: int, picture_url: string, status: string, time_zone: string, title: string, updated_at: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1715,7 +1737,7 @@ export def "get-spots-id-attachments" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<attachable_id: int, attachable_type: string, created_at: string, description: string, file_url: string, id: int, map_id: int, sizes: record, spot: record<counts: record, created_at: string, description: string, id: int, lat: float, lon: float, map_id: int, picture_url: string, status: string, time_zone: string, title: string, updated_at: string, user: record>, status: string, user: record<about: string, counts: record, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>> {
+]: nothing -> oneof<table<attachable_id: int, attachable_type: string, created_at: string, description: string, file_url: string, id: int, map_id: int, sizes: record, spot: record<counts: record, created_at: string, description: string, id: int, lat: float, lon: float, map_id: int, picture_url: string, status: string, time_zone: string, title: string, updated_at: string, user: record>, status: string, user: record<about: string, counts: record, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1751,7 +1773,7 @@ export def "post-spots-id-attachments" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: string
-]: any -> record<attachable_id: int, attachable_type: string, created_at: string, description: string, file_url: string, id: int, map_id: int, sizes: record, spot: record<counts: record<attachments: int, comments: int, respot: int>, created_at: string, description: string, id: int, lat: float, lon: float, map_id: int, picture_url: string, status: string, time_zone: string, title: string, updated_at: string, user: record<about: string, counts: record, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>>, status: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>> {
+]: any -> oneof<record<attachable_id: int, attachable_type: string, created_at: string, description: string, file_url: string, id: int, map_id: int, sizes: record, spot: record<counts: record<attachments: int, comments: int, respot: int>, created_at: string, description: string, id: int, lat: float, lon: float, map_id: int, picture_url: string, status: string, time_zone: string, title: string, updated_at: string, user: record<about: string, counts: record, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>>, status: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1789,7 +1811,7 @@ export def "get-spots-id-comments" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<body: string, created_at: string, id: int, status: string, updated_at: string, user: record<about: string, counts: record, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>> {
+]: nothing -> oneof<table<body: string, created_at: string, id: int, status: string, updated_at: string, user: record<about: string, counts: record, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1825,7 +1847,7 @@ export def "post-spots-id-comments" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: string # e.g. Nice photo
-]: any -> record<body: string, created_at: string, id: int, status: string, updated_at: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>> {
+]: any -> oneof<record<body: string, created_at: string, id: int, status: string, updated_at: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1866,7 +1888,7 @@ export def "get-spots-id-events" [
   --timeframe-start: string # Begin of time range of event (ISO 8601 date format).
   --timeframe-end: string # End of time range of event (ISO 8601 date format).
   --bounds: string # To refine your event index request to contain only events within a geographical box pass the followng bounds parameters. F. e. to get events within 'Hamburg, St. Pauli': bounds[sw_lat]=53.54831449741324 bounds[sw_lon]=9.943227767944336 bounds[ne_lat]=53.5571103674878 bounds[ne_lon]=9.9776029586792
-]: nothing -> table<counts: record<attachments: int, comments: int>, created_at: string, description: string, ends_at: string, id: int, lat: float, lon: float, owner_id: int, picture_url: string, spot: record<counts: record, created_at: string, description: string, id: int, lat: float, lon: float, map_id: int, picture_url: string, status: string, time_zone: string, title: string, updated_at: string, user: record>, starts_at: string, time_zone: string, title: string, updated_at: string, user: record<about: string, counts: record, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>> {
+]: nothing -> oneof<table<counts: record<attachments: int, comments: int>, created_at: string, description: string, ends_at: string, id: int, lat: float, lon: float, owner_id: int, picture_url: string, spot: record<counts: record, created_at: string, description: string, id: int, lat: float, lon: float, map_id: int, picture_url: string, status: string, time_zone: string, title: string, updated_at: string, user: record>, starts_at: string, time_zone: string, title: string, updated_at: string, user: record<about: string, counts: record, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1911,7 +1933,7 @@ export def "post-spots-id-events" [
   --time-zone: string # e.g. Berlin
   --title: string # e.g. 20th anniversary event
   --user-id: int # e.g. 703943
-]: any -> record<counts: record<attachments: int, comments: int>, created_at: string, description: string, ends_at: string, id: int, lat: float, lon: float, owner_id: int, picture_url: string, spot: record<counts: record<attachments: int, comments: int, respot: int>, created_at: string, description: string, id: int, lat: float, lon: float, map_id: int, picture_url: string, status: string, time_zone: string, title: string, updated_at: string, user: record<about: string, counts: record, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>>, starts_at: string, time_zone: string, title: string, updated_at: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>> {
+]: any -> oneof<record<counts: record<attachments: int, comments: int>, created_at: string, description: string, ends_at: string, id: int, lat: float, lon: float, owner_id: int, picture_url: string, spot: record<counts: record<attachments: int, comments: int, respot: int>, created_at: string, description: string, id: int, lat: float, lon: float, map_id: int, picture_url: string, status: string, time_zone: string, title: string, updated_at: string, user: record<about: string, counts: record, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>>, starts_at: string, time_zone: string, title: string, updated_at: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1950,7 +1972,7 @@ export def "post-spots-id-respots" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: float
-]: any -> record<created_at: string, id: int, map: record<counts: record<attachments: int, comments: int, impressions: int, respots: int, spots: int, subscriptions: int>, created_at: string, description: string, id: int, map_settings: record<editor_access: string, respotting_to_this_map: bool, visitor_access: string>, owner_id: int, picture_url: string, title: string, updated_at: string, visibility: string>, map_id: int, spot: record<counts: record<attachments: int, comments: int, respot: int>, created_at: string, description: string, id: int, lat: float, lon: float, map_id: int, picture_url: string, status: string, time_zone: string, title: string, updated_at: string, user: record<about: string, counts: record, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>>, updated_at: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>> {
+]: any -> oneof<record<created_at: string, id: int, map: record<counts: record<attachments: int, comments: int, impressions: int, respots: int, spots: int, subscriptions: int>, created_at: string, description: string, id: int, map_settings: record<editor_access: string, respotting_to_this_map: bool, visitor_access: string>, owner_id: int, picture_url: string, title: string, updated_at: string, visibility: string>, map_id: int, spot: record<counts: record<attachments: int, comments: int, respot: int>, created_at: string, description: string, id: int, lat: float, lon: float, map_id: int, picture_url: string, status: string, time_zone: string, title: string, updated_at: string, user: record<about: string, counts: record, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>>, updated_at: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1989,7 +2011,7 @@ export def "get-subscriptions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --user-id: int # Id of user
   --map-id: int # Id of map
-]: nothing -> table<created_at: string, id: int, map: record<counts: record, created_at: string, description: string, id: int, map_settings: record, owner_id: int, picture_url: string, title: string, updated_at: string, visibility: string>, updated_at: string, user: record<about: string, counts: record, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>, user_id: int> {
+]: nothing -> oneof<table<created_at: string, id: int, map: record<counts: record, created_at: string, description: string, id: int, map_settings: record, owner_id: int, picture_url: string, title: string, updated_at: string, visibility: string>, updated_at: string, user: record<about: string, counts: record, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>, user_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "user_id" $user_id "scalar") (serialize-qp "map_id" $map_id "scalar")] | flatten | str join "&"
@@ -2024,7 +2046,7 @@ export def "post-subscriptions" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: float
-]: any -> record<created_at: string, id: int, map: record<counts: record<attachments: int, comments: int, impressions: int, respots: int, spots: int, subscriptions: int>, created_at: string, description: string, id: int, map_settings: record<editor_access: string, respotting_to_this_map: bool, visitor_access: string>, owner_id: int, picture_url: string, title: string, updated_at: string, visibility: string>, updated_at: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>, user_id: int> {
+]: any -> oneof<record<created_at: string, id: int, map: record<counts: record<attachments: int, comments: int, impressions: int, respots: int, spots: int, subscriptions: int>, created_at: string, description: string, id: int, map_settings: record<editor_access: string, respotting_to_this_map: bool, visitor_access: string>, owner_id: int, picture_url: string, title: string, updated_at: string, visibility: string>, updated_at: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>, user_id: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2060,7 +2082,7 @@ export def "get-trends-latest" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<counts: record<attachments: int, comments: int, impressions: int, respots: int, spots: int, subscriptions: int>, created_at: string, description: string, id: int, map_settings: record<editor_access: string, respotting_to_this_map: bool, visitor_access: string>, owner_id: int, picture_url: string, title: string, updated_at: string, visibility: string> {
+]: nothing -> oneof<table<counts: record<attachments: int, comments: int, impressions: int, respots: int, spots: int, subscriptions: int>, created_at: string, description: string, id: int, map_settings: record<editor_access: string, respotting_to_this_map: bool, visitor_access: string>, owner_id: int, picture_url: string, title: string, updated_at: string, visibility: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/trends/latest" $auth.query)
@@ -2093,7 +2115,7 @@ export def "get-trends-recommended" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<counts: record<attachments: int, comments: int, impressions: int, respots: int, spots: int, subscriptions: int>, created_at: string, description: string, id: int, map_settings: record<editor_access: string, respotting_to_this_map: bool, visitor_access: string>, owner_id: int, picture_url: string, title: string, updated_at: string, visibility: string> {
+]: nothing -> oneof<table<counts: record<attachments: int, comments: int, impressions: int, respots: int, spots: int, subscriptions: int>, created_at: string, description: string, id: int, map_settings: record<editor_access: string, respotting_to_this_map: bool, visitor_access: string>, owner_id: int, picture_url: string, title: string, updated_at: string, visibility: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/trends/recommended" $auth.query)
@@ -2127,7 +2149,7 @@ export def "get-users-search" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # Query
-]: nothing -> record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string> {
+]: nothing -> oneof<record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
@@ -2162,7 +2184,7 @@ export def "get-users-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string> {
+]: nothing -> oneof<record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2197,7 +2219,7 @@ export def "get-users-user-id-maps" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<counts: record<attachments: int, comments: int, impressions: int, respots: int, spots: int, subscriptions: int>, created_at: string, description: string, id: int, map_settings: record<editor_access: string, respotting_to_this_map: bool, visitor_access: string>, owner_id: int, picture_url: string, title: string, updated_at: string, visibility: string> {
+]: nothing -> oneof<table<counts: record<attachments: int, comments: int, impressions: int, respots: int, spots: int, subscriptions: int>, created_at: string, description: string, id: int, map_settings: record<editor_access: string, respotting_to_this_map: bool, visitor_access: string>, owner_id: int, picture_url: string, title: string, updated_at: string, visibility: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }

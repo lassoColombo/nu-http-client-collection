@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -116,9 +140,9 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cancel-job" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["cancel-job" "cancel-quantum-task" "create-job" "create-quantum-task" "get-device" "get-job" "get-quantum-task" "list-tags-for-resource" "tag-resource" "search-devices" "search-jobs" "search-quantum-tasks" "untag-resource" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -158,7 +182,7 @@ export def "cancel-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<cancellationStatus: string, jobArn: string> {
+]: nothing -> oneof<record<cancellationStatus: string, jobArn: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_arn | is-empty) { error make --unspanned { msg: "path parameter 'jobArn' must be non-empty" } }
@@ -204,7 +228,7 @@ export def "cancel-quantum-task" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   client_token: string # The client token associated with the request.
-]: any -> record<cancellationStatus: string, quantumTaskArn: string> {
+]: any -> oneof<record<cancellationStatus: string, quantumTaskArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -234,13 +258,6 @@ export def "cancel-quantum-task" [
 #
 # POST /job
 # operationId: CreateJob
-# --algorithmSpecification shape: {containerImage?: record, scriptModeConfig?: record}
-# --checkpointConfig shape: {localPath?: string, s3Uri?: string}
-# --deviceConfig shape: {device?: string}
-# --inputDataConfig item shape: {channelName: string, contentType?: string, dataSource: record}
-# --instanceConfig shape: {instanceCount?: int, ... (2 more fields)}
-# --outputDataConfig shape: {kmsKeyId?: string, s3Path?: string}
-# --stoppingCondition shape: {maxRuntimeInSeconds?: int}
 export def "create-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -270,7 +287,7 @@ export def "create-job" [
   role_arn: string # The Amazon Resource Name (ARN) of an IAM role that Amazon Braket can assume to perform tasks on behalf of a user. It can access user resources, run an Amazon Braket job container on behalf of user, and output resources to the users' s3 buckets.
   --stopping-condition: record # Specifies limits for how long an Amazon Braket job can run. — shape: {maxRuntimeInSeconds?: int}
   --tags: record # A tag object that consists of a key and an optional value, used to manage metadata for Amazon Braket resources.
-]: any -> record<jobArn: string> {
+]: any -> oneof<record<jobArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -325,7 +342,7 @@ export def "create-quantum-task" [
   output_s3_key_prefix: string # The key prefix for the location in the S3 bucket to store task results in.
   shots: int # The number of shots to use for the task.
   --tags: record # Tags to be added to the quantum task you're creating.
-]: any -> record<quantumTaskArn: string> {
+]: any -> oneof<record<quantumTaskArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -372,7 +389,7 @@ export def "get-device" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<deviceArn: string, deviceCapabilities: string, deviceName: string, deviceStatus: string, deviceType: string, providerName: string> {
+]: nothing -> oneof<record<deviceArn: string, deviceCapabilities: string, deviceName: string, deviceStatus: string, deviceType: string, providerName: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($device_arn | is-empty) { error make --unspanned { msg: "path parameter 'deviceArn' must be non-empty" } }
@@ -417,7 +434,7 @@ export def "get-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<algorithmSpecification: record<containerImage: record<uri: string>, scriptModeConfig: record<compressionType: string, entryPoint: string, s3Uri: string>>, billableDuration: int, checkpointConfig: record<localPath: string, s3Uri: string>, createdAt: string, deviceConfig: record<device: string>, endedAt: string, events: table<eventType: string, message: string, timeOfEvent: string>, failureReason: string, hyperParameters: record, inputDataConfig: table<channelName: string, contentType: string, dataSource: record>, instanceConfig: record<instanceCount: int, instanceType: string, volumeSizeInGb: int>, jobArn: string, jobName: string, outputDataConfig: record<kmsKeyId: string, s3Path: string>, roleArn: string, startedAt: string, status: string, stoppingCondition: record<maxRuntimeInSeconds: int>, tags: record> {
+]: nothing -> oneof<record<algorithmSpecification: record<containerImage: record<uri: string>, scriptModeConfig: record<compressionType: string, entryPoint: string, s3Uri: string>>, billableDuration: int, checkpointConfig: record<localPath: string, s3Uri: string>, createdAt: string, deviceConfig: record<device: string>, endedAt: string, events: table<eventType: string, message: string, timeOfEvent: string>, failureReason: string, hyperParameters: record, inputDataConfig: table<channelName: string, contentType: string, dataSource: record>, instanceConfig: record<instanceCount: int, instanceType: string, volumeSizeInGb: int>, jobArn: string, jobName: string, outputDataConfig: record<kmsKeyId: string, s3Path: string>, roleArn: string, startedAt: string, status: string, stoppingCondition: record<maxRuntimeInSeconds: int>, tags: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_arn | is-empty) { error make --unspanned { msg: "path parameter 'jobArn' must be non-empty" } }
@@ -462,7 +479,7 @@ export def "get-quantum-task" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<createdAt: string, deviceArn: string, deviceParameters: string, endedAt: string, failureReason: string, jobArn: string, outputS3Bucket: string, outputS3Directory: string, quantumTaskArn: string, shots: int, status: string, tags: record> {
+]: nothing -> oneof<record<createdAt: string, deviceArn: string, deviceParameters: string, endedAt: string, failureReason: string, jobArn: string, outputS3Bucket: string, outputS3Directory: string, quantumTaskArn: string, shots: int, status: string, tags: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($quantum_task_arn | is-empty) { error make --unspanned { msg: "path parameter 'quantumTaskArn' must be non-empty" } }
@@ -507,7 +524,7 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<tags: record> {
+]: nothing -> oneof<record<tags: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
@@ -553,7 +570,7 @@ export def "tag-resource" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   tags: record # Specify the tags to add to the resource.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -583,7 +600,6 @@ export def "tag-resource" [
 #
 # POST /devices
 # operationId: SearchDevices
-# --filters item shape: {name: string, values: list<string>}
 export def "search-devices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -606,7 +622,7 @@ export def "search-devices" [
   filters: list # The filter values to use to search for a device. — item shape: {name: string, values: list<string>}
   --max-results-body: int # The maximum number of results to return in the response. (body field)
   --next-token-body: string # A token used for pagination of results returned in the response. Use the token returned from the previous request continue results where the previous request ended. (body field)
-]: any -> record<devices: table<deviceArn: string, deviceName: string, deviceStatus: string, deviceType: string, providerName: string>, nextToken: string> {
+]: any -> oneof<record<devices: table<deviceArn: string, deviceName: string, deviceStatus: string, deviceType: string, providerName: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -636,7 +652,6 @@ export def "search-devices" [
 #
 # POST /jobs
 # operationId: SearchJobs
-# --filters item shape: {name: string, operator: "LT"|"LTE"|"EQUAL"|"GT"|"GTE"|"BETWEEN"|"CONTAINS", values: list<string>}
 export def "search-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -659,7 +674,7 @@ export def "search-jobs" [
   filters: list # The filter values to use when searching for a job. — item shape: {name: string, operator: "LT"|"LTE"|"EQUAL"|"GT"|"GTE"|"BETWEEN"|"CONTAINS", values: list<string>}
   --max-results-body: int # The maximum number of results to return in the response. (body field)
   --next-token-body: string # A token used for pagination of results returned in the response. Use the token returned from the previous request to continue results where the previous request ended. (body field)
-]: any -> record<jobs: table<createdAt: string, device: string, endedAt: string, jobArn: string, jobName: string, startedAt: string, status: string, tags: record>, nextToken: string> {
+]: any -> oneof<record<jobs: table<createdAt: string, device: string, endedAt: string, jobArn: string, jobName: string, startedAt: string, status: string, tags: record>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -689,7 +704,6 @@ export def "search-jobs" [
 #
 # POST /quantum-tasks
 # operationId: SearchQuantumTasks
-# --filters item shape: {name: string, operator: "LT"|"LTE"|"EQUAL"|"GT"|"GTE"|"BETWEEN", values: list<string>}
 export def "search-quantum-tasks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -712,7 +726,7 @@ export def "search-quantum-tasks" [
   filters: list # Array of SearchQuantumTasksFilter objects. — item shape: {name: string, operator: "LT"|"LTE"|"EQUAL"|"GT"|"GTE"|"BETWEEN", values: list<string>}
   --max-results-body: int # Maximum number of results to return in the response. (body field)
   --next-token-body: string # A token used for pagination of results returned in the response. Use the token returned from the previous request continue results where the previous request ended. (body field)
-]: any -> record<nextToken: string, quantumTasks: table<createdAt: string, deviceArn: string, endedAt: string, outputS3Bucket: string, outputS3Directory: string, quantumTaskArn: string, shots: int, status: string, tags: record>> {
+]: any -> oneof<record<nextToken: string, quantumTasks: table<createdAt: string, deviceArn: string, endedAt: string, outputS3Bucket: string, outputS3Directory: string, quantumTaskArn: string, shots: int, status: string, tags: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -761,7 +775,7 @@ export def "untag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }

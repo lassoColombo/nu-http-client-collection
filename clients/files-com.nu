@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "x-filesapi-key" => { {scheme: $scheme, headers: {"X-FilesAPI-Key": $token_val}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -161,9 +185,9 @@ def ssl-completer [] { ["if_available" "never" "require" "require_implicit"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-action-notification-export-results" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-action-notification-export-results" "post-action-notification-exports" "get-action-notification-exports-id" "post-action-webhook-failures-id-retry" "api-key-delete-current" "api-key-find-current" "api-key-update-current" "get-api-keys" "post-api-keys" "delete-api-keys-id" "get-api-keys-id" "patch-api-keys-id" "get-apps" "get-as2-incoming-messages" "get-as2-outgoing-messages" "get-as2-partners" "post-as2-partners" "delete-as2-partners-id" "get-as2-partners-id" "patch-as2-partners-id" "get-as2-stations" "post-as2-stations" "delete-as2-stations-id" "get-as2-stations-id" "patch-as2-stations-id" "get-automation-runs" "get-automation-runs-id" "get-automations" "post-automations" "delete-automations-id" "get-automations-id" "patch-automations-id" "get-bandwidth-snapshots" "get-behaviors" "post-behaviors" "behavior-list-for-path" "post-behaviors-webhook-test" "delete-behaviors-id" "get-behaviors-id" "patch-behaviors-id" "get-bundle-downloads" "get-bundle-notifications" "post-bundle-notifications" "delete-bundle-notifications-id" "get-bundle-notifications-id" "patch-bundle-notifications-id" "get-bundle-recipients" "post-bundle-recipients" "get-bundle-registrations" "get-bundles" "post-bundles" "delete-bundles-id" "get-bundles-id" "patch-bundles-id" "post-bundles-id-share" "get-clickwraps" "post-clickwraps" "delete-clickwraps-id" "get-clickwraps-id" "patch-clickwraps-id" "get-dns-records" "get-external-events" "post-external-events" "get-external-events-id" "file-action-begin-upload" "file-action-copy" "file-action-find" "file-action-move" "post-file-comment-reactions" "delete-file-comment-reactions-id" "post-file-comments" "file-comment-list-for-path" "delete-file-comments-id" "patch-file-comments-id" "get-file-migrations-id" "delete-files-path" "file-download" "patch-files-path" "post-files-path" "folder-list-for-path" "post-folders-path" "get-form-field-sets" "post-form-field-sets" "delete-form-field-sets-id" "get-form-field-sets-id" "patch-form-field-sets-id" "get-group-users" "post-group-users" "delete-group-users-id" "patch-group-users-id" "get-groups" "post-groups" "delete-groups-group-id-memberships-user-id" "patch-groups-group-id-memberships-user-id" "get-groups-group-id-permissions" "get-groups-group-id-users" "post-groups-group-id-users" "delete-groups-id" "get-groups-id" "patch-groups-id" "history-list" "history-list-for-file" "history-list-for-folder" "history-list-logins" "history-list-for-user" "get-history-export-results" "post-history-exports" "get-history-exports-id" "get-inbox-recipients" "post-inbox-recipients" "get-inbox-registrations" "get-inbox-uploads" "get-invoices" "get-invoices-id" "get-ip-addresses" "get-ip-addresses-exavault-reserved" "get-ip-addresses-reserved" "delete-locks-path" "lock-list-for-path" "post-locks-path" "get-message-comment-reactions" "post-message-comment-reactions" "delete-message-comment-reactions-id" "get-message-comment-reactions-id" "get-message-comments" "post-message-comments" "delete-message-comments-id" "get-message-comments-id" "patch-message-comments-id" "get-message-reactions" "post-message-reactions" "delete-message-reactions-id" "get-message-reactions-id" "get-messages" "post-messages" "delete-messages-id" "get-messages-id" "patch-messages-id" "get-notifications" "post-notifications" "delete-notifications-id" "get-notifications-id" "patch-notifications-id" "get-payments" "get-payments-id" "get-permissions" "post-permissions" "delete-permissions-id" "get-priorities" "get-projects" "post-projects" "delete-projects-id" "get-projects-id" "patch-projects-id" "get-public-keys" "post-public-keys" "delete-public-keys-id" "get-public-keys-id" "patch-public-keys-id" "get-remote-bandwidth-snapshots" "get-remote-servers" "post-remote-servers" "delete-remote-servers-id" "get-remote-servers-id" "patch-remote-servers-id" "get-remote-servers-id-configuration-file" "post-remote-servers-id-configuration-file" "get-requests" "post-requests" "get-requests-folders-path" "delete-requests-id" "delete-sessions" "post-sessions" "get-settings-changes" "get-sftp-host-keys" "post-sftp-host-keys" "delete-sftp-host-keys-id" "get-sftp-host-keys-id" "patch-sftp-host-keys-id" "get-site" "patch-site" "get-site-api-keys" "post-site-api-keys" "get-site-dns-records" "get-site-ip-addresses" "post-site-test-webhook" "get-site-usage" "get-sso-strategies" "get-sso-strategies-id" "post-sso-strategies-id-sync" "delete-styles-path" "get-styles-path" "patch-styles-path" "get-usage-daily-snapshots" "get-usage-snapshots" "patch-user" "get-user-api-keys" "post-user-api-keys" "get-user-groups" "get-user-public-keys" "post-user-public-keys" "get-user-cipher-uses" "get-user-requests" "post-user-requests" "delete-user-requests-id" "get-user-requests-id" "get-users" "post-users" "delete-users-id" "get-users-id" "patch-users-id" "post-users-id2fa-reset" "post-users-id-resend-welcome-email" "post-users-id-unlock" "get-users-user-id-api-keys" "post-users-user-id-api-keys" "get-users-user-id-cipher-uses" "get-users-user-id-groups" "get-users-user-id-permissions" "get-users-user-id-public-keys" "post-users-user-id-public-keys" "post-webhook-tests" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -199,7 +223,7 @@ export def "get-action-notification-export-results" [
   --cursor: string # Used for pagination. When a list request has more records available, cursors are provided in the response headers `X-Files-Cursor-Next` and `X-Files-Cursor-Prev`. Send one of those cursor value here to resume an existing list from the next available record. Note: many of our SDKs have iterator methods that will automatically handle cursor-based pagination.
   --per-page: int # Number of records to show per page. (Max: 10,000, 1,000 or less is recommended). (format: int32)
   --action-notification-export-id: int # ID of the associated action notification export. (required, format: int32)
-]: nothing -> table<created_at: int, folder: string, id: int, message: string, path: string, request_headers: string, request_method: string, request_url: string, status: int, success: bool> {
+]: nothing -> oneof<table<created_at: int, folder: string, id: int, message: string, path: string, request_headers: string, request_method: string, request_url: string, status: int, success: bool>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($action_notification_export_id == null) { error make --unspanned { msg: "required query parameter 'action_notification_export_id' missing: pass --action-notification-export-id" } }
@@ -245,7 +269,7 @@ export def "post-action-notification-exports" [
   --query-success: oneof<nothing, bool> # true if the webhook request succeeded (i.e. returned a 200 or 204 response status). false otherwise. (e.g. true)
   --start-at: string # Start date/time of export range. (format: date-time, e.g. 2000-01-01T01:00:00Z)
   --user-id: int # User ID. Provide a value of `0` to operate the current session's user. (format: int32)
-]: any -> record<end_at: string, export_version: string, id: int, query_folder: string, query_message: string, query_path: string, query_request_method: string, query_request_url: string, query_status: string, query_success: bool, results_url: string, start_at: string, status: string> {
+]: any -> oneof<record<end_at: string, export_version: string, id: int, query_folder: string, query_message: string, query_path: string, query_request_method: string, query_request_url: string, query_status: string, query_success: bool, results_url: string, start_at: string, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -285,7 +309,7 @@ export def "get-action-notification-exports-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<end_at: string, export_version: string, id: int, query_folder: string, query_message: string, query_path: string, query_request_method: string, query_request_url: string, query_status: string, query_success: bool, results_url: string, start_at: string, status: string> {
+]: nothing -> oneof<record<end_at: string, export_version: string, id: int, query_folder: string, query_message: string, query_path: string, query_request_method: string, query_request_url: string, query_status: string, query_success: bool, results_url: string, start_at: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -390,7 +414,7 @@ export def "api-key-find-current" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created_at: string, description: string, descriptive_label: string, expires_at: string, id: int, key: string, last_use_at: string, name: string, path: string, permission_set: string, platform: string, url: string, user_id: int> {
+]: nothing -> oneof<record<created_at: string, description: string, descriptive_label: string, expires_at: string, id: int, key: string, last_use_at: string, name: string, path: string, permission_set: string, platform: string, url: string, user_id: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api_key" $auth.query)
@@ -427,7 +451,7 @@ export def "api-key-update-current" [
   --expires-at: string # API Key expiration date (format: date-time, e.g. 2000-01-01T01:00:00Z)
   --name: string # Internal name for the API Key. For your use. (e.g. My Main API Key)
   --permission-set: string@permission-set-completer # Permissions for this API Key. Keys with the `desktop_app` permission set only have the ability to do the functions provided in our Desktop App (File and Share Link operations). Additional permission sets may become available in the future, such as for a Site Admin to give a key with no administrator privileges. If you have ideas for permission sets, please let us know. (e.g. full)
-]: any -> record<created_at: string, description: string, descriptive_label: string, expires_at: string, id: int, key: string, last_use_at: string, name: string, path: string, permission_set: string, platform: string, url: string, user_id: int> {
+]: any -> oneof<record<created_at: string, description: string, descriptive_label: string, expires_at: string, id: int, key: string, last_use_at: string, name: string, path: string, permission_set: string, platform: string, url: string, user_id: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -476,7 +500,7 @@ export def "get-api-keys" [
   --filter-like: record # If set, return records where the specified field is equal to the supplied value. Valid fields are `expires_at`.
   --filter-lt: record # If set, return records where the specified field is less than the supplied value. Valid fields are `expires_at`.
   --filter-lteq: record # If set, return records where the specified field is less than or equal to the supplied value. Valid fields are `expires_at`.
-]: nothing -> table<created_at: string, description: string, descriptive_label: string, expires_at: string, id: int, key: string, last_use_at: string, name: string, path: string, permission_set: string, platform: string, url: string, user_id: int> {
+]: nothing -> oneof<table<created_at: string, description: string, descriptive_label: string, expires_at: string, id: int, key: string, last_use_at: string, name: string, path: string, permission_set: string, platform: string, url: string, user_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "user_id" $user_id "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort_by" $sort_by "multi") (serialize-qp "filter" $filter "multi") (serialize-qp "filter_gt" $filter_gt "multi") (serialize-qp "filter_gteq" $filter_gteq "multi") (serialize-qp "filter_like" $filter_like "multi") (serialize-qp "filter_lt" $filter_lt "multi") (serialize-qp "filter_lteq" $filter_lteq "multi")] | flatten | str join "&"
@@ -517,7 +541,7 @@ export def "post-api-keys" [
   --path: string # Folder path restriction for this api key. (e.g. shared/docs)
   --permission-set: string@permission-set-completer # Permissions for this API Key. Keys with the `desktop_app` permission set only have the ability to do the functions provided in our Desktop App (File and Share Link operations). Additional permission sets may become available in the future, such as for a Site Admin to give a key with no administrator privileges. If you have ideas for permission sets, please let us know. (default: full, e.g. full)
   --user-id: int # User ID. Provide a value of `0` to operate the current session's user. (format: int32)
-]: any -> record<created_at: string, description: string, descriptive_label: string, expires_at: string, id: int, key: string, last_use_at: string, name: string, path: string, permission_set: string, platform: string, url: string, user_id: int> {
+]: any -> oneof<record<created_at: string, description: string, descriptive_label: string, expires_at: string, id: int, key: string, last_use_at: string, name: string, path: string, permission_set: string, platform: string, url: string, user_id: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -593,7 +617,7 @@ export def "get-api-keys-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created_at: string, description: string, descriptive_label: string, expires_at: string, id: int, key: string, last_use_at: string, name: string, path: string, permission_set: string, platform: string, url: string, user_id: int> {
+]: nothing -> oneof<record<created_at: string, description: string, descriptive_label: string, expires_at: string, id: int, key: string, last_use_at: string, name: string, path: string, permission_set: string, platform: string, url: string, user_id: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -633,7 +657,7 @@ export def "patch-api-keys-id" [
   --expires-at: string # API Key expiration date (format: date-time, e.g. 2000-01-01T01:00:00Z)
   --name: string # Internal name for the API Key. For your use. (e.g. My Main API Key)
   --permission-set: string@permission-set-completer # Permissions for this API Key. Keys with the `desktop_app` permission set only have the ability to do the functions provided in our Desktop App (File and Share Link operations). Additional permission sets may become available in the future, such as for a Site Admin to give a key with no administrator privileges. If you have ideas for permission sets, please let us know. (e.g. full)
-]: any -> record<created_at: string, description: string, descriptive_label: string, expires_at: string, id: int, key: string, last_use_at: string, name: string, path: string, permission_set: string, platform: string, url: string, user_id: int> {
+]: any -> oneof<record<created_at: string, description: string, descriptive_label: string, expires_at: string, id: int, key: string, last_use_at: string, name: string, path: string, permission_set: string, platform: string, url: string, user_id: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -682,7 +706,7 @@ export def "get-apps" [
   --filter-like: record # If set, return records where the specified field is equal to the supplied value. Valid fields are `name` and `app_type`. Valid field combinations are `[ name, app_type ]` and `[ app_type, name ]`.
   --filter-lt: record # If set, return records where the specified field is less than the supplied value. Valid fields are `name` and `app_type`. Valid field combinations are `[ name, app_type ]` and `[ app_type, name ]`.
   --filter-lteq: record # If set, return records where the specified field is less than or equal to the supplied value. Valid fields are `name` and `app_type`. Valid field combinations are `[ name, app_type ]` and `[ app_type, name ]`.
-]: nothing -> table<app_type: string, documentation_links: record, extended_description: string, external_homepage_url: string, featured: bool, folder_behavior_type: string, icon_url: string, logo_thumbnail_url: string, logo_url: string, marketing_youtube_url: string, name: string, remote_server_type: string, screenshot_list_urls: list<string>, short_description: string, sso_strategy_type: string, tutorial_youtube_url: string> {
+]: nothing -> oneof<table<app_type: string, documentation_links: record, extended_description: string, external_homepage_url: string, featured: bool, folder_behavior_type: string, icon_url: string, logo_thumbnail_url: string, logo_url: string, marketing_youtube_url: string, name: string, remote_server_type: string, screenshot_list_urls: list<string>, short_description: string, sso_strategy_type: string, tutorial_youtube_url: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort_by" $sort_by "multi") (serialize-qp "filter" $filter "multi") (serialize-qp "filter_gt" $filter_gt "multi") (serialize-qp "filter_gteq" $filter_gteq "multi") (serialize-qp "filter_like" $filter_like "multi") (serialize-qp "filter_lt" $filter_lt "multi") (serialize-qp "filter_lteq" $filter_lteq "multi")] | flatten | str join "&"
@@ -727,7 +751,7 @@ export def "get-as2-incoming-messages" [
   --filter-lt: record # If set, return records where the specified field is less than the supplied value. Valid fields are `created_at`.
   --filter-lteq: record # If set, return records where the specified field is less than or equal to the supplied value. Valid fields are `created_at`.
   --as2-partner-id: int # As2 Partner ID. If provided, will return message specific to that partner. (format: int32)
-]: nothing -> table<activity_log: string, as2_from: string, as2_partner_id: int, as2_station_id: int, as2_to: string, attachment_filename: string, body_size: string, content_type: string, created_at: string, date: string, encrypted_uri: string, hex_recipient_serial: string, http_headers: record, http_response_code: string, http_response_headers: record, id: int, ip: string, mdn_response_uri: string, message_decrypted: bool, message_id: string, message_mdn_returned: bool, message_processing_success: bool, message_received: bool, message_signature_verified: bool, mic: string, mic_algo: string, processing_result: string, processing_result_description: string, raw_uri: string, recipient_issuer: string, recipient_serial: string, smime_signed_uri: string, smime_uri: string, subject: string, uuid: string> {
+]: nothing -> oneof<table<activity_log: string, as2_from: string, as2_partner_id: int, as2_station_id: int, as2_to: string, attachment_filename: string, body_size: string, content_type: string, created_at: string, date: string, encrypted_uri: string, hex_recipient_serial: string, http_headers: record, http_response_code: string, http_response_headers: record, id: int, ip: string, mdn_response_uri: string, message_decrypted: bool, message_id: string, message_mdn_returned: bool, message_processing_success: bool, message_received: bool, message_signature_verified: bool, mic: string, mic_algo: string, processing_result: string, processing_result_description: string, raw_uri: string, recipient_issuer: string, recipient_serial: string, smime_signed_uri: string, smime_uri: string, subject: string, uuid: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort_by" $sort_by "multi") (serialize-qp "filter" $filter "multi") (serialize-qp "filter_gt" $filter_gt "multi") (serialize-qp "filter_gteq" $filter_gteq "multi") (serialize-qp "filter_like" $filter_like "multi") (serialize-qp "filter_lt" $filter_lt "multi") (serialize-qp "filter_lteq" $filter_lteq "multi") (serialize-qp "as2_partner_id" $as2_partner_id "scalar")] | flatten | str join "&"
@@ -772,7 +796,7 @@ export def "get-as2-outgoing-messages" [
   --filter-lt: record # If set, return records where the specified field is less than the supplied value. Valid fields are `created_at`.
   --filter-lteq: record # If set, return records where the specified field is less than or equal to the supplied value. Valid fields are `created_at`.
   --as2-partner-id: int # As2 Partner ID. If provided, will return message specific to that partner. (format: int32)
-]: nothing -> table<activity_log: string, as2_from: string, as2_partner_id: int, as2_station_id: int, as2_to: string, attachment_filename: string, body_size: string, created_at: string, date: string, encrypted_uri: string, http_headers: record, http_response_code: string, http_response_headers: record, http_transmission_duration: float, id: int, mdn_message_id_matched: bool, mdn_mic_matched: bool, mdn_processing_success: bool, mdn_received: bool, mdn_response_uri: string, mdn_signature_verified: bool, mdn_valid: bool, message_id: string, mic: string, mic_sha_256: string, processing_result: string, processing_result_description: string, raw_uri: string, smime_signed_uri: string, smime_uri: string, uuid: string> {
+]: nothing -> oneof<table<activity_log: string, as2_from: string, as2_partner_id: int, as2_station_id: int, as2_to: string, attachment_filename: string, body_size: string, created_at: string, date: string, encrypted_uri: string, http_headers: record, http_response_code: string, http_response_headers: record, http_transmission_duration: float, id: int, mdn_message_id_matched: bool, mdn_mic_matched: bool, mdn_processing_success: bool, mdn_received: bool, mdn_response_uri: string, mdn_signature_verified: bool, mdn_valid: bool, message_id: string, mic: string, mic_sha_256: string, processing_result: string, processing_result_description: string, raw_uri: string, smime_signed_uri: string, smime_uri: string, uuid: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort_by" $sort_by "multi") (serialize-qp "filter" $filter "multi") (serialize-qp "filter_gt" $filter_gt "multi") (serialize-qp "filter_gteq" $filter_gteq "multi") (serialize-qp "filter_like" $filter_like "multi") (serialize-qp "filter_lt" $filter_lt "multi") (serialize-qp "filter_lteq" $filter_lteq "multi") (serialize-qp "as2_partner_id" $as2_partner_id "scalar")] | flatten | str join "&"
@@ -809,7 +833,7 @@ export def "get-as2-partners" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Used for pagination. When a list request has more records available, cursors are provided in the response headers `X-Files-Cursor-Next` and `X-Files-Cursor-Prev`. Send one of those cursor value here to resume an existing list from the next available record. Note: many of our SDKs have iterator methods that will automatically handle cursor-based pagination.
   --per-page: int # Number of records to show per page. (Max: 10,000, 1,000 or less is recommended). (format: int32)
-]: nothing -> table<as2_station_id: int, hex_public_certificate_serial: string, id: int, name: string, public_certificate_issuer: string, public_certificate_md5: string, public_certificate_not_after: string, public_certificate_not_before: string, public_certificate_serial: string, public_certificate_subject: string, server_certificate: string, uri: string> {
+]: nothing -> oneof<table<as2_station_id: int, hex_public_certificate_serial: string, id: int, name: string, public_certificate_issuer: string, public_certificate_md5: string, public_certificate_not_after: string, public_certificate_not_before: string, public_certificate_serial: string, public_certificate_subject: string, server_certificate: string, uri: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
@@ -849,7 +873,7 @@ export def "post-as2-partners" [
   public_certificate: string
   --server-certificate: string # Remote server certificate security setting
   uri: string # URL base for AS2 responses
-]: any -> record<as2_station_id: int, hex_public_certificate_serial: string, id: int, name: string, public_certificate_issuer: string, public_certificate_md5: string, public_certificate_not_after: string, public_certificate_not_before: string, public_certificate_serial: string, public_certificate_subject: string, server_certificate: string, uri: string> {
+]: any -> oneof<record<as2_station_id: int, hex_public_certificate_serial: string, id: int, name: string, public_certificate_issuer: string, public_certificate_md5: string, public_certificate_not_after: string, public_certificate_not_before: string, public_certificate_serial: string, public_certificate_subject: string, server_certificate: string, uri: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -925,7 +949,7 @@ export def "get-as2-partners-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<as2_station_id: int, hex_public_certificate_serial: string, id: int, name: string, public_certificate_issuer: string, public_certificate_md5: string, public_certificate_not_after: string, public_certificate_not_before: string, public_certificate_serial: string, public_certificate_subject: string, server_certificate: string, uri: string> {
+]: nothing -> oneof<record<as2_station_id: int, hex_public_certificate_serial: string, id: int, name: string, public_certificate_issuer: string, public_certificate_md5: string, public_certificate_not_after: string, public_certificate_not_before: string, public_certificate_serial: string, public_certificate_subject: string, server_certificate: string, uri: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -965,7 +989,7 @@ export def "patch-as2-partners-id" [
   --public-certificate: string
   --server-certificate: string # Remote server certificate security setting
   --uri: string # URL base for AS2 responses
-]: any -> record<as2_station_id: int, hex_public_certificate_serial: string, id: int, name: string, public_certificate_issuer: string, public_certificate_md5: string, public_certificate_not_after: string, public_certificate_not_before: string, public_certificate_serial: string, public_certificate_subject: string, server_certificate: string, uri: string> {
+]: any -> oneof<record<as2_station_id: int, hex_public_certificate_serial: string, id: int, name: string, public_certificate_issuer: string, public_certificate_md5: string, public_certificate_not_after: string, public_certificate_not_before: string, public_certificate_serial: string, public_certificate_subject: string, server_certificate: string, uri: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1007,7 +1031,7 @@ export def "get-as2-stations" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Used for pagination. When a list request has more records available, cursors are provided in the response headers `X-Files-Cursor-Next` and `X-Files-Cursor-Prev`. Send one of those cursor value here to resume an existing list from the next available record. Note: many of our SDKs have iterator methods that will automatically handle cursor-based pagination.
   --per-page: int # Number of records to show per page. (Max: 10,000, 1,000 or less is recommended). (format: int32)
-]: nothing -> table<domain: string, hex_public_certificate_serial: string, id: int, name: string, private_key_md5: string, private_key_password_md5: string, public_certificate_issuer: string, public_certificate_md5: string, public_certificate_not_after: string, public_certificate_not_before: string, public_certificate_serial: string, public_certificate_subject: string, uri: string> {
+]: nothing -> oneof<table<domain: string, hex_public_certificate_serial: string, id: int, name: string, private_key_md5: string, private_key_password_md5: string, public_certificate_issuer: string, public_certificate_md5: string, public_certificate_not_after: string, public_certificate_not_before: string, public_certificate_serial: string, public_certificate_subject: string, uri: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
@@ -1046,7 +1070,7 @@ export def "post-as2-stations" [
   private_key: string
   --private-key-password: string
   public_certificate: string
-]: any -> record<domain: string, hex_public_certificate_serial: string, id: int, name: string, private_key_md5: string, private_key_password_md5: string, public_certificate_issuer: string, public_certificate_md5: string, public_certificate_not_after: string, public_certificate_not_before: string, public_certificate_serial: string, public_certificate_subject: string, uri: string> {
+]: any -> oneof<record<domain: string, hex_public_certificate_serial: string, id: int, name: string, private_key_md5: string, private_key_password_md5: string, public_certificate_issuer: string, public_certificate_md5: string, public_certificate_not_after: string, public_certificate_not_before: string, public_certificate_serial: string, public_certificate_subject: string, uri: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1122,7 +1146,7 @@ export def "get-as2-stations-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<domain: string, hex_public_certificate_serial: string, id: int, name: string, private_key_md5: string, private_key_password_md5: string, public_certificate_issuer: string, public_certificate_md5: string, public_certificate_not_after: string, public_certificate_not_before: string, public_certificate_serial: string, public_certificate_subject: string, uri: string> {
+]: nothing -> oneof<record<domain: string, hex_public_certificate_serial: string, id: int, name: string, private_key_md5: string, private_key_password_md5: string, public_certificate_issuer: string, public_certificate_md5: string, public_certificate_not_after: string, public_certificate_not_before: string, public_certificate_serial: string, public_certificate_subject: string, uri: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1162,7 +1186,7 @@ export def "patch-as2-stations-id" [
   --private-key: string
   --private-key-password: string
   --public-certificate: string
-]: any -> record<domain: string, hex_public_certificate_serial: string, id: int, name: string, private_key_md5: string, private_key_password_md5: string, public_certificate_issuer: string, public_certificate_md5: string, public_certificate_not_after: string, public_certificate_not_before: string, public_certificate_serial: string, public_certificate_subject: string, uri: string> {
+]: any -> oneof<record<domain: string, hex_public_certificate_serial: string, id: int, name: string, private_key_md5: string, private_key_password_md5: string, public_certificate_issuer: string, public_certificate_md5: string, public_certificate_not_after: string, public_certificate_not_before: string, public_certificate_serial: string, public_certificate_subject: string, uri: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1213,7 +1237,7 @@ export def "get-automation-runs" [
   --filter-lt: record # If set, return records where the specified field is less than the supplied value. Valid fields are `status`.
   --filter-lteq: record # If set, return records where the specified field is less than or equal to the supplied value. Valid fields are `status`.
   --automation-id: int # ID of the associated Automation. (required, format: int32, e.g. 1)
-]: nothing -> table<automation_id: int, completed_at: string, created_at: string, id: int, status: string, status_messages_url: string> {
+]: nothing -> oneof<table<automation_id: int, completed_at: string, created_at: string, id: int, status: string, status_messages_url: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($automation_id == null) { error make --unspanned { msg: "required query parameter 'automation_id' missing: pass --automation-id" } }
@@ -1250,7 +1274,7 @@ export def "get-automation-runs-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<automation_id: int, completed_at: string, created_at: string, id: int, status: string, status_messages_url: string> {
+]: nothing -> oneof<record<automation_id: int, completed_at: string, created_at: string, id: int, status: string, status_messages_url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1296,7 +1320,7 @@ export def "get-automations" [
   --filter-lteq: record # If set, return records where the specified field is less than or equal to the supplied value. Valid fields are `automation`, `last_modified_at` or `disabled`. Valid field combinations are `[ automation, disabled ]` and `[ disabled, automation ]`.
   --with-deleted: oneof<nothing, bool> # Set to true to include deleted automations in the results.
   --automation: string # DEPRECATED: Type of automation to filter by. Use `filter[automation]` instead.
-]: nothing -> table<automation: string, deleted: bool, description: string, destination_replace_from: string, destination_replace_to: string, destinations: list<string>, disabled: bool, group_ids: list<int>, id: int, interval: string, last_modified_at: string, name: string, path: string, schedule: record, source: string, sync_ids: list<int>, trigger: string, trigger_actions: list<string>, user_id: int, user_ids: list<int>, value: record, webhook_url: string> {
+]: nothing -> oneof<table<automation: string, deleted: bool, description: string, destination_replace_from: string, destination_replace_to: string, destinations: list<string>, disabled: bool, group_ids: list<int>, id: int, interval: string, last_modified_at: string, name: string, path: string, schedule: record, source: string, sync_ids: list<int>, trigger: string, trigger_actions: list<string>, user_id: int, user_ids: list<int>, value: record, webhook_url: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort_by" $sort_by "multi") (serialize-qp "filter" $filter "multi") (serialize-qp "filter_gt" $filter_gt "multi") (serialize-qp "filter_gteq" $filter_gteq "multi") (serialize-qp "filter_like" $filter_like "multi") (serialize-qp "filter_lt" $filter_lt "multi") (serialize-qp "filter_lteq" $filter_lteq "multi") (serialize-qp "with_deleted" $with_deleted "scalar") (serialize-qp "automation" $automation "scalar")] | flatten | str join "&"
@@ -1349,7 +1373,7 @@ export def "post-automations" [
   --trigger-actions: list<string> # If trigger is `action`, this is the list of action types on which to trigger the automation. Valid actions are create, read, update, destroy, move, copy (e.g. [create])
   --user-ids: string # A list of user IDs the automation is associated with. If sent as a string, it should be comma-delimited.
   --value: record # A Hash of attributes specific to the automation type. (e.g. {limit: 1})
-]: any -> record<automation: string, deleted: bool, description: string, destination_replace_from: string, destination_replace_to: string, destinations: list<string>, disabled: bool, group_ids: list<int>, id: int, interval: string, last_modified_at: string, name: string, path: string, schedule: record, source: string, sync_ids: list<int>, trigger: string, trigger_actions: list<string>, user_id: int, user_ids: list<int>, value: record, webhook_url: string> {
+]: any -> oneof<record<automation: string, deleted: bool, description: string, destination_replace_from: string, destination_replace_to: string, destinations: list<string>, disabled: bool, group_ids: list<int>, id: int, interval: string, last_modified_at: string, name: string, path: string, schedule: record, source: string, sync_ids: list<int>, trigger: string, trigger_actions: list<string>, user_id: int, user_ids: list<int>, value: record, webhook_url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1425,7 +1449,7 @@ export def "get-automations-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<automation: string, deleted: bool, description: string, destination_replace_from: string, destination_replace_to: string, destinations: list<string>, disabled: bool, group_ids: list<int>, id: int, interval: string, last_modified_at: string, name: string, path: string, schedule: record, source: string, sync_ids: list<int>, trigger: string, trigger_actions: list<string>, user_id: int, user_ids: list<int>, value: record, webhook_url: string> {
+]: nothing -> oneof<record<automation: string, deleted: bool, description: string, destination_replace_from: string, destination_replace_to: string, destinations: list<string>, disabled: bool, group_ids: list<int>, id: int, interval: string, last_modified_at: string, name: string, path: string, schedule: record, source: string, sync_ids: list<int>, trigger: string, trigger_actions: list<string>, user_id: int, user_ids: list<int>, value: record, webhook_url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1479,7 +1503,7 @@ export def "patch-automations-id" [
   --trigger-actions: list<string> # If trigger is `action`, this is the list of action types on which to trigger the automation. Valid actions are create, read, update, destroy, move, copy (e.g. [create])
   --user-ids: string # A list of user IDs the automation is associated with. If sent as a string, it should be comma-delimited.
   --value: record # A Hash of attributes specific to the automation type. (e.g. {limit: 1})
-]: any -> record<automation: string, deleted: bool, description: string, destination_replace_from: string, destination_replace_to: string, destinations: list<string>, disabled: bool, group_ids: list<int>, id: int, interval: string, last_modified_at: string, name: string, path: string, schedule: record, source: string, sync_ids: list<int>, trigger: string, trigger_actions: list<string>, user_id: int, user_ids: list<int>, value: record, webhook_url: string> {
+]: any -> oneof<record<automation: string, deleted: bool, description: string, destination_replace_from: string, destination_replace_to: string, destinations: list<string>, disabled: bool, group_ids: list<int>, id: int, interval: string, last_modified_at: string, name: string, path: string, schedule: record, source: string, sync_ids: list<int>, trigger: string, trigger_actions: list<string>, user_id: int, user_ids: list<int>, value: record, webhook_url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1528,7 +1552,7 @@ export def "get-bandwidth-snapshots" [
   --filter-like: record # If set, return records where the specified field is equal to the supplied value. Valid fields are `logged_at`.
   --filter-lt: record # If set, return records where the specified field is less than the supplied value. Valid fields are `logged_at`.
   --filter-lteq: record # If set, return records where the specified field is less than or equal to the supplied value. Valid fields are `logged_at`.
-]: nothing -> table<bytes_received: float, bytes_sent: float, id: int, logged_at: string, requests_get: float, requests_other: float, requests_put: float, sync_bytes_received: float, sync_bytes_sent: float> {
+]: nothing -> oneof<table<bytes_received: float, bytes_sent: float, id: int, logged_at: string, requests_get: float, requests_other: float, requests_put: float, sync_bytes_received: float, sync_bytes_sent: float>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort_by" $sort_by "multi") (serialize-qp "filter" $filter "multi") (serialize-qp "filter_gt" $filter_gt "multi") (serialize-qp "filter_gteq" $filter_gteq "multi") (serialize-qp "filter_like" $filter_like "multi") (serialize-qp "filter_lt" $filter_lt "multi") (serialize-qp "filter_lteq" $filter_lteq "multi")] | flatten | str join "&"
@@ -1573,7 +1597,7 @@ export def "get-behaviors" [
   --filter-lt: record # If set, return records where the specified field is less than the supplied value. Valid fields are `behavior`.
   --filter-lteq: record # If set, return records where the specified field is less than or equal to the supplied value. Valid fields are `behavior`.
   --behavior: string # If set, only shows folder behaviors matching this behavior type.
-]: nothing -> table<attachment_url: string, behavior: string, description: string, id: int, name: string, path: string, value: record> {
+]: nothing -> oneof<table<attachment_url: string, behavior: string, description: string, id: int, name: string, path: string, value: record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort_by" $sort_by "multi") (serialize-qp "filter" $filter "multi") (serialize-qp "filter_gt" $filter_gt "multi") (serialize-qp "filter_gteq" $filter_gteq "multi") (serialize-qp "filter_like" $filter_like "multi") (serialize-qp "filter_lt" $filter_lt "multi") (serialize-qp "filter_lteq" $filter_lteq "multi") (serialize-qp "behavior" $behavior "scalar")] | flatten | str join "&"
@@ -1614,7 +1638,7 @@ export def "post-behaviors" [
   --name: string # Name for this behavior. (e.g. example)
   path: string # Folder behaviors path.
   --value: string # The value of the folder behavior. Can be a integer, array, or hash depending on the type of folder behavior. See The Behavior Types section for example values for each type of behavior. (e.g. {"method": "GET"})
-]: any -> record<attachment_url: string, behavior: string, description: string, id: int, name: string, path: string, value: record> {
+]: any -> oneof<record<attachment_url: string, behavior: string, description: string, id: int, name: string, path: string, value: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1665,7 +1689,7 @@ export def "behavior-list-for-path" [
   --filter-lteq: record # If set, return records where the specified field is less than or equal to the supplied value. Valid fields are `behavior`.
   --recursive: string # Show behaviors above this path?
   --behavior: string # DEPRECATED: If set only shows folder behaviors matching this behavior type. Use `filter[behavior]` instead.
-]: nothing -> table<attachment_url: string, behavior: string, description: string, id: int, name: string, path: string, value: record> {
+]: nothing -> oneof<table<attachment_url: string, behavior: string, description: string, id: int, name: string, path: string, value: record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
@@ -1707,7 +1731,7 @@ export def "post-behaviors-webhook-test" [
   --headers: record # Additional request headers. (e.g. {x-test-header: testvalue})
   --method: string # HTTP method(GET or POST). (e.g. GET)
   url: string # URL for testing the webhook. (e.g. https://www.site.com/...)
-]: any -> record<clickwrap_body: string, clickwrap_id: int, code: int, data: record<dynamic: record>, errors: table<fields: list, messages: list>, message: string, status: string> {
+]: any -> oneof<record<clickwrap_body: string, clickwrap_id: int, code: int, data: record<dynamic: record>, errors: table<fields: list, messages: list>, message: string, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1783,7 +1807,7 @@ export def "get-behaviors-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<attachment_url: string, behavior: string, description: string, id: int, name: string, path: string, value: record> {
+]: nothing -> oneof<record<attachment_url: string, behavior: string, description: string, id: int, name: string, path: string, value: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1826,7 +1850,7 @@ export def "patch-behaviors-id" [
   --name: string # Name for this behavior. (e.g. example)
   --path: string # Folder behaviors path.
   --value: string # The value of the folder behavior. Can be a integer, array, or hash depending on the type of folder behavior. See The Behavior Types section for example values for each type of behavior. (e.g. {"method": "GET"})
-]: any -> record<attachment_url: string, behavior: string, description: string, id: int, name: string, path: string, value: record> {
+]: any -> oneof<record<attachment_url: string, behavior: string, description: string, id: int, name: string, path: string, value: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1877,7 +1901,7 @@ export def "get-bundle-downloads" [
   --filter-lteq: record # If set, return records where the specified field is less than or equal to the supplied value. Valid fields are `created_at`.
   --bundle-id: int # Bundle ID (format: int32)
   --bundle-registration-id: int # BundleRegistration ID (format: int32)
-]: nothing -> table<bundle_registration: record<bundle_code: string, bundle_id: int, bundle_recipient_id: int, clickwrap_body: string, code: string, company: string, created_at: string, email: string, form_field_data: record, form_field_set_id: int, inbox_code: string, ip: string, name: string>, created_at: string, download_method: string, path: string> {
+]: nothing -> oneof<table<bundle_registration: record<bundle_code: string, bundle_id: int, bundle_recipient_id: int, clickwrap_body: string, code: string, company: string, created_at: string, email: string, form_field_data: record, form_field_set_id: int, inbox_code: string, ip: string, name: string>, created_at: string, download_method: string, path: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort_by" $sort_by "multi") (serialize-qp "filter" $filter "multi") (serialize-qp "filter_gt" $filter_gt "multi") (serialize-qp "filter_gteq" $filter_gteq "multi") (serialize-qp "filter_like" $filter_like "multi") (serialize-qp "filter_lt" $filter_lt "multi") (serialize-qp "filter_lteq" $filter_lteq "multi") (serialize-qp "bundle_id" $bundle_id "scalar") (serialize-qp "bundle_registration_id" $bundle_registration_id "scalar")] | flatten | str join "&"
@@ -1916,7 +1940,7 @@ export def "get-bundle-notifications" [
   --cursor: string # Used for pagination. When a list request has more records available, cursors are provided in the response headers `X-Files-Cursor-Next` and `X-Files-Cursor-Prev`. Send one of those cursor value here to resume an existing list from the next available record. Note: many of our SDKs have iterator methods that will automatically handle cursor-based pagination.
   --per-page: int # Number of records to show per page. (Max: 10,000, 1,000 or less is recommended). (format: int32)
   --bundle-id: int # Bundle ID to notify on (format: int32, e.g. 1)
-]: nothing -> table<bundle_id: int, id: int, notify_on_registration: bool, notify_on_upload: bool, user_id: int> {
+]: nothing -> oneof<table<bundle_id: int, id: int, notify_on_registration: bool, notify_on_upload: bool, user_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "user_id" $user_id "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "bundle_id" $bundle_id "scalar")] | flatten | str join "&"
@@ -1955,7 +1979,7 @@ export def "post-bundle-notifications" [
   --notify-on-registration: oneof<nothing, bool> # Triggers bundle notification when a registration action occurs for it. (e.g. true)
   --notify-on-upload: oneof<nothing, bool> # Triggers bundle notification when a upload action occurs for it. (e.g. true)
   --user-id: int # The id of the user to notify. (format: int32, e.g. 1)
-]: any -> record<bundle_id: int, id: int, notify_on_registration: bool, notify_on_upload: bool, user_id: int> {
+]: any -> oneof<record<bundle_id: int, id: int, notify_on_registration: bool, notify_on_upload: bool, user_id: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2031,7 +2055,7 @@ export def "get-bundle-notifications-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<bundle_id: int, id: int, notify_on_registration: bool, notify_on_upload: bool, user_id: int> {
+]: nothing -> oneof<record<bundle_id: int, id: int, notify_on_registration: bool, notify_on_upload: bool, user_id: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2069,7 +2093,7 @@ export def "patch-bundle-notifications-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --notify-on-registration: oneof<nothing, bool> # Triggers bundle notification when a registration action occurs for it. (e.g. true)
   --notify-on-upload: oneof<nothing, bool> # Triggers bundle notification when a upload action occurs for it. (e.g. true)
-]: any -> record<bundle_id: int, id: int, notify_on_registration: bool, notify_on_upload: bool, user_id: int> {
+]: any -> oneof<record<bundle_id: int, id: int, notify_on_registration: bool, notify_on_upload: bool, user_id: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2120,7 +2144,7 @@ export def "get-bundle-recipients" [
   --filter-lt: record # If set, return records where the specified field is less than the supplied value. Valid fields are `has_registrations`.
   --filter-lteq: record # If set, return records where the specified field is less than or equal to the supplied value. Valid fields are `has_registrations`.
   --bundle-id: int # List recipients for the bundle with this ID. (required, format: int32)
-]: nothing -> table<company: string, name: string, note: string, recipient: string, sent_at: string> {
+]: nothing -> oneof<table<company: string, name: string, note: string, recipient: string, sent_at: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($bundle_id == null) { error make --unspanned { msg: "required query parameter 'bundle_id' missing: pass --bundle-id" } }
@@ -2163,7 +2187,7 @@ export def "post-bundle-recipients" [
   recipient: string # Email addresses to share this bundle with. (e.g. johndoe@gmail.com)
   --share-after-create: oneof<nothing, bool> # Set to true to share the link with the recipient upon creation.
   --user-id: int # User ID. Provide a value of `0` to operate the current session's user. (format: int32)
-]: any -> record<company: string, name: string, note: string, recipient: string, sent_at: string> {
+]: any -> oneof<record<company: string, name: string, note: string, recipient: string, sent_at: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2206,7 +2230,7 @@ export def "get-bundle-registrations" [
   --cursor: string # Used for pagination. When a list request has more records available, cursors are provided in the response headers `X-Files-Cursor-Next` and `X-Files-Cursor-Prev`. Send one of those cursor value here to resume an existing list from the next available record. Note: many of our SDKs have iterator methods that will automatically handle cursor-based pagination.
   --per-page: int # Number of records to show per page. (Max: 10,000, 1,000 or less is recommended). (format: int32)
   --bundle-id: int # ID of the associated Bundle (format: int32)
-]: nothing -> table<bundle_code: string, bundle_id: int, bundle_recipient_id: int, clickwrap_body: string, code: string, company: string, created_at: string, email: string, form_field_data: record, form_field_set_id: int, inbox_code: string, ip: string, name: string> {
+]: nothing -> oneof<table<bundle_code: string, bundle_id: int, bundle_recipient_id: int, clickwrap_body: string, code: string, company: string, created_at: string, email: string, form_field_data: record, form_field_set_id: int, inbox_code: string, ip: string, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "user_id" $user_id "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "bundle_id" $bundle_id "scalar")] | flatten | str join "&"
@@ -2251,7 +2275,7 @@ export def "get-bundles" [
   --filter-like: record # If set, return records where the specified field is equal to the supplied value. Valid fields are `created_at`.
   --filter-lt: record # If set, return records where the specified field is less than the supplied value. Valid fields are `created_at`.
   --filter-lteq: record # If set, return records where the specified field is less than or equal to the supplied value. Valid fields are `created_at`.
-]: nothing -> table<clickwrap_body: string, clickwrap_id: int, code: string, created_at: string, description: string, dont_separate_submissions_by_folder: bool, expires_at: string, form_field_set: record<form_fields: list, form_layout: list, id: int, skip_company: bool, skip_email: bool, skip_name: bool, title: string>, has_inbox: bool, id: int, inbox_id: int, max_uses: int, note: string, password_protected: bool, path_template: string, paths: list<string>, permissions: string, preview_only: bool, require_registration: bool, require_share_recipient: bool, send_email_receipt_to_uploader: bool, skip_company: bool, skip_email: bool, skip_name: bool, url: string, user_id: int, username: string, watermark_attachment: record<name: string, uri: string>, watermark_value: record> {
+]: nothing -> oneof<table<clickwrap_body: string, clickwrap_id: int, code: string, created_at: string, description: string, dont_separate_submissions_by_folder: bool, expires_at: string, form_field_set: record<form_fields: list, form_layout: list, id: int, skip_company: bool, skip_email: bool, skip_name: bool, title: string>, has_inbox: bool, id: int, inbox_id: int, max_uses: int, note: string, password_protected: bool, path_template: string, paths: list<string>, permissions: string, preview_only: bool, require_registration: bool, require_share_recipient: bool, send_email_receipt_to_uploader: bool, skip_company: bool, skip_email: bool, skip_name: bool, url: string, user_id: int, username: string, watermark_attachment: record<name: string, uri: string>, watermark_value: record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "user_id" $user_id "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort_by" $sort_by "multi") (serialize-qp "filter" $filter "multi") (serialize-qp "filter_gt" $filter_gt "multi") (serialize-qp "filter_gteq" $filter_gteq "multi") (serialize-qp "filter_like" $filter_like "multi") (serialize-qp "filter_lt" $filter_lt "multi") (serialize-qp "filter_lteq" $filter_lteq "multi")] | flatten | str join "&"
@@ -2308,7 +2332,7 @@ export def "post-bundles" [
   --skip-name: oneof<nothing, bool> # BundleRegistrations can be saved without providing name? (e.g. true)
   --user-id: int # User ID. Provide a value of `0` to operate the current session's user. (format: int32)
   --watermark-attachment-file: string # Preview watermark image applied to all bundle items. (format: binary)
-]: any -> record<clickwrap_body: string, clickwrap_id: int, code: string, created_at: string, description: string, dont_separate_submissions_by_folder: bool, expires_at: string, form_field_set: record<form_fields: list<record>, form_layout: list<int>, id: int, skip_company: bool, skip_email: bool, skip_name: bool, title: string>, has_inbox: bool, id: int, inbox_id: int, max_uses: int, note: string, password_protected: bool, path_template: string, paths: list<string>, permissions: string, preview_only: bool, require_registration: bool, require_share_recipient: bool, send_email_receipt_to_uploader: bool, skip_company: bool, skip_email: bool, skip_name: bool, url: string, user_id: int, username: string, watermark_attachment: record<name: string, uri: string>, watermark_value: record> {
+]: any -> oneof<record<clickwrap_body: string, clickwrap_id: int, code: string, created_at: string, description: string, dont_separate_submissions_by_folder: bool, expires_at: string, form_field_set: record<form_fields: list<record>, form_layout: list<int>, id: int, skip_company: bool, skip_email: bool, skip_name: bool, title: string>, has_inbox: bool, id: int, inbox_id: int, max_uses: int, note: string, password_protected: bool, path_template: string, paths: list<string>, permissions: string, preview_only: bool, require_registration: bool, require_share_recipient: bool, send_email_receipt_to_uploader: bool, skip_company: bool, skip_email: bool, skip_name: bool, url: string, user_id: int, username: string, watermark_attachment: record<name: string, uri: string>, watermark_value: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2384,7 +2408,7 @@ export def "get-bundles-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<clickwrap_body: string, clickwrap_id: int, code: string, created_at: string, description: string, dont_separate_submissions_by_folder: bool, expires_at: string, form_field_set: record<form_fields: list<record>, form_layout: list<int>, id: int, skip_company: bool, skip_email: bool, skip_name: bool, title: string>, has_inbox: bool, id: int, inbox_id: int, max_uses: int, note: string, password_protected: bool, path_template: string, paths: list<string>, permissions: string, preview_only: bool, require_registration: bool, require_share_recipient: bool, send_email_receipt_to_uploader: bool, skip_company: bool, skip_email: bool, skip_name: bool, url: string, user_id: int, username: string, watermark_attachment: record<name: string, uri: string>, watermark_value: record> {
+]: nothing -> oneof<record<clickwrap_body: string, clickwrap_id: int, code: string, created_at: string, description: string, dont_separate_submissions_by_folder: bool, expires_at: string, form_field_set: record<form_fields: list<record>, form_layout: list<int>, id: int, skip_company: bool, skip_email: bool, skip_name: bool, title: string>, has_inbox: bool, id: int, inbox_id: int, max_uses: int, note: string, password_protected: bool, path_template: string, paths: list<string>, permissions: string, preview_only: bool, require_registration: bool, require_share_recipient: bool, send_email_receipt_to_uploader: bool, skip_company: bool, skip_email: bool, skip_name: bool, url: string, user_id: int, username: string, watermark_attachment: record<name: string, uri: string>, watermark_value: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2442,7 +2466,7 @@ export def "patch-bundles-id" [
   --skip-name: oneof<nothing, bool> # BundleRegistrations can be saved without providing name? (e.g. true)
   --watermark-attachment-delete: oneof<nothing, bool> # If true, will delete the file stored in watermark_attachment
   --watermark-attachment-file: string # Preview watermark image applied to all bundle items. (format: binary)
-]: any -> record<clickwrap_body: string, clickwrap_id: int, code: string, created_at: string, description: string, dont_separate_submissions_by_folder: bool, expires_at: string, form_field_set: record<form_fields: list<record>, form_layout: list<int>, id: int, skip_company: bool, skip_email: bool, skip_name: bool, title: string>, has_inbox: bool, id: int, inbox_id: int, max_uses: int, note: string, password_protected: bool, path_template: string, paths: list<string>, permissions: string, preview_only: bool, require_registration: bool, require_share_recipient: bool, send_email_receipt_to_uploader: bool, skip_company: bool, skip_email: bool, skip_name: bool, url: string, user_id: int, username: string, watermark_attachment: record<name: string, uri: string>, watermark_value: record> {
+]: any -> oneof<record<clickwrap_body: string, clickwrap_id: int, code: string, created_at: string, description: string, dont_separate_submissions_by_folder: bool, expires_at: string, form_field_set: record<form_fields: list<record>, form_layout: list<int>, id: int, skip_company: bool, skip_email: bool, skip_name: bool, title: string>, has_inbox: bool, id: int, inbox_id: int, max_uses: int, note: string, password_protected: bool, path_template: string, paths: list<string>, permissions: string, preview_only: bool, require_registration: bool, require_share_recipient: bool, send_email_receipt_to_uploader: bool, skip_company: bool, skip_email: bool, skip_name: bool, url: string, user_id: int, username: string, watermark_attachment: record<name: string, uri: string>, watermark_value: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2528,7 +2552,7 @@ export def "get-clickwraps" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Used for pagination. When a list request has more records available, cursors are provided in the response headers `X-Files-Cursor-Next` and `X-Files-Cursor-Prev`. Send one of those cursor value here to resume an existing list from the next available record. Note: many of our SDKs have iterator methods that will automatically handle cursor-based pagination.
   --per-page: int # Number of records to show per page. (Max: 10,000, 1,000 or less is recommended). (format: int32)
-]: nothing -> table<body: string, id: int, name: string, use_with_bundles: string, use_with_inboxes: string, use_with_users: string> {
+]: nothing -> oneof<table<body: string, id: int, name: string, use_with_bundles: string, use_with_inboxes: string, use_with_users: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
@@ -2568,7 +2592,7 @@ export def "post-clickwraps" [
   --use-with-bundles: string@use-with-bundles-completer # Use this Clickwrap for Bundles? (e.g. example)
   --use-with-inboxes: string@use-with-inboxes-completer # Use this Clickwrap for Inboxes? (e.g. example)
   --use-with-users: string@use-with-users-completer # Use this Clickwrap for User Registrations? Note: This only applies to User Registrations where the User is invited to your Files.com site using an E-Mail invitation process where they then set their own password. (e.g. example)
-]: any -> record<body: string, id: int, name: string, use_with_bundles: string, use_with_inboxes: string, use_with_users: string> {
+]: any -> oneof<record<body: string, id: int, name: string, use_with_bundles: string, use_with_inboxes: string, use_with_users: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2644,7 +2668,7 @@ export def "get-clickwraps-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<body: string, id: int, name: string, use_with_bundles: string, use_with_inboxes: string, use_with_users: string> {
+]: nothing -> oneof<record<body: string, id: int, name: string, use_with_bundles: string, use_with_inboxes: string, use_with_users: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2685,7 +2709,7 @@ export def "patch-clickwraps-id" [
   --use-with-bundles: string@use-with-bundles-completer # Use this Clickwrap for Bundles? (e.g. example)
   --use-with-inboxes: string@use-with-inboxes-completer # Use this Clickwrap for Inboxes? (e.g. example)
   --use-with-users: string@use-with-users-completer # Use this Clickwrap for User Registrations? Note: This only applies to User Registrations where the User is invited to your Files.com site using an E-Mail invitation process where they then set their own password. (e.g. example)
-]: any -> record<body: string, id: int, name: string, use_with_bundles: string, use_with_inboxes: string, use_with_users: string> {
+]: any -> oneof<record<body: string, id: int, name: string, use_with_bundles: string, use_with_inboxes: string, use_with_users: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2727,7 +2751,7 @@ export def "get-dns-records" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Used for pagination. When a list request has more records available, cursors are provided in the response headers `X-Files-Cursor-Next` and `X-Files-Cursor-Prev`. Send one of those cursor value here to resume an existing list from the next available record. Note: many of our SDKs have iterator methods that will automatically handle cursor-based pagination.
   --per-page: int # Number of records to show per page. (Max: 10,000, 1,000 or less is recommended). (format: int32)
-]: nothing -> table<domain: string, id: string, rrtype: string, value: string> {
+]: nothing -> oneof<table<domain: string, id: string, rrtype: string, value: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
@@ -2771,7 +2795,7 @@ export def "get-external-events" [
   --filter-like: record # If set, return records where the specified field is equal to the supplied value. Valid fields are `created_at`, `event_type`, `remote_server_type`, `status` or `folder_behavior_id`. Valid field combinations are `[ event_type, status, created_at ]`, `[ event_type, created_at ]` or `[ status, created_at ]`.
   --filter-lt: record # If set, return records where the specified field is less than the supplied value. Valid fields are `created_at`, `event_type`, `remote_server_type`, `status` or `folder_behavior_id`. Valid field combinations are `[ event_type, status, created_at ]`, `[ event_type, created_at ]` or `[ status, created_at ]`.
   --filter-lteq: record # If set, return records where the specified field is less than or equal to the supplied value. Valid fields are `created_at`, `event_type`, `remote_server_type`, `status` or `folder_behavior_id`. Valid field combinations are `[ event_type, status, created_at ]`, `[ event_type, created_at ]` or `[ status, created_at ]`.
-]: nothing -> table<body: string, body_url: string, bytes_synced: int, created_at: string, errored_files: int, event_type: string, folder_behavior_id: int, id: int, remote_server_type: string, status: string, successful_files: int> {
+]: nothing -> oneof<table<body: string, body_url: string, bytes_synced: int, created_at: string, errored_files: int, event_type: string, folder_behavior_id: int, id: int, remote_server_type: string, status: string, successful_files: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort_by" $sort_by "multi") (serialize-qp "filter" $filter "multi") (serialize-qp "filter_gt" $filter_gt "multi") (serialize-qp "filter_gteq" $filter_gteq "multi") (serialize-qp "filter_like" $filter_like "multi") (serialize-qp "filter_lt" $filter_lt "multi") (serialize-qp "filter_lteq" $filter_lteq "multi")] | flatten | str join "&"
@@ -2808,7 +2832,7 @@ export def "post-external-events" [
   --dry-run(-n) # Return the request that would be sent without executing it
   body: string # Event body (e.g. example)
   status: string@status-completer # Status of event. (e.g. example)
-]: any -> record<body: string, body_url: string, bytes_synced: int, created_at: string, errored_files: int, event_type: string, folder_behavior_id: int, id: int, remote_server_type: string, status: string, successful_files: int> {
+]: any -> oneof<record<body: string, body_url: string, bytes_synced: int, created_at: string, errored_files: int, event_type: string, folder_behavior_id: int, id: int, remote_server_type: string, status: string, successful_files: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2848,7 +2872,7 @@ export def "get-external-events-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<body: string, body_url: string, bytes_synced: int, created_at: string, errored_files: int, event_type: string, folder_behavior_id: int, id: int, remote_server_type: string, status: string, successful_files: int> {
+]: nothing -> oneof<record<body: string, body_url: string, bytes_synced: int, created_at: string, errored_files: int, event_type: string, folder_behavior_id: int, id: int, remote_server_type: string, status: string, successful_files: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2891,7 +2915,7 @@ export def "file-action-begin-upload" [
   --restart: int # File byte offset to restart from. (format: int32)
   --size: int # Total bytes of file being uploaded (include bytes being retained if appending/restarting). (format: int32)
   --with-rename: oneof<nothing, bool> # Allow file rename instead of overwrite?
-]: any -> table<action: string, ask_about_overwrites: bool, available_parts: int, expires: string, headers: record, http_method: string, next_partsize: int, parallel_parts: bool, parameters: record, part_number: int, partsize: int, path: string, ref: string, send: record, upload_uri: string> {
+]: any -> oneof<table<action: string, ask_about_overwrites: bool, available_parts: int, expires: string, headers: record, http_method: string, next_partsize: int, parallel_parts: bool, parameters: record, part_number: int, partsize: int, path: string, ref: string, send: record, upload_uri: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2934,7 +2958,7 @@ export def "file-action-copy" [
   --dry-run(-n) # Return the request that would be sent without executing it
   destination: string # Copy destination path.
   --structure: oneof<nothing, bool> # Copy structure only?
-]: any -> record<file_migration_id: int, status: string> {
+]: any -> oneof<record<file_migration_id: int, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2978,7 +3002,7 @@ export def "file-action-find" [
   --preview-size: string # Request a preview size. Can be `small` (default), `large`, `xlarge`, or `pdf`.
   --with-previews: oneof<nothing, bool> # Include file preview information?
   --with-priority-color: oneof<nothing, bool> # Include file priority color information?
-]: nothing -> record<crc32: string, created_at: string, display_name: string, download_uri: string, is_locked: bool, md5: string, mime_type: string, mtime: string, path: string, permissions: string, preview: record<download_uri: string, id: int, size: string, status: string, type: string>, preview_id: int, priority_color: string, provided_mtime: string, region: string, size: int, subfolders_locked_: bool, type: string> {
+]: nothing -> oneof<record<crc32: string, created_at: string, display_name: string, download_uri: string, is_locked: bool, md5: string, mime_type: string, mtime: string, path: string, permissions: string, preview: record<download_uri: string, id: int, size: string, status: string, type: string>, preview_id: int, priority_color: string, provided_mtime: string, region: string, size: int, subfolders_locked_: bool, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
@@ -3016,7 +3040,7 @@ export def "file-action-move" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   destination: string # Move destination path.
-]: any -> record<file_migration_id: int, status: string> {
+]: any -> oneof<record<file_migration_id: int, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -3059,7 +3083,7 @@ export def "post-file-comment-reactions" [
   emoji: string # Emoji to react with.
   file_comment_id: int # ID of file comment to attach reaction to. (format: int32)
   --user-id: int # User ID. Provide a value of `0` to operate the current session's user. (format: int32)
-]: any -> record<emoji: string, id: int> {
+]: any -> oneof<record<emoji: string, id: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -3136,7 +3160,7 @@ export def "post-file-comments" [
   --dry-run(-n) # Return the request that would be sent without executing it
   body: string # Comment body.
   path: string # File path.
-]: any -> record<body: string, id: int, reactions: table<emoji: string, id: int>> {
+]: any -> oneof<record<body: string, id: int, reactions: table<emoji: string, id: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -3178,7 +3202,7 @@ export def "file-comment-list-for-path" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Used for pagination. When a list request has more records available, cursors are provided in the response headers `X-Files-Cursor-Next` and `X-Files-Cursor-Prev`. Send one of those cursor value here to resume an existing list from the next available record. Note: many of our SDKs have iterator methods that will automatically handle cursor-based pagination.
   --per-page: int # Number of records to show per page. (Max: 10,000, 1,000 or less is recommended). (format: int32)
-]: nothing -> table<body: string, id: int, reactions: list<record>> {
+]: nothing -> oneof<table<body: string, id: int, reactions: list<record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
@@ -3252,7 +3276,7 @@ export def "patch-file-comments-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   body: string # Comment body.
-]: any -> record<body: string, id: int, reactions: table<emoji: string, id: int>> {
+]: any -> oneof<record<body: string, id: int, reactions: table<emoji: string, id: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -3293,7 +3317,7 @@ export def "get-file-migrations-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<dest_path: string, files_moved: int, files_total: int, id: int, log_url: string, operation: string, path: string, region: string, status: string> {
+]: nothing -> oneof<record<dest_path: string, files_moved: int, files_total: int, id: int, log_url: string, operation: string, path: string, region: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3371,7 +3395,7 @@ export def "file-download" [
   --preview-size: string # Request a preview size. Can be `small` (default), `large`, `xlarge`, or `pdf`.
   --with-previews: oneof<nothing, bool> # Include file preview information?
   --with-priority-color: oneof<nothing, bool> # Include file priority color information?
-]: nothing -> record<crc32: string, created_at: string, display_name: string, download_uri: string, is_locked: bool, md5: string, mime_type: string, mtime: string, path: string, permissions: string, preview: record<download_uri: string, id: int, size: string, status: string, type: string>, preview_id: int, priority_color: string, provided_mtime: string, region: string, size: int, subfolders_locked_: bool, type: string> {
+]: nothing -> oneof<record<crc32: string, created_at: string, display_name: string, download_uri: string, is_locked: bool, md5: string, mime_type: string, mtime: string, path: string, permissions: string, preview: record<download_uri: string, id: int, size: string, status: string, type: string>, preview_id: int, priority_color: string, provided_mtime: string, region: string, size: int, subfolders_locked_: bool, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
@@ -3410,7 +3434,7 @@ export def "patch-files-path" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --priority-color: string # Priority/Bookmark color of file. (e.g. red)
   --provided-mtime: string # Modified time of file. (format: date-time)
-]: any -> record<crc32: string, created_at: string, display_name: string, download_uri: string, is_locked: bool, md5: string, mime_type: string, mtime: string, path: string, permissions: string, preview: record<download_uri: string, id: int, size: string, status: string, type: string>, preview_id: int, priority_color: string, provided_mtime: string, region: string, size: int, subfolders_locked_: bool, type: string> {
+]: any -> oneof<record<crc32: string, created_at: string, display_name: string, download_uri: string, is_locked: bool, md5: string, mime_type: string, mtime: string, path: string, permissions: string, preview: record<download_uri: string, id: int, size: string, status: string, type: string>, preview_id: int, priority_color: string, provided_mtime: string, region: string, size: int, subfolders_locked_: bool, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -3464,7 +3488,7 @@ export def "post-files-path" [
   --size: int # Size of file. (format: int32)
   --structure: string # If copying folder, copy just the structure?
   --with-rename: oneof<nothing, bool> # Allow file rename instead of overwrite?
-]: any -> record<crc32: string, created_at: string, display_name: string, download_uri: string, is_locked: bool, md5: string, mime_type: string, mtime: string, path: string, permissions: string, preview: record<download_uri: string, id: int, size: string, status: string, type: string>, preview_id: int, priority_color: string, provided_mtime: string, region: string, size: int, subfolders_locked_: bool, type: string> {
+]: any -> oneof<record<crc32: string, created_at: string, display_name: string, download_uri: string, is_locked: bool, md5: string, mime_type: string, mtime: string, path: string, permissions: string, preview: record<download_uri: string, id: int, size: string, status: string, type: string>, preview_id: int, priority_color: string, provided_mtime: string, region: string, size: int, subfolders_locked_: bool, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -3513,7 +3537,7 @@ export def "folder-list-for-path" [
   --search-all: oneof<nothing, bool> # Search entire site? If set, we will ignore the folder path provided and search the entire site. This is the same API used by the search bar in the UI. Search results are a best effort, not real time, and not guaranteed to match every file. This field should only be used for ad-hoc (human) searching, and not as part of an automated process.
   --with-previews: oneof<nothing, bool> # Include file previews?
   --with-priority-color: oneof<nothing, bool> # Include file priority color information?
-]: nothing -> table<crc32: string, created_at: string, display_name: string, download_uri: string, is_locked: bool, md5: string, mime_type: string, mtime: string, path: string, permissions: string, preview: record<download_uri: string, id: int, size: string, status: string, type: string>, preview_id: int, priority_color: string, provided_mtime: string, region: string, size: int, subfolders_locked_: bool, type: string> {
+]: nothing -> oneof<table<crc32: string, created_at: string, display_name: string, download_uri: string, is_locked: bool, md5: string, mime_type: string, mtime: string, path: string, permissions: string, preview: record<download_uri: string, id: int, size: string, status: string, type: string>, preview_id: int, priority_color: string, provided_mtime: string, region: string, size: int, subfolders_locked_: bool, type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
@@ -3552,7 +3576,7 @@ export def "post-folders-path" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --mkdir-parents: oneof<nothing, bool> # Create parent directories if they do not exist?
   --provided-mtime: string # User provided modification time. (format: date-time)
-]: any -> record<crc32: string, created_at: string, display_name: string, download_uri: string, is_locked: bool, md5: string, mime_type: string, mtime: string, path: string, permissions: string, preview: record<download_uri: string, id: int, size: string, status: string, type: string>, preview_id: int, priority_color: string, provided_mtime: string, region: string, size: int, subfolders_locked_: bool, type: string> {
+]: any -> oneof<record<crc32: string, created_at: string, display_name: string, download_uri: string, is_locked: bool, md5: string, mime_type: string, mtime: string, path: string, permissions: string, preview: record<download_uri: string, id: int, size: string, status: string, type: string>, preview_id: int, priority_color: string, provided_mtime: string, region: string, size: int, subfolders_locked_: bool, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -3595,7 +3619,7 @@ export def "get-form-field-sets" [
   --user-id: int # User ID. Provide a value of `0` to operate the current session's user. (format: int32)
   --cursor: string # Used for pagination. When a list request has more records available, cursors are provided in the response headers `X-Files-Cursor-Next` and `X-Files-Cursor-Prev`. Send one of those cursor value here to resume an existing list from the next available record. Note: many of our SDKs have iterator methods that will automatically handle cursor-based pagination.
   --per-page: int # Number of records to show per page. (Max: 10,000, 1,000 or less is recommended). (format: int32)
-]: nothing -> table<form_fields: list<record>, form_layout: list<int>, id: int, skip_company: bool, skip_email: bool, skip_name: bool, title: string> {
+]: nothing -> oneof<table<form_fields: list<record>, form_layout: list<int>, id: int, skip_company: bool, skip_email: bool, skip_name: bool, title: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "user_id" $user_id "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
@@ -3620,7 +3644,6 @@ export def "get-form-field-sets" [
 #
 # POST /form_field_sets
 # operationId: PostFormFieldSets
-# --form_fields item shape: {default_option?: string, field_type?: string, help_text?: string, id?: int, label?: string, options_for_select?: string, required?: bool}
 export def "post-form-field-sets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3637,7 +3660,7 @@ export def "post-form-field-sets" [
   --skip-name: oneof<nothing, bool> # Skip validating form name
   --title: string # Title to be displayed
   --user-id: int # User ID. Provide a value of `0` to operate the current session's user. (format: int32)
-]: any -> record<form_fields: table<default_option: string, field_type: string, form_field_set_id: int, help_text: string, id: int, label: string, options_for_select: list, required: bool>, form_layout: list<int>, id: int, skip_company: bool, skip_email: bool, skip_name: bool, title: string> {
+]: any -> oneof<record<form_fields: table<default_option: string, field_type: string, form_field_set_id: int, help_text: string, id: int, label: string, options_for_select: list, required: bool>, form_layout: list<int>, id: int, skip_company: bool, skip_email: bool, skip_name: bool, title: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -3711,7 +3734,7 @@ export def "get-form-field-sets-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<form_fields: table<default_option: string, field_type: string, form_field_set_id: int, help_text: string, id: int, label: string, options_for_select: list, required: bool>, form_layout: list<int>, id: int, skip_company: bool, skip_email: bool, skip_name: bool, title: string> {
+]: nothing -> oneof<record<form_fields: table<default_option: string, field_type: string, form_field_set_id: int, help_text: string, id: int, label: string, options_for_select: list, required: bool>, form_layout: list<int>, id: int, skip_company: bool, skip_email: bool, skip_name: bool, title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3736,7 +3759,6 @@ export def "get-form-field-sets-id" [
 #
 # PATCH /form_field_sets/{id}
 # operationId: PatchFormFieldSetsId
-# --form_fields item shape: {default_option?: string, field_type?: string, help_text?: string, id?: int, label?: string, options_for_select?: string, required?: bool}
 export def "patch-form-field-sets-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3753,7 +3775,7 @@ export def "patch-form-field-sets-id" [
   --skip-email: oneof<nothing, bool> # Skip validating form email
   --skip-name: oneof<nothing, bool> # Skip validating form name
   --title: string # Title to be displayed
-]: any -> record<form_fields: table<default_option: string, field_type: string, form_field_set_id: int, help_text: string, id: int, label: string, options_for_select: list, required: bool>, form_layout: list<int>, id: int, skip_company: bool, skip_email: bool, skip_name: bool, title: string> {
+]: any -> oneof<record<form_fields: table<default_option: string, field_type: string, form_field_set_id: int, help_text: string, id: int, label: string, options_for_select: list, required: bool>, form_layout: list<int>, id: int, skip_company: bool, skip_email: bool, skip_name: bool, title: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -3795,7 +3817,7 @@ export def "get-group-users" [
   --cursor: string # Used for pagination. When a list request has more records available, cursors are provided in the response headers `X-Files-Cursor-Next` and `X-Files-Cursor-Prev`. Send one of those cursor value here to resume an existing list from the next available record. Note: many of our SDKs have iterator methods that will automatically handle cursor-based pagination.
   --per-page: int # Number of records to show per page. (Max: 10,000, 1,000 or less is recommended). (format: int32)
   --group-id: int # Group ID. If provided, will return group_users of this group. (format: int32)
-]: nothing -> table<admin: bool, group_id: int, group_name: string, user_id: int, usernames: list<string>> {
+]: nothing -> oneof<table<admin: bool, group_id: int, group_name: string, user_id: int, usernames: list<string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "user_id" $user_id "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "group_id" $group_id "scalar")] | flatten | str join "&"
@@ -3833,7 +3855,7 @@ export def "post-group-users" [
   --admin: oneof<nothing, bool> # Is the user a group administrator?
   group_id: int # Group ID to add user to. (format: int32)
   user_id: int # User ID to add to group. (format: int32)
-]: any -> record<admin: bool, group_id: int, group_name: string, user_id: int, usernames: list<string>> {
+]: any -> oneof<record<admin: bool, group_id: int, group_name: string, user_id: int, usernames: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -3917,7 +3939,7 @@ export def "patch-group-users-id" [
   --admin: oneof<nothing, bool> # Is the user a group administrator?
   group_id: int # Group ID to add user to. (format: int32)
   user_id: int # User ID to add to group. (format: int32)
-]: any -> record<admin: bool, group_id: int, group_name: string, user_id: int, usernames: list<string>> {
+]: any -> oneof<record<admin: bool, group_id: int, group_name: string, user_id: int, usernames: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -3967,7 +3989,7 @@ export def "get-groups" [
   --filter-lt: record # If set, return records where the specified field is less than the supplied value. Valid fields are `name`.
   --filter-lteq: record # If set, return records where the specified field is less than or equal to the supplied value. Valid fields are `name`.
   --ids: string # Comma-separated list of group ids to include in results.
-]: nothing -> table<admin_ids: string, id: int, name: string, notes: string, user_ids: string, usernames: string> {
+]: nothing -> oneof<table<admin_ids: string, id: int, name: string, notes: string, user_ids: string, usernames: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort_by" $sort_by "multi") (serialize-qp "filter" $filter "multi") (serialize-qp "filter_gt" $filter_gt "multi") (serialize-qp "filter_gteq" $filter_gteq "multi") (serialize-qp "filter_like" $filter_like "multi") (serialize-qp "filter_lt" $filter_lt "multi") (serialize-qp "filter_lteq" $filter_lteq "multi") (serialize-qp "ids" $ids "scalar")] | flatten | str join "&"
@@ -4006,7 +4028,7 @@ export def "post-groups" [
   --name: string # Group name.
   --notes: string # Group notes.
   --user-ids: string # A list of user ids. If sent as a string, should be comma-delimited.
-]: any -> record<admin_ids: string, id: int, name: string, notes: string, user_ids: string, usernames: string> {
+]: any -> oneof<record<admin_ids: string, id: int, name: string, notes: string, user_ids: string, usernames: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -4086,7 +4108,7 @@ export def "patch-groups-group-id-memberships-user-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --admin: oneof<nothing, bool> # Is the user a group administrator?
-]: any -> record<admin: bool, group_id: int, group_name: string, user_id: int, usernames: list<string>> {
+]: any -> oneof<record<admin: bool, group_id: int, group_name: string, user_id: int, usernames: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -4140,7 +4162,7 @@ export def "get-groups-group-id-permissions" [
   --path: string # DEPRECATED: Permission path. If provided, will scope permissions to this path. Use `filter[path]` instead.
   --user-id: string # DEPRECATED: User ID. If provided, will scope permissions to this user. Use `filter[user_id]` instead.`
   --include-groups: oneof<nothing, bool> # If searching by user or group, also include user's permissions that are inherited from its groups?
-]: nothing -> table<group_id: int, group_name: string, id: int, path: string, permission: string, recursive: bool, user_id: int, username: string> {
+]: nothing -> oneof<table<group_id: int, group_name: string, id: int, path: string, permission: string, recursive: bool, user_id: int, username: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'group_id' must be non-empty" } }
@@ -4180,7 +4202,7 @@ export def "get-groups-group-id-users" [
   --user-id: int # User ID. If provided, will return group_users of this user. (format: int32)
   --cursor: string # Used for pagination. When a list request has more records available, cursors are provided in the response headers `X-Files-Cursor-Next` and `X-Files-Cursor-Prev`. Send one of those cursor value here to resume an existing list from the next available record. Note: many of our SDKs have iterator methods that will automatically handle cursor-based pagination.
   --per-page: int # Number of records to show per page. (Max: 10,000, 1,000 or less is recommended). (format: int32)
-]: nothing -> table<admin: bool, group_id: int, group_name: string, user_id: int, usernames: list<string>> {
+]: nothing -> oneof<table<admin: bool, group_id: int, group_name: string, user_id: int, usernames: list<string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'group_id' must be non-empty" } }
@@ -4260,7 +4282,7 @@ export def "post-groups-group-id-users" [
   --time-zone: string # User time zone (e.g. Pacific Time (US & Canada))
   --user-root: string # Root folder for FTP (and optionally SFTP if the appropriate site-wide setting is set.) Note that this is not used for API, Desktop, or Web interface. (e.g. example)
   --username: string # User's username (e.g. user)
-]: any -> record<active_2fa: bool, admin_group_ids: list<int>, allowed_ips: string, api_keys_count: int, attachments_permission: bool, authenticate_until: string, authentication_method: string, avatar_url: string, billing_permission: bool, bypass_inactive_disable: bool, bypass_site_allowed_ips: bool, company: string, created_at: string, dav_permission: bool, days_remaining_until_password_expire: int, disabled: bool, email: string, externally_managed: bool, first_login_at: string, ftp_permission: bool, group_ids: string, header_text: string, id: int, language: string, last_active_at: string, last_api_use_at: string, last_dav_login_at: string, last_desktop_login_at: string, last_ftp_login_at: string, last_login_at: string, last_protocol_cipher: string, last_restapi_login_at: string, last_sftp_login_at: string, last_web_login_at: string, lockout_expires: string, name: string, notes: string, notification_daily_send_time: int, office_integration_enabled: bool, password_expire_at: string, password_expired: bool, password_set_at: string, password_validity_days: int, public_keys_count: int, receive_admin_alerts: bool, require_2fa: string, require_password_change: bool, restapi_permission: bool, self_managed: bool, sftp_permission: bool, site_admin: bool, skip_welcome_screen: bool, ssl_required: string, sso_strategy_id: int, subscribe_to_newsletter: bool, time_zone: string, type_of_2fa: string, user_root: string, username: string> {
+]: any -> oneof<record<active_2fa: bool, admin_group_ids: list<int>, allowed_ips: string, api_keys_count: int, attachments_permission: bool, authenticate_until: string, authentication_method: string, avatar_url: string, billing_permission: bool, bypass_inactive_disable: bool, bypass_site_allowed_ips: bool, company: string, created_at: string, dav_permission: bool, days_remaining_until_password_expire: int, disabled: bool, email: string, externally_managed: bool, first_login_at: string, ftp_permission: bool, group_ids: string, header_text: string, id: int, language: string, last_active_at: string, last_api_use_at: string, last_dav_login_at: string, last_desktop_login_at: string, last_ftp_login_at: string, last_login_at: string, last_protocol_cipher: string, last_restapi_login_at: string, last_sftp_login_at: string, last_web_login_at: string, lockout_expires: string, name: string, notes: string, notification_daily_send_time: int, office_integration_enabled: bool, password_expire_at: string, password_expired: bool, password_set_at: string, password_validity_days: int, public_keys_count: int, receive_admin_alerts: bool, require_2fa: string, require_password_change: bool, restapi_permission: bool, self_managed: bool, sftp_permission: bool, site_admin: bool, skip_welcome_screen: bool, ssl_required: string, sso_strategy_id: int, subscribe_to_newsletter: bool, time_zone: string, type_of_2fa: string, user_root: string, username: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -4337,7 +4359,7 @@ export def "get-groups-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<admin_ids: string, id: int, name: string, notes: string, user_ids: string, usernames: string> {
+]: nothing -> oneof<record<admin_ids: string, id: int, name: string, notes: string, user_ids: string, usernames: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4377,7 +4399,7 @@ export def "patch-groups-id" [
   --name: string # Group name.
   --notes: string # Group notes.
   --user-ids: string # A list of user ids. If sent as a string, should be comma-delimited.
-]: any -> record<admin_ids: string, id: int, name: string, notes: string, user_ids: string, usernames: string> {
+]: any -> oneof<record<admin_ids: string, id: int, name: string, notes: string, user_ids: string, usernames: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -4429,7 +4451,7 @@ export def "history-list" [
   --filter-like: record # If set, return records where the specified field is equal to the supplied value. Valid fields are `user_id`, `folder` or `path`.
   --filter-lt: record # If set, return records where the specified field is less than the supplied value. Valid fields are `user_id`, `folder` or `path`.
   --filter-lteq: record # If set, return records where the specified field is less than or equal to the supplied value. Valid fields are `user_id`, `folder` or `path`.
-]: nothing -> table<action: string, destination: string, display: string, failure_type: string, id: int, interface: string, ip: string, path: string, source: string, targets: list<record>, user_id: int, username: string, when: string> {
+]: nothing -> oneof<table<action: string, destination: string, display: string, failure_type: string, id: int, interface: string, ip: string, path: string, source: string, targets: list<record>, user_id: int, username: string, when: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start_at" $start_at "scalar") (serialize-qp "end_at" $end_at "scalar") (serialize-qp "display" $display "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort_by" $sort_by "multi") (serialize-qp "filter" $filter "multi") (serialize-qp "filter_gt" $filter_gt "multi") (serialize-qp "filter_gteq" $filter_gteq "multi") (serialize-qp "filter_like" $filter_like "multi") (serialize-qp "filter_lt" $filter_lt "multi") (serialize-qp "filter_lteq" $filter_lteq "multi")] | flatten | str join "&"
@@ -4471,7 +4493,7 @@ export def "history-list-for-file" [
   --cursor: string # Used for pagination. When a list request has more records available, cursors are provided in the response headers `X-Files-Cursor-Next` and `X-Files-Cursor-Prev`. Send one of those cursor value here to resume an existing list from the next available record. Note: many of our SDKs have iterator methods that will automatically handle cursor-based pagination.
   --per-page: int # Number of records to show per page. (Max: 10,000, 1,000 or less is recommended). (format: int32)
   --sort-by: record # If set, sort records by the specified field in either `asc` or `desc` direction (e.g. `sort_by[user_id]=desc`). Valid fields are `user_id` and `created_at`.
-]: nothing -> table<action: string, destination: string, display: string, failure_type: string, id: int, interface: string, ip: string, path: string, source: string, targets: list<record>, user_id: int, username: string, when: string> {
+]: nothing -> oneof<table<action: string, destination: string, display: string, failure_type: string, id: int, interface: string, ip: string, path: string, source: string, targets: list<record>, user_id: int, username: string, when: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
@@ -4514,7 +4536,7 @@ export def "history-list-for-folder" [
   --cursor: string # Used for pagination. When a list request has more records available, cursors are provided in the response headers `X-Files-Cursor-Next` and `X-Files-Cursor-Prev`. Send one of those cursor value here to resume an existing list from the next available record. Note: many of our SDKs have iterator methods that will automatically handle cursor-based pagination.
   --per-page: int # Number of records to show per page. (Max: 10,000, 1,000 or less is recommended). (format: int32)
   --sort-by: record # If set, sort records by the specified field in either `asc` or `desc` direction (e.g. `sort_by[user_id]=desc`). Valid fields are `user_id` and `created_at`.
-]: nothing -> table<action: string, destination: string, display: string, failure_type: string, id: int, interface: string, ip: string, path: string, source: string, targets: list<record>, user_id: int, username: string, when: string> {
+]: nothing -> oneof<table<action: string, destination: string, display: string, failure_type: string, id: int, interface: string, ip: string, path: string, source: string, targets: list<record>, user_id: int, username: string, when: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
@@ -4556,7 +4578,7 @@ export def "history-list-logins" [
   --cursor: string # Used for pagination. When a list request has more records available, cursors are provided in the response headers `X-Files-Cursor-Next` and `X-Files-Cursor-Prev`. Send one of those cursor value here to resume an existing list from the next available record. Note: many of our SDKs have iterator methods that will automatically handle cursor-based pagination.
   --per-page: int # Number of records to show per page. (Max: 10,000, 1,000 or less is recommended). (format: int32)
   --sort-by: record # If set, sort records by the specified field in either `asc` or `desc` direction (e.g. `sort_by[user_id]=desc`). Valid fields are `user_id` and `created_at`.
-]: nothing -> table<action: string, destination: string, display: string, failure_type: string, id: int, interface: string, ip: string, path: string, source: string, targets: list<record>, user_id: int, username: string, when: string> {
+]: nothing -> oneof<table<action: string, destination: string, display: string, failure_type: string, id: int, interface: string, ip: string, path: string, source: string, targets: list<record>, user_id: int, username: string, when: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start_at" $start_at "scalar") (serialize-qp "end_at" $end_at "scalar") (serialize-qp "display" $display "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort_by" $sort_by "multi")] | flatten | str join "&"
@@ -4598,7 +4620,7 @@ export def "history-list-for-user" [
   --cursor: string # Used for pagination. When a list request has more records available, cursors are provided in the response headers `X-Files-Cursor-Next` and `X-Files-Cursor-Prev`. Send one of those cursor value here to resume an existing list from the next available record. Note: many of our SDKs have iterator methods that will automatically handle cursor-based pagination.
   --per-page: int # Number of records to show per page. (Max: 10,000, 1,000 or less is recommended). (format: int32)
   --sort-by: record # If set, sort records by the specified field in either `asc` or `desc` direction (e.g. `sort_by[user_id]=desc`). Valid fields are `user_id` and `created_at`.
-]: nothing -> table<action: string, destination: string, display: string, failure_type: string, id: int, interface: string, ip: string, path: string, source: string, targets: list<record>, user_id: int, username: string, when: string> {
+]: nothing -> oneof<table<action: string, destination: string, display: string, failure_type: string, id: int, interface: string, ip: string, path: string, source: string, targets: list<record>, user_id: int, username: string, when: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -4638,7 +4660,7 @@ export def "get-history-export-results" [
   --cursor: string # Used for pagination. When a list request has more records available, cursors are provided in the response headers `X-Files-Cursor-Next` and `X-Files-Cursor-Prev`. Send one of those cursor value here to resume an existing list from the next available record. Note: many of our SDKs have iterator methods that will automatically handle cursor-based pagination.
   --per-page: int # Number of records to show per page. (Max: 10,000, 1,000 or less is recommended). (format: int32)
   --history-export-id: int # ID of the associated history export. (required, format: int32)
-]: nothing -> table<action: string, created_at: int, created_at_iso8601: int, destination: string, failure_type: string, file_id: int, folder: string, id: int, interface: string, ip: string, parent_id: int, path: string, src: string, target_expires_at: int, target_id: int, target_name: string, target_permission: string, target_permission_set: string, target_platform: string, target_recursive: bool, target_user_id: int, target_username: string, user_id: int, username: string> {
+]: nothing -> oneof<table<action: string, created_at: int, created_at_iso8601: int, destination: string, failure_type: string, file_id: int, folder: string, id: int, interface: string, ip: string, parent_id: int, path: string, src: string, target_expires_at: int, target_id: int, target_name: string, target_permission: string, target_permission_set: string, target_platform: string, target_recursive: bool, target_user_id: int, target_username: string, user_id: int, username: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($history_export_id == null) { error make --unspanned { msg: "required query parameter 'history_export_id' missing: pass --history-export-id" } }
@@ -4696,7 +4718,7 @@ export def "post-history-exports" [
   --query-username: string # Filter results by this username. (e.g. jerry)
   --start-at: string # Start date/time of export range. (format: date-time, e.g. 2000-01-01T01:00:00Z)
   --user-id: int # User ID. Provide a value of `0` to operate the current session's user. (format: int32)
-]: any -> record<end_at: string, history_version: string, id: int, query_action: string, query_destination: string, query_failure_type: string, query_file_id: string, query_folder: string, query_interface: string, query_ip: string, query_parent_id: string, query_path: string, query_src: string, query_target_id: string, query_target_name: string, query_target_permission: string, query_target_permission_set: string, query_target_platform: string, query_target_user_id: string, query_target_username: string, query_user_id: string, query_username: string, results_url: string, start_at: string, status: string> {
+]: any -> oneof<record<end_at: string, history_version: string, id: int, query_action: string, query_destination: string, query_failure_type: string, query_file_id: string, query_folder: string, query_interface: string, query_ip: string, query_parent_id: string, query_path: string, query_src: string, query_target_id: string, query_target_name: string, query_target_permission: string, query_target_permission_set: string, query_target_platform: string, query_target_user_id: string, query_target_username: string, query_user_id: string, query_username: string, results_url: string, start_at: string, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -4736,7 +4758,7 @@ export def "get-history-exports-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<end_at: string, history_version: string, id: int, query_action: string, query_destination: string, query_failure_type: string, query_file_id: string, query_folder: string, query_interface: string, query_ip: string, query_parent_id: string, query_path: string, query_src: string, query_target_id: string, query_target_name: string, query_target_permission: string, query_target_permission_set: string, query_target_platform: string, query_target_user_id: string, query_target_username: string, query_user_id: string, query_username: string, results_url: string, start_at: string, status: string> {
+]: nothing -> oneof<record<end_at: string, history_version: string, id: int, query_action: string, query_destination: string, query_failure_type: string, query_file_id: string, query_folder: string, query_interface: string, query_ip: string, query_parent_id: string, query_path: string, query_src: string, query_target_id: string, query_target_name: string, query_target_permission: string, query_target_permission_set: string, query_target_platform: string, query_target_user_id: string, query_target_username: string, query_user_id: string, query_username: string, results_url: string, start_at: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4782,7 +4804,7 @@ export def "get-inbox-recipients" [
   --filter-lt: record # If set, return records where the specified field is less than the supplied value. Valid fields are `has_registrations`.
   --filter-lteq: record # If set, return records where the specified field is less than or equal to the supplied value. Valid fields are `has_registrations`.
   --inbox-id: int # List recipients for the inbox with this ID. (required, format: int32)
-]: nothing -> table<company: string, name: string, note: string, recipient: string, sent_at: string> {
+]: nothing -> oneof<table<company: string, name: string, note: string, recipient: string, sent_at: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($inbox_id == null) { error make --unspanned { msg: "required query parameter 'inbox_id' missing: pass --inbox-id" } }
@@ -4825,7 +4847,7 @@ export def "post-inbox-recipients" [
   recipient: string # Email address to share this inbox with. (e.g. johndoe@gmail.com)
   --share-after-create: oneof<nothing, bool> # Set to true to share the link with the recipient upon creation.
   --user-id: int # User ID. Provide a value of `0` to operate the current session's user. (format: int32)
-]: any -> record<company: string, name: string, note: string, recipient: string, sent_at: string> {
+]: any -> oneof<record<company: string, name: string, note: string, recipient: string, sent_at: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -4867,7 +4889,7 @@ export def "get-inbox-registrations" [
   --cursor: string # Used for pagination. When a list request has more records available, cursors are provided in the response headers `X-Files-Cursor-Next` and `X-Files-Cursor-Prev`. Send one of those cursor value here to resume an existing list from the next available record. Note: many of our SDKs have iterator methods that will automatically handle cursor-based pagination.
   --per-page: int # Number of records to show per page. (Max: 10,000, 1,000 or less is recommended). (format: int32)
   --folder-behavior-id: int # ID of the associated Inbox. (format: int32)
-]: nothing -> table<clickwrap_body: string, code: string, company: string, created_at: string, email: string, form_field_data: record, form_field_set_id: int, inbox_id: int, inbox_recipient_id: int, inbox_title: string, name: string> {
+]: nothing -> oneof<table<clickwrap_body: string, code: string, company: string, created_at: string, email: string, form_field_data: record, form_field_set_id: int, inbox_id: int, inbox_recipient_id: int, inbox_title: string, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "folder_behavior_id" $folder_behavior_id "scalar")] | flatten | str join "&"
@@ -4913,7 +4935,7 @@ export def "get-inbox-uploads" [
   --filter-lteq: record # If set, return records where the specified field is less than or equal to the supplied value. Valid fields are `created_at`.
   --inbox-registration-id: int # InboxRegistration ID (format: int32)
   --inbox-id: int # Inbox ID (format: int32)
-]: nothing -> table<created_at: string, inbox_registration: record<clickwrap_body: string, code: string, company: string, created_at: string, email: string, form_field_data: record, form_field_set_id: int, inbox_id: int, inbox_recipient_id: int, inbox_title: string, name: string>, path: string> {
+]: nothing -> oneof<table<created_at: string, inbox_registration: record<clickwrap_body: string, code: string, company: string, created_at: string, email: string, form_field_data: record, form_field_set_id: int, inbox_id: int, inbox_recipient_id: int, inbox_title: string, name: string>, path: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort_by" $sort_by "multi") (serialize-qp "filter" $filter "multi") (serialize-qp "filter_gt" $filter_gt "multi") (serialize-qp "filter_gteq" $filter_gteq "multi") (serialize-qp "filter_like" $filter_like "multi") (serialize-qp "filter_lt" $filter_lt "multi") (serialize-qp "filter_lteq" $filter_lteq "multi") (serialize-qp "inbox_registration_id" $inbox_registration_id "scalar") (serialize-qp "inbox_id" $inbox_id "scalar")] | flatten | str join "&"
@@ -4950,7 +4972,7 @@ export def "get-invoices" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Used for pagination. When a list request has more records available, cursors are provided in the response headers `X-Files-Cursor-Next` and `X-Files-Cursor-Prev`. Send one of those cursor value here to resume an existing list from the next available record. Note: many of our SDKs have iterator methods that will automatically handle cursor-based pagination.
   --per-page: int # Number of records to show per page. (Max: 10,000, 1,000 or less is recommended). (format: int32)
-]: nothing -> table<amount: float, balance: float, created_at: string, currency: string, download_uri: string, id: int, invoice_line_items: list<record>, method: string, payment_line_items: list<record>, payment_reversed_at: string, payment_type: string, site_name: string, type: string, updated_at: string> {
+]: nothing -> oneof<table<amount: float, balance: float, created_at: string, currency: string, download_uri: string, id: int, invoice_line_items: list<record>, method: string, payment_line_items: list<record>, payment_reversed_at: string, payment_type: string, site_name: string, type: string, updated_at: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
@@ -4986,7 +5008,7 @@ export def "get-invoices-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<amount: float, balance: float, created_at: string, currency: string, download_uri: string, id: int, invoice_line_items: table<amount: float, created_at: string, description: string, plan: string, service_end_at: string, service_start_at: string, site: string, type: string, updated_at: string>, method: string, payment_line_items: table<amount: float, created_at: string, invoice_id: int, payment_id: int>, payment_reversed_at: string, payment_type: string, site_name: string, type: string, updated_at: string> {
+]: nothing -> oneof<record<amount: float, balance: float, created_at: string, currency: string, download_uri: string, id: int, invoice_line_items: table<amount: float, created_at: string, description: string, plan: string, service_end_at: string, service_start_at: string, site: string, type: string, updated_at: string>, method: string, payment_line_items: table<amount: float, created_at: string, invoice_id: int, payment_id: int>, payment_reversed_at: string, payment_type: string, site_name: string, type: string, updated_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5023,7 +5045,7 @@ export def "get-ip-addresses" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Used for pagination. When a list request has more records available, cursors are provided in the response headers `X-Files-Cursor-Next` and `X-Files-Cursor-Prev`. Send one of those cursor value here to resume an existing list from the next available record. Note: many of our SDKs have iterator methods that will automatically handle cursor-based pagination.
   --per-page: int # Number of records to show per page. (Max: 10,000, 1,000 or less is recommended). (format: int32)
-]: nothing -> table<associated_with: string, group_id: int, id: string, ip_addresses: list<string>> {
+]: nothing -> oneof<table<associated_with: string, group_id: int, id: string, ip_addresses: list<string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
@@ -5060,7 +5082,7 @@ export def "get-ip-addresses-exavault-reserved" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Used for pagination. When a list request has more records available, cursors are provided in the response headers `X-Files-Cursor-Next` and `X-Files-Cursor-Prev`. Send one of those cursor value here to resume an existing list from the next available record. Note: many of our SDKs have iterator methods that will automatically handle cursor-based pagination.
   --per-page: int # Number of records to show per page. (Max: 10,000, 1,000 or less is recommended). (format: int32)
-]: nothing -> table<ftp_enabled: bool, ip_address: string, server_name: string, sftp_enabled: bool> {
+]: nothing -> oneof<table<ftp_enabled: bool, ip_address: string, server_name: string, sftp_enabled: bool>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
@@ -5097,7 +5119,7 @@ export def "get-ip-addresses-reserved" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Used for pagination. When a list request has more records available, cursors are provided in the response headers `X-Files-Cursor-Next` and `X-Files-Cursor-Prev`. Send one of those cursor value here to resume an existing list from the next available record. Note: many of our SDKs have iterator methods that will automatically handle cursor-based pagination.
   --per-page: int # Number of records to show per page. (Max: 10,000, 1,000 or less is recommended). (format: int32)
-]: nothing -> table<ftp_enabled: bool, ip_address: string, server_name: string, sftp_enabled: bool> {
+]: nothing -> oneof<table<ftp_enabled: bool, ip_address: string, server_name: string, sftp_enabled: bool>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
@@ -5175,7 +5197,7 @@ export def "lock-list-for-path" [
   --cursor: string # Used for pagination. When a list request has more records available, cursors are provided in the response headers `X-Files-Cursor-Next` and `X-Files-Cursor-Prev`. Send one of those cursor value here to resume an existing list from the next available record. Note: many of our SDKs have iterator methods that will automatically handle cursor-based pagination.
   --per-page: int # Number of records to show per page. (Max: 10,000, 1,000 or less is recommended). (format: int32)
   --include-children: oneof<nothing, bool> # Include locks from children objects?
-]: nothing -> table<allow_access_by_any_user: bool, depth: string, exclusive: bool, owner: string, path: string, recursive: bool, scope: string, timeout: int, token: string, type: string, user_id: int, username: string> {
+]: nothing -> oneof<table<allow_access_by_any_user: bool, depth: string, exclusive: bool, owner: string, path: string, recursive: bool, scope: string, timeout: int, token: string, type: string, user_id: int, username: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
@@ -5216,7 +5238,7 @@ export def "post-locks-path" [
   --exclusive: oneof<nothing, bool> # Is lock exclusive?
   --recursive: string # Does lock apply to subfolders?
   --timeout: int # Lock timeout length (format: int32)
-]: any -> record<allow_access_by_any_user: bool, depth: string, exclusive: bool, owner: string, path: string, recursive: bool, scope: string, timeout: int, token: string, type: string, user_id: int, username: string> {
+]: any -> oneof<record<allow_access_by_any_user: bool, depth: string, exclusive: bool, owner: string, path: string, recursive: bool, scope: string, timeout: int, token: string, type: string, user_id: int, username: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -5260,7 +5282,7 @@ export def "get-message-comment-reactions" [
   --cursor: string # Used for pagination. When a list request has more records available, cursors are provided in the response headers `X-Files-Cursor-Next` and `X-Files-Cursor-Prev`. Send one of those cursor value here to resume an existing list from the next available record. Note: many of our SDKs have iterator methods that will automatically handle cursor-based pagination.
   --per-page: int # Number of records to show per page. (Max: 10,000, 1,000 or less is recommended). (format: int32)
   --message-comment-id: int # Message comment to return reactions for. (required, format: int32)
-]: nothing -> table<emoji: string, id: int> {
+]: nothing -> oneof<table<emoji: string, id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($message_comment_id == null) { error make --unspanned { msg: "required query parameter 'message_comment_id' missing: pass --message-comment-id" } }
@@ -5298,7 +5320,7 @@ export def "post-message-comment-reactions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   emoji: string # Emoji to react with.
   --user-id: int # User ID. Provide a value of `0` to operate the current session's user. (format: int32)
-]: any -> record<emoji: string, id: int> {
+]: any -> oneof<record<emoji: string, id: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -5374,7 +5396,7 @@ export def "get-message-comment-reactions-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<emoji: string, id: int> {
+]: nothing -> oneof<record<emoji: string, id: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5413,7 +5435,7 @@ export def "get-message-comments" [
   --cursor: string # Used for pagination. When a list request has more records available, cursors are provided in the response headers `X-Files-Cursor-Next` and `X-Files-Cursor-Prev`. Send one of those cursor value here to resume an existing list from the next available record. Note: many of our SDKs have iterator methods that will automatically handle cursor-based pagination.
   --per-page: int # Number of records to show per page. (Max: 10,000, 1,000 or less is recommended). (format: int32)
   --message-id: int # Message comment to return comments for. (required, format: int32)
-]: nothing -> table<body: string, id: int, reactions: list<record>> {
+]: nothing -> oneof<table<body: string, id: int, reactions: list<record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($message_id == null) { error make --unspanned { msg: "required query parameter 'message_id' missing: pass --message-id" } }
@@ -5451,7 +5473,7 @@ export def "post-message-comments" [
   --dry-run(-n) # Return the request that would be sent without executing it
   body: string # Comment body.
   --user-id: int # User ID. Provide a value of `0` to operate the current session's user. (format: int32)
-]: any -> record<body: string, id: int, reactions: table<emoji: string, id: int>> {
+]: any -> oneof<record<body: string, id: int, reactions: table<emoji: string, id: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -5527,7 +5549,7 @@ export def "get-message-comments-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<body: string, id: int, reactions: table<emoji: string, id: int>> {
+]: nothing -> oneof<record<body: string, id: int, reactions: table<emoji: string, id: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5564,7 +5586,7 @@ export def "patch-message-comments-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   body: string # Comment body.
-]: any -> record<body: string, id: int, reactions: table<emoji: string, id: int>> {
+]: any -> oneof<record<body: string, id: int, reactions: table<emoji: string, id: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -5608,7 +5630,7 @@ export def "get-message-reactions" [
   --cursor: string # Used for pagination. When a list request has more records available, cursors are provided in the response headers `X-Files-Cursor-Next` and `X-Files-Cursor-Prev`. Send one of those cursor value here to resume an existing list from the next available record. Note: many of our SDKs have iterator methods that will automatically handle cursor-based pagination.
   --per-page: int # Number of records to show per page. (Max: 10,000, 1,000 or less is recommended). (format: int32)
   --message-id: int # Message to return reactions for. (required, format: int32)
-]: nothing -> table<emoji: string, id: int> {
+]: nothing -> oneof<table<emoji: string, id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($message_id == null) { error make --unspanned { msg: "required query parameter 'message_id' missing: pass --message-id" } }
@@ -5646,7 +5668,7 @@ export def "post-message-reactions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   emoji: string # Emoji to react with.
   --user-id: int # User ID. Provide a value of `0` to operate the current session's user. (format: int32)
-]: any -> record<emoji: string, id: int> {
+]: any -> oneof<record<emoji: string, id: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -5722,7 +5744,7 @@ export def "get-message-reactions-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<emoji: string, id: int> {
+]: nothing -> oneof<record<emoji: string, id: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5761,7 +5783,7 @@ export def "get-messages" [
   --cursor: string # Used for pagination. When a list request has more records available, cursors are provided in the response headers `X-Files-Cursor-Next` and `X-Files-Cursor-Prev`. Send one of those cursor value here to resume an existing list from the next available record. Note: many of our SDKs have iterator methods that will automatically handle cursor-based pagination.
   --per-page: int # Number of records to show per page. (Max: 10,000, 1,000 or less is recommended). (format: int32)
   --project-id: int # Project for which to return messages. (required, format: int32)
-]: nothing -> table<body: string, comments: list<record>, id: int, subject: string> {
+]: nothing -> oneof<table<body: string, comments: list<record>, id: int, subject: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id == null) { error make --unspanned { msg: "required query parameter 'project_id' missing: pass --project-id" } }
@@ -5801,7 +5823,7 @@ export def "post-messages" [
   project_id: int # Project to which the message should be attached. (format: int32)
   subject: string # Message subject. (e.g. Files.com Account Upgrade)
   --user-id: int # User ID. Provide a value of `0` to operate the current session's user. (format: int32)
-]: any -> record<body: string, comments: table<body: string, id: int, reactions: list>, id: int, subject: string> {
+]: any -> oneof<record<body: string, comments: table<body: string, id: int, reactions: list>, id: int, subject: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -5877,7 +5899,7 @@ export def "get-messages-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<body: string, comments: table<body: string, id: int, reactions: list>, id: int, subject: string> {
+]: nothing -> oneof<record<body: string, comments: table<body: string, id: int, reactions: list>, id: int, subject: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5916,7 +5938,7 @@ export def "patch-messages-id" [
   body: string # Message body. (e.g. We should upgrade our Files.com account!)
   project_id: int # Project to which the message should be attached. (format: int32)
   subject: string # Message subject. (e.g. Files.com Account Upgrade)
-]: any -> record<body: string, comments: table<body: string, id: int, reactions: list>, id: int, subject: string> {
+]: any -> oneof<record<body: string, comments: table<body: string, id: int, reactions: list>, id: int, subject: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -5969,7 +5991,7 @@ export def "get-notifications" [
   --group-id: int # DEPRECATED: Show notifications for this Group ID. Use `filter[group_id]` instead. (format: int32)
   --path: string # Show notifications for this Path.
   --include-ancestors: oneof<nothing, bool> # If `include_ancestors` is `true` and `path` is specified, include notifications for any parent paths. Ignored if `path` is not specified.
-]: nothing -> table<group_id: int, group_name: string, id: int, message: string, notify_on_copy: bool, notify_on_delete: bool, notify_on_download: bool, notify_on_move: bool, notify_on_upload: bool, notify_user_actions: bool, path: string, recursive: bool, send_interval: string, suppressed_email: bool, trigger_by_share_recipients: bool, triggering_filenames: list<string>, triggering_group_ids: list<int>, triggering_user_ids: list<int>, unsubscribed: bool, unsubscribed_reason: string, user_id: int, username: string> {
+]: nothing -> oneof<table<group_id: int, group_name: string, id: int, message: string, notify_on_copy: bool, notify_on_delete: bool, notify_on_download: bool, notify_on_move: bool, notify_on_upload: bool, notify_user_actions: bool, path: string, recursive: bool, send_interval: string, suppressed_email: bool, trigger_by_share_recipients: bool, triggering_filenames: list<string>, triggering_group_ids: list<int>, triggering_user_ids: list<int>, unsubscribed: bool, unsubscribed_reason: string, user_id: int, username: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "user_id" $user_id "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort_by" $sort_by "multi") (serialize-qp "filter" $filter "multi") (serialize-qp "filter_gt" $filter_gt "multi") (serialize-qp "filter_gteq" $filter_gteq "multi") (serialize-qp "filter_like" $filter_like "multi") (serialize-qp "filter_lt" $filter_lt "multi") (serialize-qp "filter_lteq" $filter_lteq "multi") (serialize-qp "group_id" $group_id "scalar") (serialize-qp "path" $path "scalar") (serialize-qp "include_ancestors" $include_ancestors "scalar")] | flatten | str join "&"
@@ -6021,7 +6043,7 @@ export def "post-notifications" [
   --triggering-user-ids: list<int> # Only notify on actions made one of the specified users (e.g. [1])
   --user-id: int # The id of the user to notify. Provide `user_id`, `username` or `group_id`. (format: int32)
   --username: string # The username of the user to notify. Provide `user_id`, `username` or `group_id`.
-]: any -> record<group_id: int, group_name: string, id: int, message: string, notify_on_copy: bool, notify_on_delete: bool, notify_on_download: bool, notify_on_move: bool, notify_on_upload: bool, notify_user_actions: bool, path: string, recursive: bool, send_interval: string, suppressed_email: bool, trigger_by_share_recipients: bool, triggering_filenames: list<string>, triggering_group_ids: list<int>, triggering_user_ids: list<int>, unsubscribed: bool, unsubscribed_reason: string, user_id: int, username: string> {
+]: any -> oneof<record<group_id: int, group_name: string, id: int, message: string, notify_on_copy: bool, notify_on_delete: bool, notify_on_download: bool, notify_on_move: bool, notify_on_upload: bool, notify_user_actions: bool, path: string, recursive: bool, send_interval: string, suppressed_email: bool, trigger_by_share_recipients: bool, triggering_filenames: list<string>, triggering_group_ids: list<int>, triggering_user_ids: list<int>, unsubscribed: bool, unsubscribed_reason: string, user_id: int, username: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -6097,7 +6119,7 @@ export def "get-notifications-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<group_id: int, group_name: string, id: int, message: string, notify_on_copy: bool, notify_on_delete: bool, notify_on_download: bool, notify_on_move: bool, notify_on_upload: bool, notify_user_actions: bool, path: string, recursive: bool, send_interval: string, suppressed_email: bool, trigger_by_share_recipients: bool, triggering_filenames: list<string>, triggering_group_ids: list<int>, triggering_user_ids: list<int>, unsubscribed: bool, unsubscribed_reason: string, user_id: int, username: string> {
+]: nothing -> oneof<record<group_id: int, group_name: string, id: int, message: string, notify_on_copy: bool, notify_on_delete: bool, notify_on_download: bool, notify_on_move: bool, notify_on_upload: bool, notify_user_actions: bool, path: string, recursive: bool, send_interval: string, suppressed_email: bool, trigger_by_share_recipients: bool, triggering_filenames: list<string>, triggering_group_ids: list<int>, triggering_user_ids: list<int>, unsubscribed: bool, unsubscribed_reason: string, user_id: int, username: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6146,7 +6168,7 @@ export def "patch-notifications-id" [
   --triggering-filenames: list<string> # Array of filenames (possibly with wildcards) to match for action path (e.g. [*.jpg, notify_file.txt])
   --triggering-group-ids: list<int> # Only notify on actions made by a member of one of the specified groups (e.g. [1])
   --triggering-user-ids: list<int> # Only notify on actions made one of the specified users (e.g. [1])
-]: any -> record<group_id: int, group_name: string, id: int, message: string, notify_on_copy: bool, notify_on_delete: bool, notify_on_download: bool, notify_on_move: bool, notify_on_upload: bool, notify_user_actions: bool, path: string, recursive: bool, send_interval: string, suppressed_email: bool, trigger_by_share_recipients: bool, triggering_filenames: list<string>, triggering_group_ids: list<int>, triggering_user_ids: list<int>, unsubscribed: bool, unsubscribed_reason: string, user_id: int, username: string> {
+]: any -> oneof<record<group_id: int, group_name: string, id: int, message: string, notify_on_copy: bool, notify_on_delete: bool, notify_on_download: bool, notify_on_move: bool, notify_on_upload: bool, notify_user_actions: bool, path: string, recursive: bool, send_interval: string, suppressed_email: bool, trigger_by_share_recipients: bool, triggering_filenames: list<string>, triggering_group_ids: list<int>, triggering_user_ids: list<int>, unsubscribed: bool, unsubscribed_reason: string, user_id: int, username: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -6188,7 +6210,7 @@ export def "get-payments" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Used for pagination. When a list request has more records available, cursors are provided in the response headers `X-Files-Cursor-Next` and `X-Files-Cursor-Prev`. Send one of those cursor value here to resume an existing list from the next available record. Note: many of our SDKs have iterator methods that will automatically handle cursor-based pagination.
   --per-page: int # Number of records to show per page. (Max: 10,000, 1,000 or less is recommended). (format: int32)
-]: nothing -> table<amount: float, balance: float, created_at: string, currency: string, download_uri: string, id: int, invoice_line_items: list<record>, method: string, payment_line_items: list<record>, payment_reversed_at: string, payment_type: string, site_name: string, type: string, updated_at: string> {
+]: nothing -> oneof<table<amount: float, balance: float, created_at: string, currency: string, download_uri: string, id: int, invoice_line_items: list<record>, method: string, payment_line_items: list<record>, payment_reversed_at: string, payment_type: string, site_name: string, type: string, updated_at: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
@@ -6224,7 +6246,7 @@ export def "get-payments-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<amount: float, balance: float, created_at: string, currency: string, download_uri: string, id: int, invoice_line_items: table<amount: float, created_at: string, description: string, plan: string, service_end_at: string, service_start_at: string, site: string, type: string, updated_at: string>, method: string, payment_line_items: table<amount: float, created_at: string, invoice_id: int, payment_id: int>, payment_reversed_at: string, payment_type: string, site_name: string, type: string, updated_at: string> {
+]: nothing -> oneof<record<amount: float, balance: float, created_at: string, currency: string, download_uri: string, id: int, invoice_line_items: table<amount: float, created_at: string, description: string, plan: string, service_end_at: string, service_start_at: string, site: string, type: string, updated_at: string>, method: string, payment_line_items: table<amount: float, created_at: string, invoice_id: int, payment_id: int>, payment_reversed_at: string, payment_type: string, site_name: string, type: string, updated_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6272,7 +6294,7 @@ export def "get-permissions" [
   --group-id: string # DEPRECATED: Group ID. If provided, will scope permissions to this group. Use `filter[group_id]` instead.`
   --user-id: string # DEPRECATED: User ID. If provided, will scope permissions to this user. Use `filter[user_id]` instead.`
   --include-groups: oneof<nothing, bool> # If searching by user or group, also include user's permissions that are inherited from its groups?
-]: nothing -> table<group_id: int, group_name: string, id: int, path: string, permission: string, recursive: bool, user_id: int, username: string> {
+]: nothing -> oneof<table<group_id: int, group_name: string, id: int, path: string, permission: string, recursive: bool, user_id: int, username: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort_by" $sort_by "multi") (serialize-qp "filter" $filter "multi") (serialize-qp "filter_gt" $filter_gt "multi") (serialize-qp "filter_gteq" $filter_gteq "multi") (serialize-qp "filter_like" $filter_like "multi") (serialize-qp "filter_lt" $filter_lt "multi") (serialize-qp "filter_lteq" $filter_lteq "multi") (serialize-qp "path" $path "scalar") (serialize-qp "group_id" $group_id "scalar") (serialize-qp "user_id" $user_id "scalar") (serialize-qp "include_groups" $include_groups "scalar")] | flatten | str join "&"
@@ -6313,7 +6335,7 @@ export def "post-permissions" [
   --recursive: oneof<nothing, bool> # Apply to subfolders recursively?
   --user-id: int # User ID. Provide `username` or `user_id` (format: int32)
   --username: string # User username. Provide `username` or `user_id`
-]: any -> record<group_id: int, group_name: string, id: int, path: string, permission: string, recursive: bool, user_id: int, username: string> {
+]: any -> oneof<record<group_id: int, group_name: string, id: int, path: string, permission: string, recursive: bool, user_id: int, username: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -6391,7 +6413,7 @@ export def "get-priorities" [
   --cursor: string # Used for pagination. When a list request has more records available, cursors are provided in the response headers `X-Files-Cursor-Next` and `X-Files-Cursor-Prev`. Send one of those cursor value here to resume an existing list from the next available record. Note: many of our SDKs have iterator methods that will automatically handle cursor-based pagination.
   --per-page: int # Number of records to show per page. (Max: 10,000, 1,000 or less is recommended). (format: int32)
   --path: string # The path to query for priorities (required)
-]: nothing -> table<color: string, path: string> {
+]: nothing -> oneof<table<color: string, path: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($path == null) { error make --unspanned { msg: "required query parameter 'path' missing: pass --path" } }
@@ -6429,7 +6451,7 @@ export def "get-projects" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Used for pagination. When a list request has more records available, cursors are provided in the response headers `X-Files-Cursor-Next` and `X-Files-Cursor-Prev`. Send one of those cursor value here to resume an existing list from the next available record. Note: many of our SDKs have iterator methods that will automatically handle cursor-based pagination.
   --per-page: int # Number of records to show per page. (Max: 10,000, 1,000 or less is recommended). (format: int32)
-]: nothing -> table<global_access: string, id: int> {
+]: nothing -> oneof<table<global_access: string, id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
@@ -6465,7 +6487,7 @@ export def "post-projects" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   global_access: string # Global permissions. Can be: `none`, `anyone_with_read`, `anyone_with_full`.
-]: any -> record<global_access: string, id: int> {
+]: any -> oneof<record<global_access: string, id: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -6541,7 +6563,7 @@ export def "get-projects-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<global_access: string, id: int> {
+]: nothing -> oneof<record<global_access: string, id: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6578,7 +6600,7 @@ export def "patch-projects-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   global_access: string # Global permissions. Can be: `none`, `anyone_with_read`, `anyone_with_full`.
-]: any -> record<global_access: string, id: int> {
+]: any -> oneof<record<global_access: string, id: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -6621,7 +6643,7 @@ export def "get-public-keys" [
   --user-id: int # User ID. Provide a value of `0` to operate the current session's user. (format: int32)
   --cursor: string # Used for pagination. When a list request has more records available, cursors are provided in the response headers `X-Files-Cursor-Next` and `X-Files-Cursor-Prev`. Send one of those cursor value here to resume an existing list from the next available record. Note: many of our SDKs have iterator methods that will automatically handle cursor-based pagination.
   --per-page: int # Number of records to show per page. (Max: 10,000, 1,000 or less is recommended). (format: int32)
-]: nothing -> table<created_at: string, fingerprint: string, id: int, title: string> {
+]: nothing -> oneof<table<created_at: string, fingerprint: string, id: int, title: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "user_id" $user_id "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
@@ -6659,7 +6681,7 @@ export def "post-public-keys" [
   public_key: string # Actual contents of SSH key.
   title: string # Internal reference for key. (e.g. My Main Key)
   --user-id: int # User ID. Provide a value of `0` to operate the current session's user. (format: int32)
-]: any -> record<created_at: string, fingerprint: string, id: int, title: string> {
+]: any -> oneof<record<created_at: string, fingerprint: string, id: int, title: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -6735,7 +6757,7 @@ export def "get-public-keys-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created_at: string, fingerprint: string, id: int, title: string> {
+]: nothing -> oneof<record<created_at: string, fingerprint: string, id: int, title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6772,7 +6794,7 @@ export def "patch-public-keys-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   title: string # Internal reference for key. (e.g. My Main Key)
-]: any -> record<created_at: string, fingerprint: string, id: int, title: string> {
+]: any -> oneof<record<created_at: string, fingerprint: string, id: int, title: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -6821,7 +6843,7 @@ export def "get-remote-bandwidth-snapshots" [
   --filter-like: record # If set, return records where the specified field is equal to the supplied value. Valid fields are `logged_at`.
   --filter-lt: record # If set, return records where the specified field is less than the supplied value. Valid fields are `logged_at`.
   --filter-lteq: record # If set, return records where the specified field is less than or equal to the supplied value. Valid fields are `logged_at`.
-]: nothing -> table<id: int, logged_at: string, remote_server_id: int, sync_bytes_received: float, sync_bytes_sent: float> {
+]: nothing -> oneof<table<id: int, logged_at: string, remote_server_id: int, sync_bytes_received: float, sync_bytes_sent: float>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort_by" $sort_by "multi") (serialize-qp "filter" $filter "multi") (serialize-qp "filter_gt" $filter_gt "multi") (serialize-qp "filter_gteq" $filter_gteq "multi") (serialize-qp "filter_like" $filter_like "multi") (serialize-qp "filter_lt" $filter_lt "multi") (serialize-qp "filter_lteq" $filter_lteq "multi")] | flatten | str join "&"
@@ -6858,7 +6880,7 @@ export def "get-remote-servers" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Used for pagination. When a list request has more records available, cursors are provided in the response headers `X-Files-Cursor-Next` and `X-Files-Cursor-Prev`. Send one of those cursor value here to resume an existing list from the next available record. Note: many of our SDKs have iterator methods that will automatically handle cursor-based pagination.
   --per-page: int # Number of records to show per page. (Max: 10,000, 1,000 or less is recommended). (format: int32)
-]: nothing -> table<auth_account_name: string, auth_setup_link: string, auth_status: string, authentication_method: string, aws_access_key: string, azure_blob_storage_account: string, azure_blob_storage_container: string, azure_blob_storage_sas_token: string, azure_files_storage_account: string, azure_files_storage_sas_token: string, azure_files_storage_share_name: string, backblaze_b2_bucket: string, backblaze_b2_s3_endpoint: string, disabled: bool, enable_dedicated_ips: bool, filebase_access_key: string, filebase_bucket: string, files_agent_api_token: string, files_agent_permission_set: string, files_agent_root: string, google_cloud_storage_bucket: string, google_cloud_storage_project_id: string, hostname: string, id: int, max_connections: int, name: string, one_drive_account_type: string, pin_to_site_region: bool, pinned_region: string, port: int, rackspace_container: string, rackspace_region: string, rackspace_username: string, remote_home_path: string, s3_bucket: string, s3_compatible_access_key: string, s3_compatible_bucket: string, s3_compatible_endpoint: string, s3_compatible_region: string, s3_region: string, server_certificate: string, server_host_key: string, server_type: string, ssl: string, username: string, wasabi_access_key: string, wasabi_bucket: string, wasabi_region: string> {
+]: nothing -> oneof<table<auth_account_name: string, auth_setup_link: string, auth_status: string, authentication_method: string, aws_access_key: string, azure_blob_storage_account: string, azure_blob_storage_container: string, azure_blob_storage_sas_token: string, azure_files_storage_account: string, azure_files_storage_sas_token: string, azure_files_storage_share_name: string, backblaze_b2_bucket: string, backblaze_b2_s3_endpoint: string, disabled: bool, enable_dedicated_ips: bool, filebase_access_key: string, filebase_bucket: string, files_agent_api_token: string, files_agent_permission_set: string, files_agent_root: string, google_cloud_storage_bucket: string, google_cloud_storage_project_id: string, hostname: string, id: int, max_connections: int, name: string, one_drive_account_type: string, pin_to_site_region: bool, pinned_region: string, port: int, rackspace_container: string, rackspace_region: string, rackspace_username: string, remote_home_path: string, s3_bucket: string, s3_compatible_access_key: string, s3_compatible_bucket: string, s3_compatible_endpoint: string, s3_compatible_region: string, s3_region: string, server_certificate: string, server_host_key: string, server_type: string, ssl: string, username: string, wasabi_access_key: string, wasabi_bucket: string, wasabi_region: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
@@ -6947,7 +6969,7 @@ export def "post-remote-servers" [
   --wasabi-bucket: string # Wasabi Bucket name (e.g. my-bucket)
   --wasabi-region: string # Wasabi region (e.g. us-west-1)
   --wasabi-secret-key: string # Wasabi secret key.
-]: any -> record<auth_account_name: string, auth_setup_link: string, auth_status: string, authentication_method: string, aws_access_key: string, azure_blob_storage_account: string, azure_blob_storage_container: string, azure_blob_storage_sas_token: string, azure_files_storage_account: string, azure_files_storage_sas_token: string, azure_files_storage_share_name: string, backblaze_b2_bucket: string, backblaze_b2_s3_endpoint: string, disabled: bool, enable_dedicated_ips: bool, filebase_access_key: string, filebase_bucket: string, files_agent_api_token: string, files_agent_permission_set: string, files_agent_root: string, google_cloud_storage_bucket: string, google_cloud_storage_project_id: string, hostname: string, id: int, max_connections: int, name: string, one_drive_account_type: string, pin_to_site_region: bool, pinned_region: string, port: int, rackspace_container: string, rackspace_region: string, rackspace_username: string, remote_home_path: string, s3_bucket: string, s3_compatible_access_key: string, s3_compatible_bucket: string, s3_compatible_endpoint: string, s3_compatible_region: string, s3_region: string, server_certificate: string, server_host_key: string, server_type: string, ssl: string, username: string, wasabi_access_key: string, wasabi_bucket: string, wasabi_region: string> {
+]: any -> oneof<record<auth_account_name: string, auth_setup_link: string, auth_status: string, authentication_method: string, aws_access_key: string, azure_blob_storage_account: string, azure_blob_storage_container: string, azure_blob_storage_sas_token: string, azure_files_storage_account: string, azure_files_storage_sas_token: string, azure_files_storage_share_name: string, backblaze_b2_bucket: string, backblaze_b2_s3_endpoint: string, disabled: bool, enable_dedicated_ips: bool, filebase_access_key: string, filebase_bucket: string, files_agent_api_token: string, files_agent_permission_set: string, files_agent_root: string, google_cloud_storage_bucket: string, google_cloud_storage_project_id: string, hostname: string, id: int, max_connections: int, name: string, one_drive_account_type: string, pin_to_site_region: bool, pinned_region: string, port: int, rackspace_container: string, rackspace_region: string, rackspace_username: string, remote_home_path: string, s3_bucket: string, s3_compatible_access_key: string, s3_compatible_bucket: string, s3_compatible_endpoint: string, s3_compatible_region: string, s3_region: string, server_certificate: string, server_host_key: string, server_type: string, ssl: string, username: string, wasabi_access_key: string, wasabi_bucket: string, wasabi_region: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -7023,7 +7045,7 @@ export def "get-remote-servers-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<auth_account_name: string, auth_setup_link: string, auth_status: string, authentication_method: string, aws_access_key: string, azure_blob_storage_account: string, azure_blob_storage_container: string, azure_blob_storage_sas_token: string, azure_files_storage_account: string, azure_files_storage_sas_token: string, azure_files_storage_share_name: string, backblaze_b2_bucket: string, backblaze_b2_s3_endpoint: string, disabled: bool, enable_dedicated_ips: bool, filebase_access_key: string, filebase_bucket: string, files_agent_api_token: string, files_agent_permission_set: string, files_agent_root: string, google_cloud_storage_bucket: string, google_cloud_storage_project_id: string, hostname: string, id: int, max_connections: int, name: string, one_drive_account_type: string, pin_to_site_region: bool, pinned_region: string, port: int, rackspace_container: string, rackspace_region: string, rackspace_username: string, remote_home_path: string, s3_bucket: string, s3_compatible_access_key: string, s3_compatible_bucket: string, s3_compatible_endpoint: string, s3_compatible_region: string, s3_region: string, server_certificate: string, server_host_key: string, server_type: string, ssl: string, username: string, wasabi_access_key: string, wasabi_bucket: string, wasabi_region: string> {
+]: nothing -> oneof<record<auth_account_name: string, auth_setup_link: string, auth_status: string, authentication_method: string, aws_access_key: string, azure_blob_storage_account: string, azure_blob_storage_container: string, azure_blob_storage_sas_token: string, azure_files_storage_account: string, azure_files_storage_sas_token: string, azure_files_storage_share_name: string, backblaze_b2_bucket: string, backblaze_b2_s3_endpoint: string, disabled: bool, enable_dedicated_ips: bool, filebase_access_key: string, filebase_bucket: string, files_agent_api_token: string, files_agent_permission_set: string, files_agent_root: string, google_cloud_storage_bucket: string, google_cloud_storage_project_id: string, hostname: string, id: int, max_connections: int, name: string, one_drive_account_type: string, pin_to_site_region: bool, pinned_region: string, port: int, rackspace_container: string, rackspace_region: string, rackspace_username: string, remote_home_path: string, s3_bucket: string, s3_compatible_access_key: string, s3_compatible_bucket: string, s3_compatible_endpoint: string, s3_compatible_region: string, s3_region: string, server_certificate: string, server_host_key: string, server_type: string, ssl: string, username: string, wasabi_access_key: string, wasabi_bucket: string, wasabi_region: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7113,7 +7135,7 @@ export def "patch-remote-servers-id" [
   --wasabi-bucket: string # Wasabi Bucket name (e.g. my-bucket)
   --wasabi-region: string # Wasabi region (e.g. us-west-1)
   --wasabi-secret-key: string # Wasabi secret key.
-]: any -> record<auth_account_name: string, auth_setup_link: string, auth_status: string, authentication_method: string, aws_access_key: string, azure_blob_storage_account: string, azure_blob_storage_container: string, azure_blob_storage_sas_token: string, azure_files_storage_account: string, azure_files_storage_sas_token: string, azure_files_storage_share_name: string, backblaze_b2_bucket: string, backblaze_b2_s3_endpoint: string, disabled: bool, enable_dedicated_ips: bool, filebase_access_key: string, filebase_bucket: string, files_agent_api_token: string, files_agent_permission_set: string, files_agent_root: string, google_cloud_storage_bucket: string, google_cloud_storage_project_id: string, hostname: string, id: int, max_connections: int, name: string, one_drive_account_type: string, pin_to_site_region: bool, pinned_region: string, port: int, rackspace_container: string, rackspace_region: string, rackspace_username: string, remote_home_path: string, s3_bucket: string, s3_compatible_access_key: string, s3_compatible_bucket: string, s3_compatible_endpoint: string, s3_compatible_region: string, s3_region: string, server_certificate: string, server_host_key: string, server_type: string, ssl: string, username: string, wasabi_access_key: string, wasabi_bucket: string, wasabi_region: string> {
+]: any -> oneof<record<auth_account_name: string, auth_setup_link: string, auth_status: string, authentication_method: string, aws_access_key: string, azure_blob_storage_account: string, azure_blob_storage_container: string, azure_blob_storage_sas_token: string, azure_files_storage_account: string, azure_files_storage_sas_token: string, azure_files_storage_share_name: string, backblaze_b2_bucket: string, backblaze_b2_s3_endpoint: string, disabled: bool, enable_dedicated_ips: bool, filebase_access_key: string, filebase_bucket: string, files_agent_api_token: string, files_agent_permission_set: string, files_agent_root: string, google_cloud_storage_bucket: string, google_cloud_storage_project_id: string, hostname: string, id: int, max_connections: int, name: string, one_drive_account_type: string, pin_to_site_region: bool, pinned_region: string, port: int, rackspace_container: string, rackspace_region: string, rackspace_username: string, remote_home_path: string, s3_bucket: string, s3_compatible_access_key: string, s3_compatible_bucket: string, s3_compatible_endpoint: string, s3_compatible_region: string, s3_region: string, server_certificate: string, server_host_key: string, server_type: string, ssl: string, username: string, wasabi_access_key: string, wasabi_bucket: string, wasabi_region: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -7154,7 +7176,7 @@ export def "get-remote-servers-id-configuration-file" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<api_token: string, config_version: string, hostname: string, id: int, permission_set: string, port: int, private_key: string, public_key: string, root: string, server_host_key: string, status: string, subdomain: string> {
+]: nothing -> oneof<record<api_token: string, config_version: string, hostname: string, id: int, permission_set: string, port: int, private_key: string, public_key: string, root: string, server_host_key: string, status: string, subdomain: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7201,7 +7223,7 @@ export def "post-remote-servers-id-configuration-file" [
   --server-host-key: string # e.g. example
   --status: string # either running or shutdown (e.g. example)
   --subdomain: string # e.g. example
-]: any -> record<api_token: string, config_version: string, hostname: string, id: int, permission_set: string, port: int, private_key: string, public_key: string, root: string, server_host_key: string, status: string, subdomain: string> {
+]: any -> oneof<record<api_token: string, config_version: string, hostname: string, id: int, permission_set: string, port: int, private_key: string, public_key: string, root: string, server_host_key: string, status: string, subdomain: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -7246,7 +7268,7 @@ export def "get-requests" [
   --sort-by: record # If set, sort records by the specified field in either `asc` or `desc` direction (e.g. `sort_by[destination]=desc`). Valid fields are `destination`.
   --mine: oneof<nothing, bool> # Only show requests of the current user? (Defaults to true if current user is not a site admin.)
   --path: string # Path to show requests for. If omitted, shows all paths. Send `/` to represent the root directory.
-]: nothing -> table<automation_id: string, destination: string, id: int, path: string, source: string, user_display_name: string> {
+]: nothing -> oneof<table<automation_id: string, destination: string, id: int, path: string, source: string, user_display_name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort_by" $sort_by "multi") (serialize-qp "mine" $mine "scalar") (serialize-qp "path" $path "scalar")] | flatten | str join "&"
@@ -7285,7 +7307,7 @@ export def "post-requests" [
   --group-ids: string # A list of group IDs to request the file from. If sent as a string, it should be comma-delimited.
   path: string # Folder path on which to request the file.
   --user-ids: string # A list of user IDs to request the file from. If sent as a string, it should be comma-delimited.
-]: any -> record<automation_id: string, destination: string, id: int, path: string, source: string, user_display_name: string> {
+]: any -> oneof<record<automation_id: string, destination: string, id: int, path: string, source: string, user_display_name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -7329,7 +7351,7 @@ export def "get-requests-folders-path" [
   --per-page: int # Number of records to show per page. (Max: 10,000, 1,000 or less is recommended). (format: int32)
   --sort-by: record # If set, sort records by the specified field in either `asc` or `desc` direction (e.g. `sort_by[destination]=desc`). Valid fields are `destination`.
   --mine: oneof<nothing, bool> # Only show requests of the current user? (Defaults to true if current user is not a site admin.)
-]: nothing -> table<automation_id: string, destination: string, id: int, path: string, source: string, user_display_name: string> {
+]: nothing -> oneof<table<automation_id: string, destination: string, id: int, path: string, source: string, user_display_name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
@@ -7439,7 +7461,7 @@ export def "post-sessions" [
   --partial-session-id: string # Identifier for a partially-completed login
   --password: string # Password for sign in (e.g. password)
   --username: string # Username to sign in as (e.g. username)
-]: any -> record<id: string, language: string, read_only: bool, sftp_insecure_ciphers: bool> {
+]: any -> oneof<record<id: string, language: string, read_only: bool, sftp_insecure_ciphers: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -7487,7 +7509,7 @@ export def "get-settings-changes" [
   --filter-like: record # If set, return records where the specified field is equal to the supplied value. Valid fields are `api_key_id` and `user_id`.
   --filter-lt: record # If set, return records where the specified field is less than the supplied value. Valid fields are `api_key_id` and `user_id`.
   --filter-lteq: record # If set, return records where the specified field is less than or equal to the supplied value. Valid fields are `api_key_id` and `user_id`.
-]: nothing -> table<changes: list<string>, created_at: string, user_id: int, user_is_files_support: bool, username: string> {
+]: nothing -> oneof<table<changes: list<string>, created_at: string, user_id: int, user_is_files_support: bool, username: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort_by" $sort_by "multi") (serialize-qp "filter" $filter "multi") (serialize-qp "filter_gt" $filter_gt "multi") (serialize-qp "filter_gteq" $filter_gteq "multi") (serialize-qp "filter_like" $filter_like "multi") (serialize-qp "filter_lt" $filter_lt "multi") (serialize-qp "filter_lteq" $filter_lteq "multi")] | flatten | str join "&"
@@ -7524,7 +7546,7 @@ export def "get-sftp-host-keys" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Used for pagination. When a list request has more records available, cursors are provided in the response headers `X-Files-Cursor-Next` and `X-Files-Cursor-Prev`. Send one of those cursor value here to resume an existing list from the next available record. Note: many of our SDKs have iterator methods that will automatically handle cursor-based pagination.
   --per-page: int # Number of records to show per page. (Max: 10,000, 1,000 or less is recommended). (format: int32)
-]: nothing -> table<fingerprint_md5: string, fingerprint_sha256: string, id: int, name: string> {
+]: nothing -> oneof<table<fingerprint_md5: string, fingerprint_sha256: string, id: int, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
@@ -7561,7 +7583,7 @@ export def "post-sftp-host-keys" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The friendly name of this SFTP Host Key.
   --private-key: string # The private key data.
-]: any -> record<fingerprint_md5: string, fingerprint_sha256: string, id: int, name: string> {
+]: any -> oneof<record<fingerprint_md5: string, fingerprint_sha256: string, id: int, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -7637,7 +7659,7 @@ export def "get-sftp-host-keys-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<fingerprint_md5: string, fingerprint_sha256: string, id: int, name: string> {
+]: nothing -> oneof<record<fingerprint_md5: string, fingerprint_sha256: string, id: int, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7675,7 +7697,7 @@ export def "patch-sftp-host-keys-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The friendly name of this SFTP Host Key.
   --private-key: string # The private key data.
-]: any -> record<fingerprint_md5: string, fingerprint_sha256: string, id: int, name: string> {
+]: any -> oneof<record<fingerprint_md5: string, fingerprint_sha256: string, id: int, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -7715,7 +7737,7 @@ export def "get-site" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<active_sftp_host_key_id: int, admin_user_id: int, allow_bundle_names: bool, allowed_2fa_method_bypass_for_ftp_sftp_dav: bool, allowed_2fa_method_sms: bool, allowed_2fa_method_totp: bool, allowed_2fa_method_u2f: bool, allowed_2fa_method_webauthn: bool, allowed_2fa_method_yubi: bool, allowed_countries: string, allowed_ips: string, ask_about_overwrites: bool, bundle_activity_notifications: string, bundle_expiration: int, bundle_password_required: bool, bundle_registration_notifications: string, bundle_require_share_recipient: bool, bundle_upload_receipt_notifications: string, bundle_watermark_attachment: record<name: string, uri: string>, bundle_watermark_value: record, color2_left: string, color2_link: string, color2_text: string, color2_top: string, color2_top_text: string, contact_name: string, created_at: string, currency: string, custom_namespace: bool, days_to_retain_backups: int, default_time_zone: string, desktop_app: bool, desktop_app_session_ip_pinning: bool, desktop_app_session_lifetime: int, disable_files_certificate_generation: bool, disable_notifications: bool, disable_password_reset: bool, disable_users_from_inactivity_period_days: int, disallowed_countries: string, domain: string, domain_hsts_header: bool, domain_letsencrypt_chain: string, email: string, folder_permissions_groups_only: bool, ftp_enabled: bool, hipaa: bool, icon128: record<name: string, uri: string>, icon16: record<name: string, uri: string>, icon32: record<name: string, uri: string>, icon48: record<name: string, uri: string>, immutable_files_set_at: string, include_password_in_welcome_email: bool, language: string, ldap_base_dn: string, ldap_domain: string, ldap_enabled: bool, ldap_group_action: string, ldap_group_exclusion: string, ldap_group_inclusion: string, ldap_host: string, ldap_host_2: string, ldap_host_3: string, ldap_port: int, ldap_secure: bool, ldap_type: string, ldap_user_action: string, ldap_user_include_groups: string, ldap_username: string, ldap_username_field: string, login_help_text: string, logo: record<name: string, uri: string>, max_prior_passwords: int, mobile_app: bool, mobile_app_session_ip_pinning: bool, mobile_app_session_lifetime: int, motd_text: string, motd_use_for_ftp: bool, motd_use_for_sftp: bool, name: string, next_billing_amount: float, next_billing_date: string, non_sso_groups_allowed: bool, non_sso_users_allowed: bool, office_integration_available: bool, office_integration_type: string, oncehub_link: string, opt_out_global: bool, overage_notified_at: string, overage_notify: bool, overdue: bool, password_min_length: int, password_require_letter: bool, password_require_mixed: bool, password_require_number: bool, password_require_special: bool, password_require_unbreached: bool, password_requirements_apply_to_bundles: bool, password_validity_days: int, phone: string, pin_all_remote_servers_to_site_region: bool, reply_to_email: string, require_2fa: bool, require_2fa_stop_time: string, require_2fa_user_type: string, session: record<id: string, language: string, read_only: bool, sftp_insecure_ciphers: bool>, session_expiry: float, session_expiry_minutes: int, session_pinned_by_ip: bool, sftp_enabled: bool, sftp_host_key_type: string, sftp_insecure_ciphers: bool, sftp_user_root_enabled: bool, sharing_enabled: bool, show_request_access_link: bool, site_footer: string, site_header: string, smtp_address: string, smtp_authentication: string, smtp_from: string, smtp_port: int, smtp_username: string, ssl_required: bool, subdomain: string, switch_to_plan_date: string, tls_disabled: bool, trial_days_left: int, trial_until: string, updated_at: string, uploads_via_email_authentication: bool, use_provided_modified_at: bool, user: record<active_2fa: bool, admin_group_ids: list<int>, allowed_ips: string, api_keys_count: int, attachments_permission: bool, authenticate_until: string, authentication_method: string, avatar_url: string, billing_permission: bool, bypass_inactive_disable: bool, bypass_site_allowed_ips: bool, company: string, created_at: string, dav_permission: bool, days_remaining_until_password_expire: int, disabled: bool, email: string, externally_managed: bool, first_login_at: string, ftp_permission: bool, group_ids: string, header_text: string, id: int, language: string, last_active_at: string, last_api_use_at: string, last_dav_login_at: string, last_desktop_login_at: string, last_ftp_login_at: string, last_login_at: string, last_protocol_cipher: string, last_restapi_login_at: string, last_sftp_login_at: string, last_web_login_at: string, lockout_expires: string, name: string, notes: string, notification_daily_send_time: int, office_integration_enabled: bool, password_expire_at: string, password_expired: bool, password_set_at: string, password_validity_days: int, public_keys_count: int, receive_admin_alerts: bool, require_2fa: string, require_password_change: bool, restapi_permission: bool, self_managed: bool, sftp_permission: bool, site_admin: bool, skip_welcome_screen: bool, ssl_required: string, sso_strategy_id: int, subscribe_to_newsletter: bool, time_zone: string, type_of_2fa: string, user_root: string, username: string>, user_lockout: bool, user_lockout_lock_period: int, user_lockout_tries: int, user_lockout_within: int, user_requests_enabled: bool, user_requests_notify_admins: bool, welcome_custom_text: string, welcome_email_cc: string, welcome_email_enabled: bool, welcome_email_subject: string, welcome_screen: string, windows_mode_ftp: bool> {
+]: nothing -> oneof<record<active_sftp_host_key_id: int, admin_user_id: int, allow_bundle_names: bool, allowed_2fa_method_bypass_for_ftp_sftp_dav: bool, allowed_2fa_method_sms: bool, allowed_2fa_method_totp: bool, allowed_2fa_method_u2f: bool, allowed_2fa_method_webauthn: bool, allowed_2fa_method_yubi: bool, allowed_countries: string, allowed_ips: string, ask_about_overwrites: bool, bundle_activity_notifications: string, bundle_expiration: int, bundle_password_required: bool, bundle_registration_notifications: string, bundle_require_share_recipient: bool, bundle_upload_receipt_notifications: string, bundle_watermark_attachment: record<name: string, uri: string>, bundle_watermark_value: record, color2_left: string, color2_link: string, color2_text: string, color2_top: string, color2_top_text: string, contact_name: string, created_at: string, currency: string, custom_namespace: bool, days_to_retain_backups: int, default_time_zone: string, desktop_app: bool, desktop_app_session_ip_pinning: bool, desktop_app_session_lifetime: int, disable_files_certificate_generation: bool, disable_notifications: bool, disable_password_reset: bool, disable_users_from_inactivity_period_days: int, disallowed_countries: string, domain: string, domain_hsts_header: bool, domain_letsencrypt_chain: string, email: string, folder_permissions_groups_only: bool, ftp_enabled: bool, hipaa: bool, icon128: record<name: string, uri: string>, icon16: record<name: string, uri: string>, icon32: record<name: string, uri: string>, icon48: record<name: string, uri: string>, immutable_files_set_at: string, include_password_in_welcome_email: bool, language: string, ldap_base_dn: string, ldap_domain: string, ldap_enabled: bool, ldap_group_action: string, ldap_group_exclusion: string, ldap_group_inclusion: string, ldap_host: string, ldap_host_2: string, ldap_host_3: string, ldap_port: int, ldap_secure: bool, ldap_type: string, ldap_user_action: string, ldap_user_include_groups: string, ldap_username: string, ldap_username_field: string, login_help_text: string, logo: record<name: string, uri: string>, max_prior_passwords: int, mobile_app: bool, mobile_app_session_ip_pinning: bool, mobile_app_session_lifetime: int, motd_text: string, motd_use_for_ftp: bool, motd_use_for_sftp: bool, name: string, next_billing_amount: float, next_billing_date: string, non_sso_groups_allowed: bool, non_sso_users_allowed: bool, office_integration_available: bool, office_integration_type: string, oncehub_link: string, opt_out_global: bool, overage_notified_at: string, overage_notify: bool, overdue: bool, password_min_length: int, password_require_letter: bool, password_require_mixed: bool, password_require_number: bool, password_require_special: bool, password_require_unbreached: bool, password_requirements_apply_to_bundles: bool, password_validity_days: int, phone: string, pin_all_remote_servers_to_site_region: bool, reply_to_email: string, require_2fa: bool, require_2fa_stop_time: string, require_2fa_user_type: string, session: record<id: string, language: string, read_only: bool, sftp_insecure_ciphers: bool>, session_expiry: float, session_expiry_minutes: int, session_pinned_by_ip: bool, sftp_enabled: bool, sftp_host_key_type: string, sftp_insecure_ciphers: bool, sftp_user_root_enabled: bool, sharing_enabled: bool, show_request_access_link: bool, site_footer: string, site_header: string, smtp_address: string, smtp_authentication: string, smtp_from: string, smtp_port: int, smtp_username: string, ssl_required: bool, subdomain: string, switch_to_plan_date: string, tls_disabled: bool, trial_days_left: int, trial_until: string, updated_at: string, uploads_via_email_authentication: bool, use_provided_modified_at: bool, user: record<active_2fa: bool, admin_group_ids: list<int>, allowed_ips: string, api_keys_count: int, attachments_permission: bool, authenticate_until: string, authentication_method: string, avatar_url: string, billing_permission: bool, bypass_inactive_disable: bool, bypass_site_allowed_ips: bool, company: string, created_at: string, dav_permission: bool, days_remaining_until_password_expire: int, disabled: bool, email: string, externally_managed: bool, first_login_at: string, ftp_permission: bool, group_ids: string, header_text: string, id: int, language: string, last_active_at: string, last_api_use_at: string, last_dav_login_at: string, last_desktop_login_at: string, last_ftp_login_at: string, last_login_at: string, last_protocol_cipher: string, last_restapi_login_at: string, last_sftp_login_at: string, last_web_login_at: string, lockout_expires: string, name: string, notes: string, notification_daily_send_time: int, office_integration_enabled: bool, password_expire_at: string, password_expired: bool, password_set_at: string, password_validity_days: int, public_keys_count: int, receive_admin_alerts: bool, require_2fa: string, require_password_change: bool, restapi_permission: bool, self_managed: bool, sftp_permission: bool, site_admin: bool, skip_welcome_screen: bool, ssl_required: string, sso_strategy_id: int, subscribe_to_newsletter: bool, time_zone: string, type_of_2fa: string, user_root: string, username: string>, user_lockout: bool, user_lockout_lock_period: int, user_lockout_tries: int, user_lockout_within: int, user_requests_enabled: bool, user_requests_notify_admins: bool, welcome_custom_text: string, welcome_email_cc: string, welcome_email_enabled: bool, welcome_email_subject: string, welcome_screen: string, windows_mode_ftp: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/site" $auth.query)
@@ -7883,7 +7905,7 @@ export def "patch-site" [
   --welcome-email-subject: string # Include this email subject in welcome emails if enabled
   --welcome-screen: string # Does the welcome screen appear?
   --windows-mode-ftp: oneof<nothing, bool> # Does FTP user Windows emulation mode?
-]: any -> record<active_sftp_host_key_id: int, admin_user_id: int, allow_bundle_names: bool, allowed_2fa_method_bypass_for_ftp_sftp_dav: bool, allowed_2fa_method_sms: bool, allowed_2fa_method_totp: bool, allowed_2fa_method_u2f: bool, allowed_2fa_method_webauthn: bool, allowed_2fa_method_yubi: bool, allowed_countries: string, allowed_ips: string, ask_about_overwrites: bool, bundle_activity_notifications: string, bundle_expiration: int, bundle_password_required: bool, bundle_registration_notifications: string, bundle_require_share_recipient: bool, bundle_upload_receipt_notifications: string, bundle_watermark_attachment: record<name: string, uri: string>, bundle_watermark_value: record, color2_left: string, color2_link: string, color2_text: string, color2_top: string, color2_top_text: string, contact_name: string, created_at: string, currency: string, custom_namespace: bool, days_to_retain_backups: int, default_time_zone: string, desktop_app: bool, desktop_app_session_ip_pinning: bool, desktop_app_session_lifetime: int, disable_files_certificate_generation: bool, disable_notifications: bool, disable_password_reset: bool, disable_users_from_inactivity_period_days: int, disallowed_countries: string, domain: string, domain_hsts_header: bool, domain_letsencrypt_chain: string, email: string, folder_permissions_groups_only: bool, ftp_enabled: bool, hipaa: bool, icon128: record<name: string, uri: string>, icon16: record<name: string, uri: string>, icon32: record<name: string, uri: string>, icon48: record<name: string, uri: string>, immutable_files_set_at: string, include_password_in_welcome_email: bool, language: string, ldap_base_dn: string, ldap_domain: string, ldap_enabled: bool, ldap_group_action: string, ldap_group_exclusion: string, ldap_group_inclusion: string, ldap_host: string, ldap_host_2: string, ldap_host_3: string, ldap_port: int, ldap_secure: bool, ldap_type: string, ldap_user_action: string, ldap_user_include_groups: string, ldap_username: string, ldap_username_field: string, login_help_text: string, logo: record<name: string, uri: string>, max_prior_passwords: int, mobile_app: bool, mobile_app_session_ip_pinning: bool, mobile_app_session_lifetime: int, motd_text: string, motd_use_for_ftp: bool, motd_use_for_sftp: bool, name: string, next_billing_amount: float, next_billing_date: string, non_sso_groups_allowed: bool, non_sso_users_allowed: bool, office_integration_available: bool, office_integration_type: string, oncehub_link: string, opt_out_global: bool, overage_notified_at: string, overage_notify: bool, overdue: bool, password_min_length: int, password_require_letter: bool, password_require_mixed: bool, password_require_number: bool, password_require_special: bool, password_require_unbreached: bool, password_requirements_apply_to_bundles: bool, password_validity_days: int, phone: string, pin_all_remote_servers_to_site_region: bool, reply_to_email: string, require_2fa: bool, require_2fa_stop_time: string, require_2fa_user_type: string, session: record<id: string, language: string, read_only: bool, sftp_insecure_ciphers: bool>, session_expiry: float, session_expiry_minutes: int, session_pinned_by_ip: bool, sftp_enabled: bool, sftp_host_key_type: string, sftp_insecure_ciphers: bool, sftp_user_root_enabled: bool, sharing_enabled: bool, show_request_access_link: bool, site_footer: string, site_header: string, smtp_address: string, smtp_authentication: string, smtp_from: string, smtp_port: int, smtp_username: string, ssl_required: bool, subdomain: string, switch_to_plan_date: string, tls_disabled: bool, trial_days_left: int, trial_until: string, updated_at: string, uploads_via_email_authentication: bool, use_provided_modified_at: bool, user: record<active_2fa: bool, admin_group_ids: list<int>, allowed_ips: string, api_keys_count: int, attachments_permission: bool, authenticate_until: string, authentication_method: string, avatar_url: string, billing_permission: bool, bypass_inactive_disable: bool, bypass_site_allowed_ips: bool, company: string, created_at: string, dav_permission: bool, days_remaining_until_password_expire: int, disabled: bool, email: string, externally_managed: bool, first_login_at: string, ftp_permission: bool, group_ids: string, header_text: string, id: int, language: string, last_active_at: string, last_api_use_at: string, last_dav_login_at: string, last_desktop_login_at: string, last_ftp_login_at: string, last_login_at: string, last_protocol_cipher: string, last_restapi_login_at: string, last_sftp_login_at: string, last_web_login_at: string, lockout_expires: string, name: string, notes: string, notification_daily_send_time: int, office_integration_enabled: bool, password_expire_at: string, password_expired: bool, password_set_at: string, password_validity_days: int, public_keys_count: int, receive_admin_alerts: bool, require_2fa: string, require_password_change: bool, restapi_permission: bool, self_managed: bool, sftp_permission: bool, site_admin: bool, skip_welcome_screen: bool, ssl_required: string, sso_strategy_id: int, subscribe_to_newsletter: bool, time_zone: string, type_of_2fa: string, user_root: string, username: string>, user_lockout: bool, user_lockout_lock_period: int, user_lockout_tries: int, user_lockout_within: int, user_requests_enabled: bool, user_requests_notify_admins: bool, welcome_custom_text: string, welcome_email_cc: string, welcome_email_enabled: bool, welcome_email_subject: string, welcome_screen: string, windows_mode_ftp: bool> {
+]: any -> oneof<record<active_sftp_host_key_id: int, admin_user_id: int, allow_bundle_names: bool, allowed_2fa_method_bypass_for_ftp_sftp_dav: bool, allowed_2fa_method_sms: bool, allowed_2fa_method_totp: bool, allowed_2fa_method_u2f: bool, allowed_2fa_method_webauthn: bool, allowed_2fa_method_yubi: bool, allowed_countries: string, allowed_ips: string, ask_about_overwrites: bool, bundle_activity_notifications: string, bundle_expiration: int, bundle_password_required: bool, bundle_registration_notifications: string, bundle_require_share_recipient: bool, bundle_upload_receipt_notifications: string, bundle_watermark_attachment: record<name: string, uri: string>, bundle_watermark_value: record, color2_left: string, color2_link: string, color2_text: string, color2_top: string, color2_top_text: string, contact_name: string, created_at: string, currency: string, custom_namespace: bool, days_to_retain_backups: int, default_time_zone: string, desktop_app: bool, desktop_app_session_ip_pinning: bool, desktop_app_session_lifetime: int, disable_files_certificate_generation: bool, disable_notifications: bool, disable_password_reset: bool, disable_users_from_inactivity_period_days: int, disallowed_countries: string, domain: string, domain_hsts_header: bool, domain_letsencrypt_chain: string, email: string, folder_permissions_groups_only: bool, ftp_enabled: bool, hipaa: bool, icon128: record<name: string, uri: string>, icon16: record<name: string, uri: string>, icon32: record<name: string, uri: string>, icon48: record<name: string, uri: string>, immutable_files_set_at: string, include_password_in_welcome_email: bool, language: string, ldap_base_dn: string, ldap_domain: string, ldap_enabled: bool, ldap_group_action: string, ldap_group_exclusion: string, ldap_group_inclusion: string, ldap_host: string, ldap_host_2: string, ldap_host_3: string, ldap_port: int, ldap_secure: bool, ldap_type: string, ldap_user_action: string, ldap_user_include_groups: string, ldap_username: string, ldap_username_field: string, login_help_text: string, logo: record<name: string, uri: string>, max_prior_passwords: int, mobile_app: bool, mobile_app_session_ip_pinning: bool, mobile_app_session_lifetime: int, motd_text: string, motd_use_for_ftp: bool, motd_use_for_sftp: bool, name: string, next_billing_amount: float, next_billing_date: string, non_sso_groups_allowed: bool, non_sso_users_allowed: bool, office_integration_available: bool, office_integration_type: string, oncehub_link: string, opt_out_global: bool, overage_notified_at: string, overage_notify: bool, overdue: bool, password_min_length: int, password_require_letter: bool, password_require_mixed: bool, password_require_number: bool, password_require_special: bool, password_require_unbreached: bool, password_requirements_apply_to_bundles: bool, password_validity_days: int, phone: string, pin_all_remote_servers_to_site_region: bool, reply_to_email: string, require_2fa: bool, require_2fa_stop_time: string, require_2fa_user_type: string, session: record<id: string, language: string, read_only: bool, sftp_insecure_ciphers: bool>, session_expiry: float, session_expiry_minutes: int, session_pinned_by_ip: bool, sftp_enabled: bool, sftp_host_key_type: string, sftp_insecure_ciphers: bool, sftp_user_root_enabled: bool, sharing_enabled: bool, show_request_access_link: bool, site_footer: string, site_header: string, smtp_address: string, smtp_authentication: string, smtp_from: string, smtp_port: int, smtp_username: string, ssl_required: bool, subdomain: string, switch_to_plan_date: string, tls_disabled: bool, trial_days_left: int, trial_until: string, updated_at: string, uploads_via_email_authentication: bool, use_provided_modified_at: bool, user: record<active_2fa: bool, admin_group_ids: list<int>, allowed_ips: string, api_keys_count: int, attachments_permission: bool, authenticate_until: string, authentication_method: string, avatar_url: string, billing_permission: bool, bypass_inactive_disable: bool, bypass_site_allowed_ips: bool, company: string, created_at: string, dav_permission: bool, days_remaining_until_password_expire: int, disabled: bool, email: string, externally_managed: bool, first_login_at: string, ftp_permission: bool, group_ids: string, header_text: string, id: int, language: string, last_active_at: string, last_api_use_at: string, last_dav_login_at: string, last_desktop_login_at: string, last_ftp_login_at: string, last_login_at: string, last_protocol_cipher: string, last_restapi_login_at: string, last_sftp_login_at: string, last_web_login_at: string, lockout_expires: string, name: string, notes: string, notification_daily_send_time: int, office_integration_enabled: bool, password_expire_at: string, password_expired: bool, password_set_at: string, password_validity_days: int, public_keys_count: int, receive_admin_alerts: bool, require_2fa: string, require_password_change: bool, restapi_permission: bool, self_managed: bool, sftp_permission: bool, site_admin: bool, skip_welcome_screen: bool, ssl_required: string, sso_strategy_id: int, subscribe_to_newsletter: bool, time_zone: string, type_of_2fa: string, user_root: string, username: string>, user_lockout: bool, user_lockout_lock_period: int, user_lockout_tries: int, user_lockout_within: int, user_requests_enabled: bool, user_requests_notify_admins: bool, welcome_custom_text: string, welcome_email_cc: string, welcome_email_enabled: bool, welcome_email_subject: string, welcome_screen: string, windows_mode_ftp: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -7932,7 +7954,7 @@ export def "get-site-api-keys" [
   --filter-like: record # If set, return records where the specified field is equal to the supplied value. Valid fields are `expires_at`.
   --filter-lt: record # If set, return records where the specified field is less than the supplied value. Valid fields are `expires_at`.
   --filter-lteq: record # If set, return records where the specified field is less than or equal to the supplied value. Valid fields are `expires_at`.
-]: nothing -> table<created_at: string, description: string, descriptive_label: string, expires_at: string, id: int, key: string, last_use_at: string, name: string, path: string, permission_set: string, platform: string, url: string, user_id: int> {
+]: nothing -> oneof<table<created_at: string, description: string, descriptive_label: string, expires_at: string, id: int, key: string, last_use_at: string, name: string, path: string, permission_set: string, platform: string, url: string, user_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "user_id" $user_id "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort_by" $sort_by "multi") (serialize-qp "filter" $filter "multi") (serialize-qp "filter_gt" $filter_gt "multi") (serialize-qp "filter_gteq" $filter_gteq "multi") (serialize-qp "filter_like" $filter_like "multi") (serialize-qp "filter_lt" $filter_lt "multi") (serialize-qp "filter_lteq" $filter_lteq "multi")] | flatten | str join "&"
@@ -7973,7 +7995,7 @@ export def "post-site-api-keys" [
   --path: string # Folder path restriction for this api key. (e.g. shared/docs)
   --permission-set: string@permission-set-completer # Permissions for this API Key. Keys with the `desktop_app` permission set only have the ability to do the functions provided in our Desktop App (File and Share Link operations). Additional permission sets may become available in the future, such as for a Site Admin to give a key with no administrator privileges. If you have ideas for permission sets, please let us know. (default: full, e.g. full)
   --user-id: int # User ID. Provide a value of `0` to operate the current session's user. (format: int32)
-]: any -> record<created_at: string, description: string, descriptive_label: string, expires_at: string, id: int, key: string, last_use_at: string, name: string, path: string, permission_set: string, platform: string, url: string, user_id: int> {
+]: any -> oneof<record<created_at: string, description: string, descriptive_label: string, expires_at: string, id: int, key: string, last_use_at: string, name: string, path: string, permission_set: string, platform: string, url: string, user_id: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -8014,7 +8036,7 @@ export def "get-site-dns-records" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Used for pagination. When a list request has more records available, cursors are provided in the response headers `X-Files-Cursor-Next` and `X-Files-Cursor-Prev`. Send one of those cursor value here to resume an existing list from the next available record. Note: many of our SDKs have iterator methods that will automatically handle cursor-based pagination.
   --per-page: int # Number of records to show per page. (Max: 10,000, 1,000 or less is recommended). (format: int32)
-]: nothing -> table<domain: string, id: string, rrtype: string, value: string> {
+]: nothing -> oneof<table<domain: string, id: string, rrtype: string, value: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
@@ -8051,7 +8073,7 @@ export def "get-site-ip-addresses" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Used for pagination. When a list request has more records available, cursors are provided in the response headers `X-Files-Cursor-Next` and `X-Files-Cursor-Prev`. Send one of those cursor value here to resume an existing list from the next available record. Note: many of our SDKs have iterator methods that will automatically handle cursor-based pagination.
   --per-page: int # Number of records to show per page. (Max: 10,000, 1,000 or less is recommended). (format: int32)
-]: nothing -> table<associated_with: string, group_id: int, id: string, ip_addresses: list<string>> {
+]: nothing -> oneof<table<associated_with: string, group_id: int, id: string, ip_addresses: list<string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
@@ -8092,7 +8114,7 @@ export def "post-site-test-webhook" [
   --headers: record # Additional request headers. (e.g. {x-test-header: testvalue})
   --method: string # HTTP method(GET or POST). (e.g. GET)
   url: string # URL for testing the webhook. (e.g. https://www.site.com/...)
-]: any -> record<clickwrap_body: string, clickwrap_id: int, code: int, data: record<dynamic: record>, errors: table<fields: list, messages: list>, message: string, status: string> {
+]: any -> oneof<record<clickwrap_body: string, clickwrap_id: int, code: int, data: record<dynamic: record>, errors: table<fields: list, messages: list>, message: string, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -8131,7 +8153,7 @@ export def "get-site-usage" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<bytes_sent: float, current_storage: float, deleted_files_counted_in_minimum: float, deleted_files_storage: float, end_at: string, high_water_storage: float, high_water_user_count: float, id: int, root_storage: float, start_at: string, sync_bytes_received: float, sync_bytes_sent: float, total_billable_transfer_usage: float, total_billable_usage: float, usage_by_top_level_dir: record> {
+]: nothing -> oneof<record<bytes_sent: float, current_storage: float, deleted_files_counted_in_minimum: float, deleted_files_storage: float, end_at: string, high_water_storage: float, high_water_user_count: float, id: int, root_storage: float, start_at: string, sync_bytes_received: float, sync_bytes_sent: float, total_billable_transfer_usage: float, total_billable_usage: float, usage_by_top_level_dir: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/site/usage" $auth.query)
@@ -8167,7 +8189,7 @@ export def "get-sso-strategies" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Used for pagination. When a list request has more records available, cursors are provided in the response headers `X-Files-Cursor-Next` and `X-Files-Cursor-Prev`. Send one of those cursor value here to resume an existing list from the next available record. Note: many of our SDKs have iterator methods that will automatically handle cursor-based pagination.
   --per-page: int # Number of records to show per page. (Max: 10,000, 1,000 or less is recommended). (format: int32)
-]: nothing -> table<deprovision_behavior: string, deprovision_groups: bool, deprovision_users: bool, enabled: bool, id: int, label: string, ldap_base_dn: string, ldap_domain: string, ldap_host: string, ldap_host_2: string, ldap_host_3: string, ldap_port: int, ldap_secure: bool, ldap_username: string, ldap_username_field: string, logo_url: string, protocol: string, provider: string, provision_attachments_permission: bool, provision_company: string, provision_dav_permission: bool, provision_email_signup_groups: string, provision_ftp_permission: bool, provision_group_default: string, provision_group_exclusion: string, provision_group_inclusion: string, provision_group_required: string, provision_groups: bool, provision_sftp_permission: bool, provision_site_admin_groups: string, provision_time_zone: string, provision_users: bool, saml_provider_cert_fingerprint: string, saml_provider_issuer_url: string, saml_provider_metadata_content: string, saml_provider_metadata_url: string, saml_provider_slo_target_url: string, saml_provider_sso_target_url: string, scim_authentication_method: string, scim_oauth_access_token: string, scim_oauth_access_token_expires_at: string, scim_username: string, subdomain: string> {
+]: nothing -> oneof<table<deprovision_behavior: string, deprovision_groups: bool, deprovision_users: bool, enabled: bool, id: int, label: string, ldap_base_dn: string, ldap_domain: string, ldap_host: string, ldap_host_2: string, ldap_host_3: string, ldap_port: int, ldap_secure: bool, ldap_username: string, ldap_username_field: string, logo_url: string, protocol: string, provider: string, provision_attachments_permission: bool, provision_company: string, provision_dav_permission: bool, provision_email_signup_groups: string, provision_ftp_permission: bool, provision_group_default: string, provision_group_exclusion: string, provision_group_inclusion: string, provision_group_required: string, provision_groups: bool, provision_sftp_permission: bool, provision_site_admin_groups: string, provision_time_zone: string, provision_users: bool, saml_provider_cert_fingerprint: string, saml_provider_issuer_url: string, saml_provider_metadata_content: string, saml_provider_metadata_url: string, saml_provider_slo_target_url: string, saml_provider_sso_target_url: string, scim_authentication_method: string, scim_oauth_access_token: string, scim_oauth_access_token_expires_at: string, scim_username: string, subdomain: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
@@ -8203,7 +8225,7 @@ export def "get-sso-strategies-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<deprovision_behavior: string, deprovision_groups: bool, deprovision_users: bool, enabled: bool, id: int, label: string, ldap_base_dn: string, ldap_domain: string, ldap_host: string, ldap_host_2: string, ldap_host_3: string, ldap_port: int, ldap_secure: bool, ldap_username: string, ldap_username_field: string, logo_url: string, protocol: string, provider: string, provision_attachments_permission: bool, provision_company: string, provision_dav_permission: bool, provision_email_signup_groups: string, provision_ftp_permission: bool, provision_group_default: string, provision_group_exclusion: string, provision_group_inclusion: string, provision_group_required: string, provision_groups: bool, provision_sftp_permission: bool, provision_site_admin_groups: string, provision_time_zone: string, provision_users: bool, saml_provider_cert_fingerprint: string, saml_provider_issuer_url: string, saml_provider_metadata_content: string, saml_provider_metadata_url: string, saml_provider_slo_target_url: string, saml_provider_sso_target_url: string, scim_authentication_method: string, scim_oauth_access_token: string, scim_oauth_access_token_expires_at: string, scim_username: string, subdomain: string> {
+]: nothing -> oneof<record<deprovision_behavior: string, deprovision_groups: bool, deprovision_users: bool, enabled: bool, id: int, label: string, ldap_base_dn: string, ldap_domain: string, ldap_host: string, ldap_host_2: string, ldap_host_3: string, ldap_port: int, ldap_secure: bool, ldap_username: string, ldap_username_field: string, logo_url: string, protocol: string, provider: string, provision_attachments_permission: bool, provision_company: string, provision_dav_permission: bool, provision_email_signup_groups: string, provision_ftp_permission: bool, provision_group_default: string, provision_group_exclusion: string, provision_group_inclusion: string, provision_group_required: string, provision_groups: bool, provision_sftp_permission: bool, provision_site_admin_groups: string, provision_time_zone: string, provision_users: bool, saml_provider_cert_fingerprint: string, saml_provider_issuer_url: string, saml_provider_metadata_content: string, saml_provider_metadata_url: string, saml_provider_slo_target_url: string, saml_provider_sso_target_url: string, scim_authentication_method: string, scim_oauth_access_token: string, scim_oauth_access_token_expires_at: string, scim_username: string, subdomain: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -8311,7 +8333,7 @@ export def "get-styles-path" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<id: int, logo: record<name: string, uri: string>, path: string, thumbnail: record<name: string, uri: string>> {
+]: nothing -> oneof<record<id: int, logo: record<name: string, uri: string>, path: string, thumbnail: record<name: string, uri: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
@@ -8348,7 +8370,7 @@ export def "patch-styles-path" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   file: string # Logo for custom branding. (format: binary)
-]: any -> record<id: int, logo: record<name: string, uri: string>, path: string, thumbnail: record<name: string, uri: string>> {
+]: any -> oneof<record<id: int, logo: record<name: string, uri: string>, path: string, thumbnail: record<name: string, uri: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -8397,7 +8419,7 @@ export def "get-usage-daily-snapshots" [
   --filter-like: record # If set, return records where the specified field is equal to the supplied value. Valid fields are `date` and `usage_snapshot_id`. Valid field combinations are `[ usage_snapshot_id, date ]`.
   --filter-lt: record # If set, return records where the specified field is less than the supplied value. Valid fields are `date` and `usage_snapshot_id`. Valid field combinations are `[ usage_snapshot_id, date ]`.
   --filter-lteq: record # If set, return records where the specified field is less than or equal to the supplied value. Valid fields are `date` and `usage_snapshot_id`. Valid field combinations are `[ usage_snapshot_id, date ]`.
-]: nothing -> table<api_usage_available: bool, current_storage: int, date: string, deleted_files_counted_in_minimum: int, deleted_files_storage: int, id: int, read_api_usage: int, root_storage: int, usage_by_top_level_dir: record, user_count: int, write_api_usage: int> {
+]: nothing -> oneof<table<api_usage_available: bool, current_storage: int, date: string, deleted_files_counted_in_minimum: int, deleted_files_storage: int, id: int, read_api_usage: int, root_storage: int, usage_by_top_level_dir: record, user_count: int, write_api_usage: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort_by" $sort_by "multi") (serialize-qp "filter" $filter "multi") (serialize-qp "filter_gt" $filter_gt "multi") (serialize-qp "filter_gteq" $filter_gteq "multi") (serialize-qp "filter_like" $filter_like "multi") (serialize-qp "filter_lt" $filter_lt "multi") (serialize-qp "filter_lteq" $filter_lteq "multi")] | flatten | str join "&"
@@ -8434,7 +8456,7 @@ export def "get-usage-snapshots" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Used for pagination. When a list request has more records available, cursors are provided in the response headers `X-Files-Cursor-Next` and `X-Files-Cursor-Prev`. Send one of those cursor value here to resume an existing list from the next available record. Note: many of our SDKs have iterator methods that will automatically handle cursor-based pagination.
   --per-page: int # Number of records to show per page. (Max: 10,000, 1,000 or less is recommended). (format: int32)
-]: nothing -> table<bytes_sent: float, current_storage: float, deleted_files_counted_in_minimum: float, deleted_files_storage: float, end_at: string, high_water_storage: float, high_water_user_count: float, id: int, root_storage: float, start_at: string, sync_bytes_received: float, sync_bytes_sent: float, total_billable_transfer_usage: float, total_billable_usage: float, usage_by_top_level_dir: record> {
+]: nothing -> oneof<table<bytes_sent: float, current_storage: float, deleted_files_counted_in_minimum: float, deleted_files_storage: float, end_at: string, high_water_storage: float, high_water_user_count: float, id: int, root_storage: float, start_at: string, sync_bytes_received: float, sync_bytes_sent: float, total_billable_transfer_usage: float, total_billable_usage: float, usage_by_top_level_dir: record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
@@ -8513,7 +8535,7 @@ export def "patch-user" [
   --time-zone: string # User time zone (e.g. Pacific Time (US & Canada))
   --user-root: string # Root folder for FTP (and optionally SFTP if the appropriate site-wide setting is set.) Note that this is not used for API, Desktop, or Web interface. (e.g. example)
   --username: string # User's username (e.g. user)
-]: any -> record<active_2fa: bool, admin_group_ids: list<int>, allowed_ips: string, api_keys_count: int, attachments_permission: bool, authenticate_until: string, authentication_method: string, avatar_url: string, billing_permission: bool, bypass_inactive_disable: bool, bypass_site_allowed_ips: bool, company: string, created_at: string, dav_permission: bool, days_remaining_until_password_expire: int, disabled: bool, email: string, externally_managed: bool, first_login_at: string, ftp_permission: bool, group_ids: string, header_text: string, id: int, language: string, last_active_at: string, last_api_use_at: string, last_dav_login_at: string, last_desktop_login_at: string, last_ftp_login_at: string, last_login_at: string, last_protocol_cipher: string, last_restapi_login_at: string, last_sftp_login_at: string, last_web_login_at: string, lockout_expires: string, name: string, notes: string, notification_daily_send_time: int, office_integration_enabled: bool, password_expire_at: string, password_expired: bool, password_set_at: string, password_validity_days: int, public_keys_count: int, receive_admin_alerts: bool, require_2fa: string, require_password_change: bool, restapi_permission: bool, self_managed: bool, sftp_permission: bool, site_admin: bool, skip_welcome_screen: bool, ssl_required: string, sso_strategy_id: int, subscribe_to_newsletter: bool, time_zone: string, type_of_2fa: string, user_root: string, username: string> {
+]: any -> oneof<record<active_2fa: bool, admin_group_ids: list<int>, allowed_ips: string, api_keys_count: int, attachments_permission: bool, authenticate_until: string, authentication_method: string, avatar_url: string, billing_permission: bool, bypass_inactive_disable: bool, bypass_site_allowed_ips: bool, company: string, created_at: string, dav_permission: bool, days_remaining_until_password_expire: int, disabled: bool, email: string, externally_managed: bool, first_login_at: string, ftp_permission: bool, group_ids: string, header_text: string, id: int, language: string, last_active_at: string, last_api_use_at: string, last_dav_login_at: string, last_desktop_login_at: string, last_ftp_login_at: string, last_login_at: string, last_protocol_cipher: string, last_restapi_login_at: string, last_sftp_login_at: string, last_web_login_at: string, lockout_expires: string, name: string, notes: string, notification_daily_send_time: int, office_integration_enabled: bool, password_expire_at: string, password_expired: bool, password_set_at: string, password_validity_days: int, public_keys_count: int, receive_admin_alerts: bool, require_2fa: string, require_password_change: bool, restapi_permission: bool, self_managed: bool, sftp_permission: bool, site_admin: bool, skip_welcome_screen: bool, ssl_required: string, sso_strategy_id: int, subscribe_to_newsletter: bool, time_zone: string, type_of_2fa: string, user_root: string, username: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -8562,7 +8584,7 @@ export def "get-user-api-keys" [
   --filter-like: record # If set, return records where the specified field is equal to the supplied value. Valid fields are `expires_at`.
   --filter-lt: record # If set, return records where the specified field is less than the supplied value. Valid fields are `expires_at`.
   --filter-lteq: record # If set, return records where the specified field is less than or equal to the supplied value. Valid fields are `expires_at`.
-]: nothing -> table<created_at: string, description: string, descriptive_label: string, expires_at: string, id: int, key: string, last_use_at: string, name: string, path: string, permission_set: string, platform: string, url: string, user_id: int> {
+]: nothing -> oneof<table<created_at: string, description: string, descriptive_label: string, expires_at: string, id: int, key: string, last_use_at: string, name: string, path: string, permission_set: string, platform: string, url: string, user_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "user_id" $user_id "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort_by" $sort_by "multi") (serialize-qp "filter" $filter "multi") (serialize-qp "filter_gt" $filter_gt "multi") (serialize-qp "filter_gteq" $filter_gteq "multi") (serialize-qp "filter_like" $filter_like "multi") (serialize-qp "filter_lt" $filter_lt "multi") (serialize-qp "filter_lteq" $filter_lteq "multi")] | flatten | str join "&"
@@ -8603,7 +8625,7 @@ export def "post-user-api-keys" [
   --path: string # Folder path restriction for this api key. (e.g. shared/docs)
   --permission-set: string@permission-set-completer # Permissions for this API Key. Keys with the `desktop_app` permission set only have the ability to do the functions provided in our Desktop App (File and Share Link operations). Additional permission sets may become available in the future, such as for a Site Admin to give a key with no administrator privileges. If you have ideas for permission sets, please let us know. (default: full, e.g. full)
   --user-id: int # User ID. Provide a value of `0` to operate the current session's user. (format: int32)
-]: any -> record<created_at: string, description: string, descriptive_label: string, expires_at: string, id: int, key: string, last_use_at: string, name: string, path: string, permission_set: string, platform: string, url: string, user_id: int> {
+]: any -> oneof<record<created_at: string, description: string, descriptive_label: string, expires_at: string, id: int, key: string, last_use_at: string, name: string, path: string, permission_set: string, platform: string, url: string, user_id: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -8646,7 +8668,7 @@ export def "get-user-groups" [
   --cursor: string # Used for pagination. When a list request has more records available, cursors are provided in the response headers `X-Files-Cursor-Next` and `X-Files-Cursor-Prev`. Send one of those cursor value here to resume an existing list from the next available record. Note: many of our SDKs have iterator methods that will automatically handle cursor-based pagination.
   --per-page: int # Number of records to show per page. (Max: 10,000, 1,000 or less is recommended). (format: int32)
   --group-id: int # Group ID. If provided, will return group_users of this group. (format: int32)
-]: nothing -> table<admin: bool, group_id: int, group_name: string, user_id: int, usernames: list<string>> {
+]: nothing -> oneof<table<admin: bool, group_id: int, group_name: string, user_id: int, usernames: list<string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "user_id" $user_id "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "group_id" $group_id "scalar")] | flatten | str join "&"
@@ -8684,7 +8706,7 @@ export def "get-user-public-keys" [
   --user-id: int # User ID. Provide a value of `0` to operate the current session's user. (format: int32)
   --cursor: string # Used for pagination. When a list request has more records available, cursors are provided in the response headers `X-Files-Cursor-Next` and `X-Files-Cursor-Prev`. Send one of those cursor value here to resume an existing list from the next available record. Note: many of our SDKs have iterator methods that will automatically handle cursor-based pagination.
   --per-page: int # Number of records to show per page. (Max: 10,000, 1,000 or less is recommended). (format: int32)
-]: nothing -> table<created_at: string, fingerprint: string, id: int, title: string> {
+]: nothing -> oneof<table<created_at: string, fingerprint: string, id: int, title: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "user_id" $user_id "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
@@ -8722,7 +8744,7 @@ export def "post-user-public-keys" [
   public_key: string # Actual contents of SSH key.
   title: string # Internal reference for key. (e.g. My Main Key)
   --user-id: int # User ID. Provide a value of `0` to operate the current session's user. (format: int32)
-]: any -> record<created_at: string, fingerprint: string, id: int, title: string> {
+]: any -> oneof<record<created_at: string, fingerprint: string, id: int, title: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -8764,7 +8786,7 @@ export def "get-user-cipher-uses" [
   --user-id: int # User ID. Provide a value of `0` to operate the current session's user. (format: int32)
   --cursor: string # Used for pagination. When a list request has more records available, cursors are provided in the response headers `X-Files-Cursor-Next` and `X-Files-Cursor-Prev`. Send one of those cursor value here to resume an existing list from the next available record. Note: many of our SDKs have iterator methods that will automatically handle cursor-based pagination.
   --per-page: int # Number of records to show per page. (Max: 10,000, 1,000 or less is recommended). (format: int32)
-]: nothing -> table<created_at: string, id: int, interface: string, protocol_cipher: string, updated_at: string, user_id: int> {
+]: nothing -> oneof<table<created_at: string, id: int, interface: string, protocol_cipher: string, updated_at: string, user_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "user_id" $user_id "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
@@ -8801,7 +8823,7 @@ export def "get-user-requests" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Used for pagination. When a list request has more records available, cursors are provided in the response headers `X-Files-Cursor-Next` and `X-Files-Cursor-Prev`. Send one of those cursor value here to resume an existing list from the next available record. Note: many of our SDKs have iterator methods that will automatically handle cursor-based pagination.
   --per-page: int # Number of records to show per page. (Max: 10,000, 1,000 or less is recommended). (format: int32)
-]: nothing -> table<details: string, email: string, id: int, name: string> {
+]: nothing -> oneof<table<details: string, email: string, id: int, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
@@ -8839,7 +8861,7 @@ export def "post-user-requests" [
   details: string # Details of the user request
   email: string # Email of user requested
   name: string # Name of user requested
-]: any -> record<details: string, email: string, id: int, name: string> {
+]: any -> oneof<record<details: string, email: string, id: int, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -8915,7 +8937,7 @@ export def "get-user-requests-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<details: string, email: string, id: int, name: string> {
+]: nothing -> oneof<record<details: string, email: string, id: int, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -8968,7 +8990,7 @@ export def "get-users" [
   --q-password-validity-days: string # If set, list only users with overridden password validity days setting.
   --q-ssl-required: string # If set, list only users with overridden SSL required setting.
   --search: string # Searches for partial matches of name, username, or email.
-]: nothing -> table<active_2fa: bool, admin_group_ids: list<int>, allowed_ips: string, api_keys_count: int, attachments_permission: bool, authenticate_until: string, authentication_method: string, avatar_url: string, billing_permission: bool, bypass_inactive_disable: bool, bypass_site_allowed_ips: bool, company: string, created_at: string, dav_permission: bool, days_remaining_until_password_expire: int, disabled: bool, email: string, externally_managed: bool, first_login_at: string, ftp_permission: bool, group_ids: string, header_text: string, id: int, language: string, last_active_at: string, last_api_use_at: string, last_dav_login_at: string, last_desktop_login_at: string, last_ftp_login_at: string, last_login_at: string, last_protocol_cipher: string, last_restapi_login_at: string, last_sftp_login_at: string, last_web_login_at: string, lockout_expires: string, name: string, notes: string, notification_daily_send_time: int, office_integration_enabled: bool, password_expire_at: string, password_expired: bool, password_set_at: string, password_validity_days: int, public_keys_count: int, receive_admin_alerts: bool, require_2fa: string, require_password_change: bool, restapi_permission: bool, self_managed: bool, sftp_permission: bool, site_admin: bool, skip_welcome_screen: bool, ssl_required: string, sso_strategy_id: int, subscribe_to_newsletter: bool, time_zone: string, type_of_2fa: string, user_root: string, username: string> {
+]: nothing -> oneof<table<active_2fa: bool, admin_group_ids: list<int>, allowed_ips: string, api_keys_count: int, attachments_permission: bool, authenticate_until: string, authentication_method: string, avatar_url: string, billing_permission: bool, bypass_inactive_disable: bool, bypass_site_allowed_ips: bool, company: string, created_at: string, dav_permission: bool, days_remaining_until_password_expire: int, disabled: bool, email: string, externally_managed: bool, first_login_at: string, ftp_permission: bool, group_ids: string, header_text: string, id: int, language: string, last_active_at: string, last_api_use_at: string, last_dav_login_at: string, last_desktop_login_at: string, last_ftp_login_at: string, last_login_at: string, last_protocol_cipher: string, last_restapi_login_at: string, last_sftp_login_at: string, last_web_login_at: string, lockout_expires: string, name: string, notes: string, notification_daily_send_time: int, office_integration_enabled: bool, password_expire_at: string, password_expired: bool, password_set_at: string, password_validity_days: int, public_keys_count: int, receive_admin_alerts: bool, require_2fa: string, require_password_change: bool, restapi_permission: bool, self_managed: bool, sftp_permission: bool, site_admin: bool, skip_welcome_screen: bool, ssl_required: string, sso_strategy_id: int, subscribe_to_newsletter: bool, time_zone: string, type_of_2fa: string, user_root: string, username: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort_by" $sort_by "multi") (serialize-qp "filter" $filter "multi") (serialize-qp "filter_gt" $filter_gt "multi") (serialize-qp "filter_gteq" $filter_gteq "multi") (serialize-qp "filter_like" $filter_like "multi") (serialize-qp "filter_lt" $filter_lt "multi") (serialize-qp "filter_lteq" $filter_lteq "multi") (serialize-qp "ids" $ids "scalar") (serialize-qp "q[username]" $q_username "scalar") (serialize-qp "q[email]" $q_email "scalar") (serialize-qp "q[notes]" $q_notes "scalar") (serialize-qp "q[admin]" $q_admin "scalar") (serialize-qp "q[allowed_ips]" $q_allowed_ips "scalar") (serialize-qp "q[password_validity_days]" $q_password_validity_days "scalar") (serialize-qp "q[ssl_required]" $q_ssl_required "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
@@ -9047,7 +9069,7 @@ export def "post-users" [
   --time-zone: string # User time zone (e.g. Pacific Time (US & Canada))
   --user-root: string # Root folder for FTP (and optionally SFTP if the appropriate site-wide setting is set.) Note that this is not used for API, Desktop, or Web interface. (e.g. example)
   --username: string # User's username (e.g. user)
-]: any -> record<active_2fa: bool, admin_group_ids: list<int>, allowed_ips: string, api_keys_count: int, attachments_permission: bool, authenticate_until: string, authentication_method: string, avatar_url: string, billing_permission: bool, bypass_inactive_disable: bool, bypass_site_allowed_ips: bool, company: string, created_at: string, dav_permission: bool, days_remaining_until_password_expire: int, disabled: bool, email: string, externally_managed: bool, first_login_at: string, ftp_permission: bool, group_ids: string, header_text: string, id: int, language: string, last_active_at: string, last_api_use_at: string, last_dav_login_at: string, last_desktop_login_at: string, last_ftp_login_at: string, last_login_at: string, last_protocol_cipher: string, last_restapi_login_at: string, last_sftp_login_at: string, last_web_login_at: string, lockout_expires: string, name: string, notes: string, notification_daily_send_time: int, office_integration_enabled: bool, password_expire_at: string, password_expired: bool, password_set_at: string, password_validity_days: int, public_keys_count: int, receive_admin_alerts: bool, require_2fa: string, require_password_change: bool, restapi_permission: bool, self_managed: bool, sftp_permission: bool, site_admin: bool, skip_welcome_screen: bool, ssl_required: string, sso_strategy_id: int, subscribe_to_newsletter: bool, time_zone: string, type_of_2fa: string, user_root: string, username: string> {
+]: any -> oneof<record<active_2fa: bool, admin_group_ids: list<int>, allowed_ips: string, api_keys_count: int, attachments_permission: bool, authenticate_until: string, authentication_method: string, avatar_url: string, billing_permission: bool, bypass_inactive_disable: bool, bypass_site_allowed_ips: bool, company: string, created_at: string, dav_permission: bool, days_remaining_until_password_expire: int, disabled: bool, email: string, externally_managed: bool, first_login_at: string, ftp_permission: bool, group_ids: string, header_text: string, id: int, language: string, last_active_at: string, last_api_use_at: string, last_dav_login_at: string, last_desktop_login_at: string, last_ftp_login_at: string, last_login_at: string, last_protocol_cipher: string, last_restapi_login_at: string, last_sftp_login_at: string, last_web_login_at: string, lockout_expires: string, name: string, notes: string, notification_daily_send_time: int, office_integration_enabled: bool, password_expire_at: string, password_expired: bool, password_set_at: string, password_validity_days: int, public_keys_count: int, receive_admin_alerts: bool, require_2fa: string, require_password_change: bool, restapi_permission: bool, self_managed: bool, sftp_permission: bool, site_admin: bool, skip_welcome_screen: bool, ssl_required: string, sso_strategy_id: int, subscribe_to_newsletter: bool, time_zone: string, type_of_2fa: string, user_root: string, username: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -9123,7 +9145,7 @@ export def "get-users-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<active_2fa: bool, admin_group_ids: list<int>, allowed_ips: string, api_keys_count: int, attachments_permission: bool, authenticate_until: string, authentication_method: string, avatar_url: string, billing_permission: bool, bypass_inactive_disable: bool, bypass_site_allowed_ips: bool, company: string, created_at: string, dav_permission: bool, days_remaining_until_password_expire: int, disabled: bool, email: string, externally_managed: bool, first_login_at: string, ftp_permission: bool, group_ids: string, header_text: string, id: int, language: string, last_active_at: string, last_api_use_at: string, last_dav_login_at: string, last_desktop_login_at: string, last_ftp_login_at: string, last_login_at: string, last_protocol_cipher: string, last_restapi_login_at: string, last_sftp_login_at: string, last_web_login_at: string, lockout_expires: string, name: string, notes: string, notification_daily_send_time: int, office_integration_enabled: bool, password_expire_at: string, password_expired: bool, password_set_at: string, password_validity_days: int, public_keys_count: int, receive_admin_alerts: bool, require_2fa: string, require_password_change: bool, restapi_permission: bool, self_managed: bool, sftp_permission: bool, site_admin: bool, skip_welcome_screen: bool, ssl_required: string, sso_strategy_id: int, subscribe_to_newsletter: bool, time_zone: string, type_of_2fa: string, user_root: string, username: string> {
+]: nothing -> oneof<record<active_2fa: bool, admin_group_ids: list<int>, allowed_ips: string, api_keys_count: int, attachments_permission: bool, authenticate_until: string, authentication_method: string, avatar_url: string, billing_permission: bool, bypass_inactive_disable: bool, bypass_site_allowed_ips: bool, company: string, created_at: string, dav_permission: bool, days_remaining_until_password_expire: int, disabled: bool, email: string, externally_managed: bool, first_login_at: string, ftp_permission: bool, group_ids: string, header_text: string, id: int, language: string, last_active_at: string, last_api_use_at: string, last_dav_login_at: string, last_desktop_login_at: string, last_ftp_login_at: string, last_login_at: string, last_protocol_cipher: string, last_restapi_login_at: string, last_sftp_login_at: string, last_web_login_at: string, lockout_expires: string, name: string, notes: string, notification_daily_send_time: int, office_integration_enabled: bool, password_expire_at: string, password_expired: bool, password_set_at: string, password_validity_days: int, public_keys_count: int, receive_admin_alerts: bool, require_2fa: string, require_password_change: bool, restapi_permission: bool, self_managed: bool, sftp_permission: bool, site_admin: bool, skip_welcome_screen: bool, ssl_required: string, sso_strategy_id: int, subscribe_to_newsletter: bool, time_zone: string, type_of_2fa: string, user_root: string, username: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -9203,7 +9225,7 @@ export def "patch-users-id" [
   --time-zone: string # User time zone (e.g. Pacific Time (US & Canada))
   --user-root: string # Root folder for FTP (and optionally SFTP if the appropriate site-wide setting is set.) Note that this is not used for API, Desktop, or Web interface. (e.g. example)
   --username: string # User's username (e.g. user)
-]: any -> record<active_2fa: bool, admin_group_ids: list<int>, allowed_ips: string, api_keys_count: int, attachments_permission: bool, authenticate_until: string, authentication_method: string, avatar_url: string, billing_permission: bool, bypass_inactive_disable: bool, bypass_site_allowed_ips: bool, company: string, created_at: string, dav_permission: bool, days_remaining_until_password_expire: int, disabled: bool, email: string, externally_managed: bool, first_login_at: string, ftp_permission: bool, group_ids: string, header_text: string, id: int, language: string, last_active_at: string, last_api_use_at: string, last_dav_login_at: string, last_desktop_login_at: string, last_ftp_login_at: string, last_login_at: string, last_protocol_cipher: string, last_restapi_login_at: string, last_sftp_login_at: string, last_web_login_at: string, lockout_expires: string, name: string, notes: string, notification_daily_send_time: int, office_integration_enabled: bool, password_expire_at: string, password_expired: bool, password_set_at: string, password_validity_days: int, public_keys_count: int, receive_admin_alerts: bool, require_2fa: string, require_password_change: bool, restapi_permission: bool, self_managed: bool, sftp_permission: bool, site_admin: bool, skip_welcome_screen: bool, ssl_required: string, sso_strategy_id: int, subscribe_to_newsletter: bool, time_zone: string, type_of_2fa: string, user_root: string, username: string> {
+]: any -> oneof<record<active_2fa: bool, admin_group_ids: list<int>, allowed_ips: string, api_keys_count: int, attachments_permission: bool, authenticate_until: string, authentication_method: string, avatar_url: string, billing_permission: bool, bypass_inactive_disable: bool, bypass_site_allowed_ips: bool, company: string, created_at: string, dav_permission: bool, days_remaining_until_password_expire: int, disabled: bool, email: string, externally_managed: bool, first_login_at: string, ftp_permission: bool, group_ids: string, header_text: string, id: int, language: string, last_active_at: string, last_api_use_at: string, last_dav_login_at: string, last_desktop_login_at: string, last_ftp_login_at: string, last_login_at: string, last_protocol_cipher: string, last_restapi_login_at: string, last_sftp_login_at: string, last_web_login_at: string, lockout_expires: string, name: string, notes: string, notification_daily_send_time: int, office_integration_enabled: bool, password_expire_at: string, password_expired: bool, password_set_at: string, password_validity_days: int, public_keys_count: int, receive_admin_alerts: bool, require_2fa: string, require_password_change: bool, restapi_permission: bool, self_managed: bool, sftp_permission: bool, site_admin: bool, skip_welcome_screen: bool, ssl_required: string, sso_strategy_id: int, subscribe_to_newsletter: bool, time_zone: string, type_of_2fa: string, user_root: string, username: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -9361,7 +9383,7 @@ export def "get-users-user-id-api-keys" [
   --filter-like: record # If set, return records where the specified field is equal to the supplied value. Valid fields are `expires_at`.
   --filter-lt: record # If set, return records where the specified field is less than the supplied value. Valid fields are `expires_at`.
   --filter-lteq: record # If set, return records where the specified field is less than or equal to the supplied value. Valid fields are `expires_at`.
-]: nothing -> table<created_at: string, description: string, descriptive_label: string, expires_at: string, id: int, key: string, last_use_at: string, name: string, path: string, permission_set: string, platform: string, url: string, user_id: int> {
+]: nothing -> oneof<table<created_at: string, description: string, descriptive_label: string, expires_at: string, id: int, key: string, last_use_at: string, name: string, path: string, permission_set: string, platform: string, url: string, user_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -9403,7 +9425,7 @@ export def "post-users-user-id-api-keys" [
   --name: string # Internal name for the API Key. For your use. (e.g. My Main API Key)
   --path: string # Folder path restriction for this api key. (e.g. shared/docs)
   --permission-set: string@permission-set-completer # Permissions for this API Key. Keys with the `desktop_app` permission set only have the ability to do the functions provided in our Desktop App (File and Share Link operations). Additional permission sets may become available in the future, such as for a Site Admin to give a key with no administrator privileges. If you have ideas for permission sets, please let us know. (default: full, e.g. full)
-]: any -> record<created_at: string, description: string, descriptive_label: string, expires_at: string, id: int, key: string, last_use_at: string, name: string, path: string, permission_set: string, platform: string, url: string, user_id: int> {
+]: any -> oneof<record<created_at: string, description: string, descriptive_label: string, expires_at: string, id: int, key: string, last_use_at: string, name: string, path: string, permission_set: string, platform: string, url: string, user_id: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -9446,7 +9468,7 @@ export def "get-users-user-id-cipher-uses" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Used for pagination. When a list request has more records available, cursors are provided in the response headers `X-Files-Cursor-Next` and `X-Files-Cursor-Prev`. Send one of those cursor value here to resume an existing list from the next available record. Note: many of our SDKs have iterator methods that will automatically handle cursor-based pagination.
   --per-page: int # Number of records to show per page. (Max: 10,000, 1,000 or less is recommended). (format: int32)
-]: nothing -> table<created_at: string, id: int, interface: string, protocol_cipher: string, updated_at: string, user_id: int> {
+]: nothing -> oneof<table<created_at: string, id: int, interface: string, protocol_cipher: string, updated_at: string, user_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -9486,7 +9508,7 @@ export def "get-users-user-id-groups" [
   --cursor: string # Used for pagination. When a list request has more records available, cursors are provided in the response headers `X-Files-Cursor-Next` and `X-Files-Cursor-Prev`. Send one of those cursor value here to resume an existing list from the next available record. Note: many of our SDKs have iterator methods that will automatically handle cursor-based pagination.
   --per-page: int # Number of records to show per page. (Max: 10,000, 1,000 or less is recommended). (format: int32)
   --group-id: int # Group ID. If provided, will return group_users of this group. (format: int32)
-]: nothing -> table<admin: bool, group_id: int, group_name: string, user_id: int, usernames: list<string>> {
+]: nothing -> oneof<table<admin: bool, group_id: int, group_name: string, user_id: int, usernames: list<string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -9535,7 +9557,7 @@ export def "get-users-user-id-permissions" [
   --path: string # DEPRECATED: Permission path. If provided, will scope permissions to this path. Use `filter[path]` instead.
   --group-id: string # DEPRECATED: Group ID. If provided, will scope permissions to this group. Use `filter[group_id]` instead.`
   --include-groups: oneof<nothing, bool> # If searching by user or group, also include user's permissions that are inherited from its groups?
-]: nothing -> table<group_id: int, group_name: string, id: int, path: string, permission: string, recursive: bool, user_id: int, username: string> {
+]: nothing -> oneof<table<group_id: int, group_name: string, id: int, path: string, permission: string, recursive: bool, user_id: int, username: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -9574,7 +9596,7 @@ export def "get-users-user-id-public-keys" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Used for pagination. When a list request has more records available, cursors are provided in the response headers `X-Files-Cursor-Next` and `X-Files-Cursor-Prev`. Send one of those cursor value here to resume an existing list from the next available record. Note: many of our SDKs have iterator methods that will automatically handle cursor-based pagination.
   --per-page: int # Number of records to show per page. (Max: 10,000, 1,000 or less is recommended). (format: int32)
-]: nothing -> table<created_at: string, fingerprint: string, id: int, title: string> {
+]: nothing -> oneof<table<created_at: string, fingerprint: string, id: int, title: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -9613,7 +9635,7 @@ export def "post-users-user-id-public-keys" [
   --dry-run(-n) # Return the request that would be sent without executing it
   public_key: string # Actual contents of SSH key.
   title: string # Internal reference for key. (e.g. My Main Key)
-]: any -> record<created_at: string, fingerprint: string, id: int, title: string> {
+]: any -> oneof<record<created_at: string, fingerprint: string, id: int, title: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -9662,7 +9684,7 @@ export def "post-webhook-tests" [
   --method: string # HTTP method(GET or POST). (e.g. GET)
   --raw-body: string # raw body text (e.g. test body)
   url: string # URL for testing the webhook. (e.g. https://www.site.com/...)
-]: any -> record<code: int, data: record<dynamic: record>, message: string, status: string, success: bool> {
+]: any -> oneof<record<code: int, data: record<dynamic: record>, message: string, status: string, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)

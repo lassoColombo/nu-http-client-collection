@@ -12,27 +12,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -40,8 +49,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -52,7 +66,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -87,7 +110,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -142,9 +166,9 @@ def type-completer-5 [] { ["brand" "clip" "episode" "episode,clip" "series"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-broadcasts" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-broadcasts" "get-broadcasts-latest" "get-broadcast-by-pid" "get-categories" "get-categories-id" "get-collection-members" "get-experience-homepage" "get-music-popular-artists" "get-music-popular-artist-by-id" "get-music-popular-playlists" "get-music-popular-playlist-by-id" "get-music-popular-tracks" "get-music-popular-track-by-id" "delete-my-categories-follows" "get-my-categories-follows" "post-my-categories-follows" "get-music-export" "get-music-export-jobs" "post-music-export-job" "get-music-export-tracks" "get-personalised-music-favourites" "post-personalised-music-favourites-batch" "put-personalised-music-favourites-batch" "get-personalised-music-favourites-by-type" "delete-personalised-music-favourites-by-type-by-id" "get-personalised-music-favourites-by-type-by-id" "post-personalised-music-favourites-by-type-by-id" "put-personalised-music-favourites-by-type-by-id" "get-personalised-music-follows" "post-personalised-music-follows-batch" "put-personalised-music-follows-batch" "get-personalised-music-follows-by-type" "delete-personalised-music-follows-by-type-by-id" "get-personalised-music-follows-by-type-by-id" "post-personalised-music-follows-by-type-by-id" "put-personalised-music-follows-by-type-by-id" "delete-music-preferences-export" "get-music-preferences-export" "post-music-preferences-export" "delete-music-preferences-export-vendor" "get-music-preferences-export-vendor" "post-music-preferences-export-vendor" "put-music-preferences-export-vendor" "delete-my-networks-follows" "get-my-networks-follows" "post-my-networks-follows" "post-my-plays" "suggest-container" "get-container" "get-recommendations" "get-personalised-radio-favourites" "post-personalised-radio-batch" "put-personalised-radio-batch" "get-personalised-radio-favourites-by-type" "delete-personalised-radio-by-activity-type-by-id" "get-personalised-radio-by-activity-type-by-id" "post-personalised-radio-by-activity-type-by-id" "put-personalised-radio-by-activity-type-by-id" "get-personalised-radio-follows" "post-personalised-radio-follows-batch" "put-personalised-radio-follows-batch" "get-personalised-radio-follows-by-type" "delete-personalised-radio-follows-by-type-by-id" "get-personalised-radio-follows-by-type-by-id" "post-personalised-radio-follows-by-type-by-id" "put-personalised-radio-follows-by-type-by-id" "get-personalised-radio-plays" "get-podcasts" "get-podcasts-featured" "get-podcast-by-pid" "get-podcast-episodes" "get-radio-networks" "get-popular-episodes-clips" "get-radio-programmes" "get-radio-programmes-by-pid" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -181,7 +205,7 @@ export def "get-broadcasts" [
   --date: string # Filter by date. E.g. 2016-06-17
   --sort: string@sort-completer # Sort by provided query. E.g. 'start_at' sorts in ascending order, and '-start_at' sorts in descending order
   --x-api-key: string # API_KEY (required)
-]: nothing -> record<_schema: string, limit: int, offset: int, results: table<duration: int, end: string, is_audio_described: bool, is_blanked: bool, is_critical: bool, is_live: bool, is_repeat: bool, is_webcast: bool, pid: string, programme: record, service_id: string, start: string, type: string, version_pid: string>, total: int> {
+]: nothing -> oneof<record<_schema: string, limit: int, offset: int, results: table<duration: int, end: string, is_audio_described: bool, is_blanked: bool, is_critical: bool, is_live: bool, is_repeat: bool, is_webcast: bool, pid: string, programme: record, service_id: string, start: string, type: string, version_pid: string>, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
@@ -226,7 +250,7 @@ export def "get-broadcasts-latest" [
   --previous: string # Filter what was on air previously in minutes. E.g. '240' returns programmes broadcasted in the previous four hurs
   --sort: string@sort-completer # Sort by provided query. E.g. 'start_at' sorts in ascending order, and '-start_at' sorts in descending order
   --x-api-key: string # API_KEY (required)
-]: nothing -> record<_schema: string, limit: int, offset: int, results: table<duration: int, end: string, is_audio_described: bool, is_blanked: bool, is_critical: bool, is_live: bool, is_repeat: bool, is_webcast: bool, pid: string, programme: record, service_id: string, start: string, type: string, version_pid: string>, total: int> {
+]: nothing -> oneof<record<_schema: string, limit: int, offset: int, results: table<duration: int, end: string, is_audio_described: bool, is_blanked: bool, is_critical: bool, is_live: bool, is_repeat: bool, is_webcast: bool, pid: string, programme: record, service_id: string, start: string, type: string, version_pid: string>, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
@@ -266,7 +290,7 @@ export def "get-broadcast-by-pid" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-api-key: string # API_KEY (required)
-]: nothing -> record<_schema: string, limit: int, offset: int, results: table<duration: int, end: string, is_audio_described: bool, is_blanked: bool, is_critical: bool, is_live: bool, is_repeat: bool, is_webcast: bool, pid: string, programme: record, service_id: string, start: string, type: string, version_pid: string>, total: int> {
+]: nothing -> oneof<record<_schema: string, limit: int, offset: int, results: table<duration: int, end: string, is_audio_described: bool, is_blanked: bool, is_critical: bool, is_live: bool, is_repeat: bool, is_webcast: bool, pid: string, programme: record, service_id: string, start: string, type: string, version_pid: string>, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pid | is-empty) { error make --unspanned { msg: "path parameter 'pid' must be non-empty" } }
@@ -305,7 +329,7 @@ export def "get-categories" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string@kind-completer # Filter by provided query. E.g. 'promoted' returns promoted categories
   --x-api-key: string # API_KEY (required)
-]: nothing -> record<_schema: string, limit: int, offset: int, results: table<category_type: string, child_categories: list, depth: int, id: string, pip_id: string, title: string, type: string, url_key: string>, total: int> {
+]: nothing -> oneof<record<_schema: string, limit: int, offset: int, results: table<category_type: string, child_categories: list, depth: int, id: string, pip_id: string, title: string, type: string, url_key: string>, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
@@ -344,7 +368,7 @@ export def "get-categories-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-api-key: string # API_KEY (required)
-]: nothing -> record<_schema: string, limit: int, offset: int, results: table<category_type: string, child_categories: list, depth: int, id: string, pip_id: string, title: string, type: string, url_key: string>, total: int> {
+]: nothing -> oneof<record<_schema: string, limit: int, offset: int, results: table<category_type: string, child_categories: list, depth: int, id: string, pip_id: string, title: string, type: string, url_key: string>, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -386,7 +410,7 @@ export def "get-collection-members" [
   --offset: int # Paginated results offset
   --limit: int # Paginated results limit
   --x-api-key: string # API_KEY (required)
-]: nothing -> record<_schema: string, limit: int, offset: int, results: table<pid: string, type: string>, total: int> {
+]: nothing -> oneof<record<_schema: string, limit: int, offset: int, results: table<pid: string, type: string>, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pid | is-empty) { error make --unspanned { msg: "path parameter 'pid' must be non-empty" } }
@@ -426,7 +450,7 @@ export def "get-experience-homepage" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-api-key: string # API_KEY (required)
-]: nothing -> record<_schema: string, data: table<description: string, title: string, type: string, uri: string>> {
+]: nothing -> oneof<record<_schema: string, data: table<description: string, title: string, type: string, uri: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
@@ -469,7 +493,7 @@ export def "get-music-popular-artists" [
   --offset: int # Paginated results offset
   --limit: int # Paginated results limit
   --x-api-key: string # API_KEY (required)
-]: nothing -> record<limit: int, method: string, offset: int, repliedAt: string, results: table<gid: string, id: string, imagePid: string, name: string, score: int, sortName: string>, schema: string, total: int> {
+]: nothing -> oneof<record<limit: int, method: string, offset: int, repliedAt: string, results: table<gid: string, id: string, imagePid: string, name: string, score: int, sortName: string>, schema: string, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
@@ -512,7 +536,7 @@ export def "get-music-popular-artist-by-id" [
   --until: string # ISO 8601 Date yyyy-mm-dd. Returns items between given 'since' and 'until' date params
   --decomposed: oneof<nothing, bool> # In addition to the overall score, return a list of scores broken down by day N.B Must be used in conjunction with since and/or until and since is >= 31 days
   --x-api-key: string # API_KEY (required)
-]: nothing -> record<limit: int, method: string, offset: int, repliedAt: string, results: table<gid: string, id: string, imagePid: string, name: string, score: int, sortName: string>, schema: string, total: int> {
+]: nothing -> oneof<record<limit: int, method: string, offset: int, repliedAt: string, results: table<gid: string, id: string, imagePid: string, name: string, score: int, sortName: string>, schema: string, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -557,7 +581,7 @@ export def "get-music-popular-playlists" [
   --offset: int # Paginated results offset
   --limit: int # Paginated results limit
   --x-api-key: string # API_KEY (required)
-]: nothing -> record<limit: int, method: string, offset: int, repliedAt: string, results: table<categories: list, commentsEnabled: bool, description: string, externalPartners: list, genre: string, id: string, imagePid: string, imageUrl: string, kind: string, mood: string, oneOff: bool, playlistPlaybackType: string, score: int, serviceId: string, title: string, updatedAt: string, visibility: string, wideImagePid: string, wideImageUrl: string>, schema: string, total: int> {
+]: nothing -> oneof<record<limit: int, method: string, offset: int, repliedAt: string, results: table<categories: list, commentsEnabled: bool, description: string, externalPartners: list, genre: string, id: string, imagePid: string, imageUrl: string, kind: string, mood: string, oneOff: bool, playlistPlaybackType: string, score: int, serviceId: string, title: string, updatedAt: string, visibility: string, wideImagePid: string, wideImageUrl: string>, schema: string, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
@@ -600,7 +624,7 @@ export def "get-music-popular-playlist-by-id" [
   --until: string # ISO 8601 Date yyyy-mm-dd. Returns items between given 'since' and 'until' date params
   --decomposed: oneof<nothing, bool> # In addition to the overall score, return a list of scores broken down by day N.B Must be used in conjunction with since and/or until and since is >= 31 days
   --x-api-key: string # API_KEY (required)
-]: nothing -> record<limit: int, method: string, offset: int, repliedAt: string, results: table<categories: list, commentsEnabled: bool, description: string, externalPartners: list, genre: string, id: string, imagePid: string, imageUrl: string, kind: string, mood: string, oneOff: bool, playlistPlaybackType: string, score: int, serviceId: string, title: string, updatedAt: string, visibility: string, wideImagePid: string, wideImageUrl: string>, schema: string, total: int> {
+]: nothing -> oneof<record<limit: int, method: string, offset: int, repliedAt: string, results: table<categories: list, commentsEnabled: bool, description: string, externalPartners: list, genre: string, id: string, imagePid: string, imageUrl: string, kind: string, mood: string, oneOff: bool, playlistPlaybackType: string, score: int, serviceId: string, title: string, updatedAt: string, visibility: string, wideImagePid: string, wideImageUrl: string>, schema: string, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -648,7 +672,7 @@ export def "get-music-popular-tracks" [
   --offset: int # Paginated results offset
   --limit: int # Paginated results limit
   --x-api-key: string # API_KEY (required)
-]: nothing -> record<limit: int, method: string, offset: int, repliedAt: string, results: table<album: string, artistGid: string, artistName: string, artists: list, baseTitle: string, classical: bool, id: string, mergedIds: list, preferredMultiplayRecordAudio: record, preferredRecordAudio: record, radioEdit: bool, recordAudio: list, recordImageHref: string, recordImagePid: string, score: int, title: string, type: string>, schema: string, total: int> {
+]: nothing -> oneof<record<limit: int, method: string, offset: int, repliedAt: string, results: table<album: string, artistGid: string, artistName: string, artists: list, baseTitle: string, classical: bool, id: string, mergedIds: list, preferredMultiplayRecordAudio: record, preferredRecordAudio: record, radioEdit: bool, recordAudio: list, recordImageHref: string, recordImagePid: string, score: int, title: string, type: string>, schema: string, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
@@ -694,7 +718,7 @@ export def "get-music-popular-track-by-id" [
   --artist: string # MusicBrainz artist ID
   --decomposed: oneof<nothing, bool> # In addition to the overall score, return a list of scores broken down by day N.B Must be used in conjunction with since and/or until and since is >= 31 days
   --x-api-key: string # API_KEY (required)
-]: nothing -> record<limit: int, method: string, offset: int, repliedAt: string, results: table<album: string, artistGid: string, artistName: string, artists: list, baseTitle: string, classical: bool, id: string, mergedIds: list, preferredMultiplayRecordAudio: record, preferredRecordAudio: record, radioEdit: bool, recordAudio: list, recordImageHref: string, recordImagePid: string, score: int, title: string, type: string>, schema: string, total: int> {
+]: nothing -> oneof<record<limit: int, method: string, offset: int, repliedAt: string, results: table<album: string, artistGid: string, artistName: string, artists: list, baseTitle: string, classical: bool, id: string, mergedIds: list, preferredMultiplayRecordAudio: record, preferredRecordAudio: record, radioEdit: bool, recordAudio: list, recordImageHref: string, recordImagePid: string, score: int, title: string, type: string>, schema: string, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -780,7 +804,7 @@ export def "get-my-categories-follows" [
   --limit: int # Paginated results limit
   --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
   --x-api-key: string # API_KEY (required)
-]: nothing -> record<_schema: string, limit: int, offset: int, total: int> {
+]: nothing -> oneof<record<_schema: string, limit: int, offset: int, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let authorization = ($authorization | default "Bearer OAUTH_TOKEN")
@@ -868,7 +892,7 @@ export def "get-music-export" [
   --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
   --x-authentication-provider: string # Authentication type (required, default: idv5)
   --x-api-key: string # API_KEY (required)
-]: nothing -> record<created_at: string, id: string, job_id: string, status: string, vendor: string> {
+]: nothing -> oneof<record<created_at: string, id: string, job_id: string, status: string, vendor: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let authorization = ($authorization | default "Bearer OAUTH_TOKEN")
@@ -913,7 +937,7 @@ export def "get-music-export-jobs" [
   --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
   --x-authentication-provider: string # Authentication type (required, default: idv5)
   --x-api-key: string # API_KEY (required)
-]: nothing -> record<created_at: string, id: string, job_id: string, status: string, vendor: string> {
+]: nothing -> oneof<record<created_at: string, id: string, job_id: string, status: string, vendor: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($over16 == null) { error make --unspanned { msg: "required query parameter 'over16' missing: pass --over16" } }
@@ -960,7 +984,7 @@ export def "post-music-export-job" [
   --x-authentication-provider: string # Authentication type (required, default: idv5)
   --x-api-key: string # API_KEY (required)
   --body: list
-]: any -> record<method: string, replied_at: string, schema: string> {
+]: any -> oneof<record<method: string, replied_at: string, schema: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1012,7 +1036,7 @@ export def "get-music-export-tracks" [
   --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
   --x-authentication-provider: string # Authentication type (required, default: idv5)
   --x-api-key: string # API_KEY (required)
-]: nothing -> record<created_at: string, id: string, job_id: string, status: string, vendor: string> {
+]: nothing -> oneof<record<created_at: string, id: string, job_id: string, status: string, vendor: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($over16 == null) { error make --unspanned { msg: "required query parameter 'over16' missing: pass --over16" } }
@@ -1060,7 +1084,7 @@ export def "get-personalised-music-favourites" [
   --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
   --x-authentication-provider: string # Authentication type (required, default: idv5)
   --x-api-key: string # API_KEY (required)
-]: nothing -> record<limit: int, method: string, offset: int, replied_at: string, results: table<action: string, activity: string, added_at: string, data: list, domain: string, id: string, meta_data: record, type: string, urn: string>, schema: string, total: int> {
+]: nothing -> oneof<record<limit: int, method: string, offset: int, replied_at: string, results: table<action: string, activity: string, added_at: string, data: list, domain: string, id: string, meta_data: record, type: string, urn: string>, schema: string, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let authorization = ($authorization | default "Bearer OAUTH_TOKEN")
@@ -1104,7 +1128,7 @@ export def "post-personalised-music-favourites-batch" [
   --x-authentication-provider: string # Authentication type (required, default: idv5)
   --x-api-key: string # API_KEY (required)
   --body: list
-]: any -> record<limit: int, method: string, offset: int, replied_at: string, results: table<action: string, activity: string, added_at: string, data: list, domain: string, id: string, meta_data: record, type: string, urn: string>, schema: string, total: int> {
+]: any -> oneof<record<limit: int, method: string, offset: int, replied_at: string, results: table<action: string, activity: string, added_at: string, data: list, domain: string, id: string, meta_data: record, type: string, urn: string>, schema: string, total: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1150,7 +1174,7 @@ export def "put-personalised-music-favourites-batch" [
   --x-authentication-provider: string # Authentication type (required, default: idv5)
   --x-api-key: string # API_KEY (required)
   --body: list
-]: any -> record<method: string, replied_at: string, schema: string> {
+]: any -> oneof<record<method: string, replied_at: string, schema: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1199,7 +1223,7 @@ export def "get-personalised-music-favourites-by-type" [
   --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
   --x-authentication-provider: string # Authentication type (required, default: idv5)
   --x-api-key: string # API_KEY (required)
-]: nothing -> record<limit: int, method: string, offset: int, replied_at: string, results: table<action: string, activity: string, added_at: string, data: list, domain: string, id: string, meta_data: record, type: string, urn: string>, schema: string, total: int> {
+]: nothing -> oneof<record<limit: int, method: string, offset: int, replied_at: string, results: table<action: string, activity: string, added_at: string, data: list, domain: string, id: string, meta_data: record, type: string, urn: string>, schema: string, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
@@ -1245,7 +1269,7 @@ export def "delete-personalised-music-favourites-by-type-by-id" [
   --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
   --x-authentication-provider: string # Authentication type (required, default: idv5)
   --x-api-key: string # API_KEY (required)
-]: nothing -> record<method: string, replied_at: string, schema: string> {
+]: nothing -> oneof<record<method: string, replied_at: string, schema: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
@@ -1291,7 +1315,7 @@ export def "get-personalised-music-favourites-by-type-by-id" [
   --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
   --x-authentication-provider: string # Authentication type (required, default: idv5)
   --x-api-key: string # API_KEY (required)
-]: nothing -> record<limit: int, method: string, offset: int, replied_at: string, results: table<action: string, activity: string, added_at: string, data: list, domain: string, id: string, meta_data: record, type: string, urn: string>, schema: string, total: int> {
+]: nothing -> oneof<record<limit: int, method: string, offset: int, replied_at: string, results: table<action: string, activity: string, added_at: string, data: list, domain: string, id: string, meta_data: record, type: string, urn: string>, schema: string, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
@@ -1322,7 +1346,6 @@ export def "get-personalised-music-favourites-by-type-by-id" [
 #
 # POST /my/music/favourites/{type}/{id}
 # operationId: postPersonalisedMusicFavouritesByTypeById
-# --meta_data shape: {key: string}
 export def "post-personalised-music-favourites-by-type-by-id" [
   type: string@type-completer
   id: string
@@ -1342,7 +1365,7 @@ export def "post-personalised-music-favourites-by-type-by-id" [
   --added-at: string
   --context: string
   --meta-data: record # shape: {key: string}
-]: any -> record<limit: int, method: string, offset: int, replied_at: string, results: table<action: string, activity: string, added_at: string, data: list, domain: string, id: string, meta_data: record, type: string, urn: string>, schema: string, total: int> {
+]: any -> oneof<record<limit: int, method: string, offset: int, replied_at: string, results: table<action: string, activity: string, added_at: string, data: list, domain: string, id: string, meta_data: record, type: string, urn: string>, schema: string, total: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1376,7 +1399,6 @@ export def "post-personalised-music-favourites-by-type-by-id" [
 #
 # PUT /my/music/favourites/{type}/{id}
 # operationId: putPersonalisedMusicFavouritesByTypeById
-# --meta_data shape: {key: string}
 export def "put-personalised-music-favourites-by-type-by-id" [
   type: string@type-completer
   id: string
@@ -1396,7 +1418,7 @@ export def "put-personalised-music-favourites-by-type-by-id" [
   --added-at: string
   --context: string
   --meta-data: record # shape: {key: string}
-]: any -> record<method: string, replied_at: string, schema: string> {
+]: any -> oneof<record<method: string, replied_at: string, schema: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1449,7 +1471,7 @@ export def "get-personalised-music-follows" [
   --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
   --x-authentication-provider: string # Authentication type (required, default: idv5)
   --x-api-key: string # API_KEY (required)
-]: nothing -> record<limit: int, method: string, offset: int, replied_at: string, results: table<action: string, activity: string, added_at: string, data: list, domain: string, id: string, meta_data: record, type: string, urn: string>, schema: string, total: int> {
+]: nothing -> oneof<record<limit: int, method: string, offset: int, replied_at: string, results: table<action: string, activity: string, added_at: string, data: list, domain: string, id: string, meta_data: record, type: string, urn: string>, schema: string, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let authorization = ($authorization | default "Bearer OAUTH_TOKEN")
@@ -1497,7 +1519,7 @@ export def "post-personalised-music-follows-batch" [
   --x-authentication-provider: string # Authentication type (required, default: idv5)
   --x-api-key: string # API_KEY (required)
   --body: list
-]: any -> record<method: string, replied_at: string, schema: string> {
+]: any -> oneof<record<method: string, replied_at: string, schema: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1548,7 +1570,7 @@ export def "put-personalised-music-follows-batch" [
   --x-authentication-provider: string # Authentication type (required, default: idv5)
   --x-api-key: string # API_KEY (required)
   --body: list
-]: any -> record<method: string, replied_at: string, schema: string> {
+]: any -> oneof<record<method: string, replied_at: string, schema: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1601,7 +1623,7 @@ export def "get-personalised-music-follows-by-type" [
   --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
   --x-authentication-provider: string # Authentication type (required, default: idv5)
   --x-api-key: string # API_KEY (required)
-]: nothing -> record<limit: int, method: string, offset: int, replied_at: string, results: table<action: string, activity: string, added_at: string, data: list, domain: string, id: string, meta_data: record, type: string, urn: string>, schema: string, total: int> {
+]: nothing -> oneof<record<limit: int, method: string, offset: int, replied_at: string, results: table<action: string, activity: string, added_at: string, data: list, domain: string, id: string, meta_data: record, type: string, urn: string>, schema: string, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
@@ -1650,7 +1672,7 @@ export def "delete-personalised-music-follows-by-type-by-id" [
   --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
   --x-authentication-provider: string # Authentication type (required, default: idv5)
   --x-api-key: string # API_KEY (required)
-]: nothing -> record<method: string, replied_at: string, schema: string> {
+]: nothing -> oneof<record<method: string, replied_at: string, schema: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
@@ -1700,7 +1722,7 @@ export def "get-personalised-music-follows-by-type-by-id" [
   --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
   --x-authentication-provider: string # Authentication type (required, default: idv5)
   --x-api-key: string # API_KEY (required)
-]: nothing -> record<limit: int, method: string, offset: int, replied_at: string, results: table<action: string, activity: string, added_at: string, data: list, domain: string, id: string, meta_data: record, type: string, urn: string>, schema: string, total: int> {
+]: nothing -> oneof<record<limit: int, method: string, offset: int, replied_at: string, results: table<action: string, activity: string, added_at: string, data: list, domain: string, id: string, meta_data: record, type: string, urn: string>, schema: string, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
@@ -1732,7 +1754,6 @@ export def "get-personalised-music-follows-by-type-by-id" [
 #
 # POST /my/music/follows/{type}/{id}
 # operationId: postPersonalisedMusicFollowsByTypeById
-# --meta_data shape: {key: string}
 export def "post-personalised-music-follows-by-type-by-id" [
   type: string@type-completer-1
   id: string
@@ -1755,7 +1776,7 @@ export def "post-personalised-music-follows-by-type-by-id" [
   --added-at: string
   --context: string
   --meta-data: record # shape: {key: string}
-]: any -> record<method: string, replied_at: string, schema: string> {
+]: any -> oneof<record<method: string, replied_at: string, schema: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1790,7 +1811,6 @@ export def "post-personalised-music-follows-by-type-by-id" [
 #
 # PUT /my/music/follows/{type}/{id}
 # operationId: putPersonalisedMusicFollowsByTypeById
-# --meta_data shape: {key: string}
 export def "put-personalised-music-follows-by-type-by-id" [
   type: string@type-completer-1
   id: string
@@ -1813,7 +1833,7 @@ export def "put-personalised-music-follows-by-type-by-id" [
   --added-at: string
   --context: string
   --meta-data: record # shape: {key: string}
-]: any -> record<method: string, replied_at: string, schema: string> {
+]: any -> oneof<record<method: string, replied_at: string, schema: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1861,7 +1881,7 @@ export def "delete-music-preferences-export" [
   --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
   --x-authentication-provider: string # Authentication type (required, default: idv5)
   --x-api-key: string # API_KEY (required)
-]: nothing -> record<method: string, replied_at: string, schema: string> {
+]: nothing -> oneof<record<method: string, replied_at: string, schema: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let authorization = ($authorization | default "Bearer OAUTH_TOKEN")
@@ -1903,7 +1923,7 @@ export def "get-music-preferences-export" [
   --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
   --x-authentication-provider: string # Authentication type (required, default: idv5)
   --x-api-key: string # API_KEY (required)
-]: nothing -> record<method: string, replied_at: string, results: table<access_expires_at: string, access_token: string, add_plus_export: bool, authorization_code: string, last_export: string, legacy_state: string, partner_id: string, refresh_token: string, terms: bool, vendor: string>, schema: string, total: int> {
+]: nothing -> oneof<record<method: string, replied_at: string, results: table<access_expires_at: string, access_token: string, add_plus_export: bool, authorization_code: string, last_export: string, legacy_state: string, partner_id: string, refresh_token: string, terms: bool, vendor: string>, schema: string, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let authorization = ($authorization | default "Bearer OAUTH_TOKEN")
@@ -1955,7 +1975,7 @@ export def "post-music-preferences-export" [
   refresh_token: string
   --terms: oneof<nothing, bool>
   vendor: string
-]: any -> record<method: string, replied_at: string, schema: string> {
+]: any -> oneof<record<method: string, replied_at: string, schema: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2047,7 +2067,7 @@ export def "get-music-preferences-export-vendor" [
   --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
   --x-authentication-provider: string # Authentication type (required, default: idv5)
   --x-api-key: string # API_KEY (required)
-]: nothing -> record<method: string, replied_at: string, results: table<access_expires_at: string, access_token: string, add_plus_export: bool, authorization_code: string, last_export: string, legacy_state: string, partner_id: string, refresh_token: string, terms: bool, vendor: string>, schema: string, total: int> {
+]: nothing -> oneof<record<method: string, replied_at: string, results: table<access_expires_at: string, access_token: string, add_plus_export: bool, authorization_code: string, last_export: string, legacy_state: string, partner_id: string, refresh_token: string, terms: bool, vendor: string>, schema: string, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($vendor | is-empty) { error make --unspanned { msg: "path parameter 'vendor' must be non-empty" } }
@@ -2257,7 +2277,7 @@ export def "get-my-networks-follows" [
   --limit: int # Paginated results limit
   --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
   --x-api-key: string # API_KEY (required)
-]: nothing -> record<_schema: string, limit: int, offset: int, results: table<created: string, type: string>, total: int> {
+]: nothing -> oneof<record<_schema: string, limit: int, offset: int, results: table<created: string, type: string>, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let authorization = ($authorization | default "Bearer OAUTH_TOKEN")
@@ -2394,7 +2414,7 @@ export def "suggest-container" [
   --previous-container: string # Container ID of the previous container in the Playspace stream.
   --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
   --x-api-key: string # API_KEY (required)
-]: nothing -> record<id: string, members: table<description: string, image_url: string, pid: string, title: string, type: string, version_pid: string>, title: string, type: string> {
+]: nothing -> oneof<record<id: string, members: table<description: string, image_url: string, pid: string, title: string, type: string, version_pid: string>, title: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($previous_pid == null) { error make --unspanned { msg: "required query parameter 'previous_pid' missing: pass --previous-pid" } }
@@ -2437,7 +2457,7 @@ export def "get-container" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
   --x-api-key: string # API_KEY (required)
-]: nothing -> record<id: string, members: table<description: string, image_url: string, pid: string, title: string, type: string, version_pid: string>, title: string, type: string> {
+]: nothing -> oneof<record<id: string, members: table<description: string, image_url: string, pid: string, title: string, type: string, version_pid: string>, title: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2481,7 +2501,7 @@ export def "get-recommendations" [
   --rights: string@rights-completer # Only return available results for the web/mobile. (required)
   --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
   --x-api-key: string # API_KEY (required)
-]: nothing -> record<_schema: string, limit: int, offset: int, results: table<pid: string, type: string>, total: int> {
+]: nothing -> oneof<record<_schema: string, limit: int, offset: int, results: table<pid: string, type: string>, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rights == null) { error make --unspanned { msg: "required query parameter 'rights' missing: pass --rights" } }
@@ -2528,7 +2548,7 @@ export def "get-personalised-radio-favourites" [
   --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
   --x-authentication-provider: string # Authentication type (required, default: idv5)
   --x-api-key: string # API_KEY (required)
-]: nothing -> record<_schema: string, limit: int, method: string, offset: int, replied_at: string, results: table<action: string, activity: string, added_at: string, data: record, domain: string, id: string, metadata: record, type: string, uas_type: string, urn: string>, total: int> {
+]: nothing -> oneof<record<_schema: string, limit: int, method: string, offset: int, replied_at: string, results: table<action: string, activity: string, added_at: string, data: record, domain: string, id: string, metadata: record, type: string, uas_type: string, urn: string>, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let authorization = ($authorization | default "Bearer OAUTH_TOKEN")
@@ -2572,7 +2592,7 @@ export def "post-personalised-radio-batch" [
   --x-authentication-provider: string # Authentication type (required, default: idv5)
   --x-api-key: string # API_KEY (required)
   --body: list
-]: any -> record<_schema: string, method: string, replied_at: string> {
+]: any -> oneof<record<_schema: string, method: string, replied_at: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2618,7 +2638,7 @@ export def "put-personalised-radio-batch" [
   --x-authentication-provider: string # Authentication type (required, default: idv5)
   --x-api-key: string # API_KEY (required)
   --body: list
-]: any -> record<_schema: string, method: string, replied_at: string> {
+]: any -> oneof<record<_schema: string, method: string, replied_at: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2668,7 +2688,7 @@ export def "get-personalised-radio-favourites-by-type" [
   --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
   --x-authentication-provider: string # Authentication type (required, default: idv5)
   --x-api-key: string # API_KEY (required)
-]: nothing -> record<_schema: string, limit: int, method: string, offset: int, replied_at: string, results: table<action: string, activity: string, added_at: string, data: record, domain: string, id: string, metadata: record, type: string, uas_type: string, urn: string>, total: int> {
+]: nothing -> oneof<record<_schema: string, limit: int, method: string, offset: int, replied_at: string, results: table<action: string, activity: string, added_at: string, data: record, domain: string, id: string, metadata: record, type: string, uas_type: string, urn: string>, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
@@ -2714,7 +2734,7 @@ export def "delete-personalised-radio-by-activity-type-by-id" [
   --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
   --x-authentication-provider: string # Authentication type (required, default: idv5)
   --x-api-key: string # API_KEY (required)
-]: nothing -> record<_schema: string, method: string, replied_at: string> {
+]: nothing -> oneof<record<_schema: string, method: string, replied_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
@@ -2761,7 +2781,7 @@ export def "get-personalised-radio-by-activity-type-by-id" [
   --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
   --x-authentication-provider: string # Authentication type (required, default: idv5)
   --x-api-key: string # API_KEY (required)
-]: nothing -> record<_schema: string, limit: int, method: string, offset: int, replied_at: string, results: table<action: string, activity: string, added_at: string, data: record, domain: string, id: string, metadata: record, type: string, uas_type: string, urn: string>, total: int> {
+]: nothing -> oneof<record<_schema: string, limit: int, method: string, offset: int, replied_at: string, results: table<action: string, activity: string, added_at: string, data: record, domain: string, id: string, metadata: record, type: string, uas_type: string, urn: string>, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
@@ -2793,7 +2813,6 @@ export def "get-personalised-radio-by-activity-type-by-id" [
 #
 # POST /my/radio/favourites/{type}/{pid}
 # operationId: postPersonalisedRadioByActivityTypeById
-# --metadata shape: {key: string}
 export def "post-personalised-radio-by-activity-type-by-id" [
   type: string@type-completer-2
   pid: string
@@ -2813,7 +2832,7 @@ export def "post-personalised-radio-by-activity-type-by-id" [
   --added-at: string
   --context: string
   --metadata: record # shape: {key: string}
-]: any -> record<_schema: string, method: string, replied_at: string> {
+]: any -> oneof<record<_schema: string, method: string, replied_at: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2847,7 +2866,6 @@ export def "post-personalised-radio-by-activity-type-by-id" [
 #
 # PUT /my/radio/favourites/{type}/{pid}
 # operationId: putPersonalisedRadioByActivityTypeById
-# --metadata shape: {key: string}
 export def "put-personalised-radio-by-activity-type-by-id" [
   type: string@type-completer-2
   pid: string
@@ -2867,7 +2885,7 @@ export def "put-personalised-radio-by-activity-type-by-id" [
   --added-at: string
   --context: string
   --metadata: record # shape: {key: string}
-]: any -> record<_schema: string, method: string, replied_at: string> {
+]: any -> oneof<record<_schema: string, method: string, replied_at: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2918,7 +2936,7 @@ export def "get-personalised-radio-follows" [
   --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
   --x-authentication-provider: string # Authentication type (required, default: idv5)
   --x-api-key: string # API_KEY (required)
-]: nothing -> record<_schema: string, limit: int, method: string, offset: int, replied_at: string, results: table<action: string, activity: string, added_at: string, data: record, domain: string, id: string, metadata: record, type: string, uas_type: string, urn: string>, total: int> {
+]: nothing -> oneof<record<_schema: string, limit: int, method: string, offset: int, replied_at: string, results: table<action: string, activity: string, added_at: string, data: record, domain: string, id: string, metadata: record, type: string, uas_type: string, urn: string>, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let authorization = ($authorization | default "Bearer OAUTH_TOKEN")
@@ -2962,7 +2980,7 @@ export def "post-personalised-radio-follows-batch" [
   --x-authentication-provider: string # Authentication type (required, default: idv5)
   --x-api-key: string # API_KEY (required)
   --body: list
-]: any -> record<_schema: string, method: string, replied_at: string> {
+]: any -> oneof<record<_schema: string, method: string, replied_at: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3008,7 +3026,7 @@ export def "put-personalised-radio-follows-batch" [
   --x-authentication-provider: string # Authentication type (required, default: idv5)
   --x-api-key: string # API_KEY (required)
   --body: list
-]: any -> record<_schema: string, method: string, replied_at: string> {
+]: any -> oneof<record<_schema: string, method: string, replied_at: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3058,7 +3076,7 @@ export def "get-personalised-radio-follows-by-type" [
   --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
   --x-authentication-provider: string # Authentication type (required, default: idv5)
   --x-api-key: string # API_KEY (required)
-]: nothing -> record<_schema: string, limit: int, method: string, offset: int, replied_at: string, results: table<action: string, activity: string, added_at: string, data: record, domain: string, id: string, metadata: record, type: string, uas_type: string, urn: string>, total: int> {
+]: nothing -> oneof<record<_schema: string, limit: int, method: string, offset: int, replied_at: string, results: table<action: string, activity: string, added_at: string, data: record, domain: string, id: string, metadata: record, type: string, uas_type: string, urn: string>, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
@@ -3104,7 +3122,7 @@ export def "delete-personalised-radio-follows-by-type-by-id" [
   --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
   --x-authentication-provider: string # Authentication type (required, default: idv5)
   --x-api-key: string # API_KEY (required)
-]: nothing -> record<_schema: string, method: string, replied_at: string> {
+]: nothing -> oneof<record<_schema: string, method: string, replied_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
@@ -3150,7 +3168,7 @@ export def "get-personalised-radio-follows-by-type-by-id" [
   --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
   --x-authentication-provider: string # Authentication type (required, default: idv5)
   --x-api-key: string # API_KEY (required)
-]: nothing -> record<_schema: string, limit: int, method: string, offset: int, replied_at: string, results: table<action: string, activity: string, added_at: string, data: record, domain: string, id: string, metadata: record, type: string, uas_type: string, urn: string>, total: int> {
+]: nothing -> oneof<record<_schema: string, limit: int, method: string, offset: int, replied_at: string, results: table<action: string, activity: string, added_at: string, data: record, domain: string, id: string, metadata: record, type: string, uas_type: string, urn: string>, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
@@ -3181,7 +3199,6 @@ export def "get-personalised-radio-follows-by-type-by-id" [
 #
 # POST /my/radio/follows/{type}/{pid}
 # operationId: postPersonalisedRadioFollowsByTypeById
-# --metadata shape: {key: string}
 export def "post-personalised-radio-follows-by-type-by-id" [
   type: string@type-completer-3
   pid: string
@@ -3201,7 +3218,7 @@ export def "post-personalised-radio-follows-by-type-by-id" [
   --added-at: string
   --context: string
   --metadata: record # shape: {key: string}
-]: any -> record<_schema: string, method: string, replied_at: string> {
+]: any -> oneof<record<_schema: string, method: string, replied_at: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3235,7 +3252,6 @@ export def "post-personalised-radio-follows-by-type-by-id" [
 #
 # PUT /my/radio/follows/{type}/{pid}
 # operationId: putPersonalisedRadioFollowsByTypeById
-# --metadata shape: {key: string}
 export def "put-personalised-radio-follows-by-type-by-id" [
   type: string@type-completer-3
   pid: string
@@ -3255,7 +3271,7 @@ export def "put-personalised-radio-follows-by-type-by-id" [
   --added-at: string
   --context: string
   --metadata: record # shape: {key: string}
-]: any -> record<_schema: string, method: string, replied_at: string> {
+]: any -> oneof<record<_schema: string, method: string, replied_at: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3306,7 +3322,7 @@ export def "get-personalised-radio-plays" [
   --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
   --x-authentication-provider: string # Authentication type (required, default: idv5)
   --x-api-key: string # API_KEY (required)
-]: nothing -> record<_schema: string, limit: int, method: string, offset: int, replied_at: string, results: table<action: string, activity: string, added_at: string, data: record, domain: string, id: string, metadata: record, type: string, uas_type: string, urn: string>, total: int> {
+]: nothing -> oneof<record<_schema: string, limit: int, method: string, offset: int, replied_at: string, results: table<action: string, activity: string, added_at: string, data: record, domain: string, id: string, metadata: record, type: string, uas_type: string, urn: string>, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let authorization = ($authorization | default "Bearer OAUTH_TOKEN")
@@ -3355,7 +3371,7 @@ export def "get-podcasts" [
   --q: string # Search query String
   --coverage: string@coverage-completer # Local, National or Regional Coverage
   --x-api-key: string # API_KEY (required)
-]: nothing -> record<_schema: string, limit: int, offset: int, results: table<category_summaries: list, days_available: int, entity_type: string, first_published_date: string, frequency: string, images: list, latest_available_episodes: list, network_summary: record, pid: string, rss_url: string, synopses: record, territory: string, titles: record, total_available_episodes: int, type: string, updated_at: string>, total: int> {
+]: nothing -> oneof<record<_schema: string, limit: int, offset: int, results: table<category_summaries: list, days_available: int, entity_type: string, first_published_date: string, frequency: string, images: list, latest_available_episodes: list, network_summary: record, pid: string, rss_url: string, synopses: record, territory: string, titles: record, total_available_episodes: int, type: string, updated_at: string>, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
@@ -3394,7 +3410,7 @@ export def "get-podcasts-featured" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-api-key: string # API_KEY (required)
-]: nothing -> record<_schema: string, limit: float, offset: float, results: table<featured_podcasts: list, title: string, type: string>, total: float> {
+]: nothing -> oneof<record<_schema: string, limit: float, offset: float, results: table<featured_podcasts: list, title: string, type: string>, total: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
@@ -3435,7 +3451,7 @@ export def "get-podcast-by-pid" [
   --offset: int # Paginated results offset
   --limit: int # Paginated results limit
   --x-api-key: string # API_KEY (required)
-]: nothing -> record<_schema: string, limit: int, offset: int, results: table<category_summaries: list, days_available: int, entity_type: string, first_published_date: string, frequency: string, images: list, latest_available_episodes: list, network_summary: record, pid: string, rss_url: string, synopses: record, territory: string, titles: record, total_available_episodes: int, type: string, updated_at: string>, total: int> {
+]: nothing -> oneof<record<_schema: string, limit: int, offset: int, results: table<category_summaries: list, days_available: int, entity_type: string, first_published_date: string, frequency: string, images: list, latest_available_episodes: list, network_summary: record, pid: string, rss_url: string, synopses: record, territory: string, titles: record, total_available_episodes: int, type: string, updated_at: string>, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pid | is-empty) { error make --unspanned { msg: "path parameter 'pid' must be non-empty" } }
@@ -3478,7 +3494,7 @@ export def "get-podcast-episodes" [
   --offset: int # Paginated results offset
   --limit: int # Paginated results limit
   --x-api-key: string # API_KEY (required)
-]: nothing -> record<_schema: string, limit: float, offset: float, results: table<asset_url: string, available_versions: list, images: list, media_type: string, network_summary: record, pid: string, release_date: string, short_synopsis: string, titles: record, type: string>, total: float> {
+]: nothing -> oneof<record<_schema: string, limit: float, offset: float, results: table<asset_url: string, available_versions: list, images: list, media_type: string, network_summary: record, pid: string, release_date: string, short_synopsis: string, titles: record, type: string>, total: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pid | is-empty) { error make --unspanned { msg: "path parameter 'pid' must be non-empty" } }
@@ -3520,7 +3536,7 @@ export def "get-radio-networks" [
   --preset: oneof<nothing, bool> # Returns all networks needed for iPlayer Radio responsive web navigation
   --international: oneof<nothing, bool> # Returns all networks available internationally
   --x-api-key: string # API_KEY (required)
-]: nothing -> record<_schema: string, limit: int, offset: int, results: table<active: bool, contacts: list, date_ranges: list, group: string, id: string, international: bool, key: string, preset: bool, promoted_category_summaries: list, services: list, short_title: string, sort: int, title: string, type: string>, total: int> {
+]: nothing -> oneof<record<_schema: string, limit: int, offset: int, results: table<active: bool, contacts: list, date_ranges: list, group: string, id: string, international: bool, key: string, preset: bool, promoted_category_summaries: list, services: list, short_title: string, sort: int, title: string, type: string>, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
@@ -3570,7 +3586,7 @@ export def "get-popular-episodes-clips" [
   --media-set: list@media-set-completer # Filter by media set name. Accepts comma separated combinations of the following: pc,mobile-download,android-download-high,apple-ios-download-high,mobile-cellular-main,mobile-phone-main,iptv-all
   --q: string # Search query String
   --x-api-key: string # API_KEY (required)
-]: nothing -> record<_schema: string, limit: int, offset: int, results: table<data: record, id: string, score: int, type: string>, total: int> {
+]: nothing -> oneof<record<_schema: string, limit: int, offset: int, results: table<data: record, id: string, score: int, type: string>, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
@@ -3616,7 +3632,7 @@ export def "get-radio-programmes" [
   --container: string # Filter by container. Accepts any brand or series pid
   --type: string@type-completer-5 # Filter by programme type. Accepts comma separated values
   --x-api-key: string # API_KEY (required)
-]: nothing -> record<_schema: string, limit: int, offset: int, results: table<pid: string, type: string>, total: int> {
+]: nothing -> oneof<record<_schema: string, limit: int, offset: int, results: table<pid: string, type: string>, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
@@ -3656,7 +3672,7 @@ export def "get-radio-programmes-by-pid" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-api-key: string # API_KEY (required)
-]: nothing -> record<_schema: string, limit: int, offset: int, results: table<pid: string, type: string>, total: int> {
+]: nothing -> oneof<record<_schema: string, limit: int, offset: int, results: table<pid: string, type: string>, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pid | is-empty) { error make --unspanned { msg: "path parameter 'pid' must be non-empty" } }

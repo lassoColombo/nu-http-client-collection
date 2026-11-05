@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -134,9 +157,9 @@ def x-amz-target-completer-30 [] { ["KinesisAnalytics_20180523.UpdateApplication
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "add-application-cloud-watch-logging-option" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["add-application-cloud-watch-logging-option" "add-application-input" "add-application-input-processing-configuration" "add-application-output" "add-application-reference-data-source" "add-application-vpc-configuration" "create-application" "create-application-presigned-url" "create-application-snapshot" "delete-application" "delete-application-cloud-watch-logging-option" "delete-application-input-processing-configuration" "delete-application-output" "delete-application-reference-data-source" "delete-application-snapshot" "delete-application-vpc-configuration" "describe-application" "describe-application-snapshot" "describe-application-version" "discover-input-schema" "list-application-snapshots" "list-application-versions" "list-applications" "list-tags-for-resource" "rollback-application" "start-application" "stop-application" "tag-resource" "untag-resource" "update-application" "update-application-maintenance-configuration" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -158,7 +181,6 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AddApplicationCloudWatchLoggingOption
-# --CloudWatchLoggingOption shape: {LogStreamARN: string}
 export def "add-application-cloud-watch-logging-option" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -181,7 +203,7 @@ export def "add-application-cloud-watch-logging-option" [
   --current-application-version-id: int # The version ID of the Kinesis Data Analytics application. You must provide the CurrentApplicationVersionId or the ConditionalToken.You can retrieve the application version ID using DescribeApplication. For better concurrency support, use the ConditionalToken parameter instead of CurrentApplicationVersionId.
   cloud_watch_logging_option: record # Provides a description of Amazon CloudWatch logging options, including the log stream Amazon Resource Name (ARN). — shape: {LogStreamARN: string}
   --conditional-token: string # A value you use to implement strong concurrency for application updates. You must provide the CurrentApplicationVersionId or the ConditionalToken. You get the application's current ConditionalToken using DescribeApplication. For better concurrency support, use the ConditionalToken parameter instead of CurrentApplicationVersionId.
-]: any -> record<ApplicationARN: string, ApplicationVersionId: int, CloudWatchLoggingOptionDescriptions: table<CloudWatchLoggingOptionId: string, LogStreamARN: string, RoleARN: string>> {
+]: any -> oneof<record<ApplicationARN: string, ApplicationVersionId: int, CloudWatchLoggingOptionDescriptions: table<CloudWatchLoggingOptionId: string, LogStreamARN: string, RoleARN: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -211,7 +233,6 @@ export def "add-application-cloud-watch-logging-option" [
 #
 # POST /
 # operationId: AddApplicationInput
-# --Input shape: {NamePrefix: string, InputProcessingConfiguration?: record, KinesisStreamsInput?: record, KinesisFirehoseInput?: record, InputParallelism?: record, InputSchema: record}
 export def "add-application-input" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -233,7 +254,7 @@ export def "add-application-input" [
   application_name: string # The name of your existing application to which you want to add the streaming source.
   current_application_version_id: int # The current version of your application. You must provide the ApplicationVersionID or the ConditionalToken.You can use the DescribeApplication operation to find the current application version.
   --body-input: record # When you configure the application input for a SQL-based Kinesis Data Analytics application, you specify the streaming source, the in-application stream name that is created, and the mapping between the two. — shape: {NamePrefix: string, InputProcessingConfiguration?: record, KinesisStreamsInput?: record, KinesisFirehoseInput?: record, InputParallelism?: record, InputSchema: record}
-]: any -> record<ApplicationARN: string, ApplicationVersionId: int, InputDescriptions: table<InputId: string, NamePrefix: string, InAppStreamNames: list, InputProcessingConfigurationDescription: record, KinesisStreamsInputDescription: record, KinesisFirehoseInputDescription: record, InputSchema: record, InputParallelism: record, InputStartingPositionConfiguration: record>> {
+]: any -> oneof<record<ApplicationARN: string, ApplicationVersionId: int, InputDescriptions: table<InputId: string, NamePrefix: string, InAppStreamNames: list, InputProcessingConfigurationDescription: record, KinesisStreamsInputDescription: record, KinesisFirehoseInputDescription: record, InputSchema: record, InputParallelism: record, InputStartingPositionConfiguration: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -264,7 +285,6 @@ export def "add-application-input" [
 #
 # POST /
 # operationId: AddApplicationInputProcessingConfiguration
-# --InputProcessingConfiguration shape: {InputLambdaProcessor: record}
 export def "add-application-input-processing-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -287,7 +307,7 @@ export def "add-application-input-processing-configuration" [
   current_application_version_id: int # The version of the application to which you want to add the input processing configuration. You can use the DescribeApplication operation to get the current application version. If the version specified is not the current version, the ConcurrentModificationException is returned.
   input_id: string # The ID of the input configuration to add the input processing configuration to. You can get a list of the input IDs for an application using the DescribeApplication operation.
   input_processing_configuration: record # For a SQL-based Kinesis Data Analytics application, describes a processor that is used to preprocess the records in the stream before being processed by your application code. Currently, the only input processor available is Amazon Lambda (https://docs.aws.amazon.com/lambda/). — shape: {InputLambdaProcessor: record}
-]: any -> record<ApplicationARN: string, ApplicationVersionId: int, InputId: string, InputProcessingConfigurationDescription: record<InputLambdaProcessorDescription: record<ResourceARN: string, RoleARN: string>>> {
+]: any -> oneof<record<ApplicationARN: string, ApplicationVersionId: int, InputId: string, InputProcessingConfigurationDescription: record<InputLambdaProcessorDescription: record<ResourceARN: string, RoleARN: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -317,7 +337,6 @@ export def "add-application-input-processing-configuration" [
 #
 # POST /
 # operationId: AddApplicationOutput
-# --Output shape: {Name: string, KinesisStreamsOutput?: record, KinesisFirehoseOutput?: record, LambdaOutput?: record, DestinationSchema: record}
 export def "add-application-output" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -339,7 +358,7 @@ export def "add-application-output" [
   application_name: string # The name of the application to which you want to add the output configuration.
   current_application_version_id: int # The version of the application to which you want to add the output configuration. You can use the DescribeApplication operation to get the current application version. If the version specified is not the current version, the ConcurrentModificationException is returned.
   output: record # Describes a SQL-based Kinesis Data Analytics application's output configuration, in which you identify an in-application stream and a destination where you want the in-application stream data to be written. The destination can be a Kinesis data stream or a Kinesis Data Firehose delivery stream. — shape: {Name: string, KinesisStreamsOutput?: record, KinesisFirehoseOutput?: record, LambdaOutput?: record, DestinationSchema: record}
-]: any -> record<ApplicationARN: string, ApplicationVersionId: int, OutputDescriptions: table<OutputId: string, Name: string, KinesisStreamsOutputDescription: record, KinesisFirehoseOutputDescription: record, LambdaOutputDescription: record, DestinationSchema: record>> {
+]: any -> oneof<record<ApplicationARN: string, ApplicationVersionId: int, OutputDescriptions: table<OutputId: string, Name: string, KinesisStreamsOutputDescription: record, KinesisFirehoseOutputDescription: record, LambdaOutputDescription: record, DestinationSchema: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -369,7 +388,6 @@ export def "add-application-output" [
 #
 # POST /
 # operationId: AddApplicationReferenceDataSource
-# --ReferenceDataSource shape: {TableName: string, S3ReferenceDataSource?: record, ReferenceSchema: record}
 export def "add-application-reference-data-source" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -391,7 +409,7 @@ export def "add-application-reference-data-source" [
   application_name: string # The name of an existing application.
   current_application_version_id: int # The version of the application for which you are adding the reference data source. You can use the DescribeApplication operation to get the current application version. If the version specified is not the current version, the ConcurrentModificationException is returned.
   reference_data_source: record # For a SQL-based Kinesis Data Analytics application, describes the reference data source by providing the source information (Amazon S3 bucket name and object key name), the resulting in-application table name that is created, and the necessary schema to map the data elements in the Amazon S3 object to the in-application table. — shape: {TableName: string, S3ReferenceDataSource?: record, ReferenceSchema: record}
-]: any -> record<ApplicationARN: string, ApplicationVersionId: int, ReferenceDataSourceDescriptions: table<ReferenceId: string, TableName: string, S3ReferenceDataSourceDescription: record, ReferenceSchema: record>> {
+]: any -> oneof<record<ApplicationARN: string, ApplicationVersionId: int, ReferenceDataSourceDescriptions: table<ReferenceId: string, TableName: string, S3ReferenceDataSourceDescription: record, ReferenceSchema: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -421,7 +439,6 @@ export def "add-application-reference-data-source" [
 #
 # POST /
 # operationId: AddApplicationVpcConfiguration
-# --VpcConfiguration shape: {SubnetIds: list<string>, SecurityGroupIds: list<string>}
 export def "add-application-vpc-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -444,7 +461,7 @@ export def "add-application-vpc-configuration" [
   --current-application-version-id: int # The version of the application to which you want to add the VPC configuration. You must provide the CurrentApplicationVersionId or the ConditionalToken. You can use the DescribeApplication operation to get the current application version. If the version specified is not the current version, the ConcurrentModificationException is returned. For better concurrency support, use the ConditionalToken parameter instead of CurrentApplicationVersionId.
   vpc_configuration: record # Describes the parameters of a VPC used by the application. — shape: {SubnetIds: list<string>, SecurityGroupIds: list<string>}
   --conditional-token: string # A value you use to implement strong concurrency for application updates. You must provide the ApplicationVersionID or the ConditionalToken. You get the application's current ConditionalToken using DescribeApplication. For better concurrency support, use the ConditionalToken parameter instead of CurrentApplicationVersionId.
-]: any -> record<ApplicationARN: string, ApplicationVersionId: int, VpcConfigurationDescription: record<VpcConfigurationId: string, VpcId: string, SubnetIds: list<string>, SecurityGroupIds: list<string>>> {
+]: any -> oneof<record<ApplicationARN: string, ApplicationVersionId: int, VpcConfigurationDescription: record<VpcConfigurationId: string, VpcId: string, SubnetIds: list<string>, SecurityGroupIds: list<string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -474,9 +491,6 @@ export def "add-application-vpc-configuration" [
 #
 # POST /
 # operationId: CreateApplication
-# --ApplicationConfiguration shape: {SqlApplicationConfiguration?: record, FlinkApplicationConfiguration?: record, EnvironmentProperties?: record, ApplicationCodeConfiguration?: record, ApplicationSnapshotConfiguration?: record, VpcConfigurations?: list, ZeppelinApplicationConfiguration?: record}
-# --CloudWatchLoggingOptions item shape: {LogStreamARN: string}
-# --Tags item shape: {Key: string, Value?: string}
 export def "create-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -503,7 +517,7 @@ export def "create-application" [
   --cloud-watch-logging-options: list # Use this parameter to configure an Amazon CloudWatch log stream to monitor application configuration errors. — item shape: {LogStreamARN: string}
   --tags: list # A list of one or more tags to assign to the application. A tag is a key-value pair that identifies an application. Note that the maximum number of application tags includes system tags. The maximum number of user-defined application tags is 50. For more information, see Using Tagging (https://docs.aws.amazon.com/kinesisanalytics/latest/java/how-tagging.html). — item shape: {Key: string, Value?: string}
   --application-mode: string@application-mode-completer # Use the STREAMING mode to create a Kinesis Data Analytics For Flink application. To create a Kinesis Data Analytics Studio notebook, use the INTERACTIVE mode.
-]: any -> record<ApplicationDetail: record<ApplicationARN: string, ApplicationDescription: string, ApplicationName: string, RuntimeEnvironment: string, ServiceExecutionRole: string, ApplicationStatus: string, ApplicationVersionId: int, CreateTimestamp: string, LastUpdateTimestamp: string, ApplicationConfigurationDescription: record<SqlApplicationConfigurationDescription: record, ApplicationCodeConfigurationDescription: record, RunConfigurationDescription: record, FlinkApplicationConfigurationDescription: record, EnvironmentPropertyDescriptions: record, ApplicationSnapshotConfigurationDescription: record, VpcConfigurationDescriptions: list, ZeppelinApplicationConfigurationDescription: record>, CloudWatchLoggingOptionDescriptions: list<record>, ApplicationMaintenanceConfigurationDescription: record<ApplicationMaintenanceWindowStartTime: string, ApplicationMaintenanceWindowEndTime: string>, ApplicationVersionUpdatedFrom: int, ApplicationVersionRolledBackFrom: int, ConditionalToken: string, ApplicationVersionRolledBackTo: int, ApplicationMode: string>> {
+]: any -> oneof<record<ApplicationDetail: record<ApplicationARN: string, ApplicationDescription: string, ApplicationName: string, RuntimeEnvironment: string, ServiceExecutionRole: string, ApplicationStatus: string, ApplicationVersionId: int, CreateTimestamp: string, LastUpdateTimestamp: string, ApplicationConfigurationDescription: record<SqlApplicationConfigurationDescription: record, ApplicationCodeConfigurationDescription: record, RunConfigurationDescription: record, FlinkApplicationConfigurationDescription: record, EnvironmentPropertyDescriptions: record, ApplicationSnapshotConfigurationDescription: record, VpcConfigurationDescriptions: list, ZeppelinApplicationConfigurationDescription: record>, CloudWatchLoggingOptionDescriptions: list<record>, ApplicationMaintenanceConfigurationDescription: record<ApplicationMaintenanceWindowStartTime: string, ApplicationMaintenanceWindowEndTime: string>, ApplicationVersionUpdatedFrom: int, ApplicationVersionRolledBackFrom: int, ConditionalToken: string, ApplicationVersionRolledBackTo: int, ApplicationMode: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -554,7 +568,7 @@ export def "create-application-presigned-url" [
   application_name: string # The name of the application.
   url_type: string@url-type-completer # The type of the extension for which to create and return a URL. Currently, the only valid extension URL type is FLINK_DASHBOARD_URL.
   --session-expiration-duration-in-seconds: int # The duration in seconds for which the returned URL will be valid.
-]: any -> record<AuthorizedUrl: string> {
+]: any -> oneof<record<AuthorizedUrl: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -604,7 +618,7 @@ export def "create-application-snapshot" [
   --x-amz-target: string@x-amz-target-completer-8 # required
   application_name: string # The name of an existing application
   snapshot_name: string # An identifier for the application snapshot.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -654,7 +668,7 @@ export def "delete-application" [
   --x-amz-target: string@x-amz-target-completer-9 # required
   application_name: string # The name of the application to delete.
   create_timestamp: string # Use the DescribeApplication operation to get this value. (format: date-time)
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -706,7 +720,7 @@ export def "delete-application-cloud-watch-logging-option" [
   --current-application-version-id: int # The version ID of the application. You must provide the CurrentApplicationVersionId or the ConditionalToken. You can retrieve the application version ID using DescribeApplication. For better concurrency support, use the ConditionalToken parameter instead of CurrentApplicationVersionId.
   cloud_watch_logging_option_id: string # The CloudWatchLoggingOptionId of the Amazon CloudWatch logging option to delete. You can get the CloudWatchLoggingOptionId by using the DescribeApplication operation.
   --conditional-token: string # A value you use to implement strong concurrency for application updates. You must provide the CurrentApplicationVersionId or the ConditionalToken. You get the application's current ConditionalToken using DescribeApplication. For better concurrency support, use the ConditionalToken parameter instead of CurrentApplicationVersionId.
-]: any -> record<ApplicationARN: string, ApplicationVersionId: int, CloudWatchLoggingOptionDescriptions: table<CloudWatchLoggingOptionId: string, LogStreamARN: string, RoleARN: string>> {
+]: any -> oneof<record<ApplicationARN: string, ApplicationVersionId: int, CloudWatchLoggingOptionDescriptions: table<CloudWatchLoggingOptionId: string, LogStreamARN: string, RoleARN: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -757,7 +771,7 @@ export def "delete-application-input-processing-configuration" [
   application_name: string # The name of the application.
   current_application_version_id: int # The application version. You can use the DescribeApplication operation to get the current application version. If the version specified is not the current version, the ConcurrentModificationException is returned.
   input_id: string # The ID of the input configuration from which to delete the input processing configuration. You can get a list of the input IDs for an application by using the DescribeApplication operation.
-]: any -> record<ApplicationARN: string, ApplicationVersionId: int> {
+]: any -> oneof<record<ApplicationARN: string, ApplicationVersionId: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -808,7 +822,7 @@ export def "delete-application-output" [
   application_name: string # The application name.
   current_application_version_id: int # The application version. You can use the DescribeApplication operation to get the current application version. If the version specified is not the current version, the ConcurrentModificationException is returned.
   output_id: string # The ID of the configuration to delete. Each output configuration that is added to the application (either when the application is created or later) using the AddApplicationOutput operation has a unique ID. You need to provide the ID to uniquely identify the output configuration that you want to delete from the application configuration. You can use the DescribeApplication operation to get the specific OutputId.
-]: any -> record<ApplicationARN: string, ApplicationVersionId: int> {
+]: any -> oneof<record<ApplicationARN: string, ApplicationVersionId: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -859,7 +873,7 @@ export def "delete-application-reference-data-source" [
   application_name: string # The name of an existing application.
   current_application_version_id: int # The current application version. You can use the DescribeApplication operation to get the current application version. If the version specified is not the current version, the ConcurrentModificationException is returned.
   reference_id: string # The ID of the reference data source. When you add a reference data source to your application using the AddApplicationReferenceDataSource, Kinesis Data Analytics assigns an ID. You can use the DescribeApplication operation to get the reference ID.
-]: any -> record<ApplicationARN: string, ApplicationVersionId: int> {
+]: any -> oneof<record<ApplicationARN: string, ApplicationVersionId: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -910,7 +924,7 @@ export def "delete-application-snapshot" [
   application_name: string # The name of an existing application.
   snapshot_name: string # The identifier for the snapshot delete.
   snapshot_creation_timestamp: string # The creation timestamp of the application snapshot to delete. You can retrieve this value using or . (format: date-time)
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -962,7 +976,7 @@ export def "delete-application-vpc-configuration" [
   --current-application-version-id: int # The current application version ID. You must provide the CurrentApplicationVersionId or the ConditionalToken. You can retrieve the application version ID using DescribeApplication. For better concurrency support, use the ConditionalToken parameter instead of CurrentApplicationVersionId.
   vpc_configuration_id: string # The ID of the VPC configuration to delete.
   --conditional-token: string # A value you use to implement strong concurrency for application updates. You must provide the CurrentApplicationVersionId or the ConditionalToken. You get the application's current ConditionalToken using DescribeApplication. For better concurrency support, use the ConditionalToken parameter instead of CurrentApplicationVersionId.
-]: any -> record<ApplicationARN: string, ApplicationVersionId: int> {
+]: any -> oneof<record<ApplicationARN: string, ApplicationVersionId: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1012,7 +1026,7 @@ export def "describe-application" [
   --x-amz-target: string@x-amz-target-completer-16 # required
   application_name: string # The name of the application.
   --include-additional-details: oneof<nothing, bool> # Displays verbose information about a Kinesis Data Analytics application, including the application's job plan.
-]: any -> record<ApplicationDetail: record<ApplicationARN: string, ApplicationDescription: string, ApplicationName: string, RuntimeEnvironment: string, ServiceExecutionRole: string, ApplicationStatus: string, ApplicationVersionId: int, CreateTimestamp: string, LastUpdateTimestamp: string, ApplicationConfigurationDescription: record<SqlApplicationConfigurationDescription: record, ApplicationCodeConfigurationDescription: record, RunConfigurationDescription: record, FlinkApplicationConfigurationDescription: record, EnvironmentPropertyDescriptions: record, ApplicationSnapshotConfigurationDescription: record, VpcConfigurationDescriptions: list, ZeppelinApplicationConfigurationDescription: record>, CloudWatchLoggingOptionDescriptions: list<record>, ApplicationMaintenanceConfigurationDescription: record<ApplicationMaintenanceWindowStartTime: string, ApplicationMaintenanceWindowEndTime: string>, ApplicationVersionUpdatedFrom: int, ApplicationVersionRolledBackFrom: int, ConditionalToken: string, ApplicationVersionRolledBackTo: int, ApplicationMode: string>> {
+]: any -> oneof<record<ApplicationDetail: record<ApplicationARN: string, ApplicationDescription: string, ApplicationName: string, RuntimeEnvironment: string, ServiceExecutionRole: string, ApplicationStatus: string, ApplicationVersionId: int, CreateTimestamp: string, LastUpdateTimestamp: string, ApplicationConfigurationDescription: record<SqlApplicationConfigurationDescription: record, ApplicationCodeConfigurationDescription: record, RunConfigurationDescription: record, FlinkApplicationConfigurationDescription: record, EnvironmentPropertyDescriptions: record, ApplicationSnapshotConfigurationDescription: record, VpcConfigurationDescriptions: list, ZeppelinApplicationConfigurationDescription: record>, CloudWatchLoggingOptionDescriptions: list<record>, ApplicationMaintenanceConfigurationDescription: record<ApplicationMaintenanceWindowStartTime: string, ApplicationMaintenanceWindowEndTime: string>, ApplicationVersionUpdatedFrom: int, ApplicationVersionRolledBackFrom: int, ConditionalToken: string, ApplicationVersionRolledBackTo: int, ApplicationMode: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1062,7 +1076,7 @@ export def "describe-application-snapshot" [
   --x-amz-target: string@x-amz-target-completer-17 # required
   application_name: string # The name of an existing application.
   snapshot_name: string # The identifier of an application snapshot. You can retrieve this value using .
-]: any -> record<SnapshotDetails: record<SnapshotName: string, SnapshotStatus: string, ApplicationVersionId: int, SnapshotCreationTimestamp: string>> {
+]: any -> oneof<record<SnapshotDetails: record<SnapshotName: string, SnapshotStatus: string, ApplicationVersionId: int, SnapshotCreationTimestamp: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1112,7 +1126,7 @@ export def "describe-application-version" [
   --x-amz-target: string@x-amz-target-completer-18 # required
   application_name: string # The name of the application for which you want to get the version description.
   application_version_id: int # The ID of the application version for which you want to get the description.
-]: any -> record<ApplicationVersionDetail: record<ApplicationARN: string, ApplicationDescription: string, ApplicationName: string, RuntimeEnvironment: string, ServiceExecutionRole: string, ApplicationStatus: string, ApplicationVersionId: int, CreateTimestamp: string, LastUpdateTimestamp: string, ApplicationConfigurationDescription: record<SqlApplicationConfigurationDescription: record, ApplicationCodeConfigurationDescription: record, RunConfigurationDescription: record, FlinkApplicationConfigurationDescription: record, EnvironmentPropertyDescriptions: record, ApplicationSnapshotConfigurationDescription: record, VpcConfigurationDescriptions: list, ZeppelinApplicationConfigurationDescription: record>, CloudWatchLoggingOptionDescriptions: list<record>, ApplicationMaintenanceConfigurationDescription: record<ApplicationMaintenanceWindowStartTime: string, ApplicationMaintenanceWindowEndTime: string>, ApplicationVersionUpdatedFrom: int, ApplicationVersionRolledBackFrom: int, ConditionalToken: string, ApplicationVersionRolledBackTo: int, ApplicationMode: string>> {
+]: any -> oneof<record<ApplicationVersionDetail: record<ApplicationARN: string, ApplicationDescription: string, ApplicationName: string, RuntimeEnvironment: string, ServiceExecutionRole: string, ApplicationStatus: string, ApplicationVersionId: int, CreateTimestamp: string, LastUpdateTimestamp: string, ApplicationConfigurationDescription: record<SqlApplicationConfigurationDescription: record, ApplicationCodeConfigurationDescription: record, RunConfigurationDescription: record, FlinkApplicationConfigurationDescription: record, EnvironmentPropertyDescriptions: record, ApplicationSnapshotConfigurationDescription: record, VpcConfigurationDescriptions: list, ZeppelinApplicationConfigurationDescription: record>, CloudWatchLoggingOptionDescriptions: list<record>, ApplicationMaintenanceConfigurationDescription: record<ApplicationMaintenanceWindowStartTime: string, ApplicationMaintenanceWindowEndTime: string>, ApplicationVersionUpdatedFrom: int, ApplicationVersionRolledBackFrom: int, ConditionalToken: string, ApplicationVersionRolledBackTo: int, ApplicationMode: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1142,9 +1156,6 @@ export def "describe-application-version" [
 #
 # POST /
 # operationId: DiscoverInputSchema
-# --InputStartingPositionConfiguration shape: {InputStartingPosition?: "NOW"|"TRIM_HORIZON"|"LAST_STOPPED_POINT"}
-# --S3Configuration shape: {BucketARN: string, FileKey: string}
-# --InputProcessingConfiguration shape: {InputLambdaProcessor: record}
 export def "discover-input-schema" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1168,7 +1179,7 @@ export def "discover-input-schema" [
   --input-starting-position-configuration: record # Describes the point at which the application reads from the streaming source. — shape: {InputStartingPosition?: "NOW"|"TRIM_HORIZON"|"LAST_STOPPED_POINT"}
   --s3-configuration: record # For a SQL-based Kinesis Data Analytics application, provides a description of an Amazon S3 data source, including the Amazon Resource Name (ARN) of the S3 bucket and the name of the Amazon S3 object that contains the data. — shape: {BucketARN: string, FileKey: string}
   --input-processing-configuration: record # For a SQL-based Kinesis Data Analytics application, describes a processor that is used to preprocess the records in the stream before being processed by your application code. Currently, the only input processor available is Amazon Lambda (https://docs.aws.amazon.com/lambda/). — shape: {InputLambdaProcessor: record}
-]: any -> record<InputSchema: record<RecordFormat: record<RecordFormatType: string, MappingParameters: record>, RecordEncoding: string, RecordColumns: list<record>>, ParsedInputRecords: list<list<string>>, ProcessedInputRecords: list<string>, RawInputRecords: list<string>> {
+]: any -> oneof<record<InputSchema: record<RecordFormat: record<RecordFormatType: string, MappingParameters: record>, RecordEncoding: string, RecordColumns: list<record>>, ParsedInputRecords: list<list<string>>, ProcessedInputRecords: list<string>, RawInputRecords: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1219,7 +1230,7 @@ export def "list-application-snapshots" [
   application_name: string # The name of an existing application.
   --limit: int # The maximum number of application snapshots to list.
   --next-token: string # Use this parameter if you receive a NextToken response in a previous request that indicates that there is more output available. Set it to the value of the previous call's NextToken response to indicate where the output should continue from.
-]: any -> record<SnapshotSummaries: table<SnapshotName: string, SnapshotStatus: string, ApplicationVersionId: int, SnapshotCreationTimestamp: string>, NextToken: string> {
+]: any -> oneof<record<SnapshotSummaries: table<SnapshotName: string, SnapshotStatus: string, ApplicationVersionId: int, SnapshotCreationTimestamp: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1270,7 +1281,7 @@ export def "list-application-versions" [
   application_name: string # The name of the application for which you want to list all versions.
   --limit: int # The maximum number of versions to list in this invocation of the operation.
   --next-token: string # If a previous invocation of this operation returned a pagination token, pass it into this value to retrieve the next set of results. For more information about pagination, see Using the Amazon Command Line Interface's Pagination Options (https://docs.aws.amazon.com/cli/latest/userguide/pagination.html).
-]: any -> record<ApplicationVersionSummaries: table<ApplicationVersionId: int, ApplicationStatus: string>, NextToken: string> {
+]: any -> oneof<record<ApplicationVersionSummaries: table<ApplicationVersionId: int, ApplicationStatus: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1320,7 +1331,7 @@ export def "list-applications" [
   --x-amz-target: string@x-amz-target-completer-22 # required
   --limit: int # The maximum number of applications to list.
   --next-token: string # If a previous command returned a pagination token, pass it into this value to retrieve the next set of results. For more information about pagination, see Using the Amazon Command Line Interface's Pagination Options (https://docs.aws.amazon.com/cli/latest/userguide/pagination.html).
-]: any -> record<ApplicationSummaries: table<ApplicationName: string, ApplicationARN: string, ApplicationStatus: string, ApplicationVersionId: int, RuntimeEnvironment: string, ApplicationMode: string>, NextToken: string> {
+]: any -> oneof<record<ApplicationSummaries: table<ApplicationName: string, ApplicationARN: string, ApplicationStatus: string, ApplicationVersionId: int, RuntimeEnvironment: string, ApplicationMode: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1369,7 +1380,7 @@ export def "list-tags-for-resource" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-23 # required
   resource_arn: string # The ARN of the application for which to retrieve tags.
-]: any -> record<Tags: table<Key: string, Value: string>> {
+]: any -> oneof<record<Tags: table<Key: string, Value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1419,7 +1430,7 @@ export def "rollback-application" [
   --x-amz-target: string@x-amz-target-completer-24 # required
   application_name: string # The name of the application.
   current_application_version_id: int # The current application version ID. You can retrieve the application version ID using DescribeApplication.
-]: any -> record<ApplicationDetail: record<ApplicationARN: string, ApplicationDescription: string, ApplicationName: string, RuntimeEnvironment: string, ServiceExecutionRole: string, ApplicationStatus: string, ApplicationVersionId: int, CreateTimestamp: string, LastUpdateTimestamp: string, ApplicationConfigurationDescription: record<SqlApplicationConfigurationDescription: record, ApplicationCodeConfigurationDescription: record, RunConfigurationDescription: record, FlinkApplicationConfigurationDescription: record, EnvironmentPropertyDescriptions: record, ApplicationSnapshotConfigurationDescription: record, VpcConfigurationDescriptions: list, ZeppelinApplicationConfigurationDescription: record>, CloudWatchLoggingOptionDescriptions: list<record>, ApplicationMaintenanceConfigurationDescription: record<ApplicationMaintenanceWindowStartTime: string, ApplicationMaintenanceWindowEndTime: string>, ApplicationVersionUpdatedFrom: int, ApplicationVersionRolledBackFrom: int, ConditionalToken: string, ApplicationVersionRolledBackTo: int, ApplicationMode: string>> {
+]: any -> oneof<record<ApplicationDetail: record<ApplicationARN: string, ApplicationDescription: string, ApplicationName: string, RuntimeEnvironment: string, ServiceExecutionRole: string, ApplicationStatus: string, ApplicationVersionId: int, CreateTimestamp: string, LastUpdateTimestamp: string, ApplicationConfigurationDescription: record<SqlApplicationConfigurationDescription: record, ApplicationCodeConfigurationDescription: record, RunConfigurationDescription: record, FlinkApplicationConfigurationDescription: record, EnvironmentPropertyDescriptions: record, ApplicationSnapshotConfigurationDescription: record, VpcConfigurationDescriptions: list, ZeppelinApplicationConfigurationDescription: record>, CloudWatchLoggingOptionDescriptions: list<record>, ApplicationMaintenanceConfigurationDescription: record<ApplicationMaintenanceWindowStartTime: string, ApplicationMaintenanceWindowEndTime: string>, ApplicationVersionUpdatedFrom: int, ApplicationVersionRolledBackFrom: int, ConditionalToken: string, ApplicationVersionRolledBackTo: int, ApplicationMode: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1449,7 +1460,6 @@ export def "rollback-application" [
 #
 # POST /
 # operationId: StartApplication
-# --RunConfiguration shape: {FlinkRunConfiguration?: record, SqlRunConfigurations?: list, ApplicationRestoreConfiguration?: record}
 export def "start-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1470,7 +1480,7 @@ export def "start-application" [
   --x-amz-target: string@x-amz-target-completer-25 # required
   application_name: string # The name of the application.
   --run-configuration: record # Describes the starting parameters for an Kinesis Data Analytics application. — shape: {FlinkRunConfiguration?: record, SqlRunConfigurations?: list, ApplicationRestoreConfiguration?: record}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1520,7 +1530,7 @@ export def "stop-application" [
   --x-amz-target: string@x-amz-target-completer-26 # required
   application_name: string # The name of the running application to stop.
   --force: oneof<nothing, bool> # Set to true to force the application to stop. If you set Force to true, Kinesis Data Analytics stops the application without taking a snapshot. Force-stopping your application may lead to data loss or duplication. To prevent data loss or duplicate processing of data during application restarts, we recommend you to take frequent snapshots of your application. You can only force stop a Flink-based Kinesis Data Analytics application. You can't force stop a SQL-based Kinesis Data Analytics application. The application must be in the STARTING, UPDATING, STOPPING, AUTOSCALING, or RUNNING status.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1550,7 +1560,6 @@ export def "stop-application" [
 #
 # POST /
 # operationId: TagResource
-# --Tags item shape: {Key: string, Value?: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1571,7 +1580,7 @@ export def "tag-resource" [
   --x-amz-target: string@x-amz-target-completer-27 # required
   resource_arn: string # The ARN of the application to assign the tags.
   tags: list # The key-value tags to assign to the application. — item shape: {Key: string, Value?: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1621,7 +1630,7 @@ export def "untag-resource" [
   --x-amz-target: string@x-amz-target-completer-28 # required
   resource_arn: string # The ARN of the Kinesis Data Analytics application from which to remove the tags.
   tag_keys: list<string> # A list of keys of tags to remove from the specified application.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1651,9 +1660,6 @@ export def "untag-resource" [
 #
 # POST /
 # operationId: UpdateApplication
-# --ApplicationConfigurationUpdate shape: {SqlApplicationConfigurationUpdate?: record, ApplicationCodeConfigurationUpdate?: record, FlinkApplicationConfigurationUpdate?: record, EnvironmentPropertyUpdates?: record, ApplicationSnapshotConfigurationUpdate?: record, VpcConfigurationUpdates?: list, ZeppelinApplicationConfigurationUpdate?: record}
-# --RunConfigurationUpdate shape: {FlinkRunConfiguration?: record, ApplicationRestoreConfiguration?: record}
-# --CloudWatchLoggingOptionUpdates item shape: {CloudWatchLoggingOptionId: string, LogStreamARNUpdate?: string}
 export def "update-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1679,7 +1685,7 @@ export def "update-application" [
   --run-configuration-update: record # Describes the updates to the starting parameters for a Kinesis Data Analytics application. — shape: {FlinkRunConfiguration?: record, ApplicationRestoreConfiguration?: record}
   --cloud-watch-logging-option-updates: list # Describes application Amazon CloudWatch logging option updates. You can only update existing CloudWatch logging options with this action. To add a new CloudWatch logging option, use AddApplicationCloudWatchLoggingOption. — item shape: {CloudWatchLoggingOptionId: string, LogStreamARNUpdate?: string}
   --conditional-token: string # A value you use to implement strong concurrency for application updates. You must provide the CurrentApplicationVersionId or the ConditionalToken. You get the application's current ConditionalToken using DescribeApplication. For better concurrency support, use the ConditionalToken parameter instead of CurrentApplicationVersionId.
-]: any -> record<ApplicationDetail: record<ApplicationARN: string, ApplicationDescription: string, ApplicationName: string, RuntimeEnvironment: string, ServiceExecutionRole: string, ApplicationStatus: string, ApplicationVersionId: int, CreateTimestamp: string, LastUpdateTimestamp: string, ApplicationConfigurationDescription: record<SqlApplicationConfigurationDescription: record, ApplicationCodeConfigurationDescription: record, RunConfigurationDescription: record, FlinkApplicationConfigurationDescription: record, EnvironmentPropertyDescriptions: record, ApplicationSnapshotConfigurationDescription: record, VpcConfigurationDescriptions: list, ZeppelinApplicationConfigurationDescription: record>, CloudWatchLoggingOptionDescriptions: list<record>, ApplicationMaintenanceConfigurationDescription: record<ApplicationMaintenanceWindowStartTime: string, ApplicationMaintenanceWindowEndTime: string>, ApplicationVersionUpdatedFrom: int, ApplicationVersionRolledBackFrom: int, ConditionalToken: string, ApplicationVersionRolledBackTo: int, ApplicationMode: string>> {
+]: any -> oneof<record<ApplicationDetail: record<ApplicationARN: string, ApplicationDescription: string, ApplicationName: string, RuntimeEnvironment: string, ServiceExecutionRole: string, ApplicationStatus: string, ApplicationVersionId: int, CreateTimestamp: string, LastUpdateTimestamp: string, ApplicationConfigurationDescription: record<SqlApplicationConfigurationDescription: record, ApplicationCodeConfigurationDescription: record, RunConfigurationDescription: record, FlinkApplicationConfigurationDescription: record, EnvironmentPropertyDescriptions: record, ApplicationSnapshotConfigurationDescription: record, VpcConfigurationDescriptions: list, ZeppelinApplicationConfigurationDescription: record>, CloudWatchLoggingOptionDescriptions: list<record>, ApplicationMaintenanceConfigurationDescription: record<ApplicationMaintenanceWindowStartTime: string, ApplicationMaintenanceWindowEndTime: string>, ApplicationVersionUpdatedFrom: int, ApplicationVersionRolledBackFrom: int, ConditionalToken: string, ApplicationVersionRolledBackTo: int, ApplicationMode: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1709,7 +1715,6 @@ export def "update-application" [
 #
 # POST /
 # operationId: UpdateApplicationMaintenanceConfiguration
-# --ApplicationMaintenanceConfigurationUpdate shape: {ApplicationMaintenanceWindowStartTimeUpdate: string}
 export def "update-application-maintenance-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1730,7 +1735,7 @@ export def "update-application-maintenance-configuration" [
   --x-amz-target: string@x-amz-target-completer-30 # required
   application_name: string # The name of the application for which you want to update the maintenance configuration.
   application_maintenance_configuration_update: record # Describes the updated maintenance configuration for the application. — shape: {ApplicationMaintenanceWindowStartTimeUpdate: string}
-]: any -> record<ApplicationARN: string, ApplicationMaintenanceConfigurationDescription: record<ApplicationMaintenanceWindowStartTime: string, ApplicationMaintenanceWindowEndTime: string>> {
+]: any -> oneof<record<ApplicationARN: string, ApplicationMaintenanceConfigurationDescription: record<ApplicationMaintenanceWindowStartTime: string, ApplicationMaintenanceWindowEndTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

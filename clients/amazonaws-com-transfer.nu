@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -167,9 +190,9 @@ def x-amz-target-completer-57 [] { ["TransferService.UpdateUser"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-access" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["create-access" "create-agreement" "create-connector" "create-profile" "create-server" "create-user" "create-workflow" "delete-access" "delete-agreement" "delete-certificate" "delete-connector" "delete-host-key" "delete-profile" "delete-server" "delete-ssh-public-key" "delete-user" "delete-workflow" "describe-access" "describe-agreement" "describe-certificate" "describe-connector" "describe-execution" "describe-host-key" "describe-profile" "describe-security-policy" "describe-server" "describe-user" "describe-workflow" "import-certificate" "import-host-key" "import-ssh-public-key" "list-accesses" "list-agreements" "list-certificates" "list-connectors" "list-executions" "list-host-keys" "list-profiles" "list-security-policies" "list-servers" "list-tags-for-resource" "list-users" "list-workflows" "send-workflow-step-state" "start-file-transfer" "start-server" "stop-server" "tag-resource" "test-identity-provider" "untag-resource" "update-access" "update-agreement" "update-certificate" "update-connector" "update-host-key" "update-profile" "update-server" "update-user" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -191,8 +214,6 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: CreateAccess
-# --HomeDirectoryMappings item shape: {Entry: string, Target: string}
-# --PosixProfile shape: {Uid: int, Gid: int, SecondaryGids?: list<int>}
 export def "create-access" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -219,7 +240,7 @@ export def "create-access" [
   role: string # The Amazon Resource Name (ARN) of the Identity and Access Management (IAM) role that controls your users' access to your Amazon S3 bucket or Amazon EFS file system. The policies attached to this role determine the level of access that you want to provide your users when transferring files into and out of your Amazon S3 bucket or Amazon EFS file system. The IAM role should also contain a trust relationship that allows the server to access your resources when servicing your users' transfer requests.
   server_id: string # A system-assigned unique identifier for a server instance. This is the specific server that you added your user to.
   external_id: string # A unique identifier that is required to identify specific groups within your directory. The users of the group that you associate have access to your Amazon S3 or Amazon EFS resources over the enabled protocols using Transfer Family. If you know the group name, you can view the SID values by running the following command using Windows PowerShell. Get-ADGroup -Filter {samAccountName -like "YourGroupName*"} -Properties * | Select SamAccountName,ObjectSid In that command, replace YourGroupName with the name of your Active Directory group. The regular expression used to validate this parameter is a string of characters consisting of uppercase and lowercase alphanumeric characters with no spaces. You can also include underscores or any of the following characters: =,.@:/-
-]: any -> record<ServerId: string, ExternalId: string> {
+]: any -> oneof<record<ServerId: string, ExternalId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -249,7 +270,6 @@ export def "create-access" [
 #
 # POST /
 # operationId: CreateAgreement
-# --Tags item shape: {Key: string, Value: string}
 export def "create-agreement" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -276,7 +296,7 @@ export def "create-agreement" [
   access_role: string # With AS2, you can send files by calling StartFileTransfer and specifying the file paths in the request parameter, SendFilePaths. We use the file’s parent directory (for example, for --send-file-paths /bucket/dir/file.txt, parent directory is /bucket/dir/) to temporarily store a processed AS2 message file, store the MDN when we receive them from the partner, and write a final JSON file containing relevant metadata of the transmission. So, the AccessRole needs to provide read and write access to the parent directory of the file location used in the StartFileTransfer request. Additionally, you need to provide read and write access to the parent directory of the files that you intend to send with StartFileTransfer.
   --status: string@status-completer # The status of the agreement. The agreement can be either ACTIVE or INACTIVE.
   --tags: list # Key-value pairs that can be used to group and search for agreements. — item shape: {Key: string, Value: string}
-]: any -> record<AgreementId: string> {
+]: any -> oneof<record<AgreementId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -306,8 +326,6 @@ export def "create-agreement" [
 #
 # POST /
 # operationId: CreateConnector
-# --As2Config shape: {LocalProfileId?: string, PartnerProfileId?: string, MessageSubject?: string, Compression?: "ZLIB"|"DISABLED", EncryptionAlgorithm?: "AES128_CBC"|"AES192_CBC"|"AES256_CBC"|"NONE", SigningAlgorithm?: "SHA256"|"SHA384"|"SHA512"|"SHA1"|"NONE", MdnSigningAlgorithm?: "SHA256"|"SHA384"|"SHA512"|"SHA1"|"NONE"|"DEFAULT", MdnResponse?: "SYNC"|"NONE"}
-# --Tags item shape: {Key: string, Value: string}
 export def "create-connector" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -331,7 +349,7 @@ export def "create-connector" [
   access_role: string # With AS2, you can send files by calling StartFileTransfer and specifying the file paths in the request parameter, SendFilePaths. We use the file’s parent directory (for example, for --send-file-paths /bucket/dir/file.txt, parent directory is /bucket/dir/) to temporarily store a processed AS2 message file, store the MDN when we receive them from the partner, and write a final JSON file containing relevant metadata of the transmission. So, the AccessRole needs to provide read and write access to the parent directory of the file location used in the StartFileTransfer request. Additionally, you need to provide read and write access to the parent directory of the files that you intend to send with StartFileTransfer.
   --logging-role: string # The Amazon Resource Name (ARN) of the Identity and Access Management (IAM) role that allows a connector to turn on CloudWatch logging for Amazon S3 events. When set, you can view connector activity in your CloudWatch logs.
   --tags: list # Key-value pairs that can be used to group and search for connectors. Tags are metadata attached to connectors for any purpose. — item shape: {Key: string, Value: string}
-]: any -> record<ConnectorId: string> {
+]: any -> oneof<record<ConnectorId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -361,7 +379,6 @@ export def "create-connector" [
 #
 # POST /
 # operationId: CreateProfile
-# --Tags item shape: {Key: string, Value: string}
 export def "create-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -384,7 +401,7 @@ export def "create-profile" [
   profile_type: string@profile-type-completer # Determines the type of profile to create: Specify LOCAL to create a local profile. A local profile represents the AS2-enabled Transfer Family server organization or party. Specify PARTNER to create a partner profile. A partner profile represents a remote organization, external to Transfer Family.
   --certificate-ids: list<string> # An array of identifiers for the imported certificates. You use this identifier for working with profiles and partner profiles.
   --tags: list # Key-value pairs that can be used to group and search for AS2 profiles. — item shape: {Key: string, Value: string}
-]: any -> record<ProfileId: string> {
+]: any -> oneof<record<ProfileId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -414,11 +431,6 @@ export def "create-profile" [
 #
 # POST /
 # operationId: CreateServer
-# --EndpointDetails shape: {AddressAllocationIds?: list<string>, SubnetIds?: list<string>, VpcEndpointId?: string, VpcId?: string, SecurityGroupIds?: list<string>}
-# --IdentityProviderDetails shape: {Url?: string, InvocationRole?: string, DirectoryId?: string, Function?: string}
-# --ProtocolDetails shape: {PassiveIp?: string, TlsSessionResumptionMode?: "DISABLED"|"ENABLED"|"ENFORCED", SetStatOption?: "DEFAULT"|"ENABLE_NO_OP", As2Transports?: list<string>}
-# --Tags item shape: {Key: string, Value: string}
-# --WorkflowDetails shape: {OnUpload?: list, OnPartialUpload?: list}
 export def "create-server" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -452,7 +464,7 @@ export def "create-server" [
   --security-policy-name: string # Specifies the name of the security policy that is attached to the server.
   --tags: list # Key-value pairs that can be used to group and search for servers. — item shape: {Key: string, Value: string}
   --workflow-details: record # Container for the WorkflowDetail data type. It is used by actions that trigger a workflow to begin execution. — shape: {OnUpload?: list, OnPartialUpload?: list}
-]: any -> record<ServerId: string> {
+]: any -> oneof<record<ServerId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -482,9 +494,6 @@ export def "create-server" [
 #
 # POST /
 # operationId: CreateUser
-# --HomeDirectoryMappings item shape: {Entry: string, Target: string}
-# --PosixProfile shape: {Uid: int, Gid: int, SecondaryGids?: list<int>}
-# --Tags item shape: {Key: string, Value: string}
 export def "create-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -513,7 +522,7 @@ export def "create-user" [
   --ssh-public-key-body: string # The public portion of the Secure Shell (SSH) key used to authenticate the user to the server. The three standard SSH public key format elements are <key type>, <body base64>, and an optional <comment>, with spaces between each element. Transfer Family accepts RSA, ECDSA, and ED25519 keys. For RSA keys, the key type is ssh-rsa. For ED25519 keys, the key type is ssh-ed25519. For ECDSA keys, the key type is either ecdsa-sha2-nistp256, ecdsa-sha2-nistp384, or ecdsa-sha2-nistp521, depending on the size of the key you generated.
   --tags: list # Key-value pairs that can be used to group and search for users. Tags are metadata attached to users for any purpose. — item shape: {Key: string, Value: string}
   user_name: string # A unique string that identifies a user and is associated with a ServerId. This user name must be a minimum of 3 and a maximum of 100 characters long. The following are valid characters: a-z, A-Z, 0-9, underscore '_', hyphen '-', period '.', and at sign '@'. The user name can't start with a hyphen, period, or at sign.
-]: any -> record<ServerId: string, UserName: string> {
+]: any -> oneof<record<ServerId: string, UserName: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -543,9 +552,6 @@ export def "create-user" [
 #
 # POST /
 # operationId: CreateWorkflow
-# --Steps item shape: {Type?: "COPY"|"CUSTOM"|"TAG"|"DELETE"|"DECRYPT", CopyStepDetails?: record, CustomStepDetails?: record, DeleteStepDetails?: record, TagStepDetails?: record, DecryptStepDetails?: record}
-# --OnExceptionSteps item shape: {Type?: "COPY"|"CUSTOM"|"TAG"|"DELETE"|"DECRYPT", CopyStepDetails?: record, CustomStepDetails?: record, DeleteStepDetails?: record, TagStepDetails?: record, DecryptStepDetails?: record}
-# --Tags item shape: {Key: string, Value: string}
 export def "create-workflow" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -568,7 +574,7 @@ export def "create-workflow" [
   steps: list # Specifies the details for the steps that are in the specified workflow. The TYPE specifies which of the following actions is being taken for this step. COPY - Copy the file to another location. CUSTOM - Perform a custom step with an Lambda function target. DECRYPT - Decrypt a file that was encrypted before it was uploaded. DELETE - Delete the file. TAG - Add a tag to the file. Currently, copying and tagging are supported only on S3. For file location, you specify either the Amazon S3 bucket and key, or the Amazon EFS file system ID and path. — item shape: {Type?: "COPY"|"CUSTOM"|"TAG"|"DELETE"|"DECRYPT", CopyStepDetails?: record, CustomStepDetails?: record, DeleteStepDetails?: record, TagStepDetails?: record, DecryptStepDetails?: record}
   --on-exception-steps: list # Specifies the steps (actions) to take if errors are encountered during execution of the workflow. For custom steps, the lambda function needs to send FAILURE to the call back API to kick off the exception steps. Additionally, if the lambda does not send SUCCESS before it times out, the exception steps are executed. — item shape: {Type?: "COPY"|"CUSTOM"|"TAG"|"DELETE"|"DECRYPT", CopyStepDetails?: record, CustomStepDetails?: record, DeleteStepDetails?: record, TagStepDetails?: record, DecryptStepDetails?: record}
   --tags: list # Key-value pairs that can be used to group and search for workflows. Tags are metadata attached to workflows for any purpose. — item shape: {Key: string, Value: string}
-]: any -> record<WorkflowId: string> {
+]: any -> oneof<record<WorkflowId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1114,7 +1120,7 @@ export def "describe-access" [
   --x-amz-target: string@x-amz-target-completer-17 # required
   server_id: string # A system-assigned unique identifier for a server that has this access assigned.
   external_id: string # A unique identifier that is required to identify specific groups within your directory. The users of the group that you associate have access to your Amazon S3 or Amazon EFS resources over the enabled protocols using Transfer Family. If you know the group name, you can view the SID values by running the following command using Windows PowerShell. Get-ADGroup -Filter {samAccountName -like "YourGroupName*"} -Properties * | Select SamAccountName,ObjectSid In that command, replace YourGroupName with the name of your Active Directory group. The regular expression used to validate this parameter is a string of characters consisting of uppercase and lowercase alphanumeric characters with no spaces. You can also include underscores or any of the following characters: =,.@:/-
-]: any -> record<ServerId: string, Access: record<HomeDirectory: string, HomeDirectoryMappings: list<record>, HomeDirectoryType: string, Policy: string, PosixProfile: record<Uid: int, Gid: int, SecondaryGids: list>, Role: string, ExternalId: string>> {
+]: any -> oneof<record<ServerId: string, Access: record<HomeDirectory: string, HomeDirectoryMappings: list<record>, HomeDirectoryType: string, Policy: string, PosixProfile: record<Uid: int, Gid: int, SecondaryGids: list>, Role: string, ExternalId: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1164,7 +1170,7 @@ export def "describe-agreement" [
   --x-amz-target: string@x-amz-target-completer-18 # required
   agreement_id: string # A unique identifier for the agreement. This identifier is returned when you create an agreement.
   server_id: string # The server identifier that's associated with the agreement.
-]: any -> record<Agreement: record<Arn: string, AgreementId: string, Description: string, Status: string, ServerId: string, LocalProfileId: string, PartnerProfileId: string, BaseDirectory: string, AccessRole: string, Tags: list<record>>> {
+]: any -> oneof<record<Agreement: record<Arn: string, AgreementId: string, Description: string, Status: string, ServerId: string, LocalProfileId: string, PartnerProfileId: string, BaseDirectory: string, AccessRole: string, Tags: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1213,7 +1219,7 @@ export def "describe-certificate" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-19 # required
   certificate_id: string # An array of identifiers for the imported certificates. You use this identifier for working with profiles and partner profiles.
-]: any -> record<Certificate: record<Arn: string, CertificateId: string, Usage: string, Status: string, Certificate: string, CertificateChain: string, ActiveDate: string, InactiveDate: string, Serial: string, NotBeforeDate: string, NotAfterDate: string, Type: string, Description: string, Tags: list<record>>> {
+]: any -> oneof<record<Certificate: record<Arn: string, CertificateId: string, Usage: string, Status: string, Certificate: string, CertificateChain: string, ActiveDate: string, InactiveDate: string, Serial: string, NotBeforeDate: string, NotAfterDate: string, Type: string, Description: string, Tags: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1262,7 +1268,7 @@ export def "describe-connector" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-20 # required
   connector_id: string # The unique identifier for the connector.
-]: any -> record<Connector: record<Arn: string, ConnectorId: string, Url: string, As2Config: record<LocalProfileId: string, PartnerProfileId: string, MessageSubject: string, Compression: string, EncryptionAlgorithm: string, SigningAlgorithm: string, MdnSigningAlgorithm: string, MdnResponse: string>, AccessRole: string, LoggingRole: string, Tags: list<record>>> {
+]: any -> oneof<record<Connector: record<Arn: string, ConnectorId: string, Url: string, As2Config: record<LocalProfileId: string, PartnerProfileId: string, MessageSubject: string, Compression: string, EncryptionAlgorithm: string, SigningAlgorithm: string, MdnSigningAlgorithm: string, MdnResponse: string>, AccessRole: string, LoggingRole: string, Tags: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1312,7 +1318,7 @@ export def "describe-execution" [
   --x-amz-target: string@x-amz-target-completer-21 # required
   execution_id: string # A unique identifier for the execution of a workflow.
   workflow_id: string # A unique identifier for the workflow.
-]: any -> record<WorkflowId: string, Execution: record<ExecutionId: string, InitialFileLocation: record<S3FileLocation: record, EfsFileLocation: record>, ServiceMetadata: record<UserDetails: record>, ExecutionRole: string, LoggingConfiguration: record<LoggingRole: string, LogGroupName: string>, PosixProfile: record<Uid: int, Gid: int, SecondaryGids: list>, Status: string, Results: record<Steps: list, OnExceptionSteps: list>>> {
+]: any -> oneof<record<WorkflowId: string, Execution: record<ExecutionId: string, InitialFileLocation: record<S3FileLocation: record, EfsFileLocation: record>, ServiceMetadata: record<UserDetails: record>, ExecutionRole: string, LoggingConfiguration: record<LoggingRole: string, LogGroupName: string>, PosixProfile: record<Uid: int, Gid: int, SecondaryGids: list>, Status: string, Results: record<Steps: list, OnExceptionSteps: list>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1362,7 +1368,7 @@ export def "describe-host-key" [
   --x-amz-target: string@x-amz-target-completer-22 # required
   server_id: string # The identifier of the server that contains the host key that you want described.
   host_key_id: string # The identifier of the host key that you want described.
-]: any -> record<HostKey: record<Arn: string, HostKeyId: string, HostKeyFingerprint: string, Description: string, Type: string, DateImported: string, Tags: list<record>>> {
+]: any -> oneof<record<HostKey: record<Arn: string, HostKeyId: string, HostKeyFingerprint: string, Description: string, Type: string, DateImported: string, Tags: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1411,7 +1417,7 @@ export def "describe-profile" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-23 # required
   profile_id: string # The identifier of the profile that you want described.
-]: any -> record<Profile: record<Arn: string, ProfileId: string, ProfileType: string, As2Id: string, CertificateIds: list<string>, Tags: list<record>>> {
+]: any -> oneof<record<Profile: record<Arn: string, ProfileId: string, ProfileType: string, As2Id: string, CertificateIds: list<string>, Tags: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1460,7 +1466,7 @@ export def "describe-security-policy" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-24 # required
   security_policy_name: string # Specifies the name of the security policy that is attached to the server.
-]: any -> record<SecurityPolicy: record<Fips: bool, SecurityPolicyName: string, SshCiphers: list<string>, SshKexs: list<string>, SshMacs: list<string>, TlsCiphers: list<string>>> {
+]: any -> oneof<record<SecurityPolicy: record<Fips: bool, SecurityPolicyName: string, SshCiphers: list<string>, SshKexs: list<string>, SshMacs: list<string>, TlsCiphers: list<string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1509,7 +1515,7 @@ export def "describe-server" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-25 # required
   server_id: string # A system-assigned unique identifier for a server.
-]: any -> record<Server: record<Arn: string, Certificate: string, ProtocolDetails: record<PassiveIp: string, TlsSessionResumptionMode: string, SetStatOption: string, As2Transports: list>, Domain: string, EndpointDetails: record<AddressAllocationIds: list, SubnetIds: list, VpcEndpointId: string, VpcId: string, SecurityGroupIds: list>, EndpointType: string, HostKeyFingerprint: string, IdentityProviderDetails: record<Url: string, InvocationRole: string, DirectoryId: string, Function: string>, IdentityProviderType: string, LoggingRole: string, PostAuthenticationLoginBanner: string, PreAuthenticationLoginBanner: string, Protocols: list<string>, SecurityPolicyName: string, ServerId: string, State: string, Tags: list<record>, UserCount: int, WorkflowDetails: record<OnUpload: list, OnPartialUpload: list>>> {
+]: any -> oneof<record<Server: record<Arn: string, Certificate: string, ProtocolDetails: record<PassiveIp: string, TlsSessionResumptionMode: string, SetStatOption: string, As2Transports: list>, Domain: string, EndpointDetails: record<AddressAllocationIds: list, SubnetIds: list, VpcEndpointId: string, VpcId: string, SecurityGroupIds: list>, EndpointType: string, HostKeyFingerprint: string, IdentityProviderDetails: record<Url: string, InvocationRole: string, DirectoryId: string, Function: string>, IdentityProviderType: string, LoggingRole: string, PostAuthenticationLoginBanner: string, PreAuthenticationLoginBanner: string, Protocols: list<string>, SecurityPolicyName: string, ServerId: string, State: string, Tags: list<record>, UserCount: int, WorkflowDetails: record<OnUpload: list, OnPartialUpload: list>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1559,7 +1565,7 @@ export def "describe-user" [
   --x-amz-target: string@x-amz-target-completer-26 # required
   server_id: string # A system-assigned unique identifier for a server that has this user assigned.
   user_name: string # The name of the user assigned to one or more servers. User names are part of the sign-in credentials to use the Transfer Family service and perform file transfer tasks.
-]: any -> record<ServerId: string, User: record<Arn: string, HomeDirectory: string, HomeDirectoryMappings: list<record>, HomeDirectoryType: string, Policy: string, PosixProfile: record<Uid: int, Gid: int, SecondaryGids: list>, Role: string, SshPublicKeys: list<record>, Tags: list<record>, UserName: string>> {
+]: any -> oneof<record<ServerId: string, User: record<Arn: string, HomeDirectory: string, HomeDirectoryMappings: list<record>, HomeDirectoryType: string, Policy: string, PosixProfile: record<Uid: int, Gid: int, SecondaryGids: list>, Role: string, SshPublicKeys: list<record>, Tags: list<record>, UserName: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1608,7 +1614,7 @@ export def "describe-workflow" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-27 # required
   workflow_id: string # A unique identifier for the workflow.
-]: any -> record<Workflow: record<Arn: string, Description: string, Steps: list<record>, OnExceptionSteps: list<record>, WorkflowId: string, Tags: list<record>>> {
+]: any -> oneof<record<Workflow: record<Arn: string, Description: string, Steps: list<record>, OnExceptionSteps: list<record>, WorkflowId: string, Tags: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1638,7 +1644,6 @@ export def "describe-workflow" [
 #
 # POST /
 # operationId: ImportCertificate
-# --Tags item shape: {Key: string, Value: string}
 export def "import-certificate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1665,7 +1670,7 @@ export def "import-certificate" [
   --inactive-date: string # An optional date that specifies when the certificate becomes inactive. (format: date-time)
   --description: string # A short description that helps identify the certificate.
   --tags: list # Key-value pairs that can be used to group and search for certificates. — item shape: {Key: string, Value: string}
-]: any -> record<CertificateId: string> {
+]: any -> oneof<record<CertificateId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1695,7 +1700,6 @@ export def "import-certificate" [
 #
 # POST /
 # operationId: ImportHostKey
-# --Tags item shape: {Key: string, Value: string}
 export def "import-host-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1718,7 +1722,7 @@ export def "import-host-key" [
   host_key_body: string # The private key portion of an SSH key pair. Transfer Family accepts RSA, ECDSA, and ED25519 keys. (format: password)
   --description: string # The text description that identifies this host key.
   --tags: list # Key-value pairs that can be used to group and search for host keys. — item shape: {Key: string, Value: string}
-]: any -> record<ServerId: string, HostKeyId: string> {
+]: any -> oneof<record<ServerId: string, HostKeyId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1769,7 +1773,7 @@ export def "import-ssh-public-key" [
   server_id: string # A system-assigned unique identifier for a server.
   ssh_public_key_body: string # The public key portion of an SSH key pair. Transfer Family accepts RSA, ECDSA, and ED25519 keys.
   user_name: string # The name of the user account that is assigned to one or more servers.
-]: any -> record<ServerId: string, SshPublicKeyId: string, UserName: string> {
+]: any -> oneof<record<ServerId: string, SshPublicKeyId: string, UserName: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1822,7 +1826,7 @@ export def "list-accesses" [
   --max-results-body: int # Specifies the maximum number of access SIDs to return. (body field)
   --next-token-body: string # When you can get additional results from the ListAccesses call, a NextToken parameter is returned in the output. You can then pass in a subsequent command to the NextToken parameter to continue listing additional accesses. (body field)
   server_id: string # A system-assigned unique identifier for a server that has users assigned to it.
-]: any -> record<NextToken: string, ServerId: string, Accesses: table<HomeDirectory: string, HomeDirectoryType: string, Role: string, ExternalId: string>> {
+]: any -> oneof<record<NextToken: string, ServerId: string, Accesses: table<HomeDirectory: string, HomeDirectoryType: string, Role: string, ExternalId: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1876,7 +1880,7 @@ export def "list-agreements" [
   --max-results-body: int # The maximum number of agreements to return. (body field)
   --next-token-body: string # When you can get additional results from the ListAgreements call, a NextToken parameter is returned in the output. You can then pass in a subsequent command to the NextToken parameter to continue listing additional agreements. (body field)
   server_id: string # The identifier of the server for which you want a list of agreements.
-]: any -> record<NextToken: string, Agreements: table<Arn: string, AgreementId: string, Description: string, Status: string, ServerId: string, LocalProfileId: string, PartnerProfileId: string>> {
+]: any -> oneof<record<NextToken: string, Agreements: table<Arn: string, AgreementId: string, Description: string, Status: string, ServerId: string, LocalProfileId: string, PartnerProfileId: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1929,7 +1933,7 @@ export def "list-certificates" [
   --x-amz-target: string@x-amz-target-completer-33 # required
   --max-results-body: int # The maximum number of certificates to return. (body field)
   --next-token-body: string # When you can get additional results from the ListCertificates call, a NextToken parameter is returned in the output. You can then pass in a subsequent command to the NextToken parameter to continue listing additional certificates. (body field)
-]: any -> record<NextToken: string, Certificates: table<Arn: string, CertificateId: string, Usage: string, Status: string, ActiveDate: string, InactiveDate: string, Type: string, Description: string>> {
+]: any -> oneof<record<NextToken: string, Certificates: table<Arn: string, CertificateId: string, Usage: string, Status: string, ActiveDate: string, InactiveDate: string, Type: string, Description: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1982,7 +1986,7 @@ export def "list-connectors" [
   --x-amz-target: string@x-amz-target-completer-34 # required
   --max-results-body: int # The maximum number of connectors to return. (body field)
   --next-token-body: string # When you can get additional results from the ListConnectors call, a NextToken parameter is returned in the output. You can then pass in a subsequent command to the NextToken parameter to continue listing additional connectors. (body field)
-]: any -> record<NextToken: string, Connectors: table<Arn: string, ConnectorId: string, Url: string>> {
+]: any -> oneof<record<NextToken: string, Connectors: table<Arn: string, ConnectorId: string, Url: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2036,7 +2040,7 @@ export def "list-executions" [
   --max-results-body: int # Specifies the maximum number of executions to return. (body field)
   --next-token-body: string # ListExecutions returns the NextToken parameter in the output. You can then pass the NextToken parameter in a subsequent command to continue listing additional executions. This is useful for pagination, for instance. If you have 100 executions for a workflow, you might only want to list first 10. If so, call the API by specifying the max-results: aws transfer list-executions --max-results 10 This returns details for the first 10 executions, as well as the pointer (NextToken) to the eleventh execution. You can now call the API again, supplying the NextToken value you received: aws transfer list-executions --max-results 10 --next-token $somePointerReturnedFromPreviousListResult This call returns the next 10 executions, the 11th through the 20th. You can then repeat the call until the details for all 100 executions have been returned. (body field)
   workflow_id: string # A unique identifier for the workflow.
-]: any -> record<NextToken: string, WorkflowId: string, Executions: table<ExecutionId: string, InitialFileLocation: record, ServiceMetadata: record, Status: string>> {
+]: any -> oneof<record<NextToken: string, WorkflowId: string, Executions: table<ExecutionId: string, InitialFileLocation: record, ServiceMetadata: record, Status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2088,7 +2092,7 @@ export def "list-host-keys" [
   --max-results: int # The maximum number of host keys to return.
   --next-token: string # When there are additional results that were not returned, a NextToken parameter is returned. You can use that value for a subsequent call to ListHostKeys to continue listing results.
   server_id: string # The identifier of the server that contains the host keys that you want to view.
-]: any -> record<NextToken: string, ServerId: string, HostKeys: table<Arn: string, HostKeyId: string, Fingerprint: string, Description: string, Type: string, DateImported: string>> {
+]: any -> oneof<record<NextToken: string, ServerId: string, HostKeys: table<Arn: string, HostKeyId: string, Fingerprint: string, Description: string, Type: string, DateImported: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2141,7 +2145,7 @@ export def "list-profiles" [
   --max-results-body: int # The maximum number of profiles to return. (body field)
   --next-token-body: string # When there are additional results that were not returned, a NextToken parameter is returned. You can use that value for a subsequent call to ListProfiles to continue listing results. (body field)
   --profile-type: string@profile-type-completer # Indicates whether to list only LOCAL type profiles or only PARTNER type profiles. If not supplied in the request, the command lists all types of profiles.
-]: any -> record<NextToken: string, Profiles: table<Arn: string, ProfileId: string, As2Id: string, ProfileType: string>> {
+]: any -> oneof<record<NextToken: string, Profiles: table<Arn: string, ProfileId: string, As2Id: string, ProfileType: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2194,7 +2198,7 @@ export def "list-security-policies" [
   --x-amz-target: string@x-amz-target-completer-38 # required
   --max-results-body: int # Specifies the number of security policies to return as a response to the ListSecurityPolicies query. (body field)
   --next-token-body: string # When additional results are obtained from the ListSecurityPolicies command, a NextToken parameter is returned in the output. You can then pass the NextToken parameter in a subsequent command to continue listing additional security policies. (body field)
-]: any -> record<NextToken: string, SecurityPolicyNames: list<string>> {
+]: any -> oneof<record<NextToken: string, SecurityPolicyNames: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2247,7 +2251,7 @@ export def "list-servers" [
   --x-amz-target: string@x-amz-target-completer-39 # required
   --max-results-body: int # Specifies the number of servers to return as a response to the ListServers query. (body field)
   --next-token-body: string # When additional results are obtained from the ListServers command, a NextToken parameter is returned in the output. You can then pass the NextToken parameter in a subsequent command to continue listing additional servers. (body field)
-]: any -> record<NextToken: string, Servers: table<Arn: string, Domain: string, IdentityProviderType: string, EndpointType: string, LoggingRole: string, ServerId: string, State: string, UserCount: int>> {
+]: any -> oneof<record<NextToken: string, Servers: table<Arn: string, Domain: string, IdentityProviderType: string, EndpointType: string, LoggingRole: string, ServerId: string, State: string, UserCount: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2301,7 +2305,7 @@ export def "list-tags-for-resource" [
   arn: string # Requests the tags associated with a particular Amazon Resource Name (ARN). An ARN is an identifier for a specific Amazon Web Services resource, such as a server, user, or role.
   --max-results-body: int # Specifies the number of tags to return as a response to the ListTagsForResource request. (body field)
   --next-token-body: string # When you request additional results from the ListTagsForResource operation, a NextToken parameter is returned in the input. You can then pass in a subsequent command to the NextToken parameter to continue listing additional tags. (body field)
-]: any -> record<Arn: string, NextToken: string, Tags: table<Key: string, Value: string>> {
+]: any -> oneof<record<Arn: string, NextToken: string, Tags: table<Key: string, Value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2355,7 +2359,7 @@ export def "list-users" [
   --max-results-body: int # Specifies the number of users to return as a response to the ListUsers request. (body field)
   --next-token-body: string # When you can get additional results from the ListUsers call, a NextToken parameter is returned in the output. You can then pass in a subsequent command to the NextToken parameter to continue listing additional users. (body field)
   server_id: string # A system-assigned unique identifier for a server that has users assigned to it.
-]: any -> record<NextToken: string, ServerId: string, Users: table<Arn: string, HomeDirectory: string, HomeDirectoryType: string, Role: string, SshPublicKeyCount: int, UserName: string>> {
+]: any -> oneof<record<NextToken: string, ServerId: string, Users: table<Arn: string, HomeDirectory: string, HomeDirectoryType: string, Role: string, SshPublicKeyCount: int, UserName: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2408,7 +2412,7 @@ export def "list-workflows" [
   --x-amz-target: string@x-amz-target-completer-42 # required
   --max-results-body: int # Specifies the maximum number of workflows to return. (body field)
   --next-token-body: string # ListWorkflows returns the NextToken parameter in the output. You can then pass the NextToken parameter in a subsequent command to continue listing additional workflows. (body field)
-]: any -> record<NextToken: string, Workflows: table<WorkflowId: string, Description: string, Arn: string>> {
+]: any -> oneof<record<NextToken: string, Workflows: table<WorkflowId: string, Description: string, Arn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2461,7 +2465,7 @@ export def "send-workflow-step-state" [
   execution_id: string # A unique identifier for the execution of a workflow.
   --body-token: string # Used to distinguish between multiple callbacks for multiple Lambda steps within the same execution.
   status: string@status-completer-1 # Indicates whether the specified step succeeded or failed.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2512,7 +2516,7 @@ export def "start-file-transfer" [
   --x-amz-target: string@x-amz-target-completer-44 # required
   connector_id: string # The unique identifier for the connector.
   send_file_paths: list<string> # An array of strings. Each string represents the absolute path for one outbound file transfer. For example, DOC-EXAMPLE-BUCKET/myfile.txt .
-]: any -> record<TransferId: string> {
+]: any -> oneof<record<TransferId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2640,7 +2644,6 @@ export def "stop-server" [
 #
 # POST /
 # operationId: TagResource
-# --Tags item shape: {Key: string, Value: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2714,7 +2717,7 @@ export def "test-identity-provider" [
   --source-ip: string # The source IP address of the user account to be tested.
   user_name: string # The name of the user account to be tested.
   --user-password: string # The password of the user account to be tested. (format: password)
-]: any -> record<Response: string, StatusCode: int, Message: string, Url: string> {
+]: any -> oneof<record<Response: string, StatusCode: int, Message: string, Url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2794,8 +2797,6 @@ export def "untag-resource" [
 #
 # POST /
 # operationId: UpdateAccess
-# --HomeDirectoryMappings item shape: {Entry: string, Target: string}
-# --PosixProfile shape: {Uid: int, Gid: int, SecondaryGids?: list<int>}
 export def "update-access" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2822,7 +2823,7 @@ export def "update-access" [
   --role: string # The Amazon Resource Name (ARN) of the Identity and Access Management (IAM) role that controls your users' access to your Amazon S3 bucket or Amazon EFS file system. The policies attached to this role determine the level of access that you want to provide your users when transferring files into and out of your Amazon S3 bucket or Amazon EFS file system. The IAM role should also contain a trust relationship that allows the server to access your resources when servicing your users' transfer requests.
   server_id: string # A system-assigned unique identifier for a server instance. This is the specific server that you added your user to.
   external_id: string # A unique identifier that is required to identify specific groups within your directory. The users of the group that you associate have access to your Amazon S3 or Amazon EFS resources over the enabled protocols using Transfer Family. If you know the group name, you can view the SID values by running the following command using Windows PowerShell. Get-ADGroup -Filter {samAccountName -like "YourGroupName*"} -Properties * | Select SamAccountName,ObjectSid In that command, replace YourGroupName with the name of your Active Directory group. The regular expression used to validate this parameter is a string of characters consisting of uppercase and lowercase alphanumeric characters with no spaces. You can also include underscores or any of the following characters: =,.@:/-
-]: any -> record<ServerId: string, ExternalId: string> {
+]: any -> oneof<record<ServerId: string, ExternalId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2878,7 +2879,7 @@ export def "update-agreement" [
   --partner-profile-id: string # A unique identifier for the partner profile. To change the partner profile identifier, provide a new value here.
   --base-directory: string # To change the landing directory (folder) for files that are transferred, provide the bucket folder that you want to use; for example, /DOC-EXAMPLE-BUCKET/home/mydirectory .
   --access-role: string # With AS2, you can send files by calling StartFileTransfer and specifying the file paths in the request parameter, SendFilePaths. We use the file’s parent directory (for example, for --send-file-paths /bucket/dir/file.txt, parent directory is /bucket/dir/) to temporarily store a processed AS2 message file, store the MDN when we receive them from the partner, and write a final JSON file containing relevant metadata of the transmission. So, the AccessRole needs to provide read and write access to the parent directory of the file location used in the StartFileTransfer request. Additionally, you need to provide read and write access to the parent directory of the files that you intend to send with StartFileTransfer.
-]: any -> record<AgreementId: string> {
+]: any -> oneof<record<AgreementId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2930,7 +2931,7 @@ export def "update-certificate" [
   --active-date: string # An optional date that specifies when the certificate becomes active. (format: date-time)
   --inactive-date: string # An optional date that specifies when the certificate becomes inactive. (format: date-time)
   --description: string # A short description to help identify the certificate.
-]: any -> record<CertificateId: string> {
+]: any -> oneof<record<CertificateId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2960,7 +2961,6 @@ export def "update-certificate" [
 #
 # POST /
 # operationId: UpdateConnector
-# --As2Config shape: {LocalProfileId?: string, PartnerProfileId?: string, MessageSubject?: string, Compression?: "ZLIB"|"DISABLED", EncryptionAlgorithm?: "AES128_CBC"|"AES192_CBC"|"AES256_CBC"|"NONE", SigningAlgorithm?: "SHA256"|"SHA384"|"SHA512"|"SHA1"|"NONE", MdnSigningAlgorithm?: "SHA256"|"SHA384"|"SHA512"|"SHA1"|"NONE"|"DEFAULT", MdnResponse?: "SYNC"|"NONE"}
 export def "update-connector" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2984,7 +2984,7 @@ export def "update-connector" [
   --as2-config: record # Contains the details for a connector object. The connector object is used for AS2 outbound processes, to connect the Transfer Family customer with the trading partner. — shape: {LocalProfileId?: string, PartnerProfileId?: string, MessageSubject?: string, Compression?: "ZLIB"|"DISABLED", EncryptionAlgorithm?: "AES128_CBC"|"AES192_CBC"|"AES256_CBC"|"NONE", SigningAlgorithm?: "SHA256"|"SHA384"|"SHA512"|"SHA1"|"NONE", MdnSigningAlgorithm?: "SHA256"|"SHA384"|"SHA512"|"SHA1"|"NONE"|"DEFAULT", MdnResponse?: "SYNC"|"NONE"}
   --access-role: string # With AS2, you can send files by calling StartFileTransfer and specifying the file paths in the request parameter, SendFilePaths. We use the file’s parent directory (for example, for --send-file-paths /bucket/dir/file.txt, parent directory is /bucket/dir/) to temporarily store a processed AS2 message file, store the MDN when we receive them from the partner, and write a final JSON file containing relevant metadata of the transmission. So, the AccessRole needs to provide read and write access to the parent directory of the file location used in the StartFileTransfer request. Additionally, you need to provide read and write access to the parent directory of the files that you intend to send with StartFileTransfer.
   --logging-role: string # The Amazon Resource Name (ARN) of the Identity and Access Management (IAM) role that allows a connector to turn on CloudWatch logging for Amazon S3 events. When set, you can view connector activity in your CloudWatch logs.
-]: any -> record<ConnectorId: string> {
+]: any -> oneof<record<ConnectorId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3035,7 +3035,7 @@ export def "update-host-key" [
   server_id: string # The identifier of the server that contains the host key that you are updating.
   host_key_id: string # The identifier of the host key that you are updating.
   description: string # An updated description for the host key.
-]: any -> record<ServerId: string, HostKeyId: string> {
+]: any -> oneof<record<ServerId: string, HostKeyId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3085,7 +3085,7 @@ export def "update-profile" [
   --x-amz-target: string@x-amz-target-completer-55 # required
   profile_id: string # The identifier of the profile object that you are updating.
   --certificate-ids: list<string> # An array of identifiers for the imported certificates. You use this identifier for working with profiles and partner profiles.
-]: any -> record<ProfileId: string> {
+]: any -> oneof<record<ProfileId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3115,10 +3115,6 @@ export def "update-profile" [
 #
 # POST /
 # operationId: UpdateServer
-# --ProtocolDetails shape: {PassiveIp?: string, TlsSessionResumptionMode?: "DISABLED"|"ENABLED"|"ENFORCED", SetStatOption?: "DEFAULT"|"ENABLE_NO_OP", As2Transports?: list<string>}
-# --EndpointDetails shape: {AddressAllocationIds?: list<string>, SubnetIds?: list<string>, VpcEndpointId?: string, VpcId?: string, SecurityGroupIds?: list<string>}
-# --IdentityProviderDetails shape: {Url?: string, InvocationRole?: string, DirectoryId?: string, Function?: string}
-# --WorkflowDetails shape: {OnUpload?: list, OnPartialUpload?: list}
 export def "update-server" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3150,7 +3146,7 @@ export def "update-server" [
   --security-policy-name: string # Specifies the name of the security policy that is attached to the server.
   server_id: string # A system-assigned unique identifier for a server instance that the user account is assigned to.
   --workflow-details: record # Container for the WorkflowDetail data type. It is used by actions that trigger a workflow to begin execution. — shape: {OnUpload?: list, OnPartialUpload?: list}
-]: any -> record<ServerId: string> {
+]: any -> oneof<record<ServerId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3180,8 +3176,6 @@ export def "update-server" [
 #
 # POST /
 # operationId: UpdateUser
-# --HomeDirectoryMappings item shape: {Entry: string, Target: string}
-# --PosixProfile shape: {Uid: int, Gid: int, SecondaryGids?: list<int>}
 export def "update-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3208,7 +3202,7 @@ export def "update-user" [
   --role: string # The Amazon Resource Name (ARN) of the Identity and Access Management (IAM) role that controls your users' access to your Amazon S3 bucket or Amazon EFS file system. The policies attached to this role determine the level of access that you want to provide your users when transferring files into and out of your Amazon S3 bucket or Amazon EFS file system. The IAM role should also contain a trust relationship that allows the server to access your resources when servicing your users' transfer requests.
   server_id: string # A system-assigned unique identifier for a server instance that the user account is assigned to.
   user_name: string # A unique string that identifies a user and is associated with a server as specified by the ServerId. This user name must be a minimum of 3 and a maximum of 100 characters long. The following are valid characters: a-z, A-Z, 0-9, underscore '_', hyphen '-', period '.', and at sign '@'. The user name can't start with a hyphen, period, or at sign.
-]: any -> record<ServerId: string, UserName: string> {
+]: any -> oneof<record<ServerId: string, UserName: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

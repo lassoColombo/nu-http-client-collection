@@ -12,27 +12,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -40,8 +49,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -52,7 +66,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -87,7 +110,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -115,9 +139,9 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-estimated-price" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-estimated-price" "get-the-minimum-payment-amount" "get-list-of-payments" "get-update-payment-estimate" "get-payment-status" "verify-payout" "get-sub-partners" "get-sub-partner-balance" "get-transfer" "get-all-transfers" "get-many-recurring-payments" "get-many-plans" "get-one-plan" "update-plan" "delete-recurring-payment" "get-one-recurring-payment" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -153,7 +177,7 @@ export def "get-estimated-price" [
   --currency-from: string # e.g. usd
   --currency-to: string # e.g. btc
   --x-api-key: string # e.g. {{your_api_key}}
-]: nothing -> record<amount_from: float, currency_from: string, currency_to: string, estimated_amount: float> {
+]: nothing -> oneof<record<amount_from: float, currency_from: string, currency_to: string, estimated_amount: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "amount" $amount "scalar") (serialize-qp "currency_from" $currency_from "scalar") (serialize-qp "currency_to" $currency_to "scalar")] | flatten | str join "&"
@@ -193,7 +217,7 @@ export def "get-the-minimum-payment-amount" [
   --currency-from: string # e.g. eth
   --currency-to: string # e.g. trx
   --x-api-key: string # e.g. {{your_api_key}}
-]: nothing -> record<currency_from: string, currency_to: string, fiat_equivalent: float, min_amount: float> {
+]: nothing -> oneof<record<currency_from: string, currency_to: string, fiat_equivalent: float, min_amount: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "currency_from" $currency_from "scalar") (serialize-qp "currency_to" $currency_to "scalar")] | flatten | str join "&"
@@ -237,7 +261,7 @@ export def "get-list-of-payments" [
   --date-from: string # e.g. 2020-01-01
   --date-to: string # e.g. 2021-01-01
   --x-api-key: string # e.g. {{your_api_key}}
-]: nothing -> record<data: table<actually_paid: float, order_description: string, order_id: string, outcome_amount: float, outcome_currency: string, pay_address: string, pay_amount: float, pay_currency: string, payment_id: float, payment_status: string, price_amount: float, price_currency: string, purchase_id: string>, limit: float, page: float, pagesCount: float, total: float> {
+]: nothing -> oneof<record<data: table<actually_paid: float, order_description: string, order_id: string, outcome_amount: float, outcome_currency: string, pay_address: string, pay_amount: float, pay_currency: string, payment_id: float, payment_status: string, price_amount: float, price_currency: string, purchase_id: string>, limit: float, page: float, pagesCount: float, total: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "dateFrom" $date_from "scalar") (serialize-qp "dateTo" $date_to "scalar")] | flatten | str join "&"
@@ -276,7 +300,7 @@ export def "get-update-payment-estimate" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-api-key: string # e.g. {{your_api_key}}
-]: nothing -> record<expiration_estimate_date: string, id: string, pay_amount: float, token_id: string> {
+]: nothing -> oneof<record<expiration_estimate_date: string, id: string, pay_amount: float, token_id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -315,7 +339,7 @@ export def "get-payment-status" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-api-key: string # e.g. {{your_api_key}}
-]: nothing -> record<actually_paid: float, created_at: string, order_description: string, order_id: string, outcome_amount: float, outcome_currency: string, pay_address: string, pay_amount: float, pay_currency: string, payment_id: float, payment_status: string, price_amount: float, price_currency: string, purchase_id: string, updated_at: string> {
+]: nothing -> oneof<record<actually_paid: float, created_at: string, order_description: string, order_id: string, outcome_amount: float, outcome_currency: string, pay_address: string, pay_amount: float, pay_currency: string, payment_id: float, payment_status: string, price_amount: float, price_currency: string, purchase_id: string, updated_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'payment_id' must be non-empty" } }
@@ -436,7 +460,7 @@ export def "get-sub-partner-balance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-api-key: string # e.g. {{your_api_key}}
-]: nothing -> record<result: record<balances: record<usddtrc20: record, usdtbsc: record>, subPartnerId: string>> {
+]: nothing -> oneof<record<result: record<balances: record<usddtrc20: record, usdtbsc: record>, subPartnerId: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -474,7 +498,7 @@ export def "get-transfer" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<result: record<amount: string, created_at: string, currency: string, from_sub_id: string, id: string, status: string, to_sub_id: string, updated_at: string>> {
+]: nothing -> oneof<record<result: record<amount: string, created_at: string, currency: string, from_sub_id: string, id: string, status: string, to_sub_id: string, updated_at: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -514,7 +538,7 @@ export def "get-all-transfers" [
   --limit: string # (optional) default 10 (e.g. 10)
   --offset: string # (optional) default 0 (e.g. 0)
   --order: string # ASC / DESC (optional) default ASC (e.g. ASC)
-]: nothing -> record<count: float, result: table<amount: string, created_at: string, currency: string, from_sub_id: string, id: string, status: string, to_sub_id: string, updated_at: string>> {
+]: nothing -> oneof<record<count: float, result: table<amount: string, created_at: string, currency: string, from_sub_id: string, id: string, status: string, to_sub_id: string, updated_at: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
@@ -555,7 +579,7 @@ export def "get-many-recurring-payments" [
   --limit: string # e.g. 10
   --offset: string # e.g. 0
   --x-api-key: string # e.g. {{your_api_key}}
-]: nothing -> record<count: float, result: table<created_at: string, expire_date: string, id: string, is_active: bool, status: string, subscriber: record, subscription_plan_id: string, updated_at: string>> {
+]: nothing -> oneof<record<count: float, result: table<created_at: string, expire_date: string, id: string, is_active: bool, status: string, subscriber: record, subscription_plan_id: string, updated_at: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "subscription_plan_id" $subscription_plan_id "scalar") (serialize-qp "is_active" $is_active "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -595,7 +619,7 @@ export def "get-many-plans" [
   --limit: string # Number (e.g. 10)
   --offset: string # Number (e.g. 3)
   --x-api-key: string # e.g. {{your_api_key}}
-]: nothing -> record<count: float, result: table<amount: float, cancel_url: any, created_at: string, currency: string, id: string, interval_day: string, ipn_callback_url: any, partially_paid_url: any, success_url: any, title: string, updated_at: string>> {
+]: nothing -> oneof<record<count: float, result: table<amount: float, cancel_url: any, created_at: string, currency: string, id: string, interval_day: string, ipn_callback_url: any, partially_paid_url: any, success_url: any, title: string, updated_at: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -634,7 +658,7 @@ export def "get-one-plan" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-api-key: string # e.g. {{your_api_key}}
-]: nothing -> record<result: record<amount: float, cancel_url: any, created_at: string, currency: string, id: string, interval_day: string, ipn_callback_url: any, partially_paid_url: any, success_url: any, title: string, updated_at: string>> {
+]: nothing -> oneof<record<result: record<amount: float, cancel_url: any, created_at: string, currency: string, id: string, interval_day: string, ipn_callback_url: any, partially_paid_url: any, success_url: any, title: string, updated_at: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($plan_id | is-empty) { error make --unspanned { msg: "path parameter 'plan-id' must be non-empty" } }
@@ -716,7 +740,7 @@ export def "delete-recurring-payment" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> record<result: string> {
+]: any -> oneof<record<result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -756,7 +780,7 @@ export def "get-one-recurring-payment" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-api-key: string # e.g. {{your_api_key}}
-]: nothing -> record<result: record<created_at: string, expire_date: string, id: string, is_active: bool, status: string, subscriber: record<sub_partner_id: string>, subscription_plan_id: string, updated_at: string>> {
+]: nothing -> oneof<record<result: record<created_at: string, expire_date: string, id: string, is_active: bool, status: string, subscriber: record<sub_partner_id: string>, subscription_plan_id: string, updated_at: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($sub_id | is-empty) { error make --unspanned { msg: "path parameter 'sub_id' must be non-empty" } }

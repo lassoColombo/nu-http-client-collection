@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -119,9 +143,9 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "osconfig-projects-zones-instances-lookup-effective-guest-policy" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["osconfig-projects-zones-instances-lookup-effective-guest-policy" "osconfig-projects-patch-deployments-delete" "osconfig-projects-patch-jobs-get" "osconfig-projects-patch-deployments-patch" "osconfig-projects-patch-jobs-cancel" "osconfig-projects-patch-deployments-pause" "osconfig-projects-patch-deployments-resume" "osconfig-projects-guest-policies-list" "osconfig-projects-guest-policies-create" "osconfig-projects-patch-jobs-instance-details-list" "osconfig-projects-patch-deployments-list" "osconfig-projects-patch-deployments-create" "osconfig-projects-patch-jobs-list" "osconfig-projects-patch-jobs-execute" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -168,7 +192,7 @@ export def "osconfig-projects-zones-instances-lookup-effective-guest-policy" [
   --os-architecture: string # Architecture of OS running on the instance. The OS Config agent only provides this field for targeting if OS Inventory is enabled for that instance.
   --os-short-name: string # Short name of the OS running on the instance. The OS Config agent only provides this field for targeting if OS Inventory is enabled for that instance.
   --os-version: string # Version of the OS running on the instance. The OS Config agent only provides this field for targeting if OS Inventory is enabled for that VM instance.
-]: any -> record<packageRepositories: table<packageRepository: record, source: string>, packages: table<package: record, source: string>, softwareRecipes: table<softwareRecipe: record, source: string>> {
+]: any -> oneof<record<packageRepositories: table<packageRepository: record, source: string>, packages: table<package: record, source: string>, softwareRecipes: table<softwareRecipe: record, source: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -219,7 +243,7 @@ export def "osconfig-projects-patch-deployments-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -267,7 +291,7 @@ export def "osconfig-projects-patch-jobs-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<createTime: string, description: string, displayName: string, dryRun: bool, duration: string, errorMessage: string, instanceDetailsSummary: record<ackedInstanceCount: string, applyingPatchesInstanceCount: string, downloadingPatchesInstanceCount: string, failedInstanceCount: string, inactiveInstanceCount: string, noAgentDetectedInstanceCount: string, notifiedInstanceCount: string, pendingInstanceCount: string, postPatchStepInstanceCount: string, prePatchStepInstanceCount: string, rebootingInstanceCount: string, startedInstanceCount: string, succeededInstanceCount: string, succeededRebootRequiredInstanceCount: string, timedOutInstanceCount: string>, instanceFilter: record<all: bool, groupLabels: list<record>, instanceNamePrefixes: list<string>, instances: list<string>, zones: list<string>>, name: string, patchConfig: record<apt: record<excludes: list, exclusivePackages: list, type: string>, goo: record, migInstancesAllowed: bool, postStep: record<linuxExecStepConfig: record, windowsExecStepConfig: record>, preStep: record<linuxExecStepConfig: record, windowsExecStepConfig: record>, rebootConfig: string, windowsUpdate: record<classifications: list, excludes: list, exclusivePatches: list>, yum: record<excludes: list, exclusivePackages: list, minimal: bool, security: bool>, zypper: record<categories: list, excludes: list, exclusivePatches: list, severities: list, withOptional: bool, withUpdate: bool>>, patchDeployment: string, percentComplete: float, rollout: record<disruptionBudget: record<fixed: int, percent: int>, mode: string>, state: string, updateTime: string> {
+]: nothing -> oneof<record<createTime: string, description: string, displayName: string, dryRun: bool, duration: string, errorMessage: string, instanceDetailsSummary: record<ackedInstanceCount: string, applyingPatchesInstanceCount: string, downloadingPatchesInstanceCount: string, failedInstanceCount: string, inactiveInstanceCount: string, noAgentDetectedInstanceCount: string, notifiedInstanceCount: string, pendingInstanceCount: string, postPatchStepInstanceCount: string, prePatchStepInstanceCount: string, rebootingInstanceCount: string, startedInstanceCount: string, succeededInstanceCount: string, succeededRebootRequiredInstanceCount: string, timedOutInstanceCount: string>, instanceFilter: record<all: bool, groupLabels: list<record>, instanceNamePrefixes: list<string>, instances: list<string>, zones: list<string>>, name: string, patchConfig: record<apt: record<excludes: list, exclusivePackages: list, type: string>, goo: record, migInstancesAllowed: bool, postStep: record<linuxExecStepConfig: record, windowsExecStepConfig: record>, preStep: record<linuxExecStepConfig: record, windowsExecStepConfig: record>, rebootConfig: string, windowsUpdate: record<classifications: list, excludes: list, exclusivePatches: list>, yum: record<excludes: list, exclusivePackages: list, minimal: bool, security: bool>, zypper: record<categories: list, excludes: list, exclusivePatches: list, severities: list, withOptional: bool, withUpdate: bool>>, patchDeployment: string, percentComplete: float, rollout: record<disruptionBudget: record<fixed: int, percent: int>, mode: string>, state: string, updateTime: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -293,11 +317,6 @@ export def "osconfig-projects-patch-jobs-get" [
 #
 # PATCH /v1beta/{name}
 # operationId: osconfig.projects.patchDeployments.patch
-# --instanceFilter shape: {all?: bool, groupLabels?: list, instanceNamePrefixes?: list<string>, instances?: list<string>, zones?: list<string>}
-# --oneTimeSchedule shape: {executeTime?: string}
-# --patchConfig shape: {apt?: record, goo?: record, migInstancesAllowed?: bool, postStep?: record, preStep?: record, rebootConfig?: "REBOOT_CONFIG_UNSPECIFIED"|"DEFAULT"|"ALWAYS"|"NEVER", windowsUpdate?: record, yum?: record, zypper?: record}
-# --recurringSchedule shape: {endTime?: string, frequency?: "FREQUENCY_UNSPECIFIED"|"WEEKLY"|"MONTHLY"|"DAILY", monthly?: record, startTime?: string, timeOfDay?: record, timeZone?: record, weekly?: record}
-# --rollout shape: {disruptionBudget?: record, mode?: "MODE_UNSPECIFIED"|"ZONE_BY_ZONE"|"CONCURRENT_ZONES"}
 export def "osconfig-projects-patch-deployments-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -329,7 +348,7 @@ export def "osconfig-projects-patch-deployments-patch" [
   --patch-config: record # Patch configuration specifications. Contains details on how to apply the patch(es) to a VM instance. — shape: {apt?: record, goo?: record, migInstancesAllowed?: bool, postStep?: record, preStep?: record, rebootConfig?: "REBOOT_CONFIG_UNSPECIFIED"|"DEFAULT"|"ALWAYS"|"NEVER", windowsUpdate?: record, yum?: record, zypper?: record}
   --recurring-schedule: record # Sets the time for recurring patch deployments. — shape: {endTime?: string, frequency?: "FREQUENCY_UNSPECIFIED"|"WEEKLY"|"MONTHLY"|"DAILY", monthly?: record, startTime?: string, timeOfDay?: record, timeZone?: record, weekly?: record}
   --rollout: record # Patch rollout configuration specifications. Contains details on the concurrency control when applying patch(es) to all targeted VMs. — shape: {disruptionBudget?: record, mode?: "MODE_UNSPECIFIED"|"ZONE_BY_ZONE"|"CONCURRENT_ZONES"}
-]: any -> record<createTime: string, description: string, duration: string, instanceFilter: record<all: bool, groupLabels: list<record>, instanceNamePrefixes: list<string>, instances: list<string>, zones: list<string>>, lastExecuteTime: string, name: string, oneTimeSchedule: record<executeTime: string>, patchConfig: record<apt: record<excludes: list, exclusivePackages: list, type: string>, goo: record, migInstancesAllowed: bool, postStep: record<linuxExecStepConfig: record, windowsExecStepConfig: record>, preStep: record<linuxExecStepConfig: record, windowsExecStepConfig: record>, rebootConfig: string, windowsUpdate: record<classifications: list, excludes: list, exclusivePatches: list>, yum: record<excludes: list, exclusivePackages: list, minimal: bool, security: bool>, zypper: record<categories: list, excludes: list, exclusivePatches: list, severities: list, withOptional: bool, withUpdate: bool>>, recurringSchedule: record<endTime: string, frequency: string, lastExecuteTime: string, monthly: record<monthDay: int, weekDayOfMonth: record>, nextExecuteTime: string, startTime: string, timeOfDay: record<hours: int, minutes: int, nanos: int, seconds: int>, timeZone: record<id: string, version: string>, weekly: record<dayOfWeek: string>>, rollout: record<disruptionBudget: record<fixed: int, percent: int>, mode: string>, state: string, updateTime: string> {
+]: any -> oneof<record<createTime: string, description: string, duration: string, instanceFilter: record<all: bool, groupLabels: list<record>, instanceNamePrefixes: list<string>, instances: list<string>, zones: list<string>>, lastExecuteTime: string, name: string, oneTimeSchedule: record<executeTime: string>, patchConfig: record<apt: record<excludes: list, exclusivePackages: list, type: string>, goo: record, migInstancesAllowed: bool, postStep: record<linuxExecStepConfig: record, windowsExecStepConfig: record>, preStep: record<linuxExecStepConfig: record, windowsExecStepConfig: record>, rebootConfig: string, windowsUpdate: record<classifications: list, excludes: list, exclusivePatches: list>, yum: record<excludes: list, exclusivePackages: list, minimal: bool, security: bool>, zypper: record<categories: list, excludes: list, exclusivePatches: list, severities: list, withOptional: bool, withUpdate: bool>>, recurringSchedule: record<endTime: string, frequency: string, lastExecuteTime: string, monthly: record<monthDay: int, weekDayOfMonth: record>, nextExecuteTime: string, startTime: string, timeOfDay: record<hours: int, minutes: int, nanos: int, seconds: int>, timeZone: record<id: string, version: string>, weekly: record<dayOfWeek: string>>, rollout: record<disruptionBudget: record<fixed: int, percent: int>, mode: string>, state: string, updateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -381,7 +400,7 @@ export def "osconfig-projects-patch-jobs-cancel" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record<createTime: string, description: string, displayName: string, dryRun: bool, duration: string, errorMessage: string, instanceDetailsSummary: record<ackedInstanceCount: string, applyingPatchesInstanceCount: string, downloadingPatchesInstanceCount: string, failedInstanceCount: string, inactiveInstanceCount: string, noAgentDetectedInstanceCount: string, notifiedInstanceCount: string, pendingInstanceCount: string, postPatchStepInstanceCount: string, prePatchStepInstanceCount: string, rebootingInstanceCount: string, startedInstanceCount: string, succeededInstanceCount: string, succeededRebootRequiredInstanceCount: string, timedOutInstanceCount: string>, instanceFilter: record<all: bool, groupLabels: list<record>, instanceNamePrefixes: list<string>, instances: list<string>, zones: list<string>>, name: string, patchConfig: record<apt: record<excludes: list, exclusivePackages: list, type: string>, goo: record, migInstancesAllowed: bool, postStep: record<linuxExecStepConfig: record, windowsExecStepConfig: record>, preStep: record<linuxExecStepConfig: record, windowsExecStepConfig: record>, rebootConfig: string, windowsUpdate: record<classifications: list, excludes: list, exclusivePatches: list>, yum: record<excludes: list, exclusivePackages: list, minimal: bool, security: bool>, zypper: record<categories: list, excludes: list, exclusivePatches: list, severities: list, withOptional: bool, withUpdate: bool>>, patchDeployment: string, percentComplete: float, rollout: record<disruptionBudget: record<fixed: int, percent: int>, mode: string>, state: string, updateTime: string> {
+]: any -> oneof<record<createTime: string, description: string, displayName: string, dryRun: bool, duration: string, errorMessage: string, instanceDetailsSummary: record<ackedInstanceCount: string, applyingPatchesInstanceCount: string, downloadingPatchesInstanceCount: string, failedInstanceCount: string, inactiveInstanceCount: string, noAgentDetectedInstanceCount: string, notifiedInstanceCount: string, pendingInstanceCount: string, postPatchStepInstanceCount: string, prePatchStepInstanceCount: string, rebootingInstanceCount: string, startedInstanceCount: string, succeededInstanceCount: string, succeededRebootRequiredInstanceCount: string, timedOutInstanceCount: string>, instanceFilter: record<all: bool, groupLabels: list<record>, instanceNamePrefixes: list<string>, instances: list<string>, zones: list<string>>, name: string, patchConfig: record<apt: record<excludes: list, exclusivePackages: list, type: string>, goo: record, migInstancesAllowed: bool, postStep: record<linuxExecStepConfig: record, windowsExecStepConfig: record>, preStep: record<linuxExecStepConfig: record, windowsExecStepConfig: record>, rebootConfig: string, windowsUpdate: record<classifications: list, excludes: list, exclusivePatches: list>, yum: record<excludes: list, exclusivePackages: list, minimal: bool, security: bool>, zypper: record<categories: list, excludes: list, exclusivePatches: list, severities: list, withOptional: bool, withUpdate: bool>>, patchDeployment: string, percentComplete: float, rollout: record<disruptionBudget: record<fixed: int, percent: int>, mode: string>, state: string, updateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -433,7 +452,7 @@ export def "osconfig-projects-patch-deployments-pause" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record<createTime: string, description: string, duration: string, instanceFilter: record<all: bool, groupLabels: list<record>, instanceNamePrefixes: list<string>, instances: list<string>, zones: list<string>>, lastExecuteTime: string, name: string, oneTimeSchedule: record<executeTime: string>, patchConfig: record<apt: record<excludes: list, exclusivePackages: list, type: string>, goo: record, migInstancesAllowed: bool, postStep: record<linuxExecStepConfig: record, windowsExecStepConfig: record>, preStep: record<linuxExecStepConfig: record, windowsExecStepConfig: record>, rebootConfig: string, windowsUpdate: record<classifications: list, excludes: list, exclusivePatches: list>, yum: record<excludes: list, exclusivePackages: list, minimal: bool, security: bool>, zypper: record<categories: list, excludes: list, exclusivePatches: list, severities: list, withOptional: bool, withUpdate: bool>>, recurringSchedule: record<endTime: string, frequency: string, lastExecuteTime: string, monthly: record<monthDay: int, weekDayOfMonth: record>, nextExecuteTime: string, startTime: string, timeOfDay: record<hours: int, minutes: int, nanos: int, seconds: int>, timeZone: record<id: string, version: string>, weekly: record<dayOfWeek: string>>, rollout: record<disruptionBudget: record<fixed: int, percent: int>, mode: string>, state: string, updateTime: string> {
+]: any -> oneof<record<createTime: string, description: string, duration: string, instanceFilter: record<all: bool, groupLabels: list<record>, instanceNamePrefixes: list<string>, instances: list<string>, zones: list<string>>, lastExecuteTime: string, name: string, oneTimeSchedule: record<executeTime: string>, patchConfig: record<apt: record<excludes: list, exclusivePackages: list, type: string>, goo: record, migInstancesAllowed: bool, postStep: record<linuxExecStepConfig: record, windowsExecStepConfig: record>, preStep: record<linuxExecStepConfig: record, windowsExecStepConfig: record>, rebootConfig: string, windowsUpdate: record<classifications: list, excludes: list, exclusivePatches: list>, yum: record<excludes: list, exclusivePackages: list, minimal: bool, security: bool>, zypper: record<categories: list, excludes: list, exclusivePatches: list, severities: list, withOptional: bool, withUpdate: bool>>, recurringSchedule: record<endTime: string, frequency: string, lastExecuteTime: string, monthly: record<monthDay: int, weekDayOfMonth: record>, nextExecuteTime: string, startTime: string, timeOfDay: record<hours: int, minutes: int, nanos: int, seconds: int>, timeZone: record<id: string, version: string>, weekly: record<dayOfWeek: string>>, rollout: record<disruptionBudget: record<fixed: int, percent: int>, mode: string>, state: string, updateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -485,7 +504,7 @@ export def "osconfig-projects-patch-deployments-resume" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record<createTime: string, description: string, duration: string, instanceFilter: record<all: bool, groupLabels: list<record>, instanceNamePrefixes: list<string>, instances: list<string>, zones: list<string>>, lastExecuteTime: string, name: string, oneTimeSchedule: record<executeTime: string>, patchConfig: record<apt: record<excludes: list, exclusivePackages: list, type: string>, goo: record, migInstancesAllowed: bool, postStep: record<linuxExecStepConfig: record, windowsExecStepConfig: record>, preStep: record<linuxExecStepConfig: record, windowsExecStepConfig: record>, rebootConfig: string, windowsUpdate: record<classifications: list, excludes: list, exclusivePatches: list>, yum: record<excludes: list, exclusivePackages: list, minimal: bool, security: bool>, zypper: record<categories: list, excludes: list, exclusivePatches: list, severities: list, withOptional: bool, withUpdate: bool>>, recurringSchedule: record<endTime: string, frequency: string, lastExecuteTime: string, monthly: record<monthDay: int, weekDayOfMonth: record>, nextExecuteTime: string, startTime: string, timeOfDay: record<hours: int, minutes: int, nanos: int, seconds: int>, timeZone: record<id: string, version: string>, weekly: record<dayOfWeek: string>>, rollout: record<disruptionBudget: record<fixed: int, percent: int>, mode: string>, state: string, updateTime: string> {
+]: any -> oneof<record<createTime: string, description: string, duration: string, instanceFilter: record<all: bool, groupLabels: list<record>, instanceNamePrefixes: list<string>, instances: list<string>, zones: list<string>>, lastExecuteTime: string, name: string, oneTimeSchedule: record<executeTime: string>, patchConfig: record<apt: record<excludes: list, exclusivePackages: list, type: string>, goo: record, migInstancesAllowed: bool, postStep: record<linuxExecStepConfig: record, windowsExecStepConfig: record>, preStep: record<linuxExecStepConfig: record, windowsExecStepConfig: record>, rebootConfig: string, windowsUpdate: record<classifications: list, excludes: list, exclusivePatches: list>, yum: record<excludes: list, exclusivePackages: list, minimal: bool, security: bool>, zypper: record<categories: list, excludes: list, exclusivePatches: list, severities: list, withOptional: bool, withUpdate: bool>>, recurringSchedule: record<endTime: string, frequency: string, lastExecuteTime: string, monthly: record<monthDay: int, weekDayOfMonth: record>, nextExecuteTime: string, startTime: string, timeOfDay: record<hours: int, minutes: int, nanos: int, seconds: int>, timeZone: record<id: string, version: string>, weekly: record<dayOfWeek: string>>, rollout: record<disruptionBudget: record<fixed: int, percent: int>, mode: string>, state: string, updateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -538,7 +557,7 @@ export def "osconfig-projects-guest-policies-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # The maximum number of guest policies to return.
   --page-token: string # A pagination token returned from a previous call to `ListGuestPolicies` that indicates where this listing should continue from.
-]: nothing -> record<guestPolicies: table<assignment: record, createTime: string, description: string, etag: string, name: string, packageRepositories: list, packages: list, recipes: list, updateTime: string>, nextPageToken: string> {
+]: nothing -> oneof<record<guestPolicies: table<assignment: record, createTime: string, description: string, etag: string, name: string, packageRepositories: list, packages: list, recipes: list, updateTime: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -564,10 +583,6 @@ export def "osconfig-projects-guest-policies-list" [
 #
 # POST /v1beta/{parent}/guestPolicies
 # operationId: osconfig.projects.guestPolicies.create
-# --assignment shape: {groupLabels?: list, instanceNamePrefixes?: list<string>, instances?: list<string>, osTypes?: list, zones?: list<string>}
-# --packageRepositories item shape: {apt?: record, goo?: record, yum?: record, zypper?: record}
-# --packages item shape: {desiredState?: "DESIRED_STATE_UNSPECIFIED"|"INSTALLED"|"UPDATED"|"REMOVED", manager?: "MANAGER_UNSPECIFIED"|"ANY"|"APT"|"YUM"|"ZYPPER"|"GOO", name?: string}
-# --recipes item shape: {artifacts?: list, desiredState?: "DESIRED_STATE_UNSPECIFIED"|"INSTALLED"|"UPDATED"|"REMOVED", installSteps?: list, name?: string, updateSteps?: list, version?: string}
 export def "osconfig-projects-guest-policies-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -598,7 +613,7 @@ export def "osconfig-projects-guest-policies-create" [
   --package-repositories: list # A list of package repositories to configure on the VM instance. This is done before any other configs are applied so they can use these repos. Package repositories are only configured if the corresponding package manager(s) are available. — item shape: {apt?: record, goo?: record, yum?: record, zypper?: record}
   --packages: list # The software packages to be managed by this policy. — item shape: {desiredState?: "DESIRED_STATE_UNSPECIFIED"|"INSTALLED"|"UPDATED"|"REMOVED", manager?: "MANAGER_UNSPECIFIED"|"ANY"|"APT"|"YUM"|"ZYPPER"|"GOO", name?: string}
   --recipes: list # A list of Recipes to install on the VM instance. — item shape: {artifacts?: list, desiredState?: "DESIRED_STATE_UNSPECIFIED"|"INSTALLED"|"UPDATED"|"REMOVED", installSteps?: list, name?: string, updateSteps?: list, version?: string}
-]: any -> record<assignment: record<groupLabels: list<record>, instanceNamePrefixes: list<string>, instances: list<string>, osTypes: list<record>, zones: list<string>>, createTime: string, description: string, etag: string, name: string, packageRepositories: table<apt: record, goo: record, yum: record, zypper: record>, packages: table<desiredState: string, manager: string, name: string>, recipes: table<artifacts: list, desiredState: string, installSteps: list, name: string, updateSteps: list, version: string>, updateTime: string> {
+]: any -> oneof<record<assignment: record<groupLabels: list<record>, instanceNamePrefixes: list<string>, instances: list<string>, osTypes: list<record>, zones: list<string>>, createTime: string, description: string, etag: string, name: string, packageRepositories: table<apt: record, goo: record, yum: record, zypper: record>, packages: table<desiredState: string, manager: string, name: string>, recipes: table<artifacts: list, desiredState: string, installSteps: list, name: string, updateSteps: list, version: string>, updateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -652,7 +667,7 @@ export def "osconfig-projects-patch-jobs-instance-details-list" [
   --filter: string # A filter expression that filters results listed in the response. This field supports filtering results by instance zone, name, state, or `failure_reason`.
   --page-size: int # The maximum number of instance details records to return. Default is 100.
   --page-token: string # A pagination token returned from a previous call that indicates where this listing should continue from.
-]: nothing -> record<nextPageToken: string, patchJobInstanceDetails: table<attemptCount: string, failureReason: string, instanceSystemId: string, name: string, state: string>> {
+]: nothing -> oneof<record<nextPageToken: string, patchJobInstanceDetails: table<attemptCount: string, failureReason: string, instanceSystemId: string, name: string, state: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -702,7 +717,7 @@ export def "osconfig-projects-patch-deployments-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # Optional. The maximum number of patch deployments to return. Default is 100.
   --page-token: string # Optional. A pagination token returned from a previous call to ListPatchDeployments that indicates where this listing should continue from.
-]: nothing -> record<nextPageToken: string, patchDeployments: table<createTime: string, description: string, duration: string, instanceFilter: record, lastExecuteTime: string, name: string, oneTimeSchedule: record, patchConfig: record, recurringSchedule: record, rollout: record, state: string, updateTime: string>> {
+]: nothing -> oneof<record<nextPageToken: string, patchDeployments: table<createTime: string, description: string, duration: string, instanceFilter: record, lastExecuteTime: string, name: string, oneTimeSchedule: record, patchConfig: record, recurringSchedule: record, rollout: record, state: string, updateTime: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -728,11 +743,6 @@ export def "osconfig-projects-patch-deployments-list" [
 #
 # POST /v1beta/{parent}/patchDeployments
 # operationId: osconfig.projects.patchDeployments.create
-# --instanceFilter shape: {all?: bool, groupLabels?: list, instanceNamePrefixes?: list<string>, instances?: list<string>, zones?: list<string>}
-# --oneTimeSchedule shape: {executeTime?: string}
-# --patchConfig shape: {apt?: record, goo?: record, migInstancesAllowed?: bool, postStep?: record, preStep?: record, rebootConfig?: "REBOOT_CONFIG_UNSPECIFIED"|"DEFAULT"|"ALWAYS"|"NEVER", windowsUpdate?: record, yum?: record, zypper?: record}
-# --recurringSchedule shape: {endTime?: string, frequency?: "FREQUENCY_UNSPECIFIED"|"WEEKLY"|"MONTHLY"|"DAILY", monthly?: record, startTime?: string, timeOfDay?: record, timeZone?: record, weekly?: record}
-# --rollout shape: {disruptionBudget?: record, mode?: "MODE_UNSPECIFIED"|"ZONE_BY_ZONE"|"CONCURRENT_ZONES"}
 export def "osconfig-projects-patch-deployments-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -764,7 +774,7 @@ export def "osconfig-projects-patch-deployments-create" [
   --patch-config: record # Patch configuration specifications. Contains details on how to apply the patch(es) to a VM instance. — shape: {apt?: record, goo?: record, migInstancesAllowed?: bool, postStep?: record, preStep?: record, rebootConfig?: "REBOOT_CONFIG_UNSPECIFIED"|"DEFAULT"|"ALWAYS"|"NEVER", windowsUpdate?: record, yum?: record, zypper?: record}
   --recurring-schedule: record # Sets the time for recurring patch deployments. — shape: {endTime?: string, frequency?: "FREQUENCY_UNSPECIFIED"|"WEEKLY"|"MONTHLY"|"DAILY", monthly?: record, startTime?: string, timeOfDay?: record, timeZone?: record, weekly?: record}
   --rollout: record # Patch rollout configuration specifications. Contains details on the concurrency control when applying patch(es) to all targeted VMs. — shape: {disruptionBudget?: record, mode?: "MODE_UNSPECIFIED"|"ZONE_BY_ZONE"|"CONCURRENT_ZONES"}
-]: any -> record<createTime: string, description: string, duration: string, instanceFilter: record<all: bool, groupLabels: list<record>, instanceNamePrefixes: list<string>, instances: list<string>, zones: list<string>>, lastExecuteTime: string, name: string, oneTimeSchedule: record<executeTime: string>, patchConfig: record<apt: record<excludes: list, exclusivePackages: list, type: string>, goo: record, migInstancesAllowed: bool, postStep: record<linuxExecStepConfig: record, windowsExecStepConfig: record>, preStep: record<linuxExecStepConfig: record, windowsExecStepConfig: record>, rebootConfig: string, windowsUpdate: record<classifications: list, excludes: list, exclusivePatches: list>, yum: record<excludes: list, exclusivePackages: list, minimal: bool, security: bool>, zypper: record<categories: list, excludes: list, exclusivePatches: list, severities: list, withOptional: bool, withUpdate: bool>>, recurringSchedule: record<endTime: string, frequency: string, lastExecuteTime: string, monthly: record<monthDay: int, weekDayOfMonth: record>, nextExecuteTime: string, startTime: string, timeOfDay: record<hours: int, minutes: int, nanos: int, seconds: int>, timeZone: record<id: string, version: string>, weekly: record<dayOfWeek: string>>, rollout: record<disruptionBudget: record<fixed: int, percent: int>, mode: string>, state: string, updateTime: string> {
+]: any -> oneof<record<createTime: string, description: string, duration: string, instanceFilter: record<all: bool, groupLabels: list<record>, instanceNamePrefixes: list<string>, instances: list<string>, zones: list<string>>, lastExecuteTime: string, name: string, oneTimeSchedule: record<executeTime: string>, patchConfig: record<apt: record<excludes: list, exclusivePackages: list, type: string>, goo: record, migInstancesAllowed: bool, postStep: record<linuxExecStepConfig: record, windowsExecStepConfig: record>, preStep: record<linuxExecStepConfig: record, windowsExecStepConfig: record>, rebootConfig: string, windowsUpdate: record<classifications: list, excludes: list, exclusivePatches: list>, yum: record<excludes: list, exclusivePackages: list, minimal: bool, security: bool>, zypper: record<categories: list, excludes: list, exclusivePatches: list, severities: list, withOptional: bool, withUpdate: bool>>, recurringSchedule: record<endTime: string, frequency: string, lastExecuteTime: string, monthly: record<monthDay: int, weekDayOfMonth: record>, nextExecuteTime: string, startTime: string, timeOfDay: record<hours: int, minutes: int, nanos: int, seconds: int>, timeZone: record<id: string, version: string>, weekly: record<dayOfWeek: string>>, rollout: record<disruptionBudget: record<fixed: int, percent: int>, mode: string>, state: string, updateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -818,7 +828,7 @@ export def "osconfig-projects-patch-jobs-list" [
   --filter: string # If provided, this field specifies the criteria that must be met by patch jobs to be included in the response. Currently, filtering is only available on the patch_deployment field.
   --page-size: int # The maximum number of instance status to return.
   --page-token: string # A pagination token returned from a previous call that indicates where this listing should continue from.
-]: nothing -> record<nextPageToken: string, patchJobs: table<createTime: string, description: string, displayName: string, dryRun: bool, duration: string, errorMessage: string, instanceDetailsSummary: record, instanceFilter: record, name: string, patchConfig: record, patchDeployment: string, percentComplete: float, rollout: record, state: string, updateTime: string>> {
+]: nothing -> oneof<record<nextPageToken: string, patchJobs: table<createTime: string, description: string, displayName: string, dryRun: bool, duration: string, errorMessage: string, instanceDetailsSummary: record, instanceFilter: record, name: string, patchConfig: record, patchDeployment: string, percentComplete: float, rollout: record, state: string, updateTime: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -844,9 +854,6 @@ export def "osconfig-projects-patch-jobs-list" [
 #
 # POST /v1beta/{parent}/patchJobs:execute
 # operationId: osconfig.projects.patchJobs.execute
-# --instanceFilter shape: {all?: bool, groupLabels?: list, instanceNamePrefixes?: list<string>, instances?: list<string>, zones?: list<string>}
-# --patchConfig shape: {apt?: record, goo?: record, migInstancesAllowed?: bool, postStep?: record, preStep?: record, rebootConfig?: "REBOOT_CONFIG_UNSPECIFIED"|"DEFAULT"|"ALWAYS"|"NEVER", windowsUpdate?: record, yum?: record, zypper?: record}
-# --rollout shape: {disruptionBudget?: record, mode?: "MODE_UNSPECIFIED"|"ZONE_BY_ZONE"|"CONCURRENT_ZONES"}
 export def "osconfig-projects-patch-jobs-execute" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -876,7 +883,7 @@ export def "osconfig-projects-patch-jobs-execute" [
   --instance-filter: record # A filter to target VM instances for patching. The targeted VMs must meet all criteria specified. So if both labels and zones are specified, the patch job targets only VMs with those labels and in those zones. — shape: {all?: bool, groupLabels?: list, instanceNamePrefixes?: list<string>, instances?: list<string>, zones?: list<string>}
   --patch-config: record # Patch configuration specifications. Contains details on how to apply the patch(es) to a VM instance. — shape: {apt?: record, goo?: record, migInstancesAllowed?: bool, postStep?: record, preStep?: record, rebootConfig?: "REBOOT_CONFIG_UNSPECIFIED"|"DEFAULT"|"ALWAYS"|"NEVER", windowsUpdate?: record, yum?: record, zypper?: record}
   --rollout: record # Patch rollout configuration specifications. Contains details on the concurrency control when applying patch(es) to all targeted VMs. — shape: {disruptionBudget?: record, mode?: "MODE_UNSPECIFIED"|"ZONE_BY_ZONE"|"CONCURRENT_ZONES"}
-]: any -> record<createTime: string, description: string, displayName: string, dryRun: bool, duration: string, errorMessage: string, instanceDetailsSummary: record<ackedInstanceCount: string, applyingPatchesInstanceCount: string, downloadingPatchesInstanceCount: string, failedInstanceCount: string, inactiveInstanceCount: string, noAgentDetectedInstanceCount: string, notifiedInstanceCount: string, pendingInstanceCount: string, postPatchStepInstanceCount: string, prePatchStepInstanceCount: string, rebootingInstanceCount: string, startedInstanceCount: string, succeededInstanceCount: string, succeededRebootRequiredInstanceCount: string, timedOutInstanceCount: string>, instanceFilter: record<all: bool, groupLabels: list<record>, instanceNamePrefixes: list<string>, instances: list<string>, zones: list<string>>, name: string, patchConfig: record<apt: record<excludes: list, exclusivePackages: list, type: string>, goo: record, migInstancesAllowed: bool, postStep: record<linuxExecStepConfig: record, windowsExecStepConfig: record>, preStep: record<linuxExecStepConfig: record, windowsExecStepConfig: record>, rebootConfig: string, windowsUpdate: record<classifications: list, excludes: list, exclusivePatches: list>, yum: record<excludes: list, exclusivePackages: list, minimal: bool, security: bool>, zypper: record<categories: list, excludes: list, exclusivePatches: list, severities: list, withOptional: bool, withUpdate: bool>>, patchDeployment: string, percentComplete: float, rollout: record<disruptionBudget: record<fixed: int, percent: int>, mode: string>, state: string, updateTime: string> {
+]: any -> oneof<record<createTime: string, description: string, displayName: string, dryRun: bool, duration: string, errorMessage: string, instanceDetailsSummary: record<ackedInstanceCount: string, applyingPatchesInstanceCount: string, downloadingPatchesInstanceCount: string, failedInstanceCount: string, inactiveInstanceCount: string, noAgentDetectedInstanceCount: string, notifiedInstanceCount: string, pendingInstanceCount: string, postPatchStepInstanceCount: string, prePatchStepInstanceCount: string, rebootingInstanceCount: string, startedInstanceCount: string, succeededInstanceCount: string, succeededRebootRequiredInstanceCount: string, timedOutInstanceCount: string>, instanceFilter: record<all: bool, groupLabels: list<record>, instanceNamePrefixes: list<string>, instances: list<string>, zones: list<string>>, name: string, patchConfig: record<apt: record<excludes: list, exclusivePackages: list, type: string>, goo: record, migInstancesAllowed: bool, postStep: record<linuxExecStepConfig: record, windowsExecStepConfig: record>, preStep: record<linuxExecStepConfig: record, windowsExecStepConfig: record>, rebootConfig: string, windowsUpdate: record<classifications: list, excludes: list, exclusivePatches: list>, yum: record<excludes: list, exclusivePackages: list, minimal: bool, security: bool>, zypper: record<categories: list, excludes: list, exclusivePatches: list, severities: list, withOptional: bool, withUpdate: bool>>, patchDeployment: string, percentComplete: float, rollout: record<disruptionBudget: record<fixed: int, percent: int>, mode: string>, state: string, updateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

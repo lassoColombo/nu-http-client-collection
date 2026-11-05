@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -113,9 +137,9 @@ def relationship-type-filter-completer [] { ["CAUSE_OF_INPUT_ANOMALY_GROUP" "EFF
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "activate-anomaly-detector" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["activate-anomaly-detector" "back-test-anomaly-detector" "create-alert" "create-anomaly-detector" "create-metric-set" "deactivate-anomaly-detector" "delete-alert" "delete-anomaly-detector" "describe-alert" "describe-anomaly-detection-executions" "describe-anomaly-detector" "describe-metric-set" "detect-metric-set-config" "get-anomaly-group" "get-data-quality-metrics" "get-feedback" "get-sample-data" "list-alerts" "list-anomaly-detectors" "list-anomaly-group-related-metrics" "list-anomaly-group-summaries" "list-anomaly-group-time-series" "list-metric-sets" "list-tags-for-resource" "tag-resource" "put-feedback" "untag-resource" "update-alert" "update-anomaly-detector" "update-metric-set" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -155,7 +179,7 @@ export def "activate-anomaly-detector" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   anomaly_detector_arn: string # The ARN of the anomaly detector.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -202,7 +226,7 @@ export def "back-test-anomaly-detector" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   anomaly_detector_arn: string # The Amazon Resource Name (ARN) of the anomaly detector.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -231,8 +255,6 @@ export def "back-test-anomaly-detector" [
 #
 # POST /CreateAlert
 # operationId: CreateAlert
-# --Action shape: {SNSConfiguration?: record, LambdaConfiguration?: record}
-# --AlertFilters shape: {MetricList?: list<string>, DimensionFilterList?: list}
 export def "create-alert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -257,7 +279,7 @@ export def "create-alert" [
   action: record # A configuration that specifies the action to perform when anomalies are detected. — shape: {SNSConfiguration?: record, LambdaConfiguration?: record}
   --tags: record # A list of tags (https://docs.aws.amazon.com/lookoutmetrics/latest/dev/detectors-tags.html) to apply to the alert.
   --alert-filters: record # The configuration of the alert filters. — shape: {MetricList?: list<string>, DimensionFilterList?: list}
-]: any -> record<AlertArn: string> {
+]: any -> oneof<record<AlertArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -286,7 +308,6 @@ export def "create-alert" [
 #
 # POST /CreateAnomalyDetector
 # operationId: CreateAnomalyDetector
-# --AnomalyDetectorConfig shape: {AnomalyDetectorFrequency?: "P1D"|"PT1H"|"PT10M"|"PT5M"}
 export def "create-anomaly-detector" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -309,7 +330,7 @@ export def "create-anomaly-detector" [
   anomaly_detector_config: record # Contains information about a detector's configuration. — shape: {AnomalyDetectorFrequency?: "P1D"|"PT1H"|"PT10M"|"PT5M"}
   --kms-key-arn: string # The ARN of the KMS key to use to encrypt your data.
   --tags: record # A list of tags (https://docs.aws.amazon.com/lookoutmetrics/latest/dev/detectors-tags.html) to apply to the anomaly detector.
-]: any -> record<AnomalyDetectorArn: string> {
+]: any -> oneof<record<AnomalyDetectorArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -338,10 +359,6 @@ export def "create-anomaly-detector" [
 #
 # POST /CreateMetricSet
 # operationId: CreateMetricSet
-# --MetricList item shape: {MetricName: string, AggregationFunction: "AVG"|"SUM", Namespace?: string}
-# --TimestampColumn shape: {ColumnName?: string, ColumnFormat?: string}
-# --MetricSource shape: {S3SourceConfig?: record, AppFlowConfig?: record, CloudWatchConfig?: record, RDSSourceConfig?: record, RedshiftSourceConfig?: record, AthenaSourceConfig?: record}
-# --DimensionFilterList item shape: {Name?: string, FilterList?: list}
 export def "create-metric-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -371,7 +388,7 @@ export def "create-metric-set" [
   --timezone: string # The time zone in which your source data was recorded.
   --tags: record # A list of tags (https://docs.aws.amazon.com/lookoutmetrics/latest/dev/detectors-tags.html) to apply to the dataset.
   --dimension-filter-list: list # A list of filters that specify which data is kept for anomaly detection. — item shape: {Name?: string, FilterList?: list}
-]: any -> record<MetricSetArn: string> {
+]: any -> oneof<record<MetricSetArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -418,7 +435,7 @@ export def "deactivate-anomaly-detector" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   anomaly_detector_arn: string # The Amazon Resource Name (ARN) of the anomaly detector.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -465,7 +482,7 @@ export def "delete-alert" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   alert_arn: string # The ARN of the alert to delete.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -512,7 +529,7 @@ export def "delete-anomaly-detector" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   anomaly_detector_arn: string # The ARN of the detector to delete.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -559,7 +576,7 @@ export def "describe-alert" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   alert_arn: string # The ARN of the alert to describe.
-]: any -> record<Alert: record<Action: record<SNSConfiguration: record, LambdaConfiguration: record>, AlertDescription: string, AlertArn: string, AnomalyDetectorArn: string, AlertName: string, AlertSensitivityThreshold: int, AlertType: string, AlertStatus: string, LastModificationTime: string, CreationTime: string, AlertFilters: record<MetricList: list, DimensionFilterList: list>>> {
+]: any -> oneof<record<Alert: record<Action: record<SNSConfiguration: record, LambdaConfiguration: record>, AlertDescription: string, AlertArn: string, AnomalyDetectorArn: string, AlertName: string, AlertSensitivityThreshold: int, AlertType: string, AlertStatus: string, LastModificationTime: string, CreationTime: string, AlertFilters: record<MetricList: list, DimensionFilterList: list>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -611,7 +628,7 @@ export def "describe-anomaly-detection-executions" [
   --timestamp: string # The timestamp of the anomaly detection job.
   --max-results-body: int # The number of items to return in the response. (body field)
   --next-token-body: string # Specify the pagination token that's returned by a previous request to retrieve the next page of results. (body field)
-]: any -> record<ExecutionList: table<Timestamp: string, Status: string, FailureReason: string>, NextToken: string> {
+]: any -> oneof<record<ExecutionList: table<Timestamp: string, Status: string, FailureReason: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -659,7 +676,7 @@ export def "describe-anomaly-detector" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   anomaly_detector_arn: string # The ARN of the detector to describe.
-]: any -> record<AnomalyDetectorArn: string, AnomalyDetectorName: string, AnomalyDetectorDescription: string, AnomalyDetectorConfig: record<AnomalyDetectorFrequency: string>, CreationTime: string, LastModificationTime: string, Status: string, FailureReason: string, KmsKeyArn: string, FailureType: string> {
+]: any -> oneof<record<AnomalyDetectorArn: string, AnomalyDetectorName: string, AnomalyDetectorDescription: string, AnomalyDetectorConfig: record<AnomalyDetectorFrequency: string>, CreationTime: string, LastModificationTime: string, Status: string, FailureReason: string, KmsKeyArn: string, FailureType: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -706,7 +723,7 @@ export def "describe-metric-set" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   metric_set_arn: string # The ARN of the dataset.
-]: any -> record<MetricSetArn: string, AnomalyDetectorArn: string, MetricSetName: string, MetricSetDescription: string, CreationTime: string, LastModificationTime: string, Offset: int, MetricList: table<MetricName: string, AggregationFunction: string, Namespace: string>, TimestampColumn: record<ColumnName: string, ColumnFormat: string>, DimensionList: list<string>, MetricSetFrequency: string, Timezone: string, MetricSource: record<S3SourceConfig: record<RoleArn: string, TemplatedPathList: list, HistoricalDataPathList: list, FileFormatDescriptor: record>, AppFlowConfig: record<RoleArn: string, FlowName: string>, CloudWatchConfig: record<RoleArn: string, BackTestConfiguration: record>, RDSSourceConfig: record<DBInstanceIdentifier: string, DatabaseHost: string, DatabasePort: int, SecretManagerArn: string, DatabaseName: string, TableName: string, RoleArn: string, VpcConfiguration: record>, RedshiftSourceConfig: record<ClusterIdentifier: string, DatabaseHost: string, DatabasePort: int, SecretManagerArn: string, DatabaseName: string, TableName: string, RoleArn: string, VpcConfiguration: record>, AthenaSourceConfig: record<RoleArn: string, DatabaseName: string, DataCatalog: string, TableName: string, WorkGroupName: string, S3ResultsPath: string, BackTestConfiguration: record>>, DimensionFilterList: table<Name: string, FilterList: list>> {
+]: any -> oneof<record<MetricSetArn: string, AnomalyDetectorArn: string, MetricSetName: string, MetricSetDescription: string, CreationTime: string, LastModificationTime: string, Offset: int, MetricList: table<MetricName: string, AggregationFunction: string, Namespace: string>, TimestampColumn: record<ColumnName: string, ColumnFormat: string>, DimensionList: list<string>, MetricSetFrequency: string, Timezone: string, MetricSource: record<S3SourceConfig: record<RoleArn: string, TemplatedPathList: list, HistoricalDataPathList: list, FileFormatDescriptor: record>, AppFlowConfig: record<RoleArn: string, FlowName: string>, CloudWatchConfig: record<RoleArn: string, BackTestConfiguration: record>, RDSSourceConfig: record<DBInstanceIdentifier: string, DatabaseHost: string, DatabasePort: int, SecretManagerArn: string, DatabaseName: string, TableName: string, RoleArn: string, VpcConfiguration: record>, RedshiftSourceConfig: record<ClusterIdentifier: string, DatabaseHost: string, DatabasePort: int, SecretManagerArn: string, DatabaseName: string, TableName: string, RoleArn: string, VpcConfiguration: record>, AthenaSourceConfig: record<RoleArn: string, DatabaseName: string, DataCatalog: string, TableName: string, WorkGroupName: string, S3ResultsPath: string, BackTestConfiguration: record>>, DimensionFilterList: table<Name: string, FilterList: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -735,7 +752,6 @@ export def "describe-metric-set" [
 #
 # POST /DetectMetricSetConfig
 # operationId: DetectMetricSetConfig
-# --AutoDetectionMetricSource shape: {S3SourceConfig?: record}
 export def "detect-metric-set-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -755,7 +771,7 @@ export def "detect-metric-set-config" [
   --x-amz-signed-headers: string
   anomaly_detector_arn: string # An anomaly detector ARN.
   auto_detection_metric_source: record # An auto detection metric source. — shape: {S3SourceConfig?: record}
-]: any -> record<DetectedMetricSetConfig: record<Offset: record<Value: record, Confidence: string, Message: string>, MetricSetFrequency: record<Value: record, Confidence: string, Message: string>, MetricSource: record<S3SourceConfig: record>>> {
+]: any -> oneof<record<DetectedMetricSetConfig: record<Offset: record<Value: record, Confidence: string, Message: string>, MetricSetFrequency: record<Value: record, Confidence: string, Message: string>, MetricSource: record<S3SourceConfig: record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -803,7 +819,7 @@ export def "get-anomaly-group" [
   --x-amz-signed-headers: string
   anomaly_group_id: string # The ID of the anomaly group.
   anomaly_detector_arn: string # The Amazon Resource Name (ARN) of the anomaly detector.
-]: any -> record<AnomalyGroup: record<StartTime: string, EndTime: string, AnomalyGroupId: string, AnomalyGroupScore: float, PrimaryMetricName: string, MetricLevelImpactList: list<record>>> {
+]: any -> oneof<record<AnomalyGroup: record<StartTime: string, EndTime: string, AnomalyGroupId: string, AnomalyGroupScore: float, PrimaryMetricName: string, MetricLevelImpactList: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -851,7 +867,7 @@ export def "get-data-quality-metrics" [
   --x-amz-signed-headers: string
   anomaly_detector_arn: string # The Amazon Resource Name (ARN) of the anomaly detector that you want to investigate.
   --metric-set-arn: string # The Amazon Resource Name (ARN) of a specific data quality metric set.
-]: any -> record<AnomalyDetectorDataQualityMetricList: table<StartTimestamp: string, MetricSetDataQualityMetricList: list>> {
+]: any -> oneof<record<AnomalyDetectorDataQualityMetricList: table<StartTimestamp: string, MetricSetDataQualityMetricList: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -880,7 +896,6 @@ export def "get-data-quality-metrics" [
 #
 # POST /GetFeedback
 # operationId: GetFeedback
-# --AnomalyGroupTimeSeriesFeedback shape: {AnomalyGroupId?: string, TimeSeriesId?: string}
 export def "get-feedback" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -904,7 +919,7 @@ export def "get-feedback" [
   anomaly_group_time_series_feedback: record # An anomalous metric in an anomaly group. — shape: {AnomalyGroupId?: string, TimeSeriesId?: string}
   --max-results-body: int # The maximum number of results to return. (body field)
   --next-token-body: string # Specify the pagination token that's returned by a previous request to retrieve the next page of results. (body field)
-]: any -> record<AnomalyGroupTimeSeriesFeedback: table<TimeSeriesId: string, IsAnomaly: bool>, NextToken: string> {
+]: any -> oneof<record<AnomalyGroupTimeSeriesFeedback: table<TimeSeriesId: string, IsAnomaly: bool>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -934,7 +949,6 @@ export def "get-feedback" [
 #
 # POST /GetSampleData
 # operationId: GetSampleData
-# --S3SourceConfig shape: {RoleArn?: string, TemplatedPathList?: list<string>, HistoricalDataPathList?: list<string>, FileFormatDescriptor?: record}
 export def "get-sample-data" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -953,7 +967,7 @@ export def "get-sample-data" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --s3-source-config: record # Contains information about the source configuration in Amazon S3. — shape: {RoleArn?: string, TemplatedPathList?: list<string>, HistoricalDataPathList?: list<string>, FileFormatDescriptor?: record}
-]: any -> record<HeaderValues: list<string>, SampleRows: list<list<string>>> {
+]: any -> oneof<record<HeaderValues: list<string>, SampleRows: list<list<string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1004,7 +1018,7 @@ export def "list-alerts" [
   --anomaly-detector-arn: string # The ARN of the alert's detector.
   --next-token-body: string # If the result of the previous request is truncated, the response includes a NextToken. To retrieve the next set of results, use the token in the next request. Tokens expire after 24 hours. (body field)
   --max-results-body: int # The maximum number of results that will be displayed by the request. (body field)
-]: any -> record<AlertSummaryList: table<AlertArn: string, AnomalyDetectorArn: string, AlertName: string, AlertSensitivityThreshold: int, AlertType: string, AlertStatus: string, LastModificationTime: string, CreationTime: string, Tags: record>, NextToken: string> {
+]: any -> oneof<record<AlertSummaryList: table<AlertArn: string, AnomalyDetectorArn: string, AlertName: string, AlertSensitivityThreshold: int, AlertType: string, AlertStatus: string, LastModificationTime: string, CreationTime: string, Tags: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1055,7 +1069,7 @@ export def "list-anomaly-detectors" [
   --x-amz-signed-headers: string
   --max-results-body: int # The maximum number of results to return. (body field)
   --next-token-body: string # If the result of the previous request was truncated, the response includes a NextToken. To retrieve the next set of results, use the token in the next request. Tokens expire after 24 hours. (body field)
-]: any -> record<AnomalyDetectorSummaryList: table<AnomalyDetectorArn: string, AnomalyDetectorName: string, AnomalyDetectorDescription: string, CreationTime: string, LastModificationTime: string, Status: string, Tags: record>, NextToken: string> {
+]: any -> oneof<record<AnomalyDetectorSummaryList: table<AnomalyDetectorArn: string, AnomalyDetectorName: string, AnomalyDetectorDescription: string, CreationTime: string, LastModificationTime: string, Status: string, Tags: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1109,7 +1123,7 @@ export def "list-anomaly-group-related-metrics" [
   --relationship-type-filter: string@relationship-type-filter-completer # Filter for potential causes (CAUSE_OF_INPUT_ANOMALY_GROUP) or downstream effects (EFFECT_OF_INPUT_ANOMALY_GROUP) of the anomaly group.
   --max-results-body: int # The maximum number of results to return. (body field)
   --next-token-body: string # Specify the pagination token that's returned by a previous request to retrieve the next page of results. (body field)
-]: any -> record<InterMetricImpactList: table<MetricName: string, AnomalyGroupId: string, RelationshipType: string, ContributionPercentage: float>, NextToken: string> {
+]: any -> oneof<record<InterMetricImpactList: table<MetricName: string, AnomalyGroupId: string, RelationshipType: string, ContributionPercentage: float>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1162,7 +1176,7 @@ export def "list-anomaly-group-summaries" [
   sensitivity_threshold: int # The minimum severity score for inclusion in the output.
   --max-results-body: int # The maximum number of results to return. (body field)
   --next-token-body: string # Specify the pagination token that's returned by a previous request to retrieve the next page of results. (body field)
-]: any -> record<AnomalyGroupSummaryList: table<StartTime: string, EndTime: string, AnomalyGroupId: string, AnomalyGroupScore: float, PrimaryMetricName: string>, AnomalyGroupStatistics: record<EvaluationStartDate: string, TotalCount: int, ItemizedMetricStatsList: list<record>>, NextToken: string> {
+]: any -> oneof<record<AnomalyGroupSummaryList: table<StartTime: string, EndTime: string, AnomalyGroupId: string, AnomalyGroupScore: float, PrimaryMetricName: string>, AnomalyGroupStatistics: record<EvaluationStartDate: string, TotalCount: int, ItemizedMetricStatsList: list<record>>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1216,7 +1230,7 @@ export def "list-anomaly-group-time-series" [
   metric_name: string # The name of the measure field.
   --max-results-body: int # The maximum number of results to return. (body field)
   --next-token-body: string # Specify the pagination token that's returned by a previous request to retrieve the next page of results. (body field)
-]: any -> record<AnomalyGroupId: string, MetricName: string, TimestampList: list<string>, NextToken: string, TimeSeriesList: table<TimeSeriesId: string, DimensionList: list, MetricValueList: list>> {
+]: any -> oneof<record<AnomalyGroupId: string, MetricName: string, TimestampList: list<string>, NextToken: string, TimeSeriesList: table<TimeSeriesId: string, DimensionList: list, MetricValueList: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1268,7 +1282,7 @@ export def "list-metric-sets" [
   --anomaly-detector-arn: string # The ARN of the anomaly detector containing the metrics sets to list.
   --max-results-body: int # The maximum number of results to return. (body field)
   --next-token-body: string # If the result of the previous request was truncated, the response includes a NextToken. To retrieve the next set of results, use the token in the next request. Tokens expire after 24 hours. (body field)
-]: any -> record<MetricSetSummaryList: table<MetricSetArn: string, AnomalyDetectorArn: string, MetricSetDescription: string, MetricSetName: string, CreationTime: string, LastModificationTime: string, Tags: record>, NextToken: string> {
+]: any -> oneof<record<MetricSetSummaryList: table<MetricSetArn: string, AnomalyDetectorArn: string, MetricSetDescription: string, MetricSetName: string, CreationTime: string, LastModificationTime: string, Tags: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1316,7 +1330,7 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Tags: record> {
+]: nothing -> oneof<record<Tags: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
@@ -1362,7 +1376,7 @@ export def "tag-resource" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   tags: record # Tags to apply to the resource. Tag keys and values can contain letters, numbers, spaces, and the following symbols: _.:/=+@-
-]: any -> any {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1392,7 +1406,6 @@ export def "tag-resource" [
 #
 # POST /PutFeedback
 # operationId: PutFeedback
-# --AnomalyGroupTimeSeriesFeedback shape: {AnomalyGroupId?: string, TimeSeriesId?: string, IsAnomaly?: bool}
 export def "put-feedback" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1412,7 +1425,7 @@ export def "put-feedback" [
   --x-amz-signed-headers: string
   anomaly_detector_arn: string # The Amazon Resource Name (ARN) of the anomaly detector.
   anomaly_group_time_series_feedback: record # Feedback for an anomalous metric. — shape: {AnomalyGroupId?: string, TimeSeriesId?: string, IsAnomaly?: bool}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1460,7 +1473,7 @@ export def "untag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
@@ -1489,8 +1502,6 @@ export def "untag-resource" [
 #
 # POST /UpdateAlert
 # operationId: UpdateAlert
-# --Action shape: {SNSConfiguration?: record, LambdaConfiguration?: record}
-# --AlertFilters shape: {MetricList?: list<string>, DimensionFilterList?: list}
 export def "update-alert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1513,7 +1524,7 @@ export def "update-alert" [
   --alert-sensitivity-threshold: int # An integer from 0 to 100 specifying the alert sensitivity threshold.
   --action: record # A configuration that specifies the action to perform when anomalies are detected. — shape: {SNSConfiguration?: record, LambdaConfiguration?: record}
   --alert-filters: record # The configuration of the alert filters. — shape: {MetricList?: list<string>, DimensionFilterList?: list}
-]: any -> record<AlertArn: string> {
+]: any -> oneof<record<AlertArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1542,7 +1553,6 @@ export def "update-alert" [
 #
 # POST /UpdateAnomalyDetector
 # operationId: UpdateAnomalyDetector
-# --AnomalyDetectorConfig shape: {AnomalyDetectorFrequency?: "P1D"|"PT1H"|"PT10M"|"PT5M"}
 export def "update-anomaly-detector" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1564,7 +1574,7 @@ export def "update-anomaly-detector" [
   --kms-key-arn: string # The Amazon Resource Name (ARN) of an AWS KMS encryption key.
   --anomaly-detector-description: string # The updated detector description.
   --anomaly-detector-config: record # Contains information about a detector's configuration. — shape: {AnomalyDetectorFrequency?: "P1D"|"PT1H"|"PT10M"|"PT5M"}
-]: any -> record<AnomalyDetectorArn: string> {
+]: any -> oneof<record<AnomalyDetectorArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1593,10 +1603,6 @@ export def "update-anomaly-detector" [
 #
 # POST /UpdateMetricSet
 # operationId: UpdateMetricSet
-# --MetricList item shape: {MetricName: string, AggregationFunction: "AVG"|"SUM", Namespace?: string}
-# --TimestampColumn shape: {ColumnName?: string, ColumnFormat?: string}
-# --MetricSource shape: {S3SourceConfig?: record, AppFlowConfig?: record, CloudWatchConfig?: record, RDSSourceConfig?: record, RedshiftSourceConfig?: record, AthenaSourceConfig?: record}
-# --DimensionFilterList item shape: {Name?: string, FilterList?: list}
 export def "update-metric-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1623,7 +1629,7 @@ export def "update-metric-set" [
   --metric-set-frequency: string@metric-set-frequency-completer # The dataset's interval.
   --metric-source: record # Contains information about source data used to generate metrics. — shape: {S3SourceConfig?: record, AppFlowConfig?: record, CloudWatchConfig?: record, RDSSourceConfig?: record, RedshiftSourceConfig?: record, AthenaSourceConfig?: record}
   --dimension-filter-list: list # Describes a list of filters for choosing specific dimensions and specific values. Each filter consists of the dimension and one of its values that you want to include. When multiple dimensions or values are specified, the dimensions are joined with an AND operation and the values are joined with an OR operation. — item shape: {Name?: string, FilterList?: list}
-]: any -> record<MetricSetArn: string> {
+]: any -> oneof<record<MetricSetArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

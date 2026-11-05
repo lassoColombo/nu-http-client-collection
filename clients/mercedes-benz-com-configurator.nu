@@ -12,27 +12,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -40,8 +49,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -52,7 +66,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -87,7 +110,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -103,9 +127,9 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "markets-get" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["markets-get" "market-get" "bodies-get" "body-get" "classes-get" "class-get" "models-get" "model-get" "model-configurations-get" "model-configuration-get" "model-configuration-alternatives-get" "image-components-get" "image-components-engine-get" "image-components-equipments-get" "image-components-equipments-by-code-get" "image-components-paint-get" "image-components-rim-get" "image-components-trim-get" "image-components-upholstery-get" "image-vehicle-get" "model-configuration-selectables-get" "online-code-post" "online-code-get" "product-groups-get" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -140,7 +164,7 @@ export def "markets-get" [
   --language: string # This is a ISO language string e.g. 'de' and is spoken in Austria 'AT', Germany 'DE' and Swiss 'CH'. (default: de)
   --country: string # This is a ISO country string e.g. Germany 'DE' or Swiss 'CH'.
   --fields-filter: list<string> # Specifies which fields should be included in the result. If this filter is not used, per default all fields are returned.
-]: nothing -> table<_links: record<bodies: record, classes: record, models: record, productgroups: record, self: record>, country: string, language: string, marketId: string> {
+]: nothing -> oneof<table<_links: record<bodies: record, classes: record, models: record, productgroups: record, self: record>, country: string, language: string, marketId: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "language" $language "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "fieldsFilter" $fields_filter "csv")] | flatten | str join "&"
@@ -177,7 +201,7 @@ export def "market-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-filter: list<string> # Specifies which fields should be included in the result. If this filter is not used, per default all fields are returned.
-]: nothing -> record<_links: record<bodies: record<href: string>, classes: record<href: string>, models: record<href: string>, productgroups: record<href: string>, self: record<href: string>>, country: string, language: string, marketId: string> {
+]: nothing -> oneof<record<_links: record<bodies: record<href: string>, classes: record<href: string>, models: record<href: string>, productgroups: record<href: string>, self: record<href: string>>, country: string, language: string, marketId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($market_id | is-empty) { error make --unspanned { msg: "path parameter 'marketId' must be non-empty" } }
@@ -218,7 +242,7 @@ export def "bodies-get" [
   --body-id: string # This is a body id e.g. '1' for 'Limousine' in Germany. (default: 2)
   --product-groups: list<string> # Specifies to which product groups the vehicles belong which should be returned. The product groups are separated from each other by a comma and are case sensitive. Allowed values are: * PKW * VAN * SMART
   --fields-filter: list<string> # Specifies which fields should be included in the result. If this filter is not used, per default all fields are returned.
-]: nothing -> table<_links: record<models: record, self: record>, bodyId: string, bodyName: string> {
+]: nothing -> oneof<table<_links: record<models: record, self: record>, bodyId: string, bodyName: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($market_id | is-empty) { error make --unspanned { msg: "path parameter 'marketId' must be non-empty" } }
@@ -257,7 +281,7 @@ export def "body-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-filter: list<string> # Specifies which fields should be included in the result. If this filter is not used, per default all fields are returned.
-]: nothing -> record<_links: record<models: record<href: string>, self: record<href: string>>, bodyId: string, bodyName: string> {
+]: nothing -> oneof<record<_links: record<models: record<href: string>, self: record<href: string>>, bodyId: string, bodyName: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($market_id | is-empty) { error make --unspanned { msg: "path parameter 'marketId' must be non-empty" } }
@@ -299,7 +323,7 @@ export def "classes-get" [
   --body-id: string # This is a body id e.g. '1' for 'Limousine' in Germany. (default: 2)
   --product-groups: list<string> # Specifies to which product groups the vehicles belong which should be returned. The product groups are separated from each other by a comma and are case sensitive. Allowed values are: * PKW * VAN * SMART
   --fields-filter: list<string> # Specifies which fields should be included in the result. If this filter is not used, per default all fields are returned.
-]: nothing -> table<_links: record<models: record, self: record>, classId: string, className: string> {
+]: nothing -> oneof<table<_links: record<models: record, self: record>, classId: string, className: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($market_id | is-empty) { error make --unspanned { msg: "path parameter 'marketId' must be non-empty" } }
@@ -338,7 +362,7 @@ export def "class-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-filter: list<string> # Specifies which fields should be included in the result. If this filter is not used, per default all fields are returned.
-]: nothing -> record<_links: record<models: record<href: string>, self: record<href: string>>, classId: string, className: string> {
+]: nothing -> oneof<record<_links: record<models: record<href: string>, self: record<href: string>>, classId: string, className: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($market_id | is-empty) { error make --unspanned { msg: "path parameter 'marketId' must be non-empty" } }
@@ -383,7 +407,7 @@ export def "models-get" [
   --national-sales-type: string # This is the national sales type (NST) of a distinct baumuster. There is no predefined pattern for the NST, each market defines its NST. e.g. 'E07' in France, 0001 in Germany and ZA1 in South Africa Using the NST markets can define market specific conditions. e.g. different initial configuration, etc.
   --product-groups: list<string> # Specifies to which product groups the vehicles belong which should be returned. The product groups are separated from each other by a comma and are case sensitive. Allowed values are: * PKW * VAN * SMART
   --fields-filter: list<string> # Specifies which fields should be included in the result. If this filter is not used, per default all fields are returned.
-]: nothing -> table<_links: record<configuration: record, self: record>, baumuster: string, modelId: string, name: string, nationalSalesType: string, priceInformation: record<currency: string, instalmentPrice: float, netPrice: float, price: float, taxes: list>, productGroup: record<name: string>, shortName: string, vehicleBody: record<_links: record, bodyId: string, bodyName: string>, vehicleClass: record<_links: record, classId: string, className: string>> {
+]: nothing -> oneof<table<_links: record<configuration: record, self: record>, baumuster: string, modelId: string, name: string, nationalSalesType: string, priceInformation: record<currency: string, instalmentPrice: float, netPrice: float, price: float, taxes: list>, productGroup: record<name: string>, shortName: string, vehicleBody: record<_links: record, bodyId: string, bodyName: string>, vehicleClass: record<_links: record, classId: string, className: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($market_id | is-empty) { error make --unspanned { msg: "path parameter 'marketId' must be non-empty" } }
@@ -422,7 +446,7 @@ export def "model-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-filter: list<string> # Specifies which fields should be included in the result. If this filter is not used, per default all fields are returned.
-]: nothing -> record<_links: record<configuration: record<href: string>, self: record<href: string>>, baumuster: string, modelId: string, name: string, nationalSalesType: string, priceInformation: record<currency: string, instalmentPrice: float, netPrice: float, price: float, taxes: list<record>>, productGroup: record<name: string>, shortName: string, vehicleBody: record<_links: record<models: record, self: record>, bodyId: string, bodyName: string>, vehicleClass: record<_links: record<models: record, self: record>, classId: string, className: string>> {
+]: nothing -> oneof<record<_links: record<configuration: record<href: string>, self: record<href: string>>, baumuster: string, modelId: string, name: string, nationalSalesType: string, priceInformation: record<currency: string, instalmentPrice: float, netPrice: float, price: float, taxes: list<record>>, productGroup: record<name: string>, shortName: string, vehicleBody: record<_links: record<models: record, self: record>, bodyId: string, bodyName: string>, vehicleClass: record<_links: record<models: record, self: record>, classId: string, className: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($market_id | is-empty) { error make --unspanned { msg: "path parameter 'marketId' must be non-empty" } }
@@ -462,7 +486,7 @@ export def "model-configurations-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-filter: list<string> # Specifies which fields should be included in the result. If this filter is not used, per default all fields are returned.
-]: nothing -> record<_links: record<imageapi_vehicle: record<href: string>, selectables: record<href: string>, self: record<href: string>>, changeYear: string, configurationId: string, configurationPrice: record<currency: string, instalmentPrice: float, netPrice: float, price: float, taxes: list<record>>, initialPrice: record<currency: string, instalmentPrice: float, netPrice: float, price: float, taxes: list<record>>, marketId: string, modelId: string, modelYear: string, technicalInformation: record<acceleration: record<unit: string, value: float>, doors: float, energyEfficiencyClass: string, engine: record<alternativeFuelType: string, capacity: record, cylinder: string, driveConcept: string, emissionStandard: string, engineConcept: string, fuelEconomy: record, fuelType: string, powerHp: record, powerHybridExtensionHp: record, powerHybridExtensionKw: record, powerKw: record>, nedc: record<consumption: record, electricRange: record, emission: record, weight: record>, seats: float, topSpeed: record<unit: string, value: float>, transmission: record<code: string, codeType: string, name: string>, wltp: record<consumption: record, emission: record>>, vehicleComponents: table<_links: record, code: string, codeType: string, componentSortId: float, componentType: string, description: string, fixed: bool, hidden: bool, id: string, name: string, priceInformation: record, pseudoCode: bool, selected: bool, standard: bool>, wltpConfiguration: bool> {
+]: nothing -> oneof<record<_links: record<imageapi_vehicle: record<href: string>, selectables: record<href: string>, self: record<href: string>>, changeYear: string, configurationId: string, configurationPrice: record<currency: string, instalmentPrice: float, netPrice: float, price: float, taxes: list<record>>, initialPrice: record<currency: string, instalmentPrice: float, netPrice: float, price: float, taxes: list<record>>, marketId: string, modelId: string, modelYear: string, technicalInformation: record<acceleration: record<unit: string, value: float>, doors: float, energyEfficiencyClass: string, engine: record<alternativeFuelType: string, capacity: record, cylinder: string, driveConcept: string, emissionStandard: string, engineConcept: string, fuelEconomy: record, fuelType: string, powerHp: record, powerHybridExtensionHp: record, powerHybridExtensionKw: record, powerKw: record>, nedc: record<consumption: record, electricRange: record, emission: record, weight: record>, seats: float, topSpeed: record<unit: string, value: float>, transmission: record<code: string, codeType: string, name: string>, wltp: record<consumption: record, emission: record>>, vehicleComponents: table<_links: record, code: string, codeType: string, componentSortId: float, componentType: string, description: string, fixed: bool, hidden: bool, id: string, name: string, priceInformation: record, pseudoCode: bool, selected: bool, standard: bool>, wltpConfiguration: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($market_id | is-empty) { error make --unspanned { msg: "path parameter 'marketId' must be non-empty" } }
@@ -503,7 +527,7 @@ export def "model-configuration-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-filter: list<string> # Specifies which fields should be included in the result. If this filter is not used, per default all fields are returned.
-]: nothing -> record<_links: record<imageapi_vehicle: record<href: string>, selectables: record<href: string>, self: record<href: string>>, changeYear: string, configurationId: string, configurationPrice: record<currency: string, instalmentPrice: float, netPrice: float, price: float, taxes: list<record>>, initialPrice: record<currency: string, instalmentPrice: float, netPrice: float, price: float, taxes: list<record>>, marketId: string, modelId: string, modelYear: string, technicalInformation: record<acceleration: record<unit: string, value: float>, doors: float, energyEfficiencyClass: string, engine: record<alternativeFuelType: string, capacity: record, cylinder: string, driveConcept: string, emissionStandard: string, engineConcept: string, fuelEconomy: record, fuelType: string, powerHp: record, powerHybridExtensionHp: record, powerHybridExtensionKw: record, powerKw: record>, nedc: record<consumption: record, electricRange: record, emission: record, weight: record>, seats: float, topSpeed: record<unit: string, value: float>, transmission: record<code: string, codeType: string, name: string>, wltp: record<consumption: record, emission: record>>, vehicleComponents: table<_links: record, code: string, codeType: string, componentSortId: float, componentType: string, description: string, fixed: bool, hidden: bool, id: string, name: string, priceInformation: record, pseudoCode: bool, selected: bool, standard: bool>, wltpConfiguration: bool> {
+]: nothing -> oneof<record<_links: record<imageapi_vehicle: record<href: string>, selectables: record<href: string>, self: record<href: string>>, changeYear: string, configurationId: string, configurationPrice: record<currency: string, instalmentPrice: float, netPrice: float, price: float, taxes: list<record>>, initialPrice: record<currency: string, instalmentPrice: float, netPrice: float, price: float, taxes: list<record>>, marketId: string, modelId: string, modelYear: string, technicalInformation: record<acceleration: record<unit: string, value: float>, doors: float, energyEfficiencyClass: string, engine: record<alternativeFuelType: string, capacity: record, cylinder: string, driveConcept: string, emissionStandard: string, engineConcept: string, fuelEconomy: record, fuelType: string, powerHp: record, powerHybridExtensionHp: record, powerHybridExtensionKw: record, powerKw: record>, nedc: record<consumption: record, electricRange: record, emission: record, weight: record>, seats: float, topSpeed: record<unit: string, value: float>, transmission: record<code: string, codeType: string, name: string>, wltp: record<consumption: record, emission: record>>, vehicleComponents: table<_links: record, code: string, codeType: string, componentSortId: float, componentType: string, description: string, fixed: bool, hidden: bool, id: string, name: string, priceInformation: record, pseudoCode: bool, selected: bool, standard: bool>, wltpConfiguration: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($market_id | is-empty) { error make --unspanned { msg: "path parameter 'marketId' must be non-empty" } }
@@ -546,7 +570,7 @@ export def "model-configuration-alternatives-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-filter: list<string> # Specifies which fields should be included in the result. If this filter is not used, per default all fields are returned.
-]: nothing -> table<_links: record<imageapi_vehicle: record, selectables: record, self: record>, addedComponents: list<record>, configurationId: string, marketId: string, modelId: string, priceInformation: record, removedComponents: list<record>, updatedComponents: list<record>> {
+]: nothing -> oneof<table<_links: record<imageapi_vehicle: record, selectables: record, self: record>, addedComponents: list<record>, configurationId: string, marketId: string, modelId: string, priceInformation: record, removedComponents: list<record>, updatedComponents: list<record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($market_id | is-empty) { error make --unspanned { msg: "path parameter 'marketId' must be non-empty" } }
@@ -588,7 +612,7 @@ export def "image-components-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<components: record<engine: record<url: string>, equipments: record, paint: record<paint1: record, paint2: record>, rim: record<code: string, url: string>, trim: record<code: string, url: string>, upholstery: record<code: string, url: string>>> {
+]: nothing -> oneof<record<components: record<engine: record<url: string>, equipments: record, paint: record<paint1: record, paint2: record>, rim: record<code: string, url: string>, trim: record<code: string, url: string>, upholstery: record<code: string, url: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($market_id | is-empty) { error make --unspanned { msg: "path parameter 'marketId' must be non-empty" } }
@@ -628,7 +652,7 @@ export def "image-components-engine-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<engine: record<url: string>> {
+]: nothing -> oneof<record<engine: record<url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($market_id | is-empty) { error make --unspanned { msg: "path parameter 'marketId' must be non-empty" } }
@@ -668,7 +692,7 @@ export def "image-components-equipments-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<equipments: record> {
+]: nothing -> oneof<record<equipments: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($market_id | is-empty) { error make --unspanned { msg: "path parameter 'marketId' must be non-empty" } }
@@ -709,7 +733,7 @@ export def "image-components-equipments-by-code-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<equipment: record<url: string>> {
+]: nothing -> oneof<record<equipment: record<url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($market_id | is-empty) { error make --unspanned { msg: "path parameter 'marketId' must be non-empty" } }
@@ -750,7 +774,7 @@ export def "image-components-paint-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<paint: record<paint1: record<code: string, url: string>, paint2: record<code: string, url: string>>> {
+]: nothing -> oneof<record<paint: record<paint1: record<code: string, url: string>, paint2: record<code: string, url: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($market_id | is-empty) { error make --unspanned { msg: "path parameter 'marketId' must be non-empty" } }
@@ -790,7 +814,7 @@ export def "image-components-rim-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<rim: record<code: string, url: string>> {
+]: nothing -> oneof<record<rim: record<code: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($market_id | is-empty) { error make --unspanned { msg: "path parameter 'marketId' must be non-empty" } }
@@ -830,7 +854,7 @@ export def "image-components-trim-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<trim: record<code: string, url: string>> {
+]: nothing -> oneof<record<trim: record<code: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($market_id | is-empty) { error make --unspanned { msg: "path parameter 'marketId' must be non-empty" } }
@@ -870,7 +894,7 @@ export def "image-components-upholstery-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<upholstery: record<code: string, url: string>> {
+]: nothing -> oneof<record<upholstery: record<code: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($market_id | is-empty) { error make --unspanned { msg: "path parameter 'marketId' must be non-empty" } }
@@ -913,7 +937,7 @@ export def "image-vehicle-get" [
   --perspectives: string # One or more perspectives as a comma separated String list e.g. 'EXT000,EXT010,INT1'. The following perspectives are available: * EXT000-EXT350: EXT000 defines the front view, EXT010 defines a rotation of 10 degress and so forth. * INT1-INT4: These are the 4 available interior perspectives. The default value is EXT020,INT1 if no value is provided. (default: EXT020,INT1)
   --roof-open: oneof<nothing, bool> # Set 'true', if you are looking for images with the roof open. This option is only valid for cabrios. Default is 'false'. (default: false)
   --night: oneof<nothing, bool> # Set 'true', if you are looking for images with a darker background and the vehicle's headlights turned on. Default is 'false'. (default: false)
-]: nothing -> record<vehicle: record> {
+]: nothing -> oneof<record<vehicle: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($market_id | is-empty) { error make --unspanned { msg: "path parameter 'marketId' must be non-empty" } }
@@ -956,7 +980,7 @@ export def "model-configuration-selectables-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --component-types: list<string> # A list of component types separated by a comma case insensitive. If nothing is defined all component types are returned. Allowed values are: - WHEELS - PAINTS - UPHOLSTERIES - TRIMS - PACKAGES - LINES - SPECIAL_EDITION - SPECIAL_EQUIPMENT
   --fields-filter: list<string> # Specifies which fields should be included in the result. If this filter is not used, per default all fields are returned.
-]: nothing -> record<_links: record<self: record<href: string>>, componentCategories: table<cardinality: string, categoryId: string, categoryName: string, categorySortId: float, componentIds: list, subcategories: list>, vehicleComponents: record<componentId: record<_links: record, code: string, codeType: string, componentSortId: float, componentType: string, description: string, fixed: bool, hidden: bool, id: string, name: string, priceInformation: record, pseudoCode: bool, selected: bool, standard: bool>>> {
+]: nothing -> oneof<record<_links: record<self: record<href: string>>, componentCategories: table<cardinality: string, categoryId: string, categoryName: string, categorySortId: float, componentIds: list, subcategories: list>, vehicleComponents: record<componentId: record<_links: record, code: string, codeType: string, componentSortId: float, componentType: string, description: string, fixed: bool, hidden: bool, id: string, name: string, priceInformation: record, pseudoCode: bool, selected: bool, standard: bool>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($market_id | is-empty) { error make --unspanned { msg: "path parameter 'marketId' must be non-empty" } }
@@ -997,7 +1021,7 @@ export def "online-code-post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   configuration_id: string # String that identifies a configuration. e.g. E-D15-D18-D41-D46-D49-D52-D53-D54-D59-D60-D71-F32-F36-F88-F98-G03-G05-G36-G56-I61-J67-M23-M70-N18-N25-N62-N92-O76-Q29-Q56-Q79-Q92-S01-S05-S08-S63-S92-T05-T07-T62-T84-T88_I-953_L-696_P-001_S-152-160-161-171-258-290-292-294-411-442-470-472-475-485-516-533-538-560-570-573-580-584-58U-591-620-70B-807-888-B03-B16-B51-K11-L18-R43-U60
   model_id: string # String that identifies a model. e.g. '176042_002'
-]: any -> record<onlineCode: string> {
+]: any -> oneof<record<onlineCode: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1038,7 +1062,7 @@ export def "online-code-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-filter: list<string> # Specifies which fields should be included in the result. If this filter is not used, per default all fields are returned.
-]: nothing -> record<_links: record<imageapi_vehicle: record<href: string>, selectables: record<href: string>, self: record<href: string>>, changeYear: string, configurationId: string, configurationPrice: record<currency: string, instalmentPrice: float, netPrice: float, price: float, taxes: list<record>>, initialPrice: record<currency: string, instalmentPrice: float, netPrice: float, price: float, taxes: list<record>>, marketId: string, modelId: string, modelYear: string, technicalInformation: record<acceleration: record<unit: string, value: float>, doors: float, energyEfficiencyClass: string, engine: record<alternativeFuelType: string, capacity: record, cylinder: string, driveConcept: string, emissionStandard: string, engineConcept: string, fuelEconomy: record, fuelType: string, powerHp: record, powerHybridExtensionHp: record, powerHybridExtensionKw: record, powerKw: record>, nedc: record<consumption: record, electricRange: record, emission: record, weight: record>, seats: float, topSpeed: record<unit: string, value: float>, transmission: record<code: string, codeType: string, name: string>, wltp: record<consumption: record, emission: record>>, vehicleComponents: table<_links: record, code: string, codeType: string, componentSortId: float, componentType: string, description: string, fixed: bool, hidden: bool, id: string, name: string, priceInformation: record, pseudoCode: bool, selected: bool, standard: bool>, wltpConfiguration: bool> {
+]: nothing -> oneof<record<_links: record<imageapi_vehicle: record<href: string>, selectables: record<href: string>, self: record<href: string>>, changeYear: string, configurationId: string, configurationPrice: record<currency: string, instalmentPrice: float, netPrice: float, price: float, taxes: list<record>>, initialPrice: record<currency: string, instalmentPrice: float, netPrice: float, price: float, taxes: list<record>>, marketId: string, modelId: string, modelYear: string, technicalInformation: record<acceleration: record<unit: string, value: float>, doors: float, energyEfficiencyClass: string, engine: record<alternativeFuelType: string, capacity: record, cylinder: string, driveConcept: string, emissionStandard: string, engineConcept: string, fuelEconomy: record, fuelType: string, powerHp: record, powerHybridExtensionHp: record, powerHybridExtensionKw: record, powerKw: record>, nedc: record<consumption: record, electricRange: record, emission: record, weight: record>, seats: float, topSpeed: record<unit: string, value: float>, transmission: record<code: string, codeType: string, name: string>, wltp: record<consumption: record, emission: record>>, vehicleComponents: table<_links: record, code: string, codeType: string, componentSortId: float, componentType: string, description: string, fixed: bool, hidden: bool, id: string, name: string, priceInformation: record, pseudoCode: bool, selected: bool, standard: bool>, wltpConfiguration: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($market_id | is-empty) { error make --unspanned { msg: "path parameter 'marketId' must be non-empty" } }
@@ -1077,7 +1101,7 @@ export def "product-groups-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields-filter: list<string> # Specifies which fields should be included in the result. If this filter is not used, per default all fields are returned.
-]: nothing -> record<_links: record<models: record<href: string>, self: record<href: string>>, market: record<_links: record<bodies: record, classes: record, models: record, productgroups: record, self: record>, country: string, language: string, marketId: string>, productGroups: table<name: string>> {
+]: nothing -> oneof<record<_links: record<models: record<href: string>, self: record<href: string>>, market: record<_links: record<bodies: record, classes: record, models: record, productgroups: record, self: record>, country: string, language: string, marketId: string>, productGroups: table<name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($market_id | is-empty) { error make --unspanned { msg: "path parameter 'marketId' must be non-empty" } }

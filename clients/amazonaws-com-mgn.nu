@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -119,9 +143,9 @@ def replication-type-completer [] { ["AGENT_BASED" "SNAPSHOT_SHIPPING"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "archive-application" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["archive-application" "archive-wave" "associate-applications" "associate-source-servers" "change-server-life-cycle-state" "create-application" "create-launch-configuration-template" "create-replication-configuration-template" "create-wave" "delete-application" "delete-job" "delete-launch-configuration-template" "delete-replication-configuration-template" "delete-source-server" "delete-vcenter-client" "delete-wave" "describe-job-log-items" "describe-jobs" "describe-launch-configuration-templates" "describe-replication-configuration-templates" "describe-source-servers" "describe-vcenter-clients" "disassociate-applications" "disassociate-source-servers" "disconnect-from-service" "finalize-cutover" "get-launch-configuration" "get-replication-configuration" "initialize-service" "list-applications" "list-export-errors" "list-exports" "list-import-errors" "list-imports" "list-source-server-actions" "list-tags-for-resource" "tag-resource" "list-template-actions" "list-waves" "mark-as-archived" "put-source-server-action" "put-template-action" "remove-source-server-action" "remove-template-action" "retry-data-replication" "start-cutover" "start-export" "start-import" "start-replication" "start-test" "terminate-target-instances" "unarchive-application" "unarchive-wave" "untag-resource" "update-application" "update-launch-configuration" "update-launch-configuration-template" "update-replication-configuration" "update-replication-configuration-template" "update-source-server-replication-type" "update-wave" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -161,7 +185,7 @@ export def "archive-application" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   application_id: string # Application ID.
-]: any -> record<applicationAggregatedStatus: record<healthStatus: string, lastUpdateDateTime: string, progressStatus: string, totalSourceServers: int>, applicationID: string, arn: string, creationDateTime: string, description: string, isArchived: bool, lastModifiedDateTime: string, name: string, tags: record, waveID: string> {
+]: any -> oneof<record<applicationAggregatedStatus: record<healthStatus: string, lastUpdateDateTime: string, progressStatus: string, totalSourceServers: int>, applicationID: string, arn: string, creationDateTime: string, description: string, isArchived: bool, lastModifiedDateTime: string, name: string, tags: record, waveID: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -208,7 +232,7 @@ export def "archive-wave" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   wave_id: string # Wave ID.
-]: any -> record<arn: string, creationDateTime: string, description: string, isArchived: bool, lastModifiedDateTime: string, name: string, tags: record, waveAggregatedStatus: record<healthStatus: string, lastUpdateDateTime: string, progressStatus: string, replicationStartedDateTime: string, totalApplications: int>, waveID: string> {
+]: any -> oneof<record<arn: string, creationDateTime: string, description: string, isArchived: bool, lastModifiedDateTime: string, name: string, tags: record, waveAggregatedStatus: record<healthStatus: string, lastUpdateDateTime: string, progressStatus: string, replicationStartedDateTime: string, totalApplications: int>, waveID: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -256,7 +280,7 @@ export def "associate-applications" [
   --x-amz-signed-headers: string
   application_i_ds: list<string> # Application IDs list.
   wave_id: string # Wave ID.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -304,7 +328,7 @@ export def "associate-source-servers" [
   --x-amz-signed-headers: string
   application_id: string # Application ID.
   source_server_i_ds: list<string> # Source server IDs list.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -333,7 +357,6 @@ export def "associate-source-servers" [
 #
 # POST /ChangeServerLifeCycleState
 # operationId: ChangeServerLifeCycleState
-# --lifeCycle shape: {state?: "READY_FOR_TEST"|"READY_FOR_CUTOVER"|"CUTOVER"}
 export def "change-server-life-cycle-state" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -353,7 +376,7 @@ export def "change-server-life-cycle-state" [
   --x-amz-signed-headers: string
   life_cycle: record # The request to change the source server migration lifecycle state. — shape: {state?: "READY_FOR_TEST"|"READY_FOR_CUTOVER"|"CUTOVER"}
   source_server_id: string # The request to change the source server migration lifecycle state by source server ID.
-]: any -> record<applicationID: string, arn: string, dataReplicationInfo: record<dataReplicationError: record<error: string, rawError: string>, dataReplicationInitiation: record<nextAttemptDateTime: string, startDateTime: string, steps: list>, dataReplicationState: string, etaDateTime: string, lagDuration: string, lastSnapshotDateTime: string, replicatedDisks: list<record>>, fqdnForActionFramework: string, isArchived: bool, launchedInstance: record<ec2InstanceID: string, firstBoot: string, jobID: string>, lifeCycle: record<addedToServiceDateTime: string, elapsedReplicationDuration: string, firstByteDateTime: string, lastCutover: record<finalized: record, initiated: record, reverted: record>, lastSeenByServiceDateTime: string, lastTest: record<finalized: record, initiated: record, reverted: record>, state: string>, replicationType: string, sourceProperties: record<cpus: list<record>, disks: list<record>, identificationHints: record<awsInstanceID: string, fqdn: string, hostname: string, vmPath: string, vmWareUuid: string>, lastUpdatedDateTime: string, networkInterfaces: list<record>, os: record<fullString: string>, ramBytes: int, recommendedInstanceType: string>, sourceServerID: string, tags: record, userProvidedID: string, vcenterClientID: string> {
+]: any -> oneof<record<applicationID: string, arn: string, dataReplicationInfo: record<dataReplicationError: record<error: string, rawError: string>, dataReplicationInitiation: record<nextAttemptDateTime: string, startDateTime: string, steps: list>, dataReplicationState: string, etaDateTime: string, lagDuration: string, lastSnapshotDateTime: string, replicatedDisks: list<record>>, fqdnForActionFramework: string, isArchived: bool, launchedInstance: record<ec2InstanceID: string, firstBoot: string, jobID: string>, lifeCycle: record<addedToServiceDateTime: string, elapsedReplicationDuration: string, firstByteDateTime: string, lastCutover: record<finalized: record, initiated: record, reverted: record>, lastSeenByServiceDateTime: string, lastTest: record<finalized: record, initiated: record, reverted: record>, state: string>, replicationType: string, sourceProperties: record<cpus: list<record>, disks: list<record>, identificationHints: record<awsInstanceID: string, fqdn: string, hostname: string, vmPath: string, vmWareUuid: string>, lastUpdatedDateTime: string, networkInterfaces: list<record>, os: record<fullString: string>, ramBytes: int, recommendedInstanceType: string>, sourceServerID: string, tags: record, userProvidedID: string, vcenterClientID: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -402,7 +425,7 @@ export def "create-application" [
   --description: string # Application description.
   name: string # Application name.
   --tags: record # Application tags.
-]: any -> record<applicationAggregatedStatus: record<healthStatus: string, lastUpdateDateTime: string, progressStatus: string, totalSourceServers: int>, applicationID: string, arn: string, creationDateTime: string, description: string, isArchived: bool, lastModifiedDateTime: string, name: string, tags: record, waveID: string> {
+]: any -> oneof<record<applicationAggregatedStatus: record<healthStatus: string, lastUpdateDateTime: string, progressStatus: string, totalSourceServers: int>, applicationID: string, arn: string, creationDateTime: string, description: string, isArchived: bool, lastModifiedDateTime: string, name: string, tags: record, waveID: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -431,10 +454,6 @@ export def "create-application" [
 #
 # POST /CreateLaunchConfigurationTemplate
 # operationId: CreateLaunchConfigurationTemplate
-# --largeVolumeConf shape: {iops?: int, throughput?: int, volumeType?: "io1"|"io2"|"gp3"|"gp2"|"st1"|"sc1"|"standard"}
-# --licensing shape: {osByol?: bool}
-# --postLaunchActions shape: {cloudWatchLogGroupName?: string, deployment?: "TEST_AND_CUTOVER"|"CUTOVER_ONLY"|"TEST_ONLY", s3LogBucket?: string, s3OutputKeyPrefix?: string, ssmDocuments?: list}
-# --smallVolumeConf shape: {iops?: int, throughput?: int, volumeType?: "io1"|"io2"|"gp3"|"gp2"|"st1"|"sc1"|"standard"}
 export def "create-launch-configuration-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -466,7 +485,7 @@ export def "create-launch-configuration-template" [
   --small-volume-max-size: int # Small volume maximum size.
   --tags: record # Request to associate tags during creation of a Launch Configuration Template.
   --target-instance-type-right-sizing-method: string@target-instance-type-right-sizing-method-completer # Target instance type right-sizing method.
-]: any -> record<arn: string, associatePublicIpAddress: bool, bootMode: string, copyPrivateIp: bool, copyTags: bool, ec2LaunchTemplateID: string, enableMapAutoTagging: bool, largeVolumeConf: record<iops: int, throughput: int, volumeType: string>, launchConfigurationTemplateID: string, launchDisposition: string, licensing: record<osByol: bool>, mapAutoTaggingMpeID: string, postLaunchActions: record<cloudWatchLogGroupName: string, deployment: string, s3LogBucket: string, s3OutputKeyPrefix: string, ssmDocuments: list<record>>, smallVolumeConf: record<iops: int, throughput: int, volumeType: string>, smallVolumeMaxSize: int, tags: record, targetInstanceTypeRightSizingMethod: string> {
+]: any -> oneof<record<arn: string, associatePublicIpAddress: bool, bootMode: string, copyPrivateIp: bool, copyTags: bool, ec2LaunchTemplateID: string, enableMapAutoTagging: bool, largeVolumeConf: record<iops: int, throughput: int, volumeType: string>, launchConfigurationTemplateID: string, launchDisposition: string, licensing: record<osByol: bool>, mapAutoTaggingMpeID: string, postLaunchActions: record<cloudWatchLogGroupName: string, deployment: string, s3LogBucket: string, s3OutputKeyPrefix: string, ssmDocuments: list<record>>, smallVolumeConf: record<iops: int, throughput: int, volumeType: string>, smallVolumeMaxSize: int, tags: record, targetInstanceTypeRightSizingMethod: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -525,7 +544,7 @@ export def "create-replication-configuration-template" [
   staging_area_tags: record # Request to configure Staging Area tags during Replication Settings template creation.
   --tags: record # Request to configure tags during Replication Settings template creation.
   --use-dedicated-replication-server: oneof<nothing, bool> # Request to use Dedicated Replication Servers during Replication Settings template creation.
-]: any -> record<arn: string, associateDefaultSecurityGroup: bool, bandwidthThrottling: int, createPublicIP: bool, dataPlaneRouting: string, defaultLargeStagingDiskType: string, ebsEncryption: string, ebsEncryptionKeyArn: string, replicationConfigurationTemplateID: string, replicationServerInstanceType: string, replicationServersSecurityGroupsIDs: list<string>, stagingAreaSubnetId: string, stagingAreaTags: record, tags: record, useDedicatedReplicationServer: bool> {
+]: any -> oneof<record<arn: string, associateDefaultSecurityGroup: bool, bandwidthThrottling: int, createPublicIP: bool, dataPlaneRouting: string, defaultLargeStagingDiskType: string, ebsEncryption: string, ebsEncryptionKeyArn: string, replicationConfigurationTemplateID: string, replicationServerInstanceType: string, replicationServersSecurityGroupsIDs: list<string>, stagingAreaSubnetId: string, stagingAreaTags: record, tags: record, useDedicatedReplicationServer: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -577,7 +596,7 @@ export def "create-wave" [
   --description: string # Wave description.
   name: string # Wave name.
   --tags: record # Wave tags.
-]: any -> record<arn: string, creationDateTime: string, description: string, isArchived: bool, lastModifiedDateTime: string, name: string, tags: record, waveAggregatedStatus: record<healthStatus: string, lastUpdateDateTime: string, progressStatus: string, replicationStartedDateTime: string, totalApplications: int>, waveID: string> {
+]: any -> oneof<record<arn: string, creationDateTime: string, description: string, isArchived: bool, lastModifiedDateTime: string, name: string, tags: record, waveAggregatedStatus: record<healthStatus: string, lastUpdateDateTime: string, progressStatus: string, replicationStartedDateTime: string, totalApplications: int>, waveID: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -624,7 +643,7 @@ export def "delete-application" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   application_id: string # Application ID.
-]: any -> any {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -671,7 +690,7 @@ export def "delete-job" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   job_id: string # Request to delete Job from service by Job ID.
-]: any -> any {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -718,7 +737,7 @@ export def "delete-launch-configuration-template" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   launch_configuration_template_id: string # ID of resource to be deleted.
-]: any -> any {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -765,7 +784,7 @@ export def "delete-replication-configuration-template" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   replication_configuration_template_id: string # Request to delete Replication Configuration Template from service by Replication Configuration Template ID.
-]: any -> any {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -812,7 +831,7 @@ export def "delete-source-server" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   source_server_id: string # Request to delete Source Server from service by Server ID.
-]: any -> any {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -906,7 +925,7 @@ export def "delete-wave" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   wave_id: string # Wave ID.
-]: any -> any {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -957,7 +976,7 @@ export def "describe-job-log-items" [
   job_id: string # Request to describe Job log job ID.
   --max-results-body: int # Request to describe Job log item maximum results. (body field)
   --next-token-body: string # Request to describe Job log next token. (body field)
-]: any -> record<items: table<event: string, eventData: record, logDateTime: string>, nextToken: string> {
+]: any -> oneof<record<items: table<event: string, eventData: record, logDateTime: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -987,7 +1006,6 @@ export def "describe-job-log-items" [
 #
 # POST /DescribeJobs
 # operationId: DescribeJobs
-# --filters shape: {fromDate?: string, jobIDs?: list<string>, toDate?: string}
 export def "describe-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1010,7 +1028,7 @@ export def "describe-jobs" [
   --filters: record # Request to describe Job log filters. — shape: {fromDate?: string, jobIDs?: list<string>, toDate?: string}
   --max-results-body: int # Request to describe job log items by max results. (body field)
   --next-token-body: string # Request to describe job log items by next token. (body field)
-]: any -> record<items: table<arn: string, creationDateTime: string, endDateTime: string, initiatedBy: string, jobID: string, participatingServers: list, status: string, tags: record, type: string>, nextToken: string> {
+]: any -> oneof<record<items: table<arn: string, creationDateTime: string, endDateTime: string, initiatedBy: string, jobID: string, participatingServers: list, status: string, tags: record, type: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1062,7 +1080,7 @@ export def "describe-launch-configuration-templates" [
   --launch-configuration-template-i-ds: list<string> # Request to filter Launch Configuration Templates list by Launch Configuration Template ID.
   --max-results-body: int # Maximum results to be returned in DescribeLaunchConfigurationTemplates. (body field)
   --next-token-body: string # Next pagination token returned from DescribeLaunchConfigurationTemplates. (body field)
-]: any -> record<items: table<arn: string, associatePublicIpAddress: bool, bootMode: string, copyPrivateIp: bool, copyTags: bool, ec2LaunchTemplateID: string, enableMapAutoTagging: bool, largeVolumeConf: record, launchConfigurationTemplateID: string, launchDisposition: string, licensing: record, mapAutoTaggingMpeID: string, postLaunchActions: record, smallVolumeConf: record, smallVolumeMaxSize: int, tags: record, targetInstanceTypeRightSizingMethod: string>, nextToken: string> {
+]: any -> oneof<record<items: table<arn: string, associatePublicIpAddress: bool, bootMode: string, copyPrivateIp: bool, copyTags: bool, ec2LaunchTemplateID: string, enableMapAutoTagging: bool, largeVolumeConf: record, launchConfigurationTemplateID: string, launchDisposition: string, licensing: record, mapAutoTaggingMpeID: string, postLaunchActions: record, smallVolumeConf: record, smallVolumeMaxSize: int, tags: record, targetInstanceTypeRightSizingMethod: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1114,7 +1132,7 @@ export def "describe-replication-configuration-templates" [
   --max-results-body: int # Request to describe Replication Configuration template by max results. (body field)
   --next-token-body: string # Request to describe Replication Configuration template by next token. (body field)
   --replication-configuration-template-i-ds: list<string> # Request to describe Replication Configuration template by template IDs.
-]: any -> record<items: table<arn: string, associateDefaultSecurityGroup: bool, bandwidthThrottling: int, createPublicIP: bool, dataPlaneRouting: string, defaultLargeStagingDiskType: string, ebsEncryption: string, ebsEncryptionKeyArn: string, replicationConfigurationTemplateID: string, replicationServerInstanceType: string, replicationServersSecurityGroupsIDs: list, stagingAreaSubnetId: string, stagingAreaTags: record, tags: record, useDedicatedReplicationServer: bool>, nextToken: string> {
+]: any -> oneof<record<items: table<arn: string, associateDefaultSecurityGroup: bool, bandwidthThrottling: int, createPublicIP: bool, dataPlaneRouting: string, defaultLargeStagingDiskType: string, ebsEncryption: string, ebsEncryptionKeyArn: string, replicationConfigurationTemplateID: string, replicationServerInstanceType: string, replicationServersSecurityGroupsIDs: list, stagingAreaSubnetId: string, stagingAreaTags: record, tags: record, useDedicatedReplicationServer: bool>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1144,7 +1162,6 @@ export def "describe-replication-configuration-templates" [
 #
 # POST /DescribeSourceServers
 # operationId: DescribeSourceServers
-# --filters shape: {applicationIDs?: list<string>, isArchived?: bool, lifeCycleStates?: list<string>, replicationTypes?: list<string>, sourceServerIDs?: list<string>}
 export def "describe-source-servers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1167,7 +1184,7 @@ export def "describe-source-servers" [
   --filters: record # Request to filter Source Servers list. — shape: {applicationIDs?: list<string>, isArchived?: bool, lifeCycleStates?: list<string>, replicationTypes?: list<string>, sourceServerIDs?: list<string>}
   --max-results-body: int # Request to filter Source Servers list by maximum results. (body field)
   --next-token-body: string # Request to filter Source Servers list by next token. (body field)
-]: any -> record<items: table<applicationID: string, arn: string, dataReplicationInfo: record, fqdnForActionFramework: string, isArchived: bool, launchedInstance: record, lifeCycle: record, replicationType: string, sourceProperties: record, sourceServerID: string, tags: record, userProvidedID: string, vcenterClientID: string>, nextToken: string> {
+]: any -> oneof<record<items: table<applicationID: string, arn: string, dataReplicationInfo: record, fqdnForActionFramework: string, isArchived: bool, launchedInstance: record, lifeCycle: record, replicationType: string, sourceProperties: record, sourceServerID: string, tags: record, userProvidedID: string, vcenterClientID: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1216,7 +1233,7 @@ export def "describe-vcenter-clients" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<items: table<arn: string, datacenterName: string, hostname: string, lastSeenDatetime: string, sourceServerTags: record, tags: record, vcenterClientID: string, vcenterUUID: string>, nextToken: string> {
+]: nothing -> oneof<record<items: table<arn: string, datacenterName: string, hostname: string, lastSeenDatetime: string, sourceServerTags: record, tags: record, vcenterClientID: string, vcenterUUID: string>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
@@ -1262,7 +1279,7 @@ export def "disassociate-applications" [
   --x-amz-signed-headers: string
   application_i_ds: list<string> # Application IDs list.
   wave_id: string # Wave ID.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1310,7 +1327,7 @@ export def "disassociate-source-servers" [
   --x-amz-signed-headers: string
   application_id: string # Application ID.
   source_server_i_ds: list<string> # Source server IDs list.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1357,7 +1374,7 @@ export def "disconnect-from-service" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   source_server_id: string # Request to disconnect Source Server from service by Server ID.
-]: any -> record<applicationID: string, arn: string, dataReplicationInfo: record<dataReplicationError: record<error: string, rawError: string>, dataReplicationInitiation: record<nextAttemptDateTime: string, startDateTime: string, steps: list>, dataReplicationState: string, etaDateTime: string, lagDuration: string, lastSnapshotDateTime: string, replicatedDisks: list<record>>, fqdnForActionFramework: string, isArchived: bool, launchedInstance: record<ec2InstanceID: string, firstBoot: string, jobID: string>, lifeCycle: record<addedToServiceDateTime: string, elapsedReplicationDuration: string, firstByteDateTime: string, lastCutover: record<finalized: record, initiated: record, reverted: record>, lastSeenByServiceDateTime: string, lastTest: record<finalized: record, initiated: record, reverted: record>, state: string>, replicationType: string, sourceProperties: record<cpus: list<record>, disks: list<record>, identificationHints: record<awsInstanceID: string, fqdn: string, hostname: string, vmPath: string, vmWareUuid: string>, lastUpdatedDateTime: string, networkInterfaces: list<record>, os: record<fullString: string>, ramBytes: int, recommendedInstanceType: string>, sourceServerID: string, tags: record, userProvidedID: string, vcenterClientID: string> {
+]: any -> oneof<record<applicationID: string, arn: string, dataReplicationInfo: record<dataReplicationError: record<error: string, rawError: string>, dataReplicationInitiation: record<nextAttemptDateTime: string, startDateTime: string, steps: list>, dataReplicationState: string, etaDateTime: string, lagDuration: string, lastSnapshotDateTime: string, replicatedDisks: list<record>>, fqdnForActionFramework: string, isArchived: bool, launchedInstance: record<ec2InstanceID: string, firstBoot: string, jobID: string>, lifeCycle: record<addedToServiceDateTime: string, elapsedReplicationDuration: string, firstByteDateTime: string, lastCutover: record<finalized: record, initiated: record, reverted: record>, lastSeenByServiceDateTime: string, lastTest: record<finalized: record, initiated: record, reverted: record>, state: string>, replicationType: string, sourceProperties: record<cpus: list<record>, disks: list<record>, identificationHints: record<awsInstanceID: string, fqdn: string, hostname: string, vmPath: string, vmWareUuid: string>, lastUpdatedDateTime: string, networkInterfaces: list<record>, os: record<fullString: string>, ramBytes: int, recommendedInstanceType: string>, sourceServerID: string, tags: record, userProvidedID: string, vcenterClientID: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1404,7 +1421,7 @@ export def "finalize-cutover" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   source_server_id: string # Request to finalize Cutover by Source Server ID.
-]: any -> record<applicationID: string, arn: string, dataReplicationInfo: record<dataReplicationError: record<error: string, rawError: string>, dataReplicationInitiation: record<nextAttemptDateTime: string, startDateTime: string, steps: list>, dataReplicationState: string, etaDateTime: string, lagDuration: string, lastSnapshotDateTime: string, replicatedDisks: list<record>>, fqdnForActionFramework: string, isArchived: bool, launchedInstance: record<ec2InstanceID: string, firstBoot: string, jobID: string>, lifeCycle: record<addedToServiceDateTime: string, elapsedReplicationDuration: string, firstByteDateTime: string, lastCutover: record<finalized: record, initiated: record, reverted: record>, lastSeenByServiceDateTime: string, lastTest: record<finalized: record, initiated: record, reverted: record>, state: string>, replicationType: string, sourceProperties: record<cpus: list<record>, disks: list<record>, identificationHints: record<awsInstanceID: string, fqdn: string, hostname: string, vmPath: string, vmWareUuid: string>, lastUpdatedDateTime: string, networkInterfaces: list<record>, os: record<fullString: string>, ramBytes: int, recommendedInstanceType: string>, sourceServerID: string, tags: record, userProvidedID: string, vcenterClientID: string> {
+]: any -> oneof<record<applicationID: string, arn: string, dataReplicationInfo: record<dataReplicationError: record<error: string, rawError: string>, dataReplicationInitiation: record<nextAttemptDateTime: string, startDateTime: string, steps: list>, dataReplicationState: string, etaDateTime: string, lagDuration: string, lastSnapshotDateTime: string, replicatedDisks: list<record>>, fqdnForActionFramework: string, isArchived: bool, launchedInstance: record<ec2InstanceID: string, firstBoot: string, jobID: string>, lifeCycle: record<addedToServiceDateTime: string, elapsedReplicationDuration: string, firstByteDateTime: string, lastCutover: record<finalized: record, initiated: record, reverted: record>, lastSeenByServiceDateTime: string, lastTest: record<finalized: record, initiated: record, reverted: record>, state: string>, replicationType: string, sourceProperties: record<cpus: list<record>, disks: list<record>, identificationHints: record<awsInstanceID: string, fqdn: string, hostname: string, vmPath: string, vmWareUuid: string>, lastUpdatedDateTime: string, networkInterfaces: list<record>, os: record<fullString: string>, ramBytes: int, recommendedInstanceType: string>, sourceServerID: string, tags: record, userProvidedID: string, vcenterClientID: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1451,7 +1468,7 @@ export def "get-launch-configuration" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   source_server_id: string # Request to get Launch Configuration information by Source Server ID.
-]: any -> record<bootMode: string, copyPrivateIp: bool, copyTags: bool, ec2LaunchTemplateID: string, enableMapAutoTagging: bool, launchDisposition: string, licensing: record<osByol: bool>, mapAutoTaggingMpeID: string, name: string, postLaunchActions: record<cloudWatchLogGroupName: string, deployment: string, s3LogBucket: string, s3OutputKeyPrefix: string, ssmDocuments: list<record>>, sourceServerID: string, targetInstanceTypeRightSizingMethod: string> {
+]: any -> oneof<record<bootMode: string, copyPrivateIp: bool, copyTags: bool, ec2LaunchTemplateID: string, enableMapAutoTagging: bool, launchDisposition: string, licensing: record<osByol: bool>, mapAutoTaggingMpeID: string, name: string, postLaunchActions: record<cloudWatchLogGroupName: string, deployment: string, s3LogBucket: string, s3OutputKeyPrefix: string, ssmDocuments: list<record>>, sourceServerID: string, targetInstanceTypeRightSizingMethod: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1498,7 +1515,7 @@ export def "get-replication-configuration" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   source_server_id: string # Request to get Replication Configuration by Source Server ID.
-]: any -> record<associateDefaultSecurityGroup: bool, bandwidthThrottling: int, createPublicIP: bool, dataPlaneRouting: string, defaultLargeStagingDiskType: string, ebsEncryption: string, ebsEncryptionKeyArn: string, name: string, replicatedDisks: table<deviceName: string, iops: int, isBootDisk: bool, stagingDiskType: string, throughput: int>, replicationServerInstanceType: string, replicationServersSecurityGroupsIDs: list<string>, sourceServerID: string, stagingAreaSubnetId: string, stagingAreaTags: record, useDedicatedReplicationServer: bool> {
+]: any -> oneof<record<associateDefaultSecurityGroup: bool, bandwidthThrottling: int, createPublicIP: bool, dataPlaneRouting: string, defaultLargeStagingDiskType: string, ebsEncryption: string, ebsEncryptionKeyArn: string, name: string, replicatedDisks: table<deviceName: string, iops: int, isBootDisk: bool, stagingDiskType: string, throughput: int>, replicationServerInstanceType: string, replicationServersSecurityGroupsIDs: list<string>, sourceServerID: string, stagingAreaSubnetId: string, stagingAreaTags: record, useDedicatedReplicationServer: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1544,7 +1561,7 @@ export def "initialize-service" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/InitializeService" $auth.query)
@@ -1570,7 +1587,6 @@ export def "initialize-service" [
 #
 # POST /ListApplications
 # operationId: ListApplications
-# --filters shape: {applicationIDs?: list<string>, isArchived?: bool, waveIDs?: list<string>}
 export def "list-applications" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1593,7 +1609,7 @@ export def "list-applications" [
   --filters: record # Applications list filters. — shape: {applicationIDs?: list<string>, isArchived?: bool, waveIDs?: list<string>}
   --max-results-body: int # Maximum results to return when listing applications. (body field)
   --next-token-body: string # Request next token. (body field)
-]: any -> record<items: table<applicationAggregatedStatus: record, applicationID: string, arn: string, creationDateTime: string, description: string, isArchived: bool, lastModifiedDateTime: string, name: string, tags: record, waveID: string>, nextToken: string> {
+]: any -> oneof<record<items: table<applicationAggregatedStatus: record, applicationID: string, arn: string, creationDateTime: string, description: string, isArchived: bool, lastModifiedDateTime: string, name: string, tags: record, waveID: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1645,7 +1661,7 @@ export def "list-export-errors" [
   export_id: string # List export errors request export id.
   --max-results-body: int # List export errors request max results. (body field)
   --next-token-body: string # List export errors request next token. (body field)
-]: any -> record<items: table<errorData: record, errorDateTime: string>, nextToken: string> {
+]: any -> oneof<record<items: table<errorData: record, errorDateTime: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1675,7 +1691,6 @@ export def "list-export-errors" [
 #
 # POST /ListExports
 # operationId: ListExports
-# --filters shape: {exportIDs?: list<string>}
 export def "list-exports" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1698,7 +1713,7 @@ export def "list-exports" [
   --filters: record # List exports request filters. — shape: {exportIDs?: list<string>}
   --max-results-body: int # List export request max results. (body field)
   --next-token-body: string # List export request next token. (body field)
-]: any -> record<items: table<creationDateTime: string, endDateTime: string, exportID: string, progressPercentage: float, s3Bucket: string, s3BucketOwner: string, s3Key: string, status: string, summary: record>, nextToken: string> {
+]: any -> oneof<record<items: table<creationDateTime: string, endDateTime: string, exportID: string, progressPercentage: float, s3Bucket: string, s3BucketOwner: string, s3Key: string, status: string, summary: record>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1750,7 +1765,7 @@ export def "list-import-errors" [
   import_id: string # List import errors request import id.
   --max-results-body: int # List import errors request max results. (body field)
   --next-token-body: string # List import errors request next token. (body field)
-]: any -> record<items: table<errorData: record, errorDateTime: string, errorType: string>, nextToken: string> {
+]: any -> oneof<record<items: table<errorData: record, errorDateTime: string, errorType: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1780,7 +1795,6 @@ export def "list-import-errors" [
 #
 # POST /ListImports
 # operationId: ListImports
-# --filters shape: {importIDs?: list<string>}
 export def "list-imports" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1803,7 +1817,7 @@ export def "list-imports" [
   --filters: record # List imports request filters. — shape: {importIDs?: list<string>}
   --max-results-body: int # List imports request max results. (body field)
   --next-token-body: string # List imports request next token. (body field)
-]: any -> record<items: table<creationDateTime: string, endDateTime: string, importID: string, progressPercentage: float, s3BucketSource: record, status: string, summary: record>, nextToken: string> {
+]: any -> oneof<record<items: table<creationDateTime: string, endDateTime: string, importID: string, progressPercentage: float, s3BucketSource: record, status: string, summary: record>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1833,7 +1847,6 @@ export def "list-imports" [
 #
 # POST /ListSourceServerActions
 # operationId: ListSourceServerActions
-# --filters shape: {actionIDs?: list<string>}
 export def "list-source-server-actions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1857,7 +1870,7 @@ export def "list-source-server-actions" [
   --max-results-body: int # Maximum amount of items to return when listing source server post migration custom actions. (body field)
   --next-token-body: string # Next token to use when listing source server post migration custom actions. (body field)
   source_server_id: string # Source server ID.
-]: any -> record<items: table<actionID: string, actionName: string, active: bool, category: string, description: string, documentIdentifier: string, documentVersion: string, externalParameters: record, mustSucceedForCutover: bool, order: int, parameters: record, timeoutSeconds: int>, nextToken: string> {
+]: any -> oneof<record<items: table<actionID: string, actionName: string, active: bool, category: string, description: string, documentIdentifier: string, documentVersion: string, externalParameters: record, mustSucceedForCutover: bool, order: int, parameters: record, timeoutSeconds: int>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1905,7 +1918,7 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<tags: record> {
+]: nothing -> oneof<record<tags: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
@@ -1981,7 +1994,6 @@ export def "tag-resource" [
 #
 # POST /ListTemplateActions
 # operationId: ListTemplateActions
-# --filters shape: {actionIDs?: list<string>}
 export def "list-template-actions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2005,7 +2017,7 @@ export def "list-template-actions" [
   launch_configuration_template_id: string # Launch configuration template ID.
   --max-results-body: int # Maximum amount of items to return when listing template post migration custom actions. (body field)
   --next-token-body: string # Next token to use when listing template post migration custom actions. (body field)
-]: any -> record<items: table<actionID: string, actionName: string, active: bool, category: string, description: string, documentIdentifier: string, documentVersion: string, externalParameters: record, mustSucceedForCutover: bool, operatingSystem: string, order: int, parameters: record, timeoutSeconds: int>, nextToken: string> {
+]: any -> oneof<record<items: table<actionID: string, actionName: string, active: bool, category: string, description: string, documentIdentifier: string, documentVersion: string, externalParameters: record, mustSucceedForCutover: bool, operatingSystem: string, order: int, parameters: record, timeoutSeconds: int>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2035,7 +2047,6 @@ export def "list-template-actions" [
 #
 # POST /ListWaves
 # operationId: ListWaves
-# --filters shape: {isArchived?: bool, waveIDs?: list<string>}
 export def "list-waves" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2058,7 +2069,7 @@ export def "list-waves" [
   --filters: record # Waves list filters. — shape: {isArchived?: bool, waveIDs?: list<string>}
   --max-results-body: int # Maximum results to return when listing waves. (body field)
   --next-token-body: string # Request next token. (body field)
-]: any -> record<items: table<arn: string, creationDateTime: string, description: string, isArchived: bool, lastModifiedDateTime: string, name: string, tags: record, waveAggregatedStatus: record, waveID: string>, nextToken: string> {
+]: any -> oneof<record<items: table<arn: string, creationDateTime: string, description: string, isArchived: bool, lastModifiedDateTime: string, name: string, tags: record, waveAggregatedStatus: record, waveID: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2106,7 +2117,7 @@ export def "mark-as-archived" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   source_server_id: string # Mark as archived by Source Server ID.
-]: any -> record<applicationID: string, arn: string, dataReplicationInfo: record<dataReplicationError: record<error: string, rawError: string>, dataReplicationInitiation: record<nextAttemptDateTime: string, startDateTime: string, steps: list>, dataReplicationState: string, etaDateTime: string, lagDuration: string, lastSnapshotDateTime: string, replicatedDisks: list<record>>, fqdnForActionFramework: string, isArchived: bool, launchedInstance: record<ec2InstanceID: string, firstBoot: string, jobID: string>, lifeCycle: record<addedToServiceDateTime: string, elapsedReplicationDuration: string, firstByteDateTime: string, lastCutover: record<finalized: record, initiated: record, reverted: record>, lastSeenByServiceDateTime: string, lastTest: record<finalized: record, initiated: record, reverted: record>, state: string>, replicationType: string, sourceProperties: record<cpus: list<record>, disks: list<record>, identificationHints: record<awsInstanceID: string, fqdn: string, hostname: string, vmPath: string, vmWareUuid: string>, lastUpdatedDateTime: string, networkInterfaces: list<record>, os: record<fullString: string>, ramBytes: int, recommendedInstanceType: string>, sourceServerID: string, tags: record, userProvidedID: string, vcenterClientID: string> {
+]: any -> oneof<record<applicationID: string, arn: string, dataReplicationInfo: record<dataReplicationError: record<error: string, rawError: string>, dataReplicationInitiation: record<nextAttemptDateTime: string, startDateTime: string, steps: list>, dataReplicationState: string, etaDateTime: string, lagDuration: string, lastSnapshotDateTime: string, replicatedDisks: list<record>>, fqdnForActionFramework: string, isArchived: bool, launchedInstance: record<ec2InstanceID: string, firstBoot: string, jobID: string>, lifeCycle: record<addedToServiceDateTime: string, elapsedReplicationDuration: string, firstByteDateTime: string, lastCutover: record<finalized: record, initiated: record, reverted: record>, lastSeenByServiceDateTime: string, lastTest: record<finalized: record, initiated: record, reverted: record>, state: string>, replicationType: string, sourceProperties: record<cpus: list<record>, disks: list<record>, identificationHints: record<awsInstanceID: string, fqdn: string, hostname: string, vmPath: string, vmWareUuid: string>, lastUpdatedDateTime: string, networkInterfaces: list<record>, os: record<fullString: string>, ramBytes: int, recommendedInstanceType: string>, sourceServerID: string, tags: record, userProvidedID: string, vcenterClientID: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2165,7 +2176,7 @@ export def "put-source-server-action" [
   --parameters: record # Source server post migration custom action parameters.
   source_server_id: string # Source server ID.
   --timeout-seconds: int # Source server post migration custom action timeout in seconds.
-]: any -> record<actionID: string, actionName: string, active: bool, category: string, description: string, documentIdentifier: string, documentVersion: string, externalParameters: record, mustSucceedForCutover: bool, order: int, parameters: record, timeoutSeconds: int> {
+]: any -> oneof<record<actionID: string, actionName: string, active: bool, category: string, description: string, documentIdentifier: string, documentVersion: string, externalParameters: record, mustSucceedForCutover: bool, order: int, parameters: record, timeoutSeconds: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2225,7 +2236,7 @@ export def "put-template-action" [
   order: int # Template post migration custom action order.
   --parameters: record # Template post migration custom action parameters.
   --timeout-seconds: int # Template post migration custom action timeout in seconds.
-]: any -> record<actionID: string, actionName: string, active: bool, category: string, description: string, documentIdentifier: string, documentVersion: string, externalParameters: record, mustSucceedForCutover: bool, operatingSystem: string, order: int, parameters: record, timeoutSeconds: int> {
+]: any -> oneof<record<actionID: string, actionName: string, active: bool, category: string, description: string, documentIdentifier: string, documentVersion: string, externalParameters: record, mustSucceedForCutover: bool, operatingSystem: string, order: int, parameters: record, timeoutSeconds: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2273,7 +2284,7 @@ export def "remove-source-server-action" [
   --x-amz-signed-headers: string
   action_id: string # Source server post migration custom action ID to remove.
   source_server_id: string # Source server ID of the post migration custom action to remove.
-]: any -> any {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2321,7 +2332,7 @@ export def "remove-template-action" [
   --x-amz-signed-headers: string
   action_id: string # Template post migration custom action ID to remove.
   launch_configuration_template_id: string # Launch configuration template ID of the post migration custom action to remove.
-]: any -> any {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2368,7 +2379,7 @@ export def "retry-data-replication" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   source_server_id: string # Retry data replication for Source Server ID.
-]: any -> record<applicationID: string, arn: string, dataReplicationInfo: record<dataReplicationError: record<error: string, rawError: string>, dataReplicationInitiation: record<nextAttemptDateTime: string, startDateTime: string, steps: list>, dataReplicationState: string, etaDateTime: string, lagDuration: string, lastSnapshotDateTime: string, replicatedDisks: list<record>>, fqdnForActionFramework: string, isArchived: bool, launchedInstance: record<ec2InstanceID: string, firstBoot: string, jobID: string>, lifeCycle: record<addedToServiceDateTime: string, elapsedReplicationDuration: string, firstByteDateTime: string, lastCutover: record<finalized: record, initiated: record, reverted: record>, lastSeenByServiceDateTime: string, lastTest: record<finalized: record, initiated: record, reverted: record>, state: string>, replicationType: string, sourceProperties: record<cpus: list<record>, disks: list<record>, identificationHints: record<awsInstanceID: string, fqdn: string, hostname: string, vmPath: string, vmWareUuid: string>, lastUpdatedDateTime: string, networkInterfaces: list<record>, os: record<fullString: string>, ramBytes: int, recommendedInstanceType: string>, sourceServerID: string, tags: record, userProvidedID: string, vcenterClientID: string> {
+]: any -> oneof<record<applicationID: string, arn: string, dataReplicationInfo: record<dataReplicationError: record<error: string, rawError: string>, dataReplicationInitiation: record<nextAttemptDateTime: string, startDateTime: string, steps: list>, dataReplicationState: string, etaDateTime: string, lagDuration: string, lastSnapshotDateTime: string, replicatedDisks: list<record>>, fqdnForActionFramework: string, isArchived: bool, launchedInstance: record<ec2InstanceID: string, firstBoot: string, jobID: string>, lifeCycle: record<addedToServiceDateTime: string, elapsedReplicationDuration: string, firstByteDateTime: string, lastCutover: record<finalized: record, initiated: record, reverted: record>, lastSeenByServiceDateTime: string, lastTest: record<finalized: record, initiated: record, reverted: record>, state: string>, replicationType: string, sourceProperties: record<cpus: list<record>, disks: list<record>, identificationHints: record<awsInstanceID: string, fqdn: string, hostname: string, vmPath: string, vmWareUuid: string>, lastUpdatedDateTime: string, networkInterfaces: list<record>, os: record<fullString: string>, ramBytes: int, recommendedInstanceType: string>, sourceServerID: string, tags: record, userProvidedID: string, vcenterClientID: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2416,7 +2427,7 @@ export def "start-cutover" [
   --x-amz-signed-headers: string
   source_server_i_ds: list<string> # Start Cutover by Source Server IDs.
   --tags: record # Start Cutover by Tags.
-]: any -> record<job: record<arn: string, creationDateTime: string, endDateTime: string, initiatedBy: string, jobID: string, participatingServers: list<record>, status: string, tags: record, type: string>> {
+]: any -> oneof<record<job: record<arn: string, creationDateTime: string, endDateTime: string, initiatedBy: string, jobID: string, participatingServers: list<record>, status: string, tags: record, type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2465,7 +2476,7 @@ export def "start-export" [
   s3_bucket: string # Start export request s3 bucket.
   --s3-bucket-owner: string # Start export request s3 bucket owner.
   s3_key: string # Start export request s3key.
-]: any -> record<exportTask: record<creationDateTime: string, endDateTime: string, exportID: string, progressPercentage: float, s3Bucket: string, s3BucketOwner: string, s3Key: string, status: string, summary: record<applicationsCount: int, serversCount: int, wavesCount: int>>> {
+]: any -> oneof<record<exportTask: record<creationDateTime: string, endDateTime: string, exportID: string, progressPercentage: float, s3Bucket: string, s3BucketOwner: string, s3Key: string, status: string, summary: record<applicationsCount: int, serversCount: int, wavesCount: int>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2494,7 +2505,6 @@ export def "start-export" [
 #
 # POST /StartImport
 # operationId: StartImport
-# --s3BucketSource shape: {s3Bucket?: string, s3BucketOwner?: string, s3Key?: string}
 export def "start-import" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2514,7 +2524,7 @@ export def "start-import" [
   --x-amz-signed-headers: string
   --client-token: string # Start import request client token.
   s3_bucket_source: record # S3 bucket source. — shape: {s3Bucket?: string, s3BucketOwner?: string, s3Key?: string}
-]: any -> record<importTask: record<creationDateTime: string, endDateTime: string, importID: string, progressPercentage: float, s3BucketSource: record<s3Bucket: string, s3BucketOwner: string, s3Key: string>, status: string, summary: record<applications: record, servers: record, waves: record>>> {
+]: any -> oneof<record<importTask: record<creationDateTime: string, endDateTime: string, importID: string, progressPercentage: float, s3BucketSource: record<s3Bucket: string, s3BucketOwner: string, s3Key: string>, status: string, summary: record<applications: record, servers: record, waves: record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2561,7 +2571,7 @@ export def "start-replication" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   source_server_id: string # ID of source server on which to start replication.
-]: any -> record<applicationID: string, arn: string, dataReplicationInfo: record<dataReplicationError: record<error: string, rawError: string>, dataReplicationInitiation: record<nextAttemptDateTime: string, startDateTime: string, steps: list>, dataReplicationState: string, etaDateTime: string, lagDuration: string, lastSnapshotDateTime: string, replicatedDisks: list<record>>, fqdnForActionFramework: string, isArchived: bool, launchedInstance: record<ec2InstanceID: string, firstBoot: string, jobID: string>, lifeCycle: record<addedToServiceDateTime: string, elapsedReplicationDuration: string, firstByteDateTime: string, lastCutover: record<finalized: record, initiated: record, reverted: record>, lastSeenByServiceDateTime: string, lastTest: record<finalized: record, initiated: record, reverted: record>, state: string>, replicationType: string, sourceProperties: record<cpus: list<record>, disks: list<record>, identificationHints: record<awsInstanceID: string, fqdn: string, hostname: string, vmPath: string, vmWareUuid: string>, lastUpdatedDateTime: string, networkInterfaces: list<record>, os: record<fullString: string>, ramBytes: int, recommendedInstanceType: string>, sourceServerID: string, tags: record, userProvidedID: string, vcenterClientID: string> {
+]: any -> oneof<record<applicationID: string, arn: string, dataReplicationInfo: record<dataReplicationError: record<error: string, rawError: string>, dataReplicationInitiation: record<nextAttemptDateTime: string, startDateTime: string, steps: list>, dataReplicationState: string, etaDateTime: string, lagDuration: string, lastSnapshotDateTime: string, replicatedDisks: list<record>>, fqdnForActionFramework: string, isArchived: bool, launchedInstance: record<ec2InstanceID: string, firstBoot: string, jobID: string>, lifeCycle: record<addedToServiceDateTime: string, elapsedReplicationDuration: string, firstByteDateTime: string, lastCutover: record<finalized: record, initiated: record, reverted: record>, lastSeenByServiceDateTime: string, lastTest: record<finalized: record, initiated: record, reverted: record>, state: string>, replicationType: string, sourceProperties: record<cpus: list<record>, disks: list<record>, identificationHints: record<awsInstanceID: string, fqdn: string, hostname: string, vmPath: string, vmWareUuid: string>, lastUpdatedDateTime: string, networkInterfaces: list<record>, os: record<fullString: string>, ramBytes: int, recommendedInstanceType: string>, sourceServerID: string, tags: record, userProvidedID: string, vcenterClientID: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2609,7 +2619,7 @@ export def "start-test" [
   --x-amz-signed-headers: string
   source_server_i_ds: list<string> # Start Test for Source Server IDs.
   --tags: record # Start Test by Tags.
-]: any -> record<job: record<arn: string, creationDateTime: string, endDateTime: string, initiatedBy: string, jobID: string, participatingServers: list<record>, status: string, tags: record, type: string>> {
+]: any -> oneof<record<job: record<arn: string, creationDateTime: string, endDateTime: string, initiatedBy: string, jobID: string, participatingServers: list<record>, status: string, tags: record, type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2657,7 +2667,7 @@ export def "terminate-target-instances" [
   --x-amz-signed-headers: string
   source_server_i_ds: list<string> # Terminate Target instance by Source Server IDs.
   --tags: record # Terminate Target instance by Tags.
-]: any -> record<job: record<arn: string, creationDateTime: string, endDateTime: string, initiatedBy: string, jobID: string, participatingServers: list<record>, status: string, tags: record, type: string>> {
+]: any -> oneof<record<job: record<arn: string, creationDateTime: string, endDateTime: string, initiatedBy: string, jobID: string, participatingServers: list<record>, status: string, tags: record, type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2704,7 +2714,7 @@ export def "unarchive-application" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   application_id: string # Application ID.
-]: any -> record<applicationAggregatedStatus: record<healthStatus: string, lastUpdateDateTime: string, progressStatus: string, totalSourceServers: int>, applicationID: string, arn: string, creationDateTime: string, description: string, isArchived: bool, lastModifiedDateTime: string, name: string, tags: record, waveID: string> {
+]: any -> oneof<record<applicationAggregatedStatus: record<healthStatus: string, lastUpdateDateTime: string, progressStatus: string, totalSourceServers: int>, applicationID: string, arn: string, creationDateTime: string, description: string, isArchived: bool, lastModifiedDateTime: string, name: string, tags: record, waveID: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2751,7 +2761,7 @@ export def "unarchive-wave" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   wave_id: string # Wave ID.
-]: any -> record<arn: string, creationDateTime: string, description: string, isArchived: bool, lastModifiedDateTime: string, name: string, tags: record, waveAggregatedStatus: record<healthStatus: string, lastUpdateDateTime: string, progressStatus: string, replicationStartedDateTime: string, totalApplications: int>, waveID: string> {
+]: any -> oneof<record<arn: string, creationDateTime: string, description: string, isArchived: bool, lastModifiedDateTime: string, name: string, tags: record, waveAggregatedStatus: record<healthStatus: string, lastUpdateDateTime: string, progressStatus: string, replicationStartedDateTime: string, totalApplications: int>, waveID: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2848,7 +2858,7 @@ export def "update-application" [
   application_id: string # Application ID.
   --description: string # Application description.
   --name: string # Application name.
-]: any -> record<applicationAggregatedStatus: record<healthStatus: string, lastUpdateDateTime: string, progressStatus: string, totalSourceServers: int>, applicationID: string, arn: string, creationDateTime: string, description: string, isArchived: bool, lastModifiedDateTime: string, name: string, tags: record, waveID: string> {
+]: any -> oneof<record<applicationAggregatedStatus: record<healthStatus: string, lastUpdateDateTime: string, progressStatus: string, totalSourceServers: int>, applicationID: string, arn: string, creationDateTime: string, description: string, isArchived: bool, lastModifiedDateTime: string, name: string, tags: record, waveID: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2877,8 +2887,6 @@ export def "update-application" [
 #
 # POST /UpdateLaunchConfiguration
 # operationId: UpdateLaunchConfiguration
-# --licensing shape: {osByol?: bool}
-# --postLaunchActions shape: {cloudWatchLogGroupName?: string, deployment?: "TEST_AND_CUTOVER"|"CUTOVER_ONLY"|"TEST_ONLY", s3LogBucket?: string, s3OutputKeyPrefix?: string, ssmDocuments?: list}
 export def "update-launch-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2907,7 +2915,7 @@ export def "update-launch-configuration" [
   --post-launch-actions: record # Post Launch Actions to executed on the Test or Cutover instance. — shape: {cloudWatchLogGroupName?: string, deployment?: "TEST_AND_CUTOVER"|"CUTOVER_ONLY"|"TEST_ONLY", s3LogBucket?: string, s3OutputKeyPrefix?: string, ssmDocuments?: list}
   source_server_id: string # Update Launch configuration by Source Server ID request.
   --target-instance-type-right-sizing-method: string@target-instance-type-right-sizing-method-completer # Update Launch configuration Target instance right sizing request.
-]: any -> record<bootMode: string, copyPrivateIp: bool, copyTags: bool, ec2LaunchTemplateID: string, enableMapAutoTagging: bool, launchDisposition: string, licensing: record<osByol: bool>, mapAutoTaggingMpeID: string, name: string, postLaunchActions: record<cloudWatchLogGroupName: string, deployment: string, s3LogBucket: string, s3OutputKeyPrefix: string, ssmDocuments: list<record>>, sourceServerID: string, targetInstanceTypeRightSizingMethod: string> {
+]: any -> oneof<record<bootMode: string, copyPrivateIp: bool, copyTags: bool, ec2LaunchTemplateID: string, enableMapAutoTagging: bool, launchDisposition: string, licensing: record<osByol: bool>, mapAutoTaggingMpeID: string, name: string, postLaunchActions: record<cloudWatchLogGroupName: string, deployment: string, s3LogBucket: string, s3OutputKeyPrefix: string, ssmDocuments: list<record>>, sourceServerID: string, targetInstanceTypeRightSizingMethod: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2936,10 +2944,6 @@ export def "update-launch-configuration" [
 #
 # POST /UpdateLaunchConfigurationTemplate
 # operationId: UpdateLaunchConfigurationTemplate
-# --largeVolumeConf shape: {iops?: int, throughput?: int, volumeType?: "io1"|"io2"|"gp3"|"gp2"|"st1"|"sc1"|"standard"}
-# --licensing shape: {osByol?: bool}
-# --postLaunchActions shape: {cloudWatchLogGroupName?: string, deployment?: "TEST_AND_CUTOVER"|"CUTOVER_ONLY"|"TEST_ONLY", s3LogBucket?: string, s3OutputKeyPrefix?: string, ssmDocuments?: list}
-# --smallVolumeConf shape: {iops?: int, throughput?: int, volumeType?: "io1"|"io2"|"gp3"|"gp2"|"st1"|"sc1"|"standard"}
 export def "update-launch-configuration-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2971,7 +2975,7 @@ export def "update-launch-configuration-template" [
   --small-volume-conf: record # Launch template disk configuration. — shape: {iops?: int, throughput?: int, volumeType?: "io1"|"io2"|"gp3"|"gp2"|"st1"|"sc1"|"standard"}
   --small-volume-max-size: int # Small volume maximum size.
   --target-instance-type-right-sizing-method: string@target-instance-type-right-sizing-method-completer # Target instance type right-sizing method.
-]: any -> record<arn: string, associatePublicIpAddress: bool, bootMode: string, copyPrivateIp: bool, copyTags: bool, ec2LaunchTemplateID: string, enableMapAutoTagging: bool, largeVolumeConf: record<iops: int, throughput: int, volumeType: string>, launchConfigurationTemplateID: string, launchDisposition: string, licensing: record<osByol: bool>, mapAutoTaggingMpeID: string, postLaunchActions: record<cloudWatchLogGroupName: string, deployment: string, s3LogBucket: string, s3OutputKeyPrefix: string, ssmDocuments: list<record>>, smallVolumeConf: record<iops: int, throughput: int, volumeType: string>, smallVolumeMaxSize: int, tags: record, targetInstanceTypeRightSizingMethod: string> {
+]: any -> oneof<record<arn: string, associatePublicIpAddress: bool, bootMode: string, copyPrivateIp: bool, copyTags: bool, ec2LaunchTemplateID: string, enableMapAutoTagging: bool, largeVolumeConf: record<iops: int, throughput: int, volumeType: string>, launchConfigurationTemplateID: string, launchDisposition: string, licensing: record<osByol: bool>, mapAutoTaggingMpeID: string, postLaunchActions: record<cloudWatchLogGroupName: string, deployment: string, s3LogBucket: string, s3OutputKeyPrefix: string, ssmDocuments: list<record>>, smallVolumeConf: record<iops: int, throughput: int, volumeType: string>, smallVolumeMaxSize: int, tags: record, targetInstanceTypeRightSizingMethod: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3000,7 +3004,6 @@ export def "update-launch-configuration-template" [
 #
 # POST /UpdateReplicationConfiguration
 # operationId: UpdateReplicationConfiguration
-# --replicatedDisks item shape: {deviceName?: string, iops?: int, isBootDisk?: bool, stagingDiskType?: "AUTO"|"GP2"|"IO1"|"SC1"|"ST1"|"STANDARD"|"GP3"|"IO2", throughput?: int}
 export def "update-replication-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3033,7 +3036,7 @@ export def "update-replication-configuration" [
   --staging-area-subnet-id: string # Update replication configuration Staging Area subnet request.
   --staging-area-tags: record # Update replication configuration Staging Area Tags request.
   --use-dedicated-replication-server: oneof<nothing, bool> # Update replication configuration use dedicated Replication Server request.
-]: any -> record<associateDefaultSecurityGroup: bool, bandwidthThrottling: int, createPublicIP: bool, dataPlaneRouting: string, defaultLargeStagingDiskType: string, ebsEncryption: string, ebsEncryptionKeyArn: string, name: string, replicatedDisks: table<deviceName: string, iops: int, isBootDisk: bool, stagingDiskType: string, throughput: int>, replicationServerInstanceType: string, replicationServersSecurityGroupsIDs: list<string>, sourceServerID: string, stagingAreaSubnetId: string, stagingAreaTags: record, useDedicatedReplicationServer: bool> {
+]: any -> oneof<record<associateDefaultSecurityGroup: bool, bandwidthThrottling: int, createPublicIP: bool, dataPlaneRouting: string, defaultLargeStagingDiskType: string, ebsEncryption: string, ebsEncryptionKeyArn: string, name: string, replicatedDisks: table<deviceName: string, iops: int, isBootDisk: bool, stagingDiskType: string, throughput: int>, replicationServerInstanceType: string, replicationServersSecurityGroupsIDs: list<string>, sourceServerID: string, stagingAreaSubnetId: string, stagingAreaTags: record, useDedicatedReplicationServer: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3093,7 +3096,7 @@ export def "update-replication-configuration-template" [
   --staging-area-subnet-id: string # Update replication configuration template Staging Area subnet ID request.
   --staging-area-tags: record # Update replication configuration template Staging Area Tags request.
   --use-dedicated-replication-server: oneof<nothing, bool> # Update replication configuration template use dedicated Replication Server request.
-]: any -> record<arn: string, associateDefaultSecurityGroup: bool, bandwidthThrottling: int, createPublicIP: bool, dataPlaneRouting: string, defaultLargeStagingDiskType: string, ebsEncryption: string, ebsEncryptionKeyArn: string, replicationConfigurationTemplateID: string, replicationServerInstanceType: string, replicationServersSecurityGroupsIDs: list<string>, stagingAreaSubnetId: string, stagingAreaTags: record, tags: record, useDedicatedReplicationServer: bool> {
+]: any -> oneof<record<arn: string, associateDefaultSecurityGroup: bool, bandwidthThrottling: int, createPublicIP: bool, dataPlaneRouting: string, defaultLargeStagingDiskType: string, ebsEncryption: string, ebsEncryptionKeyArn: string, replicationConfigurationTemplateID: string, replicationServerInstanceType: string, replicationServersSecurityGroupsIDs: list<string>, stagingAreaSubnetId: string, stagingAreaTags: record, tags: record, useDedicatedReplicationServer: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3141,7 +3144,7 @@ export def "update-source-server-replication-type" [
   --x-amz-signed-headers: string
   replication_type: string@replication-type-completer # Replication type to which to update source server.
   source_server_id: string # ID of source server on which to update replication type.
-]: any -> record<applicationID: string, arn: string, dataReplicationInfo: record<dataReplicationError: record<error: string, rawError: string>, dataReplicationInitiation: record<nextAttemptDateTime: string, startDateTime: string, steps: list>, dataReplicationState: string, etaDateTime: string, lagDuration: string, lastSnapshotDateTime: string, replicatedDisks: list<record>>, fqdnForActionFramework: string, isArchived: bool, launchedInstance: record<ec2InstanceID: string, firstBoot: string, jobID: string>, lifeCycle: record<addedToServiceDateTime: string, elapsedReplicationDuration: string, firstByteDateTime: string, lastCutover: record<finalized: record, initiated: record, reverted: record>, lastSeenByServiceDateTime: string, lastTest: record<finalized: record, initiated: record, reverted: record>, state: string>, replicationType: string, sourceProperties: record<cpus: list<record>, disks: list<record>, identificationHints: record<awsInstanceID: string, fqdn: string, hostname: string, vmPath: string, vmWareUuid: string>, lastUpdatedDateTime: string, networkInterfaces: list<record>, os: record<fullString: string>, ramBytes: int, recommendedInstanceType: string>, sourceServerID: string, tags: record, userProvidedID: string, vcenterClientID: string> {
+]: any -> oneof<record<applicationID: string, arn: string, dataReplicationInfo: record<dataReplicationError: record<error: string, rawError: string>, dataReplicationInitiation: record<nextAttemptDateTime: string, startDateTime: string, steps: list>, dataReplicationState: string, etaDateTime: string, lagDuration: string, lastSnapshotDateTime: string, replicatedDisks: list<record>>, fqdnForActionFramework: string, isArchived: bool, launchedInstance: record<ec2InstanceID: string, firstBoot: string, jobID: string>, lifeCycle: record<addedToServiceDateTime: string, elapsedReplicationDuration: string, firstByteDateTime: string, lastCutover: record<finalized: record, initiated: record, reverted: record>, lastSeenByServiceDateTime: string, lastTest: record<finalized: record, initiated: record, reverted: record>, state: string>, replicationType: string, sourceProperties: record<cpus: list<record>, disks: list<record>, identificationHints: record<awsInstanceID: string, fqdn: string, hostname: string, vmPath: string, vmWareUuid: string>, lastUpdatedDateTime: string, networkInterfaces: list<record>, os: record<fullString: string>, ramBytes: int, recommendedInstanceType: string>, sourceServerID: string, tags: record, userProvidedID: string, vcenterClientID: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3190,7 +3193,7 @@ export def "update-wave" [
   --description: string # Wave description.
   --name: string # Wave name.
   wave_id: string # Wave ID.
-]: any -> record<arn: string, creationDateTime: string, description: string, isArchived: bool, lastModifiedDateTime: string, name: string, tags: record, waveAggregatedStatus: record<healthStatus: string, lastUpdateDateTime: string, progressStatus: string, replicationStartedDateTime: string, totalApplications: int>, waveID: string> {
+]: any -> oneof<record<arn: string, creationDateTime: string, description: string, isArchived: bool, lastModifiedDateTime: string, name: string, tags: record, waveAggregatedStatus: record<healthStatus: string, lastUpdateDateTime: string, progressStatus: string, replicationStartedDateTime: string, totalApplications: int>, waveID: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

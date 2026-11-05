@@ -12,27 +12,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -40,8 +49,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -52,7 +66,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -87,7 +110,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -137,9 +161,9 @@ def sort-completer-3 [] { ["id" "id:asc" "id:desc" "name" "name:asc" "name:desc"
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-actions" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-actions" "get-actions-id" "get-certificates" "post-certificates" "delete-certificates-id" "get-certificates-id" "put-certificates-id" "get-certificates-id-actions" "post-certificates-id-actions-retry" "get-certificates-id-actions-action-id" "get-datacenters" "get-datacenters-id" "get-firewalls" "post-firewalls" "delete-firewalls-id" "get-firewalls-id" "put-firewalls-id" "get-firewalls-id-actions" "post-firewalls-id-actions-apply-to-resources" "post-firewalls-id-actions-remove-from-resources" "post-firewalls-id-actions-set-rules" "get-firewalls-id-actions-action-id" "get-floating-ips" "post-floating-ips" "delete-floating-ips-id" "get-floating-ips-id" "put-floating-ips-id" "get-floating-ips-id-actions" "post-floating-ips-id-actions-assign" "post-floating-ips-id-actions-change-dns-ptr" "post-floating-ips-id-actions-change-protection" "post-floating-ips-id-actions-unassign" "get-floating-ips-id-actions-action-id" "get-images" "delete-images-id" "get-images-id" "put-images-id" "get-images-id-actions" "post-images-id-actions-change-protection" "get-images-id-actions-action-id" "get-isos" "get-isos-id" "get-load-balancer-types" "get-load-balancer-types-id" "get-load-balancers" "post-load-balancers" "delete-load-balancers-id" "get-load-balancers-id" "put-load-balancers-id" "get-load-balancers-id-actions" "post-load-balancers-id-actions-add-service" "post-load-balancers-id-actions-add-target" "post-load-balancers-id-actions-attach-to-network" "post-load-balancers-id-actions-change-algorithm" "post-load-balancers-id-actions-change-dns-ptr" "post-load-balancers-id-actions-change-protection" "post-load-balancers-id-actions-change-type" "post-load-balancers-id-actions-delete-service" "post-load-balancers-id-actions-detach-from-network" "post-load-balancers-id-actions-disable-public-interface" "post-load-balancers-id-actions-enable-public-interface" "post-load-balancers-id-actions-remove-target" "post-load-balancers-id-actions-update-service" "get-load-balancers-id-actions-action-id" "get-load-balancers-id-metrics" "get-locations" "get-locations-id" "get-networks" "post-networks" "delete-networks-id" "get-networks-id" "put-networks-id" "get-networks-id-actions" "post-networks-id-actions-add-route" "post-networks-id-actions-add-subnet" "post-networks-id-actions-change-ip-range" "post-networks-id-actions-change-protection" "post-networks-id-actions-delete-route" "post-networks-id-actions-delete-subnet" "get-networks-id-actions-action-id" "get-placement-groups" "post-placement-groups" "delete-placement-groups-id" "get-placement-groups-id" "put-placement-groups-id" "get-pricing" "get-primary-ips" "post-primary-ips" "delete-primary-ips-id" "get-primary-ips-id" "put-primary-ips-id" "post-primary-ips-id-actions-assign" "post-primary-ips-id-actions-change-dns-ptr" "post-primary-ips-id-actions-change-protection" "post-primary-ips-id-actions-unassign" "get-server-types" "get-server-types-id" "get-servers" "post-servers" "delete-servers-id" "get-servers-id" "put-servers-id" "get-servers-id-actions" "post-servers-id-actions-add-to-placement-group" "post-servers-id-actions-attach-iso" "post-servers-id-actions-attach-to-network" "post-servers-id-actions-change-alias-ips" "post-servers-id-actions-change-dns-ptr" "post-servers-id-actions-change-protection" "post-servers-id-actions-change-type" "post-servers-id-actions-create-image" "post-servers-id-actions-detach-from-network" "post-servers-id-actions-detach-iso" "post-servers-id-actions-disable-backup" "post-servers-id-actions-disable-rescue" "post-servers-id-actions-enable-backup" "post-servers-id-actions-enable-rescue" "post-servers-id-actions-poweroff" "post-servers-id-actions-poweron" "post-servers-id-actions-reboot" "post-servers-id-actions-rebuild" "post-servers-id-actions-remove-from-placement-group" "post-servers-id-actions-request-console" "post-servers-id-actions-reset" "post-servers-id-actions-reset-password" "post-servers-id-actions-shutdown" "get-servers-id-actions-action-id" "get-servers-id-metrics" "get-ssh-keys" "post-ssh-keys" "delete-ssh-keys-id" "get-ssh-keys-id" "put-ssh-keys-id" "get-volumes" "post-volumes" "delete-volumes-id" "get-volumes-id" "put-volumes-id" "get-volumes-id-actions" "post-volumes-id-actions-attach" "post-volumes-id-actions-change-protection" "post-volumes-id-actions-detach" "post-volumes-id-actions-resize" "get-volumes-id-actions-action-id" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -173,7 +197,7 @@ export def "get-actions" [
   --id: int # Can be used multiple times, the response will contain only Actions with specified IDs
   --sort: string@sort-completer # Can be used multiple times.
   --status: string@status-completer # Can be used multiple times, the response will contain only Actions with specified statuses
-]: nothing -> record<actions: table<command: string, error: record, finished: string, id: int, progress: float, resources: list, started: string, status: string>, meta: record<pagination: record<last_page: float, next_page: float, page: float, per_page: float, previous_page: float, total_entries: float>>> {
+]: nothing -> oneof<record<actions: table<command: string, error: record, finished: string, id: int, progress: float, resources: list, started: string, status: string>, meta: record<pagination: record<last_page: float, next_page: float, page: float, per_page: float, previous_page: float, total_entries: float>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "status" $status "scalar")] | flatten | str join "&"
@@ -208,7 +232,7 @@ export def "get-actions-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
+]: nothing -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -246,7 +270,7 @@ export def "get-certificates" [
   --name: string # Can be used to filter resources by their name. The response will only contain the resources matching the specified name
   --label-selector: string # Can be used to filter resources by labels. The response will only contain resources matching the label selector.
   --type: string@type-completer # Can be used multiple times. The response will only contain Certificates matching the type.
-]: nothing -> record<certificates: table<certificate: string, created: string, domain_names: list, fingerprint: string, id: int, labels: record, name: string, not_valid_after: string, not_valid_before: string, status: record, type: string, used_by: list>, meta: record<pagination: record<last_page: float, next_page: float, page: float, per_page: float, previous_page: float, total_entries: float>>> {
+]: nothing -> oneof<record<certificates: table<certificate: string, created: string, domain_names: list, fingerprint: string, id: int, labels: record, name: string, not_valid_after: string, not_valid_before: string, status: record, type: string, used_by: list>, meta: record<pagination: record<last_page: float, next_page: float, page: float, per_page: float, previous_page: float, total_entries: float>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sort" $sort "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "label_selector" $label_selector "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
@@ -286,7 +310,7 @@ export def "post-certificates" [
   name: string # Name of the Certificate (e.g. my website cert)
   --private-key: string # Certificate key in PEM format. Required for type `uploaded` Certificates. (e.g. -----BEGIN PRIVATE KEY----- ...)
   --type: string@type-completer # Choose between uploading a Certificate in PEM format or requesting a managed *Let's Encrypt* Certificate. If omitted defaults to `uploaded`. (e.g. uploaded)
-]: any -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>, certificate: record<certificate: string, created: string, domain_names: list<string>, fingerprint: string, id: int, labels: record, name: string, not_valid_after: string, not_valid_before: string, status: record<error: record, issuance: string, renewal: string>, type: string, used_by: list<record>>> {
+]: any -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>, certificate: record<certificate: string, created: string, domain_names: list<string>, fingerprint: string, id: int, labels: record, name: string, not_valid_after: string, not_valid_before: string, status: record<error: record, issuance: string, renewal: string>, type: string, used_by: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -358,7 +382,7 @@ export def "get-certificates-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<certificate: record<certificate: string, created: string, domain_names: list<string>, fingerprint: string, id: int, labels: record, name: string, not_valid_after: string, not_valid_before: string, status: record<error: record, issuance: string, renewal: string>, type: string, used_by: list<record>>> {
+]: nothing -> oneof<record<certificate: record<certificate: string, created: string, domain_names: list<string>, fingerprint: string, id: int, labels: record, name: string, not_valid_after: string, not_valid_before: string, status: record<error: record, issuance: string, renewal: string>, type: string, used_by: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -395,7 +419,7 @@ export def "put-certificates-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --labels: record # User-defined labels (key-value pairs) (e.g. {labelkey: value})
   --name: string # New Certificate name (e.g. my website cert)
-]: any -> record<certificate: record<certificate: string, created: string, domain_names: list<string>, fingerprint: string, id: int, labels: record, name: string, not_valid_after: string, not_valid_before: string, status: record<error: record, issuance: string, renewal: string>, type: string, used_by: list<record>>> {
+]: any -> oneof<record<certificate: record<certificate: string, created: string, domain_names: list<string>, fingerprint: string, id: int, labels: record, name: string, not_valid_after: string, not_valid_before: string, status: record<error: record, issuance: string, renewal: string>, type: string, used_by: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -435,7 +459,7 @@ export def "get-certificates-id-actions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --sort: string@sort-completer # Can be used multiple times.
   --status: string@status-completer # Can be used multiple times, the response will contain only Actions with specified statuses
-]: nothing -> record<actions: table<command: string, error: record, finished: string, id: int, progress: float, resources: list, started: string, status: string>, meta: record<pagination: record<last_page: float, next_page: float, page: float, per_page: float, previous_page: float, total_entries: float>>> {
+]: nothing -> oneof<record<actions: table<command: string, error: record, finished: string, id: int, progress: float, resources: list, started: string, status: string>, meta: record<pagination: record<last_page: float, next_page: float, page: float, per_page: float, previous_page: float, total_entries: float>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -471,7 +495,7 @@ export def "post-certificates-id-actions-retry" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
+]: nothing -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -507,7 +531,7 @@ export def "get-certificates-id-actions-action-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
+]: nothing -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -543,7 +567,7 @@ export def "get-datacenters" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Can be used to filter Datacenters by their name. The response will only contain the Datacenter matching the specified name. When the name does not match the Datacenter name format, an `invalid_input` error is returned.
-]: nothing -> record<datacenters: table<description: string, id: int, location: record, name: string, server_types: record>, recommendation: float> {
+]: nothing -> oneof<record<datacenters: table<description: string, id: int, location: record, name: string, server_types: record>, recommendation: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar")] | flatten | str join "&"
@@ -578,7 +602,7 @@ export def "get-datacenters-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<datacenter: record<description: string, id: int, location: record<city: string, country: string, description: string, id: float, latitude: float, longitude: float, name: string, network_zone: string>, name: string, server_types: record<available: list, available_for_migration: list, supported: list>>> {
+]: nothing -> oneof<record<datacenter: record<description: string, id: int, location: record<city: string, country: string, description: string, id: float, latitude: float, longitude: float, name: string, network_zone: string>, name: string, server_types: record<available: list, available_for_migration: list, supported: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -615,7 +639,7 @@ export def "get-firewalls" [
   --sort: string@sort-completer-1 # Can be used multiple times.
   --name: string # Can be used to filter resources by their name. The response will only contain the resources matching the specified name
   --label-selector: string # Can be used to filter resources by labels. The response will only contain resources matching the label selector.
-]: nothing -> record<firewalls: table<applied_to: list, created: string, id: int, labels: record, name: string, rules: list>, meta: record<pagination: record<last_page: float, next_page: float, page: float, per_page: float, previous_page: float, total_entries: float>>> {
+]: nothing -> oneof<record<firewalls: table<applied_to: list, created: string, id: int, labels: record, name: string, rules: list>, meta: record<pagination: record<last_page: float, next_page: float, page: float, per_page: float, previous_page: float, total_entries: float>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sort" $sort "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "label_selector" $label_selector "scalar")] | flatten | str join "&"
@@ -639,8 +663,6 @@ export def "get-firewalls" [
 # Create a Firewall
 #
 # POST /firewalls
-# --apply_to item shape: {label_selector?: record, server?: record, type: "server"|"label_selector"}
-# --rules item shape: {description?: string, destination_ips?: list<string>, direction: "in"|"out", port?: string, protocol: "tcp"|"udp"|"icmp"|"esp"|"gre", source_ips?: list<string>}
 export def "post-firewalls" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -655,7 +677,7 @@ export def "post-firewalls" [
   --labels: record # User-defined labels (key-value pairs)
   name: string # Name of the Firewall (e.g. Corporate Intranet Protection)
   --rules: list # Array of rules (e.g. [{direction: in, port: 80, protocol: tcp, source_ips: [28.239.13.1/32, 28.239.14.0/24, ff21:1eac:9a3b:ee58:5ca:990c:8bc9:c03b/128]}]) — item shape: {description?: string, destination_ips?: list<string>, direction: "in"|"out", port?: string, protocol: "tcp"|"udp"|"icmp"|"esp"|"gre", source_ips?: list<string>}
-]: any -> record<actions: table<command: string, error: record, finished: string, id: int, progress: float, resources: list, started: string, status: string>, firewall: record<applied_to: list<record>, created: string, id: int, labels: record, name: string, rules: list<record>>> {
+]: any -> oneof<record<actions: table<command: string, error: record, finished: string, id: int, progress: float, resources: list, started: string, status: string>, firewall: record<applied_to: list<record>, created: string, id: int, labels: record, name: string, rules: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -727,7 +749,7 @@ export def "get-firewalls-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<firewall: record<applied_to: list<record>, created: string, id: int, labels: record, name: string, rules: list<record>>> {
+]: nothing -> oneof<record<firewall: record<applied_to: list<record>, created: string, id: int, labels: record, name: string, rules: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -764,7 +786,7 @@ export def "put-firewalls-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --labels: record # User-defined labels (key-value pairs) (e.g. {labelkey: value})
   --name: string # New Firewall name (e.g. new-name)
-]: any -> record<firewall: record<applied_to: list<record>, created: string, id: int, labels: record, name: string, rules: list<record>>> {
+]: any -> oneof<record<firewall: record<applied_to: list<record>, created: string, id: int, labels: record, name: string, rules: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -804,7 +826,7 @@ export def "get-firewalls-id-actions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --sort: string@sort-completer # Can be used multiple times.
   --status: string@status-completer # Can be used multiple times, the response will contain only Actions with specified statuses
-]: nothing -> record<actions: table<command: string, error: record, finished: string, id: int, progress: float, resources: list, started: string, status: string>, meta: record<pagination: record<last_page: float, next_page: float, page: float, per_page: float, previous_page: float, total_entries: float>>> {
+]: nothing -> oneof<record<actions: table<command: string, error: record, finished: string, id: int, progress: float, resources: list, started: string, status: string>, meta: record<pagination: record<last_page: float, next_page: float, page: float, per_page: float, previous_page: float, total_entries: float>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -829,7 +851,6 @@ export def "get-firewalls-id-actions" [
 # Apply to Resources
 #
 # POST /firewalls/{id}/actions/apply_to_resources
-# --apply_to item shape: {label_selector?: record, server?: record, type?: "server"|"label_selector"}
 export def "post-firewalls-id-actions-apply-to-resources" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -842,7 +863,7 @@ export def "post-firewalls-id-actions-apply-to-resources" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   apply_to: list # Resources the Firewall should be applied to — item shape: {label_selector?: record, server?: record, type?: "server"|"label_selector"}
-]: any -> record<actions: table<command: string, error: record, finished: string, id: int, progress: float, resources: list, started: string, status: string>, meta: record<pagination: record<last_page: float, next_page: float, page: float, per_page: float, previous_page: float, total_entries: float>>> {
+]: any -> oneof<record<actions: table<command: string, error: record, finished: string, id: int, progress: float, resources: list, started: string, status: string>, meta: record<pagination: record<last_page: float, next_page: float, page: float, per_page: float, previous_page: float, total_entries: float>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -869,7 +890,6 @@ export def "post-firewalls-id-actions-apply-to-resources" [
 # Remove from Resources
 #
 # POST /firewalls/{id}/actions/remove_from_resources
-# --remove_from item shape: {label_selector?: record, server?: record, type?: "server"|"label_selector"}
 export def "post-firewalls-id-actions-remove-from-resources" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -882,7 +902,7 @@ export def "post-firewalls-id-actions-remove-from-resources" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   remove_from: list # Resources the Firewall should be removed from — item shape: {label_selector?: record, server?: record, type?: "server"|"label_selector"}
-]: any -> record<actions: table<command: string, error: record, finished: string, id: int, progress: float, resources: list, started: string, status: string>, meta: record<pagination: record<last_page: float, next_page: float, page: float, per_page: float, previous_page: float, total_entries: float>>> {
+]: any -> oneof<record<actions: table<command: string, error: record, finished: string, id: int, progress: float, resources: list, started: string, status: string>, meta: record<pagination: record<last_page: float, next_page: float, page: float, per_page: float, previous_page: float, total_entries: float>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -909,7 +929,6 @@ export def "post-firewalls-id-actions-remove-from-resources" [
 # Set Rules
 #
 # POST /firewalls/{id}/actions/set_rules
-# --rules item shape: {description?: string, destination_ips?: list<string>, direction: "in"|"out", port?: string, protocol: "tcp"|"udp"|"icmp"|"esp"|"gre", source_ips?: list<string>}
 export def "post-firewalls-id-actions-set-rules" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -922,7 +941,7 @@ export def "post-firewalls-id-actions-set-rules" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   rules: list # Array of rules — item shape: {description?: string, destination_ips?: list<string>, direction: "in"|"out", port?: string, protocol: "tcp"|"udp"|"icmp"|"esp"|"gre", source_ips?: list<string>}
-]: any -> record<actions: table<command: string, error: record, finished: string, id: int, progress: float, resources: list, started: string, status: string>, meta: record<pagination: record<last_page: float, next_page: float, page: float, per_page: float, previous_page: float, total_entries: float>>> {
+]: any -> oneof<record<actions: table<command: string, error: record, finished: string, id: int, progress: float, resources: list, started: string, status: string>, meta: record<pagination: record<last_page: float, next_page: float, page: float, per_page: float, previous_page: float, total_entries: float>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -961,7 +980,7 @@ export def "get-firewalls-id-actions-action-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
+]: nothing -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -999,7 +1018,7 @@ export def "get-floating-ips" [
   --name: string # Can be used to filter Floating IPs by their name. The response will only contain the Floating IP matching the specified name.
   --label-selector: string # Can be used to filter Floating IPs by labels. The response will only contain Floating IPs matching the label selector.
   --sort: string@sort-completer-2 # Can be used multiple times. Choices id id:asc id:desc created created:asc created:desc
-]: nothing -> record<floating_ips: table<blocked: bool, created: string, description: string, dns_ptr: list, home_location: record, id: int, ip: string, labels: record, name: string, protection: record, server: int, type: string>, meta: record<pagination: record<last_page: float, next_page: float, page: float, per_page: float, previous_page: float, total_entries: float>>> {
+]: nothing -> oneof<record<floating_ips: table<blocked: bool, created: string, description: string, dns_ptr: list, home_location: record, id: int, ip: string, labels: record, name: string, protection: record, server: int, type: string>, meta: record<pagination: record<last_page: float, next_page: float, page: float, per_page: float, previous_page: float, total_entries: float>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "label_selector" $label_selector "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
@@ -1039,7 +1058,7 @@ export def "post-floating-ips" [
   --name: string # e.g. Web Frontend
   --server: int # Server to assign the Floating IP to (e.g. 42)
   type: string@type-completer-1 # Floating IP type
-]: any -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>, floating_ip: record<blocked: bool, created: string, description: string, dns_ptr: list<record>, home_location: record<city: string, country: string, description: string, id: float, latitude: float, longitude: float, name: string, network_zone: string>, id: int, ip: string, labels: record, name: string, protection: record<delete: bool>, server: int, type: string>> {
+]: any -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>, floating_ip: record<blocked: bool, created: string, description: string, dns_ptr: list<record>, home_location: record<city: string, country: string, description: string, id: float, latitude: float, longitude: float, name: string, network_zone: string>, id: int, ip: string, labels: record, name: string, protection: record<delete: bool>, server: int, type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1111,7 +1130,7 @@ export def "get-floating-ips-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<floating_ip: record<blocked: bool, created: string, description: string, dns_ptr: list<record>, home_location: record<city: string, country: string, description: string, id: float, latitude: float, longitude: float, name: string, network_zone: string>, id: int, ip: string, labels: record, name: string, protection: record<delete: bool>, server: int, type: string>> {
+]: nothing -> oneof<record<floating_ip: record<blocked: bool, created: string, description: string, dns_ptr: list<record>, home_location: record<city: string, country: string, description: string, id: float, latitude: float, longitude: float, name: string, network_zone: string>, id: int, ip: string, labels: record, name: string, protection: record<delete: bool>, server: int, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1149,7 +1168,7 @@ export def "put-floating-ips-id" [
   --description: string # New Description to set (e.g. Web Frontend)
   --labels: record # User-defined labels (key-value pairs) (e.g. {labelkey: value})
   --name: string # New unique name to set (e.g. Web Frontend)
-]: any -> record<floating_ip: record<blocked: bool, created: string, description: string, dns_ptr: list<record>, home_location: record<city: string, country: string, description: string, id: float, latitude: float, longitude: float, name: string, network_zone: string>, id: int, ip: string, labels: record, name: string, protection: record<delete: bool>, server: int, type: string>> {
+]: any -> oneof<record<floating_ip: record<blocked: bool, created: string, description: string, dns_ptr: list<record>, home_location: record<city: string, country: string, description: string, id: float, latitude: float, longitude: float, name: string, network_zone: string>, id: int, ip: string, labels: record, name: string, protection: record<delete: bool>, server: int, type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1189,7 +1208,7 @@ export def "get-floating-ips-id-actions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --sort: string@sort-completer # Can be used multiple times.
   --status: string@status-completer # Can be used multiple times, the response will contain only Actions with specified statuses
-]: nothing -> record<actions: table<command: string, error: record, finished: string, id: int, progress: float, resources: list, started: string, status: string>> {
+]: nothing -> oneof<record<actions: table<command: string, error: record, finished: string, id: int, progress: float, resources: list, started: string, status: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1226,7 +1245,7 @@ export def "post-floating-ips-id-actions-assign" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   server: int # ID of the Server the Floating IP shall be assigned to (e.g. 42)
-]: any -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
+]: any -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1266,7 +1285,7 @@ export def "post-floating-ips-id-actions-change-dns-ptr" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --dns-ptr: string # Hostname to set as a reverse DNS PTR entry, will reset to original default value if `null` (nullable, e.g. server02.example.com)
   ip: string # IP address for which to set the reverse DNS entry (e.g. 1.2.3.4)
-]: any -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
+]: any -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1305,7 +1324,7 @@ export def "post-floating-ips-id-actions-change-protection" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --delete: oneof<nothing, bool> # If true, prevents the Floating IP from being deleted (e.g. true)
-]: any -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
+]: any -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1343,7 +1362,7 @@ export def "post-floating-ips-id-actions-unassign" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
+]: nothing -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1379,7 +1398,7 @@ export def "get-floating-ips-id-actions-action-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
+]: nothing -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1421,7 +1440,7 @@ export def "get-images" [
   --include-deprecated: oneof<nothing, bool> # Can be used multiple times.
   --name: string # Can be used to filter resources by their name. The response will only contain the resources matching the specified name
   --label-selector: string # Can be used to filter resources by labels. The response will only contain resources matching the label selector.
-]: nothing -> record<images: table<bound_to: int, created: string, created_from: record, deleted: string, deprecated: string, description: string, disk_size: float, id: int, image_size: float, labels: record, name: string, os_flavor: string, os_version: string, protection: record, rapid_deploy: bool, status: string, type: string>, meta: record<pagination: record<last_page: float, next_page: float, page: float, per_page: float, previous_page: float, total_entries: float>>> {
+]: nothing -> oneof<record<images: table<bound_to: int, created: string, created_from: record, deleted: string, deprecated: string, description: string, disk_size: float, id: int, image_size: float, labels: record, name: string, os_flavor: string, os_version: string, protection: record, rapid_deploy: bool, status: string, type: string>, meta: record<pagination: record<last_page: float, next_page: float, page: float, per_page: float, previous_page: float, total_entries: float>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sort" $sort "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "bound_to" $bound_to "scalar") (serialize-qp "include_deprecated" $include_deprecated "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "label_selector" $label_selector "scalar")] | flatten | str join "&"
@@ -1491,7 +1510,7 @@ export def "get-images-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<image: record<bound_to: int, created: string, created_from: record<id: int, name: string>, deleted: string, deprecated: string, description: string, disk_size: float, id: int, image_size: float, labels: record, name: string, os_flavor: string, os_version: string, protection: record<delete: bool>, rapid_deploy: bool, status: string, type: string>> {
+]: nothing -> oneof<record<image: record<bound_to: int, created: string, created_from: record<id: int, name: string>, deleted: string, deprecated: string, description: string, disk_size: float, id: int, image_size: float, labels: record, name: string, os_flavor: string, os_version: string, protection: record<delete: bool>, rapid_deploy: bool, status: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1529,7 +1548,7 @@ export def "put-images-id" [
   --description: string # New description of Image (e.g. My new Image description)
   --labels: record # User-defined labels (key-value pairs) (e.g. {labelkey: value})
   --type: string@type-completer-3 # Destination Image type to convert to
-]: any -> record<image: record<bound_to: int, created: string, created_from: record<id: int, name: string>, deleted: string, deprecated: string, description: string, disk_size: float, id: int, image_size: float, labels: record, name: string, os_flavor: string, os_version: string, protection: record<delete: bool>, rapid_deploy: bool, status: string, type: string>> {
+]: any -> oneof<record<image: record<bound_to: int, created: string, created_from: record<id: int, name: string>, deleted: string, deprecated: string, description: string, disk_size: float, id: int, image_size: float, labels: record, name: string, os_flavor: string, os_version: string, protection: record<delete: bool>, rapid_deploy: bool, status: string, type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1569,7 +1588,7 @@ export def "get-images-id-actions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --sort: string@sort-completer # Can be used multiple times.
   --status: string@status-completer # Can be used multiple times, the response will contain only Actions with specified statuses
-]: nothing -> record<actions: table<command: string, error: record, finished: string, id: int, progress: float, resources: list, started: string, status: string>, meta: record<pagination: record<last_page: float, next_page: float, page: float, per_page: float, previous_page: float, total_entries: float>>> {
+]: nothing -> oneof<record<actions: table<command: string, error: record, finished: string, id: int, progress: float, resources: list, started: string, status: string>, meta: record<pagination: record<last_page: float, next_page: float, page: float, per_page: float, previous_page: float, total_entries: float>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1606,7 +1625,7 @@ export def "post-images-id-actions-change-protection" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --delete: oneof<nothing, bool> # If true, prevents the snapshot from being deleted (e.g. true)
-]: any -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
+]: any -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1645,7 +1664,7 @@ export def "get-images-id-actions-action-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
+]: nothing -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1681,7 +1700,7 @@ export def "get-isos" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Can be used to filter ISOs by their name. The response will only contain the ISO matching the specified name.
-]: nothing -> record<isos: table<deprecated: string, description: string, id: int, name: string, type: string>, meta: record<pagination: record<last_page: float, next_page: float, page: float, per_page: float, previous_page: float, total_entries: float>>> {
+]: nothing -> oneof<record<isos: table<deprecated: string, description: string, id: int, name: string, type: string>, meta: record<pagination: record<last_page: float, next_page: float, page: float, per_page: float, previous_page: float, total_entries: float>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar")] | flatten | str join "&"
@@ -1716,7 +1735,7 @@ export def "get-isos-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<iso: record<deprecated: string, description: string, id: int, name: string, type: string>> {
+]: nothing -> oneof<record<iso: record<deprecated: string, description: string, id: int, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1751,7 +1770,7 @@ export def "get-load-balancer-types" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Can be used to filter Load Balancer types by their name. The response will only contain the Load Balancer type matching the specified name.
-]: nothing -> record<load_balancer_types: table<deprecated: string, description: string, id: float, max_assigned_certificates: float, max_connections: float, max_services: float, max_targets: float, name: string, prices: list>> {
+]: nothing -> oneof<record<load_balancer_types: table<deprecated: string, description: string, id: float, max_assigned_certificates: float, max_connections: float, max_services: float, max_targets: float, name: string, prices: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar")] | flatten | str join "&"
@@ -1786,7 +1805,7 @@ export def "get-load-balancer-types-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<load_balancer_type: record<deprecated: string, description: string, id: float, max_assigned_certificates: float, max_connections: float, max_services: float, max_targets: float, name: string, prices: list<record>>> {
+]: nothing -> oneof<record<load_balancer_type: record<deprecated: string, description: string, id: float, max_assigned_certificates: float, max_connections: float, max_services: float, max_targets: float, name: string, prices: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1823,7 +1842,7 @@ export def "get-load-balancers" [
   --sort: string@sort-completer-1 # Can be used multiple times.
   --name: string # Can be used to filter resources by their name. The response will only contain the resources matching the specified name
   --label-selector: string # Can be used to filter resources by labels. The response will only contain resources matching the label selector.
-]: nothing -> record<load_balancers: table<algorithm: record, created: string, id: int, included_traffic: int, ingoing_traffic: int, labels: record, load_balancer_type: record, location: record, name: string, outgoing_traffic: int, private_net: list, protection: record, public_net: record, services: list, targets: list>, meta: record<pagination: record<last_page: float, next_page: float, page: float, per_page: float, previous_page: float, total_entries: float>>> {
+]: nothing -> oneof<record<load_balancers: table<algorithm: record, created: string, id: int, included_traffic: int, ingoing_traffic: int, labels: record, load_balancer_type: record, location: record, name: string, outgoing_traffic: int, private_net: list, protection: record, public_net: record, services: list, targets: list>, meta: record<pagination: record<last_page: float, next_page: float, page: float, per_page: float, previous_page: float, total_entries: float>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sort" $sort "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "label_selector" $label_selector "scalar")] | flatten | str join "&"
@@ -1847,10 +1866,6 @@ export def "get-load-balancers" [
 # Create a Load Balancer
 #
 # POST /load_balancers
-# --algorithm shape: {type: "round_robin"|"least_connections"}
-# --labels shape: {labelkey?: string}
-# --services item shape: {destination_port: int, health_check: record, http?: record, listen_port: int, protocol: "tcp"|"http"|"https", proxyprotocol: bool}
-# --targets item shape: {health_status?: list, ip?: record, label_selector?: record, server?: record, targets?: list, type: "server"|"label_selector"|"ip", use_private_ip?: bool}
 export def "post-load-balancers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1871,7 +1886,7 @@ export def "post-load-balancers" [
   --public-interface: oneof<nothing, bool> # Enable or disable the public interface of the Load Balancer (e.g. true)
   --services: list # Array of services — item shape: {destination_port: int, health_check: record, http?: record, listen_port: int, protocol: "tcp"|"http"|"https", proxyprotocol: bool}
   --targets: list # Array of targets — item shape: {health_status?: list, ip?: record, label_selector?: record, server?: record, targets?: list, type: "server"|"label_selector"|"ip", use_private_ip?: bool}
-]: any -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>, load_balancer: record<algorithm: record<type: string>, created: string, id: int, included_traffic: int, ingoing_traffic: int, labels: record, load_balancer_type: record<deprecated: string, description: string, id: float, max_assigned_certificates: float, max_connections: float, max_services: float, max_targets: float, name: string, prices: list>, location: record<city: string, country: string, description: string, id: float, latitude: float, longitude: float, name: string, network_zone: string>, name: string, outgoing_traffic: int, private_net: list<record>, protection: record<delete: bool>, public_net: record<enabled: bool, ipv4: record, ipv6: record>, services: list<record>, targets: list<record>>> {
+]: any -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>, load_balancer: record<algorithm: record<type: string>, created: string, id: int, included_traffic: int, ingoing_traffic: int, labels: record, load_balancer_type: record<deprecated: string, description: string, id: float, max_assigned_certificates: float, max_connections: float, max_services: float, max_targets: float, name: string, prices: list>, location: record<city: string, country: string, description: string, id: float, latitude: float, longitude: float, name: string, network_zone: string>, name: string, outgoing_traffic: int, private_net: list<record>, protection: record<delete: bool>, public_net: record<enabled: bool, ipv4: record, ipv6: record>, services: list<record>, targets: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1943,7 +1958,7 @@ export def "get-load-balancers-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<load_balancer: record<algorithm: record<type: string>, created: string, id: int, included_traffic: int, ingoing_traffic: int, labels: record, load_balancer_type: record<deprecated: string, description: string, id: float, max_assigned_certificates: float, max_connections: float, max_services: float, max_targets: float, name: string, prices: list>, location: record<city: string, country: string, description: string, id: float, latitude: float, longitude: float, name: string, network_zone: string>, name: string, outgoing_traffic: int, private_net: list<record>, protection: record<delete: bool>, public_net: record<enabled: bool, ipv4: record, ipv6: record>, services: list<record>, targets: list<record>>> {
+]: nothing -> oneof<record<load_balancer: record<algorithm: record<type: string>, created: string, id: int, included_traffic: int, ingoing_traffic: int, labels: record, load_balancer_type: record<deprecated: string, description: string, id: float, max_assigned_certificates: float, max_connections: float, max_services: float, max_targets: float, name: string, prices: list>, location: record<city: string, country: string, description: string, id: float, latitude: float, longitude: float, name: string, network_zone: string>, name: string, outgoing_traffic: int, private_net: list<record>, protection: record<delete: bool>, public_net: record<enabled: bool, ipv4: record, ipv6: record>, services: list<record>, targets: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1980,7 +1995,7 @@ export def "put-load-balancers-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --labels: record # User-defined labels (key-value pairs) (e.g. {labelkey: value})
   --name: string # New Load Balancer name (e.g. new-name)
-]: any -> record<load_balancer: record<algorithm: record<type: string>, created: string, id: int, included_traffic: int, ingoing_traffic: int, labels: record, load_balancer_type: record<deprecated: string, description: string, id: float, max_assigned_certificates: float, max_connections: float, max_services: float, max_targets: float, name: string, prices: list>, location: record<city: string, country: string, description: string, id: float, latitude: float, longitude: float, name: string, network_zone: string>, name: string, outgoing_traffic: int, private_net: list<record>, protection: record<delete: bool>, public_net: record<enabled: bool, ipv4: record, ipv6: record>, services: list<record>, targets: list<record>>> {
+]: any -> oneof<record<load_balancer: record<algorithm: record<type: string>, created: string, id: int, included_traffic: int, ingoing_traffic: int, labels: record, load_balancer_type: record<deprecated: string, description: string, id: float, max_assigned_certificates: float, max_connections: float, max_services: float, max_targets: float, name: string, prices: list>, location: record<city: string, country: string, description: string, id: float, latitude: float, longitude: float, name: string, network_zone: string>, name: string, outgoing_traffic: int, private_net: list<record>, protection: record<delete: bool>, public_net: record<enabled: bool, ipv4: record, ipv6: record>, services: list<record>, targets: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2020,7 +2035,7 @@ export def "get-load-balancers-id-actions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --sort: string@sort-completer # Can be used multiple times.
   --status: string@status-completer # Can be used multiple times, the response will contain only Actions with specified statuses
-]: nothing -> record<actions: table<command: string, error: record, finished: string, id: int, progress: float, resources: list, started: string, status: string>, meta: record<pagination: record<last_page: float, next_page: float, page: float, per_page: float, previous_page: float, total_entries: float>>> {
+]: nothing -> oneof<record<actions: table<command: string, error: record, finished: string, id: int, progress: float, resources: list, started: string, status: string>, meta: record<pagination: record<last_page: float, next_page: float, page: float, per_page: float, previous_page: float, total_entries: float>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2045,8 +2060,6 @@ export def "get-load-balancers-id-actions" [
 # Add Service
 #
 # POST /load_balancers/{id}/actions/add_service
-# --health_check shape: {http?: record, interval: int, port: int, protocol: "tcp"|"http", retries: int, timeout: int}
-# --http shape: {certificates?: list<int>, cookie_lifetime?: int, cookie_name?: string, redirect_http?: bool, sticky_sessions?: bool}
 export def "post-load-balancers-id-actions-add-service" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2064,7 +2077,7 @@ export def "post-load-balancers-id-actions-add-service" [
   listen_port: int # Port the Load Balancer listens on (e.g. 443)
   protocol: string@protocol-completer # Protocol of the Load Balancer (e.g. https)
   --proxyprotocol: oneof<nothing, bool> # Is Proxyprotocol enabled or not (e.g. false)
-]: any -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
+]: any -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2092,9 +2105,6 @@ export def "post-load-balancers-id-actions-add-service" [
 # Add Target
 #
 # POST /load_balancers/{id}/actions/add_target
-# --ip shape: {ip: string}
-# --label_selector shape: {selector: string}
-# --server shape: {id: float}
 export def "post-load-balancers-id-actions-add-target" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2111,7 +2121,7 @@ export def "post-load-balancers-id-actions-add-target" [
   --server: record # Configuration for type Server, required if type is `server` — shape: {id: float}
   type: string@type-completer-4 # Type of the resource
   --use-private-ip: oneof<nothing, bool> # Use the private network IP instead of the public IP of the Server, requires the Server and Load Balancer to be in the same network. Default value is false. (e.g. true)
-]: any -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
+]: any -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2151,7 +2161,7 @@ export def "post-load-balancers-id-actions-attach-to-network" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ip: string # IP to request to be assigned to this Load Balancer; if you do not provide this then you will be auto assigned an IP address (e.g. 10.0.1.1)
   network: float # ID of an existing network to attach the Load Balancer to (e.g. 4711)
-]: any -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
+]: any -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2190,7 +2200,7 @@ export def "post-load-balancers-id-actions-change-algorithm" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   type: string@type-completer-5 # Algorithm of the Load Balancer
-]: any -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
+]: any -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2230,7 +2240,7 @@ export def "post-load-balancers-id-actions-change-dns-ptr" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --dns-ptr: string # Hostname to set as a reverse DNS PTR entry (nullable, e.g. lb1.example.com)
   ip: string # Public IP address for which the reverse DNS entry should be set (e.g. 1.2.3.4)
-]: any -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
+]: any -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2269,7 +2279,7 @@ export def "post-load-balancers-id-actions-change-protection" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --delete: oneof<nothing, bool> # If true, prevents the Load Balancer from being deleted (e.g. true)
-]: any -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
+]: any -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2308,7 +2318,7 @@ export def "post-load-balancers-id-actions-change-type" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   load_balancer_type: string # ID or name of Load Balancer type the Load Balancer should migrate to (e.g. lb21)
-]: any -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
+]: any -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2347,7 +2357,7 @@ export def "post-load-balancers-id-actions-delete-service" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   listen_port: float # The listen port of the service you want to delete (e.g. 4711)
-]: any -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
+]: any -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2386,7 +2396,7 @@ export def "post-load-balancers-id-actions-detach-from-network" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   network: float # ID of an existing network to detach the Load Balancer from (e.g. 4711)
-]: any -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
+]: any -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2424,7 +2434,7 @@ export def "post-load-balancers-id-actions-disable-public-interface" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
+]: nothing -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2459,7 +2469,7 @@ export def "post-load-balancers-id-actions-enable-public-interface" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
+]: nothing -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2483,9 +2493,6 @@ export def "post-load-balancers-id-actions-enable-public-interface" [
 # Remove Target
 #
 # POST /load_balancers/{id}/actions/remove_target
-# --ip shape: {ip: string}
-# --label_selector shape: {selector: string}
-# --server shape: {id: float}
 export def "post-load-balancers-id-actions-remove-target" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2501,7 +2508,7 @@ export def "post-load-balancers-id-actions-remove-target" [
   --label-selector: record # Configuration for label selector targets, required if type is `label_selector` — shape: {selector: string}
   --server: record # Configuration for type Server, required if type is `server` — shape: {id: float}
   type: string@type-completer-4 # Type of the resource
-]: any -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
+]: any -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2528,8 +2535,6 @@ export def "post-load-balancers-id-actions-remove-target" [
 # Update Service
 #
 # POST /load_balancers/{id}/actions/update_service
-# --health_check shape: {http?: record, interval: int, port: int, protocol: "tcp"|"http", retries: int, timeout: int}
-# --http shape: {certificates?: list<int>, cookie_lifetime?: int, cookie_name?: string, redirect_http?: bool, sticky_sessions?: bool}
 export def "post-load-balancers-id-actions-update-service" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2547,7 +2552,7 @@ export def "post-load-balancers-id-actions-update-service" [
   listen_port: int # Port the Load Balancer listens on (e.g. 443)
   protocol: string@protocol-completer # Protocol of the Load Balancer (e.g. https)
   --proxyprotocol: oneof<nothing, bool> # Is Proxyprotocol enabled or not (e.g. false)
-]: any -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
+]: any -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2587,7 +2592,7 @@ export def "get-load-balancers-id-actions-action-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
+]: nothing -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2627,7 +2632,7 @@ export def "get-load-balancers-id-metrics" [
   --start: string # Start of period to get Metrics for (in ISO-8601 format) (required)
   --end: string # End of period to get Metrics for (in ISO-8601 format) (required)
   --step: string # Resolution of results in seconds
-]: nothing -> record<metrics: record<end: string, start: string, step: float, time_series: record>> {
+]: nothing -> oneof<record<metrics: record<end: string, start: string, step: float, time_series: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2666,7 +2671,7 @@ export def "get-locations" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Can be used to filter Locations by their name. The response will only contain the Location matching the specified name.
-]: nothing -> record<locations: table<city: string, country: string, description: string, id: float, latitude: float, longitude: float, name: string, network_zone: string>> {
+]: nothing -> oneof<record<locations: table<city: string, country: string, description: string, id: float, latitude: float, longitude: float, name: string, network_zone: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar")] | flatten | str join "&"
@@ -2701,7 +2706,7 @@ export def "get-locations-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<location: record<city: string, country: string, description: string, id: float, latitude: float, longitude: float, name: string, network_zone: string>> {
+]: nothing -> oneof<record<location: record<city: string, country: string, description: string, id: float, latitude: float, longitude: float, name: string, network_zone: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2737,7 +2742,7 @@ export def "get-networks" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Can be used to filter networks by their name. The response will only contain the networks matching the specified name.
   --label-selector: string # Can be used to filter networks by labels. The response will only contain networks with a matching label selector pattern.
-]: nothing -> record<meta: record<pagination: record<last_page: float, next_page: float, page: float, per_page: float, previous_page: float, total_entries: float>>, networks: table<created: string, id: int, ip_range: string, labels: record, load_balancers: list, name: string, protection: record, routes: list, servers: list, subnets: list>> {
+]: nothing -> oneof<record<meta: record<pagination: record<last_page: float, next_page: float, page: float, per_page: float, previous_page: float, total_entries: float>>, networks: table<created: string, id: int, ip_range: string, labels: record, load_balancers: list, name: string, protection: record, routes: list, servers: list, subnets: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "label_selector" $label_selector "scalar")] | flatten | str join "&"
@@ -2761,9 +2766,6 @@ export def "get-networks" [
 # Create a Network
 #
 # POST /networks
-# --labels shape: {labelkey?: string}
-# --routes item shape: {destination: string, gateway: string}
-# --subnets item shape: {ip_range?: string, network_zone: string, type: "cloud"|"server"|"vswitch"}
 export def "post-networks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2779,7 +2781,7 @@ export def "post-networks" [
   name: string # Name of the network (e.g. mynet)
   --routes: list # Array of routes set in this network. The destination of the route must be one of the private IPv4 ranges of RFC1918. The gateway must be a subnet/IP of the ip_range of the network object. The destination must not overlap with an existing ip_range in any subnets or with any destinations in other routes or with the first IP of the networks ip_range or with 172.31.1.1. The gateway cannot be the first IP of the networks ip_range and also cannot be 172.31.1.1. — item shape: {destination: string, gateway: string}
   --subnets: list # Array of subnets allocated. — item shape: {ip_range?: string, network_zone: string, type: "cloud"|"server"|"vswitch"}
-]: any -> record<network: record<created: string, id: int, ip_range: string, labels: record, load_balancers: list<int>, name: string, protection: record<delete: bool>, routes: list<record>, servers: list<int>, subnets: list<record>>> {
+]: any -> oneof<record<network: record<created: string, id: int, ip_range: string, labels: record, load_balancers: list<int>, name: string, protection: record<delete: bool>, routes: list<record>, servers: list<int>, subnets: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2851,7 +2853,7 @@ export def "get-networks-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<network: record<created: string, id: int, ip_range: string, labels: record, load_balancers: list<int>, name: string, protection: record<delete: bool>, routes: list<record>, servers: list<int>, subnets: list<record>>> {
+]: nothing -> oneof<record<network: record<created: string, id: int, ip_range: string, labels: record, load_balancers: list<int>, name: string, protection: record<delete: bool>, routes: list<record>, servers: list<int>, subnets: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2875,7 +2877,6 @@ export def "get-networks-id" [
 # Update a Network
 #
 # PUT /networks/{id}
-# --labels shape: {labelkey?: string}
 export def "put-networks-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2889,7 +2890,7 @@ export def "put-networks-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --labels: record # User-defined labels (key-value pairs) — shape: {labelkey?: string}
   --name: string # New network name (e.g. new-name)
-]: any -> record<network: record<created: string, id: int, ip_range: string, labels: record, load_balancers: list<int>, name: string, protection: record<delete: bool>, routes: list<record>, servers: list<int>, subnets: list<record>>> {
+]: any -> oneof<record<network: record<created: string, id: int, ip_range: string, labels: record, load_balancers: list<int>, name: string, protection: record<delete: bool>, routes: list<record>, servers: list<int>, subnets: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2929,7 +2930,7 @@ export def "get-networks-id-actions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --sort: string@sort-completer # Can be used multiple times.
   --status: string@status-completer # Can be used multiple times, the response will contain only Actions with specified statuses
-]: nothing -> record<actions: table<command: string, error: record, finished: string, id: int, progress: float, resources: list, started: string, status: string>, meta: record<pagination: record<last_page: float, next_page: float, page: float, per_page: float, previous_page: float, total_entries: float>>> {
+]: nothing -> oneof<record<actions: table<command: string, error: record, finished: string, id: int, progress: float, resources: list, started: string, status: string>, meta: record<pagination: record<last_page: float, next_page: float, page: float, per_page: float, previous_page: float, total_entries: float>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2967,7 +2968,7 @@ export def "post-networks-id-actions-add-route" [
   --dry-run(-n) # Return the request that would be sent without executing it
   destination: string # Destination network or host of this route. Must not overlap with an existing ip_range in any subnets or with any destinations in other routes or with the first IP of the networks ip_range or with 172.31.1.1. Must be one of the private IPv4 ranges of RFC1918. (e.g. 10.100.1.0/24)
   gateway: string # Gateway for the route. Cannot be the first IP of the networks ip_range, an IP behind a vSwitch or 172.31.1.1, as this IP is being used as a gateway for the public network interface of Servers. (e.g. 10.0.1.1)
-]: any -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
+]: any -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3009,7 +3010,7 @@ export def "post-networks-id-actions-add-subnet" [
   network_zone: string # Name of Network zone. The Location object contains the `network_zone` property each Location belongs to. (e.g. eu-central)
   type: string@type-completer-7 # Type of Subnetwork
   --vswitch-id: int # ID of the robot vSwitch. Must be supplied if the subnet is of type vswitch. (e.g. 1000)
-]: any -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
+]: any -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3048,7 +3049,7 @@ export def "post-networks-id-actions-change-ip-range" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   ip_range: string # The new prefix for the whole Network (e.g. 10.0.0.0/12)
-]: any -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
+]: any -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3087,7 +3088,7 @@ export def "post-networks-id-actions-change-protection" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --delete: oneof<nothing, bool> # If true, prevents the Network from being deleted (e.g. true)
-]: any -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
+]: any -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3127,7 +3128,7 @@ export def "post-networks-id-actions-delete-route" [
   --dry-run(-n) # Return the request that would be sent without executing it
   destination: string # Destination network or host of this route. Must not overlap with an existing ip_range in any subnets or with any destinations in other routes or with the first IP of the networks ip_range or with 172.31.1.1. Must be one of the private IPv4 ranges of RFC1918. (e.g. 10.100.1.0/24)
   gateway: string # Gateway for the route. Cannot be the first IP of the networks ip_range, an IP behind a vSwitch or 172.31.1.1, as this IP is being used as a gateway for the public network interface of Servers. (e.g. 10.0.1.1)
-]: any -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
+]: any -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3166,7 +3167,7 @@ export def "post-networks-id-actions-delete-subnet" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   ip_range: string # IP range of subnet to delete (e.g. 10.0.1.0/24)
-]: any -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
+]: any -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3205,7 +3206,7 @@ export def "get-networks-id-actions-action-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
+]: nothing -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3244,7 +3245,7 @@ export def "get-placement-groups" [
   --name: string # Can be used to filter resources by their name. The response will only contain the resources matching the specified name
   --label-selector: string # Can be used to filter resources by labels. The response will only contain resources matching the label selector.
   --type: string@type-completer-8 # Can be used multiple times. The response will only contain PlacementGroups matching the type.
-]: nothing -> record<meta: record<pagination: record<last_page: float, next_page: float, page: float, per_page: float, previous_page: float, total_entries: float>>, placement_groups: table<created: string, id: int, labels: record, name: string, servers: list, type: string>> {
+]: nothing -> oneof<record<meta: record<pagination: record<last_page: float, next_page: float, page: float, per_page: float, previous_page: float, total_entries: float>>, placement_groups: table<created: string, id: int, labels: record, name: string, servers: list, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sort" $sort "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "label_selector" $label_selector "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
@@ -3281,7 +3282,7 @@ export def "post-placement-groups" [
   --labels: record # User-defined labels (key-value pairs)
   name: string # Name of the PlacementGroup (e.g. my Placement Group)
   type: string@type-completer-8 # Define the Placement Group Type. (e.g. spread)
-]: any -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>, placement_group: record<created: string, id: int, labels: record, name: string, servers: list<int>, type: string>> {
+]: any -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>, placement_group: record<created: string, id: int, labels: record, name: string, servers: list<int>, type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3353,7 +3354,7 @@ export def "get-placement-groups-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<placement_group: record<created: string, id: int, labels: record, name: string, servers: list<int>, type: string>> {
+]: nothing -> oneof<record<placement_group: record<created: string, id: int, labels: record, name: string, servers: list<int>, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3390,7 +3391,7 @@ export def "put-placement-groups-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --labels: record # User-defined labels (key-value pairs) (e.g. {labelkey: value})
   --name: string # New PlacementGroup name (e.g. my Placement Group)
-]: any -> record<placement_group: record<created: string, id: int, labels: record, name: string, servers: list<int>, type: string>> {
+]: any -> oneof<record<placement_group: record<created: string, id: int, labels: record, name: string, servers: list<int>, type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3427,7 +3428,7 @@ export def "get-pricing" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<pricing: record<currency: string, floating_ip: record<price_monthly: record>, floating_ips: list<record>, image: record<price_per_gb_month: record>, load_balancer_types: list<record>, primary_ips: list<record>, server_backup: record<percentage: string>, server_types: list<record>, traffic: record<price_per_tb: record>, vat_rate: string, volume: record<price_per_gb_month: record>>> {
+]: nothing -> oneof<record<pricing: record<currency: string, floating_ip: record<price_monthly: record>, floating_ips: list<record>, image: record<price_per_gb_month: record>, load_balancer_types: list<record>, primary_ips: list<record>, server_backup: record<percentage: string>, server_types: list<record>, traffic: record<price_per_tb: record>, vat_rate: string, volume: record<price_per_gb_month: record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/pricing" $auth.query)
@@ -3464,7 +3465,7 @@ export def "get-primary-ips" [
   --label-selector: string # Can be used to filter resources by labels. The response will only contain resources matching the label selector.
   --ip: string # Can be used to filter resources by their ip. The response will only contain the resources matching the specified ip. (e.g. 127.0.0.1)
   --sort: string@sort-completer-2 # Can be used multiple times. Choices id id:asc id:desc created created:asc created:desc
-]: nothing -> record<meta: record<pagination: record<last_page: float, next_page: float, page: float, per_page: float, previous_page: float, total_entries: float>>, primary_ips: table<assignee_id: int, assignee_type: string, auto_delete: bool, blocked: bool, created: string, datacenter: record, dns_ptr: list, id: int, ip: string, labels: record, name: string, protection: record, type: string>> {
+]: nothing -> oneof<record<meta: record<pagination: record<last_page: float, next_page: float, page: float, per_page: float, previous_page: float, total_entries: float>>, primary_ips: table<assignee_id: int, assignee_type: string, auto_delete: bool, blocked: bool, created: string, datacenter: record, dns_ptr: list, id: int, ip: string, labels: record, name: string, protection: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "label_selector" $label_selector "scalar") (serialize-qp "ip" $ip "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
@@ -3505,7 +3506,7 @@ export def "post-primary-ips" [
   --labels: record # User-defined labels (key-value pairs) (e.g. {labelkey: value})
   name: string # e.g. my-ip
   type: string@type-completer-1 # Primary IP type
-]: any -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>, primary_ip: record<assignee_id: int, assignee_type: string, auto_delete: bool, blocked: bool, created: string, datacenter: record<description: string, id: int, location: record, name: string, server_types: record>, dns_ptr: list<record>, id: int, ip: string, labels: record, name: string, protection: record<delete: bool>, type: string>> {
+]: any -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>, primary_ip: record<assignee_id: int, assignee_type: string, auto_delete: bool, blocked: bool, created: string, datacenter: record<description: string, id: int, location: record, name: string, server_types: record>, dns_ptr: list<record>, id: int, ip: string, labels: record, name: string, protection: record<delete: bool>, type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3577,7 +3578,7 @@ export def "get-primary-ips-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<primary_ip: record<assignee_id: int, assignee_type: string, auto_delete: bool, blocked: bool, created: string, datacenter: record<description: string, id: int, location: record, name: string, server_types: record>, dns_ptr: list<record>, id: int, ip: string, labels: record, name: string, protection: record<delete: bool>, type: string>> {
+]: nothing -> oneof<record<primary_ip: record<assignee_id: int, assignee_type: string, auto_delete: bool, blocked: bool, created: string, datacenter: record<description: string, id: int, location: record, name: string, server_types: record>, dns_ptr: list<record>, id: int, ip: string, labels: record, name: string, protection: record<delete: bool>, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3615,7 +3616,7 @@ export def "put-primary-ips-id" [
   --auto-delete: oneof<nothing, bool> # Delete this Primary IP when the resource it is assigned to is deleted (e.g. true)
   --labels: record # User-defined labels (key-value pairs) (e.g. {labelkey: value})
   --name: string # New unique name to set (e.g. my-ip)
-]: any -> record<primary_ip: record<assignee_id: int, assignee_type: string, auto_delete: bool, blocked: bool, created: string, datacenter: record<description: string, id: int, location: record, name: string, server_types: record>, dns_ptr: list<record>, id: int, ip: string, labels: record, name: string, protection: record<delete: bool>, type: string>> {
+]: any -> oneof<record<primary_ip: record<assignee_id: int, assignee_type: string, auto_delete: bool, blocked: bool, created: string, datacenter: record<description: string, id: int, location: record, name: string, server_types: record>, dns_ptr: list<record>, id: int, ip: string, labels: record, name: string, protection: record<delete: bool>, type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3655,7 +3656,7 @@ export def "post-primary-ips-id-actions-assign" [
   --dry-run(-n) # Return the request that would be sent without executing it
   assignee_id: int # ID of a resource of type `assignee_type` (e.g. 4711)
   assignee_type: string@assignee-type-completer # Type of resource assigning the Primary IP to (e.g. server)
-]: any -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
+]: any -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3695,7 +3696,7 @@ export def "post-primary-ips-id-actions-change-dns-ptr" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --dns-ptr: string # Hostname to set as a reverse DNS PTR entry, will reset to original default value if `null` (nullable, e.g. server02.example.com)
   ip: string # IP address for which to set the reverse DNS entry (e.g. 1.2.3.4)
-]: any -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
+]: any -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3734,7 +3735,7 @@ export def "post-primary-ips-id-actions-change-protection" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --delete: oneof<nothing, bool> # If true, prevents the Primary IP from being deleted (e.g. true)
-]: any -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
+]: any -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3772,7 +3773,7 @@ export def "post-primary-ips-id-actions-unassign" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
+]: nothing -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3807,7 +3808,7 @@ export def "get-server-types" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Can be used to filter Server types by their name. The response will only contain the Server type matching the specified name.
-]: nothing -> record<server_types: table<cores: float, cpu_type: string, deprecated: bool, description: string, disk: float, id: float, memory: float, name: string, prices: list, storage_type: string>> {
+]: nothing -> oneof<record<server_types: table<cores: float, cpu_type: string, deprecated: bool, description: string, disk: float, id: float, memory: float, name: string, prices: list, storage_type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar")] | flatten | str join "&"
@@ -3842,7 +3843,7 @@ export def "get-server-types-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<server_type: record<cores: float, cpu_type: string, deprecated: bool, description: string, disk: float, id: float, memory: float, name: string, prices: list<record>, storage_type: string>> {
+]: nothing -> oneof<record<server_type: record<cores: float, cpu_type: string, deprecated: bool, description: string, disk: float, id: float, memory: float, name: string, prices: list<record>, storage_type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3880,7 +3881,7 @@ export def "get-servers" [
   --label-selector: string # Can be used to filter resources by labels. The response will only contain resources matching the label selector.
   --sort: string@sort-completer-1 # Can be used multiple times.
   --status: string@status-completer-2 # Can be used multiple times. The response will only contain Server matching the status
-]: nothing -> record<meta: record<pagination: record<last_page: float, next_page: float, page: float, per_page: float, previous_page: float, total_entries: float>>, servers: table<backup_window: string, created: string, datacenter: record, id: int, image: record, included_traffic: float, ingoing_traffic: float, iso: record, labels: record, load_balancers: list, locked: bool, name: string, outgoing_traffic: float, placement_group: record, primary_disk_size: float, private_net: list, protection: record, public_net: record, rescue_enabled: bool, server_type: record, status: string, volumes: list>> {
+]: nothing -> oneof<record<meta: record<pagination: record<last_page: float, next_page: float, page: float, per_page: float, previous_page: float, total_entries: float>>, servers: table<backup_window: string, created: string, datacenter: record, id: int, image: record, included_traffic: float, ingoing_traffic: float, iso: record, labels: record, load_balancers: list, locked: bool, name: string, outgoing_traffic: float, placement_group: record, primary_disk_size: float, private_net: list, protection: record, public_net: record, rescue_enabled: bool, server_type: record, status: string, volumes: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "label_selector" $label_selector "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "status" $status "scalar")] | flatten | str join "&"
@@ -3904,8 +3905,6 @@ export def "get-servers" [
 # Create a Server
 #
 # POST /servers
-# --firewalls item shape: {firewall?: int}
-# --public_net shape: {enable_ipv4?: bool, enable_ipv6?: bool, ipv4?: int, ipv6?: int}
 export def "post-servers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3931,7 +3930,7 @@ export def "post-servers" [
   --start-after-create: oneof<nothing, bool> # Start Server right after creation. Defaults to true. (e.g. true)
   --user-data: string # Cloud-Init user data to use during Server creation. This field is limited to 32KiB. (e.g. #cloud-config runcmd: - [touch, /root/cloud-init-worked] )
   --volumes: list<int> # Volume IDs which should be attached to the Server at the creation time. Volumes must be in the same Location. (e.g. [123])
-]: any -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>, next_actions: table<command: string, error: record, finished: string, id: int, progress: float, resources: list, started: string, status: string>, root_password: string, server: record<backup_window: string, created: string, datacenter: record<description: string, id: int, location: record, name: string, server_types: record>, id: int, image: record<bound_to: int, created: string, created_from: record, deleted: string, deprecated: string, description: string, disk_size: float, id: int, image_size: float, labels: record, name: string, os_flavor: string, os_version: string, protection: record, rapid_deploy: bool, status: string, type: string>, included_traffic: float, ingoing_traffic: float, iso: record<deprecated: string, description: string, id: int, name: string, type: string>, labels: record, load_balancers: list<int>, locked: bool, name: string, outgoing_traffic: float, placement_group: record<created: string, id: int, labels: record, name: string, servers: list, type: string>, primary_disk_size: float, private_net: list<record>, protection: record<delete: bool, rebuild: bool>, public_net: record<firewalls: list, floating_ips: list, ipv4: record, ipv6: record>, rescue_enabled: bool, server_type: record<cores: float, cpu_type: string, deprecated: bool, description: string, disk: float, id: int, memory: float, name: string, prices: list, storage_type: string>, status: string, volumes: list<int>>> {
+]: any -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>, next_actions: table<command: string, error: record, finished: string, id: int, progress: float, resources: list, started: string, status: string>, root_password: string, server: record<backup_window: string, created: string, datacenter: record<description: string, id: int, location: record, name: string, server_types: record>, id: int, image: record<bound_to: int, created: string, created_from: record, deleted: string, deprecated: string, description: string, disk_size: float, id: int, image_size: float, labels: record, name: string, os_flavor: string, os_version: string, protection: record, rapid_deploy: bool, status: string, type: string>, included_traffic: float, ingoing_traffic: float, iso: record<deprecated: string, description: string, id: int, name: string, type: string>, labels: record, load_balancers: list<int>, locked: bool, name: string, outgoing_traffic: float, placement_group: record<created: string, id: int, labels: record, name: string, servers: list, type: string>, primary_disk_size: float, private_net: list<record>, protection: record<delete: bool, rebuild: bool>, public_net: record<firewalls: list, floating_ips: list, ipv4: record, ipv6: record>, rescue_enabled: bool, server_type: record<cores: float, cpu_type: string, deprecated: bool, description: string, disk: float, id: int, memory: float, name: string, prices: list, storage_type: string>, status: string, volumes: list<int>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3968,7 +3967,7 @@ export def "delete-servers-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
+]: nothing -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4003,7 +4002,7 @@ export def "get-servers-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<server: record<backup_window: string, created: string, datacenter: record<description: string, id: int, location: record, name: string, server_types: record>, id: int, image: record<bound_to: int, created: string, created_from: record, deleted: string, deprecated: string, description: string, disk_size: float, id: int, image_size: float, labels: record, name: string, os_flavor: string, os_version: string, protection: record, rapid_deploy: bool, status: string, type: string>, included_traffic: float, ingoing_traffic: float, iso: record<deprecated: string, description: string, id: int, name: string, type: string>, labels: record, load_balancers: list<int>, locked: bool, name: string, outgoing_traffic: float, placement_group: record<created: string, id: int, labels: record, name: string, servers: list, type: string>, primary_disk_size: float, private_net: list<record>, protection: record<delete: bool, rebuild: bool>, public_net: record<firewalls: list, floating_ips: list, ipv4: record, ipv6: record>, rescue_enabled: bool, server_type: record<cores: float, cpu_type: string, deprecated: bool, description: string, disk: float, id: int, memory: float, name: string, prices: list, storage_type: string>, status: string, volumes: list<int>>> {
+]: nothing -> oneof<record<server: record<backup_window: string, created: string, datacenter: record<description: string, id: int, location: record, name: string, server_types: record>, id: int, image: record<bound_to: int, created: string, created_from: record, deleted: string, deprecated: string, description: string, disk_size: float, id: int, image_size: float, labels: record, name: string, os_flavor: string, os_version: string, protection: record, rapid_deploy: bool, status: string, type: string>, included_traffic: float, ingoing_traffic: float, iso: record<deprecated: string, description: string, id: int, name: string, type: string>, labels: record, load_balancers: list<int>, locked: bool, name: string, outgoing_traffic: float, placement_group: record<created: string, id: int, labels: record, name: string, servers: list, type: string>, primary_disk_size: float, private_net: list<record>, protection: record<delete: bool, rebuild: bool>, public_net: record<firewalls: list, floating_ips: list, ipv4: record, ipv6: record>, rescue_enabled: bool, server_type: record<cores: float, cpu_type: string, deprecated: bool, description: string, disk: float, id: int, memory: float, name: string, prices: list, storage_type: string>, status: string, volumes: list<int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4040,7 +4039,7 @@ export def "put-servers-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --labels: record # User-defined labels (key-value pairs) (e.g. {labelkey: value})
   --name: string # New name to set (e.g. my-server)
-]: any -> record<server: record<backup_window: string, created: string, datacenter: record<description: string, id: int, location: record, name: string, server_types: record>, id: int, image: record<bound_to: int, created: string, created_from: record, deleted: string, deprecated: string, description: string, disk_size: float, id: int, image_size: float, labels: record, name: string, os_flavor: string, os_version: string, protection: record, rapid_deploy: bool, status: string, type: string>, included_traffic: float, ingoing_traffic: float, iso: record<deprecated: string, description: string, id: int, name: string, type: string>, labels: record, load_balancers: list<int>, locked: bool, name: string, outgoing_traffic: float, placement_group: record<created: string, id: int, labels: record, name: string, servers: list, type: string>, primary_disk_size: float, private_net: list<record>, protection: record<delete: bool, rebuild: bool>, public_net: record<firewalls: list, floating_ips: list, ipv4: record, ipv6: record>, rescue_enabled: bool, server_type: record<cores: float, cpu_type: string, deprecated: bool, description: string, disk: float, id: int, memory: float, name: string, prices: list, storage_type: string>, status: string, volumes: list<int>>> {
+]: any -> oneof<record<server: record<backup_window: string, created: string, datacenter: record<description: string, id: int, location: record, name: string, server_types: record>, id: int, image: record<bound_to: int, created: string, created_from: record, deleted: string, deprecated: string, description: string, disk_size: float, id: int, image_size: float, labels: record, name: string, os_flavor: string, os_version: string, protection: record, rapid_deploy: bool, status: string, type: string>, included_traffic: float, ingoing_traffic: float, iso: record<deprecated: string, description: string, id: int, name: string, type: string>, labels: record, load_balancers: list<int>, locked: bool, name: string, outgoing_traffic: float, placement_group: record<created: string, id: int, labels: record, name: string, servers: list, type: string>, primary_disk_size: float, private_net: list<record>, protection: record<delete: bool, rebuild: bool>, public_net: record<firewalls: list, floating_ips: list, ipv4: record, ipv6: record>, rescue_enabled: bool, server_type: record<cores: float, cpu_type: string, deprecated: bool, description: string, disk: float, id: int, memory: float, name: string, prices: list, storage_type: string>, status: string, volumes: list<int>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4080,7 +4079,7 @@ export def "get-servers-id-actions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --sort: string@sort-completer # Can be used multiple times.
   --status: string@status-completer # Can be used multiple times, the response will contain only Actions with specified statuses
-]: nothing -> record<actions: table<command: string, error: record, finished: string, id: int, progress: float, resources: list, started: string, status: string>, meta: record<pagination: record<last_page: float, next_page: float, page: float, per_page: float, previous_page: float, total_entries: float>>> {
+]: nothing -> oneof<record<actions: table<command: string, error: record, finished: string, id: int, progress: float, resources: list, started: string, status: string>, meta: record<pagination: record<last_page: float, next_page: float, page: float, per_page: float, previous_page: float, total_entries: float>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4117,7 +4116,7 @@ export def "post-servers-id-actions-add-to-placement-group" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   placement_group: int # ID of Placement Group the Server should be added to (e.g. 1)
-]: any -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
+]: any -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4156,7 +4155,7 @@ export def "post-servers-id-actions-attach-iso" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   iso: string # ID or name of ISO to attach to the Server as listed in GET `/isos` (e.g. FreeBSD-11.0-RELEASE-amd64-dvd1)
-]: any -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
+]: any -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4197,7 +4196,7 @@ export def "post-servers-id-actions-attach-to-network" [
   --alias-ips: list<string> # Additional IPs to be assigned to this Server (e.g. [10.0.1.2])
   --ip: string # IP to request to be assigned to this Server; if you do not provide this then you will be auto assigned an IP address (e.g. 10.0.1.1)
   network: int # ID of an existing network to attach the Server to (e.g. 4711)
-]: any -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
+]: any -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4237,7 +4236,7 @@ export def "post-servers-id-actions-change-alias-ips" [
   --dry-run(-n) # Return the request that would be sent without executing it
   alias_ips: list<string> # New alias IPs to set for this Server (e.g. [10.0.1.2])
   network: int # ID of an existing Network already attached to the Server (e.g. 4711)
-]: any -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
+]: any -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4277,7 +4276,7 @@ export def "post-servers-id-actions-change-dns-ptr" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --dns-ptr: string # Hostname to set as a reverse DNS PTR entry, reset to original value if `null` (nullable, e.g. server01.example.com)
   ip: string # Primary IP address for which the reverse DNS entry should be set (e.g. 1.2.3.4)
-]: any -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
+]: any -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4317,7 +4316,7 @@ export def "post-servers-id-actions-change-protection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --delete: oneof<nothing, bool> # If true, prevents the Server from being deleted (currently delete and rebuild attribute needs to have the same value) (e.g. true)
   --rebuild: oneof<nothing, bool> # If true, prevents the Server from being rebuilt (currently delete and rebuild attribute needs to have the same value) (e.g. true)
-]: any -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
+]: any -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4357,7 +4356,7 @@ export def "post-servers-id-actions-change-type" [
   --dry-run(-n) # Return the request that would be sent without executing it
   server_type: string # ID or name of Server type the Server should migrate to (e.g. cx11)
   --upgrade-disk: oneof<nothing, bool> # If false, do not upgrade the disk (this allows downgrading the Server type later) (e.g. true)
-]: any -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
+]: any -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4385,7 +4384,6 @@ export def "post-servers-id-actions-change-type" [
 # Create Image from a Server
 #
 # POST /servers/{id}/actions/create_image
-# --labels shape: {labelkey?: string}
 export def "post-servers-id-actions-create-image" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4400,7 +4398,7 @@ export def "post-servers-id-actions-create-image" [
   --description: string # Description of the Image, will be auto-generated if not set (e.g. my image)
   --labels: record # User-defined labels (key-value pairs) — shape: {labelkey?: string}
   --type: string@type-completer-9 # Type of Image to create (default: `snapshot`) (e.g. snapshot)
-]: any -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>, image: record<bound_to: int, created: string, created_from: record<id: int, name: string>, deleted: string, deprecated: string, description: string, disk_size: float, id: int, image_size: float, labels: record, name: string, os_flavor: string, os_version: string, protection: record<delete: bool>, rapid_deploy: bool, status: string, type: string>> {
+]: any -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>, image: record<bound_to: int, created: string, created_from: record<id: int, name: string>, deleted: string, deprecated: string, description: string, disk_size: float, id: int, image_size: float, labels: record, name: string, os_flavor: string, os_version: string, protection: record<delete: bool>, rapid_deploy: bool, status: string, type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4439,7 +4437,7 @@ export def "post-servers-id-actions-detach-from-network" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   network: int # ID of an existing network to detach the Server from (e.g. 4711)
-]: any -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
+]: any -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4477,7 +4475,7 @@ export def "post-servers-id-actions-detach-iso" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
+]: nothing -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4512,7 +4510,7 @@ export def "post-servers-id-actions-disable-backup" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
+]: nothing -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4547,7 +4545,7 @@ export def "post-servers-id-actions-disable-rescue" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
+]: nothing -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4582,7 +4580,7 @@ export def "post-servers-id-actions-enable-backup" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
+]: nothing -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4619,7 +4617,7 @@ export def "post-servers-id-actions-enable-rescue" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ssh-keys: list<int> # Array of SSH key IDs which should be injected into the rescue system. (e.g. [2323])
   --type: string@type-completer-10 # Type of rescue system to boot (default: `linux64`)
-]: any -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>, root_password: string> {
+]: any -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>, root_password: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4657,7 +4655,7 @@ export def "post-servers-id-actions-poweroff" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
+]: nothing -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4692,7 +4690,7 @@ export def "post-servers-id-actions-poweron" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
+]: nothing -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4727,7 +4725,7 @@ export def "post-servers-id-actions-reboot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
+]: nothing -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4763,7 +4761,7 @@ export def "post-servers-id-actions-rebuild" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   image: string # ID or name of Image to rebuilt from. (e.g. ubuntu-20.04)
-]: any -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>, root_password: string> {
+]: any -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>, root_password: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4801,7 +4799,7 @@ export def "post-servers-id-actions-remove-from-placement-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
+]: nothing -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4836,7 +4834,7 @@ export def "post-servers-id-actions-request-console" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>, password: string, wss_url: string> {
+]: nothing -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>, password: string, wss_url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4871,7 +4869,7 @@ export def "post-servers-id-actions-reset" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
+]: nothing -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4906,7 +4904,7 @@ export def "post-servers-id-actions-reset-password" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>, root_password: string> {
+]: nothing -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>, root_password: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4941,7 +4939,7 @@ export def "post-servers-id-actions-shutdown" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
+]: nothing -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4977,7 +4975,7 @@ export def "get-servers-id-actions-action-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
+]: nothing -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5017,7 +5015,7 @@ export def "get-servers-id-metrics" [
   --start: string # Start of period to get Metrics for (in ISO-8601 format) (required)
   --end: string # End of period to get Metrics for (in ISO-8601 format) (required)
   --step: string # Resolution of results in seconds
-]: nothing -> record<metrics: record<end: string, start: string, step: float, time_series: record>> {
+]: nothing -> oneof<record<metrics: record<end: string, start: string, step: float, time_series: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5059,7 +5057,7 @@ export def "get-ssh-keys" [
   --name: string # Can be used to filter resources by their name. The response will only contain the resources matching the specified name
   --fingerprint: string # Can be used to filter SSH keys by their fingerprint. The response will only contain the SSH key matching the specified fingerprint.
   --label-selector: string # Can be used to filter resources by labels. The response will only contain resources matching the label selector.
-]: nothing -> record<meta: record<pagination: record<last_page: float, next_page: float, page: float, per_page: float, previous_page: float, total_entries: float>>, ssh_keys: table<created: string, fingerprint: string, id: int, labels: record, name: string, public_key: string>> {
+]: nothing -> oneof<record<meta: record<pagination: record<last_page: float, next_page: float, page: float, per_page: float, previous_page: float, total_entries: float>>, ssh_keys: table<created: string, fingerprint: string, id: int, labels: record, name: string, public_key: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sort" $sort "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "fingerprint" $fingerprint "scalar") (serialize-qp "label_selector" $label_selector "scalar")] | flatten | str join "&"
@@ -5096,7 +5094,7 @@ export def "post-ssh-keys" [
   --labels: record # User-defined labels (key-value pairs)
   name: string # Name of the SSH key (e.g. My ssh key)
   public_key: string # Public key (e.g. ssh-rsa AAAjjk76kgf...Xt)
-]: any -> record<ssh_key: record<created: string, fingerprint: string, id: int, labels: record, name: string, public_key: string>> {
+]: any -> oneof<record<ssh_key: record<created: string, fingerprint: string, id: int, labels: record, name: string, public_key: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5168,7 +5166,7 @@ export def "get-ssh-keys-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<ssh_key: record<created: string, fingerprint: string, id: int, labels: record, name: string, public_key: string>> {
+]: nothing -> oneof<record<ssh_key: record<created: string, fingerprint: string, id: int, labels: record, name: string, public_key: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5205,7 +5203,7 @@ export def "put-ssh-keys-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --labels: record # User-defined labels (key-value pairs) (e.g. {labelkey: value})
   --name: string # New name Name to set (e.g. My ssh key)
-]: any -> record<ssh_key: record<created: string, fingerprint: string, id: int, labels: record, name: string, public_key: string>> {
+]: any -> oneof<record<ssh_key: record<created: string, fingerprint: string, id: int, labels: record, name: string, public_key: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5246,7 +5244,7 @@ export def "get-volumes" [
   --sort: string@sort-completer-1 # Can be used multiple times.
   --name: string # Can be used to filter resources by their name. The response will only contain the resources matching the specified name
   --label-selector: string # Can be used to filter resources by labels. The response will only contain resources matching the label selector.
-]: nothing -> record<meta: record<pagination: record<last_page: float, next_page: float, page: float, per_page: float, previous_page: float, total_entries: float>>, volumes: table<created: string, format: string, id: int, labels: record, linux_device: string, location: record, name: string, protection: record, server: int, size: float, status: string>> {
+]: nothing -> oneof<record<meta: record<pagination: record<last_page: float, next_page: float, page: float, per_page: float, previous_page: float, total_entries: float>>, volumes: table<created: string, format: string, id: int, labels: record, linux_device: string, location: record, name: string, protection: record, server: int, size: float, status: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "label_selector" $label_selector "scalar")] | flatten | str join "&"
@@ -5287,7 +5285,7 @@ export def "post-volumes" [
   name: string # Name of the volume (e.g. databases-storage)
   --server: int # Server to which to attach the Volume once it's created (Volume will be created in the same Location as the server)
   size: int # Size of the Volume in GB (e.g. 42)
-]: any -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>, next_actions: table<command: string, error: record, finished: string, id: int, progress: float, resources: list, started: string, status: string>, volume: record<created: string, format: string, id: int, labels: record, linux_device: string, location: record<city: string, country: string, description: string, id: float, latitude: float, longitude: float, name: string, network_zone: string>, name: string, protection: record<delete: bool>, server: int, size: float, status: string>> {
+]: any -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>, next_actions: table<command: string, error: record, finished: string, id: int, progress: float, resources: list, started: string, status: string>, volume: record<created: string, format: string, id: int, labels: record, linux_device: string, location: record<city: string, country: string, description: string, id: float, latitude: float, longitude: float, name: string, network_zone: string>, name: string, protection: record<delete: bool>, server: int, size: float, status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5359,7 +5357,7 @@ export def "get-volumes-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<volume: record<created: string, format: string, id: int, labels: record, linux_device: string, location: record<city: string, country: string, description: string, id: float, latitude: float, longitude: float, name: string, network_zone: string>, name: string, protection: record<delete: bool>, server: int, size: float, status: string>> {
+]: nothing -> oneof<record<volume: record<created: string, format: string, id: int, labels: record, linux_device: string, location: record<city: string, country: string, description: string, id: float, latitude: float, longitude: float, name: string, network_zone: string>, name: string, protection: record<delete: bool>, server: int, size: float, status: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5383,7 +5381,6 @@ export def "get-volumes-id" [
 # Update a Volume
 #
 # PUT /volumes/{id}
-# --labels shape: {labelkey?: string}
 export def "put-volumes-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5397,7 +5394,7 @@ export def "put-volumes-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --labels: record # User-defined labels (key-value pairs) — shape: {labelkey?: string}
   name: string # New Volume name (e.g. database-storage)
-]: any -> record<volume: record<created: string, format: string, id: int, labels: record, linux_device: string, location: record<city: string, country: string, description: string, id: float, latitude: float, longitude: float, name: string, network_zone: string>, name: string, protection: record<delete: bool>, server: int, size: float, status: string>> {
+]: any -> oneof<record<volume: record<created: string, format: string, id: int, labels: record, linux_device: string, location: record<city: string, country: string, description: string, id: float, latitude: float, longitude: float, name: string, network_zone: string>, name: string, protection: record<delete: bool>, server: int, size: float, status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5437,7 +5434,7 @@ export def "get-volumes-id-actions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --sort: string@sort-completer # Can be used multiple times.
   --status: string@status-completer # Can be used multiple times, the response will contain only Actions with specified statuses
-]: nothing -> record<actions: table<command: string, error: record, finished: string, id: int, progress: float, resources: list, started: string, status: string>, meta: record<pagination: record<last_page: float, next_page: float, page: float, per_page: float, previous_page: float, total_entries: float>>> {
+]: nothing -> oneof<record<actions: table<command: string, error: record, finished: string, id: int, progress: float, resources: list, started: string, status: string>, meta: record<pagination: record<last_page: float, next_page: float, page: float, per_page: float, previous_page: float, total_entries: float>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5475,7 +5472,7 @@ export def "post-volumes-id-actions-attach" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --automount: oneof<nothing, bool> # Auto-mount the Volume after attaching it (e.g. false)
   server: int # ID of the Server the Volume will be attached to (e.g. 43)
-]: any -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
+]: any -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5514,7 +5511,7 @@ export def "post-volumes-id-actions-change-protection" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --delete: oneof<nothing, bool> # If true, prevents the Volume from being deleted (e.g. true)
-]: any -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
+]: any -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5552,7 +5549,7 @@ export def "post-volumes-id-actions-detach" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
+]: nothing -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5588,7 +5585,7 @@ export def "post-volumes-id-actions-resize" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   size: float # New Volume size in GB (must be greater than current size) (e.g. 50)
-]: any -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
+]: any -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5627,7 +5624,7 @@ export def "get-volumes-id-actions-action-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
+]: nothing -> oneof<record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }

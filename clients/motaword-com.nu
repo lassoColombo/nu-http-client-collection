@@ -15,27 +15,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
     "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -43,8 +52,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -55,7 +69,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -90,7 +113,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -133,9 +157,9 @@ def user-type-completer [] { ["all" "vendor"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-endpoints" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-endpoints" "download-async" "get-blog-posts" "delete-cache" "get-commissions" "get-commissions-by-filter" "get-continuous-projects" "create-continuous-project" "delete-continuous-project" "get-continuous-project" "update-continuous-project" "get-analytics-token" "collect-analytics" "post-continuous-projects-id-complete" "get-quote-for-documents" "complete-continuous-document" "get-quote-for-document" "get-quote-for-languages" "complete-language" "get-quote-for-language" "delete-subscription" "get-subscription" "create-subscription" "update-subscription" "update-subscription-payment-method" "translate" "get-continuous-project-documents" "add-document" "post-continuous-project-document-progress" "post-continuous-project-file-strings" "get-continuous-project-document" "update-document" "get-continuous-project-document-progress" "get-continuous-project-file-strings" "get-continuous-project-invoices" "get-continuous-project-progress" "get-continuous-project-strings" "clear-translation-cache" "get-translation-cache" "recache-translations" "get-active-widgets" "create-active-widget" "delete-active-widget" "get-active-widget" "update-active-widget" "reset-active-widget-token" "get-corporate" "get-available-corporate-permissions" "get-corporate-user-groups" "save-corporate-user-group" "get-corporate-users" "save-corporate-user" "get-corporates-list" "get-corporate-by-id" "get-available-corporate-permissions-by-id" "get-corporate-user-groups-by-id" "save-corporate-user-group-by-id" "get-corporate-users-by-id" "delete-account" "get-documents" "get-all-document-subjects" "get-document" "get-document-progress" "regenerate-preview" "get-similar-documents" "use-as-draft" "use-as-regular" "downgrade-proofreader" "get-earnings" "get-formats" "freeze-account" "download-global-glossary" "update-global-glossary" "get-integrations-token" "get-invitation-vendors" "get-languages" "log-location" "make-proofreader" "get-me" "update-me" "get-delivery-prediction" "subscribe-notification" "unsubscribe-notification" "post-message" "get-client-profile-for-pam" "get-project-completion-report-for-pam" "update-password" "get-payment-info" "update-payment-info" "reset-corporate-payment-code" "toggle-corporate-auto-charge" "get-credit-card" "delete-credit-card" "reset-card-payment-code" "get-permissions" "upload-profile-picture" "get-projects" "create-project" "get-quote-id-from-internal-id" "get-vendor-projects" "delete-project" "get-project" "update-project" "assign-cm" "trigger-callback" "cancel-project" "deliver-project" "download" "download-language" "send-quote-email" "get-invoice" "download-html-invoice" "download-pdf-invoice" "launch-project" "package" "track-package" "package-language" "get-progress" "recreate-project" "submit-project-reports" "get-sales-activities" "insert-sales-activity" "delete-project-webhook" "get-project-webhooks" "post-project-webhook" "update-project-webhook" "get-activities" "get-activity" "submit-comment" "get-activity-comments" "get-comments" "get-project-documents" "create-project-document" "delete-project-document" "get-project-document" "update-project-document" "download-project-document" "get-document-translations" "download-translated-document-for-language" "get-document-translations-for-language" "get-glossaries" "create-glossary" "delete-glossary" "get-glossary" "update-glossary" "download-glossary" "get-project-strings" "package-project-translation-memory" "package-project-translation-memory-status" "package-project-translation-memory-for-language" "package-project-translation-memory-for-language-status" "get-project-strings-for-language" "get-style-guides" "create-style-guide" "delete-style-guide" "get-style-guide" "update-style-guide" "download-style-guide" "get-project-translations" "get-project-translations-for-language" "get-project-vendors" "get-filter-contents" "get-language-pairs-report" "get-projects-report" "generate-qa-report" "get-users-report" "send-email-confirmation" "get-responsivity" "search-everywhere" "reindex-documents" "check-documents-reindex" "get-stats" "get-commission-stats" "get-commission-stats-by-filter" "get-popular-pairs" "get-project-stats" "get-string-stats" "get-strings" "post-strings" "update-translation-memory-unit" "package-user-translation-memory" "package-user-translation-memory-for-language-status" "download-global-style-guide" "update-global-style-guide" "get-questions" "submit-answers" "get-swagger-yaml" "get-access-token" "unfreeze-account" "get-user-groups" "get-users" "create-user" "get-available-vendors" "get-filtered-vendors" "send-password-reminder" "get-all-vendor-tags" "get-user" "update-user" "approve-vendor-application" "delete-user-account" "get-user-documents" "downgrade-user-proofreader" "get-user-earnings" "freeze-user-account" "make-user-proofreader" "subscribe-user-notification" "unsubscribe-user-notification" "get-user-payment-info" "update-user-payment-info" "get-user-permissions" "upload-user-profile-picture" "get-vendor-projects-by-user-id" "reject-vendor-application" "send-user-email-confirmation" "get-user-responsivity" "get-user-stats" "get-user-popular-pairs" "get-user-project-stats" "suspend-user" "unfreeze-user-account" "get-this-user-groups" "update-user-group" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -167,7 +191,7 @@ export def "get-endpoints" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/" $auth.query)
@@ -242,7 +266,7 @@ export def "get-blog-posts" [
   --fallback: oneof<nothing, bool> # When `true`, and no article is found in the locale, it falls back to `locale=en`.
   --page: int # format: int64, default: 1
   --per-page: int # format: int64, default: 1
-]: nothing -> record<articles: table<announcement_type: string, author: string, content: string, created_at: string, excerpt: string, id: int, language: string, links: record, slug: string, title: string, topic: string>, meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>> {
+]: nothing -> oneof<record<articles: table<announcement_type: string, author: string, content: string, created_at: string, excerpt: string, id: int, language: string, links: record, slug: string, title: string, topic: string>, meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "locale" $locale "scalar") (serialize-qp "fallback" $fallback "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
@@ -278,7 +302,7 @@ export def "delete-cache" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<status: string> {
+]: nothing -> oneof<record<status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
@@ -313,7 +337,7 @@ export def "get-commissions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<commissions: table<amount: record, date: string, project: record, status: string>, meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>> {
+]: nothing -> oneof<record<commissions: table<amount: record, date: string, project: record, status: string>, meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/commissions" $auth.query)
@@ -353,7 +377,7 @@ export def "get-commissions-by-filter" [
   --source-languages: list<string> # List of source language codes.
   --target-languages: list<string> # List of target language codes.
   --users: list<int> # List of corporate user IDs. Valid for corporate accounts only.
-]: any -> record<commissions: table<amount: record, date: string, project: record, status: string>, meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>> {
+]: any -> oneof<record<commissions: table<amount: record, date: string, project: record, status: string>, meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -391,7 +415,7 @@ export def "get-continuous-projects" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer # Type of continuous project. (nullable, default: active)
-]: nothing -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, projects: table<analytics_enabled: bool, auto_start_postedit: bool, created_at: string, id: int, is_enabled: bool, last_activity_at: string, links: record, mt_enabled: bool, mt_engine: string, name: string, postedit_enabled: bool, source_language: string, status: string, subscription: record, target_languages: list, type: string, word_count: int>> {
+]: nothing -> oneof<record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, projects: table<analytics_enabled: bool, auto_start_postedit: bool, created_at: string, id: int, is_enabled: bool, last_activity_at: string, links: record, mt_enabled: bool, mt_engine: string, name: string, postedit_enabled: bool, source_language: string, status: string, subscription: record, target_languages: list, type: string, word_count: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar")] | flatten | str join "&"
@@ -416,8 +440,6 @@ export def "get-continuous-projects" [
 #
 # POST /continuous_projects
 # operationId: createContinuousProject
-# --links shape: {self?: record, editors?: record}
-# --subscription shape: {downgrade?: list<string>, payment_method?: int, period_end?: string, plan_id?: string, plan_name?: string, price?: string, products?: list, schedule_name?: string, schedule_start?: string, subscription_id?: string, upgrade?: list<string>, withTrial?: any}
 export def "create-continuous-project" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -445,7 +467,7 @@ export def "create-continuous-project" [
   --target-languages: list<string>
   --type: string # Continuous project type. We currently have only 2 types, NULL and "active".
   --word-count: int # format: int64
-]: any -> record<analytics_enabled: bool, auto_start_postedit: bool, created_at: string, id: int, is_enabled: bool, last_activity_at: string, links: record<self: record<href: string>, editors: record>, mt_enabled: bool, mt_engine: string, name: string, postedit_enabled: bool, source_language: string, status: string, subscription: record<downgrade: list<string>, payment_method: int, period_end: string, plan_id: string, plan_name: string, price: string, products: list<any>, schedule_name: string, schedule_start: string, subscription_id: string, upgrade: list<string>, withTrial: any>, target_languages: list<string>, type: string, word_count: int> {
+]: any -> oneof<record<analytics_enabled: bool, auto_start_postedit: bool, created_at: string, id: int, is_enabled: bool, last_activity_at: string, links: record<self: record<href: string>, editors: record>, mt_enabled: bool, mt_engine: string, name: string, postedit_enabled: bool, source_language: string, status: string, subscription: record<downgrade: list<string>, payment_method: int, period_end: string, plan_id: string, plan_name: string, price: string, products: list<any>, schedule_name: string, schedule_start: string, subscription_id: string, upgrade: list<string>, withTrial: any>, target_languages: list<string>, type: string, word_count: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -483,7 +505,7 @@ export def "delete-continuous-project" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<status: string> {
+]: nothing -> oneof<record<status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -519,7 +541,7 @@ export def "get-continuous-project" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<analytics_enabled: bool, auto_start_postedit: bool, created_at: string, id: int, is_enabled: bool, last_activity_at: string, links: record<self: record<href: string>, editors: record>, mt_enabled: bool, mt_engine: string, name: string, postedit_enabled: bool, source_language: string, status: string, subscription: record<downgrade: list<string>, payment_method: int, period_end: string, plan_id: string, plan_name: string, price: string, products: list<any>, schedule_name: string, schedule_start: string, subscription_id: string, upgrade: list<string>, withTrial: any>, target_languages: list<string>, type: string, word_count: int> {
+]: nothing -> oneof<record<analytics_enabled: bool, auto_start_postedit: bool, created_at: string, id: int, is_enabled: bool, last_activity_at: string, links: record<self: record<href: string>, editors: record>, mt_enabled: bool, mt_engine: string, name: string, postedit_enabled: bool, source_language: string, status: string, subscription: record<downgrade: list<string>, payment_method: int, period_end: string, plan_id: string, plan_name: string, price: string, products: list<any>, schedule_name: string, schedule_start: string, subscription_id: string, upgrade: list<string>, withTrial: any>, target_languages: list<string>, type: string, word_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -544,7 +566,6 @@ export def "get-continuous-project" [
 #
 # POST /continuous_projects/{id}
 # operationId: updateContinuousProject
-# --languages item shape: {code?: string, is_enabled?: bool}
 export def "update-continuous-project" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -563,7 +584,7 @@ export def "update-continuous-project" [
   --mt-enabled: oneof<nothing, bool>
   --name: string
   --postedit-enabled: oneof<nothing, bool>
-]: any -> record<analytics_enabled: bool, auto_start_postedit: bool, created_at: string, id: int, is_enabled: bool, last_activity_at: string, links: record<self: record<href: string>, editors: record>, mt_enabled: bool, mt_engine: string, name: string, postedit_enabled: bool, source_language: string, status: string, subscription: record<downgrade: list<string>, payment_method: int, period_end: string, plan_id: string, plan_name: string, price: string, products: list<any>, schedule_name: string, schedule_start: string, subscription_id: string, upgrade: list<string>, withTrial: any>, target_languages: list<string>, type: string, word_count: int> {
+]: any -> oneof<record<analytics_enabled: bool, auto_start_postedit: bool, created_at: string, id: int, is_enabled: bool, last_activity_at: string, links: record<self: record<href: string>, editors: record>, mt_enabled: bool, mt_engine: string, name: string, postedit_enabled: bool, source_language: string, status: string, subscription: record<downgrade: list<string>, payment_method: int, period_end: string, plan_id: string, plan_name: string, price: string, products: list<any>, schedule_name: string, schedule_start: string, subscription_id: string, upgrade: list<string>, withTrial: any>, target_languages: list<string>, type: string, word_count: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -602,7 +623,7 @@ export def "get-analytics-token" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<jwt: string> {
+]: nothing -> oneof<record<jwt: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -643,7 +664,7 @@ export def "collect-analytics" [
   --session-id: string
   --type: string
   --user-id: string
-]: any -> record<status: string> {
+]: any -> oneof<record<status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -682,7 +703,7 @@ export def "post-continuous-projects-id-complete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<status: string> {
+]: nothing -> oneof<record<status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -719,7 +740,7 @@ export def "get-quote-for-documents" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --files: list<int>
-]: any -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, projects: table<average_scores: record, budget_code: string, callback_url: string, can_pam_manage: bool, client: record, cm_id: int, completed_on: string, continuous_project_type: string, created_at: int, custom: record, delivery_at: int, errors: list, id: int, is_api_project: bool, is_certified: bool, is_continuous: bool, is_manual: bool, links: record, pairs: list, pivoted_projects: list, price: record, price_without_discount: record, role: string, should_send_client_survey: bool, source: string, source_language: string, status: string, subjects: list, target_languages: list, tms_name: string, valid_until: int, vendor_word_count: int, word_count: int, word_count_analysis: record>> {
+]: any -> oneof<record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, projects: table<average_scores: record, budget_code: string, callback_url: string, can_pam_manage: bool, client: record, cm_id: int, completed_on: string, continuous_project_type: string, created_at: int, custom: record, delivery_at: int, errors: list, id: int, is_api_project: bool, is_certified: bool, is_continuous: bool, is_manual: bool, links: record, pairs: list, pivoted_projects: list, price: record, price_without_discount: record, role: string, should_send_client_survey: bool, source: string, source_language: string, status: string, subjects: list, target_languages: list, tms_name: string, valid_until: int, vendor_word_count: int, word_count: int, word_count_analysis: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -759,7 +780,7 @@ export def "complete-continuous-document" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<status: string> {
+]: nothing -> oneof<record<status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -797,7 +818,7 @@ export def "get-quote-for-document" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, projects: table<average_scores: record, budget_code: string, callback_url: string, can_pam_manage: bool, client: record, cm_id: int, completed_on: string, continuous_project_type: string, created_at: int, custom: record, delivery_at: int, errors: list, id: int, is_api_project: bool, is_certified: bool, is_continuous: bool, is_manual: bool, links: record, pairs: list, pivoted_projects: list, price: record, price_without_discount: record, role: string, should_send_client_survey: bool, source: string, source_language: string, status: string, subjects: list, target_languages: list, tms_name: string, valid_until: int, vendor_word_count: int, word_count: int, word_count_analysis: record>> {
+]: nothing -> oneof<record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, projects: table<average_scores: record, budget_code: string, callback_url: string, can_pam_manage: bool, client: record, cm_id: int, completed_on: string, continuous_project_type: string, created_at: int, custom: record, delivery_at: int, errors: list, id: int, is_api_project: bool, is_certified: bool, is_continuous: bool, is_manual: bool, links: record, pairs: list, pivoted_projects: list, price: record, price_without_discount: record, role: string, should_send_client_survey: bool, source: string, source_language: string, status: string, subjects: list, target_languages: list, tms_name: string, valid_until: int, vendor_word_count: int, word_count: int, word_count_analysis: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -835,7 +856,7 @@ export def "get-quote-for-languages" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --languages: list<string>
-]: any -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, projects: table<average_scores: record, budget_code: string, callback_url: string, can_pam_manage: bool, client: record, cm_id: int, completed_on: string, continuous_project_type: string, created_at: int, custom: record, delivery_at: int, errors: list, id: int, is_api_project: bool, is_certified: bool, is_continuous: bool, is_manual: bool, links: record, pairs: list, pivoted_projects: list, price: record, price_without_discount: record, role: string, should_send_client_survey: bool, source: string, source_language: string, status: string, subjects: list, target_languages: list, tms_name: string, valid_until: int, vendor_word_count: int, word_count: int, word_count_analysis: record>> {
+]: any -> oneof<record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, projects: table<average_scores: record, budget_code: string, callback_url: string, can_pam_manage: bool, client: record, cm_id: int, completed_on: string, continuous_project_type: string, created_at: int, custom: record, delivery_at: int, errors: list, id: int, is_api_project: bool, is_certified: bool, is_continuous: bool, is_manual: bool, links: record, pairs: list, pivoted_projects: list, price: record, price_without_discount: record, role: string, should_send_client_survey: bool, source: string, source_language: string, status: string, subjects: list, target_languages: list, tms_name: string, valid_until: int, vendor_word_count: int, word_count: int, word_count_analysis: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -875,7 +896,7 @@ export def "complete-language" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<status: string> {
+]: nothing -> oneof<record<status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -913,7 +934,7 @@ export def "get-quote-for-language" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, projects: table<average_scores: record, budget_code: string, callback_url: string, can_pam_manage: bool, client: record, cm_id: int, completed_on: string, continuous_project_type: string, created_at: int, custom: record, delivery_at: int, errors: list, id: int, is_api_project: bool, is_certified: bool, is_continuous: bool, is_manual: bool, links: record, pairs: list, pivoted_projects: list, price: record, price_without_discount: record, role: string, should_send_client_survey: bool, source: string, source_language: string, status: string, subjects: list, target_languages: list, tms_name: string, valid_until: int, vendor_word_count: int, word_count: int, word_count_analysis: record>> {
+]: nothing -> oneof<record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, projects: table<average_scores: record, budget_code: string, callback_url: string, can_pam_manage: bool, client: record, cm_id: int, completed_on: string, continuous_project_type: string, created_at: int, custom: record, delivery_at: int, errors: list, id: int, is_api_project: bool, is_certified: bool, is_continuous: bool, is_manual: bool, links: record, pairs: list, pivoted_projects: list, price: record, price_without_discount: record, role: string, should_send_client_survey: bool, source: string, source_language: string, status: string, subjects: list, target_languages: list, tms_name: string, valid_until: int, vendor_word_count: int, word_count: int, word_count_analysis: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -950,7 +971,7 @@ export def "delete-subscription" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<downgrade: list<string>, payment_method: int, period_end: string, plan_id: string, plan_name: string, price: string, products: list<any>, schedule_name: string, schedule_start: string, subscription_id: string, upgrade: list<string>, withTrial: any> {
+]: nothing -> oneof<record<downgrade: list<string>, payment_method: int, period_end: string, plan_id: string, plan_name: string, price: string, products: list<any>, schedule_name: string, schedule_start: string, subscription_id: string, upgrade: list<string>, withTrial: any>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -986,7 +1007,7 @@ export def "get-subscription" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<downgrade: list<string>, payment_method: int, period_end: string, plan_id: string, plan_name: string, price: string, products: list<any>, schedule_name: string, schedule_start: string, subscription_id: string, upgrade: list<string>, withTrial: any> {
+]: nothing -> oneof<record<downgrade: list<string>, payment_method: int, period_end: string, plan_id: string, plan_name: string, price: string, products: list<any>, schedule_name: string, schedule_start: string, subscription_id: string, upgrade: list<string>, withTrial: any>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1034,7 +1055,7 @@ export def "create-subscription" [
   --subscription-id: string # Stripe subscription id for this project
   --upgrade: list<string> # Stripe upgradable plan
   --with-trial: any # Stripe plan trial (format: boolean)
-]: any -> record<downgrade: list<string>, payment_method: int, period_end: string, plan_id: string, plan_name: string, price: string, products: list<any>, schedule_name: string, schedule_start: string, subscription_id: string, upgrade: list<string>, withTrial: any> {
+]: any -> oneof<record<downgrade: list<string>, payment_method: int, period_end: string, plan_id: string, plan_name: string, price: string, products: list<any>, schedule_name: string, schedule_start: string, subscription_id: string, upgrade: list<string>, withTrial: any>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1085,7 +1106,7 @@ export def "update-subscription" [
   --subscription-id: string # Stripe subscription id for this project
   --upgrade: list<string> # Stripe upgradable plan
   --with-trial: any # Stripe plan trial (format: boolean)
-]: any -> record<downgrade: list<string>, payment_method: int, period_end: string, plan_id: string, plan_name: string, price: string, products: list<any>, schedule_name: string, schedule_start: string, subscription_id: string, upgrade: list<string>, withTrial: any> {
+]: any -> oneof<record<downgrade: list<string>, payment_method: int, period_end: string, plan_id: string, plan_name: string, price: string, products: list<any>, schedule_name: string, schedule_start: string, subscription_id: string, upgrade: list<string>, withTrial: any>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1136,7 +1157,7 @@ export def "update-subscription-payment-method" [
   --subscription-id: string # Stripe subscription id for this project
   --upgrade: list<string> # Stripe upgradable plan
   --with-trial: any # Stripe plan trial (format: boolean)
-]: any -> record<downgrade: list<string>, payment_method: int, period_end: string, plan_id: string, plan_name: string, price: string, products: list<any>, schedule_name: string, schedule_start: string, subscription_id: string, upgrade: list<string>, withTrial: any> {
+]: any -> oneof<record<downgrade: list<string>, payment_method: int, period_end: string, plan_id: string, plan_name: string, price: string, products: list<any>, schedule_name: string, schedule_start: string, subscription_id: string, upgrade: list<string>, withTrial: any>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1164,8 +1185,6 @@ export def "update-subscription-payment-method" [
 #
 # POST /continuous_projects/{id}/translate/{targetLanguage}
 # operationId: translate
-# --documents item shape: {data?: string, name?: string}
-# --filters shape: {skipMt?: list<string>, skipPostEdit?: list<string>}
 export def "translate" [
   id: int
   target_language: string
@@ -1223,7 +1242,7 @@ export def "get-continuous-project-documents" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter-by-language: string
-]: nothing -> record<documents: table<billed_word_count: int, id: string, links: record, name: string, post_edit_enabled: bool, project_id: string, source_language: string, target_languages: list, word_count: int>, meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>> {
+]: nothing -> oneof<record<documents: table<billed_word_count: int, id: string, links: record, name: string, post_edit_enabled: bool, project_id: string, source_language: string, target_languages: list, word_count: int>, meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -1249,7 +1268,6 @@ export def "get-continuous-project-documents" [
 #
 # POST /continuous_projects/{projectId}/documents
 # operationId: addDocument
-# --document shape: {data?: string, name?: string}
 export def "add-document" [
   project_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1262,7 +1280,7 @@ export def "add-document" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --document: record # shape: {data?: string, name?: string}
-]: any -> record<billed_word_count: int, id: string, links: record<self: record<href: string>, admins: record, download: record<href: string>, editors: record, preview_box: record<href: string>, preview_pdf: record<href: string>, preview_pdf_viewer: record<href: string>, progress: record<href: string>, project: record<href: string>, strings: record<href: string>, thumbnail: record<href: string>>, name: string, post_edit_enabled: bool, project_id: string, source_language: string, target_languages: list<string>, word_count: int> {
+]: any -> oneof<record<billed_word_count: int, id: string, links: record<self: record<href: string>, admins: record, download: record<href: string>, editors: record, preview_box: record<href: string>, preview_pdf: record<href: string>, preview_pdf_viewer: record<href: string>, progress: record<href: string>, project: record<href: string>, strings: record<href: string>, thumbnail: record<href: string>>, name: string, post_edit_enabled: bool, project_id: string, source_language: string, target_languages: list<string>, word_count: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1303,7 +1321,7 @@ export def "post-continuous-project-document-progress" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --document-name: string
   --filter-by-language: string
-]: any -> record<languages: record, links: record<self: record<href: string>, project: record<href: string>>, project_status: string, proofreading: float, total: float, translation: float, word_count: int> {
+]: any -> oneof<record<languages: record, links: record<self: record<href: string>, project: record<href: string>>, project_status: string, proofreading: float, total: float, translation: float, word_count: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1343,7 +1361,7 @@ export def "post-continuous-project-file-strings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --document-name: string
-]: any -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, translations: table<content: string, file_id: int, id: string, translations: record>> {
+]: any -> oneof<record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, translations: table<content: string, file_id: int, id: string, translations: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1383,7 +1401,7 @@ export def "get-continuous-project-document" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<billed_word_count: int, id: string, links: record<self: record<href: string>, admins: record, download: record<href: string>, editors: record, preview_box: record<href: string>, preview_pdf: record<href: string>, preview_pdf_viewer: record<href: string>, progress: record<href: string>, project: record<href: string>, strings: record<href: string>, thumbnail: record<href: string>>, name: string, post_edit_enabled: bool, project_id: string, source_language: string, target_languages: list<string>, word_count: int> {
+]: nothing -> oneof<record<billed_word_count: int, id: string, links: record<self: record<href: string>, admins: record, download: record<href: string>, editors: record, preview_box: record<href: string>, preview_pdf: record<href: string>, preview_pdf_viewer: record<href: string>, progress: record<href: string>, project: record<href: string>, strings: record<href: string>, thumbnail: record<href: string>>, name: string, post_edit_enabled: bool, project_id: string, source_language: string, target_languages: list<string>, word_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -1409,7 +1427,6 @@ export def "get-continuous-project-document" [
 #
 # POST /continuous_projects/{projectId}/documents/{documentId}
 # operationId: updateDocument
-# --document shape: {data?: string, name?: string}
 export def "update-document" [
   project_id: int
   document_id: int
@@ -1423,7 +1440,7 @@ export def "update-document" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --document: record # shape: {data?: string, name?: string}
-]: any -> record<billed_word_count: int, id: string, links: record<self: record<href: string>, admins: record, download: record<href: string>, editors: record, preview_box: record<href: string>, preview_pdf: record<href: string>, preview_pdf_viewer: record<href: string>, progress: record<href: string>, project: record<href: string>, strings: record<href: string>, thumbnail: record<href: string>>, name: string, post_edit_enabled: bool, project_id: string, source_language: string, target_languages: list<string>, word_count: int> {
+]: any -> oneof<record<billed_word_count: int, id: string, links: record<self: record<href: string>, admins: record, download: record<href: string>, editors: record, preview_box: record<href: string>, preview_pdf: record<href: string>, preview_pdf_viewer: record<href: string>, progress: record<href: string>, project: record<href: string>, strings: record<href: string>, thumbnail: record<href: string>>, name: string, post_edit_enabled: bool, project_id: string, source_language: string, target_languages: list<string>, word_count: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1465,7 +1482,7 @@ export def "get-continuous-project-document-progress" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter-by-language: string
-]: nothing -> record<languages: record, links: record<self: record<href: string>, project: record<href: string>>, project_status: string, proofreading: float, total: float, translation: float, word_count: int> {
+]: nothing -> oneof<record<languages: record, links: record<self: record<href: string>, project: record<href: string>>, project_status: string, proofreading: float, total: float, translation: float, word_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -1504,7 +1521,7 @@ export def "get-continuous-project-file-strings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, translations: table<content: string, file_id: int, id: string, translations: record>> {
+]: nothing -> oneof<record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, translations: table<content: string, file_id: int, id: string, translations: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -1541,7 +1558,7 @@ export def "get-continuous-project-invoices" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<invoices: table<amount: float, base_amount: float, base_currency: string, billing: record, currency: string, id: int, invoice_no: int, invoiced_at: string, links: record, status: string>> {
+]: nothing -> oneof<record<invoices: table<amount: float, base_amount: float, base_currency: string, billing: record, currency: string, id: int, invoice_no: int, invoiced_at: string, links: record, status: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -1578,7 +1595,7 @@ export def "get-continuous-project-progress" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter-by-language: string
-]: nothing -> record<costs: record<mt: record<amount: float, currency: string>, post_edit: record<amount: float, currency: string>, saved: record<amount: float, currency: string>, total: record<amount: float, currency: string>>, progress: record<languages: record, links: record<self: record, project: record>, project_status: string, proofreading: float, total: float, translation: float, word_count: int>, word_counts: record<mt: int, post_edit: int, total: int>> {
+]: nothing -> oneof<record<costs: record<mt: record<amount: float, currency: string>, post_edit: record<amount: float, currency: string>, saved: record<amount: float, currency: string>, total: record<amount: float, currency: string>>, progress: record<languages: record, links: record<self: record, project: record>, project_status: string, proofreading: float, total: float, translation: float, word_count: int>, word_counts: record<mt: int, post_edit: int, total: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -1615,7 +1632,7 @@ export def "get-continuous-project-strings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, translations: table<content: string, file_id: int, id: string, translations: record>> {
+]: nothing -> oneof<record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, translations: table<content: string, file_id: int, id: string, translations: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -1653,7 +1670,7 @@ export def "clear-translation-cache" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --locale: string # Locale
   --file-id: int # Continuous Project File ID (format: int64)
-]: nothing -> record<status: string> {
+]: nothing -> oneof<record<status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -1691,7 +1708,7 @@ export def "get-translation-cache" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --flatten: oneof<nothing, bool> # Flatten cache results and ignore document keys (default: 1)
-]: nothing -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, translations: record> {
+]: nothing -> oneof<record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, translations: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -1730,7 +1747,7 @@ export def "recache-translations" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --locale: string # Locale
   --file-id: int # Continuous Project File ID (format: int64)
-]: nothing -> record<status: string> {
+]: nothing -> oneof<record<status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -1767,7 +1784,7 @@ export def "get-active-widgets" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, widgets: table<allow_hash_in_url: bool, allow_query_in_url: bool, auto_detect_source_language: bool, created_at: string, elements: string, follow_user: bool, force_cache_refresh_interval: bool, id: int, language_mappings: string, live: bool, modify_links: bool, name: string, optimize_per_page: bool, pages: string, path_regex: string, position: string, query_name: string, reboot_on_url_change: bool, restricted_domains: string, sections: string, test_mode: bool, theme: string, token: string, url_change_mode: string, url_mode: string, use_cache: bool, use_dummy_translations: bool, variables: string>> {
+]: nothing -> oneof<record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, widgets: table<allow_hash_in_url: bool, allow_query_in_url: bool, auto_detect_source_language: bool, created_at: string, elements: string, follow_user: bool, force_cache_refresh_interval: bool, id: int, language_mappings: string, live: bool, modify_links: bool, name: string, optimize_per_page: bool, pages: string, path_regex: string, position: string, query_name: string, reboot_on_url_change: bool, restricted_domains: string, sections: string, test_mode: bool, theme: string, token: string, url_change_mode: string, url_mode: string, use_cache: bool, use_dummy_translations: bool, variables: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -1831,7 +1848,7 @@ export def "create-active-widget" [
   --use-cache: oneof<nothing, bool> # Should we make use of local browser cache for your visitors? We will refresh the cache when Active JS detects new activity in your project.
   --use-dummy-translations: oneof<nothing, bool> # When enabled, we will translate your website with dummy content, rather than actually using MT/TM.
   --variables: string # Continuous project variable definitions
-]: any -> record<allow_hash_in_url: bool, allow_query_in_url: bool, auto_detect_source_language: bool, created_at: string, elements: string, follow_user: bool, force_cache_refresh_interval: bool, id: int, language_mappings: string, live: bool, modify_links: bool, name: string, optimize_per_page: bool, pages: string, path_regex: string, position: string, query_name: string, reboot_on_url_change: bool, restricted_domains: string, sections: string, test_mode: bool, theme: string, token: string, url_change_mode: string, url_mode: string, use_cache: bool, use_dummy_translations: bool, variables: string> {
+]: any -> oneof<record<allow_hash_in_url: bool, allow_query_in_url: bool, auto_detect_source_language: bool, created_at: string, elements: string, follow_user: bool, force_cache_refresh_interval: bool, id: int, language_mappings: string, live: bool, modify_links: bool, name: string, optimize_per_page: bool, pages: string, path_regex: string, position: string, query_name: string, reboot_on_url_change: bool, restricted_domains: string, sections: string, test_mode: bool, theme: string, token: string, url_change_mode: string, url_mode: string, use_cache: bool, use_dummy_translations: bool, variables: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1871,7 +1888,7 @@ export def "delete-active-widget" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<status: string> {
+]: nothing -> oneof<record<status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -1909,7 +1926,7 @@ export def "get-active-widget" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<allow_hash_in_url: bool, allow_query_in_url: bool, auto_detect_source_language: bool, created_at: string, elements: string, follow_user: bool, force_cache_refresh_interval: bool, id: int, language_mappings: string, live: bool, modify_links: bool, name: string, optimize_per_page: bool, pages: string, path_regex: string, position: string, query_name: string, reboot_on_url_change: bool, restricted_domains: string, sections: string, test_mode: bool, theme: string, token: string, url_change_mode: string, url_mode: string, use_cache: bool, use_dummy_translations: bool, variables: string> {
+]: nothing -> oneof<record<allow_hash_in_url: bool, allow_query_in_url: bool, auto_detect_source_language: bool, created_at: string, elements: string, follow_user: bool, force_cache_refresh_interval: bool, id: int, language_mappings: string, live: bool, modify_links: bool, name: string, optimize_per_page: bool, pages: string, path_regex: string, position: string, query_name: string, reboot_on_url_change: bool, restricted_domains: string, sections: string, test_mode: bool, theme: string, token: string, url_change_mode: string, url_mode: string, use_cache: bool, use_dummy_translations: bool, variables: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -1975,7 +1992,7 @@ export def "update-active-widget" [
   --use-cache: oneof<nothing, bool> # Should we make use of local browser cache for your visitors? We will refresh the cache when Active JS detects new activity in your project.
   --use-dummy-translations: oneof<nothing, bool> # When enabled, we will translate your website with dummy content, rather than actually using MT/TM.
   --variables: string # Continuous project variable definitions
-]: any -> record<allow_hash_in_url: bool, allow_query_in_url: bool, auto_detect_source_language: bool, created_at: string, elements: string, follow_user: bool, force_cache_refresh_interval: bool, id: int, language_mappings: string, live: bool, modify_links: bool, name: string, optimize_per_page: bool, pages: string, path_regex: string, position: string, query_name: string, reboot_on_url_change: bool, restricted_domains: string, sections: string, test_mode: bool, theme: string, token: string, url_change_mode: string, url_mode: string, use_cache: bool, use_dummy_translations: bool, variables: string> {
+]: any -> oneof<record<allow_hash_in_url: bool, allow_query_in_url: bool, auto_detect_source_language: bool, created_at: string, elements: string, follow_user: bool, force_cache_refresh_interval: bool, id: int, language_mappings: string, live: bool, modify_links: bool, name: string, optimize_per_page: bool, pages: string, path_regex: string, position: string, query_name: string, reboot_on_url_change: bool, restricted_domains: string, sections: string, test_mode: bool, theme: string, token: string, url_change_mode: string, url_mode: string, use_cache: bool, use_dummy_translations: bool, variables: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2016,7 +2033,7 @@ export def "reset-active-widget-token" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<allow_hash_in_url: bool, allow_query_in_url: bool, auto_detect_source_language: bool, created_at: string, elements: string, follow_user: bool, force_cache_refresh_interval: bool, id: int, language_mappings: string, live: bool, modify_links: bool, name: string, optimize_per_page: bool, pages: string, path_regex: string, position: string, query_name: string, reboot_on_url_change: bool, restricted_domains: string, sections: string, test_mode: bool, theme: string, token: string, url_change_mode: string, url_mode: string, use_cache: bool, use_dummy_translations: bool, variables: string> {
+]: nothing -> oneof<record<allow_hash_in_url: bool, allow_query_in_url: bool, auto_detect_source_language: bool, created_at: string, elements: string, follow_user: bool, force_cache_refresh_interval: bool, id: int, language_mappings: string, live: bool, modify_links: bool, name: string, optimize_per_page: bool, pages: string, path_regex: string, position: string, query_name: string, reboot_on_url_change: bool, restricted_domains: string, sections: string, test_mode: bool, theme: string, token: string, url_change_mode: string, url_mode: string, use_cache: bool, use_dummy_translations: bool, variables: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -2052,7 +2069,7 @@ export def "get-corporate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<billing: record<city: string, country: string, phone: string, state: string, street: string, zip: string, name: string>, domain: string, email: string, id: int, logo: string, name: string, web_site: string> {
+]: nothing -> oneof<record<billing: record<city: string, country: string, phone: string, state: string, street: string, zip: string, name: string>, domain: string, email: string, id: int, logo: string, name: string, web_site: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/corporate" $auth.query)
@@ -2086,7 +2103,7 @@ export def "get-available-corporate-permissions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, permissions: list<string>> {
+]: nothing -> oneof<record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, permissions: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/corporate/permissions" $auth.query)
@@ -2120,7 +2137,7 @@ export def "get-corporate-user-groups" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, user_groups: table<corporate_id: int, id: int, name: string, permissions: list>> {
+]: nothing -> oneof<record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, user_groups: table<corporate_id: int, id: int, name: string, permissions: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/corporate/user-groups" $auth.query)
@@ -2158,7 +2175,7 @@ export def "save-corporate-user-group" [
   --id: int # format: int64
   --name: string
   --permissions: list<string>
-]: any -> record<corporate_id: int, id: int, name: string, permissions: list<string>> {
+]: any -> oneof<record<corporate_id: int, id: int, name: string, permissions: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2195,7 +2212,7 @@ export def "get-corporate-users" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, users: table<billing: record, birthday: string, can_work_manual_files: bool, city: string, client: record, corporate_id: int, country: string, created_at: int, do_not_contact: bool, email: string, first_name: string, has_pwd: bool, id: int, is_client: bool, is_developer: bool, is_proofreader: bool, is_prospect: bool, is_sales_person: bool, is_vendor: bool, language_pairs: list, last_name: string, last_seen_online_at: int, links: record, locale: string, mailing: record, name: string, native_language: string, nps: float, phone_number: string, profile_picture_path: string, social_media: record, state: string, status: string, street: string, timezone: string, tms_user_name: string, user_groups: list, vendor: record, zip_code: string>> {
+]: nothing -> oneof<record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, users: table<billing: record, birthday: string, can_work_manual_files: bool, city: string, client: record, corporate_id: int, country: string, created_at: int, do_not_contact: bool, email: string, first_name: string, has_pwd: bool, id: int, is_client: bool, is_developer: bool, is_proofreader: bool, is_prospect: bool, is_sales_person: bool, is_vendor: bool, language_pairs: list, last_name: string, last_seen_online_at: int, links: record, locale: string, mailing: record, name: string, native_language: string, nps: float, phone_number: string, profile_picture_path: string, social_media: record, state: string, status: string, street: string, timezone: string, tms_user_name: string, user_groups: list, vendor: record, zip_code: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/corporate/users" $auth.query)
@@ -2219,7 +2236,6 @@ export def "get-corporate-users" [
 #
 # POST /corporate/users
 # operationId: saveCorporateUser
-# --notifications shape: {phone_number?: string, sms_enabled?: bool}
 export def "save-corporate-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2246,7 +2262,7 @@ export def "save-corporate-user" [
   --paypal-email: string # Optional. Vendor paypal e-mail
   --require-1099: oneof<nothing, bool> # Optional. Whether this vendor requires 1099 form in US for their earnings.
   --user-groups: list<int> # A list of user group IDs
-]: any -> record<billing: record<city: string, country: string, phone: string, state: string, street: string, zip: string, name: string>, birthday: string, can_work_manual_files: bool, city: string, client: record<corporate: record<email: string, id: int, logo: string, name: string, phone_number: string>, nps: float, subjects: record>, corporate_id: int, country: string, created_at: int, do_not_contact: bool, email: string, first_name: string, has_pwd: bool, id: int, is_client: bool, is_developer: bool, is_proofreader: bool, is_prospect: bool, is_sales_person: bool, is_vendor: bool, language_pairs: table<source_language: string, target_language: string>, last_name: string, last_seen_online_at: int, links: record<self: record<href: string>, login_as: record<href: string>, projects: record<href: string>, responsivity: record<href: string>, stats: record<href: string>>, locale: string, mailing: record<city: string, country: string, phone: string, state: string, street: string, zip: string>, name: string, native_language: string, nps: float, phone_number: string, profile_picture_path: string, social_media: record<facebook_url: string, linkedIn_url: string, twitter_url: string>, state: string, status: string, street: string, timezone: string, tms_user_name: string, user_groups: table<corporate_id: int, id: int, name: string, permissions: list>, vendor: record<can_work_manual_files: bool, email_open_rate: float, is_frozen: bool, is_proofreader: bool, language_pairs: list<record>, native_language: string, pam_tqs: float, paypal_email: string, profile_survey: record<current_services: string, daily_proofreading_capacity: string, daily_translation_capacity: string, dtp_software: string, experience: string, is_certified_translator: string, is_sworn_translator: string, memoq: string, memsource: string, omegat: string, proofreader_experience: string, provides_creative_writing_service: string, provides_postedit_service: string, reference: string, sdl_trados: string, skype_id: string, smartcat: string, smartling: string, software: string, specialization: string, subtitle_edit: string, subtitle_workshop: string, translator_association: string, transsuite_2000: string, vendor_profile_lsp: string, wordbee: string, wordfast: string, work_type: string, work_with: string, working_as: string, working_timezone: string, xbench: string, xtm: string>, require_1099: bool, tags: list<string>, tms_user_name: string, vendor_type: string>, zip_code: string> {
+]: any -> oneof<record<billing: record<city: string, country: string, phone: string, state: string, street: string, zip: string, name: string>, birthday: string, can_work_manual_files: bool, city: string, client: record<corporate: record<email: string, id: int, logo: string, name: string, phone_number: string>, nps: float, subjects: record>, corporate_id: int, country: string, created_at: int, do_not_contact: bool, email: string, first_name: string, has_pwd: bool, id: int, is_client: bool, is_developer: bool, is_proofreader: bool, is_prospect: bool, is_sales_person: bool, is_vendor: bool, language_pairs: table<source_language: string, target_language: string>, last_name: string, last_seen_online_at: int, links: record<self: record<href: string>, login_as: record<href: string>, projects: record<href: string>, responsivity: record<href: string>, stats: record<href: string>>, locale: string, mailing: record<city: string, country: string, phone: string, state: string, street: string, zip: string>, name: string, native_language: string, nps: float, phone_number: string, profile_picture_path: string, social_media: record<facebook_url: string, linkedIn_url: string, twitter_url: string>, state: string, status: string, street: string, timezone: string, tms_user_name: string, user_groups: table<corporate_id: int, id: int, name: string, permissions: list>, vendor: record<can_work_manual_files: bool, email_open_rate: float, is_frozen: bool, is_proofreader: bool, language_pairs: list<record>, native_language: string, pam_tqs: float, paypal_email: string, profile_survey: record<current_services: string, daily_proofreading_capacity: string, daily_translation_capacity: string, dtp_software: string, experience: string, is_certified_translator: string, is_sworn_translator: string, memoq: string, memsource: string, omegat: string, proofreader_experience: string, provides_creative_writing_service: string, provides_postedit_service: string, reference: string, sdl_trados: string, skype_id: string, smartcat: string, smartling: string, software: string, specialization: string, subtitle_edit: string, subtitle_workshop: string, translator_association: string, transsuite_2000: string, vendor_profile_lsp: string, wordbee: string, wordfast: string, work_type: string, work_with: string, working_as: string, working_timezone: string, xbench: string, xtm: string>, require_1099: bool, tags: list<string>, tms_user_name: string, vendor_type: string>, zip_code: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2283,7 +2299,7 @@ export def "get-corporates-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<billing: record<city: string, country: string, phone: string, state: string, street: string, zip: string, name: string>, domain: string, email: string, id: int, logo: string, name: string, web_site: string> {
+]: nothing -> oneof<table<billing: record<city: string, country: string, phone: string, state: string, street: string, zip: string, name: string>, domain: string, email: string, id: int, logo: string, name: string, web_site: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/corporates/all" $auth.query)
@@ -2318,7 +2334,7 @@ export def "get-corporate-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<billing: record<city: string, country: string, phone: string, state: string, street: string, zip: string, name: string>, domain: string, email: string, id: int, logo: string, name: string, web_site: string> {
+]: nothing -> oneof<record<billing: record<city: string, country: string, phone: string, state: string, street: string, zip: string, name: string>, domain: string, email: string, id: int, logo: string, name: string, web_site: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($corporate_id | is-empty) { error make --unspanned { msg: "path parameter 'corporateId' must be non-empty" } }
@@ -2354,7 +2370,7 @@ export def "get-available-corporate-permissions-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, permissions: list<string>> {
+]: nothing -> oneof<record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, permissions: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($corporate_id | is-empty) { error make --unspanned { msg: "path parameter 'corporateId' must be non-empty" } }
@@ -2390,7 +2406,7 @@ export def "get-corporate-user-groups-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, user_groups: table<corporate_id: int, id: int, name: string, permissions: list>> {
+]: nothing -> oneof<record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, user_groups: table<corporate_id: int, id: int, name: string, permissions: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($corporate_id | is-empty) { error make --unspanned { msg: "path parameter 'corporateId' must be non-empty" } }
@@ -2430,7 +2446,7 @@ export def "save-corporate-user-group-by-id" [
   --id: int # format: int64
   --name: string
   --permissions: list<string>
-]: any -> record<corporate_id: int, id: int, name: string, permissions: list<string>> {
+]: any -> oneof<record<corporate_id: int, id: int, name: string, permissions: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2469,7 +2485,7 @@ export def "get-corporate-users-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, users: table<billing: record, birthday: string, can_work_manual_files: bool, city: string, client: record, corporate_id: int, country: string, created_at: int, do_not_contact: bool, email: string, first_name: string, has_pwd: bool, id: int, is_client: bool, is_developer: bool, is_proofreader: bool, is_prospect: bool, is_sales_person: bool, is_vendor: bool, language_pairs: list, last_name: string, last_seen_online_at: int, links: record, locale: string, mailing: record, name: string, native_language: string, nps: float, phone_number: string, profile_picture_path: string, social_media: record, state: string, status: string, street: string, timezone: string, tms_user_name: string, user_groups: list, vendor: record, zip_code: string>> {
+]: nothing -> oneof<record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, users: table<billing: record, birthday: string, can_work_manual_files: bool, city: string, client: record, corporate_id: int, country: string, created_at: int, do_not_contact: bool, email: string, first_name: string, has_pwd: bool, id: int, is_client: bool, is_developer: bool, is_proofreader: bool, is_prospect: bool, is_sales_person: bool, is_vendor: bool, language_pairs: list, last_name: string, last_seen_online_at: int, links: record, locale: string, mailing: record, name: string, native_language: string, nps: float, phone_number: string, profile_picture_path: string, social_media: record, state: string, status: string, street: string, timezone: string, tms_user_name: string, user_groups: list, vendor: record, zip_code: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($corporate_id | is-empty) { error make --unspanned { msg: "path parameter 'corporateId' must be non-empty" } }
@@ -2504,7 +2520,7 @@ export def "delete-account" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<status: string> {
+]: nothing -> oneof<record<status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/delete-account" $auth.query)
@@ -2547,7 +2563,7 @@ export def "get-documents" [
   --order-by: string@order-by-completer # default: updated_at
   --order-type: string@order-type-completer
   --with: list<string> # Attach further information. Possible values 'preview' to fetch temporary preview URLs. This is NOT recommended to be used with list calls. Only use with[]=preview for single document/style guide calls.
-]: nothing -> record<documents: table<file_type: string, has_custom_package: bool, id: int, links: record, manual_files: list, name: string, project_id: int, review_in_manual_editor: bool, scheme: record, search_score: float, source_language: string, subject: string, target_languages: list, uploaded_at: int, word_count: int>, meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>> {
+]: nothing -> oneof<record<documents: table<file_type: string, has_custom_package: bool, id: int, links: record, manual_files: list, name: string, project_id: int, review_in_manual_editor: bool, scheme: record, search_score: float, source_language: string, subject: string, target_languages: list, uploaded_at: int, word_count: int>, meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "recent" $recent "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "type_filter" $type_filter "scalar") (serialize-qp "language_code" $language_code "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "order_type" $order_type "scalar") (serialize-qp "with[]" $with "multi")] | flatten | str join "&"
@@ -2582,7 +2598,7 @@ export def "get-all-document-subjects" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<name: string> {
+]: nothing -> oneof<table<name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/documents/subjects" $auth.query)
@@ -2617,7 +2633,7 @@ export def "get-document" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<billed_word_count: int, id: string, links: record<self: record<href: string>, admins: record, download: record<href: string>, editors: record, preview_box: record<href: string>, preview_pdf: record<href: string>, preview_pdf_viewer: record<href: string>, progress: record<href: string>, project: record<href: string>, strings: record<href: string>, thumbnail: record<href: string>>, name: string, post_edit_enabled: bool, project_id: string, source_language: string, target_languages: list<string>, word_count: int> {
+]: nothing -> oneof<record<billed_word_count: int, id: string, links: record<self: record<href: string>, admins: record, download: record<href: string>, editors: record, preview_box: record<href: string>, preview_pdf: record<href: string>, preview_pdf_viewer: record<href: string>, progress: record<href: string>, project: record<href: string>, strings: record<href: string>, thumbnail: record<href: string>>, name: string, post_edit_enabled: bool, project_id: string, source_language: string, target_languages: list<string>, word_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
@@ -2653,7 +2669,7 @@ export def "get-document-progress" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<languages: record, links: record<self: record<href: string>, project: record<href: string>>, project_status: string, proofreading: float, total: float, translation: float, word_count: int> {
+]: nothing -> oneof<record<languages: record, links: record<self: record<href: string>, project: record<href: string>>, project_status: string, proofreading: float, total: float, translation: float, word_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
@@ -2689,7 +2705,7 @@ export def "regenerate-preview" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<link: record<href: string>, source: string> {
+]: nothing -> oneof<record<link: record<href: string>, source: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
@@ -2727,7 +2743,7 @@ export def "get-similar-documents" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --per-page: int # Determines the number of similar documents to return. (format: int64, default: 1)
   --with: list<string> # Attach further information. Possible values 'preview' to fetch temporary preview URLs. This is NOT recommended to be used with list calls. Only use with[]=preview for single document/style guide calls.
-]: nothing -> record<documents: table<file_type: string, has_custom_package: bool, id: int, links: record, manual_files: list, name: string, project_id: int, review_in_manual_editor: bool, scheme: record, search_score: float, source_language: string, subject: string, target_languages: list, uploaded_at: int, word_count: int>, meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>> {
+]: nothing -> oneof<record<documents: table<file_type: string, has_custom_package: bool, id: int, links: record, manual_files: list, name: string, project_id: int, review_in_manual_editor: bool, scheme: record, search_score: float, source_language: string, subject: string, target_languages: list, uploaded_at: int, word_count: int>, meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
@@ -2767,7 +2783,7 @@ export def "use-as-draft" [
   --from-file-id: float
   --from-manual-translation-file-id: float
   --to-manual-translation-file-id: float
-]: any -> record<status: string> {
+]: any -> oneof<record<status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2812,7 +2828,7 @@ export def "use-as-regular" [
   --from-manual-translation-file-id: float
   --hide-numbers: oneof<nothing, bool>
   --recreate: oneof<nothing, bool>
-]: any -> record<status: string> {
+]: any -> oneof<record<status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2849,7 +2865,7 @@ export def "downgrade-proofreader" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<status: string> {
+]: nothing -> oneof<record<status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/downgrade-proofreader" $auth.query)
@@ -2883,7 +2899,7 @@ export def "get-earnings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<completed: table<amount: float, currency: string, due_date: string, status: string, words: int, words_approved: int, words_translated: int, is_above_average: bool, score: float, strings_edited: int, strings_translated: int, project_id: int>, ongoing: table<amount: float, currency: string, due_date: string, status: string, words: int, words_approved: int, words_translated: int, is_above_average: bool, score: float, strings_edited: int, strings_translated: int, project_id: int>, total: float> {
+]: nothing -> oneof<record<completed: table<amount: float, currency: string, due_date: string, status: string, words: int, words_approved: int, words_translated: int, is_above_average: bool, score: float, strings_edited: int, strings_translated: int, project_id: int>, ongoing: table<amount: float, currency: string, due_date: string, status: string, words: int, words_approved: int, words_translated: int, is_above_average: bool, score: float, strings_edited: int, strings_translated: int, project_id: int>, total: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/earnings" $auth.query)
@@ -2917,7 +2933,7 @@ export def "get-formats" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/formats" $auth.query)
@@ -2951,7 +2967,7 @@ export def "freeze-account" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<status: string> {
+]: nothing -> oneof<record<status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/freeze-account" $auth.query)
@@ -3020,7 +3036,7 @@ export def "update-global-glossary" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   glossary: string # Glossary file. Currently supported formats: .xlsx, .tbx (format: binary)
-]: any -> record<status: string> {
+]: any -> oneof<record<status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3057,7 +3073,7 @@ export def "get-integrations-token" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<token: string> {
+]: nothing -> oneof<record<token: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/integrations/token" $auth.query)
@@ -3092,7 +3108,7 @@ export def "get-invitation-vendors" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> record<vendors: table<matchedNeeds: list, userId: int>> {
+]: any -> oneof<record<vendors: table<matchedNeeds: list, userId: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3129,7 +3145,7 @@ export def "get-languages" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<code: string, name: string> {
+]: nothing -> oneof<table<code: string, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/languages" $auth.query)
@@ -3166,7 +3182,7 @@ export def "log-location" [
   lat: float # Latitude of location (format: float)
   lon: float # Longitude of location (format: float)
   --timestamp: int
-]: any -> record<status: string> {
+]: any -> oneof<record<status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3202,7 +3218,7 @@ export def "make-proofreader" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<status: string> {
+]: nothing -> oneof<record<status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/make-proofreader" $auth.query)
@@ -3236,7 +3252,7 @@ export def "get-me" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<billing: record<city: string, country: string, phone: string, state: string, street: string, zip: string, name: string>, birthday: string, can_work_manual_files: bool, city: string, client: record<corporate: record<email: string, id: int, logo: string, name: string, phone_number: string>, nps: float, subjects: record>, corporate_id: int, country: string, created_at: int, do_not_contact: bool, email: string, first_name: string, has_pwd: bool, id: int, is_client: bool, is_developer: bool, is_proofreader: bool, is_prospect: bool, is_sales_person: bool, is_vendor: bool, language_pairs: table<source_language: string, target_language: string>, last_name: string, last_seen_online_at: int, links: record<self: record<href: string>, login_as: record<href: string>, projects: record<href: string>, responsivity: record<href: string>, stats: record<href: string>>, locale: string, mailing: record<city: string, country: string, phone: string, state: string, street: string, zip: string>, name: string, native_language: string, nps: float, phone_number: string, profile_picture_path: string, social_media: record<facebook_url: string, linkedIn_url: string, twitter_url: string>, state: string, status: string, street: string, timezone: string, tms_user_name: string, user_groups: table<corporate_id: int, id: int, name: string, permissions: list>, vendor: record<can_work_manual_files: bool, email_open_rate: float, is_frozen: bool, is_proofreader: bool, language_pairs: list<record>, native_language: string, pam_tqs: float, paypal_email: string, profile_survey: record<current_services: string, daily_proofreading_capacity: string, daily_translation_capacity: string, dtp_software: string, experience: string, is_certified_translator: string, is_sworn_translator: string, memoq: string, memsource: string, omegat: string, proofreader_experience: string, provides_creative_writing_service: string, provides_postedit_service: string, reference: string, sdl_trados: string, skype_id: string, smartcat: string, smartling: string, software: string, specialization: string, subtitle_edit: string, subtitle_workshop: string, translator_association: string, transsuite_2000: string, vendor_profile_lsp: string, wordbee: string, wordfast: string, work_type: string, work_with: string, working_as: string, working_timezone: string, xbench: string, xtm: string>, require_1099: bool, tags: list<string>, tms_user_name: string, vendor_type: string>, zip_code: string> {
+]: nothing -> oneof<record<billing: record<city: string, country: string, phone: string, state: string, street: string, zip: string, name: string>, birthday: string, can_work_manual_files: bool, city: string, client: record<corporate: record<email: string, id: int, logo: string, name: string, phone_number: string>, nps: float, subjects: record>, corporate_id: int, country: string, created_at: int, do_not_contact: bool, email: string, first_name: string, has_pwd: bool, id: int, is_client: bool, is_developer: bool, is_proofreader: bool, is_prospect: bool, is_sales_person: bool, is_vendor: bool, language_pairs: table<source_language: string, target_language: string>, last_name: string, last_seen_online_at: int, links: record<self: record<href: string>, login_as: record<href: string>, projects: record<href: string>, responsivity: record<href: string>, stats: record<href: string>>, locale: string, mailing: record<city: string, country: string, phone: string, state: string, street: string, zip: string>, name: string, native_language: string, nps: float, phone_number: string, profile_picture_path: string, social_media: record<facebook_url: string, linkedIn_url: string, twitter_url: string>, state: string, status: string, street: string, timezone: string, tms_user_name: string, user_groups: table<corporate_id: int, id: int, name: string, permissions: list>, vendor: record<can_work_manual_files: bool, email_open_rate: float, is_frozen: bool, is_proofreader: bool, language_pairs: list<record>, native_language: string, pam_tqs: float, paypal_email: string, profile_survey: record<current_services: string, daily_proofreading_capacity: string, daily_translation_capacity: string, dtp_software: string, experience: string, is_certified_translator: string, is_sworn_translator: string, memoq: string, memsource: string, omegat: string, proofreader_experience: string, provides_creative_writing_service: string, provides_postedit_service: string, reference: string, sdl_trados: string, skype_id: string, smartcat: string, smartling: string, software: string, specialization: string, subtitle_edit: string, subtitle_workshop: string, translator_association: string, transsuite_2000: string, vendor_profile_lsp: string, wordbee: string, wordfast: string, work_type: string, work_with: string, working_as: string, working_timezone: string, xbench: string, xtm: string>, require_1099: bool, tags: list<string>, tms_user_name: string, vendor_type: string>, zip_code: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/me" $auth.query)
@@ -3260,7 +3276,6 @@ export def "get-me" [
 #
 # POST /me
 # operationId: updateMe
-# --notifications shape: {phone_number?: string, sms_enabled?: bool}
 export def "update-me" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3287,7 +3302,7 @@ export def "update-me" [
   --paypal-email: string # Optional. Vendor paypal e-mail
   --require-1099: oneof<nothing, bool> # Optional. Whether this vendor requires 1099 form in US for their earnings.
   --user-groups: list<int> # A list of user group IDs
-]: any -> record<billing: record<city: string, country: string, phone: string, state: string, street: string, zip: string, name: string>, birthday: string, can_work_manual_files: bool, city: string, client: record<corporate: record<email: string, id: int, logo: string, name: string, phone_number: string>, nps: float, subjects: record>, corporate_id: int, country: string, created_at: int, do_not_contact: bool, email: string, first_name: string, has_pwd: bool, id: int, is_client: bool, is_developer: bool, is_proofreader: bool, is_prospect: bool, is_sales_person: bool, is_vendor: bool, language_pairs: table<source_language: string, target_language: string>, last_name: string, last_seen_online_at: int, links: record<self: record<href: string>, login_as: record<href: string>, projects: record<href: string>, responsivity: record<href: string>, stats: record<href: string>>, locale: string, mailing: record<city: string, country: string, phone: string, state: string, street: string, zip: string>, name: string, native_language: string, nps: float, phone_number: string, profile_picture_path: string, social_media: record<facebook_url: string, linkedIn_url: string, twitter_url: string>, state: string, status: string, street: string, timezone: string, tms_user_name: string, user_groups: table<corporate_id: int, id: int, name: string, permissions: list>, vendor: record<can_work_manual_files: bool, email_open_rate: float, is_frozen: bool, is_proofreader: bool, language_pairs: list<record>, native_language: string, pam_tqs: float, paypal_email: string, profile_survey: record<current_services: string, daily_proofreading_capacity: string, daily_translation_capacity: string, dtp_software: string, experience: string, is_certified_translator: string, is_sworn_translator: string, memoq: string, memsource: string, omegat: string, proofreader_experience: string, provides_creative_writing_service: string, provides_postedit_service: string, reference: string, sdl_trados: string, skype_id: string, smartcat: string, smartling: string, software: string, specialization: string, subtitle_edit: string, subtitle_workshop: string, translator_association: string, transsuite_2000: string, vendor_profile_lsp: string, wordbee: string, wordfast: string, work_type: string, work_with: string, working_as: string, working_timezone: string, xbench: string, xtm: string>, require_1099: bool, tags: list<string>, tms_user_name: string, vendor_type: string>, zip_code: string> {
+]: any -> oneof<record<billing: record<city: string, country: string, phone: string, state: string, street: string, zip: string, name: string>, birthday: string, can_work_manual_files: bool, city: string, client: record<corporate: record<email: string, id: int, logo: string, name: string, phone_number: string>, nps: float, subjects: record>, corporate_id: int, country: string, created_at: int, do_not_contact: bool, email: string, first_name: string, has_pwd: bool, id: int, is_client: bool, is_developer: bool, is_proofreader: bool, is_prospect: bool, is_sales_person: bool, is_vendor: bool, language_pairs: table<source_language: string, target_language: string>, last_name: string, last_seen_online_at: int, links: record<self: record<href: string>, login_as: record<href: string>, projects: record<href: string>, responsivity: record<href: string>, stats: record<href: string>>, locale: string, mailing: record<city: string, country: string, phone: string, state: string, street: string, zip: string>, name: string, native_language: string, nps: float, phone_number: string, profile_picture_path: string, social_media: record<facebook_url: string, linkedIn_url: string, twitter_url: string>, state: string, status: string, street: string, timezone: string, tms_user_name: string, user_groups: table<corporate_id: int, id: int, name: string, permissions: list>, vendor: record<can_work_manual_files: bool, email_open_rate: float, is_frozen: bool, is_proofreader: bool, language_pairs: list<record>, native_language: string, pam_tqs: float, paypal_email: string, profile_survey: record<current_services: string, daily_proofreading_capacity: string, daily_translation_capacity: string, dtp_software: string, experience: string, is_certified_translator: string, is_sworn_translator: string, memoq: string, memsource: string, omegat: string, proofreader_experience: string, provides_creative_writing_service: string, provides_postedit_service: string, reference: string, sdl_trados: string, skype_id: string, smartcat: string, smartling: string, software: string, specialization: string, subtitle_edit: string, subtitle_workshop: string, translator_association: string, transsuite_2000: string, vendor_profile_lsp: string, wordbee: string, wordfast: string, work_type: string, work_with: string, working_as: string, working_timezone: string, xbench: string, xtm: string>, require_1099: bool, tags: list<string>, tms_user_name: string, vendor_type: string>, zip_code: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3325,7 +3340,7 @@ export def "get-delivery-prediction" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --project-id: int # format: int64
-]: any -> record<result: table<language: string, late: bool, probability: float>> {
+]: any -> oneof<record<result: table<language: string, late: bool, probability: float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3365,7 +3380,7 @@ export def "subscribe-notification" [
   --device: string@device-completer
   --endpoint: string # OneSignal calls this "player ID".
   --type: string@type-completer-1 # default: OneSignal
-]: any -> record<status: string> {
+]: any -> oneof<record<status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3404,7 +3419,7 @@ export def "unsubscribe-notification" [
   --device: string@device-completer
   --endpoint: string # OneSignal calls this "player ID".
   --type: string@type-completer-1 # default: OneSignal
-]: any -> record<status: string> {
+]: any -> oneof<record<status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3446,7 +3461,7 @@ export def "post-message" [
   --slots: list<string> # contexts for next message
   --thread-id: string # id of the thread
   --thread-key: string # the key for thread_id default is project
-]: any -> record<status: string> {
+]: any -> oneof<record<status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3484,7 +3499,7 @@ export def "get-client-profile-for-pam" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account_creation_date: string, client_project_count: float, corporate: string, corporate_id: float, corporate_user_count: float, frequent_file_extension: string, frequent_language_pairs: list<string>, full_name: string, growth: bool, is_complex: bool, last_12_months_spending: float, last_project: float, last_project_time: string, last_proofreaders: table<full_name: string, id: float, language: string, vendor_link: string>, notes: list<string>, nps: record<average: record<completed_surveys_count: float, score: float>, last: record<completion_date: string, score: float>>, user_rank_in_project_count: float, user_rank_in_spending: float> {
+]: nothing -> oneof<record<account_creation_date: string, client_project_count: float, corporate: string, corporate_id: float, corporate_user_count: float, frequent_file_extension: string, frequent_language_pairs: list<string>, full_name: string, growth: bool, is_complex: bool, last_12_months_spending: float, last_project: float, last_project_time: string, last_proofreaders: table<full_name: string, id: float, language: string, vendor_link: string>, notes: list<string>, nps: record<average: record<completed_surveys_count: float, score: float>, last: record<completion_date: string, score: float>>, user_rank_in_project_count: float, user_rank_in_spending: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($client_id | is-empty) { error make --unspanned { msg: "path parameter 'clientId' must be non-empty" } }
@@ -3520,7 +3535,7 @@ export def "get-project-completion-report-for-pam" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<admin_user_id: float, completion_report_data: table<invited_vendors: list, target_language: string>, id: float, quote_id: float> {
+]: nothing -> oneof<record<admin_user_id: float, completion_report_data: table<invited_vendors: list, target_language: string>, id: float, quote_id: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -3556,7 +3571,7 @@ export def "update-password" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --password: string # New Password
-]: any -> record<status: string> {
+]: any -> oneof<record<status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3593,7 +3608,7 @@ export def "get-payment-info" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<billing: record<city: string, country: string, phone: string, state: string, street: string, zip: string, name: string>, card: record<bin: string, id: int, is_default: bool, payment_code: string>, cards: table<bin: string, id: int, is_default: bool, payment_code: string>, corporate: record<allow_api_invoicing: bool, allow_payment_code: bool, auto_charge: bool, billing: record<city: string, country: string, phone: string, state: string, street: string, zip: string, name: string>, card: record<bin: string, id: int, is_default: bool, payment_code: string>, contact_email_address: string, payment_code: string>, shared_card: record<bin: string, id: int, is_default: bool, payment_code: string>> {
+]: nothing -> oneof<record<billing: record<city: string, country: string, phone: string, state: string, street: string, zip: string, name: string>, card: record<bin: string, id: int, is_default: bool, payment_code: string>, cards: table<bin: string, id: int, is_default: bool, payment_code: string>, corporate: record<allow_api_invoicing: bool, allow_payment_code: bool, auto_charge: bool, billing: record<city: string, country: string, phone: string, state: string, street: string, zip: string, name: string>, card: record<bin: string, id: int, is_default: bool, payment_code: string>, contact_email_address: string, payment_code: string>, shared_card: record<bin: string, id: int, is_default: bool, payment_code: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payment" $auth.query)
@@ -3637,7 +3652,7 @@ export def "update-payment-info" [
   --save-as-corporate-primary: oneof<nothing, bool>
   --share-with-corporate-users: oneof<nothing, bool>
   --stripe-token: string
-]: any -> record<billing: record<city: string, country: string, phone: string, state: string, street: string, zip: string, name: string>, card: record<bin: string, id: int, is_default: bool, payment_code: string>, cards: table<bin: string, id: int, is_default: bool, payment_code: string>, corporate: record<allow_api_invoicing: bool, allow_payment_code: bool, auto_charge: bool, billing: record<city: string, country: string, phone: string, state: string, street: string, zip: string, name: string>, card: record<bin: string, id: int, is_default: bool, payment_code: string>, contact_email_address: string, payment_code: string>, shared_card: record<bin: string, id: int, is_default: bool, payment_code: string>> {
+]: any -> oneof<record<billing: record<city: string, country: string, phone: string, state: string, street: string, zip: string, name: string>, card: record<bin: string, id: int, is_default: bool, payment_code: string>, cards: table<bin: string, id: int, is_default: bool, payment_code: string>, corporate: record<allow_api_invoicing: bool, allow_payment_code: bool, auto_charge: bool, billing: record<city: string, country: string, phone: string, state: string, street: string, zip: string, name: string>, card: record<bin: string, id: int, is_default: bool, payment_code: string>, contact_email_address: string, payment_code: string>, shared_card: record<bin: string, id: int, is_default: bool, payment_code: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3674,7 +3689,7 @@ export def "reset-corporate-payment-code" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<bin: string, id: int, is_default: bool, payment_code: string> {
+]: nothing -> oneof<record<bin: string, id: int, is_default: bool, payment_code: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payment/reset-corporate-payment-code" $auth.query)
@@ -3708,7 +3723,7 @@ export def "toggle-corporate-auto-charge" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<status: string> {
+]: nothing -> oneof<record<status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payment/toggle-corporate-auto-charge" $auth.query)
@@ -3743,7 +3758,7 @@ export def "get-credit-card" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<bin: string, id: int, is_default: bool, payment_code: string> {
+]: nothing -> oneof<record<bin: string, id: int, is_default: bool, payment_code: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($card_id | is-empty) { error make --unspanned { msg: "path parameter 'cardId' must be non-empty" } }
@@ -3779,7 +3794,7 @@ export def "delete-credit-card" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<status: string> {
+]: nothing -> oneof<record<status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($card_id | is-empty) { error make --unspanned { msg: "path parameter 'cardId' must be non-empty" } }
@@ -3815,7 +3830,7 @@ export def "reset-card-payment-code" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<bin: string, id: int, is_default: bool, payment_code: string> {
+]: nothing -> oneof<record<bin: string, id: int, is_default: bool, payment_code: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($card_id | is-empty) { error make --unspanned { msg: "path parameter 'cardId' must be non-empty" } }
@@ -3850,7 +3865,7 @@ export def "get-permissions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, permissions: list<string>> {
+]: nothing -> oneof<record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, permissions: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/permissions" $auth.query)
@@ -3885,7 +3900,7 @@ export def "upload-profile-picture" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   profile_picture: string # Profile picture file contents. Accepted extensions are png, jpg. (format: binary)
-]: any -> record<status: string> {
+]: any -> oneof<record<status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3934,7 +3949,7 @@ export def "get-projects" [
   --order-by: string@order-by-completer-1 # default: id
   --order-type: string@order-type-completer
   --with: list<string> # Include detailed information. Possible values 'client', 'vendor'
-]: nothing -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, projects: table<average_scores: record, budget_code: string, callback_url: string, can_pam_manage: bool, client: record, cm_id: int, completed_on: string, continuous_project_type: string, created_at: int, custom: record, delivery_at: int, errors: list, id: int, is_api_project: bool, is_certified: bool, is_continuous: bool, is_manual: bool, links: record, pairs: list, pivoted_projects: list, price: record, price_without_discount: record, role: string, should_send_client_survey: bool, source: string, source_language: string, status: string, subjects: list, target_languages: list, tms_name: string, valid_until: int, vendor_word_count: int, word_count: int, word_count_analysis: record>> {
+]: nothing -> oneof<record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, projects: table<average_scores: record, budget_code: string, callback_url: string, can_pam_manage: bool, client: record, cm_id: int, completed_on: string, continuous_project_type: string, created_at: int, custom: record, delivery_at: int, errors: list, id: int, is_api_project: bool, is_certified: bool, is_continuous: bool, is_manual: bool, links: record, pairs: list, pivoted_projects: list, price: record, price_without_discount: record, role: string, should_send_client_survey: bool, source: string, source_language: string, status: string, subjects: list, target_languages: list, tms_name: string, valid_until: int, vendor_word_count: int, word_count: int, word_count_analysis: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "status[]" $status "multi") (serialize-qp "with_pending" $with_pending "scalar") (serialize-qp "with_started" $with_started "scalar") (serialize-qp "with_completed" $with_completed "scalar") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "order_type" $order_type "scalar") (serialize-qp "with[]" $with "multi")] | flatten | str join "&"
@@ -3977,7 +3992,7 @@ export def "create-project" [
   --source-language: string
   --styleguides: string # Optional. You can add as many files as you want in styleguides[] parameter. Or you add your style guides later in separate calls. (format: binary)
   --target-languages: list<string>
-]: any -> record<average_scores: record, budget_code: string, callback_url: string, can_pam_manage: bool, client: record<billing: record<city: string, country: string, phone: string, state: string, street: string, zip: string, name: string>, birthday: string, can_work_manual_files: bool, city: string, client: record<corporate: record, nps: float, subjects: record>, corporate_id: int, country: string, created_at: int, do_not_contact: bool, email: string, first_name: string, has_pwd: bool, id: int, is_client: bool, is_developer: bool, is_proofreader: bool, is_prospect: bool, is_sales_person: bool, is_vendor: bool, language_pairs: list<record>, last_name: string, last_seen_online_at: int, links: record<self: record, login_as: record, projects: record, responsivity: record, stats: record>, locale: string, mailing: record<city: string, country: string, phone: string, state: string, street: string, zip: string>, name: string, native_language: string, nps: float, phone_number: string, profile_picture_path: string, social_media: record<facebook_url: string, linkedIn_url: string, twitter_url: string>, state: string, status: string, street: string, timezone: string, tms_user_name: string, user_groups: list<record>, vendor: record<can_work_manual_files: bool, email_open_rate: float, is_frozen: bool, is_proofreader: bool, language_pairs: list, native_language: string, pam_tqs: float, paypal_email: string, profile_survey: record, require_1099: bool, tags: list, tms_user_name: string, vendor_type: string>, zip_code: string>, cm_id: int, completed_on: string, continuous_project_type: string, created_at: int, custom: record, delivery_at: int, errors: table<code: string, help: string, http_code: int, message: string>, id: int, is_api_project: bool, is_certified: bool, is_continuous: bool, is_manual: bool, links: record<self: record<href: string>, documents: record<href: string>, glossaries: record<href: string>, payment: record<href: string>, quote_pdf: record<href: string>, styleguides: record<href: string>>, pairs: table<currency: string, is_proofreader: bool, proofreader: record, proofreading_rate: float, source_language: string, target_language: string, translation_rate: float>, pivoted_projects: list<int>, price: record<amount: float, base_amount: float, base_currency: string, currency: string, usd_amount: float>, price_without_discount: record<amount: float, base_amount: float, base_currency: string, currency: string, usd_amount: float>, role: string, should_send_client_survey: bool, source: string, source_language: string, status: string, subjects: list<string>, target_languages: list<string>, tms_name: string, valid_until: int, vendor_word_count: int, word_count: int, word_count_analysis: record<base: float, duplicate: float, exclusion: float, final: float, tm: float>> {
+]: any -> oneof<record<average_scores: record, budget_code: string, callback_url: string, can_pam_manage: bool, client: record<billing: record<city: string, country: string, phone: string, state: string, street: string, zip: string, name: string>, birthday: string, can_work_manual_files: bool, city: string, client: record<corporate: record, nps: float, subjects: record>, corporate_id: int, country: string, created_at: int, do_not_contact: bool, email: string, first_name: string, has_pwd: bool, id: int, is_client: bool, is_developer: bool, is_proofreader: bool, is_prospect: bool, is_sales_person: bool, is_vendor: bool, language_pairs: list<record>, last_name: string, last_seen_online_at: int, links: record<self: record, login_as: record, projects: record, responsivity: record, stats: record>, locale: string, mailing: record<city: string, country: string, phone: string, state: string, street: string, zip: string>, name: string, native_language: string, nps: float, phone_number: string, profile_picture_path: string, social_media: record<facebook_url: string, linkedIn_url: string, twitter_url: string>, state: string, status: string, street: string, timezone: string, tms_user_name: string, user_groups: list<record>, vendor: record<can_work_manual_files: bool, email_open_rate: float, is_frozen: bool, is_proofreader: bool, language_pairs: list, native_language: string, pam_tqs: float, paypal_email: string, profile_survey: record, require_1099: bool, tags: list, tms_user_name: string, vendor_type: string>, zip_code: string>, cm_id: int, completed_on: string, continuous_project_type: string, created_at: int, custom: record, delivery_at: int, errors: table<code: string, help: string, http_code: int, message: string>, id: int, is_api_project: bool, is_certified: bool, is_continuous: bool, is_manual: bool, links: record<self: record<href: string>, documents: record<href: string>, glossaries: record<href: string>, payment: record<href: string>, quote_pdf: record<href: string>, styleguides: record<href: string>>, pairs: table<currency: string, is_proofreader: bool, proofreader: record, proofreading_rate: float, source_language: string, target_language: string, translation_rate: float>, pivoted_projects: list<int>, price: record<amount: float, base_amount: float, base_currency: string, currency: string, usd_amount: float>, price_without_discount: record<amount: float, base_amount: float, base_currency: string, currency: string, usd_amount: float>, role: string, should_send_client_survey: bool, source: string, source_language: string, status: string, subjects: list<string>, target_languages: list<string>, tms_name: string, valid_until: int, vendor_word_count: int, word_count: int, word_count_analysis: record<base: float, duplicate: float, exclusion: float, final: float, tm: float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4015,7 +4030,7 @@ export def "get-quote-id-from-internal-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<internal_id: int, public_id: int> {
+]: nothing -> oneof<record<internal_id: int, public_id: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -4054,7 +4069,7 @@ export def "get-vendor-projects" [
   --completed: oneof<nothing, bool> # Return only projects that have been completed. When `true`, this makes `joined` true as well.
   --page: int # format: int64, default: 1
   --per-page: int # format: int64, default: 10
-]: nothing -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, projects: table<average_scores: record, budget_code: string, callback_url: string, can_pam_manage: bool, client: record, cm_id: int, completed_on: string, continuous_project_type: string, created_at: int, custom: record, delivery_at: int, errors: list, id: int, is_api_project: bool, is_certified: bool, is_continuous: bool, is_manual: bool, links: record, pairs: list, pivoted_projects: list, price: record, price_without_discount: record, role: string, should_send_client_survey: bool, source: string, source_language: string, status: string, subjects: list, target_languages: list, tms_name: string, valid_until: int, vendor_word_count: int, word_count: int, word_count_analysis: record>> {
+]: nothing -> oneof<record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, projects: table<average_scores: record, budget_code: string, callback_url: string, can_pam_manage: bool, client: record, cm_id: int, completed_on: string, continuous_project_type: string, created_at: int, custom: record, delivery_at: int, errors: list, id: int, is_api_project: bool, is_certified: bool, is_continuous: bool, is_manual: bool, links: record, pairs: list, pivoted_projects: list, price: record, price_without_discount: record, role: string, should_send_client_survey: bool, source: string, source_language: string, status: string, subjects: list, target_languages: list, tms_name: string, valid_until: int, vendor_word_count: int, word_count: int, word_count_analysis: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "joined" $joined "scalar") (serialize-qp "completed" $completed "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
@@ -4090,7 +4105,7 @@ export def "delete-project" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<status: string> {
+]: nothing -> oneof<record<status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4127,7 +4142,7 @@ export def "get-project" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --with: list<string> # Include detailed information. Possible values 'client', 'vendor', 'score'
-]: nothing -> record<average_scores: record, budget_code: string, callback_url: string, can_pam_manage: bool, client: record<billing: record<city: string, country: string, phone: string, state: string, street: string, zip: string, name: string>, birthday: string, can_work_manual_files: bool, city: string, client: record<corporate: record, nps: float, subjects: record>, corporate_id: int, country: string, created_at: int, do_not_contact: bool, email: string, first_name: string, has_pwd: bool, id: int, is_client: bool, is_developer: bool, is_proofreader: bool, is_prospect: bool, is_sales_person: bool, is_vendor: bool, language_pairs: list<record>, last_name: string, last_seen_online_at: int, links: record<self: record, login_as: record, projects: record, responsivity: record, stats: record>, locale: string, mailing: record<city: string, country: string, phone: string, state: string, street: string, zip: string>, name: string, native_language: string, nps: float, phone_number: string, profile_picture_path: string, social_media: record<facebook_url: string, linkedIn_url: string, twitter_url: string>, state: string, status: string, street: string, timezone: string, tms_user_name: string, user_groups: list<record>, vendor: record<can_work_manual_files: bool, email_open_rate: float, is_frozen: bool, is_proofreader: bool, language_pairs: list, native_language: string, pam_tqs: float, paypal_email: string, profile_survey: record, require_1099: bool, tags: list, tms_user_name: string, vendor_type: string>, zip_code: string>, cm_id: int, completed_on: string, continuous_project_type: string, created_at: int, custom: record, delivery_at: int, errors: table<code: string, help: string, http_code: int, message: string>, id: int, is_api_project: bool, is_certified: bool, is_continuous: bool, is_manual: bool, links: record<self: record<href: string>, documents: record<href: string>, glossaries: record<href: string>, payment: record<href: string>, quote_pdf: record<href: string>, styleguides: record<href: string>>, pairs: table<currency: string, is_proofreader: bool, proofreader: record, proofreading_rate: float, source_language: string, target_language: string, translation_rate: float>, pivoted_projects: list<int>, price: record<amount: float, base_amount: float, base_currency: string, currency: string, usd_amount: float>, price_without_discount: record<amount: float, base_amount: float, base_currency: string, currency: string, usd_amount: float>, role: string, should_send_client_survey: bool, source: string, source_language: string, status: string, subjects: list<string>, target_languages: list<string>, tms_name: string, valid_until: int, vendor_word_count: int, word_count: int, word_count_analysis: record<base: float, duplicate: float, exclusion: float, final: float, tm: float>> {
+]: nothing -> oneof<record<average_scores: record, budget_code: string, callback_url: string, can_pam_manage: bool, client: record<billing: record<city: string, country: string, phone: string, state: string, street: string, zip: string, name: string>, birthday: string, can_work_manual_files: bool, city: string, client: record<corporate: record, nps: float, subjects: record>, corporate_id: int, country: string, created_at: int, do_not_contact: bool, email: string, first_name: string, has_pwd: bool, id: int, is_client: bool, is_developer: bool, is_proofreader: bool, is_prospect: bool, is_sales_person: bool, is_vendor: bool, language_pairs: list<record>, last_name: string, last_seen_online_at: int, links: record<self: record, login_as: record, projects: record, responsivity: record, stats: record>, locale: string, mailing: record<city: string, country: string, phone: string, state: string, street: string, zip: string>, name: string, native_language: string, nps: float, phone_number: string, profile_picture_path: string, social_media: record<facebook_url: string, linkedIn_url: string, twitter_url: string>, state: string, status: string, street: string, timezone: string, tms_user_name: string, user_groups: list<record>, vendor: record<can_work_manual_files: bool, email_open_rate: float, is_frozen: bool, is_proofreader: bool, language_pairs: list, native_language: string, pam_tqs: float, paypal_email: string, profile_survey: record, require_1099: bool, tags: list, tms_user_name: string, vendor_type: string>, zip_code: string>, cm_id: int, completed_on: string, continuous_project_type: string, created_at: int, custom: record, delivery_at: int, errors: table<code: string, help: string, http_code: int, message: string>, id: int, is_api_project: bool, is_certified: bool, is_continuous: bool, is_manual: bool, links: record<self: record<href: string>, documents: record<href: string>, glossaries: record<href: string>, payment: record<href: string>, quote_pdf: record<href: string>, styleguides: record<href: string>>, pairs: table<currency: string, is_proofreader: bool, proofreader: record, proofreading_rate: float, source_language: string, target_language: string, translation_rate: float>, pivoted_projects: list<int>, price: record<amount: float, base_amount: float, base_currency: string, currency: string, usd_amount: float>, price_without_discount: record<amount: float, base_amount: float, base_currency: string, currency: string, usd_amount: float>, role: string, should_send_client_survey: bool, source: string, source_language: string, status: string, subjects: list<string>, target_languages: list<string>, tms_name: string, valid_until: int, vendor_word_count: int, word_count: int, word_count_analysis: record<base: float, duplicate: float, exclusion: float, final: float, tm: float>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4169,7 +4184,7 @@ export def "update-project" [
   --custom: list<string> # Optional. This is a consistent custom data parameter that will be given to you in the response across every request of this project model. Values should be provided like this, custom[my_key] = my_value. If you previously provided one, it will be replaced.
   --source-language: string
   --target-languages: list<string>
-]: any -> record<average_scores: record, budget_code: string, callback_url: string, can_pam_manage: bool, client: record<billing: record<city: string, country: string, phone: string, state: string, street: string, zip: string, name: string>, birthday: string, can_work_manual_files: bool, city: string, client: record<corporate: record, nps: float, subjects: record>, corporate_id: int, country: string, created_at: int, do_not_contact: bool, email: string, first_name: string, has_pwd: bool, id: int, is_client: bool, is_developer: bool, is_proofreader: bool, is_prospect: bool, is_sales_person: bool, is_vendor: bool, language_pairs: list<record>, last_name: string, last_seen_online_at: int, links: record<self: record, login_as: record, projects: record, responsivity: record, stats: record>, locale: string, mailing: record<city: string, country: string, phone: string, state: string, street: string, zip: string>, name: string, native_language: string, nps: float, phone_number: string, profile_picture_path: string, social_media: record<facebook_url: string, linkedIn_url: string, twitter_url: string>, state: string, status: string, street: string, timezone: string, tms_user_name: string, user_groups: list<record>, vendor: record<can_work_manual_files: bool, email_open_rate: float, is_frozen: bool, is_proofreader: bool, language_pairs: list, native_language: string, pam_tqs: float, paypal_email: string, profile_survey: record, require_1099: bool, tags: list, tms_user_name: string, vendor_type: string>, zip_code: string>, cm_id: int, completed_on: string, continuous_project_type: string, created_at: int, custom: record, delivery_at: int, errors: table<code: string, help: string, http_code: int, message: string>, id: int, is_api_project: bool, is_certified: bool, is_continuous: bool, is_manual: bool, links: record<self: record<href: string>, documents: record<href: string>, glossaries: record<href: string>, payment: record<href: string>, quote_pdf: record<href: string>, styleguides: record<href: string>>, pairs: table<currency: string, is_proofreader: bool, proofreader: record, proofreading_rate: float, source_language: string, target_language: string, translation_rate: float>, pivoted_projects: list<int>, price: record<amount: float, base_amount: float, base_currency: string, currency: string, usd_amount: float>, price_without_discount: record<amount: float, base_amount: float, base_currency: string, currency: string, usd_amount: float>, role: string, should_send_client_survey: bool, source: string, source_language: string, status: string, subjects: list<string>, target_languages: list<string>, tms_name: string, valid_until: int, vendor_word_count: int, word_count: int, word_count_analysis: record<base: float, duplicate: float, exclusion: float, final: float, tm: float>> {
+]: any -> oneof<record<average_scores: record, budget_code: string, callback_url: string, can_pam_manage: bool, client: record<billing: record<city: string, country: string, phone: string, state: string, street: string, zip: string, name: string>, birthday: string, can_work_manual_files: bool, city: string, client: record<corporate: record, nps: float, subjects: record>, corporate_id: int, country: string, created_at: int, do_not_contact: bool, email: string, first_name: string, has_pwd: bool, id: int, is_client: bool, is_developer: bool, is_proofreader: bool, is_prospect: bool, is_sales_person: bool, is_vendor: bool, language_pairs: list<record>, last_name: string, last_seen_online_at: int, links: record<self: record, login_as: record, projects: record, responsivity: record, stats: record>, locale: string, mailing: record<city: string, country: string, phone: string, state: string, street: string, zip: string>, name: string, native_language: string, nps: float, phone_number: string, profile_picture_path: string, social_media: record<facebook_url: string, linkedIn_url: string, twitter_url: string>, state: string, status: string, street: string, timezone: string, tms_user_name: string, user_groups: list<record>, vendor: record<can_work_manual_files: bool, email_open_rate: float, is_frozen: bool, is_proofreader: bool, language_pairs: list, native_language: string, pam_tqs: float, paypal_email: string, profile_survey: record, require_1099: bool, tags: list, tms_user_name: string, vendor_type: string>, zip_code: string>, cm_id: int, completed_on: string, continuous_project_type: string, created_at: int, custom: record, delivery_at: int, errors: table<code: string, help: string, http_code: int, message: string>, id: int, is_api_project: bool, is_certified: bool, is_continuous: bool, is_manual: bool, links: record<self: record<href: string>, documents: record<href: string>, glossaries: record<href: string>, payment: record<href: string>, quote_pdf: record<href: string>, styleguides: record<href: string>>, pairs: table<currency: string, is_proofreader: bool, proofreader: record, proofreading_rate: float, source_language: string, target_language: string, translation_rate: float>, pivoted_projects: list<int>, price: record<amount: float, base_amount: float, base_currency: string, currency: string, usd_amount: float>, price_without_discount: record<amount: float, base_amount: float, base_currency: string, currency: string, usd_amount: float>, role: string, should_send_client_survey: bool, source: string, source_language: string, status: string, subjects: list<string>, target_languages: list<string>, tms_name: string, valid_until: int, vendor_word_count: int, word_count: int, word_count_analysis: record<base: float, duplicate: float, exclusion: float, final: float, tm: float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4209,7 +4224,7 @@ export def "assign-cm" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --user-id: int # format: int64
-]: any -> record<status: string> {
+]: any -> oneof<record<status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4249,7 +4264,7 @@ export def "trigger-callback" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<average_scores: record, budget_code: string, callback_url: string, can_pam_manage: bool, client: record<billing: record, birthday: string, can_work_manual_files: bool, city: string, client: record, corporate_id: int, country: string, created_at: int, do_not_contact: bool, email: string, first_name: string, has_pwd: bool, id: int, is_client: bool, is_developer: bool, is_proofreader: bool, is_prospect: bool, is_sales_person: bool, is_vendor: bool, language_pairs: list, last_name: string, last_seen_online_at: int, links: record, locale: string, mailing: record, name: string, native_language: string, nps: float, phone_number: string, profile_picture_path: string, social_media: record, state: string, status: string, street: string, timezone: string, tms_user_name: string, user_groups: list, vendor: record, zip_code: string>, cm_id: int, completed_on: string, continuous_project_type: string, created_at: int, custom: record, delivery_at: int, errors: list<record>, id: int, is_api_project: bool, is_certified: bool, is_continuous: bool, is_manual: bool, links: record<self: record, documents: record, glossaries: record, payment: record, quote_pdf: record, styleguides: record>, pairs: list<record>, pivoted_projects: list<int>, price: record<amount: float, base_amount: float, base_currency: string, currency: string, usd_amount: float>, price_without_discount: record<amount: float, base_amount: float, base_currency: string, currency: string, usd_amount: float>, role: string, should_send_client_survey: bool, source: string, source_language: string, status: string, subjects: list<string>, target_languages: list<string>, tms_name: string, valid_until: int, vendor_word_count: int, word_count: int, word_count_analysis: record<base: float, duplicate: float, exclusion: float, final: float, tm: float>>, result: string, type: string, url: string> {
+]: nothing -> oneof<record<data: record<average_scores: record, budget_code: string, callback_url: string, can_pam_manage: bool, client: record<billing: record, birthday: string, can_work_manual_files: bool, city: string, client: record, corporate_id: int, country: string, created_at: int, do_not_contact: bool, email: string, first_name: string, has_pwd: bool, id: int, is_client: bool, is_developer: bool, is_proofreader: bool, is_prospect: bool, is_sales_person: bool, is_vendor: bool, language_pairs: list, last_name: string, last_seen_online_at: int, links: record, locale: string, mailing: record, name: string, native_language: string, nps: float, phone_number: string, profile_picture_path: string, social_media: record, state: string, status: string, street: string, timezone: string, tms_user_name: string, user_groups: list, vendor: record, zip_code: string>, cm_id: int, completed_on: string, continuous_project_type: string, created_at: int, custom: record, delivery_at: int, errors: list<record>, id: int, is_api_project: bool, is_certified: bool, is_continuous: bool, is_manual: bool, links: record<self: record, documents: record, glossaries: record, payment: record, quote_pdf: record, styleguides: record>, pairs: list<record>, pivoted_projects: list<int>, price: record<amount: float, base_amount: float, base_currency: string, currency: string, usd_amount: float>, price_without_discount: record<amount: float, base_amount: float, base_currency: string, currency: string, usd_amount: float>, role: string, should_send_client_survey: bool, source: string, source_language: string, status: string, subjects: list<string>, target_languages: list<string>, tms_name: string, valid_until: int, vendor_word_count: int, word_count: int, word_count_analysis: record<base: float, duplicate: float, exclusion: float, final: float, tm: float>>, result: string, type: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4287,7 +4302,7 @@ export def "cancel-project" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --reason: string # Cancellation reason
-]: any -> record<status: string> {
+]: any -> oneof<record<status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4326,7 +4341,7 @@ export def "deliver-project" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<status: string> {
+]: nothing -> oneof<record<status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4436,7 +4451,7 @@ export def "send-quote-email" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<status: string> {
+]: nothing -> oneof<record<status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4472,7 +4487,7 @@ export def "get-invoice" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<amount: float, base_amount: float, base_currency: string, billing: record<city: string, country: string, phone: string, state: string, street: string, zip: string, name: string>, currency: string, id: int, invoice_no: int, invoiced_at: string, links: record<self: record<href: string>, corporate: record<href: string>, html: record<href: string>, json: record<href: string>, pdf: record<href: string>, project: record<href: string>, view: record<href: string>>, status: string> {
+]: nothing -> oneof<record<amount: float, base_amount: float, base_currency: string, billing: record<city: string, country: string, phone: string, state: string, street: string, zip: string, name: string>, currency: string, id: int, invoice_no: int, invoiced_at: string, links: record<self: record<href: string>, corporate: record<href: string>, html: record<href: string>, json: record<href: string>, pdf: record<href: string>, project: record<href: string>, view: record<href: string>>, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4586,7 +4601,7 @@ export def "launch-project" [
   --payment-code: string # Optional. `corporate` payment method requires this.s
   --payment-method: string@payment-method-completer # Optional. Determines which method to use for payment. `client`, `app`, `corporate_card` methods require a credit card ID. `credit` method requires Stripe token and bin. `corporate` method follows corporate account policy automatically, either follows invoicing flow or automatically charges corporate's primary card.
   --stripe-token: string # This is required if you are using a one-time credit card. This is the token generted from frontend via Stripe SDK. If you are using a one-time card with `stripe_token`, you must also provide `bin`, last 4 digits of the card.
-]: any -> record<status: string> {
+]: any -> oneof<record<status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4664,7 +4679,7 @@ export def "track-package" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # This is the package tracking key provided in the response of a /package call.
-]: nothing -> record<status: string> {
+]: nothing -> oneof<record<status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4704,7 +4719,7 @@ export def "package-language" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --async: int # If you want to package and download the translation synchronously, mark this parameter as '0'. It will package the translation and then return the packaged file in the response, identical to /download call after an asynchronous /package call. (format: int64, default: 0)
-]: nothing -> record<status: string, key: string> {
+]: nothing -> oneof<record<status: string, key: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4743,7 +4758,7 @@ export def "get-progress" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-raw: oneof<nothing, bool> # This will return a more raw progress information for translation and proofreading. For instance, when completed, we will return 100% for both tasks by default, whereas their actual progress may be lower than 100%. (default: false)
-]: nothing -> record<languages: record, links: record<self: record<href: string>, project: record<href: string>>, project_status: string, proofreading: float, total: float, translation: float, word_count: int> {
+]: nothing -> oneof<record<languages: record, links: record<self: record<href: string>, project: record<href: string>>, project_status: string, proofreading: float, total: float, translation: float, word_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4780,7 +4795,7 @@ export def "recreate-project" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<status: string> {
+]: nothing -> oneof<record<status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4818,7 +4833,7 @@ export def "submit-project-reports" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --activity-type: string # Activity Type
   --message: string # Report Message
-]: any -> record<status: string> {
+]: any -> oneof<record<status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4859,7 +4874,7 @@ export def "get-sales-activities" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --exclude-owner: string
   --type: string@type-completer-2
-]: nothing -> record<activities: table<body: string, created_at: int, created_by: string, type: string>> {
+]: nothing -> oneof<record<activities: table<body: string, created_at: int, created_by: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4899,7 +4914,7 @@ export def "insert-sales-activity" [
   --subject: string
   --timestamp: int # format: int64
   --type: string # Activity Type
-]: any -> record<status: string> {
+]: any -> oneof<record<status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4938,7 +4953,7 @@ export def "delete-project-webhook" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<status: string> {
+]: nothing -> oneof<record<status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4974,7 +4989,7 @@ export def "get-project-webhooks" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<average_scores: record, budget_code: string, callback_url: string, can_pam_manage: bool, client: record<billing: record<city: string, country: string, phone: string, state: string, street: string, zip: string, name: string>, birthday: string, can_work_manual_files: bool, city: string, client: record<corporate: record, nps: float, subjects: record>, corporate_id: int, country: string, created_at: int, do_not_contact: bool, email: string, first_name: string, has_pwd: bool, id: int, is_client: bool, is_developer: bool, is_proofreader: bool, is_prospect: bool, is_sales_person: bool, is_vendor: bool, language_pairs: list<record>, last_name: string, last_seen_online_at: int, links: record<self: record, login_as: record, projects: record, responsivity: record, stats: record>, locale: string, mailing: record<city: string, country: string, phone: string, state: string, street: string, zip: string>, name: string, native_language: string, nps: float, phone_number: string, profile_picture_path: string, social_media: record<facebook_url: string, linkedIn_url: string, twitter_url: string>, state: string, status: string, street: string, timezone: string, tms_user_name: string, user_groups: list<record>, vendor: record<can_work_manual_files: bool, email_open_rate: float, is_frozen: bool, is_proofreader: bool, language_pairs: list, native_language: string, pam_tqs: float, paypal_email: string, profile_survey: record, require_1099: bool, tags: list, tms_user_name: string, vendor_type: string>, zip_code: string>, cm_id: int, completed_on: string, continuous_project_type: string, created_at: int, custom: record, delivery_at: int, errors: table<code: string, help: string, http_code: int, message: string>, id: int, is_api_project: bool, is_certified: bool, is_continuous: bool, is_manual: bool, links: record<self: record<href: string>, documents: record<href: string>, glossaries: record<href: string>, payment: record<href: string>, quote_pdf: record<href: string>, styleguides: record<href: string>>, pairs: table<currency: string, is_proofreader: bool, proofreader: record, proofreading_rate: float, source_language: string, target_language: string, translation_rate: float>, pivoted_projects: list<int>, price: record<amount: float, base_amount: float, base_currency: string, currency: string, usd_amount: float>, price_without_discount: record<amount: float, base_amount: float, base_currency: string, currency: string, usd_amount: float>, role: string, should_send_client_survey: bool, source: string, source_language: string, status: string, subjects: list<string>, target_languages: list<string>, tms_name: string, valid_until: int, vendor_word_count: int, word_count: int, word_count_analysis: record<base: float, duplicate: float, exclusion: float, final: float, tm: float>> {
+]: nothing -> oneof<record<average_scores: record, budget_code: string, callback_url: string, can_pam_manage: bool, client: record<billing: record<city: string, country: string, phone: string, state: string, street: string, zip: string, name: string>, birthday: string, can_work_manual_files: bool, city: string, client: record<corporate: record, nps: float, subjects: record>, corporate_id: int, country: string, created_at: int, do_not_contact: bool, email: string, first_name: string, has_pwd: bool, id: int, is_client: bool, is_developer: bool, is_proofreader: bool, is_prospect: bool, is_sales_person: bool, is_vendor: bool, language_pairs: list<record>, last_name: string, last_seen_online_at: int, links: record<self: record, login_as: record, projects: record, responsivity: record, stats: record>, locale: string, mailing: record<city: string, country: string, phone: string, state: string, street: string, zip: string>, name: string, native_language: string, nps: float, phone_number: string, profile_picture_path: string, social_media: record<facebook_url: string, linkedIn_url: string, twitter_url: string>, state: string, status: string, street: string, timezone: string, tms_user_name: string, user_groups: list<record>, vendor: record<can_work_manual_files: bool, email_open_rate: float, is_frozen: bool, is_proofreader: bool, language_pairs: list, native_language: string, pam_tqs: float, paypal_email: string, profile_survey: record, require_1099: bool, tags: list, tms_user_name: string, vendor_type: string>, zip_code: string>, cm_id: int, completed_on: string, continuous_project_type: string, created_at: int, custom: record, delivery_at: int, errors: table<code: string, help: string, http_code: int, message: string>, id: int, is_api_project: bool, is_certified: bool, is_continuous: bool, is_manual: bool, links: record<self: record<href: string>, documents: record<href: string>, glossaries: record<href: string>, payment: record<href: string>, quote_pdf: record<href: string>, styleguides: record<href: string>>, pairs: table<currency: string, is_proofreader: bool, proofreader: record, proofreading_rate: float, source_language: string, target_language: string, translation_rate: float>, pivoted_projects: list<int>, price: record<amount: float, base_amount: float, base_currency: string, currency: string, usd_amount: float>, price_without_discount: record<amount: float, base_amount: float, base_currency: string, currency: string, usd_amount: float>, role: string, should_send_client_survey: bool, source: string, source_language: string, status: string, subjects: list<string>, target_languages: list<string>, tms_name: string, valid_until: int, vendor_word_count: int, word_count: int, word_count_analysis: record<base: float, duplicate: float, exclusion: float, final: float, tm: float>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5011,7 +5026,7 @@ export def "post-project-webhook" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --callback-url: string # Webhook URL. We will send POST callbacks when the status of the current project is changed. Possible status changes are, 'translated', 'proofread', 'completed'.
-]: any -> record<average_scores: record, budget_code: string, callback_url: string, can_pam_manage: bool, client: record<billing: record<city: string, country: string, phone: string, state: string, street: string, zip: string, name: string>, birthday: string, can_work_manual_files: bool, city: string, client: record<corporate: record, nps: float, subjects: record>, corporate_id: int, country: string, created_at: int, do_not_contact: bool, email: string, first_name: string, has_pwd: bool, id: int, is_client: bool, is_developer: bool, is_proofreader: bool, is_prospect: bool, is_sales_person: bool, is_vendor: bool, language_pairs: list<record>, last_name: string, last_seen_online_at: int, links: record<self: record, login_as: record, projects: record, responsivity: record, stats: record>, locale: string, mailing: record<city: string, country: string, phone: string, state: string, street: string, zip: string>, name: string, native_language: string, nps: float, phone_number: string, profile_picture_path: string, social_media: record<facebook_url: string, linkedIn_url: string, twitter_url: string>, state: string, status: string, street: string, timezone: string, tms_user_name: string, user_groups: list<record>, vendor: record<can_work_manual_files: bool, email_open_rate: float, is_frozen: bool, is_proofreader: bool, language_pairs: list, native_language: string, pam_tqs: float, paypal_email: string, profile_survey: record, require_1099: bool, tags: list, tms_user_name: string, vendor_type: string>, zip_code: string>, cm_id: int, completed_on: string, continuous_project_type: string, created_at: int, custom: record, delivery_at: int, errors: table<code: string, help: string, http_code: int, message: string>, id: int, is_api_project: bool, is_certified: bool, is_continuous: bool, is_manual: bool, links: record<self: record<href: string>, documents: record<href: string>, glossaries: record<href: string>, payment: record<href: string>, quote_pdf: record<href: string>, styleguides: record<href: string>>, pairs: table<currency: string, is_proofreader: bool, proofreader: record, proofreading_rate: float, source_language: string, target_language: string, translation_rate: float>, pivoted_projects: list<int>, price: record<amount: float, base_amount: float, base_currency: string, currency: string, usd_amount: float>, price_without_discount: record<amount: float, base_amount: float, base_currency: string, currency: string, usd_amount: float>, role: string, should_send_client_survey: bool, source: string, source_language: string, status: string, subjects: list<string>, target_languages: list<string>, tms_name: string, valid_until: int, vendor_word_count: int, word_count: int, word_count_analysis: record<base: float, duplicate: float, exclusion: float, final: float, tm: float>> {
+]: any -> oneof<record<average_scores: record, budget_code: string, callback_url: string, can_pam_manage: bool, client: record<billing: record<city: string, country: string, phone: string, state: string, street: string, zip: string, name: string>, birthday: string, can_work_manual_files: bool, city: string, client: record<corporate: record, nps: float, subjects: record>, corporate_id: int, country: string, created_at: int, do_not_contact: bool, email: string, first_name: string, has_pwd: bool, id: int, is_client: bool, is_developer: bool, is_proofreader: bool, is_prospect: bool, is_sales_person: bool, is_vendor: bool, language_pairs: list<record>, last_name: string, last_seen_online_at: int, links: record<self: record, login_as: record, projects: record, responsivity: record, stats: record>, locale: string, mailing: record<city: string, country: string, phone: string, state: string, street: string, zip: string>, name: string, native_language: string, nps: float, phone_number: string, profile_picture_path: string, social_media: record<facebook_url: string, linkedIn_url: string, twitter_url: string>, state: string, status: string, street: string, timezone: string, tms_user_name: string, user_groups: list<record>, vendor: record<can_work_manual_files: bool, email_open_rate: float, is_frozen: bool, is_proofreader: bool, language_pairs: list, native_language: string, pam_tqs: float, paypal_email: string, profile_survey: record, require_1099: bool, tags: list, tms_user_name: string, vendor_type: string>, zip_code: string>, cm_id: int, completed_on: string, continuous_project_type: string, created_at: int, custom: record, delivery_at: int, errors: table<code: string, help: string, http_code: int, message: string>, id: int, is_api_project: bool, is_certified: bool, is_continuous: bool, is_manual: bool, links: record<self: record<href: string>, documents: record<href: string>, glossaries: record<href: string>, payment: record<href: string>, quote_pdf: record<href: string>, styleguides: record<href: string>>, pairs: table<currency: string, is_proofreader: bool, proofreader: record, proofreading_rate: float, source_language: string, target_language: string, translation_rate: float>, pivoted_projects: list<int>, price: record<amount: float, base_amount: float, base_currency: string, currency: string, usd_amount: float>, price_without_discount: record<amount: float, base_amount: float, base_currency: string, currency: string, usd_amount: float>, role: string, should_send_client_survey: bool, source: string, source_language: string, status: string, subjects: list<string>, target_languages: list<string>, tms_name: string, valid_until: int, vendor_word_count: int, word_count: int, word_count_analysis: record<base: float, duplicate: float, exclusion: float, final: float, tm: float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5051,7 +5066,7 @@ export def "update-project-webhook" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --callback-url: string # Webhook URL. We will send POST callbacks when the status of the current project is changed. Possible status changes are, 'translated', 'proofread', 'completed'.
-]: any -> record<average_scores: record, budget_code: string, callback_url: string, can_pam_manage: bool, client: record<billing: record<city: string, country: string, phone: string, state: string, street: string, zip: string, name: string>, birthday: string, can_work_manual_files: bool, city: string, client: record<corporate: record, nps: float, subjects: record>, corporate_id: int, country: string, created_at: int, do_not_contact: bool, email: string, first_name: string, has_pwd: bool, id: int, is_client: bool, is_developer: bool, is_proofreader: bool, is_prospect: bool, is_sales_person: bool, is_vendor: bool, language_pairs: list<record>, last_name: string, last_seen_online_at: int, links: record<self: record, login_as: record, projects: record, responsivity: record, stats: record>, locale: string, mailing: record<city: string, country: string, phone: string, state: string, street: string, zip: string>, name: string, native_language: string, nps: float, phone_number: string, profile_picture_path: string, social_media: record<facebook_url: string, linkedIn_url: string, twitter_url: string>, state: string, status: string, street: string, timezone: string, tms_user_name: string, user_groups: list<record>, vendor: record<can_work_manual_files: bool, email_open_rate: float, is_frozen: bool, is_proofreader: bool, language_pairs: list, native_language: string, pam_tqs: float, paypal_email: string, profile_survey: record, require_1099: bool, tags: list, tms_user_name: string, vendor_type: string>, zip_code: string>, cm_id: int, completed_on: string, continuous_project_type: string, created_at: int, custom: record, delivery_at: int, errors: table<code: string, help: string, http_code: int, message: string>, id: int, is_api_project: bool, is_certified: bool, is_continuous: bool, is_manual: bool, links: record<self: record<href: string>, documents: record<href: string>, glossaries: record<href: string>, payment: record<href: string>, quote_pdf: record<href: string>, styleguides: record<href: string>>, pairs: table<currency: string, is_proofreader: bool, proofreader: record, proofreading_rate: float, source_language: string, target_language: string, translation_rate: float>, pivoted_projects: list<int>, price: record<amount: float, base_amount: float, base_currency: string, currency: string, usd_amount: float>, price_without_discount: record<amount: float, base_amount: float, base_currency: string, currency: string, usd_amount: float>, role: string, should_send_client_survey: bool, source: string, source_language: string, status: string, subjects: list<string>, target_languages: list<string>, tms_name: string, valid_until: int, vendor_word_count: int, word_count: int, word_count_analysis: record<base: float, duplicate: float, exclusion: float, final: float, tm: float>> {
+]: any -> oneof<record<average_scores: record, budget_code: string, callback_url: string, can_pam_manage: bool, client: record<billing: record<city: string, country: string, phone: string, state: string, street: string, zip: string, name: string>, birthday: string, can_work_manual_files: bool, city: string, client: record<corporate: record, nps: float, subjects: record>, corporate_id: int, country: string, created_at: int, do_not_contact: bool, email: string, first_name: string, has_pwd: bool, id: int, is_client: bool, is_developer: bool, is_proofreader: bool, is_prospect: bool, is_sales_person: bool, is_vendor: bool, language_pairs: list<record>, last_name: string, last_seen_online_at: int, links: record<self: record, login_as: record, projects: record, responsivity: record, stats: record>, locale: string, mailing: record<city: string, country: string, phone: string, state: string, street: string, zip: string>, name: string, native_language: string, nps: float, phone_number: string, profile_picture_path: string, social_media: record<facebook_url: string, linkedIn_url: string, twitter_url: string>, state: string, status: string, street: string, timezone: string, tms_user_name: string, user_groups: list<record>, vendor: record<can_work_manual_files: bool, email_open_rate: float, is_frozen: bool, is_proofreader: bool, language_pairs: list, native_language: string, pam_tqs: float, paypal_email: string, profile_survey: record, require_1099: bool, tags: list, tms_user_name: string, vendor_type: string>, zip_code: string>, cm_id: int, completed_on: string, continuous_project_type: string, created_at: int, custom: record, delivery_at: int, errors: table<code: string, help: string, http_code: int, message: string>, id: int, is_api_project: bool, is_certified: bool, is_continuous: bool, is_manual: bool, links: record<self: record<href: string>, documents: record<href: string>, glossaries: record<href: string>, payment: record<href: string>, quote_pdf: record<href: string>, styleguides: record<href: string>>, pairs: table<currency: string, is_proofreader: bool, proofreader: record, proofreading_rate: float, source_language: string, target_language: string, translation_rate: float>, pivoted_projects: list<int>, price: record<amount: float, base_amount: float, base_currency: string, currency: string, usd_amount: float>, price_without_discount: record<amount: float, base_amount: float, base_currency: string, currency: string, usd_amount: float>, role: string, should_send_client_survey: bool, source: string, source_language: string, status: string, subjects: list<string>, target_languages: list<string>, tms_name: string, valid_until: int, vendor_word_count: int, word_count: int, word_count_analysis: record<base: float, duplicate: float, exclusion: float, final: float, tm: float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5092,7 +5107,7 @@ export def "get-activities" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # format: int64, default: 1
   --per-page: int # format: int64, default: 10
-]: nothing -> record<activities: table<activity_at: int, id: int, links: record, source_text: string, target_text: string, translator: int, type: string>, meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>> {
+]: nothing -> oneof<record<activities: table<activity_at: int, id: int, links: record, source_text: string, target_text: string, translator: int, type: string>, meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -5130,7 +5145,7 @@ export def "get-activity" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<activity_at: int, id: int, links: record<self: record<href: string>, comments: record<href: string>, project: record<href: string>>, source_text: string, target_text: string, translator: int, type: string> {
+]: nothing -> oneof<record<activity_at: int, id: int, links: record<self: record<href: string>, comments: record<href: string>, project: record<href: string>>, source_text: string, target_text: string, translator: int, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -5156,7 +5171,6 @@ export def "get-activity" [
 #
 # POST /projects/{projectId}/activities/{activityId}
 # operationId: submitComment
-# --links shape: {self?: record, activity?: record, project?: record}
 export def "submit-comment" [
   project_id: int
   activity_id: int
@@ -5173,7 +5187,7 @@ export def "submit-comment" [
   --commented-at: int # Unix epoch time (format: int64)
   --id: int # format: int64
   --links: record # shape: {self?: record, activity?: record, project?: record}
-]: any -> record<comment: string, commented_at: int, id: int, links: record<self: record<href: string>, activity: record<href: string>, project: record<href: string>>> {
+]: any -> oneof<record<comment: string, commented_at: int, id: int, links: record<self: record<href: string>, activity: record<href: string>, project: record<href: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5214,7 +5228,7 @@ export def "get-activity-comments" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<activities: table<comment: string, commented_at: int, id: int, links: record>, meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>> {
+]: nothing -> oneof<record<activities: table<comment: string, commented_at: int, id: int, links: record>, meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -5253,7 +5267,7 @@ export def "get-comments" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # format: int64, default: 1
   --per-page: int # format: int64, default: 10
-]: nothing -> record<activities: table<comment: string, commented_at: int, id: int, links: record>, meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>> {
+]: nothing -> oneof<record<activities: table<comment: string, commented_at: int, id: int, links: record>, meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -5291,7 +5305,7 @@ export def "get-project-documents" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --with: list<string> # Attach further information. Possible values 'preview' to fetch temporary preview URLs. This is NOT recommended to be used with list calls. Only use with[]=preview for single document/style guide calls.
-]: nothing -> record<documents: table<file_type: string, has_custom_package: bool, id: int, links: record, manual_files: list, name: string, project_id: int, review_in_manual_editor: bool, scheme: record, search_score: float, source_language: string, subject: string, target_languages: list, uploaded_at: int, word_count: int>, meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>> {
+]: nothing -> oneof<record<documents: table<file_type: string, has_custom_package: bool, id: int, links: record, manual_files: list, name: string, project_id: int, review_in_manual_editor: bool, scheme: record, search_score: float, source_language: string, subject: string, target_languages: list, uploaded_at: int, word_count: int>, meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -5317,7 +5331,6 @@ export def "get-project-documents" [
 #
 # POST /projects/{projectId}/documents
 # operationId: createProjectDocument
-# --source-links[] item shape: {name?: string, size?: int, source?: "dropbox"|"googledrive"|"icloud", url?: string}
 export def "create-project-document" [
   project_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5332,7 +5345,7 @@ export def "create-project-document" [
   --documents: list<string> # You can add as many files as you want in documents[] parameter.
   --schemes: string # JSON string. If your documents have a scheme, as in cases of CSV files, use the same array index keys for `schemes` parameter to specify their schemes. See `Document Schemes` title in the API documentation.
   --source-links: list # When provided, we will download the files from these URLs, in addition to files provded in `documents` parameter and then save as source documents — item shape: {name?: string, size?: int, source?: "dropbox"|"googledrive"|"icloud", url?: string}
-]: any -> record<documents: table<file_type: string, has_custom_package: bool, id: int, links: record, manual_files: list, name: string, project_id: int, review_in_manual_editor: bool, scheme: record, search_score: float, source_language: string, subject: string, target_languages: list, uploaded_at: int, word_count: int>, meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>> {
+]: any -> oneof<record<documents: table<file_type: string, has_custom_package: bool, id: int, links: record, manual_files: list, name: string, project_id: int, review_in_manual_editor: bool, scheme: record, search_score: float, source_language: string, subject: string, target_languages: list, uploaded_at: int, word_count: int>, meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5372,7 +5385,7 @@ export def "delete-project-document" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<status: string> {
+]: nothing -> oneof<record<status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -5411,7 +5424,7 @@ export def "get-project-document" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --with: list<string> # Attach further information. Possible values 'preview' to fetch temporary preview URLs. This is NOT recommended to be used with list calls. Only use with[]=preview for single document/style guide calls.
-]: nothing -> record<file_type: string, has_custom_package: bool, id: int, links: record<self: record<href: string>, admins: record, download: record<href: string>, editors: record, preview_box: record<href: string>, preview_pdf: record<href: string>, preview_pdf_viewer: record<href: string>, progress: record<href: string>, project: record<href: string>, strings: record<href: string>, thumbnail: record<href: string>>, manual_files: table<driveFileId: int, isProofread: bool, isTranslated: bool, language: string, proofreadingFileId: int, translationFileId: int>, name: string, project_id: int, review_in_manual_editor: bool, scheme: record, search_score: float, source_language: string, subject: string, target_languages: list<string>, uploaded_at: int, word_count: int> {
+]: nothing -> oneof<record<file_type: string, has_custom_package: bool, id: int, links: record<self: record<href: string>, admins: record, download: record<href: string>, editors: record, preview_box: record<href: string>, preview_pdf: record<href: string>, preview_pdf_viewer: record<href: string>, progress: record<href: string>, project: record<href: string>, strings: record<href: string>, thumbnail: record<href: string>>, manual_files: table<driveFileId: int, isProofread: bool, isTranslated: bool, language: string, proofreadingFileId: int, translationFileId: int>, name: string, project_id: int, review_in_manual_editor: bool, scheme: record, search_score: float, source_language: string, subject: string, target_languages: list<string>, uploaded_at: int, word_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -5438,7 +5451,6 @@ export def "get-project-document" [
 #
 # POST /projects/{projectId}/documents/{documentId}
 # operationId: updateProjectDocument
-# --source-link shape: {name?: string, size?: int, source?: "dropbox"|"googledrive"|"icloud", url?: string}
 export def "update-project-document" [
   project_id: int
   document_id: int
@@ -5454,7 +5466,7 @@ export def "update-project-document" [
   --documents: string # Single file data. The name is plural to provide a consistent naming convention. (format: binary)
   --schemes: string # JSON string. If your documents have a scheme, as in cases of CSV files, use the same array index keys for `schemes` parameter to specify their schemes. See `Document Schemes` title in the API documentation.
   --source-link: record # shape: {name?: string, size?: int, source?: "dropbox"|"googledrive"|"icloud", url?: string}
-]: any -> record<file_type: string, has_custom_package: bool, id: int, links: record<self: record<href: string>, admins: record, download: record<href: string>, editors: record, preview_box: record<href: string>, preview_pdf: record<href: string>, preview_pdf_viewer: record<href: string>, progress: record<href: string>, project: record<href: string>, strings: record<href: string>, thumbnail: record<href: string>>, manual_files: table<driveFileId: int, isProofread: bool, isTranslated: bool, language: string, proofreadingFileId: int, translationFileId: int>, name: string, project_id: int, review_in_manual_editor: bool, scheme: record, search_score: float, source_language: string, subject: string, target_languages: list<string>, uploaded_at: int, word_count: int> {
+]: any -> oneof<record<file_type: string, has_custom_package: bool, id: int, links: record<self: record<href: string>, admins: record, download: record<href: string>, editors: record, preview_box: record<href: string>, preview_pdf: record<href: string>, preview_pdf_viewer: record<href: string>, progress: record<href: string>, project: record<href: string>, strings: record<href: string>, thumbnail: record<href: string>>, manual_files: table<driveFileId: int, isProofread: bool, isTranslated: bool, language: string, proofreadingFileId: int, translationFileId: int>, name: string, project_id: int, review_in_manual_editor: bool, scheme: record, search_score: float, source_language: string, subject: string, target_languages: list<string>, uploaded_at: int, word_count: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5533,7 +5545,7 @@ export def "get-document-translations" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, translations: table<content: string, file_id: int, id: string, translations: record>> {
+]: nothing -> oneof<record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, translations: table<content: string, file_id: int, id: string, translations: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -5614,7 +5626,7 @@ export def "get-document-translations-for-language" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, translations: table<content: string, file_id: int, id: string, translations: record>> {
+]: nothing -> oneof<record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, translations: table<content: string, file_id: int, id: string, translations: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -5652,7 +5664,7 @@ export def "get-glossaries" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<glossaries: table<id: int, links: record, name: string, uploaded_at: int>, meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>> {
+]: nothing -> oneof<record<glossaries: table<id: int, links: record, name: string, uploaded_at: int>, meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -5689,7 +5701,7 @@ export def "create-glossary" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   glossaries: string # You can only add one glossary, even though the name suggests multiple glossaries. This may be updated in the future to support multiple glossaries. (format: binary)
-]: any -> record<id: int, links: record<self: record<href: string>, admins: record, download: record<href: string>, editors: record, preview_box: record<href: string>, preview_pdf: record<href: string>, preview_pdf_viewer: record<href: string>, progress: record<href: string>, project: record<href: string>, strings: record<href: string>, thumbnail: record<href: string>>, name: string, uploaded_at: int> {
+]: any -> oneof<record<id: int, links: record<self: record<href: string>, admins: record, download: record<href: string>, editors: record, preview_box: record<href: string>, preview_pdf: record<href: string>, preview_pdf_viewer: record<href: string>, progress: record<href: string>, project: record<href: string>, strings: record<href: string>, thumbnail: record<href: string>>, name: string, uploaded_at: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5729,7 +5741,7 @@ export def "delete-glossary" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<status: string> {
+]: nothing -> oneof<record<status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -5767,7 +5779,7 @@ export def "get-glossary" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<id: int, links: record<self: record<href: string>, admins: record, download: record<href: string>, editors: record, preview_box: record<href: string>, preview_pdf: record<href: string>, preview_pdf_viewer: record<href: string>, progress: record<href: string>, project: record<href: string>, strings: record<href: string>, thumbnail: record<href: string>>, name: string, uploaded_at: int> {
+]: nothing -> oneof<record<id: int, links: record<self: record<href: string>, admins: record, download: record<href: string>, editors: record, preview_box: record<href: string>, preview_pdf: record<href: string>, preview_pdf_viewer: record<href: string>, progress: record<href: string>, project: record<href: string>, strings: record<href: string>, thumbnail: record<href: string>>, name: string, uploaded_at: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -5806,7 +5818,7 @@ export def "update-glossary" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   glossaries: string # You can only add one glossary, even though the name suggests multiple glossaries. This may be updated in the future to support multiple glossaries. (format: binary)
-]: any -> record<id: int, links: record<self: record<href: string>, admins: record, download: record<href: string>, editors: record, preview_box: record<href: string>, preview_pdf: record<href: string>, preview_pdf_viewer: record<href: string>, progress: record<href: string>, project: record<href: string>, strings: record<href: string>, thumbnail: record<href: string>>, name: string, uploaded_at: int> {
+]: any -> oneof<record<id: int, links: record<self: record<href: string>, admins: record, download: record<href: string>, editors: record, preview_box: record<href: string>, preview_pdf: record<href: string>, preview_pdf_viewer: record<href: string>, progress: record<href: string>, project: record<href: string>, strings: record<href: string>, thumbnail: record<href: string>>, name: string, uploaded_at: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5884,7 +5896,7 @@ export def "get-project-strings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, translations: table<content: string, file_id: int, id: string, translations: record>> {
+]: nothing -> oneof<record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, translations: table<content: string, file_id: int, id: string, translations: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -5923,7 +5935,7 @@ export def "package-project-translation-memory" [
   --accept: string@accept-completer-1 # Response content type
   --async: int # If you want to package and download the translation memory synchronously, mark this parameter as '0'. It will package the translation memory and then return the packaged file in the response, identical to async/download call after an asynchronous /package call. (format: int64, default: 0)
   --format: string # Translation Memory file format (default: tmx)
-]: nothing -> record<duration: int, key: string, message: record, status: string> {
+]: nothing -> oneof<record<duration: int, key: string, message: record, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -5961,7 +5973,7 @@ export def "package-project-translation-memory-status" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --async-request-key: string # Async operation key (required)
-]: nothing -> record<duration: int, key: string, message: record, status: string> {
+]: nothing -> oneof<record<duration: int, key: string, message: record, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -6003,7 +6015,7 @@ export def "package-project-translation-memory-for-language" [
   --accept: string@accept-completer-1 # Response content type
   --async: int # If you want to package and download the translation memory synchronously, mark this parameter as '0'. It will package the translation memory and then return the packaged file in the response, identical to async/download call after an asynchronous /package call. (format: int64, default: 0)
   --format: string # Translation Memory file format (default: tmx)
-]: nothing -> record<duration: int, key: string, message: record, status: string> {
+]: nothing -> oneof<record<duration: int, key: string, message: record, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -6043,7 +6055,7 @@ export def "package-project-translation-memory-for-language-status" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --async-request-key: string # Async operation key (required)
-]: nothing -> record<duration: int, key: string, message: record, status: string> {
+]: nothing -> oneof<record<duration: int, key: string, message: record, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -6083,7 +6095,7 @@ export def "get-project-strings-for-language" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, translations: table<content: string, file_id: int, id: string, translations: record>> {
+]: nothing -> oneof<record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, translations: table<content: string, file_id: int, id: string, translations: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -6121,7 +6133,7 @@ export def "get-style-guides" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --with: list<string> # Attach further information. Possible values 'preview' to fetch temporary preview URLs. This is NOT recommended to be used with list calls. Only use with[]=preview for single document/style guide calls.
-]: nothing -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, styleguides: table<id: int, links: record, name: string, uploaded_at: int>> {
+]: nothing -> oneof<record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, styleguides: table<id: int, links: record, name: string, uploaded_at: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -6159,7 +6171,7 @@ export def "create-style-guide" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   styleguides: string # You can only add one style guide, even though the name suggests multiple style guides. This may be updated in the future to support multiple style guides. (format: binary)
-]: any -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, styleguides: table<id: int, links: record, name: string, uploaded_at: int>> {
+]: any -> oneof<record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, styleguides: table<id: int, links: record, name: string, uploaded_at: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6199,7 +6211,7 @@ export def "delete-style-guide" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<status: string> {
+]: nothing -> oneof<record<status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -6238,7 +6250,7 @@ export def "get-style-guide" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --with: list<string> # Attach further information. Possible values 'preview' to fetch temporary preview URLs. This is NOT recommended to be used with list calls. Only use with[]=preview for single document/style guide calls.
-]: nothing -> record<id: int, links: record<self: record<href: string>, admins: record, download: record<href: string>, editors: record, preview_box: record<href: string>, preview_pdf: record<href: string>, preview_pdf_viewer: record<href: string>, progress: record<href: string>, project: record<href: string>, strings: record<href: string>, thumbnail: record<href: string>>, name: string, uploaded_at: int> {
+]: nothing -> oneof<record<id: int, links: record<self: record<href: string>, admins: record, download: record<href: string>, editors: record, preview_box: record<href: string>, preview_pdf: record<href: string>, preview_pdf_viewer: record<href: string>, progress: record<href: string>, project: record<href: string>, strings: record<href: string>, thumbnail: record<href: string>>, name: string, uploaded_at: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -6278,7 +6290,7 @@ export def "update-style-guide" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   styleguides: string # You can only add one style guide, even though the name suggests multiple style guides. This may be updated in the future to support multiple style guides. (format: binary)
-]: any -> record<id: int, links: record<self: record<href: string>, admins: record, download: record<href: string>, editors: record, preview_box: record<href: string>, preview_pdf: record<href: string>, preview_pdf_viewer: record<href: string>, progress: record<href: string>, project: record<href: string>, strings: record<href: string>, thumbnail: record<href: string>>, name: string, uploaded_at: int> {
+]: any -> oneof<record<id: int, links: record<self: record<href: string>, admins: record, download: record<href: string>, editors: record, preview_box: record<href: string>, preview_pdf: record<href: string>, preview_pdf_viewer: record<href: string>, progress: record<href: string>, project: record<href: string>, strings: record<href: string>, thumbnail: record<href: string>>, name: string, uploaded_at: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6358,7 +6370,7 @@ export def "get-project-translations" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, translations: table<content: string, file_id: int, id: string, translations: record>> {
+]: nothing -> oneof<record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, translations: table<content: string, file_id: int, id: string, translations: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -6397,7 +6409,7 @@ export def "get-project-translations-for-language" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, translations: table<content: string, file_id: int, id: string, translations: record>> {
+]: nothing -> oneof<record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, translations: table<content: string, file_id: int, id: string, translations: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -6434,7 +6446,7 @@ export def "get-project-vendors" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, users: table<billing: record, birthday: string, can_work_manual_files: bool, city: string, client: record, corporate_id: int, country: string, created_at: int, do_not_contact: bool, email: string, first_name: string, has_pwd: bool, id: int, is_client: bool, is_developer: bool, is_proofreader: bool, is_prospect: bool, is_sales_person: bool, is_vendor: bool, language_pairs: list, last_name: string, last_seen_online_at: int, links: record, locale: string, mailing: record, name: string, native_language: string, nps: float, phone_number: string, profile_picture_path: string, social_media: record, state: string, status: string, street: string, timezone: string, tms_user_name: string, user_groups: list, vendor: record, zip_code: string>> {
+]: nothing -> oneof<record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, users: table<billing: record, birthday: string, can_work_manual_files: bool, city: string, client: record, corporate_id: int, country: string, created_at: int, do_not_contact: bool, email: string, first_name: string, has_pwd: bool, id: int, is_client: bool, is_developer: bool, is_proofreader: bool, is_prospect: bool, is_sales_person: bool, is_vendor: bool, language_pairs: list, last_name: string, last_seen_online_at: int, links: record, locale: string, mailing: record, name: string, native_language: string, nps: float, phone_number: string, profile_picture_path: string, social_media: record, state: string, status: string, street: string, timezone: string, tms_user_name: string, user_groups: list, vendor: record, zip_code: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -6471,7 +6483,7 @@ export def "get-filter-contents" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --date-from: string # the date-time notation as defined by RFC 3339, section 5.6, for example, 2017-07-21T17:32:28Z (format: date-time)
   --date-to: string # the date-time notation as defined by RFC 3339, section 5.6, for example, 2017-07-21T17:32:28Z (format: date-time)
-]: any -> record<budget_codes: list<string>, categories: list<string>, clients: table<id: int, name: string>, documents: table<id: int, name: string>, projects: table<id: int, name: string>, severities: list<string>, source_languages: list<string>, subjects: list<string>, target_languages: list<string>, vendors: table<id: int, name: string>> {
+]: any -> oneof<record<budget_codes: list<string>, categories: list<string>, clients: table<id: int, name: string>, documents: table<id: int, name: string>, projects: table<id: int, name: string>, severities: list<string>, source_languages: list<string>, subjects: list<string>, target_languages: list<string>, vendors: table<id: int, name: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6514,7 +6526,7 @@ export def "get-language-pairs-report" [
   --source-languages: list<string> # List of source language codes.
   --target-languages: list<string> # List of target language codes.
   --users: list<int> # List of corporate user IDs. Valid for corporate accounts only.
-]: any -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, report: table<language_pair: record, spending: float, word_count: int>> {
+]: any -> oneof<record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, report: table<language_pair: record, spending: float, word_count: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6557,7 +6569,7 @@ export def "get-projects-report" [
   --source-languages: list<string> # List of source language codes.
   --target-languages: list<string> # List of target language codes.
   --users: list<int> # List of corporate user IDs. Valid for corporate accounts only.
-]: any -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, projects: table<average_scores: record, budget_code: string, callback_url: string, can_pam_manage: bool, client: record, cm_id: int, completed_on: string, continuous_project_type: string, created_at: int, custom: record, delivery_at: int, errors: list, id: int, is_api_project: bool, is_certified: bool, is_continuous: bool, is_manual: bool, links: record, pairs: list, pivoted_projects: list, price: record, price_without_discount: record, role: string, should_send_client_survey: bool, source: string, source_language: string, status: string, subjects: list, target_languages: list, tms_name: string, valid_until: int, vendor_word_count: int, word_count: int, word_count_analysis: record>> {
+]: any -> oneof<record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, projects: table<average_scores: record, budget_code: string, callback_url: string, can_pam_manage: bool, client: record, cm_id: int, completed_on: string, continuous_project_type: string, created_at: int, custom: record, delivery_at: int, errors: list, id: int, is_api_project: bool, is_certified: bool, is_continuous: bool, is_manual: bool, links: record, pairs: list, pivoted_projects: list, price: record, price_without_discount: record, role: string, should_send_client_survey: bool, source: string, source_language: string, status: string, subjects: list, target_languages: list, tms_name: string, valid_until: int, vendor_word_count: int, word_count: int, word_count_analysis: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6606,7 +6618,7 @@ export def "generate-qa-report" [
   --subjects: list<string>
   --target-languages: list<string>
   --vendors: list<float>
-]: any -> record<report: table<category: string, comment: string, docId: string, editorLink: string, end: int, inSource: bool, isCurrent: bool, module: string, projectId: record, severity: string, source: string, sourceLanguage: record, start: int, state: string, targetLanguage: record, translation: string, uniqueKey: string, vendor: record>> {
+]: any -> oneof<record<report: table<category: string, comment: string, docId: string, editorLink: string, end: int, inSource: bool, isCurrent: bool, module: string, projectId: record, severity: string, source: string, sourceLanguage: record, start: int, state: string, targetLanguage: record, translation: string, uniqueKey: string, vendor: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6649,7 +6661,7 @@ export def "get-users-report" [
   --source-languages: list<string> # List of source language codes.
   --target-languages: list<string> # List of target language codes.
   --users: list<int> # List of corporate user IDs. Valid for corporate accounts only.
-]: any -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, report: table<currency: string, spending: float, user: record, word_count: int>> {
+]: any -> oneof<record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, report: table<currency: string, spending: float, user: record, word_count: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6686,7 +6698,7 @@ export def "send-email-confirmation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<status: string> {
+]: nothing -> oneof<record<status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/resend-email-confirmation" $auth.query)
@@ -6721,7 +6733,7 @@ export def "get-responsivity" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --period: string@period-completer # Time period to calculate your responsiveness (default: monthly)
-]: nothing -> record<links: record<self: record<href: string>>, responsivity: table<invited: int, month: string, notEntered: int, onlyEntered: int, score: float, week: string, worked: int>> {
+]: nothing -> oneof<record<links: record<self: record<href: string>>, responsivity: table<invited: int, month: string, notEntered: int, onlyEntered: int, score: float, week: string, worked: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "period" $period "scalar")] | flatten | str join "&"
@@ -6760,7 +6772,7 @@ export def "search-everywhere" [
   --include: list<string> # Search in these entities. Current oprions are projects, documents, strings. Can be multiple. When not provided, we'll search through all entities.
   --page: int # format: int64, default: 1
   --per-page: int # format: int64, default: 10
-]: nothing -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, result: record<documents: list<record>, projects: list<record>, strings: list<record>>> {
+]: nothing -> oneof<record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, result: record<documents: list<record>, projects: list<record>, strings: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
@@ -6796,7 +6808,7 @@ export def "reindex-documents" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<duration: int, key: string, message: record, status: string> {
+]: nothing -> oneof<record<duration: int, key: string, message: record, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/search/documents/reindex" $auth.query)
@@ -6831,7 +6843,7 @@ export def "check-documents-reindex" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --async-request-key: string # Async operation key (required)
-]: nothing -> record<duration: int, key: string, message: record, status: string> {
+]: nothing -> oneof<record<duration: int, key: string, message: record, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($async_request_key == null) { error make --unspanned { msg: "required query parameter 'async_request_key' missing: pass --async-request-key" } }
@@ -6867,7 +6879,7 @@ export def "get-stats" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<client: record<document_count: int, nps: float, started_project_count: int, total_discounted: record<amount: float, currency: string>, total_project_count: int, total_spending: float, translator_count: int>, vendor: record<earnings: record<total: float>, projects: record<invited: int, total: int, worked: int>, words: record<approved: int, translated: int>>> {
+]: nothing -> oneof<record<client: record<document_count: int, nps: float, started_project_count: int, total_discounted: record<amount: float, currency: string>, total_project_count: int, total_spending: float, translator_count: int>, vendor: record<earnings: record<total: float>, projects: record<invited: int, total: int, worked: int>, words: record<approved: int, translated: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/stats" $auth.query)
@@ -6901,7 +6913,7 @@ export def "get-commission-stats" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<balance: record<amount: float, currency: string>, paid: record<amount: float, currency: string>, quote_total: record<amount: float, currency: string>, total: record<amount: float, currency: string>> {
+]: nothing -> oneof<record<balance: record<amount: float, currency: string>, paid: record<amount: float, currency: string>, quote_total: record<amount: float, currency: string>, total: record<amount: float, currency: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/stats/commissions" $auth.query)
@@ -6941,7 +6953,7 @@ export def "get-commission-stats-by-filter" [
   --source-languages: list<string> # List of source language codes.
   --target-languages: list<string> # List of target language codes.
   --users: list<int> # List of corporate user IDs. Valid for corporate accounts only.
-]: any -> record<balance: record<amount: float, currency: string>, paid: record<amount: float, currency: string>, quote_total: record<amount: float, currency: string>, total: record<amount: float, currency: string>> {
+]: any -> oneof<record<balance: record<amount: float, currency: string>, paid: record<amount: float, currency: string>, quote_total: record<amount: float, currency: string>, total: record<amount: float, currency: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6978,7 +6990,7 @@ export def "get-popular-pairs" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<pairs: table<source_language: string, target_language: string>> {
+]: nothing -> oneof<record<pairs: table<source_language: string, target_language: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/stats/popular-pairs" $auth.query)
@@ -7012,7 +7024,7 @@ export def "get-project-stats" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<stats: table<languages: list, month: string, number_of_projects: int, total_spending: float, week: string>> {
+]: nothing -> oneof<record<stats: table<languages: list, month: string, number_of_projects: int, total_spending: float, week: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/stats/projects" $auth.query)
@@ -7046,7 +7058,7 @@ export def "get-string-stats" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<language_counts: table<project_string_count: int, source_language: string, tm_string_count: int>, total_project_strings_count: int, total_tm_strings_count: int> {
+]: nothing -> oneof<record<language_counts: table<project_string_count: int, source_language: string, tm_string_count: int>, total_project_strings_count: int, total_tm_strings_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/stats/strings" $auth.query)
@@ -7082,7 +7094,7 @@ export def "get-strings" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --source-language: string # Source Language Code
   --page: int # Requested page (format: int64, default: 0)
-]: nothing -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, strings: table<content: string, language: string, last_changed: string, translations: list>> {
+]: nothing -> oneof<record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, strings: table<content: string, language: string, last_changed: string, translations: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "source_language" $source_language "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
@@ -7122,7 +7134,7 @@ export def "post-strings" [
   --contents: list<string>
   --source-language: string
   --target-languages: list<string>
-]: any -> record<cost: record<amount: float, currency: string>, strings: table<content: string, language: string, last_changed: string, translations: list>> {
+]: any -> oneof<record<cost: record<amount: float, currency: string>, strings: table<content: string, language: string, last_changed: string, translations: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7163,7 +7175,7 @@ export def "update-translation-memory-unit" [
   --source-text: string
   --target-language: string
   --target-text: string
-]: any -> record<status: string> {
+]: any -> oneof<record<status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7204,7 +7216,7 @@ export def "package-user-translation-memory" [
   --accept: string@accept-completer-1 # Response content type
   --async: int # If you want to package and download the translation memory synchronously, mark this parameter as '0'. It will package the translation memory and then return the packaged file in the response, identical to async/download call after an asynchronous /package call. (format: int64, default: 0)
   --email: int # If you don't need us to email the TMX, set this to '0'. Default is 1. (format: int64, default: 1)
-]: nothing -> record<duration: int, key: string, message: record, status: string> {
+]: nothing -> oneof<record<duration: int, key: string, message: record, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($language_code | is-empty) { error make --unspanned { msg: "path parameter 'languageCode' must be non-empty" } }
@@ -7242,7 +7254,7 @@ export def "package-user-translation-memory-for-language-status" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --async-request-key: string # Async operation key (required)
-]: nothing -> record<duration: int, key: string, message: record, status: string> {
+]: nothing -> oneof<record<duration: int, key: string, message: record, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($language_code | is-empty) { error make --unspanned { msg: "path parameter 'languageCode' must be non-empty" } }
@@ -7314,7 +7326,7 @@ export def "update-global-style-guide" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   styleguide: string # Style guide file. Currently supported formats: .pdf, .docx, .txt (format: binary)
-]: any -> record<status: string> {
+]: any -> oneof<record<status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7354,7 +7366,7 @@ export def "get-questions" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --attach-answers-for-project: int # Project ID (format: int64)
-]: nothing -> table<answers: list<record>, question: record<enabled: bool, format: string, id: int, question: string, text: string>, question_answers: list<record>> {
+]: nothing -> oneof<table<answers: list<record>, question: record<enabled: bool, format: string, id: int, question: string, text: string>, question_answers: list<record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
@@ -7381,7 +7393,6 @@ export def "get-questions" [
 #
 # POST /surveys/{scope}/{type}
 # operationId: submitAnswers
-# --answers item shape: {answer?: string, project_id?: int, question_answer_id?: int, question_id?: int, user_id?: int}
 export def "submit-answers" [
   scope: string
   type: string
@@ -7395,7 +7406,7 @@ export def "submit-answers" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --answers: list # item shape: {answer?: string, project_id?: int, question_answer_id?: int, question_id?: int, user_id?: int}
-]: any -> record<status: string> {
+]: any -> oneof<record<status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7474,7 +7485,7 @@ export def "get-access-token" [
   scope: string # Authorization scope. Use 'privileged' for private endpoints.
   --user-id: int # Value for user_id grant type flow. (format: int64)
   --username: string # MW Account email (to be used in password grant type)
-]: any -> record<access_token: string, expires_in: int, refresh_token: string, scope: string, token_type: string, user_id: int> {
+]: any -> oneof<record<access_token: string, expires_in: int, refresh_token: string, scope: string, token_type: string, user_id: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -7511,7 +7522,7 @@ export def "unfreeze-account" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<status: string> {
+]: nothing -> oneof<record<status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/unfreeze-account" $auth.query)
@@ -7545,7 +7556,7 @@ export def "get-user-groups" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, user_groups: table<corporate_id: int, id: int, name: string, permissions: list>> {
+]: nothing -> oneof<record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, user_groups: table<corporate_id: int, id: int, name: string, permissions: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user-groups" $auth.query)
@@ -7584,7 +7595,7 @@ export def "get-users" [
   --user-type: string@user-type-completer # default: all
   --search: string
   --email: string
-]: nothing -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, users: table<billing: record, birthday: string, can_work_manual_files: bool, city: string, client: record, corporate_id: int, country: string, created_at: int, do_not_contact: bool, email: string, first_name: string, has_pwd: bool, id: int, is_client: bool, is_developer: bool, is_proofreader: bool, is_prospect: bool, is_sales_person: bool, is_vendor: bool, language_pairs: list, last_name: string, last_seen_online_at: int, links: record, locale: string, mailing: record, name: string, native_language: string, nps: float, phone_number: string, profile_picture_path: string, social_media: record, state: string, status: string, street: string, timezone: string, tms_user_name: string, user_groups: list, vendor: record, zip_code: string>> {
+]: nothing -> oneof<record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, users: table<billing: record, birthday: string, can_work_manual_files: bool, city: string, client: record, corporate_id: int, country: string, created_at: int, do_not_contact: bool, email: string, first_name: string, has_pwd: bool, id: int, is_client: bool, is_developer: bool, is_proofreader: bool, is_prospect: bool, is_sales_person: bool, is_vendor: bool, language_pairs: list, last_name: string, last_seen_online_at: int, links: record, locale: string, mailing: record, name: string, native_language: string, nps: float, phone_number: string, profile_picture_path: string, social_media: record, state: string, status: string, street: string, timezone: string, tms_user_name: string, user_groups: list, vendor: record, zip_code: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "user_type" $user_type "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "email" $email "scalar")] | flatten | str join "&"
@@ -7609,14 +7620,6 @@ export def "get-users" [
 #
 # POST /users
 # operationId: createUser
-# --billing shape: {city?: string, country?: string, phone?: string, state?: string, street?: string, zip?: string, name?: string}
-# --client shape: {corporate?: record, nps?: float, subjects?: record}
-# --language_pairs item shape: {source_language?: string, target_language?: string}
-# --links shape: {self?: record, login_as?: record, projects?: record, responsivity?: record, stats?: record}
-# --mailing shape: {city?: string, country?: string, phone?: string, state?: string, street?: string, zip?: string}
-# --social_media shape: {facebook_url?: string, linkedIn_url?: string, twitter_url?: string}
-# --user_groups item shape: {corporate_id?: int, id?: int, name?: string, permissions?: list<string>}
-# --vendor shape: {can_work_manual_files?: bool, email_open_rate?: float, is_frozen?: bool, is_proofreader?: bool, language_pairs?: list, native_language?: string, pam_tqs?: float, paypal_email?: string, profile_survey?: record, require_1099?: bool, tags?: list<string>, tms_user_name?: string, vendor_type?: string}
 @deprecated --flag can-work-manual-files
 @deprecated --flag city
 @deprecated --flag country
@@ -7678,7 +7681,7 @@ export def "create-user" [
   --user-groups: list # item shape: {corporate_id?: int, id?: int, name?: string, permissions?: list<string>}
   --vendor: record # shape: {can_work_manual_files?: bool, email_open_rate?: float, is_frozen?: bool, is_proofreader?: bool, language_pairs?: list, native_language?: string, pam_tqs?: float, paypal_email?: string, profile_survey?: record, require_1099?: bool, tags?: list<string>, tms_user_name?: string, vendor_type?: string}
   --zip-code: string # \@deprecated. use mailing or billing key. new key name is "zip". (DEPRECATED)
-]: any -> record<billing: record<city: string, country: string, phone: string, state: string, street: string, zip: string, name: string>, birthday: string, can_work_manual_files: bool, city: string, client: record<corporate: record<email: string, id: int, logo: string, name: string, phone_number: string>, nps: float, subjects: record>, corporate_id: int, country: string, created_at: int, do_not_contact: bool, email: string, first_name: string, has_pwd: bool, id: int, is_client: bool, is_developer: bool, is_proofreader: bool, is_prospect: bool, is_sales_person: bool, is_vendor: bool, language_pairs: table<source_language: string, target_language: string>, last_name: string, last_seen_online_at: int, links: record<self: record<href: string>, login_as: record<href: string>, projects: record<href: string>, responsivity: record<href: string>, stats: record<href: string>>, locale: string, mailing: record<city: string, country: string, phone: string, state: string, street: string, zip: string>, name: string, native_language: string, nps: float, phone_number: string, profile_picture_path: string, social_media: record<facebook_url: string, linkedIn_url: string, twitter_url: string>, state: string, status: string, street: string, timezone: string, tms_user_name: string, user_groups: table<corporate_id: int, id: int, name: string, permissions: list>, vendor: record<can_work_manual_files: bool, email_open_rate: float, is_frozen: bool, is_proofreader: bool, language_pairs: list<record>, native_language: string, pam_tqs: float, paypal_email: string, profile_survey: record<current_services: string, daily_proofreading_capacity: string, daily_translation_capacity: string, dtp_software: string, experience: string, is_certified_translator: string, is_sworn_translator: string, memoq: string, memsource: string, omegat: string, proofreader_experience: string, provides_creative_writing_service: string, provides_postedit_service: string, reference: string, sdl_trados: string, skype_id: string, smartcat: string, smartling: string, software: string, specialization: string, subtitle_edit: string, subtitle_workshop: string, translator_association: string, transsuite_2000: string, vendor_profile_lsp: string, wordbee: string, wordfast: string, work_type: string, work_with: string, working_as: string, working_timezone: string, xbench: string, xtm: string>, require_1099: bool, tags: list<string>, tms_user_name: string, vendor_type: string>, zip_code: string> {
+]: any -> oneof<record<billing: record<city: string, country: string, phone: string, state: string, street: string, zip: string, name: string>, birthday: string, can_work_manual_files: bool, city: string, client: record<corporate: record<email: string, id: int, logo: string, name: string, phone_number: string>, nps: float, subjects: record>, corporate_id: int, country: string, created_at: int, do_not_contact: bool, email: string, first_name: string, has_pwd: bool, id: int, is_client: bool, is_developer: bool, is_proofreader: bool, is_prospect: bool, is_sales_person: bool, is_vendor: bool, language_pairs: table<source_language: string, target_language: string>, last_name: string, last_seen_online_at: int, links: record<self: record<href: string>, login_as: record<href: string>, projects: record<href: string>, responsivity: record<href: string>, stats: record<href: string>>, locale: string, mailing: record<city: string, country: string, phone: string, state: string, street: string, zip: string>, name: string, native_language: string, nps: float, phone_number: string, profile_picture_path: string, social_media: record<facebook_url: string, linkedIn_url: string, twitter_url: string>, state: string, status: string, street: string, timezone: string, tms_user_name: string, user_groups: table<corporate_id: int, id: int, name: string, permissions: list>, vendor: record<can_work_manual_files: bool, email_open_rate: float, is_frozen: bool, is_proofreader: bool, language_pairs: list<record>, native_language: string, pam_tqs: float, paypal_email: string, profile_survey: record<current_services: string, daily_proofreading_capacity: string, daily_translation_capacity: string, dtp_software: string, experience: string, is_certified_translator: string, is_sworn_translator: string, memoq: string, memsource: string, omegat: string, proofreader_experience: string, provides_creative_writing_service: string, provides_postedit_service: string, reference: string, sdl_trados: string, skype_id: string, smartcat: string, smartling: string, software: string, specialization: string, subtitle_edit: string, subtitle_workshop: string, translator_association: string, transsuite_2000: string, vendor_profile_lsp: string, wordbee: string, wordfast: string, work_type: string, work_with: string, working_as: string, working_timezone: string, xbench: string, xtm: string>, require_1099: bool, tags: list<string>, tms_user_name: string, vendor_type: string>, zip_code: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7722,7 +7725,7 @@ export def "get-available-vendors" [
   --source-language: string # Source language code
   --target-languages: list<string> # List of target language codes.
   --types: list<string> # List of vendor types
-]: any -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, users: table<billing: record, birthday: string, can_work_manual_files: bool, city: string, client: record, corporate_id: int, country: string, created_at: int, do_not_contact: bool, email: string, first_name: string, has_pwd: bool, id: int, is_client: bool, is_developer: bool, is_proofreader: bool, is_prospect: bool, is_sales_person: bool, is_vendor: bool, language_pairs: list, last_name: string, last_seen_online_at: int, links: record, locale: string, mailing: record, name: string, native_language: string, nps: float, phone_number: string, profile_picture_path: string, social_media: record, state: string, status: string, street: string, timezone: string, tms_user_name: string, user_groups: list, vendor: record, zip_code: string>> {
+]: any -> oneof<record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, users: table<billing: record, birthday: string, can_work_manual_files: bool, city: string, client: record, corporate_id: int, country: string, created_at: int, do_not_contact: bool, email: string, first_name: string, has_pwd: bool, id: int, is_client: bool, is_developer: bool, is_proofreader: bool, is_prospect: bool, is_sales_person: bool, is_vendor: bool, language_pairs: list, last_name: string, last_seen_online_at: int, links: record, locale: string, mailing: record, name: string, native_language: string, nps: float, phone_number: string, profile_picture_path: string, social_media: record, state: string, status: string, street: string, timezone: string, tms_user_name: string, user_groups: list, vendor: record, zip_code: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7820,7 +7823,7 @@ export def "get-filtered-vendors" [
   --working-as: list<string>
   --xbench: int
   --xtm: int
-]: any -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, users: table<billing: record, birthday: string, can_work_manual_files: bool, city: string, client: record, corporate_id: int, country: string, created_at: int, do_not_contact: bool, email: string, first_name: string, has_pwd: bool, id: int, is_client: bool, is_developer: bool, is_proofreader: bool, is_prospect: bool, is_sales_person: bool, is_vendor: bool, language_pairs: list, last_name: string, last_seen_online_at: int, links: record, locale: string, mailing: record, name: string, native_language: string, nps: float, phone_number: string, profile_picture_path: string, social_media: record, state: string, status: string, street: string, timezone: string, tms_user_name: string, user_groups: list, vendor: record, zip_code: string>> {
+]: any -> oneof<record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, users: table<billing: record, birthday: string, can_work_manual_files: bool, city: string, client: record, corporate_id: int, country: string, created_at: int, do_not_contact: bool, email: string, first_name: string, has_pwd: bool, id: int, is_client: bool, is_developer: bool, is_proofreader: bool, is_prospect: bool, is_sales_person: bool, is_vendor: bool, language_pairs: list, last_name: string, last_seen_online_at: int, links: record, locale: string, mailing: record, name: string, native_language: string, nps: float, phone_number: string, profile_picture_path: string, social_media: record, state: string, status: string, street: string, timezone: string, tms_user_name: string, user_groups: list, vendor: record, zip_code: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7859,7 +7862,7 @@ export def "send-password-reminder" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --email: string
-]: any -> record<status: string> {
+]: any -> oneof<record<status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7896,7 +7899,7 @@ export def "get-all-vendor-tags" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<color: string, name: string> {
+]: nothing -> oneof<table<color: string, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users/tags" $auth.query)
@@ -7931,7 +7934,7 @@ export def "get-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<billing: record<city: string, country: string, phone: string, state: string, street: string, zip: string, name: string>, birthday: string, can_work_manual_files: bool, city: string, client: record<corporate: record<email: string, id: int, logo: string, name: string, phone_number: string>, nps: float, subjects: record>, corporate_id: int, country: string, created_at: int, do_not_contact: bool, email: string, first_name: string, has_pwd: bool, id: int, is_client: bool, is_developer: bool, is_proofreader: bool, is_prospect: bool, is_sales_person: bool, is_vendor: bool, language_pairs: table<source_language: string, target_language: string>, last_name: string, last_seen_online_at: int, links: record<self: record<href: string>, login_as: record<href: string>, projects: record<href: string>, responsivity: record<href: string>, stats: record<href: string>>, locale: string, mailing: record<city: string, country: string, phone: string, state: string, street: string, zip: string>, name: string, native_language: string, nps: float, phone_number: string, profile_picture_path: string, social_media: record<facebook_url: string, linkedIn_url: string, twitter_url: string>, state: string, status: string, street: string, timezone: string, tms_user_name: string, user_groups: table<corporate_id: int, id: int, name: string, permissions: list>, vendor: record<can_work_manual_files: bool, email_open_rate: float, is_frozen: bool, is_proofreader: bool, language_pairs: list<record>, native_language: string, pam_tqs: float, paypal_email: string, profile_survey: record<current_services: string, daily_proofreading_capacity: string, daily_translation_capacity: string, dtp_software: string, experience: string, is_certified_translator: string, is_sworn_translator: string, memoq: string, memsource: string, omegat: string, proofreader_experience: string, provides_creative_writing_service: string, provides_postedit_service: string, reference: string, sdl_trados: string, skype_id: string, smartcat: string, smartling: string, software: string, specialization: string, subtitle_edit: string, subtitle_workshop: string, translator_association: string, transsuite_2000: string, vendor_profile_lsp: string, wordbee: string, wordfast: string, work_type: string, work_with: string, working_as: string, working_timezone: string, xbench: string, xtm: string>, require_1099: bool, tags: list<string>, tms_user_name: string, vendor_type: string>, zip_code: string> {
+]: nothing -> oneof<record<billing: record<city: string, country: string, phone: string, state: string, street: string, zip: string, name: string>, birthday: string, can_work_manual_files: bool, city: string, client: record<corporate: record<email: string, id: int, logo: string, name: string, phone_number: string>, nps: float, subjects: record>, corporate_id: int, country: string, created_at: int, do_not_contact: bool, email: string, first_name: string, has_pwd: bool, id: int, is_client: bool, is_developer: bool, is_proofreader: bool, is_prospect: bool, is_sales_person: bool, is_vendor: bool, language_pairs: table<source_language: string, target_language: string>, last_name: string, last_seen_online_at: int, links: record<self: record<href: string>, login_as: record<href: string>, projects: record<href: string>, responsivity: record<href: string>, stats: record<href: string>>, locale: string, mailing: record<city: string, country: string, phone: string, state: string, street: string, zip: string>, name: string, native_language: string, nps: float, phone_number: string, profile_picture_path: string, social_media: record<facebook_url: string, linkedIn_url: string, twitter_url: string>, state: string, status: string, street: string, timezone: string, tms_user_name: string, user_groups: table<corporate_id: int, id: int, name: string, permissions: list>, vendor: record<can_work_manual_files: bool, email_open_rate: float, is_frozen: bool, is_proofreader: bool, language_pairs: list<record>, native_language: string, pam_tqs: float, paypal_email: string, profile_survey: record<current_services: string, daily_proofreading_capacity: string, daily_translation_capacity: string, dtp_software: string, experience: string, is_certified_translator: string, is_sworn_translator: string, memoq: string, memsource: string, omegat: string, proofreader_experience: string, provides_creative_writing_service: string, provides_postedit_service: string, reference: string, sdl_trados: string, skype_id: string, smartcat: string, smartling: string, software: string, specialization: string, subtitle_edit: string, subtitle_workshop: string, translator_association: string, transsuite_2000: string, vendor_profile_lsp: string, wordbee: string, wordfast: string, work_type: string, work_with: string, working_as: string, working_timezone: string, xbench: string, xtm: string>, require_1099: bool, tags: list<string>, tms_user_name: string, vendor_type: string>, zip_code: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -7955,7 +7958,6 @@ export def "get-user" [
 # POST /{userId}
 #
 # operationId: updateUser
-# --notifications shape: {phone_number?: string, sms_enabled?: bool}
 export def "update-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -7983,7 +7985,7 @@ export def "update-user" [
   --paypal-email: string # Optional. Vendor paypal e-mail
   --require-1099: oneof<nothing, bool> # Optional. Whether this vendor requires 1099 form in US for their earnings.
   --user-groups: list<int> # A list of user group IDs
-]: any -> record<billing: record<city: string, country: string, phone: string, state: string, street: string, zip: string, name: string>, birthday: string, can_work_manual_files: bool, city: string, client: record<corporate: record<email: string, id: int, logo: string, name: string, phone_number: string>, nps: float, subjects: record>, corporate_id: int, country: string, created_at: int, do_not_contact: bool, email: string, first_name: string, has_pwd: bool, id: int, is_client: bool, is_developer: bool, is_proofreader: bool, is_prospect: bool, is_sales_person: bool, is_vendor: bool, language_pairs: table<source_language: string, target_language: string>, last_name: string, last_seen_online_at: int, links: record<self: record<href: string>, login_as: record<href: string>, projects: record<href: string>, responsivity: record<href: string>, stats: record<href: string>>, locale: string, mailing: record<city: string, country: string, phone: string, state: string, street: string, zip: string>, name: string, native_language: string, nps: float, phone_number: string, profile_picture_path: string, social_media: record<facebook_url: string, linkedIn_url: string, twitter_url: string>, state: string, status: string, street: string, timezone: string, tms_user_name: string, user_groups: table<corporate_id: int, id: int, name: string, permissions: list>, vendor: record<can_work_manual_files: bool, email_open_rate: float, is_frozen: bool, is_proofreader: bool, language_pairs: list<record>, native_language: string, pam_tqs: float, paypal_email: string, profile_survey: record<current_services: string, daily_proofreading_capacity: string, daily_translation_capacity: string, dtp_software: string, experience: string, is_certified_translator: string, is_sworn_translator: string, memoq: string, memsource: string, omegat: string, proofreader_experience: string, provides_creative_writing_service: string, provides_postedit_service: string, reference: string, sdl_trados: string, skype_id: string, smartcat: string, smartling: string, software: string, specialization: string, subtitle_edit: string, subtitle_workshop: string, translator_association: string, transsuite_2000: string, vendor_profile_lsp: string, wordbee: string, wordfast: string, work_type: string, work_with: string, working_as: string, working_timezone: string, xbench: string, xtm: string>, require_1099: bool, tags: list<string>, tms_user_name: string, vendor_type: string>, zip_code: string> {
+]: any -> oneof<record<billing: record<city: string, country: string, phone: string, state: string, street: string, zip: string, name: string>, birthday: string, can_work_manual_files: bool, city: string, client: record<corporate: record<email: string, id: int, logo: string, name: string, phone_number: string>, nps: float, subjects: record>, corporate_id: int, country: string, created_at: int, do_not_contact: bool, email: string, first_name: string, has_pwd: bool, id: int, is_client: bool, is_developer: bool, is_proofreader: bool, is_prospect: bool, is_sales_person: bool, is_vendor: bool, language_pairs: table<source_language: string, target_language: string>, last_name: string, last_seen_online_at: int, links: record<self: record<href: string>, login_as: record<href: string>, projects: record<href: string>, responsivity: record<href: string>, stats: record<href: string>>, locale: string, mailing: record<city: string, country: string, phone: string, state: string, street: string, zip: string>, name: string, native_language: string, nps: float, phone_number: string, profile_picture_path: string, social_media: record<facebook_url: string, linkedIn_url: string, twitter_url: string>, state: string, status: string, street: string, timezone: string, tms_user_name: string, user_groups: table<corporate_id: int, id: int, name: string, permissions: list>, vendor: record<can_work_manual_files: bool, email_open_rate: float, is_frozen: bool, is_proofreader: bool, language_pairs: list<record>, native_language: string, pam_tqs: float, paypal_email: string, profile_survey: record<current_services: string, daily_proofreading_capacity: string, daily_translation_capacity: string, dtp_software: string, experience: string, is_certified_translator: string, is_sworn_translator: string, memoq: string, memsource: string, omegat: string, proofreader_experience: string, provides_creative_writing_service: string, provides_postedit_service: string, reference: string, sdl_trados: string, skype_id: string, smartcat: string, smartling: string, software: string, specialization: string, subtitle_edit: string, subtitle_workshop: string, translator_association: string, transsuite_2000: string, vendor_profile_lsp: string, wordbee: string, wordfast: string, work_type: string, work_with: string, working_as: string, working_timezone: string, xbench: string, xtm: string>, require_1099: bool, tags: list<string>, tms_user_name: string, vendor_type: string>, zip_code: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8021,7 +8023,7 @@ export def "approve-vendor-application" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<status: string> {
+]: nothing -> oneof<record<status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -8057,7 +8059,7 @@ export def "delete-user-account" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<status: string> {
+]: nothing -> oneof<record<status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -8101,7 +8103,7 @@ export def "get-user-documents" [
   --per-page: int # format: int64, default: 10
   --order-by: string@order-by-completer # default: updated_at
   --order-type: string@order-type-completer
-]: nothing -> record<documents: table<file_type: string, has_custom_package: bool, id: int, links: record, manual_files: list, name: string, project_id: int, review_in_manual_editor: bool, scheme: record, search_score: float, source_language: string, subject: string, target_languages: list, uploaded_at: int, word_count: int>, meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>> {
+]: nothing -> oneof<record<documents: table<file_type: string, has_custom_package: bool, id: int, links: record, manual_files: list, name: string, project_id: int, review_in_manual_editor: bool, scheme: record, search_score: float, source_language: string, subject: string, target_languages: list, uploaded_at: int, word_count: int>, meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -8137,7 +8139,7 @@ export def "downgrade-user-proofreader" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<status: string> {
+]: nothing -> oneof<record<status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -8173,7 +8175,7 @@ export def "get-user-earnings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<completed: table<amount: float, currency: string, due_date: string, status: string, words: int, words_approved: int, words_translated: int, is_above_average: bool, score: float, strings_edited: int, strings_translated: int, project_id: int>, ongoing: table<amount: float, currency: string, due_date: string, status: string, words: int, words_approved: int, words_translated: int, is_above_average: bool, score: float, strings_edited: int, strings_translated: int, project_id: int>, total: float> {
+]: nothing -> oneof<record<completed: table<amount: float, currency: string, due_date: string, status: string, words: int, words_approved: int, words_translated: int, is_above_average: bool, score: float, strings_edited: int, strings_translated: int, project_id: int>, ongoing: table<amount: float, currency: string, due_date: string, status: string, words: int, words_approved: int, words_translated: int, is_above_average: bool, score: float, strings_edited: int, strings_translated: int, project_id: int>, total: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -8209,7 +8211,7 @@ export def "freeze-user-account" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<status: string> {
+]: nothing -> oneof<record<status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -8244,7 +8246,7 @@ export def "make-user-proofreader" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<status: string> {
+]: nothing -> oneof<record<status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -8282,7 +8284,7 @@ export def "subscribe-user-notification" [
   --device: string@device-completer
   --endpoint: string # OneSignal calls this "player ID".
   --type: string@type-completer-1 # default: OneSignal
-]: any -> record<status: string> {
+]: any -> oneof<record<status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8323,7 +8325,7 @@ export def "unsubscribe-user-notification" [
   --device: string@device-completer
   --endpoint: string # OneSignal calls this "player ID".
   --type: string@type-completer-1 # default: OneSignal
-]: any -> record<status: string> {
+]: any -> oneof<record<status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8362,7 +8364,7 @@ export def "get-user-payment-info" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<billing: record<city: string, country: string, phone: string, state: string, street: string, zip: string, name: string>, card: record<bin: string, id: int, is_default: bool, payment_code: string>, cards: table<bin: string, id: int, is_default: bool, payment_code: string>, corporate: record<allow_api_invoicing: bool, allow_payment_code: bool, auto_charge: bool, billing: record<city: string, country: string, phone: string, state: string, street: string, zip: string, name: string>, card: record<bin: string, id: int, is_default: bool, payment_code: string>, contact_email_address: string, payment_code: string>, shared_card: record<bin: string, id: int, is_default: bool, payment_code: string>> {
+]: nothing -> oneof<record<billing: record<city: string, country: string, phone: string, state: string, street: string, zip: string, name: string>, card: record<bin: string, id: int, is_default: bool, payment_code: string>, cards: table<bin: string, id: int, is_default: bool, payment_code: string>, corporate: record<allow_api_invoicing: bool, allow_payment_code: bool, auto_charge: bool, billing: record<city: string, country: string, phone: string, state: string, street: string, zip: string, name: string>, card: record<bin: string, id: int, is_default: bool, payment_code: string>, contact_email_address: string, payment_code: string>, shared_card: record<bin: string, id: int, is_default: bool, payment_code: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -8387,11 +8389,6 @@ export def "get-user-payment-info" [
 #
 # POST /{userId}/payment
 # operationId: updateUserPaymentInfo
-# --billing shape: {city?: string, country?: string, phone?: string, state?: string, street?: string, zip?: string, name?: string}
-# --card shape: {bin?: string, id?: int, is_default?: bool, payment_code?: string}
-# --cards item shape: {bin?: string, id?: int, is_default?: bool, payment_code?: string}
-# --corporate shape: {allow_api_invoicing?: bool, allow_payment_code?: bool, auto_charge?: bool, billing?: record, card?: record, contact_email_address?: string, payment_code?: string}
-# --shared_card shape: {bin?: string, id?: int, is_default?: bool, payment_code?: string}
 export def "update-user-payment-info" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -8408,7 +8405,7 @@ export def "update-user-payment-info" [
   --cards: list # item shape: {bin?: string, id?: int, is_default?: bool, payment_code?: string}
   --corporate: record # shape: {allow_api_invoicing?: bool, allow_payment_code?: bool, auto_charge?: bool, billing?: record, card?: record, contact_email_address?: string, payment_code?: string}
   --shared-card: record # shape: {bin?: string, id?: int, is_default?: bool, payment_code?: string}
-]: any -> record<status: string> {
+]: any -> oneof<record<status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8447,7 +8444,7 @@ export def "get-user-permissions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, permissions: list<string>> {
+]: nothing -> oneof<record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, permissions: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -8483,7 +8480,7 @@ export def "upload-user-profile-picture" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   profile_picture: string # Profile picture file contents. Accepted extensions are png, jpg. (format: binary)
-]: any -> record<status: string> {
+]: any -> oneof<record<status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8526,7 +8523,7 @@ export def "get-vendor-projects-by-user-id" [
   --completed: oneof<nothing, bool> # Return only projects that have been completed. When `true`, this makes `joined` true as well.
   --page: int # format: int64, default: 1
   --per-page: int # format: int64, default: 10
-]: nothing -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, projects: table<average_scores: record, budget_code: string, callback_url: string, can_pam_manage: bool, client: record, cm_id: int, completed_on: string, continuous_project_type: string, created_at: int, custom: record, delivery_at: int, errors: list, id: int, is_api_project: bool, is_certified: bool, is_continuous: bool, is_manual: bool, links: record, pairs: list, pivoted_projects: list, price: record, price_without_discount: record, role: string, should_send_client_survey: bool, source: string, source_language: string, status: string, subjects: list, target_languages: list, tms_name: string, valid_until: int, vendor_word_count: int, word_count: int, word_count_analysis: record>> {
+]: nothing -> oneof<record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, projects: table<average_scores: record, budget_code: string, callback_url: string, can_pam_manage: bool, client: record, cm_id: int, completed_on: string, continuous_project_type: string, created_at: int, custom: record, delivery_at: int, errors: list, id: int, is_api_project: bool, is_certified: bool, is_continuous: bool, is_manual: bool, links: record, pairs: list, pivoted_projects: list, price: record, price_without_discount: record, role: string, should_send_client_survey: bool, source: string, source_language: string, status: string, subjects: list, target_languages: list, tms_name: string, valid_until: int, vendor_word_count: int, word_count: int, word_count_analysis: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -8562,7 +8559,7 @@ export def "reject-vendor-application" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<status: string> {
+]: nothing -> oneof<record<status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -8598,7 +8595,7 @@ export def "send-user-email-confirmation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<status: string> {
+]: nothing -> oneof<record<status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -8635,7 +8632,7 @@ export def "get-user-responsivity" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --period: string@period-completer # Period for calcualtion. (default: monthly)
-]: nothing -> record<links: record<self: record<href: string>>, responsivity: table<invited: int, month: string, notEntered: int, onlyEntered: int, score: float, week: string, worked: int>> {
+]: nothing -> oneof<record<links: record<self: record<href: string>>, responsivity: table<invited: int, month: string, notEntered: int, onlyEntered: int, score: float, week: string, worked: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -8672,7 +8669,7 @@ export def "get-user-stats" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<client: record<document_count: int, nps: float, started_project_count: int, total_discounted: record<amount: float, currency: string>, total_project_count: int, total_spending: float, translator_count: int>, vendor: record<earnings: record<total: float>, projects: record<invited: int, total: int, worked: int>, words: record<approved: int, translated: int>>> {
+]: nothing -> oneof<record<client: record<document_count: int, nps: float, started_project_count: int, total_discounted: record<amount: float, currency: string>, total_project_count: int, total_spending: float, translator_count: int>, vendor: record<earnings: record<total: float>, projects: record<invited: int, total: int, worked: int>, words: record<approved: int, translated: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -8708,7 +8705,7 @@ export def "get-user-popular-pairs" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<pairs: table<source_language: string, target_language: string>> {
+]: nothing -> oneof<record<pairs: table<source_language: string, target_language: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -8744,7 +8741,7 @@ export def "get-user-project-stats" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<stats: table<languages: list, month: string, number_of_projects: int, total_spending: float, week: string>> {
+]: nothing -> oneof<record<stats: table<languages: list, month: string, number_of_projects: int, total_spending: float, week: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -8780,7 +8777,7 @@ export def "suspend-user" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --reason: string # Suspension reason for vendor
-]: any -> record<status: string> {
+]: any -> oneof<record<status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8819,7 +8816,7 @@ export def "unfreeze-user-account" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<status: string> {
+]: nothing -> oneof<record<status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -8855,7 +8852,7 @@ export def "get-this-user-groups" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, user_groups: table<corporate_id: int, id: int, name: string, permissions: list>> {
+]: nothing -> oneof<record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, user_groups: table<corporate_id: int, id: int, name: string, permissions: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -8918,7 +8915,7 @@ export def "update-user-group" [
   --use-cache: oneof<nothing, bool> # Should we make use of local browser cache for your visitors? We will refresh the cache when Active JS detects new activity in your project.
   --use-dummy-translations: oneof<nothing, bool> # When enabled, we will translate your website with dummy content, rather than actually using MT/TM.
   --variables: string # Continuous project variable definitions
-]: any -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, user_groups: table<corporate_id: int, id: int, name: string, permissions: list>> {
+]: any -> oneof<record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, user_groups: table<corporate_id: int, id: int, name: string, permissions: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

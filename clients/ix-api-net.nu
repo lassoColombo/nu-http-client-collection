@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -119,8 +143,13 @@ def base-url-completer [] { ["http://localhost/api/v2"] }
 def auth-scheme-completer [] { ["bearer" "none"] }
 
 # Completers for enum parameters
-def type-completer [] { ["route_server"] }
-def type-completer-1 [] { ["cloud_vc" "exchange_lan" "mp2mp_vc" "p2mp_vc" "p2p_vc"] }
+def type-completer [] { ["allow" "deny"] }
+def type-completer-1 [] { ["route_server"] }
+def bgp-session-type-completer [] { ["active" "passive"] }
+def session-mode-completer [] { ["collector" "public"] }
+def type-completer-2 [] { ["cloud_vc" "exchange_lan" "mp2mp_vc" "p2mp_vc" "p2p_vc"] }
+def role-completer [] { ["leaf" "root"] }
+def type-completer-3 [] { ["cloud_vc" "mp2mp_vc" "p2mp_vc" "p2p_vc"] }
 def downgrade-allowed-completer [] { ["true" "true"] }
 def upgrade-allowed-completer [] { ["false" "true"] }
 def delivery-method-completer [] { ["dedicated" "shared"] }
@@ -128,9 +157,9 @@ def delivery-method-completer [] { ["dedicated" "shared"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts-list" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["accounts-list" "accounts-create" "accounts-destroy" "accounts-read" "accounts-partial-update" "accounts-update" "auth-token-refresh" "auth-token-create" "connections-list" "connections-read" "contacts-list" "contacts-create" "contacts-destroy" "contacts-read" "contacts-partial-update" "contacts-update" "devices-list" "devices-read" "facilities-list" "facilities-read" "api-health-read" "api-implementation-read" "ips-list" "ips-create" "ips-read" "ips-partial-update" "ips-update" "macs-list" "macs-create" "macs-destroy" "macs-read" "member-joining-rules-list" "member-joining-rules-create" "member-joining-rules-destroy" "member-joining-rules-read" "member-joining-rules-partial-update" "member-joining-rules-update" "metro-area-networks-list" "metro-area-networks-read" "metro-areas-list" "metro-areas-read" "network-feature-configs-list" "network-feature-configs-create" "network-feature-configs-destroy" "network-feature-configs-read" "network-feature-configs-partial-update" "network-feature-configs-update" "network-features-list" "network-features-read" "network-service-configs-list" "network-service-configs-create" "network-service-configs-destroy" "network-service-configs-read" "network-service-configs-partial-update" "network-service-configs-update" "network-service-config-cancellation-policy-read" "network-services-list" "network-services-create" "network-services-destroy" "network-services-read" "network-services-partial-update" "network-services-update" "network-service-cancellation-policy-read" "network-service-change-request-destroy" "network-service-change-request-read" "network-service-change-request-create" "pops-list" "pops-read" "ports-list" "ports-read" "product-offerings-list" "product-offerings-read" "role-assignments-list" "role-assignments-create" "role-assignments-destroy" "role-assignments-read" "roles-list" "roles-read" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -169,7 +198,7 @@ export def "accounts-list" [
   --billable: int # Filter by billable
   --external-ref: string # Filter by external_ref
   --name: string # Filter by name
-]: nothing -> table<address: record<country: string, locality: string, post_office_box_number: string, postal_code: string, region: string, street_address: string>, billing_information: record<address: record, name: string, vat_number: string>, discoverable: bool, external_ref: string, id: string, legal_name: string, managing_account: string, metro_area_network_presence: list<string>, name: string, state: string, status: list<record>> {
+]: nothing -> oneof<table<address: record<country: string, locality: string, post_office_box_number: string, postal_code: string, region: string, street_address: string>, billing_information: record<address: record, name: string, vat_number: string>, discoverable: bool, external_ref: string, id: string, legal_name: string, managing_account: string, metro_area_network_presence: list<string>, name: string, state: string, status: list<record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "csv") (serialize-qp "state" $state "scalar") (serialize-qp "state__is_not" $state_is_not "scalar") (serialize-qp "managing_account" $managing_account "scalar") (serialize-qp "billable" $billable "scalar") (serialize-qp "external_ref" $external_ref "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
@@ -194,8 +223,6 @@ export def "accounts-list" [
 #
 # POST /accounts
 # operationId: accounts_create
-# --address shape: {country: string, locality: string, post_office_box_number?: string, postal_code: string, region?: string, street_address: string}
-# --billing_information shape: {address: record, name: string, vat_number?: string}
 export def "accounts-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -214,7 +241,7 @@ export def "accounts-create" [
   --managing-account: string # The `id` of a managing account. Can be used for creating a customer hierachy. (nullable, e.g. IX:Account:231)
   --metro-area-network-presence: list<string> # Informal list of `MetroAreaNetwork` ids, indicating the presence to other accounts. The list is maintained by the account and can be empty. (default: [], e.g. [14021, 12939])
   name: string # Name of the account, how it gets represented in e.g. a "customers list". (e.g. Moonpeer Inc.)
-]: any -> record<address: record<country: string, locality: string, post_office_box_number: string, postal_code: string, region: string, street_address: string>, billing_information: record<address: record<country: string, locality: string, post_office_box_number: string, postal_code: string, region: string, street_address: string>, name: string, vat_number: string>, discoverable: bool, external_ref: string, id: string, legal_name: string, managing_account: string, metro_area_network_presence: list<string>, name: string, state: string, status: table<attrs: record, message: string, severity: int, tag: string, timestamp: string>> {
+]: any -> oneof<record<address: record<country: string, locality: string, post_office_box_number: string, postal_code: string, region: string, street_address: string>, billing_information: record<address: record<country: string, locality: string, post_office_box_number: string, postal_code: string, region: string, street_address: string>, name: string, vat_number: string>, discoverable: bool, external_ref: string, id: string, legal_name: string, managing_account: string, metro_area_network_presence: list<string>, name: string, state: string, status: table<attrs: record, message: string, severity: int, tag: string, timestamp: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -252,7 +279,7 @@ export def "accounts-destroy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<address: record<country: string, locality: string, post_office_box_number: string, postal_code: string, region: string, street_address: string>, billing_information: record<address: record<country: string, locality: string, post_office_box_number: string, postal_code: string, region: string, street_address: string>, name: string, vat_number: string>, discoverable: bool, external_ref: string, id: string, legal_name: string, managing_account: string, metro_area_network_presence: list<string>, name: string, state: string, status: table<attrs: record, message: string, severity: int, tag: string, timestamp: string>> {
+]: nothing -> oneof<record<address: record<country: string, locality: string, post_office_box_number: string, postal_code: string, region: string, street_address: string>, billing_information: record<address: record<country: string, locality: string, post_office_box_number: string, postal_code: string, region: string, street_address: string>, name: string, vat_number: string>, discoverable: bool, external_ref: string, id: string, legal_name: string, managing_account: string, metro_area_network_presence: list<string>, name: string, state: string, status: table<attrs: record, message: string, severity: int, tag: string, timestamp: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -288,7 +315,7 @@ export def "accounts-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<address: record<country: string, locality: string, post_office_box_number: string, postal_code: string, region: string, street_address: string>, billing_information: record<address: record<country: string, locality: string, post_office_box_number: string, postal_code: string, region: string, street_address: string>, name: string, vat_number: string>, discoverable: bool, external_ref: string, id: string, legal_name: string, managing_account: string, metro_area_network_presence: list<string>, name: string, state: string, status: table<attrs: record, message: string, severity: int, tag: string, timestamp: string>> {
+]: nothing -> oneof<record<address: record<country: string, locality: string, post_office_box_number: string, postal_code: string, region: string, street_address: string>, billing_information: record<address: record<country: string, locality: string, post_office_box_number: string, postal_code: string, region: string, street_address: string>, name: string, vat_number: string>, discoverable: bool, external_ref: string, id: string, legal_name: string, managing_account: string, metro_area_network_presence: list<string>, name: string, state: string, status: table<attrs: record, message: string, severity: int, tag: string, timestamp: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -325,7 +352,7 @@ export def "accounts-partial-update" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> record<address: record<country: string, locality: string, post_office_box_number: string, postal_code: string, region: string, street_address: string>, billing_information: record<address: record<country: string, locality: string, post_office_box_number: string, postal_code: string, region: string, street_address: string>, name: string, vat_number: string>, discoverable: bool, external_ref: string, id: string, legal_name: string, managing_account: string, metro_area_network_presence: list<string>, name: string, state: string, status: table<attrs: record, message: string, severity: int, tag: string, timestamp: string>> {
+]: any -> oneof<record<address: record<country: string, locality: string, post_office_box_number: string, postal_code: string, region: string, street_address: string>, billing_information: record<address: record<country: string, locality: string, post_office_box_number: string, postal_code: string, region: string, street_address: string>, name: string, vat_number: string>, discoverable: bool, external_ref: string, id: string, legal_name: string, managing_account: string, metro_area_network_presence: list<string>, name: string, state: string, status: table<attrs: record, message: string, severity: int, tag: string, timestamp: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -353,8 +380,6 @@ export def "accounts-partial-update" [
 #
 # PUT /accounts/{id}
 # operationId: accounts_update
-# --address shape: {country: string, locality: string, post_office_box_number?: string, postal_code: string, region?: string, street_address: string}
-# --billing_information shape: {address: record, name: string, vat_number?: string}
 export def "accounts-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -374,7 +399,7 @@ export def "accounts-update" [
   --managing-account: string # The `id` of a managing account. Can be used for creating a customer hierachy. (nullable, e.g. IX:Account:231)
   metro_area_network_presence: list<string> # Informal list of `MetroAreaNetwork` ids, indicating the presence to other accounts. The list is maintained by the account and can be empty. (e.g. [14021, 12939])
   name: string # Name of the account, how it gets represented in e.g. a "customers list". (e.g. Moonpeer Inc.)
-]: any -> record<address: record<country: string, locality: string, post_office_box_number: string, postal_code: string, region: string, street_address: string>, billing_information: record<address: record<country: string, locality: string, post_office_box_number: string, postal_code: string, region: string, street_address: string>, name: string, vat_number: string>, discoverable: bool, external_ref: string, id: string, legal_name: string, managing_account: string, metro_area_network_presence: list<string>, name: string, state: string, status: table<attrs: record, message: string, severity: int, tag: string, timestamp: string>> {
+]: any -> oneof<record<address: record<country: string, locality: string, post_office_box_number: string, postal_code: string, region: string, street_address: string>, billing_information: record<address: record<country: string, locality: string, post_office_box_number: string, postal_code: string, region: string, street_address: string>, name: string, vat_number: string>, discoverable: bool, external_ref: string, id: string, legal_name: string, managing_account: string, metro_area_network_presence: list<string>, name: string, state: string, status: table<attrs: record, message: string, severity: int, tag: string, timestamp: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -413,7 +438,7 @@ export def "auth-token-refresh" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   refresh_token: string
-]: any -> record<access_token: string, refresh_token: string> {
+]: any -> oneof<record<access_token: string, refresh_token: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
@@ -452,7 +477,7 @@ export def "auth-token-create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   api_key: string
   api_secret: string
-]: any -> record<access_token: string, refresh_token: string> {
+]: any -> oneof<record<access_token: string, refresh_token: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
@@ -499,7 +524,7 @@ export def "connections-list" [
   --pop: string # Filter by pop
   --facility: string # Filter by facility
   --external-ref: string # Filter by external_ref
-]: nothing -> table<billing_account: string, consuming_account: string, contract_ref: string, external_ref: string, id: string, lacp_timeout: string, managing_account: string, mode: string, name: string, outer_vlan_ethertypes: list<string>, ports: list<string>, purchase_order: string, role_assignments: list<string>, speed: int, state: string, status: list<record>, vlan_types: list<string>> {
+]: nothing -> oneof<table<billing_account: string, consuming_account: string, contract_ref: string, external_ref: string, id: string, lacp_timeout: string, managing_account: string, mode: string, name: string, outer_vlan_ethertypes: list<string>, ports: list<string>, purchase_order: string, role_assignments: list<string>, speed: int, state: string, status: list<record>, vlan_types: list<string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "csv") (serialize-qp "state" $state "scalar") (serialize-qp "state__is_not" $state_is_not "scalar") (serialize-qp "mode" $mode "scalar") (serialize-qp "mode__is_not" $mode_is_not "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "metro_area_network" $metro_area_network "scalar") (serialize-qp "pop" $pop "scalar") (serialize-qp "facility" $facility "scalar") (serialize-qp "external_ref" $external_ref "scalar")] | flatten | str join "&"
@@ -535,7 +560,7 @@ export def "connections-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<billing_account: string, consuming_account: string, contract_ref: string, external_ref: string, id: string, lacp_timeout: string, managing_account: string, mode: string, name: string, outer_vlan_ethertypes: list<string>, ports: list<string>, purchase_order: string, role_assignments: list<string>, speed: int, state: string, status: table<attrs: record, message: string, severity: int, tag: string, timestamp: string>, vlan_types: list<string>> {
+]: nothing -> oneof<record<billing_account: string, consuming_account: string, contract_ref: string, external_ref: string, id: string, lacp_timeout: string, managing_account: string, mode: string, name: string, outer_vlan_ethertypes: list<string>, ports: list<string>, purchase_order: string, role_assignments: list<string>, speed: int, state: string, status: table<attrs: record, message: string, severity: int, tag: string, timestamp: string>, vlan_types: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -574,7 +599,7 @@ export def "contacts-list" [
   --managing-account: string # Filter by managing_account
   --consuming-account: string # Filter by consuming_account
   --external-ref: string # Filter by external_ref
-]: nothing -> table<consuming_account: string, email: string, external_ref: string, id: string, managing_account: string, name: string, telephone: string> {
+]: nothing -> oneof<table<consuming_account: string, email: string, external_ref: string, id: string, managing_account: string, name: string, telephone: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "csv") (serialize-qp "managing_account" $managing_account "scalar") (serialize-qp "consuming_account" $consuming_account "scalar") (serialize-qp "external_ref" $external_ref "scalar")] | flatten | str join "&"
@@ -615,7 +640,7 @@ export def "contacts-create" [
   managing_account: string # The `id` of the account responsible for managing the service via the API. A manager can read and update the state of entities. (e.g. 238189294)
   --name: string # A name of a person or an organisation (nullable, e.g. Some A. Name)
   --telephone: string # The telephone number in E.164 Phone Number Formatting (nullable, e.g. +442071838750)
-]: any -> record<consuming_account: string, email: string, external_ref: string, id: string, managing_account: string, name: string, telephone: string> {
+]: any -> oneof<record<consuming_account: string, email: string, external_ref: string, id: string, managing_account: string, name: string, telephone: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -653,7 +678,7 @@ export def "contacts-destroy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<consuming_account: string, email: string, external_ref: string, id: string, managing_account: string, name: string, telephone: string> {
+]: nothing -> oneof<record<consuming_account: string, email: string, external_ref: string, id: string, managing_account: string, name: string, telephone: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -689,7 +714,7 @@ export def "contacts-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<consuming_account: string, email: string, external_ref: string, id: string, managing_account: string, name: string, telephone: string> {
+]: nothing -> oneof<record<consuming_account: string, email: string, external_ref: string, id: string, managing_account: string, name: string, telephone: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -726,7 +751,7 @@ export def "contacts-partial-update" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> record<consuming_account: string, email: string, external_ref: string, id: string, managing_account: string, name: string, telephone: string> {
+]: any -> oneof<record<consuming_account: string, email: string, external_ref: string, id: string, managing_account: string, name: string, telephone: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -771,7 +796,7 @@ export def "contacts-update" [
   managing_account: string # The `id` of the account responsible for managing the service via the API. A manager can read and update the state of entities. (e.g. 238189294)
   --name: string # A name of a person or an organisation (nullable, e.g. Some A. Name)
   --telephone: string # The telephone number in E.164 Phone Number Formatting (nullable, e.g. +442071838750)
-]: any -> record<consuming_account: string, email: string, external_ref: string, id: string, managing_account: string, name: string, telephone: string> {
+]: any -> oneof<record<consuming_account: string, email: string, external_ref: string, id: string, managing_account: string, name: string, telephone: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -820,7 +845,7 @@ export def "devices-list" [
   --facility: string # Filter by facility
   --pop: string # Filter by pop
   --metro-area-network: string # Filter by metro_area_network
-]: nothing -> table<capabilities: list<record>, facility: string, id: string, name: string, pop: string> {
+]: nothing -> oneof<table<capabilities: list<record>, facility: string, id: string, name: string, pop: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "csv") (serialize-qp "name" $name "scalar") (serialize-qp "capability_media_type" $capability_media_type "scalar") (serialize-qp "capability_speed" $capability_speed "scalar") (serialize-qp "capability_speed__lt" $capability_speed_lt "scalar") (serialize-qp "capability_speed__lte" $capability_speed_lte "scalar") (serialize-qp "capability_speed__gt" $capability_speed_gt "scalar") (serialize-qp "capability_speed__gte" $capability_speed_gte "scalar") (serialize-qp "facility" $facility "scalar") (serialize-qp "pop" $pop "scalar") (serialize-qp "metro_area_network" $metro_area_network "scalar")] | flatten | str join "&"
@@ -856,7 +881,7 @@ export def "devices-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<capabilities: table<availability: int, max_lag: int, media_type: string, speed: int>, facility: string, id: string, name: string, pop: string> {
+]: nothing -> oneof<record<capabilities: table<availability: int, max_lag: int, media_type: string, speed: int>, facility: string, id: string, name: string, pop: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -904,7 +929,7 @@ export def "facilities-list" [
   --address-country: string # Filter by address_country
   --address-locality: string # Filter by address_locality
   --postal-code: string # Filter by postal_code
-]: nothing -> table<address_country: string, address_locality: string, address_region: string, id: string, metro_area: string, name: string, organisation_name: string, peeringdb_facility_id: int, pops: list<string>, postal_code: string, street_address: string> {
+]: nothing -> oneof<table<address_country: string, address_locality: string, address_region: string, id: string, metro_area: string, name: string, organisation_name: string, peeringdb_facility_id: int, pops: list<string>, postal_code: string, street_address: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "csv") (serialize-qp "capability_media_type" $capability_media_type "scalar") (serialize-qp "capability_speed" $capability_speed "scalar") (serialize-qp "capability_speed__lt" $capability_speed_lt "scalar") (serialize-qp "capability_speed__lte" $capability_speed_lte "scalar") (serialize-qp "capability_speed__gt" $capability_speed_gt "scalar") (serialize-qp "capability_speed__gte" $capability_speed_gte "scalar") (serialize-qp "organisation_name" $organisation_name "scalar") (serialize-qp "metro_area" $metro_area "scalar") (serialize-qp "metro_area_network" $metro_area_network "scalar") (serialize-qp "address_country" $address_country "scalar") (serialize-qp "address_locality" $address_locality "scalar") (serialize-qp "postal_code" $postal_code "scalar")] | flatten | str join "&"
@@ -940,7 +965,7 @@ export def "facilities-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<address_country: string, address_locality: string, address_region: string, id: string, metro_area: string, name: string, organisation_name: string, peeringdb_facility_id: int, pops: list<string>, postal_code: string, street_address: string> {
+]: nothing -> oneof<table<address_country: string, address_locality: string, address_region: string, id: string, metro_area: string, name: string, organisation_name: string, peeringdb_facility_id: int, pops: list<string>, postal_code: string, street_address: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -975,7 +1000,7 @@ export def "api-health-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<checks: record, description: string, links: record, notes: list<string>, output: string, releaseId: string, serviceId: string, status: string, version: string> {
+]: nothing -> oneof<record<checks: record, description: string, links: record, notes: list<string>, output: string, releaseId: string, serviceId: string, status: string, version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/health" $auth.query)
@@ -1009,7 +1034,7 @@ export def "api-implementation-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<schema_version: string, service_version: string, supported_network_feature_config_types: list<string>, supported_network_feature_types: list<string>, supported_network_service_config_types: list<string>, supported_network_service_types: list<string>, supported_operations: list<string>> {
+]: nothing -> oneof<record<schema_version: string, service_version: string, supported_network_feature_config_types: list<string>, supported_network_feature_types: list<string>, supported_network_service_config_types: list<string>, supported_network_service_types: list<string>, supported_operations: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/implementation" $auth.query)
@@ -1056,7 +1081,7 @@ export def "ips-list" [
   --prefix-length: int # Filter by prefix_length
   --valid-not-before: string # Filter by valid_not_before
   --valid-not-after: string # Filter by valid_not_after
-]: nothing -> table<address: string, consuming_account: string, external_ref: string, fqdn: string, id: string, managing_account: string, prefix_length: int, valid_not_after: string, valid_not_before: string, version: int> {
+]: nothing -> oneof<table<address: string, consuming_account: string, external_ref: string, fqdn: string, id: string, managing_account: string, prefix_length: int, valid_not_after: string, valid_not_before: string, version: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "csv") (serialize-qp "managing_account" $managing_account "scalar") (serialize-qp "consuming_account" $consuming_account "scalar") (serialize-qp "external_ref" $external_ref "scalar") (serialize-qp "network_service" $network_service "scalar") (serialize-qp "network_service_config" $network_service_config "scalar") (serialize-qp "network_feature" $network_feature "scalar") (serialize-qp "network_feature_config" $network_feature_config "scalar") (serialize-qp "version" $version "scalar") (serialize-qp "fqdn" $fqdn "scalar") (serialize-qp "prefix_length" $prefix_length "scalar") (serialize-qp "valid_not_before" $valid_not_before "scalar") (serialize-qp "valid_not_after" $valid_not_after "scalar")] | flatten | str join "&"
@@ -1100,7 +1125,7 @@ export def "ips-create" [
   --valid-not-after: string # nullable, format: date-time
   --valid-not-before: string # nullable, format: date-time
   version: int # The version of the internet protocol. (e.g. 4)
-]: any -> record<address: string, consuming_account: string, external_ref: string, fqdn: string, id: string, managing_account: string, prefix_length: int, valid_not_after: string, valid_not_before: string, version: int> {
+]: any -> oneof<record<address: string, consuming_account: string, external_ref: string, fqdn: string, id: string, managing_account: string, prefix_length: int, valid_not_after: string, valid_not_before: string, version: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1138,7 +1163,7 @@ export def "ips-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<address: string, consuming_account: string, external_ref: string, fqdn: string, id: string, managing_account: string, prefix_length: int, valid_not_after: string, valid_not_before: string, version: int> {
+]: nothing -> oneof<record<address: string, consuming_account: string, external_ref: string, fqdn: string, id: string, managing_account: string, prefix_length: int, valid_not_after: string, valid_not_before: string, version: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1175,7 +1200,7 @@ export def "ips-partial-update" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> record<address: string, consuming_account: string, external_ref: string, fqdn: string, id: string, managing_account: string, prefix_length: int, valid_not_after: string, valid_not_before: string, version: int> {
+]: any -> oneof<record<address: string, consuming_account: string, external_ref: string, fqdn: string, id: string, managing_account: string, prefix_length: int, valid_not_after: string, valid_not_before: string, version: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1223,7 +1248,7 @@ export def "ips-update" [
   --valid-not-after: string # nullable, format: date-time
   --valid-not-before: string # nullable, format: date-time
   version: int # The version of the internet protocol. (e.g. 4)
-]: any -> record<address: string, consuming_account: string, external_ref: string, fqdn: string, id: string, managing_account: string, prefix_length: int, valid_not_after: string, valid_not_before: string, version: int> {
+]: any -> oneof<record<address: string, consuming_account: string, external_ref: string, fqdn: string, id: string, managing_account: string, prefix_length: int, valid_not_after: string, valid_not_before: string, version: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1270,7 +1295,7 @@ export def "macs-list" [
   --assigned-at: string # Filter by assigned_at
   --valid-not-before: string # Filter by valid_not_before
   --valid-not-after: string # Filter by valid_not_after
-]: nothing -> table<address: string, consuming_account: string, external_ref: string, id: string, managing_account: string, valid_not_after: string, valid_not_before: string> {
+]: nothing -> oneof<table<address: string, consuming_account: string, external_ref: string, id: string, managing_account: string, valid_not_after: string, valid_not_before: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "csv") (serialize-qp "managing_account" $managing_account "scalar") (serialize-qp "consuming_account" $consuming_account "scalar") (serialize-qp "external_ref" $external_ref "scalar") (serialize-qp "network_service_config" $network_service_config "scalar") (serialize-qp "address" $address "scalar") (serialize-qp "assigned_at" $assigned_at "scalar") (serialize-qp "valid_not_before" $valid_not_before "scalar") (serialize-qp "valid_not_after" $valid_not_after "scalar")] | flatten | str join "&"
@@ -1311,7 +1336,7 @@ export def "macs-create" [
   managing_account: string # The `id` of the account responsible for managing the service via the API. A manager can read and update the state of entities. (e.g. 238189294)
   --valid-not-after: string # nullable, format: date-time
   --valid-not-before: string # nullable, format: date-time
-]: any -> record<address: string, consuming_account: string, external_ref: string, id: string, managing_account: string, valid_not_after: string, valid_not_before: string> {
+]: any -> oneof<record<address: string, consuming_account: string, external_ref: string, id: string, managing_account: string, valid_not_after: string, valid_not_before: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1349,7 +1374,7 @@ export def "macs-destroy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<address: string, consuming_account: string, external_ref: string, id: string, managing_account: string, valid_not_after: string, valid_not_before: string> {
+]: nothing -> oneof<record<address: string, consuming_account: string, external_ref: string, id: string, managing_account: string, valid_not_after: string, valid_not_before: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1385,7 +1410,7 @@ export def "macs-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<address: string, consuming_account: string, external_ref: string, id: string, managing_account: string, valid_not_after: string, valid_not_before: string> {
+]: nothing -> oneof<record<address: string, consuming_account: string, external_ref: string, id: string, managing_account: string, valid_not_after: string, valid_not_before: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1422,7 +1447,7 @@ export def "member-joining-rules-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: list<string> # Filter by id (e.g. id1,id2,id3)
   --network-service: string # Filter by network_service
-]: nothing -> list<any> {
+]: nothing -> oneof<list<any>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "csv") (serialize-qp "network_service" $network_service "scalar")] | flatten | str join "&"
@@ -1458,13 +1483,19 @@ export def "member-joining-rules-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body: record
+  --capacity-max: int # An optional rate limit which has precedence over the capacity set in the network service config. (nullable)
+  --capacity-min: int # Require an optional minimum capacity to join the network service. (nullable)
+  consuming_account: string # The `id` of the account to which access to the network service should be granted or denied. (e.g. 2381982)
+  --external-ref: string # Reference field, free to use for the API user. (nullable, e.g. IX:Service:23042)
+  managing_account: string # The `id` of the account responsible for managing the service via the API. A manager can read and update the state of entities. (e.g. 238189294)
+  network_service: string
+  type: string@type-completer # e.g. allow
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/member-joining-rules" $auth.query)
-  let req_body = $body
+  let req_body = {"capacity_max": $capacity_max, "capacity_min": $capacity_min, "consuming_account": $consuming_account, "external_ref": $external_ref, "managing_account": $managing_account, "network_service": $network_service, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1613,14 +1644,19 @@ export def "member-joining-rules-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body: record
+  --capacity-max: int # An optional rate limit which has precedence over the capacity set in the network service config. (nullable)
+  --capacity-min: int # Require an optional minimum capacity to join the network service. (nullable)
+  consuming_account: string # The `id` of the account to which access to the network service should be granted or denied. (e.g. 2381982)
+  --external-ref: string # Reference field, free to use for the API user. (nullable, e.g. IX:Service:23042)
+  managing_account: string # The `id` of the account responsible for managing the service via the API. A manager can read and update the state of entities. (e.g. 238189294)
+  type: string@type-completer # e.g. allow
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/member-joining-rules/{id}") $auth.query)
-  let req_body = $body
+  let req_body = {"capacity_max": $capacity_max, "capacity_min": $capacity_min, "consuming_account": $consuming_account, "external_ref": $external_ref, "managing_account": $managing_account, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1656,7 +1692,7 @@ export def "metro-area-networks-list" [
   --name: string # Filter by name
   --metro-area: string # Filter by metro_area
   --service-provider: string # Filter by service_provider
-]: nothing -> table<id: string, metro_area: string, name: string, pops: list<string>, service_provider: string> {
+]: nothing -> oneof<table<id: string, metro_area: string, name: string, pops: list<string>, service_provider: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "csv") (serialize-qp "name" $name "scalar") (serialize-qp "metro_area" $metro_area "scalar") (serialize-qp "service_provider" $service_provider "scalar")] | flatten | str join "&"
@@ -1692,7 +1728,7 @@ export def "metro-area-networks-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<id: string, metro_area: string, name: string, pops: list<string>, service_provider: string> {
+]: nothing -> oneof<record<id: string, metro_area: string, name: string, pops: list<string>, service_provider: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1728,7 +1764,7 @@ export def "metro-areas-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: list<string> # Filter by id (e.g. id1,id2,id3)
-]: nothing -> table<display_name: string, facilities: list<string>, iata_code: string, id: string, metro_area_networks: list<string>, un_locode: string> {
+]: nothing -> oneof<table<display_name: string, facilities: list<string>, iata_code: string, id: string, metro_area_networks: list<string>, un_locode: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "csv")] | flatten | str join "&"
@@ -1764,7 +1800,7 @@ export def "metro-areas-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<display_name: string, facilities: list<string>, iata_code: string, id: string, metro_area_networks: list<string>, un_locode: string> {
+]: nothing -> oneof<table<display_name: string, facilities: list<string>, iata_code: string, id: string, metro_area_networks: list<string>, un_locode: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1805,10 +1841,10 @@ export def "network-feature-configs-list" [
   --managing-account: string # Filter by managing_account
   --consuming-account: string # Filter by consuming_account
   --external-ref: string # Filter by external_ref
-  --type: string@type-completer # Filter by type
+  --type: string@type-completer-1 # Filter by type
   --service-config: string # Filter by service_config
   --network-feature: string # Filter by network_feature
-]: nothing -> list<any> {
+]: nothing -> oneof<list<any>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "csv") (serialize-qp "state" $state "scalar") (serialize-qp "state__is_not" $state_is_not "scalar") (serialize-qp "managing_account" $managing_account "scalar") (serialize-qp "consuming_account" $consuming_account "scalar") (serialize-qp "external_ref" $external_ref "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "service_config" $service_config "scalar") (serialize-qp "network_feature" $network_feature "scalar")] | flatten | str join "&"
@@ -1844,13 +1880,32 @@ export def "network-feature-configs-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body: record
+  --as-set-v4: string # AS-SET of the customer for IPv4 prefix filtering. This is used to generate filters on the router servers. Only valid referenced prefixes within the AS-SET are allowed inbound to the route server. All other routes are filtered. This field is *required* if the route server network feature only supports the `af_inet` address family. If multiple address families are supported, it is optional if the `as_set_v6` is provided. Important: The format has to be: "AS-SET@IRR". IRR is the database where the AS-SET is registred. Typically used IRR's are RADB, RIPE, NTTCOM, APNIC, ALTDB, LEVEL3, ARIN, AFRINIC, LACNIC (nullable, e.g. MOON-AS@RIPE)
+  --as-set-v6: string # AS-SET of the customer for IPv6. This is used to generate filters on the router servers. Only valid referenced prefixes within the AS-SET are allowed inbound to the route server. All other routes are filtered. This field is *required* if the route server network feature only supports the `af_inet6` address family. If multiple address families are supported, it is optional if the `as_set_v4` is provided. Important: The format has to be: "AS-SET@IRR". IRR is the database where the AS-SET is registred. Typically used IRR's are RADB, RIPE, NTTCOM, APNIC, ALTDB, LEVEL3, ARIN, AFRINIC, LACNIC (nullable, e.g. MOON-AS@RIPE)
+  asn: int # The ASN of the peer. (format: int64, e.g. 4200000023)
+  bgp_session_type: string@bgp-session-type-completer # The session type describes which of the both parties will open the connection. If set to passive, the customer router needs to open the connection. If its set to active, the route server will open the connection. The standard behavior on most exchanges is passive. (e.g. passive)
+  billing_account: string # An account requires billing_information to be used as a `billing_account`.
+  consuming_account: string # The `id` of the account consuming a service. Used to be `owning_customer`. (e.g. 2381982)
+  --contract-ref: string # A reference to a contract. If no specific contract is used, a default MAY be chosen by the implementer. (nullable, e.g. contract:31824)
+  --external-ref: string # Reference field, free to use for the API user. (nullable, e.g. IX:Service:23042)
+  --insert-ixp-asn: oneof<nothing, bool> # Insert the ASN of the exchange into the AS path. This function is only used in special cases. In 99% of all cases, it should be false. (default: true)
+  ip: string # The BGP session will be established from this IP address. Only IPs assigned to the corresponding network service config can be used.
+  managing_account: string # The `id` of the account responsible for managing the service via the API. A manager can read and update the state of entities. (e.g. 238189294)
+  --max-prefix-v4: int # Announcing more than `max_prefix` IPv4 prefixes the bgp session will be droped. (nullable, e.g. 5000)
+  --max-prefix-v6: int # Announcing more than `max_prefix` IPv6 prefixes the bgp session will be droped. (nullable, e.g. 5000)
+  network_feature: string
+  network_service_config: string
+  --password: string # The cleartext BGP session password (default: "", e.g. bgp-session-test-23)
+  --purchase-order: string # Purchase Order ID which will be displayed on the invoice. (default: "", e.g. Project: DC Moon)
+  role_assignments: list<string> # A set of `RoleAssignment`s. See the documentation on the specific `required_contact_roles`, `nfc_required_contact_roles` or `nsc_required_contact_roles` on what `RoleAssignment`s to provide. (e.g. [c-impl:123, c-noc:331])
+  session_mode: string@session-mode-completer # Set the session mode with the routeserver. (e.g. public)
+  type: string@type-completer-1 # e.g. route_server
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/network-feature-configs" $auth.query)
-  let req_body = $body
+  let req_body = {"as_set_v4": $as_set_v4, "as_set_v6": $as_set_v6, "asn": $asn, "bgp_session_type": $bgp_session_type, "billing_account": $billing_account, "consuming_account": $consuming_account, "contract_ref": $contract_ref, "external_ref": $external_ref, "insert_ixp_asn": $insert_ixp_asn, "ip": $ip, "managing_account": $managing_account, "max_prefix_v4": $max_prefix_v4, "max_prefix_v6": $max_prefix_v6, "network_feature": $network_feature, "network_service_config": $network_service_config, "password": $password, "purchase_order": $purchase_order, "role_assignments": $role_assignments, "session_mode": $session_mode, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1999,14 +2054,27 @@ export def "network-feature-configs-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body: record
+  --as-set-v4: string # AS-SET of the customer for IPv4 prefix filtering. This is used to generate filters on the router servers. Only valid referenced prefixes within the AS-SET are allowed inbound to the route server. All other routes are filtered. This field is *required* if the route server network feature only supports the `af_inet` address family. If multiple address families are supported, it is optional if the `as_set_v6` is provided. Important: The format has to be: "AS-SET@IRR". IRR is the database where the AS-SET is registred. Typically used IRR's are RADB, RIPE, NTTCOM, APNIC, ALTDB, LEVEL3, ARIN, AFRINIC, LACNIC (nullable, e.g. MOON-AS@RIPE)
+  --as-set-v6: string # AS-SET of the customer for IPv6. This is used to generate filters on the router servers. Only valid referenced prefixes within the AS-SET are allowed inbound to the route server. All other routes are filtered. This field is *required* if the route server network feature only supports the `af_inet6` address family. If multiple address families are supported, it is optional if the `as_set_v4` is provided. Important: The format has to be: "AS-SET@IRR". IRR is the database where the AS-SET is registred. Typically used IRR's are RADB, RIPE, NTTCOM, APNIC, ALTDB, LEVEL3, ARIN, AFRINIC, LACNIC (nullable, e.g. MOON-AS@RIPE)
+  asn: int # The ASN of the peer. (format: int64, e.g. 4200000023)
+  bgp_session_type: string@bgp-session-type-completer # The session type describes which of the both parties will open the connection. If set to passive, the customer router needs to open the connection. If its set to active, the route server will open the connection. The standard behavior on most exchanges is passive. (e.g. passive)
+  consuming_account: string # The `id` of the account consuming a service. Used to be `owning_customer`. (e.g. 2381982)
+  --external-ref: string # Reference field, free to use for the API user. (nullable, e.g. IX:Service:23042)
+  --insert-ixp-asn: oneof<nothing, bool> # Insert the ASN of the exchange into the AS path. This function is only used in special cases. In 99% of all cases, it should be false. (default: true)
+  ip: string # The BGP session will be established from this IP address. Only IPs assigned to the corresponding network service config can be used.
+  managing_account: string # The `id` of the account responsible for managing the service via the API. A manager can read and update the state of entities. (e.g. 238189294)
+  --max-prefix-v4: int # Announcing more than `max_prefix` IPv4 prefixes the bgp session will be droped. (nullable, e.g. 5000)
+  --max-prefix-v6: int # Announcing more than `max_prefix` IPv6 prefixes the bgp session will be droped. (nullable, e.g. 5000)
+  --password: string # The cleartext BGP session password (default: "", e.g. bgp-session-test-23)
+  session_mode: string@session-mode-completer # Set the session mode with the routeserver. (e.g. public)
+  type: string@type-completer-1 # e.g. route_server
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/network-feature-configs/{id}") $auth.query)
-  let req_body = $body
+  let req_body = {"as_set_v4": $as_set_v4, "as_set_v6": $as_set_v6, "asn": $asn, "bgp_session_type": $bgp_session_type, "consuming_account": $consuming_account, "external_ref": $external_ref, "insert_ixp_asn": $insert_ixp_asn, "ip": $ip, "managing_account": $managing_account, "max_prefix_v4": $max_prefix_v4, "max_prefix_v6": $max_prefix_v6, "password": $password, "session_mode": $session_mode, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2039,11 +2107,11 @@ export def "network-features-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: list<string> # Filter by id (e.g. id1,id2,id3)
-  --type: string@type-completer # Filter by type
+  --type: string@type-completer-1 # Filter by type
   --required: string # Filter by required
   --network-service: string # Filter by network_service
   --name: string # Filter by name
-]: nothing -> list<any> {
+]: nothing -> oneof<list<any>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "csv") (serialize-qp "type" $type "scalar") (serialize-qp "required" $required "scalar") (serialize-qp "network_service" $network_service "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
@@ -2121,14 +2189,14 @@ export def "network-service-configs-list" [
   --managing-account: string # Filter by managing_account
   --consuming-account: string # Filter by consuming_account
   --external-ref: string # Filter by external_ref
-  --type: string@type-completer-1 # Filter by type
+  --type: string@type-completer-2 # Filter by type
   --inner-vlan: int # Filter by inner_vlan
   --outer-vlan: int # Filter by outer_vlan
   --capacity: int # Filter by capacity
   --network-service: string # Filter by network_service
   --connection: string # Filter by connection
   --product-offering: string # Filter by product_offering
-]: nothing -> list<any> {
+]: nothing -> oneof<list<any>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "csv") (serialize-qp "state" $state "scalar") (serialize-qp "state__is_not" $state_is_not "scalar") (serialize-qp "managing_account" $managing_account "scalar") (serialize-qp "consuming_account" $consuming_account "scalar") (serialize-qp "external_ref" $external_ref "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "inner_vlan" $inner_vlan "scalar") (serialize-qp "outer_vlan" $outer_vlan "scalar") (serialize-qp "capacity" $capacity "scalar") (serialize-qp "network_service" $network_service "scalar") (serialize-qp "connection" $connection "scalar") (serialize-qp "product_offering" $product_offering "scalar")] | flatten | str join "&"
@@ -2164,13 +2232,31 @@ export def "network-service-configs-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body: record
+  --asns: list<int>
+  billing_account: string # An account requires billing_information to be used as a `billing_account`.
+  --capacity: int # The capacity of the service in Mbps. If set to Null, the maximum capacity will be used, i.e. the virtual circuit is not rate-limited. An exchange may choose to constrain the available capacity range of a `ProductOffering`. That means, the service can consume up to the total bandwidth of the `Connection`. Typically the service is charged based on the capacity. (nullable)
+  connection: string # The id of the connection to use for this `NetworkServiceConfig`.
+  consuming_account: string # The `id` of the account consuming a service. Used to be `owning_customer`. (e.g. 2381982)
+  --contract-ref: string # A reference to a contract. If no specific contract is used, a default MAY be chosen by the implementer. (nullable, e.g. contract:31824)
+  --external-ref: string # Reference field, free to use for the API user. (nullable, e.g. IX:Service:23042)
+  --listed: oneof<nothing, bool> # The customer wants to be featured on the member list
+  --macs: list<string> # A list of mac-address IDs.
+  managing_account: string # The `id` of the account responsible for managing the service via the API. A manager can read and update the state of entities. (e.g. 238189294)
+  network_service: string # The id of the `NetworkService` to configure.
+  --product-offering: string # The product offering must match the type `exchange_lan` and must refer to the related network service through the `exchange_lan_network_service` property.
+  --purchase-order: string # Purchase Order ID which will be displayed on the invoice. (default: "", e.g. Project: DC Moon)
+  role_assignments: list<string> # A set of `RoleAssignment`s. See the documentation on the specific `required_contact_roles`, `nfc_required_contact_roles` or `nsc_required_contact_roles` on what `RoleAssignment`s to provide. (e.g. [c-impl:123, c-noc:331])
+  type: string@type-completer-2 # e.g. exchange_lan
+  vlan_config: any # The vlan configuration defines how the service is made available on the connection.
+  --role: string@role-completer # A `leaf` can only reach roots and is isolated from other leafs. A `root` can reach any other point in the virtual circuit including other roots. (default: leaf)
+  --cloud-vlan: int # If the `provider_vlans` property of the `ProductOffering` is `multi`, a numeric value refers to a specific vlan on the service provider side. Otherwise, if set to `null`, it refers to all unmatched vlan ids on the service provider side. (All vlan ids from the service provider side are presented as tags within any vlans specified in `vlan_config`.) If the `provider_vlans` property of the `ProductOffering` is `single`, the `cloud_vlan` MUST be `null` or MUST NOT be provided. (nullable, format: int32)
+  --handover: int # The handover enumerates the connection and is required for checking diversity constraints. It must be within `1 <= x <= network_service.diversity`. (e.g. 1)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/network-service-configs" $auth.query)
-  let req_body = $body
+  let req_body = {"asns": $asns, "billing_account": $billing_account, "capacity": $capacity, "connection": $connection, "consuming_account": $consuming_account, "contract_ref": $contract_ref, "external_ref": $external_ref, "listed": $listed, "macs": $macs, "managing_account": $managing_account, "network_service": $network_service, "product_offering": $product_offering, "purchase_order": $purchase_order, "role_assignments": $role_assignments, "type": $type, "vlan_config": $vlan_config, "role": $role, "cloud_vlan": $cloud_vlan, "handover": $handover} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2323,14 +2409,31 @@ export def "network-service-configs-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body: record
+  --asns: list<int>
+  billing_account: string # An account requires billing_information to be used as a `billing_account`.
+  --capacity: int # The capacity of the service in Mbps. If set to Null, the maximum capacity will be used, i.e. the virtual circuit is not rate-limited. An exchange may choose to constrain the available capacity range of a `ProductOffering`. That means, the service can consume up to the total bandwidth of the `Connection`. Typically the service is charged based on the capacity. (nullable)
+  connection: string # The id of the connection to use for this `NetworkServiceConfig`.
+  consuming_account: string # The `id` of the account consuming a service. Used to be `owning_customer`. (e.g. 2381982)
+  --contract-ref: string # A reference to a contract. If no specific contract is used, a default MAY be chosen by the implementer. (nullable, e.g. contract:31824)
+  --external-ref: string # Reference field, free to use for the API user. (nullable, e.g. IX:Service:23042)
+  --listed: oneof<nothing, bool> # The customer wants to be featured on the member list
+  --macs: list<string> # A list of mac-address IDs.
+  managing_account: string # The `id` of the account responsible for managing the service via the API. A manager can read and update the state of entities. (e.g. 238189294)
+  --purchase-order: string # Purchase Order ID which will be displayed on the invoice. (default: "", e.g. Project: DC Moon)
+  role_assignments: list<string> # A set of `RoleAssignment`s. See the documentation on the specific `required_contact_roles`, `nfc_required_contact_roles` or `nsc_required_contact_roles` on what `RoleAssignment`s to provide. (e.g. [c-impl:123, c-noc:331])
+  type: string@type-completer-2 # e.g. exchange_lan
+  vlan_config: any # The vlan configuration defines how the service is made available on the connection.
+  --network-service: string # The id of the `NetworkService` to configure.
+  --role: string@role-completer # A `leaf` can only reach roots and is isolated from other leafs. A `root` can reach any other point in the virtual circuit including other roots. (default: leaf)
+  --cloud-vlan: int # If the `provider_vlans` property of the `ProductOffering` is `multi`, a numeric value refers to a specific vlan on the service provider side. Otherwise, if set to `null`, it refers to all unmatched vlan ids on the service provider side. (All vlan ids from the service provider side are presented as tags within any vlans specified in `vlan_config`.) If the `provider_vlans` property of the `ProductOffering` is `single`, the `cloud_vlan` MUST be `null` or MUST NOT be provided. (nullable, format: int32)
+  --handover: int # The handover enumerates the connection and is required for checking diversity constraints. It must be within `1 <= x <= network_service.diversity`. (e.g. 1)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/network-service-configs/{id}") $auth.query)
-  let req_body = $body
+  let req_body = {"asns": $asns, "billing_account": $billing_account, "capacity": $capacity, "connection": $connection, "consuming_account": $consuming_account, "contract_ref": $contract_ref, "external_ref": $external_ref, "listed": $listed, "macs": $macs, "managing_account": $managing_account, "purchase_order": $purchase_order, "role_assignments": $role_assignments, "type": $type, "vlan_config": $vlan_config, "network_service": $network_service, "role": $role, "cloud_vlan": $cloud_vlan, "handover": $handover} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2364,7 +2467,7 @@ export def "network-service-config-cancellation-policy-read" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --decommission-at: string # By providing a date in the format `YYYY-MM-DD` you can query the policy what would happen if you request a decommissioning on this date.
-]: nothing -> record<charged_until: string, decommission_at: string> {
+]: nothing -> oneof<record<charged_until: string, decommission_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2406,10 +2509,10 @@ export def "network-services-list" [
   --managing-account: string # Filter by managing_account
   --consuming-account: string # Filter by consuming_account
   --external-ref: string # Filter by external_ref
-  --type: string@type-completer-1 # Filter by type
+  --type: string@type-completer-2 # Filter by type
   --pop: string # Filter by pop
   --product-offering: string # Filter by product_offering
-]: nothing -> list<any> {
+]: nothing -> oneof<list<any>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "csv") (serialize-qp "state" $state "scalar") (serialize-qp "state__is_not" $state_is_not "scalar") (serialize-qp "managing_account" $managing_account "scalar") (serialize-qp "consuming_account" $consuming_account "scalar") (serialize-qp "external_ref" $external_ref "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "pop" $pop "scalar") (serialize-qp "product_offering" $product_offering "scalar")] | flatten | str join "&"
@@ -2445,13 +2548,25 @@ export def "network-services-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body: record
+  billing_account: string # An account requires billing_information to be used as a `billing_account`.
+  consuming_account: string # The `id` of the account consuming a service. Used to be `owning_customer`. (e.g. 2381982)
+  --contract-ref: string # A reference to a contract. If no specific contract is used, a default MAY be chosen by the implementer. (nullable, e.g. contract:31824)
+  --external-ref: string # Reference field, free to use for the API user. (nullable, e.g. IX:Service:23042)
+  --joining-member-account: string # The account of the B-side member joining the virtual circuit. (e.g. 231829)
+  managing_account: string # The `id` of the account responsible for managing the service via the API. A manager can read and update the state of entities. (e.g. 238189294)
+  product_offering: string
+  --purchase-order: string # Purchase Order ID which will be displayed on the invoice. (default: "", e.g. Project: DC Moon)
+  type: string@type-completer-3 # e.g. p2p_vc
+  --name: string # Name of the point to multi-point virtual circuit.
+  --public: oneof<nothing, bool> # A public p2mp network service can be joined by everyone on the exchange unless denied by a member-joining-rule. Public network services are visible to other members of the IXP, however only `name`, `type`, `product_offering`, `consuming_account` and `managing_account` are made available. Other required fields are redacted. (default: false)
+  --capacity: int # The capacity of the service in Mbps. When null, the maximum capacity will be used. (nullable)
+  --cloud-key: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/network-services" $auth.query)
-  let req_body = $body
+  let req_body = {"billing_account": $billing_account, "consuming_account": $consuming_account, "contract_ref": $contract_ref, "external_ref": $external_ref, "joining_member_account": $joining_member_account, "managing_account": $managing_account, "product_offering": $product_offering, "purchase_order": $purchase_order, "type": $type, "name": $name, "public": $public, "capacity": $capacity, "cloud_key": $cloud_key} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2604,14 +2719,26 @@ export def "network-services-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body: record
+  billing_account: string # An account requires billing_information to be used as a `billing_account`.
+  consuming_account: string # The `id` of the account consuming a service. Used to be `owning_customer`. (e.g. 2381982)
+  --contract-ref: string # A reference to a contract. If no specific contract is used, a default MAY be chosen by the implementer. (nullable, e.g. contract:31824)
+  --external-ref: string # Reference field, free to use for the API user. (nullable, e.g. IX:Service:23042)
+  --joining-member-account: string # The account of the B-side member joining the virtual circuit. (e.g. 231829)
+  managing_account: string # The `id` of the account responsible for managing the service via the API. A manager can read and update the state of entities. (e.g. 238189294)
+  product_offering: string
+  --purchase-order: string # Purchase Order ID which will be displayed on the invoice. (default: "", e.g. Project: DC Moon)
+  type: string@type-completer-3 # e.g. p2p_vc
+  --name: string # Name of the point to multi-point virtual circuit.
+  --public: oneof<nothing, bool> # A public p2mp network service can be joined by everyone on the exchange unless denied by a member-joining-rule. Public network services are visible to other members of the IXP, however only `name`, `type`, `product_offering`, `consuming_account` and `managing_account` are made available. Other required fields are redacted. (default: false)
+  --capacity: int # The capacity of the service in Mbps. When null, the maximum capacity will be used. (nullable)
+  --cloud-key: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/network-services/{id}") $auth.query)
-  let req_body = $body
+  let req_body = {"billing_account": $billing_account, "consuming_account": $consuming_account, "contract_ref": $contract_ref, "external_ref": $external_ref, "joining_member_account": $joining_member_account, "managing_account": $managing_account, "product_offering": $product_offering, "purchase_order": $purchase_order, "type": $type, "name": $name, "public": $public, "capacity": $capacity, "cloud_key": $cloud_key} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2645,7 +2772,7 @@ export def "network-service-cancellation-policy-read" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --decommission-at: string # By providing a date in the format `YYYY-MM-DD` you can query the policy what would happen if you request a decommissioning on this date.
-]: nothing -> record<charged_until: string, decommission_at: string> {
+]: nothing -> oneof<record<charged_until: string, decommission_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2682,7 +2809,7 @@ export def "network-service-change-request-destroy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<capacity: int, product_offering: string> {
+]: nothing -> oneof<record<capacity: int, product_offering: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2718,7 +2845,7 @@ export def "network-service-change-request-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<capacity: int, product_offering: string> {
+]: nothing -> oneof<record<capacity: int, product_offering: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2756,7 +2883,7 @@ export def "network-service-change-request-create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --capacity: int # The desired capacity of the service in Mbps. Must be within the range of `bandwidth_min` and `bandwidth_max` of the `ProductOffering`. When `null` the maximum capacity wil be used. (nullable)
   product_offering: string # Migrate to a diffrent product offering. Please note, that the offering only may differ in bandwidth.
-]: any -> record<capacity: int, product_offering: string> {
+]: any -> oneof<record<capacity: int, product_offering: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2803,7 +2930,7 @@ export def "pops-list" [
   --capability-speed-lte: int # Filter by capability_speed__lte
   --capability-speed-gt: int # Filter by capability_speed__gt
   --capability-speed-gte: int # Filter by capability_speed__gte
-]: nothing -> table<devices: list<string>, facility: string, id: string, metro_area_network: string, name: string> {
+]: nothing -> oneof<table<devices: list<string>, facility: string, id: string, metro_area_network: string, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "csv") (serialize-qp "facility" $facility "scalar") (serialize-qp "metro_area_network" $metro_area_network "scalar") (serialize-qp "capability_media_type" $capability_media_type "scalar") (serialize-qp "capability_speed" $capability_speed "scalar") (serialize-qp "capability_speed__lt" $capability_speed_lt "scalar") (serialize-qp "capability_speed__lte" $capability_speed_lte "scalar") (serialize-qp "capability_speed__gt" $capability_speed_gt "scalar") (serialize-qp "capability_speed__gte" $capability_speed_gte "scalar")] | flatten | str join "&"
@@ -2839,7 +2966,7 @@ export def "pops-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<devices: list<string>, facility: string, id: string, metro_area_network: string, name: string> {
+]: nothing -> oneof<record<devices: list<string>, facility: string, id: string, metro_area_network: string, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2884,7 +3011,7 @@ export def "ports-list" [
   --device: string # Filter by device
   --speed: string # Filter by speed
   --connection: string # Filter by connection
-]: nothing -> table<billing_account: string, connection: string, consuming_account: string, contract_ref: string, device: string, external_ref: string, id: string, managing_account: string, media_type: string, name: string, pop: string, purchase_order: string, role_assignments: list<string>, speed: int, state: string, status: list<record>> {
+]: nothing -> oneof<table<billing_account: string, connection: string, consuming_account: string, contract_ref: string, device: string, external_ref: string, id: string, managing_account: string, media_type: string, name: string, pop: string, purchase_order: string, role_assignments: list<string>, speed: int, state: string, status: list<record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "csv") (serialize-qp "state" $state "scalar") (serialize-qp "state__is_not" $state_is_not "scalar") (serialize-qp "media_type" $media_type "scalar") (serialize-qp "pop" $pop "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "external_ref" $external_ref "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "speed" $speed "scalar") (serialize-qp "connection" $connection "scalar")] | flatten | str join "&"
@@ -2920,7 +3047,7 @@ export def "ports-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<billing_account: string, connection: string, consuming_account: string, contract_ref: string, device: string, external_ref: string, id: string, managing_account: string, media_type: string, name: string, pop: string, purchase_order: string, role_assignments: list<string>, speed: int, state: string, status: table<attrs: record, message: string, severity: int, tag: string, timestamp: string>> {
+]: nothing -> oneof<record<billing_account: string, connection: string, consuming_account: string, contract_ref: string, device: string, external_ref: string, id: string, managing_account: string, media_type: string, name: string, pop: string, purchase_order: string, role_assignments: list<string>, speed: int, state: string, status: table<attrs: record, message: string, severity: int, tag: string, timestamp: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2956,7 +3083,7 @@ export def "product-offerings-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: list<string> # Filter by id (e.g. id1,id2,id3)
-  --type: string@type-completer-1 # Filter by type
+  --type: string@type-completer-2 # Filter by type
   --name: string # Filter by name
   --handover-metro-area: string # Filter by handover_metro_area
   --handover-metro-area-network: string # Filter by handover_metro_area_network
@@ -2972,7 +3099,7 @@ export def "product-offerings-list" [
   --delivery-method: string@delivery-method-completer # Filter by delivery_method
   --cloud-key: string # For product offerings of type `cloud_vc`, if the `service_provider_workflow` is `provider_first` the `cloud_key` will be used for filtering the relevant offerings.
   --fields: string # Returned objects only have properties which are present in the list of fields. The required `type` property is *implicitly* included. The results are *deduplicated*. (e.g. handover_metro_area,service_provider)
-]: nothing -> list<any> {
+]: nothing -> oneof<list<any>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "csv") (serialize-qp "type" $type "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "handover_metro_area" $handover_metro_area "scalar") (serialize-qp "handover_metro_area_network" $handover_metro_area_network "scalar") (serialize-qp "service_metro_area" $service_metro_area "scalar") (serialize-qp "service_metro_area_network" $service_metro_area_network "scalar") (serialize-qp "service_provider" $service_provider "scalar") (serialize-qp "downgrade_allowed" $downgrade_allowed "scalar") (serialize-qp "upgrade_allowed" $upgrade_allowed "scalar") (serialize-qp "bandwidth" $bandwidth "scalar") (serialize-qp "physical_port_speed" $physical_port_speed "scalar") (serialize-qp "service_provider_region" $service_provider_region "scalar") (serialize-qp "service_provider_pop" $service_provider_pop "scalar") (serialize-qp "delivery_method" $delivery_method "scalar") (serialize-qp "cloud_key" $cloud_key "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
@@ -3047,7 +3174,7 @@ export def "role-assignments-list" [
   --id: list<string> # Filter by id (e.g. id1,id2,id3)
   --contact: string # Filter by contact
   --role: string # Filter by role
-]: nothing -> table<contact: string, id: string, role: string> {
+]: nothing -> oneof<table<contact: string, id: string, role: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "csv") (serialize-qp "contact" $contact "scalar") (serialize-qp "role" $role "scalar")] | flatten | str join "&"
@@ -3084,7 +3211,7 @@ export def "role-assignments-create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   contact: string # The `id` of a contact the role is assigned to. (e.g. contact:42b)
   role: string # The `id` of a role the contact is assigned to. (e.g. role:23)
-]: any -> record<contact: string, id: string, role: string> {
+]: any -> oneof<record<contact: string, id: string, role: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3122,7 +3249,7 @@ export def "role-assignments-destroy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<contact: string, id: string, role: string> {
+]: nothing -> oneof<record<contact: string, id: string, role: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($assignment_id | is-empty) { error make --unspanned { msg: "path parameter 'assignment_id' must be non-empty" } }
@@ -3158,7 +3285,7 @@ export def "role-assignments-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<contact: string, id: string, role: string> {
+]: nothing -> oneof<record<contact: string, id: string, role: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($assignment_id | is-empty) { error make --unspanned { msg: "path parameter 'assignment_id' must be non-empty" } }
@@ -3196,7 +3323,7 @@ export def "roles-list" [
   --id: list<string> # Filter by id (e.g. id1,id2,id3)
   --name: string # Filter by name
   --contact: string # Filter by contact
-]: nothing -> table<id: string, name: string, required_fields: list<string>> {
+]: nothing -> oneof<table<id: string, name: string, required_fields: list<string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "csv") (serialize-qp "name" $name "scalar") (serialize-qp "contact" $contact "scalar")] | flatten | str join "&"
@@ -3234,7 +3361,7 @@ export def "roles-read" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-id: list<string> # Filter by id (e.g. id1,id2,id3)
   --name: string # Filter by name
-]: nothing -> record<id: string, name: string, required_fields: list<string>> {
+]: nothing -> oneof<record<id: string, name: string, required_fields: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }

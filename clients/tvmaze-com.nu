@@ -14,27 +14,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -42,8 +51,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -54,7 +68,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -89,7 +112,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -129,9 +153,9 @@ def embed-completer-4 [] { ["webchannel"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-auth-poll" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["post-auth-poll" "post-auth-start" "get-auth-validate" "post-scrobble-episodes" "put-scrobble-episodes-episode-id" "post-scrobble-shows" "get-scrobble-shows-show-id" "get-user-episodes" "delete-user-episodes-episode-id" "get-user-episodes-episode-id" "put-user-episodes-episode-id" "get-user-follows-networks" "delete-user-follows-networks-network-id" "get-user-follows-networks-network-id" "put-user-follows-networks-network-id" "get-user-follows-people" "delete-user-follows-people-person-id" "get-user-follows-people-person-id" "put-user-follows-people-person-id" "get-user-follows-shows" "delete-user-follows-shows-show-id" "get-user-follows-shows-show-id" "put-user-follows-shows-show-id" "get-user-follows-webchannels" "delete-user-follows-webchannels-webchannel-id" "get-user-follows-webchannels-webchannel-id" "put-user-follows-webchannels-webchannel-id" "get-user-tags" "post-user-tags" "delete-user-tags-tag-id" "patch-user-tags-tag-id" "get-user-tags-tag-id-shows" "delete-user-tags-tag-id-shows-show-id" "put-user-tags-tag-id-shows-show-id" "get-user-votes-episodes" "delete-user-votes-episodes-episode-id" "get-user-votes-episodes-episode-id" "put-user-votes-episodes-episode-id" "get-user-votes-shows" "delete-user-votes-shows-show-id" "get-user-votes-shows-show-id" "put-user-votes-shows-show-id" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -163,7 +187,7 @@ export def "post-auth-poll" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body-token: string
-]: any -> record<apikey: string, username: string> {
+]: any -> oneof<record<apikey: string, username: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -201,7 +225,7 @@ export def "post-auth-start" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # The user's email address
   --email-confirmation: oneof<nothing, bool> # Whether to email the user a confirmation link (default: true)
-]: any -> record<confirm_url: string, token: string> {
+]: any -> oneof<record<confirm_url: string, token: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -237,7 +261,7 @@ export def "get-auth-validate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<premium: int> {
+]: nothing -> oneof<record<premium: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/auth/validate" $auth.query)
@@ -271,7 +295,7 @@ export def "post-scrobble-episodes" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> table<code: int, errors: record, input: record, message: string, result: record> {
+]: any -> oneof<table<code: int, errors: record, input: record, message: string, result: record>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -297,7 +321,6 @@ export def "post-scrobble-episodes" [
 # Mark an episode as acquired or watched based on its ID
 #
 # PUT /scrobble/episodes/{episode_id}
-# --_embedded shape: {episode?: record}
 export def "put-scrobble-episodes-episode-id" [
   episode_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -312,7 +335,7 @@ export def "put-scrobble-episodes-episode-id" [
   --embedded: record # shape: {episode?: record}
   --marked-at: int # Epoch timestamp for when the user watched the episode, or 0 for unknown.
   --type: any # 0 for watched, 1 for acquired, 2 for skipped
-]: any -> record<_embedded: record<episode: record>, episode_id: int, marked_at: int, type: any> {
+]: any -> oneof<record<_embedded: record<episode: record>, episode_id: int, marked_at: int, type: any>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -353,7 +376,7 @@ export def "post-scrobble-shows" [
   --thetvdb-id: int # The show's TheTVDB ID
   --imdb-id: int # The show's IMDB ID
   --body: list
-]: any -> table<code: int, errors: record, input: record, message: string, result: record> {
+]: any -> oneof<table<code: int, errors: record, input: record, message: string, result: record>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -392,7 +415,7 @@ export def "get-scrobble-shows-show-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --embed: string@embed-completer # Embed full episode info
-]: nothing -> table<_embedded: record<episode: record>, episode_id: int, marked_at: int, type: any> {
+]: nothing -> oneof<table<_embedded: record<episode: record>, episode_id: int, marked_at: int, type: any>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($show_id | is-empty) { error make --unspanned { msg: "path parameter 'show_id' must be non-empty" } }
@@ -428,7 +451,7 @@ export def "get-user-episodes" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --show-id: int # Only return episodes from this specific show
-]: nothing -> table<_embedded: record<episode: record>, episode_id: int, marked_at: int, type: any> {
+]: nothing -> oneof<table<_embedded: record<episode: record>, episode_id: int, marked_at: int, type: any>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "show_id" $show_id "scalar")] | flatten | str join "&"
@@ -498,7 +521,7 @@ export def "get-user-episodes-episode-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<_embedded: record<episode: record>, episode_id: int, marked_at: int, type: any> {
+]: nothing -> oneof<record<_embedded: record<episode: record>, episode_id: int, marked_at: int, type: any>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($episode_id | is-empty) { error make --unspanned { msg: "path parameter 'episode_id' must be non-empty" } }
@@ -522,7 +545,6 @@ export def "get-user-episodes-episode-id" [
 # Mark an episode
 #
 # PUT /user/episodes/{episode_id}
-# --_embedded shape: {episode?: record}
 export def "put-user-episodes-episode-id" [
   episode_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -537,7 +559,7 @@ export def "put-user-episodes-episode-id" [
   --embedded: record # shape: {episode?: record}
   --marked-at: int # Epoch timestamp for when the user watched the episode, or 0 for unknown.
   --type: any # 0 for watched, 1 for acquired, 2 for skipped
-]: any -> record<_embedded: record<episode: record>, episode_id: int, marked_at: int, type: any> {
+]: any -> oneof<record<_embedded: record<episode: record>, episode_id: int, marked_at: int, type: any>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -575,7 +597,7 @@ export def "get-user-follows-networks" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --embed: string@embed-completer-1 # Embed full network info
-]: nothing -> table<_embedded: record<network: record>, network_id: int> {
+]: nothing -> oneof<table<_embedded: record<network: record>, network_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "embed" $embed "scalar")] | flatten | str join "&"
@@ -645,7 +667,7 @@ export def "get-user-follows-networks-network-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<_embedded: record<network: record>, network_id: int> {
+]: nothing -> oneof<record<_embedded: record<network: record>, network_id: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'network_id' must be non-empty" } }
@@ -680,7 +702,7 @@ export def "put-user-follows-networks-network-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<_embedded: record<network: record>, network_id: int> {
+]: nothing -> oneof<record<_embedded: record<network: record>, network_id: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'network_id' must be non-empty" } }
@@ -715,7 +737,7 @@ export def "get-user-follows-people" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --embed: string@embed-completer-2 # Embed full person info
-]: nothing -> table<_embedded: record<person: record>, person_id: int> {
+]: nothing -> oneof<table<_embedded: record<person: record>, person_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "embed" $embed "scalar")] | flatten | str join "&"
@@ -785,7 +807,7 @@ export def "get-user-follows-people-person-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<_embedded: record<person: record>, person_id: int> {
+]: nothing -> oneof<record<_embedded: record<person: record>, person_id: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($person_id | is-empty) { error make --unspanned { msg: "path parameter 'person_id' must be non-empty" } }
@@ -820,7 +842,7 @@ export def "put-user-follows-people-person-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<_embedded: record<person: record>, person_id: int> {
+]: nothing -> oneof<record<_embedded: record<person: record>, person_id: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($person_id | is-empty) { error make --unspanned { msg: "path parameter 'person_id' must be non-empty" } }
@@ -855,7 +877,7 @@ export def "get-user-follows-shows" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --embed: string@embed-completer-3 # Embed full show info
-]: nothing -> table<_embedded: record<show: record>, show_id: int> {
+]: nothing -> oneof<table<_embedded: record<show: record>, show_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "embed" $embed "scalar")] | flatten | str join "&"
@@ -925,7 +947,7 @@ export def "get-user-follows-shows-show-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<_embedded: record<show: record>, show_id: int> {
+]: nothing -> oneof<record<_embedded: record<show: record>, show_id: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($show_id | is-empty) { error make --unspanned { msg: "path parameter 'show_id' must be non-empty" } }
@@ -960,7 +982,7 @@ export def "put-user-follows-shows-show-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<_embedded: record<show: record>, show_id: int> {
+]: nothing -> oneof<record<_embedded: record<show: record>, show_id: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($show_id | is-empty) { error make --unspanned { msg: "path parameter 'show_id' must be non-empty" } }
@@ -995,7 +1017,7 @@ export def "get-user-follows-webchannels" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --embed: string@embed-completer-4 # Embed full webchannel info
-]: nothing -> table<_embedded: record<webchannel: record>, webchannel_id: int> {
+]: nothing -> oneof<table<_embedded: record<webchannel: record>, webchannel_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "embed" $embed "scalar")] | flatten | str join "&"
@@ -1065,7 +1087,7 @@ export def "get-user-follows-webchannels-webchannel-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<_embedded: record<webchannel: record>, webchannel_id: int> {
+]: nothing -> oneof<record<_embedded: record<webchannel: record>, webchannel_id: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($webchannel_id | is-empty) { error make --unspanned { msg: "path parameter 'webchannel_id' must be non-empty" } }
@@ -1100,7 +1122,7 @@ export def "put-user-follows-webchannels-webchannel-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<_embedded: record<webchannel: record>, webchannel_id: int> {
+]: nothing -> oneof<record<_embedded: record<webchannel: record>, webchannel_id: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($webchannel_id | is-empty) { error make --unspanned { msg: "path parameter 'webchannel_id' must be non-empty" } }
@@ -1134,7 +1156,7 @@ export def "get-user-tags" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<id: int, name: string> {
+]: nothing -> oneof<table<id: int, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/tags" $auth.query)
@@ -1168,7 +1190,7 @@ export def "post-user-tags" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string
-]: any -> record<id: int, name: string> {
+]: any -> oneof<record<id: int, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1241,7 +1263,7 @@ export def "patch-user-tags-tag-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string
-]: any -> record<id: int, name: string> {
+]: any -> oneof<record<id: int, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1280,7 +1302,7 @@ export def "get-user-tags-tag-id-shows" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --embed: string@embed-completer-3 # Embed full show info
-]: nothing -> table<_embedded: record<show: record>, show_id: int> {
+]: nothing -> oneof<table<_embedded: record<show: record>, show_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($tag_id | is-empty) { error make --unspanned { msg: "path parameter 'tag_id' must be non-empty" } }
@@ -1354,7 +1376,7 @@ export def "put-user-tags-tag-id-shows-show-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<_embedded: record<show: record>, show_id: int> {
+]: nothing -> oneof<record<_embedded: record<show: record>, show_id: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($tag_id | is-empty) { error make --unspanned { msg: "path parameter 'tag_id' must be non-empty" } }
@@ -1389,7 +1411,7 @@ export def "get-user-votes-episodes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<episode_id: int, vote: int, voted_at: int> {
+]: nothing -> oneof<table<episode_id: int, vote: int, voted_at: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/votes/episodes" $auth.query)
@@ -1458,7 +1480,7 @@ export def "get-user-votes-episodes-episode-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<episode_id: int, vote: int, voted_at: int> {
+]: nothing -> oneof<record<episode_id: int, vote: int, voted_at: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($episode_id | is-empty) { error make --unspanned { msg: "path parameter 'episode_id' must be non-empty" } }
@@ -1494,7 +1516,7 @@ export def "put-user-votes-episodes-episode-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --vote: int # The vote number
-]: any -> record<episode_id: int, vote: int, voted_at: int> {
+]: any -> oneof<record<episode_id: int, vote: int, voted_at: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1532,7 +1554,7 @@ export def "get-user-votes-shows" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --embed: string@embed-completer-3 # Embed full show info
-]: nothing -> table<show_id: int, vote: int, voted_at: int> {
+]: nothing -> oneof<table<show_id: int, vote: int, voted_at: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "embed" $embed "scalar")] | flatten | str join "&"
@@ -1602,7 +1624,7 @@ export def "get-user-votes-shows-show-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<show_id: int, vote: int, voted_at: int> {
+]: nothing -> oneof<record<show_id: int, vote: int, voted_at: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($show_id | is-empty) { error make --unspanned { msg: "path parameter 'show_id' must be non-empty" } }
@@ -1638,7 +1660,7 @@ export def "put-user-votes-shows-show-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --vote: int # The vote number
-]: any -> record<show_id: int, vote: int, voted_at: int> {
+]: any -> oneof<record<show_id: int, vote: int, voted_at: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)

@@ -12,27 +12,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -40,8 +49,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -52,7 +66,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -87,7 +110,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -115,9 +139,9 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "dev-get-assets" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["dev-get-assets" "dev-get-collections" "get-systems" "get-audit" "get-counts" "get-audit-dev" "get-counts-dev" "auth-dev" "verify-auth" "dev-delete-collection" "dev-create-collection" "dev-update-collection" "get-admin-dev-count" "get-system-count" "get-database-status" "admin-owner-change" "delete-device-keys" "create-rotating-keys" "delete-devices-admin" "get-system-devices" "update-devices-admin" "delete-system-device" "get-system-device" "create-system-device" "update-system-device" "get-edge-template" "update-edge-template" "get-edges" "get-adapter-edges" "delete-edge" "get-edge" "create-edge" "update-edge" "dev-logout" "get-license-key" "get-dev" "disable-dev" "get-devs" "get-system-updates" "get-system-updates-dev" "get-system-status" "get-portal-info" "change-dev-password" "reg-dev" "regen-secret" "reset-password" "delete-email-settings" "email-settings" "create-email-communication" "update-email-settings" "test-email" "view-security" "update-security" "delete-sms-settings" "sms-settings" "create-sms-communication" "update-sms-settings" "test-sms" "get-systems-for-dev" "get-triggers" "get-trigger-handlers" "delete-trigger-handler" "get-trigger-handler" "create-trigger" "update-trigger-handler" "get-timer-handlers" "delete-timer-handler" "get-timer-handler" "create-timer-handler" "update-timer-handler" "delete-user" "get-user-list" "add-user" "user-change-user-info" "get-user-column-data" "add-column" "delete-roles" "get-roles" "add-role" "settings-changes" "get-roles-count" "get-dev-info" "update-dev2-fa" "get-shared-cache" "delete-shared-cache" "add-shared-cache" "update-shared-cache" "delete-device-session" "get-device-session" "get-device-session-count" "delete-user-session" "get-user-session" "get-user-session-count" "delete-system" "get-system-info" "create-system" "update-system" "get-webhooks" "delete-webhook" "create-webhook" "update-webhook" "send-validation" "all-edge-sync-status" "get-sync-status" "edge-sync-status" "retry-sync" "api-info" "get-service" "execute-service" "delete-collection-data" "get-collection-data" "create-collection-data" "update-collection-data" "delete-collection-data-alt" "get-collection-data-alt" "create-collection-data-alt" "update-collection-data-alt" "get-columns" "delete-message-history" "get-message-history" "publish-message" "get-users" "auth-anon" "auth-user" "user-check-auth" "delete-user-as-user" "get-user-info" "update-user-info" "user-logout" "update-user-pass" "reg-user" "delete-devices" "get-devices" "update-devices" "auth-device" "add-device" "update-device-info" "get-all-edges" "get-collections" "return-service-settings" "delete-timer-by-name" "get-timer-by-name" "create-new-timer" "update-timer-by-name" "get-all-timers" "delete-trigger-by-name" "get-trigger-by-name" "create-new-trigger" "update-trigger-by-name" "get-all-trigger" "delete-collection" "create-collection" "update-collection" "get-device-table-schema" "get-device-count" "get-edge-table-schema" "get-edge-count" "delete-edge-by-name" "get-edge-data-by-name" "create-new-edge" "update-edge-by-name" "get-all-deployments" "create-deployment" "delete-deployment" "get-a-deployment" "update-deployment" "get-buckets-data" "get-single-bucket-data" "copy-bucket-file" "create-bucket-file" "delete-bucket-file" "get-box-files-meta" "move-bucket-file" "get-box-files" "delete-non-unique-index" "create-non-unique-index" "get-indexes" "delete-unique-index" "create-unique-index" "update-upsert" "connected-device-count" "get-connected-device-list" "get-connected-device-info" "get-all-external-db" "create-external-db" "delete-external-db" "get-external-db" "update-database-credentials" "perform-db-operation" "get-topics" "get-topic-count" "change-user-info" "payload-webhook-query" "execute-webhook" "get-adapters" "add-adapter" "delete-adapter" "map-adapter-command" "add-edge-command" "adapter-config" "update-file-info" "delete-file" "file-download" "update-existing-file-content" "get-failed-service-query" "get-failed-services" "delete-failed-service" "get-system-failed-services" "retry-failed-service" "library-history" "get-old-library-version" "get-libraries" "delete-library" "get-library" "create-library" "update-library" "get-logs" "delete-service" "add-service" "update-service" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -268,7 +292,7 @@ export def "get-audit" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # Query object used to filter the items. See query model at in the description for example.
   --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
-]: nothing -> table<action_type: string, asset_class: string, asset_id: string, changes: string, email: string, id: int, response_time: int, system_key: string, time: string, user_type: string> {
+]: nothing -> oneof<table<action_type: string, asset_class: string, asset_id: string, changes: string, email: string, id: int, response_time: int, system_key: string, time: string, user_type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
@@ -347,7 +371,7 @@ export def "get-audit-dev" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # Query object used to filter the items. See query model at in the description for example.
   --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
-]: nothing -> table<action_type: string, asset_class: string, asset_id: string, changes: string, email: string, id: int, response_time: int, system_key: string, time: string, user_type: string> {
+]: nothing -> oneof<table<action_type: string, asset_class: string, asset_id: string, changes: string, email: string, id: int, response_time: int, system_key: string, time: string, user_type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
@@ -428,7 +452,7 @@ export def "auth-dev" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # e.g. cbman@clearblade.com
   --password: string # e.g. cl34rbl4d3
-]: any -> record<dev_token: string, expires_at: int, is_two_factor: bool, refresh_token: string, user_id: string> {
+]: any -> oneof<record<dev_token: string, expires_at: int, is_two_factor: bool, refresh_token: string, user_id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -578,7 +602,6 @@ export def "dev-create-collection" [
 #
 # PUT /admin/collectionmanagement
 # operationId: DevUpdateCollection
-# --addColumn shape: {id: string, name: string, type: string}
 export def "dev-update-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -832,7 +855,7 @@ export def "create-rotating-keys" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --clear-blade-dev-token: string # Developer Token obtained through developer authentication. (required)
   --body: record
-]: any -> record<active_key: string, keys: list<string>> {
+]: any -> oneof<record<active_key: string, keys: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -949,8 +972,6 @@ export def "get-system-devices" [
 #
 # PUT /admin/devices/{systemKey}
 # operationId: UpdateDevicesAdmin
-# --$set shape: {[columnName]?: any}
-# --query item shape: {EQ?: list, GT?: list, GTE?: list, LT?: list, LTE?: list, NEQ?: list, RE?: list}
 export def "update-devices-admin" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -965,7 +986,7 @@ export def "update-devices-admin" [
   --clear-blade-dev-token: string # Token obtained through user authentication. (required)
   --set: record # shape: {[columnName]?: any}
   --query: list # item shape: {EQ?: list, GT?: list, GTE?: list, LT?: list, LTE?: list, NEQ?: list, RE?: list}
-]: any -> record<DATA: list<record>, TOTAL: int> {
+]: any -> oneof<record<DATA: list<record>, TOTAL: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1235,7 +1256,6 @@ export def "get-edge-template" [
 #
 # PUT /admin/edges/template/{systemKey}/{edgeName}
 # operationId: UpdateEdgeTemplate
-# --def_module shape: {module?: "trigger"|"service"|"library"}
 export def "update-edge-template" [
   system_key: string
   edge_name: string
@@ -1778,7 +1798,7 @@ export def "get-system-updates" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # Query object used to filter the items. See query model at in the description for example.
   --clearblade-dev-token: string # Developer Token obtained through admin authentication. (required)
-]: nothing -> table<developers: list<any>, disabled: bool, diskUsage: int, lastUpdated: int, name: string, numAPIReqsMonth: int, numAPIReqsTotal: int, numAPIReqsYear: int, numDeployments: int, numDevices: int, numDevs: int, numEdges: int, numLibraries: int, numPub: int, numPubMonth: int, numPubYear: int, numRecMonth: int, numRecTotal: int, numRecYear: int, numRoles: int, numServices: int, numUsers: int, owner: string, system_key: string> {
+]: nothing -> oneof<table<developers: list<any>, disabled: bool, diskUsage: int, lastUpdated: int, name: string, numAPIReqsMonth: int, numAPIReqsTotal: int, numAPIReqsYear: int, numDeployments: int, numDevices: int, numDevs: int, numEdges: int, numLibraries: int, numPub: int, numPubMonth: int, numPubYear: int, numRecMonth: int, numRecTotal: int, numRecYear: int, numRoles: int, numServices: int, numUsers: int, owner: string, system_key: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($clearblade_dev_token == null) { error make --unspanned { msg: "required header parameter 'Clearblade-DevToken' missing: pass --clearblade-dev-token" } }
@@ -1819,7 +1839,7 @@ export def "get-system-updates-dev" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # Query object used to filter the items. See query model at in the description for example.
   --clearblade-devtoken: string # Developer Token obtained through admin authentication. (required)
-]: nothing -> table<developers: list<any>, disabled: bool, diskUsage: int, lastUpdated: int, name: string, numAPIReqsMonth: int, numAPIReqsTotal: int, numAPIReqsYear: int, numDeployments: int, numDevices: int, numDevs: int, numEdges: int, numLibraries: int, numPub: int, numPubMonth: int, numPubYear: int, numRecMonth: int, numRecTotal: int, numRecYear: int, numRoles: int, numServices: int, numUsers: int, owner: string, system_key: string> {
+]: nothing -> oneof<table<developers: list<any>, disabled: bool, diskUsage: int, lastUpdated: int, name: string, numAPIReqsMonth: int, numAPIReqsTotal: int, numAPIReqsYear: int, numDeployments: int, numDevices: int, numDevs: int, numEdges: int, numLibraries: int, numPub: int, numPubMonth: int, numPubYear: int, numRecMonth: int, numRecTotal: int, numRecYear: int, numRoles: int, numServices: int, numUsers: int, owner: string, system_key: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
@@ -1900,7 +1920,7 @@ export def "get-portal-info" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --clear-blade-dev-token: string # Developer Token obtained through developer authentication. (required)
-]: nothing -> table<config: record, description: string, last_updated: string, name: string, namespace: string, system_key: string, type: string> {
+]: nothing -> oneof<table<config: record, description: string, last_updated: string, name: string, namespace: string, system_key: string, type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
@@ -1986,7 +2006,7 @@ export def "reg-dev" [
   lname: string # Developer's last name. (e.g. theMachine)
   org: string # Developer's organization. (e.g. ClearBlade)
   password: string # Developer's password. (e.g. bieberboy)
-]: any -> record<dev_token: string, expires_at: int, is_two_factor: bool, refresh_token: string, user_id: string> {
+]: any -> oneof<record<dev_token: string, expires_at: int, is_two_factor: bool, refresh_token: string, user_id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2109,7 +2129,7 @@ export def "delete-email-settings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
-]: nothing -> record<success: bool> {
+]: nothing -> oneof<record<success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
@@ -2147,7 +2167,7 @@ export def "email-settings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
-]: nothing -> record<encryption_type: string, from: string, host: string, password: string, port: string, protocol: string, two_factor_message: string, two_factor_subject: string, username: string, validation_message: string, validation_subject: string> {
+]: nothing -> oneof<record<encryption_type: string, from: string, host: string, password: string, port: string, protocol: string, two_factor_message: string, two_factor_subject: string, username: string, validation_message: string, validation_subject: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
@@ -2248,7 +2268,7 @@ export def "update-email-settings" [
   --username: string # e.g. example@gmail.com
   --validation-message: string # e.g. Please validate your email here: $LINK
   --validation-subject: string # e.g. Email validation
-]: any -> record<success: bool> {
+]: any -> oneof<record<success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2290,7 +2310,7 @@ export def "test-email" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
   --recipient: string # e.g. example@companyname.com
-]: any -> record<success: bool> {
+]: any -> oneof<record<success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2331,7 +2351,7 @@ export def "view-security" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
-]: nothing -> record<developer_token_ttl: int, two_factor_auth: record<enabled: bool>> {
+]: nothing -> oneof<record<developer_token_ttl: int, two_factor_auth: record<enabled: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
@@ -2358,7 +2378,6 @@ export def "view-security" [
 #
 # PUT /admin/settings/security
 # operationId: UpdateSecurity
-# --two_factor_auth shape: {enabled?: bool}
 export def "update-security" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2372,7 +2391,7 @@ export def "update-security" [
   --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
   --developer-token-ttl: int # e.g. 86400
   --two-factor-auth: any # shape: {enabled?: bool}
-]: any -> record<developer_token_ttl: int, two_factor_auth: record<enabled: bool>> {
+]: any -> oneof<record<developer_token_ttl: int, two_factor_auth: record<enabled: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2413,7 +2432,7 @@ export def "delete-sms-settings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
-]: nothing -> record<success: bool> {
+]: nothing -> oneof<record<success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
@@ -2451,7 +2470,7 @@ export def "sms-settings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
-]: nothing -> record<from: string, password: string, service_name: string, two_factor_message: string, url: string, username: string, validation_message: string> {
+]: nothing -> oneof<record<from: string, password: string, service_name: string, two_factor_message: string, url: string, username: string, validation_message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
@@ -2496,7 +2515,7 @@ export def "create-sms-communication" [
   --url: string # e.g. https://api.twilio.com
   --username: string # e.g. AC25b4eb989b9db8
   --validation-message: string # e.g. Please validate your email here: $LINK
-]: any -> record<success: bool> {
+]: any -> oneof<record<success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2544,7 +2563,7 @@ export def "update-sms-settings" [
   --url: string # e.g. https://api.twilio.com
   --username: string # e.g. AC25b4eb989b9db8
   --validation-message: string # e.g. Please validate your email here: $LINK
-]: any -> record<success: bool> {
+]: any -> oneof<record<success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2586,7 +2605,7 @@ export def "test-sms" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
   --recipient: string # e.g. +15120000000
-]: any -> record<success: bool> {
+]: any -> oneof<record<success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2628,7 +2647,7 @@ export def "get-systems-for-dev" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
-]: nothing -> table<developers: list<any>, disabled: bool, diskUsage: int, lastUpdated: int, name: string, numAPIReqsMonth: int, numAPIReqsTotal: int, numAPIReqsYear: int, numDeployments: int, numDevices: int, numDevs: int, numEdges: int, numLibraries: int, numPub: int, numPubMonth: int, numPubYear: int, numRecMonth: int, numRecTotal: int, numRecYear: int, numRoles: int, numServices: int, numUsers: int, owner: string, system_key: string> {
+]: nothing -> oneof<table<developers: list<any>, disabled: bool, diskUsage: int, lastUpdated: int, name: string, numAPIReqsMonth: int, numAPIReqsTotal: int, numAPIReqsYear: int, numDeployments: int, numDevices: int, numDevs: int, numEdges: int, numLibraries: int, numPub: int, numPubMonth: int, numPubYear: int, numRecMonth: int, numRecTotal: int, numRecYear: int, numRoles: int, numServices: int, numUsers: int, owner: string, system_key: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($dev_email | is-empty) { error make --unspanned { msg: "path parameter 'devEmail' must be non-empty" } }
@@ -2818,7 +2837,6 @@ export def "get-trigger-handler" [
 #
 # POST /admin/triggers/handlers/{systemKey}/{name}
 # operationId: CreateTrigger
-# --key_value_pairs shape: {topic?: string}
 export def "create-trigger" [
   system_key: string
   name: string
@@ -2870,7 +2888,6 @@ export def "create-trigger" [
 #
 # PUT /admin/triggers/handlers/{systemKey}/{name}
 # operationId: UpdateTriggerHandler
-# --key_value_pairs shape: {topic?: string}
 export def "update-trigger-handler" [
   system_key: string
   name: string
@@ -3281,7 +3298,6 @@ export def "add-user" [
 #
 # PUT /admin/user/{systemKey}
 # operationId: UserChangeUserInfo
-# --changes shape: {roles: any}
 export def "user-change-user-info" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3545,7 +3561,6 @@ export def "add-role" [
 #
 # PUT /admin/user/{systemKey}/roles
 # operationId: SettingsChanges
-# --changes shape: {allcollections?: any, allservices?: record, collections?: any, deployments?: record, description?: string, devices?: record, edges?: any, msgHistory?: record, portals?: any, roles?: record, services?: any, topics?: any, triggers?: record, users?: record}
 export def "settings-changes" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3645,7 +3660,7 @@ export def "get-dev-info" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
-]: nothing -> record<admin: bool, creation_date: int, email: string, email_validated: bool, fname: string, last_login: int, lname: string, org: string, phone: string, phone_validated: bool, two_factor_enabled: bool, two_factor_enabled_instance_: bool, two_factor_method: string, userid: string> {
+]: nothing -> oneof<record<admin: bool, creation_date: int, email: string, email_validated: bool, fname: string, last_login: int, lname: string, org: string, phone: string, phone_validated: bool, two_factor_enabled: bool, two_factor_enabled_instance_: bool, two_factor_method: string, userid: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
@@ -3686,7 +3701,7 @@ export def "update-dev2-fa" [
   --phone: string # e.g. +15120000000
   --two-factor-enabled: oneof<nothing, bool> # e.g. true
   --two-factor-method: string # e.g. sms
-]: any -> record<success: bool> {
+]: any -> oneof<record<success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3728,7 +3743,7 @@ export def "get-shared-cache" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --clear-blade-dev-token: string # Dev Token obtained through user authentication. (required)
-]: nothing -> table<description: string, id: string, name: string, system_key: string, ttl: int> {
+]: nothing -> oneof<table<description: string, id: string, name: string, system_key: string, ttl: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
@@ -3769,7 +3784,7 @@ export def "delete-shared-cache" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --clear-blade-dev-token: string # Dev Token obtained through user authentication. (required)
-]: nothing -> record<success: bool> {
+]: nothing -> oneof<record<success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
@@ -3814,7 +3829,7 @@ export def "add-shared-cache" [
   --description: string # Description of new shared cache
   --name: string # e.g. sharedCache
   ttl: int # e.g. 30
-]: any -> record<success: bool> {
+]: any -> oneof<record<success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3861,7 +3876,7 @@ export def "update-shared-cache" [
   --clear-blade-dev-token: string # Dev Token obtained through user authentication. (required)
   --description: string
   ttl: int # e.g. 30
-]: any -> record<success: bool> {
+]: any -> oneof<record<success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3948,7 +3963,7 @@ export def "get-device-session" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # Query object used to filter the items. See query model at in the description for example.
   --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
-]: nothing -> table<device_key: string, issued: int> {
+]: nothing -> oneof<table<device_key: string, issued: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
@@ -3990,7 +4005,7 @@ export def "get-device-session-count" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # Query object used to filter the items. See query model at in the description for example.
   --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
@@ -4074,7 +4089,7 @@ export def "get-user-session" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # Query object used to filter the items. See query model at in the description for example.
   --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
-]: nothing -> table<issued: int, user_id: string> {
+]: nothing -> oneof<table<issued: int, user_id: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
@@ -4116,7 +4131,7 @@ export def "get-user-session-count" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # Query object used to filter the items. See query model at in the description for example.
   --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
@@ -4198,7 +4213,7 @@ export def "get-system-info" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # System Key that identifies the system you want the info about. (required)
   --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
-]: nothing -> record<Dev: string, appId: string, appSecret: string, auth_service: string, description: string, name: string, reg_service: string, registration: string, token_ttl: string, token_ttl_anon: int, token_ttl_device: string, token_ttl_user: string> {
+]: nothing -> oneof<record<Dev: string, appId: string, appSecret: string, auth_service: string, description: string, name: string, reg_service: string, registration: string, token_ttl: string, token_ttl_anon: int, token_ttl_device: string, token_ttl_user: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
@@ -4240,7 +4255,7 @@ export def "create-system" [
   --clear-blade-dev-token: string # Developer Token obtained through developer authentication. (required)
   description: string # e.g. Here is my new system.
   name: string # e.g. ExampleSystem
-]: any -> record<Dev: string, appId: string, appSecret: string, auth_service: string, description: string, name: string, reg_service: string, registration: string, token_ttl: string, token_ttl_anon: int, token_ttl_device: string, token_ttl_user: string> {
+]: any -> oneof<record<Dev: string, appId: string, appSecret: string, auth_service: string, description: string, name: string, reg_service: string, registration: string, token_ttl: string, token_ttl_anon: int, token_ttl_device: string, token_ttl_user: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4335,7 +4350,7 @@ export def "get-webhooks" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --clear-blade-dev-token: string # Dev Token obtained through authentication. (required)
-]: nothing -> table<auth_method: string, description: string, id: string, name: string, service_name: string, system_key: string, system_secret: string> {
+]: nothing -> oneof<table<auth_method: string, description: string, id: string, name: string, service_name: string, system_key: string, system_secret: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
@@ -4376,7 +4391,7 @@ export def "delete-webhook" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --clear-blade-dev-token: string # Dev Token obtained through authentication. (required)
-]: nothing -> record<success: bool> {
+]: nothing -> oneof<record<success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
@@ -4422,7 +4437,7 @@ export def "create-webhook" [
   --description: string # e.g. Create a webhook
   --body-name: string # e.g. webhook_example
   service_name: string # e.g. service_example
-]: any -> record<success: bool> {
+]: any -> oneof<record<success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4514,7 +4529,7 @@ export def "send-validation" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
   --type: string # e.g. email
-]: any -> record<success: bool> {
+]: any -> oneof<record<success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4726,7 +4741,7 @@ export def "api-info" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<about: record, buildId: string, version: string> {
+]: nothing -> oneof<record<about: record, buildId: string, version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/about" $auth.query)
@@ -4852,7 +4867,7 @@ export def "delete-collection-data" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # Query to limit scope of deletion. (required)
   --clear-blade-user-token: string # Token obtained through user authentication. (required)
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
@@ -4897,7 +4912,7 @@ export def "get-collection-data" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # Query object used to filter the items. See query model below for example.
   --clear-blade-user-token: string # Token obtained through user authentication. (required)
-]: nothing -> record<CURRENTPAGE: int, DATA: list<record>, NEXTPAGEURL: string, PREVPAGEURL: int, TOTAL: int> {
+]: nothing -> oneof<record<CURRENTPAGE: int, DATA: list<record>, NEXTPAGEURL: string, PREVPAGEURL: int, TOTAL: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
@@ -4941,7 +4956,7 @@ export def "create-collection-data" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --clear-blade-user-token: string # Token obtained through user authentication. (required)
   --body: list
-]: any -> table<item_id: string> {
+]: any -> oneof<table<item_id: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4973,8 +4988,6 @@ export def "create-collection-data" [
 #
 # PUT /api/v/1/collection/{systemKey}/{collectionName}
 # operationId: UpdateCollectionData
-# --$set shape: {columnName?: any}
-# --query shape: {FILTERS?: list}
 export def "update-collection-data" [
   system_key: string
   collection_name: string
@@ -4990,7 +5003,7 @@ export def "update-collection-data" [
   --clear-blade-user-token: string # Token obtained through user authentication. (required)
   --set: record # shape: {columnName?: any}
   --query: any # shape: {FILTERS?: list}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5035,7 +5048,7 @@ export def "delete-collection-data-alt" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # Query to limit scope of deletion. (required)
   --clear-blade-user-token: string # Token obtained through user authentication. (required)
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collectionID' must be non-empty" } }
@@ -5078,7 +5091,7 @@ export def "get-collection-data-alt" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # Query object used to filter the items. See query model below for example.
   --clear-blade-user-token: string # Token obtained through user authentication. (required)
-]: nothing -> record<CURRENTPAGE: int, DATA: list<record>, NEXTPAGEURL: string, PREVPAGEURL: int, TOTAL: int> {
+]: nothing -> oneof<record<CURRENTPAGE: int, DATA: list<record>, NEXTPAGEURL: string, PREVPAGEURL: int, TOTAL: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collectionID' must be non-empty" } }
@@ -5120,7 +5133,7 @@ export def "create-collection-data-alt" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --clear-blade-user-token: string # Token obtained through user authentication. (required)
   --body: list
-]: any -> table<item_id: string> {
+]: any -> oneof<table<item_id: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5151,8 +5164,6 @@ export def "create-collection-data-alt" [
 #
 # PUT /api/v/1/data/{collectionID}
 # operationId: UpdateCollectionDataAlt
-# --$set shape: {columnName?: any}
-# --query shape: {FILTERS?: list}
 export def "update-collection-data-alt" [
   collection_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5167,7 +5178,7 @@ export def "update-collection-data-alt" [
   --clear-blade-user-token: string # Token obtained through user authentication. (required)
   --set: record # shape: {columnName?: any}
   --query: any # shape: {FILTERS?: list}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5212,7 +5223,7 @@ export def "get-columns" [
   --clear-blade-user-token: string # Token obtained through user authentication. (required)
   --clear-blade-system-key: string # System Key that identifies the system that holds the collection. (required)
   --clear-blade-system-secret: string # header parameter for ensuring authenticity (required)
-]: nothing -> table<ColumnName: string, ColumnType: string, PK: bool> {
+]: nothing -> oneof<table<ColumnName: string, ColumnType: string, PK: bool>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collectionID' must be non-empty" } }
@@ -5396,7 +5407,7 @@ export def "get-users" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # Query object used to filter the user list. See the query model below for an example.
   --clear-blade-user-token: string # Token obtained through user authentication. (required)
-]: nothing -> record<Data: table<creation_date: string, email: string, user_id: string>, Total: int> {
+]: nothing -> oneof<record<Data: table<creation_date: string, email: string, user_id: string>, Total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
@@ -5436,7 +5447,7 @@ export def "auth-anon" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --clear-blade-system-key: string # System Key that identifies the system you're logging the user into. (required)
   --clear-blade-system-secret: string # System Secret that ensures authenticity. (required)
-]: nothing -> record<user_token: string> {
+]: nothing -> oneof<record<user_token: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($clear_blade_system_key == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-SystemKey' missing: pass --clear-blade-system-key" } }
@@ -5478,7 +5489,7 @@ export def "auth-user" [
   --clear-blade-system-secret: string # System Secret that ensures authenticity. (required)
   --email: string # e.g. cbman@clearblade.com
   --password: string # e.g. cl34rbl4d3
-]: any -> record<expires_at: int, refresh_token: string, user_id: string, user_token: string> {
+]: any -> oneof<record<expires_at: int, refresh_token: string, user_id: string, user_token: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5521,7 +5532,7 @@ export def "user-check-auth" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --clear-blade-system-key: string # System Key that identifies the system the user might be logged into. (required)
   --clear-blade-user-token: string # User Token obtained through previous authentication. (required)
-]: nothing -> record<is_authenticated: bool> {
+]: nothing -> oneof<record<is_authenticated: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($clear_blade_system_key == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-SystemKey' missing: pass --clear-blade-system-key" } }
@@ -5606,7 +5617,7 @@ export def "get-user-info" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --clear-blade-user-token: string # Token obtained through user authentication. (required)
-]: nothing -> record<creation_date: string, email: string, user_id: string> {
+]: nothing -> oneof<record<creation_date: string, email: string, user_id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
@@ -5771,7 +5782,7 @@ export def "reg-user" [
   --clear-blade-user-token: string # Token obtained through user authentication. (required)
   email: string # User's email. (e.g. cbman@clearblade.com)
   password: string # User's password. (e.g. cl34rbl4d3)
-]: any -> record<creation_date: string, email: string, expires_at: int, options: string, refresh_token: string, user_id: string, user_token: string> {
+]: any -> oneof<record<creation_date: string, email: string, expires_at: int, options: string, refresh_token: string, user_id: string, user_token: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5859,7 +5870,7 @@ export def "get-devices" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # Tags to filter devices by. See the query model below for an example.
   --clear-blade-user-token: string # Token obtained through user authentication. (required)
-]: nothing -> record<allow_certificate_auth: bool, allow_key_auth: bool, certificate: string, created_date: int, description: string, device_key: string, enabled: bool, last_active_date: int, name: string, state: string, system_key: string, type: string> {
+]: nothing -> oneof<record<allow_certificate_auth: bool, allow_key_auth: bool, certificate: string, created_date: int, description: string, device_key: string, enabled: bool, last_active_date: int, name: string, state: string, system_key: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'SystemKey' must be non-empty" } }
@@ -5888,8 +5899,6 @@ export def "get-devices" [
 #
 # PUT /api/v/2/devices/{SystemKey}
 # operationId: UpdateDevices
-# --$set shape: {[columnName]?: any}
-# --query item shape: {EQ?: list, GT?: list, GTE?: list, LT?: list, LTE?: list, NEQ?: list, RE?: list}
 export def "update-devices" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5904,7 +5913,7 @@ export def "update-devices" [
   --clear-blade-user-token: string # Token obtained through user authentication. (required)
   --set: record # shape: {[columnName]?: any}
   --query: list # item shape: {EQ?: list, GT?: list, GTE?: list, LT?: list, LTE?: list, NEQ?: list, RE?: list}
-]: any -> record<DATA: list<record>, TOTAL: int> {
+]: any -> oneof<record<DATA: list<record>, TOTAL: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5948,7 +5957,7 @@ export def "auth-device" [
   --dry-run(-n) # Return the request that would be sent without executing it
   active_key: string # e.g. 378BLE
   device_name: string # e.g. BLEdevice
-]: any -> record<deviceName: string, deviceToken: string, expiresAt: int, refreshToken: string> {
+]: any -> oneof<record<deviceName: string, deviceToken: string, expiresAt: int, refreshToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5997,7 +6006,7 @@ export def "add-device" [
   --body-name: string # e.g. device_name
   --state: string # e.g. On
   --type: string # e.g. Sensor
-]: any -> record<allow_certificate_auth: bool, allow_key_auth: bool, certificate: string, created_date: int, description: string, device_key: string, enabled: bool, last_active_date: int, name: string, state: string, system_key: string, type: string> {
+]: any -> oneof<record<allow_certificate_auth: bool, allow_key_auth: bool, certificate: string, created_date: int, description: string, device_key: string, enabled: bool, last_active_date: int, name: string, state: string, system_key: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6044,7 +6053,7 @@ export def "update-device-info" [
   --clear-blade-user-token: string # Token obtained through user authentication. (required)
   --custom-attribute: string # e.g. custom_setting
   --state: string # e.g. On
-]: any -> record<allow_certificate_auth: bool, allow_key_auth: bool, certificate: string, created_date: int, description: string, device_key: string, enabled: bool, last_active_date: int, name: string, state: string, system_key: string, type: string> {
+]: any -> oneof<record<allow_certificate_auth: bool, allow_key_auth: bool, certificate: string, created_date: int, description: string, device_key: string, enabled: bool, last_active_date: int, name: string, state: string, system_key: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6131,7 +6140,7 @@ export def "get-collections" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --clear-blade-user-token: string # Token obtained through user authentication. (required)
-]: nothing -> table<appID: string, collectionID: string, name: string> {
+]: nothing -> oneof<table<appID: string, collectionID: string, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
@@ -6171,7 +6180,7 @@ export def "return-service-settings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --clear-blade-dev-token: string # Dev Token obtained through authentication. (required)
-]: nothing -> record<code: table<auto_balance: bool, auto_balance_euid: string, auto_restart: bool, concurrency: int, euid: string, execution_timeout: int, logging_enabled: bool, name: string, namespace: string, system_key: string, uuid: string, version: int, version_id: string>> {
+]: nothing -> oneof<record<code: table<auto_balance: bool, auto_balance_euid: string, auto_restart: bool, concurrency: int, euid: string, execution_timeout: int, logging_enabled: bool, name: string, namespace: string, system_key: string, uuid: string, version: int, version_id: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
@@ -6254,7 +6263,7 @@ export def "get-timer-by-name" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --clear-blade-user-token: string # Token obtained through user authentication. (required)
-]: nothing -> record<description: string, frequency: int, name: string, namespace: string, repeats: int, service_name: string, start_time: string, system_key: string, system_secret: string, timer_key: string, user_id: string, user_token: string> {
+]: nothing -> oneof<record<description: string, frequency: int, name: string, namespace: string, repeats: int, service_name: string, start_time: string, system_key: string, system_secret: string, timer_key: string, user_id: string, user_token: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
@@ -6302,7 +6311,7 @@ export def "create-new-timer" [
   --body-name: string # Timer label (e.g. tenSecondTimer)
   repeats: int # The number of times a timer handler is invoked. To invoke the handler indefinitely set 'repeats = -1' (e.g. 20)
   service_name: string # The handler service invoked by the timer (e.g. getTemps)
-]: any -> record<description: string, frequency: int, name: string, namespace: string, repeats: int, service_name: string, start_time: string, system_key: string, system_secret: string, timer_key: string, user_id: string, user_token: string> {
+]: any -> oneof<record<description: string, frequency: int, name: string, namespace: string, repeats: int, service_name: string, start_time: string, system_key: string, system_secret: string, timer_key: string, user_id: string, user_token: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6355,7 +6364,7 @@ export def "update-timer-by-name" [
   --body-name: string # Timer label (e.g. tenSecondTimer)
   repeats: int # The number of times a timer handler is invoked. To invoke the handler indefinitely set 'repeats = -1' (e.g. 20)
   service_name: string # The handler service invoked by the timer (e.g. getTemps)
-]: any -> record<description: string, frequency: int, name: string, namespace: string, repeats: int, service_name: string, start_time: string, system_key: string, system_secret: string, timer_key: string, user_id: string, user_token: string> {
+]: any -> oneof<record<description: string, frequency: int, name: string, namespace: string, repeats: int, service_name: string, start_time: string, system_key: string, system_secret: string, timer_key: string, user_id: string, user_token: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6401,7 +6410,7 @@ export def "get-all-timers" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --clear-blade-user-token: string # Token obtained through user authentication. (required)
-]: nothing -> table<description: string, frequency: int, name: string, namespace: string, repeats: int, service_name: string, start_time: string, system_key: string, system_secret: string, timer_key: string, user_id: string, user_token: string> {
+]: nothing -> oneof<table<description: string, frequency: int, name: string, namespace: string, repeats: int, service_name: string, start_time: string, system_key: string, system_secret: string, timer_key: string, user_id: string, user_token: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
@@ -6484,7 +6493,7 @@ export def "get-trigger-by-name" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --clear-blade-user-token: string # Token obtained through user authentication. (required)
-]: nothing -> table<event_definition: record<def_keys: list, def_module: string, def_name: string, visibility: bool>, key_value_pairs: record, name: string, namespace: string, service_name: string, system_key: string, system_secret: string> {
+]: nothing -> oneof<table<event_definition: record<def_keys: list, def_module: string, def_name: string, visibility: bool>, key_value_pairs: record, name: string, namespace: string, service_name: string, system_key: string, system_secret: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
@@ -6513,7 +6522,6 @@ export def "get-trigger-by-name" [
 #
 # POST /api/v/3/code/{systemKey}/trigger/{name}
 # operationId: CreateNewTrigger
-# --key_value_pairs shape: {topic?: string}
 export def "create-new-trigger" [
   system_key: string
   name: string
@@ -6532,7 +6540,7 @@ export def "create-new-trigger" [
   --disabled: oneof<nothing, bool> # Enable or disable trigger (e.g. true)
   key_value_pairs: any # shape: {topic?: string}
   service_name: string # e.g. updateTemps
-]: any -> table<event_definition: record<def_keys: list, def_module: string, def_name: string, visibility: bool>, key_value_pairs: record, name: string, namespace: string, service_name: string, system_key: string, system_secret: string> {
+]: any -> oneof<table<event_definition: record<def_keys: list, def_module: string, def_name: string, visibility: bool>, key_value_pairs: record, name: string, namespace: string, service_name: string, system_key: string, system_secret: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6565,7 +6573,6 @@ export def "create-new-trigger" [
 #
 # PUT /api/v/3/code/{systemKey}/trigger/{name}
 # operationId: UpdateTriggerByName
-# --key_value_pairs shape: {topic?: string}
 export def "update-trigger-by-name" [
   system_key: string
   name: string
@@ -6584,7 +6591,7 @@ export def "update-trigger-by-name" [
   --disabled: oneof<nothing, bool> # Enable or disable trigger (e.g. true)
   key_value_pairs: any # shape: {topic?: string}
   service_name: string # e.g. updateTemps
-]: any -> table<event_definition: record<def_keys: list, def_module: string, def_name: string, visibility: bool>, key_value_pairs: record, name: string, namespace: string, service_name: string, system_key: string, system_secret: string> {
+]: any -> oneof<table<event_definition: record<def_keys: list, def_module: string, def_name: string, visibility: bool>, key_value_pairs: record, name: string, namespace: string, service_name: string, system_key: string, system_secret: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6629,7 +6636,7 @@ export def "get-all-trigger" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --clear-blade-user-token: string # Token obtained through user authentication. (required)
-]: nothing -> table<event_definition: record<def_keys: list, def_module: string, def_name: string, visibility: bool>, key_value_pairs: record, name: string, namespace: string, service_name: string, system_key: string, system_secret: string> {
+]: nothing -> oneof<table<event_definition: record<def_keys: list, def_module: string, def_name: string, visibility: bool>, key_value_pairs: record, name: string, namespace: string, service_name: string, system_key: string, system_secret: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
@@ -6715,7 +6722,7 @@ export def "create-collection" [
   app_id: string # This is the system key (e.g. c0f8e2c50bbeeaf87f5efa2eee301)
   --collection-id: string # e.g. c0f8e2c50bbeeafb87f5efa2eee301
   name: string # e.g. newCollection
-]: any -> record<appID: string, collectionID: string, name: string> {
+]: any -> oneof<record<appID: string, collectionID: string, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6746,7 +6753,6 @@ export def "create-collection" [
 #
 # PUT /api/v/3/collectionmanagement
 # operationId: UpdateCollection
-# --addColumn shape: {id: string, name: string, type: string}
 export def "update-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6804,7 +6810,7 @@ export def "get-device-table-schema" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --clear-blade-user-token: string # Token obtained through user authentication. (required)
-]: nothing -> table<ColumnName: string, ColumnType: string, PK: bool> {
+]: nothing -> oneof<table<ColumnName: string, ColumnType: string, PK: bool>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
@@ -6844,7 +6850,7 @@ export def "get-device-count" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --clear-blade-user-token: string # Token obtained through user authentication. (required)
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
@@ -7162,7 +7168,7 @@ export def "get-all-deployments" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # Tags to filter deployments by. See the query model above for an example.
   --clear-blade-user-token: string # User Token obtained through user authentication. (required)
-]: nothing -> table<description: string, name: string> {
+]: nothing -> oneof<table<description: string, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
@@ -7191,7 +7197,6 @@ export def "get-all-deployments" [
 #
 # POST /api/v/3/{systemKey}/deployments
 # operationId: CreateDeployment
-# --assets item shape: {asset_class?: string, asset_id?: string, sync_to_edge?: bool, sync_to_platform?: bool}
 export def "create-deployment" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7322,8 +7327,6 @@ export def "get-a-deployment" [
 #
 # PUT /api/v/3/{systemKey}/deployments/{deploymentName}
 # operationId: UpdateDeployment
-# --assets shape: {add?: list, remove?: list}
-# --edges shape: {adds?: list<string>, removes?: list<string>}
 export def "update-deployment" [
   system_key: string
   deployment_name: string
@@ -7383,7 +7386,7 @@ export def "get-buckets-data" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
-]: nothing -> table<deployment_name: string, edge_config: list<any>, edge_storage: string, platform_config: list<any>, platform_storage: string, system_key: string> {
+]: nothing -> oneof<table<deployment_name: string, edge_config: list<any>, edge_storage: string, platform_config: list<any>, platform_storage: string, system_key: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
@@ -7424,7 +7427,7 @@ export def "get-single-bucket-data" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
-]: nothing -> record<deployment_name: string, edge_config: list<any>, edge_storage: string, platform_config: list<any>, platform_storage: string, system_key: string> {
+]: nothing -> oneof<record<deployment_name: string, edge_config: list<any>, edge_storage: string, platform_config: list<any>, platform_storage: string, system_key: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
@@ -7518,7 +7521,7 @@ export def "create-bucket-file" [
   --box: string # Box Name (e.g. inbox)
   --contents: string # base64 encoded file contents (e.g. IyEvYmluL2Jhc2gKbWtkaXIgU2hvd1RpbWVBZGFwdGVyCgptdiBzdGFydC5zaCBTaG93VGltZUFkYXB0ZXIKbXYgc3RvcC5zaCBTaG93VGltZUFkYXB0ZXIKbXYgc3RhdHVzLnNoIFNob3dUaW1lQWRhcHRlcgptdiBkZXBsb3kuc2ggU2hvd1RpbWVBZGFwdGVyCm12IHVuZGVwbG95LnNoIFNob3dUaW1lQWRhcHRlcgptdiBzaG93VGltZSBTaG93VGltZUFkYXB0ZXIKCmVjaG8gIlNob3dUaW1lQWRhcHRlciBEZXBsb3llZCI=)
   --path: string # Relative File Path (e.g. /relative/file/path)
-]: any -> record<base_name: string, bucket_name: string, last_modified: string, path_name: string, permissions: string, relative_name: string, size: int> {
+]: any -> oneof<record<base_name: string, bucket_name: string, last_modified: string, path_name: string, permissions: string, relative_name: string, size: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7612,7 +7615,7 @@ export def "get-box-files-meta" [
   --box: string # one of inbox, outbox or sandbox, defaults to 'inbox' if empty.
   --path: string # Query object used to filter the items. See query model at in the description for example.
   --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
-]: nothing -> record<base_name: string, bucket_name: string, last_modified: string, path_name: string, permissions: string, relative_name: string, size: int> {
+]: nothing -> oneof<record<base_name: string, bucket_name: string, last_modified: string, path_name: string, permissions: string, relative_name: string, size: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
@@ -7705,7 +7708,7 @@ export def "get-box-files" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --box: string # Query object used to filter the items. See query model at in the description for example.
   --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
-]: nothing -> record<example_full_path_to_file_txt: record<base_name: string, bucket_name: string, last_modified: string, path_name: string, permissions: string, relative_name: string, size: int>> {
+]: nothing -> oneof<record<example_full_path_to_file_txt: record<base_name: string, bucket_name: string, last_modified: string, path_name: string, permissions: string, relative_name: string, size: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
@@ -7749,7 +7752,7 @@ export def "delete-non-unique-index" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --column-name: string # required
   --clear-blade-dev-token: string # Dev Token obtained through dev authentication. (required)
-]: nothing -> record<success: bool> {
+]: nothing -> oneof<record<success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
@@ -7794,7 +7797,7 @@ export def "create-non-unique-index" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --column-name: string # required
   --clear-blade-dev-token: string # Dev Token obtained through dev authentication. (required)
-]: nothing -> record<success: bool> {
+]: nothing -> oneof<record<success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
@@ -7838,7 +7841,7 @@ export def "get-indexes" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --clear-blade-dev-token: string # Dev Token obtained through authentication. (required)
-]: nothing -> record<Data: table<name: string, type: string>, Total: int> {
+]: nothing -> oneof<record<Data: table<name: string, type: string>, Total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
@@ -7881,7 +7884,7 @@ export def "delete-unique-index" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --column-name: string # required
   --clear-blade-dev-token: string # Dev Token obtained through dev authentication. (required)
-]: nothing -> record<success: bool> {
+]: nothing -> oneof<record<success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
@@ -7926,7 +7929,7 @@ export def "create-unique-index" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --column-name: string # required
   --clear-blade-dev-token: string # Dev Token obtained through dev authentication. (required)
-]: nothing -> record<success: bool> {
+]: nothing -> oneof<record<success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
@@ -8014,7 +8017,7 @@ export def "connected-device-count" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --clear-blade-user-token: string # Token obtained through user authentication. (required)
-]: nothing -> record<total_device_connections: int, total_devices: int, unique_device_connections: int> {
+]: nothing -> oneof<record<total_device_connections: int, total_devices: int, unique_device_connections: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
@@ -8054,7 +8057,7 @@ export def "get-connected-device-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --clear-blade-user-token: string # Dev Token obtained through authentication. (required)
-]: nothing -> record<device_name: table<client_id: string, time_connected: string>> {
+]: nothing -> oneof<record<device_name: table<client_id: string, time_connected: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
@@ -8095,7 +8098,7 @@ export def "get-connected-device-info" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --clear-blade-user-token: string # Token obtained through user authentication. (required)
-]: nothing -> record<allow_certificate_auth: bool, allow_key_auth: bool, certificate: string, connections: table<client_id: string, time_connected: string>, created_date: int, description: string, device_key: string, enabled: bool, has_keys: bool, last_active_date: int, name: string, state: string, system_key: string, type: string> {
+]: nothing -> oneof<record<allow_certificate_auth: bool, allow_key_auth: bool, certificate: string, connections: table<client_id: string, time_connected: string>, created_date: int, description: string, device_key: string, enabled: bool, has_keys: bool, last_active_date: int, name: string, state: string, system_key: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
@@ -8136,7 +8139,7 @@ export def "get-all-external-db" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --clear-blade-dev-token: string # Dev Token obtained through authentication. (required)
-]: nothing -> table<dbtype: string, name: string> {
+]: nothing -> oneof<table<dbtype: string, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
@@ -8164,7 +8167,6 @@ export def "get-all-external-db" [
 #
 # POST /api/v/4/external-db/{systemKey}
 # operationId: CreateExternalDB
-# --credentials shape: {address?: string, dbname?: string, password?: string, port?: string, user?: string}
 export def "create-external-db" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8180,7 +8182,7 @@ export def "create-external-db" [
   --credentials: any # shape: {address?: string, dbname?: string, password?: string, port?: string, user?: string}
   --dbtype: string # e.g. mysql
   --name: string # e.g. mysql_example
-]: any -> record<success: bool> {
+]: any -> oneof<record<success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8224,7 +8226,7 @@ export def "delete-external-db" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --clear-blade-user-token: string # User Token obtained through authentication. (required)
-]: nothing -> record<success: bool> {
+]: nothing -> oneof<record<success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
@@ -8266,7 +8268,7 @@ export def "get-external-db" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --clear-blade-user-token: string # User Token obtained through authentication. (required)
-]: nothing -> record<credentials: record<address: string, dbname: string, password: string, port: string, user: string>, dbtype: string, id: int, name: string, system_key: string> {
+]: nothing -> oneof<record<credentials: record<address: string, dbname: string, password: string, port: string, user: string>, dbtype: string, id: int, name: string, system_key: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
@@ -8313,7 +8315,7 @@ export def "update-database-credentials" [
   --password: string # e.g. MSQL_PASSWORD
   --port: string # e.g. 3306
   --user: string # e.g. MYSQL_USER
-]: any -> record<address: string, dbname: string, password: string, port: string, user: string> {
+]: any -> oneof<record<address: string, dbname: string, password: string, port: string, user: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8359,7 +8361,7 @@ export def "perform-db-operation" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --clear-blade-user-token: string # User Token obtained through authentication. (required)
   --operation: any
-]: any -> record<Data: list<any>, Total: int> {
+]: any -> oneof<record<Data: list<any>, Total: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8404,7 +8406,7 @@ export def "get-topics" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # Query object used to filter the items. See query model in the description for example.
   --clear-blade-dev-token: string # Dev Token obtained through authentication. (required)
-]: nothing -> table<ip: string, payload: string, payloadsize: int, pk: string, qos: int, time: int, topicid: string, userid: string> {
+]: nothing -> oneof<table<ip: string, payload: string, payloadsize: int, pk: string, qos: int, time: int, topicid: string, userid: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
@@ -8445,7 +8447,7 @@ export def "get-topic-count" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --clear-blade-dev-token: string # Dev Token obtained through authentication. (required)
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
@@ -8473,7 +8475,6 @@ export def "get-topic-count" [
 #
 # PUT /api/v/4/user/manage
 # operationId: ChangeUserInfo
-# --changes shape: {password?: string, roles?: any}
 export def "change-user-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

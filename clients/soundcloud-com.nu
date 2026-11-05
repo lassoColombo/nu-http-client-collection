@@ -16,7 +16,6 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "query-client_id" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "client_id")=(encode-path-segment $token_val)", location: "query"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
@@ -31,22 +30,32 @@ def merge-auth [parts: list]: nothing -> record {
   {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -54,8 +63,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -66,7 +80,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -101,7 +124,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -163,9 +187,9 @@ def track-sharing-completer [] { ["private" "public"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "token-authheader" "token-clientid"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-connect" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-connect" "delete-likes-playlists-playlist-id" "post-likes-playlists-playlist-id" "delete-likes-tracks-track-id" "post-likes-tracks-track-id" "get-me" "get-me-activities" "get-me-activities-all-own" "get-me-activities-tracks" "get-me-connections" "get-me-connections-connection-id" "get-me-favorites-ids" "get-me-followers" "get-me-followers-follower-id" "get-me-followings" "get-me-followings-tracks" "delete-me-followings-user-id" "get-me-followings-user-id" "put-me-followings-user-id" "get-me-likes-tracks" "get-me-playlists" "get-me-playlists-playlist-id" "get-me-tracks" "get-me-tracks-track-id" "post-oauth2-token" "get-playlists" "post-playlists" "delete-playlists-playlist-id" "get-playlists-playlist-id" "put-playlists-playlist-id" "get-playlists-playlist-id-reposters" "get-playlists-playlist-id-tracks" "delete-reposts-playlists-playlist-id" "post-reposts-playlists-playlist-id" "delete-reposts-tracks-track-id" "post-reposts-tracks-track-id" "get-resolve" "get-tracks" "post-tracks" "delete-tracks-track-id" "get-tracks-track-id" "put-tracks-track-id" "get-tracks-track-id-comments" "post-tracks-track-id-comments" "get-tracks-track-id-favoriters" "get-tracks-track-id-related" "get-tracks-track-id-reposters" "get-tracks-track-id-streams" "get-users" "get-users-user-id" "get-users-user-id-comments" "get-users-user-id-favorites" "get-users-user-id-followers" "get-users-user-id-followings" "get-users-user-id-followings-following-id" "get-users-user-id-likes-tracks" "get-users-user-id-playlists" "get-users-user-id-tracks" "get-users-user-id-web-profiles" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -379,7 +403,7 @@ export def "get-me" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<avatar_url: string, city: string, country: string, description: string, discogs_name: string, first_name: string, followers_count: int, followings_count: int, full_name: string, id: int, kind: string, last_modified: string, last_name: string, locale: string, myspace_name: string, permalink: string, permalink_url: string, plan: string, playlist_count: int, primary_email_confirmed: bool, private_playlists_count: int, private_tracks_count: int, public_favorites_count: int, quota: record<unlimited_upload_quota: bool, upload_seconds_used: int>, reposts_count: int, subscriptions: list<list<any>>, track_count: int, uri: string, username: string, website: string, website_title: string> {
+]: nothing -> oneof<record<avatar_url: string, city: string, country: string, description: string, discogs_name: string, first_name: string, followers_count: int, followings_count: int, full_name: string, id: int, kind: string, last_modified: string, last_name: string, locale: string, myspace_name: string, permalink: string, permalink_url: string, plan: string, playlist_count: int, primary_email_confirmed: bool, private_playlists_count: int, private_tracks_count: int, public_favorites_count: int, quota: record<unlimited_upload_quota: bool, upload_seconds_used: int>, reposts_count: int, subscriptions: list<list<any>>, track_count: int, uri: string, username: string, website: string, website_title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/me" $auth.query)
@@ -414,7 +438,7 @@ export def "get-me-activities" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --access: list<string> # Filters content by level of access the user (logged in or anonymous) has to the track. The result list will include only tracks with the specified access. Include all options if you'd like to see all possible tracks. See `Track#access` schema for more details. (default: playable,preview)
   --limit: int # Number of results to return in the collection. (default: 50, e.g. 2)
-]: nothing -> record<collection: table<created_at: string, origin: record, type: string>, future_href: string, next_href: string> {
+]: nothing -> oneof<record<collection: table<created_at: string, origin: record, type: string>, future_href: string, next_href: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "access" $access "csv") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
@@ -450,7 +474,7 @@ export def "get-me-activities-all-own" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --access: list<string> # Filters content by level of access the user (logged in or anonymous) has to the track. The result list will include only tracks with the specified access. Include all options if you'd like to see all possible tracks. See `Track#access` schema for more details. (default: playable,preview)
   --limit: int # Number of results to return in the collection. (default: 50, e.g. 2)
-]: nothing -> record<collection: table<created_at: string, origin: record, type: string>, future_href: string, next_href: string> {
+]: nothing -> oneof<record<collection: table<created_at: string, origin: record, type: string>, future_href: string, next_href: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "access" $access "csv") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
@@ -486,7 +510,7 @@ export def "get-me-activities-tracks" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --access: list<string> # Filters content by level of access the user (logged in or anonymous) has to the track. The result list will include only tracks with the specified access. Include all options if you'd like to see all possible tracks. See `Track#access` schema for more details. (default: playable,preview)
   --limit: int # Number of results to return in the collection. (default: 50, e.g. 2)
-]: nothing -> record<collection: table<created_at: string, origin: record, type: string>, future_href: string, next_href: string> {
+]: nothing -> oneof<record<collection: table<created_at: string, origin: record, type: string>, future_href: string, next_href: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "access" $access "csv") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
@@ -523,7 +547,7 @@ export def "get-me-connections" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results to return in the collection. (default: 50, e.g. 2)
   --offset: int # Offset of first result. Deprecated, use `linked_partitioning` instead. (DEPRECATED, default: 0, e.g. 0)
-]: nothing -> table<created_at: string, display_name: string, id: int, kind: string, post_favorite: bool, post_publish: bool, service: string, type: string, uri: string> {
+]: nothing -> oneof<table<created_at: string, display_name: string, id: int, kind: string, post_favorite: bool, post_publish: bool, service: string, type: string, uri: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -558,7 +582,7 @@ export def "get-me-connections-connection-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created_at: string, display_name: string, id: int, kind: string, post_favorite: bool, post_publish: bool, service: string, type: string, uri: string> {
+]: nothing -> oneof<record<created_at: string, display_name: string, id: int, kind: string, post_favorite: bool, post_publish: bool, service: string, type: string, uri: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connection_id' must be non-empty" } }
@@ -667,7 +691,7 @@ export def "get-me-followers-follower-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<avatar_url: string, city: string, country: string, created_at: string, description: string, discogs_name: string, first_name: string, followers_count: int, followings_count: int, full_name: string, id: int, kind: string, last_modified: string, last_name: string, myspace_name: string, permalink: string, permalink_url: string, plan: string, playlist_count: int, public_favorites_count: int, reposts_count: int, subscriptions: list<list<any>>, track_count: int, uri: string, username: string, website: string, website_title: string> {
+]: nothing -> oneof<record<avatar_url: string, city: string, country: string, created_at: string, description: string, discogs_name: string, first_name: string, followers_count: int, followings_count: int, full_name: string, id: int, kind: string, last_modified: string, last_name: string, myspace_name: string, permalink: string, permalink_url: string, plan: string, playlist_count: int, public_favorites_count: int, reposts_count: int, subscriptions: list<list<any>>, track_count: int, uri: string, username: string, website: string, website_title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($follower_id | is-empty) { error make --unspanned { msg: "path parameter 'follower_id' must be non-empty" } }
@@ -742,7 +766,7 @@ export def "get-me-followings-tracks" [
   --access: list<string> # Filters content by level of access the user (logged in or anonymous) has to the track. The result list will include only tracks with the specified access. Include all options if you'd like to see all possible tracks. See `Track#access` schema for more details. (default: playable,preview)
   --limit: int # Number of results to return in the collection. (default: 50, e.g. 2)
   --offset: int # Offset of first result. Deprecated, use `linked_partitioning` instead. (DEPRECATED, default: 0, e.g. 0)
-]: nothing -> table<access: string, artwork_url: string, available_country_codes: string, bpm: int, comment_count: int, commentable: bool, created_at: string, description: string, download_count: int, download_url: string, downloadable: string, duration: int, embeddable_by: string, favoritings_count: int, genre: string, id: int, isrc: string, key_signature: string, kind: string, label_name: string, license: string, permalink_url: string, playback_count: int, purchase_title: string, purchase_url: string, release: string, release_day: int, release_month: int, release_year: int, reposts_count: int, secret_uri: string, sharing: string, stream_url: string, streamable: bool, tag_list: string, title: string, uri: string, user: record<avatar_url: string, created_at: string, id: int, kind: string, last_modified: string, permalink: string, permalink_url: string, uri: string, username: string>, user_favorite: bool, user_playback_count: int, waveform_url: string> {
+]: nothing -> oneof<table<access: string, artwork_url: string, available_country_codes: string, bpm: int, comment_count: int, commentable: bool, created_at: string, description: string, download_count: int, download_url: string, downloadable: string, duration: int, embeddable_by: string, favoritings_count: int, genre: string, id: int, isrc: string, key_signature: string, kind: string, label_name: string, license: string, permalink_url: string, playback_count: int, purchase_title: string, purchase_url: string, release: string, release_day: int, release_month: int, release_year: int, reposts_count: int, secret_uri: string, sharing: string, stream_url: string, streamable: bool, tag_list: string, title: string, uri: string, user: record<avatar_url: string, created_at: string, id: int, kind: string, last_modified: string, permalink: string, permalink_url: string, uri: string, username: string>, user_favorite: bool, user_playback_count: int, waveform_url: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "access" $access "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -814,7 +838,7 @@ export def "get-me-followings-user-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<avatar_url: string, city: string, country: string, created_at: string, description: string, discogs_name: string, first_name: string, followers_count: int, followings_count: int, full_name: string, id: int, kind: string, last_modified: string, last_name: string, myspace_name: string, permalink: string, permalink_url: string, plan: string, playlist_count: int, public_favorites_count: int, reposts_count: int, subscriptions: list<list<any>>, track_count: int, uri: string, username: string, website: string, website_title: string> {
+]: nothing -> oneof<record<avatar_url: string, city: string, country: string, created_at: string, description: string, discogs_name: string, first_name: string, followers_count: int, followings_count: int, full_name: string, id: int, kind: string, last_modified: string, last_name: string, myspace_name: string, permalink: string, permalink_url: string, plan: string, playlist_count: int, public_favorites_count: int, reposts_count: int, subscriptions: list<list<any>>, track_count: int, uri: string, username: string, website: string, website_title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -849,7 +873,7 @@ export def "put-me-followings-user-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<avatar_url: string, city: string, country: string, created_at: string, description: string, discogs_name: string, first_name: string, followers_count: int, followings_count: int, full_name: string, id: int, kind: string, last_modified: string, last_name: string, myspace_name: string, permalink: string, permalink_url: string, plan: string, playlist_count: int, public_favorites_count: int, reposts_count: int, subscriptions: list<list<any>>, track_count: int, uri: string, username: string, website: string, website_title: string> {
+]: nothing -> oneof<record<avatar_url: string, city: string, country: string, created_at: string, description: string, discogs_name: string, first_name: string, followers_count: int, followings_count: int, full_name: string, id: int, kind: string, last_modified: string, last_name: string, myspace_name: string, permalink: string, permalink_url: string, plan: string, playlist_count: int, public_favorites_count: int, reposts_count: int, subscriptions: list<list<any>>, track_count: int, uri: string, username: string, website: string, website_title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -920,7 +944,7 @@ export def "get-me-playlists" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results to return in the collection. (default: 50, e.g. 2)
-]: nothing -> table<artwork_url: string, created_at: string, description: string, downloadable: bool, duration: int, ean: string, embeddable_by: string, genre: string, id: int, kind: string, label: record<avatar_url: string, created_at: string, id: int, kind: string, last_modified: string, permalink: string, permalink_url: string, uri: string, username: string>, label_id: int, label_name: string, last_modified: string, license: string, likes_count: int, permalink: string, permalink_url: string, playlist_type: string, purchase_title: string, purchase_url: string, release: string, release_day: int, release_month: int, release_year: int, sharing: string, streamable: bool, tag_list: string, tags: string, title: string, track_count: int, tracks: list<record>, tracks_uri: string, type: string, uri: string, user: record<avatar_url: string, created_at: string, id: int, kind: string, last_modified: string, permalink: string, permalink_url: string, uri: string, username: string>, user_id: int> {
+]: nothing -> oneof<table<artwork_url: string, created_at: string, description: string, downloadable: bool, duration: int, ean: string, embeddable_by: string, genre: string, id: int, kind: string, label: record<avatar_url: string, created_at: string, id: int, kind: string, last_modified: string, permalink: string, permalink_url: string, uri: string, username: string>, label_id: int, label_name: string, last_modified: string, license: string, likes_count: int, permalink: string, permalink_url: string, playlist_type: string, purchase_title: string, purchase_url: string, release: string, release_day: int, release_month: int, release_year: int, sharing: string, streamable: bool, tag_list: string, tags: string, title: string, track_count: int, tracks: list<record>, tracks_uri: string, type: string, uri: string, user: record<avatar_url: string, created_at: string, id: int, kind: string, last_modified: string, permalink: string, permalink_url: string, uri: string, username: string>, user_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
@@ -957,7 +981,7 @@ export def "get-me-playlists-playlist-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<artwork_url: string, created_at: string, description: string, downloadable: bool, duration: int, ean: string, embeddable_by: string, genre: string, id: int, kind: string, label: record<avatar_url: string, created_at: string, id: int, kind: string, last_modified: string, permalink: string, permalink_url: string, uri: string, username: string>, label_id: int, label_name: string, last_modified: string, license: string, likes_count: int, permalink: string, permalink_url: string, playlist_type: string, purchase_title: string, purchase_url: string, release: string, release_day: int, release_month: int, release_year: int, sharing: string, streamable: bool, tag_list: string, tags: string, title: string, track_count: int, tracks: table<access: string, artwork_url: string, available_country_codes: string, bpm: int, comment_count: int, commentable: bool, created_at: string, description: string, download_count: int, download_url: string, downloadable: string, duration: int, embeddable_by: string, favoritings_count: int, genre: string, id: int, isrc: string, key_signature: string, kind: string, label_name: string, license: string, permalink_url: string, playback_count: int, purchase_title: string, purchase_url: string, release: string, release_day: int, release_month: int, release_year: int, reposts_count: int, secret_uri: string, sharing: string, stream_url: string, streamable: bool, tag_list: string, title: string, uri: string, user: record, user_favorite: bool, user_playback_count: int, waveform_url: string>, tracks_uri: string, type: string, uri: string, user: record<avatar_url: string, created_at: string, id: int, kind: string, last_modified: string, permalink: string, permalink_url: string, uri: string, username: string>, user_id: int> {
+]: nothing -> oneof<record<artwork_url: string, created_at: string, description: string, downloadable: bool, duration: int, ean: string, embeddable_by: string, genre: string, id: int, kind: string, label: record<avatar_url: string, created_at: string, id: int, kind: string, last_modified: string, permalink: string, permalink_url: string, uri: string, username: string>, label_id: int, label_name: string, last_modified: string, license: string, likes_count: int, permalink: string, permalink_url: string, playlist_type: string, purchase_title: string, purchase_url: string, release: string, release_day: int, release_month: int, release_year: int, sharing: string, streamable: bool, tag_list: string, tags: string, title: string, track_count: int, tracks: table<access: string, artwork_url: string, available_country_codes: string, bpm: int, comment_count: int, commentable: bool, created_at: string, description: string, download_count: int, download_url: string, downloadable: string, duration: int, embeddable_by: string, favoritings_count: int, genre: string, id: int, isrc: string, key_signature: string, kind: string, label_name: string, license: string, permalink_url: string, playback_count: int, purchase_title: string, purchase_url: string, release: string, release_day: int, release_month: int, release_year: int, reposts_count: int, secret_uri: string, sharing: string, stream_url: string, streamable: bool, tag_list: string, title: string, uri: string, user: record, user_favorite: bool, user_playback_count: int, waveform_url: string>, tracks_uri: string, type: string, uri: string, user: record<avatar_url: string, created_at: string, id: int, kind: string, last_modified: string, permalink: string, permalink_url: string, uri: string, username: string>, user_id: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($playlist_id | is-empty) { error make --unspanned { msg: "path parameter 'playlist_id' must be non-empty" } }
@@ -1030,7 +1054,7 @@ export def "get-me-tracks-track-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<access: string, artwork_url: string, available_country_codes: string, bpm: int, comment_count: int, commentable: bool, created_at: string, description: string, download_count: int, download_url: string, downloadable: string, duration: int, embeddable_by: string, favoritings_count: int, genre: string, id: int, isrc: string, key_signature: string, kind: string, label_name: string, license: string, permalink_url: string, playback_count: int, purchase_title: string, purchase_url: string, release: string, release_day: int, release_month: int, release_year: int, reposts_count: int, secret_uri: string, sharing: string, stream_url: string, streamable: bool, tag_list: string, title: string, uri: string, user: record<avatar_url: string, created_at: string, id: int, kind: string, last_modified: string, permalink: string, permalink_url: string, uri: string, username: string>, user_favorite: bool, user_playback_count: int, waveform_url: string> {
+]: nothing -> oneof<record<access: string, artwork_url: string, available_country_codes: string, bpm: int, comment_count: int, commentable: bool, created_at: string, description: string, download_count: int, download_url: string, downloadable: string, duration: int, embeddable_by: string, favoritings_count: int, genre: string, id: int, isrc: string, key_signature: string, kind: string, label_name: string, license: string, permalink_url: string, playback_count: int, purchase_title: string, purchase_url: string, release: string, release_day: int, release_month: int, release_year: int, reposts_count: int, secret_uri: string, sharing: string, stream_url: string, streamable: bool, tag_list: string, title: string, uri: string, user: record<avatar_url: string, created_at: string, id: int, kind: string, last_modified: string, permalink: string, permalink_url: string, uri: string, username: string>, user_favorite: bool, user_playback_count: int, waveform_url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($track_id | is-empty) { error make --unspanned { msg: "path parameter 'track_id' must be non-empty" } }
@@ -1081,7 +1105,7 @@ export def "post-oauth2-token" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1140,7 +1164,6 @@ export def "get-playlists" [
 # Creates a playlist.
 #
 # POST /playlists
-# --playlist shape: {description?: string, sharing?: "public"|"private", title?: string, tracks?: list}
 export def "post-playlists" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1152,7 +1175,7 @@ export def "post-playlists" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --playlist: record # shape: {description?: string, sharing?: "public"|"private", title?: string, tracks?: list}
-]: any -> record<artwork_url: string, created_at: string, description: string, downloadable: bool, duration: int, ean: string, embeddable_by: string, genre: string, id: int, kind: string, label_id: int, label_name: string, last_modified: string, license: string, permalink: string, permalink_url: string, playlist_type: string, purchase_title: string, purchase_url: string, release: string, release_day: int, release_month: int, release_year: int, sharing: string, streamable: bool, tag_list: string, title: string, track_count: int, tracks: table<artwork_url: string, bpm: int, comment_count: int, commentable: bool, created_at: string, description: string, download_count: int, downloadable: string, duration: int, embeddable_by: string, favoritings_count: int, genre: string, id: int, isrc: string, key_signature: string, kind: string, label_name: string, license: string, permalink_url: string, playback_count: int, purchase_title: string, purchase_url: string, release: string, release_day: int, release_month: int, release_year: int, sharing: string, stream_url: string, streamable: bool, tag_list: string, title: string, uri: string, user: record, user_favorite: bool, user_playback_count: int, waveform_url: string>, type: string, uri: string, user: record<avatar_url: string, created_at: string, id: int, kind: string, last_modified: string, permalink: string, permalink_url: string, uri: string, username: string>, user_id: int> {
+]: any -> oneof<record<artwork_url: string, created_at: string, description: string, downloadable: bool, duration: int, ean: string, embeddable_by: string, genre: string, id: int, kind: string, label_id: int, label_name: string, last_modified: string, license: string, permalink: string, permalink_url: string, playlist_type: string, purchase_title: string, purchase_url: string, release: string, release_day: int, release_month: int, release_year: int, sharing: string, streamable: bool, tag_list: string, title: string, track_count: int, tracks: table<artwork_url: string, bpm: int, comment_count: int, commentable: bool, created_at: string, description: string, download_count: int, downloadable: string, duration: int, embeddable_by: string, favoritings_count: int, genre: string, id: int, isrc: string, key_signature: string, kind: string, label_name: string, license: string, permalink_url: string, playback_count: int, purchase_title: string, purchase_url: string, release: string, release_day: int, release_month: int, release_year: int, sharing: string, stream_url: string, streamable: bool, tag_list: string, title: string, uri: string, user: record, user_favorite: bool, user_playback_count: int, waveform_url: string>, type: string, uri: string, user: record<avatar_url: string, created_at: string, id: int, kind: string, last_modified: string, permalink: string, permalink_url: string, uri: string, username: string>, user_id: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1226,7 +1249,7 @@ export def "get-playlists-playlist-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --secret-token: string # A secret token to fetch private playlists/tracks
   --access: list<string> # Filters content by level of access the user (logged in or anonymous) has to the track. The result list will include only tracks with the specified access. Include all options if you'd like to see all possible tracks. See `Track#access` schema for more details. (default: playable,preview)
-]: nothing -> record<artwork_url: string, created_at: string, description: string, downloadable: bool, duration: int, ean: string, embeddable_by: string, genre: string, id: int, kind: string, label: record<avatar_url: string, created_at: string, id: int, kind: string, last_modified: string, permalink: string, permalink_url: string, uri: string, username: string>, label_id: int, label_name: string, last_modified: string, license: string, likes_count: int, permalink: string, permalink_url: string, playlist_type: string, purchase_title: string, purchase_url: string, release: string, release_day: int, release_month: int, release_year: int, sharing: string, streamable: bool, tag_list: string, tags: string, title: string, track_count: int, tracks: table<access: string, artwork_url: string, available_country_codes: string, bpm: int, comment_count: int, commentable: bool, created_at: string, description: string, download_count: int, download_url: string, downloadable: string, duration: int, embeddable_by: string, favoritings_count: int, genre: string, id: int, isrc: string, key_signature: string, kind: string, label_name: string, license: string, permalink_url: string, playback_count: int, purchase_title: string, purchase_url: string, release: string, release_day: int, release_month: int, release_year: int, reposts_count: int, secret_uri: string, sharing: string, stream_url: string, streamable: bool, tag_list: string, title: string, uri: string, user: record, user_favorite: bool, user_playback_count: int, waveform_url: string>, tracks_uri: string, type: string, uri: string, user: record<avatar_url: string, created_at: string, id: int, kind: string, last_modified: string, permalink: string, permalink_url: string, uri: string, username: string>, user_id: int> {
+]: nothing -> oneof<record<artwork_url: string, created_at: string, description: string, downloadable: bool, duration: int, ean: string, embeddable_by: string, genre: string, id: int, kind: string, label: record<avatar_url: string, created_at: string, id: int, kind: string, last_modified: string, permalink: string, permalink_url: string, uri: string, username: string>, label_id: int, label_name: string, last_modified: string, license: string, likes_count: int, permalink: string, permalink_url: string, playlist_type: string, purchase_title: string, purchase_url: string, release: string, release_day: int, release_month: int, release_year: int, sharing: string, streamable: bool, tag_list: string, tags: string, title: string, track_count: int, tracks: table<access: string, artwork_url: string, available_country_codes: string, bpm: int, comment_count: int, commentable: bool, created_at: string, description: string, download_count: int, download_url: string, downloadable: string, duration: int, embeddable_by: string, favoritings_count: int, genre: string, id: int, isrc: string, key_signature: string, kind: string, label_name: string, license: string, permalink_url: string, playback_count: int, purchase_title: string, purchase_url: string, release: string, release_day: int, release_month: int, release_year: int, reposts_count: int, secret_uri: string, sharing: string, stream_url: string, streamable: bool, tag_list: string, title: string, uri: string, user: record, user_favorite: bool, user_playback_count: int, waveform_url: string>, tracks_uri: string, type: string, uri: string, user: record<avatar_url: string, created_at: string, id: int, kind: string, last_modified: string, permalink: string, permalink_url: string, uri: string, username: string>, user_id: int>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_authheader | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_AUTHHEADER_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_CLIENTID_TOKEN | default "")) "query-client_id")])
   let base = ($base_url | default $BASE_URL)
   if ($playlist_id | is-empty) { error make --unspanned { msg: "path parameter 'playlist_id' must be non-empty" } }
@@ -1251,7 +1274,6 @@ export def "get-playlists-playlist-id" [
 # Updates a playlist.
 #
 # PUT /playlists/{playlist_id}
-# --playlist shape: {description?: string, sharing?: "public"|"private", title?: string, tracks?: list}
 export def "put-playlists-playlist-id" [
   playlist_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1264,7 +1286,7 @@ export def "put-playlists-playlist-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --playlist: record # shape: {description?: string, sharing?: "public"|"private", title?: string, tracks?: list}
-]: any -> record<artwork_url: string, created_at: string, description: string, downloadable: bool, duration: int, ean: string, embeddable_by: string, genre: string, id: int, kind: string, label_id: int, label_name: string, last_modified: string, license: string, permalink: string, permalink_url: string, playlist_type: string, purchase_title: string, purchase_url: string, release: string, release_day: int, release_month: int, release_year: int, sharing: string, streamable: bool, tag_list: string, title: string, track_count: int, tracks: table<artwork_url: string, bpm: int, comment_count: int, commentable: bool, created_at: string, description: string, download_count: int, downloadable: string, duration: int, embeddable_by: string, favoritings_count: int, genre: string, id: int, isrc: string, key_signature: string, kind: string, label_name: string, license: string, permalink_url: string, playback_count: int, purchase_title: string, purchase_url: string, release: string, release_day: int, release_month: int, release_year: int, sharing: string, stream_url: string, streamable: bool, tag_list: string, title: string, uri: string, user: record, user_favorite: bool, user_playback_count: int, waveform_url: string>, type: string, uri: string, user: record<avatar_url: string, created_at: string, id: int, kind: string, last_modified: string, permalink: string, permalink_url: string, uri: string, username: string>, user_id: int> {
+]: any -> oneof<record<artwork_url: string, created_at: string, description: string, downloadable: bool, duration: int, ean: string, embeddable_by: string, genre: string, id: int, kind: string, label_id: int, label_name: string, last_modified: string, license: string, permalink: string, permalink_url: string, playlist_type: string, purchase_title: string, purchase_url: string, release: string, release_day: int, release_month: int, release_year: int, sharing: string, streamable: bool, tag_list: string, title: string, track_count: int, tracks: table<artwork_url: string, bpm: int, comment_count: int, commentable: bool, created_at: string, description: string, download_count: int, downloadable: string, duration: int, embeddable_by: string, favoritings_count: int, genre: string, id: int, isrc: string, key_signature: string, kind: string, label_name: string, license: string, permalink_url: string, playback_count: int, purchase_title: string, purchase_url: string, release: string, release_day: int, release_month: int, release_year: int, sharing: string, stream_url: string, streamable: bool, tag_list: string, title: string, uri: string, user: record, user_favorite: bool, user_playback_count: int, waveform_url: string>, type: string, uri: string, user: record<avatar_url: string, created_at: string, id: int, kind: string, last_modified: string, permalink: string, permalink_url: string, uri: string, username: string>, user_id: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1303,7 +1325,7 @@ export def "get-playlists-playlist-id-reposters" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results to return in the collection. (default: 50, e.g. 2)
-]: nothing -> record<collection: table<avatar_url: string, created_at: string, id: int, kind: string, last_modified: string, permalink: string, permalink_url: string, uri: string, username: string>, next_href: string> {
+]: nothing -> oneof<record<collection: table<avatar_url: string, created_at: string, id: int, kind: string, last_modified: string, permalink: string, permalink_url: string, uri: string, username: string>, next_href: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-client_id"))
   let base = ($base_url | default $BASE_URL)
   if ($playlist_id | is-empty) { error make --unspanned { msg: "path parameter 'playlist_id' must be non-empty" } }
@@ -1618,7 +1640,7 @@ export def "post-tracks" [
   --track-streamable: oneof<nothing, bool> # default: true
   --track-tag-list: string # The tag_list property contains a list of tags separated by spaces. Multiword tags are quoted in double quotes. We also support machine tags that follow the pattern NAMESPACE:KEY=VALUE. For example: geo:lat=43.555 camel:size=medium “machine:tag=with space” Machine tags are not revealed to the user on the track pages.
   --track-title: string
-]: any -> record<access: string, artwork_url: string, available_country_codes: string, bpm: int, comment_count: int, commentable: bool, created_at: string, description: string, download_count: int, download_url: string, downloadable: string, duration: int, embeddable_by: string, favoritings_count: int, genre: string, id: int, isrc: string, key_signature: string, kind: string, label_name: string, license: string, permalink_url: string, playback_count: int, purchase_title: string, purchase_url: string, release: string, release_day: int, release_month: int, release_year: int, reposts_count: int, secret_uri: string, sharing: string, stream_url: string, streamable: bool, tag_list: string, title: string, uri: string, user: record<avatar_url: string, created_at: string, id: int, kind: string, last_modified: string, permalink: string, permalink_url: string, uri: string, username: string>, user_favorite: bool, user_playback_count: int, waveform_url: string> {
+]: any -> oneof<record<access: string, artwork_url: string, available_country_codes: string, bpm: int, comment_count: int, commentable: bool, created_at: string, description: string, download_count: int, download_url: string, downloadable: string, duration: int, embeddable_by: string, favoritings_count: int, genre: string, id: int, isrc: string, key_signature: string, kind: string, label_name: string, license: string, permalink_url: string, playback_count: int, purchase_title: string, purchase_url: string, release: string, release_day: int, release_month: int, release_year: int, reposts_count: int, secret_uri: string, sharing: string, stream_url: string, streamable: bool, tag_list: string, title: string, uri: string, user: record<avatar_url: string, created_at: string, id: int, kind: string, last_modified: string, permalink: string, permalink_url: string, uri: string, username: string>, user_favorite: bool, user_playback_count: int, waveform_url: string>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_authheader | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_AUTHHEADER_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_CLIENTID_TOKEN | default "")) "query-client_id")])
   let base = ($base_url | default $BASE_URL)
@@ -1693,7 +1715,7 @@ export def "get-tracks-track-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --secret-token: string # A secret token to fetch private playlists/tracks
-]: nothing -> record<access: string, artwork_url: string, available_country_codes: string, bpm: int, comment_count: int, commentable: bool, created_at: string, description: string, download_count: int, download_url: string, downloadable: string, duration: int, embeddable_by: string, favoritings_count: int, genre: string, id: int, isrc: string, key_signature: string, kind: string, label_name: string, license: string, permalink_url: string, playback_count: int, purchase_title: string, purchase_url: string, release: string, release_day: int, release_month: int, release_year: int, reposts_count: int, secret_uri: string, sharing: string, stream_url: string, streamable: bool, tag_list: string, title: string, uri: string, user: record<avatar_url: string, created_at: string, id: int, kind: string, last_modified: string, permalink: string, permalink_url: string, uri: string, username: string>, user_favorite: bool, user_playback_count: int, waveform_url: string> {
+]: nothing -> oneof<record<access: string, artwork_url: string, available_country_codes: string, bpm: int, comment_count: int, commentable: bool, created_at: string, description: string, download_count: int, download_url: string, downloadable: string, duration: int, embeddable_by: string, favoritings_count: int, genre: string, id: int, isrc: string, key_signature: string, kind: string, label_name: string, license: string, permalink_url: string, playback_count: int, purchase_title: string, purchase_url: string, release: string, release_day: int, release_month: int, release_year: int, reposts_count: int, secret_uri: string, sharing: string, stream_url: string, streamable: bool, tag_list: string, title: string, uri: string, user: record<avatar_url: string, created_at: string, id: int, kind: string, last_modified: string, permalink: string, permalink_url: string, uri: string, username: string>, user_favorite: bool, user_playback_count: int, waveform_url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-client_id"))
   let base = ($base_url | default $BASE_URL)
   if ($track_id | is-empty) { error make --unspanned { msg: "path parameter 'track_id' must be non-empty" } }
@@ -1718,7 +1740,6 @@ export def "get-tracks-track-id" [
 # Updates a track's information.
 #
 # PUT /tracks/{track_id}
-# --track shape: {commentable?: bool, description?: string, downloadable?: bool, embeddable_by?: "all"|"me"|"none", genre?: string, isrc?: string, label_name?: string, license?: "no-rights-reserved"|"all-rights-reserved"|"cc-by"|"cc-by-nc"|"cc-by-nd"|"cc-by-sa"|"cc-by-nc-nd"|"cc-by-nc-sa", permalink?: string, purchase_url?: string, release?: string, release_date?: string, sharing?: "public"|"private", streamable?: bool, tag_list?: string, title?: string}
 export def "put-tracks-track-id" [
   track_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1731,7 +1752,7 @@ export def "put-tracks-track-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --track: record # shape: {commentable?: bool, description?: string, downloadable?: bool, embeddable_by?: "all"|"me"|"none", genre?: string, isrc?: string, label_name?: string, license?: "no-rights-reserved"|"all-rights-reserved"|"cc-by"|"cc-by-nc"|"cc-by-nd"|"cc-by-sa"|"cc-by-nc-nd"|"cc-by-nc-sa", permalink?: string, purchase_url?: string, release?: string, release_date?: string, sharing?: "public"|"private", streamable?: bool, tag_list?: string, title?: string}
-]: any -> record<access: string, artwork_url: string, available_country_codes: string, bpm: int, comment_count: int, commentable: bool, created_at: string, description: string, download_count: int, download_url: string, downloadable: string, duration: int, embeddable_by: string, favoritings_count: int, genre: string, id: int, isrc: string, key_signature: string, kind: string, label_name: string, license: string, permalink_url: string, playback_count: int, purchase_title: string, purchase_url: string, release: string, release_day: int, release_month: int, release_year: int, reposts_count: int, secret_uri: string, sharing: string, stream_url: string, streamable: bool, tag_list: string, title: string, uri: string, user: record<avatar_url: string, created_at: string, id: int, kind: string, last_modified: string, permalink: string, permalink_url: string, uri: string, username: string>, user_favorite: bool, user_playback_count: int, waveform_url: string> {
+]: any -> oneof<record<access: string, artwork_url: string, available_country_codes: string, bpm: int, comment_count: int, commentable: bool, created_at: string, description: string, download_count: int, download_url: string, downloadable: string, duration: int, embeddable_by: string, favoritings_count: int, genre: string, id: int, isrc: string, key_signature: string, kind: string, label_name: string, license: string, permalink_url: string, playback_count: int, purchase_title: string, purchase_url: string, release: string, release_day: int, release_month: int, release_year: int, reposts_count: int, secret_uri: string, sharing: string, stream_url: string, streamable: bool, tag_list: string, title: string, uri: string, user: record<avatar_url: string, created_at: string, id: int, kind: string, last_modified: string, permalink: string, permalink_url: string, uri: string, username: string>, user_favorite: bool, user_playback_count: int, waveform_url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1798,7 +1819,6 @@ export def "get-tracks-track-id-comments" [
 # Returns the newly created comment on success
 #
 # POST /tracks/{track_id}/comments
-# --comment shape: {body: string, timestamp?: any}
 export def "post-tracks-track-id-comments" [
   track_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1811,7 +1831,7 @@ export def "post-tracks-track-id-comments" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --comment: record # shape: {body: string, timestamp?: any}
-]: any -> record<body: string, created_at: string, id: int, kind: string, timestamp: string, track_id: int, uri: string, user: record<avatar_url: string, followers_count: int, followings_count: int, id: int, kind: string, last_modified: string, permalink: string, permalink_url: string, reposts_count: int, uri: string, username: string>, user_id: int> {
+]: any -> oneof<record<body: string, created_at: string, id: int, kind: string, timestamp: string, track_id: int, uri: string, user: record<avatar_url: string, followers_count: int, followings_count: int, id: int, kind: string, last_modified: string, permalink: string, permalink_url: string, reposts_count: int, uri: string, username: string>, user_id: int>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_authheader | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_AUTHHEADER_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_CLIENTID_TOKEN | default "")) "query-client_id")])
   let base = ($base_url | default $BASE_URL)
@@ -1852,7 +1872,7 @@ export def "get-tracks-track-id-favoriters" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results to return in the collection. (default: 50, e.g. 2)
   --offset: int # Offset of first result. Deprecated, use `linked_partitioning` instead. (DEPRECATED, default: 0, e.g. 0)
-]: nothing -> table<avatar_url: string, city: string, country: string, description: string, discogs_name: string, first_name: string, followers_count: int, followings_count: int, full_name: string, id: int, kind: string, last_modified: string, last_name: string, myspace_name: string, permalink: string, permalink_url: string, plan: string, playlist_count: int, public_favorites_count: int, reposts_count: int, subscriptions: list<list>, track_count: int, uri: string, username: string, website: string, website_title: string> {
+]: nothing -> oneof<table<avatar_url: string, city: string, country: string, description: string, discogs_name: string, first_name: string, followers_count: int, followings_count: int, full_name: string, id: int, kind: string, last_modified: string, last_name: string, myspace_name: string, permalink: string, permalink_url: string, plan: string, playlist_count: int, public_favorites_count: int, reposts_count: int, subscriptions: list<list>, track_count: int, uri: string, username: string, website: string, website_title: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-client_id"))
   let base = ($base_url | default $BASE_URL)
   if ($track_id | is-empty) { error make --unspanned { msg: "path parameter 'track_id' must be non-empty" } }
@@ -1930,7 +1950,7 @@ export def "get-tracks-track-id-reposters" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results to return in the collection. (default: 50, e.g. 2)
-]: nothing -> record<collection: table<avatar_url: string, created_at: string, id: int, kind: string, last_modified: string, permalink: string, permalink_url: string, uri: string, username: string>, next_href: string> {
+]: nothing -> oneof<record<collection: table<avatar_url: string, created_at: string, id: int, kind: string, last_modified: string, permalink: string, permalink_url: string, uri: string, username: string>, next_href: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-client_id"))
   let base = ($base_url | default $BASE_URL)
   if ($track_id | is-empty) { error make --unspanned { msg: "path parameter 'track_id' must be non-empty" } }
@@ -1967,7 +1987,7 @@ export def "get-tracks-track-id-streams" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --secret-token: string # A secret token to fetch private playlists/tracks
-]: nothing -> record<hls_mp3_128_url: string, hls_opus_64_url: string, http_mp3_128_url: string, preview_mp3_128_url: string> {
+]: nothing -> oneof<record<hls_mp3_128_url: string, hls_opus_64_url: string, http_mp3_128_url: string, preview_mp3_128_url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-client_id"))
   let base = ($base_url | default $BASE_URL)
   if ($track_id | is-empty) { error make --unspanned { msg: "path parameter 'track_id' must be non-empty" } }
@@ -2044,7 +2064,7 @@ export def "get-users-user-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<avatar_url: string, city: string, country: string, description: string, discogs_name: string, first_name: string, followers_count: int, followings_count: int, full_name: string, id: int, kind: string, last_modified: string, last_name: string, locale: string, myspace_name: string, permalink: string, permalink_url: string, plan: string, playlist_count: int, primary_email_confirmed: bool, private_playlists_count: int, private_tracks_count: int, public_favorites_count: int, quota: record<unlimited_upload_quota: bool, upload_seconds_used: int>, reposts_count: int, subscriptions: list<list<any>>, track_count: int, uri: string, username: string, website: string, website_title: string> {
+]: nothing -> oneof<record<avatar_url: string, city: string, country: string, description: string, discogs_name: string, first_name: string, followers_count: int, followings_count: int, full_name: string, id: int, kind: string, last_modified: string, last_name: string, locale: string, myspace_name: string, permalink: string, permalink_url: string, plan: string, playlist_count: int, primary_email_confirmed: bool, private_playlists_count: int, private_tracks_count: int, public_favorites_count: int, quota: record<unlimited_upload_quota: bool, upload_seconds_used: int>, reposts_count: int, subscriptions: list<list<any>>, track_count: int, uri: string, username: string, website: string, website_title: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_authheader | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_AUTHHEADER_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_CLIENTID_TOKEN | default "")) "query-client_id")])
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -2082,7 +2102,7 @@ export def "get-users-user-id-comments" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results to return in the collection. (default: 50, e.g. 2)
   --offset: int # Offset of first result. Deprecated, use `linked_partitioning` instead. (DEPRECATED, default: 0, e.g. 0)
-]: nothing -> table<body: string, created_at: string, id: int, kind: string, timestamp: string, track_id: int, uri: string, user: record<avatar_url: string, followers_count: int, followings_count: int, id: int, kind: string, last_modified: string, permalink: string, permalink_url: string, reposts_count: int, uri: string, username: string>, user_id: int> {
+]: nothing -> oneof<table<body: string, created_at: string, id: int, kind: string, timestamp: string, track_id: int, uri: string, user: record<avatar_url: string, followers_count: int, followings_count: int, id: int, kind: string, last_modified: string, permalink: string, permalink_url: string, reposts_count: int, uri: string, username: string>, user_id: int>, string, record, nothing> {
   let auth = (merge-auth [(build-auth ($token_authheader | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_AUTHHEADER_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_CLIENTID_TOKEN | default "")) "query-client_id")])
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -2235,7 +2255,7 @@ export def "get-users-user-id-followings-following-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<avatar_url: string, city: string, country: string, description: string, discogs_name: string, first_name: string, followers_count: int, followings_count: int, full_name: string, id: int, kind: string, last_modified: string, last_name: string, locale: string, myspace_name: string, permalink: string, permalink_url: string, plan: string, playlist_count: int, primary_email_confirmed: bool, private_playlists_count: int, private_tracks_count: int, public_favorites_count: int, quota: record<unlimited_upload_quota: bool, upload_seconds_used: int>, reposts_count: int, subscriptions: list<list<any>>, track_count: int, uri: string, username: string, website: string, website_title: string> {
+]: nothing -> oneof<record<avatar_url: string, city: string, country: string, description: string, discogs_name: string, first_name: string, followers_count: int, followings_count: int, full_name: string, id: int, kind: string, last_modified: string, last_name: string, locale: string, myspace_name: string, permalink: string, permalink_url: string, plan: string, playlist_count: int, primary_email_confirmed: bool, private_playlists_count: int, private_tracks_count: int, public_favorites_count: int, quota: record<unlimited_upload_quota: bool, upload_seconds_used: int>, reposts_count: int, subscriptions: list<list<any>>, track_count: int, uri: string, username: string, website: string, website_title: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_authheader | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_AUTHHEADER_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_CLIENTID_TOKEN | default "")) "query-client_id")])
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -2389,7 +2409,7 @@ export def "get-users-user-id-web-profiles" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results to return in the collection. (default: 50, e.g. 2)
-]: nothing -> table<created_at: string, id: int, kind: string, service: string, title: string, url: string, username: string> {
+]: nothing -> oneof<table<created_at: string, id: int, kind: string, service: string, title: string, url: string, username: string>, string, record, nothing> {
   let auth = (merge-auth [(build-auth ($token_authheader | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_AUTHHEADER_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_CLIENTID_TOKEN | default "")) "query-client_id")])
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }

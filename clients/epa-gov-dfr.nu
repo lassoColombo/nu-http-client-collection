@@ -12,27 +12,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -40,8 +49,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -52,7 +66,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -87,7 +110,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -108,9 +132,9 @@ def p-qmtype-completer [] { ["MONTH" "QUARTER"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-dfr-rest-services-air-3-yr-download" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-dfr-rest-services-air-3-yr-download" "post-dfr-rest-services-air-3-yr-download" "get-dfr-rest-services-cwa-3-yr-effluent-download" "post-dfr-rest-services-cwa-3-yr-effluent-download" "get-dfr-rest-services-cwa-3-yr-sepscs-download" "post-dfr-rest-services-cwa-3-yr-sepscs-download" "get-dfr-rest-services-get-air-compliance" "post-dfr-rest-services-get-air-compliance" "get-dfr-rest-services-get-air-quality" "post-dfr-rest-services-get-air-quality" "get-dfr-rest-services-get-aws-docs" "post-dfr-rest-services-get-aws-docs" "get-dfr-rest-services-get-case-formal-actions" "post-dfr-rest-services-get-case-formal-actions" "get-dfr-rest-services-get-compliance-history" "post-dfr-rest-services-get-compliance-history" "get-dfr-rest-services-get-compliance-summary" "post-dfr-rest-services-get-compliance-summary" "get-dfr-rest-services-get-csv" "post-dfr-rest-services-get-csv" "get-dfr-rest-services-get-cwa-3yr-compliance" "post-dfr-rest-services-get-cwa-3yr-compliance" "get-dfr-rest-services-get-cwa-3yr-d80d90-counts" "post-dfr-rest-services-get-cwa-3yr-d80d90-counts" "get-dfr-rest-services-get-cwa-cs-compliance" "post-dfr-rest-services-get-cwa-cs-compliance" "get-dfr-rest-services-get-cwa-eff-alr" "post-dfr-rest-services-get-cwa-eff-alr" "get-dfr-rest-services-get-cwa-eff-alr-exp" "post-dfr-rest-services-get-cwa-eff-alr-exp" "get-dfr-rest-services-get-cwa-eff-compliance" "post-dfr-rest-services-get-cwa-eff-compliance" "get-dfr-rest-services-get-cwa-eff-compliance-exp" "post-dfr-rest-services-get-cwa-eff-compliance-exp" "get-dfr-rest-services-get-cwa-ps-compliance" "post-dfr-rest-services-get-cwa-ps-compliance" "get-dfr-rest-services-get-cwa-rnc-compliance" "post-dfr-rest-services-get-cwa-rnc-compliance" "get-dfr-rest-services-get-cwa-se-compliance" "post-dfr-rest-services-get-cwa-se-compliance" "get-dfr-rest-services-get-d80d90s-details" "post-dfr-rest-services-get-d80d90s-details" "get-dfr-rest-services-get-demographics-by-id" "post-dfr-rest-services-get-demographics-by-id" "get-dfr-rest-services-get-dfr" "post-dfr-rest-services-get-dfr" "get-dfr-rest-services-get-ejscreen-indexes" "post-dfr-rest-services-get-ejscreen-indexes" "get-dfr-rest-services-get-enforcement-summary" "post-dfr-rest-services-get-enforcement-summary" "get-dfr-rest-services-get-extract-dates" "post-dfr-rest-services-get-extract-dates" "get-dfr-rest-services-get-formal-actions" "post-dfr-rest-services-get-formal-actions" "get-dfr-rest-services-get-icis-formal-actions" "post-dfr-rest-services-get-icis-formal-actions" "get-dfr-rest-services-get-inspections" "post-dfr-rest-services-get-inspections" "get-dfr-rest-services-get-map" "post-dfr-rest-services-get-map" "get-dfr-rest-services-get-naics" "post-dfr-rest-services-get-naics" "get-dfr-rest-services-get-notices" "post-dfr-rest-services-get-notices" "get-dfr-rest-services-get-permits" "post-dfr-rest-services-get-permits" "get-dfr-rest-services-get-rcra-compliance" "post-dfr-rest-services-get-rcra-compliance" "get-dfr-rest-services-get-sdwa-lead-and-copper" "post-dfr-rest-services-get-sdwa-lead-and-copper" "get-dfr-rest-services-get-sdwa-sanitary-surveys" "post-dfr-rest-services-get-sdwa-sanitary-surveys" "get-dfr-rest-services-get-sdwa-site-visits" "post-dfr-rest-services-get-sdwa-site-visits" "get-dfr-rest-services-get-sdwa-violations" "post-dfr-rest-services-get-sdwa-violations" "get-dfr-rest-services-get-sdwis-compliance" "post-dfr-rest-services-get-sdwis-compliance" "get-dfr-rest-services-get-sic-codes" "post-dfr-rest-services-get-sic-codes" "get-dfr-rest-services-get-spatial-metadata" "post-dfr-rest-services-get-spatial-metadata" "get-dfr-rest-services-get-tri-history" "post-dfr-rest-services-get-tri-history" "get-dfr-rest-services-get-tri-releases" "post-dfr-rest-services-get-tri-releases" "get-dfr-rest-services-get-tribes" "post-dfr-rest-services-get-tribes" "get-dfr-rest-services-get-water-quality" "post-dfr-rest-services-get-water-quality" "get-dfr-rest-services-get-water-quality-details" "post-dfr-rest-services-get-water-quality-details" "get-dfr-rest-services-rcra-3-yr-download" "post-dfr-rest-services-rcra-3-yr-download" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -349,7 +373,7 @@ export def "get-dfr-rest-services-get-air-compliance" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: nothing -> record<Results: record<AirCompliance: record<Header: record, Sources: list>, Message: string>> {
+]: nothing -> oneof<record<Results: record<AirCompliance: record<Header: record, Sources: list>, Message: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
@@ -388,7 +412,7 @@ export def "post-dfr-rest-services-get-air-compliance" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   p_id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: any -> record<Results: record<AirCompliance: record<Header: record, Sources: list>, Message: string>> {
+]: any -> oneof<record<Results: record<AirCompliance: record<Header: record, Sources: list>, Message: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -397,7 +421,7 @@ export def "post-dfr-rest-services-get-air-compliance" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -429,7 +453,7 @@ export def "get-dfr-rest-services-get-air-quality" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: nothing -> record<Results: record<AirQuality: record<CarbonMonoxide1971Area: string, Lead1978Area: string, Lead2008Area: string, NitrogenDioxide1971Area: string, Ozone8hr1997Area: string, Ozone8hr2008Area: string, Ozone8hr2015Area: string, ParticulateMatter1987Area: string, ParticulateMatter1997Area: string, ParticulateMatter2006Area: string, ParticulateMatter2012Area: string, SulfurDioxide1971Area: string, SulfurDioxide2010Area: string>, Message: string>> {
+]: nothing -> oneof<record<Results: record<AirQuality: record<CarbonMonoxide1971Area: string, Lead1978Area: string, Lead2008Area: string, NitrogenDioxide1971Area: string, Ozone8hr1997Area: string, Ozone8hr2008Area: string, Ozone8hr2015Area: string, ParticulateMatter1987Area: string, ParticulateMatter1997Area: string, ParticulateMatter2006Area: string, ParticulateMatter2012Area: string, SulfurDioxide1971Area: string, SulfurDioxide2010Area: string>, Message: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
@@ -468,7 +492,7 @@ export def "post-dfr-rest-services-get-air-quality" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   p_id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: any -> record<Results: record<AirQuality: record<CarbonMonoxide1971Area: string, Lead1978Area: string, Lead2008Area: string, NitrogenDioxide1971Area: string, Ozone8hr1997Area: string, Ozone8hr2008Area: string, Ozone8hr2015Area: string, ParticulateMatter1987Area: string, ParticulateMatter1997Area: string, ParticulateMatter2006Area: string, ParticulateMatter2012Area: string, SulfurDioxide1971Area: string, SulfurDioxide2010Area: string>, Message: string>> {
+]: any -> oneof<record<Results: record<AirQuality: record<CarbonMonoxide1971Area: string, Lead1978Area: string, Lead2008Area: string, NitrogenDioxide1971Area: string, Ozone8hr1997Area: string, Ozone8hr2008Area: string, Ozone8hr2015Area: string, ParticulateMatter1987Area: string, ParticulateMatter1997Area: string, ParticulateMatter2006Area: string, ParticulateMatter2012Area: string, SulfurDioxide1971Area: string, SulfurDioxide2010Area: string>, Message: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -477,7 +501,7 @@ export def "post-dfr-rest-services-get-air-quality" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -509,7 +533,7 @@ export def "get-dfr-rest-services-get-aws-docs" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: nothing -> record<Results: record<Message: string>> {
+]: nothing -> oneof<record<Results: record<Message: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
@@ -548,7 +572,7 @@ export def "post-dfr-rest-services-get-aws-docs" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   p_id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: any -> record<Results: record<Message: string>> {
+]: any -> oneof<record<Results: record<Message: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -557,7 +581,7 @@ export def "post-dfr-rest-services-get-aws-docs" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -589,7 +613,7 @@ export def "get-dfr-rest-services-get-case-formal-actions" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: nothing -> record<Results: record<CaseFormalActions: record<Action: list, ProgramDates: list>, Message: string>> {
+]: nothing -> oneof<record<Results: record<CaseFormalActions: record<Action: list, ProgramDates: list>, Message: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
@@ -628,7 +652,7 @@ export def "post-dfr-rest-services-get-case-formal-actions" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   p_id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: any -> record<Results: record<CaseFormalActions: record<Action: list, ProgramDates: list>, Message: string>> {
+]: any -> oneof<record<Results: record<CaseFormalActions: record<Action: list, ProgramDates: list>, Message: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -637,7 +661,7 @@ export def "post-dfr-rest-services-get-case-formal-actions" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -669,7 +693,7 @@ export def "get-dfr-rest-services-get-compliance-history" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: nothing -> record<Results: record<ComplianceHistory: record<Inspection: list, ProgramDates: list>, Message: string>> {
+]: nothing -> oneof<record<Results: record<ComplianceHistory: record<Inspection: list, ProgramDates: list>, Message: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
@@ -708,7 +732,7 @@ export def "post-dfr-rest-services-get-compliance-history" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   p_id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: any -> record<Results: record<ComplianceHistory: record<Inspection: list, ProgramDates: list>, Message: string>> {
+]: any -> oneof<record<Results: record<ComplianceHistory: record<Inspection: list, ProgramDates: list>, Message: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -717,7 +741,7 @@ export def "post-dfr-rest-services-get-compliance-history" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -749,7 +773,7 @@ export def "get-dfr-rest-services-get-compliance-summary" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: nothing -> record<Results: record<ComplianceSummary: record<ProgramDates: list, Source: list>, Message: string>> {
+]: nothing -> oneof<record<Results: record<ComplianceSummary: record<ProgramDates: list, Source: list>, Message: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
@@ -788,7 +812,7 @@ export def "post-dfr-rest-services-get-compliance-summary" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   p_id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: any -> record<Results: record<ComplianceSummary: record<ProgramDates: list, Source: list>, Message: string>> {
+]: any -> oneof<record<Results: record<ComplianceSummary: record<ProgramDates: list, Source: list>, Message: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -797,7 +821,7 @@ export def "post-dfr-rest-services-get-compliance-summary" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -897,7 +921,7 @@ export def "get-dfr-rest-services-get-cwa-3yr-compliance" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: nothing -> record<Results: record<CWA3YrCompliance: record<Header: record, Sources: list>, Message: string>> {
+]: nothing -> oneof<record<Results: record<CWA3YrCompliance: record<Header: record, Sources: list>, Message: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
@@ -936,7 +960,7 @@ export def "post-dfr-rest-services-get-cwa-3yr-compliance" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   p_id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: any -> record<Results: record<CWA3YrCompliance: record<Header: record, Sources: list>, Message: string>> {
+]: any -> oneof<record<Results: record<CWA3YrCompliance: record<Header: record, Sources: list>, Message: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -945,7 +969,7 @@ export def "post-dfr-rest-services-get-cwa-3yr-compliance" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -977,7 +1001,7 @@ export def "get-dfr-rest-services-get-cwa-3yr-d80d90-counts" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: nothing -> record<Results: record<CWA3YrD80D90Counts: record<Header: record, Sources: list>, Message: string>> {
+]: nothing -> oneof<record<Results: record<CWA3YrD80D90Counts: record<Header: record, Sources: list>, Message: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
@@ -1016,7 +1040,7 @@ export def "post-dfr-rest-services-get-cwa-3yr-d80d90-counts" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   p_id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: any -> record<Results: record<CWA3YrD80D90Counts: record<Header: record, Sources: list>, Message: string>> {
+]: any -> oneof<record<Results: record<CWA3YrD80D90Counts: record<Header: record, Sources: list>, Message: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1025,7 +1049,7 @@ export def "post-dfr-rest-services-get-cwa-3yr-d80d90-counts" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1057,7 +1081,7 @@ export def "get-dfr-rest-services-get-cwa-cs-compliance" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: nothing -> record<Results: record<CWACSCompliance: record<Header: record, Sources: list>, Message: string>> {
+]: nothing -> oneof<record<Results: record<CWACSCompliance: record<Header: record, Sources: list>, Message: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
@@ -1096,7 +1120,7 @@ export def "post-dfr-rest-services-get-cwa-cs-compliance" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   p_id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: any -> record<Results: record<CWACSCompliance: record<Header: record, Sources: list>, Message: string>> {
+]: any -> oneof<record<Results: record<CWACSCompliance: record<Header: record, Sources: list>, Message: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1105,7 +1129,7 @@ export def "post-dfr-rest-services-get-cwa-cs-compliance" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1137,7 +1161,7 @@ export def "get-dfr-rest-services-get-cwa-eff-alr" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: nothing -> record<Results: record<CWAEffluentALRExceedences: record<Header: record, Sources: list>, Message: string>> {
+]: nothing -> oneof<record<Results: record<CWAEffluentALRExceedences: record<Header: record, Sources: list>, Message: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
@@ -1176,7 +1200,7 @@ export def "post-dfr-rest-services-get-cwa-eff-alr" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   p_id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: any -> record<Results: record<CWAEffluentALRExceedences: record<Header: record, Sources: list>, Message: string>> {
+]: any -> oneof<record<Results: record<CWAEffluentALRExceedences: record<Header: record, Sources: list>, Message: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1185,7 +1209,7 @@ export def "post-dfr-rest-services-get-cwa-eff-alr" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1217,7 +1241,7 @@ export def "get-dfr-rest-services-get-cwa-eff-alr-exp" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: nothing -> record<Results: record<CWAEffluentALRExceedencesEXP: record<Header: record, Sources: list>, Message: string>> {
+]: nothing -> oneof<record<Results: record<CWAEffluentALRExceedencesEXP: record<Header: record, Sources: list>, Message: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
@@ -1256,7 +1280,7 @@ export def "post-dfr-rest-services-get-cwa-eff-alr-exp" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   p_id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: any -> record<Results: record<CWAEffluentALRExceedencesEXP: record<Header: record, Sources: list>, Message: string>> {
+]: any -> oneof<record<Results: record<CWAEffluentALRExceedencesEXP: record<Header: record, Sources: list>, Message: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1265,7 +1289,7 @@ export def "post-dfr-rest-services-get-cwa-eff-alr-exp" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1297,7 +1321,7 @@ export def "get-dfr-rest-services-get-cwa-eff-compliance" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: nothing -> record<Results: record<CWAEffluentCompliance: record<Header: record, Sources: list>, Message: string>> {
+]: nothing -> oneof<record<Results: record<CWAEffluentCompliance: record<Header: record, Sources: list>, Message: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
@@ -1336,7 +1360,7 @@ export def "post-dfr-rest-services-get-cwa-eff-compliance" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   p_id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: any -> record<Results: record<CWAEffluentCompliance: record<Header: record, Sources: list>, Message: string>> {
+]: any -> oneof<record<Results: record<CWAEffluentCompliance: record<Header: record, Sources: list>, Message: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1345,7 +1369,7 @@ export def "post-dfr-rest-services-get-cwa-eff-compliance" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1377,7 +1401,7 @@ export def "get-dfr-rest-services-get-cwa-eff-compliance-exp" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: nothing -> record<Results: record<CWAEffluentComplianceEXP: record<Header: record, Sources: list>, Message: string>> {
+]: nothing -> oneof<record<Results: record<CWAEffluentComplianceEXP: record<Header: record, Sources: list>, Message: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
@@ -1416,7 +1440,7 @@ export def "post-dfr-rest-services-get-cwa-eff-compliance-exp" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   p_id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: any -> record<Results: record<CWAEffluentComplianceEXP: record<Header: record, Sources: list>, Message: string>> {
+]: any -> oneof<record<Results: record<CWAEffluentComplianceEXP: record<Header: record, Sources: list>, Message: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1425,7 +1449,7 @@ export def "post-dfr-rest-services-get-cwa-eff-compliance-exp" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1457,7 +1481,7 @@ export def "get-dfr-rest-services-get-cwa-ps-compliance" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: nothing -> record<Results: record<CWAPSCompliance: record<Header: record, Sources: list>, Message: string>> {
+]: nothing -> oneof<record<Results: record<CWAPSCompliance: record<Header: record, Sources: list>, Message: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
@@ -1496,7 +1520,7 @@ export def "post-dfr-rest-services-get-cwa-ps-compliance" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   p_id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: any -> record<Results: record<CWAPSCompliance: record<Header: record, Sources: list>, Message: string>> {
+]: any -> oneof<record<Results: record<CWAPSCompliance: record<Header: record, Sources: list>, Message: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1505,7 +1529,7 @@ export def "post-dfr-rest-services-get-cwa-ps-compliance" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1537,7 +1561,7 @@ export def "get-dfr-rest-services-get-cwa-rnc-compliance" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: nothing -> record<Results: record<CWARNCCompliance: record<Header: record, Sources: list>, Message: string>> {
+]: nothing -> oneof<record<Results: record<CWARNCCompliance: record<Header: record, Sources: list>, Message: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
@@ -1576,7 +1600,7 @@ export def "post-dfr-rest-services-get-cwa-rnc-compliance" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   p_id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: any -> record<Results: record<CWARNCCompliance: record<Header: record, Sources: list>, Message: string>> {
+]: any -> oneof<record<Results: record<CWARNCCompliance: record<Header: record, Sources: list>, Message: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1585,7 +1609,7 @@ export def "post-dfr-rest-services-get-cwa-rnc-compliance" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1617,7 +1641,7 @@ export def "get-dfr-rest-services-get-cwa-se-compliance" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: nothing -> record<Results: record<CWASECompliance: record<Header: record, Sources: list>, Message: string>> {
+]: nothing -> oneof<record<Results: record<CWASECompliance: record<Header: record, Sources: list>, Message: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
@@ -1656,7 +1680,7 @@ export def "post-dfr-rest-services-get-cwa-se-compliance" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   p_id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: any -> record<Results: record<CWASECompliance: record<Header: record, Sources: list>, Message: string>> {
+]: any -> oneof<record<Results: record<CWASECompliance: record<Header: record, Sources: list>, Message: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1665,7 +1689,7 @@ export def "post-dfr-rest-services-get-cwa-se-compliance" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1700,7 +1724,7 @@ export def "get-dfr-rest-services-get-d80d90s-details" [
   --p-qmtype: string@p-qmtype-completer # Identifies the time frame type, month or quarter, for the D80/D90 download.
   --p-qmvalue: string # A number between 1 and 39 that identifies the specific month or quarter for the D80/D90 violation download.
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: nothing -> record<Results: record<D80D90sDetails: record<Sources: list>, Message: string>> {
+]: nothing -> oneof<record<Results: record<D80D90sDetails: record<Sources: list>, Message: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_npdes_id" $p_npdes_id "scalar") (serialize-qp "p_missinglate" $p_missinglate "scalar") (serialize-qp "p_qmtype" $p_qmtype "scalar") (serialize-qp "p_qmvalue" $p_qmvalue "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
@@ -1741,7 +1765,7 @@ export def "post-dfr-rest-services-get-d80d90s-details" [
   --p-qmtype: string@p-qmtype-completer # Identifies the time frame type, month or quarter, for the D80/D90 download.
   --p-qmvalue: string # A number between 1 and 39 that identifies the specific month or quarter for the D80/D90 violation download.
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: nothing -> record<Results: record<D80D90sDetails: record<Sources: list>, Message: string>> {
+]: nothing -> oneof<record<Results: record<D80D90sDetails: record<Sources: list>, Message: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_npdes_id" $p_npdes_id "scalar") (serialize-qp "p_missinglate" $p_missinglate "scalar") (serialize-qp "p_qmtype" $p_qmtype "scalar") (serialize-qp "p_qmvalue" $p_qmvalue "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
@@ -1779,7 +1803,7 @@ export def "get-dfr-rest-services-get-demographics-by-id" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: nothing -> record<Results: record<Demographics: record<Adults: string, AfricanAmerican: string, AmericanIndian: string, AsianPacificIslander: string, BSBA: string, CenterLatitude: string, CenterLongitude: string, Child: string, Grades9to12: string, HSDiploma: string, HispanicOrigin: string, Households: string, HouseholdsPublicAssistance: string, HousingUnits: string, Income15to25k: string, Income25to50k: string, Income50to75k: string, Income75kPlus: string, IncomeLess15k: string, LandArea: string, Less9thGrade: string, Minors: string, OtherMultiracial: string, PercentMinority: string, PersonsBelowPovertyLevel: string, PopulationDensity: string, Radius: string, Seniors: string, SomeCollege: string, TotalPersons: string, WaterArea: string, White: string>, Message: string>> {
+]: nothing -> oneof<record<Results: record<Demographics: record<Adults: string, AfricanAmerican: string, AmericanIndian: string, AsianPacificIslander: string, BSBA: string, CenterLatitude: string, CenterLongitude: string, Child: string, Grades9to12: string, HSDiploma: string, HispanicOrigin: string, Households: string, HouseholdsPublicAssistance: string, HousingUnits: string, Income15to25k: string, Income25to50k: string, Income50to75k: string, Income75kPlus: string, IncomeLess15k: string, LandArea: string, Less9thGrade: string, Minors: string, OtherMultiracial: string, PercentMinority: string, PersonsBelowPovertyLevel: string, PopulationDensity: string, Radius: string, Seniors: string, SomeCollege: string, TotalPersons: string, WaterArea: string, White: string>, Message: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
@@ -1818,7 +1842,7 @@ export def "post-dfr-rest-services-get-demographics-by-id" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   p_id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: any -> record<Results: record<Demographics: record<Adults: string, AfricanAmerican: string, AmericanIndian: string, AsianPacificIslander: string, BSBA: string, CenterLatitude: string, CenterLongitude: string, Child: string, Grades9to12: string, HSDiploma: string, HispanicOrigin: string, Households: string, HouseholdsPublicAssistance: string, HousingUnits: string, Income15to25k: string, Income25to50k: string, Income50to75k: string, Income75kPlus: string, IncomeLess15k: string, LandArea: string, Less9thGrade: string, Minors: string, OtherMultiracial: string, PercentMinority: string, PersonsBelowPovertyLevel: string, PopulationDensity: string, Radius: string, Seniors: string, SomeCollege: string, TotalPersons: string, WaterArea: string, White: string>, Message: string>> {
+]: any -> oneof<record<Results: record<Demographics: record<Adults: string, AfricanAmerican: string, AmericanIndian: string, AsianPacificIslander: string, BSBA: string, CenterLatitude: string, CenterLongitude: string, Child: string, Grades9to12: string, HSDiploma: string, HispanicOrigin: string, Households: string, HouseholdsPublicAssistance: string, HousingUnits: string, Income15to25k: string, Income25to50k: string, Income50to75k: string, Income75kPlus: string, IncomeLess15k: string, LandArea: string, Less9thGrade: string, Minors: string, OtherMultiracial: string, PercentMinority: string, PersonsBelowPovertyLevel: string, PopulationDensity: string, Radius: string, Seniors: string, SomeCollege: string, TotalPersons: string, WaterArea: string, White: string>, Message: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1827,7 +1851,7 @@ export def "post-dfr-rest-services-get-demographics-by-id" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1860,7 +1884,7 @@ export def "get-dfr-rest-services-get-dfr" [
   --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --p-system: string # System Acronym Filter. Enter a single system acronym to filter results.
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: nothing -> record<Results: record<AirCompliance: record<Header: record, Sources: list>, AirQuality: record<CarbonMonoxide1971Area: string, Lead1978Area: string, Lead2008Area: string, NitrogenDioxide1971Area: string, Ozone8hr1997Area: string, Ozone8hr2008Area: string, Ozone8hr2015Area: string, ParticulateMatter1987Area: string, ParticulateMatter1997Area: string, ParticulateMatter2006Area: string, ParticulateMatter2012Area: string, SulfurDioxide1971Area: string, SulfurDioxide2010Area: string>, CAEDDocuments: list<record>, CWA3YrCompliance: record<Header: record, Sources: list>, CWA3YrD80D90Counts: record<Header: record, Sources: list>, CWACSCompliance: record<Header: record, Sources: list>, CWAEffluentALRExceedences: record<Header: record, Sources: list>, CWAEffluentALRExceedencesEXP: record<Header: record, Sources: list>, CWAEffluentCompliance: record<Header: record, Sources: list>, CWAEffluentComplianceEXP: record<Header: record, Sources: list>, CWAPSCompliance: record<Header: record, Sources: list>, CWARNCCompliance: record<Header: record, Sources: list>, CWASECompliance: record<Header: record, Sources: list>, CaseFormalActions: record<Action: list, ProgramDates: list>, ComplianceHistory: record<Inspection: list, ProgramDates: list>, ComplianceSummary: record<ProgramDates: list, Source: list>, Demographics: record<Adults: string, AfricanAmerican: string, AmericanIndian: string, AsianPacificIslander: string, BSBA: string, CenterLatitude: string, CenterLongitude: string, Child: string, Grades9to12: string, HSDiploma: string, HispanicOrigin: string, Households: string, HouseholdsPublicAssistance: string, HousingUnits: string, Income15to25k: string, Income25to50k: string, Income50to75k: string, Income75kPlus: string, IncomeLess15k: string, LandArea: string, Less9thGrade: string, Minors: string, OtherMultiracial: string, PercentMinority: string, PersonsBelowPovertyLevel: string, PopulationDensity: string, Radius: string, Seniors: string, SomeCollege: string, TotalPersons: string, WaterArea: string, White: string>, EJScreenIndexes: record<HazardWasteProximity: string, LeadPaintIndicator: string, NATACancerRisk: string, NATADieselPM: string, NATARespiratoryHI: string, Over80Count: string, Ozone: string, PM25: string, RMPProximity: string, RegistryID: string, SuperfundProximity: string, TrafficProximity: string, WaterDischargeProximity: string>, EnforcementComplianceSummaries: record<ProgramDates: list, Summaries: list>, FormalActions: record<Action: list, ProgramDates: list>, ICISFormalActions: record<Action: list, ProgramDates: list>, InspectionEnforcementSummary: record<ProgramDates: list, Source: list>, LeadAndCopperRule5Yr: record<CopperSamples: list, CuALE: string, CuALEUnits: string, CuALEValue: string, CuSampleDates: string, CuViol: string, LeadAndCopperViol: string, LeadCopperRuleHealthBasedViol: string, LeadSamples: list, PbALE: string, PbALEUnits: string, PbALEValue: string, PbSampleDates: string, PbViol: string, RuleCode350Viol: string, SourceID: string, iCU90: string, iPB90: string>, MapOutput: record<CenterLatitude: string, CenterLongitude: string, IconBaseURL: string, MapData: list, PopUpBaseURL: string>, Message: string, MultipleFRSFacilities: record<RegistryIDs: list>, NAICS: record<Sources: list>, Notices: record<Notice: list, ProgramDates: list>, Permits: list<record>, RCRACompliance: record<Mnth10End: string, Mnth10Start: string, Mnth11End: string, Mnth11Start: string, Mnth12End: string, Mnth12Start: string, Mnth13End: string, Mnth13Start: string, Mnth14End: string, Mnth14Start: string, Mnth15End: string, Mnth15Start: string, Mnth16End: string, Mnth16Start: string, Mnth17End: string, Mnth17Start: string, Mnth18End: string, Mnth18Start: string, Mnth19End: string, Mnth19Start: string, Mnth1End: string, Mnth1Start: string, Mnth20End: string, Mnth20Start: string, Mnth21End: string, Mnth21Start: string, Mnth22End: string, Mnth22Start: string, Mnth23End: string, Mnth23Start: string, Mnth24End: string, Mnth24Start: string, Mnth25End: string, Mnth25Start: string, Mnth26End: string, Mnth26Start: string, Mnth27End: string, Mnth27Start: string, Mnth28End: string, Mnth28Start: string, Mnth29End: string, Mnth29Start: string, Mnth2End: string, Mnth2Start: string, Mnth30End: string, Mnth30Start: string, Mnth31End: string, Mnth31Start: string, Mnth32End: string, Mnth32Start: string, Mnth33End: string, Mnth33Start: string, Mnth34End: string, Mnth34Start: string, Mnth35End: string, Mnth35Start: string, Mnth36End: string, Mnth36Start: string, Mnth3End: string, Mnth3Start: string, Mnth4End: string, Mnth4Start: string, Mnth5End: string, Mnth5Start: string, Mnth6End: string, Mnth6Start: string, Mnth7End: string, Mnth7Start: string, Mnth8End: string, Mnth8Start: string, Mnth9End: string, Mnth9Start: string, Qtr10End: string, Qtr10Start: string, Qtr11End: string, Qtr11Start: string, Qtr12End: string, Qtr12Start: string, Qtr1End: string, Qtr1Start: string, Qtr2End: string, Qtr2Start: string, Qtr3End: string, Qtr3Start: string, Qtr4End: string, Qtr4Start: string, Qtr5End: string, Qtr5Start: string, Qtr6End: string, Qtr6Start: string, Qtr7End: string, Qtr7Start: string, Qtr8End: string, Qtr8Start: string, Qtr9End: string, Qtr9Start: string, Sources: list>, Reports: record<HasPollRpt: string>, SDWISCompliance: record<Mnth10End: string, Mnth10Start: string, Mnth11End: string, Mnth11Start: string, Mnth12End: string, Mnth12Start: string, Mnth13End: string, Mnth13Start: string, Mnth14End: string, Mnth14Start: string, Mnth15End: string, Mnth15Start: string, Mnth16End: string, Mnth16Start: string, Mnth17End: string, Mnth17Start: string, Mnth18End: string, Mnth18Start: string, Mnth19End: string, Mnth19Start: string, Mnth1End: string, Mnth1Start: string, Mnth20End: string, Mnth20Start: string, Mnth21End: string, Mnth21Start: string, Mnth22End: string, Mnth22Start: string, Mnth23End: string, Mnth23Start: string, Mnth24End: string, Mnth24Start: string, Mnth25End: string, Mnth25Start: string, Mnth26End: string, Mnth26Start: string, Mnth27End: string, Mnth27Start: string, Mnth28End: string, Mnth28Start: string, Mnth29End: string, Mnth29Start: string, Mnth2End: string, Mnth2Start: string, Mnth30End: string, Mnth30Start: string, Mnth31End: string, Mnth31Start: string, Mnth32End: string, Mnth32Start: string, Mnth33End: string, Mnth33Start: string, Mnth34End: string, Mnth34Start: string, Mnth35End: string, Mnth35Start: string, Mnth36End: string, Mnth36Start: string, Mnth37End: string, Mnth37Start: string, Mnth38End: string, Mnth38Start: string, Mnth39End: string, Mnth39Start: string, Mnth3End: string, Mnth3Start: string, Mnth4End: string, Mnth4Start: string, Mnth5End: string, Mnth5Start: string, Mnth6End: string, Mnth6Start: string, Mnth7End: string, Mnth7Start: string, Mnth8End: string, Mnth8Start: string, Mnth9End: string, Mnth9Start: string, Qtr10End: string, Qtr10Start: string, Qtr11End: string, Qtr11Start: string, Qtr12End: string, Qtr12Start: string, Qtr13End: string, Qtr13Start: string, Qtr1End: string, Qtr1Start: string, Qtr2End: string, Qtr2Start: string, Qtr3End: string, Qtr3Start: string, Qtr4End: string, Qtr4Start: string, Qtr5End: string, Qtr5Start: string, Qtr6End: string, Qtr6Start: string, Qtr7End: string, Qtr7Start: string, Qtr8End: string, Qtr8Start: string, Qtr9End: string, Qtr9Start: string, Sources: list>, SIC: record<Sources: list>, SanitarySurveys: record<Sources: list>, SiteVisits: record<Sources: list>, SpatialMetadata: record<CalculatedAccuracy: string, CollectionMethod: string, CoordinateSourceSystem: string, CoordinateSourceSystemId: string, Latitude83: string, Longitude83: string, ReferencePoint: string, RegistryID: string>, SystemExtractDates: record<Dates: list>, TRIHistory: record<Sources: list>, TRIReleases: record<Chemicals: list, Header: list>, Tribes: list<record>, ViolationsEnforcementActions: record<Sources: list>, WaterQuality: record<Sources: list>, WaterQualityDetails: record<Sources: list>, WebFireDocuments: list<record>>> {
+]: nothing -> oneof<record<Results: record<AirCompliance: record<Header: record, Sources: list>, AirQuality: record<CarbonMonoxide1971Area: string, Lead1978Area: string, Lead2008Area: string, NitrogenDioxide1971Area: string, Ozone8hr1997Area: string, Ozone8hr2008Area: string, Ozone8hr2015Area: string, ParticulateMatter1987Area: string, ParticulateMatter1997Area: string, ParticulateMatter2006Area: string, ParticulateMatter2012Area: string, SulfurDioxide1971Area: string, SulfurDioxide2010Area: string>, CAEDDocuments: list<record>, CWA3YrCompliance: record<Header: record, Sources: list>, CWA3YrD80D90Counts: record<Header: record, Sources: list>, CWACSCompliance: record<Header: record, Sources: list>, CWAEffluentALRExceedences: record<Header: record, Sources: list>, CWAEffluentALRExceedencesEXP: record<Header: record, Sources: list>, CWAEffluentCompliance: record<Header: record, Sources: list>, CWAEffluentComplianceEXP: record<Header: record, Sources: list>, CWAPSCompliance: record<Header: record, Sources: list>, CWARNCCompliance: record<Header: record, Sources: list>, CWASECompliance: record<Header: record, Sources: list>, CaseFormalActions: record<Action: list, ProgramDates: list>, ComplianceHistory: record<Inspection: list, ProgramDates: list>, ComplianceSummary: record<ProgramDates: list, Source: list>, Demographics: record<Adults: string, AfricanAmerican: string, AmericanIndian: string, AsianPacificIslander: string, BSBA: string, CenterLatitude: string, CenterLongitude: string, Child: string, Grades9to12: string, HSDiploma: string, HispanicOrigin: string, Households: string, HouseholdsPublicAssistance: string, HousingUnits: string, Income15to25k: string, Income25to50k: string, Income50to75k: string, Income75kPlus: string, IncomeLess15k: string, LandArea: string, Less9thGrade: string, Minors: string, OtherMultiracial: string, PercentMinority: string, PersonsBelowPovertyLevel: string, PopulationDensity: string, Radius: string, Seniors: string, SomeCollege: string, TotalPersons: string, WaterArea: string, White: string>, EJScreenIndexes: record<HazardWasteProximity: string, LeadPaintIndicator: string, NATACancerRisk: string, NATADieselPM: string, NATARespiratoryHI: string, Over80Count: string, Ozone: string, PM25: string, RMPProximity: string, RegistryID: string, SuperfundProximity: string, TrafficProximity: string, WaterDischargeProximity: string>, EnforcementComplianceSummaries: record<ProgramDates: list, Summaries: list>, FormalActions: record<Action: list, ProgramDates: list>, ICISFormalActions: record<Action: list, ProgramDates: list>, InspectionEnforcementSummary: record<ProgramDates: list, Source: list>, LeadAndCopperRule5Yr: record<CopperSamples: list, CuALE: string, CuALEUnits: string, CuALEValue: string, CuSampleDates: string, CuViol: string, LeadAndCopperViol: string, LeadCopperRuleHealthBasedViol: string, LeadSamples: list, PbALE: string, PbALEUnits: string, PbALEValue: string, PbSampleDates: string, PbViol: string, RuleCode350Viol: string, SourceID: string, iCU90: string, iPB90: string>, MapOutput: record<CenterLatitude: string, CenterLongitude: string, IconBaseURL: string, MapData: list, PopUpBaseURL: string>, Message: string, MultipleFRSFacilities: record<RegistryIDs: list>, NAICS: record<Sources: list>, Notices: record<Notice: list, ProgramDates: list>, Permits: list<record>, RCRACompliance: record<Mnth10End: string, Mnth10Start: string, Mnth11End: string, Mnth11Start: string, Mnth12End: string, Mnth12Start: string, Mnth13End: string, Mnth13Start: string, Mnth14End: string, Mnth14Start: string, Mnth15End: string, Mnth15Start: string, Mnth16End: string, Mnth16Start: string, Mnth17End: string, Mnth17Start: string, Mnth18End: string, Mnth18Start: string, Mnth19End: string, Mnth19Start: string, Mnth1End: string, Mnth1Start: string, Mnth20End: string, Mnth20Start: string, Mnth21End: string, Mnth21Start: string, Mnth22End: string, Mnth22Start: string, Mnth23End: string, Mnth23Start: string, Mnth24End: string, Mnth24Start: string, Mnth25End: string, Mnth25Start: string, Mnth26End: string, Mnth26Start: string, Mnth27End: string, Mnth27Start: string, Mnth28End: string, Mnth28Start: string, Mnth29End: string, Mnth29Start: string, Mnth2End: string, Mnth2Start: string, Mnth30End: string, Mnth30Start: string, Mnth31End: string, Mnth31Start: string, Mnth32End: string, Mnth32Start: string, Mnth33End: string, Mnth33Start: string, Mnth34End: string, Mnth34Start: string, Mnth35End: string, Mnth35Start: string, Mnth36End: string, Mnth36Start: string, Mnth3End: string, Mnth3Start: string, Mnth4End: string, Mnth4Start: string, Mnth5End: string, Mnth5Start: string, Mnth6End: string, Mnth6Start: string, Mnth7End: string, Mnth7Start: string, Mnth8End: string, Mnth8Start: string, Mnth9End: string, Mnth9Start: string, Qtr10End: string, Qtr10Start: string, Qtr11End: string, Qtr11Start: string, Qtr12End: string, Qtr12Start: string, Qtr1End: string, Qtr1Start: string, Qtr2End: string, Qtr2Start: string, Qtr3End: string, Qtr3Start: string, Qtr4End: string, Qtr4Start: string, Qtr5End: string, Qtr5Start: string, Qtr6End: string, Qtr6Start: string, Qtr7End: string, Qtr7Start: string, Qtr8End: string, Qtr8Start: string, Qtr9End: string, Qtr9Start: string, Sources: list>, Reports: record<HasPollRpt: string>, SDWISCompliance: record<Mnth10End: string, Mnth10Start: string, Mnth11End: string, Mnth11Start: string, Mnth12End: string, Mnth12Start: string, Mnth13End: string, Mnth13Start: string, Mnth14End: string, Mnth14Start: string, Mnth15End: string, Mnth15Start: string, Mnth16End: string, Mnth16Start: string, Mnth17End: string, Mnth17Start: string, Mnth18End: string, Mnth18Start: string, Mnth19End: string, Mnth19Start: string, Mnth1End: string, Mnth1Start: string, Mnth20End: string, Mnth20Start: string, Mnth21End: string, Mnth21Start: string, Mnth22End: string, Mnth22Start: string, Mnth23End: string, Mnth23Start: string, Mnth24End: string, Mnth24Start: string, Mnth25End: string, Mnth25Start: string, Mnth26End: string, Mnth26Start: string, Mnth27End: string, Mnth27Start: string, Mnth28End: string, Mnth28Start: string, Mnth29End: string, Mnth29Start: string, Mnth2End: string, Mnth2Start: string, Mnth30End: string, Mnth30Start: string, Mnth31End: string, Mnth31Start: string, Mnth32End: string, Mnth32Start: string, Mnth33End: string, Mnth33Start: string, Mnth34End: string, Mnth34Start: string, Mnth35End: string, Mnth35Start: string, Mnth36End: string, Mnth36Start: string, Mnth37End: string, Mnth37Start: string, Mnth38End: string, Mnth38Start: string, Mnth39End: string, Mnth39Start: string, Mnth3End: string, Mnth3Start: string, Mnth4End: string, Mnth4Start: string, Mnth5End: string, Mnth5Start: string, Mnth6End: string, Mnth6Start: string, Mnth7End: string, Mnth7Start: string, Mnth8End: string, Mnth8Start: string, Mnth9End: string, Mnth9Start: string, Qtr10End: string, Qtr10Start: string, Qtr11End: string, Qtr11Start: string, Qtr12End: string, Qtr12Start: string, Qtr13End: string, Qtr13Start: string, Qtr1End: string, Qtr1Start: string, Qtr2End: string, Qtr2Start: string, Qtr3End: string, Qtr3Start: string, Qtr4End: string, Qtr4Start: string, Qtr5End: string, Qtr5Start: string, Qtr6End: string, Qtr6Start: string, Qtr7End: string, Qtr7Start: string, Qtr8End: string, Qtr8Start: string, Qtr9End: string, Qtr9Start: string, Sources: list>, SIC: record<Sources: list>, SanitarySurveys: record<Sources: list>, SiteVisits: record<Sources: list>, SpatialMetadata: record<CalculatedAccuracy: string, CollectionMethod: string, CoordinateSourceSystem: string, CoordinateSourceSystemId: string, Latitude83: string, Longitude83: string, ReferencePoint: string, RegistryID: string>, SystemExtractDates: record<Dates: list>, TRIHistory: record<Sources: list>, TRIReleases: record<Chemicals: list, Header: list>, Tribes: list<record>, ViolationsEnforcementActions: record<Sources: list>, WaterQuality: record<Sources: list>, WaterQualityDetails: record<Sources: list>, WebFireDocuments: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
@@ -1900,7 +1924,7 @@ export def "post-dfr-rest-services-get-dfr" [
   p_id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
   --p-system: string # System Acronym Filter. Enter a single system acronym to filter results.
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: any -> record<Results: record<AirCompliance: record<Header: record, Sources: list>, AirQuality: record<CarbonMonoxide1971Area: string, Lead1978Area: string, Lead2008Area: string, NitrogenDioxide1971Area: string, Ozone8hr1997Area: string, Ozone8hr2008Area: string, Ozone8hr2015Area: string, ParticulateMatter1987Area: string, ParticulateMatter1997Area: string, ParticulateMatter2006Area: string, ParticulateMatter2012Area: string, SulfurDioxide1971Area: string, SulfurDioxide2010Area: string>, CAEDDocuments: list<record>, CWA3YrCompliance: record<Header: record, Sources: list>, CWA3YrD80D90Counts: record<Header: record, Sources: list>, CWACSCompliance: record<Header: record, Sources: list>, CWAEffluentALRExceedences: record<Header: record, Sources: list>, CWAEffluentALRExceedencesEXP: record<Header: record, Sources: list>, CWAEffluentCompliance: record<Header: record, Sources: list>, CWAEffluentComplianceEXP: record<Header: record, Sources: list>, CWAPSCompliance: record<Header: record, Sources: list>, CWARNCCompliance: record<Header: record, Sources: list>, CWASECompliance: record<Header: record, Sources: list>, CaseFormalActions: record<Action: list, ProgramDates: list>, ComplianceHistory: record<Inspection: list, ProgramDates: list>, ComplianceSummary: record<ProgramDates: list, Source: list>, Demographics: record<Adults: string, AfricanAmerican: string, AmericanIndian: string, AsianPacificIslander: string, BSBA: string, CenterLatitude: string, CenterLongitude: string, Child: string, Grades9to12: string, HSDiploma: string, HispanicOrigin: string, Households: string, HouseholdsPublicAssistance: string, HousingUnits: string, Income15to25k: string, Income25to50k: string, Income50to75k: string, Income75kPlus: string, IncomeLess15k: string, LandArea: string, Less9thGrade: string, Minors: string, OtherMultiracial: string, PercentMinority: string, PersonsBelowPovertyLevel: string, PopulationDensity: string, Radius: string, Seniors: string, SomeCollege: string, TotalPersons: string, WaterArea: string, White: string>, EJScreenIndexes: record<HazardWasteProximity: string, LeadPaintIndicator: string, NATACancerRisk: string, NATADieselPM: string, NATARespiratoryHI: string, Over80Count: string, Ozone: string, PM25: string, RMPProximity: string, RegistryID: string, SuperfundProximity: string, TrafficProximity: string, WaterDischargeProximity: string>, EnforcementComplianceSummaries: record<ProgramDates: list, Summaries: list>, FormalActions: record<Action: list, ProgramDates: list>, ICISFormalActions: record<Action: list, ProgramDates: list>, InspectionEnforcementSummary: record<ProgramDates: list, Source: list>, LeadAndCopperRule5Yr: record<CopperSamples: list, CuALE: string, CuALEUnits: string, CuALEValue: string, CuSampleDates: string, CuViol: string, LeadAndCopperViol: string, LeadCopperRuleHealthBasedViol: string, LeadSamples: list, PbALE: string, PbALEUnits: string, PbALEValue: string, PbSampleDates: string, PbViol: string, RuleCode350Viol: string, SourceID: string, iCU90: string, iPB90: string>, MapOutput: record<CenterLatitude: string, CenterLongitude: string, IconBaseURL: string, MapData: list, PopUpBaseURL: string>, Message: string, MultipleFRSFacilities: record<RegistryIDs: list>, NAICS: record<Sources: list>, Notices: record<Notice: list, ProgramDates: list>, Permits: list<record>, RCRACompliance: record<Mnth10End: string, Mnth10Start: string, Mnth11End: string, Mnth11Start: string, Mnth12End: string, Mnth12Start: string, Mnth13End: string, Mnth13Start: string, Mnth14End: string, Mnth14Start: string, Mnth15End: string, Mnth15Start: string, Mnth16End: string, Mnth16Start: string, Mnth17End: string, Mnth17Start: string, Mnth18End: string, Mnth18Start: string, Mnth19End: string, Mnth19Start: string, Mnth1End: string, Mnth1Start: string, Mnth20End: string, Mnth20Start: string, Mnth21End: string, Mnth21Start: string, Mnth22End: string, Mnth22Start: string, Mnth23End: string, Mnth23Start: string, Mnth24End: string, Mnth24Start: string, Mnth25End: string, Mnth25Start: string, Mnth26End: string, Mnth26Start: string, Mnth27End: string, Mnth27Start: string, Mnth28End: string, Mnth28Start: string, Mnth29End: string, Mnth29Start: string, Mnth2End: string, Mnth2Start: string, Mnth30End: string, Mnth30Start: string, Mnth31End: string, Mnth31Start: string, Mnth32End: string, Mnth32Start: string, Mnth33End: string, Mnth33Start: string, Mnth34End: string, Mnth34Start: string, Mnth35End: string, Mnth35Start: string, Mnth36End: string, Mnth36Start: string, Mnth3End: string, Mnth3Start: string, Mnth4End: string, Mnth4Start: string, Mnth5End: string, Mnth5Start: string, Mnth6End: string, Mnth6Start: string, Mnth7End: string, Mnth7Start: string, Mnth8End: string, Mnth8Start: string, Mnth9End: string, Mnth9Start: string, Qtr10End: string, Qtr10Start: string, Qtr11End: string, Qtr11Start: string, Qtr12End: string, Qtr12Start: string, Qtr1End: string, Qtr1Start: string, Qtr2End: string, Qtr2Start: string, Qtr3End: string, Qtr3Start: string, Qtr4End: string, Qtr4Start: string, Qtr5End: string, Qtr5Start: string, Qtr6End: string, Qtr6Start: string, Qtr7End: string, Qtr7Start: string, Qtr8End: string, Qtr8Start: string, Qtr9End: string, Qtr9Start: string, Sources: list>, Reports: record<HasPollRpt: string>, SDWISCompliance: record<Mnth10End: string, Mnth10Start: string, Mnth11End: string, Mnth11Start: string, Mnth12End: string, Mnth12Start: string, Mnth13End: string, Mnth13Start: string, Mnth14End: string, Mnth14Start: string, Mnth15End: string, Mnth15Start: string, Mnth16End: string, Mnth16Start: string, Mnth17End: string, Mnth17Start: string, Mnth18End: string, Mnth18Start: string, Mnth19End: string, Mnth19Start: string, Mnth1End: string, Mnth1Start: string, Mnth20End: string, Mnth20Start: string, Mnth21End: string, Mnth21Start: string, Mnth22End: string, Mnth22Start: string, Mnth23End: string, Mnth23Start: string, Mnth24End: string, Mnth24Start: string, Mnth25End: string, Mnth25Start: string, Mnth26End: string, Mnth26Start: string, Mnth27End: string, Mnth27Start: string, Mnth28End: string, Mnth28Start: string, Mnth29End: string, Mnth29Start: string, Mnth2End: string, Mnth2Start: string, Mnth30End: string, Mnth30Start: string, Mnth31End: string, Mnth31Start: string, Mnth32End: string, Mnth32Start: string, Mnth33End: string, Mnth33Start: string, Mnth34End: string, Mnth34Start: string, Mnth35End: string, Mnth35Start: string, Mnth36End: string, Mnth36Start: string, Mnth37End: string, Mnth37Start: string, Mnth38End: string, Mnth38Start: string, Mnth39End: string, Mnth39Start: string, Mnth3End: string, Mnth3Start: string, Mnth4End: string, Mnth4Start: string, Mnth5End: string, Mnth5Start: string, Mnth6End: string, Mnth6Start: string, Mnth7End: string, Mnth7Start: string, Mnth8End: string, Mnth8Start: string, Mnth9End: string, Mnth9Start: string, Qtr10End: string, Qtr10Start: string, Qtr11End: string, Qtr11Start: string, Qtr12End: string, Qtr12Start: string, Qtr13End: string, Qtr13Start: string, Qtr1End: string, Qtr1Start: string, Qtr2End: string, Qtr2Start: string, Qtr3End: string, Qtr3Start: string, Qtr4End: string, Qtr4Start: string, Qtr5End: string, Qtr5Start: string, Qtr6End: string, Qtr6Start: string, Qtr7End: string, Qtr7Start: string, Qtr8End: string, Qtr8Start: string, Qtr9End: string, Qtr9Start: string, Sources: list>, SIC: record<Sources: list>, SanitarySurveys: record<Sources: list>, SiteVisits: record<Sources: list>, SpatialMetadata: record<CalculatedAccuracy: string, CollectionMethod: string, CoordinateSourceSystem: string, CoordinateSourceSystemId: string, Latitude83: string, Longitude83: string, ReferencePoint: string, RegistryID: string>, SystemExtractDates: record<Dates: list>, TRIHistory: record<Sources: list>, TRIReleases: record<Chemicals: list, Header: list>, Tribes: list<record>, ViolationsEnforcementActions: record<Sources: list>, WaterQuality: record<Sources: list>, WaterQualityDetails: record<Sources: list>, WebFireDocuments: list<record>>> {
+]: any -> oneof<record<Results: record<AirCompliance: record<Header: record, Sources: list>, AirQuality: record<CarbonMonoxide1971Area: string, Lead1978Area: string, Lead2008Area: string, NitrogenDioxide1971Area: string, Ozone8hr1997Area: string, Ozone8hr2008Area: string, Ozone8hr2015Area: string, ParticulateMatter1987Area: string, ParticulateMatter1997Area: string, ParticulateMatter2006Area: string, ParticulateMatter2012Area: string, SulfurDioxide1971Area: string, SulfurDioxide2010Area: string>, CAEDDocuments: list<record>, CWA3YrCompliance: record<Header: record, Sources: list>, CWA3YrD80D90Counts: record<Header: record, Sources: list>, CWACSCompliance: record<Header: record, Sources: list>, CWAEffluentALRExceedences: record<Header: record, Sources: list>, CWAEffluentALRExceedencesEXP: record<Header: record, Sources: list>, CWAEffluentCompliance: record<Header: record, Sources: list>, CWAEffluentComplianceEXP: record<Header: record, Sources: list>, CWAPSCompliance: record<Header: record, Sources: list>, CWARNCCompliance: record<Header: record, Sources: list>, CWASECompliance: record<Header: record, Sources: list>, CaseFormalActions: record<Action: list, ProgramDates: list>, ComplianceHistory: record<Inspection: list, ProgramDates: list>, ComplianceSummary: record<ProgramDates: list, Source: list>, Demographics: record<Adults: string, AfricanAmerican: string, AmericanIndian: string, AsianPacificIslander: string, BSBA: string, CenterLatitude: string, CenterLongitude: string, Child: string, Grades9to12: string, HSDiploma: string, HispanicOrigin: string, Households: string, HouseholdsPublicAssistance: string, HousingUnits: string, Income15to25k: string, Income25to50k: string, Income50to75k: string, Income75kPlus: string, IncomeLess15k: string, LandArea: string, Less9thGrade: string, Minors: string, OtherMultiracial: string, PercentMinority: string, PersonsBelowPovertyLevel: string, PopulationDensity: string, Radius: string, Seniors: string, SomeCollege: string, TotalPersons: string, WaterArea: string, White: string>, EJScreenIndexes: record<HazardWasteProximity: string, LeadPaintIndicator: string, NATACancerRisk: string, NATADieselPM: string, NATARespiratoryHI: string, Over80Count: string, Ozone: string, PM25: string, RMPProximity: string, RegistryID: string, SuperfundProximity: string, TrafficProximity: string, WaterDischargeProximity: string>, EnforcementComplianceSummaries: record<ProgramDates: list, Summaries: list>, FormalActions: record<Action: list, ProgramDates: list>, ICISFormalActions: record<Action: list, ProgramDates: list>, InspectionEnforcementSummary: record<ProgramDates: list, Source: list>, LeadAndCopperRule5Yr: record<CopperSamples: list, CuALE: string, CuALEUnits: string, CuALEValue: string, CuSampleDates: string, CuViol: string, LeadAndCopperViol: string, LeadCopperRuleHealthBasedViol: string, LeadSamples: list, PbALE: string, PbALEUnits: string, PbALEValue: string, PbSampleDates: string, PbViol: string, RuleCode350Viol: string, SourceID: string, iCU90: string, iPB90: string>, MapOutput: record<CenterLatitude: string, CenterLongitude: string, IconBaseURL: string, MapData: list, PopUpBaseURL: string>, Message: string, MultipleFRSFacilities: record<RegistryIDs: list>, NAICS: record<Sources: list>, Notices: record<Notice: list, ProgramDates: list>, Permits: list<record>, RCRACompliance: record<Mnth10End: string, Mnth10Start: string, Mnth11End: string, Mnth11Start: string, Mnth12End: string, Mnth12Start: string, Mnth13End: string, Mnth13Start: string, Mnth14End: string, Mnth14Start: string, Mnth15End: string, Mnth15Start: string, Mnth16End: string, Mnth16Start: string, Mnth17End: string, Mnth17Start: string, Mnth18End: string, Mnth18Start: string, Mnth19End: string, Mnth19Start: string, Mnth1End: string, Mnth1Start: string, Mnth20End: string, Mnth20Start: string, Mnth21End: string, Mnth21Start: string, Mnth22End: string, Mnth22Start: string, Mnth23End: string, Mnth23Start: string, Mnth24End: string, Mnth24Start: string, Mnth25End: string, Mnth25Start: string, Mnth26End: string, Mnth26Start: string, Mnth27End: string, Mnth27Start: string, Mnth28End: string, Mnth28Start: string, Mnth29End: string, Mnth29Start: string, Mnth2End: string, Mnth2Start: string, Mnth30End: string, Mnth30Start: string, Mnth31End: string, Mnth31Start: string, Mnth32End: string, Mnth32Start: string, Mnth33End: string, Mnth33Start: string, Mnth34End: string, Mnth34Start: string, Mnth35End: string, Mnth35Start: string, Mnth36End: string, Mnth36Start: string, Mnth3End: string, Mnth3Start: string, Mnth4End: string, Mnth4Start: string, Mnth5End: string, Mnth5Start: string, Mnth6End: string, Mnth6Start: string, Mnth7End: string, Mnth7Start: string, Mnth8End: string, Mnth8Start: string, Mnth9End: string, Mnth9Start: string, Qtr10End: string, Qtr10Start: string, Qtr11End: string, Qtr11Start: string, Qtr12End: string, Qtr12Start: string, Qtr1End: string, Qtr1Start: string, Qtr2End: string, Qtr2Start: string, Qtr3End: string, Qtr3Start: string, Qtr4End: string, Qtr4Start: string, Qtr5End: string, Qtr5Start: string, Qtr6End: string, Qtr6Start: string, Qtr7End: string, Qtr7Start: string, Qtr8End: string, Qtr8Start: string, Qtr9End: string, Qtr9Start: string, Sources: list>, Reports: record<HasPollRpt: string>, SDWISCompliance: record<Mnth10End: string, Mnth10Start: string, Mnth11End: string, Mnth11Start: string, Mnth12End: string, Mnth12Start: string, Mnth13End: string, Mnth13Start: string, Mnth14End: string, Mnth14Start: string, Mnth15End: string, Mnth15Start: string, Mnth16End: string, Mnth16Start: string, Mnth17End: string, Mnth17Start: string, Mnth18End: string, Mnth18Start: string, Mnth19End: string, Mnth19Start: string, Mnth1End: string, Mnth1Start: string, Mnth20End: string, Mnth20Start: string, Mnth21End: string, Mnth21Start: string, Mnth22End: string, Mnth22Start: string, Mnth23End: string, Mnth23Start: string, Mnth24End: string, Mnth24Start: string, Mnth25End: string, Mnth25Start: string, Mnth26End: string, Mnth26Start: string, Mnth27End: string, Mnth27Start: string, Mnth28End: string, Mnth28Start: string, Mnth29End: string, Mnth29Start: string, Mnth2End: string, Mnth2Start: string, Mnth30End: string, Mnth30Start: string, Mnth31End: string, Mnth31Start: string, Mnth32End: string, Mnth32Start: string, Mnth33End: string, Mnth33Start: string, Mnth34End: string, Mnth34Start: string, Mnth35End: string, Mnth35Start: string, Mnth36End: string, Mnth36Start: string, Mnth37End: string, Mnth37Start: string, Mnth38End: string, Mnth38Start: string, Mnth39End: string, Mnth39Start: string, Mnth3End: string, Mnth3Start: string, Mnth4End: string, Mnth4Start: string, Mnth5End: string, Mnth5Start: string, Mnth6End: string, Mnth6Start: string, Mnth7End: string, Mnth7Start: string, Mnth8End: string, Mnth8Start: string, Mnth9End: string, Mnth9Start: string, Qtr10End: string, Qtr10Start: string, Qtr11End: string, Qtr11Start: string, Qtr12End: string, Qtr12Start: string, Qtr13End: string, Qtr13Start: string, Qtr1End: string, Qtr1Start: string, Qtr2End: string, Qtr2Start: string, Qtr3End: string, Qtr3Start: string, Qtr4End: string, Qtr4Start: string, Qtr5End: string, Qtr5Start: string, Qtr6End: string, Qtr6Start: string, Qtr7End: string, Qtr7Start: string, Qtr8End: string, Qtr8Start: string, Qtr9End: string, Qtr9Start: string, Sources: list>, SIC: record<Sources: list>, SanitarySurveys: record<Sources: list>, SiteVisits: record<Sources: list>, SpatialMetadata: record<CalculatedAccuracy: string, CollectionMethod: string, CoordinateSourceSystem: string, CoordinateSourceSystemId: string, Latitude83: string, Longitude83: string, ReferencePoint: string, RegistryID: string>, SystemExtractDates: record<Dates: list>, TRIHistory: record<Sources: list>, TRIReleases: record<Chemicals: list, Header: list>, Tribes: list<record>, ViolationsEnforcementActions: record<Sources: list>, WaterQuality: record<Sources: list>, WaterQualityDetails: record<Sources: list>, WebFireDocuments: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1909,7 +1933,7 @@ export def "post-dfr-rest-services-get-dfr" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1941,7 +1965,7 @@ export def "get-dfr-rest-services-get-ejscreen-indexes" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: nothing -> record<Results: record<EJScreenIndexes: record<HazardWasteProximity: string, LeadPaintIndicator: string, NATACancerRisk: string, NATADieselPM: string, NATARespiratoryHI: string, Over80Count: string, Ozone: string, PM25: string, RMPProximity: string, RegistryID: string, SuperfundProximity: string, TrafficProximity: string, WaterDischargeProximity: string>, Message: string>> {
+]: nothing -> oneof<record<Results: record<EJScreenIndexes: record<HazardWasteProximity: string, LeadPaintIndicator: string, NATACancerRisk: string, NATADieselPM: string, NATARespiratoryHI: string, Over80Count: string, Ozone: string, PM25: string, RMPProximity: string, RegistryID: string, SuperfundProximity: string, TrafficProximity: string, WaterDischargeProximity: string>, Message: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
@@ -1980,7 +2004,7 @@ export def "post-dfr-rest-services-get-ejscreen-indexes" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   p_id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: any -> record<Results: record<EJScreenIndexes: record<HazardWasteProximity: string, LeadPaintIndicator: string, NATACancerRisk: string, NATADieselPM: string, NATARespiratoryHI: string, Over80Count: string, Ozone: string, PM25: string, RMPProximity: string, RegistryID: string, SuperfundProximity: string, TrafficProximity: string, WaterDischargeProximity: string>, Message: string>> {
+]: any -> oneof<record<Results: record<EJScreenIndexes: record<HazardWasteProximity: string, LeadPaintIndicator: string, NATACancerRisk: string, NATADieselPM: string, NATARespiratoryHI: string, Over80Count: string, Ozone: string, PM25: string, RMPProximity: string, RegistryID: string, SuperfundProximity: string, TrafficProximity: string, WaterDischargeProximity: string>, Message: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1989,7 +2013,7 @@ export def "post-dfr-rest-services-get-ejscreen-indexes" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -2021,7 +2045,7 @@ export def "get-dfr-rest-services-get-enforcement-summary" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: nothing -> record<Results: record<EnforcementComplianceSummaries: record<ProgramDates: list, Summaries: list>, Message: string>> {
+]: nothing -> oneof<record<Results: record<EnforcementComplianceSummaries: record<ProgramDates: list, Summaries: list>, Message: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
@@ -2060,7 +2084,7 @@ export def "post-dfr-rest-services-get-enforcement-summary" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   p_id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: any -> record<Results: record<EnforcementComplianceSummaries: record<ProgramDates: list, Summaries: list>, Message: string>> {
+]: any -> oneof<record<Results: record<EnforcementComplianceSummaries: record<ProgramDates: list, Summaries: list>, Message: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2069,7 +2093,7 @@ export def "post-dfr-rest-services-get-enforcement-summary" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -2101,7 +2125,7 @@ export def "get-dfr-rest-services-get-extract-dates" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: nothing -> record<Results: record<Message: string, SystemExtractDates: record<Dates: list>>> {
+]: nothing -> oneof<record<Results: record<Message: string, SystemExtractDates: record<Dates: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
@@ -2140,7 +2164,7 @@ export def "post-dfr-rest-services-get-extract-dates" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   p_id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: any -> record<Results: record<Message: string, SystemExtractDates: record<Dates: list>>> {
+]: any -> oneof<record<Results: record<Message: string, SystemExtractDates: record<Dates: list>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2149,7 +2173,7 @@ export def "post-dfr-rest-services-get-extract-dates" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -2181,7 +2205,7 @@ export def "get-dfr-rest-services-get-formal-actions" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: nothing -> record<Results: record<FormalActions: record<Action: list, ProgramDates: list>, Message: string>> {
+]: nothing -> oneof<record<Results: record<FormalActions: record<Action: list, ProgramDates: list>, Message: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
@@ -2220,7 +2244,7 @@ export def "post-dfr-rest-services-get-formal-actions" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   p_id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: any -> record<Results: record<FormalActions: record<Action: list, ProgramDates: list>, Message: string>> {
+]: any -> oneof<record<Results: record<FormalActions: record<Action: list, ProgramDates: list>, Message: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2229,7 +2253,7 @@ export def "post-dfr-rest-services-get-formal-actions" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -2261,7 +2285,7 @@ export def "get-dfr-rest-services-get-icis-formal-actions" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: nothing -> record<Results: record<ICISFormalActions: record<Action: list, ProgramDates: list>, Message: string>> {
+]: nothing -> oneof<record<Results: record<ICISFormalActions: record<Action: list, ProgramDates: list>, Message: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
@@ -2300,7 +2324,7 @@ export def "post-dfr-rest-services-get-icis-formal-actions" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   p_id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: any -> record<Results: record<ICISFormalActions: record<Action: list, ProgramDates: list>, Message: string>> {
+]: any -> oneof<record<Results: record<ICISFormalActions: record<Action: list, ProgramDates: list>, Message: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2309,7 +2333,7 @@ export def "post-dfr-rest-services-get-icis-formal-actions" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -2341,7 +2365,7 @@ export def "get-dfr-rest-services-get-inspections" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: nothing -> record<Results: record<InspectionEnforcementSummary: record<ProgramDates: list, Source: list>, Message: string>> {
+]: nothing -> oneof<record<Results: record<InspectionEnforcementSummary: record<ProgramDates: list, Source: list>, Message: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
@@ -2380,7 +2404,7 @@ export def "post-dfr-rest-services-get-inspections" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   p_id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: any -> record<Results: record<InspectionEnforcementSummary: record<ProgramDates: list, Source: list>, Message: string>> {
+]: any -> oneof<record<Results: record<InspectionEnforcementSummary: record<ProgramDates: list, Source: list>, Message: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2389,7 +2413,7 @@ export def "post-dfr-rest-services-get-inspections" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -2421,7 +2445,7 @@ export def "get-dfr-rest-services-get-map" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: nothing -> record<Results: record<MapOutput: record<CenterLatitude: string, CenterLongitude: string, IconBaseURL: string, MapData: list, PopUpBaseURL: string>, Message: string>> {
+]: nothing -> oneof<record<Results: record<MapOutput: record<CenterLatitude: string, CenterLongitude: string, IconBaseURL: string, MapData: list, PopUpBaseURL: string>, Message: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
@@ -2460,7 +2484,7 @@ export def "post-dfr-rest-services-get-map" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   p_id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: any -> record<Results: record<MapOutput: record<CenterLatitude: string, CenterLongitude: string, IconBaseURL: string, MapData: list, PopUpBaseURL: string>, Message: string>> {
+]: any -> oneof<record<Results: record<MapOutput: record<CenterLatitude: string, CenterLongitude: string, IconBaseURL: string, MapData: list, PopUpBaseURL: string>, Message: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2469,7 +2493,7 @@ export def "post-dfr-rest-services-get-map" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -2501,7 +2525,7 @@ export def "get-dfr-rest-services-get-naics" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: nothing -> record<Results: record<Message: string, NAICS: record<Sources: list>>> {
+]: nothing -> oneof<record<Results: record<Message: string, NAICS: record<Sources: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
@@ -2540,7 +2564,7 @@ export def "post-dfr-rest-services-get-naics" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   p_id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: any -> record<Results: record<Message: string, NAICS: record<Sources: list>>> {
+]: any -> oneof<record<Results: record<Message: string, NAICS: record<Sources: list>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2549,7 +2573,7 @@ export def "post-dfr-rest-services-get-naics" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -2581,7 +2605,7 @@ export def "get-dfr-rest-services-get-notices" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: nothing -> record<Results: record<Message: string, Notices: record<Notice: list, ProgramDates: list>>> {
+]: nothing -> oneof<record<Results: record<Message: string, Notices: record<Notice: list, ProgramDates: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
@@ -2620,7 +2644,7 @@ export def "post-dfr-rest-services-get-notices" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   p_id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: any -> record<Results: record<Message: string, Notices: record<Notice: list, ProgramDates: list>>> {
+]: any -> oneof<record<Results: record<Message: string, Notices: record<Notice: list, ProgramDates: list>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2629,7 +2653,7 @@ export def "post-dfr-rest-services-get-notices" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -2661,7 +2685,7 @@ export def "get-dfr-rest-services-get-permits" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: nothing -> record<Results: record<Message: string, Permits: list<record>, Reports: record<HasPollRpt: string>>> {
+]: nothing -> oneof<record<Results: record<Message: string, Permits: list<record>, Reports: record<HasPollRpt: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
@@ -2700,7 +2724,7 @@ export def "post-dfr-rest-services-get-permits" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   p_id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: any -> record<Results: record<Message: string, Permits: list<record>, Reports: record<HasPollRpt: string>>> {
+]: any -> oneof<record<Results: record<Message: string, Permits: list<record>, Reports: record<HasPollRpt: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2709,7 +2733,7 @@ export def "post-dfr-rest-services-get-permits" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -2741,7 +2765,7 @@ export def "get-dfr-rest-services-get-rcra-compliance" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: nothing -> record<Results: record<Message: string, RCRACompliance: record<Mnth10End: string, Mnth10Start: string, Mnth11End: string, Mnth11Start: string, Mnth12End: string, Mnth12Start: string, Mnth13End: string, Mnth13Start: string, Mnth14End: string, Mnth14Start: string, Mnth15End: string, Mnth15Start: string, Mnth16End: string, Mnth16Start: string, Mnth17End: string, Mnth17Start: string, Mnth18End: string, Mnth18Start: string, Mnth19End: string, Mnth19Start: string, Mnth1End: string, Mnth1Start: string, Mnth20End: string, Mnth20Start: string, Mnth21End: string, Mnth21Start: string, Mnth22End: string, Mnth22Start: string, Mnth23End: string, Mnth23Start: string, Mnth24End: string, Mnth24Start: string, Mnth25End: string, Mnth25Start: string, Mnth26End: string, Mnth26Start: string, Mnth27End: string, Mnth27Start: string, Mnth28End: string, Mnth28Start: string, Mnth29End: string, Mnth29Start: string, Mnth2End: string, Mnth2Start: string, Mnth30End: string, Mnth30Start: string, Mnth31End: string, Mnth31Start: string, Mnth32End: string, Mnth32Start: string, Mnth33End: string, Mnth33Start: string, Mnth34End: string, Mnth34Start: string, Mnth35End: string, Mnth35Start: string, Mnth36End: string, Mnth36Start: string, Mnth3End: string, Mnth3Start: string, Mnth4End: string, Mnth4Start: string, Mnth5End: string, Mnth5Start: string, Mnth6End: string, Mnth6Start: string, Mnth7End: string, Mnth7Start: string, Mnth8End: string, Mnth8Start: string, Mnth9End: string, Mnth9Start: string, Qtr10End: string, Qtr10Start: string, Qtr11End: string, Qtr11Start: string, Qtr12End: string, Qtr12Start: string, Qtr1End: string, Qtr1Start: string, Qtr2End: string, Qtr2Start: string, Qtr3End: string, Qtr3Start: string, Qtr4End: string, Qtr4Start: string, Qtr5End: string, Qtr5Start: string, Qtr6End: string, Qtr6Start: string, Qtr7End: string, Qtr7Start: string, Qtr8End: string, Qtr8Start: string, Qtr9End: string, Qtr9Start: string, Sources: list>>> {
+]: nothing -> oneof<record<Results: record<Message: string, RCRACompliance: record<Mnth10End: string, Mnth10Start: string, Mnth11End: string, Mnth11Start: string, Mnth12End: string, Mnth12Start: string, Mnth13End: string, Mnth13Start: string, Mnth14End: string, Mnth14Start: string, Mnth15End: string, Mnth15Start: string, Mnth16End: string, Mnth16Start: string, Mnth17End: string, Mnth17Start: string, Mnth18End: string, Mnth18Start: string, Mnth19End: string, Mnth19Start: string, Mnth1End: string, Mnth1Start: string, Mnth20End: string, Mnth20Start: string, Mnth21End: string, Mnth21Start: string, Mnth22End: string, Mnth22Start: string, Mnth23End: string, Mnth23Start: string, Mnth24End: string, Mnth24Start: string, Mnth25End: string, Mnth25Start: string, Mnth26End: string, Mnth26Start: string, Mnth27End: string, Mnth27Start: string, Mnth28End: string, Mnth28Start: string, Mnth29End: string, Mnth29Start: string, Mnth2End: string, Mnth2Start: string, Mnth30End: string, Mnth30Start: string, Mnth31End: string, Mnth31Start: string, Mnth32End: string, Mnth32Start: string, Mnth33End: string, Mnth33Start: string, Mnth34End: string, Mnth34Start: string, Mnth35End: string, Mnth35Start: string, Mnth36End: string, Mnth36Start: string, Mnth3End: string, Mnth3Start: string, Mnth4End: string, Mnth4Start: string, Mnth5End: string, Mnth5Start: string, Mnth6End: string, Mnth6Start: string, Mnth7End: string, Mnth7Start: string, Mnth8End: string, Mnth8Start: string, Mnth9End: string, Mnth9Start: string, Qtr10End: string, Qtr10Start: string, Qtr11End: string, Qtr11Start: string, Qtr12End: string, Qtr12Start: string, Qtr1End: string, Qtr1Start: string, Qtr2End: string, Qtr2Start: string, Qtr3End: string, Qtr3Start: string, Qtr4End: string, Qtr4Start: string, Qtr5End: string, Qtr5Start: string, Qtr6End: string, Qtr6Start: string, Qtr7End: string, Qtr7Start: string, Qtr8End: string, Qtr8Start: string, Qtr9End: string, Qtr9Start: string, Sources: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
@@ -2780,7 +2804,7 @@ export def "post-dfr-rest-services-get-rcra-compliance" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   p_id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: any -> record<Results: record<Message: string, RCRACompliance: record<Mnth10End: string, Mnth10Start: string, Mnth11End: string, Mnth11Start: string, Mnth12End: string, Mnth12Start: string, Mnth13End: string, Mnth13Start: string, Mnth14End: string, Mnth14Start: string, Mnth15End: string, Mnth15Start: string, Mnth16End: string, Mnth16Start: string, Mnth17End: string, Mnth17Start: string, Mnth18End: string, Mnth18Start: string, Mnth19End: string, Mnth19Start: string, Mnth1End: string, Mnth1Start: string, Mnth20End: string, Mnth20Start: string, Mnth21End: string, Mnth21Start: string, Mnth22End: string, Mnth22Start: string, Mnth23End: string, Mnth23Start: string, Mnth24End: string, Mnth24Start: string, Mnth25End: string, Mnth25Start: string, Mnth26End: string, Mnth26Start: string, Mnth27End: string, Mnth27Start: string, Mnth28End: string, Mnth28Start: string, Mnth29End: string, Mnth29Start: string, Mnth2End: string, Mnth2Start: string, Mnth30End: string, Mnth30Start: string, Mnth31End: string, Mnth31Start: string, Mnth32End: string, Mnth32Start: string, Mnth33End: string, Mnth33Start: string, Mnth34End: string, Mnth34Start: string, Mnth35End: string, Mnth35Start: string, Mnth36End: string, Mnth36Start: string, Mnth3End: string, Mnth3Start: string, Mnth4End: string, Mnth4Start: string, Mnth5End: string, Mnth5Start: string, Mnth6End: string, Mnth6Start: string, Mnth7End: string, Mnth7Start: string, Mnth8End: string, Mnth8Start: string, Mnth9End: string, Mnth9Start: string, Qtr10End: string, Qtr10Start: string, Qtr11End: string, Qtr11Start: string, Qtr12End: string, Qtr12Start: string, Qtr1End: string, Qtr1Start: string, Qtr2End: string, Qtr2Start: string, Qtr3End: string, Qtr3Start: string, Qtr4End: string, Qtr4Start: string, Qtr5End: string, Qtr5Start: string, Qtr6End: string, Qtr6Start: string, Qtr7End: string, Qtr7Start: string, Qtr8End: string, Qtr8Start: string, Qtr9End: string, Qtr9Start: string, Sources: list>>> {
+]: any -> oneof<record<Results: record<Message: string, RCRACompliance: record<Mnth10End: string, Mnth10Start: string, Mnth11End: string, Mnth11Start: string, Mnth12End: string, Mnth12Start: string, Mnth13End: string, Mnth13Start: string, Mnth14End: string, Mnth14Start: string, Mnth15End: string, Mnth15Start: string, Mnth16End: string, Mnth16Start: string, Mnth17End: string, Mnth17Start: string, Mnth18End: string, Mnth18Start: string, Mnth19End: string, Mnth19Start: string, Mnth1End: string, Mnth1Start: string, Mnth20End: string, Mnth20Start: string, Mnth21End: string, Mnth21Start: string, Mnth22End: string, Mnth22Start: string, Mnth23End: string, Mnth23Start: string, Mnth24End: string, Mnth24Start: string, Mnth25End: string, Mnth25Start: string, Mnth26End: string, Mnth26Start: string, Mnth27End: string, Mnth27Start: string, Mnth28End: string, Mnth28Start: string, Mnth29End: string, Mnth29Start: string, Mnth2End: string, Mnth2Start: string, Mnth30End: string, Mnth30Start: string, Mnth31End: string, Mnth31Start: string, Mnth32End: string, Mnth32Start: string, Mnth33End: string, Mnth33Start: string, Mnth34End: string, Mnth34Start: string, Mnth35End: string, Mnth35Start: string, Mnth36End: string, Mnth36Start: string, Mnth3End: string, Mnth3Start: string, Mnth4End: string, Mnth4Start: string, Mnth5End: string, Mnth5Start: string, Mnth6End: string, Mnth6Start: string, Mnth7End: string, Mnth7Start: string, Mnth8End: string, Mnth8Start: string, Mnth9End: string, Mnth9Start: string, Qtr10End: string, Qtr10Start: string, Qtr11End: string, Qtr11Start: string, Qtr12End: string, Qtr12Start: string, Qtr1End: string, Qtr1Start: string, Qtr2End: string, Qtr2Start: string, Qtr3End: string, Qtr3Start: string, Qtr4End: string, Qtr4Start: string, Qtr5End: string, Qtr5Start: string, Qtr6End: string, Qtr6Start: string, Qtr7End: string, Qtr7Start: string, Qtr8End: string, Qtr8Start: string, Qtr9End: string, Qtr9Start: string, Sources: list>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2789,7 +2813,7 @@ export def "post-dfr-rest-services-get-rcra-compliance" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -2821,7 +2845,7 @@ export def "get-dfr-rest-services-get-sdwa-lead-and-copper" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: nothing -> record<Results: record<LeadAndCopperRule5Yr: record<CopperSamples: list, CuALE: string, CuALEUnits: string, CuALEValue: string, CuSampleDates: string, CuViol: string, LeadAndCopperViol: string, LeadCopperRuleHealthBasedViol: string, LeadSamples: list, PbALE: string, PbALEUnits: string, PbALEValue: string, PbSampleDates: string, PbViol: string, RuleCode350Viol: string, SourceID: string, iCU90: string, iPB90: string>, Message: string>> {
+]: nothing -> oneof<record<Results: record<LeadAndCopperRule5Yr: record<CopperSamples: list, CuALE: string, CuALEUnits: string, CuALEValue: string, CuSampleDates: string, CuViol: string, LeadAndCopperViol: string, LeadCopperRuleHealthBasedViol: string, LeadSamples: list, PbALE: string, PbALEUnits: string, PbALEValue: string, PbSampleDates: string, PbViol: string, RuleCode350Viol: string, SourceID: string, iCU90: string, iPB90: string>, Message: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
@@ -2860,7 +2884,7 @@ export def "post-dfr-rest-services-get-sdwa-lead-and-copper" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   p_id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: any -> record<Results: record<LeadAndCopperRule5Yr: record<CopperSamples: list, CuALE: string, CuALEUnits: string, CuALEValue: string, CuSampleDates: string, CuViol: string, LeadAndCopperViol: string, LeadCopperRuleHealthBasedViol: string, LeadSamples: list, PbALE: string, PbALEUnits: string, PbALEValue: string, PbSampleDates: string, PbViol: string, RuleCode350Viol: string, SourceID: string, iCU90: string, iPB90: string>, Message: string>> {
+]: any -> oneof<record<Results: record<LeadAndCopperRule5Yr: record<CopperSamples: list, CuALE: string, CuALEUnits: string, CuALEValue: string, CuSampleDates: string, CuViol: string, LeadAndCopperViol: string, LeadCopperRuleHealthBasedViol: string, LeadSamples: list, PbALE: string, PbALEUnits: string, PbALEValue: string, PbSampleDates: string, PbViol: string, RuleCode350Viol: string, SourceID: string, iCU90: string, iPB90: string>, Message: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2869,7 +2893,7 @@ export def "post-dfr-rest-services-get-sdwa-lead-and-copper" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -2901,7 +2925,7 @@ export def "get-dfr-rest-services-get-sdwa-sanitary-surveys" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: nothing -> record<Results: record<Message: string, SanitarySurveys: record<Sources: list>>> {
+]: nothing -> oneof<record<Results: record<Message: string, SanitarySurveys: record<Sources: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
@@ -2940,7 +2964,7 @@ export def "post-dfr-rest-services-get-sdwa-sanitary-surveys" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   p_id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: any -> record<Results: record<Message: string, SanitarySurveys: record<Sources: list>>> {
+]: any -> oneof<record<Results: record<Message: string, SanitarySurveys: record<Sources: list>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2949,7 +2973,7 @@ export def "post-dfr-rest-services-get-sdwa-sanitary-surveys" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -2981,7 +3005,7 @@ export def "get-dfr-rest-services-get-sdwa-site-visits" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: nothing -> record<Results: record<Message: string, SiteVisits: record<Sources: list>>> {
+]: nothing -> oneof<record<Results: record<Message: string, SiteVisits: record<Sources: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
@@ -3020,7 +3044,7 @@ export def "post-dfr-rest-services-get-sdwa-site-visits" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   p_id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: any -> record<Results: record<Message: string, SiteVisits: record<Sources: list>>> {
+]: any -> oneof<record<Results: record<Message: string, SiteVisits: record<Sources: list>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3029,7 +3053,7 @@ export def "post-dfr-rest-services-get-sdwa-site-visits" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -3061,7 +3085,7 @@ export def "get-dfr-rest-services-get-sdwa-violations" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: nothing -> record<Results: record<Message: string, ViolationsEnforcementActions: record<Sources: list>>> {
+]: nothing -> oneof<record<Results: record<Message: string, ViolationsEnforcementActions: record<Sources: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
@@ -3100,7 +3124,7 @@ export def "post-dfr-rest-services-get-sdwa-violations" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   p_id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: any -> record<Results: record<Message: string, ViolationsEnforcementActions: record<Sources: list>>> {
+]: any -> oneof<record<Results: record<Message: string, ViolationsEnforcementActions: record<Sources: list>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3109,7 +3133,7 @@ export def "post-dfr-rest-services-get-sdwa-violations" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -3141,7 +3165,7 @@ export def "get-dfr-rest-services-get-sdwis-compliance" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: nothing -> record<Results: record<Message: string, SDWISCompliance: record<Mnth10End: string, Mnth10Start: string, Mnth11End: string, Mnth11Start: string, Mnth12End: string, Mnth12Start: string, Mnth13End: string, Mnth13Start: string, Mnth14End: string, Mnth14Start: string, Mnth15End: string, Mnth15Start: string, Mnth16End: string, Mnth16Start: string, Mnth17End: string, Mnth17Start: string, Mnth18End: string, Mnth18Start: string, Mnth19End: string, Mnth19Start: string, Mnth1End: string, Mnth1Start: string, Mnth20End: string, Mnth20Start: string, Mnth21End: string, Mnth21Start: string, Mnth22End: string, Mnth22Start: string, Mnth23End: string, Mnth23Start: string, Mnth24End: string, Mnth24Start: string, Mnth25End: string, Mnth25Start: string, Mnth26End: string, Mnth26Start: string, Mnth27End: string, Mnth27Start: string, Mnth28End: string, Mnth28Start: string, Mnth29End: string, Mnth29Start: string, Mnth2End: string, Mnth2Start: string, Mnth30End: string, Mnth30Start: string, Mnth31End: string, Mnth31Start: string, Mnth32End: string, Mnth32Start: string, Mnth33End: string, Mnth33Start: string, Mnth34End: string, Mnth34Start: string, Mnth35End: string, Mnth35Start: string, Mnth36End: string, Mnth36Start: string, Mnth37End: string, Mnth37Start: string, Mnth38End: string, Mnth38Start: string, Mnth39End: string, Mnth39Start: string, Mnth3End: string, Mnth3Start: string, Mnth4End: string, Mnth4Start: string, Mnth5End: string, Mnth5Start: string, Mnth6End: string, Mnth6Start: string, Mnth7End: string, Mnth7Start: string, Mnth8End: string, Mnth8Start: string, Mnth9End: string, Mnth9Start: string, Qtr10End: string, Qtr10Start: string, Qtr11End: string, Qtr11Start: string, Qtr12End: string, Qtr12Start: string, Qtr13End: string, Qtr13Start: string, Qtr1End: string, Qtr1Start: string, Qtr2End: string, Qtr2Start: string, Qtr3End: string, Qtr3Start: string, Qtr4End: string, Qtr4Start: string, Qtr5End: string, Qtr5Start: string, Qtr6End: string, Qtr6Start: string, Qtr7End: string, Qtr7Start: string, Qtr8End: string, Qtr8Start: string, Qtr9End: string, Qtr9Start: string, Sources: list>>> {
+]: nothing -> oneof<record<Results: record<Message: string, SDWISCompliance: record<Mnth10End: string, Mnth10Start: string, Mnth11End: string, Mnth11Start: string, Mnth12End: string, Mnth12Start: string, Mnth13End: string, Mnth13Start: string, Mnth14End: string, Mnth14Start: string, Mnth15End: string, Mnth15Start: string, Mnth16End: string, Mnth16Start: string, Mnth17End: string, Mnth17Start: string, Mnth18End: string, Mnth18Start: string, Mnth19End: string, Mnth19Start: string, Mnth1End: string, Mnth1Start: string, Mnth20End: string, Mnth20Start: string, Mnth21End: string, Mnth21Start: string, Mnth22End: string, Mnth22Start: string, Mnth23End: string, Mnth23Start: string, Mnth24End: string, Mnth24Start: string, Mnth25End: string, Mnth25Start: string, Mnth26End: string, Mnth26Start: string, Mnth27End: string, Mnth27Start: string, Mnth28End: string, Mnth28Start: string, Mnth29End: string, Mnth29Start: string, Mnth2End: string, Mnth2Start: string, Mnth30End: string, Mnth30Start: string, Mnth31End: string, Mnth31Start: string, Mnth32End: string, Mnth32Start: string, Mnth33End: string, Mnth33Start: string, Mnth34End: string, Mnth34Start: string, Mnth35End: string, Mnth35Start: string, Mnth36End: string, Mnth36Start: string, Mnth37End: string, Mnth37Start: string, Mnth38End: string, Mnth38Start: string, Mnth39End: string, Mnth39Start: string, Mnth3End: string, Mnth3Start: string, Mnth4End: string, Mnth4Start: string, Mnth5End: string, Mnth5Start: string, Mnth6End: string, Mnth6Start: string, Mnth7End: string, Mnth7Start: string, Mnth8End: string, Mnth8Start: string, Mnth9End: string, Mnth9Start: string, Qtr10End: string, Qtr10Start: string, Qtr11End: string, Qtr11Start: string, Qtr12End: string, Qtr12Start: string, Qtr13End: string, Qtr13Start: string, Qtr1End: string, Qtr1Start: string, Qtr2End: string, Qtr2Start: string, Qtr3End: string, Qtr3Start: string, Qtr4End: string, Qtr4Start: string, Qtr5End: string, Qtr5Start: string, Qtr6End: string, Qtr6Start: string, Qtr7End: string, Qtr7Start: string, Qtr8End: string, Qtr8Start: string, Qtr9End: string, Qtr9Start: string, Sources: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
@@ -3180,7 +3204,7 @@ export def "post-dfr-rest-services-get-sdwis-compliance" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   p_id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: any -> record<Results: record<Message: string, SDWISCompliance: record<Mnth10End: string, Mnth10Start: string, Mnth11End: string, Mnth11Start: string, Mnth12End: string, Mnth12Start: string, Mnth13End: string, Mnth13Start: string, Mnth14End: string, Mnth14Start: string, Mnth15End: string, Mnth15Start: string, Mnth16End: string, Mnth16Start: string, Mnth17End: string, Mnth17Start: string, Mnth18End: string, Mnth18Start: string, Mnth19End: string, Mnth19Start: string, Mnth1End: string, Mnth1Start: string, Mnth20End: string, Mnth20Start: string, Mnth21End: string, Mnth21Start: string, Mnth22End: string, Mnth22Start: string, Mnth23End: string, Mnth23Start: string, Mnth24End: string, Mnth24Start: string, Mnth25End: string, Mnth25Start: string, Mnth26End: string, Mnth26Start: string, Mnth27End: string, Mnth27Start: string, Mnth28End: string, Mnth28Start: string, Mnth29End: string, Mnth29Start: string, Mnth2End: string, Mnth2Start: string, Mnth30End: string, Mnth30Start: string, Mnth31End: string, Mnth31Start: string, Mnth32End: string, Mnth32Start: string, Mnth33End: string, Mnth33Start: string, Mnth34End: string, Mnth34Start: string, Mnth35End: string, Mnth35Start: string, Mnth36End: string, Mnth36Start: string, Mnth37End: string, Mnth37Start: string, Mnth38End: string, Mnth38Start: string, Mnth39End: string, Mnth39Start: string, Mnth3End: string, Mnth3Start: string, Mnth4End: string, Mnth4Start: string, Mnth5End: string, Mnth5Start: string, Mnth6End: string, Mnth6Start: string, Mnth7End: string, Mnth7Start: string, Mnth8End: string, Mnth8Start: string, Mnth9End: string, Mnth9Start: string, Qtr10End: string, Qtr10Start: string, Qtr11End: string, Qtr11Start: string, Qtr12End: string, Qtr12Start: string, Qtr13End: string, Qtr13Start: string, Qtr1End: string, Qtr1Start: string, Qtr2End: string, Qtr2Start: string, Qtr3End: string, Qtr3Start: string, Qtr4End: string, Qtr4Start: string, Qtr5End: string, Qtr5Start: string, Qtr6End: string, Qtr6Start: string, Qtr7End: string, Qtr7Start: string, Qtr8End: string, Qtr8Start: string, Qtr9End: string, Qtr9Start: string, Sources: list>>> {
+]: any -> oneof<record<Results: record<Message: string, SDWISCompliance: record<Mnth10End: string, Mnth10Start: string, Mnth11End: string, Mnth11Start: string, Mnth12End: string, Mnth12Start: string, Mnth13End: string, Mnth13Start: string, Mnth14End: string, Mnth14Start: string, Mnth15End: string, Mnth15Start: string, Mnth16End: string, Mnth16Start: string, Mnth17End: string, Mnth17Start: string, Mnth18End: string, Mnth18Start: string, Mnth19End: string, Mnth19Start: string, Mnth1End: string, Mnth1Start: string, Mnth20End: string, Mnth20Start: string, Mnth21End: string, Mnth21Start: string, Mnth22End: string, Mnth22Start: string, Mnth23End: string, Mnth23Start: string, Mnth24End: string, Mnth24Start: string, Mnth25End: string, Mnth25Start: string, Mnth26End: string, Mnth26Start: string, Mnth27End: string, Mnth27Start: string, Mnth28End: string, Mnth28Start: string, Mnth29End: string, Mnth29Start: string, Mnth2End: string, Mnth2Start: string, Mnth30End: string, Mnth30Start: string, Mnth31End: string, Mnth31Start: string, Mnth32End: string, Mnth32Start: string, Mnth33End: string, Mnth33Start: string, Mnth34End: string, Mnth34Start: string, Mnth35End: string, Mnth35Start: string, Mnth36End: string, Mnth36Start: string, Mnth37End: string, Mnth37Start: string, Mnth38End: string, Mnth38Start: string, Mnth39End: string, Mnth39Start: string, Mnth3End: string, Mnth3Start: string, Mnth4End: string, Mnth4Start: string, Mnth5End: string, Mnth5Start: string, Mnth6End: string, Mnth6Start: string, Mnth7End: string, Mnth7Start: string, Mnth8End: string, Mnth8Start: string, Mnth9End: string, Mnth9Start: string, Qtr10End: string, Qtr10Start: string, Qtr11End: string, Qtr11Start: string, Qtr12End: string, Qtr12Start: string, Qtr13End: string, Qtr13Start: string, Qtr1End: string, Qtr1Start: string, Qtr2End: string, Qtr2Start: string, Qtr3End: string, Qtr3Start: string, Qtr4End: string, Qtr4Start: string, Qtr5End: string, Qtr5Start: string, Qtr6End: string, Qtr6Start: string, Qtr7End: string, Qtr7Start: string, Qtr8End: string, Qtr8Start: string, Qtr9End: string, Qtr9Start: string, Sources: list>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3189,7 +3213,7 @@ export def "post-dfr-rest-services-get-sdwis-compliance" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -3221,7 +3245,7 @@ export def "get-dfr-rest-services-get-sic-codes" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: nothing -> record<Results: record<Message: string, SIC: record<Sources: list>>> {
+]: nothing -> oneof<record<Results: record<Message: string, SIC: record<Sources: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
@@ -3260,7 +3284,7 @@ export def "post-dfr-rest-services-get-sic-codes" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   p_id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: any -> record<Results: record<Message: string, SIC: record<Sources: list>>> {
+]: any -> oneof<record<Results: record<Message: string, SIC: record<Sources: list>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3269,7 +3293,7 @@ export def "post-dfr-rest-services-get-sic-codes" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -3301,7 +3325,7 @@ export def "get-dfr-rest-services-get-spatial-metadata" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: nothing -> record<Results: record<Message: string, SpatialMetadata: record<CalculatedAccuracy: string, CollectionMethod: string, CoordinateSourceSystem: string, CoordinateSourceSystemId: string, Latitude83: string, Longitude83: string, ReferencePoint: string, RegistryID: string>>> {
+]: nothing -> oneof<record<Results: record<Message: string, SpatialMetadata: record<CalculatedAccuracy: string, CollectionMethod: string, CoordinateSourceSystem: string, CoordinateSourceSystemId: string, Latitude83: string, Longitude83: string, ReferencePoint: string, RegistryID: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
@@ -3340,7 +3364,7 @@ export def "post-dfr-rest-services-get-spatial-metadata" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   p_id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: any -> record<Results: record<Message: string, SpatialMetadata: record<CalculatedAccuracy: string, CollectionMethod: string, CoordinateSourceSystem: string, CoordinateSourceSystemId: string, Latitude83: string, Longitude83: string, ReferencePoint: string, RegistryID: string>>> {
+]: any -> oneof<record<Results: record<Message: string, SpatialMetadata: record<CalculatedAccuracy: string, CollectionMethod: string, CoordinateSourceSystem: string, CoordinateSourceSystemId: string, Latitude83: string, Longitude83: string, ReferencePoint: string, RegistryID: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3349,7 +3373,7 @@ export def "post-dfr-rest-services-get-spatial-metadata" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -3381,7 +3405,7 @@ export def "get-dfr-rest-services-get-tri-history" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: nothing -> record<Results: record<Message: string, TRIHistory: record<Sources: list>>> {
+]: nothing -> oneof<record<Results: record<Message: string, TRIHistory: record<Sources: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
@@ -3420,7 +3444,7 @@ export def "post-dfr-rest-services-get-tri-history" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   p_id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: any -> record<Results: record<Message: string, TRIHistory: record<Sources: list>>> {
+]: any -> oneof<record<Results: record<Message: string, TRIHistory: record<Sources: list>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3429,7 +3453,7 @@ export def "post-dfr-rest-services-get-tri-history" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -3461,7 +3485,7 @@ export def "get-dfr-rest-services-get-tri-releases" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: nothing -> record<Results: record<Message: string, TRIReleases: record<Chemicals: list, Header: list>>> {
+]: nothing -> oneof<record<Results: record<Message: string, TRIReleases: record<Chemicals: list, Header: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
@@ -3500,7 +3524,7 @@ export def "post-dfr-rest-services-get-tri-releases" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   p_id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: any -> record<Results: record<Message: string, TRIReleases: record<Chemicals: list, Header: list>>> {
+]: any -> oneof<record<Results: record<Message: string, TRIReleases: record<Chemicals: list, Header: list>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3509,7 +3533,7 @@ export def "post-dfr-rest-services-get-tri-releases" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -3541,7 +3565,7 @@ export def "get-dfr-rest-services-get-tribes" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: nothing -> record<Results: record<Message: string, Tribes: list<record>>> {
+]: nothing -> oneof<record<Results: record<Message: string, Tribes: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
@@ -3580,7 +3604,7 @@ export def "post-dfr-rest-services-get-tribes" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   p_id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: any -> record<Results: record<Message: string, Tribes: list<record>>> {
+]: any -> oneof<record<Results: record<Message: string, Tribes: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3589,7 +3613,7 @@ export def "post-dfr-rest-services-get-tribes" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -3621,7 +3645,7 @@ export def "get-dfr-rest-services-get-water-quality" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: nothing -> record<Results: record<Message: string, WaterQuality: record<Sources: list>>> {
+]: nothing -> oneof<record<Results: record<Message: string, WaterQuality: record<Sources: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
@@ -3660,7 +3684,7 @@ export def "post-dfr-rest-services-get-water-quality" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   p_id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: any -> record<Results: record<Message: string, WaterQuality: record<Sources: list>>> {
+]: any -> oneof<record<Results: record<Message: string, WaterQuality: record<Sources: list>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3669,7 +3693,7 @@ export def "post-dfr-rest-services-get-water-quality" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -3701,7 +3725,7 @@ export def "get-dfr-rest-services-get-water-quality-details" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: nothing -> record<Results: record<Message: string, WaterQualityDetails: record<Sources: list>>> {
+]: nothing -> oneof<record<Results: record<Message: string, WaterQualityDetails: record<Sources: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
@@ -3740,7 +3764,7 @@ export def "post-dfr-rest-services-get-water-quality-details" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   p_id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: any -> record<Results: record<Message: string, WaterQualityDetails: record<Sources: list>>> {
+]: any -> oneof<record<Results: record<Message: string, WaterQualityDetails: record<Sources: list>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3749,7 +3773,7 @@ export def "post-dfr-rest-services-get-water-quality-details" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url

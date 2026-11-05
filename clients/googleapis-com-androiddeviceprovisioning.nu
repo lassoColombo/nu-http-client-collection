@@ -12,27 +12,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -40,8 +49,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -52,7 +66,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -87,7 +110,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -119,9 +143,9 @@ def section-type-completer [] { ["SECTION_TYPE_SIM_LOCK" "SECTION_TYPE_UNSPECIFI
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "androiddeviceprovisioning-customers-list" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["androiddeviceprovisioning-customers-list" "androiddeviceprovisioning-partners-devices-metadata" "androiddeviceprovisioning-partners-customers-list" "androiddeviceprovisioning-partners-devices-claim" "androiddeviceprovisioning-partners-devices-claim-async" "androiddeviceprovisioning-partners-devices-find-by-identifier" "androiddeviceprovisioning-partners-devices-find-by-owner" "androiddeviceprovisioning-partners-devices-unclaim" "androiddeviceprovisioning-partners-devices-unclaim-async" "androiddeviceprovisioning-partners-devices-update-metadata-async" "androiddeviceprovisioning-customers-configurations-delete" "androiddeviceprovisioning-partners-devices-get" "androiddeviceprovisioning-customers-configurations-patch" "androiddeviceprovisioning-customers-configurations-list" "androiddeviceprovisioning-customers-configurations-create" "androiddeviceprovisioning-partners-vendors-customers-list" "androiddeviceprovisioning-partners-customers-create" "androiddeviceprovisioning-customers-devices-list" "androiddeviceprovisioning-customers-devices-apply-configuration" "androiddeviceprovisioning-customers-devices-remove-configuration" "androiddeviceprovisioning-customers-devices-unclaim" "androiddeviceprovisioning-customers-dpcs-list" "androiddeviceprovisioning-partners-vendors-list" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -166,7 +190,7 @@ export def "androiddeviceprovisioning-customers-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # The maximum number of customers to show in a page of results. A number between 1 and 100 (inclusive).
   --page-token: string # A token specifying which result page to return. This field has custom validations in ListCustomersRequestValidator
-]: nothing -> record<customers: table<adminEmails: list, companyId: string, companyName: string, googleWorkspaceAccount: record, languageCode: string, name: string, ownerEmails: list, skipWelcomeEmail: bool, termsStatus: string>, nextPageToken: string> {
+]: nothing -> oneof<record<customers: table<adminEmails: list, companyId: string, companyName: string, googleWorkspaceAccount: record, languageCode: string, name: string, ownerEmails: list, skipWelcomeEmail: bool, termsStatus: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -191,7 +215,6 @@ export def "androiddeviceprovisioning-customers-list" [
 #
 # POST /v1/partners/{metadataOwnerId}/devices/{deviceId}/metadata
 # operationId: androiddeviceprovisioning.partners.devices.metadata
-# --deviceMetadata shape: {entries?: record}
 export def "androiddeviceprovisioning-partners-devices-metadata" [
   metadata_owner_id: string
   device_id: string
@@ -216,7 +239,7 @@ export def "androiddeviceprovisioning-partners-devices-metadata" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --device-metadata: record # Metadata entries that can be attached to a `Device`. To learn more, read [Device metadata](https://developers.google.com/zero-touch/guides/metadata). — shape: {entries?: record}
-]: any -> record<entries: record> {
+]: any -> oneof<record<entries: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -270,7 +293,7 @@ export def "androiddeviceprovisioning-partners-customers-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # The maximum number of results to be returned. If not specified or 0, all the records are returned.
   --page-token: string # A token identifying a page of results returned by the server.
-]: nothing -> record<customers: table<adminEmails: list, companyId: string, companyName: string, googleWorkspaceAccount: record, languageCode: string, name: string, ownerEmails: list, skipWelcomeEmail: bool, termsStatus: string>, nextPageToken: string, totalSize: int> {
+]: nothing -> oneof<record<customers: table<adminEmails: list, companyId: string, companyName: string, googleWorkspaceAccount: record, languageCode: string, name: string, ownerEmails: list, skipWelcomeEmail: bool, termsStatus: string>, nextPageToken: string, totalSize: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($partner_id | is-empty) { error make --unspanned { msg: "path parameter 'partnerId' must be non-empty" } }
@@ -296,8 +319,6 @@ export def "androiddeviceprovisioning-partners-customers-list" [
 #
 # POST /v1/partners/{partnerId}/devices:claim
 # operationId: androiddeviceprovisioning.partners.devices.claim
-# --deviceIdentifier shape: {chromeOsAttestedDeviceId?: string, deviceType?: "DEVICE_TYPE_UNSPECIFIED"|"DEVICE_TYPE_ANDROID"|"DEVICE_TYPE_CHROME_OS", imei?: string, manufacturer?: string, meid?: string, model?: string, serialNumber?: string}
-# --deviceMetadata shape: {entries?: record}
 export def "androiddeviceprovisioning-partners-devices-claim" [
   partner_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -327,7 +348,7 @@ export def "androiddeviceprovisioning-partners-devices-claim" [
   --pre-provisioning-token: string # Optional. Must and can only be set for Chrome OS devices.
   --section-type: string@section-type-completer # Required. The section type of the device's provisioning record.
   --simlock-profile-id: string # Optional. Must and can only be set when DeviceProvisioningSectionType is SECTION_TYPE_SIM_LOCK. The unique identifier of the SimLock profile. (format: int64)
-]: any -> record<deviceId: string, deviceName: string> {
+]: any -> oneof<record<deviceId: string, deviceName: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -356,7 +377,6 @@ export def "androiddeviceprovisioning-partners-devices-claim" [
 #
 # POST /v1/partners/{partnerId}/devices:claimAsync
 # operationId: androiddeviceprovisioning.partners.devices.claimAsync
-# --claims item shape: {customerId?: string, deviceIdentifier?: record, deviceMetadata?: record, googleWorkspaceCustomerId?: string, preProvisioningToken?: string, sectionType?: "SECTION_TYPE_UNSPECIFIED"|"SECTION_TYPE_SIM_LOCK"|"SECTION_TYPE_ZERO_TOUCH", simlockProfileId?: string}
 export def "androiddeviceprovisioning-partners-devices-claim-async" [
   partner_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -380,7 +400,7 @@ export def "androiddeviceprovisioning-partners-devices-claim-async" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --claims: list # Required. A list of device claims. — item shape: {customerId?: string, deviceIdentifier?: record, deviceMetadata?: record, googleWorkspaceCustomerId?: string, preProvisioningToken?: string, sectionType?: "SECTION_TYPE_UNSPECIFIED"|"SECTION_TYPE_SIM_LOCK"|"SECTION_TYPE_ZERO_TOUCH", simlockProfileId?: string}
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -409,7 +429,6 @@ export def "androiddeviceprovisioning-partners-devices-claim-async" [
 #
 # POST /v1/partners/{partnerId}/devices:findByIdentifier
 # operationId: androiddeviceprovisioning.partners.devices.findByIdentifier
-# --deviceIdentifier shape: {chromeOsAttestedDeviceId?: string, deviceType?: "DEVICE_TYPE_UNSPECIFIED"|"DEVICE_TYPE_ANDROID"|"DEVICE_TYPE_CHROME_OS", imei?: string, manufacturer?: string, meid?: string, model?: string, serialNumber?: string}
 export def "androiddeviceprovisioning-partners-devices-find-by-identifier" [
   partner_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -435,7 +454,7 @@ export def "androiddeviceprovisioning-partners-devices-find-by-identifier" [
   --device-identifier: record # Encapsulates hardware and product IDs to identify a manufactured device. To understand requirements on identifier sets, read [Identifiers](https://developers.google.com/zero-touch/guides/identifiers). — shape: {chromeOsAttestedDeviceId?: string, deviceType?: "DEVICE_TYPE_UNSPECIFIED"|"DEVICE_TYPE_ANDROID"|"DEVICE_TYPE_CHROME_OS", imei?: string, manufacturer?: string, meid?: string, model?: string, serialNumber?: string}
   --limit: string # Required. The maximum number of devices to show in a page of results. Must be between 1 and 100 inclusive. (format: int64)
   --page-token: string # A token specifying which result page to return.
-]: any -> record<devices: table<claims: list, configuration: string, deviceId: string, deviceIdentifier: record, deviceMetadata: record, name: string>, nextPageToken: string, totalSize: int> {
+]: any -> oneof<record<devices: table<claims: list, configuration: string, deviceId: string, deviceIdentifier: record, deviceMetadata: record, name: string>, nextPageToken: string, totalSize: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -491,7 +510,7 @@ export def "androiddeviceprovisioning-partners-devices-find-by-owner" [
   --limit: string # Required. The maximum number of devices to show in a page of results. Must be between 1 and 100 inclusive. (format: int64)
   --page-token: string # A token specifying which result page to return.
   --section-type: string@section-type-completer # Required. The section type of the device's provisioning record.
-]: any -> record<devices: table<claims: list, configuration: string, deviceId: string, deviceIdentifier: record, deviceMetadata: record, name: string>, nextPageToken: string, totalSize: int> {
+]: any -> oneof<record<devices: table<claims: list, configuration: string, deviceId: string, deviceIdentifier: record, deviceMetadata: record, name: string>, nextPageToken: string, totalSize: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -520,7 +539,6 @@ export def "androiddeviceprovisioning-partners-devices-find-by-owner" [
 #
 # POST /v1/partners/{partnerId}/devices:unclaim
 # operationId: androiddeviceprovisioning.partners.devices.unclaim
-# --deviceIdentifier shape: {chromeOsAttestedDeviceId?: string, deviceType?: "DEVICE_TYPE_UNSPECIFIED"|"DEVICE_TYPE_ANDROID"|"DEVICE_TYPE_CHROME_OS", imei?: string, manufacturer?: string, meid?: string, model?: string, serialNumber?: string}
 export def "androiddeviceprovisioning-partners-devices-unclaim" [
   partner_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -548,7 +566,7 @@ export def "androiddeviceprovisioning-partners-devices-unclaim" [
   --section-type: string@section-type-completer # Required. The section type of the device's provisioning record.
   --vacation-mode-days: int # The duration of the vacation unlock starting from when the request is processed. (1 day is treated as 24 hours) (format: int32)
   --vacation-mode-expire-time: string # The expiration time of the vacation unlock. (format: google-datetime)
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -577,7 +595,6 @@ export def "androiddeviceprovisioning-partners-devices-unclaim" [
 #
 # POST /v1/partners/{partnerId}/devices:unclaimAsync
 # operationId: androiddeviceprovisioning.partners.devices.unclaimAsync
-# --unclaims item shape: {deviceId?: string, deviceIdentifier?: record, sectionType?: "SECTION_TYPE_UNSPECIFIED"|"SECTION_TYPE_SIM_LOCK"|"SECTION_TYPE_ZERO_TOUCH", vacationModeDays?: int, vacationModeExpireTime?: string}
 export def "androiddeviceprovisioning-partners-devices-unclaim-async" [
   partner_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -601,7 +618,7 @@ export def "androiddeviceprovisioning-partners-devices-unclaim-async" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --unclaims: list # Required. The list of devices to unclaim. — item shape: {deviceId?: string, deviceIdentifier?: record, sectionType?: "SECTION_TYPE_UNSPECIFIED"|"SECTION_TYPE_SIM_LOCK"|"SECTION_TYPE_ZERO_TOUCH", vacationModeDays?: int, vacationModeExpireTime?: string}
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -630,7 +647,6 @@ export def "androiddeviceprovisioning-partners-devices-unclaim-async" [
 #
 # POST /v1/partners/{partnerId}/devices:updateMetadataAsync
 # operationId: androiddeviceprovisioning.partners.devices.updateMetadataAsync
-# --updates item shape: {deviceId?: string, deviceIdentifier?: record, deviceMetadata?: record}
 export def "androiddeviceprovisioning-partners-devices-update-metadata-async" [
   partner_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -654,7 +670,7 @@ export def "androiddeviceprovisioning-partners-devices-update-metadata-async" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --updates: list # Required. The list of metadata updates. — item shape: {deviceId?: string, deviceIdentifier?: record, deviceMetadata?: record}
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -705,7 +721,7 @@ export def "androiddeviceprovisioning-customers-configurations-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -753,7 +769,7 @@ export def "androiddeviceprovisioning-partners-devices-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<claims: table<additionalService: string, googleWorkspaceCustomerId: string, ownerCompanyId: string, resellerId: string, sectionType: string, vacationModeExpireTime: string, vacationModeStartTime: string>, configuration: string, deviceId: string, deviceIdentifier: record<chromeOsAttestedDeviceId: string, deviceType: string, imei: string, manufacturer: string, meid: string, model: string, serialNumber: string>, deviceMetadata: record<entries: record>, name: string> {
+]: nothing -> oneof<record<claims: table<additionalService: string, googleWorkspaceCustomerId: string, ownerCompanyId: string, resellerId: string, sectionType: string, vacationModeExpireTime: string, vacationModeStartTime: string>, configuration: string, deviceId: string, deviceIdentifier: record<chromeOsAttestedDeviceId: string, deviceType: string, imei: string, manufacturer: string, meid: string, model: string, serialNumber: string>, deviceMetadata: record<entries: record>, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -810,7 +826,7 @@ export def "androiddeviceprovisioning-customers-configurations-patch" [
   --dpc-extras: string # The JSON-formatted EMM provisioning extras that are passed to the DPC.
   --dpc-resource-path: string # Required. The resource name of the selected DPC (device policy controller) in the format `customers/[CUSTOMER_ID]/dpcs/*`. To list the supported DPCs, call `customers.dpcs.list`.
   --is-default: oneof<nothing, bool> # Required. Whether this is the default configuration that zero-touch enrollment applies to any new devices the organization purchases in the future. Only one customer configuration can be the default. Setting this value to `true`, changes the previous default configuration's `isDefault` value to `false`.
-]: any -> record<companyName: string, configurationId: string, configurationName: string, contactEmail: string, contactPhone: string, customMessage: string, dpcExtras: string, dpcResourcePath: string, isDefault: bool, name: string> {
+]: any -> oneof<record<companyName: string, configurationId: string, configurationName: string, contactEmail: string, contactPhone: string, customMessage: string, dpcExtras: string, dpcResourcePath: string, isDefault: bool, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -861,7 +877,7 @@ export def "androiddeviceprovisioning-customers-configurations-list" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<configurations: table<companyName: string, configurationId: string, configurationName: string, contactEmail: string, contactPhone: string, customMessage: string, dpcExtras: string, dpcResourcePath: string, isDefault: bool, name: string>> {
+]: nothing -> oneof<record<configurations: table<companyName: string, configurationId: string, configurationName: string, contactEmail: string, contactPhone: string, customMessage: string, dpcExtras: string, dpcResourcePath: string, isDefault: bool, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -917,7 +933,7 @@ export def "androiddeviceprovisioning-customers-configurations-create" [
   --dpc-extras: string # The JSON-formatted EMM provisioning extras that are passed to the DPC.
   --dpc-resource-path: string # Required. The resource name of the selected DPC (device policy controller) in the format `customers/[CUSTOMER_ID]/dpcs/*`. To list the supported DPCs, call `customers.dpcs.list`.
   --is-default: oneof<nothing, bool> # Required. Whether this is the default configuration that zero-touch enrollment applies to any new devices the organization purchases in the future. Only one customer configuration can be the default. Setting this value to `true`, changes the previous default configuration's `isDefault` value to `false`.
-]: any -> record<companyName: string, configurationId: string, configurationName: string, contactEmail: string, contactPhone: string, customMessage: string, dpcExtras: string, dpcResourcePath: string, isDefault: bool, name: string> {
+]: any -> oneof<record<companyName: string, configurationId: string, configurationName: string, contactEmail: string, contactPhone: string, customMessage: string, dpcExtras: string, dpcResourcePath: string, isDefault: bool, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -970,7 +986,7 @@ export def "androiddeviceprovisioning-partners-vendors-customers-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # The maximum number of results to be returned.
   --page-token: string # A token identifying a page of results returned by the server.
-]: nothing -> record<customers: table<adminEmails: list, companyId: string, companyName: string, googleWorkspaceAccount: record, languageCode: string, name: string, ownerEmails: list, skipWelcomeEmail: bool, termsStatus: string>, nextPageToken: string, totalSize: int> {
+]: nothing -> oneof<record<customers: table<adminEmails: list, companyId: string, companyName: string, googleWorkspaceAccount: record, languageCode: string, name: string, ownerEmails: list, skipWelcomeEmail: bool, termsStatus: string>, nextPageToken: string, totalSize: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -996,7 +1012,6 @@ export def "androiddeviceprovisioning-partners-vendors-customers-list" [
 #
 # POST /v1/{parent}/customers
 # operationId: androiddeviceprovisioning.partners.customers.create
-# --customer shape: {adminEmails?: list<string>, companyName?: string, googleWorkspaceAccount?: record, languageCode?: string, ownerEmails?: list<string>, skipWelcomeEmail?: bool}
 export def "androiddeviceprovisioning-partners-customers-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1020,7 +1035,7 @@ export def "androiddeviceprovisioning-partners-customers-create" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --customer: record # A reseller, vendor, or customer in the zero-touch reseller and customer APIs. — shape: {adminEmails?: list<string>, companyName?: string, googleWorkspaceAccount?: record, languageCode?: string, ownerEmails?: list<string>, skipWelcomeEmail?: bool}
-]: any -> record<adminEmails: list<string>, companyId: string, companyName: string, googleWorkspaceAccount: record<customerId: string, preProvisioningTokens: list<string>>, languageCode: string, name: string, ownerEmails: list<string>, skipWelcomeEmail: bool, termsStatus: string> {
+]: any -> oneof<record<adminEmails: list<string>, companyId: string, companyName: string, googleWorkspaceAccount: record<customerId: string, preProvisioningTokens: list<string>>, languageCode: string, name: string, ownerEmails: list<string>, skipWelcomeEmail: bool, termsStatus: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1073,7 +1088,7 @@ export def "androiddeviceprovisioning-customers-devices-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: string # The maximum number of devices to show in a page of results. Must be between 1 and 100 inclusive.
   --page-token: string # A token specifying which result page to return.
-]: nothing -> record<devices: table<claims: list, configuration: string, deviceId: string, deviceIdentifier: record, deviceMetadata: record, name: string>, nextPageToken: string> {
+]: nothing -> oneof<record<devices: table<claims: list, configuration: string, deviceId: string, deviceIdentifier: record, deviceMetadata: record, name: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1099,7 +1114,6 @@ export def "androiddeviceprovisioning-customers-devices-list" [
 #
 # POST /v1/{parent}/devices:applyConfiguration
 # operationId: androiddeviceprovisioning.customers.devices.applyConfiguration
-# --device shape: {deviceId?: string, deviceIdentifier?: record}
 export def "androiddeviceprovisioning-customers-devices-apply-configuration" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1124,7 +1138,7 @@ export def "androiddeviceprovisioning-customers-devices-apply-configuration" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --configuration: string # Required. The configuration applied to the device in the format `customers/[CUSTOMER_ID]/configurations/[CONFIGURATION_ID]`.
   --device: record # A `DeviceReference` is an API abstraction that lets you supply a _device_ argument to a method using one of the following identifier types: * A numeric API resource ID. * Real-world hardware IDs, such as IMEI number, belonging to the manufactured device. Methods that operate on devices take a `DeviceReference` as a parameter type because it's more flexible for the caller. To learn more about device identifiers, read [Identifiers](https://developers.google.com/zero-touch/guides/identifiers). — shape: {deviceId?: string, deviceIdentifier?: record}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1153,7 +1167,6 @@ export def "androiddeviceprovisioning-customers-devices-apply-configuration" [
 #
 # POST /v1/{parent}/devices:removeConfiguration
 # operationId: androiddeviceprovisioning.customers.devices.removeConfiguration
-# --device shape: {deviceId?: string, deviceIdentifier?: record}
 export def "androiddeviceprovisioning-customers-devices-remove-configuration" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1177,7 +1190,7 @@ export def "androiddeviceprovisioning-customers-devices-remove-configuration" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --device: record # A `DeviceReference` is an API abstraction that lets you supply a _device_ argument to a method using one of the following identifier types: * A numeric API resource ID. * Real-world hardware IDs, such as IMEI number, belonging to the manufactured device. Methods that operate on devices take a `DeviceReference` as a parameter type because it's more flexible for the caller. To learn more about device identifiers, read [Identifiers](https://developers.google.com/zero-touch/guides/identifiers). — shape: {deviceId?: string, deviceIdentifier?: record}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1206,7 +1219,6 @@ export def "androiddeviceprovisioning-customers-devices-remove-configuration" [
 #
 # POST /v1/{parent}/devices:unclaim
 # operationId: androiddeviceprovisioning.customers.devices.unclaim
-# --device shape: {deviceId?: string, deviceIdentifier?: record}
 export def "androiddeviceprovisioning-customers-devices-unclaim" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1230,7 +1242,7 @@ export def "androiddeviceprovisioning-customers-devices-unclaim" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --device: record # A `DeviceReference` is an API abstraction that lets you supply a _device_ argument to a method using one of the following identifier types: * A numeric API resource ID. * Real-world hardware IDs, such as IMEI number, belonging to the manufactured device. Methods that operate on devices take a `DeviceReference` as a parameter type because it's more flexible for the caller. To learn more about device identifiers, read [Identifiers](https://developers.google.com/zero-touch/guides/identifiers). — shape: {deviceId?: string, deviceIdentifier?: record}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1281,7 +1293,7 @@ export def "androiddeviceprovisioning-customers-dpcs-list" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<dpcs: table<dpcName: string, name: string, packageName: string>> {
+]: nothing -> oneof<record<dpcs: table<dpcName: string, name: string, packageName: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1331,7 +1343,7 @@ export def "androiddeviceprovisioning-partners-vendors-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # The maximum number of results to be returned.
   --page-token: string # A token identifying a page of results returned by the server.
-]: nothing -> record<nextPageToken: string, totalSize: int, vendors: table<adminEmails: list, companyId: string, companyName: string, googleWorkspaceAccount: record, languageCode: string, name: string, ownerEmails: list, skipWelcomeEmail: bool, termsStatus: string>> {
+]: nothing -> oneof<record<nextPageToken: string, totalSize: int, vendors: table<adminEmails: list, companyId: string, companyName: string, googleWorkspaceAccount: record, languageCode: string, name: string, ownerEmails: list, skipWelcomeEmail: bool, termsStatus: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }

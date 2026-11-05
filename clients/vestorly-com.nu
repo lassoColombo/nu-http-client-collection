@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -118,9 +142,9 @@ def type-completer [] { ["bounce" "click" "content_posted" "create_post" "delete
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "find-advisor-by-id" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["find-advisor-by-id" "find-article-phrases" "find-articles" "find-article-by-id" "find-custom-feed-filters" "create-custom-feed-filter" "delete-custom-feed-filter" "find-custom-feed-filter-by-id" "update-custom-feed-filter-by-id" "find-custom-feeds" "create-custom-feed" "delete-custom-feed" "find-custom-feed-by-id" "update-category-by-id" "find-custom-feed-articles" "duplicate-custom-feed" "find-events" "create-event" "find-event-by-id" "find-groups" "create-group" "delete-group" "find-group-by-id" "update-group-by-id" "find-member-events" "find-member-reports" "find-members" "create-member" "find-member-by-id" "update-member-by-id" "find-newsletter-settings" "find-newsletter-settings-by-id" "update-newsletter-settings-by-id" "find-newsletters" "get-newsletter-by-id" "update-newsletter-by-id" "find-posts" "create-post" "get-post-by-id" "update-post-by-id" "find-seed-custom-feeds" "create-seed-custom-feed" "delete-seed-custom-feed" "find-seed-custom-feed-by-id" "update-seed-custom-feed-by-id" "login" "logout" "find-sources" "create-source" "get-source-by-id" "update-source-by-id" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -155,7 +179,7 @@ export def "find-advisor-by-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --vestorly-auth: string # Vestorly Auth Token (required)
   --access-token: string # OAuth Token
-]: nothing -> record<about: string, account_type: string, address: string, adv_brochure: string, api_key: string, city: string, company: string, compliance_bcc_email_address: string, dashboard_url: string, disclosure: string, email_report_blast: string, external_options: string, first_name: string, id: string, last_name: string, linkedin: string, logo: string, name: string, plan: string, profile_picture: string, reg_number: string, state: string, tag: string, twitter_handle: string, website: string, zip: string> {
+]: nothing -> oneof<record<about: string, account_type: string, address: string, adv_brochure: string, api_key: string, city: string, company: string, compliance_bcc_email_address: string, dashboard_url: string, disclosure: string, email_report_blast: string, external_options: string, first_name: string, id: string, last_name: string, linkedin: string, logo: string, name: string, plan: string, profile_picture: string, reg_number: string, state: string, tag: string, twitter_handle: string, website: string, zip: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -197,7 +221,7 @@ export def "find-article-phrases" [
   --text-search: string # Text to search phrases
   --size: int # Number of returned phrases
   --from: int # Number of phrases to skip
-]: nothing -> record<article_phrases: table<created_at: int, length: int, text: string>> {
+]: nothing -> oneof<record<article_phrases: table<created_at: int, length: int, text: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($vestorly_auth == null) { error make --unspanned { msg: "required query parameter 'vestorly_auth' missing: pass --vestorly-auth" } }
@@ -239,7 +263,7 @@ export def "find-articles" [
   --text-query: string # Search query parameter
   --sort-direction: string # Direction of sort (used with sort_by parameter)
   --sort-by: string # Field on model to sort by
-]: nothing -> record<articles: table<_id: string, body: string, created_at: string, external_url: string, external_url_source: string, external_url_type: string, image_height: int, image_path: string, image_url: string, image_width: int, is_mobile_proxy_needed: bool, is_proxy_needed: bool, is_responsive: bool, logo_url: string, needs_sanitize: bool, proxy_url: string, redirector_link: string, square_logo_url: string, suitability_score: string, summary: string, title: string, topic: string, url: string>> {
+]: nothing -> oneof<record<articles: table<_id: string, body: string, created_at: string, external_url: string, external_url_source: string, external_url_type: string, image_height: int, image_path: string, image_url: string, image_width: int, is_mobile_proxy_needed: bool, is_proxy_needed: bool, is_responsive: bool, logo_url: string, needs_sanitize: bool, proxy_url: string, redirector_link: string, square_logo_url: string, suitability_score: string, summary: string, title: string, topic: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($vestorly_auth == null) { error make --unspanned { msg: "required query parameter 'vestorly_auth' missing: pass --vestorly-auth" } }
@@ -278,7 +302,7 @@ export def "find-article-by-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --vestorly-auth: string # Vestorly Auth Token (required)
   --access-token: string # OAuth Token
-]: nothing -> record<article: record<_id: string, body: string, created_at: string, external_url: string, external_url_source: string, external_url_type: string, image_height: int, image_path: string, image_url: string, image_width: int, is_mobile_proxy_needed: bool, is_proxy_needed: bool, is_responsive: bool, logo_url: string, needs_sanitize: bool, proxy_url: string, redirector_link: string, square_logo_url: string, suitability_score: string, summary: string, title: string, topic: string, url: string>> {
+]: nothing -> oneof<record<article: record<_id: string, body: string, created_at: string, external_url: string, external_url_source: string, external_url_type: string, image_height: int, image_path: string, image_url: string, image_width: int, is_mobile_proxy_needed: bool, is_proxy_needed: bool, is_responsive: bool, logo_url: string, needs_sanitize: bool, proxy_url: string, redirector_link: string, square_logo_url: string, suitability_score: string, summary: string, title: string, topic: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -317,7 +341,7 @@ export def "find-custom-feed-filters" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --vestorly-auth: string # Vestorly Auth Token (required)
   --access-token: string # OAuth Token
-]: nothing -> record<custom_feed_filters: table<_id: string, custom_feed_id: string, source_ids: list>> {
+]: nothing -> oneof<record<custom_feed_filters: table<_id: string, custom_feed_id: string, source_ids: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($vestorly_auth == null) { error make --unspanned { msg: "required query parameter 'vestorly_auth' missing: pass --vestorly-auth" } }
@@ -357,7 +381,7 @@ export def "create-custom-feed-filter" [
   --access-token: string # OAuth Token
   custom_feed_id: string
   --source-ids: list<string>
-]: any -> record<custom_feed_filter: record<_id: string, custom_feed_id: string, source_ids: list<string>>> {
+]: any -> oneof<record<custom_feed_filter: record<_id: string, custom_feed_id: string, source_ids: list<string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -399,7 +423,7 @@ export def "delete-custom-feed-filter" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --vestorly-auth: string # Vestorly Auth Token (required)
   --access-token: string # OAuth Token
-]: nothing -> record<custom_feed_filter: record<_id: string, custom_feed_id: string, source_ids: list<string>>> {
+]: nothing -> oneof<record<custom_feed_filter: record<_id: string, custom_feed_id: string, source_ids: list<string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -439,7 +463,7 @@ export def "find-custom-feed-filter-by-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --vestorly-auth: string # Vestorly Auth Token (required)
   --access-token: string # OAuth Token
-]: nothing -> record<custom_feed_filter: record<_id: string, custom_feed_id: string, source_ids: list<string>>> {
+]: nothing -> oneof<record<custom_feed_filter: record<_id: string, custom_feed_id: string, source_ids: list<string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -481,7 +505,7 @@ export def "update-custom-feed-filter-by-id" [
   --access-token: string # OAuth Token
   custom_feed_id: string
   --source-ids: list<string>
-]: any -> record<custom_feed_filter: record<_id: string, custom_feed_id: string, source_ids: list<string>>> {
+]: any -> oneof<record<custom_feed_filter: record<_id: string, custom_feed_id: string, source_ids: list<string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -523,7 +547,7 @@ export def "find-custom-feeds" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --vestorly-auth: string # Vestorly Auth Token (required)
   --access-token: string # OAuth Token
-]: nothing -> record<custom_feeds: table<_id: string, custom_feed_filter_id: string, custom_feed_permission_id: string, custom_feed_template_id: string, custom_feed_visibility: int, default: bool, display_label: string, is_auto_curated_newsletter_custom_feed: bool, label: string, links: string, popularity: float, premium_content: bool, seed_custom_feed_id: string, third_party_articles_custom_feed_id: string>> {
+]: nothing -> oneof<record<custom_feeds: table<_id: string, custom_feed_filter_id: string, custom_feed_permission_id: string, custom_feed_template_id: string, custom_feed_visibility: int, default: bool, display_label: string, is_auto_curated_newsletter_custom_feed: bool, label: string, links: string, popularity: float, premium_content: bool, seed_custom_feed_id: string, third_party_articles_custom_feed_id: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($vestorly_auth == null) { error make --unspanned { msg: "required query parameter 'vestorly_auth' missing: pass --vestorly-auth" } }
@@ -572,7 +596,7 @@ export def "create-custom-feed" [
   --seed-custom-feed-id: string
   --social-posting-id: string
   --third-party-articles-custom-feed-id: string
-]: any -> record<custom_feed: record<_id: string, custom_feed_filter_id: string, custom_feed_permission_id: string, custom_feed_template_id: string, custom_feed_visibility: int, default: bool, display_label: string, is_auto_curated_newsletter_custom_feed: bool, label: string, links: string, popularity: float, premium_content: bool, seed_custom_feed_id: string, third_party_articles_custom_feed_id: string>> {
+]: any -> oneof<record<custom_feed: record<_id: string, custom_feed_filter_id: string, custom_feed_permission_id: string, custom_feed_template_id: string, custom_feed_visibility: int, default: bool, display_label: string, is_auto_curated_newsletter_custom_feed: bool, label: string, links: string, popularity: float, premium_content: bool, seed_custom_feed_id: string, third_party_articles_custom_feed_id: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -614,7 +638,7 @@ export def "delete-custom-feed" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --vestorly-auth: string # Vestorly Auth Token (required)
   --access-token: string # OAuth Token
-]: nothing -> record<custom_feed: record<_id: string, custom_feed_filter_id: string, custom_feed_permission_id: string, custom_feed_template_id: string, custom_feed_visibility: int, default: bool, display_label: string, is_auto_curated_newsletter_custom_feed: bool, label: string, links: string, popularity: float, premium_content: bool, seed_custom_feed_id: string, third_party_articles_custom_feed_id: string>> {
+]: nothing -> oneof<record<custom_feed: record<_id: string, custom_feed_filter_id: string, custom_feed_permission_id: string, custom_feed_template_id: string, custom_feed_visibility: int, default: bool, display_label: string, is_auto_curated_newsletter_custom_feed: bool, label: string, links: string, popularity: float, premium_content: bool, seed_custom_feed_id: string, third_party_articles_custom_feed_id: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -654,7 +678,7 @@ export def "find-custom-feed-by-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --vestorly-auth: string # Vestorly Auth Token (required)
   --access-token: string # OAuth Token
-]: nothing -> record<custom_feed: record<_id: string, custom_feed_filter_id: string, custom_feed_permission_id: string, custom_feed_template_id: string, custom_feed_visibility: int, default: bool, display_label: string, is_auto_curated_newsletter_custom_feed: bool, label: string, links: string, popularity: float, premium_content: bool, seed_custom_feed_id: string, third_party_articles_custom_feed_id: string>> {
+]: nothing -> oneof<record<custom_feed: record<_id: string, custom_feed_filter_id: string, custom_feed_permission_id: string, custom_feed_template_id: string, custom_feed_visibility: int, default: bool, display_label: string, is_auto_curated_newsletter_custom_feed: bool, label: string, links: string, popularity: float, premium_content: bool, seed_custom_feed_id: string, third_party_articles_custom_feed_id: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -705,7 +729,7 @@ export def "update-category-by-id" [
   --seed-custom-feed-id: string
   --social-posting-id: string
   --third-party-articles-custom-feed-id: string
-]: any -> record<custom_feed: record<_id: string, custom_feed_filter_id: string, custom_feed_permission_id: string, custom_feed_template_id: string, custom_feed_visibility: int, default: bool, display_label: string, is_auto_curated_newsletter_custom_feed: bool, label: string, links: string, popularity: float, premium_content: bool, seed_custom_feed_id: string, third_party_articles_custom_feed_id: string>> {
+]: any -> oneof<record<custom_feed: record<_id: string, custom_feed_filter_id: string, custom_feed_permission_id: string, custom_feed_template_id: string, custom_feed_visibility: int, default: bool, display_label: string, is_auto_curated_newsletter_custom_feed: bool, label: string, links: string, popularity: float, premium_content: bool, seed_custom_feed_id: string, third_party_articles_custom_feed_id: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -753,7 +777,7 @@ export def "find-custom-feed-articles" [
   --start: int # Field where the fetch will start from (format: int32)
   --created-at-gte-days-ago: string # Filter retrieved articles since this date
   --text-query: string # Search query parameter
-]: nothing -> record<articles: table<_id: string, body: string, created_at: string, external_url: string, external_url_source: string, external_url_type: string, image_height: int, image_path: string, image_url: string, image_width: int, is_mobile_proxy_needed: bool, is_proxy_needed: bool, is_responsive: bool, logo_url: string, needs_sanitize: bool, proxy_url: string, redirector_link: string, square_logo_url: string, suitability_score: string, summary: string, title: string, topic: string, url: string>> {
+]: nothing -> oneof<record<articles: table<_id: string, body: string, created_at: string, external_url: string, external_url_source: string, external_url_type: string, image_height: int, image_path: string, image_url: string, image_width: int, is_mobile_proxy_needed: bool, is_proxy_needed: bool, is_responsive: bool, logo_url: string, needs_sanitize: bool, proxy_url: string, redirector_link: string, square_logo_url: string, suitability_score: string, summary: string, title: string, topic: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -793,7 +817,7 @@ export def "duplicate-custom-feed" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --vestorly-auth: string # Vestorly Auth Token (required)
   --access-token: string # OAuth Token
-]: nothing -> record<custom_feed: record<_id: string, custom_feed_filter_id: string, custom_feed_permission_id: string, custom_feed_template_id: string, custom_feed_visibility: int, default: bool, display_label: string, is_auto_curated_newsletter_custom_feed: bool, label: string, links: string, popularity: float, premium_content: bool, seed_custom_feed_id: string, third_party_articles_custom_feed_id: string>> {
+]: nothing -> oneof<record<custom_feed: record<_id: string, custom_feed_filter_id: string, custom_feed_permission_id: string, custom_feed_template_id: string, custom_feed_visibility: int, default: bool, display_label: string, is_auto_curated_newsletter_custom_feed: bool, label: string, links: string, popularity: float, premium_content: bool, seed_custom_feed_id: string, third_party_articles_custom_feed_id: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -832,7 +856,7 @@ export def "find-events" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --vestorly-auth: string # Vestorly Auth Token (required)
   --access-token: string # OAuth Token
-]: nothing -> record<events: table<_id: string, advisor_id: string, created_at: string, event_content: record, original_url: string, originator_email: string, originator_id: string, parent_event_id: string, referer: string, subject_email: string, subject_id: string, type: string>> {
+]: nothing -> oneof<record<events: table<_id: string, advisor_id: string, created_at: string, event_content: record, original_url: string, originator_email: string, originator_id: string, parent_event_id: string, referer: string, subject_email: string, subject_id: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($vestorly_auth == null) { error make --unspanned { msg: "required query parameter 'vestorly_auth' missing: pass --vestorly-auth" } }
@@ -858,7 +882,6 @@ export def "find-events" [
 #
 # POST /events
 # operationId: createEvent
-# --event_content shape: {_id?: string, content_field?: string, content_id?: string, content_type?: string, created_at?: string, slug?: string, updated_at?: string}
 export def "create-event" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -882,7 +905,7 @@ export def "create-event" [
   subject_email: string
   --subject-id: string
   type: string@type-completer
-]: any -> record<meta: record<message: string>> {
+]: any -> oneof<record<meta: record<message: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -924,7 +947,7 @@ export def "find-event-by-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --access-token: string # OAuth Token
   --vestorly-auth: string # Vestorly Auth Token (required)
-]: nothing -> record<event: record<_id: string, advisor_id: string, created_at: string, event_content: record<_id: string, content_field: string, content_id: string, content_type: string, created_at: string, slug: string, updated_at: string>, original_url: string, originator_email: string, originator_id: string, parent_event_id: string, referer: string, subject_email: string, subject_id: string, type: string>> {
+]: nothing -> oneof<record<event: record<_id: string, advisor_id: string, created_at: string, event_content: record<_id: string, content_field: string, content_id: string, content_type: string, created_at: string, slug: string, updated_at: string>, original_url: string, originator_email: string, originator_id: string, parent_event_id: string, referer: string, subject_email: string, subject_id: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -963,7 +986,7 @@ export def "find-groups" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --vestorly-auth: string # Vestorly Auth Token (required, format: string)
   --access-token: string # OAuth Token
-]: nothing -> record<groups: table<_id: string, autopublish: bool, is_default: bool, is_hidden: bool, name: string, new_weekly_mailer_content: string, newsletter_subject: string, number_articles_per_group: int, number_articles_per_newsletter: int>> {
+]: nothing -> oneof<record<groups: table<_id: string, autopublish: bool, is_default: bool, is_hidden: bool, name: string, new_weekly_mailer_content: string, newsletter_subject: string, number_articles_per_group: int, number_articles_per_newsletter: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($vestorly_auth == null) { error make --unspanned { msg: "required query parameter 'vestorly_auth' missing: pass --vestorly-auth" } }
@@ -1010,7 +1033,7 @@ export def "create-group" [
   --newsletter-subject: string
   --number-articles-per-group: int # format: int32
   --number-articles-per-newsletter: int # format: int32
-]: any -> record<group: record<_id: string, autopublish: bool, is_default: bool, is_hidden: bool, name: string, new_weekly_mailer_content: string, newsletter_subject: string, number_articles_per_group: int, number_articles_per_newsletter: int>> {
+]: any -> oneof<record<group: record<_id: string, autopublish: bool, is_default: bool, is_hidden: bool, name: string, new_weekly_mailer_content: string, newsletter_subject: string, number_articles_per_group: int, number_articles_per_newsletter: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1052,7 +1075,7 @@ export def "delete-group" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --vestorly-auth: string # Vestorly Auth Token (required, format: string)
   --access-token: string # OAuth Token
-]: nothing -> record<group: record<_id: string, autopublish: bool, is_default: bool, is_hidden: bool, name: string, new_weekly_mailer_content: string, newsletter_subject: string, number_articles_per_group: int, number_articles_per_newsletter: int>> {
+]: nothing -> oneof<record<group: record<_id: string, autopublish: bool, is_default: bool, is_hidden: bool, name: string, new_weekly_mailer_content: string, newsletter_subject: string, number_articles_per_group: int, number_articles_per_newsletter: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1092,7 +1115,7 @@ export def "find-group-by-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --vestorly-auth: string # Vestorly Auth Token (required, format: string)
   --access-token: string # OAuth Token
-]: nothing -> record<group: record<_id: string, autopublish: bool, is_default: bool, is_hidden: bool, name: string, new_weekly_mailer_content: string, newsletter_subject: string, number_articles_per_group: int, number_articles_per_newsletter: int>> {
+]: nothing -> oneof<record<group: record<_id: string, autopublish: bool, is_default: bool, is_hidden: bool, name: string, new_weekly_mailer_content: string, newsletter_subject: string, number_articles_per_group: int, number_articles_per_newsletter: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1141,7 +1164,7 @@ export def "update-group-by-id" [
   --newsletter-subject: string
   --number-articles-per-group: int # format: int32
   --number-articles-per-newsletter: int # format: int32
-]: any -> record<group: record<_id: string, autopublish: bool, is_default: bool, is_hidden: bool, name: string, new_weekly_mailer_content: string, newsletter_subject: string, number_articles_per_group: int, number_articles_per_newsletter: int>> {
+]: any -> oneof<record<group: record<_id: string, autopublish: bool, is_default: bool, is_hidden: bool, name: string, new_weekly_mailer_content: string, newsletter_subject: string, number_articles_per_group: int, number_articles_per_newsletter: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1184,7 +1207,7 @@ export def "find-member-events" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --vestorly-auth: string # Vestorly Auth Token (required)
   --access-token: string # OAuth Token
-]: nothing -> record<member_events: table<_id: string, content_url: string, created_at: string, event_date: string, event_source: string, event_type: string, member_id: string, original_url: string, originator_email: string, originator_group_id: string, originator_id: string, originator_name: string, originator_type: string, parent_event_id: string, parent_originator_id: string, referer: string, source: string, subject_id: string, type: string, username: string>, members: table<_id: string, added_on: string, email: string, first_name: string, last_name: string, picture_url: string>> {
+]: nothing -> oneof<record<member_events: table<_id: string, content_url: string, created_at: string, event_date: string, event_source: string, event_type: string, member_id: string, original_url: string, originator_email: string, originator_group_id: string, originator_id: string, originator_name: string, originator_type: string, parent_event_id: string, parent_originator_id: string, referer: string, source: string, subject_id: string, type: string, username: string>, members: table<_id: string, added_on: string, email: string, first_name: string, last_name: string, picture_url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($vestorly_auth == null) { error make --unspanned { msg: "required query parameter 'vestorly_auth' missing: pass --vestorly-auth" } }
@@ -1222,7 +1245,7 @@ export def "find-member-reports" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --vestorly-auth: string # Vestorly Auth Token (required)
   --access-token: string # OAuth Token
-]: nothing -> record<member_reports: table<day: int, event_count: int, originator_group_id: string, parent_originator_id: string, source: string, type: string, year: int>> {
+]: nothing -> oneof<record<member_reports: table<day: int, event_count: int, originator_group_id: string, parent_originator_id: string, source: string, type: string, year: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($vestorly_auth == null) { error make --unspanned { msg: "required query parameter 'vestorly_auth' missing: pass --vestorly-auth" } }
@@ -1262,7 +1285,7 @@ export def "find-members" [
   --access-token: string # OAuth Token
   --start: int # Skips number of members from start
   --limit: int # Number of members to return
-]: nothing -> record<members: table<_id: string, address: string, age: string, assets: string, city: string, data_estimated: bool, education: string, email: string, estimated_location: string, estimated_zip: string, family: string, first_name: string, gender: string, genuine_email: bool, high_net_worth: bool, home_market_value: string, home_owner_status: string, hometown: string, household_income: string, interest_consultation: string, interest_in_new_advisor: string, invited_by: string, invited_on: string, is_client: bool, is_hidden: bool, last_active_date: string, last_name: string, location: string, marital_status: string, message: string, occupation: string, phone: string, picture_url: string, portfolio_size: string, profile_url: string, register_ip_addr: string, signed_up_with: string, state: string, subscribed_group_ids: list, tags: list, unsubscribed: bool, unsubscribed_date: bool, user_type: string, zip: string>, meta: record<message: string>, more_results: bool> {
+]: nothing -> oneof<record<members: table<_id: string, address: string, age: string, assets: string, city: string, data_estimated: bool, education: string, email: string, estimated_location: string, estimated_zip: string, family: string, first_name: string, gender: string, genuine_email: bool, high_net_worth: bool, home_market_value: string, home_owner_status: string, hometown: string, household_income: string, interest_consultation: string, interest_in_new_advisor: string, invited_by: string, invited_on: string, is_client: bool, is_hidden: bool, last_active_date: string, last_name: string, location: string, marital_status: string, message: string, occupation: string, phone: string, picture_url: string, portfolio_size: string, profile_url: string, register_ip_addr: string, signed_up_with: string, state: string, subscribed_group_ids: list, tags: list, unsubscribed: bool, unsubscribed_date: bool, user_type: string, zip: string>, meta: record<message: string>, more_results: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($vestorly_auth == null) { error make --unspanned { msg: "required query parameter 'vestorly_auth' missing: pass --vestorly-auth" } }
@@ -1344,7 +1367,7 @@ export def "create-member" [
   --unsubscribed-date: oneof<nothing, bool>
   --user-type: string
   --zip: string
-]: any -> record<member: record<_id: string, address: string, age: string, assets: string, city: string, data_estimated: bool, education: string, email: string, estimated_location: string, estimated_zip: string, family: string, first_name: string, gender: string, genuine_email: bool, high_net_worth: bool, home_market_value: string, home_owner_status: string, hometown: string, household_income: string, interest_consultation: string, interest_in_new_advisor: string, invited_by: string, invited_on: string, is_client: bool, is_hidden: bool, last_active_date: string, last_name: string, location: string, marital_status: string, message: string, occupation: string, phone: string, picture_url: string, portfolio_size: string, profile_url: string, register_ip_addr: string, signed_up_with: string, state: string, subscribed_group_ids: list<string>, tags: list<string>, unsubscribed: bool, unsubscribed_date: bool, user_type: string, zip: string>> {
+]: any -> oneof<record<member: record<_id: string, address: string, age: string, assets: string, city: string, data_estimated: bool, education: string, email: string, estimated_location: string, estimated_zip: string, family: string, first_name: string, gender: string, genuine_email: bool, high_net_worth: bool, home_market_value: string, home_owner_status: string, hometown: string, household_income: string, interest_consultation: string, interest_in_new_advisor: string, invited_by: string, invited_on: string, is_client: bool, is_hidden: bool, last_active_date: string, last_name: string, location: string, marital_status: string, message: string, occupation: string, phone: string, picture_url: string, portfolio_size: string, profile_url: string, register_ip_addr: string, signed_up_with: string, state: string, subscribed_group_ids: list<string>, tags: list<string>, unsubscribed: bool, unsubscribed_date: bool, user_type: string, zip: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1386,7 +1409,7 @@ export def "find-member-by-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --vestorly-auth: string # Vestorly Auth Token (required, format: string)
   --access-token: string # OAuth Token
-]: nothing -> record<member: record<_id: string, address: string, age: string, assets: string, city: string, data_estimated: bool, education: string, email: string, estimated_location: string, estimated_zip: string, family: string, first_name: string, gender: string, genuine_email: bool, high_net_worth: bool, home_market_value: string, home_owner_status: string, hometown: string, household_income: string, interest_consultation: string, interest_in_new_advisor: string, invited_by: string, invited_on: string, is_client: bool, is_hidden: bool, last_active_date: string, last_name: string, location: string, marital_status: string, message: string, occupation: string, phone: string, picture_url: string, portfolio_size: string, profile_url: string, register_ip_addr: string, signed_up_with: string, state: string, subscribed_group_ids: list<string>, tags: list<string>, unsubscribed: bool, unsubscribed_date: bool, user_type: string, zip: string>> {
+]: nothing -> oneof<record<member: record<_id: string, address: string, age: string, assets: string, city: string, data_estimated: bool, education: string, email: string, estimated_location: string, estimated_zip: string, family: string, first_name: string, gender: string, genuine_email: bool, high_net_worth: bool, home_market_value: string, home_owner_status: string, hometown: string, household_income: string, interest_consultation: string, interest_in_new_advisor: string, invited_by: string, invited_on: string, is_client: bool, is_hidden: bool, last_active_date: string, last_name: string, location: string, marital_status: string, message: string, occupation: string, phone: string, picture_url: string, portfolio_size: string, profile_url: string, register_ip_addr: string, signed_up_with: string, state: string, subscribed_group_ids: list<string>, tags: list<string>, unsubscribed: bool, unsubscribed_date: bool, user_type: string, zip: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1470,7 +1493,7 @@ export def "update-member-by-id" [
   --unsubscribed-date: oneof<nothing, bool>
   --user-type: string
   --zip: string
-]: any -> record<member: record<_id: string, address: string, age: string, assets: string, city: string, data_estimated: bool, education: string, email: string, estimated_location: string, estimated_zip: string, family: string, first_name: string, gender: string, genuine_email: bool, high_net_worth: bool, home_market_value: string, home_owner_status: string, hometown: string, household_income: string, interest_consultation: string, interest_in_new_advisor: string, invited_by: string, invited_on: string, is_client: bool, is_hidden: bool, last_active_date: string, last_name: string, location: string, marital_status: string, message: string, occupation: string, phone: string, picture_url: string, portfolio_size: string, profile_url: string, register_ip_addr: string, signed_up_with: string, state: string, subscribed_group_ids: list<string>, tags: list<string>, unsubscribed: bool, unsubscribed_date: bool, user_type: string, zip: string>> {
+]: any -> oneof<record<member: record<_id: string, address: string, age: string, assets: string, city: string, data_estimated: bool, education: string, email: string, estimated_location: string, estimated_zip: string, family: string, first_name: string, gender: string, genuine_email: bool, high_net_worth: bool, home_market_value: string, home_owner_status: string, hometown: string, household_income: string, interest_consultation: string, interest_in_new_advisor: string, invited_by: string, invited_on: string, is_client: bool, is_hidden: bool, last_active_date: string, last_name: string, location: string, marital_status: string, message: string, occupation: string, phone: string, picture_url: string, portfolio_size: string, profile_url: string, register_ip_addr: string, signed_up_with: string, state: string, subscribed_group_ids: list<string>, tags: list<string>, unsubscribed: bool, unsubscribed_date: bool, user_type: string, zip: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1513,7 +1536,7 @@ export def "find-newsletter-settings" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --vestorly-auth: string # Vestorly Auth Token (required)
   --access-token: string # OAuth Token
-]: nothing -> record<newsletter_settings: table<_id: string, banner_color: string, body_html: string, email_accent_color: string, email_day_of_week: int, email_hour: int, email_status: string, facebook_active_wall: string, footer_email_font: string, footer_html: string, footer_image_url: string, group_id: string, header_background_color: string, header_image_url: string, intro_text: string, linkedin_active_wall: string, montage_enabled: bool, montage_facebook_image_url: string, montage_linkedin_image_url: string, montage_title: string, montage_twitter_image_url: string, newsletter_ids: list, newsletter_type: string, primary_email_font: string, salutation_text: string, social_day_of_week: int, social_description: string, social_posting_text: string, social_title: string, subject: string, title_color: string>> {
+]: nothing -> oneof<record<newsletter_settings: table<_id: string, banner_color: string, body_html: string, email_accent_color: string, email_day_of_week: int, email_hour: int, email_status: string, facebook_active_wall: string, footer_email_font: string, footer_html: string, footer_image_url: string, group_id: string, header_background_color: string, header_image_url: string, intro_text: string, linkedin_active_wall: string, montage_enabled: bool, montage_facebook_image_url: string, montage_linkedin_image_url: string, montage_title: string, montage_twitter_image_url: string, newsletter_ids: list, newsletter_type: string, primary_email_font: string, salutation_text: string, social_day_of_week: int, social_description: string, social_posting_text: string, social_title: string, subject: string, title_color: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($vestorly_auth == null) { error make --unspanned { msg: "required query parameter 'vestorly_auth' missing: pass --vestorly-auth" } }
@@ -1552,7 +1575,7 @@ export def "find-newsletter-settings-by-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --vestorly-auth: string # Vestorly Auth Token (required)
   --access-token: string # OAuth Token
-]: nothing -> record<newsletter_setting: record<_id: string, banner_color: string, body_html: string, email_accent_color: string, email_day_of_week: int, email_hour: int, email_status: string, facebook_active_wall: string, footer_email_font: string, footer_html: string, footer_image_url: string, group_id: string, header_background_color: string, header_image_url: string, intro_text: string, linkedin_active_wall: string, montage_enabled: bool, montage_facebook_image_url: string, montage_linkedin_image_url: string, montage_title: string, montage_twitter_image_url: string, newsletter_ids: list<string>, newsletter_type: string, primary_email_font: string, salutation_text: string, social_day_of_week: int, social_description: string, social_posting_text: string, social_title: string, subject: string, title_color: string>> {
+]: nothing -> oneof<record<newsletter_setting: record<_id: string, banner_color: string, body_html: string, email_accent_color: string, email_day_of_week: int, email_hour: int, email_status: string, facebook_active_wall: string, footer_email_font: string, footer_html: string, footer_image_url: string, group_id: string, header_background_color: string, header_image_url: string, intro_text: string, linkedin_active_wall: string, montage_enabled: bool, montage_facebook_image_url: string, montage_linkedin_image_url: string, montage_title: string, montage_twitter_image_url: string, newsletter_ids: list<string>, newsletter_type: string, primary_email_font: string, salutation_text: string, social_day_of_week: int, social_description: string, social_posting_text: string, social_title: string, subject: string, title_color: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1579,7 +1602,6 @@ export def "find-newsletter-settings-by-id" [
 #
 # PUT /newsletter_settings/{id}
 # operationId: updateNewsletterSettingsByID
-# --newsletter_setting shape: {_id: string, banner_color?: string, body_html?: string, email_accent_color?: string, email_day_of_week?: int, email_hour?: int, email_status?: string, facebook_active_wall?: string, footer_email_font?: string, footer_html?: string, footer_image_url?: string, group_id?: string, header_background_color?: string, header_image_url?: string, intro_text?: string, linkedin_active_wall?: string, montage_enabled?: bool, montage_facebook_image_url?: string, montage_linkedin_image_url?: string, ... (12 more fields)}
 export def "update-newsletter-settings-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1594,7 +1616,7 @@ export def "update-newsletter-settings-by-id" [
   --vestorly-auth: string # Vestorly Auth Token (required)
   --access-token: string # OAuth Token
   --newsletter-setting: any # shape: {_id: string, banner_color?: string, body_html?: string, email_accent_color?: string, email_day_of_week?: int, email_hour?: int, email_status?: string, facebook_active_wall?: string, footer_email_font?: string, footer_html?: string, footer_image_url?: string, group_id?: string, header_background_color?: string, header_image_url?: string, intro_text?: string, linkedin_active_wall?: string, montage_enabled?: bool, montage_facebook_image_url?: string, montage_linkedin_image_url?: string, ... (12 more fields)}
-]: any -> record<newsletter_setting: record<_id: string, banner_color: string, body_html: string, email_accent_color: string, email_day_of_week: int, email_hour: int, email_status: string, facebook_active_wall: string, footer_email_font: string, footer_html: string, footer_image_url: string, group_id: string, header_background_color: string, header_image_url: string, intro_text: string, linkedin_active_wall: string, montage_enabled: bool, montage_facebook_image_url: string, montage_linkedin_image_url: string, montage_title: string, montage_twitter_image_url: string, newsletter_ids: list<string>, newsletter_type: string, primary_email_font: string, salutation_text: string, social_day_of_week: int, social_description: string, social_posting_text: string, social_title: string, subject: string, title_color: string>> {
+]: any -> oneof<record<newsletter_setting: record<_id: string, banner_color: string, body_html: string, email_accent_color: string, email_day_of_week: int, email_hour: int, email_status: string, facebook_active_wall: string, footer_email_font: string, footer_html: string, footer_image_url: string, group_id: string, header_background_color: string, header_image_url: string, intro_text: string, linkedin_active_wall: string, montage_enabled: bool, montage_facebook_image_url: string, montage_linkedin_image_url: string, montage_title: string, montage_twitter_image_url: string, newsletter_ids: list<string>, newsletter_type: string, primary_email_font: string, salutation_text: string, social_day_of_week: int, social_description: string, social_posting_text: string, social_title: string, subject: string, title_color: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1636,7 +1658,7 @@ export def "find-newsletters" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --vestorly-auth: string # Vestorly Auth Token (required)
   --access-token: string # OAuth Token
-]: nothing -> record<newsletters: table<_id: string, click_count: int, is_default: bool, is_sent: bool, total_click_count: int, unique_click_count: int>> {
+]: nothing -> oneof<record<newsletters: table<_id: string, click_count: int, is_default: bool, is_sent: bool, total_click_count: int, unique_click_count: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($vestorly_auth == null) { error make --unspanned { msg: "required query parameter 'vestorly_auth' missing: pass --vestorly-auth" } }
@@ -1675,7 +1697,7 @@ export def "get-newsletter-by-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --vestorly-auth: string # Vestorly Auth Token (required)
   --access-token: string # OAuth Token
-]: nothing -> record<newsletter: record<_id: string, click_count: int, is_default: bool, is_sent: bool, total_click_count: int, unique_click_count: int>> {
+]: nothing -> oneof<record<newsletter: record<_id: string, click_count: int, is_default: bool, is_sent: bool, total_click_count: int, unique_click_count: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1720,7 +1742,7 @@ export def "update-newsletter-by-id" [
   --is-sent: oneof<nothing, bool>
   --total-click-count: int # format: int64
   --unique-click-count: int # format: int64
-]: any -> record<newsletter: record<_id: string, click_count: int, is_default: bool, is_sent: bool, total_click_count: int, unique_click_count: int>> {
+]: any -> oneof<record<newsletter: record<_id: string, click_count: int, is_default: bool, is_sent: bool, total_click_count: int, unique_click_count: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1765,7 +1787,7 @@ export def "find-posts" [
   --text-query: string # Filter post by parameters
   --external-url: string # Filter by External URL
   --is-published: string # Filter by is_published boolean
-]: nothing -> record<posts: table<_id: string, advisor_id: string, approval_status: string, approval_transactions: list, article_id: string, comment: string, created_at: string, display_date: string, display_summary: string, display_tag: string, external_url: string, external_url_source: string, external_url_type: string, group_ids: list, image_height: string, image_path: string, image_url: string, image_width: string, is_featured: bool, is_mobile_proxy_needed: bool, is_proxy_needed: bool, is_published: bool, is_responsive: bool, logo_url: string, needs_sanitize: string, newsletter_ids: list, post_date: string, proxy_url: string, redirector_link: string, slug: string, square_logo_url: string, suitability_score: string, summary: string, title: string, topic: string, updated_at: string, vestorly_url: string, video: string, video_id: string>> {
+]: nothing -> oneof<record<posts: table<_id: string, advisor_id: string, approval_status: string, approval_transactions: list, article_id: string, comment: string, created_at: string, display_date: string, display_summary: string, display_tag: string, external_url: string, external_url_source: string, external_url_type: string, group_ids: list, image_height: string, image_path: string, image_url: string, image_width: string, is_featured: bool, is_mobile_proxy_needed: bool, is_proxy_needed: bool, is_published: bool, is_responsive: bool, logo_url: string, needs_sanitize: string, newsletter_ids: list, post_date: string, proxy_url: string, redirector_link: string, slug: string, square_logo_url: string, suitability_score: string, summary: string, title: string, topic: string, updated_at: string, vestorly_url: string, video: string, video_id: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($vestorly_auth == null) { error make --unspanned { msg: "required query parameter 'vestorly_auth' missing: pass --vestorly-auth" } }
@@ -1840,7 +1862,7 @@ export def "create-post" [
   --vestorly-url: string
   --video: string
   --video-id: string
-]: any -> record<post: record<_id: string, advisor_id: string, approval_status: string, approval_transactions: list<string>, article_id: string, comment: string, created_at: string, display_date: string, display_summary: string, display_tag: string, external_url: string, external_url_source: string, external_url_type: string, group_ids: list<string>, image_height: string, image_path: string, image_url: string, image_width: string, is_featured: bool, is_mobile_proxy_needed: bool, is_proxy_needed: bool, is_published: bool, is_responsive: bool, logo_url: string, needs_sanitize: string, newsletter_ids: list<string>, post_date: string, proxy_url: string, redirector_link: string, slug: string, square_logo_url: string, suitability_score: string, summary: string, title: string, topic: string, updated_at: string, vestorly_url: string, video: string, video_id: string>> {
+]: any -> oneof<record<post: record<_id: string, advisor_id: string, approval_status: string, approval_transactions: list<string>, article_id: string, comment: string, created_at: string, display_date: string, display_summary: string, display_tag: string, external_url: string, external_url_source: string, external_url_type: string, group_ids: list<string>, image_height: string, image_path: string, image_url: string, image_width: string, is_featured: bool, is_mobile_proxy_needed: bool, is_proxy_needed: bool, is_published: bool, is_responsive: bool, logo_url: string, needs_sanitize: string, newsletter_ids: list<string>, post_date: string, proxy_url: string, redirector_link: string, slug: string, square_logo_url: string, suitability_score: string, summary: string, title: string, topic: string, updated_at: string, vestorly_url: string, video: string, video_id: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1882,7 +1904,7 @@ export def "get-post-by-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --vestorly-auth: string # Vestorly Auth Token (required)
   --access-token: string # OAuth Token
-]: nothing -> record<post: record<_id: string, advisor_id: string, approval_status: string, approval_transactions: list<string>, article_id: string, comment: string, created_at: string, display_date: string, display_summary: string, display_tag: string, external_url: string, external_url_source: string, external_url_type: string, group_ids: list<string>, image_height: string, image_path: string, image_url: string, image_width: string, is_featured: bool, is_mobile_proxy_needed: bool, is_proxy_needed: bool, is_published: bool, is_responsive: bool, logo_url: string, needs_sanitize: string, newsletter_ids: list<string>, post_date: string, proxy_url: string, redirector_link: string, slug: string, square_logo_url: string, suitability_score: string, summary: string, title: string, topic: string, updated_at: string, vestorly_url: string, video: string, video_id: string>> {
+]: nothing -> oneof<record<post: record<_id: string, advisor_id: string, approval_status: string, approval_transactions: list<string>, article_id: string, comment: string, created_at: string, display_date: string, display_summary: string, display_tag: string, external_url: string, external_url_source: string, external_url_type: string, group_ids: list<string>, image_height: string, image_path: string, image_url: string, image_width: string, is_featured: bool, is_mobile_proxy_needed: bool, is_proxy_needed: bool, is_published: bool, is_responsive: bool, logo_url: string, needs_sanitize: string, newsletter_ids: list<string>, post_date: string, proxy_url: string, redirector_link: string, slug: string, square_logo_url: string, suitability_score: string, summary: string, title: string, topic: string, updated_at: string, vestorly_url: string, video: string, video_id: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1961,7 +1983,7 @@ export def "update-post-by-id" [
   --vestorly-url: string
   --video: string
   --video-id: string
-]: any -> record<post: record<_id: string, advisor_id: string, approval_status: string, approval_transactions: list<string>, article_id: string, comment: string, created_at: string, display_date: string, display_summary: string, display_tag: string, external_url: string, external_url_source: string, external_url_type: string, group_ids: list<string>, image_height: string, image_path: string, image_url: string, image_width: string, is_featured: bool, is_mobile_proxy_needed: bool, is_proxy_needed: bool, is_published: bool, is_responsive: bool, logo_url: string, needs_sanitize: string, newsletter_ids: list<string>, post_date: string, proxy_url: string, redirector_link: string, slug: string, square_logo_url: string, suitability_score: string, summary: string, title: string, topic: string, updated_at: string, vestorly_url: string, video: string, video_id: string>> {
+]: any -> oneof<record<post: record<_id: string, advisor_id: string, approval_status: string, approval_transactions: list<string>, article_id: string, comment: string, created_at: string, display_date: string, display_summary: string, display_tag: string, external_url: string, external_url_source: string, external_url_type: string, group_ids: list<string>, image_height: string, image_path: string, image_url: string, image_width: string, is_featured: bool, is_mobile_proxy_needed: bool, is_proxy_needed: bool, is_published: bool, is_responsive: bool, logo_url: string, needs_sanitize: string, newsletter_ids: list<string>, post_date: string, proxy_url: string, redirector_link: string, slug: string, square_logo_url: string, suitability_score: string, summary: string, title: string, topic: string, updated_at: string, vestorly_url: string, video: string, video_id: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2003,7 +2025,7 @@ export def "find-seed-custom-feeds" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --vestorly-auth: string # Vestorly Auth Token (required)
   --access-token: string # OAuth Token
-]: nothing -> record<seed_custom_feeds: table<_id: string, article_id: string, custom_feed_id: string, not_article_id: string, not_seeds: list, seeds: list, sort_by: string>> {
+]: nothing -> oneof<record<seed_custom_feeds: table<_id: string, article_id: string, custom_feed_id: string, not_article_id: string, not_seeds: list, seeds: list, sort_by: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($vestorly_auth == null) { error make --unspanned { msg: "required query parameter 'vestorly_auth' missing: pass --vestorly-auth" } }
@@ -2047,7 +2069,7 @@ export def "create-seed-custom-feed" [
   --not-seeds: list<string>
   --seeds: list<string>
   --sort-by: string
-]: any -> record<seed_custom_feed: record<_id: string, article_id: string, custom_feed_id: string, not_article_id: string, not_seeds: list<string>, seeds: list<string>, sort_by: string>> {
+]: any -> oneof<record<seed_custom_feed: record<_id: string, article_id: string, custom_feed_id: string, not_article_id: string, not_seeds: list<string>, seeds: list<string>, sort_by: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2089,7 +2111,7 @@ export def "delete-seed-custom-feed" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --vestorly-auth: string # Vestorly Auth Token (required)
   --access-token: string # OAuth Token
-]: nothing -> record<seed_custom_feed: record<_id: string, article_id: string, custom_feed_id: string, not_article_id: string, not_seeds: list<string>, seeds: list<string>, sort_by: string>> {
+]: nothing -> oneof<record<seed_custom_feed: record<_id: string, article_id: string, custom_feed_id: string, not_article_id: string, not_seeds: list<string>, seeds: list<string>, sort_by: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2129,7 +2151,7 @@ export def "find-seed-custom-feed-by-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --vestorly-auth: string # Vestorly Auth Token (required)
   --access-token: string # OAuth Token
-]: nothing -> record<seed_custom_feed: record<_id: string, article_id: string, custom_feed_id: string, not_article_id: string, not_seeds: list<string>, seeds: list<string>, sort_by: string>> {
+]: nothing -> oneof<record<seed_custom_feed: record<_id: string, article_id: string, custom_feed_id: string, not_article_id: string, not_seeds: list<string>, seeds: list<string>, sort_by: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2175,7 +2197,7 @@ export def "update-seed-custom-feed-by-id" [
   --not-seeds: list<string>
   --seeds: list<string>
   --sort-by: string
-]: any -> record<seed_custom_feed: record<_id: string, article_id: string, custom_feed_id: string, not_article_id: string, not_seeds: list<string>, seeds: list<string>, sort_by: string>> {
+]: any -> oneof<record<seed_custom_feed: record<_id: string, article_id: string, custom_feed_id: string, not_article_id: string, not_seeds: list<string>, seeds: list<string>, sort_by: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2217,7 +2239,7 @@ export def "login" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --username: string # Username in the vestorly platform (required)
   --password: string # Password in Vestorly Platform (required)
-]: nothing -> record<_id: string, current_user: record<_id: string, company: string, first_name: string, last_name: string, name: string, new_user: bool, picture_url: string, plan_expired: bool, plan_id: string, plan_setup: bool, plan_status: string, plan_stripe: bool, show_tour: bool, slug: string, user_type: string, username: string, website: string>, new_user: bool, settings: record<_id: string, adv_brochure: string, company: string, disclosure: string, feature: record<_id: string>, name: string, orgsetting: record<_id: string, company_address: string, company_contact_email: string, company_homepage_url: string, is_default: bool, name: string, privacy_policy_url: string, site_url: string, terms_and_conditions_url: string>, personalsetting: record<_id: string>, picture_url: string, slug: string, website: string>, vestorly_auth: string> {
+]: nothing -> oneof<record<_id: string, current_user: record<_id: string, company: string, first_name: string, last_name: string, name: string, new_user: bool, picture_url: string, plan_expired: bool, plan_id: string, plan_setup: bool, plan_status: string, plan_stripe: bool, show_tour: bool, slug: string, user_type: string, username: string, website: string>, new_user: bool, settings: record<_id: string, adv_brochure: string, company: string, disclosure: string, feature: record<_id: string>, name: string, orgsetting: record<_id: string, company_address: string, company_contact_email: string, company_homepage_url: string, is_default: bool, name: string, privacy_policy_url: string, site_url: string, terms_and_conditions_url: string>, personalsetting: record<_id: string>, picture_url: string, slug: string, website: string>, vestorly_auth: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($username == null) { error make --unspanned { msg: "required query parameter 'username' missing: pass --username" } }
@@ -2256,7 +2278,7 @@ export def "logout" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --vestorly-auth: string # Authenication token (required)
-]: nothing -> record<message: string> {
+]: nothing -> oneof<record<message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2295,7 +2317,7 @@ export def "find-sources" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --vestorly-auth: string # Vestorly Auth Token (required)
   --access-token: string # OAuth Token
-]: nothing -> record<sources: table<_id: string, custom_rss_feed: bool, enabled: bool, logo_url: string, name: string, rss_publisher: string, url: string>> {
+]: nothing -> oneof<record<sources: table<_id: string, custom_rss_feed: bool, enabled: bool, logo_url: string, name: string, rss_publisher: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($vestorly_auth == null) { error make --unspanned { msg: "required query parameter 'vestorly_auth' missing: pass --vestorly-auth" } }
@@ -2339,7 +2361,7 @@ export def "create-source" [
   name: string
   rss_publisher: string
   url: string
-]: any -> record<source: record<_id: string, custom_rss_feed: bool, enabled: bool, logo_url: string, name: string, rss_publisher: string, url: string>> {
+]: any -> oneof<record<source: record<_id: string, custom_rss_feed: bool, enabled: bool, logo_url: string, name: string, rss_publisher: string, url: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2381,7 +2403,7 @@ export def "get-source-by-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --vestorly-auth: string # Vestorly Auth Token (required)
   --access-token: string # OAuth Token
-]: nothing -> record<source: record<_id: string, custom_rss_feed: bool, enabled: bool, logo_url: string, name: string, rss_publisher: string, url: string>> {
+]: nothing -> oneof<record<source: record<_id: string, custom_rss_feed: bool, enabled: bool, logo_url: string, name: string, rss_publisher: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2427,7 +2449,7 @@ export def "update-source-by-id" [
   name: string
   rss_publisher: string
   url: string
-]: any -> record<source: record<_id: string, custom_rss_feed: bool, enabled: bool, logo_url: string, name: string, rss_publisher: string, url: string>> {
+]: any -> oneof<record<source: record<_id: string, custom_rss_feed: bool, enabled: bool, logo_url: string, name: string, rss_publisher: string, url: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

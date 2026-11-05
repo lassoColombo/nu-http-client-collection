@@ -12,27 +12,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -40,8 +49,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -52,7 +66,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -87,7 +110,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -105,9 +129,9 @@ def accept-completer [] { ["application/json" "text/json"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "advisors-get" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["advisors-get" "advisors-get-by-householdid-clientid" "advisors-get-by-id" "assumptions-get-by-planid" "business-entities-get-by-planid" "business-entities-get-by-id-planid" "calculations-get-by-planid" "defined-benefit-pensions-get-by-planid" "defined-benefit-pensions-get-by-id-planid" "eula-accept" "family-get-by-planid" "goal-adjustments-get-education-by-id-clientid-planid" "goal-adjustments-post-education-by-id-goaladjustments-planid" "goal-adjustments-get-goal-success-rates-by-clientid-planid" "goal-adjustments-get-major-purchase-by-id-clientid-planid" "goal-adjustments-post-major-purchase-by-id-goaladjustments-planid" "goal-adjustments-get-goal-adjustment-restrictions-by-clientid-planid" "goal-adjustments-get-retirement-by-clientid-planid" "goal-adjustments-post-retirement-by-goaladjustments-planid" "goal-adjustments-get-what-are-my-options-by-id-clientid-planid" "goals-get-by-planid" "goals-get-by-id-planid" "holding-companies-get-by-planid" "holding-companies-get-by-id-planid" "households-get-by-householdid" "liabilities-get-by-planid" "liabilities-get-by-id-planid" "lifestyle-assets-get-by-planid" "lifestyle-assets-get-by-id-planid" "live-plan-get-goals-by-clientid-planid" "live-plan-get-goal-funding-list-by-clientid-planid" "live-plan-get-what-are-my-options-by-id-clientid-planid" "live-plan-get-accounts-by-clientid-planid" "live-plan-get-liabilities-by-clientid-planid" "live-plan-get-lifestyle-assets-by-clientid-planid" "live-plan-get-real-estate-assets-by-clientid-planid" "live-plan-get-projected-net-worth-by-clientid-planid" "live-plan-get-projected-needs-vs-abilities-by-id-clientid-planid" "net-worth-get-by-planid" "password-has-user-set-password" "password-password-requirements" "password-reset-by-model" "password-set-by-model" "plan-information-get-by-planid" "plan-statuses-get-by-planid" "portfolio-accounts-get-by-planid" "portfolio-accounts-get-by-id-planid" "projected-annual-summary-get-by-planid" "projected-annual-summary-get-by-id-planid" "projected-cash-flow-get-by-planid" "projected-cash-flow-get-by-id-planid" "projected-goals-get-assets-funding-goals-by-planid" "projected-goals-get-needs-vs-abilities-by-planid" "projected-net-worth-get-by-planid" "projected-net-worth-get-by-id-planid" "restricted-stocks-get-by-planid" "restricted-stocks-get-by-id-planid" "service-information-statistics" "stock-options-get-by-planid" "stock-options-get-by-id-planid" "auth-login-by-model" "auth-password-requirements" "auth-logout" "auth-resume-session" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -140,7 +164,7 @@ export def "advisors-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<advisors: table<addressLine1: string, addressLine2: string, advisorId: string, advisorTitle: string, businessPhone: string, cellPhone: string, city: string, emailAddress: string, faxPhone: string, firstName: string, homePhone: string, lastName: string, links: list, middleName: string, officeName: string, officeWebsite: string, pagerNumber: string, postalCode: string, stateProvince: string>> {
+]: nothing -> oneof<record<advisors: table<addressLine1: string, addressLine2: string, advisorId: string, advisorTitle: string, businessPhone: string, cellPhone: string, city: string, emailAddress: string, faxPhone: string, firstName: string, homePhone: string, lastName: string, links: list, middleName: string, officeName: string, officeWebsite: string, pagerNumber: string, postalCode: string, stateProvince: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/Advisors" $auth.query)
@@ -177,7 +201,7 @@ export def "advisors-get-by-householdid-clientid" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<advisors: table<addressLine1: string, addressLine2: string, advisorId: string, advisorTitle: string, businessPhone: string, cellPhone: string, city: string, emailAddress: string, faxPhone: string, firstName: string, homePhone: string, lastName: string, links: list, middleName: string, officeName: string, officeWebsite: string, pagerNumber: string, postalCode: string, stateProvince: string>> {
+]: nothing -> oneof<record<advisors: table<addressLine1: string, addressLine2: string, advisorId: string, advisorTitle: string, businessPhone: string, cellPhone: string, city: string, emailAddress: string, faxPhone: string, firstName: string, homePhone: string, lastName: string, links: list, middleName: string, officeName: string, officeWebsite: string, pagerNumber: string, postalCode: string, stateProvince: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($household_id | is-empty) { error make --unspanned { msg: "path parameter 'householdId' must be non-empty" } }
@@ -215,7 +239,7 @@ export def "advisors-get-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<addressLine1: string, addressLine2: string, advisorId: string, advisorTitle: string, businessPhone: string, cellPhone: string, city: string, emailAddress: string, faxPhone: string, firstName: string, homePhone: string, lastName: string, links: table<href: string, rel: string>, middleName: string, officeName: string, officeWebsite: string, pagerNumber: string, postalCode: string, stateProvince: string> {
+]: nothing -> oneof<record<addressLine1: string, addressLine2: string, advisorId: string, advisorTitle: string, businessPhone: string, cellPhone: string, city: string, emailAddress: string, faxPhone: string, firstName: string, homePhone: string, lastName: string, links: table<href: string, rel: string>, middleName: string, officeName: string, officeWebsite: string, pagerNumber: string, postalCode: string, stateProvince: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -252,7 +276,7 @@ export def "assumptions-get-by-planid" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --plan-id: string # Id of the plan to retrieve data from (e.g. 1001-11-3). (required)
-]: nothing -> record<assumptions: record<anyHeadAlreadyRetired: bool, bothRetired: bool, bucketing: record<distributionBucketTargetBalance: record, endDate: record, indexedAt: record, returnRate: record, standardDeviation: record, startDate: record>, client: record<alreadyRetired: bool, deceasedAge: int, deceasedDate: record, estateIncomeTaxes: record, governmentPensions: record, maritalOrTaxFilingStatus: record, preRetirementIncomeTaxes: record, retirementAge: int, retirementDate: record, retirementIncomeTaxes: record>, coClient: record<alreadyRetired: bool, deceasedAge: int, deceasedDate: record, estateIncomeTaxes: record, governmentPensions: record, maritalOrTaxFilingStatus: record, preRetirementIncomeTaxes: record, retirementAge: int, retirementDate: record, retirementIncomeTaxes: record>, firstToDieDate: record<day: int, formatted: string, formattedMMMMddyyyy: string, formattedMMMdd: string, formattedMMMddyyyy: string, formattedMMMyyyy: string, formattedNA: string, month: int, toDateTime: string, urlEncoded: string, year: int>, firstToDieMember: string, firstToRetireDate: record<day: int, formatted: string, formattedMMMMddyyyy: string, formattedMMMdd: string, formattedMMMddyyyy: string, formattedMMMyyyy: string, formattedNA: string, month: int, toDateTime: string, urlEncoded: string, year: int>, inflationRate: record<formattedDoubleDecimal: string, formattedNoDecimal: string, formattedSingleDecimal: string, raw: float, rawCappedAt100: float>, lastToDieDate: record<day: int, formatted: string, formattedMMMMddyyyy: string, formattedMMMdd: string, formattedMMMddyyyy: string, formattedMMMyyyy: string, formattedNA: string, month: int, toDateTime: string, urlEncoded: string, year: int>, lastToDieMember: string, lastToRetireDate: record<day: int, formatted: string, formattedMMMMddyyyy: string, formattedMMMdd: string, formattedMMMddyyyy: string, formattedMMMyyyy: string, formattedNA: string, month: int, toDateTime: string, urlEncoded: string, year: int>, retirementYearAdjustedIfAlreadyRetired: record<raw: int>, splitSurplusSavingsStrategiesEnabled: bool, taxMethod: string>, links: table<href: string, rel: string>> {
+]: nothing -> oneof<record<assumptions: record<anyHeadAlreadyRetired: bool, bothRetired: bool, bucketing: record<distributionBucketTargetBalance: record, endDate: record, indexedAt: record, returnRate: record, standardDeviation: record, startDate: record>, client: record<alreadyRetired: bool, deceasedAge: int, deceasedDate: record, estateIncomeTaxes: record, governmentPensions: record, maritalOrTaxFilingStatus: record, preRetirementIncomeTaxes: record, retirementAge: int, retirementDate: record, retirementIncomeTaxes: record>, coClient: record<alreadyRetired: bool, deceasedAge: int, deceasedDate: record, estateIncomeTaxes: record, governmentPensions: record, maritalOrTaxFilingStatus: record, preRetirementIncomeTaxes: record, retirementAge: int, retirementDate: record, retirementIncomeTaxes: record>, firstToDieDate: record<day: int, formatted: string, formattedMMMMddyyyy: string, formattedMMMdd: string, formattedMMMddyyyy: string, formattedMMMyyyy: string, formattedNA: string, month: int, toDateTime: string, urlEncoded: string, year: int>, firstToDieMember: string, firstToRetireDate: record<day: int, formatted: string, formattedMMMMddyyyy: string, formattedMMMdd: string, formattedMMMddyyyy: string, formattedMMMyyyy: string, formattedNA: string, month: int, toDateTime: string, urlEncoded: string, year: int>, inflationRate: record<formattedDoubleDecimal: string, formattedNoDecimal: string, formattedSingleDecimal: string, raw: float, rawCappedAt100: float>, lastToDieDate: record<day: int, formatted: string, formattedMMMMddyyyy: string, formattedMMMdd: string, formattedMMMddyyyy: string, formattedMMMyyyy: string, formattedNA: string, month: int, toDateTime: string, urlEncoded: string, year: int>, lastToDieMember: string, lastToRetireDate: record<day: int, formatted: string, formattedMMMMddyyyy: string, formattedMMMdd: string, formattedMMMddyyyy: string, formattedMMMyyyy: string, formattedNA: string, month: int, toDateTime: string, urlEncoded: string, year: int>, retirementYearAdjustedIfAlreadyRetired: record<raw: int>, splitSurplusSavingsStrategiesEnabled: bool, taxMethod: string>, links: table<href: string, rel: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($plan_id == null) { error make --unspanned { msg: "required query parameter 'planId' missing: pass --plan-id" } }
@@ -290,7 +314,7 @@ export def "business-entities-get-by-planid" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --plan-id: string # Id of the plan to retrieve data from (e.g. 1001-11-3). (required)
-]: nothing -> record<businessEntities: table<activities: list, assetId: record, businessType: string, businessTypeFormatted: string, currentAnnualDistributions: record, currentAnnualDividends: record, currentAnnualGrowthRate: record, currentAnnualNetIncome: record, entityName: string, liquidationEvent: record, marketValuationDate: record, marketValue: record, owner: string, purchaseAmount: record, purchaseDate: record, standardDeviation: record>, links: table<href: string, rel: string>> {
+]: nothing -> oneof<record<businessEntities: table<activities: list, assetId: record, businessType: string, businessTypeFormatted: string, currentAnnualDistributions: record, currentAnnualDividends: record, currentAnnualGrowthRate: record, currentAnnualNetIncome: record, entityName: string, liquidationEvent: record, marketValuationDate: record, marketValue: record, owner: string, purchaseAmount: record, purchaseDate: record, standardDeviation: record>, links: table<href: string, rel: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($plan_id == null) { error make --unspanned { msg: "required query parameter 'planId' missing: pass --plan-id" } }
@@ -329,7 +353,7 @@ export def "business-entities-get-by-id-planid" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --plan-id: string # Id of the plan to retrieve data from (e.g. 1001-11-3). (required)
-]: nothing -> record<businessEntity: record<activities: list<record>, assetId: record<rawId: int>, businessType: string, businessTypeFormatted: string, currentAnnualDistributions: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, currentAnnualDividends: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, currentAnnualGrowthRate: record<formattedDoubleDecimal: string, formattedNoDecimal: string, formattedSingleDecimal: string, raw: float, rawCappedAt100: float>, currentAnnualNetIncome: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, entityName: string, liquidationEvent: record<firstSaleDate: record, lastSaleDate: record, liquidationType: string, liquidationTypeDescription: string, saleDatesDescription: string>, marketValuationDate: record<day: int, formatted: string, formattedMMMMddyyyy: string, formattedMMMdd: string, formattedMMMddyyyy: string, formattedMMMyyyy: string, formattedNA: string, month: int, toDateTime: string, urlEncoded: string, year: int>, marketValue: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, owner: string, purchaseAmount: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, purchaseDate: record<day: int, formatted: string, formattedMMMMddyyyy: string, formattedMMMdd: string, formattedMMMddyyyy: string, formattedMMMyyyy: string, formattedNA: string, month: int, toDateTime: string, urlEncoded: string, year: int>, standardDeviation: record<formattedDoubleDecimal: string, formattedNoDecimal: string, formattedSingleDecimal: string, raw: float, rawCappedAt100: float>>, links: table<href: string, rel: string>> {
+]: nothing -> oneof<record<businessEntity: record<activities: list<record>, assetId: record<rawId: int>, businessType: string, businessTypeFormatted: string, currentAnnualDistributions: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, currentAnnualDividends: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, currentAnnualGrowthRate: record<formattedDoubleDecimal: string, formattedNoDecimal: string, formattedSingleDecimal: string, raw: float, rawCappedAt100: float>, currentAnnualNetIncome: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, entityName: string, liquidationEvent: record<firstSaleDate: record, lastSaleDate: record, liquidationType: string, liquidationTypeDescription: string, saleDatesDescription: string>, marketValuationDate: record<day: int, formatted: string, formattedMMMMddyyyy: string, formattedMMMdd: string, formattedMMMddyyyy: string, formattedMMMyyyy: string, formattedNA: string, month: int, toDateTime: string, urlEncoded: string, year: int>, marketValue: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, owner: string, purchaseAmount: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, purchaseDate: record<day: int, formatted: string, formattedMMMMddyyyy: string, formattedMMMdd: string, formattedMMMddyyyy: string, formattedMMMyyyy: string, formattedNA: string, month: int, toDateTime: string, urlEncoded: string, year: int>, standardDeviation: record<formattedDoubleDecimal: string, formattedNoDecimal: string, formattedSingleDecimal: string, raw: float, rawCappedAt100: float>>, links: table<href: string, rel: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -406,7 +430,7 @@ export def "defined-benefit-pensions-get-by-planid" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --plan-id: string # Id of the plan to retrieve data from (e.g. 1001-11-3). (required)
-]: nothing -> record<definedBenefitPensions: table<benefit: record, description: string, isBenefitFormula: bool, isBenefitIntegratedWithCppQpp: bool, isFormulaIntegratedWithCppQpp: bool, owner: string, pensionType: string, percentPayableToSurvivor: record, projectedYearsOfService: int, startDate: record>, links: table<href: string, rel: string>> {
+]: nothing -> oneof<record<definedBenefitPensions: table<benefit: record, description: string, isBenefitFormula: bool, isBenefitIntegratedWithCppQpp: bool, isFormulaIntegratedWithCppQpp: bool, owner: string, pensionType: string, percentPayableToSurvivor: record, projectedYearsOfService: int, startDate: record>, links: table<href: string, rel: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($plan_id == null) { error make --unspanned { msg: "required query parameter 'planId' missing: pass --plan-id" } }
@@ -445,7 +469,7 @@ export def "defined-benefit-pensions-get-by-id-planid" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --plan-id: string # Id of the plan to retrieve data from (e.g. 1001-11-3). (required)
-]: nothing -> record<definedBenefitPension: record<benefit: record<enabled: bool, populated: bool, value: record>, description: string, isBenefitFormula: bool, isBenefitIntegratedWithCppQpp: bool, isFormulaIntegratedWithCppQpp: bool, owner: string, pensionType: string, percentPayableToSurvivor: record<formattedDoubleDecimal: string, formattedNoDecimal: string, formattedSingleDecimal: string, raw: float, rawCappedAt100: float>, projectedYearsOfService: int, startDate: record<day: int, formatted: string, formattedMMMMddyyyy: string, formattedMMMdd: string, formattedMMMddyyyy: string, formattedMMMyyyy: string, formattedNA: string, month: int, toDateTime: string, urlEncoded: string, year: int>>, links: table<href: string, rel: string>> {
+]: nothing -> oneof<record<definedBenefitPension: record<benefit: record<enabled: bool, populated: bool, value: record>, description: string, isBenefitFormula: bool, isBenefitIntegratedWithCppQpp: bool, isFormulaIntegratedWithCppQpp: bool, owner: string, pensionType: string, percentPayableToSurvivor: record<formattedDoubleDecimal: string, formattedNoDecimal: string, formattedSingleDecimal: string, raw: float, rawCappedAt100: float>, projectedYearsOfService: int, startDate: record<day: int, formatted: string, formattedMMMMddyyyy: string, formattedMMMdd: string, formattedMMMddyyyy: string, formattedMMMyyyy: string, formattedNA: string, month: int, toDateTime: string, urlEncoded: string, year: int>>, links: table<href: string, rel: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -519,7 +543,7 @@ export def "family-get-by-planid" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --plan-id: string # Id of the plan to retrieve data from (e.g. 1001-11-3). (required)
-]: nothing -> record<family: record<address: record<city: string, combinedCityStateProvince: string, country: string, stateOrProvince: string, stateOrProvinceAbbrev: string, street1: string, street2: string, zipOrPostalCode: string>, client: record<address: record, ageAsOfPlanDate: int, birthdate: record, citizenship: string, email: string, employer: record, gender: record, name: record, ownershipId: string, phone: record>, coClient: record<address: record, ageAsOfPlanDate: int, birthdate: record, citizenship: string, email: string, employer: record, gender: record, name: record, ownershipId: string, phone: record>, dependents: list<record>, headFullNames: string>, links: table<href: string, rel: string>> {
+]: nothing -> oneof<record<family: record<address: record<city: string, combinedCityStateProvince: string, country: string, stateOrProvince: string, stateOrProvinceAbbrev: string, street1: string, street2: string, zipOrPostalCode: string>, client: record<address: record, ageAsOfPlanDate: int, birthdate: record, citizenship: string, email: string, employer: record, gender: record, name: record, ownershipId: string, phone: record>, coClient: record<address: record, ageAsOfPlanDate: int, birthdate: record, citizenship: string, email: string, employer: record, gender: record, name: record, ownershipId: string, phone: record>, dependents: list<record>, headFullNames: string>, links: table<href: string, rel: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($plan_id == null) { error make --unspanned { msg: "required query parameter 'planId' missing: pass --plan-id" } }
@@ -559,7 +583,7 @@ export def "goal-adjustments-get-education-by-id-clientid-planid" [
   --accept: string@accept-completer # Response content type
   --client-id: string # Id of the client user for the plan. Required if current session user is an advisor. Ignored for client user sessions.
   --plan-id: string # Id of the Plan to retrieve or update data for (e.g. 1001-11-3). (required)
-]: nothing -> record<adjustedValues: record<duration: float, expensesCovered: float, lumpSumContribution: float, lumpSumDate: string, monthlySavingsContribution: float>, created: string, goalId: int, projectedResults: record<goalId: int, percentCovered: float, projections: list<record>>> {
+]: nothing -> oneof<record<adjustedValues: record<duration: float, expensesCovered: float, lumpSumContribution: float, lumpSumDate: string, monthlySavingsContribution: float>, created: string, goalId: int, projectedResults: record<goalId: int, percentCovered: float, projections: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -586,7 +610,6 @@ export def "goal-adjustments-get-education-by-id-clientid-planid" [
 #
 # POST /api/GoalAdjustments/Education/{id}/Calculations
 # operationId: GoalAdjustments_PostEducationByIdGoaladjustmentsPlanid
-# --adjustedValues shape: {duration?: float, expensesCovered?: float, lumpSumContribution?: float, lumpSumDate?: string, monthlySavingsContribution?: float}
 export def "goal-adjustments-post-education-by-id-goaladjustments-planid" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -601,7 +624,7 @@ export def "goal-adjustments-post-education-by-id-goaladjustments-planid" [
   --accept: string@accept-completer # Response content type
   --plan-id: string # Id of the Plan to retrieve or update data for (e.g. 1001-11-3). (required)
   --adjusted-values: record # shape: {duration?: float, expensesCovered?: float, lumpSumContribution?: float, lumpSumDate?: string, monthlySavingsContribution?: float}
-]: any -> record<goalAdjustments: record<adjustedValues: record<duration: float, expensesCovered: float, lumpSumContribution: float, lumpSumDate: string, monthlySavingsContribution: float>, created: string, goalId: int>, projectedResults: record<goalId: int, percentCovered: float, projections: list<record>>> {
+]: any -> oneof<record<goalAdjustments: record<adjustedValues: record<duration: float, expensesCovered: float, lumpSumContribution: float, lumpSumDate: string, monthlySavingsContribution: float>, created: string, goalId: int>, projectedResults: record<goalId: int, percentCovered: float, projections: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -644,7 +667,7 @@ export def "goal-adjustments-get-goal-success-rates-by-clientid-planid" [
   --accept: string@accept-completer # Response content type
   --client-id: string # Id of the client user for the plan. Required if current session user is an advisor. Ignored for client user sessions.
   --plan-id: string # Id of the Plan to retrieve or update data for (e.g. 1001-11-3). (required)
-]: nothing -> record<goalSuccessRateResults: table<description: string, goalId: int, successRate: float>> {
+]: nothing -> oneof<record<goalSuccessRateResults: table<description: string, goalId: int, successRate: float>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($plan_id == null) { error make --unspanned { msg: "required query parameter 'planId' missing: pass --plan-id" } }
@@ -684,7 +707,7 @@ export def "goal-adjustments-get-major-purchase-by-id-clientid-planid" [
   --accept: string@accept-completer # Response content type
   --client-id: string # Id of the client user for the plan. Required if current session user is an advisor. Ignored for client user sessions.
   --plan-id: string # Id of the Plan to retrieve or update data for (e.g. 1001-11-3). (required)
-]: nothing -> record<adjustedValues: record<lumpSumContribution: float, lumpSumDate: string, monthlySavingsContribution: float, targetDate: string, totalNeed: float>, created: string, goalId: int, projectedResults: record<goalId: int, percentCovered: float, projections: list<record>>> {
+]: nothing -> oneof<record<adjustedValues: record<lumpSumContribution: float, lumpSumDate: string, monthlySavingsContribution: float, targetDate: string, totalNeed: float>, created: string, goalId: int, projectedResults: record<goalId: int, percentCovered: float, projections: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -711,7 +734,6 @@ export def "goal-adjustments-get-major-purchase-by-id-clientid-planid" [
 #
 # POST /api/GoalAdjustments/MajorPurchase/{id}/Calculations
 # operationId: GoalAdjustments_PostMajorPurchaseByIdGoaladjustmentsPlanid
-# --adjustedValues shape: {lumpSumContribution?: float, lumpSumDate?: string, monthlySavingsContribution?: float, targetDate?: string, totalNeed?: float}
 export def "goal-adjustments-post-major-purchase-by-id-goaladjustments-planid" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -726,7 +748,7 @@ export def "goal-adjustments-post-major-purchase-by-id-goaladjustments-planid" [
   --accept: string@accept-completer # Response content type
   --plan-id: string # Id of the Plan to retrieve or update data for (e.g. 1001-11-3). (required)
   --adjusted-values: record # shape: {lumpSumContribution?: float, lumpSumDate?: string, monthlySavingsContribution?: float, targetDate?: string, totalNeed?: float}
-]: any -> record<goalAdjustments: record<adjustedValues: record<lumpSumContribution: float, lumpSumDate: string, monthlySavingsContribution: float, targetDate: string, totalNeed: float>, created: string, goalId: int>, projectedResults: record<goalId: int, percentCovered: float, projections: list<record>>> {
+]: any -> oneof<record<goalAdjustments: record<adjustedValues: record<lumpSumContribution: float, lumpSumDate: string, monthlySavingsContribution: float, targetDate: string, totalNeed: float>, created: string, goalId: int>, projectedResults: record<goalId: int, percentCovered: float, projections: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -769,7 +791,7 @@ export def "goal-adjustments-get-goal-adjustment-restrictions-by-clientid-planid
   --accept: string@accept-completer # Response content type
   --client-id: string # Id of the client user for the plan. Required if current session user is an advisor. Ignored for client user sessions.
   --plan-id: string # Id of the Plan to retrieve or update data for (e.g. 1001-11-3). (required)
-]: nothing -> record<educationRestrictions: table<canChangeDuration: bool, goalId: int>> {
+]: nothing -> oneof<record<educationRestrictions: table<canChangeDuration: bool, goalId: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($plan_id == null) { error make --unspanned { msg: "required query parameter 'planId' missing: pass --plan-id" } }
@@ -808,7 +830,7 @@ export def "goal-adjustments-get-retirement-by-clientid-planid" [
   --accept: string@accept-completer # Response content type
   --client-id: string # Id of the client user for the plan. Required if current session user is an advisor. Ignored for client user sessions.
   --plan-id: string # Id of the Plan to retrieve or update data for (e.g. 1001-11-3). (required)
-]: nothing -> record<adjustedValues: record<clientRetirementAge: float, coClientRetirementAge: float, discretionaryExpenseCoverage: float, fixedExpenseCoverage: float, lumpSumContribution: float, lumpSumDate: string, monthlySavingsContribution: float>, created: string, goalId: int, projectedResults: record<goalId: int, percentCovered: float, projections: list<record>>> {
+]: nothing -> oneof<record<adjustedValues: record<clientRetirementAge: float, coClientRetirementAge: float, discretionaryExpenseCoverage: float, fixedExpenseCoverage: float, lumpSumContribution: float, lumpSumDate: string, monthlySavingsContribution: float>, created: string, goalId: int, projectedResults: record<goalId: int, percentCovered: float, projections: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($plan_id == null) { error make --unspanned { msg: "required query parameter 'planId' missing: pass --plan-id" } }
@@ -834,7 +856,6 @@ export def "goal-adjustments-get-retirement-by-clientid-planid" [
 #
 # POST /api/GoalAdjustments/Retirement/Calculations
 # operationId: GoalAdjustments_PostRetirementByGoaladjustmentsPlanid
-# --adjustedValues shape: {clientRetirementAge?: float, coClientRetirementAge?: float, discretionaryExpenseCoverage?: float, fixedExpenseCoverage?: float, lumpSumContribution?: float, lumpSumDate?: string, monthlySavingsContribution?: float}
 export def "goal-adjustments-post-retirement-by-goaladjustments-planid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -848,7 +869,7 @@ export def "goal-adjustments-post-retirement-by-goaladjustments-planid" [
   --accept: string@accept-completer # Response content type
   --plan-id: string # Id of the Plan to retrieve or update data for (e.g. 1001-11-3). (required)
   --adjusted-values: record # shape: {clientRetirementAge?: float, coClientRetirementAge?: float, discretionaryExpenseCoverage?: float, fixedExpenseCoverage?: float, lumpSumContribution?: float, lumpSumDate?: string, monthlySavingsContribution?: float}
-]: any -> record<goalAdjustments: record<adjustedValues: record<clientRetirementAge: float, coClientRetirementAge: float, discretionaryExpenseCoverage: float, fixedExpenseCoverage: float, lumpSumContribution: float, lumpSumDate: string, monthlySavingsContribution: float>, created: string, goalId: int>, projectedResults: record<goalId: int, percentCovered: float, projections: list<record>>> {
+]: any -> oneof<record<goalAdjustments: record<adjustedValues: record<clientRetirementAge: float, coClientRetirementAge: float, discretionaryExpenseCoverage: float, fixedExpenseCoverage: float, lumpSumContribution: float, lumpSumDate: string, monthlySavingsContribution: float>, created: string, goalId: int>, projectedResults: record<goalId: int, percentCovered: float, projections: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -891,7 +912,7 @@ export def "goal-adjustments-get-what-are-my-options-by-id-clientid-planid" [
   --accept: string@accept-completer # Response content type
   --client-id: string # Id of the client user for the plan. Required if current session user is an advisor. Ignored for client user sessions.
   --plan-id: string # Id of the Plan to retrieve or update data for (e.g. 1001-11-3). (required)
-]: nothing -> record<additionalMonthlySavings: float, clientRetirementAge: int, clientRetirementAgeDate: string, coClientRetirementAge: int, coClientRetirementAgeDate: string, expenseCoverageDollars: float, expenseCoveragePercentage: float, lumpSumSavings: float, purchaseDate: string> {
+]: nothing -> oneof<record<additionalMonthlySavings: float, clientRetirementAge: int, clientRetirementAgeDate: string, coClientRetirementAge: int, coClientRetirementAgeDate: string, expenseCoverageDollars: float, expenseCoveragePercentage: float, lumpSumSavings: float, purchaseDate: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -930,7 +951,7 @@ export def "goals-get-by-planid" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --plan-id: string # Id of the plan to retrieve data from (e.g. 1001-11-3). (required)
-]: nothing -> record<goals: table<assetsRemainingAfterFundingGoal: record, coverage: record, description: string, endDate: record, identifier: record, startDate: record, type: string, yearAssetsDepleted: record>, links: table<href: string, rel: string>> {
+]: nothing -> oneof<record<goals: table<assetsRemainingAfterFundingGoal: record, coverage: record, description: string, endDate: record, identifier: record, startDate: record, type: string, yearAssetsDepleted: record>, links: table<href: string, rel: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($plan_id == null) { error make --unspanned { msg: "required query parameter 'planId' missing: pass --plan-id" } }
@@ -969,7 +990,7 @@ export def "goals-get-by-id-planid" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --plan-id: string # Id of the plan to retrieve data from (e.g. 1001-11-3). (required)
-]: nothing -> record<goal: record<assetsRemainingAfterFundingGoal: record<enabled: bool, populated: bool, value: record>, coverage: record<enabled: bool, populated: bool, value: record>, description: string, endDate: record<day: int, formatted: string, formattedMMMMddyyyy: string, formattedMMMdd: string, formattedMMMddyyyy: string, formattedMMMyyyy: string, formattedNA: string, month: int, toDateTime: string, urlEncoded: string, year: int>, identifier: record<id: int>, startDate: record<day: int, formatted: string, formattedMMMMddyyyy: string, formattedMMMdd: string, formattedMMMddyyyy: string, formattedMMMyyyy: string, formattedNA: string, month: int, toDateTime: string, urlEncoded: string, year: int>, type: string, yearAssetsDepleted: record<enabled: bool, populated: bool, value: record>>, links: table<href: string, rel: string>> {
+]: nothing -> oneof<record<goal: record<assetsRemainingAfterFundingGoal: record<enabled: bool, populated: bool, value: record>, coverage: record<enabled: bool, populated: bool, value: record>, description: string, endDate: record<day: int, formatted: string, formattedMMMMddyyyy: string, formattedMMMdd: string, formattedMMMddyyyy: string, formattedMMMyyyy: string, formattedNA: string, month: int, toDateTime: string, urlEncoded: string, year: int>, identifier: record<id: int>, startDate: record<day: int, formatted: string, formattedMMMMddyyyy: string, formattedMMMdd: string, formattedMMMddyyyy: string, formattedMMMyyyy: string, formattedNA: string, month: int, toDateTime: string, urlEncoded: string, year: int>, type: string, yearAssetsDepleted: record<enabled: bool, populated: bool, value: record>>, links: table<href: string, rel: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1008,7 +1029,7 @@ export def "holding-companies-get-by-planid" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --plan-id: string # Id of the plan to retrieve data from (e.g. 1001-11-3). (required)
-]: nothing -> record<holdingCompanies: table<annualDividendYield: record, ccpc: record, commonSharesOutstanding: int, contributions: record, corporateYearEnd: record, description: string, dividendType: string, dividendTypeFormatted: string, estateDetails: record, historicalData: record, id: string, investmentAccounts: list, liabilities: list, lifeInsurancePolicies: list, marketValue: record, numPreferredShareClasses: int, otherAssets: list, ownershipAsOfDate: record, ownershipDetails: record, preferredSharesOutstanding: int, provinceOfIncorporation: string, provinceOfTaxation: string, realEstateAssets: list, valueOfAllCommonShares: record, valueOfAllPreferredShares: record, withdrawals: record>, links: table<href: string, rel: string>> {
+]: nothing -> oneof<record<holdingCompanies: table<annualDividendYield: record, ccpc: record, commonSharesOutstanding: int, contributions: record, corporateYearEnd: record, description: string, dividendType: string, dividendTypeFormatted: string, estateDetails: record, historicalData: record, id: string, investmentAccounts: list, liabilities: list, lifeInsurancePolicies: list, marketValue: record, numPreferredShareClasses: int, otherAssets: list, ownershipAsOfDate: record, ownershipDetails: record, preferredSharesOutstanding: int, provinceOfIncorporation: string, provinceOfTaxation: string, realEstateAssets: list, valueOfAllCommonShares: record, valueOfAllPreferredShares: record, withdrawals: record>, links: table<href: string, rel: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($plan_id == null) { error make --unspanned { msg: "required query parameter 'planId' missing: pass --plan-id" } }
@@ -1047,7 +1068,7 @@ export def "holding-companies-get-by-id-planid" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --plan-id: string # Id of the plan to retrieve data from (e.g. 1001-11-3). (required)
-]: nothing -> record<holdingCompany: record<annualDividendYield: record<formattedDoubleDecimal: string, formattedNoDecimal: string, formattedSingleDecimal: string, raw: float, rawCappedAt100: float>, ccpc: record<rawValue: bool, valueAsYesNo: string>, commonSharesOutstanding: int, contributions: record<interCompanyDividendsReceived: list, sharePurchases: list, shareholderLoans: list>, corporateYearEnd: record<day: int, formatted: string, formattedMMMMddyyyy: string, formattedMMMdd: string, formattedMMMddyyyy: string, formattedMMMyyyy: string, formattedNA: string, month: int, toDateTime: string, urlEncoded: string, year: int>, description: string, dividendType: string, dividendTypeFormatted: string, estateDetails: record<enableFiftyPercentSolution: record, estateFreeze: record, estateFreezeDate: record, shareOptionsAtFirstDeath: string, shareOptionsAtSecondDeathAndDeathInTheSameYear: string>, historicalData: record<generalSetups: record, notionalAccounts: record, outstandingShareholderLoans: record>, id: string, investmentAccounts: list<record>, liabilities: list<record>, lifeInsurancePolicies: list<record>, marketValue: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, numPreferredShareClasses: int, otherAssets: list<record>, ownershipAsOfDate: record<day: int, formatted: string, formattedMMMMddyyyy: string, formattedMMMdd: string, formattedMMMddyyyy: string, formattedMMMyyyy: string, formattedNA: string, month: int, toDateTime: string, urlEncoded: string, year: int>, ownershipDetails: record<common: list, commonSharesDetails: list, preferred: list, preferredSharesDetails: list, shareholderPercentOwnership: list>, preferredSharesOutstanding: int, provinceOfIncorporation: string, provinceOfTaxation: string, realEstateAssets: list<record>, valueOfAllCommonShares: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, valueOfAllPreferredShares: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, withdrawals: record<loanRepaymentsToShareholder: list, manualDividendDistributions: list, shareRedemptions: list>>, links: table<href: string, rel: string>> {
+]: nothing -> oneof<record<holdingCompany: record<annualDividendYield: record<formattedDoubleDecimal: string, formattedNoDecimal: string, formattedSingleDecimal: string, raw: float, rawCappedAt100: float>, ccpc: record<rawValue: bool, valueAsYesNo: string>, commonSharesOutstanding: int, contributions: record<interCompanyDividendsReceived: list, sharePurchases: list, shareholderLoans: list>, corporateYearEnd: record<day: int, formatted: string, formattedMMMMddyyyy: string, formattedMMMdd: string, formattedMMMddyyyy: string, formattedMMMyyyy: string, formattedNA: string, month: int, toDateTime: string, urlEncoded: string, year: int>, description: string, dividendType: string, dividendTypeFormatted: string, estateDetails: record<enableFiftyPercentSolution: record, estateFreeze: record, estateFreezeDate: record, shareOptionsAtFirstDeath: string, shareOptionsAtSecondDeathAndDeathInTheSameYear: string>, historicalData: record<generalSetups: record, notionalAccounts: record, outstandingShareholderLoans: record>, id: string, investmentAccounts: list<record>, liabilities: list<record>, lifeInsurancePolicies: list<record>, marketValue: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, numPreferredShareClasses: int, otherAssets: list<record>, ownershipAsOfDate: record<day: int, formatted: string, formattedMMMMddyyyy: string, formattedMMMdd: string, formattedMMMddyyyy: string, formattedMMMyyyy: string, formattedNA: string, month: int, toDateTime: string, urlEncoded: string, year: int>, ownershipDetails: record<common: list, commonSharesDetails: list, preferred: list, preferredSharesDetails: list, shareholderPercentOwnership: list>, preferredSharesOutstanding: int, provinceOfIncorporation: string, provinceOfTaxation: string, realEstateAssets: list<record>, valueOfAllCommonShares: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, valueOfAllPreferredShares: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, withdrawals: record<loanRepaymentsToShareholder: list, manualDividendDistributions: list, shareRedemptions: list>>, links: table<href: string, rel: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1086,7 +1107,7 @@ export def "households-get-by-householdid" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --household-id: int # The Id of the specific household to retrieve (format: int32)
-]: nothing -> record<households: table<accessiblePlans: list, clientDescription: string, householdId: int>, links: table<href: string, rel: string>> {
+]: nothing -> oneof<record<households: table<accessiblePlans: list, clientDescription: string, householdId: int>, links: table<href: string, rel: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "householdId" $household_id "scalar")] | flatten | str join "&"
@@ -1123,7 +1144,7 @@ export def "liabilities-get-by-planid" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --plan-id: string # Id of the plan to retrieve data from (e.g. 1001-11-3). (required)
-]: nothing -> record<liabilities: table<annualPaymentAmount: record, balanceAsOf: record, balanceAsOfPlanDate: record, debtModStrategies: record, description: string, id: string, insuredForDisability: record, insuredForLife: record, interestRate: record, isInterestRateVariable: record, isPaymentVariable: record, linkedAssetId: string, linkedAssetName: string, loanDate: record, originalBalance: record, owner: string, paidOffByRetirement: record, payOffDate: record, payOffOptionType: record, paymentAmount: record, paymentFrequency: record, paymentType: record, type: record>, links: table<href: string, rel: string>> {
+]: nothing -> oneof<record<liabilities: table<annualPaymentAmount: record, balanceAsOf: record, balanceAsOfPlanDate: record, debtModStrategies: record, description: string, id: string, insuredForDisability: record, insuredForLife: record, interestRate: record, isInterestRateVariable: record, isPaymentVariable: record, linkedAssetId: string, linkedAssetName: string, loanDate: record, originalBalance: record, owner: string, paidOffByRetirement: record, payOffDate: record, payOffOptionType: record, paymentAmount: record, paymentFrequency: record, paymentType: record, type: record>, links: table<href: string, rel: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($plan_id == null) { error make --unspanned { msg: "required query parameter 'planId' missing: pass --plan-id" } }
@@ -1162,7 +1183,7 @@ export def "liabilities-get-by-id-planid" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --plan-id: string # Id of the plan to retrieve data from (e.g. 1001-11-3). (required)
-]: nothing -> record<liability: record<annualPaymentAmount: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, balanceAsOf: record<date: record, formattedDecimal: string, formattedNoDecimal: string, raw: float>, balanceAsOfPlanDate: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, debtModStrategies: record<lumpSumDebtModStrategies: list, periodicDebtModStrategies: list>, description: string, id: string, insuredForDisability: record<rawValue: bool, valueAsYesNo: string>, insuredForLife: record<rawValue: bool, valueAsYesNo: string>, interestRate: record<formattedDoubleDecimal: string, formattedNoDecimal: string, formattedSingleDecimal: string, raw: float, rawCappedAt100: float>, isInterestRateVariable: record<rawValue: bool, valueAsYesNo: string>, isPaymentVariable: record<rawValue: bool, valueAsYesNo: string>, linkedAssetId: string, linkedAssetName: string, loanDate: record<day: int, formatted: string, formattedMMMMddyyyy: string, formattedMMMdd: string, formattedMMMddyyyy: string, formattedMMMyyyy: string, formattedNA: string, month: int, toDateTime: string, urlEncoded: string, year: int>, originalBalance: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, owner: string, paidOffByRetirement: record<enabled: bool, populated: bool, value: record>, payOffDate: record<enabled: bool, populated: bool, value: record>, payOffOptionType: record<value: string>, paymentAmount: record<enabled: bool, populated: bool, value: record>, paymentFrequency: record<value: string>, paymentType: record<value: string>, type: record<value: string>>, links: table<href: string, rel: string>> {
+]: nothing -> oneof<record<liability: record<annualPaymentAmount: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, balanceAsOf: record<date: record, formattedDecimal: string, formattedNoDecimal: string, raw: float>, balanceAsOfPlanDate: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, debtModStrategies: record<lumpSumDebtModStrategies: list, periodicDebtModStrategies: list>, description: string, id: string, insuredForDisability: record<rawValue: bool, valueAsYesNo: string>, insuredForLife: record<rawValue: bool, valueAsYesNo: string>, interestRate: record<formattedDoubleDecimal: string, formattedNoDecimal: string, formattedSingleDecimal: string, raw: float, rawCappedAt100: float>, isInterestRateVariable: record<rawValue: bool, valueAsYesNo: string>, isPaymentVariable: record<rawValue: bool, valueAsYesNo: string>, linkedAssetId: string, linkedAssetName: string, loanDate: record<day: int, formatted: string, formattedMMMMddyyyy: string, formattedMMMdd: string, formattedMMMddyyyy: string, formattedMMMyyyy: string, formattedNA: string, month: int, toDateTime: string, urlEncoded: string, year: int>, originalBalance: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, owner: string, paidOffByRetirement: record<enabled: bool, populated: bool, value: record>, payOffDate: record<enabled: bool, populated: bool, value: record>, payOffOptionType: record<value: string>, paymentAmount: record<enabled: bool, populated: bool, value: record>, paymentFrequency: record<value: string>, paymentType: record<value: string>, type: record<value: string>>, links: table<href: string, rel: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1201,7 +1222,7 @@ export def "lifestyle-assets-get-by-planid" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --plan-id: string # Id of the plan to retrieve data from (e.g. 1001-11-3). (required)
-]: nothing -> record<lifestyleAssets: table<afterTaxProceedsAccountName: string, description: string, futureValueProjectedGrossSaleValue: record, id: string, isMajorPurchaseGoal: bool, marketValueAsOf: record, owner: string, preTaxGrowthRate: record, presentValueProjectedGrossSaleValue: record, projectedSaleDate: record, purchaseAmount: record, purchaseDate: record, sellingCostPercent: record, standardDeviation: record, type: record>, links: table<href: string, rel: string>> {
+]: nothing -> oneof<record<lifestyleAssets: table<afterTaxProceedsAccountName: string, description: string, futureValueProjectedGrossSaleValue: record, id: string, isMajorPurchaseGoal: bool, marketValueAsOf: record, owner: string, preTaxGrowthRate: record, presentValueProjectedGrossSaleValue: record, projectedSaleDate: record, purchaseAmount: record, purchaseDate: record, sellingCostPercent: record, standardDeviation: record, type: record>, links: table<href: string, rel: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($plan_id == null) { error make --unspanned { msg: "required query parameter 'planId' missing: pass --plan-id" } }
@@ -1240,7 +1261,7 @@ export def "lifestyle-assets-get-by-id-planid" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --plan-id: string # Id of the plan to retrieve data from (e.g. 1001-11-3). (required)
-]: nothing -> record<lifestyleAsset: record<afterTaxProceedsAccountName: string, description: string, futureValueProjectedGrossSaleValue: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, id: string, isMajorPurchaseGoal: bool, marketValueAsOf: record<date: record, formattedDecimal: string, formattedNoDecimal: string, raw: float>, owner: string, preTaxGrowthRate: record<formattedDoubleDecimal: string, formattedNoDecimal: string, formattedSingleDecimal: string, raw: float, rawCappedAt100: float>, presentValueProjectedGrossSaleValue: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, projectedSaleDate: record<day: int, formatted: string, formattedMMMMddyyyy: string, formattedMMMdd: string, formattedMMMddyyyy: string, formattedMMMyyyy: string, formattedNA: string, month: int, toDateTime: string, urlEncoded: string, year: int>, purchaseAmount: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, purchaseDate: record<day: int, formatted: string, formattedMMMMddyyyy: string, formattedMMMdd: string, formattedMMMddyyyy: string, formattedMMMyyyy: string, formattedNA: string, month: int, toDateTime: string, urlEncoded: string, year: int>, sellingCostPercent: record<formattedDoubleDecimal: string, formattedNoDecimal: string, formattedSingleDecimal: string, raw: float, rawCappedAt100: float>, standardDeviation: record<formattedDoubleDecimal: string, formattedNoDecimal: string, formattedSingleDecimal: string, raw: float, rawCappedAt100: float>, type: record<formatted: string, value: string>>, links: table<href: string, rel: string>> {
+]: nothing -> oneof<record<lifestyleAsset: record<afterTaxProceedsAccountName: string, description: string, futureValueProjectedGrossSaleValue: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, id: string, isMajorPurchaseGoal: bool, marketValueAsOf: record<date: record, formattedDecimal: string, formattedNoDecimal: string, raw: float>, owner: string, preTaxGrowthRate: record<formattedDoubleDecimal: string, formattedNoDecimal: string, formattedSingleDecimal: string, raw: float, rawCappedAt100: float>, presentValueProjectedGrossSaleValue: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, projectedSaleDate: record<day: int, formatted: string, formattedMMMMddyyyy: string, formattedMMMdd: string, formattedMMMddyyyy: string, formattedMMMyyyy: string, formattedNA: string, month: int, toDateTime: string, urlEncoded: string, year: int>, purchaseAmount: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, purchaseDate: record<day: int, formatted: string, formattedMMMMddyyyy: string, formattedMMMdd: string, formattedMMMddyyyy: string, formattedMMMyyyy: string, formattedNA: string, month: int, toDateTime: string, urlEncoded: string, year: int>, sellingCostPercent: record<formattedDoubleDecimal: string, formattedNoDecimal: string, formattedSingleDecimal: string, raw: float, rawCappedAt100: float>, standardDeviation: record<formattedDoubleDecimal: string, formattedNoDecimal: string, formattedSingleDecimal: string, raw: float, rawCappedAt100: float>, type: record<formatted: string, value: string>>, links: table<href: string, rel: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1280,7 +1301,7 @@ export def "live-plan-get-goals-by-clientid-planid" [
   --accept: string@accept-completer # Response content type
   --client-id: string # Id of the client user for the plan. Required if current session user is an advisor. Ignored for client user sessions.
   --plan-id: string # Id of the Plan to retrieve or update data for (e.g. 1001-11-3). (required)
-]: nothing -> record<clientDescription: string, clientId: int, goals: table<amount: float, coveragePercentage: float, description: string, endDate: string, id: int, inflationRate: float, owners: list, startDate: string, type: string>, planDescription: string, planLastUpdateTime: string> {
+]: nothing -> oneof<record<clientDescription: string, clientId: int, goals: table<amount: float, coveragePercentage: float, description: string, endDate: string, id: int, inflationRate: float, owners: list, startDate: string, type: string>, planDescription: string, planLastUpdateTime: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($plan_id == null) { error make --unspanned { msg: "required query parameter 'planId' missing: pass --plan-id" } }
@@ -1319,7 +1340,7 @@ export def "live-plan-get-goal-funding-list-by-clientid-planid" [
   --accept: string@accept-completer # Response content type
   --client-id: string # Id of the client user for the plan. Required if current session user is an advisor. Ignored for client user sessions.
   --plan-id: string # Id of the Plan to retrieve or update data for (e.g. 1001-11-3). (required)
-]: nothing -> record<goals: table<description: string, fundingAccounts: list, goalId: int>> {
+]: nothing -> oneof<record<goals: table<description: string, fundingAccounts: list, goalId: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($plan_id == null) { error make --unspanned { msg: "required query parameter 'planId' missing: pass --plan-id" } }
@@ -1359,7 +1380,7 @@ export def "live-plan-get-what-are-my-options-by-id-clientid-planid" [
   --accept: string@accept-completer # Response content type
   --client-id: string # Id of the client user for the plan. Required if current session user is an advisor. Ignored for client user sessions.
   --plan-id: string # Id of the Plan to retrieve or update data for (e.g. 1001-11-3). (required)
-]: nothing -> record<additionalMonthlySavings: float, clientRetirementAge: int, clientRetirementAgeDate: string, coClientRetirementAge: int, coClientRetirementAgeDate: string, expenseCoverageDollars: float, expenseCoveragePercentage: float, lumpSumSavings: float, purchaseDate: string> {
+]: nothing -> oneof<record<additionalMonthlySavings: float, clientRetirementAge: int, clientRetirementAgeDate: string, coClientRetirementAge: int, coClientRetirementAgeDate: string, expenseCoverageDollars: float, expenseCoveragePercentage: float, lumpSumSavings: float, purchaseDate: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1399,7 +1420,7 @@ export def "live-plan-get-accounts-by-clientid-planid" [
   --accept: string@accept-completer # Response content type
   --client-id: string # Id of the client user for the plan. Required if current session user is an advisor. Ignored for client user sessions.
   --plan-id: string # Id of the Plan to retrieve or update data for (e.g. 1001-11-3). (required)
-]: nothing -> record<accounts: table<description: string, holdings: list, id: int, legacyId: string, owner: record, type: int>> {
+]: nothing -> oneof<record<accounts: table<description: string, holdings: list, id: int, legacyId: string, owner: record, type: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($plan_id == null) { error make --unspanned { msg: "required query parameter 'planId' missing: pass --plan-id" } }
@@ -1438,7 +1459,7 @@ export def "live-plan-get-liabilities-by-clientid-planid" [
   --accept: string@accept-completer # Response content type
   --client-id: string # Id of the client user for the plan. Required if current session user is an advisor. Ignored for client user sessions.
   --plan-id: string # Id of the Plan to retrieve or update data for (e.g. 1001-11-3). (required)
-]: nothing -> record<liabilities: table<description: string, endDate: string, id: int, legacyId: string, outstandingPrincipal: float, outstandingPrincipalAsOfDate: string, owner: record, startDate: string, type: int>> {
+]: nothing -> oneof<record<liabilities: table<description: string, endDate: string, id: int, legacyId: string, outstandingPrincipal: float, outstandingPrincipalAsOfDate: string, owner: record, startDate: string, type: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($plan_id == null) { error make --unspanned { msg: "required query parameter 'planId' missing: pass --plan-id" } }
@@ -1477,7 +1498,7 @@ export def "live-plan-get-lifestyle-assets-by-clientid-planid" [
   --accept: string@accept-completer # Response content type
   --client-id: string # Id of the client user for the plan. Required if current session user is an advisor. Ignored for client user sessions.
   --plan-id: string # Id of the Plan to retrieve or update data for (e.g. 1001-11-3). (required)
-]: nothing -> record<lifestyleAssets: table<description: string, id: int, owner: record, purchaseDate: string, purchaseValue: float, type: int, valuationDate: string, valuationValue: float>> {
+]: nothing -> oneof<record<lifestyleAssets: table<description: string, id: int, owner: record, purchaseDate: string, purchaseValue: float, type: int, valuationDate: string, valuationValue: float>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($plan_id == null) { error make --unspanned { msg: "required query parameter 'planId' missing: pass --plan-id" } }
@@ -1516,7 +1537,7 @@ export def "live-plan-get-real-estate-assets-by-clientid-planid" [
   --accept: string@accept-completer # Response content type
   --client-id: string # Id of the client user for the plan. Required if current session user is an advisor. Ignored for client user sessions.
   --plan-id: string # Id of the Plan to retrieve or update data for (e.g. 1001-11-3). (required)
-]: nothing -> record<realEstateAssets: table<description: string, id: int, legacyId: string, marketValue: float, owner: record, purchaseAmount: float, purchaseDate: string, valuationDate: string>> {
+]: nothing -> oneof<record<realEstateAssets: table<description: string, id: int, legacyId: string, marketValue: float, owner: record, purchaseAmount: float, purchaseDate: string, valuationDate: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($plan_id == null) { error make --unspanned { msg: "required query parameter 'planId' missing: pass --plan-id" } }
@@ -1555,7 +1576,7 @@ export def "live-plan-get-projected-net-worth-by-clientid-planid" [
   --accept: string@accept-completer # Response content type
   --client-id: string # Id of the client user for the plan. Required if current session user is an advisor. Ignored for client user sessions.
   --plan-id: string # Id of the Plan to retrieve or update data for (e.g. 1001-11-3). (required)
-]: nothing -> record<netWorthProjections: table<endOfYearRetirementAssets: float, endOfYearTotalAssets: float, year: int>> {
+]: nothing -> oneof<record<netWorthProjections: table<endOfYearRetirementAssets: float, endOfYearTotalAssets: float, year: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($plan_id == null) { error make --unspanned { msg: "required query parameter 'planId' missing: pass --plan-id" } }
@@ -1595,7 +1616,7 @@ export def "live-plan-get-projected-needs-vs-abilities-by-id-clientid-planid" [
   --accept: string@accept-completer # Response content type
   --client-id: string # Id of the client user for the plan. Required if current session user is an advisor. Ignored for client user sessions.
   --plan-id: string # Id of the Plan to retrieve or update data for (e.g. 1001-11-3). (required)
-]: nothing -> record<goalId: int, percentCovered: float, projections: table<projectedAbilities: float, projectedNeed: float, year: int>> {
+]: nothing -> oneof<record<goalId: int, percentCovered: float, projections: table<projectedAbilities: float, projectedNeed: float, year: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1634,7 +1655,7 @@ export def "net-worth-get-by-planid" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --plan-id: string # Id of the plan to retrieve data from (e.g. 1001-11-3). (required)
-]: nothing -> record<links: table<href: string, rel: string>, netWorth: record<netWorthAtPlanDate: record<assets: record, assetsFundingRetirement: record, clientNetWorth: record, coClientNetWorth: record, communityPropertyNetWorth: record, jointNetWorth: record, liabilities: record, totalNetWorth: record>, netWorthAtPlanEnd: record<enabled: bool, populated: bool, value: record>, netWorthAtRetirement: record<enabled: bool, populated: bool, value: record>>> {
+]: nothing -> oneof<record<links: table<href: string, rel: string>, netWorth: record<netWorthAtPlanDate: record<assets: record, assetsFundingRetirement: record, clientNetWorth: record, coClientNetWorth: record, communityPropertyNetWorth: record, jointNetWorth: record, liabilities: record, totalNetWorth: record>, netWorthAtPlanEnd: record<enabled: bool, populated: bool, value: record>, netWorthAtRetirement: record<enabled: bool, populated: bool, value: record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($plan_id == null) { error make --unspanned { msg: "required query parameter 'planId' missing: pass --plan-id" } }
@@ -1822,7 +1843,7 @@ export def "plan-information-get-by-planid" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --plan-id: string # Id of the plan to retrieve data from (e.g. 1001-11-3). (required)
-]: nothing -> record<country: string, description: string, isJointAnalysis: bool, links: table<href: string, rel: string>, locale: string, planDate: record<day: int, formatted: string, formattedMMMMddyyyy: string, formattedMMMdd: string, formattedMMMddyyyy: string, formattedMMMyyyy: string, formattedNA: string, month: int, toDateTime: string, urlEncoded: string, year: int>, planDescription: string, planId: string, planLevel: string, planModules: record<isCriticalIllnessModuleEnabled: bool, isDisabilityIncomeModuleEnabled: bool, isEstatePlanningModuleEabled: bool, isLongTermCareModuleEnabled: bool, isSurvivorIncomeModuleEnabled: bool>, planType: string, publishDate: record<day: int, formatted: string, formattedMMMMddyyyy: string, formattedMMMdd: string, formattedMMMddyyyy: string, formattedMMMyyyy: string, formattedNA: string, month: int, toDateTime: string, urlEncoded: string, year: int>> {
+]: nothing -> oneof<record<country: string, description: string, isJointAnalysis: bool, links: table<href: string, rel: string>, locale: string, planDate: record<day: int, formatted: string, formattedMMMMddyyyy: string, formattedMMMdd: string, formattedMMMddyyyy: string, formattedMMMyyyy: string, formattedNA: string, month: int, toDateTime: string, urlEncoded: string, year: int>, planDescription: string, planId: string, planLevel: string, planModules: record<isCriticalIllnessModuleEnabled: bool, isDisabilityIncomeModuleEnabled: bool, isEstatePlanningModuleEabled: bool, isLongTermCareModuleEnabled: bool, isSurvivorIncomeModuleEnabled: bool>, planType: string, publishDate: record<day: int, formatted: string, formattedMMMMddyyyy: string, formattedMMMdd: string, formattedMMMddyyyy: string, formattedMMMyyyy: string, formattedNA: string, month: int, toDateTime: string, urlEncoded: string, year: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($plan_id == null) { error make --unspanned { msg: "required query parameter 'planId' missing: pass --plan-id" } }
@@ -1860,7 +1881,7 @@ export def "plan-statuses-get-by-planid" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --plan-id: string # Id of the plan to retrieve data from (e.g. 1001-11-3) (required)
-]: nothing -> record<hasIntegratedAccounts: string, links: table<href: string, rel: string>, planDataStatus: string, serializedDataStatus: string> {
+]: nothing -> oneof<record<hasIntegratedAccounts: string, links: table<href: string, rel: string>, planDataStatus: string, serializedDataStatus: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($plan_id == null) { error make --unspanned { msg: "required query parameter 'planId' missing: pass --plan-id" } }
@@ -1898,7 +1919,7 @@ export def "portfolio-accounts-get-by-planid" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --plan-id: string # Id of the plan to retrieve data from (e.g. 1001-11-3). (required)
-]: nothing -> record<links: table<href: string, rel: string>, portfolioAccounts: table<accountReturnRatesNoLongerCorrelateToAssumedAssetMixDueToOverrideInGsm: bool, annualFee: record, applicableRangeRetirementLiquidatedAssets: record, costBasis: record, description: string, descriptionWithOwner: string, excludeInAA: bool, holdings: list, id: string, isSystemGenerated: bool, marketValue: record, owner: string, portfolioAssets: list, rateOfReturn: record, savingsStrategies: record, seppRedemptionStrategy: record, type: string, valuationDate: record>> {
+]: nothing -> oneof<record<links: table<href: string, rel: string>, portfolioAccounts: table<accountReturnRatesNoLongerCorrelateToAssumedAssetMixDueToOverrideInGsm: bool, annualFee: record, applicableRangeRetirementLiquidatedAssets: record, costBasis: record, description: string, descriptionWithOwner: string, excludeInAA: bool, holdings: list, id: string, isSystemGenerated: bool, marketValue: record, owner: string, portfolioAssets: list, rateOfReturn: record, savingsStrategies: record, seppRedemptionStrategy: record, type: string, valuationDate: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($plan_id == null) { error make --unspanned { msg: "required query parameter 'planId' missing: pass --plan-id" } }
@@ -1937,7 +1958,7 @@ export def "portfolio-accounts-get-by-id-planid" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --plan-id: string # Id of the plan to retrieve data from (e.g. 1001-11-3). (required)
-]: nothing -> record<links: table<href: string, rel: string>, portfolioAccount: record<accountReturnRatesNoLongerCorrelateToAssumedAssetMixDueToOverrideInGsm: bool, annualFee: record<formattedDoubleDecimal: string, formattedNoDecimal: string, formattedSingleDecimal: string, raw: float, rawCappedAt100: float>, applicableRangeRetirementLiquidatedAssets: record<endDate: record, startDate: record>, costBasis: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, description: string, descriptionWithOwner: string, excludeInAA: bool, holdings: list<record>, id: string, isSystemGenerated: bool, marketValue: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, owner: string, portfolioAssets: list<record>, rateOfReturn: record<preRetirement: record, retirement: record>, savingsStrategies: record<lumpSumSavingsStrategies: list, periodicSavingsStrategies: list, rrspMaximizerStrategies: list, surplusSavingsStrategies: list>, seppRedemptionStrategy: record<applicableDateRange: record, distributionMethod: record, lifeExpectancyTable: record, redemptionFrequency: record>, type: string, valuationDate: record<day: int, formatted: string, formattedMMMMddyyyy: string, formattedMMMdd: string, formattedMMMddyyyy: string, formattedMMMyyyy: string, formattedNA: string, month: int, toDateTime: string, urlEncoded: string, year: int>>> {
+]: nothing -> oneof<record<links: table<href: string, rel: string>, portfolioAccount: record<accountReturnRatesNoLongerCorrelateToAssumedAssetMixDueToOverrideInGsm: bool, annualFee: record<formattedDoubleDecimal: string, formattedNoDecimal: string, formattedSingleDecimal: string, raw: float, rawCappedAt100: float>, applicableRangeRetirementLiquidatedAssets: record<endDate: record, startDate: record>, costBasis: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, description: string, descriptionWithOwner: string, excludeInAA: bool, holdings: list<record>, id: string, isSystemGenerated: bool, marketValue: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, owner: string, portfolioAssets: list<record>, rateOfReturn: record<preRetirement: record, retirement: record>, savingsStrategies: record<lumpSumSavingsStrategies: list, periodicSavingsStrategies: list, rrspMaximizerStrategies: list, surplusSavingsStrategies: list>, seppRedemptionStrategy: record<applicableDateRange: record, distributionMethod: record, lifeExpectancyTable: record, redemptionFrequency: record>, type: string, valuationDate: record<day: int, formatted: string, formattedMMMMddyyyy: string, formattedMMMdd: string, formattedMMMddyyyy: string, formattedMMMyyyy: string, formattedNA: string, month: int, toDateTime: string, urlEncoded: string, year: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1976,7 +1997,7 @@ export def "projected-annual-summary-get-by-planid" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --plan-id: string # Id of the plan to retrieve data from (e.g. 1001-11-3). (required)
-]: nothing -> record<links: table<href: string, rel: string>, projections: table<annualSummary: record, links: list>> {
+]: nothing -> oneof<record<links: table<href: string, rel: string>, projections: table<annualSummary: record, links: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($plan_id == null) { error make --unspanned { msg: "required query parameter 'planId' missing: pass --plan-id" } }
@@ -2015,7 +2036,7 @@ export def "projected-annual-summary-get-by-id-planid" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --plan-id: string # Id of the plan to retrieve data from (e.g. 1001-11-3). (required)
-]: nothing -> record<annualSummary: record<cashFlow: record<surplusDeficit: float, totalIncome: float, totalOutflowsWithTaxes: float, totalOutflowsWithoutTaxes: float, totalTaxes: float>, clientAge: int, coClientAge: int, netWorth: record<totalAssets: float, totalLiabilities: float, totalNetWorth: float>, year: int>, links: table<href: string, rel: string>> {
+]: nothing -> oneof<record<annualSummary: record<cashFlow: record<surplusDeficit: float, totalIncome: float, totalOutflowsWithTaxes: float, totalOutflowsWithoutTaxes: float, totalTaxes: float>, clientAge: int, coClientAge: int, netWorth: record<totalAssets: float, totalLiabilities: float, totalNetWorth: float>, year: int>, links: table<href: string, rel: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2054,7 +2075,7 @@ export def "projected-cash-flow-get-by-planid" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --plan-id: string # Id of the plan to retrieve data from (e.g. 1001-11-3). (required)
-]: nothing -> record<links: table<href: string, rel: string>, projections: table<cashFlow: record, links: list>> {
+]: nothing -> oneof<record<links: table<href: string, rel: string>, projections: table<cashFlow: record, links: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($plan_id == null) { error make --unspanned { msg: "required query parameter 'planId' missing: pass --plan-id" } }
@@ -2093,7 +2114,7 @@ export def "projected-cash-flow-get-by-id-planid" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --plan-id: string # Id of the plan to retrieve data from (e.g. 1001-11-3). (required)
-]: nothing -> record<cashFlow: record<cashFlow: record<clientCashFlow: record, coClientCashFlow: record, totalCashFlow: record>, clientAge: int, coClientAge: int, year: int>, links: table<href: string, rel: string>> {
+]: nothing -> oneof<record<cashFlow: record<cashFlow: record<clientCashFlow: record, coClientCashFlow: record, totalCashFlow: record>, clientAge: int, coClientAge: int, year: int>, links: table<href: string, rel: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2132,7 +2153,7 @@ export def "projected-goals-get-assets-funding-goals-by-planid" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --plan-id: string # Id of the plan to retrieve data from (e.g. 1001-11-3). (required)
-]: nothing -> record<links: table<href: string, rel: string>, projections: table<clientAge: int, coClientAge: int, goals: list, year: int>> {
+]: nothing -> oneof<record<links: table<href: string, rel: string>, projections: table<clientAge: int, coClientAge: int, goals: list, year: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($plan_id == null) { error make --unspanned { msg: "required query parameter 'planId' missing: pass --plan-id" } }
@@ -2170,7 +2191,7 @@ export def "projected-goals-get-needs-vs-abilities-by-planid" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --plan-id: string # Id of the plan to retrieve data from (e.g. 1001-11-3). (required)
-]: nothing -> record<links: table<href: string, rel: string>, projections: table<clientAge: int, coClientAge: int, goals: list, year: int>> {
+]: nothing -> oneof<record<links: table<href: string, rel: string>, projections: table<clientAge: int, coClientAge: int, goals: list, year: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($plan_id == null) { error make --unspanned { msg: "required query parameter 'planId' missing: pass --plan-id" } }
@@ -2208,7 +2229,7 @@ export def "projected-net-worth-get-by-planid" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --plan-id: string # Id of the plan to retrieve data from (e.g. 1001-11-3). (required)
-]: nothing -> record<links: table<href: string, rel: string>, projections: table<links: list, netWorth: record>> {
+]: nothing -> oneof<record<links: table<href: string, rel: string>, projections: table<links: list, netWorth: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($plan_id == null) { error make --unspanned { msg: "required query parameter 'planId' missing: pass --plan-id" } }
@@ -2247,7 +2268,7 @@ export def "projected-net-worth-get-by-id-planid" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --plan-id: string # Id of the plan to retrieve data from (e.g. 1001-11-3). (required)
-]: nothing -> record<links: table<href: string, rel: string>, netWorth: record<clientAge: int, coClientAge: int, endOfYearNetWorth: record<assets: record, assetsFundingRetirement: record, clientNetWorth: record, coClientNetWorth: record, communityPropertyNetWorth: record, jointNetWorth: record, liabilities: record, totalNetWorth: record>, year: int>> {
+]: nothing -> oneof<record<links: table<href: string, rel: string>, netWorth: record<clientAge: int, coClientAge: int, endOfYearNetWorth: record<assets: record, assetsFundingRetirement: record, clientNetWorth: record, coClientNetWorth: record, communityPropertyNetWorth: record, jointNetWorth: record, liabilities: record, totalNetWorth: record>, year: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2286,7 +2307,7 @@ export def "restricted-stocks-get-by-planid" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --plan-id: string # Id of the plan to retrieve data from (e.g. 1001-11-3). (required)
-]: nothing -> record<links: table<href: string, rel: string>, restrictedStocks: table<annualDividendPerUnit: record, applicableRangeRetirementLiquidatedAssets: record, awardedDate: record, currentUnitValue: record, description: string, growthRate: record, id: string, numberOfUnits: int, owner: string, pricePaidForAward: record, type: string>> {
+]: nothing -> oneof<record<links: table<href: string, rel: string>, restrictedStocks: table<annualDividendPerUnit: record, applicableRangeRetirementLiquidatedAssets: record, awardedDate: record, currentUnitValue: record, description: string, growthRate: record, id: string, numberOfUnits: int, owner: string, pricePaidForAward: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($plan_id == null) { error make --unspanned { msg: "required query parameter 'planId' missing: pass --plan-id" } }
@@ -2325,7 +2346,7 @@ export def "restricted-stocks-get-by-id-planid" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --plan-id: string # Id of the plan to retrieve data from (e.g. 1001-11-3). (required)
-]: nothing -> record<links: table<href: string, rel: string>, restrictedStock: record<annualDividendPerUnit: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, applicableRangeRetirementLiquidatedAssets: record<endDate: record, startDate: record>, awardedDate: record<day: int, formatted: string, formattedMMMMddyyyy: string, formattedMMMdd: string, formattedMMMddyyyy: string, formattedMMMyyyy: string, formattedNA: string, month: int, toDateTime: string, urlEncoded: string, year: int>, currentUnitValue: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, description: string, growthRate: record<formattedDoubleDecimal: string, formattedNoDecimal: string, formattedSingleDecimal: string, raw: float, rawCappedAt100: float>, id: string, numberOfUnits: int, owner: string, pricePaidForAward: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, type: string>> {
+]: nothing -> oneof<record<links: table<href: string, rel: string>, restrictedStock: record<annualDividendPerUnit: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, applicableRangeRetirementLiquidatedAssets: record<endDate: record, startDate: record>, awardedDate: record<day: int, formatted: string, formattedMMMMddyyyy: string, formattedMMMdd: string, formattedMMMddyyyy: string, formattedMMMyyyy: string, formattedNA: string, month: int, toDateTime: string, urlEncoded: string, year: int>, currentUnitValue: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, description: string, growthRate: record<formattedDoubleDecimal: string, formattedNoDecimal: string, formattedSingleDecimal: string, raw: float, rawCappedAt100: float>, id: string, numberOfUnits: int, owner: string, pricePaidForAward: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2363,7 +2384,7 @@ export def "service-information-statistics" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<altairConnectionStatus: bool, name: string, pomVersion: string, serviceVersion: string, status: string> {
+]: nothing -> oneof<record<altairConnectionStatus: bool, name: string, pomVersion: string, serviceVersion: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/ServiceInformation/Statistics" $auth.query)
@@ -2399,7 +2420,7 @@ export def "stock-options-get-by-planid" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --plan-id: string # Id of the plan to retrieve data from (e.g. 1001-11-3). (required)
-]: nothing -> record<links: table<href: string, rel: string>, stockOptions: table<annualDividendPerUnit: record, applicableRangeRetirementLiquidatedAssets: record, company: string, currentUnitPrice: record, currentUnitPriceDate: record, description: string, endOfPlanYearExercisableGrossValue: record, exerciseCost: record, expirationDate: record, grantDate: record, grantedOptions: int, growthRate: record, id: string, optionsExercisable: int, optionsExercised: int, optionsVested: int, owner: string, preTaxProfit: record, startOfYearAMTBasis: record, startOfYearCostBasis: record, startOfYearUnitPrice: record, strikePrice: record, symbol: string, type: string, typeFormatted: string, vestingSchedule: list>> {
+]: nothing -> oneof<record<links: table<href: string, rel: string>, stockOptions: table<annualDividendPerUnit: record, applicableRangeRetirementLiquidatedAssets: record, company: string, currentUnitPrice: record, currentUnitPriceDate: record, description: string, endOfPlanYearExercisableGrossValue: record, exerciseCost: record, expirationDate: record, grantDate: record, grantedOptions: int, growthRate: record, id: string, optionsExercisable: int, optionsExercised: int, optionsVested: int, owner: string, preTaxProfit: record, startOfYearAMTBasis: record, startOfYearCostBasis: record, startOfYearUnitPrice: record, strikePrice: record, symbol: string, type: string, typeFormatted: string, vestingSchedule: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($plan_id == null) { error make --unspanned { msg: "required query parameter 'planId' missing: pass --plan-id" } }
@@ -2438,7 +2459,7 @@ export def "stock-options-get-by-id-planid" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --plan-id: string # Id of the plan to retrieve data from (e.g. 1001-11-3). (required)
-]: nothing -> record<links: table<href: string, rel: string>, stockOption: record<annualDividendPerUnit: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, applicableRangeRetirementLiquidatedAssets: record<endDate: record, startDate: record>, company: string, currentUnitPrice: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, currentUnitPriceDate: record<day: int, formatted: string, formattedMMMMddyyyy: string, formattedMMMdd: string, formattedMMMddyyyy: string, formattedMMMyyyy: string, formattedNA: string, month: int, toDateTime: string, urlEncoded: string, year: int>, description: string, endOfPlanYearExercisableGrossValue: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, exerciseCost: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, expirationDate: record<day: int, formatted: string, formattedMMMMddyyyy: string, formattedMMMdd: string, formattedMMMddyyyy: string, formattedMMMyyyy: string, formattedNA: string, month: int, toDateTime: string, urlEncoded: string, year: int>, grantDate: record<day: int, formatted: string, formattedMMMMddyyyy: string, formattedMMMdd: string, formattedMMMddyyyy: string, formattedMMMyyyy: string, formattedNA: string, month: int, toDateTime: string, urlEncoded: string, year: int>, grantedOptions: int, growthRate: record<formattedDoubleDecimal: string, formattedNoDecimal: string, formattedSingleDecimal: string, raw: float, rawCappedAt100: float>, id: string, optionsExercisable: int, optionsExercised: int, optionsVested: int, owner: string, preTaxProfit: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, startOfYearAMTBasis: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, startOfYearCostBasis: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, startOfYearUnitPrice: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, strikePrice: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, symbol: string, type: string, typeFormatted: string, vestingSchedule: list<record>>> {
+]: nothing -> oneof<record<links: table<href: string, rel: string>, stockOption: record<annualDividendPerUnit: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, applicableRangeRetirementLiquidatedAssets: record<endDate: record, startDate: record>, company: string, currentUnitPrice: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, currentUnitPriceDate: record<day: int, formatted: string, formattedMMMMddyyyy: string, formattedMMMdd: string, formattedMMMddyyyy: string, formattedMMMyyyy: string, formattedNA: string, month: int, toDateTime: string, urlEncoded: string, year: int>, description: string, endOfPlanYearExercisableGrossValue: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, exerciseCost: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, expirationDate: record<day: int, formatted: string, formattedMMMMddyyyy: string, formattedMMMdd: string, formattedMMMddyyyy: string, formattedMMMyyyy: string, formattedNA: string, month: int, toDateTime: string, urlEncoded: string, year: int>, grantDate: record<day: int, formatted: string, formattedMMMMddyyyy: string, formattedMMMdd: string, formattedMMMddyyyy: string, formattedMMMyyyy: string, formattedNA: string, month: int, toDateTime: string, urlEncoded: string, year: int>, grantedOptions: int, growthRate: record<formattedDoubleDecimal: string, formattedNoDecimal: string, formattedSingleDecimal: string, raw: float, rawCappedAt100: float>, id: string, optionsExercisable: int, optionsExercised: int, optionsVested: int, owner: string, preTaxProfit: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, startOfYearAMTBasis: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, startOfYearCostBasis: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, startOfYearUnitPrice: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, strikePrice: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, symbol: string, type: string, typeFormatted: string, vestingSchedule: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2478,7 +2499,7 @@ export def "auth-login-by-model" [
   --accept: string@accept-completer # Response content type
   --password: string
   --username: string
-]: any -> record<eulaAccepted: bool, hasAccountAggregation: bool, hasGoalWhatIfing: bool, hasUserSetPassword: bool, isAdmin: bool, isAdvisor: bool, isClient: bool, isPasswordExpired: bool, userId: string, userName: string> {
+]: any -> oneof<record<eulaAccepted: bool, hasAccountAggregation: bool, hasGoalWhatIfing: bool, hasUserSetPassword: bool, isAdmin: bool, isAdvisor: bool, isClient: bool, isPasswordExpired: bool, userId: string, userName: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2585,7 +2606,7 @@ export def "auth-resume-session" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<eulaAccepted: bool, hasAccountAggregation: bool, hasGoalWhatIfing: bool, hasUserSetPassword: bool, isAdmin: bool, isAdvisor: bool, isClient: bool, isPasswordExpired: bool, userId: string, userName: string> {
+]: nothing -> oneof<record<eulaAccepted: bool, hasAccountAggregation: bool, hasGoalWhatIfing: bool, hasUserSetPassword: bool, isAdmin: bool, isAdvisor: bool, isClient: bool, isPasswordExpired: bool, userId: string, userName: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/auth/ResumeSession" $auth.query)

@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -171,9 +194,9 @@ def x-amz-target-completer-65 [] { ["AmazonPersonalize.UpdateRecommender"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-batch-inference-job" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["create-batch-inference-job" "create-batch-segment-job" "create-campaign" "create-dataset" "create-dataset-export-job" "create-dataset-group" "create-dataset-import-job" "create-event-tracker" "create-filter" "create-metric-attribution" "create-recommender" "create-schema" "create-solution" "create-solution-version" "delete-campaign" "delete-dataset" "delete-dataset-group" "delete-event-tracker" "delete-filter" "delete-metric-attribution" "delete-recommender" "delete-schema" "delete-solution" "describe-algorithm" "describe-batch-inference-job" "describe-batch-segment-job" "describe-campaign" "describe-dataset" "describe-dataset-export-job" "describe-dataset-group" "describe-dataset-import-job" "describe-event-tracker" "describe-feature-transformation" "describe-filter" "describe-metric-attribution" "describe-recipe" "describe-recommender" "describe-schema" "describe-solution" "describe-solution-version" "get-solution-metrics" "list-batch-inference-jobs" "list-batch-segment-jobs" "list-campaigns" "list-dataset-export-jobs" "list-dataset-groups" "list-dataset-import-jobs" "list-datasets" "list-event-trackers" "list-filters" "list-metric-attribution-metrics" "list-metric-attributions" "list-recipes" "list-recommenders" "list-schemas" "list-solution-versions" "list-solutions" "list-tags-for-resource" "start-recommender" "stop-recommender" "stop-solution-version-creation" "tag-resource" "untag-resource" "update-campaign" "update-metric-attribution" "update-recommender" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -195,10 +218,6 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: CreateBatchInferenceJob
-# --jobInput shape: {s3DataSource: record}
-# --jobOutput shape: {s3DataDestination: record}
-# --batchInferenceJobConfig shape: {itemExplorationConfig?: record}
-# --tags item shape: {tagKey: string, tagValue: string}
 export def "create-batch-inference-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -226,7 +245,7 @@ export def "create-batch-inference-job" [
   role_arn: string # The ARN of the Amazon Identity and Access Management role that has permissions to read and write to your input and output Amazon S3 buckets respectively.
   --batch-inference-job-config: record # The configuration details of a batch inference job. — shape: {itemExplorationConfig?: record}
   --tags: list # A list of tags (https://docs.aws.amazon.com/personalize/latest/dev/tagging-resources.html) to apply to the batch inference job. — item shape: {tagKey: string, tagValue: string}
-]: any -> record<batchInferenceJobArn: string> {
+]: any -> oneof<record<batchInferenceJobArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -256,9 +275,6 @@ export def "create-batch-inference-job" [
 #
 # POST /
 # operationId: CreateBatchSegmentJob
-# --jobInput shape: {s3DataSource: record}
-# --jobOutput shape: {s3DataDestination: record}
-# --tags item shape: {tagKey: string, tagValue: string}
 export def "create-batch-segment-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -285,7 +301,7 @@ export def "create-batch-segment-job" [
   job_output: record # The output configuration parameters of a batch segment job. — shape: {s3DataDestination: record}
   role_arn: string # The ARN of the Amazon Identity and Access Management role that has permissions to read and write to your input and output Amazon S3 buckets respectively.
   --tags: list # A list of tags (https://docs.aws.amazon.com/personalize/latest/dev/tagging-resources.html) to apply to the batch segment job. — item shape: {tagKey: string, tagValue: string}
-]: any -> record<batchSegmentJobArn: string> {
+]: any -> oneof<record<batchSegmentJobArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -315,8 +331,6 @@ export def "create-batch-segment-job" [
 #
 # POST /
 # operationId: CreateCampaign
-# --campaignConfig shape: {itemExplorationConfig?: record}
-# --tags item shape: {tagKey: string, tagValue: string}
 export def "create-campaign" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -340,7 +354,7 @@ export def "create-campaign" [
   --min-provisioned-tps: int # Specifies the requested minimum provisioned transactions (recommendations) per second that Amazon Personalize will support.
   --campaign-config: record # The configuration details of a campaign. — shape: {itemExplorationConfig?: record}
   --tags: list # A list of tags (https://docs.aws.amazon.com/personalize/latest/dev/tagging-resources.html) to apply to the campaign. — item shape: {tagKey: string, tagValue: string}
-]: any -> record<campaignArn: string> {
+]: any -> oneof<record<campaignArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -370,7 +384,6 @@ export def "create-campaign" [
 #
 # POST /
 # operationId: CreateDataset
-# --tags item shape: {tagKey: string, tagValue: string}
 export def "create-dataset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -394,7 +407,7 @@ export def "create-dataset" [
   dataset_group_arn: string # The Amazon Resource Name (ARN) of the dataset group to add the dataset to.
   dataset_type: string # The type of dataset. One of the following (case insensitive) values: Interactions Items Users
   --tags: list # A list of tags (https://docs.aws.amazon.com/personalize/latest/dev/tagging-resources.html) to apply to the dataset. — item shape: {tagKey: string, tagValue: string}
-]: any -> record<datasetArn: string> {
+]: any -> oneof<record<datasetArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -424,8 +437,6 @@ export def "create-dataset" [
 #
 # POST /
 # operationId: CreateDatasetExportJob
-# --jobOutput shape: {s3DataDestination: record}
-# --tags item shape: {tagKey: string, tagValue: string}
 export def "create-dataset-export-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -450,7 +461,7 @@ export def "create-dataset-export-job" [
   role_arn: string # The Amazon Resource Name (ARN) of the IAM service role that has permissions to add data to your output Amazon S3 bucket.
   job_output: record # The output configuration parameters of a dataset export job. — shape: {s3DataDestination: record}
   --tags: list # A list of tags (https://docs.aws.amazon.com/personalize/latest/dev/tagging-resources.html) to apply to the dataset export job. — item shape: {tagKey: string, tagValue: string}
-]: any -> record<datasetExportJobArn: string> {
+]: any -> oneof<record<datasetExportJobArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -480,7 +491,6 @@ export def "create-dataset-export-job" [
 #
 # POST /
 # operationId: CreateDatasetGroup
-# --tags item shape: {tagKey: string, tagValue: string}
 export def "create-dataset-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -504,7 +514,7 @@ export def "create-dataset-group" [
   --kms-key-arn: string # The Amazon Resource Name (ARN) of a Key Management Service (KMS) key used to encrypt the datasets.
   --domain: string@domain-completer # The domain of the dataset group. Specify a domain to create a Domain dataset group. The domain you specify determines the default schemas for datasets and the use cases available for recommenders. If you don't specify a domain, you create a Custom dataset group with solution versions that you deploy with a campaign.
   --tags: list # A list of tags (https://docs.aws.amazon.com/personalize/latest/dev/tagging-resources.html) to apply to the dataset group. — item shape: {tagKey: string, tagValue: string}
-]: any -> record<datasetGroupArn: string, domain: string> {
+]: any -> oneof<record<datasetGroupArn: string, domain: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -534,8 +544,6 @@ export def "create-dataset-group" [
 #
 # POST /
 # operationId: CreateDatasetImportJob
-# --dataSource shape: {dataLocation?: string}
-# --tags item shape: {tagKey: string, tagValue: string}
 export def "create-dataset-import-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -561,7 +569,7 @@ export def "create-dataset-import-job" [
   --tags: list # A list of tags (https://docs.aws.amazon.com/personalize/latest/dev/tagging-resources.html) to apply to the dataset import job. — item shape: {tagKey: string, tagValue: string}
   --import-mode: string@import-mode-completer # Specify how to add the new records to an existing dataset. The default import mode is FULL. If you haven't imported bulk records into the dataset previously, you can only specify FULL. Specify FULL to overwrite all existing bulk data in your dataset. Data you imported individually is not replaced. Specify INCREMENTAL to append the new records to the existing data in your dataset. Amazon Personalize replaces any record with the same ID with the new one.
   --publish-attribution-metrics-to-s3: oneof<nothing, bool> # If you created a metric attribution, specify whether to publish metrics for this import job to Amazon S3
-]: any -> record<datasetImportJobArn: string> {
+]: any -> oneof<record<datasetImportJobArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -591,7 +599,6 @@ export def "create-dataset-import-job" [
 #
 # POST /
 # operationId: CreateEventTracker
-# --tags item shape: {tagKey: string, tagValue: string}
 export def "create-event-tracker" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -613,7 +620,7 @@ export def "create-event-tracker" [
   name: string # The name for the event tracker.
   dataset_group_arn: string # The Amazon Resource Name (ARN) of the dataset group that receives the event data.
   --tags: list # A list of tags (https://docs.aws.amazon.com/personalize/latest/dev/tagging-resources.html) to apply to the event tracker. — item shape: {tagKey: string, tagValue: string}
-]: any -> record<eventTrackerArn: string, trackingId: string> {
+]: any -> oneof<record<eventTrackerArn: string, trackingId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -643,7 +650,6 @@ export def "create-event-tracker" [
 #
 # POST /
 # operationId: CreateFilter
-# --tags item shape: {tagKey: string, tagValue: string}
 export def "create-filter" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -666,7 +672,7 @@ export def "create-filter" [
   dataset_group_arn: string # The ARN of the dataset group that the filter will belong to.
   filter_expression: string # The filter expression defines which items are included or excluded from recommendations. Filter expression must follow specific format rules. For information about filter expression structure and syntax, see Filter expressions (https://docs.aws.amazon.com/personalize/latest/dg/filter-expressions.html). (format: password)
   --tags: list # A list of tags (https://docs.aws.amazon.com/personalize/latest/dev/tagging-resources.html) to apply to the filter. — item shape: {tagKey: string, tagValue: string}
-]: any -> record<filterArn: string> {
+]: any -> oneof<record<filterArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -696,8 +702,6 @@ export def "create-filter" [
 #
 # POST /
 # operationId: CreateMetricAttribution
-# --metrics item shape: {eventType: string, metricName: string, expression: string}
-# --metricsOutputConfig shape: {s3DataDestination?: record, roleArn: string}
 export def "create-metric-attribution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -720,7 +724,7 @@ export def "create-metric-attribution" [
   dataset_group_arn: string # The Amazon Resource Name (ARN) of the destination dataset group for the metric attribution.
   metrics: list # A list of metric attributes for the metric attribution. Each metric attribute specifies an event type to track and a function. Available functions are SUM() or SAMPLECOUNT(). For SUM() functions, provide the dataset type (either Interactions or Items) and column to sum as a parameter. For example SUM(Items.PRICE). — item shape: {eventType: string, metricName: string, expression: string}
   metrics_output_config: record # The output configuration details for a metric attribution. — shape: {s3DataDestination?: record, roleArn: string}
-]: any -> record<metricAttributionArn: string> {
+]: any -> oneof<record<metricAttributionArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -750,8 +754,6 @@ export def "create-metric-attribution" [
 #
 # POST /
 # operationId: CreateRecommender
-# --recommenderConfig shape: {itemExplorationConfig?: record, minRecommendationRequestsPerSecond?: int}
-# --tags item shape: {tagKey: string, tagValue: string}
 export def "create-recommender" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -775,7 +777,7 @@ export def "create-recommender" [
   recipe_arn: string # The Amazon Resource Name (ARN) of the recipe that the recommender will use. For a recommender, a recipe is a Domain dataset group use case. Only Domain dataset group use cases can be used to create a recommender. For information about use cases see Choosing recommender use cases (https://docs.aws.amazon.com/personalize/latest/dg/domain-use-cases.html).
   --recommender-config: record # The configuration details of the recommender. — shape: {itemExplorationConfig?: record, minRecommendationRequestsPerSecond?: int}
   --tags: list # A list of tags (https://docs.aws.amazon.com/personalize/latest/dev/tagging-resources.html) to apply to the recommender. — item shape: {tagKey: string, tagValue: string}
-]: any -> record<recommenderArn: string> {
+]: any -> oneof<record<recommenderArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -826,7 +828,7 @@ export def "create-schema" [
   name: string # The name for the schema.
   schema: string # A schema in Avro JSON format.
   --domain: string@domain-completer # The domain for the schema. If you are creating a schema for a dataset in a Domain dataset group, specify the domain you chose when you created the Domain dataset group.
-]: any -> record<schemaArn: string> {
+]: any -> oneof<record<schemaArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -856,8 +858,6 @@ export def "create-schema" [
 #
 # POST /
 # operationId: CreateSolution
-# --solutionConfig shape: {eventValueThreshold?: string, hpoConfig?: record, algorithmHyperParameters?: record, featureTransformationParameters?: record, autoMLConfig?: record, optimizationObjective?: record}
-# --tags item shape: {tagKey: string, tagValue: string}
 export def "create-solution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -884,7 +884,7 @@ export def "create-solution" [
   --event-type: string # When your have multiple event types (using an EVENT_TYPE schema field), this parameter specifies which event type (for example, 'click' or 'like') is used for training the model. If you do not provide an eventType, Amazon Personalize will use all interactions for training with equal weight regardless of type.
   --solution-config: record # Describes the configuration properties for the solution. — shape: {eventValueThreshold?: string, hpoConfig?: record, algorithmHyperParameters?: record, featureTransformationParameters?: record, autoMLConfig?: record, optimizationObjective?: record}
   --tags: list # A list of tags (https://docs.aws.amazon.com/personalize/latest/dev/tagging-resources.html) to apply to the solution. — item shape: {tagKey: string, tagValue: string}
-]: any -> record<solutionArn: string> {
+]: any -> oneof<record<solutionArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -914,7 +914,6 @@ export def "create-solution" [
 #
 # POST /
 # operationId: CreateSolutionVersion
-# --tags item shape: {tagKey: string, tagValue: string}
 export def "create-solution-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -937,7 +936,7 @@ export def "create-solution-version" [
   solution_arn: string # The Amazon Resource Name (ARN) of the solution containing the training configuration information.
   --training-mode: string@training-mode-completer # The scope of training to be performed when creating the solution version. The FULL option trains the solution version based on the entirety of the input solution's training data, while the UPDATE option processes only the data that has changed in comparison to the input solution. Choose UPDATE when you want to incrementally update your solution version instead of creating an entirely new one. The UPDATE option can only be used when you already have an active solution version created from the input solution using the FULL option and the input solution was trained with the User-Personalization (https://docs.aws.amazon.com/personalize/latest/dg/native-recipe-new-item-USER_PERSONALIZATION.html) recipe or the HRNN-Coldstart (https://docs.aws.amazon.com/personalize/latest/dg/native-recipe-hrnn-coldstart.html) recipe.
   --tags: list # A list of tags (https://docs.aws.amazon.com/personalize/latest/dev/tagging-resources.html) to apply to the solution version. — item shape: {tagKey: string, tagValue: string}
-]: any -> record<solutionVersionArn: string> {
+]: any -> oneof<record<solutionVersionArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1427,7 +1426,7 @@ export def "describe-algorithm" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-23 # required
   algorithm_arn: string # The Amazon Resource Name (ARN) of the algorithm to describe.
-]: any -> record<algorithm: record<name: string, algorithmArn: string, algorithmImage: record<name: string, dockerURI: string>, defaultHyperParameters: record, defaultHyperParameterRanges: record<integerHyperParameterRanges: list, continuousHyperParameterRanges: list, categoricalHyperParameterRanges: list>, defaultResourceConfig: record, trainingInputMode: string, roleArn: string, creationDateTime: string, lastUpdatedDateTime: string>> {
+]: any -> oneof<record<algorithm: record<name: string, algorithmArn: string, algorithmImage: record<name: string, dockerURI: string>, defaultHyperParameters: record, defaultHyperParameterRanges: record<integerHyperParameterRanges: list, continuousHyperParameterRanges: list, categoricalHyperParameterRanges: list>, defaultResourceConfig: record, trainingInputMode: string, roleArn: string, creationDateTime: string, lastUpdatedDateTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1476,7 +1475,7 @@ export def "describe-batch-inference-job" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-24 # required
   batch_inference_job_arn: string # The ARN of the batch inference job to describe.
-]: any -> record<batchInferenceJob: record<jobName: string, batchInferenceJobArn: string, filterArn: string, failureReason: string, solutionVersionArn: string, numResults: int, jobInput: record<s3DataSource: record>, jobOutput: record<s3DataDestination: record>, batchInferenceJobConfig: record<itemExplorationConfig: record>, roleArn: string, status: string, creationDateTime: string, lastUpdatedDateTime: string>> {
+]: any -> oneof<record<batchInferenceJob: record<jobName: string, batchInferenceJobArn: string, filterArn: string, failureReason: string, solutionVersionArn: string, numResults: int, jobInput: record<s3DataSource: record>, jobOutput: record<s3DataDestination: record>, batchInferenceJobConfig: record<itemExplorationConfig: record>, roleArn: string, status: string, creationDateTime: string, lastUpdatedDateTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1525,7 +1524,7 @@ export def "describe-batch-segment-job" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-25 # required
   batch_segment_job_arn: string # The ARN of the batch segment job to describe.
-]: any -> record<batchSegmentJob: record<jobName: string, batchSegmentJobArn: string, filterArn: string, failureReason: string, solutionVersionArn: string, numResults: int, jobInput: record<s3DataSource: record>, jobOutput: record<s3DataDestination: record>, roleArn: string, status: string, creationDateTime: string, lastUpdatedDateTime: string>> {
+]: any -> oneof<record<batchSegmentJob: record<jobName: string, batchSegmentJobArn: string, filterArn: string, failureReason: string, solutionVersionArn: string, numResults: int, jobInput: record<s3DataSource: record>, jobOutput: record<s3DataDestination: record>, roleArn: string, status: string, creationDateTime: string, lastUpdatedDateTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1574,7 +1573,7 @@ export def "describe-campaign" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-26 # required
   campaign_arn: string # The Amazon Resource Name (ARN) of the campaign.
-]: any -> record<campaign: record<name: string, campaignArn: string, solutionVersionArn: string, minProvisionedTPS: int, campaignConfig: record<itemExplorationConfig: record>, status: string, failureReason: string, creationDateTime: string, lastUpdatedDateTime: string, latestCampaignUpdate: record<solutionVersionArn: string, minProvisionedTPS: int, campaignConfig: record, status: string, failureReason: string, creationDateTime: string, lastUpdatedDateTime: string>>> {
+]: any -> oneof<record<campaign: record<name: string, campaignArn: string, solutionVersionArn: string, minProvisionedTPS: int, campaignConfig: record<itemExplorationConfig: record>, status: string, failureReason: string, creationDateTime: string, lastUpdatedDateTime: string, latestCampaignUpdate: record<solutionVersionArn: string, minProvisionedTPS: int, campaignConfig: record, status: string, failureReason: string, creationDateTime: string, lastUpdatedDateTime: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1623,7 +1622,7 @@ export def "describe-dataset" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-27 # required
   dataset_arn: string # The Amazon Resource Name (ARN) of the dataset to describe.
-]: any -> record<dataset: record<name: string, datasetArn: string, datasetGroupArn: string, datasetType: string, schemaArn: string, status: string, creationDateTime: string, lastUpdatedDateTime: string>> {
+]: any -> oneof<record<dataset: record<name: string, datasetArn: string, datasetGroupArn: string, datasetType: string, schemaArn: string, status: string, creationDateTime: string, lastUpdatedDateTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1672,7 +1671,7 @@ export def "describe-dataset-export-job" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-28 # required
   dataset_export_job_arn: string # The Amazon Resource Name (ARN) of the dataset export job to describe.
-]: any -> record<datasetExportJob: record<jobName: string, datasetExportJobArn: string, datasetArn: string, ingestionMode: string, roleArn: string, status: string, jobOutput: record<s3DataDestination: record>, creationDateTime: string, lastUpdatedDateTime: string, failureReason: string>> {
+]: any -> oneof<record<datasetExportJob: record<jobName: string, datasetExportJobArn: string, datasetArn: string, ingestionMode: string, roleArn: string, status: string, jobOutput: record<s3DataDestination: record>, creationDateTime: string, lastUpdatedDateTime: string, failureReason: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1721,7 +1720,7 @@ export def "describe-dataset-group" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-29 # required
   dataset_group_arn: string # The Amazon Resource Name (ARN) of the dataset group to describe.
-]: any -> record<datasetGroup: record<name: string, datasetGroupArn: string, status: string, roleArn: string, kmsKeyArn: string, creationDateTime: string, lastUpdatedDateTime: string, failureReason: string, domain: string>> {
+]: any -> oneof<record<datasetGroup: record<name: string, datasetGroupArn: string, status: string, roleArn: string, kmsKeyArn: string, creationDateTime: string, lastUpdatedDateTime: string, failureReason: string, domain: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1770,7 +1769,7 @@ export def "describe-dataset-import-job" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-30 # required
   dataset_import_job_arn: string # The Amazon Resource Name (ARN) of the dataset import job to describe.
-]: any -> record<datasetImportJob: record<jobName: string, datasetImportJobArn: string, datasetArn: string, dataSource: record<dataLocation: string>, roleArn: string, status: string, creationDateTime: string, lastUpdatedDateTime: string, failureReason: string, importMode: string, publishAttributionMetricsToS3: bool>> {
+]: any -> oneof<record<datasetImportJob: record<jobName: string, datasetImportJobArn: string, datasetArn: string, dataSource: record<dataLocation: string>, roleArn: string, status: string, creationDateTime: string, lastUpdatedDateTime: string, failureReason: string, importMode: string, publishAttributionMetricsToS3: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1819,7 +1818,7 @@ export def "describe-event-tracker" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-31 # required
   event_tracker_arn: string # The Amazon Resource Name (ARN) of the event tracker to describe.
-]: any -> record<eventTracker: record<name: string, eventTrackerArn: string, accountId: string, trackingId: string, datasetGroupArn: string, status: string, creationDateTime: string, lastUpdatedDateTime: string>> {
+]: any -> oneof<record<eventTracker: record<name: string, eventTrackerArn: string, accountId: string, trackingId: string, datasetGroupArn: string, status: string, creationDateTime: string, lastUpdatedDateTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1868,7 +1867,7 @@ export def "describe-feature-transformation" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-32 # required
   feature_transformation_arn: string # The Amazon Resource Name (ARN) of the feature transformation to describe.
-]: any -> record<featureTransformation: record<name: string, featureTransformationArn: string, defaultParameters: record, creationDateTime: string, lastUpdatedDateTime: string, status: string>> {
+]: any -> oneof<record<featureTransformation: record<name: string, featureTransformationArn: string, defaultParameters: record, creationDateTime: string, lastUpdatedDateTime: string, status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1917,7 +1916,7 @@ export def "describe-filter" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-33 # required
   filter_arn: string # The ARN of the filter to describe.
-]: any -> record<filter: record<name: string, filterArn: string, creationDateTime: string, lastUpdatedDateTime: string, datasetGroupArn: string, failureReason: string, filterExpression: string, status: string>> {
+]: any -> oneof<record<filter: record<name: string, filterArn: string, creationDateTime: string, lastUpdatedDateTime: string, datasetGroupArn: string, failureReason: string, filterExpression: string, status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1966,7 +1965,7 @@ export def "describe-metric-attribution" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-34 # required
   metric_attribution_arn: string # The metric attribution's Amazon Resource Name (ARN).
-]: any -> record<metricAttribution: record<name: string, metricAttributionArn: string, datasetGroupArn: string, metricsOutputConfig: record<s3DataDestination: record, roleArn: string>, status: string, creationDateTime: string, lastUpdatedDateTime: string, failureReason: string>> {
+]: any -> oneof<record<metricAttribution: record<name: string, metricAttributionArn: string, datasetGroupArn: string, metricsOutputConfig: record<s3DataDestination: record, roleArn: string>, status: string, creationDateTime: string, lastUpdatedDateTime: string, failureReason: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2015,7 +2014,7 @@ export def "describe-recipe" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-35 # required
   recipe_arn: string # The Amazon Resource Name (ARN) of the recipe to describe.
-]: any -> record<recipe: record<name: string, recipeArn: string, algorithmArn: string, featureTransformationArn: string, status: string, description: string, creationDateTime: string, recipeType: string, lastUpdatedDateTime: string>> {
+]: any -> oneof<record<recipe: record<name: string, recipeArn: string, algorithmArn: string, featureTransformationArn: string, status: string, description: string, creationDateTime: string, recipeType: string, lastUpdatedDateTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2064,7 +2063,7 @@ export def "describe-recommender" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-36 # required
   recommender_arn: string # The Amazon Resource Name (ARN) of the recommender to describe.
-]: any -> record<recommender: record<recommenderArn: string, datasetGroupArn: string, name: string, recipeArn: string, recommenderConfig: record<itemExplorationConfig: record, minRecommendationRequestsPerSecond: int>, creationDateTime: string, lastUpdatedDateTime: string, status: string, failureReason: string, latestRecommenderUpdate: record<recommenderConfig: record, creationDateTime: string, lastUpdatedDateTime: string, status: string, failureReason: string>, modelMetrics: record>> {
+]: any -> oneof<record<recommender: record<recommenderArn: string, datasetGroupArn: string, name: string, recipeArn: string, recommenderConfig: record<itemExplorationConfig: record, minRecommendationRequestsPerSecond: int>, creationDateTime: string, lastUpdatedDateTime: string, status: string, failureReason: string, latestRecommenderUpdate: record<recommenderConfig: record, creationDateTime: string, lastUpdatedDateTime: string, status: string, failureReason: string>, modelMetrics: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2113,7 +2112,7 @@ export def "describe-schema" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-37 # required
   schema_arn: string # The Amazon Resource Name (ARN) of the schema to retrieve.
-]: any -> record<schema: record<name: string, schemaArn: string, schema: string, creationDateTime: string, lastUpdatedDateTime: string, domain: string>> {
+]: any -> oneof<record<schema: record<name: string, schemaArn: string, schema: string, creationDateTime: string, lastUpdatedDateTime: string, domain: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2162,7 +2161,7 @@ export def "describe-solution" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-38 # required
   solution_arn: string # The Amazon Resource Name (ARN) of the solution to describe.
-]: any -> record<solution: record<name: string, solutionArn: string, performHPO: bool, performAutoML: bool, recipeArn: string, datasetGroupArn: string, eventType: string, solutionConfig: record<eventValueThreshold: string, hpoConfig: record, algorithmHyperParameters: record, featureTransformationParameters: record, autoMLConfig: record, optimizationObjective: record>, autoMLResult: record<bestRecipeArn: string>, status: string, creationDateTime: string, lastUpdatedDateTime: string, latestSolutionVersion: record<solutionVersionArn: string, status: string, creationDateTime: string, lastUpdatedDateTime: string, failureReason: string>>> {
+]: any -> oneof<record<solution: record<name: string, solutionArn: string, performHPO: bool, performAutoML: bool, recipeArn: string, datasetGroupArn: string, eventType: string, solutionConfig: record<eventValueThreshold: string, hpoConfig: record, algorithmHyperParameters: record, featureTransformationParameters: record, autoMLConfig: record, optimizationObjective: record>, autoMLResult: record<bestRecipeArn: string>, status: string, creationDateTime: string, lastUpdatedDateTime: string, latestSolutionVersion: record<solutionVersionArn: string, status: string, creationDateTime: string, lastUpdatedDateTime: string, failureReason: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2211,7 +2210,7 @@ export def "describe-solution-version" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-39 # required
   solution_version_arn: string # The Amazon Resource Name (ARN) of the solution version.
-]: any -> record<solutionVersion: record<name: string, solutionVersionArn: string, solutionArn: string, performHPO: bool, performAutoML: bool, recipeArn: string, eventType: string, datasetGroupArn: string, solutionConfig: record<eventValueThreshold: string, hpoConfig: record, algorithmHyperParameters: record, featureTransformationParameters: record, autoMLConfig: record, optimizationObjective: record>, trainingHours: float, trainingMode: string, tunedHPOParams: record<algorithmHyperParameters: record>, status: string, failureReason: string, creationDateTime: string, lastUpdatedDateTime: string>> {
+]: any -> oneof<record<solutionVersion: record<name: string, solutionVersionArn: string, solutionArn: string, performHPO: bool, performAutoML: bool, recipeArn: string, eventType: string, datasetGroupArn: string, solutionConfig: record<eventValueThreshold: string, hpoConfig: record, algorithmHyperParameters: record, featureTransformationParameters: record, autoMLConfig: record, optimizationObjective: record>, trainingHours: float, trainingMode: string, tunedHPOParams: record<algorithmHyperParameters: record>, status: string, failureReason: string, creationDateTime: string, lastUpdatedDateTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2260,7 +2259,7 @@ export def "get-solution-metrics" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-40 # required
   solution_version_arn: string # The Amazon Resource Name (ARN) of the solution version for which to get metrics.
-]: any -> record<solutionVersionArn: string, metrics: record> {
+]: any -> oneof<record<solutionVersionArn: string, metrics: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2313,7 +2312,7 @@ export def "list-batch-inference-jobs" [
   --solution-version-arn: string # The Amazon Resource Name (ARN) of the solution version from which the batch inference jobs were created.
   --next-token-body: string # The token to request the next page of results. (body field)
   --max-results-body: int # The maximum number of batch inference job results to return in each page. The default value is 100. (body field)
-]: any -> record<batchInferenceJobs: table<batchInferenceJobArn: string, jobName: string, status: string, creationDateTime: string, lastUpdatedDateTime: string, failureReason: string, solutionVersionArn: string>, nextToken: string> {
+]: any -> oneof<record<batchInferenceJobs: table<batchInferenceJobArn: string, jobName: string, status: string, creationDateTime: string, lastUpdatedDateTime: string, failureReason: string, solutionVersionArn: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2367,7 +2366,7 @@ export def "list-batch-segment-jobs" [
   --solution-version-arn: string # The Amazon Resource Name (ARN) of the solution version that the batch segment jobs used to generate batch segments.
   --next-token-body: string # The token to request the next page of results. (body field)
   --max-results-body: int # The maximum number of batch segment job results to return in each page. The default value is 100. (body field)
-]: any -> record<batchSegmentJobs: table<batchSegmentJobArn: string, jobName: string, status: string, creationDateTime: string, lastUpdatedDateTime: string, failureReason: string, solutionVersionArn: string>, nextToken: string> {
+]: any -> oneof<record<batchSegmentJobs: table<batchSegmentJobArn: string, jobName: string, status: string, creationDateTime: string, lastUpdatedDateTime: string, failureReason: string, solutionVersionArn: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2421,7 +2420,7 @@ export def "list-campaigns" [
   --solution-arn: string # The Amazon Resource Name (ARN) of the solution to list the campaigns for. When a solution is not specified, all the campaigns associated with the account are listed.
   --next-token-body: string # A token returned from the previous call to ListCampaigns (https://docs.aws.amazon.com/personalize/latest/dg/API_ListCampaigns.html) for getting the next set of campaigns (if they exist). (body field)
   --max-results-body: int # The maximum number of campaigns to return. (body field)
-]: any -> record<campaigns: table<name: string, campaignArn: string, status: string, creationDateTime: string, lastUpdatedDateTime: string, failureReason: string>, nextToken: string> {
+]: any -> oneof<record<campaigns: table<name: string, campaignArn: string, status: string, creationDateTime: string, lastUpdatedDateTime: string, failureReason: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2475,7 +2474,7 @@ export def "list-dataset-export-jobs" [
   --dataset-arn: string # The Amazon Resource Name (ARN) of the dataset to list the dataset export jobs for.
   --next-token-body: string # A token returned from the previous call to ListDatasetExportJobs for getting the next set of dataset export jobs (if they exist). (body field)
   --max-results-body: int # The maximum number of dataset export jobs to return. (body field)
-]: any -> record<datasetExportJobs: table<datasetExportJobArn: string, jobName: string, status: string, creationDateTime: string, lastUpdatedDateTime: string, failureReason: string>, nextToken: string> {
+]: any -> oneof<record<datasetExportJobs: table<datasetExportJobArn: string, jobName: string, status: string, creationDateTime: string, lastUpdatedDateTime: string, failureReason: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2528,7 +2527,7 @@ export def "list-dataset-groups" [
   --x-amz-target: string@x-amz-target-completer-45 # required
   --next-token-body: string # A token returned from the previous call to ListDatasetGroups for getting the next set of dataset groups (if they exist). (body field)
   --max-results-body: int # The maximum number of dataset groups to return. (body field)
-]: any -> record<datasetGroups: table<name: string, datasetGroupArn: string, status: string, creationDateTime: string, lastUpdatedDateTime: string, failureReason: string, domain: string>, nextToken: string> {
+]: any -> oneof<record<datasetGroups: table<name: string, datasetGroupArn: string, status: string, creationDateTime: string, lastUpdatedDateTime: string, failureReason: string, domain: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2582,7 +2581,7 @@ export def "list-dataset-import-jobs" [
   --dataset-arn: string # The Amazon Resource Name (ARN) of the dataset to list the dataset import jobs for.
   --next-token-body: string # A token returned from the previous call to ListDatasetImportJobs for getting the next set of dataset import jobs (if they exist). (body field)
   --max-results-body: int # The maximum number of dataset import jobs to return. (body field)
-]: any -> record<datasetImportJobs: table<datasetImportJobArn: string, jobName: string, status: string, creationDateTime: string, lastUpdatedDateTime: string, failureReason: string, importMode: string>, nextToken: string> {
+]: any -> oneof<record<datasetImportJobs: table<datasetImportJobArn: string, jobName: string, status: string, creationDateTime: string, lastUpdatedDateTime: string, failureReason: string, importMode: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2636,7 +2635,7 @@ export def "list-datasets" [
   --dataset-group-arn: string # The Amazon Resource Name (ARN) of the dataset group that contains the datasets to list.
   --next-token-body: string # A token returned from the previous call to ListDatasetImportJobs for getting the next set of dataset import jobs (if they exist). (body field)
   --max-results-body: int # The maximum number of datasets to return. (body field)
-]: any -> record<datasets: table<name: string, datasetArn: string, datasetType: string, status: string, creationDateTime: string, lastUpdatedDateTime: string>, nextToken: string> {
+]: any -> oneof<record<datasets: table<name: string, datasetArn: string, datasetType: string, status: string, creationDateTime: string, lastUpdatedDateTime: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2690,7 +2689,7 @@ export def "list-event-trackers" [
   --dataset-group-arn: string # The ARN of a dataset group used to filter the response.
   --next-token-body: string # A token returned from the previous call to ListEventTrackers for getting the next set of event trackers (if they exist). (body field)
   --max-results-body: int # The maximum number of event trackers to return. (body field)
-]: any -> record<eventTrackers: table<name: string, eventTrackerArn: string, status: string, creationDateTime: string, lastUpdatedDateTime: string>, nextToken: string> {
+]: any -> oneof<record<eventTrackers: table<name: string, eventTrackerArn: string, status: string, creationDateTime: string, lastUpdatedDateTime: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2744,7 +2743,7 @@ export def "list-filters" [
   --dataset-group-arn: string # The ARN of the dataset group that contains the filters.
   --next-token-body: string # A token returned from the previous call to ListFilters for getting the next set of filters (if they exist). (body field)
   --max-results-body: int # The maximum number of filters to return. (body field)
-]: any -> record<Filters: table<name: string, filterArn: string, creationDateTime: string, lastUpdatedDateTime: string, datasetGroupArn: string, failureReason: string, status: string>, nextToken: string> {
+]: any -> oneof<record<Filters: table<name: string, filterArn: string, creationDateTime: string, lastUpdatedDateTime: string, datasetGroupArn: string, failureReason: string, status: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2798,7 +2797,7 @@ export def "list-metric-attribution-metrics" [
   --metric-attribution-arn: string # The Amazon Resource Name (ARN) of the metric attribution to retrieve attributes for.
   --next-token-body: string # Specify the pagination token from a previous request to retrieve the next page of results. (body field)
   --max-results-body: int # The maximum number of metrics to return in one page of results. (body field)
-]: any -> record<metrics: table<eventType: string, metricName: string, expression: string>, nextToken: string> {
+]: any -> oneof<record<metrics: table<eventType: string, metricName: string, expression: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2852,7 +2851,7 @@ export def "list-metric-attributions" [
   --dataset-group-arn: string # The metric attributions' dataset group Amazon Resource Name (ARN).
   --next-token-body: string # Specify the pagination token from a previous request to retrieve the next page of results. (body field)
   --max-results-body: int # The maximum number of metric attributions to return in one page of results. (body field)
-]: any -> record<metricAttributions: table<name: string, metricAttributionArn: string, status: string, creationDateTime: string, lastUpdatedDateTime: string, failureReason: string>, nextToken: string> {
+]: any -> oneof<record<metricAttributions: table<name: string, metricAttributionArn: string, status: string, creationDateTime: string, lastUpdatedDateTime: string, failureReason: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2907,7 +2906,7 @@ export def "list-recipes" [
   --next-token-body: string # A token returned from the previous call to ListRecipes for getting the next set of recipes (if they exist). (body field)
   --max-results-body: int # The maximum number of recipes to return. (body field)
   --domain: string@domain-completer # Filters returned recipes by domain for a Domain dataset group. Only recipes (Domain dataset group use cases) for this domain are included in the response. If you don't specify a domain, all recipes are returned.
-]: any -> record<recipes: table<name: string, recipeArn: string, status: string, creationDateTime: string, lastUpdatedDateTime: string, domain: string>, nextToken: string> {
+]: any -> oneof<record<recipes: table<name: string, recipeArn: string, status: string, creationDateTime: string, lastUpdatedDateTime: string, domain: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2961,7 +2960,7 @@ export def "list-recommenders" [
   --dataset-group-arn: string # The Amazon Resource Name (ARN) of the Domain dataset group to list the recommenders for. When a Domain dataset group is not specified, all the recommenders associated with the account are listed.
   --next-token-body: string # A token returned from the previous call to ListRecommenders for getting the next set of recommenders (if they exist). (body field)
   --max-results-body: int # The maximum number of recommenders to return. (body field)
-]: any -> record<recommenders: table<name: string, recommenderArn: string, datasetGroupArn: string, recipeArn: string, recommenderConfig: record, status: string, creationDateTime: string, lastUpdatedDateTime: string>, nextToken: string> {
+]: any -> oneof<record<recommenders: table<name: string, recommenderArn: string, datasetGroupArn: string, recipeArn: string, recommenderConfig: record, status: string, creationDateTime: string, lastUpdatedDateTime: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3014,7 +3013,7 @@ export def "list-schemas" [
   --x-amz-target: string@x-amz-target-completer-54 # required
   --next-token-body: string # A token returned from the previous call to ListSchemas for getting the next set of schemas (if they exist). (body field)
   --max-results-body: int # The maximum number of schemas to return. (body field)
-]: any -> record<schemas: table<name: string, schemaArn: string, creationDateTime: string, lastUpdatedDateTime: string, domain: string>, nextToken: string> {
+]: any -> oneof<record<schemas: table<name: string, schemaArn: string, creationDateTime: string, lastUpdatedDateTime: string, domain: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3068,7 +3067,7 @@ export def "list-solution-versions" [
   --solution-arn: string # The Amazon Resource Name (ARN) of the solution.
   --next-token-body: string # A token returned from the previous call to ListSolutionVersions for getting the next set of solution versions (if they exist). (body field)
   --max-results-body: int # The maximum number of solution versions to return. (body field)
-]: any -> record<solutionVersions: table<solutionVersionArn: string, status: string, creationDateTime: string, lastUpdatedDateTime: string, failureReason: string>, nextToken: string> {
+]: any -> oneof<record<solutionVersions: table<solutionVersionArn: string, status: string, creationDateTime: string, lastUpdatedDateTime: string, failureReason: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3122,7 +3121,7 @@ export def "list-solutions" [
   --dataset-group-arn: string # The Amazon Resource Name (ARN) of the dataset group.
   --next-token-body: string # A token returned from the previous call to ListSolutions for getting the next set of solutions (if they exist). (body field)
   --max-results-body: int # The maximum number of solutions to return. (body field)
-]: any -> record<solutions: table<name: string, solutionArn: string, status: string, creationDateTime: string, lastUpdatedDateTime: string, recipeArn: string>, nextToken: string> {
+]: any -> oneof<record<solutions: table<name: string, solutionArn: string, status: string, creationDateTime: string, lastUpdatedDateTime: string, recipeArn: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3172,7 +3171,7 @@ export def "list-tags-for-resource" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-57 # required
   resource_arn: string # The resource's Amazon Resource Name.
-]: any -> record<tags: table<tagKey: string, tagValue: string>> {
+]: any -> oneof<record<tags: table<tagKey: string, tagValue: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3221,7 +3220,7 @@ export def "start-recommender" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-58 # required
   recommender_arn: string # The Amazon Resource Name (ARN) of the recommender to start.
-]: any -> record<recommenderArn: string> {
+]: any -> oneof<record<recommenderArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3270,7 +3269,7 @@ export def "stop-recommender" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-59 # required
   recommender_arn: string # The Amazon Resource Name (ARN) of the recommender to stop.
-]: any -> record<recommenderArn: string> {
+]: any -> oneof<record<recommenderArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3349,7 +3348,6 @@ export def "stop-solution-version-creation" [
 #
 # POST /
 # operationId: TagResource
-# --tags item shape: {tagKey: string, tagValue: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3370,7 +3368,7 @@ export def "tag-resource" [
   --x-amz-target: string@x-amz-target-completer-61 # required
   resource_arn: string # The resource's Amazon Resource Name (ARN).
   tags: list # Tags to apply to the resource. For more information see Tagging Personalize resources (https://docs.aws.amazon.com/personalize/latest/dev/tagging-resources.html). — item shape: {tagKey: string, tagValue: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3420,7 +3418,7 @@ export def "untag-resource" [
   --x-amz-target: string@x-amz-target-completer-62 # required
   resource_arn: string # The resource's Amazon Resource Name (ARN).
   tag_keys: list<string> # Keys to remove from the resource's tags.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3450,7 +3448,6 @@ export def "untag-resource" [
 #
 # POST /
 # operationId: UpdateCampaign
-# --campaignConfig shape: {itemExplorationConfig?: record}
 export def "update-campaign" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3473,7 +3470,7 @@ export def "update-campaign" [
   --solution-version-arn: string # The ARN of a new solution version to deploy.
   --min-provisioned-tps: int # Specifies the requested minimum provisioned transactions (recommendations) per second that Amazon Personalize will support.
   --campaign-config: record # The configuration details of a campaign. — shape: {itemExplorationConfig?: record}
-]: any -> record<campaignArn: string> {
+]: any -> oneof<record<campaignArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3503,8 +3500,6 @@ export def "update-campaign" [
 #
 # POST /
 # operationId: UpdateMetricAttribution
-# --addMetrics item shape: {eventType: string, metricName: string, expression: string}
-# --metricsOutputConfig shape: {s3DataDestination?: record, roleArn: string}
 export def "update-metric-attribution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3527,7 +3522,7 @@ export def "update-metric-attribution" [
   --remove-metrics: list<string> # Remove metric attributes from the metric attribution.
   --metrics-output-config: record # The output configuration details for a metric attribution. — shape: {s3DataDestination?: record, roleArn: string}
   --metric-attribution-arn: string # The Amazon Resource Name (ARN) for the metric attribution to update.
-]: any -> record<metricAttributionArn: string> {
+]: any -> oneof<record<metricAttributionArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3557,7 +3552,6 @@ export def "update-metric-attribution" [
 #
 # POST /
 # operationId: UpdateRecommender
-# --recommenderConfig shape: {itemExplorationConfig?: record, minRecommendationRequestsPerSecond?: int}
 export def "update-recommender" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3578,7 +3572,7 @@ export def "update-recommender" [
   --x-amz-target: string@x-amz-target-completer-65 # required
   recommender_arn: string # The Amazon Resource Name (ARN) of the recommender to modify.
   recommender_config: record # The configuration details of the recommender. — shape: {itemExplorationConfig?: record, minRecommendationRequestsPerSecond?: int}
-]: any -> record<recommenderArn: string> {
+]: any -> oneof<record<recommenderArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
